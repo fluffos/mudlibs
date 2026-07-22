@@ -15,7 +15,7 @@ worked; keep status values consistent so the table stays greppable:
 - `blocked: <reason>` (needs a decision or hit something unresolved)
 
 Port assignments: sequential from 40001, recorded here so re-running
-several libs at once never collides. **Next free port: 40020** (40001-40019
+several libs at once never collides. **Next free port: 40021** (40001-40020
 assigned; 40007 is ds386, deprioritized/partial). On mega-libs (tens of
 thousands of files, the "nitan" family), skip the full `lpcc_check.sh`
 sweep — it can OOM the host before finishing (see AGENTS.md §6b) — and
@@ -28,9 +28,16 @@ rely on the boot + interactive-connect test as the verification gate.
   majority of this collection. If an archive turns out to be English
   (like ds386/Dead Souls), do the minimum to note what it is, don't sink
   deep debugging time into it -- move on to the next Chinese one.
-- **Done: 18 / 100** (shanhaizhanshen, xingzhanyingxiong, unknownlib20150716
+- **Done: 19 / 100** (shanhaizhanshen, xingzhanyingxiong, unknownlib20150716
   [小雨西游II], bxsj [书剑天下], bxsj1 [书剑·经典], chidi [江湖I], ...,
-  nitan170911 [仙剑奇侠传], nitan6 [笑傲江湖])
+  nitan170911 [仙剑奇侠传], nitan6 [笑傲江湖], rzrmud [大唐西游])
+- **rzrmud confirms the nitan-family bug is lineage-specific, not
+  universal**: this lib's simul_efun has no global set/query/delete at
+  all, relying entirely on per-object `inherit NPC;`-style base classes
+  instead (the architecturally correct pattern) -- booted with zero
+  fixes needed. Don't assume every lib needs the §15 dbase fix; check
+  whether `adm/obj/simul_efun.lpc` (or equivalent) actually defines
+  those functions before assuming the bug applies.
 - **Major finding on nitan170911** (AGENTS.md §15): the whole "NT/nitan/
   Lonely" mudlib lineage implements per-object property storage
   (`set`/`query`/`delete`) as bare simul_efun calls, relying on
@@ -106,7 +113,7 @@ rely on the boot + interactive-connect test as the verification gate.
 | 20 | MUD侠客行2017完整版.zip | xiakexing2017 | 40017 | done | 侠客行 2017, booted with zero fixes; see libs/xiakexing2017/NOTES.md |
 | 21 | nitan170911.7z | nitan170911 | 40018 | done | 仙剑奇侠传 (NT/nitan/Lonely lineage); found the major simul_efun set/query/dbase architecture bug (AGENTS.md §15) + several never-defined-globals gaps (§15b) + preload data-file .c refs (§15c); new-player registration needs a real MySQL backend (out of scope, fails gracefully with a clear message); see libs/nitan170911/NOTES.md |
 | 22 | nitan6.zip | nitan6 | 40019 | done | 笑傲江湖, same NT/nitan lineage as #21 -- proactively applied all §15/§15b/§15c fixes before first boot, booted clean on the first attempt; found a missing seteuid() + a heartbeat-interval efun gap + the "bare array" typo (§15f, new); plays through into full character creation with zero crashes; see libs/nitan6/NOTES.md |
-| 23 | rzrmud.20130220.tar.gz | | | not started | |
+| 23 | rzrmud.20130220.tar.gz | rzrmud | 40020 | done | 大唐西游/YWX人造人, different lineage from nitan family (no simul_efun-based dbase, correctly uses per-object inherit instead); booted with zero fixes, 97.5% lpcc pass; ~55-file missing-inherit content gap noted but not fixed; see libs/rzrmud/NOTES.md |
 | 24 | TOMud_VC源代码.rar | | | not started | name suggests VC/Windows source, triage |
 | 25 | xkx2001测试用老lib.zip | | | not started | |
 | 26 | xlqy_new2007.rar | | | not started | |
