@@ -19,6 +19,18 @@ lower="${ARCHIVE,,}"
 case "$lower" in
   *.zip)
     unzip -o -q "$ARCHIVE" -d "$DEST" 2>&1 || unzip -o -q -O GBK "$ARCHIVE" -d "$DEST"
+    # unzip exits 0 even when EVERY member was skipped for a wrong/missing
+    # password (only prints "skipping: ... unable to get password" per
+    # file) -- if nothing landed, the whole archive is probably password-
+    # protected. Some archives in this collection embed the password
+    # directly in the zip comment (shown at the top of unzip's own output,
+    # garbled through this environment's locale but readable as e.g.
+    # "解压密码:muds.cn" -- "extraction password: X") -- try that literal
+    # known password as a fallback before giving up.
+    if [[ -z "$(find "$DEST" -type f -print -quit 2>/dev/null)" ]]; then
+      echo "  (no files extracted -- retrying with known archive password 'muds.cn')"
+      unzip -P "muds.cn" -o -q "$ARCHIVE" -d "$DEST" 2>&1
+    fi
     ;;
   *.rar)
     (cd "$DEST" && unrar x -y -o+ "$ARCHIVE" >/dev/null)
