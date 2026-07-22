@@ -32,23 +32,25 @@ rely on the boot + interactive-connect test as the verification gate.
   majority of this collection. If an archive turns out to be English
   (like ds386/Dead Souls), do the minimum to note what it is, don't sink
   deep debugging time into it -- move on to the next Chinese one.
-- **Done: 39 / 100, plus 5 more (archives #47-51) currently being
-  processed in parallel by background agents** (see below once they
-  report back) (shanhaizhanshen, xingzhanyingxiong, unknownlib20150716
-  [小雨西游II], bxsj [书剑天下], bxsj1 [书剑·经典], chidi [江湖I], ...,
-  nitan170911 [仙剑奇侠传], nitan6 [笑傲江湖], rzrmud [大唐西游], xo, xo_final,
-  zzfy [郑州风云3], shiji [世纪], dongfanggushi2 [东方故事Ⅱ之天朝帝国],
-  zhonghua2 [中华英雄苏州站], shujian2008 [书剑天下 2008],
-  shujiantianxia [书剑天下, 小熊泥苑 snapshot], shujianpiaoling2 [书剑飘零Ⅱ],
-  xianlvqiyuan [仙侣情缘/XLQY, 知秋站 2001 snapshot],
-  xianlvqingyuanzheda [仙侣情缘浙大版], xianjianchuanqi [仙剑狂侠2000],
-  xiakexinzhuan2 [侠客新传], xiakeyingxiong3 [侠客英雄传III],
-  xiakexing100 [侠客行一百], xiakexing3 [侠客行三/金庸群侠传],
-  beimeixiakexing2001 [侠客行, North America 2001 build],
-  xiyangzaixian_fengkuang [夕阳再现])
-- **Parallelizing more aggressively per user request**: archives #47-51
-  (夕阳再现-风云再起2.rar, 夕阳再线III之炎龙封印.rar, 大唐双龙.rar,
-  天下.tar.gz, 天下无雪.rar) are being processed simultaneously by 5
+- **Done: 40 / 100, plus 4 more (archives #47, #48, #50, #51) currently
+  being processed in parallel by background agents** (see below once
+  they report back) (shanhaizhanshen, xingzhanyingxiong,
+  unknownlib20150716 [小雨西游II], bxsj [书剑天下], bxsj1 [书剑·经典],
+  chidi [江湖I], ..., nitan170911 [仙剑奇侠传], nitan6 [笑傲江湖], rzrmud
+  [大唐西游], xo, xo_final, zzfy [郑州风云3], shiji [世纪],
+  dongfanggushi2 [东方故事Ⅱ之天朝帝国], zhonghua2 [中华英雄苏州站],
+  shujian2008 [书剑天下 2008], shujiantianxia [书剑天下, 小熊泥苑
+  snapshot], shujianpiaoling2 [书剑飘零Ⅱ], xianlvqiyuan [仙侣情缘/XLQY,
+  知秋站 2001 snapshot], xianlvqingyuanzheda [仙侣情缘浙大版],
+  xianjianchuanqi [仙剑狂侠2000], xiakexinzhuan2 [侠客新传],
+  xiakeyingxiong3 [侠客英雄传III], xiakexing100 [侠客行一百], xiakexing3
+  [侠客行三/金庸群侠传], beimeixiakexing2001 [侠客行, North America 2001
+  build], xiyangzaixian_fengkuang [夕阳再现], datangshuanglong
+  [大唐双龙, config has a stale "碧血残阳之豪侠晚歌" name field --
+  confirmed NOT a duplicate of archive #71, just a copy-paste leftover])
+- **Parallelizing more aggressively per user request**: archives #47,
+  #48, #50, #51 (夕阳再现-风云再起2.rar, 夕阳再线III之炎龙封印.rar,
+  天下.tar.gz, 天下无雪.rar) are being processed simultaneously by
   background agents rather than one at a time -- each handles its own
   full pipeline (convert/fix/boot/test/lpcc/NOTES.md) independently and
   reports back; TODO.md/AGENTS.md updates and commits for those 5 are
@@ -279,7 +281,7 @@ rely on the boot + interactive-connect test as the verification gate.
 | 46 | 夕阳再现-疯狂江湖.rar | xiyangzaixian_fengkuang | 40040 | done | dup: 夕阳再现-疯狂江湖(1).rar; 夕阳再现, adm/obj/ layout, no dns_master in preload (nothing to exclude); standard §15h fix; full registration flow verified with real name "秦风"; 97.8% lpcc pass; see libs/xiyangzaixian_fengkuang/NOTES.md |
 | 47 | 夕阳再现-风云再起2.rar | | | not started | |
 | 48 | 夕阳再线III之炎龙封印.rar | | | not started | |
-| 49 | 大唐双龙.rar | | | not started | |
+| 49 | 大唐双龙.rar | datangshuanglong | 40043 | done | related-but-distinct fork of dtsl(#8)/llmud_datangshuanglong(#18) lineage (chinese.c identical, master.c differs, same diamond-inherit weapon bug recurs); config has a stale "碧血残阳之豪侠晚歌" name field (confirmed NOT #71 duplicate, just copy-paste leftover); standard §15h fix + F_UNIQUE/F_BACKUP macro gaps + diamond-inherit fix; full registration flow verified with real name "秦风" reaching the actual game world; 94.6% lpcc pass; see libs/datangshuanglong/NOTES.md |
 | 50 | 天下.tar.gz | | | not started | |
 | 51 | 天下无雪.rar | | | not started | |
 | 52 | 小雨西游.zip | | | not started | |

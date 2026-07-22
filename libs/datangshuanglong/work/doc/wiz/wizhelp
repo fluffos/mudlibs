@@ -1,0 +1,144 @@
+ [大唐巫师帮助]
+
+大唐中的巫师命令和其他MUD的没什么太大的区别，主要的区别在战斗中。
+下面是大唐中的人物属性的变量名称：
+
+精：gin, 有效精:eff_gin, 最大精:max_gin
+
+精神:sen  有效精神: eff_sen,  最大精神: max_sen
+
+气血: kee  有效气血: eff_kee,  最大气血: max_kee
+
+内力:force  最大内力: max_force
+
+食物: food  饮水: water
+
+江湖声望: famous  战斗经验: combat_exp
+
+潜能: potential  最大潜能: max_pot
+
+膂力: str   根骨:con  容貌: per  悟性: int  身法:cor  福缘:kar
+
+在使用 call 命令 call完武功后，要使用use命令来指定使用这种武功。
+use 命令和原来MUD中的 enable(jifa)命令一样的用法，
+如 use sword xxxx,但是使用内功要 use force_skill xxxx.
+
+其他的巫师命令就没有什么变化了。
+
+[战斗设计]
+一：战斗中攻击者主要有两个因素：攻击力和伤害力。
+
+1）其中与伤害力有关的因素是：臂力/2, 潜能，所用的招数的伤害力*5/4（如果使用了apply命令，则为
+所用的招数的伤害力*所用的攻击力/4），武器的伤害力（为 武器的伤害力*武器的坚强度/武器的最大坚强度），
+武器的附加伤害力（和使用武器的次数增加而增加），使用技能的有效等级（为 技能+基本技能/2），加力。
+
+之所以在伤害力中加入潜能因素而不是经验值因素，是因为潜能和经验值有关，简化了算法，同时更加强调
+了apply命令的重要，希望战斗时多使用apply命令。
+
+2）其中与攻击力有关的因素有：（攻击者经验-防守者的经验）/100，使用的轻功技能的有效等级（为
+ 特殊轻功+基本轻功/2），所使用的招数的攻击力*5/4（如果使用了apply则是所使用的招数的攻击力*
+ 所用的攻击力/4），护具所增加的攻击力，身法，还要减掉负重的1/10000.
+
+二：战斗中与防守者有关的两个主要因素：躲闪力和招架力。
+
+1）与躲闪力有关的因素为：轻功的有效等级（特殊轻功+基本轻功/2），基本招架/2，精神状态的百分比，
+  护具所增加的轻功，还要减掉负重的1/10000。
+
+2）与招架力有关的因素为：护具的保护力，在上一个战斗回合中所用招数的招架力*5/4（如果使用了apply,
+则为 在上一个战斗回合中所用招数的招架力*（10-上一回合所使用的攻击力）/4），基本招架/2。
+
+  战斗规则：
+     
+     如果  攻击力>躲闪力
+              如果  伤害力>招架力
+                   那么 防守者 受到 （伤害力-招架力）/3 气的damage
+                                         防守者 受到 （伤害力-招架力）/6 气的wound
+                        否则  防守者只受到很少的伤害
+     否则
+          如果 防守者会轻功 有%75 的概率使用轻功躲开，%25的概率进行招架（parryd.c)
+              否则 %75的概率用基本轻功的描述躲开，%25的概率进行招架（parryd.c)
+
+
+以上是《大唐》的目前战斗系统，欢迎给出更好的意见。
+
+
+NPC 及武功，PFM.
+
+NPC 基本没有什么变化，除了在武功的的设定方面。由于战斗没了enable,所以
+没了map_skill().大唐中的武功类别有：空手(hand),剑(sword)(武器的还有其他，
+就不说了 ),内功(force_skill),轻功(dodge).
+所以所有空手的武功，在加在NPC上时，用 set("hand",({"武功一","武功二"}));
+其他也就类似了，总的说就是 set(类别,({武功的名字}));
+（这样看起来有点怪？:-)   ）
+
+武功函数请参见写好的武功。
+
+PFM：如果要在PFM中调用 COMBAT_D中的do_attack函数，接口形式为
+     do_attack(object me,object victim,object weapon,mapping apply_action,int quick)
+	 其中me为攻击方，victim 为防守方，weapon 为攻击方的武器，apply_action为使用
+	 apply命令后的参数，可以为零，quick为调用的快慢，建议为2.
+	 另外如果要指定pfm所出的招数，可以在PFM文件中加入
+	 mapping actionp=([
+	     "action":"动作",
+		 "damage":伤害力，
+		 "dodge":攻击力，
+		 "skill_name":"与PFM有关的武功名字，用英文",
+       ]);
+	   然后就要 me->set("actionp",actionp);
+	   (当然，也可以不调用 COMBAT_D)
+	   下面是一个例子:
+
+//破碎虚空。
+#include <ansi.h>
+
+inherit SSERVER;
+string *strike=({"左掌","右掌"});
+string *desc=({"灌注内力,","划了个弧线,","左右晃动,","劲力到处,","划了个圆弧,","横向一扫,"});
+string *attack=({"犹如一道闪电","夹带着风雷之声","闪过一道白光","如同利剑一般"});
+mapping actionp=([
+		"action":"",
+		"damage":2380,
+		"dodge":360,
+		"damage_type":"瘀伤",
+		"skill_name":"xukong-zhang",
+	]);
+	
+
+   
+int perform(object me,object target)
+{ 
+   object weapon;
+    weapon=me->query_temp("weapon");
+	if(!me->is_fighting())
+		return notify_fail("[破碎虚空]只能在战斗中使用!\n");
+   if(weapon)
+    return notify_fail("拿着武器，如何使用[破碎虚空]？\n");
+    if(!me->query_skill("poyu-quan"))
+    return notify_fail("不学[破玉拳]如何使用[破碎虚空]？\n");
+	if(!me->query_skill("xukong-zhang",1))
+    return notify_fail("不学[虚空掌]如何使用[破碎虚空]？\n");
+    if((int)me->query("max_force")<3000)
+    return notify_fail("你的内力修为太低了!\n");
+    if((int)me->query("force")<400)
+    return notify_fail("你的内力不够使用此招数!\n");
+    if((int)me->query_skill("strike",1)<150)
+    return notify_fail("你的基本掌法太差了！\n");
+    if((int)me->query_skill("poyu-quan",1)<100)
+    return notify_fail("你的[破玉拳]还不到家！\n");
+	if((int)me->query_skill("xukong-zhang",1)<150)
+    return notify_fail("你的[虚空掌]还不到家！\n");
+    if(me->query("force")<actionp["damage"]/2+400)
+		return notify_fail("你的内力无法使用此招数！\n");
+	actionp["action"]=HIW"$N"+strike[random(sizeof(strike))]+desc[random(sizeof(desc))]+attack[random(sizeof(attack))]+"，一招[破碎虚空]猛地朝$n的$l处打去!"NOR;
+	me->set("actionp",actionp);
+	me->start_busy(1);
+	COMBAT_D->do_attack(me,target,0,0,2);
+	me->add("force",-actionp["damage"]/2-400);
+	me->delete("actionp");
+	
+    return 1;   
+  
+}  
+ 
+
+//pfm结束。

@@ -1,0 +1,18 @@
+mapping npc_list=([
+"/d/luoyang/npc/zheng-shiru":"洛阳郑石如","/d/luoyang/npc/shangguan-long":"洛阳上官龙",
+"/d/luoyang/npc/rongjiaojiao":"洛阳荣姣姣","/d/yangzhou/npc/sun":"扬州当铺孙老板",
+"/d/yangzhou/npc/xiaoer2":"扬州安福客栈的店小二","/d/clone/npc/chenshoubei":"扬州陈守备",
+"/d/yangzhou/npc/weichisheng":"尉迟胜","/d/yangzhou/npc/tiejiang":"扬州的铁匠",
+"/d/yangzhou/npc/li":"扬州飘香酒楼的李老板","/d/yangzhou/npc/zhu":"扬州杂货铺的朱老板",
+"/d/yangzhou/npc/ouyang":"扬州钱庄的欧阳老板","/d/xiangyang/npc/bai":"襄阳白清儿",
+"/d/quest/yrs/zhuge-dewei":"巴陵的诸葛德威","/d/baling/npc/wu":"巴陵钱庄的吴老板",
+"/d/baling/npc/xiaoer":"巴陵酒管的店小二","/d/baling/npc/jiyinong":"巴陵的季亦农",
+"/d/baling/npc/tiejiang":"巴陵的铁匠","/d/pengliang/npc/tiejiang":"彭梁的铁匠",
+"/d/xucheng/npc/xiaoer":"许城车马店的店小二","/d/xucheng/npc/xiaoer2":"许城酒馆的店小二",
+"/d/leshou/npc/xiaoer3":"乐寿天外天酒店的店小二","/d/leshou/npc/qiao":"乐寿当铺的乔老板",
+"/d/leshou/npc/tiejiang":"乐寿的铁匠","/d/leshou/npc/li":"乐寿杂货铺的李老板",
+"/d/leshou/npc/song":"乐寿药铺的宋大夫","/d/yuyang/npc/meng":"渔阳当铺的孟老板",
+"/d/yuyang/npc/tiejiang":"渔阳的铁匠","/d/yuyang/npc/xiaoer":"渔阳客店的店小二",
+"/d/yuyang/npc/wang":"渔阳药铺的王药师","/d/yuyang/npc/qian":"渔阳钱庄的钱老板",
+"/d/shanhaiguan/npc/wang":"山海关酒馆的王老板","/d/job/songwupin/rong":"山海关的荣凤祥",
+]);
