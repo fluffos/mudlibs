@@ -1574,6 +1574,28 @@ message that can misdirect debugging toward "which package is missing"
 when the real issue is a stale mutual-exclusivity assumption from a
 different, older driver target.
 
+### 15s. A shared 2-arg `tell_room()`/`message()`-family simul_efun wrapper can pass a raw `int 0` into this driver's `message()` efun, which rejects it — breaks silently on the FIRST preloaded room's heartbeat, not at compile time
+
+Found on `yueyingqiyuan` (archive #54): `adm/simul_efun/message.lpc`'s
+`tell_room()` was written to accept an optional "exclude" argument, and
+when called in its common 2-arg form (~578 call sites across the lib)
+passed a bare `int 0` through to the real `message()` efun as the 4th
+("exclude") argument. This driver's `message()` requires that argument to
+be an object, an array, or absent/`0` handled internally — but the way
+this particular wrapper constructed the call, the literal `0` reached
+`message()` in a form it rejects (`Bad argument 4 to message()`), and
+since `tell_room()` is one of the most commonly called simul_efuns (any
+room's `heartbeat()`/`init()`/emote broadcasting), the very first
+preloaded room to fire its heartbeat surfaced it. This is a compile-clean,
+lpcc-clean bug — it only manifests at runtime, and only once some room
+actually calls the wrapper. Fix once at the shared root (e.g. `exclude ||
+({})` before delegating to the real efun) rather than touching any of the
+578 call sites. **Lesson**: when a preloaded room crashes on its own
+heartbeat with an efun-argument-type error, suspect a shared simul_efun
+wrapper's argument-passing shape before the room's own code — the room is
+usually just the first caller to exercise a latent bug in a widely-used
+helper.
+
 ---
 
 ## Per-archive gotchas index

@@ -1,0 +1,182 @@
+
+//trade.c
+//create by zanlin
+//1999.8.2
+#define THOUSANDGOLD_OB "/clone/money/thousand-gold"
+#define HUNDREDGOLD_OB "/clone/money/hundred-cash"
+#define THCASH_OB "/clone/money/thousand-cash"
+#define 
+#include <ansi.h>
+void pay_him(object who, int amount);
+int affordable(object me, int amount);
+
+
+inherit F_CLEAN_UP;
+
+
+int main(object me, string arg)
+{
+	object seller, goods,newob;
+	   string unit,dest,obname;
+	   string *sellobname,*objname;
+	   mapping priced_map,item_map;
+	   int i,pri,amount,bool,afford;
+	   //if(!wizardp(me))return notify_fail("你现在还不能使用这条指令.\n");
+	   if(me->is_busy())return notify_fail("等你忙过了再来买东西吧。\n");   
+	   if( !arg || sscanf(arg, "%s from %s", obname,dest)!=2 )
+		  return notify_fail("你要向谁买什么东西？(trade something from somebody)\n");
+	   if(!objectp(seller = present(dest, environment(me))))
+		return notify_fail("这个人好象并不在这里啊!\n");
+	if( !seller->is_character() )
+		return notify_fail("看清楚一点，那并不是生物。\n");
+	if( !living(seller) || seller->is_fighting() )
+		return notify_fail(seller->name() + "现在可能没有心思做生意.\n"); 
+	if(seller==me)	return notify_fail("你想向自己买东西?\n");
+	   if(!userp(seller)) return notify_fail("你只能从玩家商人那里交易(trade).\n");
+	   if(!mapp(priced_map = seller->query_temp("sellobj")))
+	   return notify_fail(seller->name()+"现在什么也不想卖.\n");
+	   sellobname=keys(priced_map);
+	   bool=0;
+	   for(i=0;i<sizeof(priced_map);i++)
+	   if(objectp(goods=present(sellobname[i],seller)))
+		 if(obname==goods->query("id"))
+			{
+			  item_map=priced_map[sellobname[i]];
+			  objname=keys(item_map);
+			  pri=item_map[objname[0]];
+			  bool=1;
+			  break;
+			 }
+	if(!bool)return notify_fail(seller->name()+"似乎没有把这样东西标价出售,\n"
+			  +"或者是"+seller->name()+"现在已没有了这样东西.\n");
+	if(!(unit=goods->query("base_unit")))unit=goods->query("unit");  
+	 if( afford = affordable(me, pri) )
+		 {
+		 pay_him(me, afford-pri);
+		   
+			 } else{
+		  tell_object(seller,
+				YEL+me->name()
+				+"想从你这里购买"
+				+goods->name()
+				+",可惜其钱不够.\n"NOR);
+
+		  return notify_fail("对不起,你现在没有足够的钱从"
+					+seller->name()
+					+"那里购买"
+					+goods->name()+".\n");
+		   }
+		
+		amount=goods->query_amount();
+		switch(amount)
+		{
+		  case 0:
+		  case 1:break;
+		 default:newob=new(base_name(goods));
+		  newob->set_amount(1);
+		  goods->set_amount((int)goods->query_amount()-1);
+		  goods=newob;
+		 } 
+		MONEY_D->pay_player(seller,pri);
+		goods->move(me);
+		message_vision("$N从$n那里买了一" + unit +goods->name() + "。\n", me,seller);
+		   // traded then delete key of goods
+		for(i=0;i<sizeof(priced_map);i++)
+		if(sellobname[i]==obname)
+		   {
+			 map_delete(priced_map,obname);
+			 seller->set_temp("sellobj",priced_map);
+					  
+		   }
+ 
+		   this_player()->start_busy(1);
+		return 1;
+}
+void pay_him(object who, int amount)
+
+{
+	object ob;
+	object cash, hungold, gold, silver, coin,thougold;
+	 thougold = present("thousand-gold_money",who);
+		   hungold = present("hundred-cash_money", who);
+	cash = present("thousand-cash_money", who);
+	gold = present("gold_money",who);
+	silver = present("silver_money",who);
+	coin = present("coin_money",who);
+	   if(thougold)destruct(thougold);
+		   if(hungold) destruct(hungold);
+	if(cash) destruct(cash);
+	if(gold) destruct(gold);
+	if(silver) destruct(silver);
+	if(coin) destruct(coin);
+
+
+	if( amount < 1 )return;
+		 if (amount/10000000){
+			   ob = new(THOUSANDGOLD_OB);
+			   ob->set_amount(amount/10000000);
+			   ob->move(who);
+			   amount %=10000000;
+			  }
+	if( amount/1000000 ) {
+		ob = new(HUNDREDGOLD_OB);
+		ob->set_amount(amount/1000000);
+		ob->move(who);
+		amount %= 1000000;
+	}
+	if( amount/100000 ) {
+		ob = new(THCASH_OB);
+		ob->set_amount(amount/100000);
+		ob->move(who);
+		amount %= 100000;
+	}
+	if( amount/10000 ) {
+		ob = new(GOLD_OB);
+		ob->set_amount(amount/10000);
+		ob->move(who);
+		amount %= 10000;
+	}
+	if( amount/100 ) {
+		ob = new(SILVER_OB);
+		ob->set_amount(amount/100);
+		ob->move(who);
+		amount %= 100;
+	}
+	if( amount ) {
+		ob = new(COIN_OB);
+		ob->set_amount(amount);
+		ob->move(who);
+	}
+}
+
+int affordable(object me, int amount)
+{
+	int total;
+	object cash, hungold, gold, silver, coin,thougold;
+		  thougold = present("thousand-gold_money",me);
+	hungold = present("hundred-cash_money", me);
+	cash = present("thousand-cash_money", me);
+	gold = present("gold_money",me);
+	silver = present("silver_money",me);
+	coin = present("coin_money",me);
+  
+	total = 0;
+		  if (thougold) total+= thougold->value();
+	if( hungold) total += hungold->value();
+	if( cash) total += cash->value();
+	if( gold ) total += gold->value();
+	if( silver ) total += silver->value();
+	if( coin ) total += coin->value();
+	if( total < amount ) return 0;
+	return total;
+}
+int help(object me)
+{
+  write(@HELP
+指令格式 : trade something from somebody
+	 从玩家商人那里购买东西.
+HELP
+	);
+	return 1;
+}
+ 

@@ -32,7 +32,7 @@ rely on the boot + interactive-connect test as the verification gate.
   majority of this collection. If an archive turns out to be English
   (like ds386/Dead Souls), do the minimum to note what it is, don't sink
   deep debugging time into it -- move on to the next Chinese one.
-- **Done: 46 / 100** (shanhaizhanshen, xingzhanyingxiong,
+- **Done: 47 / 100** (shanhaizhanshen, xingzhanyingxiong,
   unknownlib20150716 [小雨西游II], bxsj [书剑天下], bxsj1 [书剑·经典],
   chidi [江湖I], ..., nitan170911 [仙剑奇侠传], nitan6 [笑傲江湖], rzrmud
   [大唐西游], xo, xo_final, zzfy [郑州风云3], shiji [世纪],
@@ -49,7 +49,8 @@ rely on the boot + interactive-connect test as the verification gate.
   tianxiawuxue [天下无雪], xiyangzaixian_fengyun2 [夕阳再现/风云再起2],
   xiyangzaixian3 [夕阳再现III之炎龙封印], tianxia [天下 Beta],
   menghuanxiyou2002 [梦幻西游2002版, same codebase as mhxy #19],
-  xiaoyuxiyou [小雨西游/小雨西游Ⅱ, same lineage as unknownlib20150716 #3])
+  xiaoyuxiyou [小雨西游/小雨西游Ⅱ, same lineage as unknownlib20150716 #3],
+  yueyingqiyuan [月影奇缘, ES II lineage])
 - **New AGENTS.md §15q (hidden client-protocol-version gate)**: found on
   xiyangzaixian3 -- a pre-id prompt can check the input against a
   hardcoded literal (client version string), not just a BIG5/student
@@ -313,7 +314,7 @@ rely on the boot + interactive-connect test as the verification gate.
 | 51 | 天下无雪.rar | tianxiawuxue | 40045 | done | adm/obj/ layout (nested at raw/mud/world/); standard §15h fix + upgraded valid_override to 3-arg (§14) + fixed a stray-brace typo cluster in d/kaifeng/ground0-3.lpc + proactive dns_master preload exclusion (§15p); full registration flow verified end-to-end incl. real name "秦风" reaching the actual game world; 97.6% lpcc pass; see libs/tianxiawuxue/NOTES.md |
 | 52 | 小雨西游.zip | xiaoyuxiyou | 40046 | done | self-IDs as 小雨西游 but live banner says 小雨西游Ⅱ v3.0 (2013 snapshot); chinese.lpc byte-identical to unknownlib20150716(#3), same engine lineage different site snapshot; standard §15h fix + proactive get_include_path() insurance; no dns_master in preload (nothing to exclude); one corrupted quest file hung lpcc, renamed .corrupted-orig; full registration flow verified with 3 real Chinese names incl. one reaching an actual room + look/quit, dup-id rejection also confirmed working; 99.0% lpcc pass; see libs/xiaoyuxiyou/NOTES.md |
 | 53 | 新狂想空间II.rar | | | not started | |
-| 54 | 月影奇缘.rar | | | not started | |
+| 54 | 月影奇缘.rar | yueyingqiyuan | 40048 | done | ★月影奇缘★, ES II lineage (adm/obj/{master,simul_efun} layout, master.c credits "Lil"/"Annihilator" like es1_win/esI/xkx2001/rzrmud/xo family); standard §15h fix + proactive dns_master preload exclusion (§15p) + upgraded valid_override to 3-arg (§14) + NEW message.lpc tell_room() bug (578 call sites passed raw int 0 as message()'s 4th arg, driver rejects it, fixed once at the shared root); an intermittent unreproduced crash seen twice early in testing (no trace anywhere, not reproduced across 8+ later clean runs) flagged for future investigation, not blocking; full registration flow verified end-to-end incl. real name "秦风终" reaching an actual starting room; 97.1% lpcc pass; see libs/yueyingqiyuan/NOTES.md |
 | 55 | 未明空间.rar | | | not started | |
 | 56 | 梦幻西游2002版.rar | menghuanxiyou2002 | 40050 | done | same 2002-era codebase as mhxy(#19) -- confirmed via diff (14561/14563 files identical incl. master.c/chinese.c byte-identical, only logind.c banner branding + wizlist state differ), all fixes ported directly rather than rediscovered; standard §15h fix + §8h convertd.lpc typo (45x) + missing /u/feizei/log file fix + proactive dns_master preload exclusion (§15p); full registration flow verified end-to-end incl. real name "秦风" reaching gift-allocation/game-world welcome, confirmed via saved data files too; 97.3% lpcc pass (matches #19); see libs/menghuanxiyou2002/NOTES.md |
 | 57 | 模拟华附.zip | | | not started | |

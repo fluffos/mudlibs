@@ -1,0 +1,315 @@
+// Room: /d/city/shenhualou2.c
+// 生化楼二楼
+
+inherit ROOM;
+#include <ansi.h>
+
+int do_sit(string arg);
+int do_stand();
+int do_add(string arg);
+int do_shiyan();
+int do_quit();
+string look_sign();
+string look_table();
+
+mapping *yao = ({
+([	"name" : "蒸馏水",
+	"unit" : "瓶",
+	"short" : "zhengliushui",
+	"remaining" : 1,
+	"value" : 33,
+]),
+([	"name" : "硫酸",
+	"unit" : "瓶",
+	"short" : "liusuan",
+	"remaining" : 1,
+	"value" : 98,
+]),
+});
+
+void create()
+{
+	set("short", "生化楼二楼");
+	set("long", @LONG
+这里是同学们上实验课的地方。隐隐有一股令人感到不大舒服的气
+味传来，使你不由捂住了鼻子。周围摆满了做实验的用具，在阴暗的灯
+光下你觉得这地方透出一些邪气。左边是药品室，右边是器具室。在屋
+子的中央有一张实验桌子(table)，可供做实验用。桌子周围摆有一圈
+椅子(chair)，在墙上挂有一块大牌子(sign)。
+LONG
+	);
+	set("valid_startroom",1);
+	
+	set("exits", ([ 
+  		"east" :   __DIR__"yaopingshi",
+  		"west" :   __DIR__"qijushi",
+  		"north" :  __DIR__"zhaoroom",
+  		"down" :   __DIR__"shenhualou",
+]));
+
+	set("item_desc", ([
+		"sign" : (: look_sign :),
+		"table" : (: look_table :),    // 呵呵， 可以看看你在桌子上放了此什么东西。
+		"chair" : "一把木制的坐椅，看起来好象很结实。\n",
+	]) );
+
+	setup();
+}
+
+void init()
+{
+	object ob=this_player();
+       	if (ob->query("family/family_name") == "化学派")
+       	 {                                   // 我的意思是想在这个地方加个判断
+       		remove_call_out("kee");      // 让不是化学派的人到这个地方来，
+		call_out("kee", 0);      // 如果没有护具就会中毒！ 看来没什么用！ 其它派的肯定会叫唤的！还是不加了吧！
+	}
+	else
+	{
+	message_vision( HIB "一阵令人觉得不大舒服的气味飘过，$N不由立刻屏住呼吸，可惜还是迟了。\n" NOR,ob);
+	// if(!ob->query_condition("huaxue_poison"))
+	// ob->apply_condition("huaxue_poison",random(10)+10);
+	}
+	add_action("do_quit", "quit");
+	add_action("do_shiyan", "shiyan");
+	add_action("do_add", "add");
+	add_action("do_stand", "zhan");
+	add_action("do_sit", "sit");
+	
+}
+
+
+
+
+int do_sit(string arg)
+{
+	object me = this_player();
+
+	if (me->is_busy() || me->is_fighting())	return notify_fail("你正忙着呢！\n");
+	if (arg == "table")
+		return notify_fail("你要坐在桌子上拿自己当实验品？\n");	
+
+	if ( !arg || arg != "chair" )
+		return notify_fail("你要坐在地上？有个性！\n");	
+	
+	if (me->query_temp("marks/sit"))
+		return notify_fail("你已经坐在座位上了。\n");	
+
+	remove_call_out("check_payed");
+	message_vision("$N找了个空位坐下，准备做实验。\n", me);	
+
+	me->set_temp("marks/sit", 1);
+	return 1;
+}
+
+int do_stand()
+{
+	object me = this_player();
+
+	if (!me->query_temp("marks/sit"))
+		return notify_fail("你没有坐在椅子上。\n");	
+	message_vision("$N拍拍屁股，站了起来。\n", me);	
+	me->delete_temp("yao_count");
+	me->delete_temp("yao_1");
+	me->delete_temp("yao_2");
+	me->delete_temp("yao_3");
+	me->delete_temp("yao_4");
+	me->delete_temp("yao_5");
+	me->delete_temp("total_pay");
+	me->delete_temp("marks/sit");
+	return 1;
+}
+
+int do_add(string arg)
+{
+	object me = this_player();
+	object ob = this_object();
+	string target, item;
+	object obj, dest, *inv, obj2;
+	int i, count;
+
+        if (!me->query_temp("marks/sit"))
+		return notify_fail("你得先坐在椅子上。\n");	
+        if( sscanf(arg, "%s in %s", item, target)!=2 )
+		return notify_fail("你要在桌子上放什么？\n");
+	if( !objectp(obj = present(item, me)) )
+			return notify_fail("你身上没有这样东西。\n");
+	if (target != "table")
+		return notify_fail("你要把东西放在什么地方？\n");
+	if(obj->query("no_drop"))
+			return notify_fail("这样东西不能离开你。\n");
+	if (!(count = me->query_temp("yao_count"))) me->set_temp("yao_count", 0);
+	if (!me->query_temp("total_pay")) me->set_temp("total_pay", 0);
+	for (i = 0; i < sizeof(yao); i++)
+		if (item == yao[i]["name"] || item == yao[i]["short"]) {
+			if (me->query_temp("yao_count") >= 5) {    //这里要加上最大放药品数，防有人恶意foold系统
+				message_vision("你在桌子上堆了太多的东西了！”\n", me);
+				return notify_fail("");
+			}
+			message_vision("$N把一" + yao[i]["unit"] + yao[i]["name"] +"放在桌子上。\n", me);
+			destruct(obj);
+			me->add_temp("total_pay", yao[i]["value"]);
+			me->add_temp("yao_count", 1);
+			me->set_temp("yao_" + count + "/name", yao[i]["name"]);
+			me->set_temp("yao_" + count + "/short", yao[i]["short"]);
+			me->set_temp("yao_" + count + "/unit", yao[i]["unit"]);
+			me->set_temp("yao_" + count + "/remaining", yao[i]["remaining"]);
+			me->set_temp("yao_" + count + "/supply", yao[i]["supply"]);
+			me->set_temp("yao_" + count + "/type", "yao");
+			return 1;
+        }
+        return notify_fail("这个东西不能当实验品用。\n");    // 不是mapping *yao  里面例出来的东西不能放在桌子上！
+                }
+
+
+int do_shiyan()
+{
+	object me = this_player();
+	int pay;
+
+	if (!(pay = me->query_temp("total_pay")))		
+		return notify_fail("你什么东西都没有，怎么做实验呀？\n");
+	if (me->query_temp("marks/sit")) {
+		me->start_busy(200);
+		message_vision(HIY"$N拿起面前的器具与药品开始了化学实验。\n"NOR, me);   // 加上做实验的描述！ 可以用random描述不同的实验过程。
+		call_out ("shiyanend",2+random(10));
+		return 1;
+		// 加busy time, 转到实验，
+		// me->delete_temp("total_pay");
+		// 我没有加做实验消耗 精 精力 内力 或潜能的关系！ 你自己看着加吧！
+		// 什么？ 不会加 ？ 靠！ 去死吧！ :p
+	}
+}
+
+int shiyanend() 
+
+ { 
+ 	object me = this_player();
+	int pay;
+	string fainthome;
+	if (pay = me->query_temp("total_pay"))		
+	message_vision("你放进去的东西是" + pay + "分。”\n", me);  // 这一行是我测试用的，等你改完了可以把这一行去掉。
+ 	me->start_busy(1);
+	if (pay == 295) new("/clone/misc/zhujingchan")->move(me);
+	if (pay == 490) new("/clone/misc/baiyao")->move(me);
+	// 别告诉我你看不懂上面两行的意思！ 就是说如果你在桌子上放的东西一共有多少分。
+	// 每样东西有一个value的参数，如果所有的东西value 加起来等于 295 或 490
+	// 就能clone 出相应的药品放在你的身上。
+	// 295 就是 98*2 + 33*3 你要在桌子上放2瓶硫酸，三瓶蒸馏水。
+	// 490 就是98*5 你要在桌子上放5瓶硫酸。
+	// 这样你就可以实验出各种不同的药品了！
+	// 具体的pay得数,你可以自己控制,呵呵，小学的加减乘除，好简单的！
+	
+	
+	if (pay != 295 && pay != 490)     // 这里是判断是否炸飞的条件，如果不炸飞，就可以实验出一堆垃圾！
+		{			  // 如果你不想用被炸飞，可以clone npc , auto kill , 或是得到垃圾。	
+		message_vision(HIR"只听轰的一声，$N面前冒起一阵浓烟。\n"NOR, me);
+		me->unconcious();
+		me->delete_temp("yao_count");
+		me->delete_temp("yao_1");
+		me->delete_temp("yao_2");
+		me->delete_temp("yao_3");
+		me->delete_temp("yao_4");
+		me->delete_temp("yao_5");
+		me->delete_temp("total_pay");
+		me->delete_temp("marks/sit");
+		message_vision(HIR"只听“嗖”的一声，$N被炸的从窗口飞了出去。\n"NOR, me);
+		switch (random(3))  // 随机炸飞的地点，你自己加吧！！
+	{
+		case 1:
+			fainthome="/d/city/damen";
+			break;
+		case 2:
+			fainthome="/d/city/jiaxuedalou";
+			break;
+		default:
+			fainthome="/d/city/eroad3";
+			break;
+	}
+		tell_room((fainthome),HIR"你远远的听到“轰”的一声巨响，好象是化学实验楼出事了。\n\n", ({me}));
+		me->move(fainthome);
+		message("vision",HIR"只听“嗖”地一声，" +  me->query("name") +"浑身冒着黑烟从天上摔了下来。\n"NOR, environment(me), me);
+		// 如果想有被随机炸死的条件，就可以放在这个地方了！把前面的 me->unconcious(); 去掉，
+		// 比如  气小于 150 , 精< 150 的时候，可加一个 random , 死了就是 某某人做实验失败，以身殉职！me->die;
+		// 如果大于就是昏过去！
+		return 1;
+		}
+		else
+		{
+	me->delete_temp("yao_count");
+	me->delete_temp("yao_1");
+	me->delete_temp("yao_2");
+	me->delete_temp("yao_3");
+	me->delete_temp("yao_4");
+	me->delete_temp("yao_5");
+	me->delete_temp("total_pay");
+	message_vision(HIY"$N深深吸了口气，看起来实验做得非常成功。\n"NOR, me);
+	}
+        }
+
+int do_quit()
+{
+	if (this_player()->query_temp("total_pay")) {
+		write("你放了东西在实验桌上，得做完实验才能走，要么就得收拾一下你面前的桌子。\n");
+		return 1;
+	}
+	return 0;
+}
+
+string look_sign()
+{
+	string serve;
+	int i;
+
+	write("牌子上写着：\n");
+	write(HIR"请勿吸烟与大声喧哗。\n"NOR);
+	return "";
+}
+
+string look_table()
+{
+	object me = this_player();
+	int i, j, num, count;
+	string name;
+
+	if (!(count = me->query_temp("yao_count"))) {
+		write("你没有在实验桌上放什么东西。\n");
+		return "";
+	}
+	write("你面前的实验桌上放着：\n");
+	for (i = 0; i < count; i++)
+	{
+		name = me->query_temp("yao_" + i + "/name");
+		num = 1;
+		for (j = 0; j < count; j++)
+		{
+			if (j == i) continue;
+			if (name == me->query_temp("yao_" + j + "/name")) {
+				if (j < i) {
+					num = 0;
+					break;
+				}
+				num++;
+			}
+		}
+		if (!num) continue;
+		write("    " + chinese_number(num) + me->query_temp("yao_" + i + "/unit") + name + "(" + me->query_temp("yao_" + i + "/short") +")。\n");
+	}
+	return "";
+}
+
+int valid_leave(object me, string dir)
+{
+	if (me->query_temp("marks/sit"))
+		return notify_fail("你还在椅子上坐着呢。\n");	
+
+	me->delete_temp("yao_count");
+	me->delete_temp("yao_1");
+	me->delete_temp("yao_2");
+	me->delete_temp("yao_3");
+	me->delete_temp("yao_4");
+	me->delete_temp("yao_5");
+	me->delete_temp("total_pay");
+	return ::valid_leave(me, dir);
+}
+
