@@ -1,0 +1,20 @@
+// cracked by vikee 2/09/2002   vikee@263.net
+// bang.c
+#include <weapon.h>
+
+inherit STICK;
+
+void create()
+{
+        set_name("木棒", ({"mu bang"}));
+        set_weight(3000);
+        if( clonep() )
+                set_default_object(__FILE__);
+        else {
+                set("unit", "个");
+		set("value", 100);
+		set("material", "wood");
+	     }
+	init_stick(15);
+	setup();
+}

@@ -1,0 +1,20 @@
+// cracked by vikee 2/09/2002   vikee@263.net
+#include <weapon.h>
+
+inherit HAMMER;
+
+void create()
+{
+  set_name("法锤", ({ "fa chui", "chui", "hammer" }) );
+  init_hammer(25);
+  set("unit", "把");
+  set_weight(1000);
+  if( clonep() )
+     set_default_object(__FILE__);
+  else {
+    set("value", 200);
+    set("material", "metal");
+  }
+  setup();
+}
+
