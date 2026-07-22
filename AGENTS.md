@@ -1826,3 +1826,15 @@ second — both listed for traceability):
   Fundamentally incompatible with this project's FluffOS/LPC pipeline —
   it's a different server architecture entirely, not something that
   needs UTF-8/registration fixes. Skipped entirely, not converted.
+- `消失的亞特蘭提斯MUD破解版.zip` (archive #64) — confirmed NOT an LPC
+  mudlib: another Merc 2.1/DikuMUD-derivative compiled C server
+  ("EnvyMud" lineage — `envyb.exe`/`play.bat` scaffold), `src/act_*.c`/
+  `comm.c`/`db.c`/`fight.c`/`handler.c` (same canonical Merc file names as
+  三国歪传/#31), `area/*.are` Diku world-data files, a prebuilt
+  `merc.exe`+`cygwin1.dll`, zero `inherit` statements anywhere. Same
+  category as #31, skipped entirely. Despite the archive's Traditional-
+  Chinese filename, its plain-text `readme.txt` decoded cleanly with the
+  standard GB18030 conversion — no BIG5 fallback was actually needed here
+  (though the embedded `.are` world-data text looked BIG5-shaped on raw-
+  byte inspection; moot since none of this content runs through our
+  pipeline).
