@@ -1,0 +1,163 @@
+// command.c
+// 修改：中山大学  张三丰（Micro）----Micro_Liang@Hotmail.Com		1997.6
+
+#include <command.h>
+#include <dbase.h>
+#include <origin.h>
+
+// Micro: 990316 预先定义
+varargs void start_busy(mixed new_busy, mixed new_interrupt);
+nomask mixed query_busy();
+
+// Let command path be static, thus we can make sure no one can get command
+// path directly from restore_object().
+static string *path;
+
+// init_command_hook()
+// 经由 add_action，将所有 user 输入东西传入 command_hook() 这个函数。
+// 本函数没有传回值。
+
+
+// 呼叫 command daemon (COMMAND_D) 看看在指定路径内是否有跟 verb 同名
+// 的档案，若有，传回档名。
+// Leave this to allow other objects can search your commands such as
+// help, which...
+string find_command(string verb)
+{
+	return (string)COMMAND_D->find_command(verb, path);
+}
+
+// 一但使用者输入一行文字, driver会将除了第一个字以外的文字当成参数(arg) 
+// 并传至此函数。输入的第一个字就是所谓的动词(verb)。通常是一个指令。接
+// 下来我们经由query_verb()得到这个动词，也就是使用者所输入的第一个字。
+// 然後开始判定使用者输入这行文字的目的。首先我们将动词传入find_command()
+// 看看在使用者的路径设定中是否有与这个动词相同的指令档名，如果有，则试
+// 著以call_other()去呼叫该档名的main()函数并传入参数arg 及动作人物件。
+// 如果成功，则结束离开。不符合上述条件者，本函数在此呼叫EMOTE_D ( emotedaemon)，
+// 判别这个动词是不是emote 之一，如果不是的话则呼叫管理交谈频道的daemon，
+// (CHANNEL_D) 看看这个是不是交谈频道用的指令。最後，我们来判定这是不是
+// 使用者用来移动的的指令（如：东、南、西、北等等）。如果以上皆非，那我
+// 们就传回 0，有可能这个使用者输入了一个不存在的指令。
+//    
+// 如果 PROFILE_COMMANDS 有定义的话，有关这个指令的使用情形会由PROFILE_D
+// 记录下来并存於指定档案中。
+// 
+// This is the add_action hook handling movement, commands, emotes and
+// channels. Optimization is needed.
+private nomask int command_hook(string arg)
+{
+	string verb, file;
+
+#ifdef PROFILE_COMMANDS
+	int mem, utime, stime;
+	mapping info;
+
+	mem = memory_info();
+	info = rusage();
+	utime = info["utime"];
+	stime = info["stime"];
+#endif
+
+	verb = query_verb();
+
+	if( !arg 
+	&&	(environment() && stringp(environment()->query("exits/" + verb)))
+	&&	stringp(file = find_command("go"))
+	&&	call_other(file, "main", this_object(), verb))
+		;
+	
+	else if( stringp(file = find_command(verb)) 
+	&& call_other(file, "main", this_object(), arg))
+		;
+
+	else if( EMOTE_D->do_emote( this_object(), verb, arg ) )
+		;
+
+	else if( CHANNEL_D->do_channel( this_object(), verb, arg ) )
+		;
+
+
+	else { 
+// Micro: 990316 命令出错，罚停1秒
+                if(random(2)==0 && intp(query_busy())) start_busy(query_busy()+1);
+	        return 0;
+	}
+
+#ifdef PROFILE_COMMANDS
+	info = rusage();
+	PROFILE_D->log_command(verb, memory_info() - mem, info["stime"] - stime,
+		info["utime"] - utime);
+#endif
+
+	return 1;
+}
+
+// 将 *p 指定为路径。*p 为阵列型态。
+private nomask void set_path(string *p)
+{
+//	if( origin() != ORIGIN_LOCAL
+//	&&	geteuid(previous_object()) != ROOT_UID )
+//		return;
+	path = p;
+}
+
+string *query_path() { return path; }		// 返回命令路径 
+mixed *query_commands() { return commands(); }	// 返回各种命令
+
+// 强迫动作物件执行一个指令，呼叫此函数的物件需要有 ROOT UID 才会成功。
+int force_me(string cmd)
+{
+	if( geteuid(previous_object()) != ROOT_UID )
+		return 0;
+
+	return command( this_object()->process_input(cmd) );
+}
+
+nomask void enable_player()
+{
+	if( stringp(query("id")) ) set_living_name(query("id"));
+	else set_living_name(query("name"));
+
+	set("disable_type", "");
+
+	enable_commands();
+	add_action("command_hook", "", 1);
+
+	if( !userp(this_object()) )
+		set_path(NPC_PATH);
+	else
+	switch( wizhood(this_object()) ) {
+		case "(admin)":
+			set_path(ADM_PATH);
+			enable_wizard();
+			break;
+		case "(arch)":
+			set_path(ARC_PATH);
+			enable_wizard();
+			break;
+		case "(wizard)":
+			set_path(WIZ_PATH);
+			enable_wizard();
+			break;
+		case "(apprentice)":
+			set_path(APR_PATH);
+			enable_wizard();
+			break;
+		case "(immortal)":
+			set_path(IMM_PATH);
+			break;
+		default:
+			set_path(PLR_PATH);
+	}
+}
+
+nomask void disable_player(string type)
+{
+	if( geteuid(previous_object()) != ROOT_UID
+	&&	previous_object() != this_object()) return;
+
+	set("disable_type", type);
+	// disable_commands();
+}
+
+

@@ -1,0 +1,308 @@
+// seller-cmd.c - 车马店老板
+// 编程：中山大学  张三丰（Micro）----Micro_Liang@Hotmail.Com           1997.6
+
+#include <ansi.h>
+#include <login.h>
+#include <command.h>
+
+inherit NPC;
+inherit F_VENDOR;
+
+#define SET_SKILL       60                      // 定义基本武功的值（随机），自动生成经验
+#define SET_SEN         0                       // 定义正气的值
+
+void create()
+{
+        int n;
+
+        set_name("车马店老板", ({ "seller", "waiter" }));
+
+        set("long", @LONG
+他就是车马店老板。
+LONG
+        );
+
+        set("attitude", "friendly");
+        set("gender", "男性" );                 // 性别
+        set("age", 36);                         // 年纪
+
+        set("str", 30);                         // 膂力
+        // set("cps", 30);                      // 定力
+        // set("cor", 30);                      // 胆识
+        // set("per", 30);                      // 容貌
+        set("con", 30);                         // 根骨
+
+        set("combat_exp", SET_SKILL * SET_SKILL * SET_SKILL / 10 * ( 10 + random( 10 ) ) / 10);
+        set("SEN", SET_SEN);
+
+        set("env/wimpy", 30);                   //
+
+        n = SET_SKILL + random(10) - 5;         set_skill("unarmed", (n <= 0) ? 1 : n);
+        n = SET_SKILL + random(10) - 5;         set_skill("parry",   (n <= 0) ? 1 : n);
+        n = SET_SKILL + random(10) - 5;         set_skill("dodge",   (n <= 0) ? 1 : n);
+
+        set("vendor_goods", ([
+                "/obj/horse/horse" : 3,
+        ]) );
+
+        setup();
+
+        carry_object("/obj/cloth/cloth")->wear();       // 装备
+
+        add_money("gold", 1);                           // 金钱
+}
+
+void init()
+{
+        object ob;
+
+        ::init();
+		if( this_object()->query_temp("unconcious") ) return;
+        if( interactive(ob = this_player()) && !is_fighting() ) {
+                remove_call_out("greeting");
+                call_out("greeting", 1, ob);
+        }
+        add_action("do_vendor_list", "list");
+
+        add_action("do_name", "name");
+        add_action("do_unit", "unit");
+        add_action("do_ride_msg", "ride_msg");
+        add_action("do_unride_msg", "unride_msg");
+        add_action("do_make", "make");
+}
+
+int do_name(string name)
+{
+        object me, ob;
+
+        me = this_player();
+
+        if( !name ) return notify_fail( @TEXT
+指令格式 : name <命名>
+
+这个指令可以让你为自己身上的独门坐骑取一个自定的名字。你如果希望
+在名字中使用 ANSI 的控制字元改变颜色，可以用以下的控制字串：
+
+$BLK$ - 黑色            $NOR$ - 恢复正常颜色
+$RED$ - 红色            $HIR$ - 亮红色
+$GRN$ - 绿色            $HIG$ - 亮绿色
+$YEL$ - 土黄色          $HIY$ - 黄色
+$BLU$ - 深蓝色          $HIB$ - 蓝色
+$MAG$ - 浅紫色          $HIM$ - 粉红色
+$CYN$ - 蓝绿色          $HIC$ - 天青色
+$WHT$ - 浅灰色          $HIW$ - 白色
+
+其中系统自动会在字串尾端加一个 $NOR$。
+
+TEXT
+        );
+
+        if( strlen(name) > 40 )
+                return notify_fail("你取的名字太长了，想一个短一点的吧。\n");
+
+        name = replace_string(name, "$BLK$", BLK);
+        name = replace_string(name, "$RED$", RED);
+        name = replace_string(name, "$GRN$", GRN);
+        name = replace_string(name, "$YEL$", YEL);
+        name = replace_string(name, "$BLU$", BLU);
+        name = replace_string(name, "$MAG$", MAG);
+        name = replace_string(name, "$CYN$", CYN);
+        name = replace_string(name, "$WHT$", WHT);
+        name = replace_string(name, "$HIR$", HIR);
+        name = replace_string(name, "$HIG$", HIG);
+        name = replace_string(name, "$HIY$", HIY);
+        name = replace_string(name, "$HIB$", HIB);
+        name = replace_string(name, "$HIM$", HIM);
+        name = replace_string(name, "$HIC$", HIC);
+        name = replace_string(name, "$HIW$", HIW);
+        name = replace_string(name, "$NOR$", NOR);
+        name = name + NOR;
+
+        // 临时加入对付小康的东东，以后删除。
+        name = replace_string( name, "张三丰", me->query("name") );
+
+        me->set("animal/name", name);
+
+        if ( objectp( ob = present( "my animal", me ) ) ) {
+                ob->set( "name", name );
+                tell_object(me, "你将独门坐骑的名称定义为：" + name + "。\n");
+        }
+
+        return 1;
+}
+
+int do_unit(string unit)
+{
+        object me, ob;
+
+        me = this_player();
+
+        if( !unit ) return notify_fail( @TEXT
+指令格式 : unit <单位>
+
+这个指令可以让你为自己身上的独门坐骑取一个适合的单位。
+例如：unit 匹   一（匹）千里马
+TEXT
+        );
+
+        me->set("animal/unit", unit);
+        if ( objectp( ob = present( "my animal", me ) ) ) {
+                ob->set( "unit", unit );
+                tell_object(me, "你将独门坐骑的单位定义为：" + unit + "。\n");
+        }
+
+        return 1;
+}
+
+int do_ride_msg(string arg)
+{
+        object me, ob;
+
+        me = this_player();
+
+        if( !arg ) return notify_fail( @TEXT
+指令格式 : ride_msg <命名>
+
+这个指令可以让你设定独门坐骑的装备信息。
+例如：ride_msg $N骑上一匹日行千里的$n。
+
+TEXT
+        );
+
+        arg = arg + "\n";
+
+        me->set("animal/ride_msg", arg);
+        if ( objectp( ob = present( "my animal", me ) ) ) {
+                ob->set( "ride_msg", arg );
+                tell_object(me, "你将独门坐骑的装备信息定义为：" + arg + "\n");
+        }
+
+        return 1;
+}
+
+int do_unride_msg(string arg)
+{
+        object me, ob;
+
+        me = this_player();
+
+        if( !arg ) return notify_fail( @TEXT
+指令格式 : unride_msg <命名>
+
+这个指令可以让你设定独门坐骑的卸装信息。
+例如：unride_msg $N跳下$n。
+
+TEXT
+        );
+
+        arg = arg + "\n";
+
+        me->set("animal/unride_msg", arg);
+        if ( objectp( ob = present( "my animal", me ) ) ) {
+                ob->set( "unride_msg", arg );
+                tell_object(me, "你将独门坐骑的卸装信息定义为：" + arg + "\n");
+        }
+
+        return 1;
+}
+
+int do_make(string arg)
+{
+        object me, ob;
+        int cost, high, low, n;
+
+        me = this_player();
+
+        if( !arg || !sscanf(arg, "%d", cost) ) return notify_fail( @TEXT
+指令格式 : make <花费的精和神的值>
+TEXT
+        );
+
+        if( cost < 10 ) return notify_fail("你最少要花 10 点「精」和「神」。\n");
+
+        if( (int)me->query("gin") < cost || (int)me->query("sen") < cost )
+                return notify_fail("你现在的「精」或「神」太少了。\n");
+
+        if ( !objectp( ob = present( "my animal", me ) ) )
+                return notify_fail("你现在没有独门坐骑。\n");
+
+        if ( ob->query("equipped") ) return notify_fail("你必须跳下「" + ob->name() + "」。\n");
+
+        if( me->query( "animal/max_life" ) >= 100 ) 
+                return notify_fail("你没有必要再升级「" + ob->name() + NOR "」了。\n");
+
+        high = me->query("animal/points_high");
+        low  = me->query("animal/points_low");
+        low += cost;
+        if( low > 1000 ) {
+                high += low / 1000;
+                low  %= 1000;
+        }
+
+        if( high >= pow( 2.0, me->query( "animal/max_life" ) / 5.0 + 1.0 ) ) {
+                high = 0; low = 0;
+                me->add("animal/max_life", 1);
+                ob->init();
+                tell_object(me, WHT "你的「" + me->query("animal/name") + WHT "」升级了！\n" NOR);
+                tell_object(me, WHT "「" + me->query("animal/name") + WHT "」的最大生命值是：" 
+                        + chinese_number( me->query("animal/max_life") ) + "。\n" NOR);
+        }
+        else {
+                n = high * 100 / pow( 2.0, me->query( "animal/max_life" ) / 5.0 + 1.0 );
+                tell_object(me, WHT "「" + me->query("animal/name") + WHT "」的完成度是：百分之" 
+                        + chinese_number( n ) + "。\n" NOR);
+        }
+
+        me->set("animal/points_high", high);
+        me->set("animal/points_low", low);
+
+        tell_object(me, "你开始训练「" + ob->name() + "」....\n");
+
+        me->receive_damage("gin", cost);
+        me->receive_damage("sen", cost);
+        me->start_busy(1);
+
+        return 1;
+}
+
+int accept_object(object me, object ob)
+{
+        object animal;
+
+        if( !ob->id("stone") ) return 0;
+
+        if ( !objectp( animal = present( "my animal", me ) ) ) {
+                tell_object(me, "你现在没有独门坐骑。\n" );
+                return 0;
+        }
+
+        if ( animal->query("equipped") ) {
+                tell_object(me, "你必须放下「" + animal->name() + "」。\n" );
+                return 0;
+        }
+
+        if( ob->id("red stone") && me->query("animal/max_life") < 100 ) {
+                command( "smile " + me->query("id") );
+                me->add("animal/max_life", 1);
+                animal->init();
+                tell_object(me, WHT "你的「" + me->query("animal/name") + WHT "」升级了！\n" NOR);
+                tell_object(me, WHT "「" + me->query("animal/name") + WHT "」的最大生命值是：" 
+                        + chinese_number( me->query("animal/max_life") ) + "。\n" NOR);
+                return 1;
+        }
+        command( "? " + me->query("id") );
+        command( "say 你给我这样东西干什么耶。" );
+
+        return 0;
+}
+
+void greeting(object ob)
+{
+        if( !ob || environment(ob) != environment() ) return;
+        switch( random(1) ) {
+                case 0:
+                        say( this_object()->query("name") + "笑咪咪地说道：这位" + RANK_D->query_respect(ob)
+                                + "，想买马匹吗？\n");
+                        break;
+        }
+}

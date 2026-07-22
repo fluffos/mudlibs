@@ -17,7 +17,7 @@ worked; keep status values consistent so the table stays greppable:
   etc.; see AGENTS.md's non-mudlib list — skipped, not converted)
 
 Port assignments: sequential from 40001, recorded here so re-running
-several libs at once never collides. **Next free port: 40037** (40001-40036
+several libs at once never collides. **Next free port: 40038** (40001-40037
 assigned; 40007 is ds386, deprioritized/partial). On mega-libs (tens of
 thousands of files, the "nitan" family), skip the full `lpcc_check.sh`
 sweep — it can OOM the host before finishing (see AGENTS.md §6b) — and
@@ -30,7 +30,7 @@ rely on the boot + interactive-connect test as the verification gate.
   majority of this collection. If an archive turns out to be English
   (like ds386/Dead Souls), do the minimum to note what it is, don't sink
   deep debugging time into it -- move on to the next Chinese one.
-- **Done: 34 / 100** (shanhaizhanshen, xingzhanyingxiong, unknownlib20150716
+- **Done: 35 / 100** (shanhaizhanshen, xingzhanyingxiong, unknownlib20150716
   [小雨西游II], bxsj [书剑天下], bxsj1 [书剑·经典], chidi [江湖I], ...,
   nitan170911 [仙剑奇侠传], nitan6 [笑傲江湖], rzrmud [大唐西游], xo, xo_final,
   zzfy [郑州风云3], shiji [世纪], dongfanggushi2 [东方故事Ⅱ之天朝帝国],
@@ -38,7 +38,7 @@ rely on the boot + interactive-connect test as the verification gate.
   shujiantianxia [书剑天下, 小熊泥苑 snapshot], shujianpiaoling2 [书剑飘零Ⅱ],
   xianlvqiyuan [仙侣情缘/XLQY, 知秋站 2001 snapshot],
   xianlvqingyuanzheda [仙侣情缘浙大版], xianjianchuanqi [仙剑狂侠2000],
-  xiakexinzhuan2 [侠客新传])
+  xiakexinzhuan2 [侠客新传], xiakeyingxiong3 [侠客英雄传III])
 - **Watch for hidden pre-id prompts** (e.g. a "BIG5 font Y/N?" question
   that blends invisibly into the connection banner, found on
   xiakexinzhuan2): if a registration test produces confusing cascading
@@ -247,7 +247,7 @@ rely on the boot + interactive-connect test as the verification gate.
 | 39 | 仙侣情缘浙大版.rar | xianlvqingyuanzheda | 40033 | done | "ZJU" fork of XLQY by bugbug/alading, adm/obj/ layout, chinese.c matches xlqy_new2007(#26) but other core files differ; standard §15h/§8h fixes + NEW standing policy (§15p): dns_master preload hang -> trimmed preload to registration-essential daemons only (documented exclusions in NOTES.md); full registration flow verified with real name "秦风"; 98.4% lpcc pass; see libs/xianlvqingyuanzheda/NOTES.md |
 | 40 | 仙剑传奇.rar | xianjianchuanqi | 40034 | done | 仙剑狂侠2000, Century-family adm/single/ layout matching shujian2008's is_chinese/check_legal_name shape; proactively excluded dns_master from preload (§15p) before first boot -- booted clean in <20s; found+fixed a new unguarded write(read_file()) crash (uptime.lpc LASTCRASH path mismatch) + an orphaned directory-named-like-a-file conversion quirk; full registration flow verified with real name "秦风"; 95.5% lpcc pass; see libs/xianjianchuanqi/NOTES.md |
 | 41 | 侠客新传(2).rar | xiakexinzhuan2 | 40035 | done | 侠客新传 v0.1b, Century-family adm/single/ layout (config.cfg has a leftover 海洋II MUD_NAME suggesting a forked base); standard §15h fix + deep named.lpc fix (nitan-family shape) + proactive dns_master preload exclusion (§15p); hidden BIG5-prompt testing gotcha documented; full registration flow verified with real name "秦风" (avoiding banned novel character "中神通"); 97.3% lpcc pass; see libs/xiakexinzhuan2/NOTES.md |
-| 42 | 侠客英雄传III 可用.zip | | | not started | |
+| 42 | 侠客英雄传III 可用.zip | xiakeyingxiong3 | 40036 | done | 侠客英雄传 (Jin Yong + European medieval + manga crossover setting), adm/obj/ layout; standard §15h fix (chinesed.c's is_chinese had a pre-existing str[0]-not-str[i] typo, harmless since always called per-character, fixed to standard shape) + proactive dns_master preload exclusion (§15p); full registration flow verified with real name "秦风" (avoiding banned "张三丰"); 98.0% lpcc pass; see libs/xiakeyingxiong3/NOTES.md |
 | 43 | 侠客行100.rar | | | not started | |
 | 44 | 侠客行III .rar | | | not started | |
 | 45 | 北美侠客行2001.rar | | | not started | |

@@ -1,0 +1,233 @@
+// give.c
+
+#include <move.h>
+#include <ansi.h>
+inherit F_CLEAN_UP;
+int do_throw(object me, object ob, int amount, object target, string type);
+int can_throw(object me, object ob,int amount, object target, string type);
+void create() { seteuid(getuid()); }
+int main(object me, string arg)
+{
+        string target, item, dir ,type;
+        object obj, who, here,room, obj2;
+        int i, amount;
+        mapping exit;
+        if( me->is_busy() )
+                return notify_fail("你的动作还没有完成，不能使用投掷。\n");
+        if( me->query_temp("sleeping") ) return notify_fail("你现在正躺着呢。\n");
+        if(!arg) 
+            return notify_fail("你要把什麽东西投掷向谁？\n");
+        if( sscanf(arg, "%s to %s", item, target)==2 );
+            else return notify_fail("你要把什麽东西投掷向谁？\n");
+        here = environment(me);
+        type="near";
+        if( sscanf(target, "%s at %s", target, dir)==2 )  {
+        if( !mapp(exit = here->query("exits")) || undefinedp(exit[dir]) ) 
+                        return notify_fail("这里没有这个方向。\n");
+        if( !(room = load_object(exit[dir])) )
+           return notify_fail("那个地方还不存在。\n");
+        if( !(room = find_object(exit[dir])) )
+                return notify_fail("找不到那个地方。\n");
+       type = "far";       }
+     if(type == "far") {        
+        if(!objectp(who = present(target, room)) || !living(who))
+                return notify_fail("那个地方没有你要袭击的人。\n");} 
+     else  if(!objectp(who = present(target, here)) || !living(who))
+                return notify_fail("这里没有你要袭击的人。\n");
+        if( me == who ) return notify_fail("用suicide -f 恐怕更方便吧？\n");
+
+        if(sscanf(item, "%d %s", amount, item) == 2) {
+                if( !objectp(obj = present(item, me)) ) 
+                        return notify_fail("你身上没有这样东西。\n");
+                if( obj->query("no_drop") )
+                        return notify_fail("这样东西不能随便丢出去。\n");
+                if( !obj->query_amount() )      
+                        return notify_fail( obj->name() + "不能被分开丢出去。\n");
+                if( amount < 1 )
+                        return notify_fail("东西的数量至少是一个。\n");
+                if( amount > obj->query_amount() ) 
+                        return notify_fail("你没有那麽多的" + obj->name() + "。\n");
+                else if( amount == (int)obj->query_amount() ) {
+                        if( !can_throw(me, obj,amount, who, type) ) return 0;
+                        return do_throw(me, obj, amount, who, type);
+                }
+                else {
+                        obj->set_amount( (int)obj->query_amount() - amount );
+                        obj2 = new(base_name(obj));
+                        obj2->set_amount(amount);
+                        if( !can_throw(me, obj2, amount,who,type) ) {
+                                obj->set_amount( obj->query_amount() + obj2->query_amount() );
+                                destruct(obj2);
+                                return 0;
+                        }
+                        if( obj->query_amount() <= 0 ) destruct(obj);
+                        return do_throw(me, obj2, amount, who, type);
+                }
+        }
+        if(!objectp(obj = present(item, me)))
+                return notify_fail("你身上没有这样东西。\n");
+        if( !can_throw(me, obj, amount ,who, type) ) return 0;
+        return do_throw(me, obj, amount, who, type);
+}
+int can_throw(object me, object ob,int amount, object target,string type )
+{
+     int skill, weight, power;
+     string w_type;
+     skill = (int) me->query_skill("throwing");
+     power = (int)me->query("str") + (int)me->query("force_factor");
+     weight = (int) ob->weight(); 
+     if( me->query("force") < me->query("force_factor") )
+                return notify_fail("你内力不足。\n");  
+     if((me->query("score") < 1 )&& type == "far")
+                return notify_fail("你的评价已经够低了，还敢放暗器偷袭？\n");
+     if( skill < 150 )
+                return notify_fail("你的暗器使用水平太差，不能有效地投掷东西。\n");
+     if( type == "far" && skill < 300 )
+                return notify_fail("你的暗器使用水平太差，不能把东西丢这么远。\n");
+     if( !(ob->query("weapon_prop")))
+        {   if( skill < 200 )
+                 return notify_fail("你的暗器使用水平太差，只能丢兵器。\n");
+           if( ( ( weight / 100 ) > skill || ( weight / 200) > power ) && skill < 700 )
+                return notify_fail("这东西太重了，你丢不出去。\n");
+           if(  weight < 100 &&(  skill < 500 || power < 150 ))
+                return notify_fail("这东西太小了，你丢不出去。\n");
+           if( type == "far" ){
+           if(( ( weight / 50 ) > skill || ( weight / 100) > power) && skill < 800 )
+                return notify_fail("这东西太重了，你丢不了这么远。\n");
+           if(  weight < 100 &&( skill < 600 || power < 200 ))
+                return notify_fail("这东西太小了，你丢不了这么远。\n");}
+        } 
+    else if(ob->query("skill_type") != "throwing")
+        { if( skill < 300 )  return notify_fail("你的暗器使用水平太差，不能丢一般兵器。\n");
+           w_type = (string)ob->query("skill_type");
+         if(( w_type == "stick" || w_type == "fork" || w_type == "staff"
+                || w_type=="hammer") && skill < 400 )
+                  return notify_fail("你的暗器使用水平太差，丢不了这种兵器。\n");
+         if( type == "far" && skill < 500 )
+                  return notify_fail("你的暗器使用水平太差，不能把兵器丢这么远。\n");
+         } 
+     if( amount > skill / 50 ) 
+                  return notify_fail("你一次丢不了这么多数量的东西。\n");
+     if( sizeof(all_inventory(ob)) >= MAX_CARRY ) 
+                return notify_fail(ob->name() +  "身上的东西已经太多啦。\n");
+        if( ob->query("no_drop") )
+                return notify_fail("这样东西不能随便丢出去。\n");
+        return 1;
+}
+int do_throw(object me, object ob, int amount,object target,string type)
+{      int weight,damage,ap,dp,pp,busy,weapon,skill,defense_factor,count ; object room;
+       string msg0,msg,name,result,result0,result1;
+       damage = (int)me->query("str") + (int)me->query("force_factor");   
+       weight = (int) ob->weight(); 
+       skill = (int) me->query_skill("throwing"); ap = skill; 
+       room = environment(target);
+       dp = (int)target->query_skill("dodge");
+       pp = (int)target->query_skill("parry");
+     if( weapon = (int)ob->query("weapon_prop/damage") )
+            damage = damage * (100 + weapon) / 100; 
+     if(amount > 0) { ap = ap * (9 + amount) / 10; 
+                        weight = weight / amount;
+                       damage = damage / (9 + amount) * 10; }
+     damage = damage * ( 3000 + weight ) / 5000;      
+     damage = damage * skill * skill / 100000;
+     if(type == "far")    { 
+           damage = damage / (2 +random (2));
+           ap = ap / 1 + random(3); 
+     damage = damage * 3 / 4 + random (damage /4 );
+     if(target->query_skill("iron-cloth"))
+         damage -= (int) target->query("iron-cloth") * 1 + random(2);
+     if(damage < 0 ) damage = 0;
+     message_vision(HIC"\n$N平心静气，双眼盯着"+(string)room->query("short") +
+       "之处，猛地把手一挥！一"+ob->query("unit")+ ob->query("name")+"激射了出去！\n\n"NOR,me);
+          } else  message_vision(HIC"\n$N突然一声奸笑，手一挥，把一"
+  + ob->query("unit") + ob->name()+HIC"猛地向$n丢了出去！\n"NOR,me,target);
+      msg0 = "\n突然有一"+ob->query("unit")+ ob->name()+"向$N飞快地射了过去！\n";
+      name= target->name();      result ="";
+      me->add("force",- me->query("force_factor"));
+      me->start_busy(2);  
+      if( random(ap+dp) > dp )
+          {  if(random(ap+pp) > pp ) {
+                  if ( (defense_factor = target->query_temp("protect")) 
+                        &&      target->query("force") > 30 && random(defense_factor) > 8 ) 
+                        {  
+                                count = defense_factor / 2 + random(defense_factor);
+                                defense_factor = defense_factor * defense_factor;
+                                count += random(defense_factor);
+                                if (count >= damage)
+                                        result += WHT + "$N成功地运用护体真气化解了"+ ob->name()+"的伤害！\n" + NOR;
+                                if (count >= damage / 2 && count < damage)
+                                        result += WHT + "$N成功地运用护体真气化解了"+ ob->name()+"大部分的伤害！\n" + NOR;
+                                if (count < damage / 2 && count > 0)
+                                        result += WHT + "$N成功地运用护体真气化解了"+ ob->name()+"一部分的伤害！\n" + NOR;
+                                damage -= count;
+                                if (damage < 0) damage = 0;
+                                target->add("force", -30);
+                        }               if( weapon ) {
+               msg= "一下子没有来得及防备，被"+ ob->name()+"狠狠地戳中了！\n";    
+               target->receive_wound("kee", damage);
+              } else {
+          msg= "一下子没来得及防备，被" +ob->name()+"重重地打在身上！\n";       
+               target->receive_wound("kee", random(damage / 3)); }
+               target->receive_damage("kee", damage);
+           } else  { msg=name+"眼见难以躲开，奋力把"+ ob->query("name")+"挡住了！\n";damage = 0;}
+          }     
+      else { msg ="见势不好，连忙往旁边一闪，"+ ob->query("name")+"从身边掠了过去。\n";
+               damage =0;}
+
+  if(damage >0 || count > 0 ) { 
+      result0 =COMBAT_D->status_msg((int)target->query("kee")
+ * 100 / (int)target->query("max_kee")); 
+     result += " ( $N"+result0 +" )\n"; 
+     result1 = " ( "+name+result0+" )\n"; } 
+     if(type =="far")
+    {
+          if(damage > 0 || (int)count > 0) {
+              tell_object(me,HIW"你看到......\n"NOR + "  "+name+msg +"  "+result1+HIW"\n…………"NOR);
+             message_vision(msg0+"$N"+ msg + result,target); 
+            } else  { tell_object(me,HIW"你看到......\n"NOR + "  "+name+msg+HIW"\n…………"NOR);
+                       message_vision(msg0+ "$N"+ msg,target); }
+     } else { 
+          if(damage > 0 || (int)count > 0)  message_vision(msg0 +"$N"+ msg + result,target); 
+              else  message_vision(msg0 + "$N"+ msg ,target,);                             
+            }
+   message_vision(CYN"\n$N施施然地措了措手，一副无知状，好象什么都没有发生过一样。\n\n"NOR,me);
+             if ( living(target) && type == "near")
+           { if( !target->is_killing(me) ) 
+            target->kill_ob(me);
+           }
+  if( type =="far")
+      {  if ((int)target->query("combat_exp")  > (int)me->query("combat_exp") )
+           { tell_object(target,"你急忙往四周一望，发现是"+me->name()+"在"+
+       (string)(environment(me))->query("short")+"暗算你。\n");         
+             tell_object(me,target->name()+"发现是你在暗算了！\n"); 
+//            me->add_killer( ({ target->query("id")} );$
+           } else message_vision("$N一脸恐惶，左顾右盼却不知道到底是被谁暗算了。\n",target);
+
+      }   
+       if(type == "far")  me->add_temp("anqi",1);
+       if( (int)me->query_temp("anqi") == 3 ) {
+            tell_object(me,RED"你总是用暗器偷袭这种下三滥手段，你的评价降低了！\n"NOR);
+            me->set_temp("anqi",0);
+            me->add("score",-1); }
+      if(weight < 500 && random(10) > 5 ) destruct(ob);
+         else ob->move(environment(target));
+ return 1;
+}
+
+int help(object me)
+{        write(@HELP
+指令格式：throw <物品名称> to <某人> at <方向>
+**************************************************************
+这个指令可以让你将某样物品向某人投掷出去从而造成伤害。
+当然, 首先你要拥有这样物品，带有数量的物品前面可以加入数量，
+一次投掷出物品的数量取决于自身投掷能力的大小和出力值的大小。
+一般来说，带有一定重量和具有武器属性的东西才能投掷，但是如果
+投掷能力相当高，内功相当深厚了也可以投掷出重量轻的非武器物品，
+就是所谓“飞花摘叶”也可以伤人。 
+HELP
+        );
+        
+        return 1;
+}
+
+
