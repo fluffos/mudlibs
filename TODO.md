@@ -17,7 +17,7 @@ worked; keep status values consistent so the table stays greppable:
   etc.; see AGENTS.md's non-mudlib list — skipped, not converted)
 
 Port assignments: sequential from 40001, recorded here so re-running
-several libs at once never collides. **Next free port: 40029** (40001-40028
+several libs at once never collides. **Next free port: 40030** (40001-40029
 assigned; 40007 is ds386, deprioritized/partial). On mega-libs (tens of
 thousands of files, the "nitan" family), skip the full `lpcc_check.sh`
 sweep — it can OOM the host before finishing (see AGENTS.md §6b) — and
@@ -30,11 +30,27 @@ rely on the boot + interactive-connect test as the verification gate.
   majority of this collection. If an archive turns out to be English
   (like ds386/Dead Souls), do the minimum to note what it is, don't sink
   deep debugging time into it -- move on to the next Chinese one.
-- **Done: 27 / 100** (shanhaizhanshen, xingzhanyingxiong, unknownlib20150716
+- **Done: 28 / 100** (shanhaizhanshen, xingzhanyingxiong, unknownlib20150716
   [小雨西游II], bxsj [书剑天下], bxsj1 [书剑·经典], chidi [江湖I], ...,
   nitan170911 [仙剑奇侠传], nitan6 [笑傲江湖], rzrmud [大唐西游], xo, xo_final,
   zzfy [郑州风云3], shiji [世纪], dongfanggushi2 [东方故事Ⅱ之天朝帝国],
-  zhonghua2 [中华英雄苏州站])
+  zhonghua2 [中华英雄苏州站], shujian2008 [书剑天下 2008])
+- **Two major new bug classes (AGENTS.md §15n, §15o), found on
+  shujian2008**: on any lib with a genuinely CUSTOM `securityd.lpc` ACL
+  (not the simpler `find_object`-only master.lpc pattern), the driver's
+  own compile-time source/`#include` loading goes through the SAME
+  `valid_read` gate as real data reads, attributed to `this_player()` --
+  a fresh pre-login connection defaults to `(player)` status, which most
+  ACLs deny for `/adm`/`/cmds`, so the FIRST lazy compile of any
+  never-preloaded object touched by the registration flow crashes
+  ("Read access denied") one dependency at a time. Fix: allowlist
+  `func=="load_object"/"recompile_object"/"include"` in the custom
+  `valid_read`. Separately, a missing `master.lpc get_include_path()`
+  breaks `#include`s specifically for compiles triggered mid-connection
+  (works fine at preload/bare lpcc-check). **Check both proactively on
+  any lib with a real custom security daemon** -- this was the most
+  diagnostically expensive lib processed since the nitan-family §15
+  discovery.
 - **New bug class (AGENTS.md §15m), found on zhonghua2**: a daemon's
   unguarded `restore()` in `create()` can crash on stale/corrupted save
   data shipped in the archive itself (not a UTF8 issue), masquerading
@@ -165,7 +181,7 @@ rely on the boot + interactive-connect test as the verification gate.
 | 32 | 世纪.zip | shiji | 40026 | done | 世纪(Century), adm/single/ layout; found §4 master.lpc fix + §15h chinese-detection fix + a NEW case-sensitive DATA file bug (mudvisitor vs MUDVISITOR, §15k) that silently crashed every connection attempt; full registration flow verified incl. real Chinese name "萧峰"; 93.6% lpcc pass; see libs/shiji/NOTES.md |
 | 33 | 东方故事二.rar | dongfanggushi2 | 40027 | done | dup: 东方故事二 (1).rar; "东方故事Ⅱ之天朝帝国", ES II lineage but a distinct/smaller codebase than es1_win/esI despite same adm/obj/ layout; found a NEW driver-crash bug (master.lpc destructing SIMUL_EFUN_OB segfaults on boot, §15l) + §4 fix on both valid_write/valid_read + §15h fix incl. a new sliding-window sub-variant; unusually long registration chain (id→confirm→password→email→race→gender→Chinese name) verified end-to-end through a real Chinese name "萧峰" all the way into an actual game room; 85.9% lpcc pass; see libs/dongfanggushi2/NOTES.md |
 | 34 | 中华2.rar | zhonghua2 | 40028 | done | 中华英雄苏州站, adm/single/ layout; found a stale corrupted versiond.o save file crashing a daemon's create() and masquerading as a maintenance gate (NEW, §15m) + §15h fix (unique whole-string is_chinese variant) + deep named.lpc fix (nitan-family shape) + combined surname/given-name length fix; full registration flow verified with real surname "萧" + given name "峰"; 97.3% lpcc pass; see libs/zhonghua2/NOTES.md |
-| 35 | 书剑2008.rar | | | not started | |
+| 35 | 书剑2008.rar | shujian2008 | 40029 | done | 「书剑天下」2008, Century-family adm/single/ layout with a genuinely custom securityd.lpc ACL; found TWO new major bug classes (§15n func-discrimination gap blocking mid-connection lazy compiles + §15o missing get_include_path) + standard §15h fixes; full registration flow verified incl. correct rejection of banned novel-name "萧峰" then acceptance of invented name "秦风"; 99.2% lpcc pass; see libs/shujian2008/NOTES.md |
 | 36 | 书剑天下.rar | | | not started | |
 | 37 | 书剑飘零II .zip | | | not started | |
 | 38 | 仙侣奇缘新版.rar | | | not started | |

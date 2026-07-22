@@ -1319,6 +1319,90 @@ a daemon whose name suggests version/sync/replication bookkeeping BEFORE
 assuming it's a real gate to wait out or work around — it may just be a
 crashed `create()` that never got to flip a readiness flag.
 
+### 15n. A custom `securityd.lpc`'s `valid_read` ACL, correct for real data reads, can block the driver's own compile-time source/`#include` loading — crashing every never-preloaded object's FIRST lazy compile mid-connection
+
+Found on `shujian2008`, and likely to recur on any lib with a genuinely
+custom (not `find_object`-only) security daemon: a real `exclude_read`
+ACL table, keyed by directory and caller "status" (`(player)`,
+`(wizard)`, etc.), correctly denies an ordinary player from reading
+`/adm` or `/cmds` — that's the intended security boundary. The problem:
+the DRIVER routes its OWN compile-time file access through this exact
+same `valid_read` master apply, with distinct `func` values —
+`"load_object"`/`"recompile_object"` when lazily compiling an object for
+the first time (any ordinary `call_other`/`new()` on a never-touched
+file), and `"include"` (a SEPARATE case) when resolving a `#include`
+during that compile — and a fresh, not-yet-authenticated connection's
+`this_player()` defaults to `(player)` status, which most `exclude_read`
+tables deny for `/adm`/`/cmds`. Net effect: the FIRST TIME any
+never-preloaded `/adm` or `/cmds` object gets touched by the
+registration flow (in practice: whatever daemon/cmd the flow happens to
+call first that isn't in `adm/etc/preload` — `BAN_D`, `UPTIME_CMD`,
+`mudlist`, `sited`, one at a time as each was reached on this lib), the
+compile crashes with `"Read access denied"` instead of just succeeding —
+a completely different failure mode than an actual permission bug, and
+one that looks like it's blocking a NEW thing every time you fix the
+last one, because it is: each never-before-touched dependency hits the
+same wall independently. Symptom in `debug.log`: `执行时段错误：*Read
+access denied.` rooted at the CALLING line (e.g. `BAN_D->is_banned(...)`),
+not inside the callee. **Fix**: add an explicit early-allow to the
+custom `valid_read`'s `switch(func)` (the same pattern most of these
+daemons already use for `"file_size"`/`"stat"`):
+```lpc
+switch (func) {
+    case "file_size":
+    case "stat":
+        return 1;
+    case "load_object":
+    case "recompile_object":
+    case "include":
+        return 1;   // compiling/including code is never a sensitive data read
+}
+```
+This is far more robust than patching the preload list one discovered
+dependency at a time (which doesn't scale — there's no way to know in
+advance every object the registration flow will eventually lazily touch).
+**Check any lib with a genuinely custom `securityd`/`TRUST_D`-style
+`valid_read`** (as opposed to the simpler `find_object(SECURITY_D)`-only
+master.lpc pattern seen in `shiji`/`zhonghua2`) for this gap proactively,
+before the first boot attempt.
+
+### 15o. `master.lpc` missing `get_include_path()` breaks `#include`s specifically for compiles triggered mid-connection (not preload, not a bare `lpcc` check)
+
+A distinct but related gotcha, easy to mistake for §15n's symptom since
+both surface as a broken compile during the SAME registration-flow
+dependency chain. Per the driver source
+(`compiler/internal/lexer_utils.cc`'s `init_include_path()`): when there
+is no VM context (preload-time compiles, a bare `echo path | lpcc
+--batch` check), the driver just uses the config file's raw `include
+directories` list directly. When there IS a VM context — i.e. a REAL
+compile triggered live, mid-connection, by an ordinary `call_other`/
+`new()` from inside an `input_to` callback — the driver instead calls
+`master->get_include_path()` to build the search path, and if that apply
+isn't defined at all, no path gets resolved (not even the config
+default). Symptom: `Cannot #include globals.h` (or any other header) —
+note this is a COMPILE error, distinguishable from §15n's RUNTIME "Read
+access denied" — for an object that compiles perfectly cleanly via a
+bare `lpcc --batch` check or during preload, but fails specifically when
+lazily triggered live mid-connection. Fix: add the same
+`get_include_path()` shape already documented for the `es1_win`/`esI`
+lineage (§8d):
+```lpc
+string *get_include_path(string file)
+{
+    string *parts = explode(file, "/");
+    if (sizeof(parts) <= 1)
+        return ({ "/", ":DEFAULT:" });
+    return ({ "/" + implode(parts[0..<2], "/"), ":DEFAULT:" });
+}
+```
+`":DEFAULT:"` tells the driver to also search the config's normal
+include path. **Caveat**: on `shujian2008`, once §15n's fix let the
+underlying `#include` read through, this specific symptom was gone
+before it was re-tested in isolation — so treat §15n as the fix to try
+FIRST on any lib with a custom `securityd`, and only add this one if
+`Cannot #include <file>` errors persist for mid-connection compiles
+specifically after that.
+
 ---
 
 ## Per-archive gotchas index
