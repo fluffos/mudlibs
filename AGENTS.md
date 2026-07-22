@@ -807,6 +807,178 @@ fragment as a standalone top-level object did — see §6b) — but the fix is
 correct and free, so apply it whenever you spot a 2-arg `valid_override`
 during the master.lpc read-through from §4/§7.
 
+### 15. Simul_efun-based generic `set`/`query`/`delete` property storage: `this_object()` is the SIMUL_EFUN OBJECT during a bare simul_efun call, not the caller — a whole-mudlib architecture bug, not a missing function
+
+This is the single most important/subtle finding of the whole project so
+far (discovered on `nitan170911`, and it applies verbatim to `nitan6` and
+any other "NT/nitan/Lonely" lineage lib with the same `adm/kernel/
+simul_efun/wizard.lpc` pattern — check for it proactively).
+
+**The pattern.** These mudlibs implement a generic per-object property
+system via `bare set(prop, data)` / `query(prop)` / `delete(prop)` calls
+used EVERYWHERE (tens of thousands of call sites), resolved as **simul_efun
+calls** (`adm/kernel/simul_efun/wizard.lpc` defines them) whenever the
+calling file has no local override. The overwhelmingly dominant calling
+convention (35000+ call sites for `query`, 4000+ for `set` on this one lib)
+is actually **3 args**: `query(prop, ob)` / `set(prop, data, ob)` — an
+explicit *target object*, not the documented 2-arg "raw" flag form.
+
+**The bug.** Per FluffOS's `call_direct()` (`vm/internal/base/interpret.cc`,
+used by `call_simul_efun()` in `vm/internal/simul_efun.cc`),
+`current_object` — and so `this_object()` — becomes **the simul_efun
+object itself** for the duration of a bare simul_efun call, not the
+original caller (`previous_object()` is the caller). Confirmed empirically
+with a two-object `lpcc` test: object A calls `set("hp", 42)` with no
+target; object B (never touched) then calls `query("hp")` and gets back
+`42` — **every caller that relies on the plain simul_efun for its own
+storage is reading and writing the simul_efun's own single shared `dbase`
+mapping**, not its own. In a live game this means every character/room/
+item without its own override would (mostly) share one property bag.
+
+**The fix — two parts:**
+1. **Give `feature/dbase.lpc` real, local `set`/`query`/`delete` (+
+   `_temp` variants) methods**, not just the storage variable. Almost
+   every relevant object (`inherit/char/char.lpc`, `inherit/room/room.lpc`,
+   etc.) already does `inherit F_DBASE` directly — once dbase.lpc defines
+   these as real functions, every such object gets them as genuine
+   *inherited, local* functions. A bare `set(...)` call from any feature
+   file composed into that object's program then resolves locally against
+   *that object's own* `dbase`, never touching the simul_efun at all. The
+   trailing `ob` parameter, when given and not `this_object()`, redirects
+   via a plain `ob->set(prop, data)` call_other (ordinary call_other
+   semantics are fine here — `current_object` becomes `ob` correctly, no
+   simul_efun weirdness, since this is a real function call not a bare
+   simul_efun dispatch).
+2. **Keep a matching set in the simul_efun's own `wizard.lpc`** as a
+   fallback ONLY for objects that don't inherit F_DBASE at all — with the
+   same `ob`-redirect logic, so at least the common `query(prop, ob)` /
+   `set(prop, data, ob)` convention behaves correctly there too instead of
+   silently hitting the shared fallback dbase.
+
+**A trap inside the fix — infinite recursion.** A handful of files define
+their OWN local `set`/`query`/`delete` override for a couple of special
+properties (room.lpc's `short`/`long`, user.lpc's level-up cascades,
+baby.lpc's `combat_exp`, master.lpc/giftd.lpc/examined.lpc similar), and
+fall through to "the generic implementation" for everything else. In the
+original archive this fallback was `efun::set(...)` etc. (not a real efun
+on this driver — see the pattern below). **Do not "fix" that fallback by
+routing it through the simul_efun object** (`SIMUL_EFUN_OB->set(idx, data,
+this_object())`): since `ob == this_object()` in the pure-fallback case,
+the simul_efun's own `ob`-redirect (part 2 above) calls straight back into
+`ob->set(...)` — i.e. back into the SAME overriding function — infinite
+recursion ("Too deep recursion", crashes the whole connection). The
+correct fallback, since these files `inherit F_DBASE` (directly or
+transitively), is `::set(idx, data)` / `::query(idx)` / `::delete(idx)` /
+`::add(prop, data)` — explicit **parent-scope** call to F_DBASE's real
+implementation, bypassing the local override without going anywhere near
+the simul_efun. Only use `ob->X(...)` (plain call_other) when `ob` is
+confirmed to be a *different* object than `this_object()`.
+
+**Related: `efun::X()` for X that was never a real efun.** Grep the whole
+lib for `efun::set(`, `efun::query(`, `efun::delete(`, `efun::addn(` —
+none of these are real FluffOS efuns (verify against `find ~/src/fluffos/
+src -iname '*.spec' | xargs grep`), they only ever existed as user-defined
+simul_efuns on the original server. `addn(prop, data, ob)` / `addn_temp`
+(numeric increment-or-set) show the same "never actually defined, only
+referenced" gap as `remove_ansi`/`B2G`/`db_affected`/`noansi_strlen` (see
+below) — restore as real simul_efuns delegating to `ob->add(prop, data)`
+(F_DBASE's own `add()`, which already does the increment-or-set logic).
+
+### 15b. More "only ever called, never defined" globals in the same family
+
+Beyond `addn`/`addn_temp` (§15), this lineage has several more bare
+functions called everywhere but genuinely undefined anywhere reachable —
+each one only surfaces as a *runtime* "Undefined function called: X" (not
+a compile error) the first time actual game logic reaches that code path,
+so a clean boot + lpcc PASS does not mean these are all found; keep
+watching debug.log during interactive testing:
+- **`remove_ansi(str)`** — strip ANSI color codes. Was only ever a real
+  method inside one unrelated inherited object (`feature/quest.lpc`), not
+  reachable from simul_efun context. Restore as a simul_efun (see
+  `adm/kernel/simul_efun/ansi_util.lpc` on nitan170911) using the same
+  color-table logic, included EARLY in `simul_efun.lpc` (before anything
+  that calls it — same #include-order rule as everything else in this
+  composed file, §8b).
+- **`noansi_strlen(str)`** — `strlen(remove_ansi(str))`, trivial, same gap.
+- **`B2G(str)`** — "Big5 to GBK" charset conversion; every call site but
+  one or two is commented out, confirming it was already being phased out.
+  Since the whole mudlib runs in UTF-8 post-conversion, there's no Big5 vs
+  GBK distinction left — a passthrough (`return str;`) is correct, not a
+  stopgap.
+- **`db_affected(db)`** — affected-row count after `db_exec()`. This
+  driver's DB package (`src/packages/db/db.spec`) has no such efun, and
+  `db_exec()` itself returns 0 for INSERT/UPDATE/DELETE (no result set) —
+  there's no real affected-row count obtainable through this driver's DB
+  API at all. Since every call site already checks `db_exec()`'s own
+  return for the real success/failure signal, a stub returning `1` (assume
+  ≥1 row) is a reasonable, documented compromise, not a silent lie.
+
+### 15c. `/adm/etc/preload`-style data files also need their `.c` refs fixed — the quote-based sed pass doesn't touch them
+
+`convert_lib.sh`'s literal-`".c"`-reference fixer (§2) only touches lines
+matching a *quoted* `".c"` inside `.lpc`/`.h` source. Some mudlibs also
+have a **plain-text data file** (no quotes, one bare path per line, e.g.
+`/adm/etc/preload` listing daemons to load — `/adm/daemons/securityd.c`,
+`/adm/daemons/logind.c`, ...) that the mudlib's own preload logic
+`explode()`s and `load_object()`s directly. After the `.c`→`.lpc` rename,
+these bare `.c` paths point at files that no longer exist; `load_object()`
+on them fails, usually silently swallowed by the mudlib's own `catch()`
+around the preload loop — so the daemon in question (often
+`securityd`!) just **never loads, with no visible error at all**. Symptom:
+`master.lpc`'s `valid_write`/`valid_read` (which defer to
+`find_object(SECURITY_D)`, defaulting to **deny** for write if not found)
+silently reject every write, and any `->method()` call on the
+security daemon's macro path just does nothing. Confirmed the daemon
+never loaded by running `lpcc --batch` against `SECURITY_D`'s own path
+directly and seeing `FAIL`. Fix: `sed -i 's/\.c$//' <the data file>` (or
+rename to `.lpc` if the reader is extension-strict) — check any
+`config`-like directory (`adm/etc/`) for OTHER files with this same bare
+`/path.c` pattern, not just `preload`.
+
+### 15d. Diagnosing a silent runtime crash inside a simul_efun/master apply chain — safe_apply()/find_object() swallow the error silently, even with a plain `catch()`
+
+Extending §8c: `new_conn_handler`'s call to `logon()` uses `safe_apply()`
+(`vm/internal/apply.cc`), which wraps the call in a raw C++ `try/catch`
+that discards the LPC error string entirely — no trace, no master
+`error_handler` call, nothing. **A plain LPC `catch(expr)` wrapped around
+the suspect call is the fix**, but note: wrap the *smallest* enclosing
+statement, not just the top-level call — if the real error is buried
+several call-other layers deep (`logon() -> LOGIN_D->logon() -> …`), you
+need the `catch()` at (or need to add one temporarily at) the level that
+actually executes the throwing statement, since `safe_apply`'s outer catch
+still eats anything that isn't caught by an LPC `catch()` first. Once
+caught, `efun::write(err)` (not the mudlib's own `write()` — that itself
+routes through `this_player()`/`previous_object()` plumbing that may not
+be safely established yet) reliably reaches the connected telnet client;
+`efun::write_file()` to a scratch path does NOT reliably work at this
+stage if the security daemon hasn't loaded yet (see §15c) since
+`valid_write` denies by default. Bisect by wrapping progressively smaller
+statements in `catch()` (or adding sequential `efun::write("CKPTn\n")`
+checkpoints) until you isolate the exact failing line; **always remove
+this instrumentation once the root cause is fixed** — it's easy to forget
+one checkpoint buried in a large function (happened once: a leftover
+`efun::write("CKPT9\n")` etc. leaked into the actual welcome-banner output
+because the running driver process had compiled the OLD (uncleaned)
+version of the file before the cleanup edit landed — **LPC objects don't
+recompile just because their source file changed on disk; you must
+restart the driver process** after every edit to see it take effect, even
+mid-investigation).
+
+### 15e. A "restore graceful degradation" pattern: guard every un-checked `->method()` chained straight onto a factory call
+
+Several bugs in this family share one shape: `SOME_D->create_x(...)
+->move(...)` or `ob = SOME_D->create_x(...); set(..., ob); ob->color(...)`
+with **no check that the factory call actually returned an object** —
+`create_object()`/`create_dynamic()`-style factories in this codebase
+legitimately return `0` on a data/content mismatch (e.g. a randomly picked
+item template file that doesn't `file_size()` correctly), and the
+original (looser-typed) driver apparently no-op'd a call_other on `0`
+instead of throwing. Search for the *caller's* immediate next line rather
+than assuming the factory itself is broken — the minimal, correct fix is
+an `if (objectp(ob))` guard at the call site, not "fix" the factory to
+never return 0 (it's supposed to be able to, for legitimately-missing
+content).
+
 ---
 
 ## Per-archive gotchas index

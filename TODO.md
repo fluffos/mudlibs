@@ -15,8 +15,8 @@ worked; keep status values consistent so the table stays greppable:
 - `blocked: <reason>` (needs a decision or hit something unresolved)
 
 Port assignments: sequential from 40001, recorded here so re-running
-several libs at once never collides. **Next free port: 40008** (40007
-taken by ds386, in progress).
+several libs at once never collides. **Next free port: 40020** (40001-40019
+assigned; 40007 is ds386, deprioritized/partial).
 
 ## Progress summary (updated as libs are finished)
 
@@ -25,8 +25,19 @@ taken by ds386, in progress).
   majority of this collection. If an archive turns out to be English
   (like ds386/Dead Souls), do the minimum to note what it is, don't sink
   deep debugging time into it -- move on to the next Chinese one.
-- **Done: 16 / 100** (shanhaizhanshen, xingzhanyingxiong, unknownlib20150716
-  [小雨西游II], bxsj [书剑天下], bxsj1 [书剑·经典], chidi [江湖I])
+- **Done: 17 / 100** (shanhaizhanshen, xingzhanyingxiong, unknownlib20150716
+  [小雨西游II], bxsj [书剑天下], bxsj1 [书剑·经典], chidi [江湖I], ...,
+  nitan170911 [仙剑奇侠传])
+- **Major finding on nitan170911** (AGENTS.md §15): the whole "NT/nitan/
+  Lonely" mudlib lineage implements per-object property storage
+  (`set`/`query`/`delete`) as bare simul_efun calls, relying on
+  `this_object()` being the CALLER during a simul_efun call -- but on this
+  driver `this_object()` is the SIMUL_EFUN OBJECT itself, so without a
+  fix every object sharing no local override reads/writes ONE shared
+  dbase. Fixed by giving `feature/dbase.lpc` real local set/query/delete
+  (inherited by nearly everything). **nitan6 shares this exact lineage
+  and will need the identical fix** -- apply proactively, don't
+  rediscover.
 - **Partial/deprioritized: ds386** ("Dead Souls", archive #7 — English,
   Nightmare-mudlib-lineage, not wuxia). Boots and the first-time admin
   setup wizard runs interactively; not polished further per the policy
@@ -78,8 +89,8 @@ taken by ds386, in progress).
 | 18 | LLMUD(大唐双龙)v_0.11版.rar | llmud_datangshuanglong | 40015 | done | same lineage as dtsl(#8), zero boot fixes needed; see libs/llmud_datangshuanglong/NOTES.md |
 | 19 | mhxy.rar | mhxy | 40016 | done | 梦幻西游 (Qingdao), 西游记 lineage; CRLF sed gotcha (§8h); see libs/mhxy/NOTES.md |
 | 20 | MUD侠客行2017完整版.zip | xiakexing2017 | 40017 | done | 侠客行 2017, booted with zero fixes; see libs/xiakexing2017/NOTES.md |
-| 21 | nitan170911.7z | | | not started | |
-| 22 | nitan6.zip | | | not started | |
+| 21 | nitan170911.7z | nitan170911 | 40018 | done | 仙剑奇侠传 (NT/nitan/Lonely lineage); found the major simul_efun set/query/dbase architecture bug (AGENTS.md §15) + several never-defined-globals gaps (§15b) + preload data-file .c refs (§15c); new-player registration needs a real MySQL backend (out of scope, fails gracefully with a clear message); see libs/nitan170911/NOTES.md |
+| 22 | nitan6.zip | nitan6 | 40019 | converted | same NT/nitan lineage as #21 -- expect to need the identical §15/§15b/§15c fixes; not yet booted |
 | 23 | rzrmud.20130220.tar.gz | | | not started | |
 | 24 | TOMud_VC源代码.rar | | | not started | name suggests VC/Windows source, triage |
 | 25 | xkx2001测试用老lib.zip | | | not started | |
