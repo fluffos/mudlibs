@@ -13,6 +13,13 @@ if [[ ! -f "$ARCHIVE" ]]; then
   exit 1
 fi
 
+# Must be absolute: the *.rar/*.exe branches below `cd "$DEST"` before
+# referencing $ARCHIVE, so a relative path (the normal "archives/foo.rar"
+# calling convention) silently fails to open -- unrar prints "Cannot open"
+# and exits 0, and this script (no `-e`) doesn't fail loudly (it exits 0
+# and prints "extracted ..." with `raw/` empty either way).
+ARCHIVE="$(cd "$(dirname "$ARCHIVE")" && pwd)/$(basename "$ARCHIVE")"
+
 mkdir -p "$DEST"
 
 lower="${ARCHIVE,,}"
@@ -58,6 +65,11 @@ case "$lower" in
     exit 1
     ;;
 esac
+
+if [[ -z "$(find "$DEST" -type f -print -quit 2>/dev/null)" ]]; then
+  echo "ERROR: nothing extracted into $DEST -- check the archive/tool output above" >&2
+  exit 1
+fi
 
 echo "extracted $ARCHIVE -> $DEST"
 find "$DEST" -maxdepth 2 | head -20

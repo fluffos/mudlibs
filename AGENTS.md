@@ -115,6 +115,17 @@ lib fully playable) unless a specific lib is called out for deeper work.
   `7z x` or `unrar x` can usually still open them directly.
 - Watch for archives that are just a renamed `.gz`/`.tar` of something
   unrelated (e.g. `西行战记.gz` unpacks to `xxzj.tar`).
+- **Found on archive #26 (`xlqy_new2007.rar`)**: `extract.sh`'s `.rar`/
+  `.exe`-SFX branches `cd "$DEST"` before invoking `unrar x ... "$ARCHIVE"`
+  — since the normal calling convention passes a RELATIVE path
+  (`archives/foo.rar`), after the `cd` that path no longer resolves,
+  `unrar` prints `Cannot open ... No such file or directory` and (because
+  the script has no `-e`) exits 0 anyway, so the script happily reports
+  "extracted" with an EMPTY `raw/`. **Fixed**: `ARCHIVE` is now resolved
+  to an absolute path up front, and the script now fails loudly (checks
+  `raw/` actually has files, `exit 1` if not) instead of silently
+  succeeding with nothing extracted — catches this class of bug for ANY
+  archive type, not just `.rar`, going forward.
 
 ## Encoding — `file`'s text/binary guess is not reliable enough to gate on
 
