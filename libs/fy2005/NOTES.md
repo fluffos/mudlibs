@@ -35,8 +35,8 @@ to quotes automatically, `static`→`nosave` (44 files).
   bare (unquoted) paths, and blanket-fixing "any `path.c` text anywhere"
   risks false positives in genuine documentation/help text. Left as-is —
   affects some quest/scenery room resolution, not the boot/login path.
-- lpcc sweep run; not fully triaged past confirming a clean boot given
-  time constraints.
+- lpcc sweep: 9696/9764 pass (99.3%) — not fully triaged past confirming
+  a clean boot given time constraints.
 
 ## How to run
 
