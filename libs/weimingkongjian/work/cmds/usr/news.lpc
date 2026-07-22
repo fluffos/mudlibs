@@ -1,0 +1,230 @@
+// Cmds:/cmds/usr/news.c
+// Created by kittt@djx
+// 由jjgod为天下英豪修改
+// by xiha@wmkj 2001-8-8
+
+#include <ansi.h>;
+inherit BULETIN_BOARD;
+
+
+// create part和普通的BOARD差不多
+void create()
+{
+        set_name("未明空间新闻版", ({ "newsboard"}) );
+        set("location", "/d/wizard/wizard_room"); // 这里用了一个ROOM来放置BOARD，简单，你做 
+        set("board_id", "yxwdnews_b");              // 成一个指令来输入新闻也可以。
+        setup();
+        set("capacity", 500);
+}
+
+// 这个部份是用来在login时调用的。
+int check_news(object me)
+{
+        int num,i,last_time_read;
+        mapping *notes, last_read_time;
+        string myid,msg="";
+        notes = query("notes");
+        last_read_time =me->query("board_last_read"+(string)query("board_id"));
+        myid = query("board_id");
+        if( !pointerp(notes) || !sizeof(notes) ) return 1;
+
+        if(userp(me))
+        {
+                i=sizeof(notes)-me->query("LastReadNews");
+                
+                if(i < 6 && i > 0) // 小于6条新闻才显示标题，不然会FLOOD
+                {
+                        msg =HIC"\n≡"HIY"────未明空间最新消息────────────────────────────"HIC"≡\n"NOR;
+                        
+                        if( !mapp(last_read_time) || undefinedp(last_read_time[myid]) )
+                                num = 1;
+                                
+                        else
+                                for(num = 1; num<=sizeof(notes); num++)
+                                        if( notes[num-1]["time"] > last_read_time[myid] ) break;
+                                        
+                        if (mapp(last_read_time)) last_time_read = last_read_time[myid];
+                        for(i=sizeof(notes)-1 ; i>num-2 ; i--)
+                        {
+                                msg += sprintf(HIY"["NOR"%3d"HIY"]"NOR,i+1);
+                                msg += sprintf("     %-=25s %10s [%s]\n",
+                                        notes[i]["title"], notes[i]["author"],
+                                        ctime(notes[i]["time"]));;
+                        }
+                        
+                        msg += HIC"≡"HIY"────────────────────────────未明空间新闻系统────"HIC"≡"NOR;
+                        me->start_more(msg);
+                }
+                
+                i=sizeof(notes)-me->query("LastReadNews");
+                if (i<0) i=0;
+                write(HBRED HIY"【未明空间新闻系统】告诉您：从您上次收听到现在"+((i==0)? "没有任何":"共有"+HIW+chinese_number(i)+HIY"条")+"新闻！\n"NOR);
+                if(i>10) write("你可以Help news 来查看【未明空间新闻系统】的收听方法。\n"); // 提醒不知道有NEWS系统的玩家使用news
+        }
+}
+int main(object me, string arg)
+{
+        int num,i,last_time_read;
+        mapping *notes, last_read_time;
+        string myid,msg,title,number;
+
+        last_read_time = me->query("board_last_read");
+        myid = query("board_id");
+        notes = query("notes");
+        i=sizeof(notes)-me->query("LastReadNews");
+        if( !pointerp(notes) || !sizeof(notes) )
+        return notify_fail(HIW"【未明空间新闻系统】告诉您：对不起，「未明空间」目前没有任何新闻。（唉，巫师也太懒了。）\n"NOR);
+        if( !arg ) 
+        {
+                if (i<0) i=0;
+                if(i>10) write("你可以 Help news 来查看未明空间新闻系统的使用方法。\n"); 
+                write(HIW"【未明空间新闻系统】"NOR"告诉您：「未明空间」目前共有"+HIW+chinese_number(sizeof(notes))+NOR"条新闻"+((i==0)? "。":"，您有"+HIY+chinese_number(i)+NOR"条尚未收听。")+"\n");return 1; }
+
+        if (sscanf(arg,"add %s",title)==1) {
+                if (!title) return notify_fail("请指定一个新闻的标题。\n");
+                if (!wizardp(me)) return notify_fail("对不起，只有未明空间的巫师才可以发布新闻。\n");
+                else {
+                        do_post(title);
+                        return 1;
+                        }
+                }
+
+        if (sscanf(arg,"del %s",number)==1) {
+                if (!number) return notify_fail("你要删除哪一个编号的新闻？\n");
+                if (!wizardp(me)) return notify_fail("对不起，只有未明空间的巫师才可以删除新闻。\n");
+                else {
+                        do_discard(number);
+                        return 1;
+                        }
+                }
+
+                if( arg=="all") // 显示所有新闻
+                {
+                        msg = HIC"\n≡"HIY"──────未明空间所有新闻──────────────────────────"HIC"≡\n"NOR;
+                        notes = query("notes");
+                        
+                        if (mapp(last_read_time)) last_time_read = last_read_time[myid];
+                        for(i=sizeof(notes)-1 ; i>-1 ; i--)
+                        {
+                                msg += sprintf("  %s[%3d]" NOR,
+                                notes[i]["time"] > last_time_read ? HIY: "", i+1);
+                                msg += sprintf("     %-=25s %15s [%s]\n",
+                                        notes[i]["title"], notes[i]["author"],
+                                        ctime(notes[i]["time"]));;
+                        }
+                        msg += HIC"≡"HIY"───────────────────────────────未明空间─────"HIC"≡"NOR;
+                        me->start_more(msg);
+                        return 1;
+                }
+                if (arg=="new")  // 显示最新新闻
+                {
+                        if(!mapp(last_read_time)||undefinedp(last_read_time[myid]) )
+                                num = 1;
+                        else
+                                for(num = 1; num<=sizeof(notes); num++)
+                                if(notes[num-1]["time"]>last_read_time[myid] ) break;
+                }
+                else if(!sscanf(arg,"%d",num)) return notify_fail("你到底要看第几条新闻呀？\n");
+                if( num < 1||num > sizeof(notes))
+                return notify_fail("看清楚点，好像没有这条新闻耶。\n");
+        num--;
+        me->start_more(sprintf("\n\n%s\n"HIR"新闻主题："HIY"%s\n"HIW"新闻巫师："NOR"%s\n"HIG"新闻时间：%s\n"HIC
+        "≡"HIY"──────未明空间新闻播放──────────────────────"HIC"≡\n"NOR,
+                HIC"这是「未明空间」创立以来的第"+chinese_number(num + 1)+"条新闻。"NOR, 
+                notes[num]["title"],notes[num]["author"], 
+                ctime(notes[num]["time"]))
+                + notes[num]["msg"]+
+        HIC"≡"HIY"───────────────────────────未明空间─────"HIC"≡"NOR, );
+
+        if( !mapp(last_read_time) )
+                me->set("board_last_read", ([ myid: notes[num]["time"] ]) );
+        else 
+                if( undefinedp(last_read_time[myid]) || notes[num]["time"] > last_read_time[myid] )
+                        last_read_time[myid] = notes[num]["time"];
+
+        if(me->query("LastReadNews") < num + 1)
+        me->set("LastReadNews",num+1);
+        return 1;
+}
+
+
+void init()
+{
+        object me=this_player();
+// 所有巫师都有权限
+       if (wizardp(me)){
+                add_action("do_post", "broadcast");
+                add_action("do_post", "gb");
+                add_action("do_discard", "discard");
+        }       
+}
+
+void done_post(object me, mapping note, string text)
+{
+        mapping *notes;
+        object *user=users();
+        string msg;
+        int i,num;
+        string *tell_news = ({ 
+        "新闻精灵突然从地下钻出来，展开手中的卷轴，开始宣读新闻：\n",
+        "只听“扑通”一声，天上掉下一个新闻精灵，展开手中的卷轴，开始宣读新闻：\n",
+        "新闻精灵急急忙忙的跑了过来，摔了一交。你赶紧扶稳它，让它宣读新闻：\n",
+        "新闻精灵突然在你背后拍拍你的肩膀，下了你一跳，只好听它宣读新闻：\n",
+        });
+
+        string *finish_news = ({ 
+        "新闻宣读完毕，新闻精灵又赶紧往地下一钻，不见了。\n",
+        "新闻读完了，只见新闻精灵闪了一闪就不见了。\n",
+        "新闻精灵正要走，又摔了一交。你赶紧扶稳它，让它一瘸一拐的走了。\n",
+        "新闻精灵卷起卷轴，满意的踱着方步走了。\n",
+        });
+
+        note["time"] = time();
+        note["msg"] = text;
+        notes = query("notes");
+        if( !pointerp(notes) || !sizeof(notes) )
+                notes = ({ note });
+        else
+                notes += ({ note });
+
+        if( sizeof(notes) > query("capacity"))
+                notes = notes[query("capacity")/2 .. query("capacity")];
+
+        set("notes", notes);
+        save();
+        restore();
+
+/*
+ 使用channel显示提示有了最新新闻10888729
+        CHANNEL_D->do_channel(me, "yh", BLINK HIY"【笑书神侠】有了最新新闻！各位玩家请用 news 查看。" NOR);
+*/
+        tell_object(me, "新闻发表完毕。\n");
+        message("system",HIM+tell_news[random(3)]+NOR,users());
+        num=sizeof(notes)-1;
+
+        msg=sprintf(HIC"≡"HIY"────新闻标题：[%-46s]─"HIC"≡\n"NOR+notes[num]["msg"]+
+        HIC"≡"HIY"───────────────────────────未明空间─────"HIC"≡\n"NOR,notes[num]["title"]);
+        message("system",msg,users());
+        message("system",HIM+finish_news[random(3)]+NOR,users());
+        users()->set("LastReadNews",num+1);
+        users()->set("board_last_read", ([ query("board_id"): notes[num]["time"] ]) );
+        return;
+}
+
+int help(object me)
+{
+    write(@HELP
+「未明空间」新闻系统指令 
+
+指令格式 :
+news                    查看共有的和最新发布的新闻。
+news all                未明空间新闻一览。 
+news new                阅读最新的新闻。 
+news del <新闻编号>     删除新闻。
+news add <新闻标题>     写新的新闻。
+news <新闻编号>         查看此编号新闻的详细内容。 
+HELP
+    );
+    return 1;
+}
+
