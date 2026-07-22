@@ -13,6 +13,8 @@ worked; keep status values consistent so the table stays greppable:
   renders correctly)
 - `done` (playable + NOTES.md written + committed)
 - `blocked: <reason>` (needs a decision or hit something unresolved)
+- `not mudlib` (confirmed not LPC mudlib content — client source, docs,
+  etc.; see AGENTS.md's non-mudlib list — skipped, not converted)
 
 Port assignments: sequential from 40001, recorded here so re-running
 several libs at once never collides. **Next free port: 40021** (40001-40020
@@ -114,7 +116,7 @@ rely on the boot + interactive-connect test as the verification gate.
 | 21 | nitan170911.7z | nitan170911 | 40018 | done | 仙剑奇侠传 (NT/nitan/Lonely lineage); found the major simul_efun set/query/dbase architecture bug (AGENTS.md §15) + several never-defined-globals gaps (§15b) + preload data-file .c refs (§15c); new-player registration needs a real MySQL backend (out of scope, fails gracefully with a clear message); see libs/nitan170911/NOTES.md |
 | 22 | nitan6.zip | nitan6 | 40019 | done | 笑傲江湖, same NT/nitan lineage as #21 -- proactively applied all §15/§15b/§15c fixes before first boot, booted clean on the first attempt; found a missing seteuid() + a heartbeat-interval efun gap + the "bare array" typo (§15f, new); plays through into full character creation with zero crashes; see libs/nitan6/NOTES.md |
 | 23 | rzrmud.20130220.tar.gz | rzrmud | 40020 | done | 大唐西游/YWX人造人, different lineage from nitan family (no simul_efun-based dbase, correctly uses per-object inherit instead); booted with zero fixes, 97.5% lpcc pass; ~55-file missing-inherit content gap noted but not fixed; see libs/rzrmud/NOTES.md |
-| 24 | TOMud_VC源代码.rar | | | not started | name suggests VC/Windows source, triage |
+| 24 | TOMud_VC源代码.rar | | | not mudlib | confirmed: "MyMud", a Windows MFC/VC++ GUI mud CLIENT (MainFrm.cpp, DialogGame.cpp, MudSock.cpp, ...), not LPC source -- skipped, see AGENTS.md's non-mudlib list |
 | 25 | xkx2001测试用老lib.zip | | | not started | |
 | 26 | xlqy_new2007.rar | | | not started | |
 | 27 | xlqy-解压看readme.rar | | | not started | |

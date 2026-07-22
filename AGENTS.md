@@ -1052,3 +1052,8 @@ second — both listed for traceability):
 - `西行战记.gz` — plain gzip of a tar (`xxzj.tar`), not `.tar.gz` despite
   looking like a bare archive; extracts fine with `tar` after `gunzip` or
   directly via `tar xzf`.
+- `TOMud_VC源代码.rar` (archive #24) — confirmed NOT a mudlib: it's
+  "MyMud", a Windows MFC/VC++ GUI mud **client** (`MainFrm.cpp`,
+  `DialogGame.cpp`, `MudSock.cpp`, etc. — a telnet client with dialogs,
+  not LPC source). Skipped entirely, not run through the conversion
+  pipeline.
