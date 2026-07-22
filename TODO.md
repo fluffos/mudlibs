@@ -17,7 +17,7 @@ worked; keep status values consistent so the table stays greppable:
   etc.; see AGENTS.md's non-mudlib list — skipped, not converted)
 
 Port assignments: sequential from 40001, recorded here so re-running
-several libs at once never collides. **Next free port: 40032** (40001-40031
+several libs at once never collides. **Next free port: 40033** (40001-40032
 assigned; 40007 is ds386, deprioritized/partial). On mega-libs (tens of
 thousands of files, the "nitan" family), skip the full `lpcc_check.sh`
 sweep — it can OOM the host before finishing (see AGENTS.md §6b) — and
@@ -30,12 +30,26 @@ rely on the boot + interactive-connect test as the verification gate.
   majority of this collection. If an archive turns out to be English
   (like ds386/Dead Souls), do the minimum to note what it is, don't sink
   deep debugging time into it -- move on to the next Chinese one.
-- **Done: 30 / 100** (shanhaizhanshen, xingzhanyingxiong, unknownlib20150716
+- **Done: 31 / 100** (shanhaizhanshen, xingzhanyingxiong, unknownlib20150716
   [小雨西游II], bxsj [书剑天下], bxsj1 [书剑·经典], chidi [江湖I], ...,
   nitan170911 [仙剑奇侠传], nitan6 [笑傲江湖], rzrmud [大唐西游], xo, xo_final,
   zzfy [郑州风云3], shiji [世纪], dongfanggushi2 [东方故事Ⅱ之天朝帝国],
   zhonghua2 [中华英雄苏州站], shujian2008 [书剑天下 2008],
-  shujiantianxia [书剑天下, 小熊泥苑 snapshot], shujianpiaoling2 [书剑飘零Ⅱ])
+  shujiantianxia [书剑天下, 小熊泥苑 snapshot], shujianpiaoling2 [书剑飘零Ⅱ],
+  xianlvqiyuan [仙侣情缘/XLQY, 知秋站 2001 snapshot])
+- **Registration flow SHAPE varies a lot between libs** -- confirmed
+  again on xianlvqiyuan: GB/BIG5 prompt, then an "are you a student"
+  age-gate (any non-"no" answer ends the session), then `new` must be
+  typed literally (not any unused id), then English name, then Chinese
+  name with NO y/n confirmation in between. Always read logind.lpc's
+  actual get_id/confirm_id/get_name call chain before scripting a
+  registration test -- don't assume the shape from a previous lib.
+- **Similar Chinese titles are NOT a reliable lineage signal** (2nd
+  confirmation, after shujianpiaoling2 vs shujian2008): xianlvqiyuan's
+  "仙侣奇缘新版" turned out to be a different, older 2001 codebase
+  snapshot than xlqy_new2007's "新仙侣情缘之飘渺纪元" (archive #26,
+  2007-era) -- confirmed via md5sum diff on core files. Always verify
+  via diff, never assume from title alone.
 - **Reminder confirmed again on shujianpiaoling2**: a similar Chinese
   title ("书剑" in both this and shujian2008/shujiantianxia) does NOT
   imply shared lineage -- this one has a completely different adm/obj/
@@ -199,7 +213,7 @@ rely on the boot + interactive-connect test as the verification gate.
 | 35 | 书剑2008.rar | shujian2008 | 40029 | done | 「书剑天下」2008, Century-family adm/single/ layout with a genuinely custom securityd.lpc ACL; found TWO new major bug classes (§15n func-discrimination gap blocking mid-connection lazy compiles + §15o missing get_include_path) + standard §15h fixes; full registration flow verified incl. correct rejection of banned novel-name "萧峰" then acceptance of invented name "秦风"; 99.2% lpcc pass; see libs/shujian2008/NOTES.md |
 | 36 | 书剑天下.rar | shujiantianxia | 40030 | done | code-identical to shujian2008(#35) -- confirmed via diff, only site branding ("小熊泥苑") + runtime state differ, NOT a byte-identical archive though (different md5sum, kept as its own entry); ported all 7 already-proven fixes directly, booted clean on first attempt; full registration flow verified with real name "秦风"; 99.2% lpcc pass (same as #35); see libs/shujiantianxia/NOTES.md |
 | 37 | 书剑飘零II .zip | shujianpiaoling2 | 40031 | done | 「书剑飘零Ⅱ」"Stray Book & Sword" by 飞白工作室, adm/obj/ layout -- genuinely unrelated to shujian2008/shujiantianxia despite similar title; standard §15h fix + proactive get_include_path() insurance; confirmed §4/§15n not needed via source reading; full registration flow verified with real name "秦风"; 95.3% lpcc pass; see libs/shujianpiaoling2/NOTES.md |
-| 38 | 仙侣奇缘新版.rar | | | not started | |
+| 38 | 仙侣奇缘新版.rar | xianlvqiyuan | 40032 | done | 仙侣情缘/XLQY, 知秋站 2001 snapshot, DIFFERENT older codebase than xlqy_new2007(#26) despite similar title (confirmed via md5sum diff); standard §15h fix + proactive get_include_path() + §8h convertd.lpc typo (45x) + NEW case-sensitivity bug (BANNER vs banner) that silently crashed every connection via unguarded cat()/write(0), fixed + hardened cat() itself; full registration flow verified (gb->no->new->English name->real Chinese name "秦风"); 98.5% lpcc pass; see libs/xianlvqiyuan/NOTES.md |
 | 39 | 仙侣情缘浙大版.rar | | | not started | |
 | 40 | 仙剑传奇.rar | | | not started | |
 | 41 | 侠客新传(2).rar | | | not started | |
