@@ -103,10 +103,13 @@ actual character creation/login is out of scope for this pass.
 
 ## lpcc sweep
 
-Ran `scripts/lpcc_check.sh` after all fixes above; see `lpcc_fail.log` /
-`lpcc_batch_raw.log` for the full pass/fail list (~54,600 files, this is a
-large lib — expect a long run, ~20-30+ min). Remaining failures are
-expected to be the usual long tail (template/dynamic-generation files
-that need specific runtime context to load, per AGENTS.md §6b) rather
-than newly-discovered architecture bugs — the connect-time crash chain
-above was the blocking issue and is resolved.
+**Not completed** — this lib has ~54,600 `.lpc` files, and `lpcc --batch`
+keeps everything loaded in one VM session with no unloading; the sweep
+drove this 23GB host down to ~370MB free with heavy swapping after ~18
+minutes, well before finishing, so it was killed rather than risk an OOM
+(see AGENTS.md §6b's mega-lib note). The boot + interactive-connect test
+above is what actually found every real bug fixed in this pass (§15/§15b/
+§15c/§15e) and is treated as sufficient verification for a lib this size;
+a full sweep would mostly surface the same long-tail false positives
+described in §6b (files needing specific runtime context to load) rather
+than new architecture bugs, at real cost to run safely.

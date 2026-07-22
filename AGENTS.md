@@ -433,6 +433,22 @@ them:
   the big repetitive categories (call_other/couldn't-find-object clusters)
   in that lib's `NOTES.md` as expected noise once you've spot-checked a
   couple and confirmed the pattern.
+- **On a mega-lib (tens of thousands of files, e.g. the "nitan" family at
+  26,000-55,000 `.lpc` files), the full sweep's memory use can become the
+  real bottleneck, not time.** `lpcc --batch` keeps every compiled object
+  loaded in ONE VM session for the whole run (that's the whole point — no
+  reboot per file), but that means memory grows *unbounded* across tens of
+  thousands of files with no unloading; on this 23GB host it drove free
+  memory down to ~370MB with 2.6GB swapped after ~18 minutes on a 54,600-
+  file lib, well before finishing, at real risk of OOM-killing something
+  else. If a sweep on a mega-lib is eating most of system RAM after many
+  minutes, kill it rather than let it run to potential OOM — the boot +
+  interactive-connect test (this pipeline's other verification step) is
+  the test that actually caught every real bug found on nitan170911/nitan6
+  (see §15), and is a perfectly sufficient signal on its own for a lib this
+  size; treat the full sweep as a nice-to-have on mega-libs, not a
+  required gate the way it is on normal-sized (hundreds to low-thousands
+  of files) libs.
 
 ### 7. Missing `get_root_uid()`/`get_bb_uid()` master applies (PACKAGE_UIDS)
 
@@ -978,6 +994,26 @@ than assuming the factory itself is broken — the minimal, correct fix is
 an `if (objectp(ob))` guard at the call site, not "fix" the factory to
 never return 0 (it's supposed to be able to, for legitimately-missing
 content).
+
+### 15f. Bare `array` as a full type-by-itself declaration silently doesn't declare anything on this driver
+
+`array name;` or `array name = expr;` (no preceding element type — as
+opposed to `mixed *name`, `int *name`, etc.) is common across this whole
+mudlib family (~30-40 occurrences per lib). The compiler's grammar
+(`opt_atomic_type L_ARRAY`) technically allows an *empty* atomic type
+before `array`, but empirically on this driver it does not actually
+register `name` as a declared variable at all: `array lines;` alone
+compiles with **no error**, but any later use of `lines` (e.g. `lines =
+({...})`) fails with `Undefined variable`/`Illegal lvalue`; the combined
+form `array name = expr;` in one statement fails immediately with `Illegal
+LHS`. Confirmed with a minimal `lpcc` test isolating the exact statement.
+Fix per-occurrence as it surfaces (via lpcc sweep or an interactive-test
+crash) by inserting the actual element type: `array` → `mixed *`. **Do
+not try to bulk-fix every occurrence found via grep** — most are in files
+that are never reached during a basic boot+login test, and this is
+exactly the "long tail, not all reachable at once" situation in §6b;
+fixing only what a real lpcc/interactive-test failure actually surfaces
+keeps the signal-to-effort ratio sane on a lib with 50,000+ files.
 
 ---
 

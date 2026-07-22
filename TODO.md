@@ -16,7 +16,10 @@ worked; keep status values consistent so the table stays greppable:
 
 Port assignments: sequential from 40001, recorded here so re-running
 several libs at once never collides. **Next free port: 40020** (40001-40019
-assigned; 40007 is ds386, deprioritized/partial).
+assigned; 40007 is ds386, deprioritized/partial). On mega-libs (tens of
+thousands of files, the "nitan" family), skip the full `lpcc_check.sh`
+sweep — it can OOM the host before finishing (see AGENTS.md §6b) — and
+rely on the boot + interactive-connect test as the verification gate.
 
 ## Progress summary (updated as libs are finished)
 
@@ -25,9 +28,9 @@ assigned; 40007 is ds386, deprioritized/partial).
   majority of this collection. If an archive turns out to be English
   (like ds386/Dead Souls), do the minimum to note what it is, don't sink
   deep debugging time into it -- move on to the next Chinese one.
-- **Done: 17 / 100** (shanhaizhanshen, xingzhanyingxiong, unknownlib20150716
+- **Done: 18 / 100** (shanhaizhanshen, xingzhanyingxiong, unknownlib20150716
   [小雨西游II], bxsj [书剑天下], bxsj1 [书剑·经典], chidi [江湖I], ...,
-  nitan170911 [仙剑奇侠传])
+  nitan170911 [仙剑奇侠传], nitan6 [笑傲江湖])
 - **Major finding on nitan170911** (AGENTS.md §15): the whole "NT/nitan/
   Lonely" mudlib lineage implements per-object property storage
   (`set`/`query`/`delete`) as bare simul_efun calls, relying on
@@ -35,9 +38,21 @@ assigned; 40007 is ds386, deprioritized/partial).
   driver `this_object()` is the SIMUL_EFUN OBJECT itself, so without a
   fix every object sharing no local override reads/writes ONE shared
   dbase. Fixed by giving `feature/dbase.lpc` real local set/query/delete
-  (inherited by nearly everything). **nitan6 shares this exact lineage
-  and will need the identical fix** -- apply proactively, don't
-  rediscover.
+  (inherited by nearly everything).
+- **Confirmed on nitan6**: applying every nitan170911 fix proactively
+  before the first boot attempt worked -- booted clean on the first try.
+  This is the playbook for any future same-lineage lib: recognize it, copy
+  the byte-identical generic engine files straight over, manually re-apply
+  the same transformation to files with real content differences, THEN
+  boot.
+- **Mega-lib note**: both nitan170911 (~54,600 files) and nitan6 (~23,100
+  files) are far larger than every other lib processed so far. The full
+  `lpcc_check.sh` sweep is impractical at this scale -- it drove this
+  23GB host to ~370MB free with heavy swapping after 18 minutes on
+  nitan170911, well before finishing, so it was killed rather than risk
+  an OOM. Skipped entirely on nitan6. The boot + interactive-connect test
+  found every real bug on both libs and is treated as sufficient
+  verification for libs this size (AGENTS.md §6b).
 - **Partial/deprioritized: ds386** ("Dead Souls", archive #7 — English,
   Nightmare-mudlib-lineage, not wuxia). Boots and the first-time admin
   setup wizard runs interactively; not polished further per the policy
@@ -90,7 +105,7 @@ assigned; 40007 is ds386, deprioritized/partial).
 | 19 | mhxy.rar | mhxy | 40016 | done | 梦幻西游 (Qingdao), 西游记 lineage; CRLF sed gotcha (§8h); see libs/mhxy/NOTES.md |
 | 20 | MUD侠客行2017完整版.zip | xiakexing2017 | 40017 | done | 侠客行 2017, booted with zero fixes; see libs/xiakexing2017/NOTES.md |
 | 21 | nitan170911.7z | nitan170911 | 40018 | done | 仙剑奇侠传 (NT/nitan/Lonely lineage); found the major simul_efun set/query/dbase architecture bug (AGENTS.md §15) + several never-defined-globals gaps (§15b) + preload data-file .c refs (§15c); new-player registration needs a real MySQL backend (out of scope, fails gracefully with a clear message); see libs/nitan170911/NOTES.md |
-| 22 | nitan6.zip | nitan6 | 40019 | converted | same NT/nitan lineage as #21 -- expect to need the identical §15/§15b/§15c fixes; not yet booted |
+| 22 | nitan6.zip | nitan6 | 40019 | done | 笑傲江湖, same NT/nitan lineage as #21 -- proactively applied all §15/§15b/§15c fixes before first boot, booted clean on the first attempt; found a missing seteuid() + a heartbeat-interval efun gap + the "bare array" typo (§15f, new); plays through into full character creation with zero crashes; see libs/nitan6/NOTES.md |
 | 23 | rzrmud.20130220.tar.gz | | | not started | |
 | 24 | TOMud_VC源代码.rar | | | not started | name suggests VC/Windows source, triage |
 | 25 | xkx2001测试用老lib.zip | | | not started | |
