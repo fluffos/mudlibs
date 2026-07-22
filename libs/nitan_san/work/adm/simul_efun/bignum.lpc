@@ -1,0 +1,246 @@
+// bignum.lpc
+//
+// FIX (AGENTS.md §8e-style, new): util.lpc's count_add/count_sub/count_mul/
+// count_div/count_lt/count_gt/count_le/count_ge/count_eq/big_number_pow
+// (this lib's "arbitrary precision" arithmetic helpers, used EXTREMELY
+// widely -- hundreds of files, mostly combat/stat/currency math) all
+// funnel through a single `efun::count(n1, op, n2)` call that isn't a
+// real efun on this driver at all (checked every *.spec in ~/src/fluffos --
+// no such efun exists), unlike the file_lines/sort_string/filter_ansi/
+// file_crypt/file_valid gaps (see the #if 0 fixes in file.lpc/message.lpc/
+// util.lpc) there is no pure-LPC #else fallback already written for this
+// one -- implement it for real as an arbitrary-precision decimal-string
+// integer arithmetic library. Numbers are represented as plain decimal
+// strings (optionally int, converted via sprintf), sign+magnitude.
+
+private string _bn_strip_zeros(string s)
+{
+        int i = 0;
+        int len = strlen(s);
+        while (i < len - 1 && s[i] == '0') i++;
+        return s[i..];
+}
+
+private string _bn_to_str(mixed n)
+{
+        if (intp(n)) return sprintf("%d", n);
+        if (stringp(n)) return n;
+        if (floatp(n)) return sprintf("%d", (int)n);
+        return "0";
+}
+
+// returns ({ sign (1 or -1), digits (no leading zeros, no sign) })
+private mixed *_bn_split(mixed n)
+{
+        string s;
+        int sign;
+
+        s = _bn_to_str(n);
+        sign = 1;
+        if (strlen(s) && s[0..0] == "-")
+        {
+                sign = -1;
+                s = s[1..];
+        }
+        if (s == "") s = "0";
+        s = _bn_strip_zeros(s);
+        if (s == "0") sign = 1;
+
+        return ({ sign, s });
+}
+
+// compare two non-negative digit strings (no leading zeros): -1/0/1
+private int _bn_cmp_abs(string a, string b)
+{
+        if (strlen(a) != strlen(b))
+                return strlen(a) > strlen(b) ? 1 : -1;
+        if (a == b) return 0;
+        return a > b ? 1 : -1;
+}
+
+private string _bn_add_abs(string a, string b)
+{
+        int la, lb, maxlen, carry, i, da, db, sum;
+        string result;
+
+        la = strlen(a); lb = strlen(b);
+        maxlen = la > lb ? la : lb;
+        carry = 0;
+        result = "";
+
+        for (i = 0; i < maxlen || carry; i++)
+        {
+                da = (i < la) ? (a[la - 1 - i] - '0') : 0;
+                db = (i < lb) ? (b[lb - 1 - i] - '0') : 0;
+                sum = da + db + carry;
+                carry = sum / 10;
+                result = sprintf("%d", sum % 10) + result;
+        }
+
+        return result == "" ? "0" : result;
+}
+
+// assumes a >= b (both non-negative, no leading zeros)
+private string _bn_sub_abs(string a, string b)
+{
+        int la, lb, borrow, i, da, db, diff;
+        string result;
+
+        la = strlen(a); lb = strlen(b);
+        borrow = 0;
+        result = "";
+
+        for (i = 0; i < la; i++)
+        {
+                da = a[la - 1 - i] - '0';
+                db = (i < lb) ? (b[lb - 1 - i] - '0') : 0;
+                diff = da - db - borrow;
+                if (diff < 0)
+                {
+                        diff += 10;
+                        borrow = 1;
+                } else
+                        borrow = 0;
+                result = sprintf("%d", diff) + result;
+        }
+
+        return _bn_strip_zeros(result);
+}
+
+private string _bn_mul_abs(string a, string b)
+{
+        int la, lb, i, j, da, db, mul, started;
+        int *res;
+        string result;
+
+        la = strlen(a); lb = strlen(b);
+        res = allocate(la + lb);
+
+        for (i = la - 1; i >= 0; i--)
+        {
+                da = a[i] - '0';
+                for (j = lb - 1; j >= 0; j--)
+                {
+                        db = b[j] - '0';
+                        mul = da * db + res[i + j + 1];
+                        res[i + j + 1] = mul % 10;
+                        res[i + j] += mul / 10;
+                }
+        }
+
+        result = "";
+        started = 0;
+        for (i = 0; i < sizeof(res); i++)
+        {
+                if (! started && res[i] == 0) continue;
+                started = 1;
+                result += sprintf("%d", res[i]);
+        }
+
+        return result == "" ? "0" : result;
+}
+
+// integer division, non-negative operands, no leading zeros; b == "0" is
+// guarded against by the caller (count()) to avoid a crash.
+private string _bn_div_abs(string a, string b)
+{
+        string quotient, remainder;
+        int i, la, digit;
+
+        quotient = "";
+        remainder = "0";
+        la = strlen(a);
+
+        for (i = 0; i < la; i++)
+        {
+                remainder = _bn_strip_zeros(remainder + a[i..i]);
+                digit = 0;
+                while (_bn_cmp_abs(remainder, b) >= 0)
+                {
+                        remainder = _bn_sub_abs(remainder, b);
+                        digit++;
+                }
+                quotient += sprintf("%d", digit);
+        }
+
+        return _bn_strip_zeros(quotient);
+}
+
+private string _bn_signed_add(int s1, string d1, int s2, string d2)
+{
+        int cmp;
+        string r;
+
+        if (s1 == s2)
+        {
+                r = _bn_add_abs(d1, d2);
+                return (s1 < 0 && r != "0") ? ("-" + r) : r;
+        }
+
+        cmp = _bn_cmp_abs(d1, d2);
+        if (cmp == 0) return "0";
+        if (cmp > 0)
+        {
+                r = _bn_sub_abs(d1, d2);
+                return (s1 < 0 && r != "0") ? ("-" + r) : r;
+        }
+        r = _bn_sub_abs(d2, d1);
+        return (s2 < 0 && r != "0") ? ("-" + r) : r;
+}
+
+// -1 if n1<n2, 0 if equal, 1 if n1>n2 (signed comparison)
+private int _bn_signed_cmp(int s1, string d1, int s2, string d2)
+{
+        if (d1 == "0" && d2 == "0") return 0;
+        if (s1 != s2) return s1 > s2 ? 1 : -1;
+        return (s1 > 0) ? _bn_cmp_abs(d1, d2) : -_bn_cmp_abs(d1, d2);
+}
+
+varargs mixed count(mixed n1, string op, mixed n2)
+{
+        mixed *p1, *p2;
+        int s1, s2;
+        string d1, d2, r;
+
+        p1 = _bn_split(n1);
+        p2 = _bn_split(n2);
+        s1 = p1[0]; d1 = p1[1];
+        s2 = p2[0]; d2 = p2[1];
+
+        switch (op)
+        {
+                case "+":
+                        return _bn_signed_add(s1, d1, s2, d2);
+
+                case "-":
+                        return _bn_signed_add(s1, d1, -s2, d2);
+
+                case "*":
+                        r = _bn_mul_abs(d1, d2);
+                        if (r == "0") return "0";
+                        return (s1 * s2 < 0) ? ("-" + r) : r;
+
+                case "/":
+                        if (d2 == "0") return "0";  // avoid div-by-zero crash
+                        r = _bn_div_abs(d1, d2);
+                        if (r == "0") return "0";
+                        return (s1 * s2 < 0) ? ("-" + r) : r;
+
+                case "<":
+                        return _bn_signed_cmp(s1, d1, s2, d2) < 0;
+
+                case ">":
+                        return _bn_signed_cmp(s1, d1, s2, d2) > 0;
+
+                case "<=":
+                        return _bn_signed_cmp(s1, d1, s2, d2) <= 0;
+
+                case ">=":
+                        return _bn_signed_cmp(s1, d1, s2, d2) >= 0;
+
+                case "==":
+                        return _bn_signed_cmp(s1, d1, s2, d2) == 0;
+        }
+
+        return 0;
+}

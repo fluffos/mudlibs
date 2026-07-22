@@ -18,9 +18,7 @@ worked; keep status values consistent so the table stays greppable:
 
 Port assignments: sequential from 40001, recorded here so re-running
 several libs at once never collides. **Next free port: 40056** (40001-40055
-assigned/reserved -- 40051-40055 are reserved for archives #57-61, being
-processed in parallel by background agents as of this update; 40007 is
-ds386, deprioritized/partial). On mega-libs (tens of
+assigned; 40007 is ds386, deprioritized/partial). On mega-libs (tens of
 thousands of files, the "nitan" family), skip the full `lpcc_check.sh`
 sweep — it can OOM the host before finishing (see AGENTS.md §6b) — and
 rely on the boot + interactive-connect test as the verification gate.
@@ -32,7 +30,7 @@ rely on the boot + interactive-connect test as the verification gate.
   majority of this collection. If an archive turns out to be English
   (like ds386/Dead Souls), do the minimum to note what it is, don't sink
   deep debugging time into it -- move on to the next Chinese one.
-- **Done: 52 / 100** (shanhaizhanshen, xingzhanyingxiong,
+- **Done: 53 / 100** (shanhaizhanshen, xingzhanyingxiong,
   unknownlib20150716 [小雨西游II], bxsj [书剑天下], bxsj1 [书剑·经典],
   chidi [江湖I], ..., nitan170911 [仙剑奇侠传], nitan6 [笑傲江湖], rzrmud
   [大唐西游], xo, xo_final, zzfy [郑州风云3], shiji [世纪],
@@ -56,7 +54,7 @@ rely on the boot + interactive-connect test as the verification gate.
   lineage], moniHuafu [模拟华附, 风云3 engine lineage], jianghufengyun
   [江湖风云单机, 夕阳再现 lineage shared with #46/#55], nitan_ceshi
   [泥潭III测试版/《终极魔界》, NT/nitan/Lonely lineage predating the §15
-  dbase bug])
+  dbase bug], nitan_san [泥潭三, sibling of nitan_ceshi #60])
 - **New AGENTS.md §15q (hidden client-protocol-version gate)**: found on
   xiyangzaixian3 -- a pre-id prompt can check the input against a
   hardcoded literal (client version string), not just a BIG5/student
@@ -74,7 +72,14 @@ rely on the boot + interactive-connect test as the verification gate.
   xiyangzaixian_fengyun2, xiyangzaixian3, tianxia). A second batch of 5
   (archives #52-56: xiaoyuxiyou, xinkuangxiangkongjian2, yueyingqiyuan,
   weimingkongjian, menghuanxiyou2002) followed the same pattern and is
-  also now all done. This mode continues for archive #57 onward.
+  also now all done. A third batch of 5 (archives #57-61: moniHuafu,
+  wuhanzhan, jianghufengyun, nitan_ceshi, nitan_san) followed the same
+  pattern; #60/#61 (both "nitan"/泥潭 family) were flagged in advance as
+  likely siblings of nitan170911/nitan6 and confirmed as a related-but-
+  earlier snapshot that predates §15's core dbase bug. 4 of the 5
+  (#57/#59/#60/#61) are done as of this update; #58 (wuhanzhan) is still
+  being verified/consolidated. This mode continues for archive #62
+  onward.
 - **New AGENTS.md §15r (check_config.lpc driver-version self-check)**:
   found on tianxia -- a driver-version self-check file `inherit`ed
   straight into simul_efun.lpc/master.lpc can fatally `error()` on
@@ -329,7 +334,7 @@ rely on the boot + interactive-connect test as the verification gate.
 | 58 | 武汉站.rar | | | not started | |
 | 59 | 江湖风云.rar | jianghufengyun | 40053 | done | dup: 江湖风云 (1).rar; config self-names "江湖风云单机"; 夕阳再现 lineage confirmed via md5sum three-way against xiyangzaixian_fengkuang(#46)/weimingkongjian(#55) -- chinese.c identical across all 3, master.c matches #55, securityd.c matches #46, likely close to their common ancestor; ported #46/#55's proven §15h fix + proactive dns_master preload exclusion (§15p) directly; 18 pre-existing content bugs fixed via lpcc sweep (heredoc-merge typos, missing quotes, iconv-eaten-newline, PEN->SWORD copy-paste, etc, several literally the same files/bugs already seen in weimingkongjian, confirming shared world content); full registration flow verified 3 times with real Chinese names "秦风三"/"林风"/"秦风四", each reaching a different actual room; 98.6% lpcc pass; see libs/jianghufengyun/NOTES.md |
 | 60 | 泥潭III测试版.rar | nitan_ceshi | 40054 | done | self-IDs as "nitan.3", live banner "《终极魔界》"; confirmed NT/nitan/Lonely engine family via diff against nitan170911(#21)/nitan6(#22) but an earlier snapshot (adm/single/ not adm/kernel/) that PREDATES the §15 dbase architecture bug entirely (feature/dbase.c already has real local set/query/delete, zero efun::set/query/delete call sites) -- no MySQL backend needed either, unlike nitan170911; standard §15h fix (chinese/logind/named) + §14/§15o/§15p + new LONELY_IMPROVED-gated efun:: family (6 sites flipped to existing fallback, 9 count_* bignum functions restored via atoi() not a bare (int) cast which doesn't parse strings) + disconnected rmtree.lpc wired in + §15s message() 4th-arg fix (was breaking the mudlib's own error handler) + is_killing(ob) vs is_killing(ob->query("id")) typo blocking the player body class from compiling (same shape as tianxia's query_shadowed finding) + new .c->.lpc rename-fallout variant (hardcoded [0..<3] extension-strip needing [0..<5] in eventd/storyd.lpc); full registration flow verified in 3 independent runs incl. real single-character surnames/names "秦风"/"林风" reaching the actual starting room, plus a returning-player admin-password-reset login path also confirmed; lpcc sweep skipped (13,497 files, risky size per §6b, relied on boot+3x interactive test instead); see libs/nitan_ceshi/NOTES.md |
-| 61 | 泥潭三.rar | | | not started | |
+| 61 | 泥潭三.rar | nitan_san | 40055 | done | sibling of nitan_ceshi(#60) -- same NT/nitan/Lonely adm/single/ layout branch, predates §15's dbase bug (feature/dbase.c has real local set/query/delete, zero efun::set/query/delete sites), no MySQL backend needed; independently found nearly the identical fix list as #60 (strong cross-confirmation): standard §15h fix + §15n/§15o/§15p + LONELY_IMPROVED efun:: fallback flips + wrote a from-scratch bignum.lpc replacing nonexistent efun::count() (~230 call sites) + §15f bare-array bug (incl. a new function-parameter variant in ntefun.lpc) + §15s message() fix + fixed inherit/misc/quest.lpc's set_information() signature at the shared root (resolved 9 quest-template failures at once, vs #60 which left it as documented noise) + is_killing() type typo blocking the player body class + eventd/storyd rename-width bug; full registration flow verified across multiple runs with real single-character Chinese names (秦风/秦岭/秦淮), each reaching an actual room, dup-name rejection and quit-abort also confirmed working; lpcc sweep skipped (13,559 files, mega-lib bracket + concurrent host memory pressure); see libs/nitan_san/NOTES.md |
 | 62 | 浴血重生MUD.rar | | | not started | |
 | 63 | 海洋II 2010 正式无错完整版下载.rar | | | not started | dup: "...(1).rar" |
 | 64 | 消失的亞特蘭提斯MUD破解版.zip | | | not started | Traditional Chinese -- try BIG5 if GB18030 conversion is lossy |

@@ -1711,6 +1711,40 @@ opaque check — these libs came from an era of informal, sometimes
 hostile, anti-redistribution tricks aimed at whoever hosted the game
 next, and this project is exactly that "whoever hosts it next."
 
+### 15v. A `LONELY_IMPROVED`-style always-on flag can gate a whole family of `efun::X()` calls to functions that were never real on any driver in this project — check for an existing pure-LPC fallback before reimplementing
+
+Found independently on both `nitan_ceshi` (archive #60) and `nitan_san`
+(archive #61), siblings in the NT/nitan/Lonely lineage: `include/
+globals.h` unconditionally `#define`s a flag like `LONELY_IMPROVED`
+(originally meant to mark "this driver has my custom patch," but always
+compiled in here since nothing ever undefines it), gating several
+`adm/simul_efun/*.lpc` functions (`sort_string`, `filter_ansi`,
+`file_crypt`, `file_valid`, `file_lines`, `sort_msg`, ...) to call
+`efun::X()` versions that never existed on any FluffOS build. Before
+reimplementing anything, check whether the same file already has a
+working pure-LPC `#else`/`#ifndef` fallback branch sitting right next to
+the dead branch — flipping the guard (or converting to `#if 0`) is a free
+fix reusing code the original author already wrote and tested.
+
+**The one sub-case with no fallback at all was a hard compile-blocker**:
+`count_add`/`count_mul`/`count_sub`/`count_div`/`count_lt`/`count_gt`/
+`count_le`/`count_ge`/`count_eq` wrap a bespoke MudOS-fork arbitrary-
+precision bignum efun (`count(n1, op, n2)`) used for currency/damage math
+at ~230-1000+ call sites — no fallback existed, so `simul_efun.lpc` itself
+failed to compile. Two independent fixes were tried across the two
+sibling libs: `nitan_ceshi` restored ordinary 64-bit int arithmetic
+routed through the lib's own `atoi()` (`intp(n) ? n : atoi(n)` — **not** a
+bare `(int)` cast, which is a type-assertion on this driver, not a
+string-to-int parse, and crashes at runtime the first time a call site
+passes a numeric string); `nitan_san` instead wrote a small from-scratch
+arbitrary-precision `adm/simul_efun/bignum.lpc` library. Either approach
+compiles and passes the interactive registration/gameplay test; the
+int-arithmetic route is simpler and was sufficient for values seen in
+practice, but note it silently loses precision beyond 64-bit `int` range
+if a lib's economy ever produces genuinely huge numbers — prefer it as
+the default, faster fix, but watch for overflow-shaped bugs later if the
+lib's own numbers turn out to need true bignum semantics.
+
 ---
 
 ## Per-archive gotchas index
