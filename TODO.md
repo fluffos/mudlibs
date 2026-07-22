@@ -71,7 +71,7 @@ taken by ds386, in progress).
 | 11 | dw_fluffos_v3.zip | | | deprioritized | same Discworld bundle, different version -- skipping per policy |
 | 12 | es1_win.rar | es1_win | 40009 | done | 东方故事(蓝天), foundational wuxia base lib; found preload-time get_include_path timing gotcha (§8d); see libs/es1_win/NOTES.md |
 | 13 | esI.rar | esI | 40010 | done | 东方故事/屠龙之战, same lineage as #12, both known fixes applied proactively; see libs/esI/NOTES.md |
-| 14 | fengyun4-3-4.rar | | | not started | |
+| 14 | fengyun4-3-4.rar | fengyun434 | 40011 | done | 风云Ⅳ, booted with zero fixes, 99% lpcc pass rate; see libs/fengyun434/NOTES.md |
 | 15 | fluffos(西游记2000).tar.gz | | | not started | likely a driver bundle, not a mudlib -- triage first |
 | 16 | fy2005.rar | | | not started | |
 | 17 | fy2.rar | | | not started | |
