@@ -352,6 +352,22 @@ together**, and re-check after: an `Inherited file '...' does not exist!` or
 `Fail to load object` error naming a path with no visible `.c`/`.lpc` in the
 *failing* file is a strong signal to grep the include chain's headers.
 
+**A second, unrelated rename-fallout variant** (found on `nitan_ceshi`,
+archive #60): code that lists a directory and strips a filename's
+extension via a **hardcoded fixed-width slice** rather than an actual
+extension-aware string op, e.g. `map_array(get_dir(DIR+"*.lpc"), (:
+$1[0..<3] :))`. `<3` (drop the last 3 chars) was correct for stripping the
+original 2-character `.c` extension (`"foo.c"[0..<3]` → the last 3 chars
+dropped leaves `"foo"`... check the sibling math for whatever the
+original file actually used), but is now wrong for the 4-character `.lpc`
+extension, silently leaving a trailing letter (e.g. `"foo.lpc"[0..<3]` →
+`"foo.l"`, not `"foo"`) that then fails a subsequent `load_object()`/
+`call_other()` with a filename that looks almost-but-not-quite right.
+Grep for `\[0\.\.<[0-9]\]` (or similar fixed small slice widths) anywhere
+near a `get_dir()`/directory-listing call as part of the standard convert
+pass, and widen the cutoff by the same +2 characters the extension grew
+by (`.c`→`.lpc`).
+
 ### 3. `static` is illegal on FUNCTIONS in this driver — use `nosave`
 
 Old MudOS/FluffOS mudlibs freely write `static <type> function_name(...)`
@@ -1059,6 +1075,25 @@ watching debug.log during interactive testing:
   most impactful fix in that lib's pass, and worth checking first whenever
   a lib accepts registration input but then never actually drops the
   player into the game world.
+
+  **This is now a recognized recurring failure mode, not a one-off**:
+  found again on `nitan_ceshi` (archive #60) in an unrelated shape — a
+  direct (non-`->`) call `is_killing(ob)` in `/clone/user/user.lpc` (the
+  player body class there) passed an object where `is_killing(string id)`
+  declares a `string` parameter; every other one of 60+ call sites
+  elsewhere in the same lib correctly passed `ob->query("id")`. Because
+  it's a *direct* function call, this driver's static type checker
+  enforced the declared parameter type strictly and refused to compile
+  the whole file. **General lesson**: whenever registration accepts a
+  real Chinese name/password but the character never actually lands in
+  the game world (silently, with no crash message pointing at the
+  problem), suspect the player-body class object itself failing to
+  compile — grep its own file's `debug.log` compile line specifically,
+  don't assume the registration daemon's own logic is at fault. The two
+  known root causes so far are a never-defined-simul_efun call (§15b) and
+  a genuine same-object function-argument-type mismatch like this one —
+  both are single-call-site bugs with an outsized, easy-to-misdiagnose
+  effect.
 
 ### 15c. `/adm/etc/preload`-style data files also need their `.c` refs fixed — the quote-based sed pass doesn't touch them
 
