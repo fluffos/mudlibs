@@ -32,9 +32,9 @@ rely on the boot + interactive-connect test as the verification gate.
   majority of this collection. If an archive turns out to be English
   (like ds386/Dead Souls), do the minimum to note what it is, don't sink
   deep debugging time into it -- move on to the next Chinese one.
-- **Done: 42 / 100, plus 2 more (archives #48, #50) currently
-  being processed in parallel by background agents** (see below once
-  they report back) (shanhaizhanshen, xingzhanyingxiong,
+- **Done: 43 / 100, plus 1 more (archive #50) currently
+  being processed in parallel by a background agent** (see below once
+  it reports back) (shanhaizhanshen, xingzhanyingxiong,
   unknownlib20150716 [小雨西游II], bxsj [书剑天下], bxsj1 [书剑·经典],
   chidi [江湖I], ..., nitan170911 [仙剑奇侠传], nitan6 [笑傲江湖], rzrmud
   [大唐西游], xo, xo_final, zzfy [郑州风云3], shiji [世纪],
@@ -48,14 +48,18 @@ rely on the boot + interactive-connect test as the verification gate.
   build], xiyangzaixian_fengkuang [夕阳再现], datangshuanglong
   [大唐双龙, config has a stale "碧血残阳之豪侠晚歌" name field --
   confirmed NOT a duplicate of archive #71, just a copy-paste leftover],
-  tianxiawuxue [天下无雪], xiyangzaixian_fengyun2 [夕阳再现/风云再起2])
-- **Parallelizing more aggressively per user request**: archives #48
-  (夕阳再线III之炎龙封印.rar) and #50 (天下.tar.gz) are still being
-  processed by background agents as of this update -- each handles its
-  own full pipeline (convert/fix/boot/test/lpcc/NOTES.md) independently
-  and reports back; the TODO.md/AGENTS.md edits and commit for each is
-  done by the main session once verified, to avoid concurrent-edit
-  conflicts on these shared files.
+  tianxiawuxue [天下无雪], xiyangzaixian_fengyun2 [夕阳再现/风云再起2],
+  xiyangzaixian3 [夕阳再现III之炎龙封印])
+- **New AGENTS.md §15q (hidden client-protocol-version gate)**: found on
+  xiyangzaixian3 -- a pre-id prompt can check the input against a
+  hardcoded literal (client version string), not just a BIG5/student
+  question, and looks identical in prompt text to a normal id prompt.
+  Always read the actual `input_to` callback chain, don't infer flow
+  shape from prompt text alone.
+- **Parallelizing more aggressively per user request**: archive #50
+  (天下.tar.gz) is still being processed by a background agent as of
+  this update; the TODO.md/AGENTS.md edits and commit are done by the
+  main session once verified, to avoid concurrent-edit conflicts.
 - **New extraction edge case (AGENTS.md's Archive tooling section)**:
   a `.rar`-named archive can actually be a plain tar with relative
   `../...` member paths, which GNU `tar -xf` refuses outright even with
@@ -280,7 +284,7 @@ rely on the boot + interactive-connect test as the verification gate.
 | 45 | 北美侠客行2001.rar | beimeixiakexing2001 | 40039 | done | 侠客行/"The Quest of Oriental Chivalry", same codebase lineage as xkx2001(#25) confirmed via diff (chinese.c/master.c identical, logind.c differs by one comment); ported xkx2001's proven check_legal_name fix + standard is_chinese fix + NEW instance of §8e tail-efun bug (fatal here, took down the whole simul_efun compile) + proactive dns_master preload exclusion (§15p); hidden BIG5 prompt; full registration flow verified with real name "秦风" (avoiding banned "韦小宝"); 84.6% lpcc pass (same missing EDITOR_D pattern as xkx2001); see libs/beimeixiakexing2001/NOTES.md |
 | 46 | 夕阳再现-疯狂江湖.rar | xiyangzaixian_fengkuang | 40040 | done | dup: 夕阳再现-疯狂江湖(1).rar; 夕阳再现, adm/obj/ layout, no dns_master in preload (nothing to exclude); standard §15h fix; full registration flow verified with real name "秦风"; 97.8% lpcc pass; see libs/xiyangzaixian_fengkuang/NOTES.md |
 | 47 | 夕阳再现-风云再起2.rar | xiyangzaixian_fengyun2 | 40041 | done | adm/obj/ layout, chinese.c byte-identical to archive #46 but logind.c/master.c/securityd.c differ (similar titles/shared files ≠ shared lineage overall); standard §15h fix + proactive dns_master preload exclusion (§15p) + fixed a couple of pre-existing missing-quote typos; full registration flow verified end-to-end incl. real name "秦风" reaching the actual game world; 98.6% lpcc pass; see libs/xiyangzaixian_fengyun2/NOTES.md |
-| 48 | 夕阳再线III之炎龙封印.rar | | | not started | |
+| 48 | 夕阳再线III之炎龙封印.rar | xiyangzaixian3 | 40042 | done | "夕阳再现III之炎龙封印" (AKAI Studio 2006), adm/obj/ layout nested at raw/夕阳再现III/夕阳再现III/world/; standard §15h fix + missing WQA_ROOM macro fix (81-file cascade, new §8g variant) + proactive dns_master preload exclusion (§15p) + NEW hidden client-version gate found (§15q, literal "2060" check) + several pre-existing typos fixed; full registration flow verified end-to-end incl. real name "秦风五" reaching the actual game world; 98.3% lpcc pass; see libs/xiyangzaixian3/NOTES.md |
 | 49 | 大唐双龙.rar | datangshuanglong | 40043 | done | related-but-distinct fork of dtsl(#8)/llmud_datangshuanglong(#18) lineage (chinese.c identical, master.c differs, same diamond-inherit weapon bug recurs); config has a stale "碧血残阳之豪侠晚歌" name field (confirmed NOT #71 duplicate, just copy-paste leftover); standard §15h fix + F_UNIQUE/F_BACKUP macro gaps + diamond-inherit fix; full registration flow verified with real name "秦风" reaching the actual game world; 94.6% lpcc pass; see libs/datangshuanglong/NOTES.md |
 | 50 | 天下.tar.gz | | | not started | |
 | 51 | 天下无雪.rar | tianxiawuxue | 40045 | done | adm/obj/ layout (nested at raw/mud/world/); standard §15h fix + upgraded valid_override to 3-arg (§14) + fixed a stray-brace typo cluster in d/kaifeng/ground0-3.lpc + proactive dns_master preload exclusion (§15p); full registration flow verified end-to-end incl. real name "秦风" reaching the actual game world; 97.6% lpcc pass; see libs/tianxiawuxue/NOTES.md |

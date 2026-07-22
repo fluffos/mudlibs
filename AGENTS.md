@@ -754,6 +754,18 @@ from a handful of the failing blocks — if it's byte-identical across all
 of them, it's almost certainly one shared dependency, not independent
 bugs.)
 
+**Variant found on `xiyangzaixian3` (archive #48)**: the shared
+dependency isn't always a broken FILE — it can be a missing `#define`.
+81 files under `quest/game/` all did `inherit WQA_ROOM;`, and
+`include/globals.h` simply never defined the `WQA_ROOM` macro at all
+(genuinely absent in the raw archive too, not an artifact of
+conversion) — the target file it should have pointed at
+(`/quest/game/wqa_room.c`) existed and was fine. Adding one `#define
+WQA_ROOM "/quest/game/wqa_room"` resolved all 81 failures in one shot.
+Same "one shared root cause, not N bugs" principle, just check for a
+missing macro definition (not only a broken shared file) when N
+failures share an `inherit`/`#include` target name that never resolves.
+
 ### 8h. `convertd.lpc`'s Greek-table stray-backslash typo can recur, and CRLF silently breaks the naive sed fix
 
 The stray-trailing-backslash-before-closing-quote bug documented for
@@ -1450,6 +1462,32 @@ to just the entries needed for registration (`securityd`/`band`/
 document in that lib's `NOTES.md` which daemons were excluded and why,
 rather than open-ended bisection across ~20 preload entries for one of
 ~100 archives.
+
+### 15q. A hidden pre-id prompt can be a literal client-protocol-version gate, not a BIG5/student-age question — always read the actual callback, don't trust the prompt text
+
+Found on `xiyangzaixian3` (archive #48), extending the "hidden pre-id
+prompt" family already documented (BIG5/GB font questions, "are you a
+student" age-gates): the very first prompt reads
+"请输入您的英文名字:" ("please enter your English name") — indistinguishable
+from a normal id prompt by its text alone — but the actual `input_to`
+callback bound to it (`get_id`) checks the input against a **hardcoded
+literal client-version string** (here, `"2060"`, a Tomud/笑傲江湖-client
+handshake code), rejecting anything else with "你的客户端非Tomud或者非
+笑傲江湖WWW客户端" and disconnecting. Only after receiving that exact
+literal does it advance to the REAL id-collecting callback
+(`get_id1`/similar). Extra trap: a failed real-id check often loops back
+to the FIRST callback (the version gate), not the second — so the gate
+must be re-satisfied on every retry, not just once at the start of the
+session. Symptom: sending what looks like a perfectly valid English id
+first produces a confusing "wrong client" rejection that has nothing to
+do with the id's own validity. **Lesson**: never infer a registration
+flow's shape from the prompt TEXT alone — always read the actual
+`input_to` callback chain (`logon()`/`get_id`/`get_id1`/`confirm_id`/
+`get_name`, whatever the lib's own names are) before scripting a test,
+and if the very first real input gets rejected in a way that doesn't
+match the visible prompt's apparent meaning, suspect a hidden gate
+checking for a specific literal (client version, magic string) rather
+than assuming the id-validation logic itself is broken.
 
 ---
 
