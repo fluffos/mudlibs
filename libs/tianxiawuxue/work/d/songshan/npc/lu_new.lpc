@@ -1,0 +1,384 @@
+// 陆柏，嵩山派任务Npc
+// lu.c
+// knightly 2006.08.17
+
+inherit NPC;
+inherit F_MASTER;
+#include <ansi.h>;
+#include "job_npc.h";
+
+string ask_dojob();
+string ask_finishjob();
+string ask_canceljob();
+/*
+*************************************
+定义嵩山任务玩家的标志
+1、永久标志：
+		"family_job/songshan/"
+		GetCount	领取任务数量
+		DoneCount	完成数量
+		GetExp		取得经验
+		GetPot		取得潜能
+		GetPay		取得师门忠诚
+		---
+		fCount		失败次数
+		losspay		损失师门忠诚
+		---
+		Getjob			取得任务
+		Done				已杀死奸细
+		---
+		npcflee			任务npc消失		
+		*之所以用永久变量，是避免relogin可以清除任务
+2、临时标志：		
+		"family_job/songshan/"
+		killerid		奸细id
+		killername	奸细名称
+		family			奸细出现门派
+		area				奸细出现地点(玩家看不见)
+		loopcount		本轮第几个任务
+		needfanxing	反省期
+*************************************
+*/
+void create()
+{
+        set_name("陆柏", ({ "lu bai", "bai", "lu" }) );
+        set("nickname", "仙鹤手");
+        set("gender", "男性");
+        set("class", "swordsman");
+        set("age", 45);
+        set("attitude", "peaceful");
+        set("str", 26);
+        set("con", 30);
+        set("dex", 30);
+        set("int", 28);
+
+        set("neili", 5000);
+        set("max_neili", 5000);
+        set("jiali", 30);
+        set("max_qi",2000);
+        set("max_jing",1200);
+        set("combat_exp", 100000000);
+        set("shen_type", 0);
+
+        set_skill("literate", 2000);
+        set_skill("unarmed", 1000);
+        set_skill("sword", 1000);
+        set_skill("force", 1200);
+        set_skill("parry", 1000);
+        set_skill("dodge", 1000);
+        set_skill("songshan-jian", 1000);
+        set_skill("lingxu-bu", 1000);
+        set_skill("dasongyang-shou", 1000);
+        set_skill("hanbing-zhenqi", 1200);
+
+        map_skill("sword", "songshan-jian");
+        map_skill("parry", "songshan-sword");
+        map_skill("dodge", "lingxu-bu");
+        map_skill("force", "hanbing-zhenqi");
+        map_skill("unarmed", "dasongyang-shou");
+
+        create_family("嵩山派", 13, "弟子");
+        
+        set("inquiry", ([
+                "效力" : (: ask_dojob :),
+                "复命" : (: ask_finishjob :),
+                "失败" : (: ask_canceljob :),
+             ]) );        
+        
+        setup();
+
+        carry_object("/clone/weapon/changjian")->wield();
+        carry_object("/clone/cloth/cloth")->wear();
+}
+
+void attempt_apprentice(object ob)
+{
+                mapping fam = ob->query("family");
+
+                if(ob->query("gender") != "男性")
+                {
+                        command("say 我可只收男徒.");
+                        return;
+                }       
+                if (!fam || fam["family_name"] != "嵩山派")
+                {
+                        command("say "+RANK_D->query_respect(ob)+"与本门素无来往，不知此话从何谈起？");
+                        return;
+                }
+                if((int)ob->query_skill("force", 1) < 800) 
+                {
+                        command("say 内功是嵩山派武功之基础。"); 
+                        command("say " + RANK_D->query_respect(ob)+"是否还应该先在内功上多下点功夫？");
+                        return;
+                }
+                if((int)ob->query_skill("hanbing-zhenqi",1) < 800 )
+                {
+                        command("say 寒冰真气是我派行走江湖的根本所在。");
+                        command("say 要想铲奸除恶,真才实学却是半点也马虎不得。");
+                        command("say "+RANK_D->query_respect(ob)+"的基础武功没有学会，还是请回吧。");
+                        return;
+                }
+
+                command("say 嗯，看你还是个学武的料，我就收下你吧！");
+                command("recruit " + ob->query("id"));
+                ob->set("class","sworder");
+}
+
+string ask_dojob()
+{   
+                object me,killer, killer2;
+                int killed;
+                mapping fam;
+                me=this_player();
+                fam = me->query("family");
+
+                if (!fam || fam["family_name"] != "嵩山派")
+                {
+									return CYN"咦，"+RANK_D->query_respect(me)+"与本门素无来往，不知此话从何谈起？\n"NOR;
+                }
+                
+                if (me->is_busy())
+                {
+                	return CYN"唉，"+RANK_D->query_respect(me)+"，你如此繁忙怎好在派给你任务呢。\n"NOR;
+                }
+                                
+                if(me->query("combat_exp")<200000000)
+                   return CYN"你能力尚不足担当此重任，还是再锻炼一下吧！\n"NOR;
+
+                if(me->query("max_neili")<100000)
+                   return CYN"你内力太浅，无法担当此重任，还是再锻炼一下吧！\n"NOR;
+                
+                // 如果已经杀死奸细,但是没有复命
+                killed= (int)me->query("family_job/songshan/done");
+                if (killed==1)
+                {
+                        return HIW"你还是先复命吧。\n"NOR;                             
+                }
+								
+								//
+								if (me->query("family_job/songshan/npcflee"))
+								{
+									return HIB"呵呵，你已经任务在身，不过好像无法完成了吧。\n"NOR;
+								}
+								//							
+								
+                // 如果还在反省期
+                if (me->query_temp("family_job/songshan/needfanxing"))
+              	{
+              		return HIW"你反省够了吗?\n"NOR;
+              	}
+                
+                // 如果没有杀死奸细
+                if((int)me->query("family_job/songshan/getjob")==1)
+                {
+                	if (wizardp(me))
+                	{
+                        return HIW"你现在的任务是去杀掉潜伏在"+me->query_temp("family_job/songshan/family")+
+                        "("+me->query_temp("family_job/songshan/area")+")"+
+                       "的对五岳剑盟别有用心的奸细。\n"NOR;
+                  }
+                  else
+                  {
+                        return HIW"你现在的任务是去杀掉潜伏在"+me->query_temp("family_job/songshan/family")+
+                       "的对五岳剑盟别有用心的奸细。\n"NOR;                  	
+                  }
+                }
+								// 生成奸细
+                killer=new(__DIR__"job_npc2.lpc");
+                place_room(me,killer);
+                killer->start_escape(killer,me);
+								
+                me->set("family_job/songshan/getjob",1);
+                me->add("family_job/songshan/getcount",1);
+                // 生成假奸细
+                killer2=new(__DIR__"job_npc2.lpc");
+                killer2->start_escape(killer2,me);
+                killer2->move(me->query_temp("family_job/songshan/area"));
+
+                me->start_busy(3+random(2));                              
+                
+                if (wizardp(me))
+                {
+	                return 
+	                 HIC"难得"+me->query("name")+"有心为本门分忧解难，老夫近日获悉"
+	                +"有内奸在"+me->query_temp("family_job/songshan/family")+"("+me->query_temp("family_job/songshan/area")+")一带活动。\n"
+	                +"你就准备一下，替老夫前去除掉吧。\n"NOR;
+              	}
+              	else
+              	{
+	                return 
+	                 HIC"难得"+me->query("name")+"有心为本门分忧解难，老夫近日获悉"
+	                +"有内奸在"+me->query_temp("family_job/songshan/family")+"一带活动。\n你就准备一下，替老夫前去除掉吧。\n"NOR;              		
+              	}
+}
+
+string ask_finishjob()
+{
+      int kill_count,reward,lev;
+      object me;
+      mapping fam;
+      
+      me=this_player();   
+                  
+      fam = me->query("family");
+      if (!fam || fam["family_name"] != "嵩山派")
+      {
+          return CYN"咦，"+RANK_D->query_respect(me)+"与本门素无来往，不知此话从何谈起？\n"NOR;
+      }      
+      
+      if((int)me->query("family_job/songshan/getjob")!=1)
+      {
+              return HIW"你还是先把任务领了吧。\n"NOR;                                   
+      }
+            
+      if((int)me->query("family_job/songshan/done")!=1)
+      {
+              return HIW"你还是先去把奸细处理了吧。\n"NOR;                                   
+      }
+      
+      kill_count= me->query_temp("family_job/songshan/loopcount");
+      lev=me->query_skill("literate", 1);
+      
+      me->start_busy(3+random(3));
+      command("say 好样的，继续努力！\n先休息一下吧。\n");
+      
+      me->delete("family_job/songshan/getjob");
+      me->delete("family_job/songshan/done");
+      me->delete_temp("family_job/songshan/killerid");
+      me->delete_temp("family_job/songshan/killername");
+      me->delete_temp("family_job/songshan/family");
+      me->delete_temp("family_job/songshan/area");
+      
+      me->add("family_job/songshan/getpay", 1+random(1+kill_count));
+      
+      if(kill_count>9 )
+      {
+              reward= me->query("kar")*kill_count;
+              if(lev<2000)
+               {
+                   reward= reward* 50;
+               }
+              else
+               {
+                  reward= reward* 80;
+               }
+              //reward= reward* 10 * me->query_skill("literate", 1);
+              reward= reward* (int)me->query_skill("literate", 1);
+              reward= reward/10;
+              
+              me->add("combat_exp", reward);
+              me->add("potential", reward/2);
+
+							command("chat "+me->query("name")+",介于你对本门的忠心，除了忠诚度再额外奖励你"HIY+CHINESE_D->chinese_number(reward)+HIC"点经验，"HIY+
+             CHINESE_D->chinese_number(reward/2)+HIC"点潜能。\n"NOR);
+             /*
+              return HIW"介于你对本门的忠心，除了忠诚度再额外奖励你"+CHINESE_D->chinese_number(reward)+"点经验\n"+
+             CHINESE_D->chinese_number(reward/2)+"点潜能。\n"NOR;
+             */
+             	// 积累一定系数后，清零。相当于连续完成9次以后，如果继续连续完成，有最多5次机会额外奖励。
+             	if (kill_count>15)
+             	{
+             		me->set_temp("family_job/songshan/loopcount", 0);
+             	}
+             	//
+             
+							return HIW"你的门派忠诚度提高了。\n"NOR;                                    
+      }
+      else
+      {
+              return HIW"你的门派忠诚度提高了。\n"NOR;                       
+      }
+}
+
+string ask_canceljob()
+{
+      int kill_count, deccount, flee;
+      object me;
+      mapping fam;
+         
+      me=this_player();               
+      
+      fam = me->query("family");
+      if (!fam || fam["family_name"] != "嵩山派")
+      {
+          return CYN"咦，"+RANK_D->query_respect(me)+"与本门素无来往，不知此话从何谈起？\n"NOR;
+      }            
+      
+      if(!me->query("family_job/songshan/getjob"))
+      {
+      		command("kick "+me->query("id"));
+         	return HIW"你并无任务在身，哪里来的失败！\n"NOR;                                   
+      }      
+
+      if(me->query("family_job/songshan/done"))
+      {
+      		command("? "+me->query("id"));
+         	return HIW"你不是已经杀死奸细了吗，怎么说失败了？\n"NOR;                                   
+      }      
+							
+      // 如果奸细溜掉了
+			if (me->query("family_job/songshan/npcflee"))
+			{
+				me->delete("family_job/songshan/npcflee");
+				flee=1;
+				command("say " +HIR"你在做什么，奸细都已经溜掉了！\n下去反省一下吧！\n"NOR);
+				me->move("/d/songshan/luyanpubu");
+				call_out("do_fanxing", 120, this_object(), me);
+			}						
+			else			
+			{
+				flee=0;			
+      	command("say "+HIB"任务失败虽不全是你的错，但是失败就应该受到惩罚，以后努力吧！\n"NOR);
+      }
+      
+			kill_count = (int)me->query("family_job/songshan/donecount");      
+      
+      // 扣除师门忠诚
+      if (kill_count>100)
+      {
+      	if (random(3)==1)
+      	{
+      		deccount = 1+random(2);
+      	}
+      	else
+      		deccount = 1+random(4);
+      }
+      else
+      {
+      	if (random(10)>=7)
+      	{
+      		deccount = 2+random(4);
+      	}
+      	else
+      	{
+      		deccount = 2+random(6);
+      	}
+      }
+      
+      me->add("family_job/songshan/getpay", -deccount);
+      me->add("family_job/songshan/losspay", deccount);
+      // 增加失败次数
+      me->add("family_job/songshan/losscount", 1);
+      
+      // 清除任务标记
+      me->delete_temp("family_job/songshan/");
+      me->set("family_job/songshan/getjob", 0);
+      me->set("family_job/songshan/done", 0);
+      
+      // 反省标记
+      if (flee==1)
+      	me->set_temp("family_job/songshan/needfanxing", 1);
+      
+			me->start_busy(10+random(4));
+			
+			return HIW"你的门派忠诚度降低了。\n"NOR;
+}
+
+void do_fanxing(object ob,object me)
+{
+	if (!me || !ob) return;
+	me->delete_temp("/family_job/songshan/needfanxing");
+	ob->command("tell "+me->query("id")+HIY"你可省悟到奸细可能带来的巨大灾难吗?\n以后要更加努力啊!\n"NOR);
+		
+	return;
+}

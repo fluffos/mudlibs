@@ -1,0 +1,204 @@
+// 
+// skills.c
+
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+
+string tribar_graph(int val, int eff, int max, string bcolor, string fcolor, string dcolor)
+{
+        string ret;
+        int i, n, eff_n, max_n = 5;
+
+        if( max == 0 ) max = 1;
+        n = val * 100 / max / 20;
+        eff_n = eff * 100 / max / 20;
+
+        if( n < 0 ) n = 0;
+        if( eff_n < 0 ) eff_n = 0;
+        if( n > max_n ) n = max_n;
+        if( eff_n > max_n ) eff_n = max_n;
+
+        ret = NOR "[" NOR;
+        for( i = 0 ; i < max_n; i ++ ) {
+        if( i > eff_n ) ret += GRN;
+        if( i < n )  ret += BLU"─"NOR;
+                else ret += RED"─"NOR;
+        }
+        ret += HIG + NOR"]" NOR;
+        return ret;
+}
+
+string *skill_level_desc = ({
+       BLU "不堪一击" NOR,BLU "毫不足虑" NOR,BLU "不足挂齿" NOR,BLU "初学乍练" NOR,BLU "勉勉强强" NOR,
+        HIB "初窥门径" NOR,HIB "初出茅庐" NOR,HIB "略知一二" NOR,HIB "普普通通" NOR,HIB "平平淡淡" NOR,
+        CYN "平淡无奇" NOR,CYN "粗通皮毛" NOR,CYN "半生不熟" NOR,CYN "马马虎虎" NOR,CYN "略有小成" NOR,
+        HIC "已有小成" NOR,HIC "鹤立鸡群" NOR,HIC "驾轻就熟" NOR,HIC "青出于蓝" NOR,HIC "融会贯通" NOR,
+        GRN "心领神会" NOR,GRN "炉火纯青" NOR,GRN "了然于胸" NOR,GRN "略有大成" NOR,GRN "已有大成" NOR,
+        YEL "豁然贯通" NOR,YEL "出类拔萃" NOR,YEL "无可匹敌" NOR,YEL "技冠群雄" NOR,YEL "神乎其技" NOR,
+        HIY "出神入化" NOR,HIY "非同凡响" NOR,HIY "傲视群雄" NOR,HIY "登峰造极" NOR,HIY "无与伦比" NOR,
+        RED "所向披靡" NOR,RED "一代宗师" NOR,RED "精深奥妙" NOR,RED "神功盖世" NOR,RED "举世无双" NOR,
+        WHT "惊世骇俗" NOR,WHT "撼天动地" NOR,WHT "震古铄今" NOR,WHT "超凡入圣" NOR,WHT "威镇寰宇" NOR,
+        HIW "空前绝后" NOR,HIW "天人合一" NOR,MAG "深藏不露" NOR,HIM "深不可测" NOR,HIR "返璞归真" NOR
+});
+string *knowledge_level_desc = ({
+        BLU "新学乍用" NOR,     BLU "不甚了了" NOR,     BLU "不知端倪" NOR,
+        HIB "平淡无奇" NOR,     HIB "司空见惯" NOR,     HIB "初窥门径" NOR,
+        MAG "略知一二" NOR,     MAG "茅塞顿开" NOR,     MAG "略识之无" NOR,
+        YEL "滚瓜烂熟" NOR,     YEL "马马虎虎" NOR,     YEL "轻车熟路" NOR,
+        HIM "运用自如" NOR,     HIM "触类旁通" NOR,     HIM "深入浅出" NOR,
+        CYN "已有小成" NOR,     CYN "心领神会" NOR,     CYN "了然於胸" NOR,
+        CYN "见多识广" NOR,     CYN "无所不通" NOR,     CYN "卓尔不群" NOR,
+        HIC "满腹经纶" NOR,     HIC "豁然贯通" NOR,     HIC "博古通今" NOR,
+        HIC "博大精深" NOR,     HIC "超群绝伦" NOR,     HIC "举世无双" NOR,
+        HIY "独步天下" NOR,     HIY "震古铄今" NOR,     HIY "超凡入圣" NOR,
+        HIY "深不可测" NOR,     HIW "诸葛在世" NOR,     HIW "孔子重生" NOR,
+});
+
+string skill_level(string, int);
+
+int main(object me, string arg)
+{
+        object ob,*list, couple_ob;
+        mapping skl, lrn, map;
+        string *sname, *mapped,target,cardname;
+        string *sk;
+        int i,j,marry_flag;;
+        seteuid(getuid());
+
+        if(!arg)
+                ob = me;
+        else{
+                ob = present(arg, environment(me));
+                if (!ob) ob = find_player(arg);
+                if (!ob) ob = find_living(arg);
+                if (!ob) ob = LOGIN_D->find_body(arg);
+                if (!ob || !me->visible(ob))
+                return notify_fail("你要察看谁的技能？\n");
+        }
+
+        target = (string) me->query("couple/couple_id");        
+        if(stringp(target)) couple_ob = find_player(target);
+        if( ob!=me && !wizardp(me) && !ob->is_apprentice_of(me)
+        && !me->is_apprentice_of(ob) && ob!=couple_ob
+        && !ob->query("skill_public")
+        && !ob->query("pubmaster") )
+                return notify_fail("只有管理或有师徒关系的人能察看他人的技能。\n");
+
+
+        skl = ob->query_skills();
+        if(!sizeof(skl)) {
+                write( (ob==me ? "你" : ob->name()) + "目前并没有学会任何技能。\n");
+                return 1;
+        }
+        write(
+                HBBLU YEL+(ob==me ? "你" : ob->name())+"目前所学过的技能：（共"+chinese_number(sizeof(skl))+"项技能）"NOR"\n"
+        );
+        sname  = sort_array( keys(skl), (: strcmp :) );
+        
+        map = ob->query_skill_map();
+        if( mapp(map) ) mapped = values(map);
+        if( !mapped ) mapped = ({});
+
+        lrn = ob->query_learned();
+        if( !mapp(lrn) ) lrn = ([]);
+        j=0;
+
+        sk = keys(skl);
+
+        for(i=0; i<sizeof(skl); i++) {
+                if(SKILL_D(sname[i])->type()=="knowledge"){
+                        j=j+1;
+                }
+        }
+        if(j>0) { printf("┌"HBGRN WHT"%20s"NOR"─────────────────────────┐\n",chinese_number(j)+"项知识");}
+        for(i=0; i<sizeof(skl); i++) {
+                if(SKILL_D(sname[i])->type()=="knowledge"){
+                printf("│%s%s%-31s"NOR, 
+                        (member_array(sname[i], mapped)==-1? "　":HIG"□"NOR),
+                        ((lrn[sname[i]] >= (skl[sname[i]]+1) * (skl[sname[i]]+1)) ? HIM : ""),
+                        (to_chinese(sname[i]) + "(" + sname[i] + ")"));
+                printf("%-8s%4d/%12d", 
+                        skill_level(SKILL_D(sname[i])->type(), skl[sname[i]]),
+                        skl[sname[i]], (int)lrn[sname[i]]);
+                printf(tribar_graph((int)lrn[sname[i]],skl[sname[i]]*skl[sname[i]], skl[sname[i]]*skl[sname[i]], HBBLU, HIY ,HIR)+"│\n");
+                }
+        }
+        if(j>0) { write("└───────────────────────────────────┘\n");}
+
+        j=0;
+        for(i=0; i<sizeof(skl); i++) {
+                if(SKILL_D(sname[i])->type() != "knowledge" && (sname[i] == "force" || sname[i] == "cuff" || sname[i] == "strike" || sname[i] == "finger" || sname[i] == "claw" || sname[i] == "hand" || sname[i] == "array" || sname[i] == "sword" || sname[i] == "blade" || sname[i] == "club" || sname[i] == "pike" || sname[i] == "staff" || sname[i] == "stick" || sname[i] == "hook" ||  sname[i] == "dodge" ||  sname[i] == "parry" || sname[i] == "whip" || sname[i] == "hammer" || sname[i] == "begging" || sname[i] == "training" || sname[i] == "checking" || sname[i] == "digging" || sname[i] == "leg" || sname[i] == "feixing-shu" || sname[i] == "archery" || sname[i] == "throwing" || sname[i] == "jinshe-zhuifa" || sname[i] == "axe" || sname[i] == "unarmed" )){
+                j=j+1;
+                }
+        }
+        if(j>0) { printf("┌"HBGRN WHT"%20s"NOR"─────────────────────────┐\n",chinese_number(j)+"项基本功夫");}
+        for(i=0; i<sizeof(skl); i++) {
+                if(SKILL_D(sname[i])->type() != "knowledge" && (sname[i] == "force" || sname[i] == "cuff" || sname[i] == "strike" || sname[i] == "finger" || sname[i] == "claw" || sname[i] == "hand" || sname[i] == "array" || sname[i] == "sword" || sname[i] == "blade" || sname[i] == "club" || sname[i] == "pike" || sname[i] == "staff" || sname[i] == "stick" || sname[i] == "hook" ||  sname[i] == "dodge" ||  sname[i] == "parry" || sname[i] == "whip" || sname[i] == "hammer" || sname[i] == "begging" || sname[i] == "training" || sname[i] == "checking" || sname[i] == "digging" || sname[i] == "leg" || sname[i] == "feixing-shu" || sname[i] == "archery" || sname[i] == "throwing" || sname[i] == "jinshe-zhuifa" || sname[i] == "axe" || sname[i] == "unarmed" )){
+                printf("│%s%s%-31s"NOR, 
+                        (member_array(sname[i], mapped)==-1? "　":HIC"□"NOR),
+                        ((lrn[sname[i]] >= (skl[sname[i]]+1) * (skl[sname[i]]+1)) ? HIM : ""),
+                        (to_chinese(sname[i]) + "(" + sname[i] + ")"));
+                printf("%-8s%4d/%12d", 
+                        skill_level(SKILL_D(sname[i])->type(), skl[sname[i]]),
+                        skl[sname[i]], (int)lrn[sname[i]]);
+                printf(tribar_graph((int)lrn[sname[i]],skl[sname[i]]*skl[sname[i]], skl[sname[i]]*skl[sname[i]], HBBLU, HIY ,HIR)+"│\n");
+                }
+        }
+        if(j>0) { write("└───────────────────────────────────┘\n");}
+j=0;
+        for(i=0; i<sizeof(skl); i++) {
+                if(SKILL_D(sname[i])->type() != "knowledge" && (sname[i] != "force" && sname[i] != "cuff" && sname[i] != "strike" && sname[i] != "finger" && sname[i] != "claw" && sname[i] != "hand" && sname[i] != "kick" && sname[i] != "sword" && sname[i] != "blade" && sname[i] != "club" && sname[i] != "pike" && sname[i] != "staff" && sname[i] != "stick" && sname[i] != "hook" && sname[i] != "dodge" && sname[i] != "parry" && sname[i] != "whip" && sname[i] != "hammer" && sname[i] != "begging" && sname[i] != "training" && sname[i] != "checking" && sname[i] != "digging" && sname[i] != "swimming" && sname[i] != "feixing-shu" && sname[i] != "archery" && sname[i] != "throwing" && sname[i] != "jinshe-zhuifa" && sname[i] != "axe" && sname[i] != "unarmed" )){
+                j=j+1;
+                }
+        }
+        if(j>0) { printf("┌"HBGRN WHT"%20s"NOR"─────────────────────────┐\n",chinese_number(j)+"项特殊功夫");}
+        for(i=0; i<sizeof(skl); i++) {
+                if(SKILL_D(sname[i])->type() != "knowledge" && (sname[i] != "force" && sname[i] != "cuff" && sname[i] != "strike" && sname[i] != "finger" && sname[i] != "claw" && sname[i] != "hand" && sname[i] != "kick" && sname[i] != "sword" && sname[i] != "blade" && sname[i] != "club" && sname[i] != "pike" && sname[i] != "staff" && sname[i] != "stick" && sname[i] != "hook" && sname[i] != "dodge" && sname[i] != "parry" && sname[i] != "whip" && sname[i] != "hammer" && sname[i] != "begging" && sname[i] != "training" && sname[i] != "checking" && sname[i] != "digging" && sname[i] != "swimming"  && sname[i] != "feixing-shu" && sname[i] != "archery" && sname[i] != "throwing" && sname[i] != "jinshe-zhuifa" && sname[i] != "axe" && sname[i] != "unarmed"
+                && sname[i] != "leg" )){
+                printf("│%s%s%-31s"NOR, 
+                        (member_array(sname[i], mapped)==-1? "　":HIR"□"NOR),
+                        ((lrn[sname[i]] >= (skl[sname[i]]+1) * (skl[sname[i]]+1)) ? HIM : ""),
+                        (to_chinese(sname[i]) + "(" + sname[i] + ")"));
+                printf("%-8s%4d/%12d", 
+                        skill_level(SKILL_D(sname[i])->type(), skl[sname[i]]),
+                        skl[sname[i]], (int)lrn[sname[i]]);
+                printf(tribar_graph((int)lrn[sname[i]],skl[sname[i]]*skl[sname[i]], skl[sname[i]]*skl[sname[i]], HBBLU, HIY ,HIR)+"│\n");
+                }
+        }
+        if(j>0) { write("└─────────────────────────"BLINK""HIM"★天下无雪★"NOR"────┘\n");}
+      
+        return 1;
+}
+
+string skill_level(string type, int level)
+{
+        int grade;
+        grade = level / 30;
+        switch(type) {
+                case "knowledge":
+                        if( grade >= sizeof(knowledge_level_desc) )
+                                grade = sizeof(knowledge_level_desc)-1;
+                        return knowledge_level_desc[grade];
+                default:
+                        if( grade >= sizeof(skill_level_desc) )
+                                grade = sizeof(skill_level_desc)-1;
+                        return skill_level_desc[grade];
+        }
+}
+int help(object me)
+{
+        write(@HELP
+指令格式 : skills|cha [<某人>]
+
+这个指令可以让你(你)查询所学过的技能。
+
+你也可以指定一个和你有师徒关系的对象，用 skills 可以查知对方的技能状况。
+
+巫师可以查询任何人或 NPC 的技能状况。
+
+HELP
+        );
+    return 1;
+}
+

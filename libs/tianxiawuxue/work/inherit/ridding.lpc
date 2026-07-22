@@ -1,0 +1,63 @@
+//坐骑  ridding
+#include <dbase.h>
+#include <ansi.h>
+
+int ride()
+{
+    object owner;
+    mapping ride_prop, applied_prop;
+    string *apply;
+
+    if( !owner = environment() ) return 0;
+    if( !owner->is_character() ) return 0;
+
+    if( query("equipped") )
+    return notify_fail("你已经骑在上面了。\n");
+
+    if( !mapp(ride_prop = query("ride_prop")) )
+    return notify_fail("你只能骑可以骑的东西。\n");
+
+    if( owner->query_temp("riding") )
+    return notify_fail("你已经有坐骑了。\n");
+
+    owner->set_temp("riding", query("name"));
+
+    apply = keys(ride_prop);
+    applied_prop = owner->query_temp("apply");
+
+    if( !mapp(applied_prop) ) applied_prop = ([]);
+    for(int i = 0; i<sizeof(apply); i++)
+        if( undefinedp(applied_prop[apply[i]]) )
+            applied_prop[apply[i]] = ride_prop[apply[i]];
+        else
+            applied_prop[apply[i]] += ride_prop[apply[i]];
+    owner->set_temp("apply", applied_prop);
+    set("equipped", "rode");
+    return 1;
+}
+
+int unequip()
+{
+    object owner;
+    mapping prop, applied_prop;
+    string *apply, equipped;
+    if( !(owner = environment())->is_character() ) return 0;
+    if( !stringp(equipped = query("equipped")) )
+        return notify_fail("你目前并没有骑这样东西。\n");
+
+    if( equipped=="rode" )
+    {
+        owner->delete_temp("riding" );
+        prop = query("ride_prop");
+    }
+
+    apply = keys(prop);
+    applied_prop = owner->query_temp("apply");
+    for(int i = 0; i<sizeof(apply); i++)
+      applied_prop[apply[i]] -= prop[apply[i]];
+    delete("equipped");
+    
+    return 1;
+}
+
+

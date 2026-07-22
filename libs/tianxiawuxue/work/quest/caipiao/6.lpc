@@ -1,0 +1,334 @@
+//彩票 
+#include <ansi.h>
+
+inherit ROOM;
+inherit F_SAVE;
+
+mapping *old_biao,*new_biao;
+int num,totalgold=100,luckman,goldperwin;
+int jieguo,oldjieguo;
+
+/*
+变量说明：
+old_biao为上期兑奖表
+new_biao为本期投注表
+num为期数
+totalgold为全部的投注黄金数，最低数为10
+luckman为上期中奖人数
+goldperwin为猜对的回报，值最大为10，由totalgold与luckman计算得出
+投注方式为10选1
+*/
+
+int do_read(string);
+int do_ya(string);
+void enough_rest();
+void beginsixhechai();
+int wizcontrol();
+
+void create()
+{
+    set ("short", "天下无雪福彩投注站");
+    set ("long", @LONG
+这里是“天下无雪”玩家的福利彩票售票点，大家可以试试呀！
+如何押注请read rules，查看目前的投注情况请read piao。
+LONG);
+
+    set("no_fight", 1);
+    set("exits", ([
+        "north" : "/d/city/duchang",
+      ]));
+    old_biao=({ });
+    new_biao=({ });
+    num = 0;
+    jieguo = 0;
+    setup();
+    beginsixhechai();
+    seteuid(ROOT_UID);
+}
+
+void beginsixhechai()
+{
+    num ++;
+    set("end_ya",0);
+    jieguo = random(6) +1;
+    totalgold=totalgold*10;//设置回报率
+    if(totalgold<10)
+        totalgold=4+random(6);
+    message( "du",HIW"〖赌场消息〗：天下无雪福彩投注站第"+num+"期开始啦！快去投注哟！\n"NOR,users() );//提醒玩家开始
+    remove_call_out("endsixhechai");
+    call_out("endsixhechai",1400);
+}
+
+void endsixhechai()
+{
+    if(num>1)
+        message("du", HIW"〖赌场消息〗：离上期兑奖时间还有5分钟，请还没兑奖的速去领奖！\n"NOR,users() );
+    message("du", HIW"〖赌场消息〗：本期天下无雪福彩停止下注，5分钟后继续关注天下无雪福彩！\n"NOR,users() );
+    set("end_ya",1);
+    remove_call_out("kaijian");
+    call_out("kaijian",100);
+}
+
+void kaijian()
+{
+    int i,j;
+    j=0;
+    luckman=0;
+    i=sizeof(new_biao);
+    if(random(10)>4)
+        if(i>0)
+            jieguo=new_biao[random(i-1)]["win"];
+
+    for(i=0;i<sizeof(new_biao);i++)
+        if(new_biao[i]["win"]==jieguo)
+        {
+            luckman++;
+            j=j+new_biao[i]["gold"];
+        }
+    if(j>0)
+        goldperwin=totalgold/j;
+    if(goldperwin<2)
+        goldperwin=2;
+    if(goldperwin>10)
+        goldperwin=10;
+    //防止中奖了而没有收入，同时限制暴发户
+
+    message("du", HIW"〖赌场消息〗：上期彩票兑奖时间已过！！！\n"NOR,users() );
+    message("du", HIW"〖赌场消息〗：本期彩票最终结果公布，是数字 "+jieguo+" ！押对的快去兑奖啊！\n福彩累计奖金为"+totalgold+"两黄金，共有"+luckman+"人中奖\n"NOR,users() );
+    old_biao = new_biao;
+    oldjieguo=jieguo;
+    new_biao = ({ });
+    remove_call_out("beginsixhechai");
+    call_out("beginsixhechai",10);
+}
+
+void init()
+{
+    add_action("do_read", "read");
+    add_action("do_ya","touzhu");
+    add_action("do_duijiang","duijiang");
+    add_action("do_wizcontrol","wizcontrol");
+}
+
+int do_wizcontrol(string arg)
+{
+    int i;
+    object me=this_player();
+    if(!wizardp(me)) return 0;
+    if(!arg)
+        return notify_fail("你要更新什么？\n");
+    if(arg=="begin")
+    {
+        remove_call_out("beginsixhechai");
+        remove_call_out("endsixhechai");
+        remove_call_out("kaijian");
+        beginsixhechai();
+    }
+    if(arg=="end")
+    {
+        remove_call_out("beginsixhechai");
+        remove_call_out("endsixhechai");
+        remove_call_out("kaijian");
+    }
+    if(sscanf(arg,"%d",i)==1)//如只加数字更新中奖号
+    {
+        if((i<1)&&(i>10))
+            return notify_fail("你要更新的数字不在1-10之间\n");
+        else
+            jieguo=i;
+    }           
+    return 1;
+}
+
+string query_save_file()
+{
+    return DATA_DIR + "board/chaipiao";
+}
+
+int do_ya(string arg)
+{
+    int i,j;
+    object me,ob;
+    mapping biao;
+
+    me = this_player();
+    for(i=0;i<sizeof(new_biao);i++)
+        if(new_biao[i]["id"]==me->query("id"))
+            return notify_fail("第人每期只能押一次！\n");
+    if(query("end_ya"))
+        return notify_fail("截止时间已过，等会再来押吧......\n");
+    if (query_temp("busy"))
+        return notify_fail("稍候........\n");
+    if(!arg || sscanf(arg, "%d %d", i,j) != 2)
+        return notify_fail("命令格式：touzhu <枚数> <多少两黄金>\n");
+    if(i<1||i>10)
+        return notify_fail("不可能吧？你是不是想白送钱？\n");
+    if(j < 1)
+        return notify_fail("你想白赚啊？\n");
+    if(j>100)
+        return notify_fail("押得太多，请不要多于100。\n");
+    if((int)j>me->query("money")/10000)
+        return notify_fail("这里不收现金！到钱庄存够了钱再来！”\n");
+
+    message_vision("$N想了半天大声喊道：“我选 "+i+" 这个数！押 "+j+" 两黄金！”\n",me);
+    me->add("money",-j*10000);
+    totalgold+=j;
+    tell_object(me,"钱庄已经扣除了你押下的"+j+"两黄金。请等候闭幕结果吧！\n");
+
+    biao = ([
+      "id":me->query("id"),
+      "name":me->query("name"),
+      "win":i,
+      "gold":j,
+    ]);
+    if( !pointerp(new_biao) ) new_biao = ({ biao });
+    else new_biao += ({ biao });
+
+    remove_call_out("enough_rest");
+    call_out("enough_rest", 1);
+    return 1;
+}
+
+
+
+int do_read(string arg)
+{
+    int i,j,k;
+    object me;
+    string name,str,str0,str1,str2;
+    mapping biao;
+
+    me = this_player();
+
+    if(arg == "rules")
+    {
+        write("本期彩票快要开奖了，欢迎在此押注：数字为一至十中的一个，押注者\n"
+          "以黄金为单位，最高押100 gold，最少 1 gold。现金不收，必\n"
+          "须先存进钱庄。押赌后钱庄直接扣钱。押赌时间到20号截\n"
+          "止。中奖者按所押的黄金数分享全部累计奖金。想好了后\n"
+          "就 "HIY"touzhu <数字> <多少两黄金>"NOR"当然每个ID只\n"
+          "能押一次，押过不许后悔！\n");
+        write("请使用duijiang指令，你的奖金将自动进入你帐户。\n");
+        return 1;
+    }
+    if(arg == "piao")
+    {
+        if(num)
+            write("★★★★★★★★★★★★★★★★★★★★★★★★\n"
+              HIG"上期彩票开奖数字： "HIY+oldjieguo+HIG" ！(开始兑奖duijiang)\n"
+              "累计奖金总额为："+totalgold+"两黄金。\n");
+        if( !pointerp(old_biao) || !sizeof(old_biao) )
+        {
+            write("\n上期没有人投注。\n");
+        }
+        write("已有 "+sizeof(old_biao)+" 个玩家投注：\n"
+          HIC"玩家名　　　　预测数字  　押黄金数｜玩家名　　　　预测数字  　押黄金数\n"
+          "—————————————————｜—————————————————\n");
+        str0 = HIM"本期彩票投注玩家：\n"NOR;
+        str1 = HIM"上期已经兑过奖的玩家：\n"NOR;
+        str2 = HIM"上期没中奖和还未兑过奖的玩家：\n"NOR;
+        j = 0;
+        k = 0;
+        for(i=0; i<sizeof(new_biao); i++)
+        {
+            name = new_biao[i]["name"]+"("+new_biao[i]["id"]+")";
+            str0 += sprintf("%-18s    %-5d  %-5d%s",name,(int)new_biao[i]["win"],
+              (int)new_biao[i]["gold"],j%2?"\n":"｜",);
+            j++;
+        }
+        j = 0;
+        k = 0;
+        for(i=0; i<sizeof(old_biao); i++)
+        {
+            name = old_biao[i]["name"]+"("+old_biao[i]["id"]+")";
+            if(!(int)old_biao[i]["dui"])
+            {
+                str2 += sprintf("%-18s    %-5d  %-5d%s",name,(int)old_biao[i]["win"],
+                  (int)old_biao[i]["gold"],j%2?"\n":"｜",);
+                j++;
+            }
+            else
+            {
+                str1 += sprintf("%-18s    %-5d  %-5d%s",name,(int)old_biao[i]["win"],
+                  (int)old_biao[i]["gold"],k%2?"\n":"｜",);
+                k++;
+            }
+        }
+
+        write(str0+"\n"+str1+"\n"+str2+"\n");
+        return 1;
+    }
+    else
+        write("你要看什么？押注规则请read rules，押注情况请read piao。\n");
+    return 1;
+}
+
+
+void enough_rest()
+{
+    delete_temp("busy");
+}
+
+int do_duijiang()
+{
+    int i,j,maxmoney,getgold;
+    int award=0;
+    object me,ob;
+    mapping biao,du;
+
+    me = this_player();
+    maxmoney=me->query("combat_exp") * 10;
+    if(maxmoney<1000)
+        maxmoney=10000;
+
+    for(i=0;i<sizeof(old_biao);i++)
+        if( me->query("id")==old_biao[i]["id"] && old_biao[i]["dui"]!=1 && old_biao[i]["win"]==oldjieguo)
+        {
+            award=1;
+            j=old_biao[i]["gold"];
+            old_biao[i]["dui"]=1;
+        }
+
+    if(award==0)
+        return notify_fail("你没有奖的，或者已经兑过奖了！\n");
+    if (query_temp("busy"))
+        return notify_fail("稍候........\n");
+    set_temp("busy",1);
+    getgold=j*goldperwin;
+
+    if(getgold+me->query("money")<maxmoney)
+    {
+        write("你押了"+j+" 两黄金，按规定得奖金 "+(getgold)+" 两黄金，
+                已划入你的钱庄帐户！\n");
+        me->add("money",getgold*10000);
+    }
+    else
+    {
+        ob=new("/clone/money/gold");
+        ob->set_amount(getgold);
+        if (!ob->move(me))
+        {
+            ob->move(environment(me));
+            return notify_fail("你带不了那么多钱。一下子落到地上！！！\n");
+        }
+        write("你押了"+j+" 两黄金，按规定得奖金 "+(getgold)+" 两黄金，
+        你的银行帐户不能再存更多的钱了，这是现金，你收好！\n");
+
+    }
+    totalgold=totalgold-getgold;
+    if(totalgold<10)
+        totalgold=4+random(6);
+    i=getgold*10;
+    if(i<10)
+      i=10;
+    if(i>1000)
+      i=1000;
+    i=20+random(i);
+    me->add("potential",i);
+    message("du", HIW"〖赌场消息〗："+me->name()+"兑奖得到 "+getgold+" 两黄金！
+    并获得"+i+"点潜能\n"NOR,users() );  
+    remove_call_out("enough_rest");
+    call_out("enough_rest", 1);
+    return 1;
+}
+

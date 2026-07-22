@@ -1,0 +1,83 @@
+#include <ansi.h>
+#include <skill.h>
+#include <weapon.h>
+#include <combat.h>
+inherit F_SSERVER;
+ 
+int perform(object me, object target)
+{
+    object weapon, ob;
+    string msg;
+    int i, damage;
+    object *obb;
+
+    if( !me->is_fighting() )
+        return notify_fail("雄霸天下只能在战斗中使用。\n");
+
+    if (me->query_temp("perform")) return notify_fail("你上一招未使完！\n");
+    if (!objectp(weapon = me->query_temp("weapon"))
+    || (string)weapon->query("skill_type") != "blade")
+    if (!objectp(weapon = me->query_temp("secondary_weapon"))
+    || (string)weapon->query("skill_type") != "blade")
+        return notify_fail("你使用的武器不对。\n");
+    else me->set_temp("secondly_weapon",1);
+    if( (int)me->query("neili") < 100000 )
+        return notify_fail("你的真气不够！\n");
+    if( (int)me->query_skill("blade", 1) < 1000 || me->query_skill("xiongba-tianxia", 1) < 1000 ||
+        me->query_skill_mapped("blade") != "xiongba-tianxia")
+        return notify_fail("你的雄霸天下还没练成吧！\n");
+    msg = HIR "$N长啸了一声，把心中怨气全部运到了刀上！\n" NOR;
+    message_vision(msg, me);
+    me->clean_up_enemy();
+    ob = me->select_opponent();
+    if(ob)
+    {
+	msg = HIB "$n只觉得$N的刀光好像从四处八方的劈来，一点空隙都没有！\n" NOR;
+	message_vision(msg, me, ob);
+    }
+    me->add("neili", -150);
+    me->set_temp("perform",1);
+    me->set_temp("perform_xiongba",1);
+    for(i = 0; i < 8; i++)
+        if (me->is_fighting(ob) && ob->is_fighting(me) && ob->query("eff_qi")>0){
+              me->set_temp("action_msg",WHT BMAG+"紧接着"+NOR);
+                if (!weapon->query("equipped")) break;
+              COMBAT_D->do_attack(me, ob,weapon, 1);
+            }else break;
+        me->delete_temp("perform_xiongba");
+    me->delete_temp("secondly_weapon");
+    me->start_call_out( (: call_other, __FILE__, "del_perform", me :), 3);;
+    
+obb = all_inventory(environment(me));
+for(i=0; i<sizeof(obb); i++) 
+{
+        if( !living(obb[i]) || obb[i]==me || wizardp(obb[i]) || (obb[i]->query("age")<16 && userp(obb[i])) )
+                continue;
+        if( me->query("combat_exp") < obb[i]->query("combat_exp"))
+			continue;
+        if( me->query("neili")<0) continue;
+
+        damage = ((int)me->query("max_neili")/2) - ((int)obb[i]->query("max_neili"));
+
+        if( damage > 0 ) 
+	 {
+            obb[i]->receive_damage("qi", damage,me );
+            message_vision(HIW BRED "$N好像着了魔似的，手中的"+weapon->query("name")+"毫不留情的也朝$n砍了过来! $n似乎被$N的刀气伤到了。\n" NOR, me, obb[i]);
+		obb[i]->start_busy(2);
+		me->add("neili", -damage);
+        if( !obb[i]->is_killing(me) )	obb[i]->kill_ob(me);
+        if( !me->is_killing(obb[i]) )	me->fight_ob(obb[i]);
+        }
+}
+
+
+
+
+return 1;
+}
+
+void del_perform(object me)
+{
+   if (!me) return;
+   me->delete_temp("perform");
+}

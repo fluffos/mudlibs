@@ -1,0 +1,517 @@
+
+// This function calculates the combined skill/combat_exp power of a certain
+// skill. This value is used for A/(A+B) probability use.
+
+varargs int skill_power(object ob, string skill, int usage,int type)
+{
+        int status, level, power,max,enc,rate;
+        string hi_skill;
+
+        if( !living(ob) ) return 0;
+        max = (int) ob->query_max_encumbrance()+1;
+        enc = 3+(max - (int) ob->query_encumbrance() + 2000) * 7 / max;
+  // npcs does not have this restrication
+        if(!userp(ob)) enc = 10;
+        level = ob->query_skill(skill);
+        if(type)level = ob->query_skill(skill,1)/2;
+        switch(usage) {
+                case SKILL_USAGE_ATTACK:
+                        level += ob->query_temp("apply/attack");
+                        break;
+                case SKILL_USAGE_DEFENSE:
+                        level += ob->query_temp("apply/defense");
+                        break;
+                case SKILL_USAGE_MOVE:
+                        level += ob->query_temp("apply/move");
+                        break;
+        }
+
+        hi_skill = ob->query_skill_mapped(skill);
+        if( !hi_skill ) hi_skill = skill;
+        rate = SKILL_D(hi_skill)->query_rate(ob)+100;
+        if(level<100) {
+        if( (status = ob->query("max_sen")) > 0 )
+            power = (level*level)  * (int)ob->query("sen") /status;
+        else
+                power = (level*level) ;
+        if(usage == SKILL_USAGE_MOVE) return power * enc/10;
+        return (power + (int)ob->query("combat_exp")/50)*enc/10*rate/100;
+        } else {
+        if( (status = ob->query("max_sen")) > 0 )
+            power = (level*level)  * ((int)ob->query("sen")*20/status)/20 ; 
+        else
+                power = (level*level);
+        if(usage == SKILL_USAGE_MOVE) return power /10* enc;
+        return (power + (int)ob->query("combat_exp")/50)*enc/10*rate/100;
+        }
+}
+
+// do_protect()
+// a function that checks to see if there is anything/anyone protects our victim
+
+
+int do_protect(object me, object weapon,int ap, object victim)
+{
+        object *pros;
+        string output;
+        int pp;
+        string parry_skill;
+        int i;
+        output="";
+        pros = victim->query_temp("protected");
+        i = random(sizeof(pros));
+        if(!pros[i]||pros[i]->query_temp("disable_command")||!living(pros[i])) {
+        pros -= ({ pros[i] });
+        if(!sizeof(pros)) victim->delete_temp("protected");
+        return 0;     }
+        
+        if(environment(pros[i]) != environment(victim)) return 0;
+        if(pros[i]->is_character())
+        {
+                //      Check if the pros[i] can parry this attack for the victim.
+                if( pros[i]->query_temp("weapon") ) {
+                        pp = skill_power(pros[i], "parry",SKILL_USAGE_DEFENSE);
+                        if( !weapon ) pp *= 2;
+                } else {
+                        if( weapon ) pp = skill_power(pros[i],"unarmed",SKILL_USAGE_DEFENSE)/2;
+                        else pp = skill_power(pros[i], "unarmed",SKILL_USAGE_DEFENSE);
+                }
+                if( pros[i]->is_busy() ) pp /= 3;
+                if( pp < 1 ) pp = 1;
+                if( random(ap + pp)< pp ) {
+                if(pros[i]->query_temp("weapon")){
+                    parry_skill = pros[i]->query_skill_mapped("parry");
+                    if(!pros[i]->query_temp("weapon")||
+                       pros[i]->query_temp("weapon")->query("skill_type")!=parry_skill)
+                        parry_skill="parry";
+                if( !parry_skill)  parry_skill = "parry";
+                }
+                else
+                {
+                parry_skill = pros[i]->query_skill_mapped("unarmed");
+                if(!parry_skill) parry_skill = "unarmed";
+                }
+                if(weapon)
+                    output = SKILL_D(parry_skill)->query_parry_action(weapon)["action"];
+                else output+="";
+                if( pros[i]->query_temp("weapon"))
+               
+                output = replace_string( output, "$v", (pros[i]->query_temp("weapon"))->name());
+                output = replace_string( output, "$n", pros[i]->name());
+                output = replace_string( output, "$p", pros[i]->name());
+                victim->set_temp("protectors_msg", output);
+                return 1;
+                }
+                else
+                        return 0;
+        }
+        else {
+        victim->set_temp("protectors_msg",pros[i]->protection_msg());
+        return pros[i]->protection();
+        }
+
+}
+
+// do_attack()
+//
+// Perform an attack action. This function is called by fight() or as an
+// interface for some special utilize in quests.
+//
+varargs int do_attack(object me, object victim, object weapon,
+        int attack_type,string attack_msg, string damtype,int no_test_attack)
+{
+        mapping my, your, action,prepare,dodge_action,parry_action;
+        string limb, *limbs, result;
+        string attack_skill, force_skill,  dodge_skill, parry_skill;
+        mixed foo;
+        //生物坐标.no_test_attack是不用检测能够攻击到对方的标志，增加这个
+        //参数意味着me攻击victim的时候不用检测能否攻击到对方
+        int damage, damage_bonus, bounce;
+        int wounded = 0;
+
+
+        if(!victim||!environment(victim)||!environment(me)||
+           environment(me)!=environment(victim)||
+           environment(me)->query("no_fight")) return 1;
+        //没有传入no_test_attack这个参数，就意味着必须判断me能否攻击到victim，为什么不采用
+        //need_test_attack这样的参数呢，因为如果改成类似need_test_attack的参数,那么势必要修改
+        //许多地方。
+        if(!no_test_attack){
+if(!("/feature/npcai"->test_attack(me,victim,
+me->query_temp("map/x"),
+                                  me->query_temp("map/y")))) 
+                    return 0;//无法攻击到对方
+        }
+        my = me->query_entire_dbase();
+        your = victim->query_entire_dbase();
+
+        //
+        // (0) Choose skills.
+        //
+        prepare = me->query_skill_prepare();
+        if (!prepare) prepare = ([]);
+
+        if( objectp(weapon) )   attack_skill = weapon->query("skill_type");
+        else if ( sizeof(prepare) == 0) attack_skill = "unarmed";
+        else if ( sizeof(prepare) == 1) attack_skill = (keys(prepare))[0];
+        else if ( sizeof(prepare) == 2) attack_skill = (keys(prepare))[me->query_temp("action_flag")];
+        
+        //
+        // (1) Find out what action the offenser will take.
+        //
+        action = me->query("actions");
+        if( !mapp(action) ) {
+                me->reset_action();
+                action = me->query("action");
+                if( !mapp(action) ) {
+                      CHANNEL_D->do_channel( this_object(), "sys",
+                         sprintf("%s(%s): bad action = %O", me->name(1),
+                          me->query("id"), me->query("actions", 1)));
+                        return 0;
+                }
+        }
+        result = "\n" + action["action"] + "！\n";
+        if(stringp(attack_msg)) result = "\n" + attack_msg + "\n";
+
+        //
+        // (2) Prepare AP, DP for checking if hit.
+        //
+
+        limbs = victim->query("limbs");
+        limb = limbs[random(sizeof(limbs))];
+
+        dodge_skill = victim->query_skill_mapped("dodge");
+        if( !dodge_skill ) dodge_skill = "dodge";
+        dodge_action = SKILL_D(dodge_skill)->query_dodge_action();
+        if(!mapp(dodge_action)) dodge_action=([]);
+        prepare = victim->query_skill_prepare();
+        if (!prepare) prepare = ([]);
+
+        parry_skill = victim->query_skill_mapped("parry");
+        if(!stringp(parry_skill)) parry_skill= "parry";
+
+        if( objectp(victim->query_temp("weapon")) ) {
+           if(!SKILL_D(parry_skill)->valid_enable(victim->query_temp("weapon")->query("skill_type")))
+               {
+                parry_skill= "parry";
+                pp = skill_power(victim,"parry",SKILL_USAGE_DEFENSE,1);
+                }
+           else {
+                pp = skill_power(victim, "parry", SKILL_USAGE_DEFENSE,0);
+                parry_skill = victim->query_skill_mapped("parry");
+               }
+           if( !weapon ) pp *= 2;
+        } else {
+           //victim没有拿武器,但是却又将parry enable成了要武器的技能
+           if(!SKILL_D(parry_skill)->valid_enable("unarmed") ) parry_skill="parry";
+           if( weapon ) pp = 0;
+           else if ( sizeof(prepare) == 0) {
+               if(victim->query_skill_mapped("parry")==victim->query_skill_mapped("unarmed"))
+                  {pp = skill_power(victim, "unarmed", SKILL_USAGE_DEFENSE,0);
+                  parry_skill = victim->query_skill_mapped("parry");}
+           } else if ( sizeof(prepare) == 1) {
+               if(victim->query_skill_mapped("parry")==victim->query_skill_mapped((keys(prepare))[0]))
+                  {pp = skill_power(victim,(keys(prepare))[0],SKILL_USAGE_DEFENSE,0);
+                  parry_skill = victim->query_skill_mapped("parry");}
+           } else if ( sizeof(prepare) == 2) pp = skill_power(victim,(keys(prepare))[me->query_temp("action_flag")],SKILL_USAGE_DEFENSE,0);
+        }
+        if(!stringp(parry_skill)) parry_skill= "parry";
+        parry_action = SKILL_D(parry_skill)->query_parry_action(weapon);
+        if(!mapp(parry_action)) parry_action=([]);
+
+        ap = skill_power(me, attack_skill, SKILL_USAGE_ATTACK,0);
+        if( action["attack"])
+                ap += ap * action["attack"] / 100 ;
+        if( ap < 1) ap = 1;
+
+        dp = skill_power(victim, "dodge", SKILL_USAGE_DEFENSE,0);
+        if( dodge_action["dodge"])
+                dp += dp * dodge_action["dodge"] / 100 ;
+        if( action["dodge"])
+                dp += dp * action["dodge"] / 100 ;
+        if( dp < 1 ) dp = 1;
+        if( victim->is_busy() ) dp /= 3;
+        if( parry_action["parry"])
+              pp += pp * parry_action["parry"] / 100 ;
+        if( action["parry"])
+              pp += pp * action["parry"] / 100 ;
+        if( pp < 1 ) pp = 1;
+        if( victim->is_busy() ) pp /= 3;
+        //
+        // (3) Fight!
+        //     Give us a chance of AP/(AP+DP) to "hit" our opponent. Since both
+        //     AP and DP are greater than zero, so we always have chance to hit
+        //     or be hit.
+        //
+   if(sizeof(victim->query_temp("protected")) && do_protect(me,weapon,ap,victim))
+   {
+                result += victim->query_temp("protectors_msg");
+                damage = RESULT_PROTECT;        
+   } else {
+         if( random(ap + dp) < dp ) {       // Does the victim dodge this hit?
+
+                result += dodge_action["action"];
+
+                if( dp < ap && (!userp(victim) || !userp(me)) 
+                &&      random(your["gin"]*100/your["max_gin"] + your["int"]) > 50 ) {
+                        victim->improve_skill("dodge", 1);
+                }
+
+    // This is for NPC only. NPC have chance to get exp when fail to hit.
+                     if( (ap < dp) && !userp(me) ) {
+                        if( random(my["int"]) > 15 ) my["combat_exp"] += 5;
+                        me->improve_skill(attack_skill, random(my["int"]));
+                }
+                damage = RESULT_DODGE;
+
+        } else {
+
+                //
+                //      (4) Check if the victim can parry this attack.
+                //
+
+             if( random(ap + pp)< pp ) {
+                result += parry_action["action"]+"\n";
+                        if( pp < ap && (!userp(victim) || !userp(me)) 
+                        &&      random(your["gin"]*100/your["max_gin"] + your["int"]) > 50 ) {
+                                victim->improve_skill("parry", 1);
+                        }
+                        damage = RESULT_PARRY;
+
+                } else{
+
+                        //
+                 //      (5) We hit the victim and the victim failed to parry
+                        //
+
+                        damage = me->query_temp("apply/damage")/2+1;
+                        damage = (damage + random(damage)) / 2;
+                        if( action["damage"] )
+                                damage += action["damage"] * damage / 100;
+
+                        damage_bonus = me->query_str();
+                        damage_bonus = to_int(pow(damage_bonus*damage_bonus*damage_bonus,0.42));
+                        if(weapon) damage_bonus -= damage_bonus/3;
+
+                        // Let force skill take effect.
+                        if( my["force_factor"] && (my["force"] > my["force_factor"]) ) {
+                                if( force_skill = me->query_skill_mapped("force") ) {
+                                        foo = SKILL_D(force_skill)->hit_ob(me, victim, damage_bonus, my["force_factor"]);
+                        if( damage_bonus > 0 )
+                                damage += (damage_bonus + random(damage_bonus))/2;
+                        if( damage < 0 ) damage = 0;
+
+                        // Let combat exp take effect
+                        bounce = your["combat_exp"] + 1;
+                        while( random(100) > my["combat_exp"] * 100 / bounce ) {
+                                damage -= damage / 5;
+                                bounce/= 2;
+                                if(bounce<1)bounce=1;
+                        }
+
+                        //
+                        //      (5.5) Check if victim can absorb the damage
+                        //
+                //下面的金刚不坏有可能被别的功夫破掉，从而无法发挥作用.
+                //例如中了独孤九剑的破气式.破气式本来是破内力的,但是此
+                //处更改为破金刚不坏
+                damage -=  ((int)victim->query_con()/4);
+                if(damage<0)damage=1;
+                //victim的金刚不坏之身被破
+                if(!victim->query_temp("useless_iron_cloth"))
+                    absorb_vic = victim->query_skill("iron-cloth") /2;
+                else 
+                    absorb_vic =0;
+                
+                if( victim->query_skill("iron-cloth")&&
+                   !victim->query_temp("useless_iron_cloth"))
+                {
+                    absorb_skill = victim->query_skill_mapped("iron-cloth");
+                                        if( stringp(foo) ) result += foo
+                                        else if( intp(foo) ) damage_bonus += foo
+                                
+                        
+                        if( action["force"] 
+                                damage_bonus += action["force"] * damage_bonus / 100
+                        if( parry_skill = me->query_skill_mapped(attack_skill) ) 
+                                foo = SKILL_D(parry_skill)->hit_ob(me, victim, damage_bonus)
+                                if( stringp(foo) ) result += foo
+                                else if(intp(foo) ) damage_bonus += foo
+                        
+                        // Let weapon or monster have their special damage
+                        if( weapon ) 
+                                foo = weapon->hit_ob(me, victim, damage_bonus)
+                                if( stringp(foo) ) result += foo
+                                else if(intp(foo) ) damage_bonus += foo
+                        } else 
+                                foo = me->hit_ob(me, victim, damage_bonus)
+                                if( stringp(foo) ) result += foo
+                                else if(intp(foo) ) damage_bonus += foo
+                        
+                    if( !absorb_skill ) absorb_skill = "iron-cloth"
+                    result += SKILL_D(absorb_skill)->query_absorb_msg()
+                
+                if(!me->query_temp("useless_iron_cloth")
+                    damage_bonus = me->query_skill("iron-cloth")
+                else damage_bonus=0
+                if( (damage - absorb_vic) < 0 ) 
+                    if(!victim->query_temp("useless_iron_cloth")
+                         absorb_skill = victim->query_skill_mapped("iron-cloth")
+                    else absorb_skill=0
+                    if( absorb_skill
+                        bounce = 0 - ((SKILL_D(absorb_skill)->bounce_ratio()) *(damage - absorb_vic) / 10)
+                    els
+                        bounce = 0
+                    if(!me->query_temp("useless_iron_cloth")
+                        absorb_skill = me ->query_skill_mapped("iron-cloth")
+                    else absorb_skill=0
+                    if( absorb_skill
+                        bounce -= (SKILL_D(absorb_skill)->bounce_ratio()) *damage_bonus / 10
+                    els
+                         bounce -= 0
+                    if ( bounce < 0 ) bounce = 0
+                         me->receive_damage("kee", bounce )
+                         me->receive_damage("kee", 1, victim,"physical")
+                         result += damage_msg(bounce, "反弹伤")
+                
+                else  
+                        /
+                        //      (6) Inflict the damage
+                        /
+                    damage = victim->receive_damage("kee", damage, me,"physical" )
+                    if( /* (me->is_killing(victim) || weapon)&& *
+                    random(damage) > (int)victim->query_temp("apply/armor") ) 
+                   // We are sure that damage is greater than victim's armor here
+                    victim->receive_wound("kee"
+                        damage - (int)victim->query_temp("apply/armor"), me,"physical")
+                        wounded = 1
+                    
+                    if(stringp(damtype)
+                        result += damage_msg(damage, damtype)
+                    els
+                        result += damage_msg(damage, action["damage_type"])
+                        /
+                        //      (7) Give experienc
+                        /
+                        if( !userp(me) || !userp(victim) ) 
+                                if( (ap < dp
+                                &&      (random(my["sen"]*100/my["max_sen"] + my["int"]) > 55) ) 
+                                  me->improve_skill(attack_skill, 1)
+                                
+                        
+                
+        }
+    
+} //protect by other  
+        result = replace_string( result, "$l", limb );
+        if( objectp(weapon) )
+                result = replace_string( result, "$w", weapon->name() );
+        else if( stringp(action["weapon"]) )
+                result = replace_string( result, "$w", action["weapon"] );
+        if(objectp(foo=victim->query_temp("weapon")))
+                result = replace_string( result, "$v", foo->name() );
+        
+        if(!victim->query_temp("useless_iron_cloth")&&
+            victim->query_skill_mapped("iron-cloth"))
+            result = replace_string( result, "$z",  to_chinese(victim->query_skill_mapped("iron-cloth")));
+        message_vision(result, me, victim );
+
+        if( wizardp(me) && (string)me->query("env/combat")=="verbose" ) {
+                if( damage > 0 )
+                        tell_object(me, sprintf( GRN "AP：%d，DP：%d，PP：%d，伤害力：%d absorb: %d\n" NOR,
+                                ap, dp, pp, damage,absorb_vic));
+                else
+                        tell_object(me, sprintf( GRN "AP：%d，DP：%d，PP：%d\n" NOR,ap, dp, pp));
+        }
+
+        if( damage>0&&(damage - absorb_vic) >= 0 )
+                report_status(victim, wounded);
+        else if(damage>0) report_status(me, wounded);
+        if( victim->is_busy() ) victim->interrupt_me(me,"hit");
+        if( (!me->is_killing(your["id"])) &&
+            (!victim->is_killing(my["id"])) &&
+            (me->is_fighting(victim)) &&
+            (victim->is_fighting(me)) ) {
+          if(victim->query("sen")*2<victim->query("max_sen") ||
+          victim->query("kee")*2<victim->query("max_kee") ||
+          victim->query("gin")*2<victim->query("max_gin") ){
+          me->remove_enemy(victim);
+          victim->remove_enemy(me);
+          message_vision(winner_msg[random(sizeof(winner_msg))], me, victim);
+          REWARD_D->winner_quest(me,victim);
+           } else if(me->query("sen")*2<me->query("max_sen") ||
+          me->query("kee")*2<me->query("max_kee") ||
+          me->query("gin")*2<me->query("max_gin") ){
+          me->remove_enemy(victim);
+          victim->remove_enemy(me);
+          message_vision(winner_msg[random(sizeof(winner_msg))], victim,me);
+          REWARD_D->winner_quest(victim,me);
+           }
+          }
+        if( functionp(action["post_action"]) )
+                evaluate( action["post_action"], me, victim, weapon, damage);
+        if(objectp(weapon)&&(damage!=RESULT_DODGE)) 
+                WEAPON_D->weapon_used(me,victim,weapon,damage);
+        // See if the victim can make a riposte.
+
+        if(!("/feature/npcai"->test_attack(victim,me,
+                                          victim->query_temp("map/x"),
+                                          victim->query_temp("map/y"))))
+                                          //测试victim能否击中me
+            return 0;
+        if( attack_type==TYPE_REGULAR
+        &&      damage < 1
+        && living(victim)&& !victim->query_temp("disable_command")
+        &&      victim->query_temp("guarding") ) {
+                    victim->set_temp("guarding", 0);
+                    if( random(my["cps"]) < 5 ) {
+                          if( !(int)me->query("env/combat_brief") )
+                               message_vision("$N一击不中，露出了破绽！\n", me);
+                          do_attack(victim, me, victim->query_temp("weapon"), TYPE_QUICK);
+                    } else {
+                           if( !(int)me->query("env/combat_brief") )
+                               message_vision("$N见$n攻击失误，趁机发动攻击！\n", victim, me);
+                           do_attack(victim, me, victim->query_temp("weapon"), TYPE_RIPOSTE);
+                    }
+        }
+}
+//      fight()
+//
+//This is called in the attack() defined in F_ATTACK, which handles fighting
+//      in the heart_beat() of all livings. Be sure to optimize it carefully.
+//
+void fight(object me, object victim)
+{
+
+        if( !living(me) ) return;
+
+        if( !me->visible(victim)
+        && (random(110 + (int)me->query_skill("perception")) < 100) )
+                return;
+
+// If victim is busy or unconcious, always take the chance to makeanattack.
+        if( victim->is_busy() || !living(victim) ||victim->query_temp("disable_command")) {
+                me->set_temp("guarding", 0);
+                if( !victim->is_fighting(me) ) victim->fight_ob(me);
+                do_attack(me, victim, me->query_temp("weapon"), TYPE_QUICK);
+
+        // Else, see if we are brave enough to make an aggressive action.
+        } else if( random( (int)victim->query("cps") * 3 ) < ((int)me->query("cor") + (int)me->query("bellicosity") / 50) ) {
+                me->set_temp("guarding", 0);
+                if( !victim->is_fighting(me) ) victim->fight_ob(me);
+                do_attack(me, victim, me->query_temp("weapon"), TYPE_REGULAR);
+
+        // Else, we just start guarding.
+        } else if( !me->query_temp("guarding") ) {
+                me->set_temp("guarding", 1);
+                if( !(int)me->query("env/combat_brief") ) 
+                           message_vision( guard_msg[random(sizeof(guard_msg))], me, victim);
+                return;
+        } else return;
+}
+
+//      auto_fight()
+//
+//      This function is to start an automatically fight. Currently this is
+//      used in "aggressive", "vendetta", "hatred", "berserk" fight.
+//

@@ -32,7 +32,7 @@ rely on the boot + interactive-connect test as the verification gate.
   majority of this collection. If an archive turns out to be English
   (like ds386/Dead Souls), do the minimum to note what it is, don't sink
   deep debugging time into it -- move on to the next Chinese one.
-- **Done: 40 / 100, plus 4 more (archives #47, #48, #50, #51) currently
+- **Done: 41 / 100, plus 3 more (archives #47, #48, #50) currently
   being processed in parallel by background agents** (see below once
   they report back) (shanhaizhanshen, xingzhanyingxiong,
   unknownlib20150716 [小雨西游II], bxsj [书剑天下], bxsj1 [书剑·经典],
@@ -47,7 +47,8 @@ rely on the boot + interactive-connect test as the verification gate.
   [侠客行三/金庸群侠传], beimeixiakexing2001 [侠客行, North America 2001
   build], xiyangzaixian_fengkuang [夕阳再现], datangshuanglong
   [大唐双龙, config has a stale "碧血残阳之豪侠晚歌" name field --
-  confirmed NOT a duplicate of archive #71, just a copy-paste leftover])
+  confirmed NOT a duplicate of archive #71, just a copy-paste leftover],
+  tianxiawuxue [天下无雪])
 - **Parallelizing more aggressively per user request**: archives #47,
   #48, #50, #51 (夕阳再现-风云再起2.rar, 夕阳再线III之炎龙封印.rar,
   天下.tar.gz, 天下无雪.rar) are being processed simultaneously by
@@ -283,7 +284,7 @@ rely on the boot + interactive-connect test as the verification gate.
 | 48 | 夕阳再线III之炎龙封印.rar | | | not started | |
 | 49 | 大唐双龙.rar | datangshuanglong | 40043 | done | related-but-distinct fork of dtsl(#8)/llmud_datangshuanglong(#18) lineage (chinese.c identical, master.c differs, same diamond-inherit weapon bug recurs); config has a stale "碧血残阳之豪侠晚歌" name field (confirmed NOT #71 duplicate, just copy-paste leftover); standard §15h fix + F_UNIQUE/F_BACKUP macro gaps + diamond-inherit fix; full registration flow verified with real name "秦风" reaching the actual game world; 94.6% lpcc pass; see libs/datangshuanglong/NOTES.md |
 | 50 | 天下.tar.gz | | | not started | |
-| 51 | 天下无雪.rar | | | not started | |
+| 51 | 天下无雪.rar | tianxiawuxue | 40045 | done | adm/obj/ layout (nested at raw/mud/world/); standard §15h fix + upgraded valid_override to 3-arg (§14) + fixed a stray-brace typo cluster in d/kaifeng/ground0-3.lpc + proactive dns_master preload exclusion (§15p); full registration flow verified end-to-end incl. real name "秦风" reaching the actual game world; 97.6% lpcc pass; see libs/tianxiawuxue/NOTES.md |
 | 52 | 小雨西游.zip | | | not started | |
 | 53 | 新狂想空间II.rar | | | not started | |
 | 54 | 月影奇缘.rar | | | not started | |

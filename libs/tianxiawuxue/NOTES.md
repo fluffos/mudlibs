@@ -1,0 +1,187 @@
+# tianxiawuxue — 天下无雪
+
+Archive: `天下无雪.rar` (#51). Port: 40045. Status: **done** (boots
+clean, full registration flow verified end-to-end including a real
+Chinese name entering the game world).
+
+## What this is
+
+"天下无雪" ("A World Without Snow"), credit line "by Dream" (see the
+in-game news banner and `2006.6.24 yc` credit), thanks a wizard-team
+roster (Poor/Sinb/Lonely/Zjb/Xxxqi/Yuchang/Lywin/Kool/Weal/Han) in its
+welcome/news text. `adm/obj/{master,simul_efun}` layout (not
+`adm/single/`), inherits per-object storage via `feature/dbase.c`
+(`inherit F_DBASE;` in `logind.c` and elsewhere) rather than the
+nitan-family shared-simul_efun dbase pattern — no AGENTS.md §15
+architecture fix needed here (confirmed via source reading before
+boot, same as `rzrmud`). ~15,737 raw files, 12,168 `.lpc` files after
+rename — one of the larger libs in this batch.
+
+**Observation on lineage**: this lib's `adm/simul_efun/chinese.c` is
+byte-identical to `xiyangzaixian3`'s (archive #48), processed in
+parallel by another agent in this same project run — same standard
+single-first-character `is_chinese` shape
+(`strlen>=2 && str[0]>160 && str[0]<255`). Worth noting as a possible
+shared "夕阳再现"/风云-family upstream common ancestor, though this
+lib's own `master.c`/`securityd.c`/`logind.c` were read and fixed
+independently rather than assumed identical beyond that one file.
+
+## Fixes applied
+
+1. **AGENTS.md §15h**, standard shape, in
+   `adm/simul_efun/chinese.lpc`: `is_chinese()`'s GBK lead-byte check
+   (`strlen(str)>=2 && str[0]>160 && str[0]<255`) rewritten to a CJK
+   Unicode codepoint check (`strlen(str)>=1 && str[0]>=0x4e00 &&
+   str[0]<=0x9fff`).
+2. **AGENTS.md §15h**, `check_legal_name()` in `adm/daemons/logind.lpc`:
+   byte-count bound `< 2 || > 10` → character-count bound `< 1 || > 5`;
+   removed the `i%2==0 &&` even-byte-offset gate so every character
+   position is checked. The message text ("必须是 1 到 5 个中文字")
+   already stated the correct intended character count, confirming the
+   halved bound is right, not a guess. The file has CRCRLF line
+   endings throughout (confirmed via `cat -A`) — used line-numbered
+   `sed` rather than a text-match `Edit`, since the literal `\r\r`
+   bytes don't match a plain-text search string.
+   The second loop (`strsrch(name, banned_name[i])` substring check)
+   was left untouched per the task brief — `strsrch` works fine on
+   UTF-8 strings as-is, no fix needed there.
+3. **AGENTS.md §15p**: `/adm/daemons/network/dns_master` was in
+   `adm/etc/preload` — removed proactively before the first boot
+   attempt. Confirmed via source read that its `create()` really does
+   call `startup_udp()` synchronously (not deferred via `call_out()`),
+   which calls `socket_create()`/`socket_bind()` directly at load
+   time — exactly the hang-risk pattern §15p warns about. Checked
+   every other preload entry (`dynamicd`, `channeld`, `monitord`,
+   `storyd`, `toptend`, `fingerd`, `aliasd`, `commandd`, `autosaved`,
+   `rankd`, `virtuald`) for `socket_create`/`socket_bind`/`socket_listen`
+   — none of them use any socket efuns, so no other exclusions needed.
+4. **AGENTS.md §14** (free, low-risk, applied on sight):
+   `master.lpc`'s `valid_override(file, name)` was 2-arg only — added
+   the 3rd `main_file` parameter and OR'd it into the
+   `SIMUL_EFUN_OB`/`MASTER_OB` allow-check, matching the documented
+   3-arg apply signature for `#include`d simul_efun fragments.
+5. **Confirmed NOT needed, via source reading, before the first boot
+   attempt**:
+   - §4 (lazy security-daemon `load_object` recursion) — `master.c`'s
+     `valid_write`/`valid_read` already gate via `find_object(SECURITY_D)`
+     only. `valid_read` has an unusual extra early branch
+     (`if (!undefinedp(user)) if (!objectp(user=previous_object())) return 1;`)
+     — left as-is per the task brief, not touched.
+   - §7 (missing `get_root_uid`/`get_bb_uid`) — both already present in
+     `master.c`, returning `ROOT_UID`/`BACKBONE_UID`.
+   - §15l (destruct-`SIMUL_EFUN_OB`-in-`create()` driver crash) —
+     `master.c` has no `create()` logic beyond a `write()` banner line;
+     no destruct call at all.
+   - §8c (`this_player()`-override footgun in a custom `securityd`) —
+     `adm/daemons/securityd.c`'s `valid_read` is an unconditional
+     `return 1;` (no ACL at all), and `valid_write` never overrides
+     `user` with `this_player()`. No §15n/§15o custom-ACL gap either,
+     for the same reason — there's effectively no read-side ACL to
+     misfire against driver-internal compiles.
+   - Deep `named.lpc` fix — no `named.c`/`named.lpc` file exists
+     anywhere in this lib (only a stale `data/named.o` save file).
+   - No hidden pre-id prompt (no BIG5/GB font question, no student
+     age-gate) — `logon()` goes straight from the welcome banner to
+     the English-id prompt.
+
+## Interactive test result — full registration flow
+
+Read `logind.lpc`'s actual `get_id`/`confirm_id`/`get_name` chain before
+testing (not assumed from another lib). Shape: welcome banner → English
+id (`get_id`) → y/n `confirm_id` → Chinese name (`get_name`, accepted
+directly on a valid name, no extra y/n confirmation step) → password
+(`new_password`/`confirm_password`) → gift/attribute selection
+(`select_gift`/`get_gift`) → email (`get_email`) → gender (`get_gender`)
+→ `enter_world`.
+
+`banned_name` contains the mud's own name ("天下无雪"/"天下有雪"),
+pronouns, and a few political figures (毛泽东/邓小平/江泽民) — no Jin
+Yong novel-character names in the list, so no swap was needed from the
+default test name.
+
+Verified the **complete** registration path in one continuous
+`mudclient.py` connection: id `qinfeng` → confirm `y` → **real Chinese
+name `秦风`** → accepted (no rejection) → password `test1234` (set +
+confirmed) → gift selection `0` (random) → confirm gift `y` → email
+`qin@test.com` → gender `m` → character created, entered the game world
+at 铁枪庙 (Iron Spear Temple), the news system announced "又有一个新玩
+家：秦风[qinfeng]" and "听说又来了一位叫做秦风的少年侠士", `look`
+rendered the room correctly, `quit` produced the game's own ASCII-art
+farewell banner. `debug.log` for the whole session has zero
+`error`/`denied`/`Undefined function`/`Bad argument`/recursion/segfault
+lines — only benign "Unknown #pragma, ignored" and "Unused local
+variable" compiler warnings (both non-fatal, both extremely common
+across this whole codebase family).
+
+## lpcc sweep
+
+Right after the driver was killed post-registration-test, `free -h`
+showed only ~1.7GB free with 2.4GB already swapped — two *other* libs
+being processed concurrently by other agents on this same host
+(`xiyangzaixian_fengyun2`'s `lpcc --batch` alone at ~6.1GB RSS,
+`datangshuanglong`'s at ~1.1GB RSS and rising) had consumed most of
+the 23GB host's headroom. Waited rather than starting a third
+concurrent sweep on top of an already-below-threshold state; memory
+recovered to ~8.7GB free a couple minutes later once those other
+sweeps finished, at which point the sweep here ran cleanly (peaked at
+~2.1GB RSS on the `lpcc` process, host stayed at 6.7-8.7GB free
+throughout — no pressure requiring an early kill).
+
+**Result**: 12,167 files, **11,873 pass / 294 fail (97.6%)**. Found
+and fixed one genuine, reasonably-cheap bug via the sweep:
+
+- **`d/kaifeng/ground0.lpc`'s `announcing()` had a stray extra `}`**
+  closing the function body right after the `if (wizardp(snowcat))
+  tell_object(...)` single-statement branch, leaving a dangling
+  `else` with no matching `if` and an extra unmatched `}` at the end
+  of the function — a genuine pre-existing typo, not an encoding or
+  rename artifact. This one shared base file is inherited by 4 zone
+  room files (`ground0`/`ground1`/`ground2`/`ground3`, an arena/
+  tournament zone in 开封/Kaifeng), matching the "one shared
+  dependency, not N separate bugs" pattern (AGENTS.md §8g). Fixed by
+  removing the stray brace. Note: fixing this surfaced a second,
+  unrelated, genuinely pre-existing gap in the same file —
+  `do_report()` references `STEP_PREPARE`/`STEP_FIGHT`/`STEP_FINISH`
+  constants that are defined in `d/kaifeng/guanli.h`/`ground.h` but
+  never `#include`d by `ground0.lpc` itself — left unfixed as a
+  known content-completeness issue in this one non-critical arena
+  zone file, not chased further (not on the registration/boot path).
+
+The remaining ~293 failures were triaged by category, not fixed
+individually (consistent with AGENTS.md §6b/§13 — long-tail zone/
+skill content, not registration-blocking):
+- **`Cannot #include <header>` cluster**, mostly under `/u/lonely/`
+  and other wizards' personal home directories (`u/lonely/obj/user/`
+  even contains what looks like a whole alternate personal
+  master.lpc/simul_efun.lpc/quit.lpc sandbox) — genuinely missing
+  headers in personal wizard-sandbox content, a real archive content
+  gap (§13-style), not something to fabricate.
+- **`Invalid simulated efunction override` cluster**, entirely in
+  `/u/lonely/file.lpc` and `/u/lonely/obj/user/simul_efun.lpc` — a
+  wizard's personal simul_efun clone attempting `efun::ed`/`efun::cp`
+  overrides that `master.lpc`'s `valid_override` correctly denies
+  (only `SIMUL_EFUN_OB`/`MASTER_OB` may use those) — working as
+  designed, not a bug.
+- **`Undefined function message_combatd` cluster** (~26 files, all
+  under `kungfu/skill/`) — same "only ever called, never defined"
+  shape as AGENTS.md §15b's `message_vision`-family gap on a
+  different lib, but never actually implemented anywhere reachable in
+  *this* lib either as a real function or a simul_efun. Affects
+  combat-message flavor text in specific skill special-attacks only;
+  not fixed (would require guessing the intended signature/semantics
+  from scratch — out of scope for a registration-flow verification
+  pass, logged here as a known gameplay gap).
+- **`syntax error` cluster** (90) and **`Illegal character`
+  cluster** (58) — mostly individual pre-existing typos scattered
+  across `kungfu/class/*` NPC files (undefined macros used as bare
+  identifiers where `inherit` expects a string literal — e.g.
+  `inherit F_QUESTER;` where `F_QUESTER` is never `#define`d anywhere
+  in this lib at all, and `inherit SSERVER;` where only `F_SSERVER` is
+  defined — likely renamed/removed features from whatever this
+  content was cloned from) plus a fullwidth-punctuation-in-code-
+  position typo pattern (§9-style, e.g. a fullwidth `；` instead of
+  `;` right after an `inherit` statement) confirmed present in at
+  least one file. None of this is on the registration/boot path
+  (`kungfu/class/*` are individual boss/NPC "class" instances, not
+  preloaded or reachable from character creation) — logged as a known
+  long-tail content gap per AGENTS.md §6b, not fixed file-by-file.
