@@ -1,0 +1,369 @@
+如何将 LPC 程式最佳化
+(MudOS 0.9.x 版)
+作者: Luke Mewburn <zap@rmit.edu.au>
+版本: 1.2
+日期: 930321
+翻译: Devianth <davidwu@uclink.berkeley.edu>, elon@eastern.stories
+      (10/29/94)
+ 
+0. 简介
+ 
+我写这篇文章的原因是我注意到 LPmud 越来越倾向复杂化及玩家驱动的功能.
+这是好现象, 但因为 LPC 运作的方法 (一次只解译一部份的程式) 写不好的程
+式码不但会使的整个 mud 慢下来, 也会使在 mud 上的玩家感到 'lag'.
+ 
+因为如此, 我决定去找出方法将一些常用的工作写成有效率的程式并记录下来
+以供参考. 我假设读者已有一些 C 或 LPC 的程式经验. 但是, 如果你是新手,
+我依然建议你将本文读完因才能在一开始就学到正确的程式写法.
+ 
+虽然我的研究是关於 MudOS 0.9 的 driver, 但许多经验还是能在其它 LP v3
+型的 driver 下使用. 但这并不保证这里所讲的在非 MudOS driver 下是完全
+正确的, (比方说 Amylaar 的 3.2@22 driver), 因为各 driver 程式码已经
+有相当大的差异了.
+ 
+以下的程式码, 我们将假设这些定义:
+int i, j, max, bitfield;
+object *list;
+string *arr, name;
+ 
+LPC, 像 C 一样, 有支援 '动态配置'. 也就是 driver 只有在需要
+时才会将记忆体分给要用的运算 (完成後会收回). 跟 C 不同的是, LPC 会自动
+地在你使用完後收回分配的记忆体 (i.e. 当没有 LPC 程试码在使用时) - 又叫
+'清除收集'. 字串 (string), 阵列 (array) 和 mapping 都是'动态'处理的.
+ 
+虽然 '动态配置' 在结构化程式里非常有用, 但相对的它也使用了非
+常多的 CPU 时间. 本文的目地之一就是要教你如何正确的运用 '动态配置'
+的好处而不要浪费了这项功能.
+ 
+1. GENERAL POINTS
+ 
+在我开始教你如何始某段程式码加速运作前, 我提出以下一些关於电脑程式写作
+的公理:
+ 
+第一条, '电脑花 80% 的时间执行 20% 的程式' ('80% of the time spent
+executing an algorithm is in 20% of the code'), 或是所谓的 '80/20' 法
+则. (有些说法是 75/25 或 90/10).  这个经证实的事实可以有效的帮助你写
+LPC 不要花太多时间试著将你所有的 LPC 程试码最佳化, 你不会有那麽多的时
+间. 将精神放在一些较常用, 执行次数较多的区段, 如 for-loops 等.
+ 
+第二是, 如何选用正确的 algorithm. 大多数的时间, 当一个简单的 algorithm
+就足够时, 人们会选择一个复杂 algorithm, 特别是当程式处理少数资料时, 简单
+的 algorithm 通常比较有效率. 要能在简化及效率上作一番取舍.
+ 
+因为大部份的 driver 都没有对 LPC 码作最佳化的功能 (比方说重写 expression
+或回圈 strength-reduction), 你能帮的忙就是有智慧的写自己的程式码.
+ 
+一个加速的方法是将一个共用的常数/函式移到回圈或回圈测试之外, 并使用一
+个暂时的变数. 最长见的就是在 while/for condition (q.v) 时使用 'sizeof(arr)'
+在其它状况下, 有可能某个函式每次都会在回圈里被呼叫, 但那个函式每次都会
+传回一个相同的值 - 如果真是这样, 就在回圈以外将这个值设定成一个变数, 并
+在回圈内使用这个变数. 例如:
+ 
+for ( i = 0; i <max; i++)
+    if ( list[i] == some_condition )
+        do_something_with( list[i], this_player()->query("name") );
+ 
+假设 "name" 是不变的, 则以下的方法会比较好:
+ 
+name = this_player()->query("name");
+for ( i = 0; i <max; i++)
+    if ( list[i] == some_condition )
+        do_something_with( list[i], name );
+ 
+虽然说好的程式格式并不会真的加快编译的速度, 但一个简单好读的程式比较
+好修改及 debug. 大多数的人对程式的格式有不同的看法, 所以我在这里也不
+会强迫读者使用我的格式, 我只想告诉你, 选择一个你喜欢的格式, 然後保持
+下去.
+ 
+2. 资料型态 (DATA TYPES)
+ 
+LPC 至少有以下的资料型态: int, string, object, mixed, mapping.
+由以上所组成的阵列也是可能的.
+以下是使用这些资料型态的要则:
+ 
+2.1 整数 (INT)
+ 
+整数资料型态使用起来非常的有效率, 因为 integer 不需要动态配置.
+使用 bitfields (e.g. hand-coded with #defines, (模拟 ANSI C 的 enum's)),
+你可以储存多种的 flags 资料. 这样会比将资料存成 bit size 来的快, 因为
+bitfields 只需要 32 bits.
+以下是处理 integer bit fields 的范例程式: (假设 VALUE 为 1,2,4,8, etc.)
+ 
+bitfield != VALUE;    // set bit VALUE
+bitfield &= ~VALUE;   // reset bit VALUE
+bitfield & VALUE      // test bit VALUE
+ 
+如果你要设 bit n, 将 VALUE 取代为 (1 << n)
+ 
+2.2 字串 (STRINGS)
+ 
+字串是最常用的资料型态, 但它需要 '动态配置'. 常数字串(constant string)
+(i.e, 单纯的 'write' 叙述) 是存放於一个 '字串表' 里, 所以如果要有多重的
+copy 通常不需要多馀的记忆体. 字串的加法 (使用 + 符号) 就是一个非常耗时的
+运作 - 每加一段字就要配置记忆体一次. 通常我们会这样写:
+
+write("this is a forest\n" +
+      "and is really boring.\n" +
+      "You are feeling sleepy\n");
+
+这是最糟的方法来写一个常数字串 - 当这个 object (物件) 被编译时会非常的慢,
+而且也没有有效率的运用记忆体. 值得注意的是, 在 MudOS 0.9.15 [我们用
+0.9.19.x] 在字串加法里不一定要用 '+' 这个符号来代表 - 但这样只是节省了原
+始程式的大小 - 它还是需要使用动态记忆体分配来使用每一段在 " " 里的字串.
+试试以下:
+ 
+write("\
+this is a forect\n\
+and is really boring.\n\
+You are feeling sleepy.\n\
+");
+ 
+这样的话所有的文字都存在一起. 你通常能用这种方法存取一页以上的文字, 超过
+这个数量时你的 parser 可能会呛到, 试著将你的文字分段, 并使用分开的 write
+statement.
+ 
+注: 注意, \ 後到一行的结尾(eotl)之间不能有空白字元, 否则 parser 会抱怨.
+ 
+UPDATE: MudOS 0.9.14.3 以後, 指定常数字串时有一个新的符号 - '@', 所以上
+述范例也可以写成:
+ 
+write( @ENDMESSAGE
+This is a forect
+and is really boring
+You are feeling sleepy.
+ENDMESSAGE
+);
+ 
+('ENDMESSAGE' 是用来作为分界点的, 可以是任何不在 main body(?) 的任何字串,
+而且它一定要在一行的最开端使用, 要不然它不会被当做 '讯息结束' 的记号.)
+ 
+另一个没有效率的方法:
+write("Your name is " + this_player()->query("name") + "\n" +
+"and your level is " + this_player()->query("level") + "\n");
+ 
+如果你的 driver 有 printf(), 试著用以下的方法:
+printf(Your name is %s\nand your level is %d\n",
+this_player()->query("name"), this_player()->query("level") );
+ 
+其它还有很多类似的例子, so you get the general idea.
+ 
+但不要误解我的意思, 字串加法是很常用的, 所以不要试著去用一些很长的运作或
+技巧来避免用到字串加法. (因为这通常会比使用字串加法还慢).
+ 
+2.3 浮点 (FLOATS)
+ 
+0.9.15 以後的 driver 都有支援浮点(floating point)资料型态. 在宣告变数时用
+'float' 这个 keyword. (对写 C 程式的人来讲, 这和 C 的 'double' type 相同)
+ 
+像 cos, sin, (和类似的运算), ln, 和 sqrt (平方根) 等的的运算函数也可以使
+用. 这种资料型态可以在编辑时暂时跳过, 但我看不出来这有什麽需要.
+ 
+    浮点的运算比整数慢、所以能用整数运算时尽量不要用浮点运算。需要用
+到浮点运算时, 尽量先把它们算出来以回避重复的运算(这点对於任何程式都通).
+ 
+2.4. 阵列 (ARRAY)
+ 
+阵列是非常有用的, 但跟字串一样, 不当的使用会造成低效率的程式.
+ 
+一个在回圈内有增加或除掉项目的回圈通常是较慢的. 解决的方法是适当的运用
+记忆体预先配置。
+ 
+摘自 TMI-2 的 /adm/daemons/cmd_d.c :
+ 
+bin_ls = get_dir(path + "/");
+result = ({ });
+for (i = 0; i < sizeof(bin_ls); i++) {
+            if(sscanf(bin_ls[i], "_%s.c", tmp) == 1)
+result += ({ tmp });
+        }
+        cmd_table[path]=result;
+    
+这里, 并不是所有的项目都有选到, 被选到的也是在被修改过後再放到最後
+的阵列中.
+ 
+以下面的方法取代:
+ 
+bin_ls = get_dir(path + "/");
+i = sizeof(bin_ls);
+result = allocate(i);
+j = 0;
+while (i--) { // 使用 'while' 的原因请参考下面
+            if(sscanf(bin_ls[i], "_%s.c", tmp) == 1)
+               result[j++] = tmp;
+        }
+        cmd_table[path]=result[0..j-1];
+ 
+因为我们知道结果一定是 <= sizeof(bin_ls), 我们就只配置这麽多空间. 然
+後再依需求增加项目. 最後, 在我们们使用结果前, 将阵列调到正确的大小.
+(使用 [0..j-1] 运作).
+ 
+[这里的英文原文少了一段, 整节看来没有意义, 故省略]
+ 
+预先配置最大的优点就是在用预先配置时, 处理时间和项目数目呈线性正比 (linear)
+而用 += 的阵列处理和处理时间成指数比增加 (exponential).
+ 
+2.5. MAPPINGS
+ 
+    Mappings 就是连接性的阵列 - 能用基本资料型态(int, string, 或 object)
+来做索引的资料结构。以资料结构来说, 它通常比阵列来的有效率, 并可以用来
+模拟 C 里的 'structs' 叙述.
+ 
+基於 mappings 内部储存的方式, 预先配置的 mapping 比较有效率.
+如果你已经知道 mapping 里的元素会保持在 x 个 (还可以再增加), 而且不会因
+为使用 map_delete 而使总元素低於 x 个, 则此法特别有效率. (比方说, 当一个
+mapping 已预先配置了 x 个元素, 在大多数的元素都被用 map_delete 删除後,
+你将会浪费很多记忆体因为 map_delete 将不会把预先配置的 mapping 里没有用
+的记忆体释放出来.)
+ 
+一个常见的预先配置方法可在 emote daemon 或像 /std/user (或 /obj/player)
+里的标准物件中找到. 对於前者, 如果你已经有 200 个左右的项目,
+不要用下列方法来格式你的 mapping:
+ 
+emotemap = ([ ]);
+    
+应该改用:
+ 
+emotemap = allocate_mapping( 200 );
+ 
+ 
+3. 控制程序 (CONTROL FLOW) 以及 回圈 (LOOPING)
+ 
+在一个完整的 LPC 程式中, 控制程式执行的程序 (由测试, 以及部份的回圈所
+组成) 可以因为正确的使用不同的形式而变得比较有效率.
+ 
+3.1. WHILE
+ 
+最简单的 (也是在简化型里最快的) 回圈使用方式.
+常见的是:
+ 
+list = users();
+for ( i = 0 ; i < sizeof(list) ; i++ )
+    do_something_with_item( list[i] );
+    
+这是非常的没有效率, 因为 sizeof(list) 的值每次都要被重新计算出来 (参考
+上面的 GENERAL POINTS 一节). 如果你想将整个 list 反过来排列, 试著使用以
+下的方法:
+ 
+max = sizeof(list);  // slight performance gain
+i = -1;
+while ( ++i < max )  //evaluate and increment at same time
+    do_something_with_item(list[i]);
+    
+如果顺序没有什麽太大的关系, 以下是最快的方式:
+ 
+i = sizeof(list);
+while (i--)
+    do_something_with_item(list[i]);
+    
+这就是 '简单的调件 while 回圈' ('simple condition while loop'). 和下列的
+实在是没什麽太大的不同.
+ 
+for ( i = sizeof(list) ; i-- ; )   ;
+ 
+以及相对等的 while 回圈. 但还是有少许利益可得.
+ 
+3.2. FOR
+    
+最常见的回圈结构之一, 这在当你每次都需要在回圈结述前执行某个比较复杂的
+动作时非常有用. 如果只是使用简单的指数增加或减少, 用 'while' 叙述会比较
+好.
+ 
+如果 '结述运作' (ending operation) 比较复杂, 则以下的通用例子:
+ 
+for ( initialise ; test ; final ) {
+    main body
+}
+ 
+比下列清楚:
+ 
+initialize
+while ( test ) {
+    main body
+    final
+}
+ 
+ 
+3.3. 开关 (SWITCH)
+ 
+switch 叙述应该尽可能的用来取代 'if-then-else' 型结构. 因为新的 driver
+都有对 switch 叙述作相当程度的简化. 另一方面, 用 switch 叙述的程试码看来
+也比较 '乾净'.
+ 
+用 switch 叙数的另一个优点是 `状况范围' (case range) 的支援. (一个 C 没有
+的特色). 如果你的测试设定如下面的范围:
+ 
+case 1:  case 2:  case 3:
+ 
+可用以下代替:
+ 
+case 1..3:
+ 
+可能比较有效率 (至少字少打一些)
+ 
+4. 结论
+ 
+我确定这份文件中一定有错误, 但是人不是完美的.
+ 
+以下的人对本文的 1.1 版提出问题, 意见:
+    @TMI-2:        Blackthorn, Mobydick, Square, Alexus, Amylaar, Darin
+    @Ivory.tower:  Telsin, Vampyr
+    @Underdark:    Cynic, Brian
+ 
+Luke [Zak].
+ 
+ 
+程式的最佳化
+==============
+
+在optimizing_code里已经谈到了一些最佳化的简单注意事项。然而最
+佳化并不是少数adm或大巫师的事，而是每一个巫师写程式都必须注意
+的事项。因此请大家在完成一个作品时，再花一些时间重看一下程式 
+，看看可不可以 藉由一些简单的更改来避免一些不必要的计算，即使 
+只是节省一两个计算也是好的。当然也不必为了省一点点的计算而花
+很多时间或是把程式写得很复杂。但是一些简单的原则，或是稍微注
+意一下，就可能 会有很大的影响。
+我们来看一个简单的例子，底下是/adm/daemons/aim_d.c其中的一段 
+程式，注意看第七行：
+
+if( random(100) < 30 && !me->query("npc") ) return 0;
+
+本来放在倒数第五行，也就是变成注解的地方。我看到了，就把它移 
+到现在的位置。这样有什麽差别呢？如果在原来的位置，中间作了一 
+堆关於skill的计算，当此行成立，这些计算都浪费了。而移到第七行 
+的位置，当此行成立，就不会去计算skill，只是更改一下程式的位置 
+，就可以节省许多不必要的计算。这个程式是医生每回合攻击时都会 
+呼叫到，你可以想像原来的写法作了多少不必要的计算。
+
+int aim_target(object me, object victim)
+{
+	int skill, diffculty;
+	string loc;
+	object weapon;
+	// difficulty for player
+	if( random(100) < 30 && !me->query("npc") ) return 0;
+
+	skill = (int)me->query_skill("anatomlogy");
+	loc = (string)me->query("aiming_loc");
+	if( !skill || !loc ) return 0;
+	diffculty = diffs[loc];
+	if( undefinedp(diffculty) ) return 0;
+	diffculty += diffculty*(int)victim->query("aim_difficulty/"+loc)/100;
+   [中间省略]
+	skill /= 10;
+	skill += (int)me->query_stat("int") * 2 + (int)me->query_stat("kar");
+	skill -= (int)victim->query_stat("int") * 2 + (int)victim->query_stat("kar");
+
+//	if( random(100) < 30 && !me->query("npc") ) return 0;
+
+	if( random(skill) < diffculty ) return 0;
+	return (int)call_other( this_object(), "hit_" + loc, me, victim );
+}
+
+在考虑程式最佳化时，先想想这段程式被使用的频率有多高，如果是 
+使用频率很高的程式，那就要多花些心力注意最佳化。一般使用频率 
+较高的程式大略是/adm/, /cmds/, /std下的程式，不过这不是一般 
+巫师可以动的，另外公会的一些程式，武器的特攻、NPC的tactic，以 
+及一些init,relay_message的程式等等。这些都是使用频率很高的程 
+式，请大家多花一些心力。
+
+Eastern Story@Yueh	1996/3/2

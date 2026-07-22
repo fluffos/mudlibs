@@ -184,6 +184,28 @@ find work \( -name "*.lpc" -o -name "*.h" \) -print0 \
 Any hit is raw un-converted GBK masquerading as a `.lpc`/`.h` file — just
 `iconv -f GB18030 -t UTF-8 [-c]` it directly, same as any other file.
 
+**`iconv -c`'s invalid-byte recovery can eat an adjacent REAL byte too, not
+just the invalid one** — found on `xo_final`/`shujian2008`/`xianlvqiyuan`
+(a corrupted string literal's closing quote silently disappearing) and, in
+a new specific manifestation on `tianxia` (archive #50): a `set("long",
+@LONG ... LONG)` text block's closing `LONG` tag ending up merged onto the
+end of the preceding text line, breaking the syntax rule that the closing
+tag must start its own line (`error: End of file in text block`). Root
+cause confirmed by diffing against the raw pre-conversion bytes: the
+original file had an invalid GBK lead byte immediately followed by a
+literal newline (`0x0A` is not a legal GBK trail byte) right before the
+closing tag — `iconv -c`'s skip-forward heuristic on an invalid multi-byte
+start advances by the presumed character width, which swallowed the real
+newline along with the bad byte. **Signal to watch for**: any `error: End
+of file in text block` (or a missing-closing-quote-shaped error) on a file
+ALSO flagged `LOSSY conversion` in `convert_lib.sh`'s log is a strong hint
+to check for exactly this — a merged closing-tag/quote line — rather than
+assume a from-scratch content bug. Fix by re-inserting the dropped
+newline/quote at the exact point indicated by the raw byte layout (not a
+guess) — Python line-index read/write if hidden PUA characters are also
+present (see the `xo_final` mohe-zhi.lpc precedent below), otherwise a
+straightforward line-numbered edit.
+
 ## Encoding
 
 Mudlib source is GBK/GB2312 (simplified) in the vast majority of archives.
@@ -986,6 +1008,37 @@ watching debug.log during interactive testing:
   API at all. Since every call site already checks `db_exec()`'s own
   return for the real success/failure signal, a stub returning `1` (assume
   ≥1 row) is a reasonable, documented compromise, not a silent lie.
+- **`clr_ansi(str)`** (found on `tianxia`, archive #50) — same job as
+  `remove_ansi` above, just a different name from a different lineage;
+  called from ~10+ files including the lib's own `valid_chinese()`. Same
+  fix, same include-order caveat.
+- **`chinese_number(int)`** (found on `tianxia`) — Arabic-to-Chinese
+  numeral spellout (一二三...), called from ~90 files. Restore using the
+  same algorithm as `nitan170911`/`nitan6`'s `chinesed.lpc` — confirmed via
+  a doc-file credit that `tianxia` shares an author ("发现号/Find") with
+  that lineage, so the ported implementation is exact, not a guess.
+- **`changed_match_path(mapping, string)`** (found on `tianxia`) — thin
+  historical wrapper; restore as a straight passthrough to the real
+  `match_path()` efun.
+- **`query_bandwide()`** (found on `tianxia`) — bandwidth-readout stub with
+  no FluffOS equivalent at all (checked core/sockets/contrib specs).
+  Called UNGUARDED from `logind.lpc`'s connection-entry function on
+  *every* connection with no `catch()` — this is the same silent-crash-in-
+  logon()-chain shape as §15d, and on `tianxia` it was killing every
+  connection before any prompt appeared. Stub returning `({ 0.0, 0.0 })`
+  (purely cosmetic) fully resolves it.
+- **`query_shadowed()`** (found on `tianxia`) — called bare from
+  `feature/self.lpc`/`std/equip.lpc`. The correct restoration is
+  `shadow(previous_object(), 0)` — **not** `shadow(this_object(), 0)`.
+  Since this is a bare simul_efun call, `this_object()` inside it resolves
+  to the simul_efun object itself (§15's core footgun), so the naive
+  `this_object()` version always returns 0. On `tianxia` this was blocking
+  `/obj/user/user` (the player body class) from compiling at all, which
+  silently broke character-creation completion (`make_body()` returning 0)
+  immediately after the Chinese name/password were accepted — the single
+  most impactful fix in that lib's pass, and worth checking first whenever
+  a lib accepts registration input but then never actually drops the
+  player into the game world.
 
 ### 15c. `/adm/etc/preload`-style data files also need their `.c` refs fixed — the quote-based sed pass doesn't touch them
 
@@ -1488,6 +1541,38 @@ and if the very first real input gets rejected in a way that doesn't
 match the visible prompt's apparent meaning, suspect a hidden gate
 checking for a specific literal (client version, magic string) rather
 than assuming the id-validation logic itself is broken.
+
+### 15r. A `check_config.lpc`-shaped driver-version self-check, `inherit`ed straight into `simul_efun.lpc`/`master.lpc`, can fatally `error()` on obsolete MudOS-era `#ifdef` assumptions that don't hold on this FluffOS build
+
+Found on `tianxia` (archive #50): `adm/obj/check_config.lpc`, pulled in
+via `private inherit __DIR__ "check_config";` directly inside
+`simul_efun.lpc`. Its `create()` walks a checklist of `#ifdef`/`#ifndef`
+driver-flag assumptions from the original MudOS-era target and calls a
+bare, unconditional `error()` on any mismatch — fatal here specifically
+*because* it runs during simul_efun's own construction, with no `catch()`
+anywhere in the chain, so one failed check takes down the entire
+simul_efun object (same blast radius as §15's core `tail()`-in-
+simul_efun.lpc crash). Two checks failed on this FluffOS build:
+- `#ifdef __PRIVS__` — the original assumption was that `__PRIVS__` and
+  `PACKAGE_UIDS` were mutually exclusive driver configurations; this
+  driver defines **both**, breaking that assumption even though privileges
+  actually work fine.
+- `#ifndef __AUTO_TRUST_BACKBONE__` — the driver doesn't define this
+  macro at all, but `master.lpc`'s own `valid_override()` already handles
+  backbone trust explicitly, so the check's underlying concern is already
+  satisfied by a different mechanism the self-check doesn't know about.
+
+Fix: don't delete the whole file (it may catch a real future
+misconfiguration) — disable just the specific failing checks, e.g. wrap
+each in an always-false `#ifdef DISABLED_LEGACY_..._CHECK` guard, leaving
+every other check intact and active. **Lesson**: any lib with a
+`check_config`/`checkconfig`/`verify_driver`-shaped file inherited
+directly into `master.lpc` or `simul_efun.lpc` is worth grepping for bare
+`error()` calls gated on `#ifdef`/`#ifndef` BEFORE the first boot attempt
+— on this driver such a file crashes construction with a config-sounding
+message that can misdirect debugging toward "which package is missing"
+when the real issue is a stale mutual-exclusivity assumption from a
+different, older driver target.
 
 ---
 

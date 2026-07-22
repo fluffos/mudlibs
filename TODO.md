@@ -18,9 +18,7 @@ worked; keep status values consistent so the table stays greppable:
 
 Port assignments: sequential from 40001, recorded here so re-running
 several libs at once never collides. **Next free port: 40046** (40001-40045
-assigned/reserved -- 40041-40045 are reserved for archives #47-51, being
-processed in parallel by background agents as of this update; 40007 is
-ds386, deprioritized/partial). On mega-libs (tens of
+assigned; 40007 is ds386, deprioritized/partial). On mega-libs (tens of
 thousands of files, the "nitan" family), skip the full `lpcc_check.sh`
 sweep — it can OOM the host before finishing (see AGENTS.md §6b) — and
 rely on the boot + interactive-connect test as the verification gate.
@@ -32,9 +30,7 @@ rely on the boot + interactive-connect test as the verification gate.
   majority of this collection. If an archive turns out to be English
   (like ds386/Dead Souls), do the minimum to note what it is, don't sink
   deep debugging time into it -- move on to the next Chinese one.
-- **Done: 43 / 100, plus 1 more (archive #50) currently
-  being processed in parallel by a background agent** (see below once
-  it reports back) (shanhaizhanshen, xingzhanyingxiong,
+- **Done: 44 / 100** (shanhaizhanshen, xingzhanyingxiong,
   unknownlib20150716 [小雨西游II], bxsj [书剑天下], bxsj1 [书剑·经典],
   chidi [江湖I], ..., nitan170911 [仙剑奇侠传], nitan6 [笑傲江湖], rzrmud
   [大唐西游], xo, xo_final, zzfy [郑州风云3], shiji [世纪],
@@ -49,17 +45,40 @@ rely on the boot + interactive-connect test as the verification gate.
   [大唐双龙, config has a stale "碧血残阳之豪侠晚歌" name field --
   confirmed NOT a duplicate of archive #71, just a copy-paste leftover],
   tianxiawuxue [天下无雪], xiyangzaixian_fengyun2 [夕阳再现/风云再起2],
-  xiyangzaixian3 [夕阳再现III之炎龙封印])
+  xiyangzaixian3 [夕阳再现III之炎龙封印], tianxia [天下 Beta])
 - **New AGENTS.md §15q (hidden client-protocol-version gate)**: found on
   xiyangzaixian3 -- a pre-id prompt can check the input against a
   hardcoded literal (client version string), not just a BIG5/student
   question, and looks identical in prompt text to a normal id prompt.
   Always read the actual `input_to` callback chain, don't infer flow
   shape from prompt text alone.
-- **Parallelizing more aggressively per user request**: archive #50
-  (天下.tar.gz) is still being processed by a background agent as of
-  this update; the TODO.md/AGENTS.md edits and commit are done by the
-  main session once verified, to avoid concurrent-edit conflicts.
+- **Parallelizing more aggressively per user request**: archives #47-51
+  (5 libs) were dispatched to concurrent background agents, each handed
+  the full convert/fix/boot/test/lpcc pipeline for one archive
+  independently; the main session verified each agent's key claims (fix
+  present in the actual file, dns_master excluded, zero boot errors, no
+  lingering driver process) before doing the TODO.md/AGENTS.md edits and
+  git commit itself, to avoid concurrent-edit conflicts on shared files.
+  All 5 are now done (datangshuanglong, tianxiawuxue,
+  xiyangzaixian_fengyun2, xiyangzaixian3, tianxia). This mode continues
+  for archive #52 onward.
+- **New AGENTS.md §15r (check_config.lpc driver-version self-check)**:
+  found on tianxia -- a driver-version self-check file `inherit`ed
+  straight into simul_efun.lpc/master.lpc can fatally `error()` on
+  obsolete MudOS-era `#ifdef` assumptions (e.g. `__PRIVS__` vs
+  `PACKAGE_UIDS` presumed mutually exclusive) that don't hold on this
+  FluffOS build; disable just the specific failing checks, don't delete
+  the whole file.
+- **New Encoding gotcha**: `iconv -c`'s invalid-byte recovery can eat an
+  adjacent REAL newline too (not just the bad byte), merging a heredoc's
+  closing tag onto the preceding text line -- cross-reference against
+  convert_lib.sh's LOSSY-conversion log when seeing "End of file in text
+  block" errors. Found on tianxia (3 files).
+- **New §15b additions**: clr_ansi, chinese_number, changed_match_path,
+  query_bandwide, query_shadowed -- more "called everywhere, defined
+  nowhere" simul_efuns, found on tianxia. query_shadowed() must restore
+  as `shadow(previous_object(), 0)`, not `this_object()` (bare
+  simul_efun-call footgun, §15).
 - **New extraction edge case (AGENTS.md's Archive tooling section)**:
   a `.rar`-named archive can actually be a plain tar with relative
   `../...` member paths, which GNU `tar -xf` refuses outright even with
@@ -286,7 +305,7 @@ rely on the boot + interactive-connect test as the verification gate.
 | 47 | 夕阳再现-风云再起2.rar | xiyangzaixian_fengyun2 | 40041 | done | adm/obj/ layout, chinese.c byte-identical to archive #46 but logind.c/master.c/securityd.c differ (similar titles/shared files ≠ shared lineage overall); standard §15h fix + proactive dns_master preload exclusion (§15p) + fixed a couple of pre-existing missing-quote typos; full registration flow verified end-to-end incl. real name "秦风" reaching the actual game world; 98.6% lpcc pass; see libs/xiyangzaixian_fengyun2/NOTES.md |
 | 48 | 夕阳再线III之炎龙封印.rar | xiyangzaixian3 | 40042 | done | "夕阳再现III之炎龙封印" (AKAI Studio 2006), adm/obj/ layout nested at raw/夕阳再现III/夕阳再现III/world/; standard §15h fix + missing WQA_ROOM macro fix (81-file cascade, new §8g variant) + proactive dns_master preload exclusion (§15p) + NEW hidden client-version gate found (§15q, literal "2060" check) + several pre-existing typos fixed; full registration flow verified end-to-end incl. real name "秦风五" reaching the actual game world; 98.3% lpcc pass; see libs/xiyangzaixian3/NOTES.md |
 | 49 | 大唐双龙.rar | datangshuanglong | 40043 | done | related-but-distinct fork of dtsl(#8)/llmud_datangshuanglong(#18) lineage (chinese.c identical, master.c differs, same diamond-inherit weapon bug recurs); config has a stale "碧血残阳之豪侠晚歌" name field (confirmed NOT #71 duplicate, just copy-paste leftover); standard §15h fix + F_UNIQUE/F_BACKUP macro gaps + diamond-inherit fix; full registration flow verified with real name "秦风" reaching the actual game world; 94.6% lpcc pass; see libs/datangshuanglong/NOTES.md |
-| 50 | 天下.tar.gz | | | not started | |
+| 50 | 天下.tar.gz | tianxia | 40044 | done | 《天下》Beta, adm/obj/ layout (nested at raw/mud/tx/, archive also bundles a full MudOS driver source tree at raw/mud/MudOS/ which was correctly ignored); standard §15h fix doubled (is_chinese + a separate valid_chinese() whole-string check) + logind.lpc check_legal_name() byte-width fixes + disabled 2 stale checks in a check_config.lpc driver-version self-check inherited into simul_efun.lpc (§15r, new) + restored 5 never-defined simul_efuns (clr_ansi, chinese_number, changed_match_path, db_affected, query_bandwide, query_shadowed -- §15b additions, new) + fixed a genuine query_shadowing() efun-arity bug in bleeding.lpc + fixed 3 files' lossy-iconv-merged text-block closing tags (new Encoding gotcha) + fixed a 45-occurrence §8h Greek-table typo + fixed a 12-file duplicate `inherit ROOM;` bug + proactive dns_master preload exclusion (§15p); query_shadowed() fix was the single most impactful -- was silently blocking the player body class from compiling, breaking character creation right after Chinese name/password were accepted; full registration flow verified end-to-end incl. real name "秦风" reaching the actual game world; 99.1% lpcc pass; see libs/tianxia/NOTES.md |
 | 51 | 天下无雪.rar | tianxiawuxue | 40045 | done | adm/obj/ layout (nested at raw/mud/world/); standard §15h fix + upgraded valid_override to 3-arg (§14) + fixed a stray-brace typo cluster in d/kaifeng/ground0-3.lpc + proactive dns_master preload exclusion (§15p); full registration flow verified end-to-end incl. real name "秦风" reaching the actual game world; 97.6% lpcc pass; see libs/tianxiawuxue/NOTES.md |
 | 52 | 小雨西游.zip | | | not started | |
 | 53 | 新狂想空间II.rar | | | not started | |

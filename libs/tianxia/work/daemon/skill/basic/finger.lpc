@@ -1,0 +1,4 @@
+// strike.c
+
+inherit SKILL;
+
