@@ -692,6 +692,23 @@ from a handful of the failing blocks — if it's byte-identical across all
 of them, it's almost certainly one shared dependency, not independent
 bugs.)
 
+### 8h. `convertd.lpc`'s Greek-table stray-backslash typo can recur, and CRLF silently breaks the naive sed fix
+
+The stray-trailing-backslash-before-closing-quote bug documented for
+`fluffos_xiyou2000` (`"α\",` should be `"α",`, in a charset-conversion
+daemon's Greek-alphabet lookup table) recurred verbatim in `mhxy` (same
+西游记 lineage) — check `adm/daemons/convertd.lpc` for this shape on any
+lib in this family. **The straightforward fix
+(`sed -i -E 's/\\"(,)?$/"\1/'`) can silently do nothing if the file has
+CRLF line endings** — `sed`'s `$` anchors before the `\n`, not before a
+`\r` that precedes it, so a trailing `\r` after the comma means the
+pattern never matches, `sed` reports 0 changes with no error, and it's
+easy to assume the file was already clean. **Verify a "no changes made"
+result actually means "nothing left to fix"** (re-`grep` the pattern
+after any such sed, don't just trust silence) — and if the file has CRLF,
+use `s/\\"(,)?\r?$/"\1\r/` (allow and preserve the optional trailing
+`\r`) instead.
+
 ### 9. Fullwidth Chinese punctuation used as code syntax (typo, not encoding)
 
 A handful of pre-existing typos (found via the lpcc sweep's "Illegal

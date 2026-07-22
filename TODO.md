@@ -25,7 +25,7 @@ taken by ds386, in progress).
   majority of this collection. If an archive turns out to be English
   (like ds386/Dead Souls), do the minimum to note what it is, don't sink
   deep debugging time into it -- move on to the next Chinese one.
-- **Done: 11 / 100** (shanhaizhanshen, xingzhanyingxiong, unknownlib20150716
+- **Done: 15 / 100** (shanhaizhanshen, xingzhanyingxiong, unknownlib20150716
   [小雨西游II], bxsj [书剑天下], bxsj1 [书剑·经典], chidi [江湖I])
 - **Partial/deprioritized: ds386** ("Dead Souls", archive #7 — English,
   Nightmare-mudlib-lineage, not wuxia). Boots and the first-time admin
@@ -76,7 +76,7 @@ taken by ds386, in progress).
 | 16 | fy2005.rar | fy2005 | 40013 | done | 风云Ⅳ (2005 build), boots clean; 5-min startup grace period before login works; see libs/fy2005/NOTES.md |
 | 17 | fy2.rar | fy2 | 40014 | done | 风云再起Ⅱ, booted with zero fixes; see libs/fy2/NOTES.md |
 | 18 | LLMUD(大唐双龙)v_0.11版.rar | llmud_datangshuanglong | 40015 | done | same lineage as dtsl(#8), zero boot fixes needed; see libs/llmud_datangshuanglong/NOTES.md |
-| 19 | mhxy.rar | | | not started | |
+| 19 | mhxy.rar | mhxy | 40016 | done | 梦幻西游 (Qingdao), 西游记 lineage; CRLF sed gotcha (§8h); see libs/mhxy/NOTES.md |
 | 20 | MUD侠客行2017完整版.zip | | | not started | |
 | 21 | nitan170911.7z | | | not started | |
 | 22 | nitan6.zip | | | not started | |
