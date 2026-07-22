@@ -1,0 +1,147 @@
+//    兰花拂穴手
+
+#include <ansi.h>
+
+inherit SKILL;
+
+mapping *action = ({
+([      "action" : "$N左手忽做兰花之形，五指轻拢慢抹，拂向$n的周身大穴",
+	"force" : 250,
+	"dodge" : 5,
+	"parry" : 2,
+	"damage": 15,
+	"weapon": "左手",
+	"lvl" : 0,
+	"skill_name" : "兰花手左手式",
+	"damage_type" : "擦伤"
+]),
+([      "action" : "$N右手轻摇，颤抖不定，便如兰花浴风般划向$n的$l",
+	"force" : 520,
+	"dodge" : 10,
+	"parry" : 5,
+	"damage": 45,
+	"weapon": "右手",
+	"lvl" : 80,
+	"skill_name" : "兰花手右手式",
+	"damage_type" : "擦伤"
+]),
+});
+
+int valid_enable(string usage) { return usage == "hand" || usage == "parry"; }
+
+int valid_learn(object me)
+{
+	object nvxu;
+
+	if (me->query("gender") == "男性") {
+		if (!(nvxu = find_object("/clone/npc/huang-son-in-law")))
+			nvxu = load_object("/clone/npc/huang-son-in-law");
+		if (nvxu->query("winner") != me->query("id") || nvxu->query("death_count") < me->query("death_count")) 
+			return notify_fail("兰花拂穴手乃黄岛主家传绝学，不传外姓。\n");
+	}
+	else if (me->query("gender") == "女性") {
+		if (me->query("class") != "bonze" || me->query("family/family_name") != "峨嵋派" || me->query("family/generation") > 3)
+			return notify_fail("兰花拂穴手乃峨嵋派祖师郭襄秘学，普通弟子是学不到的。\n");
+	}
+	else
+		return notify_fail("兰花拂穴手乃黄岛主家传绝学，不传外姓。\n");
+	if (me->query_temp("weapon") || me->query_temp("secondary_weapon"))
+		return notify_fail("学兰花拂穴手必须空手。\n");
+	if ((int)me->query("max_neili") < 300)
+		return notify_fail("你的内力太弱，无法兰花拂穴手。\n");
+	return 1;
+}
+
+string query_skill_name(int level)
+{
+	int i;
+
+	for(i = sizeof(action)-1; i >= 0; i--)
+		if(level >= action[i]["lvl"])
+			return action[i]["skill_name"];
+}
+
+mapping query_action(object me, object weapon)
+{
+	int i, level;
+
+	level   = (int) me->query_skill("lanhua-shou", 1);
+        if (random(level) > 120 && me->query_skill("force") > 250 &&
+            me->query("neili") >= 600)
+        {
+		me->add("neili", -120);
+		me->set_temp("autopfm_lhs", 1);
+		return ([
+		"action": HIR "$N双手交叠，使出“兰花手双手式”，形状便如兰花新蕾初放，于轻风中微微摇摆。$n看得有些发呆，却蓦然发现$N的十指已拂到面前！" NOR,
+		"damage": 56,
+		"force": 580,
+               	"dodge" : -5,
+                "parry" : -5,
+		"damage_type": "擦伤"]);
+	}
+	me->delete_temp("autopfm_lhs");
+	for(i = sizeof(action); i > 0; i--)
+		if(level > action[i-1]["lvl"])
+			return action[NewRandom(i, 20, level/5)];
+}
+
+int practice_skill(object me)
+{
+	int lvl = me->query_skill("lanhua-shou", 1);
+	int i = sizeof(action);
+	mapping learned = me->query_learned();
+
+	if (!mapp(learned)) learned = ([]);
+	if (!learned["lanhua-shou"])
+		while (i--) 
+			if (lvl == action[i]["lvl"])
+				if (me->query("gender") == "女性")
+					return notify_fail("你将已经学会的所有招式练习了一遍，发现如果不去找师父学新的招式就无法获得进步了。\n");
+				else
+					return notify_fail("你将已经学会的所有招式练习了一遍，发现如果不去找岳父学新的招式就无法获得进步了。\n");
+
+	if (me->query_temp("weapon") || me->query_temp("secondary_weapon"))
+		return notify_fail("练兰花拂穴手必须空手。\n");
+	if ((int)me->query("jingli") < 60)
+		return notify_fail("你的体力太低了。\n");
+	if ((int)me->query("neili") < 40)
+		return notify_fail("你的内力不够练兰花拂穴手。\n");
+	me->receive_damage("jingli", 40);
+	me->add("neili", -20);
+	return 1;
+}
+
+mixed hit_ob(object me, object victim, int damage_bonus, int factor)
+{
+	int hurt, lvl = me->query_skill("lanhua-shou", 1);
+
+	if (me->query_temp("autopfm_lhs")) {
+		if (!random(3)) {
+			if (victim->is_busy()) victim->start_busy(1);
+			else victim->start_busy(3) + random(3);
+			me->add("neili", -40);
+			hurt = (victim->query("neili") < lvl / 6 ? victim->query("neili") : lvl / 6);
+			victim->add("neili", -hurt);
+			victim->add("qi", -lvl / 5);
+			me->improve_skill("lanhua-shou", random(me->query("int")/4));
+			me->delete_temp("autopfm_lhs");
+			return HIR "$n被$N这招双手式同时拂中了数个穴道，只觉得全身巨痛，真气在经脉里四处乱窜,一时竟然无法控制！\n" NOR;
+		}
+		return 0;
+	}
+	if (victim->is_busy()) return 0;
+	if (!random(7)) {
+		victim->start_busy(2) + random(2);
+		if (!random(4)) {
+			me->add("neili", -20);
+			hurt = (victim->query("neili") < lvl / 7 ? victim->query("neili") : lvl / 7);
+			victim->add("neili", -hurt);
+			victim->add("qi", -lvl / 8);
+			me->improve_skill("lanhua-shou", random(me->query("int")/5));
+			return HIR "$n被$N拂中了穴道，只觉得一阵钻心的疼痛，真气不由得一滞！\n" NOR;
+		}
+		return CYN "$n被$N拂中了穴道，真气不由得一滞！\n" NOR;
+	}
+}
+
+mapping *query_actions() { return action; }

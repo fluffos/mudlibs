@@ -1,0 +1,186 @@
+                        LPC 基础
+                  Descartes Borg / 文
+                       jjgod / 译
+                   第一版：1993/04/23
+                   第二版：1993/06/16
+
+第二章：LPC 程序
+
+2.1 关于程序
+
+这一章的名字其实起得很不好，直到目前为止，还没有任何人用
+LPC 写过“程序”，LPC 程序员们仅仅是在写物件而已。这有什
+么不同呢？好的，不同之处就在于文件执行的方式。当你运行一
+个程序时，是从程序的一个确定的地方开始执行。换句话说，所
+有程序中都有一个地方被标明为程序开始执行的入口。另外，程
+序也有明确的结束点，因而当执行到了这一点时程序就终止了。
+所以，简而言之，程序的执行是从一个明确的起始点到一个明确
+的结束点的。但 LPC 物件并非如此。
+
+在 MUD 中，LPC 物件是与运行游戏的 driver(MudOS) 中单独的
+部分。换句话说，MUD 程序的执行是由 driver 来开始和结束的。
+但事实上 driver 在创造你游戏的这个世界的方面仅仅是做了一
+点点而已，相应的，driver 倒是非常的依赖 LPC 代码，执行物
+件的代码就是这样的。因此，LPC 物件没必要有起始点和结束点。
+
+像其他的编程语言一样，LPC “程序”是由一个或者更多的文件
+构成的。一个 LPC 物件要运行，只要得先装载进入 driver的内
+存。Driver执行物件的代码，是依从一个定义好的结构的，这个
+结构，就是贯穿本书的主线。总之，本节你需要知道的就是 LPC
+物件即没有起始点也没有结束的时候。
+
+2.2 Driver 与 mudlib 的交互
+
+我在前面提到过，driver 是一个在服务器上运行的 C 程序。它
+让你连接进入游戏、处理 LPC 代码。注意，这仅仅是一种MUD程
+序编制的方式，而且未必就是最好的一种方式。你或许可以把整
+个游戏都用 C 来写，然后再编译好， 这样的一个游戏会会比我
+们所讲的这种 driver 的方式快很多，但是它的灵活性就差很多
+了，因为巫师无法在它运行的时候增加什么内容进去。 DikuMUD
+采用的就是这种方式。与之不同的 LPMUD 的方式是 driver对于
+游戏世界不加以定义，这个世界都是由相关的人进行定义、添加、
+修改的，因此，你能够在游戏运行的时候增加一些内容进去。这
+就是 LPMUD 为什么要使用 LPC 编程语言的原因，你可以用 LPC
+语言来定义游戏的世界，而 driver 则是在需要的时候读取并执
+行它。LPC 也是一个比 C 容易理解得多的语言， 因而就有更多
+的人可以用它来制作 MUD 世界了。
+
+当你写完了一个 LPC程序以后，它仅仅是保存在服务器的硬盘上
+直到游戏中的什么东西涉及了它。当游戏中的什么东西终于涉及
+了它的时候，此文件的一个复制版本将被载入内存，然后这个物
+件中一个特别的函数将被呼叫以初始化此物件中变量的取值。
+
+2.3 将一个物件载入内存
+
+Although there is no particular place in an object code that must exist
+in order for the driver to begin executing it, there is a place for which
+the driver will search in order to initialize the object.  On compat 
+drivers, it is the function called reset().  On native muds it is the
+function called create().
+
+LPC objects are made up of variables (values which can change) and
+functions which are used to manipulate those variables.  Functions
+manipulate variables through the use of LPC grammatical structures,
+which include calling other functions, using externally defined
+functions (efuns), and basic LPC expressions and flow control 
+mechanisms.
+
+Does that sound convoluted?  First lets start with a variable.  A
+variable might be something like: level.  It can "vary" from sitation
+to situation in value, and different things use the value of the player's
+level to make different things happen.  For instance, if you are a
+level 19 player, the value of the variable level will be 19.  Now
+if your mud is on the old LPMud 2.4.5 system where levels 1-19 are
+players and 20+ are wizards, things can ask for your level value to
+see if you can perform wizard type actions.  Basically, each object
+in LPC is a pile of variables with values which change over time.
+Things happen to these objects based on what values its variables
+hold.  Often, then things that happen cause the variables to change.
+
+So, whenever an object in LPC is referenced by another object currently
+in memory, the driver searches to see what places for values the
+object has (but they have no values yet).  Once that is done, the driver
+calls a function in the object called reset() or create() (depending
+on your driver) which will set up the starting values for the object's
+variables.  It is thus through *calls* to *functions* that variable
+values get manipulated.
+
+But create() or reset() is NOT the starting place of LPC code, although
+it is where most LPC code execution does begin.  The fact is, those
+functions need not exist.  If your object does just fine with its
+starting values all being NULL pointers (meaning, for our purposes
+here, 0), then you do not need a create() or reset() function.  Thus
+the first bit of execution of the object's code may begin somewhere
+completely different.
+
+Now we get to what this chapter is all about.  The question: What
+consists a complete LPC object?  Well, an LPC object is simply
+one or more functions grouped together manipulating 0 or more
+variables.  The order in which functions are placed in an object
+relative to one another is irrelevant.  In other words:
+
+-----
+void init() { add_action("smile", "smile"); }
+
+void create() { return; }
+
+int smile(string str) { return 0; }
+-----
+
+is exactly the same as:
+
+-----
+void create() { return; }
+
+int smile(string str) { return 0; }
+
+void init() { add_action("smile", "smile"); }
+_____
+
+Also important to note, the object containing only:
+
+-----
+void nonsense() {}
+-----
+
+is a valid, but trivial object, although it probably would not interact
+properly with other objects on your mud since such an object has no
+weight, is invisible, etc..
+
+2.4 Chapter summary
+LPC code has no beginning point or ending point, since LPC code is used
+to create objects to be used by the driver program rather than create
+individual programs.  LPC objects consist of one or more functions whose
+order in the code is irrelevant, as well as of zero or more variables whose
+values are manipulated inside those functions.  LPC objects simply sit
+on the host machine's hard driver until referenced by another object in
+the game (in other words, they do not really exist).  Once the object
+is referenced, it is loaded into the machine's memory with empty
+values for the variables.  The function reset() in compat muds or
+create() in native muds is called in that object if it exists to allow
+the variables to take on initial values.  Other functions in the object
+are used by the driver and other objects in the game to allow interaction
+among objects and the manipulation of the LPC variables.
+
+A note on reset() and create():
+create() is only used by muds in native mode (see the textbook Introduction
+for more information on native mode vs. compat mode).  It is only used
+to initialize newly referenced objects.
+
+reset() is used by both muds in compat mode and native mode.  In compat
+mode, reset() performs two functions.  First, it is used to initialize
+newly referenced objects.  In addition, however, compat mode muds use
+reset() to "reset" the object.  In other words, return it to its initial
+state of affairs.  This allows monsters to regenerate in a room and doors
+to start back in the shut position, etc..  Native mode muds use reset()
+to perform the second function (as its name implies).
+
+So there are two important things which happen in LP style muds which
+cause the driver to make calls to functions in objects.  The first is
+the creation of the object.  At this time, the driver calls a function
+to initalize the values in the object.  For compat mode muds, this
+is performed by the function named reset() (with an argument of 0,
+more on this later though).  For muds running in native mode, this is
+performed by the function create().
+
+The second is the returning of the room to some base state of affairs.
+This base set of affairs may or may not be different from the initial
+state of affairs, and certainly you would not want to take up time
+doing redundant things (like resetting variables that never change).
+Compat mode muds nevertheless use the same function that was used to
+create the object to reset it, that being reset().  Native mode muds,
+who use create() to create the room, instead use reset() to reset it.
+All is not lost in compat mode though, as there is a way to tell the
+difference between creation and resetting.  For reset purposes, the
+driver passes either 1 or the reset number as an argument to reset()
+in compat mode.  Now this is meaningless to you now, but just keep in
+mind that you can in fact tell the difference in compat mode.  Also
+keep in mind that the argment in the creation use of reset is 0 and
+the argument in the reset use is a nonzero number.
+
+感谢：
+Jackyboy & Jeeny
+
+翻译使用的词汇：
+object          : 物件
+execution       : 执行

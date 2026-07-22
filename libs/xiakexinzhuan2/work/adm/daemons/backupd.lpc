@@ -1,0 +1,336 @@
+// Daemon:/adm/daemons/backupd.c
+// 备份系统
+// Written by jjgod for FYTX & XKXZ. 2001/04/04.
+
+#include <ansi.h>
+inherit F_DBASE;
+
+// 15 分钟（900 秒）允许备份一次
+#define BACKUP_TICK	900
+#define DEBUG		1
+
+private void sys_info(string msg);
+private int do_backup(object me);
+private int do_restore(object me,string user);
+private int backup_data(string dtdir,string bkdir);
+private int assure_not_exist(string bkdir);
+
+#define ADM_CMD_RM	"/cmds/adm/zrm"
+#define ADM_CMD_CP	"/cmds/adm/zcp"
+
+void create()
+{
+	seteuid(ROOT_UID);
+	set("channel_id", "备份精灵");
+	sys_info("备份系统已经启动。");
+}
+
+// 检测一个物件是否 Root
+int is_root(mixed ob)
+{
+	if (stringp(ob))
+		return (SECURITY_D->get_status(ob) == "(admin)");
+
+	if (objectp(ob))
+	{
+		if (geteuid(ob) == ROOT_UID)
+		// Root object want to execute
+			return 1;
+
+		return (SECURITY_D->get_status(geteuid(ob)) == "(admin)");
+	}
+
+	return 1;
+}
+
+private void sys_info(string msg)
+{
+	CHANNEL_D->do_channel(this_object(), "sys", msg);
+	log_file("backup", ctime(time()) + ": " + msg + "\n");
+}
+
+void backup_user(object user)
+{
+	object link_ob;
+
+	if(!objectp(link_ob = user->query_temp("link_ob"))) {
+		write("你不是经由正常连线进入，不能备份。\n");
+		return;
+	}
+
+	if (time()-user->query("last_bk")<BACKUP_TICK&&wiz_level(user)<2) {
+		write("你刚刚才备份过，请过"
+			+(BACKUP_TICK-(time()-user->query("last_bk")))
+			+"秒再尝试备份。\n");
+		return;
+	}
+	else {
+		if(do_backup(user)) {
+			write(user->name()+"的档案已经备份完毕。\n");
+			user->set("last_bk",time());
+			return;
+		} else {
+			write("备份失败，请与巫师联系。\n");
+			return;
+		}
+	}
+}
+
+private int do_backup(object me)
+{
+	string file,bkfile,file2,bkfile2,dir,dir2;
+	string id=me->query("id");
+
+	// Login_ob 文件
+	file = sprintf(DATA_DIR+"login/%c/%s.o",id[0],id);
+	bkfile = sprintf(BACKUP_DIR+"login/%c/%s.o",id[0],id);
+	dir = sprintf(BACKUP_DIR+"login/%c",id[0]);
+
+	// User_ob 文件
+	file2 = sprintf(DATA_DIR + "user/%c/%s.o", id[0], id);
+	bkfile2 = sprintf(BACKUP_DIR + "user/%c/%s.o", id[0], id);
+	dir2 = sprintf(BACKUP_DIR + "user/%c", id[0]);
+
+	// 假如没有目录是复制不了的
+	if (file_size(dir) != -2)
+	{
+		sys_info("无此目录：" + dir + " ……新建此目录。");
+		mkdir(dir);
+	}
+
+	if (file_size(dir2) != -2) {
+		sys_info("无此目录：" + dir2 + " ……新建此目录。");
+		mkdir(dir2);
+	}
+
+	if (file_size(bkfile)>0) rm(bkfile);
+	if (file_size(bkfile2)>0) rm(bkfile2);
+
+	if (cp(file,bkfile)&&cp(file2,bkfile2))
+		return 1;
+	else return 0;
+}
+
+void restore_user(object me,string user)
+{
+	object link_ob;
+
+	// 只允许 admin、arch 和 Root 使用这个函数
+	if (me!=this_player(1)||wizhood(me)!="(admin)"
+	&&wizhood(me)!="(arch)"&&!is_root(me)) {
+		write("你没有权力使用这个指令。\n");
+		return;
+	}
+
+	else {
+		if(do_restore(me,user)) {
+			write("此用户的档案已经成功恢复。\n");
+			return;
+		} else {
+			write("恢复失败，请查看 /log/backup 以确定原因。\n");
+			return;
+		}
+	}
+}
+
+private int do_restore(object me,string user)
+{
+	string flogin, fuser,msg,id;
+	object link_ob,ob;
+
+	if( file_size(BACKUP_DIR+ "login/"+user[0..0]+"/"+user+__SAVE_EXTENSION__)<0)
+	{
+		write("没有这位使用者。\n");
+		return 0;
+	}
+
+	flogin = "login/" + user[0..0] + "/" + user + __SAVE_EXTENSION__;
+	fuser  = "user/"  + user[0..0] + "/" + user + __SAVE_EXTENSION__;
+
+	msg = HIM "开始恢复玩家(" + user + ")的备份数据。\n\n" NOR;
+
+	if (file_size(BACKUP_DIR + flogin) < 0)
+	{
+		write(sprintf("%s缺少文件：%s，无法恢复。\n", msg, BACKUP_DIR+ flogin));
+		return 0;
+	}
+
+	if (file_size(BACKUP_DIR+ fuser) < 0)
+	{
+		write(sprintf("%s缺少文件：%s，无法恢复。\n", msg,BACKUP_DIR+ fuser));
+		return 0;
+	}
+
+// 先删文件
+	if (file_size(DATA_DIR + flogin) >= 0 ||file_size(DATA_DIR + fuser) >= 0)
+	{
+		rm(DATA_DIR + flogin);
+		rm(DATA_DIR + fuser);
+	                msg += "删除玩家目前的档案。\n";
+	}
+
+	if (file_size(DATA_DIR + flogin) >= 0 ||
+	file_size(DATA_DIR + fuser) >= 0)
+	{
+	                write(sprintf("%s没有能够成功的删除玩家现在的档案(%s)和(%s)。\n"
+		"请先查证然后再执行备份操作。\n",
+		msg, DATA_DIR + flogin, DATA_DIR + fuser));
+		return 0;
+	}
+
+// 然后复制文件
+	cp(BACKUP_DIR+ flogin, DATA_DIR + flogin);
+	cp(BACKUP_DIR+ fuser,  DATA_DIR + fuser);
+	msg += sprintf("从(%s与%s)中复制玩家的档案数据。\n", BACKUP_DIR+flogin,BACKUP_DIR+fuser);
+
+// 检查是否成功
+	if (file_size(DATA_DIR + flogin) < 0 ||file_size(DATA_DIR + fuser) < 0)
+	{
+		write(sprintf("%s没有能够成功的从(%s)中复制玩家的档案。\n",
+		msg, BACKUP_DIR));
+		return 0;
+	}
+	msg += sprintf("档案复制成功。\n");
+	sys_info(sprintf("%s: 用户 %s 的档案被 %s 由 %s 恢复。\n",
+	ctime(time()),user,me->query("id"),(BACKUP_DIR+flogin+"\n与 "+BACKUP_DIR+fuser)));
+
+// 检查此玩家是否在线
+	if (! (ob = find_player(user)))
+	{
+		write(msg);
+		return 1;
+	}
+
+// 重载物件
+	tell_object(ob, HIM "\n从磁盘中载入你的数据，并重新设置。\n" NOR);
+	if (!ob->restore())
+	{
+		write(sprintf("%s该用户无法读取备份的数据。\n", msg));
+		return 0;
+	}
+	if (objectp(link_ob = ob->query_temp("link_ob")))
+		link_ob->restore();
+		write(msg);
+
+	ob->delete_temp("user_setup");
+	ob->setup();
+// 假如房间错误
+	if (! environment(ob))
+	{
+		tell_object(ob, HIC "\n由于你现在所处的环境不正常，需"
+		"要移动到巫师会客室。\n" NOR);
+		ob->move("/d/wizard/guest_room");
+		ob->set("startroom", "/d/wizard/guest_room");
+	}
+// 让玩家检查一下自己的属性是否已恢复
+	tell_object(ob, NOR"\n>" HIY  "l\n" NOR);
+	catch(ob->force_me("look"));
+
+	tell_object(ob, NOR">" HIY  "hp\n" NOR);
+	catch(ob->force_me("hp"));
+
+	tell_object(ob, ">" HIY "Check your backup data now.\n" +
+	HIC "请检查你目前的状况是否正确。\n" NOR +
+		(ob == me ? "" : ">"));
+
+	if (ob != me)
+		tell_object(me, HIC "\n玩家已经重新设置。\n\n" NOR);
+
+	return 1;
+}
+
+varargs string *query_dir(int raw)
+{
+	return (raw)?get_dir(DATA_DIR):get_dir(BACKUP_DIR);
+}
+
+void backup_all(object me)
+{
+	object link_ob;
+	string *dtdirs,bkdir;
+	int i;
+
+	// 只允许 admin、arch 和 Root 使用这个函数
+	if (me!=this_player(1)||wizhood(me)!="(admin)"
+	&&wizhood(me)!="(arch)"&&!is_root(me)) {
+		write("你没有权力使用这个指令。\n");
+		return;
+	}
+
+	if (!arrayp(query_dir())||!arrayp(dtdirs=query_dir(1))) {
+		write("没有足够的目录和文件，无法使用这个指令。\n");
+		return;
+	}
+
+	else {
+		for (i=0;i<sizeof(dtdirs);i++) {
+			if (dtdirs[i]=="user"||dtdirs[i]=="login") continue;
+			bkdir=BACKUP_DIR+dtdirs[i];
+
+			if (file_size(DATA_DIR+dtdirs[i])>=0) {
+				sys_info(DATA_DIR+dtdirs[i]+" 已经被成功复制到 "+bkdir+"。");
+				cp(DATA_DIR+dtdirs[i],bkdir);
+				continue;
+			}
+
+			if(backup_data(DATA_DIR+dtdirs[i],bkdir)) {
+#ifdef DEBUG
+				sys_info(DATA_DIR+dtdirs[i]+" 已经被成功复制到 "+bkdir+"。");
+#endif
+			} else {
+				sys_info(DATA_DIR+dtdirs[i]+" 备份失败，请查看 /log/backup 以确定原因。");
+			}
+		}
+		sys_info("成功完成备份工作。");
+		return;
+	}
+}
+
+private int backup_data(string dtdir,string bkdir)
+{
+	mixed *file;
+	int count;
+	int i;
+
+	if (! is_root(previous_object()))
+	{
+		write(HIR "YOU HAVE NO ACCESS TO BACKUP.\n" NOR);
+		return 0;
+	}
+
+	seteuid(getuid());
+#ifdef DEBUG
+	sys_info(sprintf("备份工作开始。", bkdir));
+#endif
+	if (! assure_not_exist(bkdir))
+	{
+		sys_info(sprintf("备份失败：无法删除(%s)。", bkdir));
+		return 0;
+	}
+
+	sys_info("复制 "+dtdir+" 到 "+bkdir);
+
+	count = ADM_CMD_CP->copy_dir(dtdir, bkdir);
+	if (count)
+	                sys_info(sprintf("总共有%d个文件被保存到(%s)中。", count, bkdir));
+#ifdef DEBUG
+	sys_info(sprintf("备份工作完毕。", bkdir));
+#endif
+	return 1;
+}
+
+private int assure_not_exist(string bkdir)
+{
+	switch(file_size(bkdir))
+	{
+		case -1:
+			return 1;
+
+		case -2:
+		                ADM_CMD_RM->rm_dir(bkdir);
+			return (file_size(bkdir) == -1);
+
+		default:
+			return rm(bkdir);
+	}
+}

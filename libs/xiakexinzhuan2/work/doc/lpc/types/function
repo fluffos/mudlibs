@@ -1,0 +1,192 @@
+             LPC帮助文档—变量类型—函数
+基本概念：
+
+MudOS 有一个叫做“function”的变量类型，这种变量可以
+用于指向一种普遍的函数。你可能已经熟悉传递一个函数到
+某个 efun 的主意。拿取，比如说 filter_array这个efun，
+它获取一个数祖，然后返回一个其每个元素都在某个函数中
+返回非零的数组。习惯上，这个过程是由传递一个物件和一
+个函数的名称来完成的。现在呢，它还可以由传递一个函数
+型的表达式来完成，这个表达式只是包括了了一个可以稍后
+进行计算的函数。
+函数指针可以被创建和分派到一个变量，例如：
+
+function f = (: local_func :);
+
+以及被传递到其他的常规情况或者 efuns，就像普通的值一
+样：
+
+foo(f);  map_array( ({ 1, 2 }), f);
+
+或者在稍后进行计算：
+
+x = evaluate(f, "hi");
+
+当最后一行被运行后，f 指出的这个函数就被呼叫了，而“
+hi”则被作为一个实参。这样做将达到与下面同样的效果：
+
+x = local_func("hi");
+
+使用一个函数指针的优势是：如果此后你想运行的是另一个
+函数，你可以仅仅改变变量的值就行了。
+
+值得注意的是，如果 evaluate() 被输入一个不是函数的值，
+它将原封不动的把这个值再传回来。你可以这样试试：
+
+void set_short(mixed x) { short = x; }
+mixed query_short() { return evaluate(short); }
+
+这么做的话，一般的物件可以仅仅是：set_short("任意")，
+而特殊些的就可以通过：set_short((: short_func :)); 
+来多样化的改变自己的短描述。
+
+有用的几种函数指针：
+
+上面这个就是一个最简单的函数指针，它们仅仅是指向同一
+个物件中的一个本地函数。调用时，参数也可以包括在内，
+例如：
+
+string foo(string a, string b)
+{
+        return "(" + a "," + b + ")";
+}
+
+void create()
+{
+        function f = (: foo, "left" :);
+        printf("%s %s\n", evaluate(f), evaluate(f, "right"));
+}
+
+将会打印出：(left,0) (left,right)
+
+第二种情况则是仅仅是像 (: efun_name :) 这样的 efun指
+针。这种这本地函数指针是很相似的，例如 objects efun
+可以获取一个可选的函数，返回所有通过此函数的结果是真
+值的物件，因此：objects((: clonep :)) 将会返回一个包
+括游戏中所有是复制品的物件。当然，也可以带上参数：
+
+void create()
+{
+        int i;
+        function f = (: write, "Hello, world!\n" :);
+
+        for (i = 0; i < 3; i++) { evaluate(f); }
+}
+
+将会打印出：
+Hello, world!
+Hello, world!
+Hello, world!
+
+注意 simul_efun 在和函数指针的关系上是与 efun一样的。
+
+第三种是和 MudOS 通常支持的类似的 call_other函数指针，
+格式是：(: object, function :)。如果要使用参数，参数
+要被假如一个在函数名前面的数组中。下面是例子：
+
+void create()
+{
+     string *ret;
+     function f = (: this_player(), "query" :);    
+
+     ret = map(({ "name", "short", "long" }), f);
+     write(implode(ret, "\n"));
+}
+
+这样将会打印出 this_player()->query("name")、
+               this_player()->query("short") 和
+               this_player()->query("long") 的结果。
+要使一个函数指针直接呼叫 query("short")，可以使用：
+
+f = (: this_player(), ({ "query", "short" }) :)
+
+下面是其他的一些同样效果的方法提供参考：
+
+// 使用 call_other efun 的 efun 指针
+f = (: call_other, this_player(), "query", "short" :)
+// 一个表达式的功能，看看下边
+f = (: this_player()->query("short") :)
+
+第四种则是表达式函数指针。这是以 (: expression :) 的
+形式来使用的。在一个表达式函数指针中，参数可以写成类
+似于 $1、$2、$3...这样的形式，例如：
+
+evaluate((: $1 + $2 :), 3, 4) // 返回 7.
+
+在用到 sort_array 时，它将很有用，例如：
+top_ten = sort_array(player_list, 
+          (: $2->query_level() - $1->query_level :) )[0..9];
+
+
+第五种可以称为无名的函数指针：
+
+void create()
+{
+        function f = function(int x)
+        {
+                int y;
+
+                switch(x)
+                {
+                case 1: y = 3;
+                case 2: y = 5;
+                }
+                return y - 2;
+        };
+
+        printf("%i %i %i\n", (*f)(1), (*f)(2), (*f)(3));
+}
+
+将会打印出：1 3 -2
+
+注意那个 (*f)(...) 是和 evaluate(f, ...)一样而且被保
+留作向后兼容。凡是在一般函数中合法的东西在无名函数中
+就是合法的。
+
+函数将在什么时候被运行呢？
+
+有一条原则是：在 efun、本地函数和 simul_efun函数指针
+被创建时，作为其参数的函数就被运行了。如果是一个表达
+式形式的函数指针，则是要等到此函数指针确实地被使用时
+才运行：
+
+// 当此函数指针创建时它就将 destruct 所有是
+// this_player() 的人
+(: destruct, this_player() :)
+// 当此函数运行时才 destruct 所有是 this_player()
+// 的人
+(: destruct(this_player()) :)
+
+因此，在一个表达式指针中，使用一个本地变量是违法的。
+因为等到这个函数指针运行的时候，可能这个变量已经不存
+在了。然而，还是有一种解决的方法：
+
+// 和上面的第一个例子一样
+(: destruct($(this_player)) :)
+
+$(whatever) 的意思就是立即计算whatever，保持着这个值，
+直到这个函数被运行的时候再拿出来用。这还可以使事情做
+得更有效率：
+
+map_array(listeners, 
+          (: tell_object($1, $(this_player()->query_name()) + " bows.\n") :));
+
+上面的这个 $(this_player()->query_name()) 只需要被计
+算一次，而不是每次消息时都再计算一次。当然增加的那段
+也可以预先做好：
+
+map_array(listeners, 
+          (: tell_object($1, $(this_player()->query_name() + " bows.\n")) :));
+
+注意，在这种情况下我们也可以这样做(效率最低的方式)：
+
+map_array(listeners, 
+          (: tell_object, this_player()->query_name() + " bows.\n" :));
+
+翻译使用的词汇：
+evaluate         : 运行、计算
+function pointer : 函数指针
+argument         : 参数
+local            : 本地
+variable         : 变量
+whatever         : 任意
