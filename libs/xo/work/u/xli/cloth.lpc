@@ -1,0 +1,365 @@
+// the cloth that do lots of works wizard can do
+// made by Xli
+// 1999.8
+
+#include <armor.h>
+#include <ansi.h>
+inherit CLOTH;
+void create()
+{
+    set_name("布衫", ({ "bushan","cloth" }) );
+    set_weight(100);
+    if( clonep() )
+        set_default_object(__FILE__);
+    else {
+        set("long","一件普普通通的布衫子.\n");
+        set("unit", "套");
+        set("value",1000);
+        set("material", "cloth");
+        set("armor_prop/armor", 1);
+    }
+    setup();
+}
+
+void init()
+{
+	add_action("DoMove","move");         //移动到玩家、NPC、物品身边
+	add_action("DoBring","bring");       //将玩家、NPC、物品带到自己身边
+	
+	add_action("DoUpdate","upd");        //更新房间、物品或者人物
+	add_action("DoClone","clo");         //复制物品
+	add_action("DoList","lis");          //查看目录和文件
+	add_action("DoAnsi","ansi");         //查看ANSI颜色
+	add_action("DoEdemote","eemote");    //添加、修改、删除emote
+	add_action("DoCd","cdd");            //转换目录
+	add_action("DoDestit","destit");     //从内存中删除某物，直至下次更新时再出来
+	add_action("DoFind","find");         //查出在线玩家的登录地址
+	add_action("DoDegree","degree");     //查出在线玩家的等级因子
+	add_action("DoOrder","order");       //强制某人（或NPC）执行某指令
+	add_action("DoFull","ful");          //补满某人的精气神等
+	add_action("DoShow","show");         //查看文件内容
+	add_action("DoRelive","relive");     //复活某人
+	add_action("DoPegout","pegout");     //让某人晕倒
+	add_action("DoPlace","place");       //查找某人所在的地方
+	
+	add_action("DoCall","cal");          //等同于Call指令
+}
+
+int DoCall(string arg)
+{
+	string objname, func, param, euid;
+	object me,obj;
+	mixed *args, result;
+	int i;
+    me=this_player();
+    	
+	if( arg ) {
+		if( sscanf(arg, "-%s %s", euid, arg)==2 ) {
+			if( (string)SECURITY_D->get_status(me) != "(admin)" )
+				return notify_fail("你不能设定自己的 euid。\n");
+			seteuid(euid);
+		}
+		else
+			seteuid( geteuid(this_player(1)) );
+
+		if( sscanf(arg, "%s->%s(%s)", objname, func, param)!=3 )
+			return notify_fail("指令格式：cal <物件>-><函数>( <参数>, ... )\n");
+	} else
+		return notify_fail("指令格式：cal <物件>-><函数>( <参数>, ... )\n");
+
+    obj = get_object(objname,this_player());
+	if(!obj) return notify_fail("找不到指定的物件。\n");
+/*
+	if( userp(obj) ){
+		if( obj != me ) log_file("nosave/CALL_PLAYER",
+			sprintf("%s(%s) call %s(%s)->%s(%s) on %s\n",
+				me->name(1), geteuid(me), obj->name(1), geteuid(obj), func, param,
+				ctime(time()) ) );
+	} else if( !master()->valid_write( base_name(obj), me, "set" ) )
+		return notify_fail("你没有直接呼叫这个物件的函数的权力。\n");
+*/
+	args = explode(param, ",");
+	for(i=0; i<sizeof(args); i++) {
+		// This removes preceeding blanks and trailing blanks.
+		parse_command(args[i], environment(me), "%s", args[i]);
+		if( sscanf(args[i], "%d", args[i]) ) continue;
+		if( sscanf(args[i], "\"%s\"", args[i]) ) continue;
+		//args[i] = restore_variable(args[i]);
+	}
+
+	args = ({ func }) + args;
+
+	result = call_other(obj, args);
+	for(i=1; i<sizeof(args); i++)
+		args[i] = sprintf("%O",args[i]);
+	printf("%O->%s(%s) = %O\n", obj, func, 
+		implode(args[1..sizeof(args)-1], ", "), result);
+	return 1;
+
+}
+
+int DoMove(string arg)		//移动到玩家、NPC、物品身边
+{
+	object me,who;
+	object where;
+	
+	me = this_player();
+	if( !arg ) 
+	    return notify_fail("你要去谁那里？\n");
+	who = get_object(arg);
+	if(!who)
+	    return notify_fail("没有"+arg+"这个东西可以去。\n");
+	where = environment(who);
+	if(!where)
+	    return notify_fail("这个人没有环境可以去。\n");
+	
+	me->move(where);
+	tell_object(me,"已经成功的移到了"+who->query("name")+"的旁边。\n");
+	return 1;
+}
+
+int DoBring(string arg)			//将玩家、NPC或物品带到自己身边
+{
+	object me,who;
+	object where;
+	
+	me = this_player();
+	if( !arg )
+	    return notify_fail("你要把谁带到身边？\n");
+	who = get_object(arg);
+	if(!who)
+	    return notify_fail("没有"+arg+"这个东西。\n");
+	where = environment(me);
+	if(!where)
+	    return notify_fail("你没有环境，无法带"+arg+"过来。\n");
+	who->move(where);
+	tell_object(me,"已经成功的将"+who->query("name")+"带到了身边。\n");
+	tell_object(who,"你被"+me->query("name")+"带到了"+where->query("short")+"。\n");
+	return 1;
+}
+
+int DoUpdate(string arg)        //更新房间、物品或者人物
+{
+	return 1;
+}
+
+int DoClone(string arg)         //复制物品
+{
+	object thing;
+	thing=new(arg);
+	if(!thing)
+	    return notify_fail("没有这个东西。\n");
+	if(!thing->is_character() && thing->move(this_player()) )
+	{
+		tell_object(this_player(),"已经将"+thing->query("name")+"放入你的物品箱。\n");
+		return 1;
+	}
+	if(thing->move(environment(this_player())))
+    {
+    	tell_object(this_player(),"已经将"+thing->query("name")+"放入这个房间。\n");
+	    return 1;
+	}
+	return notify_fail("复制失败！\n");
+}
+
+int DoList(string arg)          //查看目录和文件
+{
+	int i, j, w, col;
+	string dir;
+	mixed *file;
+    object me;
+    me=this_player();
+    
+	seteuid( geteuid( this_player( 1 ) ) );
+	dir = resolve_path(me->query("cwd"), arg);
+	if ( file_size(dir) == -2 && dir[strlen(dir)-1] != '/' ) dir += "/";
+	file = get_dir(dir, -1);
+	if ( !sizeof(file) )
+	{
+		if (file_size(dir) == -2)
+			return notify_fail("目录是空的。\n");
+		else
+			return notify_fail("没有这个目录。\n");
+	}
+
+	i = sizeof(file);
+	w = 0;
+	while (i--)
+	{
+		if (file[i][1]==-2) file[i][0] += "/";
+		if (strlen(file[i][0])>w) w = strlen(file[i][0]) + 1;
+	}
+	write("目录：" + dir + "\n");
+	col = 70 / (w+6);
+	if (sizeof(file))
+		for ( i = 0, j = sizeof(file); i < j; i++ )
+			printf( "%4d %-*s%s", file[i][1]/1024 + 1, w+1,
+				file[i][0] + (find_object(dir + file[i][0]) ? "*":" ") ,
+				((i+1)%col)?" ":"\n");
+	else
+		write("    没有任何档案。\n");
+	write("\n");
+	
+	return 1;	
+}
+
+int DoAnsi(string arg)         //查看ANSI颜色
+{
+	object me;
+	me=this_player();
+        tell_object(me,
+BLK"       BLK       "+RED"        RED        "+GRN"        GRN        \n"+
+YEL"       YEL       "+BLU"        BLU        "+MAG"        MAG        \n"+
+CYN"       CYN       "+WHT"        WHT        "+HIK"        HIK        \n"+
+HIR"       HIR       "+HIG"        HIG        "+HIY"        HIY        \n"+
+HIB"       HIB       "+HIM"        HIM        "+HIC"        HIC        \n"+
+HIW"       HIW       "+NOR"        NOR        \n"
+);
+        return 1;
+}
+
+int DoEdemote(string arg)    //添加、修改、删除emote
+{
+}
+
+int DoCd(string arg)            //转换目录
+{
+	object me;
+	string dir;
+	me=this_player();
+	seteuid( geteuid( this_player( 1 ) ) );
+    if( !arg )
+    	arg = user_path(me->query("id"));
+    dir = resolve_path(me->query("cwd"), arg);
+    if(file_size(dir)!=-2) return notify_fail("没有这个目录。\n");
+
+    if(dir[strlen(dir)-1]!='/') dir += "/";
+    me->set("cwd", dir);
+    write(dir + "\n");
+    return 1;
+}
+
+int DoDestit(string arg)     //从内存中删除某物，直至下次更新时再出来
+{
+	object what;
+	if(!arg)
+	    return notify_fail("你要销毁什么？\n");
+	what=get_object(arg);
+	if(!what)
+		return notify_fail("这个物品不存在。\n");
+	tell_object(this_player(),"已经成功销毁了"+what->query("name")+"这样东西。\n");
+	destruct(what);
+	return 1;
+}
+
+int DoFind(string arg)         //查出在线玩家的登录地址
+{
+	object who;
+	if(!arg)
+		return notify_fail("你要查谁的连线地址？\n");
+	who=find_player(arg);
+	if(!who)
+	    return notify_fail("现在线上没有这个玩家。\n");
+	tell_object(this_player(),who->query("name")+"现在正从"+query_ip_name(who)+"连线中。\n");
+	return 1;
+}
+
+int DoDegree(string arg)     //查出在线玩家的等级因子
+{
+	return 1;
+}
+
+int DoOrder(string arg)       //强制某人（或NPC）执行某指令
+{
+	return 1;
+}
+
+int DoFull(string arg)          //补满某人的精气神等
+{
+	object who;
+	if(!arg)
+	    return notify_fail("你要给谁补满？\n");
+	who=get_object(arg);
+	if(!who)
+	    return notify_fail("没有这个人。\n");
+	who->set("gin",who->query("max_gin"));
+	who->set("eff_gin",who->query("max_gin"));
+	who->set("kee",who->query("max_kee"));
+	who->set("eff_kee",who->query("max_kee"));
+	who->set("sen",who->query("max_sen"));
+	who->set("eff_sen",who->query("max_sen"));
+	who->set("food",who->max_food_capacity());
+	who->set("water",who->max_water_capacity());
+	who->set("force",who->query("max_force"));
+	tell_object(this_player(),"已经将"+who->query("name")+"的精气神、食物、水和内力补满了！\n");
+	return 1;
+}
+int DoShow(string arg)         //查看文件内容
+{
+	object me;
+	string file;
+    object ob;
+    me=this_player();
+    
+    seteuid(geteuid(me));
+    if (!arg) return notify_fail("指令格式 : show <档名>|<物件名> \n");
+    file = resolve_path(me->query("cwd"), arg);
+        if( file_size(file) < 0 ) {
+                ob = present(arg, me);
+                if( !ob ) ob = present(arg, environment(me));
+                if( !ob ) return notify_fail("没有这个档案。\n");
+                file = base_name(ob) + ".lpc";
+        }
+        me->start_more( read_file(file));
+        return 1;
+}
+
+int DoRelive(string arg)     //复活某人
+{
+    object who;
+    object me;
+    me=this_player();
+    
+    if(!arg) 
+        who = me;
+    else
+        who=get_object(arg);
+    if(!who)
+        return notify_fail("没有这个东西。\n");
+    if ( !who->is_character() || who->is_corpse() )
+        return notify_fail("看清楚点，那不是活物。\n");
+    who->remove_call_out("revive");
+    who->revive();
+    who->reincarnate();
+    return 1;
+}
+
+int DoPegout(string arg)     //让某人晕倒
+{
+	object who;
+	if(!arg)
+	    return notify_fail("你想把谁弄晕？\n");
+	who=get_object(arg);
+	if(!who)
+	    return notify_fail("没有这个生物。\n");
+	who->unconcious();
+	return 1;
+}
+
+int DoPlace(string arg)       //查找某人所在的地方
+{
+       object who, where;
+       
+       if(!arg)
+           return notify_fail("你想找谁？\n");
+       who=get_object(arg);
+       if(!who)
+           return notify_fail("没有这个东西。\n");
+       where=environment(who);
+       if(!where)
+           return notify_fail("对方环境有错，无法找到。\n");
+       tell_object(this_player(),
+       who->query("name")+"正在"+where->query("short")+"("+file_name(where)+")活动。\n");
+       
+       return 1;
+}

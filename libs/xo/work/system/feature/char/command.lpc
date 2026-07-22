@@ -1,0 +1,533 @@
+// filename : /feature/command.c
+//
+// ChangeLog:
+//    1997-03-03    Falcon        add time limit.
+// Qyz 1997-5-6    classify commands.
+// 19970828 Trill fix bug from "add_action" 
+// 19971201 Amber add EnvEffect() to replace add_action
+// and allow obj to interrupt commands.
+// 1997-12-20 Amber : 加入AUTO_D接口
+// wuliao :((
+// 1998-04-25 15:19 : 完善autod的接口
+// 08/21/98: nerd: add path of avatars and hm, delete the path of wiz&imm
+
+#include <command.h>
+#include <dbase.h>
+#include <origin.h>
+#include <options.h>
+#include <action.h>
+
+inherit F_ACTION;
+
+// Functions prototype
+int force_me(string);
+nomask void disable_player(string type);
+nomask void enable_player();       
+nomask int valid_command( object this, string file );
+varargs nomask void disable_command( string path, string reason );
+nomask void enable_path();
+int can_act();
+
+private int EnvEffect( object this, string verb, string arg );
+
+mixed *GetActions();
+void AddAction(mixed, object, string);
+int RemoveAction(mixed);
+int eventAct(string, string);
+private void FilterAction();
+private mixed FindAction(string);
+
+//Added by Hydra
+void GiveAction(mixed,string);
+mixed *GetGiveActions();
+string printaction();
+
+private nosave class Action *GiveActions=({});
+
+// Let command path be private, thus we can make sure no one can get command
+// path directly from restore_object().
+private nosave string *path;
+
+private nosave class Action * Actions = ({});
+// Leave this to allow other objects can search your commands such as
+// help, which...
+string find_command(string verb)
+{
+    return (string)COMMAND_D->find_command( verb, path );
+}
+
+// This is the add_action hook handling movement, commands, emotes and
+// channels. Optimization is needed.
+nomask int command_hook(string arg)
+{
+    string verb, file;
+    object env, this;
+
+#ifdef PROFILE_COMMANDS
+    int mem, utime, stime;
+    mapping info;
+
+    mem = memory_info();
+    info = rusage();
+    utime = info["utime"];
+    stime = info["stime"];
+#endif
+
+    this = this_object();          
+    // 这里本来是指令限制，move to user.c
+
+    verb = query_verb();
+    // LALA add to detected riding limit.( Amber 1998-04-25 08:18 )
+    // 蠢人也不留个说明。
+    file = find_command( verb );
+    if ( stringp( file ) && query_temp_marks("is_riding") != 0 )
+    {
+        string * file_name = explode( file, "/" );
+        if ( file_name[ 1 ] == "verb" )
+        {
+            switch ( file_name[ 2 ] )
+            {
+                case "drink" : case "drop"   : case "eat"  : case "follow" :
+                case "give"  : case "go"     : case "look" : case "nod"    :
+                case "remove": case "ride"   : case "shake": case "stop"   :
+                case "talk"  : case "unwield": case "wear" : case "wield"  :
+                    break;
+                default :
+                    return notify_fail( "你现在骑着一"
+                    + query_temp_marks("is_riding")
+                    + "呢，无法做出这个动作！\n");
+            }
+        }
+    }
+    env = environment();
+    //printf( "Enter command_hook with %s, me is %O, verb is %s\n",
+    //    arg, this, verb );
+    //////////////////////////////////////////////////////////////////
+    FilterAction();
+    // 1998-04-25 15:21
+    // 加入一个接口函数，希望能够最终代替所有的调用方式。Amber
+    /*if ( AUTO_D->AcclaimAction( this, this, verb, arg ) )
+    // arg就是整个的附加message，全部传给起反应的物体
+    {
+        // 这个是动作成功后的附加处理，后面每一种成功的命令都应该带。
+        // 最终希望能够只用一个判断解决问题。Amber 1998-04-26 19:45
+        AUTO_D->eventAfterAction( this, this, verb, arg );
+    }*/
+    // add_action: rem by Amber. Edit by trill
+    if (eventAct(verb, arg))
+    {
+        //AUTO_D->eventAfterAction( this, verb, arg );
+    }
+    /*1998-04-25 15:24 disabled. Amber
+    //  amber加入一个类似event的体系减少addaction的运用以及产生物品的
+    //  相关触发功能。
+    else if ( EnvEffect( this, verb, arg ) )
+    {
+    } 
+    */
+    else if ( !arg && (env && stringp(env->query("exits/" + verb))) &&
+         stringp( file = find_command( "go" ) ) &&
+         valid_command( this, file ) &&
+         call_other( file, "main", this, verb ) )// go directions
+    {
+        //AUTO_D->eventAfterAction( this, "go " + verb, arg );
+    }
+    else if ( stringp( file = find_command( verb ) ) &&
+              valid_command( this, file ) &&  
+              call_other( file, "main", this, arg ) )// cmds
+    {
+        // AUTO_D->eventAfterAction( this, verb, arg );
+    }
+    /*1998-04-25 15:23 disabled.
+    else if ( AUTO_D->AcclaimAction( this, verb, arg ) )
+    {
+    }// 这里的AUTO_D接口在command后，主要处理非常规指令 Amber
+    */
+    else if ( EMOTE_D->do_emote( this, verb, arg ) )// emotes
+    {
+        // AUTO_D->eventAfterAction( this, "emote " + verb, arg );
+    }
+    else if ( CHANNEL_D->do_channel( this, verb, arg ) )// chat
+    {
+        // AUTO_D->eventAfterAction( this, "channel " + verb, arg );
+    }
+
+    //Qyz  假如被disable后，给出一个为什么会disable的说明。
+    else if ( this->query_temp("disable_status") &&  find_command( verb ) )
+        return notify_fail(this->query_temp("disable_status")+"\n");
+    else
+            return 0;
+        
+#ifdef PROFILE_COMMANDS
+    info = rusage();
+    PROFILE_D->log_command( verb, memory_info() - mem,
+        info[ "stime" ] - stime, info[ "utime" ] - utime );
+#endif
+
+    return 1;
+}
+
+nomask void set_path(string *p)
+{
+    if ( origin() != ORIGIN_LOCAL &&
+         geteuid( previous_object() ) != ROOT_UID )
+    {
+        error("Security violidation. Must be root to set_path.\n");
+    }
+    path = p;
+}
+
+string *query_path() { return path; }
+
+int force_me(string cmd)
+{
+    if ( geteuid( previous_object() ) != ROOT_UID )
+        return 0;
+    return command( cmd );
+}
+
+nomask void enable_player()
+{
+    string disable_path;
+    disable_path = query_temp("disable_path");
+    
+    if ( stringp( query( "id" ) ) )
+        set_living_name( query( "id" ) );
+    else
+        set_living_name( query( "name" ) );
+
+    enable_commands();
+    efun::add_action( "command_hook", "", 1 );
+    FilterAction();
+    //last_time = time();
+    //last_count = 0;    
+
+    if ( !userp( this_object() )  )
+        set_path( NPC_PATH );
+    else
+        switch( wizhood(this_object()) )
+        {
+        case "(admin)":
+            set_path(ADMIN_PATH);
+            enable_wizard();
+            break;
+
+        case "(arch)":
+            set_path(ARCH_PATH);
+            enable_wizard();
+            break;
+
+        case "(apprentice)":
+            set_path(APP_PATH);
+            enable_wizard();
+            break;
+
+        /*case "(avatar)":
+            set_path(AVATAR_PATH);
+            break;
+
+        case "(high mortal)":
+            set_path(HM_PATH);
+            break;*/
+
+        default:
+            if ( avatarp( this_object() ) )
+                set_path( AVATAR_PATH );
+            else if ( high_mortalp( this_object() ) )
+                set_path( HM_PATH );
+            else
+                set_path(PLAYER_PATH);
+            break;
+    }
+}
+
+nomask void disable_player(string type)
+{
+    object prev, this;
+
+    prev = previous_object();
+    this = this_object();
+    if ( geteuid( prev ) != ROOT_UID && prev != this )
+        return;
+
+    set( "disable_type", type );
+    disable_commands();
+}
+
+nomask int valid_command( object this, string file )
+{
+    mapping path_level = ([
+                    "comm"  : 1,
+                    "verb"  : 2,
+                    "skill" : 3,
+                    ]);
+    string path,cmd,disable_path;
+
+    if ( wizardp( this ) )
+        return 1;
+    if ( sscanf( file, "/cmds/%s/%s", path, cmd )!= 2 )
+        return 0;
+    disable_path = this->query_temp("disable_path");
+    if ( disable_path && path_level[path] >= path_level[disable_path] )
+        return 0;
+    else 
+        return 1;
+}
+
+varargs nomask void disable_command( string path, string reason )
+{
+    object this;
+    this = this_object();
+    this->set_temp("disable_path", path );
+    if( reason )
+    this->set_temp("disable_status", reason );
+}
+
+nomask void enable_path()
+{
+    object this;
+    this = this_object();
+    this->delete_temp("disable_path");
+    this->delete_temp("disable_status");
+}
+
+int can_act()
+{
+    object this;
+    this = this_object();
+    if ( !living(this) ) return 0;
+    if ( this->is_busy() || 
+         this->is_lianing() || 
+         this->is_duilianing() ||
+         this->is_fighting() )
+        return notify_fail("你现在正忙于其他的事情，不可能分心。\n");
+    if ( this->query_temp("disable_path") == "verb" )
+    {
+        if ( this->query_temp("disable_status") )
+        return notify_fail(this->query_temp("disable_status") );
+        else return 0;
+    }
+    else return 1;
+}
+
+
+/* /system/feature/command.c
+ * from XO I MudLib
+ * 处理add_action带来的问题.
+ * created by Trill 19970827
+ * version %1.0%
+ * last modified: 970827
+ */
+
+mixed * GetActions()
+{
+    if ( !Actions ) 
+        return (Actions = ({}));
+    else 
+        return Actions;
+}
+
+//Added by hydra
+mixed * GetGiveActions()
+{
+    if (!GiveActions)
+        return (GiveActions=({}));
+    else
+        return GiveActions;
+}
+
+string printaction()
+{
+    string msg;
+    foreach(class Action ac in GiveActions)
+    {
+        msg += sprintf("%-s      %s",ac->verb,ac->func);
+    }
+    return "Actions are " + msg;
+}
+
+void GiveAction(mixed verbs,string func)
+{
+    if ( !arrayp(verbs) )
+        verbs = ({ verbs });
+    foreach(string verb in verbs)
+    {
+        class Action ac;
+        if ( sizeof( Actions) )
+        {
+            int dup =0;
+            foreach( ac in GiveActions )
+            {
+                if ( ac->verb == verb
+                        && ac->func == func )
+                    dup = 1; //重复。。faint.
+            }
+            if ( dup )
+                break;
+        }
+        ac = new(class Action);
+        ac->verb = verb;
+        ac->ob=file_name(this_object());
+        ac->func = func;
+        if ( !GiveActions )
+            GiveActions = ({ac});
+        else GiveActions += ({ac});
+    }
+
+}
+//Ended here ,Hydra
+
+void AddAction(mixed verbs, object obj, string func)
+{
+	// bugs: if you get some obj and put down ... again and again,
+	// you'll get a long filter of cmds :(( -- nerd
+    if ( !arrayp(verbs) )
+        verbs = ({ verbs });
+    foreach(string verb in verbs)
+    {
+        class Action ac;
+        if ( sizeof( Actions) )
+        {
+            int dup =0;
+            foreach( ac in Actions )
+            {
+                if ( ac->verb == verb
+                        && ac->ob == file_name(obj)
+                        && ac->func == func )
+                    dup = 1; //重复。。faint.
+            }
+            if ( dup )
+                break;
+        }
+        ac = new(class Action);
+        ac->verb = verb;
+        ac->ob = file_name(obj);
+        ac->func = func;
+        if ( !Actions )
+            Actions = ({ac});
+        else Actions += ({ac});
+    }
+}
+
+int RemoveAction(mixed obj)
+{
+    if (objectp(obj)) obj = file_name(obj);
+    if (!stringp(obj)) return 0;
+    foreach(class Action action in Actions)
+        if (action->ob == obj )
+            action = 0;
+    Actions = filter(Actions, (: $1 :));
+    foreach(class Action action in Actions)
+        if (action->ob == obj)
+            return 0;
+    return 1;
+}
+
+void FilterAction()
+{
+    Actions = filter(map(Actions, function(class Action action)
+        {
+            object obj;
+            if ((obj = find_object(action->ob)) &&
+                (present(obj, this_object()) ||
+                present(obj, environment(this_object())) ||
+                obj == environment(this_object())))
+                return action;
+            else
+                return 0;
+        }), (: $1 :)); 
+}
+
+mixed FindAction(string verb)
+{
+    class Action * tmp = ({});
+    foreach(class Action action in GetActions())
+        if (classp(action) && action->verb == verb)
+        {
+            if (!arrayp(tmp))
+                tmp = ({action});
+            else
+                tmp += ({action});
+        }
+    return tmp;
+}
+
+nomask int eventAct(string verb, string arg)
+{
+    //string * dir, time;
+    foreach(class Action action in FindAction(verb))
+    {
+        if (find_object(action->ob))
+        {
+            /*
+            dir = explode(action->ob, "/");
+            if ( dir[0] == "u" || dir[0] == "open" )
+            {
+                time = ctime(time());
+                log_file(ACTION_LOG, sprintf("%s在%s执行%s上的" + 
+                    "action:%s参数是%s\n", this_player()->query("id"), 
+                    time[4..<6], action->ob, action->verb, arg));  
+            }*/       
+            if (call_other(action->ob, action->func, arg))
+                return 1;
+        }
+    }
+    return 0;
+}
+//////////////////////////////////////////////////////////////////////
+/*  1998-04-25 15:31 disabled by Amber
+    这种结构本来是用来处理自身的可附加指令，如果允许每一个object继承command.c， 
+    那么就是一个add_action的结构。 
+//  Amber made on 1997-12-01 
+private int EnvEffect( object this, string verb, string arg )
+{
+    object env, *inv;
+    int i,flag;
+    string file;
+
+    if ( !this->can_act() )// 与verb限制相同。 
+        return 0;
+    if ( !env ) 
+        return 0;
+
+    flag = 0;
+    // environment effect
+    file = file_name( env );
+    if ( call_other( file, "eventEnvEffect" + verb, this, arg ) )
+    {
+        flag = 1;
+    }
+    // continue to consider other effections.
+    // 身边的物品。 
+    inv = all_inventory( env );
+    for ( i = 0; i < sizeof( inv ); i++ )
+    {
+        // inv[ i ] is a char and cant make actions.
+        if ( inv[ i ]->is_character() && !inv[ i ]->can_act() )
+            continue;
+        if ( userp( inv[ i ] ) )
+            continue;// 还是先不考虑user吧 
+        file = base_name( inv[ i ] );
+        if ( call_other( file, "eventEnvEffect" + verb, this, arg ) )
+        {
+            flag = 1;
+        }
+        // 如果不考虑相互关系，那也就是这么着了。给所有物品执行这个函数的 
+        // 权力。让它们自己去判断是否有别的物品同时被触发吧。 
+    }
+    //  身上的物品 
+    inv = all_inventory( this );
+    for ( i = 0; i < sizeof( inv ); i++ )
+    {
+        // inv[ i ] is a char.
+        if ( inv[ i ]->is_character() )
+            continue;
+        file = base_name( inv[ i ] );
+        if ( call_other( file, "eventEnvEffect" + verb, this, arg ) )
+        {
+            flag = 1;
+        }
+    }
+    return flag;
+}
+*/

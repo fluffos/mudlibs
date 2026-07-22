@@ -1,0 +1,87 @@
+// sleep.c
+//这个sleep.c存在两个问题：一个是condition的问题。一般来说，能不用condition
+//的就不用，完全可以加个标志来实现。另一个是在睡觉时把那个room设为no_fight，
+//但是在最后的清除时也出了不少的麻烦。考虑用一个新的办法……
+#include <ansi.h>
+
+void wakeup( object, object );
+
+int main( object ppl, string arg )
+{
+	mapping fam;
+	object here = environment( ppl );
+
+    seteuid( getuid() );
+	if ( (!(fam = ppl->query("family") ) 
+        || fam["family_name"] !=(string)here->query("sleep_room") )
+        && here->query("sleep_room")!="inn" 
+        && !here->can_sleep( ppl ) )
+        return notify_fail("这里不是让你睡的地方。\n");
+ 
+    if ( environment(ppl)->query("wiz") )
+        return notify_fail(HIR "这是属于神的房间，不能用来睡觉。\n" NOR);
+  
+	if ( ppl->is_busy() )
+    	return notify_fail("你正忙着，怎么能睡觉呢。\n");
+
+	if ( ppl->is_fighting() )
+    	return notify_fail("战斗中不能睡觉！\n");
+        
+    if ( ppl->query("mud_age") - ppl->query("sleeped") < 180 )
+        return notify_fail("你可不能整天睡觉呀，该出去活动活动了。\n");
+
+	if ( here->query("sleep_room") 
+        || here->can_sleep( ppl ) )
+    {
+    	write("你躺到自己的床上，闭上眼睛，开始睡觉。\n");
+    	write("不一会儿，你就进入了梦乡。\n");
+    	ppl->set_temp("block_msg/all",1);
+    	message_vision("$N一歪身，倒在床上，不一会便鼾声大作，进入了梦乡。\n",ppl);
+    }
+
+	here->add_temp("sleeping_person", 1);
+
+	ppl->set("no_get", 1);    
+	ppl->set("no_get_from", 1);
+
+	ppl->disable_player("<睡梦中>");
+	call_out("wakeup", 15 + random(75 - ppl->query("con")), ppl, here);
+	return 1;
+}
+
+void wakeup(object ppl,object here)
+{
+	ppl->set("kee", ppl->query("eff_kee"));
+	ppl->add("gin", (ppl->query("eff_gin") - ppl->query("gin"))*2/3 );
+	ppl->add("sen", (ppl->query("eff_sen") - ppl->query("sen"))*2/3 );
+	if( (int)ppl->query("force") < (int)ppl->query("max_force") )
+	ppl->add("force", (ppl->query("max_force") - ppl->query("force"))/2 );
+	ppl->enable_player();
+  
+    ppl->set("sleeped", ppl->query("mud_age") );
+
+	message_vision("$N一觉醒来，精力充沛地活动了一下筋骨。\n",ppl);
+	ppl->set_temp("block_msg/all", 0);
+	write("你一觉醒来，只觉精力充沛。该活动一下了。\n");
+
+	here->add_temp("sleeping_person", -1);
+	ppl->delete("no_get");    
+	ppl->delete("no_get_from");    
+ 
+}
+
+int help(object ppl)
+{
+  write(@HELP
+指令格式 : sleep
+    睡觉是一个人生活中必不可少的一部分活动。当然，在XO中，睡
+觉不可能象生活中一样占去你大量的时间。睡觉可以让玩家恢复体力
+和精神等等参数，使自己的状态恢复到良好的水平。
+    睡觉必须在特殊的房间中进行。对于每个门派，有自己的只许本
+门派弟子使用的卧室；在城市中，则有所有玩家都可以使用的客房，
+但大部分都是需要花钱的。
+  
+HELP
+    );
+    return 1;
+}

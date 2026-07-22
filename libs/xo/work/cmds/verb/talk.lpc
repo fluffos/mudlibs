@@ -1,0 +1,133 @@
+// talk.c last edit on Feb 11,1997 by Lin
+//modified by trill Apr 16 1997
+
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+
+string *msg_notalk_msg = ({
+	"$n摇摇头，说道：我没工夫闲聊。\n",
+	"$n睁大眼睛望著$N，显然不知道$P在干什么。\n",
+	"$n耸了耸肩，很抱歉地说：我对闲谈不感兴趣。\n",
+	"$n不耐烦的瞪了$N一眼，说道：没看我正忙着吗？\n",
+	"$n看了$N一眼，说道：对不起。又接着忙自己的事去了。\n",
+	"$n笑嘻嘻看着$N，说道：你想聊什么？\n"
+	"$n老大不愿意的看了$N一眼，又转过身去了。\n",
+	"$n恶狠狠地瞪了$N一眼，说道：“烦着呢！别理我！”\n",
+	"$n看了你一眼，显出一付不信任的样子，摇了摇头。\n",
+	"$n耸了耸肩，很抱歉地说：无可奉告。\n",
+//	"$n说：“我就是$n，你难道不知道吗？”\n",
+	"$n说：“.............................”\n",
+	"$n说：“练武要有节制，当心走火入魔。”\n",
+	"$N还没来得及同$n交谈，$n就转过身去了。\n",
+	"$n说：“呵呵，这个么。。。。。。今儿天气真好！”\n",
+	"$n说：“练武讲求独辟捷径，如果只是跟着师傅学，是不会有好结果的”\n",
+//	"$n说：“听说汴京城不久就允许武林中人进城了”\n",
+});
+
+int main(object me, string arg)
+{
+	mapping limit;
+	string guy,*msg,*nn;
+	object ob;
+	int length,n,i;
+
+	seteuid(getuid());
+                        
+    
+	if( !arg || sscanf(arg, "%s", guy)!=1 )
+		return notify_fail("你要和谁讲话？\n");
+
+	if( !objectp(ob = present(guy, environment(me))) )
+		return notify_fail("这里没有这个人。\n");
+
+	if( !ob->is_character() ) {
+		message_vision("$N对著$n嘀咕着什么，有点神经兮兮的样子\n", me, ob);
+		return 1;
+	}
+  
+	if( userp(ob) )
+		return notify_fail("请用tell或whisper命令\n");
+
+	if( !living(ob) ) 
+		return notify_fail( ob->query("name")+ "现在显然没有办法和你说话.\n" );
+
+	if( !ob->query("can_speak"))
+        return notify_fail( "你先要让" + ob->name() + "会说话。\n");
+/*
+          if( random(3) == 2)
+	{
+		message_vision(msg_notalk_msg[random(sizeof(msg_notalk_msg))], me, ob);
+		return 1;
+	}
+*/
+    n = 1;
+	if( ob->query("talk_limit/"))
+	{
+    	limit = ob->query("talk_limit");
+		nn = keys( limit );
+		for( i = 0; i < sizeof( nn ); i ++ )
+			if( me->query( nn[ i ] ) < limit[ nn[ i ] ] ) n = 0;
+	}
+   
+    if( n == 1 )
+    {
+    	if( ob->query("talk_msg" ) ) 
+    	{
+        	msg = ob->query( "talk_msg" );
+			length = random( sizeof(msg) );
+
+		    //trill 可以在 talk_msg 下加个function
+            //Qyz 出现了length out of bounds的情况，
+            // 所以应该在调用stringp()之前先判断一下
+			if ( msg[ length ] && stringp( msg[ length ] ) )
+				tell_object(me,HIC + ob->query("name")+"说道：" + msg[length] + "\n" NOR);
+			else if ( functionp( msg[ length ] ) )
+				return evaluate( msg[ length ] );
+			return 1;
+		}
+		else n = 0;
+	}
+	else if ( n == 0 )
+	{
+		if( ob->query("talk_fail_msg") ) 
+		{
+			msg = ob->query("talk_fail_msg");
+			length = random(sizeof(msg));   
+			if( stringp( msg[ length ] ) )
+			    tell_object(me,HIC + ob->query("name")+"说道：" + msg[length] + "\n" NOR); 
+			else if( functionp( msg[ length ] ) )
+			    return evaluate( msg[ length ] ) ;
+			return 1;
+		}
+	}
+	if( !ob->query_answer( me ) )
+	     
+//TODO，可以再和NPC 本身的参数挂上钩。
+          message_vision(msg_notalk_msg[random(sizeof(msg_notalk_msg))], me, ob);
+	return 1;
+}
+
+int help(object me)
+{
+   write( @HELP
+指令格式: talk <somebody>
+这个指令可以和一个NPC闲谈，也许他(她)会告诉你一些有用的信息。
+HELP
+   );
+   if(wizardp(me))
+     write(@HELP
+使用这个命令前需要在NPC 身上设定如下参数：
+1。  "talk_limit"                                         (mapping)
+    用来限制玩家是否能得到正确的TALK信息，如果玩家的数据中有一
+  项小于mapping中相应设定值，就不能得到正确的信息。
+2。  "talk_msg"                                           (*string)
+    指定当玩家的数据都符合limit中的条件时，NPC 所提供的信息（可以是多条
+  ），采用随机提取的方式。
+3。  "talk_fail_msg"                                      (*string)
+    指定当玩家的数据不符合limit中的条件时，NPC 所提供的信息。      
+    如果没有这些信息，将在NPC身上调用int query_answer(object me)函数，
+没有在调用talk.c中的notalk_msg.
+HELP);
+   return 1;
+}

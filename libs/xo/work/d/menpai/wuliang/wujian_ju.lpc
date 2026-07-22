@@ -1,0 +1,201 @@
+//Qyz 
+
+#include <ansi.h>
+
+inherit ROOM;
+
+private int gain_points( object me );
+private int gain_xiuwei( object me );
+
+void create()
+{
+	set("short","悟剑居");
+	set("long",@LONG
+这悟剑居模样甚是古怪，全是以一块块千百斤重的大石砌成，凹凹凸凸，宛
+然是一个石洞，厚厚的石壁上刻着一些奇怪的符号，还有各种姿势的人形，据说
+这些图形里隐藏着无量剑派最高深的剑法，门下弟子获得掌门许可后可到此地参
+修（ｃａｎｘｉｕ），可很少有人能悟出其中有什么奥秘。
+LONG 
+);
+
+    set("no_fight", 1);
+	set("exits",
+	([
+         "south": __DIR__"houyuan",
+        ]));
+    setup();
+}
+
+void reset()
+{
+    ::reset();
+    if( random(10) >= 3 )
+        set_temp_marks( "can_get_points", 1 );
+}
+
+void init()
+{
+    add_action("can_xiu", "canxiu");
+}
+
+int can_xiu( string arg )
+{
+    object me;
+    me = this_player();
+
+    if( !me->can_act() || me->is_fighting() )
+        return notify_fail("你现在无法静下心来仔细参修。\n");
+
+    if( query("canxiuers") >= 3 )
+        return notify_fail("石壁旁现已站满了人，你无法再来参修了。\n");
+
+    tell_object( me, "你坐到石壁旁边，开始仔细审视那些奇怪的图案和符号。\n");
+
+    add("canxiuers", 1);
+    me->disable_command("verb", "你正在看那石壁上的绝学，不可分心哦。\n");
+
+    call_out("start_canxiu", 10, me );
+
+    return 1;
+}
+
+void start_canxiu( object me )
+{
+    int time;
+
+    if( !me ) return;
+
+    if( environment(me) != this_object() )
+    {
+        me->enable_path();
+        me->receive_damage("gin", 50 );
+        this_object()->add("canxiuers", -1);
+        return;
+    }
+
+    if( me->query_xiuwei_by_type("sword") < ( 570 + random( 80 ) ) )
+    {
+        me->enable_path();
+        me->receive_damage("gin", 50 );
+        this_object()->add("canxiuers", -1);
+        tell_object( me, "你呆呆地对着那莫名其妙的图形看了半天，还是看不出\n"
+                         "那石壁上的图形有什么奇特之处。\n");
+        return;
+    }
+    if( me->query_xiuwei_by_type("sword") > ( 1800 + random( 300 ) ) ||
+        me->query_xiuwei_by_type("zonggang") > ( 800 + random( 310 ) ) )
+    {
+        me->enable_path();
+        me->receive_damage("gin",5);
+        this_object()->add("canxiuers",-1);
+        tell_object( me, "你看了一会儿，觉得上面的东西实在没有什么神秘的地方\n"
+                  "不看也罢了。\n");
+        return;
+    }
+
+    tell_object( me, "你端详了好半天那石壁上的图形，心中突然灵光一闪，隐隐\n"
+                    "觉得这图形跟你所学过的武功颇有相通之处..而其中似乎又\n"
+                    "蕴藏着极为深奥的武学的道理...\n"
+                    "你不知不觉地陷入了沉思......\n");
+    me->set_temp("block_msg/all", 1);
+
+    time = ( me->query_xiuwei_by_type("sword") - 600 ) /200 + 5 ;
+    call_out("get_gain", time, me );
+}
+
+void get_gain( object me )
+{
+    string msg;
+    int points, xiuwei, gain_point;
+
+    if( !me ) return;
+
+    me->delete_temp("block_msg/all");
+
+    if( environment(me) != this_object() )
+    {
+        me->enable_path();
+        me->receive_damage("gin", 50 );
+        this_object()->add("canxiuers", -1);
+        return;
+    }
+
+    msg = "过了许久，你才从沉思中清醒过来....\n";
+        
+    gain_point = gain_points(me);
+    if( random(me->query("kar")) < 5 )
+        gain_point -= random(50);
+
+    if( gain_point > 40 )
+        msg += HIW "只觉得这石壁上的图形所蕴藏的变化解释了你长期以来心中\n"
+               "的疑问，你对『剑道』的理解又深了一层。\n" NOR; 
+
+    else if( gain_point > 10 )
+        msg += GRN "对石壁上的有些图形尽管你还不能悟透，但与你所学的武功\n"
+               "相印证，似乎也有一些收获。\n" NOR;
+
+    else if( gain_point >= 0 )
+        msg += YEL "只感到石壁上的图形似乎是玄妙万分，但却又莫名其妙，看\n"
+               "了半天，仍是一无所获。\n" NOR;
+
+    else
+        msg += RED "你只觉得那石壁上的图形是又繁又乱，待要仔细看，便觉心\n"
+               "烦意躁，脑袋便似要爆炸一般。\n" NOR;
+
+    points = me->query("qyz_points");
+    points += gain_point;    
+
+    if( points >= 100 )
+    {
+        if( !me->query_jibie("jue-jian") )
+            msg += "你觉得这石壁上的图形实际上暗藏着一门极是玄妙的剑法。\n";
+        
+        msg += YEL "你的『石壁绝剑』进步了！\n" NOR;
+
+        me->improve_jibie("jue-jian", 1);
+        points = 0;
+
+        xiuwei = gain_xiuwei(me);
+        me->improve_xiuwei("sword", xiuwei ); 
+        msg += "你的〖 剑 术 〗的修为有所提高。";
+        if( random(10) < 4 )
+        {
+            me->improve_xiuwei("zonggang", xiuwei );        
+            msg += "在〖 武 学 〗上的造诣也更深了。\n";
+        }
+        else
+            msg += "\n";   
+    }
+    
+    me->set("qyz_points", points);
+    tell_object( me, msg );
+    me->receive_damage("gin", 100);
+    me->enable_path();
+    this_object()->add("canxiuers", -1 );
+}
+
+int gain_points( object me )
+{
+    int points;
+    if( !this_object()->query_temp_marks("can_get_points") )
+    return 0;
+    
+    if( !me->query_jibie("jue-jian") )
+        points = 50;
+    else
+        points = ( me->query_lingwu_ratio("jue-jian") - 50 );
+
+    points += random(me->query("int")/3);
+    points += ( me->query_xiuwei_by_type("sword") - 600 )/50;
+
+    points *= me->query_char_ratio("gin");
+    points *= me->query_char_eff_ratio("gin");
+    points /= 10000;
+    return points;
+}
+
+int gain_xiuwei( object me )
+{
+    return random(3) + 1 + me->query_int() / 20;
+}
+             

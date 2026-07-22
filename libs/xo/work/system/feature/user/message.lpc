@@ -1,0 +1,151 @@
+// filename : /feature/message.c
+
+#include <ansi.h>
+#include <dbase.h>
+#include <command.h>
+
+#define MAX_MSG_BUF_SIZE        2000
+
+private nosave string *msg_buffer = ({});
+//nosave string temp_msg;
+//nosave int Mark;
+
+mixed query (mixed x);
+
+void receive_message (string msgclass, string msg)
+{
+    string subclass, *ch;
+    object this;
+
+    this = this_object ();
+    if (!interactive (this))
+    {
+        this->relay_message (msgclass, msg);
+        return;
+    }
+
+    if (sscanf (msgclass, "%s:%s", subclass, msgclass) == 2)
+    {
+        switch (subclass)
+        {
+        case "channel":
+            ch = query ("channels");
+            if (!pointerp (ch) || member_array (msgclass, ch) == -1)
+            return;
+            break;
+        case "outdoor":
+            if (!environment () || !environment ()->query ("outdoors"))
+            return;
+            break;
+        default:
+            error ("Message: Invalid Subclass " + subclass + ".\n");
+        }
+    }
+
+    if (query_temp ("block_msg/all")
+        || query_temp ("block_msg/" + msgclass)
+        || query ("blind"))
+        return;
+
+    if ( (in_input (this))  || in_edit (this) && msgclass != "editor" )
+    {
+        if (sizeof (msg_buffer) < MAX_MSG_BUF_SIZE)
+            msg_buffer += ({ msg });
+    }
+    else
+    {
+        receive (msg);
+    }
+}
+
+private string write_prompt ()
+{
+/*    int y;
+*/
+    if (sizeof (msg_buffer))
+    {
+        receive (BLU "【输入时暂存讯息】\n" NOR);
+        map_array ( msg_buffer, (: receive :) );
+        msg_buffer = ({ });
+    }
+/*    if ((y = query_ed_mode()) != -1)
+    {
+        string ret;
+        if (!y)
+        {
+            if (wizardp(this_object()))
+                ret = ":";
+            else
+                ret = "\tQ)不存盘退出，x)存盘退出，h)帮助\nCommand: ";
+        }
+        else if (y == -2)
+            ret = "Help: ";
+        else
+            ret = "*\b";
+        receive( ret );
+        return ret;
+    }*/
+    if (this_object ())
+    {
+        mixed prompt = query ("env/prompt");
+        mapping my;
+        string *dir, hp, cwd = query ("cwd");
+        if (!cwd)
+            cwd = "";
+        else
+            cwd = sprintf ("%s", cwd == "/" ? "/" : cwd[0.. < 2]);
+        if (stringp (prompt))
+        {
+            my = this_object ()->query_entire_dbase ();
+            dir = explode (file_name (environment (this_object ())), "/");
+            if (strsrch (prompt, "$HP") > -1)
+            {
+                hp = sprintf ("精神:%s%d%%" NOR " 生命:%s%d%%" NOR " 体能:%s%d%%" NOR,
+                HP_CMD->status_color (my["gin"], my["max_gin"]),
+                      my["gin"] * 100 / my["max_gin"],
+                HP_CMD->status_color (my["kee"], my["max_kee"]),
+                      my["kee"] * 100 / my["max_kee"],
+                HP_CMD->status_color (my["sen"], my["max_sen"]),
+                      my["sen"] * 100 / my["max_sen"]);
+                prompt = replace_string (prompt, "$HP", hp);
+            }
+            prompt = replace_string (prompt, "$T", "时间:" + ctime (time()));
+            if (wizardp(this_object()))
+            {
+                prompt = replace_string (prompt, "$L", "位置:" +
+                           chinese_place_name (dir[2]));
+                prompt = replace_string (prompt, "$P", "工作目录:" + cwd);
+            }
+            prompt = replace_string (prompt, "$_", "\n");
+            prompt = replace_string (prompt, "$$", "$");
+            prompt = prompt[<1..];
+            if (prompt != ">" && prompt != "$" && prompt != "%" && prompt != "]")
+            prompt += ">";
+        }
+        else if (intp (prompt))
+        {
+            switch (prompt)
+            {
+            case 0:
+                prompt = ">";
+                break;
+            case -1:
+                prompt = "";
+                break;
+            default:
+                prompt = "%";
+                break;
+            }
+        }
+        else
+            prompt = ">";
+        write (prompt);
+    }
+    else
+        write ("> ");
+}
+
+void receive_snoop (string msg)
+{
+    receive ("#" + msg);
+}

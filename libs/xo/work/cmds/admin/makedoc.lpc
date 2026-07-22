@@ -1,0 +1,196 @@
+//整理文档专用
+//makedoc.c
+
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+
+int help(object);   
+int main(object,string);
+void QueryNpcInfo(string);
+void QueryRoomInfo(string);
+void QueryObjInfo(string);
+string QuerySkill(object);
+string QueryScore(object);
+
+int main(object me,string arg)
+{
+    string path,var;
+    string *filename;
+
+    if( !arg || sscanf(arg,"%s %s",path,var) != 2)
+    {
+        return help(me);
+    }
+        
+    if(file_size(path = resolve_path(me->query("cwd"),path)) != -2 )
+        return notify_fail("没有这个目录！\n");
+    
+    if(path[sizeof(path)-1] != '/')
+        path += "/";
+        
+    switch(var)
+    {
+        case "-npc":
+        case "-NPC":
+            QueryNpcInfo(path);
+            break;
+        case "-room":
+        case "-ROOM":
+            QueryRoomInfo(path);
+            break;
+        case "-obj":
+        case "-OBJ":
+            QueryObjInfo(path);
+            break;
+        default:
+            write("第二个参数不对，没有这个种类！\n");
+            break;
+    }
+    return 1;
+}
+
+void QueryNpcInfo(string path)
+{
+    string filename;
+    string *file;
+    object obj;
+    int num=0;
+    filename=path+"整理文档_NPC篇";
+    
+    file=get_dir(path);
+    
+    foreach(string tmp in file)
+    {
+        if (file_size(tmp) == -2)
+        {
+            continue;
+        }
+        if (catch(obj=new(path + tmp)))
+        {
+            continue;
+        }
+        if (!objectp(obj))
+        {   
+            continue;   
+        }
+        if(!obj->is_character() || !obj->query("name"))
+        {
+            continue;
+         }
+         num += 1;
+        write_file(filename,"================================================================\n",0);
+        write_file(filename,RED"文件"NOR+num+"\n",0);
+        write_file(filename,RED"文件名："NOR+tmp+"\n",0);
+        write_file(filename,GRN"中文名字："NOR+obj->query("name")+"\n",0);
+        write_file(filename,HIY"所有英文ID: "NOR + sprintf("%s",implode(obj->parse_command_id_list(), ","))+"\n",0);
+//        write_file(filename,"身上的add_action有：\n",0);
+        if(obj->query("talk_msg"))
+        {
+            write_file(filename,HIY"身上的talk_msg: \n"NOR,0);
+            foreach(string msg in obj->query("talk_msg"))
+            {
+                if(stringp(msg))
+                    write_file(filename,sprintf("       %s ",msg),0);
+                else
+                    write_file(filename,"       是函数：待整理\n",0);
+             }
+        }
+        if(obj->query("inquiry"))
+        {
+            write_file(filename,HIY"身上的inquiry: \n"NOR,0);
+/*            write(sizeof(tmsg));
+            for(i=0;i<sizeof(tmsg);i++)
+            {
+                foreach(string key in keys(tmsg[i]))
+                {
+                if(stringp(tmsg[i][key]))
+                    write_file(filename,sprintf("       %s:%s",key,tmsg[i][key]),0);
+                else
+                    write_file(filename,sprintf("       %s:回答是函数，待整理\n",key),0);
+                }
+             }*/
+        }
+        write_file(filename,CYN"所学功夫：\n"NOR,0);
+        write_file(filename,QuerySkill(obj),0);
+        write_file(filename,CYN"修为：\n"NOR,0);
+        write_file(filename,QueryScore(obj),0);
+        
+    }
+    write_file(filename,"================================================================\n",0);
+    write_file(filename,"本目录下总共有"+num+"个NPC文件！\n",0);
+}
+
+string QuerySkill(object ob)
+{
+    mapping m_lingwu, m_jibie, m_jilei, m_xiuwei, m_enable;
+    string *sname;
+    int i, jibie, lingwu, jilei,xiuwei, opt_all;    
+    string msg="";
+
+    m_jibie = ob->query_jibie_map();
+    if ( !sizeof(m_jibie) )
+    {
+    	return("        "+ob->name() + "没有任何武功。\n");
+    }
+    msg += "        "+ob->name() +"目前所学过的技能：\n";
+         
+    m_lingwu = ob->query_lingwu_map();
+    m_jilei = ob->query_jilei_map();
+    m_xiuwei = ob->query_xiuwei_map();
+    m_enable = ob->query_enable_map();
+
+    if ( !mapp(m_jilei) )  m_jilei  = ([]);
+    if ( !mapp(m_lingwu) ) m_lingwu = ([]);
+    if ( !mapp(m_xiuwei) ) m_xiuwei = ([]);
+    if ( !mapp(m_enable) ) m_enable = ([]);
+
+    sname=keys(m_jibie);
+    
+        msg=msg+"----------------------------------------------级别-领悟-积累-领悟比-积累比\n";
+        for ( i = 0; i < sizeof( m_jibie ); i++ )
+    	{
+            if ( SKILL_D( sname[ i ] )->is_native_skill() )
+                continue;
+
+            if ( ob->check_hide_skill(sname[i]) && !opt_all )
+                continue;
+
+    	    jibie = m_jibie[ sname[ i ] ];
+    	    jilei = m_jilei[ sname[ i ] ];
+    	    lingwu = m_lingwu[ sname[ i ] ];
+            xiuwei = m_xiuwei[ sname[ i ] ];
+    	    msg  = msg + sprintf( "%s%-12s%-28s%8d%4d/%5d %3d%%   %3d%%\n",
+                m_enable[ sname[i] ] ? "★" : "  ",
+                to_chinese(sname[i]), " 〖" + sname[i] + "〗",
+    	    	jibie, lingwu, jilei,
+                ob->query_lingwu_ratio( sname[ i ] ),
+                ob->query_jilei_ratio( sname[ i ] ) );
+    	}
+    return msg;
+}
+
+string QueryScore(object ob)
+{
+    string msg;
+    int i;
+    string * xiuwei =({ "sword","blade","unarmed","dodge","short","whip","long","zonggang"});
+    msg="";
+    for(i=0;i<sizeof(xiuwei);i++)
+    {
+        if (ob->query_xiuwei_by_type(xiuwei[i]))
+            msg=msg+sprintf("%20s%20d",xiuwei[i],ob->query_xiuwei_by_type(xiuwei[i]))+"\n";
+    }
+    if (msg == "")
+        return "    "+ob->name()+"没有任何修为\n";
+    return msg;
+}
+int help(object me)
+{
+    write(@HELP
+    指令格式：
+    makedoc 路径名 -种类名
+    例如：makedoc /d/city/yangzhou -npc
+HELP);
+    return 1;
+}        

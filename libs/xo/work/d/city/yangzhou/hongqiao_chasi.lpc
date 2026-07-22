@@ -1,0 +1,210 @@
+// Room: /d/city/yangzhou/hongqiao_chasi.c
+
+inherit ROOM;
+#include <ansi.h>
+string look_record();
+
+void create()
+{
+    set("short", YEL"虹桥茶肆"NOR);
+    set("long", @LONG
+茶楼西边面河围以朱栏，摆有数张茶几，上置盆景花木，数名儒生模样的客
+人在品茶闲谈。南墙挂着几幅字画，中悬巨幅扇面。中间摆着两张海梅方桌，各
+配四张白瓷凳。此处闲静淡雅，当是休栖之佳处。近来茶楼隔了几个单间供茶客
+们闲聊用，边上挂着一块牌子。
+LONG
+    );
+    set("chashi", 1);
+    set("no_clean_up", 0);
+    set("no_kill", "yangzhou");
+
+    set("objects", ([ /* sizeof() == 1 */
+        __DIR__"npc/zhengqi" : 1,
+    ]));
+    set( "detail", ([
+        "牌子" : (: look_record :),
+    ]) );
+    set("exits", ([ /* sizeof() == 2 */
+        "southwest" : __DIR__"shili_changjie3",
+        "north" : __DIR__"hongqiao_jie",
+    ]));
+
+    setup();
+}
+
+void init()
+{
+    add_action( "do_build", ({ "build", "jianli" }) );
+    add_action( "do_enter", ({ "enter", "jinru" }) );
+}
+
+string look_record()
+{
+    string str, *id;
+    object record, chatroom, builder;
+    mapping owner;
+    int i;
+
+    record = new( MISC_DIR "record" );
+    //Qyz 
+    // to trill:
+    //为了避免出错，暂时将这里直接返回
+    if ( !record || !record->restore() || 1 )
+    {
+        return "一块光光的牌子，什么也没写。\n";
+    }
+    else
+    {
+        owner = record->query( "owner" );
+        id = keys( owner );
+        if ( !sizeof( id ) )
+        {
+            destruct( record );
+            return "一块光光的牌子，什么也没写。\n";
+        }
+        str = "    本茶肆现已有的聊天室：\n";
+        for ( i = 0; i < sizeof( id ); i ++ )
+        {
+            chatroom = record->query( "owner/" + id[ i ] );
+            builder = chatroom->query_temp( "owner" );
+            str = sprintf( "%s    %s(%s)建立的%s    \n    聊天主题：%s\n", str,
+                builder->name(), builder->query( "id" ), 
+                chatroom->query( "short" ), chatroom->query( "title" ) );
+        }
+    }
+    return str;
+}
+
+int do_build(string arg)
+{
+    object me = this_player();
+    object chatroom, record;
+    
+    if ( !me->query( "can_build_chatroom" ) && !wizardp( me ) )
+        return 0;
+    if ( !record = new( MISC_DIR "record" ) )
+    {
+        write( "not find record...:-( \n" );
+        return 0;
+    }
+    // 记录谁创建了一个chatroom，该chatroom归他所有。
+    record->restore();
+    if ( record->query( "owner/" + me->query( "id" ) ) )
+    {
+        write( "你已经有了你自己的聊天室了。\n" );
+        destruct( record );
+        return 1;
+    }
+    if ( !chatroom = new( MISC_DIR "chatroom" ) )
+    {
+        write( "build fail...:-( \n" );
+        return 0;
+    }
+    record->set( "owner/" + me->query( "id" ), file_name( chatroom ) );
+    record->save();
+    destruct( record );
+    chatroom->set_temp( "owner", me );
+    write( @MSG
+---------------------------------------------------------------------
+你想对你创建的聊天室起什么名字？
+MSG
+    );
+    write( "->" );
+    input_to( "get_chatroom_short", chatroom );
+    return 1;
+}
+
+int get_chatroom_short( string msg, object chatroom )
+{
+    if ( msg && strlen( msg ) < 2 )
+    {
+        write( "你输入的聊天室名字不合要求。请重新输入。\n->" );
+        input_to( "get_chatroom_short", chatroom );
+        return 1;
+    }
+    else if ( msg )
+        chatroom->set( "short", msg );
+    write(@MSG
+---------------------------------------------------------------------
+MSG
+    );
+    write( msg + "的聊天主题是什么？\n->" );
+    input_to( "get_chatroom_title", chatroom );
+    return 1;
+}
+
+int get_chatroom_title( string msg, object chatroom )
+{
+    if ( msg && strlen( msg ) < 2 )
+    {
+        write( "你输入的聊天主题不合要求。请重新输入。\n->" );
+        input_to( "get_chatroom_title", chatroom );
+        return 1;
+    }
+    if ( !msg || msg == "" ) msg = "大家先随便聊聊吧。";
+    chatroom->set( "title", msg );
+    write( "聊天室创建完毕！\n" );
+    return 1;
+}
+
+int do_enter( string arg )
+{
+    object record, chatroom, me;
+    mapping owner;
+    string *owner_id, short, room_name;
+    int i;
+
+    me = this_player();
+    if ( !arg ) arg = me->query( "id");
+    if ( !record = new( MISC_DIR "record" ) )
+    {
+        write( "not find record...\n" );
+        return 0;
+    }
+    record->restore();
+    owner = record->query( "owner" );
+    owner_id = keys( owner );
+    for( i = 0; i < sizeof( owner_id ); i ++ )
+    {
+        if ( owner_id[ i ] == arg )
+        {
+            room_name = owner[ arg ];
+            if ( find_object( room_name ) )
+            {
+                chatroom = find_object( room_name );
+            }
+            else
+            {
+                record->delete( "owner/" + arg );
+                record->save();
+                destruct( record );
+                write( "没有你想进入的那间聊天室。\n" );
+                return 1;
+            }
+            if ( chatroom->query( "immortal" ) )
+            {
+                write( "那是神仙建立的供神仙们会谈用的，现在不欢迎凡人入内。\n" );
+                return 1;
+            }
+            if ( chatroom->query( "prative" ) && 
+                !chatroom->query( "invited/" + me->query( "id" ) ) )
+            {
+                write( "那是私人聊天室，而你又未被邀请，所以你不能进去。\n" );
+                destruct( record );
+                return 0;
+            }
+            short = chatroom->query( "short" );
+            message( "vision", me->query( "name" ) + "离开这里，去" + 
+                short + "。\n", environment( me ), ({ me }) );
+            tell_object( me, "你进入了" + short + "。\n" );
+            me->move( chatroom );
+            message( "vision", me->query( "name" ) + "进入了这里。\n", 
+                environment( me ), ({ me }) );
+            destruct( record );
+            return 1;
+        }
+    }
+    write( "你想进入的聊天室还没有创建。\n" );
+    return 1;
+}
+

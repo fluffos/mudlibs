@@ -1,0 +1,245 @@
+// who.c
+// last modify 1997
+// Qyz..增加一个关于family的敌人的信息。
+// nerd : Add intermud functions.
+// nerd 98-9-18, add new functions to user levels...
+// changed by tea 10.16.98
+
+#include <ansi.h>
+#include <net/daemons.h>
+
+#define OPTION_LONG 0x1
+#define OPTION_FAMILY 0x2
+//#define OPTION_WIZARD 0x4
+#define OPTION_ENEMY  0x8
+//#define OPTION_SORTID 0x16
+
+inherit F_CLEAN_UP;
+
+string * colors = ({ GRN, RED, YEL, BLU, MAG, CYN });
+string * levels = ({ "神    仙", "神的化身", "高级玩家", "普通玩家","新    手" });
+
+string GetShort(object ob)
+{
+    return( ob->query("name")+"("+ob->query("id")+")" );
+}
+
+void create() { seteuid(getuid()); }
+
+string Line()
+{
+    return "\n"+repeat_string( "-=", 35 ) + "-";
+}
+
+string Header( int option )
+{
+    string tmp;
+    tmp = sprintf( "目前一共有"GRN"%s"NOR"位玩家连线中，",
+                chinese_number(sizeof(users())) );
+    if ( option & OPTION_ENEMY )
+        tmp += "其中本门公敌有：";
+    else if ( option & OPTION_FAMILY )
+        tmp += "其中同门有：";
+    else
+        tmp += "线上的玩家如下：";
+    tmp = center(tmp) + "\n";
+    tmp = center( GRN + "◎ " + mud_name() +" ◎" + NOR , 72) + "\n"
+            + tmp;
+    tmp += Line();
+    return tmp;
+}
+
+string Tail()
+{
+    string cmds, lines;
+    string tmp = Line();
+    sscanf( query_load_average(), "%s cmds/s, %s comp lines/s", cmds, lines );
+    tmp += sprintf("\n系统负担：平均每秒%s条指令，编译%s行程序。\n", cmds, lines );
+    return tmp;
+}
+
+// print a user array.
+// list : object array of users.
+varargs string PrintUser(object * list, int status, int flag)
+{
+    int j;
+    string str;
+    string my_fam = this_player()->query("family/family_name");
+    if ( ! sizeof( list ) )
+        return "";
+
+    str = "\n" + BBLK + colors[status] + center(levels[status],72) + "\n" + NOR;
+    for ( j = 0; j< sizeof(list); j++ )
+    {
+//        name = sprintf( "%s(%s)", list[j]->name( 1 ),
+//            capitalize( list[j]->query( "id" ) ) );
+        if ( flag & OPTION_LONG )
+            str += sprintf("%s %-60s\n", RANK_D->query_rank(list[j]), list[j]->short());
+        else if ( flag & OPTION_ENEMY )
+        {
+            int qtt = (int) FAMILY_D->query_enemy_quantity(my_fam,list[j]->query("id"));
+            str += sprintf("%s %-50s仇恨度：%s%s\n", RANK_D->query_rank(list[j]),
+                    list[j]->short(),chinese_number(qtt/100),(j%3 == 2 ? "\n" : "") );
+        }
+        else // short :)
+        {
+            str += sprintf("%-25s%s", GetShort(list[j]), (j % 3 == 2 ? "\n" : ""));
+        }
+    }
+    if (j % 3 && ( ! flag & OPTION_LONG ) ) str += "\n";
+    return str;
+}
+
+mixed main(object me, string arg)
+{
+    string  str, my_fam, mud;
+    object *list, * rest;
+    int option;
+
+    option = 0;
+    if ( arg )
+    {
+        if ( arg[0] == '@' )
+        {
+            if (! mud = INTERMUD_D->GetMudName( arg[1..] ) )
+                return notify_fail("目前在列表中没有这个Mud。\n");
+            write( "网络请求已经发出，请稍候。\n");
+            INTERMUD_D->eventSendWhoRequest( mud );
+            return 1;
+        }
+        foreach ( string s in explode(arg, " ") )
+        {
+            switch(s)
+            {
+                case "-l": option |= OPTION_LONG;     break;
+                //case "-w": option |= OPTION_WIZARD;    break;
+                case "-e": option |= OPTION_ENEMY;     break;
+                case "-f": option |= OPTION_FAMILY;    break;
+                default:
+                    return notify_fail("指令格式：who [-l] [-e] [-f]\n");
+            }
+        }
+    }
+
+    // check if we have family
+    if ( option & ( OPTION_FAMILY | OPTION_ENEMY ) )
+    {
+        my_fam = me->query("family/family_name");
+        if ( !my_fam )
+             return notify_fail("你现在还没有门派呢。\n");
+    }
+
+    // Get a list of the visible user
+    list = filter ( users(), (: environment($1) && this_player()->visible($1) :) );
+
+//    if ( option & OPTION_WIZARD )
+//        list = filter( list, (: wizardp :) );
+    if ( option & OPTION_FAMILY )
+        list = filter( list, (: this_player()->is_tongmen_of($1) :) );
+    if ( option & OPTION_ENEMY )
+    {
+        list = filter( list, function(object ob, string my_fam)
+            {
+                string your_id = ob->query("id");
+                if (!FAMILY_D->is_family_enemy( my_fam, your_id) )
+                    return 0;
+                if (!FAMILY_D->query_enemy_quantity(my_fam,your_id))
+                    return 0;
+                return 1;
+            }, my_fam );
+    }
+    if ( !sizeof(list) )
+        return notify_fail("没有你所要求的玩家信息。\n");
+    // O.K. 已经获得了所需打印的玩家列表。
+
+    // Sort the IDs.
+    list = sort_array( list, (: $1->query("id") > $2->query("id")?1:-1 :) );
+
+/* 
+    if ( option & OPTION_ENEMY )
+        tmp += "本门公敌有：";
+    else if ( option & OPTION_FAMILY )
+        tmp += "同门有：";
+    else
+        tmp += "：";
+    str += center( tmp, 70 ) + "\n\n";
+    if ( option & OPTION_WIZARD )
+        str += "神仙有：\n";
+    else if ( option & OPTION_ENEMY )
+        str += "\n";
+    else if ( option & OPTION_FAMILY )
+        str += "同门有：\n";
+    else
+        str += "玩家有：\n";
+    str += repeat_string( "-=", 35 ) + "-\n";
+*/
+    str = Header(option);
+    list = list - ( rest = filter(list, (:wizardp:) ) );
+    str += PrintUser( rest, 0, option );
+    list = list - ( rest = filter(list,(: avatarp :) ) );
+    str += PrintUser( rest , 1, option );
+    list = list - ( rest = filter(list, (:high_mortalp:) ) );
+    str += PrintUser( rest , 2, option );
+    list = list - ( rest = filter(list, (: newbiep :) ) );
+    str += PrintUser( list , 3, option );
+    str += PrintUser( rest , 4, option );
+//    if ( !(option & OPTION_SORTID) )
+   // {
+/*        if ( (int)me->query("gin") < 30 && !wizardp(me))
+            return notify_fail("你的精神太差了，没有办法得知其他玩家的详细资料。\n");
+        me->receive_damage("gin", 10);
+*/
+/*        foreach ( object * guys in ({ wizards, avatars, hms, list, newbies }) )
+        {
+            if ( !sizeof(guys) )
+                continue;
+
+            if ( !(option & OPTION_ENEMY) )
+            {
+                for ( j=0; j< sizeof(list); j++ )
+                {
+                    name = sprintf( "%s(%s)", list[j]->name( 1 ),
+                        capitalize( list[j]->query( "id" ) ) );
+                    str = sprintf("%s%-25s%s", str, name, (j % 3 == 2 ? "\n" : ""));
+                }
+                if (j % 3 ) str += "\n";
+            }
+            else
+            {
+                for ( j=0; j<sizeof(list); j++)
+                {
+                    qtt = (int) FAMILY_D->query_enemy_quantity(my_fam,list[j]->query("id"));
+                    name = sprintf( "%s(%s)", list[ j ]->name( 1 ),
+                        capitalize( list[j]->query( "id" ) ) );
+                    str = sprintf( "%s%-25s仇恨度： %10s点\n", str, name,
+                        chinese_number(qtt/100) );
+                }
+            }
+        }
+    }
+    else        // we have option long ...
+    {
+        foreach( object ppl in list)
+            str += sprintf("%s %-60s\n", RANK_D->query_rank(ppl), ppl->short(1) );
+    }*/
+    str += Tail();
+    me->start_more(str);
+    return 1;
+}
+
+int help(object me)
+{
+write(@HELP
+指令格式 : who [-l | -e | -f]
+
+这个指令可以列出所有在线上的玩家。
+
+-l 列出线上所有的玩家的全部信息。
+-e 列出线上你所在门派的敌人。
+-f 列出线上你的同门。
+
+相关指令： finger
+HELP
+    );
+    return 1;
+}

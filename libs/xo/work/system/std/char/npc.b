@@ -1,0 +1,634 @@
+// filename : /std/char/npc.c
+
+#include <command.h>
+#include <localtime.h>
+
+inherit CHARACTER;
+inherit F_CLEAN_UP;
+inherit F_NAMEDATA;
+
+static int last_scheduled_time_tag = 0;
+
+static string *reject_msg = ({
+    "说道：您太客气了，这怎么敢当？\n",
+    "像是受宠若惊一样，说道：请教？这怎么敢当？\n",
+    "笑着说道：您见笑了，我这点雕虫小技怎够资格「指点」您什么？\n",
+});
+
+static string *refuse_msg = ({
+    "说道：这位$U，应当是$M向您请教才是。\n",
+});
+
+// Function Prototypes
+string get_reject_msg();
+string get_refuse_msg();
+void SetTitle();
+
+////////////////////////////////////////////////////////////////////////////
+
+void init()
+{
+	::init();
+	if ( clonep() )
+        CHANNEL_D->register_relay_channel("chat");
+}
+
+mixed carry_object(string file)
+{
+	object ob;
+
+	// Don't let master copy clone equips
+	if( !clonep() ) return VOID_OB;
+
+	if( !objectp(ob = new(file)) ) return 0;
+
+	// Support of uniqueness. 
+	if( ob->is_unique() &&  UNIQUE_D->had_cloned( ob ) )
+	{   
+	    destruct( ob );
+	    return 0;
+	}
+	if( ob->violate_unique() ) ob = ob->create_replica();
+	if( !ob ) return VOID_OB;
+
+	ob->move(this_object());
+	return ob;
+}
+
+object add_money(string type, int amount)
+{
+	object ob;
+
+	ob = carry_object( CLONE_DIR + "money/" + type );
+	if ( !ob ) return 0;
+	ob->set_amount( amount );
+}
+
+void set_hp( string type, int count )
+{
+   if ( type != "kee" && type != "gin" && type != "sen" )
+        error("invalue type passed to function set_hp");
+   set(type, count );
+   set("eff_" + type, count );
+   set("max_" + type, count );
+}
+
+
+int accept_fight(object who)
+{
+	string att;
+	int gin, max_gin, kee, max_kee, sen, max_sen;
+
+	att = query( "attitude" );
+
+	if ( is_fighting() )
+		switch( att )
+		{
+		case "heroism":
+			command( "say 哼！出招吧！\n" );
+			break;
+
+		default:
+			command( "say 想倚多为胜，这不是欺人太甚吗！\n" );
+			return 0;
+		}
+
+	gin = query( "gin" );
+	max_gin = query( "max_gin" );
+	kee = query( "kee" );
+	max_kee = query( "max_kee" );
+	sen = query( "sen" );
+	max_sen = query( "max_sen" );
+	if ( gin * 100 / max_gin >= 90 &&
+		 kee * 100 / max_kee >= 90 &&
+		 sen * 100 / max_sen >= 90 )
+	{
+		switch( att )
+		{
+		case "friendly":
+			command( "say " + RANK_D->query_self( this_object() )
+					+ "怎麽可能是" + RANK_D->query_respect( who )
+					+ "的对手？\n" );
+			return 0;
+	
+		case "aggressive":
+		case "killer":
+			command( "say 哼！出招吧！\n" );
+			break;
+
+		default:
+			if ( !is_fighting() )
+				command( "say 既然" + RANK_D->query_respect( who )
+						+ "赐教，" + RANK_D->query_self( this_object() )
+						+ "只好奉陪。\n" );
+		}
+		return 1;
+	}
+	else
+		return 0;
+}
+
+// 程序结构暂时先用 accept_fight 的
+int accept_bihua( object who )
+{
+	string att;
+	int gin, max_gin, kee, max_kee, sen, max_sen;
+
+	att = query( "attitude" );
+	if ( is_fighting() )
+		switch( att )
+		{
+		case "heroism":
+            return 1;
+
+		default:
+			return 0;
+		}
+
+	gin = query( "gin" ); max_gin = query( "max_gin" );
+	kee = query( "kee" ); max_kee = query( "max_kee" );
+	sen = query( "sen" ); max_sen = query( "max_sen" );
+	if ( gin * 100 / max_gin >= 80 &&
+		 kee * 100 / max_kee >= 80 &&
+		 sen * 100 / max_sen >= 80 )
+	{
+        if( !accept_fight( who ) )
+            return 0;
+		switch( att )
+		{
+		case "friendly":
+			return 0;
+	
+		case "aggressive":
+		case "killer":
+		default:
+            return 1;
+		}
+	}
+	else
+		return 0;
+}
+
+// 简单起见, 先用 accept_bihua 来判断
+int accept_duilian( object who )
+{
+    return accept_bihua( who );
+}
+
+// 别人向我们请教的时候将调用这个函数, 在这里, 我们判断双方是否
+// 同门, 如果不是, 就不教. 特殊的 NPC 可以重载这个函数来做一些
+// 前提条件的判断.
+int valid_teach( object you, string skill )
+{
+    object me;
+    mapping my_family, your_family;
+    int my_gen, your_gen, my_jibie;
+
+    me = this_object();
+    // 不会就不教啦, 不然有些问题
+
+    // Qyz 
+    // 关于会不会这门功夫的判断还是放到qingjiao.c里判断比较合适
+    if ( !me->is_tongmen_of( you )  )
+    {
+        notify_fail( me->name() + get_reject_msg() );
+        return 0;
+    }
+    my_family = me->query( "family" );
+    your_family = you->query( "family" );
+    my_gen = my_family[ "generation" ];
+    your_gen = your_family[ "generation" ];
+    if ( my_gen > your_gen )
+    {
+        string temp = get_refuse_msg();
+        temp = replace_string( temp, "$U", you->get_tongmen_guanxi( me ) );
+        temp = replace_string( temp, "$M", me->get_tongmen_guanxi( you ) );
+        notify_fail( me->name() + temp );
+        return 0;
+    }
+    return 1;
+}
+
+// This function is called by the reset() of the room that creates this
+// npc. When this function is called, it means the room demand the npc
+// to return its startroom.
+int return_home(object home)
+{
+	object env, this;
+
+	env = environment();
+	this = this_object();
+
+	// Are we at home already?
+	if ( !env || env == home )
+		return 1;
+
+	// Are we able to leave?
+	if ( !living( this ) ||	is_fighting() ||
+		 !mapp( env->query( "exits" ) ) ) 
+	{
+		return 0;
+	}
+
+	// Leave for home now.
+	message( "vision", this->name() + "急急忙忙地离开了。\n", env, this );
+	return move( home );
+}
+
+// This is the chat function dispatcher. If you use function type chat
+// message, you can either define your own functions or use the default
+// ones.
+int chat()
+{
+	string *msg;
+	int chance, rnd;
+
+	if ( !environment() )
+		return 0;
+
+	chance = query( is_fighting() ? "chat_chance_combat" : "chat_chance" );
+	if ( !chance )
+		return 0;
+
+	msg = query( is_fighting() ? "chat_msg_combat": "chat_msg" ); 
+	if ( arrayp( msg ) )
+	{
+		if (( random( 100 ) < chance ) && sizeof( msg ))
+		{
+			rnd = random( sizeof( msg ) );
+			if ( stringp( msg[ rnd ] ) )
+				say( msg[ rnd ] );
+			else if ( functionp( msg[ rnd ] ) )
+				return evaluate( msg[ rnd ] );
+		}
+		return 1;
+	}
+}
+
+// 重入 heart_beat 来实现 NPC 的 chat 和 schedule
+void heart_beat()
+{
+	mapping schedule;
+
+    // NPC 的 chat 
+	if( living(this_object()) && !is_busy() ) 
+	{
+		chat();
+		if( !this_object() ) return;
+	}
+
+    // NPC 的 schedule
+	if( clonep(this_object()) && mapp(schedule = query("schedule")) )
+	{
+		mapping gt;
+		int time_tag;
+
+		gt = NATURE_D->game_time(1);
+		time_tag = gt[LT_HOUR] * 100 + (gt[LT_MIN] / 10) * 10;
+		if( time_tag != last_scheduled_time_tag )
+		{
+			evaluate(schedule[time_tag]);
+			last_scheduled_time_tag = time_tag;
+		}
+		if( !this_object() ) return;
+	}
+	
+	::heart_beat();
+}
+
+// Default chat function: Let the npc random move to another room.
+int random_move()
+{
+	mapping exits;
+	string *dirs, dir;
+	
+	exits = environment()->query( "exits" );
+	command( "open door" );
+	if ( !mapp( exits ) ) return 0;
+	dirs = keys( exits );
+	dir = dirs[ random( sizeof( dirs ) ) ];
+    while ( exits[ dir ]->query( "refuse_npc" ) )
+    {
+        dir = dirs[ random( sizeof( dirs ) ) ];
+    }
+	command( "go " + dir );
+}
+
+// Default chat function: Let the npc cast his/her enabled spells
+void cast_spell( string spell )
+{
+	string spell_skill;
+
+	spell_skill = query_skill_mapped( "spells" );
+	if ( stringp( spell_skill ) )
+		SKILL_D( spell_skill )->cast_spell( this_object(), spell );
+}
+
+// Default chat function: Let the npc exert his/her enabled force
+int exert_function(string func)
+{
+	string force_skill;
+
+	force_skill = query_skill_mapped( "force" );
+	if ( stringp( force_skill ) )
+		SKILL_D( force_skill )->exert_function( this_object(), func );
+}
+
+// Default chat function: Let the npc perform special action with 
+// his/her enabled martial art
+int perform_action(string action)
+{
+	object weapon;
+	string skill, act;
+
+	if ( sscanf( action, "%s.%s", skill, act ) != 2 )
+		return 0;
+	skill = query_skill_mapped( skill );
+	if ( stringp( skill ) )
+		return SKILL_D( skill )->perform_action( this_object(), act );		
+}
+
+// npc对一些semote有反应，不再是任人欺负的
+// 木头人了。
+// 有反应的emote :
+// kick trip hammer admire
+// loveu love loveshoe qmarry
+// interest poke
+void relay_emote(object me, string verb)
+{
+	string player_id, object_id, att, relay_msg;
+	object ob = this_object();
+
+	if( !userp(me) ) return;
+    if( !me->can_act()) return;
+	object_id = ob->query("id");
+	player_id = me->query("id");
+	att = query( "attitude" );
+
+	// 如果这个npc身上设了emote这个mapping
+	// 对一些emote有特殊的反应，
+	// 这个反应可以是个string，也可以是个function
+
+	if ( relay_msg = query("emote/" + verb ) )
+	{
+		if ( stringp( relay_msg ) )
+			message_vision( relay_msg + "\n", ob, me );
+		else if ( functionp( relay_msg ) )
+			return evaluate( relay_msg );
+		return;
+	}
+
+	if ( random(100) < 30 ) return ;
+	switch(verb)
+	{
+	case "hit" :
+		if ( id("kids") || id("kid") || id("ya huan") )
+		{
+			command("chat* qifu " + player_id );
+			command("hit " + player_id );
+			return;
+		}
+    	switch ( att )
+    	{
+    	case "friendly" : case "peaceful" :
+			command("shake " + player_id);
+    		break;
+    	case "heroism" :
+ 			command( "say 这位" + RANK_D->query_respect(me) + "，你为什么要打我？会痛的！\n" );
+			command( "hammer " + player_id);
+			break;
+		case "killer" :
+			message_vision("$N恶狠狠对$n骂道：你小子是不要命了吧，惹到我的头上来了。\n", ob, me);
+			command( "hammer " + player_id );
+			break;
+		default :
+			message_vision("$N狠狠瞪了$n一眼。\n", ob, me);
+			command( "kick " + player_id );
+			break;
+		}
+		break;
+
+    case "kick" :
+		if ( id("kids") || id("kid") || id("ya huan") )
+		{
+			command("chat* qifu " + player_id );
+			command("trip " + player_id );
+			return;
+		}
+    	switch ( att )
+    	{
+    	case "friendly" : case "peaceful" :
+    		message_vision( "$N微微对$n一笑，一副不置可否的样子。\n", ob, me );
+    		break;
+    	case "heroism" :
+			command( "say 这位" + RANK_D->query_respect(me) + "，你为什么要踢我一脚？" );
+			command( "kick " + player_id);
+			break;
+		case "killer" :
+			message_vision("$N恶狠狠对$n骂道：你小子是不要命了吧，惹到我的头上来了。\n", ob, me);
+			command( "hammer " + player_id );
+			break;
+		default :
+			message_vision("$N狠狠瞪了$n一眼。\n", ob, me);
+			command( "kick " + player_id );
+			break;
+		}
+		break;
+	case "hammer" :
+		if ( id("kids") || id("kid") || id("ya huan") )
+		{
+			command("chat* qifu " + player_id );
+			command("trip " + player_id );
+			return ;
+		}
+		switch( att )
+		{
+		case "killer" :
+			message_vision("$N恶狠狠对$n骂道：你小子是不要命了吧，惹到我的头上来了。\n", ob, me);
+			command("hammer " + player_id);
+			break;
+		default :
+			command("pure");
+			command("faint " + player_id );
+			break;
+		}
+		break;
+	case "admire" :
+		switch ( att )
+		{
+		case "friendly" : case "peaceful" :
+			command("smile " + object_id );
+			break;
+		case "heroism" :
+			command("haha " + object_id );
+			break;
+		case "killer" :
+			command("look " + player_id );
+			break;
+		default :
+			command("xixi " + player_id );
+			break;
+		}
+		break;
+	case "interest" :
+		switch ( att )
+		{
+		case "killer" :
+			command("grin " + player_id );
+			break;
+		case "heroism":
+			command("kick " + object_id );
+			break;
+		default :
+			command("shake " + object_id );
+			break;
+		}
+		break;
+	case "loveu" : case "love" : case "loveshoe" : case "qmarry" :
+		switch ( query("gender") )
+		{
+		case "男性" :
+			if ( (string)me->query("gender") == "男性" )
+				command("chat* laugh1 " + player_id);
+			else
+				command("interest " + player_id);
+			break;
+		case "女性" :
+			if ( (string)me->query("gender") == "男性" )
+			{
+				command("shake " + player_id);
+				if ( (int)me->query_per() > 25 
+				&& (int)ob->query("age") < 30 && (int)ob->query("int") > 22 )
+					command("sing");
+			}
+			else 
+				command("? " + player_id);
+			break;
+		}
+		break;
+	case "poke" :
+		switch( att )
+		{
+		case "friendly" : case "peaceful" :
+			command("? " + player_id);
+			break;
+		default :
+			command("poke " + object_id);
+			break;
+		}
+		break;
+	case "trip" :
+		if ( id("kids") || id("kid") || id("ya huan") )
+		{
+			command("chat* qifu " + player_id );
+			command("kick " + player_id );
+			return ;
+		}
+		switch ( att )
+		{
+		case "friendly" : case "peaceful" :
+			command("shake " + player_id );
+			break;
+		default :
+			command("kick " + player_id );
+		}
+	default :
+		command( "? "+ player_id );
+		break;
+	}
+}
+
+//////////////////////////////////////////////////////////////////////////
+// Internal Function
+
+private string get_reject_msg()
+{
+    return reject_msg[ random( sizeof( reject_msg ) ) ];
+}
+
+private string get_refuse_msg()
+{
+    return refuse_msg[ random( sizeof( refuse_msg ) ) ];
+}
+
+//Qyz 用于回答玩家关于功夫的问题。
+int tell_skills( object you )
+{
+    mapping skills;
+    string *sname, att,skill; 
+    object me;
+    mapping my_family, your_family;
+    int my_gen, your_gen;
+    
+    me = this_object();
+    att = query("attitude");
+    skills = query_jibie_map();
+
+    if ( !me->is_tongmen_of( you ) )
+    {
+       	switch ( att )
+      	{
+           	case "friendly" : case "peaceful" :
+		    	message_vision( me->name() + 
+		    	"对$N笑着说：“见笑了，我哪里会什么武功呢，你还是去问别人吧。”\n",you);
+    		    break;
+    	    case "heroism" :
+    	        message_vision( me->name() +
+    	        "对$N冷淡地摇摇头说：“你并非本门中人，多问这些干甚？”\n",you);
+    			break;
+	    	case "killer" : case "aggressive" :
+		    	message_vision( me->name() + 
+		    	"恶狠狠对$N骂道：“你小子问这个干什么？想动手吗？”\n",you);
+    			break;
+	    	default :
+		    	message_vision("$N冷冷看了$n一眼，并不说话。\n", you, me);
+    			break;
+	    	}
+            return 1;
+    }                                                                   
+    my_family = me->query( "family" );
+    your_family = you->query( "family" );
+    my_gen = my_family[ "generation" ];
+    your_gen = your_family[ "generation" ];
+    if ( my_gen > your_gen )
+    {
+        message_vision("$N恭恭敬敬地对$n说：“我的功夫嘛，哪里比得上您呢？”\n",me ,you);
+        return 1;
+    }
+    sname = keys(skills);   
+    skill = sname[random(sizeof(sname))];
+    message_vision("$N对着$n点了点头：“你在本门可以学习" + 
+                    to_chinese(skill)+"(" + skill + ")这门武功。”\n",me,you);        
+    return 1;
+}
+
+
+int accept_special_object( object who, object ob )
+{
+    mapping quest;
+    string task, name, dest, msg;
+    if( !quest = who->query("quest") ) return 0;
+    
+    task = quest["quest"];
+    if( !sscanf( task, "送%s给%s", name, dest )== 2 ) return 0;
+
+    if( name != ob->name() ||
+        ob->is_character() ||
+        dest != this_object()->name() ) return 0;
+    if( task == who->query("done_quest")) return 0;
+    
+    if( ob->be_given_to_dest( this_object(), who ) ) {}
+    
+    if( msg = quest["send_msg"] )
+    tell_object( who, msg );
+    else 
+    message_vision( "$N对着$n点了点头说: 好了,你先回去覆命吧.\n", 
+                    this_object(), who );
+    who->set("done_quest", task );
+    return 1;
+}
+
+    
+
+    
+    

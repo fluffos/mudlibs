@@ -1,0 +1,212 @@
+// XUANWU_D
+// xuanwud.c 
+// by lnwm 98-09-06
+
+// 思路：1。控制整个玄武堂的机关和npc，当有闯入者
+//          或者出现叛徒时统一行动。
+//          如：停止学功夫开始一致对外等。。。
+//       2。控制整个玄武堂的作息和休息制度。
+//          当然包括npc的休息。
+//       3。学功夫的控制，包括每个级别的玩家   
+//          可以修的工夫和等级，以及下山的控制。
+//  使警报消失有两种方法：a。躲到一个不防护的房间。b。die。grin 
+//                        c。提供一个跳下去的地方。
+
+
+#include <ansi.h>
+
+#define ROOM_NUMBER 4
+#define XUANWU_DIR "/d/zuzhi/yipin_tang/xuanwu_tang/"
+
+inherit ITEM;
+
+private string *RoomNames = allocate( ROOM_NUMBER );
+private int InAlarm = 0;
+
+void SetAlarm( int NewALarm );
+int QueryAlarm();
+void CheckEnemy();
+void EnemyLeave();
+void KillEnemy( object room );
+void KillEnemyInRoom( object me );
+int GetLongBeepTime();
+int GetShortBeepTime();
+
+void SetAlarm( int NewAlarm )
+{
+    InAlarm = NewAlarm;
+}
+
+int QueryAlarm()
+{
+    return InAlarm;
+}
+
+void create()
+{
+    int i;
+    string *name_list = ({
+//        "ceting", "chufang", "fanting", "menfang", "neitang", "neiyuan_men", "shanlu",
+//        "shanpo", "tingyuan1", "tingyuan2", "tingyuan3", "tingyuan4", "weishifang1",
+//        "weishifang2", "wuchang1", "wuchang2", "wuchang3", "wuchang4", "xiaolu1",
+//        "xiaolu2", "xiuxishi1", "xiuxishi2", "xiuxishi3", "xuanya1", "xuanya3",
+//        "xuanya4", "yanwu_ting", "zhangfang", "zhengmen", "zhengting", "diaolan"
+            "xuanya3","wuchang4","xuanya1","diaolan"    
+        });
+
+    set_name("玄武堂控制台",({"xuanwud"}) );
+    set("long" , "这里是玄武堂的总控台，对全堂的指令都是从这里发出来的。\n");
+    setup();
+    i=0;
+    foreach ( string name in name_list )
+    {
+        RoomNames[i] = XUANWU_DIR + name;
+        i=i+1;
+    }
+}
+
+void EnemyCome( object enemy_room )
+{
+    tell_room( enemy_room, RED"警报声突然响起，有敌人闯入玄武堂！\n"NOR );
+    SetAlarm( 1 );
+    KillEnemy( enemy_room );
+    CheckEnemy();
+}
+
+void CheckEnemy()
+{
+    int i,flag = 0;
+    object room;
+
+    for( i=0;i<ROOM_NUMBER;i++)
+    {
+        if( !room=find_object( RoomNames[i] ) )
+            room=load_object( RoomNames[i] );
+        foreach( object inv in deep_inventory( room ) )
+        {
+            if( userp( inv ) && inv->query_temp_marks("lnwm/闯入玄武") )
+            {
+                flag = 1;
+                KillEnemy( room );
+            }
+        }
+    }
+    
+    if( !flag )
+    {
+        remove_call_out( "CheckEnemy" );
+        SetAlarm( 0 );
+        EnemyLeave();
+        return;
+    }
+
+    for( i=0;i<ROOM_NUMBER;i++)
+    {
+        if( !room=find_object( RoomNames[i] ) )
+            room=load_object( RoomNames[i] );
+        tell_room( room, RED"警报：玄武堂内有敌人！！\n"NOR );    
+    }
+    remove_call_out( "CheckEnemy" );
+    call_out("CheckEnemy", 15 );        
+    //here need int find_call_out(string funtion_name)? it return's time remaining
+}
+
+void EnemyLeave()
+{
+    object room;
+    int i;
+
+    for( i=0;i <ROOM_NUMBER;i++)
+    {
+        if( !room=find_object( RoomNames[i] ) )
+            room=load_object( RoomNames[i] );
+        foreach( object inv in deep_inventory( room ) )
+        {
+            if( inv->is_xwnpc() )
+            {
+                inv->SetAlarm(0);
+                if( inv->is_wushi() && inv->can_act() 
+                    && inv->query("leave_from")
+                    && inv->query("leave_from") != environment( inv ) )
+                {
+                    tell_room( inv->query("leave_from"), "武士参加完战斗后，又回到原地。\n");
+                    inv->move( inv->query("leave_from") );
+                }
+            }    
+        }
+    }
+}
+
+void KillEnemy( object enemy_room )
+{
+    object room,Guard;
+    int i,Guards = 0,AllGuards = 0;
+    
+    foreach( object inv in deep_inventory( enemy_room ) )
+    {
+        if( inv->is_xwnpc() )
+        Guards++;
+    }
+    AllGuards = Guards;
+
+    for( i=0;i<ROOM_NUMBER;i++)
+    {
+        if( !room=find_object( RoomNames[i] ) )
+            room=load_object( RoomNames[i] );
+        foreach( object inv in deep_inventory( room ) )
+        {
+            if( inv->is_xwnpc() )
+            {
+                inv->SetAlarm(1);
+                inv->clean_up_enemy();
+                if( inv->is_duilianing() )
+                    inv->remove_all_duishou();
+                if( inv->is_wushi() && inv->can_act() && room != enemy_room && AllGuards < 5 )
+                {
+                    tell_room( room, inv->query("name")+"听到警报声，马上飞身冲了出去。\n");
+                    inv->move( enemy_room );
+                    inv->set("leave_from",room);
+                    KillEnemyInRoom( inv );
+                    //该冲去防卫了，那么如果有两个以上的敌人而护卫又不够了怎么办？好象只有new了。
+                    AllGuards++;
+                }    
+            }    
+        }
+    }
+    if( AllGuards < 5 )
+        for(i=0;i<5-AllGuards;i++)
+        {
+            Guard = new(XUANWU_DIR "npc/newwushi");
+            Guard->move( enemy_room );
+            Guard->set("leave_from",enemy_room);
+            KillEnemyInRoom( Guard );
+        }    
+    //呵呵。这样如果敌人乱跑，极端结果是玄武堂的每个房间充满4个护卫武士。:P(也就是120个。faint)
+    AllGuards = 0;
+}
+
+void KillEnemyInRoom( object me )
+{
+    foreach( object inv in all_inventory( environment( me ) ) )
+    {
+        if( userp( inv ) && inv->query_temp_marks("lnwm/闯入玄武") ||
+            userp( inv ) && inv->query_condition("kill_xuanwu")     )
+        {
+            COMBAT_D->fight( inv, me );
+            inv->kill_ob( me );
+            me->kill_ob( inv );
+            me->add_killer( inv );
+            inv->add_killer( me );
+        }   
+    }
+}
+
+int GetLongBeepTime()
+{
+    return query_shichen();
+}
+
+int GetShortBeepTime()
+{
+    return query_month();
+}

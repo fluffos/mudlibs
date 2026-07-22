@@ -1,0 +1,194 @@
+// Filename : /system/feature/move.c
+//
+
+#pragma optimize
+
+#include <dbase.h>
+#include <ansi.h>
+
+private nosave int weight = 0;
+private nosave int encumb = 0, max_encumb = 0;
+
+nomask int query_encumbrance() { return encumb; }
+
+nomask int over_encumbranced() { return encumb > max_encumb; }
+
+nomask int query_max_encumbrance() { return max_encumb; }
+
+nomask void set_max_encumbrance(int e) { max_encumb = e; }
+
+nomask void add_encumbrance(int w)
+{
+	object this = this_object();
+
+	encumb += w;
+	if ( encumb < 0 )
+		log_file( MOVE_LOG, sprintf( "%O encumbrance underflow.\n", this ) );
+	if ( encumb > max_encumb )
+		this->over_encumbrance();
+	if ( environment() )
+		environment()->add_encumbrance( w );
+}
+
+void over_encumbrance()
+{
+	object this = this_object();
+
+	if ( !interactive( this_object() ) )
+		return;
+	tell_object( this, "你的负荷过重了！\n" );
+}
+
+nomask int query_weight() { return weight; }
+
+nomask void set_weight(int w)
+{
+	object env = environment();
+
+	if ( !env )
+	{
+		weight = w;
+		return;
+	}
+	if ( w != weight )
+		env->add_encumbrance( w - weight );
+	weight = w;
+}
+
+// This is the "current" weight of an object, which is used on weight
+// checking in move().
+nomask int weight() { return weight + encumb; }
+
+varargs int move(mixed dest, int silent)
+{
+	object ob, env, this, ppl;
+    object * inv;
+    string str, temp;
+    int i;
+
+	this = this_object();
+	ppl = this_player();
+
+	// If we are equipped, unequip first.
+	if ( query("equipped") && !this->unequip() )
+		return notify_fail("你没有办法取下这样东西。\n");
+
+	// Find the destination ob for moving.
+	if ( objectp(dest) )
+		ob = dest;
+	else if ( stringp(dest) )
+	{
+		call_other( dest, "???" );
+		ob = find_object( dest );
+		if ( !ob )
+		{
+			temp = sprintf( "F_MOVE: 目的 %s 不存在.\n", dest );
+			return notify_fail( temp );
+		}
+	}
+	else
+	{
+		sprintf( temp, "F_MOVE: 非法的目的 %O.\n", dest );
+		return notify_fail( temp );
+	}
+
+	// Check if the destination ob can hold this object.
+	// Beforce checking it, we check if the destination is environment of
+	// this_object() (or environment of its environment). If it is, then
+	// this could be like get something from a bag carried by the player.
+	// Since the player can carry the bag, we assume he can carry the this
+	// object in the bag and encumbrance checking is unessessary.
+	env = this_object();
+	while ( env = environment( env ) )
+		if ( env == ob )
+			break;
+	if ( !env &&
+		 ob->query_encumbrance() + weight() > ob->query_max_encumbrance() )
+	{
+		if ( ob == this )
+			return notify_fail( this->name() + "对你而言太重了。\n" );
+		else
+			return notify_fail( this->name() + "对" +
+						ob->name() + "而言太重了。\n" );
+	}
+
+	// Move the object and update encumbrance
+	if ( environment() )
+    {
+		environment()->add_encumbrance( - weight() );
+        environment()->RemoveAction(this_object());
+    }
+	move_object( ob );
+	ob->add_encumbrance( weight() );
+
+	// If we are players, try look where we are.
+	if ( interactive( this ) &&		// are we linkdead?
+		 living( this ) &&			// are we still concious?
+		 !silent )
+	{
+		str = HIG + environment()->query("short") + NOR + "\n";
+        if ( (int)query( "env/brief" ) == 1 )
+        {
+			inv = all_inventory(environment(this_object()));
+           	for ( i = 0; i < sizeof( inv ); i++ )
+            {
+				if ( (inv[i] == this) || (!this->visible(inv[i])) )
+					continue;
+                str += "  " + inv[i]->short() + "\n";
+            }
+        }
+        if ( query("env/brief") )
+            tell_object( this, str );
+	    else
+	        command( "look" );
+	if ( environment()->welcome_visitor(this) ) {}
+	}
+
+	return 1;
+}
+
+void remove(string euid)
+{
+	object default_ob;
+	object prev, this;
+
+	prev = previous_object();
+	this = this_object();
+	if ( !prev || base_name(prev) != SIMUL_EFUN_OB )
+		error("F_MOVE: remove() 只能被 destruct() simul efun 调用.\n");
+
+	if ( interactive(this) && euid != ROOT_UID && wiz_level(prev) < 3 )
+	{
+		log_file( DESTRUCT_LOG,
+			sprintf( "%s attempt to destruct user object %s (%s)\n",
+				euid, this->query("id"), ctime(time()) ) );
+		error( "你(" + euid + ")不能摧毁其他的使用者。\n" );
+	}
+	else if ( this->query("equipped") )
+	{
+		if ( !this->unequip() )
+			log_file( DESTRUCT_LOG,
+				sprintf( "Failed to unequip %s when destructed.\n",
+					file_name( this ) ) );
+	}
+
+	// We only care about our own weight here, since remove() is called once
+	// on each destruct(), so our inventory (encumbrance) will be counted as
+	// well.
+	if ( environment() )
+		environment()->add_encumbrance( - weight );
+
+	if ( default_ob = this_object()->query_default_object() )
+		default_ob->add( "no_clean_up", -1 );
+}
+
+int move_or_destruct( object dest )
+{
+	object this = this_object();
+
+	if ( userp(this) )
+	{
+		tell_object(this, "你忽然觉得身体没有了依靠，一阵飘飘然然中到了另一个地方。。\n");
+		move(VOID_OB);
+	}
+}

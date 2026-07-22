@@ -1,0 +1,96 @@
+// filename : /feature/food.c
+
+#include <dbase.h>
+#include <name.h>
+#include <ansi.h>
+
+int is_food()
+{ 
+    return 1;
+}
+
+int do_eat()
+{
+    mapping gifts;
+    object this, ppl;
+    string msg, *list;
+    int over_value, i, temp, sign;
+
+    this = this_object();
+    ppl = this_player();
+    if ( !query( "food_remaining" ) )
+        return notify_fail( name() + "已经没什么好吃的了。\n");
+    if ( (int)ppl->query( "food" ) >= (int)ppl->max_food_capacity() )
+    {
+        if( msg = this->query( "over_msg" ) )
+            return notify_fail( msg );
+        else
+            return notify_fail("你已经吃太饱了，再也塞不下任何东西了。\n");
+    }
+
+    ppl->add( "food", query( "food_supply" ) );
+
+    if ( ppl->is_fighting() )
+        ppl->start_busy( 2 );
+
+    // This allows customization of eating effect.
+    if ( this->eat_effect( ppl , this ) == 1 )
+        return 1;
+
+    over_value = this->query( "over_value" );
+    if ( !over_value ) over_value = 0;
+    set( "value", over_value );
+    add( "food_remaining", -1 );
+
+    // hamlet的想法：食物对天赋有影响 (trill)
+    // 可以在food,fruit等加个mapping gifts
+    // 这样对gifts有影响
+    if ( gifts = query("gifts") )
+    {
+        list = keys( gifts );
+        for( i = 0; i < sizeof( list ); i ++ )
+        {
+            ppl->add( "hamlet_food/" + list[ i ], 
+                query("gifts/" + list[ i ] ) );
+            temp = ppl->query( "hamlet_food/" + list[ i ] );
+            sign = ( temp > 0 ) ? 1 : -1 ;
+            temp *= sign;
+            if ( temp >= 1000  && random( 2000 - temp ) == 0 )
+            {
+                ppl->set( "hamlet_food/" + list[ i ], 0 );
+                //如果这个player年纪小<22，就改善先天的天赋
+                //否则 只影响后天的天赋就 query_per()这类了..
+		//现在这个东西太麻烦，而且我们对先天后天的天赋使用没有明确的概念
+		//所以我就把它都改成先天的了。——lala，１９９８－０１－０７
+                if ( ppl->query( list[ i ] ) >= 35
+                    && sign > 0 )
+                    sign = 0;
+                if ( ppl->query( list[ i ] ) <= 10
+                    && sign < 0 )
+                    sign = 0;
+                ppl->add( list[ i ] , sign );
+                tell_object( ppl, YEL
+"由于你日常的饮食习惯而造成了你天赋的改变！\n"
+                NOR );
+            }
+        }
+    }
+
+    if ( !query( "food_remaining" ) )
+    {
+        if ( msg = this->query("end_msg") )
+            message_vision( msg ,ppl,this );
+        else
+            message_vision( "$N将" + name() + "吃得干干净净。\n", ppl );
+        if ( !this->finish_eat( ppl , this ) )  //交给food去加剩余的东西。
+            destruct(this);
+    }
+    else
+    {
+        if ( msg = this->query("eat_msg")  )
+            message_vision( msg , ppl , this );
+        else
+            message_vision("$N拿起" + name() + "咬了几口。\n", ppl);
+    }
+    return 1;
+}

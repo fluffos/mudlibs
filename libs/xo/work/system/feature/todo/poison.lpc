@@ -1,0 +1,159 @@
+
+// poison.c  
+// by lnwm 98/03/31
+
+// 基本想法：毒药有阳性，阴性和中性之分
+//           体内同时种两种类型的毒药，当有互相克制的现象
+//           但毕竟是毒药，当同时中两种类型的毒时，阴阳相消转为毒性相对较低的中性毒药。
+//           中性毒药可看作是体内毒素的存留，不能解消，除非借助其他手段。
+
+//           另外，毒药分对精气神不同的伤害。(gin,kee,sen)
+//           同时还分硬伤和软伤。(receive_wound和recieve_damage)
+
+//           中毒方式则应分为1。涂在兵器上，砍中后引发。(涉及combatd）
+//                           2。放在食物，饮水里。(涉及put,eat,drink等cmds或标准饮食)
+//                           3。散布在空气中，人走进去后引发。(涉及标准房间) 
+//                           4。其他方式。(用add_action使用)
+
+//           考虑毒药的慢发作特性，所有效果都作为condition存在在人身上。
+//           由每次update_condition时判断发作状况。
+
+// this is the inherit file of a ppl;
+
+#include <dbase.h>
+#include <ansi.h>
+#include <poison.h>
+
+int abs(int x); // pig mudos haven't this fun.
+
+class Damage
+{
+    int m_type;
+    int m_hurt;
+}
+
+class Poison
+{
+    int m_ttl;
+    string m_msg;
+    class Damage *m_damage;
+}
+
+private class Poison *poison = 0;
+
+int eventReceivePoison(object what)
+{
+    class Poison temp;
+    if (!what)
+        return 0;
+    if (!temp = what->GetPoison())
+        return 0;
+    if (!poison)
+        poison = ({ temp });
+    else
+        poison += ({ temp });
+    return 1;
+}
+
+int eventOccur()
+{
+    int *damage = ({ 0, 0, 0});
+    int *wound = ({ 0, 0, 0 });
+    object this = this_object();
+    class Damage * tmp = 0;
+    if (!poison)    // we have no poison
+        return 0;
+    if (!this)
+        return 0;
+    foreach( class Poison p in poison)
+    {
+        if ( p->m_ttl-- == 0)
+        {
+            poison -= ({ p });
+            if (!sizeof(poison))
+                poison = 0;
+            continue;
+        }
+        if ( !p->m_damage )
+            continue;
+        tell_object(this,p->m_msg);
+             //按理说,不同时期会有不同表现,不同人还看到不同的东东
+        if (environment(this))
+            tell_object(environment(this),p->m_msg);
+        tmp += p->m_damage; // 先集中所有的Damage info.
+    }
+    if (!tmp)
+        return 0; // should be error
+    foreach( class Damage d in tmp )
+    {
+        int h;
+        int type = d->m_type;
+        h = d->m_hurt;
+        if (!h || !type)
+            continue;
+        if ( type & TYPE_WOUND ) // wound flag
+        {
+            if (type & TYPE_KEE)
+                damage[0] += type & TYPE_YANG ? h : -h;
+            else if (type & TYPE_GIN)
+                damage[1] += type & TYPE_YANG ? h : -h;
+            else if (type & TYPE_SEN)
+                damage[2] += type & TYPE_YANG ? h : -h;
+            else
+                ;
+        }
+        else if ( type & TYPE_DAMAGE )
+        {
+            if (type & TYPE_KEE)
+                wound[0] += type & TYPE_YANG ? h : -h;
+            else if (type & TYPE_GIN)
+                wound[1] += type & TYPE_YANG ? h : -h;
+            else if (type & TYPE_SEN)
+                wound[2] += type & TYPE_YANG ? h : -h;
+            else
+                ;
+        }                        
+    }
+    foreach( class Damage d in tmp )
+    {
+        int h;
+        int type = d->m_type;
+        h = d->m_hurt;
+        if (!h || !type || !type & TYPE_ZHONG )
+            continue;
+        if ( type & TYPE_WOUND ) // wound flag
+        {
+            if (type & TYPE_KEE)
+                damage[0] = h + abs(damage[0]);
+            else if (type & TYPE_GIN)
+                damage[1] = h + abs(damage[1]);
+            else if (type & TYPE_SEN)
+                damage[2] = h + abs(damage[2]);
+            else
+                ;
+        }
+        else if ( type & TYPE_DAMAGE )
+        {
+            if (type & TYPE_KEE)
+                wound[0] = h + abs(wound[0]);
+            else if (type & TYPE_GIN)
+                wound[1] += h + abs(wound[1]);
+            else if (type & TYPE_SEN)
+                wound[2] += h + abs(wound[2]);
+            else
+                ;
+        }
+    }
+    this->receive_damage("kee",damage[0]);
+    this->receive_damage("gin",damage[1]);
+    this->receive_damage("sen",damage[2]);
+    this->receive_wound("kee",wound[0]);
+    this->receive_wound("gin",wound[1]);
+    this->receive_wound("sen",wound[2]);
+    return 1;
+}
+
+int abs(int x)
+{
+    return x>0? x : -x;
+}

@@ -1,0 +1,271 @@
+// Item:xinfang.c
+// By trill
+
+#define EXITROOM        "/d/city/yangzhou/tongsi_jie"
+
+#include <ansi.h>
+inherit ITEM;
+inherit F_SAVE;
+
+int change_description( object );
+private int check_legal_string( string );
+private void save_desc();
+
+void create()
+{
+    restore();
+    set( "short", "新房" );
+    set( "long", "一间空空的屋子，需要重新装修。\n" );
+    set( "not_startroom", 1 );
+    set_max_encumbrance( 40000000 );
+    setup();
+}
+
+string query_save_file()
+{
+    return DATA_DIR + "xinfang";
+}
+
+
+void init()
+{
+    seteuid( getuid() );
+    add_action( "do_change", ({"change", "gaibian" }) );
+    add_action( "do_invite", ({"invite", "yaoqing" }) );
+    add_action( "do_leave", ({ "leave", "likai", "out" }) );
+    add_action( "do_letout", ({ "letout", "ganzou" }) );
+}
+
+int do_change( string arg )
+{
+    string long, my_id, owner_id;
+    object me;
+
+    me = this_player();
+    my_id = me->query( "id" );
+    owner_id = query_temp( "owner_id" );
+    if ( my_id != owner_id && !me->query( "have_married/" + owner_id ) )
+        return 0; 
+    switch ( arg )
+    {
+        case "short" : case "新房名字" :
+            write( @TEXT
+---------------------------------------------------------------------
+你想对你的新房起什么名字？
+TEXT
+            );
+            write( "->" );
+            input_to( "change_short" );
+            break;
+        case "long" : case "新房描述" :
+            write( @TEXT
+---------------------------------------------------------------------
+你想怎样装修你的新房？
+TEXT
+            );
+            write( "->" );
+            long = "";
+            input_to( "change_long", long );
+            break;
+        default :
+            write( @TEXT
+    你能改变房子的如下性质：
+    新房的名字：    gaibian 新房名字
+    新房的描述：    gaibian 新房描述
+TEXT    
+            );
+            break;
+    }
+    return 1;
+}
+
+int change_short( string msg )
+{
+    if ( !check_legal_string( msg ) )
+    {
+        input_to( "change_short" );
+        return 1;
+    }
+    if ( msg && strlen( msg ) < 2 )
+    {
+        write( "你输入的新房名字不合要求。请重新输入。\n->" );
+        input_to( "change_short" );
+        return 1;
+    }
+    else if ( strlen( msg ) > 16 )
+    {
+        write( "你起的新房的名字请控制在8个中文字以内。\n" );
+        return 1;
+    }
+    set( "short", msg );
+    save_desc();
+   write( "Ok. \n" );
+    return 1;
+}
+
+int change_long( string msg, string long )
+{
+    if ( msg=="." )
+    {
+        write( "Ok. \n" );
+        set( "long", long );
+        save_desc();
+        return 1;
+    }
+    if ( !check_legal_string( msg ) )
+    {
+        input_to( "change_long" );
+        return 1;
+    }
+    long = long + msg + "\n";
+    write("->");
+    input_to("change_long", long);
+    return 1;
+}
+
+int do_invite( string arg )
+{
+    object ob, me;
+    string my_id, owner_id;
+
+    me = this_player();
+    my_id = me->query( "id" );
+    owner_id = query_temp( "owner_id" );    
+    if ( my_id != owner_id &&
+        !me->query( "have_married/" + owner_id ) )
+    {
+        return 0;
+    }
+    if ( arg == my_id )
+        return notify_fail( "你邀请自己到自己家去？有没有搞错啊？\n " );
+    if ( !find_player( arg ) )
+    {
+        write( "你确信现在线上有这个玩家吗？\n" );
+        return 1;
+    }
+    ob = find_player( arg );
+    if ( environment( ob ) == environment( me ) )
+    {
+        write( ob->name() + "不就在你的身边吗？\n" );
+        return 1;
+    }
+    ob->set_temp( owner_id + " invited", file_name( environment( me ) ) );
+    tell_object( ob, "\n" + me->name() + "邀请你去" + me->name() + 
+        "的家：" + query( "short" ) + "。\n" );
+    return 1;
+}
+
+int do_letout( string arg )
+{
+    object me, ob;
+    string my_id, owner_id;
+    
+    me = this_player();
+    owner_id = query_temp( "owner_id" ); 
+    if ( my_id != owner_id && !me->query( "have_married/" + owner_id ) )
+        return 0; 
+    if ( !arg ) return notify_fail( "你想赶走谁？\n" );
+    if ( objectp( ob = present( arg, this_object() ) ) )
+    {
+        if ( userp( ob ) )
+        {
+            message_vision( "$N对$n说道：我不欢迎你呆在这里，请出去。\n"
+                "说着，就把$n推了出去。\n", me, ob );
+            ob->delete_temp( owner_id + " invited" );
+            ob->move( EXITROOM );
+            tell_object( "ob", "你被赶出了" + query( "short" ) );
+            message( "vision",RANK_D->query_nomal( ob ) + "进入这里。\n",
+                environment( ob ), ob );
+            return 1;
+        }
+    }
+    write( "你只能把这里的玩家赶出去。\n" );
+    return 1;
+}
+
+int do_leave( string arg )
+{
+    object *all, me;
+
+    me = this_player();
+    all = all_inventory(environment(me));
+    if ( sizeof( all ) == 1 )
+    {
+        remove_call_out( "dest" );
+        call_out( "dest", 180, this_object() );
+    }
+    message( "vIsion", "一位" + RANK_D->query_normal(me) + "离开了这里。\n",
+        environment( me ), ({ me } ) );
+    me->move( EXITROOM );
+    tell_object( me, "你进入通泗街。\n" );
+    message( "vision", "一位" + RANK_D->query_normal(me) + "进入这里。\n",
+        environment( me ), me );
+    return 1;
+}
+
+void dest( object ob )
+{
+    string owner_id;
+
+    if ( sizeof( all_inventory( ob ) ) ) return;
+    
+    save_desc();
+    destruct( ob );
+}
+
+int check_legal_string( string arg )
+{
+    return 1;/*
+    int i;
+
+    i = strlen( arg );
+
+    while ( i-- )
+    {
+        if ( arg[ i ] <= ' ' )
+        {
+            write("对不起，你的不能用使用控制字符。\n");
+            return 0;
+        }
+        if ( i % 2 == 0 && !is_chinese(arg[ i..<0 ]) )
+        {
+            write("对不起，请您用「中文」。\n");
+            return 0;
+        }
+    }
+    return 1; */
+}
+
+int change_description( string owner_id )
+{
+    string short, long;
+    mapping desc;
+    
+    desc = query( owner_id );
+    if ( !desc ) return 0;
+    if ( !undefinedp( desc[ "short" ] ) )
+        set( "short", desc[ "short" ] );
+    if ( !undefinedp( desc[ "long" ] ) )
+        set( "long", desc[ "long" ] );
+    return 1;
+}
+
+void save_desc()
+{
+    string owner_id = query_temp( "owner_id" );
+    string long, short;
+    mapping owner;
+    long = query( "long" );
+    short = query( "short" );
+    owner = query( "owner" );
+    restore();
+    set( owner_id + "/long", long );
+    set( owner_id + "/short", short );
+    set( "owner", owner );
+    set( "long", long );
+    set( "short", short );
+    
+    save();
+}
+
+

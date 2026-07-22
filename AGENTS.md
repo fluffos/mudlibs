@@ -1026,6 +1026,26 @@ exactly the "long tail, not all reachable at once" situation in §6b;
 fixing only what a real lpcc/interactive-test failure actually surfaces
 keeps the signal-to-effort ratio sane on a lib with 50,000+ files.
 
+### 15g. `#include <Foo.h>` vs the actual `foo.h` on disk — case-sensitivity mismatch from a Windows-origin archive
+
+Found on `xo` (archive #28): a small number of `#include <Action.h>`
+(capital A) directives referenced an actual file that only exists as
+`include/action.h` (lowercase) — silently resolves fine on the original
+Windows development environment's case-insensitive filesystem, hard
+compile error (`Cannot #include`, cascading to `Undefined class`/
+`Undefined variable` everywhere that transitively depends on it) on this
+Linux/case-sensitive one. Diagnose via the lpcc sweep: if ONE error
+category (`Cannot #include X.h`, `Undefined class/variable Y`) dominates
+the failure count by a wide margin, `grep -rn "include.*<X.h>"` and
+compare against the real on-disk filename's case before assuming a
+missing-content gap — fixing the (usually very small number of) include
+directives with the wrong case can resolve a huge fraction of a sweep's
+failures in one edit (762+155 out of 1395 total failures here, down to
+72, from fixing just 3 files). Cross-check the whole tree isn't also
+missing the reverse case or has genuine duplicate-cased files
+(`find . -iname '*.h'` grouped case-insensitively) before assuming a
+single fix location.
+
 ---
 
 ## Per-archive gotchas index

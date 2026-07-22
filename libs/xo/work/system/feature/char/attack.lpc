@@ -1,0 +1,497 @@
+// filename : /system/feature/attack.c
+
+// checked by lnwm&nerd 1998/01/20
+
+#include <ansi.h>
+#include <dbase.h>
+#include <origin.h>
+#include <skill.h>
+
+#define MAX_OPPONENT    8	
+
+private nosave object duishou = 0;
+private nosave object *enemy = ({});
+// 为了支持与多人同时比划
+private nosave string *bihua = ({});
+private nosave string *killer = ({});
+
+///////////////////////////////////////////////////////////////////////////
+// prototypes
+
+object query_duishou() { return duishou; }
+object *query_enemy() { return enemy; }
+string *query_bihua() { return bihua; }
+string *query_killer() { return killer; }
+
+int remove_duishou(object ob);
+int remove_enemy(object ob);
+int remove_bihua(object ob);
+int remove_killer(object ob);
+void remove_all_duishou();
+void remove_all_enemy();
+
+//增加的也应该有。--by lnwm
+void add_enemy( object ob );
+void add_killer( object ob );
+
+///////////////////////////////////////////////////////////////////////////
+// 状态判断函数
+
+varargs int is_duilianing(object ob)
+{
+	if (( ob && ( ob == duishou )) || ( !ob && duishou ))
+        return 1;
+	return 0;
+}
+
+// This function returns 1 if we are fighting anyone (or with ob)
+varargs int is_fighting(object ob)
+{
+	if ( !ob ) return sizeof(enemy) > 0;
+
+	return member_array(ob, enemy) != -1;
+}
+
+// 看看我是否正在与 id 比划或者正在与某人比划
+varargs int is_bihuaing(string id)
+{
+	if ( !id ) return sizeof(bihua) > 0;
+
+	return member_array(id, bihua) != -1;
+}
+
+// This function returns 1 if we are fighting anyone (or with ob)
+varargs int is_killing(string id)
+{
+	if ( !id ) return sizeof(killer) > 0;
+
+	return member_array(id, killer) != -1;
+}
+
+///////////////////////////////////////////////////////////////////////////
+//这是下马用的
+int do_ride_none(object me)
+{
+    object ob, this, *inv;
+    int i = 0;
+    
+    if( !this = find_object( HALL ) )
+        this = load_object( HALL );
+    inv = all_inventory(this);
+    while( i < sizeof(inv) && i >= 0 )
+    {
+        if( inv[i]->query("is_rided_by") == me->query("id") )
+        {
+            ob = inv[i];
+            i = -10;
+        }
+        i++;    
+    }
+    if( i >= 0 )            
+        return notify_fail("发现错误！\n");
+    message_vision("$N急忙从$n上跳下迎战。\n", me, ob);
+    ob->move( environment(me) );
+    ob->delele("is_rided_by");
+    ob->set("xingcheng", me->query_temp_marks("zuoji/xingcheng"));
+    me->delete_temp_marks("is_riding");
+    me->delete_temp_marks("zuoji");
+    return 1;
+}
+// 起动战斗 
+
+void duilian_ob(object ob)
+{
+	if ( !ob || ob == this_object() ) return;
+
+    delete_temp( "pending/duilian" );
+	set_heart_beat( 1 );
+
+    duishou = ob;
+    if ( ob->query_temp_marks("is_riding") != 0 )
+    {
+        do_ride_none( ob );
+    }
+}
+
+
+//This function starts fight between this_object() and ob
+void fight_ob(object ob)
+{
+	if ( !ob || ob == this_object() ) return;
+
+    delete_temp( "pending/fight" );
+	set_heart_beat( 1 );
+
+    // 如果对手正处于练习或对练状态, 我们就让他停下来准备战斗
+    // 准备过程 busy random( 3 )
+    if ( ob->is_lianing() )
+    {
+        ob->stop_lian();
+        ob->set_busy( random( 3 ) );
+        message_vision( HIY"$N赶紧收势迎战！\n" NOR, ob );
+    }
+    else if ( ob->is_duilianing() )
+    {
+        ob->remove_all_duishou();
+        ob->set_busy( random( 3 ) );
+        message_vision( HIY"$N赶紧停手迎战！\n" NOR, ob );
+    }
+
+    //如果对手在马上，就让他下马来准备战斗，busy random( 3 )
+    if ( ob->query_temp_marks("is_riding") != 0 && userp(ob) )
+    {
+        do_ride_none( ob );
+        ob->set_busy( random( 3 ) );
+    }
+	if ( member_array( ob, enemy ) == -1 ) 
+		enemy += ({ ob });
+
+    if (ob->is_fighting(this_object()))
+        return;
+    else
+    {
+        ob->fight_ob(this_object());
+        return;
+    }    
+}
+
+void bihua_ob(object ob)
+{
+	if ( member_array( ob->query( "id" ), bihua ) == -1 )
+		bihua += ({ ob->query( "id" ) });
+
+    delete_temp( "pending/bihua" );
+	fight_ob( ob );
+}
+
+// This function starts killing between this_object() and ob
+void kill_ob(object ob)
+{
+	object *guards;
+
+	if( member_array(ob->query("id"), killer)==-1 )
+		killer += ({ ob->query("id") });
+
+	tell_object(ob, HIR "看起来" + this_object()->name() + "想杀死你！\n" NOR);
+
+	// If we were protecting the target, cancel the protection.
+	if ( ob == query_temp( "guardfor" ) )
+    {
+		delete_temp("guardfor");
+		guards = ob->query_temp("guarded");
+		guards -= ({ this_object() });
+		ob->set_temp("guarded", guards);
+		tell_object(this_object(), HIY "你停止保护" + ob->name() + "。\n" NOR);
+		tell_object(ob, HIY + this_object()->name() + "停止保护你。\n" NOR);
+	}
+
+	// Check if anyone are is guarding the target, let them join the combat too.
+	if ( arrayp(guards = ob->query_temp("guarded")) )
+    {
+		guards = filter_array(guards, (:
+				objectp($1)
+			&&	living($1)
+			&&	$1 != this_object()
+			&&	present($1, environment())
+			&&	!is_fighting($1)
+			&&	$1->visible(this_object()) :));
+		if ( sizeof(guards) > 0 )
+        {
+			// guards must be added to enemy prior to call guards join the fight
+			// thus can prevent infinite loop in the mutual guard case.
+			enemy += guards;
+			message("vision", HIR + ob->name() + "受到攻击！你挺身加入战团！\n" NOR,
+				guards);
+			guards->kill_ob(this_object());
+		}
+	}
+	fight_ob(ob);
+}
+
+///////////////////////////////////////////////////////////////////////////
+// 战斗对象整理 
+
+void clean_up_duishou()
+{
+	if ( objectp( duishou ) )
+	{
+        // 如果我的对手不在我的 environment 中, 或 disable_command 了,
+        // 就不认为他是我的对手了.
+        if (( environment( duishou ) != environment() ) ||
+			!living( duishou ) )
+		{
+			duishou = 0;
+		}
+	}
+
+}
+
+void clean_up_enemy()
+{
+	if ( sizeof( enemy ) > 0 )
+	{
+		for ( int i = 0; i < sizeof( enemy ); i++ )
+		{
+			object ob = enemy[ i ];
+
+
+			if ( !objectp( ob ) || environment( ob ) != environment() ||
+				( !living( ob ) && !is_killing( ob->query( "id" ) ) ) )
+			{
+			// 对 perform 的取消！ add this by tea 10.24.98  8:00 in the morning!!!
+				if( query_temp("perform/attack/target")==ob ) {
+				    delete_temp("perform/attack");
+			            tell_object(this_object(),"PERFORM CANCEL.\n");
+				}
+				enemy[ i ] = 0;
+                	// 我们之需要保证 bihua 中的元素也一定存在于 enemy 中,
+	                // 事情就会好办些.
+	        	        if ( bihua  && objectp( ob ) )
+		    	            bihua -= ({ ob->query( "id" ) });
+			}
+		}
+		enemy -= ({ 0 });
+	}
+}
+
+int remove_duishou(object ob)
+{
+    if ( duishou && ( ob == duishou ))
+    {
+        duishou = 0;
+        return 1;
+    }
+    return 0;
+}
+
+// Stop fighting ob.
+int remove_enemy(object ob)
+{
+	if ( is_killing( ob->query( "id" ) ) ) return 0;
+
+// 对 perform 的取消！ add this by tea 10.24.98  8:00 in the morning!!!
+	if( query_temp("perform/attack/target")==ob ) {
+	    delete_temp("perform/attack");
+            tell_object(this_object(),"PERFORM CANCEL.\n");
+	}
+
+	enemy -= ({ ob });
+	return 1;
+}
+
+// 停止同 ob 的比划
+int remove_bihua(object ob)
+{
+	if ( is_bihuaing( ob->query( "id" ) ) )
+	{
+        if ( bihua )
+    		bihua -= ({ ob->query( "id" ) });
+		remove_enemy( ob );
+		return 1;
+	}
+
+	return remove_enemy(ob);
+}
+
+// Stop killing ob.
+int remove_killer(object ob)
+{
+    if ( !ob )
+        return 0;
+	if ( is_killing( ob->query( "id" ) ) )
+	{
+		killer -= ({ ob->query( "id" ) });
+		remove_enemy( ob );
+		return 1;
+	}
+
+	return remove_enemy(ob);
+}
+
+void remove_all_duishou()
+{
+    if ( objectp( duishou ) )
+        duishou->remove_duishou( this_object() );
+    duishou = 0;
+}
+
+// Stop all fighting, include bihua, but killer remains.
+void remove_all_enemy()
+{
+	for ( int i = 0; i < sizeof( enemy ); i++ )
+	{
+		// We ask our enemy to stop fight, but not nessessary to confirm
+		// if the fight is succeffully stopped, bcz the fight will start
+		// again if our enemy keeping call COMBAT_D->fight() on us.
+		if ( objectp( enemy[ i ] ) )
+	        {
+	            if ( bihua )
+        	        bihua -= ({ enemy[ i ]->query( "id" ) });
+	            // 为了保证如果 enemy[ i ] 是我的比划对手我们双方停手
+        	    // 但如果需要 bihua 时如果一方停手而另一方不会主动停,
+	            // 那么可能就要用 remove_enemy 了.
+			enemy[ i ]->remove_bihua( this_object() );
+			//enemy[ i ]->remove_enemy( this_object() );
+        	}
+		enemy[ i ] = 0;;
+	}
+
+	enemy = ({});
+}
+
+// Stop all fighting and killing.
+void remove_all_killer()
+{
+	killer = ({});
+	enemy -= ({ 0 });
+    
+	for ( int i = 0; i < sizeof( enemy ); i++ )
+		if ( enemy[ i ] )
+	        {
+	            if ( bihua )
+        	        bihua -= ({ enemy[ i ]->query( "id" ) });
+	            enemy[ i ]->remove_killer( this_object() );
+        	    enemy[ i ] = 0;
+        	}
+
+	enemy -= ({ 0 });
+}
+
+void add_enemy( object ob )
+{
+    if( member_array(ob->query("id"), enemy)==-1 )
+        enemy += ({ ob->query("id") });
+}
+
+void add_killer( object ob )
+{
+    if( member_array(ob->query("id"), killer)==-1 )
+        killer += ({ ob->query("id") });
+}
+
+///////////////////////////////////////////////////////////////////////////
+// 战斗进行
+
+// This function checks if the current opponent is available or
+// select a new one.
+object select_opponent()
+{
+	int which;
+
+    // 如果有对练的人，我们优先选择他. 理论上我们应该做到
+    // 在对练的时候没有人同我在战斗
+    if ( duishou ) return duishou;
+
+	if ( !sizeof( enemy ) ) return 0;
+
+	which = random( MAX_OPPONENT );
+
+	return which < sizeof( enemy ) ? enemy[ which ] : enemy[ 0 ];
+}
+
+// This is called in heart_beat() to perform attack action.
+int attack()
+{
+	object opponent;
+
+	clean_up_duishou();
+	clean_up_enemy();
+
+	opponent = select_opponent();
+	if ( objectp( opponent ) )
+	{
+		set_temp( "last_opponent", opponent );
+		COMBAT_D->fight( this_object(), opponent );
+		return 1;
+	}
+	else
+		return 0;
+}
+
+//
+// init() - called by MudOS when another object is moved to us.
+//
+void init()
+{
+	object ob;
+	string mark;
+
+	// We check these conditions here prior to handle auto fights. Although
+	// most of these conditions are checked again in COMBAT_D's auto_fight()
+	// function, these check reduces lots of possible failure in the call_out
+	// launched by auto_fight() and saves some overhead.
+	if ( is_fighting() ||
+		 !living( this_object() ) ||
+		 !( ob = this_player() ) ||
+		 environment( ob ) != environment() ||
+		 !living( ob ) ||
+		 ob->query( "linkdead" ) )
+	{
+		return;
+	}
+
+	// Now start check the auto fight cases.
+	if ( userp( ob ) && is_killing( ob->query( "id" ) ) ) 
+	{
+		COMBAT_D->auto_fight( this_object(), ob, "hatred" );
+		return;
+	}
+        else if ( stringp(mark=query("vendetta_mark")) ){
+                mark="vendetta/"+mark;
+                if( ob->query( mark ) ){
+		COMBAT_D->auto_fight( this_object(), ob, "vendetta" );
+		return;
+                }
+	} 
+	else if ( userp( ob ) && (string)query( "attitude" ) == "aggressive" )
+	{
+		COMBAT_D->auto_fight( this_object(), ob, "aggressive" );
+		return;
+	}  
+	else if ( random((int)query("bellicosity") / 40) > (int)query("cps") ) 
+	{
+		COMBAT_D->auto_fight( this_object(), ob, "berserk" );
+		return;
+	} 
+}
+
+// reset_action()
+//
+// This function serves as a interface of F_ATTACK and wielded, worn objects.
+// When the living's fighting action need update, call this function.
+//
+/*
+void reset_action()
+{
+	object weapon;
+	string type, skill;
+	mixed action;
+
+	weapon = query_temp( "weapon" );
+	if ( weapon )
+		type = weapon->query( "skill_type" );
+	else 
+		type = "unarmed";
+
+	skill = query_skill_mapped( type );
+	if ( stringp( skill ) )
+	{
+		// If using a mapped skill, call the skill daemon.
+		set( "actions",
+			(: call_other, SKILL_D( skill ), "query_action" :) );
+	}
+	else
+	{
+		// Else, let weapon handle it.
+		if ( weapon )
+		{
+			action = weapon->query( "actions", 1 );
+			write( sprintf( "F_ATTACK, action is %O\n", action ) );
+			set( "actions", weapon->query( "actions", 1 ) );
+		}
+		else
+			set( "actions", query( "default_actions", 1 ) );
+	}
+}
+*/
+

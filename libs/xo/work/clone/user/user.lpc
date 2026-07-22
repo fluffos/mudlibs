@@ -1,0 +1,287 @@
+// Filename : /clone/misc/user.c
+
+#include <origin.h>
+#include <user.h>
+#include <ansi.h>
+#include <options.h>
+#include <command.h>
+
+inherit CHARACTER;
+inherit F_AUTOLOAD;
+inherit F_SAVE;
+inherit F_AUTOSAVE;
+inherit F_ALIAS;
+//inherit F_EDIT;
+inherit "/system/feature/user/editor";
+inherit F_MESSAGE;
+inherit F_MORE;
+
+private nosave int last_age_set;
+// Last command execute time
+private nosave int last_time;
+// Last interval execute commands count
+private nosave int last_count;
+
+void create()
+{
+	seteuid("Mudlib");
+    character::create();
+//    task::create();
+    set_name("使用者物件", ({ "user object", "user", "object" }) );
+}
+
+void reset()
+{
+    if( (int)query("thief") > 0 )
+        add("thief", -1 );
+}
+
+// This is used by F_SAVE to determine the filename to save our data.
+string query_save_file()
+{
+    string id;
+
+    id = geteuid();
+    if ( !id ) 
+		id = getuid();
+    if ( !stringp(id) ) 
+		return 0;
+    return
+		sprintf( DATA_DIR "user/%c/%s", id[0], id );
+}
+
+int save()
+{
+    int res;
+
+    save_autoload();
+    res = ::save();
+    clean_up_autoload();        // To save memory
+    return res;
+}
+
+
+// This function updates player's age, called by heart_beat()
+void update_age()
+{
+    mapping gifts;
+    int i, temp, sign, sign_mark;
+    int age, max_age;
+    string *list;
+
+    sign_mark = 0;
+    // Update the time we spend on mudding, using method from TMI-2 mudlib.
+    // fuck, really rubbish.
+    if ( !last_age_set ) 
+        last_age_set = time();
+    add("mud_age", time() - last_age_set);
+    last_age_set = time();
+
+    temp = query("age");
+    age = (int)query("age_modify") + (int)query("mud_age") / BASE_TIME;
+	age += 14;
+    set("age", age);
+    if ( age > temp && temp ) // birthday :)
+    {
+        message("vision", YEL "恭喜！你又长大了一岁了！"NOR"\n", this_object());
+        if ( age == 15 )
+            message("vision", "从今天起，你不再是新手，不再受到保护了，自己保重！\n", this_object());
+    }
+    max_age = query("max_age");
+    if ( max_age )
+    { 
+        if ( age > max_age + max_age / 100 )
+        {
+            // 应该死了...嘿嘿
+            // user.c 权限不够不能destruct player...
+            // 只好借助一个指令来完成了。
+            if( wizardp( this_object() ) )
+            // wizard不应该死，要不被别人把他登了就惨了。 by lnwm 980922
+            {
+                message("vision", "你是巫师，所以就不老死，不过还是把你的岁数改回去好。\n", this_object());
+                return;
+            }
+            SUICIDE_CMD->laosi( this_object() );
+            return; 
+        }
+        if ( ( age + 10 ) > max_age + query( "max_force") / 1000 )
+        {
+            // 出些提示信息， 你该死了..
+            if ( !random( 1000 ) ) 
+                write( "你心头有些不详的预感，似乎大限将至。\n" );
+        }
+    }
+    gifts = query( "gifts_jilei" );
+    if ( !gifts )
+        return;
+    list = keys( gifts );
+    for( i = 0; i < sizeof( list ); i ++ )
+    {
+        temp = gifts[ list[ i ] ];
+        sign = ( temp > 0 ) ? 1 : -1 ;
+        temp *= sign;
+        if ( temp >= 1000  && random( 2000 - temp ) == 0 )
+        {
+            set( "gifts_jilei/" + list[ i ], 0 );
+            if ( query("age") > 20 )
+            {
+                if ( sign > 0 && 
+                    query( "gifts_modify/" + list[ i ] ) > 9 )
+                    sign = 0;
+                if ( sign < 0 && 
+                    query( "gifts_modify/" + list[ i ] ) < -8 )
+                    sign = 0;
+                add( "gifts_modify/" + list[ i ], sign );
+            }
+            else
+            {
+                if ( sign > 0 && query( list[ i ] ) > 34 )
+                    sign = 0;
+                if ( sign < 0 && query( list[ i ] ) < 11 )
+                    sign = 0;
+                add( list[ i ] , sign );
+            }
+            sign_mark += sign;
+        }
+    }
+    if ( sign_mark ) 
+        write( "你的体内似乎发生一些奇妙的变化。\n" );
+}
+
+void heart_beat()
+{
+    character::heart_beat();
+    update_age();
+    autosave();
+}
+
+void setup()
+{
+    // We want set age first before new player got initialized with
+    // random age.
+    update_age();
+
+    ::setup();
+    restore_autoload();
+}
+
+void eventLogin()
+{
+}
+
+void eventQuit()
+{
+}
+
+protected void user_dump(int type)
+{
+    if( this_object() && wizardp( this_object() ) )
+        return;
+    switch ( type )
+    {
+        case DUMP_NET_DEAD:
+            if ( wizardp( this_object() ) ) return;
+            tell_room( environment(), query("name") + "断线超过 "
+                + NET_DEAD_TIMEOUT/60 + " 分钟，自动退出这个世界。\n");
+            set_temp("valid_quit",1);
+            command("quit");
+            break;
+
+        case DUMP_IDLE:
+            tell_object( this_object(), "对不起，您已经发呆超过 " 
+                + IDLE_TIMEOUT / 60 + " 分钟了，请下次再来。\n");
+            tell_room( environment(), "一阵风吹来，将发呆中的" + query("name")
+                + "化为一堆飞灰，消失了。\n", ({this_object()}));
+            set_temp("valid_quit",1);
+            command("quit");
+            break;
+    }
+}
+
+// net_dead: called by the gamedriver when an interactive player loses
+// hir network connection to the mud.
+private void net_dead()
+{
+    object link_ob;
+
+    set_heart_beat(0);
+    if ( objectp(link_ob = query_temp("link_ob")) )
+        destruct(link_ob);
+
+    // Stop fighting, we'll be back soon.
+    remove_all_enemy();
+
+    set_temp("netdead", 1);
+    if ( userp(this_object()) )
+    {
+        call_out("user_dump", NET_DEAD_TIMEOUT, DUMP_NET_DEAD);
+        tell_room(environment(), query("name") + "断线了。", this_object());
+        CHANNEL_D->do_channel(this_object(), "sys", "断线了。");
+    }
+    else
+    {
+        command("quit");
+    }
+}
+
+// reconnect: called by the LOGIN_D when a netdead player reconnects.
+void reconnect()
+{
+    set_heart_beat(1);
+    set_temp("netdead",0);
+    remove_call_out("user_dump");
+    tell_object(this_object(), "重新连线返回。\n");
+}
+
+
+// process-input
+private string process_input(string cmd)
+{
+    object this;
+/*	string ret = editor::process_input(cmd);
+	if ( ret == "" )
+		return "";*/
+    this = this_object();
+
+    this->set_heart_beat(1);
+    //玩家老没有心跳。这里尝试输入指令就注入一次heart_beat by lnwm 981030
+
+    if ( userp( this ) && !wizardp( this ) ) //sure be a user.
+    {
+        if ( time() - last_time == 0 )
+        {
+            last_count++;
+            if ( last_count > MIN_COMMAND_LIMIT )
+            {
+                if ( last_count > MAX_COMMAND_LIMIT )
+                {
+                    log_file( COMMAND_LIMIT_LOG,
+                        sprintf( "%s(%s)在(%s)输入权力被停止.\n",
+                        this->query( "name" ), this->query( "id" ),
+                        ctime( time() )[ 4..18 ] ) );
+                    //这里的disable_commands有问题，player被当作obj了，导致了很多bug的产生
+                    //我用busy代替，试一下效果如何---leonhart 98.4.6
+                    start_busy(2,"你输入指令太多，!是机器人!!!\n" );
+                    // tell_object( this, "你输入的指令太多, 是机器人!!!\n" );
+                    // file = find_command( "quit" );
+                    // call_other( file, "main", ppl );
+                    // disable_player( "指令过多" );
+                    // disable_commands();
+                    // call_out( "enable_player", DISABLE_TIME );
+                    return "";
+                }
+                //log_file( COMMAND_LIMIT_LOG,
+                //sprintf( "%s(%s)在(%s)指令超过限制.\n", ppl->query( "name" ),
+                //ppl->query( "id" ), ctime( time() )[ 4..18 ] ) );
+                receive("你输入的的指令超过限制, 系统拒不接受.\n" );
+                return "";
+            }
+        }
+        else
+        {
+            last_time = time();
+            last_count = 0;
+        }
+    }
+	return alias::process_input(cmd);
+}

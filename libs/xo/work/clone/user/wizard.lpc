@@ -1,0 +1,171 @@
+// Filename : /clone/misc/user.c
+
+#include <origin.h>
+#include <user.h>
+#include <ansi.h>
+#include <options.h>
+#include <command.h>
+
+inherit CHARACTER;
+inherit F_AUTOLOAD;
+inherit F_SAVE;
+inherit F_AUTOSAVE;
+inherit F_ALIAS;
+inherit F_EDIT;
+inherit F_MESSAGE;
+inherit F_MORE;
+inherit "/system/feature/user/test"; //用来测试一些东西,仅对wiz拥有.
+
+private nosave int last_age_set;
+
+void create()
+{
+	seteuid("Mudlib");
+    character::create();
+//    task::create();
+    set_name("使用者物件", ({ "user object", "user", "object" }) );
+}
+
+void reset()
+{
+    if( (int)query("thief") > 0 )
+        add("thief", -1 );
+}
+
+// This is used by F_SAVE to determine the filename to save our data.
+string query_save_file()
+{
+    string id;
+
+    id = geteuid();
+    if ( !id ) 
+		id = getuid();
+    if ( !stringp(id) ) 
+		return 0;
+    return
+		sprintf( DATA_DIR "user/%c/%s", id[0], id );
+}
+
+int save()
+{
+    int res;
+
+    save_autoload();
+    res = ::save();
+    clean_up_autoload();        // To save memory
+    return res;
+}
+
+
+// This function updates player's age, called by heart_beat()
+void update_age()
+{
+    mapping gifts;
+    int i, temp, sign, sign_mark;
+    int age, max_age;
+    string *list;
+
+    sign_mark = 0;
+    // Update the time we spend on mudding, using method from TMI-2 mudlib.
+    // fuck, really rubbish.
+    if ( !last_age_set ) 
+        last_age_set = time();
+    add("mud_age", time() - last_age_set);
+    last_age_set = time();
+
+    temp = query("age");
+    age = (int)query("age_modify") + (int)query("mud_age") / BASE_TIME;
+    set("age", age);
+    if ( age > temp ) // birthday :)
+    {
+        message("vision", YEL "恭喜！你又长大了一岁了！"NOR"\n", this_object());
+        if ( age == 15 )
+            message("vision", "从今天起，你不在受到新手的保护了，自己保重！\n", this_object());
+    }
+}
+
+void heart_beat()
+{
+    character::heart_beat();
+    update_age();
+    autosave();
+}
+
+void setup()
+{
+    // We want set age first before new player got initialized with
+    // random age.
+    update_age();
+
+    ::setup();
+    restore_autoload();
+}
+
+void eventLogin()
+{
+}
+
+void eventQuit()
+{
+}
+
+private void user_dump(int type)
+{
+    if( this_object() && wizardp( this_object() ) )
+        return;
+    switch ( type )
+    {
+        case DUMP_NET_DEAD:
+            if ( wizardp( this_object() ) ) return;
+            tell_room( environment(), query("name") + "断线超过 "
+                + NET_DEAD_TIMEOUT/60 + " 分钟，自动退出这个世界。\n");
+            set_temp("valid_quit",1);
+            command("quit");
+            break;
+
+        case DUMP_IDLE:
+            tell_object( this_object(), "对不起，您已经发呆超过 " 
+                + IDLE_TIMEOUT / 60 + " 分钟了，请下次再来。\n");
+            tell_room( environment(), "一阵风吹来，将发呆中的" + query("name")
+                + "化为一堆飞灰，消失了。\n", ({this_object()}));
+            set_temp("valid_quit",1);
+            command("quit");
+            break;
+    }
+}
+
+// net_dead: called by the gamedriver when an interactive player loses
+// hir network connection to the mud.
+private void net_dead()
+{
+    object link_ob;
+
+    set_heart_beat(0);
+    if ( objectp(link_ob = query_temp("link_ob")) )
+        destruct(link_ob);
+
+    // Stop fighting, we'll be back soon.
+    remove_all_enemy();
+
+    set_temp("netdead", 1);
+    if ( userp(this_object()) )
+    {
+        call_out("user_dump", NET_DEAD_TIMEOUT, DUMP_NET_DEAD);
+        tell_room(environment(), query("name") + "断线了。", this_object());
+        CHANNEL_D->do_channel(this_object(), "sys", "断线了。");
+    }
+    else
+    {
+        command("quit");
+    }
+}
+
+// reconnect: called by the LOGIN_D when a netdead player reconnects.
+void reconnect()
+{
+    set_heart_beat(1);
+    set_temp("netdead",0);
+    remove_call_out("user_dump");
+    tell_object(this_object(), "重新连线返回。\n");
+}
+
