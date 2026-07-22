@@ -1289,6 +1289,36 @@ they're harmless). **Check every new lib's `master.lpc create()` for a
 silent in a compile-only `lpcc --batch` check (no error, no warning) and
 only shows up as a hard crash on the very first real driver boot.
 
+### 15m. A daemon's unguarded `restore()` in `create()` can crash on stale/corrupted save data and masquerade as an intentional maintenance gate
+
+Found in `zhonghua2`: `adm/daemons/versiond.lpc` (a version-sync/
+replication daemon, relevant to any lib with a "release server" /
+multi-station-sync concept) calls `restore()` directly inside its own
+`create()`, with no `catch()`. The archive shipped with a stale/corrupted
+save file (`data/versiond.o` — confirmed via byte-for-byte comparison
+against the raw pre-conversion archive to be corrupted in the ORIGINAL
+archive, not something the UTF-8 conversion introduced) that threw
+`*restore_object(): Illegal mapping format`, aborting `create()` before
+it reached the code that would otherwise set a "we're ready" flag (here,
+`version_ok = 1`, gated behind a `RELEASE_SERVER() == "local"` check that
+should have made it trivially true). Because another code path
+(`logind.lpc`'s login gate) checks that flag on every connection, the
+visible symptom was every non-wizard connection stuck behind a
+maintenance-sounding message ("现在本站正在同步版本" — "currently
+syncing version") that implied an intentional, deliberate gate to wait
+out — when actually the daemon had simply crashed once at boot and never
+initialized the flag at all. Fix: rename/move the stale save file out of
+the way so `restore()` finds nothing and returns cleanly (LPC's
+`restore_object()` on a missing file is not an error) instead of
+crashing on the corrupt one; then `create()` proceeds normally. **Lesson
+generalizes beyond this one daemon**: if a fresh boot's first-connection
+banner shows ANY unexpected "syncing"/"please wait"/maintenance-sounding
+message that doesn't correspond to anything in `config`, check
+`debug.log` for a `restore_object()`/`Illegal mapping format` error near
+a daemon whose name suggests version/sync/replication bookkeeping BEFORE
+assuming it's a real gate to wait out or work around — it may just be a
+crashed `create()` that never got to flip a readiness flag.
+
 ---
 
 ## Per-archive gotchas index

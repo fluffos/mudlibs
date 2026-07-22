@@ -17,7 +17,7 @@ worked; keep status values consistent so the table stays greppable:
   etc.; see AGENTS.md's non-mudlib list — skipped, not converted)
 
 Port assignments: sequential from 40001, recorded here so re-running
-several libs at once never collides. **Next free port: 40028** (40001-40027
+several libs at once never collides. **Next free port: 40029** (40001-40028
 assigned; 40007 is ds386, deprioritized/partial). On mega-libs (tens of
 thousands of files, the "nitan" family), skip the full `lpcc_check.sh`
 sweep — it can OOM the host before finishing (see AGENTS.md §6b) — and
@@ -30,10 +30,19 @@ rely on the boot + interactive-connect test as the verification gate.
   majority of this collection. If an archive turns out to be English
   (like ds386/Dead Souls), do the minimum to note what it is, don't sink
   deep debugging time into it -- move on to the next Chinese one.
-- **Done: 26 / 100** (shanhaizhanshen, xingzhanyingxiong, unknownlib20150716
+- **Done: 27 / 100** (shanhaizhanshen, xingzhanyingxiong, unknownlib20150716
   [小雨西游II], bxsj [书剑天下], bxsj1 [书剑·经典], chidi [江湖I], ...,
   nitan170911 [仙剑奇侠传], nitan6 [笑傲江湖], rzrmud [大唐西游], xo, xo_final,
-  zzfy [郑州风云3], shiji [世纪], dongfanggushi2 [东方故事Ⅱ之天朝帝国])
+  zzfy [郑州风云3], shiji [世纪], dongfanggushi2 [东方故事Ⅱ之天朝帝国],
+  zhonghua2 [中华英雄苏州站])
+- **New bug class (AGENTS.md §15m), found on zhonghua2**: a daemon's
+  unguarded `restore()` in `create()` can crash on stale/corrupted save
+  data shipped in the archive itself (not a UTF8 issue), masquerading
+  as an intentional maintenance/sync gate on every connection instead of
+  looking like a crash. If a fresh boot's banner shows an unexplained
+  "syncing"/"please wait" message, check debug.log for a
+  `restore_object()`/"Illegal mapping format" error before assuming it's
+  a real gate to wait out.
 - **New crash bug class (AGENTS.md §15l), found on dongfanggushi2**:
   `master.lpc`'s `create()` destructing+reloading `SIMUL_EFUN_OB` (an
   old-MudOS trick) segfaults the WHOLE DRIVER PROCESS on this build if
@@ -155,7 +164,7 @@ rely on the boot + interactive-connect test as the verification gate.
 | 31 | 三国歪传.rar | | | not mudlib | confirmed: DikuMUD/Merc-lineage compiled C server ("三国歪传" by mrec, Taiwan) -- src/db.c,comm.c,fight.c,handler.c (Diku/Merc/ROM names), area/ .are-style world files, zero `inherit` statements anywhere -- fundamentally not LPC, skipped, see AGENTS.md's non-mudlib list |
 | 32 | 世纪.zip | shiji | 40026 | done | 世纪(Century), adm/single/ layout; found §4 master.lpc fix + §15h chinese-detection fix + a NEW case-sensitive DATA file bug (mudvisitor vs MUDVISITOR, §15k) that silently crashed every connection attempt; full registration flow verified incl. real Chinese name "萧峰"; 93.6% lpcc pass; see libs/shiji/NOTES.md |
 | 33 | 东方故事二.rar | dongfanggushi2 | 40027 | done | dup: 东方故事二 (1).rar; "东方故事Ⅱ之天朝帝国", ES II lineage but a distinct/smaller codebase than es1_win/esI despite same adm/obj/ layout; found a NEW driver-crash bug (master.lpc destructing SIMUL_EFUN_OB segfaults on boot, §15l) + §4 fix on both valid_write/valid_read + §15h fix incl. a new sliding-window sub-variant; unusually long registration chain (id→confirm→password→email→race→gender→Chinese name) verified end-to-end through a real Chinese name "萧峰" all the way into an actual game room; 85.9% lpcc pass; see libs/dongfanggushi2/NOTES.md |
-| 34 | 中华2.rar | | | not started | |
+| 34 | 中华2.rar | zhonghua2 | 40028 | done | 中华英雄苏州站, adm/single/ layout; found a stale corrupted versiond.o save file crashing a daemon's create() and masquerading as a maintenance gate (NEW, §15m) + §15h fix (unique whole-string is_chinese variant) + deep named.lpc fix (nitan-family shape) + combined surname/given-name length fix; full registration flow verified with real surname "萧" + given name "峰"; 97.3% lpcc pass; see libs/zhonghua2/NOTES.md |
 | 35 | 书剑2008.rar | | | not started | |
 | 36 | 书剑天下.rar | | | not started | |
 | 37 | 书剑飘零II .zip | | | not started | |
