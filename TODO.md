@@ -65,10 +65,10 @@ taken by ds386, in progress).
 | 5 | bxsj1.rar | bxsj1 | 40005 | done | 书剑·经典, same lineage as #4; 3 known fixes applied proactively; see libs/bxsj1/NOTES.md |
 | 6 | chidi.rar | chidi | 40006 | done | 江湖I; found tail() missing-efun + include-angle-bracket bugs (§8e, convert_lib.sh fix); see libs/chidi/NOTES.md |
 | 7 | ds3.8.6.zip | ds386 | 40007 | partial/deprioritized | Dead Souls, English-language -- user directed to deprioritize non-Chinese libs; boots + admin wizard runs but not polished; see libs/ds386/NOTES.md |
-| 8 | dtsl.rar | | | not started | |
-| 9 | dw_fluffos_v1.tar.gz | | | not started | likely a driver bundle, not a mudlib -- triage first |
-| 10 | dw_fluffos_v2.zip | | | not started | likely a driver bundle, not a mudlib -- triage first |
-| 11 | dw_fluffos_v3.zip | | | not started | likely a driver bundle, not a mudlib -- triage first |
+| 8 | dtsl.rar | dtsl | 40008 | done | 大唐双龙传, lib #1 lineage, booted with zero fixes; found F_UNIQUE macro gap + diamond-inherit issue; see libs/dtsl/NOTES.md |
+| 9 | dw_fluffos_v1.tar.gz | | | deprioritized | confirmed Discworld mudlib (English) -- skipping per policy, revisit only if asked |
+| 10 | dw_fluffos_v2.zip | | | deprioritized | same Discworld bundle, different version -- skipping per policy |
+| 11 | dw_fluffos_v3.zip | | | deprioritized | same Discworld bundle, different version -- skipping per policy |
 | 12 | es1_win.rar | | | not started | |
 | 13 | esI.rar | | | not started | |
 | 14 | fengyun4-3-4.rar | | | not started | |

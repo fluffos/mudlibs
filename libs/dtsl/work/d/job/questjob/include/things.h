@@ -1,0 +1,4 @@
+string *things=({
+"sbook",
+"cbook",
+});

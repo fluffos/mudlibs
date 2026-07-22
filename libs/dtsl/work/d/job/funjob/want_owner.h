@@ -1,0 +1,19 @@
+mapping want_owner=([
+"宋缺":"/d/lingnan/npc/songque","宋鲁":"/d/lingnan/npc/songlu",
+"宋智":"/d/lingnan/npc/songzhi","宋玉致":"/d/job/cisha/songyuzhi",
+"傅采林":"/d/yjp/npc/fucailin","盖苏文":"/d/yjp/npc/gai",
+"金正宗":"/d/yjp/npc/jin","傅君嫱":"/d/yjp/npc/qiang",
+"边不负":"/d/yinkui/npc/bianbu-fu","云长老":"/d/yinkui/npc/yun",
+"祝玉妍":"/d/yinkui/npc/zhuyu-yan","候希白":"/d/luoyang/npc/houxibai",
+"毕玄":"/d/tujue/bi","可达志":"/d/tujue/ke","颉利大汗":"/d/tujue/kehan",
+"康鞘利":"/d/tujue/kang","墩欲谷":"/d/tujue/dun","尚邦":"/d/dongming/npc/shangbang",
+"尚奎泰":"/d/dongming/npc/shangkuitai","尚仁":"/d/dongming/npc/shangren",
+"尚万年":"/d/dongming/npc/shangwannian","单美仙":"/d/dongming/npc/shanmeixian",
+"单青":"/d/dongming/npc/shanqing","单琬晶":"/d/dongming/npc/shanwanjing",
+"单秀":"/d/dongming/npc/shanxiu","单燕":"/d/dongming/npc/shanyan",
+"单玉蝶":"/d/dongming/npc/shanyudie","霍青桥":"/d/chengdu/npc/huoqing-qiao",
+"范卓":"/d/chengdu/npc/fanzhuo","解晖":"/d/chengdu/npc/xiehui",
+"解文龙":"/d/chengdu/npc/xiewenlong","焦邪":"/d/clone/npc/jiaoxie",
+"跋锋寒":"/d/clone/npc/bafenghan","欧阳希夷":"/d/clone/npc/ouyang-xiyi",
+"云玉真":"/d/clone/npc/yunyuzhen"
+]);
