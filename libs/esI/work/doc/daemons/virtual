@@ -1,0 +1,50 @@
+      Virtual Objects - by Pallando 93-08-19
+     =================
+
+If you try to go to a room, and the go command finds that the room object isn't
+already loaded, it uses the call_other() efun (functionally the same as "->")
+to try to load (compile) the object from the file.  (This also applies to
+cloning an object, but I will stick to load for this example.)
+
+IE if you try to go to a room "/d/grid/10,7.grid" the command will use the efun
+find_object() to check for an object with the file_name() "/d/grid/10,7.grid"
+and if that fails it will look for a text file "/d/grid/10,7.grid.c" containing
+LPC code that can be compiled to form the object.
+
+Previously (in LPC2) if the driver failed to find the corresponding file, that 
+would be that and it would return an error.  However MudOS (and other versions
+of the LPC3 driver) have implemented virtual objects so the driver doesn't stop
+at this stage.  Instead, when it is trying to load an object <filename> and it
+it fails to find a file "<filename>.c" it call compile_object() in the master
+object (/adm/obj/master.c) with <filename> as a string argument.
+The master object calls compile_object("<filename>") in VIRTUAL_D defined in
+/include/daemons.h (/adm/daemons/virtual_d.c)
+
+The virtual_d hands on control to another object, depending on <filename>
+If <filename> is of the form "/u/*/<wizard_name>/*" it checks for an object
+  "/u/*/<wizard_name>/virtual/server"
+If <filename> is of the form "/d/<domain_name>/*" it checks for an object
+  "/d/<domain_name>/virtual/server"
+otherwise it hands control to /adm/daemons/virtual/server
+
+In the case of our example "/d/grid/10,7.grid" it checks for an object
+  "/d/grid/virtual/server" and, failing to find it, calls compile_object()
+in /adm/daemons/virtual/server which checks for a <filename> of the form
+"<basefilename>.<suffix>" then hands on control to another server, 
+depending on <basefilename>.  It looks in the same directories as virtual_d
+but this time for a file called "<suffix>_server" rather than "server".
+And finally looks for an object "/adm/daemons/virtual/<suffix>_server"
+
+In the case of our example there is no "/d/grid/virtual/grid_server" but
+"/adm/daemons/virtual/grid_server" does exist and compile_object() is
+called in it.
+
+compile_object() in grid_server.c is defined in /std/virtual/compile.c
+which it inherits.  The function clones a copy of the base object and
+returns the object (eg "/adm/daemons/virtual/grid_server#123" ) to
+the functon that called it.  The object gets passed up the chain
+of functions to the driver which renames the cloned object to the
+<filename> it was originally looking for "/d/grid/10,7.grid"
+Had 0 been returned at any stage by any of the functions instead of
+an object, the driver would have treated the attempt to load the object
+as an error, the same as in LPC2.

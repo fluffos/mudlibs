@@ -1,0 +1,161 @@
+// default function for spells. Create by Kyoko. Modified by Yueh
+#include <mudlib.h>
+#include <magic.h>
+
+int modify_find_rate(object caster)
+{
+	if ( caster->query("player_invisible") )
+		return (int)caster->query_level()/2;
+	return 0;
+}
+
+void recharging( object player, int volumn, string spell_type )
+{
+   object weapon;
+   int left, max, number, damage;
+   weapon = player->query("weapon1");
+   if( !weapon ) return;
+   left = weapon->query("charge_left");
+   max = weapon->query("max_charge");
+   if( (string)weapon->query("special_damage_type")==spell_type && left < max ) {
+     number = (int)weapon->query("stored_energy");
+     damage = (int)weapon->query("special_damage")*2;
+// if( volumn < 5 ) number++;
+     number++;
+     if( number > damage ) {
+       number -= damage;
+       left++;
+       weapon->set("charge_left", left);
+     }
+     weapon->set("stored_energy", number);
+     return;
+   }
+}
+/*
+int success_hit(int number, object caster, string type, int need_spell_level)
+{
+   int skill, spell_lvl;
+
+   if( caster->query("npc") ) return 1;
+   skill = (int)caster->query_skill("target");
+   if( member_array(type, MAGIC_TYPES) != -1 ) {
+     spell_lvl = (int)caster->query("spell_levels/"+type);
+     if( spell_lvl < need_spell_level )
+       number += number*(need_spell_level-spell_lvl) / 10;
+   }   
+   if( random(number) > skill ) return 0;
+   else return 1;
+}
+*/
+int success_hit(int number, object caster, string type, int need_spell_level)
+{
+   int skill, spell_lvl,n;
+
+   if( caster->query("npc") ) return 1;
+   skill = (int)caster->query_skill("target");
+   if( member_array(type, MAGIC_TYPES) != -1 ) {
+     spell_lvl = (int)caster->query("spell_levels/"+type);
+     if( spell_lvl < need_spell_level )
+       number += number*(need_spell_level-spell_lvl) / 10;
+   }   
+   if( random(number) > skill ) return 0;
+   if (caster->query_temp("cast_flee"))
+       {
+          caster->delete_temp("cast_flee");
+	n=caster->query_temp("cast_miss");
+	if (!n) n=0;
+          if ( random (100) > (spell_lvl+40+n*2+((spell_lvl - need_spell_level) / 5))) {
+		caster->set_temp("cast_miss",n+1);
+		return 0;
+	}
+        }
+   caster->set_temp("cast_miss",0);
+   return 1;
+}
+
+void gain_spell_experience(object caster, string type, int exp)
+{
+	if( !caster ) return;
+	if( member_array(type, MAGIC_TYPES) == -1 ) return;
+	if (environment(caster)->query("PK_ZONE")) return; 
+	caster->add("spell_exps/"+type, exp);
+}
+
+int modify_sp_cost(object caster, int sp, string type, int need_spell_level)
+{
+	int spell_lvl;
+	
+	if( caster->query("npc") ) return sp;
+	if( member_array(type, MAGIC_TYPES) == -1 ) return sp;
+	spell_lvl = (int)caster->query("spell_levels/"+type);
+	if( spell_lvl < need_spell_level )
+		sp += sp*(need_spell_level-spell_lvl)/10;
+	else if( (spell_lvl > need_spell_level+5) &&
+			 (spell_lvl < (need_spell_level+15)) )
+		sp -= sp * (spell_lvl-need_spell_level-5) / 20;
+	else if( spell_lvl >= need_spell_level+15 )
+		sp /= 2;
+	return sp;
+}
+
+int modify_damage(object caster, int dam, string type, int need_spell_level)
+{
+	int spell_lvl;
+	
+	if( caster->query("npc") ) return dam;
+	if( member_array(type, MAGIC_TYPES) == -1 ) return dam;
+	spell_lvl = (int)caster->query("spell_levels/"+type);
+	if( spell_lvl < need_spell_level )
+		dam -= dam*(need_spell_level-spell_lvl)/20;
+	if( dam < 1 ) dam = 1;
+	return dam;
+}
+
+int modify_delay_time(object caster, int delay_time, string type, int need_spell_level)
+{
+	int spell_lvl;
+	
+	if( caster->query("npc") ) return delay_time;
+	if( member_array(type, MAGIC_TYPES) == -1 ) return delay_time;
+	spell_lvl = (int)caster->query("spell_levels/"+type);
+	if( spell_lvl < need_spell_level )
+		delay_time -= delay_time*(need_spell_level-spell_lvl)/25;
+	if( delay_time < 1 ) delay_time = 1;
+	return delay_time;
+}
+
+void report( object caster, object victim )
+{
+   string message;
+   message= "/adm/daemons/statsd"->status_string(victim);
+   if( living( caster ) )
+     tell_object( caster, 
+       sprintf("( %s%s )\n" ,victim->query("c_name"),message));
+
+   if( living( victim ) )
+     tell_object( victim, 
+       sprintf("( 你%s )\n" ,message ));
+}
+
+int check_level(object caster, object victim, int one)
+{
+	if( !userp(caster) || !userp(victim) || 
+		( (int)victim->query_level()>4 && ( (int)caster->query_level()>4)) )
+		return 1;
+	if( one ) {
+		tell_object( caster, set_color(
+			"以诸神之名, 你不可以攻击这个人。\n","HIY",caster) );
+		tell_object( victim, set_color(
+			sprintf("%s(%s)尝试攻击你, 但是万能的天神阻止了他并给予警告。\n",
+				caster->query("c_name"), caster->query("name")), "HIC", victim));
+		tell_room( environment( victim ), 
+			sprintf("%s(%s)尝试攻击%s(%s), 但是万能的天神阻止了他并给予警告。\n",
+				caster->query("c_name"), caster->query("name"),
+				victim->query("c_name"), victim->query("name")) ,
+				({ caster, victim }));
+	} else
+		tell_object( victim, set_color(
+			"天上突然传来一阵宏亮的声音: 你的等级太低了，不能被 PK。\n"
+			"万能的天神伟大的魔力让你免於受到伤害。\n", "HIC", victim));
+	return 0;
+}

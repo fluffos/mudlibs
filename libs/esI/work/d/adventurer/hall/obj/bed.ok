@@ -1,0 +1,289 @@
+#include "mudlib.h"
+
+inherit OBJECT;
+
+string *c_illusion =({
+"睡梦中你看到一只羊、二只羊、三只羊、四只羊...越来越多的羊跑来跑去！\n",
+"睡梦中你看到自己站在一堆里体小山上微笑，原来躺下的都是自己的杰作！\n",
+"睡梦中你看到自己不断的呐喊著：杀呀！杀呀！像个疯子一样.....\n",
+"你看到一位全身金光闪闪的骑士，於千军万马中冲刺，取敌人首级如入无人之地！\n",
+"睡梦中你看到一位头顶有光圈的高僧，正演练一套神奇武功\，生龙活虎如达摩再世！\n",
+"睡梦中你看到一位身材迷人，曲线姚佻的女魔法师，笑著对你说：「嗨！大帅哥！」\n",
+"带著情人吃完大餐要付账时，你好像看到一个身影，然後发现钱不见了！真是好糗！\n",
+"你看到一位高人在月下舞剑，身影翩翩，口中念著「我歌月徘徊，我舞影凌乱！」\n",
+"睡梦中你看到一位全身脏兮兮的流浪汉，口中不断念著「和平！奋斗！玩泥巴！」\n",
+"睡梦中你看到一只可怜的小猫，叫著「喵喵！大爷别杀我...小的给你跪下磕头！」\n",
+"你看到一只变态的青蛙唱著「你说你想要逃，偏偏注定要死掉，命没了！钱没了..」\n",
+ }) ;
+
+//int maxhp,maxsp,maxtp,hp_full,sp_full,tp_full ;
+
+void create()
+{
+        set_name( "Bed", "行军床" );
+//        set( "id", ( { "bed" } ) );
+        set_short( "行军床" );
+        set("unit", "个" );
+        set_long( "这是一个行军床, 你可以在上面睡觉\n" );
+        set( "weight", 100000);
+}
+
+void init()
+{
+add_action("cmd_sleep","sleep");
+// add_action("cmd_out","out");
+// add_action("cmd_quit","quit");
+add_action("cmd_wake","wake");
+add_action("cmd_protect","protect");
+add_action("cmd_unprotect","unprotect");
+add_action("cmd_kill","kill");
+}
+void do_sleep(object player, int skill, int degree,int num )
+{ 
+   string text;
+   string *colors = ({ "HIC", "HIY", "HIB" });
+   int i, maxhp, maxsp, maxtp, hp_full, sp_full, tp_full;
+   if ( degree < 10 && skill > random(degree*10) && (int)this_player()->query_temp("shaked") < 1) { 
+           if (degree > 2) i = random(8)+2 ; else i = degree ;
+           text = c_illusion[i];
+           message("illusion", 
+              set_color(text, colors[random(3)], player),player) ;
+           if (degree % 2) {
+             tell_room( environment(player), 
+             sprintf("你看到 %s 躺在床上，一边流著口水，一边传出吓人的鼾声。\n",
+               player->query("c_name")), player );
+           } 
+           maxhp = (int)player->query("max_hp"); 
+           maxsp = (int)player->query("max_sp"); 
+           maxtp = (int)player->query("max_tp");     
+           player->add("hit_points", num + 1);
+           player->add("spell_points", (int)num/2 + 1 );
+           player->add("talk_points", (int)num/2 + 1 );
+           if ((int)player->query("hit_points") >= maxhp) {
+              player->set("hit_points",maxhp) ;
+              hp_full = 1 ;
+           } 
+           if ((int)player->query("spell_points") >= maxsp) {
+              player->set("spell_points",maxsp) ;
+              sp_full = 1 ;
+           }
+           if ((int)player->query("talk_points") >= maxtp) {
+              player->set("talk_points",maxtp) ;
+              tp_full = 1 ;
+           } 
+           call_out( "do_sleep", 8, player, skill, degree + 1,num );
+   } else {
+       player->delete_temp("block_command");
+       tell_object( player, 
+		"......突然间你听到一阵闹铃声，不甘愿的醒了过来。\n" );
+       tell_room( environment(player), 
+       sprintf("你看到%s揉揉惺忪眼睛，伸伸懒腰，继续活动。\n",
+               player->query("c_name")), player );
+       call_out("quit_camp", degree*20, player);
+   }
+}
+
+void quit_camp( object player )
+{
+        if( !player ) return;
+        tell_object( player,
+                "你感觉有一点累了。\n");
+        player->delete_temp("in_sleep");
+}
+
+int cmd_sleep()
+{
+    int skill, hp, num;
+    object me,env;
+	
+    me = this_player();
+    env = environment(me) ;
+    skill = (int)me->query_temp("build_skill");
+//    maxhp = (int)me->query("max_hp"); 
+//    maxsp = (int)me->query("max_sp"); 
+//    maxtp = (int)me->query("max_tp");     
+//    sp_full=0; hp_full=0; tp_full = 0 ;
+    num = me->query_temp("camp_size");
+    if ( me->query("class") == "adventurer" )
+    num = num +1;  
+    if (me->query_temp("in_sleep")) {
+    write("你是猪啊，才睡醒又想睡？\n");
+    return 1;
+    }
+    if( (int)me->query_attacker()) {
+      write("在战斗中睡觉，想要找老黑泡茶吗？\n");
+      return 1;
+    }
+    tell_object( me,
+                    "你实在太累了，随便找个空地倒头就睡。\n" );
+    tell_room( env, 
+	me->query("c_name")+"似乎太累了，一进来就躺在床上补充睡眠。\n",
+		me );
+    if( !wizardp( me ) ) {
+	me->set_temp("in_sleep",1);
+	me->set_temp("block_command", 1 );
+    }		
+    me->set_temp("shaked",0);
+    call_out( "do_sleep", 8, me, skill, 0, num );
+    return 1;
+}
+
+int cmd_wake(string arg)
+{
+     object target,me;
+     me = this_player();
+     if ( !arg || arg == "") {
+                      tell_object( me,
+                      "你已经起床了啊?\n" );
+                      return 1;
+                      }
+    
+     if ( !(target = present( arg,environment(this_player()))) ) {
+                      tell_object( me,
+                      "这里没有叫"+arg+"的东西。\n");
+                      return 1;
+                      }
+    
+     if ( !visible(target,this_player()) || target->query("invisible_player")) {
+                      tell_object( me,
+                      "好像没有这个人喔?\n");
+                      return 1;
+                      }
+     
+     if ( !living(target) || !(int)target->query_temp("block_command")==1 ) {
+                      tell_object( me,
+                      "你用力的摇晃"+target->query("c_name")+"但是什麽事也没发生。\n");
+                      return 1;
+                      }      
+      tell_object( me, set_color(
+           "你大力的摇晃" + target->query("c_name") + "的身体，企图把他叫醒...\n\n", "HIY"
+           ,me) );
+                      
+      tell_object(target, set_color(
+           me->query("c_name")+"大力的摇晃你的身体.....\n\n", "HIM"
+            ,target));
+                                              
+      tell_room( environment(me), "\n"+
+           me->query("c_name")+"大力摇晃"+
+           target->query("c_name")+"的身体，企图把他叫醒\n\n" ,
+           ({ me, target }) );
+      
+      target->set_temp("shaked",1); 
+      target->delete_temp("block_command");
+      target->receive_special_damage("none",20);
+      return 1;
+   }  
+int cmd_protect(string str)
+{
+	object damsel,*prot,*prot2;
+	string *foo;
+	int	i;
+
+        if ((string)this_player()->query("class") != "adventurer" ) 
+              return notify_fail("只有冒险者有能力在帐蓬中守卫...\n");
+        prot = (object *)this_player()->query_temp("protect_whom");
+
+	if (!str) {
+		if ( sizeof(prot) < 1 )
+			return notify_fail("你现在没有保护任何人。\n");
+		prot2 = ({ }) ;
+		for ( i=0 ; i < sizeof(prot) ; i++) 
+			if ( !nullp(prot[i]) && prot[i]) prot2 += ({ prot[i] }) ;
+		prot = prot2 ;
+		this_player()->set_temp("protect_whom",prot);
+		write(set_color("你现在保护著 :\n","HIY",this_player()));
+		for ( i=0 ; i < sizeof(prot) ; i++)
+			write(sprintf("%s(%s)\n",prot[i]->query("c_name"),prot[i]->query("name")));
+		return 1;
+	}
+
+	damsel = present(str, environment(this_player())) ;
+//	if ( damsel = this_player() )
+//	        return notify_fail("保护自己吗，你还真聪明\n");
+	if (!damsel || !living(damsel))
+		return notify_fail("你要保护谁？\n");
+
+        if( prot && pointerp(prot) ) {
+                if ( member_array( damsel,prot ) != -1 )
+                return notify_fail("你已经保护著他了 !!\n");
+		if (sizeof(prot) > 3 )
+		return notify_fail("你不能分心保护那麽多人 !!\n");
+	}
+
+	write( sprintf("你提高了警觉，注意%s的安全。\n",damsel->query("short"),to_chinese(subjective(damsel))));
+	tell_object( damsel, 
+		sprintf("%s目不转睛的注意著你的安全！\n",this_player()->query("c_name")));
+
+	damsel->add_temp("who_protect", ({ this_player() }) ) ;
+	this_player()->add_temp("protect_whom", ({ damsel }) ) ;
+	return 1 ;
+}
+int cmd_unprotect(string str)
+{
+	object *foo, *tmp, me;
+	int i, j, done;
+
+	if( !str ) return 0;
+	me = this_player();
+	if ((string)this_player()->query("class") != "adventurer" )
+	            return notify_fail("只有冒险者有能力在帐蓬中守卫...\n");
+	foo = (object *)me->query_temp("protect_whom");
+	if( sizeof(foo) < 1 )
+		return notify_fail("你现在并没有保护任何人。\n");
+	done = 0;
+	for( i=sizeof(foo)-1; i>=0; i-- ) {
+		if ( !foo[i] ) continue ;
+		if( !foo[i]->id(str) ) continue;
+		write(sprintf("你停止保护%s(%s)。\n", foo[i]->query("c_name"),
+				foo[i]->query("name")));
+		tell_object( foo[i], 
+			sprintf("%s(%s)停止保护你。\n", me->query("c_name"),
+				me->query("name")));
+		tmp = foo[i]->query_temp("who_protect");
+		tmp -= ({ me });
+		foo[i]->set_temp("who_protect", tmp);
+		foo[i] = 0;
+		done++;
+	}
+	if( done ) {
+		if( sizeof(foo) > done ) {
+			done = 0;
+			tmp = allocate(sizeof(foo)-done);
+			for( i=sizeof(foo)-1; i>=0; i-- ) {
+				if( foo[i] == 0 ) continue;
+				tmp[j] = foo[i];
+				j++;
+			}
+			me->set_temp("proctect_whom", tmp);
+		} else me->delete_temp("protect_whom");
+	} else return notify_fail( 
+		"你现在并没有保护任何叫做 " + str + " 的人。\n");
+	return 1;
+}
+int cmd_kill(string arg)
+{ 
+       object me, victim, *protector;
+       int i,kar;
+       me = this_player();
+       kar = this_player()->query_perm_stat("karma");
+       if( !arg ) return 0; 
+       if ( !( victim = present( arg,environment(me))) ) return 0;
+       if ( !living(victim)) return 0;                
+       protector = (object *)victim->query_temp("who_protect");
+       if( sizeof(protector) < 1 ) {
+       if( victim->query_temp("block_command")) { 
+       victim->set_temp("shaked",1);
+//       victim->die();
+       victim->receive_damage( 180 - kar*random(4)); 
+       return 0; }
+       else { 
+       victim->set_temp("shaked",1);
+       return 0;
+       }
+       }
+       for( i=sizeof(protector)-1; i>=0; i-- ) {
+       if ( !present(protector[i],environment(me)) ) continue ;
+       me->kill_ob(protector[i]);
+       }
+       return 0;
+ }        

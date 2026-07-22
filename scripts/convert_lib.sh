@@ -94,6 +94,28 @@ grep -rlZ '#include *<[^>]*\.c>' "$WORK" --include="*.lpc" --include="*.h" 2>/de
 after2=$(grep -rn '#include *<[^>]*\.c>' "$WORK" --include="*.lpc" --include="*.h" 2>/dev/null | wc -l)
 echo "  fixed $((before2 - after2)) refs, $after2 remain"
 
+echo "== converting local #include <x.lpc> to \"x.lpc\" (angle brackets only search"
+echo "   the configured include path, never the including file's own directory --"
+echo "   see AGENTS.md §8d; safe/additive since quotes ALSO fall back to the"
+echo "   include path, so this never breaks a genuinely-global include)"
+local_inc_fixed=0
+while IFS= read -r -d '' f; do
+  fdir=$(dirname "$f")
+  # Extract each #include <...> target on its own line, check if it
+  # resolves locally (same directory as the including file); if so,
+  # convert just that line's brackets to quotes.
+  while IFS= read -r inc_path; do
+    [[ -z "$inc_path" ]] && continue
+    base=$(basename "$inc_path")
+    if [[ -f "$fdir/$base" ]]; then
+      esc_path=$(printf '%s\n' "$inc_path" | sed -e 's/[.[\*^$/]/\\&/g')
+      sed -i -E "s#include *<${esc_path}>#include \"${inc_path}\"#" "$f"
+      local_inc_fixed=$((local_inc_fixed + 1))
+    fi
+  done < <(grep -oE '#include *<[^>]+>' "$f" | sed -E 's/#include *<([^>]+)>/\1/')
+done < <(find "$WORK" -type f \( -name "*.lpc" -o -name "*.h" \) -print0)
+echo "  converted $local_inc_fixed local angle-bracket includes to quotes"
+
 echo "== static -> nosave (.lpc + .h)"
 # NUL-delimited throughout -- a plain newline-delimited pipe into xargs
 # word-splits any filename containing a space (seen: "char - 副本.lpc",

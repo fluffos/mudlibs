@@ -1,0 +1,80 @@
+  The MudOS driver comes with the ability to create and use virtual objects.
+A virtual object is one that was NOT created from an existing file: thus,
+it doesn't take up any disk space. They're ideal for making a large number
+of similar but not identical objects: historically they've usually been
+used to make rooms, creating large areas without wasting a lot of disk space.
+However, they are applicable to any situation where you need a lot of
+similar but not identical items which can be customized based on a single
+string argument (which can be sscanfed into multiple arguments if needed.)
+   Virtual objects get created in the following way. Whenever the driver
+tries to load a file that doesn't exist, it calls compile_object() in the
+master object, passing the name of the nonexistant file as an argument.
+This function can return an object to the driver, or it can return 0,
+in which case the driver will report that the file cannot be loaded.
+If the function returns an object, then that object is handed back to
+the driver and treated as if it had been loaded from the file name. The
+virtual object can be customized based on the file name that was loaded,
+so that virtual objects need not be exactly alike, and can have as much
+variation as you can code base on a string argument.
+   Exactly where that object comes from depends on the mudlib. You can alter
+the code of your mudlib to do different things. In the TMI-2 mudlib, the
+master object calls compile_object() in the virtual object daemon, which is
+the file /adm/daemons/virtual_d.c, passing the name of the file as an argument.
+This file passes control to a virtual object handler. The virtual object
+handler will parse the file name and determine which base object should
+be cloned to supply a virtual object. Which of the various virtual object
+handlers gets called depends on the file name supplied. If the file name is
+of the form /u/x/xyzzy/*, then it tries to pass control to the handler
+/u/x/xyzzy/virtual/server.c. If the file name is of the form /d/Foo/*,
+then it tries to pass control to /d/Foo/virtual/server.c. If the file
+name is not of these forms, or if the requested handler doesn't exist,
+then control is instead passed to /adm/daemons/virtual/server.c. By
+altering /adm/daemons/virtual_d.c, you can direct control to other
+places, if you would want to do that.
+   The virtual object handler parses the file name, and decides what object
+should be cloned in response to the attempted load. You can code your own
+handlers, or you can use the default server. If you use the default server,
+then things go like this. First, the server attemps to parse the name
+of the file in the following form: args.tmp.c, where both args and tmp
+are strings (seperated by a .). For example, if the cloned file was
+/u/m/mobydick/3,3.ocean.c, then args would be "3,3" and tmp would be
+"ocean". Next, the handler looks for a base object to clone, based onthe
+file name requested and the tmp string. If the original file name was of
+the form /u/x/xyzzy/*, then it looks for a file called <tmp>_server.c,
+in the directory /u/x/xyzzy/virtual. In the above example, the handler
+would look for an object called /u/m/mobydick/virtual/ocean_server.c.
+If the file name is of the form /d/Foo/*, then it looks for the file
+<tmp>_server.c in the directory /d/Foo/virtual. If neither of these
+servers exists or the file name is not of those forms, then it tries
+to find /adm/daemons/virtual/<tmp>_server.c. If it can't find that, or
+if the parse attempt fails, then it returns 0, and the driver reports
+that the original object doesn't exist.
+If, however, the object server is found, then the handler calls the
+function compile_object() in the server, passing args as an argument
+to that function. All virtual object servers should #include the file
+/std/virtual/compile.c which defines this function. It creates a clone of
+itself using the clone_object() efun, and calls the initialize() function
+in the new object, passing <args> as an argument. This information is
+used by the initialize() function to customize the new object before
+giving it to the driver. For example, in the grid_server file which comes
+with the mudlib, <args> is equal to the room's coordinates on the grid,
+eg. "3,3" from the file "3,3.grid.c". The grid server uses sscanf() to
+break the string apart into two integers, and supplies terrain and exits
+to the room based on those two coordinates.
+  By writing your own virtual object servers and handlers, you can do
+much more than this with the virtual object facility. First, you can
+start with a different base object: the existing servers are all rooms
+but you can do other things as well. For example, you could start with
+a weapon as the base object: then, you can treat the argument as the
+specific weapon type and customized the weapon based on whether the
+requested file was "sword.weapon.c", "pole-arm.weapon.c", or whatever.
+You can write the initialize function yourself to do the customization
+in whateever way you like.
+  If you want to, you can also rewrite the object handler to pass different
+arguments. For example, you can rewrite the handler to pass the entire
+file name to the object server, instead of parsing it and only passing the
+arguments. You can then call restore_file() to restore an object's data
+from the supplied file name. This has been used to create a room system
+where instead of each room being coded, they only exist as save files, and
+the virtual object system is used to restore the appropriate save file
+to the default room.

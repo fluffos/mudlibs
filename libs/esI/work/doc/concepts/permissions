@@ -1,0 +1,205 @@
+Article 4214 of rec.games.mud.lp:
+Path: newsflash.concordia.ca!utcsri!utnut!torn!spool.mu.edu!howland.reston.ans.net!xlink.net!math.fu-berlin.de!cs.tu-berlin.de!tubmud
+From: tubmud@cs.tu-berlin.de (TUB Multi User Domain)
+Newsgroups: rec.games.mud.lp
+Subject: A security system for LPmuds
+Date: 21 Jun 1993 22:14:31 GMT
+Organization: Technical University of Berlin, Germany
+Lines: 188
+Message-ID: <205bs7$l2@news.cs.tu-berlin.de>
+Reply-To: r_behren@informatik.uni-kl.de
+NNTP-Posting-Host: dragon.cs.tu-berlin.de
+Mime-Version: 1.0
+Content-Type: text/plain; charset=iso-8859-1
+Content-Transfer-Encoding: 8bit
+
+DESIGN PRINCIPLES FOR A SECURITY SYSTEM
+
+There are many conditions a good security system should satisfy. Ease of
+use, consistent design, and of course security. The current uid system
+used in many muds fails to satisfy all of them. It is unnecessarily
+complicated to use, its design has to many twists and it has been broken
+to often to be considered safe. Therefore I have tried to design a system
+that performs better in all three areas.
+
+BASIC CONCEPT
+
+The security system described in this article is based on the concept of
+'permissions' and 'protections'. Every object gets a certain permission
+level assigned, every file a protection. Access is then granted based on
+the comparison of the permissions of the objects involved in the computation
+and the protection of level of the file that is to be accessed. If the
+'total' (the meaning of total will be explained later) permission level
+of all the objects involved is greater than or equal to the protection
+level of the file, the access is successful.
+
+DEFINITIONS
+
+We no need a more precise notation of what 'permissions' and 'protections'
+are and how the 'total' value is computed.
+
+Basically, all permission and protection values are drawn from a finite
+set S. We define an operation ^ on S such that (S,^) is a lower semilattice
+and the relation <= induced by a<=b iff a = a ^ b is a partial order. We will
+further assume that S contains at least two elements, <1> and <0>, where
+<1>>=s for all s in S and <0><=s for all s in S. ^ is normally known as the
+"greatest lower bound" operator.
+
+Example: We define S to be the set { <1>, <a>, <b>, <c>, <0> } and use the
+         following diagram to define ^ and <=.
+
+                  <1>
+                /  |  \
+              /    |    \
+            <a>   <b>   <c>
+              \    |    /
+                \  |  /
+                  <0>
+
+         We have x <= y iff x = y or x is below y in the above graph and
+         there is a straight connection between x and y.
+         x ^ y = z iff z is the topmost element in the graph such that
+         z <= x and z <= y.
+         For example, <a> ^ <1> = <a>, <b> ^ <0> = <0>, <a> ^ <c> = 0.
+
+Of course, more complex orderings can be thought of. The above ordering
+is a simple example with permissions/protections for three wizards, as well
+as for root and an /open directory (in MUD terms).
+
+We proceed now to assign values from S to directories. In the above example,
+/players/a, /players/b and /players/c would have been assigned <a>, <b> and
+<c> respectively. /open would have been assigned <0> and all the other
+directories like /obj would have gotten a value of <1>.
+
+Any file within a directory now automatically inherits the value assigned to 
+the directory it resides in as its protection. If the directory has no
+value assigned to it, the above directory is checked, then the one above
+that until we find a value. So /players/a/obj/test.c would get <a> as its
+protection level. On the other hand, /players/guest.o would have protection
+level <1>, not that of <guest>, because the file resides in the directory
+/players, not in /players/guest.
+
+For objects, they inherit the protection of the files they were created
+from as their maximum permissions. However, they automatically get an
+initial protection level of <0> and have to raise them if they need more
+permissions, the maximum permission level derived from the file name being
+the upper bound for that. So for example, /obj/player.c could get any
+permissions because <1>, the maximum permission level is higher than
+all the other permissions available. On the other hand, in most cases
+the player object will get permissions like <a> or <b>, for the instances
+of the object will be wizards who are not meant to have global access.
+
+The 'total' permissions of a set { ob1, ob2, ..., obn } of objects is their
+greatest lower bound, namely: perm(ob1) ^ perm(ob2) ^ ... ^ perm(obn),
+where perm(ob) desribes the current permissions of object ob.
+
+HOW IT WORKS
+
+Now what is done to decide about the validity of a file access attempt of
+an object? Let us assume that our current computation made the stack look
+as follows: ob1->ob2->ob3->...->obn, where ob1 called ob2, ob2 called ob3
+and so forth until computation reached obn, which is equal to this_object().
+
+If obn no attempts a write access, say, by write_file(), we check the
+following:
+Are the total permissions of { this_interactive(), ob1, ..., obn } >= the
+protection of the argument of write_file()? If yes, the write_file()
+succeeds, otherwise it fails. It should be noted that in any case where
+this_interactive() is 0, the total permissions will automatically be 0 (as
+in heart_beat()). We will solve this problem later.
+
+So far, so good. We can now without problems assign permissions <1> to
+any tool that writes files because the total permissions will be those
+of the player who uses it. Likewise, it is impossible for objects to
+force other players to do unsafe actions because in the process they will
+reduce the total permissions to what they can do (or less).
+
+However, that leaves certain interesting cases out. For example, every
+save command issued by players without permissions <1> would fail because
+they can't bypass the protection of the save file. We need an additional
+LPC construct to handle this case.
+
+The LPC statement:
+
+unguarded (p) { ...; }
+
+will temporarily (i.e. during execution of the statements within the
+braces { ... } ) reset the permission level to p, where p has to be equal
+to less than the maximum permission level of the object executing the
+statement. Effectively, if in stack state ob1->...->obn the statement
+gets executed by obi, the total permissions will be computed as
+p ^ perm(ob(i+1)) ^ ... ^ perm(obn). Therefore the statement:
+
+unguarded (1) { save_object("/players/"+name); } will succeed.
+
+Note that the (p) argument to argument is optional and defaults to the
+objects maximum permissions.
+
+ADVANCED STRUCTURING OF THE PERMISSION/PROTECTION GRAPH
+
+Of course, the simple example semilattice defined above is insufficient
+in many respects. For example, what if wizard <a> wants to give his friend
+wizard <b> access to directory /players/a/foo, because he wants him to
+add some stuff to bar.c? He has to create a new permission level, let's
+call it <ab> and assign it to directory /players/a/foo. It will have
+still higher protection than <0> (so that wizard c can't write to it)
+but lower protection than both <a> and <b> so that they both can write
+to it. Interestingly, all objects from /players/a/foo can now only write
+to their own directory and /open, so giving access to wizard b to one
+directory doesn't compromise the security of the rest of /players/a.
+
+Access to domains and other schemes can be handled in a similar way.
+Define where the new protection level will reside within the graph,
+define it and assign it to a directory.
+
+INTERFACE
+
+The following efuns are needed:
+
+query_permissions(file|object[,mode]) will return the permissions/protection
+  of the file or object given as the argument. Mode is an integer.
+  If querying the protections of a file, zero stands for read protection
+  and non-zero for write protection. For an object, zero will return
+  current permissions, non-zero will return maximum permissions. Mode
+  defaults to 1 for files and 0 for objects.
+set_permissions(permissions) will set the permissions of this_object()
+  to permissions if permissions is equal to or less than the maximum
+  value allowed for this_object().
+create_permissions(directory,above,below) will create new
+  permission levels between the permission levels listed in the arrays
+  above and below. The efun checks if this would introduce a cycle and
+  report an error in this case.
+  create_permissions() will fail if at this point the total permissions
+  are less than or equal to the new permission level created. Write access
+  to the directory with the new permissions is also required.
+copy_permissions(directory1,directory2) will transfer the protection level
+  of directory1 to directory2. Write access to directory2 is required
+  and the current permissions must be greater than the protection level that
+  is transferred.
+delete_permissions(directory) will result in directory no longer having
+  a protection/permission value assigned to it and instead inherit
+  the value of the parent directory. The value of / cannot be deleted
+  and will always be <1>.
+
+How permissions are represented internally doesn't matter much. Strings
+or integers are obvious choices. The database needed to store the structure
+should be in human readable form, however, to ease emergency changes when
+the mud is down.
+
+IMPLEMENTATION
+
+The implementation of semilattice operations is definitely not trivial,
+especially if the structure needs being changed dynamically. Normally
+the worst case performance in the general case to determine the value of
+a ^ b is O(|S|). Of course caching should result in substantial speedups.
+Better implementations of the average case have been done, but the best
+choice should probably be to restrict oneself to a structure that has
+been specialized to handle the permission structure of muds well and
+can compute a ^ b still in O(1) time.
+
+Please feel free to comment, criticize and inquire about this scheme.
+
+				Reimer Behrends
+
+
+

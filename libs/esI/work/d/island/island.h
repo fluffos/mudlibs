@@ -1,0 +1,10 @@
+#include <mudlib.h>
+#define ISLAND "/d/island/"
+#define IOBJ   "/d/island/obj/"
+#define IMON   "/d/island/monster/"
+#define IWEP   "/d/island/weapon/"
+#define CLASS  "monk/general/"
+#define FIST   "monk/fist/"
+#define ITOWN  "/d/island/town/"
+#define IWAR   "/d/island/war/"
+#define IWARO  "/d/island/war/obj/"
