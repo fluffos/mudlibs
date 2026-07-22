@@ -1,0 +1,333 @@
+
+#include <ansi.h> 
+inherit ROOM; 
+int check_name(string str,object me);
+int do_fen2(object me,object obj);
+int do_zhu2(object me,object obj);
+int do_jinshu2(object me,object obj);
+string to_string(mixed arg)
+{
+        return stringp(arg) ? arg : save_variable(arg);
+}
+
+void create()
+{
+    seteuid(ROOT_UID);
+    set("short", HIR"头盔合成室"NOR);
+
+    set("long", @LONG
+这里是头盔合成室，大家可以拿着自己辛苦找到的
+稀有金属和材料来这里合成出厉害的合成头盔!
+放主材料(zhu)，辅助材料(fen)，加入矿石(jinshu)
+最后请用(hecheng ***)来制造属于你的装备。
+LONG
+        );
+    set("exits", ([
+      "down" :  __DIR__"hchands",
+    "up" : __DIR__"hcwaist",
+    ]));
+    set("no_fight",1);
+    set("no_beg",1);
+    set("no_steal",1);
+    setup();
+}
+
+void init()
+{ 
+    add_action("do_zhu","zhu");
+    add_action("do_fen","fen");
+    add_action("do_jinshu","jinshu");
+    add_action("do_hecheng","hecheng"); 
+}
+
+int check_name(string name,object me)
+{
+    int i;
+
+    i = strlen(name);
+
+    if( (strlen(name) < 4) || (strlen(name) > 50 ) ) {
+             tell_object(me,"合成头盔名字请定在50个位数。\n");
+            return 0;
+    }
+    while(i--) {
+        if( name[i]<=' ' ) {
+            tell_object(me,"对不起，你的合成头盔名字中不能用控制字符。\n");
+                return 0;
+        }
+    }
+    return 1;
+}
+int do_zhu(string arg)
+{
+    object obj;
+    object ob;
+    object me = this_player();
+
+    if(!arg) return notify_fail("你要拿什么当主材料？\n");
+
+if (me->query("rmb") < 5000000)
+          { 
+              write("对不起,你的人民币小于500万，不能合成 !\n" NOR);
+              return 1;
+          }
+
+    if( !objectp(obj = present(arg, me)) )
+        return notify_fail("你身上并没有这样东西！\n");
+
+    if(me->is_busy())
+        return notify_fail("您现在正忙,等一下再放进去吧！\n");
+
+    return do_zhu2(me, obj);
+}
+int do_zhu2(object me,object obj)
+{
+    object ob;
+    string arg=obj->short(1);
+    me = this_player();
+
+    if (me->query_temp("hecheng/zhu"))
+        return notify_fail("对不起你已经"+me->query_temp("hecheng/name")+"做主材料了！\n");
+
+    foreach ( ob in all_inventory(me)){
+        if (ob->short(1)!=arg) continue;
+        if (!ob->query("head_type")) {
+            write("这样东西不是合成头盔的材料吧??\n");
+            return 1;
+        }
+
+        if( ob->query("equipped") )
+            return notify_fail("这个材料你已经装备着了，不能合成。\n");
+        
+        write(HIR"你拿"+ob->name()+HIR"做主材料！\n"NOR);
+        me->set_temp("hecheng/zhu",ob->query("head_type"));
+        me->set_temp("hecheng/name",""+ob->name()+"");
+        if ( ob->query("armor_prop/armor") > 500 )
+            me->set_temp("hecheng/armor", 500);
+        else
+            me->set_temp("hecheng/armor",ob->query("armor_prop/armor"));
+        
+        destruct(ob);
+        return 1;
+    }
+}
+
+int do_fen(string arg)
+{
+    object obj;
+    object ob;
+    object me = this_player();
+
+    if(!arg) return notify_fail("你要放什么材料进去？\n");
+
+if (me->query("rmb") < 5000000)
+          { 
+              write("对不起,你的人民币小于500万，不能合成 !\n" NOR);
+              return 1;
+          }
+
+    if( !me->query_temp("hecheng/zhu"))
+        return notify_fail("合成头盔必须要先放好主材料,要不然无法合成！\n");
+
+    if( !objectp(obj = present(arg, me)) )
+        return notify_fail("你身上并没有这样东西！\n");
+
+    return do_fen2(me, obj);
+}
+int do_fen2(object me,object obj)
+{
+    object ob;
+    string arg=obj->short(1);
+   
+    if (me->query_temp("hecheng/fen"))
+        return notify_fail("你已经放过辅助材料了！\n");
+   
+
+    foreach ( ob in all_inventory(me)){
+        if (ob->short(1)!=arg) continue;
+        if (!ob->query("head_type")) {
+            write("这样东西并不能拿来合成头盔！\n");
+            return 1;
+        }
+
+        if( ob->query("equipped") )
+            return notify_fail("这个材料你已经装备着了，不能合成。\n");
+        if (me->query_temp("hecheng/name")==""+ob->name()+"")
+            return notify_fail("你已经把"+ob->name()+"当主材料放进去合成了！\n");
+
+        me->add_temp("hecheng/armor",random(ob->query("armor_prop/armor")));
+        me->set_temp("hecheng/fen",1);
+        write(HIB"你把"+ob->name()+HIB"放进去做辅助材料！\n"NOR);
+        destruct(ob);
+        return 1;
+    }
+}
+
+
+int do_jinshu(string arg)
+{
+    object obj;
+    object ob;
+    object me = this_player();
+
+    if(!arg) return notify_fail("你要放什么金属进去？\n");
+
+if (me->query("rmb") < 5000000)
+          { 
+              write("对不起,你的人民币小于500万，不能合成 !\n" NOR);
+              return 1;
+          }
+
+    if( !me->query_temp("hecheng/zhu"))
+        return notify_fail("合成头盔必须要先放好主材料,要不然无法合成！\n");
+
+    if( !objectp(obj = present(arg, me)) )
+        return notify_fail("你身上并没有这样东西！\n");
+
+    return do_jinshu2(me, obj);
+}
+
+int do_jinshu2(object me,object obj)
+{
+    object ob;
+    string arg = obj->short(1);
+   
+    if (me->query_temp("hecheng/jinshu")>=8)
+        return notify_fail("合成一次最多只能放八个金属！\n");
+   
+    foreach ( ob in all_inventory(me)) {
+        if (ob->short(1)!=arg) continue;
+        if (!ob->query("skill_type") && !ob->query("zhongji_hc")) {
+            write("这样东西并不能拿来合成！\n");
+            return 1;
+        }
+  
+        if ( ob->query("int") ) 
+            me->add_temp("hecheng/int", 60+random(ob->query("int"))*1/9);
+      
+        if ( ob->query("str") ) 
+            me->add_temp("hecheng/str", 60+random(ob->query("str"))*1/9);    
+
+        if ( ob->query("dex") ) 
+            me->add_temp("hecheng/dex", 60+random(ob->query("dex"))*1/9);
+      
+        if ( ob->query("con") ) 
+            me->add_temp("hecheng/con", 60+random(ob->query("con"))*1/9);
+     
+        if ( ob->query("damage") ) 
+            me->add_temp("hecheng/armor", random(ob->query("damage"))*1/9);
+
+
+        me->add_temp("hecheng/jinshu",1);
+        write(HIB"你把"+ob->name()+HIB"这样金属放进去准备合成！\n"NOR);
+        destruct(ob);
+        return 1;
+    }
+}
+int do_hecheng(string arg)
+{
+    string w_name, id, lb, file, item_buff;
+    object item;
+    string time;
+    
+    object me = this_player();
+    id = me->query("id");
+    
+    if (!arg) return notify_fail("你给合成头盔取个名字呀！\n");
+
+    if (!me->query_temp("hecheng/zhu"))
+        return notify_fail("你没放主材料无法合成！\n");
+
+    if (!me->query_temp("hecheng/fen"))
+        return notify_fail("你没放分材料无法合成！\n");
+
+    sscanf(arg ,"%s" ,w_name);
+
+    if(! check_name(w_name,me))      
+        return 1;
+
+    if(!w_name)
+        return notify_fail("什么？(使用hecheng 加头盔的名字\n)");
+
+    w_name = replace_string(w_name, "$BLK$", BLK);
+    w_name = replace_string(w_name, "$RED$", RED);
+    w_name = replace_string(w_name, "$GRN$", GRN);
+    w_name = replace_string(w_name, "$YEL$", YEL);
+    w_name = replace_string(w_name, "$BLU$", BLU);
+    w_name = replace_string(w_name, "$MAG$", MAG);
+    w_name = replace_string(w_name, "$CYN$", CYN);
+    w_name = replace_string(w_name, "$WHT$", WHT);
+    w_name = replace_string(w_name, "$HIR$", HIR);
+    w_name = replace_string(w_name, "$HIG$", HIG);
+    w_name = replace_string(w_name, "$HIY$", HIY);
+    w_name = replace_string(w_name, "$HIB$", HIB);
+    w_name = replace_string(w_name, "$HIM$", HIM);
+    w_name = replace_string(w_name, "$HIC$", HIC);
+    w_name = replace_string(w_name, "$HIW$", HIW);
+    w_name = replace_string(w_name, "$NOR$", NOR);
+    item_buff = "";
+        
+    file = DATA_DIR + "item/" + id + "/";
+    
+	if ( file_size(file) != -2 )
+		mkdir(DATA_DIR + "item/" + id);
+     
+    time = to_string(time());
+    file += id + time + ".lpc";
+     
+    if (me) {
+        lb = "head";
+        /**************继承和定义该物品的类型************/
+        item_buff += "/**本文件由合成系统自动生成**/\n\n";
+        item_buff += "#include <ansi.h>\n";
+        item_buff += "#include <armor.h>\n\n";
+        item_buff += "inherit NECK;\n\n";
+        /****************************************************/
+        item_buff += "void create()\n{\n";
+        item_buff += "\tobject me = this_player();\n\n";
+        item_buff += "\tset_name(\"" + w_name + "\"NOR, ({\"" + id + " "+ lb + "\", \"hecheng\", \"" + lb +"\"}) );\n"; 
+        item_buff += "\tset(\"hcloth/name\", \"" + w_name + "\"NOR);\n"; 
+        item_buff += "\tset(\"hcloth/id\", \"" + id + " " + lb + "\");\n"; 
+        item_buff += "\tset(\"long\", \"这是由" + me->query("name") + "(" + me->query("id") + ")合成的" + w_name + "\" + NOR + \"。\\n\");\n"; 
+        item_buff += "\tset(\"armor_type\", \"" + lb + "\");\n"; 
+        item_buff += "\tset_weight(5000);\n"; 
+        item_buff += "\tset(\"unit\", \"双\");\n"; 
+        item_buff += "\tset(\"no_get\", 1);\n"; 
+        item_buff += "\tset(\"no_give\", 1);\n"; 
+        item_buff += "\tset(\"no_sell\", 1);\n"; 
+        item_buff += "\tset(\"no_steal\", 1);\n"; 
+        item_buff += "\tset(\"no_beg\", 1);\n"; 
+        item_buff += "\tset(\"no_drop\", 1);\n"; 
+        
+        if (me->query_temp("hecheng/armor"))
+            item_buff += "\tset(\"armor_prop/armor\", " + me->query_temp("hecheng/armor") + ");\n"; 
+        if (me->query_temp("hecheng/con"))
+            item_buff += "\tset(\"armor_prop/constitution\", " + me->query_temp("hecheng/con") + ");\n"; 
+        if (me->query_temp("hecheng/dex"))
+            item_buff += "\tset(\"armor_prop/dexerity\", " + me->query_temp("hecheng/dex") + ");\n"; 
+        if (me->query_temp("hecheng/int"))
+            item_buff += "\tset(\"armor_prop/intelligence\", " + me->query_temp("hecheng/int") + ");\n"; 
+        if (me->query_temp("hecheng/str"))
+            item_buff += "\tset(\"armor_prop/strength\", " + me->query_temp("hecheng/str") + ");\n"; 
+        
+        item_buff += "\tset(\"wear_msg\", me->name() + NOR \"装备\" + name () + NOR \"！\\n\");\n";
+        item_buff += "\tset(\"unwear_msg\", me->name() + NOR \"脱下\" + name () + NOR \"！\\n\");\n";
+        
+        item_buff += sprintf("\n   setup();\n}\n\n");
+         me->add("rmb", -2000000); 
+        me->delete_temp("hecheng");
+        
+        if (write_file(file, item_buff)) {
+            item = new(file);
+            item->restore();
+            item->move(me);
+            message_vision(HIG"$N合成装备成功！\n"NOR, me);
+        } else
+            return notify_fail("写入数据失败，档案无法保存！\n");
+
+    }
+    return 1;
+}
+
+
+

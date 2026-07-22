@@ -18,8 +18,8 @@ void powerup()
 {
         object me = this_object();
         random(2)?
-    //    me->command_function("chat ÑÅµäÄÈ£¬´ÍÓèÎÒÁ¦Á¿°É£¡\n"):
-    //    me->command_function("chat Ğ¡ÓîÖæ£¡±¬·¢°É£¡\n");
+    //    me->command_function("chat é›…å…¸å¨œï¼Œèµäºˆæˆ‘åŠ›é‡å§ï¼\n"):
+    //    me->command_function("chat å°å®‡å®™ï¼çˆ†å‘å§ï¼\n");
     set("eff_qi",query("max_qi"));
     set("eff_jing",query("max_jing"));
     set("jing",query("max_jing"));

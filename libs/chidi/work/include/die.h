@@ -4,7 +4,7 @@ void die()
         int kf;
         string banghui;
         object area;
-        if(base_name(environment())+".c"!=query("area_file"))
+        if(base_name(environment())+".lpc"!=query("area_file"))
                 return ::die();
         if(! stringp(banghui=query("banghui")))
                 return ::die();
@@ -25,8 +25,8 @@ void die()
         area->set("kaifa",kaifa);
         area->save();
         destruct(area);
-        message("channel:rumor",YEL"¡¾Ò¥ÑÔËÄÆğ¡¿Ä³ÈË£ºÓÉÓÚ"+query("name")+
-        "±»É±£¬"+query("area_name")+"µÄ¿ª·¢¶È½µÎª"+kaifa+"£¡\n"NOR,users());
+        message("channel:rumor",YEL"ã€è°£è¨€å››èµ·ã€‘æŸäººï¼šç”±äº"+query("name")+
+        "è¢«æ€ï¼Œ"+query("area_name")+"çš„å¼€å‘åº¦é™ä¸º"+kaifa+"ï¼\n"NOR,users());
         return ::die();
 }
 

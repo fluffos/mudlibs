@@ -10,7 +10,7 @@ int valid_kill(object killer, object victim)
 
      if(userp(victim) && killer->query_condition("no_pk_time")>480 
        && userp(killer))
-       return notify_fail("你最近杀人太多，此时忽然觉得罪孽深重，下不去手。\n");
+       return notify_fail("浣犳渶杩戞潃浜哄お澶氾紝姝ゆ椂蹇界劧瑙夊緱缃娣遍噸锛屼笅涓嶅幓鎵嬨�俓n");
 
      return 1;
 }

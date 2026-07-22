@@ -7,10 +7,10 @@
 #define ESC ""
 #define CSI ESC + "["
  
-//ºÅÁîÌìÏÂĞ­Òé
-#define JYM_DENGLU ESC+"0x0001"          //ÔÊĞíµÇÂ½
-#define JYM_USER_NAME ESC+"0x0002"       //ÇëÇóÊäÈëÓÃ»§Ãû
-#define JYM_PSAWD ESC+"0x0003"           //ÇëÇóÊäÈëÓÃ»§ÃÜÂë
+//å·ä»¤å¤©ä¸‹åè®®
+#define JYM_DENGLU ESC+"0x0001"          //å…è®¸ç™»é™†
+#define JYM_USER_NAME ESC+"0x0002"       //è¯·æ±‚è¾“å…¥ç”¨æˆ·å
+#define JYM_PSAWD ESC+"0x0003"           //è¯·æ±‚è¾“å…¥ç”¨æˆ·å¯†ç 
 
                 /*  Foreground Colors  */
  

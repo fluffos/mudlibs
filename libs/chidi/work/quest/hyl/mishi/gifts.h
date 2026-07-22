@@ -33,13 +33,13 @@ int give_gifts(object ob)
     
 	ob->delete_temp("tdh_job");
 	tell_object(ob,HIY"
-Äã±£»¤»ðÔÆ½ÌÌØ±ðÈËÎï°²È»·µ»Ø£¬¹¦ÀÍÆÄ´ó£¬µÃµ½ÁË£º" + 
+ä½ ä¿æŠ¤ç«äº‘æ•™ç‰¹åˆ«äººç‰©å®‰ç„¶è¿”å›žï¼ŒåŠŸåŠ³é¢‡å¤§ï¼Œå¾—åˆ°äº†ï¼š" + 
 
-                       chinese_number(exp) + "µãÊµÕ½¾­Ñé£¬" +
+                       chinese_number(exp) + "ç‚¹å®žæˆ˜ç»éªŒï¼Œ" +
 
-                       chinese_number(pot) + "µãÇ±ÄÜµÄ½±Àø¡£\n"+
+                       chinese_number(pot) + "ç‚¹æ½œèƒ½çš„å¥–åŠ±ã€‚\n"+
 
-"ÄãÎªÌìµØ»á×öÁË"HIW+chinese_number(ob->query("tiandihui/job"))+HIG"´Î¹¤×÷¡£\n"NOR);
+"ä½ ä¸ºå¤©åœ°ä¼šåšäº†"HIW+chinese_number(ob->query("tiandihui/job"))+HIG"æ¬¡å·¥ä½œã€‚\n"NOR);
 	ob->apply_condition("tdh_job_busy",4+random(4));
 	return 1;
 }
@@ -53,20 +53,20 @@ int do_point(string arg)
 {
 	object mishi,ma,ob=this_player();
 	
-	if(!arg) return notify_fail("ÄãÂÒ´ÁÁËÒ»Í¨£¬·¢ÏÖÃ»ÈËÀíÄã¡£\n");
-	if(ob->query_temp("tdh_job/job_name")!="±£»¤ÃÜÊ¹")
-		return notify_fail("ÄãÂÒ´ÁÊ²Ã´£¿\n");
+	if(!arg) return notify_fail("ä½ ä¹±æˆ³äº†ä¸€é€šï¼Œå‘çŽ°æ²¡äººç†ä½ ã€‚\n");
+	if(ob->query_temp("tdh_job/job_name")!="ä¿æŠ¤å¯†ä½¿")
+		return notify_fail("ä½ ä¹±æˆ³ä»€ä¹ˆï¼Ÿ\n");
 	if(!(mishi=present(arg,environment(ob))))
-		return notify_fail("ÄãÒªÖ¸Ë­£¿\n");
+		return notify_fail("ä½ è¦æŒ‡è°ï¼Ÿ\n");
 	if(!(ma=present("xu tianchuan",environment(ob))))
-		return notify_fail("½ÌÖ÷²»ÔÚ£¬»¹ÊÇÏÈµÈµÈÔÙËµ¡£\n");
+		return notify_fail("æ•™ä¸»ä¸åœ¨ï¼Œè¿˜æ˜¯å…ˆç­‰ç­‰å†è¯´ã€‚\n");
 	if(mishi->query("guarder_id")!=ob->query("id"))
-		return notify_fail("ÄãÓÃÊÖÖ¸ÁË"+mishi->name()+"Ò»ÏÂ£¬"+ma->name()+"Ò¡ÁËÒ¡Í·¡£\n");
+		return notify_fail("ä½ ç”¨æ‰‹æŒ‡äº†"+mishi->name()+"ä¸€ä¸‹ï¼Œ"+ma->name()+"æ‘‡äº†æ‘‡å¤´ã€‚\n");
 	if(!ob->query_condition("tdh_job_busy"))
-		return notify_fail(CYN"ÄãÖ¸ÁËÖ¸"+mishi->name()+"£¬"+ma->name()+"Ì¾µÀ£º´Ë´ÎÊ±ÈÕ»¨·ÑÌ«¶à£¬ÎÒµÈ·´µ¹²»±ã¡£\n"NOR);
-	message_vision("$NÓÃÄ¿¹âÖ¸ÁËÖ¸$n¡£",ob,mishi);
-	message_vision("$N³åÉÏÇ°È¥£¬¼¤¶¯µØÎÕ×¡$nµÄÊÖ£¬ßìÑÊµÃÒ»¾ä»°Ò²Ëµ²»³öÀ´¡£\n",ma,mishi);
-	message_vision("$NÎûÎûÉµÐ¦ÁËÒ»ÏÂ£º½ÌÖÐÈÎÎñ·±¶à£¬ËùÐÒ²»¸º½ÌÖ÷ËùÍû£¬"+RANK_D->query_self(ob)+"¾Í´Ë±ð¹ý¡£\n",ob);
+		return notify_fail(CYN"ä½ æŒ‡äº†æŒ‡"+mishi->name()+"ï¼Œ"+ma->name()+"å¹é“ï¼šæ­¤æ¬¡æ—¶æ—¥èŠ±è´¹å¤ªå¤šï¼Œæˆ‘ç­‰åå€’ä¸ä¾¿ã€‚\n"NOR);
+	message_vision("$Nç”¨ç›®å…‰æŒ‡äº†æŒ‡$nã€‚",ob,mishi);
+	message_vision("$Nå†²ä¸Šå‰åŽ»ï¼Œæ¿€åŠ¨åœ°æ¡ä½$nçš„æ‰‹ï¼Œå“½å’½å¾—ä¸€å¥è¯ä¹Ÿè¯´ä¸å‡ºæ¥ã€‚\n",ma,mishi);
+	message_vision("$Nå˜»å˜»å‚»ç¬‘äº†ä¸€ä¸‹ï¼šæ•™ä¸­ä»»åŠ¡ç¹å¤šï¼Œæ‰€å¹¸ä¸è´Ÿæ•™ä¸»æ‰€æœ›ï¼Œ"+RANK_D->query_self(ob)+"å°±æ­¤åˆ«è¿‡ã€‚\n",ob);
 	call_out("destructing",1,mishi);
 	give_gifts(ob);
 	return 1;

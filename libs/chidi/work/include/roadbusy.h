@@ -5,7 +5,7 @@ int valid_leave(object me,string dir)
                 if( random(me->query_skill("dodge",1))==0 )
                 {
                         me->start_busy(random(2)+1);
-                        return notify_fail("你走累了，需要休息一下！\n");
+                        return notify_fail("浣犺蛋绱簡锛岄渶瑕佷紤鎭竴涓嬶紒\n");
                 }
                 else return 1;
         }

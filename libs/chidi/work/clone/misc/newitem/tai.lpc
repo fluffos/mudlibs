@@ -1,0 +1,665 @@
+//开放至＋13的装备 add by luoyun 2007/01/11 
+//增加合成记录 add by luoyun 2007/01/11 
+#include <ansi.h>
+inherit ITEM;
+
+int get_baoshi(int sta,string mess1);
+private string  create_file(object item_temp);
+private int     save_item_file(string filename, string content);
+private string  prop_segment(mapping p, string path);
+
+void create()
+{
+        set_name(HIM"进化合成台(tai)"NOR, ({"tai"}) );
+        set("short", HIM"进化合成台(tai)"NOR);
+        set_max_encumbrance(5000);
+        set("temperature",25);
+        set_temp("max_temp",25);
+        set_temp("min_temp",25);
+        
+        if( clonep() )
+                set_default_object(__FILE__);
+        else {
+                set("unit", "口");
+                set("no_get", 1);
+                set("no_put", 1);
+	set ("long", @LONG
+这是合成进化装备的地方。
+------------------------------------------
+祝福寶石: 用于合成＋1至＋2的装备    成功率60％
+靈魂寶石：用于合成＋1至＋4的装备    成功率45％
+創造寶石：用于合成＋1至＋7的装备    成功率55％
+天使之心：用于合成＋1至＋9的装备    成功率50％
+天神之淚：用于合成＋1至＋12的装备   成功率50％
+軒轅原石：用于合成＋1至＋13的装备   成功率45％
+-------------------------------------------
+在这里你可以用如下命令合成进化装备:
+-----------------------------------
+init   : 租用进化合成台(20000元人民币)
+add    : 把宝石和装备放入进化合成台    
+finish : 结束合成(失敗所有物品消失)    
+-----------------------------------
+LONG);               
+
+                set("value", 50);
+        }
+}
+
+int is_container() { return 1; }
+
+void init()
+{
+	add_action("do_init", "init");
+	add_action("do_add","add");
+	add_action("do_finish", "finish");
+	add_action("do_get","get");
+	add_action("do_put","put");	
+}
+
+int do_init()
+{
+   	object me = this_player();
+   	object obj,ob = this_object();   
+   	     
+       if (me->query("rmb")<20000) return notify_fail("进化合成台需要2万元人民币一次！\n");  
+       if (me->query_temp("checking"))
+      return notify_fail("你已经租用了进化合成台。\n");
+     	if(ob->query_temp("user") && ob->query_temp("user") != me->query("id"))
+     	{
+     		if ( time()-ob->query_temp("init_time")<300 && ((obj=present(ob->query_temp("user"))) || (obj = present(ob->query_temp("user"), environment(me))))) 
+   			return notify_fail(obj->name()+"正在用呢，请等五分钟再试试！\n");      
+   	}
+       me->add("rmb",-20000);
+	reload_object(ob);
+	ob->set_temp("init_time",time());
+       ob->set_temp("user",me->query("id"));
+       me->set_temp("checking",1);
+       message_vision("$N花了贰万元人民币租用了"+ob->name()+"准备合成进化装备。\n",me);
+       //message("channel:chat",HIM"【空穴来风】：听说"+me->name()+"开始合成进化装备。\n"NOR,users());
+       remove_call_out("do_temperature");
+       remove_call_out("do_checking");
+       call_out("do_temperature", 2);
+       call_out("do_checking", 60);
+       return 1;		
+}
+
+int do_add(string arg)
+{
+	 string item_name;        
+        object me = this_player();
+        object ob = this_object();
+        object item;
+        mixed *inv;
+        int i;
+        inv = all_inventory(ob);
+
+	if (ob->query_temp("user") != me->query("id")) 
+               return notify_fail("你租用了进化合成台了吗？\n");
+       if(!arg) 
+               return notify_fail("你要将什么东西放入进化合成台里？\n");
+       if( sscanf(arg, "%s in tai", item_name)!=1 )
+                return notify_fail("用法：add <> in tai。\n");
+       item=present(item_name, me);       
+       if (! present(item_name, me)) 
+               return notify_fail("你身上没有这东西。\n");       
+     	if (sizeof(all_inventory(ob))>=2) 
+               return notify_fail(ob->name()+"里面已经放满了。\n");
+       if ((string)item->query("express")!="can_shenghua")  
+              return notify_fail("你只能放可进化物品进去。\n"); //判断放入物品是否可进化 
+       if(!sizeof(inv)) 
+       {
+               message_vision( "$N将一"+item->query("unit")+item->query("name")+"放进"+ob->name()+"。\n",me);
+               item->move(ob);      
+}
+               for(i=0; i<sizeof(inv); i++) 
+       if( inv[i]->query("material") != "baoshi" )//台内物品是装备
+     {
+   	      if (item->query("material") != "zhuangbei" )//放入物品不是装备 
+   	 {
+   	     message_vision( "$N将一"+item->query("unit")+item->query("name")+"放进"+ob->name()+"。\n",me);
+            item->move(ob);      
+   	}else{
+return notify_fail("你现在只能放进化宝石进去。\n");
+  }
+}
+else
+       if( inv[i]->query("material") != "zhuangbei" )//台内物品是宝石
+     {
+   	      if (item->query("material") != "baoshi" )//放入物品不是宝石 
+   	 {
+   	     message_vision( "$N将一"+item->query("unit")+item->query("name")+"放进"+ob->name()+"。\n",me);
+            item->move(ob);      
+   	}else{
+return notify_fail("你现在只能放进化装备进去。\n");
+  }
+}
+       return 1;
+                
+}
+
+int do_get(string arg)
+{
+	string item_name;
+        object me = this_player();
+        object ob = this_object();
+        if(!arg) return notify_fail("你要干什么？\n");
+        if( sscanf(arg, "%s from tai", item_name)==1 && ob->query_temp("user") != me->query("id"))
+                return 1;
+        return 0;
+                
+}
+
+int do_put(string arg)
+{
+	string item_name;
+        if(!arg) return notify_fail("你要干什么？\n");
+        if( sscanf(arg, "%s in tai", item_name)==1 )
+                return 1;
+        return 0;
+                
+}
+int do_finish()
+{
+   object me = this_player();
+   object ob = this_object();
+   object baoshi;object zhuangbei;
+   mixed *inv;
+   string mess,filename,id;
+   int i,lvl,sh_lvl,sj_lvl,suss,suss1,suss2,point; //sta为炼完状态，0：失败，物品消失；1：失败，物品不消失；
+   		//2：成功，得到＋1合成裝備；3、成功，得到大于＋2～＋7合成裝備
+      
+   if (ob->query_temp("user") != me->query("id")) return notify_fail("你租用了进化合成台了吗？\n");
+           remove_call_out("do_temperature");
+  
+   mess="";
+   inv = all_inventory(ob);
+   if( !sizeof(inv) ) 
+	return notify_fail("进化合成台里什么都没有，你想干什么啊？\n"); 
+ 
+   if( sizeof(inv)<=1) 
+       return get_baoshi(1,mess);//隻有一種東西不能用来合成  
+
+                   for(i=0; i<sizeof(inv); i++)
+  if (inv[0]->query("material")=="baoshi")
+{
+   baoshi=inv[0];
+   zhuangbei=inv[1];
+}else{
+   zhuangbei=inv[0];
+   baoshi=inv[1];
+}
+              for(i=0; i<sizeof(inv); i++)
+                 lvl=baoshi->query("lvl");
+                 sh_lvl=zhuangbei->query("sh_lvl"); 
+                 sj_lvl=zhuangbei->query("sj_lvl");                      
+          if (lvl <= sj_lvl || sj_lvl >= 13){        
+   		 mess=HIC+"合成的配方好像不對（寶石與裝備的等級不符）。\n"+NOR;	
+               return get_baoshi(1,mess);
+}
+        id = me->query("id");
+	filename = ITEM_DIR + id[0..0] + "/" + id + 
+		   "-" +me->query("id")+"'"+zhuangbei->query("id")+ ".lpc";
+	if (file_size(filename) != -1)
+	{
+                mess=HIC+"你已经拥有这个装备，别太贪心了。。\n"+NOR;		
+		return get_baoshi(1,mess);             
+	 }
+   /*---(分子/分母) 当分子>分母则成功合成装配--*/
+   point=baoshi->query("point");   
+   suss1=100-point;//分母（等级越高则成功率越低）
+   suss=random(100); //分子
+   if (sj_lvl >= 4 && sj_lvl <= 7)
+     suss=random(90); //装备等级>=4并且<=7则成功率下降5%
+     suss -=suss/20;if (suss <=0) suss=1; 
+else
+   if (sj_lvl >= 7 && sj_lvl <= 9 )
+     suss=random(80); ;//装备等级>=7并且<= 9则成功率下降10%   
+     suss -=suss/10;if (suss <=0) suss=1;
+else
+  if (sj_lvl >= 9 && sj_lvl <= 12 )
+     suss=random(80); //装备等级>=9并且<= 12则成功率下降5%    
+     suss -=suss/20;if (suss <=0) suss=1; 
+else
+  if (sj_lvl >= 12 && sj_lvl <= 13 )
+     suss=random(80); //装备等级>=12并且<= 13则成功率下降3%  
+     suss -=suss/30;if (suss <=0) suss=1; 
+else
+      suss=random(100); //装备等级>=0并且<= 3则成功率不下降  
+ 
+   tell_object(me,HIY"成功率："+(suss)+"/"+(suss1)+"\n"NOR);	      
+   if (suss >= suss1) return get_baoshi(2,mess);//等级>=成功率，则成功合成装备
+       else return get_baoshi(0,mess);//合成失败，所有閤成物品消失
+
+}
+int get_baoshi(int sta,string mess1)
+{
+   object me = this_player();
+   object obj,ob = this_object();
+   object baoshi;
+   object zhuangbei;
+   string mess, me_name,ob_name,zhuangbei_id;
+   string item_filename;
+   int i,k,sum,lvl,sjlvl,*kind=({0,0});
+   mixed *inv;   
+
+   me_name=me->name();
+   ob_name=ob->name();
+   inv = all_inventory(ob);
+   mess=HIG+me_name+"觉得差不多了，收起神功，屏住呼吸，小心翼翼地打开"+ob_name+"\n";
+   switch(sta)
+   {
+   	case 0://合成失败
+   		mess+=HIG+"但是"+ob_name+HIG+"里面空空如也，什么都没有。\n"+NOR;
+   		     for (k=0;k<sizeof(inv);k++)
+          if (inv[0]->query("material")=="baoshi")
+            {
+              baoshi=inv[0];
+              zhuangbei=inv[1];
+                  }else{
+              zhuangbei=inv[0];
+              baoshi=inv[1];
+                             }     
+         zhuangbei_id = zhuangbei->query("id");       
+         me->delete("can_summon/"+zhuangbei_id);//删除装备召唤功能       
+         if (zhuangbei->query("sh_lvl")>0){            
+            rm(base_name(zhuangbei)+ ".lpc");//删除装备文件
+	     DBASE_D->clear_object(zhuangbei);//删除数据库记录
+            }
+                        destruct(zhuangbei);
+                        destruct(baoshi); 
+                me->add("合成装备/失败次数",1);            
+                //message("channel:chat",HIM"【空穴来风】：听说"+me_name+"合成进化装备失败，所有材料付之一炬。\n"NOR,users());
+   		break;
+      case 1://合成材料不符合
+   		mess+=HIG+"发现原来合成的材料还在里面，只好又尴尬地拿了出来。\n"+NOR;
+   		for (k=0;k<sizeof(inv);k++)
+   			inv[k]->move(me);
+              //message("channel:chat",HIM"【空穴来风】：听说"+me_name+"合成进化装备失败，还好，材料还在。\n"NOR,users());
+   		break;
+   	case 2://合成炼制成功   		
+   		 for (k=0;k<sizeof(inv);k++)
+          if (inv[0]->query("material")=="baoshi")
+            {
+              baoshi=inv[0];
+              zhuangbei=inv[1];
+                  }else{
+              zhuangbei=inv[0];
+              baoshi=inv[1];
+                             }
+       obj=zhuangbei;
+       lvl=zhuangbei->query("sh_lvl",1);
+       lvl += 1;  
+       if (lvl > 13) lvl=13;
+       obj->set("item/wield_msg", zhuangbei->query("wield_msg"));
+	obj->set("item/wear_msg", zhuangbei->query("wear_msg"));
+	obj->set("item/unwield_msg", zhuangbei->query("unwield_msg"));
+	obj->set("item/remove_msg", zhuangbei->query("remove_msg"));
+	obj->set("item/name",   zhuangbei->query("name")+"[5m[1;32m〖已進化〗[2;37;0m");
+	obj->set("item/id",  me->query("id")+"'"+zhuangbei->query("id"));
+       obj->set("item/name1",   zhuangbei->query("name"));
+	obj->set("item/id1", zhuangbei->query("id"));
+       obj->set("item/unit",  zhuangbei->query("unit"));
+	obj->set("item/point",  zhuangbei->query("point"));	
+       obj->set("item/wscale", 3);       
+       obj->set("item/stype", zhuangbei->query("stype"));
+       obj->set("item/ctype", zhuangbei->query("ctype"));
+       obj->set("item/value", zhuangbei->query("value"));
+       obj->set("item/express", zhuangbei->query("express"));
+       obj->set("item/sh_lvl", lvl);
+       obj->set("item/type", zhuangbei->query("type"));
+       obj->set("item/long", zhuangbei->query("long"));
+       obj->set("material", zhuangbei->query("material"));
+	obj->set("item/owner_name", me->query("name"));
+	obj->set("item/owner_id", me->query("id"));
+       if (zhuangbei->query("sj_lvl")){
+       obj->set("item/sj_lvl", zhuangbei->query("sj_lvl"));      
+       rm(base_name(zhuangbei)+ ".lpc");}
+/*--------------------------------------屬性基數---------------------------------------------*/
+if (zhuangbei->query("armor"))
+       obj->set("item/armor",  zhuangbei->query("armor"));
+if (zhuangbei->query("attack1"))
+       obj->set("item/attack1",  zhuangbei->query("attack1"));
+if (zhuangbei->query("defense1"))
+	obj->set("item/defense1", zhuangbei->query("defense1"));
+if (zhuangbei->query("intelligence"))
+	obj->set("item/intelligence",  zhuangbei->query("intelligence"));
+if (zhuangbei->query("dexerity"))
+	obj->set("item/dexerity",  zhuangbei->query("dexerity"));
+if (zhuangbei->query("constitution"))
+	obj->set("item/constitution",  zhuangbei->query("constitution"));
+if (zhuangbei->query("strength"))
+	obj->set("item/strength",  zhuangbei->query("strength"));
+if (zhuangbei->query("karma"))
+	obj->set("item/karma",  zhuangbei->query("karma"));
+if (zhuangbei->query("personality"))
+	obj->set("item/personality",  zhuangbei->query("personality"));
+if (zhuangbei->query("dodge"))
+	obj->set("item/dodge",  zhuangbei->query("dodge"));
+if (zhuangbei->query("force"))
+	obj->set("item/force",  zhuangbei->query("force"));
+/*-----------------------------------------END------------------------------------------------*/
+            if (item_filename = create_file(obj))
+	{
+                // clear the old item's data
+                DBASE_D->set_object_data(obj, 0);
+		destruct(obj);
+                catch(call_other(item_filename, "???"));
+		obj= find_object(item_filename);                
+                if (! obj)
+                {
+                        message_vision("$N一呆，对$n道：抱歉抱歉！出了一些问题！\n",
+                                       this_object(), me);
+                } else {
+/*-----------------------------------特殊屬性賦值---------------------------------------*/          
+if (obj->query("armor"))
+       obj->set("armor_prop/armor",  obj->query("armor")*lvl );
+if (obj->query("attack1"))
+       obj->set("armor_prop/attack1",  obj->query("attack1")*lvl );
+if (obj->query("defense1"))
+	obj->set("armor_prop/defense1", obj->query("defense1")*lvl );
+if (obj->query("intelligence"))
+	obj->set("armor_prop/intelligence",  obj->query("intelligence")*lvl );
+if (obj->query("dexerity"))
+	obj->set("armor_prop/dexerity",  obj->query("dexerity")*lvl );
+if (obj->query("constitution"))
+	obj->set("armor_prop/constitution",  obj->query("constitution")*lvl );
+if (obj->query("strength"))
+	obj->set("armor_prop/strength",  obj->query("strength")*lvl );
+if (obj->query("karma"))
+	obj->set("armor_prop/karma",  obj->query("karma")*lvl );
+if (obj->query("personality"))
+	obj->set("armor_prop/personality",  obj->query("personality")*lvl );
+if (obj->query("dodge"))
+	obj->set("armor_prop/dodge",  obj->query("dodge")*lvl );
+if (obj->query("force"))
+	obj->set("armor_prop/force",  obj->query("force")*lvl );
+/*----------------------------------------END------------------------------------------*/
+                obj->set("sj_lvl",lvl);//进化等级
+	         obj->move(me);
+                obj->save();             // Create the record in dbase               
+		 log_file("nosave/item", sprintf("%s %s created  %s(%s)\n",
+		          log_time(), log_id(me),
+                 filter_color(obj->name(1)), obj->query("id")));
+                 for (k=0;k<sizeof(inv);k++) 
+                 destruct(inv[k]);
+               me->add("合成装备/成功次数",1);            
+   		 mess+=HIG+"发现里面一"+obj->query("unit")+obj->name()+HIG+"闪闪发光。\n";
+   		 mess+=me_name+"迫不急待地一把抓了出来。\n"+NOR;
+                // message("channel:chat",HIM"【空穴来风】：听说"+me_name+"进化装备成功，炼成了"+obj->name()+"。\n"NOR,users());
+		 break;
+                }
+          } 
+  }
+   mess+=mess1;
+   tell_room(environment(me),mess);
+   reload_object(ob);
+   me->delete_temp("checking");
+   return 1;	
+}
+
+// 生成道具文档, 需要一个的道具原料对象
+// 生成以后建立 ITEM_DIR/???.c 然后删除旧的原料对象, 生成一件新的道具，返回文件名
+
+// 关于原料对象各个属性的说明(item/)
+// ------ 用户可以描述的属性
+// name		道具的名称， 必须要
+// id			道具的ID，   必须要
+// long		道具的描述，系统会在生成道具时自动添加关于炼制原料的描述
+// wield_msg		装备武器的描述，如果没有系统会自动生成
+// unwield_msg	收回武器时的描述
+// wear_msg		穿上护甲时的描述
+// unwear_msg		脱掉护甲时的描述
+
+// ------ 不是用户描述的属性
+// owner_id		制造者的ID
+// owner_name       制造者的名字
+// unit		单位
+// type		道具的类型 weapon 或 armor
+// stype		道具的子类别 weapon 为 sword, blade, whip, stick ； armor 为 armor
+// ctype		道具的类别的中文名 weapon 为 剑、刀、鞭、杖 ； armor 为 护甲
+// value		道具的价值
+// point             伤害力
+
+// ------ 说明是用户自练的道具的属性
+// item_make		1
+
+private string create_file(object item_temp)
+{
+	string	buf;			// 生成文件的缓冲区
+	string	filename;
+       string  desc;
+	int	i,desc_name,desc_id;
+       mapping info;
+       mapping apply;
+       string  ih;
+       string  id;
+       string  mess;
+
+	// 生成文件名
+     if (!item_temp->query("item/sj_lvl"))//第一次合成
+     {
+       id = item_temp->query("item/owner_id");
+	filename = ITEM_DIR + id[0..0] + "/" + id + 
+		   "-" + item_temp->query("item/id") + ".lpc";
+     }else{ 
+       id = item_temp->query("item/owner_id");
+	filename = ITEM_DIR + id[0..0] + "/" + id + 
+		   "-" + item_temp->query("item/id1") + ".lpc";
+        }
+	if (file_size(filename) != -1)
+	{
+		write("无法生成档案，请通知巫师处理。\n");
+		return 0;         
+	}
+        assure_file(filename);
+	buf = "// ITEM Made by player(" + item_temp->query("item/owner_name") +
+              ":" + item_temp->query("item/owner_id") + ") " + filename + 
+	      "\n// Written by GAN JIANG(Doing Lu 1998/11/2)\t" + ctime(time()) + "\n";
+        info = item_temp->query("item");
+        ih = up_case(info["stype"]);
+        apply = item_temp->query("armor_prop");      
+
+	if (info["type"] == "weapon")//暫時不開放武器道具，因此在原始道具不會設置type=weapon，這樣武器道具文件也無法生成。
+	{
+		// 生成武器道具文件
+		desc = "这是由炼制而成的一" +
+		       info["unit"] + info["sh_lvl"] + "。\n";
+
+                desc += info["long"];
+                if (desc[strlen(desc) - 1] != '\n')
+                        desc += "\n";
+
+		desc += info["ctype"] + "柄上刻着一行小字：" +
+		        info["owner_name"] + "(" + info["owner_id"] + ")\n";
+
+		// 自动补充空信息
+		if (info["wield_msg"] == "")
+		{
+			info["wield_msg"] = HIC "$N" HIC "一声清啸，抖出一" +
+					    info["unit"] + HIC "$n" HIC "。" NOR;
+		}
+
+		if (info["unwield_msg"] == "")
+		{
+			info["unwield_msg"] = "$N随手一抹，收起了$n。";
+		}
+		buf += "#include <ansi.h>\n";
+		buf += "#include <weapon.h>\n\n";
+		buf += "inherit " + ih + ";\n";
+                buf += "inherit F_NEWITEM;\n\n";
+                buf += "void create()\n{\n";
+		buf += sprintf("\tset_name(\"%s\", ({ \"%s\" }));\n", 
+				info["name"], info["id"]);
+		buf += sprintf("\tset_weight(%d);\n", item_temp->query_weight() * item_temp->query("item/wscale") / 100);
+		buf += sprintf("\tset(\"item_make\", 1);\n");
+		buf += sprintf("\tset(\"unit\", \"%s\");\n", info["unit"]);
+		buf += sprintf("\tset(\"long\", \"%s\");\n", desc);
+		buf += sprintf("\tset(\"value\", %d);\n", info["value"]);
+		buf += sprintf("\tset(\"point\", %d);\n", info["point"]);
+		buf += sprintf("\tset(\"material\", \"%s\");\n", item_temp->query("material"));
+		buf += sprintf("\tset(\"wield_msg\", \"%s\\n\");\n", info["wield_msg"]);
+		buf += sprintf("\tset(\"unwield_msg\", \"%s\\n\");\n", info["unwield_msg"]);
+		buf += sprintf("\trestore();\n");//取消该项，因为不能autoload
+		buf += sprintf("\tinit_%s(apply_damage());\n", info["stype"]);
+                buf += prop_segment(info["prop"], "");
+		buf += sprintf("\n\tsetup();\n}\n\n");
+		// 生成武器道具文件完毕
+	} else
+	{
+		// 生成防护道具文件
+
+if (!info["sj_lvl"])//第一次合成
+     {
+		desc = HIR"這是已經成功進化的一" +
+		       info["unit"] + info["ctype"]+ "。\n"NOR;
+
+             desc += info["long"];
+                if (desc[strlen(desc) - 1] != '\n')
+                        desc += "\n";
+
+		desc += info["ctype"] + "缘上刻着一行小字：" +
+		        info["owner_name"] + "(" + info["owner_id"] + ")\n";
+
+             desc_name = info["name"];
+             desc_id = info["id"];
+} else{  
+             desc =info["long"]; 
+             desc_name = info["name1"];
+             desc_id = info["id1"];
+}
+
+		// 自动补充空信息
+		if (info["wear_msg"] == "")
+		{
+			info["wear_msg"] = YEL "$N" YEL "装备" +
+					   info["name"] + YEL "。" NOR;
+		}
+		if (info["remove_msg"] == "")
+		{
+			info["remove_msg"] = YEL "$N" YEL "脱下了" +
+					     info["name"] + YEL "。" NOR;
+		}
+		buf += "#include <ansi.h>\n";
+		buf += "#include <armor.h>\n\n";
+		buf += "inherit " + ih + ";\n";
+              buf += "inherit F_NEWITEM;\n\n";
+              buf += "void create()\n{\n";
+		buf += sprintf("\tset_name(\"%s\", ({ \"%s\" }));\n", 
+				desc_name, desc_id);
+		buf += sprintf("\tset_weight(%d);\n", item_temp->query_weight() * item_temp->query("item/wscale") / 100);
+              buf += sprintf("\tif( clonep() )\n\tset_default_object(__FILE__);\n\telse {\n");
+		buf += sprintf("\tset(\"item_make\", 1);\n");
+		buf += sprintf("\tset(\"unit\", \"%s\");\n", info["unit"]);
+		buf += sprintf("\tset(\"long\", \"%s\");\n", desc);
+		buf += sprintf("\tset(\"value\", %d);\n", info["value"]);
+		buf += sprintf("\tset(\"point\", %d);\n", info["point"]);
+		buf += sprintf("\tset(\"express\", \"%s\");\n", info["express"]);
+		buf += sprintf("\tset(\"type\", \"%s\");\n", info["type"]);
+                buf += sprintf("\tset(\"stype\", \"%s\");\n", info["stype"]);
+                buf += sprintf("\tset(\"ctype\", \"%s\");\n", info["ctype"]);              
+		buf += sprintf("\tset(\"sh_lvl\", %d);\n", info["sh_lvl"]);          
+              //buf += sprintf("\tset(\"owner\", \"%s\");\n", info["owner_name"]);
+              //buf += sprintf("\tset(\"user\", \"%s\");\n", info["owner_id"]);	
+	        buf += sprintf("\tset(\"material\", \"%s\");\n", item_temp->query("material"));
+		buf += sprintf("\tset(\"wear_msg\", \"%s\");\n", info["wear_msg"]);
+		buf += sprintf("\tset(\"remove_msg\", \"%s\");\n", info["remove_msg"]);
+		buf += sprintf("\trestore();\n");
+           if (info["attack1"])
+		buf += sprintf("\tset(\"attack1\", %d);\n", info["attack1"]);
+           if (info["defense1"])
+		buf += sprintf("\tset(\"defense1\", %d);\n", info["defense1"]);
+           if (info["intelligence"])
+		buf += sprintf("\tset(\"intelligence\", %d);\n", info["intelligence"]);
+           if (info["dexerity"])
+		buf += sprintf("\tset(\"dexerity\", %d);\n", info["dexerity"]);
+           if (info["constitution"])
+		buf += sprintf("\tset(\"constitution\", %d);\n", info["constitution"]);
+           if (info["strength"])
+		buf += sprintf("\tset(\"strength\", %d);\n", info["strength"]);
+           if (info["armor"])
+		buf += sprintf("\tset(\"armor\", %d);\n", info["armor"]);
+           if (info["karma"])
+		buf += sprintf("\tset(\"karma\", %d);\n", info["karma"]);
+           if (info["personality"])
+		buf += sprintf("\tset(\"personality\", %d);\n", info["personality"]);
+           if (info["dodge"])
+		buf += sprintf("\tset(\"dodge\", %d);\n", info["dodge"]);
+           if (info["force"])
+		buf += sprintf("\tset(\"force\", %d);\n", info["force"]);
+              buf += sprintf("\t}\n");
+		buf += sprintf("\n\tsetup();\n}\n\n");
+		// 生成防护道具文件完毕
+	}
+        buf += sprintf("string long() { return query(\"long\") + item_long(); }\n");
+
+	if (save_item_file(filename, buf) == 1)
+		return filename;
+
+	return 0;
+}
+
+void do_temperature()
+{
+	if (this_object()->query("temperature") > 25) 
+	{
+		this_object()->add("temperature",-1);
+	}	   
+	else if (this_object()->query("temperature") < 25)
+	{
+		this_object()->add("temperature",1);
+	}
+	call_out("do_temperature", 2);
+	
+}
+void do_checking()
+{
+	if (this_player()->query_temp("checking")) 
+	{
+		this_player()->delete_temp("checking");
+              tell_object(this_player(),HIW"你反应太迟钝了，下次再来合成装备吧！\n"NOR);
+	}	   
+	remove_call_out("do_checking");	
+}
+
+// add mapping
+private string prop_segment(mapping p, string path)
+{
+        string buf;
+        string *ks;
+        int i;
+
+        buf = "";
+        if (! p) return buf;
+
+        ks = keys(p);
+        for (i = 0; i < sizeof(ks); i++)
+        {
+                // check the paramter's type
+                if (mapp(p[ks[i]]))
+                {
+                        path += ks[i] + "/";
+                        buf += prop_segment(p[ks[i]], path);
+                } else
+                        buf += sprintf("\tset(\"%s\", %s);\n",
+                                       path + ks[i], (string)p[ks[i]]);
+        }
+
+        return buf;
+}
+
+// filename 是写入文档的名称，已经包含有路径
+// content 是写入文档的内容
+private int save_item_file(string filename, string content)
+{
+	rm(filename);
+	if (write_file(filename, content))
+	{
+                VERSION_D->append_sn(filename);
+		return 1;
+	} else
+	{
+		write("写入档案(" + filename + ")时出错，请通知巫师处理。\n");
+		return 0;
+	}
+}
+

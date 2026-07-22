@@ -2,7 +2,7 @@
 mapping *wheres=({
           
   
-      (["chinese":                "扬州中央广场",
+      (["chinese":                "鎵窞涓ぎ骞垮満",
        "weizhi" :              "/d/city/guangchang",]),  
 
            });

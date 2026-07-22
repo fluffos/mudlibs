@@ -2,21 +2,21 @@
 
 mapping guainame=([
 
-"Ä§":
-     (["ÕÅËÄ":({"zhang si","zhang"}),"ÍõÈı":({"wang san","wang"}),
-      "ÀîÎå":({"li wu","li"}),"Áõ´ó":({"liu da","liu"}),
-     "·ç¶ş":({"feng er","feng"}),"ÕÔÁù":({"zhao liu","zhao"}),
-     "ÖÜÆß":({"zou qi","zhou"}),"Îâ°Ë":({"wu ba","wu"}),
-     "Ö£¾Å":({"zheng jiu","zheng"}),"õ¿Ê®":({"bie shi","bie"}),
-     "ÁõµÂ»ª":({"liu dehua","liu"}),"¹ù¸»³Ç":({"guo fucheng","guo"}),
-     "ÕÅÑ§ÓÑ":({"zhang xueyou","zhang"}),"Ö£ÒÁ½¡":({"zheng yijiang","zheng"}),
-     "ÖÜĞÇĞÇ":({"zhou xingxing","zhou"}),"ÀèÃ÷":({"li ming","li"}),
-     "ÖÜ»ª½¡":({"zhou huajiang","zhou"}),"Äª´ó":({"mo da","mo"}),
-     "ÀèÉú":({"li sheng","li"}),"ÌÆÎ÷¾­":({"tang xijing","tang"}),
-     "Öí°Ë½ä":({"zhu bajie","zhu"}),"Ëï°Ô":({"sun ba","sun"}),
-     "Àî°Ô":({"li ba","li"}),"ĞÛ°Ô":({"xiong ba","xiong"}),
-     "¹«Ëï¶ş":({"gongsun er","gongsun"}),"¹«ËïÎŞµĞ":({"gongsun wudi","gongsun"}),
-     "Ë¾Âí¿µ":({"sima kang","sima"}),"È«ÎŞµĞ":({"quan wudi","quan"}),
+"é­”":
+     (["å¼ å››":({"zhang si","zhang"}),"ç‹ä¸‰":({"wang san","wang"}),
+      "æäº”":({"li wu","li"}),"åˆ˜å¤§":({"liu da","liu"}),
+     "é£äºŒ":({"feng er","feng"}),"èµµå…­":({"zhao liu","zhao"}),
+     "å‘¨ä¸ƒ":({"zou qi","zhou"}),"å´å…«":({"wu ba","wu"}),
+     "éƒ‘ä¹":({"zheng jiu","zheng"}),"è¹©å":({"bie shi","bie"}),
+     "åˆ˜å¾·å":({"liu dehua","liu"}),"éƒ­å¯ŒåŸ":({"guo fucheng","guo"}),
+     "å¼ å­¦å‹":({"zhang xueyou","zhang"}),"éƒ‘ä¼Šå¥":({"zheng yijiang","zheng"}),
+     "å‘¨æ˜Ÿæ˜Ÿ":({"zhou xingxing","zhou"}),"é»æ˜":({"li ming","li"}),
+     "å‘¨åå¥":({"zhou huajiang","zhou"}),"è«å¤§":({"mo da","mo"}),
+     "é»ç”Ÿ":({"li sheng","li"}),"å”è¥¿ç»":({"tang xijing","tang"}),
+     "çŒªå…«æˆ’":({"zhu bajie","zhu"}),"å­™éœ¸":({"sun ba","sun"}),
+     "æéœ¸":({"li ba","li"}),"é›„éœ¸":({"xiong ba","xiong"}),
+     "å…¬å­™äºŒ":({"gongsun er","gongsun"}),"å…¬å­™æ— æ•Œ":({"gongsun wudi","gongsun"}),
+     "å¸é©¬åº·":({"sima kang","sima"}),"å…¨æ— æ•Œ":({"quan wudi","quan"}),
 
                ]),
 

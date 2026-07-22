@@ -2,20 +2,20 @@
 #include <ansi.h>
 inherit F_CLEAN_UP;
 mapping valid_types = ([
-        "unarmed":      "È­½Å",
-        "sword":        "½£·¨",
-        "hammer":       "´¸·¨",
-        "blade":        "µ¶·¨",
-        "stick":        "°ô·¨",
-        "axe":          "¸«·¨",
-        "staff":        "ÕÈ·¨",
-        "club" :    "¹÷·¨",
-        "throwing":     "°µÆ÷",
-        "force":        "ÄÚ¹¦",
-        "parry":        "ÕĞ¼Ü",
-        "dodge":        "Çá¹¦",
-        "taoism":       "µÀÑ§ĞÄ·¨",
-        "whip":     "±Ş·¨",
+        "unarmed":      "æ‹³è„š",
+        "sword":        "å‰‘æ³•",
+        "hammer":       "é”¤æ³•",
+        "blade":        "åˆ€æ³•",
+        "stick":        "æ£’æ³•",
+        "axe":          "æ–§æ³•",
+        "staff":        "æ–æ³•",
+        "club" :    "æ£æ³•",
+        "throwing":     "æš—å™¨",
+        "force":        "å†…åŠŸ",
+        "parry":        "æ‹›æ¶",
+        "dodge":        "è½»åŠŸ",
+        "taoism":       "é“å­¦å¿ƒæ³•",
+        "whip":     "é­æ³•",
 ]);
 object find_player(string target)
 {
@@ -47,20 +47,20 @@ int main(object me, string arg)
                         }
                         if( !me->query_skill(skill[i]) ) continue;
                         modify = me->query_temp("apply/" + skill[i]);
-                        str+=sprintf("  %-20s£º %-20s  ÓĞĞ§µÈ¼¶£º%s%3d\n" NOR, 
+                        str+=sprintf("  %-20sï¼š %-20s  æœ‰æ•ˆç­‰çº§ï¼š%s%3d\n" NOR, 
                                 valid_types[skill[i]] + " (" + skill[i] + ")",
-                                undefinedp(map[skill[i]]) ? "ÎŞ" : to_chinese(map[skill[i]]),
+                                undefinedp(map[skill[i]]) ? "æ— " : to_chinese(map[skill[i]]),
                                 (modify==0 ? "" : (modify>0 ? HIC : HIR)),
                                 me->query_skill(skill[i]));
                 }
                 if (str=="")
-                        return notify_fail("ÄãÄ¿Ç°Ã»ÓĞÈÎºÎÌØÊâ¼¼ÄÜ¡£\n");
-                if (arg!="")    write("ÒÔÏÂÊÇÄãÄ¿Ç°Ê¹ÓÃÖĞµÄÌØÊâ¼¼ÄÜ¡£\n");
+                        return notify_fail("ä½ ç›®å‰æ²¡æœ‰ä»»ä½•ç‰¹æ®ŠæŠ€èƒ½ã€‚\n");
+                if (arg!="")    write("ä»¥ä¸‹æ˜¯ä½ ç›®å‰ä½¿ç”¨ä¸­çš„ç‰¹æ®ŠæŠ€èƒ½ã€‚\n");
                 write(str);
                 return 1;
         }
         if( arg=="?" ) {
-                write("ÒÔÏÂÊÇ¿ÉÒÔÊ¹ÓÃÌØÊâ¼¼ÄÜµÄÖÖÀà£º\n");
+                write("ä»¥ä¸‹æ˜¯å¯ä»¥ä½¿ç”¨ç‰¹æ®ŠæŠ€èƒ½çš„ç§ç±»ï¼š\n");
                 skill = sort_array(keys(valid_types), (: strcmp :) );
                 for(i=0; i<sizeof(skill); i++) {
                         printf("  %s (%s)\n", valid_types[skill[i]], skill[i] );
@@ -72,21 +72,21 @@ int main(object me, string arg)
                 if( !ob ) ob = find_living(arg);
                 if( !ob ) ob = present(arg, environment(me));
                 if (ob) {
-                        write(ob->short()+"Ä¿Ç°Ê¹ÓÃÖĞµÄÌØÊâ¼¼ÄÜ£º\n");
+                        write(ob->short()+"ç›®å‰ä½¿ç”¨ä¸­çš„ç‰¹æ®ŠæŠ€èƒ½ï¼š\n");
                         return main(ob,"");
                 }
         }
         if( sscanf(arg, "%s %s", ski, map_to)!=2 )
-                return notify_fail("Ö¸Áî¸ñÊ½£ºenable[<¼¼ÄÜÖÖÀà> <¼¼ÄÜÃû³Æ>|none]\n");
+                return notify_fail("æŒ‡ä»¤æ ¼å¼ï¼šenable[<æŠ€èƒ½ç§ç±»> <æŠ€èƒ½åç§°>|none]\n");
         if( undefinedp(valid_types[ski]) )
-                return notify_fail("Ã»ÓĞÕâ¸ö¼¼ÄÜÖÖÀà£¬ÓÃ enable ? ¿ÉÒÔ²é¿´ÓĞÄÄĞ©ÖÖÀà¡£\n");
+                return notify_fail("æ²¡æœ‰è¿™ä¸ªæŠ€èƒ½ç§ç±»ï¼Œç”¨ enable ? å¯ä»¥æŸ¥çœ‹æœ‰å“ªäº›ç§ç±»ã€‚\n");
         if (map_to == me->query_skill_mapped(ski) )
-                return notify_fail("ÄãÒÑ¾­×°±¸ºÃÁË¡£\n");
+                return notify_fail("ä½ å·²ç»è£…å¤‡å¥½äº†ã€‚\n");
 
         if( map_to == "none" ) {
             if ((me->query_temp("powerup") || me->query_temp("exercise_cost")) && ski=="force" && stringp(me->query_skill_mapped("force"))){
                 me->set_temp("exercise_cost",-1);
-                write(RED "ÄãÊÔ×Å»»ÓÃÄÚ¹¦£¬Í»È»¾õµÃËÄÖ«ÂéÄ¾£¬ÊÖ½Å±ùÀä¡£\nÏÔÈ»ÊÇÆøÏ¢²»ÄÜ»Øµ½µ¤Ìï¡£\n"NOR);
+                write(RED "ä½ è¯•ç€æ¢ç”¨å†…åŠŸï¼Œçªç„¶è§‰å¾—å››è‚¢éº»æœ¨ï¼Œæ‰‹è„šå†°å†·ã€‚\næ˜¾ç„¶æ˜¯æ°”æ¯ä¸èƒ½å›åˆ°ä¸¹ç”°ã€‚\n"NOR);
                 if (me->query("max_neili")>100)
                         me->add("max_neili",-100);
                 else    me->delete("max_neili");
@@ -98,17 +98,17 @@ int main(object me, string arg)
                 write("Ok.\n");
                 return 1;
         } else if( map_to==ski ) {
-                write("¡¸" + to_chinese(ski) + "¡¹ÊÇËùÓĞ" + valid_types[ski] + "µÄ»ù´¡£¬²»ĞèÒª enable¡£\n");
+                write("ã€Œ" + to_chinese(ski) + "ã€æ˜¯æ‰€æœ‰" + valid_types[ski] + "çš„åŸºç¡€ï¼Œä¸éœ€è¦ enableã€‚\n");
                 return 1;
         }
         if( !me->query_skill(map_to, 1) )
-                return notify_fail("Äã²»»áÕâÖÖ¼¼ÄÜ¡£\n");
+                return notify_fail("ä½ ä¸ä¼šè¿™ç§æŠ€èƒ½ã€‚\n");
         if( !SKILL_D(map_to)->valid_enable(ski) )
-                return notify_fail("Õâ¸ö¼¼ÄÜ²»ÄÜµ±³ÉÕâÖÖÓÃÍ¾¡£\n");
+                return notify_fail("è¿™ä¸ªæŠ€èƒ½ä¸èƒ½å½“æˆè¿™ç§ç”¨é€”ã€‚\n");
         if ((me->query_temp("powerup") || me->query_temp("exercise_cost") || me->query_temp("protect")) && ski=="force"){
                 me->set_temp("exercise_cost",-1);
  
-                write(RED "Äã¸ÄÓÃÁíÒ»ÖÖÄÚ¹¦£¬Í»È»¾õµÃËÄÖ«ÂéÄ¾£¬ÊÖ½Å±ùÀä¡£\nÏÔÈ»ÊÇÆøÏ¢²»ÄÜ»Øµ½µ¤Ìï¡£\n"NOR);
+                write(RED "ä½ æ”¹ç”¨å¦ä¸€ç§å†…åŠŸï¼Œçªç„¶è§‰å¾—å››è‚¢éº»æœ¨ï¼Œæ‰‹è„šå†°å†·ã€‚\næ˜¾ç„¶æ˜¯æ°”æ¯ä¸èƒ½å›åˆ°ä¸¹ç”°ã€‚\n"NOR);
                 if (me->query("max_neili")>100)
                         me->add("max_neili",-100);
                 else    me->delete("max_neili");
@@ -120,12 +120,12 @@ int main(object me, string arg)
         write("Ok.\n");
         
         if( ski=="taoism" ) {
-                write("Äã¸ÄÓÃÁíÒ»ÖÖ·¨ÊõÏµ£¬¾«Á¦±ØĞëÖØĞÂ¶ÍÁ·¡£\n");
+                write("ä½ æ”¹ç”¨å¦ä¸€ç§æ³•æœ¯ç³»ï¼Œç²¾åŠ›å¿…é¡»é‡æ–°é”»ç»ƒã€‚\n");
                 me->set("jingli", 0);
                 me->receive_damage("jing", 0);
         } 
         else if( ski=="force" ) {
-                write("Äã¸ÄÓÃÁíÒ»ÖÖÄÚ¹¦£¬ÄÚÁ¦±ØĞëÖØĞÂ¶ÍÁ·¡£\n");
+                write("ä½ æ”¹ç”¨å¦ä¸€ç§å†…åŠŸï¼Œå†…åŠ›å¿…é¡»é‡æ–°é”»ç»ƒã€‚\n");
                 me->set("neili", 0);
                 me->receive_damage("qi", 0);
         }
@@ -134,11 +134,11 @@ int main(object me, string arg)
 int help(object me)
 {
         write(@HELP
-Ö¸Áî¸ñÊ½ : enable [<¼¼ÄÜÖÖÀà> <¼¼ÄÜÃû³Æ> | none]
+æŒ‡ä»¤æ ¼å¼ : enable [<æŠ€èƒ½ç§ç±»> <æŠ€èƒ½åç§°> | none]
            enable ?
-Õâ¸öÖ¸ÁîÈÃÄãÖ¸¶¨ËùÒªÓÃµÄ¼¼ÄÜ£¬ĞèÖ¸Ã÷¼¼ÄÜÖÖÀàºÍ¼¼ÄÜÃû³Æ¡£Èç¹û²»¼Ó²Î
-ÊıÔò»áÏÔÊ¾³ö¼¼ÄÜÖÖÀà¼°ÄãÄ¿Ç°ËùÊ¹ÓÃµÄ¼¼ÄÜÃû³Æ £¬Èç¹û¼ÓÒ»¸ö£¿»áÁĞ³ö
-ËùÓĞÄÜÊ¹ÓÃÌØÊâ¼¼ÄÜµÄ¼¼ÄÜÖÖÀà¡£
+è¿™ä¸ªæŒ‡ä»¤è®©ä½ æŒ‡å®šæ‰€è¦ç”¨çš„æŠ€èƒ½ï¼Œéœ€æŒ‡æ˜æŠ€èƒ½ç§ç±»å’ŒæŠ€èƒ½åç§°ã€‚å¦‚æœä¸åŠ å‚
+æ•°åˆ™ä¼šæ˜¾ç¤ºå‡ºæŠ€èƒ½ç§ç±»åŠä½ ç›®å‰æ‰€ä½¿ç”¨çš„æŠ€èƒ½åç§° ï¼Œå¦‚æœåŠ ä¸€ä¸ªï¼Ÿä¼šåˆ—å‡º
+æ‰€æœ‰èƒ½ä½¿ç”¨ç‰¹æ®ŠæŠ€èƒ½çš„æŠ€èƒ½ç§ç±»ã€‚
  
 HELP
         );

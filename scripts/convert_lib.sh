@@ -87,6 +87,13 @@ grep -rlZ '\.c"' "$WORK" --include="*.lpc" --include="*.h" 2>/dev/null | xargs -
 after=$(grep -rn '\.c"' "$WORK" --include="*.lpc" --include="*.h" 2>/dev/null | wc -l)
 echo "  fixed $((before - after)) refs, $after remain (inspect manually -- see AGENTS.md §2)"
 
+echo "== fixing #include <....c> references (angle-bracket form)"
+before2=$(grep -rn '#include *<[^>]*\.c>' "$WORK" --include="*.lpc" --include="*.h" 2>/dev/null | wc -l)
+grep -rlZ '#include *<[^>]*\.c>' "$WORK" --include="*.lpc" --include="*.h" 2>/dev/null \
+  | xargs -0 -r sed -i -E 's/(#include *<[^>]*)\.c>/\1.lpc>/g'
+after2=$(grep -rn '#include *<[^>]*\.c>' "$WORK" --include="*.lpc" --include="*.h" 2>/dev/null | wc -l)
+echo "  fixed $((before2 - after2)) refs, $after2 remain"
+
 echo "== static -> nosave (.lpc + .h)"
 # NUL-delimited throughout -- a plain newline-delimited pipe into xargs
 # word-splits any filename containing a space (seen: "char - 副本.lpc",

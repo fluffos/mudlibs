@@ -588,6 +588,76 @@ efun exists in this driver for dirname-style string ops — use
 don't overwrite an existing one, extend it (prepend the local directory to
 whatever it already returns).
 
+### 8e. `tail` is not a real FluffOS efun (never was, in this driver)
+
+Seen on lib #1 (`cmds/wiz/tail.lpc`, non-fatal there — an unused admin
+command) and lib #6 (`adm/simul_efun/file.lpc`, FATAL there — inside a
+function that gets compiled as part of `simul_efun.lpc`, so the whole
+boot fails): `efun::tail(file)` / bare `tail(file)` calls that expect a
+"print the last N lines of a file" builtin that doesn't exist anywhere in
+this driver (`error: Unknown efun: tail`, and no `docs/efun/*/tail.md`
+either). Whatever old driver these libs targeted apparently had one; it
+isn't part of FluffOS's efun set at all, not something removed/renamed
+here. **Fix: reimplement in plain LPC** — `read_file()` + `explode()` on
+`"\n"` + slice the last N elements + `write(implode(...))`:
+```lpc
+int do_tail_lpc(string file, int n) {
+    string content, *lines;
+    int start;
+    content = read_file(file);
+    if (!stringp(content)) return 0;
+    lines = explode(content, "\n");
+    start = sizeof(lines) - n;
+    if (start < 0) start = 0;
+    write(implode(lines[start..], "\n") + "\n");
+    return 1;
+}
+```
+Check whether the surrounding function actually has any live callers
+before spending time matching old return-value semantics exactly — in
+both places seen so far it was dead/rarely-used admin tooling.
+
+### 8f. `TYPE * name1, name2;` — the array modifier doesn't propagate across a comma list
+
+Found on lib #7 (ds386, Dead Souls) — a different lineage entirely (English,
+Nightmare-derived, not Chinese-wuxia) but relevant to ANY future English-
+language archive since this looks like an old-codebase-wide habit, not a
+one-off typo. This driver's grammar scopes a declaration's `*` to the
+FIRST declarator only, C-style (`int *a, b;` declares `a` as `int *` but
+`b` as plain `int`) — but Dead Souls writes `object * dummies, all_inv;`
+throughout, clearly INTENDING both to be arrays (both get assigned
+array-returning calls a few lines later: `all_inv = all_inventory();`,
+`dummies = ({})`). Symptom: `error: Bad assignment ( TYPE vs TYPE * )`
+and cascading `Value indexed has a bad type` on the very next use of the
+"forgotten-star" variable — often in a totally different, unrelated-
+looking file each time, since it's one instance of a systemic authoring
+habit, not a single bug.
+
+**Fix (one shot, not per-declaration)**: found 33 affected files by
+grepping for the shape `TYPE * name1, name2, ...;` (a full declaration
+line, 2+ bare comma-separated identifiers, ending in `;`) and wrote a
+small Python script to add a `*` before every subsequent identifier in
+the list that doesn't already have one (leaves an already-correct
+`string *a, *b;` untouched). Safe because the pattern is narrow enough to
+only match genuine multi-declarator statements, not function calls or
+other comma-separated contexts. Re-run the same grep after `convert_lib.sh`
+finishes on any new lib — if it's non-empty, this bug is present.
+
+### 8g. Before treating N identical lpcc-sweep errors as N bugs, check for one shared inherited file
+
+If the exact same error string shows up in dozens/hundreds of otherwise-
+unrelated files in an lpcc sweep, check whether they all `inherit` (or
+`#include`) one common base file first — fixing that ONE file can
+resolve the entire cascade in one shot, versus wasting time investigating
+each affected file individually assuming they're separate bugs. (Found on
+ds386/Dead Souls: 299 files all failed identically because they all
+inherit `lib/body.lpc`, which had one bad `class TYPENAME array Foo()`
+declaration — fixing that single line resolved all 299 sweep failures at
+once. General technique: extract the exact same underlying error line
+from a handful of the failing blocks — if it's byte-identical across all
+of them, it's almost certainly one shared dependency, not independent
+bugs.)
+
 ### 9. Fullwidth Chinese punctuation used as code syntax (typo, not encoding)
 
 A handful of pre-existing typos (found via the lpcc sweep's "Illegal

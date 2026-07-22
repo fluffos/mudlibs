@@ -109,7 +109,7 @@ void do_datan(object me)
         else if (!me->query_temp("followed"))
         {
                 tell_object(me,HIC"这么久你还没赶到，弟子已经被砍死了。\n"NOR);
-                ob=find_object(me->query_temp("where")+".c");
+                ob=find_object(me->query_temp("where")+".lpc");
                 if (obb=present("di zi",ob)) 
                 {
                         tell_room(ob,HIG"突然杀出几个"+me->query_temp("duishou")+"弟子对着"+obb->query("name")+"猛砍一阵。\n然后就四处散开，不见了。\n");

@@ -1,6 +1,6 @@
 // database.h
 
-// 是否采用永久连接
+// 鏄惁閲囩敤姘镐箙杩炴帴
 #define STATIC_LINK
 
 protected mapping all_others_db = ([
@@ -14,4 +14,4 @@ protected string REGISTERED_TABLE	= "reg_player";
 protected string TEMP_TABLE		= "tmp_player";
 protected string PAWN_TABLE		= "pawn_tb";
 protected string FAIL_CMD_TABLE	= "fail_cmds";
-protected int reg_time		= 86400*2;	// 两天
+protected int reg_time		= 86400*2;	// 涓ゅぉ

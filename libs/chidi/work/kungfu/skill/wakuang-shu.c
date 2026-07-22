@@ -1,8 +1,0 @@
-inherit SKILL;
-string type() { return "knowledge"; }
-
-int valid_learn(object me)
-{
-        return notify_fail("挖矿术只能靠挖矿来增加。\n");
-}
-

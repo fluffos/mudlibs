@@ -15,17 +15,34 @@ worked; keep status values consistent so the table stays greppable:
 - `blocked: <reason>` (needs a decision or hit something unresolved)
 
 Port assignments: sequential from 40001, recorded here so re-running
-several libs at once never collides. **Next free port: 40006.**
+several libs at once never collides. **Next free port: 40008** (40007
+taken by ds386, in progress).
 
 ## Progress summary (updated as libs are finished)
 
-- **Done: 5 / 100** (shanhaizhanshen, xingzhanyingxiong, unknownlib20150716
-  [小雨西游II], bxsj [书剑天下], bxsj1 [书剑·经典])
+- **POLICY (per user direction): deprioritize non-Chinese/English-language
+  archives.** Focus on the Chinese wuxia/xianxia libs, which is the vast
+  majority of this collection. If an archive turns out to be English
+  (like ds386/Dead Souls), do the minimum to note what it is, don't sink
+  deep debugging time into it -- move on to the next Chinese one.
+- **Done: 6 / 100** (shanhaizhanshen, xingzhanyingxiong, unknownlib20150716
+  [小雨西游II], bxsj [书剑天下], bxsj1 [书剑·经典], chidi [江湖I])
+- **Partial/deprioritized: ds386** ("Dead Souls", archive #7 — English,
+  Nightmare-mudlib-lineage, not wuxia). Boots and the first-time admin
+  setup wizard runs interactively; not polished further per the policy
+  above. Still found reusable fixes along the way (§8f, §8g in AGENTS.md).
 - Once a lib's lineage is recognized (shared master.lpc/securityd.lpc
   code shapes), apply known catalog fixes PROACTIVELY before the first
   boot attempt instead of rediscovering them -- worked cleanly for bxsj1
   (same lineage as bxsj): all 3 fixes applied up front, booted clean on
   the first try.
+- **Lesson from ds386**: an automated multi-file fix for a systemic-
+  looking pattern needs verification per-instance, not just on the 1-2
+  samples that motivated it -- a regex-shaped bug class can still have
+  genuinely-correct instances mixed in with broken ones. Also: when the
+  SAME error string appears in dozens of files, check for one shared
+  inherited dependency before assuming dozens of separate bugs (AGENTS.md
+  §8g) -- much higher leverage.
 - Tooling built along the way (now reusable for the rest): `extract.sh`,
   `convert_lib.sh` (encoding + rename + ref-fixes, automated), `lpcc_check.sh`
   (now batch-mode, ~15-70x faster — one VM boot compiles every file),
@@ -46,8 +63,8 @@ several libs at once never collides. **Next free port: 40006.**
 | 3 | 20150716未知lib.zip | unknownlib20150716 | 40003 | done | actually 小雨西游II; found get_include_path fix (§8d); see libs/unknownlib20150716/NOTES.md |
 | 4 | bxsj.rar | bxsj | 40004 | done | 书剑天下; found 3 new bugs incl. the this_player()-override footgun (§8c); see libs/bxsj/NOTES.md |
 | 5 | bxsj1.rar | bxsj1 | 40005 | done | 书剑·经典, same lineage as #4; 3 known fixes applied proactively; see libs/bxsj1/NOTES.md |
-| 6 | chidi.rar | | | not started | |
-| 7 | ds3.8.6.zip | | | not started | |
+| 6 | chidi.rar | chidi | 40006 | done | 江湖I; found tail() missing-efun + include-angle-bracket bugs (§8e, convert_lib.sh fix); see libs/chidi/NOTES.md |
+| 7 | ds3.8.6.zip | ds386 | 40007 | partial/deprioritized | Dead Souls, English-language -- user directed to deprioritize non-Chinese libs; boots + admin wizard runs but not polished; see libs/ds386/NOTES.md |
 | 8 | dtsl.rar | | | not started | |
 | 9 | dw_fluffos_v1.tar.gz | | | not started | likely a driver bundle, not a mudlib -- triage first |
 | 10 | dw_fluffos_v2.zip | | | not started | likely a driver bundle, not a mudlib -- triage first |

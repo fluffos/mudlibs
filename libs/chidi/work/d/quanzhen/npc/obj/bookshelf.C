@@ -2,17 +2,17 @@
 inherit ITEM;
 void create()
 {
-        set_name(HIW "Êé¼Ü" NOR, ({ "shu jia", "jia" }) );         
+        set_name(HIW "ä¹¦æ¶" NOR, ({ "shu jia", "jia" }) );         
         set_weight(30000000);
         if( clonep() )
                 set_default_object(__FILE__);
         else{
-        set("unit", "¸ö");
-        set("long", "ÕâÊÇÒ»¸ö×¨ÃÅÓÃÀ´·Å¸÷ÖÖÊé±¾µÄ¼Ü×Ó¡£
-ÀïÃæÓĞ£º
-       Ììî¸ÕıÆø(book)£¬        
-       ¿ÕÃ÷È­Æ×(quan pu)£¬ 
-       Ììî¸½£Æ×(jian pu)£¬ 
+        set("unit", "ä¸ª");
+        set("long", "è¿™æ˜¯ä¸€ä¸ªä¸“é—¨ç”¨æ¥æ”¾å„ç§ä¹¦æœ¬çš„æ¶å­ã€‚
+é‡Œé¢æœ‰ï¼š
+       å¤©ç½¡æ­£æ°”(book)ï¼Œ        
+       ç©ºæ˜æ‹³è°±(quan pu)ï¼Œ 
+       å¤©ç½¡å‰‘è°±(jian pu)ï¼Œ 
 
 \n");
         set("material","wood");
@@ -31,19 +31,19 @@ int do_get(string arg)
   string arg1,arg2;
   me=this_player();
   if(!arg || sscanf(arg, "%s from %s", arg1, arg2)!=2)
-   return notify_fail("ÃüÁî¸ñÊ½: get <Êé±¾Ãû³Æ> from jia¡£\n");
+   return notify_fail("å‘½ä»¤æ ¼å¼: get <ä¹¦æœ¬åç§°> from jiaã€‚\n");
   if (arg2!="jia")
-     return notify_fail("ÃüÁî¸ñÊ½: get <Êé±¾Ãû³Æ> from jia¡£\n");
+     return notify_fail("å‘½ä»¤æ ¼å¼: get <ä¹¦æœ¬åç§°> from jiaã€‚\n");
   if(present(arg1, me) || present(arg1, environment()))
-     return notify_fail("ÒÑ¾­ÓĞÕâÑù¶«Î÷ÁË¡£\n");
+     return notify_fail("å·²ç»æœ‰è¿™æ ·ä¸œè¥¿äº†ã€‚\n");
     switch (arg1){
           case "book": ob=new("/d/quanzhen/obj/force_book"); break;             
           case "quan pu": ob=new("/d/quanzhen/obj/unarmed_book"); break;   
           case "jian pu": ob=new("/d/quanzhen/obj/sword_book"); break;         
           default :
-                 return notify_fail("Ã»ÓĞÕâ±¾Êé¡£\n");
+                 return notify_fail("æ²¡æœ‰è¿™æœ¬ä¹¦ã€‚\n");
           }
      if(ob) ob->move(me);
-       message_vision("$N´ÓÊé¼ÜÉÏÄÃ³öÒ»±¾$n¡£\n",me, ob);  
+       message_vision("$Nä»ä¹¦æ¶ä¸Šæ‹¿å‡ºä¸€æœ¬$nã€‚\n",me, ob);  
        return 1;
 }

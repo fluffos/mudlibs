@@ -7,12 +7,12 @@ int save_file(string short, string llong, string *householder);
 
 void create()
 {
-        set_name("ÌÒ»¨Í¯", ({"taohua tong","kid"}));
-        set("gender", "ÄÐÐÔ");
+        set_name("æ¡ƒèŠ±ç«¥", ({"taohua tong","kid"}));
+        set("gender", "ç”·æ€§");
         set("age", 9);
         set("long",
-"Ò»¸öÌìÕæÍçÆ¤µÄÐ¡Í¯£¬Ëû¹Ü×ÅÔ§ÑìÏªµÄ±ðÛÓ¡£Ò²Ðíµ÷Æ¤£¬Ò²ÐíÄêÓ×£¬×ÜÊÇ
-²»Ê±ÓÐ¶ñ×÷¾ç¡£\n");
+"ä¸€ä¸ªå¤©çœŸé¡½çš®çš„å°ç«¥ï¼Œä»–ç®¡ç€é¸³é¸¯æºªçš„åˆ«å¡¾ã€‚ä¹Ÿè®¸è°ƒçš®ï¼Œä¹Ÿè®¸å¹´å¹¼ï¼Œæ€»æ˜¯
+ä¸æ—¶æœ‰æ¶ä½œå‰§ã€‚\n");
         set("attitude", "friendly");
         set("combat_exp", 2500);
         set("per", 25);
@@ -42,45 +42,45 @@ int do_apply(string arg)
        officer = present("taohua tong", environment(me));
        laotou = officer->query("name");
        if(!arg)
-           return notify_fail("ÄãÒªÉêÇëÊ²Ã´£¿\n");
+           return notify_fail("ä½ è¦ç”³è¯·ä»€ä¹ˆï¼Ÿ\n");
        if(arg != "house" )
-           return notify_fail("ÄãÒªÉêÇëÊ²Ã´£¿\n");
+           return notify_fail("ä½ è¦ç”³è¯·ä»€ä¹ˆï¼Ÿ\n");
        if(!(me->query("couple/couple_id")))
        {
-             message_vision(laotou+"¹Ê×÷ÀÏ³ÉµØÌ¾ÁËÌ¾µÀ£º" +
+             message_vision(laotou+"æ•…ä½œè€æˆåœ°å¹äº†å¹é“ï¼š" +
              RANK_D->query_respect(me)
-+"¼ÈÊÇ¶ÀÉíÒ»ÈË£¬×ÔÈ»åÐÒ£×ÔÔÚ¡£ºÎ¿à×ÔÇóÊø¸¿£¿\n", officer);
++"æ—¢æ˜¯ç‹¬èº«ä¸€äººï¼Œè‡ªç„¶é€é¥è‡ªåœ¨ã€‚ä½•è‹¦è‡ªæ±‚æŸç¼šï¼Ÿ\n", officer);
              return 3;
         }
 
         if(file_size("/data/playerhomes/h_"+me->query("id")+".o") != -1)
         {
-                message_vision(laotou+"µ÷Æ¤µØ¹ÎÁË¹Î"+me->query("name")+"µÄÁ³£¬ÎûÐ¦µÀ£º" +
-RANK_D->query_respect(me) +"²»ÊÇÒÑ¾­ÓÐÁË·¿×ÓÂð£¿»¹ÏëÔÙÆ­Ò»¸ö£¿\n",officer,me);
+                message_vision(laotou+"è°ƒçš®åœ°åˆ®äº†åˆ®"+me->query("name")+"çš„è„¸ï¼Œå˜»ç¬‘é“ï¼š" +
+RANK_D->query_respect(me) +"ä¸æ˜¯å·²ç»æœ‰äº†æˆ¿å­å—ï¼Ÿè¿˜æƒ³å†éª—ä¸€ä¸ªï¼Ÿ\n",officer,me);
                 return 1;
         }
-        if((me->query("gender")) == "ÄÐÐÔ")
-        {       str = "ÆÞ×Ó";
+        if((me->query("gender")) == "ç”·æ€§")
+        {       str = "å¦»å­";
         }
         else
-        {    str = "ÕÉ·ò";
+        {    str = "ä¸ˆå¤«";
         }
         partner = me->query("couple/couple_id");
         if(file_size("/data/playerhomes/h_"+partner+".o") != -1)
         {
-                message_vision(laotou+"µ÷Æ¤µØ¹ÎÁË¹Î"+me->query("name")+"µÄÁ³£¬ÎûÐ¦µÀ£º" +
-RANK_D->query_respect(me) +"£¬ÄãÃÇ¼Ò²»ÊÇÒÑ¾­ÓÐÁË·¿×ÓÂð£¿»¹ÏëÔÙÆ­Ò»¸ö£¿\n",officer,me);
+                message_vision(laotou+"è°ƒçš®åœ°åˆ®äº†åˆ®"+me->query("name")+"çš„è„¸ï¼Œå˜»ç¬‘é“ï¼š" +
+RANK_D->query_respect(me) +"ï¼Œä½ ä»¬å®¶ä¸æ˜¯å·²ç»æœ‰äº†æˆ¿å­å—ï¼Ÿè¿˜æƒ³å†éª—ä¸€ä¸ªï¼Ÿ\n",officer,me);
                 return 1;
         }
         if(!(spouse = present(partner, environment(me))))
         {
-                message_vision(laotou+"¶Ô×Å"+me->query("name")+"Ò¡ÁËÒ¡Í·µÀ£ºÁì·¿ÕâÃ´´óµÄÊÂ£¬"+
-RANK_D->query_respect(me)+"»¹ÊÇºÍÄã"+str+"Ò»ÆðÀ´µÄºÃ£¡\n", officer, me);
-                return notify_fail("ÄãµÃÈÃÄã"+str+"Ò»ÆðÀ´£¡\n");
+                message_vision(laotou+"å¯¹ç€"+me->query("name")+"æ‘‡äº†æ‘‡å¤´é“ï¼šé¢†æˆ¿è¿™ä¹ˆå¤§çš„äº‹ï¼Œ"+
+RANK_D->query_respect(me)+"è¿˜æ˜¯å’Œä½ "+str+"ä¸€èµ·æ¥çš„å¥½ï¼\n", officer, me);
+                return notify_fail("ä½ å¾—è®©ä½ "+str+"ä¸€èµ·æ¥ï¼\n");
         }
         if(!me->query_temp("rental_paid") && !spouse->query_temp("rental_paid"))
-                return notify_fail(laotou+"ÎûÎûÐ¦µÀ£ºÊÀÉÏÖ»ÅÂÃ»ÓÐ±ãÒËµÄ·¿×ÓÅ¶¡£\n");
-        message_vision(laotou+"Ð¦ÃÐÃÐµØ¶Ô$NµÀ£ºÈ¢ÆÞ¡¢Áì·¿¡¢Éú×Ó£¬ÈËÉúÈý´óÊÂÒ®£¡\n", me);
+                return notify_fail(laotou+"å˜»å˜»ç¬‘é“ï¼šä¸–ä¸Šåªæ€•æ²¡æœ‰ä¾¿å®œçš„æˆ¿å­å“¦ã€‚\n");
+        message_vision(laotou+"ç¬‘çœ¯çœ¯åœ°å¯¹$Né“ï¼šå¨¶å¦»ã€é¢†æˆ¿ã€ç”Ÿå­ï¼Œäººç”Ÿä¸‰å¤§äº‹è€¶ï¼\n", me);
         me->set_temp("is_applying_house",1);
 //   officer->set_temp("house_applied",1);
 
@@ -89,13 +89,13 @@ RANK_D->query_respect(me)+"»¹ÊÇºÍÄã"+str+"Ò»ÆðÀ´µÄºÃ£¡\n", officer, me);
         room->set("home_host",({me->query("id")})+({partner}));
         room->save();
 
-        message_vision("$NËµµÀ£º·¿×ÓÒÑ¾­½¨ºÃÁË£¬ÄúÕâ¾ÍÈ¥×°ÐÞ°É£¡\n",officer);
+        message_vision("$Nè¯´é“ï¼šæˆ¿å­å·²ç»å»ºå¥½äº†ï¼Œæ‚¨è¿™å°±åŽ»è£…ä¿®å§ï¼\n",officer);
 
 /*
-       message_vision("$NÐ¦ÃÐÃÐµØ¶Ô$nµÀ£ºÈ¡ÆÞ¡¢Áì·¿¡¢Éú×Ó£¬ÈËÉúÈý´óÊÂÒ®£¡\n",officer,me);
-       message_vision("$NËµµÀ£ºÎÒÈ¥¼ì²é¼ì²é·¿×Ó£¬È¥È¥¾ÍÀ´¡£" +
+       message_vision("$Nç¬‘çœ¯çœ¯åœ°å¯¹$né“ï¼šå–å¦»ã€é¢†æˆ¿ã€ç”Ÿå­ï¼Œäººç”Ÿä¸‰å¤§äº‹è€¶ï¼\n",officer,me);
+       message_vision("$Nè¯´é“ï¼šæˆ‘åŽ»æ£€æŸ¥æ£€æŸ¥æˆ¿å­ï¼ŒåŽ»åŽ»å°±æ¥ã€‚" +
 RANK_D->query_respect(me)+
-"ÔÚÕâ¶ùÉÔ´ýÆ¬¿Ì£¬¿É±ð×ß°¡£¡\n",officer);
+"åœ¨è¿™å„¿ç¨å¾…ç‰‡åˆ»ï¼Œå¯åˆ«èµ°å•Šï¼\n",officer);
         officer->move(filename);
 */
         return 1;
@@ -108,17 +108,17 @@ int accept_object(object who, object ob)
         if (ob->value()< 1000000)
         {
               if(who->query_temp("is_applying_house"))
-                    command("say "+RANK_D->query_respect(who)+"³öÊÖÕâÃ´´ó·½¡£¸®ÉÏ±£×¼¸»ÀöÌÃ»Ê¡£\n");
+                    command("say "+RANK_D->query_respect(who)+"å‡ºæ‰‹è¿™ä¹ˆå¤§æ–¹ã€‚åºœä¸Šä¿å‡†å¯Œä¸½å ‚çš‡ã€‚\n");
               else
-                    command("say "+RANK_D->query_respect(who)+"ÕâÃ´¿ÍÆø£¬ÎÒÕâ¾Í¸øÄú°ì¡£\n");
+                    command("say "+RANK_D->query_respect(who)+"è¿™ä¹ˆå®¢æ°”ï¼Œæˆ‘è¿™å°±ç»™æ‚¨åŠžã€‚\n");
         }
         else
         {
               if(who->query_temp("is_applying_house"))
-                    command("say "+RANK_D->query_respect(who)+"³öÊÖÕâÃ´´ó·½¡£¸®ÉÏ±£×¼¸»ÀöÌÃ»Ê¡£\n");
+                    command("say "+RANK_D->query_respect(who)+"å‡ºæ‰‹è¿™ä¹ˆå¤§æ–¹ã€‚åºœä¸Šä¿å‡†å¯Œä¸½å ‚çš‡ã€‚\n");
               else
               {
-                    command("say "+RANK_D->query_respect(who)+"ÈôÊÇÏëÉêÇë·¿×Ó£¬¾¡¹ÜËµ¡£\n");
+                    command("say "+RANK_D->query_respect(who)+"è‹¥æ˜¯æƒ³ç”³è¯·æˆ¿å­ï¼Œå°½ç®¡è¯´ã€‚\n");
                     who->set_temp("rental_paid", 1);
               }
         }

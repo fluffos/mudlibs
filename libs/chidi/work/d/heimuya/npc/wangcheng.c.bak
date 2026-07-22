@@ -5,11 +5,11 @@ inherit F_UNIQUE;
 
 void create()
 {
-	set_name("Íõ³Ï", ({ "wang cheng","wang"}) );
-	set("gender", "ÄĞĞÔ" );
-	set("title", "ÈÕÔÂÉñ½Ì·çÀ×ÌÃÆìÖ÷");
+	set_name("ç‹è¯š", ({ "wang cheng","wang"}) );
+	set("gender", "ç”·æ€§" );
+	set("title", "æ—¥æœˆç¥æ•™é£é›·å ‚æ——ä¸»");
 	set("age", 65);
-	set("long", "´ËÈËÉí²Ä°«ÅÖ£¬ÂúÁ³¶ÑĞ¦£¬ÆäÊµÎªÈËÊ®·Öºİ¶¾¡£\n");
+	set("long", "æ­¤äººèº«æçŸ®èƒ–ï¼Œæ»¡è„¸å †ç¬‘ï¼Œå…¶å®ä¸ºäººååˆ†ç‹ æ¯’ã€‚\n");
 	set("attitude", "friendly");
 	set("shen_type", -1);
 
@@ -43,7 +43,7 @@ void create()
 	map_skill("parry", "taiji-jian");
 	map_skill("sword", "taiji-jian");
 
-	create_family("ÈÕÔÂÉñ½Ì",2,"µÜ×Ó ·çÀ×ÌÃÆìÖ÷");
+	create_family("æ—¥æœˆç¥æ•™",2,"å¼Ÿå­ é£é›·å ‚æ——ä¸»");
 
 	setup();
         carry_object("/clone/weapon/gangjian")->wield();
@@ -52,6 +52,6 @@ void create()
 
 void attempt_apprentice(object ob)
 {
-     command("say ÎÒÊÇ»¼ÄÑÖ®Éí, ÔõÃ´ÄÜÊÕÍ½ÄØ¡£×³Ê¿»¹ÊÇÇë»Ø°É!\n");
+     command("say æˆ‘æ˜¯æ‚£éš¾ä¹‹èº«, æ€ä¹ˆèƒ½æ”¶å¾’å‘¢ã€‚å£®å£«è¿˜æ˜¯è¯·å›å§!\n");
 }
 

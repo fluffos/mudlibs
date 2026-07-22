@@ -1,12 +1,12 @@
-// ±àÐ´ÏÉµ¤±Ø±¸ÊôÐÔ½éÉÜ
-// set("gift_rate", 75);														ÏÉµ¤µÄ³É¹¦ÂÊ
-// set("gift_effect", 8);														ÏÉµ¤µÄÐ§¹û(8±¶ÏÉµ¤)
-// set("gift_attr", "xiandan/int");												ÏÉµ¤Ôö¼ÓµÄÊôÐÔ(xiandan/int, xiandan/str, xiandan/con, xiandan/dex)
-// set("gift_type", "int");														ÏÉµ¤µÄÀàÐÍ(int, str, con, dex)
-// set("gift_time", 360);														ÏÉµ¤µÄ³ÖÐøÊ±¼ä(µ¥Î»Îª 10s, 360 == 3600s ¼´Ò»¸öÐ¡Ê±)
-// set("gift_cond", "tempint");													ÏÉµ¤Ð§¹ûÃû³Æ ÓÃÀ´¶Ô×´Ì¬¼ÆÊ±(tempint, tempstr, tempcon, tempdex)
-// set("gift_msg", HIG "Í»È»¼äÄãÖ»¾õÁéÌ¨´¦Ò»Æ¬¿ÕÃ÷£¬ÊæÌ©ÎÞ±È¡£\n" NOR);			³ÔÏÉµ¤µÄÃèÊö
-// set("gift_msg2", HIC "ÄãµÄÏÈÌìÎòÐÔÁÙÊ±(Ò»Ð¡Ê±)Ôö¼ÓÁË°Ë±¶¡£\n" NOR);			ÏÉµ¤µÄ¹¦Ð§ÃèÊö
+// ç¼–å†™ä»™ä¸¹å¿…å¤‡å±žæ€§ä»‹ç»
+// set("gift_rate", 75);														ä»™ä¸¹çš„æˆåŠŸçŽ‡
+// set("gift_effect", 8);														ä»™ä¸¹çš„æ•ˆæžœ(8å€ä»™ä¸¹)
+// set("gift_attr", "xiandan/int");												ä»™ä¸¹å¢žåŠ çš„å±žæ€§(xiandan/int, xiandan/str, xiandan/con, xiandan/dex)
+// set("gift_type", "int");														ä»™ä¸¹çš„ç±»åž‹(int, str, con, dex)
+// set("gift_time", 360);														ä»™ä¸¹çš„æŒç»­æ—¶é—´(å•ä½ä¸º 10s, 360 == 3600s å³ä¸€ä¸ªå°æ—¶)
+// set("gift_cond", "tempint");													ä»™ä¸¹æ•ˆæžœåç§° ç”¨æ¥å¯¹çŠ¶æ€è®¡æ—¶(tempint, tempstr, tempcon, tempdex)
+// set("gift_msg", HIG "çªç„¶é—´ä½ åªè§‰çµå°å¤„ä¸€ç‰‡ç©ºæ˜Žï¼Œèˆ’æ³°æ— æ¯”ã€‚\n" NOR);			åƒä»™ä¸¹çš„æè¿°
+// set("gift_msg2", HIC "ä½ çš„å…ˆå¤©æ‚Ÿæ€§ä¸´æ—¶(ä¸€å°æ—¶)å¢žåŠ äº†å…«å€ã€‚\n" NOR);			ä»™ä¸¹çš„åŠŸæ•ˆæè¿°
 
 
 
@@ -23,48 +23,48 @@ int do_eat(string arg)
 	string strAttr, strCond, strType;
 
 	if(!id(arg))
-		return notify_fail("ÄãÒª³ÔÊ²Ã´£¿\n");
+		return notify_fail("ä½ è¦åƒä»€ä¹ˆï¼Ÿ\n");
 
 	iRate	= query("gift_rate");
 	iEffect = query("gift_effect");
 	iTime	= query("gift_time");
 	if(!stringp(strAttr = query("gift_attr")))
-		return notify_fail("Õâ¸öµ¤ÊÇ³ôµÄ£¡\n");
+		return notify_fail("è¿™ä¸ªä¸¹æ˜¯è‡­çš„ï¼\n");
 	if(!stringp(strCond = query("gift_cond")))
-		return notify_fail("Õâ¸öµ¤ÊÇ³ôµÄ£¡\n");
+		return notify_fail("è¿™ä¸ªä¸¹æ˜¯è‡­çš„ï¼\n");
 	if(!stringp(strType = query("gift_type")))
-		return notify_fail("Õâ¸öµ¤ÊÇ³ôµÄ£¡\n");
+		return notify_fail("è¿™ä¸ªä¸¹æ˜¯è‡­çš„ï¼\n");
 
 	if(this_player()->query(strAttr, 1) > 1)
-		return notify_fail("ÄãÒ»´ÎÖ»ÄÜ³ÔÒ»¸ö\n");
+		return notify_fail("ä½ ä¸€æ¬¡åªèƒ½åƒä¸€ä¸ª\n");
 
-	// ÕæÃüÌì×ÓÌáÉý³É¹¦¼¸ÂÊ
+	// çœŸå‘½å¤©å­æå‡æˆåŠŸå‡ çŽ‡
 	if (this_player()->query("special_skills/emperor"))
 		iRate += 35;
-	// ÌìÉ·¹ÂÐÇÌáÉý³É¹¦¼¸ÂÊ
+	// å¤©ç…žå­¤æ˜Ÿæå‡æˆåŠŸå‡ çŽ‡
 	if (this_player()->query("special_skills/lonely"))
 		iRate += 10;
-	// ¸£ÐÇ¸ßÕÕÌáÉý³É¹¦¼¸ÂÊ
+	// ç¦æ˜Ÿé«˜ç…§æå‡æˆåŠŸå‡ çŽ‡
 	if (this_player()->query("special_skill/lucky"))
 		iRate += 5;
 
-	message_vision(WHT "$N" WHT "Ò»Ñö²±£¬ÍÌÏÂÁËÒ»" +
+	message_vision(WHT "$N" WHT "ä¸€ä»°è„–ï¼Œåžä¸‹äº†ä¸€" +
 		query("unit") + name() + WHT
-		"¡£\n" NOR, this_player());
+		"ã€‚\n" NOR, this_player());
 
 	/*
 	if (this_player()->query("gift/" + strType + "/all") >= 10)
 	{
-	tell_object(this_player(), "Äã¾õµÃÕâÒ©ºÃÏóÃ»Ê²Ã´Ð§¹û¡£\n");
+	tell_object(this_player(), "ä½ è§‰å¾—è¿™è¯å¥½è±¡æ²¡ä»€ä¹ˆæ•ˆæžœã€‚\n");
 	} else
 	*/
 
 	if(random(100) >= iRate)
 	{
-		tell_object(this_player(), HIR "²»¹ýÄã¾õµÃÕâÒ©ºÃÏñÃ»Æðµ½Ê²Ã´"
-			"×÷ÓÃ¡£\n" NOR);
+		tell_object(this_player(), HIR "ä¸è¿‡ä½ è§‰å¾—è¿™è¯å¥½åƒæ²¡èµ·åˆ°ä»€ä¹ˆ"
+			"ä½œç”¨ã€‚\n" NOR);
 
-		// ¼ÇÂ¼Ê§°ÜµÄ¼ÇºÅ
+		// è®°å½•å¤±è´¥çš„è®°å·
 		this_player()->add("gift/" + strType + "/fail", 1);
 	}
 	else
@@ -72,17 +72,17 @@ int do_eat(string arg)
 		tell_object(this_player(), query("gift_msg"));
 		tell_object(this_player(), query("gift_msg2"));
 
-		// ¼ÇÂ¼³É¹¦µÄ¼ÇºÅ
+		// è®°å½•æˆåŠŸçš„è®°å·
 		this_player()->add("gift/" + strType + "/succeed", 1);
 		iValue = (int)this_player()->query(strType) * (iEffect - 1);
 		this_player()->set(strAttr, iValue);
 
-		// Ôö¼ÓÏàÓ¦µÄÌì¸³ÊôÐÔ
+		// å¢žåŠ ç›¸åº”çš„å¤©èµ‹å±žæ€§
 		this_player()->add(strType, iValue);
 		this_player()->apply_condition(strCond, iTime);
 	}
 
-	// ¼ÇÂ¼Èë³Ôµ¤µÄ×ÜÁ¿
+	// è®°å½•å…¥åƒä¸¹çš„æ€»é‡
 	this_player()->add("gift/" + strType + "/all", 1);
 	destruct(this_object());
 	return 1;

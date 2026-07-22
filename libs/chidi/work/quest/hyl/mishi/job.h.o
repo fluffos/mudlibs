@@ -1,4 +1,4 @@
-//jobÖ®´ÌÉ±ÅÑÍ½
+//jobä¹‹åˆºæ€å›å¾’
 // By yfeng 25/9/99
 
 #include <ansi.h>
@@ -15,16 +15,16 @@ string give_job(object ob)
 	mpWhere=where[random(sizeof(where))];
 	mpPassword=password[random(sizeof(password))];
 	obMishi=new(__DIR__"mishi");
-	obMishi->clone(ob,-20-random(6));//ÃÜÊ¹±ÈÎÒµÍ20-25¼¶
+	obMishi->clone(ob,-20-random(6));//å¯†ä½¿æ¯”æˆ‘ä½20-25çº§
 	command("nod "+ob->query("id"));
 	message_vision(CYN"
-$N¶Ô$nËµµÀ£ºÓÉÓÚ»ğÔÆ½Ì·´ÅÑ¸æÃÜ£¬ÎÒ»ğÔÆ½ÌÃÜÊ¹"+HIC+obMishi->name()+CYN"½üÈÕÔÚ"+HIG+mpWhere["name"]+CYN"Ò»´øÓöÄÑ£¬ÎŞ·¨ÓëÎÒÃÇÁªÏµ£¬
-ÄãÇÒËÙÈ¥"+mpWhere["name"]+"Óª¾ÈÎÒ»ğÔÆÌØ±ğÈËÎï¡£\n"NOR,this_object(),ob);
-	command("tell "+ob->query("id")+" ´ËÈËÏàÃ²Èç´ËÕâ°ã Õâ°ã...");
-	command("whisper "+ob->query("id")+" ÄãÓëÆäÁªÂç°µºÅÎª"+mpPassword["password"]+"£¬ÇĞ¿ÚÎª"+mpPassword["confirm"]+"¡£");
+$Nå¯¹$nè¯´é“ï¼šç”±äºç«äº‘æ•™åå›å‘Šå¯†ï¼Œæˆ‘ç«äº‘æ•™å¯†ä½¿"+HIC+obMishi->name()+CYN"è¿‘æ—¥åœ¨"+HIG+mpWhere["name"]+CYN"ä¸€å¸¦é‡éš¾ï¼Œæ— æ³•ä¸æˆ‘ä»¬è”ç³»ï¼Œ
+ä½ ä¸”é€Ÿå»"+mpWhere["name"]+"è¥æ•‘æˆ‘ç«äº‘ç‰¹åˆ«äººç‰©ã€‚\n"NOR,this_object(),ob);
+	command("tell "+ob->query("id")+" æ­¤äººç›¸è²Œå¦‚æ­¤è¿™èˆ¬ è¿™èˆ¬...");
+	command("whisper "+ob->query("id")+" ä½ ä¸å…¶è”ç»œæš—å·ä¸º"+mpPassword["password"]+"ï¼Œåˆ‡å£ä¸º"+mpPassword["confirm"]+"ã€‚");
 	obMishi->set("guarder_id",ob->query("id"));
 	ob->delete_temp("tdh_job");
-    ob->set_temp("tdh_job/job_name","±£»¤ÃÜÊ¹");
+    ob->set_temp("tdh_job/job_name","ä¿æŠ¤å¯†ä½¿");
     ob->set_temp("tdh_job/password",mpPassword["password"]);
     ob->set_temp("tdh_job/confirm",mpPassword["confirm"]);
     ob->set_temp("tdh_job/time",(time=60+random(25)));// busy time :5-8min
@@ -36,35 +36,35 @@ $N¶Ô$nËµµÀ£ºÓÉÓÚ»ğÔÆ½Ì·´ÅÑ¸æÃÜ£¬ÎÒ»ğÔÆ½ÌÃÜÊ¹"+HIC+obMishi->name()+CYN"½üÈÕÔÚ"+HI
     mpWhere=mptw;
     ob->set_temp("tdh_job/s_where",mpWhere["where"]);
     ob->set_temp("tdh_job/s_city",mpWhere["name"]);	
-    ob->set_temp("tdh_job/job_fail_msg",HIY"Í»È»£¬Ò»¸öÏ¸ÈôÎÃĞêµÄÉùÒô´«ÈëÄã¶ú£ºÅÑÍ½ÕıÅÉ¸ßÊÖ×·É±ÓÚÄã£¬´ËµØ²»ÒË¾ÃÁô£¡\n"NOR);
+    ob->set_temp("tdh_job/job_fail_msg",HIY"çªç„¶ï¼Œä¸€ä¸ªç»†è‹¥èšŠå˜˜çš„å£°éŸ³ä¼ å…¥ä½ è€³ï¼šå›å¾’æ­£æ´¾é«˜æ‰‹è¿½æ€äºä½ ï¼Œæ­¤åœ°ä¸å®œä¹…ç•™ï¼\n"NOR);
     obMishi->apply_condition("tdh_job_mishi",time-2);
     ob->apply_condition("tdh_job_busy",time);
-    call_out("meet_fanpan",20+random(21),ob);//20-40Ãëºó£¬Óöµ½µÚÒ»¸ö·´ÅÑ
-    return "´ËÈ¥ÇĞ¼ÇĞĞ×ÙÄªÂ¶£¬·ñÔòÎ£ÏÕÖØÖØ£¡\n";      
+    call_out("meet_fanpan",20+random(21),ob);//20-40ç§’åï¼Œé‡åˆ°ç¬¬ä¸€ä¸ªåå›
+    return "æ­¤å»åˆ‡è®°è¡Œè¸ªè«éœ²ï¼Œå¦åˆ™å±é™©é‡é‡ï¼\n";      
 }
 
 int meet_fanpan(object ob)
 {
     object obFanpan;
     
-    if((ob->query_temp("tdh_job/job_name")=="±£»¤ÃÜÊ¹")
+    if((ob->query_temp("tdh_job/job_name")=="ä¿æŠ¤å¯†ä½¿")
         && (ob->query_temp("tdh_job/meet_fanpan")!=1)
         && (interactive(ob))
         && !environment(ob)->query("no_fight"))
     {
 	    obFanpan=new(__DIR__"fanpan1");
-        obFanpan->clone(ob,-5-random(11));//µÚÒ»¸ö·´ÅÑ±ÈÎÒµÍ5-15¼¶
+        obFanpan->clone(ob,-5-random(11));//ç¬¬ä¸€ä¸ªåå›æ¯”æˆ‘ä½5-15çº§
 	    obFanpan->apply_condition("tdh_job_fanpan",ob->query_condition("tdh_job_busy")/2);
         obFanpan->move(environment(ob));
         ob->start_busy(1);      
-        message_vision(HIB"Í»È»£¬Ò»¸öºÚÓ°Ïò$NÏ®À´!!! \n"NOR,ob);
-        message_vision(HIW"$N¼ûÀ´ÕßÉùÊÆ¼«Ç¿£¬²»±ãÓ²½Ó£¬ÃÍÎüÒ»¿ÚÆø£¬Ïòºó·ÉÈ¥¡£\n"NOR,ob);
-        message_vision(CYN"Ö»Ìı$NÒõĞ¦µÀ£º·´Ôô»¹²»ÊøÊÖ¾ÍÇÜ£¬ÎÒ¿´ÄãÍùÄÄÅÜ£¡\n"NOR,obFanpan);
-        message_vision(CYN"$NºßÁËÒ»Éù£ºÈç´ËËµÀ´£¬ÎÒµ½Òª¿´ÄãÓĞ¼¸½ï¼¸Á½£¿\n"NOR,ob);
+        message_vision(HIB"çªç„¶ï¼Œä¸€ä¸ªé»‘å½±å‘$Nè¢­æ¥!!! \n"NOR,ob);
+        message_vision(HIW"$Nè§æ¥è€…å£°åŠ¿æå¼ºï¼Œä¸ä¾¿ç¡¬æ¥ï¼ŒçŒ›å¸ä¸€å£æ°”ï¼Œå‘åé£å»ã€‚\n"NOR,ob);
+        message_vision(CYN"åªå¬$Né˜´ç¬‘é“ï¼šåè´¼è¿˜ä¸æŸæ‰‹å°±æ“’ï¼Œæˆ‘çœ‹ä½ å¾€å“ªè·‘ï¼\n"NOR,obFanpan);
+        message_vision(CYN"$Nå“¼äº†ä¸€å£°ï¼šå¦‚æ­¤è¯´æ¥ï¼Œæˆ‘åˆ°è¦çœ‹ä½ æœ‰å‡ æ–¤å‡ ä¸¤ï¼Ÿ\n"NOR,ob);
         obFanpan->kill_ob(ob);
         obFanpan->set_leader(ob);
         ob->start_busy(1);
-        ob->add_temp("tdh_job/meet_fanpan",1);//Óöµ½µÚÒ»¸ö·´ÅÑ
+        ob->add_temp("tdh_job/meet_fanpan",1);//é‡åˆ°ç¬¬ä¸€ä¸ªåå›
         call_other(__DIR__"fanpan1","zhuisha",ob);
         return 1;
     }
@@ -80,10 +80,10 @@ void destructing(object ob)
 int accept_object(object ob,object obj)
 {
 	if(obj->query("id")!="qingmu ling")
-		return notify_fail(CYN+this_object()->name()+"ËÆºõ²»¶®ÄãµÄÒâË¼¡£\n"NOR);
+		return notify_fail(CYN+this_object()->name()+"ä¼¼ä¹ä¸æ‡‚ä½ çš„æ„æ€ã€‚\n"NOR);
 	if(!ob->query("tiandihui/join"))
 	{
-		command("say ´ËÎïÄã´ÓºÎ¶øÀ´£¡£¡£¡");
+		command("say æ­¤ç‰©ä½ ä»ä½•è€Œæ¥ï¼ï¼ï¼");
 		command("consider "+ob->query("id"));
 		ob->delete_temp("mark/have_ling");
 		call_out("destructing",1,obj);
@@ -92,8 +92,8 @@ int accept_object(object ob,object obj)
 	}
 	if(ob->query_condition("tdh_job_busy"))
 	{
-		command("say ´ËÁîÄã´ÓºÎ¶øÀ´£¿");
-		command("say ÕâÊÇÎÒ»ğÔÆ½ÌºÅÁîÖ®Îï£¬ÔõÂäÈëÄãÊÖ£¿");
+		command("say æ­¤ä»¤ä½ ä»ä½•è€Œæ¥ï¼Ÿ");
+		command("say è¿™æ˜¯æˆ‘ç«äº‘æ•™å·ä»¤ä¹‹ç‰©ï¼Œæ€è½å…¥ä½ æ‰‹ï¼Ÿ");
 		ob->delete_temp("tdh_job");
 		ob->delete_temp("mark/have_ling");
 		call_out("destructing",1,obj);

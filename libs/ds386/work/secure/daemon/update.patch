@@ -1,0 +1,214 @@
+#include <lib.h>
+#include <daemons.h>
+#include <commands.h>
+
+#ifndef LOG_D
+#define LOG_D "/secure/daemon/log"
+#endif
+
+mapping EventsMap = ([]);
+mixed *event_funs = ({});
+int connect_warn;
+string shiz = "\n---------------\n"+ 
+"%^RED%^CRITICAL%^RESET%^: There was a problem with "+
+"/secure/lib/connect.c . When the upgrade is complete "+
+"you must log out and log back in to make sure the "+
+"correct file is in place.\n---------------\n";
+
+int check_function(string str){
+    if(member_array(str,MASTER_D->GetEfuns()) != -1) return 1;
+    return 0;
+}
+
+int make_empties(){
+    string *removes = ({
+            });
+
+    string *empties = ({
+            "/cmds/hm",
+            "/cmds/builders",
+            "/secure/cmds/common",
+            "/secure/save/postal",
+            "/secure/save/binaries",
+            "/secure/save/decre",
+            "/secure/save/players",
+            "/secure/save/letters",
+            "/secure/save/backup",
+            "/secure/save/creators",
+            "/secure/save/suicide",
+            "/secure/save/rid",
+            "/secure/save/votes",
+            "/secure/upgrades/txt",
+            "/www/doc",
+            "/www/logs",
+            "/doc/lpc/advanced",
+            "/doc/tmp",
+            "/doc/help/avatars",
+            "/doc/help/hm",
+            "/doc/help/religion",
+            "/doc/help/law",
+            "/doc/faq",
+            "/log/author_stats",
+            "/log/suicides",
+            "/realms/template/tmp",
+            "/realms/template/log",
+            "/realms/template/area/etc",
+            "/realms/template/area/meals",
+            "/realms/template/area/doors",
+            "/domains/town/save",
+            "/domains/town/virtual/forest",
+            "/domains/town/virtual/sub",
+            "/domains/town/virtual/surface",
+            "/domains/default/save",
+            "/domains/default/virtual/sky",
+            "/domains/default/virtual/arena",
+            "/domains/Ylsrim/save",
+            "/domains/Ylsrim/virtual/desert",
+            "/verbs/spells",
+            "/verbs/undead",
+            "/secure/log/intermud",
+            "/secure/log/network",
+            "/domains/default/save",
+            "/domains/town/save",
+            "/open",
+            "/powers",
+            "/powers/spells",
+            "/powers/prayers",
+            "/powers/feats",
+            "/powers/psionics",
+            "/powers/trades",
+            "/secure/log",
+            "/secure/log/adm",
+            "/secure/log/bak",
+            "/secure/log/intermud",
+            "/secure/log/network",
+    });
+
+    foreach(string dir in empties){
+        catch( mkdir(dir) );
+    }
+    foreach(string dir in removes){
+        catch( rmdir(dir) );
+    }
+    return 1;
+}
+
+void deletes(){
+    catch( rm("/cmds/players/lines.c") );
+    catch( rm("/domains/campus/room/spath.c") );
+    catch( rm("/domains/campus/room/science.c") );
+    catch( rm("/domains/campus/room/store.c") );
+    catch( rm("/domains/campus/room/square.c") );
+    catch( rm("/domains/campus/room/u_lab.c") );
+    catch( rm("/domains/campus/room/uptree.c") );
+    catch( rm("/domains/campus/room/tunnel3.c") );
+    catch( rm("/domains/campus/obj/tree.c") );
+    catch( rm("/secure/cmds/creators/vi.c") );
+    catch( rm("/secure/cmds/creators/isql.c") );
+    catch( rm("/secure/cmds/players/mc.c") );
+    catch( rm("/cmds/players/language.c") );
+    catch( rm("/secure/lib/include/bboard.h") );
+    catch( rm("/lib/inventory.c") );
+    catch( rm("/verbs/rooms/cast.c") );
+    catch( rm("/cmds/creators/goto.c") );
+    catch( rename("/domains/town/virtual/sky", "/domains/town/virtual/oldsky"+time()) );
+    mkdir("/domains/town/virtual/sky");
+}
+
+varargs static void eventUpdate(object whom){
+    int err, reboot;
+    object remote;
+    string config_file = read_file(CONFIG_H);
+    string newfile = "/secure/daemon/update.blank";
+    cp(newfile, UPDATE_D+".c");
+    if(!cp("/secure/lib/connect.real", LIB_CONNECT + ".c")){
+        connect_warn = 1;
+        if(whom){ 
+            tell_player(whom, shiz);
+        }
+    }
+
+    if(sizeof(config_file)){
+        if(!grepp(config_file, "GUEST_ALLOWED"))
+            config_file = append_line(config_file,"#define CED_DISABLED",
+                    "#define GUEST_ALLOWED            1");
+        if(!grepp(config_file, "PLAYER_INTERTELL_ALLOWED"))
+            config_file = append_line(config_file,"#define CED_DISABLED",
+                    "#define PLAYER_INTERTELL_ALLOWED 1");
+        write_file(CONFIG_H, config_file+"\n", 1);
+    }
+
+    call_out( (: make_empties :),0);
+    call_out( (: deletes :),0);
+
+    reset_eval_cost();
+
+    catch( (: reload(LIB_DAEMON,1,1) :) );
+    catch( (: reload(EVENTS_D,0,1) :) );
+    catch( (: EventsMap = EVENTS_D->GetEvents() :) );
+    if(sizeof(EventsMap)){
+        foreach(mixed key, mixed val in EventsMap){
+            event_funs += ({ val["function"] });
+        }
+        if(member_array("ReadDir",event_funs) == -1)
+            EVENTS_D->AddEvent(FILE_D ,FILE_D,"ReadDir",({ }),90000,1);
+        if(member_array("ReadFuns",event_funs) == -1)
+            EVENTS_D->AddEvent(FUNCTION_D,FUNCTION_D,"ReadFuns",({ }),100000,1);
+        if(member_array("RotateLogs",event_funs) == -1)
+            EVENTS_D->AddEvent(LOG_D,LOG_D,"RotateLogs",({ }),3600,1);
+    }
+
+    reset_eval_cost();
+
+    catch( reload("/secure/daemon/master",0,1) );
+    catch( reload("/secure/sefun/arrays",0,1) );
+    catch( reload("/secure/sefun/sefun",0,1) );
+    catch( reload("/daemon/races",0,1) );
+ 
+    catch( load_object("/secure/cmds/admins/removeraces")->cmd());
+    catch( load_object("/secure/cmds/admins/addraces")->cmd());
+    catch( reload("/daemon/races",0,1) );
+
+    catch( reload("/domains/default/room/stargate_lab.c",0,1));
+    catch( reload("/domains/town/virtual/space/1,1,1",0,1));
+    catch( reload("/domains/town/virtual/bottom/33,100000",0,1));
+    catch( reload("/domains/Praxis/square.c",0,1));
+    catch( reload("/domains/Ylsrim/room/tower",0,1));
+    catch( reload("/domains/campus/room/slab",0,1));
+    update(LIB_SAVE);
+    update(LIB_CLEAN);
+    update(LIB_DAEMON);
+    update(RELOAD_D);
+
+    err = catch( update(LIB_ARMOR) );
+    if(whom){
+        tell_player(whom,"Update daemon finished.");
+        if(query_os_type() == "windows" || uptime() < 240){             
+            tell_player(whom,"Rebooting now is a good idea.");
+        }
+        else tell_player(whom,"Initiating warm boot.");
+    }
+    if(!err && query_os_type() != "windows"){
+        RELOAD_D->WarmBoot();
+    }
+    if(connect_warn){
+        CHAT_D->eventSendChannel("UPDATE_D", "admin", shiz);
+    }
+}
+
+static void create() {
+    object whom;
+    catch( load_object(CMD_REMOVERACES)->cmd());
+    catch( load_object(CMD_REMOVECLASSES)->cmd());
+    catch( load_object(CMD_ADDRACES)->cmd());
+    catch( load_object(CMD_ADDCLASSES)->cmd());
+    if(this_player()) whom = this_player();
+    call_out((: eventUpdate :), 1, whom);
+    if(whom){
+        tell_player(whom,"Please stand by until you see the "
+        "\"Update daemon finished.\" message.");
+        tell_player(whom,"If you do not see it after a "
+        "few seconds, you may need to restore "
+        "your mud from backup.");
+    }
+}

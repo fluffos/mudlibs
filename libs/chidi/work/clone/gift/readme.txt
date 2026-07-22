@@ -1,7 +1,7 @@
-½²¹ÊÊÂ²¢·¢½±ÀøÏµÍ³ËµÃ÷£º
+è®²æ•…äº‹å¹¶å‘å¥–åŠ±ç³»ç»Ÿè¯´æ˜ï¼š
   
-     COPYÎÄ¼şstoryd.cµ½/adm/daemons/ÏÂ£¬ÔÚ/adm/etc/perloadÖĞ¼ÓÈë/adm/daemons/storyd.cÓï¾ä£¬ÔÙ°ÑgiftÎÄ¼ş¼Ücopyµ½/clone/ÏÂ¡£¼´¿É×Ô¶¯ÔËĞĞ£¬ÈçÃ»×Ô¶¯ÔËĞĞ£¬¿ÉÒÔupdate /adm/daemons/storyd.c£¬Ê¹ÆäÔËĞĞ¡£ÈçÓĞÎÊÌâ¿ÉÀ´ĞÅÑ¯ÎÊ¡£
-±ğµÄÎÄ¼ş·ÅÈëclone/gift
-ÔÚinclude/globals.h
+     COPYæ–‡ä»¶storyd.cåˆ°/adm/daemons/ä¸‹ï¼Œåœ¨/adm/etc/perloadä¸­åŠ å…¥/adm/daemons/storyd.cè¯­å¥ï¼Œå†æŠŠgiftæ–‡ä»¶æ¶copyåˆ°/clone/ä¸‹ã€‚å³å¯è‡ªåŠ¨è¿è¡Œï¼Œå¦‚æ²¡è‡ªåŠ¨è¿è¡Œï¼Œå¯ä»¥update /adm/daemons/storyd.cï¼Œä½¿å…¶è¿è¡Œã€‚å¦‚æœ‰é—®é¢˜å¯æ¥ä¿¡è¯¢é—®ã€‚
+åˆ«çš„æ–‡ä»¶æ”¾å…¥clone/gift
+åœ¨include/globals.h
      #define STORY_DIR	        "/clone/gift/"
      #define STORY_D	        "/adm/daemons/storyd"

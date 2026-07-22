@@ -1,0 +1,292 @@
+// newcard.c
+//modify by jzw 2006/2/1
+//modify by jzw 2006/2/9 for 取潜能的判断
+//modify by luoyun 2006/5/17 for 增加会员冲值功能
+#include <dbase.h>
+#include <ansi.h>;
+#include <command.h>;
+inherit ITEM;
+
+void create()
+{
+        set_name(HIR"江湖"+HIY"银行卡"NOR, ({"bank card", "card"}));
+        if( clonep() )
+                set_default_object(__FILE__);
+        else {
+                set("unit", "张");
+                set("long",
+"这是一张"HIG"江湖-银行卡"NOR"，是江湖银行发给每一个玩家的信用卡
+具体使用请help bank_card
+"BBLU""HIR"*************************************************************"NOR"
+                    "HBYEL"潜能储蓄"NOR" 
+"HIC"cha_pot"NOR"<查潜能>   "HIC"cun_pot"NOR"<存潜能>   "HIC"qu_pot"NOR"<取潜能>
+                   "HBYEL"人民币储蓄"NOR" 
+"HIG"chongzhi chonggold"NOR"<会员冲值>              "HIG"chaxun"NOR"<查询余额>"HIG"
+"BBLU""HIR"*************************************************************"NOR"\n");
+
+set("value", 100);
+set("no_drop",1);
+set("no_get",1);
+set("no_put",1);
+set("no_give",1);
+set("material","iron");
+set_weight(10);
+        }
+        setup();
+}
+
+string merit_string(int merit)
+{
+    if( merit< 1 ) merit= 1;
+   
+        return chinese_number(merit) + "人民币";
+   
+}
+
+void init()
+{
+        add_action("do_chongzhi", "chongzhi");
+        add_action("do_chonggold", "chonggold");
+        add_action("do_deposit", "cun_pot");
+        add_action("do_withdraw", "qu_pot");
+        add_action("do_check", "cha_pot");
+        add_action("do_chaxun", "chaxun");
+        //add_action("do_sell", "xsell");
+}
+
+//存潜能
+int do_deposit(string arg)
+{      
+        int i,qn;string amount;
+        object me;
+        qn = this_player()->query("card_potential");
+        me = this_player();        
+        if( !arg)
+        return notify_fail("指令格式：cun_pot <数量> <潜能>\n");
+        if ( sscanf(arg, "%d %s", i, amount)!=2 || amount!="潜能")
+        return notify_fail("指令格式：cun_pot <数量> <潜能>\n");
+        if ( i < 0 || i > 2000000000 )
+            return notify_fail("不能存负数潜能/一次最多只能存20亿潜能。\n");       
+
+        if ( this_player()->query("potential")-this_player()->query("learned_points") < i){
+        tell_object(me,"你没有那么多潜能可以存。\n" );
+        return 1;
+        }     
+        qn += i;
+        if ( qn < 0||qn >2140000000){
+             tell_object(me,"存入的潜能+银行卡的潜能总和不能大于21.4亿。\n" );
+             return 1;
+        }     
+      if ( this_player()->query("card_potential") < 0 ){
+             tell_object(me,"你想骗银行？小心报警抓你。\n" );
+             return 1;
+        }     
+
+      if ( i < 0 ){
+             tell_object(me,"你想作弊？小心杀你的档，嘿嘿！\n" );
+             return 1;
+        }     
+        if ( this_player()->query("doing") ==("closed" || "breakup")){
+             tell_object(me,"你现在正在闭关中，不能使用银行卡。\n" );
+             return 1;
+        }
+        me->add("potential",-i);
+        me->add("card_potential",i);
+
+
+        tell_object(me,"你将"HIR""+(i)+""NOR"点潜能存入银行卡里。\n" );
+        tell_object(me,"你的银行卡里还存了"HIR""+(this_player()->query("card_potential"))+""NOR"点潜能。\n" );
+        return 1;
+}
+
+//取潜能
+int do_withdraw(string arg)
+{      
+        int i,qn;string amount;
+        object me;
+        me = this_player();
+        qn = this_player()->query("potential")-this_player()->query("learned_points");  
+        
+        if( !arg)
+        return notify_fail("指令格式：qu_pot <数量> <潜能>\n");
+        if ( sscanf(arg, "%d %s", i, amount)!=2 || amount!="潜能")
+        return notify_fail("指令格式：qu_pot <数量> <潜能>\n");
+        if (i < 0 || i > 1000000000 )
+        return notify_fail("不能取负数潜能/一次最多只能取10亿潜能。\n");
+        qn += i;
+        if ( qn < 0 ||qn >= 2140000000){
+        tell_object(me,"取出的潜能+身上的潜能总和不能大于21.4亿。\n" );
+        return 1;
+        }     
+
+             if ( this_player()->query("card_potential") < i){
+             tell_object(me,"你想要偷潜能?给你点教训,看你以后还敢不敢?你的银行卡里没有那么多潜能可取。\n" );
+             me->unconcious();
+
+             return 1;
+        }     
+        if ( this_player()->query("doing") ==("closed" || "breakup")){
+             tell_object(me,"你现在正在闭关中，不能使用银行卡。\n" );
+             return 1;
+        }
+        this_player()->add("potential",i);
+        this_player()->add("card_potential",-i);
+
+        tell_object(me,"你从银行卡中取出"HIR""+(i)+""NOR"点潜能。\n" );
+        tell_object(me,"你的银行卡里还存了"HIR""+(this_player()->query("card_potential"))+""NOR"点潜能。\n" );
+        return 1;
+}
+
+//查潜能
+int do_check(string arg)
+{      
+          object me;
+          me = this_player();
+          if ( this_player()->query("card_potential" ) < 1){
+             tell_object(me,"你的银行卡里的没有任何潜能。\n" );
+             return 1;
+        }     
+
+        tell_object(me,"你的银行卡里还存了"HIR""+(this_player()->query("card_potential"))+""NOR"点潜能。\n" );
+
+
+        return 1;
+}
+
+//会员冲值功能
+int do_chongzhi(string arg)
+{      int nl,jl,rmb,i;
+       object me;string yxb;
+       me = this_player();       
+       rmb =me->query("rmb");
+       if (rmb < 0) rmb = 0;
+       if(me->query("max_neili") < 1000000)      
+                return notify_fail("你内力不足100万!\n");
+
+      if (me->query("max_jingli") < 10)
+        return notify_fail("你精力不足10!\n");
+        
+       if( !arg)
+       return notify_fail("指令格式：chongzhi <数量> <YXB>\n");
+       if ( sscanf(arg, "%d %s", i, yxb)!=2 || yxb!="YXB")
+             return notify_fail("指令格式：chongzhi <数量> <YXB>\n");       
+       if (i < 1 || i > 2000 )
+               return notify_fail("每次最少冲值1元，最多冲值2000元。\n");
+       rmb += i;
+       if ( rmb < 0 || rmb > 2140000000)
+               return notify_fail(HIW"你如果继续冲值的话卡会爆的哦 :)\n"NOR);
+      // if ( nl < i*100 )
+     //          return notify_fail(HIR"你现在的内力和精力不能够进行冲值。\n"NOR);       
+        if ( me->query("temp/insert"))
+       {
+             tell_object(me,"请从自动售货机取出你的江湖会员卡（pull card）再冲值吧。\n");
+             return 1;
+       }
+        me->add("rmb",i);
+        me->add("max_neili",-i*1000);
+       // me->add("max_jingli",-i*100);
+
+        tell_object(me,"你已经成功冲值了"HIR""+chinese_number(i)+""NOR"元人民币。\n" );
+        tell_object(me,"你的帐号里还存了"HIC""+chinese_number(this_player()->query("rmb"))+""NOR"元人民币。\n" );
+        tell_object(me,"本次冲值你已经被扣除了"HIC""+chinese_number(i*1000)+""NOR"点永久内力。\n" );
+        //tell_object(me,"本次冲值你已经被扣除了"HIC""+chinese_number(i*100)+""NOR"点永久精力。\n" );
+        tell_object(me,"万分感激你对江湖的大力支持！祝你游戏愉快。\n" );
+        me->save();
+        return 1;
+      }
+
+
+//金钱冲值功能
+int do_chonggold(string arg)
+{      int nl,jl,rmb,i;
+       object me;string yxb;
+       me = this_player();       
+       rmb =me->query("rmb");
+       if (rmb < 0) rmb = 0;
+       if(me->query("money") < 1000000000)      
+                return notify_fail("你存款不足10万金!\n");
+
+            
+       if( !arg)
+       return notify_fail("指令格式：chongzhi <数量> <YXB>\n");
+       if ( sscanf(arg, "%d %s", i, yxb)!=2 || yxb!="YXB")
+             return notify_fail("指令格式：chongzhi <数量> <YXB>\n");       
+       if (i < 1 || i > 10 )
+               return notify_fail("每次最少冲值1元，最多冲值10元。\n");
+       rmb += i;
+       if ( rmb < 0 || rmb > 2140000000)
+               return notify_fail(HIW"你如果继续冲值的话卡会爆的哦 :)\n"NOR);
+      // if ( nl < i*100 )
+     //          return notify_fail(HIR"你现在的内力和精力不能够进行冲值。\n"NOR);       
+        if ( me->query("temp/insert"))
+       {
+             tell_object(me,"请从自动售货机取出你的江湖会员卡（pull card）再冲值吧。\n");
+             return 1;
+       }
+        me->add("rmb",i);
+        me->add("money",-i*100000000); 
+
+        tell_object(me,"你已经成功冲值了"HIR""+chinese_number(i)+""NOR"元人民币。\n" );
+        tell_object(me,"你的帐号里还存了"HIC""+chinese_number(this_player()->query("rmb"))+""NOR"元人民币。\n" );
+        tell_object(me,"本次冲值你已经被扣除了"HIC""+chinese_number(i*10000)+""NOR"点永久金子。\n" );
+        tell_object(me,"万分感激你对江湖的大力支持！祝你游戏愉快。\n" );
+        me->save();
+        return 1;
+      }
+
+
+//会员查询功能
+int do_chaxun(string arg)
+{      
+          object me;
+          me = this_player();
+         
+          if ( this_player()->query("rmb" ) < 1){
+             tell_object(me,"你的帐号里的没有任何存款。\n" );
+             return 1;
+        }     
+
+        tell_object(me,"你的帐号里还存了"HIC""+chinese_number(this_player()->query("rmb"))+""NOR"元人民币。\n" );
+
+
+        return 1;
+}
+/*
+//会员贩卖功能
+int do_sell(string arg)
+{
+    object ob,obj,*inv;
+    string str;
+    int merit;    
+    int amount,i,j=1;
+    if( !arg )
+        return notify_fail("你要卖断什麽物品？\n");
+        if(sscanf(arg, "%d %s", j,str)==2 )
+        arg=str;
+    if( !(obj = present(arg, this_player())) )
+        return notify_fail("你要卖断什麽物品？\n");
+    if (j<1) return notify_fail("什么？几个？你当我是三岁小孩呀？\n");
+    merit = obj->query("merit"); 
+    if (!merit) return notify_fail("你只能卖会员商品！\n");          
+    if (!amount=obj->query_amount())    amount=1;
+    merit*=amount;   
+    merit=merit*80/100000;
+   
+    for (i=0;i<j;i++){
+        if( !(ob = present(arg, this_player())) )
+            break;
+        else{
+                ob->move(this_object());
+                inv = all_inventory(this_object());
+                if (sizeof(inv)>610)
+                destruct(inv[sizeof(inv)-2]);
+        }
+    }
+    this_player()->add("rmb",merit*i);
+    message_vision("$N把身上的" + CHINESE_D->chinese_number(i)+obj->query("unit")+obj->query("name") + "卖掉"+ merit_string(merit*i)+"。\n",
+        this_player());
+    if (!obj->query("merit")) destruct(obj);
+    return 1;
+}
+*/
+int query_autoload() { return 1; }

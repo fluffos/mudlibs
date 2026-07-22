@@ -5,11 +5,11 @@ inherit ROOM;
 
 void create()
 {
-	set("short", "éÅÊ÷ÉÏ");
+	set("short", "æ¦•æ ‘ä¸Š");
 	set("long", @LONG
-ÕâÀïÊÇ´óÊ÷µÄ¶¥¶Ë£¬ËÄÖÜÊÇÅ¨ÃÜµÄÖ¦Ò¶ºÍÊªäõäõµÄÌ¦Þº¡£Ò»Õó
-Î¢·ç´µÀ´£¬Ê÷Ò¶·¢³öà§À²À²µÄÉùÒô¡£´ÓÉÏÃæÍûÏÂÈ¥£¬ÄãÖ»¾õµÃÒ»Õó
-ÑÛÔÎ£¬ÐÄÏë»¹ÊÇ¸Ï¿ìÏÂÈ¥°É¡£
+è¿™é‡Œæ˜¯å¤§æ ‘çš„é¡¶ç«¯ï¼Œå››å‘¨æ˜¯æµ“å¯†çš„æžå¶å’Œæ¹¿æ¼‰æ¼‰çš„è‹”è—“ã€‚ä¸€é˜µ
+å¾®é£Žå¹æ¥ï¼Œæ ‘å¶å‘å‡ºå”°å•¦å•¦çš„å£°éŸ³ã€‚ä»Žä¸Šé¢æœ›ä¸‹åŽ»ï¼Œä½ åªè§‰å¾—ä¸€é˜µ
+çœ¼æ™•ï¼Œå¿ƒæƒ³è¿˜æ˜¯èµ¶å¿«ä¸‹åŽ»å§ã€‚
 LONG
 	);
         set("outdoors", "wudujiao");
@@ -39,11 +39,11 @@ int do_climb(string arg)
 	object me=this_player();
 	object ob; 
 	if( (!arg) ||!((arg == "tree") || (arg == "down")))
-		return notify_fail("ÄãÒªÅÀÊ²Ã´£¿\n");
-		message_vision("$NÅÊ×ÅéÅÊ÷µÄÖ¦è¾ÂýÂýµÄÅÀÁËÏÂÈ¥¡£\n\n",me);
+		return notify_fail("ä½ è¦çˆ¬ä»€ä¹ˆï¼Ÿ\n");
+		message_vision("$Næ”€ç€æ¦•æ ‘çš„æžæˆæ…¢æ…¢çš„çˆ¬äº†ä¸‹åŽ»ã€‚\n\n",me);
         ob = load_object(__DIR__"nanyuan");
         ob = find_object(__DIR__"nanyuan");
-        message("vision", me->query("name")+"´ÓéÅÊ÷ÉÏÃæÅÀÁËÏÂÀ´¡£\n", ob);
+        message("vision", me->query("name")+"ä»Žæ¦•æ ‘ä¸Šé¢çˆ¬äº†ä¸‹æ¥ã€‚\n", ob);
         me->move(__DIR__"nanyuan");
         return 1;
 }

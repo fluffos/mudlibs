@@ -27,12 +27,12 @@ void checking(object me,object ob)
                   }
                   else
                         ob->add_temp("help_killed",1);
-              message_vision("$NÆËÔÚµØÉÏÕõÔúÁË¼¸ÏÂ£¬¿ÚÖÐÅç³ö¼¸¿Ú"HIR"ÏÊÑª"NOR"£¬ËÀÁË£¡\n",me);
+              message_vision("$Næ‰‘åœ¨åœ°ä¸ŠæŒ£æ‰Žäº†å‡ ä¸‹ï¼Œå£ä¸­å–·å‡ºå‡ å£"HIR"é²œè¡€"NOR"ï¼Œæ­»äº†ï¼\n",me);
                        remove_call_out("destroy");
                  call_out("destroy",1, me);
                   if(ob->query_condition("jobshadi_limit")==0)
                   {
-                        message_vision(CYN"\nÒ»¸öÊØ³ÇËÎ±øÅÜ¹ýÀ´ËµµÀ£ºÃÉ¹Å÷°×ÓÔÝÊ±±»»÷ÍËÁË£¬$N¿ÉÒÔ»ØÈ¥¸´ÃüÁË£¡\n"NOR,ob);
+                        message_vision(CYN"\nä¸€ä¸ªå®ˆåŸŽå®‹å…µè·‘è¿‡æ¥è¯´é“ï¼šè’™å¤é¼å­æš‚æ—¶è¢«å‡»é€€äº†ï¼Œ$Nå¯ä»¥å›žåŽ»å¤å‘½äº†ï¼\n"NOR,ob);
                         ob->set_temp("job_over",1);
                         ob->delete_temp("start_job");
                   }
@@ -40,7 +40,7 @@ void checking(object me,object ob)
                   {
                  switch( random(2) ) {
                         case 0:
-                        message_vision(HIR"³ÇÏÂÓÖÅÀÉÏÀ´Ò»¸öÃÉ¹Å±øÊ¿¡£\n" NOR,ob); 
+                        message_vision(HIR"åŸŽä¸‹åˆçˆ¬ä¸Šæ¥ä¸€ä¸ªè’™å¤å…µå£«ã€‚\n" NOR,ob); 
                         robber=new(__DIR__"robber1");
                         robber->do_change(this_player());
                         robber->move(room);
@@ -49,7 +49,7 @@ void checking(object me,object ob)
             ob->kill_ob(robber);
                         break;
                         case 1:
-                        message_vision(HIR"³ÇÏÂÓÖÅÀÉÏÀ´Ò»¸öÃÉ¹Å½«Áì¡£\n" NOR,ob); 
+                        message_vision(HIR"åŸŽä¸‹åˆçˆ¬ä¸Šæ¥ä¸€ä¸ªè’™å¤å°†é¢†ã€‚\n" NOR,ob); 
                         robber=new(__DIR__"robber2");
                         robber->do_change(this_player());
                         robber->move(room);
@@ -80,7 +80,7 @@ int do_kill(string arg)
         object me = this_object();
         if (me->is_fighting()) 
         {
-                message_vision(CYN"\n¼ÓÓÍ£¡¼ÓÓÍ£¡\n"NOR,who);
+                message_vision(CYN"\nåŠ æ²¹ï¼åŠ æ²¹ï¼\n"NOR,who);
                 return 1;
         }
         if(!arg || present(arg,environment(me))!=me) return 0;

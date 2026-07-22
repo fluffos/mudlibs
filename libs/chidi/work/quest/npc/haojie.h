@@ -1,32 +1,32 @@
 mapping city_area=([
- "ÑïÖİ³Ç" : ({"/d/city/","beidajie1","beidajie2","beimen","guangchang",
+ "æ‰¬å·åŸ" : ({"/d/city/","beidajie1","beidajie2","beimen","guangchang",
               "nandajie1","nandajie2","nanmen","qianzhuang","shuyuan",
               "xidajie1","xidajie2","ximen",
             }),
- "ÈªÖİ³Ç" : ({"/d/quanzhou/","beimen","haigang","jiaxing","jxnanmen",
+ "æ³‰å·åŸ" : ({"/d/quanzhou/","beimen","haigang","jiaxing","jxnanmen",
               "nanhu","nanhu1","nanmen","qzroad1","qzroad2","qzroad3",
               "qzroad4","qzroad5","tieqiang","yanyu","zahuopu","zhongxin",
             }),
- "ÏåÑô³Ç" : ({"/d/xiangyang/","guangchang","eastjie1","eastjie2","eastroad1",
+ "è¥„é˜³åŸ" : ({"/d/xiangyang/","guangchang","eastjie1","eastjie2","eastroad1",
               "eastroad2","jiekou2","northroad2","dingzi","northroad1",
               "jiekou1","westroad2","westroad1","westjie2","westjie1",
             }), 
- "ÁéğÕ¹¬" : ({"/d/lingjiu/","dating","damen","changl15","changl7","changl6",
+ "çµé¹«å®«" : ({"/d/lingjiu/","dating","damen","changl15","changl7","changl6",
               "changl5","changl1","changl9","changl12","changl8","changl4",
               "changl3","changl2","changl10","huayuan","xiaodao1","xiaodao2",
             }),
- "°×ÍÕÉ½" : ({"/d/baituo/","chaifang","changlang","chufang","damen","datiepu",
+ "ç™½é©¼å±±" : ({"/d/baituo/","chaifang","changlang","chufang","damen","datiepu",
               "dating","dongjie","guangchang","houmen","houyuan","huayuan",
               "jiudian","menlang","tuyuan","xijie","ximen","yaofang","yuanzi",
             }),
- "±±¾©³Ç" : ({"/d/city2/","chaoyan1","chaoyan2","chaoyang","di_an1","di_an2",
+ "åŒ—äº¬åŸ" : ({"/d/city2/","chaoyan1","chaoyan2","chaoyang","di_an1","di_an2",
               "di_an3","di_an4","di_anmen","dongcha1","dongcha2","dongchangdamen",
               "dongmen","nandaj1","nandaj2","tian_anm","wangfu1","wangfu2",
               "wangfu3","xichang1","xichang2","xidan","xidan1","ximen",
             }),
          ]);
 
-string *city_name=({"ÑïÖİ³Ç","ÈªÖİ³Ç","ÏåÑô³Ç","ÁéğÕ¹¬","°×ÍÕÉ½","±±¾©³Ç"});
+string *city_name=({"æ‰¬å·åŸ","æ³‰å·åŸ","è¥„é˜³åŸ","çµé¹«å®«","ç™½é©¼å±±","åŒ—äº¬åŸ"});
 string site_name;
 int haojie_times;
 
@@ -68,9 +68,9 @@ void haojie_begin(int num)
      haojie_times++;
 
      site_name=city_name[random(sizeof(city_name))];
-     message("channel:rumor", HIR"¡¾ÎäÁÖºÆ½Ù¡¿"HIW"½­ºşÓ¢ĞÛÁî"
-            +HIR"ÖØÏÖ½­ºş£¬ºÅÕÙ¸÷Â·ºÀ½ÜÆë¸°"+HIY+site_name+HIR"µÖÓù"
-            +HIB"É±ÊÖ°ï"+HIR"Ö®ÈëÇÖ£¡\n"NOR,users());
+     message("channel:rumor", HIR"ã€æ­¦æ—æµ©åŠ«ã€‘"HIW"æ±Ÿæ¹–è‹±é›„ä»¤"
+            +HIR"é‡ç°æ±Ÿæ¹–ï¼Œå·å¬å„è·¯è±ªæ°é½èµ´"+HIY+site_name+HIR"æŠµå¾¡"
+            +HIB"æ€æ‰‹å¸®"+HIR"ä¹‹å…¥ä¾µï¼\n"NOR,users());
      for(n=0;n<num;n++)
      {
           killer=new("/quest/chousha/killer");
@@ -88,8 +88,8 @@ void haojie_new(int num)
      if( haojie_times >= 4 )
      {
           haojie_times=1;
-          message("channel:rumor", HIR"¡¾ÎäÁÖºÆ½Ù¡¿¾­¹ıÒ»¶ÎÊ±¼äµÄÊâËÀ"
-            +HIR"²«¶·£¬Ë«·½½ÔÓĞÉËÍö£¬½øÈëÁË¶ÌÔİµÄĞİÕû£¡\n"NOR,users()); 
+          message("channel:rumor", HIR"ã€æ­¦æ—æµ©åŠ«ã€‘ç»è¿‡ä¸€æ®µæ—¶é—´çš„æ®Šæ­»"
+            +HIR"ææ–—ï¼ŒåŒæ–¹çš†æœ‰ä¼¤äº¡ï¼Œè¿›å…¥äº†çŸ­æš‚çš„ä¼‘æ•´ï¼\n"NOR,users()); 
 
           remove_call_out("haojie_begin");
           call_out("haojie_begin",120,num);
@@ -115,9 +115,9 @@ void haojie_close()
       ulist[k]->delete_temp("apply/short");
    }
 
-   message("channel:rumor", HIR"¡¾ÎäÁÖºÆ½Ù¡¿¾­¹ı¸÷Â·ÎäÁÖºÀ½ÜµÄÊâËÀ¿¹Õù£¬"
-   +HIY"É±ÊÖ°ï"+HIR"³Æ°ÔÎäÁÖµÄÒõÄ±ÖÕÓÚÔİÊ±Ğû¸æÆÆÃğ£¬\n½­ºşÖĞÓÖËÆºõ»Ö¸´"
-   +"ÁËÒÔÍùµÄÆ¬¿Ì°²Æ½£¡\n"NOR,users());
+   message("channel:rumor", HIR"ã€æ­¦æ—æµ©åŠ«ã€‘ç»è¿‡å„è·¯æ­¦æ—è±ªæ°çš„æ®Šæ­»æŠ—äº‰ï¼Œ"
+   +HIY"æ€æ‰‹å¸®"+HIR"ç§°éœ¸æ­¦æ—çš„é˜´è°‹ç»ˆäºæš‚æ—¶å®£å‘Šç ´ç­ï¼Œ\næ±Ÿæ¹–ä¸­åˆä¼¼ä¹æ¢å¤"
+   +"äº†ä»¥å¾€çš„ç‰‡åˆ»å®‰å¹³ï¼\n"NOR,users());
 
    haojie_times=0;
    killer_rate=6;

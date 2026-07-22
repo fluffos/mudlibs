@@ -6,7 +6,7 @@ string check_len(string str)
 	int max_len = 33,len;
 	
 	len = (max_len+color_len(str)) - strlen(str);
-	return sprintf("%"+len+"s","©¦\n");
+	return sprintf("%"+len+"s","â”‚\n");
 }
 
 int init()
@@ -45,133 +45,133 @@ int init()
 
 		switch(zl)
 		{
-			case 1  : equip_zl = YEL"ÖĞ¼¶"NOR; break;
-			case 2  : equip_zl = MAG"¸ß¼¶"NOR; break;
-			case 3  : equip_zl = HIG"×¿Ô½"NOR; break;
-			default : equip_zl = HIB"³õ¼¶"NOR; break;
+			case 1  : equip_zl = YEL"ä¸­çº§"NOR; break;
+			case 2  : equip_zl = MAG"é«˜çº§"NOR; break;
+			case 3  : equip_zl = HIG"å“è¶Š"NOR; break;
+			default : equip_zl = HIB"åˆçº§"NOR; break;
 		}
 		
 		chars = sprintf("[%s]",equip_zl);
-		str = HIY"¡¶½­ºş¡·"NOR"×°±¸ÊôĞÔ:";
-		str += "\n©°©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©´\n";
+		str = HIY"ã€Šæ±Ÿæ¹–ã€‹"NOR"è£…å¤‡å±æ€§:";
+		str += "\nâ”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”\n";
 
-		if(zj) temp_str = sprintf("©¦%7s+%d%s%s","",zj,name,chars);
-		else temp_str = sprintf("©¦%7s%s%s","",name,chars);
+		if(zj) temp_str = sprintf("â”‚%7s+%d%s%s","",zj,name,chars);
+		else temp_str = sprintf("â”‚%7s%s%s","",name,chars);
 		str += temp_str;
 		str += check_len(temp_str);
-		str += sprintf("©¦%28s©¦\n","");
+		str += sprintf("â”‚%28sâ”‚\n","");
 
-		if(exp) { temp_str = sprintf("©¦%7s¾­ÑéĞèÇó: %d","",exp); }
-		else { temp_str = sprintf("©¦%7s¾­ÑéĞèÇó: %s","","ÎŞĞèÇó"); }
-		str += temp_str;
-		str += check_len(temp_str);
-
-		if(gender) temp_str = sprintf("©¦%7sĞÔ±ğĞèÇó: %s","",gender);
-		else temp_str = sprintf("©¦%7sĞÔ±ğĞèÇó: %s","","ÎŞĞèÇó");
+		if(exp) { temp_str = sprintf("â”‚%7sç»éªŒéœ€æ±‚: %d","",exp); }
+		else { temp_str = sprintf("â”‚%7sç»éªŒéœ€æ±‚: %s","","æ— éœ€æ±‚"); }
 		str += temp_str;
 		str += check_len(temp_str);
 
-		if(level) temp_str = sprintf("©¦%7sµÈ¼¶ĞèÇó: %d","",level);
-		else temp_str = sprintf("©¦%7sµÈ¼¶ĞèÇó: %s","","ÎŞĞèÇó");
+		if(gender) temp_str = sprintf("â”‚%7sæ€§åˆ«éœ€æ±‚: %s","",gender);
+		else temp_str = sprintf("â”‚%7sæ€§åˆ«éœ€æ±‚: %s","","æ— éœ€æ±‚");
 		str += temp_str;
 		str += check_len(temp_str);
 
-		temp_str = sprintf("©¦%7s×°±¸ÖØÁ¿: %d","",weight);
+		if(level) temp_str = sprintf("â”‚%7sç­‰çº§éœ€æ±‚: %d","",level);
+		else temp_str = sprintf("â”‚%7sç­‰çº§éœ€æ±‚: %s","","æ— éœ€æ±‚");
 		str += temp_str;
 		str += check_len(temp_str);
 
-		temp_str = sprintf("©¦%7s×°±¸ÄÍ¾Ã: %d","",lasting);
+		temp_str = sprintf("â”‚%7sè£…å¤‡é‡é‡: %d","",weight);
 		str += temp_str;
 		str += check_len(temp_str);
 
-		temp_str = sprintf("©¦%7s×°±¸¼ÛÖµ: %dÁ½»Æ½ğ","",value/10000);
+		temp_str = sprintf("â”‚%7sè£…å¤‡è€ä¹…: %d","",lasting);
 		str += temp_str;
 		str += check_len(temp_str);
 
-		temp_str = sprintf("©¦%7s×°±¸¹¥»÷: %d","",damage);
+		temp_str = sprintf("â”‚%7sè£…å¤‡ä»·å€¼: %dä¸¤é»„é‡‘","",value/10000);
+		str += temp_str;
+		str += check_len(temp_str);
+
+		temp_str = sprintf("â”‚%7sè£…å¤‡æ”»å‡»: %d","",damage);
 		str += temp_str;
 		str += check_len(temp_str);
 
 		if(hp)
 		{
-			temp_str = sprintf("©¦%7s"HIC"ÆøÑª¼Ó³É: %d"NOR,"",hp);
+			temp_str = sprintf("â”‚%7s"HIC"æ°”è¡€åŠ æˆ: %d"NOR,"",hp);
 			str += temp_str;
 			str += check_len(temp_str);
 		}
 		if(mp)
 		{
-			temp_str = sprintf("©¦%7s"YEL"ÄÚÁ¦¼Ó³É: %d"NOR,"",mp);
+			temp_str = sprintf("â”‚%7s"YEL"å†…åŠ›åŠ æˆ: %d"NOR,"",mp);
 			str += temp_str;
 			str += check_len(temp_str);
 		}
 		if(pp < 0)
 		{
-			temp_str = sprintf("©¦%7s¼õÉÙ·ÀÓù: %d","",pp);
+			temp_str = sprintf("â”‚%7så‡å°‘é˜²å¾¡: %d","",pp);
 			str += temp_str;
 			str += check_len(temp_str);
 		}
 		else if(pp)
 		{
-			temp_str = sprintf("©¦%7s"HIY"×·¼Ó·ÀÓù: %d"NOR,"",pp);
+			temp_str = sprintf("â”‚%7s"HIY"è¿½åŠ é˜²å¾¡: %d"NOR,"",pp);
 			str += temp_str;
 			str += check_len(temp_str);
 		}
 		if(ap||cp)
 		{
-			temp_str = sprintf("©¦%7s"HIM"×·¼Ó¹¥»÷: %d(%d)"NOR,"",ap,cp);
+			temp_str = sprintf("â”‚%7s"HIM"è¿½åŠ æ”»å‡»: %d(%d)"NOR,"",ap,cp);
 			str += temp_str;
 			str += check_len(temp_str);
 		}
 		if(baoji)
 		{
 			baoji_str = sprintf("%d.%d%d",baoji/100,baoji%100,baoji%10)+"%";
-			temp_str = sprintf("©¦%7s"HIR"×°±¸±¬»÷£º%s"NOR,"",baoji_str);
+			temp_str = sprintf("â”‚%7s"HIR"è£…å¤‡çˆ†å‡»ï¼š%s"NOR,"",baoji_str);
 			str += temp_str;
 			str += check_len(temp_str);
 		}
 		if(strs)
 		{
-			temp_str = sprintf("©¦%7s"RED"±ÛÁ¦Ôö¼Ó: %d"NOR,"",strs);
+			temp_str = sprintf("â”‚%7s"RED"è‡‚åŠ›å¢åŠ : %d"NOR,"",strs);
 			str += temp_str;
 			str += check_len(temp_str);
 		}
 		if(dex)
 		{
-			temp_str = sprintf("©¦%7s"MAG"Éí·¨Ôö¼Ó: %d"NOR,"",dex);
+			temp_str = sprintf("â”‚%7s"MAG"èº«æ³•å¢åŠ : %d"NOR,"",dex);
 			str += temp_str;
 			str += check_len(temp_str);
 		}
 		if(ints)
 		{
-			temp_str = sprintf("©¦%7s"CYN"ÎòĞÔÔö¼Ó: %d"NOR,"",ints);
+			temp_str = sprintf("â”‚%7s"CYN"æ‚Ÿæ€§å¢åŠ : %d"NOR,"",ints);
 			str += temp_str;
 			str += check_len(temp_str);
 		}
 		if(cons)
 		{
-			temp_str = sprintf("©¦%7s"YEL"¸ù¹ÇÔö¼Ó: %d"NOR,"",cons);
+			temp_str = sprintf("â”‚%7s"YEL"æ ¹éª¨å¢åŠ : %d"NOR,"",cons);
 			str += temp_str;
 			str += check_len(temp_str);
 		}
 		if(con)
 		{
-			temp_str = sprintf("©¦%7s"HIW"×°±¸ÊıÁ¿: %d"NOR,"",con);
+			temp_str = sprintf("â”‚%7s"HIW"è£…å¤‡æ•°é‡: %d"NOR,"",con);
 			str += temp_str;
 			str += check_len(temp_str);
 		}
 		if(jing)
 		{
-			temp_str = sprintf("©¦%7s"HIG"¾«Æø¼Ó³É: %d"NOR,"",jing);
+			temp_str = sprintf("â”‚%7s"HIG"ç²¾æ°”åŠ æˆ: %d"NOR,"",jing);
 			str += temp_str;
 			str += check_len(temp_str);
 		}
 		if(jingli)
 		{
-			temp_str = sprintf("©¦%7s"HIR"¾«Á¦¼Ó³É: %d"NOR,"",jingli);
+			temp_str = sprintf("â”‚%7s"HIR"ç²¾åŠ›åŠ æˆ: %d"NOR,"",jingli);
 			str += temp_str;
 			str += check_len(temp_str);
 		}
-		str += "©¸©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¼\n";
+		str += "â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜\n";
 		
 		ob->set("long",str);
 	}

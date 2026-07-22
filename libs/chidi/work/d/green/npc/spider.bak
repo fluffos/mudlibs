@@ -2,17 +2,17 @@ inherit NPC;
 
 void create()
 {
-	set_name("Ö©Öë", ({ "spider" }) );
-	set("race", "Ò°ÊŞ");
+	set_name("èœ˜è››", ({ "spider" }) );
+	set("race", "é‡å…½");
 	set("age", 1);
 	set("long",@LONG
-ÕâÊÇÒ»Ö»ÌåĞÍÏàµ±´óµÄÖ©Öë, ¿´À´ÓĞµãÏÅÈË.
+è¿™æ˜¯ä¸€åªä½“å‹ç›¸å½“å¤§çš„èœ˜è››, çœ‹æ¥æœ‰ç‚¹å“äºº.
 
 LONG
 	);
 	set("str", 20);
 
-	set("limbs", ({ "Í·²¿", "ÉíÌå" }) );
+	set("limbs", ({ "å¤´éƒ¨", "èº«ä½“" }) );
 	set("verbs", ({ "bite" }) );
 
 	set_temp("apply/attack", 15);

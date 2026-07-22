@@ -1,4 +1,0 @@
-//modify by xiha@wmkj
-#define AS_FEATURE
-#include "mace.c"
-

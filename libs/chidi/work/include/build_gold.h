@@ -1,4 +1,4 @@
-// »Æ½ğ¼×.c
+// é»„é‡‘ç”².c
 void build_armor(object ob,object basts);
 int do_make(string arg);
 void confirm_dispose(string arg, object ob, object fabao_ob);
@@ -8,9 +8,9 @@ int do_make(string arg)
    object ob = this_player();
    object fabao_ob;
    
-   if( !arg || arg == "" ) return notify_fail("ÄãÒª×öÊ²Ã´·¨±¦£¿\n");
-   if( !objectp(fabao_ob = present(arg, ob)) )	return notify_fail("ÄãÉíÉÏÃ»ÓĞÕâÑù¶«Î÷¡£\n");
-   if( fabao_ob->query("equipped") ) return notify_fail("ÄãÊ×ÏÈ±ØĞë·ÅÏÂÕâÑù¶«Î÷¡£\n");
+   if( !arg || arg == "" ) return notify_fail("ä½ è¦åšä»€ä¹ˆæ³•å®ï¼Ÿ\n");
+   if( !objectp(fabao_ob = present(arg, ob)) )	return notify_fail("ä½ èº«ä¸Šæ²¡æœ‰è¿™æ ·ä¸œè¥¿ã€‚\n");
+   if( fabao_ob->query("equipped") ) return notify_fail("ä½ é¦–å…ˆå¿…é¡»æ”¾ä¸‹è¿™æ ·ä¸œè¥¿ã€‚\n");
    
    build_armor(ob,fabao_ob);
    return 1;
@@ -34,7 +34,7 @@ void build_armor(object ob,object base)
         
          if(ob->query("daoxing")/1000 < 3000)
           {
-            write("Äã»¹Ã»ÓĞ×Ê¸ñÊ¹ÓÃ»Æ½ğ×°±¸!\n");
+            write("ä½ è¿˜æ²¡æœ‰èµ„æ ¼ä½¿ç”¨é»„é‡‘è£…å¤‡!\n");
             return ;
            }
         
@@ -42,7 +42,7 @@ void build_armor(object ob,object base)
         else gold_num = gold_num + 1;	
         if( gold_num > 12) 
         {
-           write("ÄãÏÖÔÚ±£´æµÄ»Æ½ğ×°±¸Ì«¶àÁË¡£\n");
+           write("ä½ ç°åœ¨ä¿å­˜çš„é»„é‡‘è£…å¤‡å¤ªå¤šäº†ã€‚\n");
            return ;
         }
         
@@ -50,8 +50,8 @@ void build_armor(object ob,object base)
         else series_no = series_no + 1;	
         
         		
-	if(base->query("old_long")) fabao_long = HIY""+base->query("old_long")+"ÉÏÃæÒşÔ¼½ğÉ«ÉÁÏÖ"NOR;
-	else fabao_long = HIY""+base->query("long")+"ÉÏÃæÒşÔ¼½ğÉ«ÉÁÏÖ"NOR;
+	if(base->query("old_long")) fabao_long = HIY""+base->query("old_long")+"ä¸Šé¢éšçº¦é‡‘è‰²é—ªç°"NOR;
+	else fabao_long = HIY""+base->query("long")+"ä¸Šé¢éšçº¦é‡‘è‰²é—ªç°"NOR;
 
               armor_dir = "/d/objj/";
 	        ob_file = "none";
@@ -70,7 +70,7 @@ void build_armor(object ob,object base)
                 if(armor_type=="waist") ob_file = armor_dir + "cloth/belt";
 		if(ob_file=="none") 
 	        {
-	          write("ÕâÑù¶«Î÷²»ÄÜÉú³É»Æ½ğ×°±¸¡£\n");
+	          write("è¿™æ ·ä¸œè¥¿ä¸èƒ½ç”Ÿæˆé»„é‡‘è£…å¤‡ã€‚\n");
 	          return;
 	        }
 	         
@@ -78,7 +78,7 @@ void build_armor(object ob,object base)
 	newob = new("/d/baoshi/armor/base");
 	if(!newob) 
 	{ 
-	   write("»Æ½ğ×°±¸Éú³ÉÊ§°Ü,ÇëÍ¨ÖªÎ×Ê¦¡£\n");
+	   write("é»„é‡‘è£…å¤‡ç”Ÿæˆå¤±è´¥,è¯·é€šçŸ¥å·«å¸ˆã€‚\n");
 	   return;
 	}
 	
@@ -168,9 +168,9 @@ void build_armor(object ob,object base)
 	   newob->move(environment(ob));
 	ob->add("daoxing",-1*gold_num*100000);
 	ob->save();
-        message_vision(newob->query("name")+"ÉÏµÄÎå¿Å±¦Ê¯Í»È»ÌÚ¿Õ¶øÆğ£¬»ØĞıÔÚËÄÖÜ,×îºó»¯×öÒ»µÀ½ğ¹â×êÈëÁË"+newob->query("name")+"ÖĞ¡£\n",ob);
-        message_vision(newob->query("name")+"ÉÏÒşÔ¼ÓĞ°µ½ğÉÁÏÖ¡£\n",ob);
-        message("channel:rumor",HIG"¡¾"+HIR"ÆæÕäÒì±¦"+HIG"¡¿"+HIM+"Ä³ÈË£ºÌıËµ"HIW+ob->query("name")+HIM"µÃµ½Ò»¼ş´«ËµÖĞµÄ"+HIY"»Æ½ğ"+newob->query("name")+"ÁË£¡\n"NOR,users() );
+        message_vision(newob->query("name")+"ä¸Šçš„äº”é¢—å®çŸ³çªç„¶è…¾ç©ºè€Œèµ·ï¼Œå›æ—‹åœ¨å››å‘¨,æœ€ååŒ–åšä¸€é“é‡‘å…‰é’»å…¥äº†"+newob->query("name")+"ä¸­ã€‚\n",ob);
+        message_vision(newob->query("name")+"ä¸Šéšçº¦æœ‰æš—é‡‘é—ªç°ã€‚\n",ob);
+        message("channel:rumor",HIG"ã€"+HIR"å¥‡çå¼‚å®"+HIG"ã€‘"+HIM+"æŸäººï¼šå¬è¯´"HIW+ob->query("name")+HIM"å¾—åˆ°ä¸€ä»¶ä¼ è¯´ä¸­çš„"+HIY"é»„é‡‘"+newob->query("name")+"äº†ï¼\n"NOR,users() );
  
 	destruct(base);
   	return;
@@ -194,7 +194,7 @@ void build_weapon(object ob,object base)
         
          if(ob->query("daoxing")/1000 < 3000)
           {
-            write("Äã»¹Ã»ÓĞ×Ê¸ñÊ¹ÓÃ»Æ½ğ×°±¸!\n");
+            write("ä½ è¿˜æ²¡æœ‰èµ„æ ¼ä½¿ç”¨é»„é‡‘è£…å¤‡!\n");
             return ;
            }
         
@@ -202,12 +202,12 @@ void build_weapon(object ob,object base)
         else gold_num = gold_num + 1;	
         if( gold_num > 13) 
         {
-           write("ÄãÏÖÔÚ±£´æµÄ»Æ½ğ×°±¸Ì«¶àÁË¡£\n");
+           write("ä½ ç°åœ¨ä¿å­˜çš„é»„é‡‘è£…å¤‡å¤ªå¤šäº†ã€‚\n");
            return ;
         }
         if(ob->query("gold/weapon"))
         {
-           write("ÄãÒÑ¾­ÓĞÒ»Ñù»Æ½ğÎäÆ÷ÁË¡£\n");
+           write("ä½ å·²ç»æœ‰ä¸€æ ·é»„é‡‘æ­¦å™¨äº†ã€‚\n");
            return ;
         }
         
@@ -216,8 +216,8 @@ void build_weapon(object ob,object base)
         else series_no = series_no + 1;	
         
         		
-	if(base->query("old_long")) fabao_long = HIY""+base->query("old_long")+"ÉÏÃæÒşÔ¼½ğÉ«ÉÁÏÖ"NOR;
-	else fabao_long = HIY""+base->query("long")+"ÉÏÃæÒşÔ¼½ğÉ«ÉÁÏÖ"NOR;
+	if(base->query("old_long")) fabao_long = HIY""+base->query("old_long")+"ä¸Šé¢éšçº¦é‡‘è‰²é—ªç°"NOR;
+	else fabao_long = HIY""+base->query("long")+"ä¸Šé¢éšçº¦é‡‘è‰²é—ªç°"NOR;
 
 //              weapon_dir = "/std/weapon/";
               weapon_dir = "/clone/weapon/";
@@ -237,7 +237,7 @@ void build_weapon(object ob,object base)
                 if(weapon_type=="whip") ob_file = weapon_dir + "whip";
 		if(ob_file=="none") 
 	        {
-	          write("ÕâÑù¶«Î÷²»ÄÜÉú³É»Æ½ğ×°±¸¡£\n");
+	          write("è¿™æ ·ä¸œè¥¿ä¸èƒ½ç”Ÿæˆé»„é‡‘è£…å¤‡ã€‚\n");
 	          return;
 	        }
 	         
@@ -245,7 +245,7 @@ void build_weapon(object ob,object base)
 	newob = new("/d/baoshi/weapon/base");
 	if(!newob) 
 	{ 
-	   write("»Æ½ğ×°±¸Éú³ÉÊ§°Ü,ÇëÍ¨ÖªÎ×Ê¦¡£\n");
+	   write("é»„é‡‘è£…å¤‡ç”Ÿæˆå¤±è´¥,è¯·é€šçŸ¥å·«å¸ˆã€‚\n");
 	   return;
 	}
 	
@@ -307,9 +307,9 @@ void build_weapon(object ob,object base)
 	   newob->move(environment(ob));
 	ob->add("daoxing",-1*gold_num*100000);
 	ob->save();
-        message_vision(newob->query("name")+"ÉÏµÄÎå¿Å±¦Ê¯Í»È»ÌÚ¿Õ¶øÆğ£¬»ØĞıÔÚËÄÖÜ,×îºó»¯×öÒ»µÀ½ğ¹â×êÈëÁË"+newob->query("name")+"ÖĞ¡£\n",ob);
-        message_vision(newob->query("name")+"ÉÏÒşÔ¼ÓĞ°µ½ğÉÁÏÖ¡£\n",ob);
-        message("channel:rumor",HIG"¡¾"+HIR"ÆæÕäÒì±¦"+HIG"¡¿"+HIM+"Ä³ÈË£ºÌıËµ"HIW+ob->query("name")+HIM"µÃµ½Ò»¼ş´«ËµÖĞµÄ"+HIY"»Æ½ğ"+newob->query("name")+"ÁË£¡\n"NOR,users() );
+        message_vision(newob->query("name")+"ä¸Šçš„äº”é¢—å®çŸ³çªç„¶è…¾ç©ºè€Œèµ·ï¼Œå›æ—‹åœ¨å››å‘¨,æœ€ååŒ–åšä¸€é“é‡‘å…‰é’»å…¥äº†"+newob->query("name")+"ä¸­ã€‚\n",ob);
+        message_vision(newob->query("name")+"ä¸Šéšçº¦æœ‰æš—é‡‘é—ªç°ã€‚\n",ob);
+        message("channel:rumor",HIG"ã€"+HIR"å¥‡çå¼‚å®"+HIG"ã€‘"+HIM+"æŸäººï¼šå¬è¯´"HIW+ob->query("name")+HIM"å¾—åˆ°ä¸€ä»¶ä¼ è¯´ä¸­çš„"+HIY"é»„é‡‘"+newob->query("name")+"äº†ï¼\n"NOR,users() );
  
 	destruct(base);
   	return;

@@ -5,7 +5,7 @@ int block_tell(object me)
                 time=time();
                 if(me->query("channel/tell_block") &&
                   (time-me->query("channel/tell_block"))<0 ) {
-                   write("你的交谈指令被暂时关闭了。\n");
+                   write("浣犵殑浜よ皥鎸囦护琚殏鏃跺叧闂簡銆俓n");
                    return 0;
                 }
               
@@ -17,7 +17,7 @@ int block_tell(object me)
                   me->set("channel/last_tell",time);
                   if (time==last_tell) {
                     me->set("channel/tell_block",time+180);
-                    write("因为一次讲话太多，你的交谈指令被暂时关闭了。\n");
+                    write("鍥犱负涓�娆¤璇濆お澶氾紝浣犵殑浜よ皥鎸囦护琚殏鏃跺叧闂簡銆俓n");
                     return 0;
                   }
                 }

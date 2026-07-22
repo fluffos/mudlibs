@@ -1,0 +1,185 @@
+// UNIQUE_D :  /system/daemon/uniqued.c 
+
+#define SAVEFILE    "/data/unique" 
+
+#include <dbase.h>
+
+inherit F_CLEAN_UP;
+inherit F_DBASE;
+inherit F_SAVE; 
+
+string query_save_file();
+void set_unique(object unique_ob,object user);
+string query_unique(object unique_ob);
+int had_cloned(object unique_ob);
+int cloned_by_new(object unique_ob);
+void delete_unique(string unique_ob);
+void change_user_for_unique(object unique_ob,object user);
+void check_unique_for_delete(object user);             
+void check_unique_(object user);
+void check_unique_temp(object user);
+
+void create()
+{
+    seteuid( ROOT_UID );
+    set( "name", "造物精灵" );
+    set( "id", "create_unique" ); 
+    restore();
+}
+                 
+string query_save_file()
+{
+    return SAVEFILE;
+}
+
+void set_unique(object unique_ob,object user)
+{
+    mapping file;
+    restore();
+    if ( unique_ob->query("unique_forever") )
+        file = query("object");
+    else 
+        file = query_temp("object");
+    if ( !file )
+        file = ([ base_name( unique_ob ) : user->query("id") ]);
+    else 
+        file[ base_name( unique_ob ) ] = user->query("id");
+    set("object",file);  
+    save(); 
+    return;
+}
+                                       
+void delete_unique(string unique_ob)
+{
+    mapping file;
+    string *obj;
+    int i;                         
+    restore();
+    if ( unique_ob->query("unique_forever") )
+        file = query("object");
+    else 
+        file = query_temp("object");
+    if ( !file )
+        return;
+    else if( !file[ unique_ob ] )
+        return;    
+    else
+    {   
+        obj = keys( file );
+        for( i=0; i<sizeof(obj); i++ )
+            if( obj[i] == unique_ob )
+            {
+                file[obj[i]] = "";
+                break;
+            }     
+    }      
+    if ( unique_ob->query("unique_forever") )
+        set("object",file);
+    else
+        set_temp("object",file);
+    save();
+    return;
+}
+
+string query_unique(object unique_ob)
+{
+    mapping file;
+    restore();
+    if ( unique_ob->query("unique_forever") )
+        file = query("object");
+    else 
+        file = query_temp("object");
+    if ( !file )
+        return "";
+    if ( !file[ base_name( unique_ob ) ] )
+        return "";
+    return file[ base_name( unique_ob ) ];//user_id
+}
+
+int had_cloned(object unique_ob)
+{
+    if ( query_unique( unique_ob ) == "" || !query_unique( unique_ob ) )
+    {
+        if ( !cloned_by_new( unique_ob ) )
+            return 0;
+        else
+            return 1;//mud have,but not with any user.
+    }
+    else
+    {
+        if ( !cloned_by_new( unique_ob ) )
+            return 2;//user have,not in mud.
+        else 
+            return 3;//user have,mud have which not with user either.
+    }
+}
+
+int cloned_by_new( object unique_ob )
+{
+    if ( !clonep( unique_ob ) ) 
+        return 0;
+    return 1;
+}
+
+void change_user_for_unique(object unique_ob,object user)
+{
+    if ( !had_cloned( unique_ob ) )
+        set_unique( unique_ob, user ); 
+    else if ( query_unique( unique_ob ) != user->query("id") )
+        set_unique( unique_ob, user );
+}
+
+void check_unique_for_delete( object user )
+{   
+    check_unique_(user);
+    check_unique_temp(user);
+}
+
+void check_unique_(object user) 
+{
+    mapping file; 
+    string *obj;    
+    int i;     
+    restore();
+    file = query("object"); 
+    if ( !file )
+        return;
+    else
+    {
+        obj = keys( file );
+        for( i=0 ; i<sizeof( obj ) ; i++ )
+            if ( file[obj[i]] == user->query("id") )
+            {
+                if ( !objectp( present( obj[i]->query("id"), user ) ) )
+                    delete_unique( obj[i] );
+                if ( file_size(user->query_save_file()+__SAVE_EXTENSION__) < 1 )
+                    delete_unique( obj[i] );
+            } 
+    }                 
+    save();
+}
+
+void check_unique_temp(object user)
+{
+    mapping file; 
+    string *obj;    
+    int i;     
+    restore();
+    file = query_temp("object");
+    if ( !file )
+        return;
+    else
+    {
+        obj = keys( file );
+        for ( i=0 ; i<sizeof( obj ) ; i++ )
+            if ( file[obj[i]] == user->query("id") )
+            {
+                if ( !objectp( present( obj[i]->query("id"), user ) ) )
+                    delete_unique( obj[i] );
+                if ( file_size(user->query_save_file()+__SAVE_EXTENSION__) < 1 )
+                    delete_unique( obj[i] );
+            }
+    }                 
+    save();
+}
+
