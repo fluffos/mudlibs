@@ -32,7 +32,7 @@ rely on the boot + interactive-connect test as the verification gate.
   majority of this collection. If an archive turns out to be English
   (like ds386/Dead Souls), do the minimum to note what it is, don't sink
   deep debugging time into it -- move on to the next Chinese one.
-- **Done: 50 / 100** (shanhaizhanshen, xingzhanyingxiong,
+- **Done: 51 / 100** (shanhaizhanshen, xingzhanyingxiong,
   unknownlib20150716 [小雨西游II], bxsj [书剑天下], bxsj1 [书剑·经典],
   chidi [江湖I], ..., nitan170911 [仙剑奇侠传], nitan6 [笑傲江湖], rzrmud
   [大唐西游], xo, xo_final, zzfy [郑州风云3], shiji [世纪],
@@ -53,7 +53,8 @@ rely on the boot + interactive-connect test as the verification gate.
   yueyingqiyuan [月影奇缘, ES II lineage], weimingkongjian [未明空间/wmkj,
   fork of xiyangzaixian_fengkuang #46's 夕阳再现 lineage],
   xinkuangxiangkongjian2 [新狂想空间II, actually named 狂想空间, ES II
-  lineage], moniHuafu [模拟华附, 风云3 engine lineage])
+  lineage], moniHuafu [模拟华附, 风云3 engine lineage], jianghufengyun
+  [江湖风云单机, 夕阳再现 lineage shared with #46/#55])
 - **New AGENTS.md §15q (hidden client-protocol-version gate)**: found on
   xiyangzaixian3 -- a pre-id prompt can check the input against a
   hardcoded literal (client version string), not just a BIG5/student
@@ -324,7 +325,7 @@ rely on the boot + interactive-connect test as the verification gate.
 | 56 | 梦幻西游2002版.rar | menghuanxiyou2002 | 40050 | done | same 2002-era codebase as mhxy(#19) -- confirmed via diff (14561/14563 files identical incl. master.c/chinese.c byte-identical, only logind.c banner branding + wizlist state differ), all fixes ported directly rather than rediscovered; standard §15h fix + §8h convertd.lpc typo (45x) + missing /u/feizei/log file fix + proactive dns_master preload exclusion (§15p); full registration flow verified end-to-end incl. real name "秦风" reaching gift-allocation/game-world welcome, confirmed via saved data files too; 97.3% lpcc pass (matches #19); see libs/menghuanxiyou2002/NOTES.md |
 | 57 | 模拟华附.zip | moniHuafu | 40051 | done | 模拟华附 (华南师大附中 high-school setting, author 阿飞/Jjgod, 2000), 风云3 engine lineage (same as zzfy/fy2/fy2005/fengyun434); standard §15h fix + proactive dns_master preload exclusion (§15p) + upgraded valid_override to 3-arg (§14) + new uptime.lpc unguarded write(read_file()) crash killing every connection (LASTCRASH path) + reverted a static/->nosave sed collateral hit on 10 files' "static/CRASHES"-style string literals (orphaned real seed data, restored) + neutralized a dormant "phone-home license check" self-destruct function in securityd.lpc (confirmed unreachable, disabled as insurance); full registration flow verified incl. real name "秦风" reaching an actual game room, re-login/restore also verified in a second session; 98.7% lpcc pass; see libs/moniHuafu/NOTES.md |
 | 58 | 武汉站.rar | | | not started | |
-| 59 | 江湖风云.rar | | | not started | dup: 江湖风云 (1).rar |
+| 59 | 江湖风云.rar | jianghufengyun | 40053 | done | dup: 江湖风云 (1).rar; config self-names "江湖风云单机"; 夕阳再现 lineage confirmed via md5sum three-way against xiyangzaixian_fengkuang(#46)/weimingkongjian(#55) -- chinese.c identical across all 3, master.c matches #55, securityd.c matches #46, likely close to their common ancestor; ported #46/#55's proven §15h fix + proactive dns_master preload exclusion (§15p) directly; 18 pre-existing content bugs fixed via lpcc sweep (heredoc-merge typos, missing quotes, iconv-eaten-newline, PEN->SWORD copy-paste, etc, several literally the same files/bugs already seen in weimingkongjian, confirming shared world content); full registration flow verified 3 times with real Chinese names "秦风三"/"林风"/"秦风四", each reaching a different actual room; 98.6% lpcc pass; see libs/jianghufengyun/NOTES.md |
 | 60 | 泥潭III测试版.rar | | | not started | |
 | 61 | 泥潭三.rar | | | not started | |
 | 62 | 浴血重生MUD.rar | | | not started | |

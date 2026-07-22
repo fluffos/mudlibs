@@ -1,0 +1,3 @@
+// lingfa.c
+
+inherit SKILL;

@@ -93,6 +93,14 @@ knowledge base for a ~100-archive batch job, not a diary of one run.
    confirmation prompt for new characters). Read the transcript for mangled
    text (missed an encoding conversion somewhere — see §1) and driver-side
    errors in the lib's `log/debug.log`.
+   - **Launching the driver reliably**: a plain `nohup ... & disown` has
+     been observed to die from an unexplained external `SIGTERM` between
+     tool calls on this host, even mid-interactive-test with the process
+     otherwise healthy (found on `jianghufengyun`, archive #59). Prefer
+     `setsid nohup ~/src/fluffos/build-debug/src/driver config.fluffos &
+     disown` (own session, immune to whatever signals the parent shell's
+     process group) if you hit this; the tool-provided `run_in_background`
+     option on a Bash call is an equally reliable alternative.
 7. **Record findings** in `libs/<slug>/NOTES.md` and update the status row
    in `TODO.md`. Promote anything reusable into the catalog below.
 
