@@ -32,7 +32,7 @@ rely on the boot + interactive-connect test as the verification gate.
   majority of this collection. If an archive turns out to be English
   (like ds386/Dead Souls), do the minimum to note what it is, don't sink
   deep debugging time into it -- move on to the next Chinese one.
-- **Done: 54 / 100** (shanhaizhanshen, xingzhanyingxiong,
+- **Done: 55 / 100** (shanhaizhanshen, xingzhanyingxiong,
   unknownlib20150716 [小雨西游II], bxsj [书剑天下], bxsj1 [书剑·经典],
   chidi [江湖I], ..., nitan170911 [仙剑奇侠传], nitan6 [笑傲江湖], rzrmud
   [大唐西游], xo, xo_final, zzfy [郑州风云3], shiji [世纪],
@@ -57,7 +57,7 @@ rely on the boot + interactive-connect test as the verification gate.
   [江湖风云单机, 夕阳再现 lineage shared with #46/#55], nitan_ceshi
   [泥潭III测试版/《终极魔界》, NT/nitan/Lonely lineage predating the §15
   dbase bug], nitan_san [泥潭三, sibling of nitan_ceshi #60], wuhanzhan
-  [武汉站/大话西游, ES II lineage])
+  [武汉站/大话西游, ES II lineage], huoying [火影/Naruto, ES2 lineage])
 - **New AGENTS.md §15q (hidden client-protocol-version gate)**: found on
   xiyangzaixian3 -- a pre-id prompt can check the input against a
   hardcoded literal (client version string), not just a BIG5/student
@@ -346,7 +346,7 @@ rely on the boot + interactive-connect test as the verification gate.
 | 62 | 浴血重生MUD.rar | | | not started | |
 | 63 | 海洋II 2010 正式无错完整版下载.rar | | | not started | dup: "...(1).rar" |
 | 64 | 消失的亞特蘭提斯MUD破解版.zip | atlantis | | not mudlib | confirmed: Merc 2.1/DikuMUD-derivative compiled C server ("EnvyMud" lineage per envyb.exe/play.bat scaffold) -- src/act_*.c/comm.c/db.c/fight.c/handler.c (canonical Merc names), area/*.are Diku world-data files, prebuilt merc.exe+cygwin1.dll, zero `inherit` statements anywhere -- same category as 三国歪传(#31), skipped, see AGENTS.md's non-mudlib list |
-| 65 | 火影.rar | | | not started | dup: 火影 (1).rar |
+| 65 | 火影.rar | huoying | 40059 | done | dup: 火影 (1).rar; self-IDs as 火影 (Naruto-themed, "Neolith 0.0.2" engine by Annihilator 2000, ES2 lineage same family as wuhanzhan/xinkuangxiangkongjian2/yueyingqiyuan); §4 recursion-guard fix (existing catch() wasn't sufficient, recursion re-enters via a new outer call) + standard §15h fix incl. a fullwidth-space byte-vs-char equality variant + §15w log_error() warning-spam gate + NEW hardcoded MUD_PORT=8000 mismatch silently rejecting every connection at the TCP layer despite a clean boot log (fixed to 40059) + NEW mixed-GBK+BIG5 config.cfg (BIG5 bytes decode to valid-but-wrong mojibake under GB18030, undetectable by convert_lib.sh's lossy-conversion check, fixed 4 lines manually) + one pre-existing typo; full registration flow verified with real names "秦风"/"王小虎" both reaching an actual starting room ("巫师神殿"), reconnect/quit save-restore lifecycle also confirmed; 98.1% lpcc pass; dns_master already commented out in the raw archive itself, nothing to fix there; see libs/huoying/NOTES.md |
 | 66 | 炎黄武魂_64bit.rar | | | not started | |
 | 67 | 炎黄英雄史.rar | | | not started | |
 | 68 | 炎龙封印-笑傲江湖3阿飞站.rar | | | not started | |

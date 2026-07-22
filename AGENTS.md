@@ -1775,6 +1775,50 @@ RUNTIME_ERRORS", trace)` inside the handler is a cheap, permanent
 insurance so runtime errors are never silently lost regardless of what
 the handler's own logic does afterward.
 
+### 15x. A hardcoded `MUD_PORT` mismatch silently rejects every connection at the TCP dispatch layer, with a completely clean boot log — always cross-check the mudlib's own compiled-in port constant against `config.fluffos`'s assigned port
+
+Found on `huoying` (archive #65): `master.lpc`'s `connect(int port)` apply
+dispatches on a hardcoded `MUD_PORT` constant from `globals.h` (here,
+`8000` — the original author's own port), completely independent of
+whatever port the driver was actually launched on via `config.fluffos`.
+Since this project assigns each converted lib its own unique port
+(40001, 40002, ...) to allow running several concurrently, every one of
+these libs' `MUD_PORT`-style constants is near-certain to mismatch the
+assigned port unless previously caught. When it mismatches, the driver
+boots with **zero errors anywhere** (preload, compile, everything
+succeeds) but every incoming connection is rejected at the mudlib's own
+`connect()` dispatch (`error in connect()` or similar), which can look
+identical to a driver-level "nothing's listening"/networking problem
+rather than a one-line mudlib config bug. **Check for this proactively**:
+grep for `MUD_PORT`/`PORTNO`/similar hardcoded port constants in
+`globals.h`/`config.h`-equivalent files during the standard fix pass, and
+update it to match the lib's assigned port — same category of "config
+value baked into mudlib source, not just the driver's own
+`config.fluffos`" as the daemon-address/hostname constants worth a
+similar grep.
+
+### 15y. A single config/data file can be mixed multiple Chinese encodings (GBK for most content, BIG5 for a few lines) — a straight GB18030 decode won't error, it will silently produce valid-but-wrong mojibake that `convert_lib.sh`'s lossy-conversion detector cannot catch
+
+Found on `huoying` (archive #65): `config.cfg`'s header comments and two
+default system messages were authored in BIG5 while the rest of the file
+(and the rest of the lib) is ordinary GBK/GB2312. Because BIG5 and GBK
+are both variable-width multi-byte encodings covering overlapping byte
+ranges, decoding BIG5 bytes as GB18030 does not throw an invalid-sequence
+error — it produces a different but still well-formed sequence of valid
+Unicode characters (wrong text, not an error), so `convert_lib.sh`'s
+lossy-conversion log (which watches for iconv's `-c` drop-invalid-bytes
+recovery firing) never flags it. **This can only be caught by actually
+reading the converted output** for text that looks like nonsense Chinese
+(not the usual mangled-looking replacement-character garbage of a true
+decode failure, but grammatically odd/wrong-topic real Chinese text) —
+worth a quick visual skim of any file with prominent user-facing strings
+(banners, config comments, default messages) even after a "successful"
+lossless conversion, especially on any lib where BIG5 is plausible at all
+(Traditional-region distribution, mixed-region community forks). Fix by
+manually re-decoding just the affected lines/file with the correct BIG5
+codec and patching them back in, rather than assuming a single encoding
+choice is correct for 100% of a lib's text.
+
 ---
 
 ## Per-archive gotchas index
