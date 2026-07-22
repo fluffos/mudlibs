@@ -1403,6 +1403,29 @@ FIRST on any lib with a custom `securityd`, and only add this one if
 `Cannot #include <file>` errors persist for mid-connection compiles
 specifically after that.
 
+### 15p. Proactively exclude DNS/intermud/network daemons from `adm/etc/preload` on every lib — don't wait to discover a boot hang
+
+Standing policy (per explicit user direction): before the first boot
+attempt, grep `adm/etc/preload` for any DNS/intermud/mudlist daemon
+(commonly `network/dns_master`, sometimes just `dns_master`) and remove
+it. These daemons typically bootstrap a cross-mud database via `resolve()`
++ UDP `socket_create()`/`socket_bind()` against a hardcoded remote
+server address (a "boot server") that doesn't exist / isn't reachable in
+this sandboxed environment, and can cause the boot to hang or become
+extremely slow (observed on `xianlvqingyuanzheda`: minutes of wall-clock
+time with only single-digit seconds of accumulated CPU time — heavily
+I/O-blocked, not computing). This is pure intermud/cross-mud-list
+functionality, never needed for registration-flow testing — don't spend
+time diagnosing exactly which call blocks or why; just exclude the
+daemon from preload proactively, the same way §4/§15g/etc. are checked
+for on sight. If a lib's boot is still unusually slow after removing the
+obvious DNS daemon, don't chase it further either — trim `preload` down
+to just the entries needed for registration (`securityd`/`band`/
+`virtuald`/`logind`/`cmd_d`/`chinesed`/`convertd`-shaped daemons) and
+document in that lib's `NOTES.md` which daemons were excluded and why,
+rather than open-ended bisection across ~20 preload entries for one of
+~100 archives.
+
 ---
 
 ## Per-archive gotchas index
