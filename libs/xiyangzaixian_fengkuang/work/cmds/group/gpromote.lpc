@@ -1,0 +1,123 @@
+// by tiantian(www.wangcf.com) 2001.4
+// 调整对方的级别
+
+#include <ansi.h>
+#include <party.h>
+
+string * grouplevel = ({
+	"fubangzhu", "zhanglao", "xiangzhu", "shizhe", "bangzhong",
+});
+string * intlevel = ({
+	"4", "3", "2", "1", "0",
+});
+int * explevel = ({
+	EXP_PARTY_FUBANGZHU, EXP_PARTY_ZHANGLAO, EXP_PARTY_XIANGZHU,
+	EXP_PARTY_SHIZHE, EXP_PARTY_BANGZHONG,
+});
+
+int main(object me, string arg)
+{
+	object ob;
+	string group_file,str;
+	int newlevel;
+	string id, level;
+
+	if( !me->query("partyid") )
+		return notify_fail("你并没有加入任何帮派。\n");
+
+	if (!me->query("bangzhu") && !me->query("zhanglao"))	
+	{
+		return notify_fail("你的级别不够调整别人的级别。\n");
+
+	if( me->is_busy() )
+		return notify_fail("你现在正忙着呢。\n");
+
+	if( !arg )
+		return notify_fail("语法错误！使用help tisheng查看帮助。\n");
+
+	if( sscanf( arg, "%s %s", id, level ) != 2 )
+		return notify_fail("语法错误！使用help tisheng查看帮助。\n");
+
+	if( !( ob = present( id, environment(me) ) ) )
+		return notify_fail("你想调整谁的级别 ？\n");
+	
+	if( ob==me )
+		return notify_fail("你不能调整自己的级别。\n");
+
+	if( !userp(ob) )
+		return notify_fail(ob->name() + "他不是玩家。\n");
+
+	if( ob->query("partyid")!=me->query("partyid") )
+		return notify_fail("他不是本帮帮众。\n");
+
+	if( ob->query("group/level") >= me->query("group/level") )
+		return notify_fail("你只能调整级别比自己低的人。\n");
+
+	if( level == grouplevel[PARTY_BANGZHONG] || level == intlevel[PARTY_BANGZHONG] )
+		newlevel = PARTY_BANGZHONG;
+	else if( level == grouplevel[PARTY_SHIZHE] || level == intlevel[PARTY_SHIZHE] )
+		newlevel = PARTY_SHIZHE;
+	else if( level == grouplevel[PARTY_XIANGZHU] || level == intlevel[PARTY_XIANGZHU] )
+		newlevel = PARTY_XIANGZHU;
+	else if( level == grouplevel[PARTY_ZHANGLAO] || level == intlevel[PARTY_ZHANGLAO] )
+		newlevel = PARTY_ZHANGLAO;
+	else if( level == grouplevel[PARTY_FUBANGZHU] || level == intlevel[PARTY_FUBANGZHU] )
+		newlevel = PARTY_FUBANGZHU;
+	else if( level == "+1" ) {
+		if( ob->query("group/level") == PARTY_FUBANGZHU )
+			return notify_fail( "对方的级别已经无法继续提高了。\n" );
+		newlevel = ob->query("group/level") + 1;
+	}
+	else if( level == "-1" ) {
+		if( ob->query("group/level") == PARTY_BANGZHONG )
+			return notify_fail( "对方的级别已经无法继续降低了。\n" );
+		newlevel = ob->query("group/level") - 1;
+	}
+	else
+		return notify_fail( "级别无效，请使用help tisheng查询。\n" );
+
+	if( newlevel >= me->query("party/level") )
+		return notify_fail("你无权将对方的级别提到这样的高度。\n");
+
+	if( ob->query("combat_exp") < explevel[newlevel] )
+		return notify_fail("对方的江湖声望不够，无法担当如此重任。\n");
+
+	ob->set("group/level", newlevel);
+	ob->set( "group/title",HIW "" 
+		+ to_chinese( ob->query( "partyid" ) ) 
+		+ HIW "" HIR
+		+ PARTY_D->query_rank( ob )
+		+ HIR "" NOR);
+	ob->set( "title", ob->query( "party/title" ) );
+    ob->save();
+	str = "我决定，从即日起" + ob->query("id") + "担任"
+		+ to_chinese( me->query("partyname") )
+		+ PARTY_D->query_rank( ob ) + "职务。";
+	CHANNEL_D->do_channel(me, "chat", sprintf("%s",str));
+
+	me->start_busy(1);
+
+	return 1;
+}
+
+int help(object me)
+{
+        write(@HELP
+----------------------------------------
+指令格式 : tisheng <帮众> <新级别>
+ 
+调整对方在帮派中的级别。
+可以使用下列方法输入新级别：
+1 输入级别名称，分别是 fubangzhu(副帮主)、zhanglao(长老)、
+  shizhe(使者)、xiangzhu(香主)、bangzhong(帮众)。
+2 输入与级别对应的数字，分别是 4(副帮主)、3(长老)、
+  2(香主)、1(使者)、0(弟子)。
+3 使用 +1 将对方的级别提高一级，-1 将对方的级别降低一级。
+
+相关指令：join add kdd
+ 
+----------------------------------------
+HELP
+        );
+        return 1;
+}

@@ -1,0 +1,117 @@
+// by tiantian(www.wangcf.com) 2001.4
+// 建造新房间
+
+#include <group.h>
+
+int main(object me,string arg)
+{
+	int num;
+    string file,arg_new,group_file,new_file;
+    object env, group, new_room;
+
+    env = environment(me);
+	if( !env )
+		return 0;
+
+    file = file_name(env) + ".lpc";
+
+	if( !me->query("group") )
+		return notify_fail( "你并没有加入任何帮派。\n" );
+
+	if( me->query("group/level") < GROUP_VICE_MASTER )
+		return notify_fail( "只有副帮主才能保存房间的设置。\n" );
+
+	if( env->query("group") != me->query("group/group") ) 
+		return notify_fail("这里不是我派的领地。\n");
+        
+    if( !arg )
+        return notify_fail("指令格式：gmkroom <方向>\n");
+
+    if( arg!="north" && arg!="south" && arg!="east" && arg!="west"
+		&& arg!="down" && arg!="up" )
+        return notify_fail("你只能选择north、south、east、west、up、down方向。\n");
+
+    if( env->query( "exits/" + arg ) )
+	    return notify_fail("这个方向已经有房子了。\n");
+
+	group = load_object( GROUP_D->query_home( me ) );
+    if( group -> query("room_max") <= group->query( "room" ) )
+    	return notify_fail("已经达到房间上限，请消除不要的房间再建．\n");
+
+    if( group->query("gold") < ROOM_COST )
+        return notify_fail( "本帮没有足够的资金来建房\n" );
+
+	group->add( "room_num", 1);
+	group->add( "room", 1 );
+	group->add( "gold", - ROOM_COST );
+    num = group->query( "room_num" );
+
+    new_file = GROUP_D->query_cwd( me ) + (string)num + ".lpc";
+
+    if( !write_file( new_file, @ROOM_CODE
+
+#include <ansi.h>
+inherit ROOM;
+
+void create()
+{
+        set("short", "空房间");
+        set("long", " 你可以用(set_long)来写描述  (set_short) 来写名称，用(add_desc)设定\n景点，用(set_gate)来设定大门(add_npc)来为这房屋加入npc!!。\n");
+        setup();
+        replace_program(ROOM);
+}
+ROOM_CODE
+        ) ) 
+    return notify_fail("你没有建造房间的权利, 请通知巫师。\n");
+
+    message_vision("$N卷起袖子开始建造房间。\n", this_player());
+
+    switch(arg) {
+    case "north":
+		arg_new="south";
+        break;
+    case "south":
+        arg_new="north";
+        break;
+    case "east":
+        arg_new="west";
+        break;
+    case "west":
+        arg_new="east";
+        break;
+    case "up":
+        arg_new="down";
+        break;
+    case "down":
+        arg_new="up";
+        break;
+    }
+
+    new( new_file );
+	new_room = load_object( new_file );
+    new_room->add( "exits", ([ arg_new:file_name(env)] ) );
+    new_room->set( "group", me->query( "group/group" ) );
+    env->add( "exits", ([ arg:GROUP_D->query_cwd( me ) + (string)num] ) );
+    GROUP_D->save_group( me );
+    GROUP_D->save_room( me, new_file );
+    GROUP_D->save_room( me, file_name(env) + ".lpc" );
+	write( "完毕。\n" );
+    return 1;
+}
+
+
+int help(object me)
+{
+  write(@HELP
+----------------------------------------
+指令格式 : gmkroom <方向>
+
+在当前房间指定方向的空地上建造一间房间。
+
+相关指令：grmroom gsaveroom
+
+----------------------------------------
+HELP
+    );
+    return 1;
+}

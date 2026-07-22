@@ -17,8 +17,10 @@ worked; keep status values consistent so the table stays greppable:
   etc.; see AGENTS.md's non-mudlib list — skipped, not converted)
 
 Port assignments: sequential from 40001, recorded here so re-running
-several libs at once never collides. **Next free port: 40041** (40001-40040
-assigned; 40007 is ds386, deprioritized/partial). On mega-libs (tens of
+several libs at once never collides. **Next free port: 40046** (40001-40045
+assigned/reserved -- 40041-40045 are reserved for archives #47-51, being
+processed in parallel by background agents as of this update; 40007 is
+ds386, deprioritized/partial). On mega-libs (tens of
 thousands of files, the "nitan" family), skip the full `lpcc_check.sh`
 sweep — it can OOM the host before finishing (see AGENTS.md §6b) — and
 rely on the boot + interactive-connect test as the verification gate.
@@ -30,7 +32,9 @@ rely on the boot + interactive-connect test as the verification gate.
   majority of this collection. If an archive turns out to be English
   (like ds386/Dead Souls), do the minimum to note what it is, don't sink
   deep debugging time into it -- move on to the next Chinese one.
-- **Done: 38 / 100** (shanhaizhanshen, xingzhanyingxiong, unknownlib20150716
+- **Done: 39 / 100, plus 5 more (archives #47-51) currently being
+  processed in parallel by background agents** (see below once they
+  report back) (shanhaizhanshen, xingzhanyingxiong, unknownlib20150716
   [小雨西游II], bxsj [书剑天下], bxsj1 [书剑·经典], chidi [江湖I], ...,
   nitan170911 [仙剑奇侠传], nitan6 [笑傲江湖], rzrmud [大唐西游], xo, xo_final,
   zzfy [郑州风云3], shiji [世纪], dongfanggushi2 [东方故事Ⅱ之天朝帝国],
@@ -40,7 +44,16 @@ rely on the boot + interactive-connect test as the verification gate.
   xianlvqingyuanzheda [仙侣情缘浙大版], xianjianchuanqi [仙剑狂侠2000],
   xiakexinzhuan2 [侠客新传], xiakeyingxiong3 [侠客英雄传III],
   xiakexing100 [侠客行一百], xiakexing3 [侠客行三/金庸群侠传],
-  beimeixiakexing2001 [侠客行, North America 2001 build])
+  beimeixiakexing2001 [侠客行, North America 2001 build],
+  xiyangzaixian_fengkuang [夕阳再现])
+- **Parallelizing more aggressively per user request**: archives #47-51
+  (夕阳再现-风云再起2.rar, 夕阳再线III之炎龙封印.rar, 大唐双龙.rar,
+  天下.tar.gz, 天下无雪.rar) are being processed simultaneously by 5
+  background agents rather than one at a time -- each handles its own
+  full pipeline (convert/fix/boot/test/lpcc/NOTES.md) independently and
+  reports back; TODO.md/AGENTS.md updates and commits for those 5 are
+  deliberately deferred to a single consolidation pass once they all
+  report back, to avoid concurrent-edit conflicts on these shared files.
 - **New extraction edge case (AGENTS.md's Archive tooling section)**:
   a `.rar`-named archive can actually be a plain tar with relative
   `../...` member paths, which GNU `tar -xf` refuses outright even with
@@ -263,7 +276,7 @@ rely on the boot + interactive-connect test as the verification gate.
 | 43 | 侠客行100.rar | xiakexing100 | 40037 | done | 侠客行一百, Century-family adm/single/ layout, largest lib in this batch (~14,227 raw files); standard §15h fix + proactive dns_master preload exclusion (§15p); full registration flow verified with real name "秦风" (avoiding banned "韦小宝"); 99.3% lpcc pass, memory stayed healthy despite size; see libs/xiakexing100/NOTES.md |
 | 44 | 侠客行III .rar | xiakexing3 | 40038 | done | actually a plain tar despite .rar extension (relative ../ paths, needed Python tarfile workaround, see AGENTS.md); config MUD_NAME "侠客行三" but live banner says "金庸群侠传"; adm/obj/ layout, unrelated to xiakexing100(#43) despite similar title; standard §15h fix + proactive dns_master preload exclusion (§15p); full registration flow verified with real name "秦风"; 96.8% lpcc pass; see libs/xiakexing3/NOTES.md |
 | 45 | 北美侠客行2001.rar | beimeixiakexing2001 | 40039 | done | 侠客行/"The Quest of Oriental Chivalry", same codebase lineage as xkx2001(#25) confirmed via diff (chinese.c/master.c identical, logind.c differs by one comment); ported xkx2001's proven check_legal_name fix + standard is_chinese fix + NEW instance of §8e tail-efun bug (fatal here, took down the whole simul_efun compile) + proactive dns_master preload exclusion (§15p); hidden BIG5 prompt; full registration flow verified with real name "秦风" (avoiding banned "韦小宝"); 84.6% lpcc pass (same missing EDITOR_D pattern as xkx2001); see libs/beimeixiakexing2001/NOTES.md |
-| 46 | 夕阳再现-疯狂江湖.rar | | | not started | dup: 夕阳再现-疯狂江湖(1).rar |
+| 46 | 夕阳再现-疯狂江湖.rar | xiyangzaixian_fengkuang | 40040 | done | dup: 夕阳再现-疯狂江湖(1).rar; 夕阳再现, adm/obj/ layout, no dns_master in preload (nothing to exclude); standard §15h fix; full registration flow verified with real name "秦风"; 97.8% lpcc pass; see libs/xiyangzaixian_fengkuang/NOTES.md |
 | 47 | 夕阳再现-风云再起2.rar | | | not started | |
 | 48 | 夕阳再线III之炎龙封印.rar | | | not started | |
 | 49 | 大唐双龙.rar | | | not started | |
