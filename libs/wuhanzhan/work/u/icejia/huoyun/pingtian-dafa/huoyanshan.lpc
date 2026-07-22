@@ -1,0 +1,134 @@
+//修改自地狱火。
+#include <ansi.h>
+
+inherit SSERVER;
+int check_damage(object me, object target, int time);
+int generate_msg(object me);
+
+int cast(object me, object target)
+{
+        int time;
+
+        if( !target ) target = offensive_target(me);
+
+        if( !target
+        ||      !target->is_character()
+        ||      target->is_corpse()
+        ||      target==me)
+                return notify_fail("你要对谁引动火焰山？\n");
+
+        if((int)me->query_skill("pingtian-dafa") < 30 )
+                return notify_fail("你的平天大法等级还不够。\n");
+
+        if( time()-(int)me->query_temp("huoyanshan_end") < 10 )
+                return notify_fail("可不能这样乱烧呀。\n");
+        if((int)me->query_skill("huomoforce") < 30 )
+                return notify_fail("你的火魔心法等级还不够。\n");
+
+        if((int)me->query("mana") < 25+2*(int)me->query("mana_factor") )
+                return notify_fail("你的法力不够了！\n");
+
+        if(me->query("family/family_name") != "火云洞")
+                return notify_fail("只有火云洞门人才能够引动火焰山。\n");
+        if((int)me->query("sen") < 100 )
+                return notify_fail("现在你的精神不足！\n");
+
+        if( (int)me->query("kee") < 100 )
+                return notify_fail("你的气血不足。\n");
+
+        if( random(me->query("max_mana")) < 50 ) {
+                write("这次好象不大灵。\n");
+                return 1;
+        }
+
+        time = 2 + (int)me->query_skill("pingtian-dafa",1) / 50;
+        if ( time > 8 ) time=8;
+
+        message_vision(HIR"$N迅速念动咒语，"NOR" "RED"三昧真火 "HIR"从你身上呼啸而出，铺天盖地笼向$n\n这正是$N引动的"HIY"火焰山。"NOR, me,
+target);
+        me->start_busy(1+random(1));
+        me->set_temp("huoyanshan_end",time());
+        check_damage(me, target, time);
+
+        return 3+random(5);
+
+}
+
+int check_damage(object me, object target, int time)
+{
+        int ap,dp,damage,success;
+
+        if( !target
+        || !me 
+       || environment(me) != environment(target)) {
+                remove_call_out("check_damage");
+                return 1;
+        }
+
+        ap= (int)me->query_skill("spells");
+        ap= ap*ap*ap/10;
+        ap= ap+(int)me->query("combat_exp");
+
+        dp= (int)target->query_skill("spells");
+        dp= dp*dp*dp/10;
+        dp= dp+(int)target->query("combat_exp");
+
+         damage=(int)me->query("max_mana")/4 - (int)target->query("max_mana")/10;
+
+        success=1;
+
+        if( damage < 0 ) success = 0;
+        if( random(ap+dp) < dp ) success = 0;
+        if( (int)me->query("mana") < 30 ) success = 0;
+        if( (int)me->query("kee")  < 30 ) success = 0;
+        if( environment(me)->query("no_fight")
+        || environment(me)->query("no_magic") ) success = 0;
+
+        if( success ){
+
+message_vision(HIR"\n$N突然闻到一股焦臭，慌忙回头一看，原来身上已经着火。\n$N慌忙用手拍熄身上的火苗。同时也漏出了破绽。\n"NOR, target);
+                target->receive_damage("kee", random(damage));
+                target->receive_wound("kee", damage/3);
+                target->start_busy(2);
+                COMBAT_D->report_status(target);
+                me->add("force", -25);
+                me->add("mana", -25);
+        } else {
+                tell_room(environment(target), HIR"\n一条条火舌不安的跳动着………\n"NOR);
+        }
+
+        time--;
+
+        
+        if( time ) {
+                if(!target->is_corpse()) {
+                call_out("generate_msg", 4, me);
+                call_out("check_damage", 8, me, target, time);
+                                         }
+        }                       
+        
+        if( !target->is_fighting(me) ) {
+                if( living(target) ) {
+                        if( userp(target) ) target->fight_ob(me);
+                        else target->kill_ob(me);
+                }
+                me->kill_ob(target);
+        }
+
+
+        return 1;
+}
+
+int generate_msg(object me)
+{
+        string *msgs=({
+                HIY"\n空气中似乎有一股硫磺的气味……\n"NOR,
+                HIR"\n团团跳动的火焰不知从哪里来的……\n"NOR,
+                RED"\n似乎有朵飘的很低的红云在四周舞动……\n"NOR,
+                YEL"\n——呼啦——似乎有人在用内力抑制体内的内力！\n"NOR,
+        });
+        if( !me ) return 1;
+        tell_room( environment(me), msgs[random(sizeof(msgs))]);
+}
+
+

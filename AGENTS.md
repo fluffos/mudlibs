@@ -1745,6 +1745,36 @@ if a lib's economy ever produces genuinely huge numbers — prefer it as
 the default, faster fix, but watch for overflow-shaped bugs later if the
 lib's own numbers turn out to need true bignum semantics.
 
+### 15w. `log_error()`/`APPLY_LOG_ERROR` on this driver funnels every compile *warning*, not just real errors, to whatever the mudlib's own handler does with it — a mudlib written assuming only fatal errors reach that apply will spam every connected player with the scary default message on ordinary warnings
+
+Found on `wuhanzhan` (archive #58): `master.lpc`'s `log_error()` (bound to
+the driver's `APPLY_LOG_ERROR`) displayed its message to every non-wizard
+player present, which the original author intended only for genuine
+fatal compile errors — but this driver calls the same apply for soft
+compile *warnings* too (e.g. `Illegal to declare nosave function`, a
+`self`/harmless warning from §3's own `nosave` fix), so ordinary
+warnings during any lazy compile were spamming every online player with
+what looks like a serious crash message — 98 spurious messages in one
+short test session. Diagnosed by first ruling out `error_handler()` (zero
+hits via temporary instrumentation) and finding the actual spam volume
+matched `log_error()`'s own `/log/log` write instead. Fix: gate the
+player-facing broadcast on the message NOT containing the substring
+`"warning:"` (still write everything to the log file, just don't
+broadcast warnings to players). **Lesson**: if a lib's registration flow
+works but ordinary connected play is noisy with alarming-looking system
+messages that don't correspond to an actual crash, check whether
+`log_error()`/`error_handler()` conflates warnings and real errors —
+don't assume every message reaching that apply is fatal just because the
+original mudlib author assumed that on their own driver.
+
+Related, same discovery: this driver's `error_handler()` apply is
+declared `void` — a mudlib whose old comment says "falls through to
+debug.log automatically" may be relying on a return-value path that
+doesn't exist here. Adding an explicit `efun::write_file("/log/
+RUNTIME_ERRORS", trace)` inside the handler is a cheap, permanent
+insurance so runtime errors are never silently lost regardless of what
+the handler's own logic does afterward.
+
 ---
 
 ## Per-archive gotchas index

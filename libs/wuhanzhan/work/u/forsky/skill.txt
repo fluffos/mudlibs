@@ -1,0 +1,132 @@
+【 高级Skill制作技巧 】 
+
+    如果说武侠小说中最精彩最吸引人的，不是婆婆妈妈的爱情故事，也不是卑鄙无耻的江湖仇杀， 是那出神入化的武功描写。MUD中也是一样，最能吸引玩家的，恐怕就是精彩的skill和perform。大家总是 喜欢变化多端（或者说花哨）的武功。有朋友要求我写一下是如何制作的，我想现在可看的code相当多， 最基本我就不需要再说了吧，这里我只讲一下一些制作技巧。 
+
+一： mixed hit_ob() 
+一般所说的autopfm就是由这个函数制作的，其作用是在普通攻击击中对方时，加入一段较特殊的攻击。 例如： 
+
+mixed hit_ob(object me, object victim) // 引入mix hit，一般放在action面
+{	
+    if( random(me->query_skill("xxxx")) > victim->query_skill("dodge")/3
+		&& random(10) > 5) // 判断是否出autopfm
+     {
+  	victim->receive_damage("qi", random(me->query_skill("cuff"))+200); // 追加一定的伤害
+  	return HIC "眼见$n向后一跃已躲过$N这招，谁知拳力本似乎已尽，此时却又生新力\n
+拳头更往前伸长了半尺，正打中$n的$l！\n" NOR;   // 返回一个描述
+	}
+}
+
+这个最简单的autopfm就做好了，当然条件也可以变多，伤害的种类也可以变，描述可以更花哨，看你自己的创意了。 
+
+更进一步的mix效果
+为了开发大家的想法，再讲解一个复杂点的mix效果。 
+
+mixed hit_ob(object me, object victim)
+{
+	string msg;
+	int ap,dp;
+	object weapon;
+
+        ap = me->query_skill("xxxx", 1) + me->query_str();
+        dp =  victim->query_skill("force",1) + victim->query_dex();
+
+        weapon = victim->query_temp("weapon");
+
+   	if(objectp(weapon) && me->query_skill("xxxx")>100){  // 复杂判断，慢慢分析
+        if( random(ap+dp) > dp && random(2)>0){
+	if(me->query("neili") > victim->query("neili")*2){
+                         if(weapon->query("rigidity") >=4 ){  // 判断武器硬度
+                               victim->start_busy(1);
+                              weapon->move(environment(victim));  // weapon->move(me)是什麽效果呢？
+						     变成夺兵器了，哇！！
+                               victim->receive_damage("qi", 50);  
+                               victim->receive_wound("qi", 25);      
+       msg = HIR"只听“轰”的一声，$n手中的$w"HIR"已被无形剑气震飞，虎口也在猛烈撞击下震裂！\n" NOR;
+                                msg = replace_string(msg, "$w", weapon->name());    
+                               }
+                        else{
+                               victim->start_busy(1);
+                                msg = HIW"只听“啪”的一声响，$n手中$w"HIW"已被无形剑气断为两截！\n" NOR;
+                                msg = replace_string(msg, "$w", weapon->name());
+                             // 空手断兵器的效果，利害吧。 
+                                weapon->unequip();
+                                weapon->move(environment(victim));
+                                weapon->set("name", "断掉的"+weapon->query("name"));
+                                weapon->set("value", 0);
+                                weapon->delete("long");
+                                weapon->set("weapon_prop", 0);
+                                }
+				}
+                   else {       
+       msg = HIY"只听一声大响，$n手中的$w"HIY"在无形剑气的冲击下不住颤抖，险些脱手！\n" NOR;
+                            msg = replace_string(msg, "$w", weapon->name()); // 只有描述没其他的也可以
+                               }
+		}
+
+		return msg; // 返回
+    }
+}
+
+上面这段code在不同情况下可以输出三种不同的效果，如果你都搞懂了，mixed hit_ob就没问题啦。 
+
+二： 运用query_action 
+这种在query_action中加入特殊招式，由于往往带有特殊的颜色和很大的damage，很多人也把他当作autopfm来看其好处是通过了combatd的运算，不需要自己写太多的东西。下面看看这个例子： 
+
+mapping query_action(object me, object weapon)
+{
+    int i, j, level, adjust, tmp;
+    object target; 
+            
+    level   = (int) me->query_skill("xxxx",1);
+    for(i = sizeof(action); i > 0; i--) {
+        if(level > action[i-1]["lvl"]) {
+            j = NewRandom(i, 20, level/5);    
+            target = offensive_target(me);  //需要自己定义对手
+     //  大量的判断是必须的  
+            if (random(me->query("combat_exp")) > target->query("combat_exp")/2 && 
+      		me->query_skill("xxxx", 1) >= 180 && 
+		me->query("jiali")>=50 &&
+      		me->query("neili") > 1000 &&
+  		random(5)>3)        {  
+		me->add("neili",-50);
+                return ([  // 这是特殊的一招
+ 	"action" : HIW"$N突然怒喝双掌齐齐推出，一式「XXXX」，顿时掌力如排山倒海般压向$n！"NOR,
+                    "force" : 750,  // 酷得变态的伤害是一大特色
+                    "dodge": 10,
+                    "damage_type" : "瘀伤",
+                    ]);
+               }
+		return ([  // 普通的action都在这里返回
+                    "action" : action[j]["action"],
+                    "force" : action[j]["force"],
+                    "dodge":action[j],
+                    "lvl" : action[j]["lvl"],
+                    "weapon" : action[j]["weapon"],
+                    "damage_type" : action[j]["damage_type"],
+                    ]);
+        }
+    }
+}       
+
+这里引入了和普通action不同的一招，当然伤害也很高(你还可以加入receive_damage放入更多的damage或者其他东东) 描述也可以写更多，按条件加颜色等等，自己去想了，我都讲了还有什麽意思。 
+
+三： 防御中的int ob_hit 
+上面2个function都是介绍攻击的，下面来讲讲防御。 int ob_hit()发生在当自己被击中时，主要用于减少受到的伤害。这个function不但可以用skill中，还可以用在cloth中。下面看看这个简单的例子： 
+
+int ob_hit(object ob, object me, int damage)
+{   // 加入的描述
+   message_vision(HIY"眼看$N这一招正要击中$n，就被莫名的力道一带，偏开了寸许！\n"NOR, ob,me);          
+   return -damage/2;  // 返回要减少伤害值               
+}
+
+这个真是够简单啊，本来还可以分条件返回不同damage，不想讲了，呵呵。 因为我困了。不过也差不多啦，意思理解了就好，发展和创造就靠自己了。 不然永远只会抄。今天就讲到这里吧，如果还有问题的可以post或者Email我， 关于perform或者谁还想我做专题讲解的，按每篇100RMB收费（joke）。addoil all :)
+
+上面文章中涉及的code都为站长所写
+的code sample，只做为研究用途。
+
+作者： Kittt 
+Email address ： Jeffwang@mindspring.com 
+
+
+
+<--回到上页 

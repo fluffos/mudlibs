@@ -1,0 +1,130 @@
+#include <ansi.h>
+#include <mudlib.h>
+#include <command.h>
+#include <armor.h>
+inherit F_SAVE;
+inherit CLOTH;
+string status_color(int current, int max);
+
+void init()
+{
+  add_action("do_smash","smash");
+  add_action("do_ls","ls");
+  add_action("do_cd","cd");
+  add_action("do_more","more");
+}
+
+void create()
+{
+  set_name("粗布衣" , ({"linen","cloth"}));
+  set("unit","件");
+  set_weight(3000);
+  set("no_get", 1);
+  set("no_sell",1);
+  set("no_drop",1);
+  set("no_put", 1);
+  set("no_give",1);
+  set("material", "cloth");
+  set("armor_prop/armor", 1);
+  setup();
+}
+
+int do_smash(string arg)
+{
+        object ob;
+        object me;
+        string name1, name2;
+        me=this_player();
+        if (!arg) return notify_fail("指令格式: smash <living>\n");
+        ob = present(arg, environment(me));
+        if (!ob) return notify_fail("找不到这个生物.\n");
+
+        name1 = (string)me->query("name");
+        name2 = (string)ob->query("name");
+        
+        write("你高举双手大喝 去死吧! 从天上降下一道闪电将"+name2+"化作一堆灰烬.\n");
+        ob->set("env/immortal", 0);
+        ob -> die();
+        return 1;
+}
+
+int do_ls(string arg)
+{
+        object me=this_player();
+        int i, j, w, col;
+        string dir, long;
+        mixed *file;
+
+        if (arg) {
+                if (sscanf(arg, "%s %s", long, arg)==2) {
+                        if (long!="-l") arg=long+" "+arg;
+                }
+                else if (arg=="-l") { long="-l"; arg="";}
+        }
+        dir = resolve_path(me->query("cwd"), arg);
+        if( file_size(dir)==-2 && dir[strlen(dir)-1] != '/' ) dir += "/";
+        file = get_dir(dir, -1);
+        if( !sizeof(file) )
+        {if (file_size(dir) == -2) return notify_fail("目录是空的。\n");
+                else
+                return notify_fail("没有这个目录。\n");
+        }
+
+        i = sizeof(file);
+        w = 0;
+        while(i--) {
+                if (file[i][1]==-2) file[i][0] += "/";
+                if (strlen(file[i][0])>w) w = strlen(file[i][0]) + 1;
+        }
+        write("目录：" + dir + "\n");
+        col = 70 / (w+6);
+        if (sizeof(file))
+                for(i=0, j = sizeof(file); i<j; i++)
+                        if (long!="-l") 
+                                printf("%4d %-*s%s", file[i][1]/1024 + 1, w+1,
+                                file[i][0] + (find_object(dir + file[i][0])? "*":" ") ,
+                                ((i+1)%col)?"  ":"\n");
+                        else printf("%10d %s %-*s%s", file[i][1], ctime(file[i][2]), w+1,
+                                file[i][0] + (find_object(dir + file[i][0])? "*":" "), "\n");
+
+        else write("    没有任何档案。\n");
+        write("\n");
+        
+        return 1;       
+}
+
+int do_cd(string arg)
+{
+        object me=this_player();
+        string dir;
+
+        if( !arg )
+                arg = user_path(me->query("id"));
+        dir = resolve_path(me->query("cwd"), arg);
+        if(file_size(dir)!=-2) return notify_fail("没有这个目录。\n");
+
+        if(dir[strlen(dir)-1]!='/') dir += "/";
+        me->set("cwd", dir);
+        write(dir + "\n");
+        return 1;       
+}
+
+int do_more(string arg)
+{
+        string file;
+        object ob;
+        object me=this_player();
+
+        seteuid(geteuid(me));
+        if (!arg) return notify_fail("指令格式 : more <档名>|<物件名> \n");
+        file = resolve_path(me->query("cwd"), arg);
+        if( file_size(file) < 0 ) {
+                ob = present(arg, me);
+                if( !ob ) ob = present(arg, environment(me));
+                if( !ob ) return notify_fail("没有这个档案。\n");
+                file = base_name(ob) + ".lpc";
+                                   }
+        me->start_more( read_file(file));
+        return 1;
+}
+

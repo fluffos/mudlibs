@@ -1,0 +1,279 @@
+ // 神话世界·西游记·版本４．５０
+/* <SecCrypt CPL V3R05> */
+ 
+// score.c
+
+#include <ansi.h>
+#include <combat.h>
+
+inherit F_CLEAN_UP;
+
+string *gift_ranking = ({"下下之选","下等", "中下", "中等", "中上", "上等", "上上之选"});
+
+string bar_string = "■■■■■■■■■■■■■■■■■■■■■■■■■";
+string blank_string ="□□□□□□□□□□□□□□□□□□□□□□□□□";
+
+string display_attr(int gift, int value);
+string status_color(int current, int max);
+string date_string(int date);
+string tribar_graph(int val, int eff, int max, string color);
+string money_str(int amount);
+
+void create() { seteuid(ROOT_UID); }
+
+int main(object me, string arg)
+{
+        object ob;
+        mapping my;
+        string line, str, skill_type, skill_msg;
+        int skill_lvl;
+        mapping skl;
+        object weapon;
+        int attack_points, dodge_points, parry_points,year,obstacles;
+        int *levels;
+        int i,dntg,gong;
+        int total;
+
+        seteuid(getuid(me));
+
+        if(!arg)
+                ob = me;
+        else if (wizardp(me)) {
+                ob = present(arg, environment(me));
+                if (!ob) ob = find_player(arg);
+                if (!ob) ob = find_living(arg);
+                if (!ob) return notify_fail("你要察看谁的状态？\n");
+        } else
+                return notify_fail("只有巫师能察看别人的状态。\n");
+
+        skl= ob->query_skills();
+        if(!sizeof(skl))
+             skill_msg=HIB"没有技能"NOR;
+        else {
+        levels=values(skl);
+        skill_lvl=0;
+        for(i=0;i<sizeof(skl);i++) {
+           if(skill_lvl<levels[i]) skill_lvl=levels[i];
+        }
+        skill_msg=RANK_D->describe_skill(skill_lvl);
+        }
+        my = ob->query_entire_dbase();
+
+        line = HIG "\n=================="NOR+HIR"个"NOR+HIG"===="NOR+HIR"人"NOR+HIG"===="NOR+HIR"资"NOR+HIG"===="NOR+HIR"料"NOR+HIG"======================\n" NOR;
+        line += sprintf( BOLD "%s" NOR "%s\n", RANK_D->query_rank(ob),
+ob->short(1) );
+        line += HIG "============================================================\n" NOR;
+   if( ob->query("fake_age")){
+           line += sprintf(" 你是一%s%s岁的%s%s，%s生。\n",
+                   ob->query("unit"),
+                   chinese_number(ob->query("age")), 
+                   ob->query("gender"),
+                   ob->query("race"),
+                   CHINESE_D->chinese_date(((int)ob->query("birthday") - 14*365*24*60) * 60) );
+       }else{
+           line += sprintf(" 你是一%s%s岁的%s%s，%s生。\n",
+                   ob->query("unit"),
+                   chinese_number(ob->query("age")),
+                   ob->query("gender"),
+                   ob->query("race"),
+                   CHINESE_D->chinese_date(((int)ob->query("birthday") - 14*365*24*60) * 60) );
+   }
+           year = my["combat_exp"] / 1000;
+          if(year)
+          line += sprintf(" 你有"RED"%s年"NOR"的道行。\n",
+                      chinese_number(year));
+          else
+          line += sprintf(" 你的道行"RED"还不到一年"NOR"。\n");
+
+          obstacles = ob->query("obstacle/number");
+
+        if( wizardp(me) || (int)ob->query("age") >= 14 ) {
+                line += sprintf(
+                        " 膂力：[%s]  胆识：[%s]  悟性：[%s]  灵性：[%s]\n"
+                        " 定力：[%s]  容貌：[%s]  根骨：[%s]  福缘：[%s]\n\n",
+                        display_attr(my["str"], ob->query_str()),
+                        display_attr(my["cor"], ob->query_cor()),
+                        display_attr(my["int"], ob->query_int()),
+                        display_attr(my["spi"], ob->query_spi()),
+                        display_attr(my["cps"], ob->query_cps()),
+                        display_attr(my["per"], ob->query_per()),
+                        display_attr(my["con"], ob->query_con()),
+                        display_attr(my["kar"], ob->query_kar()));
+        }
+
+        if( mapp(my["family"]) ) {
+                if( my["family"]["master_name"] )
+                        line = sprintf("%s 你的师父是%s。\n",
+                                line, my["family"]["master_name"] );
+        }
+
+        if (ob->query("married")) {
+                if (ob->query("gender")=="女性") {
+                        line += " 你的丈夫是" + ob->query("couple/name")+"。\n\n";
+                }
+                else {
+                        line += " 你的妻子是" + ob->query("couple/name")+"。\n\n";
+        }
+        }
+        else {
+                if (ob->query("gender")=="女性")
+                        line += " 你目前待字闺中。\n\n";
+                else line+=" 你目前是光棍儿一条。\n\n";
+        }
+        
+        if (ob->query("zhiye"))
+                  line += sprintf(" 你目前的职业是"+ob->query("zhiye/name")+"。\n\n");
+        else      line+=" 你目前尚未选择职业。\n\n";    
+
+        if (ob->query("degree"))
+                  line += sprintf(" 你目前的官位是"+ob->query("degree")+"。\n\n");
+        else      line+=" 你目前尚未出仕。\n\n";    
+
+        line += " <气>  " + tribar_graph(my["kee"], my["eff_kee"],
+my["max_kee"], HIR) + "\n";
+        line += " <神>  " + tribar_graph(my["sen"], my["eff_sen"],
+my["max_sen"], HIB) + "\n";
+        if( objectp(weapon = ob->query_temp("weapon")) )
+                skill_type = weapon->query("skill_type");
+        else
+                skill_type = "unarmed";
+
+        attack_points = COMBAT_D->skill_power(ob, skill_type,
+SKILL_USAGE_ATTACK);
+        parry_points = COMBAT_D->skill_power(ob, skill_type,
+SKILL_USAGE_DEFENSE);
+        dodge_points = COMBAT_D->skill_power(ob, "dodge",
+SKILL_USAGE_DEFENSE);
+     attack_points = attack_points * 1000;
+        parry_points = parry_points *1000;
+     dodge_points = dodge_points * 1000;
+
+        line += sprintf("\n 战斗攻击力 " HIW "%d (+%d)" NOR
+"\t\t战斗防御力 " HIW "%d (+%d)\n\n" NOR,
+                attack_points/100 + 1, ob->query_temp("apply/damage"),
+                (dodge_points + (weapon? parry_points:
+(parry_points/10)))/100 + 1, ob->query_temp("apply/armor"));
+
+        line += " 食物：" + tribar_graph(my["food"],
+ob->max_food_capacity(), ob->max_food_capacity(), YEL) + "\n";
+        line += " 饮水：" + tribar_graph(my["water"],
+ob->max_water_capacity(), ob->max_water_capacity(), CYN) + "\n";
+
+        line += sprintf("\n 你到目前为止总共杀了 %d 个人，其中有 %d 个是其他玩家。\n\n",
+                my["MKS"] + my["PKS"], my["PKS"]);
+        
+   if(ob->query("kill/pkgain") ) { 
+          line +=sprintf(" ＰＫ道行增加： %s  \n",
+       COMBAT_D->chinese_daoxing(ob->query("kill/pkgain")));
+          if(!ob->query("kill/pklose") &&
+        !ob->query("kill/nkgain") ) line+="\n";
+        }
+   if(ob->query("kill/pklose") ) {
+          line +=sprintf(" ＰＫ道行减少： %s\n",
+       COMBAT_D->chinese_daoxing(ob->query("kill/pklose")));
+          if(!ob->query("kill/nkgain") ) line+="\n";
+        }
+   if(ob->query("kill/nkgain") ) {
+          line +=sprintf(" ＮＫ道行增加： %s\n\n",
+       COMBAT_D->chinese_daoxing(ob->query("kill/nkgain")));
+        }
+
+        total = (int)ob->query("balance");
+        if(!total || total < 0)  {
+                ob->set("balance", 0);
+                total=0;
+        }
+        if(total>0)
+           line += sprintf(" 钱庄存款：%s\n", money_str(total) );
+        else
+           line +=" 钱庄存款：你没有存钱。\n";
+            
+        if(obstacles)
+                line += sprintf(RED" 西天取经"NOR"：你已经历了"RED"%s"NOR"道劫难。\n", chinese_number(obstacles));
+                else line += RED" 西天取经"NOR"：你还未曾踏上取经之路\n";
+        dntg = ob->query("dntg/number");
+             if (dntg == 0) line += " "RED"大闹天宫"NOR"：你还未曾大闹天宫\n";
+             else line+= RED" 大闹天宫"NOR"：你大闹天宫已过"HIR+chinese_number(dntg)+NOR"关。\n";
+          gong = ob->query("12gong/number");
+             if (gong == 0) line += " "HIY"黄金十二宫"NOR"：你还未曾闯过黄金十二宫\n";
+                  else line+= HIY" 黄金十二宫"NOR"：你黄金十二宫已经过了"HIR+chinese_number(gong)+NOR"宫。\n";
+        
+        RANK_D->describe_skill(skill_lvl);
+        line += sprintf(" 道行境界：[%s]           武功级别：[%s]\n",
+                 RANK_D->describe_dx((int)ob->query("combat_exp")),  skill_msg );
+        line += sprintf(" 法力修为：[%s]           内力修为：[%s]\n",
+                 RANK_D->describe_fali((int)ob->query("max_mana")),  RANK_D->describe_neili((int)ob->query("max_force")) );
+        line += sprintf(" 杀  气： " RED "%-9d" NOR "            ",ob->query("bellicosity") );
+        line += sprintf(" 杀  神： " HIM "%-9d\n" NOR,ob->query("killers") );
+        line += sprintf(" 潜  能： " HIY "%-9d" NOR "            ",(int)ob->query("potential") -(int)ob->query("learned_points") );
+//      line += sprintf(" 评  价： " HIC "%-9d\n" NOR,ob->query("score") );
+        line += sprintf(" 灵  神： " HIC "%-9d\n" NOR,ob->query("max_atman") );
+
+        line =line+HIG "=========================="NOR+HIY"仙履奇缘"NOR+HIG"============================\n" NOR;
+        write(line);
+        return 1;
+}
+
+string display_attr(int gift, int value)
+{
+        if( value > gift ) return sprintf( HIY "%3d" NOR, value );
+        else if( value < gift ) return sprintf( CYN "%3d" NOR, value );
+        else return sprintf("%3d", value);
+}
+
+string status_color(int current, int max)
+{
+        int percent;
+
+        if( max ) percent = current * 100 / max;
+        else percent = 100;
+
+        if( percent > 100 ) return HIC;
+        if( percent >= 90 ) return HIG;
+        if( percent >= 60 ) return HIY;
+        if( percent >= 30 ) return YEL;
+        if( percent >= 10 ) return HIR;
+        return RED;
+}
+
+string tribar_graph(int val, int eff, int max, string color)
+{
+        return color + bar_string[0..(val*25/max)*2-1]
+                + ((eff > val) ?
+blank_string[(val*25/max)*2..(eff*25/max)*2-1] : "") + NOR;
+}
+
+string money_str(int amount)
+{        
+   // returns a chinese string of `amount` of money
+        string output;
+
+        if (amount / 10000) {
+                output = chinese_number(amount / 10000) + "两黄金";
+                amount %= 10000;
+        }
+        else
+                output = "";
+        if (amount / 100) {
+                output = output + chinese_number(amount / 100) + "两白银";
+                amount %= 100;
+        }
+        if (amount)
+                return output + chinese_number(amount) + "文铜板";
+        return output;
+}
+
+int help(object me)
+{
+        write(@HELP
+指令格式 : score
+           score <对象名称>                   (巫师专用)
+
+这个指令可以显示你或指定对象(含怪物)的基本资料。
+基本资料的设定请参阅 'help setup'。
+
+see also : hp
+HELP
+    );
+    return 1;
+}

@@ -1,0 +1,166 @@
+// marry_ring.c - 结婚戒指
+
+#include <ansi.h>
+#include <mudlib.h>
+#include <armor.h>
+
+inherit FINGER;
+
+int do_coupletalk(string arg, int emote);
+
+object find_player(string target)
+{
+	int i;
+	object *str;
+	str=users();
+	for (i=0;i<sizeof(str);i++)
+		if (str[i]->query("id")==target && interactive(str[i]))
+			return str[i];
+	return 0;
+}
+
+
+
+string couplename( object ob ) {
+	if( ob ) {
+		if( (string)ob->query("gender") == "女性" ) return "老婆" + ob->name(1);
+		if( (string)ob->query("gender") == "男性" ) return "老公" + ob->name(1);
+		return "旧伴侣" + ob->name(1);
+	}
+}
+
+void init()
+{
+        add_action("do_coupletalk_0", "ct");
+        add_action("do_coupletalk_1", "ct*");
+        add_action("do_coupletalk_2", "ct#");
+}
+
+int do_coupletalk_0(string arg) { return do_coupletalk( arg, 0 ); }
+
+int do_coupletalk_1(string arg) { return do_coupletalk( arg, 1 ); }
+
+int do_coupletalk_2(string arg) { return do_coupletalk( arg, 2 ); }
+
+void dest() { destruct(this_object()); }
+
+void owner_is_killed() { call_out("dest",2); }
+
+int do_coupletalk(string arg, int emote)
+{
+        object me, couple_ob;
+        int i;
+
+        me = this_player();
+
+        if ( !stringp(me->query("marry")) )
+                return notify_fail("你没有伴侣。\n");
+
+        couple_ob = find_player( me->query("marry") );
+        if( !couple_ob )
+                return  notify_fail("你的伴侣现在无法听见你，或者已经离开游戏了。\n");
+
+        if ((string)couple_ob->query("gender") == "无性") 
+                return  notify_fail("你原来的伴侣已经做了太监，你还是把他忘了吧。\n");
+
+        if ((string)couple_ob->query("class") == "bonze") 
+                return  notify_fail("你原来的伴侣已经做了和尚，你还是把他忘了吧。\n");
+
+        if ( !arg ) {
+                write( MAG "你又深情地想念你的爱侣了。\n" NOR);
+                tell_room(environment(me), CYN + (string)me->name() + "又在深情地想念自己的爱侣" 
+			+ (string)couple_ob->name() + "。\n" + NOR, ({me, couple_ob}));
+                tell_object(couple_ob, sprintf(HIM "%s又在深情地想念你了。\n"NOR, couplename( me ) ) ); 
+
+                return 1;
+        }
+	
+        if (!stringp(arg) || arg == "" || arg == " ") arg = "...";
+
+        // Support of channel emote
+        if( emote ) {
+                string vb, emote_arg;
+
+                if( sscanf(arg, "%s %s", vb, emote_arg) != 2 ) {
+                        vb = arg;
+                        emote_arg = couple_ob->query("id");
+                }
+
+		// If out support of channel emote and still send this message
+        	if (emote == 2){
+                 	arg = me->name() + vb + "\n";
+	        	tell_object( me, MAG + arg + NOR);
+	        	tell_object( couple_ob, MAG + arg + NOR);
+		}else{
+			arg=EMOTE_D->do_emote(me,vb,emote_arg,3);
+	        	if (arg)       	tell_object( me, MAG + arg + NOR);
+			arg=EMOTE_D->do_emote(me,vb,emote_arg,4);
+	        	if (arg)       	tell_object( couple_ob, MAG + arg + NOR);
+		}
+	        return 1;
+
+        }
+	else {
+	        write(sprintf(MAG "你对%s说：%s\n" NOR, couplename( couple_ob ), arg ));
+        	tell_object(couple_ob, sprintf(HIM "%s对你说：%s\n" NOR, couplename( me ), arg ));
+	}
+
+        return 1;
+}
+
+void create()
+{
+        set_name( HIY "结婚戒指" NOR, ({"marry ring", "ring"}) );
+        set_weight(400);
+        set( "no_get", 1);
+	set( "no_put", 1 );
+        set( "no_drop", "你的结婚戒指不能丢弃,只能去红娘庄解除婚约。\n");
+        set( "long", @LONG
+这是一枚结婚戒指。你可以使用以下命令：
+[36m
+coupletalk ( ct )	和伴侣对话。
+
+支持命令：ct, ct#, ct*
+[2;37;0m
+LONG
+	);
+        if( clonep() )
+                set_default_object(__FILE__);
+        else {
+                set("unit", "枚");
+                set("material", "gold");
+		set("armor_type", "finger");
+                set("armor_prop/armor", 10);
+		set("armor_prop/defense", 10);
+	        set("wear_msg", "$N将$n拿出来小心地戴在手指上。\n");
+	        set("remove_msg", "$N将$n小心地从手指上摘下来放好。\n");
+        }
+	call_out("load_ring",1);
+}
+
+void load_ring()
+{
+	        object me, couple_ob;
+			me = environment(this_object());
+			if (!me || !userp(me)){
+				call_out("dest",1);
+				return;
+			}
+			if( me->query("marry") ) {
+			        couple_ob = find_player( me->query("marry") );
+                    if (couple_ob && environment(couple_ob) ){
+                          if (couple_ob->query("marry")!=me->query("id") ){
+                               me->delete("marry");
+                                me->delete("couple");
+                               tell_object(me,HIY "你的伴侣已经重新投胎了,如果你们有缘...\n"NOR);
+                               destruct(this_object()); 
+                               return;
+                          }
+		        	 	tell_object(me, HIM "\n你的" + couplename( couple_ob ) + "也在这里，快去找啦....\n" NOR);
+		                	tell_object(couple_ob , sprintf( HIM "\n你的%s来啦，快去接呀....\n" NOR, couplename( me ) ));
+			        }
+			        set("name", HIC+me->query("id")+HIY "和" HIC + me->query("marry") + HIY "的结婚戒指" NOR );
+			}
+			this_object()->wear();
+
+}

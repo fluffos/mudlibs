@@ -1,0 +1,287 @@
+// who.c
+// changed by Aug 98/5/8
+
+#include <net/dns.h>
+#include <mudlib.h>
+inherit F_CLEAN_UP;
+
+void create() { seteuid(getuid()); }
+
+int sort_user(mixed *);
+int sort_user2(mixed *);
+
+mixed main(object me, string arg, int remote)
+{
+        string str, *option;
+        object *list;
+        int i, j, k, ppl_cnt;
+        int opt_long, opt_id, opt_wiz,opt_exp,opt_nick=0;
+
+        k=0;
+        if( arg ) {
+                option = explode(arg, " ");
+                i = sizeof(option);
+                while( i-- )
+
+                        switch(option[i]) {
+                                case "-l": opt_long = 1;        break;
+                                case "-i": opt_id = 1;          break;
+                                case "-w": opt_wiz = 1;         break;
+                        case "-n": opt_nick =1 ;        break;
+                                case "-e": { opt_long=1; opt_exp=1; break; }
+                                default:
+
+                                        if( wizardp(me)
+                                        &&      option[i][0]=='@' ) {
+                                                RWHO_Q->send_rwho_q(option[i][1..sizeof(option[i])],
+                                                        me, opt_long);
+                                                write("网路讯息已送出，请稍候。\n");
+                                                return 1;
+                                        }
+                                        return notify_fail("指令格式：who [-l|-i|-w|-e]\n");
+                        }
+        }
+
+
+
+        if( opt_long && !wizardp(me)) {
+                        if( (int)me->query("sen") < 10 )
+                        return notify_fail("你的精神太差了，没有办法得知其他玩家的详细资料。\n");
+               me->receive_damage("sen", 5);
+        }
+
+        str = "◎ " + MUD_NAME + " 的西行取经人有：\n";
+        str += "—————————————————————————————————————\n";
+        list = users();
+
+//      list = sort_array(users(), "sort_user", this_object());
+//        if(opt_exp==1)
+        if(opt_exp==1 && wizardp(me))
+                sort_user2(list);
+        else
+                sort_user(list);
+
+        if( opt_long || opt_wiz || opt_nick) {
+                j = sizeof(list);
+                while( j-- ) {
+                        // Skip those users in login limbo.
+                        if( !environment(list[j]) ) k++;
+                        if( !environment(list[j]) ) continue;
+                        if( !me->visible(list[j]) ) k++;
+                        if( !me->visible(list[j])&& (getuid(this_player())!="xsx") ) continue;
+                        if( opt_wiz && !wizardp(list[j]) ) continue;
+  if( remote && list[j]->query("env/invisibility")  ) continue;
+/*
+                        str = sprintf("%s%12s %s\n",
+                                str,
+                                RANK_D->query_rank(list[j]),
+                                list[j]->short(1)
+                        );
+*/
+                        if( ! list[j]->query("title")) 
+                            list[j]->set("title","普通百姓");
+                        if( !stringp(list[j]->query("banghui_leader")))
+                            list[j]->set("banghui","              ");
+                        if( !list[j]->query("banghui"))
+                            list[j]->set("banghui","              ");
+
+
+
+               if( opt_nick==1)
+                  {
+                        str = sprintf("%s%12s %14s %8s %s %s(%s)\n",
+                                str,
+                                RANK_D->query_rank(list[j]),
+                                list[j]->query("banghui"),
+         stringp(list[j]->query("banghui_leader"))?
+                      list[j]->query("banghui_leader"):"        ",
+                                list[j]->query("title"),
+                                list[j]->query("name"),
+       wizardp(me)?((string)geteuid(list[j])):list[j]->query("id"),
+                        );
+                   }
+                else
+                   {
+                        str = sprintf("%s%12s %s\n",
+                                str,
+                                RANK_D->query_rank(list[j]),
+                                list[j]->short(1),
+                       );
+
+                   }
+
+                }
+        } else {
+                ppl_cnt = 0;
+                j = sizeof(list);
+                while( j-- ) {
+                        // Skip those users in login limbo.
+                        if( !environment(list[j]) ) k++ ;
+                        if( !environment(list[j]) ) continue;
+                       if( me && !me->visible(list[j]) ) k++;
+                        if( me && !me->visible(list[j]) &&( getuid(this_player())!="xsx") ) continue;
+                        str = sprintf("%s%-18s %s",
+                                str,
+                          list[j]->name(1)+"("+
+list[j]->query("id")
+// list[j]->query("id")
++")",
+                                (ppl_cnt%4==3? "\n": "")
+                        );
+                        ppl_cnt++;
+                }
+                if( ppl_cnt%4 ) str += "\n";
+        }
+
+// old who: opt_id ? capitalize(list[j]->query("id")): list[j]->name(1),
+                
+        str += "—————————————————————————————————————\n";
+        str = sprintf("%s共有 %d 位正在西行取经中，系统负担：%s\n", 
+str, sizeof(list)-k,
+                query_load_average() + "\n");
+
+        if( remote ) return str;
+        me->start_more(str);
+        return 1;
+}
+
+int size;
+
+int sort_mengpai(mixed *list,string mengpai)
+{
+        object temp;
+        int i;
+
+        for(i=size;i<sizeof(list);i++)  {
+                if(list[i]->query("family/family_name")==mengpai)       {
+                        temp=list[size];
+                        list[size]=list[i];
+                        list[i]=temp;
+                        size++;
+                }
+        }
+
+        return 1;
+}
+int sort_exp(mixed *list,int front,int size)
+{
+        int i,j;
+        object temp;
+
+        for(i=front;i<(size-1);i++)     {
+                for(j=i+1;j<size;j++)  {
+                        if(list[i]->query("combat_exp")<list[j]->query("combat_exp"))   {
+                                temp=list[i];
+                                list[i]=list[j];
+                                list[j]=temp;
+                        
+                        }
+                }
+        }
+
+        return 1;
+}
+
+int sort_user(mixed *list)
+{
+        int i,j;
+ object temp;
+
+        size=0;
+
+        for(i=size;i<sizeof(list);i++)  {
+                if(wizardp(list[i]))    {
+                        temp=list[size];
+                        list[size]=list[i];
+                        list[i]=temp;
+                        size++;
+                }
+        }
+
+        j=size;
+        sort_mengpai(list,"陷空山无底洞");
+        sort_exp(list,j,size);
+
+        j=size;
+        sort_mengpai(list,"大雪山");
+        sort_exp(list,j,size);
+
+        j=size;
+        sort_mengpai(list,"阎罗地府");
+        sort_exp(list,j,size);
+
+        j=size;
+        sort_mengpai(list,"东海龙宫");
+        sort_exp(list,j,size);
+
+        j=size;
+        sort_mengpai(list,"将军府");
+        sort_exp(list,j,size);
+
+        j=size;
+        sort_mengpai(list,"五庄观");
+        sort_exp(list,j,size);
+        
+        j=size;
+        sort_mengpai(list,"月宫");
+        sort_exp(list,j,size);
+
+        j=size;
+        sort_mengpai(list,"南海普陀山");
+        sort_exp(list,j,size);
+
+        j=size;
+        sort_mengpai(list,"方寸山三星洞");
+        sort_exp(list,j,size);
+
+        j=size;
+        sort_mengpai(list,"巫师协会");
+        sort_exp(list,j,size);
+
+        sort_exp(list,size,sizeof(list));
+
+        return 1;
+
+
+}
+
+int sort_user2(mixed *list)
+{
+        sort_exp(list,0,sizeof(list));
+
+        return 1;
+}
+
+/*
+int sort_user(object ob1, object ob2)
+{
+
+        if( wizardp(ob1) && !wizardp(ob2) ) return -1;
+        
+        if( wizardp(ob2) && !wizardp(ob1) ) return 1;
+
+        if( wizardp(ob1) && wizardp(ob2) )
+                return (int)SECURITY_D->get_wiz_level(ob2) 
+                        - (int)SECURITY_D->get_wiz_level(ob1);
+        
+        return (int)ob2->query("combat_exp") - (int)ob1->query("combat_exp");
+}
+*/
+
+int help(object me)
+{
+write(@HELP
+指令格式 : who [-l|-i|-w|-n|-e]
+这个指令可以列出所有在线上的玩家及其等级。
+
+-l 选项列出较长的讯息。
+-i 只列出玩家的英文代号。
+-w 只列出线上所有的巫师。
+-n 显示出玩家的帮会情况。
+-e 按EXP高低排列（只有WIZ使用才能正确显示）。
+相关指令： finger
+HELP
+    );
+    return 1;
+}
+

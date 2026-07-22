@@ -1,0 +1,201 @@
+
+#include <ansi.h>
+#include <weapon.h>
+#include <gun.h>
+
+inherit GUN;
+
+string *waitime_msg = ({
+        HIG "铿锵！\n\n" NOR,
+        HIC "嘭！！\n\n" NOR,
+
+});
+
+void init()
+{
+
+        add_action("do_aim","aim");
+        add_action("do_zidan","zidan");
+}
+
+void create()
+{
+
+        set_name(HIC+BLK"振动波来福枪"NOR, ({ "rifle", "gun" }) );
+
+        set_weight(5500);
+        if( clonep() )
+                set_default_object(__FILE__);
+        else {
+                set("unit", "把");
+                set("gun_type", RIFLE100);
+                set("bullet_type", ORDINARY_BULLET);
+                set("max_bullet", 2000);
+                set("bullet", 2000);
+                set("ones_shoot", 50);
+                set("value", 1000000);
+                set("material", "steel");
+                set("long", "这是一把粗长的" + this_object()->query("gun_type") + "振动波来福枪，里面最多可以装" + 
+           chinese_number(this_object()->query("bullet")) + "发子弹。
+它每次能发出" + chinese_number(this_object()->query("ones_shoot")) + "发子弹，价值：" + 
+        chinese_number(this_object()->query("value")/100) + "两纹银。\n");
+                set("wield_msg", "$N从背后抽出一把$n握在手中。\n");
+                set("unequip_msg", "$N将手中的$n放回背后的行囊。\n");
+        }
+        init_gun(1000);
+        setup();
+}
+
+int do_aim(string arg)
+{
+
+        object me, obj;
+
+        me = this_player();
+
+        if( !arg )
+                return notify_fail("你想开枪打谁？\n");
+
+        if( !this_object()->query("equipped") )
+                return notify_fail("你必须得把振动波来福枪装备上。\n");
+
+        if( me->is_busy() )
+                return notify_fail("你现在忙的很，先顾顾自己再放枪吧。\n");
+
+        if( this_object()->query("bullet") <=0)
+                return notify_fail("微型核融合电池已经打光了，再装备上一些吧。\n");
+
+        if(!objectp(obj = present(arg, environment(me))))
+                return notify_fail("这里看不到这个人。\n");
+
+        if( environment(me)->query("no_fight") )
+                return notify_fail("这里放枪会引起公愤的。\n");
+
+        if( !obj->query_temp("is_unconcious") && !living(obj) || obj->is_corpse() )
+                return notify_fail("看清楚一点，那并不是活物。\n");
+
+        if(obj == me)
+                return notify_fail("自杀？suicide -f是我们提供的最佳途径。\n");
+
+        if(userp(obj))
+                if(obj->query("combat_exp") < 50000 )
+                return notify_fail(" 你能不能改掉欺负弱者的习惯？\n");
+
+        if(userp(obj))
+                if(obj->query("mud_age") < 500000 )
+                return notify_fail(" 你能不能不对小孩子开枪？\n");
+
+        message_vision(HIC "\n$N举起" + this_object()->query("name") + HIC"，邪恶的阴笑了一声,瞄准了$n！\n\n" NOR, 
+                        me, obj);
+
+        this_object()->set_temp("target", arg);
+        me->start_busy(2);
+        call_out("do_shoot",1,0);
+        return 1;
+}
+
+int do_shoot(int stage)
+{
+        object me, obj;
+        string arg, result, results, obj_name;
+        int ratio, shootlvl, damage, radio, oneshoot, shooton;
+        me = this_player();
+        shootlvl = me->query_skill("shoot");
+        if( !(arg = this_object()->query_temp("target")) ) 
+                return notify_fail("你还没有瞄准你的射击目标，再瞄一次。\n");
+
+        if( !objectp(obj = present(arg, environment(me)) ))
+                return notify_fail("你要射击的对象已经离开了。\n");
+
+        tell_object(me, waitime_msg[stage]);
+        if( ++stage < sizeof(waitime_msg) ) {
+                call_out( "do_shoot", 1,stage);
+                return 0;
+                }
+        if( !obj->is_fighting(me) )
+        obj->kill_ob(me);
+        oneshoot = this_object()->query("ones_shoot");
+        if( this_object()->query("bullet") < this_object()->query("ones_shoot") )
+        oneshoot = this_object()->query("bullet");      
+        this_object()->add("bullet", -oneshoot);
+        if(this_object()->query("bullet_type") == "高速型")
+        ratio = random(2300) + shootlvl;
+        else
+        ratio = random(2000) + shootlvl;
+        if(ratio > 450){
+        if(this_object()->query("bullet_type") == "普通型")
+        damage = 100 + random(200);
+        if(this_object()->query("bullet_type") == "超能型")
+        damage = 200 + random(200);
+        if(this_object()->query("bullet_type") == "穿甲型")
+        damage = 150 + random(450);
+        if(this_object()->query("bullet_type") == "微型核融合电池")
+        damage = 1500 + random(4500);
+        else damage = 100 + random(200);
+
+        if(oneshoot > 1){
+        if(this_object()->query("bullet_type") == "高速型")
+        shooton = oneshoot*ratio/(2300 + shootlvl);
+        else
+        shooton = oneshoot*ratio/(2000 + shootlvl);
+        if(shooton < 1) shooton = 1;
+        damage = shooton*(damage/7) + (damage /ratio);
+        }
+        radio = (int)obj->query("kee") * 100 / (int)obj->query("max_kee");
+        result = COMBAT_D->status_msg(radio);
+        results = COMBAT_D->damage_msg(damage, "枪伤");
+        if(shooton >= 2)
+        message_vision(HIR +chinese_number((int)oneshoot) +"发子弹飞快的向$n射了过去！！\n只听「乒」地一声巨响，$n被打中了" + 
+         chinese_number((int)shooton) + "发。\n" + results + "\n" NOR,
+                        me, obj);
+        else
+
+        message_vision(HIR +chinese_number((int)oneshoot) +"发子弹飞快的向$n射了过去！！\n只听「乒」地一声巨响，" + results + 
+      "\n" NOR,
+                        me, obj);
+        message_vision("( $N" + result + ")\n", obj);
+        }
+        else {
+
+        message_vision(HIR "\n$N对准$n扣动了扳机！\n只听卡的一声,子弹卡了壳!\n\n" NOR,
+                        me, obj);}
+        obj->add("kee",-damage);
+        obj->add("eff_kee",-(damage/13));
+        if(this_object()->query("bullet_type") == "死亡型")
+        obj->die();
+        if(this_object()->query("bullet_type") == "麻痹型")
+        obj->unconcious();
+        if(obj->query_temp("is_unconcious") && obj->query("kee") < 30)
+        {
+        obj_name = obj->query("name");
+        obj->die();
+        message_vision(HIC + obj_name +"被$N用枪击死啦！\n" NOR, me, obj);
+        }
+        if(obj->query("kee") < 0)
+        obj->unconcious();
+        return 1;
+}
+
+int do_zidan(string arg)
+{
+        object me, ob;
+        me = this_player();
+        if( me->is_busy() )
+                return notify_fail("你现在忙的很，先顾顾自己再放枪吧。\n");
+        if( !arg ){
+        if( this_object()->query("bullet") <=0)
+                return notify_fail("枪里的子弹已经打光了，再装上一些吧。\n");
+        tell_object(me, "你看到" + this_object()->query("name") + 
+       "里面还有"+YEL+chinese_number(this_object()->query("bullet"))+NOR+"发"+this_object()->query("bullet_type")+"的子弹\n");
+        return 1;
+        }
+        if( !objectp(ob = present(arg, me)) )
+        return notify_fail("你身上没有这样东西。\n");
+        if( !ob->query("gun_type") )
+        return notify_fail("你只能查看能装子弹的东西。\n");
+        if( ob->query("bullet") <=0)
+                return notify_fail("这把枪里的子弹已经打光了，再装备上一些吧。\n");
+        tell_object(me, "你看到" + ob->query("name") + 
+     "里面还有"+YEL+chinese_number(ob->query("bullet"))+NOR+"发"+ob->query("bullet_type")+"的子弹\n");
+        return 1;
+}

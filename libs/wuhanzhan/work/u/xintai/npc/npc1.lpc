@@ -1,0 +1,236 @@
+#include <ansi.h>
+
+inherit NPC;
+int random_place(object me, string dirs);
+void _leave();
+void leave();
+int announced=0;
+string *dirs = ({
+"/u/xintai/d/test/tianjue",
+});
+void create()
+{
+        seteuid(getuid());
+        set_name("TEST",({"test"}));
+        set("chat_chance", 10);
+        set("chat_msg", ({
+                (: random_move :)
+        }));
+        setup();
+}
+void init()
+{
+    object me=this_object();
+    object who=this_player();
+    int type;
+    int t=query("stay_time");
+    ::init();
+    if(t && time()>(t+300)) {
+        remove_call_out("leave");
+        call_out("leave",1);
+        return;
+    }
+    if(t && time()>t) {
+        remove_call_out("_leave");
+        call_out("_leave",300);
+    }
+    if(!living(this_object())) return;
+    if(!living(who)) return;
+    if( who->query("family/family_name") != query("target"))
+    return;
+    remove_call_out("check_room");
+    call_out("check_room",2);
+}
+void check_room()
+{
+    object me=this_object();
+    object env=environment(me);
+    if(!living(me)) return;
+    if(env && (env->query("no_fight") ||
+                env->query("no_magic"))) {
+        random_move();
+    }
+}
+void copy_status(object me,object ob)
+{
+        object *inv;
+        mapping skill_status,map_status;
+        string *sname,*mname;
+        int i, eff_dx, nk_factor;
+        me->set_name("暴走"+ob->query("name"),({ob->query("id")+"_npc"}));
+        me->set("gender",ob->query("gender"));
+  set("attitude", "aggressive");
+        me->set("title",ob->query("title"));
+        me->set("nickname",ob->query("nickname"));
+        me->set("str",ob->query("str"));
+        me->set("con",ob->query("con"));
+        me->set("cor",ob->query("cor"));
+        me->set("spi",ob->query("spi"));
+        me->set("cps",ob->query("cps"));
+        me->set("max_kee",ob->query("max_kee")*3);
+        me->set("eff_kee",ob->query("eff_kee")*3);
+        me->set("kee",ob->query("kee")*3);
+        me->set("max_sen",ob->query("max_sen")*3);
+        me->set("eff_sen",ob->query("eff_sen")*3);
+        me->set("sen",ob->query("sen")*3);
+        me->set("max_force",ob->query("max_force")*3/2);
+        me->set("force",ob->query("force")*3/2);
+        me->set("force_factor",ob->query("force_factor")*3/2);
+        me->set("max_mana",ob->query("max_mana")*3);
+        me->set("mana",ob->query("mana")*3/2);
+        me->set("mana_factor",ob->query("mana_factor")*3/2);
+        me->set("combat_exp",ob->query("combat_exp") * 3/2);
+        if (skill_status=ob->query_skills())
+        {
+        sname=keys(skill_status);
+        for(i=0;i<sizeof(skill_status);i++) {
+                me->set_skill(sname[i],skill_status[sname[i]]+random(100));
+        }
+        }
+        if (map_status = ob->query_skill_map())
+        {
+        mname  = keys(map_status);
+        for(i=0; i<sizeof(map_status); i++) {
+                me->map_skill(mname[i], map_status[mname[i]]);
+        }
+        }
+        inv = all_inventory(ob);
+        for(i=0; i<sizeof(inv); i++)
+        {
+                if( inv[i]->query("weapon_prop") 
+                &&  inv[i]->query("equipped")
+                &&  !inv[i]->query_unique() ) {
+                        carry_object(base_name(inv[i]))->wield();
+                }
+                else if( inv[i]->query("armor_prop") 
+                &&  inv[i]->query("equipped") 
+                &&  !inv[i]->query_unique() ) {
+                        carry_object(base_name(inv[i]))->wear();
+                }
+        }
+        me->set("stay_time",time()+600+random(60));
+        me->set("kill_gain", 100+random(50));
+        eff_dx = ob->query("combat_exp");
+        if(eff_dx>50000000) 
+        nk_factor = 9;
+        else if(eff_dx>30000000)
+        nk_factor = 8;
+        else if(eff_dx>10000000)
+        nk_factor = 7;
+        else if(eff_dx>5000000)
+        nk_factor = 6;
+        else if(eff_dx>3000000)
+        nk_factor = 5;
+        else if(eff_dx>1000000)
+        nk_factor = 4;
+        else if(eff_dx>500000)
+        nk_factor = 3;
+        else if(eff_dx>300000)
+        nk_factor = 2;
+        else nk_factor = 1;
+        reset_eval_cost();
+}
+int invocation(object who,int i)
+{
+        object me=this_object();
+        copy_status(me,who);
+        if(!random_place(me, dirs[i]))
+        return 0;
+        return 1;
+}
+int random_place(object me, string dirs)
+{
+        int  j, k;
+        object  newob;
+        mixed*  file, exit;
+        file = get_dir( dirs+"/*.lpc", -1 );
+        if( !sizeof(file) )             return 1;
+        for(k=0;k<30;k++) { // try 30 times
+           j = random(sizeof(file));
+           if( file[j][1] > 0 ) {
+             newob=load_object(dirs+"/"+file[j][0]);
+             if (newob) {  
+               if(newob->query("no_fight") ||
+                       newob->query("no_magic") ||
+                       !(exit=newob->query("exits")) ||
+                       sizeof(exit)<1)
+                   continue;
+               if(me->move(newob)) {
+                   message_vision("$N走了过来。\n",me);
+                   return 1;
+               }
+              }
+             }
+            }
+        return 0;
+}
+varargs int receive_damage(string type, int damage, object who)
+{
+  object me=this_object();
+  call_out("exertheal",1,me);
+  return ::receive_damage(type,damage,who);
+}
+void exertheal(object me) 
+{
+  me->command("exert heal");
+  me->command("exert recover");
+}
+void die()
+{
+        int reward;
+        object ob,me;
+        ob = query_temp("last_damage_from");
+        me=this_object();
+        if (!ob)
+        {
+                leave();
+                return; 
+        }
+        if ( userp(ob))
+        {
+        reward = query("kill_gain") * query("nk_factor");
+        ob->add("kill/aaa",reward);
+        tell_object(ob,"你的功劳增加了。\n");
+        }
+  me->move("/d/city/droproom");
+        destruct(this_object());
+}
+void unconcious()
+{
+  if (query("kee")<0 || query("sen")<0) die();
+   else ::unconcious();
+}
+void heart_beat()
+{
+        if (!query_temp("weapon") && !query_temp("added"))
+        {
+        set_temp("added", 1);
+        set("force_factor",100);
+        set("force",5000);
+        }
+        if (query("eff_kee")<query("max_kee")*2/3)
+        {
+                command("surrender");
+                call_out("exertheal",1,this_object());
+        }
+        ::heart_beat();
+}
+void _leave()
+{
+        object me=this_object();
+        if(me->is_fighting() || me->is_busy())
+        return;
+        leave();
+}
+void leave()
+{
+      if(this_object()) {
+{
+        if(environment())
+          message("vision",HIR + name() + 
+                  "身子一晃，变成一股青烟散去了。\n" NOR,environment());
+}
+        destruct(this_object());
+      }
+      return;
+}

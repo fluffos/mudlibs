@@ -1,0 +1,133 @@
+#include <ansi.h>
+#include <dbase.h>
+#include <armor.h>
+#define MAX_SAVE 8
+inherit F_AUTOLOAD;  
+inherit ITEM;
+
+object focusobj;
+
+void create()
+{
+     set_name(HIW"机器猫的口袋"NOR, ({ "cat bag" ,"catbag","bag" }) );
+     set_weight(0);
+     set("value", 50000000);
+     set("material", "cloth");
+     set("unit", "个");
+     set("no_steal", 1);
+     set("no_drop", 1);
+     set("no_sell", 1);
+     set("no_give", 1);
+     set("no_get", 1);
+     setup();
+}
+void init()
+{
+   add_action("do_put", "put");
+   add_action("do_get", "get");
+   add_action("do_look", "look");
+}
+int do_put(string arg)
+{
+    object me=this_player(),ob;
+    string msg,obj_file;
+    int save_objects,new_one=1,value;
+    string from_ob,put_ob;
+    if(!arg)return 0;
+    sscanf(arg,"%s in %s",put_ob,from_ob);
+      if(!put_ob||!from_ob||(from_ob!="cat bag"&&from_ob!="cat"&&from_ob!="bag"))
+         return 0;
+
+      if(me->is_busy())
+        {tell_object(this_player(),"放珍贵的东西当然要慢慢来啦！\n");return 1;}  
+
+     ob=present(put_ob,me);
+ if(ob) 
+    {
+        if (ob->query_weight()>1000000)
+                return notify_fail("这件东西太重了，怎么也装不进去。\n");
+        if (ob->query("money_id"))
+                return notify_fail("钱财乃身外之物，不必这么小心吧！\n");
+        if (ob->query("food_supply"))
+                return notify_fail("食物也想放到里面吗？\n");
+
+       save_objects=me->query("catbag_objects");
+     if(save_objects>=MAX_SAVE){tell_object(this_player(),"这里已经塞不下任何东西了！\n");return 1;}
+       msg=base_name(ob);
+      obj_file="catbag_save"+save_objects;
+      me->set(obj_file,msg);
+      save_objects=save_objects+1;
+      me->set("catbag_objects",save_objects);
+      me->start_busy(1);
+      message_vision("$N拿出一"+ob->query("unit")+ob->query("name")+"放进了机器猫的口袋。\n",me);
+        destruct(ob);    
+      return 1;
+     }
+ else {tell_object(this_player(),"你身上没有这样东西！\n");return 1;}
+}
+int do_look(string arg)
+{
+     int i,total_save; 
+     object ob,me=this_player();
+     if(arg!="cat"&&arg!="cat bag"&&arg!="bag")
+        return 0;
+     tell_object(me,HIC"这个是机器猫的口袋可以用它放一些重要的东西。\n"NOR); 
+     total_save=me->query("catbag_objects"); 
+     if(total_save)
+     tell_object(me,HIC"里面装有：\n"NOR);   
+     else
+     tell_object(me,HIC"里面没有装任何东西。\n"NOR);   
+        for(i=0;i<total_save;i++)
+         {
+           ob=new(me->query("catbag_save"+i));
+             if(ob)
+             tell_object(me,i+"   "+ob->query("name")+"  ("+ob->query("id")+")\n");   
+            destruct(ob);
+        }
+     return 1;
+}
+int do_get(string arg)
+{
+    object ob,me=this_player();
+ int i,j,total_save,get_ob,max_weight=me->query_max_encumbrance(),now_weight=me->query_encumbrance(); 
+    string from_ob;
+    if(!arg)return 0;
+    sscanf(arg,"%d from %s",get_ob,from_ob);
+      if(!from_ob||(from_ob!="cat bag"&&from_ob!="cat"&&from_ob!="bag"))
+         return 0;
+      if(me->is_busy())
+        {tell_object(this_player(),"拿珍贵的东西当然要慢慢来啦！\n");return 1;}  
+      total_save=me->query("catbag_objects"); 
+      if(total_save<=0) 
+         {
+          tell_object(me,"里面什么东西也拿不出来了。\n");      
+          return 1;
+         }
+      if(get_ob>(total_save-1)||get_ob<0)
+         {
+          tell_object(me,"命令格式： get (物品序号) from cat bag\n");      
+          return 1;
+         }
+           ob=new(me->query("catbag_save"+get_ob));
+             if(!ob)
+         {
+         tell_object(me,"这个东西你无论怎样都拿不出来，真奇怪！\n");
+         return 1;
+         }
+           if(ob->query_weight()+now_weight>=max_weight)
+         {
+         tell_object(me,"这个东西你无论怎样都拿不出来，可能是负重过多了！\n");
+         return 1;
+         }
+      tell_room(environment(me),"你看到"+me->query("name")+"偷偷从机器猫的口袋拿出什么东西放进怀里。\n",me);  
+      tell_object(me,"你偷偷从机器猫的口袋拿出一"+ob->query("unit")+ob->query("name")+"放进怀里。\n",me);      
+           ob->move(me);
+       for(i=get_ob;i<total_save-1;i++)
+         {j=i+1;
+         me->set("catbag_save"+i,me->query("catbag_save"+j));     
+         }
+         me->add("catbag_objects",-1);
+      me->start_busy(1);
+     return 1;
+}
+int query_autoload() { return 1; }

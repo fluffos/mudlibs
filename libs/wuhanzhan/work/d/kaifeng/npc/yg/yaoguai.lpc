@@ -1,0 +1,153 @@
+#include <ansi.h>;
+
+inherit "/d/dntg/yunlou/npc/yaoguai.lpc";
+
+int yaoguai_type=0;
+
+void create()
+{
+        ::create();
+
+        setname2();
+
+        set("chat_chance", 3);
+        set("chat_msg", ({
+             (: random_move :)
+        }) );
+
+        setup();
+}
+
+void leave()
+{
+      if(this_object()) { 
+        if(environment())
+          message("vision",HIB + name() + 
+                  "窜了几窜就不见了。\n" NOR,environment());
+        destruct(this_object());
+      }
+      return;
+}
+
+string invocation(object who, int level)
+{       object me=this_object(), env;
+        string *dirs; 
+        int exp, i, lvl;
+        string where, long, guainame;
+        
+        // make skills less.
+        copy_status(me, who, level-2);
+
+        ::_invocation(who ,level);
+
+        dirs=dirs1;
+
+        // choose npc type.
+        i=random(1000);
+        if(i<30) {
+            set("type","aggressive");
+        } else if(i<100) {
+            set("type","blocker");
+        } else if(i<300) {
+            set("type","aggressive_on_owner");
+        } else 
+            set("type","normal");
+        
+        if(!random_place(me, dirs)) {
+            leave();
+            return 0;
+        }
+        
+        env=environment(me);
+        guainame=me->query("name")+"("+capitalize(me->query("id"))+")";
+        where=guainame;
+        if(env)
+          where+="在"+MISC_D->find_place(env);
+
+        if(query("combat_exp")>10000)
+            command("wield all");
+
+        return where;
+}
+
+int accept_object (object who, object ob)
+{
+    return 1;
+}
+
+int do_block(string arg)
+{
+    object me=this_object();
+    object who=this_player();
+    string verb=query_verb();
+    int t;
+    
+    if(wizardp(who) && !visible(who)) return 0;
+    
+    if(me->is_fighting()) return 0;
+
+    if(verb!="go" &&
+            verb!="fly" &&
+            !(environment() && environment()->query("exits/" + verb)))
+        return 0;
+
+    t=who->query_temp("mieyao/allow_to_leave");
+    if(t==0 || random(3)>0) {
+        tell_object(who,"你正要离开，忽然看见什么东西在眼前一晃，"+
+                "不由得停了下来。\n");
+        who->set_temp("mieyao/allow_to_leave",1);
+        return 1;
+    } 
+    
+    who->set_temp("mieyao/allow_to_leave",0);
+    return 0;
+}
+
+void die()
+{
+        string owner;
+        object owner_ob;
+        object me=this_object();
+        string str;
+        int max_kee, max_sen, ratio, exp_r, pot_r,turn;
+
+        owner = query("owner");
+
+        if( stringp(owner) && objectp(owner_ob = find_player(owner)) ) {
+	    if(environment(owner_ob)==environment() && living(owner_ob)) {
+                    message_vision(death_msg[random(sizeof(death_msg))],
+			    owner_ob,this_object());
+		    max_kee=query("max_kee");
+		    max_sen=query("max_sen");
+		    ratio=100*(max_kee-other_kee)/max_kee;
+		    if(ratio<0) ratio=0;
+		    ratio=ratio*(max_sen-other_sen)/max_sen;
+		    if(ratio<0) ratio=0;
+		    exp_r=exp_reward*ratio/100+random(10);
+		    pot_r=pot_reward*ratio/100+random(5);
+	    } else {
+		message_vision("$N死了。\n",this_object());
+		exp_r=0;
+		pot_r=0;
+		ratio=0;
+	    }
+		    owner_ob->add("combat_exp",exp_r);
+		    owner_ob->add("potential",pot_r);
+                    owner_ob->set("mieyao/done1",1);    
+            turn=owner_ob->query_temp("mieyao/level1")+1;
+	    str=" 得到"+COMBAT_D->chinese_daoxing(exp_r)+"道行，"+
+		pot_r+" 点潜能，第 " + turn + " 个妖.\n";
+
+                    MONITOR_D->report_system_object_msg(owner_ob, str);
+           if (!exp_r)
+                 tell_object(owner_ob, "你得到了零时辰道行和"+chinese_number(pot_r)+"点潜能！\n");
+           else
+                 tell_object(owner_ob, "你得到了"+COMBAT_D->chinese_daoxing(exp_r)
+                            +"道行和"+chinese_number(pot_r)+
+                            "点潜能！\n");
+        } else {
+            message_vision("$N死了。\n",this_object());
+        }
+
+        destruct(this_object());
+}
