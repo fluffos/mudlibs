@@ -79,8 +79,8 @@ rely on the boot + interactive-connect test as the verification gate.
   2. `MAX_EXPANSION_NESTING`/`kMaxExpandStringDepth` raised (32→1024,
      64→1024 outside ASan builds) so long macro-heavy expressions compile;
      `lpcc` given a `--batch` mode for fast multi-file sweeps.
-- Fix catalog in `AGENTS.md` is up to §14 (+ §8b/8c/8d sub-entries) — read
-  it before starting a new lib, most of what's there will recur.
+- Fix catalog in `AGENTS.md` is up to §15f (+ §8b-8h, §15b-15f sub-entries)
+  — read it before starting a new lib, most of what's there will recur.
 
 | # | Archive | Slug | Port | Status | Notes |
 |---|---|---|---|---|---|
