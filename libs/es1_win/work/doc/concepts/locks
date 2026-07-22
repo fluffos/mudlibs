@@ -1,0 +1,110 @@
+This file explains how object locks, such as locks on treasure chests and
+other containers, work and how you can set them up in your own objects.
+Door locks are handled differently (because a door is not an object in the
+LPC sense); see the doors document to see how those locks work.
+
+To make an object lockable:
+      1) inherit the standard lock object (usually /std/lock.c).
+      2)  in create(), set "max_lock" to the difficulty of the lock.
+      3)  in create(), set "lock" to whatever state you want the lock
+          to start at.  (Usually the same as "max_lock")
+      4)  in create(), set "key" to the name of the string that
+          is returned by query()ing "to_lock" in the proper key.
+      5)  if you have an init(), make sure it calls lock::init();....
+  
+Locks define and use the following properties:
+  
+  "lock"
+  
+      This property is the object's current lock status, whether
+      or not the object has inherited lock.c.  This is accomplished in
+      all lock functions by making 0 mean the object has no lock.
+      
+      Return values:
+      
+          -1  Unlocked.  This object is lockable, but is currently unlocked.
+           0  Not Lockable.  This object is not lockable.
+          1+  Locked.  The number represents the lock's current difficulty
+                to pick, in addition to relaying that it is locked.
+
+  "max_lock"
+  
+      This property is the difficulty for this lock when it is fully
+      locked.  If n == 0, the lock will effectively cease to exist,
+      being neither lockable or unlockable.  The object will be treated
+      as any object without a lock.
+      
+  
+  "key"
+  
+      This property is compared to the "to_lock" property in the key
+      trying to turn the lock.
+  
+  
+  int lock(int n)
+  
+      This function attempts to set the lock's state.  If n is -1 it is
+      attempting to unlock it.  If n is positive, it is attempting to
+      lock it to that difficulty.  The lock will never be locked to a
+      difficulty greater than that set in "max_lock".
+        The way this function is set up brings in great flexibility to
+      the lockable object.  It first query()s "to_lock" in
+      "current_key", set by lock_object() or unlock_object().  If
+      it returns a string equal to that set in "key", the lock will
+      query "lock_turn" in the locking object to find out how much
+      the key will unlock the lock.
+        If query("to_lock") returns "skeleton", it acts as if it were the
+      correct string and goes on to query "lock_turn".
+        If "to_lock" returns anything else, (including 0) the
+      object doing the unlocking ("current_key") will be checked
+      to see if it is living.  If it is, it is assumed to be picking
+      the lock successfully.
+        Finally, if none of the above take place, the lock will not be
+      affected.  The most common occurent of this would be lock_object()
+      or unlock_object() being called without an argument fitting their
+      pattern of "%s with %s".
+      
+        The return value is the state of the lock, same as query("lock").
+  
+  int lock_func(string str)
+  
+      This function is called with the by lock() just before it checks
+      to see if "current_key"->query("to_lock") is proper for this
+      lock.  The argument passed is the same as that passed to lock().
+      If this function returns 0 and "to_lock" is not equal to "key",
+      lock() will call pick_lock(this_player(), n) and return.
+        (n is the argument passed to lock().)
+        Currently, this function returns true only if "to_lock" of
+      "current_key" is == "skeleton".
+      
+      This function is here for you to impliment your own special code
+      for making your lock do fancy things.  Take a look at the info on
+      "turn_lock" in keys.doc for an idea on customization....
+  
+  int lock_object(string str)
+  
+      Processes str as "%s with %s", then checks for a present object
+      with an id() of the second string, either on the player or in the
+      player's environment. It then sets "current_key" to the second
+      string and calls lock() with the "turn_lock" from the object.  If
+      the object is not found, or str doesn't fit the pattern,
+      "current_key" is set to null, and lock() is called with "max_lock".
+  
+  
+  int unlock_object(string str)
+  
+      Just like lock_object(), only calls lock() with the value of -1
+      whether or not the object is found.
+  
+  
+  void pick_lock(object player, int lock)
+  
+      Called if there is no key and lock_func() returned 0.  It assumes
+      that the player has successfully used the "pick" skill and should
+      set the state of the lock ("lock") appropriately.
+  
+
+For examples of locks, see the object chest.c and gold_key.c which can
+be found in /obj in the standard mudlib.
+"gold_key.c", and "skeleton_key.c") in this directory.
+

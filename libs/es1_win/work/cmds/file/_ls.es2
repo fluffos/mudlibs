@@ -1,0 +1,302 @@
+// New ls command by Rust@TMI-2 on 23-4-94
+// This is the ls from hell.  Supports every flag anyone
+// has asked me for. I don 't feel so hot about -r support, but oh well.
+// if there's some odd flag you' d like to see implemented, let me know.
+// Val@TMI-2 maded the following fixes (July 2, 1994) :
+//Fixed: ls /doc/??? (used to turn into /doc/???/*)
+//Fixed: ls -t didn't strip all . begining files
+//Fixed: ls -F didn't add * to any files if the argument wasn't a directory
+//	 for example "ls -F /std/c*"
+//Fixed: ls -s used '-' as size for 0 bytes long files.  now it is 0.
+
+// Blue@TMI-2, 940905.  Changed the default argument (when
+// you just type "ls") from " " to "".  Resolv_path had been
+// changed (anonymously) so that the space didn't work any
+// more.
+// Leto 941109 Changed status to int.
+// Val  950124 removed extra empty line, allowed -Fr with -l,
+//             added flags -1 and -A
+// Leto 950211 made is use new range (v20.26+)
+
+#define L_LINE sprintf("%-30s %-8s %s", "Last Modified", "Size", "File")
+#define DASHES "-----------------------------------------------------------------"
+#define F_FLAG	1
+#define S_FLAG	2
+#define L_FLAG	4
+#define A_FLAG	8
+#define T_FLAG	16
+#define R_FLAG	32
+#define X_FLAG	64
+#define ONE_FLAG 128
+#define CAP_A_FLAG 256
+
+ mixed	internal_ls(string path, int active, int internal_call);
+mixed		map_junk(mixed junk, int index);
+int		sort_by_time(mixed a, mixed b);
+int		sort_by_ext(mixed a, mixed b);
+int		filter_directories(mixed junk);
+int		filter_no_period(mixed junk);
+
+int
+cmd_ls(string arg)
+{
+    int		i;
+    int		active;
+    string	flags;
+    string     *output;
+
+    seteuid(getuid(previous_object()));
+    if (!arg)
+	arg = "";
+    else
+	arg += " ";
+
+    while (sscanf(arg, "-%s %s", flags, arg) > 1) {
+	i = strlen(flags);
+	while (i--)
+	    switch (flags[i]) {
+	    case 'F':
+		active |= F_FLAG;
+		break;
+	    case 's':
+		active |= S_FLAG;
+		break;
+	    case 'l':
+		active |= L_FLAG;
+		break;
+	    case 'a':
+		active |= A_FLAG;
+		break;
+	    case 't':
+		active |= T_FLAG;
+		break;
+	    case 'r':
+		active |= R_FLAG;
+		break;
+	    case 'x':
+		active |= X_FLAG;
+		break;
+	    case '1':
+		active |= ONE_FLAG;
+		break;
+	    case 'A':
+		active |= CAP_A_FLAG;
+		break;
+	    }
+    }
+
+    if (arg[<1..<1] == " ")
+	arg = arg[0..<2];
+    if (arg == "/..") {
+	write("ls: no such directory.\n");
+	return 1;
+    }
+
+    // Remove impossible flag combinations.
+    if (active & L_FLAG) active &= ~S_FLAG;
+
+    arg = resolv_path(this_player()->query("cwd"), arg);
+    if (output = internal_ls(arg, active, 0)) {
+	this_player()->more(output);
+    }
+    return 1;
+}
+
+ string *
+internal_ls(string arg, int active, int internal_call)
+{
+    mixed      *junk;
+    string     *files;
+    int	       *times;
+    int	       *sizes;
+    string     *dirs;
+    int		first_period;
+    int		i, j;
+    string     *output;
+    mixed	tmp;
+    string	path;
+
+    output = ({ sprintf("Path: [%s]", arg) });
+
+    if (internal_call) {
+	path = arg;
+	arg += "*";
+    } else {
+	if (arg[<1..< 1] != "/" && file_size(arg + "/") == -2)
+	    arg += "/";
+	path = arg;
+	if (arg[<1..<1] == "/") {
+	    arg += "*";
+	} else {
+	    for (i = strlen(path); path[--i] != '/';);
+	    first_period = path[i+1] == '.';
+	    path = path[0..i];
+	}
+    }
+
+    junk = get_dir(arg, -1);
+
+    if (!sizeof(junk)) {
+	write("ls: no such file or directory.\n");
+	return 0;
+    }
+
+    if (!(active & A_FLAG) && !first_period) {
+	junk = filter_array(junk, (active & CAP_A_FLAG)?"filter_limit_period":
+			    "filter_no_period", this_object());
+	if (!sizeof(junk)) {
+	    if (internal_call)
+	        return ({ sprintf("%s: Directory is empty.", path) });
+	    write("Directory is empty.\n");
+	    return 0;
+	}
+    }
+
+    if (active & T_FLAG)
+	junk = sort_array(junk, "sort_by_time", this_object());
+
+    if (active & X_FLAG)
+	junk = sort_array(junk, "sort_by_ext", this_object());
+
+    if (active & R_FLAG)
+	dirs = map_array(
+		filter_array(junk, "filter_directories", this_object()),
+		"map_junk", this_object(), 0);
+
+    files = map_array(junk, "map_junk", this_object(), 0);
+    sizes = map_array(junk, "map_junk", this_object(), 1);
+    times = map_array(junk, "map_junk", this_object(), 2);
+
+    if (active & (F_FLAG | S_FLAG)) {
+	for (i = sizeof(sizes); i--;) {
+	    if (active & S_FLAG) {
+		tmp = (sizes[i] >= 0) ?
+		sprintf("%3d %s", (sizes[i] + 1023) / 1024, files[i]) :
+		sprintf("  - %s", files[i]);
+	    } else {
+		tmp = files[i];
+	    }
+	    if (active & F_FLAG) {
+		if (sizes[i] == -2) {
+		    tmp += "/";
+		} else if (files[i][<2..<1] == ".c" &&
+			   find_object(path + files[i])) {
+		    tmp += "*";
+		}
+	    }
+	    files[i] = tmp;
+	}
+    }
+
+    if (active & L_FLAG) {
+#ifndef UNIX_LOOK
+	int out_idx, max;
+
+	out_idx = sizeof(output += ({L_LINE,DASHES}));
+	output += allocate(max = sizeof(files));
+
+	for (i = 0; i < max; i++) {
+	    output[out_idx++] = (sizes[i] >= 0) ?
+		sprintf("%-30s %-8d %s", ctime(times[i]), sizes[i], files[i]) :
+		sprintf("%-30s %-8s %s", ctime(times[i]), "Dir", files[i]);
+	}
+#else
+	int out_idx, max, time_lim;
+
+	time_lim = time() - 178 * 24 * 3600;
+	out_idx = sizeof(output);
+	output += allocate(max = sizeof(files));
+
+	for (i = 0; i < max; i++) {
+	    tmp = ctime( times[i] );
+	    tmp = (times[i] < time_lim) ? (tmp[4..10] + tmp[19..23]) :
+		tmp[4..15];
+	    output[out_idx++] = (sizes[i] >= 0) ?
+		sprintf("%6d %s %s", sizes[i], tmp, files[i]) :
+		sprintf(" (dir) %s %s", tmp, files[i]);
+	}
+#endif
+    } else if (!(active & ONE_FLAG) ) {
+	// !L_FLAG !ONE_FLAG
+	for (i = 0; i < sizeof(files); i += 300) {
+	    output += explode(sprintf("%-79#s\n", implode(files[i..(i + 299)],
+							  "\n")), "\n");
+	}
+    } else {
+	// ONE_FLAG
+	output += files;
+    }
+
+    if (active & R_FLAG) {
+	for (i = 0; i < sizeof(dirs); i++)
+	    output += ({ "" }) + internal_ls(path + dirs[i] + "/", active, 1);
+    }
+    return output;
+}
+
+int 
+help()
+{
+    write(wrap(
+	"Usage:  ls [ -aslFrtx1 ] [ Directory ]\n"
+	"The ls command shows the user the files in the specified "
+	"directory, or if there is none given, to his current working "
+	"directory.\nFlags:\n"
+	" -a  shows files with a . as the first character, which are "
+	"normally excluded.\n"
+	" -A  same as -a, except that '.' and '..' are not listed.\n"
+	" -s  shows an approximate file size to the next highest kilobyte.\n"
+	" -F  postpends a '/' to directory names and '*' to loaded files.\n"
+	" -l  gives the long display. The l flag negates the s flag.\n"
+	" -r  is recursive, and should not be used on directories such as "
+	"the root directory, etc...  as the eval cost would top out.\n"
+	" -t  sorts by date last modified.\n"
+	" -x  sorts by file extension.\n"
+	" -1  show only one file per line.\n"
+	"Unsupported flags are ignored.\n"
+	));
+    return 1;
+}
+
+mixed 
+map_junk(mixed junk, int index)
+{
+    return junk[index];
+}
+
+int
+filter_no_period(mixed junk)
+{
+    if (junk[0][0] != '.') return 1;
+}
+
+int
+filter_limit_period(mixed junk)
+{
+    if (junk[0] != "." && junk[0] != "..") return 1;
+}
+
+int 
+filter_directories(mixed junk)
+{
+    if (junk[1] == -2 && junk[0] != "." && junk[0] != "..")
+	return 1;
+}
+
+int 
+sort_by_time(mixed file_a, mixed file_b)
+{
+    return file_a[2] > file_b[2] ? 1 : -1;
+}
+
+int 
+sort_by_ext(mixed file_a, mixed file_b)
+{
+    file_a = " ." + file_a[0];
+    file_b = " ." + file_b[0];
+    file_a = explode(file_a, ".");
+    file_b = explode(file_b, ".");
+    if (sizeof(file_a) == 2 || sizeof(file_b) == 2)
+	return sizeof(file_a) > sizeof(file_b) ? 1 : -1;
+    return file_a[sizeof(file_a) - 1] > file_b[sizeof(file_b) - 1] ? 1 : -1;
+}

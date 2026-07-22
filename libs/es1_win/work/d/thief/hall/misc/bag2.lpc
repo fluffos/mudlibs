@@ -1,0 +1,114 @@
+#include "mudlib.h"
+#define         RATE ({ 13,20,32,55,68,70,75,80,87,90,95 })
+
+inherit CONTAINER;
+
+void create()
+{
+	::create();
+	set_name("bag", "麻布袋");
+	set_short("麻布袋");
+	set_c_open_long("这个麻布袋是小偷常用来装赃物的袋子，又宽又大的，\n好像很适合拿来盖\布袋(wrap)兼阿鲁巴。\n");
+	set( "weight", 20);
+	set( "weight_apply", 50 );
+	set( "max_load", 300);
+	set( "value", ({ 220, "silver" }));
+	set( "prevent_insert",1 );
+	set( "prevent_put_money", 1);
+}
+
+void init()
+{
+	add_action("do_wrap","wrap");
+}
+int do_wrap(string arg)
+{
+	object target, *members, *actor, me, leader_ob;
+	string leader;
+	int skill,rate,level,i;
+
+	me = this_player();
+	if ( sizeof(all_inventory()) ) return notify_fail("你把袋子扛了起来。\n");
+	if ( !arg || arg == "" ) 
+		return notify_fail("你把袋子卷起来。\n");
+
+	if ( !me->query_vision() )
+	        return notify_fail("这里一片漆黑 ! 你什麽也看不到 !!\n");
+	if ( !target = present(arg,environment(me)) )
+		return notify_fail("这里没有叫做 "+arg+" 的东东。\n");
+	if ( !living(target) )
+		return notify_fail("这里没有叫做 "+arg+" 的生物。\n");	
+	if ( target->query_attacker() ) 
+		return notify_fail("对方正在和人打架，你找不到机会出手。\n");
+	if ( target->query("no_attack") )
+		return notify_fail("你不可以欺负这种稀有动物，会遭天罚 ...\n");
+	if ( target->query("user") ) {
+		if ( (int)me->query_level() < 5 || 
+			(int)target->query_level() < 5 ) 
+			return notify_fail("还没到欺负他的时候嘛 ... 等你(或他)长大吧 !!\n");
+	}
+	if ( !leader = me->query_temp("leader") ) 
+		return notify_fail("要围炉也得先找好帮手嘛 !! 先 Party 吧 !!\n");
+	if ( !leader_ob = find_player(leader) )
+		return notify_fail("你的队长溜了 !! 重新 Party 吧 !!\n");
+	members = leader_ob->query_temp("party_members") ;
+	actor = ({ });
+	for ( i = sizeof(members)-1 ; i >= 0 ; i--) {
+		if ( environment(members[i]) == environment(me) )
+			actor += ({ members[i] });
+	}
+	if ( sizeof(actor) < 2 ) 
+		return notify_fail("只有你一个人在场啦 ... 怎麽围炉？？\n");
+	
+	actor -= ({ me });
+	
+	tell_object(me,
+		set_color("你拉出一个布袋，往"+target->query("c_name")+"罩下去 ...\n","HIY") );
+	tell_object(target,
+		set_color(me->query("c_name")+"突然拉出一个布袋，望你的头上罩过来 ..\n","HIY"));
+	tell_room(environment(me),set_color(me->query("c_name")+"突然拉出一个麻布袋，向"+target->query("c_name")+"的头上罩下去 ...\n","HIY"),
+		({ me,target }) );
+	rate = (int)me->query_skill("trick") + (int)me->query_skill("hide") 
+		+ (int)me->query_skill("sneak");
+	rate += ((int)me->query_stat("dex") + (int)me->query_stat("kar") -
+		 (int)target->query_stat("dex") - (int)target->query_stat("kar"))*10;
+	level = (rate * (int)me->query_skill("trick"))/7000 ;
+	if ( level < 0 ) 
+		level = 0;
+	else
+		if ( level > 10 ) level = 10;
+	target->kill_ob(me);
+	if ( wizardp(me) )
+		tell_object(me,sprintf("rate = %d , RATE = %d \n",rate,RATE[level]));
+	if ( random(100) < RATE[level] ) {
+		skill = (int)me->query_skill("trick")/10
+			+ ((int)me->query_stat("kar")
+			+ (int)me->query_stat("str")
+			- (int)target->query_stat("str")
+			- (int)target->query_stat("kar"))*2;
+		if ( skill < 0 ) skill = 0;
+		if ( skill > 60 ) skill = 60;
+		
+		tell_room(environment(me),
+			sprintf("%s被罩个正著，只听见%s大喊 : 围～炉～喽～ ....\n",target->query("c_name"),me->query("c_name"))
+			, ({ target, me }));
+		tell_object(me,target->query("c_name")+"还愣愣的在发呆 ... 呵呵呵 ～～～ 中奖啦 ...\n");
+		tell_object(target,"你来不及躲开 ... 眼前登时一片漆黑 ～～　哇 !! 可恶的家伙 !!\n");
+		if ( wizardp(me) ) tell_object(me,"block "+(4+(skill/15)*2)+"\n");
+		target->block_attack(4+(skill/15)*2);
+		target->set_temp("msg_stop_attack",
+			set_color("(你被人用布袋罩住，正在拼命的挣扎 !! )\n","HIY",target));
+		me->block_attack(4+(skill/15)*2);
+		me->set_temp("msg_stop_attack",
+			set_color("(你正使劲地用布袋罩住"+target->query("c_name")+"，呦呵呵 ～～～ 好像骑野马 !! )\n","HIC",me));
+
+
+		this_object()->remove();
+		return 1;
+	}
+	tell_room(environment(me),
+		"但是"+target->query("c_name")+"突然向旁边一闪，他扑了个空 ...\n", ({ me,target }) );
+	tell_object(me,target->query("c_name")+"突然向旁边一闪，不妙 ... 啊 ～～ 糗大了...\n");
+	tell_object(target,"你急忙向旁边一闪，让他扑了个空，可恶的家伙 !! 扁他 !!\n");
+	return 1;	
+}

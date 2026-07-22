@@ -69,7 +69,7 @@ taken by ds386, in progress).
 | 9 | dw_fluffos_v1.tar.gz | | | deprioritized | confirmed Discworld mudlib (English) -- skipping per policy, revisit only if asked |
 | 10 | dw_fluffos_v2.zip | | | deprioritized | same Discworld bundle, different version -- skipping per policy |
 | 11 | dw_fluffos_v3.zip | | | deprioritized | same Discworld bundle, different version -- skipping per policy |
-| 12 | es1_win.rar | | | not started | |
+| 12 | es1_win.rar | es1_win | 40009 | done | 东方故事(蓝天), foundational wuxia base lib; found preload-time get_include_path timing gotcha (§8d); see libs/es1_win/NOTES.md |
 | 13 | esI.rar | | | not started | |
 | 14 | fengyun4-3-4.rar | | | not started | |
 | 15 | fluffos(西游记2000).tar.gz | | | not started | likely a driver bundle, not a mudlib -- triage first |

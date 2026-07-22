@@ -1,0 +1,6 @@
+#define FILE_SERVER 0
+#define MY_IP "140.114.209.12 "
+#define MY_PORT 8000
+#define PORT 8764
+#define SERVER_IP "140.113.204.42 "
+#define UNITE_MUDS ({ "140.113.204.42 "+PORT,"140.114.209.12 "+PORT })

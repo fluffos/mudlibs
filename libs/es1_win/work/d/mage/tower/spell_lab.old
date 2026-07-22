@@ -1,0 +1,110 @@
+#include "../mage.h"
+
+inherit ROOM;
+
+mixed *spell_level_exp ;
+int do_help(string arg);
+void set_spell_level_exp();
+
+void create()
+{
+	::create();
+	seteuid( getuid() );
+	set_spell_level_exp();
+	set_short("Spell Lab", "魔法研究室");
+	set_long(@C_LONG_DESCRIPTION
+这是银色之塔中专门研究魔法的研究室, 在这里你可以将你使用法术的心得做
+一番整理。你看到一整排的书桌, 一些初级魔法师正一边喃喃自语并将自己的心得
+写在自己的魔法书上。你可以在这里整理你对魔法的心得, 提升(advance) 你的魔
+法熟练度。
+C_LONG_DESCRIPTION
+	);
+    set( "no_monster", 1);
+	set( "light", 1 );
+	set( "exits", ([ 
+		"north" : MAGE"library" ]) );
+	reset();
+}
+
+void set_spell_level_exp()
+{
+	int exp, i;
+	
+	exp = MAX_GUILD_EXP;
+	spell_level_exp = allocate(MAX_GUILD_LVL);
+	for( i=MAX_GUILD_LVL-1; i>=0; i-- ) {
+		spell_level_exp[i] = exp;
+		switch( i ) {
+			case  0..1  : exp -= exp /  2; break;
+			case  2..5  : exp -= exp /  3; break;
+			case  6..9  : exp -= exp /  4; break;
+			case 10..19 : exp -= exp /  5; break;
+			case 20..29 : exp -= exp /  6; break;
+			case 30..39 : exp -= exp /  7; break;
+			case 40..49 : exp -= exp /  8; break;
+			case 50..59 : exp -= exp /  5; break;
+			default : break;
+		}
+	}
+}
+
+void init()
+{
+	add_action("do_advance", "advance");
+	add_action("do_cost", "cost");
+	add_action("do_help", "help");
+}
+
+int do_advance(string arg)
+{
+	int need_exp, exp, lvl, i;
+	mapping spell_lvls;
+	string *types;
+	
+	if( !arg ) return do_help("advance");
+	if( member_array(arg, MAGIC_TYPES) == -1 ) 
+		return notify_fail("没有这种魔法种类。\n");
+	lvl = (int)this_player()->query("spell_levels/"+arg);
+	exp = (int)this_player()->query("spell_exps/"+arg);
+	if( lvl >= MAX_GUILD_LVL ) {
+		write(	"你已经完全了解"+to_chinese(arg)+"的奥义了。\n");
+		return 1;
+	}
+	need_exp = spell_level_exp[lvl];
+	if( exp < need_exp ) {
+		write("你还需要 "+(need_exp-exp)+" 点"+to_chinese(arg)+"经验才能提升"+
+			to_chinese(arg)+"的熟练等级。\n" 
+);
+		return 1;
+	} else {
+		this_player()->set("spell_levels/"+arg, lvl+1);
+		lvl = 0;
+		for( i=0; i<sizeof(MAGIC_TYPES); i++)
+			lvl += this_player()->query("spell_levels/"+MAGIC_TYPES[i]);
+		lvl /= (sizeof(MAGIC_TYPES));
+		this_player()->set("spell_levels/guild", lvl);
+		write("经过一番整理, 你将你对"+to_chinese(arg)+"的心得仔细地写在魔法书上。\n"
+);
+		return 1;
+	}
+}
+
+int do_cost()
+{
+	int i;
+	write("提升各类魔法熟练等级所需的魔法经验...\n");
+	for( i=0; i<MAX_GUILD_LVL; i++ ) {
+		printf("  魔法熟练等级 %2d : %15d 点魔法经验。\n",i+1,spell_level_exp[i]);
+	}
+	return 1;
+}
+
+int do_help(string arg)
+{
+	if( !arg || arg != "advance" ) return 0;
+	write("Syntax: advance [ elemental | black-magic | misc ]\n\n"
+		"The command raise your magic level on 3 magic type.\n"
+		"Type cost to see how many experiences needed for each level.\n");
+	return 1;
+}
+

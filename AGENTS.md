@@ -588,6 +588,40 @@ efun exists in this driver for dirname-style string ops — use
 don't overwrite an existing one, extend it (prepend the local directory to
 whatever it already returns).
 
+**Timing gotcha (found on lib #12, es1_win): `get_include_path()` is NOT
+consulted for files compiled during PRELOAD.** Per the driver source
+(`compiler/internal/lexer_utils.cc`'s `init_include_path()`): "No VM
+context: keep the config-file include path as-is -- there is no master
+object to ask" — `compiler_vm_context` isn't set yet for at least some
+preload-time compiles, so the master apply is silently skipped and the
+`<local.h>` `#include` still fails to resolve for anything reached via
+preload (which, transitively, can be almost anything — a preloaded room
+inheriting a base that `#include`s the broken header). Symptom is
+confusing: no compile error shows anywhere obvious, because it surfaces
+much later, e.g. as an "Undefined function" error the first time a live
+feature actually calls the missing function — and if that first call
+happens inside a new connection's `logon()` chain, the DRIVER's own
+`new_conn_handler` swallows the error and just silently disconnects the
+user with NO message at all (see the diagnosis technique note right
+below). **If a `<local.h>` failure shows up in a file that's ever reached
+via preload (most `std/`-tree base classes are), don't rely on
+`get_include_path()` alone — also change that specific `#include
+<x.h>` to `#include "x.h"` (quotes)**, which resolves against the
+including file's own directory unconditionally, with no VM-context
+dependency at all.
+
+**Diagnosis technique for "server hangs / silently disconnects on
+connect, no error anywhere I can see"**: the LPC-level error IS being
+thrown (check `debug.log` in full, not just a filtered grep — the crucial
+line can be far from where you're looking) but the driver's
+`new_conn_handler` catches any error escaping a connection's `logon()`
+chain and disconnects with zero message to the client. If even
+`debug.log` seems clean, temporarily instrument the suspect function with
+`write("DEBUG A\n"); ... write("DEBUG B\n");` bracketing each statement,
+reboot, connect once, and see which markers printed — narrows the failure
+to one statement in seconds instead of guessing. Remove the instrumentation
+once found (same technique used for the securityd.lpc diagnosis in §8c).
+
 ### 8e. `tail` is not a real FluffOS efun (never was, in this driver)
 
 Seen on lib #1 (`cmds/wiz/tail.lpc`, non-fatal there — an unused admin

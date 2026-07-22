@@ -1,0 +1,121 @@
+   This file explains how the MudOS virtual room grid works and how to
+modify it for use in your own mudlib.
+   The virtual room grid system makes it possible to lay out large numbers
+of similar but not identical rooms without taking up a large quantity of
+disk space with room files. This is done by having a single room object
+with an initialization procedure that takes the coordinates of the virtual
+room as an argument and sets the exits and terrain appropriately, and
+sets the internal structure so that the room appears to have come from a
+unique file.
+   The single room object is /daemons/virtual/grid_server.c Instead of
+having a create function, it has an initialize function which takes an
+argument of the form x,y. Whenever the driver tries to load a virtual
+room, it clones a copy of grid_server.c and calls the initialize function
+passing the x,y as an argument. Based on this x,y argument, the virtual
+room sets its exits to: north, x-1,y: south, x+1,y; east, x,y+1; west, x,y-1.
+Note that the axes do NOT match the usual Cartesian system. Instead, the
+north-south coordinate is the first number, where larger numbers are south
+of smaller ones, and the east-west coordinate is the second number, larger
+numbers being east of smaller ones. This is done so that the map file is
+oriented normally, with north at the top of the file and the other directions
+accordingly.
+   Terrain and availability of exits are controlled by three input files
+and a daemon object. The three input files are grid.descs, grid.terrain,
+and grid.exits, all of which are in /d/grid/data. Grid.descs is a list of
+all the available short and long descriptions that virtual rooms can have.
+They are listed in pairs, with the short description on the first line and
+the long description on the second line. Each description has to fit on
+a single line.
+    Grid.terrain is a map, oriented with north at the top, showing the
+terrain type that is present at each x,y coordinate. The number of each
+room is the number of its short/long description pair in grid.descs. For
+example, if the grid.descs file was:
+
+A house
+Outside a white house.
+A deep dark pit
+You are at the bottom of a deep dark pit.
+Green grass
+You are roaming through green grass.
+
+and the grid.terrain file was:
+
+0 2
+2 1
+
+the room 0,0 would have the short description "A house", room 1,1 would have
+the description "A deep dark pit", and the other two rooms would have "Green
+grass." By changing the numbers on the map appropriately, you can alter the
+terrain that appears in each virtual room, and you can add more terrain
+types by adding onto the grid.descs file. Each number in the terrain map
+must have exactly one space between it and the next number, or the daemon
+object will not be able to handle it properly. Also, there must be no
+extraneous spaces on the beginning or end of the line
+   The third file "grid.exits" controls which exits are available in each
+virtual grid room. It is also a map, like grid.terrain, and each grid room
+has a number from 0 to 15 which indicates which exits are available. The
+number meanings are determined like this: 0 means all exits are available.
+For each exit you want to block off, add the following numbers to the exit
+code: north 8, south 4, east 2, west 1. Thus, a room with exit code 1 has
+all exits except west available. A room with exit code 4 has all exits
+except south available. You block off multiple exits by adding the numbers:
+thus a room with exit code 5 blocks of both south and west, leaving only
+north and east as available exits. A room with exit code 7 blocks off all
+exits except north, and a room with exit code 15 (the maximum) blocks off
+all exits. Again, each number must have exactly one space in between. An
+example exits map might look like this:
+
+9 8 10 9 8 10
+1 0 2 1 0 2
+1 0 0 0 0 2
+1 0 2 1 0 2
+5 4 4 4 4 6
+
+Note that the exit map does not have to be square: the system can handle
+rectangular grids. It does have to be the same size as the terrain map.
+The exit map is surrounded by exit codes which prevent you from moving
+off the map, which it should always do. Thus, all codes along the top
+edge should be 8 or greater, so that they block off north. Similarly,
+the left edge needs to block off west (1), the right edge blocks off
+east (2) and the bottom edge south (4). The corners should be 9,10,6,
+and 5, starting from top left and going clockwise.
+In this example map, the 2 1 pairs in the middle form a block in the
+center of the room. If you are in the 2 room, you cannot go east into
+the 1 room: if you are in the 1 room you cannot go west into the 2 room.
+You can only get from the left half of the room to the right half by
+passing through the gap in row 2 (remember the numbering starts at 0). This
+map might represent a mountain range with a single pass and valleys on
+either side.
+
+   Exits and terrain are controlled by the daemon object which is found as
+/daemons/virtual/terrain_daemon.c. When this object loads, it reads in
+the contents of these three files. First, it reads in the short and long
+descriptions and stores them in an array. Next, it reads in the terrain
+codes and stores them in a 2x2 array. Last, it reads in the exit codes and
+stores them in another 2x2 array.
+   The terrain daemon defines three procedures, which take an x,y pair as
+arguments and return the short description, long description, and exit code
+of the virtual room at that x,y coordinate. When a virtual room is cloned,
+the grid_server asks the terrain daemon for the descriptions and exits of
+the room based on its x,y coordinates and sets the description and exits
+appropriately.
+
+    Note that each virtual room defines as its exits (up to) four other
+virtual rooms. To interact real rooms with virtual rooms, you need to make
+a real room that has the same file name as a virtual room, and sets its
+exits to four virtual rooms. You do this by creating a room called
+x,y.grid.c and placing it in the directory /d/grid/rooms. For example,
+let x=11, y=7. In /d/grid/rooms, there is a file called 11,7.grid.c which
+sets 12,7.grid.c, 11,6.grid.c, 11,8.grid.c, and nmain.c as its exits.
+When a player is on North Main Street in Footown, when he moves North he
+steps onto 11,7.grid.c. Because there is a room file by that name in
+/d/grid/rooms, the real room is loaded and the exits are set by that
+file. Moving south will takes the player back to nmain.c. However, moving
+north will cause the driver to try to load the file /d/grid/10,7.grid.c,
+which doesn't exist. The driver, not finding the file, will load up the
+virtual room and move the player there. The virtual room will define its
+south exit to be 11,7.grid: when the player tries to move back south, the
+driver will find the real room /d/grid/11,7.grid.c and move the player
+there, from where he can get back into Footown.
+
+Comments, suggestions to Mobydick@TMI-2
