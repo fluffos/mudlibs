@@ -1270,3 +1270,12 @@ second — both listed for traceability):
   `DialogGame.cpp`, `MudSock.cpp`, etc. — a telnet client with dialogs,
   not LPC source). Skipped entirely, not run through the conversion
   pipeline.
+- `三国歪传.rar` (archive #31) — confirmed NOT an LPC mudlib: it's a
+  DikuMUD/Merc-lineage **compiled C server** ("三国歪传" by mrec, Taiwan
+  — a Three Kingdoms parody), `src/db.c`/`comm.c`/`fight.c`/`handler.c`
+  (classic Diku/Merc/ROM file names), `area/` world files with a
+  `directory.lst` index (Diku `.are` convention), zero `inherit`
+  statements anywhere in the whole tree (LPC's most basic keyword).
+  Fundamentally incompatible with this project's FluffOS/LPC pipeline —
+  it's a different server architecture entirely, not something that
+  needs UTF-8/registration fixes. Skipped entirely, not converted.
