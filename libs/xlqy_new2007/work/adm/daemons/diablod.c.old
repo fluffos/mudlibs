@@ -1,0 +1,1052 @@
+//by gamer@88 合成物品库 2003.10
+//需要同时修改forge.h和本文件
+//注意！！！！！！增加的前缀要按顺序！！！和forge.h中完全一致！！！！！！！
+
+#include <ansi.h>
+#include <forge.h>
+
+inherit F_DBASE;
+
+string *effect_one=({"dodge","parry","force","spells","attack","defense","armor"});
+
+string *effect_two=({"strength","courage","intelligence","spirituality","composure",
+		     "personality","constitution","karma","add_kee","add_sen","add_force","add_mana","magic_find"});
+		     
+string *effect_three_weapon=({"combat_blood_kee","combat_blood_sen","combat_blood_force","combat_blood_mana",
+				"parry_block_attack","add_spell_kee","add_spell_sen","add_spell_all","skill_double_damage"});
+				
+string *effect_three_armor=({"force_vs_damage","spells_vs_damage","anti_spell_kee","anti_spell_sen","anti_spell_all"});
+string *effect_three_all=({"add_max_kee","add_max_sen","add_max_force","add_max_mana","can_inset","add_all_skill",});
+		     	
+string *armors=({"armor","boots","cloth","hands","neck","shield","surcoat","wrists","finger","waist","head"});
+
+string *weapons=({"axe","blade","dagger","fork","hammer","mace","qin","rake","spear","staff",
+		   "stick","sword","throwing","whip","xiao"});
+
+int set_diablo_effect(int kind,int content,int level);
+void drop(object npc,object user,int obj_level,int npc_level);
+string random_file(string dir_path);
+object create_diablo_ob(string type,int kind,int level);
+void set_armors_prop(object obj,string type,int kind,int level);
+void set_weapons_prop(object obj,int kind,int level);
+void create()
+{
+	seteuid(getuid());
+	set("name", "暗黑精灵");
+	set("id", "diablod");	
+	
+}
+void diablo_drop(object npc,object user)
+{
+   int npc_exp,npc_dx,npc_total,npc_level;
+   int user_exp,user_dx,user_kar,user_total;
+   int obj_level=1;//装备等级
+   int user_success;//成功机率
+   int user_kar_and_success;
+   int npc_mf;
+   if (!npc) return;
+   if (!userp(user)) return;
+   if(!npc->query("is_diablo_npc")) return;
+   //获得npc属性
+   npc_exp=npc->query("combat_exp");
+   npc_dx=npc->query("daoxing");
+   npc_mf=npc->query("magic_find");		//以百为基数
+   npc_total=npc_exp+npc_dx;//把武学和道行相加.用于判断掉出装备的等级
+   //获得user属性
+   user_exp=user->query("combat_exp");
+   user_dx=user->query("daoxing");
+   user_total=user_exp+user_dx;
+   user_kar=user->query_kar()*100;              //以万为基数
+   
+   user_success=user->query_temp("apply/magic_find");  //以万为基数
+   user_kar_and_success=user_success+user_kar;
+   if(user->query("special_skill/greedy"))
+   	user_kar_and_success+=user_kar_and_success/4;       //给饭桶加个用处...
+ 
+ ///装备的等级分为9级，只和npc有关
+   if(npc_total<500*1000)
+   	npc_level=1;
+   else if(npc_total<1000*1000)
+   	npc_level=2;
+   else if (npc_total<1500*1000)
+   	npc_level=3;
+    else if (npc_total<2400*1000)
+   	npc_level=4;
+    else if (npc_total<4000*1000)
+   	npc_level=5;
+    else if (npc_total<6000*1000)
+   	npc_level=6;
+    else if (npc_total<10000*1000)
+   	npc_level=7;
+    else if (npc_total<15000*1000)
+   	npc_level=8;	
+    else npc_level=9;
+       
+    
+   //判断是否应该掉出装备.
+ //  if (wizardp(user)||npc_total/2000>random(user_total/1000)&&random(2)) //算法简单哈哈,杀比自己菜很多的是很难出东西的,级别相同1/4,两倍才有1/2
+ 	if(1)
+   {
+   	//装备的种类分为八种，只和user的magic find有关。//嗯和npc也应该有关！
+   	int success=user_kar_and_success/10+random(user_kar_and_success)/10;
+   
+   	if (random(success*npc_mf)/1000>random(31852)) 	 obj_level=UNIQUES;
+ //  	else if (success*npc_mf/1000>random(6000))  obj_level=SET;
+   	else if (random(success*npc_mf)/1000>random(18347))	 obj_level=RARE;
+   	else if (random(success*npc_mf)/1000>random(13562))  obj_level=SUPERIOR;
+   	else if (random(success*npc_mf)/1000>random(6379))  obj_level=NORMAL;
+   	else if (random(success*npc_mf)/1000>random(3754))   obj_level=LOW_QUALITY;
+   	else if (random(success*npc_mf)/1000>random(1860))   obj_level=CRACKED;
+   	else obj_level=CRUDE;
+   	drop(npc,user,obj_level,npc_level);
+    
+   }
+}
+
+void drop(object npc,object user,int obj_level,int npc_level)
+{
+   
+   object env;
+   object obj;
+   string temp_str;
+   string dir_path;//存放物品文件的目录名
+   string file_name;
+   string file_full_name;
+   env=environment(npc);
+   if (!env) return ;
+   if (random(50)>25) temp_str="armors";
+     	else temp_str="weapons";
+   if(obj_level==SET) //套装
+   {   
+     
+   dir_path="/obj/diablo_ob/set/"+temp_str+"/"+npc_level+"";
+   file_name=random_file(dir_path);
+   file_full_name=dir_path+"/"+file_name;
+   //判断是否存在file
+   if (file_size(file_full_name) <0) 
+   {
+   	message_vision(file_full_name,npc);
+   	return ;
+   }
+   obj=new(file_full_name);
+   obj->move(env);
+   message_vision(GRN+"从$N身上掉了出来一"+obj->query("unit")
+                     +obj->name()+""HIG"「品级：套装 ，等级:"+npc_level+"」\n"+NOR,npc);
+   CHANNEL_D->do_channel(this_object(),"sys",user->query("name")+"得到一"+obj->query("unit")
+                     +obj->name()+""HIG"「品级：套装 ，等级:"+npc_level+"」\n");
+     return;
+    }
+    else 
+    {
+    	
+    	obj=create_diablo_ob(temp_str,obj_level,npc_level);
+    	obj->set("kind",obj_level);
+    	obj->set("level",npc_level);
+    	obj->set("no_put",1);
+   	 if(obj)
+   	  obj->move(env);
+         message_vision(GRN+"从$N身上掉了出来一"+obj->query("unit")
+                     +obj->name()+""HIC"「品级:"+obj_level+"，等级："+npc_level+" 」\n"+NOR,npc);
+          CHANNEL_D->do_channel(this_object(),"sys",user->query("name")+"得到一"+obj->query("unit")
+                     +obj->name()+""HIC"「品级:"+obj_level+"，等级："+npc_level+"」\n");
+         if(obj_level==UNIQUES&&!wizardp(user))
+          CHANNEL_D->do_channel(this_object(),"rumor",HIR+user->query("name")+NOR+HIM"得到一"+obj->query("unit")+NOR
+                    		 +obj->query("name")+NOR"\n");
+     return;
+   }
+}
+
+string random_file(string dir_path)
+{
+   mixed *file;
+   int j;
+   file = get_dir( dir_path+"/*.c", -1 );
+   if( !sizeof(file) ) return "";
+   j = random(sizeof(file));
+   return file[j][0];
+}
+
+object create_diablo_ob(string type,int kind,int level)
+{
+	object obj;
+	string types;
+	switch(type)
+	{	case "armors":
+		{	
+		types=armors[random(sizeof(armors))];
+		obj=new("/obj/diablo_ob/armors/"+types+".c");
+		set_armors_prop(obj, types,kind, level);
+		
+		break;
+		}
+		case "weapons":
+			{
+		types=weapons[random(sizeof(weapons))];
+		obj=new("/obj/diablo_ob/weapons/"+types+".c");
+		set_weapons_prop(obj,kind,level);
+		break;
+		}
+		default :
+		obj=new("/d/obj/armor/shoupi.c");
+	}	
+	return obj;
+}
+void set_armors_prop(object obj,string type,int kind,int level)
+{
+	int effect;
+	int lvl_content;
+	string content;	
+	switch(kind)
+	{
+				case CRUDE:
+				case CRACKED:
+				 obj->set("identification",1);
+				 obj->set("name",HIB"粗糙"+obj->query("name")+NOR);
+				   break;
+				case LOW_QUALITY:
+				 	
+				  
+				    lvl_content=LEVEL_1_EFF;
+				   effect=set_diablo_effect(LOW_QUALITY,lvl_content,level);      
+				   content=effect_one[lvl_content-50];
+				   obj->add("diablo_prop/"+content,effect);	
+				   obj->set("identification",1);
+				    obj->set("name",HIB"低劣"+obj->query("name")+NOR);
+				   break; 
+				case NORMAL:
+				   
+				  
+				    lvl_content=LEVEL_1_EFF;
+				   effect=set_diablo_effect(NORMAL,lvl_content,level);
+				   content=effect_one[lvl_content-50];      
+				    obj->add("diablo_prop/"+content,effect);
+				    
+				     if(!random(9))
+				{  lvl_content=LEVEL_1_EFF;
+				    content=effect_one[lvl_content-50];
+				   effect=set_diablo_effect(LOW_QUALITY,lvl_content,level);      
+				  obj->add("diablo_prop/"+content,effect);	
+				}
+				
+				     obj->set("identification",1);	
+				      obj->set("name",GRN"普通"+obj->query("name")+NOR);
+				   break;    
+				case SUPERIOR:
+				 			
+				    lvl_content=LEVEL_1_EFF;
+				   
+				   effect=set_diablo_effect(SUPERIOR,lvl_content,level);  
+				   content=effect_one[lvl_content-50];    
+				   obj->add("diablo_prop/"+content,effect);	
+				  if(!random(7))
+				{  
+				    lvl_content=LEVEL_1_EFF;
+				    content=effect_one[lvl_content-50];  
+				    effect=set_diablo_effect(NORMAL,lvl_content,level);      
+				   obj->add("diablo_prop/"+content,effect);	
+				}
+				   obj->set("name",HIM"优质"+obj->query("name")+NOR);
+				   if(random(2))
+				
+				{	lvl_content=LEVEL_2_EFF;
+					content=effect_two[lvl_content-100];
+					}	
+				   else 
+				  
+				 {   lvl_content=LEVEL_1_EFF;
+					content=effect_one[lvl_content-50];
+				}
+				   effect=set_diablo_effect(SUPERIOR,lvl_content,level);      
+				   obj->add("diablo_prop/"+content,effect);	
+				   if(!random(9))
+				{  lvl_content=LEVEL_2_EFF;
+				    content=effect_two[lvl_content-100];
+				   effect=set_diablo_effect(NORMAL,lvl_content,level);      
+				  obj->add("diablo_prop/"+content,effect);	
+				}	
+				   break;     
+				   
+				case RARE:
+				 
+				  
+				   lvl_content=LEVEL_1_EFF;
+				   content=effect_one[lvl_content-50];
+				   effect=set_diablo_effect(RARE,lvl_content,level);      
+				     obj->add("diablo_prop/"+content,effect);	
+				     if(!random(5))
+				{  lvl_content=LEVEL_1_EFF;
+				    content=effect_one[lvl_content-50];
+				   effect=set_diablo_effect(SUPERIOR,lvl_content,level);      
+				  obj->add("diablo_prop/"+content,effect);	
+				}
+				    obj->set("name",HIY"稀有"+obj->query("name")+NOR);
+				   if(random(3))
+				
+				{	lvl_content=LEVEL_2_EFF;
+					content=effect_two[lvl_content-100];
+					}
+				   else 
+				{  
+				    lvl_content=LEVEL_1_EFF;
+				    content=effect_one[lvl_content-50];
+				}
+				   effect=set_diablo_effect(RARE,lvl_content,level);      
+				     obj->add("diablo_prop/"+content,effect);		
+				   if(!random(7))
+				{  lvl_content=LEVEL_2_EFF;
+				    content=effect_two[lvl_content-100];
+				   effect=set_diablo_effect(SUPERIOR,lvl_content,level);      
+				  obj->add("diablo_prop/"+content,effect);	
+				}	
+				   break;     
+				   
+				case UNIQUES:
+				 
+				 
+				    lvl_content=LEVEL_1_EFF;
+				    content=effect_one[lvl_content-50];
+				   effect=set_diablo_effect(UNIQUES,lvl_content,level);      
+				    obj->add("diablo_prop/"+content,effect);	
+				  obj->set("name",YEL"绝世"+obj->query("name")+NOR);
+				if(!random(3))
+				{  lvl_content=LEVEL_1_EFF;
+				    content=effect_one[lvl_content-50];
+				   effect=set_diablo_effect(RARE,lvl_content,level);      
+				  obj->add("diablo_prop/"+content,effect);	
+				}
+				    lvl_content=LEVEL_2_EFF;
+				    content=effect_two[lvl_content-100];
+				   effect=set_diablo_effect(UNIQUES,lvl_content,level);      
+				     obj->add("diablo_prop/"+content,effect);		
+				   if(!random(5))
+				{  lvl_content=LEVEL_2_EFF;
+				    content=effect_two[lvl_content-100];
+				   effect=set_diablo_effect(RARE,lvl_content,level);      
+				  obj->add("diablo_prop/"+content,effect);	
+				}
+				 if(!random(7))
+				{ if(random(2)) 
+				  {	lvl_content=LEVEL_3_ARMOR_EFF;
+				    content=effect_three_armor[lvl_content-300];
+				   effect=set_diablo_effect(RARE,lvl_content,level);      
+				  obj->add("diablo_prop/"+content,effect);	
+				}
+				else
+				{
+					lvl_content=LEVEL_3_ALL_EFF;
+				    content=effect_three_all[lvl_content-400];
+				   effect=set_diablo_effect(RARE,lvl_content,level);      
+				  obj->add("diablo_prop/"+content,effect);	
+					
+				}
+				}
+				   if(random(3))
+				   	{	
+				   	if(random(2))
+				    
+				     		{
+				     		lvl_content=LEVEL_3_ARMOR_EFF;
+				     		content=effect_three_armor[lvl_content-300];
+				     	}
+				     	else 	
+				    
+				   	  {	
+				   	  		lvl_content=LEVEL_3_ALL_EFF;
+				   		  content=effect_three_all[lvl_content-400];
+				   	}
+					}
+				   else  
+				
+				     {
+				     	lvl_content=LEVEL_2_EFF;
+				     	content=effect_two[lvl_content-100];
+				}
+				   effect=set_diablo_effect(UNIQUES,lvl_content,level);      
+				    obj->add("diablo_prop/"+content,effect);		
+				   break;      
+						
+			}
+
+		
+	switch(type)
+	{	
+		
+		case "armor" :
+		{	
+			switch(kind)
+			{
+				
+				case CRUDE:
+				   obj->set("diablo_prop/armor", 10+2*level+random(level));
+				   break;
+				case CRACKED:
+				   obj->set("diablo_prop/armor", 15+3*level+random(level));	
+				   break;
+				case LOW_QUALITY:
+				   obj->set("diablo_prop/armor",20+5*level+random(level));	
+				  
+				   break; 
+				case NORMAL:
+				   obj->set("diablo_prop/armor", 25+7*level+random(level));	
+				  
+				   break;    
+				case SUPERIOR:
+				    obj->set("diablo_prop/armor", 30+10*level+random(level));	
+				  				   	
+				   break;     
+				   
+				case RARE:
+				    obj->set("diablo_prop/armor",35+15*level+random(level));	
+				   				   	
+				   break;     
+				   
+				case UNIQUES:
+				   obj->set("diablo_prop/armor",45+20*level+random(level));	
+				  
+				   break;      
+						
+			}
+		}
+		break;	
+		case "boots" :
+		{	
+			switch(kind)
+			{
+				case CRUDE:
+				   obj->set("diablo_prop/armor", 1+level+random(level));
+				   break;
+				case CRACKED:
+				   obj->set("diablo_prop/armor", 5+level+random(level));	
+				   break;
+				case LOW_QUALITY:
+				    obj->set("diablo_prop/armor", 10+3*level+random(level));	
+				  
+				   break; 
+				case NORMAL:
+				   obj->set("diablo_prop/armor", 12+5*level+random(level));	
+				  
+				   break;    
+				case SUPERIOR:
+				   obj->set("diablo_prop/armor",15+7*level+random(level));	
+				  				   	
+				   break;     
+				   
+				case RARE:
+				   obj->set("diablo_prop/armor", 20+9*level+random(level));	
+				   				   	
+				   break;     
+				   
+				case UNIQUES:
+				   obj->set("diablo_prop/armor", 30+12*level+random(level));	
+				  
+				   break;      
+						
+			}
+		}
+		break;	
+		case "cloth" :
+		{	
+			switch(kind)
+			{
+				case CRUDE:
+				    obj->set("diablo_prop/armor", 5+2*level+random(level));
+				   break;
+				case CRACKED:
+				   obj->set("diablo_prop/armor", 10+3*level+random(level));	
+				   break;
+				case LOW_QUALITY:
+				    obj->set("diablo_prop/armor", 15+4*level+random(level));	
+				  
+				   break; 
+				case NORMAL:
+				   obj->set("diablo_prop/armor", 20+6*level+random(level));	
+				  
+				   break;    
+				case SUPERIOR:
+				   obj->set("diablo_prop/armor", 25+8*level+random(level));	
+				  				   	
+				   break;     
+				   
+				case RARE:
+				  obj->set("diablo_prop/armor", 30+12*level+random(level));	
+				   				   	
+				   break;     
+				   
+				case UNIQUES:
+				    obj->set("diablo_prop/armor", 40+15*level+random(level));	
+				  
+				   break;      
+						
+			}
+		}
+		break;	
+		case "hands" :
+		{	
+			switch(kind)
+			{
+				case CRUDE:
+				   obj->set("diablo_prop/armor",1+level+random(level));
+				   break;
+				case CRACKED:
+				    obj->set("diablo_prop/armor", 5+level+random(level));	
+				   break;
+				case LOW_QUALITY:
+				   obj->set("diablo_prop/armor", 10+2*level+random(level));	
+				  
+				   break; 
+				case NORMAL:
+				   obj->set("diablo_prop/armor",15+3*level+random(level));	
+				  
+				   break;    
+				case SUPERIOR:
+				   obj->set("diablo_prop/armor", 20+5*level+random(level));	
+				  				   	
+				   break;     
+				   
+				case RARE:
+				  obj->set("diablo_prop/armor",25+7*level+random(level));	
+				   				   	
+				   break;     
+				   
+				case UNIQUES:
+				    obj->set("diablo_prop/armor", 35+10*level+random(level));	
+				  
+				   break;      
+						
+			}
+		}
+		break;	
+		case "neck" :
+		{	
+			switch(kind)
+			{
+				case CRUDE:
+				    obj->set("diablo_prop/armor", 1+level+random(level));
+				   break;
+				case CRACKED:
+				    obj->set("diablo_prop/armor", 5+level+random(level));	
+				   break;
+				case LOW_QUALITY:
+				   obj->set("diablo_prop/armor", 10+2*level+random(level));	
+				  
+				   break; 
+				case NORMAL:
+				    obj->set("diablo_prop/armor", 15+3*level+random(level));	
+				  
+				   break;    
+				case SUPERIOR:
+				 obj->set("diablo_prop/armor", 20+5*level+random(level));	
+				  				   	
+				   break;     
+				   
+				case RARE:
+				  obj->set("diablo_prop/armor", 25+7*level+random(level));	
+				   				   	
+				   break;     
+				   
+				case UNIQUES:
+				   obj->set("diablo_prop/armor",35+10*level+random(level));	
+				  
+				   break;      
+						
+			}
+		}
+		break;	
+		case "shield" :
+		{	
+			switch(kind)
+			{
+				case CRUDE:
+				    obj->set("diablo_prop/armor", 5+2*level+random(level));
+				   break;
+				case CRACKED:
+				  obj->set("diablo_prop/armor", 10+3*level+random(level));	
+				   break;
+				case LOW_QUALITY:
+				   obj->set("diablo_prop/armor", 15+5*level+random(level));	
+				  
+				   break; 
+				case NORMAL:
+				  obj->set("diablo_prop/armor", 20+7*level+random(level));	
+				  
+				   break;    
+				case SUPERIOR:
+				  obj->set("diablo_prop/armor", 30+10*level+random(level));	
+				  				   	
+				   break;     
+				   
+				case RARE:
+				 obj->set("diablo_prop/armor",40+12*level+random(level));	
+				   				   	
+				   break;     
+				   
+				case UNIQUES:
+				   obj->set("diablo_prop/armor",50+15*level+random(level));	
+				  
+				   break;      
+						
+			}
+		}
+		break;	
+		case "surcoat" :
+		{	
+			switch(kind)
+			{
+				case CRUDE:
+				   obj->set("diablo_prop/armor", 5+level+random(level));
+				   break;
+				case CRACKED:
+				  obj->set("diablo_prop/armor", 10+level+random(level));	
+				   break;
+				case LOW_QUALITY:
+				  obj->set("diablo_prop/armor",15+2*level+random(level));	
+				  
+				   break; 
+				case NORMAL:
+				  obj->set("diablo_prop/armor",20+3*level+random(level));	
+				  
+				   break;    
+				case SUPERIOR:
+				    obj->set("diablo_prop/armor", 25+5*level+random(level));	
+				  				   	
+				   break;     
+				   
+				case RARE:
+				  obj->set("diablo_prop/armor",30+7*level+random(level));	
+				   				   	
+				   break;     
+				   
+				case UNIQUES:
+				 obj->set("diablo_prop/armor",40+10*level+random(level));	
+				  
+				   break;      
+						
+			}
+		}
+		break;	
+		case "wrists" :
+		{	
+			switch(kind)
+			{
+				case CRUDE:
+				   obj->set("diablo_prop/armor", 1+level+random(level));
+				   break;
+				case CRACKED:
+				  obj->set("diablo_prop/armor", 5+level+random(level));	
+				   break;
+				case LOW_QUALITY:
+				  obj->set("diablo_prop/armor", 7+2*level+random(level));	
+				  
+				   break; 
+				case NORMAL:
+				   obj->set("diablo_prop/armor", 10+3*level+random(level));	
+				  
+				   break;    
+				case SUPERIOR:
+				   obj->set("diablo_prop/armor", 15+5*level+random(level));	
+				  				   	
+				   break;     
+				   
+				case RARE:
+				    obj->set("diablo_prop/armor",20+7*level+random(level));	
+				   				   	
+				   break;     
+				   
+				case UNIQUES:
+				    obj->set("diablo_prop/armor", 30+10*level+random(level));	
+				  
+				   break;      
+						
+			}
+		}
+		break;	
+		case "finger" :
+		{	
+			switch(kind)
+			{
+				case CRUDE:
+				   obj->set("diablo_prop/armor",1+level+random(level));
+				   break;
+				case CRACKED:
+				   obj->set("diablo_prop/armor", 3+level+random(level));	
+				   break;
+				case LOW_QUALITY:
+				  obj->set("diablo_prop/armor",5+2*level+random(level));	
+				  
+				   break; 
+				case NORMAL:
+				   obj->set("diablo_prop/armor", 10+3*level+random(level));	
+				  
+				   break;    
+				case SUPERIOR:
+				   obj->set("diablo_prop/armor", 15+4*level+random(level));	
+				  				   	
+				   break;     
+				   
+				case RARE:
+				   obj->set("diablo_prop/armor", 20+6*level+random(level));	
+				   				   	
+				   break;     
+				   
+				case UNIQUES:
+				    obj->set("diablo_prop/armor", 30+8*level+random(level));	
+				  
+				   break;      
+						
+			}
+		}
+		break;	
+		case "waist" :
+		{	
+			switch(kind)
+			{
+				case CRUDE:
+				 obj->set("diablo_prop/armor", 1+level+random(level));
+				   break;
+				case CRACKED:
+				 obj->set("diablo_prop/armor", 3+2*level+random(level));	
+				   break;
+				case LOW_QUALITY:
+				  obj->set("diablo_prop/armor", 5+3*level+random(level));	
+				  
+				   break; 
+				case NORMAL:
+				  obj->set("diablo_prop/armor",7+5*level+random(level));	
+				  
+				   break;    
+				case SUPERIOR:
+				  obj->set("diablo_prop/armor",10+7*level+random(level));	
+				  				   	
+				   break;     
+				   
+				case RARE:
+				  obj->set("diablo_prop/armor", 15+10*level+random(level));	
+				   				   	
+				   break;     
+				   
+				case UNIQUES:
+				 obj->set("diablo_prop/armor", 25+15*level+random(level));	
+				  
+				   break;      
+						
+			}
+		}
+		break;	
+		case "head" :
+		{	
+			switch(kind)
+			{
+				case CRUDE:
+				  obj->set("diablo_prop/armor", 1+level+random(level));
+				   break;
+				case CRACKED:
+				   obj->set("diablo_prop/armor",3+2*level+random(level));	
+				   break;
+				case LOW_QUALITY:
+				  obj->set("diablo_prop/armor", 5+3*level+random(level));	
+				  
+				   break; 
+				case NORMAL:
+				   obj->set("diablo_prop/armor", 7+5*level+random(level));	
+				  
+				   break;    
+				case SUPERIOR:
+				  obj->set("diablo_prop/armor",10+8*level+random(level));	
+				  				   	
+				   break;     
+				   
+				case RARE:
+				 obj->set("diablo_prop/armor", 15+12*level+random(level));	
+				   				   	
+				   break;     
+				   
+				case UNIQUES:
+				    obj->set("diablo_prop/armor",25+15*level+random(level));	
+				  
+				   break;      
+						
+			}
+		}
+		break;	
+		
+		
+		}
+	
+}
+void set_weapons_prop(object obj,int kind,int level)
+{
+	int effect;
+	int lvl_content;
+	string content;
+	switch(kind)
+	{
+				case CRUDE:
+				   obj->set("diablo_prop/damage", 5+3*level+random(level));
+				    obj->set("identification",1);
+				     obj->set("name",HIB"粗糙"+obj->query("name")+NOR);
+				     break;
+				case CRACKED:
+				   obj->set("diablo_prop/damage",  10+5*level+random(level));
+				    obj->set("identification",1);
+				     obj->set("name",HIB"粗糙"+obj->query("name")+NOR);
+				   break;
+				case LOW_QUALITY:
+				  obj->set("diablo_prop/damage", 15+8*level+random(2*level));
+				
+				     lvl_content=LEVEL_1_EFF;
+				     content=effect_one[lvl_content-50];
+				   effect=set_diablo_effect(LOW_QUALITY,lvl_content,level);      
+				  obj->add("diablo_prop/"+content,effect);	
+				   obj->set("identification",1);
+				    obj->set("name",HIB"低劣"+obj->query("name")+NOR);
+				   break; 
+				case NORMAL:
+				   obj->set("diablo_prop/damage",  20+10*level+random(3*level));
+				    lvl_content=LEVEL_1_EFF;
+				    content=effect_one[lvl_content-50];
+				   effect=set_diablo_effect(NORMAL,lvl_content,level);      
+				  obj->add("diablo_prop/"+content,effect);	
+				  if(!random(9))
+				{  lvl_content=LEVEL_1_EFF;
+				    content=effect_one[lvl_content-50];
+				   effect=set_diablo_effect(LOW_QUALITY,lvl_content,level);      
+				  obj->add("diablo_prop/"+content,effect);	
+				}
+				   obj->set("identification",1);
+				    obj->set("name",GRN"普通"+obj->query("name")+NOR);
+				   break;    
+				case SUPERIOR:
+				 obj->set("diablo_prop/damage", 25+12*level+random(4*level));
+				   lvl_content=LEVEL_1_EFF;
+				   content=effect_one[lvl_content-50];
+				   effect=set_diablo_effect(SUPERIOR,lvl_content,level);      
+				  obj->add("diablo_prop/"+content,effect);
+				   if(!random(7))
+				{  lvl_content=LEVEL_1_EFF;
+				    content=effect_one[lvl_content-50];
+				   effect=set_diablo_effect(NORMAL,lvl_content,level);      
+				  obj->add("diablo_prop/"+content,effect);	
+				}
+				  
+				  
+				  obj->set("name",HIM"优质"+obj->query("name")+NOR);
+				   if(random(2))
+				     {
+				     	lvl_content=LEVEL_2_EFF;
+				     	content=effect_two[lvl_content-100];
+				}
+				   else   
+				   {
+				   	 lvl_content=LEVEL_1_EFF;
+				   	 content=effect_one[lvl_content-50];
+				   	}
+				   effect=set_diablo_effect(SUPERIOR,lvl_content,level);      
+				  obj->add("diablo_prop/"+content,effect);
+				   if(!random(9))
+				{  lvl_content=LEVEL_2_EFF;
+				  content=effect_two[lvl_content-100];
+				   effect=set_diablo_effect(NORMAL,lvl_content,level);      
+				  obj->add("diablo_prop/"+content,effect);	
+				} 	
+				   break;     
+				   
+				case RARE:
+				 obj->set("diablo_prop/damage", 30+15*level+random(5*level));
+				     lvl_content=LEVEL_1_EFF;
+				     content=effect_one[lvl_content-50];
+				   effect=set_diablo_effect(RARE,lvl_content,level);      
+				   obj->add("diablo_prop/"+content,effect);
+				     if(!random(5))
+				{  lvl_content=LEVEL_1_EFF;
+				    content=effect_one[lvl_content-50];
+				   effect=set_diablo_effect(SUPERIOR,lvl_content,level);      
+				  obj->add("diablo_prop/"+content,effect);	
+				}
+				 				   
+				     obj->set("name",HIY"稀有"+obj->query("name")+NOR);
+				   if(random(3))
+				 {  lvl_content=LEVEL_2_EFF;
+				 	content=effect_two[lvl_content-100];
+				}
+				   else
+				   {  lvl_content=LEVEL_1_EFF;
+				   	content=effect_one[lvl_content-50];
+				}
+				   effect=set_diablo_effect(RARE,lvl_content,level);      
+				   obj->add("diablo_prop/"+content,effect);	
+				    if(!random(7))
+				{  lvl_content=LEVEL_2_EFF;
+				  content=effect_two[lvl_content-100];
+				   effect=set_diablo_effect(SUPERIOR,lvl_content,level);      
+				  obj->add("diablo_prop/"+content,effect);	
+				} 		
+				   break;     
+				   
+				case UNIQUES:
+				   obj->set("diablo_prop/damage",  40+20*level+random(6*level));
+				   lvl_content=LEVEL_1_EFF;
+				   content=effect_one[lvl_content-50];
+				   effect=set_diablo_effect(UNIQUES,lvl_content,level);      
+				  obj->add("diablo_prop/"+content,effect);	
+				   if(!random(3))
+				{  lvl_content=LEVEL_1_EFF;
+				    content=effect_one[lvl_content-50];
+				   effect=set_diablo_effect(RARE,lvl_content,level);      
+				  obj->add("diablo_prop/"+content,effect);	
+				}
+				 if(!random(5))
+				{  lvl_content=LEVEL_2_EFF;
+				    content=effect_two[lvl_content-100];
+				   effect=set_diablo_effect(RARE,lvl_content,level);      
+				  obj->add("diablo_prop/"+content,effect);	
+				} 
+				 if(!random(7))
+				{ if(random(2)) 
+				  {	lvl_content=LEVEL_3_WEAPON_EFF;
+				    content=effect_three_weapon[lvl_content-200];
+				   effect=set_diablo_effect(RARE,lvl_content,level);      
+				  obj->add("diablo_prop/"+content,effect);	
+				}
+				else
+				{
+					lvl_content=LEVEL_3_ALL_EFF;
+				    content=effect_three_all[lvl_content-400];
+				   effect=set_diablo_effect(RARE,lvl_content,level);      
+				  obj->add("diablo_prop/"+content,effect);	
+					
+				}
+				}
+				   obj->set("name",YEL"绝世"+obj->query("name")+NOR);
+				   lvl_content=LEVEL_2_EFF;
+				   content=effect_two[lvl_content-100];
+				   effect=set_diablo_effect(UNIQUES,lvl_content,level);      
+				   obj->add("diablo_prop/"+content,effect);	
+				   
+				   if(random(3))
+				    { if(random(2))	
+				    {	lvl_content=LEVEL_3_WEAPON_EFF;
+				 	   content=effect_three_weapon[lvl_content-200];
+					}
+				    	else {
+				    		  lvl_content=LEVEL_3_ALL_EFF;
+				    		  content=effect_three_all[lvl_content-400];
+				    		}
+					}
+				   else    
+				   { 	
+				   	lvl_content=LEVEL_2_EFF;
+				   	content=effect_two[lvl_content-100];
+				   }
+				   				   
+				   effect=set_diablo_effect(UNIQUES,lvl_content,level);      
+				   obj->add("diablo_prop/"+content,effect);
+				   
+				   	
+				   break;      
+						
+			}	
+	
+}
+int set_diablo_effect(int kind,int content,int level)
+{
+	
+	switch(content)
+	  		{
+	  			
+	  			case ARMOR_EFF :
+	  			{	return 2*kind+2*random(level+1);
+	  			break;
+	  			}
+	  			case DODGE_EFF :
+	  			case PARRY_EFF :
+	  			case FORCE_EFF :
+	  			case SPELLS_EFF :
+	  			{	return level+3*kind+2*random(level+1);
+	  			break;
+	  		}
+	  			case ATTACK_EFF:
+	  			case DEFENSE_EFF :
+	  		{		return level+2*kind+random(level+1);
+	  			break;
+	  		}	
+	  			
+	  			//////////////////////////////////////////////////
+	  			
+	  			case STR_EFF:
+		  		{	return level+2*kind+random(level+1);
+		  			break;
+		  		}
+	  			case INT_EFF :
+	  			
+	  			case SPI_EFF :
+	  				
+	  			case PER_EFF:
+	  				  			
+	  			case CON_EFF:
+	  				
+	  			case KAR_EFF :
+	  			{	return kind+random(level+1);
+	  			break;
+	  		}
+	  			case CPS_EFF :
+	  			case COR_EFF :
+	  			{	return 2*kind+2*random(level+1);
+	  			break;}
+	  			case MAGIC_FIND:
+	  			{	return 100*level+800*kind+800*random(level+1); 
+	  			
+	  			break;}
+	  			case ADD_KEE:
+	  			case ADD_SEN:
+	  			{	return 8*level+15*kind+random(kind*level);
+	  				break;
+	  			}
+	  			case ADD_FORCE:
+	  			case ADD_MANA:
+	  			{	return 10*level+15*kind+random(kind*level);
+	  				break;
+	  			}
+	  			///////////////////极品////////////////////////////
+	  			
+	  			case CAN_INSET :
+	  		{	return 1+random(3);
+	  				break;}
+	  			case ADD_ALL_SKILL :
+	  			{
+	  				return level+random(level);
+	  				break;
+	  			}
+	  			
+	  			case PARRY_BLOCK_ATTACK:
+	  			case SKILL_DOUBLE_DAMAGE:
+	  			{	return 1000*(kind-6)+100*level+random(100*level);
+	  				break;
+	  			}
+	  			case FORCE_VS_DAMAGE:
+	  			case SPELLS_VS_DAMAGE:
+	  			case ANTI_SPELL_ALL:
+	  			case ADD_SPELL_ALL:
+	  			{	return 500*(kind-6)+50*level+random(50*level);
+	  				break;
+	  			}
+	  			case ANTI_SPELL_KEE:  
+				case ANTI_SPELL_SEN:
+				case ADD_SPELL_KEE:
+				case ADD_SPELL_SEN:
+				case ADD_MAX_MANA:
+				case ADD_MAX_FORCE:
+				case ADD_MAX_KEE:
+				case ADD_MAX_SEN:
+				case COMBAT_BLOOD_KEE:
+				case COMBAT_BLOOD_SEN:
+				case COMBAT_BLOOD_FORCE:
+				case COMBAT_BLOOD_MANA:
+				{	return 1000*(kind-6)+100*level+random(100*level);
+					break;
+				}
+	  		
+	  			
+	  		}
+	  			  	
+	
+}

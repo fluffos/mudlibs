@@ -1,0 +1,1143 @@
+// hsmw.c
+// by theone 2006.6.7
+
+#include <ansi.h>
+inherit JOBNPC;
+
+string *dirs = ({
+"/d/qujing/wuji",
+"/d/qujing/baoxiang",
+"/d/qujing/tianzhu",
+"/d/qujing/nuerguo",
+"/d/qujing/yuhua",
+"/d/qujing/jinping",
+"/d/qujing/wuzhuang",
+"/d/qujing/jisaiguo",
+"/d/qujing/qinfa",
+"/d/qujing/biqiu",
+"/d/qujing/zhuzi",
+"/d/qujing/chechi",
+"/d/gao",
+"/d/jz",
+});
+
+string *family_name_z = ({
+	"方寸山三星洞",
+	"幻世勇者",
+	"将军府",
+	"南海普陀山",
+	"蜀山剑派",
+	"五庄观",
+	"月宫",
+});
+
+string *family_name_x = ({
+	"东海龙宫",
+	"大雪山",
+	"幻世魔导",
+	"盘丝洞",
+	"陷空山无底洞",
+	"阎罗地府",
+	"火云洞",
+});
+
+string *dunfa = ({
+	"jile",             //putuo
+	"shuidun",          //dragon
+	"townportal",       //hell
+	"move",             //hsl_magic
+	"fengshi",          //hsl_might
+	"huadun",           //moon
+	"ygbh",             //pansi
+	"tudun",            //wdd
+	"yundun",           //lingtai
+	"huodun",           //huoyun
+	"escape",           //xueshan
+	"wuxing",           //wzg
+	"tuoqiao",           //shushan
+	"huanying",
+});
+
+string *summon = ({
+	"golem",
+	"guardian",
+	"hufa",
+	"invocation",
+	"fenshen",
+});
+
+object *players_k=({});  //k this_object() 的玩家
+object *players_g=({});  //保护this_object()的玩家
+object *list = ({});     //wx满足条件的保护 this_object()的玩家
+object *list_k = ({});
+
+
+int random_place(object me, string dirs);
+void check_golem(object ob);
+void _leave();
+void leave();
+void call_player_g();
+int call_player_k(object ob);
+void kill_start();
+void reward_g();
+void reward_k();
+void punish_all_list();
+void job_give(object ob);
+void job_punish(object ob);
+int check_exp(object ob,int exp);
+int abs(int i);
+int max(int i,int j);
+int min(int i,int j);
+int filter_x(object ob);
+int filter_z(object ob);
+
+object *query_players_k()
+{
+	return players_k;
+}
+
+object *query_players_g()
+{
+	return players_g;
+}
+
+int query_no_clone(){return 1;}//为防止bug，此行一定要有
+
+void create()
+{
+        set_name(HIW"混世魔王"NOR,({"hunshi mowang","mowang","hsmw"}));
+        set("gender","男性");
+        set("age",40);
+        set("per", 30);
+        set("int", 30);
+        set("kar", 30);
+        set("str", 20);
+        set("cor", 25);
+        set("cps", 99);
+        set("long", @LONG
+上古魔王，煞气十足，面目狰狞，他曾是天地至尊的同门，一场变故使之性情大变。
+LONG);
+        set("daoxing",1000000);
+        set("combat_exp", 1234567);
+        set("max_force", 5000);
+        set("class","yao");
+        set("eff_kee", 5000);
+        set("eff_gin", 5000);
+        set("eff_sen", 5000);
+        set("kee", 5000);
+        set("gin", 5000);
+        set("sen", 5000);
+        set("force", 5000);
+        set("mana", 5000);
+        set_skill("yaofa", 300);
+        set_skill("spells", 40);
+        set_skill("dodge", 40);
+        set_skill("parry", 40);
+        set_skill("force", 40);
+        set_skill("unarmed", 40);
+        set("force_factor",100);
+        set("stay_time",time()+600+random(300));        
+        set("title", HIY "上古魔头" NOR);
+        set("attitude", "friendly");
+        set("chat_chance", 10);
+        set("chat_msg", ({
+                (: random_move :)
+        }));
+        setup();
+        carry_object(__DIR__"obj/baipao")->wear();
+        carry_object("/d/obj/drug/jinchuang");
+        carry_object("/d/obj/drug/jinchuang");
+        carry_object("/d/obj/drug/jinchuang");
+        carry_object("/d/obj/drug/jinchuang");
+        carry_object("/d/obj/drug/jinchuang");
+        carry_object("/d/obj/drug/jinchuang");
+        carry_object("/d/obj/drug/jinchuang");
+        carry_object("/d/obj/drug/jinchuang");
+        carry_object("/d/obj/drug/jinchuang");
+        carry_object("/d/obj/drug/jinchuang");
+        carry_object("/d/obj/drug/jinchuang");
+        carry_object("/d/obj/drug/jinchuang");        
+
+}
+
+void init()
+{
+    object me=this_object();
+    object who=this_player();
+    int i,dcnt=0;
+      	
+    int t=query("stay_time");
+
+    ::init();
+    add_action("do_no","ji");    
+    add_action("do_qkdf","cast");
+    add_action("do_block","",1);
+    add_action("do_burn","burn");
+    add_action("do_kill","kill");
+    add_action("do_protect","protect");
+    add_action("do_pfm","perform");
+    add_action("do_exert","exert");
+  
+  	if(t && time()>(t+900)) {
+        remove_call_out("leave");
+        call_out("leave",1);
+        return;
+    }
+
+    if(t && time()>t) {
+        remove_call_out("_leave");
+        call_out("_leave",900);
+    }
+    
+    
+    /*for( i=0;i<sizeof(players_k);i++)
+     	if( players_k[i]->query_temp("zxzz_killed") )
+    		dcnt++;
+    
+    if( dcnt==sizeof(players_k) && me->query("kill_started") ) //k npc者全挂了，给奖励
+    {
+    	remove_call_out("reward_g");
+    	call_out("reward_g",1);
+    }*/               //此段加到了假死判断中，及时给奖励
+        
+}
+
+int do_pfm(string arg)
+{
+	string pfm_id,pfm_name,cname=this_object()->name();
+	object who = this_player();
+	int kst = this_object()->query("kill_start");
+	
+	if(!arg) return 0;
+	if( sscanf(arg,"%s",pfm_id)==1 )
+	{
+		if((arg=="chaofeng" || pfm_id=="chaofeng") && !kst)
+		{
+			tell_object(who,"还没开战就想用百鸟朝凤？想搞破坏啊！\n");
+			return 1;
+		}
+		if( arg=="dodge.xukong" || pfm_id=="dodge.xukong" )
+		{
+			tell_object(who,"雕虫小技就不要在我面前演了。\n");
+			return 1;
+		}
+	}
+	
+	if( sscanf(arg,"%s on %s",pfm_id,pfm_name)==2 )
+	{
+		if((pfm_name=="hunshi mowang" || pfm_name=="hsmw" || pfm_name=="mowang") && !kst)
+		{
+			tell_object(who,"战斗还未开始，你没法对"+cname+"使用外功。\n");
+			return 1;
+		}
+		if(pfm_id=="chaofeng" && !kst)
+		{
+			tell_object(who,"还没开战就想用百鸟朝凤？想搞破坏啊！\n");
+			return 1;
+		}
+		if( pfm_id=="dodge.xukong" )
+		{
+			tell_object(who,"雕虫小技就不要在我面前演了。\n");
+			return 1;
+		}
+	}
+	return 0;
+}
+
+int do_exert(string arg)
+{
+	string exert_id;
+	int kst = this_object()->query("kill_start");
+	object who = this_player();
+	
+	if(!arg) return 0;
+	if(sscanf(arg,"%s",exert_id)==1)
+	{
+		if((arg == "roar" || exert_id=="roar") && !kst)
+		{
+			tell_object(who,"还没开战就想瞎吼？想搞破坏啊！\n");
+			return 1;
+		}
+	}
+	return 0;
+}
+
+int do_qkdf(string arg)
+{
+    
+        string cast_id,cast_name;
+        object who = this_player();
+        int kst = this_object()->query("kill_started");
+        
+      if(!arg)	return 0;
+      if(sscanf(arg,"%s",cast_id)==1)
+      {
+        if(arg=="qiankun" || cast_id=="qiankun")
+        {
+        	tell_object(who,"在混世魔王面前还想用袖里乾坤？！\n");
+   		    return 1; 
+        }
+        
+        if( (member_array(arg,dunfa)!=-1 || member_array(cast_id,dunfa)!=-1 ) && kst )
+        {
+        	if( member_array( who->query("family/family_name"),family_name_z )!=-1 ){ //正派
+  				      tell_object(who,"在混世魔王面前还想溜？！\n");
+  				      return 1;
+  			      }
+  			    else {//邪派
+  			    	  tell_object(who,"保护"+this_object()->name()+"的任务还没完成，不能逃走!\n");
+  			    	  return 1;
+  			    }
+        }
+      }
+                     
+    if (sscanf(arg, "%s on %s", cast_id,cast_name) == 2){
+     
+        if(cast_id=="qiankun" || arg=="qiankun"){
+     
+            tell_object(who,"在混世魔王面前还想用袖里乾坤？！\n");
+   		      return 1; 
+  		    }
+  		  if( member_array("cast_id",summon) && !kst )
+  		  {
+  		  	  tell_object(who,"战斗还未开始，不能召唤护法。\n");
+  		  	  return 1;
+  		  }
+  		  if( (member_array(find_player(cast_name),players_k)!=-1
+  		      || member_array(find_player(cast_name),players_g)!=-1)
+  		    && find_player(cast_name)!=who
+  		    && !kst )
+  		  {
+  		  	  tell_object(who,"战斗还未开始就动手？\n");
+  		  	  return 1;
+  		  }
+  		  if((cast_name=="hunshi mowang" || cast_name=="hsmw" || cast_name=="mowang") && !kst)
+  		  {
+  		  	tell_object(who,"战斗还未开始你就想对混世魔王使用法术？\n");
+  		  	return 1;
+  		  }  
+  		  if( (cast_id=="wuxing" && cast_name==who->query("id") 
+  		      || member_array("arg",dunfa)!=-1)
+  		      && kst ){//战斗开始后不许使用遁法
+  			     
+  			    if( member_array( who->query("family/family_name"),family_name_z )!=-1 ){ //正派
+  				      tell_object(who,"在混世魔王面前还想溜？！\n");
+  				      return 1;
+  			      }
+  			    else {//邪派
+  			    	  tell_object(who,"保护"+this_object()->name()+"的任务还没完成，不能逃走!\n");
+  			    	  return 1;
+  			    }
+  		    }
+  	}
+  	else return 0;
+}
+
+int do_burn(string arg)//jjf弟子burn escape
+{
+	string burn_id;
+	object who = this_player();
+	object me = this_object();
+	
+	if(!arg) return 0;
+	if(sscanf(arg,"%s",burn_id)==1)
+	{
+		if(arg == "escape" || burn_id == "escape"){
+			message_vision("$N手脚笨拙地想燃着手中的逃命符，但在$n面前岂能得逞？！\n",who,me);
+			return 1;
+		}
+	}
+	else return 0;
+}
+
+int do_no(string arg)
+{
+        object who = this_player();
+        object me = this_object();
+        message_vision("$N鬼鬼遂遂不知想干什么，$n威严地盯着$N，吓得$N不知所措。\n",who,me);
+        return 1;
+}
+
+int do_kill(string arg)
+{
+	      object who = this_player();
+	      object me = this_object();
+	      object where = environment(me);
+	      int i;
+	      
+	      if(!arg)	return 0;	      
+	      if ( (arg=="hunshi mowang" || arg=="mowang" || arg=="hsmw") ){
+	      	  if( member_array( who->query("family/family_name"),family_name_z )!=-1 ){//正派玩家
+  	              if(who->query("combat_exp")<1000000){
+  	                  message_vision("\n$n对$N哼道：就你这点微末道行还不配与我动手!\n",who,me);
+  	                   return 1;
+  	                }
+	                 if( sizeof(players_k)<1 ){//参加任务的正派玩家数为0
+	                 		if(call_player_k(who))
+	                 		{
+				                 players_k+=({who});
+				                 who->set_temp("zxzz_job",1);
+				                 me->set("exp_ref",who->query("combat_exp"));
+		                     message_vision("\n$n不屑地对看了$N一眼道：就你一个小喽罗?把帮手叫齐让我一块儿收拾你们吧!\n",who,me);
+												 check_golem(who);
+												}
+		                   return 1;
+		                }
+		               else if( sizeof(players_k)<2 ){//已参加任务的正派玩家数为1
+		    	           if( member_array(who,players_k)==-1 ){//不是已经参加任务的玩家
+		    		             if( check_exp(who,me->query("exp_ref")) ){//wx符合条件
+		    	                   players_k+=({who});
+		    	                   who->set_temp("zxzz_job",1);
+		    	                   message_vision("\n$n瞪了$N一眼，喝道：是时候了，让你们尝尝厉害!\n"
+		    	                       +"不待本王出手，待我召唤几个弟子就可收拾了你们!\n",who,me);
+		    	                   check_golem(who);
+		    	                   call_out("call_player_g",1);
+		    	                   return 1;
+		    	                }
+		    	               else {//wx不符合条件
+		    	               	if( who->query("combat_exp")<me->query("exp_ref") )
+		    	               	      tell_object(who,"你武学太低，恐怕自己反倒被k，还是作罢吧!\n");
+		    	    	          else
+		    	    	                tell_object(who,"你武学太高，不适合参加本次任务!\n");
+		    	    	          
+		    	    	          return 1;
+		    	    	         }
+		    	            }
+		    	           else {//已经参加任务的玩家
+		    	                   message_vision("\n$n对$N冷笑道：你急什么，待会有你好看的!\n",who,me);
+		    	                   return 1;
+		    	             }
+		    	          }
+		               else if( sizeof(players_k)>=2 ){//已参加任务的玩家数为2，已满
+		               	  if(member_array(who,players_k)==-1)  //不是已参加任务的玩家
+		               	  {
+		    	               tell_object(who,"已经有足够的你的同道中人参加此次任务了!\n");
+		    	               return 1;
+		    	            }
+		    	            else   //已参加任务的玩家
+		    	            {
+		    	            	 if(sizeof(players_g)<2)//保护npc的玩家数不够
+		    	            	 {
+		    	            	 	   tell_object(who,me->name()+"召唤的玩家还没到齐！\n");
+		    	            	 	   return 1;
+		    	            	 }
+		    	            	 /************可以不要，玩家不在场可以move过来*****************
+		    	            	 else  //保护npc的玩家到齐
+		    	            	 {
+		    	            	 	   for(i=0;i<sizeof(players_g);i++)
+		    	            	 	   {
+		    	            	 	   	  if(!present(players_g[i],where))   //有玩家不在场
+		    	            	 	   	  {
+		    	            	 	   	  	tell_object(who,"保护"+me->name()+"的玩家有的不在场!\n");
+		    	            	 	   	  	return 1;
+		    	            	 	   	  }
+		    	            	 	   }
+		    	            	 }
+		    	            	 **************战斗的开始由this_object控制********************/
+		    	            }
+		               }
+		            }
+             else {
+			              message_vision("\n$n瞪了$N一眼:你魔道中人瞎起什么哄？\n",who,me);
+			              return 1;
+		             }
+		             
+		         if( !me->query("kill_started") )
+	      		 {
+	      				message("zxzz",HIR"\n****正邪之战马上开始，请做好准备!****\n\n",players_k);
+	      				message("zxzz",HIR"\n****正邪之战马上开始，请做好准备!****\n\n",players_g);
+	      				remove_call_out("kill_start");
+        				call_out("kill_start",5);
+        		 }
+	      }
+	      
+	      if( (member_array(find_player(arg),players_g)!=-1 
+	       || member_array(find_player(arg),players_k)!=-1)//被杀者为参加任务的玩家
+	       && (sizeof(players_g)<2 || sizeof(players_k)<2) //参加任务的玩家数量不够
+	       && (member_array(who,players_g)!=-1 || member_array(who,players_k)!=-1) )//杀人者为参加任务的玩家
+	      {
+	      	  if( ((member_array(find_player(arg),players_g)!=-1) 
+	      	    && (member_array(who,players_g)!=-1)) //被杀者和杀人者同为保护npc玩家
+	      	   || ((member_array(find_player(arg),players_k)!=-1) 
+	      	    && (member_array(who,players_k)!=-1)) )//被杀者和杀人者同为k npc玩家
+	      	  {
+	      	  	  tell_object(who,find_player(arg)->name()+"可是你的同盟！\n");
+	      	  	  return 1;
+	      	  }
+	      	  else
+	      	  {
+	      	  	  tell_object(who,"时机未到，暂时不能动手！\n");
+	      	  	  return 1;
+	      	  }
+	      }
+}
+
+int do_protect(string arg)
+{
+	object who = this_player();
+	object me = this_object();
+	
+	if(!arg)	return 0;	
+	if(member_array(who,list)!=-1)//满足保护条件的玩家
+	{
+	  if( arg!="hunshi mowang" && arg!="mowang" && arg!="hsmw" )
+	  {
+	    	write("你要保护谁？\n");
+	    	return 1;
+	  }
+	  else 
+	  {
+		    if(sizeof(players_g)>=2)
+		    {
+		        write("已经有足够的玩家保护"+me->name()+"了!\n");
+		        return 1;
+		    }
+		    else //只有此种情况可使用protect命令
+		    {
+		        players_g+=({who});
+		        who->set_temp("zxzz_job",1);
+		        message_vision("\n$n拍了拍$N的肩膀:好样的！\n",who,me);
+		        check_golem(who);
+		        if(sizeof(players_g)==2)//人都到齐了，5s后开杀
+		        {
+		        	  //tell_room( environment(me),HIR"\n正邪之战马上开始，请大家做好准备!\n"NOR );
+		        	  message("zxzz",HIR"\n****正邪之战马上开始，请大家做好准备!****\n\n",players_k);
+		        	  message("zxzz",HIR"\n****正邪之战马上开始，请大家做好准备!****\n\n",players_g);
+		        	  
+		        	  remove_call_out("punish_all_list");
+		        	  remove_call_out("reward_g");
+		        	  call_out("reward_g",480);
+		        	  remove_call_out("kill_start");
+		        	  call_out("kill_start",5);
+		        }
+		    }
+	  }
+  }
+  else     //不合条件的玩家不能使用protect命令
+  {
+  	if(member_array(who->query("family/family_name"),family_name_z)!=-1)//不是邪派玩家
+  	{
+  	    write("你杀他还来不及呢，还保护？\n");
+  	    return 1;
+    }
+    else if(!sizeof(list))   //剩下的不合条件的就是wx不够的了？还有可能是list为空（表示还没召唤玩家）
+    {
+    	  write(me->name()+"现在还不需要保护。\n");
+    	  return 1;
+    }
+    else
+    {
+    	if( who->query("combat_exp")<me->query("exp_ref") )
+    	  write("恐怕你修为不够，还是明哲保身吧！\n");
+    	else
+    		write("你修为甚高，不劳烦你参加此次任务！\n");
+    	
+    	return 1;
+    }
+  }
+	
+}
+
+void kill_ob (object ob)
+{
+  object me = this_object();
+  object where = environment(me);
+  int i,level,level_temp;
+  
+  if(me->query("diy")&&!me->query("copied"))
+  {
+  	level=0;
+  	for(i=0;i<sizeof(players_k);i++)
+  	{
+  		level_temp=NPC_D->get_skill_level(players_k[i]);
+  		if(level_temp>level)
+  			level = level_temp;
+  	}
+  	STATU_D->set_npc_skill(me, level, "方寸山三星洞");
+  	NPC_D->set_npc_hp(me, ob, 100);
+  	NPC_D->full_hp_status(me);
+  	set("force_factor",300);
+  	set("mana_factor",300);
+  	set_temp("apply/attack", 200);
+    set_temp("apply/defense", 200);
+    set_temp("apply/armor", 250);
+    set_temp("apply/damage", 250);
+    carry_object(__DIR__"obj/xtg")->wield();
+    command("perform qiankun");
+  	me->set("copied",1);
+  	reset_eval_cost();
+  }
+  
+  for(i=0;i<sizeof(players_g);i++)
+  {
+  	if( present(players_g[i],where) )
+  	{
+  		message_vision("$n一个箭步冲了上去，挡在了"+me->name()
+  									+"面前，冲$N呵道：“休得无礼！”\n",ob,players_g[i]);
+  		players_g[i]->kill_ob(ob);
+  	}
+  }
+ 
+  ::kill_ob(ob);
+}
+
+void die ()
+{
+    object ob = query_temp("last_damage_from");
+    object me = this_object();
+    object where = environment (me);
+    
+    for(int i=0;i<sizeof(players_g);i++)
+    {
+    	if( present(players_g[i],where) && players_g[i]->query_temp("zxzz_job") )
+    	{
+    		message_vision ("\n$N微微一笑，马上神采奕奕。\n",me);
+    		NPC_D->full_hp_status(me);
+    		return;
+    	}
+    }
+    
+    if(!ob)
+    {
+    	leave();
+    	return;
+    }
+    
+    remove_call_out("reward_g");
+    message("system",HIG"【"+HIR+"正邪之争"+HIG+"】"+me->name()
+            +"：这次算你们走运，下次可每那么便宜了！\n"NOR, users());//下面应该给k npc者奖励
+    reward_k();
+      
+}
+
+void unconcious()
+{
+   die();
+}
+
+void _leave()
+{
+    object me=this_object();
+    if (me->is_fighting() || me->is_busy())
+        return;
+    leave();
+}
+
+void leave()
+{
+    object me = this_object(); 
+    object where = environment (me);
+         
+    if (this_object())
+    {
+        if (environment(me))
+        {
+            command("say 来到凡尘已够久了，我该回去了。。。");
+            message("vision",HIB + name() + 
+                    "化作一阵青烟，飘然而去。\n" NOR,environment());
+        }
+        destruct(this_object());
+    }
+    return;
+}
+
+int invocation(int i)
+{
+        object me=this_object();
+        if(!random_place(me, dirs[i])) return 0;
+        return 1;
+}
+
+int random_place(object me, string dirs)
+{
+        int  j, k;
+        object  newob;
+        mixed*  file, exit;
+        file = get_dir( dirs+"/*.lpc", -1 );
+
+        if( !sizeof(file) ) return 1;
+
+        for(k=0;k<30;k++) { // try 30 times
+           j = random(sizeof(file));
+           if( file[j][1] > 0 ) {
+             newob=load_object(dirs+"/"+file[j][0]);
+             if (newob) {  
+               if(newob->query("no_fight") ||
+                       newob->query("no_magic") ||
+                       !(exit=newob->query("exits")) ||
+                       sizeof(exit)<1)
+                   continue;
+
+               if(me->move(newob)) {
+                   message_vision("$N走了过来。\n",me);
+                   return 1;
+               }
+             }
+           }
+        }
+
+        return 0;
+}
+
+int call_player_k(object ob)
+{
+	    int i,lcnt=0;
+	    string msg,strin;
+	    string *lmsg;
+	    list_k = objects( (:userp:) );
+	    list_k = filter_array(list_k,(:interactive:));
+	    list_k = filter_array(list_k,(:filter_x:));
+	    list_k = filter_array(list_k,(:check_exp:),ob->query("combat_exp"));
+	    list_k-=({ob});
+	    	    
+	    if(sizeof(list_k)<1) {
+	    	    tell_object(ob,"以你的武学，现在不适合做此次任务。\n");
+	    	    return 0;
+	    	  }
+	    else {
+	    	    msg = "下列弟子速来"+environment(this_object())->query("short")+"助阵:\n";
+	    	    message("zxzz",HIG"【"+HIR+"正邪之争"+HIG+"】"HIW"天地至尊(TDZZ)："HIG+msg+NOR,users());
+	    	    message("zxzz","                    "+HIY"┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓\n\n"NOR,users());
+	    	    msg = "";
+	    	    for(i=0;i<sizeof(list_k);i++){
+	    	    	    strin=list_k[i]->name(1)+"("+capitalize(list_k[i]->query("id"))+")";
+                  msg = sprintf("%s%s%-18s"NOR"%s",
+				                msg,
+				                query_idle(list_k[i]) > 120?HIM "+":((list_k[i]->query("gender")=="女性")?MAG" ":WHT" "),
+				                strin,
+				                ++lcnt%4 ? "": "\n"	);    	    	    
+	    	    }
+	    	    lmsg = explode(msg,"\n");
+	    	    for(i=0;i<sizeof(lmsg);i++)
+	    	    {
+	    	    	    message("zxzz","                      "+lmsg[i]+"\n",users());
+	    	    }
+	    	    message("zxzz","\n                    "+HIY"┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛\n"NOR,users());
+	    	    return 1;
+			}	
+}
+
+void call_player_g()
+{
+	    int i,lcnt=0;
+	    string msg,strin;
+	    string *lmsg;
+	    list = objects( (:userp:) );
+	    list = filter_array(list,(:interactive:));
+	    list = filter_array(list,(:filter_z:));
+	    list = filter_array(list,(:check_exp:),this_object()->query("exp_ref"));
+	    	    
+	    if(sizeof(list)<2) {
+	    	    msg= "罢罢罢，天地之间竟无合适的魔道中人替我护法，看来只有我亲自动手了!\n";
+	    	    message("zxzz",HIG"【"+HIR+"正邪之争"+HIG+"】"HIW"混世魔王(HSMW)："HIG+msg+NOR,users());
+	    	    this_object()->set("diy",1);
+	    	    message("zxzz",HIR"\n****正邪之战马上开始，请大家做好准备!****\n\n",players_k);
+	    	    message("zxzz",HIR"\n****正邪之战马上开始，请大家做好准备!****\n\n",players_g);
+	    	    remove_call_out("kill_start");
+	    	    call_out("kill_start",5);
+	    	  }
+	    else {
+	    	    msg = "下列弟子速来(五分钟之内)"+environment(this_object())->query("short")+"护法:\n";
+	    	    message("zxzz",HIG"【"+HIR+"正邪之争"+HIG+"】"HIW"混世魔王(HSMW)："HIG+msg+NOR,users());
+	    	    message("zxzz","                    "+HIY"┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓\n\n"NOR,users());
+	    	    msg = "";
+	    	    for(i=0;i<sizeof(list);i++){
+	    	    	    strin=list[i]->name(1)+"("+capitalize(list[i]->query("id"))+")";
+                  msg = sprintf("%s%s%-18s"NOR"%s",
+				                msg,
+				                query_idle(list[i]) > 120?HIM "+":((list[i]->query("gender")=="女性")?MAG" ":WHT" "),
+				                strin,
+				                ++lcnt%4 ? "": "\n"	);    	    	    
+	    	    }
+	    	    lmsg = explode(msg,"\n");
+	    	    for(i=0;i<sizeof(lmsg);i++)
+	    	    {
+	    	    	    message("zxzz","                      "+lmsg[i]+"\n",users());
+	    	    }
+	    	    message("zxzz","\n                    "+HIY"┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛\n"NOR,users());
+						
+						remove_call_out("punish_all_list");
+						call_out("punish_all_list",300);//5分钟之内玩家没到齐，punish之
+	    }
+}
+
+void kill_start()
+{
+	int i,j,zxzz_mark,dif;
+	object who1,who2;
+	object me = this_object();	
+	object where = environment(me);
+	
+	zxzz_mark = 21+random(1000);
+	dif = random(20);
+		
+	me->set("kill_started",1);//表明已经开战，kill()函数里面的判断依据
+	me->set_temp("zxzz/mark",zxzz_mark-dif);
+	me->set_temp("mark_dif",dif);
+	me->set_temp("zxzz_job",1);
+	
+	if( me->query("diy") )
+	{
+		for(i=0;i<sizeof(players_k);i++)
+		{
+			who1 = players_k[i];
+			if(!present(who1,where))
+			{
+				message_vision("天空中出现"+me->name()+"的大手，将$N抓了起来,$N顿时不见踪影！\n",who1);
+				who1->move(where);
+			}
+			who1->set_temp("zxzz/mark",zxzz_mark);
+			me->kill_ob(who1);
+		}
+		return;
+	}
+	
+	for(i=0;i<sizeof(players_k);i++)   //两派玩家数量相等才行，如不等，此for语句需修改
+	{
+		who1 = players_k[i];
+		who2 = players_g[i];
+		
+		if(!present(who1,where))
+		{
+		  message_vision("天空中出现"+me->name()+"的大手，将$N抓了起来,$N顿时不见踪影！\n",who1);
+		  who1->move(where);
+	  }
+		
+		if(!present(who2,where))
+		{
+		  message_vision("天空中出现"+me->name()+"的大手，将$N抓了起来,$N顿时不见踪影！\n",who2);
+		  who2->move(where);
+	  }
+	  
+	  who1->set_temp("zxzz/mark",zxzz_mark);
+	  who2->set_temp("zxzz/mark",zxzz_mark-dif);//mark不一样防止同队玩家趁机pk
+	  																				 //如果同队玩家pk，mark一样，真死！
+	}
+	
+	for(i=0;i<sizeof(players_k);i++)
+	{
+		me->kill_ob(players_k[i]);
+		for(j=0;j<sizeof(players_g);j++)
+		{
+			players_k[i]->kill_ob(players_g[j]);
+			players_g[j]->kill_ob(players_k[i]);
+		}
+	}
+}
+
+void reward_g()
+{
+	int i,j;
+	string *killers;
+	object player;
+	
+	for(i=0;i<sizeof(players_g);i++)
+	{
+		player=players_g[i];
+		job_give(player);
+		if(player->query_temp("zxzz_killed"))
+			player->delete_temp("zxzz_killed");
+		//message();
+		killers = player->query_killer();
+		
+		for( j=0;j<sizeof(players_k);j++ )
+			if( member_array(players_k[j]->query("id"),killers)!=-1 )
+				player->remove_killer(players_k[j]);
+		
+		tell_object(player,"你被奖励了！\n");//for test
+	}
+	
+	for(i=0;i<sizeof(players_k);i++)
+	{
+		player = players_k[i];
+		job_punish(player);
+		if(player->query_temp("zxzz_killed"))
+			player->delete_temp("zxzz_killed");
+		
+		killers = player->query_killer();
+		for( j=0;j<sizeof(players_g);j++ )
+			if( member_array(players_g[j]->query("id"),killers)!=-1 )
+				player->remove_killer(players_g[j]);
+			if( member_array(this_object()->query("id"),killers)!=-1 )
+				player->remove_killer(this_object());
+		
+		tell_object(player,"你任务失败，要受罚，嘿嘿......\n");//for test
+	}
+	
+	destruct(this_object());
+}
+
+void reward_k()
+{
+	int i,j;
+	string *killers;
+	object player;
+	
+	for(i=0;i<sizeof(players_k);i++)
+	{
+		player=players_k[i];
+		job_give(player);
+		if(player->query_temp("zxzz_killed"))
+			player->delete_temp("zxzz_killed");
+		//message();
+		killers = player->query_killer();
+		
+		for( j=0;j<sizeof(players_g);j++ )
+			if( member_array(players_g[j]->query("id"),killers)!=-1 )
+				player->remove_killer(players_g[j]);
+			if( member_array(this_object()->query("id"),killers)!=-1 )
+				player->remove_killer(this_object());
+		
+		tell_object(player,"你被奖励了！\n");//for test
+	}
+	
+	for(i=0;i<sizeof(players_g);i++)
+	{
+		player = players_g[i];
+		job_punish(player);
+		if(player->query_temp("zxzz_killed"))
+			player->delete_temp("zxzz_killed");
+		
+		killers = player->query_killer();
+		for( j=0;j<sizeof(players_k);j++ )
+			if( member_array(players_k[j]->query("id"),killers)!=-1 )
+				player->remove_killer(players_k[j]);
+		
+		tell_object(player,"你任务失败，要受罚，嘿嘿......\n");//for test
+	}
+	
+	destruct(this_object());
+}
+
+
+void heart_beat()
+{
+    int i;
+    
+    if (query("eff_kee") < query("max_kee"))
+        command("eat yao");
+        
+    for(i=0;i<sizeof(players_k);i++)
+    {
+    	if(!(objectp(players_k[i]) && environment(players_k[i])))
+    		players_k-=({players_k[i]});
+    }    
+
+    ::heart_beat();
+}
+
+int do_block(string arg)
+{
+    object me=this_object();
+    object who=this_player();
+    string verb=query_verb();
+    int t;
+    
+    // wizardp(who) && 
+ 
+    if((verb=="duandao" || verb=="steal" || verb=="throw") && !me->query("kill_started"))
+    {
+    	message_vision("$N对$n摇了摇头。\n",me,who);
+    	return 1;
+    }
+           
+    if(!userp(who)) return 0;
+       
+    if(!me->query("kill_started")) return 0;
+      
+    if(!who->query_temp("zxzz_job")) return 0;
+   
+    if(verb!="go" &&
+            verb!="fly" &&
+            !(environment() && environment()->query("exits/" + verb)))
+        return 0;
+    
+    t= random(2);			//1/2的机率走掉
+   
+    if (t==1) {
+        message_vision("$n乘$N一个不注意，急忙溜了过去。\n",me,who);
+        return 0;
+    }
+   
+    message_vision("$N一伸手拦在$n面前，高声叫道：\n"+
+            " 死妖怪，现在想跑来不急了,拿命来吧！\n\n",me,who);
+    tell_object(who,me->name()+"一把拦住了你！\n");
+    return 1;
+}
+
+void check_golem(object ob)
+{
+	object golem;
+	
+	if(ob->query("summon/diablo_npc"))
+        {
+        	golem=ob->query("summon/diablo_npc");
+        	 if(objectp(golem)&&environment(golem))
+        	 {
+        	 		message_vision(this_object()->name()+"对$N甩了甩手!\n",golem);
+        			golem->die();
+        	 }
+        }
+}
+
+void punish_all_list()
+{
+	int i;
+	string cname = this_object()->name();
+	
+	/*for(i=0;i<sizeof(list);i++)
+	{
+		if(member_array(list[i],players_g)==-1 && objectp(list[i]) && environment(list[i]))
+		{
+			list[i]->set("origin_room",environment(list[i]));
+			list[i]->set("start_room",list[i]->query("startroom"));
+			tell_room(environment(list[i]),"天空之中传来"+cname+"的声音:"+(string)list[i]->query("name")+"不听我的召唤，将受惩罚！━━"+(string)list[i]->query("name")+"转眼间凭空消失...\n");
+			tell_object(list[i],"你被抓了起来....\n");
+			list[i]->move("d/quest/zxzz/punish");
+			list[i]->apply_condition("zxzz_jail",8+random(8));
+			tell_room(environment(list[i]),cname+"将"+(string)list[i]->query("name")+"塞了进来。\n");
+			tell_object(list[i],"你被塞进了一个虚幻的空间...\n");
+			
+			tell_object(list[i],"由于你没有尽到保护"+cname+"的责任，内力和法力尽失......\n");
+			list[i]->add("max_mana",-list[i]->query("max_mana")/1500);
+			list[i]->add("max_force",-list[i]->query("max_force")/1500);
+			list[i]->set("mana",1);
+			list[i]->set("force",1);
+		}
+	}*/ //屏蔽掉不做任务的惩罚
+	this_object()->set("diy",1);
+	message("zxzz",HIR"\n****正邪之战马上开始，请大家做好准备!****\n\n",players_k);
+	message("zxzz",HIR"\n****正邪之战马上开始，请大家做好准备!****\n\n",players_g);
+	remove_call_out("kill_start");
+	call_out("kill_start",5);
+}
+
+void job_give(object ob)
+{
+	int exp,base_exp,bonus,exp_get,dx_get,pot_get,gold_get,ww_get,fth_get,more_rwd;
+	string str;
+	
+	exp = ob->query("combat_exp");
+	
+	if(exp<500000)	base_exp = 4800;
+  else if(exp<1200000)	base_exp = 5900;
+  else if(exp<2100000)	base_exp = 7200;
+  else if(exp<3200000)	base_exp = 8500;
+  else if(exp<5400000)	base_exp = 9800;
+  else if(exp<7500000)	base_exp = 12100;
+  else if(exp<10000000)	base_exp = 15400;
+  else if(exp<14000000)	base_exp = 17900;
+  else if(exp<20000000)	base_exp = 21500;
+  else if(exp<30000000) base_exp = 26000;
+  else		base_exp = 30000;
+  
+  ob->add("zxzz/count",1);
+  bonus = ob->query("zxzz/count");
+  if(bonus>100)  	bonus+=random(bonus);
+  else if(bonus>500)	bonus+=bonus;
+  else if(bonus>1500)	bonus = 3000+random(bonus);
+  
+  bonus+=bonus;
+  exp_get = base_exp+random(500)+bonus+base_exp/12;
+  dx_get = exp_get*3/2;
+  pot_get = exp_get*4/5+random(500);
+  gold_get = 3+bonus/200;
+	
+	more_rwd = ob->query("gain_more_reward")+ob->query_temp("gain_more_reward");
+	more_rwd+=ob->query_kar();
+	exp_get+=exp_get*more_rwd/10000;
+	dx_get+=dx_get*more_rwd/10000;
+	pot_get+=pot_get*more_rwd/10000;
+	gold_get+=gold_get*more_rwd/10000;
+	ww_get = 3+random(3);
+	fth_get = 1+random(2);
+	
+	ob->add("combat_exp",exp_get);
+	ob->add("zxzz/exp",exp_get);
+	ob->add("potential",pot_get);
+	ob->add("zxzz/pot",pot_get);
+	ob->add("daoxing",dx_get);
+	ob->add("zxzz/dx",dx_get);
+	ob->add("balance",gold_get*10000);
+	ob->add("zxzz/gold",gold_get); 
+	ob->add("weiwang",ww_get);
+	ob->add("zxzz/ww",ww_get);
+	ob->add("faith",fth_get);
+	ob->add("zxzz/fth",fth_get);
+	
+	tell_object(ob,HIY"由于正邪之战的胜利，你被奖励了：\n" + 
+				  		chinese_number(exp_get) + "点实战经验、" +
+				      COMBAT_D->chinese_daoxing(dx_get)+"道行、" +
+				      chinese_number(pot_get) + "点潜能、"+
+				      chinese_number(gold_get) + "两黄金。\n"+
+				      NOR);
+	str = ob->name()+"在正邪之战中获胜，实战经验增加了" + chinese_number(exp_get) + "点，道行提升了"+COMBAT_D->chinese_daoxing(dx_get)+"，潜能增加了"+chinese_number(pot_get) + "点，威望(+"+chinese_number(ww_get)+")及忠诚(+"+chinese_number(fth_get)+")提高，并获得了"+chinese_number(gold_get) + "两黄金的奖励！\n";
+	message("zxzz",HIW"【正邪之争】："+str+"\n"NOR,users());
+	MONITOR_D->report_system_msg (str);
+}
+
+void job_punish(object ob)
+{
+	string cname = this_object()->name();
+	
+	if(member_array(ob,players_g)!=-1)
+		tell_object(ob,"念在你保护"+cname+"的份上，就不惩罚了!\n");
+	
+	if(member_array(ob,players_k)!=-1)
+	{
+		
+		ob->set("mana",1);
+		ob->set("force",1);
+		if(ob->query("faith")>=1)
+			ob->add("faith",-1);
+		if(ob->query("weiwang")>=1)
+			ob->add("weiwang",-1);
+		tell_object(ob,"由于任务失败，你的威望降低了，内力法力被吸干了......\n");
+		ob->start_busy(20);
+	}
+}
+
+int check_exp(object ob,int exp)
+{
+	    int ob_exp = ob->query("combat_exp");
+	
+	    if ( min(exp,ob_exp)<=4000000 && abs(ob_exp-exp)<max(exp,ob_exp)/10 )
+	          return 1;
+	          
+	    if ( min(exp,ob_exp)<=6000000 && abs(ob_exp-exp)<max(exp,ob_exp)/8 )
+	          return 1;
+	          
+	    if ( min(exp,ob_exp)<=8000000 && abs(ob_exp-exp)<max(exp,ob_exp)/5 )
+	          return 1;
+	    
+	    return 0;
+}
+
+int abs(int i)
+{
+	return (i<0)? -i : i;
+}
+
+int max(int i,int j)
+{
+	return (i>j)? i : j;
+}
+
+int min(int i,int j)
+{
+	return (i>j)? j : i;
+}
+
+int filter_x(object ob)
+{
+	    if(member_array(ob->query("family/family_name"),family_name_z)!=-1)
+	          return 1;
+	    else  return 0;
+}
+
+int filter_z(object ob)
+{
+		if(member_array(ob->query("family/family_name"),family_name_x)!=-1)
+				return 1;
+		else	return 0;
+}

@@ -1,0 +1,184 @@
+// by bugbug & alading @ 缥缈水云间, 2003-4-5
+//破龙斩 Created by Repoo 
+#include <ansi.h>
+ 
+inherit F_DBASE;
+inherit SSERVER;
+
+#define CHANCE_LOSE_POINT 300
+ 
+void delay_effect(object me, object target, object weapon,int power);
+ 
+int perform(object me, object target)
+{
+        int delay,skill,myskill,myskill1,myforce,myexp,tparryb, tparryh , tforce , texp, damage;
+        int flag;
+        object weapon=me->query_temp("weapon");
+        string msg,str,tname;
+        msg = "";
+        if( !target ) target = offensive_target(me);
+        if( !target
+        ||      !target->is_character()
+        ||      target->is_corpse()
+        ||      target==me)
+                return notify_fail("你要对谁施展这一招「破龙斩」？\n");
+        
+        if(weapon->query("id")=="tianlong zhan") flag = 4;
+        else if(weapon->query("id")=="tianlong dao") flag = 3;
+        else flag = 2;
+        myskill= (int)me->query_skill("blade",1);
+        myskill1= (int)me->query_skill("tianlongzhan",1);
+        myforce = (int)me->query("max_force");
+        myexp = (int)me->query("combat_exp")+(int)me->query("daoxing");
+        tname = target->query_namer();
+        
+        skill=me->query_skill("blade");
+        if (skill<100) 
+           return notify_fail("你的基本刀法太差劲了。\n"); 
+        if(me->query_skill("tianlongzhan",1) < 70)
+                return notify_fail("你的天龙斩级别还不够。\n");
+//		if(me->query("tianlongzhan/zhengqi_point") < 30)
+//			return notify_fail("你的天地正气不够，无法使出这招。\n");
+		//appended by bugbug,2002.2
+        if( (int)me->query("force") < 300 )      
+                return notify_fail("你的内力不够。\n");
+        if( (int)me->query_temp("plz_delay") )
+                return notify_fail("你已经在施展破龙斩了。\n");
+        if( time()-(int)me->query_temp("plz_end") < 5 )
+                return notify_fail("你破龙斩刚使完，休息一下再用吧。\n");   // alading add
+        tforce = (int)target->query("max_force");
+        texp = (int)target->query("combat_exp")+(int)target->query("daoxing");
+   
+        
+        me->add("force", -100);
+        message_vision(HIW"$N飞速的把手中的"+CYN""+weapon->name()+HIW"旋转起来，"
+        +HIB"顺势一挥，一道白光象$n飞去\n"NOR, me,target);
+        if (random(myexp)>(int)(texp/3) && random(myforce) > (int)(tforce/3)) 
+        {
+             msg = HIR"\n$n被这股刀光扫个正着！"
+                                "“扑”，$n喷出一大口鲜血，看来是受了内伤！\n"NOR;
+	damage= (int)(((int)me->query("force_factor")+myforce/10+me->query("tianlongzhan/zhengqi_point")) -  tforce/12);
+ 	if(damage<1)damage = 1;
+ 	damage = damage*flag/2;
+	damage = damage*8/10;
+ 	target->receive_damage("kee", me->query("eff_kee")*damage/4800, me);
+ 	target->receive_wound("kee", me->query("eff_sen")*damage/4800, me);
+     	message_vision(msg, me, target);
+     	COMBAT_D->report_status(target);
+     	if (target->query("eff_kee")<0 || !living(target))  
+        {
+		str=target->name()+"被"+HIY""+me->name()+""+HIM"用峨嵋绝招"+HIW"「破龙斩」"NOR+HIM"杀死了，看来世间又要出现魔王了!\n";
+	    message("channel:rumor",HIM"【小道消息】某人："+str+"\n"NOR,users());
+	    }
+     delay=2;
+     me->set_temp("plz_delay", 1);
+     me->start_busy(delay);
+     target->start_busy(delay+1);
+     me->start_call_out( (: call_other, __FILE__, "delay_effect", 
+     me, target,weapon,delay,tname:), delay);
+     }
+     else
+	{
+    msg = HIB"$n忙运功向抗，用深厚的内力将$N的攻势都化解了。\n\n"NOR;
+    message_vision(msg, me, target);
+    }
+            
+    me->set_temp("plz_end",time());   // alading add
+        
+    return 1;
+}
+ 
+void delay_effect(object me,object target,object weapon,string tname)
+{
+        int myskill,times, damage;
+         int flag;
+        string number,str;
+        me->delete_temp("plz_delay");
+        myskill = (int)me->query_skill("tianlongzhan", 1); 
+        if( !target ) target = offensive_target(me); 
+//        weapon = me->query_temp("weapon");
+  	if(weapon->query("id")=="tianlong zhan") flag = 4;
+        else if(weapon->query("id")=="tianlong dao") flag = 3;
+        else flag = 2;
+        if(myskill <100){
+                times = 3;        
+                number = "三";}
+            else
+                if (myskill <120){
+                    times = 4;
+                    number = "四";}
+                else
+                    if(myskill <180 ){
+                           times = 5;
+                           number = "五";}
+                     else 
+                     if(myskill < 240 ){ 
+                           times = 6;
+                           number = "六";}
+       		     else 
+                     { 
+                           times = 9;
+                           number = "九";}
+        
+        if(me->is_fighting() && target->is_fighting() && (environment(me) == environment(target)))
+        {
+        if( !living(target)) return;
+        me->delete("env/brief_message");
+        target->delete("env/brief_message");
+	damage = me->query("tianlongzhan/zhengqi_point")/2+99+random(me->query_skill("tianlongzhan",1)); //  alading 2002-4-9
+	damage = damage*flag/2;
+	damage = damage*8/10;
+	if ( weapon != me->query_temp("weapon"))
+	{
+        message_vision(HIB"你换了兵器，无法继续破龙斩，刀光隐没消失无形！\n"NOR, me, target);
+		return; 
+	}        // alading 01.11.29
+    message_vision(HIR"\n刀光过后，"+ weapon->query("name")+ HIR"化作无数小刀，闪电般向$n射出了"+number+"刀！\n"NOR,me,target);
+    for(int i=1;i<=times;i++)
+    {
+    message_vision(HIW"刀光闪\n"NOR,me,target);
+    target->receive_damage("sen",damage/(10-i),me);
+    target->receive_wound("sen", random(damage/(10-i)), me);
+    target->receive_damage("kee",(damage+1)/(10-i),me);
+    target->receive_wound("kee", random(damage/(10-i)), me);
+    COMBAT_D->report_status(target, 0);
+    COMBAT_D->report_sen_status(target);
+    me->receive_damage("sen", 20);
+    if((int)me->query("force") > (times*50+50) )
+        	me->add("force", -(times*50+50));
+    else	
+        	me->set("force",0);
+    }
+    if( !target->is_fighting(me) ) 
+    {
+		if( living(target) ) 
+        {
+        if( userp(target) ) 
+			target->fight_ob(me);
+        else target->kill_ob(me);
+         }
+     }
+	if(me->is_fighting() && target->is_fighting() &&
+	environment(me) == environment(target) && times>6)
+	{
+    target->receive_damage("sen",damage,me);
+    target->receive_wound("sen", random(damage), me);
+    target->receive_damage("kee",damage+1,me);
+    target->receive_wound("kee", random(damage), me);	
+	message_vision(HIM"\n$n只觉得眼前一花，胸口已被$N的"+ weapon->query("name")+ HIR"划出几道深深的伤痕！！！\n\n" NOR,me,target);
+	}	
+	COMBAT_D->report_status(target, 0);
+	COMBAT_D->report_sen_status(target);
+	}
+	else
+	me->delete_temp("plz_delay");
+	/*
+	if ( random(CHANCE_LOSE_POINT) == 100)
+	{
+		me->add("tianlongzhan/zhengqi_point",-1);
+		tell_object(me,HIC "你感到你身上的天地正气减弱了！\n" NOR );
+	}//bugbug,2002-4-8
+	*/
+	return;
+}
+

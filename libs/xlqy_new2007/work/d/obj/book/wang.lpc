@@ -1,0 +1,274 @@
+// by bugbug & alading @ 缥缈水云间, 2003-4-5
+// literate.c
+
+inherit ITEM;
+inherit F_SAVE;
+ void set_skill (string str,int level);
+
+void create()
+{
+  set_name("〖仙剑奇侠传〗", ({"xianjian qixia", "zhuan", "book"}));
+  set_weight(1000);
+  if (clonep())
+    set_default_object(__FILE__);
+  else
+  {
+    set("unit", "几页");
+    set("material", "paper");
+    set("value", 0);
+    set("long", "几页薄薄的〖仙剑奇侠传〗。\n");
+                set("no_drop", "这东西不能丢。\n");
+                set("no_put", "珍惜它吧。\n");
+                set("no_give", "这东西不能送人。\n");
+                set("no_get", "这东西拿不起来\n");
+  }
+    setup();
+}
+
+void init ()
+{
+  object me = this_object();
+  object who = this_player();
+if(who->query("shushan/skills"))
+ set_skill(who->query("shushan/book"),who->query("shushan/skills"));
+
+  add_action ("do_read", "read");
+  add_action ("do_read", "study");
+  add_action ("do_read", "du");
+  add_action ("do_decide", "decide");
+        remove_call_out("do_melt");
+        call_out("do_melt", 1);
+
+  if (! me->query("my_owner") &&
+      interactive (who))
+    me->set("my_owner",who->query("id"));
+}
+
+void do_melt()
+{
+        if(this_object()) call_out("melt", 5);
+}
+
+void melt()
+{
+  object me = this_object();
+  object who = this_player();
+
+  if (me->query("my_owner") != who->query("id"))
+  {
+    tell_object (who,"这本书是你的么？\n");
+    destruct(this_object());
+    return;
+  }
+  if(who->query("nyj/shushan")!="done")
+  {
+    tell_object (who,"这几页〖仙剑奇侠传〗不是你的。\n");
+    destruct(this_object());
+    return;
+  }
+
+}
+void set_skill (string str,int level)
+{
+  set("skill", ([
+                "name": str,
+                "exp_required": 1000000,
+                "sen_cost": 30,
+                "difficulty": 30,
+                "max_skill": level,
+  ]));
+}
+
+mapping skills = ([
+  "archery": "基本弓箭",
+  "axe": "基本斧法",
+  "blade": "基本刀法",
+  "dagger": "短兵刃",
+  "dodge": "基本轻功",
+  "fork": "基本叉法",
+  "hammer": "基本锤法",
+  "mace": "基本锏法",
+  "parry": "拆招卸力之法",
+  "rack": "基本钯法",
+  "spear": "基本枪法",
+  "staff": "基本杖法",
+  "stick": "基本棍法",
+  "sword": "基本剑术",
+  "throwing": "暗器使用",
+  "whip": "基本鞭术",
+  "unarmed": "扑击格斗之技",
+  "force": "内功心法",
+  "spells": "法术",
+  "literate": "读书识字",
+]);
+
+void show_skills ()
+{
+  int i;
+  int size = sizeof (skills);
+  string *strs = keys(skills);
+
+  write ("你可以选择如下技能：\n");
+  strs = (string *)sort_array (strs, 1);
+  for (i = 0; i < size; i++)
+  {
+    write ("  "+strs[i]+": "+skills[strs[i]]+"\n");
+  }
+}
+
+int do_decide (string arg)
+{
+  object me = this_object();
+  object who = this_player();
+  string *strs = keys(skills);
+  int oldskill ;
+  string str;
+  int i;
+  int size = sizeof (skills);
+ 
+  if (me->query("my_owner") != who->query("id"))
+  {
+    tell_object (who,"这几页〖仙剑奇侠传〗不是你的。\n");
+    return 1;
+  }
+
+  if(who->query("nyj/shushan")!="done")
+  {
+    tell_object (who,"这几页仙〖仙剑奇侠传〗不是你的。\n");
+    return 1;
+  }
+
+  if (who->query("shushan/book"))
+  {
+    str = skills[who->query("shushan/book")];
+    tell_object (who,"你早已决定用〖仙剑奇侠传〗传学习"+str+"了。\n");
+    return 1;
+  }
+
+  for (i = 0; i < size; i++)
+  {
+    if (arg == strs[i])
+    {
+      str = skills[arg];
+      break;
+    }
+  }
+
+  if (! str)
+  { 
+    show_skills ();
+    return 1;
+  }
+
+  who->set("shushan/book",arg);
+  
+  tell_object (who,"你决定从此用〖仙剑奇侠传〗学习"+str+"。\n");
+  tell_object (who,"你可以从〖仙剑奇侠传〗中领悟到二十级"+str+"。\n");
+//if weapon or armor add_force no sub it,others sub from it
+if (arg=="force") oldskill = who->query_skill(arg,1)+20-who->query_temp("apply/add_all_skill");
+else
+  oldskill = who->query_skill(arg,1)+20-who->query_temp("apply/add_all_skill")-who->query("diablo_effect/add_"+arg);
+  who->set("shushan/skills",oldskill);
+  me->set_skill(arg,oldskill);
+  who->save();
+  return 1;
+}
+
+int reading (object me, object book)
+{
+  mapping skill;
+  int cost, my_skill;
+   object thisbook = this_object();
+  
+  if (environment(me)->query("no_fight") && 
+      environment(me)->query("no_magic"))
+    return notify_fail("安全区内禁止练功。\n");
+                    
+  if (me->is_fighting())
+    return notify_fail("你无法在战斗中专心下来研读新知！\n");
+
+  if (me->is_busy() || me->query_temp("pending/exercising"))
+    return notify_fail("你现在正忙着呢。\n");
+
+  if( !me->query_skill("literate", 1) )
+    return notify_fail("你是个文盲，先学学读书识字(literate)吧。\n");
+
+  if(me->query("nyj/shushan")!="done")
+     return notify_fail("这几页纸是哪里拣的？\n");
+  
+ if (thisbook->query("my_owner") != me->query("id"))
+  {
+    tell_object (me,"这几页〖仙剑奇侠传〗不是你的。\n");
+    return 1;
+  }
+  message_vision ("$N正专心地研读$n。\n",me,book);
+  
+  skill = book->query("skill");
+  my_skill=me->query_skill(skill["name"],1);
+
+  if ((int)me->query("combat_exp") < skill["exp_required"] ||
+      ((string)SKILL_D(skill["name"])->type()=="martial"
+      && my_skill*my_skill*my_skill/10>(int)me->query("combat_exp")))
+  {
+    write("你的道行不够，再怎么读也没用。\n");
+    return 1;
+  }
+
+  notify_fail("以你目前的能力，还没有办法学这个技能。\n");
+  if (!SKILL_D(skill["name"])->valid_learn(me))
+    return 0;
+
+  cost = skill["sen_cost"] + skill["sen_cost"] 
+         * (skill["difficulty"] - (int)me->query_int())/20;
+  if(cost < 10) cost = 10;
+  cost *=2;		// alading add
+  if ((int)me->query("sen") < cost)
+  {
+    write("你现在过于疲倦，无法专心下来研读新知。\n");
+    return 1;
+  }
+
+  if( me->query_skill(skill["name"], 1) > skill["max_skill"] )
+  {
+    write("你研读了一会儿，但是发现上面所说的对你而言都太浅了，没有学到任何东西。\n");
+    return 1;
+  }
+
+    
+  me->receive_damage("sen", cost);
+
+  if (!me->query_skill(skill["name"], 1))
+    me->set_skill(skill["name"], 0);
+  me->improve_skill(skill["name"], ((int)me->query_skill("literate", 1)/5+5)*2 );
+  write("你研读有关" + to_chinese(skill["name"]) + "的技巧，似乎有点心得。\n");
+  return 1;
+}
+
+int do_read (string arg)
+{
+  object me = this_object();
+  object who = this_player();
+
+  if (! arg ||
+      present (arg,who) != me)
+    return notify_fail ("你要读什么？\n");
+
+  if (me->query("my_owner") != who->query("id"))
+  {
+    tell_object (who,"这本〖仙剑奇侠传〗不是你的。\n");
+    return 1;
+  }
+
+  if (! me->query("skill"))  
+  {
+    if (who->query("shushan/book"))
+      me->set_skill(who->query("shushan/book"));
+    else
+    {
+      tell_object (who,"请使用decide来决定你想用〖仙剑奇侠传〗学习什么。\n");
+      return 1;
+    }
+  }
+  return reading (who,me);
+}
+

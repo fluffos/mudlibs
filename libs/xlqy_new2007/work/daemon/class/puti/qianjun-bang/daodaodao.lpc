@@ -1,0 +1,270 @@
+#include <ansi.h>
+#include <combat.h>
+inherit SSERVER;
+
+void perform_effect(object me, object target,int skill);
+void check(object me, object target, int dodge_amount,int force,int stick,object where);
+void remove_effect(object me);
+void match_force(object me,object target);
+
+
+int perform(object me, object target)
+{
+        int skill,skill_stick,stick,qianjun_skill,skill_dodge,force,dodge_amount,ini_dodge_apply,ini_damage_apply;
+        int time;
+        object where=environment(me);
+        skill = me->query_skill("wuxiangforce",1);
+        skill_dodge = me->query_skill("dodge",1);
+        skill_stick= me->query_skill("stick",1);
+        force=me->query_skill("force",1);
+        qianjun_skill= me->query_skill("qianjun-bang",1);
+	dodge_amount = (skill+skill_dodge)/36;              
+        force=force/72;
+        stick=skill_stick/24;
+		dodge_amount=dodge_amount*8/10;
+		force=force*8/10;
+		stick=stick*8/10;
+       
+if(me->query_temp("fc_set")) {
+dodge_amount += dodge_amount/2;
+force += force/2;
+stick += stick/2;
+}
+        if (!me->query_temp("psxk"))
+             ini_dodge_apply = me->query_temp("apply/dodge");
+                  
+        if( !target ) target = offensive_target(me);
+
+        if( !target
+        ||      !target->is_character()
+        ||      target->is_corpse()
+        ||      target==me)
+                return notify_fail("你要对谁施展「道·道·道」？\n");
+	if(me->query("family/family_name") != "方寸山三星洞" )
+                return notify_fail("你是哪儿偷学来的武功，也想用「道·道·道」?\n");
+        if(!me->is_fighting())
+               return notify_fail("「道·道·道」只能在战斗中使用！\n");
+        time = 180-skill/3;
+        if(time < 30) time = 25+random(10);
+        if( time()-(int)me->query_temp("psxk_end") < time )
+                return notify_fail("不要频繁的开天灵冲顶，当心走火入魔！\n");
+        
+if (me->query_temp("psxking")) return notify_fail("你已经在蓄力了。\n");
+        if (me->query_temp("psxk")) return notify_fail("你已经在蓄力了。\n");
+        if( skill < 120 )  return notify_fail("你的小无相功修为不够。\n");
+        if( skill_stick < 120 )  return notify_fail("你的基本棒法未够纯熟。\n");
+        if( qianjun_skill < 120 )  return notify_fail("你的千钧棒法未够纯熟。\n");
+        if( me->query_skill("dao",1)< 120 )  return notify_fail("你的道家心法修行不足。\n");       
+       
+        if( (int)me->query("force") < skill*3 )     
+		return notify_fail("你的内力不够。\n");
+ 
+        me->add("force", -skill*3);
+        me->set_temp("psxk_target",target);
+        tell_object(me, HIW"你默念无相口诀「大象无形，大音希声...」，一股真气从脚下涌泉穴缓缓升起。\n"NOR);
+        me->set_temp("no_move",1);  
+        me->set_temp("psxk", 1);
+        me->set_temp("before_psxk_dodge",ini_dodge_apply);
+        call_out("check", 1, me,target,dodge_amount,force,stick,where);
+        return 1;
+}
+
+
+void check(object me, object target, int dodge_amount,int force,int stick,object where)
+{   	
+	int i,skill;
+	object weapon,nowwhere;
+		
+	 if(!me) return;
+	
+	nowwhere=environment(me);	
+	 skill=me->query_skill("stick",1)+me->query_skill("wuxiangforce",1);
+        if(!target)   
+        {
+          remove_effect(me);
+          return;
+        }
+	 if (me->query_skill_mapped("force") != "wuxiangforce"
+	         || !objectp(weapon=me->query_temp("weapon")) 
+	         || (weapon->query("apply/skill_type") != "stick" 
+	             && weapon->query("skill_type") != "stick" ) 
+	         ||  me->query_skill_mapped("stick") != "qianjun-bang" ||nowwhere!=where)     
+	     remove_effect(me);
+	 	 	    
+         else if(!present(target->query("id"), environment(me)) || !me->is_fighting(target) || !me->is_fighting())
+	           remove_effect(me);
+	 
+	 else if(!me->query_temp("psxk"))
+	       remove_effect(me);
+	
+	else {
+		me->set_temp("psxking",1);
+		me->add_temp("psxk",1);
+	      if (me->query_temp("psxk")==10)
+	            {
+	            	tell_object(me, BLINK+HIW"你运气一周天，浑身充满强霸的力道。突然间脑际灵光一闪，气化为神，神化为虚直冲天灵。\n\n"NOR);     
+	         	  me->add_temp("apply/dodge",3*dodge_amount);
+	         	  me->add_temp("psxk_add_dodge",3*dodge_amount);
+	         	  me->add_temp("psxk_add_force",3*force);
+	         	  me->add_temp("apply/force",3*force);
+	         	   me->add_temp("apply/damage",3*stick);
+	         	  me->add_temp("psxk_add_damage",3*stick);
+	         	    me->add_temp("apply/force_vs_damage",6*force*72);
+	         	  me->add_temp("psxk_add_forcevsdamage",6*force*72);
+			  me->add_temp("apply/combat_double_damage",6*stick*24);
+			  me->add_temp("psxk_add_doubledamage",6*stick*24);
+	        }
+	      else if (me->query_temp("psxk")==9)
+	           { tell_object(me, HIC"你突觉内力运转周身无法突破，不禁闭目沉思，然而就在闭上双目的一瞬间意识到眼不视而魂在肝的道理。\n\n"NOR);
+	           me->add_temp("apply/dodge",3*dodge_amount);
+	           me->add_temp("apply/force",3*force);
+	           me->add_temp("psxk_add_dodge",3*dodge_amount);
+	         	  me->add_temp("psxk_add_force",3*force);
+	         	    me->add_temp("apply/damage",3*stick);
+	         	  me->add_temp("psxk_add_damage",3*stick);
+	        }
+	      else if (me->query_temp("psxk")==8)
+	          {  tell_object(me, HIR"你心平气静，对外界的嘈杂亦不听不想；耳不闻而精在肾，沉身运气，内力更高了一层。\n\n"NOR);
+	          	me->add_temp("apply/dodge",3*dodge_amount);
+	          	me->add_temp("apply/force",3*force);
+	          	me->add_temp("psxk_add_dodge",3*dodge_amount);
+	         	  me->add_temp("psxk_add_force",3*force);
+	         	    me->add_temp("apply/damage",3*stick);
+	         	  me->add_temp("psxk_add_damage",3*stick);
+	        }
+	      else if (me->query_temp("psxk")==7)
+	           { tell_object(me, BLINK+HIM"你屏住气息，运转内力于肺间。呼吸均匀悠长，已然达到了鼻不香而魄在肺的境界。\n\n"NOR);
+	           	me->add_temp("apply/dodge",2*dodge_amount);
+	           	me->add_temp("apply/force",2*force);
+	           	me->add_temp("psxk_add_dodge",2*dodge_amount);
+	         	  me->add_temp("psxk_add_force",2*force);
+	           	  me->add_temp("apply/damage",2*stick);
+	         	  me->add_temp("psxk_add_damage",2*stick);
+	         	    me->add_temp("apply/force_vs_damage",3*force*72);
+	         	  me->add_temp("psxk_add_forcevsdamage",3*force*72);
+			  me->add_temp("apply/combat_double_damage",3*stick*24);
+			  me->add_temp("psxk_add_doubledamage",3*stick*24);
+	        }
+	 	        
+	      else if (me->query_temp("psxk")==6)
+	          {  tell_object(me, HIY"你想起无相心法所言：舌不吟而神在心。连忙收声运气，但觉得心灵中一片空灵。\n\n"NOR);
+	        	me->add_temp("apply/dodge",2*dodge_amount);
+	        	me->add_temp("apply/force",2*force);
+	        	me->add_temp("psxk_add_dodge",2*dodge_amount);
+	         	  me->add_temp("psxk_add_force",2*force);
+	         	    me->add_temp("apply/damage",2*stick);
+	         	  me->add_temp("psxk_add_damage",2*stick);
+	        }
+	      else if (me->query_temp("psxk")==5)
+	          {  tell_object(me, YEL"你将沉与丹田之力带行全身，身上啪啪连响，运转自如直冲任督，忍不住纵声长啸。\n\n"NOR);
+	         	 me->add_temp("apply/dodge",2*dodge_amount);
+	         	 me->add_temp("apply/force",2*force);
+	         	 me->add_temp("psxk_add_dodge",2*dodge_amount);
+	         	  me->add_temp("psxk_add_force",2*force);
+	         	    me->add_temp("apply/damage",2*stick);
+	         	  me->add_temp("psxk_add_damage",2*stick);
+	        }
+	      else if (me->query_temp("psxk")==4)
+	         {  tell_object(me, BLINK+HIG"你默念无相心法，四肢不动而意在脾，人虽未动，却只觉内力沉于丹田，力量倍增。\n\n"NOR);
+	         	me->add_temp("apply/dodge",dodge_amount);
+	        	 me->add_temp("apply/force",force);
+	        	 me->add_temp("psxk_add_dodge",dodge_amount);
+	         	  me->add_temp("psxk_add_force",force);
+	         	    me->add_temp("apply/damage",stick);
+	         	  me->add_temp("psxk_add_damage",stick);
+	         	  
+	         	  me->add_temp("apply/force_vs_damage",force*72);
+	         	  me->add_temp("psxk_add_forcevsdamage",force*72);
+			  me->add_temp("apply/combat_double_damage",stick*24);
+			  me->add_temp("psxk_add_doubledamage",stick*24);
+	        }
+	
+	 
+	      else if (me->query_temp("psxk")==3)
+	           { tell_object(me, GRN"你收敛心神，把脚底热气运至膝间跳环，但觉内力运转间身轻无比。\n\n"NOR);
+	         	  me->add_temp("apply/dodge",dodge_amount);
+	         	  me->add_temp("apply/force",force);
+	         	  me->add_temp("psxk_add_dodge",dodge_amount);
+	         	  me->add_temp("psxk_add_force",force);
+	         	    me->add_temp("apply/damage",stick);
+	         	  me->add_temp("psxk_add_damage",stick);
+	        }
+	      else if (me->query_temp("psxk")==2)
+	         {   tell_object(me, MAG"\n你闭目运功，转瞬间突然周身骨骼格格做响，面上浮现出阵阵紫气。\n\n"NOR);
+	         	me->add_temp("apply/dodge",dodge_amount);
+	         	me->add_temp("apply/force",force);
+	         	me->add_temp("psxk_add_dodge",dodge_amount);
+	         	  me->add_temp("psxk_add_force",force);
+	         	    me->add_temp("apply/damage",stick);
+	         	  me->add_temp("psxk_add_damage",stick);
+	        }
+	      	                                          
+	     i=me->query_temp("psxk")/5;
+	    
+	     perform_effect( me, target ,skill);
+	     if(me->query_temp("psxk")<10)
+	     	call_out("check", 1+i, me,target,dodge_amount,force,stick,nowwhere);
+	     else 
+	     {
+ me->start_call_out( (: call_other, __FILE__, "remove_effect", me:),skill/36);
+	           me->delete_temp("no_move");
+	    }
+	     }
+             
+}
+void perform_effect(object me, object target,int skill)
+{
+	int cps, i,amount;
+	i=me->query_temp("psxk");
+	cps=target->query("cps");
+	amount=(int)(skill/cps);
+if(me->query_temp("fc_set")) amount+= amount/2;
+	if(i==10)
+	{
+		tell_object(me,HIW"在你强大的气机牵引下，"+target->name()+"的战力不知不觉消磨了九分！\n"NOR);
+		target->add_temp("apply/attack",-3*amount);
+		target->add_temp("apply/defense",-3*amount);
+	}
+	else if(i==7)
+	{
+		tell_object(me,HIM"在你强大的气机牵引下，"+target->name()+"的战力不知不觉消磨了六分！\n"NOR);
+		target->add_temp("apply/attack",-2*amount);
+		target->add_temp("apply/defense",-2*amount);
+	}
+	else if(i==4)
+	{	tell_object(me,HIG"在你强大的气机牵引下，"+target->name()+"的战力不知不觉消磨了三分！\n"NOR);
+		target->add_temp("apply/attack",-amount);
+		target->add_temp("apply/defense",-amount);
+	}
+
+}
+
+void remove_effect(object me)
+{
+        if(!me) return;
+        if (me->query_temp("psxk"))
+             tell_object(me, GRN"你只觉真气一松，提不起劲了。\n"NOR);
+        else return;
+        me->delete_temp("psxk");
+        me->delete_temp("psxking");
+        remove_call_out("check");
+     
+        
+        me->add_temp("apply/dodge",-me->query_temp("psxk_add_dodge"));
+        me->delete_temp("psxk_add_dodge");
+        me->add_temp("apply/force",-me->query_temp("psxk_add_force"));
+        me->delete_temp("psxk_add_force");
+         me->add_temp("apply/damage",-me->query_temp("psxk_add_damage"));
+        me->delete_temp("psxk_add_damage");
+       me->add_temp("apply/force_vs_damage",-me->query_temp("psxk_add_forcevsdamage"));
+	me->delete_temp("psxk_add_forcevsdamage");
+	me->add_temp("apply/combat_double_damage",-me->query_temp("psxk_add_doubledamage"));
+	  me->delete_temp("psxk_add_doubledamage");
+	  
+        me->delete_temp("before_psxk_dodge");
+        me->delete_temp("psxk_target");
+        me->delete_temp("no_move");
+       
+        me->set_temp("psxk_end",time());
+}
+

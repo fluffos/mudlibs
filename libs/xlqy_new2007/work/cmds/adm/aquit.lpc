@@ -1,0 +1,357 @@
+// by bugbug & alading @ 缥缈水云间, 2003-4-5
+// quit.c
+
+#include <command.h>
+#include <ansi.h>
+
+inherit F_DBASE;
+inherit F_CLEAN_UP;
+
+int do_drop(object me, object obj);
+void check_diablo(object me); //防止系统意外重启时，玩家获得利益..
+
+void create() 
+{
+	seteuid(getuid());
+	set("name", "离线指令");
+	set("id", "quit");
+}
+
+// if force_quit==1, then don't check whether allow quit.
+// used by quit after disconnected or idled too long.
+// mon 7/5/98
+int main(object me, string arg, int force_quit)
+{
+	int i,tm,exp_g,dx_g,pot_g,bal_g;
+	object* t;
+	object *inv, link_ob,zxzz_z,zxzz_x,zxzz;
+	string msg_log,msg;
+	
+	link_ob = me->query_temp("link_ob");
+  tell_object(me,HIW"如果你想暂时离开一会，请直接关闭这个窗口。这样断线不会退出。\n"NOR);
+/*************zxzz任务防止quit bug***************/	
+/*
+	zxzz_z = find_living("tiandi zhizun");
+	zxzz_x = find_living("hunshi mowang");
+	if( zxzz_z && environment(zxzz_z) ) zxzz = zxzz_z;
+	if( zxzz_x && environment(zxzz_x) ) zxzz = zxzz_x;
+	
+	if(zxzz
+	  &&(member_array(me,zxzz->query_players_k())!=-1 || member_array(me,zxzz->query_players_g())!=-1)
+	  && sizeof(zxzz->query_players_k())>=2)
+		return notify_fail("你参加的正邪之争任务还没有结束，不能退出游戏！\n");
+*/
+/*************zxzz任务防止quit bug***************/		
+
+
+	if(!force_quit) {
+	if ( me->query_temp("no_move") )
+		return notify_fail("你被定住了，哪里退得出游戏！\n");
+  
+//    if ( me->query_temp("no_quit") )
+//    return notify_fail("你现在还不能退出，请先退出队伍吧！\n");
+   
+     if(!me->query_temp("suicide_countdown")) {
+	 if( me->is_busy() )
+		return notify_fail("( 你上一个动作还没有完成，不能退出。)\n");
+        } //to allow halt suicide :D by mon 9/9/97
+
+        if( !wizardp(me) && environment(me) && 
+	  environment(me)->query("no_quit") && link_ob )
+                        return notify_fail("这里不准退出游戏。\n");
+	}
+
+	if( !wizardp(me) && (!link_ob || (
+	    link_ob && !link_ob->is_character()) ) ) {
+		inv = all_inventory(me);
+		for(i=0; i<sizeof(inv); i++)
+			if( !inv[i]->query_autoload() )
+//since drop commands when quit is a little different from normal drop commands
+//the do_drop is revised here. wuliao@xyj Feb 1997
+				do_drop(me, inv[i]);
+	}
+
+	// We might be called on a link_dead player, so check this.
+	if( link_ob ) {
+
+		// Are we possessing in others body ?
+		if( link_ob->is_character() ) {
+			write("你的魂魄回到" + link_ob->name(1) + "的身上。\n");
+			exec(link_ob, me);
+			link_ob->setup();
+			return 1;
+		}
+
+		link_ob->set("last_on", time());
+		link_ob->set("last_from", query_ip_name(me));
+		link_ob->save();
+		destruct(link_ob);
+	}
+
+	write("你历了太多的江湖风风雨雨终于有些累了。江湖人,总是在人老之前心也就老了,
+曾经叱咤过的大江南北,现在看过去竟是一片沧茫。你不禁长笑三声：兄弟们我
+还会回来的，然后便怅然若失,黯然离去 ......！\n");
+	me->set("quit_time",time());
+	me->delete("xian/get");//bugbug 2001.11.30
+	me->delete("yao/get");
+	me->delete("diablo_effect"); //gamer
+
+	if(	pointerp(t=me->query_team()) )
+	{
+		if( me->is_team_leader() )
+		{
+			message("team", "\n"+me->name(1) + "由于退出游戏，自动将队伍解散了。\n", t, me);
+		} 
+		else
+		{
+			message("team", "\n"+me->name(1) + "由于退出游戏，自动脱离队伍。\n", t, me);
+		}
+		CHANNEL_D->do_channel(this_object(), "sys",
+		me->name() + "(" + capitalize(me->query("id")) + ")" + "尝试脱离队伍。");	
+		//add by tanpot to monitor quit bug?
+		me->dismiss_team();
+		
+	}
+	//Auto team dismiss,bugbug,2002.2.14
+
+	if(!wizardp(me) || !me->query("env/invisibility"))
+	message("system", me->name() + "离开游戏。\n", environment(me), me);
+	
+	//here to moniter how many exp,dx,pot increace in this login.
+	//the flag moniter/pot etc is set in /adm/daemons/logind.c
+	//modify by starboy 2003-5-29 18:51
+	tm=me->query("login_time");
+	tm=time()-tm;
+	exp_g=me->query("combat_exp")-me->query("moniter/combat_exp");
+	pot_g=me->query("potential")-me->query("moniter/pot");
+	dx_g=me->query("daoxing")-me->query("moniter/daoxing");
+	bal_g=me->query("balance")-me->query("moniter/balance");
+	bal_g=bal_g/10000;
+	//modify by starboy to avoid too many rubbish msgs and logs 2003-5-30 0:18
+	if( exp_g>100||pot_g>100||dx_g>100||bal_g>10 ) {	//too many log,so change it 2003-5-30 11:41
+		msg_log=me->query("id")+
+		"在"+FINGER_D->age_string(tm)+"的登陆时间内获得经验"
+		+exp_g+" 、获得潜能"+pot_g+"、获得道行"+COMBAT_D->chinese_daoxing(dx_g)
+		+"。银行增加金钱"+bal_g+" gold。";		//make the message format
+
+		CHANNEL_D->do_channel(this_object(), "sys",HIR+msg_log+NOR );	//msg on sys channel
+		log_file( "increase", msg_log+"\n");	//log the increase
+		exp_g=exp_g*3600/tm;	//get increase ratio per hour here
+		pot_g=pot_g*3600/tm;	//do not tm=tm/3600 first,the tm will be zero,then can't division
+		dx_g=dx_g*3600/tm;
+		dx_g=dx_g/1000;	//convert day to year
+		bal_g=bal_g*3600/tm;
+		msg=me->query("id")+" average ratio: exp "+exp_g+" ,pot "+pot_g+" ,dx "+dx_g+" year,balance "+bal_g+" gold.";
+		CHANNEL_D->do_channel(this_object(), "sys",HIR+msg+NOR );
+		log_file( "INC_RAT", msg+"\n");		//log to another file,so that can view clearly.
+	} else
+	CHANNEL_D->do_channel(this_object(), "sys",
+		me->name() + "(" + capitalize(me->query("id")) + ")" + "离开游戏了。");	
+	
+//	check_diablo(me); 
+	me->save();
+
+	return 1;
+}
+
+int do_drop(object me, object obj)
+{
+    	//if obj is a self-made fabao, save first...
+        //if( obj->query("series_no") && obj->query("fabao") ) obj->save();
+           
+        if( obj->query("no_drop") ){
+             if(obj->query("charm")) obj->move("/obj/void");
+                destruct(obj);
+                return 0;
+        }
+        if (obj->move(environment(me))) {
+                if( obj->is_character() )
+                        message_vision("$N将$n从背上放了下来，躺在地上。\n", me, obj);
+                else {
+                        message_vision( sprintf("$N丢下一%s$n。\n",     obj->query("unit")), me, obj );
+                        if( !obj->query("value") && !obj->value() ) {
+                                tell_object(me,"因为这样东西并不值钱，所以人们并不会注意到它的存在。\n");
+                                destruct(obj);
+                        }
+                }
+                return 1;
+        }
+        return 0;
+}
+void check_diablo(object me) //防止系统意外重启时，玩家获得利益..
+{
+	
+         mapping diablo;
+        string  *type;
+	mapping skl;
+	int j;
+	string *sname;
+	
+        if( !mapp( diablo =me->query("diablo_effect") ) || sizeof(diablo) < 1 )
+                return;
+
+        type = keys(diablo);
+  for(int i=0;i<sizeof(type);i++)
+        {
+        	
+        	 if(type[i]=="add_force")
+        	 {
+        	 	if(me->query("max_force")>=me->query("diablo_effect/add_force"))
+        	 		me->add("max_force",-me->query("diablo_effect/add_force"));
+        		else me->set("max_force",0);
+        		
+        		me->add("force",-me->query("diablo_effect/add_force"));
+        		
+        		
+        		me->delete("diablo_effect/add_force");
+        	}
+        	  if(type[i]=="add_mana")
+        	 {
+        	 	if(me->query("max_mana")>=me->query("diablo_effect/add_mana"))
+        	 		me->add("max_mana",-me->query("diablo_effect/add_mana"));
+        		else me->set("max_mana",0);
+        		
+        		me->add("mana",-me->query("diablo_effect/add_mana"));
+        		
+        		
+        		me->delete("diablo_effect/add_mana");
+        	}
+        	
+        	 if(type[i]=="add_max_force")
+        	 {
+        	 	if(me->query("max_force")>=me->query("diablo_effect/add_max_force"))
+        	 		me->add("max_force",-me->query("diablo_effect/add_max_force"));
+        		else me->set("max_force",0);
+        	//	if(me->query("force")>=query_temp("diablo_effect/add_max_force"))
+        			me->add("force",-me->query("diablo_effect/add_max_force"));
+        	//	else me->set("force",0);
+        		
+        		me->delete("diablo_effect/add_max_force");
+        	}
+        	  if(type[i]=="add_max_mana")
+        	 {
+        	 	if(me->query("max_mana")>=me->query("diablo_effect/add_max_mana"))
+        	 		me->add("max_mana",-me->query("diablo_effect/add_max_mana"));
+        		else me->set("max_mana",0);
+        	//	if(me->query("mana")>=query_temp("diablo_effect/add_max_mana"))
+        			me->add("mana",-me->query("diablo_effect/add_max_mana"));
+        	//	else me->set("mana",0);
+        		
+        		me->delete("diablo_effect/add_max_mana");
+        	}
+        	if(type[i]=="add_all_skill")
+        	{
+	        	skl = me->query_skills();
+			if(!sizeof(skl)) 
+			{
+			return;	
+			}
+			j=sizeof(skl);
+			sname=keys(skl);
+			
+			for(int k=0;k<sizeof(sname);k++)
+			{
+				if(skl[sname[k]]>me->query("diablo_effect/add_all_skill"))
+				me->set_skill(sname[k],skl[sname[k]]-me->query("diablo_effect/add_all_skill"));
+				else me->delete_skill(sname[k]);
+			
+			
+			}
+			me->delete("diablo_effect/add_all_skill");
+        		
+        		
+        	}
+        	
+           	if(type[i]=="add_axe")
+        	{
+        		if(me->query_skill("axe",1))
+        		me->set_skill("axe",me->query_skill("axe",1)-me->query("diablo_effect/add_axe"));
+        		me->delete("diablo_effect/add_axe");
+        	}
+        	if(type[i]=="add_blade")
+        	{
+        		if(me->query_skill("blade",1))
+        		me->set_skill("blade",me->query_skill("blade",1)-me->query("diablo_effect/add_blade"));
+        		me->delete("diablo_effect/add_blade");
+        	}
+        	if(type[i]=="add_fork")
+        	{
+        		if(me->query_skill("fork",1))
+        		me->set_skill("fork",me->query_skill("fork",1)-me->query("diablo_effect/add_fork"));
+        		me->delete("diablo_effect/add_fork");
+        	}
+        	if(type[i]=="add_dagger")
+        	{
+        		if(me->query_skill("dagger",1))
+        			me->set_skill("dagger",me->query_skill("dagger",1)-me->query("diablo_effect/add_dagger"));
+        		me->delete("diablo_effect/add_dagger");
+        	}
+        	if(type[i]=="add_hammer")
+        	{
+        		if(me->query_skill("hammer",1))
+        		me->set_skill("hammer",me->query_skill("hammer",1)-me->query("diablo_effect/add_hammer"));
+        		me->delete("diablo_effect/add_hammer");
+        	}
+        	if(type[i]=="add_mace")
+        	{if(me->query_skill("mace",1))
+        		me->set_skill("mace",me->query_skill("mace",1)-me->query("diablo_effect/add_mace"));
+        		me->delete("diablo_effect/add_mace");
+        	}
+        	if(type[i]=="add_music")
+        	{if(me->query_skill("music",1))
+        		me->set_skill("music",me->query_skill("music",1)-me->query("diablo_effect/add_music"));
+        		me->delete("diablo_effect/add_music");
+        	}
+        	if(type[i]=="add_rake")
+        	{if(me->query_skill("rake",1))
+        		me->set_skill("rake",me->query_skill("rake",1)-me->query("diablo_effect/add_rake"));
+        		me->delete("diablo_effect/add_rake");
+        	}
+        	if(type[i]=="add_spear")
+        	{if(me->query_skill("spear",1))
+        		me->set_skill("spear",me->query_skill("spear",1)-me->query("diablo_effect/add_spear"));
+        		me->delete("diablo_effect/add_spear");
+        	}
+        	if(type[i]=="add_staff")
+        	{if(me->query_skill("staff",1))
+        		me->set_skill("staff",me->query_skill("staff",1)-me->query("diablo_effect/add_staff"));
+        		me->delete("diablo_effect/add_staff");
+        	}
+        	if(type[i]=="add_stick")
+        	{if(me->query_skill("stick",1))
+        		me->set_skill("stick",me->query_skill("stick",1)-me->query("diablo_effect/add_stick"));
+        		me->delete("diablo_effect/add_stick");
+        	}
+        	if(type[i]=="add_sword")
+        	{if(me->query_skill("sword",1))
+        		me->set_skill("sword",me->query_skill("sword",1)-me->query("diablo_effect/add_sword"));
+        		me->delete("diablo_effect/add_sword");
+        	}
+        	if(type[i]=="add_throwing")
+        	{if(me->query_skill("throwing",1))
+        		me->set_skill("throwing",me->query_skill("throwing",1)-me->query("diablo_effect/add_throwing"));
+        		me->delete("diablo_effect/add_throwing");
+        	}
+        	if(type[i]=="add_whip")
+        	{if(me->query_skill("whip",1))
+        		me->set_skill("whip",me->query_skill("whip",1)-me->query("diablo_effect/add_whip"));
+        		me->delete("diablo_effect/add_whip");
+        	}
+        	
+        	
+        
+        }	
+    
+	
+}
+int help(object me)
+{
+	write(@HELP
+指令格式 : quit
+
+当你想暂时离开时, 可利用此一指令。
+HELP
+    );
+    return 1;
+}
+

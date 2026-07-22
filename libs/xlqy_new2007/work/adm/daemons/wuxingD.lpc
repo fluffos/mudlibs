@@ -1,0 +1,2153 @@
+//wuxingd.c
+//create by gamer@88 ,2004.03
+//user的五行初始化放在updated.c中。。
+//npc五行初始化放在char的setup中
+//对于特殊的npc五行的设定比较麻烦（如，李靖的怪，判将等，都是先setup然后再setskill,setfamily的..)
+//似乎只能手工加入五行设定了..
+/*
+门派五行：五行 ：金克木 木克土 土克水 水克火 火克金 ※※金生水 水生木 木生火 火生土 土生金 
+                 
+                  防 	      防	          加       加	 	吃	     吃	         吃
+                  15          25     	30%(+10)   15%(+5)	 20          15          10
+
+金：fc             物(5)/魔(10)  电     	  电       物(5)/魔(10) 	    火       毒           水
+
+    pansi          水          电     	  电 	   水	            火      物(5)/魔(10)    毒            
+ 
+ 
+    
+木：moon，         水          毒          毒 	   水      	   电         物(3)/魔(5)    火     
+
+    hell          火          毒          毒        火   	  电        水              物(3)/魔(5)
+	
+水： lg ，         电          水     	  水        电  		    魔(15)/物(10)    火           毒  
+   
+    xs		  毒          水     	  水         毒 		    魔(15)/物(10)     电           火
+	
+火：jjf，         毒           火          火        毒 		    水         电          魔(15)/物(10)
+    hyd      魔(15)/物(10)    火          火     魔(15)/物(10)       水         毒           电
+	
+土： pt            火    物(5)/魔(10)  魔(15)/物(10)    火	     毒         水           电           
+
+,   wdd		   电    物(5)/魔(10)  魔(15)/物(10)    	电	     毒         火            水
+
+
+全：   wzg        All(15)物(5)魔(10)  	-------------------------
+
+无：shushan       物(15)         	物(15)        		all(25) 魔(15)
+
+特： hsl might    -        -       －
+特： hsl magic    -        -       －
+
+force(专家，大师，宗师）：防魔 
+spell(专家，大师，宗师）：加魔
+parry(专家，大师，宗师）：防物
+atksk(专家，大师，宗师）：加物
+
+蓝－雷--金：即电，杀伤范围较大，如20-250,但有特效no_exert or no_perform or no_cast
+绿－风--木: 即毒，杀伤力一般80，但是可以使对方中毒几秒，80+70+60=210...也可以使得对方遭受不良状态---疾病，虚弱，疯狂，诅咒，厄运，恐惧.
+白－水－水：即冰，杀伤中等150，但可以使busy
+红－火－火，杀伤力大300，可以使得no_move
+黄－土－土，物理/魔法伤害
+宝石体系
+碎裂的宝石增加相应五行的攻击或防御.
+瑕疵－－
+完美－－
+晶石－－
+
+普通的五行，直接加damage..
+专家的五行，加damage的百分比
+大师的五行，则有各种特效
+
+物理和魔法攻击加成没有10点附加。
+以白板为例子
+
+*/
+#include <ansi.h>
+
+#define WUXING_ADD_ALL		200
+#define WUXING_ADD_MAX 		2500
+#define WUXING_ADD_ON		15
+#define WUXING_ADD_LOW		1500
+#define WUXING_ADD_LOWON	5
+#define MAGIC_ADD_MAX		1500
+#define WUXING_SUB_LOW		2000
+#define WUXING_SUB_LOWON	5
+#define WUXING_SUB_HIGH		3000
+#define WUXING_SUB_HIGHON	15
+#define WUXING_EAT_HIGH 	-2000
+#define WUXING_EAT_HIGHON 	-20
+#define WUXING_EAT_MIDDLE 	-1500
+#define WUXING_EAT_MIDDLEON	-15
+#define WUXING_EAT_LOW		-500
+#define WUXING_EAT_LOWON	-10
+#define WUXING_SUB_ALL		1500
+#define WUXING_EAT_ALL		-2500
+#define MASTER_WUXING		1500
+#define MASTER_RESIST_WUXING	1000
+
+inherit F_DBASE;
+void remove_huo_effect(object target);
+void remove_jinforce_effect(object target);
+void remove_jinmana_effect(object target);
+void remove_jinpfm_effect(object target);
+void check_npc_skill_level(object npc);
+
+varargs int query_total_damage(object ob,object victim,int init_damage,int type,string kind);
+string query_ob_wuxing(object ob);
+varargs int query_ob_do_damage(object ob,int damage,string damage_type,string damage_kind);
+varargs int query_ob_re_damage(object ob,int damage,string damage_type,string damage_kind);
+void init_user_wuxing(object ob);
+
+string *poison=({"illness_poison","weakness_poison","madness_poison","fearness_poison",
+		 "curse_poison","unlucky_poison","stoner_poison"});
+
+
+void create()
+{
+	seteuid(getuid());
+	set("name", "五行");
+	set("id", "WuxingD");	
+	
+}
+mapping wuxing_menpai = ([
+		"jin_wuxing": 	({"方寸山三星洞","盘丝洞"}),
+		"mu_wuxing":	({"月宫","阎罗地府"}),
+		"shui_wuxing":	({"东海龙宫","大雪山"}),
+		"huo_wuxing":	({"将军府","火云洞"}),
+		"tu_wuxing":	({"南海普陀山","陷空山无底洞"}),
+		"all_wuxing":   ({"五庄观"}),
+		"none_wuxing":	({"蜀山剑派"}),
+		]);
+string query_ob_wuxing(object ob)
+{
+	string menpai;
+	if(!ob)
+	return "none";
+	if(!ob->is_character())
+		return "none";
+	menpai = ob->query("family/family_name");
+	if(!menpai)	return "none";
+	
+	if(menpai == "方寸山三星洞"||menpai == "盘丝洞")
+	{
+		ob->set_temp("wuxing/type","jin_wuxing");
+		if(menpai == "盘丝洞")
+		  ob->set_temp("wuxing/flag",0);
+		else ob->set_temp("wuxing/flag",1);
+		
+		return "jin_wuxing";
+	}
+	else if(menpai == "月宫"||menpai == "阎罗地府")
+	{
+		ob->set_temp("wuxing/type","mu_wuxing");
+		if(menpai == "阎罗地府")
+		  ob->set_temp("wuxing/flag",0);
+		else ob->set_temp("wuxing/flag",1);
+		
+		return "mu_wuxing";
+	}
+	else if(menpai == "东海龙宫"||menpai == "大雪山")
+	{
+		ob->set_temp("wuxing/type","shui_wuxing");
+		if(menpai == "大雪山")
+		  ob->set_temp("wuxing/flag",0);
+		else ob->set_temp("wuxing/flag",1);
+		
+		return "shui_wuxing";
+	}	
+	else if(menpai == "将军府"||menpai == "火云洞")
+	{
+		ob->set_temp("wuxing/type","huo_wuxing");
+		if(menpai == "火云洞")
+		  ob->set_temp("wuxing/flag",0);
+		else ob->set_temp("wuxing/flag",1);
+		
+		return "huo_wuxing";
+	}	
+	else if(menpai == "南海普陀山"||menpai == "陷空山无底洞")
+	{
+		ob->set_temp("wuxing/type","tu_wuxing");
+		if(menpai == "陷空山无底洞")
+		  ob->set_temp("wuxing/flag",0);
+		else ob->set_temp("wuxing/flag",1);
+		
+		return "tu_wuxing";
+	}		
+	else if(menpai == "五庄观")
+		return "all_wuxing";
+	else if(menpai == "蜀山剑派")
+		return "none_wuxing";	
+	else if(menpai == "幻世勇者")
+		return "might_wuxing";	
+	else if(menpai == "幻世魔导")
+		return "magic_wuxing";	
+		
+	return "none";
+
+}
+void check_npc_skill_level(object npc)
+{
+	int skill,level,exp;
+	string sk_level;
+	if(userp(npc)) return ;
+	
+	level = npc->query("level");
+	exp = npc->query("combat_exp");
+	exp = exp*2/3+random(exp/3);
+	if(!level)
+	{	level = LEVEL_D->query_level(exp);
+		
+		npc->set("level",level);
+	}
+	skill = npc->query_skill("dodge",1);
+	 if(skill >= 650&&!npc->query("skill_level/dodge"))
+		npc->set("skill_level/dodge","grandmaster");
+	else if(skill >= 300&&!npc->query("skill_level/dodge"))
+		npc->set("skill_level/dodge","master");
+	else if(skill >= 200&&!npc->query("skill_level/dodge"))
+		npc->set("skill_level/dodge","expert");	
+	skill = npc->query_skill("parry",1);
+	if(skill >= 650&&!npc->query("skill_level/parry"))
+		npc->set("skill_level/parry","grandmaster");
+	else if(skill >= 300&&!npc->query("skill_level/parry"))
+		npc->set("skill_level/parry","master");
+	else if(skill >= 200&&!npc->query("skill_level/parry"))
+		npc->set("skill_level/parry","expert");	
+	
+	skill = npc->query_skill("unarmed",1);
+	if(skill >= 650&&!npc->query("skill_level/unarmed"))
+		npc->set("skill_level/unarmed","grandmaster");
+	else if(skill >= 300&&!npc->query("skill_level/unarmed"))
+		npc->set("skill_level/unarmed","master");
+	else if(skill >= 200&&!npc->query("skill_level/unarmed"))
+		npc->set("skill_level/unarmed","expert");	
+	
+	skill = npc->query_skill("force",1);
+	 if(skill >= 650&&!npc->query("skill_level/force"))
+		npc->set("skill_level/force","grandmaster");
+	 else if(skill >= 300&&!npc->query("skill_level/force"))
+		npc->set("skill_level/force","master");
+	else if(skill >= 200&&!npc->query("skill_level/force"))
+		npc->set("skill_level/force","expert");
+	
+	skill = npc->query_skill("spells",1);
+	if(skill >= 650&&!npc->query("skill_level/spells"))
+		npc->set("skill_level/spells","grandmaster");
+	else if(skill >= 300&&!npc->query("skill_level/spells"))
+		npc->set("skill_level/spells","master");
+	else if(skill >= 200&&!npc->query("skill_level/spells"))
+		npc->set("skill_level/spells","expert");
+		
+		
+}	                
+
+void init_user_wuxing(object ob)
+{
+	string wuxing;
+	int flag,npc,user,effect;
+	int i ,j,k,m,n,p,spi,con,kar,cps,per,cor;
+	int force,spells,unarmed,dodge,parry,literate,level;
+	reset_eval_cost();
+	if(!ob)	return ;
+	
+	if(!ob->is_character())	return ;
+	if(ob->query_temp("wuxing/init_done")) return;
+	wuxing = query_ob_wuxing(ob);
+	ob->set_temp("wuxing/type",wuxing);
+	check_npc_skill_level(ob);
+	flag = ob->query_temp("wuxing/flag");
+	
+	spi = ob->query("spi");
+	con = ob->query("con");
+	kar = ob->query("kar");
+	cps = ob->query("cps");
+	per = ob->query("per");
+	cor = ob->query("cor");
+	force = ob->query_skill("force",1);
+	spells = ob->query_skill("spells",1);
+	unarmed = ob->query_skill("unarmed",1);
+	dodge = ob->query_skill("dodge",1);
+	parry = ob->query_skill("parry",1);
+	literate = ob->query_skill("literate",1);
+	level = ob->query("level");
+	i = (spi - 25)*50;
+	j = (con - 20)*30;
+	k = kar - 20;
+	m = cps - 20;
+	n = per - 20;
+	p = cor - 20;
+reset_eval_cost();
+	if(!userp(ob))
+	{
+		i = 1;
+		j = 1;
+		k = 1;
+		m = 1;
+		n = 1;
+		p = 1;	
+	
+	}
+	if(i > 0)
+	 i = i/2+random(i/2+50);
+	 else i = i/2-random(-i/2+50);
+	
+	if(j > 0)
+	 j = j/2+random(j/2+30);
+	 else j = j/2-random(-j/2+30);
+	 
+	if(ob->query("age") > 17)
+	{
+		if(k >=0)
+		 ob->add_temp("combat/lucky",random(k/5+1));
+		 else ob->add_temp("combat/lucky",-random(-k/5+1));
+	 
+	}
+	else ob->add_temp("combat/lucky",1+random(3));
+	if(ob->query("age") > 17) 
+	{
+		if(n >=0)
+		ob->add_temp("combat/bless",random(n/5+1));
+		else ob->add_temp("combat/bless",-random(-n/5+1));
+		
+	}
+	else ob->add_temp("combat/bless",1+random(3));
+	if(ob->query("age") > 17) 
+	{
+		if(p > 0)
+			ob->add_temp("apply/attack",p+random(p+1)+level*level/50);
+		else ob->add_temp("apply/attack",p-random(-p+1)+level*level/50);
+	}
+	else ob->add_temp("apply/attack",1+random(3));
+	if(ob->query("age") > 17) 
+	{
+		if( m > 0)
+			ob->add_temp("apply/defense",m+random(m+1)+level*level/50);
+		else 	ob->add_temp("apply/defense",m-random(-m+1)+level*level/50);
+		
+	}
+	else ob->add_temp("apply/defense",1+random(3));	
+	if(ob->query("age") > 17) 
+	{
+		
+		ob->add_temp("apply/magic_find",level*level*2+level);
+		
+		
+	}
+	else ob->add_temp("apply/magic_find",1500);	
+	
+	if(wuxing == "jin_wuxing")
+	{
+		
+		ob->add_temp("apply/add_max_jin",WUXING_ADD_MAX+i+level*level/2);
+		ob->add_temp("apply/add_jin",WUXING_ADD_ON+i/50+level);
+		ob->add_temp("apply/master_jin",MASTER_WUXING+i+level*level*2/5);
+		ob->add_temp("apply/master_resist_jin",MASTER_RESIST_WUXING+j+level*level*2/5);
+		
+		ob->add_temp("apply/sub_max_jin",WUXING_SUB_HIGH+j+level*level/3);
+		ob->add_temp("apply/sub_jin",WUXING_SUB_HIGHON+j/25+level);
+		ob->add_temp("apply/sub_max_huo",WUXING_EAT_HIGH+j+level*level/3);
+		ob->add_temp("apply/sub_huo",WUXING_EAT_HIGHON+j/25+level);
+				
+		if(flag)
+		{
+			ob->add_temp("apply/add_max_phy",500+i*2/3+level*level/6);
+			ob->add_temp("apply/add_phy",5+i/75+level*2/3);
+			ob->add_temp("apply/add_max_spells_all",1000+i*2/3+level*level/6);
+			ob->add_temp("apply/add_spells_all",5+i/75+level*2/3);
+			
+			ob->add_temp("apply/sub_max_phy",800+j+level*level/5);	
+			ob->add_temp("apply/sub_max_spells_all",1000+j+level*level/4);	
+			ob->add_temp("apply/sub_max_mu",WUXING_EAT_MIDDLE+j+level*level/3);
+			ob->add_temp("apply/sub_mu",WUXING_EAT_MIDDLEON+j/25+level);
+			ob->add_temp("apply/sub_max_shui",WUXING_EAT_LOW+j+level*level/3);
+			ob->add_temp("apply/sub_shui",WUXING_EAT_LOWON+j/25+level);
+		
+		}
+		else 
+		{
+			
+			ob->add_temp("apply/add_max_shui",WUXING_ADD_LOW+i*2/3+level*level/6);
+			ob->add_temp("apply/add_shui",WUXING_ADD_LOWON+i/75+level*2/3);
+			ob->add_temp("apply/master_shui",MASTER_WUXING/2+i+level*level/5);
+			ob->add_temp("apply/master_resist_shui",MASTER_RESIST_WUXING/2+j+level*level/5);
+			
+			ob->add_temp("apply/sub_max_phy",-500+j+level*level/5);	
+			ob->add_temp("apply/sub_max_spells_all",-1000+j+level*level/4);	
+			ob->add_temp("apply/sub_max_mu",WUXING_EAT_LOW+j+level*level/3);
+			ob->add_temp("apply/sub_mu",WUXING_EAT_LOWON+j/25+level);
+			ob->add_temp("apply/sub_max_shui",WUXING_SUB_LOW+j+level*level/3);
+			ob->add_temp("apply/sub_shui",WUXING_SUB_LOWON+j/25+level);	
+			
+			
+		}
+		
+		
+	}
+
+	else if(wuxing == "mu_wuxing")
+	{
+		ob->add_temp("apply/add_max_mu",WUXING_ADD_MAX+i+level*level/2);
+		ob->add_temp("apply/add_mu",WUXING_ADD_ON+i/50+level);
+		ob->add_temp("apply/master_mu",MASTER_WUXING+i+level*level*2/5);
+		ob->add_temp("apply/master_resist_mu",MASTER_RESIST_WUXING+j+level*level*2/5);
+		ob->add_temp("apply/sub_max_jin",WUXING_EAT_HIGH+j+level*level/3);
+		ob->add_temp("apply/sub_jin",WUXING_EAT_HIGHON+j/25+level);
+		ob->add_temp("apply/sub_max_mu",WUXING_SUB_HIGH+j+level*level/3);
+		ob->add_temp("apply/sub_mu",WUXING_SUB_HIGHON+j/25+level);
+		
+		if(flag)
+		{
+			ob->add_temp("apply/master_shui",MASTER_WUXING/2+i+level*level/5);
+			ob->add_temp("apply/master_resist_shui",MASTER_RESIST_WUXING/2+j+level*level/5);
+			ob->add_temp("apply/add_max_shui",WUXING_ADD_LOW+i*2/3+level*level/6);
+			ob->add_temp("apply/add_shui",WUXING_ADD_LOWON+i/75+level*2/3);
+			
+			ob->add_temp("apply/sub_max_phy",-500+j+level*level/5);	
+			ob->add_temp("apply/sub_max_spells_all",-1000+j+level*level/4);	
+			ob->add_temp("apply/sub_max_huo",WUXING_EAT_LOW+j+level*level/3);
+			ob->add_temp("apply/sub_huo",WUXING_EAT_LOWON+j/25+level);
+			ob->add_temp("apply/sub_max_shui",WUXING_SUB_LOW+j+level*level/3);
+			ob->add_temp("apply/sub_shui",WUXING_SUB_LOWON+j/25+level);	
+		
+		}
+		else 
+		{
+			ob->add_temp("apply/master_huo",MASTER_WUXING/2+i+level*level/5);
+			ob->add_temp("apply/master_resist_huo",MASTER_RESIST_WUXING/2+j+level*level/5);
+			ob->add_temp("apply/add_max_huo",WUXING_ADD_LOW+i*2/3+level*level/6);
+			ob->add_temp("apply/add_huo",WUXING_ADD_LOWON+i/75+level*2/3);
+			
+			ob->add_temp("apply/sub_max_phy",-300+j+level*level/5);	
+			ob->add_temp("apply/sub_max_spells_all",-700+j+level*level/4);	
+			ob->add_temp("apply/sub_max_huo",WUXING_SUB_LOW+j+level*level/3);
+			ob->add_temp("apply/sub_huo",WUXING_SUB_LOWON+j/25+level);
+			ob->add_temp("apply/sub_max_shui",WUXING_EAT_MIDDLE+j+level*level/3);
+			ob->add_temp("apply/sub_shui",WUXING_EAT_MIDDLEON+j/25+level);	
+		}
+		
+	}
+
+	else if(wuxing == "shui_wuxing")
+	{
+		ob->add_temp("apply/add_max_shui",WUXING_ADD_MAX+i+level*level/2);
+		ob->add_temp("apply/add_shui",WUXING_ADD_ON+i/50+level);
+		ob->add_temp("apply/master_shui",MASTER_WUXING+i+level*level*2/5);
+		ob->add_temp("apply/master_resist_shui",MASTER_RESIST_WUXING+j+level*level*2/5);
+		ob->add_temp("apply/sub_max_shui",WUXING_SUB_HIGH+j+level*level/3);
+		ob->add_temp("apply/sub_shui",WUXING_SUB_HIGHON+j/25+level);
+		ob->add_temp("apply/sub_max_phy",-1000+j+level*level/5);
+		ob->add_temp("apply/sub_max_spells_all",-1500+j+level*level/4);
+		if(flag)
+		{
+			ob->add_temp("apply/master_jin",MASTER_WUXING/2+i+level*level/5);
+			ob->add_temp("apply/master_resist_jin",MASTER_RESIST_WUXING/2+j+level*level/5);
+			ob->add_temp("apply/add_max_jin",WUXING_ADD_LOW+i*2/3+level*level/6);
+			ob->add_temp("apply/add_jin",WUXING_ADD_LOWON+i/75+level*2/3);
+			
+			ob->add_temp("apply/sub_max_jin",WUXING_SUB_LOW+j+level*level/3);
+			ob->add_temp("apply/sub_jin",WUXING_SUB_LOWON+j/25+level);
+			ob->add_temp("apply/sub_max_mu",WUXING_EAT_LOW+j+level*level/3);
+			ob->add_temp("apply/sub_mu",WUXING_EAT_LOWON+j/25+level);
+			ob->add_temp("apply/sub_max_huo",WUXING_EAT_MIDDLE+j+level*level/3);
+			ob->add_temp("apply/sub_huo",WUXING_EAT_MIDDLEON+j/25+level);
+			
+			
+		}
+		else
+		{
+			ob->add_temp("apply/master_mu",MASTER_WUXING/2+i+level*level/5);
+			ob->add_temp("apply/master_resist_mu",MASTER_RESIST_WUXING/2+j+level*level/5);
+			ob->add_temp("apply/add_max_mu",WUXING_ADD_LOW+i*2/3+level*level/6);
+			ob->add_temp("apply/add_mu",WUXING_ADD_LOWON+i/75+level*2/3);
+			
+			ob->add_temp("apply/sub_max_jin",WUXING_EAT_MIDDLE+j+level*level/3);
+			ob->add_temp("apply/sub_jin",WUXING_EAT_MIDDLEON+j/25+level);
+			ob->add_temp("apply/sub_max_mu",WUXING_SUB_LOW+j+level*level/3);
+			ob->add_temp("apply/sub_mu",WUXING_SUB_LOWON+j/25+level);
+			ob->add_temp("apply/sub_max_huo",WUXING_EAT_LOW+j+level*level/3);
+			ob->add_temp("apply/sub_huo",WUXING_EAT_LOWON+j/25+level);
+			
+		}
+		
+		
+		
+	}
+       
+	else if(wuxing == "huo_wuxing")
+	{
+		ob->add_temp("apply/add_max_huo",WUXING_ADD_MAX+i+level*level/2);
+		ob->add_temp("apply/add_huo",WUXING_ADD_ON+i/50+level);
+		ob->add_temp("apply/master_huo",MASTER_WUXING+i+level*level*2/5);
+		ob->add_temp("apply/master_resist_huo",MASTER_RESIST_WUXING+j+level*level*2/5);
+		ob->add_temp("apply/sub_max_huo",WUXING_SUB_HIGH +j+level*level/3);
+		ob->add_temp("apply/sub_huo",WUXING_SUB_HIGHON+j/25+level);
+		ob->add_temp("apply/sub_max_shui",WUXING_EAT_HIGH+j+level*level/3);
+		ob->add_temp("apply/sub_shui",WUXING_EAT_HIGHON+j/25+level);
+		
+		if(flag)
+		{
+			ob->add_temp("apply/master_mu",MASTER_WUXING/2+i+level*level/5);
+			ob->add_temp("apply/master_resist_mu",MASTER_RESIST_WUXING/2+j+level*level/5);
+			ob->add_temp("apply/add_max_mu",WUXING_ADD_LOW+i*2/3+level*level/6);
+			ob->add_temp("apply/add_mu",WUXING_ADD_LOWON+i/75+level*2/3);
+			
+			ob->add_temp("apply/sub_max_phy",-300+j+level*level/5);
+			ob->add_temp("apply/sub_max_spells_all",-700+j+level*level/4);
+			ob->add_temp("apply/sub_max_jin",WUXING_EAT_MIDDLE+j+level*level/3);
+			ob->add_temp("apply/sub_jin",WUXING_EAT_MIDDLEON+j/25+level);
+			ob->add_temp("apply/sub_max_mu",WUXING_SUB_LOW+j+level*level/3);
+			ob->add_temp("apply/sub_mu",WUXING_SUB_LOWON+j/25+level);
+		}
+		else 
+		{
+			ob->add_temp("apply/add_max_phy",500+i*2/3+level*level/6);
+			ob->add_temp("apply/add_phy",5+i/75+level*2/3);
+			ob->add_temp("apply/add_max_spells_all",1000+i+level*level/6);
+			ob->add_temp("apply/add_spells_all",5+i/75+level*2/3);
+			
+			ob->add_temp("apply/sub_max_phy",500+j+level*level/5);
+			ob->add_temp("apply/sub_max_spells_all",800+j+level*level/4);
+			ob->add_temp("apply/sub_max_jin",WUXING_EAT_LOW+j+level*level/3);
+			ob->add_temp("apply/sub_jin",WUXING_EAT_LOWON+j/25+level);
+			ob->add_temp("apply/sub_max_mu",WUXING_EAT_MIDDLE+j+level*level/3);
+			ob->add_temp("apply/sub_mu",WUXING_EAT_MIDDLEON+j/25+level);
+		}
+	}
+	         
+
+	else if(wuxing == "tu_wuxing")
+	{
+		ob->add_temp("apply/add_max_phy",1000+i+level*level/4);
+		ob->add_temp("apply/add_phy",5+i/50+level);
+		ob->add_temp("apply/add_max_spells_all",1500+i+level*level/3);
+		ob->add_temp("apply/add_spells_all",5+i/50+level);
+		ob->add_temp("apply/master_resist_jin",MASTER_RESIST_WUXING*2/3+level*level*2/5);
+		ob->add_temp("apply/sub_max_mu",WUXING_EAT_HIGH+j+level*level/3 );
+		ob->add_temp("apply/sub_mu",WUXING_EAT_HIGHON+j/25+level);
+		ob->add_temp("apply/sub_max_phy",500+j+level*level/4);
+		ob->add_temp("apply/sub_max_spells_all",1000+j+level*level/3);
+		
+		
+		if(flag)
+		{
+			ob->add_temp("apply/master_huo",MASTER_WUXING/2+i+level*level/5);
+			ob->add_temp("apply/master_resist_huo",MASTER_RESIST_WUXING/2+j+level*level/5);
+			ob->add_temp("apply/add_max_huo",WUXING_ADD_LOW+i*2/3+level*level/6);
+			ob->add_temp("apply/add_huo",WUXING_ADD_LOWON+i/75+level*2/3);
+			
+			ob->add_temp("apply/sub_max_jin",WUXING_EAT_LOW+j+level*level/3);
+			ob->add_temp("apply/sub_jin",WUXING_EAT_LOWON+j/25+level);
+			ob->add_temp("apply/sub_max_huo",WUXING_SUB_LOW+j+level*level/3);
+			ob->add_temp("apply/sub_huo",WUXING_SUB_LOWON+j/25+level);
+			ob->add_temp("apply/sub_max_shui",WUXING_EAT_MIDDLE+j+level*level/3);
+			ob->add_temp("apply/sub_shui",WUXING_EAT_MIDDLEON+j/25+level);
+		}
+		else
+		{
+			ob->add_temp("apply/master_jin",MASTER_WUXING/2+i+level*level/5);
+			ob->add_temp("apply/master_resist_jin",MASTER_RESIST_WUXING/2+j+level*level/5);
+			ob->add_temp("apply/add_max_jin",WUXING_ADD_LOW+i*2/3+level*level/6);
+			ob->add_temp("apply/add_jin",WUXING_ADD_LOWON+i/75+level*2/3);
+			
+			ob->add_temp("apply/sub_max_jin",WUXING_SUB_LOW+j+level*level/3);
+			ob->add_temp("apply/sub_jin",WUXING_SUB_LOWON+j/25+level);
+			ob->add_temp("apply/sub_max_huo",WUXING_EAT_MIDDLE+j+level*level/3);
+			ob->add_temp("apply/sub_huo",WUXING_EAT_MIDDLEON+j/25+level);
+			ob->add_temp("apply/sub_max_shui",WUXING_EAT_LOW+j+level*level/3);
+			ob->add_temp("apply/sub_shui",WUXING_EAT_LOWON+j/25+level);
+		}
+		
+	}
+	
+	else if(wuxing == "all_wuxing")
+	{
+ ob->add_temp("apply/sub_max_phy",500+j+level*level/5);
+ob->add_temp("apply/sub_max_spells_all",1000+j+level*level/4);
+		
+		ob->add_temp("apply/add_max_jin",WUXING_ADD_ALL+i+level*level/7);
+		ob->add_temp("apply/master_jin",MASTER_WUXING/3+i/2+level*level/7);
+		ob->add_temp("apply/add_max_mu",WUXING_ADD_ALL+i+level*level/7);
+		ob->add_temp("apply/master_mu",MASTER_WUXING/3+i/2+level*level/7);
+		ob->add_temp("apply/add_max_shui",WUXING_ADD_ALL+i+level*level/7);
+		ob->add_temp("apply/master_shui",MASTER_WUXING/3+i/2+level*level/7);
+		ob->add_temp("apply/add_max_huo",WUXING_ADD_ALL+i+level*level/7);
+		ob->add_temp("apply/master_huo",MASTER_WUXING/3+i/2+level*level/7);
+		
+		ob->add_temp("apply/sub_max_jin",WUXING_SUB_ALL+j+level*level/3);
+		ob->add_temp("apply/sub_max_mu",WUXING_SUB_ALL+j+level*level/3);
+		ob->add_temp("apply/sub_max_huo",WUXING_SUB_ALL+j+level*level/3);
+		ob->add_temp("apply/sub_max_shui",WUXING_SUB_ALL+j+level*level/3);
+		
+		ob->add_temp("apply/master_resist_huo",MASTER_RESIST_WUXING*3/2+j/2+level*level*2/5);
+		ob->add_temp("apply/master_resist_shui",MASTER_RESIST_WUXING*3/2+j/2+level*level*2/5);
+		ob->add_temp("apply/master_resist_mu",MASTER_RESIST_WUXING*3/2+j/2+level*level*2/5);
+		ob->add_temp("apply/master_resist_jin",MASTER_RESIST_WUXING*3/2+j/2+level*level*2/5);
+		
+	}
+	else if(wuxing == "none_wuxing")
+	{
+ ob->add_temp("apply/add_max_phy",3500+i*2+level*level*2/5);
+ ob->add_temp("apply/add_phy",20+i/20+level*5/4);
+ ob->add_temp("apply/sub_max_phy",3500+j*2+level*level*2/5);
+		
+		ob->add_temp("apply/sub_max_spells_all",-1500+j*3/2+level*level*2/5);
+		ob->add_temp("apply/sub_max_jin",WUXING_EAT_ALL+j*3/2+level*level*2/5);
+		
+		ob->add_temp("apply/sub_max_mu",WUXING_EAT_ALL+j*3/2+level*level*2/5);
+	
+		ob->add_temp("apply/sub_max_huo",WUXING_EAT_ALL+j*3/2+level*level*2/5);
+		
+		ob->add_temp("apply/sub_max_shui",WUXING_EAT_ALL+j*3/2+level*level*2/5);
+		ob->add_temp("apply/master_resist_huo",j*3/2+level*level*3/5);
+		ob->add_temp("apply/master_resist_shui",j*3/2+level*level*3/5);
+		ob->add_temp("apply/master_resist_mu",j*3/2+level*level*3/5);
+		ob->add_temp("apply/master_resist_jin",j*3/2+level*level*3/5);
+		
+	}
+	else if(wuxing == "might_wuxing")
+	{
+		ob->add_temp("apply/add_max_phy",2500+i*3/2+level*level*3/10);
+		ob->add_temp("apply/add_phy",20+i*3/100+level);
+		ob->add_temp("apply/sub_max_phy",2500+j*3/2+level*level*3/10);
+		
+		ob->add_temp("apply/sub_max_spells_all",-3500+j*3/2+level*level*2/5);
+		ob->add_temp("apply/sub_max_jin",-1000+WUXING_EAT_ALL+j*3/2+level*level*2/5);
+		
+		ob->add_temp("apply/sub_max_mu",-1000+WUXING_EAT_ALL+j*3/2+level*level*2/5);
+	
+		ob->add_temp("apply/sub_max_huo",-1000+WUXING_EAT_ALL+j*3/2+level*level*2/5);
+		
+		ob->add_temp("apply/sub_max_shui",-1000+WUXING_EAT_ALL+j*3/2+level*level*2/5);
+		ob->add_temp("apply/master_resist_huo",j*3/2+level*level*3/5);
+		ob->add_temp("apply/master_resist_shui",j*3/2+level*level*3/5);
+		ob->add_temp("apply/master_resist_mu",j*3/2+level*level*3/5);
+		ob->add_temp("apply/master_resist_jin",j*3/2+level*level*3/5);
+		
+	}
+	else if(wuxing == "magic_wuxing")
+	{
+		ob->add_temp("apply/sub_max_phy",-2500+j*3/2+level*level*3/10);
+		
+		ob->add_temp("apply/sub_max_spells_all",2500+j*3/2+level*level*2/5);
+		ob->add_temp("apply/sub_max_jin",WUXING_SUB_ALL+j*3/2+level*level*2/5);
+		
+		ob->add_temp("apply/sub_max_mu",WUXING_SUB_ALL+j*3/2+level*level*2/5);
+	
+		ob->add_temp("apply/sub_max_huo",WUXING_SUB_ALL+j*3/2+level*level*2/5);
+		
+		ob->add_temp("apply/sub_max_shui",WUXING_SUB_ALL+j*3/2+level*level*2/5);
+		ob->add_temp("apply/master_resist_huo",j*3/2+level*level*3/5);
+		ob->add_temp("apply/master_resist_shui",j*3/2+level*level*3/5);
+		ob->add_temp("apply/master_resist_mu",j*3/2+level*level*3/5);
+		ob->add_temp("apply/master_resist_jin",j*3/2+level*level*3/5);
+		
+	}
+	else 
+	{
+		
+		ob->add_temp("apply/sub_max_phy",j+level*level/7);
+		ob->add_temp("apply/sub_max_spells_all",j+level*level/6);
+		ob->add_temp("apply/sub_max_jin",j+level*level/5);
+		ob->add_temp("apply/sub_max_mu",j+level*level/5);
+		ob->add_temp("apply/sub_max_huo",j+level*level/5);
+		ob->add_temp("apply/sub_max_shui",j+level*level/5);
+		ob->add_temp("apply/master_resist_huo",j+level*level/5);
+		ob->add_temp("apply/master_resist_shui",j+level*level/5);
+		ob->add_temp("apply/master_resist_mu",j+level*level/5);
+		ob->add_temp("apply/master_resist_jin",j+level*level/5);
+	}
+	// for user add fixed wuxing
+	if(ob->query("wuxing_add/max_jin")) 
+		ob->add_temp("apply/add_max_jin",ob->query("wuxing_add/max_jin"));	
+	if(ob->query("wuxing_add/max_mu")) 
+		ob->add_temp("apply/add_max_mu",ob->query("wuxing_add/max_mu"));	
+	if(ob->query("wuxing_add/max_shui")) 
+		ob->add_temp("apply/add_max_shui",ob->query("wuxing_add/max_shui"));	
+	if(ob->query("wuxing_add/max_huo")) 
+		ob->add_temp("apply/add_max_huo",ob->query("wuxing_add/max_huo"));	
+	if(ob->query("wuxing_add/max_all")) 
+	{
+		ob->add_temp("apply/add_max_jin",ob->query("wuxing_add/max_all"));	
+		ob->add_temp("apply/add_max_mu",ob->query("wuxing_add/max_all"));
+		ob->add_temp("apply/add_max_shui",ob->query("wuxing_add/max_all"));
+		ob->add_temp("apply/add_max_huo",ob->query("wuxing_add/max_all"));
+	
+	}
+	
+	if(ob->query("wuxing_add/jin")) 
+		ob->add_temp("apply/add_jin",ob->query("wuxing_add/jin"));	
+	if(ob->query("wuxing_add/mu")) 
+		ob->add_temp("apply/add_mu",ob->query("wuxing_add/mu"));	
+	if(ob->query("wuxing_add/shui")) 
+		ob->add_temp("apply/add_shui",ob->query("wuxing_add/shui"));	
+	if(ob->query("wuxing_add/huo")) 
+		ob->add_temp("apply/add_huo",ob->query("wuxing_add/huo"));	
+	if(ob->query("wuxing_add/all")) 
+	{
+		ob->add_temp("apply/add_jin",ob->query("wuxing_add/all"));	
+		ob->add_temp("apply/add_mu",ob->query("wuxing_add/all"));
+		ob->add_temp("apply/add_shui",ob->query("wuxing_add/all"));
+		ob->add_temp("apply/add_huo",ob->query("wuxing_add/all"));
+	
+	}
+	
+	if(ob->query("wuxing_sub/max_jin")) 
+		ob->add_temp("apply/sub_max_jin",ob->query("wuxing_sub/max_jin"));	
+	if(ob->query("wuxing_sub/max_mu")) 
+		ob->add_temp("apply/sub_max_mu",ob->query("wuxing_sub/max_mu"));	
+	if(ob->query("wuxing_sub/max_shui")) 
+		ob->add_temp("apply/sub_max_shui",ob->query("wuxing_sub/max_shui"));	
+	if(ob->query("wuxing_sub/max_huo")) 
+		ob->add_temp("apply/sub_max_huo",ob->query("wuxing_sub/max_huo"));	
+	if(ob->query("wuxing_add/max_all")) 
+	{
+		ob->add_temp("apply/sub_max_jin",ob->query("wuxing_sub/max_all"));	
+		ob->add_temp("apply/sub_max_mu",ob->query("wuxing_sub/max_all"));
+		ob->add_temp("apply/sub_max_shui",ob->query("wuxing_sub/max_all"));
+		ob->add_temp("apply/sub_max_huo",ob->query("wuxing_sub/max_all"));
+	
+	}
+	
+	if(ob->query("wuxing_sub/jin")) 
+		ob->add_temp("apply/sub_jin",ob->query("wuxing_sub/jin"));	
+	if(ob->query("wuxing_sub/mu")) 
+		ob->add_temp("apply/sub_mu",ob->query("wuxing_sub/mu"));	
+	if(ob->query("wuxing_sub/shui")) 
+		ob->add_temp("apply/sub_shui",ob->query("wuxing_sub/shui"));	
+	if(ob->query("wuxing_sub/huo")) 
+		ob->add_temp("apply/sub_huo",ob->query("wuxing_sub/huo"));	
+	if(ob->query("wuxing_sub/all")) 
+	{
+		ob->add_temp("apply/sub_jin",ob->query("wuxing_sub/all"));	
+		ob->add_temp("apply/sub_mu",ob->query("wuxing_sub/all"));
+		ob->add_temp("apply/sub_shui",ob->query("wuxing_sub/all"));
+		ob->add_temp("apply/sub_huo",ob->query("wuxing_sub/all"));
+	
+	}
+reset_eval_cost();
+	//技能等级效果....
+	//force
+	if(!userp(ob))
+		npc = 4;
+	else npc = 1;
+	if(userp(ob))
+		user = 1;
+	else user = 2;
+	if(ob->query("skill_level/force") == "expert")
+	{
+		ob->add_temp("apply/sub_jin",force*npc/user/15);
+		ob->add_temp("apply/sub_mu",force*npc/user/15);
+		ob->add_temp("apply/sub_huo",force*npc/user/15);
+		ob->add_temp("apply/sub_shui",force*npc/user/15);
+		ob->add_temp("apply/sub_spells_all",force*npc/user/20);
+		ob->add_temp("apply/sub_phy",force*npc/user/25);
+		
+		ob->add_temp("apply/sub_max_jin",force*3*npc/user/2);
+		ob->add_temp("apply/sub_max_mu",force*3*npc/user/2);
+		ob->add_temp("apply/sub_max_huo",force*3*npc/user/2);
+		ob->add_temp("apply/sub_max_shui",force*3*npc/user/2);
+		ob->add_temp("apply/sub_max_spells_all",force*npc/user);	
+		ob->add_temp("apply/sub_max_phy",force*npc/user/2);
+		
+		if(wuxing == "all_wuxing")
+		{
+			ob->add_temp("apply/combat_blood_force",force*2*npc/user);		
+			
+		}	
+		else if(wuxing == "none_wuxing")
+		{
+			ob->add_temp("combat/force_vs_damage",force*2*npc/user);	
+		}		
+		
+	}
+	else if(ob->query("skill_level/force") == "master")
+	{
+		ob->add_temp("apply/sub_jin",force*npc/user/12);
+		ob->add_temp("apply/sub_mu",force*npc/user/12);
+		ob->add_temp("apply/sub_huo",force*npc/user/12);
+		ob->add_temp("apply/sub_shui",force*npc/user/12);
+		ob->add_temp("apply/sub_spells_all",force*npc/user/15);
+		ob->add_temp("apply/sub_phy",force*npc/user/20);
+		
+		
+		ob->add_temp("apply/sub_max_jin",force*3*npc/user);
+		ob->add_temp("apply/sub_max_mu",force*3*npc/user);
+		ob->add_temp("apply/sub_max_huo",force*3*npc/user);
+		ob->add_temp("apply/sub_max_shui",force*3*npc/user);
+		ob->add_temp("apply/sub_max_spells_all",force*2*npc/user);
+		ob->add_temp("apply/sub_max_phy",force*2*npc/user/3);
+		
+		if(wuxing == "all_wuxing")
+		{
+			ob->add_temp("apply/combat_blood_force",force*npc/user*3);		
+			
+		}	
+		else if(wuxing == "none_wuxing")
+		{
+			ob->add_temp("combat/force_vs_damage",force*npc/user*3);	
+		}	
+		
+	}
+	else if(ob->query("skill_level/force") == "grandmaster")
+	{
+		ob->add_temp("apply/sub_jin",force*npc/user/8);
+		ob->add_temp("apply/sub_mu",force*npc/user/8);
+		ob->add_temp("apply/sub_huo",force*npc/user/8);
+		ob->add_temp("apply/sub_shui",force*npc/user/8);
+		ob->add_temp("apply/sub_spells_all",force*npc/user/10);
+		ob->add_temp("apply/sub_phy",force*npc/user/12);
+		
+		ob->add_temp("apply/sub_max_jin",force*npc/user*5);
+		ob->add_temp("apply/sub_max_mu",force*npc/user*5);
+		ob->add_temp("apply/sub_max_huo",force*npc/user*5);
+		ob->add_temp("apply/sub_max_shui",force*npc/user*5);
+		ob->add_temp("apply/sub_max_spells_all",force*npc/user*4);	
+		ob->add_temp("apply/sub_max_phy",force*npc/user*2);	
+		
+		if(wuxing == "all_wuxing")
+		{
+			ob->add_temp("apply/combat_blood_force",force*npc/user*5);		
+			
+		}	
+		else if(wuxing == "none_wuxing")
+		{
+			ob->add_temp("combat/force_vs_damage",force*npc/user*5);	
+		}	
+		
+	}
+	else 
+	{
+		ob->add_temp("apply/sub_jin",force*npc/user/20);
+		ob->add_temp("apply/sub_mu",force*npc/user/20);
+		ob->add_temp("apply/sub_huo",force*npc/user/20);
+		ob->add_temp("apply/sub_shui",force*npc/user/20);
+		ob->add_temp("apply/sub_spells_all",force*npc/user/25);	
+		ob->add_temp("apply/sub_phy",force*npc/user/30);
+		
+		ob->add_temp("apply/sub_max_jin",force*npc/user);
+		ob->add_temp("apply/sub_max_mu",force*npc/user);
+		ob->add_temp("apply/sub_max_huo",force*npc/user);
+		ob->add_temp("apply/sub_max_shui",force*npc/user);
+		ob->add_temp("apply/sub_max_spells_all",force*2*npc/user/3);	
+		ob->add_temp("apply/sub_max_phy",force*npc/user/3);
+		
+		if(wuxing == "all_wuxing")
+		{
+			ob->add_temp("apply/combat_blood_force",force*2*npc/user/3);		
+			
+		}	
+		else if(wuxing == "none_wuxing")
+		{
+			ob->add_temp("combat/force_vs_damage",force*2*npc/user/3);	
+		}	
+		
+	}
+	//spells
+	if(ob->query("skill_level/spells") == "expert")
+	{
+	
+		
+		if(wuxing == "jin_wuxing")
+		{
+			ob->add_temp("apply/add_jin",spells*npc/user/15);
+			ob->add_temp("apply/add_max_jin",spells*5*npc/user);
+			ob->add_temp("apply/master_jin",spells*2*npc/user);
+			if(flag)
+			{
+				ob->add_temp("apply/add_spells_all",spells*npc/user/27);
+				ob->add_temp("apply/add_max_spells_all",spells*2*npc/user);	
+			}
+			else
+			{
+				ob->add_temp("apply/add_max_shui",spells*npc/user*10/3);	
+				ob->add_temp("apply/add_shui",spells*npc/user/22);
+				ob->add_temp("apply/master_shui",spells*4*npc/user/3);
+			}
+		}
+		else if(wuxing == "mu_wuxing")
+		{
+			ob->add_temp("apply/add_max_mu",spells*5*npc/user);	
+			ob->add_temp("apply/add_mu",spells*npc/user/15);
+			ob->add_temp("apply/master_mu",spells*2*npc/user);
+			if(flag)
+			{
+				ob->add_temp("apply/add_max_shui",spells*10*npc/user/3);	
+				ob->add_temp("apply/add_shui",spells*npc/user/22);
+				ob->add_temp("apply/master_shui",spells*4*npc/user/3);
+				
+			}
+			else
+			{
+				ob->add_temp("apply/add_max_huo",spells*10*npc/user/3);	
+				ob->add_temp("apply/add_huo",spells*npc/user/22);
+				ob->add_temp("apply/master_huo",spells*4*npc/user/3);
+				
+			}
+		}
+		else if(wuxing == "shui_wuxing")
+		{	ob->add_temp("apply/add_max_shui",spells*5*npc/user);	
+			ob->add_temp("apply/add_shui",spells*npc/user/15);
+			ob->add_temp("apply/master_shui",spells*2*npc/user);
+			if(flag)
+			{
+			ob->add_temp("apply/add_max_jin",spells*10*npc/user/3);	
+			ob->add_temp("apply/add_jin",spells*npc/user/22);
+			ob->add_temp("apply/master_jin",spells*4*npc/user/3);
+				
+			}
+			else
+			{
+			ob->add_temp("apply/add_max_mu",spells*10*npc/user/3);	
+			ob->add_temp("apply/add_mu",spells*npc/user/22);
+			ob->add_temp("apply/master_mu",spells*4*npc/user/3);	
+			}
+		}
+		else if(wuxing == "huo_wuxing")
+		{
+			ob->add_temp("apply/add_max_huo",spells*5*npc/user);	
+			ob->add_temp("apply/add_huo",spells*npc/user/15);
+			ob->add_temp("apply/master_huo",spells*2*npc/user);
+			if(flag)
+			{
+				ob->add_temp("apply/add_max_mu",spells*10*npc/user/3);	
+				ob->add_temp("apply/add_mu",spells*npc/user/22);
+				ob->add_temp("apply/master_mu",spells*4*npc/user/3);	
+			}
+			else
+			{
+				ob->add_temp("apply/add_spells_all",spells*npc/user/27);
+				ob->add_temp("apply/add_max_spells_all",spells*2*npc/user);	
+			}
+		}
+		
+		else if(wuxing == "tu_wuxing")
+		{
+			ob->add_temp("apply/add_spells_all",spells*npc/user/18);
+			ob->add_temp("apply/add_max_spells_all",spells*3*npc/user);	
+			if(flag)
+			{
+				ob->add_temp("apply/add_max_huo",spells*10*npc/user/3);	
+				ob->add_temp("apply/add_huo",spells*npc/user/22);
+				ob->add_temp("apply/master_huo",spells*4*npc/user/3);
+			}
+			else
+			{
+				ob->add_temp("apply/add_max_jin",spells*10*npc/user/3);	
+				ob->add_temp("apply/add_jin",spells*npc/user/22);
+				ob->add_temp("apply/master_jin",spells*4*npc/user/3);
+			}
+			
+		}	
+		else if(wuxing == "all_wuxing")
+		{
+			ob->add_temp("combat/spells_vs_damage",spells*3);
+			
+			ob->add_temp("apply/add_max_huo",spells*10*npc/user/16);
+			ob->add_temp("apply/master_huo",spells*4*npc/user/7);		
+			ob->add_temp("apply/add_max_jin",spells*10*npc/user/16);
+			ob->add_temp("apply/master_jin",spells*4*npc/user/7);
+			ob->add_temp("apply/add_max_mu",spells*10*npc/user/16);
+			ob->add_temp("apply/master_mu",spells*4*npc/user/7);
+			ob->add_temp("apply/add_max_shui",spells*10*npc/user/16);
+			ob->add_temp("apply/master_shui",spells*4*npc/user/7);
+		}	
+		else if(wuxing == "none_wuxing")
+		{
+			ob->add_temp("apply/combat_blood_mana",spells*3*npc/user);	
+		}	
+		
+	}
+	else if(ob->query("skill_level/spells") == "master")
+	{
+		
+		if(wuxing == "jin_wuxing")
+		{	ob->add_temp("apply/add_jin",spells*npc/user/10);
+			ob->add_temp("apply/add_max_jin",spells*7*npc/user);
+			ob->add_temp("apply/master_jin",spells*7*npc/user/2);
+			if(flag)
+			{
+				ob->add_temp("apply/add_spells_all",spells*npc/user/18);
+				ob->add_temp("apply/add_max_spells_all",spells*10*npc/user/3);	
+			}
+			else
+			{
+				ob->add_temp("apply/add_max_shui",spells*14*npc/user/3);	
+				ob->add_temp("apply/add_shui",spells*npc/user/15);
+				ob->add_temp("apply/master_shui",spells*7*npc/user/3);
+			}
+		}
+		else if(wuxing == "mu_wuxing")
+		{	
+			ob->add_temp("apply/add_max_mu",spells*7*npc/user);	
+			ob->add_temp("apply/add_mu",spells*npc/user/10);
+			ob->add_temp("apply/master_mu",spells*7*npc/user/2);
+			if(flag)
+			{
+				ob->add_temp("apply/add_max_shui",spells*14*npc/user/3);	
+				ob->add_temp("apply/add_shui",spells*npc/user/15);
+				ob->add_temp("apply/master_shui",spells*7*npc/user/3);
+				
+			}
+			else
+			{
+				ob->add_temp("apply/add_max_huo",spells*14*npc/user/3);	
+				ob->add_temp("apply/add_huo",spells*npc/user/15);
+				ob->add_temp("apply/master_huo",spells*7*npc/user/3);
+				
+			}
+		}
+		else if(wuxing == "shui_wuxing")
+		{	
+			ob->add_temp("apply/add_max_shui",spells*7*npc/user);	
+			ob->add_temp("apply/add_shui",spells*npc/user/10);
+			ob->add_temp("apply/master_shui",spells*7*npc/user/2);
+			if(flag)
+			{
+			ob->add_temp("apply/add_max_jin",spells*14*npc/user/3);	
+			ob->add_temp("apply/add_jin",spells*npc/user/15);
+			ob->add_temp("apply/master_jin",spells*7*npc/user/3);
+				
+			}
+			else
+			{
+			ob->add_temp("apply/add_max_mu",spells*14*npc/user/3);	
+			ob->add_temp("apply/add_mu",spells*npc/user/15);
+			ob->add_temp("apply/master_mu",spells*7*npc/user/3);	
+			}
+		}
+		else if(wuxing == "huo_wuxing")
+		{	ob->add_temp("apply/add_max_huo",spells*7*npc/user);	
+			ob->add_temp("apply/add_huo",spells*npc/user/10);
+			ob->add_temp("apply/master_huo",spells*7*npc/user/2);
+			if(flag)
+			{
+				ob->add_temp("apply/add_max_mu",spells*14*npc/user/3);	
+				ob->add_temp("apply/add_mu",spells*npc/user/15);
+				ob->add_temp("apply/master_mu",spells*7*npc/user/3);	
+			}
+			else
+			{
+				ob->add_temp("apply/add_spells_all",spells*npc/user/18);
+				ob->add_temp("apply/add_max_spells_all",spells*10*npc/user/3);	
+			}
+		}
+		
+		else if(wuxing == "tu_wuxing")
+		{
+			ob->add_temp("apply/add_max_spells_all",spells*5*npc/user);	
+			ob->add_temp("apply/add_spells_all",spells*npc/user/12);
+			if(flag)
+			{
+				ob->add_temp("apply/add_max_huo",spells*14*npc/user/3);	
+				ob->add_temp("apply/add_huo",spells*npc/user/15);
+				ob->add_temp("apply/master_huo",spells*7*npc/user/3);
+			}
+			else
+			{
+				ob->add_temp("apply/add_max_jin",spells*14*npc/user/3);	
+				ob->add_temp("apply/add_jin",spells*npc/user/15);
+				ob->add_temp("apply/master_jin",spells*7*npc/user/3);
+			}
+		}	
+		else if(wuxing == "all_wuxing")
+		{	ob->add_temp("combat/spells_vs_damage",spells*5);
+			
+			ob->add_temp("apply/add_max_huo",spells*14*npc/user/16);
+			ob->add_temp("apply/master_huo",spells*7*npc/user/7);		
+			ob->add_temp("apply/add_max_jin",spells*14*npc/user/16);
+			ob->add_temp("apply/master_jin",spells*7*npc/user/7);
+			ob->add_temp("apply/add_max_mu",spells*14*npc/user/16);
+			ob->add_temp("apply/master_mu",spells*7*npc/user/7);
+			ob->add_temp("apply/add_max_shui",spells*14*npc/user/16);
+			ob->add_temp("apply/master_shui",spells*7*npc/user/7);
+		}
+		
+		else if(wuxing == "none_wuxing")
+			ob->add_temp("apply/combat_blood_mana",spells*5*npc/user);	
+	}
+	else if(ob->query("skill_level/spells") == "grandmaster")
+	{
+		if(wuxing == "jin_wuxing")
+		{
+			ob->add_temp("apply/add_jin",spells*npc/user/5);
+			ob->add_temp("apply/add_max_jin",spells*9*npc/user);
+			ob->add_temp("apply/master_jin",spells*9*npc/user/2);
+			if(flag)
+			{
+				ob->add_temp("apply/add_spells_all",spells*npc/user/12);
+				ob->add_temp("apply/add_max_spells_all",spells*14*npc/user/3);	
+			}
+			else
+			{
+				ob->add_temp("apply/add_max_shui",spells*6*npc/user);	
+				ob->add_temp("apply/add_shui",spells*2*npc/user/15);
+				ob->add_temp("apply/master_shui",spells*3*npc/user);
+			}
+		}
+		else if(wuxing == "mu_wuxing")
+		{
+			ob->add_temp("apply/add_max_mu",spells*9*npc/user);	
+			ob->add_temp("apply/add_mu",spells*npc/user/5);
+			ob->add_temp("apply/master_mu",spells*9*npc/user/2);
+			if(flag)
+			{
+				ob->add_temp("apply/add_max_shui",spells*6*npc/user);	
+				ob->add_temp("apply/add_shui",spells*2*npc/user/15);
+				ob->add_temp("apply/master_shui",spells*3*npc/user);
+				
+			}
+			else
+			{
+				ob->add_temp("apply/add_max_huo",spells*6*npc/user);	
+				ob->add_temp("apply/add_huo",spells*2*npc/user/15);
+				ob->add_temp("apply/master_huo",spells*3*npc/user);
+				
+			}
+		}
+		else if(wuxing == "shui_wuxing")
+		{
+			ob->add_temp("apply/add_max_shui",spells*9*npc/user);	
+			ob->add_temp("apply/add_shui",spells*npc/user/5);
+			ob->add_temp("apply/master_shui",spells*9*npc/user/2);
+			if(flag)
+			{
+			ob->add_temp("apply/add_max_jin",spells*6*npc/user);	
+			ob->add_temp("apply/add_jin",spells*2*npc/user/15);
+			ob->add_temp("apply/master_jin",spells*3*npc/user);
+				
+			}
+			else
+			{
+			ob->add_temp("apply/add_max_mu",spells*6*npc/user);	
+			ob->add_temp("apply/add_mu",spells*2*npc/user/15);
+			ob->add_temp("apply/master_mu",spells*3*npc/user);	
+			}
+		}
+		else if(wuxing == "huo_wuxing")
+		{
+			ob->add_temp("apply/add_max_huo",spells*9*npc/user);	
+			ob->add_temp("apply/add_huo",spells*npc/user/5);
+			ob->add_temp("apply/master_huo",spells*9*npc/user/2);
+			if(flag)
+			{
+				ob->add_temp("apply/add_max_mu",spells*6*npc/user);	
+				ob->add_temp("apply/add_mu",spells*2*npc/user/15);
+				ob->add_temp("apply/master_mu",spells*3*npc/user);	
+			}
+			else
+			{
+				ob->add_temp("apply/add_spells_all",spells*npc/user/12);
+				ob->add_temp("apply/add_max_spells_all",spells*14*npc/user/3);	
+			}
+			}
+		
+		else if(wuxing == "tu_wuxing")
+		{
+			ob->add_temp("apply/add_spells_all",spells*npc/user/8);
+			ob->add_temp("apply/add_max_spells_all",spells*7*npc/user);
+			if(flag)
+			{
+				ob->add_temp("apply/add_max_huo",spells*6*npc/user);	
+				ob->add_temp("apply/add_huo",spells*2*npc/user/15);
+				ob->add_temp("apply/master_huo",spells*3*npc/user);
+			}
+			else
+			{
+				ob->add_temp("apply/add_max_jin",spells*6*npc/user);	
+				ob->add_temp("apply/add_jin",spells*2*npc/user/15);
+				ob->add_temp("apply/master_jin",spells*3*npc/user);
+			}
+		}	
+			
+		else if(wuxing == "all_wuxing")
+		{	ob->add_temp("combat/spells_vs_damage",spells*7*npc/user);	
+			ob->add_temp("apply/add_max_huo",spells*5*npc/user/4);
+			ob->add_temp("apply/master_huo",spells*5*npc/user/4);		
+			ob->add_temp("apply/add_max_jin",spells*5*npc/user/4);
+			ob->add_temp("apply/master_jin",spells*5*npc/user/4);
+			ob->add_temp("apply/add_max_mu",spells*5*npc/user/4);
+			ob->add_temp("apply/master_mu",spells*5*npc/user/4);
+			ob->add_temp("apply/add_max_shui",spells*5*npc/user/4);
+			ob->add_temp("apply/master_shui",spells*5*npc/user/4);
+		}
+		else if(wuxing == "none_wuxing")	
+			ob->add_temp("apply/combat_blood_mana",spells*7*npc/user);	
+	}
+	else
+	{
+			
+		if(wuxing == "jin_wuxing")
+		{
+			ob->add_temp("apply/add_jin",spells*npc/user/20);
+			ob->add_temp("apply/add_max_jin",spells*2*npc/user);
+			ob->add_temp("apply/master_jin",spells*npc/user);
+			if(flag)
+			{
+				ob->add_temp("apply/add_spells_all",spells*npc/user/36);
+				ob->add_temp("apply/add_max_spells_all",spells*2*npc/user/3);	
+			}
+			else
+			{
+				ob->add_temp("apply/add_max_shui",spells*4*npc/user/3);	
+				ob->add_temp("apply/add_shui",spells*npc/user/30);
+				ob->add_temp("apply/master_shui",spells*2*npc/user/3);
+			}
+		}
+		else if(wuxing == "mu_wuxing")
+		{
+			ob->add_temp("apply/add_max_mu",spells*2*npc/user);	
+			ob->add_temp("apply/add_mu",spells*npc/user/20);
+			ob->add_temp("apply/master_mu",spells*npc/user);
+			if(flag)
+			{
+				ob->add_temp("apply/add_max_shui",spells*4*npc/user/3);	
+				ob->add_temp("apply/add_shui",spells*npc/user/30);
+				ob->add_temp("apply/master_shui",spells*2*npc/user/3);
+				
+			}
+			else
+			{
+				ob->add_temp("apply/add_max_huo",spells*4*npc/user/3);	
+				ob->add_temp("apply/add_huo",spells*npc/user/30);
+				ob->add_temp("apply/master_huo",spells*2*npc/user/3);
+				
+			}
+		}
+		else if(wuxing == "shui_wuxing")
+		{
+			ob->add_temp("apply/add_max_shui",spells*2*npc/user);	
+			ob->add_temp("apply/add_shui",spells*npc/user/20);
+			ob->add_temp("apply/master_shui",spells*npc/user);
+			if(flag)
+			{
+			ob->add_temp("apply/add_max_jin",spells*4*npc/user/3);	
+			ob->add_temp("apply/add_jin",spells*npc/user/30);
+			ob->add_temp("apply/master_jin",spells*2*npc/user/3);
+				
+			}
+			else
+			{
+			ob->add_temp("apply/add_max_mu",spells*4*npc/user/3);	
+			ob->add_temp("apply/add_mu",spells*npc/user/30);
+			ob->add_temp("apply/master_mu",spells*2*npc/user/3);	
+			}
+		}
+		else if(wuxing == "huo_wuxing")
+		{
+			ob->add_temp("apply/add_max_huo",spells*2*npc/user);	
+			ob->add_temp("apply/add_huo",spells*npc/user/20);
+			ob->add_temp("apply/master_huo",spells*npc/user);
+			if(flag)
+			{
+				ob->add_temp("apply/add_max_mu",spells*4*npc/user/3);	
+				ob->add_temp("apply/add_mu",spells*npc/user/30);
+				ob->add_temp("apply/master_mu",spells*2*npc/user/3);	
+			}
+			else
+			{
+				ob->add_temp("apply/add_spells_all",spells*npc/user/36);
+				ob->add_temp("apply/add_max_spells_all",spells*2*npc/user/3);	
+			}
+		}
+		
+		else if(wuxing == "tu_wuxing")
+		{
+			ob->add_temp("apply/add_spells_all",spells*npc/user/24);
+			ob->add_temp("apply/add_max_spells_all",spells*npc/user);
+			if(flag)
+			{
+				ob->add_temp("apply/add_max_huo",spells*4*npc/user/3);	
+				ob->add_temp("apply/add_huo",spells*npc/user/30);
+				ob->add_temp("apply/master_huo",spells*2*npc/user/3);
+			}
+			else
+			{
+				ob->add_temp("apply/add_max_jin",spells*4*npc/user/3);	
+				ob->add_temp("apply/add_jin",spells*npc/user/30);
+				ob->add_temp("apply/master_jin",spells*2*npc/user/3);
+			}
+		}
+		else if(wuxing == "all_wuxing")
+		{	ob->add_temp("combat/spells_vs_damage",spells*npc/user);
+			ob->add_temp("apply/add_max_huo",spells*5*npc/user/20);
+			ob->add_temp("apply/master_huo",spells*npc/user*2/9);		
+			ob->add_temp("apply/add_max_jin",spells*5*npc/user/20);
+			ob->add_temp("apply/master_jin",spells*2*npc/user/9);
+			ob->add_temp("apply/add_max_mu",spells*5*npc/user/20);
+			ob->add_temp("apply/master_mu",spells*2*npc/user/9);
+			ob->add_temp("apply/add_max_shui",spells*5*npc/user/20);
+			ob->add_temp("apply/master_shui",spells*2*npc/user/9);
+		}
+		else if(wuxing == "none_wuxing")	
+			ob->add_temp("apply/combat_blood_mana",spells*npc/user);	
+	}
+	//unarmed
+	if(ob->query("skill_level/unarmed") == "expert")
+	{
+		ob->add_temp("apply/add_phy",unarmed/20/user*npc);
+		ob->add_temp("apply/add_max_phy",unarmed*2/user*npc);
+	}
+	else if(ob->query("skill_level/unarmed") == "master")
+	{
+		ob->add_temp("apply/add_phy",unarmed/12/user*npc);
+		ob->add_temp("apply/add_max_phy",unarmed*3/user*npc);
+	}
+	else if(ob->query("skill_level/unarmed") == "grandmaster")
+	{
+		ob->add_temp("apply/add_phy",unarmed/8/user*npc);
+		ob->add_temp("apply/add_max_phy",unarmed*5/user*npc);
+		if(ob->query("family/family_name")=="东海龙宫")
+			ob->add_temp("combat/double_attack",1);
+		
+	}
+	else
+	{
+		ob->add_temp("apply/add_phy",unarmed/25);
+		ob->add_temp("apply/add_max_phy",unarmed);	
+	}
+	//parry
+	if(ob->query("skill_level/parry") == "expert") //对于npc效果要差些..毕竟...
+	{
+		ob->add_temp("combat/parry_block_attack",parry*3/2*user); //效果不在随机装备出现了
+	}
+	else if(ob->query("skill_level/parry") == "master")
+	{
+		ob->add_temp("combat/parry_block_attack",parry*5/2*user);
+	}
+	else if(ob->query("skill_level/parry") == "grandmaster")
+	{
+		ob->add_temp("combat/parry_block_attack",parry*4*user);
+	}
+	else ob->add_temp("combat/parry_block_attack",parry*2/3*user);
+   	
+   	//dodge   实在想不出什么特效好加了....55555
+   	if(ob->query("skill_level/dodge") == "expert")
+	{
+		ob->add_temp("apply/armor",dodge/10*user);
+		ob->add_temp("combat/dodge_vs_effect",dodge*3*user);
+		ob->add_temp("apply/master_resist_huo",dodge*2*user);
+		ob->add_temp("apply/master_resist_shui",dodge*2*user);
+		ob->add_temp("apply/master_resist_mu",dodge*2*user);
+		ob->add_temp("apply/master_resist_jin",dodge*2*user);
+	}
+	else if(ob->query("skill_level/dodge") == "master")
+	{
+		ob->add_temp("apply/armor",dodge/5*user);
+		ob->add_temp("combat/dodge_vs_effect",dodge*5*user);
+		
+		ob->add_temp("apply/master_resist_huo",dodge*4*user);
+		ob->add_temp("apply/master_resist_shui",dodge*4*user);
+		ob->add_temp("apply/master_resist_mu",dodge*4*user);
+		ob->add_temp("apply/master_resist_jin",dodge*4*user);
+	}
+	else if(ob->query("skill_level/dodge") == "grandmaster")
+	{
+		ob->add_temp("apply/armor",dodge/3*user);
+		ob->add_temp("combat/dodge_vs_effect",dodge*7*user);
+		
+		ob->add_temp("apply/master_resist_huo",dodge*6*user);
+		ob->add_temp("apply/master_resist_shui",dodge*6*user);
+		ob->add_temp("apply/master_resist_mu",dodge*6*user);
+		ob->add_temp("apply/master_resist_jin",dodge*6*user);
+	} 
+   	else
+   	{	ob->add_temp("apply/armor",dodge/15*user);
+   		ob->add_temp("combat/dodge_vs_effect",dodge*user);
+   		
+		ob->add_temp("apply/master_resist_huo",dodge*user);
+		ob->add_temp("apply/master_resist_shui",dodge*user);
+		ob->add_temp("apply/master_resist_mu",dodge*user);
+		ob->add_temp("apply/master_resist_jin",dodge*user);
+	}
+	//literate .... add magic find...hmm and sth?
+	if(userp(ob))
+	{
+	
+		if(ob->query("skill_level/literate") == "expert")
+		{
+			ob->add_temp("apply/magic_find",literate*15);
+		
+		}
+		else if(ob->query("skill_level/literate") == "master")
+		{
+			ob->add_temp("apply/magic_find",literate*20);
+			
+		}
+		else if(ob->query("skill_level/literate") == "grandmaster")
+		{
+			ob->add_temp("apply/magic_find",literate*30);
+		
+		} 
+   		else
+   		{	ob->add_temp("apply/magic_find",literate*10);
+   		
+		}
+	//特殊技能效果..	 
+	
+	 effect = ob->query("per")/2+random(ob->query("per")/2);
+	if(ob->query("special_skill/agile")&&ob->query("age")>17)
+    	{	ob->add_temp("combat/dodge_vs_effect",effect*40);
+    		ob->add_temp("apply/master_resist_huo",effect*30);
+		ob->add_temp("apply/master_resist_shui",effect*30);
+		ob->add_temp("apply/master_resist_mu",effect*30);
+		ob->add_temp("apply/master_resist_jin",effect*30);
+    	
+    	
+	}
+       	 effect = ob->query("str")/2+random(ob->query("str")/2);
+       	if(ob->query("special_skill/might")&&ob->query("age")>17)
+    		ob->add_temp("apply/add_max_phy",effect*20);
+    	effect = ob->query("kar")/2+random(ob->query("kar")/2);
+    	if(ob->query("special_skill/lucky")&&ob->query("age")>17)
+;
+	effect = ob->query("cor")/2+random(ob->query("cor")/2);
+    	if(ob->query("special_skill/hatred")&&ob->query("age")>17)
+    		ob->add_temp("apply/combat_double_damage",effect*30);
+    	effect = ob->query("con")/2+random(ob->query("con")/2);
+    	if(ob->query("special_skill/constitution")&&ob->query("age")>17)
+    	{
+    		ob->add_temp("apply/sub_max_jin",effect*30);
+		ob->add_temp("apply/sub_max_mu",effect*30);
+		ob->add_temp("apply/sub_max_huo",effect*30);
+		ob->add_temp("apply/sub_max_shui",effect*30);
+		ob->add_temp("apply/sub_max_spells_all",effect*25);	
+		ob->add_temp("apply/sub_max_phy",effect*20);
+		
+	}
+	effect = ob->query("spi")/2+random(ob->query("spi")/2);
+    	if(ob->query("special_skill/spirituality")&&ob->query("age")>17)
+    	{
+    		ob->add_temp("apply/add_max_jin",effect*30);
+		ob->add_temp("apply/add_max_mu",effect*30);
+		ob->add_temp("apply/add_max_huo",effect*30);
+		ob->add_temp("apply/add_max_shui",effect*30);
+		ob->add_temp("apply/add_max_spells_all",effect*25);	
+
+	}
+     		
+  	effect = ob->query("int")/2+random(ob->query("int")/2);
+    	if(ob->query("special_skill/intellect")&&ob->query("age")>17)
+    		ob->add_temp("apply/magicback_damage",effect*30);
+	
+    	effect = ob->query("cps")/2+random(ob->query("cps")/2);
+    	if(ob->query("special_skill/defense")&&ob->query("age")>17)
+    		ob->add_temp("apply/feedback_damage",effect*40);
+	effect = ob->query("str")/4+ob->query("cor")/4+random(ob->query("str")/4+ob->query("cor")/4);
+    	if(ob->query("special_skill/power")&&ob->query("age")>17)
+    		ob->add_temp("apply/combat_ignore_armor",effect*30);
+	effect = ob->query("str")/3+ob->query("con")/3+random(ob->query("str")/3+ob->query("con")/3);
+	effect += random(effect);
+    	if(ob->query("special_skill/health")&&ob->query("age")>17)
+    		ob->add_temp("apply/regenerate_kee",effect);
+	effect = ob->query("int")/3+ob->query("spi")/3+random(ob->query("int")/3+ob->query("spi")/3);
+	effect += random(effect);
+    	if(ob->query("special_skill/energy")&&ob->query("age")>17)
+    		ob->add_temp("apply/regenerate_sen",effect);
+	effect = ob->query("cps")/4+ob->query("con")/4+random(ob->query("cps")/4+ob->query("con")/4);
+   	 if(ob->query("special_skill/ironskin")&&ob->query("age")>17)
+    		ob->add_temp("combat/parry_block_attack",effect*30);
+	
+	}
+		
+	ob->set_temp("wuxing/init_done",1);
+	
+}
+varargs int query_ob_do_damage(object ob,int damage,string damage_type,string damage_kind)
+{
+	string wuxing,menpai;
+	
+	int i,j,init_damage;
+	i = 0;
+	j = 0;
+	init_damage = damage;
+	
+	if(!ob)	return 0;
+	
+	if(!ob->is_character())	return 0;
+	
+	wuxing = query_ob_wuxing(ob);
+
+	
+	if(damage_type == "phy")
+	{
+		i = ob->query_temp("apply/add_max_phy");
+		if(i > 17500) i = 17500;
+		j = ob->query_temp("apply/add_phy");
+		j = j*5/6+random(j*9/8-j*5/6);
+		damage += damage*i/10000+j;
+		if(damage > init_damage*3)
+		damage = init_damage*3;
+		return damage;
+	
+	}
+	else if(damage_type == "jin")
+	{
+		
+		i    = ob->query_temp("apply/add_max_jin");
+		if(i > 17500) i = 17500;
+		j = ob->query_temp("apply/add_jin");
+		j = j/2+random(j);
+		
+	}
+	else if(damage_type == "mu")
+	{
+		i    = ob->query_temp("apply/add_max_mu");
+		if(i > 17500) i = 17500;
+		j = ob->query_temp("apply/add_mu");
+		j = j*3/4+random(j*6/5-j*3/4);
+		
+	}
+	else if(damage_type == "shui")
+	{
+		
+		i    = ob->query_temp("apply/add_max_shui");
+		if(i > 17500) i = 17500;
+		j = ob->query_temp("apply/add_shui");
+		j = j*4/5+random(j*4/3-j*4/5);
+	}
+	else if(damage_type == "huo")
+	{
+		i    = ob->query_temp("apply/add_max_huo");
+		if(i > 17500) i = 17500;
+		j = ob->query_temp("apply/add_huo");
+		j = j+random(j/4);
+	}
+	else if(damage_type == "magic")
+	{
+		if(damage_kind == "kee")
+		{
+			i = ob->query_temp("apply/add_max_spells_all")+ob->query_temp("apply/add_max_spells_kee");
+			if(i > 17500) i = 17500;
+			j = ob->query_temp("apply/add_spells_all")+ob->query_temp("apply/add_spells_kee");
+			j = j*2/3+random(j*8/7-j*2/3);
+		}
+				
+		else if(damage_kind == "sen")
+		{
+			i += ob->query_temp("apply/add_max_spells_all")+ob->query_temp("apply/add_max_spells_sen");
+			if(i > 17500) i = 17500;
+			j = ob->query_temp("apply/add_spells_all")+ob->query_temp("apply/add_spells_sen");	
+			j = j*2/3+random(j*8/7-j*2/3);	
+		}
+		damage += damage*i/10000+j;
+		if(damage > init_damage*3)
+			damage = init_damage*3;
+		return damage;
+		
+	}
+	if(i < 0) i =0;
+	if(j < 0) j = 0;
+	damage = damage*i/10000+j;
+	if(damage > init_damage*2)
+			damage = init_damage*2;
+	return damage;
+
+}
+
+varargs int query_ob_re_damage(object ob,int damage,string damage_type,string damage_kind)
+{
+	string wuxing;
+	
+	int i,j,init_damage;
+	i = 0;
+	j = 0;
+	init_damage = damage;
+	if(!ob)	return 0;
+	if(!ob->is_character())	return 0;
+	if(!damage) return 0;
+
+	wuxing = query_ob_wuxing(ob);
+	
+	if(damage_type == "phy")
+	{
+		j =  ob->query_temp("apply/sub_phy");
+		i =  ob->query_temp("apply/sub_max_phy");
+ if(ob->query_temp("apply/immune_phy"))
+{    damage = 0;
+ return damage;
+}
+		
+	}
+	else if(damage_type == "jin")
+	{
+	
+		j =  ob->query_temp("apply/sub_jin");
+		i =  ob->query_temp("apply/sub_max_jin");
+		
+	           if(ob->query_temp("apply/immune_jin"))
+	           {	damage = 0;
+	           	return damage;
+	           }
+
+	}
+ 
+	else if(damage_type == "mu")
+	{
+		
+		
+		j =  ob->query_temp("apply/sub_mu");
+		i =  ob->query_temp("apply/sub_max_mu");
+		
+	           if(ob->query_temp("apply/immune_mu"))
+	           {	damage = 0;
+	           	return damage;
+	           }
+		
+		
+	}
+        
+	else if(damage_type == "shui")
+	{
+	
+		j =  ob->query_temp("apply/sub_shui");
+		i =  ob->query_temp("apply/sub_max_shui");
+		
+	           if(ob->query_temp("apply/immune_shui"))
+	           {	damage = 0;
+	           	return damage;
+	           }
+	}
+
+	else if(damage_type == "huo")
+	{
+		
+		
+	
+		j =  ob->query_temp("apply/sub_huo");
+		i =  ob->query_temp("apply/sub_max_huo");
+		
+	           if(ob->query_temp("apply/immune_huo"))
+	           {	damage = 0;
+	           	return damage;
+	           }
+	}
+	else if(damage_type == "magic")
+	{
+		
+			
+		if(damage_kind == "kee")
+		{
+			j =  ob->query_temp("apply/sub_spells_kee")+ob->query_temp("apply/sub_spells_all");
+			i =  ob->query_temp("apply/sub_max_spells_kee")+ ob->query_temp("apply/sub_max_spells_all");
+		}
+		else if(damage_kind == "sen")
+		{
+			j =  ob->query_temp("apply/sub_spells_sen")+ob->query_temp("apply/sub_spells_all");
+			i =  ob->query_temp("apply/sub_max_spells_sen")+ ob->query_temp("apply/sub_max_spells_all");
+		}
+	           if(ob->query_temp("apply/immune_magic"))
+	           {	
+
+	           	damage = 0;
+	           	return damage;
+	           }
+		
+	}
+	if(i > 7500)
+		i = 7500;
+	
+	damage -= j;
+	damage -= damage*i/10000;
+	//起码能有1/4的damage伤害，除非免疫
+	if(damage < init_damage/4)
+	      	damage = init_damage/4+1;
+	return damage;
+
+}
+void remove_huo_effect(object target)
+{
+	if (target)
+		target->delete_temp("no_move");      
+	
+	return;
+}
+void remove_jinforce_effect(object target)
+{
+	if (target)
+		target->delete_temp("biqi");      
+	
+	return;
+}
+void remove_jinmana_effect(object target)
+{
+	if (target)
+		target->delete_temp("jinzhou");      
+	
+	return;
+}
+void remove_jinpfm_effect(object target)
+{
+	if (target)
+		target->delete_temp("fengmo");      
+	
+	return;
+}
+
+varargs int query_total_damage(object ob,object victim,int init_damage,string type,string kind) // ob is attacker,vic is be atked
+{
+	int damage,jin,mu,shui,huo;
+	int suck_kee,effect;
+	object weapon;
+	object *inv,obj;
+	string poison_type;
+	if(!kind)
+		return init_damage;
+	if(wizardp(ob) && (string)ob->query("env/combat_wx")=="detail")
+		tell_object(ob,"the init damage is "+init_damage+"\n");
+	if(wizardp(victim) && (string)victim->query("env/combat_wx")=="detail")
+		tell_object(victim,"the init damage is "+init_damage+"\n");	
+	inv = all_inventory(victim);
+	weapon = ob->query_temp("weapon");
+	
+	if(kind == "phy")
+	{
+	
+		damage = query_ob_do_damage(ob,init_damage,"phy","kee");
+	//	printf("the phy damage is %d\n",damage);
+		if(wizardp(ob) && (string)ob->query("env/combat_wx")=="detail")
+			tell_object(ob,"the phy damage is "+damage+"\n");
+		if(wizardp(victim) && (string)victim->query("env/combat_wx")=="detail")
+			tell_object(victim,"the phy damage is "+damage+"\n");	
+		if(ob->query_temp("apply/combat_ignore_phy")&&(random(10000) < ob->query_temp("apply/combat_ignore_phy")))
+				damage = damage;
+		else 
+		{
+			if(ob->query_temp("apply/sub_opp_phy"))
+					victim->add_temp("apply/sub_phy",-ob->query_temp("apply/sub_opp_phy"));
+			if(ob->query_temp("apply/sub_opp_maxphy"))
+						victim->add_temp("apply/sub_max_phy",-ob->query_temp("apply/sub_opp_maxphy"));
+			damage = query_ob_re_damage(victim,damage, "phy","kee");
+			if(ob->query_temp("apply/sub_opp_phy"))
+					victim->add_temp("apply/sub_phy",ob->query_temp("apply/sub_opp_phy"));
+			if(ob->query_temp("apply/sub_opp_maxphy"))
+						victim->add_temp("apply/sub_max_phy",ob->query_temp("apply/sub_opp_maxphy"));
+		}
+	//	printf("the phy damage is %d\n",damage);
+		if(wizardp(ob) && (string)ob->query("env/combat_wx")=="detail")
+			tell_object(ob,"the phy damage is "+damage+"\n");
+		if(wizardp(victim) && (string)victim->query("env/combat_wx")=="detail")
+			tell_object(victim,"the phy damage is "+damage+"\n");	
+		jin = query_ob_do_damage(ob,damage, "jin");
+	//	printf("the jin damage is %d\n",jin);
+		if(wizardp(ob) && (string)ob->query("env/combat_wx")=="detail")
+			tell_object(ob,"the jin damage is "+jin+"\n");
+		if(wizardp(victim) && (string)victim->query("env/combat_wx")=="detail")
+			tell_object(victim,"the jin damage is "+jin+"\n");	
+		jin = query_ob_re_damage(victim,jin, "jin");
+	//	printf("the jin damage is %d\n",jin);
+		if(wizardp(ob) && (string)ob->query("env/combat_wx")=="detail")
+			tell_object(ob,"the jin damage is "+jin+"\n");
+		if(wizardp(victim) && (string)victim->query("env/combat_wx")=="detail")
+			tell_object(victim,"the jin damage is "+jin+"\n");	
+		effect = jin/2+random(jin*3/2);
+		if(effect > 400)
+		{
+			effect = effect/130;
+			if(effect > 10) effect = 10;
+			if(effect < 3) effect = 3;	
+			if(ob->query_temp("apply/master_jin"))               
+			{
+					suck_kee = ob->query_temp("apply/master_jin");
+					if(!userp(ob))
+						suck_kee = suck_kee/2+random(suck_kee/2);
+					if(suck_kee > 7500)
+					suck_kee = 7500;
+					effect += effect*suck_kee/10000;
+					if(random(10000) < random(suck_kee))
+					{
+						if(weapon)
+						{	message_vision(HIB"$N手中的"+weapon->name()+HIB"轻轻一挥，迸出数道霹雳直冲$n而去！\n"NOR,ob,victim);	
+							suck_kee = victim->query_temp("apply/master_resist_jin");
+							if(suck_kee > 7500)
+							suck_kee = 7500;
+							effect -= effect*suck_kee/10000;
+							if(effect < 1) effect = 1+random(2);
+							if(random(10000) > suck_kee)
+							 {
+							 	if(random(2)&&!victim->query_temp("jinzhou"))
+							 	{	message_vision(HIB"$N被霹雳所击中，只觉得天灵麻飕飕的，无法再运用法力！\n"NOR,victim);	
+							 		victim->set_temp("jinzhou",1);
+							 		victim->start_call_out( (: call_other, __FILE__, "remove_jinmana_effect", victim :),effect+random(effect));
+							 	}
+								else if(random(2)&&!victim->query_temp("biqi"))
+							 	{	message_vision(HIB"$N被霹雳所击中，只觉得丹田麻飕飕的，无法再运用内力！\n"NOR,victim);	
+							 		victim->set_temp("biqi",1);
+							 		victim->start_call_out( (: call_other, __FILE__, "remove_jinforce_effect", victim :),effect+random(effect));
+							 	
+								}
+								else if(!victim->query_temp("fengmo")) 
+								{   message_vision(HIB"$N被霹雳所击中，只觉得手脚麻飕飕的，无法再施展外功！\n"NOR,victim);	
+									victim->set_temp("fengmo",1);
+							 		victim->start_call_out( (: call_other, __FILE__, "remove_jinpfm_effect", victim :),effect+random(effect));
+								}
+							}
+						}
+						else 
+						{
+							message_vision(HIB"$N手掌轻轻一挥，劈出数道霹雳直冲$n而去！\n"NOR,ob,victim);	
+							suck_kee = victim->query_temp("apply/master_resist_jin");
+							if(suck_kee > 7500)
+							suck_kee = 7500;
+							effect -= effect*suck_kee/10000;
+							if(effect < 1) effect = 1+random(2);
+							if(random(10000) > suck_kee)
+							 {
+							 	if(random(2)&&!victim->query_temp("jinzhou"))
+							 	{	message_vision(HIB"$N被霹雳所击中，只觉得天灵麻飕飕的，无法再运用法力！\n"NOR,victim);	
+							 		victim->set_temp("jinzhou",1);
+							 		
+							 		victim->start_call_out( (: call_other, __FILE__, "remove_jinmana_effect", victim :),effect+random(effect));
+							 	}
+								else if(random(2)&&!victim->query_temp("biqi"))
+							 	{	message_vision(HIB"$N被霹雳所击中，只觉得丹田麻飕飕的，无法再运用内力！\n"NOR,victim);	
+							 		victim->set_temp("biqi",1);
+							 		
+							 		victim->start_call_out( (: call_other, __FILE__, "remove_jinforce_effect", victim :),effect+random(effect));
+							 	
+								}
+								else if(!victim->query_temp("fengmo")) 
+								{   message_vision(HIB"$N被霹雳所击中，只觉得手脚麻飕飕的，无法再施展外功！\n"NOR,victim);	
+									victim->set_temp("fengmo",1);
+							 		
+							 		victim->start_call_out( (: call_other, __FILE__, "remove_jinpfm_effect", victim :),effect+random(effect));
+								}
+							}
+								
+								
+								
+						}
+					}	
+			}
+
+		}
+		mu = query_ob_do_damage(ob,damage, "mu");
+	//	printf("the nu damage is %d\n",mu);
+	if(wizardp(ob) && (string)ob->query("env/combat_wx")=="detail")
+			tell_object(ob,"the mu damage is "+mu+"\n");
+		if(wizardp(victim) && (string)victim->query("env/combat_wx")=="detail")
+			tell_object(victim,"the mu damage is "+mu+"\n");	
+		mu = query_ob_re_damage(victim,mu, "mu");
+		if(wizardp(ob) && (string)ob->query("env/combat_wx")=="detail")
+			tell_object(ob,"the mu damage is "+mu+"\n");
+		if(wizardp(victim) && (string)victim->query("env/combat_wx")=="detail")
+			tell_object(victim,"the mu damage is "+mu+"\n");	
+	//	printf("the nu damage is %d\n",mu);
+		effect = mu*3/4+random(mu*6/5-mu*3/4);
+		if(effect > 250)
+		{
+			effect = effect/100;
+			if(effect > 8) effect = 8;
+			if(effect < 3) effect = 3;
+			
+			if(ob->query_temp("apply/master_mu"))               
+			{
+				suck_kee = ob->query_temp("apply/master_mu");
+				if(!userp(ob))
+						suck_kee = suck_kee/2+random(suck_kee/2);
+				if(suck_kee > 7500)
+				suck_kee = 7500;
+				effect += effect*suck_kee/10000;
+				if(random(10000) < random(suck_kee))
+				{
+				if(weapon)
+				{	message_vision(HIG"$N手中的"+weapon->name()+HIG"飘出一股股绿瘴，直冲$n而去！\n"NOR,ob,victim);	
+					suck_kee = victim->query_temp("apply/master_resist_mu");
+					if(suck_kee > 7500)
+					suck_kee = 7500;
+					effect -= effect*suck_kee/10000;
+					if(effect < 1) effect = 1+random(2);
+					if(random(10000) > suck_kee)
+					 {	
+					 	message_vision(HIG"$N吸了一口，顿觉天晕地转，已然身中奇毒！\n"NOR,victim);	
+					 	
+						poison_type = poison[random(sizeof(poison))];
+						
+						if(victim->query("wuxing_poison/"+poison_type) < mu)
+					 		victim->set("wuxing_poison/"+poison_type,mu);
+						victim->apply_condition(poison_type,victim->query_condition(poison_type)+effect+random(effect));
+						
+						
+					}
+				}
+				else 
+				{
+					message_vision(HIG"$N手掌划出一股股绿烟，直冲$n而去！\n"NOR,ob,victim);	
+					suck_kee = victim->query_temp("apply/master_resist_mu");
+					if(suck_kee > 7500)
+					suck_kee = 7500;
+					effect -= effect*suck_kee/10000;
+					if(effect < 1) effect = 1+random(2);
+					if(random(10000) > suck_kee)
+					 {
+					 	message_vision(HIG"$N吸了一口，顿觉天晕地转，已然身中奇毒！\n"NOR,victim);
+						
+						poison_type = poison[random(sizeof(poison))];
+						if(victim->query("wuxing_poison/"+poison_type) < mu)
+					 		victim->set("wuxing_poison/"+poison_type,mu);
+						victim->apply_condition(poison_type,victim->query_condition(poison_type)+effect+random(effect));
+						
+					}	
+						
+						
+						
+				}
+			}
+		}	
+
+		}
+		shui = query_ob_do_damage(ob,damage, "shui");
+	//	printf("the shui damage is %d\n",shui);
+	if(wizardp(ob) && (string)ob->query("env/combat_wx")=="detail")
+			tell_object(ob,"the sghui damage is "+shui+"\n");
+		if(wizardp(victim) && (string)victim->query("env/combat_wx")=="detail")
+			tell_object(victim,"the shui damage is "+shui+"\n");	
+		shui = query_ob_re_damage(victim,shui, "shui");
+	//	printf("the shui damage is %d\n",shui);
+	if(wizardp(ob) && (string)ob->query("env/combat_wx")=="detail")
+			tell_object(ob,"the sghui damage is "+shui+"\n");
+		if(wizardp(victim) && (string)victim->query("env/combat_wx")=="detail")
+			tell_object(victim,"the shui damage is "+shui+"\n");	
+		effect = shui*4/5+random(shui*4/3-shui*4/5);
+		
+		if(effect > 210)
+		{
+			effect = effect/120;
+			if(effect > 5) effect = 5;
+			if(effect < 2) effect = 2;
+			
+			if(ob->query_temp("apply/master_shui"))               
+			{
+			suck_kee = ob->query_temp("apply/master_shui");
+			if(!userp(ob))
+				suck_kee = suck_kee/2+random(suck_kee/2);
+			if(suck_kee > 7500)
+			suck_kee = 7500;
+			effect += effect*suck_kee/10000;
+			if(random(10000) < random(suck_kee)&&!victim->is_busy())
+			{
+				if(weapon)
+				{	message_vision(WHT"\n$N手中的"+weapon->name()+WHT"发出阵阵寒气，直冲$n而去！\n"NOR,ob,victim);	
+					suck_kee = victim->query_temp("apply/master_resist_shui");
+					if(suck_kee > 7500)
+					suck_kee = 7500;
+					effect -= effect*suck_kee/10000;
+					if(effect < 1) effect = 1+random(2);
+					if(random(10000) > suck_kee)
+					 {	message_vision(WHT"$N不慎被寒气所侵，全身差点冻僵！\n"NOR,victim);	
+						victim->start_busy(effect+random(effect+1));
+					}
+				}
+				else 
+				{
+					message_vision(WHT"\n$N手掌发出阵阵寒气，直冲$n而去！\n"NOR,ob,victim);	
+					suck_kee = victim->query_temp("apply/master_resist_shui");
+					if(suck_kee > 7500)
+					suck_kee = 7500;
+					effect -= effect*suck_kee/10000;
+					if(effect < 1) effect = 1+random(2);
+					if(random(10000) > suck_kee)
+					 {	message_vision(WHT"$N不慎被寒气所侵，全身差点冻僵！\n"NOR,victim);	
+						victim->start_busy(effect+random(effect));
+					}	
+						
+						
+						
+				}
+					
+				}
+			}	
+	
+		}
+		huo = query_ob_do_damage(ob,damage, "huo");
+	//	printf("the huo damage is %d\n",huo);
+	if(wizardp(ob) && (string)ob->query("env/combat_wx")=="detail")
+			tell_object(ob,"the huo damage is "+huo+"\n");
+		if(wizardp(victim) && (string)victim->query("env/combat_wx")=="detail")
+			tell_object(victim,"the huo damage is "+huo+"\n");	
+		huo = query_ob_re_damage(victim,huo, "huo");
+	//	printf("the huo damage is %d\n",huo);
+	if(wizardp(ob) && (string)ob->query("env/combat_wx")=="detail")
+			tell_object(ob,"the huo damage is "+huo+"\n");
+		if(wizardp(victim) && (string)victim->query("env/combat_wx")=="detail")
+			tell_object(victim,"the huo damage is "+huo+"\n");	
+		effect = huo+random(huo/4);
+		if(effect > 270)
+		{
+			effect = effect/110;
+			if(effect > 10) effect = 10;
+			if(effect < 3) effect = 3;
+			
+			if(ob->query_temp("apply/master_huo"))               
+			{
+			suck_kee = ob->query_temp("apply/master_huo");
+			if(!userp(ob))
+				suck_kee = suck_kee/2+random(suck_kee/2);
+			if(suck_kee > 7500)
+			suck_kee = 7500;
+			effect += effect*suck_kee/10000;
+			if(random(10000) < random(suck_kee))
+			{
+				if(weapon)
+				{	message_vision(HIR"\n$N手中的"+weapon->name()+HIR"散出一团火焰，直冲$n而去！\n"NOR,ob,victim);	
+					suck_kee = victim->query_temp("apply/master_resist_huo");
+					if(suck_kee > 7500)
+					suck_kee = 7500;
+					effect -= effect*suck_kee/10000;
+					if(effect < 1) effect = 1+random(2);
+					if(random(10000) > suck_kee&&!victim->query_temp("no_move"))
+					 {	message_vision(HIR"$N"+HIR"被火所围，心中一惊，不知如何是好！\n"NOR,victim);	
+						victim->set_temp("no_move",1);
+						
+						victim->start_call_out( (: call_other, __FILE__, "remove_huo_effect", victim :),effect+random(effect));
+
+						if(!random(13)||wizardp(ob))
+						{
+						//	printf("the inv is %O\n",inv);
+							 if (sizeof(inv))
+							{
+							    obj = inv[random(sizeof(inv))];
+								   
+							   if (obj->move(environment(victim)))
+							   {
+							       message_vision(HIR"只见火焰一舔，$N的$n顿时化为灰烬！\n"NOR,victim,obj);
+							       destruct(obj);
+							     }
+		
+							}	
+							
+						}
+					}
+				}
+				else 
+				{
+					message_vision(HIR"\n$N手掌挥出一团火焰，直冲$n而去！\n"NOR,ob,victim);	
+					suck_kee = victim->query_temp("apply/master_resist_huo");
+					if(suck_kee > 7500)
+					suck_kee = 7500;
+					effect -= effect*suck_kee/10000;
+					if(effect < 1) effect = 1+random(2);
+					if(random(10000) > suck_kee&&!victim->query_temp("no_move"))
+					 {	message_vision(HIR"$N"+HIR"被火所围，心中一惊，不知如何是好！\n"NOR,victim);	
+						victim->set_temp("no_move",1);
+						
+						victim->start_call_out( (: call_other, __FILE__, "remove_huo_effect", victim :),effect+random(effect));
+						if(!random(23)||wizardp(ob))
+						{
+						//	printf("the inv is %O\n",inv);
+							 if (sizeof(inv))
+							{
+							    obj = inv[random(sizeof(inv))];
+								   
+							   if (obj->move(environment(victim)))
+							   {
+							       message_vision(HIR"只见火焰一舔，$N的$n顿时化为灰烬！\n"NOR,victim,obj);
+							       destruct(obj);
+							     }
+		
+							}	
+							
+						}
+					}	
+						
+						
+						
+				}
+					
+			}
+			}	
+
+		}
+		damage = damage+jin+mu+shui+huo;
+		if(!userp(ob))
+			damage = damage/2+random(damage*2/3);
+		else damage = damage*2/3+random(damage/2);
+	//	printf("the final damage is %d\n",damage);	
+	if(wizardp(ob) && (string)ob->query("env/combat_wx")=="detail")
+			tell_object(ob,"the final damage is "+damage+"\n");
+		if(wizardp(victim) && (string)victim->query("env/combat_wx")=="detail")
+			tell_object(victim,"the final damage is "+damage+"\n");	
+	
+	}
+	
+	else if(kind == "jin")
+	{
+	
+		jin = query_ob_re_damage(victim,init_damage, "jin");
+		return jin;
+		
+	}
+	else if(kind == "mu")
+	{
+
+		mu = query_ob_re_damage(victim,init_damage, "mu");
+		return mu;
+		
+	}
+	else if(kind == "shui")
+	{
+
+		shui = query_ob_re_damage(victim,init_damage, "shui");
+		return shui;
+		
+	}
+	else if(kind == "huo")
+	{
+
+		huo = query_ob_re_damage(victim,init_damage, "huo");
+		return huo;
+		
+	}
+	else if(kind == "magic")
+	{
+		
+		if(type == "kee")
+	{
+			damage = query_ob_do_damage(ob,init_damage,"magic","kee");
+		
+			jin = victim->query_temp("apply/sub_max_spells_kee")+ victim->query_temp("apply/sub_max_spells_all");
+			mu  = ob->query_temp("apply/combat_ignore_magic");
+			shui = victim->query_temp("apply/immune_magic");
+			if(mu&&jin > 0&&random(10000) < mu&&!shui)
+				damage = damage;
+			else 
+			damage = query_ob_re_damage(victim,damage, "magic","kee");
+ 
+	}
+		
+	else	if(type == "sen")
+{	
+	damage = query_ob_do_damage(ob,init_damage,"magic","sen");
+	jin = victim->query_temp("apply/sub_max_spells_sen")+ victim->query_temp("apply/sub_max_spells_all");
+	mu  = ob->query_temp("apply/combat_ignore_magic");
+	shui = victim->query_temp("apply/immune_magic");
+	if(mu&&jin > 0&&random(10000) < mu&&!shui)
+			damage = damage;
+	else 
+	damage = query_ob_re_damage(victim,damage, "magic","sen");
+
+	}	
+		
+		
+		
+	}
+	else if(kind == "spe_phy")   //特殊的攻击，如sheshen，fengchan
+	{
+	
+		damage = query_ob_do_damage(ob,init_damage,"phy","kee");
+		if(wizardp(ob) && (string)ob->query("env/combat_wx")=="detail")
+			tell_object(ob,"the phy damage is "+damage+"\n");
+		if(wizardp(victim) && (string)victim->query("env/combat_wx")=="detail")
+			tell_object(victim,"the phy damage is "+damage+"\n");	
+		damage = query_ob_re_damage(victim,damage, "phy","kee");
+		if(wizardp(ob) && (string)ob->query("env/combat_wx")=="detail")
+			tell_object(ob,"the phy damage is "+damage+"\n");
+		if(wizardp(victim) && (string)victim->query("env/combat_wx")=="detail")
+			tell_object(victim,"the phy damage is "+damage+"\n");	
+			
+	}
+	if(damage < 0) damage = 0;
+	return damage;
+
+	
+}

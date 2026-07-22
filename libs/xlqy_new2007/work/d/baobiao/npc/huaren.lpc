@@ -1,0 +1,968 @@
+
+#include <ansi.h>
+#include <room.h>
+inherit NPC;
+
+#define LIMIT_LENGTH    108
+
+#define HZK "/adm/etc/Hzk"
+#define ASC "/adm/etc/Asc"
+
+#define DEFAULT_FILL "*"
+#define DEFAULT_FCOLOR ""
+#define DEFAULT_BG " "
+#define DEFAULT_BGCOLOR ""
+#define AUTO_SIZE 12
+
+string replace_long(string longs);
+varargs mapping random_location(mixed flag);
+varargs mapping random_location(mixed flag)
+{
+        string line, dir, tmp,dir_s,str;
+        string *maps, *areas,*dirss;
+        int j,k,jj;
+        mixed*  files;
+        object room;
+        mapping location,exits;
+        string *dirs;
+        string *positions;
+        dirs = ({
+"/d/jz",
+"/d/gao",
+"/d/jjf",
+"/d/kaifeng",
+"/d/lingtai",
+"/d/moon",
+"/d/sea",
+"/d/qujing/wuzhuang",
+"/d/qujing/baoxiang",
+"/d/qujing/biqiu",
+"/d/qujing/chechi",
+"/d/qujing/fengxian",
+"/d/qujing/jingjiling",
+"/d/qujing/jinping",
+"/d/qujing/jisaiguo",
+"/d/qujing/nuerguo",
+"/d/qujing/qinfa",
+"/d/qujing/tianzhu",
+"/d/qujing/tongtian",
+"/d/qujing/wudidong",
+"/d/qujing/wuji",
+"/d/qujing/yuhua",
+"/d/qujing/zhuzi",
+});
+positions=({
+"江州",
+"高老庄",
+"大唐将军府",
+"开封",
+"灵台方寸",
+"月宫",
+"东海龙宫",
+"五庄观",
+"宝象国",
+"比丘国",
+"车迟国",
+"凤仙郡",
+"荆棘岭",
+"金平府",
+"祭赛国",
+"女儿国",
+"钦法国",
+"天竺",
+"通天河",
+"无底洞",
+"乌鸡国",
+"玉华县",
+"朱紫国",
+});
+        j=0;jj=0;
+        location=allocate_mapping(5);
+        j = random(sizeof(dirs));
+        jj=j;
+        dir_s = dirs[j];
+        files = get_dir( dir_s+"/*.lpc", -1 );
+        j = random(sizeof(files));
+        reset_eval_cost();
+        for(k=0;k<30;k++) { // try 30 times
+           j = random(sizeof(files));
+           if( files[random(sizeof(files))][1] > 0)
+            room=load_object(dir_s+"/"+files[j][0]); 
+
+        if(!room->query("no_fight")&&!room->query("alternative_die"))
+        {
+                if(room->query("no_hubiao"))
+                        continue;
+                if(sizeof(room->query("long"))<10)
+                        continue;  
+        location["file"]=dir_s+"/"+files[j][0];
+        location["room"]=room;
+        location["long"]=room->query("long");
+        str="";
+        if( mapp(exits = room->query("exits")) ) {
+                dirss = keys(exits);
+                for(int i=0; i<sizeof(dirss); i++)
+                        if( (int)room->query_door(dirss[i], "status") & DOOR_CLOSED )
+                                dirss[i] = 0;
+                dirss -= ({ 0 });
+                if (room->query("no_look"))
+                        str += "这里的出路看不清楚。\n";
+                else if( sizeof(dirss)==0 )
+                        str += "这里没有任何明显的出路。\n";
+                else if( sizeof(dirss)==1 ) {
+                        str += " 这里唯一的出口是 "+dirss[0];
+                        if (room->query("no_look"))
+                                str += "<看不见>";
+                        str += "。\n";
+
+                } else {
+                        str += sprintf(" 这里明显的出口是 " + "%s" + " 和 " + "%s" ,
+                                implode(dirss[0..sizeof(dirss)-2], "、"), dirss[sizeof(dirss)-1]);
+                        if (room->query("no_look"))
+                                str += " <看不见>";
+                        str += "。\n";
+                } 
+        }
+        location["long"]=location["long"]+str;
+        location["position"]=positions[jj];
+        break;
+        }
+        }
+        return location;
+}
+
+varargs string Display(string str, int size, string fill, string bg, string fcolor, string bgcolor)
+{
+        int offset;
+        int *mask = ({0x80, 0x40, 0x20, 0x10, 0x8, 0x4, 0x2, 0x1});
+        int scale;
+        int r,z,leafy;
+        string char;
+        string *out;
+        
+        if(!size)
+#ifdef AUTO_SIZE
+                size = AUTO_SIZE;
+#else
+                error("TEXT to PIC need size\n");
+#endif
+        out = allocate(16);
+        out = map_array(out, (: $1 = "" :));
+        size *= 2;
+
+        if(!fill) fill = DEFAULT_FILL;
+        if(!fcolor) fcolor = DEFAULT_FCOLOR;
+        if(!bg) bg = DEFAULT_BG;
+        if(sizeof(fill) != sizeof(bg)) {
+                fill = DEFAULT_FILL;
+                bg = DEFAULT_BG;
+        }
+        if(!bgcolor) bgcolor = DEFAULT_BGCOLOR;
+
+        for(int k = 0; k < sizeof(str); k++) {
+                leafy = random(2);
+                                r = random(10);
+                                z = random(3);
+                                if(z == 1)
+                                size = 24;
+                                else if(z == 2)
+                                size = 32;
+                                else size = 28;
+                                 if(leafy) { fill = HIW+"@"+NOR;
+                                bg = "@";
+                                }
+                                else {
+                                 fill = HIW+"@"+NOR;
+                                bg = " ";
+                                }
+                if(mask[0] & str[k]) {
+                        offset = size*( (atoi(sprintf("%d", str[k]))-0xA1)*94 + atoi(sprintf("%d", str[k+1])) - 0xA1 );
+                        char = read_bytes(HZK + (size/2), offset, size);
+                        k++;
+                        scale = 2;
+                } else {
+                        offset = str[k] * (size/2);
+                        char = read_bytes(ASC + (size/2), offset, (size/2));
+                        scale = 1;
+                }
+
+                if(!sizeof(char)) error("TEXT to PIC can't read bytes from character lib\n");
+
+                for(int i = 0; i < sizeof(char); i++) {
+                        for(int j = 0; j < 8; j++) {
+                                if(mask[j] & char[i]) 
+                                        out[i/scale] += fcolor + fill;
+                                else 
+                                        out[i/scale] += bgcolor + bg;
+                        }
+                }
+
+                for(int i = 0; i < sizeof(out); i++) {
+                                                                                if(!leafy) {
+                                                                out[i] = replace_string(out[i], fcolor + fill, fill );
+                                                                //  out[i] = replace_string(out[i], bg + bgcolor + bg, bg + bg);
+                                                                                }
+                                                                }
+                                                                       }
+        
+        return implode(out, "\n") + NOR;
+}
+
+int give_quest();
+int ask_biaoqi();
+void reset_me();
+int ask_times();
+int do_cancel();
+int ask_jiebiao();
+int do_reward(object who,object ob);
+int give_reward(object who);
+ int do_huida(string arg);
+string replace_long(string longs)
+{
+        string tmp="", target="";
+        int length, start, i;
+        int blank_flag=0;
+        
+        if(strlen(longs)<1) return "";     
+//      longs=replace_string(longs, "\n", "");
+
+        for(i=0;i<strlen(longs);i++)
+                if(longs[i]>160 && longs[i]<255)
+                        tmp+=longs[i..i];
+        
+
+        length=strlen(tmp);
+        
+//      if(length<LIMIT_LENGTH*2)
+//              return "";
+        start=random(length-LIMIT_LENGTH);
+        if(start%2)
+                start--;
+        for(i=start;i<start+LIMIT_LENGTH;i+=2)
+        {
+                if(blank_flag<-random(2)-2)
+                {
+                        target+="■";
+                        length++;
+                        if(random(2) || length>2)
+                        {
+                                blank_flag=0;
+                                length=0;
+                        }
+                }
+                else
+                {
+                        blank_flag--;
+                        target+=tmp[i..i+1];
+                }
+        }
+        return target;
+}
+
+void create()
+{
+        set_name("花忍", ({"hua ren", "hua"}));
+        set("age", 27);
+        set("gender", "男性");
+        seteuid(geteuid());
+        set("long",
+"脸上一道长长的刀疤，可怕之极。\n");
+        set("title", "二堂主");
+        set("attitude", "peaceful");
+                                        set("eff_kee", 1700);
+           set("eff_gin", 500);
+           set("eff_sen", 500);
+           set("kee", 1700);
+           set("gin", 500);
+           set("sen", 500);
+        set("combat_exp", 40000);
+        set("shen_type", 1);
+                        set("max_force", 200);
+                        set("force", 200);
+                        set("force_factor", 5);
+        set_skill("unarmed", 40);
+                        set_skill("changquan", 40);
+        set_skill("dodge", 60);
+        set_skill("parry", 60);
+        set("dead",0);
+        map_skill("unarmed", "changquan");
+         set("inquiry",([
+        "duobiao" : (:ask_times :),                                    
+         "夺镖"     :(: ask_times :),
+ // "jiebiao" : (: give_quest :),
+// "劫镖"     : (: give_quest :),
+        "cancel"  :  (: do_cancel :),
+        "五花翎旗" :  (: ask_biaoqi :),
+        "镖旗"     :( : ask_biaoqi :),
+        "biaoqi"     :( : ask_biaoqi :),
+         ]));
+        setup();
+        add_money("silver", 10);
+        carry_object("/d/obj/cloth/piyi")->wear();
+}
+
+void init()
+{               
+                                add_action("do_huida", "huifu");
+}
+ int do_huida(string arg)
+        {
+                         string what;
+                         int num;
+                         object where=environment(this_object());
+                         object who=this_player();
+                         if( !(who->query_temp("hubiao/m_reward") ) )
+   return notify_fail("什么啊～？\n");
+
+                         if( !arg ) return notify_fail("你要回答什么数字啊？\n");
+                         message_vision("$N答道：是“" + arg + "”。\n", this_player());
+                         sscanf(arg,"%d",num);
+                         if(num == who->query_temp("hubiao/m_num"))
+                          {     who->set_temp("hubiao/m_answer",1);
+                                  who->delete_temp("hubiao/w_answer");
+                                 who->delete_temp("hubiao/m_reward");
+                                                                                                                             tell_object(who,HIR"恭喜答对！\n"NOR);
+                                                                                                                              remove_call_out("give_reward");
+                                                                                                                             give_reward(who);
+                           }
+                         else {
+                     who->add_temp("hubiao/w_answer",1);
+                     if(who->query_temp("hubiao/w_answer") > 2)
+                      {
+                        who->delete_temp("hubiao/w_answer");
+                                                                                                                             remove_call_out("give_reward");
+                                                                                                                             give_reward(who);
+                       }
+                     return notify_fail("错了错了！\n");}
+                             return 1;
+                         }
+
+void reset_me ()
+{
+  object me = this_object();
+  me->set("eff_kee", (int)me->query("max_kee"));
+  me->set("kee", (int)me->query("max_kee"));
+  me->set("eff_sen", (int)me->query("max_sen"));
+  me->set("sen", (int)me->query("max_sen"));
+}
+ int do_reward(object who,object ob)
+    {
+       string msg;
+                        int r,ka;
+      int num;
+                        int t,w,q,b,s,g;
+                        num = ob->query("hubiao/number");
+                        t = num/100000;
+                        w = (num-t*100000)/10000;
+                        q = (num-t*100000-w*10000)/1000;
+                        b = (num-t*100000-w*10000-q*1000)/100;
+                        s = (num-t*100000-w*10000-q*1000-b*100)/10;
+                        g = num-t*100000-w*10000-q*1000-b*100-10;
+                        if(t) ka = 6;
+                        else if(w) ka= 5;
+                        else ka = 4;
+                        tell_object(who,HIR"请在20秒内说出(huifu 数字红货的暗码！\n"NOR);
+                        who->set_temp("hubiao/m_num",num);
+                        who->set_temp("hubiao/m_reward",1);
+                        who->set_temp("hubiao/value",ob->query("hubiao/value"));
+                        who->set_temp("hubiao/level",ob->query("hubiao/level"));
+                        who->set_temp("hubiao/m_success",ob->query("hubiao/m_success"));
+                        msg = sprintf("%d",num);
+                        msg = Display(msg);
+                        printf("%s",msg);
+                        call_out("give_reward",20,who);
+                }
+int give_reward(object who)
+{
+        string msg,sysmsg;
+        int lvl,value,times;
+        int exp_r, pot_r,dx_r;
+        int reward;
+        int money_amount;
+        
+        who->add("hubiao/m_success",1);
+        who->set("hubiao/start",0);
+                                lvl=who->query_temp("hubiao/level");
+                                value=who->query_temp("hubiao/value");
+                        times=who->query_temp("hubiao/m_success");
+        reward=450*lvl+40*(value+1)+(int)(2*times);
+        if(times>150)
+        reward=600*lvl+60*(value+1)+random(2*times);
+        if(times>500)      
+         reward=800*lvl+80*(value+1)+random(times-500);
+        if(times>1500)
+        reward=1200*lvl+120*(value+1);
+        exp_r=(reward+random(reward/8));
+        dx_r=(reward*0.6+random(reward/9));
+        pot_r=(reward*0.4+random(reward/10));
+                         if(who->query_temp("hubiao/m_answer"))
+                        exp_r = (int) exp_r*10/9;
+                        else
+                              exp_r=(int)exp_r*4/5;
+                         if(who->query_temp("hubiao/m_answer"))
+                        dx_r=(int)dx_r*11/10;
+                        else
+                        dx_r=(int)dx_r*2/3;
+                        if(who->query_temp("hubiao/m_answer"))
+                        pot_r=(int)pot_r*8/7;
+                        else
+                        pot_r=(int)pot_r*3/4;
+              
+        sysmsg="";
+        msg="";
+ sysmsg = who->query("name")+"完成一个等级"+who->query_temp("hubiao/level")+"，价值为"+who->query_temp("hubiao/value") +"的劫镖任务，得到";
+        switch(random(3))
+        {
+                case 0:
+                        who->add("combat_exp", exp_r);
+                        who->add("hubiao/wuxue", exp_r);
+                        who->add("daoxing", dx_r);
+                        who->add("hubiao/dx", dx_r);
+                        
+                        msg+=COMBAT_D->chinese_daoxing(dx_r)+"道行，";
+                        break;
+                case 1:
+                        who->add("daoxing", dx_r);
+                        who->add("hubiao/dx", dx_r);
+                        msg+=COMBAT_D->chinese_daoxing(dx_r)+"道行，";
+                        who->add("potential", pot_r);
+                        who->add("hubiao/pot", pot_r);
+                        msg+=pot_r+"点潜能，";
+                        
+                        break;
+                default:
+                
+                        who->add("combat_exp", exp_r);
+                        who->add("hubiao/wuxue", exp_r);
+                        msg+=exp_r+"点武学，";
+                        who->add("potential", pot_r);
+                        who->add("hubiao/pot", pot_r);
+                        msg+=pot_r+"点潜能，";
+                        
+        }
+                                who->delete_temp("hubiao/m_answer");
+                                who->delete_temp("hubiao/m_num");
+        if(who->query("hubiao/level")==1)
+        {
+         money_amount=who->query_temp("hubiao/value")*3200+random(who->query_temp("hubiao/value")*1200)+random(150*who->query_temp("hubiao/m_success"));
+                if(money_amount > 50000)
+                        money_amount = 50000+random(10000);
+                MONEY_D->pay_player(who,money_amount);
+                
+        }
+        else if(who->query("hubiao/level")==2)
+        {
+          money_amount=who->query_temp("hubiao/value")*5000+random(who->query_temp("hubiao/value")*3200)+random(400*who->query_temp("hubiao/m_success"));
+                if(money_amount > 100000)
+                        money_amount = 100000+random(20000);
+                MONEY_D->pay_player(who,money_amount);
+                
+        }       
+        else
+        {
+money_amount=who->query_temp("hubiao/value")*8000+random(who->query_temp("hubiao/value")*5000)+random(800*who->query_temp("hubiao/m_success"));
+                if(money_amount > 150000)
+                MONEY_D->pay_player(who,money_amount);
+             
+        }
+        who->add("hubiao/money",money_amount);  
+who->add("weiwang",1);
+        msg+=chinese_number(money_amount/10000)+"两黄金"+chinese_number((money_amount-(int)10000*(money_amount/10000))/100)+"两银子！\n"+NOR;
+        sysmsg+=msg;
+        message("channel:job",HIB+"【三花堂主】："+who->query("name")+msg,users());        
+        tell_object(who,HIR"恭喜你顺利完成任务！"+HIW"你得到了"+msg);
+                                who->delete_temp("hubiao/level");
+                                who->delete_temp("hubiao/value");
+                                who->delete_temp("hubiao/m_success");
+        return 1;
+        
+        
+}
+int ask_times()
+{
+        object who;
+        int money;
+        who=this_player();
+        money=who->query("hubiao/money");
+        message_vision(CYN+name()+"告诉你：你已经为三花堂劫镖了"+who->query("hubiao/m_success")+"次！
+总共获得经验值"+who->query("hubiao/wuxue")+"，道行"+COMBAT_D->chinese_daoxing(who->query("hubiao/dx"))+"，潜能"+who->query("hubiao/pot")+"点以及"+chinese_number(money/10000)+"两黄金"+chinese_number((money-(int)10000*(money/10000))/100)+"两银子！\n"NOR,who);
+
+        return 1;
+                
+}
+int accept_object(object who,object ob)
+{
+        
+        string respect;
+        
+        respect=RANK_D->query_respect(who);
+        if(ob->query("id")=="honghuo"&&ob->query("name")=="红货")
+        {
+                if(ob->query("owner")!=who)
+                {
+                        message_vision(HIR+"$N歪着嘴邪笑了一声，道：好东西好东西！\n"+NOR,this_object());
+                        
+                        return 1;
+                
+                }
+                
+                who->start_busy(3);
+                                 do_reward(who,ob);
+                
+                return 1;               
+        }
+         if(ob->query("id")!="biao qi"&&ob->query("name")!="五花翎旗")
+           return 0;
+        
+        if(ob->query("owner_id")!=who->query("id"))
+         {
+                message_vision(HIR+"$N惊讶的“啊”了一声，惊道：你是怎么弄来这玩意的？！\n"+NOR,this_object());
+                return 1;
+        
+        
+        }
+        if(who->query("jiebiao/夺回镖旗")==1)
+        {
+                message_vision(HIR+"$N惊讶的“啊”了一声，说道：这个。。。？！\n"+NOR,this_object());
+                return 0;
+        
+        }
+        if(who->query("jiebiao/去送镖旗")==1)
+          {
+                message_vision(HIW+"$N仰天大笑！\n"+NOR,this_object());
+                command("spank "+who->query("id"));
+                message_vision(HIC+"$N说道："+respect+"干的不错，无天佛祖的使者想见见你，他就住在城南乱葬岗，这点辛苦费拿去喝他娘的花酒。\n"+NOR,this_object());
+                add_money("gold", 20);
+                if(!who->query("env/no_accept"))
+                  command("give 20 gold to " + who->query("id"));
+                else command("drop 20 gold");
+                who->set("jiebiao/去见使者",1);
+                return 1;
+         }
+         return 0;
+       
+
+
+
+}
+void unconcious()
+{
+
+die();
+}
+
+void die ()
+{
+ object who=this_player();
+  object me = this_object();
+  object ob = query_temp("last_damage_from");
+  object killer=query_temp("my_killer");
+  object last =query_temp("last_killed_by");
+  string faint=query_temp("last_fainted_from");
+  if(!ob)
+  {
+                                set("eff_kee", 1700);
+           set("eff_gin", 500);
+           set("eff_sen", 500);
+           set("kee", 1700);
+           set("gin", 500);
+           set("sen", 500);
+                    
+          return;       
+        
+}
+if(!ob->query("baobiao/愿意帮忙"))
+        { 
+                set("eff_kee", 1700);
+           set("eff_gin", 500);
+           set("eff_sen", 500);
+           set("kee", 1700);
+           set("gin", 500);
+           set("sen", 500);
+                    
+         
+         return;
+        }
+ 
+  if(faint && ob) {
+      if(faint!=ob->query("id"))
+                {
+::die();
+                     set("eff_kee", 1700);
+           set("eff_gin", 500);
+           set("eff_sen", 500);
+           set("kee", 1700);
+           set("gin", 500);
+           set("sen", 500);
+                    
+                   
+                      return;
+                }
+        }
+      if(!last) last=ob;
+         else if(last!=ob)
+        { set("eff_kee", 1700);
+           set("eff_gin", 500);
+           set("eff_sen", 500);
+           set("kee", 1700);
+           set("gin", 500);
+           set("sen", 500);
+                    return;}
+  
+   message_vision(CYN"花忍“噗咚”跪倒在地，连声哀求：别杀我，别杀我。我上有八十岁的老娘，下有未满月的孩儿。\n
+劫镖旗的事不是我们干的，不是我们干的啊，饶小的一条狗命吧。\n"NOR,who);
+  
+   ob->set_temp("baobiao/kill_hua",1);
+   ob->remove_killer(this_object());
+   me->set("dead",1);
+   me->set("bellicosity", 0);
+   me->set("eff_kee",1);
+   me->set("kee",1);
+   me->set("eff_sen",1);
+   me->set("sen",1);    
+   me->remove_all_killer();
+    return ;
+}
+
+int give_quest()
+{
+        object who, killer,paper;
+        string roomlong,replacelong;
+        mapping room;
+        string msg;
+                                int t;
+        who=this_player();
+     
+        if(!who->query("jiebiao/夺回镖旗"))
+                {
+                        message_vision(CYN+name()+"摇了摇头。\n"+NOR,who);
+                        message_vision(HIR+name()+"说道：想入伙一起干？去拿五花翎旗(biaoqi)来！\n"+NOR,who);
+                        return 1;
+                }
+        if(who->query("hubiao/start"))
+            {
+                message_vision(CYN+name()+"哼了一声。\n"+NOR,who);
+                message_vision(CYN+name()+"说道：还不快快去劫来。\n"+NOR,who);
+                return 1;
+        }
+        if(who->query("balance")<200000)
+        {
+                message_vision(CYN+name()+"说道：你不给弟兄们花销，弟兄们怎么给你卖命啊。\n"+NOR,who);
+                return 1;
+        }
+  
+        t=who->query("hubiao/last_time");
+        if(who->query("hubiao/fail",1))
+         {
+              if(t<time()&&time()<t+750)
+               {        
+                  message_vision(CYN+name()+"哼了一声。\n"+NOR,who);
+                  message_vision(CYN+name()+"说道：你还是一边凉快着吧，已经有其他兄弟去了。\n"+NOR,who);
+                  return 1;
+               } 
+               who->set("hubiao/fail",0);
+         
+               
+         }
+        else if(t<time()&&time()<t+450)
+        {
+                message_vision(CYN+name()+"呵呵大笑。\n"+NOR,who);
+                  message_vision(CYN+name()+"说道：现在还没镖局出镖的消息。\n"+NOR,who);
+                return 1;
+
+        }
+        
+ paper=new("/d/baobiao/obj/paper");
+        paper->set("ownid",who->query("id"));
+ killer=new("/d/baobiao/obj/killer");
+ killer->move("/d/city/sanhua");
+        message_vision(CYN+name()+"点了点头。\n"+NOR,who);
+        switch(random(5))
+                    {
+                        case 0: {
+                                        message_vision(MAG+"$N对$n说道：据说镇远镖局要护送一批"+HIB"药材"NOR+MAG"，你按照这张镖单速去劫来。\n"+NOR,
+                                                this_object(), who);
+                                        who->set("hubiao/value",1);
+                                         killer->invocation(who,1);
+                                        break;
+                                }
+                        case 1: {
+                                        message_vision(MAG+"$N对$n说道：据说镇远镖局要护送一批"HIC"银子"NOR+MAG"，你按照这张镖单速去劫来。\n"+NOR,
+                                                this_object(), who);
+                                        who->set("hubiao/value",2);
+                                         killer->invocation(who,2);
+                                        break;
+}
+                        case 2: {
+                                        message_vision(MAG+"$N对$n说道：据说镇远镖局要护送一批"+HIG"花石纲"NOR+MAG"，你按照这张镖单速去劫来。\n"+NOR,
+                                                this_object(), who);
+                                        who->set("hubiao/value",3);
+                                         killer->invocation(who,3);
+                                        break;
+                                }
+                        case 3: {
+                                        if(random(3))
+                                        {
+                                        message_vision(MAG+"$N对$n说道：据说镇远镖局要护送一批"+HIY"黄金"NOR+MAG"，你按照这张镖单速去劫来。\n"+NOR,
+                                                this_object(), who);
+                                        who->set("hubiao/value",4);
+                                         killer->invocation(who,4);
+                                        break;
+                                        }
+                                        else
+                                        {
+                                        message_vision(MAG+"$N对$n说道：据说镇远镖局要护送一批"HIC"银子"NOR+MAG"，你按照这张镖单速去劫来。\n"+NOR,
+                                                this_object(), who);
+                                        who->set("hubiao/value",2);
+                                         killer->invocation(who,2);
+                                        }
+                                }
+                        case 4: {
+                                        if(random(2))
+                                        {
+                                        message_vision(MAG+"$N对$n说道：据说镇远镖局要护送一批"+HIW"珠宝玉器"NOR+MAG"，你按照这张镖单速去劫来。\n"+NOR,
+                                                this_object(), who);
+                                          who->set("hubiao/value",5);
+                                           killer->invocation(who,5);
+                                        break;
+                                        }
+                                        else
+                                        {
+                                        message_vision(MAG+"$N对$n说道：据说镇远镖局要护送一批"+HIG"花石纲"NOR+MAG"，你按照这张镖单速去劫来。\n"+NOR,
+                                                this_object(), who);
+                                        who->set("hubiao/value",3);
+                                         killer->invocation(who,3);
+                                        break;  
+                                        }
+                                }
+                    }
+        if(who->query("hubiao/m_success")< 50)
+        {
+
+                do{ room=random_location(); } while(!strlen(room["long"]));
+                killer->set("file_name", room["file"]);
+                paper->set("file_name", room["file"]);
+                paper->set("desc", room["long"]);
+                paper->set("position",room["position"]);
+                paper->move(who);
+               
+                who->set("hubiao/last_time", time());
+                
+                who->set("hubiao/start",1);
+                who->set("hubiao/level",1);
+                who->start_busy(2);
+                
+        }
+        else if(who->query("hubiao/m_success")< 150)
+        {
+                if(random(2))
+                do{ room=random_location(); } while(!strlen(room["long"]));
+                killer->set("file_name", room["file"]);
+                
+                roomlong=room["long"];
+                
+                replacelong=replace_long(roomlong);
+                
+                paper->set("desc",replacelong );
+                paper->set("position",room["position"]);
+                paper->move(who);
+                  
+                who->set("hubiao/last_time", time());
+                
+                who->set("hubiao/start",1);
+                who->set("hubiao/level",2);
+                who->start_busy(2);
+                
+                }
+       else 
+        {
+                do{ room=random_location(); } while(!strlen(room["long"]));
+                killer->set("file_name", room["file"]);
+                
+                roomlong=room["long"];
+                replacelong=replace_long(roomlong);
+                paper->set("desc",replacelong );
+                paper->set("position","");
+                paper->move(who);
+                          
+                who->set("hubiao/start",1);
+                who->set("hubiao/level",3);
+                who->start_busy(2);
+        }
+                
+        msg = who->name()+"接到一个等级"+who->query("hubiao/level")+"，价值为"+who->query("hubiao/value")+"的劫镖任务，地点是在"+killer->query("file_name");
+        MONITOR_D->report_system_msg (msg);
+        return 1;
+
+}
+int do_cancel()
+{
+        
+        object who=this_player();
+        object me=this_object();
+        int balance=who->query("balance");
+        int elasp_time;
+        object biaoche;
+        object *inv;
+        if(!who->query("hubiao/start"))
+          {
+                message_vision(CYN+name()+"哼了一声。\n"+NOR,who);
+                message_vision(CYN+name()+"说道：你现在有劫镖的任务么？\n"+NOR,who);
+                 return 1;
+                
+        }
+        
+        elasp_time=time()-who->query("hubiao/last_time");
+        
+        
+        if(elasp_time<360)
+           {
+           message_vision(CYN+"$N对$n咧嘴笑了笑，说道：再去试试嘛，弟兄们等着你的好消息呢。\n"+NOR,me,who);
+           return 1;
+           } 
+           
+        message_vision(HIR+"$N红着脸，羞愧的对$n说："+RANK_D->query_self(who)+"不才，难以胜任，还请堂主多多见谅!\n"+NOR,who,me);
+        if(who->query("balance")>=(who->query("hubiao/level")*50000-50000+who->query("hubiao/value")*10000))
+          {
+                message_vision(HIW+"$N一拍桌子，怒道：那就算了吧，我让别的兄弟去，不过你得给点钱让出力的兄弟们吃饭啊。\n"+NOR,me);
+                who->delete_temp("hubiao/wrong_place");
+                who->delete_temp("hubiao/right_place");
+                inv=all_inventory(environment(who));
+                    for(int zz =0; zz <sizeof(inv);zz++)
+                   if (inv[zz]->query("id")=="sha shou"&&inv[zz]->query("owner")==who)
+                       destruct(inv[zz]);          
+                who->add("weiwang",-1-random(2));               
+                who->set("balance",balance-(who->query("hubiao/level")*50000-50000+who->query("hubiao/value")*10000));
+                who->set("hubiao/fail",1);
+                who->set("hubiao/start",0);
+                who->add("hubiao/money",-(who->query("hubiao/level")*50000-50000+who->query("hubiao/value")*10000));    
+                return 1;
+        }
+        if(balance<(who->query("hubiao/level")*50000-50000+who->query("hubiao/value")*10000))
+        {
+                message_vision(HIY+"$N哼了一声，说道：那这么多兄弟岂不是要喝西北风了？！\n"+NOR,me);
+                return 1;
+        }
+          }             
+
+
+int ask_biaoqi()
+{
+        object biaoqi;
+        object who=this_player();
+        if(who->query("jiebiao/愿意帮忙")=="fail")
+        {
+           command("heng");
+           message_vision(CYN"$N说道："+RANK_D->query_rude(who)+"既然不愿意入伙，还不快滚。\n"NOR,this_object());
+           return 1;
+        }
+        if(who->query("jiebiao/夺回镖旗"))
+           {
+                message_vision(CYN"$N哈哈大笑，说道："+RANK_D->query_respect(who)+"干的不错，以后就一起为佛祖效力吧。\n"NOR,this_object());
+                return 1;
+        }
+       else if(who->query("jiebiao/去见使者"))
+            {
+                message_vision(CYN"$N说道："+RANK_D->query_respect(who)+"还不速去城南乱葬岗面见无天佛祖的使者。\n"NOR,this_object());
+                return 1;
+        }
+        else if(who->query("jiebiao/去送镖旗"))
+            {
+                message_vision(CYN"$N说道："+RANK_D->query_respect(who)+"还不快去夺旗？\n"NOR,this_object());
+                return 1;
+        }
+        else if(who->query("baobiao/夺回镖旗")==1)
+        {
+                 message_vision(CYN"$N说道："+RANK_D->query_rude(who)+"居然破坏佛祖大计，找死！\n"NOR,this_object());
+                        ::kill_ob(who);
+                          return 1;
+        }
+         else if(who->query("baobiao/去夺镖旗")==1)
+        {
+                 message_vision(CYN"$N说道："+RANK_D->query_rude(who)+"想居然破坏佛祖大计，找死！\n"NOR,this_object());
+                        ::kill_ob(who);
+                          return 1;
+        }
+       else if(who->query("baobiao/愿意帮忙")==1)
+       {
+        if(!query("dead"))
+        {
+            message_vision(CYN"$N说道："+RANK_D->query_rude(who)+"想破坏佛祖大计，找死！\n"NOR,this_object());
+            ::kill_ob(who);
+            return 1;
+          }
+          else
+          {
+                if(!who->query_temp("baobiao/kill_hua"))
+                                          return 0;     
+                message_vision("$N喝道：交出振远镖局的五花翎旗，我饶你一条狗命。\n",who);
+                              message_vision("$N抖抖嗦嗦说道，五花翎旗被无天的使者拿走了，他就在城南乱葬岗破庙里。\n",this_object());
+message_vision("说罢，$N趁$n不备，一溜烟跑了！\n",this_object(),who);
+                                         who->set("baobiao/去夺镖旗",1);
+                                         who->delete("baobiao/愿意帮忙");
+destruct(this_object());
+                                        return 1;
+                
+                
+                
+          }
+                
+      }       
+
+        message_vision(HIW"$N嘿嘿狞笑道：想入伙不干点大事，怎么表示忠心啊？五花翎旗是振远镖局的招牌，\n
+        一向由他们总镖头萧升保留着，你去把它夺来献给佛祖的使者，佛祖自然会信任你。(answer yes/no)\n"NOR,this_object());
+        add_action("do_answer","answer");
+        who->set_temp("jiebiao/询问镖旗",1);
+        return 1;
+}
+int do_answer(string arg)
+{
+        object who=this_player();
+        if(!who->query_temp("jiebiao/询问镖旗"))
+                return 0;
+        if(!arg)
+         { message_vision("$N撇了撇嘴道，胡说八道什么呢。\n",this_object());
+           return 1;
+        }
+        if(arg!="yes"&&arg!="no")
+         {  message_vision("$N撇了撇嘴道，胡说八道什么呢\n",this_object());
+            return 1;
+        }
+        
+        if(arg=="yes")
+         {
+            if(who->query("jiebiao/愿意帮忙")=="fail")
+                 {  message_vision("$N说道："+RANK_D->query_rude(who)+"既然不愿意入伙，还不快滚，想吃爷爷的刀子么。\n",this_object());
+                    return 1;
+                }
+          
+            message_vision(HIR+"$N嘿嘿奸笑几声："+RANK_D->query_self_rude(who)+"虽然不才，愿意为无天佛祖效劳。\n"+NOR,who);
+            message_vision("$N哈哈大笑道："+RANK_D->query_respect(who)+"一看就是同道中人啊，你速去夺得镖旗献给佛祖使者。\n",this_object());
+            who->set("jiebiao/愿意帮忙",1);
+            return 1;
+        }
+        if(arg=="no")
+         {
+                 message_vision(HIY+"$N哼了一声，说道：邪魔歪道"+RANK_D->query_self(who)+"岂可和你们同流合污。\n"+NOR,who);
+                 message_vision("$N说道："+RANK_D->query_rude(who)+"既然不愿意入伙，还不快滚，想吃爷爷的刀子么。\n",this_object()); 
+                 who->set("jiebiao/愿意帮忙","fail");
+                 return 1;
+         }
+                 
+
+
+
+}
+int ask_jiebiao()
+{
+       
+        return 1;
+      
+}
+
+void reset()
+{
+      
+} 
+
+
