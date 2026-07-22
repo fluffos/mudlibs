@@ -88,11 +88,15 @@ after=$(grep -rn '\.c"' "$WORK" --include="*.lpc" --include="*.h" 2>/dev/null | 
 echo "  fixed $((before - after)) refs, $after remain (inspect manually -- see AGENTS.md §2)"
 
 echo "== static -> nosave (.lpc + .h)"
-statics=$(grep -rln '\bstatic\b' "$WORK" --include="*.lpc" --include="*.h" 2>/dev/null)
-if [[ -n "$statics" ]]; then
-  echo "$statics" | xargs -r sed -i -E 's/\bstatic\b/nosave/g'
+# NUL-delimited throughout -- a plain newline-delimited pipe into xargs
+# word-splits any filename containing a space (seen: "char - 副本.lpc",
+# a backup-copy file with a literal space in its Chinese-annotated name).
+statics_count=$(grep -rlZ '\bstatic\b' "$WORK" --include="*.lpc" --include="*.h" 2>/dev/null | tee /tmp/convert_lib_statics.$$.txt | tr -cd '\0' | wc -c)
+if [[ -s /tmp/convert_lib_statics.$$.txt ]]; then
+  xargs -0 -r sed -i -E 's/\bstatic\b/nosave/g' < /tmp/convert_lib_statics.$$.txt
 fi
-echo "  files touched: $(echo "$statics" | grep -c . || true)"
+rm -f /tmp/convert_lib_statics.$$.txt
+echo "  files touched: $statics_count"
 
 echo "== done. Next: review AGENTS.md §2/§3 leftovers, check master.lpc for the §4"
 echo "   load_object-during-compile recursion pattern, then boot."

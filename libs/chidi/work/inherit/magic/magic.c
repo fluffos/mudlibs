@@ -1,0 +1,333 @@
+// 雄霸天下II魔法的继承文件
+// 参数说明
+// set_temp("armor_vs_fire",50)
+// armor_vs_fire // 对火系魔法的抵抗能力 +表示抵抗火系魔法 -表示抵抗水系魔法
+// 两者不能共存。即无法同时抵抗水系魔法和火系魔法。如果生物可以抵抗水系魔法。
+// 那么火系魔法将对他造成更大的伤害。
+// armor_vs_lightning // 抵抗电系魔法的能力
+// armor_vs_magic  // 抵抗魔法能力。对抗所以魔法 这个值不能设的太高。
+// 通常这个值应该控制在 -100至+100 以内。以百分比来计算。负数表示此生物
+// 惧怕此类魔法。正数反之。任何非特殊npc的抵抗系数不得超过-30至+30之间
+// execration  表示正在念咒。
+// 以后任何魔法都应此类为标准。不得再使用其他标记。以免混乱。
+// fireball
+// 1999.3.1 by rongg
+// fireball.c
+//这个继承文件还不是很好希望后来人能够优化他
+//2001年修改说明:
+//新增加int magic_special(string type1,string type2)函数，
+//传入两个魔法名称,magic_special()返回1表示两个魔法互相克制,如果返回0,
+//表示两个魔法不会互相克制。
+#include <ansi.h>
+inherit F_DBASE;
+inherit F_SSERVER;
+int is_magic();
+int do_execration(object me,object target,int skill,int i);
+int do_hit(object me,object target,int skill);
+int check_enemy_beside(object me);
+object *Choose_Target(object me,object target,string type,int area);
+int magic_special(string type1,string type2);
+
+int is_magic()
+{
+	return 1;
+}
+int do_execration(object me,object target,int skill,int i)
+{
+	string *allmsg;
+	int j,t;
+
+	if(me->query_temp("cast_cancel"))
+	{
+		me->delete_temp("execration");
+		me->delete_temp("cast_cancel");
+		tell_object(me,"你取消了施法\n");
+		return 1;
+	}
+	if(this_object()->query("need_two_hand")&&me->query_temp("weapon"))
+	{
+
+		me->delete_temp("execration");
+		tell_object(me,"这个魔法必须双手空闲才能够施展\n");
+		return 1;
+	}
+	allmsg=query("matter");
+	//这里是取魔法的内容,可以参考/daemon/class/taoist/necromancy/cl.c
+	j=sizeof(allmsg);
+	t=query("intonatetime");//每念一句咒语需要的时间.
+	if(!t||!intp(t)) t=1;
+	if(!target||!objectp(target)||environment(target)!=environment(me))
+	{
+		me->delete_temp("execration");
+		tell_object(me,"目标消失,你停止了念咒\n");
+		return 1;
+	}
+	if(i<j-3)
+	{
+		tell_object(me,HIC+allmsg[i]+"\n"+NOR);
+		call_out("do_execration",t,me,target,skill,i+1);
+		return 1;
+	}
+	else do_hit(me,target,skill);
+	return 1;
+}
+
+int do_hit(object me,object target,int skill)
+{
+
+	string msg,*allmsg,damagetype,magic_type,target_magic_type;
+	int xx,area,base_damage,i,j,my_exp,your_exp,damage,vs_magic,additional,odds;//附加伤害
+	object *remain_enemy;
+
+	me->delete_temp("execration");
+
+	base_damage=this_object()->query("base_damage");
+	//magic_type=this_object()->query("attribute");//魔法属性
+	magic_type=SKILL_D(me->query_skill_mapped("magic"))->attribute();//enable magic的魔法属性。
+	if(!target->query_skill_mapped("magic")) target_magic_type=0;
+	else
+		target_magic_type=SKILL_D(target->query_skill_mapped("magic"))->attribute();
+
+	if(!stringp(magic_type)) magic_type="no_type";
+	if(!stringp(target_magic_type)) target_magic_type=0;
+	//这种魔法属于无属性魔法,是不能够抵抗的
+	if(!target||!environment(target)||environment(me)!=environment(target))
+	{
+		tell_object(me,"目标已经离开了。你停止的念咒，取消了"+query("magicname")+"。\n");
+		return 1;
+	}
+	else if(environment(target)->query("no_fight"))
+	{
+		tell_object(me,"目标.现在处于禁止使用魔法的地区,你只好停止念咒，取消了"+query("magicname")+"。\n");
+		return 1;
+	}
+	else
+	{//这里开始念咒
+		allmsg=query("matter");
+		j=sizeof(allmsg);
+		msg=HIC"$N吟诵魔法咒语,开始施放魔法"+NOR+HIY+query("magicname")+"\n"NOR;
+		message_vision(msg,me,target);
+
+		area=query("area");//魔法范围
+		if(!area||!intp(area))  area=1;
+		if(area>3) area=3;
+		if(area<1) area=1;//area只可能等于1,2,3
+		//tell_object(find_player("rongg"),"asdasdasdasdasdasd"+area+target->name()+"\n");
+
+		remain_enemy=Choose_Target(me,target,this_object()->query("intelligent")?"intelligent":0,area);
+
+		for(xx=0;xx<sizeof(remain_enemy);xx++)
+		{
+			msg=allmsg[j-3]+"\n";//魔法的倒数第三,就是发出魔法之后显示的那一句.
+			if(remain_enemy[xx]==target)
+				message_vision(msg,me,target);
+			my_exp=me->query("combat_exp");
+			your_exp=remain_enemy[xx]->query("combat_exp");
+			odds=query("odds");//该魔法的命中率
+			if(!odds||!intp(odds)) odds =0;
+			i=odds-(your_exp-my_exp)/200000;
+			if(i>100) i=100;if(i<10) i=10;
+			//修正之后,魔法的命中率在10-100%之间
+			if(random(100)<=i)
+			{
+				msg=allmsg[j-2]+"\n";//query("matter")的最后一句,只有击中敌人之后才会出现
+				if(remain_enemy[xx]==target)
+					message_vision(msg,me,target);
+				else
+				{
+					msg="$N也受到$n发出的"+YEL+query("magicname")+NOR+"的波及\n";
+					message_vision(msg,remain_enemy[xx],me);
+				}
+				if(skill>=200) skill=200;
+				damage=base_damage+skill*3; // 魔法造成的伤害的最大值为base_damage+skill*3,并且不能超过1500。
+				damage=damage*(1+(my_exp/(your_exp+1))*10/100);// 这个是经验修正。
+
+				if(magic_type!="no_type")
+				{
+					vs_magic=remain_enemy[xx]->query_temp("apply/armor_vs_"+magic_type);
+					if(!vs_magic) vs_magic=0;
+					if(vs_magic>100) vs_magic=100;
+					if(vs_magic<-100) vs_magic=-100;
+					if(vs_magic>70) vs_magic=70;//魔法抵抗最多是70%
+					damage=damage*(100-vs_magic)/100;// 抵抗魔法修正
+				}
+				//fire<-->water,wind<-->earth,水火相克，风土相克。
+				if(magic_special(magic_type,target_magic_type))
+					damage*=120/100;
+				//附加魔法之间相克的特别伤害。如果me使用的是水系魔法，而敌人使用的是火系魔法
+				//那么me的水系魔法将会给敌人造成多20%的伤害力。
+
+
+				additional=me->query_spi();
+				additional=to_int(pow(additional*additional*additional,0.45));
+				if(additional>1000) additional=1000;
+				// 和臂力的计算公式一样。突出魔法师灵力的作用。
+				damage+=additional;
+				damagetype=query("damagetype");
+				if(!damagetype||!stringp(damagetype)) damagetype="qi";
+
+				if(damagetype=="kee") damagetype="qi";
+				if(damagetype=="gin") damagetype="jing";
+				//这两句是转换xkx里面对kee,gin不同的表示。
+				if(damage>1500) damage=1500;
+				if(damage<2)   damage=2;
+				//伤害力在2和1500之间。
+				if(damagetype=="all")
+				{
+					//remain_enemy[xx]->receive_damage("gin",damage,me,"magic");
+					remain_enemy[xx]->receive_damage("qi",damage,me,"magic");
+					remain_enemy[xx]->receive_damage("jing",damage/2,me,"magic");
+					//remain_enemy[xx]->receive_wound("gin",damage,me,"magic");
+					remain_enemy[xx]->receive_wound("qi",damage,me,"magic");
+					remain_enemy[xx]->receive_wound("jing",damage/2,me,"magic");
+
+				}
+				else
+				{
+					remain_enemy[xx]->receive_damage(damagetype,damage,me,"magic");
+					remain_enemy[xx]->receive_wound(damagetype,damage/2,me,"magic");
+				}
+				COMBAT_D->report_status(remain_enemy[xx]);
+			}
+			else
+			{
+				if(remain_enemy[xx]==target)
+					msg=allmsg[j-1]+"\n";//最后以句,目标躲开了
+				else msg="\n";
+				message_vision(msg,me,remain_enemy[xx]);
+			}
+			if( !remain_enemy[xx]->is_fighting(me) )
+			{
+				if( living(remain_enemy[xx]) )
+				{
+					remain_enemy[xx]->kill_ob(me);
+				}
+				me->kill_ob(target);
+			}
+		}
+	}
+	return 1;
+}
+
+
+int check_enemy_beside(object me)
+{
+	int i,y,num,mx,my,vx,vy,distancex,distancey;//房间大小,me的坐标
+
+	object *enemy;
+
+	if(!me->is_fighting()) return 0;
+	num=0;//敌人的坐标,坐标的距离
+	mx=me->query_temp("map/x");
+	my=me->query_temp("map/y");
+	if(mx==0||my==0) return 0;
+	enemy=me->query_enemy();
+	y=sizeof(enemy);
+	for(i=0;i<y;i++)
+	{
+		if(!environment(enemy[i])||environment(enemy[i])!=environment(me)) continue;
+		vx=enemy[i]->query_temp("map/x");//敌人的坐标
+		vy=enemy[i]->query_temp("map/y");
+		distancex=mx-vx;
+		distancey=my-vy;
+		if(distancex<0) distancex=-distancex;
+		if(distancey<0) distancey=-distancey;
+		if(  (distancex==1&&distancey==0)
+		    ||(distancex==0&&distancey==1)
+		)
+			num++;
+		else continue;
+	}
+	if(num>4) num=4;
+	return num;
+}
+
+int magic_special(string type1,string type2)
+{
+	//type1是攻击方的魔法属性，type2是被攻击方的魔法属性
+	//水->火->风->土->水      水克火，火克风，风克土，土克水。
+	if(type1=="water"&&type2=="fire"
+	    ||type1=="fire"&&type2=="wind"
+	    ||type1=="wind"&&type2=="earth"
+	    ||type1=="earth"&&type2=="water")
+		return 1;
+	return 0;
+}
+
+object *Choose_Target(object me,object target,string type,int area)
+{
+	object *temp,*npc,room;
+	int i,xx,yy,vx,vy,mx,my;
+
+	if(area<=1)	return ({target});
+	//攻击面积是1的魔法只能攻击到指定的target。
+
+	if(!me->query_temp("map"))	return ({target});
+	//我还没有分配到map,这种情况属于偷袭，大面积魔法在这种情况下不起作用。
+	//但是如果target还没有分配到map,但是我却已经处于战斗状态中，此时大面积魔法有效。
+	//将会攻击到我周围的生物。
+	if(area>3)	area=3;
+	//room=environment(find_player("rongg"));
+	room=environment(me);
+
+	npc=({target});
+	temp=({});
+	mx=me->query_temp("map/x");
+	my=me->query_temp("map/y");
+	if(type=="intelligent")
+	{//智能魔法,只会击中敌人
+		temp=me->query_enemy();
+		for(i=0;i<sizeof(temp);i++)
+		{
+			if(!objectp(temp[i])) continue;
+			if(!environment(temp[i])) continue;
+			if(temp[i]==target) continue;
+			if(environment(temp[i])!=environment(me)) continue;
+			vx=temp[i]->query_temp("map/x");
+			vy=temp[i]->query_temp("map/y");
+			xx=mx-vx;yy=my-vy;
+			if(!mx||!my||!vx||!vy) continue;
+			if(xx<0) xx*=-1;  if(yy<0) yy*=-1;
+			if(area==2)
+			{
+				if(xx>1||yy>1) continue;
+				if(xx==1&&yy==1) continue;
+			}
+			else if(area==3)
+			{
+				if(xx>1||yy>1) continue;
+			}
+			npc+=({temp[i]});
+		}
+	}
+	else
+	{//非智能魔法，该魔法会击中所有攻击范围内的生物，包括队友。
+		temp=all_inventory(room);
+		for(i=0;i<sizeof(temp);i++)
+		{
+			if(!objectp(temp[i])) continue;
+			if(!temp[i]->is_character()) continue;
+			if(temp[i]==me) continue;
+			if(temp[i]==target) continue;
+			if(!temp[i]->is_fighting()) continue;
+			if(!temp[i]->query_temp("map")) continue;
+			vx=temp[i]->query_temp("map/x");
+			vy=temp[i]->query_temp("map/y");
+			xx=mx-vx;yy=my-vy;
+			if(!mx||!my||!vx||!vy) continue;
+			if(xx<0) xx*=-1;  if(yy<0) yy*=-1;
+			if(area==2)
+			{
+				if(xx>1||yy>1) continue;
+				if(xx==1&&yy==1) continue;
+			}
+			else if(area==3)
+				if(xx>1||yy>1) continue;
+			npc+=({temp[i]});
+
+		}
+
+	}
+
+	return npc;
+}

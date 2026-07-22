@@ -1,0 +1,66 @@
+#include <ansi.h>
+inherit BHNPC;
+
+void create()
+{
+         set_name(HIM "宣传精灵" NOR, ({ "rumor", "shizhe", "jingling" }) );
+        set("gender", "女性" );
+        set("age", 18);
+        set("attitude", "friendly");
+        set("combat_exp", 10000000000);
+        set("per",30);
+        set("str", 800);
+        set("neili", 30);
+        set("max_neili", 30);
+        set("jiali", 100);
+        setup();
+        set("chat_chance", 1);
+        set("chat_msg", ({
+                "宣传精灵自言自语不知道在说些什么。\n",
+        }) );
+        carry_object("/clone/misc/cloth")->wear();
+}
+void init()
+{
+        object ob;
+        ob = this_player();     
+        ::init();
+        if( interactive(ob) && !is_fighting() )
+               {
+                        remove_call_out("greeting");
+                        call_out("greeting", 3, ob);
+                }
+}
+void greeting(object ob)
+{
+   if( !ob || environment(ob) != environment() ) return;
+     command("es " + HIM"\n
+                "HIR" 江湖 "HIY"("HIG"IP: "HIW"xymud.kmip.net "HIG"Port: "HIW"5555"HIY")\n
+                 "HIC"江湖全新开站，欢迎大家加入游戏！
+                 新手奖励200万经验100万潜能及1000级读书识字和300级基本技能！
+                 最完整的升官和帮派系统，还能离线练功,修建城堡,独孤解迷等！！
+                 
+     "NOR);
+}
+
+int accept_fight(object me)
+{
+        command("say " + RANK_D->query_respect(me) + "饶命！\n");
+        return 0;
+}
+void attempt_apprentice(object ob)
+{
+        command("say 我是不收徒的！你还是去别的地方看看吧！");
+}
+void die()
+{
+        object id;
+        id = new("d/city/npc/rumor");
+        command("laugh");
+        command("heihei");
+        command("grin");
+        id->move(environment(this_object()));
+        destruct(this_object());
+::die();
+}
+

@@ -1,0 +1,164 @@
+//股票相关
+//edit by feng
+
+#include <ansi.h>
+#include <localtime.h>
+
+#define STOCKD "/adm/daemons/stockd"
+
+//检查ip
+string query_ip(object npc,object player)
+{
+	string ip;
+
+	ip = query_ip_number(player); //检查IP
+
+	return ip;
+}
+
+int main(object me, string arg)
+{
+	string cmd,info,str,msg="";
+	int index,i,size,tmp,bb;
+	mapping list,inf,temp;
+	mixed key,local;
+
+	if(!arg)
+	{
+		//查看股市行情
+		if(!list = STOCKD->query_stock_list())
+		{
+			tell_object(me,"目前没有股票上市。\n");
+			return 1;
+		}
+		key = keys(list);
+		size = sizeof(key);
+		str = "   股本名称    股本数量      总价(元宝)    每股价(元宝)  动向\n";
+		str += "-----------------------------------------------------------------\n";
+		msg += str;
+		for(i=0;i<size;i++)
+		{
+			 //
+			inf = list[key[i]];
+			if(bb == 0)
+			{
+				if(inf[2] <= 0) str = sprintf(BBLU HIW"%12s   %5d股  %10d￥      %7d￥     %s  \n"NOR,key[i],0,0,0,"退市");
+				else str = sprintf(BBLU HIW"%12s   %5d股  %10d￥      %7d￥       %s  \n"NOR,key[i],inf[0],inf[0]*inf[2],inf[2],inf[3]);
+				bb++;
+			}
+			else
+			{
+				if(inf[2] <= 0) str = sprintf(BCYN BLK"%12s   %5d股  %10d￥      %7d￥     %s  \n"NOR,key[i],0,0,0,"退市");
+				else str = sprintf(BCYN BLK"%12s   %5d股  %10d￥      %7d￥       %s  \n"NOR,key[i],inf[0],inf[0]*inf[2],inf[2],inf[3]);
+				bb = 0;
+			}
+			msg += str;
+		}
+		str = "-----------------------------------------------------------------\n";
+		str += HIR"↑"NOR"代表上涨    "HIY"→"NOR"代表持平    "HIB"↓"NOR"代表下跌\n";
+		msg += str;
+		me->start_more(msg);
+		return 1;
+	}
+	if(arg == "list")
+	{
+		if(!list = STOCKD->query_buy_list()) return 1;
+		bb=0;
+		key = keys(list);
+		size = sizeof(key);
+		str = "   股本名称    股本数量    买进价格(每股)   当前价格(每股)     买入时间\n";
+		str += "-------------------------------------------------------------------------\n";
+		msg += str;
+		for(i=0;i<size;i++)
+		{
+			if(list[key[i]] && !undefinedp(list[key[i]][me->query("id")]))
+			{
+				if(inf = list[key[i]][me->query("id")])
+				{
+					local = localtime(inf[2]);
+					temp = STOCKD->query_stock_list();
+					if(bb == 0)
+					{
+						str = sprintf(BBLU HIW"%12s   %3d股       %7d人民币     %7d人民币      %d日%d时%d分\n"NOR,key[i],inf[0],inf[3],temp[key[i]][2],local[LT_MDAY],local[LT_HOUR],local[LT_MIN]+1);
+						bb++;
+					}
+					else
+					{
+						str = sprintf(BCYN BLK"%12s   %3d股       %7d人民币     %7d人民币      %d日%d时%d分\n"NOR,key[i],inf[0],inf[3],temp[key[i]][2],local[LT_MDAY],local[LT_HOUR],local[LT_MIN]+1);
+						bb = 0;
+					}
+					msg += str;
+				}
+			}
+		}
+		str = "-------------------------------------------------------------------------\n";
+		msg += str;
+		me->start_more(msg);
+		return 1;
+	}
+	if(sscanf(arg,"%s %s %d",cmd,info,index) == 3)
+	{
+		//循环看要做什么
+		switch(cmd)
+		{
+			//股票上市
+			case "上市" :
+			if(!wizardp(me))
+			{
+				tell_object(me,"你无权审核这支股的上市申请。\n");
+				return 1;
+			}
+			if(STOCKD->add_stock(me,info,index))
+				CHANNEL_D->do_channel( find_object("/d/city/npc/qian"), "game", sprintf("新股[%s]已经通过资产审核，正常上市。\n",info));
+			return 1;
+
+			//买进股票
+			case "买进" :
+			tmp = STOCKD->buy_stock(me,info,index);
+			if(tmp == 1)
+				CHANNEL_D->do_channel( find_object("/d/city/npc/qian"),
+			"game", sprintf(" %s 购入%d股%s。\n",me->query("name"),index,info),
+			tell_object(me,"你买进一支股票。\n"));
+			
+			else if(tmp == 2) CHANNEL_D->do_channel( find_object("/d/city/npc/qian"),
+				//"game", sprintf(" %s 补仓%d股%s。\n",me->query("name"),index,info),
+				tell_object(me,"你补仓一支股票。\n"));
+			
+					
+			return 1;
+
+			//卖出股票
+			case "卖出" :
+			if(tmp = STOCKD->sell_stock(me,info,index))
+				CHANNEL_D->do_channel( find_object("/d/city/npc/qian"), 
+			
+			"game", sprintf(" %s 抛售%d股%s。\n",me->query("name"),index,info),
+			tell_object(me,"你抛售一支股票。\n"));
+			return 1;
+			default :
+			tell_object(me,"你要操作什么？\n");
+			return 1;
+		}
+	}
+	return 1;
+}
+
+int help(object me)
+{
+     write(@HELP
+指令格式: stock
+这个指令让你能了解所有股票的信息。
+
+指令格式: stock list
+这个指令让你能了解已购买的股票信息。
+
+
+指令格式: stock 买进 <股票名> <交易数量>
+这个指令让你能购买股票。
+
+指令格式: stock 卖出 <股票名> <交易数量>
+这个指令让你能抛售股票。
+HELP
+    );
+    return 1;
+}

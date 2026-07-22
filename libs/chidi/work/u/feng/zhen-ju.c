@@ -1,0 +1,19 @@
+#include <ansi.h>;
+inherit ITEM;
+
+void create()
+{
+        set_name(HIW"冲穴针具"NOR, ({"zhen-ju"}));
+        if( clonep() )
+                set_default_object(__FILE__);
+        else {
+                set("unit", "盒");
+                set("long","
+这是一盒冲穴用的针具，其中包含九种银针。\n
+蝉针、圆针、堤针、锋针、铍针、圆利针、毫针\n
+长针、大针。\n");
+                set("value", 100);
+                set_weight(2);
+        }
+        setup();
+}

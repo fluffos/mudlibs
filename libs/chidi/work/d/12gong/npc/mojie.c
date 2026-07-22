@@ -1,0 +1,208 @@
+//黃金第十宮守護者
+//死亡隨機掉靈魂寶石
+inherit BHNPC;
+#include "star.h"
+ 
+void create()
+{
+        set_name("可洛诺斯", ({"kelowooz", "mo jie"}));
+        set("long", "传说中的作物之神，守护着摩羯座.\n");
+        set("gender","男性");
+        set("title", "【作物之神】");
+        set("attitude", "peaceful");
+        set("age",37);
+        set("con",45);
+        set("per",30);
+        set("str",63);
+        set("int",64);
+        set("dex",4550000);
+        set("combat_exp",1980000000);
+        set("no_suck",1);
+        set("chat_chance",50);
+        
+        set_skill("dodge", 2005250);
+        set("attitude", "peaceful");
+        set_skill("force", 2005250);
+        set_skill("parry", 2005250);
+        set_skill("unarmed", 2005250);
+        set_skill("sword", 2005250);
+        set_skill("westsword",2005250);
+        set_skill("boxing",2005250);
+        set_skill("balei",2005250);
+        set_skill("spells",2005250);
+        set_skill("renma", 2005250);
+        map_skill("sword","westsword");
+        map_skill("unarmed","boxing");
+        map_skill("spells","renma");
+        set_skill("piaomiao-shenfa",2005200);
+        set_skill("taixuan-gong",2005200);
+        map_skill("force","taixuan-gong");
+        map_skill("dodge","piaomiao-shenfa");
+        map_skill("parry","taixuan-gong");
+        set("max_jingli", 7000000);
+        set("jingli", 2100000000);
+        set("max_neili", 7000000);
+        set("neili", 2100000000);
+        set("max_qi", 1300000000);
+        set("max_jing", 1300000000);
+        set("jiali",2000000);
+        set_temp("apply/defense1", 40);
+        setup();
+        carry_object(__DIR__"obj/mj_cloth")->wear();
+        carry_object("/d/obj/weapon/sword/westsword")->wield();
+}
+void init()
+{
+        add_action("do_kill","kill");
+        add_action("do_none","perform");        
+        add_action("do_none","conjure");
+        add_action("do_none","cast");
+        add_action("do_none","halt");
+        add_action("do_none","teamkill");//
+        add_action("do_none","touxi");//
+        add_action("do_none","ansuan");//
+}
+int do_none()
+{
+        object me = this_object();
+        message_vision("$N冷笑一声：我乃$N，你想耍什么花样？\n",me);
+        return 1;
+} 
+int do_kill()
+{
+        object me = this_object();
+        object ob = this_player();
+        //if( pointerp(ob->query_team()) && ob->is_team_leader())//必须组队并且是队长
+        //{
+        set_temp("my_killer",ob);
+//copy对方的特殊攻击和防御等属性
+         if (ob->query_temp("apply/defense1"))
+        me->set_temp("apply/defense1",ob->query_temp("apply/defense1"));
+         if (ob->query_temp("apply/attack1"))
+        me->set_temp("apply/attack1",ob->query_temp("apply/attack1"));  
+         if (ob->query_temp("apply/dodge"))
+        me->set_temp("apply/dodge",ob->query_temp("apply/dodge"));  
+          if (ob->query_temp("apply/force"))
+        me->set_temp("apply/force",ob->query_temp("apply/force"));       
+        return 0;
+        //   }else{
+        //message_vision("$N冷笑一声：只有队伍的队长才由资格杀我，你想耍什么花样？\n",me);
+        //return 1;
+       //}
+} 
+void check()
+{
+        object ob=this_object();
+        object ghost;
+        object me2=new("/d/12gong/npc/mojie2.c");
+        object me=query_temp("my_killer");
+
+    if( ! me ) return ;
+    if(! present(me,environment()) )
+     {
+     remove_call_out("check");
+     if(ob)
+         destruct(ob);
+     return;
+     }                               
+ if( me->is_ghost() )
+     {
+     remove_call_out("check");
+     return;
+     }
+//copy对方的特殊攻击和防御等属性
+       if (me->query_temp("apply/defense1"))
+           ob->set_temp("apply/defense1",me->query_temp("apply/defense1"));
+       if (me->query_temp("apply/attack1"))
+           ob->set_temp("apply/attack1",me->query_temp("apply/attack1"));  
+       if (me->query_temp("apply/dodge"))
+           ob->set_temp("apply/attack1",me->query_temp("apply/dodge"));
+       if (me->query_temp("apply/force"))
+           ob->set_temp("apply/force",me->query_temp("apply/force"));    
+
+     switch(random(6))
+     {        
+        case 0:
+        {
+        message_vision(HIY"$N跪在地上，大地剧烈的震撼着！\n",ob);
+
+        if(random(3)==0)
+                {
+              message_vision(HIY"$N被震的东倒西歪，失去了平衡！\n"NOR,me);
+              me->receive_wound("qi", query("max_neili")/5);
+              me->receive_wound("jing", query("max_jingli")/10);
+                }
+        else
+        message_vision(HIW"$N站稳脚跟，和$n继续搏斗着。\n"NOR,me,ob);
+        }
+        break;
+
+
+        case 1:
+        {
+
+        message_vision(HIC"$N摆出射箭的姿势，一条鲨鱼向$n急速飞来！\n",ob,me);
+
+                if(random(3)==0)
+
+                {
+              message_vision(HIM"$N一个不小心，被挲鱼咬了个血窟窿！\n"NOR,me);
+              me->receive_wound("qi", 2*query("max_neili")/5);
+              me->receive_wound("jing", 2*query("max_jingli")/10);
+                }
+        else
+        message_vision(HIG"$N轻身跃起，鲨鱼从$N的身下飞过。\n"NOR,me);
+        }
+        break;
+
+        case 2:
+        {
+
+        message_vision(HIW"$N摇身一变，分出另外一个自己来！\n",ob);
+//        if( present("kelowooz two",environment()));
+  //      return;
+        me2->move(environment());
+        me2->kill_ob(me);
+        }
+        break;
+                    
+
+  }
+        if( random(8) == 5 )
+        powerup();
+
+        remove_call_out("check");
+        call_out("check",2+random(3));
+}
+void die()
+{
+        string *dir,file;
+        object equip;
+        object killer;
+        object me=this_object();
+        object ob = query_temp("my_killer");
+
+        if( ob && random(30) < 1 )
+        { 
+           dir = get_dir("/clone/misc/newitem/item/");
+           file = "/clone/misc/newitem/item/"+dir[random(sizeof(dir))];
+           equip = new(file);
+               if( objectp(equip) )
+               {
+                 equip->change_ob(me,ob);
+                 equip->move(ob);
+                 tell_object(all_inventory(environment(me)),
+                             BLINK+HIB"只听“哐铛”一声，好象一样东西从"
+                             +me->name()+"的尸体中掉了出来···\n"NOR);
+                 tell_object(all_inventory(environment(me)),
+                             HIW+ob->name()+"看见了稀世珍宝"HIW+equip->name()+HIW+"从"HIW+me->name()+"身上掉下，立刻把它拣了起来！\n" NOR);            
+            }
+         }
+        killer=new("/d/12gong/npc/baoping"); 
+        killer->move("/d/12gong/baoping");
+        ob->start_busy(3);
+        message("chat",HIY+"【黄金十二宫】雅典娜(Ya dian na):"+ob->name()+
+        "闯过了第十宫摩羯座，继续向黄金战士努力！\n"NOR,users());       
+        ob->add("12gong/number",1);
+       ::die();
+}

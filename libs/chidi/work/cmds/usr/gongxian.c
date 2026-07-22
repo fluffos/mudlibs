@@ -1,0 +1,141 @@
+inherit F_CLEAN_UP;
+
+
+int main(object me, string arg)
+{
+	int num;
+	string material;
+	object lingpai;
+	int mymoney;
+	int bhgxrest;
+	string msg;
+
+
+	seteuid(getuid());
+
+	if(arg)
+	{
+		if(sscanf(arg,"%d %s", num, material) == 2)
+		{
+			if(num < 100)
+			{
+				return notify_fail("至少要贡献一百个单位。\n");
+			}
+
+			if(material != "yxb" && material != "gold")
+			{
+				return notify_fail("只能捐献人民币和黄金。\n");
+			}
+
+			if(!me->query("banghui/name"))
+			{
+				return notify_fail("你没有加入任务帮会。\n");
+			}
+
+			lingpai = new("clone/misc/lingpai");
+			lingpai->create( me->query("banghui/name") );
+
+			if(material == "yxb")
+			{
+				if(me->query("rmb") < num)
+				{
+					destruct(lingpai);
+					return notify_fail("你没有这么多人民币。\n");
+				}
+
+				me->add("rmb",-num);
+				me->add("bhgxrmb", num);
+				me->add("bhgx", num/3000);
+				bhgxrest = me->query("bhgxrest") + (num%3000) / 3;
+				me->add("bhgx", bhgxrest/1000);
+				me->set("bhgxrest", bhgxrest%1000);
+
+				lingpai->add("rmb",num);
+
+				message("channel:rumor",YEL"【谣言四起】某人："+me->query("name")+"为" + me->query("banghui/name") + "贡献"+chinese_number(num)+"RMB币！\n"NOR,users());
+
+				if(lingpai->query("rmb") < 0)
+				{
+					lingpai->set("rmb",10);
+					message("channel:rumor",YEL"【谣言四起】某人："+me->query("banghui/name")+"的RMB币太多，被大贼被洗劫一空！\n"NOR,users());
+				}
+
+			}
+			else
+			{
+				if(num > 2000000)
+				{
+					destruct(lingpai);
+					return notify_fail("一次最多捐献2000000两黄金。\n");
+				}
+
+				//if more_money >= 200, mymoney overflow, so we use more_money*10000
+				mymoney = me->query("money")/10000 + me->query("more_money")*10000;
+
+				if(mymoney < num)
+				{
+					destruct(lingpai);
+					return notify_fail("你没有这么多黄金。\n");
+				}
+
+				mymoney = me->query("more_money")*10000 - num;
+				if(mymoney >= 0)
+				{
+					me->add("money", (mymoney % 10000)*10000);
+					me->set("more_money", mymoney / 10000);
+				}
+				else
+				{
+					mymoney  = me->query("money") + mymoney * 10000;
+
+					me->set("money", mymoney);
+					me->set("more_money", 0);
+				}
+
+				lingpai->add("money",num);
+				message("channel:rumor",YEL"【谣言四起】某人："+me->query("name")+"为" + me->query("banghui/name") + "贡献"+chinese_number(num)+"两黄金！\n"NOR,users());
+
+				if(lingpai->query("money") < 0)
+				{
+					lingpai->set("money",10);
+					message("channel:rumor",YEL"【谣言四起】某人："+me->query("banghui/name")+"的黄金太多，被大贼被洗劫一空！\n"NOR,users());
+				}
+
+				me->add("bhgxmoney", num);
+				me->add("bhgx", num/15000);
+				bhgxrest = me->query("bhgxrest") + (num%15000) / 15;
+				me->add("bhgx", bhgxrest/1000);
+				me->set("bhgxrest", bhgxrest%1000);
+			}
+
+			lingpai->save();
+			destruct(lingpai);
+
+			me->save();
+			return 1;
+		}
+	}
+
+	//前面处理不了，说明没有参数或者参数不正确，则显示以下信息
+	lingpai = new("clone/misc/lingpai");
+	lingpai->create( me->query("banghui/name") );
+	num = lingpai->query("rmb");
+	mymoney = lingpai->query("money");
+	destruct(lingpai);
+	msg=HIG"=========================================================================\n"NOR;
+	msg+=sprintf(HIC"%-14s%-16s%-16s%-16s%-10s\n"NOR,
+		"帮会黄金","帮会人民币","你捐献黄金","你捐献人民币","帮派贡献");
+	msg+=sprintf(HIC"%-14d%-16d%-16d%-16d%-10d\n"NOR,
+		mymoney,num,me->query("bhgxmoney"),me->query("bhgxrmb"),me->query("bhgx"));
+	msg+=HIG"=========================================================================\n"NOR;
+	msg+="\n贡献黄金与人民币指令格式：　\n"+
+		HIC"gongxian @num gold \n"+
+		"gongxian @num yxb \n\n"NOR;
+	//return notify_fail(me->query("banghui/name")+"现有资产：=====================\n" + 
+	//	"黄  金： " + mymoney + "两\n" +
+	//	"币： " + num + "圆\n" +
+	//	"贡献黄金与币指令格式：　\n"+
+	//	"gongxian num gold \n"+
+	//	"gongxian num yxb \n");
+	return notify_fail(msg);
+}

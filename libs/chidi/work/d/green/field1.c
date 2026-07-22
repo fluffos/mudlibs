@@ -1,0 +1,28 @@
+#pragma save_binary
+// Room: /d/green/field1.c
+
+inherit ROOM;
+
+void create()
+{
+	set("coor",({80,4900,10}));
+	set("short", "采石场的空地");
+	set("long",
+"这是一片黄土空地，四周堆著一些切割整齐的大石块和碎石。往\n"
+"东看去就是采石场，高耸的石璧经过多年的采挖已经看不出原来\n"
+"的模样了。往南看去是一些矮小的房舍和储存工具的地方，往西\n"
+"是村内的广场，往北靠近广场的地方有一栋简陋的民宅。\n"
+);
+	set("exits", ([ /* sizeof() == 3 */
+  "west" : "/d/green/field0",
+  "south" : "/d/green/station1",
+  "north" : "/d/green/house3",
+]));
+	set("objects", ([
+	"/d/green/npc/kid1" : 1,
+	]) );
+	set("outdoors", "green");
+
+	setup();
+	replace_program(ROOM);
+}

@@ -1,0 +1,124 @@
+// banker.c
+//modified by lonely@yxcs
+#include <ansi.h>
+inherit BHNPC;
+inherit F_BANKER;
+string query_save_file() { return DATA_DIR + "npc/钱开眼"; } 
+void create()
+{
+ set_name("钱开眼", ({"qian kaiyan", "qian", "kaiyan"}));
+this_object()->init_bhnpc();
+set("area_name","大理钱庄");
+set("area_file","/d/dali/npc/qian.c");
+set("ziyuan","黄金");
+set("jizhi",55);//注25这个数字关系都地盘的收入,这个数子不要超过100就可以了
+set("kaifa",40); 
+        set("title", "钱庄老板");
+set("nickname", BLU "一毛不拨" NOR);
+        set("gender", "男性");
+        set("age", 34);
+        set("str", 100);
+        set("int", 24);
+        set("dex", 18);
+        set("con", 18);
+        set("neili", 200);
+        set("max_neili", 100);
+        set("jiali", 10);
+        set("shen", 0);
+        set("combat_exp", 12500);
+        set("shen_type", 1);
+        set("attitude", "friendly");
+        set("env/wimpy", 50);
+        set("chat_chance", 2);
+        set("chat_msg", ({
+        "钱开眼骄傲的说道：本银号已经有上百年的历史，在大理可以说是第一家。\n",
+        "钱开眼说道：昨天我亲自看到一个杀手帮的人来取钱，看来杀手帮重出江湖了。\n"
+        "钱开眼笑着说道：杀手帮重出江湖对本银号来说，真是求之不的呀！。\n"
+        "钱开眼笑着说道：当年雾中楼在本银号存的钱可以说是最多的了。\n",
+        "钱开眼笑着说道：在本店存钱无利息，取钱收百分之一的手续费，客官您看着办吧。\n",
+        "钱开眼微微一笑，说道：本店还办理不同面额货币的兑换业务，是免费的。\n",
+        }));
+        set_skill("unarmed", 50);
+        set_skill("dodge", 50);
+        set_temp("apply/attack", 100);
+        set_temp("apply/defense", 100);
+     set("no_put",1);
+        set_temp("apply/damage", 40);
+        setup();
+        add_money("silver", 10);
+        carry_object("/clone/misc/cloth")->wear();
+}
+void init()
+{
+        object ob;
+        ::init();
+        if( this_player()->query_temp("dalikill") )
+        {
+                 kill_ob(this_player());
+        }
+    if (base_name(environment())!=this_object()->query("startroom")) return;
+        if( interactive(ob = this_player()) && !is_fighting() ) {
+                remove_call_out("greeting");
+                call_out("greeting", 1, ob);
+        }
+        add_action("do_check", "check");
+        add_action("do_check", "cha");
+        add_action("do_convert", "convert");
+        add_action("do_convert", "huan");
+        add_action("do_deposit", "deposit");
+        add_action("do_deposit", "cun");
+        add_action("do_withdraw", "withdraw");
+        add_action("do_withdraw", "qu");
+        add_action("do_kill","kill");
+}
+void greeting(object ob)
+{
+        string banghui;
+        int money;
+        object lp;
+  ob=this_player();
+return;
+        if(! (banghui=ob->query("banghui")))    {
+                command("nod");
+                return;
+        }
+       lp=new("/clone/misc/lingpai");
+        lp->create(banghui);
+        if(lp->query("no_use")) {
+                destruct(lp);
+                message_vision("$N冲着$n道：“这位"+
+                RANK_D->query_respect(ob)+"的帮会文件有问题，快点与巫师联系吧。”\n",this_object(),ob);
+                return;
+        }
+        if(lp->query("bangzhu_id")=="???")      {
+                destruct(lp);
+              message_vision("$N提醒$n道：“帮主已失踪多日，快去找狂人尼采商量商量吧。\n",this_object(),ob);
+                return;
+        }
+        if( lp->query("bangzhu_id")!=ob->query("id"))   {
+                destruct(lp);
+                message_vision("$N笑咪咪的对着$n道：“帮主何时来此处转帐啊？”\n",this_object(),ob);
+                return;
+        }
+        if(! (int)(money=lp->query("money")))   {
+                destruct(lp);
+                message_vision("$N对$n陪笑道：“目前无帐可转。”\n",
+                this_object(),ob);
+                return;
+        }
+        lp->set("money",0);
+        lp->save();
+        destruct(lp);
+        ob->add("money",money);
+        ob->save();
+        message_vision("$N将"+banghui+"最近的收帐"+MONEY_D->money_str(money)+"转到了$n的帐下。\n",this_object(),ob);
+
+}
+
+
+int do_kill(string arg)
+{
+        this_player()->set_temp("dalikill", 1);
+        return 0;
+}
+#include <die.h>

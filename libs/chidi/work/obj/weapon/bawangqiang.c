@@ -1,0 +1,27 @@
+#pragma save_binary
+// spear.c 飞龙枪
+
+#include <weapon.h>
+#include <ansi.h>
+
+inherit SPEAR;
+
+void create()
+{
+            set_name( CYN"霸王枪" NOR,({ "spear" }));
+        set_weight(10000);
+        if( clonep() )
+                set_default_object(__FILE__);
+        else{
+                set("unit", "杆");
+            set("long","一杆金黄色的长枪。分量不轻。拿在手里。沉甸甸的。一看就知道是杆好枪.\n");
+        set("value", 10000);
+        set("material", "异类金属");
+        set("wield_msg", "$N「唰」地一声将$n亮了出来，横在胸前!\n");
+        set("unwield_msg", "$N将手中的$n立在身后。\n");
+            }
+                init_spear(60);
+        setup();
+}
+
+

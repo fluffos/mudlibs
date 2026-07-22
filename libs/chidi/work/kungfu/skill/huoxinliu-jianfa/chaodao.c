@@ -1,0 +1,89 @@
+// chaodao.c 抄刀
+//diabio（青云）2003.2.1
+
+#include <ansi.h>
+
+inherit F_SSERVER;
+
+#include "/kungfu/skill/eff_msg.h";
+
+int perform(object me, object target)
+{
+        int damage, p;
+        string msg;
+        object weapon;
+
+        if( !target ) target = offensive_target(me);
+        if( !target
+        ||      !target->is_character()
+        ||      !me->is_fighting(target) )
+                return notify_fail("抄刀只能对战斗中的对手使用。\n");
+
+        if( (int)me->query_skill("huoxinliu-jianfa", 1) < 120 )
+                return notify_fail("你的活心流剑法还未练成，不能使用！\n");
+
+        if( (int)me->query("max_neili") < 800 )
+                return notify_fail("你现在内力修为不够，不能使用抄刀！\n");     
+        if( (int)me->query("neili") < 600 )
+                return notify_fail("你现在真气不足，不能使用抄刀！\n");
+        if( (int)me->query_skill("parry", 1) < 120 )
+                return notify_fail("你的基本招架之法不够娴熟，强行使用只怕有生命之忧。\n");
+         if (!objectp(weapon = target->query_temp("weapon")))
+		return notify_fail("对方手中没有武器，你使出这招「抄刀」后自觉象个傻瓜。\n");
+        if (!(me->query("feitian/chaodao_perform") & 1))
+                return notify_fail("你虽然听说过“抄刀”这一招，可是却未获传授。\n");
+
+        if (me->query_skill_mapped("sword") != "huoxinliu-jianfa")
+                return notify_fail("你现在无法使用抄刀。\n");                                                                                 
+                       
+        msg = HIW "\n$N使出神古活心流至高攻击[抄刀],疾冲向前用手背架住对手之利刃，企图夺下$n兵器！\n"NOR;
+        if( weapon = target->query_temp("weapon") ){
+          if( random(me->query_str()) > target->query_str()/2 ) {
+            me->start_busy(1);
+            me->add("neili", -250);
+     damage = (int)me->query_skill("shayi-xinfa", 1);
+         damage = random(damage)+100;                
+                target->receive_damage("qi", damage);
+                target->receive_wound("qi", damage/3);   
+
+            msg += HIR"\n$N用手背顺势一带，以剑柄直戳过与$p只觉得面部犹如受到重锤一击，一口鲜血喷出，手中"
+                +target->query_temp("weapon")->query("name")+HIR"也把持不住脱手飞了出去。\n"NOR;
+            message_vision(msg, me, target);
+                (target->query_temp("weapon"))->move(environment(target));
+            } 
+          else {
+            me->start_busy(2);
+            me->add("neili", -200);
+            msg += HIB"\n$p怎么也想不到$N居然敢兵行险招，危及之中中途变招才勉强没让$N得逞。\n";
+            message_vision(msg, me, target);
+         }
+         }
+        else
+        {
+        if (random(me->query_skill("sword")) > target->query_skill("sword")/2)
+            {
+                me->start_busy(3);
+                target->start_busy(random(3));
+                
+                me->add("neili", -50);
+                damage = (int)me->query_skill("shayi-xinfa", 1);
+				damage = (int)me->query_skill("huoxinliu-jianfa", 1) +damage;
+                damage = damage + random(damage);                
+                target->receive_damage("qi", damage);
+                target->receive_wound("qi", damage/3);   
+				me->add("neili", -(damage/3));             
+                p = (int)target->query("qi")*100/(int)target->query("max_qi");
+                msg += damage_msg(damage, "内伤");
+                msg += "( $n"+eff_status_msg(p)+" )\n";                       
+        } else 
+           {
+             me->start_busy(3);
+             me->add("neili", -180);
+             msg += CYN"\n$p怎么也想不到$N居然敢兵行险招，危及之中中途变招才勉强没让$N得逞。\n" NOR;
+          }
+        message_vision(msg, me, target);
+
+        }
+
+        return 1;
+}

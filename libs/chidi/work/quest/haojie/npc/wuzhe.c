@@ -1,0 +1,71 @@
+//by mudgod@xssx
+//wuzhe.c
+
+inherit BHNPC;
+#include <ansi.h>
+
+string do_join();
+void create()
+{
+        set_name(HIW"武林联盟接待武者"NOR, ({"wu zhe"}) );
+        set("long", "这是武林联盟的接待武者,他负责接待抗敌的武林健儿。\n");
+        set("attitude", "peaceful");
+        
+        set("max_gin", 500);
+	 set("max_kee", 700);
+        set("max_sen", 1000);
+        set("inquiry", ([
+                "join" : (: do_join :),
+       ]));
+        set("str", 40);
+        set("per", 30);
+        set("kar", 40);
+        set("combat_exp", 100000);
+        set("trusty", 500);
+        set("score", 100);
+        set("chat_chance", 1);
+        set("chat_msg", ({
+                name() + "说道：现在武林动荡不安，正是多事之秋。\n",
+          }) );
+
+        setup();
+
+}
+void init()
+{	
+	object ob;
+
+	::init();
+	if( interactive(ob = this_player()) && !is_fighting() ) {
+		remove_call_out("greeting");
+		call_out("greeting", 1, ob);
+	}
+}
+
+void greeting(object ob)
+{
+	if( !ob || environment(ob) != environment() ) return;
+         if (ob->query("combat_exp")>800000 && ob->query("age")>15)
+		message_vision(HIY"这位侠士是来对抗皇皇教的么，那么请("HIR"ask wu zhe about join"HIY")\n\n"NOR,ob);
+}
+string do_join()
+{
+        object me = this_player();
+        object sth;
+              object room;
+                room = load_object("/u/xiha/haojie/zhanchang0");
+           if( me->query("age") < 15 ) 
+		return "你乳臭未干的小孩子也来凑热闹,等你成年之后再来参与江湖纷争吧。\n";
+           if( (int) me -> query("combat_exp") < 800000)
+              return "刀剑无情,这位" + RANK_D->query_respect(this_player()) +"还是练好武功再来管江湖事吧!\n";
+        command("smile");
+		me->set("jobs/fight/name", "浩劫");
+		me->add("jobs/fight/num", 1); 
+		me->set("jobs/fight/succ", 0);
+		me->set("jobs/fight/owner", name());
+		me->set("jobs/fight/time", time());
+     		me->set("zhenying","soldier");
+		me->move(room); 
+        return "好极了！我们武林联盟正需要你这样的人才!快去杀尽那些入侵的邪魔外道吧!";
+}
+

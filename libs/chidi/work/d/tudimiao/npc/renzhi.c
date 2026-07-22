@@ -1,0 +1,555 @@
+// /d/tudimiao/npc/renzhi.c 人质
+// xlgg@hero.cd
+// 1999.05.27
+
+#include <ansi.h>
+// 定义完成护送任务后每走一步可以得到的初始经验和潜能
+#define lay_exp 50
+#define lay_qn 15 
+// 定义每遇到一次杀手伏击后可以增加的经验和潜能幅度
+#define price_exp 500
+#define price_qn 200  
+// 在行动过程中每走一步出现杀手拦路的几率,killer_appear/total_appear
+#define total_appear 10
+#define killer_appear 2
+// 定义人质做随机动作的几率，rz_cmd/total_cmd
+#define total_cmd 10
+#define rz_cmd 3
+// 随机出现杀手或做随机动作的间隔时间
+#define A_TIME 60
+// 检查自身是否昏迷的时间
+#define B_TIME 5
+// 检查护送时间，以防止护送者功夫等级高并且人质身上穿有高级护具时
+// 杀手无法解决人质，而player依仗此来挣过高的exp和潜能
+// 设置一个人质的疲劳度total_tired，疲劳度越高，防御力越低。
+
+inherit BHNPC;
+string * des_str=({
+        "这是一位黑纱蒙面的人，看不出有多大岁数。\n",
+        "他整个人都被裹在一件长大的黑衣里，默默站在那里一言不发。\n",
+        "一位微微发胖的人，满脸堆着笑。\n",
+        "他的眉头都锁在一起，似乎对什么事很担心的样子。\n",
+        "这个人猥猥琐琐地站在那里，好象有什么话又不敢说似的。\n",
+        "一位看起来神神秘秘的人，可是总让人觉得有点怪异的样子。\n",
+        "这个人站在那里好象不停地在发抖，也许是害怕什么。\n",
+        "他满脸的皱纹，看起来好象岁数很大，不过仔细一看，又好象并没有实际那么大。\n",
+        "他穿着一件本来质地很好的衣服，可是现在衣服上沾满了尘土和血迹。\n",
+});
+
+string * random_act = ({
+        "fear",
+        "dazuo 40",
+        "dazuo 60",
+        "dazuo 100",
+        "dazuo 120",
+        "tuna 50",
+        "tuna 60",
+        "tuna 70",
+        "tuna 80",
+        "say 你要把我带到哪里去啊？",
+        "remove all",
+        "remove all",
+        "remove all",
+        "drop all",
+});
+
+string * escape_msg = ({
+        "$N突然惊恐地道：“哎呀，杀手来了，我从这条路先跑了。”\n",
+        "$N怯怯地四处看了看，突然叫了起来：这地方如此偏僻，怎么能多呆呢，我先走了。\n",
+        "$N一回头，似乎看见远处有什么东西掠过，惊得转身就跑。\n",
+        "忽然听到$N一声惨叫，好象被踩住了尾巴的兔子一样转身逃了开去。\n",
+        "$N突然恍然般道：哦，这地方我以前来过，该从这条路走。说罢，转身就走。\n",
+        "$N蓦地撒腿就跑，怎么喊他也不回头，一溜烟地消失了。\n",
+});
+
+string status_color(int current, int max);
+
+void create()
+{
+        set_name("人质", ({ "ren zhi", "rz" }));
+        set("title","");
+        set("no_get",1);
+        set("gender", random(2)>0 ? "女性" : "男性");
+        set("age", 17 + random(60) );
+        set("long", des_str[random(sizeof(des_str))]);
+        
+        set("combat_exp", 500 + random(5000));
+        set("attitude", "friendly");
+        set("inquiry", ([
+                "name" : "我的姓名不能对人乱讲的。\n",
+        ]));
+
+        //设置逃跑
+        set("env/wimpy",50);
+        set("max_qi",500+random(500));
+        set("eff_qi",query("max_qi"));
+        set("qi",query("max_qi"));
+        set("max_jing",200+random(200));
+        set("eff_jing",query("max_jing"));
+        set("jing",query("max_jing"));
+
+        set("max_neili",50 + random(150) );
+        set("neili",query("max_neili") );
+        set("max_jingli",query("max_neili")/2);
+        set("jingli",query("max_jingli"));
+ 
+        set_skill("unarmed",50);
+        set_skill("sword",50);
+        set_skill("blade",50);
+        set_skill("dodge",50);
+        set_skill("force",50);
+        set_skill("jinshe-jian",100);
+        map_skill("sword","jinshe-jian");
+        
+        //保护者id
+        set("leader_name","");
+        //目的地址
+        set("dest_add","");
+        //途中所遇到的杀手伏击次数
+        set("combat_num",0);
+        // 人质总共所走的路程--步数
+        set("total_steps",0);
+        // 人质的“疲劳”度
+        set("total_tired",0);
+
+        setup();
+        carry_object("/clone/misc/cloth")->wear();
+        carry_object("/clone/weapon/changjian")->wield();
+}
+
+void init()
+{
+        add_action("do_guard","guard");
+        add_action("do_order","order");
+        add_action("do_steal","steal");
+        add_action("do_hit","hit");
+        add_action("do_kill","kill");
+        add_action("do_hp","hp");
+        add_action("do_touxi","touxi");
+        add_action("do_ansuan","ansuan");
+        remove_call_out("do_check");
+        call_out("do_check",A_TIME);
+        remove_call_out("do_check1");
+        call_out("do_check1",B_TIME);
+}
+
+int do_guard(string arg)
+{
+        object me = this_player();
+
+        if ( query("leader_name") != me->query("id") )
+                return notify_fail("你没有负责保护该人质的义务！\n");
+
+        //设置保卫者    
+        set("gurader_name",me->query("id") );
+        tell_object(me,HIR"注意：你现在开始对人质进行保卫，任何针对人质的攻击都会自动转移到你身上！\n"NOR);
+        return 1;
+}
+
+int do_hp(string arg)
+{
+        object ob = this_object();
+        object me = this_player();
+        string msg;
+        mapping my;
+
+        if (!arg || (arg != ob->query("id") && arg != "rz") ) 
+                return 0;
+        my = ob->query_entire_dbase();
+
+        if (me->query("id") == query("leader_name") ) {
+                tell_object(me,sprintf("%s的健康情况如下：\n",my["name"]));
+                msg = sprintf(" 精  ： %s%4d/ %4d %s(%3d%%)\n" NOR ,
+                        status_color(my["jing"], my["eff_jing"]), my["jing"], my["eff_jing"],
+                        status_color(my["eff_jing"], my["max_jing"]), my["eff_jing"] * 100 / my["max_jing"]);
+                tell_object(me,msg);
+                msg = sprintf(" 气  ： %s%4d/ %4d %s(%3d%%)\n" NOR ,
+                        status_color(my["qi"], my["eff_qi"]), my["qi"], my["eff_qi"],
+                        status_color(my["eff_qi"], my["max_qi"]), my["eff_qi"] * 100 / my["max_qi"]);
+                tell_object(me,msg);
+                return 1;
+        }
+        else
+                return 0;
+}
+
+int do_hit(string arg)
+{
+        object ob = this_object();
+        object me = this_player();
+        object gurad_ob;
+        
+        if (!arg || (arg != ob->query("id") && arg != "rz") ) 
+                return 0;
+        if (!query("gurader_name") || !gurad_ob = present(query("gurader_name"),environment(ob)) ) {
+                if (userp(me) ) {
+                        tell_object(me,HIW"玩家不能在人质无保护的情况下攻击他！\n"NOR);
+                        return 1;
+                }
+                else
+                        return 0;
+        }
+        if (me == gurad_ob) {
+                tell_object(me,HIR"咦？你不是他的保护者吗?\n"NOR);      
+                return 1;
+        }
+        else {
+                tell_object(me,HIR"人质正受到"+gurad_ob->query("name")+"的保护，他加入战斗对你发起攻击！\n"NOR);
+                tell_object(gurad_ob,HIR"人质受到"+me->query("name")+"攻击，你挺身加入战斗！\n"NOR);
+                me -> fight_ob(gurad_ob);
+                gurad_ob -> fight_ob(me);
+                return 1;
+        }
+}
+
+int do_kill(string arg)
+{
+        object ob = this_object();
+        object me = this_player();
+        object gurad_ob;
+        
+        if (!arg || (arg != ob->query("id") && arg != "rz") ) 
+                return 0;
+        if (!query("gurader_name") || !gurad_ob = present(query("gurader_name"),environment()) ) {
+                if (userp(me) ) {
+                        tell_object(me,HIW"玩家不能在人质无保护的情况下攻击他！\n"NOR);
+                        return 1;
+                }
+                else
+                        return 0;
+        }
+
+        if (!gurad_ob = present(query("gurader_name"),environment(ob) ) )
+                return 0;
+        if (me == gurad_ob) {
+                tell_object(me,HIR"你不想完成你的任务了吗?\n"NOR);      
+                return 1;
+        }
+        else {
+                tell_object(me,HIR"人质正受到"+gurad_ob->query("name")+"的保护，他加入战斗抵御你的攻击！\n"NOR);
+                tell_object(gurad_ob,HIR+me->query("name")+"准备杀死人质，你挺身加入战斗！\n"NOR);
+                me -> kill_ob(gurad_ob);
+                gurad_ob -> kill_ob(me);
+                return 1;
+        }
+}
+
+int do_touxi(string arg)
+{
+        object ob = this_object();
+        object me = this_player();
+        object gurad_ob;
+        
+        if (!arg || (arg != ob->query("id") && arg != "rz") ) 
+                return 0;
+        if (!query("gurader_name") || !gurad_ob = present(query("gurader_name"),environment(ob)) ) {
+                if (userp(me) ) {
+                        tell_object(me,HIW"玩家不能在人质无保护的情况下攻击他！\n"NOR);
+                        return 1;
+                }
+                else
+                        return 0;
+        }
+
+        if (!gurad_ob = present(query("gurader_name"),environment() ) )
+                return 0;
+        if (me == gurad_ob) {
+                command("papa "+me->query("id"));
+                tell_object(me,HIR"你不能偷袭人质。\n"NOR);     
+                return 1;
+        }
+        else {
+                tell_object(me,HIR"人质正受到"+gurad_ob->query("name")+"的保护，他加入战斗抵御你的攻击！\n"NOR);
+                tell_object(gurad_ob,HIR+me->query("name")+"准备对人质进行偷袭，你挺身加入战斗！\n"NOR);
+                me -> kill_ob(gurad_ob);
+                gurad_ob -> fight_ob(me);
+                return 1;
+        }
+}
+
+int do_ansuan(string arg)
+{
+        object ob = this_object();
+        object me = this_player();
+        object gurad_ob;
+        
+        if (!arg || (arg != ob->query("id") && arg != "rz") ) 
+                return 0;
+        if (!query("gurader_name") || !gurad_ob = present(query("gurader_name"),environment(ob)) ) {
+                if (userp(me) ) {
+                        tell_object(me,HIW"玩家不能在人质无保护的情况下攻击他！\n"NOR);
+                        return 1;
+                }
+                else
+                        return 0;
+        }
+
+        if (!gurad_ob = present(query("gurader_name"),environment() ) )
+                return 0;
+        if (me == gurad_ob) {
+                command("papa "+me->query("id"));
+                tell_object(me,HIR"你不能暗算人质。\n"NOR);     
+                return 1;
+        }
+        else {
+                tell_object(me,HIR"人质正受到"+gurad_ob->query("name")+"的保护，他加入战斗抵御你的攻击！\n"NOR);
+                tell_object(gurad_ob,HIR+me->query("name")+"准备对人质进行暗算，你挺身加入战斗！\n"NOR);
+                me -> kill_ob(gurad_ob);
+                gurad_ob -> fight_ob(me);
+                return 1;
+        }
+}
+
+
+int do_steal(string arg)
+{
+        object ob = this_object();
+        object me = this_player();
+        string who;
+
+        sscanf(arg,"%*s %*s %s",who);
+
+        if (who == ob->query("id") || who == "rz" ) {
+                message("vision",HIW"玩家不能偷人质身上的东西！\n"NOR,me);
+                return 1;
+        }
+        return 0;
+}
+
+int do_order(string arg)
+{
+        object me = this_player();
+        object ml;
+        string act,sth,dest,dest_add;
+        int give_exp,give_qn;
+        int i;
+        object room,shashou,anshazhe;
+        string ss_name;
+
+        if ( query("leader_name") != me->query("id") )
+                return notify_fail("由于你不是该任务的接收者，人质不会听你的指挥！\n");        
+        if (!arg || sscanf(arg, "%s %s",act,sth) != 2)
+                return notify_fail("指令格式：order <动作词> <具体动作描述>\n");
+
+        if ( act!="go" && act!="wear" && act!="remove" && 
+                act!="wield" && act!="unwield" && act!="enter" && act!="eat" )
+                return notify_fail("目前暂时不支持该项动作指令！\n");
+
+        // 判断是否已经到达目的地
+        if (act == "go") {
+                if (this_object()->is_busy() )
+                        return notify_fail(HIY"人质需要休息一会儿再上路。\n"NOR);
+                dest = sprintf( "exits/%s",sth);
+                if (! dest_add = environment()->query(dest))
+                        return notify_fail("这个方向没有出路。\n");
+                add("total_steps",1);
+                if (dest_add == query("dest_add") ) {
+                //目的地到达
+                        message_vision(YEL"$N长出了一口气道：哎，终于到了。不知道从哪里冒出来一辆马车将$N接上了车，然后扬尘而去。\n"NOR,this_object(),me);
+                        tell_object(me,HIW"恭喜你成功将人质送到目的地，完成了这次任务！\n"NOR);
+                        message("channel:chat",HIG"〖江湖任务〗："+me->query("name")+"成功将人质送到目的地。\n"NOR,users());
+                        i = 0;
+                        give_exp = lay_exp * query("total_steps");
+                        give_qn = lay_qn * query("total_steps");
+                        while ( i < query("combat_num") ) {
+                                give_exp += (price_exp/2 + random(price_exp/2));
+                                give_qn += (price_qn/2 + random(price_qn/2));
+                                i++;
+                        }
+                        if (give_exp > 8000)
+                        give_exp =8000;
+                        if (give_qn > 3000)
+                        give_qn = 3000;
+                        give_exp =give_exp*2/3+random(give_exp/2);
+                        give_qn = give_qn*2/3+random(give_qn/2);  
+                        tell_object(me,HIW + sprintf("你被奖励了！得到%s点经验和%s点潜能。\n", chinese_number(give_exp),chinese_number(give_qn) ) + NOR);
+                        me->add("combat_exp",give_exp);
+                        me->add("potential",give_qn);
+                        if ( ml = present("mi ling",me) )
+                                destruct(ml);
+                        destruct(this_object());
+                        return 1;
+                }
+                else {
+                //也许会出现杀手
+                        if (random(total_appear) < killer_appear) {
+                                if (random(2)>0) {
+                                //明杀手
+                                i = me->query("combat_exp");
+                                if (i < 600000) 
+                                        ss_name="/d/tudimiao/npc/shashou0";
+                                else
+                                        if (i < 900000)
+                                                ss_name="/d/tudimiao/npc/shashou1";
+                                        else
+                                                if (i < 1200000)
+                                                        ss_name="/d/tudimiao/npc/shashou2";
+                                                else
+                                                        if (i < 1500000)
+                                                        ss_name="/d/tudimiao/npc/shashou3";
+                                                else
+                                                        if (i < 2000000)
+                                                        ss_name="/d/tudimiao/npc/shashou4";
+                                                else
+                                                        if (i < 3000000)
+                                                        ss_name="/d/tudimiao/npc/shashou5";                
+                                                        else
+                                                        ss_name="/d/tudimiao/npc/shashou6";
+                                }
+                                else {
+                                //暗杀手
+                                        ss_name="/d/tudimiao/npc/anshazhe";
+                                }
+                                if ( !room=find_object(dest_add) )
+                                        room=load_object(dest_add);
+                                shashou = new(ss_name);
+                                shashou->move(room);
+                                command(arg);
+                        }
+                        else {
+                                command(arg);     
+                                 this_object()->start_busy(random(4));
+                        }
+                }
+        }
+        else
+                command(arg);
+        return 1;
+}
+
+void die()
+{
+        object me;
+        object ml;
+
+        if (objectp( me = find_player(query("leader_name"))) )
+        {
+                tell_object(me,HIB"人质死了，你的任务失败了！\n"NOR);
+                if (ml = present("mi ling",me) )
+                        destruct(ml);
+        }
+        message_vision("人质口中喷出几口i"HIR"鲜血"NOR"，倒在地上,死了！\n",this_object());
+
+        destruct(this_object());
+        return;
+}
+
+void do_check()
+{
+        object me,shashou;
+        string ss_name;
+        int i;
+        mapping exits;
+        string * dirs;
+        object ob = this_object();
+        object where;
+
+        if( !ob ) return;
+        where = environment(ob);
+        // 疲劳度 + 1
+        add ("total_tired",1);
+
+        if (! living(ob) || ob->is_fighting()) {
+                remove_call_out("do_check");
+                call_out("do_check",A_TIME);
+        }
+        else {
+        if (! me = find_player(query("leader_name") )) {
+                remove_call_out("do_check");
+                call_out("do_check",A_TIME);
+        }
+        else { 
+                if (random(total_appear) < killer_appear) {
+                // 出现杀手
+                        if (random(2)>0) {
+                        //明杀手
+                                i = me->query("combat_exp");
+                                if (i < 700000) 
+                                        ss_name="/d/tudimiao/npc/shashou0";
+                                else
+                                        if (i < 900000)
+                                                ss_name="/d/tudimiao/npc/shashou1";
+                                        else
+                                                if (i < 1200000)
+                                                        ss_name="/d/tudimiao/npc/shashou2";
+                                                else
+                                                        if (i < 1500000)
+                                                        ss_name="/d/tudimiao/npc/shashou3";
+                                                 else
+                                                        if (i < 2000000)
+                                                        ss_name="/d/tudimiao/npc/shashou4";
+                                                 else
+                                                        if (i < 3000000)
+                                                        ss_name="/d/tudimiao/npc/shashou5";                
+                                                        else
+                                                        ss_name="/d/tudimiao/npc/shashou6";
+                        }
+                        else {
+                        //暗杀手
+                                ss_name="/d/tudimiao/npc/anshazhe";
+                        }
+                        shashou = new(ss_name);
+                        shashou->move(where);   
+                        ob -> start_busy(1);            
+                } 
+                else {
+                        if (random(total_cmd) < rz_cmd ) {
+                        //人质开始做随机动作
+                                if (! ob->is_busy() ) {
+                                        if (random(2) >0 )
+                                        // 做随机动作
+                                                command(random_act[random(sizeof(random_act))]);
+                                        else {
+                                        // 走随机方向
+                                                if ( mapp(exits = where->query("exits") ) ) {
+                                                        message_vision(HIY+escape_msg[random(sizeof(escape_msg))]+NOR,ob);
+                                                        dirs = keys(exits);
+                                                        command("go "+dirs[random(sizeof(dirs))]);
+                                                }       
+                                        }       
+                                }
+                        }
+                }
+                remove_call_out("do_check");
+                call_out("do_check",A_TIME);
+        }
+    }
+}
+
+void do_check1()
+{
+        object ob = this_object();
+
+        if( !ob ) return;
+        if (living(ob) ) {
+                remove_call_out("do_check1");
+                call_out("do_check1",B_TIME);
+        }
+        else {
+                message_vision(HIR"$N在昏迷中突然急促地呻吟了一声，然后就再没有声音了。\n"NOR,ob);
+                ob -> die();
+        }
+
+        return;
+}
+
+string status_color(int current, int max)
+{
+        int percent;
+ 
+        if( max>0 ) percent = current * 100 / max;
+        else percent = 100;
+        if( percent > 100 ) return HIC;
+        if( percent >= 90 ) return HIG;
+        if( percent >= 60 ) return HIY;
+        if( percent >= 30 ) return YEL;
+        if( percent >= 10 ) return HIR;
+        return RED;
+}
+
+
+int accept_object(object who, object ob)
+{
+        return 1;
+}
+

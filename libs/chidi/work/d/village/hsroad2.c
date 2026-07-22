@@ -1,0 +1,25 @@
+// hsroad2.c
+// by Xiang
+
+inherit ROOM;
+
+void create()
+{
+	set("short", "青石大道");
+	set("long", @LONG
+你走在一条青石大道上，东边隐约可见到扬州城的城墙。北面两条土路分
+岔通向山里。
+LONG );
+        set("outdoors", "wudang");
+	set("exits", ([
+        "east"     : __DIR__"hsroad1",
+		"northwest" : __DIR__"hsroad3",
+		"northeast" : "/d/huashan/jzroad1",
+    "north" : "/d/green/hillfoot",
+	]));
+	set("no_clean_up", 0);
+
+	setup();
+	replace_program(ROOM);
+}
+

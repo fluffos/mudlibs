@@ -1,0 +1,59 @@
+#include <ansi.h>
+
+inherit ITEM;
+
+void create()
+{
+        set_name(HIR "超级金刚钻" NOR, ({ "jingang zuan", "zuan"}) );
+        set_weight(200);
+        if( clonep() )
+                set_default_object(__FILE__);
+        else {
+              set("long", "一根使用后可让你的自铸武器永久增加一堆镶锲孔的钻头，你重新铸另外一把武器时，\n该镶锲孔仍然存在。只能在10转时钻1次。{use}\n");
+              set("no_put",1);
+              set("no_sell",1);
+              set("ty_gift", 1);
+              set("no_get", 1);
+              set("no_give", 1);
+              set("no_drop",1); 
+              set("money",5);
+              set("unit", "根");      }
+}
+
+void init()
+{
+        add_action("do_eat", "use");
+}
+
+int do_eat(string arg)
+{
+        object me;
+
+        if (! id(arg))
+                return notify_fail("你要干什么？\n");
+
+        me = this_player();
+         
+        if (!me->query("weapon"))
+                return notify_fail("你还没有自铸武器！\n");
+       if (me->query("zhuanshi/times")<1&&me->query("weaponqie")>0)
+         return notify_fail("你还没转世呢武器只能钻一个镶锲孔！\n");
+   if (me->query("zhuanshi/times")>=1&&me->query("weaponqie")>me->query("zhuanshi/times")+2)
+          return notify_fail("你目前已经达到钻孔上限了，想继续钻孔就只能找WIZ了！\n");
+
+        
+        if (me->query("zhuanshi/times")<10)
+                         return notify_fail("你还没10转呢，不能使用这个钻头！\n");
+        
+        message_vision("$N拿起" + this_object()->name() +
+                       "往$N的自铸武器一阵猛钻！你眼看就要钻穿了！\n", me);
+
+
+                tell_object(me, HIG "恭喜你！你的自铸武器增加了好多个窟窿！\n");
+                me->add("weaponqie", 5);
+
+        destruct(this_object());
+        return 1;
+}
+
+

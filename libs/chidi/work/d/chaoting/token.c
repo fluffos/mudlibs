@@ -1,0 +1,13 @@
+#pragma save_binary
+#pragma save_binary
+
+inherit ITEM;
+void create()
+{
+    set_name( "御赐金牌", ({ "golden token","token" }) );
+    set("unit", "面");
+    set("long","这是一面皇帝御赐的金牌，上面刻着“如朕亲临”四个字。\n");
+    set_weight(1);
+    set("value",1000000);
+}
+

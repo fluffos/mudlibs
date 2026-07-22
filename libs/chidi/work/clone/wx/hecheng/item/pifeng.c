@@ -1,0 +1,85 @@
+
+#include <ansi.h>
+#include <armor.h>
+#ifdef AS_FEATURE
+#include <dbase.h>
+#else
+inherit CLOTH;
+//inherit EQUIP;
+#endif
+
+int check_name(string str,object me);
+//int do_hui(object weapon);
+//int do_rename(string arg);
+int do_qie(string arg);
+//int do_xiang(object me,object obj);
+void init()
+{
+   if (!mapp(this_player()->query("hcpifeng"))){
+     this_object()->owner_is_killed();
+     return;
+   }
+    if (this_player()!=environment()) return;
+    //add_action("do_hui","duan");
+    add_action("do_rename","gainame");
+    //add_action("do_qie","xiangqie");
+}
+void create()
+{   
+    object me;
+    string w_name,w_id,w_lb;
+    int w_armor;
+    me = this_player();
+    if (me){
+    w_name=me->query("hcpifeng/name");
+    w_id = me->query("hcpifeng/id");
+    w_armor = me->query("hcpifeng/armor");
+ //   w_lb = me->query("hcloth/lb");
+    set("armor_type", "pifeng");
+    set("armor_prop/armor", w_armor);
+    if ( me->query("hcpifeng/int") ) 
+    set("armor_prop/intelligence",me->query("hcpifeng/int"));
+    if ( me->query("hcloth/dex") ) 
+    set("armor_prop/dexerity",me->query("hcpifeng/dex"));
+    if ( me->query("hcpifeng/con") ) 
+    set("armor_prop/constitution",me->query("hcpifeng/con"));
+    if ( me->query("hcpifeng/str") ) 
+    set("armor_prop/strength",me->query("hcpifeng/str"));
+    set_weight(5000);
+    
+    set_name(w_name, ({w_id,"hecheng","pifeng"}));
+  //  set("flag", 1 | EDGED);
+    set("unit", "件");   
+    set("no_get",1);
+ //   set("no_give",1);
+    set("no_sell",1);
+    set("nopaimai",1);
+    set("no_drop",1);
+ 
+     if ( me->query("env/hcpifeng1"))
+set("wear_msg", ""HIG+me->name()+"展开一件合成披风,轻轻地披在肩上!  "NOR+me->query("env/hcpifeng1")+"\n"NOR);
+    if ( me->query("env/hcpifeng2"))
+set("unwear_msg", ""HIM+me->name()+"将披风脱下!  "NOR+me->query("env/hcpifeng2")+"\n"NOR);
+ 
+    }
+    setup();
+}
+
+int check_name(string name,object me)
+{
+        int i;
+
+        i = strlen(name);
+
+      if( (strlen(name) < 4) || (strlen(name) > 30 ) ) {
+              tell_object(me,"合成披风名字请定在50个位数。\n");
+                return 0;
+        }
+        while(i--) {
+              if( name[i]<=' ' ) {
+                  tell_object(me,"对不起，你的合成披风名字中不能用控制字符。\n");
+                        return 0;
+                }
+        }
+        return 1;
+}

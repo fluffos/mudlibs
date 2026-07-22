@@ -1,0 +1,28 @@
+
+
+inherit ROOM;
+
+void create ()
+{
+  set ("short", "广场");
+  set ("long", @LONG
+
+    从开封城门走过来，你可以看见这个方圆几百里的空地，这个广场
+具有悠久的历史，广场的四面八方都是玩家修建的各种各样的城池,从这
+里开始，你也可以在这里的任何一个地方造属于自己的城堡,扩大地盘,
+修起来了可是千秋万代的基业啊!
+
+LONG);
+
+  set("exits", ([
+       "west" : __DIR__"chengmen",
+        "north" : __DIR__"jiuguan",
+     "east" : "/d/chaoting/xianya/xianya_squre",
+      ]));
+  set("outdoors", __DIR__);
+set("owner","public");
+
+  setup();
+}
+
+

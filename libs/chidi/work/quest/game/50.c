@@ -1,0 +1,16 @@
+#include <ansi.h>
+
+inherit WQA_ROOM;
+
+void create()
+{
+	set("short", "南北朝");
+ 	set("long", @LONG
+
+    这里是南北朝时空。南北朝建于公元420年，亡于公元589年。南朝指
+宋、齐、梁、陈，北朝指北魏、东魏、西魏、北周、北齐。
+LONG
+	);
+
+        ::create();
+}

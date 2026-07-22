@@ -1,0 +1,225 @@
+#include <ansi.h>;
+inherit "/quest/npcskill";
+#include <command.h>;
+#include "/quest/name.h";
+/**************************************/
+#define MAX_EXP 50000
+#define MAX_POT 25000
+
+//1,moon,2,fangcun,3,putuo,4,hell,5,longgong,6,xueshan
+//7,wudidong
+
+object me=this_object(),questob,killertemp;
+string username;
+string guaiobname,*guaikeysa,*guaikeysb,*guaiobid;
+int s1,s2;
+
+void create()
+{  
+   int level,chooseguai;
+   object guai;   
+   guai=this_object();
+
+//以下程序分配怪的名字
+   guaikeysa=keys(guainame);
+   s1=random(sizeof(guaikeysa));
+   if (s1==0 || s1==sizeof(guaikeysa)) s1=0; 
+   guaikeysb=keys(guainame[guaikeysa[s1]]);
+   s2=random(sizeof(guaikeysb));
+   if (s2==0 || s2==sizeof(guaikeysa)) s2=0;
+   guaiobname=guaikeysb[s2];
+   guaiobid=guainame[guaikeysa[s1]][guaikeysb[s2]];
+   set_name(guaiobname,guaiobid); 
+
+//分配名字完成,
+
+   set("gender","男性");
+   set("env/wimpy", 30);
+   set("per",10);
+   set("age",60);
+   set("attitude", "friendly");
+   set("no_suck",1);
+   set("no_suck2",1);
+   set_temp("apply/armor",600);
+   set("chat_chance",10);
+   set("chat_msg",({
+   (:random_move:)}));
+   set("chat_chance_combat",random(90));
+   setup();
+   
+}
+int setguaiskill(int chooseguai,int level,object guai)
+{  
+   set_std_skills(level,guai);
+   switch (chooseguai)
+    {
+      case 1:set_moon_guai(level,guai);carry_moon_weapon();break;
+      case 2:set_fangcun_guai(level,guai);carry_fangcun_weapon();break;
+      case 3:set_putuo_guai(level,guai);carry_putuo_weapon();break;
+      case 4:set_hell_guai(level,guai);carry_hell_weapon();break;
+      case 5:set_longgong_guai(level,guai);carry_longgong_weapon();break;
+      case 6:set_xueshan_guai(level,guai);carry_xueshan_weapon();break;
+      default:set_wudidong_guai(level,guai);carry_wudidong_weapon();break;
+    }
+}
+//怪怎么也会疗伤?
+void heart_beat()
+{
+   
+   int qi,effqi,maxqi;
+   maxqi=(int)this_object()->query_temp("maxqi");   
+   effqi=(int)this_object()->query("eff_qi");
+   qi=query("qi");
+   if (effqi<maxqi) command("exert heal");
+   if (qi<(int)(effqi*2/3)) command("exert recover");
+   ::heart_beat();
+}
+
+int check_time()
+{
+   if (!query_temp("appear")) 
+     {
+       set_temp("appear",1);
+       call_out("check_time",90);
+       return 1;
+     }
+   if (me->is_fighting()) 
+     {
+       call_out("check_time",60);
+       return 1;
+     }
+    if (environment(this_object()))
+   message_vision(MAG"$N眼见情况不妙，大叫一声，溜了。\n"NOR,
+          this_object());
+   remove_call_out("check_time");
+   destruct (this_object());
+}
+
+
+void die ()
+{
+    int pot,exp;
+    object killerob,me;
+    mixed questob;
+    me=this_object();    
+    killerob=me->query_temp("last_damage_from");
+                    
+    questob=(object)me->query_temp("player"); 
+   if(!questob) return;
+    questob->set_temp("kill",0); 
+    if (!killerob) 
+    {   
+        message_vision("$N惨叫一声，死了。\n",this_object());
+        tell_object(questob,"你得到了零点经验和零点潜能！\n"NOR);
+        destruct(me);
+        return;    
+    }
+    else if (killertemp)
+     {
+        if (killertemp!=killerob)
+          {
+             message_vision("$N惨叫一声，死了。\n",this_object());
+             tell_object(questob,"你得到了零点经验和零点潜能！\n"NOR);
+             destruct(me);
+             return;    
+          }
+     } 
+    if (killerob->query("id")!=questob->query("id"))
+    {  
+       message_vision("$N惨叫一声，死了。\n",this_object());
+        tell_object(questob,"你得到了零点经验和零点潜能！\n"NOR);
+       destruct(me);
+       return; 
+    }
+/*
+    switch(random(4))
+     {
+       case 1: message_vision("$N惨叫一声，死了。\n",this_object());break;
+       case 2: message_vision("$N惨叫一声，死了。\n"
+               questob,this_object());break;
+       case 3: message_vision("$N惨叫一声，死了。\n"
+               questob,this_object());break;
+       default :message_vision("$N惨叫一声，死了。\n",questob,this_object());
+     }
+*/
+    message_vision("$N惨叫一声，死了。\n",this_object());
+    pot=me->query_temp("killrewardpot")/2;
+    exp=me->query_temp("killrewardexp");
+/*************************************************/
+if (exp>MAX_EXP) exp=MAX_EXP; 
+if (pot>MAX_POT) pot=MAX_POT;
+    questob->add("potential",pot);
+    questob->add("combat_exp",exp);
+    tell_object(questob,"你得到了"+HIW+
+    chinese_number(exp)+NOR"点经验和"+HIW+chinese_number(pot)+NOR"点潜能\n");
+    destruct(me);
+   
+}
+//不能让别人帮忙打晕怪   
+void unconcious()
+{
+  killertemp=query_temp("last_damage_from");
+  ::unconcious();
+}
+void init()
+{
+    if (is_busy()) return;
+    add_action("do_drive","drive");
+    username=query_temp("killername");
+    if ((int)environment(me)->query("no_fight")) return; 
+    if (this_player()->query("id")!=username)
+     { 
+       add_action("do_kill","team kill");
+                add_action("do_kill","kill");
+                add_action("do_kill","hit");
+                add_action("do_kill","fight");
+                add_action("do_kill","steal");
+                add_action("do_kill","beg");
+                add_action("do_kill","touxi");   
+                add_action("do_kill","persuade");         
+     }   
+}
+
+int do_drive(string arg)
+{
+    mapping exits;
+    string *dirs;
+    int size;
+    if (arg==(string)this_object()->query("id"))
+      {
+        if (environment()->query("no_fight"))
+         {
+           exits=environment()->query("exits");      
+           dirs=keys(exits);
+           size=sizeof(dirs);
+           if (size>0)
+             { 
+              this_player()->command("follow "+this_object()->query("id"));
+              command("go "+dirs[random(size)]);
+              return 1;
+             }
+          }
+       }
+     return 0;
+}
+
+//不是自己的npc不能杀
+int do_kill(string arg)
+{
+        string what,who;
+        if(!arg) return 0;
+        if(this_object()->id(arg))
+        {
+                write("江湖人士，还是少惹为妙。\n");
+                return 1;
+        }
+        else
+        if(sscanf(arg,"%s from %s",what,who)==2 && this_object()->id(who))
+        {
+                write("还是到别处去施展你的本事吧。\n");
+                return 1;
+        }
+        return 0;
+}
+
+

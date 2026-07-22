@@ -1,0 +1,28 @@
+// yuxiao.c
+#include <ansi.h>
+#include <weapon.h>
+inherit SWORD;
+inherit F_UNIQUE1;
+void create()
+{
+    set_name(HIG "玉萧" NOR, ({"yu xiao","xiao"}));
+    set_weight(15000);
+        if (clonep())
+                set_default_object(__FILE__);
+        else {
+                set("unit", "支");
+                set("long", "一支碧玉做成的长萧，看上去晶莹温润。武林中人经常以萧代剑。\n");
+                set("unique",1);
+                set("no_put",1);
+                set("no_steal",1);
+                set("rigidity",300);
+                set("replica_ob","/d/city/npc/obj/changjian");
+                set("id_id","yu xiao");
+                set("material", "bamboo");
+                set("wield_msg", "$N大袖一挥，手中已多了一支晶莹温润的玉萧。\n");
+                set("unwield_msg", "$N手中玉萧一转，眨眼间玉萧已然不见影踪。\n");
+        }
+        init_sword(350);
+        setup();
+}       
+

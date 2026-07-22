@@ -1,0 +1,61 @@
+#include "init.h"
+inherit BHNPC;
+
+void create()
+{
+        object ob;
+        int myskill;
+        ob=this_player();
+        myskill=ob->query_skill("force");
+        if (myskill<ob->query_skill("unarmed"))
+        myskill=ob->query_skill("unarmed");
+        if (myskill<ob->query_skill("dodge"))
+        myskill=ob->query_skill("dodge");
+        if (myskill<ob->query_skill("sword"))
+        myskill=ob->query_skill("sword");
+        if (myskill<ob->query_skill("parry"))
+        myskill=ob->query_skill("parry");
+        myskill=myskill*2/3;  
+        set_name("杀手", ({ "sha shou", "ss" }) );
+        set("title","无门无派");
+        set("gender", "男性" );
+        set("age", 20 + random(25) );
+        set("long",
+                "这是一位满身黑衣的人，浑身散发着刀锋般凌厉的杀气。\n");
+        set("qi", ob->query("qi")+random(300));
+        set("max_qi", ob->query("max_qi")+random(300));
+        set("jing", ob->query("jing")+random(300));
+        set("neili", ob->query("neili")+random(300));
+        set("max_neili", ob->query("max_neili")+random(300));
+        set("max_jing", ob->query("max_jing")+random(300));
+        set("jiali",myskill/2);    
+        set("str", ob->query("str")+random(20));
+        set("dex", ob->query("dex")+random(20));
+        set("per", ob->query("per"));
+        set("killer",ob->query("id"));
+        set("combat_exp", ob->query("combat_exp")+random(100000));
+        set_skill("dodge", myskill+random(40));
+        set_skill("blade", myskill+random(10));
+        set_skill("force", myskill+random(10));
+        set_skill("xiaowuxiang", myskill+random(10));
+        set_skill("hujia-daofa", myskill+random(10));
+        set_skill("xiaoyaoyou", myskill+random(40));
+        set_skill("parry", myskill+random(30));  
+        set_skill("unarmed", myskill+random(30));  
+        set_skill("jiuyin-baiguzhao", myskill+random(30)); 
+        map_skill("unarmed","jiuyin-baiguzhao"); 
+        map_skill("parry","jiuyin-baiguzhao"); 
+        map_skill("force","xiaowuxiang");
+        map_skill("dodge","xiaoyaoyou");
+        map_skill("blade","hujia-daofa");
+
+        set_leader(ob);
+        set("chat_chance_combat", 30);
+        set("chat_msg_combat", ({
+                (: perform_action, "blade.hu" :),
+        }) );
+        setup();
+        carry_object(__DIR__"obj/blade")->wield();
+        carry_object(__DIR__"obj/tiejia")->wear();  
+}
+

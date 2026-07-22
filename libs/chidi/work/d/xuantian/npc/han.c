@@ -1,0 +1,89 @@
+//han.c  by:pipip
+inherit NPC;
+string ask_me();
+void create()
+{
+    set_name("寒真", ({ "han zhen","han","zhen"}) );
+    set("gender", "男性" );
+    set("age", 25);
+    set("long", "无名老人的唯一传人--寒真，据说他已得到无名老人七成真传。\n");
+    set("attitude", "peaceful");
+    set("shen_type", -1);
+    set("nickname", HIC "寒山飞"HIW"雪" NOR);
+    set("str", 110);
+     set("no_suck", 1);
+    set("int", 90);
+    set("con", 90);
+    set("dex", 90);
+    set("per", 25);
+    set("max_qi", 6500000);
+    set("max_jing", 6500000);
+    set("jing",6500000);
+    set("neili", 6500000);
+    set("max_neili", 6500000);
+    set("jiali",1000);
+    set("jh_dj/dj",50);
+    set("combat_exp", 1650000000);
+    set("score", 20); 
+    set_skill("force", 4000);
+    set_skill("dodge", 4000);
+    set_skill("unarmed", 4000);
+    set_skill("parry", 4000);
+    set_skill("blade",4000);
+    set_skill("taixuan-gong",4000);
+    set_skill("lingyunbu", 4000);
+    set_skill("cuixin-zhang", 5000);
+    set_skill("tianxin-blade", 5000);
+    map_skill("force", "taixuan-gong");
+    map_skill("dodge", "lingyunbu");
+    map_skill("parry", "cuixin-zhang");
+    map_skill("unarmed", "cuixin-zhang");
+    map_skill("blade", "tianxin-blade");
+      set_temp("apply/defense1", 1000);
+   set_temp("apply/attack1",  8000);
+   set_temp("apply/damage",100);
+   set_temp("apply/armor", 15000);
+    create_family("玄天派",2,"大弟子");
+        set("chat_chance_combat", 99);
+        set("chat_msg_combat", ({
+                (: perform_action, "unarmed.pai" :),
+                (: perform_action, "unarmed.pai" :),
+                (: exert_function, "recover" :),
+        }) );
+   // set("inquiry", ([
+    //  "银鳞镖":(:ask_me:),
+    //]) );
+   // set("biao_count", 1);
+        setup();
+
+    carry_object("/d/xuantian/obj/cloth")->wear();
+    carry_object("/d/xuantian/obj/xblade")->wield();
+}
+
+
+int hit_ob(object me, object ob, int damage)
+{
+       if ((string)ob->query("family/master_id") != "wuming laoren") {
+              ob->apply_condition("cuixin_poison", 60000000
+              +(int)ob->query_condition("cuixin_poison") );
+   tell_object(ob, HIB "寒真的招式带出一股摧心掌毒，迎面一股寒气向你扑来！！\n" NOR );
+        }
+}
+/*
+string ask_me()
+{
+    object me,ob;
+    ob=this_player(); 
+      if ((string)ob->query("family/master_id") != "wuming laoren")
+        return "你是何人？";  
+    if (query("biao_count") < 1)
+        return "你来晚了，那只银鳞飞镖我已经赠送给别入了。";   
+    add("biao_count", -1);                  
+    command("say 嗯，我身上的确藏有师傅为师娘所制的银鳞飞镖。");
+    command("say 既然你问起来了，你就将它拿去吧。\n");
+    message_vision(HIG"寒真从怀里掏出一枚飞镖，皱了皱眉头，转手交给了$N \n\n"NOR,ob);
+    me=new("d/pipip/biao");
+    me->move(ob);
+    return HIR"此物霸气太重，希望你小心使用，切莫堕入魔道，以免永世不得翻身。\n";
+}
+*/

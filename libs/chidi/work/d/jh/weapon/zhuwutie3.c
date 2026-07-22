@@ -1,0 +1,33 @@
+inherit ITEM; 
+
+void create()
+{
+     set_name(HIR"高级魔睛烛舞铁"NOR, ({ "gjzhuwu tie" ,"zhuwu"}) );
+    set_weight(100);
+    if( clonep() )
+    set_default_object(__FILE__);
+    else {
+         set("unit", "个");                        
+        }
+
+   set("ty_weapon",1);
+   set("no_get",1);
+   set("value",200000);
+   set("money",2);
+   set("no_put",1);
+   set("no_drop",1);
+   set("no_sell",1);
+   //set("no_give",1);
+   set("zhongji_hc",1);
+   set("int",350);
+   set("str",350);
+   set("dex",350);
+   set("con",350);
+   //set("bh",40+random (200));
+   set("damage",20000);
+   set("long", "这是一个差不多绝种的金属，可以用来镶嵌兵器(xiangqian)和合成装备！\n");
+   
+   setup();
+  }
+
+

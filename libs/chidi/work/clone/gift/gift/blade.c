@@ -1,0 +1,30 @@
+#include <ansi.h>
+#include <weapon.h>
+
+//inherit F_UNIQUE;
+inherit BLADE;
+
+void create()
+{
+	set_name( HIR "无情之斩" NOR, ({ "wuqing blade", "blade" }) );
+    set_weight(10000);
+	if( clonep() )
+		set_default_object(__FILE__);
+	else {
+		set("unit", "把");
+		set("no_sell",1);
+                set("no_drop", 1);
+                set("no_give", 1);
+                set("no_put", 1);
+		set("no_zm",1);
+                set("no_paimai",1);
+                   set("long", HIY "此乃战神小夜用他的坐骑慕容小鱼的骨头所炼化而成的利刃。\n" NOR);
+		set("value", 1000);
+		set("material", "brass");
+		set("wield_msg", HIY "\n$N拿出一把无情之斩握在手中，刹那间四周一片肃穆，连天地鬼神也为之震动。\n\n" NOR);
+		set("unwield_msg", HIY "\n$N放下手中的无情之斩，周围的人才喘过一口气来。\n\n" NOR);
+	}
+
+    init_blade(10000);
+	setup();
+}

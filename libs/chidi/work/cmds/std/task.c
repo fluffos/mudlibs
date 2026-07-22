@@ -1,0 +1,23 @@
+// task.c by diabio 
+#include <ansi.h>
+int main(object me, string str)
+{
+	string output;
+        me->add("jing",-5);
+       output = HIR"                  江湖神书榜\n" NOR;
+	output += "———————————————————————————\n";
+	output += TASK_D->dyn_quest_list();
+	output += "———————————————————————————\n\n";
+	me->start_more(output);
+	return 1;
+}
+int help(object me)
+{
+	write(@HELP
+指令格式: task
+相关文件: help tasks
+这个指令是用来得知目前的所有神书.
+HELP
+	);
+     return 1;
+}

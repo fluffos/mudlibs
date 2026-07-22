@@ -1,0 +1,304 @@
+#pragma save_binary
+// 吴天德
+#include <ansi.h>
+
+int alert_gaoshou();
+inherit BHNPC;
+inherit F_MASTER;
+
+void create()
+{
+        set_name("吴天德", ({ "wu tiande", "tiande","wu" }) );
+        set("gender", "男性" );
+        set("shen_type", 1);
+        set("age", 34);
+        set("rank", 6);
+        set("max_neili", 1000);
+        set("neili", 1000);
+        set("force_factor", 20);
+
+        set("rank_info/respect", "偏将军");
+
+        set("long",             
+           "吴天德乃当今朝廷的一员大将，战功赫赫。深的皇上的信任。\n"
+           "因为近来绮云镇强盗横行，因此皇上特派他来坐镇地方。");
+        set("vendetta_mark", "authority");
+        create_family("朝廷", 5, "偏将军");
+        set("class", "officer");
+        set("title", HIY "朝廷六品官 偏将军"NOR );
+          set("combat_exp", 500000);
+  
+          set_skill("unarmed",150);
+          set_skill("parry",180);
+          set_skill("dodge", 180);
+        set_skill("spear",80);
+          set_skill("force",180);
+        set_skill("literate",100);
+        set_skill("leadership",60);
+          set_skill("bahuang-qiangfa",160);
+          set_skill("bawang-force",160);
+          set_skill("luohan-quan",160);
+          set_skill("tiyunzong",160);
+        set_skill("strategy",40);
+   
+        map_skill("unarmed", "luohan-quan");
+        map_skill("force","bawang-force");
+        map_skill("spear", "bahuang-qiangfa");
+        map_skill("parry", "bahuang-qiangfa");
+        map_skill("dodge", "tiyunzong");
+        set("inquiry", ([
+                "前程" : "只要你好好为朝廷出力，他日必能出人头地，去吧。",
+                       ]) );
+
+                set("chat_chance_combat", 90);
+        set("chat_msg_combat", ({
+                (: alert_gaoshou :),
+                (: alert_gaoshou :),
+                (: alert_gaoshou :),
+                        }) );
+
+        setup();
+        carry_object("/obj/weapon/spear")->wield();
+        carry_object(__DIR__"obj/pao")->wear();
+        carry_object("/d/chaoting/jjf/obj/not_real/map0");
+}
+
+
+void init()
+{
+        object ob;
+        ::init();
+if( interactive(ob = this_player()) && !is_fighting() ){
+        remove_call_out("greeting");
+        call_out("greeting", 1, ob);
+       }
+        add_action("do_getorder","getorder");
+}
+
+void greeting(object ob)
+{
+if( !ob || environment(ob) != environment() ) return;
+        if((string)ob->query("family/family_name") != "朝廷"
+           && (int)ob->query("PKS")> 15 )  {
+             command("say 好个沾满血腥的凶徒，竟敢在此撒野，来人!给我拿下!");
+             kill_ob(ob);
+        }
+        else if(ob->query("family/family_name")=="朝廷"){
+            if ((int)this_object()->query("begin")==2
+                && (string)ob->query("family/family_name") == "朝廷"){
+                command("say 汝可愿领命，前去征剿野羊山之土匪。领命(getorder)");
+                return ;
+            }
+            else if(ob->query("rank")!=0&&ob->query("rank")<=query("rank")){
+                // 官比吴天德大。
+                message_vision(CYN"吴天德一见$N进来。立刻迎上前去。\n"
+                                  "吴天德屈膝的向$N赔笑道：大人？什么风把大人您吹来了？\n"
+                                  "小人在这儿给您请安了。。。。。。。\n"NOR,ob);
+                return ;
+             }
+             else
+                message_vision("\n吴天德看到$N闯进来，喝道：尔等如有冤情，可向本官道来!\n\n", ob);
+        }
+else
+        message_vision("\n吴天德看到$N闯进来，喝道：尔等如有冤情，可向本官道来!\n\n", ob);
+}
+
+
+void attempt_apprentice(object ob)
+{
+	if(ob->query("family/family_name")=="朝廷"){
+                command("say 大人不要和卑职开玩笑，卑职怎敢收您为徒呢？");
+                return;
+                }
+       else if( (int)ob->query("combat_exp") > 2100000000){
+         command("say 朝廷只收出身清白之人" + 
+            RANK_D->query_respect(ob) + "的经历似乎不宜为朝廷所用");
+            return;
+        }
+        command("smile");
+        command("say 很好，" + RANK_D->query_respect(ob) + 
+                "只要你好好为朝廷出力，他日必能出人头地，去吧。\n");
+        command("recruit " + ob->query("id") );
+        ob->set("vendetta_mark","authority");
+}
+
+void recruit_apprentice(object ob)
+{
+        if( ::recruit_apprentice(ob) )
+           ob->set("class", "officer");
+           ob->set("title","朝廷七品官 俾将军");
+           ob->set("rank",7);
+}
+ 
+
+int heal_up()
+{
+int t, d, h, m, s;
+
+        t = uptime();
+        s = t % 60;             t /= 60;
+        m = t % 60;             t /= 60;
+        h = t % 24;             t /= 24;
+        d = t;
+
+	if ((int)this_object()->query("begin")==0&& m==50){
+     	    command("family 本县欲荡平野羊山，哪为将军愿意领命！");
+     	    this_object()->set("begin",2);
+        }
+	if (this_object()->query("begin")==1
+    	&& this_object()->query("time")<(int)time()){
+      	    command("family 本次扫平，野羊山的任务失败!");
+     	    this_object()->delete("begin");
+     	    this_object()->delete("ordersd");
+     	}
+        ::heal_up();
+}
+
+int do_getorder()
+{
+         object fu , ob;
+         ob = this_player();
+if (ob->query("can_not_order")==1){
+      command("say 前次尚未回来交令，此次，就不用你去了！不过如果/n
+               你交上这次出征损失的那就再给你一次机会吧。。。/n");
+               return 0;
+     }
+
+
+if ((int)this_object()->query("begin")==2
+    && (string)ob->query("family/family_name") == "朝廷"){
+           ob->set("can_not_order",1);
+           this_object()->set("begin",1);
+           fu=new("/d/chaoting/xianya/npc/obj/bingfu");
+           fu->set("owner",ob->query("id"));
+           fu->set("time",(int)time()+900);
+           this_object()->set("time",(int)time()+900);
+           this_object()->set("ordersb",ob->query("id"));
+           fu->move(ob);
+           command("say 即刻去辽东兵营，领兵出征！");
+           return 1;
+         }
+return 1;
+}
+int accept_object(object who, object ob)
+{
+        int a;
+        string msg;
+        object gold,me;
+        object card,bing;
+        me=this_player();       
+	if (ob->query("id")=="zhi"&&ob->query("real")){
+   	    if(ob->query("owner")==who->query("name")){
+      	        if(ob->query("管辖地")==this_object()->query("管辖地")){
+         	    bing=new("/open/tony/king/bing");
+         	    bing->set("leader",ob->query("owner"));
+         	    bing->move("/u/cloud/dragonhill/shillfoot");
+                    card=new("open/tony/king/token");
+         	    card->set("owner",ob->query("owner"));
+         	    card->move(who);
+	            card=new("open/tony/king/token");
+         	    card->set("owner",ob->query("owner"));
+         	    card->move(who);
+	            card=new("open/tony/king/token");
+         	    card->set("owner",ob->query("owner"));
+         	    card->move(who);
+         	    command("say 臣领旨!吾皇万岁!万万岁!");
+         	    return 1;
+       		}
+      	        else{ 
+         	    command("say 那不是我的管辖地!");
+         	    return 0;
+           	}
+     	   }
+           else {
+     	    command("say 你从哪里偷来的圣旨!!来人哪!拿下!");
+      	    this_object()->kill(who);
+     	    who->kill(this_object());
+     	    return 1;
+           }
+  	return 0;
+  	}
+
+        a=0;
+	if (ob->query("id")=="junling"&& ob->query("owner")==who->query("id")){
+   	    if(ob->query("sha_2")==0) a=a+1;
+   	    if(ob->query("sha_3")==0) a=a+1;
+   	    if(ob->query("sha_4")==0) a=a+1;
+   	    if(ob->query("sha_5")==0) a=a+2;
+   	    if(ob->query("time")>=(int)time()){
+      	        this_object()->delete("begin");
+      	        this_object()->delete("ordersd");
+      		who->add("fealty",a*2);
+      		who->delete("can_not_order");
+      		gold=new("/obj/money/gold");
+      		gold->set_amount(a*3+3); 
+      		gold->move(who);
+      		if(who->query("mark/chaotingtask"))
+         	    who->add("mark/chaotingtask",1);
+      		else who->set("mark/chaotingtask",1);
+         	command("say 做得好，本朝对军功之赐特别优厚，你暂且退下去吧!\n");
+         	call_out( "todest",1,ob ); 
+      		return 1;
+           }
+	   if (ob->query("time")<(int)time()){
+       	        this_object()->delete("begin");    
+                this_object()->delete("ordersd");
+                who->add("fealty",-2);
+                who->delete("can_not_order");
+                command("say 此等事安能，一拖再拖，无用的东西，下去！\n");
+           	call_out( "todest",1,ob ); 
+           	return 1;
+       	  }
+        }
+	if(ob->query("money_id")){
+  	    if ((ob->value()>=50000)&& who->query("can_not_order")==1){
+       		who->delete("can_not_order");
+       		call_out( "todest",1,ob );
+       		this_object()->delete("begin"); 
+       		this_object()->delete("ordersd");  
+       		command("say  这次就算了，下次定罚不饶！\n");
+       		return 1;
+            }
+            msg="吴天德对$N哼了一声，说到：你当我是叫花子打发呀？这么少。\n"
+                "不过算了。大爷我还是收下吧。\n";
+      	    message_vision(HIC+msg+NOR,me);
+      	    return 0;
+  	}
+	else command("say 无用之物，你要来做甚？某家要了！\n"); 
+  	return 0;
+
+ 
+}        
+void todest(object ob)
+{
+       object *bing;
+       int i;
+       destruct(ob);
+       bing = all_inventory(environment(this_object()));
+       for (i=0;i<sizeof(bing);i++)
+       {
+        if(!userp(bing[i])&&bing[i]->query("id")=="bing")
+            destruct(bing[i]);
+       }
+}
+
+int alert_gaoshou()
+{
+       object gaoshou,me;
+           int rank;
+       me=this_object(); 
+           rank=me->query("rank");
+       if( (8-rank)<= me->query_temp("havecalled")  )
+            return 1;    
+       if( !me->is_fighting() )
+            return 1;   
+       message_vision("$N纵声长啸,呼叫援兵。\n", me);     
+       me->receive_damage("sen", 20);
+       me->add_temp("havecalled",1);  
+       seteuid(getuid());
+       gaoshou = new("/obj/npc/gaoshou");
+       gaoshou->move(environment(me));
+       gaoshou->invocation(me);
+       return 1;
+} 
+

@@ -1,0 +1,73 @@
+// xianren.c 闲人
+inherit BHNPC;
+void create()
+{
+        set_name("闲人", ({ "xian ren", "xian" }));
+        set("gender", "男性");
+        set("age", 19);
+        set("nickname",HIW"游手好闲"NOR);
+        set("long", "他是一个成天游手好闲的人，长得高高的，很有钱。\n");
+        
+       
+        set("combat_exp", 10000000);
+        set("shen_type", 0);
+        
+        set("str", 30);
+        set("con", 30);    
+        set("int", 45);
+        set("dex", 35);
+        set("per", 30);
+        
+        set("max_qi", 1000);
+        set("max_jing", 1000);
+        set("neili", 3000);
+        set("max_neili",3000);
+        set("jiali", 100);
+
+        set_skill("unarmed", 200);
+        set_skill("dodge", 200);
+        set_skill("force",200);
+        set_skill("parry",200);
+        set_skill("axe",200);
+        set_skill("sword",200);
+        set_skill("spear",200);
+        set_skill("throwing",200);
+        set_skill("fengxiao-biao",200);
+        set_skill("fengxiao-xinfa",200);
+        set_skill("fengxiao-qiangfa",200);
+        set_skill("fengxiao-jianfa",200);
+        set_skill("fengxiao-shenfa",200);
+        set_skill("fengxiao-axe",200);
+        set_skill("fengxiao-zhang",200); 
+        set_skill("literate",400);
+
+
+
+        map_skill("unarmed","fengxiao-zhang");
+        map_skill("force","fengxiao-sxinfa");
+        map_skill("dodge","fengxiao-shenfa");
+        map_skill("parry","fengxiao-qiangfa");
+        map_skill("throwing","fengxiao-biao");
+        map_skill("axe","fengxiao-axe");
+        map_skill("sword","fengxiao-jianfa");
+        map_skill("spear","fengxiao-qiangfa");
+ 
+
+ 
+        create_family("风啸楼", 4, "弟子");
+        set("title","风啸楼接引使");
+ 
+        
+        setup();
+        carry_object("clone/cloth/female4-cloth.c")->wear();
+        add_money("gold",2);
+}
+void attempt_apprentice(object ob)
+{
+     
+                command("nod") ;
+                command("say 好好学吧！\n");
+                command("haha");
+                command("recruit "+ob->query("id"));                 
+}
+

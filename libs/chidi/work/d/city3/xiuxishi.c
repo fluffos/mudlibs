@@ -1,0 +1,15 @@
+inherit ROOM;
+void create()
+{
+       set("short", "休息室");
+       set("long", @long
+"这里是工厂的休息室。你工作累了，可以在这里休息一会！\n"
+long
+);
+       set("exits", ([
+  "west" : "/d/city3/gongzuoshi"
+  ]));
+   set("no_fight",1);
+   set("sleep_room",1);
+   setup();
+ }

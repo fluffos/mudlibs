@@ -1,0 +1,25 @@
+// throwing.c
+#include <weapon.h>
+#include <ansi.h>
+inherit THROWING;
+void create()
+{
+        set_name("幽冥飞针", ({ "youming zhen", "zhen" }) );
+        if( clonep() )
+                set_default_object(__FILE__);
+        else {
+                set("unit", "束");
+                set("value", 0);
+                set("base_unit", "支");
+                set("base_weight", 300);
+                set("base_value", 0);
+                set("material", "iron");
+                set("long", "针尖隐隐透出兰色，显然有剧毒。\n");
+                set("wield_msg", HIC"$N迅速地从袋中抽出一支幽冥飞针！\n"NOR);
+                set("unwield_msg",HIC"$N将手里的幽冥飞针放回袋中。\n"NOR);
+        }
+       set_amount(20);
+        init_throwing(25);
+        setup();
+}
+

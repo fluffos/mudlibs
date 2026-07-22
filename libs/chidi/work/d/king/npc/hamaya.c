@@ -1,0 +1,121 @@
+// ha maya.c 
+inherit BHNPC;
+inherit F_MASTER;
+void create()
+{
+    set_name("蛤蟆呀", ({ "ha maya", "ha", "maya" }));
+    set("gender", "男性");
+    set("age", 19);
+    set("nickname",HIR"惊雷堂主"NOR);
+    set("long", "他是风啸楼中主管收新弟子，设立刑法和追捕不肖弟子的\n");
+    
+    set("attitude", "peaceful");
+    set("shen_type", 1);
+    set("str", 60);
+    set("int", 80);
+    set("con", 80);
+    set("dex", 230);
+    
+    set("qi", 5000);
+    set("max_qi", 5000);
+    set("jing", 5000);
+    set("max_jing", 5000);
+    set("neili", 10000);
+    set("max_neili", 10000);
+    set("jiali", 300);
+    set("combat_exp", 800000);
+    
+        set_skill("unarmed", 300);
+        set_skill("dodge", 300);
+        set_skill("force",300);
+        set_skill("parry",300);
+        set_skill("axe",300);
+        set_skill("spear",300);
+        set_skill("throwing",300);
+        set_skill("sword",200);
+        set_skill("fengxiao-biao",300);
+        set_skill("fengxiao-xinfa",300);
+        set_skill("fengxiao-qiangfa",300);
+        set_skill("fengxiao-jianfa",300);
+        set_skill("fengxiao-shenfa",300);
+        set_skill("fengxiao-axe",300);
+        set_skill("fengxiao-zhang",300);
+        set_skill("literate",300);
+
+
+
+        map_skill("unarmed","fengxiao-zhang");
+        map_skill("force","fengxiao-xinfa");
+        map_skill("dodge","fengxiao-shenfa");
+        map_skill("parry","fengxiao-qiangfa");
+        map_skill("throwing","fengxiao-biao");
+        map_skill("axe","fengxiao-axe");
+        map_skill("sword","fengxiao-jianfa");
+        map_skill("spear","fengxiao-qiangfa");
+ 
+        create_family("风啸楼", 3, "弟子");
+        set("title","风啸楼堂主");
+        set("accept",1);
+        set("chat_chance", 10);
+       
+        set("inquiry", ([
+        "钱" : "我没钱？\n",
+        "风啸楼" : "gc,e,e,e,u。\n",
+        "拜师" : "好吧！你就Bai我吧\n",
+    ]));
+    set("chat_chance_combat", 60);
+    set("chat_msg_combat", ({
+        (: perform_action, "sword.du" :),
+        (: perform_action, "sword.leishen" :),
+        (: perform_action, "sword.jianqi" :),
+        (: exert_function, "qiqiang" :),
+    }) );
+setup();
+      carry_object("/d/king/npc/obj/zhao.c")->wear();
+    carry_object("/d/king/npc/obj/jian.c")->wield();
+    add_money("coin",2);
+}
+void attempt_apprentice(object ob)
+{
+    if (mapp(ob->query("family"))  &&   (string)ob->query("family/family_name") != "风啸楼")
+    {
+        command("say " + RANK_D->query_respect(ob) + "既然已有名师指点，何必又来拜大爷我呢？");
+        return;
+    }
+    if (((int)ob->query_skill("sword",1) < 150) || ((int)ob->query_skill("fengxiao-jianfa",1) < 150))
+    {
+        command("say 我看" + RANK_D->query_respect(ob) + "的风啸剑法还没学到家吧。");
+        return;
+    }
+    if (((int)ob->query_skill("force",1) < 150) || ((int)ob->query_skill("fengxiao-xinfa",1) < 150))
+    {
+        command("say 我看" + RANK_D->query_respect(ob) + "的风啸心法还没学到家吧。");
+        return;
+    }
+    if (((int)ob->query_skill("dodge",1) < 150) || ((int)ob->query_skill("fengxiao-shenfa",1) < 150))
+    {
+        command("say 我看" + RANK_D->query_respect(ob) + "的风啸身法还没学到家吧。");
+        return;
+    }
+    if ( (int)ob->query_skill("literate",1) < 150)
+    {
+        command("say 我看" + RANK_D->query_respect(ob) + "的读书识字还没学到家吧。");
+        return;
+    }
+    if ((int)ob->query("shen") < 2000)
+    {
+        command("say 我风啸楼乃是堂堂名门正派，对弟子要求极严。");
+        command("say 在德行方面，" + RANK_D->query_respect(ob) +
+            "是否还做得不够？");
+        return;
+    }
+    if ((int)ob->query_int() < 30) {
+        command("say 依我看" + RANK_D->query_respect(ob) + "的资质似乎不适合学我风啸楼绝学？");
+        return;
+    }
+    command("chat* haha") ;
+        command("chat 风啸楼又要出一个绝世高人！\n");
+        command("haha");
+        command("recruit "+ob->query("id"));
+}
+

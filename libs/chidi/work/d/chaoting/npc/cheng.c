@@ -1,0 +1,216 @@
+#pragma save_binary
+// zhixian_jia.c
+#include <ansi.h>
+int alert_gaoshou();
+inherit BHNPC;
+inherit F_MASTER;
+//inherit F_QUEST
+
+void create()
+{
+ set_name("程药发", ({ "cheng yaofa", "cheng yaofa","cheng" }) );
+        set("gender", "男性" );
+        set("shen_type", 1);
+        set("age", 34);
+        set("str", 30);
+        set("con", 30);
+        set("int", 30);
+        set("rank", 5);
+        set("max_neili", 30000);
+        set("neili", 3000);
+        set("force_factor", 80);
+
+        set("rank_info/respect", "荡寇将军");
+
+        set("long",
+      "他就是程药发，扬州现任知府。\n");
+
+        create_family("朝廷", 5, "荡寇将军");
+        set("title", HIY "朝廷五品官 荡寇将军" NOR );
+        set("combat_exp", 8000000);
+ 
+        set_skill("unarmed",300);
+        set_skill("parry",280);
+        set_skill("dodge", 300);
+        set_skill("spear",300);
+        set_skill("force",300);
+        set_skill("literate",100);
+        set_skill("strategy",300);
+       set_skill("leadership",300);
+       set_skill("bahuang-qiangfa",300);
+       set_skill("bawang-force",300);
+       set_skill("luohan-quan",300);
+
+       set_skill("tiyunzong",280);
+        map_skill("unarmed", "luohan-quan");
+        map_skill("force","bawang-force");
+        map_skill("spear", "bahuang-qiangfa");
+        map_skill("parry", "bahuang-qiangfa");
+        map_skill("dodge", "tiyunzong");
+        set("inquiry", ([
+                "前程" : 
+                        "只要你好好为朝廷出力，他日必能出人头地，去吧。",
+                       ]) );
+
+                set("chat_chance_combat", 40);
+        set("chat_msg_combat", ({
+                (: alert_gaoshou :),
+                (: alert_gaoshou :),
+                (: alert_gaoshou :),
+                        }) );
+
+        setup();
+        carry_object("/obj/weapon/spear")->wield();
+       carry_object("/clone/cloth/cloth")->wear();
+}
+
+
+void init()
+{
+         object ob;
+         ::init();
+ if( interactive(ob = this_player()) && !is_fighting() )
+         {
+         remove_call_out("greeting");
+         call_out("greeting", 1, ob);
+         }
+//         add_action("give_quest","quest");
+}
+
+void greeting(object ob)
+{
+if( !ob || environment(ob) != environment() ) return;
+
+if((string)ob->query("family/family_name") != "朝廷")
+        {       
+                if( (int)ob->query("PKS")-ob->query("BCF")*2 > 15 )  
+                {
+                command("say 好个沾满血腥的凶徒，竟敢在此撒野，来人!给我拿下!");
+                kill_ob(ob);
+                }       
+        else 
+            message_vision("\n程知府看到$N闯进来，喝道：尔等如有冤情，可向本官道来!\n\n", ob);
+                }
+else
+                {       
+        if(ob->query("rank")!=0&&ob->query("rank")<=query("rank"))
+                {
+                // 官比程药发大。
+                message_vision(CYN"程药发一见$N进来。立刻迎上前去。程药发屈膝的向$N赔笑道：\n"
+                                                  "大人？什么风把大人您吹来了？小人在这儿给您请安了。。。。\n"NOR,ob);
+                return ;
+            }
+        else
+            message_vision("\n程药发看到$N闯进来，喝道：尔等如有冤情，可向本官道来!\n\n", ob);   
+        }
+}
+
+
+void attempt_apprentice(object ob)
+{
+                string title;                   
+if(ob->query("family/family_name")=="朝廷")
+                {
+        if(ob->query("rank")<=query("rank")) 
+                        command("say 大人不要和卑职开玩笑，卑职怎敢收您为徒呢？");
+              //  else
+                //        {
+                  //      if(ob->query("combat_exp")<500000) 
+                    //            {
+                      //          command("say 你师傅的功夫你还没有练到家，就要来学我的功夫？？");
+                        //        command("say 太心急了吧。。。");
+                          //      }       
+                        else
+                                {
+                        command("smile");
+                    command("say 很好，" + RANK_D->query_respect(ob) + 
+                                "只要你好好为朝廷出力，他日必能出人头地，去吧。\n");
+                                title=ob->query("title");
+                        command("recruit " + ob->query("id") );
+                                ob->set("title",title);
+                        // 因为升官不是靠拜师而升的(在尚书那里升官)，所以不能够改变他的title.
+            // 并且官职也不能够改变。
+                                }
+                        }
+                return;
+                }
+else
+                {
+                command("say 朝廷只收出身清白之人" + 
+                 RANK_D->query_respect(ob) + "的经历似乎不宜为朝廷所用");
+        return;
+        }
+}
+
+void recruit_apprentice(object ob)
+{
+        if( ::recruit_apprentice(ob) )
+           ob->set("class", "officer");
+}
+ 
+int alert_gaoshou()
+{
+       object gaoshou,me;
+           int rank;
+        me=this_object();
+           rank=me->query("rank");
+       if( (8-rank)<= me->query_temp("havecalled")  )
+            return 1;    
+       if( !me->is_fighting() )
+            return 1;   
+       message_vision("$N纵声长啸,呼叫援兵。\n", me);       me->receive_damage("sen", 20);
+       me->add_temp("havecalled",1);  
+       seteuid(getuid());
+       gaoshou = new("/obj/npc/gaoshou");
+       gaoshou->move(environment(me));
+       gaoshou->invocation(me);
+       return 1;
+} 
+// 和命令give 有冲突。换一个不是给quest的npc.
+/*
+int accept_object(object who, object ob)
+{
+                object card,bing;
+if (ob->query("id")=="zhi"&&ob->query("real"))
+                {
+        if(ob->query("owner")==who->query("name"))
+                {
+            if(ob->query("管辖地")==this_object()->query("管辖地"))
+                {
+                bing=new("/open/tony/king/bing");
+                                bing->set("leader",ob->query("owner"));
+                bing->move("/d/jiangnan/sroad12");
+                bing=new("/open/tony/king/bing");
+                                bing->set("leader",ob->query("owner"));
+                bing->move("/d/yangzhou/trace1");
+                card=new("open/tony/king/token");
+                                card->set("owner",ob->query("owner"));
+                card->move(who);
+                card=new("open/tony/king/token");
+                                card->set("owner",ob->query("owner"));
+                card->move(who);
+                card=new("open/tony/king/token");
+                                card->set("owner",ob->query("owner"));
+                card->move(who);
+                command("say 臣领旨!吾皇万岁!万万岁!");
+                return 1;
+                }
+                else
+                        {
+                         command("say 那不是我的管辖地!");
+                 return 0;
+            }
+        }
+        else
+                 {
+                command("say 你从哪里偷来的圣旨!!来人哪!拿下!");
+                this_object()->kill(who);
+                who->kill(this_object());
+                return 1;
+                }
+        }
+        else
+                return 0;
+}
+*/
+

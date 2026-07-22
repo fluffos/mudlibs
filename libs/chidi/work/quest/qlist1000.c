@@ -1,0 +1,43 @@
+mapping *quest = ({
+     ([      "quest":                "旧书",
+                "diff":                 2,
+        ]),
+     ([      "quest":                "粽子",
+                "diff":                 2,
+        ]),
+        ([      "quest":                "布衣",
+                "diff":                 1,
+        ]),
+     ([      "quest":                "啃得精光的鸡腿骨头",
+                "diff":                 2,
+        ]),
+     ([      "quest":                "翡翠豆腐",
+        "diff":                 2,
+        ]),
+     ([      "quest":                "铁锤",
+                "diff":                 2,
+        ]),
+     ([      "quest":                "旧书",
+                "diff":                 2,
+        ]),
+     ([      "quest":                "小烂眼",
+                "diff":                 2,
+        ]),
+
+     ([      "quest":                "臭鸭蛋",
+                "diff":                 3,
+        ]),
+     ([      "quest":                "兔肉",
+                "diff":                 3,
+        ]),
+     ([      "quest":                "五香花生",
+                "diff":                 1,
+        ]),
+     ([      "quest":                BLU "蓝天鹅" NOR,
+                "diff":                 3,
+        ]),
+});
+mapping query_quest()
+{
+        return quest[random(sizeof(quest))];
+}

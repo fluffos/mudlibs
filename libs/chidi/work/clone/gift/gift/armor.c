@@ -1,0 +1,33 @@
+#include <ansi.h>
+#include <armor.h>
+
+//inherit F_UNIQUE;
+inherit ARMOR;
+
+void create()
+{
+        set_name(HIC"战甲"NOR, ({"yuxue armor","zhanjia", "jia", "armor"}));
+        set_weight(3000);
+        if( clonep() )
+                set_default_object(__FILE__);
+        else {
+                set("unit", "件");
+		set("long", "一件用万年天蚕丝穿连灵山翠玉合成江湖之精华制作而成的护甲。\n");
+		set("no_sell", 1);
+                set("no_drop", 1);
+                set("no_zm",1);
+                set("no_give",1);
+		set("no_put", 1);
+                set("no_get", 1);
+                set("no_paimai", 1);		
+                set("material", "crimsonsteel");
+                set("value", 1000000);
+                set("armor_prop/armor", 15000);
+		set("dex", 6000000);
+                set("armor_prop/attack", 5000000);
+                set("armor_prop/parry", 5000000);
+        }
+        setup();
+}
+
+

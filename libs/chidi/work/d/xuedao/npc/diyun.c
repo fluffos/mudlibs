@@ -1,0 +1,56 @@
+#include <ansi.h>
+inherit BHNPC;
+string ask_me();
+void create()
+{
+        set_name("狄云", ({ "di yun", "di", "yun" }));
+        set("long",@LONG
+他就是狄云，不知何时被血刀老祖困在这里，他锐利的眼神中透
+出精湛的内功修为，就是血刀老祖对他也是颇为忌惮。
+LONG
+);
+        set("gender", "男性");
+        set("age", 35);   
+
+        set("attitude", "peaceful");
+        set("shen", 200000);
+        set("str", 30);
+        set("int", 30);
+        set("con", 30);
+        set("dex", 30);   
+        set("max_qi", 8000);
+        set("max_jing", 6000);
+        set("neili", 25000);
+        set("max_neili", 22000);
+        set("jiali", 250);
+        set("combat_exp", 8000000);
+        set("score", 180000);
+
+        set_skill("literate", 400);
+        set_skill("force", 450);
+        set_skill("parry", 450);
+        set_skill("dodge", 450);  
+
+        set("inquiry", ([
+                "乌蚕衣" : (: ask_me:),
+        ]));
+        setup();           
+        carry_object("/d/xuedao/obj/wucanyi")->wear();
+}
+
+string ask_me()
+{
+    object me=this_player(),yi;
+
+    if( me->query("family/family_name")=="血刀门" )
+     return "哼！血刀门的淫僧，你就死了这条心吧！！\n";
+    else
+    if( me->query("shen")<100000 )
+    return "邪魔外道，我不会给你的。\n";
+    if(!objectp(yi=present("wucan yi",this_object())))
+    return "你来晚了，乌蚕衣已经不在我身上了。\n";
+    yi->move(me);
+    return "好吧，乌蚕衣就赠与给你了！\n";
+
+}
+

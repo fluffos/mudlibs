@@ -1,0 +1,26 @@
+// lankepu.c 烂柯谱
+// keinxin 2003.3
+inherit ITEM;
+#include <ansi.h>;
+void create()
+{
+        set_name(HIB"烂柯谱"NOR, ({ "lanke pu", "shu", "pu"}));
+        set_weight(300);
+        if( clonep() )
+            set_default_object(__FILE__);
+        else {
+            set("unit", "本");
+            set("long","一本"HIB"烂柯谱"NOR"，记载的是烂柯山仙人对局。
+功能："HIC"琴棋书画(100--150)"NOR"\n");
+            set("value", 400);
+            set("material", "paper");
+            set("skill", ([
+            "name": "art",    // name of the skill
+            "exp_required": 1000, // minimum combat experience required
+            "jing_cost":    15,// jing cost every time study this
+            "difficulty":  30,// the base int to learn this skill
+            "max_skill":  150,// the maximum level you can learn to
+            "min_skill":   100,// minimun level required
+            ]) );
+        }
+}

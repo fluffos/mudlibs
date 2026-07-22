@@ -1,0 +1,1 @@
+mixed temp(object ob){return armoralias 4  miss feng;}

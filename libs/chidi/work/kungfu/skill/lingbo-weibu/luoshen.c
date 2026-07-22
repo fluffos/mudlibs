@@ -1,0 +1,57 @@
+// luoshen.c 
+#include <ansi.h>
+inherit F_DBASE;
+inherit F_SSERVER;
+void remove_effect(object me, int amount);
+int perform(object me, object target)
+{
+       object obj,tar;
+       string msg;
+       int skill;
+       int i;
+//     if(!me->is_fighting())
+//             return notify_fail("你必须在战斗中施展洛神。\n");
+       if( (int)me->query("neili") < 500  ) 
+                 return notify_fail("你的内力不够。\n");
+       if( (int)me->query_temp("lbwb/luoshen") ) 
+                return notify_fail("你已经在运功中了。\n");
+       if(me->is_busy())
+             return notify_fail("你现在很忙，不能施展洛神。\n");
+       if( (int) me->query_skill("lingbo-weibu",1)<500 )
+             return notify_fail("你的凌波微步不够娴熟，不能施展洛神。\n");
+//       if( (int) me->query_skill("beiming-shengong",1)<200 )
+//             return notify_fail("你的北溟神功不够娴熟，不能施展洛神。\n");
+//     how can others pfm luoshen?
+//       if (me->query_skill_mapped("force") != "beiming-shengong")
+//                return notify_fail("你所使用的内功不对。\n");
+       if (me->query_skill_mapped("dodge") != "lingbo-weibu")
+                return notify_fail("你必须激发凌波微步为轻功。\n");
+         msg = HIC "$N将凌波微步中“动无常则，若危若安，进止难期，若往若还”的要旨发挥得淋漓尽致，翩若惊鸿、婉若游龙。\n"NOR;
+       message_vision(msg, me, target);
+       skill = me->query_skill("lingbo-weibu",1);
+       if( me->query("dali/meet_dy1"))
+       {
+           i= 3*((int)me->query("dex"));
+           if( skill>200) i= 5*((int)me->query("dex"));
+       }else
+       {
+           i= (int)me->query("dex");
+       }
+       if(i>100) i=100;
+       me->add_temp("apply/dexerity", i);
+       me->set_temp("lbwb/luoshen", 1);
+       me->set_temp("double_attack", 1);
+       me->add("neili", -200);
+       me->start_call_out( (: call_other, this_object(), "remove_effect", me, i :), skill/2);
+       return 1;
+}
+void remove_effect(object me, int amount )
+{
+        if (objectp(me)) {
+                me->add_temp("apply/dexerity", - amount);
+                me->delete_temp("lbwb/luoshen");
+                tell_object(me, HIW"你脚步踏遍六十四卦一个周天，神定气闲,不知不觉中内力有所积累。\n" NOR);
+                me->add("neili", random(200));
+                me->delete_temp("double_attack");
+        }
+}

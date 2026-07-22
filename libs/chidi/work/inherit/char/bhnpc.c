@@ -1,0 +1,375 @@
+#include <ansi.h>
+inherit NPC;
+
+mapping sites = ([
+"shashou" :      "杀手楼",
+"baituo"  :      "白驼山",
+"emei"    :      "峨嵋派",
+"kunlun"  :      "昆仑派",
+"wudujiao":      "五毒教",
+"yihua"   :      "移花宫",
+"lingjiu" :      "灵鹫宫",
+"xuedao"  :      "血刀门",
+"xueshan" :      "雪山寺",
+"xingxiu" :      "星宿派",
+"honghua" :      "红花会",
+"city2"   :      "天地会",
+"mr"      :      "姑苏慕容",
+"city"    :      "丐  帮",
+"taohua"  :      "桃花岛",
+"huashan" :      "华山派",
+"dali"    :      "大  理",
+"shenlong":      "神龙教",
+"lingxiao":      "灵宵城",
+"bianliang":     "汴梁城",
+"changan" :      "长安城",
+"city3"   :      "成都城",
+"feitian" :      "日  本",
+"gumu"    :      "古墓派",
+"guanwai" :      "关  外",
+"hainan"  :      "海南派",
+"heimuya" :      "黑木涯",
+"kaifeng" :      "开封城",
+"lingxiao" :     "凌霄城",
+"hengshan" :     "恒山派",
+"henshan"  :     "衡山派",
+"king"     :     "风啸楼",
+"mingjiao" :     "明  教",
+"nanyang"  :     "南阳城",
+"shaolin"  :     "少林派",
+"quanzhen" :     "全真教",
+"quanzhou" :     "泉州城",
+"shushan"  :     "蜀山派",
+"songshan" :     "嵩山派",
+"taishan"  :     "泰  山",
+"taohuacun":     "桃花村",
+"tianlongsi":    "天龙寺",
+"tongchi"  :     "通吃帮",
+"txm"      :     "铁血盟",
+"wudang"   :     "武当派",
+"wudie"    :     "舞蝶派",
+"wugongzhen":    "武功镇",
+"xiakedao" :     "侠客岛",
+"xiangyang":     "襄阳城",
+"xiaoyao"  :     "逍遥派",
+"yandang"  :     "雁荡派",
+]);
+
+void setup() 
+{
+
+        set("zhengzhao",1+random(3));
+        ::setup(); 
+        call_out("init_npc",2,this_object()); 
+} 
+
+void init_npc(object ob)
+{
+        string area_file;
+        object area;
+
+        if( !objectp(ob) || !environment(ob) ) return;
+        set("max_zhongcheng",90+random(10)); 
+        set("zhongcheng",11+random(21));
+
+        area_file=domain_file(base_name(environment(ob)));
+        if( stringp(area_file) && member_array(area_file,keys(sites))!=-1 )
+        {
+            ob->set("area",sites[area_file]);
+            ob->set("area_file",base_name(environment(ob)));
+            area=new("/clone/misc/area");
+            area->create(sites[area_file]);
+            if( area->query("banghui") )
+            {    
+                set("no_clean_up",1);
+                set("banghui/name",area->query("banghui"));
+                set("zhongcheng",area->query("zhongcheng"));
+            }
+            set("kaifa",area->query("kaifa"));
+            set("jizhi",area->query("jizhi"));
+            destruct(area);            
+        }
+        return;
+}
+
+int do_join(object who);
+
+int accept_object(object who,object obj)
+{
+        mapping data;
+        string stuffid,stuffname,*what;
+
+        if( !query("zhengzhao") ) return 0;
+/*
+        if( !who->query("banghui/name")) 
+        {
+                command("say 即然"+RANK_D->query_respect(who)
+                +"如此客气，那我就收下了。\n");
+                return 1;
+        }
+
+        if( who->query("banghui/name") == query("banghui/name"))
+        {
+                command("say 都是帮中兄弟，何必如此客气？\n");
+                return 0;
+        }
+*/
+        if( query("zhengzhao") == 1 )
+        {
+                command("say "+RANK_D->query_self(this_object())
+                +"只对武功感兴趣，其他一概免谈。\n");
+                return 0;
+        } else
+        if(query("zhengzhao") == 2 )
+        {
+           if(query_temp("zhengzhao/who") != who )
+           {
+             command("say 无功不受禄，不知"+RANK_D->query_respect(who)
+                     +"给我"+obj->query("name")+"有何用意？\n");
+             return 0;
+           }
+           if(!obj->query("money_id"))
+           {
+             command("say "+RANK_D->query_self_rude(this_object())
+                     +"只对钱有兴趣，你的破玩意自己留着吧。\n");
+             return 0;
+           }
+           if(obj->value() < query_temp("zhengzhao/money") * 10000 )
+           {
+             command("say 我不是说过了吗？"+chinese_number(query_temp("zhengzhao/money"))
+                        +"两黄金，少一个子也不行！\n");
+             return 0;
+           }
+
+           if(query("banghui") && query("zhongcheng") > who->query_per())
+           {
+              command("say 若是收了你的钱，我如何对得起帮中其他弟兄？\n");
+              return 0;
+           }
+
+           return do_join(who);
+        } else
+        if(query("zhengzhao")==3)
+        {
+           data=query_temp("zhengzhao/who");
+           if( !mapp(data) ) data=([]);
+           what=keys(data);
+
+           if(member_array(who->query("id"),what) == -1 )
+           {
+              command("say 你我素不相识，为何给"+RANK_D->query_self(this_object())
+                        +obj->query("name")+"？\n");
+              return 0;
+           }
+
+           sscanf(data[who->query("id")],"%s:%s",stuffid,stuffname);
+
+           if(stuffname != obj->query("name") || stuffid != obj->query("id"))
+           {
+              command("say "+RANK_D->query_respect(who)+"，我想要的是"
+                      +stuffname+"("+stuffid+")，不是"+obj->query("name")
+                      +"("+obj->query("id")+")！\n");
+              return 0;
+           }
+
+           if(query("banghui") && query("zhongcheng") > who->query_per() )
+           {
+              command("say 若是收了你的东西，我如何对得起帮中其他弟兄？\n");
+              return 0;
+           }
+
+           return do_join(who);
+        }
+}
+
+int do_join(object who)
+{
+        object lp_me,lp_who;
+        object area;
+        string bh_me,bh_who;
+        mapping data;
+
+        if( !bh_who = who->query("banghui/name") )
+        {
+           command("say 咦？你没有加入帮会，那我如何加入呢？\n");
+           return 0;
+        }
+
+        if( bh_who == query("banghui/name") )
+        {
+           command("say 咱们都是同帮弟兄，有事好商量嘛。\n");
+           return 0;
+        }
+
+        if( sizeof(children(base_name(this_object())+".c")) > 2 
+            || base_name(environment(this_object())) != query("area_file") )
+        {
+           command("say "+RANK_D->query_self_rude(this_object())+
+                   "身体不适，有事下次再说吧。\n");
+           return 0;
+        }
+
+        lp_who=new("/clone/misc/lingpai");
+        lp_who->create(bh_who);
+
+        if(lp_who->query("no_use"))
+        {
+           destruct(lp_who);
+           command("say 你的帮会文件有问题，快与巫师联系吧。\n");
+           return 0;
+        }
+
+        data=lp_who->query("npc");
+
+        if(!mapp(data)) data=([]);
+        data+=([query("id"):query("name")]);
+
+        lp_who->set("npc",data);
+
+
+        if(!undefinedp(who->query("banghui/quest"))
+           && who->query("banghui/quest") == 4 )
+        tell_object(who,"你的任务已经完成，快回去交差吧。\n");
+        else who->add("banghui/quest",1);
+
+        if( query("area") && query("area_file") )
+        {
+            data=lp_who->query("area");
+            if(!mapp(data)) data=([]);
+            data += ([query("area"):query("area_file")]);
+            lp_who->set("area",data);
+
+            area=new("/clone/misc/area");
+            area->create(query("area"));
+            area->set("banghui",bh_who);
+            area->set("npc",this_object()->query("id"));
+            area->set("npc_room",base_name(environment(this_object())));
+            if( query("kaifa") && query("jizhi") )
+            {
+                area->set("kaifa",query("kaifa") );
+                area->set("jizhi",query("jizhi") );
+            }
+            area->save();
+            destruct(area);
+        }
+        lp_who->save();
+        destruct(lp_who);
+
+        if( stringp(bh_me = query("banghui/name")) )
+        {
+            lp_me=new("/clone/misc/lingpai");
+            lp_me->create(bh_me);
+            if( !lp_me->query("no_use"))
+            {
+              if( query("area") && query("area_file") )
+              {
+                  data=lp_me->query("area");
+                  if(! mapp(data)) data=([]);
+                  map_delete(data,query("area"));
+                  lp_me->set("area",data);
+                  data=lp_me->query("npc");
+                  if(! mapp(data)) data=([]);
+                  map_delete(data,query("id"));
+                  lp_me->set("npc",data); 
+
+                  lp_me->save();
+                  destruct(lp_me);
+              }
+            }
+
+        }
+
+        set("banghui/name",bh_who);
+        add("zhongcheng",(query("max_zhongcheng")-query("zhongcheng"))*10/100);
+        set("no_clean_up",1);
+
+        if( query_temp("zhengzhao")) delete_temp("zhengzhao");
+
+        command("say 既然"+RANK_D->query_respect(who)+"如此看得起"
+        +RANK_D->query_self(this_object())+"，那我也不能对不起你啊。\n");
+
+        message_vision("$N决定加入帮会「"+bh_who+"」！\n",this_object());
+
+        message("channel:rumor",HIM"【谣言四起】某人："+query("name")+
+        "加入帮会「"+bh_who+"」！\n"NOR,users());
+
+        if( query("area") && query("area_file"))
+        message("channel:rumor",YEL"【谣言四起】某人："+query("area")+
+        "被帮会「"+bh_who+"」吞并！\n"NOR,users());
+
+        return 1;
+}
+
+void die()
+{
+        int kaifa;
+        int kf;
+        string banghui;
+        object area;
+
+        if(base_name(environment(this_object())) != query("area_file"))
+        return ::die();
+
+        if(! stringp(banghui=query("banghui/name")))
+        return ::die();
+
+        area=new("/clone/misc/area");
+        area->create(query("area"));
+        if(area->query("no_use"))
+        {
+                destruct(area);
+                return ::die();
+        }
+
+        kaifa=area->query("kaifa");
+        kf=query("kaifa");
+        if( kf==kaifa)
+        {
+                destruct(area);
+                return ::die();
+        }
+
+        kaifa=kaifa-(random(10)+1);
+        if(kaifa<=kf) kaifa=kf;
+
+        area->set("kaifa",kaifa);
+        area->save();
+        destruct(area);
+
+        message("channel:rumor",
+                YEL"【谣言四起】某人：由于"+query("name")+
+                "被杀，"+query("area")+"的开发度降为"+kaifa
+                +"！\n"NOR,users());
+        return ::die();
+}
+
+int accept_fight(object ob)
+{
+        object me;
+        mapping hp_status;
+        int i, temp;
+        me = this_object();
+        if (is_fighting()) return 0;
+                
+        hp_status = ob->query_entire_dbase();
+                set("no_suck",1);
+                me->set("str", hp_status["str"]/2);
+                me->set("int", hp_status["int"]/2);
+                me->set("con", hp_status["con"]/2);
+                me->set("dex", hp_status["dex"]/2);
+
+                me->set("max_qi",    hp_status["max_qi"]);
+                me->set("eff_qi",    hp_status["eff_qi"]);
+                me->set("qi",        hp_status["qi"]);
+                me->set("max_jing",  hp_status["max_jing"]);
+                me->set("eff_jing",  hp_status["eff_jing"]);
+                me->set("jing",      hp_status["jing"]);
+                me->set("max_neili", hp_status["max_neili"]);
+                me->set("neili",     hp_status["neili"]);
+                me->set("jiali",     hp_status["jiali"]);
+                me->set("combat_exp",hp_status["combat_exp"]+random(20000));
+
+        return 1;
+
+}
+

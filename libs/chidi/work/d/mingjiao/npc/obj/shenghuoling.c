@@ -1,0 +1,91 @@
+#include <ansi.h>
+#include <weapon.h>
+inherit SWORD;
+inherit F_UNIQUE1;
+void create()
+{
+        set_name(HIR"圣火令"NOR, ({ "shenghuo ling", "ling" }));
+        set_weight(5000);
+        if (clonep())
+                set_default_object(__FILE__);
+        else {
+                set("unit", "枚");
+                set("long", 
+BLK"这是一枚圣火令，看起来黑黑的毫不起眼，上面密密麻麻刻满了波斯文字。\n"NOR);
+                set("value", 1000000);
+                set("unique",1);
+                set("rigidity",300);  
+                set("no_steal",1);
+                set("no_put",1);
+                set("wield_neili", 300);
+                set("wield_maxneili", 700);
+                set("wield_str", 22);
+                set("replica_ob","/d/mingjiao/npc/obj/tieyanling");   
+                set("material", "steel");
+                set("wield_msg", "$N从怀里掏出一枚$n握在手中。\n");
+                set("unwield_msg", "$N将手中的$n收回怀中。\n");
+        }
+        init_sword(300);
+        setup();
+} 
+
+void init()
+{
+   object ob=this_object(),env;  
+   env=environment(ob);
+
+   if( env->is_character() && (time() - ob->query("rumor_time")>2))
+   {
+    ob->set("rumor_time",time());
+    message("channel:rumor",HIM"【江湖传闻】据说"+env->query("name")
+    +HIM"得到"NOR+ob->query("name")+HIM"啦！\n"NOR,users());
+   } else
+   if( !env->is_character() && (time() - ob->query("rumor_time")>2))
+   {
+    ob->set("rumor_time",time());
+    message("channel:rumor",HIM"【江湖传闻】据说"+ob->query("name")
+    +HIM"在"+env->query("short")+HIM"中出现了！\n"NOR,users());
+   }   
+   add_action("do_study","yanxi");
+}
+
+int do_study(string arg)
+{
+   object me=this_player();
+
+   if(!arg || arg!="shenghuo ling" && arg!="ling") 
+     return notify_fail("你要读什么？\n");
+
+   if(me->query("jing")<100)
+     return notify_fail("你现在太累了休息一会吧！\n");
+
+   if(me->is_busy())
+     return notify_fail("你现在正忙着呢！\n");
+
+   if(!me->is_fighting())
+     return notify_fail("圣火令必须在战斗研读！\n");
+
+   if(me->query_skill("qiankundanuoyi",1)<250
+      || me->query("family/family_name")!="明教")
+     return notify_fail("你读了一阵，发现一无所获，只好放弃了！\n");
+
+   message_vision(
+   BLU"$N默记口诀，口中喃喃念到：“需前乃右，应左则后，三虚七实，乾坤倒置....”"
+   +"\n一边游斗，一边揣摩圣火令上的符号含义。\n"NOR,me);
+   if(random(5)>1)
+   {
+    message_vision(HIW"猛然间，$N面露喜色，看来似乎领悟到了什么。\n"NOR,me);
+    me->improve_skill("qiankundanuoyi",(int)me->query_int()*(10+random(5)));
+    me->start_busy(random(3));
+    me->add("jing",-60);
+    return 1;
+   } else
+   {
+    message_vision(HIR"糟糕，$N一不小心走错了方位，后心重重挨了一记！\n"NOR,me);
+    me->start_busy(random(3));
+    me->add("jing",-60);
+    me->recieve_damage("qi",50+random(50));
+    return 1;
+   }
+}
+

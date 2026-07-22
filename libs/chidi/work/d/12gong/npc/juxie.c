@@ -1,0 +1,213 @@
+//黃金第四宮守護者
+//死亡隨機掉祝福寶石
+inherit BHNPC;
+#include "star.h"
+ 
+void create()
+{
+        set_name("阿提米斯", ({"adimis", "ju xie"}));
+        set("long", "传说中的月亮女神－阿提米斯，守护着巨蟹座。\n");
+        set("gender","女性");
+        set("title", "【月亮神】");
+        set("age",37);
+        set("con",30);
+        set("spi",40);
+        set("per",30);
+        set("str",25);
+        set("int",35);
+        set("no_suck",1);
+        set("combat_exp",1600000000);
+        set("dex",450000);
+        set("chat_chance",50);
+        
+        set("attitude", "peaceful");
+        set_skill("dodge", 2005250);
+        set_skill("force", 2005250);
+        set_skill("parry", 2005250);
+        set_skill("unarmed", 2005250);
+        set_skill("sword", 2005250);
+        set_skill("westsword",2005250);
+        set_skill("boxing",2005250);
+        set_skill("piaomiao-shenfa",2005200);
+        set_skill("taixuan-gong",2005200);
+        set_skill("balei",2005250);
+        set_skill("spells",2005250);
+        set_skill("jinniu", 2005250);
+        map_skill("sword","westsword");
+        map_skill("unarmed","boxing");
+        map_skill("spells","jinniu");
+        map_skill("force","taixuan-gong");
+        map_skill("dodge","piaomiao-shenfa");
+        set("max_jingli", 4000000);
+        set("jingli", 2100000000);
+        set("max_neili", 4000000);
+        set("neili", 2100000000);
+        set("max_qi", 800000000);
+        set("max_jing", 800000000);
+        set("jiali",2000000);
+        set_temp("apply/defense1", 30);
+        setup();
+        carry_object(__DIR__"obj/jx_cloth")->wear();
+        carry_object("/d/obj/weapon/sword/westsword")->wield();
+}
+void init()
+{
+        add_action("do_kill","kill");
+        add_action("do_none","perform");        
+        add_action("do_none","conjure");
+        add_action("do_none","cast");
+        add_action("do_none","halt");
+        add_action("do_none","teamkill");//
+        add_action("do_none","touxi");//
+        add_action("do_none","ansuan");//
+}
+int do_none()
+{
+        object me = this_object();
+        message_vision("$N冷笑一声：我乃$N，你想耍什么花样？\n",me);
+        return 1;
+} 
+int do_kill()
+{
+        object me = this_object();
+        object ob = this_player();
+        //if( pointerp(ob->query_team()) && ob->is_team_leader())//必须组队并且是队长
+        //{
+        set_temp("my_killer",ob);
+//copy对方的特殊攻击和防御等属性
+         if (ob->query_temp("apply/defense1"))
+        me->set_temp("apply/defense1",ob->query_temp("apply/defense1"));
+         if (ob->query_temp("apply/attack1"))
+        me->set_temp("apply/attack1",ob->query_temp("apply/attack1"));  
+         if (ob->query_temp("apply/dodge"))
+        me->set_temp("apply/dodge",ob->query_temp("apply/dodge"));  
+          if (ob->query_temp("apply/force"))
+        me->set_temp("apply/force",ob->query_temp("apply/force"));
+        return 0;
+        //   }else{
+        //message_vision("$N冷笑一声：只有队伍的队长才由资格杀我，你想耍什么花样？\n",me);
+        //return 1;
+       //}
+} 
+ 
+void check()
+{
+        object ob=this_object();
+        object me=query_temp("my_killer");
+        if( ! me ) return ;
+   if(! present(me,environment()) )
+     {
+     remove_call_out("check");
+     if(ob)
+         destruct(ob);
+     return;
+     }                               
+ if( me->is_ghost() )
+     {
+     remove_call_out("check");
+     return;
+     }
+//copy对方的特殊攻击和防御等属性
+       if (me->query_temp("apply/defense1"))
+           ob->set_temp("apply/defense1",me->query_temp("apply/defense1"));
+       if (me->query_temp("apply/attack1"))
+           ob->set_temp("apply/attack1",me->query_temp("apply/attack1"));  
+       if (me->query_temp("apply/dodge"))
+           ob->set_temp("apply/attack1",me->query_temp("apply/dodge"));
+       if (me->query_temp("apply/force"))
+           ob->set_temp("apply/force",me->query_temp("apply/force"));   
+
+     switch(random(6))
+
+     {        
+        case 0:
+        {
+        message_vision(HIC"$N高举双手，$n的面前忽然出现了万丈波浪！\n",ob,me);
+
+        if(random(3)==0)
+
+                {
+              message_vision(HIC"$N被波浪冲了个大踉镪，差点摔倒！\n"NOR,me);
+              me->receive_wound("qi", query("max_neili")/5);
+              me->receive_wound("jing", query("max_jingli")/10);
+                }
+        else
+        message_vision(HIC"$N一声轻笑，躲开了这万丈波浪。\n"NOR,me);
+        }
+        break;
+
+
+        case 1:
+        {
+
+        message_vision(HIC"$N眼望天空，一轮圆月忽然出现在$n的面前！\n",ob,me);
+
+        if(random(3)==0)
+
+                {
+              message_vision(HIC"原来这一轮圆月竟锋利无比，$N的身上被划了一大血口！\n"NOR,me);
+              me->receive_wound("qi", 2*query("max_neili")/5);
+              me->receive_wound("jing", 2*query("max_jingli")/10);
+                }
+        else
+        message_vision(HIC"$N躲避及时，圆月在地上嘣出了一道裂痕。\n"NOR,me);
+        }
+        break;
+
+        case 2:
+        {
+
+        message_vision(HIC"$N口念咒语，一只巨蟹从天而降，落在$n的面前。\n",ob,me);
+                              
+        if(random(3)==0)
+
+                {
+              message_vision(HIR"巨蟹伸出一双大铁钳，夹住了$N！\n"NOR,me);
+              me->start_busy(1);
+              me->receive_wound("qi", 2*query("max_neili")/5);
+              me->receive_wound("jing", 2*query("max_jingli")/10);
+                }
+        else
+        message_vision(HIR"$N定睛一看，原来是个幻象！\n"NOR,me,ob);
+        }
+        break;
+
+  }
+        if( random(8) == 5 )
+        powerup();
+
+        remove_call_out("check");
+        call_out("check",2+random(3));
+}
+void die()
+{
+        string *dir,file;
+        object equip;
+        object killer;
+        object me=this_object();
+        object ob = query_temp("my_killer");
+
+        if( ob && random(30) < 1 )
+        { 
+           dir = get_dir("/clone/misc/newitem/item/");
+           file = "/clone/misc/newitem/item/"+dir[random(sizeof(dir))];      
+           equip = new(file);
+               if( objectp(equip) )
+               {
+                 equip->change_ob(me,ob);
+                 equip->move(ob);
+                 tell_object(all_inventory(environment(me)),
+                             BLINK+HIB"只听“哐铛”一声，好象一样东西从"
+                             +me->name()+"的尸体中掉了出来···\n"NOR);
+                 tell_object(all_inventory(environment(me)),
+                             HIW+ob->name()+"看见了稀世珍宝"HIW+equip->name()+HIW+"从"HIW+me->name()+"身上掉下，立刻把它拣了起来！\n" NOR);            
+            }
+         }
+        ob->start_busy(3);
+        killer=new("/d/12gong/npc/shizi"); 
+        killer->move("/d/12gong/shizi"); 
+        message("chat",HIY+"【黄金十二宫】雅典娜(Ya dian na):"+ob->name()+
+        "闯过了第四宫巨蟹座，继续向黄金战士前进。\n"NOR,users()); 
+        ob->add("12gong/number",1);       
+       ::die();
+}

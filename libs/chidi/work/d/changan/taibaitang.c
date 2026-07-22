@@ -1,0 +1,18 @@
+// This is a room made by wsl.
+#include <room.h>
+inherit ROOM;
+void create()
+{
+    set("short", "太白堂");
+    set("long", @LONG
+闻名遐迩的“诗仙”李白
+LONG
+    );
+    set("exits", ([
+         "south" :__DIR__"ca6",
+         "east" :__DIR__"ca7",
+    ]));
+    create_door("south", "后门", "north", DOOR_CLOSED);
+    setup();
+    replace_program(ROOM);
+}

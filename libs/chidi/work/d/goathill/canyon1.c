@@ -1,0 +1,24 @@
+#pragma save_binary
+// Room: /d/goathill/canyon1.c
+
+inherit ROOM;
+
+void create()
+{
+	set("coor",({120,5140,50}));
+	set("short", "峡谷");
+	set("long",
+"你现在正走在一条狭长的峡谷之中，东西两边都是高不可攀的峭\n"
+"壁，一根五、六丈宽的石梁正横跨在你头顶的谷口，看起来摇摇\n"
+"欲坠，万一掉下来只怕当场就会被压成一个肉饼，往南就是峡谷\n"
+"的出口，峡谷谷底的地面看起来像是乾涸的山涧，弯弯曲曲往北\n"
+"通入峡谷深处。\n"
+);
+	set("exits", ([ /* sizeof() == 2 */
+		"northdown" : __DIR__"canyon2",
+		"south" : __DIR__"mroad6",
+]));
+
+	setup();
+	replace_program(ROOM);
+}

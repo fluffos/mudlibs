@@ -1,0 +1,65 @@
+// diabio(青云)2001.2.4
+#include <ansi.h>
+#include "/d/feitian/npc/cam.h"
+inherit BHNPC;
+inherit F_MASTER;
+#include "/d/feitian/npc/luo.h"
+int ask_kungfu();
+//int kungfu_asked1();
+//int ask_home();
+
+void create()
+{
+	set_name("悠久山安慈", ({ "youjiushan anci", "anci" }));
+	set("nickname",HIC"明王"NOR);
+         set("rank","十刃");
+	set("gender", "男性");
+	set("age", 33);
+            set("dex", 43);
+
+	set("combat_exp", 3200000);
+        set("max_neili",4000);
+        set("neili",4000);
+        set("max_qi",4000);
+        set("eff_qi",4000);
+        set("qi",4000);
+        set("max_jingli",4000);
+        set("eff_jingli",4000);
+        set("jingli",4000);
+
+        set_skill("shayi",100 );
+        set_skill("force", 180);
+        set_skill("dodge", 200);
+                 set_skill("xuanhualiu-quanfa",350);
+                 set_skill("unarmed",350);
+        set_skill("shayi-xinfa",180);
+
+        map_skill("force","shayi-xinfa");
+	map_skill("unarmed","xuanhualiu-quanfa");
+ //      create_party(HIG"十刃成员"NOR,HIW"明王"NOR,6);
+	setup();
+	carry_object("/clone/misc/cloth")->wear();
+            set("inquiry",([
+                    "三重劲" : (: ask_kungfu :),
+                    "学艺" : (: ask_kungfu1 :),
+                    "极限" : (: ask_kungfu2 :),
+                    "绝招" : (: ask_kungfu :),
+ //                   "杀" : (: kungfu_asked1 :),
+//                    "出去" : (: ask_home :),
+
+            ]));
+          set("chat_chance",2);
+          set("chat_msg",({
+              (: exert_function,"heal" :),
+              (: exert_function,"heal" :),
+          }));
+          set("chat_chance_combat",30);
+          set("chat_msg_combat",({
+              (: perform_action,"unarmed.sanchong" :),
+              (: exert_function,"recover" :),
+          }));
+
+          carry_object("/clone/misc/cloth")->wear();
+}
+
+

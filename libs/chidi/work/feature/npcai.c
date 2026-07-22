@@ -1,0 +1,290 @@
+#pragma save_binary
+// npc's AI
+//By rongg@xbtxIII znight@imuxbtx /2000/6/27/
+//inherit CHARACTER;
+object choose_enemy(object who,int which);
+int auto_move(object me,object target);//自动移动,如果输入了target,那么会追逐target
+int test_attack(object me,object target,int mx,int my);//测试me能否在x,y位置攻击到target.
+int test_move(int x,int y);//测试能否移动到x,y位置
+object compare_all_enemy(object *enmey);//比较enemy数组,找到合适的敌人
+
+mixed find_the_best_path(object me,object env,int target_x,int target_y);//该函数首先会寻找出一条路径最短
+//的通向target的道路.同时会返回道路的起始坐标
+static mixed rc;
+
+
+int ai(string type)
+{
+       object me;
+       me=this_object();
+       auto_move(me,0);
+
+}
+/*    int gin,kee,sen;
+        string character;
+        object *enemy,me;
+        
+        me=this_object();
+        gin=me->query("gin");
+        kee=me->query("kee");
+        sen=me->query("sen");
+        character=me->query("attitude");
+        if(stringp(character)&&character=="friend")
+        {
+            if(gin*100/me->query("max_gin")<=25||
+               kee*100/me->query("max_kee")<=25||
+               sen*100/me->query("max_sen")<=25||)
+            {
+                for(i=0;i<sizeof(enemy);i++)
+                {
+                
+                
+                }
+            
+            }
+            
+        }
+
+    疗伤 
+         疗伤条件 gin kee .sen受到伤害.并且在没有被敌人攻击到的情况下
+         如无法疗伤 (内功没有疗伤的功能) 进攻敌人(包括追逐敌人,继续战斗)
+    追逐敌人
+         条件,攻击范围内没有敌人.没有受伤或者只是轻伤,无魔法.
+         无法追逐(无法移动或者被包围),原地不动,继续战斗,等待下一次机会
+}
+*/
+//如果指定target,那么this_object将会自动追击target.如果没有指定,将会
+//随机选一个敌人追击,前提条件是this_object的攻击范围内没有敌人了
+int auto_move(object me,object target)
+{
+        object *enemy,right_enemy;
+        int mx,vx,my,vy,xx,yy,dx,dy,i,j;
+        mixed *xy_coor;
+        string way;
+        //me=this_object();
+        xy_coor=allocate(2);
+
+        if(!me->is_fighting()) return 0;
+        //if(!target){
+        //    target=choose_enemy(target);
+        //    if(!target) return 0;
+       // }
+        enemy=me->query_enemy();
+        mx=me->query_temp("map/x");
+        my=me->query_temp("map/y");
+
+        //if(!test_attack(target,mx,my)){
+             //攻击不到指定的敌人,只好进行移动
+             j=0;
+             for(i=0;i<sizeof(enemy);i++){
+                 if(!objectp(enemy[i])) continue;
+                 if(!environment(enemy[i])||environment(enemy[i])!=environment(me) ) continue;
+                 j++;
+             }
+
+             for(i=0;i<j;i++){
+
+
+                 right_enemy=choose_enemy(me,i);
+
+                 vx=right_enemy->query_temp("map/x");
+                 vy=right_enemy->query_temp("map/y");
+                 xy_coor=find_the_best_path(me,environment(me),vx,vy);//vx,vy反了
+                 //////////////////////////////////////////////////////////
+                 //问题在这里,xy_coor得到的数值永远不变
+                 
+                 if(xy_coor&&xy_coor!=({0,0})) break;
+             }
+             if(!xy_coor||xy_coor==({0,0})) {
+                return 0;
+             	//return "/cmds/std/go.c"->main(me,way);
+             	//return 0;没有能够攻击到的敌人,只好随机移动一步
+             }
+             dx=xy_coor[0];//通向目的地第一步的坐标
+             dy=xy_coor[1];
+             xx=dx-mx;yy=dy-my;
+
+             if(xx<0) way="west";
+             
+             if(xx>0) way="east";
+             
+             if(yy>0) way="south";
+             
+             if(yy<0) way="north";
+             
+             return "/cmds/std/go.c"->main(me,way);
+             
+	   return 0;
+}  
+        //}
+        //else  return 0;
+            //choose_enemy返回的敌人能够被我攻击到.
+        
+//}
+ //敌人的选择,通常都是选择距离我最近并且能够移动过去的经验最低,肉搏攻击最弱.
+object choose_enemy(object who,int which)
+{
+	object *array_enemy,*enemy;
+	int i,mx,my,vx,vy,xx,yy,temp_xy;
+	
+	enemy=who->query_enemy();
+	//test_attack();
+	//test_move();
+	//compare_all_enemy();
+	mx=who->query_temp("map/x");
+	my=who->query_temp("map/y");
+	temp_xy=1000;
+	array_enemy=({});
+	for(i=0;i<sizeof(enemy);i++){
+	    vx=enemy[i]->query_temp("map/x");
+	    vy=enemy[i]->query_temp("map/y");
+	    xx=vx-vy;yy=vy-my;
+	    if(xx<0) xx*=-1; if(yy<0) yy*=-1;
+	    if((xx+yy)<temp_xy){
+	        temp_xy=xx+yy;
+	        array_enemy+=({enemy[i]});
+	    }
+	}
+	if(array_enemy&&array_enemy!=({})){
+
+	return array_enemy[which];
+	}
+	else return 0;
+} 
+
+int test_attack(object me,object target,int mx, int my)//this_object的坐标
+{
+
+        int vx,vy,xx,yy,attack_distance;
+        object weapon;
+        if(!target->is_fighting()) return 0;
+        if(!objectp(target))       return 0;
+        if(!environment(target)||environment(me)!=environment(target)) return 0;
+        
+        vx=target->query_temp("map/x");
+        vy=target->query_temp("map/y");
+        //mx=me->query_temp("map/x");
+        //my=me->query_temp("map/y");
+        if(!vx||!vy) return 0;
+        xx=mx-vx;yy=my-vy;
+        if(xx<0) xx*=-1; if(yy<0) yy*=-1;
+        weapon=me->query_temp("weapon");
+        if(!objectp(weapon)){//空手只能攻击前后左右四个方向
+   	    if((xx>1)||(yy>1)) return 0;//距离超过1,没有贴身
+            if(xx==1&&yy==1)   return 0;//斜方向
+            return 1;
+        }
+        else
+            {
+            attack_distance=weapon->query("attack_distance");
+            if(attack_distance>=2){
+                      if(xx==2&&yy==2)   return 0;//斜方向2格
+                      if(xx>2||yy>2)     return 0;//距离超过2
+                      if(xx==2&&yy!=0||yy==2&&xx!=0) return 0;
+             
+            }
+            else{
+                     if(xx>1||yy>1) return 0;
+            }
+            return 1;
+        }
+        return 0;
+        
+        
+}
+
+//已经测试过能不能移动到目的地.同时返回的xy_coor数组中x,y不能同时>0.
+//该函数会在一个7x7的格子内
+
+mixed find_the_best_path(object me,object env,int target_x,int target_y)
+{
+       
+        
+        int x,y,rx,ry,*xy_coor,i,j,flag,u,v;
+
+
+//        xy_coor=({0,0});
+
+        if (!me || !env)
+            return 0;
+        if (!me->query_temp("map"))
+            return 0;
+        rx=env->get_matrix_x();
+        ry=env->get_matrix_y();
+        x=me->query_temp("map/x");
+        y=me->query_temp("map/y");
+        if (x==target_x && y==target_y)           return 0;
+        if (x<1 || x>rx || y<1 || y>ry
+           || target_x<1 || target_x>rx || target_y<1 || target_y>ry)
+           {
+                             //               4     0   3    0       1        1
+
+       
+           return 0;
+           }
+        rc=allocate(rx*ry);
+        for(i=0;i<rx*ry;i++)
+          rc[i]=-1;
+        rc[(target_y-1)*rx+target_x-1]=0;
+
+        flag=1;
+        while (flag)
+        {
+            flag=0;
+            for(i=1;i<=ry;i++)
+                for(j=1;j<=rx;j++)
+                {
+
+                    if ("/cmds/std/go"->check_enemy(me,j,i))
+                    continue;
+                    if (rc[(i-1)*rx+(j-1)]==-1)
+                    {
+                        for(u=-1;u<=1;u++)
+                            for(v=-1;v<=1;v++)
+                                if ((u!=0 || v!=0) && i+u>=1 && i+u<=ry && j+v>=1 && j+v<=rx)
+                                    if (rc[(i+u-1)*rx+(j+v-1)]>=0 && (rc[(i+u-1)*rx+(j+v-1)]+1<rc[(i-1)*rx+(j-1)]||rc[(i-1)*rx+(j-1)]==-1))
+                                    {
+                                        rc[(i-1)*rx+(j-1)]=rc[(i+u-1)*rx+(j+v-1)]+1;
+                                        flag=1;
+                                    }
+                    }
+                  }
+        }
+        flag=10000;
+        i=0;
+        j=0;
+        foreach(u in ({ 0,-1,1 })) 
+        foreach(v in ({ 0,-1,1}))
+
+//        for(u=-1;u<=1;u++)
+//            for(v=-1;v<=1;v++)
+                if ((u!=0 || v!=0) && y+u>=1 && y+u<=ry && x+v>=1 && x+v<=rx)
+                    if (rc[(y+u-1)*rx+(x+v-1)]>=0 && rc[(y+u-1)*rx+(x+v-1)]+1<flag)
+                    {
+                        i=u;
+                        j=v;
+                        flag=rc[(y+u-1)*rx+(x+v-1)]+1;
+                    }
+
+                    
+                    if (i==0 && j==0)
+                    {
+                      return 0;
+                        //"/cmds/std/go"->main(me,dirs[i+1][j+1]);
+                        //if (me->query_temp("map/x")==target_x && me->query_temp("map/y")==target_y)
+                        //    return 1;
+                    }
+         
+         xy_coor=({x+j,y+i});
+
+         
+         return xy_coor;
+
+
+
+}
+
+int test_move(int x,int y)
+{
+	return 1;
+}

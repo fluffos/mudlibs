@@ -1,0 +1,162 @@
+// Room: /d/shaolin/gulou7.c
+// Date: YZC 96/01/19
+inherit ROOM;
+string look_drum();
+string look_out();
+void create()
+{
+    set("short", "鼓楼七层");
+    set("long", @LONG
+这里就是鼓楼之顶。直入眼帘的便是一只大鼓。大鼓鼓身通红，
+似由白杨木箍成。两头包以水牛皮，用一匝大铜钉钉在鼓身边缘。
+鼓心有一圈白渍，看来是因为多次击打形成的。整个大鼓放在一
+个一人高的架子上，架子底层搁着两根大鼓槌。尽管山风吹人欲
+倒，谁都禁不住想击一下鼓(drum)试试。往外看，有个很大的汉
+白玉窗台(window)，上面足可站一个人，你如果想不开的话，跳
+楼(tiao lou)是一个好的解决方法。
+LONG
+    );
+    set("exits", ([
+        "down" : __DIR__"gulou6",
+    ]));
+    set("item_desc",([
+        "drum"      :   (: look_drum :),
+        "window"       :   (: look_out :),
+    ]));
+    set("objects",([
+        CLASS_D("shaolin") + "/qing-wen" : 1,
+    ]));
+    setup();
+}
+void init()
+{
+    add_action("do_hit", "hit");
+    add_action("do_out", "tiao");
+}
+int do_hit(string arg)
+{
+     object me, killer;
+    me = this_player();
+    if ( !arg || ( arg != "drum" ) ) return notify_fail("你要敲什麽？\n");
+    if((int)me->query("qi")*100/(int)me->query("max_qi") < 30)
+    {
+        killer = new(CLASS_D("shaolin") + "/qing-xiao");
+	me->set_temp("last_damage_from",killer);
+                me->die();
+        destruct(killer);
+        return 1;
+    }
+    else
+        me->add("qi", -30);
+    if ( random((int)me->query_str()) < 30 )
+    {
+        message_vision("$N一不小心敲到自己头上了。\n", me);
+        //me->add("qi", -10 - me->query("qi"));
+        me->unconcious();
+    }
+    else
+    {
+        mapping mine;
+        mine = me->query_entire_dbase();
+        message_vision("$N敲了一下大鼓，『咚……』声音传遍整个寺庙。\n", me);
+        write("鼓声如迅雷般在你耳边炸响，你头脑中一片糊涂，\n"
+            "全身摇摇欲坠，勉力支撑着不倒在地上。心中一个\n"
+            "声音告诉你，得赶快离开这里，不然就没命了。\n");
+        if ( mine["potential"] - mine["learned_points"] < 100 )
+            mine["potential"] += 1;
+    }
+    return 1;
+}
+int do_out(string arg)
+{
+        object me;
+    int i,j,my_dex, ging_cost, qi_cost, my_kar,tiaolou_cnt;
+    me = this_player();
+    my_dex = (int)me->query_dex();
+    my_kar = (int)me->query_kar();
+    i = (my_dex + my_kar)*5+ random(200);
+    j = random(i);
+    ging_cost = 600 / (int)me->query_int();
+    qi_cost = 800 / (int)me->query_int();
+    tiaolou_cnt=0;
+    if (!arg||arg!="lou") {
+    tell_room(environment(me), me->name() +"想不开想跳楼，可是双腿却不听使唤，瑟瑟发抖!\n", ({me}));
+    write("你高兴得跳得老高，不知道出了什么毛病\n");
+    return 1;
+    }
+     if((int)me->query("tiaolou_cnt")>=6000)
+    { if(random((int)me->query("kar"))>20) {
+    	me->set_skill("dodge",(int)me->query_skill("dodge",1)+1);
+    	 write(HIG"你的轻功增加了!\n");
+         CHANNEL_D->do_channel(this_object(), "rumor",
+            sprintf("由于%s坚持不懈的跳楼,轻功技能取得了长足的进展。\n", me->name(1)));}
+         me->set("tiaolou_cnt",0);
+         return 1;
+     }
+    if((int)me->query("jing") < ging_cost || (int)me->query("qi") < qi_cost)
+     { 
+    message_vision("$N满脸失望,哎,的一声叹了口气,就从楼上跳了下去。\n", me);
+    message_vision("只听『砰』地一声$N从鼓楼上落了下来。\n", me);
+    me->move(__DIR__"gulou");
+    me->unconcious();
+    return 1;
+    }
+    if ((int)me->query_skill("dodge", 1)<100 && j < 10)
+    {
+
+                me->move(__DIR__"gulou");
+                me->command("chat* "+"help!");
+                me->die();
+
+        //destruct(killer);
+    }
+    else if((int)me->query("neili")<2000 && j < 15) {
+        message_vision("$N爬上窗户，一个纵身，跳了出去。\n", me);
+        
+        me->move(__DIR__"gulou");
+       message_vision("只听『砰』地一声$N摔了个半死。\n", me);
+        me->unconcious();
+        }
+    else {
+    	message_vision("$N爬上窗户，一个纵身，跳了出去。\n", me);
+reset_eval_cost();
+     me->move(__DIR__"gulou");
+    message_vision("只听『砰』地一声$N从楼上跳了下来。\n", me);
+     tell_object(me,"你感觉到自己的轻功又有进境了！\n");
+                if (me->query_skill("dodge", 1)<400)
+                me->improve_skill("dodge", (int)me->query_skill("dodge", 1));
+                else if (me->query_skill("dodge", 1)<700)
+                me->improve_skill("dodge", (int)me->query_skill("dodge", 1)*my_kar/30);
+                else if (random(my_kar)>15)
+                 me->improve_skill("dodge", (int)me->query_skill("dodge", 1));
+                else me->improve_skill("dodge", (int)me->query_skill("dodge", 1)/2);
+
+         
+        me->add("tiaolou_cnt",1);
+        me->receive_damage("jing", ging_cost );
+        me->receive_damage("qi", qi_cost );
+        me->set_temp("die_for","从鼓楼上跳下来摔");
+        me->delete_temp("last_damage_from");
+    
+   }
+    return 1;
+}
+string look_drum()
+{
+    return
+    "※※※※※※※※※※※※※※※※※※※※※※\n"
+    "※※※※　　　　　　　　　　　　　　※※※※\n"
+    "※※※※　　　　　佛语有曰：　　　　※※※※\n"
+    "※※※※　　　　　　　　　　　　　　※※※※\n"
+    "※※※※　『求一次菩萨，击一次鼓』　※※※※\n"
+    "※※※※　　　　　　　　　　　　　　※※※※\n"
+    "※※※※　　（ｈｉｔ　ｄｒｕｍ）　　※※※※\n"
+    "※※※※　　　　　　　　　　　　　　※※※※\n"
+    "※※※※※※※※※※※※※※※※※※※※※※\n";
+}
+string look_out()
+{
+    return  "这里是鼓楼顶层的窗台，从这里可以遥望整个少室山脉，\n"
+"以及高耸入云的嵩山。浮世烟尘，尽在眼底。据说在此地\n"
+"可以与天界诸佛直接交流，对禅修大有益处。\n";
+}

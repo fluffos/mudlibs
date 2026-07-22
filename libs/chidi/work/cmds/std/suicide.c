@@ -1,0 +1,134 @@
+#include <ansi.h>
+// inherit F_CLEAN_UP;
+int main(object me, string arg)
+{
+        if( me->is_busy() )
+                return notify_fail("你上一个动作还没完成。\n");
+        if( !arg ) {
+                write("自杀？你可要想清楚哟！\n");
+                return 1;
+         }
+       if( arg!="-f" ) 
+               return notify_fail("自杀？你可要想清楚哟！(help suicide)\n");
+       if (SECURITY_D->get_status(me)!="(player)" && me->query("id") != "snow")
+            return notify_fail("你必须要由其他巫师把你降成玩家才能自杀!\n");
+       if( me->query_temp("suici") )  {
+       write(
+                "如果您选择永远死掉的自杀方式，这个人物的资料就永远删除了，请务必\n"
+                "考虑清楚，确定的话请输入您的密码：");
+        input_to("check_password", 1, me, 1);
+        return 1;
+    } else {
+       me->set_temp("suici",1);
+
+                  write(HIR"你自杀了后，你的存款，你在当铺的物品，你的信件以及你的alias都会丢失，\n你确信不要这些了吗？如果你决定了，请再次输入suicide -f这人命令。\n"NOR);
+                return 1;
+                }
+}
+protected void check_password(string passwd, object me, int forever)
+{
+         object link_ob;
+         string old_pass;
+         link_ob = me->query_temp("link_ob");
+           old_pass = link_ob->query("password");
+           if( crypt(passwd, old_pass)!=old_pass ) {
+                   write("密码错误！\n");
+                   return;
+           }
+           if (forever) {
+                   tell_object( me,
+                   HIR "\n\n你决定要自杀了，如果一分钟内不後悔，就真的永别了。\n\n\n" NOR);
+
+                  CHANNEL_D->do_channel(this_object(),"rumor",me->name() + "决定要自杀了。");
+                   me->start_busy(60);
+                   me->set_temp("suicide",1);
+                    call_out("slow_suicide",6,me,60);
+          }
+   }
+   protected int slow_suicide(object me,int sec)
+  {
+          if (!me)        return 0;
+          sec-=5;
+          if (sec>1){
+
+                  tell_object(me, RED "\n\n\n你还有"+YEL+chinese_number(sec)+"秒"+RED+"的时间可以後悔。\t\t"+HIW+"如果你後悔了，请马上退出(quit)游戏。\n\n\n" NOR);
+                   call_out("slow_suicide",5,me,sec);
+          }else   call_out("do_suicide",1,me);
+          return 1;
+  }
+   int do_suicide(object me)
+   {
+           string id,mailfile;
+           object shangshan, fae, mengzhu, room;
+           object link_ob;
+           if (!me)        return 0;
+
+          link_ob = me->query_temp("link_ob");
+           if( !link_ob ) return 0;
+          log_file("static/SUICIDE",
+                  sprintf("%s commits a suicide on %s\n", geteuid(me), ctime(time())) );
+          id=me->query("id");
+           seteuid(getuid()); 
+           if(!( fae = find_living("fae shizhe")) )
+           if(!( fae = find_object("fa-e")) )
+           fae = load_object("/d/taishan/npc/fa-e");
+          fae->restore();
+          if(me->query("id")==fae->query("winner"))
+             { 
+
+               fae->rm_file();
+            if (!room=find_object("/d/taishan/xiayi"))
+               room=load_object("/d/taishan/xiayi");
+               room->reset();
+             } 
+           if(!( shangshan = find_living("shangshan shizhe")) )
+           if(!( shangshan = find_object("shang-shan")) )
+           shangshan = load_object("/d/taishan/npc/shang-shan");
+           shangshan->restore();
+           if(me->query("id")==shangshan->query("winner"))
+             { 
+               shangshan->rm_file();
+              if (!room=find_object("/d/taishan/zhengqi"))
+               room=load_object("/d/taishan/zhengqi");
+               room->reset();
+             }
+          if(!( mengzhu = find_living("wulin mengzhu")) )
+           if(!( mengzhu = find_object("meng-zhu")) )
+           mengzhu = load_object("/d/taishan/npc/meng-zhu");
+          mengzhu->restore();
+           if(me->query("id")==mengzhu->query("winner"))
+             { 
+
+               mengzhu->rm_file();
+              if (!room=find_object("/d/taishan/fengchan"))
+              room=load_object("/d/taishan/fengchan");
+              room->reset();
+            }
+          rm( link_ob->query_save_file() + __SAVE_EXTENSION__ );
+          rm( me->query_save_file() + __SAVE_EXTENSION__ );
+          mailfile=sprintf(DATA_DIR "mail/%c/%s", id[0], id);
+
+          rm (mailfile+ __SAVE_EXTENSION__ );
+                  write("好吧，永别了:)。\n");
+          tell_room(environment(me), me->name() +"自杀了，以後你再也看不到这个人了。\n", ({me}));
+          destruct(me);
+          return 0;
+  }
+  int help (object me)
+  {
+          write(@HELP
+  指令格式: suicide -f
+  
+  如果因为某种原因你不想活了, 你可以选择自杀。
+
+
+ suicide -f : 永远的除去玩家资料, 系统会要求你
+               输入密码以确认身份。
+
+请慎重选择 :)
+
+HELP
+ );
+        return 1;
+ }
+

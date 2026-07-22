@@ -1,0 +1,37 @@
+// xigua.c
+//by smash
+#include <ansi.h>
+inherit ITEM;
+void setup()
+{}
+void init()
+{
+        add_action("do_eat", "eat");
+}
+void create()
+{
+        set_name(HIG"西瓜"NOR, ({"xi gua", "gua"}));
+        if (clonep())
+                set_default_object(__FILE__);
+        else {
+                set("unit", "个");
+                set("long", "这是一个大西瓜，看起来好诱人。\n");
+                set("value", 50);
+        }
+        setup();
+}
+
+int do_eat(string arg)
+{
+        object me = this_player();
+
+        if (!id(arg))
+                return notify_fail("你要吃什么？\n");
+        me->set("water", (int)me->max_water_capacity());
+         
+        message_vision(HIG
+ "$N抱着大西瓜使劲的吃呀吃，好爽，太爽了! \n"NOR, me);
+
+        destruct(this_object());
+        return 1;
+}

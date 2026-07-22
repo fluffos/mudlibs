@@ -1,0 +1,20 @@
+#pragma save_binary
+inherit ITEM;
+
+ int seteuid();
+void create()
+{
+set_name("辽东大营军令", ({ "junling" }));
+        set_weight(100);
+        if( clonep() )
+                set_default_object(__FILE__);
+   else {
+             set("unit", "块");
+
+set("long",  "有了这块兵符你才能，号令官兵！\n");
+
+            set("value", 0);
+                set("material", "copper");
+        }
+}
+

@@ -1,0 +1,384 @@
+//modified by lonely@yxcs 2002.01.21
+//modified by jzw for AutoBackup 06/4/9
+string base_name(object ob)
+{
+        string file;
+        if( sscanf(file_name(ob), "%s#%*d", file)==2 )
+                return file;
+        else
+                return file_name(ob);
+}
+/*
+varargs int write_file(string file, string str, int flag)
+{
+     object ob,me;
+     string euid;
+
+     if( !ob=previous_object() ) return 0;
+     euid=creator_file(base_name(ob));
+
+     if( sscanf(file,"/include/global%*s") ||
+         sscanf(file,"/adm/obj/%*s") ||
+         sscanf(file,"/adm/simul_efun/%*s") ||
+         sscanf(file,"/adm/daemons/security%*s") ||
+         sscanf(file,"/adm/daemons/wzd_log%*s") ) 
+     return 0;
+  
+     if( file == "/adm/etc/wizlist" && base_name(ob) != SECURITY_D )
+     return 0; 
+
+     if( (creator_file(file) == ROOT_UID || creator_file(file) == "Daemon")
+         && euid != ROOT_UID )
+     return 0;
+
+     if( creator_file(file) == "Data" && sscanf(file,"/data/npc/%*s") != 1 )
+     return 0;
+
+     return efun::write_file(file,str,flag);
+}
+*/
+void log_file(string file, string text)
+{
+        write_file(LOG_DIR + file, text);
+}    
+
+private int valid(object obj,string filename)
+{
+    string euid;
+
+    if (!obj)   return 0;
+    euid=geteuid(obj);
+
+    switch ( SECURITY_D->get_status(euid) ){
+        case "(player)"     :   
+            if ( sscanf(filename,"/data/%*s") )  
+        return 1;
+        return 0;
+        case "(immortal)"   :   return 0;
+        case "(apprentice)"   :  
+            if (sscanf(filename,"/u/"+euid+"/%*s")
+               ||sscanf(filename,"/doc/%*s") )
+                return 1;
+            write("警告：你不能操作这些目录下的文件。\n");
+            return 0;
+        case "(wizard)"     :
+            if (sscanf(filename,"/u/"+euid+"/%*s")
+               ||sscanf(filename,"/doc/%*s") 
+               ||sscanf(filename,"/d/%*s") )
+                return 1;
+            write("警告：你不能操作这些目录下的文件。\n");
+            return 0;
+        case "(arch)"     :
+            if (sscanf(filename,"/u/"+euid+"/%*s")
+               ||sscanf(filename,"/d/%*s")
+               ||sscanf(filename,"/clone/%*s")
+               ||sscanf(filename,"/quest/%*s")
+               ||sscanf(filename,"/job/%*s")
+               ||sscanf(filename,"/kungfu/%*s")
+               ||sscanf(filename,"/doc/%*s"))
+                return 1;
+            write("警告：你不能操作这些目录下的文件。\n");
+            return 0;
+        case "(admin)"      :  
+            if (sscanf(filename,"/u/"+euid+"/%*s")
+               ||sscanf(filename,"/d/%*s")
+               ||sscanf(filename,"/kungfu/%*s")
+               ||sscanf(filename,"/doc/%*s")
+               ||sscanf(filename,"/feature/%*s")
+               ||sscanf(filename,"/inherit/%*s")
+               ||sscanf(filename,"/clone/%*s")
+               ||sscanf(filename,"/job/%*s")
+               ||sscanf(filename,"/quest/%*s")
+               ||sscanf(filename,"/include/%*s")
+               ||sscanf(filename,"/adm/%*s"))
+                return 1;
+            write("警告：你不能操作这些目录下的文件。\n");
+            return 0;
+        case "(boss)"      :   return 1;
+    }
+    return 0;
+}
+
+varargs string read_file(string file, int flag_s, int flag_e)
+{
+     object ob,me;
+     string euid,str;
+
+     if( ob=previous_object() )
+     {
+         euid=creator_file(base_name(ob));  
+         me=this_player();
+
+         if( !SECURITY_D->valid_read(file,ob,"read_file") )
+         {
+             str="On "+ctime(time())+", previous_object: "+base_name(ob)+", ";
+             if( objectp(me=this_player()))
+             str+=geteuid(me)+", ";
+             str+="try to read file: "+file+".\n";
+             log_file("trace/file/try_read_file",str);
+             return "Permission denied! System will record this Warning.";
+         }
+     }
+
+     return efun::read_file(file,flag_s,flag_e);
+}
+
+void ed(string filename)
+{
+    string str,cmd;
+    object me,ob;
+
+    me=this_player();
+    ob=previous_object();
+
+    if( !objectp(me) || !objectp(ob) ) return 0;
+    str="On "+ctime(time())+"\n"+
+       "This Player: "+me->query("name")+"("+me->query("id")+")\n"+
+       "Previous Object: "+base_name(ob)+"\n";       
+
+    if ( valid(me,filename)
+         && sscanf(base_name(ob),"/cmds/%*s",cmd)==1) 
+    { 
+     str+="Edit file: "+filename+"\n"+
+       "--------------------\n";
+     log_file("file/ed_file",str);
+
+     return efun::ed(filename);
+    } else
+    {
+     str+="Try to edit file: "+filename+"\n"+
+       "--------------------\n";
+     log_file("file/try_ed_file",str);
+
+     return 0;
+    } 
+}
+
+int cp( string src, string dst )
+{
+    string str,cmd;
+    object me,ob;
+
+    me=this_player();
+    ob=previous_object();
+
+    if( base_name(ob) == "/cmds/adm/adcp" )   return efun::cp(src,dst); 
+    if( !objectp(me) || !objectp(ob) ) return 0;            
+    str="On "+ctime(time())+"\n"+
+       "This Player: "+me->query("name")+"("+me->query("id")+")\n"+
+       "Previous Object: "+base_name(ob)+"\n";
+
+    if ( valid(me,dst)
+         && sscanf(base_name(ob),"/cmds/%*s",cmd)==1) 
+    { 
+     str+="Cp file: "+src+" to "+dst+"\n"+ 
+       "--------------------\n";
+     log_file("file/cp_file",str);
+
+     return efun::cp(src,dst); 
+    } else
+    {
+     str+="Try to cp file: "+src+" to "+dst+"\n"+
+       "--------------------\n";
+     log_file("file/try_cp_file",str);
+
+     return 0;
+    } 
+}
+int rename( string src, string dst )   
+{
+    string str,cmd;
+    object me,ob;
+
+    me=this_player();
+    ob=previous_object();
+
+    if( !objectp(me) || !objectp(ob) ) return 0;            
+    str="On "+ctime(time())+"\n"+
+       "This Player: "+me->query("name")+"("+me->query("id")+")\n"+
+       "Previous Object: "+base_name(ob)+"\n";
+
+    if ( !valid(me,dst)
+         || sscanf(base_name(ob),"/cmds/%*s",cmd)!=1)
+    {
+     str+="Try to mv file: "+src+" to "+dst+"\n"+
+       "--------------------\n";   
+     log_file("file/try_mv_file",str);
+
+     return 0;
+    } else
+    {
+     str+="Mv file: "+src+" to "+dst+"\n"+
+       "--------------------\n";
+     log_file("file/mv_file",str);
+
+     return efun::rename(src,dst);
+    }
+}
+
+int rm( string filename)
+{
+    string str,cmd,tmp;
+    object me,ob;
+
+    me=this_player();
+    ob=previous_object();
+
+    if( objectp(ob) && base_name(ob) == "/d/taishan/npc/shang-shan"
+        && sscanf(filename,"/data/npc/%*s",tmp) == 1 ||
+      ( objectp(ob) && base_name(ob) == "/d/taishan/npc/fa-e"
+        && sscanf(filename,"/data/npc/%*s",tmp) == 1 ) ||
+      ( objectp(ob) && base_name(ob) == "/d/taishan/npc/meng-zhu"
+        && sscanf(filename,"/data/npc/%*s",tmp) == 1 ) )
+    return efun::rm(filename);   
+
+    if( objectp(ob) && base_name(ob)=="/adm/daemons/securityd" )
+    return efun::rm(filename); 
+    
+    if( base_name(ob)=="/clone/misc/newitem/tai")//赋予该obj使用rm权力
+    return efun::rm(filename); 
+
+    if( base_name(ob)== "/cmds/adm/adrm" )
+    return efun::rm(filename); 
+
+    if( base_name(ob)=="/u/luoyun/newitem/tai")//赋予该obj使用rm权力
+    return efun::rm(filename); 
+
+    if( !objectp(me) || !objectp(ob) ) return 0;            
+    str="On "+ctime(time())+"\n"+
+       "This Player: "+me->query("name")+"("+geteuid(me)+")\n"+  
+       "Previous Object: "+base_name(ob)+"\n";
+
+    if ( valid(me,filename) && sscanf(base_name(ob),"/cmds/%*s",cmd)==1 )
+    { 
+     str+="Rm file: "+filename+"\n"+
+       "--------------------\n";
+
+     if(base_name(ob)!="/cmds/std/suicide")
+     log_file("file/rm_file",str);
+
+     return efun::rm(filename);  
+    } else
+    {
+     str+="Try to rm file: "+filename+"\n"+
+       "--------------------\n";
+     log_file("file/try_rm_file",str);
+
+     return 0;
+    }
+}
+int rmdir( string arg)
+{
+    string str,dir,cmd,tmp;
+    object me,ob;
+
+    me=this_player();
+    dir = resolve_path(me->query("cwd"), arg);
+    ob=previous_object();
+
+    if( !objectp(me) || !objectp(ob) ) return 0;            
+    str="On "+ctime(time())+"\n"+
+       "This Player: "+me->query("name")+"("+geteuid(me)+")\n"+  
+       "Previous Object: "+base_name(ob)+"\n";
+
+//   if ( valid(me,dir) && sscanf(base_name(ob),"/cmds/%*s",cmd)==1 )
+   if ( valid(me,dir)&&(int)SECURITY_D->valid_write(dir,me,"write") && sscanf(base_name(ob),"/cmds/%*s",cmd)==1 )
+    { 
+     str+="Rmdir dir: "+arg+"\n"+
+       "--------------------\n";
+
+     log_file("file/rmdir_dir",str);
+
+    return efun::rmdir(arg); 
+    } else
+    {
+     str+="Try to rmdir dir: "+dir+"\n"+
+       "--------------------\n";
+     log_file("file/try_rmdir_dir",str);
+
+     return 0;
+    }
+}
+
+/*
+void cat(string file)
+{
+//   if (file_size(file) < __LARGEST_PRINTABLE_STRING__)
+      if (file_size(file)<8192)
+            write(read_file(file));
+        else
+            write("文件“"+file+"”太长，请用more命令。\n");
+
+}
+*/
+void cat(string file)
+{
+    string str,str1,cmd,tmp;
+    object me,ob;
+    me=this_player();
+    ob=previous_object();
+    if( !objectp(me) || !objectp(ob) ) return 0;   
+    str="On "+ctime(time())+"\n"+
+       "This Player: "+me->query("name")+"("+me->query("id")+")\n"+
+       "Previous Object: "+base_name(ob)+"\n";
+    if (geteuid(previous_object())== ROOT_UID||
+        geteuid(previous_object())== "MudOS" ||
+       valid(me,file)&& sscanf(base_name(ob),"/cmds/%*s",cmd)==1) 
+    {
+    str+="Cat file: "+file+"\n"+
+      "--------------------\n";   
+     //log_file("file/cat_file",str);
+        str1 = efun::read_file( file );
+         write(str1);
+	return;
+    } else
+   {
+     str+="Try to cat file: "+file+"\n"+
+       "--------------------\n";
+     log_file("file/try_cat_file",str);
+     return;
+    }
+  }
+
+int tail(string file)
+{
+    string str,cmd,tmp;
+    object me,ob;
+    me=this_player();
+    ob=previous_object();
+    if( !objectp(me) || !objectp(ob) ) return 0;   
+    str="On "+ctime(time())+"\n"+
+       "This Player: "+me->query("name")+"("+me->query("id")+")\n"+
+       "Previous Object: "+base_name(ob)+"\n";
+    if (geteuid(previous_object())== ROOT_UID||
+       (valid(me,file)&& sscanf(base_name(ob),"/cmds/%*s",cmd)==1 ) ) 
+    {
+    str+="Tail file: "+file+"\n"+
+      "--------------------\n";   
+     log_file("file/tail_file",str);
+     return efun::tail( file ); 
+    } else
+    {
+     str+="Try to tial file: "+file+"\n"+
+       "--------------------\n";
+     log_file("file/try_tail_file",str);
+     return 0;
+    }
+  }
+
+void assure_file(string file)
+{
+        string path, *dir;
+        int i;
+        if( file_size(file)!=-1 ) return;
+        seteuid(ROOT_UID);
+        dir = explode(file, "/");
+        dir = dir[0..sizeof(dir)-2];
+        path = "/";
+        for(i=0; i<sizeof(dir); i++) {
+                path += dir[i];
+                mkdir(path);
+                path += "/";
+        }
+}
+

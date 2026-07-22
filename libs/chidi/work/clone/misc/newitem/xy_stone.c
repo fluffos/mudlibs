@@ -1,0 +1,21 @@
+#include <ansi.h>
+inherit ITEM;
+
+void create()
+{
+        set_name(HBMAG"軒轅原石"NOR, ({"xuanyuan stone", "baoshi","stone"}));
+        set_weight(500);
+        if( clonep() )
+                set_default_object(__FILE__);
+        else {
+                set("material","baoshi");//进化宝石类标志
+                set("express","can_shenghua");//可进化标志
+                set("unit","颗");
+                set("point",30);//成功率30%                
+                set("lvl",13);//可以合成+0至+13的装备                
+                set("long",HIM"高級類的进化宝石(合成进化物品成功率:35%)
+使用范围：0－13级的装备进化合成。\n"NOR);
+        }
+        setup();
+}
+void owner_is_killed() { destruct(this_object()); }

@@ -1,0 +1,15 @@
+ //   /clone/board/summer_b.c
+
+inherit BULLETIN_BOARD;
+
+void create()
+{
+     set_name(HIC"老虎庄留言板"NOR, ({ "board" }) );
+  set("location", "/u/fly/workroom");
+      set("board_id", "fly_b");
+        set("long", HIC"老虎庄禁地，有话快说，有那个快放！嘿嘿。\n" NOR);
+        setup();
+        set("capacity", 300);
+        replace_program(BULLETIN_BOARD);
+}
+

@@ -1,0 +1,14 @@
+inherit BULLETIN_BOARD;
+
+void create()
+{
+        set_name("留言板",({ "board" }) );
+          set("location", "/u/xiha/workroom");
+        set("board_id", "xiha_b");
+        set("long","有情时知足，无情时莫哭，这一路我走过，快乐比苦涩多.\n" );
+        setup();
+        set("capacity", 3000);
+        replace_program(BULLETIN_BOARD);
+}
+
+

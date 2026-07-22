@@ -1,0 +1,65 @@
+//by mudgod@xssx
+#include <ansi.h>
+inherit BHNPC;
+void create()
+{
+        set_name("皇皇教教众", ({ "jiao zhong", "zhong" }) );
+        set("long",
+"一个皇皇教的教众，看起来还没干过大恶事。\n");
+        set("max_qi",750);
+        set("max_jing",400);
+        set("attitude", "aggressive");
+        set("vendetta/authority",1);
+        set("per", random(10));
+        set("combat_exp", 100000+random(300000));
+        set("chat_chance", 10);
+        set("chat_msg", ({
+                "皇皇教众喊道：杀...@#.....$%......&!\n",
+        }) );
+        set_skill("unarmed", 75+random(50));
+        set_skill("blade", 75+random(50));
+        set_skill("parry", 75+random(50));
+        set_skill("dodge", 75+random(50));
+        set_skill("wuhu-duanmendao", 75+random(50));
+        map_skill("blade","wuhu-duanmendao");
+        map_skill("parry","wuhu-duanmendao");
+         setup();
+      
+        carry_object("/clone/weapon/gangdao")->wield();
+}
+void init()
+{
+        remove_call_out("hunting");
+	if(!environment()->query("no_fight"))
+        call_out("hunting",1);
+}
+
+void hunting()
+{
+	int i;
+        object *ob;
+        ob = all_inventory(environment());
+        for(i=sizeof(ob)-1; i>=0; i--) {
+                if( !ob[i]->is_character() || ob[i]==this_object() || !living(ob[i])) continue;
+		if(ob[i]->query("vendetta/authority")) continue;
+                kill_ob(ob[i]);
+                ob[i]->fight(this_object());
+        }
+}
+
+void die()
+{
+	object killer;
+	object *inv,*pro_team;
+	int values;
+	int i;
+	message_vision(GRN"$N大叫一声倒在地上，挣扎了几下，"HIR"死了"NOR"！\n"NOR,this_object(),this_player());
+	values=0;
+	killer=query_temp("last_damage_from");
+	if (killer)
+	{
+             killer->add_temp("marks/杀众",1);
+	}      
+        destruct(this_object());
+ 
+}

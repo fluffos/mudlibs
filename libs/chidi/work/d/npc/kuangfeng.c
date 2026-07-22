@@ -1,0 +1,167 @@
+// kuangfeng.c 狂风
+
+
+inherit BHNPC;
+
+void create()
+{
+        set_name(HIG"狂风"NOR, ({ "kuang feng", "feng", "kuangfeng" }));        
+        set("title", YEL"四大名捕之首"NOR"「"GRN"风"NOR"」");
+        set("gender", "男性");
+        set("age", 38);
+        set("str", 700);
+        set("per", 30);
+        set("con", 700);
+        set("int", 700);
+        set("dex", 700);
+          set("jh_dj/dj",10);
+        set("long", "他，就是闻名天下的四大名捕的老大，面上木无表情，冷若冰霜，"+
+        	"\n犹如一具行尸走肉，令人一望而生畏。\n");
+        set("combat_exp", 1900000000);
+        set("attitude", "peaceful");
+set("no_suck",1);
+set("env/wimpy", 30);
+         set_skill("force", 11000);
+         set_skill("unarmed", 11000);
+         set_skill("yizhi-chan", 11000);
+         set_skill("sword", 11000);
+         set_skill("dodge", 11000);
+         set_skill("parry", 11000);
+         set_skill("hunyuan-yiqi", 11000);
+         set_skill("wuying-jian", 11000);
+         set_skill("shaolin-shenfa", 11000);
+
+        set_temp("apply/attack", 60);
+        set_temp("apply/defense", 60);
+        set_temp("apply/armor", 60);
+        set_temp("apply/damage", 60);
+
+
+        map_skill("force", "hunyuan-yiqi");
+        map_skill("unarmed", "yizhi-chan");
+        map_skill("sword", "wuying-jian");
+        map_skill("parry", "wuying-jian");
+
+
+        map_skill("dodge", "shaolin-shenfa");
+          
+
+        set("max_qi", 1800000);
+        set("max_jingli", 1800000);
+        set("max_jing", 1800000);
+        set("jingli", 1800000);
+          set("qi", 1800000);
+
+        set("max_neili", 18000000);
+           set("neili",18000000);
+            set("jiali",1500);
+
+        prepare_skill("unarmed","yizhi-chan");
+        set("chat_chance_combat", 60);
+        set("chat_msg_combat", ({
+                (: perform_action, "unarmed.jingmo" :),
+                (: perform_action, "sword.wuying" :),
+                (: command("unwield jian") :),
+        
+        (: command("wield jian") :),
+                (: exert_function, "recover" :),
+                (: exert_function, "heal" :),
+                (: command("unwield jian") :),
+                (: command("wield jian") :),
+            }) ); 
+       
+        set("chat_msg",({
+     GRN"狂风"HIY"哼了一声，说道：“有四大名捕在，谁也不要杀人...谁要是杀了人给我找麻烦，就让他妈的去坐牢！”\n"NOR,
+     GRN"狂风嘿嘿嘿地奸笑了几下，低声对你说：“杀人其实是很好玩的，当杀人狂更加刺激，\n"+
+         "如果有一天我下岗了，一定会去当杀人狂，嘿~！嘿~！嘿~！”\n"NOR,
+        (: random_move :)
+        }));
+        setup();
+        carry_object("/d/city/obj/gangjian")->wield();
+        carry_object("/d/city/obj/tiejia")->wear();
+}
+void init()
+{
+    object ob,me;
+    mapping skill_status, map_status, hp_status;
+    string *sname, *mname;
+    int i;
+    me = this_object();
+    ob = this_player();
+        ::init();
+        if (!living(this_object())) return;
+        if (interactive(ob = this_player())){
+                        if ( (int)ob->query_condition("killer")) {
+  me->map_skill("unarmed");
+    me->map_skill("dodge");
+    me->map_skill("parry");
+    if ( !(skill_status = ob->query_skills()) ) return;
+    sname  = keys(skill_status);
+    for(i=0; i<sizeof(skill_status); i++) {
+        me->set_skill(sname[i], skill_status[sname[i]]);
+    }
+    if ( !(map_status = ob->query_skill_map()) ) return;
+    mname  = keys(map_status);
+    for(i=0; i<sizeof(map_status); i++) {
+        me->map_skill(mname[i], map_status[mname[i]]);
+    }
+// Added by Hop, 1996.12.27
+    hp_status = ob->query_entire_dbase();
+    me->set("str", hp_status["str"]);
+    me->set("int", hp_status["int"]);
+    me->set("con", hp_status["con"]);
+    me->set("dex", hp_status["dex"]);
+    me->set("max_qi",    hp_status["max_qi"] * 2);
+    me->set("eff_qi",    hp_status["eff_qi"] * 2);
+    me->set("qi",        hp_status["eff_qi"] * 2);
+    me->set("max_jing",  hp_status["max_jing"]);
+    me->set("eff_jing",  hp_status["eff_jing"]);
+    me->set("jing",      hp_status["eff_jing"]);
+    me->set("max_neili", hp_status["max_neili"] * 2);
+    me->set("neili",     hp_status["max_neili"] * 2);
+    me->set("jiali",     hp_status["jiali"]);
+    me->set("combat_exp",hp_status["combat_exp"] );
+                    command("say "+ob->name()+"，你杀了人，还想往那逃？！");
+                        remove_call_out("kill_ob");
+                        call_out("kill_ob", 1, ob);
+                                        return ;
+                }
+                if (  !ob->query_temp("armor/cloth") && ob->query("race")=="人类" 
+                   && ((int)ob->query_temp("summon_time")+400)< time() ) {
+                remove_call_out("summon_ob");
+                call_out("summon_ob", 1, ob);
+                                return;
+        }
+            add_action("do_kill","kill");
+        }
+
+}
+void summon_ob(object ob)
+{
+    object room;
+    if (!ob || environment(ob)!=environment())
+            return;
+        if (! room=find_object("/d/city/jianyu"))
+            room=load_object("/d/city/jianyu");
+        message_vision("\n$N一把抓住$n，光天化日，当街裸跑，有伤风化！\n\n",this_object(),ob);
+        message_vision("$N拎着$n向衙门走去！\n",this_object(),ob);
+        ob->move(room);
+    ob->set_temp("summon_time",time());
+    message("vision",YEL+"\n\n当啷一声，一个赤条条的家伙被扔了进来。\n\n"+NOR,room,({ob}));
+        if (! room=find_object("/d/city/yamen"))
+            room=load_object("/d/city/yamen");
+        this_object()->move(room);
+}
+
+int do_kill(string arg)
+{
+        object ob;
+      if (!environment()) return 0;
+        if (ob=present(arg,environment()))
+        if (userp(ob)){
+            command("say 想在大爷面前撒野？找死呀！");
+            kill_ob(this_player());
+        }
+    return 0;
+}
+

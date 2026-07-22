@@ -1,0 +1,396 @@
+#include <ansi.h>
+
+inherit BHNPC;
+int big_blowing();
+
+void create()
+{
+
+        set_name(HIC"神女"NOR, ({"shen nv", "nv"}));
+
+        set("gender", "女性");
+        set("title", HIR"【"BLINK "BOSS"NOR HIR"】"NOR);
+        set("age", 18);
+        set("no_suck",1);
+        set("per",30);
+        set("con",60);
+        set("str",80);
+        set("int",80);
+        set("dex",900);
+
+        set("long", 
+
+        "一位天宫下凡的神仙女子，隐藏在此已经不知道多少年，她已经厌倦了天庭中的生活。（BOSS）。\n");
+
+   set("max_qi", 1800000000);
+   set("max_jing", 1800000000);
+   set("max_jingli", 210000000);   
+   set("max_neili", 210000000);
+   set("jingli", 2100000000);   
+   set("neili", 2100000000);    
+   set("jiali", 1000);    
+   set("attitude", "aggressive");//自动KILL玩家
+   set("jh_dj/dj",80);
+   set("combat_exp", 2140000000);
+   set_skill("jiuzhuan-12tian", 15000);
+   set_skill("unarmed", 15000);
+   set_skill("six-finger", 15000);
+   set_skill("blade", 15000);
+   set_skill("houquan", 15000);
+   set_skill("dodge", 15000);
+   set_skill("shenghuo-ling", 15000);
+   set_skill("wudu-yanluobu", 15000);
+   set_skill("taiji-quan", 15000);
+   set_skill("hujia-daofa", 15000);
+   set_skill("parry", 15000);
+   set_skill("shaolin-shenfa", 15000);
+   set_skill("force", 15000);
+   set_skill("wudu-shengong", 15000);
+   set_skill("duji", 15000);
+   set_skill("sword", 15000);
+   set_skill("wudu-goufa", 15000);
+   map_skill("unarmed", "six-finger");
+   map_skill("sword", "shenghuo-ling");
+   map_skill("dodge", "shaolin-shenfa");
+    map_skill("blade", "hujia-daofa");
+   map_skill("force", "jiuzhuan-12tian");
+   map_skill("parry", "taiji-quan");
+   set_temp("apply/defense1", random(300)+1000);
+   set_temp("apply/attack1",  random(1300)+600);
+   set_temp("apply/damage",random(3000)+1000);
+   set_temp("apply/armor", random(6000)+1000);
+   set("chat_chance_combat", random(30)+10);
+   set("chat_msg_combat", ({
+        (: command("say 我们神仙是不杀凡人的，但是你除外！") :),
+          (: exert_function, "recover" :), 
+                (: big_blowing :)
+                //(: perform_action, "sword.suo" :),
+         // (: perform_action, "sword.toufu" :),
+          //(: perform_action, "sword.yinfeng" :),
+          
+            }) ); 
+
+
+        setup();
+
+        carry_object("/clone/misc/cloth")->wear();
+       // carry_object("/d/city/obj/gangjian")->wield();
+          carry_object("/d/xiaoyao/obj/blade")->wield();
+       
+}
+
+
+int big_blowing()
+{
+remove_call_out("hurting");
+message_vision( HIR "\n\n神女如蝴蝶翩翩起舞，你不由得一阵"BLINK HIG"眼"HIM"花"HIW"缭"MAG"乱！\n\n" NOR,
+this_object());
+call_out("hurting",random(2)+1);
+        
+        
+        return 1;
+}
+
+int hurting()
+{
+        int i;
+        int dam;
+        object *inv;
+        message_vision( HIR "\n\n神女念起天魔咒：娇喝一声："BLINK HIC"天"YEL"地"HIR"毁灭！\n\n"NOR,this_object());
+        inv = all_inventory(environment(this_object()));
+        for(i=sizeof(inv)-1; i>=0; i --)
+        if( living(inv[i]))
+        if( inv[i] != this_object())
+        {
+        dam = random(40000*2)+20000;//绝招对房间内全体生物的伤害计算。
+        if(dam <0) dam = 0;
+        inv[i]->receive_wound("qi",dam);
+        COMBAT_D->report_status(inv[i],1);
+        }
+        return 1;
+}
+void die()
+{
+        object obj;
+        object me = this_player();
+        object killer;
+       if(objectp(killer=this_object()->query_temp("last_damage_from") ))
+   {          //以下是爆各类物品和几率设置
+     /*
+      if (random(10)<1)
+    {
+       obj = new("/quest/tulong/obj/drug");//元神丹
+       obj->move(environment(this_player()));
+    }
+   if (random(80)<1)
+    {
+       obj = new("/clone/fam/gift/scrcoat");//英雄披风7
+       obj->move(environment(this_player()));
+    }
+     if (random(70)<1)
+    {
+       obj = new("/clone/fam/gift/hands");//英雄手套4
+       obj->move(environment(this_player()));
+    }
+    if (random(80)<1)
+    {
+       obj = new("/clone/fam/gift/armor");//英雄铠甲1
+       obj->move(environment(this_player()));
+    }
+    if (random(60)<1)
+    {
+       obj = new("/clone/fam/gift/tm_stone");//天使之心
+       obj->move(environment(this_player()));
+    }
+      if (random(40)<1)
+    {
+       obj = new("/clone/fam/gift/cz_stone");//创造石
+       obj->move(environment(this_player()));
+    }
+   
+     if (random(20)<1)
+    {
+       obj = new("/clone/fam/gift/zf_stone");//祝福石
+       obj->move(environment(this_player()));
+    }
+    if (random(10)<1)
+    {
+       obj = new("/clone/fam/gift/int_book");//四库全书
+       obj->move(environment(this_player()));
+    } 
+     if (random(10)<1)
+    {
+       obj = new("/clone/fam/gift/j_int1");//冒牌增慧丹
+       obj->move(environment(this_player()));
+    } 
+     if (random(10)<1)
+    {
+       obj = new("/clone/fam/gift/j_int2");//冒牌青龙炼睿丹
+       obj->move(environment(this_player()));
+    }
+     if (random(20)<1)
+    {
+       obj = new("/clone/fam/gift/emperor1");//真命天子丹
+       obj->move(environment(this_player()));
+    }
+     if (random(10)<1)
+    {
+       obj = new("/clone/fam/gift/j_str3");//冒牌蚩尤诛元仙丹
+       obj->move(environment(this_player()));
+    } 
+    if (random(20)<1)
+    {
+       obj = new("/clone/fam/gift/lonely2");//天煞孤星丹
+       obj->move(environment(this_player()));
+    }
+      if (random(20)<1)
+    {
+       obj = new("/clone/fam/gift/str3");//蚩尤诛元仙丹
+       obj->move(environment(this_player()));
+    } 
+      if (random(20)<1)
+    {
+       obj = new("/clone/fam/gift/dex2");//朱雀玲珑丹
+       obj->move(environment(this_player()));
+    }
+    */
+    //15种物品
+    //————————————————————————————————
+    
+    if (random(5)<1)
+    {
+       obj = new("d/boss/skdan/sunarmed");//基本拳脚
+       obj->move(environment(this_player()));
+    }
+     if (random(5)<1)
+    {
+       obj = new("d/boss/skdan/sdodge");//基本轻功
+       obj->move(environment(this_player()));
+    }
+   
+    if (random(500)<1)
+    {
+       obj = new("/clone/fam/gift/xy_stone");//轩辕石
+       obj->move(environment(this_player()));
+    }
+    if (random(60)<1)
+    {
+       obj = new("/clone/fam/gift/ts_stone");//天使之泪
+       obj->move(environment(this_player()));
+    }
+    /*
+     if (random(80)<1)
+    {
+       obj = new("/clone/fam/gift/boots");//英雄战鞋2
+       obj->move(environment(this_player()));
+    }
+    */
+      if (random(20)<1)
+    {
+       obj = new("/clone/fam/gift/con2");//玄武铸骨丹
+       obj->move(environment(this_player()));
+    } 
+    /*
+    if (random(10)<1)
+    {
+       obj = new("/clone/fam/gift/j_int3");//冒牌神恩通慧仙丹
+       obj->move(environment(this_player()));
+    }
+     if (random(10)<1)
+    {
+       obj = new("/clone/fam/gift/j_str1");//冒牌神力丸
+       obj->move(environment(this_player()));
+    }
+    if (random(10)<1)
+    {
+       obj = new("/clone/fam/gift/j_str2");//冒牌白虎赐元丹
+       obj->move(environment(this_player()));
+    }
+    */
+        if (random(20)<1)
+    {
+       obj = new("/clone/fam/gift/perwan");//美容丸
+       obj->move(environment(this_player()));
+    }
+ if (random(20)<1)
+    {
+       obj = new("/clone/fam/gift/emperor3");//真命天子丹
+       obj->move(environment(this_player()));
+    } 
+     if (random(20)<1)
+    {
+       obj = new("/clone/fam/gift/lonely3");//天煞孤星丹
+       obj->move(environment(this_player()));
+    }
+    if (random(20)<1)
+    {
+       obj = new("/clone/fam/gift/int2");//青龙炼睿丹
+       obj->move(environment(this_player()));
+    } 
+        if (random(20)<1)
+    {
+       obj = new("/clone/fam/gift/jiuzhuan1");//九转吸阳丹
+       obj->move(environment(this_player()));
+    } 
+     if (random(20)<1)
+    {
+       obj = new("/clone/fam/gift/int1");//增慧丹
+       obj->move(environment(this_player()));
+    }
+    if (random(20)<1)
+    {
+       obj = new("/clone/fam/gift/lonely1");//天煞孤星丹
+       obj->move(environment(this_player()));
+    } 
+    
+     if (random(20)<1)
+    {
+       obj = new("/clone/fam/gift/con1");//壮骨粉
+       obj->move(environment(this_player()));
+    }
+    //15种物品
+    //-----------------------------------------------------------------
+   
+   /*   
+     if (random(5)<1)
+    {
+       obj = new("d/boss/skdan/ sforce");//基本内功
+       obj->move(environment(this_player()));
+    }
+     if (random(3)<1)
+    {
+       obj = new("/clone/fam/gift/linglong");//灵珑读写丹
+       obj->move(environment(this_player()));
+    }
+      
+     if (random(100)<1)
+    {
+       obj = new("/clone/fam/gift/xy_stone");//轩辕石
+       obj->move(environment(this_player()));
+    }
+     if (random(180)<1)
+    {
+       obj = new("/clone/fam/gift/finger");//英雄戒指3
+       obj->move(environment(this_player()));
+    }
+    if (random(20)<1)
+    {
+       obj = new("/clone/fam/gift/lh_stone");//灵魂石
+       obj->move(environment(this_player()));
+    }
+
+    if (random(120)<1)
+    {
+       obj = new("/clone/fam/gift/head");//英雄頭盔5
+       obj->move(environment(this_player()));
+    }
+    if (random(120)<1)
+    {
+       obj = new("/clone/fam/gift/neck");//英雄項鏈6
+       obj->move(environment(this_player()));
+    }
+     if (random(50)<1)
+    {
+       obj = new("/clone/fam/gift/karwan");//福缘丹
+       obj->move(environment(this_player()));
+    }
+ 
+    if (random(55)<1)
+    {
+       obj = new("/clone/fam/gift/jiuzhuan2");//九转速成丹
+       obj->move(environment(this_player()));
+    } 
+    if (random(35)<1)
+    {
+       obj = new("/clone/fam/gift/emperor2");//真命天子丹
+       obj->move(environment(this_player()));
+    } 
+    if (random(25)<1)
+    {
+       obj = new("/clone/fam/gift/con3");//洗髓再造仙丹
+       obj->move(environment(this_player()));
+    }
+    if (random(25)<1)
+    {
+       obj = new("/clone/fam/gift/dex1");//福寿膏
+       obj->move(environment(this_player()));
+    } 
+  
+    if (random(20)<1)
+    {
+       obj = new("/clone/fam/gift/dex3");//破阳无极仙丹
+       obj->move(environment(this_player()));
+    } 
+    if (random(20)<1)
+    {
+       obj = new("/clone/fam/gift/int3");//神恩通慧仙丹
+       obj->move(environment(this_player()));
+    } 
+   if (random(20)<1)
+    {
+       obj = new("/clone/fam/gift/str1");//神力丸
+       obj->move(environment(this_player()));
+    } 
+    if (random(14)<1)
+    {
+       obj = new("/clone/fam/gift/str2");//白虎赐元丹
+       obj->move(environment(this_player()));
+    }
+  
+    //15种物品
+    */
+    
+    
+            if(!killer->query_temp("m_success/神女"))
+                  { 
+        
+                killer->set_temp("m_success/神女",1);
+             message("channel:chat", HBMAG"【挑战BOSS】"+killer->query("name")+"成功地战胜了[洪荒古泽]的BOSS-神女，为泥谭增添了一份功绩!\n"NOR,users());
+                 }
+      tell_object(killer,HIR "\n【系统提示】：恭喜你战胜了BOSS！！！\n"NOR);
+  tell_object(killer, HIR "\n\n想不到凡人也能战胜神仙，得回去报告玉皇大帝才行！！\n"NOR); 
+   }
+  message_vision("$N化作一缕轻烟，直奔天庭而去！\n", this_object());
+      destruct(this_object());
+      //  ::die();
+} 

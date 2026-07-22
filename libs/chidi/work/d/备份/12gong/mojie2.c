@@ -1,0 +1,64 @@
+// by happ@YSZZ
+ 
+inherit BHNPC;
+ 
+void create()
+{
+        set_name("可洛诺斯", ({"kelowooz", "mo jie"}));
+        set("long", "传说中的作物之神，守护着摩羯座.\n");
+        set("gender","男性");
+        set("title", "【作物之神】");
+        set("attitude", "peaceful");
+        set("age",37);
+        set("con",45);
+        set("per",30);
+        set("str",63);
+        set("int",64);
+        set("dex",4550000);
+        set("combat_exp",1980000000);
+        set("no_suck",1);
+        set("chat_chance",50);
+        set("chat_msg", ({
+                "可洛诺斯说道：不知何时能再见到雅典娜！\n"   
+        }));
+        set_skill("dodge", 2005250);
+        set("attitude", "peaceful");
+        set_skill("force", 2005250);
+        set_skill("parry", 2005250);
+        set_skill("unarmed", 2005250);
+        set_skill("sword", 2005250);
+        set_skill("westsword",2005250);
+        set_skill("boxing",2005250);
+        set_skill("balei",2005250);
+        set_skill("spells",2005250);
+        set_skill("renma", 2005250);
+        map_skill("sword","westsword");
+        map_skill("unarmed","boxing");
+        map_skill("spells","renma");
+        set_skill("piaomiao-shenfa",2005200);
+        set_skill("taixuan-gong",2005200);
+        map_skill("force","taixuan-gong");
+        map_skill("dodge","piaomiao-shenfa");
+        set("max_jingli", 7000000);
+        set("jingli", 2100000000);
+        set("max_neili", 7000000);
+        set("neili", 2100000000);
+        set("max_qi", 1300000000);
+        set("max_jing", 1300000000);
+        set("jiali",2000000);
+        set_temp("apply/defense1", 20);
+        setup();
+        carry_object(__DIR__"obj/mj_cloth")->wear();
+        carry_object("/d/obj/weapon/sword/westsword")->wield();
+}
+ 
+void init()
+{
+        remove_call_out("check_me");
+        call_out("check_me",12);
+}
+void check_me()
+{
+         command("say 我先走一步了!\n");
+        destruct(this_object());
+}

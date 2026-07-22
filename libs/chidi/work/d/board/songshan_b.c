@@ -1,0 +1,18 @@
+// /clone/board/baituo_b.c
+#include <ansi.h>
+inherit BULLETIN_BOARD;
+
+void create()
+{
+        set_name(HIG"嵩山弟子留言板"NOR, ({ "board" }) );
+        set("location", "/d/songshan/chanyuan");
+        set("board_id", "songshan_b");
+        set("long", @LONG
+这是一块供嵩山弟子留言的木板
+LONG
+        );
+        setup();
+        set("capacity", 30);
+        replace_program(BULLETIN_BOARD);
+}
+

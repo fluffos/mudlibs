@@ -1,0 +1,29 @@
+#pragma save_binary
+// Room: /d/goathill/mroad4.c
+
+inherit ROOM;
+
+void create()
+{
+	set("coor",({50,5050,50}));
+	set("short", "山路转角");
+	set("long",
+"你现在正走在一条崎岖山路的转角处，山路望东通往野羊山上，\n"
+"从这里可以望见东边不远处有一个石屋立在岩壁边上，看起来像\n"
+"是冈哨或什么的，北边的山壁有一个裂口(crack)，不过离地约\n"
+"有三到四丈，往南的山路是段陡峭的下坡，如果你要下山，大概\n"
+"就是这条路了。\n"
+);
+	set("outdoors", "goathill");
+	set("exits", ([ /* sizeof() == 2 */
+		"east" : __DIR__"mroad5",
+		"southdown" : __DIR__"mroad3",
+	]));
+	set("objects", ([
+		__DIR__"npc/bandit" : 3,
+		__DIR__"npc/bandit_leader" : 1,
+	]) );
+
+	setup();
+	replace_program(ROOM);
+}

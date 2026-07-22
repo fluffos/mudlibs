@@ -1,0 +1,46 @@
+// armor.c
+#include <ansi.h>
+#include <armor.h>
+inherit HANDS;
+
+void create()
+{
+    set_name(HIM"英雄手套"NOR , ({ "hands","hero hands" }) );
+    set_weight(1000);
+    if( clonep() )
+        set_default_object(__FILE__);
+    else {
+        set("unit", "副");//单位
+        set("no_drop",1);//不允许drop
+        set("no_give",1);//不允许give
+        set("no_put",1);//不允许put
+        set("no_sell",1);//不允许sell
+        set("express","can_shenghua");//可进化标志
+        set("sh_lvl",0);//原始装备标志
+        set("material","zhuangbei");//进化装备类标志
+        set("point",20);//伤害力
+        set("stype","HANDS");//道具的子类别 
+        set("ctype","手套");//道具的类别的中文名 
+        set("type","hands");//道具的类型
+       /*-----------特殊屬性---------------------*/ 
+        set("armor",1500);//防禦
+        set("attack1",150);//追加伤害
+        set("strength",100);//追加臂力
+      /*--------------END------------------------*/
+        set("wear_msg", HIY "$N双手往裤兜里摸了半天，终于掏出一副布满油污的破烂手套！。\n" NOR);
+        set("remove_msg", HIC"$N鬼鬼祟祟地把手套脱了下来，似乎有着不可告人的秘密。\n" NOR);
+	 set("long", HIR "\t      〖英雄套裝〗－－英雄手套      \n"NOR
+YEL"\t這是一副由精靈世界裏的铸造师精心打造\n"
+"\t上麵鑲嵌着被精靈族巫師所詛咒過的石符\n"
+"\t該手套每時每刻隱約中散发出無边的法力\n"
+"\t传说得到英雄套装的人将成为江湖的\n"
+"\t至尊人物。                          \n"NOR
+HIY"\t    ----------進化基數----------\n"NOR
+HIG"\t      追加防禦：1500 ×進化次數\n"NOR
+HIG"\t      追加伤害：150  ×進化次數\n"NOR
+HIG"\t      追加臂力：100  ×進化次數\n"NOR
+HIY"\t    ----------------------------\n"NOR);	
+    }
+setup();
+}
+void owner_is_killed() { destruct(this_object()); }

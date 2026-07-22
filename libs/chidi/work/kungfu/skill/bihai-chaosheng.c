@@ -1,0 +1,36 @@
+// bihai-chaosheng.c
+
+#include <ansi.h>
+
+inherit FORCE;
+
+int valid_enable(string usage) { return usage == "force"; }
+
+#include "force.h"
+
+int valid_learn(object me)
+{
+        return valid_public(me);
+}
+
+int practice_skill(object me)
+{
+        return notify_fail("碧海潮生功只能用学(learn)方法的来增加熟练度。\n");
+}
+
+string exert_function_file(string func)
+{
+        return SKILL_D("bihai-chaosheng/") + func;
+}
+
+mapping exercise_msg(object me)
+{
+        return ([
+                "status_msg" : HIC + me->name() + "面容肃穆，静坐如渊岳，沐轻风而不惊。" NOR,
+                "start_my_msg" : "你盘腿坐下，双目微闭，双手掌心相向成虚握太极，天人合一，练气入虚。\n",
+                "start_other_msg" : me->name() + "盘腿坐下，双目微闭，双手掌心相向成虚握太极。轻风吹过，" + me->name() + "身上的衣袍竟然不为所动。\n",
+                "end_my_msg" : "你将内息又运了一个小周天，缓缓导入丹田，双臂一震，站了起来。\n",
+                "end_other_msg" : me->name() + "的脸上红光乍现，又立刻隐去。随即双臂一震，站了起来。\n"
+        ]);
+}
+

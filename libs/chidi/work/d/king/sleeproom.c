@@ -1,0 +1,21 @@
+// sleeproom.c
+// shilling 97.2
+inherit ROOM;
+void create()
+{
+    set("short", "风啸楼休息室");
+    set("long", @LONG
+这是风啸楼的休息室，非常大，谁一百多人是没问题的，
+不过，进去的时候可别闹，会打扰别人的。
+LONG
+    );
+        set("exits", ([ 
+        "south" : __DIR__"disha", 
+]));
+        set("no_fight",1);
+        set("no_steal",1);
+        set("sleep_room",1);
+    setup();
+    replace_program(ROOM);
+}
+

@@ -1,0 +1,34 @@
+
+// tomcat
+
+inherit __DIR__"fei.c";
+
+
+
+void set_skills()
+{
+        object me=this_object();
+        object weapon;
+        
+        int j;
+        j= 200+random(150); 
+        create_family("º£ÄÏ½£ÅÉ", 3, "µÜ×Ó");
+        me->set_skill("unarmed", j);
+        me->set_skill("dodge", j);
+        me->set_skill("parry", j);
+        me->set_skill("force", j);
+ 
+          me->set_skill("sword", j+random(15));
+          me->set_skill("bitao-shengong", j+random(15));
+          me->set_skill("qiongya-bufa", j+random(15));
+          me->set_skill("feixian-jian", j+random(15));
+          me->map_skill("force", "bitao-shengong");
+          me->map_skill("dodge", "qiongya-bufa");
+          me->map_skill("sword", "feixian-jian");
+          me->map_skill("parry", "feixian-jian");
+        set("chat_chance_combat", 80);
+        set("chat_msg_combat", ({
+           (: perform_action,"rouqing" :),
+            }) );    
+    carry_object("/clone/weapon/changjian")->wield();
+}

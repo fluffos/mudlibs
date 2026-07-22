@@ -1,0 +1,41 @@
+// giftbox.c 礼品盒
+
+inherit ITEM;
+#include <ansi.h>;
+void create()
+{
+        set_name(HIR"礼品盒"NOR, ({ "giftbox", "box" }));
+        set_weight(500);
+        set_max_encumbrance(10000);
+        if (clonep())
+                set_default_object(__FILE__);
+        else {
+                set("unit", "盒");
+                set("long", "一盒精致的小礼品盒子。里面放着江湖巫师给大家的利事包(lishi bao)你可以拿(take)出来。\n"NOR);
+                set("value", 0);
+                set("no_give", 1);
+                set("no_drop", 1);
+                set("no_put", 1);
+                set("no_get", 1);
+        }
+}
+void init()
+{
+        add_action("do_take", "take");
+}
+
+int do_take(string arg)
+{
+        object me=this_player();
+        object ob;
+      if(me->query("春节礼物"))
+         return notify_fail("你已经领取过今年的春节礼物了！\n"); 
+      if(!arg) return notify_fail("你要拿什么？\n");        
+      if(arg=="lishi bao"){
+       ob = new ("/clone/goft/gift/lishibao");   
+       ob->move(me); 
+       me->set("春节礼物",1);  
+       message_vision ("$N从礼品盒里拿出$n。\n",me,ob);   
+       return 1;
+        }
+       }

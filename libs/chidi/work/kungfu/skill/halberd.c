@@ -1,0 +1,5 @@
+//Cracked by Kafei
+// halberd.c
+
+inherit SKILL;
+

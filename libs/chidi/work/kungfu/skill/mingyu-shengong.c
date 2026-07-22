@@ -1,0 +1,187 @@
+  // mingyu-shengong.c 明玉神功
+// By killjapan
+
+inherit FORCE;
+string type() { return "jueshi"; }
+int valid_enable(string usage) { return usage=="force"; }
+
+int valid_learn(object me)
+{
+    mapping skl;
+    string *sname;
+         int lvl = (int)me->query_skill("mingyu-shengong", 1);
+
+       if ( !wizardp(this_player()) && (me->query("family/family_name") != "移花宫"))
+                  return notify_fail("你不是移花宫弟子不能使用明玉神功.\n
+                                    要是让两位宫主知道了你可惨了.\n");
+       if ( me->query("gender") != "女性")
+                  return notify_fail("你纯阴之气不足，难以领会高深的明玉功!\n");
+       if (me->query("sex/times"))
+                return notify_fail("修炼明玉功必须是处子之身。\n");
+        if(me->query("couple/have_couple")) 
+                return notify_fail("既已婚配还留在移花宫干什么！\n");
+        if (me->query("int") < 30)
+                return notify_fail("由于天资有限，明玉神功对于你来说过于艰深，难以理解。\n");
+       if (me->query("kar") < 30)
+                return notify_fail("你的福泽太过浅薄，难以习得明玉神功。\n");
+        if ((int)me->query_skill("force", 1) < 800)
+                return notify_fail("你的内功修为不济，难以运转明玉神功。\n");
+        if ((int)me->query_skill("dodge", 1) < 1000)
+                return notify_fail("基础都没打好，怎么能明白明玉神功的奥妙。\n");
+        
+        if (lvl>300)
+              return notify_fail("明玉神功过于深奥，若想有所提升只能自己想办法了。\n");
+    {skl = me->query_skills();}
+  {    sname  = keys(skl);}
+       for (int j=0;j<sizeof(skl);j++){
+        if (sname[j]=="mingyu-gong") continue;
+  if (this_player()->query("zhuanshi/times")) continue;
+        if( SKILL_D(sname[j])->valid_enable("force") )
+                  return notify_fail("明玉神功博大精深，既然学了其他武学，又怎可贪图神功？！\n");
+}
+
+        return 1;
+}
+mixed hit_ob(object me, object victim, int damage_bonus)
+{
+int kk;
+int maxlv;
+   maxlv
+=(me->query("mingyulv")+2)*(me->query("mingyulv")+1)*(me->query("mingyulv")+1);
+if (maxlv> 150) {maxlv=150;}
+    if( damage_bonus < 100 ) return 0;
+if (me->query("special_skill/jiuyinbody") == 1 && (me->query("neili")<me->query
+
+("max_neili")*5/4))
+     {
+    me->add("neili",random((int)me->query("jiali"))*5);
+victim->receive_wound("qi", (damage_bonus ));
+victim->receive_wound("jing", (damage_bonus ));
+   me->add("neili",random((int)me->query("jiali"))*5);
+write(HIR "你面色一白，发挥出冥雨神功的柔劲，震毁了对手的丹田。！\n" + NOR);
+
+     }
+     if( random(3*(me->query_con())) > victim->query_con()&&random(4*(me->query_skill("mingyu-shengong",1))) > (damage_bonus )) 
+     {
+     if (me->query("mingyulv"))
+     {
+                 victim->receive_wound("qi", (damage_bonus )*(15+me->query("mingyulv"))/15);
+              victim->receive_wound("jing", (damage_bonus )*(10+me->query("mingyulv"))/15);
+                         victim->add("neili", -(int)me->query("jiali")*me->query("mingyulv"));
+          if (victim->query("neili")<1) victim->set("neili",1);
+{kk=victim->query("kar");}
+if (kk<15) kk=15;
+        if ((random(me->query("kar"))>random(kk)+20)&&(me->query("neili")<me->query("max_neili")*5/4))
+     {
+    me->add("neili",random((int)me->query("jiali"))*me->query("mingyulv"));
+//        if (me->query("neili")>me->query("max_neili")*5/4)
+//     me->set("neili",me->query("max_neili")*5/4);
+     }
+        if(me->query_skill("mingyu-shengong",1)>(me->query("mingyulv",1)*1000+898)&&me->query_skill("mingyu-shengong",1)<(me->query("mingyulv",1)*1000+1002))
+          {
+me->improve_skill("mingyu-shengong",((damage_bonus )+me->query_skill("mingyu-shengong",1)+me->query_skill("mingyu-gong",1))*maxlv);
+          }
+        return HIW "$N面色一白，明玉神功第"+chinese_number(me->query("mingyulv"))+"重威力随之而出，湮灭了$n的真元！！！！\n" NOR;
+     }
+else
+     {
+              victim->receive_wound("qi", (damage_bonus )*2/3);
+             victim->receive_wound("jing", (damage_bonus )*2/3);
+                  victim->add("neili", -(int)me->query("jiali"));
+me->improve_skill("mingyu-shengong",((damage_bonus )+me->query_skill("mingyu-shengong",1)+me->query_skill("mingyu-gong",1))*2);
+        return HIW "$N面色一白，使出明玉神功的暗劲，湮灭了$n的真元！！！！\n" NOR;
+     }
+     }
+}
+void skill_improved(object me)
+{
+        switch (me->query_skill("mingyu-shengong",1))
+     {
+                case 1001:
+          {
+                        message_vision(HIW "$N面色微白，隐见骨骼。看来，阴柔内劲又有所精进。\n" NOR, me);
+                        tell_object(me, HIW "由于你勤奋研习，你的明玉神功已经突破〖第一重〗境界！！\n\n" NOR);
+                        me->set("mingyulv",1);
+                        break;
+          }
+                case 2001:
+          {
+                        message_vision(HIW "$N面色渐白，骨骼微现。看来，阴柔内劲又有所精进。\n" NOR, me);
+                        tell_object(me, HIW "由于你勤奋研习，你的明玉神功已经突破〖第二重〗境界！！\n\n" NOR);
+                        me->set("mingyulv",2);
+                        break;
+          }
+                case 3001:
+          {
+                        message_vision(HIW "$N面色逾渐白皙，骨骼隐现。看来，阴柔内劲又有所精进。\n" NOR, me);
+                        tell_object(me, HIW "由于你勤奋研习，你的明玉神功已经突破〖第三重〗境界！！\n\n" NOR);
+                        me->set("mingyulv",3);
+                        break;
+          }
+                case 4001:
+          {
+                        message_vision(HIW "$N面色白皙，周身骨骼隐现。看来，阴柔内劲又有所精进。\n" NOR, me);
+                        tell_object(me, HIW "由于你勤奋研习，你的明玉神功已经突破〖第四重〗境界！！\n\n" NOR);
+                        me->set("mingyulv",4);
+                        break;
+          }
+                case 5001:
+          {
+                        message_vision(HIW "$N面色透白，骨骼若隐若现，周身隐见白光。看来，阴柔内劲又有所精进。\n" NOR, me);
+                        tell_object(me, HIW "由于你勤奋研习，你的明玉神功已经突破〖第五重〗境界！！\n\n" NOR);
+                        me->set("mingyulv",5);
+                        break;
+          }
+                case 6001:
+          {
+                        message_vision(HIW "$N周身皮肤隐隐透白，骨骼若隐若现，隐见白光。看来，阴柔内劲又有所精进。\n" NOR, me);
+                        tell_object(me, HIW "由于你勤奋研习，你的明玉神功已经突破〖第六重〗境界！！\n\n" NOR);
+                        me->set("mingyulv",6);
+                        break;
+          }
+                case 7001:
+          {
+                        message_vision(HIW "$N周身隐隐透白，骨骼若隐若现，隐见白光。看来，阴柔内劲又有所精进。\n" NOR, me);
+                        tell_object(me, HIW "由于你勤奋研习，你的明玉神功已经突破〖第七重〗境界！！\n\n" NOR);
+                        me->set("mingyulv",7);
+                        break;
+          }
+                case 8001:
+          {
+                        message_vision(HIW "$N周身隐隐透明，骨骼内脏若隐若现，散发白光。看来，阴柔内劲又有所精进。\n" NOR, me);
+                        tell_object(me, HIW "由于你勤奋研习，你的明玉神功已经突破〖第八重〗境界！！\n\n" NOR);
+                        me->set("mingyulv",8);
+                        break;
+          }
+                case 9001:
+          {
+                        message_vision(HIW "$N周身透明，白光外放，骨骼内脏若隐若现。看来，阴柔内劲又有所精进。\n" NOR, me);
+                        tell_object(me, HIW "由于你勤奋研习，你的明玉神功已经突破〖第九重〗境界！！\n\n" NOR);
+                        me->set("mingyulv",9);
+                        break;
+          }
+                case 10001:
+          {
+                        message_vision(HIW "$N周身发出耀眼白光，全身通透，骨骼内脏清晰可见。看来，阴柔内劲又有所精进。\n" NOR, me);
+                        tell_object(me, HIW "由于你勤奋研习，你的明玉神功已经突破〖第十重〗境界！！\n\n" NOR);
+                        me->set("mingyulv",10);
+                        break;
+          }
+     }
+     return;
+}
+
+
+
+
+
+int practice_skill(object me)
+{
+    return notify_fail("冥雨神功只能用学的，或是从运用(exert)中增加熟练度。\n");
+}
+
+string exert_function_file(string func)
+{
+    return __DIR__"mingyu-shengong/" + func;
+}
+

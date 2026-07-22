@@ -1,0 +1,37 @@
+//edit by rock 2008.9.22
+// 自动生成：/make/weapon/blade
+
+#include <weapon.h>
+#include <ansi.h>
+inherit HAMMER;
+
+// 函数：所属类别
+int query_xy() { return 1 ; }
+
+// 函数：构造处理
+void create()
+{
+        set_name("五火神焰锤",({"whsychui"}));
+        set_weight(5000);
+        if( clonep() )
+        set_default_object(__FILE__);
+        else {
+		set("unit", "把");           //量词
+		set("flag",1);              //单手双手
+		set("material", "iron");
+                set("wield_msg", "$N拿出一把$n，试了试重量，然後握在手中。\n");
+                set("unwield_msg", "$N放下手中的$n。\n");
+		set("level", 70);            //装备等级
+		set("value",21000);             //价值
+		set("dp",0);                //防御
+		set("pp",-91);                //追加防御
+		set("ap",0);                //追加攻击
+             }
+	set("max_lasting",28000);   //耐久度
+	init_hammer(335);
+        setup();
+
+        set("gender","男、女");    //限制性别
+}
+
+#include "/clone/shoufei/long/weapon.h"

@@ -1,0 +1,39 @@
+//edit by rock 2008.9.22
+// 自动生成：/make/weapon/blade
+
+#include <weapon.h>
+#include <ansi.h>
+inherit THROWING;
+
+// 函数：所属类别
+int query_xy() { return 1 ; }
+
+// 函数：构造处理
+void create()
+{
+        set_name("搜魂针",({"shz"}));
+        if( clonep() )
+        set_default_object(__FILE__);
+        else {
+		set("unit", "些");           //量词
+		set("flag",2);              //单手双手
+		set("material", "iron");
+		set("base_unit", "枚");
+		set("base_weight", 0);
+		set("wield_msg", "$N「唰」的一声抽出一柄$n握在手中。\n");
+		set("unwield_msg", "$N将手中的$n插回刀鞘。\n");
+		set("level", 110);            //装备等级
+		set("base_value", 27000);       //价值
+		set("dp",-46);                //防御
+		set("pp",0);                //追加防御
+		set("ap",0);                //追加攻击
+             }
+	set("max_lasting",32000);   //耐久度
+	init_throwing(210);
+	set_amount(random(999999));
+        setup();
+
+        set("gender","男、女");    //限制性别
+}
+
+#include "/clone/shoufei/long/weapon.h"

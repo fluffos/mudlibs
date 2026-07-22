@@ -1,0 +1,37 @@
+// name、id、age、level must give
+
+
+mapping *npcdata=({
+	([	"name"	:"流氓",
+		"id"	:"liumang",
+		"age"	:20,
+		"level" :40,
+	]),
+	([	"name" :"土匪",
+		"id"	:"tufei",
+		"age"	:20,
+		"level"	:50,
+		"killer":1,
+		"skill" :"blade",
+		"move"	:1,
+		"follow":1,
+	]),
+	([	"name":"游侠",
+		"id": "youxia",
+		"age": 25,
+		"level":80,
+		
+	]),
+	([	"name":"刀客",
+		"id":"daoke",
+		"age":30,
+		"level":50,
+		"skill":"blade",
+	]),
+	([	"name":"剑客",
+		"id":"jianke",
+		"age":30,
+		"level":50,
+		"skill":"sword",
+	]),
+});

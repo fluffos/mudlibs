@@ -1,0 +1,220 @@
+// jiuyang-shengong.c
+
+#include <ansi.h>
+inherit FORCE;
+string type() { return "jueshi"; }
+mapping *action = ({
+
+        ([      "action":
+"$N使出一招「"CYN"三"HIC"重天地混元"NOR"」，左手聚出一团混元真气击向$n的$l",
+                "force":                300,
+                "damage_type":  "瘀伤"
+
+        ]),
+
+        ([      "action":
+"$N使出一招「"YEL"五"HIC"重天地混元"NOR"」，右手聚出一团混元真气击向$n的$l",
+                "force":                500,
+                "damage_type":  "瘀伤"
+
+        ]),
+
+        ([      "action":
+"$N使出一招「"HIR"七"HIC"重天地混元"NOR"」，双手由掌变拳，聚出一团混元真气击向$n的$l",
+                "force":                700,
+                "damage_type":  "瘀伤"
+        ]),
+
+        ([      "action":
+"$N使出一招「"HIW"风"HIB"雷"HIY"震"HIC"九州"NOR"」，全身腾空而起，化作一团混元真气击向$n的$l",
+                "force":                1000,
+                "damage_type":  "瘀伤"
+        ]),
+
+});
+
+mixed hit_ob(object me, object victim, int damage_bonus)
+{
+int maxlv;
+   maxlv
+     =(me->query("jiuyanglv")+2)*(me->query("jiuyanglv")+1)*(me->query("jiuyanglv")+1);
+if (maxlv> 150) {maxlv=150;}
+    if( damage_bonus < 100 ) return 0;
+if (me->query("special_skill/jiuyangbody") == 1 && (me->query("neili")<me->query("max_neili")*5/4))
+     {
+    me->add("neili",random((int)me->query("jiali"))*5);
+victim->receive_wound("qi", (damage_bonus ));
+victim->receive_wound("jing", (damage_bonus ));
+   me->add("neili",random((int)me->query("jiali"))*5);
+write(HIR "你激发出九阳神功的刚劲，震毁了对手的丹田。！\n" + NOR);
+
+     }
+   
+    if( random(3*(me->query_skill("jiuyang-shengong",1))) > (damage_bonus )) {
+if (me->query("jiuyanglv")){
+                          victim->receive_wound("qi", (damage_bonus )*(10+me->query("jiuyanglv"))/10);
+                          victim->receive_wound("jing", (damage_bonus )*(10+me->query("jiuyanglv"))/20);
+                         victim->add("neili", -(int)me->query("jiali")*me->query("jiuyanglv"));
+          if (victim->query("neili")<1) victim->set("neili",1);
+       if(me->query_skill("jiuyang-shengong",1)>(me->query("jiuyanglv",1)*1000+898)&&me->query_skill("jiuyang-shengong",1)<(me->query("jiuyanglv",1)*1000+1002))
+{
+ me->improve_skill("jiuyang-shengong",((damage_bonus )+me->query_skill("jiuyang-shengong",1))*maxlv);
+}
+        return HIR "$N发挥出九阳神功的第"+chinese_number(me->query("jiuyanglv"))+"重内劲，摧毁了$n的真元！！！！\n" NOR;
+                               }
+else   {
+  //                         victim->receive_wound("qi", (damage_bonus )/4);
+//作为超级内功 伤害太低 buff一下
+                        victim->receive_wound("qi", (damage_bonus )/1);
+//                          victim->receive_wound("jing", (damage_bonus )/4);
+//伤精效果不应太强，浴血里没有加精神的skill
+                        victim->receive_wound("jing", (damage_bonus )/2);
+                        victim->add("neili", -(int)me->query("jiali"));
+ me->improve_skill("jiuyang-shengong",((damage_bonus )+me->query_skill("jiuyang-shengong",1))*2);
+                        return HIR "$N的九阳神功摧毁了$n的真元！！！！\n" NOR;
+        }
+}
+}
+
+int valid_enable(string usage) 
+{ 
+        return  usage=="unarmed" ||
+                usage=="parry"||
+                usage=="force";
+
+}
+
+int valid_learn(object me)
+{
+    mapping skl;
+    string *sname;
+    int i;
+    int lvl = (int)me->query_skill("jiuyang-shengong", 1);
+    if ( me->query("gender") == "无性" && lvl > 49)
+        return notify_fail("你无根无性，阴阳不调，难以领会高深的九阳神功。\n");
+    if ( me->query("gender") != "男性")
+        return notify_fail("九阳神功需要阳刚之气，不适合你学。\n");
+    if ((int)me->query_skill("force", 1) < 400)
+        return notify_fail("你的基本内功火候还不够，无法领会九阳神功。\n");
+    if (me->query_skill("force",1)<=lvl)
+        return notify_fail("你的基本内功基础不够，再学下去会走火入魔的。\n");
+    if ((int)me->query_skill("jiuyang-shengong",1) > 301)
+        return notify_fail("九阳神功我就教到这儿，以后就要靠你自己练了。\n");
+    skl = me->query_skills();
+    sname  = keys(skl);
+    for (i=0;i<sizeof(skl);i++){
+        if (sname[i]=="hunyuan-yiqi") continue;
+        if (sname[i]=="yijing-force") continue;
+  if (this_player()->query("zhuanshi/times")) continue;
+        if (sname[i]=="taiji-shengong") continue;
+            if( SKILL_D(sname[i])->valid_enable("force") )
+        return notify_fail("你不先散了别派内功，怎能学九阳神功？！\n");    
+    }
+    return 1;
+}
+
+int practice_skill(object me)
+{
+        return notify_fail("九阳神功只能用学的，或是从运用(exert)中增加熟练度。\n");
+}
+
+int effective_level() { return 21; }
+
+mapping query_action(object me, object weapon)
+{
+        return action[random(sizeof(action))];
+}
+
+string *parry_msg = ({
+
+        "$n衣衫澎湃，内力汩汩，$N根本不可近身。\n",
+        "$n长袖一甩，一股大力将$N送出丈外。\n",
+        "$n施展出「九阳无我」，轻描淡写的化解了$N的攻势。\n",
+});
+
+string query_parry_msg(object me,object weapon)
+{
+            return parry_msg[random(sizeof(parry_msg))];
+}
+void skill_improved(object me)
+{
+        switch (me->query_skill("jiuyang-shengong",1))
+     {
+                case 1001:
+          {
+                        message_vision(HIY "$N周身真气澎湃而出，衣服鼓胀如球。看来，内功修为又有所精进。\n" NOR, me);
+                        tell_object(me, HIY "由于你的勤学苦练，你的九阳神功已经达到〖第一重〗境界！！\n\n" NOR);
+                        me->set("jiuyanglv",1);
+                        break;
+          }
+                case 2001:
+          {
+                        message_vision(HIY "$N周身真气澎湃而出，衣服鼓胀如球。看来，内功修为又有所精进。\n" NOR, me);
+                        tell_object(me, HIY "由于你的勤学苦练，你的九阳神功已经达到〖第二重〗境界！！\n\n" NOR);
+                        me->set("jiuyanglv",2);
+                        break;
+          }
+                case 3001:
+          {
+                        message_vision(HIY "$N周身真气澎湃而出，衣服鼓胀如球。看来，内功修为又有所精进。\n" NOR, me);
+                        tell_object(me, HIY "由于你的勤学苦练，你的九阳神功已经达到〖第三重〗境界！！\n\n" NOR);
+                        me->set("jiuyanglv",3);
+                        break;
+          }
+                case 4001:
+          {
+                        message_vision(HIY "$N周身真气澎湃而出，衣服鼓胀如球。看来，内功修为又有所精进。\n" NOR, me);
+                        tell_object(me, HIY "由于你的勤学苦练，你的九阳神功已经达到〖第四重〗境界！！\n\n" NOR);
+                        me->set("jiuyanglv",4);
+                        break;
+          }
+                case 5001:
+          {
+                        message_vision(HIY "$N周身真气澎湃而出，衣服鼓胀如球。看来，内功修为又有所精进。\n" NOR, me);
+                        tell_object(me, HIY "由于你的勤学苦练，你的九阳神功已经达到〖第五重〗境界！！\n\n" NOR);
+                        me->set("jiuyanglv",5);
+                        break;
+          }
+                case 6001:
+          {
+                        message_vision(HIY "$N周身真气澎湃而出，衣服鼓胀如球。看来，内功修为又有所精进。\n" NOR, me);
+                        tell_object(me, HIY "由于你的勤学苦练，你的九阳神功已经达到〖第六重〗境界！！\n\n" NOR);
+                          me->set("jiuyanglv",6);
+                        break;
+          }
+                case 7001:
+          {
+                        message_vision(HIY "$N周身真气澎湃而出，衣服鼓胀如球。看来，内功修为又有所精进。\n" NOR, me);
+                        tell_object(me, HIY "由于你的勤学苦练，你的九阳神功已经达到〖第七重〗境界！！\n\n" NOR);
+                        me->set("jiuyanglv",7);
+                        break;
+          }
+                case 8001:
+          {
+                        message_vision(HIY "$N周身真气澎湃而出，衣服鼓胀如球。看来，内功修为又有所精进。\n" NOR, me);
+                        tell_object(me, HIY "由于你的勤学苦练，你的九阳神功已经达到〖第八重〗境界！！\n\n" NOR);
+                        me->set("jiuyanglv",8);
+                        break;
+          }
+                case 9001:
+          {
+                        message_vision(HIY "$N周身真气澎湃而出，衣服鼓胀如球。看来，内功修为又有所精进。\n" NOR, me);
+                        tell_object(me, HIY "由于你的勤学苦练，你的九阳神功已经达到〖第九重〗境界！！\n\n" NOR);
+                        me->set("jiuyanglv",9);
+                        break;
+          }
+                case 10001:
+          {
+                        message_vision(HIY "$N周身真气澎湃而出，衣服鼓胀如球。看来，内功修为又有所精进。\n" NOR, me);
+                        tell_object(me, HIY "由于你的勤学苦练，你的九阳神功已经达到〖第十重〗境界！！\n\n" NOR);
+                        me->set("jiuyanglv",10);
+                        break;
+          }
+     }
+     return;
+}
+string exert_function_file(string func)
+{
+        return __DIR__"jiuyang-shengong/" + func;
+}
+

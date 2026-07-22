@@ -1,0 +1,23 @@
+// xuan-cloth.c
+//
+#include <armor.h>
+inherit CLOTH;
+void create()
+{
+        set_name("圣僧袈裟", ({ "jia sha" }) );
+        if( clonep() )
+                set_default_object(__FILE__);
+        else {
+          set("long", "圣僧袈裟,悟性增加50,下线不会消失。\n"NOR);
+              set("unit", "件");
+              set("pointsy",4);
+              set("no_sell",1);
+              set("no_drop",1); 
+        set("no_get", 1);
+              set("shaolin",1);
+                set("material", "cloth");
+        set("armor_prop/intelligence", 50);
+                set("armor_prop/armor", 50);
+        }
+        setup();
+}

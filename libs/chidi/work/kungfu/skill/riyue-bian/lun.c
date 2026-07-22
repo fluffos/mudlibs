@@ -1,0 +1,49 @@
+#include <ansi.h>
+inherit F_SSERVER;
+int perform(object me)
+{
+    string msg;
+    object weapon;
+    int skill, jing_cost;
+//    mapping my_fam  = me->query("family");
+    skill = me->query_skill("riyue-bian",1);
+    if (me->query_int()<50)
+        jing_cost = (int)me->query_int() - 50;
+    else    jing_cost=1;
+    if( me->is_fighting() )
+        return notify_fail("「轮字决」不能在战斗中演练。\n");
+ 
+ if ( (string)me->query("family/family_name") != "少林派") 
+     return notify_fail("只有少林弟子才能使用该PFM。\n");
+
+    if (!objectp(weapon = me->query_temp("weapon"))
+    || (string)weapon->query("skill_type") != "whip")
+        return notify_fail("你必须先去找一条鞭。\n");
+    if( !skill || (skill < 140))
+        return notify_fail("你的日月鞭法等级不够！\n");
+    if( me->query("neili") < 50 )
+        return notify_fail("你的内力不够！\n");
+    if (me->query_skill("whip",1)<= skill)
+        return notify_fail("你的基本鞭法不够，无法通过演练「轮字决」提高日月鞭法的技巧！\n");
+    if( me->query("jing") < -jing_cost )
+        return notify_fail("你现在太累了，无法集中精神演练「轮字决」！\n");
+    msg = HIM "$N使出日月鞭法之「轮字决」，将手中" + weapon->name() + HIM "挥舞了几下，日月鞭法似乎更深进了一些。\n" + NOR;
+    message_vision(msg, me);
+    me->add("neili", -50);
+    me->add("jing", jing_cost);
+    if ( skill < 60)
+        me->improve_skill("riyue-bian", 10);
+    else if (skill < 90)
+        me->improve_skill("riyue-bian", 10 + random((int)me->query_int() - 9));
+    else if (skill < 140)
+        me->improve_skill("riyue-bian", 10 + random((int)me->query_int() * 2 - 9));
+    else if (skill < 200)
+        me->improve_skill("riyue-bian", 10 + random((int)me->query_int() * 4 - 9));
+    else
+        me->improve_skill("riyue-bian", 10 + random((int)me->query_int() * 8 - 9));
+    msg = HIB"$P的「日月鞭法」进步了！\n"NOR;
+      if (random(10)<2)    me->start_busy(1);
+    message_vision(msg, me);
+    return 1;
+}
+

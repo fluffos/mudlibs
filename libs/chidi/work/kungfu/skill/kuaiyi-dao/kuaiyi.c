@@ -1,0 +1,57 @@
+//春风快意 kuaiyi.c
+
+#include <ansi.h>
+#include <skill.h>
+#include <weapon.h>
+#include <combat.h>
+
+
+void remove_effect(object me, int a_amount, int d_amount);
+
+inherit F_SSERVER;
+int perform(object me, object target)
+{
+        object weapon,ob;
+        int skill;
+        string msg;
+
+        if( !target ) target = offensive_target(me);
+
+        if( !target
+        ||      !target->is_character()
+        ||      !me->is_fighting(target) )
+                return notify_fail("「春风快意」只能在战斗中使用。\n");
+
+        if (!objectp(weapon = me->query_temp("weapon"))
+                || (string)weapon->query("skill_type") != "blade")
+                return notify_fail("绝技必须用刀才能施展。\n");
+
+        if( (int)me->query_skill("kuaiyi-dao", 1) < 135 )
+                return notify_fail("你的春风快意刀不够娴熟，不会使用此绝技。\n");
+        if( (int)me->query("neili") < 1000  ) 
+                return notify_fail("你的内力不够。\n");
+
+        me->add("neili", -125);
+
+        msg = MAG "$N一声爆“喝”使出了刀中之志高无上的绝招"+BLINK+HIR"春风快意"NOR+"，对着$n砍出无数刀影！\n"NOR;
+
+        me->clean_up_enemy();
+        ob = me->select_opponent();
+        msg = HIG"春！\n"NOR;
+        message_vision(msg, me, target);
+        COMBAT_D->do_attack(me, ob, me->query_temp("weapon"), 0);
+        msg = HIM"风！\n"NOR;
+        COMBAT_D->do_attack(me, ob, me->query_temp("weapon"), 0);
+        msg = HIB"快！\n"NOR;
+        message_vision(msg, me, target);
+        COMBAT_D->do_attack(me, ob, me->query_temp("weapon"), 0);
+        msg = HIY"意！\n"NOR;
+        message_vision(msg, me, target);
+
+        skill = me->query_skill("kuaiyi-dao");
+        message_vision(msg, me, target);
+
+        if( me->is_fighting() ) me->start_busy(1);
+
+        return 1;
+}

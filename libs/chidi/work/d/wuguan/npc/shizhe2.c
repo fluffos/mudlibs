@@ -1,0 +1,53 @@
+// zhaixing.c 摘星子
+inherit BHNPC;
+inherit F_MASTER;
+string ask_me();
+void create()
+{
+    set_name("星宿使者", ({ "shizhe" }));
+    set("nickname", "武官上宾");
+    set("long", 
+        "他就是星宿派接待使者,寻觅同流合污之人。\n"
+        "他三十多岁，脸庞瘦削，眼光中透出一丝乖戾之气。\n");
+    set("gender", "男性");
+    set("age", 35);
+    set("attitude", "peaceful");
+    set("shen_type", -1);
+    set("str", 36);
+    set("int", 38);
+    set("con", 36);
+    set("dex", 76);
+    
+    set("max_qi", 1000);
+    set("max_jing", 800);
+    set("neili", 1800);
+    set("max_neili", 1800);
+    set("jiali", 60);
+        set("combat_exp", 800000);
+    set_skill("force", 200);
+    set_skill("huagong-dafa", 200);
+    set_skill("dodge", 200);
+    set_skill("zhaixinggong", 200);
+    set_skill("unarmed", 205);
+    set_skill("xingxiu-duzhang", 200);
+    set_skill("parry", 200);
+    set_skill("staff", 200);
+    set_skill("tianshan-zhang", 200);
+    set_skill("literate", 200);
+    map_skill("force", "huagong-dafa");
+    map_skill("dodge", "zhaixinggong");
+    map_skill("unarmed", "xingxiu-duzhang");
+    map_skill("parry", "tianshan-zhang");
+    map_skill("staff", "tianshan-zhang");
+    create_family("星宿派", 3, "弟子");
+    set("title","星宿接待使");
+    setup();
+//  carry_object("/clone/weapon/gangzhang")->wield();
+    carry_object("/clone/misc/cloth")->wear();
+}
+void attempt_apprentice(object ob)
+{
+    command("say 好吧，我就收下你了。");
+    command("recruit " + ob->query("id"));
+}
+ 

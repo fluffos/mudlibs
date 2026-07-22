@@ -1,0 +1,73 @@
+// jinengdan.c 仙丹
+
+#include <ansi.h>
+
+inherit ITEM;
+
+void create()
+{
+	set_name(HIM "国庆蛋糕" NOR, ({ "cake", "festival cake" }) );
+	set_weight(200);
+	if( clonep() )
+		set_default_object(__FILE__);
+	else {
+              set("long", MAG"这是江湖的BOSS们为庆祝国庆给大家准备的一份小礼物。\n"NOR);
+              set("value", 10000);
+			  set("unit", "份");
+              set("no_give", 1);
+              set("no_drop", 1);
+              set("no_put", 1);
+              set("no_get", 1);
+              set("no_paimai", 1);
+	}
+}
+
+void init()
+{
+	add_action("do_eat", "eat");
+}
+
+int do_eat(string arg)
+{
+	int i;    
+	object me;    
+	string *skills;
+	mapping all_skills;
+	int val;
+
+
+	me = this_player();
+	if (! id(arg))
+		return notify_fail("你要吃什么？\n");   
+	message_vision(MAG"$N慢慢举起一份"+ this_object()->name() +MAG"送入嘴里。\n"NOR, me);                      
+	all_skills=this_player()->query_skills();
+	skills=keys(all_skills);
+	for(i=0; i<sizeof(skills); i++) {
+		if(SKILL_D((string)skills[i])->invalid_objadd(me))	continue;
+		this_player()->set_skill(skills[i],all_skills[skills[i]]+100);
+		//me->add_skill(skills[i], 100);
+	}
+	me->add("max_neili", 100000);
+	me->add("max_jingli",100000);
+
+	val	= (int)me->query("weapon/lv");
+	if(val > 0)
+	{
+		me->add("weapon/lv", 10);
+	}
+	else
+	{
+		val	= (int)me->query("weapon2/lv");
+		if(val > 0)
+		{
+			me->add("weapon2/lv", 10);
+		}
+	}
+
+	tell_object(me, HIY "你顿时觉得自己的又变强了一些，不禁开始觊觎别人的....\n" NOR);
+	message_vision("$N暗提内劲，浑身散发出薄薄的杀气，用眼角余光打量了周围几个家伙。\n", me);       
+	destruct(this_object());
+	return 1;
+}
+
+void owner_is_killed() { destruct(this_object()); }

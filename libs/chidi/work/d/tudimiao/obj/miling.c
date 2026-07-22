@@ -1,0 +1,155 @@
+// /d/tudimiao/obj/miling.c 密令
+// xlgg@hero.cd
+// 1999.05.28
+
+#include <ansi.h>
+inherit ITEM;
+
+string * help_str=({
+"这封密令是要你去保护一位人质，将之送到安全的地点去。在途中，不断会有各种杀手妄图取他",
+"的姓名，而人质本身是不堪一击的。途中会遇到各种各样的状况，需要靠你自己的智慧去解决。",
+"对人质而言：提供了如下命令以便保护者（你）使用：",
+"gurad : 这条命令可以使人质处于“被保护”状态，而你将成为“保护者”，任何施加于人质的",
+"        攻击都会自动地施加在你身上（当然，需要你和人质在同一房间内）；",
+"order ：这条命令可以“命令”人质做某件事；",
+"        比如：order go east “命令”人质往东方走；",
+"              order wield blade  “命令”人质装备钢刀；",
+"        具体可采用的命令可在实践中得到；",
+"在护送过程中，当然你需要不断地用hp来查看人质的健康情况。",
+"一旦人质到达目的地后，你将得到很高的奖励（具体奖励值视途中的艰苦情况而定），一般说来，",
+"这种奖励数目会比quest高10倍以上；",
+"一点提示：为了保证人质的安全，你可以想一点小技巧，比如  order wear jz 让人质穿上金刚",
+"罩，提高他的防御力；order eat jy  让人质吃金疮药,etc  :-)",
+});
+
+string * out_doors = ({
+        "扬州",
+        "白驼山",
+        "丐帮",
+        "华山",
+        "灵鹫宫",
+        "泉州",
+        "少林寺",
+        "泰山",
+        "神龙岛",
+        "天龙寺",
+        "武当山",
+        "星宿宫",
+        "逍遥派",
+        "雪山",
+        "桃花岛",
+        "北京城",
+        "五毒教",
+        "古墓派",
+        "我流",
+        "明教",
+        "全真",
+        "小村庄",
+});
+
+string * search = ({
+        "city",
+        "baituo",
+        "gaibang",
+        "huashan",
+        "lingjiu",
+        "quanzhou",
+        "shaolin",
+        "taishan",
+        "shenlong",
+        "tianlongsi",
+        "wudang",
+        "xingxiu",
+        "xiaoyao",
+        "xueshan",
+        "taohua",
+        "city2",
+        "wudujiao",
+        "gumu",
+        "woliu",
+        "mingjiao",
+        "quanzhen",
+        "village",
+});
+
+int find_outdoor(string);
+
+void init()
+{
+        add_action("do_read", "readling");
+        add_action("do_help", "helpling");
+        add_action("do_where", "whereis");
+}
+
+
+void create()
+{
+        set_name(HIY"密令"NOR, ({"mi ling" , "ml"}));
+        if (clonep())
+                set_default_object(__FILE__);
+        else {
+                set("long",
+                "这是一张已经发黄的纸，上面歪歪曲曲地写着一些字，\n你可以用指令(readling)来读取，用指令(helpling)来看帮助，用指令(whereis)看地点说明。\n");
+                set("value", 0);
+                set("material","paper");
+                set("unit", "纸");
+                set("no_get", 1);
+                set("no_drop", 1);
+                //任务描述
+                set("describe","");
+                //源地址
+                set("src_add","");
+                //源地址描述
+                set("src_des","");
+                //目的地址
+                set("dest_add","");
+                //目的地址描述
+                set("dest_des","");
+        }
+}
+
+int do_read()
+{
+        object me = this_player();
+        
+        tell_object(me,HIG"你这次的任务是："+query("describe")+"。\n"NOR);      
+        return 1;
+}
+
+int do_help()
+{
+        object me = this_player();
+        int i;
+        
+        for (i=0;i<sizeof(help_str);i++) 
+                tell_object(me,HIY + help_str[i] +"\n"+NOR);
+        return 1;
+}
+
+int do_where()
+{
+        object me = this_player();
+        int i;
+        string where;
+
+        i = find_outdoor(query("src_des"));
+        where = i < sizeof(search) ? out_doors[i] : "无法确定的位置";
+        tell_object(me,HIG"人质所处的位置——"+query("src_add")+"好象在"+ where +"\n"NOR);
+        i = find_outdoor(query("dest_des"));
+        where = i < sizeof(search) ? out_doors[i] : "无法确定的位置";
+        tell_object(me,HIG"所要送到的位置——"+query("dest_add")+"好象在"+ where +"\n"NOR);
+        return 1;
+}
+
+int find_outdoor(string arg)
+{
+        int i = 0;
+        
+        while ( i < sizeof(search) ) {
+                if (search[i] == arg)
+                        return i;
+                i ++;
+        }
+        return i;
+}
+

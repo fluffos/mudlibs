@@ -15,12 +15,17 @@ worked; keep status values consistent so the table stays greppable:
 - `blocked: <reason>` (needs a decision or hit something unresolved)
 
 Port assignments: sequential from 40001, recorded here so re-running
-several libs at once never collides. **Next free port: 40005.**
+several libs at once never collides. **Next free port: 40006.**
 
 ## Progress summary (updated as libs are finished)
 
-- **Done: 4 / 100** (shanhaizhanshen, xingzhanyingxiong, unknownlib20150716
-  [小雨西游II], bxsj [书剑天下])
+- **Done: 5 / 100** (shanhaizhanshen, xingzhanyingxiong, unknownlib20150716
+  [小雨西游II], bxsj [书剑天下], bxsj1 [书剑·经典])
+- Once a lib's lineage is recognized (shared master.lpc/securityd.lpc
+  code shapes), apply known catalog fixes PROACTIVELY before the first
+  boot attempt instead of rediscovering them -- worked cleanly for bxsj1
+  (same lineage as bxsj): all 3 fixes applied up front, booted clean on
+  the first try.
 - Tooling built along the way (now reusable for the rest): `extract.sh`,
   `convert_lib.sh` (encoding + rename + ref-fixes, automated), `lpcc_check.sh`
   (now batch-mode, ~15-70x faster — one VM boot compiles every file),
@@ -40,7 +45,7 @@ several libs at once never collides. **Next free port: 40005.**
 | 2 | 星战英雄.rar | xingzhanyingxiong | 40002 | done | 2nd pilot; found driver bug (AGENTS.md §8) + message_combatd mudlib bug; see libs/xingzhanyingxiong/NOTES.md |
 | 3 | 20150716未知lib.zip | unknownlib20150716 | 40003 | done | actually 小雨西游II; found get_include_path fix (§8d); see libs/unknownlib20150716/NOTES.md |
 | 4 | bxsj.rar | bxsj | 40004 | done | 书剑天下; found 3 new bugs incl. the this_player()-override footgun (§8c); see libs/bxsj/NOTES.md |
-| 5 | bxsj1.rar | | | not started | |
+| 5 | bxsj1.rar | bxsj1 | 40005 | done | 书剑·经典, same lineage as #4; 3 known fixes applied proactively; see libs/bxsj1/NOTES.md |
 | 6 | chidi.rar | | | not started | |
 | 7 | ds3.8.6.zip | | | not started | |
 | 8 | dtsl.rar | | | not started | |

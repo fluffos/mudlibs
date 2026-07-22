@@ -1,0 +1,8 @@
+inherit SKILL;
+int valid_enable(string usage) 
+{ return usage=="taoism"||usage=="magic"||usage=="buddhism"; } 
+
+string conjure_magic_file(string spell)
+{
+    return __DIR__ + "qimen-flee/" + spell;
+}

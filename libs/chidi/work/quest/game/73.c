@@ -1,0 +1,16 @@
+#include <ansi.h>
+
+inherit WQA_ROOM;
+
+void create()
+{
+	set("short", "明  朝");
+ 	set("long", @LONG
+
+    这里是明朝时空。明朝建于公元1368年，亡于公元1644年。首都在北
+京。
+LONG
+	);
+
+        ::create();
+}

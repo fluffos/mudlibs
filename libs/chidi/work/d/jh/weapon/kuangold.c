@@ -1,0 +1,254 @@
+
+inherit ROOM;
+int do_drop(object me, object obj);
+string money_str(int count);
+
+
+int cot;
+void create()
+{
+        set("short", "矿洞一层");
+        set("long", @LONG
+这是长安城郊外的一个矿石区，听说在这里可以挖到金属，如果有一定
+挖矿经验的人还能挖到高级金属!你也可以来挖挖(wakuang)看。
+LONG
+        );
+        set("no_sleep_room",1);
+       set("no_fight",1);
+        set("exits", ([ /* sizeof() == 1 */
+ "east" : "/d/xingxiu/xxroad2",
+        "down" : __DIR__"kuangold2",
+]));
+
+set("objects", ([
+		"/quest/haojie/npc/man" : 1,
+	]));
+    set("no_magic", 1);
+        setup();
+}
+void init()
+{
+        add_action("do_wakuang", "wakuang");
+        add_action("do_drop2", "drop");
+        if (!wizardp(this_user()))
+        add_action("discmds",({"duanlian","ansuan","touxi","persuade","teach","exert","exercise","study","learn","sleep","kill","steal","cast","conjure","expell","fight","hit","perform","prcatice","scribe","surrender"}));
+}
+ int discmds()
+{
+    tell_object(this_player(),"还是老老实实挖矿吧？！\n");
+    return 1;
+}
+int do_wakuang(string arg)
+{
+        int time;
+        object me;
+        me = this_player();
+        time = 300/(int)me->query("str");
+        if (time <15) time = 15;
+
+        if ((int)me->query("jing")<30 || (int)me->query("qi")<30) return notify_fail("你快累死了，要矿不要命了吗？\n");
+       if (me->query_temp("wakuang")&&me->query_temp("wa_jh")>time()) return notify_fail(HIG"加油呀！努力挖好矿！\n"NOR);
+
+        write(HIY"你拿起铁锤狠狠的砸着石头，希望挖出一个好矿出来......\n"NOR);
+        me->set_temp("wakuang",1);
+        me->set_temp("wa_jh",time()+30);
+        call_out("working",10+random(time),me);
+        return 1;
+}
+int working(object me)
+{
+        object obj;
+        string ob;
+        
+        if (!me)        return 1;
+        
+        me->add("jing",-30);
+        me->add("qi",-30);
+        if((string)environment(me)->query("short")!="矿洞一层")
+        {
+        write("你挖矿的时候开小差，结果什么也没挖到!\n");
+        me->delete_temp("wakuang");
+        return 1;
+        }
+    
+       if ( (me->query_skill("wakuang-shu",1) > 300&& random(1000)>997)
+        || (me->query_skill("wakuang-shu",1) > 800 && random(300)>297)
+        || (me->query_skill("wakuang-shu",1) > 500 &&random(500)>497)) {
+        if (random(10)>5)
+        switch (random(4)) {
+                case 0: ob = "/d/jh/weapon/gao11"; break;
+                case 1: ob = "/d/jh/weapon/gao12"; break;
+                case 2: ob = "/d/jh/weapon/gao13"; break;
+                case 3: ob = "/d/jh/weapon/gao14"; break;
+        }
+            
+        else 
+        switch (random(4)) {
+                case 0: ob = "/d/jh/weapon/gao21"; break;
+                case 1: ob = "/d/jh/weapon/gao22"; break;
+                case 2: ob = "/d/jh/weapon/gao23"; break;
+                case 3: ob = "/d/jh/weapon/gao24"; break;
+        }
+        }else
+     if ( (me->query_skill("wakuang-shu",1) > 150&& random(100)>98)
+       || (me->query_skill("wakuang-shu",1) > 400 && random(100)>96) ){
+        switch (random(5)) {
+                case 0: ob = "/d/jh/weapon/gang1"; break;
+                case 1: ob = "/d/jh/weapon/gang2"; break;
+                case 2: ob = "/d/jh/weapon/gang3"; break;
+                case 3: ob = "/d/jh/weapon/gang4"; break;
+                case 4: ob = "/d/jh/weapon/gang5"; break;
+        }
+        } else
+
+     if ( (me->query_skill("wakuang-shu",1) > 550&& random(100)>98 && me->query("canwazhongji"))
+       || (me->query_skill("wakuang-shu",1) > 400 && random(100)>96) && me->query("canwazhongji")){
+        switch (random(25)) {
+               case 0: ob = "/d/jh/weapon/jue/jue"; break;
+               case 1: ob = "/d/jh/weapon/jue/jue1"; break;
+               case 2: ob = "/d/jh/weapon/jue/jue2"; break;
+               case 3: ob = "/d/jh/weapon/jue/jue3"; break;
+                case 4: ob = "/d/jh/weapon/jue/jue4"; break;
+               case 5: ob = "/d/jh/weapon/jue/jue5"; break;
+               case 6: ob = "/d/jh/weapon/jue/jue6"; break;
+               case 7: ob = "/d/jh/weapon/jue/jue7"; break;
+               case 8: ob = "/d/jh/weapon/jue/jue8"; break;
+               case 9: ob = "/d/jh/weapon/jue/jue9"; break;
+               case 10: ob = "/d/jh/weapon/jue/jue10"; break;
+               case 11: ob = "/d/jh/weapon/jue/jue11"; break;
+                case 12: ob = "/d/jh/weapon/jue/jue12"; break;
+               case 13: ob = "/d/jh/weapon/jue/jue13"; break;
+               case 14: ob = "/d/jh/weapon/jue/jue14"; break;
+               case 15: ob = "/d/jh/weapon/jue/jue15"; break;
+                case 16: ob = "/d/jh/weapon/jue/jue16"; break;
+               case 17: ob = "/d/jh/weapon/jue/jue17"; break;
+               case 18: ob = "/d/jh/weapon/jue/jue18"; break;
+               case 19: ob = "/d/jh/weapon/jue/jue19"; break;
+               case 20: ob = "/d/jh/weapon/jue/jue20"; break;
+               case 21: ob = "/d/jh/weapon/jue/jue21"; break;
+               case 22: ob = "/d/jh/weapon/jue/jue22"; break;
+               case 23: ob = "/d/jh/weapon/jue/jue23"; break;
+               case 24: ob = "/d/jh/weapon/jue/jue24"; break;
+               case 25: ob = "/d/jh/weapon/jue/jue25"; break;
+       }
+               
+        me->delete("canwazhongji");
+        } else
+
+        if ( random(me->query_skill("wakuang-shu",1))
+             < me->query_skill("wakuang-shu",1)/2) {
+        if ( random(10)>8 )
+        switch (random(5)) {
+                case 0: ob = "/d/jh/weapon/tie1"; break;
+                case 1: ob = "/d/jh/weapon/tie2"; break;
+                case 2: ob = "/d/jh/weapon/tie3"; break;
+                case 3: ob = "/d/jh/weapon/tie4"; break;
+                case 4: ob = "/d/jh/weapon/tie5"; break;
+        }
+        else 
+        switch (random(5)) {
+                case 0: ob = "/d/jh/weapon/tong1"; break;
+                case 1: ob = "/d/jh/weapon/tong2"; break;
+                case 2: ob = "/d/jh/weapon/tong3"; break;
+                case 3: ob = "/d/jh/weapon/tong4"; break;
+                case 4: ob = "/d/jh/weapon/tong5"; break;
+        }
+        }
+        else
+        write(HIC"你挖了好久，但是什么也没挖到。\n"NOR);
+        
+        if ( ob )
+        {
+        obj = new(ob);
+        write(HIM"恭喜你，你挖到了一个"+ob->name()+"。\n"NOR);
+        if ( !obj->move(me) ) destruct(obj);                
+        }
+
+        me->add("combat_exp",100+random(100));
+        me->add("potential",100+random(50));
+        me->delete_temp("wakuang");
+        if ( me->query_skill("wakuang-shu",1) <100 )
+        me->improve_skill("wakuang-shu", me->query_int()*300+random(100));
+        else if ( me->query_skill("wakuang-shu",1) < 200 )
+        me->improve_skill("wakuang-shu", me->query_int()*60+random(100));
+        else
+        if ( me->query_skill("wakuang-shu",1) >= 200 )
+        me->improve_skill("wakuang-shu", me->query_int()*20+random(100));
+        write(HIY"经过此次挖矿，你对挖矿的技术似乎更有点心得了。\n"NOR);
+
+        return 1;
+}
+
+int do_drop(object me, object obj)
+{
+   int count;
+
+   if(me->is_busy())
+      return notify_fail("你正忙着呢．．．\n");
+      
+   if (obj->move(environment(me))) 
+   {
+    
+       if( obj->is_character() )
+            message_vision("$N将$n从背上放了下来，躺在地上。\n", me, obj);
+       else if (obj->query("money_id"))
+           message_vision( sprintf("$N丢下一%s$n。\n",obj->query("unit")),me, obj );
+       else 
+            { 
+message_vision( sprintf("$N将一%s$n扔进矿区垃圾堆。\n",obj->query("unit")),me,obj);
+                 destruct(obj);
+             }
+       return 1;
+    }
+    return 0;
+}
+
+int do_drop2(string arg)
+{
+   object me = this_player();
+   object obj, *inv, obj2;
+   int i, amount;
+   string item;
+
+        if(me->is_busy())
+           return notify_fail("你正忙着呢．．．\n");
+ 
+   if(!arg) return notify_fail("你要丢弃什么东西？\n");
+
+   if(sscanf(arg, "%d %s", amount, item)==2) {
+     if( !objectp(obj = present(item, me)) )
+        return notify_fail("你身上没有这样东西。\n");
+     if( !obj->query_amount() )
+        return notify_fail( obj->name() + "不能被分开丢弃。\n");
+     if( amount < 1 )
+        return notify_fail("东西的数量至少是一个。\n");
+     if( amount > obj->query_amount() )
+        return notify_fail("你没有那么多的" + obj->name() + "。\n");
+     else if( amount == (int)obj->query_amount() || !amount )
+        return do_drop(me, obj);
+     else {
+        obj2 = new(base_name(obj));
+        obj2->set_amount(amount);
+        if(do_drop(me, obj2)) { // succeed to drop
+            obj->set_amount( (int)obj->query_amount()-amount );
+            return 1;
+        }
+        else obj2->move(me);
+        return 0;
+     }
+   }
+
+   if(arg=="all") {
+     inv = all_inventory(me);
+     for(i=0; i<sizeof(inv); i++) {
+        do_drop(me, inv[i]);
+     }
+     write("Ok.\n");
+     return 1;
+   }
+
+   if(!objectp(obj = present(arg, me)))
+     return notify_fail("你身上没有这样东西。\n");
+   return do_drop(me, obj);
+}
+

@@ -1,0 +1,1 @@
+mixed temp(object ob){return armor;alias 7 miss feng;}

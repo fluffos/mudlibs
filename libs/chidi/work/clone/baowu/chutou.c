@@ -1,0 +1,22 @@
+// chutou.c
+// by smash
+inherit ITEM;
+#include <ansi.h>
+
+void create()
+{
+	set_name(HIG"锄头"NOR, ({ "chu tou", "chu" }));
+	set_weight(6000);
+	if (clonep())
+		set_default_object(__FILE__);
+	else {
+		set("unit", "把");
+		set("long", "这是一把农民用的锄头，你好象可以用它wajue什么东西。\n");
+		set("wajue", 0);
+		set("value", 200);
+		set("material", "steel");
+		 
+	}
+	 
+	setup();
+}

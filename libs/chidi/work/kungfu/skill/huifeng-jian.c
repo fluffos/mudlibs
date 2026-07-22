@@ -1,0 +1,167 @@
+// By jh@ty
+inherit SKILL;
+string type() { return "zhongji"; }
+int tydamage = this_player()->query("tydamage/sword")?this_player()->query("tydamage/sword"):this_player()->query_skill("huifeng-jian");
+
+// 第一个等级400级以前的描述，和攻击力
+mapping *action = ({
+([      "action" : "$N身行飘然而动，一式「清风袭月」，$w划出一道白光，飞快的刺向$n的$l",
+        "force" : 560,
+        "dodge" : 280,
+        "parry" : 240,
+        "damage" : tydamage,
+        "lvl" : 0,
+        "damage_type" : "刺伤"
+]),
+([      "action" : "$N「漂雪穿云」，左手剑诀,右手$w挽出朵剑花，蓦然剑锋直出，刺向$n的$l",
+        "force" : 560,
+        "dodge" : 280,
+        "parry" : 240,
+        "damage" : tydamage,
+        "lvl" : 10,
+        "damage_type" : "刺伤"
+]), 
+([      "action" : "$N一声清啸，一式「"MAG"千峰竟秀"NOR"」，手中$w顿时化作无数剑芒，洒向$n的$l",
+        "force" : 560,
+        "dodge" : 280,
+        "parry" : 240,
+        "damage" : tydamage,
+        "lvl" : 120,
+        "damage_type" : "刺伤"
+]),
+([      "action" : "$N深吸一口气，双手紧握$w，使出一式「"YEL"万流归宗"NOR"」，电射一般疾刺$n的$l",
+        "force" : 560,
+        "dodge" : 280,
+        "parry" : 240,
+        "damage" : tydamage,
+        "lvl" : 130,
+        "damage_type" : "刺伤"
+]),
+([      "action" : "$N身随剑行，一招「"RED"乌龙搅柱"NOR"」，身行化做一溜黑烟，$w刺向$n的$l",
+        "force" : 560,
+        "dodge" : 280,
+        "parry" : 240,
+        "damage" : tydamage,
+        "lvl" : 140,
+        "damage_type" : "刺伤"
+]), 
+
+([      "action" :  "$N呼的一声拔地而起，一招「"HIW"大雁啼沙"NOR"」，$w由上而下划出一道大弧,向$n的$l挥去"NOR,
+        "force" : 560,
+        "dodge" : 280,
+        "parry" : 240,
+        "damage" : tydamage,
+       "lvl" : 1000,
+        "damage_type" : "刺伤"
+]),
+([      "action" :  "$N挫身退步，一招「"HIG"进退龙游"NOR"」，$w微颤作龙吟，切骨剑气如飓风般裹向$n的$l"NOR,
+        "force" : 560,
+        "dodge" : 280,
+        "parry" : 240,
+        "damage" : tydamage,
+        "lvl" : 1001,
+        "damage_type" : "刺伤"
+]),
+([      "action" :  "$N一招「"HIB"天地鹤翔"NOR"」，手中$w嗡嗡振响，自怀中跃出，如疾电般射向$n的$l"NOR,
+        "force" : 560,
+        "dodge" : 280,
+        "parry" : 240,
+        "damage" : tydamage,
+        "lvl" : 1210,
+        "damage_type" : "刺伤"
+]),
+});
+
+
+int valid_enable(string usage) { return (usage == "sword") || (usage == "parry"); }
+
+int valid_learn(object me)
+{
+
+        if (me->query_skill("huifeng-jian")< 250 && me->query("family/master_id")!="mie jue")
+        return notify_fail("回风剑法是峨眉绝技，非灭绝师太弟子怎可教导？\n");
+
+        if ((int)me->query_skill("linji-zhuang", 1) < 20)
+                return notify_fail("你的「临济十二庄」火候太浅。\n");
+    if ((int)me->query("max_neili") < 20000)
+        return notify_fail("你的内力不够。\n");
+        if ((int)me->query_skill("force", 1) < 20)
+                return notify_fail("你的基本内功火候太浅。\n");
+    if (me->query_skill("sword", 1) <=me->query_skill("huifeng-jian", 1))
+        return notify_fail("你的基础不够，无法领会更高深的技巧。\n");
+
+        return 1;
+}
+mapping query_action(object me, object weapon)
+{
+        int i, level;
+    level   = (int) me->query_skill("huifeng-jian",1);
+        for(i = sizeof(action); i > 0; i--)
+                if(level > action[i-1]["lvl"])
+                        return action[NewRandom(i, 20, level/5)];
+}
+
+mixed hit_ob(object me, object victim, int damage_bonus)
+{
+      if( damage_bonus < 110 ) return 0;
+      if( me->query("neili") < 50000   ) return 0;
+      if( random(10) < 2   ) return 0;
+  //  第六等级的伤气
+      if( me->query_skill("huifeng-jian",1)>5000
+  && me->query("jh_dj/dj")>=25  ) {
+              victim->receive_damage("qi", (damage_bonus - 100) * 2 , me);
+return WHT  "$N的回风剑法已入化镜，奇妙一剑竟带着似柔非柔的剑气直袭$n！\n" NOR;
+  }      
+
+ //  第五等级的伤气
+      if( me->query_skill("huifeng-jian",1)>4000
+  && me->query("jh_dj/dj")>=15 ) {
+              victim->receive_damage("qi", damage_bonus - 100  , me);
+return YEL "$N的回风剑法已到第五等级，一剑随意挥出,如生了眼睛一般扑向$n！\n" NOR;
+  }      
+      if( damage_bonus < 100 ) return 0;
+
+ //  第四等级的伤气
+      if( me->query_skill("huifeng-jian",1)>3000
+  && me->query("jh_dj/dj")>=10 ) {
+           victim->receive_damage("qi", (damage_bonus - 100)  / 2, me);
+return MAG "$N的回风剑法已到第四等级，随手一剑带出一股剑气扑向$n！\n" NOR;
+  }    
+
+ //  第三等级的伤气
+        if( me->query_skill("huifeng-jian",1)>2000
+       && me->query("jh_dj/dj")>=4 ) {
+                victim->receive_damage("qi", (damage_bonus - 100) / 3 , me);
+return CYN "$N的回风剑法已入返璞归真境界，随意一剑带出一阵剑气扑向$n！\n" NOR;
+  }     
+ // 第二等级的伤气
+        if ( me->query_skill("huifeng-jian",1)>400
+  && me->query("jh_dj/dj")>=2 ) {
+             victim->receive_damage("qi", (damage_bonus - 100) / 4 , me);
+return RED "$N的回风剑法已初有小成,带出一小阵"HIR"剑气"HIW"扑向$n！\n" NOR;
+} 
+}
+
+int practice_skill(object me)
+{
+        object weapon;
+
+        if ( !me->query_skill("linji-zhuang",1) )
+                return notify_fail("练「回风拂柳剑」必须要有「临济十二庄」作底子。\n");
+
+        if (!objectp(weapon = me->query_temp("weapon"))
+        || (string)weapon->query("skill_type") != "sword")
+                return notify_fail("你使用的武器不对。\n");
+
+        if ((int)me->query("qi") < 50)
+                return notify_fail("你的体力不够练「回风拂柳剑」。\n");
+
+        me->receive_damage("qi", 30);
+        return 1;
+}
+
+string perform_action_file(string action)
+{
+        return __DIR__"huifeng-jian/" + action;
+}
+

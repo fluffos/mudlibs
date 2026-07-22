@@ -1,0 +1,289 @@
+inherit F_CLEAN_UP;
+int check_legal_name(string name);
+int check_legal_long(string name);
+void enter_desc(object me, int roomtype, string s_title, string dir, string text);
+//#define RMB_COST	1000
+//#define GOLD_COST	1
+int irmbcost;
+int igoldcost;
+#define MIN_EXP		1000000000
+int main(object me, string arg)
+{
+        int flag;
+		int roomtype;
+        string stitle;
+		string banghui;
+        string ltitle;
+        string dir;
+        object env;
+		object lingpai;
+
+        seteuid(getuid());
+        if(!arg || sscanf(arg,"%d %s %s", roomtype,dir,stitle) != 3)
+			return notify_fail("指令格式：　buildbh 1 north 天地阁总坛 \n"
+			+ "1 普通房 \n"
+			+ "2 休息室 \n"
+			+ "3 铁匠铺 \n"
+			+ "4 练功房 \n"
+			+ "5 任务房 \n"
+			+ "6 书院 \n"
+			+ "7 钱庄 \n"
+			+ "8 大门 \n"
+			+ "9 擂台 \n"
+			);
+//       if(me->query("family/privs") != -1) 
+		if((banghui=me->query("banghui/rank_lv"))<8)
+			return notify_fail("你没有这种权力。\n");
+
+        if((int)me->query("combat_exp") < MIN_EXP)
+			return notify_fail("你的实战经验不够"+chinese_number(MIN_EXP)+"点。\n");
+
+        env = environment(me);
+
+		if((string)env->query("owner") != "bh_public" 
+			&& (string)env->query("owner") != (string) me->query("banghui/name"))
+			return notify_fail("你不可在这建房！\n");
+
+		if((string)env->query("owner") != (string) me->query("banghui/name"))
+		{
+			if((string)env->query("owner") != "bh_public")
+			{
+				return notify_fail("你不可在这建房！\n");
+			}
+			else
+			{
+				if(roomtype != 8)		//公共房间只能建大门
+				{
+					return notify_fail("必须先建大门，其它房间必须在大门后面建设！\n");
+				}
+			}
+		}
+
+		if(env->query("exits/"+dir))
+        {
+			return notify_fail("这个方向已经有房屋了！\n");
+        }
+
+        if((string)env->query("type") == "zheng" && me->query("shen") < 0)
+			return notify_fail("你一个邪魔外道想在这里造房子？找死啊！\n");
+
+        if((string)env->query("type") == "xie" && me->query("shen") > 0)
+			return notify_fail("你一个正派人士想在这里造房子？找死啊！\n");
+
+		lingpai = new("clone/misc/lingpai");
+		lingpai->create( me->query("banghui/name") );
+
+        if((int)lingpai->query("created_room") > 40)
+		{
+			destruct(lingpai);
+			return notify_fail("你不可再建房了！\n");
+		}
+
+		switch(roomtype)
+		{
+		case 1:							//普通房
+			irmbcost		= 1000;
+			igoldcost		= 20000;
+			break;
+		case 2:							//休息室
+			irmbcost		= 1000;
+			igoldcost		= 20000;
+			break;
+		case 3:							//铁匠铺
+			irmbcost		= 800000;
+			igoldcost		= 1000000;
+			if((int)lingpai->query("weapon_room") >= 1)
+			{
+				destruct(lingpai);
+				return notify_fail("你不可再建铁匠铺了！\n");
+			}
+			break;
+		case 4:							//练功房
+			irmbcost		= 10000;
+			igoldcost		= 100000;
+			if((int)lingpai->query("lian_room") >= 2)
+			{
+				destruct(lingpai);
+				return notify_fail("你不可再建练功房了！\n");
+			}
+			break;
+		case 5:							//工作房
+			irmbcost		= 500000;
+			igoldcost		= 500000;
+			if((int)lingpai->query("job_room") >= 1)
+			{
+				destruct(lingpai);
+				return notify_fail("你不可再建工作房了！\n");
+			}
+			break;
+		case 6:							//书院
+			irmbcost		= 1200000;
+			igoldcost		= 1200000;
+			if((int)lingpai->query("lit_room") >= 1)
+			{
+				destruct(lingpai);
+				return notify_fail("你不可再建书房了！\n");
+			}
+			break;
+		case 7:							//钱庄
+				destruct(lingpai);
+				return notify_fail("暂不开放！\n");
+			irmbcost		= 100000;
+			igoldcost		= 300000;
+			if((int)lingpai->query("bank_room") >= 1)
+			{
+				destruct(lingpai);
+				return notify_fail("你不可再建钱庄了！\n");
+			}
+			break;
+		case 8:							//大门
+			irmbcost		= 100000;
+			igoldcost		= 300000;
+			if((int)lingpai->query("men_room") >= 1)
+			{
+				destruct(lingpai);
+				return notify_fail("你不可再建大门了！\n");
+			}
+			break;
+		case 9:							//擂台
+				destruct(lingpai);
+				return notify_fail("暂不开放！\n");
+			irmbcost		= 300000;
+			igoldcost		= 500000;
+			if((int)lingpai->query("fight_room") >= 3)
+			{
+				destruct(lingpai);
+				return notify_fail("你不可再建擂台了！\n");
+			}
+			break;
+		default:						//其它参数
+			destruct(lingpai);
+			return notify_fail("你要建什么？\n");
+			break;
+		}
+
+        if((int)lingpai->query("rmb") < irmbcost)
+		{
+			destruct(lingpai);
+			return notify_fail("贵帮的人民币不够"+chinese_number(irmbcost)+"点。\n");
+		}
+        if((int)lingpai->query("money") < igoldcost)
+		{
+			destruct(lingpai);
+			return notify_fail("贵帮银行没有"+chinese_number(igoldcost)+"两金子。\n");
+		}
+        if((int)me->query("combat_exp") < MIN_EXP)
+		{
+			destruct(lingpai);
+			return notify_fail("你的实战经验不够"+chinese_number(MIN_EXP)+"点。\n");
+		}
+
+		destruct(lingpai);
+
+        if(check_legal_name(stitle))
+		{
+			write("请输入房间描述：  ");
+			me->edit( (: enter_desc , me, roomtype, stitle, dir :) );
+		}
+
+        return 1;
+        
+}
+void enter_desc(object me, int roomtype, string s_title,string dir,string text)
+{
+string *direc= ({"north", "south", "east", "west", "northup", 
+"southup", "eastup", "westup", "northdown",
+"southdown", "eastdown", "westdown", "northeast", 
+"northwest", "southeast", "southwest", "up", "down"});
+        int i;
+        int okey=0;
+		object lingpai;
+
+        if(!check_legal_long(text)) return;
+        for (i = 0; i < sizeof(direc); i++)
+		{
+			if(direc[i] == dir)
+			{
+				okey=1; break;
+			}
+		}
+        if(okey)        
+        {
+// I think by now, we should checked all conditions,
+// deduct the cost and go build it!
+
+			lingpai = new("clone/misc/lingpai");
+			lingpai->create( me->query("banghui/name") );
+
+            lingpai->add("money",-igoldcost);
+            lingpai->add("rmb",-irmbcost);
+			lingpai->save();
+            BR_D->buildroom(me,s_title,text,dir,roomtype);
+        }
+        else
+        {
+			tell_object(me,"你要往哪个方向建？\n");
+			return;
+        }
+}
+int check_legal_name(string name)
+{
+        int i;
+        i = strlen(name);
+        if( (strlen(name) < 2) || (strlen(name) > 40 ) ) {
+                write("对不起，中文名字必须是一到二十个中文字。\n");
+                return 0;
+        }
+        while(i--) {
+                if( name[i]<=' ' ) {
+                        write("对不起，中文名字不能用控制字元。\n");
+                        return 0;
+                }
+                if( i%2==0 && !is_chinese(name[i..<0]) ) {
+                        write("对不起，名字必需是中文。\n");
+                        return 0;
+                }
+        }
+        return 1;
+}
+int check_legal_long(string name)
+{
+        int i;
+        i = strlen(name);
+        if( (strlen(name) < 120) || (strlen(name) > 600 ) ) {
+                write("对不起，中文描述必须是六十到三百个中文字。\n");
+                return 0;
+        }
+        while(i--) {
+                if(name[i]==' ' || name[i] == '\n') continue;
+                if( name[i]<' ' ) {
+                        write("对不起，中文描述不能用控制字元。\n");
+                        return 0;
+                }
+                if( i%2==0 && !is_chinese(name[i..<0]) ) {
+                        write("对不起，描述必需是中文。\n");
+                        return 0;
+                }
+        }
+        return 1;
+}
+int help (object me)
+{
+        write(@HELP
+
+指令格式：　buildbh 1 north 天地阁总坛 \n
+1 普通房
+2 休息室
+3 铁匠铺
+4 练功房
+5 任务房
+6 书院
+7 钱庄
+8 大门
+9 擂台
+
+HELP
+        );
+        return 1;
+}
+

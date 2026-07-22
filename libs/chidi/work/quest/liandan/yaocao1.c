@@ -1,0 +1,18 @@
+// yaocao.c 药草  
+// 星星lywin 2000/6/15
+
+#include <ansi.h>
+inherit ITEM;  
+void create() 
+{
+        set_name("普通药草",({"yao cao", "yao"}));
+        if ( clonep() )
+                set_default_object(__FILE__);
+        else {
+                set("unit", "株");
+		set("no_drop","不要乱丢，这东西打到人痛！\n");
+		set("no_put",1);
+                set("long", "这是一株生长在密林中的无名草药，一般人都会误认成杂草。\n");
+             }
+        setup();
+}

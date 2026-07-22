@@ -1,0 +1,16 @@
+// liyan_b.c
+// 2002/1/2 by 李彦(liyan) email:ruoyu_st@163.com
+
+inherit BULLETIN_BOARD;
+
+void create()
+{
+        set_name("玩家意见留言板",({ "board" }) );
+        set("location", "/u/liyan/jiedai");
+        set("board_id", "liyan_b");
+        set("long","这是一个专供玩家提出建议使用的留言板。\n" );
+        setup();
+        set("capacity", 3000);
+        replace_program(BULLETIN_BOARD);
+}
+

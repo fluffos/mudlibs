@@ -1,0 +1,18 @@
+#include <weapon.h>
+#include <ansi.h>
+inherit SWORD; 
+void create() {
+        set_name(HIM"东瀛神剑"NOR, ({ "sword" }) );
+        set_weight(1000);
+        if( clonep() )
+                set_default_object(__FILE__);
+        else {
+                set("unit", "把");
+                set("value", 10000);
+                set("material", "iron");
+                set("long", "这是东瀛的宝剑。\n");
+                set("wield_msg", "$N抽出一把明晃晃的$n握在手中。\n");
+                set("unequip_msg", "$N将手中的$n插入腰间的鞘。\n");
+        }
+        ::init_sword(1920);
+}

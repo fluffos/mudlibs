@@ -1,0 +1,98 @@
+// huqingyu.c
+#include <ansi.h>
+#include <command.h>
+//inherit F_CLEAN_UP;
+inherit BHNPC;
+
+void create()
+{
+        set_name("张小三",({ "zhang xiaosan","zhang" }));
+        set("gender", "男性" );
+        set("age", 63);
+        set("long",
+"张小三是当世一大神算，他的本事神奇无比,无所不知。\n");
+        set("combat_exp", 200000);
+        set("attitude", "friendly");
+        set("inquiry", ([
+            "福缘": "呵呵，五两黄金，款到就知道了！",
+            "相貌": "只要有钱就行了!",
+            "容貌": "只要有钱就行了!",
+            "生日": "想算生日是几朵花?给钱就行了!",
+        ]) );
+        setup();
+}
+
+void init()
+{
+        object ob,me;
+        add_action("do_kar","kar");
+        add_action("do_per","per"); 
+        add_action("do_birthday","birthday");               
+}
+
+int accept_object(object me, object ob)
+{
+        if( ob->query("money_id") && ob->value() >= 50000)
+        {
+        command("nod");
+        command("say 好吧，"+me->query("name")+"你想问什么？请输入kar或者per或者birthday！\n");
+        me->set_temp("marks/zhangsan",1);
+        return 1;
+        }
+}
+int do_kar(object me)
+{
+
+        me = this_player();
+
+        if(!(int)me->query_temp("marks/zhangsan"))
+        {
+            return notify_fail("张小三翻着黑白眼：钱呢？没给钱想占便宜？\n");
+        }
+
+        command("whisper "+me->query("id")+" 听清了，你的福缘："+me->query("kar"));
+        command("hehe");
+        me->delete_temp("marks/zhangsan");
+
+        return 1;
+}
+
+int do_per(object me)
+{
+        me = this_player();
+
+        if(!(int)me->query_temp("marks/zhangsan"))
+        {
+            return notify_fail("张小三翻着黑白眼：钱呢？没给钱想占便宜？\n");
+        }
+
+        command("whisper "+me->query("id")+" 听清了，你的相貌："+me->query("per"));
+        command("hehe");
+        me->delete_temp("marks/zhangsan");
+
+        return 1;
+}
+
+int do_birthday()
+{
+        object me = this_player();
+       
+        if(!(int)me->query_temp("marks/zhangsan"))
+        {
+            return notify_fail("张小三翻着黑白眼：钱呢？没给钱想占便宜？\n");
+        }
+ else{
+        int j;
+        j=me->query("birthday");
+        j=j%90+10;
+
+        command("whisper "+me->query("id")+" 听清了，你的生日："+CHINESE_D->chinese_number(j)+"朵花。");
+        command("hehe");
+        me->delete_temp("marks/zhangsan");
+        return 1;
+       }
+}
+
+
+
+

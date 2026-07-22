@@ -1,0 +1,49 @@
+
+// bula and mon@xyj
+
+inherit __DIR__"fei.c";
+
+// here should be this NPC specific skills.
+
+void set_skills()
+{
+        object me=this_object();
+        object weapon;
+
+        int j;
+        j= 200+random(150);  
+        create_family("À¥ÂØÅÉ", 3, "µÜ×Ó"); 
+        me->set_skill("unarmed", j);
+        me->set_skill("dodge", j);
+        me->set_skill("parry", j);
+        me->set_skill("force", j);
+ 
+        me->set_skill("sword", j+random(15));
+        me->set_skill("xunlei-sword", j+random(15));
+        me->set_skill("xuantian-force", j+random(15));
+        me->set_skill("sanyin-unarmed", j+random(15));
+        me->set_skill("yaoming-dodge", j+random(15));
+
+        me->map_skill("force", "xuantian-force");
+        me->map_skill("sword", "xunlei-sword");
+        me->map_skill("parry", "xunlei-sword");
+        me->map_skill("unarmed", "sanyin-unarmed");
+        me->map_skill("dodge", "yaoming-dodge");
+
+	set("chat_chance_combat", 80);
+        set("chat_msg_combat", ({
+        (: exert_function, "recover" :),
+        }) );
+
+/*
+        if (random(2))
+           weapon=new("/d/obj/weapon/whip/tielian");
+        else
+           weapon=new("/d/obj/weapon/stick/xiangmo");
+        weapon->move(me);
+      
+        command("wield all");
+*/
+     carry_object("/clone/misc/cloth")->wear();
+     carry_object("/clone/weapon/changjian")->wield();;
+}

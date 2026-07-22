@@ -1,0 +1,46 @@
+// wdroad5.c
+// by Xiang
+inherit ROOM;
+void create()
+{
+        set("short", "青石大道");
+        set("long", @LONG
+你走在一条青石大道上，四周静悄悄的。西南方向似乎有一条黄土路。
+似乎东南方有一丝杀气,远远传来,令人不寒而栗.
+LONG
+        );
+        set("outdoors", "wudang");
+        set("exits", ([
+                "southeast" : "/d/heimuya/road1", 
+                "southwest" : __DIR__"wdroad6",
+                "north" : __DIR__"wdroad4",
+  "northwest" : "/d/xiangyang/caodi6",
+        ]));
+        setup();
+}
+/* void init()
+{
+    add_action("do_move", "move");
+}
+int do_move(string arg)
+{
+    object paper;
+        if( !arg || arg=="" ) return 0;
+      if( arg=="popo" ) {
+        message_vision("$N轻轻的推了推书桌，沉重的书桌似乎根本没动...，突然从书桌和\n"
+        "墙壁之间飘落出一张纸。\n", this_player());
+       paper = new("/d/wudujiao/obj/hanshasheying");
+       add("box_count",-1);
+paper->set("own_name",this_player()->query("id"));
+        remove_call_out ("give_hssy");
+        call_out ("give_hssy", 900); // 15 分钟
+
+        paper->move(this_player());
+paper=new("/clone/misc/mask");
+       paper->move(this_player());
+paper=new("/d/city3/obj/jinshejian");
+       paper->move(this_player());
+        return 1;
+        }
+    return 0;
+} */

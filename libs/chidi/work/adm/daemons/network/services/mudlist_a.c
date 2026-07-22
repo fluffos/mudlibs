@@ -1,0 +1,35 @@
+/*
+ * File    : mudlist_a.c
+ * Creator : Pinkfish@Discworld
+ *         : Grendel@Tmi-2
+ * When    : 93-08-15
+ *
+ * This file is part of the tmi mudlib.  Please keep this header intact.
+ *
+ * This protocol is used to send a mudlist in response to mudlist_q.
+ */
+// Ported to ES2 mudlib by Annihilator@ES2 (06/15/95)
+#include <mudlib.h>
+#include <net/dns.h>
+#include <net/macros.h>
+inherit F_CLEAN_UP;
+int have_mudlist = 0;
+void create() { seteuid(ROOT_UID); }
+// Someone replyed to our query and has sent us their mudlist.
+void incoming_request(mapping info)
+{
+    if(!ACCESS_CHECK(previous_object())) return;
+
+    if(sizeof(keys(info))) have_mudlist = 1;
+
+    if (info["NAME"] && info["NAME"] != Mud_name() )
+        PING_Q->send_ping_q(info["HOSTADDRESS"], info["PORTUDP"]);
+}
+// these is used by the dns master to find out if we have a mudlist
+int clear_db_flag()
+{
+    if(ACCESS_CHECK(previous_object()))
+        have_mudlist = 0;
+}
+int query_db_flag() { return have_mudlist; }
+

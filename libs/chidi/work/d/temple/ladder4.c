@@ -1,0 +1,24 @@
+#pragma save_binary
+// Room: /d/temple/ladder4.c
+
+inherit ROOM;
+
+void create()
+{
+	set("coor",({1280,4900,20}));
+	set("short", "石英岩石阶");
+	set("long",
+"你正走在一道长长的石英岩阶梯上,阶梯的两侧种植著一排高耸\n"
+"的松树。雪亭镇就在东边不远的山下,你隐约还能听到从镇上传\n"
+"来的话语声。\n"
+);
+	set("exits", ([ /* sizeof() == 2 */
+  "westup" : __DIR__"ladder3",
+  "eastdown" : __DIR__"ladder5",
+]));
+	set("no_clean_up", 0);
+	set("outdoors", "snow");
+
+	setup();
+	replace_program(ROOM);
+}

@@ -1,0 +1,19 @@
+inherit ROOM;
+void create()
+{
+          set("short", "琴怪居");
+        set("long", @LONG
+琴怪居，通吃帮六怪之一张博的居所，琴怪平生就喜欢抚琴，
+整天都待在屋里与琴为伍，钻研琴艺。
+LONG
+        );
+        set("exits", ([
+                  "south" : __DIR__"dujv",
+                  "east" : __DIR__"yajv",
+        ]));
+        set("objects", ([
+        "/d/tongchi/npc/qinguai":1,
+        ]));
+        setup();
+        replace_program(ROOM);
+}

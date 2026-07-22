@@ -1,0 +1,48 @@
+// armor.c
+#include <ansi.h>
+#include <armor.h>
+inherit ARMOR;
+
+void create()
+{
+    set_name(HIM"英雄铠甲"NOR , ({ "armor","hero armor" }) );
+    set_weight(1000);
+    if( clonep() )
+        set_default_object(__FILE__);
+    else {
+        set("unit", "件");//单位
+        set("no_drop",1);//不允许drop
+        set("no_give",1);//不允许give
+        set("no_put",1);//不允许put
+        set("no_sell",1);//不允许sell
+        set("express","can_shenghua");//可进化标志
+        set("sh_lvl",0);//原始装备标志
+        set("material","zhuangbei");//进化装备类标志
+        set("point",20);//伤害力
+        set("stype","ARMOR");//道具的子类别 
+        set("ctype","鎧甲");//道具的类别的中文名 
+        set("type","armor");//道具的类型
+       /*-----------特殊屬性---------------------*/ 
+        set("armor",1800);//防禦
+        set("defense1",200);//追加躲避
+        set("force",100);//追加内功
+        set("constitution",100);//追加根骨
+      /*--------------END------------------------*/
+        set("wear_msg", HIY "只听一声清悦的龙吟，$N迅速的把上衣一扒，一扔，套上一件英雄铠甲。\n" NOR);
+        set("remove_msg", HIC"$N喘了几口气，把英雄铠甲卸了下来，天地间传出一声若有若无的叹息。\n" NOR);
+	 set("long",HIR "\t    〖英雄套裝〗－－英雄鎧甲\n"NOR
+YEL"\t這是一件由無數块烈火孽龙的鳞片组成，\n"
+"\t由精灵王亲手打造并祝福的铠甲，鳞片之\n"
+"\t間流露着翠绿的灵光令人心醉神迷，传说\n"
+"\t得到英雄套装的人将成为江湖的至尊\n"
+"\t人物。\n"NOR
+HIY"\t    ----------進化基數----------\n"NOR
+HIG"\t      追加防禦：1800 ×進化次數\n"NOR
+HIG"\t      追加躲避：200  ×進化次數\n"NOR
+HIG"\t      追加内功：100  ×進化次數\n"NOR
+HIG"\t      追加根骨：100  ×進化次數\n"NOR
+HIY"\t    ----------------------------\n"NOR);	
+    }
+setup();
+}
+void owner_is_killed() { destruct(this_object()); }

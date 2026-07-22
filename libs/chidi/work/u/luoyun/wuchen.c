@@ -1,0 +1,57 @@
+//nai niu.c
+#include <ansi.h>
+inherit BHNPC;
+
+void create()
+{
+        set_name("无尘大师", ({ "wuchen dashi","wuchen","dashi"}));
+        set("long", "他是江湖里神秘的人物之一，听说可以从他身上得到不少好处。\n");
+        set("nickname", HIG"南少林"HIM"败类"NOR);
+        set("gender", "男性");
+        set("age", 55);
+        set("attitude","friendly");
+        set("str", 3000);
+        set("dex", 3000);
+       set("no_suck2",1);
+        set("con", 3000);
+        set("int", 3000);
+        set("per", 30);
+        set_skill("dodge", 20000);
+        set_skill("parry", 20000);
+        set("combat_exp", 1000000000);
+        set("max_qi", 5000);
+        set("max_jing", 1000);
+        set("neili", 30000);
+        set("max_neili", 16000000);
+        set("max_jingli",16000000);
+        set("jiali", 20000);
+
+
+        setup();
+
+}
+
+void kill_ob(object ob)
+{
+        ob->remove_killer(this_object());
+        remove_killer(ob);
+        command("peace " + ob->query("id"));
+}
+void unconcious()
+{
+        reincarnate();
+        set("eff_qi", query("max_qi"));
+        set("qi", query("max_qi"));
+        set("eff_jing", query("max_jing"));
+        set("jing", query("max_jing"));
+        set("neili",30000);
+        set("max_neili", 16000000);
+        set("max_jingli",16000000);
+        say( "无尘大师狞笑着说：我是无敌不死版！\n");
+        
+}
+
+void die()
+{
+        unconcious();
+}

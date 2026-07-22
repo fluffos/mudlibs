@@ -1,0 +1,25 @@
+#pragma save_binary
+// Room: /d/temple/corridor3.c
+
+inherit ROOM;
+
+void create()
+{
+	add_light(this_object(),1);
+	set("coor",({1220,4960,35}));
+	set("short", "回廊");
+	set("long",
+"你正站在回廊转角的地方,回廊从这往西及南边而去。在走廊的\n"
+"东侧是一排厢房。北方是一条铺著青石板的小径。\n"
+);
+	set("exits", ([ /* sizeof() == 4 */
+		"north" : __DIR__"road1",
+		"south" : __DIR__"corridor7",
+		"west" : __DIR__"corridor5",
+		"east" : __DIR__"restroom2",
+]));
+
+        create_door("east","木门","west");
+
+	setup();
+}

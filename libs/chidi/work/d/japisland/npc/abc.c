@@ -1,0 +1,602 @@
+#include <globals.h>
+#include <ansi.h> 
+
+inherit NPC;
+
+//inherit "/d/japan/npc/offense_wokou";
+void smart_fight();
+int lev = random(3500);
+int laa = random(150);
+string *allplace=({"/d/japan/cavehotel","/d/japan/dbj","/d/japan/dbm","/d/japan/dnj",
+  "/d/japan/dnm","/d/japan/np","/d/japan/ntdl","/d/japan/ntdm","/d/japan/ntxl",
+  "/d/japan/ntxm","/d/japan/obj”,”/d/japan/qszl","/d/japan/sbj","/d/japan/sbm",
+  "/d/japan/storage","/d/japan/tbzl","/d/japan/tbzm","/d/japan/td","/d/japan/tdbd",
+  "/d/japan/tdnd","/d/japan/tnzl","/d/japan/tnzm","/d/japan/tsbd","/d/japan/tt",
+  "/d/japan/twt","/d/japan/txnd","/d/japan/tzdx","/d/japan/weaponshop","/d/japan/xnj",
+  "/d/japan/xnm","/d/japan/yd","/d/japan/zd","/d/japan/zddm","/d/japan/zdxm","/d/japan/zl",
+  "/d/japan/ztdd","/d/japan/ztddn","/d/japan/zx",});
+
+#define EXPBONUS 1000000
+
+void create()
+{       
+
+    set_name(HIM"倭寇首领"NOR, ({ "jap leader","leader" }) );
+    set("title", HBRED"月牍勋帅"NOR); 
+set("nickname",HIW"寇绝天下"NOR);
+    set("long","来自东瀛的强盗，他们烧杀抢掠，无恶不作。\n");
+    set("attitude", "aggressive");
+    set("no_return",1);
+    //set("bellicosity", 1);
+    set("no_arrest",1);
+    set("wokou",30);
+    //
+set("str",10000);
+set("con",10000);
+set("cps",10000);
+set("cor",10000);
+  set("lunhui_zhuanshi",random(20));
+       set("max_kee", 3000000+3000*laa);
+       set("max_sen", 3000000+3000*laa);
+       set("combat_exp", 825000000+random(800000000));
+         set("daoxing", 825000000+random(800000000));
+
+              set("faith", 102200);
+set("lunhui_zhuanshi",20+random(10));
+set("dropint",40);
+set("level",100+random(100));
+   set_skill("unarmed", 3200+lev);
+   set_skill("mindsword", 2200+lev);
+   set_skill("dodge", 2200+lev);
+   set_skill("parry", 2200+lev);
+   set_skill("literate", 2200+lev);
+   set_skill("spells", 2200+lev);
+ set_skill("mingyu-gong", 2200+lev);
+ set_skill("iron-cloth", 2200+lev);
+ set_skill("yiqiguanforce", 2200+lev);
+ set_skill("huntian-qigong", 2200+lev);
+ set_skill("qixiu-jian", 2200+lev);
+ set_skill("kugu-blade", 2200+lev);
+ set_skill("yinfeng-zhua", 2200+lev);
+ set_skill("blade", 2200+lev);
+ set_skill("ittouryu", 2200+lev);
+ set_skill("kongshoudao", 2200+lev);
+   set_skill("force", 2200+lev);
+   set_skill("zixia-shengong", 2200+lev);
+   set_skill("sevensteps", 2200+lev);
+   set_skill("taoism", 2200+lev);
+   set_skill("hunyuan-zhang", 2200+lev);
+   set_skill("yujianshu", 2200+lev);
+   set_skill("canxin-jian", 2200+lev);
+   set_skill("sword", 2200+lev);
+  set_skill("moyun-shou", 2200+lev);
+  set_skill("huomoforce", 2200+lev);
+  set_skill("lengquan-force", 2200+lev);
+  set_skill("changquan", 2200+lev);
+  set_skill("cuixin-zhang", 2200+lev);
+  set_skill("ningxie-force", 2200+lev);
+  set_skill("cloudforce", 2200+lev);
+  set_skill("lianhuan-zhang", 2200+lev);
+
+  map_skill("force", "zixia-shengong");
+  map_skill("unarmed", "hunyuan-zhang");
+  map_skill("dodge", "sevensteps");
+  map_skill("spells", "taoism");
+  map_skill("parry", "mingyu-gong");
+  map_skill("sword", "mindsword");
+ map_skill("iron-cloth", "yiqiguanforce");
+set("env/combatd",random(12));
+ set("max_force",10300000+1500*laa);
+  set("force",23000000+500*laa);
+  set("max_mana",10300000+1500*laa);
+  set("mana",23000000+50000*laa);
+//set("env/combatd",random(1));
+        set("resistance/kee",90);
+        set("resistance/gin",90);
+        set("resistance/sen",90);
+        set("lunhui_zhuanshi",random(30));
+  set("skill_level/sword","grandmaster");
+            set("skill_level/dodge","grandmaster");
+ set("skill_level/parry","grandmaster");
+ set("skill_level/force","grandmaster");
+ set("skill_level/spells","grandmaster");
+ set("skill_level/unarmed","grandmaster");
+ set("skill_level/whip","grandmaster");
+ set("skill_level/spear","grandmaster");
+ set("skill_level/blade","grandmaster");
+ set("skill_level/axe","grandmaster");
+ set("skill_level/fork","grandmaster");
+ set("skill_level/mace","grandmaster");
+ set("skill_level/throwing","grandmaster");
+ set("skill_level/literate","grandmaster");
+ set("skill_level/iron-cloth","grandmaster");
+ set("skill_level/staff","grandmaster");
+ set("skill_level/stick","grandmaster");
+ set("skill_level/dagger","grandmaster");
+ set("skill_level/music","grandmaster");
+ set("skill_level/hammer","grandmaster");
+ set("zs1/family","南海普陀山");
+  set("zs2/family","盘丝洞");
+set("zs3/family","月宫");
+set("zs4/family","方寸山三星洞");
+set("zs5/family","阎罗地府");
+set("zs6/family","峨眉派");
+set("zs7/family","神剑山庄");
+set("zs8/family","东海龙宫");
+set("zs9/family","火云洞");
+set("zs10/family","陷空山无底洞");
+set("zs11/family","五庄观");
+set("zs12/family","大雪山");
+set("zs13/family","将军府");
+set("zs14/family","蜀山剑派");
+set("zs15/family","幻世魔导");
+set("zs16/family","幻世勇者");
+set("zs17/family","日月神教");
+set("zs18/family","武圣门");
+set("zs19/family","轩辕古墓");
+set("zs20/family","三界散仙");
+set("zs21/family","昆仑山玉虚洞");
+
+set_temp("apply/armor", 56720+300*laa); 
+                add_temp("apply/damage", 1155+20*laa);
+add_temp("apply/armor_vs_force", 8725+random(8500)+100*laa);  	
+                    set_temp("combat/bless",14*laa);
+                 set_temp("combat/lucky",14*laa);
+                  set_temp("apply/sub_max_armor",12600+100*laa); 
+                 set_temp("apply/sub_max_defense",12900+100*laa); 
+if(!random(2)) set_temp("apply/immune_jin",1);
+if(!random(2)) set_temp("apply/immune_mu",1);
+if(!random(2)) set_temp("apply/immune_shui",1);
+if(!random(2)) set_temp("apply/immune_huo",1);
+     add_temp("apply/sub_max_phy",10200+100*laa);
+     add_temp("apply/sub_phy",8360+10*laa);
+set_temp("boostcurse",1);
+set_temp("dual-attack",1);
+set("no_busy",20);
+set_temp("npc_yyyy",1);
+
+create_family("陷空山无底洞", 1, "弟子");
+
+  
+  set("chat_chance_combat",999);
+        set("chat_msg_combat", ({
+      //  (: exert_function, "qiankun" :),
+                (: smart_fight() :),
+                    }) );
+  
+        setup(); 
+     carry_object("/d/japan/npc/obj/armor")->wear();
+carry_object("/d/japan/npc/obj/sword")->wield();
+carry_object("/d/japan/npc/obj/sword");
+carry_object("/d/japan/npc/obj/sword");
+carry_object("/d/japan/npc/obj/sword");
+carry_object("/d/japan/npc/obj/sword");
+carry_object("/d/japan/npc/obj/sword");
+carry_object("/d/japan/npc/obj/sword");
+carry_object("/d/japan/npc/obj/sword");
+
+carry_object("/d/japan/npc/obj/blade4");
+carry_object("/d/japan/npc/obj/blade4");
+carry_object("/d/japan/npc/obj/blade4");
+carry_object("/d/japan/npc/obj/blade4");
+carry_object("/d/japan/npc/obj/blade4");
+carry_object("/d/japan/npc/obj/blade4");
+carry_object("/d/japan/npc/obj/blade4");
+carry_object("/d/japan/npc/obj/blade4");
+carry_object("/d/japan/npc/obj/blade4");
+} 
+
+/*
+void init() 
+{                               
+    object target;
+    ::init();
+    if( !query_heart_beat(this_object())) set_heart_beat(1);        
+
+    if(environment() && !environment()->query("no_fight")) 
+    {
+	target =  this_player();
+	if(!target->query("no_see")&&!target->query("wokou"))
+	{
+	    kill_ob(target);
+	    target->kill_ob(this_object());
+	}
+    }
+} 
+*/
+
+void init()
+{
+ 
+  object me;
+
+  ::init();
+  if( interactive(me = this_player()) && !is_fighting() 
+	  && living(me) ) {
+    call_out("greeting", 1, me);
+  }
+
+}
+
+void greeting(object me)
+{
+  
+  object ob = this_object(); 
+  if( !me || environment(me) != environment() ) return;
+      kill_ob(me);
+      me->kill_ob(ob);
+      return;
+ 
+}
+
+
+
+varargs void invocation(int exp,int life_bonus,object who)
+{
+    exp = exp/3*3;
+    //        ::invocation(exp,life_bonus,who);
+}
+/*
+void smart_fight() {
+    object me;
+    object ob;
+    object *inv;
+    object target;
+    int i,j;
+    me = this_object();
+
+    if (environment()) {
+	inv = all_inventory(environment());
+	for (i=0;i<sizeof(inv);i++) {
+	    target =  inv[i];
+	    if(living(target) && !target->query("no_see") && !target->query("wokou"))
+	    {
+		kill_ob(target);
+		target->kill_ob(this_object());
+	    }
+	}
+
+    }
+   
+      command("wield all");
+ if (query_temp("weapon")) { 
+                if (random(2))
+{
+                    {
+	        command("enforce 500");
+ command("unwield all");
+command("wield sword");
+command("enable sword qixiu-jian");
+  command("perform zxzx");
+command("perform qijian");
+ command("unwield sword");
+command("wield blade");
+ command("enable blade ittouryu");
+  command("perform gobankiri");
+command("perform tianlangshixue");
+   command("perform duomingqisha");
+command("perform hyakki");
+
+	       	 }
+
+
+}
+                else                        
+
+ {
+	         command("enforce 500");
+ command("unwield all");
+command("wield sword");
+command("enable sword qixiu-jian");
+  command("perform zxzx");
+command("perform qijian");
+ command("unwield sword");
+command("wield blade");
+ command("enable blade ittouryu");
+  command("perform gobankiri");
+command("perform tianlangshixue");
+   command("perform duomingqisha");
+command("perform hyakki");
+
+
+	       	 }
+
+
+                }
+ else { 
+command("enforce 560");
+  command("enable unarmed dragonfight");
+command("perform pini");
+ command("enable unarmed cuixin-zhang");
+  command("perform cuixin");
+command("enable unarmed lianhuan-zhang");
+command("perform nianhua");
+command("enable unarmed kongshoudao");
+command("perform yaozhan");
+command("perform shimon");
+ }
+
+}
+*/
+
+
+
+void smart_fight() {
+ object me;
+ me = this_object();
+ 
+ if (query_temp("weapon")) { 
+                if (random(2))
+{
+                    {
+	       command("enforce 500");
+ command("unwield all");
+command("wield sword");
+command("enable sword qixiu-jian");
+  command("perform zxzx");
+command("perform qijian");
+ command("unwield sword");
+command("wield blade");
+ command("enable blade ittouryu");
+  command("perform gobankiri");
+command("perform tianlangshixue");
+   command("perform duomingqisha");
+command("perform hyakki");
+
+
+	       	 }
+
+
+}
+                else                        
+
+ {
+	        command("enforce 500");
+ command("unwield all");
+command("wield sword");
+command("enable sword qixiu-jian");
+  command("perform zxzx");
+command("perform qijian");
+ command("unwield sword");
+command("wield blade");
+ command("enable blade ittouryu");
+  command("perform gobankiri");
+command("perform tianlangshixue");
+   command("perform duomingqisha");
+command("perform hyakki");
+
+
+	       	 }
+
+
+                }
+ else { 
+command("enforce 560");
+  command("enable unarmed dragonfight");
+command("perform pini");
+ command("enable unarmed cuixin-zhang");
+  command("perform cuixin");
+command("enable unarmed lianhuan-zhang");
+command("perform nianhua");
+command("enable unarmed kongshoudao");
+command("perform yaozhan");
+command("perform shimon");
+
+ }
+}
+
+
+
+
+/*
+void heart_beat() {
+    object *inv;
+    int i,kee,sen,gin,div;
+    string msg;   
+   int n;
+    if (environment() && random(4)==0 ) {
+	inv = all_inventory(environment());
+
+i=random(sizeof(inv));
+	//for (i=0;i<sizeof(inv);i++) 
+if(random(i)==0)
+{
+	    if (userp(killer) && random(2)==1)
+	    {
+		switch (random(4)) { 
+		case 0:
+		    msg = YEL"$N突然觉得身法越来越凝滞！。\n"NOR;
+		    message_vision(msg,killer);
+                    if (killer->query_busy()<3)
+                    {
+                        div=killer->query("no_busy");
+                        killer->delete("no_busy");
+                        killer->start_busy(2);
+                        if(div) killer->set("no_busy",div);
+                    }
+                    else killer->add("kee",-killer->query("max_kee")/20);
+		    break;
+		case 1:
+		    msg = RED"浑然不觉之间，$N捂着鲜红的衣襟！。\n"NOR;
+		    message_vision(msg,killer);
+                    killer->add("eff_kee",-killer->query("eff_kee")/20);
+                    killer->add("kee",-killer->query("kee")/20);
+		    break;
+		case 2:
+		    msg = BLU"$N心头一震，猛然喷出一口鲜血！。\n"NOR;
+		    message_vision(msg,killer);
+                    killer->add("eff_sen",-killer->query("eff_sen")/20);
+                    killer->add("sen",-killer->query("sen")/20);
+		    break;
+		case 3:
+		    msg = MAG"$N突觉在无声无息间突然爆发出无穷无尽的啸声！。\n"NOR;
+		    message_vision(msg,killer);
+                    killer->add("eff_kee",-killer->query("eff_kee")/20);
+                    killer->add("eff_sen",-killer->query("eff_sen")/20);
+		    break;
+		}
+	    }
+	}
+    }         
+    ::heart_beat();
+}
+*/
+void unconcious()
+{
+    die();
+}
+
+
+void die()
+{
+    int gin,kee,sen,i,j;
+    int mykills,mexpg,mpotg,mscoreg,mmoneyg;
+    object room;
+    object *inv;
+    string reward_msg;
+    string info_msg;
+
+        int expg,potg,scoreg,moneyg;
+        object killer;
+int jiangli;
+
+object bb;
+int m;
+
+killer = query_temp("last_damage_from");
+if(killer = query_temp("last_damage_from"))
+   //     if (objectp(killer))
+        {
+          //   if(killer->query("possessed")) killer =killer->query("possessed");
+                killer->add_temp("jap_badguy/jiang2", 10);
+        }
+        this_object()->remove_all_killer();
+
+
+         message_vision(HIW"$N叫道：八格！八格呀噜！\n"NOR,this_object());
+
+
+	this_object()->set("is_diablo_npc",1);
+			this_object()->add("magic_find",13000+random(15000));
+	 DIABLO_D->diablo_drop(this_object(),killer);
+	 DIABLO_D->diablo_drop(this_object(),killer);
+	 DIABLO_D->diablo_drop(this_object(),killer);
+	 DIABLO_D->diablo_drop(this_object(),killer);
+	 DIABLO_D->diablo_drop(this_object(),killer);
+	 
+	
+	
+	if(random(0)<=1 && userp(killer))
+	{
+	m=random(16);
+	if(m==0)
+	  bb=new("/d/sunrise/obj/book");
+	else if(m==1)
+	  bb=new("/d/sunrise/obj/book2");
+	else if(m==2)
+	  bb=new("/d/sunrise/obj/book3");
+	else if(m==3)
+	  bb=new("/d/sunrise/obj/book4");
+	else if(m==4)
+	  bb=new("/d/sunrise/obj/book5");
+	else if(m==5)
+	  bb=new("/d/sunrise/obj/book6");
+	else if(m==6)
+	  bb=new("/d/sunrise/obj/book7");
+	else if(m==7)
+	  bb=new("/d/sunrise/obj/book8");
+	else if(m==8)
+	  bb=new("/d/sunrise/obj/book9");
+	else if(m==9)
+	  bb=new("/d/sunrise/obj/book10");
+	else if(m==10)
+	  bb=new("/d/sunrise/obj/book11");
+	else if(m==11)
+	  bb=new("/d/sunrise/obj/book12");
+	else if(m==12)
+	  bb=new("/d/sunrise/obj/book13");
+	else if(m==13)
+	  bb=new("/d/sunrise/obj/book14");
+	else   bb=new("/d/sunrise/obj/book15");
+	
+		killer->command("mp* haha");
+	killer->command("chat* gongxi");
+	killer->command("chat 倭岛几翻生死,百转血战,灭杀倭寇首领,得觅神修宝典,幸哉幸哉!!");
+ bb->set("owner",killer);
+	bb->move(killer);
+
+
+
+	}
+
+
+if(userp(killer))
+{
+message("channel:mp",RED+"\n【灭寇大战】浴血小兵(bug soldier)：我居然看到盘踞小岛多年的倭寇首领被我们英勇的灭寇志士"+BLINK+HBRED+killer->name()+NOR+RED"浴血击杀了！！\n\n"+NOR,users());
+
+message("channel:mp",HIY+"【灭寇大战】浴血小兵(bug soldier)：不说了,不说了,得赶紧给"+BLINK+HBRED+killer->name()+NOR+HIY"做人工呼吸去,杀首领不容易啊,命都去半条！！\n\n"+NOR,users());
+
+}
+j = 1;
+	expg = EXPBONUS/j;
+	potg = EXPBONUS/j/3;
+	scoreg = EXPBONUS/j;
+	moneyg = EXPBONUS/j/1000;
+	
+
+
+
+
+if (killer->query_temp("jap_badguy/bing1")>200) killer->set_temp("jap_badguy/bing1",200);
+		if (killer->query_temp("jap_badguy/bing2")>180) killer->set_temp("jap_badguy/bing2",180);
+		if (killer->query_temp("jap_badguy/bing3")>160) killer->set_temp("jap_badguy/bing3",160);
+		if (killer->query_temp("jap_badguy/bing4")>130) killer->set_temp("jap_badguy/bing4",130);
+		if (killer->query_temp("jap_badguy/jiang1")>40) killer->set_temp("jap_badguy/jiang1",40);
+		if (killer->query_temp("jap_badguy/jiang2")>25) killer->set_temp("jap_badguy/jiang2",25);
+		mykills+=killer->query_temp("jap_badguy/bing1");
+		mykills+=killer->query_temp("jap_badguy/bing2");
+		mykills+=killer->query_temp("jap_badguy/bing3")*2;
+		mykills+=killer->query_temp("jap_badguy/bing4")*5;
+		mykills+=killer->query_temp("jap_badguy/jiang1")*20;
+		mykills+=killer->query_temp("jap_badguy/jiang2")*40;
+
+		mexpg = expg/400*mykills;
+		mpotg = potg/400*mykills;
+		mscoreg = scoreg/400*mykills;
+		mmoneyg = moneyg/100*mykills/10;
+
+		reward_msg =HIW"你被奖励了：\n\t\t" +
+		chinese_number(mexpg) + "点实战经验\n\t\t"+
+		chinese_number(mpotg) + "点潜能\n\t\t" +
+		chinese_number(mscoreg) + "点道行\n\t\t" + 
+		chinese_number(mmoneyg) + "两黄金\n"NOR;
+	//	tell_object(killer,reward_msg);
+		killer->add("combat_exp",mexpg);
+		killer->add("potential",mpotg);
+		killer->add("daoxing",mscoreg);
+if(killer->query("balance")<1800000000)
+		killer->add("balance",mmoneyg*10000);
+		killer->delete_temp("jap_badguy");
+
+		//
+			info_msg ="\n\n"+killer->query("name")+HIW"参与剿灭倭寇，奖励" +HIG+chinese_number(mexpg) +NOR+HIW "点实战经验，"+HIC+
+		chinese_number(mpotg) + NOR+HIW"点潜能，" +HIM+
+		chinese_number(mscoreg) + NOR+HIW"点道行，" + HIY+
+		chinese_number(mmoneyg) + NOR+HIW"两黄金。\n\n"NOR;
+		//CHANNEL_D->do_sys_channel("info",info_msg);
+
+if(userp(killer))
+{
+ message("channel:mp",HIY+"【飞马战报】："+RED"东海加急!!闲人闪避!!"+HIM+killer->query("name")+HIY+"在灭寇大战中击杀"+HIW+"倭寇终极首领--"+BLINK+HBRED+"月牍勋帅"NOR+HIY+"!!\n"NOR,users());
+ message("channel:mp",HIY+"\n"+"【皇帝诏曰】："+HIM+killer->query("name")+HIY+"能奋勇拼杀"+HIW+"倭寇终极首领--"+BLINK+HBRED+"月牍勋帅"NOR+HIY+"!!朕要重赏!!\n"NOR,users());
+
+message("channel:mp",HIY+"\n"+"【灭寇大战】参谋部小秘(pretty secretary)：东海波涛起，灭寇逞英豪，一日展翅飞，鹏程千万里！！"+info_msg+NOR,users());
+
+}
+   
+ 
+
+
+    destruct(this_object());
+    return ;  
+}

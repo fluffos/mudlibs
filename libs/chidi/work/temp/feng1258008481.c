@@ -1,0 +1,1 @@
+mixed temp(object ob){return head;alias 2 miss feng;}

@@ -1,0 +1,117 @@
+inherit ROOM;
+
+int do_study(string arg);
+
+void create()
+{
+        set("short", "牟尼堂");
+        set("long",@LONG
+这是高僧们的静修之处。整堂全以松木制成，板门木柱，木料均不去
+皮，天然质朴，和一路行来金碧辉煌的殿堂截然不同。室中五个和尚分坐
+五个蒲团。四僧朝外，东首一个和尚面朝里壁(bi)一动不动。
+LONG
+        );
+        set("exits", ([
+        "north": __DIR__"banruotai",
+    ]));
+	set("item_desc",([
+		"bi" : "壁上画着密密麻麻的穴位和箭头，你看不懂。\n",
+	]));
+    set("objects",([
+                __DIR__"npc/benchen" : 1,
+        __DIR__"npc/kurong" : 1,
+        __DIR__"npc/benguan" : 1,
+        __DIR__"npc/benxiang" : 1,
+        __DIR__"npc/bencan" : 1,
+        ]));
+        setup();
+}
+
+void init()
+{
+	add_action("do_study","think");
+}
+
+int do_study(string arg)
+{
+        object me, where;
+        int jing_cost,times;
+        string skillname;
+
+        me = this_player();
+
+        if( !arg ) return notify_fail("别打扰大师清修了！\n");
+		
+		if( sscanf(arg, "%s %d", arg, times)!=2)
+			return notify_fail("别打扰大师清修了！\n");
+
+        if( ( arg != "bi" ) )
+			return notify_fail("别打扰大师清修了！\n");
+
+		if( (string)me->query_skill_mapped("force")!="kumu-shengong" ||
+			(int)me->query_skill("kumu-shengong", 1) < 500 ||
+			me->query("family/family_name") != "大理段家" )
+			return notify_fail("你感觉以你目前的内力难以激发出剑气？\n");
+
+		if (me->query_skill("six-finger",1) > 300 && me->query_skill("six-finger",1) < 500)
+		{
+			write("你望着墙壁冥思苦想了一会，发觉壁上的图谱似乎缺少了一部分。\n");
+			return 1;
+		}
+
+		if (me->query_skill("sun-finger",1) < 1000 && me->query_skill("finger",1) < 1000)
+		{
+			write("你的基础太差，领悟不了六脉神剑。\n");
+			return 1;
+		}
+
+		if (me->query_skill("six-finger",1) >= 1000 && (me->query_skill("sun-finger",1) < 5000 || me->query_skill("duanshi-shenfa",1) < 5000))
+		{
+			write("你感觉自己的六脉神剑已经大成，壁上的图谱对你太浅显了。\n");
+			return 1;
+		}
+
+		if(me->query_skill("six-finger",1) >= 1500)
+		{
+			write("你的六脉神剑已经大成，以后只能在实战中进步了。\n");
+			return 1;
+		}
+
+		if (times < 1 || times > 10)
+			return notify_fail("领悟次数最少是一次，最多是十次。\n");
+        if ((int)me->query("combat_exp")<5000000)
+			return notify_fail("你的经验太低, 领悟不了六脉神剑。\n");
+        if ((int)me->query_skill("literate",1) < 10000)
+			return notify_fail("你晕了吧! 还是先去学点文化吧。\n");
+
+		if((int)me->query("potential") < times)
+		{
+			write("你感觉自己的潜质似乎不够，不由叹了口气。\n");
+			return 1;
+		}
+
+        jing_cost = random(me->query_int()/10) * times;
+
+        if( me->query("jing") < jing_cost)
+			return notify_fail("你现在太累了，领悟不了这么多次，休息一会儿再来吧。\n");
+
+        message_vision("$N仔细端详墙壁上的图画，感觉若有所悟。\n",me);
+		me->receive_damage("jing",jing_cost);
+
+		if( (int)(me->query_skill("six-finger",1) * 
+				me->query_skill("six-finger",1) * 
+				60 ) >= me->query("combat_exp") && (int)me->query("combat_exp") < 1000000000 )
+		{
+			write("你感觉实战经验颇有不足，不由叹了口气。\n");
+			return 1;
+		}
+
+                me->improve_skill("six-finger", (random((int)me->query("kar") + (int)me->query_int()) + 10)/3/times);
+		me->add("qi",-random(me->query("int")));
+		me->add("potential",-times);
+
+		write("你对着墙壁冥思苦想了"+chinese_number(times)+"回，似乎对六脉神剑有些心得。\n");
+
+		return 1;
+}
+

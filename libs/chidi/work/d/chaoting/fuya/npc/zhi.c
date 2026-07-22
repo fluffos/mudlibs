@@ -1,0 +1,124 @@
+#pragma save_binary
+// zhixian_jia.c
+#include <ansi.h>
+int alert_gaoshou();
+inherit BHNPC;
+inherit F_MASTER;
+void create()
+{
+ set_name("凌退思", ({ "ling tuisi", "ling","tuisi" }) );
+        set("gender", "男性" );
+        set("shen_type", 1);
+        set("age", 44);
+        set("str", 30);
+        set("con", 30);
+        set("dex", 30);
+        set("int", 30);
+         set("rank", 6);
+        set("max_neili", 3000);
+        set("neili", 3000);
+        set("force_factor", 80);
+ set("vendetta_mark", "authority");
+        set("rank_info/respect", "知府");
+        set("long",
+      "他就是凌退思,金陵现任知府。\n");
+        create_family("朝廷", 5, "知府");
+set("title", HIY "朝廷二品官 金陵知府 " NOR );
+  set("combat_exp", 5000000);
+        set("score", 200000);
+         set_skill("unarmed",500);
+         set_skill("parry",500);
+          set_skill("dodge", 500);
+         set_skill("sword",500);
+         set_skill("force",500);
+        set_skill("literate",120);
+        set_skill("strategy",130);
+set_skill("leadership",130);
+        set_skill("fonxansword",500);
+        set_skill("fonxanforce",500);
+        set_skill("tiyunzong",500);
+      map_skill("force","fonxanforce");
+           map_skill("sword", "fonxansword");
+       map_skill("parry", "fonxansword");
+       map_skill("dodge", "tiyunzong");
+        set("inquiry", ([
+                "前程" : 
+"只要你好好为朝廷出力，他日必能出人头地，去吧。",
+                       ]) );
+set("chat_chance_combat", 40);
+        set("chat_msg_combat", ({
+                (: alert_gaoshou :),
+                (: alert_gaoshou :),
+                (: alert_gaoshou :),
+                        }) );
+        setup();
+        carry_object("/clone/weapon/gangjian")->wield();
+         carry_object("/clone/cloth/cloth")->wear();
+}
+void init()
+{
+object ob;
+//init();
+if( interactive(ob = this_player()) && !is_fighting() )
+      {
+remove_call_out("greeting");
+call_out("greeting", 1, ob);
+        }
+}
+void greeting(object ob)
+{
+if( !ob || environment(ob) != environment() ) return;
+ if((string)ob->query("family/family_name") != "朝廷")
+  if( (int)ob->query("PKS")-ob->query("BCF")*2 > 15 )  
+{
+        command("say 好个沾满血腥的凶徒，竟敢在此撒野，来人!给我拿下!");
+      kill_ob(ob);
+       }
+      else {
+message_vision("\n程知府看到$N闯进来，喝道：尔等如有冤情，可向本官道来!\n\n", ob);}
+}
+void attempt_apprentice(object ob)
+{
+           if( (string)ob->query("family/family_name") != "朝廷")
+        {
+       command("say " + ob->query("name") + "非我朝廷中人,
+        请恕本官不能答应.");
+    return;
+}
+if( (int)ob->query("rank") > 6) {
+                command("say 大人说笑了,下官怎敢收大人为徒! ");
+   return;
+}
+if( (int)ob->query("rank") < 4) {
+                command("say 你的官位还不够高" +
+ob->query("name") + "大人请回吧");
+       return;
+}
+        command("smile");
+        command("say 很好，" + RANK_D->query_respect(ob) + 
+"只要你好好为朝廷出力，他日必能出人头地，去吧。\n");
+        command("recruit " + ob->query("id") );
+      if((string)ob->query("class") != "officer")
+                ob->set("class", "officer");
+ob->set("title","朝廷"+chinese_number(8-ob->query("rank"))+"品官");
+}
+ 
+int alert_gaoshou()
+{
+        object gaoshou,me;
+       me=this_object(); 
+       if( (int)me->query("rank") <= me->query_temp("havecalled")  )
+                return 1;    
+      if( !me->is_fighting() )
+                return 1;   
+         message_vision("$N纵声长啸,呼叫援兵。\n", me);       me->receive_damage("jing", 20);
+        me->add_temp("havecalled",1);  
+
+        seteuid(getuid());
+        gaoshou = new("/obj/npc/gaoshou");
+        gaoshou->move(environment(me));
+        gaoshou->invocation(me);
+                return 1;
+} 
+
+

@@ -1,0 +1,285 @@
+// npc: shijian.c
+// Jay 3/26/96
+#include <ansi.h>
+inherit NPC;
+
+int do_start();
+int charge_money(int rmb,int gold,object me);
+
+void create()
+{
+    set_name(HIY+"CLYNAME"+NOR, ({ "CLYFULLID", "CLYFIRSTID"}));
+    set("gender", "男性" );
+    set("age", random(10) + 30);
+    set("long",     
+        "他裸着精壮的上身，手握铁锤，眯眼看着火炉。\n"+
+		"本帮的兄弟可以向他打听"+HIR+"\"锻炼\""+NOR+"\n");
+    set("str", 50);
+    set("int", 50);
+    set("con", 50);
+    set("dex", 50);
+    set("shen_type", 0);
+    set("max_neli",500);
+    set("jiali",50);
+    set_skill("unarmed", 100);
+    set_skill("dodge", 100);
+    set_skill("force",150);
+    set_skill("sword",150);
+    set_skill("parry",90);
+    set_temp("apply/attack", 50);
+    set_temp("apply/defense", 50);
+    set_temp("apply/damage",50);
+    set("combat_exp", 250000);
+    set("score",0);
+
+	set("banghui/name","CLYOWNER");
+	set("banghui/rank","锻炼师");
+	set("banghui/rank_lv", 5);
+    
+    set("attitude", "peaceful");
+        
+    set("inquiry", ([
+        "锻炼"  : "给我宝石和兵器，也许我可以帮助你提升下它的能力。",
+    ]) );
+    setup();
+    carry_object("/clone/misc/cloth")->wear();
+}
+
+void init()
+{
+    ::init();
+	add_action("do_start", "start");
+}
+
+int accept_object(object who, object ob)
+{
+	object me;
+	int rmb;
+	int gold;
+	int flag = 0;
+
+	me = this_object();
+    if(who->query("banghui/name") != me->query("banghui/name"))
+	{
+		message_vision(HIC"在下只为"+HIG+me->query("banghui/name")+HIC+"的兄弟锻炼兵器。\n"NOR, who);
+		return 0;
+    }
+
+	if(who->query("bhgx") < 5)
+	{
+		message_vision(HIC"你似乎没为帮会做什么贡献吧！\n"NOR, who);
+		return 0;
+	}
+
+	if(ob->query("can_duanlian") && ob->query("max_value"))
+	{
+
+		flag = 1;
+		who->set_temp("duanlian_obj",1);
+		who->set_temp("duanlian_maxvalue",ob->query("max_value"));
+		who->set_temp("duanlian_minvalue",ob->query("min_value"));
+
+		if(who->query_temp("duanlian_weapon"))
+		{
+			rmb = (who->query("weapon/lv")+who->query_temp("duanlian_minvalue"));
+			gold = rmb*3;
+			tell_object(who,HIC+query("name")+"看了看手中的材料，\n"+
+				"说道：这个需要"+HIG+chinese_number(rmb)+"圆人民币，"+
+				chinese_number(gold)+"两黄金。"+HIC+"你准备好了通知我(start)\n"NOR);
+		}
+		else if(who->query_temp("duanlian_weapon2"))
+		{
+			rmb = (who->query("weapon2/lv")+who->query_temp("duanlian_minvalue"));
+			gold = rmb*3;
+			tell_object(who,HIC+query("name")+"看了看手中的材料，\n"+
+				"说道：这个需要"+HIG+chinese_number(rmb)+"圆人民币，"+
+				chinese_number(gold)+"两黄金。"+HIC+"你准备好了通知我(start)\n"NOR);
+		}
+
+        return 1;
+	}
+	else
+	{
+		if (!(who->query("weapon/name")) && !(who->query("weapon2/name")))
+		{
+			message_vision(HIC"等你有了自铸兵器才来吧。\n"NOR, who);
+			return 0;
+		}
+
+		if( ob->query("owner_id") != who->query("id") )
+		{
+			message_vision(HIR"这是什么东西？\n"NOR, who);
+			return 0;
+		}
+
+		if(ob->query("name") == who->query("weapon/name"))
+		{
+			flag = 1;
+			who->set_temp("duanlian_weapon",1);
+
+			if(who->query_temp("duanlian_obj"))
+			{
+				rmb = (who->query("weapon/lv")+who->query_temp("duanlian_minvalue"));
+				gold = rmb*3;
+				tell_object(who,HIC+query("name")+"说道：这个需要"+HIG+chinese_number(rmb)+"圆人民币，"+
+					chinese_number(gold)+"两黄金。"+HIC+"你准备好了通知我(start)\n"NOR);
+			}
+			return 1;
+		}
+		else if(ob->query("name") == who->query("weapon2/name"))
+		{
+			flag = 1;
+			who->set_temp("duanlian_weapon2",1);
+
+			if(who->query_temp("duanlian_obj"))
+			{
+				rmb = (who->query("weapon2/lv")+who->query_temp("duanlian_minvalue"));
+				gold = rmb*3;
+				tell_object(who,HIC+query("name")+"说道：这个需要"+HIG+chinese_number(rmb)+"圆人民币，"+
+					chinese_number(gold)+"两黄金。"+HIC+"你准备好了通知我(start)\n"NOR);
+			}
+			return 1;
+		}
+	}
+
+	if(flag < 1)
+	{
+		message_vision(HIR"这是什么东西？\n"NOR, who);
+		return 0;
+	}
+
+    return 0;
+}
+
+int do_start()
+{
+	object me;
+	int max_value;
+	int min_value;
+	int rmb,gold;
+	object weapon;
+
+	me = this_player();
+
+	if((int)me->query("bhgx") < 5)
+	{
+        tell_object(me, HIC"你似乎没为帮会做什么贡献吧！\n"NOR);
+		return 1;
+	}
+
+	if(me->query_temp("duanlian_obj"))
+	{
+		min_value = me->query_temp("duanlian_minvalue");
+		max_value = me->query_temp("duanlian_maxvalue");
+		if(me->query_temp("duanlian_weapon"))
+		{
+			rmb = (me->query("weapon/lv")+min_value);
+			gold = rmb*3;
+			if(charge_money(rmb,gold,me))
+			{
+				me->delete_temp("duanlian_obj");
+				me->delete_temp("duanlian_weapon");
+				me->delete_temp("duanlian_minvalue");
+				me->delete_temp("duanlian_maxvalue");
+				if(random(me->query("kar")+me->query("per")) > 10)
+				{
+					me->add("weapon/lv",min_value+random(max_value-min_value));
+					tell_object(me, HIC+query("name")+"将材料都放入了熔炉，只见一时间屋中光华闪耀。\n"+
+						"片刻之后，光华止息，你感觉自己的兵器好像沉了一些。\n"NOR);
+				}
+				else
+				{
+					tell_object(me, HIC+query("name")+"将材料都放入了熔炉，只见一时间屋中光华闪耀。\n"+
+						"片刻之后，光华止息，不过你觉得自己的兵器好像没什么变化。\n"NOR);
+				}
+
+                if (!present(me->query("weapon/id"),me))
+				{
+                    weapon = UPDATE_D->creat_weapon(me);
+                    weapon->move(me);
+				}
+			}
+			else
+			{
+				tell_object(me, HIC+query("name")+"说道：准备好"+HIG+chinese_number(rmb)+"圆人民币，"+
+					chinese_number(gold)+"两黄金"+HIC+"再来吧。\n"NOR);
+			}
+		}
+		else if(me->query_temp("duanlian_weapon2"))
+		{
+			rmb = (me->query("weapon2/lv")+min_value);
+			gold = rmb*3;
+			if(charge_money(rmb,gold,me))
+			{
+				me->delete_temp("duanlian_obj");
+				me->delete_temp("duanlian_weapon2");
+				me->delete_temp("duanlian_minvalue");
+				me->delete_temp("duanlian_maxvalue");
+				if(random(me->query("kar")+me->query("per")) > 10)
+				{
+					me->add("weapon2/lv",min_value+random(max_value-min_value));
+					tell_object(me, HIC+query("name")+"将材料都放入了熔炉，只见一时间屋中光华闪耀。\n"+
+						"片刻之后，光华止息，你感觉自己的兵器好像沉了一些。\n"NOR);
+				}
+				else
+				{
+					tell_object(me, HIC+query("name")+"将材料都放入了熔炉，只见一时间屋中光华闪耀。\n"+
+						"片刻之后，光华止息，不过你觉得自己的兵器好像没什么变化。\n"NOR);
+				}
+
+                if (!present(me->query("weapon2/id"),me))
+				{
+                    weapon = UPDATE_D->creat_weapon2(me);
+                    weapon->move(me);
+				}
+			}
+			else
+			{
+				tell_object(me, HIC+query("name")+"说道：准备好"+HIG+chinese_number(rmb)+"圆人民币，"+
+					chinese_number(gold)+"两黄金"+HIC+"再来吧。\n"NOR);
+			}
+		}
+		else
+		{
+			tell_object(me, HIC+query("name")+"说道：你兵器还没有给我看呢。\n"NOR);
+		}
+	}
+	else
+	{
+		tell_object(me, HIC+query("name")+"说道：你宝石还没有给我呢。\n"NOR);
+	}
+
+	return 1;
+}
+
+int charge_money(int rmb,int gold,object me)
+{
+	int mymoney;
+
+	mymoney = me->query("money")/10000 + me->query("more_money")*10000;
+
+	if(mymoney < gold)
+	{
+		return 0;
+	}
+
+	mymoney = me->query("more_money")*10000 - gold;
+	if(mymoney >= 0)
+	{
+		me->add("money", (mymoney % 10000)*10000);
+		me->set("more_money", mymoney / 10000);
+	}
+	else
+	{
+		mymoney  = me->query("money") + mymoney * 10000;
+
+		me->set("money", mymoney);
+		me->set("more_money", 0);
+	}
+
+	me->add("rmb",-rmb);
+	me->add("bhgx",-5);
+
+	return 1;
+}
+

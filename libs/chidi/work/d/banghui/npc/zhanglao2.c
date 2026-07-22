@@ -1,0 +1,151 @@
+inherit NPC;
+
+int ask_literate();
+int ask_count();
+int do_study(string arg);
+
+void create()
+{
+    set_name(HIY+"CLYNAME"+NOR, ({ "CLYFULLID", "CLYFIRSTID"}));
+    set("gender", "男性" );
+    set("age", random(10) + 30);
+    set("long",     
+        "他左手持书右手执笔，正低头沉思什么。不时摇摇头又点点头，\n"+
+		"对你的到来丝毫没有在意。本帮的兄弟可以向他"+HIR+"\"qingjiao literate\""+NOR+"\n");
+    set("str", 50);
+    set("int", 50);
+    set("con", 50);
+    set("dex", 50);
+    set("shen_type", 0);
+    set("max_neli",500);
+    set("jiali",50);
+    set_skill("unarmed", 100);
+    set_skill("dodge", 100);
+    set_skill("force",150);
+    set_skill("sword",150);
+    set_skill("parry",90);       
+    set_skill("literate", 20000);
+
+    set_temp("apply/attack", 50);
+    set_temp("apply/defense", 50);
+    set_temp("apply/damage",50);
+    set("combat_exp", 250000);
+    set("score",0);
+
+	set("banghui/name","CLYOWNER");
+	set("banghui/rank","学士");
+	set("banghui/rank_lv", 7);
+    
+    set("attitude", "peaceful");
+        
+    set("inquiry", ([
+		"读书写字"  : (: ask_literate :),
+		"读书"		: (: ask_literate :),
+		"literate"	: (: ask_literate :),
+		"qingjiao"	: (: ask_literate :),
+		"次数"		: (: ask_count :),
+		"count"		: (: ask_count :),
+    ]) );
+    setup();
+    carry_object("/clone/misc/cloth")->wear();
+}
+
+void init()
+{
+   add_action("do_study","qingjiao");
+}
+
+int do_study(string arg)
+{
+	string skill; 
+	object me=this_player(),ob=this_object();
+
+	if(me->query("banghui/name")!=query("banghui/name"))
+	{
+		return notify_fail("请先找帮主加入帮会吧！\n");
+	}
+
+	if (ob->is_fighting())
+		return notify_fail("你还是赶紧共御外敌吧！\n");
+
+	if( !living(ob) )
+		return notify_fail("嗯....你得先把" + ob->name() + "弄醒再说。\n");
+
+	if( !arg || arg!="literate")
+		return notify_fail(HIY"你要请教(qingjiao)什么？\n"NOR); 
+
+	if (me->query_skill("literate", 1) < 5000)
+		return notify_fail(HIB"你的文化差了些，还听不懂我的讲述！\n"NOR);
+
+	if (me->query_skill("literate", 1) >= 20000)
+	return notify_fail(HIR "这项技能你的程度已经不输你师父了!\n" NOR); 
+
+	if( me->query("potential") < 50 )
+	return notify_fail("你的潜能不够了！\n"); 
+
+	if( me->query("jing") < 100 || me->query("qi") < 400 )
+	return notify_fail("你现在太累了，先休息一下吧！\n"); 
+
+	if (!me->query_temp("bh_litcount") || (int)me->query_temp("bh_litcount") >= 10000)
+	{
+		if(me->query("bhgx") < 1)
+			return notify_fail(HIG "你应该多为帮会做些事情。\n" NOR); 
+		else
+		{
+			me->add("bhgx", -1);
+			me->set_temp("bh_litcount",0);
+		}
+	}
+
+	me->receive_damage("qi",10 + random(40));
+	me->receive_damage("jing", 10 + random(40));        
+	me->add("potential",-50);
+	tell_object(me,HIC+query("name")+HIC+"指点了你一些有关"HIW"「读书写字」"HIC"的问题，"
+				+"你似乎有些心得。\n"NOR);
+	me->improve_skill("literate",12*(10+ random((int)me->query_int() - 9)));
+	me->add_temp("bh_litcount",1);
+
+	return 1;
+}
+
+int ask_literate()
+{
+	object me;
+	me = this_player();
+
+	if(me->query("banghui/name")==query("banghui/name"))
+	{
+		tell_object(me,"你可以向我学习读书写字(qingjiao literate)，一点贡献可以学习10000次。\n");
+	}
+	else
+	{
+		tell_object(me,"在下只教"+HIG+query("banghui/name")+NOR+"的兄弟。\n");
+	}
+
+	return 1;
+}
+
+int ask_count()
+{
+	object me;
+	me = this_player();
+
+	if(me->query("banghui/name")==query("banghui/name"))
+	{
+		if(!me->query_temp("bh_litcount") || me->query_temp("bh_litcount")>=10000)
+		{
+			tell_object(me,"你当前还没有和我学习。\n");
+		}
+		else
+		{
+			tell_object(me,"你已经向我学习了"+HIG+me->query_temp("bh_litcount")+NOR+"次，"
+				+"还可以学习"+(10000-me->query_temp("bh_litcount"))+"次。\n");
+		}
+	}
+	else
+	{
+		tell_object(me,"在下只教"+HIG+query("banghui/name")+NOR+"的兄弟。\n");
+	}
+
+	return 1;
+}

@@ -1,0 +1,151 @@
+// action.c
+// From ES2
+// Adapted for XKX
+static mixed busy, interrupt;
+static mapping override;
+varargs void start_busy(mixed new_busy, mixed new_interrupt)
+{   
+int hubo;
+object me;     
+    if( !new_busy ) return;
+
+    if( !intp(new_busy) && !functionp(new_busy) )
+        error("action: Invalid busy action type.\n");
+    
+    if (! objectp(me = this_object())) return;
+       if (intp(new_busy))
+        {
+                if (functionp(busy))
+                       error("action: busy conflit.\n");
+
+               if (new_busy > 1 && random(10) < 4 &&
+                   me->query("character") == "狡黠多变")
+new_busy--;
+}
+busy = new_busy;
+        if (! intp(new_interrupt) && ! functionp(new_interrupt))
+                error("action: Invalid busy action interrupt handler type.\n");
+        interrupt = new_interrupt;
+set_heart_beat(1);
+}
+nomask mixed query_busy() { return busy; }
+nomask int is_busy() { return busy != 0; }
+void continue_action()
+{
+if (intp(busy) && (busy > 0))
+        {
+               busy--;
+                return;
+        } else
+       if (functionp(busy))
+{
+             if (! evaluate(busy, this_object()))
+               {
+                    busy = 0;
+                       interrupt = 0;
+                }
+       } else
+       {
+                busy = 0;
+                interrupt = 0;
+        }
+}
+
+void interrupt_me(object who, mixed how)
+{
+        mixed bak;
+
+       bak = busy;
+       busy = 0;
+
+        if (! bak) return;
+
+       if (intp(bak) && intp(interrupt))
+{
+                if (bak < interrupt || who != this_object())
+                      return;
+
+              if (intp(how) && how > 0)
+               {
+                       // reduce busy
+                        bak -= how;
+                        if (bak < 0) return;
+              }
+       } else
+        if (functionp(interrupt))
+        {
+                if (evaluate(interrupt, this_object(), who, how))
+                {
+                        bak = 0;
+                       interrupt = 0;
+                }
+        } else
+        {
+               bak = 0;
+                interrupt = 0;
+}
+        busy = bak;
+}
+int start_call_out(function fun, int delay)
+{
+        if (wiz_level(this_object()) > 0 || 1)
+                // I won't bind the function because it will
+                // cause a serious security problem.
+                call_out("eval_function", delay, fun);
+        else
+               // if this_object() doesn't be a wizard, I will
+                // bind the function, then the player doesn't
+               // occur error when the function's owner be
+               // destructed.
+                call_out("eval_function", delay, bind(fun, this_object()));
+        return 1;
+}
+
+private void eval_function(function fun) { evaluate(fun); }
+
+// I would let some function override the old function,
+// such as the player unconcious/die ...
+// It also cause a security problem, so I must check here
+nomask int set_override(string index, function fun)
+{
+        if (! previous_object() ||
+            geteuid(previous_object()) != ROOT_UID)
+               return 0;
+
+       if (! override)
+                override = ([ ]);
+
+      override[index] = bind(fun, this_object());
+        return 1;
+}
+
+// only root & (admin) can called me
+//nomask mixed query_override(string index)
+//{
+  //      if (! is_root(previous_object()))
+    //            return 0;
+
+      //  if (! index) return override;
+        //if (! override) return 0;
+      //  return override[index];
+//}
+
+// others call me to run the override function, when I return
+// zero, the caller will run old execution continue.
+nomask int run_override(string index)
+{
+        function fun;
+
+       if (! override || ! functionp(fun = override[index]))
+                return 0;
+
+        map_delete(override, index);
+        if (! sizeof(override)) override = 0;
+        return (*fun)(this_object());
+}
+nomask void delete_override(string index)
+{
+        if (! override) return;
+        map_delete(override, index);
+        if (! sizeof(override)) override = 0;
+}

@@ -1,0 +1,16 @@
+#include <ansi.h>
+
+inherit WQA_ROOM;
+
+void create()
+{
+	set("short", "东  晋");
+ 	set("long", @LONG
+
+    这里是东晋时空。东晋建于公元317年，亡于公元420年。首都在建康
+（即当今南京）。
+LONG
+	);
+
+        ::create();
+}

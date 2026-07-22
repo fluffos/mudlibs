@@ -1,0 +1,32 @@
+//edit by rock 2008.10.15
+// 自动生成：/make/equip/cloth
+
+#include <armor.h>
+#include <ansi.h>
+inherit CLOTH;
+
+// 函数：所属类别
+int query_xy() { return 1 ; }
+
+// 函数：构造处理
+void create()
+{
+        set_name("飞天彩衣",({"flcaiy"}));
+        set_weight(5000);
+        if( clonep() )
+        set_default_object(__FILE__);
+        else {
+                 set("level", 90);            //装备等级
+                 set("unit", "件");           //量词
+                 set("material", "cloth");
+                 set("value",50500);             //价值
+                 set("armor_prop/armor", 214); //物理防御
+             }
+        set("max_lasting",28500);   //耐久度
+
+        setup();
+
+        set("gender","女性");    //限制性别
+}
+
+#include "/clone/shoufei/long/armor.h"

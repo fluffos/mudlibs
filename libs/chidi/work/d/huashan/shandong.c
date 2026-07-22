@@ -1,0 +1,24 @@
+// houshan.c
+// By Hop, 97.04.30
+inherit ROOM;
+void create()
+{
+    set("short", "山洞");
+    set("long", @LONG
+这里是华山之后山的一个小山谷，长年人迹罕至。谷中古树参天，绿
+荫森森。偶尔从远处传来几声悠扬的鸟语，伴随着阵阵花香，简直让人疑
+心自己到了世外桃源。
+你远远的看见谷中有两间小屋，看情形好象是居住一位隐世的无林至尊!
+你不禁发起愁来，该怎么办呢？
+LONG
+    );
+    set("exits", ([ /* sizeof() == 2 */
+        "south" : __DIR__"houshan",
+    ]));
+        set("objects", ([
+       "/kungfu/class/ultra/dugu.c" : 1,
+        ]));
+    set("outdoors", "huashan" );
+    set("no_magic",1);
+    setup();
+}

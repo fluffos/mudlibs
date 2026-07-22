@@ -1,0 +1,14 @@
+// jiuyangbody.c 九阳绝脉
+// Created by seabird 7/5/2014
+
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+
+string name() { return HIY "九阳绝脉" NOR; }
+
+int perform(object me, string skill)
+{
+        return notify_fail("这项技能可以提升你使用九阳神功的威力，不需要运用。\n");
+}
+

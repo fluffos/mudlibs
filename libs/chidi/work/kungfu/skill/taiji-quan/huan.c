@@ -1,0 +1,60 @@
+#include <ansi.h>
+
+inherit F_SSERVER;
+
+int perform(object me)
+{
+      string msg;
+      object weapon, weapon2, target;
+      int skill, dp, damage;
+
+      me->clean_up_enemy();
+      target = me->select_opponent();
+
+      if( (int)me->query_temp("duo") )
+              return notify_fail("你已经在夺敌人的兵刃了。\n");
+      skill = me->query_skill("taiji-quan",1);
+
+        if( me->query("skill_luanhuan_on") != 1 )
+     return notify_fail("你还不会「乱环诀」。\n");
+
+      if( !(me->is_fighting() ))
+              return notify_fail("乱环诀只能在战斗中使用。\n");
+
+      if (objectp(weapon = me->query_temp("weapon")))
+              return notify_fail("乱环诀乃是太极拳精要，你必须空手。\n");
+
+      if (!objectp(weapon2 = target->query_temp("weapon")))
+         return notify_fail("对方没有兵刃，这招乱环诀可没有什么大用了。\n");
+
+      if( skill < 500)
+              return notify_fail("你的太极拳等级不够, 不能使用乱环诀！\n");
+
+      if( me->query("neili") < 15000 )
+              return notify_fail("你的内力不够，无法将乱环诀使用的圆熟！\n");
+
+      msg = CYN "$N凝神闭息，打算施展太极拳乱环诀绝技. \n";
+      message_vision(msg, me);
+
+      dp = target->query("str") * 3;
+      if( dp < 1 )
+              dp = 1;
+      if( random(skill) > dp )
+      {
+              if(userp(me))
+                      me->add("neili",-15000);
+              msg = HIW"$N左手连划数个圆圈,右手突的至圈中窜出，搭上$n手腕一拗，$n手腕一麻，手中兵刃脱手而出！\n" NOR;
+              target->start_busy(2);
+        weapon2->move(environment(me));
+              me->start_busy(random(2));
+      }
+      else
+      {
+              msg = "可是$n已看破$N的拳术奥秘，立刻采取守势，使$N乱环诀无功而返。\n"NOR;
+              me->start_busy(random(3));
+      }
+      message_vision(msg, me, target);
+
+      return 1;
+}
+

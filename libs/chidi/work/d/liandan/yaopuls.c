@@ -1,0 +1,31 @@
+//make by yixiang
+#include <ansi.h>;
+inherit ROOM;
+
+void create()
+{
+        set("short", "药铺内室");
+        set("long", @LONG
+这是药铺的内室，两边是炼丹室。
+LONG
+        );
+        set("no_fight",1);
+        set("no_steal",1);
+        set("no_beg",1);
+
+        set("exits", ([
+            "east" : "/d/changan/ca14",
+			"south" : __DIR__"danfang1",
+			"north" : __DIR__"danfang2",
+
+        ]));
+
+
+		set("objects", ([
+           __DIR__"npc/huatuo" : 1,
+		
+
+		]));
+
+        setup();
+}

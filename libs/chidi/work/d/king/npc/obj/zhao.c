@@ -1,0 +1,24 @@
+// jingang-zhao.c
+#include <armor.h>
+#include <ansi.h>
+inherit CLOTH;
+void create()
+{
+    set_name("金刚罩", ({ "jingang zhao", "zhao" }));
+    set_weight(2000);
+    if (clonep())
+        set_default_object(__FILE__);
+    else {
+        set("long", "这是一件金光闪闪的袈裟，可惜是件假货.\n");
+        set("material", "cloth");
+        set("unit", "件");
+            set("shaolin",1);
+        set("value", 1);
+        set("wear_msg", HIY "只听「哗」的一声，$N展开一件黄色的袈裟披在身上。
+想冒充真的呀，你当xiha是傻瓜吗。\n" NOR);
+        set("remove_msg", HIY "$N将破布从身上脱了下来，折叠成小小的一团。\n" NOR);
+        set("armor_prop/armor", 1);
+    }
+    setup();
+}
+

@@ -1,0 +1,49 @@
+// Room: /city/wumiao.c
+#include <room.h>
+inherit ROOM;
+void create()
+{
+    set("short", "武庙");
+    set("long", @LONG
+这里是岳王庙的正殿，内有岳飞像，像上方悬挂岳飞手书
+“还我河山”的横匾。殿两侧壁上嵌着“尽忠报国”四个大字。
+武人到此，都放下武器，毕恭毕敬地上香礼拜。旁边似乎有一道侧门。
+LONG
+    );
+    set("no_fight", 1);
+    set("no_fight_npc",1);
+    set("no_steal", 1);
+       set("have_quest", 1);   
+    set("no_sleep_room", "1");
+           set("valid_startroom",1);
+    set("objects", ([
+        __DIR__"obj/box" : 1,
+"quest/quest_kill/dugu" : 1,
+           __DIR__"npc/bigeye" : 1,
+    __DIR__"npc/zhangsan" : 1,
+    __DIR__"npc/wizer" : 1,
+    __DIR__"npc/noshshizhe" : 1,
+              
+    ]));
+        set("exits", ([
+        "east" : __DIR__"beidajie2",
+        "northwest": "/d/wizard/guest_room",
+//        "north":"/d/city/shijian",
+         "up" : "/job/merchant/chaomai/shanghang",
+"south":"/d/jh/shengjiroom",
+        ])); 
+       create_door("northwest", "竹门", "southeast", DOOR_CLOSED);
+        setup();
+        "/clone/board/wiz2_b"->foo();
+}
+void init()
+{ 
+object me=this_player();
+if (!wizardp(this_user()))  
+add_action("discmds",({"duanlian","ansuan","attack","sha","home","array","touxi","persuade","teach","exert","exercise","study","learn","sleep","kill","steal","cast","conjure","expell","fight","hit","perform","prcatice","scribe","surrender","yanjiu"}));
+}
+int discmds()
+{ 
+   tell_object(this_player(),"大胆！在神像面前也敢胡来？！\n");
+    return 1;
+}

@@ -1,0 +1,34 @@
+// void_sense.c
+#include <ansi.h>
+inherit F_SSERVER;
+int conjure(object me, object target)
+{
+                int lvl,time;
+        lvl = (int) me->query_skill("essencemagic",1);
+if(me->query_temp("shade_sense"))
+	return notify_fail("你已经在隐身当中了。\n");
+if ( lvl < 61)
+        return notify_fail("你法术不够高！还是再学学吧！！！\n");
+if( me->query("jingli") < 200 )
+	return notify_fail("你的法力不够！\n");
+if( me->query("jing") <= 100 )
+        return notify_fail("你的精不够！\n");
+	me->add("jingli", -100);
+	me->receive_damage("jing", 50);
+	message_vision(HIW "$N凝神提气，一团白芒乍出体内，整个人渐渐虚化．．．\n" NOR, me);
+        me->set("env/invisibility", 1);
+	me->set_temp("shade_sense",1);
+        time=me->query("jingli")/40+(lvl-60)/2;
+	me->set("jingli",0);
+        me->start_call_out( (: call_other, __FILE__, "remove_effect", me :), time);
+	if( me->is_fighting() ) me->start_busy(5);
+        return 1;
+
+}
+void remove_effect(object me)
+{
+if(!wizardp(me))
+        me->delete("env/invisibility");
+        me->delete_temp("shade_sense");
+        tell_object(me, YEL"你的隐识失效了。\n"NOR);
+}

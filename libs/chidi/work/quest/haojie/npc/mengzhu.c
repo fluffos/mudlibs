@@ -1,0 +1,100 @@
+//by mudgod@xssx
+
+inherit BHNPC;
+#include <ansi.h>
+
+string do_pay();
+void create()
+{
+        set_name(HIW"武林联盟瓢把子"NOR, ({"piao bazi","piao"}) );
+        set("long", "这是武林联盟的总瓢把子,这次武林浩劫的平息就是他发的武林令，
+估计可以要到些奖赏了。\n");
+        set("attitude", "peaceful");
+        
+        set("max_jing", 1000);
+	set("max_qi", 2000);
+        set("inquiry", ([
+                "pay" : (: do_pay :),
+                "奖励" : (: do_pay :),
+                "reward" : (: do_pay :),
+	]) );
+        set("str", 40);
+        set("per", 30);
+        set("kar", 40);
+        set("combat_exp", 500000000);
+        set("trusty", 500);
+       set("neili",99999);
+       set("max_neili",99999);
+       set("qi",99999);
+       set("max_qi",99999);
+        set("score", 100);
+        set("chat_chance", 10);
+        set("chat_msg", ({
+                name() + "说道：这次武林浩劫大家都出了不少力，我要好好感谢大家("HIR"ask piao about 奖励"NOR")。\n",
+          }) );
+
+        setup();
+
+//        carry_object("/obj/cloth")->wield();
+}
+
+
+string do_pay()
+ {
+ 	int bing,guan,jiang;
+	int point,pot;
+        int givepoint,givepot;
+        object me = this_player();
+        
+        bing = me->query_temp("marks/杀众");
+        guan = me->query_temp("marks/杀舵");
+        jiang = me->query_temp("marks/杀堂");
+	
+	if (me->query("zhenying") != "soldier") return "你又没有加入武林联盟,还要来领奖赏!";
+	if (bing == 0 && guan == 0 && jiang == 0) 
+       		return "你在这次武林浩劫中没有杀掉一个敌人,还好意思来请功邀赏?\n";
+	else {
+        	if (me->query_temp("marks/逃") == 1)
+        	{
+        		message_vision("武林盟主说道:$N在这次武林纷争中半途逃跑,本是不应给奖励的。", me);
+        		command("say 但是看在也算是杀了几个敌人的份上。我也不为己甚。");
+			command("say 哦，你一共杀了" + chinese_number(bing) + "个皇皇教教众。");
+			command("say 哦，你一共杀了" + chinese_number(guan) + "个皇皇教舵主。");
+			command("say 哦，你一共杀了" + chinese_number(jiang) + "个皇皇教堂主。");
+                          givepoint = bing*(5000+random(5)) + guan*(7500+random(50)) + jiang*(10000+random(300)); 
+			givepot = givepoint/3 + random(givepoint/3);
+			command("say 你被奖励了" + 
+			chinese_number(givepoint) + "点经验\n" +
+        		chinese_number(givepot) + "点潜能\n" NOR);
+        		me -> add("combat_exp", givepoint);
+        		me -> add("potential",givepot );
+        		me -> delete_temp("marks/杀众");  
+        		me -> delete_temp("marks/杀舵");  
+        		me -> delete_temp("marks/杀堂");
+        		me -> delete_temp("marks/逃");  
+        		me->set("jobs/fight/succ", 1);   
+		} 
+		else {
+        		message_vision("武林盟主说道:果然是英雄出少年，一代新人换旧人，皇皇教这次失败，$N是功不可抹的。", me);
+			command("say 哦，你一共杀了" + chinese_number(bing)  + "个皇皇教教众。");
+			command("say 哦，你一共杀了" + chinese_number(guan) + "个皇皇教舵主。");
+			command("say 哦，你一共杀了" + chinese_number(jiang) + "个皇皇教堂主。");
+			command("say 干的不错!");
+      			command("pat " + me -> query("id"));
+                          point = bing*(12000+random(500)) + guan*(16000+random(1500)) + jiang*(45000+random(13000));
+        		pot = point/5 + random(point/5); 
+        		me -> add("combat_exp", point);
+        		me -> add("potential",pot );
+        		command("say 你被奖励了" + 
+			chinese_number(point) + "点经验\n" +
+        		chinese_number(pot) + "点潜能\n" NOR);
+        		me -> delete_temp("marks/杀众");  
+        		me -> delete_temp("marks/杀舵");  
+             		me -> delete_temp("marks/杀堂");  
+              		me->add("jobs/fight/num", 1);  
+              		me->set("jobs/fight/succ", 1);   
+           		me->set("jobs/fight/time", time());
+        		return "好好干,你的前途真是无可限量。\n";
+		}
+	}
+}

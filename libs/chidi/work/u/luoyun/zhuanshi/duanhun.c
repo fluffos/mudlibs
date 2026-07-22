@@ -1,0 +1,38 @@
+ // Room: /d/death/duanhun.c
+#include <ansi.h>
+inherit ROOM;
+
+void create()
+{
+        set("short", HIB"断魂桥"NOR);
+        set("long", RED+@LONG
+这里就是地府中阴魂投胎转世的断魂桥了，在这里喝了孟婆汤，前世一切的
+是非恩仇都一笔勾销了，再世为人，重新堕入轮回之道。
+LONG+NOR
+);
+        set("exits", ([ /* sizeof() == 4 */
+                "north" :   __DIR__"difu",
+        ]));
+
+        set("objects", ([ /* sizeof() == 4 */
+                __DIR__"mengpo" :   1,    
+        ]));      
+
+        set("no_fly",1);
+        set("indoors","city");
+        set("no_fight",1);
+        setup();
+        replace_program(ROOM);
+}
+
+void init()
+{ 
+object me=this_player();
+if (!wizardp(this_user()))  
+add_action("discmds",({"duanlian","ansuan","attack","sha","home","array","touxi","persuade","teach","exert","exercise","study","learn","sleep","kill","steal","cast","conjure","expell","fight","hit","perform","prcatice","scribe","surrender","yanjiu"}));
+}
+int discmds()
+{ 
+   tell_object(this_player(),"大胆！在神像面前也敢胡来？！\n");
+    return 1;
+}

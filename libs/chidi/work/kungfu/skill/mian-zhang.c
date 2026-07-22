@@ -1,0 +1,72 @@
+// by langgui
+inherit SKILL;
+mapping *action = ({
+([      "action" : "$N双手平伸，向外掠出，一式「"+RED+"棉掌"+NOR+"」，掌式飘忽，拍向$n的$l",
+        "force" : 100,
+        "dodge" : 15,
+        "damage": 50,
+        "damage_type" : "瘀伤",
+        "lvl" : 10,
+        "skill_name" : "棉掌"
+]),
+([      "action" : "$N一式「"+MAG+"棉掌"+NOR+"」，双掌犹如棉絮，平飞向$n",
+        "force" : 140,
+        "dodge" : 10,
+        "damage": 150,
+        "damage_type" : "内伤",
+        "lvl" : 0,
+        "skill_name" : "棉掌"
+]),
+([      "action" : "$N突然纵身跃入半空,「"+BLK+"棉掌"+NOR+"」拍向$n的头顶",
+        "force" : 170,
+        "dodge" : 15,
+        "damage": 200,
+        "damage_type" : "瘀伤",
+        "lvl" : 10,
+        "skill_name" : "棉掌"
+]),
+([      "action" : "$N突然跃起，一式「"+HIC+"棉掌"+NOR+"」夹着凌厉的掌风，攻向$n的全身",
+        "force" : 200,
+        "dodge" : 15,
+        "damage": 300,
+        "damage_type" : "瘀伤",
+        "lvl" : 10,
+        "skill_name" : "棉掌"
+]),
+
+});
+int valid_enable(string usage) { return usage=="unarmed" ||  usage=="parry"; } 
+int valid_learn(object me)
+{
+    if (me->query_temp("weapon") || me->query_temp("secondary_weapon"))
+        return notify_fail("练落武当棉掌必须空手。\n");
+  
+    if ((int)me->query("max_neili") < 100)
+        return notify_fail("你的内力太弱，无法练武当棉掌。\n");
+    return 1;
+}
+
+mapping query_action(object me, object weapon)
+{
+    int i, level;
+    level = (int)me->query_skill("luoying-zhang", 1);
+    for(i = sizeof(action); i > 0; i--)
+    if(level > action[i-1]["lvl"])
+      return action[NewRandom(i, 20, level/5)];
+}
+
+int practice_skill(object me)
+{
+    if ((int)me->query("qi") < 30)
+       return notify_fail("你的体力太低了。\n");
+    if ((int)me->query("neili") < 20)
+       return notify_fail("你的内力不够练武当棉掌。\n");
+    me->receive_damage("qi", 20);
+    me->add("neili", -1);
+    return 1;
+}    
+string perform_action_file(string action)
+{
+        return __DIR__"mian-zhang/" + action;
+}
+

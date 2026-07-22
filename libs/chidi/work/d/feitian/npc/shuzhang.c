@@ -1,0 +1,168 @@
+// Copyright (C) 1995, by Tie Yu and Daniel Yu. All rights reserved.
+// This software can not be used, copied, or modified in any form without
+// the written permission from authors.
+#include <ansi.h>
+inherit BHNPC;
+inherit F_MASTER;
+void create()
+{
+        set_name("署长", ({ "shu zhang", "shu","zhang" }) );
+        set("long",
+                "风云城中最高的官，有至高无上的权力\n");
+	set("nickname", RED"警备署"NOR);
+        set("attitude", "heroism");
+	set("student_title","官员");
+	create_family("朝廷",6,"官员");
+	set("vendetta_mark", "authority");
+        set("str", 27);
+        set("cor", 26);
+        set("cps", 25);
+	set("agi",25);
+	set("int",30);
+        set("chat_chance_combat", 50);
+ //       set("chat_msg_combat", ({
+ //               (: perform_action, "unarmed.yuhuan" :),
+//        }) );
+        set("combat_exp", 90000000);
+	set_temp("apply/damage",500);
+        set_skill("unarmed", 200);
+	set_skill("sword",100);
+	set_skill("force",80);
+        set_skill("parry", 120);
+        set_skill("dodge", 110);
+//	set_skill("changquan",200);
+//	set_skill("feixian-steps",60);
+//	set_skill("feixian-sword",80);
+//	set_skill("jingyiforce",50);
+//        set_skill("move", 100);
+//	set_skill("literate",90);
+//	set_skill("leadership",200);
+//	set_skill("strategy",200);
+//	map_skill("unarmed","changquan");
+//	map_skill("dodge","feixian-steps");
+//	map_skill("force","jingyiforce");
+//	map_skill("sword","feixian-sword");
+        setup();
+
+//        carry_object(__DIR__"obj/guanfu")->wear();
+}
+
+
+void init()
+{	
+	object ob;
+
+	::init();
+	if( interactive(ob = this_player()) && !is_fighting() ) {
+		remove_call_out("greeting");
+		call_out("greeting", 1, ob);
+	}
+}
+
+void greeting(object ob)
+{
+	if( !ob || environment(ob) != environment() ) return;
+	switch( random(10) ) {
+		case 0:
+message_vision("$N说道：“十大恶人,作恶多端,难道没有人能为民除害吗?．．。”\n",this_object(),ob);
+			break;
+		case 1:
+message_vision("$N望了$n一眼，问道：你为朝廷效力吗？．．。\n",this_object(),ob);
+			break;
+	}
+}
+
+
+int accept_object(object who, object ob)
+{  
+     object hb;
+     object silk;
+     if(ob->query("name") == "带鞘的尚方宝剑" )
+     {
+	message_vision(HIY "\n殷正廉笑着对$N说到：辛苦你啦!\n"NOR,who);
+        hb= new("/questobj/obj/hongbao");
+	hb->move(who);       
+        message_vision(HIW "\n殷正廉偷偷塞给$N一个红包!\n"NOR,who);
+	return 1;
+     }
+  else
+    {
+ 	if(ob->query("id")!="xzhang")	return 0;
+	if ((string)ob->query("name") == "大勋章"||(string)ob->query("name") == "小勋章"||(string)ob->query("name") == "方勋章"||(string)ob->query("name") == "圆勋章"||(string)ob->query("name") == "长勋章"
+			||(string)ob->query("name") == "短勋章"||(string)ob->query("name") == "厚勋章"||(string)ob->query("name") == "薄勋章"||(string)ob->query("name") == "五角勋章"||(string)ob->query("name") == "六角勋章")
+	{
+ 	command("say 好！好！！好！！！这位" + RANK_D->query_respect(who)+ "，真是志气可嘉，这个是你的奖品，继续努力吧！\n");
+	silk = new("/tongji/obj/xiang");
+	silk->move(who);
+	command("give xzhang to " + who->query("id"));
+	return 1;
+	}
+     }
+return 0;
+}
+
+
+
+
+void attempt_apprentice(object me)
+{
+	if( !me->query("class"))
+	{
+	command("smile");
+	command("say 很好！朝廷正在用人之时，努力吧！\n");
+        command("recruit " + me->query("id") );
+	}
+	else
+	command("say 朝廷不需要你这种不三不四，来历不明之人！\n");
+}
+
+void recruit_apprentice(object ob)
+{
+        if( ::recruit_apprentice(ob) )
+                ob->set("class", "official");
+		ob->set("vendetta_mark", "authority");
+
+}
+void re_rank(object student)
+{	   
+        int exp;
+        exp = (int) student->query("combat_exp");
+        if( exp <= 32000 ) {
+                student->set("title","朝廷七品芝麻官");
+                return ;
+        } else if ( exp <= 64000 ) {
+                student->set("title","朝廷六品官");
+                return ;
+        } else if ( exp <= 128000 ) {
+                student->set("title","朝廷五品官");
+                return ;
+        } else if ( exp <= 256000 ) {
+                student->set("title","朝廷四品官");
+                return ;
+        } else if ( exp <= 512000 ) {
+                student->set("title","朝廷三品官");
+                return ;
+        } else if ( exp <= 1024000 ) {
+                student->set("title","朝廷二品官");
+                return ;
+        } else if ( exp <= 1536000 ) {
+                student->set("title","朝廷一品官");
+                return ;
+        } else if ( exp <= 2304000 ) {
+                student->set("title","朝廷钦差大臣");
+                return ;
+        } else if ( exp <= 3456000 ) {
+                student->set("title","朝廷兵马统领");
+                return ;
+        } else if ( exp <= 5187000 ) {
+                student->set("title","朝廷兵马总统领");
+                return ;
+        } else if ( exp <= 26244000 ) {
+                student->set("title","镇远将军");
+                return ;
+        } else
+                student->set("title","定国大将军");
+                return ;
+
+}
+

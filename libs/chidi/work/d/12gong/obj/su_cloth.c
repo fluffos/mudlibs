@@ -1,0 +1,22 @@
+// by happ@YSZZ
+
+#include <armor.h>
+
+inherit CLOTH;
+
+void create()
+{
+   set_name("ÊÒÅ®Ê¥ÒÂ", ({ "shinu shengyi" }) );
+   set_weight(3000);
+   if( clonep() )
+     set_default_object(__FILE__);
+   else {
+     set("unit", "¼þ");
+     set("material", "steel");
+     set("no_zm",1);
+     set("12gong",1);
+
+     set("armor_prop/armor",60);
+   }
+   setup();
+}

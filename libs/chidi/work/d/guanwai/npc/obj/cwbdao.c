@@ -1,0 +1,30 @@
+#include <ansi.h>
+#include <weapon.h>
+inherit BLADE;
+inherit F_UNIQUE1;
+void create()
+{
+        set_name(HIW"闯王宝刀"NOR, ({ "chuangwang baodao", "blade","baodao" }) );
+        set_weight(16000);
+        if( clonep() )
+                set_default_object(__FILE__);
+        else {
+                set("unit", "柄");
+                set("value", 1000000);
+                set("replica_ob","/d/city/npc/obj/gangdao"); 
+                set("rigidity",300);  
+                set("unique",1);
+                set("no_steal",1);
+                set("no_put",1);
+                set("wield_neili", 300);
+                set("wield_maxneili", 700);
+                set("wield_str", 22);
+                set("material", "iron");
+                set("long", "这是闯王所使用过的刀，上面刻有几行小字。\n" );
+                set("wield_msg",HIW"一道白光，$n已在$N手中，只觉青光四射，寒气透骨，不禁机伶伶的打个冷战。\n"NOR);
+                set("unwield_msg", HIW"$N将$n插回腰间，华光顿敛，天地间只闻龙鸣。\n"NOR);
+        }
+        init_blade(400,2);
+        setup();
+}
+

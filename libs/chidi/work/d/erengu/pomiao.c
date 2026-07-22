@@ -1,0 +1,56 @@
+// pomiao.c
+// cly@yxjh
+
+#include <ansi.h>
+inherit ROOM;
+
+void create()
+{
+        set("short",HBK"破庙"NOR);
+        set("long", @LONG
+这是一间破破烂烂的小庙宇，屋顶几乎只剩下一半了，仅剩的一根柱子支撑
+着房子没有倒塌。你不由想苦笑两声，这真是一个倒霉的地方。不过既然过来了
+，也许有什么奇怪的发现也说不定。
+
+LONG );
+        set("no_fight", 1);
+        set("no_magic",1);
+        set("no_kill",1);
+        set("no_sleep",1);
+
+        set("objects", ([
+			__DIR__"npc/lidazui" : 1,
+        ]) );
+
+		set("exits", ([
+			"south" : __DIR__"erengu",
+			"north" : __DIR__"xroad1",
+		]) );
+
+        setup();
+
+}
+
+int valid_leave(object me, string dir)
+{
+	//if (wizardp(me))
+	//	return 1;
+
+	if (dir == "north")
+	{
+		if( !me->query_temp("erengu/pass") )
+		{
+			message_vision("李大嘴磨了磨牙，然后一把抓住$N：嘿嘿！你想要去哪里呢？”\n", me );
+
+			return notify_fail("李大嘴拿出一块不知道什么肉放在鼻子地下嗅了嗅。\n");
+		}
+/*
+		if( sizeof(all_inventory(tagob)) > 25 )
+		{
+			return notify_fail("那边已经人满了！！\n");
+		}
+		*/
+	}
+
+	return ::valid_leave(me, dir);
+}

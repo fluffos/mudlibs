@@ -1,0 +1,66 @@
+#include <ansi.h>
+inherit BHNPC;
+void create()
+{
+      string weapon;
+        set_name("教众", ({ "jiaozhong"}));
+        set("gender", "男性");
+        set("age", random(10) + 25);
+        set("no_quest", 1);
+        set("str", 33);
+        set("con", 26);
+        set("int", 20);
+        set("dex", 23);
+        set("long", "魔教教众。\n");
+        set("combat_exp", 1580000 + random(4000000)); 
+       
+        set("no_quest", 1);
+          set_skill("force", 350);
+          set_skill("sword", 350);
+          set_skill("dodge", 350);
+          set_skill("parry", 350);
+          set_skill("shenghuo-shengong", 350);
+          set_skill("shenghuo-ling", 350);
+          set_skill("qiankun-danuoyi", 350);
+        map_skill("sword","shenghuo-ling");
+        map_skill("dodge","qiankun-danuoyi");
+        map_skill("force","shenghuo-shengong");
+        set("chat_chance_combat", 40);
+        set("chat_msg_combat", ({
+                (: perform_action, "sword.xiyanling" :),
+                (: perform_action, "sword,yinfeng" :),
+                (: perform_action, "sword.tougu" :),
+                (: exert_function, "recover" :),
+                
+        }) );
+        set("max_qi", 3450); 
+        set("eff_jingli", 1400); 
+        set("neili", 3700); 
+        set("max_neili", 3700);
+        set("jiali", 60);
+        weapon = "/clone/weapon/gangjian";
+        setup();
+        carry_object(weapon)->wield();
+        carry_object("/clone/cloth/cloth")->wear();
+}
+
+void init()
+{ 
+   object ob;
+   ::init();
+   if( interactive(ob=this_player()) && !is_fighting() )
+   { remove_call_out("greeting");
+    call_out("greeting", 1, ob);
+ }}
+void greeting(object ob)
+{
+  object *guard,me;
+  int i;
+  me=this_object();
+  guard = all_inventory(environment(me));
+ for(i=0; i<sizeof(guard); i++)
+{
+    if( !living(guard[i]) || guard[i]->query("job")!=2 ) continue;         me->kill_ob(guard[i]);}
+command("follow "+this_player()->query("id"));
+command("kill dashi");
+}

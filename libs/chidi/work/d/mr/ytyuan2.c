@@ -1,0 +1,16 @@
+#include <ansi.h>
+#include <room.h>
+inherit ROOM;
+void create()
+{
+         set("short","樱桃园");
+         set("long",@long
+这是一片樱桃园，树上开满了樱桃花。
+long);
+         set("exits",([
+	"east" : __DIR__"ytyuan",
+             "south" : __DIR__"huandong",
+]));
+        setup();
+        replace_program(ROOM);
+}

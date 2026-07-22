@@ -1,0 +1,24 @@
+mapping *quest = ({
+     ([      "quest":                "Öñ½£",
+        "diff":                 2,
+        ]),
+     ([      "quest":                "ÎåÏã²èÒ¶µ°",
+        "diff":                 2,
+        ]),
+     ([      "quest":                "Ñò±Þ",
+        "diff":                 2,
+        ]),
+     ([      "quest":                "²¨Ë¹³¤ÅÛ",
+        "diff":                 2,
+        ]),
+     ([      "quest":                "°¢À­²®Íäµ¶",
+        "diff":                 2,
+        ]),
+     ([      "quest":                "µÀµÂ¾­¡¸µÚ°ËÕÂ¡¹",
+        "diff":                 2,
+        ]),
+});
+mapping query_quest()
+{
+        return quest[random(sizeof(quest))];
+}

@@ -1,0 +1,35 @@
+/**本文件由合成系统自动生成**/
+
+#include <ansi.h>
+#include <armor.h>
+
+inherit CLOTH;
+
+void create()
+{
+	object me = this_player();
+
+	set_name("子衣"NOR, ({"linzi cloth", "hecheng", "cloth"}) );
+	set("hcloth/name", "子衣"NOR);
+	set("hcloth/id", "linzi cloth");
+	set("long", "这是由林子(linzi)合成的子衣" + NOR + "。\n");
+	set("armor_type", "cloth");
+	set_weight(5000);
+	set("unit", "件");
+	set("no_get", 1);
+	set("no_give", 1);
+	set("no_sell", 1);
+	set("no_steal", 1);
+	set("no_beg", 1);
+	set("no_drop", 1);
+	set("armor_prop/armor", 370);
+	set("armor_prop/constitution", 650);
+	set("armor_prop/dexerity", 804);
+	set("armor_prop/intelligence", 688);
+	set("armor_prop/strength", 737);
+	set("wear_msg", me->name() + NOR "装备" + name () + NOR "！\n");
+	set("unwear_msg", me->name() + NOR "脱下" + name () + NOR "！\n");
+
+   setup();
+}
+

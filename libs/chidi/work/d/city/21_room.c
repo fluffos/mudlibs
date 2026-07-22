@@ -1,0 +1,34 @@
+inherit ROOM;
+void create()
+{
+        set("short", "21点");
+        set("long", @LONG
+这里是江湖的娱乐休闲的场所之一，
+大家玩累了可以约好几个知己良朋来这里消遣一会。
+LONG
+        );
+        set("no_clean_up", 0);
+        set("exits", ([
+        "east": __DIR__"game_room",
+        ]));
+        set("no_fight",1);
+        set("no_magic",1);
+      set("valid_startroom","1");
+        //set("freeze",1);
+        set("objects", ([
+        "/u/luoyun/game/pai21" : 1,
+        ]));
+        setup();
+       }
+void init()
+{
+    if (wizardp(this_player())) return;
+    add_action("do_jump","tiao");
+    add_action("discmds",({"sleep","respitate","exert","array","duanlian","ansuan","touxi","persuade","teach","exert","exercise","study","learn","kill","steal","conjure","fight","hit","perform","prcatice","scribe","surrender"}));
+    add_action("do_climb", "climb");
+}
+int discmds()
+{
+        tell_object(this_player(),"现在你还是专心游戏吧！\n");
+        return 1;
+}

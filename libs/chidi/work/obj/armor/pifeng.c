@@ -1,0 +1,37 @@
+// cloth.c
+//
+// This is the basic equip for players just login.
+#include <ansi.h>
+#include <armor.h>
+
+inherit ARMOR;
+
+void create()
+{
+    set_name(YEL "神翎披风" NOR, ({ "shenyu pifeng","pifeng" }) );
+    set_weight(1000);
+    if( clonep() )
+        set_default_object(__FILE__);
+    else {
+        set("unit", "件");
+        set("no_drop",1);
+        set("no_give",1);
+       set("value",500000);
+	set("long", "这是传说中用神鸟羽毛和扶桑树藤编制而成的披风，披上它能获得神的赐福。\n");
+	set("material","iron");
+       set("armor_prop/intelligence", 50);
+        set("armor_prop/dodge", 200);
+        set("armor_prop/armor", 2000);
+    }
+setup();
+}
+/*
+int move(mixed dest)
+{
+        if(! userp(dest))       return ::move(dest);
+        if( ::move(dest)==0)    return 0;
+        message("channel:rumor",YEL"【谣言】"+ "某人：神翎披风被"+
+        dest->query("name")+"抢到手了！\n"NOR,users());
+        return 1;
+}
+*/

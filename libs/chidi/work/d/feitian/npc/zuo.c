@@ -1,0 +1,66 @@
+// diabio(青云)2001.2.4
+#include <ansi.h>
+#include "/d/feitian/npc/cam.h"
+inherit BHNPC;
+inherit F_MASTER;
+#include "/d/feitian/npc/zuo.h"
+int ask_kungfu();
+
+void create()
+{
+	set_name("相乐左之助", ({ "zuo zhizu", "xiangle" }));
+	set("nickname",HIW"斩左"NOR);
+//         set("rank","十刃");
+	set("gender", "男性");
+            set("long", 
+		" 这就是人称斩左的左之助了，在他衣服后面印了一个大大的恶字。\n");
+	set("age", 23);
+            set("dex", 43);
+                 set("str", 45);
+     set("per", 43);
+	set("combat_exp", 3200000);
+        set("max_neili",4000);
+        set("neili",4000);
+        set("max_qi",4000);
+        set("eff_qi",4000);
+        set("qi",4000);
+        set("max_jingli",4000);
+        set("eff_jingli",4000);
+        set("jingli",4000);
+
+        set_skill("shayi",100 );
+        set_skill("force", 180);
+        set_skill("dodge", 200);
+                 set_skill("xuanhualiu-quanfa",350);
+                 set_skill("unarmed",350);
+        set_skill("shayi-xinfa",180);
+
+        map_skill("force","shayi-xinfa");
+	map_skill("unarmed","xuanhualiu-quanfa");
+ //      create_party(HIG"十刃成员"NOR,HIW"明王"NOR,6);
+	setup();
+	carry_object("/clone/misc/cloth")->wear();
+            set("inquiry",([
+                    "喧哗流拳法" : (: ask_kungfu :),
+                    "学艺" : (: ask_kungfu1 :),
+                    "极限" : (: ask_kungfu2 :),
+                    "剑法" : (: ask_kungfu2 :),
+                    "绝招" : (: ask_kungfu :),
+ //                    "杀" : (: kungfu_asked1 :),
+
+            ]));
+          set("chat_chance",2);
+          set("chat_msg",({
+              (: exert_function,"heal" :),
+              (: exert_function,"heal" :),
+          }));
+          set("chat_chance_combat",30);
+          set("chat_msg_combat",({
+              (: perform_action,"unarmed.sanchong" :),
+              (: exert_function,"recover" :),
+          }));
+
+          carry_object("/clone/misc/cloth")->wear();
+}
+
+

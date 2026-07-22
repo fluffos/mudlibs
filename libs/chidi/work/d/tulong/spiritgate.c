@@ -1,0 +1,38 @@
+#include <room.h>
+inherit ROOM; 
+#include <ansi.h>
+int do_look(string arg);
+void create()
+{
+      set("short","忘忧园");
+      set("long",@LONG
+你处在一个植满茶花的花园里，虽然还不是开花的时节，但是
+那些生机勃勃的茶树，不禁让你感到心神清爽。草丛里有些小虫子
+正唧喁唧喁地叫得正欢，一座精美亮丽的精灵之门（spiritgate）
+就在不远处。
+LONG);
+      set("exits",([ 
+            "west"  : "/d/gaochang/room15",
+      ]));
+	        set("objects",([
+			"/quest/tulong/npc/shouwei" : 1,
+      ]));
+	  set ("no_fight",1);
+      setup();
+} 
+
+void init()
+{
+	add_action("do_look", "look");
+}
+
+int do_look(string arg)
+{
+        object me;
+        object room;
+        me = this_player();
+        if(!arg || arg != "精灵之门" && arg != "spiritgate" ) return 0;
+tell_object(me,"这就是精灵之门，可以尝试敲（knock）一下。\n"); 
+        return 1;
+}
+

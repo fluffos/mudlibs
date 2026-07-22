@@ -1,0 +1,13 @@
+inherit SKILL;
+int valid_enable(string usage) 
+{ return usage=="taoism"||usage=="magic"||usage=="buddhism"; } 
+
+int valid_learn(object me)
+{ 
+        return notify_fail("战神录只能靠圣舍利来增加。\n");
+}
+string conjure_magic_file(string spell)
+{
+    return __DIR__ + "zhanshen-lu/" + spell;
+}
+

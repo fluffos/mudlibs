@@ -1,0 +1,165 @@
+// rewrite by lonely 解决玩家连续错误指令的问题。
+// alias.c
+#pragma save_binary
+#include <command.h>
+#define MAX_REPEAT 30
+#define MAX_ALIASES 40
+#define HISTORY_BUFFER_SIZE 20
+
+mapping alias;
+nosave string *history, last_input;
+nosave int last_cmd, repeat_cnt = 0;
+nosave int last_cmd_time,cmd_time=0,kill_time=0;
+static int last_time=time(), cmd_cnt=0, cmd_cnt1=0, cmd_cnt2=0,ft=0;
+
+// speed of player input commands.
+int query_cmd_count() {return cmd_cnt2;}
+
+string process_input(string str)
+{
+    string *args, command, argstr,verb,arg,file,cmd;
+    int i, j, count, curr_time;
+    object ob,dest;
+
+// rewrite限制晕倒后的add_action'by lonely
+	if (userp(this_object()) && (this_object()->query_temp("block_msg/all")
+			|| !living(this_object()) ) )
+		return "";
+	notify_fail(HIR"请查阅相关CMDS？\n"NOR); 
+// end
+
+	reset_eval_cost();
+	// added by mon 5/18/98 to clear up eval_counter.
+	// it seems that if one input many commands in a raw,
+	// then the eval_counter is not cleared in time, and
+	// thus causing Too long evaluation error.
+
+    if( str == (string)this_object()->query_temp("last_cmd"))
+		if(!this_object()->query_temp("last_cmd_ok"))return "";
+
+	cmd_cnt++;
+	if(cmd_cnt>20)		//threshold for how many commands can be
+	{					//input every few seconds.(determined below)
+                curr_time=time();
+                 
+		 if(curr_time-last_time<1)
+		{       
+                         if(ft>1)
+                          {
+                          message_vision(HIC "\n天空忽然传来了几声冷笑，" 
+                                      "霎时间乌云密布！一道" HIY "闪电"
+                                       HIC "从天而降！\n"
+                                       NOR, this_object());
+                          this_object()->unconcious();    
+                          message_vision(HIW "只见晕倒在地的$N"
+                                       "身上冒着缕缕轻烟......\n\n" NOR, this_object());  
+			  cmd_cnt1=0;
+                          ft=0;                       
+                          }      
+                          if(cmd_cnt1==0)
+			  { 
+                         cmd_cnt2=cmd_cnt/(curr_time-last_time+1);                                
+				write(HIG"\n\n你似乎感觉"HIW"天气"HIG"有点变化,难道天神对你的刷频已经感到不满了?\n\n"NOR);
+                                  //write("你一次输入太多命令了。\n");
+                               this_object()->start_busy(1);
+                          ft++;
+			  }
+			cmd_cnt1++;
+                                                
+			if(cmd_cnt1>21) cmd_cnt1=0;
+			last_time=curr_time; 
+		//in case of flooding, has to wait a few
+		//seconds without input to be able to
+		//input again.
+			return "";  //flooding detected. ignore input.
+   		        
+               }
+		else
+		{
+			cmd_cnt2=cmd_cnt/(curr_time-last_time+1);
+			last_time=curr_time;
+			cmd_cnt=0;
+			cmd_cnt1=0;
+                        ft=0;
+		}
+	}
+
+    if( str[0]=='!' )
+	{
+        if( pointerp(history) && sizeof(history) )
+		{
+			if( sscanf(str, "!%d", i) )
+				str = (string)history[(HISTORY_BUFFER_SIZE + last_cmd - i) % HISTORY_BUFFER_SIZE];
+            else
+				str = history[last_cmd];
+		}
+		else
+			return "";
+    }
+	else
+	{
+        if( !pointerp(history) ) history = allocate(HISTORY_BUFFER_SIZE);
+        last_cmd = (last_cmd + 1) % HISTORY_BUFFER_SIZE;
+        history[last_cmd] = str;
+    }
+    if( mapp(alias) )
+	{
+        if( !undefinedp(alias[str]) )
+            return replace_string( alias[str], "$*", "" );
+        if( sscanf(str, "%s %s", cmd, argstr)==2 && !undefinedp(alias[cmd]) )
+		{
+            cmd = replace_string( alias[cmd], "$*", argstr );
+            args = explode(argstr, " ");
+            if( (j = sizeof(args)) )
+                for(i=0; i<j; i++)
+                    cmd = replace_string( cmd, "$" + (i+1), args[i] );
+            return cmd;
+        }
+    }
+    command=(string)ALIAS_D->process_global_alias(str);
+
+	if (this_object()->query_temp("big5") )
+		command=LANGUAGE_D->Big52GB(command);
+
+    if (!living(this_object()))
+	{
+		if (sscanf(command,"%s %s",verb,arg)!=2) verb=command;
+		file="/cmds/usr/"+verb+".c";
+		if (file_size(file)>0)
+		{
+			file->main(this_object(),arg);
+			return "";
+		}
+        else if( EMOTE_D->do_emote( this_object(), verb, arg ) )
+			return "";
+        else if( CHANNEL_D->do_channel( this_object(), verb, arg ) )
+			return "";
+	}
+    return command;
+}
+int set_alias(string verb, string replace)
+{
+    if( !replace )
+	{
+        if( mapp(alias) ) map_delete(alias, verb);
+        return 1;
+    }
+	else
+	{
+        if( !mapp(alias) ) alias = ([ verb:replace ]);
+        else if( sizeof(alias) > MAX_ALIASES )
+            return notify_fail("您设定的 alias 太多了，请先删掉一些不常用的。\n");
+        else alias[verb] = replace;
+        return 1;
+    }
+}
+mapping query_all_alias()
+{
+    return alias;
+}
+string last_input()
+{
+        return last_input;
+}
+
+
