@@ -1,0 +1,1 @@
+string *banned_action=({"quit","practice","lian","exercise","dazuo","respirate","tuna","learn","xue","study","du","surrender","halt"});

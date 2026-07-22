@@ -1,0 +1,2 @@
+@MudOS.exe
+@StartMud.bat
