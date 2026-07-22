@@ -1,0 +1,577 @@
+#include <ansi.h>
+inherit F_CLEAN_UP;
+inherit F_DBASE;
+
+void msg1_perform(object me,string arg);
+void msg2_perform(object me,string arg);
+void msg3_perform(object me,string arg);
+
+void message_stone(object obj,object pfm)
+{
+string str,tmp;
+if ( !obj )
+        return;
+str = obj->dest_msg();
+if ( !str )
+        return;
+if ( !pfm )
+        tmp = "所谓绝招";
+else    tmp = pfm->query("name");
+if ( !tmp )
+        tmp = "所谓绝招";
+str = sprintf(str,tmp);
+write(str);
+return;
+}
+
+mapping valid_types = ([
+        "unarmed"       : "拳脚", "sword"       : "剑法",       "blade"         : "刀法", 
+        "art"           : "艺术", "dagger"      : "匕首",       "stick"         : "棍法",
+        "staff"         : "杖法", "throwing"    : "暗器",       "force"         : "内功", 
+        "parry"         : "招架", "dodge"       : "轻功",       "magic"         : "魔法",
+        "spells"        : "法术", "whip"        : "鞭法",       "spear"         : "枪法", 
+        "axe"           : "斧法", "mace"        : "锏法",       "fork"          : "叉法",
+        "rake"          : "钯法", "archery"     : "弓箭",       "hammer"        : "锤法", 
+]);
+
+void create() 
+{
+set("channel_id","自创绝技");    
+set("id","pfm DIY");
+seteuid(getuid()); 
+}
+
+string hit_msg()
+{
+write(@LONG
+请输入你的绝招攻击时的信息，可以带颜色，例如：
+
+HIC$N挥展开来，左一叉，右一叉，幻出无数大小光环向$nHIC绕去。
+虽看起来柔弱无力，却宛若秋波般连绵不绝，实是暗藏杀机！
+
+颜色代码请查询 color 命令。
+变量参数请参照以下：
+        $N  自己的名字。
+        $n  使用对象的名字。
+        $P  自己的人称代名词，如你、他、她、它。
+        $p  使用对象的人称代名词，如你、他、她、它。
+        $w  武器的名称
+LONG);  
+}
+
+void scc_msg()
+{
+write(@LONG
+请输入你的绝招攻击成功时的信息，可以带颜色，例如：
+
+HIR$NHIR果然被这光环套住，当时目瞪口呆，不知所措！
+
+颜色代码请查询 color 命令。
+变量参数请参照以下：
+        $N  自己的名字。
+        $n  使用对象的名字。
+        $P  自己的人称代名词，如你、他、她、它。
+        $p  使用对象的人称代名词，如你、他、她、它。
+        $w  武器的名称
+LONG);
+return;
+}
+
+string fail_msg()
+{
+write(@LONG
+请输入你的绝招攻击失败时的信息，可以带颜色，例如：
+
+HIR不料确被$NHIR看破，攻其不备，$nHIR反被打了个措手不及！
+
+颜色代码请查询 color 命令。
+变量参数请参照以下：
+        $N  自己的名字。
+        $n  使用对象的名字。
+        $P  自己的人称代名词，如你、他、她、它。
+        $p  使用对象的人称代名词，如你、他、她、它。
+        $w  武器的名称
+LONG);  
+}
+
+void do_to(string type,object me, string str)
+{
+if ( !me )
+        return; 
+if ( type=="msg1" )
+        return msg1_perform(me,str);
+if ( type=="msg2" )
+        return msg2_perform(me,str);
+if ( type=="msg3" )
+        return msg3_perform(me,str);
+}
+
+void msg3_perform(object me,string arg)
+{
+string skill_name;
+object pfm;     
+int wx;
+if ( !me )
+        return;
+pfm = me->query_temp("perform_OBJ");
+if ( !pfm )
+        return;
+if ( !arg || strlen(arg)<10 || strlen(arg)>400 )
+        {
+        scc_msg();
+        write("请输入你的绝招成功时的信息：(长度5-200个汉字)");
+        me->edit( (: call_other, this_object(), ({ "do_to","msg3",me}) :) );
+        return;
+        }        
+skill_name = me->query_temp("perform_TYPE");
+pfm->set("_hit_msg",arg);
+pfm->save();
+CHANNEL_D->do_channel(this_object(),"rumor","听说 "HIR+me->name(1)+HIM" 武功初成，自悟了一招"HIR+valid_types[skill_name]+HIM"外功绝招："HIR+pfm->query("name")+"(Perform "+pfm->query("ids")+")"+HIM"。"NOR);
+wx = me->query("combat_exp");
+wx = wx/100;
+if ( wx<20000 ) wx = 20000;
+if ( wx>500000 ) wx = 500000;
+me->set("new_pfm/"+pfm->query("ids"),skill_name);
+me->delete_temp("perform_OBJ");
+me->delete_temp("perform_TYPE");
+if ( me->query("new_perform/zztype")!="none" )
+          me->add("learned_points",5000);
+else    me->add("learned_points",10000);
+if ( me->query("new_perform/zztype")!="none" )
+          me->add("balance",-10000000);
+else      me->add("combat_exp",-wx);
+me->set("force",0);
+me->set("mana",0);
+me->add("新任务/自创perform",1);
+me->delete("new_perform");
+me->save();
+return; 
+}
+
+void msg2_perform(object me,string arg)
+{
+object pfm;     
+if ( !me )
+        return;
+pfm = me->query_temp("perform_OBJ");
+if ( !pfm )
+        return;
+if ( !arg || strlen(arg)<10 || strlen(arg)>400 )
+        {
+        fail_msg();     
+        write("请输入你的绝招攻击失败时的信息：(长度5-200个汉字)");
+        me->edit( (: call_other, this_object(), ({ "do_to","msg2",me }) :) );
+        return;
+        }
+pfm->set("_fail_msg",arg);
+scc_msg();
+write("请输入你的绝招成功时的信息：");
+me->edit( (: call_other, this_object(), ({ "do_to","msg3",me}) :) );
+return;
+}
+
+void hits_msg(int max,int num,object me, string arg)
+{
+int damage,skill_level;
+object pfm;
+string skill_name;
+if ( !me )
+        return;
+pfm = me->query_temp("perform_OBJ");
+skill_name = me->query_temp("perform_TYPE");
+if ( !pfm || !skill_name )
+        return;
+damage = me->query_temp("apply/damage");
+if ( damage>500 )
+        damage = 500;
+if ( damage<100 )
+        damage = 100;
+damage = damage/2+random(damage);
+pfm->set("perform_type/hits/"+arg,damage);
+num--;
+if ( num<=0 )
+        {
+        fail_msg();     
+        write("请输入你的绝招攻击失败时的信息：");
+        me->edit( (: call_other, this_object(), ({ "do_to","msg2",me }) :) );
+        return;
+        }
+else    {
+        write("请输入第"+(num+1)+"击的攻击描述：");
+        input_to( (: call_other, __FILE__, "hits_msg", max,num,me:));
+        return; 
+        }                               
+}
+
+void type_perform(object me,string arg)
+{
+int busy_time,damage,skill_level,tmp;   
+object pfm;
+string skill_name;
+if ( !me )
+        return;
+pfm = me->query_temp("perform_OBJ");
+skill_name = me->query_temp("perform_TYPE");
+if ( !pfm || !skill_name )
+        return;
+pfm->set("perform_type/type",arg);        
+switch(arg)
+        {
+        case "busy" : //busy敌人型
+                write(HIY"你领悟了一招busy型的绝招。\n"NOR);
+                busy_time = me->query_skill(skill_name,1);
+                busy_time/= 100;
+                if ( busy_time>10 )     busy_time = 10;
+                pfm->set("perform_type/busy_self",1+random(3));
+                pfm->set("perform_type/busy_target",busy_time);
+                break;
+        case "hit" :  //单击冷却型
+                write(HIY"你领悟了一招猛击型的绝招。\n"NOR);
+                damage = me->query_skill(skill_name,1);
+                damage+= me->query_temp("apply/damage");
+                if ( damage>2000 )   damage = 2000;
+                damage = damage/2+random(damage/2);
+                pfm->set("perform_type/hit_damage",damage);
+                pfm->set("perform_type/remove_msg/data",skill_name+"_"+pfm->query("id"));
+                pfm->set("perform_type/remove_msg/time",2+random(4));
+                break;
+        default :
+                write(HIY"你领悟了一招连续攻击的绝招。\n"NOR);  
+                pfm->set("perform_type/busy_self",2+random(5));
+                skill_level = me->query_skill(skill_name,1);
+                skill_level/= 100;
+                if ( skill_level>6 )
+                        skill_level = 6;
+                write(HIY"以你目前的"+to_chinese(skill_name)+"的修为，共可连续攻击敌人"+chinese_number(skill_level)+"次。\n"NOR);   
+                tmp = skill_level;
+                write("请输入第"+(skill_level-tmp+1)+"击的攻击描述：");
+                input_to( (: call_other, __FILE__, "hits_msg", skill_level,tmp,me:));
+                return;
+        }
+fail_msg();        
+write("请输入你的绝招攻击失败时的信息：");
+me->edit( (: call_other, this_object(), ({ "do_to","msg2",me}) :) );
+return;
+}
+
+void msg1_perform(object me,string arg)
+{
+string type;
+object pfm;     
+if ( !me )
+        return;
+pfm = me->query_temp("perform_OBJ");
+if ( !pfm )
+        return;
+if ( !arg || strlen(arg)<10 || strlen(arg)>400 )
+        {
+        hit_msg();      
+        write("请输入你的绝招攻击时的信息：(长度5-200个汉字)");
+        me->edit( (: call_other, this_object(), ({ "do_to","msg1",me }) :) );
+        return;
+        }     
+pfm->set("_msg",arg);
+type = me->query("new_perform/zztype");
+if ( !type || !stringp(type) || type=="none" )
+        {
+        if ( random(10)==1 )
+                type = "busy";
+        else if ( random(10)==1 )
+                type = "hit";
+        else    type = "hits";
+        }
+return type_perform(me,type);
+}
+
+void name_perform(object me,string arg)
+{
+object pfm;
+if ( !me )
+        return;
+if ( !LOGIN_D->check_legal_name(arg) )
+        {
+        write("请输入你想要自创的pfm的中文名:");        
+        input_to( (: call_other, __FILE__, "name_perform", me:));
+        return;
+        }               
+pfm = me->query_temp("perform_OBJ");
+if ( !pfm )
+        return;
+pfm->set("name",arg);
+pfm->setup();
+hit_msg();
+write("请输入你的绝招攻击时的信息：");
+me->edit( (: call_other, this_object(), ({ "do_to","msg1",me }) :) );
+return;
+}
+
+void new_perform(object me,string arg)
+{
+string skill_name;      
+object pfm;     
+if ( !me )
+        return;
+pfm = me->query_temp("perform_OBJ");
+skill_name = me->query_temp("perform_TYPE");
+if ( arg[0]=='n' || arg[0]=='N' )
+        {
+        if ( pfm )  destruct(pfm);
+        me->delete_temp("perform_OBJ");
+        me->delete_temp("perform_TYPE");
+        write("你取消了参悟自创外功绝招。\n");
+        }
+else if ( arg[0]=='Y' || arg[0]=='y' )
+        {
+        write("请输入你想要自创的pfm的中文名:");        
+        input_to( (: call_other, __FILE__, "name_perform", me:));
+        }
+else    {
+        write(HIY+@LONG
+        自创外功绝技会损耗：
+                1. 20000点武学经验
+                2. 10000点潜能
+LONG+NOR);      
+        write("你确定要自创"+valid_types[skill_name]+"的绝招："+arg+"？<Yes|No>");
+        input_to( (: call_other, __FILE__, "new_perform", me:));
+        }       
+return; 
+}
+                        
+int main(object me,string arg)
+{
+mapping data;   
+object obj,weapon,pfm;
+string skill_name,*temp,str,tmp,cc,pfm_type="none";
+int i,wx,snowtu=0;
+//return notify_fail("有设定错误，巫师抢修中。。。。呜呜呜\n");
+if ( !arg )
+        {
+        data = me->query("new_pfm");
+        if ( !data || !mapp(data) )
+                return notify_fail("你尚未领悟绝招。\n");
+        temp = keys(data);
+        str = "你领悟了以下的绝招：\n";
+        for(i=0;i<sizeof(temp);i++)
+                {
+                pfm = new("/obj/perform"); 
+                if ( !pfm )     error("Lost The File: O_perform.c\n");
+                pfm->set("owner_id",me->query("id"));
+                pfm->set("ids",temp[i]);
+                if ( !pfm->restore() )
+                        {
+                        destruct(pfm);
+                        continue;
+                        }
+                if ( pfm->query("pfm_level")>1 )  snowtu = pfm->query("pfm_level")*50;
+                switch(pfm->query("perform_type/type"))
+                        {
+                        case "busy" : tmp = "定身技,使对手定身"+HIR+pfm->query("perform_type/busy_target")+NOR"秒";break;
+                        case "hit"  : tmp = "对敌猛烈一击，相对伤害"+HIR+pfm->query("perform_type/hit_damage")+NOR"点，追加伤害"+HIR+snowtu+NOR"点，冷却时间"+HIR+pfm->query("perform_type/remove_msg/time")+NOR"秒";break;
+                        case   "hits"     : tmp = "对敌人连续攻击"+HIR+(sizeof(keys(pfm->query("perform_type/hits"))))+NOR"次，自己busy时间"+HIR+pfm->query("perform_type/busy_self")+NOR"秒";break;
+                        default     : tmp = "";break;
+                        }
+                str+= sprintf("\t%3-d : %s (perform %s)\n",(i+1),pfm->query("name"),temp[i]);
+                str+= sprintf("\t\t外功类型 : %s\n", valid_types[me->query("new_pfm/"+temp[i])]);  
+                str+= sprintf("\t\t外功效果 : %s\n", tmp);                
+                str+= sprintf("\t\t外功等级 : %d (%d%%)\n", pfm->query("pfm_level")?pfm->query("pfm_level"):1,pfm->query("pfm_level_exp"));
+                str+= sprintf("\t\t附加命中 : %d%%\n",pfm->query("命中附加")?pfm->query("命中附加"):0);
+                destruct(pfm);
+                }
+        me->start_more(str);    
+        return 1;
+        } 
+if ( sscanf(arg,"-%s %s",cc,arg)==2 )
+        {
+        notify_fail("命令格式错误                       
+                zzperform -e 英文名     重新领悟自己已领悟的绝招
+                zzperform -d 英文名     删除自己已领悟的绝招\n");
+        if ( cc[0]=='d' || cc[0]=='D' ) //消耗洗点石,5千潜能和1%的武学(最低1万,最大10万)
+                {
+                obj = present("clear stone",me);
+                if ( !obj || !obj->is_job() )
+                        return notify_fail("你没有洗点石，无法删除已领悟的绝招。\n");
+                if ( me->query("combat_exp")<10000 )
+                        return notify_fail("你武学经验不够。\n");
+                if ( (me->query("potential")-me->query("learned_points"))<5000 )
+                        return notify_fail("你潜能不足5000点。\n");                    
+                wx = me->query("combat_exp");
+                wx = wx/100;
+                if ( wx<10000 ) wx = 10000;
+                if ( wx>100000 ) wx = 100000;
+                if ( me->query("combat_exp")<wx )
+                        return notify_fail("你武学经验不够。\n");
+                data = me->query("new_pfm");
+                if ( !data || !mapp(data) )
+                        {
+                        if ( me->query("新任务/自创perform")<=0 )
+                                return notify_fail("你并没有自创外功绝招。\n");
+                        else if ( me->query("新任务/自创perform")>1 ) //bug?
+                                {
+                RENWU_D->bug_post(HIR+me->query("id")+HIR"无自创data，但有两个自创记录\n"NOR,NOR HIW"自创perform"NOR);  
+                                return notify_fail("你的自创日志出现意外情况，联系巫师吧。\n");
+                                }
+                        else    {
+                                me->add("combat_exp",-wx);
+                                me->add("learned_points",5000);
+                message_stone(obj,0);
+                                destruct(obj);
+                                me->delete("new_pfm/"+arg);
+                                me->delete("新任务/自创perform",-1);
+                                me->save();
+                                write("ok.你的自创记录已全部清除完毕。\n");
+                                return 1;
+                                }
+                        }
+                else    {
+if ( wizardp(me) )  write(sprintf("新任务/自创perform=%d ,sizeof(keys(data))=%d\n",me->query("新任务/自创perform"),sizeof(keys(data))) );
+                        if ( me->query("新任务/自创perform")<=0 )
+                                {
+                RENWU_D->bug_post(HIR+me->query("id")+HIR"有自创data，无自创记录\n"NOR,NOR HIW"自创perform"NOR);
+                                return notify_fail("你的自创日志出现意外情况，联系巫师吧。\n");        
+                                }
+                        if ( me->query("新任务/自创perform")<sizeof(keys(data)) )
+                                {
+                RENWU_D->bug_post(HIR+me->query("id")+HIR"自创data大于自创记录\n"NOR,NOR HIW"自创perform"NOR);          
+                                return notify_fail("你的自创日志出现意外情况，联系巫师吧。\n");        
+                                }
+                        else if ( me->query("新任务/自创perform")==sizeof(keys(data)) )
+                                {
+                                pfm = new("/obj/perform"); 
+                                if ( !pfm )     error("Lost The File: O_perform.c\n");
+                                pfm->set("owner_id",me->query("id"));
+                                pfm->set("ids",arg);
+                                if ( !pfm->restore() )
+                                        return notify_fail("好似没什么反应，你再试试。\n");
+                                if ( !("cmds/wiz/rm.lpc")->main(pfm,pfm->query_save_file()+".o") )
+                                        return notify_fail("你的自创功夫存档删除失败。\n");
+                                write("你的自创功夫 perform "+arg+" 档案删除完毕。\n");     
+                message_stone(obj,pfm);
+                                destruct(pfm);
+                                destruct(obj);
+                                me->delete("new_pfm/"+arg);
+                                me->add("新任务/自创perform",-1);
+                me->add("combat_exp",-wx);
+                                me->add("learned_points",5000);                         
+                                me->save();
+                                write("ok.你指定的自创记录已清除完毕。\n");
+                                return 1;
+                                }
+                        else    {
+                                me->add("新任务/自创perform",-1);
+                me->add("combat_exp",-wx);
+                                me->add("learned_points",5000); 
+                                me->save();
+                message_stone(obj,0);
+                                destruct(obj);
+                                write("ok.你的自创日志已清除了1个空值的记录。\n");
+                                return 1;
+                                }
+                        }                       
+                }
+        if ( cc[0]=='e' || cc[0]=='E' )  //重新领悟
+                {
+                if ( me->query("balance")<10000000 )
+                        return notify_fail("你钱庄的存款不足一千两黄金.\n");
+                if ( (me->query("potential")-me->query("learned_points"))<5000 )
+                        return notify_fail("你潜能不足5000，不能自创外功绝技。\n");
+                if ( !me->query("new_pfm/"+arg) )
+                        return notify_fail("你并没有领悟到 perform "+arg+"。\n");
+                pfm = new("/obj/perform"); 
+                if ( !pfm )     error("Lost The File: O_perform.c\n");
+                pfm->set("owner_id",me->query("id"));
+                pfm->set("ids",arg);
+                if ( !pfm->restore() )
+                        return notify_fail("你的自创功夫失败了，请洗点了重新领悟。\n");
+                me->set_temp("perform_OBJ",pfm);
+                me->set_temp("perform_TYPE",me->query("new_pfm/"+arg));
+                me->set("new_perform",([
+                        "type"  : me->query("new_pfm/"+arg),
+                        "id"    : arg,
+                        "zztype": pfm->query("perform_type/type"),
+                        "obj"   : pfm,
+                ]));    
+                write("你开始重新领悟 perform "+arg+" 的奥妙。\n");
+                pfm->delete("perform_type");
+                new_perform(me,arg);
+                return 1;
+                }       
+        return 0;       
+        }                                       
+        
+if ( me->query("new_pfm/"+arg) )
+        return notify_fail("你已创了"+arg+"的绝技。\n");
+if ( me->query("新任务/自创perform") )
+        {
+        if ( me->query("新任务/自创perform")>=2 )
+                return notify_fail("你已自创了"+me->query("新任务/自创perform")+"个绝招，目前不能再领悟新的绝招了。\n");
+        else if ( !me->query("family/zhangmen") )  
+                return notify_fail("你不是掌门大弟子，没有资格继续领悟新的绝招了。\n");
+        }              
+if ( (me->query("potential")-me->query("learned_points"))<10000 )
+        return notify_fail("你潜能不足10000，不能自创外功绝技。\n");
+if ( me->query("combat_exp")<10000000 )
+        return notify_fail("你的武学修为还不足以自创外功绝技。\n");
+if ( me->query("force")<me->query("max_force")*2 )
+        return notify_fail("你的内力不够充盈。\n");
+if ( me->query("kee")<500 )
+        return notify_fail("你的气血不够充盈。\n");
+if ( me->query("sen")<500 )
+        return notify_fail("你的精神不足。\n");
+weapon = me->query_temp("weapon");
+if ( weapon )
+        skill_name = weapon->query("skill_type");
+else    skill_name = "unarmed"; 
+if ( me->query_skill(skill_name,1)<350 )
+        return notify_fail("你的"+to_chinese(skill_name)+"还没到开宗建祖的境界。\n");
+if ( !LOGIN_D->check_legal_id(arg) )
+        return notify_fail("对不起，你的自创绝招英文名字必须是 3 到 8 个英文字母。\n");
+pfm = new("/obj/perform.lpc");
+if ( !pfm )
+        error("\n自制pfm控制文件残缺。\n");     
+pfm->set("owner_id",me->query("id"));
+pfm->set("ids",arg);
+pfm->setup();
+me->set_temp("perform_OBJ",pfm);
+me->set_temp("perform_TYPE",skill_name);
+pfm_type = me->query("new_perform/zztype");
+if ( !pfm_type || !stringp(pfm_type) )
+        pfm_type = "none";
+me->set("new_perform",([
+        "type"  : skill_name,
+        "id"    : arg,
+        "zztype": pfm_type,
+        "obj"   : pfm,
+]));    
+me->save();
+write(HIY+@LONG
+        自创外功绝技会损耗：
+                1. 1%武学经验(2w-50w)
+                2. 10000点潜能
+LONG+NOR);              
+write("你确定要自创"+valid_types[skill_name]+"的绝招："+arg+"？<Yes|No>");
+input_to( (: call_other, __FILE__, "new_perform", me:));
+return 1;
+}
+
+int help(object me)
+{
+write(HIY"  
+            命令                           说明                     条件\n"NOR);
+write(@HELP
+指令格式 : 
+        zzperform               列出你已领悟的绝招的信息列表    
+        zzperform  英文名       领悟自己的外功绝招              消耗1万潜能和1%的武学(最低2万,最大50万)  
+        zzperform -e 英文名     重新领悟自己已领悟的绝招        消耗1000黄金和1万潜能
+        zzperform -d 英文名     删除自己已领悟的绝招            消耗洗点石,5千潜能和1%的武学(最低1万,最大10万)
+                                                                如果曾领悟失败，则只删除失败的记录
+ 
+        领悟的结果是：随机领悟一种perform
+        1.  busy技       <对敌busy>
+        2.  猛击冷却型   <单击，使完无busy，有冷却时间》
+        3.  连击busy型   <连续攻击,1-6招，使完自身有busy>
+其他相关：
+        help performs        
+HELP
+);
+return 1;
+}

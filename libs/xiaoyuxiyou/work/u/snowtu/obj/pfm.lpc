@@ -1,0 +1,170 @@
+#include <ansi.h>
+#include <combat.h>
+inherit ITEM;
+inherit F_SAVE;
+
+int err_msg(string arg)
+{
+write(arg);
+return 0;
+}
+        
+void create()
+{
+set_name("自制perform",({"perform"}));
+}
+
+int do_perform(object me)
+{
+string msg,skill_name;
+object weapon,target;  
+mapping data,temp;
+string *str;
+int ap,dp,t,i,damage;
+
+if ( !target )
+        target = SSERVER->offensive_target(me);
+if ( !target || !target->is_character()
+   ||target->is_corpse() || target==me )
+        {
+        write("你要攻击谁？\n");
+        return 0;
+        }
+if ( me->query("force")<300 )
+        return err_msg("你内力不够。\n");   
+weapon = me->query_temp("weapon");
+if ( weapon )
+        skill_name = weapon->query("skill_type");
+else    skill_name = "unarmed";
+if ( me->query_skill_mapped(skill_name) )
+        skill_name = me->query_skill_mapped(skill_name);
+                        
+if ( query("_msg") )  //攻击信息
+        msg = query("_msg");
+else    msg = "$N对$n使用一式从"+to_chinese(skill_name)+"领悟出的"+query("name")+"。\n";
+
+me->add("force",-300);
+ap = COMBAT_D->skill_power(me,skill_name,SKILL_USAGE_ATTACK);
+dp = COMBAT_D->skill_power(target,"dodge",SKILL_USAGE_DEFENSE)/2;
+dp+= COMBAT_D->skill_power(target,"parry",SKILL_USAGE_DEFENSE)/2;
+
+//hits|busy|hit
+/*-----------------------
+set("perform_type",([
+        "type"          : Hits|busy|hit    类型
+        "busy_self"     : INT              自己busy时间
+        "busy_target"   : INT              敌人busy时间
+        "hits"          : ([               连击的信息以及相应的damage
+                STRING msg  : INT damage,
+                ..
+                ]),
+        "hit_damage"    : INT              单击的damage
+        "remove_msg"    : ([
+                "data"  : STRING          延迟data
+                "time"  : INT             延迟时间
+                ]),
+]))     
+------------------------*/
+data = query("perform_type");
+if ( !data || !mapp(data) )
+        return err_msg("你的自创绝技出错了，联系巫师吧。\n");
+switch(query("perform_type/type"))
+        {
+        case "busy"     :  //busy技能
+                if ( target->is_busy() )
+                        return err_msg(target->name()+"已经够忙的了，你使的再漂亮也是枉然。\n");
+                if ( random(ap+dp)<dp )
+                        {
+                        if ( query("_fail_msg") )  //失败信息
+                                msg+= query("_fail_msg");
+                        else    msg+= "结果失败了！\n";
+                        t = query("perform_type/busy_self");
+                        if ( t<1 ) t = 1+random(3);
+                        msg = COLOR_D->replace_color(msg,2);
+                        message_vision(msg,me,target);  
+                        me->start_busy(t);
+                        }
+                else    {
+                        if ( query("_hit_msg") )  //成功信息    
+                                msg+= query("_hit_msg");
+                        else    msg+= "结果一击得手！\n";
+                        msg = COLOR_D->replace_color(msg,2);
+                        message_vision(msg,me,target);  
+                        t = query("perform_type/busy_target");
+                        if ( t<1 ) t = 1+random(3);
+                        target->start_busy(random(t));
+                        }
+                break;
+        case "hit"      :  //单击延迟型
+                if ( !query("perform_type/remove_msg/data") || !query("perform_type/remove_msg/time") )
+                        return err_msg("你的自创绝技出错了，联系巫师吧。\n");
+                if ( time()<me->query_temp("zz_pfm_"+query("perform_type/remove_msg/data"))+query("perform_type/remove_msg/time") )
+                        return err_msg("绝招用多就不灵了。\n");    
+                if ( random(ap+dp)>=dp )
+                        {
+                        damage = query("perform_type/hit_damage");
+                        if ( damage<=0 )
+                                damage = me->query_skill(skill_name,1)/60;
+                        damage+= me->query_temp("apply/damage");
+                        damage-= target->query_temp("apply/armor");
+                        if ( damage>0 )
+                                {
+                                if ( query("_hit_msg") )  //成功信息      
+                                        msg+= query("_hit_msg")+"\n";
+                                else    msg+= "结果一击得手！\n";
+                                msg = COLOR_D->replace_color(msg,2);
+                                message_vision(msg,me,target);  
+                                target->receive_damage("kee",damage,me);
+                                COMBAT_D->report_status(target);
+                                if ( me->query("fotce_factor")>0 
+                                  && damage/3>0 )
+                                        {
+                                        target->receive_wound("kee",damage,me);
+                                        COMBAT_D->report_status(target,damage/3);
+                                        }
+                                }
+                        else    msg+= HIW"结果对$n"HIW"没造成什么伤害。\n"NOR;
+                        msg = COLOR_D->replace_color(msg,2);
+                        message_vision(msg,me,target);  
+                        }
+                else    {
+                        if ( query("_fail_msg") )  //失败信息
+                                msg+= query("_fail_msg");
+                        else    msg+= "结果失败了！\n";
+                        msg = COLOR_D->replace_color(msg,2);
+                        message_vision(msg,me,target);  
+                        }
+                me->set_temp("zz_pfm_"+query("perform_type/remove_msg/data",time()));
+                break;
+        case "hits"     :   //连击busy型
+                temp = query("perform_type/hits");
+                if ( !temp || !mapp(temp) )
+                        return err_msg("你的自创绝技出错了，联系巫师吧。\n");
+                str = keys(temp);
+                msg = COLOR_D->replace_color(msg,2);
+                message_vision(msg,me,target);  
+                for(i=0;i<sizeof(str);i++)
+                        {
+                        if ( !str[i] )
+                                continue;
+                        if ( !me || !target || !me->is_fighting(target) || !living(target) )
+                                continue;       
+                        COMBAT_D->do_attack(me,target,weapon,SKILL_USAGE_ATTACK,str[i]);
+                        }
+                t = query("perform_type/busy_self");
+                if ( t<1 ) t = 1+random(3);
+                me->start_busy(t);
+                return 1;
+        default :  return err_msg("你的自创绝技出错了，联系巫师吧。\n");
+        }
+return 1;
+}
+
+string query_save_file() 
+{ 
+if ( !query("owner_id") || !stringp(query("owner_id")) ) 
+        return 0; 
+return sprintf("/c/data/perform/%c/%s/%s", query("owner_id")[0],query("owner_id"),query("id")); 
+}
+
+

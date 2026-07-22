@@ -1,0 +1,208 @@
+#include <ansi.h>
+#include <armor.h>
+inherit FINGER;
+
+mapping Ring = ([
+        "kee"           : "气血增加",
+        "eff_kee"       : "气血治疗",
+        "sen"           : "精神增加",
+        "eff_sen"       : "精神治疗",
+        "mana"          : "法力增加",
+        "force"         : "内力增加",
+]);     
+
+void ran_set(int v)
+{
+        int i;
+        string str,*rr,*tmp= ({});
+        if( v<1 )
+                v = 1;
+        rr = keys(Ring);                
+        for(i=0;i<v;i++)
+        {
+                str = rr[random(sizeof(rr))];   
+                if( member_array(str,tmp)==-1 )
+                        tmp+= ({str});
+        }
+        set("addType",tmp);
+}                                               
+
+void create()
+{
+        mapping names;
+        string name;
+	names = NAME_D->random_name(({"male","female",})[random(2)]);
+        if( !names || !mapp(names) )
+                name = "西华";
+        else    
+        {
+                name = names["name"];
+		name = sprintf("%c%c%c%c",name[2],name[3],name[0],name[1]);
+        }               
+        set_name(name+"戒指", ({ "jie zhi", "jie", "ring","zhi" }));
+        set("weight", 500);
+        if (clonep())
+                set_default_object(__FILE__);
+        else 
+        {
+                set("unit", "只");
+                set("value", 0);
+                set("material", "gold");
+                set("armor_prop/armor",5);
+                set("armor_prop/personality", 1);
+                set("no_put",1);
+                set("no_get",1);
+                set("no_give",1);
+        }
+        ran_set(1+random(2));
+        setup();
+}       
+
+string long()
+{
+        int i;
+        mixed tmp;
+        string str = "一只灵气十足的戒指，上面密密麻麻刻着一些符文。\n";
+        tmp = query("addType");
+        if( !tmp || !pointerp(tmp) )
+                return str;
+        str+= "另外它还具有自动";
+        for(i=0;i<sizeof(tmp);i++)
+        {
+                if( i!=(sizeof(tmp)-1) )
+                        str+= Ring[tmp[i]]+"、";
+                else    str+= Ring[tmp[i]];
+        }
+        str+= "的功效。\n";
+        if( time()>=query("snowtuRing")+7200 )
+              str+= "不过它已经过了体验时效了，应该没什么用处了。\n";
+        return str;
+}                                       
+
+void leave()
+{
+        remove_call_out("leave");
+        if( environment() && userp(environment()) )
+                return;
+        write("\n"+this_object()->name()+HIY"化作一道金光冲天而去。\n\n"NOR);
+        destruct(this_object());
+}
+
+void _leave()
+{
+        call_out("leave",2+random(5));
+}               
+
+int check_owner()
+{
+        object env = environment();
+        if( !env || !userp(env) )
+        {
+                _leave();
+                return 0;
+        }
+        return 1;
+}
+
+void init()
+{
+        check_owner();
+}
+
+void ring_con(object me,mixed temp,int i)
+{
+        string name,msg="";
+        object ob = this_object(); 
+        if( !me || i<=0 || !present(ob,me) || !living(me) )
+                return;
+        name = ob->name();              
+        switch(temp)
+        {
+                case "kee" :            
+                        if( me->query("kee")<me->query("eff_kee") && me->query("kee")>0 )
+                        {
+                                msg+= sprintf("%s给予你%d点的气血补充。\n",name(),i);
+                                me->receive_heal("kee",i);
+                        }
+                        break;
+                case "sen" :
+                        if( me->query("sen")<me->query("eff_sen") && me->query("sen")>0 )
+                        {
+                                msg+= sprintf("%s给予你%d点的精神补充。\n",name(),i);
+                                me->receive_heal("sen",i);
+                        }
+                        break;                  
+                case "eff_kee" :
+                        if( me->query("eff_kee")<me->query("max_kee") && me->query("eff_kee")>0 )
+                        {
+                                msg+= sprintf("%s给予你%d点的气血治疗。\n",name(),i);
+                                me->receive_curing("kee",i);
+                        }
+                        break;
+                case "eff_sen" :
+                        if( me->query("eff_sen")<me->query("max_sen") && me->query("eff_sen")>0 )
+                        {
+                                msg+= sprintf("%s给予你%d点的精神治疗。\n",name(),i);
+                                me->receive_curing("sen",i);
+                        }
+                        break;                  
+                        
+                case "force" :
+                        if( me->query("force")/2<me->query("max_force") )
+                        {
+                                msg+= sprintf("%s给予你%d点的内力补充。\n",name(),i);
+                                me->add("force",i);
+                                if( me->query("force")/2>me->query("max_force") )
+                                        me->set("force",(int)me->query("max_force")*2 );
+                        }
+                        break;
+                case "mana" :
+                        if( me->query("mana")/2<me->query("max_mana") )
+                        {
+                                msg+= sprintf("%s给予你%d点的法力补充。\n",name(),i);
+                                me->add("mana",i);
+                                if( (int)me->query("mana")/2>(int)me->query("max_mana") )
+                                        me->set("mana",(int)me->query("max_mana")*2 );
+                        }
+                break;
+        }       
+        me->add_temp("HFring_msg",1);  
+        if( me->query_temp("HFring_msg")%5==0 )
+        tell_object(me,msg);
+}
+
+void recover_func()
+{
+        mixed temp;
+        int pot,lv,k;
+        object who = environment();
+          if( !who || !living(who) || who->is_busy() ) //所有者昏迷或busy无效
+                return;
+        if( !query("equipped") || query("equipped")!="worn" ) //未装备无效      
+                return;                 
+        if( environment(who) && environment(who)->query("no_magic") )
+                return;                 
+
+        if( time()>=query("snowtuRing")+7200 )
+                return;                 
+        temp = query("addType");
+        if( !temp )
+                return;
+        if( query_temp("using") )                               
+                return;
+                
+        pot = 200;
+        pot = pot/2+random(pot/2);
+        set_temp("using",1);            
+        if( stringp(temp) )
+                ring_con(who,temp,pot);
+        else if( arrayp(temp) )
+        {
+                k = sizeof(temp);
+                while(k--)
+                        ring_con(who,temp[k],pot);
+        }
+        delete_temp("using");
+        return;
+}
+

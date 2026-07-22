@@ -32,7 +32,7 @@ rely on the boot + interactive-connect test as the verification gate.
   majority of this collection. If an archive turns out to be English
   (like ds386/Dead Souls), do the minimum to note what it is, don't sink
   deep debugging time into it -- move on to the next Chinese one.
-- **Done: 45 / 100** (shanhaizhanshen, xingzhanyingxiong,
+- **Done: 46 / 100** (shanhaizhanshen, xingzhanyingxiong,
   unknownlib20150716 [小雨西游II], bxsj [书剑天下], bxsj1 [书剑·经典],
   chidi [江湖I], ..., nitan170911 [仙剑奇侠传], nitan6 [笑傲江湖], rzrmud
   [大唐西游], xo, xo_final, zzfy [郑州风云3], shiji [世纪],
@@ -48,7 +48,8 @@ rely on the boot + interactive-connect test as the verification gate.
   confirmed NOT a duplicate of archive #71, just a copy-paste leftover],
   tianxiawuxue [天下无雪], xiyangzaixian_fengyun2 [夕阳再现/风云再起2],
   xiyangzaixian3 [夕阳再现III之炎龙封印], tianxia [天下 Beta],
-  menghuanxiyou2002 [梦幻西游2002版, same codebase as mhxy #19])
+  menghuanxiyou2002 [梦幻西游2002版, same codebase as mhxy #19],
+  xiaoyuxiyou [小雨西游/小雨西游Ⅱ, same lineage as unknownlib20150716 #3])
 - **New AGENTS.md §15q (hidden client-protocol-version gate)**: found on
   xiyangzaixian3 -- a pre-id prompt can check the input against a
   hardcoded literal (client version string), not just a BIG5/student
@@ -310,7 +311,7 @@ rely on the boot + interactive-connect test as the verification gate.
 | 49 | 大唐双龙.rar | datangshuanglong | 40043 | done | related-but-distinct fork of dtsl(#8)/llmud_datangshuanglong(#18) lineage (chinese.c identical, master.c differs, same diamond-inherit weapon bug recurs); config has a stale "碧血残阳之豪侠晚歌" name field (confirmed NOT #71 duplicate, just copy-paste leftover); standard §15h fix + F_UNIQUE/F_BACKUP macro gaps + diamond-inherit fix; full registration flow verified with real name "秦风" reaching the actual game world; 94.6% lpcc pass; see libs/datangshuanglong/NOTES.md |
 | 50 | 天下.tar.gz | tianxia | 40044 | done | 《天下》Beta, adm/obj/ layout (nested at raw/mud/tx/, archive also bundles a full MudOS driver source tree at raw/mud/MudOS/ which was correctly ignored); standard §15h fix doubled (is_chinese + a separate valid_chinese() whole-string check) + logind.lpc check_legal_name() byte-width fixes + disabled 2 stale checks in a check_config.lpc driver-version self-check inherited into simul_efun.lpc (§15r, new) + restored 5 never-defined simul_efuns (clr_ansi, chinese_number, changed_match_path, db_affected, query_bandwide, query_shadowed -- §15b additions, new) + fixed a genuine query_shadowing() efun-arity bug in bleeding.lpc + fixed 3 files' lossy-iconv-merged text-block closing tags (new Encoding gotcha) + fixed a 45-occurrence §8h Greek-table typo + fixed a 12-file duplicate `inherit ROOM;` bug + proactive dns_master preload exclusion (§15p); query_shadowed() fix was the single most impactful -- was silently blocking the player body class from compiling, breaking character creation right after Chinese name/password were accepted; full registration flow verified end-to-end incl. real name "秦风" reaching the actual game world; 99.1% lpcc pass; see libs/tianxia/NOTES.md |
 | 51 | 天下无雪.rar | tianxiawuxue | 40045 | done | adm/obj/ layout (nested at raw/mud/world/); standard §15h fix + upgraded valid_override to 3-arg (§14) + fixed a stray-brace typo cluster in d/kaifeng/ground0-3.lpc + proactive dns_master preload exclusion (§15p); full registration flow verified end-to-end incl. real name "秦风" reaching the actual game world; 97.6% lpcc pass; see libs/tianxiawuxue/NOTES.md |
-| 52 | 小雨西游.zip | | | not started | |
+| 52 | 小雨西游.zip | xiaoyuxiyou | 40046 | done | self-IDs as 小雨西游 but live banner says 小雨西游Ⅱ v3.0 (2013 snapshot); chinese.lpc byte-identical to unknownlib20150716(#3), same engine lineage different site snapshot; standard §15h fix + proactive get_include_path() insurance; no dns_master in preload (nothing to exclude); one corrupted quest file hung lpcc, renamed .corrupted-orig; full registration flow verified with 3 real Chinese names incl. one reaching an actual room + look/quit, dup-id rejection also confirmed working; 99.0% lpcc pass; see libs/xiaoyuxiyou/NOTES.md |
 | 53 | 新狂想空间II.rar | | | not started | |
 | 54 | 月影奇缘.rar | | | not started | |
 | 55 | 未明空间.rar | | | not started | |
