@@ -1,0 +1,118 @@
+#include <ansi.h>
+#include <room.h>
+inherit ROOM;
+
+void create()
+{
+        set("short","海底");
+        set("channel_id","水晶宫");
+	set("alternative_die",1);
+        set("no_huicheng",1);
+        set("no_chuqiao",1);
+        set("long", @LONG
+到了一个水中世界。海面上波浪汹涌，这里却静得出奇。一群群银
+色的小鱼在蓝色的海水中游来游去，脚下是色彩斑斓的珊湖礁，其
+中白色的珊瑚连成一线，如一条白云铺成的道路。
+LONG );
+        setup();
+}
+                     
+int do_drop(string arg)
+{
+	return ("/d/city/droproom.lpc")->do_main(arg);
+}
+
+int do_cmds(string arg)
+{
+        string *nocmds,verb = query_verb();
+        nocmds = ({
+                "recall","move","maphere","fight","find",
+        });
+        if( member_array(verb,nocmds)==-1 )
+                return 0;
+        write("ok\n");
+        return 1;
+}
+
+int do_map(string arg)
+{
+	object me = this_player();
+	if( time()<me->query_temp("last_mazemap")+15 )
+		return err_msg("你不能频繁查看地图。\n");
+	me->set_temp("last_mazemap",time());
+	arg = MAZE_D->query_maze_mainobj(me)->display_common_map(this_object());
+	me->start_more(arg);		
+        return 1;
+}
+
+void init()
+{
+	if( !query("init_guai") )
+	{
+		set("guai",random(2)+random(2)+random(2));
+		set("init_guai",1);
+	}	
+	add_action("do_drop","drop");
+	add_action("do_cmds","",1);
+	add_action("do_map","map");
+}
+
+int alternative_die(object who)
+{
+        object target;
+        string file,msg;
+        if( !who )
+                return 1;
+        if( !userp(who) )
+        {
+        	who->clear_condition();
+        	if( who->is_sea() )
+        	{
+                	if( objectp(target = who->query_temp("last_damage_from"))
+                          && present(target,this_object()) )
+				who->reward_ob(target);
+		}
+                else    message_vision(HIY"$N"HIY"「啪」的一声倒在地上，挣扎着抽动了几下就死了。\n"NOR,who);
+                who->move("/d/maze/dntg-sea-sea1/empty");
+                REMOVE_D->add_object(who,1);
+                return 0;                         
+        }
+        	
+        who->powerup(0,1);
+        tell_object(who,NOR"              "REV HIR" "NOR HBWHT HIM"大闹天宫"NOR REV HIR" "NOR HBCYN HIY"东海龙宫探宝，力挚如意金箍 "NOR"\n");
+        tell_object(who,HIR"本次大闹天宫失败了！\n"NOR);
+        who->move("/d/dntg/hgs/tiebanqiao",2);
+        who->set("maze/dntg-sea-sea2",time());
+        who->delete_temp("maze");
+        if( who->query("combat_exp")>20000 )
+        	who->add("combat_exp",-20000);
+        if( who->query("daoxing")>2000 )	
+        	who->add("daoxing",-2000);
+        tell_object(who,HIY"\n你慌慌张张地从东海逃回了花果山。\n"HIR"你失去了20000点武学经验以及2年道行。"NOR"\n");
+        return 0;
+}   
+
+int valid_leave(object who,string dir)
+{
+	object guai;
+	if( userp(who) && who->is_fighting() )
+		return notify_fail("你现在正在战斗中，脱身不得。\n");
+	if( !userp(who) || query("guai")<=0 )
+		return ::valid_leave(who,dir);
+	guai = new("/d/maze/dntg-sea-sea1/npc/guai");
+	if( guai && guai->information(who) )
+	{
+		if( wizardp(who) )
+			tell_object(who,HIR"刷怪成功！\n"NOR);	
+		add("guai",-1);
+		return 2;
+	}
+	else
+	{
+		if( wizardp(who) )
+			tell_object(who,HIR"刷怪失败！\n"NOR);	
+		guai->move("/d/maze/dntg-sea-sea1/empty");
+		REMOVE_D->add_obj(guai,1);
+	}
+	return ::valid_leave(who,dir);
+}

@@ -1,0 +1,475 @@
+#include <ansi.h>
+inherit SUPER_NPC;
+inherit F_SAVE;
+
+string WeaponType;
+
+void set_weapon_type(string type)
+{
+	WeaponType = type;
+}
+
+string query_weapon_type(){return WeaponType;}
+
+string query_save_file()
+{
+	string title;
+	if( !stringp(title=query("title")) 
+	 || strlen(title)<2 )
+        	return 0;
+	return sprintf("/data/npc/7sheng/%s",title);
+}
+
+varargs void Show(object who,string arg,string color)
+{
+	string *msgs,str;
+	int i;
+	if( !who )
+		return;
+	if( !arg || !stringp(arg) || strlen(arg)<2 )
+		return;
+	if( !color || !stringp(color) )
+		color = "";
+	arg = sort_string(arg,68,0); 
+	msgs = explode(arg,"\n");
+	str = "";
+	for(i=0;i<sizeof(msgs);i++)
+		str+= "【系统】"+msgs[i]+"\n";
+	tell_object(who,color+str+NOR);	
+}
+
+varargs int check_player(object who)
+{
+	if( !environment() || !who || !living(who)
+	 || !userp(who) || !present(who,environment()) 
+	 || who->query_temp("pending/7sheng")!=query("title") )
+	 	return 0;
+	if( base_name(environment())!=query("startroom") )
+		return 0;
+	return 1;
+}
+
+void clean_skills()
+{
+	mapping skill;
+	string *skills;
+	int i;
+	
+	if( !mapp(skill = this_object()->query_skills()) 
+	 || sizeof(skill)<1 )
+	 	return;
+	if( !pointerp(skills = keys(skill))
+	 || !intp(i=sizeof(skills))
+	 || i<1 )
+	 	return;
+	while(i--)
+		this_object()->delete_skill(skills[i]);
+}
+
+void clean_inv()
+{
+	object *inv;
+	int i;
+	if( !pointerp(inv=all_inventory(this_object()))
+	 || !intp(i=sizeof(inv))
+	 || i<1 )
+	 	return;
+	while(i--)
+	{
+		if( !userp(inv[i]) )
+			destruct(inv[i]);
+		else
+		{
+			if( environment() )
+				inv[i]->move(environment());
+			else	inv[i]->move("/obj/void");
+		}	
+	}
+}
+
+void init_skills(){return;}
+
+void init_inv()
+{
+	object ob;
+	int i;
+	string type,*msgs = ({
+		"armor","cloth","hand","kui","neck","pifeng","ring",
+		"shield","shoes","waist","wrists",
+	});
+	for(i=0;i<sizeof(msgs);i++)
+	{
+		if( objectp(ob=carry_object(0,msgs[i],1)) )
+		{
+			ob->set("armor_title",query("title"));
+			ob->wear();
+		}
+	}
+	if( !stringp(type=query_weapon_type()) )
+		type = "unarmed";
+	if( objectp(ob=carry_object(0,type,1)) )
+	{
+		ob->set("weapon_title",query("title"));
+		ob->wield();			
+	}
+}
+
+void setup()
+{
+	restore();
+	if( !stringp(getuid())
+	 || query("id")==query("default_id")
+	 || (query("name")=="七大圣"&&query("id")=="da sheng") )
+		init_skills();
+	clean_inv();
+	set("looking",HIY"浑身披挂，威风凛凛"NOR"。");
+	set("rank_info/pos_msg", HIB"浑身上下，妖气弥漫"NOR"。\n");
+  	set("env/test",({"HIR","HIM"})[random(2)]);
+	::setup();	
+	init_inv();
+	add_temp("apply/combat_def",1000);	
+	add_temp("apply/spells_def",1000);
+	add_temp("apply/combat_damage",800);
+	add_temp("apply/spells_damage",800);
+	powerup(0,1);
+}
+
+void init_title(){}
+
+void create()
+{
+	set_name("七大圣",({"da sheng"}));
+	init_title();
+  	setup();
+}
+
+void do_default()
+{
+	init_skills();
+	save();
+	setup();
+}
+
+void check_7sheng(object who,string title)
+{
+	string now_id,default_id,room;
+	mapping objs;
+	object npc,env,*temp;
+	if( !who || !who->is_titles(title) )
+		return;
+	if( !stringp(now_id=who->query("id")) )
+		return;
+	switch(title)
+	{
+		case "齐天大圣" : default_id = "qitian dasheng";room = "qitian";break;
+		case "混天大圣" : default_id = "huntian dasheng";room = "huntian";break;
+		case "平天大圣" : default_id = "pingtian dasheng";room = "pingtian";break;
+		case "驱神大圣" : default_id = "qushen dasheng";room = "qushen";break;
+		case "移山大圣" : default_id = "yishan dasheng";room = "yishan";break;
+		case "覆海大圣" : default_id = "fuhai dasheng";room = "fuhai";break;
+		case "通风大圣" : default_id = "tongfeng dasheng";room = "tongfeng";break;
+		default : return;
+	}
+	if( !objectp(env = find_object("/d/dntg/hgs/"+room+".lpc")) )
+		return;
+	if( !mapp(objs=env->query_temp("objects"))
+	 || sizeof(objs)<1 )
+	 	return;
+	if( !pointerp(temp=values(objs))
+	 || sizeof(temp)<1 )
+	 	return;
+	if( objectp(npc=temp[0]) )
+		npc->do_default();
+	who->remove_title(title,1);
+	tell_object(who,HIR"【系统】由于你获得了新的七大圣称号，你失去了「"+HIY+title+HIR"」称号。"NOR"\n");
+}
+
+void change_owner(object who)
+{
+	mapping skill,xin;
+	object weapon,mail,victim,login;
+	string title,name,id,old_name,old_id,*skills,mp_skill,*ids,msg,*tls;
+	int i,k,lvl,zx=0;
+	
+	if( !who )
+		return;
+	if( !stringp(id=who->query("id"))
+	 || !stringp(name=who->query("name")) )
+	 	return;
+	if( !mapp(skill = who->query_skills()) 
+	 || sizeof(skill)<1 )
+	 	return;
+	if( !pointerp(skills = keys(skill))
+	 || !intp(i=sizeof(skills))
+	 || i<1 )
+	 	return;
+	title = query("title");
+	old_id = query("id");
+	old_name = query("name");
+	if( old_name==name || old_id==id )
+		return;
+
+	all_inventory(environment())->remove_killer(who);
+	all_inventory(environment())->remove_killer(this_object());		
+	who->powerup(0,1);		
+	message_vision(HIY"\n\n$N"HIY"脸色大变，慌忙停住攻势，朝着$n"HIY"一拱手：阁下神功盖世，在下佩服，这「"HIR+title+HIY"」的头衔便让给你了！\n\n众人一阵欢呼，齐声道好。\n\n"NOR,this_object(),who);
+	command("release");
+	
+	if( old_name!=query("default_name") )
+		CHANNEL_D->do_channel(this_object(),"rumor","听说"HIG+name+HIM"技高一筹，力压"HIG+old_name+HIM"，夺得了"HIY"「七大圣」之"HIR"「"+title+"」"HIM"的称号。"NOR);
+	else	CHANNEL_D->do_channel(this_object(),"rumor","听说"HIG+name+HIM"在"HIG"花果山群英会"HIM"技高一筹，力压群雄，夺得了"HIY"「七大圣」之"HIR"「"+title+"」"HIM"的称号。"NOR);
+	if( who->set_titles(title) )
+		tell_object(who,HIC"【系统】你获得了称号：「"HIR+title+NOR HIC"」。\n"NOR);
+	
+	tls = ({
+		"齐天大圣","混天大圣","平天大圣","驱神大圣","移山大圣","覆海大圣","通风大圣",		
+	});
+	tls-= ({title});
+	for(k=0;k<sizeof(tls);k++)
+		check_7sheng(who,tls[k]);
+	clean_skills();
+	lvl = who->query_level();
+	this_object()->set_level(lvl);
+	while(i--)
+		this_object()->set_skill(skills[i],lvl*10);
+	i=sizeof(skills);	
+	while(i--)
+	{
+		if( stringp(mp_skill=who->query_skill_mapped(skills[i])) )
+			this_object()->map_skill(skills[i],mp_skill);
+	}
+	ids = ({id+"'s pingtian dasheng",old_id,"dasheng","da sheng"});
+	set_name(name,ids);
+	if( who->query("family/family_name") )
+		create_family(who->query("family/family_name"),3,"蓝");
+	set("title",title);	
+	if( objectp(weapon=who->query_temp("weapon")) )
+		set_weapon_type(weapon->query("skill_type"));
+	else	set_weapon_type("unarmed");
+	save();
+
+	message_vision(HIG"\n\n一旁围上一群猕猴猢狲，将"+name+HIG"好好打扮一番。\n\n"NOR,who);
+
+	if( old_id!=id )
+	{
+		if( objectp(victim=find_player(old_id))
+		 && living(victim) )
+			zx = 1;
+		else
+		{
+			login = new(LOGIN_OB);
+			login->set("id", old_id);
+			if( !login->restore() ) 
+			{
+	  			destruct(login);
+	  			return;
+        		}
+        		victim = LOGIN_D->make_body(login);
+			if( !victim || !victim->restore() ) 
+			{
+			  	destruct(victim);
+			  	destruct(login);
+			  	return;
+                        }
+			destruct(login);
+		}
+		msg = HIG+name+"("+capitalize(id)+")"+HIR"技高一筹，在"HIG"花果山群英会"HIR"中战胜了你拥有的「"HIY+title+HIR"」。\n\n你失去了称号：「"HIY+title+HIR"」。\n";
+		if( zx>1 )
+		{
+			if( victim->is_titles(title) )
+			{
+				if( victim->remove_title(title,1) )
+					Show(victim,msg);
+				victim->save();	
+			}
+		}
+		else
+		{
+			mail = new(MAILBOX_OB);
+			mail->set_owner(id);
+			xin = ([
+                		"from" : "系统(SYSTEM)",
+                		"title": "花果山群英会",
+                		"to"   : id,
+                		"time" : time(),
+                		"status": "N",
+                		"text" : msg,
+        		]);
+        		mail->receive_mail(xin);
+        		if( victim->is_titles(title) )
+				victim->remove_title(title,1);
+			victim->save();	
+        		destruct(mail);
+			destruct(victim);
+		}	
+	}
+	clean_inv();
+	setup();
+}
+
+void PlayerWin(object who)
+{
+	powerup(0,1);
+	if( environment() )
+	{
+		all_inventory(environment())->remove_killer(this_object());
+		this_object()->remove_all_killer();
+	}
+	if( !check_player(who) )
+		return;
+	who->delete_temp("pending");	
+	change_owner(who);
+}
+
+void PlayerLose(object who)
+{
+	powerup(0,1);
+	if( environment() )
+	{
+		all_inventory(environment())->remove_killer(this_object());
+		this_object()->remove_all_killer();
+	}
+	if( !check_player(who) )
+		return;
+	message_vision(HIY"\n$N"HIY"哈哈大笑道：回去多练练吧！！\n"NOR,this_object());
+	who->delete_temp("pending");
+	who->set("maze/7sheng",time());
+	all_inventory(environment())->remove_killer(who);
+	who->remove_all_killer();
+}
+
+int copy_statue(object who)
+{
+	mapping skill;
+	string *skills;
+	int i,lvl;
+	if( !who || !userp(who) )
+		return 0;
+	lvl = who->query_level();
+	if( this_object()->query_level()/10<lvl/10 )
+		lvl = (lvl/10)*10+random(10);
+	else	lvl = this_object()->query_level();
+	this_object()->set_level(lvl);
+	if( !mapp(skill = this_object()->query_skills()) 
+	 || sizeof(skill)<1 )
+	 	return 0;
+	if( !pointerp(skills = keys(skill))
+	 || !intp(i=sizeof(skills))
+	 || i<1 )
+	 	return 0;
+	while(i--)
+		set_skill(skills[i],lvl*10);
+	powerup(0,1);
+	set("force_factor",query_skill("force")/5);
+	set("mana_factor",query_skill("spells")/5);
+	return 1;
+}
+
+int accept_fight(object who)
+{
+	if( !environment()->query("name")
+	 || !query("title")
+	 || environment()->query("name")!=query("title") )
+		return 0;
+	if( this_object()->is_fighting()
+	 && !this_object()->is_fighting(who) )
+	{
+		tell_object(who,CYN+name()+CYN"说道：待本大王赢下这局再说。\n"NOR);
+		return 0;
+	}
+	if( time()<who->query("maze/7sheng")+3600 )
+	{
+		tell_object(who,HIY"你刚刚挑战失败，还是稍候再来。\n"NOR);
+		return 0;
+	}
+	if( who->is_titles(query("title")) )
+	{
+		tell_object(who,HIY"你已经挑战成功了。\n"NOR);
+		return 0;
+	}
+	if( who->query_level()<60 )
+	{
+		tell_object(who,HIY"60级才能挑战。\n"NOR);
+		return 0;
+	}
+	if( !who->query_temp("pending/7sheng") )
+	{
+		if( !copy_statue(who) )
+		{
+			EMOTE_D->do_emote(this_object(), "qie",geteuid(who),HIC,0,0,0);
+			return 0;
+		}
+		EMOTE_D->do_emote(this_object(), "heihei",geteuid(who),HIC,0,0,0);
+		message_vision(HIR"$N"HIR"说道：既然你觊觎本大王的位置，好好好！成者王侯败者寇，来来来！让俺看看你有啥伎俩！\n"NOR,this_object());
+		who->set_temp("pending/7sheng",query("title"));
+		kill_ob(who);
+		who->kill_ob(this_object());
+		return 1;
+	}
+	else
+	{
+		who->delete_temp("pending/7sheng");
+		return 0;	
+	}
+}
+
+void dest_ob(object who)
+{
+	destruct(who);
+}
+
+void kill_ob(object who)
+{
+	if( !environment() )
+		return;
+	if( !who )
+	{
+		all_inventory(environment())->remove_killer(this_object());
+		this_object()->remove_killer(who);
+		message("vision",CYN+name()+CYN"哈哈大笑：劳资天下无敌！\n"NOR,environment());
+		return;
+	}
+	if( !environment()->query("name")
+	 || !query("title")
+	 || environment()->query("name")!=query("title") )
+	{
+		all_inventory(environment())->remove_killer(this_object());
+		this_object()->remove_killer(who);
+		message("vision",CYN+name()+CYN"说道：这里是哪儿？\n"NOR,environment());
+		return;
+	}
+	if( !userp(who) )
+	{
+		this_object()->remove_killer(who);
+		who->remove_killer(this_object());
+		message("vision",HIC"\n一旁围观的猕猴猢狲齐声聒噪：以多打少，胜之不武！众人上前将"+who->name()+HIC"拉下场去。\n\n"NOR,environment());
+		remove_call_out("dest_ob");
+		call_out("dest_ob",1,who);
+		return;
+	}
+	if( !who->query_temp("pending/7sheng") 
+	 || !query("title")
+	 || who->query_temp("pending/7sheng")!=query("title") )
+	{
+		this_object()->remove_killer(who);
+		who->remove_killer(this_object());
+		tell_object(who,HIC+name()+HIC"朝你摇了摇头。\n"NOR);
+		return;
+	}
+	::kill_ob(who);
+}
+
+void init()
+{
+	if( query("name")=="七大圣" && query("id")=="da sheng" )
+		this_object()->setup();
+}
+
+void die()
+{
+	message("vision",HIC"\n"+name()+HIC"脸色大变，停住了攻势。\n\n"NOR,environment());
+	powerup(0,1);
+	all_inventory(environment())->remove_killer(this_object());
+	this_object()->remove_all_killer();
+	return;
+}

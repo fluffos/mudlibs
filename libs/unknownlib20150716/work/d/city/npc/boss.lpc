@@ -1,0 +1,541 @@
+#include <ansi.h>
+inherit SUPER_NPC;
+
+int ask_party();
+mixed about_niang();
+
+void create()
+{
+        set_name("老害虫", ({"xifuhui boss","boss" }));
+        create_family("月宫", 4, "弟子");
+	set("title", "喜福会老板娘");
+        set("age", 22);
+        set("gender", "女性");
+        set("attitude", "friendly");
+	set_level(10);
+	set("per",35);
+	set_skill("literate",100);
+	set_skill("unarmed",100);
+	set_skill("dodge",100);
+	set_skill("force",100);
+	set_skill("parry",100);
+	set_skill("sword",100);
+	set_skill("spells",100);
+ 	set_skill("moonshentong",100);
+ 	set_skill("baihua-zhang",100);
+ 	set_skill("moonforce",100);
+ 	set_skill("snowsword",100);
+ 	set_skill("moondance",100);
+        map_skill("spells", "moonshentong");
+        map_skill("unarmed", "baihua-zhang");
+        map_skill("force", "moonforce");
+        map_skill("sword", "snowsword");
+        map_skill("parry", "snowsword");
+        map_skill("dodge", "moondance");
+        set_skill("chuyi",100);
+
+	set("inquiry", ([
+		"name": "在下便是这里的老板。\n",
+		"here": "这里是喜福会，城中大户人家结婚都要来这里摆喜宴哩。\n",
+		"喜宴" : (: ask_party :),
+		"酒席" : (: ask_party :),
+		"酿造" : (: about_niang :),
+	]) );
+        setup();
+        carry_object("/d/obj/cloth/pink_cloth")->wear();
+}
+
+void init()
+{
+	add_action("do_serve", "serve");
+	add_action("do_finish", "finish");
+	add_action("do_start", "start");
+}
+
+int reply_msg(object who,string arg)
+{
+	if( !who || !environment() )
+		return 0;
+	if( base_name(environment())!="/d/city/xifuhui" )
+	{
+		tell_object(who,CYN+name()+CYN"说道：一切待回到喜福会再说。\n"NOR);
+		return 1;
+	}
+	tell_object(who,CYN+name()+CYN"说道："+arg+NOR);
+	return 1;
+}	
+
+int ask_party()
+{	
+	object me, who, wife;
+	me=this_object();
+	who=this_player();
+	if( base_name(environment())!="/d/city/xifuhui" )
+		return reply_msg(who,"现在这里也没准备，我是难以相助啊！\n");
+	if( who->query_temp("host_of_party") ) 
+		return reply_msg(who,"这不是正开着喜宴呢吗？\n");
+	if( me->query_temp("ready_to_party") ) 
+		return reply_msg(who,"不好意思，我这正开着一席呢，要不您明儿再来吧！\n");
+	if( who->query_temp("ready_to_pay") ) 
+		return reply_msg(who,"你怎么问个没完！\n");
+	if( !who->query_temp("party_paid") ) 
+	{
+		who->set_temp("ready_to_pay", 1);
+		return reply_msg(who,"这一次喜宴吗，可要花费"+MONEY_D->money_str(50000)+"呢！\n");
+	}	
+}
+
+int accept_money(object who, int v)
+{
+	object m;
+	int value;
+	int price;
+
+	value=v;
+
+	if( !who->query_temp("ready_to_pay") )
+		return notify_fail(name()+"迟疑的看着你，不知道你想干什么！\n");
+
+	if( !value )
+		return notify_fail(name()+"奇怪的看着你说：给我这干什么？\n");
+
+	if( value < 50000 )
+		return notify_fail(name()+"说：这些哪够呀，要"+MONEY_D->money_str(50000)+"才行！\n");
+	who->set_temp("host_of_party", 1);
+	who->delete_temp("ready_to_pay");
+
+	call_out("count_money", 2, who);
+	call_out("start_party", 5, who);
+	return 1;
+}
+
+void destroy(object ob)
+{
+	if( ob )
+		destruct(ob);
+}
+
+void count_money(object who)
+{
+	remove_call_out("count_money");
+	if( !who || !environment()
+	 || !present(who,environment())
+	 || base_name(environment())!="/d/city/xifuhui" )
+		return;
+	tell_object(who,"\n"+name()+"把你给的钱仔细的清点了一遍。\n\n");
+	tell_object(who,name()+"痛快的说：开席！\n");
+}
+
+void start_party(object who)
+{
+	remove_call_out("start_party");
+	if( !who || !environment()
+	 || !present(who,environment())
+	 || base_name(environment())!="/d/city/xifuhui" )
+		return;
+	CHANNEL_D->do_channel(this_object(),"chat","各位老爷太太少爷小姐，今日" + who->query("name") + "在喜福会大开酒席，欢迎各位前来捧场！");
+	tell_object(who,CYN+name()+CYN"说道：您要开始(start)，我便开席。您要上菜(serve)，我就上菜，等您吃饱了，玩腻了，咱就结束(finish)。\n"NOR);
+	this_object()->set_temp("ready_to_party", 1);
+}
+
+void remove_inv()
+{
+	object *inv;
+	int i;
+
+	if( base_name(environment())!="/d/city/xifuhui" )
+		return;
+	inv = all_inventory(environment());
+	for(i=0;i<sizeof(inv);i++)
+	{
+		if( userp(inv[i]) )
+			continue;
+		if( inv[i]==this_object() )
+			continue;
+		if( !inv[i]->is_character() )
+		{
+			message("vision","一旁有伙计将"+inv[i]->name()+"顺手丢到了店外。\n",environment());
+			destruct(inv[i]);
+		}
+		else if( base_name(inv[i])=="/d/city/npc/girla"
+		      || base_name(inv[i])=="/d/city/npc/girlb"
+		      || base_name(inv[i])=="/d/city/npc/girlc"
+		      || base_name(inv[i])=="/d/city/npc/girld" )
+		{
+			message("vision",inv[i]->name(1)+"对众人福了一福，进入内堂去准备了。\n",environment());
+			destruct(inv[i]);
+		}
+		else
+		{
+			message("vision",inv[i]->name(1)+"被一旁的伙计请了出去。\n",environment());
+			inv[i]->move(sprintf("/d/city/baihu-w%d",1+random(3)));
+		}
+	}			      
+}
+
+int do_start()
+{	
+	object who = this_player();
+        object me = this_object();
+	int i;
+	object *list;
+	object girla,girlb,girlc,girld,cup;
+	
+	if( base_name(environment())!="/d/city/xifuhui" )
+		return 0;
+	if( !who->query_temp("host_of_party") )
+		return notify_fail(name()+"对你说：你又不是新郎官！\n");
+	if( !me->query_temp("ready_to_party") )
+		return notify_fail(name()+"对你说：开始什么呀，现在又没人结婚！\n");
+	if( me->query_temp("party_start_already") )
+		return notify_fail(name()+"生气的对你说：这不是已经开始了嘛！\n");
+
+	message_vision("$N大声对$n说：老板，开席！\n\n", who, me);
+	message_vision("$N大声喊着：开～～席～～喽～～\n\n", me);
+
+	remove_inv();
+	
+	me->set_temp("party_start_already", 1);
+	me->delete_temp("ready_to_party");
+	tell_room( environment(who), "旁边四个唢呐手大声的吹起了欢快的唢呐。\n");	
+
+	// mon
+	environment(me)->set("resource/nuerhong",1);
+
+	list = all_inventory(environment(me));
+	i = sizeof(list);
+	while (i--)
+	{
+	  	object ob= list[i];
+	 	if( cup=new("/d/obj/food/dishes/cup"))
+	 	{
+	  		if( !cup->move(ob) )
+	  		{
+	  			if( cup ) destruct(cup);
+	  		}
+	  	}
+	}
+	seteuid(getuid());
+	if(girla=new("/d/city/npc/girla"))	
+ 	girla->move(environment(me));
+
+        seteuid(getuid());
+        if(girlb=new("/d/city/npc/girlb"))
+        girlb->move(environment(me));
+
+        seteuid(getuid());
+        if(girlc=new("/d/city/npc/girlc"))
+        girlc->move(environment(me));
+
+        seteuid(getuid());
+        if(girld=new("/d/city/npc/girld"))
+        girld->move(environment(me));
+
+	tell_room(environment(who), "内堂走出几个漂亮的小姑娘。\n");
+	tell_room(environment(who), "你得到了一个白玉酒盏。\n");
+	call_out("finish_party", 500, who);
+	return 1;
+}
+
+int do_serve()
+{
+	object me=this_object();
+	object who=this_player();
+	object food;
+	if( base_name(environment())!="/d/city/xifuhui" )
+		return 0;
+	if( !who->query_temp("host_of_party") )
+		return notify_fail(name()+"对你嚷道：主人还没说话，你嚷个什么劲！\n");
+	if( !me->query_temp("party_start_already") )
+		return notify_fail(name()+"对你说：你还没宣布开始(start)，怎么上菜呢？\n");
+	if ( (present("food 2", environment(me))) )
+		return notify_fail(name()+"对你说：慢慢吃，吃完自然会给你上菜。\n");
+
+	message_vision("$N大声嚷嚷着：上菜，上菜！\n", who);
+
+	tell_room(environment(me), "从内堂跑出四五个小伙计，手脚麻利的将桌上的剩菜饭端了下去。\n");
+	tell_room(environment(me), "小伙计又从内堂出来，端上了一桌新的酒席。\n");
+        if(food=new("/d/obj/food/dishes/food"))
+        food->move(environment(me));
+	if(food=new("/d/obj/food/dishes/food"))
+        food->move(environment(me));
+	if(food=new("/d/obj/food/dishes/food"))
+        food->move(environment(me));
+	if(food=new("/d/obj/food/dishes/food"))
+        food->move(environment(me));
+	return 1;
+}
+
+int do_finish()
+{
+	object me=this_object();
+	object who=this_player();
+	if( base_name(environment())!="/d/city/xifuhui" )
+		return 0;
+	if( !who->query_temp("host_of_party") )
+		return notify_fail(name()+"瞪了你一眼：别乱说话！\n");
+
+	if( !me->query_temp("party_start_already") )
+		return notify_fail(name()+"瞪了你一眼：不是已经结束了吗！\n");
+	message_vision("$N对$n说道：吃饱喝足，多谢老板招待！\n", who, me);
+	remove_call_out("finish_party");
+	call_out("finish_party", 3, who);
+	return 1;
+}
+
+void finish_party(object who)
+{
+	object me=this_object();
+	remove_call_out("finish_party");
+	if( !who || !environment()
+	 || !present(who,environment())
+	 || base_name(environment())!="/d/city/xifuhui" )
+	 	return;
+	message_vision("$N大声说道：宴席就此结束，多谢大家光临！\n", me);
+
+	// mon
+	environment(me)->set("resource/nuerhong",0);
+	EMOTE_D->do_emote(this_object(), "gongxi",geteuid(me),CYN,0,0,0);
+
+	me->delete_temp("party_start_already");
+	who->delete_temp("host_of_party");
+	remove_inv();
+}
+
+mixed have_item(object me,string file,int v)
+{
+	int i;
+	object *inv;
+	if( !me || !living(me) )
+		return 0;
+	inv = all_inventory(me);
+	for(i=0;i<sizeof(inv);i++)
+	{
+		if( base_name(inv[i])==file )
+		{
+			if( inv[i]->query_amount()>0 )
+			{
+				if( inv[i]->query_amount()>=v )
+					return inv[i];
+			}
+			else if( v>1 )
+			{
+				tell_object(me,HIR"【系统】生活技能：发现一个错误：需求的道具数量>1且非叠加，请联系巫师。\n"NOR);
+				return 0;
+			}
+			else	return inv[i];		
+		}
+	}
+	return 0;	
+}
+
+void remove_inv2()
+{
+	object *inv;
+	int i;
+	delete("services_id");	
+	delete("services_time");
+	inv = all_inventory();
+	for(i=0;i<sizeof(inv);i++)
+	{
+		if( inv[i]->query("equipped") )
+			continue;
+		message("vision",name()+"丢下一"+(inv[i]->query("unit")?inv[i]->query("unit"):"些")+inv[i]->name()+"。\n",environment());
+		destruct(inv[i]);
+	}	
+}
+
+void do_give(object me,string arg)
+{
+	object *inv;
+	int i;
+	
+	remove_call_out("do_give");
+	if( !me || !environment()
+	 || !present(me,environment())
+	 || base_name(environment())!="/d/city/xifuhui" )
+	 {
+	 	remove_inv2();
+	 	return;
+	}
+	inv = all_inventory();
+	for(i=0;i<sizeof(inv);i++)
+	{
+		if( COLOR_D->clean_color(inv[i]->query("liquid/name"))==COLOR_D->clean_color(arg) )
+		{
+			message_vision(HIC"$N"HIC"将"+inv[i]->name()+HIC"交到$n"HIC"手中。\n"NOR,this_object(),me);
+			me->money_add(-10000);
+			if( !inv[i]->move(me) )
+				inv[i]->move(environment());
+			remove_inv2();
+	 		return;	
+		}
+	}
+	remove_inv2();
+	return;
+}
+
+void get_input(string arg,object me)
+{
+	mapping niang,need,nz,cl;
+	int i,v;
+	string *needs,name,file,id;
+	object new_ob,*cls,temp,who;
+	if( !me || !environment()
+	 || !present(me,environment())
+	 || base_name(environment())!="/d/city/xifuhui" 
+	 || !arg )
+	 	return;
+	if( !("/daemon/class/knowledge/chuyi/drink.lpc")->can_niang(this_object(),arg) )
+	{
+		tell_object(me,CYN+name()+CYN"说道："+RANK_D->query_self(this_object())+"酿不出「"+arg+"」"NOR"\n");
+		return;
+	}
+	if( !me->check_pay(10000) )
+	{
+		tell_object(me,CYN+name()+CYN"说道：亲，你不够付手续费哦。\n"NOR);
+		return;
+	}
+	if( stringp(id=query("services_id")) )
+	{
+		if( objectp(who=find_player(id)) )
+		{
+			if( present(who,environment()) )
+			{
+				if( time()>=query("services_time")+180 )
+				{
+					tell_object(who,HIG+name()+HIG"告诉你：因为你耗时过长，所以"+RANK_D->query_self(this_object())+"不再帮你酿造了。\n"NOR);
+					delete("services_id");
+					delete("services_time");	
+				}
+				else
+				{
+					tell_object(me,CYN+name()+CYN"说道："+RANK_D->query_self(this_object())+"正在帮"+who->name()+"酿造呢。\n"NOR);
+					return;
+				}
+			}
+			else
+			{
+				tell_object(who,HIG+name()+HIG"告诉你：因为你离开了喜福会，所以"+RANK_D->query_self(this_object())+"不再帮你酿造了。\n"NOR);
+				delete("services_id");
+				delete("services_time");	
+			}
+		}
+		else
+		{
+			delete("services_id");	
+			delete("services_time");	
+		}
+	}
+	
+	niang = ("/daemon/class/knowledge/chuyi/drink.lpc")->query_niang();
+	nz = niang[arg];
+	if( undefinedp(nz["file"]) 
+	 || undefinedp(nz["need"]) )
+		return;
+	need = nz["need"];
+	needs = keys(need); 
+	cl = ([]);
+	for(i=0;i<sizeof(needs);i++)
+	{
+		name = needs[i];
+		file = need[name];
+		if( sscanf(file,"%s_%d",file,v)!=2 )
+			continue;
+		if( !objectp(temp=have_item(me,file,v)) )
+		{
+			tell_object(me,CYN+name()+CYN"说道：酿造「"+arg+"」，你还需要"+name+"*"+v+"。"NOR"\n");
+			return;
+		}
+		cl[temp] = v;	
+	}
+	set("services_id",me->query("id"));
+	set("services_time",time());
+	EMOTE_D->do_emote(this_object(), "ok",geteuid(me),CYN,0,0,0);
+	cls = keys(cl);
+	for(i=0;i<sizeof(cls);i++)
+	{
+		
+		if( !cls[i] 
+		 || !intp(v = cl[cls[i]])
+		 || v<1
+		 || !present(cls[i],me) 
+		 || (cls[i]->query_amount()>0 && cls[i]->query_amount()<v) )
+		{
+			delete("services_id");	
+			delete("services_time");
+			tell_object(me,CYN+name()+CYN"说道：奇怪，你身上少了一个材料。\n"NOR);
+			return;
+		}
+		else
+		{
+			tell_object(me,HIC+name()+HIC"从你身上搜走一些"+cls[i]->name()+HIC"。\n"NOR);
+			if( cls[i]->query_amount()<1 )
+				cls[i]->move(this_object());
+			else if( cls[i]->query_amount()==v )
+				cls[i]->move(this_object());
+			else
+			{
+				new_ob = new(base_name(cls[i]));
+				new_ob->set_amount(v);
+				new_ob->move(this_object());
+				cls[i]->add_amount(-v);
+			}		
+		}
+	}
+	if( ("/daemon/class/knowledge/chuyi/drink.lpc")->art(this_object(),arg) )
+	{
+		EMOTE_D->do_emote(this_object(), "sweat",0,CYN,0,0,0);
+		call_out("do_give",10,me,arg);
+		return;
+	}
+	else	tell_object(me,CYN+name()+CYN"说道：直娘贼，又失败了！"NOR"\n");
+}
+
+mixed about_niang()
+{
+	string id,str;
+	object who,me = this_player();
+	
+	if( !environment()
+	 || base_name(environment())!="/d/city/xifuhui" )
+	 	return "此处是哪里？";
+	if( stringp(id=query("services_id")) )
+	{
+		if( objectp(who=find_player(id)) )
+		{
+			if( present(who,environment()) )
+			{
+				if( time()>=query("services_time")+180 )
+				{
+					tell_object(who,HIG+name()+HIG"告诉你：因为你耗时过长，所以"+RANK_D->query_self(this_object())+"不再帮你酿造了。\n"NOR);
+					delete("services_id");
+					delete("services_time");	
+				}
+				return RANK_D->query_self(this_object())+"正在帮"+who->name()+"酿造呢。";
+			}
+			else
+			{
+				tell_object(who,HIG+name()+HIG"告诉你：因为你离开了喜福会，所以"+RANK_D->query_self(this_object())+"不再帮你酿造了。\n"NOR);
+				delete("services_id");
+				delete("services_time");	
+			}
+		}
+		else
+		{
+			delete("services_id");	
+			delete("services_time");	
+		}
+	}
+	str = ("/daemon/class/knowledge/chuyi/drink.lpc")->art_list(this_object());
+	me->start_more(str);
+	if( !me->check_pay(10000) )
+	{
+		tell_object(me,CYN+name()+CYN"说道：酿造手续费是一两金。\n"NOR);
+		return 1;
+	}
+	tell_object(me,CYN+name()+CYN"说道：你要酿造哪个？\n"NOR);
+	tell_object(me,HIG"请输入要酿造的饮品名："NOR);
+	input_to("get_input",me);
+	return 1;
+}

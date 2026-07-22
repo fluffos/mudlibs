@@ -116,6 +116,38 @@ lib fully playable) unless a specific lib is called out for deeper work.
 - Watch for archives that are just a renamed `.gz`/`.tar` of something
   unrelated (e.g. `西行战记.gz` unpacks to `xxzj.tar`).
 
+## Encoding — `file`'s text/binary guess is not reliable enough to gate on
+
+Found processing lib #4 (bxsj): `convert_lib.sh` originally gated encoding
+conversion on `file -b`'s classification (`*text*|*script*` = convert,
+anything else = skip as binary). A handful of genuine GBK **source** files
+(CRCRLF line endings — `\r\r\n`, not the usual `\r\n` — apparently confuses
+`file`'s heuristic) get misclassified as `data` and silently skipped,
+leaving them permanently un-converted (raw GBK bytes shipped straight into
+`work/`). This surfaces later as `error: Invalid UTF8 codepoint in string
+literal` at BOOT/compile time, not during conversion — easy to miss since
+the conversion step reports no failure at all for these files.
+
+**Fix applied**: `convert_lib.sh` now treats known source/text extensions
+(`.c .lpc .h .txt .log .cfg .conf .map`) as text UNCONDITIONALLY,
+regardless of what `file` reports, and only falls back to the `file`-based
+guess for extensionless files and other extensions where there's no prior
+(`.o` deliberately excluded from the forced list — genuine compiled/
+bytecode-dump `.o` files exist alongside plain-text save-data `.o` files in
+this ecosystem, so that one extension still needs the real per-file guess).
+
+**After running `convert_lib.sh` on a new lib, double-check for stragglers**
+it might have already missed (from before this fix, or from some other
+`file`-classifier edge case not yet seen):
+```
+find work \( -name "*.lpc" -o -name "*.h" \) -print0 \
+  | while IFS= read -r -d '' f; do
+      file -b "$f" | grep -qE "text|script|empty" || echo "$f"
+    done
+```
+Any hit is raw un-converted GBK masquerading as a `.lpc`/`.h` file — just
+`iconv -f GB18030 -t UTF-8 [-c]` it directly, same as any other file.
+
 ## Encoding
 
 Mudlib source is GBK/GB2312 (simplified) in the vast majority of archives.
@@ -464,6 +496,97 @@ rely on whole-file symbol-table-first resolution within one file for a
 brand-new addition — existing code in these libs is presumably already
 ordered call-site-after-definition throughout, which is probably exactly
 why this never surfaced as a pre-existing bug).
+
+### 8c. `valid_read`/`valid_write` overriding the caller with `this_player()` can wrongly deny a privileged system caller
+
+Found on lib #4 (bxsj) and likely to recur on any lib sharing this
+`securityd.lpc` lineage (same family as §4's `SECURITY_D` pattern — many of
+these libs derive from a common ancestor mudlib): a common idiom is
+
+```lpc
+int valid_read(string file, mixed user, string func) {
+    if (this_player())
+        user = this_player();
+    ...
+}
+```
+
+The intent is "if a player is driving this read, check THEIR permissions,
+not the calling object's" — reasonable for genuine player-initiated file
+access. But it fires unconditionally, including when `user` is actually a
+privileged SYSTEM caller (e.g. `master.lpc` lazily `load_object()`ing a
+daemon that was never on the preload list, well after boot) that merely
+happens to run while some unrelated player is connected (`this_player()`
+is non-null for totally incidental reasons — the code path was reached
+from inside that player's login `input_to` chain). The read gets
+attributed to the connected player's own (unprivileged, "(player)")
+status instead of the real caller's root euid, and a normal `exclude_read`
+rule protecting `/adm` from ordinary players denies it — **permanently
+stranding every new connection** the first time such a lazy load happens
+post-connect (in this lib: `BAN_D`/`band` and `UPTIME_CMD`/`cmds/usr/uptime`,
+both un-preloaded, both first touched from inside the brand-new
+connection's own login sequence).
+
+**Diagnosis approach that found this fast**: don't guess from the generic
+`*Read access denied.` driver message (`src/vm/internal/simulate.cc:463`)
+alone — temporarily instrument the master apply itself
+(`efun::write_file("/DEBUG.log", sprintf("file=%O user=%O func=%O
+result=%O\n", file, user, func, result))` around the `SECURITY_D->
+valid_read()` call in `master.lpc`) to see the EXACT file/user/func/result
+for every check during a real repro, then remove the instrumentation once
+diagnosed. This took minutes and pinpointed the exact two denied
+`load_object` calls and their (surprising) `user` identity, versus a much
+longer path of reading ACL tables and guessing.
+
+**Fix**: only fall back to `this_player()` when the passed-in `user`
+doesn't already carry a resolvable identity:
+```lpc
+if (this_player() && !geteuid(user) && !getuid(user))
+    user = this_player();
+```
+This preserves the original intent (attribute ambiguous-identity reads to
+the connected player) without clobbering a caller that already has a
+legitimate euid (like `master_ob`, running with root euid).
+**Check for this exact `if (this_player()) user = this_player();` shape in
+any lib's `securityd.lpc`-equivalent early, right alongside the §4/§7
+master.lpc checks** — it's cheap to grep for and expensive to hit blind
+(it looks like a total, unexplained login lockup with no compile errors
+at all, since everything up to this point boots clean).
+
+### 8d. `#include <local.h>` for a header that lives next to the including file
+
+Found on lib #3 (unknownlib20150716/小雨西游II), affecting ~200+ files: a
+common idiom in this lineage is a per-NPC/per-room "flavor" header
+(`greeting.h`, `ground.h`, etc) sitting in the SAME directory as the `.lpc`
+file that uses it, but included with angle brackets —
+`#include <ground.h>` — not quotes. Per this driver's documented
+resolution rule (`docs/lpc/preprocessor/include.md`): `"file"` searches
+the including file's own directory THEN the include path; `<file>`
+searches the include path ONLY, never the local directory. Whatever
+driver these libs originally ran on apparently didn't enforce that
+distinction as strictly; here it's `Cannot #include ground.h`/`greeting.h`/
+etc for every such file.
+
+**Fix (one shot, not per-file)**: implement `master::get_include_path()`
+(a real apply, `docs/apply/master/get_include_path.md` — returns an array
+of directories to search, `":DEFAULT:"` standing in for the configured
+`include directories` list) to prepend the COMPILING file's own directory:
+```lpc
+string *get_include_path(string file)
+{
+    string *parts = explode(file, "/");
+    if (sizeof(parts) <= 1)
+        return ({ "/", ":DEFAULT:" });
+    return ({ "/" + implode(parts[0..<2], "/"), ":DEFAULT:" });
+}
+```
+This fixes every `<local.h>`-next-to-its-user file in the whole lib at
+once, without touching a single `#include` line. (No `strrchr`/similar
+efun exists in this driver for dirname-style string ops — use
+`explode()`/`implode()` on `/`, as above.) Check whether a lib's
+`master.lpc` already implements `get_include_path()` before adding this —
+don't overwrite an existing one, extend it (prepend the local directory to
+whatever it already returns).
 
 ### 9. Fullwidth Chinese punctuation used as code syntax (typo, not encoding)
 

@@ -1,0 +1,119 @@
+// 将军府演武场
+//2001 by lestat
+inherit ROOM;
+#include <ansi.h>
+
+void create ()
+{
+  	set ("short", "练武场");
+  	set ("long", @LONG
+空阔的场地上铺满了细细的黄土，正好适合演武(yanwu)。四面有几
+个秦府家将正在练武。树荫里，一位管家打扮的人正在背着手观看，
+还不时走上前去指点一二。场地边上挂着几个大沙袋(sandbags)，不
+知有什么用处。西面有间破败的小屋，门(door)窗(window)都封死了，与将军府里其
+它的房舍格格不入。
+LONG);
+	set("item_desc", ([
+  		"window"	: "门窗都被封死了，墙上好象有些锤砸(hammer)的痕迹。\n",
+  		"door"		: "门窗都被封死了，墙上好象有些锤砸(hammer)的痕迹。\n",
+  		"sandbags"	: "几个沉重的沙袋，可以试着打打(da)看。\n",
+	]));
+	set("outdoors","jjf");
+  	set("exits", ([
+  		"north" : __DIR__"gate",
+  		"south" : __DIR__"front_yard2",
+  		"east" : __DIR__"majuan",
+  		"southwest" : __DIR__"guest_bedroom",
+	]));
+	set("objects", ([
+        	__DIR__"npc/qinfu": 1,
+		__DIR__"npc/xiaotong": 2,
+	]));
+	setup();
+}
+
+void init()
+{   
+  	add_action("do_hammer", "hammer");
+  	add_action("do_da", "da");
+}
+
+void paodian_end()
+{
+	remove_call_out("paodian");
+}
+
+void paodian()
+{
+	object *inv;
+	int i;
+ 	if( !query("jiangjing") )
+ 		return 0;
+	tell_room(this_object(),HIC"\n战鼓声声,一片将士的呐喊声震耳欲聋。\n"NOR);
+	inv = all_inventory();
+	for(i=0;i<sizeof(inv);i++)
+	{
+		if( !userp(inv[i]) || !living(inv[i]) 
+		 || inv[i]->query("family/family_name")!="将军府" )
+      			continue;
+		tell_object(inv[i],"你随着声声战鼓与众将士一起演武。\n");
+		inv[i]->add("combat_exp",5000);
+		inv[i]->add("daoxing",800);
+		inv[i]->add("potential",500);
+		tell_object(inv[i],HIG"【门派泡点】你得到了"HIR"5000点"HIG"武学经验、"HIR+COMBAT_D->chinese_daoxing(800)+HIG"道行以及"HIR"500点"HIG"潜能修为。"NOR"\n");
+	}
+	remove_call_out("paodian");
+	call_out("paodian",5);
+}
+
+int do_da(string arg)
+{
+	object me=this_player();
+	int unarmedskll=(int)me->query_skill("unarmed",2);
+	int maxlevel, exp=(int)me->query("combat_exp");
+ 
+	if( !arg || !((arg == "sandbags") || (arg == "沙袋")))
+    		return notify_fail("你要打什么？\n");
+  	if( me->query("kee") < (int)(me->query_maxkee()/5))
+		return notify_fail("再打下去你会累死的！\n");
+  	if( me->query_temp("weapon") || me->query_temp("secondary_weapon") )
+		return notify_fail("用兵器会把沙袋打坏的！\n");
+	if (!((string)me->query("family/family_name")=="将军府"))
+    		return err_msg("你一拳向沙袋打去，可是沙袋一动不动。\n");
+
+      	write("你用尽力气向沙袋打去，打得沙袋直晃。\n");
+      	me->receive_damage("kee", (int)me->query_maxkee()/30+1);
+      	if( me->query_level()*10<=unarmedskll )
+	{
+     		me->receive_damage("kee", (int)me->query_maxkee()/10);
+     		return err_msg("你的实战经验太低，不能从打沙袋中学到新知。\n");
+   	}
+	me->improve_skill("unarmed", random((int)(me->query("con")+me->query("str")))+1);
+	tell_object(me, "你领悟出一些基本拳脚方面的窍门。\n");
+  	return 1;
+}
+
+int do_hammer(string arg)
+{       
+	object me,room,weapon;
+	me=this_player();
+  	if( !arg || ( arg!= "door" && arg!="window" ) )
+		return notify_fail("你挥起拳头往墙上砸去，呃．．．．好象挺疼！\n");
+	if( !objectp(weapon=me->query_temp("weapon"))
+	 || weapon->query("skill_type")!="hammer" )
+		return notify_fail("你挥起拳头往墙上砸去，呃．．．．好象挺疼！\n");	
+		
+	write("你挥舞大锤，往墙上砸去。\n");
+	me->add_temp("pending/jjf_hammered",1);
+	me->receive_damage("kee", 40);
+	if( random(me->query_temp("pending/jjf_hammered"))>3 )
+    	{
+    		message_vision("$N把墙砸开了一个洞，连忙钻了进去。\n", me);
+    		if(!( room = find_object("/d/jjf/mishi")) )
+                	room = load_object("/d/jjf/mishi");
+    		room->reset();
+		me->move("/d/jjf/mishi");
+    		return 1;
+  	}
+  	return 1;
+}

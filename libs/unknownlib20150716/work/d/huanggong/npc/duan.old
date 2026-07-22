@@ -1,0 +1,430 @@
+#include <ansi.h>
+inherit NPC;
+
+void check();
+int random_guai(int MAX,int level);
+
+void dismiss(object who)
+{
+remove_call_out("dimiss");      
+if ( !who )
+        return;
+say("一旁冲出一队红衣护卫，拉起"+who->name()+"就走。\n",who);
+destruct(who);
+}
+                
+int team_player(object npc,object me)
+{
+int i,j,k=0;      
+object *team;
+if ( !me || !npc )
+        return 0;
+me->team_dismiss();        
+team = npc->query_team();  
+if ( team && arrayp(team) && member_array(me,team)==-1 )
+        {
+        npc->add_team_member(me);
+        me->command("team talk* 加入了队伍。");
+        random_guai((5+random(5)),(150+random(300)));
+        }
+else    {
+        me->set_leader(npc);
+        npc->add_team_member(me);
+        npc->command("team talk "+me->name(1)+"加入了队伍。");
+        }      
+team = npc->query_team();       
+for(i=0;i<sizeof(team);i++)
+        {
+        if ( !team[i] || !userp(team[i]) )  continue;
+        if ( !living(team[i]) )
+                {
+                npc->command("team talk "+team[i]->name(1)+"退出本队。");
+                team[i]->dismiss_team();
+                continue;
+                }
+        if ( !present(team[i],environment(npc)) 
+          && !environment(me)->is_gift_map() )
+                continue;
+        k++;
+        if ( k>=2 && !environment(me)->is_gift_map() )
+                {
+                npc->command("say 好了，人齐了，我们进入演练场吧。");
+                if ( !npc->query("be_chat") )
+                        {
+                        CHANNEL_D->do_channel(npc,"chat","本队人马开始进入演练场。");
+                        npc->set("be_chat",1);
+
+                        }
+                for(j=0;j<sizeof(team);j++)
+                        {
+                        if ( !team[j] || !userp(team[j]) || !present(team[j],environment(npc)) )
+                                continue;
+                        if ( team[j]->move(npc->query_place(),2) )
+                                {       
+                                message("vision",npc->name()+"将"+team[j]->name()+"带入了演练地图。\n",environment(npc),team[j]);
+                                npc->command("team talk "+team[i]->name(1)+"进入演练地图。");
+                                message_vision(npc->name()+"将$N带进了演练地图。\n",team[j]);
+                                }
+                        }
+                }
+        }
+return 1;       
+}                               
+                
+string check_gift()
+{
+int i;  
+object *team,npc1,npc2,me = this_player();
+if ( !userp(me) )
+        {
+        remove_call_out("dimiss");
+        call_out("dismiss",1+random(3),me);     
+        return me->name()+"越来越目无王法了，左右拉出去斩了！";
+        }
+if ( me->query("family/family_name")=="火系魔法教派" )
+        return "这个，这个，皇帝交代了，本战场不让外族人参加。";
+if ( query("job")!="开" )
+        return "演练战还没开呢。";
+if ( time()<me->query("新任务/演练战")+300 )
+      return "你刚刚出来，还是在旁休息休息。";
+if ( !me->query_temp(name()+"_type") )
+        return "你想进入哪一方？(jiaru 龙队|虎队)";
+switch(me->query_temp(name()+"_type"))
+        {
+        case "龙队" :
+                say(name()+"点了点头。\n");
+                me->dismiss_team(me);
+                npc1 = present("long dui",environment());
+                if ( !npc1 || userp(npc1) )
+                        {
+                        npc1 = new(__DIR__"team1");
+                        npc1->move(environment());
+                        message_vision("$N走了过来。\n",npc1);
+                        me->set_leader(npc1);
+                        environment(me)->query("owner",this_object());
+                        }
+                if ( !team_player(npc1,me) )
+                        return "我还没准备好。";
+                break;
+        default :
+                say(name()+"点了点头。\n");
+                me->dismiss_team(me);
+                npc2 = present("hu dui",environment());
+                if ( !npc2 || userp(npc2) )
+                        {
+                        npc2 = new(__DIR__"team2");
+                        npc2->move(environment());
+                        message_vision("$N走了过来。\n",npc2);
+                        me->set_leader(npc2);
+                        environment(me)->query("owner",this_object());
+                        }
+                if ( !team_player(npc2,me) )
+                        return "我还没准备好。";
+        }
+return "加油加油。";    
+}
+
+void create()
+{
+string file,*ff;
+set_name("段志玄",({"duan zhixuan","duan"}));
+set("gender","男性");
+set("title","褒国公");
+set("long",@LONG
+高祖在太原时的旧部，首义功臣。参加李唐历次重要战役，以勇武著名。
+太宗皇帝兄弟相争时，拒绝建成、元吉的拉拢，忠于太宗，并参加了玄武
+门之变。其人治军严谨，太宗评价为“周亚夫无以加焉”。位列凌烟阁二十
+四功臣之十。
+LONG);
+set("inquiry",([
+        "演练战"        : (: check_gift :),     
+        "fight"        : (: check_gift :),     
+]));
+set("job","关");
+set("age",65);
+set("per",24);
+setup();
+carry_object("/d/obj/armor/jinjia.c")->wear();
+file = read_file(__DIR__"演练战.doc");
+if ( file && stringp(file) )
+        {
+        ff = explode(file,"\n");
+        if ( ff && arrayp(ff) )
+                set("files",ff);      
+        }
+
+remove_call_out("check");
+call_out("check",1);
+}
+
+string query_check_msg()
+{
+return "顺风耳告诉你：段志玄身有当今天子御赐的法宝，无法查出他的底细。\n";
+}
+
+void reply_check(object who)
+{
+object npc;     
+if ( !who || !environment() )
+        return;
+if ( !userp(who) )
+        {
+        say(name()+"说道：大胆"+who->name()+"竟敢窃听定国大臣的信息，左右拉出去斩了！\n");
+        say("一旁冲出一队红衣护卫，拉起"+who->name()+"就走。\n",who);
+        destruct(who);
+        }
+else    {
+        if ( present(who,environment()) )
+                {
+                say(name()+"说道："+who->name()+"越来越目无王法了！\n");
+                message_vision("$N拿眼朝$n一瞪，$n不由打了个冷战。\n",this_object(),who);
+                if ( !who->is_busy() )
+                        who->start_busy(3);
+                }
+        else    {
+                if ( random(10)==1 || who->query("env/test") )
+                        {
+                        CHANNEL_D->do_channel(this_object(),"chat",who->name()+"越来越目无王法了，竟敢窃听定国大臣的信息！");
+                        npc = new("/d/city/npc/xunluobing");
+                        if ( npc && RENWU_D->information(npc,who) && npc->move(environment(who)) )
+                                {
+                                CHANNEL_D->do_channel(this_object(),"chat","左右，速速将之拿来见我！");
+                                message_vision("$n走了过来。\n",who,npc);
+                                npc->command("say "+who->name(1)+"，你的事犯了，跟我们走一趟吧！");
+                                npc->kill_ob(who);
+                                who->kill_ob(npc);
+                                }
+                        }
+                }
+        }
+}
+
+void init()
+{
+add_action("do_jiaru","jiaru");
+add_action("do_kai","openjob");
+add_action("do_guan","closejob");
+}
+
+int random_guai(int MAX,int level)
+{
+int i,k=0;
+object guai;
+string *ff = ({
+        "baihua","dragon","hell","hyd","jjf", 
+        "moon","putuo","sanxian","shushan", 
+        "wdd","wzg","xueshan", 
+}); 
+if ( !MAX ) MAX = 10;
+if ( level<250 )   level = 250;
+for(i=0;i<MAX;i++)
+        {
+        guai = new("/quest/演练战/npc/yg-"+ff[random(sizeof(ff))]); 
+        if ( !guai )
+                continue;
+        if ( !RENWU_D->random_data(guai,level) ) 
+                { 
+                if ( guai )  destruct(guai);     
+                continue; 
+                }
+        if ( !guai->move("/quest/演练战/"+sprintf("room%d",random(50))) )
+                { 
+                if ( guai )  destruct(guai);     
+                continue; 
+                }
+        k++;
+        }
+return k;
+}
+
+varargs int flag_map(int type)
+{
+mixed *file,*ff;
+object boss,guai,r,*gg,*user;
+int i,j,m,k=0,kk=0,MAX,skill;
+string str,temp;
+if ( !environment() )  return 0;
+
+file = get_dir("/quest/演练战/*.c", -1 );
+if( !sizeof(file) )
+        return 0;
+
+for(i=0;i<sizeof(file);i++)
+        {
+        r = load_object("/quest/演练战/"+file[i][0]);
+        if ( !r )
+                {
+                CHANNEL_D->do_channel(this_object(),"sys","文件载入出错；找不到/quest/演练战/"+file[i][0]);
+                return 0;
+                }
+        if ( !type )   
+                {
+                r->delete("owner");
+                if ( k<10 )   k+= r->remove_guai();
+                kk+= r->remove_player();
+                }
+        else    r->set("owner",this_object());
+        }
+if ( !type )
+        {
+        str=""; 
+        set("job","关");
+        delete("boss");
+        set("last_close",time());
+        if ( environment() ) environment()->set("last_close",time());
+        delete("files");
+        delete("last_job");
+        if ( k>0 )
+                str+= sprintf("，共清除了 %d 个怪物",k);
+        if ( kk>0 )
+                str+= sprintf("，共有 %d 个玩家离开了地图",kk); 
+        CHANNEL_D->do_channel(this_object(),"chat","演练地图初始化完毕"+str+"。");  
+        environment()->clear_map();
+        }
+else    {
+        MAX = 5+random(10);
+        skill = 200+random(150);
+        k+= random_guai(MAX,skill);
+        reset_eval_cost();
+        k+= random_guai(MAX,skill);
+        MAX = 5+random(5);
+        skill = 300+random(250);
+        k+= random_guai(MAX,skill);
+        reset_eval_cost();
+        MAX = 3+random(5);
+        skill = 500+random(550);
+        k+= random_guai(MAX,skill);     
+      reset_eval_cost();
+        CHANNEL_D->do_channel(this_object(),"chat","奏请皇帝：开国至今，国力渐盛，万邦归依，臣恳请再开演练战场，以耀国威。");
+        message("channel:chat",HIC"【谈天说地】太宗皇帝点了点头。\n"NOR,users());
+        CHANNEL_D->do_channel(this_object(),"chat","演练场业已开放，半小时后自动清场，请玩家踊跃报名。");
+        CHANNEL_D->do_channel(this_object(),"chat","本次演练目前共有 "+k+" 个随机怪物，随着参加者的增加会有所增加。");
+        if ( !query("boss") )    {
+                  boss = new("/quest/演练战/npc/yg-boss");
+                  if ( boss && RENWU_D->random_data(boss,600+random(400)) && boss->move("/quest/演练战/"+sprintf("room%d",random(50))) )
+                              {
+                              set("boss",boss);
+                              CHANNEL_D->do_channel(this_object(),"chat","本次演练请各位玩家警惕 "+boss->name()+"。");
+                              }
+                  }
+        str = "自高祖立国至今，喜逢良辰，演练一战，扬名海内。$N，踌躇为何？人生在世，当谋身立！\n";
+        user = users();
+        for(i=0;i<sizeof(user);i++)
+                {
+                if ( !user[i] || !living(user[i]) )
+                        continue;
+                temp = str;
+                temp = replace_string(temp,"$N",user[i]->name(1));
+                tell_object(user[i],"你不禁自言自语："+temp);
+                }
+        set("job","开");
+        set("last_job",time());
+        if ( environment() ) environment()->set("last_job",time());
+        }
+return 1;
+}
+
+int do_guan(string arg)
+{
+object me = this_player();
+if ( !wizardp(me) )
+        return 0;
+if ( query("job")!="开" )
+        {
+        write("没有这个必要。\n");
+        return 1;
+        }
+if ( !flag_map() ) 
+      {
+      write("好似出问题了。\n");
+      return 1;
+      }
+write("你关闭了演练战活动。\n");
+return 1;
+}
+
+int do_kai(string arg)
+{
+string file,*ff,str,temp;
+object *user;
+int i;  
+object gift,me = this_player();
+if ( !wizardp(me) )
+        return 0;
+if ( query("job")!="关" )
+        {
+        write("没有这个必要。\n");
+        return 1;
+        }
+file = read_file(__DIR__"演练战.doc");
+if ( !file || !stringp(file) )
+        {
+        write("活动奖励文件不存在。\n");
+        return 1;
+        }
+ff = explode(file,"\n");
+if ( !ff || !arrayp(ff) )
+        {
+        write("活动奖励文件不够。\n");
+        return 1;
+        }
+if ( !flag_map(1) ) 
+      {
+      write("好似出问题了。\n");
+      return 1;
+      }
+set("files",ff);      
+write("你开启了演练战活动。\n");
+return 1;
+}
+                                
+int do_jiaru(string arg)
+{
+object me = this_player();
+if ( !arg )     return 0;
+if ( me->query_temp(name()+"_type") )
+        return 0;
+if ( arg!="龙队" && arg!="虎队" )
+        {
+        write("你只能加入 龙队 或是 虎队。\n");
+        return 1;
+        }
+message_vision("$N决定加入"+arg+"。\n",me);
+me->set_temp(name()+"_type",arg);
+return 1;
+}
+
+void check()
+{
+int v,t = query("last_job");
+remove_call_out("check");
+if ( !environment() )  return;
+if ( t<=0 )  t = environment()->query("last_job");
+if ( t>0 )
+        {
+        v = time()-t;   
+        t+= 1800;
+        t-= time();
+        if ( t>0 )
+                {
+                if ( t%300==0 )
+                        CHANNEL_D->do_channel(this_object(),"chat","演练战业已开始"+CHINESE_D->chtime(v)+"，距离结束时间还有"+CHINESE_D->chtime(t)+"。");
+                }
+        else    flag_map();
+        }
+else    {
+        t = query("last_close");
+        if ( t<=0 )   t = environment()->query("last_close");
+        if ( t>0 && query("job")=="关" )
+                {
+//                t+= 10800;  //三小时一次
+                t+= 21600;
+                t-= time();
+                if ( t<=0 )
+                        flag_map(1);
+                }                  
+      else   flag_map(1);
+        }        
+reset_eval_cost();      
+call_out("check",1);
+}

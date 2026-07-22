@@ -1,0 +1,188 @@
+// Room: /d/jjf/zuixing.c
+#include <ansi.h> 
+inherit ROOM;
+
+string look_up()
+{
+	string str = @STR
+
+醉星楼二楼
+    上得楼梯，迎面是一面玉石屏风，上绘嫦娥奔月的故事。转过屏
+风，只见两人坐在一张桌上狂饮作乐，旁边舞女在奏乐起舞。一边，
+几个青衣小童正在伺候着。有的在上菜，有的在打扇。
+
+STR;
+	str+= "    这里唯一的出口是 "HIG"down"NOR"。\n";
+	return str;
+}	
+ 
+void create ()
+{
+  	set("short", "醉星楼");
+  	set ("long", @LONG
+高祖时，太子李建成和三子李元吉对高祖御旨起麒麟阁十分不满，
+认为这是对太宗皇帝的偏爱。
+    于是二人穷二府之资，在麒麟阁的对面造了一座及其华丽宏伟的彩
+楼，名「醉星楼」。为了吸引百姓前来观看，二人甚至不惜发送食物钱
+财。
+    后二王薨，太宗仁慈，此楼依然保留。尚有二王死忠在此维护日常，
+但是据说到了夜晚，楼内常常传来哭泣之声。
+
+LONG);
+	set("no_fight", 1);
+	set("no_magic", 1);
+  	set("objects", ([
+  		__DIR__"npc/qinbing-jian" : 1,
+  		__DIR__"npc/qinbing-qi" : 1,
+	]));
+	set("exits", ([
+  		"west" : "/d/city/xuanwu-n0",
+  		"up" : __FILE__,
+	]));
+	set("item_desc",([
+		"up" : (: look_up :),
+	]));	
+	setup();
+}
+
+int valid_leave(object me, string dir)
+{
+	object weapon;
+	if( !userp(me) )
+		return 0;
+        if( dir!= "up" || me->query("family/family_name")!="将军府" )
+		return ::valid_leave(me,dir);
+	tell_object(me,look_up());
+	if( me->query_temp("jjf/醉星楼2")
+	 || time()<me->query("maze/zuixing")+1800
+	 || me->is_knowing("jjf_zuixing") )
+	{
+		tell_object(me,"\n店小二说道：醉星楼现在不营业，你老请回。\n");
+		tell_object(me,"你向下离去。\n");
+		me->command("look");
+		return 2;	
+	}
+	else if( !objectp(weapon=me->query_temp("weapon"))
+	       || weapon->query("skill_type")=="unarmed" )
+		return notify_fail("没顺手的家伙怎么拆楼？\n");
+	else
+	{
+		me->delete_temp("maze");
+		me->delete_temp("jjf");
+		me->team_dismiss();
+		if( MAZE_D->enter_maze(me, "zuixing") )
+		{
+        		me->set_temp("maze/zuixing",1);
+        		me->set("maze/zuixing",time());
+		}
+		return 2;
+	}
+}
+
+void init()
+{
+	add_action("do_kan", ({"kan","break","砍","chop","za","砸"}));
+}
+
+int do_kan(string arg)
+{
+	object weapon,me = this_player();
+	int succ;
+ 	
+ 	if( me->is_knowing("jjf_zuixing") )
+ 		return 0;
+	if( !arg 
+	 || (arg!="柱子" && arg!="zhuzi" && arg!="pillar" && arg!="zhu") )
+		return notify_fail("你要从哪里下手？\n");
+	if( me->query("kee")<300 )
+		return notify_fail("你现在体力不支。\n");		
+  	if(time()<query("broken")+1800)
+    		return notify_fail("柱子都塌了，还砍什么砍？要命的快出去吧！\n");
+	if( !objectp(weapon=me->query_temp("weapon"))
+	 || ( weapon->query("skill_type")!="axe"
+	   && weapon->query("skill_type")!="blade"
+	   && weapon->query("skill_type")!="sword" ) )
+		return notify_fail("没顺手的家伙怎么拆得动？\n");
+	if( objectp(present("qin bing", environment(me))) )
+	{
+		if( me->query_temp("jjf/know_ling") )
+			return notify_fail("看样子要想拆楼，先得把亲兵忽悠走。\n");
+		me->set_temp("jjf/know_ling",1);
+		return notify_fail("看样子要想拆楼，先得把亲兵忽悠走，回去问问尉迟公看看有什么法子吧。\n");	
+	}
+	if(!me->query_temp("jjf/醉星楼2") )
+		return notify_fail("还没砸二楼呢，就来打一楼的主意？\n");
+	
+	message_vision("$N用足了劲，将"+weapon->name(1)+"抡向彩楼的柱子！只见几片木片四散飞开。\n", me);
+	add_temp("breakdown", 1);
+	succ = 45-me->query_kar();
+	if( succ<3 )
+		succ = 3;
+	succ = random(succ)+1;	
+	if( query_temp("breakdown") >= succ )
+    	{
+      		message_vision(HIC"只听一声巨响，支撑房子的柱子从中折断，整座醉星楼塌了下来！\n"NOR, me);
+      		message_vision("$N虽然搞得灰头土脸，但居然没有受伤！大命不死，还是赶紧出去吧！\n", me);
+      		set("long", @LONG
+这里曾经是一座豪华气派的彩楼，但不知为何被人拆掉了，只剩一片
+废墟。几块烂木头下面到处都是酒杯碗筷的碎片。半截被砍断的柱子
+倒在门边。
+LONG);
+		me->delete_temp("jjf/醉星楼2");
+		set("broken",time());
+		delete_temp("breakdown");
+      		set("outdoors","changan");
+		set("exits", ([ 
+         		"west" : "/d/city/xuanwu-n0",
+		]));
+		delete("item_desc");
+		me->set_knowing("jjf_zuixing",1);
+		message("channel:chat",HIC"\n【谈天说地】尉迟恭哈哈大笑，乐得前仰后合，突然一口气倒不上来，眼看就不行了。\n\n"NOR,users());
+		if( me->query_level()<90 )
+			tell_object(me,HIG"尉迟恭(Yuchi gong)告诉你：好徒儿，来来来，老夫觉得你骨骼清奇，决定收你为徒了！\n"NOR);
+		CHANNEL_D->do_channel(this_object(),"rumor","听说"+me->name(1)+"拆掉了长安的"HIY"醉星楼"HIM"！"NOR);
+	}
+	me->receive_damage("kee", 300);
+  	return 1;
+}
+
+void reset()
+{
+	int t = query("broken");
+	::reset();
+	if( time()<t+1800 )
+	{
+		set("long", @LONG
+这里曾经是一座豪华气派的彩楼，但不知为何被人拆掉了，只剩一片
+废墟。几块烂木头下面到处都是酒杯碗筷的碎片。半截被砍断的柱子
+倒在门边。
+LONG);
+		set("outdoors","changan");
+		set("exits", ([ 
+         		"west" : "/d/city/xuanwu-n0",
+		]));
+		delete("item_desc");
+	}
+	else
+	{
+		set ("long", @LONG
+高祖时，太子李建成和三子李元吉对高祖御旨起麒麟阁十分不满，
+认为这是对太宗皇帝的偏爱。
+    于是二人穷二府之资，在麒麟阁的对面造了一座及其华丽宏伟的彩
+楼，名「醉星楼」。为了吸引百姓前来观看，二人甚至不惜发送食物钱
+财。
+    后二王薨，太宗仁慈，此楼依然保留。尚有二王死忠在此维护日常，
+但是据说到了夜晚，楼内常常传来哭泣之声。
+LONG);
+		set("item_desc",([
+			"up" : (: look_up :),
+		]));
+		delete("broken");
+                set("exits", ([ 
+                      "west" : "/d/city/xuanwu-n0", 
+                      "up" : __FILE__, 
+              ])); 
+		if( t>0 )
+			CHANNEL_D->do_channel(this_object(),"rumor","听说建齐双府重建了"HIY"醉星楼"HIM"。"NOR);
+	}	
+}

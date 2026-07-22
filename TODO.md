@@ -15,11 +15,12 @@ worked; keep status values consistent so the table stays greppable:
 - `blocked: <reason>` (needs a decision or hit something unresolved)
 
 Port assignments: sequential from 40001, recorded here so re-running
-several libs at once never collides. **Next free port: 40003.**
+several libs at once never collides. **Next free port: 40005.**
 
 ## Progress summary (updated as libs are finished)
 
-- **Done: 2 / 100** (shanhaizhanshen, xingzhanyingxiong)
+- **Done: 4 / 100** (shanhaizhanshen, xingzhanyingxiong, unknownlib20150716
+  [小雨西游II], bxsj [书剑天下])
 - Tooling built along the way (now reusable for the rest): `extract.sh`,
   `convert_lib.sh` (encoding + rename + ref-fixes, automated), `lpcc_check.sh`
   (now batch-mode, ~15-70x faster — one VM boot compiles every file),
@@ -30,15 +31,15 @@ several libs at once never collides. **Next free port: 40003.**
   2. `MAX_EXPANSION_NESTING`/`kMaxExpandStringDepth` raised (32→1024,
      64→1024 outside ASan builds) so long macro-heavy expressions compile;
      `lpcc` given a `--batch` mode for fast multi-file sweeps.
-- Fix catalog in `AGENTS.md` is up to §14 — read it before starting a new
-  lib, most of what's there will recur.
+- Fix catalog in `AGENTS.md` is up to §14 (+ §8b/8c/8d sub-entries) — read
+  it before starting a new lib, most of what's there will recur.
 
 | # | Archive | Slug | Port | Status | Notes |
 |---|---|---|---|---|---|
 | 1 | 山海战神.rar | shanhaizhanshen | 40001 | done | pilot lib; see libs/shanhaizhanshen/NOTES.md |
 | 2 | 星战英雄.rar | xingzhanyingxiong | 40002 | done | 2nd pilot; found driver bug (AGENTS.md §8) + message_combatd mudlib bug; see libs/xingzhanyingxiong/NOTES.md |
-| 3 | 20150716未知lib.zip | | | not started | |
-| 4 | bxsj.rar | | | not started | |
+| 3 | 20150716未知lib.zip | unknownlib20150716 | 40003 | done | actually 小雨西游II; found get_include_path fix (§8d); see libs/unknownlib20150716/NOTES.md |
+| 4 | bxsj.rar | bxsj | 40004 | done | 书剑天下; found 3 new bugs incl. the this_player()-override footgun (§8c); see libs/bxsj/NOTES.md |
 | 5 | bxsj1.rar | | | not started | |
 | 6 | chidi.rar | | | not started | |
 | 7 | ds3.8.6.zip | | | not started | |

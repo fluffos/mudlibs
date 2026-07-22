@@ -1,0 +1,184 @@
+#include <ansi.h>
+inherit ITEM;
+inherit __DIR__"quest_reward.lpc";
+
+nosave string type = 0;
+
+void create()
+{
+        set_name("任务", ({"ren wu",}));
+        set_weight(1);
+        if( clonep() )
+                set_default_object(__FILE__);
+        else 
+        {
+                set("unit", "个");
+        }
+        setup();
+}
+
+mixed information(object me,object npc)
+{
+	string arg,str;
+	object *obj,ob;
+	int i;
+	
+	if( !me || !living(me) 
+	 || !me->is_knowing("puti_panlong")
+	 || me->is_knowing("puti_panlong")=="succ" )
+	 	return 0;
+	if( !npc || !living(npc)
+	 || !present(npc,environment(me)) )
+	 	return 0;
+	if( query("created") )
+		return 0;
+	
+	if( random(5)==0 )
+		type = "ask";
+	else	type = "give";	
+	
+	set("created",1);
+	
+	obj = livings();	
+	ob = 0;
+	while( !ob || !living(ob) || wizardp(ob) || !ob->query("startroom") )
+		ob = obj[random(sizeof(obj))];
+	
+	switch(type)
+	{
+		case "ask" :
+			set_name(npc->name()+"的疑问",({"wen ti","yi wen","shen ma"}));
+			arg = ({
+				"水陆道场","放生","斋醮","斋戒","修身",
+				"家和万事兴","心诚则灵","白兔养殖术",
+			})[random(6)+random(3)];	
+
+			set("quest2",([
+				"name" : ob->name(),
+				"id"   : ob->query("id"),
+				"sth"  : arg,
+				"file" : base_name(ob),
+				"time" : time(),
+			]));
+			set("owner_ob",me);
+			set("names","疑问");
+			set("long",npc->name()+"发布的一个拜贤任务:\n\t去"+MISC_D->find_place(environment(ob))+"找那"+ob->short()+"，询问「"+arg+"」一事。\n");
+			return "那好吧，你且去"+MISC_D->find_place(environment(ob))+"找那"+ob->short()+"，询问「"+arg+"」一事。\n";		
+		default :
+			arg = ({
+				"修真简要","养生心得","五行经要","两仪略载","太极初略", "兔野望"
+			})[random(5)+random(2)];	
+			set_name(npc->name()+"给"+ob->query("name")+"的【"+arg+"】",({"quest book","book"}));
+			set("quest2",([
+				"name" : ob->name(),
+				"id"   : ob->query("id"),
+				"sth"  : arg,
+				"file" : base_name(ob),
+				"time" : time(),
+			]));
+			set("owner_ob",me);
+			set("names","一本【"+arg+"】");
+			set("long",npc->name()+"要交给"+MISC_D->find_place(environment(ob))+"的"+ob->short()+"的【"+arg+"】。\n");
+			return "那好吧，这里有本【"+arg+"】，你且将之交给"+MISC_D->find_place(environment(ob))+"的"+ob->short()+"。\n";
+			
+	}	
+	return 0;
+}
+
+void init()
+{
+	if( environment() && userp(environment()) )
+	{
+		if( !query("owner_ob") || environment()!=query("owner_ob") 
+		 || !type || !query("created") )
+		{
+			remove_call_out("dest_ob");
+			call_out("dest_ob",3);
+			return;
+		}
+		else if( type=="give" )	
+			add_action("do_give","give");
+		else	add_action("do_ask","ask");
+	}
+}
+
+int do_give(string arg)
+{
+	object ob,who,me=this_player();
+	string from,sth,target;
+	
+	if( !query("owner_ob")
+	 || query("owner_ob")!=me
+	 || !present(this_object(),me) 
+	 || !arg || type!="give" 
+	 || query("gived") )
+	 	return 0;
+	if( sscanf(arg,"%s to %s",sth,target)!=2
+	 && sscanf(arg,"%s %s",target,sth)!=2 )
+		return 0;
+
+	if( !objectp(ob=present(sth,me)) 
+	 || ob!=this_object() )
+	 	return 0;
+
+	if( !query("quest2/file")
+	 || !objectp(who=present(target,environment(me))) 
+	 || base_name(who)!=query("quest2/file") )
+		return 0;
+	
+	if( !stringp(from=query("quest/name")) )
+		from = "某位大能";
+	if( me->query("gender")=="女性" )
+		message_vision(HIC"$N"HIC"给$n"HIC"盈盈的福了一福，说道：奴家受"+from+"之命，给你带了封信。\n"NOR,me,who);
+	else	message_vision(HIC"$N"HIC"给$n"HIC"恭恭敬敬的作了一揖，说道：在下受"+from+"之命，给你带了封信。\n"NOR,me,who);
+	EMOTE_D->do_emote(who, "thank",geteuid(me),CYN,0,0,0);
+	message_vision(HIC"$N"HIC"说道：我这几天正琢磨着这信也该到了呢。\n"NOR,who);
+	message_vision("$N将手中的信函交给了$n。\n",me,who);
+	if( time()>query("quest2/time")+300 )
+	{
+		message_vision(HIR"$N"HIR"面露不悦之色：这位"+RANK_D->query_respect(me)+"，这书信送得有点晚啊，呵呵！"NOR"\n",who,me);
+		quest_reward(me,0);
+	}		
+	else	quest_reward(me,1);
+	set("gived",1);	
+	return 1;
+}
+
+int do_ask(string arg)
+{
+	object ob,who,me=this_player();
+	string from,sth,target;
+	
+	if( !query("owner_ob")
+	 || query("owner_ob")!=me
+	 || !present(this_object(),me) 
+	 || !arg || type!="ask" 
+	 || query("asked") )
+	 	return 0;
+	if( sscanf(arg,"%s about %s",target,sth)!=2 )
+		return 0;
+	printf("target=%s sth=%s\n",target,sth);
+	if( !query("quest2/file")
+	 || !objectp(who=present(target,environment(me))) 
+	 || base_name(who)!=query("quest2/file") )
+		return 0;
+	if( !query("quest2/sth") 
+	 || sth!=query("quest2/sth") )
+	 	return 0;	
+
+	if( !stringp(from=query("quest/name")) )
+		from = "某位大能";
+	if( me->query("gender")=="女性" )
+		message_vision(HIC"$N"HIC"给$n"HIC"盈盈的福了一福，说道：奴家受"+from+"之命，向您告知「"+sth+"」一事。\n"NOR,me,who);
+	else	message_vision(HIC"$N"HIC"给$n"HIC"恭恭敬敬的作了一揖，说道：在下受"+from+"之命，向您告知「"+sth+"」一事。\n"NOR,me,who);
+	EMOTE_D->do_emote(who, "thank",geteuid(me),CYN,0,0,0);
+	message_vision(HIC"$N"HIC"说道：我这几天正琢磨着这事呢。\n"NOR,who);
+	if( time()>query("quest2/time")+300 )
+	{
+		message_vision(HIR"$N"HIR"面露不悦之色：这位"+RANK_D->query_respect(me)+"，这口信来得有点晚啊，呵呵！"NOR"\n",who,me);
+		quest_reward(me,0);
+	}		
+	else	quest_reward(me,1);
+	set("gived",1);	
+	return 1;
+}

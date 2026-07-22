@@ -1,0 +1,166 @@
+// jldl.c
+#include <ansi.h>
+#include <combat.h>
+inherit F_CLEAN_UP;
+
+void remove_effect(object me);
+mixed jldl_result(object me, object victim,int attack_type);
+
+int exert(object me, object target)
+{
+	int skill,p,pp;
+
+	if( me->query_level()<30 )
+		return notify_fail("你的人物等级不够。\n");
+	if(time()-(int)me->query_temp("jldl_end") < 15) 
+        	return notify_fail("你现在真气不纯。\n");
+        if( (int)me->query("force") < 800 )     
+		return notify_fail("你的内力不够。\n");
+	if(me->query("family/family_name") != "方寸山三星洞")
+		return notify_fail("「借力打力」是方寸山三星洞不传之密！\n");           
+		
+	if( !target ) target = me;		
+        if( target && target != me ) 
+		return notify_fail("你只能用「借力打力」提升自己的防御力。\n");
+	
+        skill = me->query_skill("wuxiangforce",1);
+	if( skill > 900 ) skill=900;
+	if( me->query_temp("jldl") ) 
+	{
+		remove_effect(me);
+		return 1;
+	}
+        me->add("force", -150);
+        message_vision(HIG "$N"HIG"把小无相功在体内运行一周，只觉内力运行随心所欲无不如意！\n" NOR, me);
+        me->set_temp("jldl", 1);
+        p = 5;
+        pp = 0;
+        if( me->query_skill("yixing-huandou",2)>100 )
+        	pp = (me->query_skill("yixing-huandou",2)>100-100)/150+1;
+        p+= pp;	
+        if( intp(pp=me->is_knowing("puti_jldl")) 
+         && pp>0 )
+         	p+= pp;
+        me->set_temp("jldl_time",p);
+        return 1;
+}
+
+void remove_effect(object me)
+{
+        if( me && me->query_temp("jldl") )
+        {
+        	me->delete_temp("jldl");
+        	me->delete_temp("jldl_time");
+        	me->set_temp("jldl_end", time() );
+		message_vision(HIG"\n$N"HIG"的借力打力运行一周天完毕，将内力收回丹田。\n",me);
+	}
+}
+
+mixed jldl_result(object me, object victim,int attack_type)
+{   
+	string result,str;
+    	object vweapon;
+    	int ap,dp,damage,wounded;
+ 
+ 	if( !me || !living(me) )
+ 		return 0;
+ 	if( me->query_skill_mapped("force") != "wuxiangforce" 
+ 	 || me->query_temp("jldl_time")<=0 )
+ 	{
+		remove_effect(me);	
+		return 0;
+	}
+ 	if( !victim || !me->is_fighting(victim) )
+ 		return 0;
+	
+	me->add_temp("jldl_time",-1);
+	ap = me->query_str();
+	dp = victim->query_str();
+	
+	if( ap<dp/4*3 )
+		return HIG"$n"HIG"轻轻一拨，$N"HIG"招式向旁边稍微歪了一下。\n"NOR;
+
+	if( objectp(vweapon=victim->query_temp("weapon")) )
+	{
+		switch(vweapon->query("skill_type"))
+		{
+			  case "archery" :
+			  case "blade" :
+			  case "dagger":
+			  case "sword" : str = ({"砍","刺","劈","割","划"})[random(5)];break;
+			  case "axe"   : str = ({"劈","砍","砸",})[random(3)];break;
+			  case "mace"  :
+			  case "rake"  :
+			  case "spear" :
+			  case "fork"  : str = ({"戳","扫","砸",})[random(3)];break;
+			  case "stick" :
+			  case "staff" :
+			  case "hammer": str = ({"扫","砸",})[random(2)];break;
+			  case "whip"  : str = ({"扫","抽",})[random(2)];break;
+			  default : str = "撞";break;
+		}
+	}
+	else	str = "撞";
+
+	result = HIG"$n"HIG"轻轻一拨，$N"HIG"顿时觉得内力逆转，$w"HIG"向着自己的身体直"+str+"过去！\n"NOR;
+          	
+	ap = COMBAT_D->skill_power(me, "force", SKILL_USAGE_ATTACK); 
+	if( ap< 1) ap = 1;
+        dp  = COMBAT_D->skill_power(victim, "dodge", SKILL_USAGE_DEFENSE); 
+        if( dp < 1) dp = 1;
+	if( COMBAT_D->number_percent(ap,dp)<1 )                
+	{
+		if( random(2) )
+			result+= HIG"$N"HIG"一个懒驴打滚，灰头土脸的躲开了。\n"NOR;
+		else	result+= HIG"但$N"HIG"早有准备，结果$n"HIG"连边都没沾上。\n"NOR;
+		return result;
+	}
+	damage = COMBAT_D->valid_damage(victim,me,attack_type);
+	damage+= random(victim->query("force_factor")/30);
+	if( damage<10 )
+		damage = 10;	        	
+	wounded = 0;
+	damage = victim->receive_damage("kee", damage, me,attack_type);
+	if( me->is_killing(victim->query("id")) 
+	 && vweapon && damage>10 
+	 && me->query("force_factor")>victim->query("force_factor")/5 )
+		wounded = victim->receive_wound("kee",damage/2,me,attack_type);
+
+        if( COMBAT_D->query_message_type(me,victim)==3 )
+        	result = "";
+        else if( COMBAT_D->query_message_type(me,victim)==3 )	
+        {
+		result = HIG"结果$n"HIG"的借力打力对$N"HIG"造成了"HIR+damage+HIG"点气血减少";
+		if( wounded>0 )
+			result+= "以及"HIR+wounded+HIG"点气血损伤";
+		result+= "。\n"NOR;	
+	}
+        if( damage > 0 )
+        {
+        	if( wounded>0 )
+			result += "( $N" + COMBAT_D->eff_status_msg((int)victim->query("eff_kee") * 100 /(1+(int)victim->query("max_kee")) )+ " )\n";
+		else	result += "( $N" + COMBAT_D->status_msg((int)victim->query("kee") * 100/(1+(int)victim->query("max_kee")) ) + " )\n";              
+	}	
+	return result;
+}
+
+int help(object me)
+{
+        string str;
+        if( !me )  return 0;
+        str = @STR
+
+        内功名称：借力打力
+        内功所属：小无相功 
+        内功效果：一定时间内能使对方攻击时攻击其本身
+        	  最低五次，可通过门派秘籍增加次数
+        	  伤害试对方的攻击与防御而定
+        	  状态结束后冷却15秒
+        内功条件：
+        	  方寸弟子
+        	  人物等级 30 级
+                  内力800点，消耗150点
+STR;
+        me->start_more(str);
+        return 1;
+}

@@ -1,0 +1,106 @@
+#include <ansi.h>
+#include <combat.h>
+inherit SSERVER;
+
+string name(){ return "七巧连环";}
+
+mapping *action = ({
+        ([      
+                "action": "\n",
+                "dodge" : -50,
+		"parry" : -50,
+                "damage": 45,
+                "force" : 80,
+                "damage_type" : "戳伤",
+        ]),
+        ([
+                "action": "\n",
+                "dodge" : -65,
+		"parry" : -65,
+                "damage" : 45,
+                "force" : 100,
+                "damage_type" : "瘀伤",
+        ]),
+});        
+int perform(object me, object equip,object target)
+{
+	string msg,succ_msg;
+	int damage, t,lvl;
+	object weapon;
+	
+	if( !equip || !present(equip,me) )
+		return 0;
+	if( !intp(lvl = equip->query_fu_level("飞轮"))
+	 || lvl<1 )
+	 	return 0;
+	if( lvl>3 )
+		lvl = 3;	 	
+	if( me->query_level()<20 )
+		return notify_fail("你的人物等级不够。\n");
+	if( !target ) target = offensive_target(me);
+	if( !target 
+	 || !target->is_character()
+	 || !me->is_fighting(target) 
+	 || target->is_ghost() )
+        	return notify_fail("七巧连环只能对战斗中的对手使用。\n");
+	if( !objectp(weapon = me->query_temp("weapon"))
+	 || weapon->query("skill_type")!="fork" )
+	 	return notify_fail("你的叉呢？\n");
+	if( me->query_skill("fork",1)<200 )
+        	return notify_fail("你叉法不够娴熟。\n");
+	if( me->query_skill("force",1)<200 )
+        	return notify_fail("你的内功修为不够。\n");
+	if( me->query("force")<500 )
+        	return notify_fail("你内力不够，使用绝杀没什么威力！\n");
+
+	msg = HIW "$N"HIW"气运丹田，脸色变的苍白，手中$w"HIW"顿时化出七道光环对着$n"HIW"直套而下！\n"NOR;
+	succ_msg = YEL"$n"YEL"一愣，不自觉的被带了一个踉跄。\n" NOR;
+	
+	me->add("force",-200);
+	me->set_temp("pfm_msg",1);
+	me->add_temp("apply/attack",10);
+	me->set("actions",action[0]);
+	damage = COMBAT_D->do_attack(me,target,me->query_temp("weapon"),TYPE_PERFORM,msg,succ_msg);
+	me->add_temp("apply/attack",-10);
+	me->set_temp("pfm_msg",0);
+	if( damage>0 )
+	{
+		if( !target->is_busy() )
+			target->start_busy(lvl+1);
+		msg = HIY "$N"HIY"仰天长啸，一式"HIW"『绝命杀环』"HIY"奇快无比的向$n"HIY"$l攻去！\n"NOR;
+		me->set_temp("pfm_msg",1);
+		me->add_temp("apply/attack",lvl*10);
+		me->set("actions",action[1]);
+		COMBAT_D->do_attack(me,target,me->query_temp("weapon"),TYPE_PERFORM,msg);
+		me->add_temp("apply/attack",-lvl*10);
+		me->set_temp("pfm_msg",0);
+	}
+	else
+	{
+		message_combatd(YEL"$n"YEL"早已经看出$N的企图，没有上当。\n" NOR,me,target);
+	}	
+	me->reset_action();
+	me->start_busy(2);
+	return 1;
+}
+
+int help(object me)
+{
+        string str;
+        if( !me )  return 0;
+        str = @STR
+
+        外功名称：七巧连环
+        外功所属：飞轮符(镶嵌)
+        外功效果：使对方busy2-4秒并带物理攻击
+        	  自身busy2秒
+        法术条件：
+        	  人物等级20级
+                  内力500点，消耗200点
+                  基本叉法200级
+                  基本内功200级
+
+STR;
+        me->start_more(str);
+        return 1;
+}

@@ -1,0 +1,226 @@
+#include <ansi.h>
+
+varargs void Show(object who,string arg,string color)
+{
+	string *msgs,str;
+	int i;
+	if( !who )
+		return;
+	if( !arg || !stringp(arg) || strlen(arg)<2 )
+		return;
+	if( !color || !stringp(color) )
+		color = HIY;
+	arg = COLOR_D->clean_color(arg);	
+	arg = sort_string(arg,68,0); 
+	msgs = explode(arg,"\n");
+	str = "";
+	for(i=0;i<sizeof(msgs);i++)
+		str+= "【系统】"+msgs[i]+"\n";
+	tell_object(who,color+str+NOR);	
+}
+
+int is_bd_equip(object who,string type)
+{
+	string *tmp;
+	object ob;
+	int i;
+	if( !who || !living(who) || !userp(who) )
+		return 0;
+	if( !who->query_temp("armor") )
+		return 0;
+	if( !pointerp(tmp=keys(who->query_temp("armor"))) 
+	 || sizeof(tmp)<1 )
+	 	return 0;
+	for(i=0;i<sizeof(tmp);i++)
+	{
+		if( !tmp[i] )
+			continue;
+		ob = (who->query_temp("armor"))[tmp[i]];	
+		if( base_name(ob)!=who->MyArmorFile(1)
+		 || ob->query("level")>=who->query_level() )
+		 	continue;
+		if( ob->query("armor_type")==type )			 	
+			return 1;
+	}
+	return 0;
+}
+
+string *query_change_armor(object who)
+{
+	string *tmp,*ar;
+	object ob;
+	int i;
+	if( !who || !living(who) || !userp(who) )
+		return 0;
+	if( !who->query_temp("armor") )
+		return 0;
+	if( !pointerp(tmp=keys(who->query_temp("armor"))) 
+	 || sizeof(tmp)<1 )
+	 	return 0;
+	ar = ({});
+	for(i=0;i<sizeof(tmp);i++)
+	{
+		if( !tmp[i] )
+			continue;
+		ob = (who->query_temp("armor"))[tmp[i]];	
+		if( base_name(ob)!=who->MyArmorFile(1) )
+		 	continue;
+		if( ob->query("level")>=who->query_level() )
+			continue;	
+		if( ob->query("exp")>=ob->query_max_exp() )
+			continue;				 	
+		if( member_array(tmp[i],ar)==-1 ) 	
+			ar+= ({tmp[i]});
+	}
+	ar-= ({0});
+	if( sizeof(ar)<1 )
+		return 0;
+	return ar;			
+}
+
+int maxexp_result(int lvl)
+{
+	int p;
+	lvl = lvl/10+1;
+	if( lvl>=100 )
+		return 100000000;
+	if( lvl<50 )		
+		p = ((lvl*lvl*lvl+60)/5*((lvl-1)*2+60))/8*10;
+	else	p = ((lvl*lvl*lvl+60)/5*((lvl-1)*2+600))/8*18;	
+	if( p<12000 )
+		p = 12000;
+	return p;	
+}
+
+int level_up(object who,int v)
+{
+	mapping my_ar;
+	object *armors,armor,weapon;
+	string env_weapon,env_ar,*env_ars,*tmp;
+	int i,armor_ratio,weapon_ratio,final,p,k;
+	
+	if( v<=0 )
+		return 0;
+	if( !who || !userp(who) || !living(who) )
+		return v;
+	if( who->query_level()<50 )
+		return v;
+	final = v;
+	Show(who,"你共得到"+v+"点经验。\n",HIG);	
+	if( objectp(weapon=who->query_temp("weapon")) )
+	{
+		if( !stringp(env_weapon=who->query("env/weapon_change")) 
+		 || strlen(env_weapon)<2 )
+		 	env_weapon = weapon->query("skill_type");
+		if( env_weapon=="none" || env_weapon=="NONE" 
+		 || env_weapon!=weapon->query("skill_type")
+		 || base_name(weapon)!=who->MyWeaponFile(1) 
+		 || weapon->query("level")>=who->query_level() )
+			;
+		else
+		{
+			if( !intp(weapon_ratio=who->query("env/weapon_ratio")) 
+			 || weapon_ratio<2 || weapon_ratio>=100 )
+			 	weapon_ratio = 2;
+			p = v*weapon_ratio/100;
+			if( !weapon->query("combination")
+			 && weapon->query("exp")>=weapon->query_max_exp() )
+				p = 0;
+			if( p<1 )
+				;
+			else
+			{
+				if( p>final )
+					p = final;
+				
+				if( !weapon->query("combination") )
+				{
+					final-= p;
+					weapon->add("exp",p);
+					Show(who,"你的"+weapon->name(1)+"得到了"+p+"点经验。\n",HIR);
+				}
+				else
+				{
+					if( !arrayp(tmp=weapon->query("skill_types"))
+					 || sizeof(tmp)<1 )
+						;
+					else
+					{
+						k = 0;
+						for(i=0;i<sizeof(tmp);i++)
+						{
+							if( weapon->query("combination_dbase/"+tmp[i]+"/exp")>=maxexp_result(weapon->query("combination_dbase/"+tmp[i]+"/level")) )
+								continue;
+							weapon->add("combination_dbase/"+tmp[i]+"/exp",p);
+							k++;
+							Show(who,"你的"+weapon->name(1)+" "+("/cmds/std/look.lpc")->weapon_type(tmp[i])+"形态 得到了"+p+"点经验。\n",HIR);
+						}
+						if( k>0 )
+							final-= p;	
+					}						 
+				}
+			}				
+		}				 
+	}
+	if( final<=0 )
+		return 0;
+	
+	if( !mapp(my_ar=who->query_temp("armor")) 
+	 || sizeof(my_ar)<1 || final<=0 )
+	 	return final;
+	 	
+	if( !intp(armor_ratio=who->query("env/armor_ratio")) 
+	 || armor_ratio<2 || armor_ratio>=100 )
+		armor_ratio = 2;
+	env_ar=who->query("env/armor_change");
+	if( !env_ar || strlen(env_ar)<2 )
+		env_ars = query_change_armor(who);
+	else if( env_ar=="none" || env_ar=="NONE" )
+		return final;
+	else if( strsrch(env_ar,",")==-1 )
+	{
+		if( is_bd_equip(who,env_ar) )
+			env_ars = ({env_ar});
+	}
+	else
+	{
+		tmp = explode(env_ar,",");
+		if( !pointerp(tmp) || sizeof(tmp)<1 )
+			return final;
+		env_ars = ({});
+		for(i=0;i<sizeof(tmp);i++)
+		{
+			if( is_bd_equip(who,tmp[i]) )
+				env_ars+= ({tmp[i]});	
+		}
+	}
+	if( !env_ars || !pointerp(env_ars) )
+		return final;
+	
+	env_ars-= ({0});
+	if( sizeof(env_ars)<1 )
+		return final;
+			
+	p = v*armor_ratio/100;
+	if( p<=0 )
+		return final;
+	if( p*sizeof(env_ars)>final )
+		p = final/(sizeof(env_ars));
+	if( p<=0 )
+		return final;
+
+	armors = values(my_ar);
+	for(i=0;i<sizeof(armors);i++)
+	{
+		if( base_name(armors[i])!=who->MyArmorFile(1) )
+			continue;
+		if( member_array(armors[i]->query("armor_type"),env_ars)==-1 )
+			continue;
+		final-= p;
+		armors[i]->add("exp",p);
+		Show(who,"你的"+armors[i]->name(1)+"得到了"+p+"点经验。\n",HIR);
+	}
+	if( final<0 )
+		final = 0;
+	return final;
+}

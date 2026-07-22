@@ -1,0 +1,163 @@
+#include <ansi.h>
+inherit ITEM;
+
+void create()
+{
+        set_name("菩提祖师的信函", ({"xin han","letter","xin",}));
+        set_weight(1);
+        if( clonep() )
+                set_default_object(__FILE__);
+        else {
+                set("long", "这是方寸山菩提祖师爷交给%s的信函，上面写着：\n%s\n");
+                set("unit", "封");
+        }
+        setup();
+}
+
+mixed information(object me)
+{
+	string *fam,arg,str,mp,*my_data;
+	mapping npc,prop;
+	int i;
+	
+	if( !me || !living(me) 
+	 || !me->is_knowing("puti_panlong")
+	 || me->is_knowing("puti_panlong")=="succ" )
+	 	return 0;
+	if( query("created") )
+		return 0;
+			 	
+	npc = ([
+			"月宫"   : ({"西王母","xi wangmu","/d/moon/npc/xiwangmu"}),
+			"地府"   : ({"地藏王菩萨","dizang pusa","/d/death/npc/dizhang",}),
+			"将军府1": ({"秦琼","qin qiong","/d/jjf/npc/qinqiong",}),
+			"将军府2": ({"尉迟恭","yuchi gong","/d/jjf/npc/yuchigong",}),
+			"将军府3": ({"程咬金","cheng yaojin","/d/jjf/npc/chengyaojin",}),
+			"将军府4": ({"罗成","luo cheng","/d/jjf/npc/luocheng",}),
+			"盘丝"   : ({"金灵圣母","jinling shengmu","/d/pansi/npc/shengmu",}),
+			"百花谷" : ({"凝眸仙子","ningmou xianzi","/d/baihuagu/npc/ningmou",}),
+			"蜀山"   : ({"剑圣","jian sheng","/d/shushan/npc/jiansheng",}),
+			"五庄观" : ({"镇元大仙","zhenyuan daxian","/d/qujing/wuzhuang/npc/zhenyuan",}),
+			"东海"   : ({"敖广","ao guang","/d/sea/npc/longwang",}),
+			"普陀山" : ({"观音菩萨","guanyin pusa","/d/nanhai/npc/guanyin",}),
+		]);	
+	fam = keys(npc);
+	if( arrayp(my_data=me->query("family/PLCW"))
+	 && sizeof(my_data)>0 )
+	{
+		for(i=0;i<sizeof(my_data);i++)
+		fam-= ({my_data[i]});
+	}
+	fam-= ({0});
+	if( !fam || sizeof(fam)<1 )
+		return 0;
+	mp = fam[random(sizeof(fam))];
+	arg = mp;
+	arg = replace_string(arg,"1","");
+	arg = replace_string(arg,"2","");
+	arg = replace_string(arg,"3","");
+	arg = replace_string(arg,"4","");
+	str = "你且先去请那【"+arg+"】的「"+npc[mp][0]+"」，将贫道的信函交予其手，观之有何打算。\n";
+	prop = ([
+		"msg" : str,
+		"file": npc[mp][2],
+		"name": npc[mp][0],
+		"id"  : npc[mp][1],
+		"family" : fam,
+	]);
+	set("owner_ob",me);
+	set("created",1);
+	arg = "今有门下弟子"+me->query("name")+"，虽天性愚钝，然其心可嘉，故某特准其重悟盘龙，望诸位仙贤替贫道考究其一番。\n";
+	arg = sort_string(arg,76,0); 
+	set("long",sprintf(query("long"),npc[mp][0],arg));
+	set("quest",prop);
+	me->set_temp("PLCW_xin",this_object());
+	return str;
+}
+
+void dest_ob()
+{
+	remove_call_out("dest_ob");
+	destruct(this_object());
+}
+
+void init()
+{
+	if( environment() && userp(environment()) )
+	{
+		if( !query("owner_ob") || environment()!=query("owner_ob") )
+		{
+			set("long",sprintf(query("long"),"某人","\t天机不可泄露。\n"));
+			remove_call_out("dest_ob");
+			call_out("dest_ob",3);
+			return;
+		}
+		else	
+		{
+			add_action("do_give","give");
+		}
+	}
+}
+
+void give_quest(object who,object me)
+{
+	object ob;
+	string str;
+	remove_call_out("give_quest");
+	remove_call_out("dest_ob");
+	call_out("dest_ob",5);
+	if( !who || !me || !living(me)
+	 || !present(who,environment(me)) )
+	 	return;
+	if( who->query("gender")=="女性" )
+		EMOTE_D->do_emote(who, "xixi",geteuid(me),CYN,0,0,0);
+	else	EMOTE_D->do_emote(who, "hoho",geteuid(me),CYN,0,0,0);	
+	ob = new("/quest/family/fc/quest");
+	ob->set("quest",query("quest"));
+	if( !stringp(str=ob->information(me,who)) 
+	 || !ob->move(me) )
+	{
+		if( ob )  destruct(ob);
+		message_vision(HIR"$N"HIR"看罢书信，面生不悦之色，对$n"HIR"说道：此事恕某无能为力，你请回吧！\n"NOR,who,me);
+		return;
+	}
+	if( ob->query("names")!="疑问" )
+		message_vision(HIY"$N"HIY"掏出"+ob->query("names")+HIY"交给$n"HIY"。\n"NOR,who,me);
+	tell_object(me,CYN+who->name()+CYN"说道："+str+NOR"\n");
+	return;
+}
+
+int do_give(string arg)
+{
+	object ob,who,me=this_player();
+	string sth,target;
+	
+	if( !query("owner_ob")
+	 || query("owner_ob")!=me
+	 || !present(this_object(),me) 
+	 || !arg )
+	 	return 0;
+	if( sscanf(arg,"%s to %s",sth,target)!=2
+	 && sscanf(arg,"%s %s",target,sth)!=2 )
+		return 0;
+
+	if( !objectp(ob=present(sth,me)) 
+	 || ob!=this_object() )
+	 	return 0;
+
+	if( !query("quest/file")
+	 || !objectp(who=present(target,environment(me))) 
+	 || base_name(who)!=query("quest/file") )
+		return 0;
+		
+	if( me->query("gender")=="女性" )
+		message_vision(HIC"$N"HIC"给$n"HIC"盈盈的福了一福，说道：祖师爷爷叫"+RANK_D->query_self(me)+"给你带了封信。\n"NOR,me,who);
+	else	message_vision(HIC"$N"HIC"给$n"HIC"恭恭敬敬的作了一揖，说道：祖师爷爷叫"+RANK_D->query_self(me)+"给你带了封信。\n"NOR,me,who);
+	EMOTE_D->do_emote(who, "en",geteuid(me),CYN,0,0,0);
+	message_vision(CYN"$N"CYN"说道：拿来我看。\n"NOR,who);
+	message_vision("$N将手中的信函交给了$n。\n",me,who);
+	this_object()->move(who);
+	message_vision(HIY"$N"HIY"低头细细的看起信来。\n"NOR,who);
+	call_out("give_quest",3+random(4),who,me);
+	return 1;
+}

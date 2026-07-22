@@ -32,10 +32,26 @@ while IFS= read -r f; do
   n=$((n + 1))
   if [[ $((n % 200)) -eq 0 ]]; then echo "  progress $n/$total"; fi
 
-  ftype=$(file -b "$f")
-  case "$ftype" in
-    *text*|*script*) ;;
-    *) skipped_binary=$((skipped_binary + 1)); continue ;;
+  # `file`'s text/binary heuristic is NOT reliable enough to gate LPC
+  # source on alone -- a GBK file with an unusual byte pattern (seen: CRCRLF
+  # line endings) gets misclassified as "data" and silently skipped, left
+  # as raw GBK forever (a real bug found processing lib #4; re-scan any
+  # already-converted lib if you're fixing this after the fact). Known
+  # source/text extensions are ALWAYS treated as text regardless of what
+  # `file` thinks; only fall back to the `file`-based guess for extension-
+  # less files and unknown extensions, where we have no prior.
+  # (.o deliberately excluded: LPC save-data .o files are text, but a
+  # genuine compiled/bytecode-dump .o also uses that extension in some of
+  # these archives -- keep the `file`-based guess for that one.)
+  case "$f" in
+    *.c|*.lpc|*.h|*.txt|*.log|*.cfg|*.conf|*.map) ;;
+    *)
+      ftype=$(file -b "$f")
+      case "$ftype" in
+        *text*|*script*) ;;
+        *) skipped_binary=$((skipped_binary + 1)); continue ;;
+      esac
+      ;;
   esac
 
   if timeout 2 iconv -f UTF-8 -t UTF-8 "$f" >/dev/null 2>&1; then

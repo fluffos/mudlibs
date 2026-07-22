@@ -1,0 +1,210 @@
+//cast function: qiankun.c 袖里乾坤。
+//need to be activated by 镇元大仙 to use this cast...weiqi, 
+//weiqi, mon 1/98
+
+#include <ansi.h>
+#include <combat.h>
+inherit SSERVER;
+
+void get_out(object where);
+
+int cast(object me, object target)
+{
+	string msg;
+	int success;
+	object sleeveroom,sleeve;
+	string sname;
+	object env, *inv;
+	int size, i, taiyi_level;
+	int maxenc;
+
+	seteuid(getuid());
+	if( me->query_level()<40 )
+		return notify_fail("你的人物等级不够。\n");
+	if( me->query_skill("taiyi",2)<400 )
+		return notify_fail("你修为不够。\n");		
+	if(me->query("family/family_name") != "五庄观")
+		return notify_fail("「袖里乾坤」是五庄观不传之密！\n");
+	if(environment(me)->query("no_qiankun") )
+                return notify_fail("这里不能施展「袖里乾坤」。\n");
+	if( (int)me->query("mana") < 400 )
+		return notify_fail("你的法力不够了！\n");
+	if( (int)me->query("sen") < me->query_maxsen()/10*9 )
+		return notify_fail("你现在头脑不清醒，哪里使得出袖里乾坤！\n");
+
+	if( !target ) 
+		target = offensive_target(me);
+        if(!target) 
+        {
+		sleeveroom=load_object("/d/wiz/sleeveroom");
+	  	if(!sleeveroom) 
+	  		return notify_fail("你的袖子恐怕破了。\n");
+		sname = me->query("id")+"'s sleeve";
+          	if( !objectp(sleeve=present(sname,sleeveroom)) ) 
+          	{
+             		message_vision("$N将大袖迎空一甩，但是里面什么也没有。\n",me);
+			return 1;
+		}
+		size=sizeof(inv=all_inventory(sleeve));
+	  	if(!size) 
+	  	{
+             		message_vision("$N将大袖迎空一甩，但是里面什么也没有。\n",me);
+	     		return 1;
+          	}
+          	if( !me->query_temp("pending/wzg_checkqiankun") )
+          	{
+          		msg = "大袖能容天下，你的衣袖中现在有：\n";
+          		for(i=0;i<size;i++) 
+          			msg+= "\t"+inv[i]->short()+"\n";
+          		tell_object(me,msg);
+          		me->add("mana",-100);
+          		me->set_temp("pending/wzg_checkqiankun",1);
+          		tell_object(me,"\n"HIC"再次使用 "HIR"cast qiankun"HIC" 命令即可将衣袖中的物什倒出。\n"NOR);
+          		return 1;
+          	}	
+		me->add("mana",-200);
+		msg="$N将大袖迎空一甩，";
+	  	for(i=0;i<size;i++) 
+	  	{
+	    		if(inv[i]->is_character())
+	      			msg+="$n扑通一声摔倒在地上。\n";
+            		else	msg+="$n嗵地一声砸在地上。\n";
+			env=environment(me);
+            		while(!(inv[i]->move(env))) 
+            			env=environment(env);
+			message_vision(msg,me,inv[i]);
+	  	}
+	  	me->delete_temp("pending/wzg_checkqiankun");
+          	return 1;
+	}
+
+	if( time()<me->query_temp("wzg_xiuliqiankun")+5 )
+		return notify_fail("你甩了甩袖子，差点扭到筋。\n");
+
+	if( !target->is_character()
+	|| target->is_corpse()
+	|| target==me
+	|| !me->is_fighting(target) )
+		return notify_fail("你要对谁施展「袖里乾坤」？\n");
+
+	if( random(me->query_maxmana()/10)<8 ) 
+	{
+		write("你失败了！\n");
+		return 1;
+	}
+
+	if( !objectp(sleeveroom=load_object("/d/wiz/sleeveroom")) )
+		return notify_fail("你的袖子恐怕破了。\n");
+
+	msg =  HIR"\n$N"HIR"喃喃地念了几句咒语，突然大袖一挥朝$n"HIR"罩了过去！\n" NOR;
+	message_vision(msg, me, target);
+	if( !target->is_killing(me->query("id")) )
+		target->kill_ob(me);
+
+	success = COMBAT_D->attack_percent(me,target,TYPE_CAST);
+	if( target->query("vendor_goods") )   
+		success = 0;
+        if( !userp(me) && userp(target) )  success = random(10)==4;
+	if(success == 1 )
+	{
+		me->add("mana", -300);
+	
+		sname=me->query("id")+"'s sleeve";
+		if(!sleeve=present(sname,sleeveroom)) 
+		{
+			sleeve=new("/d/obj/fabao/sleeve");
+		  	if(!sleeve) 
+		  		return notify_fail("你的袖子恐怕破了。\n");
+			taiyi_level = (int)me->query_skill("taiyi", 1);
+			maxenc = taiyi_level*2000;
+			if(maxenc>800000) 
+				maxenc=800000;
+			sleeve->set_max_encumbrance(maxenc);
+			sleeve->set_owner(me);
+			sleeve->set("name",me->name()+"的衣袖中");
+			sleeve->set("short",me->name()+"的衣袖中");
+		  	if(!sleeve->move(sleeveroom)) 
+		  	{
+		  		if( sleeve )
+		  			destruct(sleeve);
+				return notify_fail("你的袖子恐怕破了。\n");
+			}
+		}
+		if(target->move(sleeve)) 
+		{
+			message("vision",HIR"结果嗖的一声，"+target->name()+HIR"便被装了进去！"NOR"\n\n",environment(me),target);
+			tell_object(target,HIR"\n\n结果你眼前一黑，顿时"+me->name()+HIR"装进了袖中！"NOR"\n\n");
+			if(!userp(me)) 
+		      		call_out("get_out", 120+random(240), sleeve);
+		  	else	call_out("get_out", 240+random(480), sleeve);
+                } 
+                else 
+                {
+                	message_vision(HIR"结果$N"HIR"只是摇晃了一下，又不动了。\n"NOR,target);
+                	tell_object(me,target->name()+"对你来说，太沉了。\n");
+		}
+	}
+	else 
+	{
+		msg =  HIR "结果被$n"HIR"法力一逼，差点罩住$N"HIR"自己的脑袋。\n" NOR;
+		message_vision(msg, me, target);
+		me->add("mana", -400);
+	} 
+	me->set_temp("wzg_xiuliqiankun",time());
+	return 1;
+}
+
+void get_out(object where)
+{
+	object owner,*inv;
+   	int i;
+
+   	if(!where) 
+   		return;
+   	if( !objectp(owner = where->query_owner()) )
+   	{
+   		i=sizeof(inv=all_inventory(where));
+   		while(i--)
+		{
+			if( userp(inv[i]) )
+				MISC_D->random_capture(inv[i],1,1);
+			else	destruct(inv[i]);	
+		}   			
+   		destruct(where);
+   		return;
+   	}
+	i=sizeof(inv=all_inventory(where));
+   	while(i--) 
+   	{
+      		if( inv[i]->is_character() )
+      		{
+         		message_vision(HIR"只见$N"HIR"大袖一挥，$n"HIR"扑通一声，从里面跌将出来，狠狠地砸在地上！\n",owner,inv[i]);
+			inv[i]->move(environment(owner));
+			if( userp(inv[i]) )
+				tell_object(inv[i],HIR"\n你眼前一黑。。。。\n\n"NOR);
+		} 
+		else	destruct(inv[i]); 
+   	}
+	return;
+}
+
+int help(object me)
+{
+        string str;
+        if( !me )  return 0;
+        str = @STR
+
+        法术名称：袖里乾坤
+        法术所属：太乙仙法
+        法术效果：以大袖兜走对方
+        	  冷却5秒
+        法术条件：
+        	  五庄观弟子
+        	  人物等级40级	
+                  法力400点，消耗300点
+                  精神90%以上
+                  太乙仙法绝对等级400级
+STR;
+        me->start_more(str);
+        return 1;
+}

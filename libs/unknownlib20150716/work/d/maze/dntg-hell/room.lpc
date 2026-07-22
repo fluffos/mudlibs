@@ -1,0 +1,236 @@
+#include <ansi.h>
+#include <room.h>
+inherit ROOM;
+
+void create()
+{
+        set("short",HIR"幽司"NOR);
+        set("channel_id","阎罗地府");
+	set("alternative_die",1);
+        set("no_huicheng",1);
+        set("no_chuqiao",1);
+        set("outdoors",0);
+        set("hell",1);
+        set("item_desc",([ 
+                       "west" : "这里黑布隆冬的，你看不清楚。\n", 
+                       "east" : "这里黑布隆冬的，你看不清楚。\n", 
+                       "south" : "这里黑布隆冬的，你看不清楚。\n", 
+                       "north" : "这里黑布隆冬的，你看不清楚。\n", 
+         ]));
+        set("long", @LONG
+这里便是阴曹地府之中，偶尔看到几个索命鬼，勾司人牵着些套着枷锁的人走来走
+去。周围是一座座的楼阁宫殿，看起来也相当的富丽堂皇，奇怪的是都有一扇钉着金钉
+的红木门和一条白玉门槛。
+LONG );
+        setup();
+}
+                     
+int do_drop(string arg)
+{
+	return ("/d/city/droproom.lpc")->do_main(arg);
+}
+
+int do_cmds(string arg)
+{
+        string *nocmds,verb = query_verb();
+        nocmds = ({
+                "recall","move","maphere","fight","find",
+        });
+        if( member_array(verb,nocmds)==-1 )
+                return 0;
+        write("ok\n");
+        return 1;
+}
+
+int do_map(string arg)
+{
+	object me = this_player();
+	if( time()<me->query_temp("last_mazemap")+15 )
+		return err_msg("你不能频繁查看地图。\n");
+	me->set_temp("last_mazemap",time());
+	arg = MAZE_D->query_maze_mainobj(me)->display_common_map(this_object());
+	me->start_more(arg);
+	write(HIR"注：地府十王殿不在地图之内。"NOR"\n");		
+        return 1;
+}
+
+void init()
+{
+	if( !query("init_guai") )
+	{
+		set("guai",random(2)+random(2)+random(2));
+		set("init_guai",1);
+	}	
+	add_action("do_drop","drop");
+	add_action("do_cmds","",1);
+	add_action("do_map","map");
+}
+
+int alternative_die(object who)
+{
+        object target;
+        string file,msg;
+        if( !who )
+                return 1;
+        if( !userp(who) )
+        {
+        	who->clear_condition();
+        	if( who->is_dntg_hell() )
+        	{
+                	if( objectp(target = who->query_temp("last_damage_from"))
+                          && present(target,this_object()) )
+			{                          
+				who->reward_ob(target);
+				return 0;
+			}
+		}
+                else    message_vision(HIY"$N"HIY"「啪」的一声倒在地上，挣扎着抽动了几下就死了。\n"NOR,who);
+                who->move("/d/maze/dntg-hell/empty");
+                REMOVE_D->add_object(who,1);
+                return 0;
+        }
+        	
+        who->powerup(0,1);
+        tell_object(who,NOR"              "REV HIR" "NOR HBWHT HIM"大闹天宫"NOR REV HIR" "NOR HBCYN HIY"大闹阎罗地府，九幽十类除名 "NOR"\n");
+        tell_object(who,HIR"本次大闹天宫失败了！\n"NOR);
+        who->move("/d/changan/fendui",2);
+	who->delete_temp("mark/dntg-hell");
+	who->set("maze/dntg-hell",time());
+        who->delete_temp("maze");
+        if( who->query("combat_exp")>20000 )
+        	who->add("combat_exp",-20000);
+        if( who->query("daoxing")>2000 )	
+        	who->add("daoxing",-2000);
+        message_vision("\n坟上的土动了动，$N顶着满头的杂草钻了出来。\n",who); 
+        tell_object(who,HIR"你失去了20000点武学经验以及2年道行。"NOR"\n");
+        return 0;
+}
+
+int query_maze_x(){return query("maze/x");}
+int query_maze_y(){return query("maze/y");}
+
+int valid_leave(object who,string dir)
+{
+	string file,lg,tmp,name,long,dir1,dir2,*wangs,*xys,xy,wang,now,*temp,*nos,*exs;
+	int i,x,y,xx,yy;
+	object room;
+	
+	if( !userp(who) )
+		return ::valid_leave(who,dir);
+	
+	if( who->query("dntg/hell")=="done" )
+		return notify_fail(HIY"\n你又来到阴曹地府，顿时上下一片鸡飞狗跳：祸事来了！祸事来了！那位又来了！\n\n"NOR);
+	
+	file = base_name(this_object());
+	if( file==sprintf("/data/maze/%c/%s/dntg-hell/maze/entry",who->query("id")[0],who->query("id")) )
+	{
+		x = query_maze_x();
+		y = query_maze_y();
+		nos = ({x+"_"+y});
+		if( pointerp(exs = values(query("exits")))
+		 && sizeof(exs)>0 )
+		{
+			for(i=0;i<sizeof(exs);i++)
+			{
+				file = exs[i];
+				sscanf(file,"/data/maze/"+who->query("id")[0]+"/"+who->query("id")+"/dntg-hell/maze/%d/%d",x,y);
+				nos+= ({sprintf("%d_%d",x,y)});
+			}
+		}		 
+		
+		lg = "";
+		if( !who->query_temp("maze/init_map") )
+		{
+			wangs = ({
+				"秦广王","楚江王","宋帝王","仵官王","平等王",
+				"都市王","泰山王","轮转王","卞城王","阎罗王",
+			});
+			xys = ({
+				"1_0","3_0","0_1","4_1","0_3","4_3","1_4","3_4",
+				"2_4","0_2","4_2","2_0",
+			});
+			temp = wangs;				
+			for(i=0;i<sizeof(wangs);i++)
+			{
+				xy = xys[random(sizeof(xys))];
+				while( member_array(xy,nos)!=-1 )
+				{
+					xys-=({xy});
+					xy = xys[random(sizeof(xys))];
+				}	
+				sscanf(xy,"%d_%d",xx,yy);
+				lg+= "随机生成坐标 "+xx+","+yy+">>>>>";
+				wang = temp[random(sizeof(temp))];
+				lg+= "地府十王之"+wang+"。\n\n";
+				who->set_temp("maze/hellwang/"+xx+"_"+yy,wang);
+				temp-=({wang});
+				xys-=({xx+"_"+yy});	
+			}	
+			who->set_temp("maze/init_map",1);
+			who->set_temp("maze/maze_room",query("mazeobj"));
+			if( !arrayp(temp) || sizeof(temp)<1 )
+				lg+= "地府十王随机生成全部完成。\n";
+			else	lg+= "尚有"+(sizeof(wangs)-1)+"个地府十王生成失败。\n";
+			if( wizardp(who) )
+				tell_object(who,BLK+HIR+lg+NOR);
+		}
+		return ::valid_leave(who,dir);
+	}
+	if( file==sprintf("/data/maze/%c/%s/dntg-hell/maze/exit",who->query("id")[0],who->query("id"))
+	 || file==sprintf("/data/maze/%c/%s/dntg-hell/enter",who->query("id")[0],who->query("id"))
+	 || file==sprintf("/data/maze/%c/%s/dntg-hell/out",who->query("id")[0],who->query("id")) )
+		return ::valid_leave(who,dir);
+
+	x = query_maze_x();
+	y = query_maze_y();		
+	tmp = sprintf("%d_%d",x,y);
+	if( !stringp(name=who->query_temp("maze/hellwang/"+tmp)) 
+	 || strlen(name)<2 )
+		return ::valid_leave(who,dir);
+	if( y==0 )
+	{
+		dir1 = "south";
+		dir2 = "north";
+	}
+	else if( x==0 )
+	{
+		dir1 = "west";
+		dir2 = "east";
+	}
+	else if( x==4 )
+	{
+		dir1 = "east";
+		dir2 = "west";
+	}
+	else if( y==4 )
+	{
+		dir1 = "north";
+		dir2 = "south";
+	}
+	else	return ::valid_leave(who,dir);
+	if( !objectp(room=query("exits/"+dir1)) )
+	{
+		room = clone_object("/d/maze/dntg-hell/boss_room");
+		long = room->query("long");
+		long = replace_string(long,"%s",name);
+		room->set("long",long);
+		room->set("wang",name);
+		tmp = HIR"但听得"HIY+ ("/cmds/std/look.lpc")->query_default_dirs()[dir1]+"面"HIR"一阵人声鼎沸，隐约有人在呵斥："HIY+name+HIR"于此办公，禁止喧哗！"NOR"\n";
+		name = replace_string(name,"王","")+"殿";
+		room->set("short",name);
+		room->set("mazeobj",query("mazeobj"));
+		room->set("exits/"+dir2,base_name(this_object()));
+		room->set("owner",who);
+		room->set("init",1);
+		if( !room->init_wang(who) )
+			tell_object(who,HIR"【系统】十王殿"HIY+name+HIR"生成失败！请联系巫师。"NOR"\n");
+		else
+		{
+			tell_object(who,tmp);
+			set("exits/"+dir1,room);
+			REMOVE_D->add_obj(room,10800);
+		}	
+		return 2;
+	}
+	return ::valid_leave(who,dir);
+}

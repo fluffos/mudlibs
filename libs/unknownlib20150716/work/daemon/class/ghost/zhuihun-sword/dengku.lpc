@@ -1,0 +1,100 @@
+// dengku.c 油尽灯枯
+#include <ansi.h>
+#include <combat.h>
+inherit SSERVER;
+
+int perform(object me, object target)
+{
+	object weapon;
+	string msg,succ_msg;
+	int i,damage,*skills;
+	int dayphase = NATURE_D->query_current_day_phase();  
+
+	if( me->query_level()<50 )
+		return notify_fail("你的人物等级不够。\n");
+	if( time()-(int)me->query_temp("souldrinker_end") < 6 )                 
+        	return notify_fail("「油尽灯枯」耗费体力极大，不能连续使用！\n");        
+	if((int)me->query("force")<600 )                  
+        	return notify_fail("你体内的内力不足。\n");        
+	if((int)me->query("kee") < 500 )                
+        	return notify_fail("你的状态不佳，无力施展「油尽灯枯」！\n");    
+        if( !objectp(weapon = me->query_temp("weapon"))
+         || weapon->query("skill_type")!="sword"
+         || me->query_skill_mapped("sword")!="zhuihun-sword" )
+		return notify_fail("「油尽灯枯」是追魂剑法的绝招。\n");
+	skills = ({
+        	"zhuihun-sword","kusang-bang","hellfire-whip",
+	});     
+	for(i=0;i<sizeof(skills);i++)
+        {
+        	if((int)me->query_skill(skills[i],1) < 500)               
+                	return notify_fail("你的『"+to_chinese(skills[i])+"』等级需要500级！\n");
+        }
+		
+	if( !target ) target = offensive_target(me);        
+	if( !target        
+ 	 || !target->is_character()        
+ 	 || target->is_corpse()        
+ 	 || target==me 
+ 	 || !me->is_fighting(target) )
+		return notify_fail("你要对谁施展「油尽灯枯」？\n");        
+	
+	message_vision(NOR"\n"HIB"$N"HIB"身形飞转，剑招急若骤雨，漫天的剑影裹着一道道黑气向$n"HIB"卷了过去！\n"NOR,me,target);
+	me->set_temp("souldrinker_end",time());
+	me->add("force", -250);
+	me->receive_damage("kee",200);
+
+	msg = HIR"$n"HIR"只觉眼前剑光飞舞，周围鬼影幢幢！似乎已经身陷鲜血淋漓的十八层地狱中一样，连忙腾挪闪跃，竭力招架，试图冲破眼前的黑雾。\n"NOR;
+	succ_msg = HIB"$N"HIB"既占先机，$w"HIB"绵绵而至，$n"HIB"中了一剑，只觉一缕缕鲜血从伤口溅出，自身的灵魂逐渐飘出体外，身体越来越虚弱。\n"NOR;
+	me->add_temp("apply/attack",40);
+	me->set_temp("pfm_msg",1);
+	damage = 500+me->query_skill("tonsillitis",1);
+	if( dayphase<6 )
+		damage = damage*2;
+	damage = COMBAT_D->do_attack(me,target,me->query_temp("weapon"),TYPE_EXERT,msg,succ_msg,0,damage,"kee");
+	me->set_temp("pfm_msg",0);
+	me->add_temp("apply/attack",-40);		
+	if( damage>0 )
+        {
+		if( target->query("force")>500 )
+                {    
+                	target->set_temp("no_exert",([
+                        	"start" : time(),
+                        	"time"  : 5,
+                        	"msg"   : "你的内息已被"+me->name()+"的「油尽灯枯」 打乱，暂时无法使用内功。\n",
+                	]));    
+                	message_vision(HIR"$n觉得自己无法再运起气来了！\n"NOR, me, target);
+                }  
+	}
+	else    
+	{
+        	message_vision(HIW"\n可是$n"HIW"早有警觉，兔起鹘落，几下跳出了$P的剑幕。\n"NOR, me,target);
+        	me->add("force", -50);
+        	me->receive_damage("kee",100);
+        }
+	return 1;
+}
+
+int help(object me)
+{
+string str;
+if ( !me )      return 0;
+str = @LONG
+        外功名称：油尽灯枯
+        外功所属：追 魂 剑
+        外功效果：对敌进行内息攻击
+                  命中则封住对方的内息5秒
+                  否则内力消耗增加50点，气血消耗增加100点 
+                  冷却6秒
+        外功条件：
+        	  人物等级50级
+        	  烈火鞭500级
+                  哭丧棒500级
+                  追魂剑500级
+                  内力600点，消耗250点
+                  气血500点，消耗200点
+LONG;
+me->start_more(str);
+return 1;
+}
+

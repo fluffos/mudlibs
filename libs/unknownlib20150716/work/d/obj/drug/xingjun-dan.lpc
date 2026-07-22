@@ -1,0 +1,148 @@
+#include <ansi.h>
+inherit F_CLEAN_UP;
+inherit F_DBASE;
+inherit F_MOVE;
+inherit F_NAME;
+
+nosave int amount;
+
+void setup(){}
+
+int query_amount() { return amount; }
+
+private void destruct_me() 
+{ 
+        remove_call_out("destruct_me");
+        destruct(this_object()); 
+}
+
+void set_amount(int v)
+{
+    object dest;
+
+        if( v<=0 )
+        {
+           amount=0; 
+           call_out("destruct_me", 1);
+           return;
+        }
+        else 
+        {
+                amount = v;
+                this_object()->set_weight(v);
+        }
+}
+
+void add_amount(int v) { set_amount(amount+v); }
+
+string short()
+{
+        string id;
+        if( !stringp(id=query("owner_id")) )
+                id = "";
+        else    id = "["+id+"]";        
+        return chinese_number(query_amount()) + query("base_unit")+ ::short()+id;
+}
+
+varargs int move(mixed dest, int silent)
+{
+        object env, *inv;
+        int i, total, total0, result;
+        string file;
+
+        result= ::move(dest, silent);
+        if(env = environment()) 
+        {
+                file = base_name(this_object());
+                inv = all_inventory(env);
+                total = (int)query_amount();
+                total0=total;
+                for(i=0; i<sizeof(inv); i++) 
+                {
+                        if( inv[i]==this_object() ) 
+                                continue;
+                        if( base_name(inv[i])==file ) 
+                        {
+                                if( inv[i]->query("owner_id")
+                                 && query("owner_id")!=inv[i]->query("owner_id") )
+                                        continue;
+                                set("owner_id",inv[i]->query("owner_id"));      
+                                total += (int)inv[i]->query_amount();
+                                destruct(inv[i]);
+                        }
+                }
+                if(total!=total0)
+                        set_amount(total);
+        }
+        return result;
+}
+
+void init()
+{
+        if( userp(environment()) )
+        {
+                if( !query("owner_id") )
+                        set("owner_id",environment()->query("id"));
+        }
+        add_action("do_eat", "eat");
+}
+
+void create()
+{
+	set_name("行军丹",({"yingjun dan", "dan", "yao","drug"}));
+	if (clonep())
+		set_default_object(__FILE__);
+	else {
+		set("unit", "些");
+		set("base_unit","粒");
+		set("long", "官厅秘制灵药，能迅速恢复人物状态。副本外使用，效果减半。\n");
+		set("value", 0);
+		set("no_sell",1);
+		set("drug_type", "良药");
+	}
+	set("is_monitored",1);
+	setup();
+	set_amount(1);
+}
+
+int do_eat(string arg)
+{
+	int maze;
+	object me = this_player();
+	if( !arg || !id(arg) || !present(this_object(),me) )
+		return 0;
+	if( environment()->query("virtual_room") )
+		maze = 1;
+	else	maze = 0;	
+	if( maze!=1 && time()<me->query_temp("last_xdan")+3 )
+		return notify_fail("你不能频繁吃这个。\n");
+	else if( time()<me->query_temp("last_xdan")+1 )
+		return notify_fail("你不能频繁吃这个。\n");
+
+	me->set_temp("last_xdan",time());
+	if( maze )
+	{
+		me->powerup(1,0);
+		me->set("force",(int)me->query_maxforce()); 
+		me->set("mana",(int)me->query_maxmana());
+	}
+	else
+	{
+		message_vision(HIG"$N"HIG"从怀里小心翼翼的拿出一颗$n"HIG"送入嘴中，果然见$P脸上慢慢泛出红光！\n"NOR,me,this_object()); 
+		me->receive_curing("kee",me->query_maxkee()/4);
+		me->receive_curing("sen",me->query_maxsen()/4);
+		me->receive_heal("kee",me->query_maxkee()/4);
+		me->receive_heal("sen",me->query_maxsen()/4);
+		me->add("force",(int)me->query_maxforce()/4); 
+		if( me->query("force")>(int)me->query_maxforce()/2 )
+			me->set("force",(int)me->query_maxforce()/2); 
+		me->add("mana",(int)me->query_maxmana()/4);
+		if( me->query("mana")>(int)me->query_maxmana()/2 )
+			me->set("mana",(int)me->query_maxmana()/2); 
+	}	
+	if( query_amount()>1 )
+		add_amount(-1);
+	else	destruct(this_object());
+	return 1;	
+}
+

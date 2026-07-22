@@ -1,0 +1,90 @@
+#include <ansi.h>
+#include <combat.h>
+inherit SSERVER;
+
+int cast(object me, object target)
+{	
+	int damage,i;
+	string msg,succ_msg;
+	object *enemy;
+	if( me->query_level()<40 )
+		return notify_fail("你的人物等级不够。\n");
+	if( me->query("mana")<450 )
+		return notify_fail("你的法力不够。\n");
+	if( me->query_skill("spells")<600 )
+		return notify_fail("你的法术修为过低。\n");
+	if( time()<me->query_temp("XST_bfrw")+6 )
+		return notify_fail("你不能频繁调用天气元气。\n");
+	
+	me->clean_up_enemy();                
+        if( !me->is_fighting() )
+        	return notify_fail("「冰风刃舞」只能战斗中使用。\n");
+        enemy = me->query_enemy();
+	if( !intp(i=sizeof(enemy)) 
+	 || i<1 )
+		return notify_fail("「冰风刃舞」只能战斗中使用。\n");
+			
+	if( !target ) target = offensive_target(me);
+	if( !target
+	||	!target->is_character()
+	|| target==me
+	||	!me->is_fighting(target) )
+		return notify_fail("「冰风刃舞」只能对战斗中的对手使用。\n");
+
+	damage = random(me->query("mana_factor"))+100;
+	if( me && me->query_level()>=90 && me->query("shentong/90") )
+	{
+		if( damage>5500 )
+			damage = 5500;
+	}
+	else
+	{
+		if( damage>1500 )
+			damage = 1500;
+	}	
+	if( COMBAT_D->query_message_type(me,target)<2 )	
+		message_vision(HIW"$N"HIW"口念法咒，将手一指，凭空刮起一阵怪风，夹带着丝丝寒意。一会功夫，寒风中就开始出现无数冰碴！\n"NOR,me);
+	else	message_vision(HIW"$N"HIW"施展了「"HIR"冰风刃舞"HIW"」。\n"NOR,me);
+	me->add("mana",-450);
+	me->set_temp("XST_bfrw",time());
+	msg = HIC"一道霞光，从寒风中窜出一个刃形气旋，带着丝丝寒意，朝着$n"HIC"$l劈去！\n"NOR;
+	me->add_temp("apply/attack",100);
+	me->set_temp("pfm_msg",1);
+	
+	while(i--)
+	{
+		target = enemy[i];
+		if( !target || !target->is_character()
+         	  || target->is_corpse()
+         	  || target==me
+         	  || !me->is_fighting(target) )
+			continue;
+		if( target->query("family/family_name")=="大雪山"
+		 || target->query("family/family_name")=="东海龙宫" )
+		 	continue;				
+		succ_msg = ({
+			WHT"结果「噗嗤」一声劈出一道血淋淋的伤口！\n"NOR,
+        		WHT"结果只听「噗」地一声，$n"WHT"的$l血如泉涌，瞬间结了一层薄冰，痛得$p咬牙切齿！\n"NOR,
+        		WHT"结果「噗」地一声砍出一道又长又深的伤口，冒着丝丝寒气，溅得$n"WHT"满脸鲜血！\n"NOR,
+        		WHT"结果只听见$n"WHT"一声惨嚎，$n"WHT"的$l被劈开一道深及见骨的可怕伤口，尚冒着丝丝寒气！\n"NOR,
+		})[random(3)];
+		damage = COMBAT_D->do_attack(me,target,me->query_temp("weapon"),TYPE_CAST,msg,succ_msg,0,damage,"kee");
+		if( damage>0 && !target->is_busy() )
+			target->start_busy(3);
+	}
+
+	me->set_temp("pfm_msg",0);
+	me->add_temp("apply/attack",-100);
+	return 1;				
+}
+
+int help(object me)
+{
+	write(@HELP
+	神通名称：冰风刃舞
+	神通效果：对区域内所有敌方进行物理攻击
+		  冷却时间6秒
+		  对龙宫、大雪山弟子无效	
+HELP);		
+	return 1;		
+}

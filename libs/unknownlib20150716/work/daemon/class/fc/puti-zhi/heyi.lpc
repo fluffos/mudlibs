@@ -1,0 +1,122 @@
+#include <ansi.h>
+#include <combat.h>
+inherit SSERVER;
+
+void perform_out(object me, object target);
+
+int perform(object me, object target)
+{
+        object weapon;
+        string msg;
+        int skill,extra;
+	
+	if( me->query_level()<9 )
+		return notify_fail("你的人物等级不够。\n");
+   	if((int)me->query("force") < 300 )
+     		return notify_fail("你的内力不足。\n");
+        if((int)me->query_skill("puti-zhi",1) < 60)
+        	return notify_fail("你的「菩提指」等级不够。\n");
+        if((int)me->query_skill("unarmed",1) < 80)
+        	return notify_fail("你的「扑击格斗」等级不够。\n");
+        if((int)me->query_skill("liangyi-sword",1)<60)
+        	return notify_fail("你的「两仪剑法」等级不够。\n");
+	if( time()<me->query_temp("puti_heyi")+5 )
+		return notify_fail("你不能频繁使用「阴阳合一」。\n");
+		
+        if( !target ) target = offensive_target(me);
+        if( !target
+         || !target->is_character()
+         || target->is_corpse()
+         || target==me
+         || !me->is_fighting(target) ) 
+                return notify_fail("你要用这招「阴阳合一」打谁？\n");
+
+	weapon = me->query_temp("weapon");
+	skill=(int)me->query_skill("puti-zhi",1);
+	extra=skill/5;
+	if( extra>50 )
+		extra = 50;
+
+	msg = NOR"\n"GRNYEL"$N"NOR GRNYEL"退了两步，突然身子微侧，紧跟着身形猛进，指法连环，直击$n"NOR GRNYEL"上三路要害！"NOR"\n";
+        me->add("force", -50);
+        me->set_temp("puti_heyi",time());
+	me->set_temp("pfm_msg",1);
+	
+	me->add_temp("apply/attack",15);
+	COMBAT_D->do_attack(me,target,me->query_temp("weapon"),TYPE_PERFORM,msg,0,({"头部", "颈部", "胸口",})[random(3)]);
+	COMBAT_D->do_attack(me,target,me->query_temp("weapon"),TYPE_PERFORM,0,0,({"头部", "颈部", "胸口",})[random(3)]);
+	COMBAT_D->do_attack(me,target,me->query_temp("weapon"),TYPE_PERFORM,0,0,({"头部", "颈部", "胸口",})[random(3)]);
+	me->add_temp("apply/attack",-15);
+	me->set_temp("pfm_msg",0);
+	
+	if( me->query_level()>=30 && living(me)
+	 && target && me->is_fighting(target) )
+	{
+		message_vision(HIY"\n紧接着$N"HIY"十指招式一变，开始凝聚灵台秘传「"HIW"天雷气"HIY"」………… \n"NOR,me);
+        	me->start_call_out( (: call_other, __FILE__, "perform_out", me,target:),1+random(3));
+        }
+        return 1;
+}
+           
+void perform_out(object me, object target)
+{
+	object weapon;
+        string msg,succ_msg;
+        int damage;
+        
+        if( !me || !living(me) )
+        	return;
+        
+        if( !target || !me->is_fighting(target) || !living(target) )
+        {
+                message_vision(HIY"\n$N"HIY"苦无敌手，散去了指尖凝聚的「"HIW"天雷气"HIY"」。\n"NOR,me);    
+                return;
+        }
+        if((int)me->query("force",)<100 )
+        {
+        	message_vision(HIY"\n$N"HIY"内息不足，散去了指尖凝聚的「"HIW"天雷气"HIY"」。\n"NOR,me); 
+        	return;
+        }
+
+	me->add("force",-50);
+	me->set_temp("puti_heyi",time());
+	msg = "\n"HIY"$N"HIY"忽然仰天大喝一声“"HIW"天 …… 雷 …… 合 …… 一"HIY"”，十指刹那间腾起灼目雷光，一阵炙热的罡气随指式狂飙而出，朝着$n"HIY"势不可挡！\n"NOR;
+	succ_msg = ({
+		HIG"$n"HIG"避无可避，十指已经到了$l！\n"NOR,
+		HIW"结果$n"HIW"脸色一下变得惨白，昏昏沉沉接连退了好几步。\n"NOR,
+		HIR"结果重重地击中，$n"HIR"「哇」地一声吐出一口鲜血！\n"NOR,
+		RED"结果「轰」地一声，$n"RED"全身气血倒行，口中鲜血狂喷而出。\n"NOR,
+		HIY"结果只听见几声喀喀轻响，$n"HIY"一声惨叫，像滩软泥般塌了下去！\n"NOR,
+	})[random(5)];	
+	me->set_temp("pfm_msg",1);
+	me->add_temp("apply/attack",25);
+	damage = COMBAT_D->do_attack(me,target,me->query_temp("weapon"),TYPE_EXERT,msg,succ_msg,0,500,"kee");
+	me->add_temp("apply/attack",-25);
+	me->delete_temp("pfm_msg");
+	
+	if( damage<1 )
+		message_combatd(HIW"\n$N"HIW"危急中突然伏地翻滚而出，避过了这致命一击，已吓得脸色苍白。\n"NOR,target);
+}
+
+int help(object me)
+{
+	string str;
+	if( !me )      
+		return 0;
+str = @LONG
+        外功名称：阴阳合一
+        外功所属：菩 提 指
+        外功效果：连续攻击对方三次
+        	  冷却5秒
+                  有隐藏追加
+        外功条件：
+        	  人物等级9级
+        	  菩提指60级
+        	  扑击格斗80级
+        	  两仪剑法60级	
+                  内力300点，消耗50-100点
+
+LONG;
+	me->start_more(str);
+	return 1;
+} 

@@ -1,0 +1,121 @@
+#include <ansi.h>
+inherit "/d/maze/qingling-3/room.lpc";
+
+nosave string long = @LONG
+这里便是三层的深处，四周笼罩在一片黑暗之中。隐约之中一丝丝血腥味传到你的鼻中。
+四周一片寂静，叫人不由心生警惕。
+LONG;
+
+void create() 
+{ 
+        set("short", "始皇陵三层");
+        set("channel_id","始皇陵三层副本");
+        set("long",long);    
+        set("virtual_room", 1); 
+        set("exits", ([
+                "east" : __DIR__"maze/exit",
+        ])); 
+        set("alternative_die",1);   
+        set("item_desc",([
+                "east" : "这里黑布隆冬的，你看不清楚。\n",
+        ]));  
+        setup();
+} 
+
+int check_player_level(object who)
+{
+	int i,max;
+	object leader,*t;
+	if( !who )
+		return 0;
+	max = who->query_level();
+	if( !objectp(leader=who->query_leader())
+	 || !pointerp(t=leader->query_team()) )
+	 	return max;
+	for(i=0;i<sizeof(t);i++)
+	{
+		if( max<t[i]->query_level() )
+			max = t[i]->query_level();
+	}	
+	return max;
+}	
+
+void create_guai()
+{
+	object boss,*inv;
+	int i,max=59;
+	inv = all_inventory();
+	for(i=0;i<sizeof(inv);i++)
+	{
+		if( userp(inv[i]) && check_player_level(inv[i])>max )
+			max = check_player_level(inv[i]);
+	}
+	CHANNEL_D->do_channel(this_object(),"sys","本轮boss等级为"+max);
+	boss = new("/d/maze/qingling-3/npc/boss");
+	boss->information(max);
+	boss->move(this_object());
+	set("boss",1);
+	message_vision(HIR"\n平地刮起一道旋风，一股股尸臭顿时弥漫了整个房间，只见$N"HIR"从黑暗之中走了出来！\n\n"NOR,boss);
+}
+
+void check_jiang()
+{
+	object *inv;
+	string *names,str;
+	int i,k,f;
+	
+	names = ({
+		"白起","王翦","王贲","蒙恬","蒙毅","赵奢",
+		"廉颇","田单","乐毅","吴起","匡章","李牧",
+	});
+	
+	str = "    两边是十二尊将俑，个个鼎鼎大名，分别是：\n";
+	reset_eval_cost();
+	inv = all_inventory();
+	for(k=0;k<sizeof(names);k++)
+	{
+		f = 0;		
+		for(i=0;i<sizeof(inv);i++)
+		{
+
+			if( userp(inv[i])
+		 	&& inv[i]->query_temp("maze/kill_"+names[k]) )
+			{
+				set(names[k],1);
+				add("num",1);
+				f = 1;				
+			}
+		}
+		if( f==1 )
+			str+= GRN+names[k]+NOR;
+		else	str+= HIG+names[k]+NOR;
+		if( k<sizeof(names)-1 )
+			str+= "、";
+		else	str+= "。";			
+	}
+	str+= "\n";
+	set("long",long+str);
+	
+	if( query("num")>=6 && !query("boss") )
+	{
+		message("vision","\n\n黑暗之中传来一阵咆哮：”是哪个吃了狗胆，居然敢打伤孤的爱将？！“\n\n",this_object());
+		remove_call_out("create_guai");
+		call_out("create_guai",3+random(3));
+	}
+	else
+	{
+		remove_call_out("check_jiang");
+		delete("checking");
+		call_out("check_jiang",1+random(5));
+	}
+}
+
+void init()
+{
+	::init();
+	if( !query("checking") )
+	{
+		set("checking",1);
+		check_jiang();
+	}
+}

@@ -1,0 +1,998 @@
+// channeld.c
+// Modify by Jingxue for XYCQ 6.10.2003
+// Modify by Qiushui for TSRJ 1.30.2004
+#include <ansi.h>
+inherit F_DBASE;
+
+#define REMOTE_Q    "/adm/daemons/network/services/gemote_q.lpc"
+        
+mapping channels = ([
+        "sys":  ([      
+                "msg_speak"     : NOR HIR "【系统】"+BLK"%s：%s\n" NOR, 
+                "wiz_only"      : 1, 
+                "msg_color"         : NOR HIR BLK,
+                ]),
+        "wiz":  ([      
+                "msg_speak"     : NOR HIW "【巫师】%s：%s\n" NOR,
+                "msg_emote"     : NOR HIW "【巫师】%s\n" NOR,
+                "wiz_only"      : 1,
+                "msg_color"         : NOR HIW,
+                ]),
+        "xyj":  ([      
+                "msg_speak"     : NOR HIR "【西游记】%s"NOR HIR"：%s\n" NOR,
+                "msg_emote"     : NOR HIR "【西游记】%s\n" NOR,
+//                "intermud"      : GCHANNEL, 
+                "channel"       : "xyj",
+//                "filter"        : (:$1["MUDLIB"]=="A Journey to the West" :) ,
+                "msg_color"         : NOR HIR,
+                ]),
+        "es":   ([  
+                "msg_speak"     : NOR WHT "【千里传音】%s"NOR WHT"：%s\n" NOR,
+                "msg_emote"     : NOR WHT "【千里传音】%s\n" NOR,
+//                "intermud"      : GCHANNEL, 
+                "channel"       : "es",
+                "filter"        : 1,
+                "msg_color"         : NOR WHT,
+                ]), //keep the channel name as "es" to be compatible with other ES2 type muds.
+        "sldh": ([      
+                "msg_speak"     : NOR HIW "【水陆大会】%s"NOR HIW"：%s\n" NOR,
+                "msg_emote"     : NOR HIW "【水陆大会】%s\n" NOR,
+                "msg_color"         : NOR HIW,
+                ]),
+        "chat": ([      
+                "msg_speak"     : NOR HIC "【谈天说地】%s"NOR HIC"：%s\n" NOR,
+                "msg_emote"     : NOR HIC "【谈天说地】%s\n" NOR,
+                "msg_color"         : NOR HIC,
+                ]),
+        "job": ([      
+                "msg_speak"     : NOR HIG "【任务】%s"NOR HIG"：%s\n" NOR,
+                "msg_emote"     : NOR HIG "【任务】%s\n" NOR,
+//                "anonymous"     : "传说",
+                "msg_color"         : NOR HIG,
+                ]),
+        "rumor":([      
+                "msg_speak"     : NOR HIM "【小道消息】%s"NOR HIM"：%s\n" NOR,
+                "msg_emote"     : NOR HIM "【小道消息】%s\n" NOR,
+                "msg_color"         : NOR+HIM,
+                "anonymous"     : "某人",
+                ]),
+        "music":([      
+                "msg_speak"     : NOR HIM"【心笙乐府】%s"NOR HIM"唱着：%s\n" NOR,
+                "msg_color"         : NOR HIM,
+                ]),
+        "club":([  
+                "msg_speak"     : NOR HIW "【帮派】%s"NOR HIW"：%s\n" NOR,
+                "msg_emote"     : NOR HIW "【帮派】%s" NOR,
+                "msg_color"         : NOR HIW,
+                "bh_only"    : 1, 
+                ]), 
+        "mp":([  
+                "msg_speak"     : NOR HIG "【门派】%s"NOR HIG": %s\n" NOR,
+                "msg_emote"     : NOR HIG "【门派】%s" NOR,
+                "msg_color"         : NOR HIG,
+                "menpai_only"   : 1,
+                ]),
+]);
+
+string chan_infor,party,menpai;
+string cs,faction;
+void add_rumor(object me,string msg);
+
+int can_chat( string sArg ) //允许说话?
+{
+	return 1 ;
+}
+
+mapping query_channels(){ return channels; }
+
+void create()
+{
+	seteuid(getuid());      // This is required to pass intermud access check.
+	set("channel_id", "频道精灵");
+	this_object()->set("rumor_point",0);
+}
+
+varargs int do_channel(object me, string verb, string arg, int emote,int allow_chat)
+{
+	object *ob;
+	string *tuned_ch, who, arg1, color,arg2;
+	int time,count,count1,last_chat,len;
+
+	if( sizeof(verb)>0 )
+        {
+        	if( verb[sizeof(verb)-1] == '*' ) 
+                {
+                	emote = 1;
+                	verb = verb[0..<2];
+                }
+        }
+	if( arg && strlen(arg)>240 ) 
+        	return 0;
+	if( !mapp(channels) || undefinedp(channels[verb]) )
+        	return 0;
+	if( !wizardp(me) && arg && !can_chat(arg) )
+        	return 0 ;
+	if( userp(me) && channels[verb]["sys_only"] && !wizardp(me) )
+        	return 0;       
+	if( channels[verb]["system_msg"] )
+        {
+        	if( !userp(me) )
+                {
+                	party = me->query("system_msg");
+                	if( party && stringp(party) )
+                        	channels[verb]["msg_speak"] = NOR HIC"【"+party+NOR HIC"】%s：%s\n" NOR;
+		} 
+	}	      
+	if( !allow_chat ) 
+        {
+        	if( channels[verb]["wiz_only"] && !wizardp(me) && userp(me) )
+                	return 0;
+		if( channels[verb]["bh_only"] )
+                {
+               		if( !me->query("banghui") )
+                       		return notify_fail("你还是先加入一个帮派再说吧。\n");
+               	}
+       		if( channels[verb]["menpai_only"] )
+               	{
+               		if( !me->query("family/family_name") )
+                       		return notify_fail("你是哪个门派的。\n");
+               	}
+        	if( emote && undefinedp(channels[verb]["msg_emote"])  ) 
+               		return notify_fail("对不起，这个频道不支持 emote 。\n");
+	
+        	time=time();
+        	if( me->query("channel/chat_block") && (time-me->query("channel/chat_block"))<0 )
+                	return notify_fail("你的交谈频道被暂时关闭了。\n");
+        	count=me->query("channel/chat_count");
+        	count1=sizeof(explode(" "+arg,"\n"))/3+1;
+        	count1+=sizeof(arg)/200;
+        	count+=count1;
+        	last_chat=me->query("channel/last_chat");
+        	if(count>2) 
+                {
+                	count=0;
+                	me->set("channel/last_chat",time);
+                	if(time==last_chat || count1>2) 
+                        {
+                        	me->set("channel/chat_block",time+180);
+                        		return notify_fail("因为一次讲话太多，你的交谈频道被暂时关闭了。\n");
+                        }
+                }
+        	me->set("channel/chat_count",count);
+        	arg2 = me->query_temp("last_channel_msg");
+        	if( !arg2 )
+                	arg2 = "...";
+        	if( arg && COLOR_D->clean_color(arg)==COLOR_D->clean_color(arg2) )     
+                	return notify_fail("用交谈频道说话请不要重复相同的讯息。\n");
+
+        	tuned_ch = me->query("channels");
+        	if( !pointerp(tuned_ch) )
+                	me->set("channels", ({ verb }) );
+        	else if( member_array(verb, tuned_ch)==-1 )
+                	me->set("channels", tuned_ch + ({ verb }) );
+
+	        if( emote && !channels[verb]["intermud_emote"]) 
+                {
+        	        string vb, emote_arg;
+                		notify_fail("本站目前并没有 "+arg+" 这个Emote。\n");
+                	if( nullp(arg) ) return 0;
+                	if( sscanf(arg, "%s %s", vb, emote_arg)!= 2 ) 
+                        {
+                        	vb = arg;
+	                        emote_arg = "";
+        		}
+                	color=channels[verb]["msg_color"];
+                	if( channels[verb]["anonymous"] )
+				arg = EMOTE_D->do_emote(me, vb, emote_arg, color, 1, 1);
+                	else    
+                	{
+                        	arg = EMOTE_D->do_emote(me, vb, emote_arg, color, 1, 0,!undefinedp(channels[verb]["intermud"]));
+                        	if( !arg ) 
+                                {
+                                	string id, site;
+	                                if( sscanf(emote_arg, "%s@%s", id, site)==2) 
+                                        {
+        	                                int age = me->query("mud_age");
+                	                        if( !wizardp(me) ) 
+                        			{
+                                                	if( age<3600 ) 
+                                                        	return notify_fail("你现在还不能使用这个频道。\n");
+	                                                else if( age<86400 ) 
+                                                        {
+        	                                                if( me->query("sen")<30 ) 
+                	                                                return notify_fail ("你现在精神不足，不能使用这个频道。\n");
+                        	                                me->receive_damage("sen",10);
+                                                        }
+                                                }
+                                        	REMOTE_Q->send_msg(channels[verb]["channel"], me,vb, id, site, channels[verb]["filter"]);
+                                        	return 1;
+                                        }
+                                }
+                        }
+                	if( !arg )     return 0;
+                }
+        }
+
+	if( channels[verb]["system_msg"] )
+        {
+        	if( userp(me) ) who = channels[verb]["system_msg"];
+        	else    who = COLOR_D->clean_color(me->name());
+        }
+	else if( channels[verb]["anonymous"] ) 
+        {
+        	who = channels[verb]["anonymous"];
+        	if( userp(me) ) 
+                {
+                	if( me->query("sen")<50 )  
+                        	return notify_fail("你已经没有精神散布谣言了。\n");
+                	me->receive_damage("sen",10);
+                	do_channel( this_object(), "sys", sprintf("谣言：%s(%s)。", me->name(1),me->query("id")));
+                }
+        }
+	else if( userp(me) || !stringp(who = me->query("channel_id")) ) 
+        {
+        	who = me->query("name");
+        	if( me->query("id") ) 
+                	who+= "(" + capitalize(me->query("id")) + ")";
+        }
+
+	ob = filter_array( users(), "filter_listener", this_object(), channels[verb] );
+	if( !arg ) arg = "．．．";
+	len = strlen(arg);
+	while(len>1 && arg[len-1]=='\n')
+        	arg = arg[0..((len--)-2)];
+        //remove excessive return at the end. by mon 9/20/97
+	if( wizardp(me) )        
+		arg = COLOR_D->replace_color(arg,1);
+	if( userp(me) ) 
+        	arg1 = replace_string(arg, "$N", me->name());
+	else    arg1 = arg;
+
+	if( emote ) 
+        {
+        	if( channels[verb]["intermud_emote"] ) 
+	                arg1 = who + " " + arg;
+        }
+	if( arrayp(channels[verb]["extra_listener"]) ) 
+        {
+        	channels[verb]["extra_listener"] -= ({ 0 });
+        	if( sizeof(channels[verb]["extra_listener"]) )
+                	channels[verb]["extra_listener"]->relay_channel(me, verb, arg);
+        }
+	if( !undefinedp(channels[verb]["intermud"])
+   	 && base_name(me)!=channels[verb]["intermud"] ) 
+	{
+        	if( userp(me) ) 
+                {
+                	int age = me->query("mud_age");
+//                arg = replace_string(arg, "$N", me->name()+"("+capitalize(me->query("id"))+"@"+Mud_name()+")",1);
+                	arg = replace_string(arg, "$N", me->name());
+                	if( !wizardp(me) ) 
+                        {
+                        	if( age<3600 ) 
+                                	return notify_fail("你现在还不能使用这个频道。\n");
+                        	else if( age<86400 ) 
+                                {
+                                	if( me->query("sen")<30 ) 
+                                        	return notify_fail("你现在精神不足，不能使用这个频道。\n");
+                                	me->receive_damage("sen",10);
+                                }
+                        }
+                }
+        	channels[verb]["intermud"]->send_msg(channels[verb]["channel"], me->query("id"), me->name(1), arg, emote, channels[verb]["filter"] );
+        }
+
+	if( emote ) 
+        	message( "channel:" + verb,sprintf( channels[verb]["msg_emote"], arg1 ), ob );
+	else    message( "channel:" + verb,sprintf( channels[verb]["msg_speak"], who, arg1 ), ob );
+
+	if( userp(me) ) 
+        	me->set_temp("last_channel_msg", arg);
+	if( channels[verb]["anonymous"] ) 
+        	add_rumor(me,arg); 
+	return 1;
+}
+
+int filter_listener(object ppl, mapping ch)
+{
+	if( !environment(ppl) ) return 0;
+	if( ch["wiz_only"] ) return wizardp(ppl);
+	if( ch["bh_only"] )
+        	return ( wizardp(ppl)&& (!ppl->query("env/bh") || ppl->query("env/bh")==party))|| party == ppl->query("banghui/banghui"); 
+	if( ch["menpai_only"] )
+        	return ( wizardp(ppl)|| ppl->query("family/family_name")==menpai); 
+	return 1;
+}
+
+void register_relay_channel(string channel)
+{
+	object ob;
+
+	ob = previous_object();
+	if( undefinedp(channels[channel]) || !ob ) return;
+	if( arrayp(channels[channel]["extra_listener"]) ) 
+        {
+        	if( member_array(ob, channels[channel]["extra_listener"]) >=0 ) 
+                	return;
+        	channels[channel]["extra_listener"] += ({ ob });
+        } 
+	else    channels[channel]["extra_listener"] = ({ ob });
+}
+
+void add_rumor(object me,string msg)
+{
+	object ob = this_object();
+	string msg_id;
+	int i;
+	int detect_chance;
+	int rumor_point = ob->query("rumor_point");
+	rumor_point++;
+	if( rumor_point>20 ) 
+        	rumor_point-=20;
+	i = sizeof(msg_id);
+	msg_id = "rumor_msg_0";
+	i = sizeof(msg_id);
+	msg_id[i-1]+= rumor_point;
+	ob->set(msg_id,msg);
+	msg_id = "rumor_id_0";
+	i = sizeof(msg_id);
+	msg_id[i-1]+= rumor_point;
+	ob->set("rumor_point",rumor_point);
+	detect_chance = 31-(int)(me->query("daoxing")/33333);
+	if( !userp(me) || wizardp(me) || random(100)>detect_chance )
+        {
+        	ob->set(msg_id,"none");
+	        return;
+        }
+	ob->set(msg_id,me->query("name")+"("+me->query("id")+")");
+	return;                 
+}
+
+string query_rumor_msg(int num)
+{
+	string msg_id;
+	string msg;
+	int i;
+	msg_id = "rumor_msg_0";
+	i = sizeof(msg_id);
+	msg_id[i-1]+= num;
+	return this_object()->query(msg_id);
+}
+
+string query_rumor_id(int num)
+{
+	string msg_id;
+	string msg;
+	int i;
+	msg_id="rumor_id_0";
+	i = sizeof(msg_id);
+	msg_id[i-1]+= num;
+	return this_object()->query(msg_id);
+}
+
+nosave mapping JueZhao = ([
+/**************************月宫**************************/
+	"jueqingbian" : ([
+		"perform_changhen"	: "长恨天歌",
+		"perform_qingmang"	: "青芒三式",
+		"perform_moon"		: "冷浸溶溶月",
+		"perform_sanshou"	: "三无三不手",
+	]),
+	"snowsword" : ([
+		"perform_tian"		: "漫天飞雪",
+		"perform_dance"		: "清歌妙舞",
+		"perform_huifeng"	: "回风舞柳",
+		"perform_lei"		: "风月凝泪",
+		"perform_qin"		: "倾城倾国",
+	]),
+	"moondance" : ([
+		"perform_dodge.wu"	: "莲步轻舞",
+		"perform_dodge.yixiao"	: "倾城一笑",
+	]),
+	"baihua-zhang" : ([
+		"perform_flower"	: "天女散花",
+		"perform_diezhang"	: "叠掌",
+	]),
+	"moonforce" : ([
+		"exert_yuanyue"		: "圆月诀",
+	]),
+	"moonshentong" : ([
+		"cast_shiyue"		: "蚀月咒",
+		"cast_mihun"		: "迷魂咒",
+		"cast_arrow"		: "落日神箭",
+		"cast_hufa"		: "召唤护法",
+		"cast_huimeng"		: "回梦咒",
+		"cast_huahu"		: "太阴·化狐",
+		"cast_huashe"		: "太阴·化蛇",
+	]),
+/************************百花谷**************************/
+	"wuyou-steps" : ([
+		"perform_dodge.wunian"	: "无念无忧",
+		"perform_dodge.zizai"	: "自在逍遥",
+		"perform_dodge.liaorao"	: "百花缭绕",
+	]),
+	"rainbow-zhi" : ([
+		"perform_jingshen"	: "惊神一击",
+		"perform_changhong"	: "长虹经天",
+	]),
+	"siji-zhang" : ([
+		"perform_jingshen"	: "惊神一击",
+		"perform_siji"		: "四季飞花",
+	]),
+	"zongheng-sword" : ([
+		"perform_yumei"		: "雨激梅花半瓣香",
+		"perform_zongheng"	: "纵横四海",
+		"perform_heng"		: "横剑",
+		"perform_zong"		: "纵剑",
+		"perform_qijian"	: "纵横七剑",
+	]),
+	"brightjade-force" : ([
+		"exert_feng"		: "寒玉灵风",
+	]),
+	"baihua-xianfa" : ([
+		"cast_flower"		: "百花飞舞",
+	]),
+/************************蜀山派**************************/
+	"chuanyun-zhang" : ([
+		"perform_chuanyun"	: "穿云裂石",
+		"perform_fuyu"		: "覆雨翻云",
+		"perform_yunqi"		: "云起龙骧",
+		"perform_yunchu"	: "云出无心",
+	]),
+	"feilong-shou" : ([
+		"perform_biao"		: "铜钱镖",
+		"perform_zhaixing"	: "凌空摘星",
+		"perform_qiankun"	: "乾坤一掷",
+	]),
+	"yujianshu" : ([
+		"perform_yujian"	: "御剑术",
+		"perform_qijue"		: "七诀剑气",
+		"perform_zhan"		: "斩龙诀",
+		"perform_wanjian"	: "万剑诀",
+		"perform_jianshen"	: "剑神",
+	]),
+	"xianfeng-yunti" : ([
+		"exert_chaoyuan"	: "五气朝元",
+		"exert_huti"		: "真元护体",
+		"exert_zhanqi"		: "天罡战气",
+	]),
+	"tianshi-fufa" : ([
+		"cast_fu"		: "天师符",
+		"cast_ding"		: "束身定",
+		"cast_feng"		: "禁咒封",
+		"cast_zhan"		: "魔焰闪空斩",
+	]),
+/************************大雪山**************************/
+	"bainiao-jian" : ([
+		"perform_feijian"	: "飞鸟投林",
+		"perform_chaofeng"	: "百鸟朝凤",
+		"perform_fengwu"	: "凤舞九天",
+		"perform_qijue"		: "凤凰七绝",
+	]),
+	"bingpo-blade" : ([
+		"perform_ningxue"	: "冰谷凝血",
+		"perform_daobo"		: "雪风刀波",
+		"perform_bingxue"	: "冰风雪雨",
+		"perform_qianshe"	: "千蛇出洞",
+	]),
+	"cuixin-zhang" : ([
+		"perform_cuixin"	: "摧心掌",
+		"perform_suoxin"	: "冰爪锁心",
+	]),
+	"xiaoyaoyou" : ([
+		"perform_dodge.xiaoyao"	: "逍遥游",
+	]),
+	"ningxie-force" : ([
+		"exert_ningxie"		: "凝血大法",
+	]),
+	"dengxian-dafa" : ([
+		"cast_hufa"		: "召唤护法",
+		"cast_juanbi"		: "扭转乾坤",
+		"cast_tuntian"		: "妖兽吞天",
+		"cast_jieti"		: "天魔解体",
+		"cast_niepan"		: "凤凰涅磐",
+		"cast_yaoshen"		: "骤现妖身",
+	]),
+/*************************龙宫***************************/
+	"dragonfight" : ([
+		"perform_leidong"	: "雷动九天",
+		"perform_sheshen"	: "舍身技",
+		"perform_shenglong"	: "升龙技",
+		"perform_yansha"	: "黑龙炎杀",
+	]),
+	"fengbo-cha" : ([
+		"perform_fengbo"	: "无尽风波",
+		"perform_bibo"		: "碧波浪涌",
+		"perform_dhwl"		: "大海无量",
+	]),
+	"huntian-hammer" : ([
+		"perform_break"		: "混元一破",
+		"perform_fan"		: "翻江倒海",
+	]),
+	"dragonstep" : ([
+		"perform_dodge.xiaoyao"	: "龙啸九天",
+	]),
+	"dragonforce" : ([
+		"exert_roar"		: "碧海龙吟",
+	]),
+	"seashentong" : ([
+		"cast_hufa"		: "召唤护法",
+		"cast_freez"		: "雪舞风灵",
+		"cast_water"		: "双龙水柱",
+	]),		    
+/*************************普陀***************************/
+	"lunhui-zhang" : ([
+		"perform_pudu"		: "慈光普渡",
+		"perform_fire"		: "无妄之火",
+		"perform_chaodu"	: "超生渡化",
+		"perform_sandu"		: "佛门三渡",
+	]),
+	"cibeidao" : ([
+		"perform_cibei"		: "慈悲双刀",
+		"perform_lian"		: "慈悲连环",
+		"perform_sheshen"	: "舍身喂鹰",
+	]),
+	"jienan-zhi" : ([
+		"perform_lingxi"	: "灵犀一指",
+		"perform_wanfo"		: "万佛朝宗",
+		"perform_wuzhi"		: "五指山",
+	]),
+	"buddhism" : ([
+		"cast_lianhua"		: "莲花宝座",
+		"cast_bighammer"	: "大力降魔杵",
+		"cast_hufa"		: "召唤护法",
+	]),
+/************************无底洞**************************/
+	"qixiu-jian" : ([
+		"perform_yaowu"		: "妖雾冲天",
+		"perform_zxzx"		: "追腥逐血",
+		"perform_duoming"	: "夺命七剑",
+	]),
+	"kugu-blade" : ([
+		"perform_pozhan"	: "破绽百出",
+		"perform_diyu"		: "无边地狱",
+		"perform_xiao"		: "刀剑啸",
+		"perform_shendao"	: "枯骨祭血神刀",
+	]),
+	"lingfu-steps" : ([
+		"perform_dodge.bianfu"	: "化身为蝠",
+	]),
+	"yinfeng-zhua" : ([
+		"perform_wuji"		: "魔光日无极",
+		"perform_duo"		: "空手入白刃",
+	]),
+	"yaofa" : ([
+		"cast_zhangqi"		: "桃花瘴",
+		"cast_bite"		: "化鼠术",
+		"cast_shuyi"		: "鼠疫成灾",
+	]),
+/************************火云洞**************************/
+	"wuyue-spear" : ([
+		"perform_buhui"		: "不见南山誓不回",
+		"perform_chongxiu"	: "秀冲青天",
+		"perform_fengchan"	: "五岳封禅",
+	]),
+	"huoyun-qiang" : ([
+		"perform_ji"		: "火灵祭枪",
+		"perform_huoyun"	: "火魂附身",
+		"perform_lihuo"		: "离火三重",
+	]),
+	"dali-bang" : ([
+		"perform_shenli"	: "天赐神力",
+		"perform_back"		: "魔王回首",
+		"perform_wujin"		: "妖云无尽",
+	]),
+	"moshenbu" : ([
+		"perform_dodge.yao"	: "摇头摆尾",
+		"perform_dodge.tashano" : "踏山裂石",
+	]),
+	"moyun-shou" : ([
+		"perform_lei"		: "掌心雷",
+		"perform_yin"		: "五岳镇印",
+	]),
+	"huomoforce" : ([
+		"exert_fire"		: "离体真火",
+	]),
+	"pingtian-dafa" : ([
+		"cast_niushi"		: "召唤牛虱",
+		"cast_zhuang"		: "撞字咒",
+		"cast_sanmei"		: "三昧真火",
+	]),
+/************************将军府**************************/
+	"wusi-mace" : ([
+		"perform_andu"		: "暗渡锏",
+		"perform_suo"		: "锁字锏",
+		"perform_jingtian"	: "惊天锏",
+	]),
+	"jinglei-mace" : ([
+		"perform_jinglei"	: "雨后惊雷",
+		"perform_tiancheng"	: "浑然天成",
+		"perform_jue"		: "万刃神兵诀",
+	]),
+	"sanban-axe" : ([
+		"perform_sanban"	: "无敌三板斧",
+		"perform_kai"		: "开天斩",
+		"perform_pidi"		: "辟地斩",
+		"perform_potian"	: "破天斩",
+		"perform_jiushi"	: "盘古九式",
+	]),
+	"bawang-qiang" : ([
+		"perform_ba"		: "霸字诀",
+		"perform_bugong"	: "不攻有悔",
+		"perform_huima"		: "回马枪",
+		"perform_juanlian"	: "珍珠倒卷帘",
+		"perform_jian"		: "枪里加锏",
+		"perform_jueming"	: "绝命枪法",
+	]),	 
+	"changquan" : ([
+		"perform_chong"		: "冲字诀",
+		"perform_zhi"		: "窒气诀",
+		"perform_hengsao"	: "横扫千军",
+		"perform_pofu"		: "破釜沉舟",
+	]),
+	"baguazhou" : ([
+		"cast_poison"		: "五瘟符",
+		"cast_thunder"		: "神霄雷法符",
+		"cast_light"		: "神霄电法符",
+	]),	 
+/*************************地府***************************/
+	"kusang-bang" : ([
+		"perform_three"		: "人·鬼·神",
+		"perform_qmly"		: "青面獠牙",
+		"perform_suoming"	: "冤魂索命",
+	]),
+	"hellfire-whip" : ([
+		"perform_xingyun"	: "鬼火腥云",
+		"perform_biluo"		: "碧落黄泉",
+		"perform_three"		: "神·人·鬼",
+		"perform_ldlh"		: "六道轮回",
+	]),
+	"zhuihun-sword" : ([
+		"perform_three"		: "鬼·神·人",
+		"perform_yanluo"	: "歌舞阎罗",
+		"perform_dengku"	: "油尽灯枯",
+		"perform_duoming"	: "追魂夺命",
+	]),
+	"ghost-steps" : ([
+		"perform_dodge.guiying"	: "幻化鬼影",
+	]),
+	"jinghun-zhang" : ([
+		"perform_zhua"		: "无常爪",
+		"perform_ku"		: "历鬼三哭",
+	]),
+	"gouhunshu" : ([
+		"cast_hufa"		: "召唤鬼卒",
+		"cast_gouhun"		: "勾魂咒",
+		"cast_fire"		: "黄泉鬼火",
+	]),
+/************************盘丝洞**************************/
+	"chixin-jian"	: ([
+		"perform_huadie"	: "化蝶",
+		"perform_hongyan"	: "红颜白发",
+		"perform_haotan"	: "痴情八叹",
+	]),
+	"yinsuo-jinling" : ([
+		"perform_moyin"		: "万铃魔音",
+		"perform_tsrj"		: "天上人间",
+		"perform_wang"		: "天罗地网",
+		"perform_feiyin"	: "天外飞音",
+	]),
+	"qingxia-jian" : ([
+		"perform_tong"		: "姐妹同心",
+		"perform_mantian"	: "青霞漫天",
+		"perform_dssh"		: "断丝锁魂",
+	]),
+	"lanhua-shou" : ([
+		"perform_juehu"		: "九阴绝户手",
+	]),
+	"pansi-dafa" : ([
+		"cast_ziqi"		: "氤氲紫气",
+		"cast_wuzhi"		: "佛祖五指",
+	]),
+/************************五庄观**************************/	
+	"sanqing-jian" : ([
+		"perform_jianmang"	: "剑芒诀",
+		"perform_jianzhang"	: "剑掌诀",
+		"perform_juejian"	: "绝剑诀",
+		"perform_xing"		: "驭星诀",
+		"perform_zui"		: "醉剑诀",						
+	]),
+	"yange-blade" : ([
+		"perform_bafang"	: "八方风雨",
+		"perform_renji"		: "了无人迹",
+		"perform_yange"		: "大漠雁歌",
+	]),
+	"fomo-zhang" : ([
+		"perform_fuhu"		: "降龙伏虎",
+		"perform_luan"		: "乱披风",
+	]),
+	"xiaofeng-sword" : ([
+		"perform_huichang"	: "荡气回肠",
+		"perform_tiandi"	: "天地同寿",
+		"perform_hammer"	: "化剑为锤",
+		"perform_staff"		: "化剑为杖",
+		"perform_zouxiao"	: "碧箫传情",						
+	]),
+	"kaishan-chui" : ([
+		"perform_jin"		: "金骨炼真",
+		"perform_poyuan"	: "破元击",
+	]),
+	"wuxing-quan" : ([
+		"perform_wuxing"	: "相生相克",
+	]),
+	"baguazhen" : ([
+		"perform_dodge.shengui"	: "神机鬼藏",
+	]),
+	"zhenyuan-force" : ([
+		"exert_juding"		: "三花聚顶",
+	]),
+	"taiyi" : ([
+		"cast_baxian"		: "八仙大阵",
+		"cast_sanqing"		: "(拟)一气化三清",
+		"cast_zhenhuo"		: "太乙真火",
+		"cast_qiankun"		: "袖里乾坤",
+	]),
+/************************公共类**************************/
+/*************************灵珠***************************/
+	"cast_equip_wuxing"		: "五行咒",
+	"cast_equip_fjcy"		: "风卷残云",
+	"cast_equip_luoshi"		: "落石术",
+	"cast_equip_slcs"		: "双龙出水",
+	"cast_equip_leiji"		: "雷击术",
+	"cast_equip_huoqiu"		: "火球术",
+	"cast_xiaoshen"			: "筑基神通",
+/*************************符文***************************/	
+	"spear" : ([
+		"perform_equip_leihong"		: "雷炎飞虹",
+	]),
+	"whip" : ([
+		"perform_equip_fuliu"		: "清风拂柳",
+		"perform_equip_hanyi"		: "寒意连绵",
+	]),
+	"axe" : ([
+		"perform_equip_hunshi"		: "混世戾斩",
+	]),
+	"blade" : ([
+		"perform_equip_feihua"		: "寒潭飞花",
+	]),
+	"dagger" : ([
+		"perform_equip_sisi"		: "丝丝入扣",
+	]),
+	"fork" : ([
+		"perform_equip_qiqiao"		: "七巧连环",
+	]),
+	"hammer" : ([
+		"perform_equip_liehen"		: "大地裂痕",
+	]),
+	"mace" : ([
+		"perform_equip_huanji"		: "缓中有急",
+	]),
+	"rake" : ([
+		"perform_equip_tianhe"		: "天河惊雷",
+	]),
+	"staff" : ([
+		"perform_equip_folun"		: "金刚佛轮",
+	]),
+	"stick" : ([
+		"perform_equip_yeti"		: "小儿夜啼",
+	]),
+	"sword" : ([
+		"perform_equip_honghua"		: "血海红花",
+	]),
+	"unarmed" : ([
+		"perform_equip_yunyu"		: "翻云覆雨",
+	]), 
+/***********************公共技能*************************/
+	"xuehejue" : ([
+		"perform_xuezong"		: "血踪万里",
+		"perform_xueqi"			: "血气惊天",
+	]),
+	"pingfeng" : ([
+		"perform_shipo"			: "石破天惊",
+		"perform_hua"			: "四屏化力",
+	]),
+	"wuhu-blade" : ([
+		"perform_cheng"			: "三人成虎",
+		"perform_huwei"			: "狐假虎威",
+		"perform_pingyang"		: "虎落平阳",
+		"perform_pushi"			: "饿虎扑食",
+		"perform_qihu"			: "骑虎难下",
+	]),
+	"wudu-shenzhang" : ([
+		"perform_wandu"			: "万毒噬体",
+	]),
+	"lieyang-jian" : ([
+		"perform_jiaoyang"		: "骄阳似火",
+		"perform_tianhuo"		: "天火直下",
+	]),
+	"leigong-zhui" : ([
+		"perform_lei"			: "电闪雷鸣",
+	]),
+]);
+
+nosave mapping KillMsg = ([
+    "slash"  : "斩",     "slice"  : "砍",     "chop"   : "劈",     "hack"   : "劈",
+    "thruse" : "刺",     "pierce" : "刺",     "wave"   : "鞭",     "whip"   : "抽",
+    "impale" : "戳",     "rake"   : "筑",     "bash"   : "砸",     "crush"  : "砸",
+    "slam"   : "挫",     "throw"  : "射",     "shoot"  : "射",     
+]);
+
+varargs void combat_channel(object me,object victim,int forall)
+{
+	mixed prop;
+	object weapon;
+	string killmsg,rkmsg,attack_skill,mapp_skill,str;
+	int msg_type = 0;
+	if( !me || !victim || !me->is_fighting(victim) )
+		return;
+	if( !stringp(killmsg=me->query_temp("kill_msg"))
+	 || strlen(killmsg)<2 )
+	 	return;	
+	prop = 0;
+	rkmsg = 0;
+	if( !forall && !userp(victim) )
+	{
+		me->delete_temp("special_msg");
+		me->delete_temp("kill_msg");
+		return;
+	}
+		
+	if( killmsg=="special_msg" )
+	{   
+		rkmsg = me->query_temp("special_msg");
+                me->delete_temp("special_msg");
+                msg_type = 1;
+	}
+        else
+        {
+        	rkmsg = 0;
+        	if( !objectp(weapon=me->query_temp("weapon"))
+            	 || !stringp(attack_skill=weapon->query("skill_type")) )
+			attack_skill = "unarmed";
+		if( !stringp(mapp_skill=me->query_skill_mapped(attack_skill)) )
+			mapp_skill = attack_skill;
+		//(!)
+		if( !undefinedp(JueZhao[mapp_skill]) )
+		{
+			prop = JueZhao[mapp_skill];
+			if( mapp(prop) )
+			{
+				if( !undefinedp(prop[killmsg]) )
+					rkmsg = prop[killmsg];
+			}
+			else if( stringp(prop) )
+				rkmsg = prop;	
+		}
+		if( !rkmsg )
+		{
+			if( !undefinedp(JueZhao[attack_skill]) )
+				prop = JueZhao[attack_skill];
+			if( mapp(prop) )
+			{
+				if( !undefinedp(prop[killmsg]) )
+					rkmsg = prop[killmsg];
+			}
+			else if( stringp(prop) )
+				rkmsg = prop;	
+		}
+		if( !rkmsg )
+		{
+			if( !undefinedp(JueZhao[killmsg]) )
+				prop = JueZhao[killmsg];
+			if( stringp(prop) )
+				rkmsg = prop;
+		}			
+		if( !rkmsg )
+		{
+			if( stringp(mapp_skill=me->query_skill_mapped("spells")) )
+			{
+				if( !undefinedp(JueZhao[mapp_skill]) )
+					prop = JueZhao[mapp_skill];
+				if( mapp(prop) )
+				{
+					if( !undefinedp(prop[killmsg]) )
+						rkmsg = prop[killmsg];
+				}
+				else if( stringp(prop) )
+					rkmsg = prop;	
+			}
+			else
+			{
+				if( !undefinedp(JueZhao["spells"]) )
+					prop = JueZhao["spells"];
+				if( mapp(prop) )
+				{
+					if( !undefinedp(prop[killmsg]) )
+						rkmsg = prop[killmsg];
+				}
+				else if( stringp(prop) )
+					rkmsg = prop;		
+			}
+		}	
+		if( !rkmsg )	
+		{
+			if( stringp(mapp_skill=me->query_skill_mapped("force")) )
+			{
+				if( !undefinedp(JueZhao[mapp_skill]) )
+					prop = JueZhao[mapp_skill];
+				if( mapp(prop) )
+				{
+					if( !undefinedp(prop[killmsg]) )
+						rkmsg = prop[killmsg];
+				}
+				else if( stringp(prop) )
+					rkmsg = prop;	
+			}
+			else
+			{
+				if( !undefinedp(JueZhao["force"]) )
+					prop = JueZhao["force"];
+				if( mapp(prop) )
+				{
+					if( !undefinedp(prop[killmsg]) )
+						rkmsg = prop[killmsg];
+				}
+				else if( stringp(prop) )
+					rkmsg = prop;		
+			}
+		}	
+	}	
+	if( !rkmsg || !stringp(rkmsg) || strlen(rkmsg)<2 )
+		msg_type = 3;
+			
+	if( msg_type==3 )
+	{
+		if( !undefinedp(KillMsg[attack_skill]) )			
+			rkmsg = KillMsg[attack_skill];
+		else	rkmsg = "打";
+	}
+	
+	str = victim->name(1)+HIM"在"+MISC_D->find_place(environment(me))+HIM"被"+me->name(1);
+	if( msg_type==1 )
+		str+= rkmsg;
+	else
+	{
+		if( msg_type==0 )
+		{
+			str+= "用一招"NOR HIY"「"+HIR+rkmsg+NOR HIY"」"NOR;
+			if( userp(victim) )
+			{
+				if( victim->query_level()<40 )
+					str+= HIM"送去了"HIW"鬼门关"HIM"。"NOR;
+				else	str+= HIM"打成了重伤。"NOR;
+			}
+			else if( victim->query_level()<40 )
+				str+= HIM"杀死了！"NOR;	
+			else	str+= HIM"打得重伤不起！"NOR;	
+		}
+		else if( objectp(weapon=me->query_temp("weapon")) )
+		{
+			str+= HIM"用"HIM+COLOR_D->clean_color(weapon->name(1))+NOR+HIM+rkmsg+NOR;
+			if( userp(victim) )
+			{
+				if( victim->query_level()<40 )
+					str+= HIR"死了"HIM"。"NOR;
+				else	str+= HIM"得"NOR RED"重伤"NOR HIM"。"NOR;	
+			}
+			else if( victim->query_level()<40 )
+				str+= HIM"杀死了！"NOR;	
+			else	str+= HIM"打得重伤不起！"NOR;		
+		}
+		else
+		{
+			str+= HIM+rkmsg+NOR;	
+			if( userp(victim) )
+			{
+				if( victim->query_level()<40 )
+					str+= RED"死了"NOR HIM"。"NOR;
+				else	str+= HIM"得"NOR RED"重伤"NOR HIM"。"NOR;	
+			}
+			else if( victim->query_level()<40 )
+				str+= HIM"杀死了！"NOR;	
+			else	str+= HIM"打得重伤不起！"NOR;		
+		}
+	}
+	me->delete_temp("special_msg");
+	me->delete_temp("kill_msg");
+	do_channel(this_object(), "rumor",str);	
+}		
