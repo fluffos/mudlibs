@@ -18,9 +18,7 @@ worked; keep status values consistent so the table stays greppable:
 
 Port assignments: sequential from 40001, recorded here so re-running
 several libs at once never collides. **Next free port: 40051** (40001-40050
-assigned/reserved -- 40046-40050 are reserved for archives #52-56, being
-processed in parallel by background agents as of this update; 40007 is
-ds386, deprioritized/partial). On mega-libs (tens of
+assigned; 40007 is ds386, deprioritized/partial). On mega-libs (tens of
 thousands of files, the "nitan" family), skip the full `lpcc_check.sh`
 sweep — it can OOM the host before finishing (see AGENTS.md §6b) — and
 rely on the boot + interactive-connect test as the verification gate.
@@ -32,7 +30,7 @@ rely on the boot + interactive-connect test as the verification gate.
   majority of this collection. If an archive turns out to be English
   (like ds386/Dead Souls), do the minimum to note what it is, don't sink
   deep debugging time into it -- move on to the next Chinese one.
-- **Done: 48 / 100** (shanhaizhanshen, xingzhanyingxiong,
+- **Done: 49 / 100** (shanhaizhanshen, xingzhanyingxiong,
   unknownlib20150716 [小雨西游II], bxsj [书剑天下], bxsj1 [书剑·经典],
   chidi [江湖I], ..., nitan170911 [仙剑奇侠传], nitan6 [笑傲江湖], rzrmud
   [大唐西游], xo, xo_final, zzfy [郑州风云3], shiji [世纪],
@@ -51,7 +49,9 @@ rely on the boot + interactive-connect test as the verification gate.
   menghuanxiyou2002 [梦幻西游2002版, same codebase as mhxy #19],
   xiaoyuxiyou [小雨西游/小雨西游Ⅱ, same lineage as unknownlib20150716 #3],
   yueyingqiyuan [月影奇缘, ES II lineage], weimingkongjian [未明空间/wmkj,
-  fork of xiyangzaixian_fengkuang #46's 夕阳再现 lineage])
+  fork of xiyangzaixian_fengkuang #46's 夕阳再现 lineage],
+  xinkuangxiangkongjian2 [新狂想空间II, actually named 狂想空间, ES II
+  lineage])
 - **New AGENTS.md §15q (hidden client-protocol-version gate)**: found on
   xiyangzaixian3 -- a pre-id prompt can check the input against a
   hardcoded literal (client version string), not just a BIG5/student
@@ -66,8 +66,10 @@ rely on the boot + interactive-connect test as the verification gate.
   lingering driver process) before doing the TODO.md/AGENTS.md edits and
   git commit itself, to avoid concurrent-edit conflicts on shared files.
   All 5 are now done (datangshuanglong, tianxiawuxue,
-  xiyangzaixian_fengyun2, xiyangzaixian3, tianxia). This mode continues
-  for archive #52 onward.
+  xiyangzaixian_fengyun2, xiyangzaixian3, tianxia). A second batch of 5
+  (archives #52-56: xiaoyuxiyou, xinkuangxiangkongjian2, yueyingqiyuan,
+  weimingkongjian, menghuanxiyou2002) followed the same pattern and is
+  also now all done. This mode continues for archive #57 onward.
 - **New AGENTS.md §15r (check_config.lpc driver-version self-check)**:
   found on tianxia -- a driver-version self-check file `inherit`ed
   straight into simul_efun.lpc/master.lpc can fatally `error()` on
@@ -314,7 +316,7 @@ rely on the boot + interactive-connect test as the verification gate.
 | 50 | 天下.tar.gz | tianxia | 40044 | done | 《天下》Beta, adm/obj/ layout (nested at raw/mud/tx/, archive also bundles a full MudOS driver source tree at raw/mud/MudOS/ which was correctly ignored); standard §15h fix doubled (is_chinese + a separate valid_chinese() whole-string check) + logind.lpc check_legal_name() byte-width fixes + disabled 2 stale checks in a check_config.lpc driver-version self-check inherited into simul_efun.lpc (§15r, new) + restored 5 never-defined simul_efuns (clr_ansi, chinese_number, changed_match_path, db_affected, query_bandwide, query_shadowed -- §15b additions, new) + fixed a genuine query_shadowing() efun-arity bug in bleeding.lpc + fixed 3 files' lossy-iconv-merged text-block closing tags (new Encoding gotcha) + fixed a 45-occurrence §8h Greek-table typo + fixed a 12-file duplicate `inherit ROOM;` bug + proactive dns_master preload exclusion (§15p); query_shadowed() fix was the single most impactful -- was silently blocking the player body class from compiling, breaking character creation right after Chinese name/password were accepted; full registration flow verified end-to-end incl. real name "秦风" reaching the actual game world; 99.1% lpcc pass; see libs/tianxia/NOTES.md |
 | 51 | 天下无雪.rar | tianxiawuxue | 40045 | done | adm/obj/ layout (nested at raw/mud/world/); standard §15h fix + upgraded valid_override to 3-arg (§14) + fixed a stray-brace typo cluster in d/kaifeng/ground0-3.lpc + proactive dns_master preload exclusion (§15p); full registration flow verified end-to-end incl. real name "秦风" reaching the actual game world; 97.6% lpcc pass; see libs/tianxiawuxue/NOTES.md |
 | 52 | 小雨西游.zip | xiaoyuxiyou | 40046 | done | self-IDs as 小雨西游 but live banner says 小雨西游Ⅱ v3.0 (2013 snapshot); chinese.lpc byte-identical to unknownlib20150716(#3), same engine lineage different site snapshot; standard §15h fix + proactive get_include_path() insurance; no dns_master in preload (nothing to exclude); one corrupted quest file hung lpcc, renamed .corrupted-orig; full registration flow verified with 3 real Chinese names incl. one reaching an actual room + look/quit, dup-id rejection also confirmed working; 99.0% lpcc pass; see libs/xiaoyuxiyou/NOTES.md |
-| 53 | 新狂想空间II.rar | | | not started | |
+| 53 | 新狂想空间II.rar | xinkuangxiangkongjian2 | 40047 | done | actually named plain "狂想空间" (config/banner) -- "新"/"II" are collector-site additions, not the game's own name; Taiwan release by wizard wade (Oct 2002), genuine ES II lineage (same as es1_win/esI/xkx2001/rzrmud/beimeixiakexing2001); standard §15h fix + proactive dns_master preload exclusion (§15p) + NEW absolute-path angle-bracket #include bug (359 files, driver's resolver never handles absolute names in <>, was silently sending new characters into VOID_OB instead of the real start room -- highest-impact fix) + NEW "inherit after global vars" ordering bug (74 files) + NEW disallowed-`..`-relative-include bug (54 files, incl. reconstructing a small missing cold.h from sibling-zone style, not fabricated content); full registration flow verified twice independently with real Chinese names "秦风二"/"秦风三", both reaching the actual starting room, second run had zero debug.log output; 95.9% lpcc pass (up from 94.8% pre-sweep-fixes); see libs/xinkuangxiangkongjian2/NOTES.md |
 | 54 | 月影奇缘.rar | yueyingqiyuan | 40048 | done | ★月影奇缘★, ES II lineage (adm/obj/{master,simul_efun} layout, master.c credits "Lil"/"Annihilator" like es1_win/esI/xkx2001/rzrmud/xo family); standard §15h fix + proactive dns_master preload exclusion (§15p) + upgraded valid_override to 3-arg (§14) + NEW message.lpc tell_room() bug (578 call sites passed raw int 0 as message()'s 4th arg, driver rejects it, fixed once at the shared root); an intermittent unreproduced crash seen twice early in testing (no trace anywhere, not reproduced across 8+ later clean runs) flagged for future investigation, not blocking; full registration flow verified end-to-end incl. real name "秦风终" reaching an actual starting room; 97.1% lpcc pass; see libs/yueyingqiyuan/NOTES.md |
 | 55 | 未明空间.rar | weimingkongjian | 40049 | done | self-IDs as 未明空间/"wmkj" (README, author 龙宝宝/xiha, 2001) but live banner shows "江湖风云之夕阳再现" -- chinese.c byte-identical to xiyangzaixian_fengkuang(#46), master/logind/securityd differ, a related-but-distinct fork; standard §15h fix (chinese.lpc + logind.lpc + named.lpc, latter turned out dead code) + proactive dns_master preload exclusion (§15p, CONFIG_DIR=/adm/etc/ confirmed as the live path, a stray unused adm/etcc/preload copy left dns_master active but is never read) + new message_combatd gap (aliased to message_vision) + PEN->SWORD copy-paste inherit fix + several pre-existing typos incl. a large unquoted-string cluster in d/city/sj.lpc; full registration flow verified twice independently across two driver sessions with real Chinese names "秦风" and "林风", both reaching different actual start rooms; 95.4% lpcc pass; see libs/weimingkongjian/NOTES.md |
 | 56 | 梦幻西游2002版.rar | menghuanxiyou2002 | 40050 | done | same 2002-era codebase as mhxy(#19) -- confirmed via diff (14561/14563 files identical incl. master.c/chinese.c byte-identical, only logind.c banner branding + wizlist state differ), all fixes ported directly rather than rediscovered; standard §15h fix + §8h convertd.lpc typo (45x) + missing /u/feizei/log file fix + proactive dns_master preload exclusion (§15p); full registration flow verified end-to-end incl. real name "秦风" reaching gift-allocation/game-world welcome, confirmed via saved data files too; 97.3% lpcc pass (matches #19); see libs/menghuanxiyou2002/NOTES.md |

@@ -1,0 +1,155 @@
+#include <combat.h>
+#include <ansi.h>
+#include <mudlib.h>
+inherit NPC;
+void create() {
+  set_name("[1;33m骆驼[0m", ({"desert camel","desert","camel"}));
+  set("title","[33m尘沙[0m");
+  set("long", "一头嘴巴不停地咀嚼，眼神呆滞的骆驼。\n");
+  set("horse",1);
+  set("no_kill",1);
+  set("no_fight",1);
+  set("max_force",2750);
+  set("force",2750);
+  set("max_kee",3200);
+  set("kee",3200);
+  set("max_gin",1500);
+  set("gin",1500);
+  set("max_sen",2250);
+  set("sen",2250);
+  set("race", "野兽");
+  set("combat_exp",750000);
+  set_skill("parry",120);
+  set_skill("move",100);
+  set_skill("dodge",100);
+  set("verbs",({"bite","claw"}));
+setup();
+}
+
+void init() {
+  add_action("do_ascend","ride");
+  add_action("do_descend","dismount");
+  add_action("do_wall","desertwall");
+  add_action("do_runaway","back_desert");
+}
+
+int do_runaway()
+{
+  object me,wolf,target;
+  string *name;
+  me = this_player();
+  wolf = this_object();
+  target = me->query_enemy();
+  if(!query_leader())
+  return notify_fail("你是这骆驼的主人吗？\n");
+
+  message_vision("[1;33m骆驼乖乖地听你的话，回家去了。[0m\n",me);
+  me->delete_temp("is_riding");
+  me->delete_temp("apply/name",name);
+  me->delete_temp("marks/have_wolf");
+  destruct(wolf);
+  return 1;
+}
+
+int do_ascend()
+{
+  object me,wolf,target;
+  me = this_player();
+  wolf = this_object();
+  target = me->query_enemy();
+  if(wolf->query("horse")!=1)
+  return notify_fail("你要骑这东西不如去妓院！\n");
+  if(me->query("class")!="bandit")
+  return notify_fail("这动物不是你可以坐的！\n");
+  if (me->query("combat_exp") < 1200000)
+  return notify_fail("你的江湖历练看来不能应付在骆驼上的状况。\n");
+  if (me->query_skill("riding",1) < 1 )
+  return notify_fail("你还不知道骑术的基本，要怎么骑？\n");
+  if(me->query_temp("is_riding"))
+  return notify_fail("你正在骑着呢！\n");
+  message_vision("[1;33m$N身子一转，双脚一踏，瞬间便安坐在驼峰之上！[0m\n",me);
+  wolf->set_leader(me);
+me->add_temp("apply/name",({ me->name()+"（正骑着"+this_object()->name()+"）"}));
+  me->set_temp("is_riding", 1);
+  me->add("marks/h_camel",random(5));
+  move(me);
+  me->set_heart_beat(1);
+  return 1;
+}
+
+int do_descend()
+{
+  object me;
+  string *name;
+  me=this_player();
+  if (!me->query_temp("is_riding"))
+  return notify_fail("你没骑东西，干嘛下来？\n");
+  message_vision("[1;37m$N一个转身，便已应声落地，好好地站在地上。[0m\n",me);
+  me->delete_temp("is_riding");
+  me->delete_temp("apply/name",name);
+  move(environment(me));
+  me->set_heart_beat(0);
+
+  return 1;
+}
+
+int do_wall()
+{
+  object me,who;
+  string *name;
+  int dodge,camel;
+  who=this_player();
+  dodge=((who->query_skill("riding",1)+who->query_skill("parry",1))/2);
+  camel=(who->query("marks/h_camel"));
+  me=query_leader();
+  who->add("marks/h_camel",random(3));
+  if (!me)
+  return notify_fail("这骆驼不当你是主人，还是骑骑看吧！\n");
+  if (who->query_temp("marks/wall",1))
+  return notify_fail("你前面已经有道沙墙了！\n");
+  if (random(200)>(who->query_skill("riding",1)))
+  return notify_fail("[1;37m骆驼不听你的指挥，不帮你筑起沙墙！[0m\n");
+  if (random(500) > camel)
+  return notify_fail("[1;35m看来你和骆驼的感情不够好，牠不理你。[0m\n");
+ message_vision("[33m"+me->query("name")+"坐下骆驼忽然双眼一睁，四脚力踏地面，\n
+尘沙满天飞舞，"+who->query("name")+"身前现起一道沙墙！[0m\n",who);
+  who->add_temp("apply/defense",dodge);
+  who->set_temp("marks/wall",1);
+  call_out("remove_effect",10,who);
+  return 1;
+}
+
+void remove_effect()
+{
+  object me,who;
+  string *name;
+  int dodge;
+  who=this_player();
+  me=query_leader();
+  dodge=((who->query_skill("riding",1)+who->query_skill("parry",1))/2);
+  message_vision("[1;37m轰的一声，矗立在"+me->query("name")+"前的沙墙已消失！[0m\n",who);
+  who->add_temp("apply/defense",-dodge);
+  who->delete_temp("marks/wall");
+}
+
+int heal_up()
+{
+  object *enemy,who,user;
+  int i,dodge;
+        user = query_leader();
+  who = this_player();
+  if(!user) return 1;
+  if( user->is_fighting() )
+  {
+   user->add("marks/h_camel",random(3));
+   if (random(120) < (user->query_skill("riding",1)))
+   {
+    enemy=user->query_enemy();
+    i=random(sizeof(enemy));
+    message_vision("[1;33m"+user->query("name")+"座下骆驼突然张开嘴巴，\n
+以迅雷不及掩耳之势向$n吐了几口口水！$n瞬间错愕不已，无法自己！[0m\n",who,enemy[i]);
+    enemy[i]->start_busy(2);
+   }
+  }
+  return ::heal_up() + 1;
+}

@@ -1596,6 +1596,46 @@ wrapper's argument-passing shape before the room's own code — the room is
 usually just the first caller to exercise a latent bug in a widely-used
 helper.
 
+### 15t. Three related `#include`-resolution failures, all silent at compile time until something actually reaches the affected code path: absolute paths in angle brackets, `..`-relative paths, and `inherit` textually preceding a header's globals
+
+All three found on `xinkuangxiangkongjian2` (archive #53), a genuine ES II
+lineage lib:
+
+1. **`#include <ABSOLUTE/PATH/header.h>`** (359 files) — angle-bracket
+   syntax is meant for the driver's configured include-path search, not
+   an already-absolute path; this driver's `inc_open()` never special-
+   cases an absolute name inside `<...>` and simply fails to resolve it.
+   Since this can affect an object that's only reached lazily (e.g. the
+   actual starting room), the failure doesn't show up at preload/boot
+   time at all — on this lib it silently sent every newly created
+   character into `VOID_OB` instead of the real start room, which then
+   spammed the log with an unrelated-looking heartbeat error from a
+   different daemon (`cbipd.lpc`) trying to operate on a void object.
+   **If a lib's registration flow completes but new characters seem to
+   land nowhere sensible (or a heartbeat/day-night daemon spams
+   unrelated-looking errors), check whether the actual start-room file
+   itself compiles — an angle-bracket absolute-path include is a good
+   first guess.** Fix: convert to quoted form (`"ABSOLUTE/PATH/header.h"`)
+   — the quoted resolver's `merge()` step already handles absolute paths
+   correctly; add `master::get_include_path()` if not already present so
+   relative quoted resolution also works from the right directory.
+2. **`#include "../parent/header.h"`** — this driver disallows `..` in
+   `#include` paths entirely (a security boundary, not a bug to work
+   around cleverly). Fix by pointing directly at the real absolute quoted
+   path once you've located where the header actually lives — don't try
+   to preserve the relative form.
+3. **`inherit` appearing textually *after* a `#include`d header (or a
+   bare global variable) in the same file** — "Illegal to inherit after
+   defining global variables" is fatal at compile time here even though
+   many older LPC codebases tolerated it. This shows up in file clusters
+   sharing one problematic header (fix the shared header's field order,
+   or reorder each file's own `inherit`/`#include`/global-declaration
+   sequence) — mechanical but easy to fumble with a blind sed pass (one
+   agent's fix attempt this session accidentally deleted the `inherit`
+   line itself from all affected files on a bad regex; always diff a
+   sed-based bulk fix against a sample before trusting it across dozens
+   of files).
+
 ---
 
 ## Per-archive gotchas index
