@@ -1,0 +1,27 @@
+inherit ROOM;
+
+
+void create()
+{
+        set("short", "草屋");
+        set("long", @LONG
+这是月光的小屋，破破烂烂没什么好看的。旁边桌子上放着一张
+牌子(paizi)。
+LONG
+        );
+        
+        set("exits", ([
+                "down" : "/d/shendian/guangchang",
+        ]) );
+        set("item_desc", ([
+                "paizi": @TEXT
+看什么，小心我海扁你一顿。
+TEXT
+        ]) );
+
+
+        set("objects", ([
+                        ]) );
+
+       setup();
+}

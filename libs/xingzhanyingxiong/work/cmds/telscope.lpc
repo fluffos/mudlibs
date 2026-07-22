@@ -1,0 +1,121 @@
+//望远镜 /d/cmds/telscope.c 改文件要放在此路径才有用 
+//version 0.1 by netplay@CCTX
+//98-11-17
+
+//修改了/adm/sumit_efun/message.c相关函数
+/*
+message_vision()加入以下语句：
+	object snobj;//监视人
+	string *snpkey;
+	mapping snp;
+	int i;
+
+	snp=environment(me)->query_temp("snp");
+	  if (mapp(snp) && sizeof(snp))
+	   {  snpkey=keys(snp);
+		for (i=0;i<sizeof(snp);i++)
+		{snobj=environment(me)->query_temp("snp/"+snpkey[i]);
+		tell_object(snobj, ">>>"+str3);
+		}
+	   }
+*/
+//修改go.c snoop时不能移动
+//if (me->query_temp("snoop"))
+//		return notify_fail("你正在监视中，不能移动。\n");
+
+/* 为了能显示 某某走了过来的信息，做了以下修改
+/adm/simul_efun/message加入以下函数
+varargs void view_message(string str, object env, object me )
+{
+	object snobj;//监视人
+	string *snpkey;
+	mapping snp;
+	int i;
+	 snp=env->query_temp("snp");
+	  if (mapp(snp) && sizeof(snp))
+	   {  snpkey=keys(snp);
+		for (i=0;i<sizeof(snp);i++)
+		{snobj=env->query_temp("snp/"+snpkey[i]);
+		tell_object(snobj, ">>>"+str);
+		}
+	   }
+	message("vision",str,env,me);
+}
+/cmds/std/go.c做以下修改
+message( "vision", mout, environment(me), ({me}) );
+改：	view_message(mout,environment(me),me);
+message( "vision", min, environment(me), ({me}) );
+改：	view_message(min,environment(me),me);
+*/
+
+
+
+#include <ansi.h>
+
+inherit ITEM;
+void init()
+{
+	add_action("do_see","see");
+	
+}
+void create()
+{
+        set_name(HIY "望远镜" NOR, ({ "telscope" }) );
+        set_weight(5000);
+        if( clonep() )
+                set_default_object(__FILE__);
+        else {  set("long", "这是一个普通的望远镜，你可以用他来监视你附近的动静\n"+
+				    "如：see south。 see none取消监视。\n");	
+                set("unit", "副");
+		   // set("no_drop","这么好的东西，还是好好留着吧。\n");
+                set("value", 50000);
+                set("material", "gold");
+                
+        }
+        setup();
+}
+
+int do_see(string arg)
+{	
+	mapping exits;
+	object env,me;
+	me=this_player();
+	env = environment(me);
+	if (!arg || arg=="") return 0;
+	if (arg=="none" )
+	if (env=me->query_temp("snoop")) 
+	{
+	 env->delete_temp("snp/"+me->query("id"));
+	 me->delete_temp("snoop");
+	 message_vision("$N取消了监视。\n",me);
+	 remove_call_out("clear_temp");
+	 return 1;
+	}else return notify_fail("你并没有在监视\n");
+	if (me->query_temp("snoop")) return notify_fail("你现在正在监视呢！\n");
+	if (me->query("jing") < 50) return notify_fail("你太累了，没法集中精力监视\n");
+			if( mapp(exits = env->query("exits")) && !undefinedp(exits[arg]) ) {
+		if( objectp(env = find_object(exits[arg])) )
+			env->set_temp("snp/"+me->query("id"),me);
+		else {
+			call_other(exits[arg], "???");
+			find_object(exits[arg])->set_temp("snp/"+me->query("id"),me);
+			}
+	message_vision("$N拿起望远镜开始监视"+arg+"方向的动静\n",me);
+	//me->command("look "+arg);
+	me->force_me("look "+arg);
+	me->set_temp("snoop",env);
+	call_out("clear_temp",60,env,me);
+	return 1;
+	}
+	return notify_fail("你要看哪里？\n");
+}
+
+void clear_temp(object env, object me)
+{
+	env->delete_temp("snp/"+me->query("id"));
+	tell_object(me,"你监视了半天，太累了，先休息一会吧\n");
+	me->delete_temp("snoop");
+	me->add("jing",-30);
+	
+
+}

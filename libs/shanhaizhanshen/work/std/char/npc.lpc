@@ -1,0 +1,206 @@
+// npc.c
+// Last modified by Spock @ FF   97.Mar.09.
+
+#include <ansi.h>
+#include <command.h>
+#include <localtime.h>
+#include <type.h>
+
+inherit CHARACTER;
+inherit F_CLEAN_UP;
+
+mixed next_chat;
+int in_combat = 0;
+int in_prog = 0;
+
+int chat();
+object carry_object(string file);
+
+int is_chatting() { return functionp(next_chat)!=0; }
+
+void do_chat(mixed c) { next_chat = c; }
+
+object carry_object(string file)
+{
+	object ob;
+
+	if( !objectp(ob = new(file)) ) return 0;
+	ob->move(this_object());
+	return ob;
+}
+
+object add_money(string type, int amount)
+{
+	object ob;
+
+	ob = carry_object("/obj/money/" + type);
+	if( !ob ) return 0;
+	ob->set_amount(amount);
+}
+
+// This function is called by the reset() of the room that creates this
+// npc. When this function is called, it means the room demand the npc
+// to return its startroom.
+//
+// For compatibility reason, NPC schedule is optional set.
+// Syntax:
+//	set("home_time", ([
+//		"10-1"	:	"file name of room 1",	<- This NPC is loaded in room 1 in 10 AM ~ 1 AM
+//		"9-17	:	"file name of room 2",	<- The same NPC is loaded in room 2 in 9 AM ~ 5 PM
+//	]); 
+
+int return_home( object home )
+{
+	mapping home_tmap;
+	string *home_time;
+	mixed *local;
+	int i, flag, begin, end;
+
+// Are we at home already?
+	if( !environment() ) return 1;
+
+	if( !(home_tmap = query("home_time")) && environment() == home )
+		return 1;
+
+// Are we able to leave?
+	if( !living(this_object())
+	||	is_fighting()
+	||	!mapp(environment()->query("exits")) ) return 0;
+
+	if( mapp( home_tmap ) ) {
+		local = localtime( time() * 60 );
+		home_time = keys( home_tmap );
+		i = sizeof( home_time );
+		while( i-- ) {
+			if( sscanf( home_time[i], "%d-%d", begin, end ) != 2 )
+				return 0;
+			if( local[LT_HOUR] >= begin && local[LT_HOUR] <= end ) {
+			        message_vision( this_object()->name() + "急急忙忙地离开。\n",
+					this_object());
+				return move( query("home_time/" + home_time[i]) );
+			}
+		}
+	}
+
+// Leave for home now.
+        message_vision( this_object()->name() + "急急忙忙地离开。\n",
+		this_object());
+	return move(home);
+}
+
+mixed eval_chat(mixed chat)
+{
+	mixed ret;
+
+	chat = evaluate(chat);
+	switch(typeof(chat)) {
+		case STRING:
+			message_vision(CYN + chat + NOR, this_object());
+			return 0;
+		case ARRAY:
+			if( !sizeof(chat) ) return 0;
+			chat[0] =  eval_chat(chat[0]);
+			return chat - ({ 0 });
+		case FUNCTION:
+			return chat;
+		default:
+			return 0;
+	}
+}
+
+int chat()
+{
+	string *msg;
+	mixed ret;
+	int chance, rnd, i;
+
+	if( !environment() ) return 0;
+
+	// Evaluate programmed chat first.
+	if( next_chat ) {
+		next_chat = eval_chat(next_chat);
+		return 1;
+	}
+
+	if( is_fighting() && in_combat == 0 ) {
+		msg = query("begin_fighting");
+		for( i = 0; i < sizeof( msg ); i++ ) {
+		if( stringp(msg[i]) )
+			message_vision(CYN + msg[i] + NOR, this_object() );
+		else if( functionp(msg[i]) )
+			evaluate(msg[i]);
+		}
+		in_combat = 1;
+		return 1;
+	}
+	if ( !is_fighting() && in_combat == 1 ) {
+		msg = query("after_fighting");
+		for( i = 0; i < sizeof( msg ); i++ ) {
+		if( stringp(msg[i]) )
+			message_vision(CYN + msg[i] + NOR, this_object() );
+		else if( functionp(msg[i]) )
+			evaluate(msg[i]);
+		}
+		in_combat = 0;
+		return 1;
+	}
+
+	// Else, do random chat if any.
+	if( !chance = (int)query(is_fighting()? "chat_chance_combat": "chat_chance") )
+		return 0;
+
+	if( arrayp(msg = query(is_fighting()? "chat_msg_combat": "chat_msg"))) {
+		if( random(100) > chance ) return 0;
+		rnd = random(sizeof(msg));
+		if( stringp(msg[rnd]) )
+			message_vision(CYN + msg[rnd] + NOR, this_object() );
+		else if( functionp(msg[rnd]) )
+			evaluate(msg[rnd]);
+		return 1;
+	}
+}
+
+// Default chat function: Let the npc random move to another room.
+int random_move()
+{
+	mapping exits;
+	string *dirs;
+	string dir;
+
+	if( !mapp(exits = environment()->query("exits")) ) return 0;
+	if( query_temp("stay_here") ) return 0;
+	dirs = keys(exits);
+	dir = dirs[random(sizeof(dirs))];
+	if( this_object()->query("race") == "人类" && 
+		environment()->query_door( dir, "id" ) )
+		command("open " + dir );
+	command("go " + dir );
+}
+
+int exec_mob_program( string *prog, int *delay ) {
+	if( !in_prog ) {
+		in_prog = 1;
+		call_out("exec_mob_program", delay[0], prog, delay );
+	} else {
+		if( command( prog[0] ) ) {
+			prog -= ({ prog[0] });
+			if( prog == ({ }) ) {
+				in_prog = 0;
+				return 1;
+			}
+			delay -= ({ delay[0] });
+			if( delay == ({ }) ) {
+				in_prog = 0;
+				return 1;
+			}
+			call_out("exec_mob_program", delay[0], prog, delay );
+		} else {
+			if( !living(this_object()) || is_fighting()
+				|| !mapp(environment()->query("exits")) ) {
+				in_prog = 0;
+				return 0;
+			}
+			call_out("exec_mob_program", 5, prog, delay );
+		}
+	}
+}

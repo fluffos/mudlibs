@@ -1,0 +1,111 @@
+// board.c
+// To board on a space ship.
+// Author: Spock @ FF	97.May.7.
+// Last modified by Spock @ FF   98.Aug.31.
+
+inherit F_CLEAN_UP;
+inherit F_CMD;
+
+int do_board( object me, object dest );
+
+int main( object me, string arg )
+{
+	string space_ship, msg;
+	object dest, tube;
+	object *inv, *rooms;
+	int max_capacity, i, j, k;
+
+	if( me->query("position") == "rest" )
+		return notify_fail("你得先站起身子才行。\n");
+
+	if( me->query("position") == "sleep" )
+		return notify_fail("你仍在睡梦中。\n");
+
+        
+
+	if( !arg)
+		return notify_fail("你要搭乘什么宇宙船舰或太空梭？\n");
+
+	sscanf(arg, "%s", space_ship);
+
+	if( ( tube = environment(me) )->query("boarding_tube") ) {
+		if( !objectp( dest = (object)tube->query("docking_ship") ) )
+			return notify_fail("目前没有任何船舰停泊在此。\n");
+	} else {
+		dest = present(space_ship, me);
+		if( !dest || living(dest) ) dest = present(space_ship, environment(me));
+		if( !dest || living(dest) )
+			return notify_fail("这里没有这艘船舰或太空梭。\n");
+
+		if( !(int)dest->is_space_ship() && !(int)dest->is_shuttle() )
+			return notify_fail("那不是一艘船舰或太空梭。\n");
+
+		if( ( (int)me->query_temp("location") - (int)dest->query_temp("location")) != 0 ) {
+			msg = (string)dest->name() + " 和你的距离太远了。\n";
+			return notify_fail( msg );
+		}
+	}
+
+// The default max capacity of a space ship is five person.
+	if( !dest->query("max_capacity") ) 
+		max_capacity = 5;
+	else 
+		max_capacity = dest->query("max_capacity");
+
+	if( dest->query("lock") == 1 ) {
+		msg = (string)dest->name() + " 的登舱门已经锁上了。\n";
+		return notify_fail( msg );
+	}
+
+// integer counter k counts how many characters is in the space_ship.
+	rooms = dest->query_ship_rooms();
+	k = 0;
+	i = sizeof( rooms );
+	while( i-- ) {
+		inv = all_inventory( rooms[i] );
+		j = sizeof( inv );
+		while( j-- ) { 
+			if( (int)inv[j]->is_character() ) 
+				k ++;
+			if( k >= max_capacity ) {
+				msg = dest->name() + " 已经坐满人了。\n";
+				return notify_fail( msg );
+			}
+		}
+	}
+	return do_board( me, dest );
+}
+
+int do_board( object me, object dest )
+{
+	object *tubes;
+
+	message_vision( sprintf("$N 搭上一%s %s.\n",
+		dest->query("unit"), dest->name()), me );
+
+	tubes = dest->query_boarding_tubes();
+	if( me->move( tubes[0] ) ) {
+		message_vision( sprintf("$N 坐上这%s %s.\n",
+			dest->query("unit"), dest->name()), me );
+		me->time_unit_loss( 10 + ( 25 - me->query("dex")) / 5 );
+		me->delete_temp("ss_command");
+		return 1;
+	}
+	return notify_fail("无法登舱，原因不明。\n");
+}
+
+int help(object me)
+{
+write(@HELP
+指令格式： board <宇宙船舰名称>
+
+这个指令可以让你进入宇宙船舰的登舱门。 
+如果宇宙船舰进入宇宙港内，你跟宇宙船舰的距离必须是 0。
+如果宇宙船舰停泊在宇宙港的登舰通道外，你必须在登舰门前。
+
+
+参考： disembark, pilot, sl
+HELP
+    );
+    return 1;
+}

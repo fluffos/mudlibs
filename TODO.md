@@ -15,12 +15,28 @@ worked; keep status values consistent so the table stays greppable:
 - `blocked: <reason>` (needs a decision or hit something unresolved)
 
 Port assignments: sequential from 40001, recorded here so re-running
-several libs at once never collides.
+several libs at once never collides. **Next free port: 40003.**
+
+## Progress summary (updated as libs are finished)
+
+- **Done: 2 / 100** (shanhaizhanshen, xingzhanyingxiong)
+- Tooling built along the way (now reusable for the rest): `extract.sh`,
+  `convert_lib.sh` (encoding + rename + ref-fixes, automated), `lpcc_check.sh`
+  (now batch-mode, ~15-70x faster — one VM boot compiles every file),
+  `mudclient.py` (telnet smoke-test client).
+- Driver patched twice (`~/src/fluffos`, both `build/` and `build-debug/`
+  rebuilt each time — see AGENTS.md §8, §"lpcc --batch"):
+  1. Null-pointer crash in `mudlib_stats.cc` (old-MudOS bootstrap ordering).
+  2. `MAX_EXPANSION_NESTING`/`kMaxExpandStringDepth` raised (32→1024,
+     64→1024 outside ASan builds) so long macro-heavy expressions compile;
+     `lpcc` given a `--batch` mode for fast multi-file sweeps.
+- Fix catalog in `AGENTS.md` is up to §14 — read it before starting a new
+  lib, most of what's there will recur.
 
 | # | Archive | Slug | Port | Status | Notes |
 |---|---|---|---|---|---|
-| 1 | 山海战神.rar | shanhaizhanshen | 40001 | playable | pilot lib; see libs/shanhaizhanshen/NOTES.md |
-| 2 | 星战英雄.rar | xingzhanyingxiong | 40002 | playable | 2nd pilot; found driver bug (AGENTS.md §8), see libs/xingzhanyingxiong/NOTES.md |
+| 1 | 山海战神.rar | shanhaizhanshen | 40001 | done | pilot lib; see libs/shanhaizhanshen/NOTES.md |
+| 2 | 星战英雄.rar | xingzhanyingxiong | 40002 | done | 2nd pilot; found driver bug (AGENTS.md §8) + message_combatd mudlib bug; see libs/xingzhanyingxiong/NOTES.md |
 | 3 | 20150716未知lib.zip | | | not started | |
 | 4 | bxsj.rar | | | not started | |
 | 5 | bxsj1.rar | | | not started | |

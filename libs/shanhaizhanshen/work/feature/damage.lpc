@@ -1,0 +1,568 @@
+// damage.c
+// The codes in heal_up() is somewhat stupid...:P
+// Last modified by Spock @ FF   97.Feb.10.
+
+#include <ansi.h>
+#include <dbase.h>
+#include <login.h>
+#include <move.h>
+
+int ghost = 0;
+
+int is_ghost() { return ghost; }
+
+varargs int limb_damage( int limb_number, int damage, object who )
+{
+        int *limbs_hit_d, val;
+
+        if( damage < 0 ) error( "F_DAMAGE: 伤害值为负值。\n");
+        if( limb_number < 0 ) error( "F_DAMAGE: 肢体号码为负值。\n");
+
+        if( objectp( who)) set_temp( "last_damage_from", who);
+        limbs_hit_d = query("limbs_hit");
+        val = limbs_hit_d[limb_number] - damage;
+
+        if( val >= 0 ) {
+                limbs_hit_d[limb_number] = val;
+                set( "limbs_hit", limbs_hit_d );
+        }
+        else {
+                limbs_hit_d[limb_number] = -1;
+                set( "limbs_hit", limbs_hit_d );
+        }
+
+        set_heart_beat(1);
+        return damage;
+}
+
+varargs int receive_damage(string type, int damage, object who)
+{
+	int val;
+
+	if( damage < 0 ) error("F_DAMAGE: 伤害值为负值。\n");
+        if( type!="spi" && type !="mov" )
+                error("F_DAMAGE: 伤害种类错误( 只能是 spi, mov 其中之一 )。\n");
+
+	if( objectp(who) ) set_temp("last_damage_from", who);
+	val = (int)query(type) - damage;
+
+	if( val >= 0 ) set(type, val);
+	else set( type, -1 );
+
+	set_heart_beat(1);
+
+	return damage;
+}
+
+varargs int limb_wound(int limb_number, int damage, object who)
+{
+        int *limbs_eff_hit_w, *limbs_hit_w, val;
+
+	if( damage < 0 ) error("F_DAMAGE: 伤害值为负值。\n");
+        if( limb_number < 0 ) error("F_DAMAGE: 肢体号码为负值。\n");
+
+	if( objectp(who) ) set_temp("last_damage_from", who);
+        limbs_eff_hit_w = query( "limbs_eff_hit");
+        val = limbs_eff_hit_w[limb_number] - damage;
+
+        if( val >= 0 ) {
+                limbs_eff_hit_w[limb_number] = val;
+                set( "limbs_eff_hit", limbs_eff_hit_w );
+        }
+	else {
+                limbs_eff_hit_w[limb_number] = -1;
+                set( "limbs_eff_hit", limbs_eff_hit_w );
+	val = -1;
+	}
+
+        limbs_hit_w = query( "limbs_hit");
+        if( limbs_hit_w[limb_number] > val ) {
+                limbs_hit_w[limb_number] = val;
+                set( "limbs_hit", limbs_hit_w);
+        }
+
+	set_heart_beat(1);
+	return damage;
+}
+
+varargs int receive_wound(string type, int damage, object who)
+{
+	int val;
+
+	if( damage < 0 ) error("F_DAMAGE: 伤害值为负值。\n");
+        if( type!="spi" && type!="mov" )
+                error("F_DAMAGE:伤害种类错误( 只能是 spi, mov 其中之一 )。\n");
+
+	if( objectp(who) ) set_temp("last_damage_from", who);
+	val = (int)query("eff_" + type) - damage;
+
+	if( val >= 0 ) set("eff_" + type, val);
+	else {
+		set( "eff_" + type, -1 );
+		val = -1;
+	}
+
+	if( (int)query(type) > val ) set(type, val);
+
+	set_heart_beat(1);
+
+	return damage;
+}
+
+int limb_heal(int limb_number, int heal)
+{
+        int *limbs_hit_h, *limbs_eff_hit_h, val;
+
+	if( heal < 0 ) error("F_DAMAGE: 恢复值为负值。\n");
+        if( limb_number < 0 ) error("F_DAMAGE: 肢体号码为负值。\n");
+
+        limbs_hit_h = query("limbs_hit");
+        val = limbs_hit_h[limb_number] + heal;
+
+        limbs_eff_hit_h = query("limbs_eff_hit");
+
+        if( val > limbs_eff_hit_h[limb_number] ){
+                limbs_hit_h[limb_number] = limbs_eff_hit_h[limb_number];
+                set( "limbs_hit", limbs_hit_h );
+        }
+        else {
+                limbs_hit_h[limb_number] = val;
+                set( "limbs_hit", limbs_hit_h );
+        }
+
+	return heal;
+}
+
+int receive_heal(string type, int heal)
+{
+	int val;
+
+	if( heal < 0 ) error("F_DAMAGE: 恢复值为负值。\n");
+        if( type!="spi" && type!="mov" )
+                error("F_DAMAGE: 恢复种类错误( 只能是 spi, mov 其中之一 )。\n");
+
+	val = (int)query(type) + heal;
+
+	if( val > (int)query("eff_" + type) ) set(type, (int)query("eff_" + type));
+	else set( type, val );
+
+	return heal;
+}
+
+int limb_curing( int limb_number, int heal)
+{
+        int *limbs_eff_hit_c, *limbs_max_hit_c, max, eff;
+
+	if( heal < 0 ) error("F_DAMAGE: 恢复值为负值。\n");
+        if( limb_number < 0 ) error("F_DAMAGE: 肢体号码为负值。\n");
+
+        limbs_eff_hit_c = query("limbs_eff_hit");
+        limbs_max_hit_c = query("limbs_max_hit");
+
+        eff = limbs_eff_hit_c[limb_number];
+        max = limbs_max_hit_c[limb_number];
+
+        if( eff + heal > max ) {
+                limbs_eff_hit_c[limb_number] = max;
+                set( "limbs_eff_hit", limbs_eff_hit_c );
+                return max - eff;
+	}
+        else {
+                limbs_eff_hit_c[limb_number] = eff + heal;
+                set( "limbs_eff_hit", limbs_eff_hit_c);
+		return heal;
+	}
+}
+
+int receive_curing(string type, int heal)
+{
+	int max, val;
+
+	if( heal < 0 ) error("F_DAMAGE: 恢复值为负值。\n");
+        if( type!="spi" && type!="mov" )
+                error("F_DAMAGE: 恢复种类错误( 只能是 spi, mov 其中之一 )。\n");
+
+	val = (int)query("eff_" + type);
+	max = (int)query("max_" + type);
+
+	if( val + heal > max ) {
+		set("eff_" + type, max);
+		return max - val;
+	} else {
+		set( "eff_" + type, val + heal);
+		return heal;
+	}
+}
+
+void unconcious()
+{
+	object defeater;
+	int pending;
+
+	if( !living(this_object()) ) return;
+	if( wizardp(this_object()) && query("env/immortal") ) return;
+
+	if( objectp(defeater = query_temp("last_damage_from")) )
+		COMBAT_D->winner_reward(defeater, this_object());
+
+	this_object()->remove_all_enemy();
+
+        message("system", HIR "\n痛苦地低垂着头，面无血色，受击后的余力还在体内四处流窜，血渐渐沥沥的从嘴角不断溢出，一种可怕的念头索绕心头：“呜……我会死吗？\n" NOR,
+		this_object());
+		if( wizardp(this_object()) && query("env/immortal") ) return;
+		this_object()->disable_player(" <昏迷不醒>");
+
+	set("combat_status", "unconcious" );
+
+	set("spi", 1);
+	set("mov", 1);
+//	set_temp("block_msg/all", 1);
+	COMBAT_D->announce(this_object(), "unconcious");
+	pending = random( 50 - query("con") ) * 20;
+	this_object()->time_unit_loss( pending );
+//	this_object()->start_busy( pending / 2);
+	call_out("revive", pending * 2 / this_object()->query("time_unit") );
+}
+
+varargs void revive(int quiet)
+{
+	remove_call_out("revive");
+	while( environment()->is_character() )
+		this_object()->move(environment(environment()));
+//	this_object()->enable_player();
+
+	set("combat_status", "normal" );
+
+	if( !quiet ) {
+		COMBAT_D->announce(this_object(), "revive");
+		set_temp("block_msg/vision", 0);
+		set_temp("block_msg/outside", 0);
+		message("system", HIY "\n虚汗涟涟，微微张开嘴，两眼无神，断断续续，微弱地说：“……救……我……”\n\n" NOR,
+			this_object());
+	} else	{
+		set_temp("block_msg/vision", 0);
+		set_temp("block_msg/outside", 0);
+	}
+}
+
+void tired()
+{
+	object defeater;
+	int pending;
+
+	if( !living(this_object()) ) return;
+	if( wizardp(this_object()) && query("env/immortal") ) return;
+
+	message( "system", HIM "\n如烂泥落下，知觉全失。。。。\n" NOR, this_object());
+	if( wizardp(this_object()) && query("env/immortal") ) return;
+//	this_object()->disable_player(" <ōみ痟>");
+	set("combat_status", "tired" );
+	this_object()->set("position", "rest");
+	pending = random( 25 - query("con") ) * 10;
+	this_object()->time_unit_loss( pending );
+//	this_object()->start_busy( pending / 2 );
+
+	if( query("spi") <= 0)
+		set("spi", 1);
+	if( query("mov") <= 0)
+		set("mov", 1);
+	COMBAT_D->announce(this_object(), "tired");
+	call_out("refresh", pending * 2 / this_object()->query("time_unit") );
+}
+
+varargs void refresh(int quiet)
+{
+	remove_call_out("refresh");
+	while( environment()->is_character() )
+		this_object()->move(environment(environment()));
+//	this_object()->enable_player();
+//	this_object()->command("stand");
+	set("combat_status", "normal" );
+	if( !quiet ) {
+		COMBAT_D->announce(this_object(), "refresh");
+		message("system", HIY "\n慢慢地力气又回到了你的身体....\n\n" NOR,
+			this_object());
+	}
+}
+
+void die()
+{
+	object corpse, killer;
+	int exp, j;
+	int *limbs_hit_d, *limbs_eff_hit_d;
+
+	if( !living(this_object()) ) revive(1);
+	if( wizardp(this_object()) && query("env/immortal") ) return;
+
+// Clear all the conditions by death.
+	this_object()->clear_condition();
+
+	set("combat_status", "dead" );
+	COMBAT_D->announce(this_object(), "dead");
+	if( objectp(killer = query_temp("last_damage_from")) ) {
+		set_temp("my_killer", killer->query("id"));
+		COMBAT_D->killer_reward(killer, this_object());
+	}
+
+	if( objectp(corpse = CHAR_D->make_corpse(this_object(), killer)) )
+		corpse->move(environment());
+
+	this_object()->remove_all_killer();
+	all_inventory(environment())->remove_killer(this_object());
+
+	this_object()->dismiss_team();
+	if( userp(this_object()) ) {
+
+		if( query("level") < 100 ) {
+			exp = query("level") * query("level") * 100;
+			set("combat_exp", exp);
+		}
+
+		limbs_hit_d = query("limbs_hit");
+		for( j = 0; j < sizeof( query("limbs")); j ++) {
+			limbs_hit_d[j] = 1;
+		}
+
+		limbs_eff_hit_d = query("limbs_eff_hit");
+		for( j = 0; j < sizeof( query("limbs")); j ++) {
+			limbs_eff_hit_d[j] = 1;
+		}
+		set("limbs_hit", limbs_hit_d);
+		set("limbs_eff_hit", limbs_eff_hit_d);
+		set("spi", 1);
+		set("eff_spi", 1);
+		set("mov", 1);
+		set("eff_mov", 1);
+                ghost = 1;
+		this_object()->level_up( this_object()->query("race"));
+		this_object()->move(DEATH_ROOM);
+		DEATH_ROOM->start_death(this_object());
+		this_object()->skill_death_penalty();
+
+	} else
+		destruct(this_object());
+}
+
+void reincarnate()
+{
+	ghost = 0;
+	set("combat_status", "normal" );
+	return;
+}
+
+int max_food_capacity() { return query_weight() / 200; }
+
+int max_water_capacity() { return query_weight() / 200; }
+
+int heal_up()
+{
+	int update_flag, i, j;
+	mapping my;
+        int *limbs_hit_u, *limbs_eff_hit_u, limb_hit_u, limb_eff_hit_u;
+        int *limbs_max_hit_u, limb_max_hit_u;
+	string *limbs_u;
+
+	update_flag = 0;
+
+	my = query_entire_dbase();
+
+	if ( !ghost ) {
+		if( my["water"] > 0 ) { my["water"] -= 1; update_flag++; }
+		if( my["food"] > 0 ) { my["food"] -= 1; update_flag++; }
+	}
+
+	limbs_u = query("limbs");
+        limbs_hit_u = query("limbs_hit");
+       	limbs_eff_hit_u = query("limbs_eff_hit");
+        limbs_max_hit_u = query("limbs_max_hit");
+
+	if( !ghost ) {
+		i = sizeof( query("limbs") ) - 1;
+		while( i >= 0 ) {
+			if( limbs_eff_hit_u[i] * 10 / limbs_max_hit_u[i] < 3 ) {
+				j = sizeof( query("limbs") ) - 1;
+				while( j >= 0 ) {
+					limbs_hit_u[j] = limbs_hit_u[j] - (10 - limbs_hit_u[i] * 10 / limbs_max_hit_u[i]);
+					j--;
+				}
+				limbs_eff_hit_u[i] = limbs_eff_hit_u[i] - (10 - limbs_eff_hit_u[i] * 10 / limbs_max_hit_u[i]);
+			message_vision(HIR "$N " HIR "的" + limbs_u[i] + "血沥沥的不断溢出 !!" NOR "\n", this_object() );
+			if( this_object()->query("position") == "sleep" )
+			tell_object( this_object(), HIR "你的" + limbs_u[i] + "血正在沥沥的不断溢出 !!" NOR "\n");
+			}
+			i--;
+		}
+	}
+
+// Now we have rest & sleep condition add here.
+// When at sleep.
+
+	if( (string)query("position") == "sleep" ) {
+		if( my["spi"] < my["eff_spi"] ) {
+			my["spi"] += my["not"] / 2 + my["int"] / 2 + my["level"] / 10;
+			if( my["spi"] > my["eff_spi"] )
+				my["spi"] = my["eff_spi"];
+			update_flag++; 
+		}
+		if( my["mov"] < my["eff_mov"] ) {
+			my["mov"] += my["dex"] + my["con"] + my["level"] / 5;
+			if( my["mov"] > my["eff_mov"] )
+				my["mov"] = my["eff_mov"];
+			update_flag++; 
+		}
+		if( ghost ) {
+			if( my["eff_spi"] < my["max_spi"] ) { 
+				my["eff_spi"] += 3 + my["level"] / 20;
+				if( my["eff_spi"] > my["max_spi"] )
+					my["eff_spi"] = my["max_spi"];
+				update_flag ++;
+			} 
+			if( my["eff_mov"] < my["max_mov"] ) {
+				my["eff_mov"] += 3 + my["level"] / 10;
+				if( my["eff_spi"] > my["max_spi"] )
+					my["eff_spi"] = my["max_spi"];
+				update_flag ++;
+			}
+		}
+
+// Deal with limbs_hit in sleep.
+
+	        i = sizeof( query("limbs") ) - 1;
+	        while( i >= 0 ) {
+        	        limb_hit_u = limbs_hit_u[i];
+                	limb_eff_hit_u = limbs_eff_hit_u[i];
+	                limb_max_hit_u = limbs_max_hit_u[i];
+
+                        if( limb_hit_u < limb_eff_hit_u ) {
+	        	        limb_hit_u += my["con"] / 3 + my["str"] / 3 + my["level"] / 10;
+				limbs_hit_u[i] = limb_hit_u;
+				if( limb_hit_u > limb_eff_hit_u )
+					limbs_hit_u[i] = limb_eff_hit_u;
+				update_flag++; 
+			}
+			if( ghost ) {
+                	        if( limb_eff_hit_u < limb_max_hit_u ) {
+                        	        limb_eff_hit_u += 3 + my["level"] / 20;
+			                limbs_eff_hit_u[i] = limb_eff_hit_u;
+					if( limb_eff_hit_u > limb_max_hit_u )
+						limbs_eff_hit_u[i] = limb_max_hit_u;
+					update_flag ++;
+				}
+			}
+			i--;
+        	}
+		set("limbs_hit", limbs_hit_u ); 
+		if( ghost )
+			set("limbs_eff_hit", limbs_eff_hit_u ); 
+	}
+
+// When at rest.
+
+	else if( (string)query("position") == "rest" ) {
+		if( my["spi"] < my["eff_spi"] ) {
+			my["spi"] += my["not"] / 3 + my["int"] / 5 + my["level"] / 10;
+			if( my["spi"] > my["eff_spi"] )
+				my["spi"] = my["eff_spi"];
+			update_flag++; 
+		}
+		if( my["mov"] < my["eff_mov"] ) {
+			my["mov"] += my["dex"] / 2 + my["con"] / 3 + my["level"] / 10;
+			if( my["mov"] > my["eff_mov"] )
+				my["mov"] = my["eff_mov"];
+			update_flag++; 
+		}
+		if( ghost ) {
+			if( my["eff_spi"] < my["max_spi"] ) { 
+				my["eff_spi"] += 2 + my["level"] / 20; 
+				if( my["eff_spi"] > my["max_spi"] )
+					my["eff_spi"] = my["max_spi"];
+				update_flag++; 
+			}
+			if( my["eff_mov"] < my["max_mov"] ) {
+				my["eff_mov"] += 2 + my["level"] / 10; 
+				if( my["eff_mov"] > my["max_mov"] )
+					my["eff_mov"] = my["max_mov"];
+				update_flag++; 
+			}
+		}
+// Deal with limbs_hit in rest.
+
+	        i = sizeof( query("limbs") ) - 1;
+	        while( i >= 0 ) {
+        	        limb_hit_u = limbs_hit_u[i];
+                	limb_eff_hit_u = limbs_eff_hit_u[i];
+	                limb_max_hit_u = limbs_max_hit_u[i];
+
+                        if( limb_hit_u < limb_max_hit_u ) {
+	        	        limb_hit_u += my["con"] / 5 + my["str"] / 5 + my["level"] / 10;
+				if( limb_hit_u > limb_eff_hit_u )
+					limbs_hit_u[i] = limb_eff_hit_u;
+				update_flag++; 
+			}
+			if ( ghost ) {
+				if( limb_eff_hit_u < limb_max_hit_u ) {
+					limb_eff_hit_u += 2 + my["level"] / 20;
+					limbs_eff_hit_u[i] = limb_eff_hit_u;
+					if( limb_eff_hit_u > limb_max_hit_u )
+						limb_eff_hit_u = limb_max_hit_u;
+					set("limbs_eff_hit", limbs_eff_hit_u );
+					update_flag++;
+				}
+			}
+			i--;
+        	}
+		set("limbs_hit", limbs_hit_u ); 
+		if( ghost )
+			set("limbs_eff_hit", limbs_eff_hit_u );
+	}
+
+// When standing.
+
+	else {
+		if( my["spi"] < my["eff_spi"] ) {
+			my["spi"] += 1 + my["level"] / 20;
+			update_flag++;
+			if( my["spi"] > my["eff_spi"] )
+				my["spi"] = my["eff_spi"];
+		}
+		if( my["mov"] < my["eff_mov"] ) {
+			my["mov"] += 5 + my["level"] / 5;
+			if( my["mov"] > my["eff_mov"] )
+				my["mov"] = my["eff_mov"];
+			update_flag++; 
+		}
+		if( ghost ) {
+			if( my["eff_spi"] < my["max_spi"] ) {
+				my["eff_spi"] ++;
+				update_flag ++;
+			}
+			if( my["eff_mov"] < my["max_mov"] ) {
+				my["eff_mov"] ++; 
+				update_flag++; 
+			}
+			i = sizeof( query("limbs") ) - 1;
+			while( i >= 0 ) {
+				i--;
+			}
+		}
+		i = sizeof( query("limbs") ) - 1;
+		while( i >= 0 ) {
+			if( limbs_hit_u[i] < limbs_max_hit_u[i] ) {
+				limbs_hit_u[i] += 1 + my["level"] / 20;
+				update_flag ++;
+			}
+			if( ghost ) {
+				if( limbs_eff_hit_u[i] < limbs_max_hit_u[i] ) {
+					limbs_eff_hit_u[i] ++;
+				update_flag ++;
+				}
+			}
+			i--;
+		}
+
+		set("limbs_hit", limbs_hit_u );
+		if( ghost )
+			set("limbs_eff_hit", limbs_eff_hit_u );
+	}
+	return update_flag;
+}

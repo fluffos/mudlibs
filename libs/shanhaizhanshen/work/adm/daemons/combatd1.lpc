@@ -1,0 +1,1309 @@
+// combatd.c
+// Combat daemon, now add vehicle combat.
+// Original ES II daemon.
+// Last modified by Spock @ FF	98.Aug.20.
+//
+// The vehicle combat is a terrible part due to my bad coding...:P
+// I copy original part for vehicle combat usage, so you can see
+// the size of this daemon grows dramastically...:P
+ 
+#pragma optimize
+
+#include <ansi.h>
+#include <skill.h>
+#include <weapon.h>
+#include <combat.h>
+
+inherit F_DBASE;
+
+string *guard_msg = ({
+        "$N" CYN " 碝т帝 " NOR "$n" CYN " 絋龟︗竚, 单诀穦ю阑.\n" NOR,
+        "$N" CYN " タ吏臮帝㏄笆, 碞单 " NOR "$n" CYN " 忌臩瘆红.\n" NOR,
+        "$N" CYN " ōぃ幢睹笆, 单 " NOR "$n" CYN " Ωю阑.\n" NOR,
+        "$N" CYN " ヘぃ锣氟╪帝 " NOR "$n" CYN " , 繦非称ю阑.\n" NOR,
+        "$N" CYN " 篊篊簿笆帝ō, 诀も.\n" NOR,
+});
+
+string *catch_hunt_msg = ({
+        "$N" HIW " ㎝ " NOR "$n" HIW " ǎ, 碞皑笆もゴ癬ㄓ !\n" NOR,
+        "$N" HIW " 癸帝 " NOR "$n" HIW " 絴洱, 琌 ! \n" NOR,
+        "$N" HIW " ㎝ " NOR "$n" HIW " 窱, 杠ぃ弧碞ゴ癬ㄓ !\n" NOR,
+        "$N" HIW " 泊縣ǎ " NOR "$n" HIW " ,  !羘侥玡笆も.\n" NOR,
+        "$N" HIW " ǎ " NOR "$n" HIW " , 繦: иさぱ獶甠ぃ ! \n" NOR,
+        "$N" HIW " 耻笵 " NOR "$n" HIW " , и侣眀さぱ眔衡衡 ! \n" NOR,
+        "$N" HIW " 耻笵 " NOR "$n" HIW " , 倒иǎ繤 ! \n" NOR, 
+} );
+
+string *v_catch_hunt_msg = ({
+	"$N" HIW " 祇瞷 " NOR "$n" HIW " 碞皑祇笆ю阑 !!\n" NOR,
+});
+
+int check_equip_broken( object me, object equip );
+void status_report( object me );
+
+void create()
+{
+	seteuid(getuid());
+	set("name", "驹矮弘艶");
+	set("id", "combatd");
+}
+
+string damage_msg(int damage, string type)
+{
+	string str;
+
+        if( damage == 0 ) return "⊿Τ硑Θヴ︙端甡.\n";
+
+	switch( type ) {
+	case "澄端":
+                if( damage < 20 ) return "琌淮淮揽瘆 $p $l ブψ.\n";
+                else if( damage < 40 ) return " $p $l 购笵灿﹀勃.\n";
+                else if( damage < 80 ) return HIW "夺羘 $p $l 购笵端 !\n";
+                else if( damage < 160 ) return HIY "夺羘 $p $l 笵﹀睴睴端 !\n";
+                else if( damage < 320 ) return HIR "夺羘 $p $l 笵瞏端, 聁眔 $N 骸羪翧﹀ !\n";
+                else return HIM "钮ǎ $p 羘篏, $w р $l 辟Θㄢ篒 ! !\n";
+		break;
+	case "端":
+                if( damage < 20 ) return "琌淮淮瘆 $p $l ブψ.\n";
+                else if( damage < 40 ) return " $p $l 承.\n";
+                else if( damage < 80 ) return HIW "糚羘 $p $l 砛\ !\n";
+                else if( damage < 160 ) return HIY "糚羘秈 $p  $l, ㄏ $p ぃパ︑癶碭˙ !\n";
+                else if( damage < 320 ) return HIR "糚夺羘, $w  $p $l ﹀ψ罸絢竇罧 !\n";
+                else return HIM "挡狦钮ǎ $p 羘篏, $w  $p  $l 癸τ, ﹀聁骸 ! !\n";
+		break;
+	case "凤端":
+                if( damage < 20 ) return " $p  $l ゴ矪.\n";
+                else if( damage < 40 ) return "阑㏑い, $p  $l 祅竳遏.\n";
+                else if( damage < 80 ) return HIW "阑㏑い, ㄏ $p 磂羘 !\n";
+                else if( damage < 160 ) return HIY "痽羘, ゴ眔 $p 硈癶ㄢ˙ !\n";
+                else if( damage < 320 ) return HIR "硂痽羘ゴ眔 $p 礹眔篏 !\n";
+                else return HIM "阑い, $p珃羘翧﹀ ! !\n";
+		break;
+        case "簀端":
+                if( damage < 20 ) return "痽羘, 揽端 $p $l ブψ.\n";
+                else if( damage < 40 ) return "痽羘, ゴ端 $p  $l.\n";
+                else if( damage < 80 ) return HIW "痽羘, ゴ $p $l , 端﹀瑈ぃゎ.\n";
+                else if( damage < 160 ) return HIY "痽羘, ゴい $p $l, 翧﹀琕俱ン︾狝.\n";
+                else if( damage < 320 ) return HIR "痽羘,  $p $l ゴ竇罧, 祅翧﹀聁眔骸.\n";
+                else return HIM "痽羘, $p $l 秨瑌, ﹀ψミ聁矪.\n";
+        case "端":
+                if( damage < 20 ) return "臚羘, 端 $p $l ブψ.\n"; 
+                else if( damage < 40 ) return "臚羘, 端 $p  $l.\n";
+                else if( damage < 80 ) return HIW "臚订羘, $p $l 端勃仓仓, ﹀瑈ぃゎ.\n";
+                else if( damage < 160 ) return HIY "臚订羘, $p  $l 眔﹀ψ家絢, 翧﹀聁.\n";
+                else if( damage < 320 ) return HIR "臚羘エ臫, $p  $l 祡年, ﹀ψ绢床.\n";
+                else return HIM "臚羘エ臫, ぱ穘笆, ǎ $p $l 竒, ぃ.\n";
+	default:
+		if( !type ) type = "端甡";
+                if( damage < 20 ) str =  "琌硑Θ矪淮稬";
+                else if( damage < 40 ) str = "硑Θ矪";
+                else if( damage < 80 ) str = HIW "硑Θ矪腨";
+                else if( damage < 160 ) str = HIY "硑Θ会腨";
+                else if( damage < 320 ) str = HIR "硑Θ讽腨";
+                else str = HIM "硑Θ伐ㄤ腨┤";
+		return str + type + "!\n";
+	}
+}
+
+string v_damage_msg(int damage, string type)
+{
+	string str;
+
+        if( damage == 0 ) return "⊿Τ硑Θヴ︙穕胊.\n";
+
+	switch( type ) {
+        case "簀端":
+                if( damage < 20 ) return "痽羘, 揽 $p $l .\n";
+                else if( damage < 40 ) return "痽羘, ゴ $p  $l.\n";
+                else if( damage < 80 ) return HIW "痽羘, ゴ $p  $l.\n";
+                else if( damage < 160 ) return HIY "痽羘,  $p  $l ゴふ.\n";
+                else if( damage < 320 ) return HIR "痽羘,  $p $l ゴ竇罧.\n";
+                else return HIM "痽羘, $p $l 秨瑌.\n";
+        case "端":
+                if( damage < 20 ) return "臚羘, 端 $p $l .\n"; 
+                else if( damage < 40 ) return "臚羘,  $p  $l.\n";
+                else if( damage < 80 ) return HIW "臚订羘, $p $l 揽勃仓仓.\n";
+                else if( damage < 160 ) return HIY "臚订羘, $p  $l 眔ヘ獶.\n";
+                else if( damage < 320 ) return HIR "臚羘エ臫, $p  $l 眔瘆年ぃ臭.\n";
+                else return HIM "臚羘エ臫, ぱ穘笆, ǎ $p $l 竒, ぃ.\n";
+	default:
+		if( !type ) type = "穕胊";
+                if( damage < 20 ) str =  "琌硑Θ矪淮稬";
+                else if( damage < 40 ) str = "硑Θ矪";
+                else if( damage < 80 ) str = HIW "硑Θ矪腨";
+                else if( damage < 160 ) str = HIY "硑Θ会腨";
+                else if( damage < 320 ) str = HIR "硑Θ讽腨";
+                else str = HIM "硑Θ伐ㄤ腨┤";
+		return str + type + "!\n";
+	}
+}
+
+string eff_status_msg(int ratio)
+{
+        if( ratio==100 ) return HIG "ㄓ胺眃▆" NOR;
+        if( ratio > 90 ) return HIG "ㄓΤㄇ端" NOR;
+        if( ratio > 80 ) return GRN "癬ㄓ翴端" NOR;
+        if( ratio > 70 ) return GRN "ōΤ碭矪端, ぃ锚ㄆ" NOR;
+	if( ratio > 60 ) return HIY "端ぃ淮, 癬ㄓ猵ぃび" NOR;
+        if( ratio > 50 ) return HIY "Τㄇ端, ㄓ端龟ぃ淮" NOR;
+        if( ratio > 40 ) return YEL "ō端勃仓仓, タ玧や嫉" NOR;
+        if( ratio > 30 ) return YEL "端, ┤Τネ㏑繧" NOR;
+        if( ratio > 20 ) return HIR "端ぇ螟や嫉, 泊帝碞璶" NOR;
+        if( ratio > 10  ) return HIR "硈ず纽常忌臩ㄓ, 竒㏑ス" NOR;
+        return HIM "ō﹀ψ家絢, 繦" NOR;
+}
+
+string status_msg(int ratio)
+{
+        if( ratio==100 ) return HIG "癬ㄓ骸" NOR;
+        if( ratio > 90 ) return HIG "ōΤㄇ端" NOR;
+        if( ratio > 80 ) return GRN "癬ㄓΤㄇ端" NOR;
+        if( ratio > 70 ) return GRN "ōΤㄇ端, τ笆Τ翴ぃび艶" NOR;
+        if( ratio > 60 ) return HIY "齿糔糔, 癬ㄓō砰猵ぃび" NOR;
+        if( ratio > 50 ) return HIY "端ぇ, 羪︹だ籥フ螟" NOR;
+        if( ratio > 40 ) return YEL "ō端瞏のǎ癌, タ玧や嫉帝" NOR;
+        if( ratio > 30 ) return YEL "ō端聁﹀, Τネ㏑繧" NOR;
+        if( ratio > 20 ) return HIR "硈ず纽常臩ㄓ, 翧﹀糛矪" NOR;
+        return HIM "ō竒﹀ψ家絢, 繦常" NOR;
+}
+
+string v_status_msg(int ratio)
+{
+        if( ratio==100 ) return HIG "癬ㄓЧ穝" NOR;
+        if( ratio > 90 ) return HIG "Τㄇ端" NOR;
+        if( ratio > 80 ) return GRN "癬ㄓΤㄇ穕胊" NOR;
+        if( ratio > 70 ) return GRN "Τㄇ端穕胊" NOR;
+        if( ratio > 60 ) return HIY "癬ㄓΤ矪穕胊" NOR;
+        if( ratio > 50 ) return HIY "俱ㄓ穕胊眔畉ぃ" NOR;
+        if( ratio > 40 ) return YEL "Τ矪腨穕胊" NOR;
+        if( ratio > 30 ) return YEL "竒穕胊眔瘆年ぃ臭" NOR;
+        if( ratio > 20 ) return HIR "ぇ戳" NOR;
+        return HIM "е璶Θ帮紀臟" NOR;
+}
+
+varargs string report_status(object ob, int effective)
+{
+        int *limbs_hit, *limbs_max_hit;
+        int j, hit, max_hit; 
+
+        hit = 0;    max_hit = 0;
+        limbs_hit = ob->query("limbs_hit");
+        limbs_max_hit = ob->query("limbs_max_hit");
+
+        j = sizeof( ob->query("limbs_hit") );
+	while( j-- ) {
+                hit += limbs_hit[j];
+                max_hit += limbs_max_hit[j];
+	}
+
+	if(effective){
+		return eff_status_msg( hit * 100 / max_hit );
+	} else {
+		return status_msg( hit * 100 / max_hit );
+        }
+}
+
+string v_report_status(object ob)
+{
+        int *armors_hit, *armors_max_hit;
+        int j, hit, max_hit; 
+
+        hit = 0;    max_hit = 0;
+        armors_hit = ob->query("armors_hit");
+        armors_max_hit = ob->query("armors_max_hit");
+
+        j = sizeof( ob->query("armors_hit") );
+	while( j-- ) {
+                hit += armors_hit[j];
+                max_hit += armors_max_hit[j];
+	}
+		return v_status_msg( hit * 100 / max_hit );
+}
+
+// This function calculates the combined skill/combat_exp power of a certain
+// skill. This value is used for A/(A+B) probability use.
+varargs int skill_power(object ob, string skill, int usage)
+{
+        int status, level, power;
+
+	if( !living(ob) ) return 0;
+
+	level = ob->query_skill(skill);
+
+// The certain skill power = skill_level * spi %
+
+	switch(usage) {
+		case SKILL_USAGE_ATTACK:
+			level += ob->query_temp("apply/attack");
+			break;
+		case SKILL_USAGE_DEFENSE:
+			level += ob->query_temp("apply/defense");
+			break;
+		default:
+			break;
+	}
+
+	if( !level ) return 0;
+
+// The certain skill power = skill_level * spi %
+
+        if( ( status = ob->query("spi") ) > 0 )
+                power = level * ( status * 100 / ob->query("max_spi") ) / 100;
+        else
+                power = 0;
+
+	return power;
+}
+
+// do_attack()
+//
+// Perform an attack action. This function is called by fight() or as an
+// interface for some special utilize in quests.
+//
+varargs int do_attack(object me, object victim, object weapon, int attack_type)
+{
+	mapping action, my, your;
+	string *limbs_c;
+	object *inv, your_driver;
+	int limb_number;
+	int j;
+
+	mapping var = ([ ]);
+	mapping str = ([ ]);
+
+	my = me->query_entire_dbase();
+	your = victim->query_entire_dbase();
+
+	var["ap"] = 0;
+	var["dp"] = 0;
+	var["pp"] = 0;
+	var["level_bonus"] = 0;
+	var["exp"] = 0;
+	var["damage"] = 0;
+	var["damage_bonus"] = 0;
+	var["wounded"] = 0;
+
+	str["attact_skill"] = "";
+	str["dodge_skill"] = "";
+	str["parry_skill"] = "";
+	str["damage_type"] = "";
+	str["limb_number"] = "";
+	str["result"] = "";
+
+	if( attack_type == TYPE_DRIVER ) {
+		inv = all_inventory( victim );
+		j = sizeof( inv );
+		while( j-- ) {
+			if( inv[j]->query_temp("command") ) {
+				your_driver = inv[j];
+				break;
+			}
+		}
+	}
+//
+// (1) Find out what action the offenser will take.
+//
+	if( weapon ) {
+		me->set("actions", (mapping)WEAPON_D->query_action( weapon ) );
+
+		if( (int)weapon->query("broken") ) {
+			tell_object(me, HIM "\n" + weapon->query("name") + "竒穕胊┪珿毁 !\n\n" NOR );
+			weapon->unequip();
+			me->reset_action();
+		}
+
+	}
+	action = (mapping)me->query("actions");
+	if( !mapp(action) ) {
+		me->reset_action();
+		action = (mapping)me->query("actions");
+		if( !mapp(action) ) {
+			CHANNEL_D->do_channel( this_object(), "sys",
+				sprintf("%s(%s): bad action = %O",
+					me->name(1), (string)me->query("id"), me->query("actions", 1)));
+			return 0;
+		}
+	}
+	if( weapon ) {
+		me->set("actions", (mapping)WEAPON_D->query_action( weapon ) );
+
+		if( (int)weapon->query("broken") ) {
+			tell_object(me, HIM "\n" + (string)weapon->query("name") + "竒穕胊┪珿毁 !\n\n" NOR );
+			weapon->unequip();
+			me->reset_action();
+		}
+
+		action = (mapping)me->query("actions");
+	}
+
+	if( functionp(action["pre_action"]) )
+		evaluate( action["pre_action"], me, victim, weapon, var["damage"] );
+
+        str["result"] = "\n" + action["action"] + " !\n";
+
+//
+// (2) Prepare var["ap"], var["dp"] for checking if hit.
+//
+//     var["ap"] = attack point, var["dp"] = defense point.
+//
+	if( weapon ) {
+		str["attack_skill"] =	(string)weapon->query("skill_type");
+		str["damage_type"]  =	(string)weapon->query("damage_type");
+	} else {
+		str["attack_skill"] = "unarmed";
+		str["damage_type"]  = "traditional";
+	}
+
+	var["level_bonus"] = your["level"] * your["level"] 
+		- my["level"] * my["level"];
+	if( var["level_bonus"] < 0 ) var["level_bonus"] = 0;
+
+	if( attack_type == TYPE_DRIVER || attack_type == TYPE_VEHICLE ) {
+		limbs_c = victim->query("armors");
+        	limb_number = random( sizeof( limbs_c ) );
+		str["limb_number"] = sprintf("%d", limb_number );
+	} else {
+		limbs_c = victim->query("limbs");
+        	limb_number = random( sizeof( limbs_c ) );
+		str["limb_number"] = sprintf("%d", limb_number );
+	}
+	var["ap"] = my["basic_ap"] + (int)me->query_temp("apply/ap")
+               	+ skill_power( me, str["attack_skill"], SKILL_USAGE_ATTACK )
+               	* skill_power( me, str["attack_skill"], SKILL_USAGE_ATTACK );
+        if( var["ap"] < 1 ) var["ap"] = 1;
+	if( attack_type == TYPE_DRIVER ) {
+        	var["dp"] = your["basic_dp"]
+                	+ skill_power( your_driver, your["skill_type"], SKILL_USAGE_DEFENSE )
+	                + skill_power( your_driver, str["attack_skill"], SKILL_USAGE_DEFENSE )
+	                * skill_power( your_driver, str["attack_skill"], SKILL_USAGE_DEFENSE );
+		if( !living( your_driver ) || your_driver->query_temp("tired") 
+			|| your_driver->query("position") == "sleep" ) 
+			var["dp"] = 1;
+		if( your["fuel"] <= 0 ) var["dp"] = 1; 
+	} else {
+		var["dp"] = your["basic_dp"] + victim->query_temp("apply/dp")
+        	        + skill_power( victim, "dodge", SKILL_USAGE_DEFENSE )
+	                + skill_power( victim, str["attack_skill"], SKILL_USAGE_DEFENSE )
+	                * skill_power( victim, str["attack_skill"], SKILL_USAGE_DEFENSE );
+
+		if( victim->is_busy() ) var["dp"] /= 3;
+		if( your["position"] == "rest" ) var["dp"] /= 2;
+		if( victim->query_temp("tired") ) var["dp"] = 1;
+		if( your["position"] == "sleep" ) var["dp"] = 1;
+		if( !living( victim ) ) var["dp"] = 1;
+	}
+	        if( var["dp"] < 1 ) var["dp"] = 1;
+
+//
+// (3) Fight!
+//     Give us a chance of var["ap"]/(var["ap"]+var["dp"]) to "hit" our opponent. Since both
+//     var["ap"] and var["dp"] are greater than zero, so we always have chance to hit
+//     or be hit.
+//
+
+// To all environment objects if wants to join combat.
+// The detail function of help_npc should written in NPC's own.
+
+	 all_inventory( environment( victim ))->help_combat( me, victim );
+
+// Does the victim dodge this hit?
+
+        if( random( var["ap"] + var["dp"] ) < var["dp"] ) {
+
+		if( attack_type == TYPE_DRIVER || attack_type == TYPE_VEHICLE ) {
+			str["dodge_skill"] = your["skill_type"];
+			str["result"] += (string)victim->query_dodge_msg( limbs_c[limb_number] );
+		} else {
+			str["dodge_skill"] = "dodge";
+			str["result"] += (string)SKILL_D( str["dodge_skill"] )->query_dodge_msg( limbs_c[limb_number] );
+
+		}
+
+//  Add combat_exp & improve skill.
+
+		if( attack_type == TYPE_DRIVER ) {
+			var["exp"] = random( (int)your_driver->query("int") + 1 + var["level_bonus"]);
+			your_driver->add("combat_exp", var["exp"] / 2 );
+			your_driver->improve_skill( str["dodge_skill"], var["exp"] );
+		} else if( !attack_type == TYPE_VEHICLE ) {
+			var["exp"] = random( victim->query("int") + 1 + var["level_bonus"]);
+			your["combat_exp"] += var["exp"] / 2;
+                	victim->improve_skill("dodge", var["exp"]);
+		}
+
+// All have chance to get exp when failed to hit.
+
+                if( random( var["ap"] + var["dp"]) > var["dp"] ) {
+			var["exp"] = random( me->query("int") + 1 + var["level_bonus"]);
+			my["combat_exp"]+= var["exp"] / 2;
+       	        	        me->improve_skill( str["attack_skill"], var["exp"]);
+		}
+		var["damage"] = RESULT_DODGE;
+		victim->time_unit_loss( 10 - victim->query("dex") / 5);
+
+	} else {
+
+//
+//      (4) Check if the victim can parry this attack.
+//
+//	Now only the victim who have wore a shield have chance to parry.
+//
+//	Vehicle doesn't parry a attack.
+
+		if( !victim->is_vehicle() && objectp( victim->query_temp("armor/shield") ) ) {
+		        var["pp"] = skill_power( victim, "parry", SKILL_USAGE_DEFENSE)
+				+ skill_power( victim, str["attack_skill"], SKILL_USAGE_DEFENSE)
+				+ victim->query_temp("apply/pp")
+				+ var["dp"];
+	
+			if( victim->is_busy() ) var["pp"] /= 3;
+			if( your["position"] == "rest" ) var["pp"] /= 2;
+			if( victim->query_temp("tired") ) var["pp"] = 1;
+			if( your["position"] == "sleep" ) var["pp"] = 1;
+			if( var["pp"] < 1 ) var["pp"] = 1;
+			if( !living( victim ) ) var["pp"] = 1;
+
+			str["parry_skill"] = "parry";
+
+		}
+		if( var["pp"] != 0 && ( random( var["ap"] + var["dp"] ) < var["dp"] * var["pp"] / 100 ) ) {
+
+// change to SKILL_D(str["parry_skill"]) after added parry msg to those
+// martial arts that can parry.
+
+			str["result"] += (string)SKILL_D("parry")->query_parry_msg(weapon);
+
+			if( var["dp"] < var["ap"] && userp( victim ) ) { 
+				var["exp"] = random( your["int"] + 1 + var["level_bonus"]);
+
+				your["combat_exp"] += var["exp"] / 2;
+				victim->improve_skill("parry", var["exp"]);
+			}
+
+// Checking shield durability.
+
+			if ( weapon ) {
+				j = (int)me->query_temp("apply/dice_number");
+				while( j-- ) {
+					var["damage"] += random( me->query_temp("apply/dice_roll")) + 1;
+
+					if( action["damage"] )
+						var["damage"] += action["damage"];
+
+					var["damage_bonus"] = me->query_temp("apply/damage_bonus")
+						+ skill_power (me, str["attack_skill"], SKILL_USAGE_ATTACK);
+
+					var["damage"] += var["damage_bonus"];
+				}
+			} else {
+				j = my["dice_number"];
+				while( j-- ) {
+					var["damage"] += random( my["dice_roll"] ) + 1;
+
+					if( action["damage"] )
+						var["damage"] += action["damage"];
+
+					var["damage_bonus"] = my["damage_bonus"]
+						+ skill_power (me, str["attack_skill"], SKILL_USAGE_ATTACK);
+					var["damage"] += var["damage_bonus"];
+				}
+			}
+
+			( victim->query_temp("armor/shield") )->add("durability", -var["damage"] );
+
+			if( wizardp( me ) && me->query("env/combat") )
+				tell_object( me, sprintf( GRN + "shield durability: %d\n", -var["damage"] ) );
+			if( wizardp( victim ) && victim->query("env/combat") )
+				tell_object( victim, sprintf( GRN "shield durability: %d", -var["damage"] ) );
+
+			check_equip_broken( victim, (object)victim->query_temp("armor/shield") );
+
+			var["damage"] = RESULT_PARRY;
+			victim->time_unit_loss( 30 - your["dex"] );
+		} else {
+
+//
+//      (5) We hit the victim and the victim failed to parry
+//
+			if ( weapon ) {
+				j = me->query_temp("apply/dice_number");
+				while( j-- ) {
+					var["damage"] += random( me->query_temp("apply/dice_roll") ) + 1;
+
+					if( action["damage"] )
+						var["damage"] += action["damage"];
+
+					var["damage_bonus"] = me->query_temp("apply/damage_bonus")
+						+ skill_power (me, str["attack_skill"], SKILL_USAGE_ATTACK);
+					var["damage"] += var["damage_bonus"];
+				}
+			} else {
+				j = my["dice_number"];
+				while( j-- ) {
+					var["damage"] += random( my["dice_roll"] ) + 1;
+
+					if( action["damage"] )
+						var["damage"] += action["damage"];
+
+					var["damage_bonus"] = my["damage_bonus"]
+						+ skill_power (me, str["attack_skill"], SKILL_USAGE_ATTACK);
+					var["damage"] += var["damage_bonus"];
+				}
+			}
+			if( wizardp( me ) && me->query("env/combat") )
+	                	tell_object( me, sprintf( GRN "initial damage: %d\n" NOR, var["damage"], ) );
+			if( wizardp( victim ) && victim->query("env/combat") )
+	                	tell_object( victim, sprintf( GRN "initial damage: %d\n" NOR, var["damage"], ) );
+
+			if( var["damage"] <= 0 )
+				var["damage"] = 0;
+			else
+                	       	var["damage"] = var["damage"] * var["damage"] / 
+					( var["damage"] + (int)victim->query_temp( "protect/" + str["damage_type"] + "/" + str["limb_number"] ) );
+
+			if( arrayp( victim->query_temp("limb_armors/" + str["limb_number"] ) )
+				&& victim->query_temp("limb_armors/" + str["limb_number"] ) != ({ }) ) {
+
+				j = random( sizeof( victim->query_temp("limb_armors/" + str["limb_number"] ) ) );
+				( victim->query_temp("limb_armors/" + str["limb_number"] ) )[j]->add("durability", - ( var["damage"] - ( victim->query_temp("limb_armors/" + str["limb_number"] ) )[j]->query("armor_prop/" + str["damage_type"] + "_armor") ) );
+
+				if( wizardp( me ) && me->query("env/combat") )
+					tell_object( me, GRN + sprintf("armor %s durability: %d" + NOR,
+						(string)victim->query_temp("limb_armors/" + str["limb_number"] )[j]->name(),
+						- ( var["damage"] - ( victim->query_temp("limb_armors/" + str["limb_number"] ) )[j]->query("armor_prop/" + str["damage_type"] + "_armor") ) ) );
+				if( wizardp( victim ) && victim->query("env/combat") )
+					tell_object( victim, GRN + sprintf("armor %s durability: %d" + NOR, 
+						(string)victim->query_temp("limb_armors/" + str["limb_number"] )[j]->name(),
+						- ( var["damage"] - ( victim->query_temp("limb_armors/" + str["limb_number"] ) )[j]->query("armor_prop/" + str["damage_type"] + "_armor") ) ) );
+
+				check_equip_broken( victim, (object)victim->query_temp("limb_armors/" + str["limb_number"] )[j] );
+			}
+
+			if( attack_type != TYPE_DRIVER && attack_type != TYPE_VEHICLE ) {
+				if( var["damage"] > 0 && your["position"] == "sleep" ) {
+					tell_object( victim, "砆寄敖脓 !\n" );
+					your["position"] = "stand";
+					victim->time_unit_loss( 100 - your["not"] );
+				}
+			}
+			else if( attack_type == TYPE_DRIVER ) {
+				if( var["damage"] > 0 && (string)your_driver->query("position") == "sleep" ) {
+					tell_object( victim, your["name"] + " 砆寄敖脓 !\n" );
+					your_driver->set("position", "rest");
+					your_driver->time_unit_loss( 100 - (int)your_driver->query("not") );
+				}
+			}
+//
+//      (6) Inflict the damage.
+//
+// The vehicle doesn't have wounded status, so we give damage to armor.
+
+			if( victim->is_vehicle() ) {
+       		                var["damage"] = victim->armor_damage( limb_number, var["damage"], me);
+				if( weapon && str["damage_type"] == "traditional" )
+					weapon->add("durability", - var["damage"] );
+			} else {
+	                        var["damage"] = victim->limb_damage( limb_number, var["damage"], me);
+				if( weapon && str["damage_type"] == "traditional" )
+					weapon->add("durability", - var["damage"] );
+
+// We are sure that damage is greater than victim's armor here.
+
+				if( var["damage"] > (int)victim->query_temp("protect/" + str["damage_type"] + "/" + str["limb_number"] ) ) {
+       	        	                victim->limb_wound( limb_number,
+	               	                        var["damage"] - (int)victim->query_temp("protect/" + str["damage_type"] + "/" + str["limb_number"] ), me);
+					var["wounded"] = 1;
+
+					if( weapon && str["damage_type"] == "traditional" )
+						weapon->add("durability", - ( (int)victim->query_temp("apply/" + str["damage_type"] + "_armor" ) ) );
+					
+				}
+			}
+
+// Checking weapon durability.
+
+			if( weapon && str["damage_type"] == "traditional" )
+				check_equip_broken( me, weapon );
+			
+			if( victim->is_vehicle() )
+				str["result"] += v_damage_msg(var["damage"], action["damage_type"]);
+			else
+				str["result"] += damage_msg(var["damage"], action["damage_type"]);
+
+//
+//      (7) Give experience
+//
+			if( attack_type == TYPE_DRIVER && userp( your_driver )) {
+				var["exp"] = random( (int)your_driver->query("int") + 1 + var["level_bonus"]);
+					your_driver->add("combat_exp", var["exp"] );
+					your_driver->improve_skill( str["attack_skill"], var["exp"]);
+			}
+			if( userp(me) || userp(victim) ) {
+				var["exp"] = random( my["int"] + 1 + var["level_bonus"]);
+					my["combat_exp"] += var["exp"];
+					me->improve_skill( str["attack_skill"], var["exp"]);
+
+				var["exp"] = random( your["int"] + 1 + var["level_bonus"]);
+				your["combat_exp"] += var["exp"] / 10;
+				victim->improve_skill( str["attack_skill"], var["exp"]);
+			}
+		}
+	} 
+
+	str["result"] = replace_string( str["result"], "$l", limbs_c[limb_number] );
+	if( weapon )
+		str["result"] = replace_string( str["result"], "$w", (string)weapon->name() );
+	else if( stringp(action["weapon"]) )
+		str["result"] = replace_string( str["result"], "$w", action["weapon"] );
+
+	message_vision(str["result"], me, victim );
+
+// See if combat_exps are high enough to raise a combat level.
+		if( ( my["combat_exp"] >= (( my["level"] + 1) 
+			* ( my["level"] + 1) * 100)) 
+			&& my["level"] <= 99 ) 
+		{
+			my["level"] += 1;
+			me->level_up( my["race"] );
+		}
+		if( attack_type == TYPE_DRIVER ) {
+			if( ( (int)your_driver->query("combat_exp") >= ( ( (int)your_driver->query("level") + 1 ) 
+				* ( (int)your_driver->query("level") + 1) * 100)) 
+				&& (int)your_driver->query("level") <= 99 ) {
+
+				your_driver->add("level", 1 );
+				your_driver->level_up( (string)your_driver->query("race"));
+			}
+		} else if( (your["combat_exp"] >= ( ( your["level"] + 1 )
+			* ( your["level"] + 1) * 100 ) ) 
+			&& your["level"] <= 99 ) 
+		{
+			your["level"] += 1;
+			victim->level_up( your["race"] );
+		}
+
+	if( wizardp( me ) && me->query("env/combat") ) 
+		{
+                	tell_object( me, 
+			sprintf( GRN "AP: %d, DP: %d, PP: %d, armor: %d, damage: %d\n" NOR,
+				var["ap"], var["dp"], var["pp"],
+				(int)victim->query_temp("protect/" + str["damage_type"] + "/" + str["limb_number"] ),
+				var["damage"], ) );
+	}
+	if( attack_type == TYPE_DRIVER )
+		if( wizardp( your_driver ) 
+			&& your_driver->query("env/combat") ) 
+		{
+                	tell_object( your_driver, 
+			sprintf( GRN "AP: %d, DP: %d, PP: %d, damage: %d\n" NOR,
+				var["ap"], var["dp"], var["pp"], var["damage"]));
+		}
+	if( wizardp( victim ) 
+		&& victim->query("env/combat") ) 
+	{
+                tell_object( victim, 
+			sprintf( GRN "AP: %d, DP: %d, PP: %d, armor: %d, damage: %d\n" NOR,
+				var["ap"], var["dp"], var["pp"],
+				(int)victim->query_temp("protect/" + str["damage_type"] + "/" + str["limb_number"] ),
+				var["damage"], ) );
+	}
+
+        if( var["damage"] > 0 ) {
+		if( victim->is_vehicle() ) {
+        	        message_vision( NOR "( $N " + (string)v_report_status( victim ) + ". )\n", victim );
+		} else {
+	                message_vision( NOR "( $N " + (string)report_status( victim, var["wounded"] ) + ". )\n", victim );
+		}
+                if( victim->is_busy() ) 
+			victim->interrupt_me(me);
+	}
+
+	if( functionp(action["post_action"]) )
+		evaluate( action["post_action"], me, victim, weapon, var["damage"]);
+
+// See if the victim can make a riposte.
+	if( attack_type==TYPE_REGULAR
+	&&	var["damage"] < 1
+        &&      (int)victim->query_temp("guarding") == 1) 
+	{
+		victim->set_temp("guarding", 0);
+                if( random( my["not"] ) < 10 ) 
+		{
+			message_vision("$N ю阑ぃい, 臩瘆红!\n", me);
+			do_attack( victim, me, (object)victim->query_temp("weapon"), TYPE_QUICK);
+		} else {
+                        message_vision("$N ǎ $n ю阑ア粇, 禭诀ю阑!\n", victim, me);
+			do_attack( victim, me, (object)victim->query_temp("weapon"), TYPE_RIPOSTE);
+		}
+	}
+	status_report( me );
+	status_report( victim );
+
+}
+
+//	fight()
+//
+//	This is called in the attack() defined in F_ATTACK, which handles fighting
+//	in the heart_beat() of all livings. Be sure to optimize it carefully.
+//
+varargs void fight(object me, object victim, int vehicle )
+{
+	mapping my, your;
+	object ob;
+	object *inv, your_driver;
+	int i, j, distance;
+	string msg_me, adv_cmd;
+	int fuel_loss;
+	int steps;
+
+	my = me->query_entire_dbase();
+	your = victim->query_entire_dbase();
+
+	if( (int)victim->is_vehicle() && !(object)me->query_temp("weapon") ) {
+		tell_object( me, "稱íも阑反更ㄣ ? 硂妓穦癌ч.\n" );
+		return;
+	}
+
+	if( (int)me->is_character() && !living( me ) ) 
+		return;
+
+	if( vehicle ) {
+		inv = all_inventory( victim );
+		j = sizeof( inv );
+		while( j-- ) {
+			if( inv[j]->query_temp("command") ) {
+				your_driver = inv[j];
+				break;
+			}
+		}
+	}
+
+	if( !(int)me->visible( victim ) ) {
+	        if( random( 26 ) > my["not"] )
+			return;
+	}
+
+	distance = (int)victim->query_temp("location") - (int)me->query_temp("location");
+	if( distance < 0 ) distance = - distance;
+
+//	altitude = (int)victim->query_temp("altitude") - (int)me->query_temp("altitude");
+//	if( altitude < 0 ) altitude = - altitude;
+
+// Now we add attack range limit and time unit.
+// There is no range limitation for vehicle.
+
+	if( ( (int)me->query_temp("apply/range") >= distance ) 
+		&& ( (int)me->query_time_unit() > 0 ) ) {
+
+// If victim is busy or unconcious, always take the chance to make an attack.
+		if( (int)victim->is_busy() || (int)victim->query_time_unit() < 0
+			|| ( (int)victim->is_character() && !living( victim ) ) 
+			|| your["position"] == "sleep" 
+			|| your["position"] == "rest" 
+			|| ( vehicle && your["fuel"] <= 0 ) 
+			) {
+			me->set_temp("guarding", 0);
+
+			if( !(int)victim->is_fighting(me) && !vehicle ) 
+				victim->fight_ob(me);
+			if( (object)me->query_temp("weapon") ) {
+				me->receive_damage("spi", (50 - my["dex"] - my["not"] ) / 10, me ); 
+				me->receive_damage("mov", (50 - my["dex"] - my["not"] ) / 10, me ); 
+
+				if( (int)me->is_character() ) {
+					me->time_unit_loss( 50 - my["dex"] - my["not"] );
+
+					if( my["position"] == "rest" && !(int)me->query_temp("tired") ) {
+						my["position"] = "stand";
+						me->time_unit_loss( 100 - my["dex"] - my["not"] );
+					}
+				}
+
+				if( vehicle && your_driver ) {
+					your_driver->receive_damage("spi", ( 50 - (int)your_driver->query("not") ) / 10, me ); 
+					fuel_loss = 100 - skill_power( your_driver, your["skill_type"], SKILL_USAGE_DEFENSE );
+					if( fuel_loss <= 0 ) fuel_loss = 1;
+					your["fuel"] -= fuel_loss;
+					your_driver->time_unit_loss( 25 - (int)your_driver->query("dex") ); 
+				} else {
+					victim->receive_damage("spi", (50 - your["dex"] - your["not"] ) / 10, victim ); 
+					victim->receive_damage("mov", (50 - your["dex"] - your["not"] ) / 10, victim ); 
+					if( your["position"] == "rest" && !(int)victim->query_temp("tired") ) {
+						your["position"] = "stand";
+						victim->time_unit_loss( 100 - your["dex"] - your["not"] );
+					}
+				}
+				i = (int)me->query_temp("apply/round");
+				while( i-- ) {
+					if( vehicle ) {
+						if( your_driver )
+							do_attack(me, victim, (object)me->query_temp("weapon"), TYPE_DRIVER);
+						else
+							do_attack(me, victim, (object)me->query_temp("weapon"), TYPE_VEHICLE);
+					}
+					else
+						do_attack(me, victim, (object)me->query_temp("weapon"), TYPE_QUICK);
+				}
+			}
+			else {
+				me->receive_damage("spi", (50 - my["dex"] - my["not"]) * 2 / 10, me ); 
+				me->receive_damage("mov", (50 - my["dex"] - my["not"]) * 2 / 10, me ); 
+
+				if( (int)me->is_character() ) {
+					me->time_unit_loss( 50 - my["dex"] - my["not"] );
+
+					if( my["position"] == "rest" && !(int)me->query_temp("tired") ) {
+						my["position"] = "stand";
+						me->time_unit_loss( 100 - my["dex"] - my["not"] );
+					}
+				}
+				if( vehicle && your_driver ) {
+					your_driver->receive_damage("spi", ( 50 - (int)your_driver->query("dex") - (int)your_driver->query("not") ) / 10, me ); 
+					fuel_loss = 100 - skill_power( your_driver, your["skill_type"], SKILL_USAGE_DEFENSE );
+					if( fuel_loss <= 0 ) fuel_loss = 1;
+					your["fuel"] -= fuel_loss; 
+					your_driver->time_unit_loss( 25 - (int)your_driver->query("dex") ); 
+				} else {
+					victim->receive_damage("spi", (50 - your["dex"] - your["not"] ) * 2 / 10, victim ); 
+					victim->receive_damage("mov", (50 - your["dex"] - your["dex"] ) * 2 / 10, victim ); 
+					if( your["position"] == "rest" && !(int)victim->query_temp("tired") ) {
+						your["position"] = "stand";
+						victim->time_unit_loss( 100 - your["dex"] - your["not"] );
+					}
+				}
+				i = my["round"];
+				while( i-- ) {
+					if( vehicle ) {
+						if( your_driver )
+							do_attack(me, victim, (object)me->query_temp("weapon"), TYPE_DRIVER);
+						else
+							do_attack(me, victim, (object)me->query_temp("weapon"), TYPE_VEHICLE);
+					}
+					else
+						do_attack(me, victim, (object)me->query_temp("weapon"), TYPE_QUICK);
+				}
+			}
+
+// Else, see if we are brave enough to make an aggressive action.
+	        } else if( random( my["dex"] ) 
+				> random( your["dex"] ) ) {
+			me->set_temp("guarding", 0);
+			if( !(int)victim->is_fighting(me) && !vehicle ) victim->fight_ob(me);
+			if( (object)me->query_temp("weapon") ) {
+				me->receive_damage("spi", (50 - my["dex"] - my["not"] ) / 10, me ); 
+				me->receive_damage("mov", (50 - my["dex"] - my["not"] ) / 10, me ); 
+
+				if( (int)me->is_character() ) {
+					me->time_unit_loss( 50 - my["dex"] - my["not"] );
+
+					if( my["position"] == "rest" && !(int)me->query_temp("tired") ) {
+						my["position"] = "stand";
+						me->time_unit_loss( 100 - my["dex"] - my["not"] );
+					}
+				}
+
+				if( vehicle && your_driver ) {
+					your_driver->receive_damage("spi", ( 50 - (int)your_driver->query("dex") - (int)your_driver->query("not") ) / 10, me ); 
+					fuel_loss = 100 - skill_power( your_driver, your["skill_type"], SKILL_USAGE_DEFENSE );
+					if( fuel_loss <= 0 ) fuel_loss = 1;
+					your["fuel"] -= fuel_loss; 
+					your_driver->time_unit_loss( 25 - (int)your_driver->query("dex") ); 
+				} else {
+					victim->receive_damage("spi", (50 - your["dex"] - your["not"] ) / 10, victim ); 
+					victim->receive_damage("mov", (50 - your["dex"] - your["not"] ) / 10, victim ); 
+					if( your["position"] == "rest" && !(int)victim->query_temp("tired") ) {
+						your["position"] = "stand";
+						victim->time_unit_loss( 100 - your["dex"] - your["not"] );
+					}
+				}
+				i = (int)me->query_temp("apply/round");
+				while( i-- ) {
+					if( vehicle ) {
+						if( your_driver )
+							do_attack(me, victim, (object)me->query_temp("weapon"), TYPE_DRIVER);
+						else
+							do_attack(me, victim, (object)me->query_temp("weapon"), TYPE_VEHICLE);
+					}
+					else
+						do_attack(me, victim, (object)me->query_temp("weapon"), TYPE_REGULAR);
+				}
+			}
+			else {
+				me->receive_damage("spi", (50 - my["dex"] - my["not"]) * 2 / 10, me ); 
+				me->receive_damage("mov", (50 - my["dex"] - my["dex"]) * 2 / 10, me ); 
+
+				if( (int)me->is_character() ) {
+					me->time_unit_loss( 50 - my["dex"] - my["not"] );
+
+					if( my["position"] == "rest" && !(int)me->query_temp("tired") ) {
+						my["position"] = "stand";
+						me->time_unit_loss( 100 - my["dex"] - my["not"] );
+					}
+				}
+
+				if( vehicle && your_driver ) {
+					your_driver->receive_damage("spi", ( 50 - (int)your_driver->query("dex") - (int)your_driver->query("not") ) / 10, me ); 
+					fuel_loss = 100 - skill_power( your_driver, your["skill_type"], SKILL_USAGE_DEFENSE );
+					if( fuel_loss <= 0 ) fuel_loss = 1;
+					your["fuel"] -= fuel_loss; 
+					your_driver->time_unit_loss( 25 - (int)your_driver->query("dex") ); 
+				} else {
+					victim->receive_damage("spi", (50 - your["dex"] - your["not"]) * 2 / 10, victim ); 
+					victim->receive_damage("mov", (50 - your["dex"] - your["dex"]) * 2 / 10, victim ); 
+					if( your["position"] == "rest" && !(int)victim->query_temp("tired") ) {
+						your["position"] = "stand";
+						victim->time_unit_loss( 100 - your["dex"] - your["not"] );
+					}
+				}
+				i = my["round"];
+				while( i-- ) {
+					if( vehicle ) {
+						if( your_driver )
+							do_attack(me, victim, (object)me->query_temp("weapon"), TYPE_DRIVER);
+						else
+							do_attack(me, victim, (object)me->query_temp("weapon"), TYPE_VEHICLE);
+					}
+					else
+						do_attack(me, victim, (object)me->query_temp("weapon"), TYPE_REGULAR);
+				}
+			}
+
+// Else, we just start guarding.
+		} else if( !(int)me->query_temp("guarding") ) {
+			if( (int)me->is_character() ) {
+				if( my["position"] == "sleep" )
+					return;
+			}
+			me->set_temp("guarding", 1);
+
+			message_vision( guard_msg[random(sizeof(guard_msg))], me, victim);
+
+			return;
+		} else return;
+	} else {
+		if( (int)me->query_temp("apply/range") < distance ) {
+			if( !(int)me->query_temp("pending/fight_msg") && userp( me)) {
+				msg_me ="$N 籔 $n ぃю阑絛瞅ず !!\n";
+				message_vision( msg_me, me, victim );
+				me->set_temp("pending/fight_msg", 1 );
+			}
+			steps = my["dex"];
+			if( steps > distance - (int)me->query_temp("apply/range") )
+				steps = distance - (int)me->query_temp("apply/range");
+			call_out( "advance", 1, me, victim, steps );
+		}
+		return;
+	}
+}
+
+//	auto_fight()
+//
+//	This function is to start an automatically fight. Currently this is
+//	used in "aggressive", "vendetta", "hatred", "berserk" fight.
+//
+void auto_fight(object me, object obj, string type)
+{
+// Now we let NPC autofight NPC, grin evily...
+
+//	if( !userp(me) && !userp(obj) ) return;
+
+// Because most of the cases that we cannot start a fight cannot be checked
+// before we really call the kill_ob(), so we just make sure we have no 
+// aggressive callout wating here.
+	if( (int)me->query_temp("looking_for_trouble") ) return;
+	me->set_temp("looking_for_trouble", 1);
+
+// This call_out gives victim a chance to slip trough the fierce guys.
+	call_out( "start_" + type, 0, me, obj);
+}
+
+void start_hatred(object me, object obj)
+{
+// Are we still exist( not becoming a corpse )?	
+	if( !me || !obj ) return;				
+
+	me->set_temp("looking_for_trouble", 0);
+
+	if(	(int)me->is_fighting(obj)		// Are we busy fighting?
+	||	!living(me)				// Are we capable for a fight?
+	||	environment(me)!=environment(obj)	// Are we still in the same room?
+	||	environment(me)->query("no_fight") 	// Are we in a peace room?
+	)	return;
+
+// We found our hatred! Charge!
+	if( (int)me->query("can_speak"))
+		message_vision( catch_hunt_msg[random(sizeof(catch_hunt_msg))], me, obj);
+	me->kill_ob(obj);
+}
+
+void start_vendetta(object me, object obj)
+{
+	if( !me || !obj ) return;			// Are we still exist( not becoming a corpse )?
+
+	me->set_temp("looking_for_trouble", 0);
+
+	if(	(int)me->is_fighting(obj)		// Are we busy fighting?
+	||	!living(me)				// Are we capable for a fight?
+	||	environment(me)!=environment(obj)	// Are we still in the same room?
+	||	environment(me)->query("no_fight") 	// Are we in a peace room?
+	)	return;
+
+	// We found our vendetta opponent! Charge!
+	me->kill_ob(obj);
+}
+
+void start_aggressive(object me, object obj)
+{
+	if( !me || !obj ) return;			// Are we still exist( not becoming a corpse )?
+
+	me->set_temp("looking_for_trouble", 0);
+
+	if(	(int)me->is_fighting(obj)			// Are we busy fighting?
+	||	!living(me)				// Are we capable for a fight?
+	||	environment(me)!=environment(obj)	// Are we still in the same room?
+	||	environment(me)->query("no_fight") 	// Are we in a peace room?
+	)	return;
+
+// We got a nice victim! Charge !!
+	me->kill_ob(obj);
+}
+
+// This function is to announce the special events of the combat.
+// This should be moved to another daemon in the future.
+
+void announce(object ob, string event)
+{
+	switch(event) {
+		case "dead":
+                        message_vision("\n$N 砆炳.\n", ob);
+			break;
+		case "unconcious":
+                        message_vision("\n$N 笆ぃ笆.\n", ob);
+			break;
+		case "revive":
+                        message_vision("\n$N 篊篊窩秨泊氟, 睲眶筁ㄓ.\n", ob);
+			break;
+		case "tired":
+			message_vision("\n$N ōみ痟, 竲ぃ铆Г.\n", ob);
+			break;
+		case "refresh":
+			message_vision("\n$N 確, 絯絯眖癬ㄓ.\n", ob);
+			break;
+	}
+	return;
+}
+
+void winner_reward(object killer, object victim)
+{
+	killer->defeated_enemy(victim);
+	return;
+}
+
+void killer_reward(object killer, object victim)
+{
+	int i;
+	string vmark, *group;
+
+// Call the mudlib killer apply.
+	killer->killed_enemy(victim);
+	group = victim->query("group");
+
+	if( userp(victim) ) {
+		killer->set("killer", 1);
+		killer->add("PKS", 1);
+		killer->add("HKS", 1);
+		killer->add( "positive_fame", victim->query("negative_fame") );
+		killer->add( "negative_fame", victim->query("positive_fame") );
+
+		if( arrayp(group) ) {
+		i = sizeof( group );
+		while( i-- ) {
+				killer->add( "kill/" + group[i], 1 );
+			}
+		}
+		victim->clear_condition();
+
+// Give the death penalty to the dying user.
+
+		victim->delete("vendetta");
+		victim->delete("thief");
+		victim->delete("killer");
+		victim->skill_death_penalty();
+
+		CHANNEL_D->do_channel(this_object(), "rumor",
+			sprintf("%s" MAG " 砆 " MAG "%s " MAG "炳." NOR, victim->name(1), killer->name(1)));
+	} else {
+		if( victim->query("race")=="摸") {
+			killer->add("HKS", 1);
+			killer->set("killer", 1 );
+		}
+		killer->add("MKS", 1);
+		killer->add( "positive_fame", (int)victim->query("negative_fame") );
+		killer->add( "negative_fame", (int)victim->query("positive_fame") );
+		if( arrayp(group) ) {
+			i = sizeof( group );
+			while( i-- ) {
+				killer->add( "kill/" + group[i], 1 );
+			}
+		}
+	}
+
+	if( stringp( vmark = (string)victim->query("vendetta_mark")) )
+		killer->add("vendetta/" + vmark, 1);
+}
+
+int advance( object me, object target, int steps )
+{
+	string msg;
+	int distance, loc_me, loc_target, mov_damage;
+
+	loc_me = (int)me->query_temp("location");
+	loc_target = (int)target->query_temp("location");
+	distance = loc_target - loc_me;
+
+	if( distance > 0 ) { 
+		loc_me += steps;
+		if( loc_target - loc_me < 0 )
+			loc_me = loc_target;
+	}
+	else if( distance < 0 ) { 
+		loc_me -= steps;
+		if( loc_target - loc_me > 0 )
+			loc_me = loc_target;
+	}
+	else if( distance == 0 ) {
+		message("vision", "竒籔ヘ夹眔ぃ.\n", me);
+		return 1;
+	}
+	distance = loc_target - loc_me;
+	if( distance < 0 ) distance = - distance;
+	me->set_temp("location", loc_me);
+
+	msg = "$N 籔 $n 禯瞒ǐㄇ. ( 禯瞒: " + distance +" )\n";
+	message_vision( msg, me, target );
+
+	mov_damage = 1 + (int)me->query_encumbrance() * 10 / (int)me->query_max_encumbrance()
+		- (int)me->query("str") / 5;
+	if( mov_damage <= 0 ) mov_damage = 0;
+	me->receive_damage( "mov", mov_damage );
+	me->time_unit_loss( mov_damage - (int)me->query("dex") / 5 );
+
+	return 1;
+}
+
+int back( object me, object target, int steps )
+{
+	string msg;
+	int distance, loc_me, loc_target, max_dis, mov_damage;
+	int mov_cost;
+
+	if( !( mov_cost = environment( me )->query("mov_cost") ) )
+		mov_cost = 10;
+	loc_me = (int)me->query_temp("location");
+	loc_target = (int)target->query_temp("location");
+	distance = loc_target - loc_me;
+	if( distance > 0 ) max_dis = loc_target;
+	else max_dis = mov_cost - loc_target;
+	if( distance == max_dis || - distance == max_dis ) {
+		message("vision","籔ヘ夹禯瞒竒环眔ぃ环.\n", me);
+		return 1;
+	}
+
+	if( distance > 0 ) {
+		loc_me -= steps;
+		if( loc_me < 0 ) {
+			loc_me = 0;
+			if( loc_target - loc_me < steps )
+				loc_me = steps;
+		}
+	} else if( distance < 0 ) {
+		loc_me += steps;
+		if( loc_me > mov_cost ) {
+			loc_me = mov_cost;
+			if( loc_me - loc_target < steps )
+				loc_me = mov_cost - steps;
+		}
+	} else {
+		if( loc_me == 0 ) loc_me += steps;
+		else if( loc_me == mov_cost ) loc_me -= steps; 
+		else if( loc_me <= mov_cost / 2 ) loc_me += steps;
+		else if( loc_me > mov_cost / 2 ) loc_me -= steps;
+		if( loc_me > mov_cost ) loc_me = mov_cost;
+		else if( loc_me < 0 ) loc_me = 0;
+	}
+	me->set_temp("location", loc_me);
+	distance = loc_target - loc_me;
+	if( distance < 0 ) distance = - distance;
+
+	msg = "$N 籔 $n 禯瞒ǐ环ㄇ. ( 禯瞒: " + distance + " )\n";
+	message_vision( msg, me, target );
+
+	mov_damage = 1 + (int)me->query_encumbrance() * 10 / (int)me->query_max_encumbrance()
+		- me->query("str") / 5;
+	if( mov_damage <= 0 ) mov_damage = 0;
+	me->receive_damage( "mov", mov_damage );
+	me->time_unit_loss( mov_damage - (int)me->query("dex") / 5 );
+
+	return 1;
+}
+
+int check_equip_broken( object me, object equip )
+{
+	if( (int)equip->query("durability") < 1 ) {
+		equip->set("broken", 1 );
+		message_vision(HIM "钮ǎ抿羘, $N" + (string)equip->name()
+			+ "竒穕胊眔礚猭ㄏノ !\n" NOR, me );
+		equip->unequip();
+		equip->set("name", "穕胊" + (string)equip->query("name"));
+		equip->set("value", (int)equip->query("value") / 100 );
+			
+		me->reset_action();
+
+		return 1;
+	}
+	return 0;
+}
+
+void status_report( object me )
+{
+	string prompt;
+	int spi, mov;
+	int *limbs_eff_hit, *limbs_max_hit;
+	int i, limb_flag = 0;
+	string *limbs;
+ 
+	prompt = NOR "[ ";
+ 
+	prompt += sprintf( GRN "丁" NOR " %d ", (int)me->query_time_unit() );
+ 	spi = (int)me->query("spi") * 100 / (int)me->query("max_spi");
+	prompt += sprintf(YEL "弘 " NOR "%d%% ", spi );
+ 
+	mov = (int)me->query("mov") * 100 / (int)me->query("max_mov");
+	prompt += sprintf(HIB "簿笆 " NOR "%d%% ", mov );
+ 
+	if( me->query("water") < 1 )
+		prompt += CYN "戴 ";
+ 
+	if( me->query("food") < 1 )
+		prompt += MAG "哀緅 ";
+ 
+	limbs_eff_hit = me->query("limbs_eff_hit");
+	limbs_max_hit = me->query("limbs_max_hit");
+	limbs = me->query("limbs");
+ 
+	i = sizeof( limbs_max_hit );
+	while( i-- ) {
+		if( limbs_eff_hit[i] * 100 / limbs_max_hit[i] < 30 ) {
+			prompt += HIR + limbs[i] + " ";
+			limb_flag = 1;
+		}
+	}
+ 
+	if( limb_flag == 1 ) prompt += "端";
+ 
+	prompt += NOR "] ";
+
+	tell_object( me, prompt );
+
+	return;
+}

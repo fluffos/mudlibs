@@ -1,0 +1,15 @@
+// bodyjia.c 躯干装甲
+inherit ITEM;
+#include <ansi.h>
+
+void create()
+{
+        set_name(HIC"躯干装甲"NOR, ({"bodyjia"}));
+        set_weight(500);
+set("num", 10);
+set("value",1000);
+        set("unit", "块");
+        set("long", "这是一块闪闪发亮的外星金属。\n");
+        setup();
+}
+

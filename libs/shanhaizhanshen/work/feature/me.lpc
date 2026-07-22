@@ -1,0 +1,1131 @@
+// /feature/me.c
+//
+// Kenny@Broken.History (4/9/1997)
+
+#include <ansi.h>                        // ﹚竡 ANSI/VT100 沧狠诀秇叉絏
+
+#define ECHO 0                                // 弄块璶陪ボじ
+#define HIDE 1                                // 弄块ぃ陪ボじ
+#define REFRESH 1                        // 弄块璶酶礶
+
+void start_edit(string filename);        // ㊣絪胯竟秨﹍絪胯
+private void _append(object pl);        // 村夹
+private void _append_line(object pl);        // 村夹┏穝︽
+private void _backspace(object pl);        // 埃村夹玡
+protected void _confirm_save(string str, object pl); // 瞒秨絪胯竟玡絋粄郎
+private void _del_char(object pl, int bs);        // 埃村夹
+private void _del_line(object pl);                // 埃俱︽
+private int  _dispatcher(object pl);                // だぃㄧΑ
+private void _down(object pl);                        // 村夹┕簿︽
+private void _end(object pl);                        // 盢村夹簿︽Ю
+private void _esc(object pl);                        // 眖块家Α㏑家Α
+private void _file_end(object pl);                // 盢村夹簿郎Ю
+private void _file_head(object pl);                // 盢村夹簿郎繷
+private void _goto_line(object pl);                // 铬疭﹚︽
+protected void _goto_line_done(string str, object pl, int rein); // 眔︽腹
+private void _help(object pl);                        // 徊礶
+private void _home(object pl);                        // 盢村夹簿︽
+protected void _input(string str, object pl, int fresh); // 弄眔块﹃
+private void _insert(object pl);                // 村夹玡础
+private void _insert_line(object pl);                // 村夹よ穝︽
+private void _insert_exclam_mark(object pl);        // 村夹玡础!じ
+private void _join(object pl);                        // 盢︽ゅ簿︽
+private void _keymap(object pl);                // ﹚竡穝龄
+protected void _keymap_done(string str, object pl); // 眔﹚竡龄
+private void _left(object pl);                        // 村夹┕オ簿
+// 篈陪ボ癟
+private varargs void _message(object pl, string str, string callback, int hide, mixed arg);
+protected void _message_done(string str, object pl); // 挡癟陪ボ
+private void _next_match(object pl);                // 穓碝/蠢传才﹃
+private void _page_down(object pl);                // ┕辈22 ︽
+private void _page_up(object pl);                // ┕辈22 ︽
+private void _process(object pl);                // 矪瞶块家Α﹃块
+protected void _quit(mixed unused, mixed pl);        // 瞒秨絪胯竟
+private void _refresh(object pl);                // 穝礶
+private void _refresh_cursor(object pl);        // 穝村夹︗竚
+// 酶礶
+private void _refresh_screen(object pl, int s_row, int e_row, int s_col);
+private void _refresh_status(object pl);        // 穝篈
+private void _replace(object pl);                // ﹃蠢传
+protected void _replace_done(string str, object pl);  // 眔蠢传﹃
+private void _right(object pl, int col, int extra); // 村夹┕簿
+private void _search(object pl);                    // ﹃穓碝
+protected void _search_done(string str, object pl);   // 眔穓碝﹃
+private void _tab(object pl);                        // ㏑家Α TAB 龄﹚︗
+private void _undef_key(object pl);                // 琘龄﹚竡
+protected void _undef_key_done(string str, object pl); // 眔﹚龄
+private void _up(object pl);                        // 村夹┕簿︽
+private void _write(object pl);                        // 眔纗郎嘿
+protected void _write_done(string str, object pl, int quit); // 纗郎
+
+private mapping EditedFiles=([ ]);		// 絪胯い郎
+/*
+int iS_Row, iE_Row,                        	// ǎ跌怠﹍ソ︽腹
+    iS_Col, iE_Col,                        	// ǎ跌怠﹍ゼ逆︗
+    iRow,   iCol,                          	// 村夹︗竚
+    is_Command_Mode, is_NewFile, is_Modify,	// 郎猵篨夹
+    is_Substituted;                         	// 传ず絏篨夹
+string *sText,                              	// 郎ず甧
+       sChar, sOldChar,                     	// 块﹃㏑
+       sCount,                              	// ㏑璸计
+       sFileName,                           	// 絪胯郎
+       sSearch, sReplace;                	// 穓碝/蠢传﹃
+mapping keymap;                                	// 龄﹚竡癸酚
+*/
+
+void start_edit(string file)                // ㊣絪胯竟秨﹍絪胯
+{
+        int  i;
+        mapping me;
+
+
+	if (objectp(EditedFiles[file]) && interactive(EditedFiles[file]))
+	{
+		write(sprintf("%s 正在编辑这个档案，请稍候再编辑。\n",
+			capitalize(EditedFiles[file]->query("id"))));
+		return;
+	} // if
+        this_player()->set_temp("me", ([ ]));
+        me = this_player()->query_temp("me");
+        me["sFileName"] = file;
+        if (file_size(file) <= 0)
+        {        // 郎 1
+                me["sText"] = ({ "" });
+                if (file_size(file) < 0)
+                {        // 穝郎
+                        me["is_Command_Mode"] = 0;
+                        me["is_NewFile"] = 1;
+                }
+        }
+        else
+        {
+        	string content=read_file(file);
+        	
+ 	        // 郎 0
+                me["is_Command_Mode"] = 1;
+                me["is_NewFile"] = 0;
+                if (stringp(content))
+                {
+                	me["sText"] = explode(read_file(file), "\n");
+                	// 盢 TAB 8 フ蠢よ獽村夹︗竚璸衡
+                	for (i=sizeof(me["sText"])-1; i>=0; i--) 
+                        	me["sText"][i] = replace_string(me["sText"][i], "\t",
+                                "        ");
+                }
+                else me["sText"] = ({ "" });
+        } // old file
+
+        me["sCount"] = "";
+        me["sSearch"] = me["sReplace"] = me["is_Modify"] = 0;
+        me["iE_Row"] = 23;
+        me["iS_Row"] = me["iS_Col"] = me["iRow"] = me["iCol"] = 1;
+        EditedFiles += ([ file: this_player() ]);
+
+        // 眔/砞﹚龄﹚竡癸酚
+             if (!mapp(me["keymap"] = this_player()->query("me_keymap")))
+                     me["keymap"] = ([ ]);
+        if (this_player()->query("me_no_help") ||
+            this_player()->query_temp("no_me_help"))
+        {        // 獶材Ωㄏノ絪胯竟钡秈絪胯竟
+                _refresh_screen(this_player(), 1, 23, 1);
+                get_char("_input", HIDE, this_player());
+        }
+        else
+        {        // 材Ωㄏノ絪胯竟弧
+                this_player()->set_temp("no_me_help", 1);
+                _help(this_player());
+        }
+} // start_edit()
+
+
+private void _refresh_cursor(object pl)        // 穝村夹︗竚
+{
+        mapping me=pl->query_temp("me");
+        printf(ESC "[%d;%df", me["iRow"]+1, me["iCol"]);
+} // _refresh_cursor()
+
+
+private void _refresh_status(object pl)        // 穝篈
+{        
+        mapping me=pl->query_temp("me");
+        
+        // 簿笆村夹 (1,1)ノはじ陪ボ篈
+        printf(HOME + NOR + REV + "列:%4d 行:%3d %-43s %10s [命令模式]" + NOR,
+                me["iS_Row"]+me["iRow"]-1, me["iS_Col"]+me["iCol"]-1,
+                sprintf("%s %s", me["sFileName"], (me["is_Modify"]? "(已修改)":
+                (me["is_NewFile"]? "(新档)": "")))[0..42],
+                (me["is_Command_Mode"]? "?:辅助画面": "[输入模式]"));
+        _refresh_cursor(pl);
+} // _refresh_status()
+
+
+// 酶礶
+private void _refresh_screen(object pl, int s_row, int e_row, int s_col)
+{
+        int  i, temp;
+        mapping me=pl->query_temp("me");
+
+        
+        if (e_row < s_row)                // 浪琩﹍ソ︽腹Ω
+        {
+                temp = e_row;
+                e_row = s_row;
+                s_row = temp;
+        }
+        
+        if (s_row < 1) s_row = 1;
+        if (s_col < 1) s_col = 1;
+        if (e_row > sizeof(me["sText"])) // ぃ禬筁郎Ю
+                e_row = sizeof(me["sText"]);
+        if (e_row-s_row > 22) e_row = s_row+22;
+        
+        me["iS_Row"] = s_row;        me["iE_Row"] = e_row;
+        me["iS_Col"] = s_col;        me["iE_Col"] = s_col+79;
+
+        printf(REF+NOR);                // 睲埃礶簿笆村夹 (1,1)
+        for (i=me["iS_Row"]-1; i<me["iE_Row"]; i++)
+                printf("\r\n%s", me["sText"][i][me["iS_Col"]-1..me["iE_Col"]-1]);
+        for (i=me["iS_Row"]+22-me["iE_Row"]; i>0; i--)
+                printf("\r\n~");        // ぃì︽腹ノ ~ ボ
+        _refresh_status(pl);
+} // _refresh_screen()
+
+
+protected void _input(string str, object pl, int fresh) // 弄眔块﹃
+{
+        int    i, size, bs=0;
+        string *chars;
+        mapping me=pl->query_temp("me");
+
+        if (fresh)
+        {        // 酶礶
+                _refresh_screen(pl, me["iS_Row"], me["iE_Row"], me["iS_Col"]);
+                get_char("_input", HIDE, pl);
+                return;
+        }
+
+        me["is_Substituted"] = 1;      	// 砞﹚传ず絏篨夹
+        if (str == "")                 	// 传奔 Backspace/Ctrl-Backspace
+        {
+                str = "BACKSPACE";
+                bs = 1;
+        }
+        if (str[0] == 27)
+        {
+                chars = explode(str, ESC);    	// 秇叉絏﹃ ESC 耞秨
+                for (i=sizeof(chars)-1; i>=0; i--)
+                        chars[i] = ESC + chars[i]; 	//  ESC
+                if (sizeof(chars) == 0)                 // 璝琌虫じ ESC
+                        chars = ({ ESC });
+        }
+        else	chars = ({ str });
+
+        size = sizeof(chars);
+        for (i=0; i<size; i++)
+        {        // 锣传秇叉絏絪胯竟ず絏
+        	switch (chars[i])
+        	{
+        	case "\t":	 me["sChar"] = "TAB";	break;
+                case "\r":	 me["sChar"] = "ENTER";	break;
+                case ESC:        me["sChar"] = "ESC";	break;
+                case ESC "OA":
+                case ESC "[A":   me["sChar"] = "UP";	break;
+                case ESC "OB":
+                case ESC "[B":   me["sChar"] = "DOWN";	break;
+                case ESC "OC":
+                case ESC "[C":   me["sChar"] = "RIGHT";	break;
+                case ESC "OD":
+                case ESC "[D":   me["sChar"] = "LEFT";	break;
+                case ESC "OH":
+                case ESC "[H":
+                case ESC "1~":
+                case ESC "[1~":  me["sChar"] = "HOME";	break;
+                case ESC "[2~":  me["sChar"] = "INSERT";break;
+                case ESC "[3~":  me["sChar"] = "DELETE";break;
+                case ESC "4~":   me["sChar"] = "END";	break;
+                case ESC "[4~":  me["sChar"] = "END";	break;
+                case ESC "[5~":  me["sChar"] = "PAGEUP";break;
+                case ESC "[6~":  me["sChar"] = "PAGEDOWN";break;
+                case ESC "OP":   me["sChar"] = "F1";	break;
+                case ESC "OQ":   me["sChar"] = "F2";	break;
+                case ESC "OR":   me["sChar"] = "F3";	break;
+                case ESC "OS":   me["sChar"] = "F4";	break;
+                case ESC "m":    me["sChar"] = "F5";	break;
+                case ESC "[17~": me["sChar"] = "F6";	break;
+                case ESC "[18~": me["sChar"] = "F7";	break;
+                case ESC "[19~": me["sChar"] = "F8";	break;
+                case ESC "[20~": me["sChar"] = "F9";	break;
+                case ESC "[21~": me["sChar"] = "F10";	break;
+                case ESC "[23~": me["sChar"] = "F11";	break;
+                case ESC "[24~": me["sChar"] = "F12";	break;
+                default:
+                	if (sizeof(chars[i])==1 &&
+                            0<chars[i][0] && chars[i][0]<27)
+                        	switch (chars[i][0])
+                        	{ // 传ず絏ㄏ块家Αㄏノ
+                        	case  1: me["sChar"]="Ctrl-A"; break;
+                        	case  2: me["sChar"]="Ctrl-B"; break;
+                        	case  4: me["sChar"]="Ctrl-D"; break;
+                        	case  5: me["sChar"]="Ctrl-E"; break;
+                        	case  6: me["sChar"]="Ctrl-F"; break;
+                        	case  7: me["sChar"]="Ctrl-G"; break;
+                        	case 10: me["sChar"]="Ctrl-J"; break;
+                        	case 11: me["sChar"]="Ctrl-K"; break;
+                        	case 12: me["sChar"]="Ctrl-L"; break;
+                        	case 14: me["sChar"]="Ctrl-N"; break;
+                        	case 15: me["sChar"]="Ctrl-O"; break;
+                        	case 16: me["sChar"]="Ctrl-P"; break;
+                        	case 17: me["sChar"]="Ctrl-Q"; break;
+                        	case 18: me["sChar"]="Ctrl-R"; break;
+                        	case 19: me["sChar"]="Ctrl-S"; break;
+                        	case 20: me["sChar"]="Ctrl-T"; break;
+                        	case 21: me["sChar"]="Ctrl-U"; break;
+                        	case 22: me["sChar"]="Ctrl-V"; break;
+                        	case 23: me["sChar"]="Ctrl-W"; break;
+                        	case 24: me["sChar"]="Ctrl-X"; break;
+                        	case 25: me["sChar"]="Ctrl-Y"; break;
+                        	case 26: me["sChar"]="Ctrl-Z"; break;
+                	} // switch
+                	else
+                	{        
+                        	me["sChar"] = chars[i];            // 炊硄﹃
+                        	if (!bs) me["is_Substituted"] = 0; // 睲埃传ず絏篨夹
+                	} // else
+                } // switch
+                // 盢锣传﹃癳だㄧΑ矪瞶单弄块
+                if (_dispatcher(pl) && i==size-1) get_char("_input", HIDE, pl);
+        } // for
+} // input()
+
+
+private int _dispatcher(object pl)                // だぃㄧΑ
+{
+        int  i, count=1;
+        mapping me=pl->query_temp("me");
+        
+        
+        if ( me["is_Command_Mode"] ||
+            (me["is_Substituted"] && // 琵块家Αㄏノ琘ㄇ
+             // 硂ぃ硂矪瞶
+             me["sChar"]!="ENTER" && me["sChar"]!="TAB") )     
+        {        // 瞷琌㏑家Α
+                if (sizeof(me["sChar"])!=1 && !me["is_Substituted"])
+                        return 1;
+                // 浪琩龄﹚竡癸酚穝﹚竡㏑
+                if (!undefinedp(me["keymap"][me["sChar"]]))
+                        me["sChar"] =
+                        me["keymap"][me["sChar"]];
+                if (!stringp(me["sChar"])) return 1; // Type checking...
+                // 浪琩琌计杠碞琌㏑璸计柑
+                if ('0'<=me["sChar"][0] && me["sChar"][0]<='9')
+                        me["sCount"] += me["sChar"];
+                else
+                {        
+                        sscanf(me["sCount"], "%d", count);
+                        me["sCount"] = ""; // 璸计竟耴箂
+                        // 滦
+                        if (me["sChar"] == ".")
+                                me["sChar"] = me["sOldChar"];
+                        else        // 癘魁硂Ω
+                                me["sOldChar"] = me["sChar"];
+                }
+
+                for (i=0; i<count; i++)
+                        switch (me["sChar"]) // だぃㄧΑ
+                        {
+                        case "a":_append(pl);                           break;
+                        case "d":
+                        case "Ctrl-D": _del_line(pl);                  break;
+                        case "f":
+                        case "Ctrl-Z": _refresh(pl);                break;
+                        case "g":
+                        case "Ctrl-G": _goto_line(pl);                break;
+                        case "h":
+                        case "LEFT":
+                        case "Ctrl-J": _left(pl);                   break;
+                        case "i":      _insert(pl);                break;
+                        case "j":
+                        case "DOWN":
+                        case "Ctrl-K": _down(pl);                break;
+                        case "k":
+                        case "UP":
+                        case "Ctrl-O": _up(pl);                        break;
+                        case "l":
+                        case "RIGHT":
+                        case "Ctrl-L": _right(pl, 1,
+                                                (me["is_Command_Mode"]?0:1));
+                                       break;
+                        case "m": _keymap(pl);                        break;
+                        case "n":
+                        case "Ctrl-N": _next_match(pl);                break;
+                        case "o": _append_line(pl);                    break;
+                        case "q":        // ボぃ弄穝块挡絪胯
+                        case "F4":
+                        case "Ctrl-Q": _quit(0, pl);                return 0;
+                        case "r":
+                        case "Ctrl-R": _replace(pl);                break;
+                        case "s":
+                        case "Ctrl-S": _search(pl);                   break;
+                        case "u": _undef_key(pl);                break;
+                        case "w":
+                        case "F2":
+                        case "Ctrl-W": _write(pl);                      break;
+                        case "x":
+                        case "DELETE":
+                        case "Ctrl-X":   _del_char(pl, 0);        break;
+                        case "A": 
+                        case "HOME":
+                        case "Ctrl-A":   _home(pl);        break;
+                        case "B":
+                        case "PAGEUP":
+                        case "Ctrl-B":   _page_up(pl);        break;
+                        case "E":
+                        case "END":
+                        case "Ctrl-E":   _end(pl);        break;
+                        case "F":
+                        case "PAGEDOWN":
+                        case "Ctrl-F":   _page_down(pl);        break;
+                        case "J":
+                        case "Ctrl-P": _join(pl);         break;
+                        case "O": _insert_line(pl);         break;
+                        case "U":
+                        case "Ctrl-U": _file_head(pl);        break;
+                        case "V":
+                        case "Ctrl-V": _file_end(pl);        break;
+                        case "?":
+                        case "F1":
+                        case "Ctrl-Y": _help(pl);         break;
+                        case "~":
+                        case "Ctrl-T": _insert_exclam_mark(pl);        break;
+                        case "BACKSPACE": _backspace(pl);          break;
+                        case "ESC": _esc(pl);                         break;
+                        case "TAB": _tab(pl);                        break;
+                        } // switch
+        } // if me["is_Command_Mode"]
+        else        
+                _process(pl);                // 矪瞶块家Α﹃块
+        
+        return 1;                        // ボ膥尿弄穝块膥尿絪胯
+} // dispatcher()
+
+
+private void _append(object pl)                // 村夹
+{
+        mapping me=pl->query_temp("me");
+        
+        if (sizeof(me["sText"]) == 0) return;
+        me["is_Command_Mode"] = 0;
+        _refresh_status(pl);
+        _right(pl, 1, 1);
+} // _append()
+
+
+private void _append_line(object pl)        // 村夹┏穝︽
+{
+        string *text;
+        mapping me=pl->query_temp("me");
+        
+        me["is_Command_Mode"] = me["is_NewFile"] = 0;
+        me["is_Modify"] = 1;
+        text = me["sText"][0..me["iS_Row"]+me["iRow"]-2] + ({ "" }) + 
+                me["sText"][me["iS_Row"]+me["iRow"]-1..<1];
+        me["sText"] = text;
+        _refresh_screen(pl, me["iS_Row"], sizeof(me["sText"]), 1);
+        me["iCol"] = 1;
+        _down(pl);
+} // _append_line()
+
+
+private void _backspace(object pl)        // 埃村夹玡
+{
+        mapping me=pl->query_temp("me");
+        
+        if (me["iS_Col"] == me["iCol"])        return;
+        _left(pl);
+        _del_char(pl, 1);
+} // _backspace()
+
+
+protected void _confirm_save(string str, object pl) // 瞒秨絪胯竟玡絋粄郎
+{
+        mapping me=pl->query_temp("me");
+        
+        if (str=="y" || str=="Y") return _write_done("", pl, 1);
+        me["is_Modify"] = 0;                // 砞﹚ゼэ篨夹
+        _quit(0, pl);
+} // _confirm_save()
+
+
+private void _del_char(object pl, int bs)                // 埃村夹
+{
+        int    go_left=0;                // 琌埃璶オ簿村夹
+        string str;
+        mapping me=pl->query_temp("me");
+
+
+        if (sizeof(me["sText"])==0 ||
+            sizeof(me["sText"][me["iS_Row"]+me["iRow"]-2])==0)
+             return;
+        if (me["is_NewFile"] || !me["is_Modify"])
+        {
+                me["is_NewFile"] = 0;
+                me["is_Modify"] = 1;        
+                _refresh_status(pl);
+        }
+        if (me["iS_Col"]+me["iCol"]-2 >=
+            sizeof(me["sText"][me["iS_Row"]+me["iRow"]-2]))
+                return;
+        str = me["sText"][me["iS_Row"]+me["iRow"]-2][0..me["iS_Col"]+
+                me["iCol"]-3];
+        // 浪琩琌惠璶逞ず甧
+        if (me["iS_Col"]+me["iCol"]-1 <
+            sizeof(me["sText"][me["iS_Row"]+me["iRow"]-2]))
+                str += me["sText"][me["iS_Row"]+
+                me["iRow"]-2][me["iS_Col"]+me["iCol"]-1..<1];
+        else        go_left = 1;                // 琌埃︽Ю┮璶オ簿村夹
+        me["sText"][me["iS_Row"]+me["iRow"]-2] = str;
+        printf(ESC "[%d;1f%-80s", me["iRow"]+1,        me["sText"][me["iS_Row"]+
+                me["iRow"]-2][me["iS_Col"]-1..me["iE_Col"]-1]);
+        if (go_left && !bs) _left(pl);
+        else        _refresh_cursor(pl);
+} // _del_char()
+
+
+private void _del_line(object pl)        // 埃俱︽
+{
+        string *text=({ });
+        mapping me=pl->query_temp("me");
+
+        me["is_NewFile"] = 0;
+        me["is_Modify"] = 1;        
+        if (me["iS_Row"]+me["iRow"]-2 > 0)
+                text = me["sText"][0..me["iS_Row"]+me["iRow"]-3];
+        text += me["sText"][me["iS_Row"]+me["iRow"]-1..<1];
+        me["sText"] = text;
+        _refresh_screen(pl, me["iS_Row"], me["iE_Row"], me["iS_Col"]);
+        if (me["iS_Row"]+me["iRow"]-1 > sizeof(me["sText"]))
+                _up(pl);                // 璝琌埃程︽碞璶簿村夹
+        // 璝村夹穝︗竚禬筁︽Ю玥簿笆村夹︽Ю
+        else if (me["iS_Col"]+me["iCol"]-1 >
+            sizeof(me["sText"][me["iS_Row"]+me["iRow"]-2]))
+            _end(pl);
+} // _del_line()
+
+
+private void _down(object pl)                // 村夹┕簿︽
+{
+        int  acc;
+        mapping me=pl->query_temp("me");
+
+
+        // 浪琩琌郎Ю
+        if (me["iS_Row"]+me["iRow"]-1 >= sizeof(me["sText"]))
+                // 璝陪ボ郎Ю︽玥ぃ暗ㄆ
+                if (me["iRow"] < 23) return;
+                else
+                {        // 陪跌郎Ю︽陪郎Ю
+                        me["iS_Row"]++;
+                        printf(ESC "[24;1f\r\n~");
+                        me["iRow"] = 22;
+                }
+        else if (++me["iRow"] > 23)
+        {        // 礶辈陪ボ︽
+                me["iS_Row"]++;                me["iE_Row"]++;
+                printf(ESC "[24;1f\r\n%s", me["sText"][me["iE_Row"]-1]
+                        [me["iS_Col"]-1..me["iE_Col"]-1]);
+                me["iRow"] = 23;
+        }
+
+        // 璝村夹穝︗竚禬筁︽Ю玥簿笆村夹︽Ю
+        if (me["iS_Col"]+me["iCol"]-1 >
+            sizeof(me["sText"][me["iS_Row"]+me["iRow"]-2]))
+                me["iCol"] = sizeof(me["sText"][me["iS_Row"]+me["iRow"]-2])-
+                        me["iS_Col"]+(me["is_Command_Mode"]?1:2);
+        // 璝︽礚玥﹚︗材逆
+        if (me["iCol"]==0 && me["iS_Col"]==1) me["iCol"] = 1;
+        if (me["iCol"] > 0)_refresh_status(pl);
+        else
+        {        // 村夹穝︗竚礶惠璶酶礶
+                acc = me["iCol"];        me["iCol"] = 1;
+                _refresh_screen(pl, me["iS_Row"], me["iE_Row"],
+                        me["iS_Col"]+acc-1);
+        }
+} // _down()
+
+
+private void _end(object pl)                // 盢村夹簿︽Ю
+{
+        mapping me=pl->query_temp("me");
+        
+        if (sizeof(me["sText"]) == 0) return;
+        // 璸衡︽Ю︗竚
+        me["iCol"] = sizeof(me["sText"][me["iS_Row"]+me["iRow"]-2])-
+                me["iS_Col"]+(me["is_Command_Mode"]?1:2);
+        if (me["iCol"] == 0) me["iCol"] = 1; // 璝︽礚玥﹚︗材逆
+        if (sizeof(me["sText"][me["iS_Row"]+me["iRow"]-2]) < me["iE_Col"])
+                    _refresh_status(pl);
+        else
+        {        // 村夹穝︗竚礶惠璶酶礶
+                me["iCol"] = 79;
+                _refresh_screen(pl, me["iS_Row"], me["iE_Row"], me["iS_Col"]+
+                        (sizeof(me["sText"][me["iS_Row"]+me["iRow"]-2])-
+                        me["iE_Col"]+1));
+        }
+} // _end()
+
+
+private void _esc(object pl)                // 眖块家Α㏑家Α
+{
+        mapping me=pl->query_temp("me");
+        me["is_Command_Mode"] = 1;
+        _left(pl);
+} // _esc()
+
+
+private void _file_end(object pl)        // 盢村夹簿郎Ю
+{
+        mapping me=pl->query_temp("me");
+        if (sizeof(me["sText"]) == 0) return;
+        _goto_line_done(sprintf("%d", sizeof(me["sText"])), pl, 0);
+} // _file_end()
+
+
+private void _file_head(object pl)        // 盢村夹簿郎繷
+{
+        mapping me=pl->query_temp("me");
+        if (sizeof(me["sText"]) == 0) return;
+        _goto_line_done("1", pl, 0);
+} // _file_head()
+
+
+private void _goto_line(object pl)        // 铬疭﹚︽
+{
+        mapping me=pl->query_temp("me");
+        _message(pl, sprintf("请输入行号（直接按 ENTER 取消，1~%d）：",
+                sizeof(me["sText"])), "_goto_line_done", ECHO, 1);
+} // _goto_line()
+
+
+protected void _goto_line_done(string str, object pl, int rein) // 眔︽腹
+{
+        int        no;
+        mapping me=pl->query_temp("me");
+
+        if (str == "") return _message_done("", pl);
+        if (sscanf(str, "%d", no)!=1 || no<1 || no>sizeof(me["sText"]))
+                return _message(pl, "错误的行号！", "_message_done", HIDE);
+        
+        me["iCol"] = 1;
+        if (me["iS_Row"]<=no && no<=me["iE_Row"])
+        {        // ﹚︽腹跌絛瞅い
+                me["iRow"] = no-me["iS_Row"]+1;
+                _refresh_status(pl);
+        }
+        else
+        {        // ﹚︽腹ぃ跌絛瞅い惠璶酶礶
+                me["iS_Row"] = no-11;
+                if (me["iS_Row"] < 1)        me["iS_Row"] = 1;
+                if (me["iE_Row"] < no+11)        me["iE_Row"] = no+11;
+                me["iRow"] = no-me["iS_Row"]+1;        
+                _refresh_screen(pl, me["iS_Row"], me["iE_Row"], 1);
+        }
+        if (rein) get_char("_input", HIDE, pl); // 浪琩琌惠璶弄Ω块
+} // _goto_line_done()
+
+
+private void _help(object pl)                // 徊礶
+{
+        printf(REF +
+" LPMud 棵辊絪胯竟  1.3   4/9/1997  by 谅盧不Kenny Hsieh), 舦┮Τ.\r
+\r
+a            村夹               d  Ctrl-D    埃俱︽\r
+f  Ctrl-Z    穝礶                     g  Ctrl-G    铬疭﹚︽\r
+h  Ctrl-J    村夹┕オ簿               i            村夹玡础\r
+j  Ctrl-K    村夹┕簿︽               k  Ctrl-O    村夹┕簿︽\r
+l  Ctrl-L    村夹┕簿               m            ﹚竡穝\龄\r
+n  Ctrl-N    穓碝/蠢传才﹃        o            村夹┏穝︽\r
+q  Ctrl-Q    瞒秨絪胯竟                   r  Ctrl-R    ﹃蠢传\r
+s  Ctrl-S    ﹃穓碝                     u            琘\龄﹚竡\r
+w  Ctrl-W    纗郎                     x  Ctrl-X    埃村夹\r
+A  Ctrl-A    盢村夹簿︽               B  Ctrl-B    ┕辈22 ︽\r
+E  Ctrl-E    盢村夹簿︽Ю               F  Ctrl-F    ┕辈22 ︽\r
+J  Ctrl-P    盢︽ゅ钡︽       O            村夹よ穝︽\r
+U  Ctrl-U    盢村夹簿郎繷               V  Ctrl-V    盢村夹簿郎Ю\r\n");
+        printf(
+".            滦                 ?  Ctrl-Y    徊礶礶\r
+~  Ctrl-T    村夹玡础!じ\r\n
+猭﹚竡龄琌ダ㎝ ESCF1°F12BACKSPACETABENTERINSERTDELETE\r
+HOMEENDPAGEUPPAGEDOWNUPDOWNLEFTRIGHTCtrl-A°Ctrl-Z\r
+\r
+舧肚冀絪胯竟叫玂痙舦Τヴ︙拜肈㎝某叫羛蹈и\r
+gis84507@cis.nctu.edu.tw ┪ kenny@cindy.cis.nctu.edu.tw\r
+                                                           [ヴ種龄絪胯竟]");
+        get_char("_input", HIDE, pl, REFRESH); // 弄龄酶礶
+} // _help()
+
+
+private void _home(object pl)                // 盢村夹簿︽
+{
+        mapping me=pl->query_temp("me");
+        
+        me["iCol"] = 1;
+        if (me["iS_Col"] == 1)_refresh_status(pl);
+        else        _refresh_screen(pl, me["iS_Row"], me["iE_Row"], 1);
+} // _home()
+
+
+private void _insert(object pl)                // 村夹玡础
+{
+        mapping me=pl->query_temp("me");
+        
+        if (sizeof(me["sText"]) == 0) return;
+        me["is_Command_Mode"] = 0;
+        _refresh_status(pl);
+} // _insert()
+
+
+private void _insert_line(object pl)        // 村夹よ穝︽
+{
+        string *text=({ });
+        mapping me=pl->query_temp("me");
+        
+        me["is_Command_Mode"] = me["is_NewFile"] = 0;
+        me["is_Modify"] = 1;
+        // 浪琩琌村夹よ琌Τず甧
+        if (me["iS_Row"]+me["iRow"]-3 >= 0)
+                text = me["sText"][0..me["iS_Row"]+me["iRow"]-3];
+        text += ({ "" });
+        text += me["sText"][me["iS_Row"]+me["iRow"]-2..<1];
+        me["sText"] = text;
+        me["iCol"] = 1;
+        _refresh_screen(pl, me["iS_Row"], sizeof(me["sText"]), 1);
+} // _insert_line()
+
+
+private void _insert_exclam_mark(object pl) // 村夹玡础!じ
+{
+        mapping me=pl->query_temp("me");
+        
+        // 礚猭タ盽块!┮疭ㄧΑ块!
+        if (sizeof(me["sText"]) == 0) return;
+        me["sChar"] = "!";
+        _process(pl);
+} // _insert_!()
+
+
+private void _join(object pl)                // 盢︽ゅ簿︽
+{
+        string *text=({ });
+        mapping me=pl->query_temp("me");
+
+
+        if (me["iS_Row"]+me["iRow"]-1 >= sizeof(me["sText"])) return;
+        
+        me["is_NewFile"] = 0;
+        me["is_Modify"] = 1;
+        _end(pl);                        // 盢村夹簿︽Ю
+        text = me["sText"][0..me["iS_Row"]+me["iRow"]-2];
+        if (sizeof(me["sText"][me["iS_Row"]+me["iRow"]-1]))
+        {        // 璝︽Τず甧ㄓ
+                text[me["iS_Row"]+me["iRow"]-2] += (" "+
+                        me["sText"][me["iS_Row"]+me["iRow"]-1]);
+                _right(pl, 1, 1);
+        }
+        text += me["sText"][me["iS_Row"]+me["iRow"]..<1];
+        me["sText"] = text;
+        _refresh_screen(pl, me["iS_Row"], me["iE_Row"], me["iS_Col"]);
+} // _join()
+
+
+private void _keymap(object pl)                // ﹚竡穝龄
+{
+        _message(pl, "叫块穝﹚竡龄㎝\龄钡 ENTER フ筳秨)",
+                "_keymap_done", ECHO);
+} // _keymap()
+
+
+protected void _keymap_done(string str, object pl) // 眔﹚竡龄
+{
+        string old, _new;
+        mapping me=pl->query_temp("me");
+        
+        _refresh_status(pl);
+        if (str != "")
+        {        // 璝Τ戈块
+                if (sscanf(str, "%s %s", _new, old) != 2)
+                        return _message(pl, "块Α岿粇", "_message_done",
+                                HIDE);
+                me["keymap"][_new] = old;
+                _message(pl, sprintf("眖穝﹚竡龄%s碞Τ\龄%s\",
+                        _new, old), "_message_done", HIDE);
+        }
+        else        get_char("_input", HIDE, pl); // 块膥尿弄块
+} // _keymap_done()
+
+
+private void _left(object pl)                // 村夹┕オ簿
+{
+        mapping me=pl->query_temp("me");
+
+        if (me["iS_Col"]==1 && me["iCol"]==1) return _refresh_status(pl);
+        if (--me["iCol"] < 1)
+        {        // 村夹穝︗竚礶惠璶酶礶
+                // 璝オ簿 8 逆び杠碞オ簿逆
+                if (me["iS_Col"]-8 < 1)
+                        me["iCol"] = me["iS_Col"]-1;
+                else        me["iCol"] = 8; // ぃ礛碞砞﹚村夹材 8 逆︗竚
+                _refresh_screen(pl, me["iS_Row"], me["iE_Row"],
+                        me["iS_Col"]-me["iCol"]);
+                return;
+        }
+        _refresh_status(pl);
+} // _left()
+
+
+// 篈陪ボ癟
+private varargs void _message(object pl, string str, string callback, int hide, mixed arg)
+{
+        printf(HOME + NOR + REV);        // 簿笆村夹 (1,1)砞﹚はじ陪ボ
+        // 睲埃篈癟
+        printf("                                                                                ");
+        printf(HOME + str);                // 簿笆村夹 (1,1)陪ボ癟
+        input_to(callback, hide, pl, arg); // 弄块戈
+} // _message()
+
+
+protected void _message_done(string str, object pl) // 挡癟陪ボ
+{
+        _refresh_status(pl);
+        get_char("_input", HIDE, pl);        // 膥尿弄块﹃
+} // _message_done()
+
+
+private void _next_match(object pl)                // 穓碝/蠢传才﹃
+{
+        mapping me=pl->query_temp("me");
+        string str="";
+        // 砞﹚癬﹍穓碝︗竚村夹瞷︗竚
+        int    j=me["iS_Col"]+me["iCol"]-1,
+               i, ofs;
+
+        
+        if (!stringp(me["sSearch"])) return; // 璝⊿砞﹚穓碝﹃ぃ暗ㄆ
+
+        for (i=me["iS_Row"]+me["iRow"]-2; i<sizeof(me["sText"]); i++)
+        {        
+                if ((ofs = strsrch(me["sText"][i][j-1..<1], me["sSearch"]))
+                    == -1)
+                        j = 1; // 硂︽⊿т杠砞﹚︽眖材逆秨﹍т
+                else
+                {        // т﹚﹃, 簿笆村夹ヘ︽
+                        _goto_line_done(sprintf("%d", i+1), pl, 0); 
+                        me["iCol"] = j+ofs; // 璸衡﹚﹃荡癸︗竚
+                        // 璝﹚﹃辅礶玥酶礶
+                        if (me["iCol"]<me["iS_Col"] ||
+                            me["iCol"]+strlen(me["sSearch"])>me["iS_Col"]+79)
+                                _refresh_screen(pl, me["iS_Row"], me["iE_Row"],
+                                        me["iCol"]);
+                        if (stringp(me["sReplace"]))
+                        {        // 惠璶蠢传﹃
+                                me["is_NewFile"] = 0;
+                                me["is_Modify"] = 1;        
+                                // 村夹玡ず甧
+                                str = me["sText"][i][0..me["iCol"]-2];
+                                str += me["sReplace"];
+                                str += (me["sText"][i][me["iCol"]+
+                                        strlen(me["sSearch"])-1..<1]);
+                                me["sText"][i] = str;
+                                // 璝蠢传﹃辅礶玥酶礶
+                                if (me["iCol"]<me["iS_Col"] ||
+                                    me["iCol"]+strlen(me["sReplace"])
+                                    > me["iS_Col"]+79)
+                                        _refresh_screen(pl, me["iS_Row"],
+                                                me["iE_Row"], me["iCol"]);
+                                // 盢村簘簿蠢传﹃
+                                me["iCol"] = me["iCol"]+strlen(me["sReplace"])-
+                                        me["iS_Col"]+1;
+                                printf(ESC "[%d;1f%-80s", me["iRow"]+1,
+                                        me["sText"][me["iS_Row"]+
+                                        me["iRow"]-2][me["iS_Col"]-1
+                                        ..me["iE_Col"]-1]);
+                        }
+                        // 盢村簘簿穓碝﹃
+                        else        me["iCol"] = me["iCol"]+strlen(me["sSearch"])-
+                                        me["iS_Col"]+1; 
+                        _refresh_status(pl);
+                        break;
+                } // if found
+        } // for each row
+        if (i >= sizeof(me["sText"]))
+                _message(pl, "тぃ﹚﹃", "_message_done", HIDE);
+        else        get_char("_input", HIDE, pl); // 弄块﹃
+} // _next_match()
+
+
+private void _page_down(object pl)        // ┕辈22 ︽
+{
+        mapping me=pl->query_temp("me");
+
+        if (me["iS_Row"]+22 > sizeof(me["sText"])) return; // 浪琩琌ぃ辈
+        me["iS_Row"] += 22;        me["iE_Row"] += 22;
+        // 浪琩村夹穝︗竚琌禬筁郎Ю
+        if (me["iS_Row"]+me["iRow"]-1 > sizeof(me["sText"]))
+                me["iRow"] = sizeof(me["sText"])-me["iS_Row"]+1;
+        _refresh_screen(pl, me["iS_Row"], me["iE_Row"], me["iS_Col"]);
+        // 璝村夹穝︗竚禬筁︽Ю玥簿笆村夹︽Ю
+        if (me["iS_Col"]+me["iCol"]-1 > sizeof(me["sText"][me["iS_Row"]+
+                me["iRow"]-2]))
+                _end(pl);
+} // _page_down()
+
+
+private void _page_up(object pl)        // ┕辈22 ︽
+{
+        mapping me=pl->query_temp("me");
+        
+        if (me["iS_Row"] <= 1) return; // 浪琩琌ぃ辈
+        me["iS_Row"] -= 22;
+        if (me["iS_Row"] < 1) me["iS_Row"] = 1; // 程陆材
+        _refresh_screen(pl, me["iS_Row"], me["iE_Row"], me["iS_Col"]);
+        // 璝村夹穝︗竚禬筁︽Ю玥簿笆村夹︽Ю
+        if (me["iS_Col"]+me["iCol"]-1 >
+            sizeof(me["sText"][me["iS_Row"]+me["iRow"]-2]))
+            _end(pl);
+} // _page_up()
+
+
+private void _process(object pl)        // 矪瞶块家Α﹃块
+{
+        int    i, size;
+        string str, rest, *input;
+        mapping me=pl->query_temp("me");
+
+
+        if (me["is_Modify"]==0 || me["is_NewFile"]==1)
+        {
+                me["is_NewFile"] = 0;
+                me["is_Modify"] = 1;
+                _refresh_status(pl);
+        }
+        if (!me["is_Substituted"] && (strsrch(me["sChar"], "\r")!=-1 ||
+            strsrch(me["sChar"], "\n")!=-1))
+                me["is_Substituted"] = 1; // 砞﹚ず絏传篨夹
+        me["sChar"] = replace_string(me["sChar"], "\t", "        ");
+        me["sChar"] = replace_string(me["sChar"], "\r", "\rENTER\r");
+        me["sChar"] = replace_string(me["sChar"], "\n", "\rENTER\r");
+        input = explode(me["sChar"], "\r");
+
+        size = sizeof(input);
+        for (i=0; i<size; i++)                // Ω矪瞶︽块
+        {
+                if (me["is_Substituted"] && input[i] == "ENTER")
+                {        // 讽龄 ENTER 璶盢村夹ぇず甧簿穝︽
+                        rest = me["sText"][me["iS_Row"]+
+                                me["iRow"]-2][me["iS_Col"]+me["iCol"]-2..<1];
+                        me["sText"][me["iS_Row"]+me["iRow"]-2] =
+                                me["sText"][me["iS_Row"]+
+                                me["iRow"]-2][0..me["iS_Col"]+me["iCol"]-3];
+                        _append_line(pl); // 村夹┏穝︽
+                        // 穝︽ず甧琌村夹︗竚ず甧
+                        me["sText"][me["iS_Row"]+me["iRow"]-2] = rest;
+                        continue;
+                }
+
+                // 块﹃ぃ琌 ENTER , 矪瞶 TAB ﹚︗
+                if (me["is_Substituted"] && input[i] == "TAB")
+                        input[i] = "        "[0..7-(me["iCol"]-1)%8];
+                str = me["sText"][me["iS_Row"]+me["iRow"]-2][0..me["iS_Col"]+
+                        me["iCol"]-3] + input[i] + me["sText"][me["iS_Row"] +
+                        me["iRow"]-2][me["iS_Col"]+ me["iCol"]-2..<1];
+                me["sText"][me["iS_Row"]+me["iRow"]-2] = str;
+                _right(pl, sizeof(input[i]), 1);
+        } // for
+
+        printf(ESC "[%d;1f%s", me["iRow"]+1, me["sText"][me["iS_Row"]+
+                me["iRow"]-2][me["iS_Col"]-1..me["iE_Col"]-1]);
+        _refresh_cursor(pl);
+} // _process()
+
+
+protected void _quit(mixed unused, mixed pl) // 瞒秨絪胯竟
+{
+        mapping me;
+        
+        seteuid(geteuid(pl));
+        me = pl->query_temp("me");
+        if (me["is_Modify"])
+                return _message(pl, "郎э叫拜惠璶郎盾y/n)[n]",
+                        "_confirm_save", ECHO);
+        me["iRow"] = 23;
+        _refresh_cursor(pl);                // 簿笆村夹程︽
+        printf(NOR "\r\n");
+        // 璝龄﹚竡癸酚琌碞睲埃產ō癘魁ぃ礛碞癘魁產ō
+        if (sizeof(me["keymap"]) == 0) pl->delete("me_keymap");
+        else pl->set("me_keymap", me["keymap"]);
+        map_delete(EditedFiles, pl->query_temp("me/sFileName"));
+        pl->delete_temp("me"); // 睲埃絪胯竟ノ既跑计
+} // _quit()
+
+
+private void _refresh(object pl)        // 穝礶
+{
+        mapping me=pl->query_temp("me");
+        _refresh_screen(pl, me["iS_Row"], me["iE_Row"], me["iS_Col"]);
+} // _refresh()
+
+
+private void _replace(object pl)        // ﹃蠢传
+{
+        _message(pl, "穓碝/蠢传﹃(钡ENTER,フ筳秨):",
+                "_replace_done", ECHO);
+} // _replace()
+
+
+protected void _replace_done(string str, object pl) // 眔蠢传﹃
+{
+        mapping me=pl->query_temp("me");
+        
+        _refresh_status(pl);
+        if (str != "")
+        {        // Τ块戈
+                if (sscanf(str, "%s %s", me["sSearch"],        me["sReplace"]) != 2)
+                {        // Τ﹃碞﹚穓碝﹃種奔﹚﹃
+                        me["sSearch"] = str;
+                        me["sReplace"] = "";
+                }
+                _next_match(pl);
+        }
+        else        get_char("_input", HIDE, pl); // 膥尿弄块﹃
+} // _replace_done()
+
+
+private void _right(object pl, int col, int extra)        // 村夹┕簿
+{
+        int    acc;
+        mapping me=pl->query_temp("me");
+
+
+        if (sizeof(me["sText"])==0 || me["iS_Col"]+me["iCol"]-1>
+            sizeof(me["sText"][me["iS_Row"]+me["iRow"]-2])-1+extra)
+            return;
+        me["iCol"] += col;
+        if (me["iS_Col"]+me["iCol"]-1 > sizeof(me["sText"][me["iS_Row"]+
+            me["iRow"]-2])+extra)
+                me["iCol"] = sizeof(me["sText"][me["iS_Row"]+me["iRow"]-2])-
+                        me["iS_Col"]+1+extra;
+        if (me["iCol"] > 80)
+        {        // 村夹穝︗竚ぃǎ跌怠ず惠璶┕簿笆跌怠
+                // 璝簿 8 逆び杠碞簿︽Ю
+                if (me["iE_Col"]+8 > sizeof(me["sText"][me["iS_Row"]+
+                    me["iRow"]-2])+1)
+                        acc = sizeof(me["sText"][me["iS_Row"]+me["iRow"]-2])-
+                                me["iE_Col"]+1;
+                else        acc = 8;
+                me["iCol"] = 80-acc+1;         // 璸衡村夹穝︗竚
+                _refresh_screen(pl, me["iS_Row"], me["iE_Row"], me["iS_Col"]+acc);
+                return;
+        }
+        _refresh_status(pl);
+} // _right()
+
+
+private void _search(object pl)                // ﹃穓碝
+{
+        _message(pl, "叫块穓碝﹃钡 ENTER )", "_search_done",
+                ECHO);
+} // _search()
+
+
+protected void _search_done(string str, object pl) // 眔穓碝﹃
+{
+        mapping me=pl->query_temp("me");
+        
+        _refresh_status(pl);
+        if (str != "")
+        {        // Τ块戈
+                me["sSearch"] = str;        me["sReplace"] = 0;
+                _next_match(pl);
+        }
+        else        get_char("_input", HIDE, pl); // 膥尿弄块﹃
+} // _search_done()
+
+
+private void _tab(object pl)                 // ㏑家Α TAB 龄﹚︗
+{
+        mapping me=pl->query_temp("me");
+        _right(pl, 8-(me["iCol"]-1)%8, 0);
+} // _tab()
+
+
+private void _undef_key(object pl)        // 琘龄﹚竡
+{
+        _message(pl, "叫块饼﹚竡ぇ\龄钡 ENTER )",
+                "_undef_key_done", ECHO);
+} // undef_key()
+
+
+protected void _undef_key_done(string str, object pl) // 眔﹚龄
+{
+        mapping me=pl->query_temp("me");
+        if (str != "")        map_delete(me["keymap"], str);
+        _message_done("", pl);
+} // undef_key_done()
+
+
+private void _up(object pl)                // 村夹┕簿︽
+{
+        int  acc;
+        mapping me=pl->query_temp("me");
+        
+        
+        if (me["iRow"]==1 && me["iS_Row"]==1)        return;
+        if (--me["iRow"] < 1)
+        {        // 村夹穝︗竚ぃǎ跌怠ず碞簿跌怠
+                me["iS_Row"]--;
+                me["iE_Row"]=me["iS_Row"]+22;
+                _refresh_screen(pl, me["iS_Row"], me["iE_Row"], me["iS_Col"]);
+                me["iRow"] = 1;
+        }
+        // 璝村夹穝︗竚禬筁︽Ю玥簿︽Ю
+        if (me["iS_Col"]+me["iCol"]-1 > sizeof(me["sText"][me["iS_Row"]+
+            me["iRow"]-2]))
+                me["iCol"] = sizeof(me["sText"][me["iS_Row"]+me["iRow"]-2])-
+                        me["iS_Col"]+(me["is_Command_Mode"]?1:2);
+        // 璝︽礚玥﹚︗材逆
+        if (me["iCol"]==0 && me["iS_Col"]==1) me["iCol"] = 1;
+        if (me["iCol"] > 0) _refresh_status(pl);
+        else
+        {        // 村夹穝︗竚ぃǎ跌怠ず酶礶
+                acc = me["iCol"];        me["iCol"] = 1;
+                _refresh_screen(pl, me["iS_Row"], me["iE_Row"],
+                        me["iS_Col"]+acc-1);
+        }
+} // _up()
+
+
+private void _write(object pl)                // 眔纗郎嘿
+{
+        _message(pl, "叫块穝郎钡 ENTER ㄏノ侣郎)",
+                "_write_done", ECHO, 0);
+} // _write()
+
+
+protected void _write_done(string str, object pl, int quit) // 纗郎
+{
+        string callback;
+        mapping me=pl->query_temp("me");
+
+        if (str == "") str = me["sFileName"];
+        else        // 眔郎
+                str = resolve_path(pl->query("cwd"), str);
+        if (quit) callback = "_quit";
+        else callback = "_message_done";
+        if (write_file(str, implode(me["sText"], "\n")+"\n", 1))
+        {
+                me["is_Modify"] = me["is_NewFile"] = 0;
+                me["sFileName"] = str;
+                _message(pl, "郎Θ\", callback, HIDE);
+        }
+        else
+                _message(pl, "郎ア毖", callback, HIDE);
+} // write_done()

@@ -6,6 +6,30 @@ knowledge base for a ~100-archive batch job, not a diary of one run.
 
 ## The pipeline, per lib
 
+-1. **`lpcc` has a `--batch` mode — use it, not one process per file.**
+   `lpcc --batch config_file [file1 file2 ...]` (or pipe newline-separated
+   object paths on stdin, extension-less, e.g. via `find work -name
+   '*.lpc' | sed ...`) boots the VM ONCE and compiles every listed file in
+   that same process, instead of a fresh boot per file. This is a driver
+   patch made in this project (`src/main_lpcc.cc`, plus two related fixes
+   below) — ~15-70x faster than the original one-process-per-file
+   approach (a 1909-file lib: ~15s vs several minutes), and `scripts/
+   lpcc_check.sh` already uses it. If you ever reach for raw `lpcc` by
+   hand instead of the script, use `--batch`, not a shell loop.
+   - **Gotcha if you ever touch this code again**: `set_eval(max_eval_cost)`
+     MUST be called before each file's compile inside the batch loop.
+     `set_eval()` arms a real OS timer (`vm/internal/eval_limit.cc`), not a
+     simple counter — without rearming it per file, elapsed wall-clock time
+     across the WHOLE batch run accumulates against one budget, and every
+     file compiled after that budget is exhausted spuriously fails with
+     "Too long evaluation. Execution aborted." regardless of its own cost
+     (this exact regression appeared once already: 22 real failures on the
+     pilot lib inflated to 447 before this fix).
+   - Batch mode reuses ONE VM/object-table for every file, matching how a
+     real boot compiles many objects in the same process (no state reset
+     between them) — this is arguably a MORE realistic test than the old
+     one-process-per-file approach, not just a faster one.
+
 0. **Two driver builds exist** — use the right one:
    - `~/src/fluffos/build/src/driver` — RelWithDebInfo, pre-existing.
    - `~/src/fluffos/build-debug/src/driver` (+ `lpcc`, `lpcshell`) — Debug
@@ -337,6 +361,47 @@ config path from elsewhere. `scripts/boot.sh` (once written) should enforce
 this via `cd "$(dirname "$CONFIG")"` internally so it's never launched
 wrong by accident.
 
+### 6b. `lpcc_check.sh`'s per-file sweep has real, expected false-positive categories
+
+Running every file through `lpcc` in isolation (§ pipeline step 5) is
+still worth doing — it found several genuine pre-existing typos in both
+pilot libs (see §9-§12 below) — but a large fraction of what it flags is
+**not a bug**, just an artifact of compiling a file completely divorced
+from its normal runtime context. Recognize these patterns before "fixing"
+them:
+
+- **`#include`-only fragment files** (e.g. this lib family's `/adm/simul_efun/*.lpc`,
+  which are `#include`d INTO `/adm/obj/simul_efun.lpc` rather than loaded
+  standalone) compile fine as part of that larger unit but can FAIL when
+  `lpcc`/`find_object()` compiles them as an independent top-level object —
+  because driver-visible things like `main_file_name()` (used by
+  `master::valid_override()` to know "what's the real compilation unit,
+  as opposed to which physical file the `efun::` call is textually in") now
+  report the fragment itself instead of the file that really includes it.
+  **Verify against the real full-driver boot log before trusting an lpcc-only
+  failure on one of these**: if `grep` for the error string comes up empty
+  in an actual `driver config.fluffos` boot log, it's a sweep artifact, not
+  a live bug.
+- **Room/NPC/board files that reference other objects by hardcoded path**
+  (`move(loc)`, `call_other(path, ...)`) fail with `Bad argument 1 to EFUN
+  call_other()` or `call_other() couldn't find object 'PATH'` when `lpcc`
+  compiles them alone, if the referenced object hasn't been compiled yet in
+  this isolated run (no real player, no real room graph, no preload
+  ordering) OR — the more common real-content case — if `PATH` genuinely
+  doesn't exist in this archive at all (see §13, missing zone content).
+  Distinguish the two by checking whether the target file exists on disk
+  (`find work -name "targetname.lpc"`); if it doesn't exist anywhere, it's
+  a real content gap, not a testing artifact, and isn't something to
+  fabricate a fix for.
+- Net effect: **triage the sweep's failures by category before fixing
+  anything** (group by error message text), fix the small number that are
+  genuine driver-compat/typo bugs (typically distinctive one-off error
+  types: syntax errors, "Undefined function/variable" on somewhat common
+  names, illegal-character errors, return-type mismatches), and just note
+  the big repetitive categories (call_other/couldn't-find-object clusters)
+  in that lib's `NOTES.md` as expected noise once you've spot-checked a
+  couple and confirmed the pattern.
+
 ### 7. Missing `get_root_uid()`/`get_bb_uid()` master applies (PACKAGE_UIDS)
 
 Our driver builds have `PACKAGE_UIDS` on. FluffOS's `set_master()`
@@ -387,6 +452,116 @@ a systemic old-MudOS-lineage pattern (author_file/domain_file implemented
 via call_other during bootstrap) — expect to hit the SAME crash signature
 on other libs and NOT need to re-diagnose it, just confirm the patched
 driver is what's running (`build-debug`/`build`, not some other checkout).
+
+### 8b. Calling a same-file function before its definition can fail to resolve
+
+When adding a new function to an existing file (e.g. the `message_combatd`
+alias in §8's write-up), calling a function defined LATER in the same file
+produced `error: Undefined function message_vision` even though it's
+defined a few lines below, in the same compilation unit. Simplest fix:
+just reorder so the alias/wrapper comes AFTER the function it calls (don't
+rely on whole-file symbol-table-first resolution within one file for a
+brand-new addition — existing code in these libs is presumably already
+ordered call-site-after-definition throughout, which is probably exactly
+why this never surfaced as a pre-existing bug).
+
+### 9. Fullwidth Chinese punctuation used as code syntax (typo, not encoding)
+
+A handful of pre-existing typos (found via the lpcc sweep's "Illegal
+character 0xXX" errors spanning 3 UTF-8 bytes) where the original author's
+input method left a **fullwidth punctuation mark inside actual code
+syntax** instead of the ASCII equivalent — `set("short"， "...")` (fullwidth
+comma `，` U+FF0C as an argument separator) and `#include <ansi。h>`
+(fullwidth period `。` U+3002 in an include filename). This is a genuine
+authoring mistake predating our involvement, not something the encoding
+conversion introduced — confirmed by checking the raw GBK bytes decode to
+the same fullwidth character. **Do not blanket-replace fullwidth
+punctuation** (it's correct and intentional inside actual Chinese string
+content, which is most of every file) — only fix the specific occurrences
+the compiler flags as illegal characters, by hand, checking each is really
+in code position (between/around syntax tokens) and not inside a string.
+
+### 10. Missing closing quote before string concatenation (typo)
+
+Another pre-existing typo category: `"$N把身上的 + ob->query("name") + "卖掉。\n"`
+— the string literal is missing its closing `"` before the `+`, so the
+parser reads everything up to the NEXT `"` (the one opening `ob->query("name"`'s
+argument) as part of one giant malformed literal, then chokes on the `+`
+inside it as a syntax error, cascading into further "Illegal character"
+noise. Fix: add the missing `"` (`"$N把身上的" + ob->query("name") + "卖掉。\n"`).
+Same shape recurs wherever `notify_fail`/`message_vision`/etc concatenate a
+literal + a `->call()` + another literal — grep the lpcc sweep's "Illegal
+character" hits for a mid-Chinese-text location (as opposed to a
+standalone punctuation typo per §9) and check for a dropped closing quote
+before assuming it's something else.
+
+### 11. Copy-paste bugs: inherit/init calls pointing at nonexistent std types
+
+Found via "Inherited file 'X' does not exist" / "Undefined function
+init_X": an object file whose OWN header comment and in-game name disagree
+with what it actually `inherit`s — e.g. `obj/weapon/axe.lpc` (comment says
+"dagger.c", sets `id: "dagger"`, item name "钢刀"/steel blade) was written
+`inherit AXE; ... init_axe(...)`, but `/std/weapon/axe.lpc` was never
+implemented in this lib (only blade/dagger/staff/sword/weapon exist) —
+clearly a copy-paste-and-half-rename artifact from whatever file this was
+cloned from. Fix by matching the inherit/init call to what the file's own
+content (name/id/comment) says it actually is, using an existing sibling
+`std/` file with the same init-function signature as the template — don't
+try to implement the missing base class from scratch (that's fabricating
+a whole new item subtype, out of scope).
+
+### 12. Orphaned non-LPC `.c` files (data mistakenly caught by the rename)
+
+`convert_lib.sh` renames every `*.c` to `*.lpc` unconditionally, which is
+usually right (§ "What counts as LPC source") but can catch a stray
+non-source file that happens to end in `.c` — found one instance: a
+plain-text ASCII-art map (`d/shenmin/shenminmap.c`, pure box-drawing/room-
+layout art, not a single line of LPC) that isn't `#include`d, inherited,
+or referenced by path anywhere else in the lib (`grep -rl` for its
+basename came up empty besides itself) — almost certainly dead/orphaned
+content from a removed "map" command. Once renamed to `.lpc` it shows up
+as an lpcc-sweep "failure" (real: it doesn't compile, it's not code) that
+is harmless in practice since nothing ever `load_object()`s it. If you hit
+one of these: confirm nothing references it, then rename it to `.txt` (or
+its original extension) instead of leaving it as a permanently-broken
+`.lpc` — keeps the sweep's pass/fail signal meaningful for files that
+actually matter.
+
+### 13. Missing zone/room content is a real archive gap, not a bug to fix
+
+`clone/board/*` (bulletin-board objects that `move()` themselves into a
+named room on `create()`) commonly reference room paths that don't exist
+ANYWHERE in the archive — not just unloaded-yet, genuinely absent (whole
+zone directories missing: no `/d/wudang`, `/d/shaolin`, `/d/huashan`, etc,
+despite dozens of board objects referencing rooms under them). This means
+the archive shipped without most of its game-world content — likely a
+"core/skeleton" release separated from a much larger world pack that never
+made it into this particular download. **Don't fabricate the missing
+rooms.** Document the gap in that lib's `NOTES.md` (which zones/how many
+files affected) and move on — these board clones aren't on any preload
+list, so they simply never get created in normal play; the only symptom is
+lpcc-sweep noise, not a real boot/gameplay defect.
+
+### 14. `valid_override()` needs the 3-arg signature for `#include`d simul_efuns
+
+`master::valid_override(file, name)` (2-arg, old-style) can wrongly reject
+a legitimate `efun::` override written inside a file that's `#include`d
+into `simul_efun.lpc` rather than being `simul_efun.lpc` itself (e.g.
+`/adm/simul_efun/object.lpc`'s `efun::destruct()` call, wrapped by a
+logging `destruct()` override) — `file` is the physical file containing
+the `efun::` call, which for an `#include`d fragment is never equal to
+`SIMUL_EFUN_OB`. The docs (`docs/apply/master/valid_override.md`) have
+always specified a 3rd `main_file` parameter for exactly this reason ("file
+will be the actual file the call appears in; mainfile will be the file
+being compiled (the two can differ due to #include)") — old libs that only
+implemented the 2-arg version are relying on undefined/permissive behavior
+for the missing arg. Fix: add the 3rd parameter and check
+`main_file == SIMUL_EFUN_OB` (or `MASTER_OB`) too. **In practice this may
+never surface in a real boot** (confirmed on the pilot lib: the real driver
+boot never hit this error even before the fix, only `lpcc` compiling the
+fragment as a standalone top-level object did — see §6b) — but the fix is
+correct and free, so apply it whenever you spot a 2-arg `valid_override`
+during the master.lpc read-through from §4/§7.
 
 ---
 

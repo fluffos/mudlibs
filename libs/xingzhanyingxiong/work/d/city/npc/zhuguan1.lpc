@@ -1,0 +1,40 @@
+// zhuguan1.c  
+#include <ansi.h>
+
+inherit NPC;
+inherit F_VENDOR;
+//inherit F_DEALER;
+
+void create()
+{
+        set_name("大堂经理", ({ "datang jingli", "jingli" }));
+set("title", HIB"星际大酒店主管"NOR );
+        set("shen_type", 1);
+
+        set("gender", "男性");
+        set("age", 25);
+set("long",
+                "这是星际大酒店负责前厅接待的经理，如果你有什么问题可以找他解决。\n");
+        set_skill("unarmed", 50);
+        set_skill("dodge", 50);
+        set_temp("apply/damage", 15);
+
+        set("combat_exp", 40000);
+        set("attitude", "friendly");
+        set("vendor_goods", ({
+"/d/city/food/",
+"/d/city/food/",
+"/d/city/food/",
+"/d/city/food/",
+        }));
+
+        setup();
+        carry_object("/d/city/obj/cloth")->wear();
+}
+
+void init()
+{
+        add_action("do_list", "list");
+        add_action("do_buy", "buy");
+}
+

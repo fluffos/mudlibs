@@ -1,0 +1,280 @@
+// score.c
+// Display an user's detail status.
+// Original ES 2 command.
+// Last modified by Spock @ FF	97.Sep.26.
+
+#include <ansi.h>
+#include <combat.h>
+
+inherit F_CLEAN_UP;
+inherit F_CMD;
+
+string bar_string = "";
+string blank_string = "";
+
+string display_attr(int gift, int value);
+string status_color(int current, int max);
+string date_string(int date);
+string tribar_graph(int val, int eff, int max, string color);
+string weapon_type( object weapon);
+
+void create() { seteuid(ROOT_UID); }
+
+int main(object me, string arg)
+{
+	object ob;
+	mapping my, conditions;
+	string line, str, skill_type, *cnd_name;
+	object weapon;
+	int attack_points, dodge_points, parry_points;
+	int *limbs_hit, *limbs_eff_hit, *limbs_max_hit;
+	int hit, eff_hit, max_hit, j;
+	int p_fame, n_fame;
+	float p_to_n, n_to_p;
+
+	seteuid(getuid(me));
+	
+	if(!arg)
+		ob = me;
+	else if (wizardp(me)) {
+		ob = present(arg, environment(me));
+		if (!ob) ob = find_player(arg);
+		if (!ob) ob = find_living(arg);
+                if (!ob) return notify_fail("你要察看谁的状态？\n");
+	} else
+                return notify_fail("只有巫师能察看别人的状态。\n");
+
+	my = ob->query_entire_dbase();
+
+	line = sprintf( BOLD "%s" NOR "%s\n", RANK_D->query_rank(ob), ob->short(1) );
+        line += sprintf(" %s是一%s%s岁的%s%s.\n",
+		gender_self( ob->query("gender") ),
+		ob->query("unit"),
+		chinese_number(ob->query("age")), 
+		ob->query("gender"),
+		ob->query("race") );
+
+	line += sprintf(
+		" "NOR"力量 ["CYN"%s"NOR"] 敏捷 ["CYN"%s"NOR"] 智力 ["CYN"%s"NOR"]"
+		" "NOR"注意 ["CYN"%s"NOR"] 体质 ["CYN"%s"NOR"] 技术 ["CYN"%s"NOR"] \n\n",
+
+		display_attr( my["str"], ob->query_str() ),
+		display_attr( my["dex"], ob->query_dex() ),
+		display_attr( my["int"], ob->query_int() ),
+		display_attr( my["not"], ob->query_not() ),
+		display_attr( my["con"], ob->query_con() ),
+		display_attr( my["tec"], ob->query_tec() ) );
+
+	line += " [精神]  " + tribar_graph(my["spi"], my["eff_spi"], my["max_spi"], HIY) + "\n";
+	line += " [移动]  " + tribar_graph(my["mov"], my["eff_mov"], my["max_mov"], HIB) + "\n";
+	line += " [体能]  请使用 hp 或 body 指令查阅。\.\n";
+	
+	line += "\n";
+
+	if( objectp(weapon = ob->query_temp("weapon")) )
+		skill_type = weapon->query("skill_type");
+	else
+		skill_type = "unarmed";
+
+	attack_points = COMBAT_D->skill_power(ob, skill_type, SKILL_USAGE_ATTACK)
+		* COMBAT_D->skill_power(ob, skill_type, SKILL_USAGE_ATTACK);
+	parry_points = COMBAT_D->skill_power(ob, "parry", SKILL_USAGE_DEFENSE);
+	dodge_points = COMBAT_D->skill_power(ob, "dodge", SKILL_USAGE_DEFENSE);
+
+	line += sprintf(" 目前共杀了["CYN"%6d"NOR"]个生物, 其中["CYN"%5d"NOR"]位人类, ["CYN"%5d"NOR"]位玩家.\n",
+		my["MKS"] + my["PKS"], my["HKS"], my["PKS"]);
+	
+	line += sprintf(" [自动逃跑]  精神 %3d%%  体能 %3d%%  移动 %3d%%  重要部位 %3d%%\n\n",
+			my["wmp_spi"], my["wmp_hit"], my["wmp_mov"], my["wmp_vital"]);
+
+	line += sprintf(" [护甲强度] 传统[" GRN "%3d" NOR "] 动能[" GRN "%3d" NOR "] 光学[" GRN "%3d" NOR "] 粒子 [" GRN "%3d" NOR "] 爆破[" GRN "%3d" NOR "]\n",
+			ob->query_temp("apply/traditional_armor"),
+			ob->query_temp("apply/projectile_armor"),
+			ob->query_temp("apply/optical_armor"),
+			ob->query_temp("apply/high_energy_armor"),
+			ob->query_temp("apply/explosive_armor") );
+
+	if( objectp(weapon) ) {
+                line += sprintf(" [攻击伤害]    " HIW "%-2d" NOR " d " HIW "%3d %s %3d" NOR
+                        " [攻击次数]    " HIC "%2d\n" NOR
+                        " [攻击范围]    " HIY "%10-d" NOR,
+                        ob->query_temp("apply/dice_number"),
+                        ob->query_temp("apply/dice_roll"),
+			( ob->query_temp("apply/damage_bonus") + COMBAT_D->skill_power(
+				ob, skill_type, SKILL_USAGE_ATTACK) >= 0 ) ?  NOR "+" HIY : " " HIY,
+                        ob->query_temp("apply/damage_bonus") +  COMBAT_D->skill_power(
+				ob, skill_type, SKILL_USAGE_ATTACK),
+                        ob->query_temp("apply/round"),ob->query_temp("apply/range") );
+        }
+        else {
+                line += sprintf(" [攻击伤害]    " HIW "%-2d" NOR " d " HIW "%3d %s %3d" NOR
+                        " [攻击次数]    " HIC "%2d\n" NOR
+                        " [攻击范围]    " HIY "%10-d" NOR,
+                        ob->query("dice_number"), ob->query("dice_roll"),
+			( ob->query("damage_bonus") +  COMBAT_D->skill_power(
+				ob, skill_type, SKILL_USAGE_ATTACK) >= 0 ) ? NOR "+" HIY : " " HIY,
+                        ob->query("damage_bonus") +  COMBAT_D->skill_power(
+				ob, skill_type, SKILL_USAGE_ATTACK),
+                        ob->query("round"), ob->query("range") );
+        }   
+		
+
+		line += sprintf("     [防御指数]    " HIG "%d (%d)\n" NOR 
+			" [武器种类]    %8s" +
+			"       [命中指数]    " HIR "%d\n\n" NOR,
+                        ob->query("basic_dp") + ob->query_temp("apply/dp")
+                        + dodge_points,
+                        parry_points + ob->query_temp("apply/pp"),
+			objectp( weapon ) ? weapon_type( weapon ) : "空手搏击", 
+                        ob->query("basic_ap") + attack_points + ob->query_temp("apply/ap") );
+
+	line += " 食物:   " + tribar_graph( ob->query("food"), ob->max_food_capacity(), ob->max_food_capacity(), YEL) + "\n";
+	line += " 饮水:   " + tribar_graph( ob->query("water"), ob->max_water_capacity(), ob->max_water_capacity(), CYN) + "\n\n";
+
+	if( ( p_fame = ob->query("positive_fame") ) <= 0 ) {
+		p_fame = 1;
+		ob->set("positive_fame", 1 );
+	}
+	if( ( n_fame = ob->query("negative_fame") ) <= 0 ) {
+		n_fame = 1;
+		ob->set("negative_fame", 1 );
+	}
+	p_to_n = to_float( p_fame ) / to_float( n_fame );	
+	n_to_p = to_float( n_fame ) / to_float( p_fame );	
+
+	line += sprintf(
+		" [战斗经验] " MAG "%-d" NOR
+		"  [战斗评价] " CYN "%-3d" NOR
+		"  [技能知识] " MAG "%-d" NOR
+		"  [时间单位] " YEL "%-2d\n" NOR
+		" [声    望] " GRN "%-10d" NOR
+		"     [正负名声]    " CYN "%-5d" NOR " / " RED "%-5d" NOR 
+			" / %-3.1f / %-3.1f\n" NOR,
+		ob->query("combat_exp"),
+		(int)ob->query("level"), (int)ob->query("knowledge"),
+		ob->query_time_unit(),
+		(int)ob->query("score"), p_fame, n_fame, 
+		p_to_n, n_to_p, );
+
+	line += "\n";
+
+	line += " [状态]  ";
+
+	if( ob->is_ghost() ) line += "(死亡) ";
+
+	if( ob->is_fighting() ) line += "(战斗) ";
+	else if( ob->query_temp("tired") ) line += "(疲乏) ";
+
+	if( ob->query("position") == "stand" ) line += "(站立) ";
+	else if( ob->query("position") == "rest" ) line += "(坐着休息) ";
+	else if( ob->query("position") == "sleep" ) line += "(睡眠) ";
+
+	if( ob->query("food") <= 0 ) line += "(饥饿) ";
+	if( ob->query("water") <= 0 ) line += "(口渴) ";
+
+	if( ob->query_temp("apply/invis") ) line += "(隐形+" + ob->query("apply/invis") + ")";
+
+	if( conditions = ob->query_conditions() ) {
+		cnd_name = keys( conditions );
+
+		for( j = 0; j < sizeof( conditions ); j++ ) {
+			line += "(" + to_chinese( cnd_name[j] ) + " / " + conditions[cnd_name[j]]+ ")";
+		}
+	}
+
+	line += "\n";
+
+	write(line);
+	return 1;
+}
+
+string display_attr(int gift, int value)
+{
+	if( value > gift ) return sprintf( HIC "%2d" NOR, value );
+	else if( value < gift ) return sprintf( RED "%2d" NOR, value );
+	else return sprintf("%2d", value);
+}
+
+string status_color(int current, int max)
+{
+	int percent;
+
+	if( max ) percent = current * 100 / max;
+	else percent = 100;
+
+	if( percent > 100 ) return HIC;
+	if( percent >= 90 ) return HIG;
+	if( percent >= 60 ) return HIY;
+	if( percent >= 30 ) return YEL;
+	if( percent >= 10 ) return HIR;
+	return RED;
+}
+
+string tribar_graph(int val, int eff, int max, string color)
+{
+	int i, sq;
+	string output, exceed_val = HIC;
+
+	if( val < 0 ) val = 0;
+	if( eff < 0 ) eff = 0;
+
+	if( val > eff ) {
+		i = ( ( val - eff ) * 25 / max ) + 1;
+		while( i ) {
+			exceed_val += "△";
+		i--;
+		}
+	}
+	output = color + ( ( val > eff ) ? bar_string[ 0..(eff*25/max)*2-1] 
+		: bar_string[0..(val*25/max)*2-1] ) + ( ( val > eff ) 
+		? exceed_val : "" ) + ( ( eff > val ) 
+		? blank_string[(val*25/max)*2..(eff*25/max)*2-1] 
+		: "" ) + NOR;
+
+	sq = eff * 25 / max;
+	if( sq < 0 ) sq = 0;
+	if( sq >= 0 && sq < 8 ) output += RED;
+	if( sq >= 8 && sq < 14 ) output += YEL;
+	if( sq >= 14 ) output += GRN;
+
+	if( val > max )
+		sq = 25;
+	if( val > eff )
+		sq = val * 25 / max;
+		
+	for( i = sq; i < 25 ; i++ ) {
+		if( i == 0 ) output += RED;
+		if( i == 8 ) output += YEL;
+		if( i == 14 ) output += GRN;
+		output += "〖";
+	}
+	output += NOR;
+	return output;
+}
+
+string weapon_type( object weapon )
+{
+	switch( weapon->query("damage_type") ) {
+		case "projectile":	return "高速动能";
+		case "optical":		return "高能光学";
+		case "high_energy":	return "粒子加速";
+		case "explosive":	return "爆破碎片";
+		case "traditional":	return "传统撞击";
+		default:		return "变态攻击";
+	}
+}
+
+int help(object me)
+{
+	write(@HELP
+指令格式： score
+           score <对象名称>               (巫师专用)
+
+这个指令可以显示你或指定对象的基本资料
+基本资料的设定请参阅 help setup.
+
+参考 : body, hp, skills, setup
+HELP
+    );
+    return 1;
+}

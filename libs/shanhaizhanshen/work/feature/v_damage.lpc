@@ -1,0 +1,113 @@
+// damage.c
+
+#include <ansi.h>
+#include <dbase.h>
+#include <login.h>
+#include <move.h>
+
+varargs int armor_damage( int armor_number, int damage, object who )
+{
+        int *armors_hit_d, val;
+
+        if( damage < 0 ) error( "F_DAMAGE: 损害值为负值。\n");
+        if( armor_number < 0 ) error( "F_DAMAGE: 装甲号码为负值。\n");
+
+        if( objectp( who)) set_temp( "last_damage_from", who);
+        armors_hit_d = query("armors_hit");
+        val = armors_hit_d[armor_number] - damage;
+
+        if( val >= 0 ) {
+                armors_hit_d[armor_number] = val;
+                set( "armors_hit", armors_hit_d );
+        }
+        else {
+                armors_hit_d[armor_number] = -1;
+                set( "armors_hit", armors_hit_d );
+        }
+
+        return damage;
+}
+
+int armor_fix(int armor_number, int fix)
+{
+        int *armors_hit_h, *armors_max_hit_h, val;
+
+	if( fix < 0 ) error("F_DAMAGE: 修复值为负值。\n");
+        if( armor_number < 0 ) error("F_DAMAGE: 装甲号码为负值。\n");
+
+        armors_hit_h = query("armors_hit");
+	armors_max_hit_h = query("armors_max_hit");
+
+        val = armors_hit_h[armor_number] + fix;
+
+	if( val < armors_max_hit_h[armor_number] ) {
+	        armors_hit_h[armor_number] = val;
+	} else {
+		armors_hit_h[armor_number] = armors_max_hit_h[armor_number];
+	}
+        set( "armors_hit", armors_hit_h );
+
+	return fix;
+}
+
+void power_failure()
+{
+	object defeater;
+        int *armors_hit;
+
+	if( objectp(defeater = query_temp("last_damage_from")) )
+		COMBAT_D->winner_reward(defeater, this_object());
+
+	this_object()->remove_all_enemy();
+
+        message("system", HIR "\n你的载具失去动力，无法移动了。\n" NOR,
+		this_object());
+
+		set("mov", 1);
+}
+
+void destroyed()
+{
+	object trash, killer, *inside;
+	int exp, i, j;
+
+	if( objectp(killer = query_temp("last_damage_from")) ) {
+		set_temp("my_killer", killer->query("id"));
+		COMBAT_D->killer_reward(killer, this_object());
+	}
+
+	message_vision( HIM "$N " HIM "爆炸了 !!\n" NOR, this_object() );
+
+	inside = all_inventory( this_object());
+	for( i = 0; i < sizeof( inside); i++) {
+		if( inside[i]->is_character()) {
+			for( j = 0; j < sizeof( inside[i]->query("limbs"));
+				j++) {
+				inside[i]->limb_damage( j, 
+					random( this_object()->query("fuel")),
+					this_object());
+				inside[i]->limb_wound( j, 
+					random( this_object()->query("fuel")),
+					this_object());
+			}
+		}
+		if( inside[i]->is_vehicle()) {
+			for( j = 0; j < sizeof( inside[i]->query("armors"));
+				j++) {
+				inside[i]->armor_damage( j, 
+					random( this_object()->query("fuel")),
+					this_object());
+			}
+		}
+	}
+
+	if( objectp(trash = VEHICLE_D->make_trash(this_object(), killer)) )
+		trash->move(environment( this_object() ));
+
+	this_object()->remove_all_killer();
+	all_inventory(environment())->remove_killer(this_object());
+
+	destruct(this_object());
+}
+
+

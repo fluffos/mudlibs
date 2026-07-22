@@ -1,0 +1,269 @@
+// go.c
+// Go to a direction.
+// Original ES II command.
+// Last modified by Spock @ FF   97.Feb.3.
+// Planning to seperate walking and driving apart.
+
+inherit F_CLEAN_UP;
+inherit F_CMD;
+
+mapping default_dirs = ([
+	
+	"north":	"北方",
+	"south":	"南方",
+	"east":		"东方",
+	"west":		"西方",
+	"northup":	"北边",
+	"southup":	"南边",
+	"eastup":	"东边",
+	"westup":	"西边",
+	"northdown":	"北边",
+	"southdown":	"南边",
+	"eastdown":	"东边",
+	"westdown":	"西边",
+	"northeast":	"东北",
+	"northwest":	"西北",
+	"southeast":	"东南",
+	"southwest":	"西南",
+	"up":		"上面",
+	"down":		"下面",
+	"enter":	"里面",
+	"out":		"外面",
+]);
+
+void create() { seteuid(getuid()); }
+
+int main(object me, string arg)
+{
+	string dest, mout, min, dir, skill;
+	object env, obj, vehicle, *ship_room;
+	mapping exit;
+	int mov, mov_cost, i, tu_lost;
+
+	if( me->query("position") == "rest" )
+		return notify_fail("你得先站起身子才行。\n");
+
+	if( me->query("position") == "sleep" )
+		return notify_fail("你仍在睡梦中。\n");
+
+       
+
+	if( !arg ) return notify_fail("你要往哪个方向走？\n");
+
+	if( me->over_encumbranced() )
+		return notify_fail("你的负荷过重，动弹不得。\n");
+
+	if( me->is_busy() )
+		return notify_fail("你的动作还没有完成，不能移动。\n");
+
+	env = environment(me);
+	if(!env) return notify_fail("你哪里也去不了。\n");
+	if( env->is_vehicle()) {
+		vehicle = environment( me);
+		env = environment( vehicle);
+	}
+
+	if( objectp( vehicle)) {
+		if( !me->query_temp("command"))
+			return notify_fail("载具不是由你驾驶的。\n");
+		if( undefinedp( mov_cost = env->query("mov_cost"))) 
+			mov_cost = 5;
+		skill = vehicle->query("skill_type");
+		mov_cost += 200 - me->query_skill("skill");
+		me->improve_skill( skill, random( me->query("int") ) 
+			+ me->query("wis") / 5 );
+		if( mov_cost < env->query("mov_cost")) 
+			mov_cost = env->query("mov_cost");
+	}
+	if( !objectp( vehicle) && undefinedp( mov_cost = env->query("mov_cost")))
+		mov_cost = 10;
+
+	if( objectp(vehicle)) {
+		if( (int)vehicle->query("fuel") - mov_cost < 0 )
+			return notify_fail("载具的燃料用光了。\n");
+	} else if( (int)me->query("mov") - mov_cost / 10 < 0 )
+		return notify_fail("你累得不能动了。\n"); 
+
+	if( !mapp(exit = env->query("exits")) || undefinedp(exit[arg]) ) {
+		if( query_verb()=="go")
+			return notify_fail("这个方向没有出路。\n");
+		else
+			return 0;
+	}
+
+	dest = exit[arg];
+
+	if( env->is_space_ship_room() ) {
+		ship_room = all_inventory( environment( env ) );
+		for ( i = 0; i < sizeof( ship_room ); i ++ ) {
+			if( base_name( ship_room[i] ) == dest ) {
+				obj = ship_room[i];
+				break;
+			}
+		if( !obj ) obj = new( dest );
+		}
+	}
+	else {
+		if( !(obj = find_object(dest)) )
+			call_other(dest, "???");
+		if( !(obj = find_object(dest)) )
+			return notify_fail("无法移动。\n");
+	}
+
+	if( objectp( vehicle)) {
+		switch( obj->query("terrain")) {
+			case "plain":
+				if( vehicle->query("plain")) return 1;
+				if( vehicle->query("atmosphere")) return 1;
+				else return notify_fail("载具无法进入平地。\n");
+			case "hill":
+				if( vehicle->query("hill")) return 1;
+				if( vehicle->query("atmosphere")) return 1;
+				else return notify_fail("载具无法进入丘陵地。\n");
+			case "mountain":
+				if( vehicle->query("mountain")) return 1;
+				if( vehicle->query("atmosphere")) return 1;
+				else return notify_fail("载具无法进入高山。\n");
+			case "river":
+				if( vehicle->query("river")) return 1;
+				if( vehicle->query("atmosphere")) return 1;
+				else return notify_fail("载具无法进入河流。\n");
+			case "ocean":
+				if( vehicle->query("ocean")) return 1;
+				if( vehicle->query("atmosphere")) return 1;
+				else return notify_fail("载个无法进入海洋。\n");
+			case "atmosphere":
+				if( vehicle->query("atmosphere")) return 1;
+				else return notify_fail("载具无法时入大气圈。\n");
+			case "space":
+				if( vehicle->query("plain")) return 1;
+				else return notify_fail("载个无法进入宇宙。\n");
+		}
+	} else {
+		switch( obj->query("terrain")) {
+			case "plain":
+				break;
+			case "hill":
+				break;
+			case "mountain":
+				break;
+			case "river":
+				if( me->query_temp("atmosphere")) return 1;
+				if( me->query_skill("swimming") < 10 )
+					return notify_fail("你游不过这条河流。\n");
+				if( mov_cost < 101 ) mov_cost = 101;
+				me->receive_damage( "spi", mov_cost * 2
+					- me->query_skill("swimming"), me );
+				me->receive_damage( "mov", mov_cost 
+					- me->query_skill("swimming"), me );
+				me->improve_skill("swimming", me->query("int") );
+				break;
+			case "ocean":
+				if( me->query_temp("ocean")) return 1;
+				if( me->query_temp("atmosphere")) return 1;
+				else return notify_fail("你不能在大海里游泳。\n");
+			case "atmosphere":
+				if( me->query_temp("atmosphere")) return 1;
+				else return notify_fail("你无法在天上飞吧。\n");
+			case "space":
+				if( me->query_temp("space")) return 1;
+				else return notify_fail("你不能在宇宙中生存。\n");
+			default:
+				break;
+		}
+	}
+
+	if( objectp(vehicle)) {
+		if(!env->valid_leave( vehicle, arg)) return 0;
+	}
+	else if( !env->valid_leave(me, arg) ) return 0;
+
+	if( !undefinedp(default_dirs[arg]) )
+		dir = default_dirs[arg];
+	else
+		dir = arg;
+
+	if( me->is_fighting() ) {
+		if( !( mout = me->query("go_fmout") ) )
+			mout = "$N 往" + dir + "飞快地逃了。\n";
+		if( !( min = me->query("go_fmin") ) )
+			min =  "$N 一边跑过来，一边不断的回头看，似乎背后有什么追过来的样子。\n";
+	} else {
+		if( !( mout = me->query("go_mout") ) )
+			mout = "$N 往" + dir + "离开。\n";
+		if( !( min = me->query("go_min") ) )
+			min =  "$N 走了过来。\n";
+	}
+
+	if( objectp(vehicle)) {
+		if( vehicle->is_fighting()) {
+		if( !( mout = vehicle->query("go_fmout") ) )
+			mout = "$N 往" + dir + "冲出去。\n";
+		if( !( min = vehicle->query("go_fmin") ) )
+			min =  "$N 飞快往这里冲过来。\n";
+		} else {
+		if( !( mout = vehicle->query("go_mout") ) )
+			mout = "$N 开往" + dir + "了。\n";
+		if( !( min = vehicle->query("go_min") ) )
+			min =  "$N 往这里过来了。\n";
+		}
+	}
+
+	if( objectp(vehicle)) 
+		message_vision_exclude( mout, vehicle, ({ vehicle }));
+	else
+		message_vision_exclude( mout, me, ({ me }) );
+
+	if( objectp(vehicle)) {
+		if( vehicle->move(obj)) {
+			vehicle->remove_all_enemy();
+			message_vision_exclude( min, vehicle, ({ vehicle }) );
+			all_inventory(env)->follow_me(vehicle, arg);
+			mov = (int)vehicle->query("fuel") - mov_cost;
+			vehicle->set("fuel", mov);
+			me->time_unit_loss( mov_cost / 10 + 2 );
+			return 1;
+		}
+	}
+	else if( me->move(obj) ) {
+		me->remove_all_enemy();
+		message_vision_exclude( min, me, ({ me }) );
+		me->set_temp("pending", 0);
+		all_inventory(env)->follow_me(me, arg);
+		me->receive_damage("mov", mov_cost / 10 );
+		tu_lost = mov_cost / 10 - me->query("dex") / 5;
+		if( tu_lost < 0 ) tu_lost = 0;
+		me->time_unit_loss( tu_lost );
+		return 1;
+	}
+
+	return 0;
+}
+
+void do_flee(object me)
+{
+	mapping exits;
+	string *directions;
+
+	if( !environment(me) || !living(me) ) return;
+	exits = environment(me)->query("exits");
+	if( !mapp(exits) || !sizeof(exits) ) return;
+	directions = keys(exits);
+	tell_object(me, "打不过，看来该想办法逃跑了...\n");
+	main(me, directions[random(sizeof(directions))]);
+}
+
+int help(object me)
+{
+	write(@HELP
+指令格式： go <方向>
+	  <方向>
+
+移动时，可以直接打方向名称。例：往西移动，打 west 或 w 即可.
+让你往指定的方向移动。如果你正在驾驶载具，则视为驾驶的命令。
+
+ 
+HELP
+    );
+    return 1;
+}

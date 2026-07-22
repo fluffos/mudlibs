@@ -1,0 +1,201 @@
+// dealer.c 商人
+// This is a inheritable object.
+// Each dealer should support buy, sell, list, value 4 commands
+
+#include <dbase.h>
+#include <ansi.h>
+
+string is_vendor_good(string arg)
+{
+        string *goods;
+        object ob;
+        int i;
+
+        if (arrayp(goods = query("vendor_goods"))) 
+                for (i = 0; i < sizeof(goods); i++) 
+                        if (goods[i]->id(arg))
+                                return goods[i];
+        return "";
+}
+
+int do_value(string arg)
+{
+        object ob;
+        int value;
+
+        if (!arg || !(ob = present(arg, this_player())))
+                return notify_fail("你要估什么的价？\n");
+        if (userp(ob))
+                ob->set("value", ob->query("per") * 500);
+
+        value = ob->query("value");
+        if (value < 1)
+                write(ob->query("name") + "不值钱！\n");
+        else 
+                write(ob->query("name") + "值" + value+"电子货币。\n");
+        return 1;
+}
+
+int do_sell(string arg)
+{
+        object ob;
+        int i;
+        int count;
+        int value;
+        object *inv;
+        
+        if (!arg || !(ob = present(arg, this_player())))
+                return notify_fail("你要卖什么？\n");
+     
+        if (stringp(ob->query("no_drop")))
+                return notify_fail("这样东西不能卖。\n");
+
+
+        if (ob->query("food_supply"))
+                return notify_fail("剩菜剩饭留给您自己用吧。\n");
+        if (userp(ob))
+        {
+                ob->set("value", ob->query("per") * 500);
+                CHANNEL_D->do_channel(ob, "rumor",
+                        sprintf("%s被某人拐卖给星际拐卖者了。", ob->name(1)));
+        }
+
+        value = ob->query("value");
+        if (value < 30)
+                write(ob->query("name") + "一文不值！\n");
+        else {
+                message_vision("$N卖掉了一" + ob->query("unit") + 
+                ob->query("name") + "给$n。\n", this_player(), this_object());
+                MONEY_D->pay_player(this_player(), value * 70 / 100);
+                if ( userp(ob))
+                {
+                        ob->move("/d/city/cangku");
+                        ob->set("startroom","/d/city/cangku");
+                        ob->set_temp("selled");
+                        ob->save();
+                }
+                else if (value < 50)
+                        destruct(ob);
+                else
+                {
+                        inv = all_inventory(this_object());
+                        count=0;
+                        for (i = 0; i < sizeof(inv); i++)
+                        {
+                                if (inv[i]->short()==ob->short())
+                                        count++;
+                        }
+                        if (count<3)
+                                ob->move(this_object());
+                        else
+                                destruct(ob);
+                }
+        }
+        return 1;
+}
+
+int do_list()
+{
+        string *goods;
+        object *inv;
+        object *inv1;
+        int *count;
+        int i;
+        int j;
+
+        inv = all_inventory(this_object());
+
+        if (!sizeof(inv) && !arrayp(goods = query("vendor_goods")))
+                return notify_fail("目前没有可以卖的东西。\n");
+        for (i = 0; i < sizeof(inv); i++) 
+        {
+                if (!inv[i]->query("equipped") && !inv[i]->query("money_id"))
+                {
+                        if (!arrayp(inv1))
+                        {
+                                inv1=({inv[i]});
+                                count=({1});
+                        }
+                        else
+                        {
+                                for (j = 0; j < sizeof(inv1); j++)
+                                        if (inv[i]->short()==inv1[j]->short())
+                                                break;
+                                if (j == sizeof(inv1))
+                                {
+                                        inv1+=({inv[i]});
+                                        count+=({1});
+                                }
+                                else
+                                        count[j]+=1;
+                        }
+                }
+        }
+        
+        printf("你可以向%s购买下列物品：\n", query("name"));
+/*
+        for (i = 0; i < sizeof(inv); i++) 
+                if (!inv[i]->query("equipped") && !inv[i]->query("money_id"))
+                printf("%30-s：%s\n", inv[i]->short(),
+                MONEY_D->price_str(inv[i]->query("value") * 6 / 5));
+*/
+        for (i = 0; i < sizeof(inv1); i++) 
+                printf("%30-s：数量：%3-i %s\n", inv1[i]->short(),
+                count[i],
+                MONEY_D->price_str(inv1[i]->query("value") * 6 / 5));
+        if (arrayp(goods = query("vendor_goods")))
+                for (i = 0; i < sizeof(goods); i++)
+                        printf("%30-s：%s\n", goods[i]->short(),
+                        MONEY_D->price_str(goods[i]->query("value")));
+        return 1;
+}       
+
+int do_buy(string arg)
+{
+        int value, val_factor;
+        string ob_file;
+        object ob;
+        mapping fam;
+object who=this_player();
+
+//      if ( (fam = this_player()->query("family")) && fam["family_name"] == "丐帮" ) 
+//              return notify_fail("你是个穷叫化，买什麽东西！\n");
+        
+        if (!arg)
+                return notify_fail("你想买什么？ \n");
+        else if (!(ob = present(arg, this_object())))
+                if ((ob_file = is_vendor_good(arg)) == "")
+                        return notify_fail("你想买什么？ \n");
+
+        if (!ob) {
+                ob = new(ob_file);
+                val_factor = 10;
+        }
+        else {
+                if (ob->query("equipped"))
+                        return notify_fail("你想买什么？ \n");
+                val_factor = 12;
+        }
+
+        if (query_temp("busy"))
+                return notify_fail("哟，抱歉啊，我这儿正忙着呢……您请稍候。\n");
+          
+   if (ob->query("value")>who->query("money")) 
+                return notify_fail("你这个戳把子，滚开点罗！\n");
+         else { MONEY_D->player_pay(this_player(), ob->query("value") *  val_factor / 10);
+                set_temp("busy", 1);
+                message_vision("$N从$n那里买下了一" + ob->query("unit") + 
+                ob->query("name") + "。\n", this_player(), this_object());
+                ob->move(this_player());
+        }
+        remove_call_out("enough_rest");
+        call_out("enough_rest", 1);
+
+        return 1;
+}
+
+void enough_rest()
+{
+        delete_temp("busy");
+}
+
