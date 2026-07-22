@@ -1046,6 +1046,140 @@ missing the reverse case or has genuine duplicate-cased files
 (`find . -iname '*.h'` grouped case-insensitively) before assuming a
 single fix location.
 
+### 15h. `chinesed.lpc`-style GBK byte-range checks are silently wrong now, everywhere, and specifically break registration — the most important systemic bug in this whole project
+
+**This affects every lib converted so far and every lib still to come.**
+Check for it proactively on every new lib, the same way §4/§8f are
+already checked proactively.
+
+**The root cause.** On this driver, indexing a string (`str[i]`) returns
+the character's Unicode **codepoint** (e.g. `0x4e2d` for 中), and
+`strlen()` counts **characters**, not bytes (confirmed by reading the
+driver source: `u8_egc_index_as_single_codepoint()` in `src/base/
+internal/strutils.cc`, `f_sizeof()`'s `EGCSmartIterator` in
+`src/packages/core/efuns_main.cc`). Every one of these mudlibs was
+written against a GBK-byte driver, where `str[i]` returned a raw byte
+(0-255) and `strlen()` counted bytes (2 per Chinese character). Every
+piece of code that inspected string bytes to detect/validate Chinese
+text is now silently checking the wrong thing:
+
+- `str[0] > 160 && str[0] < 255` (a GBK lead-byte range check) is now
+  comparing a full codepoint like `19968` (0x4E00) against `160-255` —
+  **always false** for real Chinese text. `is_chinese()` never matches
+  Chinese text anymore; it doesn't error, it just silently always
+  returns wrong.
+- `strlen(str) < 2` used to mean "reject if not even one full 2-byte GBK
+  character exists" (i.e. reject empty/corrupt input) — with UTF-8 char
+  counts, this now **rejects every genuine single-character name**
+  ("云" alone, `strlen == 1`), which is completely valid input.
+- Sliding-window / substring logic indexed by *byte* offset
+  (`name[i..i+3]` = "the next 2 GBK characters", `i%2==0` to land on
+  each character's lead byte) is walking the wrong number of *characters*
+  now — half the string goes unchecked, or the windows are simply the
+  wrong size.
+- A `PATH(name)` sharding macro using `name[0..1]` ("first GBK
+  character") now takes the first **two characters**, not one — silently
+  changes the on-disk storage/lookup key shape.
+
+**Why this is the most impactful bug found in this whole project**:
+every one of these symptoms shows up **specifically during character
+registration** — is_chinese, name-length bounds, and the similar-name
+sliding-window check are almost universally used to validate the
+surname/given-name a new player picks. Before this fix, on every
+affected lib, registration was reachable but **silently un-completable
+with any real Chinese name** — every valid Chinese name got rejected
+with "请您用「中文」取名字" (please use Chinese for your name) or "至少
+要有两个汉字" (needs at least 2 characters) or similar, even though the
+player *did* enter Chinese characters. This was never caught by earlier
+passes on any of these ~20 libs because testing stopped at "reaches the
+name-entry prompt", never actually typing a Chinese name and confirming
+acceptance through to the next step (password setup). **"Boots and
+reaches a prompt" is not the same as "the feature actually works" — for
+any registration/name-entry flow, always send a real UTF-8 Chinese
+string through it and confirm you land on the NEXT prompt, not just that
+the current one appears.**
+
+**The fix pattern** (mechanical, once you know what to look for):
+
+1. **`is_chinese`/`is_chinese2`/similar in the lib's `chinese.lpc`
+   simul_efun fragment** (`adm/simul_efun/chinese.lpc`, `adm/kernel/
+   simul_efun/chinese.lpc`, `secure/sefun/chinese.lpc`, etc. — this file
+   exists in nearly every lib in this collection). Replace the GBK
+   byte-range comparison with a CJK Unicode codepoint range check
+   (`str[i] >= 0x4e00 && str[i] <= 0x9fff` covers the CJK Unified
+   Ideographs block, which is what these mudlibs' character names use).
+   Do NOT touch `is_english`-style checks (`a >= 'a' && a <= 'z'`) — pure
+   ASCII-range comparisons are unaffected by UTF-8 vs GBK, since ASCII
+   codepoints are identical either way.
+2. **Any `strlen(x) < N` / `> N` bound calibrated against "N bytes = N/2
+   Chinese characters"** — halve N. The message text (e.g. "必须是 2 到
+   5 个中文字", "2 to 5 Chinese characters") almost always already states
+   the CORRECT intended character count — halving the numeric bound
+   makes the code match what the message already promises, it's not a
+   guess. Watch for this recurring in more than one place per lib: a
+   simple bound in `check_legal_name`'s own signature/body, AND a
+   *separate* combined-length check where the caller concatenates
+   surname + given name (`if (strlen(fname) < 4) ...`) before validating
+   the whole name — found this second site by actually testing
+   registration through to completion, not from a text search.
+3. **`i%2==0 && !is_chinese(name[i..<N])`-style loop gates** — the
+   `i%2==0` was landing on alternating BYTE offsets to catch each GBK
+   character's lead byte; with UTF-8 every index is already one
+   character, so drop the `i%2==0 &&` entirely and check every position.
+4. **Byte-shift "auto-correct" hacks** like `name[j]+=128;` (seen in one
+   lib, presumably a GBK/BIG5 byte-fixup) have **no valid meaning against
+   Unicode codepoints** — adding 128 to a codepoint corrupts the
+   character. Don't try to preserve this kind of hack; replace it with a
+   straightforward reject-if-not-Chinese check, matching what every
+   sibling lib's equivalent function already does.
+5. **Sliding-window substring checks indexed by byte offset** (`name[i..
+   i+3]` for a 2-char window, guarded by `strlen(name) < 4`) — convert
+   byte-window-width N to character-window-width N/2 throughout
+   (`name[i..i+1]`, guard `< 2`), and the loop bound `i <= l - 4` becomes
+   `i <= l - 2`.
+6. **A `PATH(name)`-style sharding macro using `name[0..1]`** ("first GBK
+   char") — change to `name[0..0]` (first character). Low risk either
+   way (it's just a storage bucket key, self-consistent as long as it's
+   used the same way everywhere), but correctness matters if anything
+   else ever assumes the bucket key really is "the first character".
+
+**Verification approach that actually caught all of this**: write a tiny
+throwaway LPC file, `#include`/call the fixed functions directly inside
+`create()`, and dump results with `efun::write("label=" + fn(args) +
+"\n");` piped through `lpcc --batch` (this reliably reaches stdout in
+that context — `write_file()` to a scratch path often does NOT, gated by
+`valid_write`/whatever security daemon hasn't loaded yet in a bare
+single-file `lpcc` run). Confirmed `is_chinese("测试")==1`,
+`is_chinese("test")==0`, `is_english("test")==1`,
+`is_english("测试")==0` this way in seconds, across every fixed variant.
+Then — critically — follow up with a REAL interactive registration test
+via `mudclient.py`, sending an actual Chinese surname + given name and
+confirming the flow reaches the NEXT prompt (password setup), not just
+that no crash occurred at the name prompt itself.
+
+**Libs fixed so far** (as of this pass): `chinese.lpc`-family fix applied
+in bxsj, bxsj1, chidi, dtsl, fengyun434, fluffos_xiyou2000, fy2, fy2005,
+llmud_datangshuanglong, mhxy, nitan170911, nitan6, rzrmud,
+shanhaizhanshen, unknownlib20150716, xiakexing2017, xingzhanyingxiong,
+xkx2001, xlqy_new2007, xo, xo_final (21 files). `check_legal_name`
+length-bound fix applied in the same set (20 files, one per lib except
+`xo`, whose copy was already fully commented out / a no-op). The deeper
+`named.lpc` (`PATH()` macro + sliding-window + combined-length-guard) fix
+was needed and applied in the "nitan" family plus chidi/dtsl/
+llmud_datangshuanglong (5 files) — **check every NEW lib for a
+`named.lpc` with the same shape**, it's not universal but recurs often
+enough to check for by name. `dtsl`'s and `llmud_datangshuanglong`'s
+`named.lpc` also has a separate, PRE-EXISTING, unrelated compile failure
+(`Cannot #include limit.h` — a genuinely missing header, nothing to do
+with this fix) that predates this pass; not fixed here, noted for
+whoever picks it up next.
+
+**Apply this proactively on every remaining lib** before/alongside the
+normal pipeline: grep for `is_chinese\|is_chinese2` definitions and
+`check_legal_name`/`named.lpc`'s `PATH(` macro on sight, fix using the
+patterns above, and — this is the part earlier passes skipped — actually
+type a Chinese name through registration before marking a lib `done`.
+
 ---
 
 ## Per-archive gotchas index

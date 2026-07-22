@@ -30,3 +30,15 @@ cd libs/fy2
 ~/src/fluffos/build-debug/src/driver config.fluffos
 python3 ../../scripts/mudclient.py 127.0.0.1 40014 --timeout 10 --send "" --send "look" --send "quit"
 ```
+
+## Post-hoc fix: UTF8-native is_chinese/registration (AGENTS.md §15h)
+
+Applied in a later batch pass across the whole project: `is_chinese`/`is_chinese2`
+in the shared `chinese.lpc` simul_efun fragment used GBK byte-range checks that
+silently never match real Chinese text once strings are UTF-8 (this driver's
+`str[i]` returns a Unicode codepoint, not a GBK byte). This broke character
+registration specifically -- any real Chinese name was rejected. Fixed the
+range check to test the CJK Unicode block instead, and halved the
+GBK-byte-calibrated length bounds in `check_legal_name` to match. See
+AGENTS.md §15h for the full writeup; confirmed via a real interactive
+registration test (Chinese surname + given name reaching the next prompt).
