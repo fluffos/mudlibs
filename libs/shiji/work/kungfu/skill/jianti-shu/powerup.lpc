@@ -1,0 +1,37 @@
+// powerup.c 爆发
+
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+int baofa(object me, object target)
+{
+   int skill;
+   if( target != me )
+   return notify_fail("你只能提升自己的战斗力。\n");
+ if( (int)me->query("jingli") < 300  )
+   return notify_fail("你的耐力不够。\n");
+   if( (int)me->query_temp("powerup") )
+   return notify_fail("你已经在运功中了。\n");
+
+   skill = me->query_skill("rennai");
+  me->add("jingli", -200);
+message_vision(
+   HIY "$N咬紧牙关，爆发出无穷潜能。\n" NOR,me);
+   me->add_temp("apply/attack", skill/2);
+   me->add_temp("apply/dodge", skill/2);
+   me->set_temp("powerup", 1);
+
+   me->start_call_out((:call_other, __FILE__, "remove_effect", me, skill/3:), skill);
+   if( me->is_fighting() ) me->start_busy(2);
+   return 1;
+}
+
+void remove_effect(object me, int amount)
+{
+   me->add_temp("apply/attack", - amount);
+   me->add_temp("apply/dodge", - amount);
+   me->delete_temp("powerup");
+   me->add("qi",-100);
+   tell_object(me, "你忽然感到一阵虚脱。\n");
+}
+

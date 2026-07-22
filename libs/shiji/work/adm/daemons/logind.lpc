@@ -1,0 +1,1059 @@
+// logind.c
+// 部份by roro@zhanguo
+// 部份 keyboy@sjmud 修改.
+
+#include <ansi.h>
+#include <command.h>
+#include <login.h>
+#include <net/daemons.h>
+#include <net/macros.h>
+#define VISITORS "/adm/single/MUDVISITOR"
+#define GIFTCARD "/adm/single/GIFTCARD"
+
+inherit F_DBASE;
+
+int wiz_lock_level = WIZ_LOCK_LEVEL;
+// tentop
+int mad_lock = 0;
+// 10 
+string *color = ({
+    RED, GRN, YEL, BLK, MAG, BLU, CYN,
+    HIR, HIG, HIY, HIB, HIM, HIC, HIW, });
+
+string *banned_name = ({
+           "你", "你", "我", "他", "她", "它", "它", "爸", "　", "妈",
+});
+void get_id(string arg, object ob);
+void confirm_id(string yn, object ob);
+object make_body(object ob);
+void encoding_to_mudlist(string arg, object ob);
+init_new_player(object user);
+varargs void enter_world(object ob, object user, int silent);
+varargs void reconnect(object ob, object user, int silent);
+object find_body(string name);
+int check_legal_id(string arg);
+int check_legal_name(string arg);
+int check_player_allowip(object ob,string site);
+int howmany_user();
+int howmany_visitor();
+int howmany_card();
+void set_visitor(int num);
+void set_card(int num);
+int howmuch_money(object ob);
+void topten_checkplayer(object player);
+string wiz_rank(string hood)
+{      
+         switch(hood) {
+case "(zhuguan)":
+return WHT "〖宇宙特警〗(Zhuguan)" NOR;
+case "(admin)":                                 
+return HIW "〖银河特警〗(Admin)" NOR;
+case "(arch)":                  
+return HIY "〖星际特警〗(Arch)" NOR;
+case "(wizard)":                  
+return HIG "〖国际刑警〗(Wizard)" NOR;
+case "(apprentice)":                
+return HIC "〖国内巡警〗(Apprantice)" NOR;
+case "(immortal)":            
+return HIM "〖普通民警〗(Immortal)" NOR;
+default:
+return HIG "〖 玩  家 〗(Player)" NOR;
+    }
+}
+ void random_gift(mapping my)
+{
+        int i;
+        int tmpstr, tmpint, tmpcon, tmpdex;
+        tmpstr = tmpint = tmpcon = tmpdex = 10;
+
+        for (i = 0; i < 40; i++) {
+                switch (random(4)) {
+                case 0: tmpstr++; break;
+                case 1: tmpint++; break;
+                case 2: tmpcon++; break;
+                case 3: tmpdex++; break;
+                }
+        }
+        if (tmpstr <= 30) my["str"] = tmpstr; else my["str"] = 30;
+        if (tmpint <= 30) my["int"] = tmpint; else my["int"] = 30;
+        if (tmpcon <= 30) my["con"] = tmpcon; else my["con"] = 30;
+        if (tmpdex <= 30) my["dex"] = tmpdex; else my["dex"] = 30;
+        // next 2 are randomly selected
+        my["kar"] = 10 + random(21);
+        my["per"] = 10 + random(21);
+}
+
+void create() 
+{
+        seteuid(getuid());
+        set("channel_id", "连线精灵");
+}
+/* 此函数是为了计算游戏的连续运行时间，函数调用放在 logon 里面 */
+string up_time()
+{
+        int t, d, h, m, s;
+        string time;
+
+        t = uptime();
+        s = t % 60;             t /= 60;
+        m = t % 60;             t /= 60;
+        h = t % 24;             t /= 24;
+        d = t;
+
+        if(d) time = chinese_number(d) + "天";
+        else time = "";
+
+        if(h) time += chinese_number(h) + "小时";
+        if(m) time += chinese_number(m) + "分";
+        time += chinese_number(s) + "秒\n";
+        
+        return time;
+}
+
+#define localhosts "MUD.SJMUD.NET"
+void logon(object ob)
+{
+        object *usr;
+        string arg;
+        string w_time;
+          int i, inv_wiz_cnt, wiz_cnt, ppl_cnt, login_cnt,WIZIP;
+        int iplimit;
+        int user_num;
+       string output;
+          string u_time,c_file,str,str1;
+        int encode;
+        	mapping mud_list;
+        mapping mud_svc;
+        mixed *muds;
+          int loop, size, total, count=0, p_count=0;
+        u_time = up_time();
+        w_time=CTIME_D->chinese_time(5);
+        usr = users();
+        wiz_cnt = 0;
+        inv_wiz_cnt = 0;
+        ppl_cnt = 0;
+        login_cnt = 0;
+WIZIP=0;
+        iplimit = 0;
+          for(i=0; i<sizeof(usr); i++) {
+                if( query_ip_name(usr[i])==query_ip_name(ob)) iplimit ++;
+                if( !environment(usr[i]) ) login_cnt++;
+                else if( wizardp(usr[i]) && usr[i]->query("env/invisibility") ) inv_wiz_cnt++;
+                else if( wizardp(usr[i]) && !usr[i]->query("env/invisibility") ) wiz_cnt++;
+                else ppl_cnt++;
+          if(KIP_D->is_banned(ob->query("id")) == usr[i] && query_ip_name(usr[i])==query_ip_name(ob)) WIZIP=1;
+        user_num = howmany_visitor();
+        }
+if( mad_lock == 1 ) {
+                write("现在时空已经封闭了，不能进入！！ \n");
+                destruct(ob);
+                return;
+        }
+
+
+        if (BAN_D->is_banned(query_ip_name(ob)) == 1) {
+                write(HIG"你的地址在本 MUD 不受欢迎。\n"NOR);
+                destruct(ob);
+                return;
+            }
+          if(!WIZIP && iplimit>3)
+                 { 
+          write(HIG"对不起，" + MUD_NAME + "限制相同ip多重登录。\n"NOR);
+               destruct(ob);
+                return;
+            }
+
+            switch( random(5) ) {
+                case 0:
+      write(color[random(sizeof(color))]+BLINK+read_file(WELCOME)+NOR);   
+             break;
+                case 1:
+                	cat("/adm/etc/welcome1");
+                break;
+                case 2:
+                	cat("/adm/etc/welcome2");
+                break;
+                case 3:
+                	cat("/adm/etc/welcome3");
+                break;
+                case 4:
+      write(color[random(sizeof(color))]+BLINK+read_file(WELCOME)+NOR);                 break;
+             }
+       if( !find_object(DNS_MASTER) )
+		{
+       write("网路精灵并没有被载入。\n");
+ write(HIC+"〖"HIW"游戏版权"NOR+HIC"〗"NOR+CYN": "+HIM"星战英雄之乱世风沙\n"+NOR);
+write(HIC+"〖"HIW"设备提供"NOR+HIC"〗"NOR+CYN": "+NOR+MAG"广东顺德电信局\n"+NOR);
+write(HIC+"〖"HIW"架站环境"NOR+HIC"〗"NOR+CYN": "+NOR+YEL"WINNT 4.0\n"+NOR);
+write(HIC+"〖"HIW"游戏系统"NOR+HIC"〗"NOR+CYN": "+NOR+HIC"MudOs V22pre11\n"+NOR);
+write(HIC+"〖"HIW"目前状态"NOR+HIC"〗"NOR+CYN": "+BLINK+HIG"正常运行\n"NOR);
+write(HIC+"〖"HIW"当机原因"NOR+HIC"〗"NOR+CYN": "+read_file("/adm/single/reboot.must")+NOR);
+write(HIC+"〖"HIW"人数限制"NOR+HIC"〗"NOR+CYN": "+HIG+chinese_number(MAX_USERS)+"\n"+NOR);
+write(HIC+"〖"HIW"运行时间"NOR+HIC"〗"NOR+CYN": "+NOR+MAG+u_time+NOR);
+write(HIC+"〖"HIW"北京时间"NOR+HIC"〗"NOR+CYN": "+w_time+"\n"+NOR);
+write(HIW+"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"+NOR);
+write(HIC+"〖"HIW"世纪主页"NOR+HIC"〗"NOR+CYN": "+NOR+HIW"WWW.SJMUD.NET\n"NOR);
+write(HIC+"〖"HIW"世纪邮箱"NOR+HIC"〗"NOR+CYN": "+NOR+HIG"KEYBOY@SJMUD.NET\n"NOR);
+write(HIC+"〖"HIW"世纪留言"NOR+HIC"〗"NOR+CYN": "+NOR+HIR"SJMUD.YEAH.NET\n"NOR);
+write(HIC+"〖"HIW"你所在IP"NOR+HIC"〗"NOR+CYN": "+NOR+RED+query_ip_name(ob)+"\n"+NOR);
+write(HIC+"〖"HIW"在线巫师"NOR+HIC"〗"NOR+CYN": "+NOR+WHT+chinese_number(wiz_cnt)+HIB"人\n"+NOR);
+write(HIC+"〖"HIW"在线玩家"NOR+HIC"〗"NOR+CYN": "+NOR+BLU+chinese_number(ppl_cnt)+HIY"人\n"+NOR);
+write(HIC+"〖"HIW"尝试连线"NOR+HIC"〗"NOR+CYN": "+NOR+CYN+chinese_number(login_cnt)+HIC"人\n"+NOR);
+write(HIW+"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"+NOR);
+
+
+write(BLU"\n您的英文名字(ID)："NOR);
+      input_to( "get_id", ob );
+}
+        //      Obtain mapping containing mud data
+        mud_list = (mapping)DNS_MASTER->query_muds();
+
+        // so we recognise ourselves as a DNS mud
+        mud_svc = DNS_MASTER->query_svc() + ([ Mud_name() : 0 ]);
+
+        if(!mud_list)
+		write( MUD_NAME + "目前并没有跟网路上其他 Mud 取得联系。\n");
+
+        //      Get list of all mud names within name server
+        muds = keys( mud_list ) - ({ "DEFAULT" });
+
+        //      Place mudlist into alphabetical format
+        muds = sort_array(muds, 1);
+
+        output = 
+BLU"Mud                  中文名称                国际网路位址     埠号  人数\n"NOR+HIW+"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"NOR;
+        //      Loop through mud list and store one by one
+        for(loop = 0, size = sizeof(muds); loop<size; loop++) {
+
+                if( !arg && mud_list[muds[loop]]["VERSION"] != MUDLIB_VERSION )
+                        continue;
+                 count = loop;
+                if( htonn(upper_case(muds[loop])) == htonn(upper_case(INTERMUD_MUD_NAME)) ){
+                        mud_list[muds[loop]]["HOSTADDRESS"]=localhosts;
+                          output +=  NOR+MAG;
+                   }
+            else if (mud_list[muds[loop]]["VERSION"] == MUDLIB_VERSION)
+                         output +=  NOR+YEL;
+              else
+                        output += NOR;
+
+                if( undefinedp(mud_list[muds[loop]]["MUDNAME"]) ) {
+                                continue;
+                        output +=  sprintf("%-43s  %-15s  %4s", 
+                                upper_case(muds[loop]),
+                                mud_list[muds[loop]]["HOSTADDRESS"],
+                                mud_list[muds[loop]]["PORT"]);
+                }
+                else {
+                        output +=  sprintf("%-20s %-23s %-15s  %4s", 
+                                upper_case(muds[loop]),
+                                undefinedp(mud_list[muds[loop]]["MUDNAME"])?
+                                "":mud_list[muds[loop]]["MUDNAME"],
+                                mud_list[muds[loop]]["HOSTADDRESS"],
+                                mud_list[muds[loop]]["PORT"]);
+                }
+                if(!undefinedp(mud_list[muds[loop]]["USERS"]))
+                                output+=sprintf("  %-4s", mud_list[muds[loop]]["USERS"] );
+                else
+                                output+=sprintf("  ----", mud_list[muds[loop]]["USERS"] );
+
+                output +=NOR"\n";
+                total ++;
+        }
+        //      Display dumped mudlist output through user's more pager
+output+=NOR+HIW"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"NOR;
+	write(output);
+ write(HIC+"〖"HIW"游戏版权"NOR+HIC"〗"NOR+CYN": "+HIM"星战英雄之乱世风沙\n"+NOR);
+write(HIC+"〖"HIW"设备提供"NOR+HIC"〗"NOR+CYN": "+NOR+MAG"广东顺德电信局\n"+NOR);
+write(HIC+"〖"HIW"架站环境"NOR+HIC"〗"NOR+CYN": "+NOR+YEL"WINNT 4.0\n"+NOR);
+write(HIC+"〖"HIW"游戏系统"NOR+HIC"〗"NOR+CYN": "+NOR+HIC"MudOs V22pre11\n"+NOR);
+write(HIC+"〖"HIW"目前状态"NOR+HIC"〗"NOR+CYN": "+HIG"正常运行\n"NOR);
+write(HIC+"〖"HIW"当机原因"NOR+HIC"〗"NOR+CYN": "+read_file("/adm/single/reboot.must")+NOR);
+write(HIC+"〖"HIW"人数限制"NOR+HIC"〗"NOR+CYN": "+HIG+chinese_number(MAX_USERS)+"\n"+NOR);
+write(HIC+"〖"HIW"运行时间"NOR+HIC"〗"NOR+CYN": "+NOR+MAG+u_time+NOR);
+write(HIC+"〖"HIW"北京时间"NOR+HIC"〗"NOR+CYN": "+w_time+"\n"+NOR);
+write(HIW+"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"+NOR);
+write(HIC+"〖"HIW"世纪主页"NOR+HIC"〗"NOR+CYN": "+NOR+HIW"WWW.SJMUD.NET\n"NOR);
+write(HIC+"〖"HIW"世纪邮箱"NOR+HIC"〗"NOR+CYN": "+NOR+HIG"KEYBOY@SJMUD.NET\n"NOR);
+write(HIC+"〖"HIW"世纪留言"NOR+HIC"〗"NOR+CYN": "+NOR+HIR"SJMUD.YEAH.NET\n"NOR);
+write(HIC+"〖"HIW"你所在IP"NOR+HIC"〗"NOR+CYN": "+NOR+RED+query_ip_name(ob)+"\n"+NOR);
+write(HIC+"〖"HIW"在线巫师"NOR+HIC"〗"NOR+CYN": "+NOR+WHT+chinese_number(wiz_cnt)+HIB"人\n"+NOR);
+write(HIC+"〖"HIW"在线玩家"NOR+HIC"〗"NOR+CYN": "+NOR+BLU+chinese_number(ppl_cnt)+HIY"人\n"+NOR);
+write(HIC+"〖"HIW"尝试连线"NOR+HIC"〗"NOR+CYN": "+NOR+CYN+chinese_number(login_cnt)+HIC"人\n"+NOR);
+write(HIW+"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"+NOR);
+
+/*       if(uptime()<10 ) 
+             {
+                    write(HIG+"\n游戏启动中，请等待十秒钟。\n请自己QUIT!"+NOR); 
+                                  destruct(ob);
+                      return; 
+             }
+	*/
+write(BLU"您的英文名字(ID)："NOR);
+      input_to( "get_id", ob );
+}
+void set_visitor(int num)
+{
+        if(num>0)
+                write_file(VISITORS, sprintf("VISITORS %d", num), 1);
+        else
+                write("巫师请注意访问者数目不对!\n");
+        return;
+}
+void set_card(int num)
+{
+        if(num>0)
+                write_file(GIFTCARD, sprintf("GIFTCARD %d", num), 1);
+        else
+                write("巫师请注意访问者数目不对!\n");
+        return;
+}
+
+int howmany_user()
+{
+        int i,j,ppl_cnt;
+        string *dir , *ppls, name;
+        mixed info;
+        seteuid(getuid());
+        ppl_cnt=0;
+        dir=get_dir(DATA_DIR+"login/");
+        for(i=0; i<sizeof(dir);i++)
+        {
+                reset_eval_cost();
+                ppls=get_dir(DATA_DIR+"login/"+dir[i]+"/");
+                ppl_cnt+=sizeof(ppls);
+        }
+        return ppl_cnt;
+}
+
+int howmany_visitor()
+{
+        int num=0;
+        string content, format;
+        content=read_file(VISITORS);
+        sscanf(content, "%s %d", format, num);
+        if(format!="VISITORS")
+                write(format+"\n巫师请注意访问者数目不对!\n");
+        return num;
+}
+int howmany_card()
+{
+        int num=0;
+        string content, format;
+        content=read_file(GIFTCARD);
+        sscanf(content, "%s %d", format, num);
+        if(format!="GIFTCARD")
+                write(format+"\n巫师请注意访问者数目不对!\n");
+        return num;
+}
+
+ void get_id(string arg, object ob)
+{
+        object ppl; 
+        int iplimit;
+        arg = lower_case(arg);
+        if( !check_legal_id(arg)) {
+                write(HIM"您的英文名字(ID)："NOR);
+                input_to("get_id", ob);
+                return;
+        }
+
+#ifdef MAX_USERS
+        if( (string)SECURITY_D->get_status(arg)=="(player)"
+      && sizeof(users()) >= MAX_USERS ) {
+                  ppl = find_body(arg);
+                // Only allow reconnect an interactive player when MAX_USERS exceeded.
+                if( !ppl || !interactive(ppl) ) {
+                         write(HIG"对不起，" + MUD_NAME + "的使用者已经太多了，请待会再来。\n"NOR);
+                        destruct(ob);
+                        return;
+                }
+        }
+#endif
+
+        if( wiz_level(arg) < wiz_lock_level ) {
+		write(HIW"对不起，世纪(SHIJI)目前限制巫师等级 " + chinese_number(wiz_lock_level)
+			+ " 以上的人才能连线。\n"NOR);
+                destruct(ob);
+                return;
+        }
+        
+        if( (string)ob->set("id", arg) != arg ) {
+                write("Failed setting user name.\n");
+                destruct(ob);
+                return;
+        }
+
+        if( arg=="guest" ) {
+                // If guest, let them create the character.
+                confirm_id("Yes", ob);
+                return;
+              } else       if (BAN_D->is_banned(ob->query("id")) == 1) {
+                write(HIG"你的ID在本 MUD 不受欢迎。\n"NOR);
+                destruct(ob);
+                return;
+        } 
+
+else if( file_size(ob->query_save_file() + __SAVE_EXTENSION__) >= 0 ) {
+                if( ob->restore() ) {
+                        write(YEL"请输入密码(PASSWD)："NOR);
+                        input_to("get_passwd", 1, ob);
+                        return;
+                } 
+
+  write(BLINK+HIG"您的人物储存挡出了一些问题，请利用 guest 人物通知巫师处理。\n");
+                destruct(ob);
+                return;
+        }
+
+         write(HIG"使用 " + (string)ob->query("id") + " 这个名字将会创造一个新的人物，您确定吗(y/n)？"NOR);
+        input_to("confirm_id", ob);
+}
+
+void get_passwd(string pass, object ob)
+{
+        string my_pass;
+        object user;
+        my_pass = ob->query("password");
+        if( crypt(pass, my_pass) != my_pass )
+        {
+      	write(HIG"\n【系统精灵】："HIR"密码错误！"NOR);
+ 	      write(NOR+WHT"\n请重新输入一次密码(PASSWD)："NOR); 
+           input_to("get_passwd_error", 1, ob);
+		}
+		else
+		{
+        	write(HIG"\n【系统精灵】："HIR"系统确认！"NOR);
+        write(HIG"\n【系统精灵】："HIR"请按ENTER进入！"NOR);
+        input_to("get_passwd_ok", ob);        	return;
+      	}
+}
+void get_passwd_error(string pass, object ob)
+{
+	string my_pass;
+	object user;
+	my_pass = ob->query("password");
+	    	if( crypt(pass, my_pass) == my_pass )
+         {
+        write(HIG"\n【系统精灵】："HIR"系统确认！"NOR);
+        write(HIG"\n【系统精灵】："HIR"请按ENTER进入！"NOR);
+        input_to("get_passwd_ok", ob);          return;
+          }
+        if( crypt(pass, my_pass) != my_pass ) {
+        	write(HIG"\n【系统精灵】："HIR"密码错误！"NOR);
+      	      write(NOR+RED"\n请再次输入一次密码(PASSWD)："NOR); 
+            input_to("get_passwd_error2", 1, ob);
+            } 
+}
+void get_passwd_error2(string pass, object ob)
+{
+	string my_pass;
+	object user;
+	my_pass = ob->query("password");
+	    	if( crypt(pass, my_pass) == my_pass )
+         {
+        write(HIG"\n【系统精灵】："HIR"系统确认！"NOR);
+        write(HIG"\n【系统精灵】："HIR"请按ENTER进入！"NOR);
+        input_to("get_passwd_ok", ob);          return;
+          }
+        if( crypt(pass, my_pass) != my_pass ) {
+        	write(HIG"\n【系统精灵】："HIR"密码错误！"NOR);
+       CHANNEL_D->do_channel( this_object(), "sys",
+              sprintf("%s试徒用%s(%s)连线进入失败。", query_ip_name(ob),ob->query("name"),ob->query("id")));
+        log_file("试徒盗用",
+                 sprintf("%s试徒用%s(%s)连线进入失败。\n时间:%s\n", query_ip_name(ob),ob->query("name"),ob->query("id"),CTIME_D->chinese_time(5)));
+ 
+  write(HIG"\n【系统精灵】："HIR"请不要试图使用他人密码进入！"NOR);                            
+destruct(ob);
+return;
+            } 
+}
+void get_passwd_ok(string pass, object ob)
+{
+string w_time,temps;
+object user;
+int time_r1,time_r2;
+time_r1 = time() - ob->query("last_quit");
+            time_r2 = 30-time_r1;
+    w_time=CTIME_D->chinese_time(5);
+        // Check if logout recently
+if (time_r1 >= 0 && time_r1 <= 30)
+        {
+                  temps = sprintf("你距上次退出仅"+HIR+" %d "+NOR+"秒.\n", time_r1);
+                write(temps);
+                if ((string)SECURITY_D->get_status(ob->query("id")) == "(player)"  )
+                {
+                        write("对不起，为了降低系统负荷，请过 "+HIR+time_r2+NOR+" 秒后再 Login，多谢您的合作。\n");
+                        destruct(ob);
+                        return;
+                } 
+                else
+                {
+                        write(HIY"虽然你是巫师，也不要频繁的 Login 哦。\n"NOR);
+                }
+}
+// Check if we are already playing.
+        user = find_body(ob->query("id"));
+        if (user) {
+                if( user->query_temp("netdead") ) {
+                        reconnect(ob, user);
+                        return;
+                }
+                write(HIC"您要将另一个连线中的相同人物赶出去，取而代之吗？(y/n)"NOR);
+                input_to("confirm_relogin", ob, user);
+                return;
+        }
+        if( objectp(user = make_body(ob)) ) {
+                if( user->restore() ) {
+            if(!check_player_allowip(user,query_ip_number(ob)))
+             {
+             write(HIR"非常抱歉，根据你设定的登录IP范围，你目前的IP地址不合法。\n"NOR);
+             write("如果这个帐号真是你本人的，请用其他帐号登录，通知在线巫师处理，
+或者发信到keyboy@sjmud.net。\n");
+             destruct(user);
+             destruct(ob);
+             return;    
+                }
+
+                        log_file( "login.log", sprintf("%s(%s)从"HIG"%s"NOR"连线进入(%s)\n", user->query("name"),user->query("id"),
+                                  query_ip_name(ob), w_time) );
+                        enter_world(ob, user);
+                        return;
+                } else {
+                        destruct(user);
+                }
+  }
+        write("请您重新创造这个人物。\n");
+        confirm_id("y", ob);
+}
+//判断玩家登录IP地址是否合法，玩家可以使用allowip命令设定自己的合法登录IP范围。 by lion
+int check_player_allowip(object ob,string site)
+ {
+ int i;
+ string *line,*terms;
+ mapping allowip;
+ //为防止意外，以下两个IP永远合法。
+if(site=="127.0.0.1")
+ return 1;
+ allowip = ob->query("allowip");
+ //没有设定合法IP范围。
+ if(!allowip||!mapp(allowip))
+ return 1;
+   terms = keys(allowip);
+   if(!sizeof(terms))
+   return 1;
+ //判断本次登录IP是否合法。  
+  line = ({});
+  line +=({site});
+  i = sizeof(terms);
+   while(i--)
+  {
+     if (sizeof(regexp(line, terms[i])) == 1)
+     return 1;
+
+     }
+//IP不合法！ 
+  return 0;
+  }
+
+
+void confirm_relogin(string yn, object ob, object user)
+{
+        object old_link;
+
+string w_time;
+w_time=CTIME_D->chinesetime(5);
+        if( yn=="" ) {
+                write(HIC"您要将另一个连线中的相同人物赶出去，取而代之吗？(y/n)"NOR);
+                input_to("confirm_relogin", ob, user);
+                return;
+        }       
+
+        if( yn[0]!='y' && yn[0]!='Y' ) {
+                write(WHT"好吧，欢迎下次再来。\n"NOR);
+                destruct(ob);
+                return;
+        } else {
+                tell_object(user, "有人从别处( " + query_ip_number(ob)
+                        + " )连线取代你所控制的人物。\n");
+                 log_file( "login.log", sprintf("%s(%s)从"HIY"%s"NOR"重新连线 (%s)\n", user->query("name"),user->query("id"),
+                        query_ip_name(ob), w_time ) );
+        }
+
+        // Kick out tho old player.
+        old_link = user->query_temp("link_ob");
+        if( old_link ) {
+                exec(old_link, user);
+                destruct(old_link);
+        }
+
+        reconnect(ob, user);    
+}
+
+ void confirm_id(string yn, object ob)
+{
+        if( yn=="" ) {
+write(HIC"使用这个名字将会创造一个新的人物，您确定吗(y/n)？\n"NOR);
+                input_to("confirm_id", ob);
+                return;
+        }       
+
+        if( yn[0]!='y' && yn[0]!='Y' ) {
+                 write(HIM"好吧，那么请重新输入您的英文名字："NOR);
+                input_to("get_id", ob);
+                return;
+        }
+write(CLR"\n");
+write(HIC"∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞\n"NOR);
+write(HIG"\t\t你的帐号:"+HIG+ob->query("id")+NOR+"\n");
+write(HIC
+"\n∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞\n"NOR);
+write(HIG"     请输入您的高姓大名，由于这个名字代表你的人物，而且以后不能更改，务必慎重择名（不雅观的姓名将被删除）。另：请不要选择金庸小说中已有人物姓名。\n"NOR);
+write(HIC"∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞
+\n"NOR);
+        write(HIW"您的中文名字(Chinese name)："NOR);
+        input_to("get_name", ob);
+}
+
+ void get_name(string arg, object ob)
+{
+        if( !check_legal_name(arg) ) {
+                write(HIR"您的中文名字(使用Big5的玩家可请求巫师修改)："NOR);
+                input_to("get_name", ob);
+                return;
+        }
+        ob->set("name", arg);
+        write(CLR);
+write(HIC"∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞\n"NOR);
+write(HIG"\t\t你的帐号:"+HIG+ob->query("id")+NOR+"\n");
+write(HIG"\t\t你的名字:"+HIM+ob->query("name")+NOR+"\n");
+write(HIC"\n∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞\n"NOR);
+write(HIG"       
+    密    码:"HIW"密码是你进入江湖最重要的东西，请想一个最少六个字符并且包含大写
+                  和小写英文字母和其它特殊符号（数字，标点）的密码。请妥善保管好
+                  你的密码，不要告诉任何人。巫师并没有义务帮你查找密码。\n"NOR);
+ write(HIC"∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞\n"NOR);
+write(HIG"请输入您的密码(Passwd)："NOR);
+input_to("new_password", 1, ob);
+}
+
+ void new_password(string pass, object ob)
+{
+        write("\n");
+        if( strlen(pass)<5 ) {
+                write(HIB"密码的长度至少要五个字元，请重设您的密码(Passwd)："NOR);
+                input_to("new_password", 1, ob);
+                return;
+        }
+        ob->set("password", crypt(pass,0) );
+        write(NOR+CYN"请再输入一次您的密码，以确认您没记错(Passwd)："NOR);
+        input_to("confirm_password", 1, ob);
+}
+
+ void confirm_password(string pass, object ob)
+{
+        mapping my;
+        string old_pass;
+        write("\n");
+        old_pass = ob->query("password");
+        if( crypt(pass, old_pass)!=old_pass ) {
+                write(BLINK+HIR"您两次输入的密码并不一样，请重新设定一次密码(Passwd)："NOR);
+                input_to("new_password", 1, ob);
+                return;
+        }
+
+        write(CLR);
+write(HIC"\n∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞\n"NOR);
+write(HIG"\t\t你的帐号:"+HIG+ob->query("id")+NOR+"\n");
+write(HIG"\t\t你的名字:"+HIM+ob->query("name")+NOR+"\n");
+write(HIG
+"\n∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞
+        膂力：影响攻击能力及负荷量的大小。
+        悟性：影响学习武功秘籍的速度及理解师傅的能力。
+        根骨：影响体力恢复的速度及升级后所增加的体力。
+        身法：影响防御及躲避的能力。
+∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞\n"NOR);
+        my = ([]);
+        random_gift(my);
+            printf(HIG"\n膂力[%d]， 悟性[%d]， 根骨[%d]， 身法[%d]\n"HIC,
+                my["str"], my["int"], my["con"], my["dex"]);
+        write(NOR+BLU"您接受这一组天赋吗？"NOR);
+        input_to("get_gift", ob, my);
+}
+
+ void get_gift(string yn, object ob, mapping my)
+{
+        if (yn[0] != 'y' && yn[0] != 'Y') {
+                random_gift(my);
+                 printf(HIG"\n膂力[%d]， 悟性[%d]， 根骨[%d]， 身法[%d]\n"NOR,
+                      my["str"], my["int"], my["con"], my["dex"]);
+                write(NOR+BLU"您同意这一组天赋吗？"NOR);
+                input_to("get_gift", ob, my);
+        }
+        if (yn[0] == 'y' || yn[0] == 'Y') {
+write(CLR);
+write(HIB"\n∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞\n"NOR);
+write(HIG"\t\t你的帐号:"+HIG+ob->query("id")+NOR+"\n");
+write(HIG"\t\t你的名字:"+HIM+ob->query("name")+NOR+"\n");
+write(HIG"\t\t你的"+NOR+BLU+"膂力:"+HIG+my["str"]+NOR+"\n");
+write(HIG"\t\t你的"+NOR+RED+"悟性:"+HIY+my["int"]+NOR+"\n");
+write(HIG"\t\t你的"+NOR+YEL+"根骨:"+HIW+my["con"]+NOR+"\n");
+write(HIG"\t\t你的"+NOR+CYN+"身法:"+HIC+my["dex"]+NOR+"\n");
+
+write(HIC"∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞\n"NOR);
+write(HIG" 
+         电子邮件：在此步骤中您将输入您的电子邮件的信箱，注意您输入的信箱
+                  必须是 id@address 的格式，我们建议您填写您正确的邮件地
+                  址，以便我们和你取的联系，当您忘记您的密码的时候这是你
+                  取回密码的唯一方式。尤其对于想申请巫师的玩家，务必认真
+                  填写。\n"NOR);
+write(HIC"∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞\n"NOR);
+write(HIC"\n您的电子邮件地址(当你忘了密码的时后就用EMAIL了)："NOR);
+                input_to("get_email", ob, my);
+        }
+}
+
+ void get_email(string email, object ob, mapping my)
+{
+        object user;
+
+        write("\n");
+                if (email == ""  || strsrch(email, "@") < 2  || strsrch(email, ".") == -1 ) {
+                  write("电子邮件地址需要是"HIG"id@address"HIC"的格式。\n");
+                 write("您的电子邮件地址：");
+                input_to("get_email", ob, my);
+                return;
+        }
+        ob->set("email", email);
+        ob->set("registered", 1);
+
+        // If you want do race stuff, ask player to choose one here, then you can
+        // set the user's body after the question is answered. The following are
+        // options for player's body, so we clone a body here.
+        ob->set("body", USER_OB);
+        if( !objectp(user = make_body(ob)) )
+                return;
+        user->set("str", my["str"]);
+        user->set("dex", my["dex"]);
+        user->set("con", my["con"]);
+        user->set("int", my["int"]);
+        ob->set("registered", 1);
+        user->set("registered", 1);
+
+write(CLR);
+write(HIB"\n∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞\n"NOR);
+write(HIG"\t\t你的帐号:"+HIG+ob->query("id")+NOR+"\n");
+write(HIG"\t\t你的名字:"+HIM+ob->query("name")+NOR+"\n");
+write(HIG"\t\t你的"+NOR+BLU+"膂力:"+HIG+user->query("str")+NOR+"\n");
+write(HIG"\t\t你的"+NOR+RED+"悟性:"+HIY+user->query("int")+NOR+"\n");
+write(HIG"\t\t你的"+NOR+YEL+"根骨:"+HIW+user->query("con")+NOR+"\n");
+write(HIG"\t\t你的"+NOR+CYN+"身法:"+HIC+user->query("dex")+NOR+"\n");
+write(HIG"\t\t你的"+NOR+MAG+"MAIL:"+HIR+ob->query("email")+NOR+"\n");
+write(HIB"\n∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞∞\n"NOR);
+
+        write(HIM"您要扮演男性(m)的角色或女性(f)的角色？"NOR);
+        input_to("get_gender", ob, user);
+}
+
+ void get_gender(string gender, object ob, object user)
+{
+string w_time;
+
+w_time=CTIME_D->chinese_time(5);
+        write("\n");
+        if( gender=="" ) {
+                write("您要扮演男性(m)的角色或女性(f)的角色？");
+                input_to("get_gender", ob, user);
+                return;
+        }
+
+        if( gender[0]=='m' || gender[0]=='M' )
+                user->set("gender", "男性");
+        else if( gender[0]=='f' || gender[0]=='F' )
+                user->set("gender", "女性" );
+        else {
+                write("对不起，您只能选择男性(m)或女性(f)的角色：");
+                input_to("get_gender", ob, user);
+                return;
+        }
+
+         log_file( "login.log", sprintf("%s(%s)从"CYN"%s"NOR"连线进入(%s)\n", user->query("name"),user->query("id"),
+                query_ip_name(ob), w_time ) );
+        init_new_player(user);
+        enter_world(ob, user);
+        write("\n");
+}
+
+object make_body(object ob)
+{
+        string err;
+        object user;
+        int n;
+
+        user = new(ob->query("body"));
+        if(!user) {
+                write("现在可能有人正在修改使用者物件的程式，无法进行复制。\n");
+                write(err+"\n");
+                return 0;
+        }
+        seteuid(ob->query("id"));
+        export_uid(user);
+        export_uid(ob);
+        seteuid(getuid());
+        user->set("id", ob->query("id"));
+        user->set_name( ob->query("name"), ({ ob->query("id")}) );
+        return user;
+}
+
+ init_new_player(object user)
+{
+  if (wizhood(user) == "(player)")
+{
+ user->set("title", "玩家一族");
+     } else {
+user->set("title", "巫师一族");
+}
+   user->set("birthday", time() );
+        user->set("food", (user->query("str")+10)*10);
+        user->set("water", (user->query("str")+10)*10);
+         user->set("board_last_read", 0);
+         user->set("last_read_time", 0);
+user->set("board_id","/clone/board/news_b");
+           user->set("notes", 0);
+          user->set("money", 5000);
+    user->set("channels", ({ "chat", "rumor", "es", "party", "jh" }) );
+}
+
+                
+varargs void enter_world(object ob, object user, int silent)
+
+{
+      object cloth, shoe, room, gift, login_ob, mailbox, bm, telnet;
+    string startroom,hood;
+mapping allowip;
+    int card_num;
+       hood = wiz_rank(wizhood(user));
+        user->set_temp("link_ob", ob);
+        ob->set_temp("body_ob", user);
+        user->set("registered", ob->query("registered"));
+        exec(user, ob);
+write(color[random(sizeof(color))]+read_file(MOTD)+NOR+"\n");
+write(NOR+CYN "★目前权限："+hood+NOR);
+write(HIG"\n你上次是从:"+HIR+ob->query("last_from")+HIG"连线进入!\n");
+write(WHT"你上次进入的时间是:"+ob->query("last_on")+"\n");
+write("\n"+NOR);
+
+        user->setup();
+        if (!user->query("food") && !user->query("water") && ob->query("age") == 14) {
+                user->set("food", user->max_food_capacity());
+                user->set("water", user->max_water_capacity());
+        }
+
+        // In case of new player, we save them here right aftre setup 
+        // compeleted.
+        user->save();
+        ob->save();
+        //Use condition to auto save user file
+        user->apply_condition("autosave", 1);
+        
+/*        if (!user->query("giftcard"))
+        {
+                card_num=howmany_card();
+                set_card(card_num+1);
+                gift = new("/clone/misc/card");
+                gift->move(user);
+                user->set("giftcard", card_num);
+        }*/
+//      if (wizhood(user) == "(player)")
+        {
+      cloth = new("/clone/cloth/cloth");
+      cloth->move(user);
+      cloth->wear();
+      shoe = new("/clone/cloth/shoe");
+      shoe->move(user);
+      shoe->wear();
+        }
+
+           	    if(!wizardp(user) && user->query("mud_age") < 86400 && user->query("combat_exp") > 900000 
+		|| !wizardp(user) && user->query("balance") >= 199990000
+                  || !wizardp(user) && user->query("mud_age") < 7200 && user->query("balance") >= 19999000)
+	    {
+	    user->move("/clone/misc/block");
+	    write(HIR"你的档案没有通过安全检测！\n"NOR);
+	    write(HIR"原因是：你的档案数据可能影响到整个MUD的公平性！\n"NOR);
+	    write(HIR"请提交天神处理！\n"NOR);
+	    log_file("nosave/player_bug",ctime(time()) +" "+ user->query("name") + "(" + user->query("id")+") 未通过logind.c。调查结果：combat_exp " + user->query("combat_exp") + "\n");
+}
+else
+{
+if( user->is_ghost() )
+                        startroom = DEATH_ROOM;
+                else
+                if( !stringp(startroom = user->query("startroom")) )
+                        startroom = START_ROOM;
+                //巫师必须先到休息室报到
+                if ( wiz_level( user->query("id") ) > 1 )
+                {
+              user->set("wiz");
+                          write(HIG+read_file("/adm/etc/wizread")+"\n"+NOR);
+              user->move("/d/wizard/bugroom");
+                        CHANNEL_D->do_channel( user, "wiz*",
+                   sprintf("连线进入世记(CENTURE)") );
+                 }
+                else
+                {
+                          if( !catch(load_object(startroom)) )
+              user->move(startroom);
+     else
+                        {
+                                  user->move(START_ROOM);
+                                startroom = START_ROOM;
+                                user->set("startroom", START_ROOM);
+}}}
+   tell_room(startroom,HIY + user->query("name") + HIG + "连线进入这个世界。\n" + NOR,
+                        ({user}));
+                user->set("temp/exp", user->query("combat_exp"));
+                user->set("temp/mud_age", user->query("mud_age"));
+                user->set("temp/money",user->query("money"));
+                user->set("temp/potential", user->query("potential"));
+                user->set("temp/time", time());
+                user->add("login_online",1);
+        login_ob=new(LOGIN_OB);
+        login_ob->set("id",user->query("id"));
+        login_ob->restore();
+        if( login_ob->query("new_mail") )
+        {
+                 write( HIY + "\n有您的信！请到电子邮局拿MAILBOX吧！\n\n" + NOR);
+                login_ob->set("new_mail", 0);
+        }
+        destruct(login_ob);
+
+ allowip = user->query("allowip");
+if(!allowip||!mapp(allowip)&&!keys(allowip))
+{
+write(BLINK+RED"\t\t请快点allowip设定自己IP范围\n"NOR);
+}
+        CHANNEL_D->do_channel( this_object(), "sys",
+sprintf(HIC"%s(%s)"NOR+BLU"由"HIW"%s"NOR+BLU"("HIG"%s"NOR+BLU")"NOR+BLU"连线进入。共清除 " + reclaim_objects() + " 个变数。\n", user->name(),user->query("id"), query_ip_name(user), query_ip_number(user)) );
+if(!wizardp(user))
+{
+message("channel:rumor",HIW"【世纪公告】:热烈欢迎"+user->query("name")+"连线进入世纪(CENTURY)!\n"+NOR,users());
+}
+     UPDATE_D->check_user(user);
+ NEWS_CMD->main(user);
+ //检查是否进入排行榜！add by jackyboy@cctx 1999/3/8
+		TOPTEN_D-> topten_checkplayer(user);
+
+}
+varargs void reconnect(object ob, object user, int silent)
+{
+        user->set_temp("link_ob", ob);
+        ob->set_temp("body_ob", user);
+        exec(user, ob);
+
+        user->reconnect();
+        if( !silent ) {
+                tell_room(environment(user), HIG + user->query("name") + HIW + "重新连线回到这个世界。\n",
+                ({user}));
+        }
+        CHANNEL_D->do_channel( this_object(), "sys",
+sprintf("%s%s由%s重新连线进入。", user->query("name"),"("+user->query("id")+")", query_ip_name(user)) );
+        UPDATE_D->check_user(user);
+}
+
+int check_legal_id(string id)
+{
+        int i;
+
+        i = strlen(id);
+        
+        if( (strlen(id) < 3) || (strlen(id) > 8 ) ) {
+                write("对不起，你的英文名字必须是 3 到 8 个英文字母。\n");
+                return 0;
+        }
+        while(i--)
+                if( id[i]<'a' || id[i]>'z' ) {
+                        write("对不起，你的英文名字只能用英文字母。\n");
+                        return 0;
+                }
+
+        return 1;
+}
+
+int check_legal_name(string name)
+{
+        int i;
+
+        // UTF8 FIX: strlen()/str[i] now count/return Unicode characters, not GBK
+        // bytes -- the length bounds here used to be byte counts (2 bytes per
+        // Chinese char) and the "i%2==0" gating only checked every OTHER
+        // (even-byte-offset) position to land on each char's lead byte. Both
+        // assumptions are gone with UTF-8: bounds are halved to real character
+        // counts, and every position is checked (not just even ones).
+        i = strlen(name);
+
+        if( (strlen(name) < 1) || (strlen(name) > 5 ) ) {
+                write("对不起，你的中文名字必须是 1 到 5 个中文字。\n");
+                return 0;
+        }
+        while(i--) {
+                if( name[i]<=' ' ) {
+                        write("对不起，你的中文名字不能用控制字元。\n");
+                        return 0;
+                }
+                if( (strsrch(name, "　") >= 0) ||
+                    (strsrch(name, "爸") >= 0)) {
+                        write("对不起，你的中文名字不能用引起误会的单字。\n");
+                        return 0;
+                }
+                if( !is_chinese(name[i..<0]) ) {
+                        write("对不起，请您用「中文」取名字。\n");
+                        return 0;
+                }
+        }
+        if( member_array(name, banned_name)!=-1 ) {
+                write("对不起，这种名字会造成其他人的困扰。\n");
+                return 0;
+        }
+
+        return 1;
+}
+
+object find_body(string name)
+{
+        object ob, *body;
+
+        if( objectp(ob = find_player(name)) )
+                return ob;
+        body = children(USER_OB);
+        for(int i=0; i<sizeof(body); i++)
+                if( clonep(body[i])
+                &&      getuid(body[i]) == name ) return body[i];
+
+        return 0;
+}
+
+int set_wizlock(int level)
+{
+        if( wiz_level(this_player(1)) <= level )
+                return 0;
+        if( geteuid(previous_object()) != ROOT_UID )
+                return 0;
+        wiz_lock_level = level;
+        return 1;
+}
+// add for ten top. 
+int set_madlock(int setmark)
+{
+if( wiz_level(this_player(1)) < wiz_level("(arch)") )
+                return 0;
+        if( setmark == 1 ) mad_lock = 1;
+        else mad_lock = 0;
+        return 1;
+}
+
+int get_madlock()
+{
+        return mad_lock;
+}
+

@@ -1,0 +1,26 @@
+inherit ITEM;
+#include <ansi.h>
+int query_autoload() { return 1; }
+void create()
+{
+      set_name(HIR"寂寞牌超级别克"NOR,({"pao che","che"}));
+       set("long",HIB"垃圾猫的专用跑车。"NOR);
+       set("no_drop",1);
+      setup();
+}
+void init()
+{
+     add_action("do_zuo","zuo");
+}
+int do_zuo(string arg)
+{
+    object me;
+    me = this_player();
+    if (!arg||arg!="pao che")
+    return notify_fail("你想坐摸子车咯？\n");
+    if (me->query("id")!="czbchina")
+    return notify_fail("这是垃圾猫的专车，你坐摸字坐！\n");
+    message_vision("$N潇洒的打开了车门，专进了车里，用一种好朽的眼光看着旁边的人！\n",me);
+    me->set_temp("enter/che",1);
+     return 1;
+}

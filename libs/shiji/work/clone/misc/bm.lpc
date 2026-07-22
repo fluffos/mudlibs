@@ -1,0 +1,312 @@
+// bm.c write by cgw
+
+#include <ansi.h>
+
+inherit ITEM;
+inherit F_SAVE;
+
+
+#define BOARD_CAPACITY query("capacity")
+#define PROP_NUM 10
+
+
+int do_select_list(string);
+int do_newquest(string);
+int do_post(string);
+int do_discard(string);
+int check_legal_name(string);
+int get_msg(string);
+
+int explv;
+void create()
+{
+        set_name("留言板管理器", ({ "board manager","manager","bm" }) );
+        set_weight(100);
+        set("unit","个");
+        set("base_unit","个");
+        set("no_get", 1);
+        set("no_get_from",1);
+        set("no_drop", "这样东西不能随便丢弃。\n");
+        setup();
+}
+
+void init()
+{
+        object me;
+        string str;
+        me=this_player(1);
+        if(stringp(str=me->query("bm/board_id")))
+                do_select_list(str);
+        else 
+                tell_object(me,"还没有选取载入留言板id，请用bset命令载入留言板id.\n
+         或者 look bm 查看留言板状态.\n");
+        add_action("do_post", "bpost");
+        add_action("do_read", "bread");
+        add_action("do_bset","bset");
+        add_action("do_bselect","bs");
+        add_action("do_discard","bdiscard");
+        add_action("do_discard","bd");
+        add_action("do_none","bnone");
+}
+
+int do_bset(string arg)
+{
+        string str;
+        if(!arg||arg=="")
+                return notify_fail("命令格式：bset board id.\n");
+        if (arg=="none") 
+        {
+                delete("board_id");
+                delete("notes");
+                
+                this_player()->delete("bm/board_id");
+                restore();
+                return notify_fail("清除所有状态。初始化Board manager...ok.\n");
+        }
+        if(file_size("/data/board/" +arg+".o")==-1)
+                return notify_fail("还没有这个留言板数据。\n");
+        
+                return do_select_list(arg);     
+        
+}
+
+int do_none(string arg)
+{
+
+
+                delete("board_id");
+                delete("notes");
+                
+                this_player()->delete("bm/board_id");
+                restore();
+                return notify_fail("清除所有状态。初始化Board manager...ok.\n");
+                
+        
+}
+
+int do_select_list(string arg)
+{
+        object me;
+        me=this_player(1);
+        
+
+        set("board_id",arg);
+        me->set("bm/board_id",arg);
+
+        tell_object(me,"载入的留言板文件id为："+arg+"\n");
+        restore();
+        return 1;
+}
+
+string query_save_file()
+{
+        string id;
+        if( !stringp(id = query("board_id")) ) return 0;
+        return "/data/board/"+id;
+}
+
+string short()
+{
+        mapping *notes;
+        int i, unread, last_read_time;
+
+        if(!stringp(query("board_id")))
+                return "留言板管理器 ["HIY"未载入留言板id."NOR"](Board manager)";
+        notes = query("notes");
+
+
+        if( !pointerp(notes) || !sizeof(notes) )
+                return "留言板管理器"+WHT" (正在使用("+query("board_id")+".o )"
+                        +::short() + HIC" [ 没有任何留言 ]"NOR;
+
+        if( this_player() ) {
+                last_read_time = (int)this_player()->query("board_last_read/" 
+                        + (string)query("board_id"));
+                for(unread = 0, i=sizeof(notes)-1; i>=0; i--, unread ++)
+                        if( notes[i]["time"] <= last_read_time ) break;
+        }
+        if( unread )
+                return sprintf( "留言板管理器"+WHT" (正在使用"+query("board_id")
+                +".o )"+NOR+HIC + "%s" + NOR + " [ %d 张留言，" + HIY + "%d" + NOR +
+                 " 张" + HIR + "未读" + NOR + "]", ::short(), sizeof(notes), unread);
+        else
+                return sprintf("留言板管理器"+WHT" (正在使用"+query("board_id")
+                +".o )"+NOR+"%s [ %d 张留言 ])", ::short(), sizeof(notes));
+
+}
+
+string long()
+{
+        mapping *notes,*bmnotes;
+        int i,unread, last_read_time,j;
+        mixed *file;
+        string msg, myid,all;
+        file = get_dir("/data/board/",-1);      
+        notes = query("notes");
+        all="";
+        msg ="留言板管理器的使用方法请look bm.\n";
+        if(stringp(myid=query("board_id")))
+                msg+="正在管理任务文件："+"("+
+                        "/data/board/"+myid+".o)\n";
+        if( !pointerp(notes) || !sizeof(notes) )
+        {
+        write("正在载入留言板资料...ok.\n");
+        write("-----------------------------------------------------------------\n");
+                for(i=0; i<sizeof(file); i++)
+                {
+                set("board_id",file[i][0]);
+                restore();
+                bmnotes = query("notes");
+
+                if( !pointerp(bmnotes) || !sizeof(bmnotes) )
+                all=::short() + " [ 没有任何留言 ]";
+
+                if( this_player() ) {
+                last_read_time = (int)this_player()->query("board_last_read/"+ query("board_id"));
+                for(unread = 0, j=sizeof(bmnotes)-1; j>=0; j--, unread ++)
+                        {if( bmnotes[j]["time"] <= last_read_time ) break;}
+                }
+                if( unread )
+                all=HIC + ::short() + NOR+"["+(string)(sizeof(bmnotes))+
+                "张留言，"+ HIY +(string)(unread)+ 
+                "张" + HIR + "未读" + NOR + "]";
+
+                else
+                all=""+::short()+"["+(string)(sizeof(bmnotes))+"张留言]";
+
+                printf("%-50s %20-s \n",all,query("board_id"));
+                }
+                delete("board_id");
+                delete("notes");
+                restore();
+        write ("-----------------------------------------------------------------\n");
+        write ("选择board id:bset,留言:bpost,删除留言:bdiscard.\n");
+        write ("注意清除所有调入留言板id用:bselect none.\n");
+        return ("Write by cgw,1999.11.19");
+        }
+
+
+
+        for(i=0; i<sizeof(notes); i++)
+                msg += sprintf("%s[%2d]" NOR "  %-40s %12s (%s)\n",
+                        HIY,
+                        i+1, notes[i]["title"], notes[i]["author"], 
+                        ctime(notes[i]["time"])[0..15] );  
+        return msg;
+}
+
+int do_read(string arg)
+{
+        int num,i;
+        mapping *notes,last_read_time;
+        string str,myid;
+        myid = query("board_id");
+        notes = query("notes");
+        last_read_time = this_player()->query("board_last_read");
+        if( !pointerp(notes) || !sizeof(notes) )
+                return notify_fail("目前没有任何留言板数据。\n");
+
+        if( !arg ) return notify_fail("指令格式：bview <留言编号>\n");
+        if( arg=="new" || arg=="next" ) {
+                if( !mapp(last_read_time) || undefinedp(last_read_time[myid]) )
+                        num = 1;
+                else
+                        for(num = 1; num<=sizeof(notes); num++)
+                                if( notes[num-1]["time"] > last_read_time[myid] ) break;
+                        
+        } else if( !sscanf(arg, "%d", num) )
+                return notify_fail("你要查看第几条留言？\n");
+        if( num < 1 || num > sizeof(notes) )
+                return notify_fail("没有这条留言。\n");
+        num--;
+
+        this_player()->start_more( sprintf(
+        "[%d] %-40s %s(%s)\n----------------------------------------------------------------------\n",
+                num + 1, notes[num]["title"], notes[num]["author"], ctime(notes[num]["time"])[0..9])
+                + notes[num]["msg"]);
+
+        if( !mapp(last_read_time) )
+                this_player()->set("board_last_read", ([ myid: notes[num]["time"] ]) );
+        else 
+                if( undefinedp(last_read_time[myid]) || notes[num]["time"] > last_read_time[myid] )
+                        last_read_time[myid] = notes[num]["time"];
+        return 1;
+}
+
+
+int do_discard(string arg)
+{
+        mapping *notes;
+        int num;
+
+        if( !arg || sscanf(arg, "%d", num)!=1 )
+                return notify_fail("指令格式：remove <任务编号>\n");
+        notes = query("notes");
+        if( !arrayp(notes) || num < 1 || num > sizeof(notes) )
+                return notify_fail("没有这条留言。\n");
+        num--;
+        if( notes[num]["author"] != (string) this_player(1)->query("name")
+        &&      (string)SECURITY_D->get_status(this_player(1)) != "(zhuguan)")
+                return notify_fail("这条留言不是你写的。\n");
+
+        if(num == 0)
+                notes = notes[num+1..sizeof(notes)-1];
+        else
+                notes = notes[0..num-1] + notes[num+1..sizeof(notes)-1];
+        set("notes", notes);
+        save();
+        write("删除第 " + (num+1) + " 个留言....Ok。\n");
+        return 1;
+}
+
+
+
+void done_post(object me, mapping note, string text)
+{
+        mapping *notes;
+
+        note["msg"] = text;
+        notes = query("notes");
+        if( !pointerp(notes) || !sizeof(notes) )
+                notes = ({ note });
+        else
+                notes += ({ note });
+
+        // Truncate the notes if maximum capacity exceeded.
+        if( sizeof(notes) > BOARD_CAPACITY )
+                notes = notes[BOARD_CAPACITY / 2 .. BOARD_CAPACITY];
+
+        set("notes", notes);
+        tell_object(me, "留言完毕。\n");
+
+        save();
+        return;
+}
+
+
+int do_post(string arg)
+{
+        object me;
+        int i;
+        mapping note,*notes;
+        notes = query("notes");
+
+        if( !pointerp(notes) || !sizeof(notes) )
+        return notify_fail("没有任何留言板id载入。\n");
+        me=this_player(1);
+
+        if(!arg) return notify_fail("留言请指定一个标题。\n");
+        
+        note = allocate_mapping(4);
+        note["title"] = arg;
+        note["author"] = this_player()->name(1);
+        note["authorid"] =this_player()->query("id");
+        note["time"] = time();
+        this_player()->edit( (: done_post, this_player(), note :) );
+
+        return 1;
+}
+
+
+
+

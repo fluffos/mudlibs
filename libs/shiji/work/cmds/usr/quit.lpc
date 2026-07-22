@@ -1,0 +1,103 @@
+// 战国 <* 版本 1.00 *>
+// File:/cmds/command/quit.c
+// Update by roro
+// 2000-1-1 20:46
+
+#include <command.h>
+#include <mudlib.h>
+#include <ansi.h>
+
+inherit F_DBASE;
+inherit F_CLEAN_UP;
+
+void create() 
+{
+        seteuid(getuid());
+        set("name", "离线指令");
+        set("id", "quit");
+        set("channel_id", "离线精灵");
+}
+
+int main(object me, object user, string arg)
+{
+        int i,j,p,time1;
+        object *inv, link_ob;
+        string w_time,time;
+        
+        w_time=CTIME_D->chinese_time(5);
+        time=CTIME_D->chinese_period(FINGER_D->online_time(me));
+        
+        if( LOGIN_D->get_mudlock()) 
+                return notify_fail("时空已经封闭，没有人能够退出这个时空了。\n");
+        if (me->query_temp("sleeped")) me->set("marks/insleeping",1);
+
+        if( me->over_encumbranced() )
+                return notify_fail("身上带的东西太多了，离不开游戏了。\n");
+
+        if( !wizardp(me) ) {
+                inv = all_inventory(me);
+                for(i=0; i<sizeof(inv); i++)
+                        if( !inv[i]->query_autoload() )
+                                DROP_CMD->do_drop(me, inv[i]);
+        }
+    call_out("later_quit",3,me);
+     write(HIG"开始退出游戏,"NOR+RED"三秒后段开连接...\n"NOR);
+return 1;
+}
+ int later_quit(object me, object user, string arg)
+{
+        int i,j,p,time1;
+        object *inv, link_ob;
+        string w_time,time;
+        w_time=CTIME_D->chinese_time(5);
+        time=CTIME_D->chinese_period(FINGER_D->online_time(me));
+
+link_ob = me->query_temp("link_ob");
+
+        // We might be called on a link_dead player, so check this.
+        if( link_ob ) {
+
+                // Are we possessing in others body ?
+                if( link_ob->is_character() ) {
+                        write("你的魂魄回到" + link_ob->name(1) + "的身上。\n");
+                        exec(link_ob, me);
+                        link_ob->setup();
+                        return 1;
+                }
+
+                link_ob->set("last_on", w_time);
+                link_ob->set("last_from", query_ip_number(me));
+                link_ob->set("last_quit",time());
+                link_ob->set("online_time",time);
+                link_ob->save();
+                if( ! environment(me)->query("no_save") )
+                {
+                        me->set("startroom", base_name(environment(me)));
+                        write("你一抱拳，转身离开游戏。\n");
+                }
+                else write("你在一个不能保存的地方退出，下次你将从另一个地方进入游戏。\n");
+                destruct(link_ob);
+        }
+
+        message("system", me->name() + "一抱拳，转身离开游戏。\n", environment(me), me);
+        i=me->query("combat_exp")-me->query("temp/exp");
+        j=me->query("money")-me->query("temp/money");
+        p=me->query("potential")-me->query("temp/potential");
+        time1=me->query("mud_age")-me->query("/temp/mud_age");
+       CHANNEL_D->do_channel(this_object(), "sys",
+                me->name() + "(" + me->query("id") + ")离开游戏了。共清除 " + 
+                reclaim_objects() + " 个变数。\n"+"\t本次连线经验增长: "+i+
+                    "\n\t本次钱币增长: "+j+"\n\t本次潜能增长:"+p+"\n\t本次连线时间:"+time+"\n");
+                log_file("nosave/EXP",
+                       sprintf("%s 上次经验：%d，本次经验：%d，平均：%d/min\n",
+                                geteuid(me), me->query_temp("combat_exp"),
+                                me->query("combat_exp"), i));
+message("channel:chat",HIW"【世纪公告】:热烈欢送"+me->query("name")+"离开世纪(CENTURY)!\n"+NOR,users());
+
+        me->save();
+        destruct(me);
+
+        return 1;
+}
+
+

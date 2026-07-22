@@ -1228,6 +1228,31 @@ Do a full `new → id → confirm → Chinese name → password` sequence in ONE
 continuous `mudclient.py` connection/session rather than several separate
 connections, so the throttle never has a chance to trigger mid-test.
 
+### 15k. Case-sensitive filename mismatches aren't limited to `#include`s (§15g) — plain DATA files hit the same Windows-origin bug, and it's much nastier at runtime
+
+`shiji`'s `adm/daemons/logind.lpc` does `read_file("/adm/single/
+MUDVISITOR")` (hardcoded uppercase), but the file that actually extracted
+from the archive is `adm/single/mudvisitor` (lowercase) — same root cause
+as §15g (authored/tested on Windows' case-insensitive filesystem, silently
+resolves there, hard-fails on this Linux host), but a plain data file
+instead of a source `#include`, so it doesn't show up as a compile error
+at all. `read_file()` on a missing path returns `0` instead of a string,
+and if that return value flows straight into something type-strict (here,
+`sscanf(content, "%s %d", ...)`) it throws a *runtime* error instead —
+and if that code runs during connection setup (here: `logon()` →
+`howmany_visitor()`), it fails EVERY single new connection before any
+prompt renders, which looks exactly like a dead/crashed server (empty
+`mudclient.py` transcript) rather than a name-lookup bug. Fix: `cp` the
+file to the exact-case path the code expects (leave the original
+lowercase file in place too, in case anything else reads it by that
+name). **Lesson**: when a fresh boot produces zero prompt output at all
+on the very first connection attempt (not a specific input further into
+the flow), suspect a case-sensitivity data-file miss before anything
+else — check the debug log for a runtime `Bad argument`/`sscanf`-shaped
+error rooted in `logon()`/`connect()`, and grep the suspect daemon for
+hardcoded ALL-CAPS or mixed-case paths, then `find -iname` to see if the
+real file on disk uses different casing.
+
 ---
 
 ## Per-archive gotchas index
