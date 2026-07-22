@@ -1,0 +1,77 @@
+// sword.c
+
+#include <ansi.h>
+
+inherit SKILL;
+
+mapping *actions = ({
+	([	"action":		"$N用手中的$w往$n$l斩去",
+		"damage_type":	"割伤",
+	]),
+	([	"action":		"$N挥动$w，往$n$l砍去",
+		"damage_type":	"　伤",
+	]),
+	([	"action":		"$N将手中$w对准$n$l一剑刺去",
+		"damage_type":	"刺伤",
+	]),
+	([	"action":		"$N挥动手中$w，削向$n$l",
+		"damage_type":	"刺伤",
+	]),
+});
+
+string *interattack = ({
+	"$N紧握著手中的$n，伺机而动　\n",
+});
+
+void create()
+{
+	seteuid(getuid());
+	DAEMON_D->register_skill_daemon("sword");
+	DAEMON_D->register_skill_daemon("secondhand sword");
+	DAEMON_D->register_skill_daemon("twohanded sword");
+	setup();
+}
+
+varargs void attack_using(object me, object opponent, object weapon)
+{
+	int damage;
+	string skill;
+
+	if( !sscanf(weapon->query("equipped"), "weapon/%s", skill) )
+		return;
+
+	if( !opponent ) {
+		if( me->query_temp("last_attacked_target"))
+			message_vision(CYN + interattack[random(sizeof(interattack))] + NOR,
+				me, weapon);
+		return;
+	}
+
+	damage = COMBAT_D->fight(me, opponent, skill,
+		actions[random(sizeof(actions))], weapon);
+
+	if( damage > 0 ) me->improve_skill(skill, 1 + random(me->query_attr("int")));
+}
+
+void skill_improved(object me, string sk)
+{
+	int skill, learn, advance_factor;
+
+	if( !sk ) sk = "sword";
+
+	switch(sk) {
+	case "sword": advance_factor = 100; break;
+	case "secondhand sword": advance_factor = 150; break;
+	case "twohanded sword": advance_factor = 120; break;
+	default: return;
+	}
+
+	skill = me->query_skill(sk, 1);
+	learn = me->query_learn(sk, 1);
+
+	if( (skill<100)
+	&&	(skill+1) * (skill+1) * advance_factor < learn ) {
+		me->advance_skill(sk, 1);
+		me->gain_score("martial art", (skill+1) * 10 );
+	}
+}

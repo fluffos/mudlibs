@@ -1,0 +1,242 @@
+// celeoid.c
+
+#define BASE_WEIGHT 100
+
+#include <ansi.h>
+#include <statistic.h>
+
+inherit F_DBASE;
+
+mapping *combat_action = ({
+	([	"action":		"$N挥拳攻击$n的$l",
+		"damage_type":	"瘀伤",
+	]),
+	([	"action":		"$N往$n的$l一抓",
+		"damage_type":	"抓伤",
+	]),
+	([	"action":		"$N往$n的$l狠狠地踢了一脚",
+		"damage_type":	"瘀伤",
+	]),
+	([	"action":		"$N提起拳头往$n的$l捶去",
+		"damage_type":	"瘀伤",
+	]),
+	([	"action":		"$N对准$n的$l用力挥出一拳",
+		"damage_type":	"瘀伤",
+	]),
+});
+
+// create()
+//
+// To save memory, we usually set the dafault object of a character
+// to his race daemon. The properties we set here can be used as
+// common default properties for characters of this race.
+
+void create()
+{
+	seteuid(getuid());
+	set("karma", 15);		// karma cost to select human when reincarnate
+	set("life_form", "living");	// default life form.
+	set("unit", "位");
+	set("gender", "male");	// default gender
+
+	set("default_body", USER_OB);	// default body object
+	set("civilized", 1);
+	set("humanoid", 1);
+	set("commoner_score_base", 200);	// score base for gaining level
+	set("attitude", "peaceful");		// default attitude
+	set("limbs", ({
+		"头部",	"颈部",	"胸口",	"後心",	"左肩",	"右肩",	"左臂",
+		"右臂",	"左手",	"右手",	"腰间",	"小腹",	"左腿",	"右腿",
+		"左脚",	"右脚"
+	}) );
+	set("default_actions", (: call_other, __FILE__, "query_action" :) );
+
+	DAEMON_D->register_race_daemon("celeoid");
+}
+
+// setup()
+//
+// setup() is called when a character is ready to enter the world. Note
+// that for a player, setup() is called EVERYTIME he/she logins while
+// initialize() is only called on character creation. For NPC, setup()
+// is called everytime loaded.
+
+void setup(object ob)
+{
+	seteuid(geteuid(ob));
+
+	ob->set_stat_regenerate("gin", TYPE_HEALTH);
+	ob->set_stat_regenerate("kee", TYPE_HEALTH);
+	ob->set_stat_regenerate("sen", TYPE_HEALTH);
+
+	ob->set_default_object(__FILE__);
+	if( !ob->query_weight() )
+		ob->set_weight(BASE_WEIGHT + ((int)ob->query_attr("str", 1) - 13 ) * 50);
+
+	// celeoid don't have natural armor.
+}
+
+// initialize()
+//
+// To initialize race-specific stuff of a character. 
+
+void initialize(object ob)
+{
+	seteuid(geteuid(ob));
+
+	ob->init_attribute(([
+		"str": 13 + random(6),
+		"int": 13 + random(6),
+		"wis": 13 + random(6),
+		"dex": 13 + random(6),
+		"con": 13 + random(6),
+		"spi": 13 + random(6),
+		"cor": 13 + random(6),
+		"cps": 13 + random(6)
+	]));
+
+	ob->init_statistic(([
+		"gin": 50,
+		"kee": 50,
+		"sen": 50,
+	]));
+
+	if( !ob->query("age") )
+		if( (string)ob->query("gender")=="female" )
+			ob->set("age", 130);
+		else 
+			ob->set("age", 130);
+
+	ob->set_default_object(__FILE__);
+}
+
+// This is the dafault_action implementation. You don't need call it
+// "query_action" always. We usually set the property "default_action"
+// to this function, and let characters access this via default object
+// query. See create() for more information. If you are to define your
+// own default_action for a character, just set the default_action
+// property of the character to something else to override default object
+// querying.
+
+mapping query_action()
+{
+	return combat_action[random(sizeof(combat_action))];
+}
+
+// advance_level()
+//
+// This function is called by F_SCORE when a character's score reaches
+// target_score. You can give bonus to the character here with race
+// concern, i.e.  mature the character.
+
+void advance_level(object ob)
+{
+	int roll;
+
+	seteuid(geteuid(ob));
+
+	roll = random(100);
+	if( roll < 30 ) {
+		string attr, c_attr;
+
+		if( roll==0 )		 { attr = "dex"; c_attr = "机敏"; }
+		else if( roll < 2 )  { attr = "spi"; c_attr = "灵性"; }
+		else if( roll < 4 )  { attr = "con"; c_attr = "根骨"; }
+		else if( roll < 8 )  { attr = "str"; c_attr = "膂力"; }
+		else if( roll < 12 ) { attr = "int"; c_attr = "悟性"; }
+		else if( roll < 16 ) { attr = "cps"; c_attr = "定力"; }
+		else if( roll < 25 ) { attr = "wis"; c_attr = "慧根"; }
+		else				 { attr = "cor"; c_attr = "胆识"; }
+
+		ob->set_attr( attr, (int)ob->query_attr(attr) + 1 );
+		tell_object(ob, HIW "你的" + c_attr + "值提高了！\n" NOR);
+	}
+	ob->advance_stat("gin", 5);
+	ob->advance_stat("kee", 5);
+	ob->advance_stat("sen", 5);
+}
+
+// valid_wield()
+//
+// This function determines if a character of this race can wield a
+// weapon in certain skill. When a character attempts to wield a weapon,
+// the valid_wield() is called in his race daemon and class daemon to
+// determine if he can wield it. In this example, we check that a human
+// can only wield a primary weapon and a secondhand weapon.
+
+int valid_wield(object me, object ob, string skill)
+{
+	return notify_fail("天灵族无法装备固体的东西　\n");
+}
+
+// valid_wear()
+//
+// This function determines if a character can wear an armor on certain
+// body part. You shuold check if the character of this race DO HAVE that
+// body part and didn't wear another armor on the same body part.
+
+int valid_wear(object me, object ob, string part)
+{
+	return notify_fail("天灵族无法装备固体的东西　\n");
+}
+
+// statistic_destroyed()
+//
+// This function is called when the character of this race is physically
+// damaged in any of his statistics. The most representive example is to
+// check if the character is about to die.
+
+int statistic_destroyed(object ob, mapping flag)
+{
+	seteuid(geteuid(ob));
+
+	// if we have kee before some statistic got destroyed, then we are
+	// in the process of dying.
+	if( ob->query_stat_maximum("kee") ) ob->die();
+
+	if( userp(ob) ) {
+		CHAR_D->make_ghost(ob);
+	} else
+		destruct(ob);
+	return 1;
+}
+
+// statistic_exhausted()
+//
+// This function is called when the character of this race has exhausted
+// any of his statistics. The most representive example is to check if the
+// character is about to fall unconcious.
+
+int statistic_exhausted(object ob, mapping flag)
+{
+	seteuid(geteuid(ob));
+
+	// Destroy life forms without physical body
+	if( !ob->query_stat_maximum("kee") ) {
+		message_vision("\n$N既没有了形体，加上元神精力耗尽，因此魂魄被地气吸入地府了　\n\n",
+			ob);
+		LOGIN_D->reincarnate(ob);
+		return;
+	}
+
+	// Unconcious
+	if( flag["gin"] || flag["kee"] || flag["sen"] ) {
+		ob->unconcious();
+		ob->supplement_stat("gin", ob->query_attr("dex"));
+		ob->supplement_stat("kee", ob->query_attr("con"));
+		ob->supplement_stat("sen", ob->query_attr("spi"));
+		return 1;
+	}
+
+	// Starving and thirsting
+	if( flag["food"] ) {
+		ob->delete_temp("statistic_exhausted/food");
+		ob->consume_stat("kee", 1);
+	}
+	if( flag["water"] ) {
+		ob->delete_temp("statistic_exhausted/water");
+		ob->consume_stat("kee", 1);
+	}
+
+	return sizeof(flag)==0;
+}

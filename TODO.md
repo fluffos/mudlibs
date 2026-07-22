@@ -17,7 +17,7 @@ worked; keep status values consistent so the table stays greppable:
   etc.; see AGENTS.md's non-mudlib list — skipped, not converted)
 
 Port assignments: sequential from 40001, recorded here so re-running
-several libs at once never collides. **Next free port: 40027** (40001-40026
+several libs at once never collides. **Next free port: 40028** (40001-40027
 assigned; 40007 is ds386, deprioritized/partial). On mega-libs (tens of
 thousands of files, the "nitan" family), skip the full `lpcc_check.sh`
 sweep — it can OOM the host before finishing (see AGENTS.md §6b) — and
@@ -30,10 +30,19 @@ rely on the boot + interactive-connect test as the verification gate.
   majority of this collection. If an archive turns out to be English
   (like ds386/Dead Souls), do the minimum to note what it is, don't sink
   deep debugging time into it -- move on to the next Chinese one.
-- **Done: 25 / 100** (shanhaizhanshen, xingzhanyingxiong, unknownlib20150716
+- **Done: 26 / 100** (shanhaizhanshen, xingzhanyingxiong, unknownlib20150716
   [小雨西游II], bxsj [书剑天下], bxsj1 [书剑·经典], chidi [江湖I], ...,
   nitan170911 [仙剑奇侠传], nitan6 [笑傲江湖], rzrmud [大唐西游], xo, xo_final,
-  zzfy [郑州风云3], shiji [世纪])
+  zzfy [郑州风云3], shiji [世纪], dongfanggushi2 [东方故事Ⅱ之天朝帝国])
+- **New crash bug class (AGENTS.md §15l), found on dongfanggushi2**:
+  `master.lpc`'s `create()` destructing+reloading `SIMUL_EFUN_OB` (an
+  old-MudOS trick) segfaults the WHOLE DRIVER PROCESS on this build if
+  called during master's own bootstrap — not an LPC error, a raw
+  process crash with no debug.log clue beyond a C++ stack dump. Check
+  every new lib's master.lpc `create()` for a `destruct()` call
+  targeting `SIMUL_EFUN_OB`/`MASTER_OB` proactively; it's invisible to a
+  compile-only lpcc check and only surfaces as a hard crash on first
+  real boot.
 - **New bug class (AGENTS.md §15k), found on shiji**: case-sensitive
   filename mismatches from Windows-origin archives aren't limited to
   `#include`s (§15g) — a plain DATA file read via `read_file()` hits the
@@ -145,7 +154,7 @@ rely on the boot + interactive-connect test as the verification gate.
 | 30 | zzfy (full).rar | zzfy | 40025 | done | 郑州风云3, same 风云 lineage as fy2/fy2005/fengyun434; simpler registration architecture (no separate "new" keyword branch -- "new" is itself banned as an id, any unused id goes straight to character creation); §15h fix applied proactively; full registration flow verified incl. real Chinese name "萧峰" reaching the password prompt; 89.5% lpcc pass; see libs/zzfy/NOTES.md |
 | 31 | 三国歪传.rar | | | not mudlib | confirmed: DikuMUD/Merc-lineage compiled C server ("三国歪传" by mrec, Taiwan) -- src/db.c,comm.c,fight.c,handler.c (Diku/Merc/ROM names), area/ .are-style world files, zero `inherit` statements anywhere -- fundamentally not LPC, skipped, see AGENTS.md's non-mudlib list |
 | 32 | 世纪.zip | shiji | 40026 | done | 世纪(Century), adm/single/ layout; found §4 master.lpc fix + §15h chinese-detection fix + a NEW case-sensitive DATA file bug (mudvisitor vs MUDVISITOR, §15k) that silently crashed every connection attempt; full registration flow verified incl. real Chinese name "萧峰"; 93.6% lpcc pass; see libs/shiji/NOTES.md |
-| 33 | 东方故事二.rar | | | not started | dup: 东方故事二 (1).rar |
+| 33 | 东方故事二.rar | dongfanggushi2 | 40027 | done | dup: 东方故事二 (1).rar; "东方故事Ⅱ之天朝帝国", ES II lineage but a distinct/smaller codebase than es1_win/esI despite same adm/obj/ layout; found a NEW driver-crash bug (master.lpc destructing SIMUL_EFUN_OB segfaults on boot, §15l) + §4 fix on both valid_write/valid_read + §15h fix incl. a new sliding-window sub-variant; unusually long registration chain (id→confirm→password→email→race→gender→Chinese name) verified end-to-end through a real Chinese name "萧峰" all the way into an actual game room; 85.9% lpcc pass; see libs/dongfanggushi2/NOTES.md |
 | 34 | 中华2.rar | | | not started | |
 | 35 | 书剑2008.rar | | | not started | |
 | 36 | 书剑天下.rar | | | not started | |

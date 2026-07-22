@@ -1,0 +1,253 @@
+//	equip.c
+
+#include <ansi.h>
+#include <combat.h>
+#include <dbase.h>
+#include <name.h>
+#include <move.h>
+#include <type.h>
+
+int unequip()
+{
+	object owner;
+	mapping prop, applied_prop;
+	string *apply, equipped, type;
+
+	if( !(owner = environment())->is_character() ) return 0;
+
+	if( !stringp(equipped = query("equipped")) )
+		return notify_fail("你目前　没有装备这样东西　\n");
+
+	// This is a speed-generality concern hack.
+	// Assume we wield this as 'sword', so we mark the wield in ourself
+	// with set("equipped", "weapon/sword"), and call player->set_temp(
+	// "weapon/sword", this_object(). Here the "weapon/sword" is the
+	// equipped path in the database.
+	owner->delete_temp(equipped);
+	delete("equipped");
+
+	if( mapp(prop = query("apply_" + equipped)) ) {
+		apply = keys(prop);
+		applied_prop = owner->query_temp("apply");
+		for(int i = 0; i<sizeof(apply); i++)
+			// To support array apply, we cannot add_temp() here.
+			applied_prop[apply[i]] -= prop[apply[i]];
+	}
+
+	return 1;
+}
+
+varargs int wear(string on_part)
+{
+	object owner, old;
+	mapping armor_prop;
+	string *apply;
+	mixed valid_types;
+
+	// Only character object can wear armors.
+	if( !(owner = environment())->is_character() ) return 0;
+
+	// If already equipped in another usage, unequip first.
+	if( query("equipped") && !unequip() ) return 0;
+
+	// Check if this can be worn on some owner's body part.
+	valid_types = query("wear_as");
+	if( on_part ) {
+		if( stringp(valid_types) ) {
+			if(on_part != valid_types)
+				return notify_fail("这样东西不能被当作这类护具使用　\n");
+		} else if( arrayp(valid_types) ) {
+			if(member_array(on_part, valid_types)==-1)
+				return notify_fail("这样东西不能被当作这类护具使用　\n");
+		} else 
+			return notify_fail("这样东西不能当作护具　\n");
+	} else {
+		if( stringp(valid_types) ) on_part = valid_types;
+		else if( arrayp(valid_types) ) on_part = valid_types[0];
+		else return notify_fail("这样东西不能当作护具　\n");
+	}
+
+	// Ask race/class daemon to check if we can wield such weapon.
+	notify_fail("你的种族或职业不允许\你使用这种护具　\n");
+	if( !(RACE_D(owner->query_race())->valid_wear(owner, this_object(), on_part))
+	||	!(CLASS_D(owner->query_class())->valid_wear(owner, this_object()), on_part))
+		return 0;
+
+	// if any object occupying on the same part, unequip it.
+	if( old = owner->query_temp("armor/" + on_part) ) 
+		if( !old->unequip() ) return 0;
+
+	// Apply armor properties if any.
+	if( mapp(armor_prop = query("apply_armor/" + on_part)) ) {
+		apply = keys(armor_prop);
+		for(int i = 0; i<sizeof(apply); i++)
+			owner->add_temp("apply/" + apply[i], armor_prop[apply[i]]);
+	}
+
+	// okay, wear it.
+	owner->set_temp("armor/" + on_part, this_object());
+	set("equipped", "armor/" + on_part);
+
+	return 1;
+}
+
+varargs int wield(string as_skill)
+{
+	object owner, old;
+	mapping weapon_prop;
+	string *apply;
+	mixed valid_types;
+
+	// Only character object can wear armors.
+	if( !(owner = environment())->is_character() ) return 0;
+
+	// If already equipped in another usage, unequip first.
+	if( query("equipped") && !unequip() ) return 0;
+
+	// Check if this can be wielded as weapon with some skill
+	valid_types = query("wield_as");
+	if( as_skill ) {
+		if( stringp(valid_types) ) {
+			if(as_skill != valid_types) 
+				return notify_fail("这样东西不能被当作这类武器使用　\n");
+		} else if( arrayp(valid_types) ) {
+			if(member_array(as_skill, valid_types)==-1) 
+				return notify_fail("这样东西不能被当作这类武器使用　\n");
+		} else
+			return notify_fail("这样东西不能当作武器　\n");
+	} else {
+		if( stringp(valid_types) ) as_skill = valid_types;
+		else if( arrayp(valid_types) ) as_skill = valid_types[0];
+		else return notify_fail("这样东西不能当作武器　\n");
+	}
+
+	// if any object occupying on the same part, unequip it.
+	if( old = owner->query_temp("weapon/" + as_skill) ) 
+		if( !old->unequip() ) return notify_fail("你无法取下正在使用中的同种类武器");
+
+	// Ask race/class daemon to check if we can wield such weapon.
+	notify_fail("你的种族或职业不允许\你使用这种武器　\n");
+	if( !(RACE_D(owner->query_race())->valid_wield(owner, this_object(), as_skill))
+	||	!(CLASS_D(owner->query_class())->valid_wield(owner, this_object()), as_skill))
+		return 0;
+
+	// Apply the weapon properties if any.
+	if( mapp(weapon_prop = query("apply_weapon/" + as_skill)) ) {
+		apply = keys(weapon_prop);
+		for(int i = 0; i<sizeof(apply); i++)
+			owner->add_temp("apply/" + apply[i], weapon_prop[apply[i]]);
+	}
+
+	// Set information about wielded.
+	owner->set_temp("weapon/" + as_skill, this_object());
+	set("equipped", "weapon/" + as_skill);
+
+	return 1;
+}
+
+void attack_with(object me, object opponent, string skill_type)
+{
+	SKILL_D(skill_type)->attack_using(me, opponent, this_object());
+}
+
+// parry_with()
+//
+// called when the owner of this_object() parries specific weapon with
+// this_object().
+// Return values are:
+// -1 : this parry failed and special message is supplied.
+// 0 : this parry failed because of weapon.
+// 1 : this parry successed. standard message should be used.
+// 2 : this parry successed, and special message is supplied.
+
+int parry_with(object ob, int strength, int parry_strength)
+{
+	// My rigidity factor.
+	int my_rig = query("rigidity") * this_object()->weight();
+	// Opponent's rigidity factor.
+	int opp_rig = ob->query("rigidity") * ob->weight();
+
+	if( !my_rig || !opp_rig ) return 0;
+
+	environment(ob)->add_temp("fight_msg",
+		"$n举起手中" + ob->name() + "奋力招架！\n");
+
+	// if attacker's strength higher ....
+	// (at this case, the strength sustained by weapon equals parry_strength)
+	if( strength >= parry_strength ) {
+		if( (parry_strength > my_rig) && random(parry_strength) > my_rig ) {
+			ITEM_D->destroy_weapon(this_object());
+			environment(ob)->add_temp("fight_msg",
+				HIW "不料「啪」地一声，" + name() + "登时断成两截！\n" NOR);
+			return -1;
+		}
+		else if( (parry_strength > opp_rig) && random(parry_strength) > opp_rig ) {
+			ITEM_D->destroy_weapon(ob);
+			environment(ob)->add_temp("fight_msg",
+				HIW "不料$N的$w和$n手中" + name()
+				+ "一碰，「啪」地一声登时断成两截！\n" NOR);
+			return 2;
+		}
+		else if( random(strength/2) > parry_strength ) {
+			move(environment(environment()));	// Drop the weapon
+			environment(ob)->add_temp("fight_msg",
+				HIY "不料「当」地一声巨响，$n手中" + name()
+				+ "拿捏不定，脱手飞出！\n" NOR);
+			return -1;
+		}
+	} else {
+		// Defender strength higher...
+		// (at this case, the strength sustained by weapon equals strength)
+		if( (strength > my_rig) && random(strength) > my_rig ) {
+			ITEM_D->destroy_weapon(this_object());
+			environment(ob)->add_temp("fight_msg",
+				HIW "不料「啪」地一声，" + name() + "登时断成两截！\n" NOR);
+			return -1;
+		}
+		else if( (strength > opp_rig) && random(strength) > opp_rig ) {
+			ITEM_D->destroy_weapon(ob);
+			environment(ob)->add_temp("fight_msg",
+				HIW "不料$N的$w和$n手中" + name()
+				+ "一碰，「啪」地一声登时断成两截！\n" NOR);
+			return 2;
+		}
+	}
+	return 1;	// Regular parry, ward off some strength only.
+}
+ 
+// inflict_damage()
+//
+// This is one of the most important functions that defines the behavier
+// of an object that can be used as weapon. This function is called by
+// COMBAT_D when someone 'hit' another one with this weapon. An argument
+// called 'strength' is passed to this function indicating that how hard
+// the blow is. Note that when this function is called, the victim (the
+// one being hit) is to be hit for sure, i.e. all initiative defense had
+// failed this moment. The default definition for this function does the
+// following task: get damage parameters, apply strength/weight bonus and
+// do physical damage on the victim.
+//
+// Note: The unit of strength is same with weight (gram).
+
+int inflict_damage(int strength, object victim)
+{
+	class damage_parameter dam;
+	string skill, eq;
+	int damage, weight, bonus = 0;
+
+	if( !stringp(eq = query("equipped"))
+	||	!sscanf(eq, "weapon/%s", skill) ) return 0;
+
+	if( (weight = this_object()->weight()) > strength ) return 0;
+	dam = query("damage/" + skill);
+
+	bonus = (((dam->multipler * (strength + weight)) / 10000 ) * random(dam->bonus)) / 100;
+	
+	damage = dam->roll + dam->multipler * random(dam->range) + bonus;
+damage -= random(victim->resist_damage(damage, this_object()));
+
+	if( damage > 0 ) 
+		return (int)victim->receive_damage(damage, this_object());
+	else
+		return 0;
+}

@@ -1,0 +1,49 @@
+// daemon.c
+ 
+inherit F_CLEAN_UP;
+ 
+void create() {seteuid(geteuid(this_player(1)));}
+ 
+int main(object me, string arg)
+{
+    mapping dmap;
+    string term, file;
+    string list = "";
+    string wiz_status;
+ 
+    dmap = DAEMON_D->query_daemons();
+    if( !arg || sscanf(arg, "-l %s", arg) ) {
+        string *t;
+        int i;
+        t = sort_array(keys(dmap), 1);
+        for(i=0; i<sizeof(t); i++) {
+            if( arg && strsrch(t[i], arg)!=0 ) continue;
+            list += sprintf("%-30s %s\n", t[i], dmap[t[i]]);
+        }
+        me->start_more(list);
+        return 1;
+        } else if( sscanf(arg, "-d %s", term) ) {
+        wiz_status = SECURITY_D->get_status(me);
+            if( wiz_status != "(admin)" && wiz_status != "(arch)" ) {
+                return notify_fail("只有 (arch) 以上的巫师才能删除 daemon 的登记　\n");
+            } else {
+                map_delete(dmap, term);
+                write("Ok.\n");
+                return 1;
+            }
+        }
+ 
+        return 0;
+}
+ 
+int help()
+{
+        write(@TEXT
+指令格式：daemon                       列出所有登记的 daemon　
+          daemon -l <domain>           列出所有登记的特定种类 daemon　
+          daemon -d <domain>:<name>    删除某一 daemon 的登记　
+	                                (arch 以上)
+TEXT
+        );
+        return 1;
+}

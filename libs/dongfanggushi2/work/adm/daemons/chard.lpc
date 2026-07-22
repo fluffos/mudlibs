@@ -1,0 +1,172 @@
+// chard.c
+
+#pragma save_binary
+
+#include <statistic.h>
+
+inherit F_CLEAN_UP;
+
+void create() { seteuid(getuid()); }
+
+// setup_char()
+//
+// This function is called when characters need setup (after create() is
+// called). The major task of this function is to keep consistency of
+// user data and NPCs. Because the game system may change with development
+// of mudlib, there might be minor or major changes in creating character
+// objects. Also, this function serves as default creation function of 
+// NPCs that saves wizards' work on initializing NPCs.
+
+void setup_char(object ob)
+{
+	mapping apply;
+
+	if( !ob->query_race() )		ob->set_race("human");
+	if( !ob->query_class() )	ob->set_class("commoner");
+	if( !ob->query_level() )	ob->set_level(1);
+
+	if( mapp(apply = ob->query("perm_apply") ) )
+		ob->set_temp("apply", copy(apply));
+
+	RACE_D(ob->query_race())->setup(ob);
+	CLASS_D(ob->query_class())->setup(ob);
+
+	ob->set("time_unit", (: call_other, ob, "query_attr", "dex" :));
+
+	switch(ob->query("life_form")) {
+		case "ghost":
+			ob->add_temp("apply/invisibility", ({ "ghost" }));
+			ob->set_temp("apply/vision_of_ghost", 1);
+			ob->delete_stat("kee");
+			ob->delete_stat("food");
+			ob->delete_stat("water");
+			ob->set_stat_regenerate("gin", TYPE_WASTING);
+			ob->set_stat_regenerate("sen", TYPE_WASTING);
+			break;
+		case "living":
+		default:
+	}
+}
+
+varargs object make_corpse(object victim, object killer)
+{
+	int i, apparition;
+	object corpse, *inv;
+	string corpse_ob;
+
+	// Ghosts don't leave a corpse.
+	if( !victim->query_stat_maximum("kee") ) {
+		all_inventory(victim)->owner_is_killed(killer);
+		inv = all_inventory(victim);
+		i = sizeof(inv);
+		while(i--) inv[i]->move(environment(victim));
+		return 0;
+	}
+
+	if( !stringp(corpse_ob = victim->query("corpse_ob")) )
+		corpse_ob = CORPSE_OB;
+
+	seteuid(MUDLIB_UID);
+	corpse = new(corpse_ob);
+	seteuid(getuid());
+
+	corpse->set_name( victim->name(1) + "的　体", ({ "corpse" }) );
+	corpse->set("long", victim->long()
+		+ "然而，" + gender_pronoun(victim->query("gender")) 
+		+ "已经死了，只剩下一具　体静静地躺在这里　\n");
+	corpse->set("age", victim->query("age"));
+	corpse->set("gender", victim->query("gender"));
+	corpse->set("victim_name", victim->name(1));
+	victim->set_temp("corpse", corpse);
+
+	// Save original statistic maximums in case if we'll resurrect.
+	corpse->set("original_statistic", copy(victim->query("statistic/maximum")));
+
+	corpse->set_weight( victim->query_weight() );
+	corpse->set_max_encumbrance( victim->query_max_encumbrance() );
+	corpse->move(environment(victim));
+	
+	// Don't let wizard left illegal items in their corpses.
+	if( !wizardp(victim) ) {
+		all_inventory(victim)->owner_killed(killer);
+		inv = all_inventory(victim);
+		i = sizeof(inv);
+		while(i--) {
+			if( (string)inv[i]->query("equipped")=="worn" ) {
+				inv[i]->move(corpse);
+				if( !inv[i]->wear() ) inv[i]->move(environment(victim));
+			}
+			else inv[i]->move(corpse);
+		}
+		killer = victim->query_temp("last_damage_from");
+		if( objectp(killer) ) {
+			// PK gains mortal sin scores.
+			if( userp(victim)
+			&&	userp(killer)
+			&&	(victim->query_level() > 1) )
+				killer->gain_score("mortal sin", victim->query_level() * victim->query_level() * 10);
+			// Register vendetta marks if any.
+			if( victim->query("vendetta_mark") )
+				killer->add("vendetta/" + victim->query("vendetta_mark"), 1);
+			killer->gain_score("kills", 1);
+		}		
+	}
+
+	return corpse;
+}
+
+object make_ghost(object victim)
+{
+	if( victim->query("immortal") ) {
+		victim->heal_stat("gin", 10000);
+		victim->heal_stat("kee", 10000);
+		victim->heal_stat("sen", 10000);
+		victim->supplement_stat("gin", 10000);
+		victim->supplement_stat("kee", 10000);
+		victim->supplement_stat("sen", 10000);
+		return;
+	}
+
+	if( victim->query("life_form") != "living" ) {
+		LOGIN_D->reincarnate(victim);
+		return 0;
+	}
+
+	victim->set("life_form", "ghost");
+	victim->supplement_stat("gin", victim->query_attr("dex"));
+	victim->supplement_stat("sen", victim->query_attr("spi"));
+	victim->delete_temp("statistic_exhausted");
+	victim->setup();
+}
+
+int resurrect(object ob)
+{
+	object corpse;
+
+	if( !ob->query_temp("corpse") ) return 0;
+
+	ob->set_temp("apply/invisibility",
+		ob->query_temp("apply/invisibility") - ({ "ghost" }));
+	ob->delete_temp("apply/vision_of_ghost");
+	if( objectp(corpse = ob->query_temp("corpse")) ) {
+		ob->set_stat_maximum("kee",
+			corpse->query("original_statistic/kee"));
+		ob->set_stat_effective("kee", 1);
+		ob->set_stat_current("kee", 1);
+		if( corpse->query("original_statistic/food") ) {
+			ob->set_stat_maximum("food",
+				corpse->query("original_statistic/food"));
+			ob->set_stat_current("food",
+				corpse->query("original_statistic/food"));
+		}
+		if( corpse->query("original_statistic/water") ) {
+			ob->set_stat_maximum("water",
+				corpse->query("original_statistic/water"));
+			ob->set_stat_current("water",
+				corpse->query("original_statistic/water"));
+		}
+	}
+	ob->set("life_form", "living");
+	ob->setup();
+	return 1;
+}

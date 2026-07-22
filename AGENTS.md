@@ -1253,6 +1253,42 @@ error rooted in `logon()`/`connect()`, and grep the suspect daemon for
 hardcoded ALL-CAPS or mixed-case paths, then `find -iname` to see if the
 real file on disk uses different casing.
 
+### 15l. `master.lpc`'s `create()` destructing/reloading `SIMUL_EFUN_OB` as an old-MudOS bootstrap trick segfaults this driver
+
+Found in `dongfanggushi2`: some MudOS-era `master.lpc`s have a `create()`
+that looks like this —
+```lpc
+void create() {
+    write("master: loaded successfully.\n");
+    seteuid(getuid());
+    if( ob = find_object(SIMUL_EFUN_OB) ) {
+        efun::destruct(ob);
+        call_other(SIMUL_EFUN_OB, "???");
+    }
+}
+```
+— an intentional force-reload of the simul_efun object, presumably to
+work around some old-driver staleness issue. On this driver, calling
+`efun::destruct()` on the simul_efun object from inside master's OWN
+`create()` — i.e. during the driver's own very early bootstrap, before
+`master_ob`/`simul_efun_ob` internal pointers are fully settled — is not
+an LPC-catchable error at all: it **segfaults the entire driver
+process**. The crash trace (visible only as a raw backward-cpp stack
+dump in the log, nothing resembling a normal LPC error) is rooted in
+`vm/internal/simulate.cc`'s `destruct_object()` dereferencing
+`master_ob->obname` on a not-yet-initialized pointer. Symptom: the driver
+just dies with "Segmentation fault" moments after starting, no
+`Accepting telnet connections` line, `catch()` doesn't help because
+there's nothing to catch — it's a process-level crash, not a thrown LPC
+error. Fix: the driver already loads simul_efun fresh before master's
+`create()` ever runs, so this destruct+reload dance serves no purpose on
+this driver — just delete it (keep the `write()`/`seteuid()` lines,
+they're harmless). **Check every new lib's `master.lpc create()` for a
+`destruct()`/`efun::destruct()` call targeting `SIMUL_EFUN_OB` (or
+`MASTER_OB`) proactively** — this is exactly the kind of thing that's
+silent in a compile-only `lpcc --batch` check (no error, no warning) and
+only shows up as a hard crash on the very first real driver boot.
+
 ---
 
 ## Per-archive gotchas index

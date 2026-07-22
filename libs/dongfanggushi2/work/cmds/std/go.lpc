@@ -1,0 +1,123 @@
+// go.c
+
+// Optimize this object causes runtime-error, dunno why.
+//#pragma optimize
+#pragma save_binary
+
+inherit F_CLEAN_UP;
+
+int do_move(object me, object dest, string dir, string exit_dir);
+
+mapping default_dirs = ([
+	"north":		"北",
+	"south":		"南",
+	"east":			"东",
+	"west":			"西",
+	"northup":		"北边",
+	"southup":		"南边",
+	"eastup":		"东边",
+	"westup":		"西边",
+	"northdown":	"北边",
+	"southdown":	"南边",
+	"eastdown":		"东边",
+	"westdown":		"西边",
+	"northeast":	"东北",
+	"northwest":	"西北",
+	"southeast":	"东南",
+	"southwest":	"西南",
+	"up":			"上",
+	"down":			"下",
+	"out":			"外",
+]);
+
+void create() {seteuid(getuid());}
+
+int main(object me, string arg)
+{
+	mixed dest;
+	string mout, min, dir;
+	object env, obj;
+
+	if( !arg ) return notify_fail("你要往哪个方向走？\n");
+
+//	if( me->over_encumbranced() )
+//		return notify_fail("你的负荷过重，动弹不得　\n");
+
+	if( me->is_busy() )
+		return notify_fail("要移动请你先用 halt 终止你正在做的事　\n");
+
+	env = environment(me);
+	if(!env) return notify_fail("你哪里也去不了　\n");
+
+	if( arg=="escape" ) {
+		mapping exits = env->query("exits");
+		string *dirs;
+		if( mapp(exits) ) {
+			dirs = keys(exits);
+			arg = dirs[random(sizeof(dirs))];
+		}
+		else return notify_fail("你找不到逃离这里的路！\n");
+	}
+
+	if( !(dest = env->query("exits/" + arg)) )
+		return notify_fail("这个方向没有出路　\n");
+
+	// Load destination room and check its existence.
+	if( stringp(dest) )
+		obj = load_object(dest);
+	else
+		obj = dest;
+	if( !objectp(obj) )
+		return notify_fail("这一个方向的出口有问题，请通知巫师处理　\n");
+	
+	if( !env->valid_leave(me, arg) ) return 0;
+
+	if( !undefinedp(default_dirs[arg]) )	dir = default_dirs[arg];
+	else									dir = arg;
+
+	if( ! me->act( (: do_move, me, obj, dir, arg :) ) ) {
+		me->set_temp("failed_flee", 1);
+		return 0;
+	}
+
+	return 1;
+}
+
+int do_move(object me, object obj, string dir, string exit_dir)
+{
+	string min, mout;
+	object old_env;
+
+	if( !me || !obj ) return 0;
+
+	if( me->is_fighting() ) {
+		mout = "往" + dir + "落荒而逃了　\n";
+		min = "跌跌撞撞地跑了过来，模样有些狼狈　\n";
+	} else {
+		mout = "往" + dir + "离开　\n";
+		min = "走了过来　\n";
+	}
+
+	old_env = environment(me);
+	message( "vision", me->name() + mout, environment(me), ({me}) );
+	if( me->move(obj) ) {
+		message( "vision", me->name() + min, environment(me), ({me}) );
+		me->set_temp("pending", 0);
+		all_inventory(old_env)->follow_me(me, exit_dir);
+		return 1;
+	}
+
+	return 0;
+}
+
+int help(object me)
+{
+	write(@HELP
+指令格式 : go <方向>
+ 
+让你往指定的方向移动　
+ 
+HELP
+    );
+    return 1;
+}
