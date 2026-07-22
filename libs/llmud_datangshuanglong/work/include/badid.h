@@ -1,0 +1,17 @@
+string *badid=({
+"fuck",
+"tmd",
+"tnnd",
+"caonima",
+"makelove",
+"sword",
+"blade",
+"spear",
+"food",
+"water",
+"pker",
+"killer",
+"kill",
+"npc",
+"armor",
+"made"});

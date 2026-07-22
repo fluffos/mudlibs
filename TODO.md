@@ -75,7 +75,7 @@ taken by ds386, in progress).
 | 15 | fluffos(西游记2000).tar.gz | fluffos_xiyou2000 | 40012 | done | 西游记/xiyouji.org; bundled driver source ignored, mudlib nested in world.tar.gz inside; see libs/fluffos_xiyou2000/NOTES.md |
 | 16 | fy2005.rar | fy2005 | 40013 | done | 风云Ⅳ (2005 build), boots clean; 5-min startup grace period before login works; see libs/fy2005/NOTES.md |
 | 17 | fy2.rar | fy2 | 40014 | done | 风云再起Ⅱ, booted with zero fixes; see libs/fy2/NOTES.md |
-| 18 | LLMUD(大唐双龙)v_0.11版.rar | | | not started | |
+| 18 | LLMUD(大唐双龙)v_0.11版.rar | llmud_datangshuanglong | 40015 | done | same lineage as dtsl(#8), zero boot fixes needed; see libs/llmud_datangshuanglong/NOTES.md |
 | 19 | mhxy.rar | | | not started | |
 | 20 | MUD侠客行2017完整版.zip | | | not started | |
 | 21 | nitan170911.7z | | | not started | |
