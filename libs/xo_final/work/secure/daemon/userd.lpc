@@ -1,0 +1,411 @@
+/*    /secure/daemon/userd.c
+ *    from the XOA Object Library
+ *    includes the user level of ppls :)
+ *    created by nerd 08/22/98
+ *    Version: @(#) userd.c 1.0@(#)
+ *    Last modified: 08/22/98
+ */
+#include <ansi.h>
+#include <user.h>
+#include <options.h>
+
+#define MIN_HM_POINT 10000
+inherit F_SAVE;
+// problem: should be private :(( but my mudos's wrong ...kick
+string * avatars;
+string * hms;
+private nosave object* users;
+
+private void create()
+{
+    seteuid(ROOT_UID);
+    restore();
+    if ( ! pointerp( avatars) )
+    {
+        hms = ({ });
+        avatars = ({ });
+    }
+    users = users();
+    if (!users)
+        users = ({ });
+}
+
+int is_avatar(mixed ob)
+{
+    if ( objectp(ob) )
+        ob = geteuid(ob);
+    if (!ob|| ! stringp(ob))
+        return 0;
+    if ( ! sizeof( avatars ) )
+        return 0;
+    return member_array( ob, avatars )!= -1;
+}
+
+string* get_avatars()
+{
+    return avatars;
+}
+
+string* get_high_mortals()
+{
+    return hms;
+}
+
+void CheckUserLevel(object ob)
+{
+    int x;
+    string * known = 
+        ({ "sword","blade","unarmed","dodge","short","force","long","zonggang"});
+    mapping xiuwei = ob->query_xiuwei_map();
+    x = 0;
+    
+    if ( wizardp( ob ) )
+        return ;
+
+    if ( sizeof ( xiuwei ) )
+        foreach ( string type, int num in xiuwei )
+            if ( member_array(type, known) != -1 )
+                x+=num * num;
+    x = sqrt (x);
+    x += ob->query("max_force")/1.2;
+    x += ob->query("combat_exp")/2000;
+    if ( x > MIN_HM_POINT // && ob->query("PKS") < 10
+        && ob->query("betrayer") < 5 
+        && !ob->query("high_mortal") )
+    {    // this is a high mortal lah..
+        ob->set("high_mortal",1);
+        hms += ({ geteuid(ob) });
+        message("vision","恭喜！由于你的勤学苦练，从今天起，你就是武林名士啦！\n",ob);
+        save();
+    }
+    else if ( (x <= MIN_HM_POINT //|| ob->query("PKS") >= 10 
+            || ob->query("betrayer") >=5)
+        && (ob->query("high_mortal")) )
+    {
+        hms -= ({ geteuid(ob) });
+        ob->set("high_mortal",0);
+        message("vision","很抱歉，由于你的懒惰或恶行，从今天开始，你降为武林人士。\n",ob);
+        save();
+    }
+}
+
+string query_save_file()
+{
+    return DATA_DIR "daemon/userd";
+}
+
+// should this be open to any program? possible no...
+string add_avatar(string who)
+{
+    // add security control here :)
+    avatars += ({ who });
+    save();
+}
+
+string delete_avatar(string who)
+{
+    //should be deleted. by lnwm
+    if(member_array(who,avatars)+1)
+        avatars -= ({ who });
+    save();
+}
+
+void add_user( object* user )
+{
+    if ( !clonep(user))
+        return;
+    if ( !user )
+        return;
+    users += ({ user });
+}
+
+void remove_user( object* user )
+{
+    users -= ({ user });
+}
+
+object* get_users()
+{
+    users = filter( users, (: $1 :) );
+    return users;
+}
+
+int remove()
+{
+    save();
+    return 1;
+}
+
+void save_user(object who)
+{
+    object env;
+
+    if ( !userp(who) )
+    {
+        return;
+    }
+
+    if  (objectp(env = environment(who)) &&
+        !env->query("not_startroom") && env->IsRoom())
+    {
+        who->set("startroom", base_name(environment(who)));
+    }
+}
+
+void setup(object who)
+{
+    if ( who->query("doing") )
+    {
+        CLOSE_D->continue_doing(who);
+    }
+}
+
+// This function updates player's age, called by heart_beat()
+void update_user_age(object who)
+{
+    mapping gifts;
+    int i, temp, sign, sign_mark,temp1;
+    int mud_age;
+    int age, max_age;
+    string *list;
+//    object env;
+//    int mud_age_modify;
+    int willdie;
+
+    if ( !userp(who) )
+    {
+        return;
+    }
+
+    sign_mark = 0;
+    // Update the time we spend on mudding, using method from TMI-2 mudlib.
+    // fuck, really rubbish.
+    if ( !who->query_last_age_set() )
+    {
+        who->set_last_age_set(time());
+    }
+
+    who->add("mud_age", time() - who->query_last_age_set());
+
+    if( !interactive(who) && who->query("doing") )
+    {
+        who->addn("offline_time", time() - who->query_last_age_set());
+    }
+    else if( interactive(who) )
+    {
+        who->addn("online_time", time() - who->query_last_age_set());
+    }
+
+//    if(objectp(env=environment(who)) && intp(env->query("mud_age_modify")) && (mud_age_modify=env->query("mud_age_modify")))
+//    if(query("age")>20)
+//       add("locker/mudagemodify",mud_age_modify*(time()-last_age_set));
+
+    who->set_last_age_set(time());
+
+    temp = who->query("age");
+    willdie = who->query("willdie");
+
+    {
+//        if((int) query("locker/mudagemodify"))
+//	mud_age = (int) query("mud_age")+(int) query("locker/mudagemodify"); //added by zhaoke 调整mud_age,我推荐mud_age就是用来记录玩家玩了多长时间得，不直接修改mud_age,具体年龄再调整
+//	else
+        mud_age = (int) who->query("mud_age");
+	    age = (int) who->query("age_modify");
+        if (mud_age < 259200)
+        {
+            age += 14 + mud_age / BASE_TIME_1;
+        }
+        else if (mud_age < 1123200)
+        {
+            age += 20 + (mud_age - 259200) / BASE_TIME_2;
+        }
+        else if (mud_age < 2419200)
+        {
+            age += 30 + (mud_age - 1123200) / BASE_TIME_3;
+        }
+        else
+        {
+            temp1 = (mud_age - 2419200)/ BASE_TIME_4;
+            age  = 40 + temp1 * 120 / ( temp1 + 120 );
+        }
+    }
+    if (age != temp)
+    {
+        who->set("age", age);
+    }
+
+    if (age > temp && temp)     // birthday :)
+    {
+        message("vision", YEL "恭喜！你又长大了一岁了！" NOR "\n", who);
+        if ( age == 18 )
+        {
+            message("vision", "从今天起，你不再是新手，不再受到保护了，自己保重！\n", who);
+        }
+
+        max_age = who->query("max_age");
+        if ( max_age )
+        {
+            if (age > max_age && !wizardp(who))
+            {
+            	who->add("willdie", 1);
+            	if ( who->query("willdie") == 1 )
+            	{
+            	    tell_object(who, HIY"你心头有些不详的预感，似乎大限将至。\n"NOR);
+            	}
+            	else if ( who->query("willdie") >= 2 )
+            	{
+            	    tell_object(who, HIY"你阳寿将近，命不久矣。\n"NOR);            		
+//            		SUICIDE_CMD->laosi(who);
+//                        return;
+                }
+            }
+/*                // 应该死了...嘿嘿
+                // user.c 权限不够不能destruct player...
+                // 只好借助一个指令来完成了。
+                if (DeadWarning > 5)
+                {
+                // wizard不应该死，要不被别人把他登了就惨了。 by lnwm 980922
+                    if (wizardp(who))
+                    {
+                        message("vision",
+                                "你是巫师，所以就不老死，不过还是把你的岁数改回去好。\n",
+                                who);
+                        return;
+                    }
+                    SUICIDE_CMD->laosi(who);
+                    return;
+                }
+            }
+            if ((age + 10) > max_age + query("max_force") / 1000)
+            {
+                // 出些提示信息， 你该死了..
+                write("你心头有些不详的预感，似乎大限将至。\n");
+                DeadWarning++;
+            }
+*/
+        }
+
+        who->save();
+
+        gifts = who->query("gifts_jilei");
+        if ( !gifts )
+        {
+            return;
+        }
+        list = keys(gifts);
+
+        for (i = 0; i < sizeof(list); i++)
+        {
+            temp = gifts[list[i]];
+            sign = (temp > 0) ? 1 : -1;
+            temp *= sign;
+            if (temp >= 2000)
+            {
+                who->set("gifts_jilei/" + list[i], 0);
+                if ( who->query("age") > 20 )
+                {
+                    if (sign > 0 && who->query("gifts_modify/" + list[i]) > 9)
+                    {
+                        sign = 0;
+                    }
+
+                    if (sign < 0 && who->query("gifts_modify/" + list[i]) < -8)
+                    {
+                        sign = 0;
+                    }
+
+                    who->add("gifts_modify/" + list[i], sign);
+                }
+                else
+                {
+                    if ( sign > 0 && who->query(list[i]) > 34 )
+                    {
+                        sign = 0;
+                    }
+
+                    if ( sign < 0 && who->query(list[i]) < 11 )
+                    {
+                        sign = 0;
+                    }
+
+                    who->add(list[i], sign);
+                }
+                sign_mark += sign;
+            }
+        }
+
+        if ( sign_mark )
+        {
+            tell_object(who, "你的体内似乎发生一些奇妙的变化。\n");
+        }
+    }
+}
+
+void user_heart_beat(object who)
+{
+    if ( !random(20) )// 不需要一直update_age
+    {
+        update_user_age(who);
+    }
+
+    who->autosave();
+
+    if ( query_idle(this_object()) > IDLE_TIMEOUT )
+    {
+        who->user_dump(DUMP_IDLE);
+    }
+}
+
+int user_cmd_limit_per_second(object who)
+{
+    if ( wizardp(who) )
+    {
+        return 0;
+    }
+
+    return MIN_COMMAND_LIMIT;
+}
+
+int visible(object this, object ob)
+{
+    int lvl, invis;
+
+    if ( !ob )
+    {
+        return 0;
+    }
+
+    lvl = wiz_level(this);
+    if ( lvl >= wiz_level(ob) )
+    {
+        return 1;
+    }
+
+    invis = ob->query("env/invisibility");
+    if ( intp(invis) && (invis > lvl) )
+    {
+        return 0;
+    }
+
+    if ( ob->is_ghost() && !wizardp(ob) )
+    {
+        if ( this->is_ghost() )
+        {
+            return 1;
+        }
+
+        return 0;
+    }
+
+    return 2;
+}
+
+void move_here(object who, int silent)
+{
+    if ( living(who) && interactive(who) && !silent )
+    {
+        who->eventDescribeEnv(environment(who), (int)who->query("env/brief"));
+        environment(who)->welcome_visitor(who);
+    }
+}
+

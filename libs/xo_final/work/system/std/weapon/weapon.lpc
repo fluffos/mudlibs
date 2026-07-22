@@ -1,0 +1,158 @@
+// filename : /system/feature/equip.c
+
+#include <dbase.h>
+#include <weapon.h>
+
+#ifndef AS_FEATURE
+inherit ITEM;
+#endif
+
+private nosave int m_equipped = 0;
+private int m_flags  = 0;
+private int m_damage = 0;
+private int m_wound  = 0;
+private int m_dodge_effect = 0;
+private string m_weapon_type = "unknown";
+
+int is_weapon() { return 1; }
+int is_equipped() { return m_equipped; }
+
+int get_flags() { return m_flags; }
+int set_flags( int flag ) { return (m_flags = flag); }
+
+int set_damage( int damage ) { return (m_damage = damage); }
+int get_damage() { return m_damage + query("damage"); }
+
+int set_wound( int w ) { return (m_wound = w); }
+int get_wound() { return m_wound + query("wound"); }
+
+int set_dodge_effect( int de ) { return (m_dodge_effect = de); }
+int get_dodge_effect() { return m_dodge_effect + query("dodge_effect"); }
+
+void set_weapon_type( string type ) { m_weapon_type = type; }
+string get_weapon_type() { return m_weapon_type; }
+mixed query( string to_q )
+{
+    if ( to_q == "weapon_type" )
+        return get_weapon_type();
+    return ::query( to_q );
+}
+
+int init_weapon( int d, int w, int f )
+{
+    set_damage(d);
+    if ( undefinedp(w) )
+        set_wound(d);
+    else
+        set_wound(w);
+    set_flags(f);
+    return 1;
+}
+
+void setup()
+{
+    if ( !get_dodge_effect() && weight() >= 3000 )
+        set_dodge_effect( -weight()/3000 );
+}
+
+int wield()
+{
+    object owner, old_weapon, snd_weapon, shield;
+    string name;
+    //int flag;
+
+    // Only character object can wear armors.
+    owner = environment();
+    if ( !owner || !owner->is_character() )
+        return 0;
+
+    // If already wielded, just recognize it.
+    if ( is_equipped() )
+        return 0;
+
+    name = query("name");
+    old_weapon = owner->query_temp( "weapon" );
+    snd_weapon = owner->query_temp( "secondary_weapon" );
+    shield = owner->query_temp( "armor/shield" );
+
+    // no first weapon?
+    if ( !old_weapon )
+    {
+        // 双手一定要双手。
+        if ( ( get_flags() & TWO_HANDED )
+                && ( snd_weapon || shield ) )
+        {
+            return notify_fail( "你必须空出双手才能装备" + name + "。\n" );
+        }
+        owner->set_temp( "weapon", this_object() );
+    } 
+    else if ( snd_weapon || shield )
+    {
+        // no free hand.
+        return notify_fail( "你必须空出一只手来使用" + name + "。\n" );
+    }
+    else // try wield as 2nd weapon or switch
+    {
+        if ( get_flags() & SECONDARY )
+        {
+            owner->set_temp("secondary_weapon", this_object());
+        }
+        // If we can switch our old weapon to secondary weapon ?
+        else if ( (int)old_weapon->get_flags() & SECONDARY ) 
+        {
+            old_weapon->unequip();
+            owner->set_temp( "weapon", this_object() );
+            old_weapon->wield();
+        }
+        // We need unwield our old weapon before we can use this one.
+        else
+            return notify_fail( "你必须先放下你目前使用着的武器。\n" );
+    }
+
+    // apply = keys( weapon_prop );
+    owner->add_temp( "apply/damage", get_damage() );
+    owner->add_temp( "apply/wound", get_wound() );
+    owner->add_temp( "apply/dodge", get_dodge_effect() );
+
+    //owner->reset_action();
+    m_equipped = EQUIP_WIELDED;
+    //set( "equipped", "wielded" );
+    return 1;
+}
+
+int unequip()
+{
+    object owner, weapon, second_weapon;
+    //mapping prop, applied_prop;
+    //string *apply; //, equipped;
+
+    owner = environment();
+    if ( !owner || !owner->is_character() )
+        return 0;
+
+    if ( ! is_equipped() )
+        return notify_fail( "你目前并没有装备" + this_object()->name() 
+                + "作为武器。\n" );
+
+    weapon = owner->query_temp( "weapon" );
+    second_weapon = owner->query_temp( "secondary_weapon" );
+    if ( weapon == this_object() )
+        owner->delete_temp( "weapon" );
+    else if ( second_weapon == this_object() )
+        owner->delete_temp( "secondary_weapon" );
+    //prop = query( "weapon_prop" );
+    //owner->reset_action();
+
+    owner->add_temp( "apply/damage", -get_damage() );
+    owner->add_temp( "apply/wound", -get_wound() );
+    owner->add_temp( "apply/dodge", -get_dodge_effect() );
+    /*
+    apply = keys(prop);
+    applied_prop = owner->query_temp( "apply" );
+    for ( int i = 0; i < sizeof( apply ); i++ )
+        // To support array apply, we cannot add_temp() here.
+        applied_prop[ apply[ i ] ] -= prop[ apply[ i ] ];
+    */
+    m_equipped = 0;
+    return 1;
+}

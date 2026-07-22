@@ -30,9 +30,20 @@ rely on the boot + interactive-connect test as the verification gate.
   majority of this collection. If an archive turns out to be English
   (like ds386/Dead Souls), do the minimum to note what it is, don't sink
   deep debugging time into it -- move on to the next Chinese one.
-- **Done: 22 / 100** (shanhaizhanshen, xingzhanyingxiong, unknownlib20150716
+- **Done: 23 / 100** (shanhaizhanshen, xingzhanyingxiong, unknownlib20150716
   [小雨西游II], bxsj [书剑天下], bxsj1 [书剑·经典], chidi [江湖I], ...,
-  nitan170911 [仙剑奇侠传], nitan6 [笑傲江湖], rzrmud [大唐西游])
+  nitan170911 [仙剑奇侠传], nitan6 [笑傲江湖], rzrmud [大唐西游], xo, xo_final)
+- **CRITICAL, project-wide (AGENTS.md §15h)**: every `chinesed.lpc`-style
+  GBK byte-range Chinese-character check is silently wrong under this
+  driver's UTF-8 native strings — it doesn't error, it just always
+  evaluates incorrectly, and this specifically breaks character
+  registration (is_chinese/check_legal_name are used to validate a new
+  player's name). Retroactively fixed across all 21 libs done before this
+  was discovered, and now applied proactively to every new lib. **Never
+  consider a registration flow "verified" just because it reaches a
+  prompt — must actually send a real Chinese name through it and confirm
+  it reaches the NEXT stage.** This is exactly how the bug went
+  undetected across 21 libs for so long.
 - **rzrmud confirms the nitan-family bug is lineage-specific, not
   universal**: this lib's simul_efun has no global set/query/delete at
   all, relying entirely on per-object `inherit NPC;`-style base classes
@@ -121,7 +132,7 @@ rely on the boot + interactive-connect test as the verification gate.
 | 26 | xlqy_new2007.rar | xlqy_new2007 | 40022 | done | 新仙侣情缘之飘渺纪元, ES II lineage; found + fixed an extract.sh bug (relative .rar paths silently failed) + the recurring convertd.lpc Greek-table backslash typo (§8h); 98.6% lpcc pass after fix; one non-fatal unexplained runtime error during login noted but not chased; see libs/xlqy_new2007/NOTES.md |
 | 27 | xlqy-解压看readme.rar | | | not started | probed: extracts fine (no password/special step needed despite the name), root `xlqy/`, same "仙侣情缘" name/config as #26 (xlqy_new2007) but a different, EARLIER/incomplete snapshot -- its own readme.txt says (translated) "this lib is very incomplete, mainly used to test the driver ... many things are incompatible, no tech support provided". Not a byte-duplicate of #26 (9174 vs 9060 .c files). Lower priority given #26 already covers this game; process with standard pipeline when its turn comes, expect a rougher lpcc pass rate per the author's own disclaimer |
 | 28 | xo.zip | xo | 40023 | done | 笑傲江湖迷你版, TMI-2/ES2 lineage (Falcon), secure/daemon/ layout; found a case-sensitivity #include bug (Action.h vs action.h, new §15g) that was causing 209/1395 lpcc failures, fixed to 72; applied §4's security-daemon reentrancy guard proactively; see libs/xo/NOTES.md |
-| 29 | xo最终版1.2.rar | | | not started | |
+| 29 | xo最终版1.2.rar | xo_final | 40024 | done | same TMI-2/ES2 lineage as xo(#28), full "final" build (~7,174 files vs xo's 1395); found the "comment eats next line" typo (2x) + ~8 lossy-conversion corrupted string literals; full registration flow verified incl. real Chinese name "赵云" reaching the password prompt; see libs/xo_final/NOTES.md |
 | 30 | zzfy (full).rar | | | not started | |
 | 31 | 三国歪传.rar | | | not started | |
 | 32 | 世纪.zip | | | not started | |

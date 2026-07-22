@@ -1,0 +1,130 @@
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+
+int main(object me, string arg)
+{
+    object ob, old_app;
+
+    if ( !arg )
+    {
+        return notify_fail("指令格式：chushi [cancel]|<对象>\n");
+    }
+
+    if ( arg == "cancel" )
+    {
+        old_app = me->query_temp("pending/chushi");
+        if ( !objectp(old_app) )
+        {
+            return notify_fail("你现在并没有出师的意思。\n");
+        }
+
+        write("你改变主意不想出师了。\n");
+        tell_object(old_app, me->name() + "改变主意不想出师了。\n");
+        me->delete_temp("pending/chushi");
+
+        return 1;
+    }
+
+    if ( !(ob = present(arg, environment(me)))
+        || !ob->is_character() )
+    {
+        return notify_fail("你想找谁出师？\n");
+    }
+
+    if ( !living(ob) )
+    {
+        return notify_fail("你必须先把" + ob->name() + "弄醒。\n");
+    }
+
+    if ( ob == me )
+    {
+        return notify_fail("找自己出师？好主意....不过没有用。\n");
+    }
+ 
+    if ( !mapp( ob->query("family") ) )
+    {
+        return notify_fail(ob->name() + "既不属於任何门派，也没有开山立派，不能出师。\n");
+    }
+
+    if ( userp(ob) && !wizardp(ob) && !wizardp(me) )
+    {
+        return notify_fail("目前不准找玩家出师。\n");
+    }
+
+    if ( !stringp(me->query("family/family_name")) || (string)me->query("family/family_name") != (string)ob->query("family/family_name") )
+    {
+        return notify_fail("不是同门，也能出师?\n");
+    }
+
+    if ( !ob->accept_chushi(me) )
+    {
+        return notify_fail("看起来" + ob->name() + "并不愿意处理出师事宜。\n");
+    }
+
+    if( me->query( "class_score/" + me->query("family/family_name") ) < 1000 )
+    {
+        message_vision(CYN"$N对$n道：“你在我门下多年，却不尽心为本门"
+            "效力，怎么就想离开了呢？”\n"NOR, ob, me );
+        me->add("class_score/" + me->query("family/family_name"), -10);
+
+        return notify_fail("你还是先为发扬本门多干点事吧！\n");
+    }
+
+    if ( (object)me->query_temp("pending/chushi") == ob )
+    {
+        message_vision(
+            "$N决定从" + me->query("family/family_name") + "出师。\n\n",
+            me, ob);
+
+        ob->process_chushi(me);
+        me->delete_temp("pending/chushi");
+
+        message_vision(
+            "$N语重心长的对$n说道: 既然你已离开我门下，从此行走江湖，就多保重自己了。\n\n",
+            ob, me);
+
+        return 1;
+    }
+    else
+    {
+        old_app = me->query_temp("pending/chushi");
+
+        if ( objectp(old_app) )
+        {
+            write("你改变主意不想找" + old_app->name() + "出师了。\n");
+            tell_object(old_app, me->name() + "改变主意不想找你出师了。\n");
+        }
+
+        message_vision("$N想要找$n出师。\n", me, ob);
+        tell_object(me, YEL "请在5秒内再次输入chushi " + ob->query("id") + "确认出师。\n" NOR);
+        me->set_temp("pending/chushi", ob );
+        call_out("clean_chushi", 5, me);
+
+        return 1;
+    }
+}
+
+void clean_chushi(object me)
+{
+    if ( !me )
+    {
+        return;
+    }
+
+    me->delete_temp("pending/chushi");
+}
+
+int help(object me)
+{
+        write(@HELP
+指令格式 : chushi [cancel]|<对象>
+
+    这个指令能让你出师，需要在门派主事者面前使用。
+
+请参考相关指令 expell、recruit
+HELP
+    );
+    return 1;
+}
+

@@ -1,0 +1,271 @@
+// filename : /feature/damage.c
+
+// checked by lnwm&nerd 98/01/20
+
+#include <ansi.h>
+#include <dbase.h>
+#include <login.h>
+#include <move.h>
+
+int ghost = 0;
+
+// 饥饿计数器, 当水或食物其中一个在零以下时, 每次心跳我们就增加一次,
+// 现在设定为饿或渴三天没有事, 第四天开始减少三要素值.
+// 12hour 等于 1year, 2m = 1d, 所以一天有 60 次心跳.
+int hungry_tick = 0;
+
+////////////////////////////////////////////////////////////////////////////
+// function prototype
+int heal_amount();
+int heal_body( string );
+int check_damage_type( string );
+
+int is_ghost() { return ghost; }
+void set_ghost() { ghost = 1; }
+int query_hungry_tick() {return hungry_tick;}
+void set_hungry_tick(int tick) {hungry_tick = tick;}
+void add_hungry_tick(int tick) {hungry_tick += tick;}
+
+object query_last_damage_from()
+{
+    return COMBAT_D->query_last_damage_from(this_object());
+}
+
+object delete_last_damage_from()
+{
+    return COMBAT_D->delete_last_damage_from(this_object());
+}
+
+void set_last_damage_from(object who)
+{
+    return COMBAT_D->set_last_damage_from(this_object(), who);
+}
+
+varargs int receive_damage( string type, int damage, object who )
+{
+    int val;
+
+    if ( damage < 0 )
+    {
+        printf("错误：F_DAMAGE: " + type + "伤害值为负值。\n请向巫师报告。。\n\n" );
+        return 0;
+    }
+
+    if ( CHAR_D->forbid_damage(this_object(), who) )
+    {
+        return 0;
+    }
+
+    if ( !check_damage_type( type ) )
+    {
+        printf( "F_DAMAGE: 伤害种类错误( 只能是 gin, kee, sen 其中之一 )。\n" );
+        return 0;
+    }
+
+    KUNGFU_D->receive_damage(type, damage, who, this_object());
+
+    if ( objectp( who ) )
+    {
+        set_last_damage_from(who);
+    }
+
+    val = ( int )query( type ) - damage;
+
+    if ( val >= 0 )
+    {
+        set( type, val );
+    }
+    else
+    {
+        set( type, -1 );
+    }
+
+    set_heart_beat( 1 );
+
+    return damage;
+}
+
+varargs int receive_wound( string type, int damage, object who )
+{
+    int val;
+
+    if ( damage < 0 )
+    {
+        error( "F_DAMAGE: " + type + "伤害值为负值。\n" );
+    }
+
+    if ( CHAR_D->forbid_wound(this_object(), who) )
+    {
+        return 0;
+    }
+
+    if ( !check_damage_type( type ) )
+    {
+        printf( "F_DAMAGE: 伤害种类错误( 只能是 gin, kee, sen 其中之一 )。\n" );
+        return 0;
+    }
+
+    KUNGFU_D->receive_wound(type, damage, who, this_object());
+
+    if ( objectp( who ) )
+    {
+        set_last_damage_from(who);
+    }
+
+    val = ( int )query( "eff_" + type ) - damage;
+
+    if ( val >= 0 )
+    {
+        set( "eff_" + type, val );
+    }
+    else
+    {
+        set( "eff_" + type, -1 );
+        val = -1;
+    }
+
+    if ( ( int )query( type ) > val )
+    {
+        set( type, val );
+    }
+
+    set_heart_beat( 1 );
+
+    return damage;
+}
+
+int receive_heal( string type, int heal )
+{
+    int val;
+
+    if ( heal < 0 )
+    {
+        error( "F_DAMAGE: 恢复值为负值。\n" );
+    }
+
+    if ( !check_damage_type( type ) )
+    {
+        printf( "F_DAMAGE: 恢复种类错误( 只能是 gin, kee, sen 其中之一 )。\n" );
+        return 0;
+    }
+
+    val = ( int )query( type ) + heal;
+
+    if ( val > ( int )query( "eff_" + type ) )
+    {
+        set( type, ( int )query( "eff_" + type ) );
+    }
+    else
+    {
+        set( type, val );
+    }
+
+    return heal;
+}
+
+int receive_curing( string type, int heal )
+{
+    int max, val;
+
+    if ( heal < 0 )
+    {
+        error( "F_DAMAGE: 恢复值为负值。\n" );
+    }
+
+    if ( !check_damage_type( type ) )
+    {
+        printf( "F_DAMAGE: 恢复种类错误( 只能是 gin, kee, sen 其中之一 )。\n" );
+        return 0;
+    }
+
+    val = ( int )query( "eff_" + type );
+    max = ( int )query( "max_" + type );
+
+    if ( val + heal > max )
+    {
+        set( "eff_" + type, max );
+        return max - val;
+    }
+    else
+    {
+        set( "eff_" + type, val + heal );
+        return heal;
+    }
+}
+
+void unconcious()
+{
+    hungry_tick = 0;
+
+    if ( CHAR_D->unconcious(this_object()) )
+    {
+        if ( 100 > query("con") )
+        {
+            call_out( "revive", random( 100 - query( "con" ) ) + 30 );
+        }
+        else
+        {
+            call_out( "revive", 30 );
+        }
+    }
+}
+
+varargs void revive( int quiet )
+{
+    remove_call_out( "revive" );
+    CHAR_D->revive(this_object(), quiet);
+}
+
+void die()
+{
+    hungry_tick = 0;
+
+    if ( CHAR_D->die(this_object()) && this_object() )
+    {
+        remove_call_out( "revive" );
+    }
+}
+
+void reincarnate()
+{
+    ghost = 0;
+    set( "eff_gin", query( "max_gin" ) );
+    set( "eff_kee", query( "max_kee" ) );
+    set( "eff_sen", query( "max_sen" ) );
+}
+
+int max_food_capacity()
+{
+    return CHAR_D->max_food_capacity(this_object());
+}
+
+int max_water_capacity()
+{
+    return CHAR_D->max_water_capacity(this_object());
+}
+
+int heal_up()
+{
+    return CHAR_D->heal_up(this_object());
+}
+
+//////////////////////////////////////////////////////////////////////////
+// Helper function
+
+int check_damage_type( string type )
+{
+    return KUNGFU_D->check_damage_type(type, this_object());
+}
+
+// 返回每次可能恢复的数量
+int heal_amount()
+{
+    return CHAR_D->heal_amount(this_object());
+}
+
+// 用来恢复三要素的有效值, 返回 1 表示需要 update_flag++
+int heal_body( string prop )
+{
+    return CHAR_D->heal_body(this_object(), prop);
+}
+

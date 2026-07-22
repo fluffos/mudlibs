@@ -1,0 +1,193 @@
+//renhe.c
+//Qyz
+
+#define RICH_MACHE      CLONE_DIR "traffic/mache1"
+#define MID_MACHE       CLONE_DIR "traffic/mache2"
+#define POOR_MACHE      CLONE_DIR "traffic/mache3"
+
+inherit NPC;
+
+int GiveHelp( object ppl );
+
+string GetDest( string dest );
+
+void init()
+{  
+    if ( this_player()->can_act() )
+    {
+        remove_call_out( "Greeting" );
+        call_out( "Greeting", 1, this_player() );
+    }
+    add_action( "DoBook", "book" );         //订马车的动作函数。
+    add_action( "DoGeton", "geton" );       //上马车的动作函数。
+}
+
+void Greeting( object ppl )
+{
+    object npc = this_object();
+
+    if ( !ppl 
+        || environment( ppl ) != environment() ) 
+        return;
+    if ( !npc->can_act() ) 
+        return;
+    message_vision( "$N向$n说道：“这位" + RANK_D->query_respect( ppl ) 
+        + "，要走远路吗？\n何不在小号订(book)一辆马车呢？\n", npc, ppl );
+}
+
+int DoBook( string arg )
+{
+    object ppl = this_player();
+    object npc = this_object();
+    string dest;                            //dest：目的地；
+    int time;                               //time：车的种类。
+    
+    if ( !ppl->can_act() )
+        return notify_fail( "你现在正忙着呢。\n" );
+
+    if ( !npc->can_act() )
+        return notify_fail( npc->name() + "现在已经无暇顾及你了。\n" );
+
+    if ( !arg 
+        || sscanf( arg, "%s %d", dest, time ) != 2 )
+    {
+        GiveHelp( ppl );
+        return 1;
+    }
+
+    if ( !dest = GetDest( dest ) )
+    {
+        GiveHelp( ppl );
+        return 1;
+    }
+
+    if ( time > 3 
+        || time < 1 )
+    {
+        GiveHelp( ppl );
+        return 1;
+    }
+
+    if ( dest == query( "location" ) )
+        return notify_fail( "你现在已经在" + dest + "了。\n" );
+
+    if ( !ppl->can_afford( 6000 / time ) )
+        return notify_fail( "你的钱不够。\n" );
+
+    if ( ppl->query_temp_marks( "waiting_mache" )       //在等车 
+        ||  ppl->query_temp_marks( "booked_mache" ) )   //已订车
+        return notify_fail( "你已经订了马车了。\n" );
+
+    tell_object( ppl, npc->name() + "点了点头说：“好，请先稍等，我们的马车很"
+        + "快就准备好。”\n" );
+    ppl->pay_money( 6000 / time );
+    ppl->set_temp_marks( "waiting_mache", 1 );
+
+    call_out( "prepared_mache", 8, ppl, dest, time );   //用８秒来准备马车
+    return 1;
+}
+
+void prepared_mache( object ppl, string dest, int time )
+{
+    string desc;
+    object mache;
+
+    if ( !ppl 
+        || environment( ppl ) != environment( this_object() ) )
+        return;
+
+    switch( time )
+    {
+        case 1  :
+            desc = "宽敞而又豪华";   
+            mache = new( RICH_MACHE );
+            break;
+        case 2  :
+            desc = "普普通通";
+            mache = new( MID_MACHE );
+            break;
+        case 3  :
+            desc = "又小又旧";
+            mache = new( POOR_MACHE );
+            break;
+    }
+    mache->set( "dest", dest );
+    tell_object( ppl, "只听几声吱吱呀呀的车轮声，一辆" + desc + "的马车慢慢\n"
+        + "驶了过来。\n车夫把马车停住，对你恭谨地说：这位" 
+        + RANK_D->query_respect( ppl ) 
+        + "，快请上\n车(geton)吧。我们还要赶远路呢。\n" );       
+    ppl->set_temp_marks( "booked_mache", mache );   
+    ppl->delete_temp_marks( "waiting_mache" );
+    call_out( "dest_empty_mache", 20, ppl, mache);            
+}
+
+void dest_empty_mache( object ppl, object mache )
+{
+    if ( !ppl ) 
+    {
+        destruct( mache );
+        return;
+    }
+
+    if ( environment(ppl) != mache )
+    {
+        tell_object( ppl, 
+            "那车夫等了半天不见你上车，便不耐烦地赶着车走了。\n" );
+        ppl->delete_temp_marks( "booked_mache" );
+        destruct( mache );
+    }
+}
+            
+int DoGeton( string arg )
+{
+    object mache;
+    object ppl = this_player();
+    
+    if ( !ppl->can_act() )
+        return notify_fail("你现在无法上车。\n");
+
+    if ( mache = ppl->query_temp_marks( "booked_mache" ) )
+    {
+        tell_object( ppl, "你拉开马车的车厢门，走进了马车。\n" );
+        ppl->move( mache );
+        ppl->delete_temp_marks( "booked_mache" );
+        return 1;
+    }
+    if ( ppl->query_temp_marks( "waiting_mache" ) )
+        return notify_fail( "你订的马车还没来呢。\n" );
+    return notify_fail( "你没有订马车，怎么能上车呢？\n" );
+}
+
+int GiveHelp( object ppl )
+{
+    write( @HELP
+指令格式：book <目的地> <马车种类>
+
+    其中，目的地有如下几个：
+        大理 ( dali )           扬州 ( yangzhou )
+        兰州 ( lanzhou )        汴京 ( bianjing )
+    ( 可以使用拼音来代替. )
+
+    马车种类有三种，“１”代表速度最快的，坐一次需 ６ 两银子；
+                    “２”代表速度中等的，坐一次需 ４ 两银子；
+                    “３”表示速度最低的，坐一次需 ２ 两银子；
+
+    比如，你可以使用“book 大理 1”。
+HELP
+    );
+    return 1;    
+}
+
+string GetDest( string dest )
+{
+    if ( dest == "大理" || dest == "dali" )
+        return "大理";
+    if ( dest == "扬州" || dest == "yangzhou" )
+        return "扬州";
+    if ( dest == "兰州" || dest == "lanzhou" )
+        return "兰州";
+    if ( dest == "汴京" || dest == "bianjing" )
+        return "汴京";
+    return 0;
+}
+

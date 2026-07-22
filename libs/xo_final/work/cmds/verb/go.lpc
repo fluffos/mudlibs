@@ -1,0 +1,356 @@
+// Filename : /cmds/std/go.c
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+
+mapping default_dirs = ([
+    "north":        "北",
+    "south":        "南",
+    "east":            "东",
+    "west":            "西",
+    "northup":      "北边",
+    "southup":      "南边",
+    "eastup":       "东边",
+    "westup":       "西边",
+    "northdown":    "北边",
+    "southdown":    "南边",
+    "eastdown":        "东边",
+    "westdown":        "西边",
+    "northeast":    "东北",
+    "northwest":    "西北",
+    "southeast":    "东南",
+    "southwest":    "西南",
+    "up":           "上",
+    "down":            "下",
+    "out":            "外",
+    "in" :          "里",
+    "enter" :       "里面",
+]);
+
+void create() { seteuid(getuid()); }
+
+int main(object me, string arg)
+{
+    string dest, mout, min, dir, blk;
+    object env, obj, blocker, *inv;
+    mapping exit;
+    mapping block;
+    mixed old_target;
+    int result, i;
+
+    int sen_cost;
+
+    if ( !arg )
+    {
+        return notify_fail("你要往哪个方向走？\n");
+    }
+
+    if ( me->over_encumbranced() )
+    {
+        return notify_fail("你的负荷过重，动弹不得。\n");
+    }
+
+    if ( !me->can_act() || (me->query("doing") && me->query("doing") != "scheme" && me->query("doing") != "trigger") )
+    {
+        if ( stringp( me->query("busy_msg") ) )
+        {
+            return notify_fail( me->query("busy_msg") );
+        }
+        else 
+        {
+            return notify_fail("你的动作还没有完成，不能移动。\n");
+        }
+    }
+
+    env = environment(me);
+    if ( !env )
+    {
+        return notify_fail("你哪里也去不了。\n");
+    }
+
+
+    //sigh, valid_leave也要destruct(npc)呀。 return 1 还是0呢？不明白 (zhaoke)
+    result = env->valid_leave(me, arg);
+    if ( !objectp(me) )
+    {
+        return 1;
+    }
+
+    if ( result < 0 )
+    {
+        return 1;
+    }
+    else if ( !result )
+    {
+        return 0;
+    }
+
+    //对身上所有有限制离开的东西进行检查 //真变态。
+    inv = all_inventory( me );
+    if ( sizeof(inv) > 105 )
+    {
+        return notify_fail("你又不是苦力，背的东西太多了！\n");
+    }
+
+    for ( i = 0; i < sizeof(inv); i++ )
+    {
+        result = inv[i]->valid_leave(me, arg);
+        if ( result < 0 )
+        {
+            return 1;
+        }
+        else if ( !result && !inv[i]->is_character() )
+        {
+            return 0;
+        }
+    }
+
+    if ( !mapp(exit = env->query("exits")) || undefinedp(exit[arg]) ) 
+    {
+        if ( query_verb() == "go" )
+        {
+            return notify_fail("这个方向是没有出路的。\n");
+        }
+        else
+        {
+            return 0;
+        }
+    }
+
+    if ( mapp(block = env->query("blocks")) && ( blk = block[arg] ) )
+    {
+        if ( objectp(blocker = present(blk, env)) &&  living(blocker) )    
+        {
+            if ( !env->query("block_msg") )
+            {
+                return notify_fail("你正打算移动，却被" + blocker->name() + "挡住了去路 。\n");    
+            }
+            return notify_fail( env->query("block_msg") );         
+        }
+    }
+
+    if ( old_target = me->query_temp("guardfor") )
+    {
+        if ( objectp(old_target) )
+        {
+            if ( living(old_target) )
+            {
+                tell_object(me, "你放弃保护" + old_target->name() + "。\n");
+            }
+            else
+            {
+                tell_object(me, "你不再理会" + old_target->name() + "，径直走了。\n");
+            }
+        }
+        else
+        {
+            tell_object( me, "你不再守住这里往"+default_dirs[old_target]+"的方向，离开了这里。\n" );
+        }
+
+        me->delete_temp("guardfor");
+    }
+
+    dest = exit[ arg ];
+    if ( !dest )
+    {
+        return notify_fail("这个方向没有出路。\n");
+    }
+
+    if ( !(obj = find_object(dest)) && !(obj = load_object(dest)) )
+    {
+        if ( !sscanf(dest, "%*s.lpc") )
+        {
+            dest += ".lpc";
+        }
+
+        if ( file_size(dest) == -1 )
+        {
+            return notify_fail("那个区域还没连通，等待开发，你还是不要去了。\n");
+        }
+
+        call_other( dest, "???" );
+    }
+
+    if ( !(obj = find_object(dest)) )
+    {
+        return notify_fail( sprintf( "无法向 %s 移动。\n", dest ) );
+    }
+
+    if ( me->query_temp_marks("is_riding") != 0 
+        && dest->query("outdoors") == 0 )
+    {
+        return notify_fail( "骑着牲口无法进入" + dest->query("short") + "。\n" );
+    }
+
+    if ( !undefinedp( default_dirs[ arg ] ) )
+    {
+        dir = default_dirs[ arg ];
+    }
+    else
+    {
+        dir = arg;
+    }
+
+    if ( me->is_fighting() )
+    {   
+        mout = "往" + dir + "落荒而逃了。\n";
+        min = "跌跌撞撞地跑了过来，模样有些狼狈。\n";
+    }
+    else 
+    {   
+        mout = "往" + dir + "快步离开。\n";
+        min = "走了过来。\n";
+    }
+
+    if ( me->query("race") == "人类" )
+    {
+        //判断是否骑马
+        if ( me->query_temp_marks("is_riding") != 0 )
+        {
+            message( "vision", "一位" + RANK_D->query_normal(me) 
+                + "骑着一" + me->query_temp_marks("is_riding")
+                + mout, environment( me ), ( {me} ) );
+        }
+        else
+        {            
+            message( "vision", "一位" + RANK_D->query_normal(me) + mout,
+                environment( me ), ({me}) );
+        }            
+    }        
+    else
+    {
+        message( "vision", "一只" + me->query( "name" ) + mout,
+            environment( me ), ( { me } ) );
+    }
+
+    if ( me->move(obj) )
+    {
+        if ( !objectp(me) )
+        {
+            return 1;
+        }
+
+        me->remove_all_bihua ();
+        me->remove_all_duishou ();    
+
+        if ( objectp(me)&&me->query("race")&&me->query("race") == "人类" )
+        {
+            if ( me->query_temp_marks("is_riding") != 0 )
+            {
+                message( "vision", "一位" + RANK_D->query_normal(me) 
+                    + "骑着一" + me->query_temp_marks("is_riding")
+                    + min, environment( me ), ( {me} ) );
+            }
+            else
+            {            
+                message( "vision", "一位" + RANK_D->query_normal(me) + min,
+                    environment( me ), ({me}) );
+            }            
+        }        
+        else
+        {
+            message( "vision", "一只" + me->query("name") + min,
+                environment( me ), ({me}) );
+        }
+
+        if ( me->query("sen") < 50 )
+        {
+            tell_object(me, WHT"你有些累得了，歇一会儿好不好？\n"NOR);  
+        }
+
+        if ( userp(me) && ( me->is_killing() || me->is_fighting()) )
+        {   
+            sen_cost = (int)me->query("sen") / 100;
+            if ( sen_cost < 5 )
+            {
+                sen_cost = 5;
+            }
+            me->receive_damage( "sen", sen_cost );
+        }
+
+        ////////到这里为止
+        me->set_temp("pending", 0);
+
+        if ( env && !(me->query_temp("no_follow")) )
+        {
+            all_inventory(env)->follow_me(me, arg);
+        }
+        me->delete_temp("no_follow");
+
+        return 1;
+    }
+
+    return 0;
+}
+
+void do_flee(object me)
+{
+    mapping exits;
+    string *directions;
+
+    if ( !environment(me) || !living(me) )
+    {
+        return;
+    }
+
+    exits = environment(me)->query("exits");
+    if ( !mapp(exits) || !sizeof(exits) )
+    {
+        return;
+    }
+
+    directions = keys(exits);
+    tell_object(me, "看来该找机会逃跑了...\n");
+    main( me, directions[ random( sizeof(directions)) ] );
+}
+
+mapping r_dirs = ([
+    "north":        "south",
+    "south":        "north",
+    "east":         "west",
+    "west":         "east",
+    "northup":      "southdown",
+    "southup":      "northdown",
+    "eastup":       "westdown",
+    "westup":       "eastdown",
+    "northdown":    "southup",
+    "southdown":    "northup",
+    "eastdown":     "westup",
+    "westdown":     "eastup",
+    "northeast":    "southwest",
+    "northwest":    "southeast",
+    "southeast":    "northwest",
+    "southwest":    "northeast",
+    "up":           "down",
+    "down":         "up",
+    "enter":        "out",
+    "out":          "enter",
+]);
+
+string query_reverse(string dir)
+{
+    if ( undefinedp(r_dirs[dir]) )
+    {
+        return 0;
+    }
+
+    return r_dirs[dir];
+}
+
+string query_chinese_dir(string dir)
+{
+    return default_dirs[dir];
+}
+
+int help(object me)
+{
+    write(@HELP
+指令格式 : go <方向>
+ 
+让你往指定的方向移动。
+ 
+HELP
+    );
+    return 1;
+}
+

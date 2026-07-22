@@ -1,0 +1,169 @@
+// filename : /adm/daemons/aliasd.c
+
+// checked by lnwm&nerd 98/01/20
+
+mapping global_alias = 
+([
+    "l":    "look",
+    "n":    "go north",
+    "e":    "go east",
+    "w":    "go west",
+    "s":    "go south",
+    "nu":    "go northup",
+    "eu":    "go eastup",
+    "wu":    "go westup",
+    "su":    "go southup",
+    "nd":    "go northdown",
+    "ed":    "go eastdown",
+    "wd":    "go westdown",
+    "sd":    "go southdown",
+    "ne":    "go northeast",
+    "se":    "go southeast",
+    "nw":    "go northwest",
+    "sw":    "go southwest",
+    "u":    "go up",
+    "d":    "go down",
+    "i":    "inventory",
+    "sha":  "kill",
+    "qiecuo":"fight",
+    "sc":"score",
+    "sk":"skills",
+    "sa":"skills",
+    "o":"out",
+    "bai": "apprentice",
+    "fangqi": "abandon",
+    "oo":"chat& 很高兴的说：“今天晚上我做东，报告大家吃圈圈。”",
+]);
+
+string process_global_alias(string arg)
+{
+    string *word;
+
+    //if ( arg[ 0 ] == '\'' ) 
+        //return "say " + arg[ 1..strlen( arg ) - 1 ];
+    switch(arg[0])
+    {
+        case '\'':
+            return "say " + arg[1..];
+            break;
+        case '/':
+            if (newbiep(this_player()))
+                return "new " + arg[1..];
+            else
+                return "chat " + arg[1..];
+            break;
+        case '"':
+            if (newbiep(this_player()))
+                return "new* " + arg[1..];
+            else
+                return "chat* " + arg[1..];
+            break;
+    }
+
+    word = explode( arg, " " );
+    if ( sizeof(word) && !undefinedp(global_alias[ word[ 0 ] ]) ) 
+    {
+        word[ 0 ] = global_alias[ word[ 0 ] ];
+        return implode( word, " " );
+    }
+
+    return arg;
+}
+
+#define MAX_REPEAT         30
+#define MAX_ALIASES     40
+string process_input(object who, string str)
+{
+    string *args, cmd, argstr;
+    int i, j;
+    mapping alias = who->query_all_alias();
+
+    //seteuid(getuid());
+
+    if ( !environment( who ) )
+    {
+        tell_object(who, "对不起，由于你没有环境，转移到void...\n");
+        who->move( VOID_OB );
+    }
+
+    if ( str == who->query_last_input() )
+    {
+        who->add_repeat_cnt(1);
+
+        if ( who->query_repeat_cnt() > MAX_REPEAT ) 
+        {
+            tell_object( who,
+                "\n孙悟空骑着一朵筋斗云飞了过来。\n"
+                "\n大声喝道：你这婆婆妈妈的家伙是唐僧!!! 滚吧!!\n\n");
+
+            if( wizardp(who) )
+            {
+                tell_object( who,
+                    "突然间孙悟空的嗓子哑了，回头一看……\n\n"
+                    "原来是一只狐狸在后面掐着孙悟空的脖子。\n"
+                    "孙悟空谄媚道：“嘿嘿，小的该死，您老请便，请便。\n");
+                who->set_repeat_cnt(0);
+            }
+            else
+            {
+                who->run_command("quit");
+            }
+        }
+    } 
+    else 
+    {
+        who->set_repeat_cnt(0);
+        who->set_last_input(str);
+    }
+
+    if ( str != who->add_cmd_history(str) )
+    {
+        return "";
+    }
+
+    if ( mapp( alias ) ) 
+    {
+        if ( !undefinedp( alias[ str ]) )
+        {
+            return replace_string( alias[str], "$*", "" );
+        }
+
+        i = sscanf( str, "%s %s", cmd, argstr );
+        if ( i == 2 && !undefinedp( alias[ cmd ] ) )
+        {
+            cmd = replace_string( alias[cmd], "$*", argstr );
+            args = explode( argstr, " " );
+            if ( j = sizeof(args) )
+            {
+                for ( i = 0; i < j; i++ )
+                {
+                    cmd = replace_string( cmd, "$" + (i+1), args[i] );
+                }
+            }
+            return cmd;
+        }
+    }
+
+    return (string)process_global_alias( str );
+}
+
+int set_alias(object who, string verb, string replace)
+{
+    mapping alias = who->query_all_alias();
+
+    if ( !replace ) 
+    {
+        who->delete_alias(verb);
+        return 1;
+    } 
+
+    if ( sizeof( alias ) > MAX_ALIASES )
+    {
+        return notify_fail("您设定的 alias 过多，请先删掉一些不常用的。\n");
+    }
+
+    who->set_alias_real(verb, replace);
+
+    return 1;
+}
+

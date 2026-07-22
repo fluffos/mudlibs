@@ -1,0 +1,219 @@
+#include <ansi.h>
+
+int accept_teach( object me, object master, string skill )
+{
+    int master_skill_jibie = 0, my_skill_jibie = 0, skill_dengji = 0;
+
+    if ( !master->is_tongmen_of(me)
+        && SKILL_D(skill)->query_dengji() > 7 )
+    {
+        tell_object(me, RANK_D->query_respect(me) + "若真想学我镇派绝学，还需拜入我门下才好啊。\n");
+        return 0;
+    }
+
+    if ( !master->is_tongmen_of(me)
+        && !me->query("shilian/" + master->query("family/family_name") + "/" + master->query("id")) )
+    {
+        tell_object(me, RANK_D->query_respect(me) + "想必也有两手绝活吧，请先与在下较量较量。\n");
+        return 0;
+    }
+
+    master_skill_jibie = master->query_jibie(skill);
+    my_skill_jibie = me->query_jibie(skill);
+
+    if ( my_skill_jibie >= master_skill_jibie )
+    {
+        tell_object( me, master->name() + "摇了摇头：你的" + to_chinese(skill) + "学到这个地步，我也无法再教你什么了。\n" );
+        return 0;
+    }
+
+    if ( my_skill_jibie && me->query_lingwu_ratio( skill ) < 90 )
+    {
+        if ( SKILL_D(skill)->is_knowledge() )
+        {
+            tell_object( me, master->name() + "摇了摇头：贪多不化，于求学无益。"
+                "你还是先熟读典籍后再来问我吧。\n" );
+            return 0;
+        }
+        else
+        {
+            message_vision("$n对$N摇了摇头：贪多嚼不烂，你且下去多多练习吧。\n" , me, master);
+            return 0;
+        }
+    }
+
+    // 先判断内功修为是否满足
+    if ( "literate" != skill )
+    {
+        skill_dengji = SKILL_D(skill)->query_dengji();
+
+        if ( 1 < skill_dengji && me->query_xiuwei_dengji("force") * 2 < skill_dengji )
+        {
+            tell_object( me, "看来你的内功修为还不足以支撑如此凶猛的功夫吧。\n");
+            return 0;
+        }
+        if ( 1 < skill_dengji && me->query_xiuwei_dengji(SKILL_D(skill)->query_xiuwei_type()) + 1 < skill_dengji )
+        {
+            tell_object( me, "看来你的外功修为还不足以支撑如此凶猛的功夫吧。\n");
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+int zhongcheng( object me, object master, string skill )
+{
+    int dengji, jibie, zhongchengdu;
+
+    if ( skill == "literate" )
+    {
+        return 1;
+    }
+
+    if ( master->query("can_teach") )
+    {
+        return 1;
+    }
+
+    dengji = SKILL_D( skill )->query_dengji();
+    if ( SKILL_D( skill )->query_level() )
+    {
+        dengji = SKILL_D( skill )->query_level();
+    }
+    if ( !dengji )
+    {
+        dengji = 1;
+    }
+
+    jibie = me->query_jibie( skill );
+
+    if ( me->is_tongmen_of(master) )
+    {
+        // 同门关系
+        if ( me->is_apprentice_of(master) )
+        {
+            if ( dengji <= 10 )
+            {
+                zhongchengdu = (dengji - 1) * 100 + jibie * (10 + dengji - 1) / 10;
+            }
+            else
+            {
+                zhongchengdu = jibie * dengji;
+            }
+
+            if ( zhongchengdu <= me->query( "class_score/" + me->query( "family/family_name" ) ) )
+            {
+                return 1;
+            }
+            else
+            {
+                return 0;
+            }
+        }
+        else
+        {
+            message_vision("$N看看$n，缓缓的说道：师门规定，严禁私下传授本门绝学。\n", master, me);
+            return 0;
+        }
+    }
+    else
+    {
+        if ( dengji <= 10 )
+        {
+            zhongchengdu = (dengji - 1) * 100 + jibie * (10 + dengji - 1) / 10;
+        }
+        else
+        {
+            zhongchengdu = jibie * dengji;
+        }
+
+        if ( zhongchengdu <= me->query( "class_score/" + master->query( "family/family_name" ) ) )
+        {
+            return 1;
+        }
+        else
+        {
+            return 0;
+        }
+    }
+
+    return 0;
+}
+
+string ask_zhen(object me, object master)
+{
+    object new_master;
+    string out_room;
+
+    if ( time() < me->query("maze/qingjiao") + 7200 )
+    {
+        return "你不能频繁进入阵中。";
+    }
+
+    new_master = new(base_name(master));
+    if ( !new_master )
+    {
+        return "NPC复制失败。";
+    }
+
+    new_master->set("title", HIY"幻象"NOR);
+
+    me->delete_temp("maze/qingjiao");
+    me->set_temp("maze_out", file_name(environment(me)));
+    if ( MAZE_D->enter_maze(me, "qingjiao") )
+    {
+        me->set_temp("maze/qingjiao", 1);
+        me->set_temp("shilian/family", master->query("family/family_name"));
+        me->set_temp("shilian/master", master->query("id"));
+        me->set_temp("shilian/master_name", master->query("name"));
+        me->set("maze/qingjiao", time());
+
+        out_room = MAZE_D->query_maze_file(me->query("id"), "qingjiao") + "out";
+        new_master->move(out_room);
+
+        return "小心为佳。";
+    }		
+
+    return "你还是歇歇再来。"; 	
+}
+
+string ask_wugong(object player, object master)
+{
+    if ( master->is_tongmen_of(player) || master->in_samezuzhi_with(player) )
+    {
+        return "你我份属同门，何须如此。";
+    }
+
+    if ( player->query("shilian/" + master->query("family/family_name") + "/" + master->query("id")) )
+    {
+        return RANK_D->query_respect(player) + "既已与我结交，自然可以学习。";
+    }
+
+    tell_object(player, RANK_D->query_respect(player) + "想必也有两手绝活吧，请先与在下较量较量。\n");
+    player->set_temp(("pending/qingjiao/" + master->query("family/family_name") + "/" + master->query("id")), 1);
+
+    return "请用agree " + master->query("id") + "同意。";
+}
+
+int do_agree(object player, object master, string arg)
+{
+    string msg;
+
+    if ( !arg || !master->id(arg) )
+    {
+        return 0;
+    }
+
+    if ( !player->query_temp("pending/qingjiao/" + master->query("family/family_name") + "/" + master->query("id")) )
+    {
+        return 0;
+    }
+
+    player->delete_temp(("pending/qingjiao/" + master->query("family/family_name") + "/" + master->query("id")));
+    msg = ask_zhen(player, master);
+    tell_object(player, msg + "\n");
+
+    return 1;
+}
+

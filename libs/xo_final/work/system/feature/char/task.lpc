@@ -1,0 +1,341 @@
+/* /system/feature/task.c
+ * from XO Object Library I
+ * handle the Tasks of a player.   
+ * created by trill 19970907
+ * version: @(#) task.c 1.0@(#)
+ */
+
+#include <task.h>
+#include "include/task.h"
+
+private mapping Tasks = ([ ]);
+private mapping TaskLevel = ([ ]);
+private nosave mapping TaskObjects = ([ ]);
+
+void AddTask( string GroupName, class task tmp )
+{
+    if ( classp( tmp ) )
+    {
+        if ( mapp( Tasks ) )
+        {
+            Tasks[ GroupName ] = tmp;
+        }
+        else
+        {
+            Tasks = ([ GroupName : tmp ]);
+        }
+    }
+}
+
+void AddTaskObject( string GroupName, object ob )
+{
+    if ( objectp( ob ) )
+    {
+        if ( mapp( TaskObjects ) )
+        {
+            TaskObjects[ GroupName ] = ob;
+        }
+        else
+        {
+            TaskObjects = ([ GroupName : ob ]);
+        }
+    }
+}
+
+class task GetTask( string GroupName )
+{
+    if ( mapp( Tasks ) && classp( Tasks[ GroupName ] ) )
+    {
+        return Tasks[ GroupName ];
+    }
+    else
+    {
+        return 0;
+    }
+}
+
+int DeleteTask( mixed tmp )
+{
+    if ( classp( tmp ) )
+        foreach( string GroupName in keys( Tasks ) )
+            if ( Tasks[ GroupName ] == tmp )
+                tmp = GroupName;
+    if ( !stringp( tmp ) ) return 0;
+    map_delete( Tasks, tmp );
+    TaskObjects[ tmp ] = 0;
+    map_delete( TaskObjects, tmp );
+    return 1;
+}
+
+string GetTaskMessage( string GroupName )
+{
+    if ( mapp( TaskObjects ) && objectp( TaskObjects[ GroupName ] ) )
+    {
+        object task = TaskObjects[ GroupName ];
+        return task->GetBeginningMessage();
+    }
+}
+
+string GetTaskName( string GroupName )
+{
+    class task task;
+    if ( mapp( Tasks ) && classp( Tasks[ GroupName ]) )
+    {
+        task = Tasks[ GroupName ];
+        return task->KeyName;
+    }
+    else
+    {
+        return 0;
+    }
+}
+
+int GetTaskBirth( string GroupName )
+{
+    class task task;
+    if ( mapp( Tasks ) && classp( Tasks[ GroupName ]) )
+    {
+        task = Tasks[ GroupName ];
+        return task->Birth;
+    }
+    else
+    {
+        return 0;
+    }
+}
+
+int GetTaskTime( string GroupName )
+{
+    class task task;
+    if ( mapp( Tasks ) && classp( Tasks[ GroupName ]) )
+    {
+        task = Tasks[ GroupName ];
+        return task->TermType;
+    }
+    else
+    {
+        return 0;
+    }
+}
+
+varargs void SetTaskEnd( string GroupName, int i )
+{
+    if ( mapp( Tasks ) && classp( Tasks[ GroupName ]) )
+    {
+        class task task;
+        task = Tasks[ GroupName ];
+        if ( i )
+        {
+            task->TaskEnd = time();
+        }
+        else
+        {
+            task->TaskEnd = 1;
+        }
+        Tasks[ GroupName ] = task;
+    }
+}
+
+int GetTaskEnd( string GroupName )
+{
+    if ( mapp( Tasks )&& classp( Tasks[ GroupName ]) )
+    {
+        class task task;
+        task = Tasks[ GroupName ];
+        return task->TaskEnd;
+    }
+    return 0;
+}
+
+void SetTaskLevel( string GroupName, int i )
+{
+    if ( mapp( TaskLevel ) )
+        TaskLevel[ GroupName ] = i;
+    else
+        TaskLevel = ([ GroupName : i ]);
+}
+
+int GetTaskLevel( string GroupName )
+{
+    if ( mapp( TaskLevel ) && intp( TaskLevel[ GroupName ]) )
+        return TaskLevel[ GroupName ];
+    return 0;
+}
+
+
+varargs void eventTaskBegin( string GroupName, string TaskName )
+{
+    TASK_D->TaskBegin( this_object(), GroupName, TaskName );
+}
+
+varargs void eventTaskEnd( string verb, mixed who, mixed item )
+{
+    string target, obj; 
+    int skill_level;
+    switch( verb )
+    {
+    case "kill" :
+    case "buy" :
+        if ( objectp( who ) )
+        {
+            target = who->query( "id" );
+        }
+        else if ( stringp( who ) )
+        {
+            target = who;
+        }
+        else
+        {
+            return;
+        }
+        break;
+    case "give" :
+        if ( objectp( who ) )
+        {
+            target = who->query( "id" );
+        }
+        else if ( stringp( who ) )
+        {
+            target = who;
+        }
+        else
+        {
+            return;
+        }
+        if ( objectp( item ) )
+            obj = item->query( "id" );
+        else if ( stringp( item ) )
+            obj = item;
+        else
+            return;
+        break;
+    case "learn" :
+        if ( stringp( who ) )
+            target = who;
+        else
+            return;
+        skill_level = this_object()->query_jibie( target );
+        break;
+    }
+    if( !mapp( Tasks )) return; //by lnwm
+    foreach( string GroupName in keys( Tasks ) )
+    {
+        class task task = Tasks[ GroupName ];
+        if( classp( task ) )
+        {
+            if ( task->Verb == verb && task->Target == target )
+            {
+                mixed * event = task->Event;
+                switch( verb )
+                {
+                case "kill" :
+                case "buy" :
+                    if ( event[ TASK_TARGET_NAME ] == target )
+                        SetTaskEnd( GroupName, 1 );
+                    break;
+                case "give" :
+                    if ( event[ TASK_TARGET_NAME ] == target
+                        && event[ TASK_OBJECT_NAME ] == obj )
+                        SetTaskEnd( GroupName, 1 );
+                    break;
+                case "learn" :
+                    if ( event[ TASK_SKILL_NAME ] == target
+                        && event[ TASK_SKILL_LEVEL ] <= skill_level )
+                        SetTaskEnd( GroupName, 1 );
+                    break;
+                }
+            }
+        }
+    }
+    return;
+}
+
+void eventQuit()
+{
+    if ( nullp( Tasks ) ) return;
+    Tasks = filter( map( Tasks, function( string key, class task task )
+        {
+            if ( task && classp( task ) )
+            {
+                if ( task->TermType )
+                {
+                    task->TermType = time() - task->Birth;
+                    task->Birth = time();
+                    return task;
+                }
+                else
+                {
+                    object tmp;
+                    tmp = TaskObjects[ key ];
+                    if ( objectp( tmp ) ) tmp->TaskFail( this_object() );
+                    return 0;
+                }
+            }
+            else
+            {
+                return 0;
+            }
+        } ), (: $2 :) );
+}
+
+void eventLogin()
+{
+    RestoreTask();
+}
+
+void RestoreTask()
+{
+    //Qyz...根据runtime log进行的修改。
+    if ( nullp(Tasks) ) return;
+    Tasks = filter( map( Tasks, function( string GroupName, class task task )
+        {
+            if ( task->TermType == 0 )
+            {
+                return 0;
+             }
+            else
+            {
+                TASK_D->TaskRestore( this_object(), GroupName, task->KeyName );
+                return task;
+             }
+        } ), (: $2 :) );
+}
+ 
+int CanTask( string GroupName )
+{
+    if ( nullp( Tasks ) )
+    {
+        return 1;
+    }
+    if ( classp( Tasks[ GroupName ] )
+        || objectp( TaskObjects[ GroupName ] )
+        || !userp( this_object() ) )
+    {
+        return 0;
+    }
+    else
+    {
+        return 1;
+    }
+}
+
+private void create()
+{
+    Tasks = ([ ]);
+    TaskLevel = ([ ]);
+    TaskObjects = ([ ]);
+}
+
+private void heart_beat()
+{
+    // Qyz 根据runtime log作的修改
+    if ( !this_object() ) return;
+    if ( !userp( this_object() ) ) return;
+    foreach( string GroupName in ( this_object()->GetZuzhiId() + ({ "other" }) ) )
+    {
+        if ( CanTask( GroupName ) )
+        {
+            this_object()->eventTaskBegin( GroupName );
+        }
+    }
+}

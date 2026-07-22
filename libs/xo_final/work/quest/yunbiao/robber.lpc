@@ -1,0 +1,308 @@
+// 劫镖ＮＰＣ
+// Updated by Lonely
+inherit NPC;
+
+#include <ansi.h>
+
+int do_nod(string arg);
+int do_fkill(object ob);
+
+void create()
+{
+    set_name( comm_man_name(), ({ "robber" }));
+
+    set("gender", "男性" );
+    set("nickname", "劫匪");
+    set("age", 30 + random(30));
+    set("attitude", "friendly");
+
+    set_temp("apply/armor", 100);
+    set_temp("apply/damage", 50);
+
+    // 初始化NPC的能力
+    set( "combat_exp", 2000 );
+    set( "social_exp", 200 );
+
+    set_wugong( "penglai-xinfa", 100, 100, 1 );
+    set_wugong( "jiben-quanfa", 100, 100, 0 );
+    set_wugong( "changquan", 100, 100, 1);
+    set_wugong( "jiben-qinggong", 100, 100, 0 );
+    set_wugong( "xingyun-shenfa", 100, 100, 1 );
+
+    set_xiuwei_level_by_type( "unarmed", 1 );
+    set_xiuwei_level_by_type( "dodge", 1 );
+    set_xiuwei_level_by_type( "force", 1 );
+
+    setup(); 
+}
+
+void init()
+{
+    object ob;
+
+    ob = this_player();
+    if ( !query("want_kill") )
+    {
+        return;
+    }
+
+    if ( ob->query("id") == query("want_kill") )
+    {
+        add_action("do_nod", "nod"); 
+
+        if (! is_fighting()) 
+        {
+            remove_call_out("check_me");
+            call_out("check_me", 0);
+        }
+    }
+    else
+    {
+        add_action("do_kill", "kill");
+        add_action("do_kill", "fight");
+        add_action("do_kill", "steal");
+        /*add_action("do_kill", "exert");
+        add_action("do_kill", "perform");*/
+    }
+}
+
+// 如果接受了贿赂
+int do_nod(string arg)
+{
+    object me = this_player();
+    object ob = this_object(), obj;
+    int amount;
+
+    if ( !me->query_temp("lonely/waiting") || !arg || arg != ob->query("id") )
+    {
+        return 0;
+    }
+
+    me->command("nod");
+
+    if ( !intp(me->query_temp("lonely/waiting")) )
+    {
+        return 0;
+    }
+
+    if ( me->query_temp("lonely/gold") )
+    {
+        message_vision(HIW "只见$N" HIW "长笑三声：“哈哈哈，识时务者为俊杰，" +
+            RANK_D->query_respect(me) + "果然是明白人，嘿嘿，这区区小宝石" +
+            "就归你了，哈哈。”\n\n" NOR,
+            ob, me);
+        obj = new(MONEY_DIR "gold");
+        obj->set_amount(amount);
+        obj->move(me, 1);
+        tell_object(me, HIR + ob->name() + "递给了你" + chinese_number(amount) +
+                "两黄金以后，吐出一口鲜血，扬长而去。\n" NOR );
+        me->delete_temp("lonely");
+        remove_call_out("escape_me");
+        remove_call_out("check_me");
+        destruct(ob);
+        return 1;
+    }       
+
+    amount = me->query_temp("lonely/waiting");
+
+    message_vision(HIW "只见$N" HIW "长笑三声：“哈哈哈，识时务者为俊杰，" +
+        RANK_D->query_respect(me) + "果然是明白人，嘿嘿，这区区" +
+        chinese_number(amount) + "两白银就归你了，哈哈。”\n\n" NOR,
+        ob, me);
+    obj = new(MONEY_DIR "silver");
+    obj->set_amount(amount);
+    obj->move(me, 1);
+    tell_object(me, HIR + ob->name() + "递给了你" + chinese_number(amount) +
+            "两白银以后，吐出一口鲜血，扬长而去。\n" NOR );
+    me->delete_temp("lonely");
+    remove_call_out("escape_me");
+    remove_call_out("check_me");
+    destruct(ob);
+    return 1;
+}
+
+int check_me()
+{
+    object ob, me = this_object();
+
+    if ( objectp(ob = present(me->query("want_kill"), environment(me)) )
+        && !environment(me)->query("no_fight" )
+        && interactive(ob) && !ob->is_fighting(me) )
+    {
+        do_fkill(ob);
+    }
+
+    if (! ob)
+    {
+        remove_call_out("escape_me");
+        call_out("escape_me", 1, me, ob);
+        return 1;
+    }
+
+    call_out("check_me", 2);   
+
+    return 1;
+}
+
+int do_fkill(object ob)
+{
+    if( !this_object()->query_temp("lonely/waiting") )
+    {
+        if ( living(this_object()) )
+        {
+            message_sort(HIR "$N大喝道：“此山是我开，此树是我栽！" +
+                query("name", ob)+"识相的话，就把红货都交出来！\n"NOR,
+                this_object());  
+        }
+
+        this_object()->kill_ob(ob);
+        ob->kill_ob(this_object());    
+    }
+
+    return 1;
+}
+
+void start_escape(object ob, object me)
+{
+    call_out("escape_me", 180, ob, me);
+}
+
+int do_kill(string arg)
+{
+    string what, who;
+
+    if (! arg)
+    {
+        return 0;
+    }
+
+    if ( this_object()->id(arg) )
+    {
+        write("江湖人士，还是少惹为妙。\n");
+        return 1;
+    }
+    else if (sscanf(arg, "%s from %s", what, who) == 2 && this_object()->id(who))
+    {
+        write("还是到别处去施展你的本事吧。\n");
+        return 1;
+    }
+
+    return 0;
+}
+
+void escape_me(object ob, object me)
+{
+    message_vision(
+        "$N狞笑了几声：“今天心情好，" + RANK_D->query_self_rude(ob) +
+        "就放过你，不陪你玩了。”说罢，一个筋斗跳出战圈，不知去向。\n", ob);
+
+    destruct(ob);
+}
+
+void unconcious()
+{
+    object me, ob = this_object();
+    int amount = 1 + random(3);
+    string *condition = ({
+        "气喘吁吁，就要不支", "头重脚轻，马上就倒", 
+        "呕血成升，眼冒金星", "伤痕累累，无力招架", 
+    });
+
+    if ( objectp(me = query_last_damage_from()) 
+        && environment() == environment(me) 
+        && !me->query_temp("lonely/waiting") )
+    {
+        switch (random(15)) 
+        {
+            case 1: 
+                message_vision(HIR "眼见$N" HIR + condition[random(sizeof(condition))]
+                        +"，突然$N大喝一声，急退几步，\n“扑通”给$n跪了下来。"
+                        "\n" NOR, ob, me);
+                tell_object(me, HIW + ob->name() + "突然从怀里掏出一堆白花花的银子，小声"
+                        "对你道：“这位" + RANK_D->query_respect(me) + "，\n你"
+                        "就网开一面（nod）如何，这" + chinese_number(amount) +
+                        "两白银就归你了！”\n" NOR);
+                remove_all_enemy(); 
+                ob->set("kee", 1);
+                ob->set("sen", 1);
+                ob->set("gin", 1);
+                ob->set_temp("lonely/waiting", amount);
+                me->set_temp("lonely/waiting", amount);
+                return;
+
+            case 2:
+                message_vision(HIR "眼见$N" HIR + condition[random(sizeof(condition))]
+                        +"，突然$N大喝一声，急退几步，\n“扑通”给$n跪了下来。"
+                        "\n" NOR, ob, me);
+                tell_object(me, HIW + ob->name() + "突然从怀里掏出一块金子，小声"
+                        "对你道：“这位" + RANK_D->query_respect(me) + "，\n你"
+                        "就网开一面（nod）如何，这金子就归你了！”\n" NOR);
+                remove_all_enemy(); 
+                ob->set("kee", 1);
+                ob->set("sen", 1);
+                ob->set("gin", 1);
+                ob->set_temp("lonely/waiting", 1);
+                me->set_temp("lonely/waiting", 1);
+                me->set_temp("lonely/gold", 1);
+                return;
+
+            default: 
+                ::unconcious();
+                return;
+        }
+    }
+
+    if ( objectp(me) )
+    {
+        me->delete_temp("lonely");
+    }
+
+    ::unconcious();
+}
+
+varargs void die(object killer)
+{
+    int reward_exp, reward_score;
+    object killer1, me;
+
+    me = this_object();
+
+    if (! killer)
+    {
+        killer = query_last_damage_from();
+    }
+
+    if ( objectp(killer) )
+    {
+        killer1 = get_object(me->query("want_kill"));
+    }
+
+    message_vision(HIC"$N惨嚎一声，口喷鲜血，倒在地上死了。\n"NOR, me);
+
+    if ( killer1 )
+    {
+        if ( killer->query("id") == me->query("want_kill") )
+        {
+            reward_exp = 10 + random(20);
+            reward_score = 1 + random(2);
+
+            tell_object(killer1,
+                HIM "恭喜你又成功解决一名劫匪！\n" NOR + HIW "在实战中，你获得了" + 
+                CHINESE_D->chinese_number(reward_exp) + "点的实战经验，以及" + 
+                CHINESE_D->chinese_number(reward_score) + "点的『信任度』！\n" NOR); 
+
+            killer1->add("quest_yunbiao/reward_exp", reward_exp);
+            killer1->add("quest_yunbiao/reward_score", reward_score);
+            killer1->add("combat_exp", reward_exp);
+            killer1->AddZuzhiScore("fengxiang", reward_score);
+            killer1->delete_temp("lonely");
+        }
+    }
+
+    remove_call_out("escape_me");
+    remove_call_out("check_me");
+    ::die();
+
+    return;
+}
+

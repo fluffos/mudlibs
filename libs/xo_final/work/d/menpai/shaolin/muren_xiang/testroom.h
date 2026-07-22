@@ -1,0 +1,155 @@
+// common part of testroom 
+
+inherit ROOM;
+
+void init()
+{
+    add_action("do_quit", "quit");
+    add_action("do_stop", "stop");
+    add_action("do_kill", "kill");
+    add_action("do_bihua", "bihua");
+    add_action("do_fight", "fight");
+    if ( userp( this_player() ) )
+    {
+        call_out( "do_begin", 1, this_player() );
+        call_out( "do_check", 2, this_player() );
+    }
+    reset();
+}
+
+int do_quit(string arg)
+{
+    write("临阵脱逃？逃不掉啦，打吧！\n");
+    return 1;
+}
+
+int do_stop(string arg)
+{
+    write("进了木人巷你就不能罢战了。\n");
+    return 1;
+}
+
+int do_kill(string arg)
+{
+    write("那个可是木人啊...\n");
+    return 1;
+}
+
+int do_bihua(string arg)
+{
+    write("不是已经打了么？\n");
+    return 1;
+}
+
+int do_fight(string arg)
+{
+    write("不是已经打了么？\n");
+    return 1;
+}
+
+int do_check(object me)
+{
+    remove_call_out( "do_check" );
+    if ( me->query_temp( "finish_bihua" ) ||
+         me->query_temp( "netdead" ) ||
+         !living( me ) )
+    {
+        remove_call_out( "done_test" );
+        call_out( "done_test", 1, me );
+    }
+    else
+    {
+        call_out( "do_check", 3, me );
+    }
+    return 1;
+}
+
+int do_begin(object me)
+{
+    object this, npc1, npc2;
+    string fn1, fn2;
+    int room_index;
+   
+    remove_call_out( "do_begin" );
+    this = this_object();
+    room_index = this->query("room_index");
+    fn1 = __DIR__ + sprintf( "npc/npc%d1", room_index );
+    fn2 = __DIR__ + sprintf( "npc/npc%d2", room_index );
+    npc1 = new( fn1 );
+    npc2 = new( fn2 );
+    npc1->move( this );
+    npc2->move( this );
+    tell_object(me,@LONG
+
+你只见突然间，两旁木壁打开两扇暗门。从中跃出两个木人向你
+扑来。你一紧双拳，迎头接住木人的招式。
+LONG);
+    this->set_marks( "npc1", npc1 );
+    this->set_marks( "npc2", npc2 );
+    me->set_temp("be_defeated",0);
+    me->bihua_ob(npc1);
+   	me->bihua_ob(npc2);
+    npc1->bihua_ob(me);
+    npc2->bihua_ob(me);
+    this_object()->set_temp( "done_test", 0 );
+    call_out("done_test", 10 * ( 9 - room_index ), me);
+    return 1;
+}
+
+int done_test(object me)
+{
+    object *npc, this;
+    string msg;
+    int room_index;
+   
+    remove_call_out( "do_check" );
+    remove_call_out( "done_test" );
+    if ( !living( me ) || me->query_temp( "netdead" ) )
+    {
+        me->revive( 0 );
+        me->set_temp( "be_defeated", 1 );
+    }
+    this = this_object();
+    room_index = this->query("room_index");
+    //this->set_temp( "done_test", 1 );    
+    if ( objectp( query_marks( "npc1" ) ) )
+        destruct( query_marks( "npc1" ) );
+    if ( objectp( query_marks( "npc2" ) ) )
+        destruct( query_marks( "npc2" ) );
+    delete_marks( "npc1" );
+    delete_marks( "npc2" );
+    message("vision",@LONG
+暗门打开，两具木人缓缓的滑进暗槽之中。一切又回复原状。
+LONG, this );
+
+    if ( me->query_temp("be_defeated") )
+    {
+	    msg = sprintf( "少林寺第" +
+            CHINESE_D->chinese_number( me->query("family/generation") ) +
+            "代弟子" + me->name() + "闯木人巷第" +
+            CHINESE_D->chinese_number( room_index ) + "关失败！\n" );
+	    CHANNEL_D->do_channel( me, "ft", msg );
+        tell_object(me,"\n看来这次闯关是以失败告终了。\n");
+        me->delete_temp("finish_bihua");
+        me->add("mark/lose",1);
+        message_vision("墙上打开了一个边门，$N垂头丧气地走了出去。\n",
+            me); 
+        me->move(__DIR__"exit");
+    } 
+    else
+    {
+	    msg = sprintf( "少林寺第" +
+            CHINESE_D->chinese_number( me->query("family/generation") ) +
+            "代弟子" + me->name() + "过木人巷第" +
+            CHINESE_D->chinese_number( room_index ) + "关！\n" );
+	    CHANNEL_D->do_channel( me, "ft", msg );
+        me->delete_temp("finish_bihua");
+	    if ( room_index < 8 )
+            me->move( __DIR__ + sprintf( "testroom%d", room_index + 1 ) );
+        else
+            me->move( __DIR__"exit" );
+	    //message_vision("$N破关而去！\n",me);
+    }
+
+    return 1;
+}

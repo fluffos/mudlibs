@@ -1,0 +1,450 @@
+/* Filename : /system/daemon/band.c
+ * from XO Lib
+ * a daemon for dealing with ban and multi-login problem
+ * $Id$
+ * last modified by hydra 19991211
+ *      Change some functions name to be consitent
+ *      Move some functions here from xoban.c
+ *      Add some functions used by commands /cmds/arch/ban.c
+ */
+ 
+// #include <net/telnet.h>
+#include <mudlib.h>
+#include <net/daemons.h>
+#include <ansi.h>
+private void LoadData();
+int AddSite(string pattern);
+int RemoveSite(string pattern);
+int PrintSites();
+int IsBannedSite(string);
+int IsMultiLogin(string, object);
+int IsTimeAllowed(object);
+int IsLegalID(string);
+
+void Dump();
+
+private string *Sites = 0;
+private string *mlDeny = 0;
+private mapping mlAllow = 0;
+private string *BannedIds = 0;
+private string *BannedNames = 0;
+private mapping NewIps = 0;
+private nosave mapping tmpBannedSites = 0;
+
+private string last_error="未知的错误";
+private string *BadStrings = ({"baba","father","mother",
+   "grandpa","grandfather","fuck","mama","shit" });
+
+void create()
+{
+    seteuid(getuid());
+    LoadData();
+}
+
+void Dump()
+{
+    printf("Sites..........\n");
+    foreach(string s in Sites)
+    printf("%s\n",s);
+    printf("mlAllow : %O",mlAllow);
+}
+
+//删除字符串两头的空格和tab
+//类似于VB里面的Trim
+/*string trim(string str)
+{
+    int j, i = 0;
+    if ( ! strlen( str ) )
+        return str;
+    j = strlen(str) - 1;
+    while ( i<j && ( str[i] == ' ' || str[i] == '\t' ) )
+        i++;
+    while ( i<j && ( str[j] == ' ' || str[j] == '\t' ) )
+        j--;
+    return str[i..j];
+}*/ // moved to simul efun -- nerd 991214
+
+//从配置文件中读入数据，文件见程序开头的定义
+void LoadData()
+{
+    string *tmp, file;
+
+    Sites = ({});
+
+    // read the list of the banned sites
+    if (file = read_file(BANNED_SITES))
+    {
+        Sites = filter(explode(file, "\n"), (:trim($1) && $1[0]!='#':)) - ({0});
+    }
+    //read the list of mutli.deny
+    if (file = read_file(MULTI_DENY))
+    {
+        mlDeny = filter(explode(file,"\n"), (:trim($1) && $1[0]!='#':)) - ({0});
+    }
+    //read the list of multi.allow
+    //file format:
+    //      ip:id[,id...]
+    //   or ip:login_number_allowed
+    if (file = read_file(MULTI_ALLOW))
+    {
+        tmp = filter(explode(file,"\n"), (:trim($1) &&$1[0]!='#':)) - ({ "" });
+        if (sizeof(tmp))
+        {
+            mlAllow = allocate_mapping(sizeof(tmp));
+            foreach (string line in tmp)
+            {
+                string ip, id_list;
+                int max_ppl;
+                if ( (sscanf(line, "%s:%d",ip,max_ppl)) == 2 )
+                {
+                    mlAllow[ip] = max_ppl;
+                }
+                else
+               {
+                    sscanf(line, "%s:%s",ip, id_list);
+                    mlAllow[ip] = map(explode(id_list,","), (:trim($1):));
+                }
+            }
+        }
+    }
+    //read the list of banned name
+    if (file = read_file( BANNED_NAME ))
+    {
+        tmp = filter(explode(file, "\n"), (: $1 && $1[0]!='/':));
+        if (sizeof(tmp))
+        {
+            BannedNames = ({});
+            foreach( string s in tmp )
+            {
+               s = replace_string(s," ", "");
+            BannedNames += explode(s,","); // faint.
+            }
+        }
+    }
+    //read the list of banned id
+    if (file = read_file( BANNED_ID ))
+    {
+        tmp = filter(explode(file, "\n"), (: $1 && $1[0]!='/':));
+        if (sizeof(tmp))
+        {
+            BannedIds = ({});
+            foreach( string s in tmp )
+            {
+                s = replace_string(s," ", "");
+                BannedIds += explode(s,","); // faint.
+            }
+        }
+    }
+}
+
+
+//是否是Ban的地址
+//在/etc/banned_sites中定义
+int IsBannedSite(string site)
+{
+    foreach( string l in Sites )
+    {
+        if (regexp(site, l))
+        {
+            last_error = sprintf("你的 IP(%s)在 %s 不受欢迎。\n如有疑问，请向 %s 查询。", site, mud_name(), ADMIN_EMAIL );
+            return 1;
+        }
+    }
+    if ( tmpBannedSites )
+    {
+        if ( !undefinedp( tmpBannedSites[site] ) ) // you are banned
+        {
+            int tm = tmpBannedSites[site];
+            int cur_time = time();
+            // if time hasn't reached
+            if ( tm > cur_time )
+            {
+                last_error = sprintf("你的 IP(%s)暂时被封。\n请于%s分钟后再尝试登录。如有疑问，请向 %s 查询。",
+                        site, chinese_number( (tm-cur_time)/60 + 1 ), ADMIN_EMAIL );
+                return 1;
+            }
+            else
+            {
+                map_delete( tmpBannedSites, site );
+            }
+        }
+    }
+    return 0;
+}
+
+//判断是否是合法的id 
+int IsLegalID(string id)
+{
+    string file_name;
+    int i = strlen(id);
+
+    if ( i < 3 || i > 10 )
+    {
+        last_error = "英文名字的长度只能在 3 到 10 个英文字符之间。";
+        return 0;
+    }
+    id = lower_case( id );
+    while (i--)
+    {
+        if (id[i] < 'a' || id[i] > 'z' )
+        {
+            last_error = "英文名字只能用英文字母。";
+            return 0;
+        }
+    }
+    if (member_array(id, BannedIds) != -1)
+    {
+        file_name = sprintf(DATA_DIR "user/%c/%s",id[0],id);
+    if (file_size(file_name + __SAVE_EXTENSION__ ) >= 1)
+        {
+            last_error = "该帐号暂时被封，请用 guest 为 id 登录。";
+            return 0;
+        }
+        last_error = "该英文名字目前为ＭＵＤ保留id，禁止使用。";
+        return 0;
+    }
+    foreach( string bstr in BadStrings)
+    {
+        if (strsrch(id,bstr)!=-1)
+        {
+            last_error = "该英文名字包含不雅字符，禁止使用。";
+            return 0;
+        }
+    }
+    
+    return 1;
+}
+
+int IsLegalName(string name)
+{
+    int i = strlen(name);
+
+    // UTF8 FIX: strlen()/str[i] now count/return Unicode characters, not
+    // GBK bytes -- bound halved to a real character count, and every
+    // position is checked now (not just even byte offsets).
+    if (i <2 || i> 5)
+    {
+        last_error = "中文名字只能是 2 到 5 个中文字。";
+        return 0;
+    }
+    while(i--)
+    {
+        if ( name[ i ] <= ' ' ||
+                ( !is_chinese(name[ i..<0 ]) ) )
+        {
+            last_error = "中文名字不能含有非中文字符。";
+            return 0;
+        }
+    }
+
+    if ( member_array( name, BannedNames ) != -1 )
+    {
+        last_error = "该中文名字为本ＭＵＤ保留，禁止使用。";
+        return 0;
+    }
+    return 1;
+}
+
+//判断是否允许MultiLogin
+//禁止在/etc/multi.deny中定义
+//允许在/etc/mutli.allow中定义
+int IsMultiLogin(string arg, object ob)
+{
+   string my_ip;
+    int ret1, ret;
+    my_ip = query_ip_number( ob );
+    // ret 是目前和我一个ip的人数.
+//    if (my_ip=="211.151.90.54"||my_ip=="211.101.236.24"||my_ip=="211.99.212.14")
+//	    return 0;
+    ret1 = sizeof(filter(users(), 
+                (: query_ip_number($1) == $(my_ip) &&       // ip相同的
+                $1->query("id") != $(arg) :)));           // 非断线的
+    if (!ret1)
+          {
+               last_error = sprintf("等陆和平居民之前必须等陆一个普通居民。\n", my_ip);
+               return 1;
+          }       
+    ret = sizeof(filter(users(), 
+                (: query_ip_number($1) == $(my_ip) &&       // ip相同的
+                $1->query("id") != $(arg)  &&
+                $1->query("peaceful") :)));           // 非断线的
+    if ( !ret )
+    return 0;
+   if (ret >=1 &&!wizardp(ob))
+          {
+               last_error = sprintf("你的IP(%s)已经登陆了一个和平居民,\n", my_ip);
+               last_error = "为了游戏的公平性，禁止同一个IP等陆两个以上的和平居民。\n"; 
+                 return 1;
+          } 
+      return 0;
+ 
+}
+
+//判断等新人的时间间隔是否大于5分钟
+int IsTimeAllowed(object ob)
+{
+    string ip = query_ip_number(ob); 
+    if (sizeof(NewIps))
+    {
+        if ( undefinedp(NewIps[ip]) )
+        {
+            NewIps[ip] = time();
+        }
+        else
+        {
+            int lasttime = NewIps[ip];
+            if ( time() - lasttime < 180 )
+            {
+                last_error = "你的ＩＰ" + ip + "上次新登录玩家时间:"
+                    + ctime(lasttime)[11..18]
+                    + " 和现\n在间隔三分钟，请过会儿再来。";
+                return 0;
+            }
+            else
+                NewIps[ip] = time();
+        }
+    }
+    else
+    {
+        NewIps = allocate_mapping(1);
+        NewIps [ip] = time();
+    }
+    return 1;
+}
+
+//打印出被ban掉的sites
+//指令ban调用本函数
+int PrintSites()
+{
+    if(!sizeof(Sites))
+        return 1;    
+    foreach ( string site in Sites)
+        write(site + "\n");
+    return 1;
+}
+
+//往banned_sites文件中加入一些地址
+int AddSite(string site)
+{
+    Sites += ({site});
+    if ( write_file(BANNED_SITES, site + "\n", 0) )
+        return 1;
+    else
+        return 0;
+}
+
+//处理multi.allow
+int PrintMultiAllow()
+{
+    printf("%O\n",filter(explode(read_file(MULTI_ALLOW),"\n"), (:trim($1) &&$1[0]!='#':)) 
+                - ({ 0 }));
+    return 1;
+}
+
+int AddMultiAllow(string line)
+{
+    string ip,id_list;
+    int max_ppl;
+    if ( (sscanf(line, "%s:%d",ip,max_ppl)) == 2 )
+    {
+        mlAllow[ip] = max_ppl;
+        if ( ! write_file(MULTI_ALLOW,line+"\n",0) )
+            return 0;
+    }
+    else if(sscanf(line, "%s:%s",ip, id_list)==2)
+    {
+        mlAllow[ip] = map(explode(id_list,","), (:trim($1):));
+        if ( !write_file(MULTI_ALLOW,line+"\n",0) )
+            return 0;
+    }
+    else
+    {
+        write("格式错误。\n正确格式：ip:number_of_id\n         ip:id_list(以逗号格开)\n");
+        return 0;
+    }
+    return 1;
+}
+
+//处理multi.deny
+int PrintMultiDeny()
+{
+    if(!sizeof(mlDeny))
+        return 1;
+    foreach ( string ip in mlDeny)
+        write(ip + "\n");
+    return 1;
+}
+
+int AddMultiDeny(string site)
+{
+    mlDeny += ({site});
+    if ( write_file(MULTI_DENY, site + "\n", 0) )
+        return 1;
+    else
+        return 0;
+}
+    
+//打印出被ban掉的ID
+//指令ban调用本函数
+int PrintID()
+{
+    if(!sizeof(BannedIds))
+        return 1;
+    foreach ( string id in BannedIds)
+        write(id + "\n");
+    return 1;
+}
+
+//往banned_id文件中加入一些地址
+int AddID(string id)
+{
+    BannedIds += ({id});
+    if ( write_file(BANNED_ID, id + "\n", 0) )
+        return 1;
+    else
+        return 0;
+}
+
+varargs int AddTempBannedSite( string site, int mins )
+{
+    // calculate the time to ban.
+    int secs = time();
+    if ( mins <= 0 )
+    {
+        secs += 30*60; // default ban it for 30 mins
+    }
+    else
+    {
+        secs += mins * 60;
+    }
+
+    // add it to the mapping.
+    if ( !tmpBannedSites )
+    {
+        tmpBannedSites = ([ site : secs ]);
+    }
+    else
+    {
+        tmpBannedSites[ site ] = secs;
+    }
+    return 1;
+}
+
+int RemoveTempBannedSite( string site )
+{
+    return map_delete( tmpBannedSites, site );
+}
+
+mapping GetTempBannedSites()
+{
+    return copy(tmpBannedSites);
+}
+
+// --- new changes: add function get_last_error()
+// to get the error mes : so that we can use this mes every where, such
+// as logind and web login :)
+string get_last_error()
+{
+    return last_error;
+}
+

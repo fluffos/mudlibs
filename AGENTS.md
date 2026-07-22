@@ -460,6 +460,16 @@ them:
   size; treat the full sweep as a nice-to-have on mega-libs, not a
   required gate the way it is on normal-sized (hundreds to low-thousands
   of files) libs.
+  **The threshold is lower than "tens of thousands"**: `xo_final`, at only
+  ~7,174 files, ALSO drove this same 23GB host down to ~214MB free with
+  heavy swapping after ~12 minutes/18GB RSS on the lpcc process alone —
+  apparently something about this particular lib's content (large/deeply
+  nested mapping literals in skill-action tables?) makes its memory
+  footprint per file much heavier than a typical lib. **Don't assume
+  "normal-sized" (low thousands of files) is automatically safe** — watch
+  `free -h` / the lpcc process's RSS while a sweep runs on ANY lib, and
+  kill it the moment it's eating a large fraction of system RAM,
+  regardless of file count.
 
 ### 7. Missing `get_root_uid()`/`get_bb_uid()` master applies (PACKAGE_UIDS)
 
@@ -1179,6 +1189,44 @@ normal pipeline: grep for `is_chinese\|is_chinese2` definitions and
 `check_legal_name`/`named.lpc`'s `PATH(` macro on sight, fix using the
 patterns above, and — this is the part earlier passes skipped — actually
 type a Chinese name through registration before marking a lib `done`.
+
+### 15i. A no-leading-whitespace Chinese comment can eat the start of the *next* physical line, silently deleting a declaration
+
+Found twice in `xo_final`: a `//`-style comment written directly against
+the left margin, immediately followed (same line, no space) by the start
+of the actual code on the line below it in the source's visual layout —
+except it isn't actually "the line below", the comment and the code were
+on the same physical line all along (`// <中文文字>int is_native_skill()`),
+so `//` swallows the rest of that line, including the function's return
+type and name, leaving a bare `{` on the next line with no matching
+declaration. Compile error is something like "unexpected `{`" pointing at
+the *following* line, which is misleading — the real defect is one line
+above. Fix: split the comment onto its own line. Cheap to grep for
+proactively: `grep -rn '^//.*[a-zA-Z_][a-zA-Z_0-9]*(' ` flags candidates,
+but false-positive-heavy (Chinese text often contains stray parens); in
+practice it's faster to just fix each compile error as it surfaces and
+recognize the shape once you've seen it once.
+
+### 15j. Anti-flood "one new registration per N minutes per IP" throttles will make a *repeat* interactive test look like a silent registration bug
+
+Several of these mudlibs throttle `new` character registration per source
+IP (e.g. `xo_final`'s `band.lpc`'s `IsTimeAllowed()`, a 180-second
+in-memory `NewIps` mapping) to stop registration spam. Since
+`mudclient.py` always connects from localhost, running a second
+registration test shortly after a first one from the same driver process
+trips this — and the rejection path (`logind.lpc`'s `die()`) has its
+error-message `write()` commented out, so the connection just drops with
+**zero output**, indistinguishable at first glance from an actual crash.
+Symptom: a `new` → `<id>` sequence that worked moments ago now produces
+nothing at all, no error in `debug.log` either. Before chasing this as a
+bug, check: (a) did a prior test from the same IP already register
+someone recently, (b) does the lib have an `IsTimeAllowed`/`NewIps`-shaped
+throttle. Fix for testing purposes: the throttle mapping is normally
+in-memory-only (not saved to disk) — killing and restarting the driver
+process clears it instantly, cheaper than waiting out the real cooldown.
+Do a full `new → id → confirm → Chinese name → password` sequence in ONE
+continuous `mudclient.py` connection/session rather than several separate
+connections, so the throttle never has a chance to trigger mid-test.
 
 ---
 

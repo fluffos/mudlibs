@@ -1,0 +1,201 @@
+#include <ansi.h>
+#include <room.h>
+
+inherit ROOM;
+
+void create()
+{
+    set("short", YEL"石洞"NOR);
+    set("long", @LONG
+千年古洞, 四处留下岁月年痕. 四壁已经斑斑驳驳, 依稀可见有些裂痕了.
+墙上象是用油彩绘着一些字画. 石壁上刻着一首唐诗<<侠客行>>。但只有诗句，
+却无注释。在石壁上还刻有几十行蝌蚪文. 光线很暗，你只好用手仔细摸索(canxiu)，
+才能了解你们写的详细内容。
+LONG
+    );
+
+    set("exits", ([
+        "north": __DIR__"out",
+    ]));
+    set("not_startroom", 1);
+
+    setup();
+}
+
+void init()
+{
+    add_action("do_canxiu", "canxiu");
+}
+
+int do_canxiu(string arg)
+{
+    object me, skill_ob;
+    int skill_jibie;
+
+    me = this_player();
+
+    if ( me->query_temp("canxiu/yanjiu") )
+    {
+        return notify_fail("你不是已经在参修了！\n");
+    }
+
+    if ( !arg || !(skill_jibie = me->query_jibie( arg )) )
+    {
+        return notify_fail(arg + "这个东西你如何参修得了？真是莫名其妙！\n");
+    }
+
+    if ( me->query("gin") < 30 )
+    {
+        return notify_fail("你现在无法集中精神来参修。\n");
+    }
+
+    if ( !me->can_act() || me->is_fighting() )
+    {
+        return notify_fail("你现在无法静下心来参修武功。\n");
+    }
+
+    if ( file_size( SKILL_D(arg) + ".lpc" ) == -1 )
+    {
+        return notify_fail("没有这门武功。\n");
+    }
+
+    skill_ob = load_object( SKILL_D(arg) );
+
+    if ( !skill_ob->valid_learn( me ) )
+    {
+        return 0;
+    }
+
+    if ( skill_jibie < 300 )
+    {
+        return notify_fail("你还是先跟师傅好好学习吧。\n");
+    }
+
+    if ( me->query_lingwu_ratio( arg ) < 90 )
+    {
+        return notify_fail("贪多嚼不烂，你且下去多多练习吧。\n");
+    }
+
+    me->set_temp("canxiu/yanjiu", 1);
+
+    tell_object( me, "你踱到墙边，开始一幅幅仔细观看上面的对战图。\n");
+
+    call_out("start_canxiu", 5, me, arg );
+
+    return 1;
+}
+
+int start_canxiu(object who, string arg)
+{   
+    int jibie;                            
+    int times;
+
+    if ( !who || environment(who) != this_object() )
+    {
+        return 1;
+    }
+
+    jibie = who->query_jibie(arg);
+    times = jibie / 50;
+
+    tell_object( who, "你边看边想，不知不觉跟着墙上的图形比划了起来......\n");
+
+    call_out("start_bihua", 5, who, arg, times);
+
+    return 1;
+}            
+
+int start_bihua(object who, string arg, int times)
+{   
+    object skill_ob;
+    int now_gin;
+    int gain_xiuwei, gain_jibie, skill_dengji;
+    string xiuwei_type;
+    mapping action;
+
+    if ( !who || environment(who) != this_object() )
+    {
+        return 1;
+    }
+
+    if ( times > 0 )
+    {
+        tell_object(who, "你将所学的「" + to_chinese(arg) + "」各招式施展出来，然后和墙上所绘进行对照。\n");
+        action = SKILL_D(arg)->query_action(who->query_jibie(arg));
+        if ( undefinedp(action["lian"]) )
+        {
+            tell_object(who, sprintf("你气沉丹田, 认真练习%s。\n", to_chinese(arg)));
+        }
+        else
+        {
+            tell_object(who, action["lian"] + "。\n");
+        }
+        tell_object(who, "你只觉平时许多不懂之处，在此一参修，顿时豁然开朗，颇有收益！\n\n");
+
+        call_out("start_bihua", 5, who, arg, times - 1);
+        return 1;
+    }
+
+    who->delete_temp("canxiu/yanjiu");
+
+    now_gin = who->query("gin");
+
+    tell_object(who, HIM"\n你停手收势，将刚才所学细细回味归纳，反复推敲。\n"NOR);
+    tell_object(who, HIM"只觉倘若临敌，施展「" + to_chinese(arg) + "」必会更加得心应手!\n"NOR);
+
+    who->set("gin", now_gin / 3);
+    skill_ob = load_object( SKILL_D(arg) );
+
+    // 先考虑请教技能的情况
+    if ( !skill_ob->is_knowledge() )
+    {
+        gain_jibie = 1;
+
+        xiuwei_type = skill_ob->query_xiuwei_type();
+
+        tell_object(who, CYN"\n你的「" + to_chinese(arg) + "」这门武功又上了一层楼！\n"NOR);
+
+        who->improve_jibie( arg, gain_jibie );
+        skill_dengji = skill_ob->query_dengji();
+        if ( !skill_dengji )
+        {
+            skill_dengji = 1;
+        }
+
+        gain_xiuwei = random(skill_dengji + 1) + 1;
+        if ( gain_xiuwei && gain_jibie )
+        {
+            who->improve_xiuwei( xiuwei_type, gain_xiuwei );
+        }
+
+        return 1;
+    }
+
+    // 请教文化类的东西是不会有修为的啦. :-)
+    gain_jibie = 1 + random(who->query("spi") / 10 + 1);
+
+    tell_object(who, CYN"\n你的「" + to_chinese(arg) + "」这门武功又上了一层楼！\n"NOR);
+
+    who->improve_jibie( arg, gain_jibie );
+    who->improve_jibie( "zonggang", random(2) );
+
+    return 1;
+}
+
+int valid_leave(object me, string dir)
+{
+    if( !me->can_act() || me->is_fighting() )
+    {
+        return notify_fail("你现在正在参修，不能随便走动。\n");
+    }
+
+    if ( me->query_temp("canxiu/yanjiu") )
+    {
+        return notify_fail("你还没参修完呢。\n");
+    }
+
+    me->delete_temp("canxiu/yanjiu");
+
+    return ::valid_leave( me, dir );
+}
+

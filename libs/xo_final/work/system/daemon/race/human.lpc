@@ -1,0 +1,281 @@
+// human.c
+
+// A normal human is at least 40 kg weight
+#define BASE_WEIGHT 40000
+
+inherit F_DBASE;
+
+int new_random();
+
+void create()
+{
+    seteuid(getuid());
+}
+
+void setup_human(object ob)
+{
+    mapping my;
+    int str, con;
+    int s;
+
+    my = ob->query_entire_dbase();
+
+    //ob->set_default_action(__FILE__, "query_action");
+    //ob->set("default_actions", (: call_other, __FILE__, "query_action" :));
+
+    if (! stringp(my["unit"])) my["unit"] = "位";
+
+    if ( ! stringp(my["gender"]) )
+    {
+        if ( random(2) )
+        {
+            my["gender"] = "男性";
+        }
+        else
+        {
+            my["gender"] = "女性";
+        }
+    }
+
+    if (! pointerp(my["limbs"])) my["limbs"] = ({
+            "头部", "颈部", "胸口", "后心", "左肩", "右肩", "左臂",
+            "右臂", "左手", "右手", "两肋", "左脸", "腰间", "小腹",
+            "左腿", "右腿", "右脸", "左脚", "右脚", "左耳", "右耳"
+        });
+
+    if ( undefinedp(my["age"]) ) my["age"] = random(30) + 15;
+
+    // NPC也应该用新的随机函数产生天赋。
+    if ( undefinedp(my["str"]) ) my["str"] = new_random() + 10;
+    if ( undefinedp(my["cor"]) ) my["cor"] = new_random() + 10;
+    if ( undefinedp(my["int"]) ) my["int"] = new_random() + 10;
+    if ( undefinedp(my["spi"]) ) my["spi"] = new_random() + 10;
+    if ( undefinedp(my["cps"]) ) my["cps"] = new_random() + 10;
+    if ( undefinedp(my["per"]) ) my["per"] = new_random() + 10;
+    if ( undefinedp(my["con"]) ) my["con"] = new_random() + 10;
+    if ( undefinedp(my["kar"]) ) my["kar"] = new_random() + 10;
+    if ( undefinedp(my["dex"]) ) my["dex"] = new_random() + 10;
+    if ( undefinedp(my["can_speak"])) my["can_speak"] = 1;
+    if ( undefinedp(my["unit"])) my["unit"] = "位";
+    if ( undefinedp(my["gender"])) my["gender"] = random(2)? "男性" : "女性";
+    if ( undefinedp(my["attitude"])) my["attitude"] = "peaceful";
+
+    str = my["str"];
+    con = ob->query_con();
+
+    // NPC 建立时应该有满的食物和饮水，以便恢复体能，否则会产生BUG
+    // 只要死缠着打个没完，NPC就死定了。
+    if ( !userp(ob) && undefinedp(my["food"]) )
+    {
+        my["food"] = (str + 10) * 10;
+    }
+
+    if ( !userp(ob) && undefinedp(my["water"]))
+    {
+        my["water"] = (str + 10) * 10;
+    }
+
+    if ( !my[ "max_force" ] )
+    {
+        if ( userp(ob) )
+        {
+            my[ "max_force" ] = 0;
+        }
+        else
+        {
+            my[ "max_force" ] = ob->query_max_force(ob->query("using_force"));
+        }
+    }
+
+    if ( !userp(ob) )
+    {
+        my[ "force" ] = 2 * my[ "max_force" ];
+
+        if ( !my["force_factor"] )
+        {
+            my["force_factor"] = my["max_force"] / 10;
+        }
+    }
+
+    // 以下是4.4 1997新修改的内容。( by lin )
+    // 然后在19980916根据实际运行情况做适当调整。
+    // 因为战斗太短，为增加多样性而适当增加气。(by lnwm)
+    if ( userp(ob) || undefinedp(my["max_gin"]) )
+    {
+        s = ob->query_int() * 5 + ob->query_con() + ob->query_dex() + ob->query_str();
+        my["max_gin"] = 100;
+
+        if ( my["age"] <= 16 )
+        {
+            my["max_gin"] = 50 + my["age"] * s * 2 / 3;
+        }
+        else if ( my["age"] <= 40 )
+        {
+            my["max_gin"] += (my["age"] - 16) * s * 2 / 3;
+        }
+        else
+        {
+            my["max_gin"] += (40 - 16) * s * 2 / 3;
+        }
+
+        if ( (int)my["max_force"] > 0 )
+        {
+            my["max_gin"] += (int)my["max_force"] / 4;
+        }
+
+        my["max_gin"] += my["max_gin"] / 10 * ob->query_xiuwei_dengji("zonggang");
+
+        if (userp(ob) && my["breakup"])
+        {
+            my["max_gin"] += my["max_gin"];
+        }
+
+        if (userp(ob) && my["animaout"])
+        {
+            my["max_gin"] += my["max_gin"];
+        }
+
+        if ( userp(ob) )
+        {
+            my["max_gin"] += my["max_gin"] * ob->query("reborn/times");
+            my["max_gin"] += ob->query("jingmai/gin");
+        }
+
+        if ( userp(ob) && ob->query("jingmai/finish") )
+        {
+            my["max_gin"] += ZHOUTIAN_D->query_jingmai_effect("gin"); 
+        }
+
+        my["max_gin"] += ob->query_temp("apply/max_gin");
+
+        if ( my["max_gin"] < 100 )
+        {
+            my["max_gin"] = 100;
+        }
+    }
+
+    if ( userp(ob) || undefinedp(my["max_kee"]) ) 
+    {
+        s = ob->query_con() * 5 + ob->query_str() + ob->query_con() + ob->query_dex();
+        my["max_kee"] = 100;
+
+        if ( my["age"] < 16 )
+        {
+            my["max_kee"] = 60 + my["age"] * my["con"] / 2;
+        }
+        else if ( my["age"] < 40 )
+        {
+            my["max_kee"] += (my["age"] - 11) * s * 2 / 3;
+        }
+        else
+        {
+            my["max_kee"] += (40 - 16) * s * 2 / 3;
+        }
+
+        if ( (int)my["max_force"] > 0 )
+        {
+            my["max_kee"] += (int)my["max_force"] / 4;
+        }
+
+        my["max_kee"] += my["max_kee"] / 10 * ob->query_xiuwei_dengji("force");
+
+        if ( userp(ob) && my["breakup"] )
+        {
+            my["max_kee"] += my["max_kee"] * 2;
+        }
+
+        if ( userp(ob) )
+        {
+            my["max_kee"] += my["max_kee"] * ob->query("reborn/times");
+        }
+
+        if ( userp(ob) )
+        {
+            my["max_kee"] += ob->query("jingmai/kee");
+        }
+
+        if ( userp(ob) && ob->query("jingmai/finish") )
+        {
+            my["max_kee"] += ZHOUTIAN_D->query_jingmai_effect("kee"); 
+        }
+
+        my["max_kee"] += ob->query_temp("apply/max_kee");
+    }
+
+    // 在这里，由于设定了新的sen的概念，我们现在把体能作成未成年以前（<=20），
+    // 每年增加很多，成年后不变，五十岁后开始减。
+    if ( userp( ob ) || undefinedp( my[ "max_sen" ] ) ) 
+    {
+        if ( my["age"] <= 14 )
+        {
+            my["max_sen"] = 100;
+        }
+        else if ( my["age"] <= 20 )
+        {
+            my["max_sen"] = 100 + my[ "max_force" ] / 12 + ( my[ "age" ] - 14 ) * ( ( str + con ) / 2 + 20 );
+        }
+        // 体能在二十岁前每年加(臂力(原始的)+根骨(可以增加))/2+20;
+        else if ( my[ "age" ] <= 50 )
+        {
+            my[ "max_sen" ] = 100 + my[ "max_force" ] / 12 + 6 * ( ( str + con ) / 2 + 20 );
+        }
+        // 五十岁以前保持不变（？是不是应该和根骨，臂力的变化而变化呢？
+        // 是的,my[]是变化前的，所以根骨应该用ob->query_con();
+        // 五十岁后每年减十。
+        else
+        {
+            my[ "max_sen" ] = 100 + my[ "max_force" ] / 12 + 6 * ( ( str + con ) / 2 + 20 ) - ( my[ "age" ] - 50 ) * 10;
+        }
+
+        if ( (int)my["max_force"] > 0 )
+        {
+            my["max_sen"] += (int)my["max_force"] / 3;
+        }
+
+        my["max_sen"] += my["max_sen"] / 10 * ob->query_xiuwei_dengji("dodge");
+
+        if ( userp(ob) && my["breakup"] )
+        {
+            my["max_sen"] += my["max_sen"] * 2;
+        }
+
+        if ( userp(ob) )
+        {
+            my["max_sen"] += my["max_sen"] * ob->query("reborn/times");
+        }
+
+        my["max_sen"] += ob->query_temp("apply/max_sen");
+
+        if ( my["max_sen"] < 100 )
+        {
+            my["max_sen"] = 100;
+        }
+    }
+
+    ob->set_default_object(__FILE__);
+
+    // 这个负重量应该和enforce后的str有关，现在先不改了。
+    if ( !ob->query_weight() )
+    {
+        ob->set_weight(BASE_WEIGHT + (my["str"] - 10) * 2000);
+    }
+}
+
+// by locker
+int new_random()
+{
+   float base, u1, u2, n, N;
+
+    N = -0.1;
+    while ( N < 0 )
+    {
+        base = random( 9999 ) + 1;
+        u1 = base / 10000;
+        base = random( 9999 ) + 1;
+        u2 = base / 10000;
+        n = sqrt( -2 * log( u1 ) ) * cos( 2 * 3.1415 * u2 );
+        N = n * 4.7 +10.5;
+    }
+    return to_int( N );
+}
+

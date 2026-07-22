@@ -1,0 +1,290 @@
+// Filename : /clone/misc/user.c
+#include <origin.h>
+#include <user.h>
+#include <ansi.h>
+#include <options.h>
+#include <command.h>
+#include <room.h>
+#include <debug.h>
+
+inherit CHARACTER;
+inherit F_AUTOLOAD;
+inherit F_SAVE;
+inherit F_AUTOSAVE;
+inherit F_ALIAS;
+
+//inherit F_EDIT;
+inherit F_EDITOR;
+inherit F_INTERFACE;
+inherit F_INTERACTIVE;
+inherit F_MESSAGE;
+inherit F_MORE;
+
+private nosave int last_age_set;
+
+// Last command execute time
+private nosave int last_time;
+
+// Last interval execute commands count
+private nosave int last_count;
+
+// Death warning
+private int DeadWarning = 0;
+private nosave object input_ob; // www mud support
+
+//private nosave int * Screen;
+
+void create()
+{
+    seteuid("Mudlib");
+    character::create();
+//    task::create();
+//    Screen = ({ 80,24 });
+    interface::create();
+    USER_D->add_user(this_object());
+    set_name("使用者物件", ({ "user object", "user", "object"}));
+}
+
+void reset()
+{
+    CHAR_D->reset_character(this_object());
+}
+
+// This is used by F_SAVE to determine the filename to save our data.
+string query_save_file()
+{
+    string id;
+
+    id = geteuid();
+
+    if (!id)
+    {
+        id = getuid();
+    }
+
+    if (!stringp(id))
+    {
+        return 0;
+    }
+
+    return sprintf(DATA_DIR "user/%c/%s", id[0], id);
+}
+
+int save()
+{
+    int res;
+    object me = this_object();
+
+    save_autoload();
+    res = ::save();
+    clean_up_autoload(); // To save memory
+
+    USER_D->save_user(me);
+
+    return res;
+}
+
+int query_last_age_set()
+{
+    return last_age_set;
+}
+
+void set_last_age_set(int time)
+{
+    last_age_set = time;
+}
+
+// This function updates player's age, called by heart_beat()
+void update_age()
+{
+    USER_D->update_user_age(this_object());
+}
+
+void heart_beat()
+{
+    character::heart_beat();
+
+    USER_D->user_heart_beat(this_object());
+}
+
+void setup()
+{
+    // We want set age first before new player got initialized with
+    // random age.
+    update_age();
+    ::setup();
+    restore_autoload();
+    USER_D->setup(this_object());
+}
+
+void eventLogin()
+{
+    USER_D->eventLogin(this_object());
+}
+
+void eventQuit()
+{
+    USER_D->eventQuit(this_object());
+}
+
+void get_verb_error( string cmd )
+{
+    string err;
+    string* p = explode( cmd, " " );
+
+    err = "/system/daemon/verbd"->get_error_msg( p[0] );
+
+    if ( err )
+    {
+        write( err + "\n" );
+    }
+    else
+    {
+        write("You can't do that!!!! -- by nerd\n");
+    }
+}
+
+mixed process_input(string cmd)
+{
+    object this;
+    mixed s;
+    int _debug;
+    string ret;
+
+    if ( cmd[0] == '@' )
+    {
+        _debug = 1;
+        cmd = cmd[1..];
+    }
+    ret = editor::process_input(cmd);
+
+    if ( ret == "" )
+    {
+        return "";
+    }
+    this = this_object();
+
+    if (!wizardp(this))         //sure be a user.
+    {
+        // nerd: 2000. 11. 9: removed start_busy if cmd count too many.
+        if (time() - last_time == 0)
+        {
+            last_count++;
+            if ( 0 < USER_D->user_cmd_limit_per_second(this) && last_count > USER_D->user_cmd_limit_per_second(this) )
+            {
+                return "";
+            }
+        }
+        else
+        {
+            last_time = time();
+            last_count = 0;
+        }
+    }
+    ret = alias::process_input(cmd);
+
+    if ( wizardp(this) )
+    {
+        if ( _debug )
+        {
+            s = parse_sentence( ret, 2 );
+        }
+        else
+        {
+            s = parse_sentence( ret );
+        }
+
+        if ( stringp( s ) )
+        {
+            if ( strsrch( s, "You can't" ) == 0 )
+            {
+                get_verb_error( ret );
+            }
+            else
+            {
+                write( s + "\n" );
+            }
+            return 1;
+        }
+
+        if ( s < 0 )
+        {
+            get_verb_error( ret );
+            return 1;
+        }
+        else if ( s > 0 )
+        {
+            return 1;
+        }
+        else
+        {
+            return ret;
+        }
+    }
+    else // !wizarp this
+    {
+        return ret;
+    }
+}
+
+int visible(object ob)
+{
+    int result = USER_D->visible(this_object(), ob);
+
+    if ( 2 != result )
+    {
+        return result;
+    }
+
+    return ::visible(ob);// ::visiable must return 1:)
+}
+
+varargs int move(mixed dest, int silent)
+{
+    if ( ::move(dest, silent) )
+    {
+        USER_D->move_here(this_object(), silent);
+        return 1;
+    }
+
+    return 0;
+}
+
+// -- www mud support
+void remove(string euid)
+{
+    if ( input_ob )
+    {
+        input_ob->player_net_dead();
+    }
+    USER_D->remove_user(this_object());
+    ::remove(euid);
+}
+
+void net_dead()
+{
+    if (input_ob)
+    {
+        input_ob->player_net_dead();
+    }
+    ::net_dead();
+}
+
+void start_more(string content)
+{
+//  if (is_html_user())
+//      receive(translate(content));
+//  else
+    ::start_more(content);
+}
+
+void set_input_ob(object ob)
+{
+    input_ob = ob;
+}
+
+object get_input_ob()
+{
+    return input_ob;
+}
+

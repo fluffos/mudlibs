@@ -1,0 +1,78 @@
+# xo_final — 笑傲江湖最终版1.2 (The Smiling, Proud Wanderer — "Final" Edition)
+
+Archive: `xo最终版1.2.rar`. Port: 40024. Status: **done** (boots clean,
+full registration flow verified end-to-end including a real Chinese name).
+
+## What this is
+
+Same TMI-2/ES2 (Falcon) lineage as `xo` (#28), but the full, un-trimmed
+"final" build — ~7,174 `.c` files vs `xo`'s 1395 "mini edition". Same
+`secure/daemon/{master,sefun}` layout. A homebrew test-station banner
+("自玩测试站... 本lib是在mini xo基础之上，全新设计开发而成") confirms this
+is a fork built on top of the mini edition.
+
+## Fixes applied
+
+1. **AGENTS.md §4 (lazy security-daemon load)**: applied proactively to
+   `secure/daemon/master.lpc`'s `valid_write`/`valid_read`, same shape as
+   `xo`.
+2. **AGENTS.md §15h (GBK byte-range Chinese detection)**: `secure/sefun/
+   chinese.lpc`'s `is_chinese`, `system/daemon/band.lpc`'s `IsLegalName`,
+   and `system/daemon/logind.lpc`'s length checks all fixed to the CJK
+   codepoint range / halved character-count bounds, applied proactively
+   from the catalog before first boot.
+3. **New: "comment eats next line" typo**, found twice — a Chinese-text
+   comment line with no leading whitespace runs `//` right into the start
+   of the *next* physical line's code, silently deleting a function
+   declaration and leaving a dangling `{`:
+   - `system/skill/basic/kongshou.lpc`: `// ...int is_native_skill()\n{`
+   - `d/menpai/shaolin/npc3/hui_quest.lpc`: `// ...if ( random(...) < 100 )`
+   Both fixed by moving the comment to its own line above the code.
+4. **Lossy GBK→UTF8 conversion corruption**: `convert_lib.sh`'s `iconv -c`
+   pass silently drops genuinely-invalid byte sequences in some raw `.c`
+   files, occasionally eating a string literal's closing quote (breaking
+   syntax) and sometimes leaving behind invisible Unicode Private-Use-Area
+   characters (``, ``) that defeat exact-string `Edit` calls.
+   Surveyed the whole tree with `iconv -f GBK -t UTF-8` against the RAW
+   pre-conversion files to find every instance (33 total flagged,
+   most cosmetic/non-fatal); confirmed and fixed the ~8 in `system/skill`
+   that actually broke compilation, reconstructing each closing quote
+   from context (sibling "action"/"lian"/"zhaoshi" fields' patterns):
+   `mohe-zhi.lpc`, `yuanyang-dao.lpc`, `taizu-quan.lpc` (two spots),
+   `dagou-bangfa.lpc`, `dugu-jiujian.lpc`, `baye-zhui.lpc`. The two with
+   hidden PUA characters needed Python line-index read/write instead of
+   the `Edit` tool's exact-substring match.
+
+## Interactive test result — full registration flow
+
+Verified the complete registration path in one continuous connection
+(critical per the user's explicit instruction not to stop at "reaches a
+prompt"):
+
+1. `new` → `欢迎光临笑傲江湖3` / English-name prompt.
+2. English id (`myxoidfull`) → passes `IsLegalID`, reaches the
+   "确定吗(y/n)？" confirmation.
+3. `y` → reaches the Chinese-name prompt.
+4. **Real Chinese name `赵云`** → accepted (no rejection message),
+   proceeds straight to "请设定您的密码：" — this is the actual proof the
+   §15h fix works, not just that the prompt renders.
+
+Also confirmed (as expected, not a bug): empty input at the English-name
+prompt triggers a polite disconnect; `BAN_D->IsTimeAllowed`'s anti-flood
+throttle (3 real minutes between `new` registrations from the same IP,
+enforced via an in-memory `NewIps` mapping in `band.lpc`, cleared by
+restarting the driver) rejects a second `new` attempt from the same
+source within the window with **no output at all** (`die()`'s error
+message is commented out at `logind.lpc` — this is intentional silence,
+not a swallowed error; don't mistake it for a bug when retesting).
+
+## lpcc sweep
+
+**Memory warning (new data point for AGENTS.md §6b)**: this ~7,174-file
+lib drove the host to ~214MB free / 18.8GB RSS on the `lpcc` process
+after ~12 minutes despite being far smaller than the previously-documented
+"tens of thousands of files" nitan-family threshold — file count alone
+does not predict memory blowup risk. Monitor `free -h`/process RSS on
+*any* sweep, not just presumed-large ones, and kill proactively if
+pressure gets severe. Reached a clean boot (zero compile errors in the
+boot log) after the fixes above.

@@ -1,0 +1,187 @@
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+
+void create()
+{
+    seteuid(getuid());
+}
+
+int main(object me, string arg)
+{
+    string *key, *gain_item;
+    mapping searchs;
+    mixed item;
+    object env, *all;
+    int i, k;
+
+    if ( !arg )
+    {
+        return notify_fail("你要搜什麽东西？\n");
+    }
+
+    if ( !me->can_act() )
+    {
+        return notify_fail("你现在动弹不得。\n");
+    }
+
+    env = environment(me);
+    if( !(searchs = env->query("search_things")) || !(item = searchs[arg]) )
+    {
+        if ( strsrch( env->query( "long" ), arg ) >= 0 )
+        {
+            return notify_fail("这里的" + arg + "没有东西可搜。\n");
+        }
+        else
+        {
+            return notify_fail("这里没有" + arg + "\n");
+        }
+    }
+
+    if ( me->query("gin") < me->query("eff_gin") / 2 )
+    {
+        return notify_fail("你现在精神不太好，还是休息一会儿吧。\n");
+    }
+
+    all = all_inventory(me);
+    for ( i = 0; i < sizeof(all); i++ )
+    {
+        if ( userp(all[i]) )
+        {
+            message_vision("$N把$n往地下一摔。\n", me, all[i]);
+            all[i]->move(env);
+        }
+    }
+
+    me->set("gin", me->query("gin") / 2);
+    message_vision("$N开始仔细搜寻这里的" + arg + "......\n", me);
+    me->set_temp("no_get", 1);
+    me->disable_player(" <搜索中>");
+
+    if ( functionp(item) )
+    {
+        item = evaluate ( item );
+    }
+
+    if ( stringp( item ) )
+    {
+        call_out("find_it", 5, me, arg, item);
+        return 1;
+    }
+
+    if ( !mapp(item) )
+    {
+        return notify_fail("这里的程序出错,请向巫师报告. + item type:" +
+                           typeof(item) + "\n");
+    }
+
+    key = keys(item);
+    gain_item = key;
+    k = 0;
+    for ( i = 0; i < sizeof( key ); i++ )
+    {
+        if ( item[key[i]] <= me->query("social_exp") )
+        {
+             gain_item[k] = key[i];
+             k++;
+        }
+    }
+
+    if ( k > 0 )
+    {
+        call_out("find_it", 5, me, arg, gain_item[random(k)]);
+    }
+    else
+    {
+        call_out("fail_find", 5, me);
+    }
+
+    return 1;
+}
+
+void find_it( object me, string arg, string item )
+{
+    mapping founds;
+    string msg;
+    object tmp_obj;
+    object env, obj;
+    int cannot_found = 0;
+
+    if ( !objectp(me) )
+    {
+        return;
+    }
+
+    env = environment(me);
+    founds = env->query_temp_marks("been_got");
+
+    me->delete_temp("no_get");
+    me->enable_player();
+
+    if ( !mapp(founds) )
+    {
+        founds = ([]);
+    }
+    if ( !undefinedp( founds[item] ) )
+    {
+        cannot_found = 1;
+    }
+
+    if( !objectp( tmp_obj = find_object( item ) ) )
+    {
+        tmp_obj = load_object( item );
+        if ( !objectp( tmp_obj ) )
+        {
+            cannot_found = 1;
+        }
+    }
+
+    if ( tmp_obj->cannot_search(me)  )
+    {
+        cannot_found = 1;
+    }
+
+    if ( cannot_found != 1 )
+    {
+        obj = new( item );
+
+        if ( obj->query_weight() < 200000 )
+        {
+            obj->move(me);
+        }
+        else
+        {
+            obj->move(environment(me));
+        }
+
+        me->add("social_exp", 8 + random(6));
+        msg = "$N找到了一" + tmp_obj->query("unit") + tmp_obj->name() + "！\n";
+        founds[item] = 1;
+        env->set_temp_marks("been_got", founds );
+    }
+    else
+    {
+        msg = "结果$N什么也没有发现。\n";
+    }
+
+    message_vision(msg, me);
+    return;
+}
+
+void fail_find(object me)
+{
+    tell_room(environment(me), "结果什么也没有发现。\n");
+}
+
+int help(object me)
+{
+    write(@HELP
+指令格式 : search <物品名称>
+
+这个指令可以让你搜索房间里的某样物品。
+
+HELP
+    );
+    return 1;
+}
+

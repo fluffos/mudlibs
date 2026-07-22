@@ -1,0 +1,122 @@
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+
+int main(object me, string arg)
+{
+    object ob, old_app;
+
+    if ( !arg )
+    {
+        return notify_fail("指令格式：betray [cancel]|<对象>\n");
+    }
+
+    if ( arg == "cancel" )
+    {
+        old_app = me->query_temp("pending/betray");
+        if ( !objectp(old_app) )
+        {
+            return notify_fail("你现在并没有判师的意思。\n");
+        }
+
+        write("你改变主意不想判师了。\n");
+        tell_object(old_app, me->name() + "改变主意不想判师了。\n");
+        me->delete_temp("pending/betray");
+
+        return 1;
+    }
+
+    if ( !(ob = present(arg, environment(me)))
+        || !ob->is_character() )
+    {
+        return notify_fail("你想找谁判师？\n");
+    }
+
+    if ( !living(ob) )
+    {
+        return notify_fail("你必须先把" + ob->name() + "弄醒。\n");
+    }
+
+    if ( ob == me )
+    {
+        return notify_fail("找自己判师？好主意....不过没有用。\n");
+    }
+ 
+    if ( !mapp( ob->query("family") ) )
+    {
+        return notify_fail(ob->name() + "既不属於任何门派，也没有开山立派，不能判师。\n");
+    }
+
+    if ( userp(ob) && !wizardp(ob) && !wizardp(me) )
+    {
+        return notify_fail("目前不准找玩家判师。\n");
+    }
+
+    if ( !stringp(me->query("family/family_name")) || (string)me->query("family/family_name") != (string)ob->query("family/family_name") )
+    {
+        return notify_fail("不是同门，也能判师?\n");
+    }
+
+    if ( !ob->accept_betray(me) )
+    {
+        return notify_fail("看起来" + ob->name() + "并不愿意处理判师事宜。\n");
+    }
+
+    if ( (object)me->query_temp("pending/betray") == ob )
+    {
+        message_vision(
+            "$N决定从" + me->query("family/family_name") + "判师。\n\n",
+            me, ob);
+
+        ob->process_betray(me);
+        me->delete_temp("pending/betray");
+
+        message_vision(
+            "$N语重心长的对$n说道: 既然你已离开我门下，从此行走江湖，就多保重自己了。\n\n",
+            ob, me);
+
+        return 1;
+    }
+    else
+    {
+        old_app = me->query_temp("pending/betray");
+
+        if ( objectp(old_app) )
+        {
+            write("你改变主意不想找" + old_app->name() + "判师了。\n");
+            tell_object(old_app, me->name() + "改变主意不想找你判师了。\n");
+        }
+
+        message_vision("$N想要找$n判师。\n", me, ob);
+        tell_object(me, YEL "请在5秒内再次输入betray " + ob->query("id") + "确认判师。\n"
+            "判师将会损失你在本门派期间获得的所有技能、修为、实战经验、江湖阅历、门忠等。\n" NOR);
+        me->set_temp("pending/betray", ob );
+        call_out("clean_betray", 5, me);
+
+        return 1;
+    }
+}
+
+void clean_betray(object me)
+{
+    if ( !me )
+    {
+        return;
+    }
+
+    me->delete_temp("pending/betray");
+}
+
+int help(object me)
+{
+        write(@HELP
+指令格式 : betray [cancel]|<对象>
+
+    这个指令能让你判师，需要在门派主事者面前使用。
+
+请参考相关指令 expell、recruit
+HELP
+    );
+    return 1;
+}
+

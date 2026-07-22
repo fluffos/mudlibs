@@ -1,0 +1,214 @@
+// staticd.c
+// 统计数据。
+
+//Add TopTen by lnwm@XO_GROUP on 2001/03/05
+
+inherit F_SAVE;
+// 先统计logind的数据。还可以统计web页的数据。
+
+#define TOP_MAX 10
+
+private int LoginUsers      = 0;
+private int * HourStatics   = 0;
+
+private mapping * TopSwords     = ({});
+private mapping * TopUnarmeds   = ({});
+private mapping * TopBlades     = ({});
+private mapping * TopDodges     = ({});
+private mapping * TopLongs      = ({});
+private mapping * TopShorts     = ({});
+private mapping * TopForces     = ({});
+private mapping * TopZonggangs  = ({});
+private mapping * TopExps       = ({});
+private mapping * TopPkers      = ({});
+private mapping * TopMoneys     = ({});
+private mapping * TopAges       = ({});
+
+void RehashTopTen( mapping ref *top_ten, object user, int val );
+
+string query_save_file()
+{
+    return DATA_DIR "daemon/nosave";
+}
+
+void create()
+{
+    seteuid(ROOT_UID);    
+   	restore();
+}
+
+void RehashTopTenSword( object user )
+{
+    RehashTopTen( ref TopSwords, user, user->query_xiuwei_by_type("sword") );
+}
+
+void RehashTopTenUnarmed( object user )
+{
+    RehashTopTen( ref TopUnarmeds, user, user->query_xiuwei_by_type("unarmed") );
+}
+
+void RehashTopTenBlade( object user )
+{
+    RehashTopTen( ref TopBlades, user, user->query_xiuwei_by_type("blade") );
+}
+
+void RehashTopTenDodge( object user )
+{
+    RehashTopTen( ref TopDodges, user, user->query_xiuwei_by_type("dodge") );
+}
+
+void RehashTopTenForce( object user )
+{
+    RehashTopTen( ref TopForces, user, (user->query("max_force") + 1000 * user->query_xiuwei_by_type("force")) / 2 );
+}
+
+void RehashTopTenLong( object user )
+{
+    RehashTopTen( ref TopLongs, user, user->query_xiuwei_by_type("long") );
+}
+
+void RehashTopTenShort( object user )
+{
+    RehashTopTen( ref TopShorts, user, user->query_xiuwei_by_type("short") );
+}
+
+void RehashTopTenZonggang( object user )
+{
+    RehashTopTen( ref TopZonggangs, user, user->query_xiuwei_by_type("zonggang") );
+}
+
+void RehashTopTenExp( object user )
+{
+    RehashTopTen( ref TopExps, user, user->query("combat_exp") );
+}
+
+void RehashTopTenPker( object user )
+{
+    RehashTopTen( ref TopPkers, user, user->query("PKS") );
+}
+
+void RehashTopTenMoney( object user )
+{
+    RehashTopTen( ref TopMoneys, user, user->query("savemoney") );
+}
+
+void RehashTopTenAge( object user )
+{
+    RehashTopTen( ref TopAges, user, user->query("age") );
+}
+
+void RehashTopTen( mapping ref * top_ten, object user, int val )
+{
+	mapping info = ([ "id"    : user->query("id"), 
+	                  "name"  : user->query("name"),
+	                  "val"   : val ]);
+	
+	int i;
+	
+    if ( !user )
+        return;
+
+    if( !top_ten || !sizeof( top_ten ) ) // FIXME: 可能重复？..
+        top_ten = ({ info });
+    else if( sizeof( top_ten )  < TOP_MAX )
+        top_ten += ({ info });
+    else
+    {
+        for( i=0; i < TOP_MAX; i++ )
+        {
+            if( info["id"] == top_ten[i] ["id" ] ) // if that pig already on top.
+            {
+                top_ten[i] = info;
+                top_ten = sort_array( top_ten,  (: $1["val"] < $2["val"] ? 1 : -1 :) );
+                save();
+                return;
+            }    
+        }
+        
+        top_ten = sort_array( top_ten,  (: $1["val"] < $2["val"] ? 1 : -1 :) );
+        if( top_ten[ TOP_MAX-1 ][ "val" ] < info[ "val" ] )
+            top_ten[ TOP_MAX-1 ] = info;
+        top_ten = sort_array( top_ten,  (: $1["val"] < $2["val"] ? 1 : -1 :) );
+    }
+    save();
+}
+
+void try_top( object user )
+{
+    RehashTopTenSword( user );
+    RehashTopTenUnarmed( user );
+    RehashTopTenBlade( user );
+    RehashTopTenDodge( user );
+    RehashTopTenForce( user );
+    RehashTopTenLong( user );
+    RehashTopTenShort( user );
+    RehashTopTenZonggang( user );
+
+    RehashTopTenExp( user );
+    RehashTopTenPker( user );
+    RehashTopTenMoney( user );
+    RehashTopTenAge( user );
+}
+
+mapping* GetTop( string type )
+{
+    switch( type )
+    {
+        case "sword":
+            return TopSwords;
+        case "unarmed":
+            return TopUnarmeds;
+        case "blade":
+            return TopBlades;
+        case "dodge":
+            return TopDodges;
+        case "exp":
+            return TopExps;
+        case "force":
+            return TopForces;
+        case "pker":
+            return TopPkers;
+        case "money":
+            return TopMoneys;
+        case "long":
+            return TopLongs;
+        case "short":
+            return TopShorts;
+        case "zonggang":
+            return TopZonggangs;
+        case "age":
+            return TopAges;
+        default:
+            return TopForces;      
+    }
+}
+
+void AddNewLogin()
+{
+    int hour = (time() % 86400) / 3600;
+    hour += 8;
+    if ( hour >= 24 )
+        hour -= 24;
+    LoginUsers += 1;
+    if ( ! HourStatics )
+        HourStatics = allocate(24);
+    
+    HourStatics [hour] += 1;
+    save();
+}
+
+string GetLoginStatus()
+{
+    return chinese_number(LoginUsers);
+}
+
+int GetLoginUsers()
+{
+    return LoginUsers;
+}
+
+int * GetHourStatics()
+{
+    return HourStatics;
+}
+

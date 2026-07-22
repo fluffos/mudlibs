@@ -1,0 +1,430 @@
+inherit F_NEW_MASTER;
+
+#include <ansi.h>
+#include "east_master.h"
+
+int time_period(int timep, object me);
+string change_master(object who);
+string master_name(object me);
+int recruit_apprentice( object me );
+string about_yubi( object me );
+string leave_east( object );
+void get_sword(object);
+void back_dating();
+
+void create()
+{
+    seteuid(getuid());
+    set_name("左子穆", ({ "zuo zimu", "zuo", "zimu" }) );
+    set("gender", "男性" );
+    set("age", 50);
+    set("str", 30);
+    set("cor", 30);
+    set("cps", 30);
+    set("int", 25);
+    set("ker", 24);
+    set("kar", 30);
+    set("positive_score",10000);
+
+    set("rank_info/respect", "左先生");
+    set("class","wuliang_east");
+
+    set("long","左子穆身材极为高大，目光犀利，但也儒雅有礼，显然曾读过不少书。\n");
+
+    create_family("无量剑派东宗", 5,"掌门人");
+
+    set("combat_exp", 500000);
+    set("social_exp", 20000);
+
+    set_wugong( "wuliang-xinfa", 300, 300, 1 );
+
+    set_wugong( "unarmed", 300, 300, 0 );
+    set_wugong( "taizu-quan", 300, 300, 0 );
+    set_wugong( "nanshan-liushi", 300, 300, 0 );
+    set_wugong( "lingxiao-shou", 300, 300, 1);
+
+    set_wugong( "sword", 300, 300, 0 );
+    set_wugong( "wuliang-jian", 300, 300, 0 );
+    set_wugong( "liuyun-jian", 300, 300, 1);
+
+    set_wugong( "jiben-qinggong", 300, 300, 0 );
+    set_wugong( "wuliang-shenfa", 300, 300, 0 );
+    set_wugong( "yanxing", 300, 300, 1 );
+
+    set_xiuwei_level_by_type("unarmed", 5);
+    set_xiuwei_level_by_type("sword", 5);
+    set_xiuwei_level_by_type("dodge", 5);
+    set_xiuwei_level_by_type("force", 5);
+    set_xiuwei_level_by_type("zonggang", 5);
+
+    set("inquiry", ([
+        "此地" : "这里便是无量剑派。",
+        "姓名" : "嗯，你既知我姓左，怎会不知在下便是无量东宗掌门人左子穆？,
+        "玉壁": (: about_yubi :),
+        "指点武功" : (: change_master :),
+    ]) );
+
+    ::create();
+
+    setup();
+    carry_object(__DIR__"obj/xuanquan")->wield();
+}
+
+void init()
+{
+    object this, env, me;
+
+    ::init();
+    add_action("do_kneel", ({ "kneel", "ketou" }) );
+
+    this = this_object();
+    env = environment( this );
+    me = this_player();
+
+    if ( !objectp(env) )
+    {
+        return;
+    }
+
+    if (( env->query( "short" ) == "侧厅" ) &&
+        ( this->query_temp( "bai_zuo" ) == me->query( "id" ) ))
+    {
+        remove_call_out( "tell_mengui" );
+        call_out( "tell_mengui", 1, me );
+    }
+}
+
+// 这儿我希望实现的是当 ppl 拜了 zuo 以后, zuo 走去侧厅等待 ppl 完成拜师
+// 仪式. 可能出现的意外情况是 ppl 不过去, 这种情况 zuo 会记住谁放了他鸽
+// 子, 在这次 MUD 运行中就拒收这个 ppl.
+int accept_apprentice(object me)
+{
+    object this, env;
+    string my_id;
+    object sword;
+
+    my_id = me->query( "id" );
+    this = this_object();
+    env = environment( this );
+
+    if ( can_apprentice(me) )
+    {
+        return 1;
+    }
+
+    if ( 2 == me->query_temp("bai_zuo") )
+    {
+        sword = new(__DIR__"obj/sword");
+        sword->move( me );
+        sword->set("long","一把无量剑派本门使用的长剑，剑上刻着" + HIY " 无量剑" +
+            me->query("name") + NOR"\n");
+        me->delete_temp( "bai_zuo" );
+        this->delete_temp( "bai_zuo" );
+        this->delete_temp( "bai_list/" + me->query("id") );
+        message_vision("左掌门将一把刻着$N名字的长剑交给了$N，说：这把剑就归你"
+                   "随身携带使用。\n记住，剑在人在，剑亡人亡！\n", me);
+
+        me->set( "wuliang/master", "shang yuqing" );
+        tell_object(me, "从今天起，你就去跟商余庆师兄学习本门基本武功吧。\n");
+
+        me->save();
+        call_out("back_dating", 5);
+
+        return 0;
+    }
+
+    if ( this->query_temp( "bai_list/" + my_id ) )
+    {
+        command( "heng " + my_id );
+        message_vision("左子穆冷冷地对$N说：你品性不正，不配入我门。\n", me);
+        return 0;
+    }
+
+    command( "nod " + my_id );
+    this->set_temp( "bai_zuo", my_id );
+    this->set_temp( "bai_list/" + my_id, 1 );
+    call_out( "back_dating", 60 );
+    message_vision("左子穆对$N说：既然这样，先随我去拜过了祖师。\n", me);
+    call_out("go_cedian", 1);
+
+    return 0;
+}
+
+void go_cedian()
+{
+    remove_call_out( "go_cedian" );
+
+    if ( environment( this_object() )->query("short") == "大厅" )
+    {
+        command( "go west" );
+    }
+}
+
+void back_dating()
+{
+    remove_call_out( "back_dating" );
+
+    if ( environment( this_object() )->query("short") == "侧厅" )
+    {
+        command( "go east" );
+    }
+}
+
+void tell_mengui( object me )
+{
+    if ( !me || environment(me) != environment() )
+    {
+        back_dating();
+        return;
+    }
+
+    tell_object(me, YEL@MSG
+左子穆对你说: 既然入我门下，第一便是要恪守本派门规。你听好了，我无量剑派
+
+        首戒欺师灭祖，不敬尊长；  二戒同门操戈，兄弟不和。
+        三戒心猿意马，不用心练功；四戒恃强凌弱，擅伤无辜。
+        五戒奸淫好色，调戏妇女；  六戒口出妄言，行事不正。
+
+这些门规，你要记牢了，如有违反，我定严惩不殆！！
+好了，给祖师爷磕头吧！
+MSG NOR);
+    me->set_temp( "bai_zuo", 1 );
+}
+
+int do_kneel(string arg)
+{
+    object me, this;
+
+    me = this_player();
+    this = this_object();
+
+    if ( environment( this )->query("short") != "侧厅" )
+    {
+        tell_object( me, "你打算给谁磕头啊？\n" );
+        return 1;
+    }
+
+    if ( 1 == me->query_temp( "bai_zuo" ) )
+    {
+        message_vision("$N对着墙上挂着的祖师像拜了八拜，站起身来。\n", me);
+        message_vision("左子穆高兴对$N笑了笑，说：很好很好(apprentice zuo)。\n", me);
+        me->set_temp("bai_zuo", 2);
+        return 1;
+    }
+
+    return 0;
+}
+
+//qyz & falcon
+//let player can change a master when he becomes strong...
+string change_master(object who)
+{
+    string msg;
+    object me;
+
+    me = this_player();
+    if ( me->query("family/family_name") != "无量剑派东宗" )
+    {
+        return "这位" + RANK_D->query_respect(me) + "说笑了, 老朽无德无能, 何言指点。";
+    }
+
+    if ( me->query( "marks/悟剑居" ) )
+    {
+        return "你的武功已经不低于师父我了。";
+    }
+
+    // 如果还没有 master, 就先指定商余庆. 不过怎么可能没有呢!!!
+    if ( !me->query("wuliang/master") )
+    {
+        me->set( "wuliang/master", "shang yuqing" );
+        msg = "从今天起，你就去跟商余庆师兄学习本门基本武功吧。";
+    }
+    else if ( me->query("wuliang/defeat_master") != me->query("wuliang/master") )
+    {
+        if ( !me->query_temp("wuliang/fight_master") )
+        {
+            me->set_temp("wuliang/fight_master", me->query("wuliang/master"));
+            printf( "左子穆沉思了一会...\n" );
+            msg = sprintf( "好，你去跟%s比试一下，再做决定吧。",
+                master_name(me) );
+        }
+        else
+        {
+            printf( "左子穆有些发怒。\n" );
+            msg = sprintf( "好高骛远，是学不好功夫的，你还是先跟%s多学点东西再说。",
+                master_name(me));
+            me->add("class_score/无量剑派东宗", -1);
+        }
+    }
+    else
+    {
+        me->delete("wuliang/defeat_master");
+        me->delete_temp("wuliang/fight_master");
+        switch ( me->query("wuliang/master") )
+        {
+            case "shang yuqing":
+                me->set( "wuliang/master", "qu lianxing" );
+                msg = "好，你现在可以去跟曲连兴师兄学习了。";
+                LOG_D->do_log(me, "你击败了商余庆而获准向曲连兴学习更高深的武功。");
+                break;
+
+            case "qu lianxing":
+                me->set( "wuliang/master", "rong ziju" );
+                msg = "嗯，不错，现在就让你容师叔来指导你吧。";
+                LOG_D->do_log(me, "你击败了曲连兴，并获准向容子矩请教更高深的武功。");
+                break;
+
+            case "rong ziju":
+                me->set( "wuliang/master", "zuo zimu" );
+                msg = "好徒儿，从今天开始，为师亲自指点于你！";
+                LOG_D->do_log(me, "在你击败容子矩后，左子穆对你特别赏识，并决定全心培养你。");
+                break;
+
+            // 我认为 zuo 在这儿应该是给一个令牌什么的
+            case "zuo zimu":
+                me->set("marks/悟剑居", 1);
+                msg = "你武功已至如此境界，看来足以领悟悟剑居中本派的武学精华。";
+                LOG_D->do_log(me, "你武功终于大成，你被左子穆获准去参修无量剑最高深的武功－－石壁绝学。");
+        }
+    }
+
+    return msg;
+}
+
+string master_name( object me )
+{
+    string master_id;
+
+    master_id = me->query("wuliang/master");
+
+    switch ( master_id )
+    {
+        case "shang yuqing" : return "你商师兄";
+        case "qu lianxing" : return "你曲师兄";
+        case "rong ziju" : return "你容师叔";
+        case "zuo zimu" : return "为师我";
+        default : error( "master_name" );
+    }
+}
+
+//lnwm:here is for 四川的无名老人
+string about_yubi( object me )
+{
+    string msg;
+
+    me = this_player();
+
+    if ( me->query("family/family_name") != "无量剑派东宗" )
+    {
+        message_vision(CYN"\n左子穆冷冷地看了$P一眼：这是我无量的地方，关你什么事？！\n"NOR, me );
+        msg = "以后请不要再问这个问题。";
+        return msg;
+    }
+
+    if ( me->query("lnwm/maowu/问左子穆") == 1 )
+    {
+        if ( me->query("class_score/无量剑派东宗") >= 500 )
+        {
+            if ( !random(20) )
+            {
+                tell_object( me, CYN"\n左子穆稍稍犹豫了一下：你最好不要再问这个问题。\n"NOR);
+                tell_object( me, CYN"左子穆深深地看了你一眼：当年你的一位师叔就是在参看玉壁的秘密后突然失踪的。\n"NOR);
+                me->delete("lnwm/maowu/问左子穆");
+                me->set("lnwm/maowu/师叔" , 1 );
+                msg = "玉壁是我无量的秘密，你现在还是不知道的好些，去吧。\n";
+                return msg;
+            }
+            else
+            {
+                msg = "玉壁是我无量的秘密，你现在还是不知道的好些，去吧。\n";
+                return msg;
+            }
+        }
+        else
+        {
+            tell_object( me, CYN"\n左子穆略微有些不快：你问这个问题做什么？\n"NOR);
+            msg = "你还是想想如何为师门多做些贡献吧。";
+            return msg;
+        }
+    }
+    else
+    {
+        tell_object( me , CYN"\n左子穆一脸茫然。\n"NOR);
+        msg = "你怎么想起来问这个问题呢？";
+        return msg;
+    }
+}
+
+int accept_betray( object me )
+{
+    me->delete("wuliang/master");
+    return 1;
+}
+
+int accept_chushi( object me )
+{
+    object this;
+
+    me = this_player();
+    this = this_object();
+
+    if( me->query_jibie("liuyun-jian") > 90 )
+    {
+        if(!me->query("marks/悟剑居") )
+        {
+            me -> add( "class_score/无量剑派东宗",-10);
+            tell_object(me, "你功夫未成，还是在我手下多学几年吧。\n");
+            return 0;
+        }
+        else if( me->query("age") < 20 )
+        {
+            message_vision(CYN"$N对$n说道：“你年纪轻轻就出去，人家会以为我无量"
+                "无人的。”\n"NOR,this,me);
+            me -> add( "class_score/无量剑派东宗",-10);            
+            tell_object(me, "过两年再说吧。\n");
+            return 0;
+        }
+        else
+        {
+            return 1;
+        }
+    }
+    else
+    {
+        tell_object(me, "学艺未精，出去岂非给我无量东宗丢脸！\n");
+        return 0;
+    }
+
+    return 1;
+}        
+
+void talk_chushi(object me)
+{
+    command( "snow "+me->query("id"));
+    message_vision(CYN"$N看看了$n，道：“既然这样，我也知道留你不住了。"
+       "出去了可不要忘了为师和你的师兄弟们啊。\n"NOR, this_object(), me);
+    me->delete("marks/悟剑居");
+    get_sword(me);
+    tell_object(me, "罢了，罢了。。。\n");
+    me->delete("wuliang/master");
+}
+
+void get_sword( object me )
+{
+    object *inv;
+
+    inv = all_inventory( me );
+
+    foreach( object ob in inv )
+    {
+        if( ob->query("id")=="chang jian" 
+            && ob->query("name")==HIY"长剑"NOR )
+        {
+            say(CYN"左子穆说道，“你身上的剑就不要带着了吧。\n"
+            "说着把你身上的长剑拿走了。\n"NOR );
+            ob -> move(environment(me));
+            destruct(ob);
+        }
+    }
+}
+

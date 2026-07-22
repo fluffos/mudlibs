@@ -1,0 +1,229 @@
+// perform.c
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+
+int main(object me, string arg)
+{
+    string skill, action;
+    int delay;
+    int cdtime = 0;
+    object skill_ob;
+    string xiuwei_type;
+    object weapon;
+
+    seteuid( getuid() );
+
+    if ( me->is_busy() )
+    {
+        return notify_fail("你上一个动作还没有完成，不能施展绝技。\n");
+    }
+
+    if ( !arg )
+    {
+        return notify_fail("你要用外功做什麽？\n");
+    }
+
+    if ( !environment(me) )
+    {
+        return notify_fail("你在虚空中无法运功。\n");
+    }
+
+    if ( environment(me)->query("no_fight") )
+    {
+        return notify_fail("你无法在这里使用外功。\n");
+    }
+
+    if ( environment(me)->query("no_kill") )
+    {
+        return notify_fail( "这里不准杀人，也不准使用绝技！\n");
+    }
+
+    if ( environment(me)->query("safeplace") )
+    {
+        return notify_fail( "这里不准使用伤害人的绝技！\n");
+    }
+
+    if ( me->query_condition("no_perform") )
+    {
+        return notify_fail(HIR "你只觉得内息一阵紊乱，根本无法控制绝技。\n" NOR);
+    }
+
+    if ( !arg )
+    {
+        return notify_fail("指令格式：perform <武功种类>.<绝技名称> on <施用对象> [<施用参数>]\n"
+            "          perform <绝技名称> [<施用参数>]\n");
+    }
+
+    if ( time() < me->query_temp("global_cd/perform") )
+    {
+        return notify_fail("你的体力还没恢复。\n");
+    }
+
+    delay = 1 + random(2);
+
+    if ( 2 == sscanf(arg, "%s.%s", skill, action) && "dodge" == skill )
+    {
+        xiuwei_type = "dodge";
+    }
+    else
+    {
+        xiuwei_type = KUNGFU_D->query_attack_xiuwei(me);
+    }
+
+    switch ( me->query_xiuwei_dengji(xiuwei_type) )
+    {
+        case 0:
+        case 1:
+            delay = 1 + random(3);
+            break;
+
+        case 2:
+            delay = 1 + random(2);
+            break;
+
+        case 3:
+            if ( !random(10) )
+            {
+                delay = 0;
+            }
+            break;
+
+        case 4:
+            if ( !random(8) )
+            {
+                delay = 0;
+            }
+            break;
+
+        case 5:
+            if ( !random(6) )
+            {
+                delay = 0;
+            }
+            break;
+
+        case 6:
+            if ( !random(4) )
+            {
+                delay = 0;
+            }
+            break;
+
+        case 7:
+            if ( !random(3) )
+            {
+                delay = 0;
+            }
+            break;
+
+        case 8:
+            if ( !random(2) )
+            {
+                delay = 0;
+            }
+            break;
+
+        case 9:
+        default:
+            if ( random(3) )
+            {
+                delay = 0;
+            }
+            break;
+    }
+
+    notify_fail("你所使用的武功中没有这种功能。\n");
+
+    if ( !skill || !action )
+    {
+        if ( cdtime = KUNGFU_D->perform_basic_action(me, arg) )
+        {
+            me->set_temp("global_cd/perform", time() + delay + cdtime);
+            return 1;
+        }
+
+        return 0;
+    }
+
+    if ( "dodge" == skill )
+    {
+        if ( cdtime = KUNGFU_D->perform_dodge_action(me, action) )
+        {
+            me->set_temp("global_cd/perform", time() + delay + cdtime);
+            return 1;
+        }
+
+        return 0;
+    }
+
+    if ( !me->skill_enabled(skill) )
+    {
+        return notify_fail("你现在没有使用这门武功。\n");
+    }
+
+    skill_ob = SKILL_D(skill);
+    if ( !skill_ob )
+    {
+        return notify_fail("有这门武功吗？\n");
+    }
+
+    if ( 100 > me->query_jibie(skill) )
+    {
+        return notify_fail("你的外功等级不够。\n");
+    }
+
+    xiuwei_type = skill_ob->query_weapon_type();
+    weapon = me->query_temp("weapon");
+    if ( "dodge" == xiuwei_type )
+    {
+    }
+    else if ( !xiuwei_type || "unarmed" == xiuwei_type )
+    {
+        if ( weapon )
+        {
+            return notify_fail("你还是先放下" + weapon->query("name") + "吧。\n");
+        }
+    }
+    else if ( !weapon || weapon->query("weapon_type") != xiuwei_type )
+    {
+        return notify_fail("你的武器能发出绝招吗？\n");
+    }
+
+    if ( cdtime = skill_ob->perform_action(me, action) )
+    {
+        me->set_temp("global_cd/perform", time() + delay + cdtime);
+        return 1;
+    }
+
+    return 0;
+}
+
+int help (object me)
+{
+    write(@HELP
+指令格式：perform <武功种类>.<绝技名称> on <施用对象> [<施用参数>]
+
+如果你所学的武功(拳脚、剑法、刀法....)有一些特殊的招式或
+功能，可以用这个指令来使用，如：
+
+    attack 1-4 物理连招，打气
+    rao ding 3 busy、no_move
+    jing 3-6 物理连招，打精
+    break 6 打装备
+    po 7-8 化学连招，打气、打精
+    hua 9 化学连招，打内力
+
+轻功方面:
+    zhuan
+
+绝技的威力如下，降低对方的安全值，使对方受内伤(每回合减气血，必然)
+和外伤(直接降气血，取决于命中)，并附有其他的特殊效果(比方说打散对
+方的护体真气); 武功的本身等级越高，武功的熟练度越高，使用绝技的间
+隔越短;绝技的命中率跟对方的轻功和自己的武术修为有极大的关系。
+
+HELP
+    );
+    return 1;
+}
+

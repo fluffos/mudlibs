@@ -1,0 +1,179 @@
+// room:/d/menpai/duanshi/neishufang.c  writen by lala Nov-1-97
+// changed by cry 9.17.98
+
+#include <room.h>
+#include <ansi.h>
+
+inherit DOOR_ROOM;
+
+
+int get_gain(object me, object ob, mapping book);
+
+void create()
+{
+    set("short", "内书房");
+    set("long", @LONG
+镇南王的内书房，地上铺着厚厚的地毯，踩在上面就象踩在棉花堆上一样，
+一点声音也没有。奇怪是虽名为书房，却没有书架或书橱等摆设，空荡荡的房间
+里面上首是一张宽大的檀木条案，四周角落里面是点着熏香的香炉，正中的空地
+上却摆放着一口巨大的铜鼎，一看就知道是古董，但是不知道有什么用处。?  
+LONG
+    );
+    set("exits", ([ 
+        "east" : __DIR__"zhengyuan",
+        ]));
+    set("not_startroom", 1);
+    set("item_desc", ([
+        "条案" : 
+"这张宽大的条案上面摆放着笔墨纸砚文房四宝，\n"
+"然而最上面的一张纸上却隐隐有些墨痕，想必\n"
+"是有什么人在上面的一张纸上写了东西而渗透\n"
+"过来的。\n",
+        "香炉" : 
+"这里的香炉和别的地方不大一样，点的不是一\n"
+"般的檀香，而是一种很古怪的黑绿色的香，散\n"
+"发出来的香气虽然并不浓郁，但是人闻了却有\n"
+"一种难以表达的感觉。\n",
+    ]) );
+
+    set("objects", ([
+            __DIR__"npc/obj/book/tongding"+random(4) : 1,
+        ]));
+    create_door("east",([
+                "name" : "内书房门",
+                "lock" : "crylock01",
+                "status" : 3,
+                "id"  : ({ "east","内书房门","door",}),
+                "other_side_dir" : "west",
+        ]),
+        "west");
+    setup();
+}                       
+
+void init()
+{
+    add_action("do_study", "study");
+    add_action("do_open",  "open" );
+}
+
+int do_study(string arg)
+{
+        object ob, me = this_player();
+        mapping book;
+        int cost;
+
+        if ( me->is_busy() )
+                return 0;
+
+        if ( me->is_fighting() )
+                return 0;
+
+        if ( me->is_lianing() )
+                return 0;
+
+        if ( me->is_duilianing() )
+                return 0;
+
+        if ( !me->query_jibie( "literate" ) )
+                return 0;
+
+    if ( !arg || ( !objectp(ob = present( arg, me ) ) && arg != "tong ding" ) )
+                return 0;
+
+    if ( arg != "tong ding" )
+        return 0;               
+
+    ob = present( "tong ding", this_object() );
+    book = ob->query( "skill" );
+        
+    if ( !SKILL_D(book["name"])->valid_learn( me ) ) 
+    {
+        write("你要学习这门武功还有一些条件没有满足。\n");
+        return 1;
+    }    
+
+    cost = book["gin_cost"]*((70-(int)me->query_int()/3-(int)me->query_spi()/3))/80;
+    if ( cost <= 0 ) cost = 1;
+
+        if ( (int)me->query("gin") < cost ) 
+    {
+                write("你现在过于疲倦，无法专心下来研读新知。\n");
+                return 1;
+        }
+
+        message("vision", me->name() + "正专心地研读" + ob->name()
+                + "。\n", environment(me), me);
+    message("vision", "你开始研读" + ob->name() + "。\n", me);
+        me->receive_damage("gin", cost);
+
+    get_gain(me, ob, book);
+        return 1;
+}
+
+int get_gain(object me, object ob, mapping book)
+{
+        string type;
+        int bonus;
+
+        type = SKILL_D( book[ "name" ] )->query_xiuwei_type();
+    
+        if ( type && (int)me->query_xiuwei_by_type(type) < book["xiuwei_required"] )
+    {
+                write("你拿着" + ob->name() +"仔细端详，却发现很难理解上面所讲的一切。\n");
+                return 1;
+        }
+    if ( (int)me->query_lingwu( "literate" ) < book[ "literate_required" ] )
+    {
+                write("你拿着" + ob->name() +"仔细研读了一下，却发现上面的文字过于艰深，也许你需要\n"
+            "多学些读书识字方面的知识了。\n");
+        return 1;
+    }
+    if ( ob->invalid_study( me ) )
+        return 1;
+        if ( !me->query_jibie( book[ "name" ] ) )
+                me->set_jibie( book["name"], 0 );
+    
+    if ( me->query_jibie( book[ "name" ] ) 
+        && me->query_lingwu_ratio( book[ "name" ] ) < 90 )
+    {
+        write( "功夫需要多加练习，才能真正掌握。\n" );
+        return 1;
+    }
+    else
+    {
+        if ( me->query_jibie( book[ "name" ] ) >=  book[ "max_jibie" ] )
+        {
+            write ( "这口鼎上所刻的一切都都已尽被你须知，你已经无法从中学到新东西了。" );
+            return 1;
+        }
+            if ( bonus = book[ "bonus_jibie" ] > 0 )
+            me->improvve_jibie( book[ "name" ], bonus );
+        else if ( bonus <= 0 )
+            me->improve_jibie( book[ "name" ], random( (int)me->query_spi()/7 ) );
+
+                if ( book["bonus_xiuwei"] && 
+                (int)me->query_xiuwei_by_type( type ) < book[ "max_xiuwei" ] )
+        {
+            bonus = book["bonus_xiuwei"];
+                        me->improve_xiuwei( type, bonus );
+        }
+    }
+        write(YEL"你研读有关" + to_chinese(book["name"]) + "的技巧，从中悟出了一些心得。\n"NOR);
+    return 1;
+}
+    
+int do_open( string arg )
+{
+    object ob, me = this_player();
+    if( arg != "east" && arg !="door" )
+        return 0;
+    message_vision(
+"$N打开门，走了出去。\n", me );
+    if( !ob = find_object( __DIR__"zhengyuan" ) )
+         ob = load_object( __DIR__"zhengyuan" );
+    tell_room( ob, "你听到开门的声音，一位" + RANK_D->query_normal(me) 
+        + "走了出来。\n" );
+    me->move( ob );
+    return 1;
+}
+        

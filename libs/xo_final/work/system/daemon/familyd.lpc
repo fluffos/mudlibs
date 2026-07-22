@@ -1,0 +1,354 @@
+//负责存放各门派之间的“友好度”。
+//Qyz
+
+#include <family.h>
+#include <ansi.h>
+
+inherit F_SAVE;
+
+private mapping family = ([ ]);
+
+void create()
+{
+    seteuid(getuid());
+    if ( !restore() || !mapp(family) )
+        family = ([]);
+}
+
+int remove()
+{
+    save();
+    return 1;
+}
+
+string query_save_file() { return DATA_DIR + "daemon/familyd"; }
+
+int set_relation(string my_fam, mapping relation)
+{
+    family[my_fam] = relation;
+    save();
+    return 1;
+}
+
+int add_family_enemy( string my_fam, string name, int score )
+{
+    if( undefinedp( family[my_fam] ) )
+        family[my_fam] = ([ name : score ]);
+    if( !undefinedp(family[my_fam][name] ) )
+        family[my_fam][name] += score;
+    else family[my_fam] += ([ name : score ]);
+    save();
+    return 1;
+}
+
+int remove_family_enemy( string my_fam, string name )
+{
+    if( undefinedp( family[my_fam] ) ) return 0;
+    else if( !undefinedp( family[my_fam][name] ) )
+    {
+    	map_delete(family[my_fam] , name);
+    	save();
+	    return 1;
+    }
+    else return 0;
+}
+
+int is_family_enemy( string my_fam, string name )
+{
+    if( undefinedp( family[my_fam] )) return 0;
+    else if( !undefinedp( family[my_fam][name] ) )
+	return 1;
+    else return 0;
+}
+
+int query_enemy_quantity( string my_fam, string name )
+{
+    if( undefinedp( family[my_fam] )) return 0;
+    else if( !undefinedp( family[my_fam][name] ) )
+	return family[my_fam][name];
+    else return 0;
+}
+        
+int improve_relation( string my_fam, string your_fam, int relation )
+{
+    if( undefinedp( family[my_fam] ) )
+        family[my_fam] = ([]);
+    if( !undefinedp(family[my_fam][your_fam]) )    
+        family[my_fam][your_fam] += relation;
+    else family[my_fam] += ([ your_fam : relation ]);
+    save();
+    return 1;
+}
+        
+mapping query_relation(string my_fam)
+{
+    if ( !undefinedp(family[my_fam]) )
+        return family[my_fam];
+    else
+        return ([]);
+}
+
+int family_relation( string my_fam, string your_fam )
+{
+    mapping relation;
+    int condition;
+    
+    relation = query_relation( my_fam );
+    if( !condition = relation[your_fam] ) return 0;
+    
+    if( condition <= -1000 ) 
+        return FAMILY_ENEMY;
+
+    else if( condition >= 1000 )
+        return FAMILY_FRIEND;
+
+    else return 0;
+}
+
+int deal_family_relation( object victim, object killer )
+{
+    object my_master, your_master;
+    mapping my_family, your_family;
+    int c_score, y_relation, m_relation; 
+    string my_fam, your_fam, my_m_id, your_m_id, my_id, your_id, declare;
+
+    your_id = killer->query("id");
+    if( your_family = killer->query("family") )
+    {
+        your_fam = your_family["family_name"];
+        your_m_id = your_family["master_id"];
+        my_id = victim->query("id");    
+        if( !undefinedp(family[your_fam]) &&
+        !undefinedp(family[your_fam][my_id]) )
+        {
+            killer->add("class_score/" + your_fam, 1);
+                                                                //100->1000 by lnwm
+            if( stringp(your_m_id) &&
+                objectp(your_master = find_living(your_m_id) ) )
+            {
+                declare = sprintf("%s杀死本门仇敌%s。\n",
+                                killer->name(1), victim->name(1) );
+                CHANNEL_D->do_channel( your_master, "ft", declare );
+            }
+            map_delete(family[your_fam] , my_id );
+            return 1;
+        }
+        if( my_family = victim->query("family") )
+        {
+            my_fam = my_family["family_name"];
+            my_m_id = my_family["master_id"];
+            c_score = victim->query("class_score/" + my_fam);
+            if( my_fam == your_fam )
+            {
+                killer->add("class_score/" + your_fam, -1 );
+                if( stringp( your_m_id ) &&
+                    objectp(your_master = find_living( your_m_id ) ) &&
+                     c_score > 30 )  
+                {
+                    declare = sprintf("%s不可再屠戮本门师兄弟。", killer->name(1) );
+                    CHANNEL_D->do_channel( your_master, "ft", declare );         
+                }     
+                return 1;                                             
+            }
+            else
+            {    
+                improve_relation( my_fam, your_fam, -c_score );
+                if( userp( killer ) )
+                    add_family_enemy( my_fam, your_id, c_score );
+                if( y_relation = family_relation( your_fam, my_fam ) )
+                {                                           
+                    if( y_relation == FAMILY_ENEMY )
+                    {
+                        killer->add("class_score" + your_fam, 1 );
+                        improve_relation( your_fam, my_fam, c_score*2 );
+                        if( stringp( your_m_id ) &&
+                            objectp(your_master = find_living( your_m_id ) ) &&
+                            c_score > 30 )
+                        {
+                            declare = sprintf("%s杀死了本门对头%s的%s。",
+                                    killer->name(1), my_fam, victim->name(1) );
+                            CHANNEL_D->do_channel( your_master, "ft", declare );
+                        }
+                    }
+                    else if( y_relation == FAMILY_FRIEND )
+                    {
+                        killer->add("class_score" + your_fam, -1 );       
+                        if( stringp( your_m_id ) &&
+                            objectp(your_master = find_living( your_m_id ) ) &&
+                            c_score > 30 )
+                        {
+                            declare = sprintf("本门弟子应该与%s的弟子和睦相处，不应互相杀戮。",
+                                        my_fam );
+                            CHANNEL_D->do_channel( your_master, "ft", declare );
+                        }
+                    }
+                }
+                if( m_relation = family_relation( my_fam, your_fam ) &&
+                    stringp( my_m_id ) &&
+                    objectp( my_master = find_living( my_m_id )) )
+                {
+                    if( m_relation == FAMILY_ENEMY )
+                    declare = sprintf("本门与%s势不两立。",
+                                        your_fam );
+                    else
+                    declare = sprintf("本门弟子%s被%s的%s杀死了。",
+                                    victim->name(1), your_fam, killer->name(1) );
+           
+                    CHANNEL_D->do_channel( my_master, "ft", declare );
+                }
+                return 1;                                              
+            }             
+        }
+        else return 0;
+    }
+    else if( my_family = victim->query("family") )                   
+    {
+        my_fam = my_family["family_name"];
+        my_m_id = my_family["master_id"];
+        c_score = victim->query("class_score"+my_fam);
+        if( userp(killer) )
+            add_family_enemy( my_fam, your_id, c_score );
+        if( stringp( my_m_id ) &&
+            objectp( my_master = find_living( my_m_id ) ) )
+        {
+            declare = sprintf("本门弟子被%s杀死了。", killer->name(1) );
+            CHANNEL_D->do_channel( my_master, "ft", declare );       
+        }
+        return 1;
+    }
+    else return 0;
+}
+
+void clear_all_family_relation( string id )
+{
+    int i;
+    string *familys = ALL_FAMILYS;
+    for( i = 0; i<sizeof(familys); i++ )
+    {
+        if( undefinedp( family[familys[i]] ) ||
+            undefinedp( family[familys[i]][id] ) )
+        continue;
+        map_delete( family[familys[i]], id );
+    }
+}
+
+int new_family_relation( object this, object who )
+{
+    string my_family_name, your_family_name;  
+    mapping relation;
+    int condition;
+    
+    if ( !this->query("family") || !who->query("family") )
+    {
+        return 0;
+    }
+
+    my_family_name = this->query("family/family_name");
+    your_family_name = who->query("family/family_name");
+
+    relation = query_relation( my_family_name );
+
+    if ( !condition = relation[your_family_name] )
+    {
+        return 0;
+    }
+
+    if ( condition < -1000 ) 
+    {
+        return FAMILY_ENEMY;
+    }
+
+    if ( condition > 1000 )
+    {
+        return FAMILY_FRIEND;
+    }
+
+    return 0;
+}
+
+int new_deal_family_relation( object me, object who )
+{
+    object my_master, your_master;
+    mapping my_family, your_family;
+    int c_score, y_relation, m_relation; 
+    string my_fam, your_fam, my_m_id, your_m_id, declare;
+
+    if ( !who->query("family") || !me->query("family") )
+    {
+        return 0;
+    }
+
+    c_score = me->query("class_score");
+    my_family = me->query("family"); 
+    my_fam = my_family["family_name"];
+    my_m_id = my_family["master_id"];
+
+    your_family = who->query("family");
+    your_fam = your_family["family_name"];
+    your_m_id = your_family["master_id"];
+
+    if ( my_fam == your_fam )
+    {
+        who->add("class_score", -( c_score/100 + 1 ) );
+        if( objectp(your_master = find_living( your_m_id ) ) && c_score > 30 )
+        {
+            declare = sprintf("%s不可再屠戮本门师兄弟。", who->name(1) );
+            CHANNEL_D->do_channel( your_master, "family", declare );
+        }
+        return 1;                                             
+    }
+    else
+    {
+        FAMILY_D->improve_relation( my_fam, your_fam, -c_score );
+        if ( y_relation = who->family_relation( me ) )
+        {
+            if ( y_relation == FAMILY_ENEMY )
+            {
+                who->add("class_score", c_score/100 );
+                tell_object( me, "he killed me and gain class_score\n");
+                improve_relation( your_fam, my_fam, c_score * 2 );
+                if( objectp(your_master = find_living( your_m_id ) ) &&
+                    c_score > 30 )
+                {
+                    declare = sprintf("%s杀死了本门对头%s的%s。",
+                                    who->name(1), my_fam, me->name(1) );
+                    CHANNEL_D->do_channel( your_master, "family", declare );
+                }
+            }
+            else if( y_relation == FAMILY_FRIEND )
+            {
+                who->add("class_score", -c_score/100 );
+                tell_object( me,"he killed me and lose class_score\n");
+                if( objectp(your_master = find_living( your_m_id ) ) &&
+                    c_score > 30 )
+                {
+                    declare = sprintf("本门弟子应该与%s的弟子和睦相处，不应互相杀戮。",
+                                        my_fam );
+                    CHANNEL_D->do_channel( your_master, "family", declare );
+                }
+            }
+            else
+            {
+                tell_object(me,"he killed me and gain nothing\n");
+            }
+         }
+         if( m_relation = me->family_relation( who ) &&
+            objectp( my_master = find_living( my_m_id )) )
+         {
+            if( m_relation == FAMILY_ENEMY )
+                declare = sprintf("本门弟子%s被%s的%s杀死了，此仇一定得报。",
+                                    me->name(1), your_fam, who->name(1) );
+
+            else if( m_relation == FAMILY_FRIEND )
+                declare = sprintf("本门弟子%s被%s的%s杀死了，但本门与%s向来和睦，不要前去生事。",
+                                    me->name(1), your_fam, who->name(1), your_fam );
+            else
+                declare = sprintf("本门弟子%s被%s的%s杀死了，不过大家不要随便大动干戈。",
+                                    me->name(1), your_fam, who->name(1) );
+           
+            CHANNEL_D->do_channel( my_master, "family", declare );
+         }
+         return 1;                                              
+    }             
+}
+

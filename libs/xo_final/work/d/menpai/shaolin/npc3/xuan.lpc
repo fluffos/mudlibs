@@ -1,0 +1,365 @@
+/* xuan.c
+ * 少林寺玄字辈模板,可以inherit.
+ *    另备有标准 "inquiry" 一套,知道少林寺,知道出家和剃度.
+ *    预装有valid_teach(),tell_skills().其中tell_skills()对已拜师的玩家调用 
+ *    tell_skills_to_apprenticed(),该函数可重载.
+ * 
+ *Hydra copied from hui.c ,and modified at 19980523
+ */
+
+#include <ansi.h>
+
+inherit NPC;
+
+string ask_for_join();
+string ask_for_shaolin();
+string ask_for_luohanzhen();
+
+void setup()
+{
+    mapping my,inquiry;
+    my = this_object()->query_entire_dbase();
+
+    if( inquiry = query("inquiry") )
+    {
+        inquiry += ([
+            "少林寺"    : (: ask_for_shaolin :),
+            "剃度"      : (: ask_for_join :),
+            "出家"      : (: ask_for_join :),
+            "罗汉阵"    : (: ask_for_luohanzhen :),
+            "罗汉大阵"  : (: ask_for_luohanzhen :),            
+        ]);        
+    }
+    else
+    {
+        inquiry = ([
+            "少林寺"    : (: ask_for_shaolin :),
+            "剃度"      : (: ask_for_join :),
+            "出家"      : (: ask_for_join :),
+            "罗汉阵"    : (: ask_for_luohanzhen :),
+            "罗汉大阵"  : (: ask_for_luohanzhen :),
+        ]);
+    }
+    set("inquiry",inquiry);
+    
+    if ( !my["class"] ) set("class","bonze");
+    if ( !my["positive_score"] )    set("positive_score", 60000);
+    ::setup();
+}
+void init()
+{
+    object ppl;
+
+    ::init();
+
+    if ( !userp( ppl = this_player() ) 
+        || !can_act() ) 
+        return;
+
+    remove_call_out( "Greeting" );
+    call_out( "Greeting", 1, ppl );
+}
+
+void Greeting( object ppl )
+{       
+
+    if( !ppl 
+        || environment( ppl ) != environment() ) 
+        return;
+
+}
+
+string ask_for_shaolin()
+{
+    object me,ob;
+
+    me = this_player();
+    ob = this_object();
+    message_vision("$N惊讶地望着$n，一脸的不能置信。\n",ob,me);
+    return("什么？你连少林寺都没听说过吗？\n");
+
+}
+
+string ask_for_join()
+{
+    object me;
+
+    me = this_player();
+
+    if( (string)me->query("family/family_name")=="少林派" )
+        return "阿弥陀佛！你已经被列入少林门墙了。\n";
+    if( (string)me->query("gender") == "女性" )
+        return "阿弥陀佛！女施主，这里是寺庙，请你到尼庵去剃度吧。\n";
+    return  "阿弥陀佛！善哉！善哉！\n"
+            "施主若真心皈依我佛，不妨去法堂找慧觉师侄剃度。\n";
+}
+
+string ask_for_luohanzhen()
+{
+    object me,ppl;
+    me = this_object();
+    ppl = this_player();
+    
+    if( ppl->query("family/family_name") != "少林派" )
+        return "罗汉阵是我们少林的第一大阵！";
+    if( ppl->query("class_score/少林派") < 2400 )
+        return "你不要急着升级，还是多为少林做些事情吧！";
+    if( ppl->query("family/zhidian_id") == query("id") )
+    {
+    	if( ppl->query("hydra/shaolin/闯阵成功") )
+    		return "你不是已经闯过罗汉阵了吗？";
+        if( ppl->query_temp("hydra/shaolin/fight_master") == query("id"))
+            return "我不是让你跟我比划一下吗？";
+        if( ppl->query("hydra/shaolin/can_ask_luohanzhen"))
+        	return "你现在可以去找方丈了！";
+        ppl->set_temp("hydra/shaolin/fight_master",me->query("id"));
+        return"你要闯罗汉阵的话，先打败老衲再说！";
+    }
+    else
+    {
+        return "你去找你自己的师傅问吧。";
+    }
+}
+
+void tell_skills_to_apprenticed(object me)
+{
+    message_vision(
+        "咱们少林武学最高的有七十二门绝技，施展起来威力无穷，直逼天人之境。\n"
+        "江湖上多有人窥视。可惜我白活了这么多年，没能学到几门，这辈子大概是\n"
+        "没指望了。本来玄澄师弟学到了一十二门绝技，可惜残废了，但愿你能有机\n"
+        "会超过他，光大我少林门楣。\n",this_object());
+    return;
+}
+
+int tell_skills(object me)
+{
+    object this=this_object();
+    mapping skills;
+    string *s_name,skill;
+    skills = this->query_jibie_map();
+    s_name = keys(skills);
+    skill = s_name[random(sizeof(s_name))];
+
+    if ( me->query("family/family_name") != "少林派")
+    {   
+        message_vision("$N警觉地望着$n，问道：“你问这个干什么？”\n",this,me);
+        return 1;
+    }
+    if ( !me->query("family/master_id") )
+    {
+        message_vision("$N道：你现在先找你虚字辈的师兄学些入门功夫吧。\n",
+            this);
+        return 1;
+    }
+    if ( me->query("family/master_id") &&
+        me->query("family/zhidian_id") != query("id") )
+    {
+        tell_skills_to_apprenticed(me);
+        return 1;
+    }
+    message_vision("$N对着$n点了点头：“你在我这里可以学习" + 
+                    to_chinese(skill)+"(" + skill + ")这门武功。”\n",this,me);        
+    return 1;
+}
+
+int refuse_killing(object who)
+{
+    int i;
+    object *inv;
+    
+    inv = all_inventory( environment() );
+    for(i = 1; i < sizeof(inv); i++)
+        if( inv[i] != this_object() && !inv[i]->weigong(who) )
+            continue;
+    message_vision(YEL"$N大叫一声：大胆狂徒，居然敢到少林寺来撒野！\n"NOR,
+        this_object());
+    this_object()->set( "force_factor",query("max_force")/10);
+    return 0;
+}
+
+//收徒，不用F_APPRENTICE里面的，我重新写了一个
+//Hydra
+int recruit( object dizi )
+{
+    mapping my_family, family;
+    string my_fam,belong,name;
+    
+    if ( dizi->query("family/zhidian_id") == query("id") )
+        return 0;
+    my_family = query("family");
+    my_fam = query("family/family_name");
+    belong = my_family[ "belong" ];
+    
+    family = allocate_mapping( 10 );
+    family[ "master_id" ] = dizi->query( "family/master_id" );
+    family[ "master_name" ] = dizi->query( "family/master_name" );
+    family[ "zhidian_id" ] = query( "id" );
+    family[ "zhidian_name" ] = query( "name" );
+    family[ "family_name" ] = my_family[ "family_name" ];
+    family[ "generation" ] = my_family[ "generation" ]+2;
+    family[ "enter_time" ] = dizi->query( "family/enter_time" );
+    family[ "title" ] = HIY"武僧"NOR;
+    family[ "privs" ] = 0;
+    family[ "belong" ] = my_family[ "belong" ];
+    dizi->set( "family", family );
+    dizi->set("class","bonze");
+  	dizi->set("title",RED"少林寺"+belong+HIY"武僧"NOR);  
+  	
+    message_vision("$N决定亲自指点$n。\n\n"
+        "$n跪了下来向$N恭恭敬敬地磕了四个响头，叫道：「多谢师祖教诲！」\n\n",
+				this_object(), dizi);  
+	name = dizi->query("name");
+    tell_object( dizi,sprintf("恭喜你成为%s。\n",dizi->query("title")) );					  
+    FAMILY_D->remove_family_enemy( my_family["family_name"], dizi->query("id"));
+    LOG_D->do_log( dizi, sprintf( "你受到%s的青睐，成为%s。",
+        family["zhidian_name"], dizi->query("title") ) );
+    return 1;
+}
+
+void attempt_apprentice(object ob)
+{
+    object this;
+    string belong;
+    this = this_object();
+    belong = this->query("family/belong");
+	if ( (string)ob->query("gender") == "女性" )
+		command("say 阿弥陀佛，女施主不要跟贫僧开玩笑。");
+	else if ( ob->query("class") != "bonze" )
+		command("say 未得方丈准许，贫僧不敢擅收俗家弟子。施主还是请回吧。");
+	else if ( ! ob->query("lnwm/pass_muren") ) 
+		command("say 莫急，莫急。你现在的功夫还欠火候，再磨练磨练吧。");
+    else if ( ob->query("family/belong") != belong )
+    {
+        command("shake "+ob->query("id"));
+        command("say 你不是我堂弟子，我不能指点你武功。");
+    }
+    else if ( ob->query("family/zhidian_id") == query( "id" ) )
+    {
+    	message_vision( "$N跪在地上，对着$n恭恭敬敬地磕了四个响头！\n",ob,this );
+    }
+    //Have not defeated 降龙&伏虎罗汉
+	else if ( ! ob->query("hydra/shaolin/can_apprentice_xuan") )
+	    command("say 莫急，莫急。你现在的功夫还欠火候，再磨练磨练吧。");
+	//Had apprentice another xuan master le ya
+    else if ( stringp(ob->query("family/zhidian_id")) 
+    	&& ob->query("family/zhidian_id")[0..3] == "xuan")
+    {
+        command("? "+ob->query("id"));
+        command("shake "+ob->query("id"));
+    }
+    //Have not passed the 方丈's 考验，so ...:-(
+    else if ( ob->query("hydra/shaolin/lose_kaoyan") )
+    {
+        command("shake");
+        command("sigh "+ob->query("id"));
+    }
+    //Allow to accept kaoyan from 方丈
+    else if ( !ob->query("hydra/shaolin/pass_kaoyan") )
+    {
+        command("en");
+        command("say 你想拜我为师，先得通过方丈的三个考验，去吧！");
+        ob->set("hydra/shaolin/can_ask_kaoyan",1);
+    }
+    //Now can recruit this ppl :-)
+    else
+    {
+        message_vision( "$N微微一笑，道：“好啊，从今天起你就是"+
+belong+"的武僧了。\n可别给少林丢脸呵。”\n",this,ob);
+        ob->delete("hydra/shaolin/can_apprentice_xuan");
+        recruit(ob);
+	}
+}
+
+
+int accept_fight(object me)
+{
+    string zhidian_id;
+    zhidian_id = me->query("family/zhidian_id");
+	if( (string)me->query( "family/family_name")=="少林派" )
+	{
+	    if( !zhidian_id ) return 0;
+	    if( zhidian_id[0..3] != "xuan" )
+	    {
+	        command("shake "+me->query("id") );
+	        return 0;
+	    }
+        command("say 那小心了n");
+        return 1;
+    }
+    else
+		command("say 施主既然身负绝艺，贫僧佩服便是，也不必较量了。");
+	
+	return 0;
+}
+
+int accept_bihua( object ppl )
+{
+    object me;
+    me = this_object();
+    if( ppl->query_temp("hydra/shaolin/fight_master") != query("id") )
+    {
+        if( accept_fight( ppl ) )
+            return 1;
+        else
+            return 0;
+    }
+    me -> set( "force"  ,query("max_force") );
+    me -> set( "eff_kee",query("max_kee") );
+    me -> set( "kee"    ,query("max_kee") );
+    me -> set( "eff_sen",query("max_sen") );
+    me -> set( "sen"    ,query("max_sen") );
+    me -> set( "env/attack",75 );
+    command( "say 那就接招吧！");
+    return 1;
+}
+
+int valid_teach(object me, string skill)
+{
+    if ( me->query("family/family_name") != "少林派" )
+        return 0;
+
+    if ( !me->query("family/master_id") )
+        return notify_fail(query("name")+"摇头道：“少林武功最重根基，这门功夫待你过了木人巷，成为\n本寺入室弟子再来精研也不迟。”");
+
+    if ( me->query("family/zhidian_id") != query("id") )
+    {
+        command( "? "+me->query("id") );
+        command( "say 你还是找你自己的师傅去学吧。");
+        return 0;
+    }
+    if ( me->query("shaolin/announced") )
+    {
+        command("say  大胆孽徒，竟然违反清规戒律，还不速去戒律院忏悔！");
+        return 0;
+    }    
+    if ( (int) me->query("oldquest/task_time")+1000 < time() )
+    {
+        say( this_object()->name() + "微一皱眉，说：“嗯...今天的日常洒扫作了没有？”\n");
+        return 0;
+    }           
+    return ::valid_teach(me, skill);
+}
+
+int win_bihua( object ppl )
+{
+    if( ppl->query_temp("hydra/shaolin/fight_master") == query("id"))
+    {
+        command( "pat "+ppl->query("id") );
+        command( "say 不要灰心，好好练，超过老衲是没问题的。");
+        ppl ->delete_temp("hydra/shaolin/fight_master");
+    }
+    return 1;
+}
+
+int lose_bihua( object ppl )
+{
+    if( ppl->query_temp("hydra/shaolin/fight_master") == query("id"))
+    {
+        command( "nod "+ppl->query("id") );
+        command( "say 不错，你已超过老衲的，可以去一闯罗汉阵了");
+        command( "say 你去找方丈吧" );
+        ppl -> delete_temp("hydra/shaolin/fight_master");
+        ppl -> set( "hydra/shaolin/can_ask_luohanzhen",1 );
+    }
+    return 1;
+}

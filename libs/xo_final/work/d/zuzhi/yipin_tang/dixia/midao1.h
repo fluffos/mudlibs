@@ -1,0 +1,21 @@
+//midao1.h.黑衣卫士
+
+#include <ansi.h>  
+inherit ROOM;
+
+void init()
+{
+    object ob, me,npc;
+    ob = this_object();
+    me = this_player();
+          
+    if (me->query("yipin")) return;   
+    if ((me->query("id"))=="wei shi") return;  
+    if ((me->query("combat_exp")>30000)) return;
+    if( random(10) > 5 ) return;  
+    if(objectp(present("wei shi", environment(me)))) return;   
+    tell_object( me, RED"突然警铃大作，一群一品堂卫士出现在四周.\n"NOR);
+    npc = new( __DIR__"npc/weishi1");
+    npc ->move(ob);
+    return;  
+}

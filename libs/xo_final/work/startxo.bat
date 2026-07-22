@@ -1,0 +1,1 @@
+bin\driver.exe config.xo
