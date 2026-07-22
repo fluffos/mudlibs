@@ -17,7 +17,7 @@ worked; keep status values consistent so the table stays greppable:
   etc.; see AGENTS.md's non-mudlib list — skipped, not converted)
 
 Port assignments: sequential from 40001, recorded here so re-running
-several libs at once never collides. **Next free port: 40021** (40001-40020
+several libs at once never collides. **Next free port: 40022** (40001-40021
 assigned; 40007 is ds386, deprioritized/partial). On mega-libs (tens of
 thousands of files, the "nitan" family), skip the full `lpcc_check.sh`
 sweep — it can OOM the host before finishing (see AGENTS.md §6b) — and
@@ -30,7 +30,7 @@ rely on the boot + interactive-connect test as the verification gate.
   majority of this collection. If an archive turns out to be English
   (like ds386/Dead Souls), do the minimum to note what it is, don't sink
   deep debugging time into it -- move on to the next Chinese one.
-- **Done: 19 / 100** (shanhaizhanshen, xingzhanyingxiong, unknownlib20150716
+- **Done: 20 / 100** (shanhaizhanshen, xingzhanyingxiong, unknownlib20150716
   [小雨西游II], bxsj [书剑天下], bxsj1 [书剑·经典], chidi [江湖I], ...,
   nitan170911 [仙剑奇侠传], nitan6 [笑傲江湖], rzrmud [大唐西游])
 - **rzrmud confirms the nitan-family bug is lineage-specific, not
@@ -117,7 +117,7 @@ rely on the boot + interactive-connect test as the verification gate.
 | 22 | nitan6.zip | nitan6 | 40019 | done | 笑傲江湖, same NT/nitan lineage as #21 -- proactively applied all §15/§15b/§15c fixes before first boot, booted clean on the first attempt; found a missing seteuid() + a heartbeat-interval efun gap + the "bare array" typo (§15f, new); plays through into full character creation with zero crashes; see libs/nitan6/NOTES.md |
 | 23 | rzrmud.20130220.tar.gz | rzrmud | 40020 | done | 大唐西游/YWX人造人, different lineage from nitan family (no simul_efun-based dbase, correctly uses per-object inherit instead); booted with zero fixes, 97.5% lpcc pass; ~55-file missing-inherit content gap noted but not fixed; see libs/rzrmud/NOTES.md |
 | 24 | TOMud_VC源代码.rar | | | not mudlib | confirmed: "MyMud", a Windows MFC/VC++ GUI mud CLIENT (MainFrm.cpp, DialogGame.cpp, MudSock.cpp, ...), not LPC source -- skipped, see AGENTS.md's non-mudlib list |
-| 25 | xkx2001测试用老lib.zip | | | not started | |
+| 25 | xkx2001测试用老lib.zip | xkx2001 | 40021 | done | 侠客行Ⅰ, "ES II" lineage (shares master.c almost verbatim with rzrmud #23 despite adm/single/ layout resembling bxsj); booted with zero fixes, 84.7% lpcc pass; missing EDITOR_D daemon noted (bulletin-board feature gap, not fixed); see libs/xkx2001/NOTES.md |
 | 26 | xlqy_new2007.rar | | | not started | |
 | 27 | xlqy-解压看readme.rar | | | not started | |
 | 28 | xo.zip | | | not started | |
