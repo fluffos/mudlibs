@@ -365,6 +365,18 @@ the pilot lib, zero false positives — no lib in this family seems to use
 a sample of matches on each new lib before trusting the blanket sed, the
 same way you would for the `.c"` rename fix).
 
+**Counterexample found** (`moniHuafu`, archive #57): the word-boundary
+match still fires inside a **string literal** when the string happens to
+contain the bare word `static` as a path segment, e.g.
+`log_file("static/CRASHES", ...)` — a lib-specific naming convention for a
+log subdirectory, unrelated to the `static`/`nosave` keyword entirely. The
+blanket sed rewrote 10 such string literals to `"nosave/CRASHES"` etc.,
+silently orphaning the archive's real pre-existing seed data that lived
+on disk at `.../static/`. Always grep for `"static` (opening quote
+immediately followed by `static`) as a distinct check from the keyword
+sed, and revert any string-literal hits rather than rely on the
+"spot-check a sample" step above catching a rare path-name collision.
+
 ### 4. Master's lazy security-daemon load recurses to a stack overflow
 
 Symptom: driver hangs/crashes with a flood of
@@ -1635,6 +1647,26 @@ lineage lib:
    line itself from all affected files on a bad regex; always diff a
    sed-based bulk fix against a sample before trusting it across dozens
    of files).
+
+### 15u. A dormant "phone-home license check" in `securityd.lpc` (or similar) can delete the whole mudlib and shut down the server if ever triggered — grep for it and neutralize even if unreachable
+
+Found on `moniHuafu` (archive #57): a function named something like
+`checking_status()` in `securityd.lpc`, clearly a circa-2000 anti-piracy
+mechanism from the original author, whose body — if ever called — deletes
+every file under the mudlib root and shuts down the driver. Confirmed
+unreachable in this specific lib (nothing in the tree calls it), so it
+wasn't an active bug, but it's cheap, safe insurance to disable the
+destructive body outright (rather than delete the function, in case
+something non-obvious does call it and depends on the call succeeding
+harmlessly) any time a grep for suspicious combinations of
+`rm`/`unlink`/`shutdown`/`rmdir`-on-mudlib-root turns up something that
+reads like a licensing/anti-piracy gate rather than legitimate admin
+tooling. **Lesson**: when skimming `securityd.lpc`/`master.lpc` for the
+usual valid_read/valid_write/valid_override applies, also scan for any
+function whose body does mass deletion or `shutdown()` gated on some
+opaque check — these libs came from an era of informal, sometimes
+hostile, anti-redistribution tricks aimed at whoever hosted the game
+next, and this project is exactly that "whoever hosts it next."
 
 ---
 
