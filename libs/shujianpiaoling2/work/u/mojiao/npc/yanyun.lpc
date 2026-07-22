@@ -1,0 +1,172 @@
+//guard.c for quest written by john darks
+#include <ansi.h>
+#include <combat.h>
+inherit NPC;
+void getname(int i);
+object offensive_target(object me);
+int find_road(object room,object target ,string exit);
+void do_shoot(string arg);
+string *order = ({"张三","王二","李四","唐五","赵七","柳十一","孙六","钱八","杜九","简十","燕十三","萧十二"});
+void create()
+{
+	set_name("白老大", ({ "horse guard","yanyun"}) );
+	set("long", "一位一身紧装黑衣的大汉，一手持弓安坐于马上，看上去杀气凌人。\n");
+	set("title","燕云十三骑");
+	set("attitude", "friendly");
+	set("max_atman", 100);
+	set("atman", 100);
+	set("max_mana", 100);
+	set("mana", 100);
+	set("max_kee",2000);
+	set("arrive_msg","整个人贴在马背上，随着一阵急促的马蹄声，如一个黑色如浓雾般飘了过来．．．");
+	set("leave_msg","一拉马缰，只听一声马嘶，飞也似的消逝了．．．");
+	set("str", 40);
+	set("cor", 5);
+	set("cps", 25);
+	set("agi", 5);
+	set_temp("apply/damage",100);
+	set_temp("apply/defense",100);
+	set_temp("apply/attack",50);
+	set("combat_exp", 3000000);
+	set("chat_chance_combat", 70);
+	set("chat_msg_combat", ({
+                (: do_shoot :),
+        }) );
+	set_skill("parry", 170);
+	set_skill("dodge", 270);
+	set_skill("move", 170);
+	set_skill("hammer",150);
+	setup();
+	carry_object(__DIR__"obj/blackcloth")->wear();
+	carry_object(__DIR__"obj/tiebow")->wield();
+}
+
+void getname(int i)
+{
+	this_object()->set_name(order[i], ({ "horse guard","yanyun"}));
+}
+
+void die()
+{
+	object horse;
+	message_vision("\n一声凄惨的马嘶声，$N大叫一声自马上摔了下来。\n", this_object());
+	horse = new(__DIR__"horse");
+	horse->move(environment(this_object()));
+	::die();
+}
+
+object offensive_target(object me)
+{
+        int sz;
+        object *enemy;
+
+        enemy = me->query_enemy();
+        if( !enemy || !arrayp(enemy) ) return 0;
+
+        sz = sizeof(enemy);
+        if( sz > 4 ) sz = 4;
+
+        if( sz > 0 ) return enemy[random(sz)];
+        else return 0;
+}
+
+void do_shoot(string arg)
+{
+	object ob,room,throw;
+	object me = this_object();
+	mapping exits;
+	string exit;
+	int step,damage,defense,i;
+	int ap,dp;
+	if (!arg) {
+		ob = offensive_target(me);
+		if( !ob
+		||	!ob->is_character()
+		||	ob->is_corpse()
+		||	ob==me)
+		return notify_fail("你要射谁？\n");
+	}
+	else {
+		ob = find_player(arg);
+		if( !ob )  ob = find_living(arg);
+		if( !ob || !environment(ob)) 
+			return notify_fail("没有这个人。\n");
+	}
+	if( !objectp(room = environment(me)) )
+		return notify_fail("这里只有灰蒙蒙地一片，箭飞不出去！\n");
+	exit = "east";
+	step = find_road( room , ob , exit);
+	if (step == -1){
+		exit = "south";
+		step = find_road( room , ob , exit);
+	}
+	if (step == -1){
+		exit = "west";
+		step = find_road( room , ob , exit);
+	}
+	if (step == -1){
+		exit = "north";
+		step = find_road( room , ob , exit);
+	}
+	if (step == -1) return ;
+	if (step==0){
+		message_vision(HIY"$N"+HIY"沉力拉弓，势如弯月！\n"NOR,me);
+		message_vision(HIY"对准$N"+HIY"就是一箭！！\n"NOR,ob);
+		message_vision(HIW"一道寒光一闪而没！！\n"NOR,me);
+		ap = COMBAT_D->skill_power(me,"hammer", SKILL_USAGE_ATTACK);
+		dp = COMBAT_D->skill_power(ob,"dodge", SKILL_USAGE_DEFENSE);
+		if ( random(ap + dp)> dp ){
+			damage = random(50) + 150;
+			message_vision(HIR"$N"+HIR"大叫一声，翻身就倒！\n"NOR,ob);
+			if (damage<0)  damage = 0;
+        		ob->receive_damage("kee", damage,me);
+        		ob->receive_wound("kee", damage/5,me);
+        		COMBAT_D->report_status(ob);
+        	}else
+        		message_vision(HIW"但$N"+HIW"冷静的躲开了！\n"NOR,ob);
+        	if (!ob->is_fight(me))	ob->kill_ob(me); 
+    		me->start_busy(3);
+	}else {
+		message_vision(HIY"$N"+HIY"沉力拉弓，势如弯月！\n"NOR,me);
+		message_vision(HIY"一股气劲凝聚在箭头，只听“呼”的一声，往"+to_chinese(exit)+"就是一箭！！\n"NOR,me);
+		message_vision(HIW"一道寒光一闪而没！！\n"NOR,me);
+		damage = random(30) + 20;
+		for (i=0 ; i< step ;i++){
+			exits = room->query("exits");
+			message("vision",HIY"一股气劲呼啸而至，"+HIW"一道寒光一闪而没！！\n"NOR,room = find_object(exits[exit]));
+			damage = (int) damage*4/5;
+		}
+		if (environment(ob)==room){
+			ap = COMBAT_D->skill_power(me,"hammer", SKILL_USAGE_ATTACK);
+			dp = COMBAT_D->skill_power(ob,"move", SKILL_USAGE_DEFENSE);
+			if ( random(ap + dp)> dp ){
+				tell_object(ob,HIR"你只觉得一股大力袭来，胸口被重重的撞了一下！！\n"NOR);
+				message("vision",HIR"只听"+ob->name()+HIR"大叫一声，已被一箭射中！\n"NOR,room,ob);
+				if (damage<0)  damage = 0;
+				ob->receive_damage("kee", damage);
+        			ob->receive_wound("kee", damage/5);
+        			COMBAT_D->report_status(ob);
+			}
+		}
+        	me->start_busy(1);
+	}
+	return ;
+}
+
+int find_road(object room,object target ,string exit)
+{
+	int i;
+	mapping exits;
+	object me = this_player();
+	if (environment(target)==room)	return 0;
+	for (i=0 ; i<5 ;i++)
+	if( mapp(exits = room->query("exits")) && !undefinedp(exits[exit]) ) {
+		if( objectp(room = find_object(exits[exit]))) {
+			if( environment(target)==room )	return (i+1);
+			else continue;
+		}
+		else break;
+	}
+	return -1;
+}
+

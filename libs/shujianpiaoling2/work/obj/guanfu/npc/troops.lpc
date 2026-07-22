@@ -1,0 +1,245 @@
+//navy official    created by baiwt@sjpl
+#include <ansi.h>
+inherit NPC;
+string eff_kees(object me);
+void create()
+{
+	object me=this_player();
+        set_name("传令官", ({ "navy official","official" }) );
+/*
+        set("attitude", "heroism");
+        set("pursuer", 1);
+        set("vendetta_mark", "authority");
+*/
+	set("str",5);
+        set("long",
+                "这是一个负责军事调度指挥的传令官。\n");
+        set("max_kee", 9000);
+        set("max_sen", 9000);
+        set("max_gin", 9000);
+        set("kee", 9000);
+        set("sen", 9000);
+        set("gin", 9000);
+        set("combat_exp", 1000);
+        set("guanfu/work_attrib", 1);
+	  set("gotime",2);
+        set_skill("unarmed", 10);
+        set_skill("parry", 10);
+        set_skill("move", 10);
+        set_skill("dodge", 10);
+        set_skill("skill_ship", 10);
+        set_skill("skill_navy", 10);
+        map_skill("dodge", "skill_ship");
+        map_skill("unarmed", "skill_navy");
+        map_skill("parry", "skill_navy");
+	set("chat_chance_combat", 50);
+	set("chat_msg_combat", ({
+		(: eff_kees(this_object()) :),
+	}) );
+        setup();
+}
+void init()
+{
+	add_action("do_goback","goback");
+	add_action("do_assault", "assault");
+}
+
+int do_goback(object me)
+{
+	object owner;
+	me = this_player();
+	owner = this_object()->query("possessed");
+	if( !owner->query_temp("is_in_battle") )
+	return notify_fail("我军并未遭遇敌人。\n");
+	this_object()->remove_all_killer();
+	owner->set("quest/guanfu","navy");// disable player re ready
+	command("say 大人有令，全军撤退！\n");
+	call_out("gohome", 5, me);
+	call_out("reachhome", 40, me);
+	return 1;
+}
+
+string eff_kees(object me)
+{
+	string pname;
+	object ob, owner;
+	object myship;
+	me = this_player();
+	ob=this_object();
+	owner = this_object()->query("possessed");
+	if((int)owner->query("water") < 2)
+	{
+	command("say 大人，我军粮草不足，已经无法再坚持战斗了。\n");
+	message_vision(CYN"\n$N仰天长叹一声，不得不下令撤退。\n"NOR,me);
+	owner->set("quest/guanfu","navy");// disable player re ready
+       ob->remove_all_killer();
+	call_out("gohome", 2, me);
+	call_out("reachhome", 40, me);
+	return "1";
+	}
+	if((int)owner->query("gin") < 20)
+	{
+	command("say 大人，我军武器弹药不足，已经无法再坚持战斗了。\n");
+	message_vision(CYN"\n$N仰天长叹一声，不得不下令撤退。\n"NOR,me);
+	owner->set("quest/guanfu","navy");// disable player re ready
+       ob->remove_all_killer();
+	call_out("gohome", 2, me);
+	call_out("reachhome", 40, me);
+	return "1";
+	}
+	if((int)owner->query("sen") < 30)
+	{
+	command("say 大人，我军战船装甲损伤严重，已经无法再坚持战斗了。\n");
+	message_vision(CYN"\n$N仰天长叹一声，不得不下令撤退。\n"NOR,me);
+	owner->set("quest/guanfu","navy");// disable player re ready
+       ob->remove_all_killer();
+	call_out("gohome", 2, me);
+	call_out("reachhome", 40, me);
+	return "1";
+	}
+	if((int)owner->query("enemy_kee") < 20)
+	{
+	owner->set("quest/guanfu", "done");
+	command("say 大人，敌军撤退了，我军已获得了全面胜利！\n");
+	say( HIC"\n军士们挥舞着胜利的旗帜，全军上下一片欢腾。\n\n"NOR);
+	say( HIC"\n我军班师回朝。\n\n"NOR);
+	owner->add("score", 10);
+	owner->set_temp("doing_assault", 2);
+	owner->set("quest/guanfu","done");// enable player prize
+       ob->remove_all_killer();
+	call_out("gohome", 2, me);
+	call_out("reachhome", 40, me);
+	return "1";
+	}
+	else
+	owner->add("enemy_kee", -random(30)-1);
+	owner->receive_damage("kee", random(30)+1);
+	owner->receive_damage("gin", random(5)+1);
+	if( owner->query("kee") < 60 )
+	{
+	pname = owner->name();
+	message_vision(HIR "\n$N的战船被击中了！\n\n"NOR,owner);
+        CHANNEL_D->do_channel(owner, "rumor",sprintf("%s在海战中阵亡了。",pname) );
+       ob->remove_call_out("enemyattack");
+       ob->remove_all_killer();
+	myship = environment(owner);
+	if( myship->query("already_battle") );
+	myship->delete("already_battle");
+	owner->delete("quest/guanfu");// disable player re ready
+	owner->delete("guanfu/battle");
+	owner->delete("quest/battle");
+	owner->delete_temp("doing_assault");
+	owner->delete_temp("is_in_battle");
+	owner->die();
+	return "1";
+	}
+	else
+	call_out("enemyattack", 5, me);
+
+	return "1";
+}
+int accept_fight(object me)
+{
+        command("say 大人，大敌当前，还是先把敌寇击退属下再陪您切磋吧。\n");
+        return 0;
+}
+int do_assault(object me)
+{
+	object enemy;
+	me=this_player();
+//	if( me->query("quest/guanfu") != "navy1" )
+//	return notify_fail("什么？");
+	if( !objectp(present("enemy ship", environment(me))) )
+	return notify_fail("我军并未遭遇敌人。\n");
+	if( !me->query_temp("is_in_battle") )
+	return notify_fail("我军并未遭遇敌人。\n");
+
+	if( me->query_temp("doing_assault") ==1)
+	return notify_fail("你正在指挥战斗。\n");
+	if( me->query_temp("doing_assault") >1 )
+	return notify_fail("你的任务已经完成了。\n");
+	enemy=present("enemy ship", environment(me));
+      message_vision(HIY"$N大声喝道：各就各位，准备战斗！\n"NOR,me);
+	this_object()->set("possessed", me);
+//	enemy->set("possessed", me);
+	this_object()->kill_ob(enemy);
+	enemy->kill_ob(this_object());
+	me->set("enemy_kee", me->query("max_kee") );
+	me->set_temp("doing_assault", 1);
+	return 1;
+}
+int gohome(object me)
+{
+	me = this_player();
+	if (this_object()->query("gotime")>1 )
+	{
+	message_vision("\n我军战船纷纷调过船头，往西撤退。\n\n"NOR,me);
+	this_object()->add("gotime", -1);
+	call_out("gohome", 10, me);
+      return 1;
+	}
+	if (this_object()->query("gotime")>0 )
+	{
+	message_vision("\n我军战船缓缓撤进了长江。\n\n"NOR,me);
+	this_object()->add("gotime", -1);
+	call_out("gohome", 10, me);
+      return 1;
+	}
+      return 1;
+}
+int enemyattack(object me)
+{
+	string pname;
+       string *enemymsg = ({"\n敌军炮弹击中我军水师战船，船桅立刻折为两段。\n\n", 
+"\n敌军炮火击中我军战船，顿时将我军将士打得血肉模糊。\n\n",
+"\n敌军火箭击中我军水师战船，船上立时着起火来。\n\n",
+"\n轰隆一声，炮弹在近我船不到丈许远的地方落下，溅起了数尺高的水花。\n\n" });
+	object myship;
+	me = this_player();
+	if ( random(40) > 20 )
+	{
+	message_vision(HIR + enemymsg[random(3)] + NOR,me);
+	me->receive_damage("kee", random(60)+1);
+	me->receive_damage("sen", random(30)+1);
+	if( me->query("kee") < 60 )
+	{
+	pname = me->name();
+	message_vision(HIR "\n$N的战船被击中了！\n\n"NOR,me);
+        CHANNEL_D->do_channel(me, "rumor",sprintf("%s在海战中阵亡了。",pname) );
+       this_object()->remove_call_out("enemyattack");
+       this_object()->remove_all_killer();
+	myship = environment(me);
+	if( myship->query("already_battle") );
+	myship->delete("already_battle");
+	me->delete("quest/guanfu");// disable player re ready
+	me->delete("guanfu/battle");
+	me->delete("quest/battle");
+	me->delete_temp("doing_assault");
+	me->delete_temp("is_in_battle");
+	me->die();
+	}
+	}
+        return 1;
+}
+
+int reachhome(object me)
+{
+	object owner, myship;
+	me = this_player();
+	owner = this_object()->query("possessed");
+	message_vision(CYN "\n战船靠岸了。\n\n"NOR,owner);
+	this_object()->set("gotime",2);
+	myship = environment(owner);
+	if( myship->query("already_battle") );
+	myship->delete("already_battle");
+	if( owner->query_temp("doing_assault") )
+	owner->delete_temp("doing_assault");
+	if( owner->query_temp("is_in_battle") )
+	owner->delete_temp("is_in_battle");
+	if( owner->query("quest/battle") )
+	owner->delete("quest/battle");
+	if( owner->query("guanfu/battle") )
+	owner->delete("guanfu/battle");
+	owner->move("/d/jinling/taihuzhai");
+        return 1;
+}

@@ -1,0 +1,543 @@
+#include <ansi.h>
+inherit NPC;
+int *stat =({0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0});
+int about_here1();
+int about_here2();
+int about_here3();
+void pay_him(object who, int amount);
+void clear_stat();
+void pre_cal();
+void create()
+{
+	int i,amun;
+	set_name( "夏艺棋", ({ "xia yiqi", "xia" }) );
+	set("long", "他本是星河宫的弟子，棋道心法出神入化。\n"
+"但后来师成下山后不知怎地迷上了赌，常常怀揣几粒骰子逢人便想赌上一把。\n");
+	set("attitude", "friendly");
+	set("title", HIW "棋坛赌怪" NOR);
+        set("force_factor", 30);
+        set("max_gin", 3000);
+        set("max_kee", 3000);
+        set("max_sen", 3000);
+        set("eff_gin", 3000);
+        set("eff_kee", 3000);
+        set("eff_sen", 3000);
+        set("gin", 3000);
+        set("kee", 99999);
+        set("sen", 3000);
+        set("max_atman", 300);
+        set("atman", 300);
+        set("max_mana", 300);
+        set("mana", 300);
+	set("age", 33);
+	set_temp("apply/damage",300);
+        set("gender", "男性" );
+        set("chat_chance", 10);
+        set("chat_msg", ({
+                "夏艺棋神秘兮兮地说道：这世上只有我一人会星河宫的棋道心法，想学吗？先跟我赌一把吧！\n",
+                "夏艺棋朗声吟道：赌中自有世态炎凉，赌中自有人生百味。\n",
+        }) );
+
+        set("inquiry", ([
+                "拜师" : (: about_here1 :),
+                "赌" : (: about_here2 :),
+                "棋道心法" : (: about_here3 :),
+        ]));
+
+	set("str", 30);
+	set("cor", 30);
+	set("cps", 25);
+	set("per",5);
+	set("lower_limit",1);
+	set("too_late",0);
+	set("first_dice",0);
+        set("second_dice",0);
+        set("third_dice",0);
+	set("max_force",4000);
+        set("force", 4000);
+	set("force_factor",40);
+	set_skill("throwing",200);
+	set_skill("unarmed",200);
+	set_skill("dodge",200);
+	set_skill("liuh-ken",150);
+        map_skill("unarmed", "liuh-ken");
+	set("combat_exp", 3000000);
+	setup();
+	carry_object("/u/baiwt/xueshan/obj/cloth")->wear();
+	carry_object("/u/baiwt/xueshan/obj/guzi")->wield();
+
+}
+void init()
+{
+        object ob;
+
+        ::init();
+        if( interactive(ob = this_player()) && !is_fighting() ) {
+                remove_call_out("greeting");
+                call_out("greeting", 1, ob);
+        }
+	add_action("do_bet", "bet");
+	
+}
+
+void greeting(object ob)
+{
+        if( !ob || environment(ob) != environment() ) return;
+        switch( random(10) ) {
+                case 0:
+                        say( "夏艺棋说道：下棋有什么好玩？赌才有意思呢！\n");
+                        break;
+                case 1:
+                        say( "夏艺棋搓了搓手，喃喃说道：好久没有痛快地赌上一把了，手都痒啦！\n");
+                        break;
+                case 2:
+                        say( "夏艺棋忽然拉住你说道：这位" + RANK_D->query_respect(ob)
+                                + "，你肯陪我赌一把吗？\n");
+                        break;
+        }
+
+
+
+	return;
+
+}
+ 
+string *dice = ({
+"[31m
+	⊙ 
+
+[37m",
+"	⊙
+
+	    ⊙
+",
+"	⊙
+	  ⊙ 
+	    ⊙
+",
+"	[31m⊙  ⊙
+
+	⊙  ⊙
+[37m",
+"	⊙  ⊙
+	  ⊙
+	⊙  ⊙
+",
+"	⊙ ⊙
+	⊙ ⊙
+	⊙ ⊙
+"
+		});
+int do_bet(string arg)
+{
+        int i,bet_amt;
+        int bet_type;
+        object me, silver;
+        string message;
+	if(!arg || !sscanf(arg, "%d %d",bet_type,bet_amt))
+                return notify_fail("bet <种类> <金量>\n");
+	if(bet_type>18 || bet_type < 0)
+		return notify_fail("种类只可从零到十八\n");
+	me = this_player();
+	if(me->is_busy())
+		return notify_fail("你上个动作还没完成。\n");
+	silver = present("silver_money", me);
+	if(!silver) return notify_fail("你身上没有银子。\n");
+	if((int) silver->query_amount() < bet_amt)
+	return notify_fail("你身上没有那麽多银子。\n");	
+	if((int) this_object()->query("lower_limit") > bet_amt)
+	return notify_fail("这铺的最小赌注是"+chinese_number((int) this_object()->query("lower_limit"))+"两银子。\n");
+        if((int) this_object()->query("too_late") )
+        return notify_fail("夏艺棋摆了摆手，说道：我累啦，休息一会儿再赌。\n");
+	if((int) me->query("gamble/amount"))
+	{
+	if(bet_type != (int) me->query("gamble/type"))
+	return notify_fail("你不可在一铺中下不同的注．\n");
+        silver->add_amount(-bet_amt);
+        me->start_busy(1);
+        if(bet_type == 0)
+                message = sprintf(RED"小"NOR);
+        if(bet_type == 1)
+                message = sprintf(RED"大"NOR);
+        if(bet_type == 2)
+                message = sprintf(RED"围骰"NOR);
+        if(bet_type >=3)
+                message = sprintf(RED"%s"NOR,chinese_number(bet_type));
+       message_vision(sprintf("$N又从身上拿出%s两白银，加压在%s上．\n",
+                                chinese_number(bet_amt), message), me);
+        bet_amt += (int) me->query("gamble/amount");
+                me->set("gamble/amount",bet_amt);
+
+	}
+	else
+	{
+	silver->add_amount(-bet_amt);
+	me->start_busy(1);
+	if(bet_type == 0)	
+		message = sprintf(RED"小"NOR);
+	if(bet_type == 1)
+		message = sprintf(RED"大"NOR);
+        if(bet_type == 2)
+                message = sprintf(RED"围骰"NOR);
+	if(bet_type >=3)
+                message = sprintf(RED"%s"NOR,chinese_number(bet_type));
+	message_vision(sprintf("$N从身上拿出%s两白银，压在%s上．\n",
+				chinese_number(bet_amt), message), me);
+	me->set("gamble/type",bet_type);
+	me->set("gamble/amount",bet_amt);
+	}
+	stat[bet_type] += bet_amt;
+	if( find_call_out("rolldice") == -1)
+		call_out("rolldice",30);
+	if( find_call_out("rolldice") >10 && find_call_out("advertise") == -1)
+		call_out("advertise",random(5)+1);
+return 1;
+}
+void advertise()
+{
+        switch( random(3) ) {
+                case 0:
+message_vision("$N向你叫道：快下注！愿赌服输，没钱可不行啊！\n",this_object());
+                        break;
+                case 1:
+message_vision("$N说道：你快下注吧，还犹豫什么？\n",this_object());
+                        break;
+                case 2:
+message_vision("$N面红耳赤地喊道：加！再加大你的赌注！赢了我就教你棋道心法！\n",this_object());
+
+                        break;
+        }
+
+        if( find_call_out("rolldice") >=10)
+                call_out("advertise",random(4)+5);
+return;
+}
+
+void rolldice()
+{
+	this_object()->set("too_late",1);
+	message_vision("$N大声叫道：下定注！说罢，将手中的三粒骰子撒向碗里．\n",this_object());
+	message_vision(YEL"\n．．．三粒骰子在碗里蹦跳着，发出悦耳的声音．．．\n"NOR,this_object());
+	pre_cal();
+	call_out("first_dice",3);
+return;
+}
+
+void first_dice()
+{
+	int first;
+        switch( random(3) ) {
+                case 0:
+        message_vision(HIW"\n一粒骰子弹了几下，停在：\n\n",this_object());
+                        break;
+                case 1:
+        message_vision(HIG"\n一粒骰子＂叮叮叮＂的跳动了几下，缓缓的停了下来：\n\n",this_object());
+                        break;
+                case 2:
+        message_vision(HIR"\n三粒骰子相互一撞，一颗直落碗底：\n\n",this_object());
+
+                        break;
+        }
+
+	first = (int) this_object()->query("first_dice");
+	message_vision(dice[first], this_object());
+	this_object()->set("first_dice",first+1);
+	call_out("second_dice",4);
+return;
+}
+
+void second_dice()
+{
+	int second;
+        switch( random(3) ) {
+                case 0:
+       message_vision(HIW"\n又一粒骰子缓缓的停了下来：\n\n",this_object());
+                        break;
+                case 1:
+        message_vision(HIG"\n第二粒骰子在碗边旋转不停．．忽地翻了个身：\n\n",this_object());
+                        break;
+                case 2:
+        message_vision(HIR"\n二粒骰子相互一撞，其中一颗跳了一跳：\n\n",this_object());
+
+                        break;
+        }
+        second= (int) this_object()->query("second_dice");
+        message_vision(dice[second], this_object());
+        this_object()->set("second_dice",second+1);
+	call_out("third_dice",5);
+
+
+return;
+}
+void third_dice()
+{
+        int third;
+        switch( random(3) ) {
+                case 0:
+       message_vision(HIW"\n最后一粒骰子在碗里滑了两下，终于停在：\n\n",this_object());
+                        break;
+                case 1:
+        message_vision(HIG"\n还有最后一粒骰子嘀遛遛的转个不停．．终于：\n\n",this_object());
+                        break;
+                case 2:
+        message_vision(HIR"\n最后一粒骰子也终于停稳了：\n\n",this_object());
+
+                        break;
+        }
+        third= (int) this_object()->query("third_dice");
+        message_vision(dice[third], this_object());
+        this_object()->set("third_dice",third+1);
+        call_out("end_the_round",2);
+
+
+return;
+}
+
+void end_the_round()
+{
+	int tot,reward,i,first, second, third;
+	object *inv;
+	first = (int) this_object()->query("first_dice");
+        second= (int) this_object()->query("second_dice");
+        third = (int) this_object()->query("third_dice");
+
+// announce results:
+message_vision(sprintf(NOR"\n$N高声叫道：%s，%s，%s，",
+		chinese_number(first),chinese_number(second),chinese_number(third)),
+		this_object());
+// see who is the winner!
+if( second == first && third == first)
+{
+message_vision("大小通吃！！\n",this_object());
+inv = all_inventory(environment(this_object()));
+        for(i=0; i<sizeof(inv); i++) {
+	if( userp(inv[i]) && (int) inv[i]->query("gamble/amount") )
+	{
+		if((int) inv[i]->query("gamble/type") == 2)
+		{
+		message_vision(CYN"夏艺棋叹道：好吧，$N赢了，我再传授一些棋道心法.\n"NOR,inv[i]);
+		reward = (int) inv[i]->query("gamble/amount") * 37 * 100;
+// also increae his qidaoxinfa skill
+		inv[i]->improve_skill("qidaoxinfa", reward/100/37 * 36);
+		pay_him( inv[i],reward);
+		}
+		inv[i]->set("gamble/amount",0);
+	}
+        }
+
+
+}
+else
+{
+tot = first+second+third;
+message_vision(sprintf("%s点，",chinese_number(tot)),this_object());
+if( tot>10 )
+message_vision("赔大吃小！\n",this_object());
+else
+message_vision("赔小吃大！\n",this_object());
+
+
+inv = all_inventory(environment(this_object()));
+        for(i=0; i<sizeof(inv); i++) {
+        if( userp(inv[i]) && (int) inv[i]->query("gamble/amount") )
+        {
+		if((int) inv[i]->query("gamble/type") == tot)
+		{
+                message_vision(CYN"夏艺棋叹道：好吧，$N赢了，我再传授一些棋道心法.\n"NOR,inv[i]);
+                reward = (int) inv[i]->query("gamble/amount") * 9 * 100;
+// also increae his qidaoxinfa skill
+                inv[i]->improve_skill("qidaoxinfa", reward/100 /9 * 8);
+                pay_him( inv[i],reward);
+                inv[i]->set("gamble/amount",0);
+		}
+		else 
+                if(((int) inv[i]->query("gamble/type") == 0 && tot <=10 ) ||
+			((int) inv[i]->query("gamble/type") == 1 && tot > 10 ))
+                {
+                message_vision(CYN"夏艺棋叹道：好吧，$N赢了，我再传授一些棋道心法.\n"NOR,inv[i]);
+                reward = (int) inv[i]->query("gamble/amount") * 2 * 100;
+// also increae his qidaoxinfa skill
+                inv[i]->improve_skill("qidaoxinfa", reward/100 / 2 * 1);
+                pay_him( inv[i],reward);
+                inv[i]->set("gamble/amount",0);
+		}
+		else
+		{
+// here are the losers
+		reward = (int) inv[i]->query("gamble/amount");
+		inv[i]->decrease_skill("qidaoxinfa", reward, 1);
+                inv[i]->set("gamble/amount",0);
+		}
+        }
+        }
+
+
+}
+this_object()->set("too_late",0);
+this_object()->set("first_dice",0);
+this_object()->set("second_dice",0);
+this_object()->set("third_dice",0);
+clear_stat();
+return;
+}
+void pay_him(object who, int amount)
+
+{
+        object ob;
+        object cash, tencash, gold, silver, coin;
+
+        if( amount < 1 ) amount = 1;
+//        if( amount/1000000 ) {
+//                ob = new(TECASH_OB);
+//                ob->set_amount(amount/1000000);
+//                ob->move(who);
+//                amount %= 1000000;
+//        }
+//        if( amount/100000 ) {
+//                ob = new(THCASH_OB);
+//                ob->set_amount(amount/100000);
+//                ob->move(who);
+//                amount %= 100000;
+//        }
+        if( amount/10000 ) {
+                ob = new("/u/baiwt/xueshan/obj/money/gold.lpc");
+                ob->set_amount(amount/10000);
+		ob->set("name","纯金叶子");
+                ob->move(who);
+                amount %= 10000;
+        }
+        if( amount/100 ) {
+                ob = new("/u/baiwt/xueshan/obj/money/silver.lpc");
+                ob->set_amount(amount/100);
+                ob->move(who);
+                amount %= 100;
+        }
+        if( amount ) {
+                ob = new("/u/baiwt/xueshan/obj/money/coin.lpc");
+                ob->set_amount(amount);
+                ob->move(who);
+        }
+}
+void clear_stat()
+{
+	int i;
+	for(i=0;i<=18;i++)
+		stat[i]=0;
+}
+
+void pre_cal()
+{
+this_object()->set("first_dice",0);
+this_object()->set("second_dice",0);
+this_object()->set("third_dice",0);
+	if( !random(25)) {
+// this is where we see what to come out to win for the casino!
+// there never is a fair bet *grin
+	int index = 12;
+	int amount ;
+	int amt1,amt2,amt3;
+	int i;
+	int stp;
+	stat[2] *= 36;
+	for(i=3;i<=10;i++)
+		stat[i] = 8*stat[i] + stat[0];
+	for(i=11;i<=18;i++)
+		stat[i] = 8*stat[i] + stat[1];
+	stat[3] += stat[2];
+	stat[18] += stat[2];
+	amount = stat[12];
+
+// now we have in this arry stat[] the amount of money we have to pay i
+// have to pay
+	for(i=11;i<=18;i++)
+		if( stat[i] < amount)
+			{
+				amount = stat[i];
+				index = i;
+			}	
+	stp = 2;
+	for(i=10;i>=stp;i--)
+		if( stat[i] < amount)
+                        {
+                                amount = stat[i];
+                                index = i;
+                        }
+
+		if( index == 2  )
+		{
+		amount = random(6);
+		this_object()->set("first_dice",amount);
+                this_object()->set("second_dice",amount);
+                this_object()->set("third_dice",amount);
+		}
+		else 
+		if( index == 3)
+		{
+                amount = 0; 
+                this_object()->set("first_dice",amount);
+                this_object()->set("second_dice",amount);
+                this_object()->set("third_dice",amount);
+                }
+		else
+		if( index == 18 )
+		{
+                amount = 5;
+                this_object()->set("first_dice",amount);
+                this_object()->set("second_dice",amount);
+                this_object()->set("third_dice",amount);
+		}
+		else
+		{
+		if( index / 3 * 3 == index ) amount = index / 3 + 1;
+		else
+		amount = index / 3;
+		this_object()->set("first_dice",amount-1);
+		index -= amount;
+		amount = index / 2;
+		this_object()->set("second_dice",amount-1);
+		index -= amount;
+		amount = index /1;
+		this_object()->set("third_dice",amount-1);
+		}
+
+	}
+	else
+	{
+this_object()->set("first_dice",random(6));
+this_object()->set("second_dice",random(6));
+this_object()->set("third_dice",random(6));
+	}
+
+}
+int about_here1()
+{
+      say(CYN"夏艺棋说道：我可不想收什么徒弟，只要你肯陪我赌，赢了我就把棋道心法传授给你.\n"NOR);
+	return 1;
+}
+int about_here2()
+{
+      say(CYN"夏艺棋高兴地说道：好啊，你肯陪我赌吗？！\n"NOR);
+      say("骰子的赌法：\n");
+      say("ｂｅｔ　＜种类＞　＜银量＞\n");
+      say("种类：　０，１，２，３到１８\n");
+      say("０：　		赌小	（３－１０）	一赔一\n");
+      say("１：  		赌大	（１１－１８）	一赔一\n");
+      say("２：　		赌围骰	（三粒骰子同点）一赔三十六\n");
+      say("３－１８	赌单点  		一赔八\n");
+      say("例子：\n");
+      say("ｂｅｔ　０　５\n");
+      say("赌五两银子在小上\n");
+	return 1;
+}
+int about_here3()
+{
+      say("夏艺棋说道：那是星河宫的下棋之道，翻天棋只有配合棋道心法才能发挥最大\n");
+      say("威力。特殊招式[斗转星移]（perform xingyi）是星河棋道中最神奇的一种心法\n");
+      say("在平时和在战斗中有不同的作用，能发挥出人的潜力。\n");
+	return 1;
+}
+int accept_fight(object me)
+{
+	command("say 我可不想跟你较量。咱们还是来赌一把吧！");
+        return 0;
+}

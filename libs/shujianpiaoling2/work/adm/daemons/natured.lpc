@@ -1,0 +1,320 @@
+//written by Baiwt@sjpl 1999,5
+// natured.c
+
+#define TIME_TICK (time()*60)
+
+nosave int current_day_phase;
+nosave int current_season_phase;
+nosave int current_weather_phase;
+
+mapping *day_phase;
+mapping *season_phase;
+mapping *weather_phase;
+
+mapping *read_table(string file);
+void init_day_phase();
+void init_season_phase();
+void init_weather_phase();
+string query_season() {return season_phase[current_season_phase]["name"];}
+void create()
+{
+	day_phase = read_table("/adm/etc/nature/day_phase");
+	init_day_phase();
+	season_phase = read_table("/adm/etc/nature/season_phase");
+	init_season_phase();
+	weather_phase = read_table("/adm/etc/nature/weather_phase");
+	init_weather_phase();
+
+}
+
+void init_day_phase()
+{
+	mixed *local;
+	int i, t;
+
+	// Get minutes of today.
+	local = localtime(TIME_TICK);
+	t = local[2] * 60 + local[1];		// hour * 60 + minutes
+
+	// Find the day phase for now.
+	for( i=0; i < sizeof(day_phase); i++)
+		if( t >= day_phase[i]["length"] )
+			t -= (int)day_phase[i]["length"];
+		else
+			break;
+
+	current_day_phase = (i==0? sizeof(day_phase)-1: i - 1);
+
+	// Since in our time scale, 1 minute == 1 second in RL, so we don't need
+	// any conversion before using this number as call_out dalay, if you 
+	// changed the time scale, be sure to convert it.
+
+	call_out("update_day_phase",
+		(int)day_phase[(current_day_phase+1) % sizeof(day_phase)]["length"] - t);
+}
+void init_weather_phase()
+{
+
+	// Find the weather phase for now.
+
+	current_weather_phase = random(sizeof(weather_phase));
+
+	// Since in our time scale, 1 minute == 1 second in RL, so we don't need
+	// any conversion before using this number as call_out dalay, if you 
+	// changed the time scale, be sure to convert it.
+
+	call_out("update_weather_phase", 720+random(720) );
+}
+
+void init_season_phase()
+{
+	mixed *local;
+	int i, t;
+
+	// Get minutes of today.
+	local = localtime(TIME_TICK);
+	t = local[2] * 60 + local[1];		// hour * 60 + minutes
+
+	// Find the season phase for now.
+	for( i=0; i < sizeof(season_phase); i++)
+		if( t >= season_phase[i]["length"] )
+			t -= (int)season_phase[i]["length"];
+		else
+			break;
+
+	current_season_phase = (i==0? sizeof(season_phase)-1: i - 1);
+
+	// Since in our time scale, 1 minute == 1 second in RL, so we don't need
+	// any conversion before using this number as call_out dalay, if you 
+	// changed the time scale, be sure to convert it.
+
+	call_out("update_season_phase",
+		(int)season_phase[(current_season_phase+1) % sizeof(season_phase)]["length"] - t);
+}
+
+void update_day_phase()
+{
+	remove_call_out("update_day_phase");
+
+	current_day_phase = (++current_day_phase) % sizeof(day_phase);
+
+	if (!weather_phase[current_weather_phase]["sun_mask"])
+		message("outdoor:vision", day_phase[current_day_phase]["time_msg"] + "\n", users());
+	if( !undefinedp(day_phase[current_day_phase]["event_fun"]) )
+		call_other(this_object(), day_phase[current_day_phase]["event_fun"]);
+	call_out("update_day_phase", day_phase[current_day_phase]["length"]);
+}
+
+void update_weather_phase()
+{
+int i,j;
+	remove_call_out("update_weather_phase");
+	i = random(3) - 1;
+	current_weather_phase += i;
+	if (current_weather_phase < 0) current_weather_phase += 2;
+	if (current_weather_phase >= sizeof(weather_phase) ) current_weather_phase -= 2;
+//	current_weather_phase += i+current_weather_phase) % sizeof(weather_phase);
+	if ( query_season()=="冬季" )
+		message("outdoor:vision", weather_phase[current_weather_phase]["cold_msg"] + "\n", users());
+	else
+		message("outdoor:vision", weather_phase[current_weather_phase]["warm_msg"] + "\n", users());
+	if( !undefinedp(weather_phase[current_weather_phase]["event_fun"]) )
+		call_other(this_object(), weather_phase[current_weather_phase]["event_fun"]);
+	call_out("update_weather_phase", random(720)+720);
+}
+
+void update_season_phase()
+{
+	remove_call_out("update_season_phase");
+
+	current_season_phase = (++current_season_phase) % sizeof(season_phase);
+	message("outdoor:vision", season_phase[current_season_phase]["time_msg"] + "\n", users());
+	if( !undefinedp(season_phase[current_season_phase]["event_fun"]) )
+		call_other(this_object(), season_phase[current_season_phase]["event_fun"]);
+	call_out("update_season_phase", season_phase[current_season_phase]["length"]);
+}
+
+//void event_sunrise()
+//{
+//        message("system", "\n event sunrise\n", users());
+//}
+//void event_morning()
+//{
+//        message("system", "\n event morning\n", users());
+//}
+//void event_afternoon()
+//{
+//        message("system", "\n event afternoon\n", users());
+//}
+//void event_night()
+//{
+//        message("system", "\n event night\n", users());
+//}
+void event_midnight()
+{
+	object *usr,ghost;
+	int i;
+       usr = users();
+        for(i=0; i<sizeof(usr); i++) 
+		{
+		if( !environment(usr[i]) ) continue;
+		if( !environment(usr[i])->query("outdoors") ) continue;
+		if( (usr[i]->query_skill("taoism",1)>20 && usr[i]->query("class")=="taoist")
+|| (usr[i]->query_skill("dormancy",1)>20 && usr[i]->query("class")=="qingcheng"))
+		{
+		seteuid(getuid());
+		ghost = new("/u/maoshan/earth/npc/mguard"+random(12));
+		if(random(9)>4)
+			{
+	tell_object(usr[i], "\n黑暗中一个"+ghost->name()+"的声音对你说道：救救我吧。。。\n\n" );
+		ghost->move(environment(usr[i]));
+			}
+		}
+		}
+//        message("system", "\n event midnight\n", users());
+}
+
+
+// This is called everyday dawn by update_day_phase, defined in the
+// "event_fun" field in /adm/etc/nature/day_phase
+void event_dawn()
+{
+        object room;
+	room = find_object("/d/city/jiyuan/dating.lpc");
+        if( !room) room = load_object("/d/city/jiyuan/dating.lpc");
+        if(room)
+        room->set("enter_permission", 0);
+//	room = find_object("/d/city/club.lpc");
+//        if (!room) room = load_object("/d/yingou/yingou");
+//        if( room )
+//        room->set("enter_permission", 0);
+        return;
+}
+// This is called everyday evening by update_day_phase, defined in the
+// "event_fun" field in /adm/etc/nature/day_phase
+void event_evening()
+{
+        object room;
+	room = find_object("/d/city/jiyuan/dating.lpc");
+        if( !room) room = load_object("/d/city/jiyuan/dating.lpc");
+        if( room )
+        room->set("enter_permission", 1);
+//        room = find_object("/d/city/club.lpc");
+//        if (!room) room = load_object("/d/city/club.lpc");
+//        if( room )
+//        room->set("enter_permission", 1);
+
+        return;
+
+}
+
+// This is called everyday noon by update_day_phase, defined in the
+// "event_fun" field in /adm/etc/nature/day_phase
+void event_noon()
+{
+	object *ob;
+	int i, skill;
+
+	ob = users();
+	for(i=0; i<sizeof(ob); i++) {
+		if( !environment(ob[i]) ) continue;
+		if( !environment(ob[i])->query("outdoors") ) continue;
+		if( !ob[i]->query("mana") ) continue;
+		if( !(skill = ob[i]->query_skill("spells", 1) )) {
+			tell_object(ob[i], "你觉得一阵晕眩，好像有一股能量从身上被人吸走了。\n");
+			ob[i]->set("mana", 0);
+			ob[i]->receive_damage("sen", 0);
+		} else if( skill < 60 ) {
+			tell_object(ob[i], "随著太阳升到天空的正中央，你觉得你的法力开始消失了。\n");
+			ob[i]->set("mana", (int)ob[i]->query("mana") * skill / 60 );
+		}
+	}
+}
+void event_heavysnow()
+{
+	object *ob;
+	int i, skill;
+
+	ob = users();
+	for(i=0; i<sizeof(ob); i++) {
+		if( !environment(ob[i]) ) continue;
+		if( !environment(ob[i])->query("outdoors") ) continue;
+		if( !ob[i]->query("force") ) continue;
+		skill = ob[i]->query_skill("force", 1);
+		if( skill < 40 && ob[i]->query_temp("apply/armor")<random(30) ) {
+			tell_object(ob[i], "一阵风吹来，你感到了一丝寒意，不禁打了个冷战。\n");
+			ob[i]->set("force", 0);
+			if( ob[i]->query("kee") > 20 )
+			ob[i]->receive_damage("kee", 10);
+		} else if( skill < 80 && ob[i]->query_temp("apply/armor")<random(50) ) {
+			tell_object(ob[i], "寒风吹来，你体内真气自动游走全身，与寒气相抗。\n");
+			ob[i]->set("force", (int)ob[i]->query("force") * skill / 80 );
+		}
+	}
+}
+
+string outdoor_room_description()
+{
+string str;
+	str = "    ";
+	if (weather_phase[current_weather_phase]["sun_mask"])
+		str += "如果天气晴朗，可以看到";
+	str += day_phase[current_day_phase]["desc_msg"] + "。\n";
+	if ( query_season()=="冬季" )
+		str +=  "    " + weather_phase[current_weather_phase]["cold_msg"] + "。\n";
+	else
+		str +=  "    " + weather_phase[current_weather_phase]["warm_msg"] + "。\n";
+	return str;
+}
+
+string game_time()
+{
+	return CHINESE_D->chinese_date(TIME_TICK);
+}
+
+// This function is to read a regular type of data table for day_phase and
+// etc.
+mapping *read_table(string file)
+{
+	string *line, *field, *format;
+	mapping *data;
+	int i, rn, fn;
+
+	line = explode(read_file(file), "\n");
+	data = ({});
+	for(i=0; i<sizeof(line); i++) {
+		if( line[i]=="" || line[i][0]=='#' ) continue;
+		if( !pointerp(field) ) {
+			field = explode( line[i], ":" );
+			continue;
+		}
+		if( !pointerp(format) ) {
+			format = explode( line[i], ":" );
+			continue;
+		}
+		break;
+	}
+
+	for( rn = 0, fn = 0; i<sizeof(line); i++) {
+		if( line[i]=="" || line[i][0]=='#' ) continue;
+		if( !fn ) data += ({ allocate_mapping(sizeof(field)) });
+		sscanf( line[i], format[fn], data[rn][field[fn]] );
+		fn = (++fn) % sizeof(field);
+		if( !fn ) ++rn;
+	}
+	return data;
+}
+
+int query_brightness() { return day_phase[current_day_phase]["brightness"]
+			* weather_phase[current_weather_phase]["brightness"] /100
+			* season_phase[current_season_phase]["brightness"] /100; }
+		
+int query_temperature() { return season_phase[current_season_phase]["temperature"]
+			* weather_phase[current_weather_phase]["temperature"] /100
+			* day_phase[current_day_phase]["temperature"] /100; }
+int query_humidity() { return weather_phase[current_weather_phase]["humidity"]
+			* day_phase[current_day_phase]["humidity"] /100
+			* season_phase[current_season_phase]["humidity"] /100; }
+			
+mapping *query_day_phase() { return day_phase; }
+mapping *query_season_phase() { return season_phase; }

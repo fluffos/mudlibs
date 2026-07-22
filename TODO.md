@@ -17,7 +17,7 @@ worked; keep status values consistent so the table stays greppable:
   etc.; see AGENTS.md's non-mudlib list — skipped, not converted)
 
 Port assignments: sequential from 40001, recorded here so re-running
-several libs at once never collides. **Next free port: 40031** (40001-40030
+several libs at once never collides. **Next free port: 40032** (40001-40031
 assigned; 40007 is ds386, deprioritized/partial). On mega-libs (tens of
 thousands of files, the "nitan" family), skip the full `lpcc_check.sh`
 sweep — it can OOM the host before finishing (see AGENTS.md §6b) — and
@@ -30,12 +30,19 @@ rely on the boot + interactive-connect test as the verification gate.
   majority of this collection. If an archive turns out to be English
   (like ds386/Dead Souls), do the minimum to note what it is, don't sink
   deep debugging time into it -- move on to the next Chinese one.
-- **Done: 29 / 100** (shanhaizhanshen, xingzhanyingxiong, unknownlib20150716
+- **Done: 30 / 100** (shanhaizhanshen, xingzhanyingxiong, unknownlib20150716
   [小雨西游II], bxsj [书剑天下], bxsj1 [书剑·经典], chidi [江湖I], ...,
   nitan170911 [仙剑奇侠传], nitan6 [笑傲江湖], rzrmud [大唐西游], xo, xo_final,
   zzfy [郑州风云3], shiji [世纪], dongfanggushi2 [东方故事Ⅱ之天朝帝国],
   zhonghua2 [中华英雄苏州站], shujian2008 [书剑天下 2008],
-  shujiantianxia [书剑天下, 小熊泥苑 snapshot])
+  shujiantianxia [书剑天下, 小熊泥苑 snapshot], shujianpiaoling2 [书剑飘零Ⅱ])
+- **Reminder confirmed again on shujianpiaoling2**: a similar Chinese
+  title ("书剑" in both this and shujian2008/shujiantianxia) does NOT
+  imply shared lineage -- this one has a completely different adm/obj/
+  layout, no named.c daemon, and a securityd.c with different internal
+  logic (doesn't override `user` with `this_player()` in valid_read, so
+  the §15n bug doesn't apply here -- confirmed by reading the source
+  proactively rather than needing to hit the crash first).
 - **Time-saver confirmed**: before doing full diagnostic work on a new
   archive, spot-check its core `.c` files (`chinese.c`, `logind.c`,
   `named.c`, `master.c`, `securityd.c`) against already-processed libs
@@ -191,7 +198,7 @@ rely on the boot + interactive-connect test as the verification gate.
 | 34 | 中华2.rar | zhonghua2 | 40028 | done | 中华英雄苏州站, adm/single/ layout; found a stale corrupted versiond.o save file crashing a daemon's create() and masquerading as a maintenance gate (NEW, §15m) + §15h fix (unique whole-string is_chinese variant) + deep named.lpc fix (nitan-family shape) + combined surname/given-name length fix; full registration flow verified with real surname "萧" + given name "峰"; 97.3% lpcc pass; see libs/zhonghua2/NOTES.md |
 | 35 | 书剑2008.rar | shujian2008 | 40029 | done | 「书剑天下」2008, Century-family adm/single/ layout with a genuinely custom securityd.lpc ACL; found TWO new major bug classes (§15n func-discrimination gap blocking mid-connection lazy compiles + §15o missing get_include_path) + standard §15h fixes; full registration flow verified incl. correct rejection of banned novel-name "萧峰" then acceptance of invented name "秦风"; 99.2% lpcc pass; see libs/shujian2008/NOTES.md |
 | 36 | 书剑天下.rar | shujiantianxia | 40030 | done | code-identical to shujian2008(#35) -- confirmed via diff, only site branding ("小熊泥苑") + runtime state differ, NOT a byte-identical archive though (different md5sum, kept as its own entry); ported all 7 already-proven fixes directly, booted clean on first attempt; full registration flow verified with real name "秦风"; 99.2% lpcc pass (same as #35); see libs/shujiantianxia/NOTES.md |
-| 37 | 书剑飘零II .zip | | | not started | |
+| 37 | 书剑飘零II .zip | shujianpiaoling2 | 40031 | done | 「书剑飘零Ⅱ」"Stray Book & Sword" by 飞白工作室, adm/obj/ layout -- genuinely unrelated to shujian2008/shujiantianxia despite similar title; standard §15h fix + proactive get_include_path() insurance; confirmed §4/§15n not needed via source reading; full registration flow verified with real name "秦风"; 95.3% lpcc pass; see libs/shujianpiaoling2/NOTES.md |
 | 38 | 仙侣奇缘新版.rar | | | not started | |
 | 39 | 仙侣情缘浙大版.rar | | | not started | |
 | 40 | 仙剑传奇.rar | | | not started | |

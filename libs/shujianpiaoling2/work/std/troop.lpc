@@ -1,0 +1,120 @@
+//	troop.c
+//
+// 	This is the standard troop daemon object. All objects defining a troop
+//	should inherit this as its skeleton.
+
+inherit F_CLEAN_UP;
+
+void create()
+{
+	seteuid(getuid());
+}
+
+//
+// valid_learn()
+//
+// This function is to check if a character should be able to 
+// learn/study/practice the troop. The default function just
+// returns 1 to allow any characters improve the troop. However,
+// a good troop should has its own feature and restriction. Redefine
+// this function in your troop object and make it reasonable 
+// according to the power of the troop.
+
+int valid_train(object me) { return 1; }
+
+int valid_effect(object me, object weapon, string action_name, int troop) 
+{ 
+	return 1;
+}
+
+// 
+// type()
+//
+// This function should return the type of the troop. The troop type now
+// affects if the troop requires combat exp in order to be learned (see
+// /cmds/std/learn.c ) and the ranking of a troop level (see 
+// /cmds/usr/troops.c )。
+// Currently we have only 2 types of troop: "martial" and "knowledge".
+
+string type() { return "martial"; }
+
+//
+// troop_improved()
+//
+// This function is called when a character's troop has gained a new level.
+// You can make some modify to a character according to the troop.
+
+void troop_improved(object me) {}
+
+//
+// exert_function()
+//
+//     This function is used by the "exert" command as specific troop's 
+// command parser. This function parses the arguments in the standard form
+// (that is, exert <function> [<target>] [<amount>]). When <target> is not 
+// present, use the character himself as default. When amount is not present
+// use default amount which is different for each function.
+//     In order to use this default exert command parser, you must define
+// a function called exert_function_file(string func) in the troop object
+// that takes the function name as argument and return the file name that
+// defines the specified function. 
+
+int exert_function(object me, string arg)
+{
+	string func, target, file;
+	object target_ob;
+	int    amount;
+
+	amount = -1;
+	if( sscanf(arg, "%s %s %d", func, target, amount)==3 ) {
+		target_ob = present(target, environment(me));
+		if( !target_ob ) return notify_fail("这里没有 " + target + "。\n");
+	} else if( sscanf(arg, "%s %d", func, amount)==2 ) {
+		target_ob = me;
+	} else if( sscanf(arg, "%s %s", func, target)==2 ) {
+		target_ob = present(target, environment(me));
+		if( !target_ob ) return notify_fail("这里没有 " + target + "。\n");
+	} else {
+		func = arg;
+		target_ob = me;
+	}
+
+	if( !stringp(file = (string)this_object()->exert_function_file(func))
+	||	file_size(file + ".lpc") < 0 )
+		return 0;
+
+	return (int)call_other( file, "exert", me, target_ob, amount);
+}
+
+int apply_action(object me, string arg)
+{
+	string action, target, file;
+	object target_ob;
+
+	if( sscanf(arg, "%s %s", action, target)==2 ) {
+		target_ob = present(target, environment(me));
+		if( !target_ob ) return notify_fail("这里没有 " + target + "。\n");
+	} else {
+		action = arg;
+	}
+
+	if( !stringp(file = (string)this_object()->apply_action_file(action))
+	||	file_size(file + ".lpc") < 0 )
+		return 0;
+
+	return (int)call_other( file, "apply", me, target_ob);
+}
+
+int curse_curses(object me, string curse, object target)
+{
+        string file;
+
+        notify_fail("你所选用的蛊术中没有这功能。\n");
+
+        if( !stringp(file = (string)this_object()->curse_curses_file(curse))
+        ||      file_size(file + ".lpc") < 0 )
+                return 0;
+
+        return (int)call_other( file, "curse", me, target);
+}
+

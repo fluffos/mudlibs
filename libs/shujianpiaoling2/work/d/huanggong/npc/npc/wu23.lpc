@@ -1,0 +1,253 @@
+// by snowcat 10/05/1997
+// wu??.c 武进士
+
+inherit NPC;
+inherit F_SAVE;
+
+#include "wu.h"
+
+int get_category_int ()
+{
+  return 2;
+}
+
+int get_position_int ()
+{
+  return 3;
+}
+
+void create()
+{
+  set_name("武进士", ({ "jin shi", "jin", "shi" }) );
+  set("title", get_respect_str());
+  set("gender", "男性" );
+  set("long",get_respect_str()+"。\n");
+  set("current_player","none of us");
+
+  setup();
+}
+
+void init()
+{
+	object me = this_object();
+
+	add_action("do_recopy", "recopy");
+	add_action("do_saveme", "saveme");
+  add_action("do_saveme", "save");
+  add_action("do_bandage","bandage");
+  add_action("do_kill", "kill");
+  add_action("do_steal", "steal");
+  add_action("do_ji", "ji");
+  add_action("do_cast", "cast");
+  add_action("do_exert", "exert");
+  add_action("do_perform", "perform");
+		
+	me->set("eff_kee", me->query("max_kee"));
+	me->set("eff_sen", me->query("max_sen"));
+	me->set("kee",     me->query("max_kee"));
+	me->set("sen",   me->query("max_sen"));
+	me->set("gin",   me->query("max_gin"));
+	me->set("force",  me->query("max_force"));
+  if (me->query("current_player")=="none of us")
+    me->reset_me(me);    
+  me->restore();
+  me->fully_recover(me);
+  me->setup();
+}
+
+int do_saveme()
+{
+	return save();
+}
+
+int checking(object me, object ob)
+{
+
+	object obj;
+	object huangpu = present("huangpu hui",environment(me));
+//	if ( !huangpu )    return 1;
+	int my_max_kee, his_max_kee;
+
+	my_max_kee  = me->query("max_kee");
+	his_max_kee = ob->query("max_kee");
+
+	if (me->is_fighting()) {
+		call_out("checking",2, me, ob);
+		return 1;
+	}
+
+	if ( !present(ob, environment()) ) return 1; 
+
+	if (( (int)me->query("kee")*100 / my_max_kee) <= 50 ) {
+		command("say 果然厉害，恭喜你成为银榜探花！\n");
+//		command("chat 恭喜" + ob->query("name") + "成为银榜探花！\n");
+  huangpu->announce (huangpu,ob->query("name")+environment(me)->query("short")+
+            "击败"+me->query("name")+"！\n");
+  huangpu->announce (huangpu,"陛下有旨，封"+ob->query("name")+"为银榜探花！\n");
+		remove_call_out("do_copy");
+		call_out("do_copy", 1, me, ob);
+		return 1;
+	}
+
+	if (( (int)ob->query("kee")*100 / his_max_kee) < 50 ) {
+		command("say 看来" + RANK_D->query_respect(ob) + 
+			"还得多加努力，方能在朝廷内出人头地 !\n");
+		return 1;
+	}
+
+	return 1;  
+}
+
+int do_copy(object me, object ob)
+{
+	me->set("winner", ob->query("id"));
+	me->add("generation", 1);	
+	me->set("current_player", ob->query("id"));
+
+	me->set("name",  ob->query("name") );
+	me->set("title", "银榜探花");
+	me->set("short", me->query("name") + "(" + me->query("id") + ")");
+//	me->delete("title");
+	me->set("nickname",  ob->query("nickname") );
+	me->set("no_clean_up", 1);
+
+	ob->delete_temp("apply/short");
+	ob->set_temp("apply/short", ({me->short()}));
+
+	remove_call_out("do_clone");
+	call_out("do_clone", 0, me, ob);
+
+	return 1;
+}
+
+int do_recopy(object me, object ob)
+{
+	me = this_object();
+	ob = this_player();
+
+	if ( me->query("winner") != ob->query("id") ) 
+		return notify_fail("你不是现任银榜探花！\n");;
+
+	ob->delete_temp("apply/short");
+	ob->set_temp("apply/short", ({me->short()}));
+
+	remove_call_out("do_clone");
+	call_out("do_clone", 0, me, ob);
+
+	return 1;
+}
+
+int do_clone(object me, object ob)
+{
+	object *inv;
+	mapping hp_status, skill_status, map_status, prepare_status;
+	string *sname, *mname, *pname;
+	int i;
+	me->set("max_kee",    ob->query("max_kee"));
+	me->set("eff_kee",    ob->query("max_kee"));
+	me->set("kee",    ob->query("max_kee"));
+	me->set("max_sen",  ob->query("max_sen"));
+	me->set("eff_sen",    ob->query("max_sen"));
+	me->set("sen",  ob->query("max_sen"));
+	me->set("max_force", ob->query("max_force"));
+	me->set("force",     ob->query("force"));
+	me->set("force_factor",     ob->query("force_factor"));
+	me->set("gender",    ob->query("gender"));
+	me->set("age",    ob->query("age"));
+	me->set("combat_exp",ob->query("combat_exp"));
+
+/* delete and copy skills */
+
+	skill_status = me->query_skills();
+	sname  = keys(skill_status);
+
+	for(i=0; i<sizeof(skill_status); i++) {
+		me->delete_skill(sname[i]);
+	}
+
+	skill_status = ob->query_skills();
+	sname  = keys(skill_status);
+
+	for(i=0; i<sizeof(skill_status); i++) {
+		me->set_skill(sname[i], skill_status[sname[i]]);
+	}
+	
+/* delete and copy skill maps */
+
+	if ( mapp(map_status = me->query_skill_map()) ) {
+		mname  = keys(map_status);
+
+		for(i=0; i<sizeof(map_status); i++) {
+			me->map_skill(mname[i]);
+		}
+	}
+
+	map_status = ob->query_skill_map();
+	mname  = keys(map_status);
+
+	for(i=0; i<sizeof(map_status); i++) {
+		me->map_skill(mname[i], map_status[mname[i]]);
+	}
+
+/* unwield and remove weapon & armor */
+
+	inv = all_inventory(me);
+	for(i=0; i<sizeof(inv); i++) {
+		if( inv[i]->query("weapon_prop") && inv[i]->query("equipped") ) {
+			inv[i]->unequip();
+			me->set("weapon", 0);
+		}
+		if( inv[i]->query("armor_prop") && inv[i]->query("equipped") ) {
+			inv[i]->unequip();
+			me->set("armor", 0);
+		}
+	}
+
+/* wield and wear weapon & armor */
+
+	inv = all_inventory(ob);
+	for(i=0; i<sizeof(inv); i++) {
+		if( inv[i]->query("weapon_prop") && inv[i]->query("weapon_prop/damage") <= 100
+		&&  inv[i]->query("equipped") ) {
+			carry_object(base_name(inv[i]))->wield();
+			me->set("weapon", base_name(inv[i]));
+		}
+		if( inv[i]->query("armor_prop") && inv[i]->query("armor_prop/armor") <= 100
+		&&  inv[i]->query("equipped") ) {
+			carry_object(base_name(inv[i]))->wear();
+			me->set("armor", base_name(inv[i]));
+		}
+	}
+
+/* copy entire dbase values */
+
+	hp_status = ob->query_entire_dbase();
+
+		me->set("str", hp_status["str"]);
+		me->set("int", hp_status["int"]);
+		me->set("per", hp_status["per"]);
+		me->set("cor", hp_status["cor"]);
+		me->set("spi", hp_status["spi"]);
+		me->set("age", hp_status["age"]);
+
+		me->set("max_kee",    hp_status["max_kee"]);
+		me->set("eff_kee",    hp_status["eff_kee"]);
+		me->set("kee",        hp_status["kee"]);
+		me->set("max_gin",  hp_status["max_gin"]);
+		me->set("eff_gin",  hp_status["eff_gin"]);
+		me->set("gin",      hp_status["gin"]);
+		me->set("max_sen",  hp_status["max_sen"]);
+		me->set("eff_sen",  hp_status["eff_sen"]);
+		me->set("sen",      hp_status["sen"]);
+		me->set("max_force", hp_status["max_force"]);
+		me->set("force",     hp_status["force"]);
+		me->set("force_factor",     hp_status["force_factor"]);
+		me->set("gender",    hp_status["gender"]);
+		me->set("combat_exp",hp_status["combat_exp"]);
+
+	save();
+
+	return 1;
+}
+
+

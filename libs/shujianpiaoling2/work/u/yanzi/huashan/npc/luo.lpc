@@ -1,0 +1,370 @@
+// tuo.c
+inherit NPC;
+#include <ansi.h>;
+int about_quest();
+int do_over();
+
+void create()
+{
+        set_name("骆寒林", ({ "luo hanlin","luo" }) );
+        set("gender", "男性");
+        set("age",43);
+        set("title", "华山派二师哥");
+        set("nickname", CYN"内务部长"NOR);
+        set("long",@LONG
+骆寒林带艺投师，虽然武功不是很高，但办事稳重老练，深得莫天雄
+信任，让其打点华山上下事物。华山各弟子的任务都由其分发。
+LONG
+        );
+        set("attitude", "peaceful");
+        set("int", 20);
+        set("cor", 20);
+        set("agi", 20);
+        set("con", 18);
+        set("str", 20);
+        set("tol", 20);
+        set("spi", 15);
+        set("dur", 20);
+        set("per", 15);
+        set("fle", 15);
+        set("cps", 20);
+        set("max_force", 1400);
+        set("force", 2000);
+        set("force_factor", 50);
+        set("combat_exp", 500000);
+        set("score", 30000);
+//      set("daode", 49000);
+
+        set("chat_chance_combat", 70);
+        set("chat_msg_combat", ({
+        (: perform_action, "sword.taiyue" :),
+        }) );
+         set("inquiry", ([
+        "quest" :  (: about_quest :),
+        "干活" :  (: about_quest :),
+        "over" :  (:do_over:),
+        "交工" :  (:do_over:),
+        ]));
+        set_skill("dodge", 120);
+        set_skill("parry", 120);
+        set_skill("sword", 120);
+        set_skill("force", 120);
+        set_skill("unarmed", 120);
+        set_skill("literate", 120);
+        set_skill("hs-zhengqi", 90);
+        set_skill("huashan-force", 100);
+        set_skill("huashan-sword", 100);
+        set_skill("huashan-strike", 100);
+        set_skill("tianluo-steps", 100);
+
+        set("perform/huashan/taiyue",1000);  //perform lv=1
+
+        map_skill("sword", "huashan-sword");
+        map_skill("parry", "huashan-sword");
+        map_skill("force", "huashan-force");
+        map_skill("unarmed", "huashan-strike");
+        map_skill("dodge", "tianluo-steps");
+
+        create_family("华山派", 16, "弟子");
+
+        setup();
+        carry_object(__DIR__"obj/longsword")->wield();
+        carry_object("/obj/cloth")->wear();
+}
+
+void init()
+{
+        add_action("do_killing", "kill");
+        add_action("do_cancel", "cancel");
+}
+int do_killing(string arg)
+{
+        object player,victim;
+        player = this_player();
+        if(!arg)
+        return 0;
+        if( objectp(victim = present(arg, environment(this_object()))))
+        {
+                if (victim->query("family/family_name")== "华山派") 
+                {
+                message_vision("$N大怒，大胆狂徒，竟敢在华山动手，未免太小看我们华山派吧！受死吧！\n",this_object());
+                this_object()->kill_ob(player);
+                player->kill_ob(this_object());
+                return 0;
+                }
+                else return 0;
+        }
+        else return 0;
+}
+void killed_enemy(object ob)
+{
+        command("say 哈哈, 不自量力的家伙！");
+}
+int do_cancel(string arg)
+{
+        object me,gold;
+        me=this_player();
+        gold = present("gold_money",me);
+        if(!arg || arg!="quest")
+                return notify_fail("你要取消什么？\n");
+        if (!(int)me->query_temp("huashan/quest"))
+                return notify_fail("你现在没有任务。\n");
+        if((int)me->query_temp("over") == 1)
+                return notify_fail("你已经完成任务了。\n");
+        command("say 这次任务太难了？知难而退可不好啊。");
+                if((int)me->query_temp("huashan/quest") == 8) {
+                        if(!gold || gold->query_amount() < 5) {
+                                command("faint");
+                                command("say 金子呢？你竟敢私吞公款！");
+                                me->add("combat_exp",-(int)me->query("combat_exp")/10);
+                                me->set("potential", (int)me->query("potential")/2);
+                                tell_object(me,HIY"你被惩罚了：\n10%经验！\n一半潜能！\n");
+                                command("say 你去思过崖反省反省吧。");
+                                me->move("/u/yanzi/huashan/siguoy");
+                                me->set_temp("huashan/quest", 0);
+                                me->delete_temp("over");
+                                me->set_temp("success",0);
+                                return 1;
+                        }
+                        else {
+                                if(gold->query_amount() == 5) 
+                                        destruct(gold);
+                                else 
+                                        gold->add_amount(-5);
+                        }
+                }
+                if( (int)me->query("combat_exp") <= 100 )   {
+                        me->set_temp("huashan/quest", 0);
+                        me->delete_temp("over");
+                        me->set_temp("success",0);
+                        me->unconcious();
+                        return 1;
+                }
+                if(me->query_temp("time"))
+                        me->delete_temp("time");
+                me->add("combat_exp", -random(100));
+                me->set_temp("huashan/quest", 0);
+                me->delete_temp("over");
+                me->set_temp("success",0);
+                return 1;
+}
+int about_quest()
+{
+        object me,obj;
+        int quest,n,exp,pot,i,num;
+        me = this_player();
+        exp = 800000;
+        pot = 400000;
+
+        if(me->query("class") != "huashan" && me->query("class") != "xiaoyao") {
+                command("say 本派的杂活自有本派弟子来打理，不劳您费心。");
+                return 1;
+        }
+        if((int)me->query("combat_exp") >= exp
+        || (int)me->query("potential")  >= pot ) {
+                command("smile");
+                command("say 你已经是名镇天下的大侠了，这些琐事不劳您费心。");
+                return 1;
+        }
+        if( me->query_temp("huashan/quest") && (me->query_quest_time()) ) {
+                command("kick " + me->query("id"));
+                command("say 你的工作还没有完成，还不去干活！");
+                return 1;
+        }
+        n = 5 + random(5);
+        if(me->query("class") == "xiaoyao")
+                command("say 原来是逍遥派的兄弟啊，要你帮忙真不好意思啊。");
+        if((int)me->query("combat_exp") < 200000) i = random(5);
+        else if((int)me->query("combat_exp") < 400000) i = random(7);
+        else if((int)me->query("combat_exp") < 800000) i = random(9);
+        switch (i)
+        {
+                case 0:
+                        num = 1;
+                        command("say 你去花园帮着把那里打理一下。");
+                        me->set_temp("garden",n);
+                        break;
+                case 1:
+                        num = 2;
+                        command("say 你去把令狐前辈的卧室打扫一下。");
+                        me->set_temp("woshi",n);
+                        break;
+                case 2:
+                        num = 3;
+                        command("say 去厨房帮着做饭去。");
+                        me->set_temp("cook",n);
+                        break;
+                case 3:
+                        num = 4;
+                        command("say 最近在整修房屋，你去帮个手吧。");
+                        me->set_temp("repair",n);
+                        break;
+                case 4:
+                        num = 5;
+                        command("say 去山门帮四师哥看守山门。");
+                        me->set_temp("guard",n);
+                        break;
+                case 5:
+                        num = 6;
+                        command("say 掌门有事出去了，你去广场教教新来弟子的武功。\n");
+                        me->set_temp("teach",n);
+                        break;
+                case 6:
+                        num = 7;// need lark modify xiaoyao
+                        command("say 这封是掌门给逍遥派的书信，你给送去。");
+                        obj=new(__DIR__"obj/letter");
+                        obj->move(me);
+                        message_vision("骆寒林给$N一封信。\n",me);
+                        break;
+                case 7:
+                        num = 8;
+                        command("say 前一阵子我派整修房舍，借了群仙观不少金子，你去把金子还给他们。");
+                        obj=new("/obj/money/gold");
+                        obj->move(me);
+                        obj->add_amount(4);
+                        message_vision("骆寒林给了$N一些金子。\n",me);
+                        break;
+                case 8:
+                        num = 9;
+                        command("say 最近我派有些房舍损坏，需要修葺，但预算不足，你去群仙观问他们借点钱来。");
+                        break;
+        }
+        me->set_temp("huashan/quest",num);
+	me->set_quest_time(random(600)+120);
+        return 1;
+}
+int do_over()
+{
+        object me,gold;
+        int exp,pot,num,n,score,success;
+        me = this_player();
+        gold = present("gold_money",me);
+        num = (int)me->query_temp("huashan/quest");
+        n = (int)me->query_temp("int");
+        success = (int)me->query_temp("success");
+
+        if(!me->query_temp("huashan/quest") ) {
+                command("say 你还没有领任务呢！");
+                return 1;
+        }
+        if(!me->query_temp("over") ) {
+                command("say 做事要有始有终，不过如果你实在完不成，可以取消(cancel)任务。");
+                return 1;
+        }
+        switch(num)
+        {
+                case 1:
+                        exp = 15*success;
+                        pot = 2*success;
+                        score = 1 + random(2);
+                        break;
+                case 2:
+                        exp = 10*success;
+                        pot = 3*success;
+                        score = 2 + random(1);
+                        break;
+                case 3:
+                        exp = 8*success;
+                        pot = 5*success;
+                        score + 2 + random(1);
+                        break;
+                case 4:
+                        exp = 12*success;
+                        pot = 4*success;
+                        score = 2 + random(2);
+                        break;
+                case 5:
+                        exp = 16*success;
+                        pot = 6*success;
+                        score = 1 + random(2);
+                        break;
+                case 6:
+                        exp = 22*success;
+                        pot = 10*success;
+                        score = 2 + random(2);
+                        break;
+                case 7:
+                        exp = 100 + random(n+10);
+                        pot = 40 + random(n+10);
+                        score = 3 + random(3);
+                        break;
+                case 8:
+                        exp = 120 + random(n+10);
+                        pot = 50 + random(n+10);
+                        score = 5 + random(2);
+                        break;
+                case 9:
+                        if(!gold || gold->query_amount() < success ) {
+                                command("say 哼，竟敢私吞公款！胆子到挺大！");
+                                me->add("combat_exp",-(int)me->query("combat_exp")/10);
+                                me->set("potential", (int)me->query("learned_points"));
+                                tell_object(me,HIY"你被惩罚了：\n10%经验！\n取消了潜能！\n");
+                                command("say 你去思过崖反省反省吧。");
+                                me->move("/u/yanzi/huashan/siguoy");
+                                return 1;
+                        }
+                        if(success == 2){
+                                exp = 50 + random(n+10);
+                                pot = 10 + random(n/2+5);
+                                score = 1;
+                        }
+                        else if(success <= 5){
+                                exp = 30*success;
+                                pot = 5*success;
+                                score = 2;
+                        }
+                        else if(success <= 10){
+                                exp = 50*success;
+                                pot = 20*success;
+                                score = 5;
+                        }
+                        else if(success <= 20){
+                                exp = 65*success;
+                                pot = 25*success;
+                                score = 10;
+                        }
+                        else {
+                                exp = 100*success;
+                                pot = 50*success;
+                                score = 50;
+                        }
+                        gold->add_amount(-success);
+                        break;
+        }
+        message_vision("$N对着$n点了点头，不错不错，干得很好。\n",this_object(),me);
+        if(exp < 1) exp=1;
+        if(pot < 1) pot=1;
+        if(score < 1) score=1;
+        tell_object(me,HIG"你被奖励了：\n" 
+        + chinese_number(exp) + "点经验！\n"
+        + chinese_number(pot) + "点潜能！\n"
+        + chinese_number(score) + "点阅历！\n"NOR);
+        me->add("combat_exp", exp);
+        me->add("potential", pot);
+        me->add("life_exp", score);
+        me->add("score", 1);
+        if(me->query_temp("wonderful")) { 
+                exp = exp/3;
+                pot = pot/4;
+                score = score/6;
+                if(exp < 1) exp=1;
+                if(pot < 1) pot=1;
+                if(score < 1) score=1;
+                command("say 你这次表现特别突出，再追加奖励！");
+                tell_object(me,HIG"你被奖励了：\n" 
+                + chinese_number(exp) + "点经验！\n"
+                + chinese_number(pot) + "点潜能！\n"
+                + chinese_number(score) + "点阅历！\n"NOR);
+                me->add("combat_exp", exp);
+                me->add("potential", pot);
+                me->add("life_exp", score);
+                me->add("score", 1);
+                me->delete_temp("wonderful");
+        }
+        me->delete_temp("over");
+        me->set_temp("huashan/quest", 0);
+        me->set_temp("success",0);
+	me->set_quest_time(0);
+        return 1;
+}
+

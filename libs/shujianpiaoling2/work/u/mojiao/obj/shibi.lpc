@@ -1,0 +1,294 @@
+//shibi.c written by john darks
+
+#include <ansi.h>
+inherit ITEM;
+string *skill_type = 
+({
+        "unarmed",
+        "axe",
+        "blade",
+        "dagger",
+        "hammer",
+        "spear",  //( fork)
+        "staff",  //(stick)
+        "sword",
+        "throwing",
+        "whip",
+});
+string *newact;
+string newtype;
+int check_chinese(string name);
+private void get_type(string type,object me);
+private void get_actions(string arg, int lvl ,object me);
+private void show_help(object me);
+private void show_actions(object me);
+private int delete_actions(object me, int lvl);
+private void save_actions(string yn, int lvl ,object me);
+
+void create()
+{       
+        set_name("石壁", ({ "shibi" ,"石壁"}));
+        set_weight(500000);
+        set("no_get", 1);
+        set("no_shown", 1);
+        if( clonep() )
+                set_default_object(__FILE__);
+        else {
+                set("unit", "块");
+                set("long", "一块石壁，光滑如镜，上面刻满了字。\n");
+        }
+        setup();
+}
+
+void init()
+{
+        add_action("do_create","create");
+}
+
+int do_create(string arg)
+{
+        object me,room;
+        int number;
+        string action;
+        me = this_player();
+        room = environment(me);
+        if (room != environment(this_object()))
+                return 0;
+        if (!arg) {
+                write("你打算自创武功．．．．\n");
+        write("
+        0. unarmed       拳脚
+        1. axe           斧法
+        2. blade         刀法
+        3. dagger        短兵刃   
+        4. hammer        锤法
+        5. spear( fork)  枪法 (叉法)
+        6. staff(stick)  杖法 (棍法)
+        7. sword         剑法
+        8. throwing      暗器
+        9. whip          鞭法 
+        \n");
+        write("请决定你要创的武功类型(0-9)：");
+        input_to("get_type",me);
+        }
+        return 1;
+}
+
+private void get_type(string type, object me)
+{
+        mapping myskill;
+        if( type=="" ) {
+                write("你决定放弃自创武功了。\n");
+                return;
+        }
+        if( type[0]=='0' || type[0]=='1' || type[0]=='2' || type[0]=='3'|| type[0]=='4'
+          || type[0]=='5' || type[0]=='6' || type[0]=='7' || type[0]=='8'|| type[0]=='9')
+                if (!me->set("my_skill/skill_type") || me->set("my_skill/skill_type")== skill_type[(int) (type[0]-'0')] ){
+                        me->set("my_skill/skill_type",skill_type[(int) (type[0]-'0')]);
+                        newtype = skill_type[(int) (type[0]-'0')];
+                }
+                else {
+                        write("现在的自创技和你原来拥有的类型不同，请选择原来的类型。\n");
+                        input_to("get_type", me);
+                        return;
+                }
+        else {
+                write("\n对不起，您只能选择列出来的种类之一(0-9)：");
+                input_to("get_type", me);
+                return;
+        }
+        myskill = me->query("my_skill");
+        if (undefinedp (myskill["skill_actions"]) )
+                me->set("my_skill/skill_actions",({}));
+        newact = me->query("my_skill/skill_actions");
+        write("请输入你招式的描写：
+        $N  代表你自己(必须有)
+        $n  代表你的对手(可以不用)
+        $w  代表你的武器(可以不用)
+        $v  代表对手的武器(可以不用)
+        $l  代表你所要攻击的对手的部位(可以不用)
+输入 h 看例子，l 看已创的招式，d 删除当前招式，输入数字
+可以直接调出相应招的招式，你最多可以创造八招招式。
+>>：");
+        input_to("get_actions",0,me);
+}
+
+private void get_actions(string arg, int lvl ,object me)
+{
+        string *actions,tmp ;
+        if( arg == "" ) {
+                write("\n保存所创造的招式(S)，继续创造招式(R)，放弃(A)？");
+                input_to("save_actions", lvl ,me);
+                return;
+        }
+        if( arg[0]=='h'){
+                show_help(me);
+                write("\n>>：");
+                input_to("get_actions", lvl ,me);
+                return;
+        }
+        if( arg[0]=='l'){
+                show_actions(me);
+                write("\n>>：");
+                input_to("get_actions", lvl ,me);
+                return;
+        }
+        if( arg[0]=='d'){
+                lvl = delete_actions(me,lvl);
+                write("\n>>：");
+                input_to("get_actions", lvl ,me);
+                return;
+        }
+        if( arg[0]=='1' ||arg[0]=='2'||arg[0]=='3'||arg[0]=='4'||arg[0]=='5'
+            ||arg[0]=='6'||arg[0]=='7'||arg[0]=='8'){
+                if ((int)(arg[0]-'1') >= sizeof(newact))
+                        write("你还没有创造这一招。\n");
+                else    {
+                        lvl = (int)(arg[0]-'1');
+                        write(newact[lvl]);
+                }
+                write("\n>>：");
+                input_to("get_actions", lvl ,me);
+                return;
+        }
+        //开始过滤 arg，确保 arg 为合法的
+        tmp = replace_string(arg,"$N","");
+        tmp = replace_string(tmp,"$n","");
+        tmp = replace_string(tmp,"$w","");
+        tmp = replace_string(tmp,"$v","");
+        tmp = replace_string(tmp,"$l","");
+        if(!check_chinese(tmp)){
+                write("描述必须是中文。\n");
+                write("\n>>：");
+                input_to("get_actions", lvl ,me);
+                return;
+        }
+        if( strlen(arg) > 131 ){
+                write("这一招的描写太长了，想一个短一点的。\n");
+                write("\n>>：");
+                input_to("get_actions", lvl ,me);
+                return;
+        }
+        if(strsrch(arg,"$N") == -1 ){
+                write("描述必须含有$N。\n");
+                write("\n>>：");
+                input_to("get_actions", lvl ,me);
+                return;
+        }
+        if (!sizeof(newact)){
+                newact = ({arg});
+                lvl = sizeof(newact);
+                write("\n>>：");
+                input_to("get_actions", lvl,me);
+                return ;
+        }else if (sizeof(newact)< 7){
+                newact += ({arg});
+                lvl = sizeof(newact);
+                write("\n>>：");
+                input_to("get_actions", lvl,me);
+                return ;
+        }else {
+                write("你最多只可以创造八招招式。\n");
+                input_to("save_actions", lvl ,me);
+                return ;
+        }
+}
+
+private void show_help(object me)
+{
+        write("\n示例：
+        $N  代表你自己(必须有)
+        $n  代表你的对手(可以不用)
+        $w  代表你的武器(可以不用)
+        $v  代表对手的武器(可以不用)
+        $l  代表你所要攻击的对手的部位(可以不用)
+1. $N吐气扬声，一招「气撼九重天」双掌并力推出
+2. $N左手虚晃，右拳「孤崖听涛」往$n的$l击出
+3. $N身影晃动，刀锋忽左忽右，手中的$w，从中路突然砍至$n的$l
+4. $N舞动$w，一招「阴云迭起」挟著无数剑光刺向$n的$l
+\n");
+        return;
+}
+
+private void show_actions(object me)
+{
+        string *actions;
+        int i;
+        actions = newact;
+        if (!sizeof(actions)){
+                write("\n目前你没有创造出任何招式。");
+        }else {
+                write("\n目前你已创造了"+chinese_number(sizeof(actions))+"招\n");
+                for (i=0 ; i<sizeof(actions); i++)
+                        write(actions[i] + "\n");
+        }               
+        return;
+}
+
+private int delete_actions(object me ,int lvl)
+{
+        string *actions,*news;
+        int i;
+        actions = newact;
+        news = ({});
+        if (!sizeof(actions)){
+                write("\n目前你没有创造出任何招式。");
+                return lvl;
+        }else {
+                write("\n第"+chinese_number(lvl)+"招\n");
+                write(actions[lvl]);
+                write("\n被删除了。\n");
+                for(i=0; i< sizeof(actions);i++){
+                        if (i<lvl)      news[i] = actions[i];
+                        if (i==lvl)     continue;
+                        if (i>lvl && i!=0)
+                                news[i-1] = actions[i];
+                }
+                newact = news;
+                return lvl-1;
+        }               
+}
+
+private void save_actions(string yn, int lvl ,object me)
+{
+        string *actions;
+        me = this_player();
+        actions = me->query("my_skill/skill_actions");
+        if( yn=="" ) {
+                write("\n保存所创造的招式(S)，继续创造招式(R)，放弃(A)？");
+                input_to("save_actions",lvl,me);
+                return;
+        }       
+        if( yn[0]=='S' || yn[0]=='s' ) {
+                if (!sizeof(newact)){
+                        write("你决定放弃创造自己的武功。\n");
+                        return;
+                }else   {
+                        write("你成功的创造了自创技。\n");
+                        me->set("my_skill/skill_type",newtype);
+                        me->set("my_skill/skill_actions",newact);
+                        me->set("my_skill/eff_level",20);
+                        me->set_skill("customskill",1);
+                        return;
+                }
+        }else if ( yn[0]=='R' || yn[0]=='r' ) {
+                write("\n>>：");
+                input_to("get_actions", lvl ,me);
+                return;
+        }else if ( yn[0]=='A' || yn[0]=='a' ) {
+                write("你决定放弃创造自己的武功。\n");
+                return;
+        }
+}
+                        
+int check_chinese(string name)
+{
+        int i;
+        if(!name) return 0;
+        i = strlen(name);
+        while(i--) {
+                if( i%2==0 && !is_chinese(name[i..<0]) ) return 0;
+        }
+        return 1;
+}
+
