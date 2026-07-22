@@ -1,0 +1,329 @@
+// /d/wudang/liandanfang.c
+
+#include <ansi.h>
+
+int give_reward(object ob);
+int do_attack(object ob);
+
+inherit ROOM;
+
+void create()
+{
+        set("short", "炼丹房");
+        set("long", @LONG
+这里是间药香弥漫的大屋，屋四周堆满了各式各样的草药，房子中间
+放着一炼丹制药的铜鼎(tongding)。因为炼丹的缘故，这屋子四季如春！
+一位炼丹道童正靠在墙脚打瞌睡。
+LONG
+        );
+        set("exits", ([
+"east" : __DIR__"xilang1",
+        ]));
+
+        set("objects",([
+                __DIR__"npc/yudaiyan" : 1,
+                __DIR__"npc/daotong1" : 1,
+        ]));
+        
+
+        set("item_desc", ([
+                "tongding" :
+"    这是由青铜铸成的炼丹铜鼎，重约二百多斤，鼎身纹有九龙戏珠
+的图案。鼎内火势正旺，正是炼丹的紧要关头！ 为了保持火势，必须不
+停地向鼎口扇(shan)风。\n",
+        ]));
+
+        set("dan_count", 6);
+        setup();
+}
+
+void init()
+{
+        add_action("do_lian", "lian");
+        add_action("do_read", "read");
+        add_action("do_study", "study");
+        add_action("do_practice", "practice");
+        add_action("do_quit", "quit");
+        add_action("do_shan", "shan");
+// add_action("do_kanshou", "kanshou");
+        add_action("do_leave", "leave");
+}
+
+int do_lian()
+{
+  object me = this_player();
+  if(me->query_temp("wd_job1")) 
+      tell_object(me,"你还是专心看守铜鼎吧！\n");
+  return 1;
+}
+int do_read()
+{
+  object me = this_player();
+  if(me->query_temp("wd_job1")) 
+      tell_object(me,"你还是专心看守铜鼎吧！\n");
+  return 1;
+}
+
+int do_study()
+{
+  object me = this_player();
+  if(me->query_temp("wd_job1")) 
+      tell_object(me,"你还是专心看守铜鼎吧！\n");
+  return 1;
+}
+int do_practice()
+{
+  object me = this_player();
+  if(me->query_temp("wd_job1")) 
+      tell_object(me,"你还是专心看守铜鼎吧！\n");
+  return 1;
+}
+
+int do_quit()
+{
+  object me = this_player();
+  if(me->query_temp("wd_job1")) 
+      write("你的任务还没完成，就想溜？还是想搞破坏！\n");
+  return 1;
+}
+
+int do_shan(string arg)
+{       mapping fam;
+        object me,ob;
+        int i, costj, costq;
+        me = this_player();
+
+        if( me->query_temp("wd_job1")) 
+            {write("你还是专心看守铜鼎吧！\n");return 1;}
+
+        if (me->is_busy())
+         {write("你现在正忙着呢！\n");return 1;}
+        if (me->is_fighting())
+         {write("你正在战斗中，无法专心干活！\n");return 1;}
+
+        if ( arg != "tongding" )
+            {    message_vision("$N摆了摆手，象是在扇凉！\n",me);
+                 return 1;
+             }
+        if (!(fam = this_player()->query("family")) || fam["family_name"] != "武当派")
+               return notify_fail("你与本派素无来往，不必在此浪费体力！\n");
+        costj = 1000 / (int)me->query("con");
+        costj = random(costj);
+        costq = 1500 / (int)me->query("str");
+        costq = random(costq);
+
+        if ((int)me->query("jingli") < costj || (int)me->query("qi") < costq){
+        message_vision("$N用力过猛，一不留神头嗑到香炉上！\n",me);
+        me->unconcious();return 1;}
+        
+        me->receive_damage("jingli", costj);
+        me->receive_damage("qi", costq);       
+
+        tell_object(me,"你用力呼哧呼哧地扇着火。\n");
+
+        if ( (int)me->query_skill("cuff", 1) < 31)
+                {
+                        write(HIY"你手臂来回用力，进退之中似乎对基本拳法有些领悟。\n"NOR);
+                        me->improve_skill("cuff", (int)(me->query("int") / 2));
+                }
+        if ( (int)me->query_skill("hand", 1) < 31)
+                {
+                        write(HIY"你手臂来回用力，进退之中似乎对基本手法有些领悟。\n"NOR);
+                        me->improve_skill("hand", (int)(me->query("int") / 2));
+                }
+          if ( (int)me->query("combat_exp") < 15000 && me->query("neili") > 100) {
+             me->add("combat_exp", (int)(me->query("con") / 6));
+             me->add("neili", - random(50));
+          }
+        i = (int)me->query("int") * (int)me->query("str") / 4;
+        i = i + (int)me->query("kar") / 3 - 20+random(8);
+     if (query("dan_count") >=1)
+      {
+        add("dan_count", -1);
+
+        if ( random(i) > 300 )
+                {
+                        write(HIY"恭喜！ 你终于炼出一白虎夺命丹！\n"NOR);
+                        ob=new(__DIR__"npc/obj/duoming-dan");
+                        ob->move(this_player());
+                        me->add("combat_exp", (int)(me->query("int") / 10));
+                        return 1;
+                      }
+        if ( random(i) > 110 )
+                {
+                        write(HIY"恭喜！ 你终于炼出一九转结气丸！\n"NOR);
+                        ob=new(__DIR__"npc/obj/jieqi-wan");
+                        ob->move(this_player());
+                        me->add("combat_exp", (int)(me->query("int") / 10));
+                        return 1;
+                      }
+        if ( random(i) > 100 )
+                {
+                        write(HIY"恭喜！ 你终于炼出一延年聚精丹！\n"NOR);
+                        ob=new(__DIR__"npc/obj/jujing-dan");
+                        ob->move(this_player());
+                        me->add("combat_exp", (int)(me->query("int") / 10));
+                        return 1;
+                      }
+      }
+     else
+        me->add("combat_exp", random((int)(me->query("int") / 10)));
+       
+        return 1;
+}
+int do_kanshou(object ob)
+{
+       mapping fam;
+       int exp;
+       object me;
+       ob = this_player();
+       if(!present("yu daiyan",  environment(ob) ) )
+                return notify_fail("什么？\n");
+       me = present("yu daiyan",  environment(ob) );
+       fam = ob->query("family");
+       exp = ob->query("combat_exp");
+       if (!fam || fam["family_name"] !="武当派")
+             return notify_fail(GRN"俞岱岩告诉你："+RANK_D->query_respect(this_player())+"与本派素无来往，我看还是不必劳您大驾了！\n"NOR);
+       if (exp<80000)
+             return notify_fail("你的实战经验不足，还是先去采药吧！\n");
+       if (ob->query_temp("wd_busy1"))
+             return notify_fail("你刚干完，还是先去歇息片刻再来吧！\n");
+       if(me->query("guard_count")<1)
+             return notify_fail("现在人手已经够了，你还是去找找其他事情做吧！\n");
+       if (ob->query_temp("wd_job1"))
+             return notify_fail("你正在看守铜鼎。\n");
+        me->add("guard_count",-1);
+        ob->set_temp("wd_job1",1);
+        ob->set_temp("apply/short", ({HIC"铜鼎守卫"NOR+" "+ob->name()+"("+capitalize(ob->query("id"))+")"}));
+        message_vision(CYN"俞岱岩说道：好吧，"+ob->name()+"，你现在就开始看守铜鼎吧，千万不要让任何人闯进来！\n"NOR,ob);
+        call_out("give_reward",180+random(120),ob);
+        if(random(10)>2)
+          {
+               call_out("do_attack",10+random(20),ob);
+               call_out("do_attack",60+random(20),ob);
+               call_out("do_attack",120+random(20),ob);
+               return 1;
+          }
+
+        return 1;
+        
+}
+
+int do_leave(object ob)
+{
+        object me;
+        ob = this_player();
+        me = present("yu daiyan",  environment(ob));
+        if( ob->query_temp("wd_job1")<1 )
+            return notify_fail("你并没有在看守铜鼎。\n");
+        remove_call_out("give_reward");
+        remove_call_out("do_attack");
+ remove_call_out("do_attack");
+ remove_call_out("do_attack");
+        ob->delete_temp("wd_job1");
+        me->add("guard_count",1);
+        ob->delete_temp("apply/short");
+        message_vision(CYN"俞岱岩说道：唉…，"+ob->name()+"，既然你干不了我也不勉强你，下次好好干吧！\n"NOR,ob);
+        return 1;
+}
+int do_attack(object ob)
+{
+        mapping skills;
+        string *sk;
+        int exp,i,lv;
+        object att;
+        ob = this_player();
+        exp = ob->query("combat_exp");
+lv = ob->query_skill("dodge",1) + random(20);
+        att = new("/d/wudang/npc/attecker");
+        att->set("qi",(int)ob->query("qi"));
+        att->set("max_qi", ( (int)ob->query("max_qi")+random(1000) ) );
+        att->set("eff_qi", ( (int)ob->query("max_qi")+random(1000) ) );
+        att->set("jing",(int)ob->query("jing"));
+        att->set("eff_jing",(int)ob->query("max_jing"));
+att->set("neili",(int)ob->query("neili")/5 );
+att->set("max_neili",(int)ob->query("max_neili")/3 );
+        att->set("jingli",(int)ob->query("jingli"));
+        att->set("eff_jingli",(int)ob->query("eff_jingli"));
+             if (exp<100000)
+att->set("combat_exp",exp+random(5000) );
+        else if( exp>100000 && exp<500000)
+att->set("combat_exp",exp+random(20000) );
+        else if( exp>500000 && exp<1000000)
+att->set("combat_exp",exp+random(300000) );
+        else if( exp>1000000 && exp<2000000)
+att->set("combat_exp",exp+random(500000) );
+        else if( exp>2000000)
+att->set("combat_exp",exp+random(500000) );
+        skills = att->query_skills();
+        if (mapp(skills)) 
+          {
+                sk = keys(skills);
+                for (i=0;i<sizeof(sk);i++)
+                        skills[sk[i]] = lv;
+          }
+
+        message_vision(RED"\n只听“哐！”的一声巨响，一名"+att->name()+"破门而入，对"+ob->name()+"发起猛烈的攻击！\n\n"NOR,ob);
+//        att->move("/u/cht/liandanfang");
+        att->move("/d/wudang/liandanfang");
+        att->kill_ob(ob);
+        return 1;
+}
+int give_reward(object ob)
+{
+        int p,e;
+        object me,here;
+        me = present("yu daiyan",  environment(ob));
+        ob = this_player();
+        here=environment(ob);
+p = 50+random(150);
+e = 50+random(250);
+        ob->delete_temp("apply/short");
+        if((string)here->query("short") != "炼丹房")
+          {
+             ob->delete_temp("wd_job1");
+             ob->delete_temp("guard");
+             tell_object(ob,CYN"看守时限已到，但是你擅离职守，任务失败了！\n"NOR);
+             return 1;
+          }
+        else
+        if(!present("yu daiyan",  environment(ob)) && here->query("short") == "炼丹房")
+        tell_object(ob,CYN"你看守铜鼎任务顺利完成！\n"NOR);
+        else
+         {    
+            message_vision(CYN"俞岱岩说道：好，时间到了！"+ob->name()+"，你下去休息吧！\n"NOR,ob);
+            me->add("guard_count",1);
+         }
+        ob->set_temp("wd_busy1",1);
+        ob->add("combat_exp",e);
+        ob->add("potential",p);
+        ob->delete_temp("wd_job1");
+        ob->delete_temp("guard");
+        if ( (int)ob->query("potential", 1) > (int)ob->query("max_pot", 1) )
+        ob->set("potential" , ob->query("max_pot", 1) );
+        tell_object(ob, GRN"
+你此次看守共得到"+CHINESE_D->chinese_number(e)+"点经验，"+CHINESE_D->chinese_number(p)+"点潜能！\n"NOR);
+        write_file( "/log/wd_job1",sprintf("%s %s(%s)看守铜鼎获得了%d点经验，%d点潜能。\n",
+ctime(time())[4..19],ob->name(),ob->query("id"),e,p));
+        remove_call_out("do_attack");
+        call_out("remove_busy1",60+random(60),ob);
+        return 1;    
+}
+
+int remove_busy1(object ob)
+{
+        ob = this_player();
+       if(!ob) return 1;
+        ob->delete_temp("wd_busy1");
+        tell_object(ob,CYN"经过一段时间的休息你又可以开始工作了！\n"NOR);
+        return 1;           
+}
+
+
+int valid_leave(object me, string dir)
+{
+        if ( me->query_temp("wd_job1") && dir == "east")
+                return notify_fail("你正在看守铜鼎，不能离开！\n");
+
+        return ::valid_leave(me, dir);
+}

@@ -1,0 +1,306 @@
+// hua.c 
+#include <ansi.h>
+
+inherit NPC;
+int time_period(int timep, object me);
+int give_job();
+int job_fail();
+string ask_me();
+mapping job;
+string sysmsg;
+
+void create()
+{
+        set_name("华安", ({ "hua an", "hua" }));
+        set("gender", "男性");
+        set("nickname", HIR"江南才子"NOR);
+        set("age", 45);
+        set("long", "一个看起来憨厚老实的人，不过他的笑容却给人一种不太一样的感觉。\n");
+
+        set("combat_exp", 30000);
+        set("shen_type", 1);
+
+        set("max_neili", 500);
+        set("neili", 500);
+        set("jiali", 10);
+
+        set_skill("force", 40);
+        set_skill("sword", 50);
+        set_skill("unarmed", 50);
+        set_skill("dodge", 50);
+        set_skill("parry", 50);
+
+        set("inquiry", ([
+                "job" : (: give_job :),
+                "工作": (: give_job :),
+                "peichang": (: job_fail :),
+                "赔偿": (: job_fail :),
+        ]) );
+        set_temp("apply/attack", 50);
+        set_temp("apply/defense", 50);
+        set_temp("apply/damage", 15);
+
+        setup();
+        carry_object("/clone/weapon/changjian")->wield();
+        carry_object("/clone/misc/cloth")->wear();
+}
+int give_job()
+{
+        int timep;
+        object  me,ob,renzhi;
+              me= this_player();
+              ob= this_object();
+       if ( me->query("combat_exp") < 200000 )
+      {
+         command("sigh");
+         message_vision("$N对$n说道：我的工作可是很危险的，"+RANK_D->query_respect(me)+"的本事差了一些，出去学点本事再来吧。\n",this_object(),me);
+         return 1;
+       }
+        if((int) me->is_ghost())
+        {
+                write("鬼魂不可要工作．\n");
+                return 1;
+        }
+        if( me->query("no_array") > time() )
+        {
+            write("上次任务你没有顺利完成，目前还不能给你工作。\n");
+            return 1;
+         }
+         if( me->query("end_array") >  time() )
+         {
+             write(name()+"说道：目前还没有什么工作安排，你先下去休息。\n");
+             return 1;
+          }
+        if((job =  me->query("fjob")))
+        {
+        if( ((int) me->query("fjob_time")) >  time() )
+             {
+                write("你目前工作还没有完成怎又来要工作？\n");
+                return 1;
+              }
+        }
+        job =ob->query_job();
+        me->delete("end_array");
+        me->delete("no_array");
+        me->set("fjob",job);
+        renzhi = new("/d/city/job/renzhi");
+        message_vision("$N说道：这是"+renzhi->query("nname")+"，现在要去"+job["target_name"]+"，但被人追杀。你千万不可大意，\n请护送到"+job["npc_title"]+job["job"]+"那里。\n",this_object());
+        message_vision("$N高声叫道：进来吧。\n",this_object());
+        timep = 10000; 
+        timep = random(timep/2)+timep/2;
+        time_period(timep, me);
+        sysmsg += "护送"+renzhi->query("nname")+"到"+job["target_name"];
+        me->set("fjob", job);
+        renzhi->set("owner",me->query("id"));
+        renzhi->set("time",(int)time()+(int) timep + 20 ); 
+        renzhi->move(environment(me));
+        message_vision("$N说道："+renzhi->query("nname")+"已经来了,请务必把他送到指定的地点。\n",this_object());
+        me->set("fjob_time", (int)time()+(int) timep);
+        return 1;
+}
+
+int time_period(int timep, object me)
+{
+        int t, d, h, m, s;
+        string time;
+        t = timep;
+        s = t % 60;             t /= 60;
+        m = t % 60;             t /= 60;
+        h = t % 24;             t /= 24;
+        d = t;
+
+        if(d) time = chinese_number(d) + "天";
+        else time = "";
+
+        if(h) time += chinese_number(h) + "小时";
+        if(m) time += chinese_number(m) + "分";
+        time += chinese_number(s) + "秒";
+        sysmsg = "在" + time + "内";
+        return 1;
+}
+void init()
+{
+     object me = this_player();
+     int exp,pot,score;
+       ::init();
+      job = me->query("fjob");
+     if( job  )
+       {
+       if( me->query("fend_job") ) {
+exp = random(me->query("kar")*20)+700+job["exp_bonus"];
+       pot = exp/2;
+       score = random(exp)+pot;
+       me->add("combat_exp",exp);
+       me->add("potential",pot);
+       command("nod");
+       message_vision("$N对$n说道：你做的很好，赶紧下去休息去吧。\n",this_object(),me);
+        tell_object(me,HIW"你被奖励了：\n" +
+        chinese_number(exp) + "点实战经验\n"+
+        chinese_number(pot) + "点潜能\n"NOR);
+        message("chat", HIM"〖江湖传闻〗：听说"+me->query("name")+"成功的把人质送到了目的地.\n"NOR,users());
+        me->delete("fjob");
+        me->delete("fjob_time");
+        me->delete("fend_job");
+        me->set("end_array",time());
+     }
+     else if( me->query("fjob_time") < time())
+     {
+     message_vision("$N对$n说道：我的朋友都被劫走了,你还敢来见我？。\n",this_object(),me);
+     me->delete("fjob");
+     me->delete("fjob_time");
+     me->set("no_array",time()+random(400)+300);
+       }
+     }
+}
+
+int job_fail()
+{
+          object me = this_player();
+        if (me->query("balance")<100000)
+        {
+           message_vision("$N脸色一沉，对$n说道：你的钱好象不够吧。\n",this_object(),me);
+              return 1;
+        }
+        if (me->query_temp("fail_job"))
+        {
+           message_vision("$N说道:你的赔偿手续已经在办理中了,稍后会通知你的。\n",this_object(),me);
+              return 1;
+        }
+             else{
+           message_vision("$N脸色一沉，对$n说道：我再给你一次机会。\n",this_object(),me);
+           message_vision("$N说道：不过我要在你的存款里面扣除一两黄金作为赔偿。\n",this_object(),me);
+          me->add("balance",  -10000);
+          me->set_temp("fail_job",1);
+        call_out("tell", random(80)+20, me);
+              }
+       return 1;
+}
+
+void tell(object me)
+{
+   command("tell " + me->query("id") + " 你的赔偿手续已经办好了！");
+        me->delete("fjob");
+        me->delete_temp("fail_job");
+        me->delete("fjob_time");
+        me->delete("fend_job");
+        me->set("end_array",time());
+        me->set("no_array",time());
+}
+mapping *job = ({
+        ([      "job":                "殷无寿",
+                "job_type":           "押送",
+                "exp_bonus":           150,
+                "money_bonus":        100,
+                "target_name":        "明教",
+                "npc_title":           "明教第三十六代弟子",
+                "target_path":         "/d/mingjiao/wu3",
+                "npc_path":            "/d/mingjiao/npc/yinwushou",
+                "npc_id":              "yin wushou",
+        ]),
+        ([      "job":                "范遥",
+                "job_type":           "押送",
+                "exp_bonus":           150,
+                "money_bonus":        200,
+                "target_name":        "明教",
+                "npc_title":          "明教光明右使逍遥二仙",
+                "target_path":        "/d/mingjiao/jyt",
+                "npc_path":           "/d/mingjiao/npc/fan",
+                "npc_id":             "fan yao",
+        ]),
+        ([      "job":                "宋远桥",
+                "job_type":           "押送",
+                "exp_bonus":           50,
+                "money_bonus":        80,
+                "target_name":        "武当派",
+                "npc_title":          "武当派第二代弟子「武当首侠」",
+                "target_path":        "/d/wudang/sanqingdian",
+                "npc_path":           "/kungfu/class/wudang/song",
+                "npc_id":             "song yuanqiao",
+        ]),
+        ([      "job":                "摘星子",
+                "job_type":           "押送",
+                "exp_bonus":           80,
+                "money_bonus":        200,
+                "target_name":        "星宿派",
+                "npc_title":          "星宿派第二代弟子「星宿派大师兄」",
+                "target_path":        "/d/xingxiu/ryd",
+                "npc_path":           "/d/xingxiu/npc/zhaixing",
+                "npc_id":             "zhaixing zi",
+        ]),
+        ([      "job":                "岳不群",
+                "job_type":           "押送",
+                "exp_bonus":          100,
+                "money_bonus":         50,
+                "target_name":        "华山派",
+                "npc_title":          "华山派第十三代掌门人「君子剑」",
+                "target_path":        "/d/hs/zhengqi",
+                "npc_path":           "/u/squall/npc/yue_buqun.lpc",
+                "npc_id":             "yue buqun",
+        ]),
+        ([      "job":                "玄难大师",
+                "job_type":           "押送",
+                "exp_bonus":          100,
+                "money_bonus":         80,
+                "target_name":        "少林派",
+                "npc_title":          "少林派第三十六代弟子「般若堂首座」",
+                "target_path":        "/d/shaolin/brtang",
+                "npc_path":           "/kungfu/class/shaolin/xuan-nan",
+                "npc_id":             "xuannan dashi",
+        ]),
+        ([      "job":                "本因大师",
+                "job_type":           "押送",
+                "exp_bonus":          100,
+                "money_bonus":         80,
+                "target_name":        "天龙寺",
+                "npc_title":          "天龙寺第十三代僧侣「天龙寺主持」",
+                "target_path":        "/d/tls/gfd",
+                "npc_path":           "/d/tls/npc/ben-yin",
+                "npc_id":             "benyin dashi",
+        ]),
+        ([      "job":                "苏星河",
+                "job_type":           "押送",
+                "exp_bonus":          100,
+                "money_bonus":         80,
+                "target_name":        "逍遥派",
+                "npc_title":          "逍遥派第四代弟子",
+                "target_path":        "/d/xiaoyao/qingcaop",
+                "npc_path":           "/d/xiaoyao/npc/suxingh",
+                "npc_id":             "su xinghe",
+        ]),
+        ([      "job":                "陆乘风",
+                "job_type":           "押送",
+                "exp_bonus":          160,
+                "money_bonus":         80,
+                "target_name":        "归云庄",
+                "npc_title":          "桃花岛第二代弟子",
+                "target_path":        "/d/guiyun/shufang
+",
+                "npc_path":           "/d/guiyun/npc/lucf",
+                "npc_id":             "lu chengfeng",
+]),
+        ([      "job":                "李教头",
+                "job_type":           "押送",
+                "exp_bonus":          100,
+                "money_bonus":         90,
+                "target_name":        "白驼山派",
+                "npc_title":          "白驼山派第二代弟子",
+                "target_path":        "/d/baituo/liangong",
+                "npc_path":           "/d/baituo/npc/li",
+                "npc_id":             "li",
+]),
+       ([      "job":                "左冷禅",
+                "job_type":           "押送",
+                "exp_bonus":          90,
+                "money_bonus":         70,
+                "target_name":        "嵩山派",
+                "npc_title":          "嵩山派第四代掌门人",
+                "target_path":        "/d/songshan/fengchantai",
+                "npc_path":           "/d/songshan/npc/zuo",
+                "npc_id":             "zuo lengchan",
+]),
+});
+mapping query_job()
+{
+        return job[random(sizeof(job))];
+}
+

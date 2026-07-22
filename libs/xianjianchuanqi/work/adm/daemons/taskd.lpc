@@ -1,0 +1,237 @@
+// taskd.C for tasks.
+// 15.03.99 by snowman@SJ
+
+/*
+   用法: get_quest(this_player(), shen type(int), job type(string), family name(string))
+   shen type is either 1 for +shen npcs or -1 for -shen npcs,
+   传回是 mapping：
+          ["id"] = target 的 ID, 
+          ["name"] = taget 的名字, 
+          ["last_id"] = 上个target的id，以免重复,
+          ["time"] = 最后时间限制,
+          ["exp_reward"] = EXP 奖励,
+          ["pot_reward"] = POT 奖励,
+          ["type"] = 种类，比如 "杀", "请", "找"...,
+          ["family"] = 门派名，如果不给family，将等于player自己的门派名,
+          ["place"] = 地点，target目前的所在地.
+          
+   PS: get_time(quest["time"]) 将传回中文的时间限制.
+*/
+
+#include <ansi.h>
+
+int check(object ob, int myexp, string id, int shen, string fam);
+int quest_reward(int exp, int texp);
+string get_place(string str);
+
+mapping get_quest(object me, int shen, string type, string family)
+{
+        object target, *living;
+        int i,j, exp;
+        
+        living = livings(); 
+        exp = (int)me->query("combat_exp");
+if (exp > 2900000 ) exp = 2900000 ;
+        
+        if(!family || !stringp(family))
+                family = me->query("family/family_name");
+                
+        if(!shen || !intp(shen))
+                shen = 0;
+                
+        if(!type || !stringp(type))
+                type = "杀";
+                
+        if(type == "送") exp = 0;
+        
+        for (i=0;i < sizeof(living);i++){       // check for the 1st time, random.
+                j = random(sizeof(living));
+                if (j <= 1 || j == sizeof(living)-1) continue;
+                if(type == "请" && living[j]->query("attitude")=="aggressive") continue;
+                if(check(living[j], exp, me->query_temp("quest/last_id"), SGN(shen), family)){
+                         target = living[j];
+                         break;
+                         }
+                }
+                
+        if(!objectp(target) || !stringp(target->query("id")))  // random failed, get target by orders.
+                for (i=0;i < sizeof(living);i++){
+                     if(type == "送" && living[j]->query("attitude")=="aggressive") continue;
+                     if(check(living[j], exp,  me->query_temp("quest/last_id"), SGN(shen), family)){
+                              target = living[j];
+                              break;
+                              }
+                     }
+                     
+        if(!objectp(target) || !stringp(target->query("id"))) 
+                return 0;         // no target at all or cant get target's id.
+        
+        if(exp > 0)
+                i = quest_reward(exp, target->query("combat_exp"));     // get the rewards.
+        else i = 10*(1+random(30));
+        
+        return ([ 
+                "id":      (string)target->query("id"),
+                "name":    (string)target->name(1),
+                "time":    time()+(i*30),
+                "exp_reward": i,
+                "pot_reward": i/4 + random(i/4),
+                "type":    type,
+                "family":  family,
+                "place" :  get_place(base_name(environment(target)))+environment(target)->query("short"),
+                ]);
+}
+
+int check(object ob, int myexp, string id, int shen, string fam)
+{
+        object room;
+        
+        if(!objectp(ob)
+           || userp(ob)
+           || ob->query("env/invisibility")
+           || ob->query("no_quest")             // special npcs, like zhong shentong, attacker, biaoshi etc.
+           || ob->query("id") == id
+           || ob->query("race")!="人类"
+           || ob->query("family/family_name") == fam
+           || ob->query("have_master")
+           || !objectp(room=environment(ob))
+           || room->query("no_fight"))
+                     return 0;
+        
+        if(intp(myexp) && myexp != 0 && (ob->query("combat_exp") > myexp*3/2
+           || ob->query("combat_exp") <= myexp))
+                     return 0;
+           
+        if(intp(shen) && ((ob->query("shen") > 0 && shen > 0)
+           || (ob->query("shen") < 0 && shen < 0)))
+                     return 0;
+                     
+        if(strsrch(file_name(room),"/d/") < 0) 
+                     return 0;
+                     
+        switch(explode(file_name(room), "/")[1]){
+                     case "wuguan":
+                     case "death":
+                     case "wizard":
+                     case "tiezhang":
+                     case "kunlun": 
+                                   return 0;
+                     }
+                
+        if( ob->query("id") == "mu ren"  || ob->query("id") == "yin ren"
+           || ob->query("id") == "jin ren") 
+                return 0;
+        else return 1;
+}
+
+int quest_reward(int exp, int texp)     // need a better form here.
+{
+        int i = 5;
+ 
+        if( exp >= texp) return 0;   // my exp > target's
+        
+        i *= 105-(exp 
+* 100 / texp);
+if (exp>1800000) i= 120 + random(100);
+
+        return i; 
+}
+
+int is_target(object corpse, object me)
+{
+        mapping quest;
+                        
+        if ( !mapp(quest = me->query_temp("quest"))) return 0; // didnt get the job
+           
+        if ( quest["time"] <  time())      return -3;  // time up.
+        
+        if ( quest["type"] != "杀")        return -1;  // job type is not killing
+        
+        if ( corpse->query("id") != "corpse") return 0;// it's not a corpse.
+                
+        if ( corpse->query("victim_id") != quest["id"]
+           || corpse->query("victim_name") != quest["name"]
+           || corpse->query("kill_by") != me)
+                                           return -2;  // killed wrong person.
+
+        if ( corpse->query("victim_user")) return -4;  // killed a player.
+        else return 1;
+}
+
+
+string get_time(int i)
+{
+        return CHINESE_D->chinese_date(i);
+}
+
+
+string get_place(string str)
+{
+        
+        string *place = explode(str, "/");
+                
+        str = " ";
+        if(place[0] == "d")
+            switch(place[1]){
+                case "baituo":   str = "西域白陀山"; break;
+                case "hj":       str = "西域回疆"; break;
+                case "mingjiao": str = "西域明教"; break;
+                case "shaolin":  str = "河南嵩山少林"; break;
+                case "songshan": str = "河南嵩山"; break;
+                case "wudang":   str = "河北武当山"; break;
+                case "xingxiu":  str = "西域星宿海"; break;
+                case "city":     str = "江南扬州城"; break;
+                case "emei":     str = "四川峨嵋山"; break;
+                case "fuzhou":   str = "南疆福州"; break;
+                case "jiaxing":  str = "江南嘉兴"; break;
+                case "taishan":  str = "山东泰山"; break;
+                case "dali":     str = "西南大理国"; break;
+                case "tls":      str = "大理天龙寺"; break;
+                case "tiezhang": str = "湖南铁掌山"; break;
+                case "kunlun":   
+                case "fairyland":str = "昆仑山脉"; break;
+                case "gumu":     str = "终南山古墓"; break;
+                case "chengdu":  str = "四川成都"; break;
+                case "huashan":  str = "陕西华山"; break;
+                case "xiangyang":str = "湖北襄阳"; break;
+                case "xueshan":  str = "西番大雪山"; break;
+                case "wizard":   str = "极乐世界"; break;
+                case "death":    str = "第十八层地狱"; break;
+                case "gaibang":  str = "丐帮分舵"; break;
+                case "hz":       str = "江南杭州"; break;
+                case "village":  str = "陕西小村"; break;
+                case "wuguang":  str = "襄阳武馆"; break;
+                case "thd" :     str = "东海桃花岛"; break;
+                case "gaibang" : str = "丐帮分舵"; break;
+                default: break;
+        }
+        return str;
+}
+
+void give_reward(object me, mapping quest, int shen, int extra)
+{
+        int exp, pot;
+        if(!me || !mapp(quest)) return;
+        
+        exp = quest["exp_reward"]*1.5;
+        pot = quest["pot_reward"]*1.5;
+
+        if(extra){
+                 exp += extra;
+                 pot += extra;
+                 }
+                
+        me->add("combat_exp", exp);
+        me->add("potential", pot);
+        
+//        if(me->query("potential") > me->query("max_pot")) 
+//               me->set("potential", me->query("max_pot"));
+        tell_object(me, HIY"你觉得脑中豁然开朗，增加了"+chinese_number(pot)+"点潜能和"+chinese_number(exp)+"点经验！\n"NOR);
+
+        if(shen)
+               me->add("shen", shen * quest["exp_reward"] * 10);
+        me->delete_temp("quest");
+        me->clear_condition("job_busy");
+        me->set_temp("quest/last_id", quest["id"]);
+
+}

@@ -1,0 +1,3 @@
+// point.c
+
+inherit SKILL;

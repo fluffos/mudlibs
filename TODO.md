@@ -17,7 +17,7 @@ worked; keep status values consistent so the table stays greppable:
   etc.; see AGENTS.md's non-mudlib list — skipped, not converted)
 
 Port assignments: sequential from 40001, recorded here so re-running
-several libs at once never collides. **Next free port: 40035** (40001-40034
+several libs at once never collides. **Next free port: 40036** (40001-40035
 assigned; 40007 is ds386, deprioritized/partial). On mega-libs (tens of
 thousands of files, the "nitan" family), skip the full `lpcc_check.sh`
 sweep — it can OOM the host before finishing (see AGENTS.md §6b) — and
@@ -30,14 +30,26 @@ rely on the boot + interactive-connect test as the verification gate.
   majority of this collection. If an archive turns out to be English
   (like ds386/Dead Souls), do the minimum to note what it is, don't sink
   deep debugging time into it -- move on to the next Chinese one.
-- **Done: 32 / 100** (shanhaizhanshen, xingzhanyingxiong, unknownlib20150716
+- **Done: 33 / 100** (shanhaizhanshen, xingzhanyingxiong, unknownlib20150716
   [小雨西游II], bxsj [书剑天下], bxsj1 [书剑·经典], chidi [江湖I], ...,
   nitan170911 [仙剑奇侠传], nitan6 [笑傲江湖], rzrmud [大唐西游], xo, xo_final,
   zzfy [郑州风云3], shiji [世纪], dongfanggushi2 [东方故事Ⅱ之天朝帝国],
   zhonghua2 [中华英雄苏州站], shujian2008 [书剑天下 2008],
   shujiantianxia [书剑天下, 小熊泥苑 snapshot], shujianpiaoling2 [书剑飘零Ⅱ],
   xianlvqiyuan [仙侣情缘/XLQY, 知秋站 2001 snapshot],
-  xianlvqingyuanzheda [仙侣情缘浙大版])
+  xianlvqingyuanzheda [仙侣情缘浙大版], xianjianchuanqi [仙剑狂侠2000])
+- **§15p validated**: xianjianchuanqi applied the DNS-daemon-preload
+  exclusion PROACTIVELY (before first boot, not reactively) and booted
+  clean in under 20s -- confirms the new standing policy works as
+  intended, worth doing on sight for every remaining lib.
+- **New tooling edge case**: a raw archive can contain a DIRECTORY
+  literally named `something.c` (not a file) -- confuses
+  convert_lib.sh's blind `.c`->`.lpc` rename (renames the dir but not
+  its children, throws harmless `mv: cannot stat` warnings). Found on
+  xianjianchuanqi (`chuixue-jian.c/`, an orphaned duplicate-content
+  folder) -- rename the resulting dir away from a `.lpc`-look-alike name
+  (e.g. `foo.orphaned-dir`) so it's never mistaken for a compilable
+  object.
 - **NEW standing policy (AGENTS.md §15p, per explicit user direction):
   proactively exclude DNS/intermud/network daemons (e.g. `network/
   dns_master`) from `adm/etc/preload` on EVERY lib before the first boot
@@ -227,7 +239,7 @@ rely on the boot + interactive-connect test as the verification gate.
 | 37 | 书剑飘零II .zip | shujianpiaoling2 | 40031 | done | 「书剑飘零Ⅱ」"Stray Book & Sword" by 飞白工作室, adm/obj/ layout -- genuinely unrelated to shujian2008/shujiantianxia despite similar title; standard §15h fix + proactive get_include_path() insurance; confirmed §4/§15n not needed via source reading; full registration flow verified with real name "秦风"; 95.3% lpcc pass; see libs/shujianpiaoling2/NOTES.md |
 | 38 | 仙侣奇缘新版.rar | xianlvqiyuan | 40032 | done | 仙侣情缘/XLQY, 知秋站 2001 snapshot, DIFFERENT older codebase than xlqy_new2007(#26) despite similar title (confirmed via md5sum diff); standard §15h fix + proactive get_include_path() + §8h convertd.lpc typo (45x) + NEW case-sensitivity bug (BANNER vs banner) that silently crashed every connection via unguarded cat()/write(0), fixed + hardened cat() itself; full registration flow verified (gb->no->new->English name->real Chinese name "秦风"); 98.5% lpcc pass; see libs/xianlvqiyuan/NOTES.md |
 | 39 | 仙侣情缘浙大版.rar | xianlvqingyuanzheda | 40033 | done | "ZJU" fork of XLQY by bugbug/alading, adm/obj/ layout, chinese.c matches xlqy_new2007(#26) but other core files differ; standard §15h/§8h fixes + NEW standing policy (§15p): dns_master preload hang -> trimmed preload to registration-essential daemons only (documented exclusions in NOTES.md); full registration flow verified with real name "秦风"; 98.4% lpcc pass; see libs/xianlvqingyuanzheda/NOTES.md |
-| 40 | 仙剑传奇.rar | | | not started | |
+| 40 | 仙剑传奇.rar | xianjianchuanqi | 40034 | done | 仙剑狂侠2000, Century-family adm/single/ layout matching shujian2008's is_chinese/check_legal_name shape; proactively excluded dns_master from preload (§15p) before first boot -- booted clean in <20s; found+fixed a new unguarded write(read_file()) crash (uptime.lpc LASTCRASH path mismatch) + an orphaned directory-named-like-a-file conversion quirk; full registration flow verified with real name "秦风"; 95.5% lpcc pass; see libs/xianjianchuanqi/NOTES.md |
 | 41 | 侠客新传(2).rar | | | not started | |
 | 42 | 侠客英雄传III 可用.zip | | | not started | |
 | 43 | 侠客行100.rar | | | not started | |
