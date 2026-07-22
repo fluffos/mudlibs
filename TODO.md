@@ -119,7 +119,7 @@ rely on the boot + interactive-connect test as the verification gate.
 | 24 | TOMud_VC源代码.rar | | | not mudlib | confirmed: "MyMud", a Windows MFC/VC++ GUI mud CLIENT (MainFrm.cpp, DialogGame.cpp, MudSock.cpp, ...), not LPC source -- skipped, see AGENTS.md's non-mudlib list |
 | 25 | xkx2001测试用老lib.zip | xkx2001 | 40021 | done | 侠客行Ⅰ, "ES II" lineage (shares master.c almost verbatim with rzrmud #23 despite adm/single/ layout resembling bxsj); booted with zero fixes, 84.7% lpcc pass; missing EDITOR_D daemon noted (bulletin-board feature gap, not fixed); see libs/xkx2001/NOTES.md |
 | 26 | xlqy_new2007.rar | xlqy_new2007 | 40022 | done | 新仙侣情缘之飘渺纪元, ES II lineage; found + fixed an extract.sh bug (relative .rar paths silently failed) + the recurring convertd.lpc Greek-table backslash typo (§8h); 98.6% lpcc pass after fix; one non-fatal unexplained runtime error during login noted but not chased; see libs/xlqy_new2007/NOTES.md |
-| 27 | xlqy-解压看readme.rar | | | not started | |
+| 27 | xlqy-解压看readme.rar | | | not started | probed: extracts fine (no password/special step needed despite the name), root `xlqy/`, same "仙侣情缘" name/config as #26 (xlqy_new2007) but a different, EARLIER/incomplete snapshot -- its own readme.txt says (translated) "this lib is very incomplete, mainly used to test the driver ... many things are incompatible, no tech support provided". Not a byte-duplicate of #26 (9174 vs 9060 .c files). Lower priority given #26 already covers this game; process with standard pipeline when its turn comes, expect a rougher lpcc pass rate per the author's own disclaimer |
 | 28 | xo.zip | | | not started | |
 | 29 | xo最终版1.2.rar | | | not started | |
 | 30 | zzfy (full).rar | | | not started | |
