@@ -126,6 +126,31 @@ lib fully playable) unless a specific lib is called out for deeper work.
   `raw/` actually has files, `exit 1` if not) instead of silently
   succeeding with nothing extracted — catches this class of bug for ANY
   archive type, not just `.rar`, going forward.
+- **Found on archive #44 (`侠客行III .rar`)**: `file` identifies it as a
+  plain POSIX tar (`unrar` correctly refuses it: "not RAR archive"), and
+  its members are stored with **relative `../xkx3/...` paths** (a tar
+  created from one directory up from the intended root). GNU `tar -xf`
+  unconditionally refuses to extract ANY member whose name contains
+  `..` ("Member name contains '..'"), regardless of destination or
+  `--transform` (the safety check runs before transforms are applied),
+  so plain `tar -xf` fails entirely with zero files extracted. Fix:
+  extract with Python's `tarfile` module instead (no such restriction),
+  stripping each member's leading `../` before calling `extract()`:
+  ```python
+  import tarfile
+  tf = tarfile.open(archive_path)
+  for m in tf.getmembers():
+      name = m.name
+      while name.startswith('../'):
+          name = name[3:]
+      m.name = name
+      tf.extract(m, path=dest_dir)
+  ```
+  Symptom to watch for: `extract.sh`'s `.rar` branch reports `unrar:
+  ... is not RAR archive` — run `file <archive>` next; if it says tar,
+  try plain `tar -xf` first (fast path for normal tars), and if THAT
+  fails with `Member name contains '..'`, use the Python `tarfile`
+  workaround above.
 
 ## Encoding — `file`'s text/binary guess is not reliable enough to gate on
 

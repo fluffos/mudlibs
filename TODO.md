@@ -17,7 +17,7 @@ worked; keep status values consistent so the table stays greppable:
   etc.; see AGENTS.md's non-mudlib list — skipped, not converted)
 
 Port assignments: sequential from 40001, recorded here so re-running
-several libs at once never collides. **Next free port: 40039** (40001-40038
+several libs at once never collides. **Next free port: 40040** (40001-40039
 assigned; 40007 is ds386, deprioritized/partial). On mega-libs (tens of
 thousands of files, the "nitan" family), skip the full `lpcc_check.sh`
 sweep — it can OOM the host before finishing (see AGENTS.md §6b) — and
@@ -30,7 +30,7 @@ rely on the boot + interactive-connect test as the verification gate.
   majority of this collection. If an archive turns out to be English
   (like ds386/Dead Souls), do the minimum to note what it is, don't sink
   deep debugging time into it -- move on to the next Chinese one.
-- **Done: 36 / 100** (shanhaizhanshen, xingzhanyingxiong, unknownlib20150716
+- **Done: 37 / 100** (shanhaizhanshen, xingzhanyingxiong, unknownlib20150716
   [小雨西游II], bxsj [书剑天下], bxsj1 [书剑·经典], chidi [江湖I], ...,
   nitan170911 [仙剑奇侠传], nitan6 [笑傲江湖], rzrmud [大唐西游], xo, xo_final,
   zzfy [郑州风云3], shiji [世纪], dongfanggushi2 [东方故事Ⅱ之天朝帝国],
@@ -39,7 +39,17 @@ rely on the boot + interactive-connect test as the verification gate.
   xianlvqiyuan [仙侣情缘/XLQY, 知秋站 2001 snapshot],
   xianlvqingyuanzheda [仙侣情缘浙大版], xianjianchuanqi [仙剑狂侠2000],
   xiakexinzhuan2 [侠客新传], xiakeyingxiong3 [侠客英雄传III],
-  xiakexing100 [侠客行一百])
+  xiakexing100 [侠客行一百], xiakexing3 [侠客行三/金庸群侠传])
+- **New extraction edge case (AGENTS.md's Archive tooling section)**:
+  a `.rar`-named archive can actually be a plain tar with relative
+  `../...` member paths, which GNU `tar -xf` refuses outright even with
+  `--transform`. Found on archive #44 (`侠客行III .rar`) -- worked
+  around with Python's `tarfile` module, stripping the leading `../`
+  from each member's name before extracting. Also: TODO.md's table had
+  the wrong filename/extension for this archive (said `.zip`, actual
+  file is `.rar` with a trailing space) -- always verify the exact
+  filename via `ls archives/ | grep` before assuming the table entry is
+  literal.
 - **Watch for hidden pre-id prompts** (e.g. a "BIG5 font Y/N?" question
   that blends invisibly into the connection banner, found on
   xiakexinzhuan2): if a registration test produces confusing cascading
@@ -250,7 +260,7 @@ rely on the boot + interactive-connect test as the verification gate.
 | 41 | 侠客新传(2).rar | xiakexinzhuan2 | 40035 | done | 侠客新传 v0.1b, Century-family adm/single/ layout (config.cfg has a leftover 海洋II MUD_NAME suggesting a forked base); standard §15h fix + deep named.lpc fix (nitan-family shape) + proactive dns_master preload exclusion (§15p); hidden BIG5-prompt testing gotcha documented; full registration flow verified with real name "秦风" (avoiding banned novel character "中神通"); 97.3% lpcc pass; see libs/xiakexinzhuan2/NOTES.md |
 | 42 | 侠客英雄传III 可用.zip | xiakeyingxiong3 | 40036 | done | 侠客英雄传 (Jin Yong + European medieval + manga crossover setting), adm/obj/ layout; standard §15h fix (chinesed.c's is_chinese had a pre-existing str[0]-not-str[i] typo, harmless since always called per-character, fixed to standard shape) + proactive dns_master preload exclusion (§15p); full registration flow verified with real name "秦风" (avoiding banned "张三丰"); 98.0% lpcc pass; see libs/xiakeyingxiong3/NOTES.md |
 | 43 | 侠客行100.rar | xiakexing100 | 40037 | done | 侠客行一百, Century-family adm/single/ layout, largest lib in this batch (~14,227 raw files); standard §15h fix + proactive dns_master preload exclusion (§15p); full registration flow verified with real name "秦风" (avoiding banned "韦小宝"); 99.3% lpcc pass, memory stayed healthy despite size; see libs/xiakexing100/NOTES.md |
-| 44 | 侠客行III .rar | | | not started | |
+| 44 | 侠客行III .rar | xiakexing3 | 40038 | done | actually a plain tar despite .rar extension (relative ../ paths, needed Python tarfile workaround, see AGENTS.md); config MUD_NAME "侠客行三" but live banner says "金庸群侠传"; adm/obj/ layout, unrelated to xiakexing100(#43) despite similar title; standard §15h fix + proactive dns_master preload exclusion (§15p); full registration flow verified with real name "秦风"; 96.8% lpcc pass; see libs/xiakexing3/NOTES.md |
 | 45 | 北美侠客行2001.rar | | | not started | |
 | 46 | 夕阳再现-疯狂江湖.rar | | | not started | dup: 夕阳再现-疯狂江湖(1).rar |
 | 47 | 夕阳再现-风云再起2.rar | | | not started | |
