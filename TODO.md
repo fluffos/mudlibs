@@ -32,7 +32,7 @@ rely on the boot + interactive-connect test as the verification gate.
   majority of this collection. If an archive turns out to be English
   (like ds386/Dead Souls), do the minimum to note what it is, don't sink
   deep debugging time into it -- move on to the next Chinese one.
-- **Done: 44 / 100** (shanhaizhanshen, xingzhanyingxiong,
+- **Done: 45 / 100** (shanhaizhanshen, xingzhanyingxiong,
   unknownlib20150716 [小雨西游II], bxsj [书剑天下], bxsj1 [书剑·经典],
   chidi [江湖I], ..., nitan170911 [仙剑奇侠传], nitan6 [笑傲江湖], rzrmud
   [大唐西游], xo, xo_final, zzfy [郑州风云3], shiji [世纪],
@@ -47,7 +47,8 @@ rely on the boot + interactive-connect test as the verification gate.
   [大唐双龙, config has a stale "碧血残阳之豪侠晚歌" name field --
   confirmed NOT a duplicate of archive #71, just a copy-paste leftover],
   tianxiawuxue [天下无雪], xiyangzaixian_fengyun2 [夕阳再现/风云再起2],
-  xiyangzaixian3 [夕阳再现III之炎龙封印], tianxia [天下 Beta])
+  xiyangzaixian3 [夕阳再现III之炎龙封印], tianxia [天下 Beta],
+  menghuanxiyou2002 [梦幻西游2002版, same codebase as mhxy #19])
 - **New AGENTS.md §15q (hidden client-protocol-version gate)**: found on
   xiyangzaixian3 -- a pre-id prompt can check the input against a
   hardcoded literal (client version string), not just a BIG5/student
@@ -313,7 +314,7 @@ rely on the boot + interactive-connect test as the verification gate.
 | 53 | 新狂想空间II.rar | | | not started | |
 | 54 | 月影奇缘.rar | | | not started | |
 | 55 | 未明空间.rar | | | not started | |
-| 56 | 梦幻西游2002版.rar | | | not started | |
+| 56 | 梦幻西游2002版.rar | menghuanxiyou2002 | 40050 | done | same 2002-era codebase as mhxy(#19) -- confirmed via diff (14561/14563 files identical incl. master.c/chinese.c byte-identical, only logind.c banner branding + wizlist state differ), all fixes ported directly rather than rediscovered; standard §15h fix + §8h convertd.lpc typo (45x) + missing /u/feizei/log file fix + proactive dns_master preload exclusion (§15p); full registration flow verified end-to-end incl. real name "秦风" reaching gift-allocation/game-world welcome, confirmed via saved data files too; 97.3% lpcc pass (matches #19); see libs/menghuanxiyou2002/NOTES.md |
 | 57 | 模拟华附.zip | | | not started | |
 | 58 | 武汉站.rar | | | not started | |
 | 59 | 江湖风云.rar | | | not started | dup: 江湖风云 (1).rar |
