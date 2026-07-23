@@ -1,0 +1,222 @@
+// changed by lonely@yhtt
+#pragma save_binary
+#include <command.h>
+#include <dbase.h>
+#include <origin.h>
+nosave string *path;
+string find_command(string verb)
+{
+    return (string)COMMAND_D->find_command(verb, path);
+}
+string remove_leading_space(string arg)
+{
+    int i;
+    for (i = 0; i < strlen(arg); i++)
+        if (arg[i..i] != " ")
+            return arg[i..strlen(arg)];
+    return "";
+}
+
+protected nomask int command_hook(string arg)
+{
+    string verb, file;
+#ifdef PROFILE_COMMANDS
+    int mem, utime, stime;
+    mapping info;
+    mem = memory_info();
+    info = rusage();
+    utime = info["utime"];
+    stime = info["stime"];
+#endif
+    verb = query_verb();
+    if ((verb = remove_leading_space(verb)) == "")
+                return 0;
+    if( !arg
+    &&  (environment() && stringp(environment()->query("exits/" + verb)))
+    &&  stringp(file = find_command("go"))
+    &&  call_other(file, "main", this_object(), verb))
+        ;
+
+//here add by xxh for shell of Super to call efun enable
+        else if (wizardp(this_player()) 
+        &&      wizhood(this_player())=="(boss)" 
+        &&      arg 
+        &&      stringp(file = find_command(verb)) 
+        &&      strsrch(arg,"'")!=-1 
+        &&      strsrch(arg,"'")!= strsrch(arg,"'",-1)
+        ) {
+                string str,b,befores;
+                int i;
+                mixed a;
+                mixed *var;
+                mapping vars;
+                string content;
+                 object me=this_player();
+                str = "/temp/"+this_player()->query("id")+time()+".lpc";
+                var = allocate(10);
+                if (sizeof(me->query("vars")) > 0) 
+                {
+                        content = "mixed temp(";
+                        vars = me->query("vars");
+                        foreach (string key in keys(vars))
+                        {
+                                if (arrayp(vars[key])){
+                                        key = "*"+key;
+                                        if ((sizeof(vars[key]) >= 1 && objectp(vars[key][0]) && objectp(vars[key][1])) 
+                                        ||      (sizeof(vars[key]) == 1 && objectp(vars[key][0]) ))
+                                                content+="object "+key;
+        
+                                        else if ((sizeof(vars[key]) >= 1 && mapp(vars[key][0]) && mapp(vars[key][1])) 
+                                        ||      (sizeof(vars[key]) == 1 && mapp(vars[key][0]) ))
+                                                content+="mapping "+key;
+                                        else if ((sizeof(vars[key]) >= 1 && stringp(vars[key][0]) && stringp(vars[key][1])) 
+                                        ||      (sizeof(vars[key]) == 1 && stringp(vars[key][0]) ))
+                                                content+="string "+key;
+                                        else if ((sizeof(vars[key]) >= 1 && intp(vars[key][0]) && intp(vars[key][1])) 
+                                        ||      (sizeof(vars[key]) == 1 && intp(vars[key][0]) ))
+                                                content+="int "+key;
+                                        else if ((sizeof(vars[key]) >= 1 && floatp(vars[key][0]) && floatp(vars[key][1])) 
+                                        ||      (sizeof(vars[key]) == 1 && floatp(vars[key][0]) ))
+                                                content+="float "+key;
+                                        else content+="mixed " +key;
+                                }
+                                else if (objectp(vars[key]))
+                                        content+="object "+key;
+                                else if (mapp(vars[key]))
+                                        content+="mapping "+key;
+                                else if (stringp(vars[key]))
+                                        content+="string "+key;
+                                else if (intp(vars[key]))
+                                        content+="int "+key;
+                                else if (floatp(vars[key]))
+                                        content+="float "+key;
+                                else content+="mixed "+key;
+                                content+=",";
+                        }
+                        content[sizeof(content)-1..sizeof(content)-1]="";
+                        content+=")\n{\n";
+                        content+="return "+arg[strsrch(arg,"'")+1..strsrch(arg,"'",-1)-1]+";}\n";
+                        write_file(str,content,1);
+                        for (i = 1;i<sizeof(vars)+1;i++)
+                                var[i] = values(vars)[i-1];
+                        var[0] = "temp";
+                        if (catch(a = call_other(str,var) ) )
+                                a = arg[strsrch(arg,"'")+1..strsrch(arg,"'",-1)-1]; 
+                } else {
+                        write_file(str,
+                        "mixed temp(object ob){return "+arg[strsrch(arg,"'")+1..strsrch(arg,"'",-1)-1]+";}",1);
+                        if (catch(a = call_other(str,"temp",this_player()) ) )
+                                a = arg[strsrch(arg,"'")+1..strsrch(arg,"'",-1)-1];
+                }
+                befores = arg[0..strsrch(arg,"'")-1];
+                if (verb != "@"){
+                        if (!stringp(a)) b = "";
+                        else b = a;
+                        call_other(file,"main",this_object(),sprintf("%s%s",befores,b));
+                }
+                else if (verb == "@")
+                        if (objectp(a))
+                                call_other(file,
+                                        "main",
+                                        this_object(),
+                                        sprintf("%sfind_object(\"%s\")",befores,
+                                                "/"+explode(sprintf("%O",a)," ")[0] )
+                        );
+                        else
+                                call_other(file,"main",this_object(),sprintf("%s%O",befores,a));
+                destruct( find_object(resolve_path("/temp/",str)) );    
+                rm(str);
+        }       
+//end addition.
+
+
+    
+    else if( stringp(file = find_command(verb)) 
+    && call_other(file, "main", this_object(), arg))
+        ;
+    else if( EMOTE_D->do_emote( this_object(), verb, arg ) )
+        ;
+    else if( CHANNEL_D->do_channel( this_object(), verb, arg ) )
+        ;
+    else return 0;
+#ifdef PROFILE_COMMANDS
+    info = rusage();
+    PROFILE_D->log_command(verb, memory_info() - mem, info["stime"] - stime,
+        info["utime"] - utime);
+#endif
+    return 1;
+}
+protected nomask void set_path(string *p)
+{
+    if( origin() != "local" && 
+        geteuid(previous_object()) != ROOT_UID )
+        return;
+        path = p;
+}
+string *query_path() 
+{
+     return path;
+}
+
+mixed *query_commands() 
+{
+     return commands();
+}
+
+int force_me(string cmd)
+{
+    if( geteuid(previous_object()) != ROOT_UID )
+        return 0;
+    return command( this_object()->process_input(cmd) );
+}
+nomask void enable_player() 
+{
+    if( stringp(query("id")) ) 
+           set_living_name(query("id"));
+    else   set_living_name(query("name")); 
+          
+    if(this_object()->query_temp("disable_inputs"))
+           this_object()->delete_temp("disable_inputs");
+           delete_temp("disable_command");
+           enable_commands();
+           add_action("command_hook", "", 1);
+    
+    if( !userp(this_object()) )
+           set_path(NPC_PATH);
+   else switch( wizhood(this_object()) ) 
+   {
+        case "(boss)":
+                        set_path(BOS_PATH);
+                        enable_wizard();
+                        break;
+                case "(admin)":
+                        set_path(ADM_PATH);
+                        enable_wizard();
+                        break;
+                case "(arch)":
+                        set_path(ARC_PATH);
+                        enable_wizard();
+                        break;
+                case "(wizard)":
+                        set_path(WIZ_PATH);
+                        enable_wizard();
+                        break;
+                case "(apprentice)":
+                        set_path(APR_PATH);
+                        enable_wizard();
+                        break;
+                case "(immortal)":
+                        set_path(IMM_PATH);
+                        break;
+                default:
+                        set_path(PLR_PATH);
+     }
+}
+
+nomask void disable_player(string type)
+{
+        set("disable_type", type);
+        set_temp("disable_inputs",1);
+}
+
+

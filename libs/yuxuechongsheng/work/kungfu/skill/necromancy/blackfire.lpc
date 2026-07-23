@@ -1,0 +1,176 @@
+// 雄霸天下II魔法技能标准范例。
+// 参数说明
+// set_temp("armor_vs_fire",50)
+// armor_vs_fire // 对火系魔法的抵抗能力 +表示抵抗火系魔法 -表示抵抗水系魔法
+// 两者不能共存。即无法同时抵抗水系魔法和火系魔法。如果生物可以抵抗水系魔法。
+// 那么火系魔法将对他造成更大的伤害。
+// armor_vs_lightning // 抵抗电系魔法的能力
+// armor_vs_magic  // 抵抗魔法能力。对抗所以魔法 这个值不能设的太高。
+// 通常这个值应该控制在 -100至+100 以内。以百分比来计算。负数表示此生物
+// 惧怕此类魔法。正数反之。任何非特殊npc的抵抗系数不得超过-30至+30之间
+// execration  表示正在念咒。
+// 以后任何魔法都应此类为标准。不得再使用其他标记。以免混乱。
+// fireball
+// 1999.3.1 by rongg
+// fireball.c
+#include <ansi.h>
+
+  inherit F_SSERVER;
+void skills_limit(object me);
+int cast(object me, object target)
+{
+	string msg;
+	int  skill;
+        skill=me->query_skill("spells");
+if(!skill||skill<250)
+	return notify_fail("你没有领悟这项魔法！\n");
+if(!me->query_skill_mapped("force")||me->query_skill_mapped("force")!="gouyee")
+	return notify_fail("火舞云霄需要谷衣心法的配合方可使用。\n");
+if( !target ) target = offensive_target(me);
+
+if( !target||!target->is_character()||target->is_corpse()
+||target==me)
+	return notify_fail("你要对谁施展火舞云霄？\n");
+if(me->query_temp("execration"))
+	return notify_fail("你正在念咒。\n");
+if((int)me->query("mana") < 150 )
+	return notify_fail("你的法力不够！\n");
+if((int)me->query("sen") < 100 )
+	return notify_fail("你的精神没有办法有效集中！\n");
+        me->add("mana", -150);
+	me->receive_damage("sen", 100);
+	msg = ""+me->name()+"自言自语不知道在说些什麽。\n";
+        message("vision",msg, environment(me), ({me}));
+	tell_object(me,"你双手向天空中伸展开去。开始默念咒语。\n");
+	me->set_temp("execration",1);
+	skills_limit(me);
+	call_out("do_execration",1,me,target,1);
+	return 1;
+}
+
+int do_execration(object me,object target,int i)
+{
+	string msg;
+	int skill;
+switch(i)
+	{
+	case 1:
+	    msg=HIC"梦之极 幻之裁\n"NOR;
+	    break;
+	case 2:
+	    msg=HIC"灰得天蓝的月 黑得骱冰的天 红得血腥的空气\n"NOR;
+	    break;
+	case 3:
+	    msg=HIC"请你解开缚于魔界的封印 打破那光明的结界\n"NOR;
+	    break;
+	case 4:
+	    msg=HIC"让无尽的黑暗降临大地吧 沉睡已久的伟大的梦幻之魔\n"NOR;
+	    break;
+	case 5:
+	    msg=HIC"请你在我的召唤中苏醒吧\n"NOR;
+	    break;
+        case 6:
+            msg=HIC"我要借助你力量去消灭一切阻挡我的力量\n"NOR;
+            break;
+        case 7:
+            msg=HIC"\n\t终\t极\t黑\t火\t焰\n"NOR;
+            break;
+	default: break;
+	}
+	if(i!=7)
+	     tell_object(me,msg);
+        else message_vision("$N忽然大喝一声：\n"+msg,me,target);
+
+        i++;
+        if(i<8&&i>=0)
+            call_out("do_execration",1,me,target,i);
+	else 
+	    {
+  	    skill=me->query_skill("necromancy",1);
+            if(!skill) return 1;
+            call_out("do_hit",0,me,target,skill);
+	    return 1;
+            }
+	return 1;
+}
+
+int do_hit(object me,object target,int skill)
+{
+
+	string msg;
+	int i,my_exp,your_exp,damage,vs_fire,vs_magic,additional;//附加伤害
+	me->delete_temp("execration");
+	skills_limit(me);
+if(!target||!environment(target)||environment(me)!=environment(target))
+	{
+	tell_object(me,"目标已经离开了。你停止的念咒，取消了终极黑火焰。\n");
+	return 1;
+	}
+else if(environment(target)->query("no_fight")){
+	tell_object(me,"目标.现在处于禁止使用魔法的地区,你只好停止念咒，取消了终极黑火焰。\n");
+	return 1;	
+	}
+
+else    {
+	msg=YEL"$N手中突然聚起一片漆黑色的火焰朝$n铺天盖地的撒去。\n"NOR;
+	message_vision(msg,me,target);
+	my_exp=me->query("combat_exp");
+	your_exp=target->query("combat_exp");
+	i=90-(your_exp-my_exp)/200000;
+	if(i>100) i=100;
+	if(i<0) i=0;
+	if(random(100)<=i)
+	    {
+    	    msg=YEL"$n立刻被一片火海包围了。\n"NOR;
+	    message_vision(msg,me,target);
+	    if(skill>=400) skill=400;
+	    damage=600+skill*3; // 火球造成的伤害的最大值为200。
+            damage=damage*(1+(my_exp/(your_exp+1))*10/100);// 这个是经验修正。
+	    if(damage>1500) damage=1500;
+	    vs_fire=target->query_temp("apply/armor_vs_fire");
+	    if(vs_fire>100) vs_fire=100;
+	    if(vs_fire<-100) vs_fire=-100;
+	    damage=damage*(100-vs_fire)/100;// 抵抗火系魔法修正
+	    vs_magic=target->query_temp("apply/armor_vs_magic");
+	    if(vs_magic>100) vs_magic=100;
+	    if(vs_magic<0) vs_magic=0;
+	    damage=damage*(100-vs_magic)/100;// 抵抗魔法修正	    
+	    additional=me->query_spi();
+	    additional=to_int(pow(additional*additional*additional,0.45));
+	    if(additional>1000) additional=1000;
+	    // 和臂力的计算公式一样。突出茅山派灵力的作用。
+	//   tell_object(me,"additional is "+additional+"\n");
+	    damage+=additional;
+	//   tell_object(me,"damage is "+damage+"\n");
+	    target->receive_damage("kee",damage,me,"magic"); //魔法伤害
+	    target->receive_wound("kee",damage/2,me,"magic");//魔法伤害
+	    COMBAT_D->report_status(target);
+	    }
+	else
+	   {
+	    msg=YEL"结果$n大惊失色，拼命朝一旁躲去。竟然被$n躲开了\n"NOR;
+	    message_vision(msg,me,target);
+           }
+        }	
+if( !target->is_fighting(me) )
+	{
+	if( living(target) ) 
+	    {
+ 	    if( userp(target) ) target->fight_ob(me);
+	    else target->kill_ob(me);
+   	    }
+	    me->kill_ob(target);
+	}
+
+	return 1;
+}
+
+void skills_limit(object me)
+{
+	string dodge;
+	dodge=me->query_skill_mapped("dodge");
+	if(stringp(dodge)){
+		me->map_skill("dodge");
+		me->delete_skill(dodge);
+	}
+}

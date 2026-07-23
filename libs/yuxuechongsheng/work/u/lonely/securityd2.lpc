@@ -1,0 +1,358 @@
+// securityd.c
+// 修改：中山大学  张三丰（Micro）----Micro_Liang@Hotmail.Com   1997.06
+
+/* ---------------------------------------------------------------
+        这个 daemon 掌管所有对档案「读」跟「写」的同意权，所采用的逻辑
+很简单：
+
+        「当你要对一个目录作读或写的动作时，如果有人说可以，而且没有人
+反对，那麽就可以，否则甭想。」
+
+        什麽意思呢？这代表所有读写动作必须经过两段检查：首先，这个档案
+必须存在於一个允许你存取的目录，或这个目录的子目录中，程式的作法是
+首先检查这个档案所在的目录 ，看看是否在「允许存许(trusted)」的名单
+中有你的名字，如果没有，或这个目录根本没有允许存取名单，那麽就检查
+这个目录所在的目录，..... 直到根目录为止。
+
+        如果在某一阶层目录的允许存许名单发现了你的名字，先别太高兴，这
+只是「有人说可以」而已，还要再检查有没有人说不可以，换句话说，这个
+档案不能是一个存在於禁止你存取的目录，或这个目录的子目录中的档案，
+程式的作法和前面很类似，先检查这个档案所在的目录，看看是否「禁止存
+取(exclude)」的名单中有你的名字，如果没有 ，或这个目录根本没有禁止
+存取名单，那麽就检查上一层的目录，..... 直到根目录为止。
+
+        如果一直到根目录为止，所有的禁止存取名单中都没有你的名字，那麽
+恭喜你，这表示「没有人说不可以」，你可以存取这个档案。
+
+        在理想的情况下，是应该记录所有巫师的存取资料的，但是我们很快会
+发现这样做是很愚蠢的，因为很多目录的允许存取名单或禁止存取名单往往
+会有一模一样的内容，这表示大部分人可以被归类成几个拥有相同存取权的
+群体(group)， 因此前面的叙述中，「名字」一词可以被代换成「名字或所
+属群体」。
+
+        群体的划分可以很简单，也可以很复杂，我们采用简单的方式：如果在
+「巫师状态表(wiz_status)」中有你的名字，那麽你就是属於表中所定义的
+群体，否则，我们用 MudOS 所提供的 efun 将使用者划分成 (wizard)、
+(player)、(object) 三个群体。你是否注意到群体的名称都加上一个括号
+，目的是为了防止有人取的名字和群体一样而造成混乱。
+
+        了解了上面所说的概念之後，其他的细节建议你直接去看原始码比较快
+，这个 security 系统很单纯，也很容易了解，如果你发现什麽漏洞，应该
+也不难改进。
+--------------------------------------------------------------- */
+
+#include <login.h>
+
+// By Annihilator@Eastern.Stories (11/25/94)
+
+// This is the "effective" access status compare to the "status" property
+// in login object that this mapping determine wizards' access rights
+// directly. It is important to make the "status" property matches this
+// mapping for wizards higher than regular wizard such as sage, arch and
+// admin. For thoese users whose name doesnot appear in this mapping, they
+// are divided into three groups (wizard),(player) and (object) using
+// wizardp() and interactive() efun.
+// The parenthesis is nessessary to prevend players naming themself "admin"
+// to hack the security system.
+// 
+// 01/14/95 Annihilator - wiz_status are defined outside this daemon in the
+//                      WIZLIST file.
+mapping wiz_status;
+string get_real_euid(object ob);
+
+string *wiz_levels = ({
+        "(player)",
+        "(immortal)",
+        "(apprentice)",
+        "(wizard)",
+        "(arch)",
+        "(admin)"
+});
+
+// A valid write attempt must pass 2 checks: your uid or status must not be
+// "excluded" and must be "trusted" on that directory in order to write in 
+// that directory. The directories containing the file is searched backward
+// from the current directory to root. And exclude is checked prior than
+// trusted.
+mapping exclude_read = ([
+        "adm":          ({ "(immortal)","(apprentice)","(wizard)","(arch)", }),
+        "feature":      ({ "(immortal)","(apprentice)","(wizard)","(arch)", }),
+        "include":      ({ "(immortal)","(apprentice)","(wizard)","(arch)", }),
+        "std":          ({ "(immortal)","(apprentice)","(wizard)", }),
+        "log":          ({ "(immortal)","(apprentice)","(wizard)", }),
+        "log/nosave":   ({ "(arch)", }),
+        "log/zen":      ({ "(admin)", }),
+        "/adm/obj":     ({ "(admin)"}),
+]);
+
+mapping trusted_write = ([
+        "/":            ({ "Root", "(admin)"}),
+]);
+
+mapping exclude_write = ([
+        "data"  :       ({ "(admin)", }),
+        "log/nosave":   ({ "(admin)", }),
+        "adm/obj":      ({ "(admin)", }),
+        "adm/simul_efun":       ({ "(admin)", }),
+]);
+
+void create()
+{
+        string *wizlist, wiz_name, wiz_level;
+        int i;
+
+        seteuid(getuid());
+        wizlist = explode(read_file(WIZLIST), "\n");
+        wiz_status = allocate_mapping(sizeof(wizlist));
+        for(i=0; i<sizeof(wizlist); i++) {
+                if( wizlist[i][0]=='#' 
+                || sscanf(wizlist[i], "%s %s", wiz_name, wiz_level)!=2 ) continue;
+                wiz_status[wiz_name] = wiz_level;
+        }
+}
+
+string *query_wizlist() { return keys(wiz_status); }
+
+// This function returns the status of an uid.
+string get_status(mixed ob)
+{
+        string euid;
+        
+        if( objectp(ob) ) {
+                euid = geteuid(ob);
+                if( !euid ) euid = getuid(ob);
+        }
+        else if( stringp(ob) ) euid = ob;
+
+        if( !undefinedp(wiz_status[euid]) ) {
+                int hour;
+                hour = localtime( time() )[2];
+                if(wiz_status[euid] == "(admin)" 
+                &&((hour >= 9 && hour <12)||(hour > 14 && hour <18)))
+                        return "(wizard)";
+                return wiz_status[euid];
+        }
+        else if( member_array(euid, wiz_levels)!=-1 ) return euid;
+        else return "(player)";
+}
+
+int get_wiz_level(object ob)
+{
+        return member_array(get_status(ob), wiz_levels);
+}
+
+int set_status(mixed ob, string status)
+{
+        string uid, *wiz, wizlist;
+        int i;
+
+        if( geteuid(previous_object())!= ROOT_UID ) return 0;
+
+        if ( find_object("/cmds/arch/promote") )        
+        {
+                if( previous_object() != find_object("/cmds/arch/promote") )
+                        return 0;       
+        }       
+        else return 0;
+/*
+        if( previous_object(1) == MASTER_OB 
+        ||      previous_object(1) == SIMUL_EFUN_OB ) return 0;
+*/
+        if( member_array(get_status(previous_object(1)), wiz_levels) < member_array(status, wiz_levels) ) return 0;
+        if( member_array(get_status(previous_object(1)), wiz_levels) < member_array(get_status(ob), wiz_levels) ) return 0;
+        if( status == "(admin)" ) return 0;
+
+        if( userp(ob) ) uid = getuid(ob);
+        else if(stringp(ob)) uid = ob;
+        else return 0;
+        
+        if( status == "(player)" )
+                map_delete(wiz_status, uid);
+        else
+                wiz_status[uid] = status;
+        wiz = keys(wiz_status);
+        for(wizlist = "", i=0; i<sizeof(wiz); i++)
+                wizlist += wiz[i] + " " + wiz_status[wiz[i]] + "\n";
+        rm(WIZLIST);
+        write_file(WIZLIST, wizlist);
+        log_file( "nosave/promotion", geteuid(previous_object()) + " promote " + capitalize(uid) + " become a " + status + " on " + ctime(time()) + "\n" );
+        return 1;
+}
+
+string *get_wizlist() { return keys(wiz_status); }
+int valid_read(string file, mixed user, string func)
+{
+        string euid, status, *path, dir;
+        string str;
+        int i;
+
+        if( !objectp(user) )
+                error("TRUST_D->valid_read: Invalid argument type of user.\n");
+
+        // 这样不光光是为了加快 ls 的速度
+        if( func == "file_size" && file != "/adm/daemons/securityd.lpc" ) return 1;
+
+        if(previous_object(1) == this_object()) return 1;
+        if( file == "/adm/daemons/securityd.lpc" ) return 0;
+        if( sscanf(file, LOG_DIR + "%*s") && func=="read_file" ) return 1;
+
+        // Let user restore their save file
+        if( func=="restore_object" ) {
+                if( sscanf(base_name(user), "/obj/%*s")
+                &&      sscanf(file, "/data/%*s")
+                &&      ( file == (string)user->query_save_file() ||
+                        file == (string)user->query_save_file() + __SAVE_EXTENSION__ ) )
+                        return 1;
+        }
+
+        // Get the euid and status of the user.
+        euid = get_real_euid(user);
+        if( !euid ) return 0;
+
+        if( euid==ROOT_UID ) return 1;
+
+        status = get_status(user);
+
+        path = explode(file, "/");
+
+        // Check if we are excluded in one of the directories containing the file.
+        for(i=sizeof(path)-1; i>=0; i--) {
+                dir = implode(path[0..i], "/");
+                if( undefinedp(exclude_read[dir]) ) continue;
+                if( member_array(euid, exclude_read[dir])!=-1 ) return 0;
+                if( member_array(status, exclude_read[dir])!=-1 ) return 0;
+        }
+
+        return 1;
+/*
+        // And then check if we are trusted in one of the directories containing
+        // the file.
+        if( member_array(euid, trusted_read["/"])!=-1 ) return 1;
+        if( member_array(status, trusted_read["/"])!=-1 ) return 1;
+        for(i=sizeof(path)-1; i>=0; i--) {
+                dir = implode(path[0..i], "/");
+                if( undefinedp(trusted_read[dir]) ) continue;
+                if( member_array(euid, trusted_read[dir])!=-1 ) return 1;
+                if( member_array(status, trusted_read[dir])!=-1 ) return 1;
+        }
+
+        // log_file("FILES", sprintf("%s(%s) read (%s) attempt on %s failed.\n", euid, status, func, file) );
+        return 0;
+*/
+}
+
+// valid_write - called by the master object to determine whether if an user
+//              is allowed to write on a certain file.
+// NOTE:
+//      The argument user should be an object according to the source code
+// of driver. However, it is a mixed type in the released docs. We assume
+// it is an object in normal case here and issue an error if it was not
+// an object.                                                                                           - Annihilator
+
+int valid_write(string file, mixed user, string func)
+{
+        string euid, status, *path, dir;
+        int i;
+
+        if( !objectp(user) )
+                error("TRUST_D->valid_write: Invalid argument type of user.\n");
+
+        if(file == WIZLIST && previous_object(1) != this_object() ) return 0;
+        if( file == "/adm/daemons/securityd.lpc" 
+        || file == "/cmds/std/suicide.lpc"
+        || file == "/cmds/arch/promote.lpc" ) return 0;
+        if( sscanf(file, LOG_DIR + "%*s") && func=="write_file" ) return 1;
+
+        // Let user save their save file
+        if( func=="save_object" ) {
+                if( sscanf(base_name(user), "/obj/%*s")
+                &&      sscanf(file, "/data/%*s")
+                &&(file == (string)user->query_save_file() ||
+                        file == (string)user->query_save_file() + ".o" ) )
+                        return 1;
+        }
+
+        // Get the euid and status of the user.
+        euid = get_real_euid(user);
+        if( !euid ) return 0;
+        status = get_status(user);
+
+        if( euid==ROOT_UID ) return 1;
+
+        if( sscanf(file, "/u/" + euid[0..0] + "/" + euid + "/%*s") )
+                return 1;
+        if( sscanf(file, "/u/" + euid + "/%*s") )
+                return 1;
+
+        path = explode(file, "/");
+
+        // Check if we are excluded in one of the directories containing the file.
+        for(i=sizeof(path)-1; i>=0; i--) {
+                dir = implode(path[0..i], "/");
+                if( undefinedp(exclude_write[dir]) ) continue;
+                if( member_array(euid, exclude_write[dir])!=-1 ) return 0;
+                if( member_array(status, exclude_write[dir])!=-1 ) return 0;
+        }
+
+        // And then check if we are trusted in one of the directories containing
+        // the file.
+        if( member_array(euid, trusted_write["/"])!=-1 ) return 1;
+        if( member_array(status, trusted_write["/"])!=-1 ) return 1;
+        for(i=sizeof(path)-1; i>=0; i--) {
+                dir = implode(path[0..i], "/");
+                if( undefinedp(trusted_write[dir]) ) continue;
+                if( member_array(euid, trusted_write[dir])!=-1 ) return 1;
+                if( member_array(status, trusted_write[dir])!=-1 ) return 1;
+        }
+
+//      LOG("FILES", sprintf("%s(%s) write attempt on %s failed.\n", euid, status, file);
+        return 0;
+}
+
+int valid_seteuid( object ob, string uid )
+{
+        if( uid==0 ) return 1;
+        if( uid==getuid(ob) ) return 1;
+        if( getuid(ob)==ROOT_UID ) return 1;
+        if( sscanf(file_name(ob), "/adm/%*s") ) return 1;
+        if( wiz_status[uid] != "(admin)"
+        &&      wiz_status[getuid(ob)] == "(admin)" )
+                return 1;
+        return 0;
+}
+string get_real_euid(object ob)
+{
+        string dir, user_uid, cmd_uid;
+        if(this_player()) user_uid = get_status(this_player());
+        if( sscanf(file_name(ob), "/cmds/%*s", dir)) {
+        if( sscanf(file_name(ob), "/cmds/%s/%*s", dir)) {
+                switch(dir){
+                        case "adm" : cmd_uid =  "(admin)";break;
+                        case "arch" : cmd_uid =  "(arch)";break;
+                        case "wiz" : cmd_uid =  "(wizard)";break;
+                        case "apr" : cmd_uid =  "(apprentice)";break;
+                        case "imm" : cmd_uid =  "(immortal)";break;
+                        case "debug" : cmd_uid =  "(admin)";break;
+                        default : cmd_uid =  "(player)";
+                }
+                if(member_array(user_uid,wiz_levels) > member_array(cmd_uid,wiz_levels))
+                        return user_uid;
+                else return cmd_uid;
+        }else return "(player)";
+        }else if( sscanf(file_name(ob), "/u/%*s", dir)) {
+                if( sscanf(file_name(ob), "/u/*s/%s/%*s", dir)) return get_status(dir);
+                else return "(player)";
+        }else return geteuid(ob);       
+}
+
+int rm_user( string user)
+{
+        seteuid(getuid());
+        if( !sscanf(user, DATA_DIR + "%*s") ) return 0;
+        if( previous_object() != find_object("/cmds/usr/suicide") 
+        && get_real_euid(previous_object()) != "(admin)" )
+        return 0;
+        rm(user);
+        return 1;
+}
+

@@ -1,0 +1,55 @@
+// rukou.c task入口
+
+#include <ansi.h>
+
+inherit ROOM;
+void create()
+{
+        set("short", "枫林渡");
+        set("long",
+"  这里是前往火云山庄的必经之路，一个牌(paizi)子立在路边,一道小河横在你的面前，上\n"
+"面结了薄薄的一层冰。渡口旁边一条破烂的布幅订在树上，白布在北风中飞舞，你定睛一看，\n"
+"上面写着几个血字：\n"
+RED"                       一入此境，便无归路！\n\n\n"NOR
+        );
+        set("exits", ([
+          "south" : "/d/llzhuang/inn",
+        ]));
+        set("item_desc", ([
+            "paizi": HIY "\n苦海无边回头是岸,你真的要过去吗?那就来吧(decided go)\n" NOR,
+    ]));
+        set("no_fight",1);
+        setup();
+}
+
+int init()
+{
+        add_action("do_decided","decided");
+}
+
+int do_decided(string arg)
+{
+        object me;
+        object *inv;
+        int i;
+        me = this_player();
+        inv = all_inventory(me);
+
+    if (me->is_busy() || me->is_fighting())
+        return notify_fail("你正忙着哪！\n");
+    if ( !arg || arg !="go" )
+        return notify_fail("你决定干什么? \n");
+
+        if( me->query("combat_exp")<1000000 ) {
+           return notify_fail("前途艰险,还是不要去了吧!\n");
+}
+        for( i=0;i<sizeof(inv);i++)
+{
+                if( inv[i]->is_character() )
+                   return notify_fail("你不能背着人进去!\n");
+}
+       write(YEL"你鼓足勇气，渡过河去，踏上了险恶的征程。\n"NOR);
+        me->move("/d/llzhuang/xueyuan");
+        return 1;
+}
+

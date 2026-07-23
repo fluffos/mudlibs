@@ -1,0 +1,143 @@
+// mudlist.c
+
+#include <ansi.h>
+#include <net/daemons.h>
+#include <net/macros.h>
+
+inherit F_CLEAN_UP;
+int main(object me,string arg)
+{     
+        mapping mud_list;
+        mapping mud_svc;
+        mixed *muds;
+        string output;
+        int loop, size, pplno,count=0;
+    
+        if( !find_object(DNS_MASTER) )
+                return notify_fail("网路精灵并没有被载入。\n");
+
+        mud_list = (mapping)DNS_MASTER->query_muds();
+        mud_svc = DNS_MASTER->query_svc() + ([ Mud_name() : 0 ]);
+        if(!mud_list)
+                return notify_fail( MUD_NAME + "目前并没有跟网路上其他 Mud 取得联系。\n");
+
+       
+        muds = keys( mud_list ) - ({ "DEFAULT" });
+
+       
+        muds = sort_array(muds, 1);
+      
+        if( arg ) arg = lower_case(arg);
+               
+               if (arg == mud_list[arg]) arg="all";
+               if(arg!="all"&&arg && arg!="") {
+                       arg = htonn(arg);
+               if(!mapp( mud_list[arg] )) {
+                        write(MUD_NAME + "并没有和这个 Mud 取得联系。\n");
+                        return 1;
+                }
+                      
+              printf("\n『有关 %s 的当前资料』\n"
+                                "≡──────────────────≡\n"
+                                "『中文名称』"WHT"  %s\n"NOR
+                                "『 语  言 』"WHT"  %s\n"NOR
+                                "『 版  本 』"WHT"  %s\n"NOR
+                                "『 MudOS  』"WHT"  %s\n"NOR
+                                "『 Mudlib 』"WHT"  %s\n"NOR
+                                "『 主  机 』"WHT"  %s\n"NOR
+                                "『 端  口 』"WHT"  %s\n"NOR
+                                "『 状  态 』"WHT"  %s\n"NOR
+                                "『在线玩家』"YEL"  %s\n"NOR
+                                "『当地时间』"WHT"  %s\n"NOR
+                                "≡──────────────────≡\n\n",
+                                mud_list[arg]["NAME"],
+                                undefinedp(mud_list[arg]["MUDNAME"])?
+                                "不详":mud_list[arg]["MUDNAME"],
+                                undefinedp(mud_list[arg]["ENCODING"])?
+                                "不详":(mud_list[arg]["ENCODING"]=="GB"?"简体汉字":"繁体汉字"),
+                                undefinedp(mud_list[arg]["VERSION"])?
+                                "不详":mud_list[arg]["VERSION"],
+                                undefinedp(mud_list[arg]["DRIVER"])?
+                                "不详":mud_list[arg]["DRIVER"],
+                                undefinedp(mud_list[arg]["MUDLIB"])?
+                                "不详":mud_list[arg]["MUDLIB"],
+                                mud_list[arg]["HOSTADDRESS"],
+                                mud_list[arg]["PORT"],
+                                mud_list[arg]["_dns_no_contact"]<1?
+                                "连线":"断开",
+                                undefinedp(mud_list[arg]["USERS"])?
+                                "不详":mud_list[arg]["USERS"],
+                                undefinedp(mud_list[arg]["TIME"])?
+                                "不详":mud_list[arg]["TIME"],
+                                );
+                return 1;
+        }
+        output = 
+BBLU+HIC"游戏名称                             国际网路位址     端口  运行时间   在线人数\n"NOR+
+"───────────────────────────────────────\n";
+
+   
+
+        for(loop = 0, size = sizeof(muds); loop<size; loop++) 
+        {
+          string mudname, mudtime;
+          mudname=undefinedp(mud_list[muds[loop]]["MUDNAME"])?
+                                "":mud_list[muds[loop]]["MUDNAME"];
+          mudname += undefinedp(mud_list[muds[loop]]["NAME"])?
+              "":"("+mud_list[muds[loop]]["NAME"]+")";
+          mudtime=mud_list[muds[loop]]["UPTIME"];
+
+          if( !arg && mud_list[muds[loop]]["VERSION"] != MUDLIB_VERSION )
+                        continue;
+                if( arg ) {
+                   
+                        if( arg =="" && mud_list[muds[loop]]["MUDLIB"] == MUDLIB_NAME )
+                                continue;
+                }               
+                if( mud_list[muds[loop]]["_dns_no_contact"] > 0 ) {
+                        if( !wizardp(me) || (wizardp(me) && me->query("env/debug")) )
+                                continue;
+                }
+
+                count = loop;
+                if( htonn(lower_case(muds[loop])) == htonn(lower_case(INTERMUD_MUD_NAME)) )
+                    output +=  BGRN+HIW;
+                else
+                        output += NOR;
+                        if( undefinedp(mud_list[muds[loop]]["MUDNAME"]) ) {
+                        output +=  sprintf("%-36s  %-17s  %-5s", 
+                                mudname,
+               
+                                mud_list[muds[loop]]["HOSTADDRESS"],
+                                mud_list[muds[loop]]["PORT"]);
+                }
+                else {
+                        output +=  sprintf("%-36s %-17s%-5s%-12s  %3s",
+                               mudname,
+                               mud_list[muds[loop]]["HOSTADDRESS"]==0?"LOCALHOST":mud_list[muds[loop]]["HOSTADDRESS"],
+                               mud_list[muds[loop]]["PORT"],
+                               undefinedp(mud_list[muds[loop]]["UPTIME"])?
+                                   "": mudtime[0..26],
+                               undefinedp(mud_list[muds[loop]]["USERS"]) ?
+                               "":""+mud_list[muds[loop]]["USERS"] );
+                }
+                output +=NOR"\n";
+                count++;
+        }
+       
+ output+="───────────────────────────────────────\n";
+ output+=sprintf("共有"WHT"%s"NOR"个站点与浴血重生网络互连中。",chinese_number(count));
+   
+   this_player()->start_more( output );
+
+        return 1;
+}
+int help()
+{
+        write("\n指令格式：mudlist            列出目前所有连线中的 Mud。\n"
+                "          mudlist <Mud名称>  列出指定 Mud 的信息。\n"
+                "          mudlist all        列出目前所有连线中的 Mud。\n\n"
+        );
+        return 1;
+}
+

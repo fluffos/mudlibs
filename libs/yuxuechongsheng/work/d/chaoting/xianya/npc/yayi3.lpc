@@ -1,0 +1,163 @@
+#pragma save_binary
+// judge_guard.c
+int back_home(string arg);
+void protect_me(object,object);
+
+inherit NPC;
+
+void create()
+{
+        set_name("大衙役", ({ "yayi" }) );
+        set("yayi",1);
+        set("my_rank",5);
+        set("gender", "男性" );
+   		set("age", 44);
+        set("con", 18);
+        set("dex", 21);
+        set("str", 50);
+        set("int", 25);
+        set("per", 27);
+        set("long", "衙役在风中威风凛凛的望着你，从他这身打扮，可知他们地位超然！！\n"
+					"他们的职责是保护五品以上官员的安全的\n");
+ 	    set("combat_exp", 200000);
+	    set("vendetta_mark", "authority");
+        set("max_neili", 500);
+        set("neili", 500);
+        set("force_factor", 10);
+
+		set("inquiry", ([
+                "回去" :  (: back_home :),
+                 "滚" : (: back_home :),]) );
+
+
+        set("attitude", "heroism");
+        set("chat_chance_combat", 15);
+        set("chat_msg_combat", ({
+                "衙役说道：你当这里是什么地方，敢来这里骚扰？\n",
+                "衙役说道：你要是再无理取闹，当心捕头把你抓去坐牢!\n",
+                "衙役手中的刀越砍越快，让你应接不暇。\n",
+                "衙役说道：衙门岂是你放肆的地方？！\n"
+        }) );
+
+            set_skill("staff", 120);
+            set_skill("parry", 120);
+            set_skill("dodge", 120);
+        
+		set_skill("chaos-steps", 120);
+
+        map_skill("dodge", "chaos-steps");
+
+        setup();
+        
+	    carry_object(__DIR__"obj/stick")->wield();
+    	carry_object(__DIR__"obj/cloth")->wear();
+}
+int move(mixed dest, int silently)
+{
+        delete_temp("dist");
+        return ::move(dest,silently);
+}
+
+void init()
+{
+                object *player, *inv,*yayi;
+                int i,rank,j,x;
+                if(query_temp("dist")) 
+                        { call_out("del_dist",1);
+                        ::init();
+                        return;
+                        }
+                inv=all_inventory(environment());
+                inv->set_temp("dist",1);
+                yayi=({});      player=({});
+                for(i=0;i<sizeof(inv);i++) {
+                        if(userp(inv[i])&&inv[i]->query("family/family_name")=="朝廷")
+                                player+=({inv[i]});
+                        if(inv[i]->query("yayi"))
+                                yayi+=({inv[i]});
+                        }
+                for(j=1;j<8;j++)
+                        for(i=0;i<sizeof(yayi);i++)
+                        { 
+                        if(j!=yayi[i]->query("my_rank")) continue;
+                        rank=yayi[i]->query("protect_officer") ? yayi[i]->query("protect_officer")->query("rank"): query("my_rank")+1;
+                        for(x=0;x<sizeof(player);x++)   
+                                {
+                                if(player[x]->query("rank")>=rank) continue;
+                                if(player[x]->query_temp("protect_officer")&&
+                                 player[x]->query_temp("protect_officer")->query("my_rank")
+                                 <=yayi[i]->query("my_rank")) continue ;
+                                protect_me(yayi[i],player[x]);
+                                }
+                        }
+                ::init();
+                call_out("del_dist", 1);
+}
+void del_dist()
+{
+        delete_temp("dist");
+}
+void protect_me(object yayi,object officer)
+{
+        object *guarded;
+        remove_call_out("show_message");
+        if(yayi->query("protect_officer"))
+                {
+                yayi->query("protect_officer")->delete_temp("protect_officer");
+                guarded=yayi->query("protect_officer")->query_temp("guarded");
+                guarded-=({yayi});
+                yayi->query("protect_officer")->set_temp("guarded",guarded);
+                }
+        if(officer->query_temp("protect_officer"))
+                {
+                guarded=officer->query_temp("guarded");
+                guarded-=({officer->query_temp("protect_officer")});
+                officer->set_temp("guarded",guarded);
+                officer->query_temp("protect_officer")->delete("protect_officer");
+                officer->query_temp("protect_officer")->set_leader();
+                }
+        officer->set_temp("protect_officer",yayi);
+        yayi->set("protect_officer",officer);
+        guarded=officer->query_temp("guarded");
+      if( !arrayp(guarded) ) guarded=({});
+        guarded+=({yayi});
+        officer->set_temp("guarded",guarded);
+        yayi->set_leader(officer);
+		yayi->set_temp("guarding",officer);
+        call_out("show_message",1,yayi,officer);
+        
+}
+void show_message(object yayi,object officer)
+{
+        
+        message_vision("$n开始保护$N．\n",officer,yayi);
+}
+
+
+int back_home(string arg)
+{
+                object me;
+                me=this_player();       
+if(this_object()!=me->query_temp("protect_officer"))
+                return 0;
+                command("say 是!大人!小的这就离开。江湖险恶。大人保重身体!!!");
+                command("protect none");
+                command("follow none");
+                me->delete_temp("protect_officer");
+                  delete("protect_officer");
+                tell_room(environment(),name()+"急急忙忙回去了！\n");
+                this_object()->move(this_object()->query("startroom"));
+                return 1;
+}
+
+
+int follow_me(object ob, string dir)
+{
+        if( !living(this_object()) ||query_temp("disable_command")|| ob==this_object() ) return 0;
+
+        if( ob==leader
+           ||      (query("pursuer") 
+           && this_object()->is_killing(ob->query("id")))) 
+                return follow_path(dir);
+        
+}

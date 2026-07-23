@@ -1,0 +1,192 @@
+// 雄霸天下II魔法技能标准范例。
+// 参数说明
+// set_temp("armor_vs_fire",50)
+// armor_vs_fire // 对火系魔法的抵抗能力 +表示抵抗火系魔法 -表示抵抗水系魔法
+// 两者不能共存。即无法同时抵抗水系魔法和火系魔法。如果生物可以抵抗水系魔法。
+// 那么火系魔法将对他造成更大的伤害。
+// armor_vs_lightning // 抵抗电系魔法的能力
+// armor_vs_magic  // 抵抗魔法能力。对抗所以魔法 这个值不能设的太高。
+// 通常这个值应该控制在 -100至+100 以内。以百分比来计算。负数表示此生物
+// 惧怕此类魔法。正数反之。任何非特殊npc的抵抗系数不得超过-30至+30之间
+// execration  表示正在念咒。
+// 以后任何魔法都应此类为标准。不得再使用其他标记。以免混乱。
+// fireball
+// 1999.3.1 by rongg
+// fireball.c
+#define SUNSHINE        0       // 晴
+#define CLOUDY_SKY      1       // 阴
+#define SPRINKLE        2       // 小雨
+#define DING_ON         3       // 大雨
+#define FOG             4       // 雾
+#define FROST           5       // 霜
+#define SNOW            6       // 雪
+#define GLOW            7       // 霞
+
+#define CLOUDLESS       0       // 无云
+#define NORMAL          1       // 有云
+#define CLOUDY          2       // 多云
+#include <ansi.h>
+
+  inherit F_SSERVER;
+
+int cast(object me, object target)
+{
+	string msg;
+	int  skill;
+        skill=me->query_skill("spells");
+        skill=me->query_skill("spells");
+if(!skill||skill<160)
+	return notify_fail("你没有领悟这项魔法！\n");
+if(!me->query_skill_mapped("force")||me->query_skill_mapped("force")!="gouyee")
+	return notify_fail("雷击雷电闪需要谷衣心法的配合方可使用。\n");
+
+if( !target ) target = offensive_target(me);
+
+if( !target||!target->is_character()||target->is_corpse()
+||target==me)
+	return notify_fail("你要对谁施展雷击雷电闪？\n");
+if(me->query_temp("execration"))
+	return notify_fail("你正在念咒。\n");
+if((int)me->query("mana") < 100 )
+	return notify_fail("你的法力不够！\n");
+if((int)me->query("sen") < 50 )
+	return notify_fail("你的精神没有办法有效集中！\n");
+        me->add("mana", -100);
+	me->receive_damage("sen", 50);
+	msg = ""+me->name()+"自言自语不知道在说些什麽。\n";
+        message("vision",msg, environment(me), ({me}));
+	tell_object(me,"你开始施展魔法。片刻你手上渐渐的形成了一个电光球\n");
+	me->set_temp("execration",1);
+//	call_out("do_hit",4,me,target,skill);
+	call_out("do_execration",2,me,target,1);
+	return 1;
+}
+
+int do_execration(object me,object target,int i)
+{
+	string msg;
+	int skill;
+switch(i)
+	{
+	case 1:
+	    msg=HIC"雷神招来。\n"NOR;
+	    break;
+	case 2:
+	    msg=HIC"遵从我命。\n"NOR;
+	    break;
+	case 3:
+	    msg=HIC"从黑暗天来的雷精灵\n"NOR;
+            break;
+        case 4:
+            msg=HIC"\n\t雷\t击\t雷\t电\t闪\n"NOR;
+	default: break;
+	}
+	message_vision(msg,me,target);
+        i++;
+        if(i<5&&i>=0)
+            call_out("do_execration",1,me,target,i);
+	else 
+	    {
+  	    skill=me->query_skill("necromancy",1);
+            if(!skill) return 1;
+            call_out("do_hit",0,me,target,skill);
+	    return 1;
+            }
+	return 1;
+}
+
+int do_hit(object me,object target,int skill)
+{
+
+	object nature;
+	string msg,outdoor;
+	int i,my_exp,your_exp,damage;
+	int vs_lightning,vs_magic,additional,add_from_nature;//附加伤害
+	me->delete_temp("execration");
+	add_from_nature=0;
+	msg="";
+if(!target||!environment(target)||environment(me)!=environment(target))
+	{
+	message_vision(YEL"$N把手一挥，一道闪电向远方射去，消失在空气中！"NOR,me);
+	return 1;
+	}
+else    {
+	outdoor=environment(me)->query("outdoors");
+	if(outdoor)
+	   {
+//	 tell_object(me,"天气是"+nature->query("mWeather/"  + outdoor + "/weather")+"");
+	    nature=find_object("/adm/daemons/natured");
+	    if(nature)
+	        {
+		if(nature->query("mWeather/"  + outdoor + "/weather")==SPRINKLE)
+		   // 正在下小雨
+	           {
+	           add_from_nature+=random(300)+100;
+	           msg=YEL"$N朝天空一指。一道闪电从天空瞬间而至。和$N手上的电光和为一体。\n"NOR;
+	           }
+	        if(nature->query("mWeather/"  + outdoor + "/weather")==DING_ON)
+	           // 正在下大雨
+	           {
+	           add_from_nature+=random(600)+100;
+		   msg=YEL"$N朝天空一指。一道闪电从天空瞬间而至。和$N手上的电光和为一体。\n"NOR;
+		   }
+	        if(nature->query("mWeather/"  + outdoor + "/weather")==SNOW)
+	           // 正在下大雪
+	           {
+	           add_from_nature+=random(600)+100;
+		   msg=YEL"$N朝天空一指。一道闪电从天空瞬间而至。和$N手上的电光和为一体。\n"NOR;
+		   }
+//	        tell_object(me,"天气是"+nature->query("mWeather/"  + outdoor + "/weather")+"");
+	        }
+    	   }
+	msg+=YEL"$N念念有词。双手一挥，奋力把手上的闪电箭朝$n射去。\n"NOR;
+	message_vision(msg,me,target);
+	my_exp=me->query("combat_exp");
+	your_exp=target->query("combat_exp");
+	i=80-(your_exp-my_exp)/200000;
+	if(i>100) i=100;
+	if(i<0) i=0;
+	if(random(100)<=i)
+	    {
+    	    msg=YEL"结果闪电击中$n，从$n的身上传来一阵阵焦臭的味道\n"NOR;
+	    if(skill>=200) skill=200;
+	    damage=350+skill*3; // 火球造成的伤害的最大值为200。
+	    additional=me->query_spi();
+	    additional=to_int(pow(additional*additional*additional,0.4));
+	    if(additional>1000) additional=1000;
+	    // 和臂力的计算公式一样。突出茅山派灵力的作用。
+	    damage+=additional;
+            damage=damage*(1+(my_exp/(your_exp+1))*10/100);// 这个是经验修正。
+	    if(damage>1500) damage=1500;
+	    vs_lightning=target->query_temp("apply/armor_vs_lightning");
+	    if(vs_lightning>100) vs_lightning=100;
+	    if(vs_lightning<-100) vs_lightning=-100;
+	    damage=damage*(100-vs_lightning)/100;// 抵抗电系魔法修正
+	    vs_magic=target->query_temp("apply/armor_vs_magic");
+	    if(vs_magic>100) vs_magic=100;
+	    if(vs_magic<0) vs_magic=0;
+	    damage=damage*(100-vs_magic)/100;// 抵抗魔法修正	    
+//	    tell_object(me,"damage is "+damage+"\n");
+	    damage+=add_from_nature;// 天气附加的伤害
+//	    tell_object(me,"add_from_nature is "+add_from_nature+"\n");
+//	    tell_object(me,"additional is "+additional+"\n");
+//	    tell_object(me,"damage is "+damage+"\n");
+	    target->receive_damage("kee",damage,me); 
+	    target->receive_wound("kee",damage/2,me);
+	    COMBAT_D->report_status(target);
+	    }
+	else msg=YEL"结果$n向旁边躲了过去。\n"NOR;
+	message_vision(msg,me,target);
+	}
+if( !target->is_fighting(me) )
+	{
+	if( living(target) ) 
+	    {
+ 	    if( userp(target) ) target->fight_ob(me);
+	    else target->kill_ob(me);
+   	    }
+	    me->kill_ob(target);
+	}
+	return 1;
+}
+

@@ -1819,6 +1819,30 @@ manually re-decoding just the affected lines/file with the correct BIG5
 codec and patching them back in, rather than assuming a single encoding
 choice is correct for 100% of a lib's text.
 
+### 15z. §3's `\bstatic\b`→`nosave` blanket sed can collide with a lib's own `#define nosave static`/`#define protected static` compatibility macro, guarded by a flag this driver never predefines
+
+Found on `yuxuechongsheng` (archive #62): some libs carry a small
+compatibility shim — `#ifndef __SENSIBLE_MODIFIERS__` / `#define nosave
+static` / `#define protected static` / `#endif` — written for an older
+driver that didn't understand `nosave`/`protected` as real keywords,
+translating them down to the `static` spelling that driver *did*
+understand. `__SENSIBLE_MODIFIERS__` is never defined by this FluffOS
+build, so the shim's branch is always active — meaning after §3's own
+blanket keyword sed runs, this `#define` line itself gets rewritten too
+(since it also contains the literal word `static`), producing `#define
+nosave nosave` (a harmless self-map) but ALSO `#define protected nosave`
+(since `protected` on the left survives untouched but the *value* on the
+right was rewritten) — silently breaking `protected`'s distinct semantics
+by aliasing it to `nosave`. **Fix**: after running §3's sed, specifically
+grep for `#define\s+(nosave|protected)\s` in every `.h` file and confirm
+each maps to itself (or delete/neutralize the compatibility shim
+entirely, since both `nosave` and `protected` are independently
+real, correctly-behaving keywords on this driver and need no translation
+at all). This is a second, distinct collision case from §3's own
+already-documented `"static/CRASHES"`-in-string-literal counterexample —
+check both when auditing a lib's own copy of the `static`→`nosave` sed's
+blast radius.
+
 ---
 
 ## Per-archive gotchas index

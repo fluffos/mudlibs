@@ -1,0 +1,4 @@
+// rake.c
+
+inherit SKILL;
+
