@@ -1,0 +1,124 @@
+// securityd.c
+
+#include <login.h>
+nosave mapping wiz_status;
+nosave string *wiz_levels = ({
+    "(player)",
+    "(immortal)",
+    "(wizard)",
+    "(admin)"
+});
+void create()
+{
+    string *wizlist, wiz_name, wiz_level;
+    int i;
+    wizlist = explode(read_file(WIZLIST), "\n");
+    wiz_status = allocate_mapping(sizeof(wizlist));
+    for(i=0; i<sizeof(wizlist); i++) {
+        if( wizlist[i][0]=='#'  || sscanf(wizlist[i], "%s %s", wiz_name, wiz_level)!=2 ) continue;
+        wiz_status[wiz_name] = wiz_level;
+    }
+}
+string *query_wizlist() { return keys(wiz_status); }
+
+// This function returns the status of an uid.
+string get_status(mixed ob)
+{
+    string euid;
+    if( objectp(ob) ) {
+        euid = geteuid(ob);
+        if( !euid ) euid = getuid(ob);
+    }   else if( stringp(ob) ) euid = ob;
+    if( !undefinedp(wiz_status[euid]) ) return wiz_status[euid];
+    else if( member_array(euid, wiz_levels)!=-1 ) return euid;
+    else    return "(player)";
+}
+int get_wiz_level(object ob)
+{
+    return member_array(get_status(ob), wiz_levels);
+}
+int set_status(mixed ob, string status)
+{
+    string uid, *wiz, wizlist;
+    int i;
+    if( geteuid(previous_object())!= ROOT_UID ) return 0;
+    if(stringp(ob))    uid = ob;
+    else if( userp(ob) )   uid = getuid(ob);
+    else return 0;
+    
+    if( status == "(player)" )
+        map_delete(wiz_status, uid);
+    else
+        wiz_status[uid] = status;
+    wiz = keys(wiz_status);
+    for(wizlist = "", i=0; i<sizeof(wiz); i++)
+        wizlist += wiz[i] + " " + wiz_status[wiz[i]] + "\n";
+    rm(WIZLIST);
+    write_file(WIZLIST, wizlist);
+    log_file( "static/promotion", capitalize(uid)
+     + " become a " + status + " on " + ctime(time()) + "\n" );
+    return 1;
+}
+string *get_wizlist() { return keys(wiz_status); }
+
+int valid_set(object ob, object user)
+{
+    int level_ob,level_user;
+    
+    if ( author_file(base_name(user)) == "MudLib"
+    || author_file(base_name(user)) ==ROOT_UID )
+        return 1;
+    if (ob==user)   return 1;
+    
+    level_ob=member_array(get_status(ob), wiz_levels);
+    level_user=member_array(get_status(user), wiz_levels);
+    
+    if (!level_user)    return 1;                        // player set
+    if (!level_ob && level_user<2)  return 0;            // wiz set player
+    return ( level_user >= level_ob );                   // wiz set wiz
+}
+
+
+    
+int valid_write(string file, mixed user, string func)
+{
+    string euid;
+    mixed localtime;
+    
+    if( !objectp(user) )
+        error("valid_write: Invalid argument type of user.\n");
+    if( func=="save_object" ) {
+        if ( file == (string)user->query_save_file() || file == (string)user->query_save_file()+".o" )
+            return 1;
+    }
+    if (get_status(user) == "(admin)" )
+    if ( sscanf( file , "/log/%*s" ) != 1 )   return 1;
+    if (get_status(user) == "(player)" ){
+        if (domain_file(base_name(user))!="Wizards")   return 1;
+    }
+    euid = geteuid(user);
+    if( sscanf(file, "/u/" + euid + "/%*s") )
+        return 1;
+    localtime=localtime(time());
+    log_file(sprintf("FILES.%d%d",localtime[5],localtime[4]+1), sprintf("%s %s %s failed.\n", euid, func , file));
+    return 0;
+}
+
+
+int valid_seteuid( object ob, string uid )
+{
+    if( uid==0 ) return 1;
+    if( uid==getuid(ob) ) return 1;
+    if( getuid(ob)==ROOT_UID ) return 1;
+    if( sscanf(file_name(ob), "/adm/%*s") ) return 1;
+    if( wiz_status[uid] != "(admin)"
+    &&  wiz_status[getuid(ob)] == "(admin)" )
+        return 1;
+    return 0;
+}
+int valid_read(string file, mixed user, string func)
+{
+    
+    return 1;
+}
+

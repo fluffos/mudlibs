@@ -32,7 +32,7 @@ rely on the boot + interactive-connect test as the verification gate.
   majority of this collection. If an archive turns out to be English
   (like ds386/Dead Souls), do the minimum to note what it is, don't sink
   deep debugging time into it -- move on to the next Chinese one.
-- **Done: 65 / 100** (shanhaizhanshen, xingzhanyingxiong,
+- **Done: 66 / 100** (shanhaizhanshen, xingzhanyingxiong,
   unknownlib20150716 [小雨西游II], bxsj [书剑天下], bxsj1 [书剑·经典],
   chidi [江湖I], ..., nitan170911 [仙剑奇侠传], nitan6 [笑傲江湖], rzrmud
   [大唐西游], xo, xo_final, zzfy [郑州风云3], shiji [世纪],
@@ -68,7 +68,8 @@ rely on the boot + interactive-connect test as the verification gate.
   夕阳再现 lineage shared with #46/#47/#55/#59], yanlongfengyin_xiaoao3
   [炎龙封印-笑傲江湖3阿飞站, heavier fork of xiyangzaixian3 #48's XYZX
   lineage], shenmo [西游记之神魔传说, ES II/Neolith lineage mega-lib],
-  shenzhou [神州, ES II lineage])
+  shenzhou [神州, ES II lineage], xiaoaojianghu_client [笑傲江湖服务端+
+  客户端, actually a genuine mudlib (not client-only), 夕阳再现 lineage])
 - **New AGENTS.md §15q (hidden client-protocol-version gate)**: found on
   xiyangzaixian3 -- a pre-id prompt can check the input against a
   hardcoded literal (client version string), not just a BIG5/student
@@ -385,7 +386,7 @@ rely on the boot + interactive-connect test as the verification gate.
 | 73 | 神魔20190924版本.rar | shenmo | 40067 | done | self-IDs as 西游记之神魔传说 (root dir xyj/); ES II/Neolith 0.0.2 lineage, same large family as es1_win/esI/xkx2001/rzrmud/beimeixiakexing2001/xinkuangxiangkongjian2/yueyingqiyuan/wuhanzhan/yanhuangwuhun/haiyang2/kuangxiangkongjian/huoying; long-lived multi-author lib (1994-2013), mega-lib (33,199 .lpc files, 740MB); standard §15h fix (chinese/named/logind) + §8d/§15o get_include_path (1706 same-dir includes) + §3 counterexample revert (82 files) + §15w fix + NEW uppercase `.C` extension (363 files, convert_lib.sh's glob missed them, manually renamed -- worth adding to AGENTS.md); §15ae explicitly checked hardest per new policy -- already independently fixed in this lib's own source (`private` commented out); full registration + post-login-command flow verified twice with real name 秦风六, look/score/quit all working correctly reaching actual start room 南城客栈; full lpcc sweep skipped per §6b mega-lib policy, individual per-file lpcc checks on critical path files passed clean; see libs/shenmo/NOTES.md |
 | 74 | 笑傲江湖II.rar | | | not started | |
 | 75 | 笑傲江湖XO .rar | | | not started | |
-| 76 | 笑傲江湖服务端+客户端.rar | | | not started | client+server bundle, triage |
+| 76 | 笑傲江湖服务端+客户端.rar | xiaoaojianghu_client | 40070 | done | despite the name, confirmed genuine mudlib not client+server bundle -- "server+client" refers to bundling 2 wire protocols (telnet/ZMUD + TOMUD menu-client handshake) on different ports, not a separate client program; NOT related to nitan6/xo/xo_final despite "笑傲江湖" title -- confirmed genuine independent fork of the 夕阳再现 lineage (#46/#47/#48/#55/#59/#68/#71) via readme credit + md5sum (chinesed.lpc matches 4 siblings, chinese.lpc matches bixiecanyang specifically); standard §15h fix + §15z (3 files) + §3 counterexample (7 files) + §14/§15s(+new shout() variant)/§15ac(3 files)/§15ab/§15w fixes + new message_combatd/message_sort aliases + highest-impact: missing shared d/city/obj/cloth.lpc (referenced by 47 NPC files across a dozen zones) restored verbatim from an identical sibling template + 5 iconv-eaten-newline fixes; §15q hidden client-version gate IS live here (get_version unconditional first callback, unlike bixiecanyang); full registration + post-login-command flow verified twice with real names 秦风(male,铁枪庙)/林风(female,武庙 w/ correct gender-specific flavor text), score also tested per §15ae, zero debug.log errors; 97.59% lpcc pass (11138/11413, up from 97.06%); see libs/xiaoaojianghu_client/NOTES.md |
 | 77 | 紫藤站.rar | | | not started | large (40MB) |
 | 78 | 终极地狱.rar | | | not started | |
 | 79 | 终极地狱之爱若幽兰1.166正式版.rar | | | not started | |
