@@ -73,3 +73,42 @@ AGENTS.md §6b/§13. Memory stayed healthy throughout (~10-11GB free
 during this sweep specifically), even while running concurrently
 alongside several sibling libs' conversions/sweeps in the same session
 as part of a push to parallelize more archives at once.
+
+## Driver-rebuild retest + LPC reformat + WASM pass (this session)
+
+- **LPC formatter applied** (`tools/lpc-syntax`, all `work/*.lpc`):
+  14,003 files reformatted, 37 unchanged, 65 refused (self-check
+  failures on messy legacy code, expected/harmless per the tool's own
+  docs). Spot-checked that the fix sites below survived reformatting
+  byte-for-byte in logic (only whitespace/style changed).
+- **New bug found and fixed during this pass's native re-verification**
+  (not caught by any earlier pass): `adm/daemons/logind.lpc`'s
+  `get_resp()`/`get_name()` had the same stray, pre-existing debug
+  leftover `printf("%O\n", ob);` seen in the `xiyouji`-family siblings
+  (2 occurrences here) — dumped a raw internal object reference (e.g.
+  `/clone/user/login#1`) straight to the connecting player right after
+  their Chinese name is accepted, on every registration. Found live
+  during a fresh registration test against the rebuilt driver; removed
+  both occurrences; re-verified with a fresh registration (`qfzaid`/
+  秦风终, male) — no stray object-reference text anywhere in the
+  transcript, `look`/`score`/`quit` all still correct.
+- **Native re-test against the freshly rebuilt driver**
+  (`~/src/fluffos/build-debug/src/driver`, rebuilt from latest upstream
+  master): boots clean, zero `FATAL`/`SIGSEGV`/`执行时段错误` in
+  `debug.log`. Full registration verified with real Chinese name
+  **秦风终** (male), reaching the actual starting room (北疆小镇),
+  `look`/`score`/`quit` all producing correct output.
+- **WASM build tested** (`~/src/fluffos/build-wasm/src` via
+  `scripts/wasm_client.js`): boots cleanly (only the expected
+  non-fatal `httpd.lpc` `socket_create`/`socket_bind` "Undefined
+  function" preload errors, since the `sockets` package isn't built
+  into this WASM image — same class of harmless preload gap as any
+  missing daemon natively). **Login is blocked by the documented
+  `query_ip_number()` WASM limitation**: `adm/daemons/logind.lpc`'s
+  `logon()` calls `BAN_D->is_banned(query_ip_number(ob))` before any
+  other prompt; under WASM this receives a malformed IP string (not a
+  real dotted-quad), and the connecting player sees "你的地址在本 MUD
+  不受欢迎" (address not welcome) immediately on connect, before ever
+  reaching the id/name prompts. This is a driver-side WASM gap, **not**
+  a mudlib bug — not patched, per AGENTS.md's standing guidance. Native
+  play on `127.0.0.1` is completely unaffected.
