@@ -603,3 +603,34 @@ python3 ../../scripts/mudclient.py 127.0.0.1 40077 --timeout 45 --idle 1.0 \
   --send "<same login password>" --send "you@example.com" --send "m" \
   --send "9" --send "y" --send "look" --send "score" --send "quit" --send "y"
 ```
+
+## Driver-rebuild retest + LPC reformat + WASM pass (this session)
+
+- **LPC formatter applied** (`tools/lpc-syntax`, all `work/*.lpc`):
+  9,123 files reformatted, 137 unchanged, 5 refused (self-check
+  failures on messy legacy code, expected). Confirmed the earlier
+  `tell_room()` §15s fix (`adm/simul_efun/message.lpc`) and the
+  `printf("%O\n", ob);` removal near the "by canoe for suppwd" comment
+  in `adm/daemons/logind.lpc` both survived reformatting intact.
+- **Native re-test against the freshly rebuilt driver**
+  (`~/src/fluffos/build-debug/src/driver`, rebuilt from latest upstream
+  master): boots clean, zero `FATAL`/`SIGSEGV`/`执行时段错误` in
+  `debug.log`. Full registration verified with real Chinese name
+  **秦风再来** (male, id `qretsix`), reaching the actual starting room
+  (南城客栈), `look`/`score` both correct; `quit`'s new-account
+  retention gate answered "y" (keep account) correctly returned to the
+  game rather than disconnecting, matching this lib's documented
+  behavior. `data/topten/` (created in an earlier pass) is still
+  present and produced zero topten-related errors.
+- **WASM build tested** (`~/src/fluffos/build-wasm/src` via
+  `scripts/wasm_client.js`): boots cleanly (only expected non-fatal
+  preload warnings). **Full registration + login succeeded end-to-end
+  under WASM too** — real Chinese name **秦风网络** (id `qfwasev`),
+  through the full `2060`/`new`/id/name/super-password/login-password/
+  email/gender/gift-accept chain, landed in the real starting room
+  (南城客栈), `look` rendered the actual room and NPCs, and the
+  quit-retention gate (`y` = keep account) worked identically to
+  native. This lib's registration/login path does not gate on
+  `query_ip_number()`'s format, so it is **not** affected by the
+  documented WASM IP-format limitation — a genuinely clean, complete
+  WASM result.
