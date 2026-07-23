@@ -10,192 +10,181 @@ int do_get(object me, object obj);
 
 void create() { seteuid(getuid()); }
 
-int main(object me, string arg)
-{
-        string from, item;
-        object obj, *inv, env, obj2;
-        int i, amount;
+int main(object me, string arg) {
+  string from, item;
+  object obj, *inv, env, obj2;
+  int i, amount;
 
-        if( me->query_temp("sleeping") ) return notify_fail("你现在正躺着呢。\n");
+  if (me->query_temp("sleeping")) return notify_fail("你现在正躺着呢。\n");
 
-        if( !arg ) return notify_fail("你要捡起什麽东西？\n");
+  if (!arg) return notify_fail("你要捡起什麽东西？\n");
 
-        if( me->is_busy() )
-                return notify_fail("你上一个动作还没有完成！\n");
+  if (me->is_busy())
+    return notify_fail("你上一个动作还没有完成！\n");
 
-        // Check if a container is specified.
-        if( sscanf(arg, "%s from %s", arg, from)==2 ) {
-                env = present(from, me);
-                if(!env) env = present(from, environment(me));
-                if(!env) return notify_fail("你找不到 " + from + " 这样东西。\n");
-                if(living(env) && (wiz_level(me) <= wiz_level(env)))
-                        return notify_fail("你的巫师等级必须比对方高，才能搜身。\n");
-        } else env = environment(me);
+  // Check if a container is specified.
+  if (sscanf(arg, "%s from %s", arg, from) == 2) {
+    env = present(from, me);
+    if (!env) env = present(from, environment(me));
+    if (!env) return notify_fail("你找不到 " + from + " 这样东西。\n");
+    if (living(env) && (wiz_level(me) <= wiz_level(env)))
+      return notify_fail("你的巫师等级必须比对方高，才能搜身。\n");
+  } else env = environment(me);
 
-        // Check if a certain amount is specified.
-        if(sscanf(arg, "%d %s", amount, item)==2) {
-                if( !objectp(obj = present(item, env)) )
-                        return notify_fail("这里没有这样东西。\n");
-                if( !obj->query_amount() )
-                        return notify_fail( obj->name() + "不能被分开拿走。\n");
-                if( amount < 1 )
-                        return notify_fail("东西的个数至少是一个。\n");
-                if( amount > obj->query_amount() )
-                        return notify_fail("这里没有那麽多的" + obj->name() + "。\n");
-                else if( amount == (int)obj->query_amount() ) {
-                        if( !can_get(me, obj) ) return 0;
-                        return do_get(me, obj);
-                } 
-                else {
-                        obj2 = new(base_name(obj));
-                        obj2->set_amount( (int)obj->query_amount() - amount );
-                        obj->set_amount(amount);
-                        obj2->move(env);                        // For containers.
-                        // obj->move(me);                       // For containers.
-                        // Counting precise amount costs more time.
-                        if( me->is_fighting() ) me->start_busy(3);
+  // Check if a certain amount is specified.
+  if (sscanf(arg, "%d %s", amount, item) == 2) {
+    if (!objectp(obj = present(item, env)))
+      return notify_fail("这里没有这样东西。\n");
+    if (!obj->query_amount())
+      return notify_fail(obj->name() + "不能被分开拿走。\n");
+    if (amount < 1)
+      return notify_fail("东西的个数至少是一个。\n");
+    if (amount > obj->query_amount())
+      return notify_fail("这里没有那麽多的" + obj->name() + "。\n");
+    else if (amount == (int)obj->query_amount()) {
+      if (!can_get(me, obj)) return 0;
+      return do_get(me, obj);
+    } else {
+      obj2 = new(base_name(obj));
+      obj2->set_amount((int)obj->query_amount() - amount);
+      obj->set_amount(amount);
+      obj2->move(env);                        // For containers.
+      // obj->move(me);                       // For containers.
+      // Counting precise amount costs more time.
+      if (me->is_fighting()) me->start_busy(3);
 
-                        if( !can_get(me, obj) ) {
-                                obj2->set_amount( obj->query_amount() + obj2->query_amount() );
-                                destruct(obj);
-                                return 0;
-                        }
-                        if( obj2->query_amount() <= 0 ) destruct(obj2);
-                        return do_get(me, obj);
-                }
-        }
+      if (!can_get(me, obj)) {
+        obj2->set_amount(obj->query_amount() + obj2->query_amount());
+        destruct(obj);
+        return 0;
+      }
+      if (obj2->query_amount() <= 0) destruct(obj2);
+      return do_get(me, obj);
+    }
+  }
 
-        // Check if we are makeing a quick get.
-        if(arg == "all") {
-                if( me->is_fighting() ) return notify_fail("你还在战斗中！只能一次拿一样。\n");
-                if( !env->query_max_encumbrance() ) return notify_fail("那不是容器。\n");
+  // Check if we are makeing a quick get.
+  if (arg == "all") {
+    if (me->is_fighting()) return notify_fail("你还在战斗中！只能一次拿一样。\n");
+    if (!env->query_max_encumbrance()) return notify_fail("那不是容器。\n");
 
-                inv = all_inventory(env);
-                if( !sizeof(inv) )
-                        return notify_fail("那里面没有任何东西。\n");
+    inv = all_inventory(env);
+    if (!sizeof(inv))
+      return notify_fail("那里面没有任何东西。\n");
 
-                for(i = 0, amount = 1; i < sizeof(inv); i++) {
-                        if( !can_get(me, inv[i]) ) continue;
-                        amount = do_get(me, inv[i]);
-                }
-                return amount;
-        }
-	// 昏的东西，目前还是当成活的。现在打算可以get 昏的人
-    // if( !objectp(obj = present(arg, env)) || living(obj) )
-        if( !objectp(obj = present(arg, env)) 
-		|| 	(living(obj) && !obj->query_temp("unconcious")) )
-                return notify_fail("你附近没有这样东西。\n");
+    for (i = 0, amount = 1; i < sizeof(inv); i++) {
+      if (!can_get(me, inv[i])) continue;
+      amount = do_get(me, inv[i]);
+    }
+    return amount;
+  }
+  // 昏的东西，目前还是当成活的。现在打算可以get 昏的人
+  // if( !objectp(obj = present(arg, env)) || living(obj) )
+  if (!objectp(obj = present(arg, env))
+    || (living(obj) && !obj->query_temp("unconcious")))
+    return notify_fail("你附近没有这样东西。\n");
 
-        if( !can_get(me, obj) ) return 0;
-        return do_get(me, obj);
-}
-        
-int do_get(object me, object obj)
-{
-        object old_env, *enemy;
-        string prep;
-        int equipped;
-
-        old_env = environment( obj );
-
-
-        // get要精确到100金方才写入记录。其它都精确到1gold
-        if( userp(me) && obj->query("money_id") && obj->value() >= 1000000 ) {
-                // 这一段取自下面的信息输出前的判断
-                if( old_env == environment(me) ) {
-                        log_file( "DROP_GET_LOG", sprintf("%s %s（%s）在%s捡起一%s（%d）%s。\n", 
-                                ctime(time()), me->query("name"), me->query("id"), 
-                                ( stringp(environment(obj)->query("short")) ) ?
-                                environment(obj)->query("short") : environment(obj)->query("name"), 
-                                obj->query("unit"), obj->query_amount(), obj->name()));
-                }
-                else if(old_env->is_character()) {
-                        // 这里由于从人身上取出一些东西，所以不用记录
-                }
-                else {
-                        log_file( "PUT_GET_LOG", sprintf("%s %s（%s）在%s从%s里取出一%s（%d）%s。\n", 
-                                ctime(time()), me->query("name"), me->query("id"), 
-                                ( stringp(environment(me)->query("short")) ) ?
-                                environment(me)->query("short") : environment(me)->query("name"), 
-                                ( stringp(environment(obj)->query("short")) ) ?
-                                environment(obj)->query("short") : environment(obj)->query("name"), 
-                                obj->query("unit"), obj->query_amount(), obj->name()));
-                }
-        }
-
-
-        if( obj->query("equipped") ) equipped = 1;
-        if( obj->move(me) ) {
-                if( (int)obj->query("no_transfer") ) {
-                        obj->set("no_get", 1); 
-                        obj->set("no_put", 1); 
-                        obj->set("no_drop", 1);
-                }
-                if( me->is_fighting() ) me->start_busy(1);
-                if( obj->is_character() )
-                        message_vision( "$N将$n扶了起来背在背上。\n", me, obj );
-                else {
-                        if( old_env == environment(me) )                // 加入马的判断
-                                prep = (mapp( obj->query("horse_prop"))) ? "套住" : "捡起";
-                        else if(old_env->is_character()) prep =  "从" + old_env->name() 
-                                + ( (mapp( obj->query("horse_prop"))) ? "附近" : "身上" ) 
-                                + (equipped ? "除下" : "搜出");
-                        else switch( old_env->query("prep") ) {
-                                case "on":
-                                        prep = "从" + old_env->name() + "上拿起";
-                                        break;
-                                case "under":
-                                        prep = "从" + old_env->name() + "下拿出";
-                                        break;
-                                case "behind":
-                                        prep = "从" + old_env->name() + "后拿出";
-                                        break;
-                                case "inside":
-                                        prep = "从" + old_env->name() + "中拿出";
-                                        break;
-                                default:
-                                        prep = "从" + old_env->name() + "中拿出";
-                                        break;
-                        };
-                        message_vision( sprintf("$N%s一%s$n。\n", prep, obj->query("unit")), me, obj );
-                }
-                return 1;
-        }
-        else return 0;
+  if (!can_get(me, obj)) return 0;
+  return do_get(me, obj);
 }
 
-int can_get(object me, object obj) 
-{
-        if( sizeof(all_inventory(me)) >= MAX_CARRY ) 
-                return notify_fail("你身上的东西太多啦。\n");
+int do_get(object me, object obj) {
+  object old_env, *enemy;
+  string prep;
+  int equipped;
 
-        if( obj->query("no_get") )
-                return notify_fail("这个东西拿不起来。\n");
-        
-        if( obj->is_character() ) {
+  old_env = environment(obj);
 
-	// 昏的东西，目前还是当成活的。现在打算可以get 昏的人
-	// 加上query_temp(un....)
-                if( living(obj) && !obj->query_temp("unconcious")) 
-					return notify_fail("你不能背负这样东西。\n");
-                //      if( !userp(obj) && !obj->is_corpse() )
-                //              return notify_fail("你只能背负其他玩家的身体。\n");
-                // If we try to save someone from combat, take the risk :P
-        }
 
-        return 1;
+  // get要精确到100金方才写入记录。其它都精确到1gold
+  if (userp(me) && obj->query("money_id") && obj->value() >= 1000000) {
+    // 这一段取自下面的信息输出前的判断
+    if (old_env == environment(me)) {
+      log_file("DROP_GET_LOG", sprintf("%s %s（%s）在%s捡起一%s（%d）%s。\n",
+        ctime(time()), me->query("name"), me->query("id"),
+        (stringp(environment(obj)->query("short"))) ?
+        environment(obj)->query("short") : environment(obj)->query("name"),
+        obj->query("unit"), obj->query_amount(), obj->name()));
+    } else if (old_env->is_character()) {
+      // 这里由于从人身上取出一些东西，所以不用记录
+    } else {
+      log_file("PUT_GET_LOG", sprintf("%s %s（%s）在%s从%s里取出一%s（%d）%s。\n",
+        ctime(time()), me->query("name"), me->query("id"),
+        (stringp(environment(me)->query("short"))) ?
+        environment(me)->query("short") : environment(me)->query("name"),
+        (stringp(environment(obj)->query("short"))) ?
+        environment(obj)->query("short") : environment(obj)->query("name"),
+        obj->query("unit"), obj->query_amount(), obj->name()));
+    }
+  }
+
+
+  if (obj->query("equipped")) equipped = 1;
+  if (obj->move(me)) {
+    if ((int)obj->query("no_transfer")) {
+      obj->set("no_get", 1);
+      obj->set("no_put", 1);
+      obj->set("no_drop", 1);
+    }
+    if (me->is_fighting()) me->start_busy(1);
+    if (obj->is_character())
+      message_vision("$N将$n扶了起来背在背上。\n", me, obj);
+    else {
+      if (old_env == environment(me))                // 加入马的判断
+        prep = (mapp(obj->query("horse_prop"))) ? "套住" : "捡起";
+      else if (old_env->is_character()) prep = "从" + old_env->name() + ((mapp(obj->query("horse_prop"))) ? "附近" : "身上") + (equipped ? "除下" : "搜出");
+      else switch (old_env->query("prep")) {
+        case "on":
+          prep = "从" + old_env->name() + "上拿起";
+          break;
+        case "under":
+          prep = "从" + old_env->name() + "下拿出";
+          break;
+        case "behind":
+          prep = "从" + old_env->name() + "后拿出";
+          break;
+        case "inside":
+          prep = "从" + old_env->name() + "中拿出";
+          break;
+        default:
+          prep = "从" + old_env->name() + "中拿出";
+          break;
+      };
+      message_vision(sprintf("$N%s一%s$n。\n", prep, obj->query("unit")), me, obj);
+    }
+    return 1;
+  } else return 0;
 }
 
-int help(object me)
-{
-        write(@HELP
+int can_get(object me, object obj) {
+  if (sizeof(all_inventory(me)) >= MAX_CARRY)
+    return notify_fail("你身上的东西太多啦。\n");
+
+  if (obj->query("no_get"))
+    return notify_fail("这个东西拿不起来。\n");
+
+  if (obj->is_character()) {
+
+    // 昏的东西，目前还是当成活的。现在打算可以get 昏的人
+    // 加上query_temp(un....)
+    if (living(obj) && !obj->query_temp("unconcious"))
+      return notify_fail("你不能背负这样东西。\n");
+    //      if( !userp(obj) && !obj->is_corpse() )
+    //              return notify_fail("你只能背负其他玩家的身体。\n");
+    // If we try to save someone from combat, take the risk :P
+  }
+
+  return 1;
+}
+
+int help(object me) {
+  write(@HELP
 指令格式：get <物品名称> [from <容器名>]
  
 这个指令可以让你捡起地上或容器内的某样物品.
  
 HELP
-        );
-        
-        return 1;
+  );
+
+  return 1;
 }
- 

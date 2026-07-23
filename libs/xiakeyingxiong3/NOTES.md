@@ -76,3 +76,37 @@ class as AGENTS.md §15ah:
   start room content (the color-dog greeting from `d/beginner/start1.lpc`),
   `score` renders correctly, and `quit` completes cleanly with zero
   runtime errors in `debug.log`.
+
+## Driver rebuild / formatter / WASM pass (2026-07-23)
+
+- **LPC formatter** (`tools/lpc-syntax/format-corpus.mjs`) run over all
+  `work/*.lpc`: 3,178 total, 3,146 written, 21 already-idempotent, 11
+  refused (self-check errors — expected on messy legacy code, not chased).
+- **Native retest against the freshly-rebuilt driver** (`build-debug`,
+  rebuilt from latest upstream master today): clean boot, zero fatal
+  errors. Full registration flow re-verified end-to-end in one continuous
+  connection (id `qinlingueb`, real Chinese name `秦岭岳`, race `0`/human,
+  gender `m`): `look` showed the real 小花狗/color-dog start-room greeting,
+  `score` rendered the full character sheet, `quit` completed cleanly.
+  Zero code changes needed — the reformatted source booted and played
+  identically to before formatting.
+- **WASM test** (`scripts/wasm_client.js` against `build-wasm`): boots
+  clean through preload (only the expected non-fatal `ftpd` preload
+  error, same shape as native). The banner displays correctly, but the
+  single WASM connection then dies during `logind.lpc`'s
+  visitor-counter bookkeeping (`write_file(LOG_DIR "login/users", ...)`)
+  before the English-name prompt is ever reached — **not the documented
+  `query_ip_number()` limitation**, but a different WASM-harness gap:
+  `wasm_client.js`'s `copyDir()` deliberately only creates a bare `log/`
+  directory in the in-memory FS (skips copying subdirectory contents to
+  avoid runtime-churn bloat), so `log/login/` doesn't exist inside the
+  WASM instance even though it's a real, populated directory in the
+  native `work/` tree. The unguarded `write_file()` in `logind.lpc`
+  (not the hardened `log_file()` simul_efun) throws, and the connection
+  is dropped. **Not a mudlib bug** — natively this directory exists and
+  the counter update works fine — and not patched here (out of this
+  pass's scope to modify the shared test harness or add defensive
+  wrapping for a directory that's only missing under this specific
+  test tool). Playability under WASM for this lib should be considered
+  "boots, but blocked at the very first prompt by a harness FS gap,"
+  distinct from the true IP-gating limitation seen on other libs.

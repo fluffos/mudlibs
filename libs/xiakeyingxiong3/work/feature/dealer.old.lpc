@@ -3,131 +3,135 @@
 
 #include <dbase.h>
 
-string is_vendor_good(string arg)
-{
-    string *goods;
-    object ob;
-    int i;
+string is_vendor_good(string arg) {
+  string *goods;
+  object ob;
+  int i;
 
-    if (arrayp(goods = query("vendor_goods"))) 
-        for (i = 0; i < sizeof(goods); i++) 
-            if (goods[i]->id(arg))
-                return goods[i];
+  if (arrayp(goods = query("vendor_goods")))
+    for (i = 0; i < sizeof(goods); i++)
+      if (goods[i]->id(arg))
+        return goods[i];
 
-    return "";
+  return "";
 }
 
-int do_value(string arg)
-{
-    object ob;
-    int value;
+int do_value(string arg) {
+  object ob;
+  int value;
 
-    if (!arg || !(ob = present(arg, this_player())))
-        return notify_fail("你要估什么的价？\n");
-    
-    if (ob->query("money_id"))
-        return notify_fail("你没用过钱啊？\n");
+  if (!arg || !(ob = present(arg, this_player())))
+    return notify_fail("你要估什么的价？\n");
 
-    value = ob->query("value");
-    if (value < 1)
-        write(ob->query("name") + "一文不值！\n");
-    else 
-        write(ob->query("name") + "值" + 
-        MONEY_D->price_str(value * 70 / 100) + "。\n");
-    return 1;
+  if (ob->query("money_id"))
+    return notify_fail("你没用过钱啊？\n");
+
+  value = ob->query("value");
+  if (value < 1)
+    write(ob->query("name") + "一文不值！\n");
+  else
+    write(ob->query("name") + "值" +
+      MONEY_D->price_str(value * 70 / 100) + "。\n");
+  return 1;
 }
 
-int do_sell(string arg)
-{
-    object ob, * inv;
-    int value;
-    
-    if (!arg || !(ob = present(arg, this_player())))
-        return notify_fail("你要卖什么？\n");
-    if (ob->query("money_id"))
-        return notify_fail("你想卖「钱」？？\n");
+int do_sell(string arg) {
+  object ob, *inv;
+  int value;
 
-    if (stringp(ob->query("no_drop")))
-        return notify_fail("这样东西不能卖。\n");
+  if (!arg || !(ob = present(arg, this_player())))
+    return notify_fail("你要卖什么？\n");
+  if (ob->query("money_id"))
+    return notify_fail("你想卖「钱」？？\n");
 
-    if (is_vendor_good(arg) != "") 
-        return notify_fail("卖给你好不好？\n");
+  if (stringp(ob->query("no_drop")))
+    return notify_fail("这样东西不能卖。\n");
 
-    if (ob->query("food_supply"))
-        return notify_fail("剩菜剩饭留给您自己用吧。\n");
-    
-    if (ob->query("shaolin"))
-        return notify_fail("小的只有一个脑袋，可不敢买少林庙产。\n");
-    
-    value = ob->query("value");
-    if (value < 30)
-        write(ob->query("name") + "一文不值！\n");
+  if (is_vendor_good(arg) != "")
+    return notify_fail("卖给你好不好？\n");
+
+  if (ob->query("food_supply"))
+    return notify_fail("剩菜剩饭留给您自己用吧。\n");
+
+  if (ob->query("shaolin"))
+    return notify_fail("小的只有一个脑袋，可不敢买少林庙产。\n");
+
+  value = ob->query("value");
+  if (value < 30)
+    write(ob->query("name") + "一文不值！\n");
+  else {
+    message_vision("$N卖掉了一" + ob->query("unit") +
+      ob->query("name") + "给$n。\n", this_player(), this_object());
+    MONEY_D->pay_player(this_player(), value * 70 / 100);
+    if (value < 50)
+      destruct(ob);
     else {
-        message_vision("$N卖掉了一" + ob->query("unit") + 
-        ob->query("name") + "给$n。\n", this_player(), this_object());
-        MONEY_D->pay_player(this_player(), value * 70 / 100);
-        if (value < 50)
-            destruct(ob);
-        else {
-            inv = all_inventory(this_object());  
-            if (inv && sizeof(inv)>100) 
-                destruct(ob);
-            else
-                ob->move(this_object());
-        }
+      inv = all_inventory(this_object());
+      if (inv && sizeof(inv) > 100)
+        destruct(ob);
+      else
+        ob->move(this_object());
     }
-    return 1;
+  }
+  return 1;
 }
 
-int do_list()
-{
-    string temp,id;
-    string * iname;
-    mapping items;
-    object *inv, * goods;
-    int i,count,unit,value;
+int do_list() {
+  string temp, id;
+  string *iname;
+  mapping items;
+  object *inv, *goods;
+  int i, count, unit, value;
 
-    inv = all_inventory(this_object());
-    if (!sizeof(inv) && !arrayp(goods = query("vendor_goods")))
-        return notify_fail("目前没有可以卖的东西。\n");
-    
-    printf("你可以向%s购买下列物品：\n", query("name"));
-    // 合并同类商品，以节省显示空间
-    for (i = 0; i < sizeof(goods); i++) 
-        if (!goods[i]->query("equipped") && !goods[i]->query("money_id")) {
-            id=goods[i]->short();
-            temp=query_temp("list/"+id);
-            if (temp) {
-                sscanf(temp,"%s -> %d %s",value,count,unit);
-                count++;
-            }
-            else count=1;
-            temp=sprintf("%s -> %d %s", MONEY_D->price_str(goods[i]->query("value")),count,goods[i]->query("unit"));
-            set_temp("list/"+id,temp);
-        } 
-    for (i = 0; i < sizeof(inv); i++) 
-        if (!inv[i]->query("equipped") && !inv[i]->query("money_id")) {
-            id=inv[i]->short();
-            temp=query_temp("list/"+id);
-            if (temp) {
-                sscanf(temp,"%s -> %d %s",value,count,unit);
-                count++;
-            }
-            else count=1;
-            temp=sprintf("%s -> %d %s", MONEY_D->price_str(inv[i]->query("value") * 6 / 5),count,inv[i]->query("unit"));
-            set_temp("list/"+id,temp);
-        }
-    items=query_temp("list");
-    delete_temp("list");
-    iname  = sort_array( keys(items), (: strcmp :) );
-    for (i=0;i<sizeof(iname);i++) {
-        sscanf(items[iname[i]],"%s -> %d %s", value,count,unit);
-        if (count==2) temp="两";
-        else
-            temp=CHINESE_D->chinese_number(count);
-        printf("%35-s : %s／每%s\n",temp+unit+iname[i],value,unit);
+  inv = all_inventory(this_object());
+  if (!sizeof(inv) && !arrayp(goods = query("vendor_goods")))
+    return notify_fail("目前没有可以卖的东西。\n");
+
+  printf("你可以向%s购买下列物品：\n", query("name"));
+  // 合并同类商品，以节省显示空间
+  for (i = 0; i < sizeof(goods); i++)
+    if (!goods[i]->query("equipped") && !goods[i]->query("money_id")) {
+      id = goods[i]->short();
+      temp = query_temp("list/" + id);
+      if (temp) {
+        sscanf(temp, "%s -> %d %s", value, count, unit);
+        count++;
+      } else count = 1;
+      temp = sprintf(
+        "%s -> %d %s",
+        MONEY_D->price_str(goods[i]->query("value")),
+        count,
+        goods[i]->query("unit")
+      );
+      set_temp("list/" + id, temp);
     }
-/*    for (i = 0; i < sizeof(inv); i++) 
+  for (i = 0; i < sizeof(inv); i++)
+    if (!inv[i]->query("equipped") && !inv[i]->query("money_id")) {
+      id = inv[i]->short();
+      temp = query_temp("list/" + id);
+      if (temp) {
+        sscanf(temp, "%s -> %d %s", value, count, unit);
+        count++;
+      } else count = 1;
+      temp = sprintf(
+        "%s -> %d %s",
+        MONEY_D->price_str(inv[i]->query("value") * 6 / 5),
+        count,
+        inv[i]->query("unit")
+      );
+      set_temp("list/" + id, temp);
+    }
+  items = query_temp("list");
+  delete_temp("list");
+  iname = sort_array(keys(items), (: strcmp :));
+  for (i = 0; i < sizeof(iname); i++) {
+    sscanf(items[iname[i]], "%s -> %d %s", value, count, unit);
+    if (count == 2) temp = "两";
+    else
+      temp = CHINESE_D->chinese_number(count);
+    printf("%35-s : %s／每%s\n", temp + unit + iname[i], value, unit);
+  }
+  /*    for (i = 0; i < sizeof(inv); i++) 
         if (!inv[i]->query("equipped") && !inv[i]->query("money_id"))
         printf("%30-s：%s\n", inv[i]->short(),
         MONEY_D->price_str(inv[i]->query("value") * 6 / 5));
@@ -135,61 +139,57 @@ int do_list()
         for (i = 0; i < sizeof(goods); i++)
             printf("%30-s：%s\n", goods[i]->short(),
             MONEY_D->price_str(goods[i]->query("value")));    */
-    return 1;
-}   
+  return 1;
+}
 
-int do_buy(string arg)
-{
-    int value, val_factor;
-    string ob_file;
-    object ob,*inv;
-//  mapping fam;
+int do_buy(string arg) {
+  int value, val_factor;
+  string ob_file;
+  object ob, *inv;
+  //  mapping fam;
 
-    
-    if (!arg)
-        return notify_fail("你想买什么？\n");
-    else if (!(ob = present(arg, this_object())))
-        if ((ob_file = is_vendor_good(arg)) == "")
-            return notify_fail("你想买什么？ \n");
 
-    if (!ob) {
-        ob = new(ob_file);
-        val_factor = 10;
-    }
-    else {
-        if (ob->query("equipped"))
-            return notify_fail("你想买什么？ \n");
-        val_factor = 12;
-    }
+  if (!arg)
+    return notify_fail("你想买什么？\n");
+  else if (!(ob = present(arg, this_object())))
+    if ((ob_file = is_vendor_good(arg)) == "")
+      return notify_fail("你想买什么？ \n");
 
-    if (query_temp("busy"))
-            return notify_fail("哟，抱歉啊，我这儿正忙着呢……您请稍候。\n");
+  if (!ob) {
+    ob = new(ob_file);
+    val_factor = 10;
+  } else {
+    if (ob->query("equipped"))
+      return notify_fail("你想买什么？ \n");
+    val_factor = 12;
+  }
 
-    // add by hello 1996.12.05
-    // 检查玩家身上是不是已有太东西
-    inv = all_inventory(this_player());  
-    if (inv && sizeof(inv)>49) 
-        return notify_fail("你身上都那么多东西了，还想买啊！\n");
-        
-    switch (MONEY_D->player_pay(this_player(), ob->query("value") *  val_factor / 10)) {
+  if (query_temp("busy"))
+    return notify_fail("哟，抱歉啊，我这儿正忙着呢……您请稍候。\n");
+
+  // add by hello 1996.12.05
+  // 检查玩家身上是不是已有太东西
+  inv = all_inventory(this_player());
+  if (inv && sizeof(inv) > 49)
+    return notify_fail("你身上都那么多东西了，还想买啊！\n");
+
+  switch (MONEY_D->player_pay(this_player(), ob->query("value") * val_factor / 10)) {
     case 0:
-        return notify_fail("穷光蛋，一边呆着去！\n");
+      return notify_fail("穷光蛋，一边呆着去！\n");
     case 2:
-        return notify_fail("您的零钱不够了，银票又没人找得开。\n");
+      return notify_fail("您的零钱不够了，银票又没人找得开。\n");
     default:
-        set_temp("busy", 1);
-        message_vision("$N从$n那里买下了一" + ob->query("unit") + 
+      set_temp("busy", 1);
+      message_vision("$N从$n那里买下了一" + ob->query("unit") +
         ob->query("name") + "。\n", this_player(), this_object());
-        ob->move(this_player());
-    }
-        remove_call_out("enough_rest");
-        call_out("enough_rest", 1);
+      ob->move(this_player());
+  }
+  remove_call_out("enough_rest");
+  call_out("enough_rest", 1);
 
-    return 1;
+  return 1;
 }
 
-void enough_rest()
-{
-        delete_temp("busy");
+void enough_rest() {
+  delete_temp("busy");
 }
-
