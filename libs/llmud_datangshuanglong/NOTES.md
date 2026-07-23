@@ -122,3 +122,31 @@ the two fixes above, fixed to the correct single-slash path.
 room, `score` showed the full correct character sheet; zero
 `"你发现事情不大对了"` lines and zero uncaught runtime errors in `debug.log`
 in the final run.
+
+## Re-verification pass: driver rebuild + LPC formatter + WASM build
+
+- **LPC formatter**: ran `format-corpus.mjs` over all 6,514 `.lpc`
+  files — 6,362 reformatted in place, 29 already-idempotent, 123
+  refused (nonzero `errors` expected/fine per the tool's own contract).
+  Specifically double-checked the §15s `tell_room()`/`shout()` fix in
+  `adm/simul_efun/message.lpc` survived the reformat byte-for-byte
+  (`exclude || ({})` still present) — it did.
+- **Native retest against rebuilt driver** (`~/src/fluffos/build-debug/
+  src/driver`, freshly rebuilt from upstream master): booted clean,
+  zero fatal errors, zero `"你发现事情不大对了"` spam. Full registration
+  re-verified with a fresh real name (秦岭十一) via the
+  `id → y → 中文名 → password×2 → email → gender → "20 20 20 20" → yes`
+  flow; landed correctly in the real 大唐学院 starting room (not VOID),
+  `look`/`score`/`quit` all correct, gender-specific starting clothes
+  shown. Confirms the §15s `tell_room` fix and the log_error warning
+  gate both still hold after the reformat + rebuilt driver — no
+  regressions, nothing to fix.
+- **WASM build test** (`scripts/wasm_client.js` against
+  `build-wasm/src`): boots cleanly in-process. Full registration/login
+  flow completed successfully under WASM too (fresh name 秦岭十二, same
+  flow as native), reaching 大唐学院 and cleanly `look`/`quit`-ing out —
+  this lib's own site-check only *displays* the connecting IP (via
+  `query_ip_number()`) rather than gating login on its format, so the
+  documented WASM IP-formatting limitation surfaces here only as a
+  cosmetic blank in the "您正在从...这个IP连线进入" banner line, not as
+  a login blocker; the lib is otherwise fully playable under WASM.

@@ -228,6 +228,19 @@ README/NOTES and move on; a lib blocked this way should be marked
 "boots under wasm, login gated by IP-check limitation" rather than
 "fails under wasm."
 
+Two more concrete manifestations found during the rebuild+format+WASM
+pass, confirming this is one root cause showing up in different shapes
+per lib, not a one-off: `longyunmeng`'s `logind.lpc` calls
+`BAN_D->is_banned(query_ip_number(ob))` directly, so the malformed WASM
+IP trips the ban check itself ("你的地址在本 MUD 不受欢迎"). More subtly,
+`menghuanxiyou2002`'s `adm/daemons/ipd.lpc` does
+`explode(query_ip_number(ob), ".")` then indexes element `[1]` — WASM's
+malformed IP doesn't split into ≥2 elements, so this throws an **uncaught
+`Array index out of bounds`** that desyncs the whole login prompt chain
+before the id prompt even renders (no graceful rejection message at all,
+just silence). Same root cause, worth recognizing either shape quickly
+rather than re-diagnosing from scratch each time.
+
 Other documented WASM-mode restrictions worth knowing before triaging a
 "why doesn't this work under wasm" finding (see `docs/build-wasm.md`'s
 own "Notes & limits"): no `sockets`/`db`/`ffi`/`pcre`/`crypto`/`async`/
