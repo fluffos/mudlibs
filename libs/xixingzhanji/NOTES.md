@@ -385,3 +385,29 @@ bugs on the tested path):
   the raw archive).
 - `work/adm/tmp/`, `work/binaries/` (referenced by `config.fluffos`'s `swap
   file`/`save binaries directory`, didn't exist in the raw archive).
+
+## Re-verification pass: driver rebuild + formatter + WASM (2026-07-23)
+
+- **LPC formatter** applied to all `work/*.lpc` (6496 files): 6419
+  reformatted, 77 already-clean/unchanged, 0 self-checked errors.
+- **Native re-test against the rebuilt driver** (`~/src/fluffos/build-debug/src/driver`):
+  booted clean (only pre-existing compile warnings, no fatals). Full
+  registration flow re-verified end-to-end with a fresh real Chinese
+  name ("秦风廿五") — gb/big5 encoding → student-age y/n → `New` →
+  English id → Chinese name → password ×2 → email → gender → attribute
+  screen (`9` then `y` to accept) → landed in the real starting room
+  (`南城客栈`); `look`/`score`/`quit` all produced correct Chinese
+  output. `log/debug.log` clean of real errors. Reformat + new driver
+  build introduced no regressions.
+- **WASM test** (`scripts/wasm_client.js` against `build-wasm/src`): boots
+  cleanly — the only preload-time errors are the expected non-fatal
+  `Undefined function socket_create`/`socket_bind`/`socket_close` in
+  `adm/daemons/ftpd.lpc` (no `sockets` package under WASM). Full
+  registration flow **completed successfully** under WASM with a real
+  Chinese name ("秦风测试"), same prompt sequence, reaching the same
+  `南城客栈` room, `look`/`quit` both correct. The known
+  `query_ip_number()` WASM limitation shows up cosmetically (the
+  "您的网路连线地址为：" banner line prints blank instead of
+  `127.0.0.1`), but this lib doesn't gate login on IP format anywhere
+  reached by this flow, so it's display-only — a clean, fully-playable
+  WASM result.
