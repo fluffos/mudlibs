@@ -413,3 +413,48 @@ gaps/incompatibilities rather than conversion bugs — left unfixed per the
   touched it, only ever killed this lib's own driver by its exact,
   recorded PID. No lingering driver process for this lib at the end of
   this session.
+
+## 2026-07-23 re-verification pass (driver rebuild + formatter + WASM)
+
+- **LPC reformat**: ran `format-corpus.mjs` over all of `work/` (466
+  `.lpc` files) — 465 written, 1 already-idempotent, 0 refused. Spot-
+  checked the §15s `tell_room()`/`message()` fix in `adm/simul_efun/
+  message.lpc` (`message("tell_room", str, ob, exclude || ({}));`) —
+  reformatted but semantically untouched, confirmed by reading the
+  formatted output directly.
+- **Native retest against the freshly-rebuilt driver**: booted clean on
+  port 40059, zero fatal preload errors. Full registration flow with a
+  fresh real Chinese name ("秦风八"/`qinfengba`) through the complete
+  wizard (id → confirm → password → confirm → email → gender → Chinese
+  name) into the actual game world (巫师神殿); reconnected with the same
+  id/password and ran explicit `look` (room description correct),
+  `score` (full character sheet correct: stats, HP/查克拉 bars, equipment
+  slots), and `quit` (clean save + disconnect) — all correct, zero
+  runtime/compile errors logged during the whole session. No regressions
+  from the reformat or the new driver binary. (Note for future
+  testers: the login wizard's English id must be pure letters, 3-10
+  chars — digits or >10 chars are silently re-prompted, easy to burn
+  several `--send` lines on by accident.)
+- **WASM test** (`scripts/wasm_client.js` against `build-wasm/src`):
+  boots cleanly (same preload warnings as native). Registration
+  proceeds all the way through the wizard — id, password, email,
+  gender, Chinese name are all accepted — but the character never
+  actually lands in the game world. Root cause is a genuine WASM
+  limitation, **distinct from the documented `query_ip_number()` issue**:
+  `adm/daemons/userid.lpc` (an ident/`auth` protocol lookup against the
+  connecting client's port 113) is lazily compiled from `logind.lpc`'s
+  `enter_world()` and uses `socket_address()`/`socket_create()`/
+  `socket_connect()` — none of which exist under this WASM build (no
+  `sockets` package, per AGENTS.md's documented WASM restriction list).
+  The file fails to compile, and because this call site is a lazy
+  runtime load at the tail end of login rather than a preloaded daemon
+  wrapped by the mudlib's own error handler, `enter_world()` throws
+  `*No program in object '/adm/daemons/userid'!` and aborts outright —
+  confirmed the character was left outside any room (a same-session
+  `look` immediately after returned "你现在什么也看不到" — not "in a
+  room" at all) rather than merely a cosmetic feature gap. Confirmed via
+  direct source read and by contrast with the fully-clean native login
+  above (reaches 巫师神殿 every time) that this is WASM-build-specific,
+  not a mudlib bug — not patched, since "fixing" it would mean removing
+  a real feature (the ident lookup) to work around a driver-build
+  limitation rather than fixing an actual bug.
