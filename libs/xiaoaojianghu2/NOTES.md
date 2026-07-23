@@ -392,3 +392,42 @@ the exact PID from that launch's own `$!`/`ps -ef` output, never a broad
 confirmed running concurrently throughout this session, e.g. for
 `shenzhou`, `xiaoaojianghu_client`, `xiaoaojianghu_xo` — none were
 touched). No driver process left running at the end of this pass.
+
+## Driver rebuild / formatter / WASM pass (2026-07-23)
+
+- **LPC formatter** run over all `work/*.lpc`: 4,344 total, 4,190
+  written, 8 already-idempotent, 146 refused (self-check errors,
+  expected on messy legacy code — this lib's larger error count than
+  siblings tracks with its earlier-documented dialect/syntax quirks).
+  **Formatter regression found and fixed (boot-breaking)**: both
+  `clone/user/user.lpc` and `system/daemon/user.lpc`'s
+  `move(mixed dest, int silent)` had `if (::move(dest, silent)) { ... }`
+  mangled into `if (: : move(dest, silent)\n)\n{ ... }` — a syntax
+  error (`unexpected L_FUNCTION_OPEN`) that broke compilation of the
+  live player-body class and **prevented the driver from booting the
+  registration path at all**. This is a formatter bug specifically on
+  the `::methodname(...)` parent-call scope operator when immediately
+  followed by `(` — same bug independently found breaking a non-live
+  room file in two sibling libs (`xianlvqiyuan`, `xianlvqingyuanzheda`)
+  this pass. Fixed by hand-restoring `if (::move(dest, silent)) { ... }`
+  in both files, re-booted, confirmed clean.
+- **Native retest against the freshly-rebuilt driver**: after the fix
+  above, clean boot, zero fatal/syntax errors. Full registration +
+  post-login-command flow re-verified **in one single continuous
+  connection** (per §15j's per-IP anti-flood throttle — confirmed this
+  is still necessary: an earlier two-connection attempt during this same
+  pass hit the exact same silent-throttle symptom documented previously)
+  with id `qinfenge`, real Chinese name `秦风山`, gender `m`: hit the
+  same known pre-existing `/d/place/newbie/start` missing-room content
+  gap (gracefully degrades to void, exactly as before), and the
+  "10-point save gate" quit message displayed correctly. Zero genuine
+  runtime errors in `debug.log` after the formatter-regression fix.
+- **WASM test**: also run as a single continuous connection (same
+  anti-flood consideration, done as insurance even though WASM has no
+  shared IP-throttle state with the native driver instance). Full
+  registration completed cleanly under WASM too — hit the identical
+  known `/d/place/newbie/start` content gap with the identical graceful
+  degrade-to-void behavior and full error trace visible in the driver's
+  own stdout, then reached the same "10-point save gate" quit prompt.
+  No IP-gating or other WASM-specific blocking issue observed — this lib
+  plays essentially identically under WASM and native.
