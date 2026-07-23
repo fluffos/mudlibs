@@ -224,3 +224,37 @@ unreachable), ~21 files cascading from `vendor_sale.lpc`'s pre-existing
 corruption, plus a long tail of one-off "Undefined variable/function"
 hits in individual quest/skill files not reached by the verified boot
 path.
+
+## Re-verification pass: driver rebuild + formatter + WASM (2026-07-23)
+
+- **LPC formatter** applied to all `work/*.lpc` (8302 files): 8215
+  reformatted, 33 already-clean/unchanged, 54 self-checked errors
+  (skipped, expected on legacy code).
+- **Native re-test against the rebuilt driver** (`~/src/fluffos/build-debug/src/driver`):
+  booted clean (only pre-existing compile warnings, no fatals). Full
+  registration flow re-verified end-to-end with a fresh real Chinese
+  name ("秦风廿六") — remembered the `"2060"` client-version gate must
+  be re-sent after *every* `get_id1` rejection, not just once (bit by
+  this exact subtlety on a first retry using an id containing a digit,
+  exactly as this file already warned) — `"2060"` → English id (pure
+  letters) → confirm `y` → Chinese name → password ×2 → gift `0` →
+  confirm `y` → email → gender → entered the real game world
+  (`北疆小镇`); `look`/`score`/`quit` all produced correct Chinese
+  output, `log/debug.log` clean of real errors. Reformat + new driver
+  build introduced no regressions.
+- **WASM test** (`scripts/wasm_client.js` against `build-wasm/src`): boots
+  cleanly (no fatal preload errors; this lib's `dns_master` is already
+  excluded from preload per an earlier fix, so no `socket_*`
+  undefined-function noise either). Registration proceeds correctly
+  through the `"2060"` gate and the English-name prompt, but is then
+  **rejected by `BAN_D->is_banned(query_ip_number(ob))`** in
+  `logind.lpc` ("你的地址在本 MUD 不受欢迎。") — this is the documented
+  `query_ip_number()` WASM limitation exactly as described in
+  AGENTS.md/`docs/build-wasm.md` (same shape as `bxsj`'s
+  `adm/daemons/sited.lpc`): the welcome banner's own IP line already
+  shows blank instead of `127.0.0.1` under this WASM build, and
+  `BAN_D`'s ban-list lookup on that malformed value spuriously matches
+  as banned. **Not a mudlib bug** — not patched, per this pass's
+  instructions. Verdict: boots under WASM, registration reaches the
+  English-name step, but login is gated by the known IP-format
+  limitation before a Chinese name can even be entered.
