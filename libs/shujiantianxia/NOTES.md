@@ -63,3 +63,37 @@ reached character attribute selection (根骨/膂力/悟性/身法 stat prompt).
 9,936 files, 9,860 pass / 76 fail (99.2%) — identical numbers to
 `shujian2008`, as expected from identical source. Memory stayed healthy
 throughout (~16GB free).
+
+## Rebuilt-driver / formatter / WASM re-verification pass (2026-07-23)
+
+Same shape as `shujian2008`'s own re-verification pass this same day
+(identical source, so identical results throughout):
+
+1. **LPC formatter**: `{"total":9936,"written":9680,"wouldChange":0,
+   "unchanged":102,"errors":154}` — identical summary to `shujian2008`.
+   Confirmed the ported `command_hook` (still plain `nomask`),
+   `commandd.lpc`'s `"%s.lpc$"` pattern, and `get_include_path()` all
+   survived reformatting. **Same formatter bug as `shujian2008`** (see
+   its NOTES.md / `tianxia/NOTES.md` for the full writeup — a bare
+   `::fn(...)` immediately after `(` gets mis-lexed as a closure
+   literal) hit in this lib's own byte-identical copies of
+   `cmds/leitai/npc_leitai.lpc` and `d/tanggu/npc/npc_leitai.lpc`
+   (`if(::move(dest, silently))`); hand-fixed identically. Re-verified
+   via `lpcc_check.sh`: 9,860/9,936 pass (76 fail, matching the
+   pre-format baseline), neither file in the failure log.
+2. **Native re-test against the rebuilt driver**: booted clean (zero
+   fatal errors). Full registration verified end-to-end: id `sjtxfmta`
+   → password ×2 → real Chinese name **`秦风十八`** → attribute roll →
+   email `test02@abcd.com` → gender `m` → entered the game world at
+   武馆前院, `look`/`score`/`quit` all producing correct real output.
+   `debug.log` clean (zero `error in error handler`/`denied`/`undefined
+   function`/`bad argument`).
+3. **WASM test**: boots cleanly (same caught `dns_master` preload
+   failure as `shujian2008`, no sockets package under wasm). **Login
+   blocked by the same documented `query_ip_number()` limitation** —
+   this lib's `sited.lpc` is byte-identical to `shujian2008`'s, so the
+   same `sscanf(ip, "%d.%d.%*d.%*d", ...) != 4` check rejects every
+   login id under wasm with "对不起，这个英文名字不能从当前地址登录。"
+   Not patched — known driver-side wasm limitation, not a mudlib bug
+   (native login verified working above). See `shujian2008/NOTES.md`
+   for the full technical writeup, not repeated here.
