@@ -139,3 +139,30 @@ correctly ("掌柜说道：欢迎！欢迎！请里面坐！"), zero spam, zero 
 triaged individually per AGENTS.md §6b/§13 — the full interactive
 registration test (which went deeper than any prior lib, reaching an
 actual room) is the verification gate.
+
+## Re-verification pass (2026-07-23): driver rebuild + LPC formatter + WASM build
+
+- **Formatter**: ran `format-corpus.mjs` over all of `work/` (427 files,
+  426 written/reformatted, 1 already-clean, 0 errors).
+- **Native retest against rebuilt driver** (`build-debug/src/driver`,
+  rebuilt from latest upstream master): clean boot, zero fatal errors in
+  `debug.log`. Full registration re-verified end-to-end on the
+  now-reformatted source with a fresh real Chinese name (`秦凡`, ID
+  `qinfan`, following this lib's own long ID→confirm→password→email→
+  race→gender→Chinese-name flow, race `human`) reaching the actual game
+  world (小客栈 starting room), innkeeper NPC greeting correctly
+  ("掌柜说道：欢迎！欢迎！请里面坐！"); `look`/`score`/`quit` all
+  produced correct output (full 精气神 status bars rendered correctly),
+  zero real errors in `debug.log`. No regressions from the reformat or
+  the fresh driver build.
+- **WASM build**: preload completes with only the expected non-fatal
+  `sockets`-package gap (`adm/daemons/ftpd.lpc`'s
+  `socket_create`/`socket_bind`/`socket_close` → `Undefined function`,
+  caught non-fatally, `Initializations complete.` still printed). Like
+  `datangshuanglong`, this lib's login path does **not** gate on
+  `query_ip_number()`'s format, so a full registration proceeded all
+  the way through under WASM too: ID `qinlan` → password → email →
+  race `human` → gender `f` → Chinese name `秦岚` → reached the actual
+  game world (小客栈), innkeeper NPC greeted correctly, `look` produced
+  correct room output, `quit` exited cleanly. **This lib is confirmed
+  fully playable under WASM**, not just "boots."
