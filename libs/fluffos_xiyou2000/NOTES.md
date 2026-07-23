@@ -62,3 +62,45 @@ range check to test the CJK Unicode block instead, and halved the
 GBK-byte-calibrated length bounds in `check_legal_name` to match. See
 AGENTS.md §15h for the full writeup; confirmed via a real interactive
 registration test (Chinese surname + given name reaching the next prompt).
+
+## Re-verification pass: driver rebuild + LPC formatter + WASM build
+
+- **Formatter**: `format-corpus.mjs` over all 5637 `.lpc` files; 5544
+  reformatted, 91 unchanged, only 2 refused (self-check `errors`) —
+  very clean corpus.
+- **Native retest against rebuilt driver**: clean, zero fixes needed.
+  Full registration flow (gb encoding → age-gate `no` → `new` keyword →
+  English id → real Chinese name → password → email → gender → gift
+  allocation `9`/`y`) verified end-to-end reaching 南城客栈, with
+  `look`/`score`/`quit` all producing correct output, zero debug.log
+  errors.
+- **WASM test — 1 regression found + fixed** (WASM-specific, does not
+  reproduce natively): `adm/daemons/logind.lpc`'s `encoding()` callback
+  runs a one-time "mirror site verification" gate
+  (`!find_object(DNS_MASTER) || !"/adm/daemons/band"->check_ip_(...)`)
+  after every player selects gb/big5. This lib's `adm/etc/preload` DOES
+  include `dns_master` (unlike libs where §15p's DNS-preload-exclusion
+  policy applies) and it preloads fine natively (real sockets work), so
+  `find_object(DNS_MASTER)` is truthy there and the gate passes cleanly
+  — but under WASM (no sockets package) `dns_master` fails to compile
+  at preload, `find_object(DNS_MASTER)` is always `0`, and the code
+  unconditionally called `DNS_MASTER->get_host_name(...)` even inside
+  its own "absent" branch (building the shutdown log message) — which
+  itself crashed with `*No program in object` before ever reaching the
+  intended `shutdown(1)`, leaving the connection stuck in a broken state
+  (every subsequent input treated as an unrecognized command, no way to
+  ever complete the encoding step). This is the exact AGENTS.md §15ai
+  pattern (`xiyouji2003`'s finding, same lineage) applied to a lib that
+  hadn't needed it before because it never excludes `dns_master` from
+  preload. Fixed identically: guard with `find_object(DNS_MASTER) &&
+  ...` so "daemon absent" means "skip the gate" (allow login) rather
+  than "gate failed" (attempt, and crash trying, to shut down). This is
+  a no-op change natively (dns_master is always present there) and only
+  changes behavior under WASM. Re-verified clean both ways: native
+  registration still reaches 南城客栈 with zero errors (real name
+  孙悟空), and the full registration flow (incl. the age-gate and `new`
+  keyword quirks, real name 猪八戒) now completes under WASM too,
+  reaching 南城客栈 with `look`/`quit` both working — full WASM
+  playthrough, not just boot. Not affected by the documented
+  `query_ip_number()` WASM limitation (this lib's gate is
+  `find_object`-based, not IP-format-based).

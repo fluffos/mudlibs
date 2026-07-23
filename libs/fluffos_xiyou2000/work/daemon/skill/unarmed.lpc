@@ -4,5 +4,3 @@
 #include <ansi.h>
 
 inherit SKILL;
-
-
