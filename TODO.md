@@ -32,7 +32,7 @@ rely on the boot + interactive-connect test as the verification gate.
   majority of this collection. If an archive turns out to be English
   (like ds386/Dead Souls), do the minimum to note what it is, don't sink
   deep debugging time into it -- move on to the next Chinese one.
-- **Done: 73 / 100** (shanhaizhanshen, xingzhanyingxiong,
+- **Done: 75 / 100** (shanhaizhanshen, xingzhanyingxiong,
   unknownlib20150716 [小雨西游II], bxsj [书剑天下], bxsj1 [书剑·经典],
   chidi [江湖I], ..., nitan170911 [仙剑奇侠传], nitan6 [笑傲江湖], rzrmud
   [大唐西游], xo, xo_final, zzfy [郑州风云3], shiji [世纪],
@@ -80,7 +80,9 @@ rely on the boot + interactive-connect test as the verification gate.
   [终极地狱-指间mud版/地狱无门, confirmed same "hell" engine core as #79
   + a mobile-client protocol layer], zhongjidiyu [终极地狱之轩辕传说,
   ES II/xkx-family lineage, confirmed UNRELATED to #79/#80 despite the
-  shared title])
+  shared title], xiyouji [西游记 v2.01 1996-1998, likely the ANCESTOR
+  snapshot of the whole ES II/XYJ lineage], xixingzhanji [西行战记, ES II
+  lineage])
 - **New AGENTS.md §15q (hidden client-protocol-version gate)**: found on
   xiyangzaixian3 -- a pre-id prompt can check the input against a
   hardcoded literal (client version string), not just a BIG5/student
@@ -431,8 +433,8 @@ rely on the boot + interactive-connect test as the verification gate.
 | 81 | 西游记2003.rar | xiyouji2003 | 40075 | done | self-IDs as 西游记[光辉岁月]; master.c 486/486 lines with only 3 trivial diffs against fluffos_xiyou2000(#15), same ES-II/"Lil"/"Annihilator" root with a later maintainer credit, NOT the mhxy/menghuanxiyou2002/shenmo branch despite shared ancient zone names indicating a much older common root; standard §15h fix (re-derived fresh, different implementation shape than any sibling) + §8h convertd Greek table (ported verbatim from mhxy/fluffos_xiyou2000) + §14/§8d-§15o/§15w/§15b/§15ac fixes + new §8g-variant missing CLUB/F_CLUB macros + §3 counterexample (17 files) + NEW dns-site-verification gate in logind.lpc calling shutdown(1) unconditionally once dns_master was excluded from preload (fixed to require find_object(DNS_MASTER) truthy first) + NEW missing /d/wiz/init gift room (mandatory post-registration move target, absent from archive, silently left new characters with no environment crashing every post-login command -- fixed with a load_object() guard falling back to START_ROOM); full registration + post-login-command flow verified across 3 runs (first exposed the /d/wiz/init bug via post-login failures, next two clean) incl. real names 秦岭(female)/林风(male), dup-name rejection also confirmed; 89.3% lpcc pass (2322/2599); see libs/xiyouji2003/NOTES.md |
 | 82 | 西游记2006之 最终幻想.rar | | | not started | |
 | 83 | 西游记450.rar | | | not started | |
-| 84 | 西游记.rar | | | not started | |
-| 85 | 西行战记.gz | | | not started | bare gzip of a tar, not .tar.gz named |
+| 84 | 西游记.rar | xiyouji | 40079 | done | live banner "西游记"/"A Journey to the West" v2.01 (1996-1998); ES II lineage but NOT a byte-duplicate of any sibling (fluffos_xiyou2000/mhxy/menghuanxiyou2002/shenmo/xiyouji2003) -- master.c header has zero site-branding/cracker credit line unlike every sibling, combined with 1998-era timestamps (older than all siblings) strongly suggests this is the ANCESTOR snapshot of the whole ES II/XYJ lineage; standard §15h fix + §15p/§15ai/§8h(45x)/§3-counterexample(6 files)/§15w/§15t(2 bugs)/§14 fixes + a local-header-one-dir-removed case + several pre-existing typos + 4 corrupted vendor .o files moved aside; full registration + post-login-command flow verified with real name 秦风 reaching 南城客栈, look/score/quit all working, zero error spam after §15w fix (confirmed via before/after comparison); 98.9% lpcc pass (4931/4987); flagged for cross-check against #82/#83 once landed; see libs/xiyouji/NOTES.md |
+| 85 | 西行战记.gz | xixingzhanji | 40080 | done | 西行战记, ES II lineage (large shared family), config says [总站] but live banner says [宜昌站] (branding drift not a bug); NEW finding: master.lpc's connect() used `switch(port){default: ...}` with no real case statements at all -- hard parse error on this driver, took down master's whole compile, sole fatal boot-blocker (rewrote as a plain block) -- worth AGENTS.md entry; standard §15h fix + §8h convertd.lpc (44 occurrences, more than usual, preserved embedded PUA glyphs) + §15p/§15ab (encoding_to_mudlist() called DNS_MASTER unconditionally even after its own find_object() check failed) + preload typo (choose->choosed) + §14/§8d-§15o/§4/§15w/§15s/§15t/§8e fixes + missing local message.h copied from a sibling dir + conversion hygiene (3 uppercase .C, 1 raw-GBK straggler); full registration + post-login-command flow verified twice with real names 秦风(male)/秦岭(female), both reaching 南城客栈, look/score/i all working with gender-appropriate text, zero errors either run; 98.83% lpcc pass (6420/6496); INCIDENT: mid-session this agent ran a broad `pkill -f "driver config.fluffos"` (the explicitly forbidden pattern) which killed archives #82/#83's concurrent driver processes -- both self-recovered (relaunched within ~1 min) but flagged here in case either lost in-progress verification state, worth double-checking their final reports; see libs/xixingzhanji/NOTES.md |
 | 86 | 重出江湖.rar | chongchujianghu | | not mudlib | confirmed: closed-source compiled Windows C++/MFC MUD server (mud.exe, PE32 GUI exe linked against MFC42D.DLL etc) + a bundled Windows GUI client, zero .c/.lpc files anywhere -- data/*.o save files ARE genuine LPC-style save_object() text (likely same wuxia gene pool as other archives) but the room/npc/skill *source* that produced them isn't in this archive; cross-referenced #88 (重出江湖完整源码linunx_2.71原版.rar)'s actual .cpp files directly and confirmed real C++ (MFC-style, #include "stdafx.h", no `inherit`/LPC syntax at all) -- the whole "重出江湖" family (#86/#87/#88) is very likely non-LPC; port not consumed, kept free; see libs/chongchujianghu/NOTES.md |
 | 87 | 重出江湖WIN完全版.rar | | | not started | |
 | 88 | 重出江湖完整源码linunx_2.71原版.rar | | | not started | |

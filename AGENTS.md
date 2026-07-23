@@ -2192,6 +2192,23 @@ concluding a lib has the §15ae command-hook bug because commands
 tighter `--idle` first — a live-clock prompt is a much more mundane
 explanation than a driver-compat bug, and worth ruling out first.
 
+### 15ao. A `switch` statement with only a `default:` case and no real `case` labels is a hard parse error on this driver, not a harmless no-op — can take down the whole file it's compiled into, including `master.lpc` itself
+
+Found on `xixingzhanji` (archive #85): `master.lpc`'s `connect(int port)`
+apply was written as `switch(port) { default: ... }` — no actual `case`
+labels at all, just a catch-all default block, presumably meant as a
+lazy way to write "run this code regardless of the port." This driver's
+grammar requires at least one real `case` to accept a `switch` at all
+("need case statements... not just default"), so this was a hard parse
+error — and since it lived directly in `master.lpc`, it took down
+master's entire compile, which is fatal at the earliest possible point
+in boot. Fix: rewrite as a plain unconditional block (drop the `switch`
+wrapper entirely, since there was no branching logic being expressed
+anyway). **Lesson**: grep for `switch\s*\([^)]*\)\s*\{\s*default:` as a
+quick proactive check — a `switch` with no real `case` is a distinctive,
+easy-to-miss anti-pattern that reads as syntactically fine to a human
+skim but isn't accepted by this driver's grammar.
+
 ---
 
 ## Per-archive gotchas index
