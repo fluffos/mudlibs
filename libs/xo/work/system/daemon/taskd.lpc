@@ -10,174 +10,132 @@
 
 private mapping tasks;
 
-void eventRehashTask()
-{
-    foreach ( mixed * dir_name in get_dir( TASK_DIR, -1 ) )
-    {
-        if ( dir_name[ 1 ] == -2 )
-        {
-            string group_name = dir_name[ 0 ];
-            foreach ( string task_name in get_dir( TASK_DIR + group_name + "/" ) )
-            {
-                int level;
-                object task_ob;
-                string tmp1, tmp2, index;
+void eventRehashTask() {
+  foreach (mixed *dir_name in get_dir(TASK_DIR, -1)) {
+    if (dir_name[1] == -2) {
+      string group_name = dir_name[0];
+      foreach (string task_name in get_dir(TASK_DIR + group_name + "/")) {
+        int level;
+        object task_ob;
+        string tmp1, tmp2, index;
 
-                if ( sscanf( task_name, "%s_%d_%s", tmp1, level, tmp2 ) != 3 )
-                {
-                    continue;
-                }
-                task_name = TASK_DIR + group_name + "/" + task_name; 
-                if ( !objectp( task_ob = find_object( task_name ) ) )
-                {
-                    task_ob = load_object( task_name );
-                }
-                if ( !objectp( task_ob = find_object( task_name ) ) )
-                {
-                    continue;
-                }
-                index = task_ob->GetGroupName()
-                    + "|" + task_ob->GetLevel()
-                    + "|" + task_ob->GetKeyName();
-                if ( !tasks[ index ] || !find_object( tasks[ index ] ) )
-                {
-                    tasks[ index ] = file_name( task_ob );
-                    log_file( "load_task", sprintf( "%s在%s被装入内存\n", 
-                        tasks[ index ], ctime( time() ) ) );
-                }
-                else
-                {
-                    object task = find_object( tasks[ index ] );
-                    if ( !query_heart_beat( task ) )
-                        task->eventSetHeartBeat();
-                }
-            }
+        if (sscanf(task_name, "%s_%d_%s", tmp1, level, tmp2) != 3) {
+          continue;
         }
+        task_name = TASK_DIR + group_name + "/" + task_name;
+        if (!objectp(task_ob = find_object(task_name))) {
+          task_ob = load_object(task_name);
+        }
+        if (!objectp(task_ob = find_object(task_name))) {
+          continue;
+        }
+        index = task_ob->GetGroupName() + "|" + task_ob->GetLevel() + "|" + task_ob->GetKeyName();
+        if (!tasks[index] || !find_object(tasks[index])) {
+          tasks[index] = file_name(task_ob);
+          log_file("load_task", sprintf("%s在%s被装入内存\n",
+            tasks[index], ctime(time())));
+        } else {
+          object task = find_object(tasks[index]);
+          if (!query_heart_beat(task))
+            task->eventSetHeartBeat();
+        }
+      }
     }
-    remove_call_out( "eventRehashTask" );
-    call_out( "eventRehashTask", TASK_REHASH_TIME );
+  }
+  remove_call_out("eventRehashTask");
+  call_out("eventRehashTask", TASK_REHASH_TIME);
 }
 
-void eventDestructTask( object ob )
-{
-    string index;
+void eventDestructTask(object ob) {
+  string index;
 
-    if ( stringp( index = get_task_index( ob ) ) )
-    {
-        map_delete( tasks, index );
-    }
-    destruct( ob );
+  if (stringp(index = get_task_index(ob))) {
+    map_delete(tasks, index);
+  }
+  destruct(ob);
 }
 
-void TaskRestore( object ppl, string GroupName, string TaskName )
-{
-    int level = ppl->GetTaskLevel( GroupName );
-    object Task = load_task( GroupName, level, TaskName );
+void TaskRestore(object ppl, string GroupName, string TaskName) {
+  int level = ppl->GetTaskLevel(GroupName);
+  object Task = load_task(GroupName, level, TaskName);
 
-    if ( !objectp( Task ) )
-    {
-        Task = load_task( GroupName, level, TaskName );
-        if ( !objectp( Task ) )
-        {
-            error( "restore task fail." );
-            return;
-        }
+  if (!objectp(Task)) {
+    Task = load_task(GroupName, level, TaskName);
+    if (!objectp(Task)) {
+      error("restore task fail.");
+      return;
     }
-    Task->AddExecutor( ppl );
-    ppl->AddTaskObject( GroupName, Task );
+  }
+  Task->AddExecutor(ppl);
+  ppl->AddTaskObject(GroupName, Task);
 }
 
-varargs void TaskBegin( object ppl, string GroupName, string TaskName ) 
-{
-    int level = ppl->GetTaskLevel( GroupName );
+varargs void TaskBegin(object ppl, string GroupName, string TaskName) {
+  int level = ppl->GetTaskLevel(GroupName);
 
-    if ( stringp( TaskName ) )
-    {
-        object Task = load_task( GroupName, level, TaskName );
-        if ( objectp( Task ) )
-        {
-            Task->AddProposer( ppl );
-            return;
-        }
+  if (stringp(TaskName)) {
+    object Task = load_task(GroupName, level, TaskName);
+    if (objectp(Task)) {
+      Task->AddProposer(ppl);
+      return;
     }
-    else
-    {
-        if ( !( ppl->CanTask( GroupName ) ) )
-        {
-            return;
+  } else {
+    if (!(ppl->CanTask(GroupName))) {
+      return;
+    } else {
+      if (!random(TASK_TIME)) {
+        object Task;
+        object *ob = get_group_task(GroupName, level);
+        if (sizeof(ob)) {
+          Task = ob[random(sizeof(ob))];
+          Task->AddProposer(ppl);
         }
-        else
-        {
-            if ( !random( TASK_TIME ) )
-            {
-                object Task;
-                object * ob = get_group_task( GroupName, level );
-                if ( sizeof( ob ) )
-                {
-                    Task = ob[ random( sizeof( ob ) ) ];
-                    Task->AddProposer( ppl );
-                }
-            }
-        }
+      }
     }
+  }
 }
 
-private void create()
-{
-    tasks = ([ ]);
-    seteuid( getuid() );
-//    eventRehashTask();
+private void create() {
+  tasks = ([]);
+  seteuid(getuid());
+  //    eventRehashTask();
 }
 
-private object * get_group_task( string GroupName, int Level )
-{
-    object * ob = ({});
-    foreach ( string index in keys( tasks ) )
-    {
-        string group_name, name;
-        int lvl;
-        sscanf( index , "%s|%d|%s", group_name, lvl, name );
-        if ( GroupName == group_name && lvl == Level )
-        {
-            object tmp = find_object( tasks[ index ] );
-            if ( objectp( tmp ) && !( tmp->IsFollower() ) ) 
-            {
-                ob += ({ tmp });
-            }
-        }
+private object *get_group_task(string GroupName, int Level) {
+  object *ob = ({});
+  foreach (string index in keys(tasks)) {
+    string group_name, name;
+    int lvl;
+    sscanf(index, "%s|%d|%s", group_name, lvl, name);
+    if (GroupName == group_name && lvl == Level) {
+      object tmp = find_object(tasks[index]);
+      if (objectp(tmp) && !(tmp->IsFollower())) {
+        ob += ({ tmp });
+      }
     }
-    
-    return ob;
+  }
+
+  return ob;
 }
 
-object load_task(string GroupName, int level, string name)
-{
-    string index = GroupName + "|" + level + "|" + name;
-    if ( stringp( tasks [ index ] ) )
-    {
-        return find_object( tasks[ index ] );
+object load_task(string GroupName, int level, string name) {
+  string index = GroupName + "|" + level + "|" + name;
+  if (stringp(tasks[index])) {
+    return find_object(tasks[index]);
+  } else {
+    string dir = TASK_DIR + "/" + GroupName + "/";
+    foreach (string file_name in get_dir(dir + GroupName + "_" + level + "*.lpc")) {
+      object task = load_object(dir + file_name);
+      if (task->GetKeyName() == name) {
+        return task;
+      } else {
+        destruct(task);
+      }
     }
-    else
-    {
-        string dir = TASK_DIR + "/" + GroupName + "/";
-        foreach ( string file_name in get_dir( dir + GroupName + "_" + level + "*.lpc" ) )
-        {
-            object task = load_object( dir + file_name );
-            if ( task->GetKeyName() == name )
-            {
-                return task;
-            }
-            else
-            {
-                destruct( task );
-            }
-        }
-        return 0;
-    }
+    return 0;
+  }
 }
 
-private string get_task_index( object ob )
-{
-    return ob->GetGroupName() + "|" + ob->GetLevel()
-        + "|" + ob->GetKeyName();
+private string get_task_index(object ob) {
+  return ob->GetGroupName() + "|" + ob->GetLevel() + "|" + ob->GetKeyName();
 }

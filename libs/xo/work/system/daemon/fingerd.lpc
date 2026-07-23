@@ -7,16 +7,14 @@
 #define SORT_D  "/system/daemon/sort.lpc"
 #endif
 
-void create()
-{
-    seteuid( getuid() );
+void create() {
+  seteuid(getuid());
 }
 
-string age_string(int time)
-{
-    return time_string(time);
-    // nerd -- 98-08-30
-    /*int month, day, hour;
+string age_string(int time) {
+  return time_string(time);
+  // nerd -- 98-08-30
+  /*int month, day, hour;
 
     time /= 3600;
     hour = time % 24;
@@ -26,113 +24,100 @@ string age_string(int time)
     return (month?month + "m":"") + (day?day + "d":"") + hour + "h";*/
 }
 
-string finger_all()
-{
-    object *ob = users(), me;
-    string msg;
-    int i;
+string finger_all() {
+  object *ob = users(), me;
+  string msg;
+  int i;
 
-    msg = "";
-    me = this_player();
-    for ( i = 0; i < sizeof( ob ); i++ )
-    {
-        if ( me && !me->visible(ob[i]) )
-            continue;
-        if( !wizardp( me ) && wizardp( ob[i] ) && ob[i]->query("env/refuse_finger") )
-            continue;
-        // 为某些不希望玩家知道自己上线的巫师准备。by lnwm 980922
-    else if( ob[i]->query("env/all/invisibility") ) continue;
-        else
-        {
-            msg = sprintf("%s%-20s  %-20s \n", msg, 
-                ob[i]->query("name"), ob[i]->query("id"),);
-        }
+  msg = "";
+  me = this_player();
+  for (i = 0; i < sizeof(ob); i++) {
+    if (me && !me->visible(ob[i]))
+      continue;
+    if (!wizardp(me) && wizardp(ob[i]) && ob[i]->query("env/refuse_finger"))
+      continue;
+    // 为某些不希望玩家知道自己上线的巫师准备。by lnwm 980922
+    else if (ob[i]->query("env/all/invisibility")) continue;
+    else {
+      msg = sprintf("%s%-20s  %-20s \n", msg,
+        ob[i]->query("name"), ob[i]->query("id"),);
     }
-    return msg;
+  }
+  return msg;
 }
 
-string finger_user(string name)
-{
-    object ob, body, me;
-    string msg; //, mud;
-    
-    me = this_player();
-    ob = new(LOGIN_OB);
-    ob->set("id", name);
-    if ( !ob->restore() )
-    {
-        destruct( ob );
-        return "没有这个玩家。\n";
+string finger_user(string name) {
+  object ob, body, me;
+  string msg;  //, mud;
+
+  me = this_player();
+  ob = new(LOGIN_OB);
+  ob->set("id", name);
+  if (!ob->restore()) {
+    destruct(ob);
+    return "没有这个玩家。\n";
+  }
+  msg = sprintf("\n英文代号：\t%s\n姓    名：\t%s\n权限等级：\t%s\n上次连线时间：\t%s\n",
+    ob->query("id"),
+    ob->query("name"),
+    SECURITY_D->get_status(name),
+    ctime(ob->query("last_on")));
+
+  if (me && wizardp(me))  // if other daemon call, there are no this_player -- nerd
+    msg += sprintf("电子邮件地址：\t%s\n上次连线地址：\t%s\n",
+      ob->query("email"),
+      ob->query("last_from"));
+
+  body = find_player(name);
+
+  if (objectp(body) && geteuid(body) == name) {
+    if (body->query("env/all/invisibility")) {
+      destruct(ob);
+      return (msg);
     }
-    msg =  sprintf( "\n英文代号：\t%s\n姓    名：\t%s\n权限等级：\t%s\n上次连线时间：\t%s\n",
-        ob->query("id"),
-        ob->query("name"),
-        SECURITY_D->get_status(name),
-         ctime(ob->query("last_on")) );
+    if (me && wizardp(me)) {
+      msg += sprintf("\n%s目前正在从 %s 连线中。\n",
+        body->name(1), query_ip_name(body));
+    } else if (me && !wizardp(me) &&
+      wizardp(body) && body->query("env/refuse_finger")) {}
+    // 为某些不希望玩家知道自己上线的巫师准备。by lnwm 980922
+    else
+      msg += sprintf("\n%s目前正在连线中。\n", body->name(1));
+  }
 
-    if ( me && wizardp(me) ) // if other daemon call, there are no this_player -- nerd
-        msg += sprintf("电子邮件地址：\t%s\n上次连线地址：\t%s\n",
-                ob->query("email"),
-                ob->query("last_from") );
-        
-    body = find_player( name );
-
-    if ( objectp( body ) && geteuid( body ) == name )
-    {
-        if ( body->query("env/all/invisibility") ) {
-             destruct( ob );
-             return( msg );
-        }
-        if ( me && wizardp(me) )
-        {
-            msg += sprintf( "\n%s目前正在从 %s 连线中。\n",
-                    body->name(1), query_ip_name(body) );
-        }
-        else if( me && !wizardp( me ) &&
-               wizardp( body ) && body->query("env/refuse_finger") )
-        {
-        }
-        // 为某些不希望玩家知道自己上线的巫师准备。by lnwm 980922
-        else
-            msg += sprintf( "\n%s目前正在连线中。\n",body->name(1));
-    }
-
-    destruct( ob );
-    return msg;
+  destruct(ob);
+  return msg;
 }
 
-object acquire_login_ob(string id)
-{
-    object ob;
+object acquire_login_ob(string id) {
+  object ob;
 
-    ob = find_player(id);
-    if ( ob )
-    {
-        // Check if the player is linkdead
-        if ( ob->query_temp("link_ob") )
-            return ob->query_temp("link_ob");
-    }
-    ob = new(LOGIN_OB);
-    ob->set("id", id);
-    return ob->restore() ? ob : 0;
+  ob = find_player(id);
+  if (ob) {
+    // Check if the player is linkdead
+    if (ob->query_temp("link_ob"))
+      return ob->query_temp("link_ob");
+  }
+  ob = new(LOGIN_OB);
+  ob->set("id", id);
+  return ob->restore() ? ob : 0;
 }
 
 // iMud functions.
-mixed * GetRemoteFinger( string who )
-{
-    object lob, uob;
-    uob = find_player( who );
-    if ( ! lob = acquire_login_ob( who ) )
-        return ({ });
-    if( uob->query("env/all/invisibility") ) return ({});
-    return ({ lob->query("name"),   // chinese name
-                0,                  // title... not avaible now
-                0,                  // real name... not avaible 2.
-                lob->query("email"),// email
-                ctime(lob->query("last_on")), // last login
-                uob ? query_idle( uob ) : -1,
-                uob ? query_ip_number( uob ) : 0,
-                SECURITY_D->get_status( who ),
-                who
-            });
+mixed *GetRemoteFinger(string who) {
+  object lob, uob;
+  uob = find_player(who);
+  if (!lob = acquire_login_ob(who))
+    return ({});
+  if (uob->query("env/all/invisibility")) return ({});
+  return ({ lob->query("name"),   // chinese name
+  0,                  // title... not avaible now
+  0,                  // real name... not avaible 2.
+  lob->query("email"),  // email
+  ctime(lob->query("last_on")),  // last login
+  uob ? query_idle(uob) : -1,
+    uob ? query_ip_number(uob) : 0,
+    SECURITY_D->get_status(who),
+    who
+  });
 }

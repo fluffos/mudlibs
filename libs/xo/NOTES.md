@@ -68,3 +68,51 @@ range check to test the CJK Unicode block instead, and halved the
 GBK-byte-calibrated length bounds in `check_legal_name` to match. See
 AGENTS.md §15h for the full writeup; confirmed via a real interactive
 registration test (Chinese surname + given name reaching the next prompt).
+
+## 2026-07-23: driver rebuild retest + LPC formatter + WASM check
+
+- **Formatter**: ran `tools/lpc-syntax`'s `format-corpus.mjs` over all
+  1395 `.lpc` files in `work/`; 1363 written, 7 already-conformant, 25
+  errors (files it refused to touch, expected/fine on legacy code).
+  Spot-checked that this didn't disturb the §4/case-sensitivity fixes
+  above, plus the pre-existing `#define private protected` / `#define
+  nosave nosave` compatibility shim in `include/globals.h` — all intact
+  post-format.
+- **Native retest**: rebuilt `~/src/fluffos/build-debug/src/driver`
+  booted clean (zero fatal errors in `log/debug.log` — the two
+  "mudlib error handler"/`#define __DEFAULT_PRAGMAS__` lines are the
+  driver's own startup config dump, not errors). Went further than the
+  previous pass (which had stopped at the "create new character?"
+  confirmation) into a **full end-to-end registration + play session**:
+  real Chinese name 秦风丁/秦风戊, English id/confirm/Chinese
+  name/password/email/gender all completed, dropped into 小秦淮客寓;
+  `look` showed the correct room+NPCs, `score` produced a correct full
+  character sheet, `quit` correctly enforced the "must play 30 real
+  minutes before saving" gate and disconnected cleanly on confirming
+  `y`. Zero real `debug.log` errors.
+- **WASM**: booted cleanly (only the expected non-fatal
+  `socket_create`/`socket_bind`/`socket_connect` "Undefined function"
+  compile errors from `system/std/net/client.lpc`, since the `sockets`
+  package isn't built into this WASM binary — matches the documented
+  non-fatal WASM restriction). Registration itself proceeds correctly
+  all the way through the gender prompt (m/f) — but **reproducibly**,
+  across several `--idle`/`--timeout` values (1.0/2.0/3.0/6.0s), the
+  transition into the live game world (`enter_world()`) never
+  completes: no banner/room text appears after answering the gender
+  prompt, and subsequent `look`/`quit` input gets the driver's generic
+  "什么? 你想干嘛?" (unrecognized command) fallback instead of real
+  output. This is **not** the documented `query_ip_number()` limitation
+  (this lib never gates login on IP format). It also does **not**
+  reproduce on the native rebuilt driver (full playthrough above was
+  clean), and notably does **not** reproduce on `xo_final` — a very
+  close sibling with near-identical `logind.lpc` registration/
+  `enter_world()` code — under the exact same WASM harness (see
+  `xo_final`'s own NOTES.md entry, verified working end-to-end). Root
+  cause not identified (the WASM harness's debug-log-open failure at
+  boot, a separate pre-existing cosmetic warning, means any real
+  runtime error thrown during `enter_world()` here would be silently
+  discarded rather than surfaced anywhere inspectable). **Verdict:
+  flagged as a possible WASM-specific gap isolated to this lib's own
+  code path, not patched** — native play is completely unaffected, and
+  chasing it further didn't seem proportionate to the smoke-test scope
+  of this pass. Worth a closer look in a future WASM-focused pass.

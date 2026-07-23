@@ -9,121 +9,112 @@ inherit F_CLEAN_UP;
 int exercising(object me);
 int halt_exercise(object me);
 
-int main(object me, string arg)
-{
-    string my_force, force;
-    object where;
-    int force_jibie;
-    
-    seteuid(getuid());
+int main(object me, string arg) {
+  string my_force, force;
+  object where;
+  int force_jibie;
 
-    where = environment( me );
-    if ( where->query( "no_fight" ) )
-        return notify_fail(HIR "这房间不能用来练功。\n" NOR);
+  seteuid(getuid());
 
-    if ( !arg )
-    {
-        if ( !force = me->query("using_force") )
-        {
-            this_object()->help();
-            return 1;
-        }
+  where = environment(me);
+  if (where->query("no_fight"))
+    return notify_fail(HIR "这房间不能用来练功。\n" NOR);
+
+  if (!arg) {
+    if (!force = me->query("using_force")) {
+      this_object()->help();
+      return 1;
     }
-    else
-        force = arg;
+  } else
+    force = arg;
 
-    if ( !me->can_act() )
-        return notify_fail("你现在正忙着呢。\n");
+  if (!me->can_act())
+    return notify_fail("你现在正忙着呢。\n");
 
-    if ( me->is_fighting() )
-        return notify_fail("一心岂可二用，战斗中是不能练内功的。\n");
+  if (me->is_fighting())
+    return notify_fail("一心岂可二用，战斗中是不能练内功的。\n");
 
-    if ( me->is_duilianing() )
-        return notify_fail("一心岂可二用，对练中是不能练内功的。\n");
+  if (me->is_duilianing())
+    return notify_fail("一心岂可二用，对练中是不能练内功的。\n");
 
-    force_jibie = me->query_jibie( force );
-    if ( !force_jibie )
-        return notify_fail( "你没学过这门内功，怎能无师自练呢？\n");
+  force_jibie = me->query_jibie(force);
+  if (!force_jibie)
+    return notify_fail("你没学过这门内功，怎能无师自练呢？\n");
 
-    if ( SKILL_D( force )->query_xiuwei_type() != "force" )
-        return notify_fail( "你要练的是内功吗？\n" );
+  if (SKILL_D(force)->query_xiuwei_type() != "force")
+    return notify_fail("你要练的是内功吗？\n");
 
-    notify_fail("这门技能不能用来修炼内力。\n");
-    if ( !SKILL_D( force )->valid_xiulian(me) )
-        return 0;
+  notify_fail("这门技能不能用来修炼内力。\n");
+  if (!SKILL_D(force)->valid_xiulian(me))
+    return 0;
 
-    if ( me->query_char_ratio( "kee" ) < 90 ||
-         me->query_char_ratio( "sen" ) < 90 ||
-         me->query_char_ratio( "gin" ) < 90 )
-    { 
-        return notify_fail("你现在身体状况不佳，无法产生内息运行全身经脉。\n");
-    }
+  if (me->query_char_ratio("kee") < 90 ||
+    me->query_char_ratio("sen") < 90 ||
+    me->query_char_ratio("gin") < 90) {
+    return notify_fail("你现在身体状况不佳，无法产生内息运行全身经脉。\n");
+  }
 
-    my_force = me->query("using_force");
+  my_force = me->query("using_force");
 
-    if ( !my_force )
-        write( HIY"你开始修炼" + to_chinese(force) + "。\n"NOR );
-    else if ( my_force != force )
-    {
-        write( RED"你决定改修" + to_chinese(force) + "，所以你的内力"
-            "必须从新积累。\n"NOR );
-        me->set( "force", 0 );
-    }  
-    
-    me->set("using_force", force);    
-    me->set_temp("exercise_cost", 200);
-    message_vision("$N盘膝坐下，紧闭双目，开始修炼内力。\n", me);
-    write(HIW"你心中存想，缓缓催动体内气息运行周天。\n"
-      "只觉体内一股热气直透上来,你进入了一种玄妙的境界......\n"NOR);	
-    me->start_busy( (: exercising :), (: halt_exercise :) );
-    return 1;
+  if (!my_force)
+    write(HIY "你开始修炼" + to_chinese(force) + "。\n" NOR);
+  else if (my_force != force) {
+    write(RED "你决定改修" + to_chinese(force) + "，所以你的内力"
+      "必须从新积累。\n" NOR);
+    me->set("force", 0);
+  }
+
+  me->set("using_force", force);
+  me->set_temp("exercise_cost", 200);
+  message_vision("$N盘膝坐下，紧闭双目，开始修炼内力。\n", me);
+  write(HIW "你心中存想，缓缓催动体内气息运行周天。\n"
+    "只觉体内一股热气直透上来,你进入了一种玄妙的境界......\n" NOR);
+  me->start_busy((: exercising :), (: halt_exercise :));
+  return 1;
 }
 
-int exercising( object me )
-{
-    string using_force, force_type;
-    int force_gain,jilei_gain;
-    int exercise_cost;
-    int force, max_force, lingwu, my_con,level, jibie,max_zouhuo;
+int exercising(object me) {
+  string using_force, force_type;
+  int force_gain, jilei_gain;
+  int exercise_cost;
+  int force, max_force, lingwu, my_con, level, jibie, max_zouhuo;
 
-    exercise_cost = me->query_temp("exercise_cost");
-    using_force = me->query("using_force");
+  exercise_cost = me->query_temp("exercise_cost");
+  using_force = me->query("using_force");
 
-    // qyz 用lingwu..我想这个内力这个东西还是严格按照
-    // 师傅教的练比较好，自己领悟出来的东西不知道合不合理
-    // 应该按照口诀练，就是jibie来控制一切。
-    // 这样也可以让机器人容易走火入魔 :-)
-    // trill 
+  // qyz 用lingwu..我想这个内力这个东西还是严格按照
+  // 师傅教的练比较好，自己领悟出来的东西不知道合不合理
+  // 应该按照口诀练，就是jibie来控制一切。
+  // 这样也可以让机器人容易走火入魔 :-)
+  // trill 
 
-    lingwu = me->query_lingwu( using_force );
-    jibie = me->query_jibie( using_force );
-    level = (int)SKILL_D(using_force)->query_level();
-    my_con = me->query( "con" );                          
-    force = me->query( "force" );
-    max_force = me->query( "max_force" );
+  lingwu = me->query_lingwu(using_force);
+  jibie = me->query_jibie(using_force);
+  level = (int)SKILL_D(using_force)->query_level();
+  my_con = me->query("con");
+  force = me->query("force");
+  max_force = me->query("max_force");
 
-    force_gain = random(2);
-    if ( !random(3) ) force_gain = ( jibie * level + my_con ) / 10;
+  force_gain = random(2);
+  if (!random(3)) force_gain = (jibie * level + my_con) / 10;
 
-    if ( random( 10 ) > 6 )
-        tell_object( me,
-            HIW"你的内息在体内沿着经脉要穴不断运转，感觉你的内力"
-            "正在不断的凝集......\n"NOR );
-    if ( !random( 20 ) )
-    {
-        jilei_gain = random( (int)me->query("int") ) / 1333  + 1;
-        if ( !random( 40 ) ) jilei_gain += sqrt( max_force );
-        me->improve_jilei( using_force, jilei_gain );
-    }
-    if ( exercise_cost >= 10 )
-    {
-        me->add("force",force_gain);
-        me->add_temp( "exercise_cost", -10 );
-        return 1;
-    }
+  if (random(10) > 6)
+    tell_object(me,
+      HIW "你的内息在体内沿着经脉要穴不断运转，感觉你的内力"
+      "正在不断的凝集......\n" NOR);
+  if (!random(20)) {
+    jilei_gain = random((int)me->query("int")) / 1333 + 1;
+    if (!random(40)) jilei_gain += sqrt(max_force);
+    me->improve_jilei(using_force, jilei_gain);
+  }
+  if (exercise_cost >= 10) {
+    me->add("force", force_gain);
+    me->add_temp("exercise_cost", -10);
+    return 1;
+  }
 
-    message_vision( "$N运功完毕，深深吸了口气，站了起来。\n", me );
-/*
+  message_vision("$N运功完毕，深深吸了口气，站了起来。\n", me);
+  /*
     if ( me->query( "can_recover_max_force" ) )
     {
         me->add( "max_force", me->query( "recover_force" ) );
@@ -132,19 +123,18 @@ int exercising( object me )
     }
     这里去掉了和走火有关的东东
 */
-    if ( force < max_force * 2 )
-        return 0;
-    else 
-    {
-        force_type = SKILL_D(using_force)->query_type();
-	    me->add( "max_force", 1 );
-        if ( force_type == "yin" )
-            me->add( "yin", 1 );
-        else if ( force_type == "yang" )
-           me->add( "yang", 1 );
-	    me->set( "force", max_force + 1 );
-	    write( HIC"你感觉内力充盈，显然内功又有进境。\n"NOR );
-/*
+  if (force < max_force * 2)
+    return 0;
+  else {
+    force_type = SKILL_D(using_force)->query_type();
+    me->add("max_force", 1);
+    if (force_type == "yin")
+      me->add("yin", 1);
+    else if (force_type == "yang")
+      me->add("yang", 1);
+    me->set("force", max_force + 1);
+    write(HIC "你感觉内力充盈，显然内功又有进境。\n" NOR);
+    /*
         if ( me->query( "can_recover_max_force" ) )
         {
             me->add( "max_force", me->query( "recover_force" ) );
@@ -152,20 +142,18 @@ int exercising( object me )
             write( HIC"你感觉到散入经脉的真气重归丹田. \n" NOR );
         }
 */
-//        call_out( "show_balance", 5, me );
-        max_zouhuo = (jibie * level /2 + my_con / 3 ) * 10;
-		
-		if( jibie > 100 
-		 && max_force > (jibie * level * 5) 
-		 && max_force < max_zouhuo )
-		// 级别大于100级，又到了由根骨控制内力上限的时候
-		{
-			write(HIC"你感觉对现在内功的领悟似已快到极限。\n"NOR);
-		}
-		
-    	if ( max_force > max_zouhuo )
-        {
-/*            switch ( random( 4 ) )
+    //        call_out( "show_balance", 5, me );
+    max_zouhuo = (jibie * level / 2 + my_con / 3) * 10;
+
+    if (jibie > 100
+      && max_force > (jibie * level * 5)
+      && max_force < max_zouhuo)  // 级别大于100级，又到了由根骨控制内力上限的时候
+    {
+      write(HIC "你感觉对现在内功的领悟似已快到极限。\n" NOR);
+    }
+
+    if (max_force > max_zouhuo) {
+      /*            switch ( random( 4 ) )
             {
             case 0 :
                 write( HIY "你觉得内息有些混乱。\n" NOR );
@@ -185,36 +173,34 @@ int exercising( object me )
                 call_out("lost_control", 1, me);
             }           
 */
-			write( HIY"你当前的内功已经无法再让你体会更深，看来需要请教师父了。\n"NOR);
-			me->set("max_force",max_zouhuo);
-        }
-        return 0;
+      write(HIY "你当前的内功已经无法再让你体会更深，看来需要请教师父了。\n" NOR);
+      me->set("max_force", max_zouhuo);
     }
+    return 0;
+  }
 }
 
-int halt_exercise(object me)
-{
-    int force, max_force, jibie; 
-    string using_force;
+int halt_exercise(object me) {
+  int force, max_force, jibie;
+  string using_force;
 
-    using_force = me->query( "using_force" );
-    jibie = me->query_jibie( using_force );
-    force = me->query( "force" );
-    max_force = me->query( "max_force" );
-    if ( force > max_force * 2 )
-        me->set( "force", (int)me->query("max_force") * 2 );
-    me->delete_temp( "mask/lian_force" );
-    write( "你强行将体内运行的真气压回丹田，站起身来。\n" );
-    if ( !random( 100 + jibie * 10 ) )
-    {
-//        remove_call_out( "lost_control" );
-//        call_out( "lost_control", 3, me );
-		me->set("max_force",max_force-max_force/10);
-		me->set("force",me->query("max_force"));
-		write(HIY"你由于强行中断修炼，不禁一阵头昏目眩......\n"NOR);
-		// 强行中断的话，内力有可能变成90%
-    }
-    return 1;
+  using_force = me->query("using_force");
+  jibie = me->query_jibie(using_force);
+  force = me->query("force");
+  max_force = me->query("max_force");
+  if (force > max_force * 2)
+    me->set("force", (int)me->query("max_force") * 2);
+  me->delete_temp("mask/lian_force");
+  write("你强行将体内运行的真气压回丹田，站起身来。\n");
+  if (!random(100 + jibie * 10)) {
+    //        remove_call_out( "lost_control" );
+    //        call_out( "lost_control", 3, me );
+    me->set("max_force", max_force - max_force / 10);
+    me->set("force", me->query("max_force"));
+    write(HIY "你由于强行中断修炼，不禁一阵头昏目眩......\n" NOR);
+    // 强行中断的话，内力有可能变成90%
+  }
+  return 1;
 }
 
 // trill:  真是不幸 走火入魔了... :-(((
@@ -280,9 +266,8 @@ int halt_exercise(object me)
 }
 
 */
-int help(object me)
-{
-    write( @HELP
+int help(object me) {
+  write(@HELP
 指令格式 : xiulian [ 内功名称 ] 
 
 运气练功，控制体内的气在各经脉间流动，藉以训练人体肌肉骨骼的耐
@@ -290,6 +275,6 @@ int help(object me)
 修练时你的生命、精神、体能的值都必须大于 90%。
 
 HELP
-    );
-    return 1;
+  );
+  return 1;
 }
