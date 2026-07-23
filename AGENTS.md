@@ -298,6 +298,29 @@ the automated rename and need a separate manual pass (`find work/ -name
 '*.C'`, case-sensitive, then rename each). Cheap to check on every lib
 going forward, not just ones that look unusually old/large.
 
+**The case-sensitivity trap goes deeper than just the rename** (found on
+`mohuanshiji`, archive #100, the final archive of this project): even
+after manually renaming uppercase `.C` files, two further problems can
+lurk:
+1. `convert_lib.sh`'s forced-text-extension check for GBK→UTF-8
+   conversion is ALSO case-sensitive — files that were `.C` never got
+   converted at all (silently left as raw GBK, since `file(1)`
+   independently misclassified several of them as binary too). Found via
+   a Python UTF-8-decode scan across the whole tree rather than trusting
+   the conversion log's silence. 15 files here needed manual conversion
+   after the fact, 11 of which also had stray DOS Ctrl-Z (`0x1a`, the
+   old MS-DOS end-of-text-file marker) bytes that needed stripping.
+2. A macro like `CHANNEL_D` that hardcodes a lowercase path
+   (`"/adm/daemons/channeld"`) can silently break once the file it
+   actually points at got case-normalized during the `.C`→`.lpc` rename
+   pass to a different case (here, `CHANNELD.lpc` — the rename preserved
+   the base name's original case instead of lowercasing it) — the path
+   in the macro and the actual filename on disk stop matching, and any
+   `CHANNEL_D->method()` call fails to load the object. Grep for a macro
+   whose string literal doesn't case-match its corresponding file on
+   disk as part of the standard uppercase-`.C` audit, not just the
+   extension itself.
+
 ## Config file format
 
 Old MudOS/FluffOS config files (`config.cfg` / `config.dwar` / etc, various

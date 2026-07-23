@@ -1,0 +1,90 @@
+// drainerbolt.c
+
+#include <ansi.h>
+
+inherit SSERVER;
+
+int cast(object me, object target)
+{
+        string msg;
+        int damage, ap, dp;
+        int extradam;
+        if( !target ) target = offensive_target(me);
+
+        if((int)me->query_skill("spells") < 20 )
+                return notify_fail("你的法术不够高！\n");
+
+        if( !target
+        ||      !target->is_character()
+        ||      target->is_corpse()
+        ||      target==me)
+                return notify_fail("你要对谁施展紫电剑？\n");
+
+        if((int)me->query("mana") < 100+(int)me->query("mana_factor") )
+                return notify_fail("你的法力不够！\n");
+
+        if((int)me->query("sen") < 20 )
+                return notify_fail("你的精神没有办法有效集中！\n");
+
+        me->add("mana", -25-(int)me->query("mana_factor"));
+        me->receive_damage("sen", 40);
+
+        if( random(me->query("max_mana")) < 40 ) {
+                write("你失败了。\n");
+                return 1;
+        }
+
+        msg = HIM "$N口中喃喃地念著咒文，手中一团紫光渐渐扩大，灵动无比！\n只听$N大喝一声“疾”，紫光化为一道光剑，一闪间疾刺向$n！\n" NOR;
+
+        ap = me->query_skill("fumozhou");
+        ap = ( ap * ap * ap / (4 * 400) ) * (int)me->query("sen");
+        ap += (int)me->query("combat_exp");
+        dp = target->query("combat_exp");
+        if( random(ap + dp) > dp ) {
+                damage = (int)me->query("max_mana") / 10 +
+random((int)me->query("eff_sen") / 5);
+                damage -= (int)target->query("max_mana") / 10 +
+random((int)target->query("eff_sen") / 5);
+         damage +=(int)me->query("mana_factor")-random((int)target->query("mana_factor"));
+
+                if( damage > 0 ) {
+     damage +=random((damage*(int)me->query_skill("spells"))/100);
+     msg +=  HIR "\n结果「嗤」地一声，紫光从$p身上透体而过，拖出一条长长的七彩光气，光气绕了\n回来，从$N身周散入$P的体内！\n" NOR;
+                        target->receive_damage("sen", damage, me);
+                        target->receive_wound("sen", damage/4, me);
+                        target->receive_damage("kee", damage, me);
+                        target->receive_wound("kee", damage/4, me);
+                        me->improve_skill("fumozhou", 1, 1);
+
+                } 
+            else {
+           msg += HIM "\n结果紫光被$n以法力反击，折了回来，反而击中了$N！\n" NOR;
+     damage -= (int)target->query("mana_factor");
+     damage -=random((-damage*(int)target->query_skill("spells"))/100);
+                        me->receive_damage("sen", -damage, target);
+                        me->receive_wound("sen", -damage/3, target);
+                        me->receive_damage("kee", -damage, target);
+                        me->receive_wound("kee", -damage/4, target);
+                        me->improve_skill("fumozhou", 1, 1);
+
+                }
+        } else
+                        msg += HIM "\n结果「嗤」地一声，紫光从$p身上透体而过，无声无息地钻入地下！\n" NOR;
+
+        message_vision(msg, me, target);
+        if( damage > 0 ) COMBAT_D->report_status(target);
+        else if( damage < 0 ) COMBAT_D->report_status(me);
+
+        if( !target->is_fighting(me) ) {
+                if( living(target) ) {
+                        if( userp(target) ) target->fight_ob(me);
+                        else                            target->kill_ob(me);
+                }
+                me->kill_ob(target);
+        }
+
+        me->start_busy(1+random(2));
+        return 3+random(5);
+}
+
+
