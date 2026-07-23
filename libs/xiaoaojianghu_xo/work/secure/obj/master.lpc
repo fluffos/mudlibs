@@ -1,0 +1,512 @@
+//
+// File  :  /adm/secure/master.c
+//
+// Purpose:
+// This is the MudOS master object.
+// This is the second object loaded after simul_efun.c.
+// Everything written with 'write()' at startup will be printed on stdout.
+// 1. create() will be called first.
+// 2. epilog() will be called.
+// 3. The game will enter multiuser mode, and enable log in.
+//
+// Original from TMI-2 and ES2
+// Rewritten by Falcon 96-10-02
+//
+
+#include <origin.h>
+
+void create()
+{
+	write( "master 成功加载.\n" );
+	seteuid( getuid() );
+}
+
+// If we don't want to del the useful object, we must modify
+// this function to suit us 
+void reset()
+{
+	efun::reclaim_objects();
+}
+
+object connect(int port)
+{
+	object login_ob;
+	mixed err;
+
+	err = catch(login_ob = new(LOGIN_OB));
+
+	if (err)
+	{
+		write("现在有人正在修改使用者连线部份的程式，请待会再来　\n");
+		write(err);
+		destruct(this_object());
+	}
+	return login_ob;
+}
+
+//////////////////////////////////////////////////////////////////////////
+// load object functions
+//
+
+// compile_object: This is used for loading MudOS "virtual" objects.
+// It should return the object the mudlib wishes to associate with the
+// filename named by 'file'.  It should return 0 if no object is to be
+// associated.
+mixed compile_object(string file)
+{
+	return 0;
+}
+
+// Function name:   update_file
+// Description:     reads in a file, ignoring lines that begin with '#'
+// Arguements:      file: a string that shows what file to read in.
+// Return:          Array of nonblank lines that don't begin with '#'
+// Note:            must be declared nosave (else a security hole)
+nosave string *update_file(string file)
+{
+	string *list;
+	string str;
+	int i;
+
+	str = read_file( file );
+	if ( !str )
+		return ({});
+	list = explode( str, "\n" );
+	for ( i = 0; i < sizeof( list ); i++ )
+	{
+		if ( list[i][0] == '#' )
+		{
+			list[i] = 0;
+		}
+	}
+	return list;
+}
+
+// Function name:       epilog
+// Return:              List of files to preload
+string *epilog(int load_empty)
+{
+    string *items;
+    
+    items = update_file( SECURE_CONFIG_DIR + "preload" );
+    //call_out( "socket_preload", 5 );
+    return items;
+}
+
+// preload an object
+void preload(string file)
+{
+    string err;
+   
+    if ( origin() != ORIGIN_DRIVER )
+		return;
+
+	if ( file_size( file + ".lpc" ) == -1 )
+		return;
+
+   	write( "加载 : " + file + " 中..." );
+    err = catch( call_other( file, "??" ) );
+    if ( err != 0 )
+		write( "\n加载 " + file + " 时发生错误 : " + err + "\n" );
+// 		write( "\n " + err + " when loading " + file + "\n" );
+	else
+	// there should be some statistic given here...
+        write( "加载完毕\n" );
+}
+
+//////////////////////////////////////////////////////////////////////////
+// ed related functions
+//
+
+// save_ed_setup and restore_ed_setup are called by the ed to maintain
+// individual options settings. These functions are located in the master
+// object so that the local admins can decide what strategy they want to use.
+int save_ed_setup(object who, int code)
+{
+	string file;
+  
+    if ( !intp( code ) )
+        return 0;
+    file = user_path( getuid( who ) ) + ".edrc";
+    rm(file);
+    return write_file(file, code + "");
+}
+
+// Retrieve the ed setup. No meaning to defend this file read from
+// unauthorized access.
+int retrieve_ed_setup(object who)
+{
+   	string file;
+   	int code;
+  
+    file = user_path(getuid(who)) + ".edrc";
+    if (file_size(file) <= 0)
+    {
+        return 0;
+    }
+    sscanf(read_file(file), "%d", code);
+    return code;
+}
+
+// make_path_absolute: This is called by the driver to resolve path names in ed.
+string make_path_absolute(string file)
+{
+	file = resolve_path((string)this_player()->query("cwd"), file);
+	return file;
+}
+
+// called if a user connection is broken while in the editor; allows
+// the mudlib to save the changes in an alternate file without modifying
+// the original
+string get_save_file_name(string fname)
+{
+    return fname + "." + time();
+}
+
+//////////////////////////////////////////////////////////////////////////
+// info retrieve functions
+//
+
+string get_root_uid()
+{
+   return ROOT_UID;
+}
+
+string get_bb_uid()
+{
+   return BACKBONE_UID;
+}
+
+string object_name(object ob)
+{
+	if ( ob ) return ob->name();
+}
+
+// creator_file should return the name of the creator of a specific file.
+string creator_file( string file )
+{
+	return (string) SIMUL_EFUN_OB->creator_file( file );
+}
+
+// domain_file should return the domain associated with a given file.
+string domain_file( string file )
+{
+	return (string) SIMUL_EFUN_OB->domain_file( file );
+}
+
+// author_file should return the name of the author of a specific file.
+string author_file( string file )
+{
+	return (string) SIMUL_EFUN_OB->author_file( file );
+}
+
+// When an object is destructed, this function is called with every
+// item in that room.  We get the chance to save users from being destructed.
+void destruct_env_of(object ob)
+{
+    if ( !interactive( ob ) )
+    {
+		// In ES2 mudlib, they don't destruct this object, why...?
+        ob->remove();
+        if ( ob )
+			destruct( ob );
+        return;
+    }
+	tell_object(ob, "你突然掉入了一个可怕的时空漩涡。\n");
+	ob->move(VOID_OB);
+}
+
+//////////////////////////////////////////////////////////////////////////
+// debug and error functions
+//
+
+// This is called when there is a driver segmentation fault or a bus error,
+// etc.  As it's nosave it can't be called by anything but the driver (and
+// master).
+
+nosave void crash( string err, object cmd_giver, object cur_obj )
+{
+   	log_file( "crashes", mud_name() + " CRASHED on: " + ctime( time() ) +
+      " ERROR: " + err + "\n" );
+	efun::shout( "泥巴精灵发出一声惨叫：哇─哩─咧─\n" );
+	efun::shout( "这个世界要覆灭了，你又要回到现实中了，自己保重吧！\n" );
+
+    //  idea from MudOS's testsuite
+    if ( objectp( cmd_giver ) )
+    {
+        if ( stringp( cmd_giver->query( "id" ) ) )
+        {
+            string temp;
+            temp = sprintf("this_player %s\n", cmd_giver->query( "id" ) );
+		    log_file( "crashes", temp );
+        }
+        else
+		    log_file( "crashes",
+			    "this_player: " + file_name( cmd_giver ) + "\n" );
+    }
+    if ( cur_obj )
+		log_file( "crashes",
+			"this_object: " + file_name( cur_obj ) + "\n" );
+
+    //  Added by Inspiral with ideas from Wirehead..hopefully this will 
+    //    prevent MudOS to save users if the filesystem is full.
+//    write_file( TMP_DIR "MudOS_crash", "abcdefg" );
+//    if ( file_size( TMP_DIR "MudOS_crash" ) )
+//    {
+//		rm( TMP_DIR "MudOS_crash" );
+//		SHUTDOWN_D->do_shutdown( 0 );
+//    }
+}
+
+int different( string fn, string pr )
+{
+    int tmp;
+
+    sscanf( fn, "%s#%d", fn, tmp );
+    fn += ".lpc";
+    return ( fn != pr ) && ( fn != ( "/" + pr ) );
+}
+
+string trace_line( object obj, string prog, string file, int line )
+{
+    string ret;
+    string objfn = obj ? file_name(obj) : "<none>";
+
+    ret = objfn;
+    if ( different( objfn, prog ) )
+        ret += sprintf( " (%s)", prog );
+
+    if ( file != prog )
+        ret += sprintf( " at %s:%d\n", file, line );
+    else
+        ret += sprintf( " at line %d\n", line );
+
+    return ret;
+}
+
+varargs string standard_trace( mapping err, int flag )
+{
+    string obj, ret;
+    mapping *trace;
+    int i, n;
+
+    ret = err["error"] + "Object: " +
+    	  trace_line(
+          	err["object"], err["program"], err["file"], err["line"] ) +
+		  "\n";
+
+    trace = err["trace"];
+
+    for ( i = 0, n = sizeof(trace); i < n; i++ )
+	{
+        if ( flag )
+            ret += sprintf( "#%d: ", i );
+
+        ret += sprintf( "'%s' at %s",
+              			trace[i]["function"],
+              			trace_line( trace[i]["object"],
+                    				trace[i]["program"],
+                    				trace[i]["file"],
+                    				trace[i]["line"] ) );
+    }
+    return ret;
+}
+
+string error_handler( mapping err, int caught )
+{
+    string ret;
+
+    // try to distinguish between different types of errors
+    ret = "---\n" + standard_trace( err );
+    write_file(( caught ? LOG_DIR + "catch" : LOG_DIR + "runtime"), ret );
+
+    // let the player know an error occurred
+    if ( this_player(1) )
+	{
+        message( "error",
+        	sprintf( "%sTrace written to %s\n",
+            	err["error"],
+            	( caught ? LOG_DIR + "catch" : LOG_DIR + "runtime" ) ),
+            this_player(1) );
+        this_player(1)->set_error( err );
+    }
+	else if ( this_player() )
+	{
+        message( "error",
+        	sprintf( "%sTrace written to %s\n",
+            	err["error"],
+            	( caught ? LOG_DIR + "catch" : LOG_DIR + "runtime" ) ),
+            this_player() );
+        this_player()->set_error( err );
+    }
+
+    // whatever we return goes to the debug.log (in this case, nothing)
+    return 0;
+}
+
+// Write an error message into a log file. The error occured in the
+// object 'file', giving the error message 'message'.
+void log_error( string file, string message )
+{
+	string name, home;
+
+	if( find_object( SIMUL_EFUN_OB ) )
+		name = file_owner( file );
+
+	if ( name )
+		home = user_path( name );
+	else
+		home = LOG_DIR;
+
+	// AGENTS.md §15w: this driver funnels every compile WARNING (not just
+	// real fatal errors) through log_error(), unlike the original driver
+	// this was written for. The original code broadcast every message
+	// here straight to the connected player, which spams "Compiling
+	// error ..." for ordinary soft warnings (e.g. "Illegal to declare
+	// nosave function" from the static->nosave fix). Only broadcast to
+	// the player for genuine errors, not warnings -- still log everything.
+	if ( this_player( 1 ) && strsrch( message, "warning:" ) == -1 )
+		efun::write( "Compiling error " + message );
+
+	message = "[" + ctime( time() )[4..18] + "]" + message;
+	efun::write_file( home + "log", message );
+}
+
+// valid_shadow: controls whether an object may be shadowed or not
+int valid_shadow( object ob ) { return 0; }
+
+// valid_override: controls which simul_efuns may be overridden with
+//   efun:: prefix and which may not.  This function is only called at
+//   object compile-time
+int valid_override( string file, string name )
+{
+	// simul_efun can override any simul_efun by Annihilator
+	if (file == SIMUL_EFUN_OB || file==MASTER_OB)
+		return 1;
+
+	if( file[0..15] == "/adm/simul_efun/" ) return 1;
+	// Must use the move() defined in F_MOVE.
+	if(((name == "move_object") || (name == "destruct")) && (file != F_MOVE)) {
+		log_error("override", sprintf("%s attempts to override %s(), denied.\n", file, name));
+		return 0;
+	}
+
+	//  may also wish to protect shutdown, snoop, and exec.
+	return 1;
+}
+
+// valid_seteuid: determines whether an object ob can become euid str
+int valid_seteuid( object ob, string str )
+{
+	return (int)SECURITY_D->valid_seteuid( ob, str );
+}
+
+// valid_socket: controls access to socket efunctions
+int valid_socket( object eff_user, string fun, mixed *info )
+{
+	return 1;
+}
+
+// valid_asm: controls whether or not an LPC->C compiled object can use
+//   asm { }
+int valid_asm( string file )
+{
+	return 1;
+}
+
+// valid_compile_to_c: controls whether or not an object may be compiled
+//   via LPC->C
+int valid_compile_to_c( string file )
+{
+	return 1;
+}
+
+// valid_hide: controls the use of the set_hide() efun, to hide objects or
+//   see hidden objects
+int valid_hide( object who )
+{
+	return 1;
+}
+
+// valid_object: controls whether an object loaded by the driver should
+//   exist
+int valid_object( object ob )
+{
+	return (!clonep(ob)) || inherits(F_MOVE, ob);
+}
+
+// valid_link: controls use of the link() efun for creating hard links
+//   between paths
+int valid_link( string original, string reference )
+{
+	return 0;
+}
+
+// valid_save_binary: controls whether an object can save a binary
+//   image of itself to the specified "save binaries directory"
+//   (see config file)
+int valid_save_binary( string filename )
+{
+	return 1;
+}
+
+// AGENTS.md §4: guard against the lazy security-daemon load recursing to
+// a stack overflow. The original code called load_object(SECURITY_D)
+// unconditionally on every single call (only gated by catch(), not by a
+// find_object() check or a re-entrancy flag) -- if valid_read/valid_write
+// itself gets invoked again while SECURITY_D is still mid-compile (e.g.
+// during master's own bootstrap, or from the driver's own error-reporting
+// path), this recurses into load_object() again, and again, until the C++
+// call stack overflows. Fix: check find_object() first, and use a
+// re-entrancy flag so a failed/disallowed load degrades to a safe default
+// instead of retrying.
+private nosave int loading_security_d;
+
+// valid_write: write privileges; called with the file name, the object
+//   initiating the call, and the function by which they called it.
+int valid_write( string file, mixed user, string func )
+{
+	object ob;
+
+	if ( !(ob = find_object(SECURITY_D)) )
+	{
+		if ( loading_security_d ) return 1;
+		loading_security_d = 1;
+		catch( ob = load_object(SECURITY_D) );
+		loading_security_d = 0;
+	}
+	if ( objectp(ob) )
+		return (int)SECURITY_D->valid_write(file, user, func);
+
+	return 0;
+}
+
+// valid_read: read privileges; called exactly the same as valid_write()
+int valid_read( string file, mixed user, string func )
+{
+	object ob;
+
+	if ( !(ob = find_object(SECURITY_D)) )
+	{
+		if ( loading_security_d ) return 1;
+		loading_security_d = 1;
+		catch( ob = load_object(SECURITY_D) );
+		loading_security_d = 0;
+	}
+	if ( objectp(ob) )
+		return (int)SECURITY_D->valid_read(file, user, func);
+
+	return 1;
+}
+
+int valid_bind(object binder, object old_owner, object new_owner)
+{
+	if( geteuid(binder)==ROOT_UID ) return 1;
+	if( old_owner && geteuid(old_owner)==ROOT_UID ) return 1;
+	if( binder==new_owner ) return 1;
+	if( !userp(new_owner) && clonep(new_owner) ) return 1;
+
+	log_file("bind", sprintf("%O attempts to bind %O's function to %O\n",
+		binder, old_owner, new_owner) );
+	return 0;
+}

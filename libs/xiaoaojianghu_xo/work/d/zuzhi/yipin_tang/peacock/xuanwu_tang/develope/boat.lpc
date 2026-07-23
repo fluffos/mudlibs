@@ -1,0 +1,259 @@
+// filename:    boat.c
+// by peacock 9/5/1997
+// 备注：一品堂之玄武堂地下入口的摆渡船。
+
+#include <ansi.h>
+
+inherit ITEM;
+
+int loaded;
+
+void create()
+{
+    set_name("小船", ({"xiao chuan", "boat", "chuan"}));
+    set_weight(300000);
+    set_max_encumbrance (100000);
+
+    set("long", "这是一条木制的小船。一个黑衣人握着双桨，坐在艇中。\n");
+    set("unit", "条");
+    set("material", "wood");
+    set("value", 1);
+    setup();
+    loaded = 0;
+}
+
+void init()
+{
+  add_action("do_enter", "enter");
+  add_action("do_out", "out");
+  add_action("do_look", "look");
+}
+
+string report_outside_objects( object env )
+{
+    object ob = this_object();
+    mixed *invs = all_inventory( env );
+    string msg;
+    int i;
+
+    if ( sizeof( invs ) <= 1 )
+        return "外面没什么显眼的东西。\n";
+
+    msg = "外面有：\n";
+    for (i=0; i < sizeof( invs ); i++)
+    {
+        if ( invs[i] == ob) continue;
+        msg += "    " + invs[i]->name() + " (" + invs[i]->query("id")+")\n";
+    }
+    return msg;
+}
+
+string report_inside_objects( object ob )
+{
+    object me = this_player();
+    mixed *invs = all_inventory( ob );
+    mixed *items = ({}), *chars = ({});
+    string msg;
+    int i;
+
+    loaded = 1;
+    if ( sizeof( invs ) <= 1 )
+        return "船里空荡荡的，什么也没有。\n";
+
+    for ( i=0; i < sizeof(invs); i++ )
+    {
+        if ( invs[i] == me ) continue;
+        if ( invs[i]->is->character() )
+            chars += ({ invs[i] });
+        else
+            items += ({ invs[i] });
+    }
+    loaded += sizeof( chars );
+//规整一下船上的人数，由于死亡或是巫师指令，可能有些人不是通过enter和out进出的。
+
+    if ( sizeof( items ) > 0 )
+    {
+        msg = "船里有：\n";
+        for ( i=0; i < sizeof( items ); i++ )
+        {
+            msg += "    " + items[i]->name() + " (" + items[i]->query("id")+")\n";    
+        }
+    }
+
+    if ( sizeof( chars ) > 0 )
+    {
+        msg += "另外，黑衣人";
+        for ( i = 0; i < sizeof( chars ); i++ )
+        {
+            msg += "、" + chars[i]->name() + " (" + chars[i]->query("id")+")";    
+        }
+        msg += "和你当真是一条船上的人了。\n";
+    }
+    
+    return msg;
+}
+
+string report_dirs( object env )
+{
+    mapping exits = env->query( "exits" );
+    string *dirs, msg;
+    int i;
+
+        if( mapp( exits ) ) {
+                dirs = keys( exits );
+                for( i=0; i < sizeof( dirs ); i++ )
+                        if( (int)env->query_door(dirs[i], "status") & DOOR_CLOSED )
+                                dirs[i] = 0;
+                dirs -= ({ 0 });
+                if( sizeof( dirs ) == 0 )
+                        msg = "    这里没有任何明显的出路。\n";
+                else if( sizeof( dirs ) == 1 )
+                        msg = "    这里唯一的出口是 " + BOLD + dirs[0] + NOR + "。\n";
+                else
+                        msg = sprintf("    这里明显的出口是 " BOLD "%s" NOR " 和 " BOLD "%s" NOR "。\n",
+                                implode( dirs[ 0 .. sizeof( dirs ) - 2 ], "、"),
+                dirs[ sizeof( dirs ) - 1 ]);
+        return msg;
+        }
+    else return "    这里没有任何明显的出路。\n";
+}
+
+int report_view ()
+{
+    object ob = this_object();
+    object me = this_player();
+    object env = environment(ob);
+    string msg;
+
+    msg = "你放眼望去，只见船外是";
+    msg += sprintf( "%s - %s\n    %s%s",
+                env->query("short"),
+                wizardp(me)? file_name(env): "",
+                env->query("long"),
+                env->query("outdoors")? NATURE_D->outdoor_room_description() : "" );
+    msg += report_dir( env );
+    msg += report_outside_objects( env );
+    msg += report_inside_objects( ob );
+    return msg;
+}
+
+string report_here()
+{
+    object ob = this_object();
+    object me = this_player();
+    string msg;
+
+    msg = sprintf( "%s - %s\n    %s",
+                query("short"),
+                wizardp(me)? file_name(ob): "",
+                query("long") );
+    msg += report_inside_objects( ob );
+    return msg;
+}
+
+int do_look (string arg)
+{
+    object ob = this_object();
+    object me = this_player();
+
+    if ( present( me, ob ) )
+    {
+        if ( !arg || arg=="")
+        {
+            write( report_view() );
+            return 1;
+        }
+        else if ( arg == "boat" || arg == "here" )
+        {
+            write( report_here() );
+            return 1;
+        }
+        else return 0;
+    }
+    else return 0;
+}
+
+int do_enter(string arg)
+{
+    object ob = this_object();
+    object me = this_player();
+
+    if ( arg != id() )
+        return 0;
+
+    if ( present( me, ob ) )
+        return notify_fail("你已经在船里了，还打算进哪儿？\n");
+
+    if ( loaded == 2 )
+    {
+        write("小木船已经上了三个人，你实在找不到落脚的地方。\n");
+        return 1;
+    }
+
+    message_vision("$N纵身一跃，落入船中。\n", me);
+    me->move( ob );
+    load += 1;
+    if ( load == 1 )
+    {
+        message_vision ("$N在船头找了一个位子，坐了下来。\n", me);
+    }
+    else
+        message_vision ("$N在船尾找了一个位子，坐了下来。\n", me);
+    return 1;
+}
+
+int do_out(string arg)
+{
+    object ob = this_object();
+    object me = this_player();
+
+    if ( !present( me, ob) )
+        return 0;
+    if ( environment( ob )->query("short") == "地下河" )
+        return notify_fail("这里是一条深入地下的暗河，四周没有落脚的地方。\n");
+    message_vision( "$N纵身一跃，跳上岸去。\n", me);
+    message( "vision", me->name() + "从船里跳上岸来。\n", environment( ob ) );
+    me->move( environment(ob) );
+    load -= 1;
+    return 1;
+}
+
+void move1()
+{
+    message("vision", "船夫划动小船，向暗河驶去，消失在黑暗中。\n",
+            environment( this_object() ) );
+    message("vision", "船夫荡起双桨，激起两朵水花。小船缓缓地向暗河驶去。\n",
+            this_object() );
+    move( load_object( __DIR__"yandong2" ) );
+    call_out( "move2", 10);
+}
+
+void move2()
+{
+    message("vision", "小船在黑暗中航行着，也不知转过了几个弯，你忽然眼前一亮，原来已到了出口。\n",
+            this_object() );
+    move( load_object( __DIR__"tianjing" ) );
+    message("vision", "一艘木制的小船从岩洞中缓缓驶出来。\n", 
+            environment( this_object() ) );
+    call_out( "move3", 10);
+}
+
+void move3()
+{
+    message("vision", "船夫划动小船，向暗河驶去，消失在黑暗中。\n",
+            enironment( this_object() ) );
+    message("vision", "船夫荡起双桨，激起两朵水花。小船缓缓地向暗河驶去。\n",
+            this_object() );
+    move( load_object( __DIR__"yandong2" ) );
+    call_out( "move4", 10);
+}
+
+void move4()
+{
+    message("vision", "小船在黑暗中航行着，也不知转过了几个弯，你忽然眼前一亮，原来已到了出口。\n",
+            this_object() );
+    move( load_object( __DIR__"yandong1" ) );
+    message("vision", "一艘木制的小船从岩洞中缓缓驶出来。\n", 
+            environment( this_object() ) );
+    call_out( "move1", 10);
+}

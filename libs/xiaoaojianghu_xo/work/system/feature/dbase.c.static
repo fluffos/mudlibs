@@ -1,0 +1,336 @@
+// filename : /feature/dbase.c
+
+// checked by lnwm&nerd 98/01/20
+
+//#include <dbase.h>
+
+inherit F_TREEMAP;
+
+mapping dbase, marks;
+nosave mapping tmp_dbase, tmp_marks;
+
+//  The default_ob provides the default values of the dbase. It is set to
+//  be master copy of an object.
+static mixed default_ob;
+
+mixed query_default_object()
+{
+    return default_ob;
+}
+
+void set_default_object(mixed ob)
+{
+//  if( geteuid(previous_object()) != ROOT_UID )
+//      error("dbase: Only this_object() or object with root euid can set default_ob.\n");
+    if ( !geteuid() ) seteuid( getuid() );
+    default_ob = ob;
+    ob->add( "no_clean_up", 1 );
+}
+
+mixed set(string prop, mixed data)
+{
+    if ( !mapp(dbase) ) dbase = ([]);
+
+    if ( strsrch( prop, '/' ) != -1 )
+        return _set( dbase, explode(prop, "/"), data );
+
+    return dbase[prop] = data;
+}
+
+mixed set_marks(string prop, mixed data)
+{
+    if ( !mapp(marks) ) marks = ([]);
+
+    if ( strsrch( prop, '/' ) != -1 )
+        return _set( marks, explode(prop, "/"), data );
+
+    return marks[prop] = data;
+}
+
+mixed SetMark(string prop, mixed data)
+{
+    return (mixed)set_marks(prop, data);
+}
+
+varargs mixed query(string prop, int raw)
+{
+    mixed data;
+
+    if ( !mapp(dbase) ) return 0;
+
+    if ( undefinedp( dbase[prop] ) && ( strsrch( prop, '/' ) != -1 ) )
+        data = _query(dbase, explode(prop, "/"));
+    else
+        data = dbase[prop];
+
+    if ( undefinedp(data) && default_ob )
+        data = default_ob->query(prop, 1);
+
+    if ( raw ) return data;
+
+    return evaluate( data, this_object() );
+}
+
+varargs mixed query_marks(string prop, int raw)
+{
+    mixed data;
+
+    if ( !mapp(marks) ) return 0;
+
+    if ( undefinedp( marks[prop] ) && ( strsrch( prop, '/' ) != -1 ) )
+        data = _query(marks, explode(prop, "/"));
+    else
+        data = marks[prop];
+
+    if ( undefinedp(data) && default_ob )
+        data = default_ob->query_marks(prop, 1);
+
+    if ( raw ) return data;
+
+    return evaluate( data, this_object() );
+}
+
+varargs mixed GetMark(string prop, int raw)
+{
+    return (mixed)query_marks(prop, raw);
+}
+
+int delete_marks(string prop)
+{
+    if ( !mapp(marks) ) return 0;
+
+    if ( strsrch(prop, '/')!=-1 )
+        return _delete(marks, explode(prop, "/"));
+    else
+    {
+        map_delete(marks, prop);
+        return 1;
+    }
+}
+
+int delete(string prop)
+{
+    if ( !mapp(dbase) ) return 0;
+
+    if ( strsrch(prop, '/')!=-1 )
+        return _delete(dbase, explode(prop, "/"));
+    else
+    {
+        map_delete(dbase, prop);
+        return 1;
+    }
+}
+
+mixed add(string prop, mixed data)
+{
+    mixed old;
+
+    if ( !mapp(dbase) || !( old = query(prop, 1) ) )
+        return set(prop, data);
+
+    if ( functionp(old) )
+        error("dbase: add() - called on a function type property.\n");
+
+    return set(prop, old + data);
+}
+
+mixed add_marks(string prop, mixed data)
+{
+    mixed old;
+
+    if ( !mapp(marks) || !( old = query_marks(prop, 1) ) )
+        return set_marks(prop, data);
+
+    if ( functionp(old) )
+        error("dbase: add_marks() - called on a function type property.\n");
+
+    return set_marks(prop, old + data);
+}
+
+int undefined( string prop )
+{
+    int result = 1;
+
+    if ( !mapp(dbase) ) return 0;
+
+    if ( !undefinedp( dbase[prop] ) )
+        result = 0;
+    else if ( strsrch( prop, '/' ) != -1 )
+        result = _undefined( dbase, explode(prop, "/") );
+
+    if ( result && default_ob )
+        result = default_ob->undefined(prop);
+
+    return result;
+}
+
+mapping query_entire_dbase()
+{
+//  if( (previous_object() != this_object())
+//  &&  (geteuid(previous_object()) != ROOT_UID) )
+//      error("dbase: query_entire_dbase() - must has root euid or be this_object().\n");
+
+    return dbase;
+}
+ // to use a daemon to save several file's dbase due to 
+ // what these files can not save their own dbase.
+int set_entire_dbase( mapping tmp )
+{
+    if ( mapp( tmp ) )
+        return 0;
+    dbase = tmp;
+    return 1;
+}
+
+mapping query_entire_marks()
+{
+    return marks;
+}
+
+mapping GetMarks()
+{
+    return marks;
+}
+
+mixed set_temp(string prop, mixed data)
+{
+    if ( !mapp(tmp_dbase) ) tmp_dbase = ([]);
+
+    if ( strsrch(prop, '/') != -1 )
+        return _set( tmp_dbase, explode(prop, "/"), data );
+
+    return tmp_dbase[prop] = data;
+}
+
+mixed set_temp_marks(string prop, mixed data)
+{
+    if ( !mapp(tmp_marks) ) tmp_marks = ([]);
+
+    if ( strsrch(prop, '/') != -1 )
+        return _set( tmp_marks, explode(prop, "/"), data );
+
+    return tmp_marks[prop] = data;
+}
+
+mixed SetTempMark(string prop, mixed data)
+{
+    return (mixed) set_temp_marks(prop, data);
+}
+
+varargs mixed query_temp(string prop, int raw)
+{
+    mixed data;
+
+    if ( !mapp(tmp_dbase) ) return 0;
+
+    if ( strsrch(prop, '/')!=-1 )
+        data = _query(tmp_dbase, explode(prop, "/"));
+    else
+        data = tmp_dbase[prop];
+
+    if ( functionp(data) && !raw )
+        return (*data)( this_object() );
+    else
+        return data;
+}
+
+varargs mixed query_temp_marks(string prop, int raw)
+{
+    mixed data;
+
+    if ( !mapp(tmp_marks) ) return 0;
+
+    if ( strsrch(prop, '/')!=-1 )
+        data = _query(tmp_marks, explode(prop, "/"));
+    else
+        data = tmp_marks[prop];
+
+    if ( functionp(data) && !raw )
+        return (*data)( this_object() );
+    else
+        return data;
+}
+
+varargs mixed GetTempMark(string prop, int raw)
+{
+    return (mixed) query_temp_marks(prop, raw);
+}
+
+int delete_temp(string prop)
+{
+    if( !mapp(tmp_dbase) ) return 0;
+
+    if ( strsrch(prop, '/') != -1 )
+        return _delete(tmp_dbase, explode(prop, "/"));
+    else
+    {
+        map_delete(tmp_dbase, prop);
+        return 1;
+    }
+}
+
+int delete_temp_marks(string prop)
+{
+    if( !mapp(tmp_marks )) return 0;
+
+    if ( strsrch(prop, '/') !=  -1 )
+        return _delete(tmp_marks, explode(prop, "/"));
+    else
+    {
+        map_delete(tmp_marks, prop);
+        return 1;
+    }
+}
+
+mixed add_temp(string prop, mixed data)
+{
+    mixed old;
+
+    if ( !mapp(tmp_dbase) || !( old = query_temp(prop, 1) ) )
+        return set_temp(prop, data);
+
+    if ( functionp(old) )
+        error("dbase: add_temp() - called on a function type property.\n");
+
+    return set_temp(prop, old + data);
+}
+
+mixed add_temp_marks(string prop, mixed data)
+{
+    mixed old;
+
+    if ( !mapp(tmp_marks) || !( old = query_temp_marks(prop, 1) ) )
+        return set_temp_marks(prop, data);
+
+    if ( functionp(old) )
+        error("dbase: add_temp_marks() - called on a function type property.\n");
+
+    return set_temp_marks(prop, old + data);
+}
+
+mapping query_entire_temp_dbase()
+{
+//  if( (previous_object() != this_object())
+//  &&  (geteuid(previous_object()) != ROOT_UID) )
+//      error("dbase: query_entire_temp_dbase() - must has root euid or this_object().\n");
+
+    return tmp_dbase;
+}
+
+mapping query_entire_temp_marks()
+{
+    return tmp_marks;
+}
+
+int delete_all_temp_marks()
+{
+    tmp_marks = ([]);
+    return 1;
+}
+
+int delete_all_marks()
+{
+    marks = ([]);
+    return 1;
+
+}

@@ -1,0 +1,548 @@
+/* /system/std/task.c
+ * from XO Object Library Test Release 
+ * a standard task;
+ * created by trill 19970918
+ * version: @(#) task.c 1.0@(#)
+ */
+
+#include <task.h>
+#include <act.h>
+#include <localtime.h>
+#include "include/task.h"
+
+private int count;
+private int Birth;
+private int ExistenceTime;
+private int TermType;
+private int TaskType;
+private string KeyName;
+private string GroupName;
+private class act BeginningAct;
+private class act SuccessAct;
+private class act FailAct;
+private mixed * TaskEvent;
+private string * RelativeTasks;
+private nosave object * Executors;
+private nosave object * Proposers;
+
+void SetExistenceTime( int iTime )
+{
+    ExistenceTime = iTime;
+}
+
+void SetTermType( mixed mType )
+{
+    if ( stringp( mType ) )
+    {
+        string sType = ( string ) mType;
+        switch( sType )
+        {
+        case "long" : case "Long" :
+            TermType = LONG_TERM;
+            break;
+        case "short" : case "Short" :
+            TermType = SHORT_TERM;
+            break;
+        }
+        
+    }
+    else if ( intp( mType ) )
+    {
+        TermType = mType;
+    }    
+}
+
+int GetTermType()
+{
+    return TermType;
+}
+
+void SetTaskType( int iType )
+{
+    TaskType = iType;
+}
+
+int GetTaskType()
+{
+    return TaskType;
+}
+
+void SetKeyName( string sName )
+{
+    KeyName = sName;
+}
+
+string GetKeyName()
+{
+    return KeyName;
+}
+
+void SetGroupName( string sName )
+{
+    GroupName = sName;
+}
+
+string GetGroupName()
+{
+    return GroupName;
+}
+
+void SetAct( string ActName, mapping arg )
+{
+    switch( ActName )
+    {
+    case "BeginningAct" :
+        BeginningAct = init_act( arg );
+        break;
+    case "SuccessAct" :
+        SuccessAct = init_act( arg );
+        break;
+    case "FailAct" :
+        FailAct = init_act( arg );
+        break;
+    }
+}
+
+class act GetAct( string ActName )
+{
+    class act act = 0;
+    switch( ActName )
+    {
+    case "BeginningAct" :
+        act = BeginningAct;
+        break;
+    case "SuccessAct" :
+        act = SuccessAct;
+        break;
+    case "FailAct" :
+        act = FailAct;
+        break;
+    }
+    return act;
+}
+
+string GetBeginningMessage()
+{
+    if ( classp( BeginningAct ) )
+    {
+        return BeginningAct->message;
+    }
+}
+
+void SetTaskEvent( mapping mapEvent )
+{
+    if ( nullp( mapEvent ) ) return;
+    parse_event( mapEvent[ "event"] );
+    if ( stringp( mapEvent[ "equipment" ] ) )
+        TaskEvent[ TASK_OBJECT_NAME ] = mapEvent["equipment"];
+}
+
+void SetRelativeTasks( string * tasks )
+{
+    RelativeTasks = tasks;
+}
+
+void TaskBegin( object ppl )
+{
+    if ( stringp( BeginningAct->message ) )
+    {
+        tell_object(ppl, BeginningAct->message);
+    }
+    if( stringp(BeginningAct->bonus) )
+    {
+        task_bonus(ppl, BeginningAct->bonus);
+    }
+    ppl->AddTask( GroupName, GetTask() );
+    ppl->AddTaskObject( GroupName, this_object() );
+    Proposers -= ({ ppl });
+    Executors += ({ ppl });
+    this_object()->PerformBegin( ppl );
+}
+
+void TaskSuccess( object ppl )
+{
+    if ( stringp( SuccessAct->message ) )
+    {
+        tell_object(ppl, SuccessAct->message);
+    }
+    if(stringp(SuccessAct->bonus))
+    {
+        task_bonus(ppl, SuccessAct->bonus);
+    }
+    Executors -= ({ ppl });
+    this_object()->PerformSuccess( ppl );
+    if ( stringp( SuccessAct->follow ) )
+    {
+        TASK_D->TaskBegin( ppl, GroupName, SuccessAct->follow );
+    }
+}
+
+varargs void TaskFail( object ppl )
+{
+    if ( stringp( FailAct->message ) )
+    {
+        tell_object(ppl, FailAct->message);
+    }
+    if (stringp(FailAct->bonus))
+    {
+        task_bonus(ppl, FailAct->bonus);
+    }
+    Executors -= ({ppl});
+    this_object()->PerformFail( ppl );
+    if ( stringp( FailAct->follow ) )
+    {
+        TASK_D->TaskBegin( ppl, GroupName, FailAct->follow );
+    }
+}
+
+varargs void TaskEnd( object ob )
+{
+    foreach( object ppl in Executors )
+    {
+        if ( !ob || ppl != ob )
+        { 
+            this_object()->TaskFail( ppl );
+        }
+        else
+        {
+            this_object()->TaskSuccess(ppl);
+        }
+        ppl->DeleteTask( GroupName );
+    }
+    this_object()->PerformEnd();
+    TASK_D->eventDestructTask( this_object() );
+}
+
+int CanBegin(object ppl)
+{
+    if ( ( sizeof( Proposers ) + sizeof( Executors ) ) >= TaskType
+        && TaskType > 0 )
+    {
+        return 0;
+    }
+    else if ( stringp( BeginningAct->time )
+        && !check_time( time(), BeginningAct->time ) ) 
+    {
+        return 0;
+    }
+    else if ( stringp( BeginningAct->site ) 
+        && !check_site( environment( ppl ), BeginningAct->site ) )
+    {
+        return 0;
+    }
+    else
+    {
+        if ( stringp( BeginningAct->character ) )
+        {
+            string * tmp = explode( BeginningAct->character, ":" );
+            object env, ob;
+            if ( sizeof( tmp ) == 2 )
+            {
+                if ( !( env = find_object( tmp[ 1 ] ) ) )
+                    env = load_object( tmp[ 1 ] );
+            }
+            else
+            {
+                env = environment( ppl );
+            }
+            if ( !( ob = find_object( tmp[ 0 ] ) ) )
+                ob = load_object( tmp[ 0 ] ) ;
+            if ( !present( ob, env ) )
+            {
+                if ( objectp( ob ) )
+                    ob->move( env );
+            }
+        }
+        return 1;
+    }
+}
+
+int CanEnd(object ppl)
+{
+    if ( !ppl->GetTaskEnd( GroupName ) )
+    {
+        return 0;
+    }
+    else if ( stringp( SuccessAct->time )
+        && !check_time( time(), SuccessAct->time ) ) 
+    {
+        return 0;
+    }
+    else if ( stringp( SuccessAct->site )
+        && !check_site( environment( ppl), SuccessAct->site ) )
+    {
+        return 0;
+    }
+    else 
+    {
+        if ( stringp( SuccessAct->character ) )
+        {
+            string * tmp = explode( SuccessAct->character, ":" );
+            object env;
+            if ( sizeof( tmp ) == 2 )
+            {
+                if ( !( env = find_object( tmp[ 1 ] ) ) )
+                    env = load_object( tmp[ 1 ] );
+            }
+            else
+            {
+                env = environment( ppl );
+            }
+            if ( !present( tmp[ 0 ], env ) )
+            {
+                object ob = new( tmp[ 0 ] );
+                if ( objectp( ob ) )
+                    ob->move( env );
+            }
+        }
+        return 1;
+    }
+}
+
+void eventSetHeartBeat()
+{
+    set_heart_beat( HEART_BEAT_TIME );
+}
+
+nosave void create()
+{
+    count = 0;
+    Birth = 0;
+    ExistenceTime = 0;
+    TermType = SHORT_TERM;
+    TaskType = -1;
+    KeyName = "No name";
+    GroupName = "other";
+    BeginningAct = 0;
+    SuccessAct = 0;
+    FailAct = 0;
+    TaskEvent = allocate( 5 );
+    RelativeTasks = ({ });
+    Executors = ({ });
+    Proposers = ({ });
+
+     set_heart_beat( HEART_BEAT_TIME ); 
+    seteuid( getuid() );
+}
+
+nosave void heart_beat()
+{
+    object this = this_object();
+
+    count ++;
+    foreach(object ppl in Executors)
+    {
+        if ( TermType == LONG_TERM )
+        {
+            if ( time() < ( ppl->GetTaskBirth( GroupName ) + ppl->GetTaskTime( GroupName ) ) )
+            {
+                this->TaskFail(ppl);
+                return;
+            }
+        }
+        else 
+        {
+            if ( ( Birth + ExistenceTime ) < time() )
+            {
+                this->TaskEnd();
+                return;
+            }
+        }
+        if ( this->CanEnd( ppl ) )
+        {
+            this->TaskEnd( ppl );
+            return;
+        }
+    }
+    foreach(object ppl in Proposers)
+    {
+        if ( !objectp( ppl ) ) continue;
+        if ( this->CanBegin( ppl ) )
+        {
+            if ( !Birth ) Birth = time();
+            this->TaskBegin( ppl );
+            return;
+        }
+
+        if ( count % 10 == 0 )
+        {
+            foreach( object player in Proposers )
+            {
+                if( player && userp( player ) )
+                {
+                    Proposers -= ({ player });
+                    ppl->DeleteTask( GroupName );
+                }
+            }
+        }
+    }
+}
+
+void AddProposer( object ppl )
+{
+    Proposers += ({ ppl });
+}
+
+void AddExecutor( object ppl )
+{
+    Executors += ({ ppl });
+}
+
+int IsFollower()
+{
+    return stringp( BeginningAct->follow );
+}
+
+mixed GetBonus( string ActName )
+{
+    mixed mBonus;
+    switch( ActName )
+    {
+    case "BeginningAct" :
+        mBonus = BeginningAct->bonus;
+        break;
+    case "SuccessAct" :
+        mBonus = SuccessAct->bonus;
+        break;
+    case "FailAct" :
+        mBonus = FailAct->bonus;
+        break;
+    }
+    return mBonus;
+}
+
+class task GetTask()
+{
+    class task task = new(class task);
+    task->TermType = TermType;
+    task->KeyName = KeyName;
+    task->Verb = TaskEvent[ TASK_VERB ];
+    if ( TaskEvent[ TASK_VERB ] == "learn" )
+        task->Target = TaskEvent[ TASK_SKILL_NAME ];
+    else
+        task->Target = TaskEvent[ TASK_TARGET_NAME ];
+    task->Event = TaskEvent; 
+    task->Birth = time();
+    return task;
+}
+
+private int check_time( int time, string arg )
+{
+    int * ltime = localtime( time );
+    int * ttime = parse_time( arg );
+    if ( !arg ) return 1;
+    if ( ttime[ LT_MON ] && ( ttime[ LT_MON ] != ltime[ LT_MON ] ) )
+        return 0;
+    if ( ttime[ LT_MDAY ] && ( ttime[ LT_MDAY ] != ltime[ LT_MDAY ] ) ) 
+        return 0;
+    return 1;
+}
+
+private int * parse_time(string arg)
+{
+    int * ptime = localtime(time());
+    int mon, day;
+    if (!arg) return 0;
+    mon = 0;
+    day = 0;
+    if (sscanf(arg, "%d 月 %d 日", mon, day) ||
+        sscanf(arg, "%d 月", mon) ||
+        sscanf(arg, "%d 日", day) ||
+        sscanf(arg, "%d month", mon) ||
+        sscanf(arg, "%d day", day) ||
+        sscanf(arg, "%d %d", mon, day) ||
+        sscanf(arg, "%d", mon));
+    ptime[LT_MON] = mon;
+    ptime[LT_MON] = day;
+    return ptime;
+}
+
+private int check_site( mixed env, string site )
+{
+    if ( !site ) return 1;
+    if ( objectp( env ) ) env = file_name( env );
+    if ( env == site ) return 1;
+    foreach( string dir in explode( env, "/" ) )
+    {
+        if (dir == site) return 1;
+    }
+    return 0;
+}
+
+private void parse_event( string arg )
+{
+    string verb, arg1, who, item;
+    int level; 
+
+    if ( !arg ) return 0;
+    sscanf( arg, "%s %s", verb, arg1 );
+    TaskEvent[ TASK_VERB ] = verb;
+    switch( verb )
+    {
+    case "kill":
+    case "buy":
+        TaskEvent[ TASK_TARGET_NAME ] = arg1;
+        break;
+    case "send":
+    case "give":
+        sscanf( arg1, "%s to %s", item, who ); 
+        TaskEvent[ TASK_OBJECT_NAME ] = item;
+        TaskEvent[ TASK_TARGET_NAME ] = who;
+        break;
+    case "learn":
+        sscanf( arg1,"%d %s", level, who );
+        TaskEvent[ TASK_SKILL_NAME ] = who;
+        TaskEvent[ TASK_SKILL_LEVEL ] = level;
+        break;   
+    case "teach":
+        sscanf( arg1, "%s %d %s", who, level, item);
+        TaskEvent[ TASK_SKILL_NAME ] = item;
+        TaskEvent[ TASK_SKILL_LEVEL ] = level;
+        TaskEvent[ TASK_TARGET_NAME ] = who;
+    }
+}
+
+private class act init_act( mapping arg )
+{
+    class act act;
+    if ( nullp( arg ) ) return 0;
+    act = new( class act );
+    act->time = arg[ "time" ];
+    act->site = arg[ "site" ];
+    act->character = arg[ "character" ];
+    act->bonus = arg[ "bonus" ];
+    act->message = arg[ "message" ];
+    act->follow = arg[ "follow" ];
+    return act;
+}
+
+private void task_bonus(object ppl, mixed bonus)
+{
+    object ob;
+    string err;
+    if ( !sscanf(bonus, "%*s.lpc") ) bonus += ".lpc";
+    if (file_size( bonus ) < 0) return;
+    if ( !find_object( bonus ) )
+    {
+        if ( err = catch( call_other( bonus, "???" ) ) )
+        {
+            error( err );
+            return;
+        }
+        else
+        {
+            ob = find_object( bonus );
+        }
+    }
+    else if ( err = catch( ob = clone_object( bonus )  ) )
+    {
+        return;
+    }
+    if ( objectp( ob ) )
+    {
+        ob->SetProperty( "can_recieve", 1 );
+        if ( !ob->move(ppl) ) ob->move( environment( ppl ) );
+    }
+    return;
+}
+

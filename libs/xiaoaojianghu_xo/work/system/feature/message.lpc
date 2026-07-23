@@ -1,0 +1,158 @@
+// filename : /feature/message.c
+
+#include <ansi.h>
+#include <dbase.h>
+#include <command.h>
+
+#define MAX_MSG_BUF_SIZE 	2000
+
+nosave string *msg_buffer = ({});
+nosave string temp_msg;
+nosave int Mark;
+
+mixed query(mixed x);
+
+void receive_message(string msgclass, string msg)
+{
+	string subclass, *ch;
+	object this;
+
+	this = this_object();
+	if ( !interactive(this) )
+	{
+		this->relay_message( msgclass, msg );
+		return;
+	}
+
+	if ( sscanf( msgclass, "%s:%s", subclass, msgclass ) == 2 )
+	{
+		switch ( subclass )
+		{
+			case "channel":
+				ch = query("channels");
+				if ( !pointerp( ch ) ||
+					 member_array( msgclass, ch ) == -1 )
+				{
+					return;
+				}
+				break;
+
+			case "outdoor":
+				if ( !environment() ||
+					 !environment()->query("outdoors") )
+				{
+					return;
+				}
+				break;
+
+			default:
+				error("Message: Invalid Subclass " + subclass + ".\n");
+		}
+	}
+
+	if ( query_temp("block_msg/all") || 
+		 query_temp("block_msg/" + msgclass) ||
+         query("blind") )
+	{
+		return;
+	}
+
+	if ( in_input(this) || in_edit(this) )
+	{
+		if ( sizeof(msg_buffer) < MAX_MSG_BUF_SIZE )
+			msg_buffer += ({ msg });
+	}
+	else
+    {
+		receive( msg );
+        if ( ( strsrch( msg, "(" ) != -1 || 
+            strsrch( msg, ")" ) ) && stringp( temp_msg ) && Mark )
+        {
+            Mark = 0;
+            temp_msg += msg;
+        }
+        else
+        {
+            Mark = 1;
+            temp_msg = msg;
+        }
+    }
+}
+
+string query_temp_msg()
+{
+    string temp;
+    temp = temp_msg;
+    temp_msg = 0;
+    return temp;
+}
+
+void write_prompt()
+{
+	if ( sizeof(msg_buffer) )
+	{
+		receive(BLU "[输入时暂存讯息]\n" NOR);
+		for ( int i = 0; i < sizeof( msg_buffer ); i++ )
+			receive( msg_buffer[ i ] );
+		msg_buffer = ({});
+	}
+    if( this_object() && wizardp( this_object()) )
+    {
+        mixed arg = query("env/cwd");
+        mapping my;
+        string *dir,prompt,hp, cwd = query("cwd");
+        if ( !cwd ) cwd = "";
+        else cwd = sprintf("%s",cwd=="/" ? "/" : cwd[0..<2]);
+        if ( stringp(arg) )
+        {
+            my = this_object()->query_entire_dbase();
+            dir = explode(file_name(environment(this_object())), "/"); 
+            if( strsrch( arg, "$HP" ) > -1 )
+            {
+                hp = sprintf("精神:%s%d%%"NOR" 生命:%s%d%%"NOR" 体能:%s%d%%"NOR,
+                    HP_CMD->status_color(my["gin"],my["max_gin"]),
+                    my["gin"]*100/my["max_gin"],
+                    HP_CMD->status_color(my["kee"],my["max_kee"]),
+                    my["kee"]*100/my["max_kee"],
+                    HP_CMD->status_color(my["sen"],my["max_sen"]),
+                    my["sen"]*100/my["max_sen"]);
+                arg = replace_string( arg, "$HP", hp );
+            }
+            arg = replace_string( arg, "$T", "时间:" + ctime(time()));
+            arg = replace_string( arg, "$L", "位置:" + 
+                chinese_place_name(dir[2]) );
+            arg = replace_string( arg, "$P", "工作目录:" + cwd );
+            arg = replace_string( arg, "$_", "\n" );
+            arg = replace_string( arg, "$$", "$" );
+            prompt = arg[<1..] ;
+            if( prompt != ">" && prompt != "$" && prompt != "%" && prompt!="]" )
+                arg += ">"; 
+        }
+        else if ( intp(arg) )
+        {
+            switch ( arg )
+            {
+            case 0:
+                arg = ">";
+                break;
+            case -1:
+                arg = "";
+                break;
+            default :
+                arg = "%";
+                break;
+            }
+        }
+        else
+            arg = ">";
+        write( arg );
+    }
+    else
+    	write( "> " );
+}
+
+void receive_snoop(string msg)
+{
+	receive("#" + msg);
+}
+

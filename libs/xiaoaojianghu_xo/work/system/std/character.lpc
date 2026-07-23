@@ -1,0 +1,407 @@
+// filename : /system/std/char.c
+//
+// ChangeLog :
+//      Falcon  1996-11-27      add lian feature
+// ChangeLog :
+//      Qyz     1996-4-25       增加走火入魔的内容
+
+#pragma save_binary
+
+#include <action.h>
+#include <ansi.h>
+#include <command.h>
+#include <condition.h>
+#include <dbase.h>
+#include <move.h>
+#include <name.h>
+#include <skill.h>
+#include <team.h>
+#include <user.h>
+
+//inherit F_ACTION;
+//inherit F_ALIAS;
+inherit F_APPRENTICE;
+inherit F_ATTACK;
+inherit F_ATTRIBUTE;
+inherit F_COMMAND;
+inherit F_CONDITION;
+inherit F_DAMAGE;
+inherit F_DBASE;
+//inherit F_EDIT;
+inherit F_FINANCE;
+//inherit F_MESSAGE;
+//inherit F_MORE;
+inherit F_MOVE;
+inherit F_NAME;
+inherit F_SKILL;
+inherit F_TEAM;
+inherit F_FAMILY;
+inherit F_ZUZHI;
+//inherit "/system/feature/test"; //用来测试一些东西,仅对wiz拥有.
+
+//inherit "/system/feature/force";
+
+// Use a tick with longer period than heart beat to save cpu's work
+nosave int tick;
+
+// 用做布尔量, 指示角色是不是在练
+nosave int lianing;
+
+// 要练习的武功
+nosave string lian_skill;
+
+// 练习的招数索引
+nosave int zhao_index;
+
+// Function prototype
+int is_lianing();
+void do_lian();
+int query_char_ratio(string type);
+int query_char_eff_ratio(string type);
+int query_lingwu_ratio(string skill);
+int query_jilei_ratio(string skill);
+int query_gongfang();
+int query_shili();
+int query_lian_limit();
+int query_combat_brief();
+
+////////////////////////////////////////////////////////////////////
+
+void create()
+{
+        // so LOGIN_D can export uid to us
+        seteuid( 0 );
+
+        lianing = 0;
+}
+
+// Use this function to identify if an object is a character.
+int is_character() { return 1; }
+
+// setup: used to configure attributes that aren't known by this_object()
+// at create() time such as living_name (and so can't be done in create()).
+void setup()
+{
+        seteuid( getuid( this_object() ) );
+
+        set_heart_beat( 1 );
+        tick = 5 + random( 10 );
+    enable_player();
+
+        CHAR_D->setup_char( this_object() );
+}
+
+void heart_beat()
+{
+        int wimpy_ratio, cnd_flag, chazhi,discrease;
+        mapping my;
+        object ob, this,me,room;
+
+        my = query_entire_dbase();
+        this = this_object();
+    me = this_player();
+/*    room = environment( me );
+
+    if ( room -> query("type") == 1 )
+    {
+         discrease = (-1) * ( room -> query("discrease"));
+         message_vision("你感觉很难受, 有些受不了...\n",me);
+         me -> add("gin",discrease);
+         me -> add("kee",discrease);
+         me -> add("sen",discrease);
+    }    */
+    // If we are dying because of mortal wounds?
+        if ( my[ "eff_kee" ] < 0 || my[ "eff_sen" ] < 0 || my[ "eff_gin" ] < 0 )
+        {
+                remove_all_enemy();
+                die();
+                return;
+        }
+        // If we're dying or falling unconcious?
+        if ( my[ "kee" ] < 0 || my[ "sen" ] < 0 || my[ "gin" ] < 0 )
+        {
+                remove_all_enemy();
+                if ( !living( this ) )
+                        die();
+                else
+                        unconcious();
+                return;
+        }
+
+        // 执行一个走火入魔的函数,check_force()在damage.c里。。
+        chazhi = my["yin"] - my["yang"] ;
+        if ( chazhi < 0 ) chazhi*= -1;
+        if ( chazhi < 200 && my["yang"] > 400 && my["yang"] < 1000 && random(100) < 10 )
+        check_force();
+
+        // Do attack if we are fighting.
+        if ( is_busy() )
+        {
+                continue_action();
+
+                // lian 应该在忙状态
+                if ( lianing && environment() && random( 100 ) > 30 )
+                        do_lian();
+
+                // We don't want heart beat be halt eventually, so return here.
+                return;
+        }
+        else
+        {
+                // Is it time to flee?
+                wimpy_ratio = (int)query( "env/wimpy" );
+                if ( is_fighting() && intp( wimpy_ratio ) && wimpy_ratio > 0 &&
+                         ( query_char_ratio("kee") <= wimpy_ratio ||
+                           query_char_ratio("sen") <= wimpy_ratio ||
+                           query_char_ratio("gin") <= wimpy_ratio ) )
+                {
+                        GO_CMD->do_flee( this );
+                }
+                // Do attack or clean up enemy if we have fleed.
+                attack();
+        }
+
+//我们把这一段给 NPC 的程序移到 npc.c 里面，重入 heart_beat()
+/*
+        if ( !userp( this ) )
+        {
+                this->chat();
+                // chat() may do anything -- include destruct(this_object())
+                if ( !this ) return;
+        }
+*/
+
+//      if ( lianing && environment() && random( 100 ) > 30 )
+//              do_lian();
+
+        if ( tick--  )
+                return;
+        else
+                tick = 5 + random( 10 );
+
+        cnd_flag = update_condition();
+
+        // If we are compeletely in peace, turn off heart beat.
+        // heal_up() must be called prior to other two to make sure it is called
+        // because the && operator is lazy :P
+        if ( ( ( cnd_flag & CND_NO_HEAL_UP ) || !heal_up() ) &&
+                 !is_fighting() && !interactive( this ) )
+        {
+                if ( environment() )
+                {
+                        ob = first_inventory( environment() );
+                        while( ob && !interactive( ob ) )
+                                ob = next_inventory( ob );
+                }
+                if ( !ob ) set_heart_beat( 0 );
+        }
+
+    // NPC 就不老？真是不可思意
+        if ( !interactive( this ) ) return;
+
+        // Make us a bit older. Only player's update_age is defined.
+        // Note: update_age() is no need to be called every heart_beat, it
+        //       remember how much time has passed since last call.
+        this_object()->update_age();
+
+        if ( query_idle( this ) > IDLE_TIMEOUT )
+                this->user_dump( DUMP_IDLE );
+
+}
+
+int visible(object ob)
+{
+        int lvl, invis;
+
+        lvl = wiz_level( this_object() );
+
+        if ( lvl > wiz_level( ob ) ) return 1;
+        invis = ob->query( "env/invisibility" );
+        if ( intp( invis ) && ( invis > lvl ) ) return 0;
+
+        if ( ob->is_ghost() )
+        {
+                if ( is_ghost() ) return 1;
+                return 0;
+        }
+
+        return 1;
+}
+
+
+int query_char_ratio( string type )
+{
+        if ( type != "gin" && type != "kee" && type != "sen" )
+        error("STD_CHAR: 种类只能是 gin, kee, sen 其中之一。\n");
+        return query( type ) * 100 / query( "max_" + type );
+}
+
+int query_char_eff_ratio( string type )
+{
+        if ( type != "gin" && type != "kee" && type != "sen" )
+        error("STD_CHAR: 种类只能是 gin, kee, sen 其中之一。\n");
+        return query( type ) * 100 / query( "eff_" + type );
+}
+
+int query_lingwu_ratio( string skill )
+{
+    int lingwu, jibie;
+
+    lingwu = query_lingwu( skill );
+    jibie = query_jibie( skill );
+    if ( !jibie )
+        return 0;
+    return lingwu * 100 / jibie;
+}
+
+int query_jilei_ratio( string skill )
+{
+    int jilei, temp;
+
+    jilei = query_jilei( skill );
+    if ( !jilei ) return 0;
+    temp = jilei * 100 / lingwu_limit( skill );
+    if ( temp > 100 ) temp = 100;
+    return temp;
+}
+
+int query_gongfang()
+{
+    int attack;
+
+    if ( undefinedp( query("env/attack") ) || !intp( query("env/attack") ) )
+        attack = 50;
+    else
+    {
+        attack = query("env/attack");
+        if ( attack < 0 ) attack = 0;
+        else if ( attack > 100 ) attack = 100;
+    }
+    return attack;
+}
+
+int query_shili()
+{
+    int shili;
+
+    if ( undefinedp( query("env/shili") ) || !intp( query("env/shili") ) )
+        shili = 100;
+    else
+    {
+        shili = query("env/shili");
+        if ( shili < 1 ) shili = 1;
+        else if ( shili > 100 ) shili = 100;
+    }
+    return shili;
+}
+
+int query_lian_limit()
+{
+    int lian_limit;
+
+    if ( undefinedp( query("env/lian_limit") ) ||
+         !intp( query("env/lian_limit") ) )
+    {
+        lian_limit = 10;
+    }
+    else
+    {
+        lian_limit = query("env/lian_limit");
+        if ( lian_limit < 10 ) lian_limit = 10;
+        else if ( lian_limit > 99 ) lian_limit = 99;
+    }
+    return lian_limit;
+}
+
+int query_combat_brief()
+{
+    int combat_brief;
+
+    if ( undefinedp( query("env/combat_brief") ) ||
+         !intp( query("env/combat_brief") ) )
+    {
+        combat_brief = 0;
+    }
+    else
+    {
+        combat_brief = query("env/combat_brief");
+    }
+    return combat_brief;
+}
+
+////////////////////////////////////////////////////////////////////
+// Lian interface
+
+int is_lianing()
+{
+        return lianing;
+}
+
+void start_lian(string skill)
+{
+        zhao_index = 0;
+        lianing = 1;
+        lian_skill = skill;
+        start_busy( (: is_lianing :) );
+}
+
+void stop_lian()
+{
+        lianing = 0;
+        if ( is_busy() )
+        {
+                this_object()->interrupt_me();
+        }
+}
+
+void do_lian()
+{
+        string msg;
+        object this, weapon, skill;
+        mapping action;
+        int jibie, sen_cost, ratio, limit;
+        int bonus;
+
+        this = this_object();
+        // 如果角色的体能值已经在 10% 或设定的限度下, 就停止练习
+        ratio = query_char_ratio("sen");
+        limit = query_lian_limit();
+        if ( limit < 10 ) limit = 10;
+        else if ( limit > 99 ) limit = 99;
+    if (( ratio < limit ) || !SKILL_D( lian_skill )->valid_lian( this ) )
+    {
+                msg = sprintf( "$N气收丹田, 练完了%s.\n", to_chinese( lian_skill ) );
+                message_vision( msg, this );
+                lianing = 0;
+                return;
+        }
+        jibie = this->query_jibie( lian_skill );
+        action = SKILL_D(lian_skill)->query_action( jibie );
+        msg = action[ "lian" ] + "\n";
+        weapon = query_temp( "weapon" );
+        if ( objectp( weapon ) )
+                msg = replace_string( msg, "$w", weapon->name() );
+        message_vision( msg, this );
+
+        // 消耗体能, 如果这一次动作领悟了, 还要消耗精神
+        if ( !action[ "sen" ] )
+                sen_cost = 3;
+        else
+                sen_cost = (int)action[ "sen" ];
+        this->receive_damage( "sen", sen_cost );
+
+//      chance = 2000 / jibie;
+//      if ( chance > 100 ) chance = 100;
+
+        if ( random( 100 ) > 70 || random( 100 ) < this->query_int() )
+        {
+        skill = load_object( SKILL_D( lian_skill ) );
+        bonus = this->query_xiuwei_dengji( skill->query_xiuwei_type() )
+                    - skill->query_dengji() + 2;
+        if ( bonus <= 0 && !random( 100 * ( 1 - bonus ) ) ) bonus = 1;
+        if ( bonus <= 0 ) bonus = 0;
+                // TODO : 考虑已经会了高等级武功的情况
+                this->improve_jilei( lian_skill, bonus );
+        }
+}
+

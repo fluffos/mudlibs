@@ -1,0 +1,875 @@
+// Filename : /clone/wizard/edit.c
+// Maybe a edit for Nightmare
+
+#define HELPPATH    "/help/wizard/edit/"
+#define UPDATE      "/cmds/wiz/update"
+#define RANGE_CMDS ({ "L", "c", "C", "m", "M", "d", "D", "S", "R" })
+#define INDEX_CMDS ({ "d", "D", "i", "I", "a", "A", ">", "<", "c", "C", "p",\
+                      "P", "L", "E", "e", "S", "R", "F", "B", "m", "M" })
+#define M_INDEX_CMDS ({ "d", "D", "c", "C", "L", "S", "R", "F", "B", "m",\
+                        "M" })
+#define MULTI_CMDS ({ "L", "C", "c", "m", "M", "D", "d", "S", "R", ">", "<",\
+                      "F", "B", "+", "-" })
+#define CHAR_CMDS ({ "d", "c", "m" })
+#define STR_CMDS ({ ">", "<", "i", "a", "e", "d", "c", "m" })
+#define TXT_CMDS ({ "O", "H", "w", "W", "T" }) 
+#define CMDS ({ "d", "D", "<", ">", "<<", ">>", "|", "^", "V", "I", "i", "A",\
+                "a", "E", "e", "C", "c", "M", "m", "P", "p", "O", "L", "F",\
+                "B", "S", "R", "T", "+", "++", "-", "W", "w", "N", "Q", "H",\
+                "U" })
+                
+inherit ITEM;
+
+int chptr, lnptr, tmpchr, tmpln, cols, rows, changed, open_pending, showln = 1,
+    fsize;
+string *file, *clipboard, name, newname;
+mixed *undo = ({ });
+
+void print_line(int show_ptr);
+void my_more(string input, string xtratxt, string *text, int startln,
+             int number, int pages);
+int open_file(string filename);
+void next();
+
+/////////////////////////////////////////////////////////////////////////////
+
+void setup()
+{
+    set_name( "编辑器", "editor" );
+    set( "long", "一个古里古怪的编辑器, 不知道功能有多强大?\n" );
+    //set_weight(10);
+}
+
+void init()
+{
+    add_action("do_edit", "edit");
+    return;
+}
+
+int do_edit(string filename)
+{
+    object me;
+
+    me = this_player();
+    if ( !wizardp( me ) )
+    {
+        return notify_fail("这个物品对你没有用!");
+    }
+    //rows = (int) me->query_rows();
+    //cols = (int) me->query_cols();
+    rows = 25;
+    cols = 80;
+    if (!filename) filename = "";
+    changed = 0;
+    seteuid( geteuid( me ) );
+    if ( !open_file( filename ) )
+    {
+        write( "不能打开文件 \"" + filename + "\".\n");
+        open_file("");
+    }
+    write( ":" );
+    input_to( "get_command" );
+    return 1;
+}
+
+void get_command(string action)  {
+string *bits, tmp, *scrap, tmp2;
+int i, j, amt, start, end, index, diff;
+
+bits = explode(action + " ", " ");
+if ((end  = sizeof(bits) - 1) == -1)  {
+   write(":");
+   input_to("get_command");
+   return;  }
+for (i = 1, start = diff = 0; i < 4  &&  i <= end; i++)  {
+   j = strlen(bits[i]);
+   if (bits[i][0] == 34  &&  !start)  {
+      start = 1;
+      bits[i] = bits[i][1 .. ];
+      --j;
+      if (i == 1)  diff = 1;  }
+   if (start)  {
+      for (index = 1, amt = 0; index <= j; ++index)  {
+         if (bits[i][<index] == 92)  ++amt;
+         else if (bits[i][<index] == 34)  {
+            bits[i] = delete(bits[i], j - 1, 1);
+            index = j;
+            if (!amt)  start = 0;  }
+         else index = j;  }
+      if (start  &&  i != end)  {
+         bits[i] += " " + bits[i + 1];
+         bits = delete(bits, 1 + i--, 1);
+         --end;  }  }
+   else if (bits[i] == "")  {
+      bits = delete(bits, i--, 1);
+      --end;  }  }
+tmpln = lnptr;
+tmpchr = chptr;
+
+i = 0;
+sscanf(bits[0], "%d", i);
+if (member_array(bits[0], CMDS) == -1  &&  !i  &&  bits[0][0] != 48)  {
+   write("Unknown command.\n:");
+   input_to("get_command");
+   return;  }
+else if (sizeof(bits) > 1  &&  member_array(bits[0], TXT_CMDS) == -1)  {
+   start = end = amt = index = i = 0;
+   tmp = tmp2 = "";
+   sscanf(bits[1], "%d", i);
+   if (!i  &&  bits[1][0] != 48  &&  bits[1][0] != 64  &&
+       bits[1][0 .. 1] != ".-")  diff = 1;
+   sscanf(bits[1], "%s-%s", tmp, tmp2);
+   if (!diff  &&  tmp != ""  &&  tmp2 != "")  {
+      if (member_array(bits[0], RANGE_CMDS) == -1)  {
+         write("Range mode not valid with command '" + bits[0] + "'.\n");
+         input_to("get_command");
+         return;  }
+      if (sscanf(tmp, "%d", start) + sscanf(tmp2, "%d", end) != 2)  {
+         if (tmp == ".")
+            start = member_array(bits[0], CHAR_CMDS) == -1 ? tmpln + 1 :
+                    tmpchr + 1;
+         if (tmp2 == ">")
+            end = member_array(bits[0], CHAR_CMDS) == -1 ? fsize :
+                  strlen(file[tmpln]);
+         else if (tmp2 == ".")
+            end = member_array(bits[0], CHAR_CMDS) == -1 ? tmpln + 1 :
+                  tmpchr + 1;  }  
+      if (start > end  ||  start <= 0)  {
+         write("Invalid range.\n:");
+         input_to("get_command");
+         return;  }
+      else  {
+         lnptr = chptr = start - 1; 
+         amt = end - start + 1;  }  }
+   else if (!diff  &&  sscanf(" " + bits[1], "%*s@%d", index))  {
+      if (member_array(bits[0], INDEX_CMDS) == -1)  {
+         write("Index mode not valid with command '" + bits[0] + "'.\n");
+         input_to("get_command");
+         return;  }
+      else if (index <= 0)  {
+         write("Invalid index.\n:");
+         input_to("get_command");
+         return;  }
+      if (sscanf(bits[1], "%d@%d", amt, index) == 2)  {
+         if (member_array(bits[0], M_INDEX_CMDS) == -1)  {
+            write("Multi-indexing not valid with command '" + bits[0] +
+                  "'.\n:");
+            input_to("get_command");
+            return;  }  }
+      else amt = 1; 
+      lnptr = chptr = index - 1;
+      if (chptr > strlen(file[tmpln]))  chptr = strlen(file[tmpln]);
+      if (lnptr > fsize)  lnptr = fsize;  }
+   else if (diff)  {
+      if (member_array(bits[0], STR_CMDS) == -1)  {
+         write("String arguments are not valid with command '" + bits[0] +
+               "'.\n:");
+         input_to("get_command");
+         return;  }
+      else diff = 1;  }
+   else  {
+      if (member_array(bits[0], MULTI_CMDS) == -1)  {
+         write("Amount mode not valid with command '" + bits[0] + "'.\n");
+         input_to("get_command");
+         return;  }
+      sscanf(bits[1], "%d", amt);  }  
+   if (!diff  &&  amt <= 0)  {
+      write("Illegal amount.\n:");
+      input_to("get_command");
+      lnptr = tmpln;
+      chptr = tmpchr;
+      return;  }  }
+else amt = 1;
+
+switch(bits[0])  {
+   case "d":
+      if (tmpln == fsize)
+         write("Cannot delete beyond end of file.\n");
+      else if (chptr == strlen(file[tmpln]))
+         write("Cannot delete beyond end of line.\n");
+      else  {
+         if (diff)  {
+            if ( (i = strsrch(file[tmpln][tmpchr .. ], bits[1])) > -1 )  {
+               chptr = i + tmpchr;
+               amt = strlen(bits[1]);  }
+            else  {
+               if (bits[1] == "")  write("Cannot search for null string.\n:");
+               else write("'" + bits[1] + "' not found.\n:");
+               input_to("get_command");
+               return;  }  }
+         else if ( (chptr + amt) > strlen(file[tmpln]) )
+            amt = strlen(file[tmpln]) - chptr;
+         undo = ({ ({ ({ "E", tmpln, ({ file[tmpln] }) }) }) }) + undo;
+         changed = 1;
+         file[tmpln] = delete(file[tmpln], chptr, amt);
+         if (chptr + amt < tmpchr)  tmpchr -= amt;
+         else if (tmpchr >= chptr)  tmpchr = chptr;
+         print_line(1);  }
+      break;
+   case ">":
+      if (tmpln != fsize)  {
+         if (index)  {
+            if (chptr > strlen(file[tmpln]))  {
+               write("Index too large - moving to end of line.\n");
+               tmpchr = strlen(file[tmpln]);  }
+            else tmpchr = chptr;  }
+         else if (diff)  {
+            if ((i = strsrch(file[tmpln][tmpchr + 1 .. ], bits[1])) != -1)
+               tmpchr += i + 1;
+            else
+               if ((i = strsrch(file[tmpln][0 .. tmpchr + strlen(bits[1]) - 1],
+                                bits[1])) != -1)
+                  tmpchr = i;
+            else  {
+               if (bits[1] == "")  write("Cannot search for null string.\n:");
+               else write("'" + bits[1] + "' not found.\n:");
+               input_to("get_command");
+               return;  }  } 
+         else tmpchr = (chptr + amt) % (strlen(file[tmpln]) + 1);
+         print_line(1);  }
+      else print_line(0); 
+      break;
+   case "<":
+      if (tmpln != fsize)  {
+         if (index)  {
+            if (chptr > strlen(file[tmpln]))  {
+               write("Index too large - moving to end of line.\n");
+               tmpchr = strlen(file[tmpln]);  }
+            else tmpchr = chptr;  }
+         else if (diff)  {
+            if ((i = strsrch(file[tmpln][0 .. tmpchr - 1],
+                             bits[1], -1)) != -1)  tmpchr = i;
+            else if ((i = strsrch(file[tmpln][tmpchr .. ],
+                                  bits[1], -1)) != -1)  tmpchr += i;
+            else  {
+               if (bits[1] == "")  write("Cannot search for null string.\n:");
+               else write("'" + bits[1] + "' not found.\n:");
+               input_to("get_command");
+               return;  }  }
+         else  {
+            tmpchr = chptr - amt; 
+            if (tmpchr < 0)  tmpchr = strlen(file[tmpln]) + tmpchr + 1;  }
+         print_line(1);  }
+      else print_line(0);
+      break;
+   case ">>":
+      if (lnptr != fsize)  {
+         tmpchr = strlen(file[lnptr]);
+         print_line(1);  }
+      else print_line(0);
+      break;
+   case "<<":
+      if (lnptr != fsize)  {
+         tmpchr = 0;
+         print_line(1);  }
+      else print_line(0);
+      break;
+   case "|":
+      if (lnptr != fsize)  {
+         tmpchr = strlen(file[lnptr]) / 2;
+         print_line(1);  }
+      else print_line(0);
+      break;
+   case "^":
+      i = showln;
+      showln = 1;
+      print_line(1);
+      showln = i;
+      break;
+   case "V":
+      if (!sizeof(clipboard))  write("Clipboard is empty.\n");
+      else my_more("", "", clipboard, 0, 0, 0);
+      return;
+      break;
+   case "D":
+      if (lnptr != fsize)  {
+         if ( (lnptr + amt) > fsize )  {
+            write("Deleting up to end of file -  ");
+            amt = fsize - lnptr;  }
+         undo = ({ ({ ({ "I", lnptr, file[lnptr .. lnptr + amt - 1] }) }) }) +
+                undo;
+         changed = 1;
+         file = delete(file, lnptr, amt);
+         fsize -= amt;
+         if (lnptr + amt < tmpln)  tmpln -= amt;
+         else if (tmpln >= lnptr)  {
+            tmpln = lnptr;
+            tmpchr = 0;  }
+         if (amt > 1)  write(amt + " lines deleted.\n");
+         else write("1 line deleted.\n");  }
+      else write("Cannot delete beyond end of file.\n");
+      break;
+   /* Old MacDonald had a farm ... */
+   case "i":
+   case "a":
+   case "e":
+      if (diff)  {
+         get_new_text(bits[1], bits[0], 0);
+         return;
+         break;  }
+   case "I":
+   case "A":   
+   case "E":
+      write("]");  /* prompt */
+      input_to("get_new_text", 0, bits[0], 0);
+      return;
+      break;
+   case "C":
+   case "M":
+      if (lnptr != fsize)  {
+         if ( (lnptr + amt)  > fsize )  {
+            write("Copying up to end of file -  ");
+            amt = fsize - lnptr;  }
+         clipboard = file[lnptr .. lnptr + amt - 1];
+         write(amt == 1 ? "1 line copied" : amt + " lines copied");
+         if ( bits[0] == "M" )  {
+            write(" and deleted.\n");
+            undo = ({ ({ ({ "I", lnptr,
+                            file[lnptr .. lnptr + amt - 1] }) }) }) +
+                   undo;
+            file = delete(file, lnptr, amt);
+            fsize -= amt;
+            if (lnptr + amt < tmpln)  tmpln -= amt;
+            else if (tmpln >= lnptr)  {
+               tmpln = lnptr;
+               tmpchr = 0;  }
+            changed = 1;  }
+         else write(".\n");  }
+      else write("Cannot copy beyond end of file.\n");
+      break;
+   case "c":
+   case "m":
+      if (diff  &&  bits[0] == "c")  {
+         if (!strlen(bits[1]))  write("No point in copying a null string.\n");
+         else  {
+            clipboard = ({ bits[1] });
+            amt = strlen(bits[1]);  }  }
+      else  {
+         if (tmpln == fsize)
+            write("Cannot copy beyond end of file.\n");
+         else if (chptr == strlen(file[tmpln]))
+            write("Cannot copy beyond end of line.\n");
+         else  {
+            if (diff)  {
+               if ( (i = strsrch(file[tmpln][tmpchr .. ], bits[1])) > -1 )  {
+                  chptr = i + tmpchr;
+                  amt = strlen(bits[1]);  }
+               else  {
+                  if (bits[1] == "")
+                     write("Cannot search for null string.\n:");
+                  else write("'" + bits[1] + "' not found.\n:");
+                  input_to("get_command");
+                  return;  }  }
+            else if ( (chptr + amt - 1) >= strlen(file[tmpln]) )  {
+               write("Copying up to end of line -  ");
+               amt = strlen(file[tmpln]) - chptr;  }
+         clipboard = ({ file[tmpln][chptr .. chptr + amt - 1] });  }  }
+      if (amt)  {
+         write(amt == 1 ? "1 character copied.\n" : 
+               amt + " characters copied.\n");
+         if ( bits[0] == "m" )  {
+            undo = ({ ({ ({ "E", tmpln, ({ file[tmpln] }) }) }) }) + undo;
+            file[tmpln] = delete(file[tmpln], chptr, amt);
+            if (chptr + amt < tmpchr)  tmpchr -= amt;
+            else if (tmpchr >= chptr)  tmpchr = chptr;
+            changed = 1;
+            print_line(1);  }  }
+      break;
+   case "p":
+      if (sizeof(clipboard) == 1)  {
+         changed = 1;
+         if (tmpln == fsize)  {
+            file = file[0 .. <2] + ({ clipboard[0], "End of file." });
+            ++fsize;
+            undo = ({ ({ ({ "D", tmpln, 1 }) }) }) + undo;  }
+         else  {
+            undo = ({ ({ ({ "E", tmpln, ({ file[tmpln] }) }) }) }) + undo;
+            if (!chptr)  file[tmpln] = clipboard[0] + file[tmpln];   
+            else file[tmpln] = file[tmpln][0 .. chptr - 1] + clipboard[0] +
+                               file[tmpln][chptr .. ];
+            if (chptr <= tmpchr)  tmpchr += strlen(clipboard[0]);  }
+         print_line(1);
+         break;  }
+   case "P":
+      if (i = sizeof(clipboard))  {
+         undo = ({ ({ ({ "D", lnptr, i }) }) }) + undo; 
+         changed = 1;
+         if (!lnptr)  file = clipboard + file;
+         else file = file[0 .. lnptr - 1] + clipboard + file[lnptr .. ]; 
+         write(i == 1 ? "1 line pasted.\n" : i + " lines pasted.\n");
+         fsize += i;
+         if (lnptr <= tmpln)  tmpln += i;  }
+      else write("Clipboard is empty.\n");
+      break;
+   case "O":
+      tmp = name;
+      if (sizeof(bits) > 1)  {
+         if (open_file(bits[1])  &&  sizeof(undo))
+            undo = ({ ({ ({ "O", tmp }) }) }) + undo;  }
+      else if (open_file("")  &&  sizeof(undo))
+         undo = ({ ({ ({ "O", tmp }) }) }) + undo;
+      if (changed)  return;
+      break;
+   case "L":
+      my_more( "", "", file[lnptr .. lnptr + amt - 1], lnptr, showln, 0 );
+      lnptr = tmpln;
+      return;
+      break;
+   case "F":
+      tmpln = lnptr;
+      lnptr += amt * rows - amt;
+      if (lnptr > fsize)  lnptr = fsize;
+      my_more("", "", file[tmpln .. lnptr], tmpln, showln, amt);
+      return;
+      break;
+   case "B":
+      tmpln = lnptr - (amt * rows - amt - 1);
+      if (tmpln < 0)  {
+         diff = tmpln;
+         tmpln = 0;  }
+      else diff = 0;
+      scrap = file[tmpln .. lnptr];
+      i = j = 0;
+      if (showln)  {
+         foreach(tmp in scrap)
+            diff += (strlen((++i + tmpln) + "] " + tmp) - 1) / cols;
+         while (diff > 0)
+            diff -= (strlen((tmpln + j + 1) + "] " + scrap[j++]) - 1) /
+                    cols + 1;  }
+      else  {
+         foreach(tmp in scrap)  diff += (strlen(tmp) - 1) / cols;
+         while (diff > 0)  diff -= (strlen(scrap[j++]) - 1) / cols + 1;  }
+      my_more( "", "", scrap[j .. ], tmpln + j, showln, 0 );
+      lnptr = tmpln + j;
+      return;
+      break;
+   case "S":
+      if (sizeof(bits) < 3)  {
+         write("Must specify search string.\n:");
+         input_to("get_command");
+         return;  }
+      else if (bits[2] == "")  {
+         write("Cannot have a null search string.\n:");
+         input_to("get_command");
+         return;  }
+      else if (lnptr + amt > fsize)  {
+         write("Searching up to end of file.\n");
+         amt = fsize - lnptr;  }
+      i = 0;
+      scrap = ({ });
+      foreach(tmp in file[lnptr .. lnptr + amt - 1])  {
+         ++i;
+         if (strsrch(tmp, bits[2]) > -1)
+            scrap += ({ (i + lnptr) + "] " + tmp });  }
+      if (!sizeof(scrap))  {
+         write("\"" + bits[2] + "\" not found.\n:");
+         input_to("get_command");  }
+      else my_more( "", "", scrap, 0, 0, 0 );
+      lnptr = tmpln;
+      return;
+      break;
+   case "R":
+      if (sizeof(bits) < 4)  {
+         write("Must specify both search and replace strings.\n:");
+         input_to("get_command");
+         return;  }
+      else if (bits[2] == "")  {
+         write("Cannot have a null search string.\n:");
+         input_to("get_command");
+         return;  }
+      tmp = sprintf("%c", ((bits[2][0] + 1) % 127) + 1);
+      i = j = index = 0;
+      foreach(tmp2 in file[lnptr .. lnptr + amt - 1])  {
+         scrap = explode(tmp + tmp2 + tmp, bits[2]);
+         if (start = sizeof(scrap) - 1)  {
+            file[i + lnptr] = implode(scrap, bits[3])[1 .. <2];
+            if (!index)  {
+               undo = ({ ({ ({ "E", i + lnptr, ({ tmp2 }) }) }) }) + undo;
+               index = j = 1;  } 
+            else if (!j)  {
+               undo[0] += ({ ({ "E", i + lnptr, ({ tmp2 }) }) });
+               j = 1;  }
+            else undo[0][<1][2] += ({ tmp2 }); 
+            write( (start == 1 ? "1 instance" : start + "instances") +
+                   " replaced on line " + (i + lnptr + 1 ) + ".\n");  }
+         else j = 0;
+         ++i;  }
+      if (!(changed = index))  write("\"" + bits[2] + "\" not found.\n");
+      break;
+   case "T":
+      if (sizeof(bits) == 1)  {
+         if (strlen(name))  catch( UPDATE -> cmd(name) );
+         else write("No valid filename has been set.\n");  }
+      else catch( UPDATE -> cmd(bits[1]) );
+      break;
+   case "+":
+      tmpln = (tmpln + amt) % (fsize + 1);
+      tmpchr = 0;
+      print_line(0);
+      break;
+   case "++":
+      tmpln = fsize;
+      tmpchr = 0;
+      print_line(0);
+      break;
+   case "-":
+      tmpln -= amt;
+      if (tmpln < 0)  tmpln = fsize + tmpln + 1;
+      tmpchr = 0;
+      print_line(0);
+      break;   
+   case "W":
+   case "w":   
+      if (!fsize)  write("Empty file; nothing saved.\n");
+      else  {
+         if (sizeof(bits) > 1)  {
+            if (name != (newname = (string)this_player()->get_path(bits[1])))  {
+               this_player()->set_in_editor(name = newname);
+               changed = 1;  }  }
+         if (name == "")  {  
+            write("Enter a name for this file (enter nothing to cancel):]");
+            input_to("get_new_text", 0, bits[0], 0);
+            return;  }
+         save_file(bits[0]);
+         if (!changed  &&  bits[0] == "W")  return;  }
+      break;
+   case "N":
+      showln = !showln;
+      if (!showln)  write("Line numbering turned off.\n");
+      else write("Line numbering turned on.\n");
+      break;
+   case "Q":
+      write("Quitting.\n");
+      this_player()->set_in_editor(0);
+      file = name = clipboard = changed = 0;
+      showln = 1;
+      undo = ({ });
+      return;
+      break;
+   case "H":
+      tmp = (sizeof(bits) == 1) ? "main" : bits[1];
+      if (tmp != "main"  &&  tmp != "strings"  &&
+          member_array(tmp, CMDS) == -1)
+         write("Unknown command '" + tmp + "'.\n");
+      else if (tmp2 = read_file(HELPPATH + tmp + ".hlp"))  {
+         my_more("", "", explode(tmp2, "\n"), 0, 0, 0);
+         return;  }
+      else write("Sorry, no help available on \"" + tmp + "\".\n");
+      break;
+   case "U":
+      if (sizeof(undo))  {
+         if (sizeof(undo) < amt)  {
+            write("Not that many commands to undo.  ");
+            amt = sizeof(undo);  }
+         for (i = 0; i < amt; i++)
+            for (j = 0; j < sizeof(undo[i]); j++)  {
+               if (undo[i][j][0] == "I")  {
+                  file = file[0 .. undo[i][j][1] - 1] + undo[i][j][2] +
+                         file[undo[i][j][1] .. ];
+                  if (undo[i][j][1] <= tmpln)
+                     tmpln += sizeof(undo[i][j][2]);  }
+               else if (undo[i][j][0] == "E")
+                  file = file[0 .. undo[i][j][1] - 1] + undo[i][j][2] +
+                         file[undo[i][j][1] + sizeof(undo[i][j][2]) .. ];
+               else if (undo[i][j][0] == "D")  {
+                  file = delete(file, undo[i][j][1], undo[i][j][2]);
+                  if (undo[i][j][1] + undo[i][j][2] < tmpln)  tmpln -=amt;
+                  else if (tmpln >= undo[i][j][1])  {
+                     tmpln = undo[i][j][1];
+                     tmpchr = 0;  }  }
+               else if (!open_file(undo[i][j][1]))  amt = i;  }
+         undo = undo[amt .. ];
+         changed = (sizeof(undo) > 0);
+         write(amt == 1 ? "1 command undone.\n" :
+                          amt + " commands undone.\n");  } 
+      else write("Nothing to undo.\n");
+      break;
+   default:
+      i = 0;
+      sscanf(bits[0], "%d", i);
+      if ( i > fsize + 1  ||  !i)  write("Out of range.\n");
+      else  {
+         tmpln = i - 1;
+         tmpchr = 0;
+         print_line(0);  }
+      break;  } 
+lnptr = tmpln;
+chptr = tmpchr;
+write(":");
+input_to("get_command");
+return;  }  /* get_command() */
+
+
+void get_new_text(string new_in, string cmd, int count)  {
+string new_in2;
+int i, l;
+
+if ( (l = strlen(new_in) - 1) > -1  &&  new_in[<1] == "." )  {
+   for (i = 0; i < l; i++)
+      if (new_in[i] != 92)  i = l;
+   if (i == l)  new_in2 = new_in[1 .. ];
+   else new_in2 = new_in;  }
+else new_in2 = new_in;
+switch (cmd)  {
+case "i":
+   if (strlen(new_in))  {
+      changed = 1;
+      if (tmpln < fsize)  {
+         undo = ({ ({ ({ "E", tmpln, ({ file[tmpln] }) }) }) }) + undo;
+         if (!chptr)  file[tmpln] = new_in + file[tmpln];
+         else file[tmpln] = file[tmpln][0 .. chptr - 1] + new_in + 
+                            file[tmpln][chptr .. ];  }
+      else  {
+         undo = ({ ({ ({ "D", fsize, 1 }) }) }) + undo;
+         if (!fsize)  file = ({ new_in, "End of file." });
+         else file = file[0 .. fsize - 1] + ({ new_in, "End of file." });
+         ++fsize;  }
+      if (chptr <= tmpchr)  tmpchr += strlen(new_in);
+      print_line(1);  }
+   break;
+case "I":
+   if (new_in != ".")  {
+      changed = 1;
+      if (!lnptr)  file = ({ new_in2 }) + file;
+      else file = file[0 .. lnptr - 1] + ({ new_in2 }) + 
+                  file[lnptr .. ];
+      write("]");
+      if (lnptr <= tmpln)  ++tmpln;
+      ++lnptr;
+      input_to("get_new_text", "I", count + 1);
+      return;  }
+   else if (count)  {
+      write( count == 1 ? "1 line added.\n" : count + " lines added.\n");
+      fsize += count;
+      undo = ({ ({ ({ "D", lnptr - count, count }) }) }) + undo;  }
+   break;
+case "a":
+   if (strlen(new_in))  {
+      changed = 1;
+      if (tmpln < fsize)  {
+         undo = ({ ({ ({ "E", tmpln, ({ file[tmpln] }) }) }) }) + undo;
+         file[tmpln] = file[tmpln][0 .. chptr] + new_in +
+                       file[tmpln][chptr + 1 .. ];  }
+      else  {
+         undo = ({ ({ ({ "D", fsize, 1 }) }) }) + undo;
+         if (!fsize)  file = ({ new_in, "End of file." });
+         else file = file[0 .. fsize - 1] + ({ new_in, "End of file." });
+         ++fsize;  }
+      print_line(1);  }
+   break;
+case "A":
+   if (new_in != ".")  {
+      changed = 1;
+      if (lnptr + count < fsize)
+         file = file[0..lnptr + count] + ({ new_in2 }) +
+                file[lnptr + count + 1 .. ];
+      else file = file[0 .. <2] + ({ new_in2, "End of file." }); 
+      write("]");
+      input_to("get_new_text", "A", count + 1);
+      return;  }
+   else if (count)  {
+      write(count == 1 ? "1 line added.\n" : count + " lines added.\n");
+      fsize += count;    
+      undo = ({ ({ ({ "D", lnptr + 1, count }) }) }) + undo;  }
+   break;
+case "E":
+   if (new_in != ".")  {
+      changed = 1;
+      if (lnptr < fsize)  {
+         if (!count)
+            undo = ({ ({ ({ "E", lnptr, ({ file[lnptr] }) }) }) }) + undo;
+         else undo[0][0][2] += ({ file[lnptr] });
+         file[lnptr] = new_in2;  }
+      else  {
+         if (!count)  undo = ({ ({ ({ "D", lnptr, 1 }) }) }) + undo;
+         else if (undo[0][0][0] == "E")  undo[0] += ({ ({ "D", lnptr, 1 }) });
+         else ++undo[0][<1][2];
+         file = file[0 .. <2] + ({ new_in2, "End of file." });
+         ++fsize;  }
+      write("]");
+      ++lnptr; 
+      input_to("get_new_text", "E", count + 1);
+      return;  }
+   else if (count)
+      write(count == 1 ? "1 line changed.\n" : count + " lines changed.\n");
+   break;
+case "e":
+   if (strlen(new_in))  {
+      changed = 1;
+      if (tmpln < fsize)  {
+         undo = ({ ({ ({ "E", tmpln, ({ file[tmpln] }) }) }) }) + undo;
+         if (!chptr)
+            file[tmpln] = new_in + file[tmpln][strlen(new_in) .. ];
+         else file[tmpln] = file[tmpln][0 .. chptr - 1] + new_in +
+                            file[tmpln][chptr + strlen(new_in) .. ];  }
+      else  {
+         if (!fsize)  file = ({ new_in, "End of file." });
+         else file = file[0 .. fsize - 1] + ({ new_in, "End of file." });
+         undo = ({ ({ ({ "D", fsize, 1 }) }) }) + undo;
+         ++fsize;  }
+      print_line(1);  }
+   break;
+case "w":
+case "W":
+   if (strlen(new_in))  {
+      this_player()->set_in_editor(name = new_in);
+      changed = 1;
+      save_file(cmd);
+      if (cmd == "W"  &&  !changed)  return;  }
+   else write("Save canceled.\n");
+   break;
+case "O":
+   if (new_in == "Y"  ||  new_in == "y")  {
+      open_pending = 1;
+      save_file("w");  }
+   else if (new_in == "A"  ||  new_in == "a")  write("Open aborted.\n");
+   else  {
+      write("Ok, you're the boss.\n");
+      count = changed;
+      changed = 0;
+      if (open_file(newname))  undo = ({ });
+      else changed = count;  }
+   break;
+default:
+   write("How in the hell did you get here?\n");
+   break;  }
+write(":");
+input_to("get_command");
+lnptr = tmpln;
+chptr = tmpchr;
+return;  }  /* get_new_text() */
+
+
+int open_file(string filename)  {
+object *things;
+string oldname;
+
+if (changed)  {
+   write("Current file has been changed.  Save now? (Y/N/A):]");
+   input_to("get_new_text", 0, "O", 0);  
+   newname = filename;
+   return 0;  }
+else if (strlen(filename))  {
+   oldname = filename;
+   if (sizeof(things = (object *)WIZ_PRESENT->
+                                 wiz_present(filename, this_player())))  {
+      filename = file_name(things[0]);
+      sscanf(filename, "%s#%*s", filename);
+      if (file_size(filename) == -2)  filename = oldname;
+      else if (file_size(filename) == -1)  filename += ".lpc";  }
+   filename = (string)this_player()->get_path(filename);
+   if (file_size(filename) == -2)  {
+      write("Cannot edit a directory.\n");
+      return 0;  }
+   lnptr = chptr = tmpln = tmpchr = changed = open_pending = 0;
+   if (file_size(filename) == -1)  {
+      write("Opening new file.\n");
+      this_player()->set_in_editor("New file");
+      file = ({ "End of file." });
+      fsize = 0;  }
+   else  {
+      file = explode( read_file(filename), "\n" ) + ({ "End of file." });
+      write(filename + " opened");
+      if (!write_file(filename, ""))  write(" (read only)");
+      write(".  (" + (fsize = (sizeof(file) - 1)) + " lines, " +
+            file_size(filename) + " bytes)\n"); }
+   name = filename;
+   this_player()->set_in_editor(name);  }
+else  {
+   write("Opening new file.\n");
+   lnptr = chptr = tmpln = tmpchr = changed = open_pending = fsize = 0;
+   name = "";
+   this_player()->set_in_editor("New file");
+   file = ({ "End of file." });  }
+return 1;  }  /* open_file() */
+
+
+void save_file(string cmd)  {
+string tmp;
+
+tmp = read_file(name);
+if (file_size(name) > -1  &&  !rm(name))  {
+   open_pending = 0;
+   write("Could not overwrite old file.\n");  }
+else if ( !write_file(name, implode( file[0 .. <2], "\n" ) + "\n") )  {
+   write("Could not write file.\n");
+   open_pending = 0;
+   if (tmp)  write_file(name, tmp);  }  
+else {
+   changed = 0;
+   write("File '" + name + "' saved.\n");
+   if (open_pending)  {
+      open_file(newname);
+      open_pending = 0;  }  }
+if (cmd == "W"  &&  !changed)  {
+   chptr = lnptr = file = name = clipboard = 0;
+   undo = ({ });
+   this_player()->set_in_editor(0);  }
+return;  }
+
+
+void my_more(string input, string xtratxt, string *text, int startln,
+             int number, int pages)  {
+int i, j, limit, lines, oldlines;
+string junk;
+
+if (input == "q")  {
+   write(":");
+   input_to("get_command");
+   return;  }
+i = lines = limit = 0;
+if (strlen(xtratxt))  {
+   printf("%s", xtratxt + "\n");
+   lines += (strlen(xtratxt) - 1) / cols + 1;
+   xtratxt = "";  }
+j = sizeof(text);
+do  {
+   junk = (number ? (1 + startln++) + "] " + text[i] : text[i]);
+   oldlines = lines;
+   lines += (strlen(junk) - 1) / cols + 1;
+   if (lines < rows)  printf("%s", junk + "\n");
+   else  {
+      limit = cols * ( rows - oldlines - 1) - 1;
+      printf("%s", junk[0 .. limit] + "\n");
+      xtratxt = junk[limit + 1 .. ];  }  }
+while (++i < j  &&  lines < rows - 1);
+if (i < j  &&  --pages)  {
+   write("MORE... enter 'q' to stop, anything else to continue:");
+   input_to("my_more", xtratxt, text[i .. ], startln, number, pages);  }
+else  { 
+   if (i < j  &&  !pages)  lnptr -= j - i;
+   write(":");
+   input_to("get_command");  }
+return;  }  /* my_more() */
+
+
+void print_line(int show_ptr)  {
+string tmp;
+int i, chr;
+
+chr = tmpchr;
+if (showln)  {
+   tmp = (tmpln + 1) + "] " + file[tmpln];
+   chr += strlen( (tmpln + 1) + "] " );  }
+else  tmp = file[tmpln];
+if (!show_ptr)  printf("%s", tmp + "\n");
+else  {
+   i = cols * ( chr / cols + 1) - 1;
+   printf("%s", tmp[0 .. i] + "\n");
+   if ( !(chr % cols)  &&  chr )  write("\n");
+   if (chr % cols)
+      write("                                                                "
+            "                                                                "
+            "                                "[0 .. chr % cols - 1] + "^\n");
+   else write("^\n");
+   if (strlen(tmp) > i + 1)  printf("%s", tmp[i + 1 .. ] + "\n");  }
+return;  }  /* print_line() */
+
+
+void dest_me()  {
+if (changed)  {
+   if (name == "")  name = "edit";
+   name = (string)this_player()->get_path(name);
+   write_file(name + ".dead", implode(file[0 .. <2], "\n"));  }
+::dest_me();
+return;  }

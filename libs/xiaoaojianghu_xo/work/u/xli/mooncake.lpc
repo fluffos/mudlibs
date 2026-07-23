@@ -1,0 +1,180 @@
+// 月饼的流程：
+// 特殊指令有：write  gei   bai
+// 先由A在里面write一条祝福，然后gei B，B bai月饼就可以了。
+// 需要修改logind，登录进来后给一个就可以了
+
+// mooncake.c ITEM
+// 中秋月饼  用来送的
+// write by Xli for XO_Group
+// date:1999.9.23
+// Last Modified by Xli 1999.9.23
+// 月饼，中秋的时候自动发给每个登录进来的人一个
+// 不能吃，是用来送人的
+// 送给别人后，对方掰开后会有张纸条，是送的人写的一句话
+
+#include <ansi.h>
+inherit ITEM;
+
+string GetName()
+{
+    string name;
+    int i;
+    i=random( 7 );
+    switch(i)
+    {
+        case 0: name=GRN"豆沙月饼"NOR;
+        break;
+		case 1: name=YEL"莲蓉月饼"NOR;
+		break;
+		case 2: name=WHT"椰蓉月饼"NOR;
+		break;
+		case 3: name=RED"火腿月饼"NOR;
+		break;
+		case 4: name=BLK"芝麻月饼"NOR;
+		break;
+		case 5: name=BLU"桂花月饼"NOR;
+		break;
+		default:name="素月饼";
+    }
+    return name;
+}
+
+void create()
+{
+    string theName;
+    theName=GetName();
+    set_name( theName, ({ "yue bing" }) );
+    set("long","一个小小的"+theName+"，香喷喷的，刚出炉，还是热的呢！\n");
+    set_weight(50);//一两
+    if( clonep() ) 
+        set_default_object(__FILE__);
+    else 
+    {
+        set("unit", "个");
+        set("value", 3000); // 三两银子一个
+        set("cant_sell","食物不便保存，本店不收。\n");
+    }
+    setup();
+}
+
+void init()
+{
+	add_action("do_eat","eat");
+	add_action("do_gei","gei");
+	add_action("do_open",({"bai"}));
+	add_action("do_drop","drop");
+	add_action("do_write","write");
+	add_action("do_give","give");
+}
+
+int do_drop(string arg)
+{
+	if(arg!="yue bing")
+	    return "/cmds/verb/drop.lpc"->main(this_player(),arg);
+	tell_object(this_player(),"这么诱人的礼品，你怎么舍得丢弃呢？\n");
+	return 1;
+}
+
+int do_eat(string arg)
+{
+	object me;
+	me = this_player();
+	if(arg!="yue bing")
+        return "/cmds/verb/eat.lpc"->main(me,arg);
+    if(me->query("xli_marks/be_gaven_id"))// 别人送的
+    {
+    	tell_object(me,
+    	"这是"+me->query("xli_marks/be_gaven_name")+"送给你的礼物，"+
+    	"仔细一看，上面有一条非常细的小缝，你不妨掰（BAI）开来看看。\n");
+    	return 1;
+    }
+    tell_object(me,
+    MAG"这是用来送礼的月饼，你可以在里面放（WRITE）\n上你的祝福给你最想送的人！\n"NOR);
+    return 1;
+}
+
+int do_gei(string arg)
+{
+	object me,who,what;
+	string yourname;
+	
+	me=this_player();
+	what=this_object();
+	if(!arg)
+	    return notify_fail("你要把礼品月饼给谁啊？\n");
+    if ( !objectp(who = present(arg, environment(me))) )
+        return notify_fail("这里没有这个人。\n");
+    if ( arg == me->query( "id" ) )
+        return notify_fail("你自己已经有月饼吃了！\n");
+    if ( !living(who) )
+        return notify_fail( who->name() + "现在可接受不了你的东西。\n" );
+    if( who->query("env/refuse_give") )
+        return notify_fail( who->name() + "好象不大愿意接收你的物品。\n");
+    if(me->query("xli_marks/have_gaven"))  
+        return notify_fail("你已经送过了月饼给人了！\n");
+    me->set("xli_marks/have_gaven",1);
+    who->set("xli_marks/be_gaven_id",me->query("id"));
+    who->set("xli_marks/be_gaven_name",me->query("name"));
+    tell_object(me,"你把这个"+
+    what->query("name")+"当礼品送给了"+who->query("name")+"\n"+
+    "心里不禁一阵砰砰乱跳！\n");
+    tell_object(who,me->query("name")+"（"+me->query("id")+"）"+
+    "把一个"+what->query("name")+"送给你作为中秋的礼物，好幸福啊！\n");
+    what->move(who);
+    return 1;
+}
+
+int do_write(string arg)
+{
+	object me,what;
+	me = this_player();
+	what=this_object();
+	if(!arg)
+	    return notify_fail("你要写下什么样的祝福呢？\n");
+	if(me->query("xli_marks/have_gaven"))
+	    return notify_fail("你已经送过月饼给别人了！\n");
+/*	if(strlen(arg)>60)
+	    return notify_fail("祝福最多只能写三十个汉字，注意言简意赅哦！\n");
+*/	what->set("xli_marks/bless",arg);
+	tell_object(me,"你将心中的祝福写在一张纸条上，卷成一个小卷。\n");
+	tell_object(me,"你将"+what->query("name")+"轻轻掰开一条小缝，把纸卷塞了进去。\n");
+	tell_object(me,"你把"+what->query("name")+"轻轻捏拢了一些，好了，礼物做好了！\n");
+	tell_object(me,"你现在可以把这个礼品"+what->query("name")+"送给（GEI）\n你最想送的人了！\n");
+		
+	return 1;
+}
+
+int do_open(string arg)
+{
+	object me,what;
+	string whoId,whoName,bless;
+	what=this_object();
+	me=this_player();
+	if(!arg || arg!="yue bing")
+	    return notify_fail("你要掰什么？\n");
+	whoId=me->query("xli_marks/be_gaven_id");
+	whoName=me->query("xli_marks/be_gaven_name");
+	if(! whoId || !whoName)
+	    return notify_fail("这个月饼是谁送你的啊，怎么能随便就掰开呢？\n");
+	bless=format_string(what->query("xli_marks/bless"),70,1);
+
+	if(bless)
+	{
+		tell_object(me,"你轻轻地把这个"+what->query("name")+"掰开，发现里面有一个小纸卷。\n");
+		tell_object(me,"你展开小纸卷，发现上面有一行字，于是展开阅读了起来......\n");
+		tell_object(me,"\n");
+		tell_object(me,
+"◤☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆★☆◥\n"+
+"	"+me->query("name")+"\n"+
+HIG"◇\n"+bless+"◇\n"NOR+
+"                                                 "+whoName+"（"+whoId+"）\n"+
+"◣☉☉☉☉☉☉☉☉☉☉☉☉☉☉☉☉☉☉☉☉☉☉☉☉☉☉☉☉☉☉☉☉☉◢\n"+
+"\n");
+        me->delete("xli_marks/be_gaven_name	");
+        me->delete("xli_marks/be_gaven_id");
+    }
+    else
+        tell_object(me,"你掰开了这个"+what->query("name")+"，结果里面什么都没有。\n");
+    what->move("/d/menpai/qingcheng/houdian");
+    return 1;
+}

