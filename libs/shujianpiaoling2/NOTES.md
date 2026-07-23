@@ -95,3 +95,40 @@ globals, a handful of type-mismatch returns) — not triaged individually
 per AGENTS.md §6b/§13, boot + full interactive registration test is the
 verification gate. Memory stayed healthy throughout (~15GB free
 consistently, no pressure).
+
+## Rebuilt-driver / formatter / WASM re-verification pass (2026-07-23)
+
+1. **LPC formatter** applied across all 12,349 `.lpc` files in `work/`:
+   `{"total":12349,"written":12291,"wouldChange":0,"unchanged":4,
+   "errors":54}`. Verified post-format that `feature/command.lpc`'s
+   `command_hook` is still plain `nomask` and `master.lpc`'s §15w
+   `strsrch(message, "warning:") == -1` guard is intact.
+2. **Native re-test against the rebuilt `build-debug/src/driver`**:
+   booted clean (zero fatal errors). Full registration verified
+   end-to-end via `mudclient.py`: id `sjplfmtc` → confirm → real Chinese
+   name **`秦风廿二`** → password ×2 → email `abc@abc.com` → gender `m`
+   → birth-family choice `0` (书香门第) → entered the game world at
+   民居, `look` displayed the room, `score` showed a correct character
+   sheet (才智/体质/... matching a 书香门第 background), `quit` dropped
+   items and printed "欢迎下次再来！". `debug.log`: zero `error in error
+   handler`/`denied`/`undefined function`/`bad argument` lines. (Noted
+   in passing, not a regression: `get_name()`/`get_resp()` in
+   `logind.lpc` both contain a pre-existing `printf("%O\n", ob);`
+   debug leftover from the original archive that echoes the login
+   object's `/obj/login#N` identifier to the player right after a valid
+   Chinese name is entered — harmless, doesn't block registration,
+   present before this pass and left as-is per the project's "don't fix
+   unrelated cosmetic content" convention.)
+3. **WASM test**: boots cleanly (only the expected non-fatal preload
+   noise — an `Invalid utf8 string while restoring emote` on
+   `restore_object()`, same class of harmless save-data quirk as other
+   libs, and the usual missing-sockets-package compile errors for any
+   network daemons). **Full registration completed successfully under
+   wasm**: id → confirm → Chinese name → password ×2 → email → gender →
+   birth-family choice → entered 民居 → `look`/`quit` both produced
+   correct real output, ending with the same "欢迎下次再来！" farewell as
+   the native session. This lib has **no IP-format-dependent login gate**
+   (no `sited`-style `query_ip_number()` check blocking new
+   connections), so it is **fully playable under wasm**, unlike several
+   sibling libs in this batch — the best-case wasm result observed this
+   pass.
