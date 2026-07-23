@@ -483,3 +483,67 @@ gameplay reachable from the tested paths).
 - `cmds/help2.lpc` — §15f bare `array` → `mixed *` (2 declarations)
 - `kungfu/class/generate/spekilled.lpc` — wrong `query()` call convention
   fixed to `call_other`
+
+## 2026-07-23: driver rebuild retest + LPC formatter + WASM check
+
+- **Formatter**: ran `tools/lpc-syntax`'s `format-corpus.mjs` over all
+  10756 `.lpc` files in `work/`; 10722 written, 30 already-conformant,
+  4 errors (files it refused to touch). **Found a real formatter bug**
+  while spot-checking: the formatter corrupts a same-line `::PARENT_FUNC(...)`
+  call when the `if (` condition wraps across the closing paren onto its
+  own line — it splits `::` into `: :` across a line break and drops the
+  matching close-paren, producing invalid syntax (`if (: : move(dest,
+  silent)\n)\n{ ... }`, an extra stray `}` left dangling). This is a bug
+  in the formatter itself, not a lib-specific issue — the exact same
+  corruption pattern was found and fixed in 2 other files in *this* lib
+  (`inherit/item/task.lpc`'s `::move`, `kungfu/class/huashan/yue-wife.lpc`'s
+  `::recruit_apprentice`) plus 2 `return (::FUNC(...))`-shaped variants
+  (`kungfu/skill/{biyun-xinfa,sanku-shengong}.lpc`'s `::valid_learn`,
+  `d/fuzhou/mishi.lpc`'s `::valid_leave`), and independently in 5 sibling
+  libs in this same pass (`xlqy_early`/`xlqy_new2007`'s shared
+  `d/sky/xitian.lpc`, `xo_final`'s `system/daemon/user.lpc`, 4 files in
+  `xuanjianlu`, `yanhuangyingxiongshi`'s own copies of this lib's 2
+  `combined.lpc`/`yue-wife.lpc` bugs, and 18 files in
+  `yanlongfengyin_xiaoao3`). Fixed all 6 instances in this lib by hand
+  (restored the original `::FUNC(...)` call and matching brace structure,
+  verified byte-for-byte against the pre-format git blob to make sure the
+  original control flow — e.g. `combined.lpc`'s `return 1` staying
+  *inside* the `if (::move(...))` block, not hoisted out — was preserved
+  exactly), then re-ran the formatter over just those files, which now
+  formats them correctly (confirms the bug is specifically the
+  line-wrapped variant, not `::` in general). Verified all 3 files
+  compile clean via `lpcc`. **Worth reporting upstream to whoever owns
+  `tools/lpc-syntax`** — this is a real, if narrow, formatter
+  regression risk for any `::`-heavy mudlib, not specific to this batch.
+- **Native retest**: rebuilt `~/src/fluffos/build-debug/src/driver`
+  booted clean after the formatter-bug fixes above (zero fatal
+  `debug.log` errors). Full registration re-verified with a real
+  Chinese name (秦岭, id `qinlingnew` to dodge a stale same-session name
+  collision from an earlier throwaway attempt): id/confirm/surname/
+  given-name/admin-password/password/type/gender all completed, landed
+  in 世外桃源 exactly as the original pass found; `look` correctly
+  re-displayed the room, `quit` gave the correct farewell. Zero real
+  debug.log errors.
+- **WASM**: booted with the expected non-fatal `socket_*`/"Undefined
+  function" preload noise (missing `sockets` package). **Found a real,
+  reproducible WASM-specific registration blocker**: `adm/daemons/
+  logind.lpc`'s `logon()` calls `!VERSION_D->is_version_ok()` directly
+  (uncaught — unlike the immediately-preceding `catch(MUDLIST_CMD->
+  main())` on the line above) as part of printing the login banner,
+  *before* the username prompt. Since `adm/daemons/versiond.lpc` uses
+  `socket_create`/`socket_bind`/`socket_listen` and fails to compile
+  entirely under this WASM build (no `sockets` package), calling
+  `VERSION_D->is_version_ok()` throws "*No program in object" — and
+  because this call is unguarded, the error aborts `logon()` entirely
+  right there, so **the username prompt itself never appears** and
+  registration cannot proceed at all under WASM. Confirmed reproducible
+  across multiple attempts/timeouts (60s+); confirmed this is NOT
+  present natively (versiond compiles fine there, full playthrough
+  above was clean). This is a different (and more severe) manifestation
+  of the same documented "no sockets package under WASM" restriction —
+  not a mudlib bug (native is completely unaffected) and not the
+  `query_ip_number()` limitation either. **Not patched** (would require
+  either adding a `catch()` around a call the mudlib author didn't
+  guard, or a driver-level sockets stub, both out of scope for this
+  smoke-test pass) — documented here and in the README as "does not
+  boot into registration under WASM" rather than "playable."
