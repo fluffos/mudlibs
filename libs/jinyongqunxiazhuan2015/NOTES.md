@@ -415,3 +415,27 @@ time).
   every other already-shipped lib's convention (it's the sweep's
   designed, permanent-per-lib output artifact, not an ad hoc scratch
   file).
+
+## Re-verification pass: driver rebuild + LPC formatter + WASM build
+
+- **LPC formatter** (AGENTS.md "Post-conversion tooling"): ran
+  `format-corpus.mjs` over all 3,256 `.lpc` files — 3,227 reformatted in
+  place, 29 refused (nonzero `errors` is expected/fine on messy legacy
+  code per the tool's own self-check contract, not chased down).
+- **Native retest against rebuilt driver** (`~/src/fluffos/build-debug/
+  src/driver`, rebuilt fresh from upstream master): booted clean, zero
+  fatal errors in `debug.log` (only pre-existing non-fatal warnings and
+  the already-documented `chinesed`/board corrupted-save-data
+  `catch()` hits). Full registration verified with a fresh real name
+  (秦风八) — English id → confirm → Chinese name → password ×2 → accept
+  stats → email → gender m → arrives in 客店; `look`/`score`/`quit` all
+  produce correct real output. No regressions from either the rebuilt
+  driver or the reformat; no fixes needed this pass.
+- **WASM build test** (`scripts/wasm_client.js` against
+  `build-wasm/src`): boots cleanly in-process (only ordinary compile
+  warnings, no fatal preload errors). Full registration/login flow
+  completed successfully under WASM too (id → name 秦风瓦 → password →
+  stats → email → gender → 客店 arrival), `look`/`quit` also correct —
+  this lib has no IP/site-gating daemon on its login path, so it is
+  **not** affected by the documented `query_ip_number()` WASM
+  limitation and reaches a full playable state under WASM.
