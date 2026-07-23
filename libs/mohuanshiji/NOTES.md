@@ -466,3 +466,35 @@ pass (97.4%)**. Remaining 219 failures triaged by category:
   archive of the batch — none are reachable from the preload list or the
   tested registration/`look`/`score` path, consistent with the project's
   stated "breadth over exhaustive depth" priority.
+
+## Re-verification pass: driver rebuild + formatter + WASM (2026-07-23)
+
+- **LPC formatter**: ran `format-corpus.mjs` across all 8535 `.lpc` files
+  under `work/` — 8383 reformatted, 133 unchanged, 19 refused
+  (token-mismatch safety gate, expected/fine, not investigated further).
+- **Native retest against the freshly-rebuilt driver**: booted clean
+  (`Initializations complete.`, zero fatal errors). Repeated the full
+  registration flow from this file's own "Registration-flow" section
+  above with a fresh real Chinese name (`秦风六` / id `qflibsj`),
+  reached 南城客栈, and confirmed `score` renders correctly and `quit`
+  exits cleanly ("欢迎下次再来！"). No regression from the reformat or
+  driver rebuild — behavior identical to the original conversion pass.
+- **WASM build test** (`scripts/wasm_client.js`): **fully playable**,
+  including a full real-name registration (`秦风七` / id `qflibwsj`)
+  reaching 南城客栈 with correct room/NPC text and a clean `quit`. One
+  thing worth flagging for the record: `debug.log` shows a single
+  non-fatal `*Array index out of bounds` trace from `adm/daemons/
+  ipd.lpc`'s `seek_ip_address()` during `enter_world()` — the exact same
+  root cause as the documented `query_ip_number()`-under-WASM limitation
+  (an empty/malformed IP string breaks `ipd.lpc`'s `explode(ip,
+  ".")[1]` indexing), but here it fires from `enter_world()`'s tail-end
+  "welcome, you're connecting from…" text lookup, which runs *after* the
+  character is already created and moved into the world — so the
+  uncaught error just skips that one cosmetic message instead of
+  breaking the `input_to()` callback chain the way it does for `mhxy`
+  (same bug, same lineage's `ipd.lpc`, different call site — this one
+  isn't gating anything). Confirmed no functional impact: registration
+  completed, room description/NPCs/exits all rendered normally, and
+  `quit` worked. Status: **fully playable under WASM** (with one
+  cosmetic, non-blocking IP-lookup error logged, same driver-level root
+  cause as `mhxy`'s WASM limitation but not blocking here).
