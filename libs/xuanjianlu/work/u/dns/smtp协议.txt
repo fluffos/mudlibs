@@ -1,0 +1,172 @@
+smtp协议
+前言
+
+　　电子邮件服务作为Internet上应用最多和最广的服务项目得到了非常广泛的应用，在网络应用中也起到非常重要的作用。如同其他的网络服务，电子邮件系统也有其使用的传输协议，包括SMTP（Simple Mail Transfer Protocol，简单邮件传输协议）、POP（Post Office Protocol，邮局协议）和IMAP（Internet Message Access Protocal，消息访问协议）等，这些协议应用于电子邮件的发送和接收。一些邮件处理软件如OutLook Express和FoxMail等就是按照SMTP和POP3 协议结合Windows Sockets套接字进行设计来收发邮件的。本文以SMTP协议为研究对象，在Visual C++ 6.0编程环境下按照SMTP协议通过套接字发送SMTP命令，接收并处理邮件服务器的反馈信息，从而实现对电子邮件的发送。
+
+　　SMTP协议的通讯模型和会话流程
+
+　　SMTP协议通讯模型
+
+　　SMTP协议是TCP/IP协议族中的一员，主要对如何将电子邮件从发送方地址传送到接收方地址，也即是对传输的规则做了规定。SMTP协议的通信模型并不复杂，主要工作集中在发送SMTP和接收SMTP上：首先针对用户发出的邮件请求，由发送SMTP建立一条连接到接收SMTP的双工通讯链路，这里的接收SMTP是相对于发送SMTP而言的，实际上它既可以是最终的接收者也可以是中间传送者。发送SMTP负责向接收SMTP发送SMTP命令，而接收SMTP则负责接收并反馈应答。可大致用下面的通讯模型示意图来表示：
+
+ 此主题相关图片如下：
+
+　SMTP协议的命令和应答
+
+　　从前面的通讯模型可以看出SMTP协议在发送SMTP和接收SMTP之间的会话是靠发送SMTP的 SMTP命令和接收SMTP反馈的应答来完成的。在通讯链路建立后，发送SMTP发送MAIL命令指令邮件发送者，若接收SMTP此时可以接收邮件则作出OK的应答，然后发送SMTP继续发出RCPT命令以确认邮件是否收到，如果接收到就作出OK的应答，否则就发出拒绝接收应答，但这并不会对整个邮件操作造成影响。双方如此反复多次，直至邮件处理完毕。SMTP协议共包含10个SMTP命令，列表如下：
+
+SMTP命令 命令说明 
+HELLO ＜domain＞ ＜CRLF＞ 识别发送方到接收SMTP的一个HELLO命令 
+MAIL FROM:＜reverse-path＞＜CRLF＞ ＜reverse-path＞为发送者地址。此命令告诉接收方一个新邮件发送的开始，并对所有的状态和缓冲区进行初始化。此命令开始一个邮件传输处理，最终完成将邮件数据传送到一个或多个邮箱中。 
+RCPT TO:＜forward-path＞＜CRLF＞ ＜forward-path＞标识各个邮件接收者的地址 
+DATA ＜CRLF＞ 
+接收SMTP将把其后的行为看作邮件数据去处理，以＜CRLF＞.＜CRLF＞标识数据的结尾。 
+REST ＜CRLF＞ 退出/复位当前的邮件传输 
+NOOP ＜CRLF＞ 要求接收SMTP仅做OK应答。（用于测试） 
+QUIT ＜CRLF＞ 要求接收SMTP返回一个OK应答并关闭传输。 
+VRFY ＜string＞ ＜CRLF＞ 验证指定的邮箱是否存在，由于安全因素，服务器多禁止此命令。 
+EXPN ＜string＞ ＜CRLF＞ 验证给定的邮箱列表是否存在，扩充邮箱列表，也常禁止使用。 
+HELP ＜CRLF＞ 查询服务器支持什么命令 
+
+注：＜CRLF＞为回车、换行，ASCII码分别为13、10（十进制）。
+
+　　SMTP协议的每一个命令都会返回一个应答码，应答码的每一个数字都是有特定含义的，如第一位数字为2时表示命令成功；为5表失败；3表没有完成。一些较复杂的邮件程序利用该特点，首先检查应答码的首数字，并根据其值来决定下一步的动作。下面将SMTP的应答码列表如下：
+
+应答码 说明 
+501 参数格式错误 
+502 命令不可实现 
+503 错误的命令序列 
+504 命令参数不可实现 
+211 系统状态或系统帮助响应 
+214 帮助信息 
+220 ＜domain＞服务就绪 
+221 ＜domain＞服务关闭 
+421 ＜domain＞服务未就绪，关闭传输信道 
+250 要求的邮件操作完成 
+251 用户非本地，将转发向＜forward-path＞ 
+450 要求的邮件操作未完成，邮箱不可用 
+550 要求的邮件操作未完成，邮箱不可用 
+451 放弃要求的操作；处理过程中出错 
+551 用户非本地，请尝试＜forward-path＞ 
+452 系统存储不足，要求的操作未执行 
+552 过量的存储分配，要求的操作未执行 
+553 邮箱名不可用，要求的操作未执行 
+354 开始邮件输入，以"."结束 
+554 操作失败 
+　在应用程序中使用SMTP协议
+
+　　SMTP协议的会话流程
+
+　　在进行程序设计之前有必要弄清SMTP协议的会话流程，其实前面介绍的内容已经可以大致勾勒出用SMTP发送邮件的框架了，对于一次普通的邮件发送，其过程大致为：先建立TCP连接，随后客户端发出HELLO命令以标识发件人自己的身份，并继续由客户端发送MAIL命令，如服务器应答为"OK"，可继续发送RCPT命令来标识电子邮件的收件人，在这里可以有多个RCPT行，而服务器端则表示是否愿意为收件人接受该邮件。在双方协商结束后，用命令DATA将邮件发送出去，其中对表示结束的"."也一并发送出去。随后结束本次发送过程，以QUIT命令退出。下面通过一个实例，从langrui@sohu.com发送邮件到renping@sina.com来更详细直观地描述此会话流程：
+
+R:220 sina.com Simple Mail Transfer Service Ready
+S:HELLO sohu.com
+R:250 sina.com
+S:MAIL FROM:＜langrui@sohu.com＞
+R:250 OK
+S:RCPT TO:＜renping@sina.com＞
+R:250 OK
+S:DATA
+R:354 Start mail input;end with "＜CRLF＞.＜CRLF＞"
+S:……
+R:250 OK
+S:QUIT
+R:221 sina.com Service closing transmission channel 
+
+　　邮件的格式化
+
+　　由于电子邮件结构上的特殊性，在传输时是不能当作简单的文本来直接处理的，而必须按照一定的格式对邮件头和邮件体进行格式化处理之后才可以被发送。需要进行格式化的部分主要有：发件人地址、收件人地址、主题和发送日期等。在RFC文档的RFC 822里对邮件的格式化有详尽的说明，有关详情请参阅该文档。下面通过VC++6.0按照RFC 822文档规定将格式化邮件的部分编写如下（部分代码）：
+
+//邮件头准备
+strTemp = _T( "From: " ) + m_strFrom; file://发件人地址
+add_header_line( (LPCTSTR)strTemp );
+strTemp = _T( "To: " ) + m_strTo; file://收件人地址
+add_header_line( (LPCTSTR)strTemp );
+m_tDateTime = m_tDateTime.GetCurrentTime();//发送时间
+strTemp = _T( "Data: " );
+strTemp += m_tDateTime.Format( "%a, %d %b %y %H:%M:%S %Z" );
+add_header_line( (LPCTSTR)strTemp );
+strTemp = _T( "Subject: " ) + m_strSubject; file://主题
+add_header_line( (LPCTSTR)strTemp );
+file://邮件头结束
+m_strHeader += _T( "\r\n" );
+file://邮件体准备
+if( m_strBody.Right( 2 ) != _T( "\r\n" ) ) file://确认最后以回车换行结束
+m_strBody += _T( "\r\n" ); 
+
+　　其中add_header_line(LPCTSTR szHeaderLine)函数用于把szHeaderLine指向的字串追加到m_strHeader后面。其中，格式化后的邮件头保存在m_strHeader里，格式化后的邮件体保存在m_strBody中。
+
+　　由Socket套接字为SMTP提供网络通讯基础
+
+　　许多网络程序都是采用Socket套接字实现的，对于一些标准的网络协议如HTTP、FTP和SMTP等协议的编程也是基于套接字程序的，只是端口号不再是随意设定而要由协议来指定，比如HTTP端口在80、FTP是21，而SMTP则是25。Socket只是提供在指定的端口上同指定的服务器从事网络上的通讯能力，至于客户和服务器之间是如何通讯的则由网络协议来规定，这对于套接字是完全透明的。因此可以使用Socket套接字为程序提供网络通讯的能力，而对于网络通讯连路建立好之后采取什么样的通讯应答则要按SMTP协议的规定去执行了。Socket套接字网络编程方面的文章资料非常丰富，限于本文篇幅，在此不再赘述，有关详情请参阅相关文档。为简便起见，没有采用编写较复杂的Windows Sockets API进行编程，而是使用经过较好封装的MFC 的CSocket类。在正式使用套接字之前，也要先用AfxSocketInit()函数对套接字进行初始化，然后用Create()创建套接字对象，并由该套接字通过Connect（）建立同邮件服务器的连接。如果一切正常，再后续的工作中就是遵循SMTP协议的约定来使用Send（）、Receive()函数来发送SMTP命令和接收邮件服务器发来的应答码以完成对邮件的传送。
+
+　　SMTP会话应答的实现
+
+　　在同邮件服务器建立好链路连接后就可以按前面介绍过的会话流程进行程序设计了，对于SMTP命令的发送，可按命令格式将其组帧完毕后用CSocket类的Send()函数将其发送到服务器，并通过CSocket类的Receive()函数接收从邮件服务器发来的应答码，并根据SMTP协议的应答码表对其做出响应的处理。下面是用于接收应答码的函数get_response()的部分实现代码：
+
+BOOL CSMTP::get_response( UINT response_expected )//输入参数为希望的应答码
+{
+……
+// m_wsSMTPServer为CSocket的类对象，调用Receive()将应答码接收到缓存
+// response_buf中
+m_wsSMTPServer.Receive( response_buf, RESPONSE_BUFFER_SIZE )
+sResponse = response_buf;
+sscanf( (LPCTSTR)sResponse.Left( 3 ), _T( "%d" ), &response );
+pResp = &response_table[ response_expected ];
+file://检验收到的应答码是否是所希望得到的
+if( response != pResp-＞nResponse )
+{
+……//不相等的话进行错误处理
+return FALSE;
+}
+return TRUE;
+} 
+
+　　会话的各个部分比较类似，都是命令--应答方式，而且均成对出现，下面是本文的重点也是实现的关键部分--在程序控制下完成对SMTP命令的格式化以及对命令的发送和对邮件服务器应答码的检验处理：
+
+//格式化并发送HELLO命令，并接收、验证服务器应答码
+gethostname( local_host, 80 );
+sHello.Format( _T( "HELO %s\r\n" ), local_host );
+m_wsSMTPServer.Send( (LPCTSTR)sHello, sHello.GetLength() );
+if( !get_response( GENERIC_SUCCESS ) ) file://检验应答码是否为250
+{
+……
+return FALSE;
+}
+file://格式化并发送MAIL命令，并接收、验证服务器应答码
+sFrom.Format( _T( "MAIL From: ＜%s＞\r\n" ), (LPCTSTR)msg-＞m_strFrom );
+m_wsSMTPServer.Send( (LPCTSTR)sFrom, sFrom.GetLength() );
+if( !get_response( GENERIC_SUCCESS ) ) file://检验应答码是否为250
+return FALSE;
+file://格式化并发送RCPT命令，并接收、验证服务器应答码
+sEmail=(LPCTSTR)msg-＞m_strTo;
+sTo.Format( _T( "RCPT TO: ＜%s＞\r\n" ), (LPCTSTR)sEmail );
+m_wsSMTPServer.Send( (LPCTSTR)sTo, sTo.GetLength() );
+if(!get_response( GENERIC_SUCCESS )) file://检验应答码是否为250
+return FALSE;
+file://格式化并发送DATA命令，并接收、验证服务器应答码
+sTemp = _T( "DATA\r\n" );
+m_wsSMTPServer.Send( (LPCTSTR)sTemp, sTemp.GetLength() );
+if( !get_response( DATA_SUCCESS ) ) file://检验应答码是否为354
+return FALSE;
+file://发送根据RFC 822文档规定格式化过的邮件头
+m_wsSMTPServer.Send( (LPCTSTR)msg-＞m_strHeader, msg-＞m_strHeader.GetLength() );
+……
+file://发送根据RFC 822文档规定格式化过的邮件体
+sTemp = msg-＞m_strBody;
+if( sTemp.Left( 3 ) == _T( ".\r\n" ) )
+sTemp = _T( "." ) + sTemp;
+while( (nPos = sTemp.Find( szBad )) ＞ -1 )
+{
+sCooked = sTemp.Mid( nStart, nPos );
+sCooked += szGood;
+sTemp = sCooked + sTemp.Right( sTemp.GetLength() - (nPos + nBadLength) );
+}
+m_wsSMTPServer.Send( (LPCTSTR)sTemp, sTemp.GetLength() );
+file://发送内容数据结束标志"＜CRLF＞.＜CRLF＞"，并检验返回应答码
+sTemp = _T( "\r\n.\r\n" );
+m_wsSMTPServer.Send( (LPCTSTR)sTemp, sTemp.GetLength() );
+if( !get_response( GENERIC_SUCCESS ) )// 检验应答码是否为250
+return FALSE; 
+
+　　到此为止，已基本在程序中体现出了SMTP协议的会话流程，能在Socket套接字所提供的网络通讯能力基础之上实现以SMTP命令和SMTP应答码为基本会话内容的通讯交互过程，从而最终实现SMTP协议对电子邮件的发送。

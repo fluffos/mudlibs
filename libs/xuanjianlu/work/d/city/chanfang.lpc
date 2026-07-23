@@ -1,0 +1,214 @@
+// Room: chanfang.c
+
+inherit ROOM;
+#include <ansi.h>
+
+inherit F_SSERVER;
+#define baby_D "/clone/npc/baby.lpc"
+
+int do_gather();
+
+void create()
+{
+        set("short", "产房");
+        set("long", @LONG
+这是一间专门为孕妇准备的产房,两个阌婆正在忙着帮助来此的夫妇，
+你的妻子要是怀孕了就赶快来哟。
+LONG
+        );
+        set("no_fight",1);
+        set("no_sleep_room",1);
+        set("no_steal",1);
+        set("no_beg",1);
+        set("no_study",1);
+        set("no_yun",1);
+
+        set("exits", ([
+                "down" : "/d/city/yaopu",
+        ]));
+        "/clone/board/baby_b"->foo();
+        setup();
+}
+
+void init()
+{
+
+//    add_action("do_findbaby","findbaby");
+
+}
+
+object* find_my_babys(string arg, int care_about_task)
+{
+    object player = this_player();
+    object *result, *tmp, *env, target;
+    int    i, n;
+
+    if (arg) {	// asking for a specific baby
+        target = present(arg, environment(player));
+	if (target->is_character() &&
+	    living(target) && 
+	    !target->is_busy() &&
+	    !target->has_task() &&
+	    target->is_baby_of(player)) {
+	    result = allocate(1);
+	    result[0] = target;
+	    return result;
+	}
+	return 0;
+    }
+
+    // asking for all baby in this room
+    env = all_inventory(environment(player));
+    tmp = allocate(sizeof(env));
+    n = 0;
+    for (i=sizeof(env)-1; i>=0; i--){
+ 	if (env[i]->is_character() &&
+	    living(env[i]) &&
+	    !env[i]->is_busy() &&
+	    (!care_about_task || !env[i]->has_task()) &&
+	    env[i]->is_baby_of(player)) {
+	    tmp[n++] = env[i];
+	}
+    }
+    
+    if (n==0) return 0;
+    result = allocate(n); // now we know how many baby there are
+    for (i=0; i<n; i++) {
+ 	result[i] = tmp[i];
+    }
+    return result;
+}
+
+int do_findbaby()
+{
+    object me=this_player(),*list,*parents,baby,where;
+    int number,size,i,j,found;
+    string myid,*babyid;
+
+    number=me->query("child");
+    if(number==0) return notify_fail("您还没有生下孩子呢。:)\n");
+
+    myid=me->query("id");
+
+    list=children("/clone/npc/baby");
+    size=sizeof(list);
+
+    for(i=1;i<=number;i++)
+    {
+        found=0;
+        if(size>0)
+        {
+            for(j=0;j<size;j++)
+            {
+                if(list[j]->query("id")==me->query("child_"+i+"/id")[0])
+                {
+                    where=environment(list[j]);
+                    if(where)
+                    {
+                        found=1;
+                        write(list[j]->query("name")+"现在在");
+                        if(where->query("short"))
+                        {
+                            write(where->query("short"));
+                        }
+                        else
+                        {
+                            write(where->short());
+                        }
+                        write("。\n");
+                        break;
+// If one have more than one boys or girls, break here after first match. Dream 01/03/98.
+                    }
+                }
+            }
+        }
+        if(found==0)
+        {
+            if(me->query("child_"+i+"/id"))
+            {
+     //modify old baby data, for compatibility.
+                if(stringp(me->query("child_"+i+"/id")))
+                {
+                    babyid=({me->query("child_"+i+"/id")})+({"baby"});
+                    me->set("child_"+i+"/id",babyid);
+                    me->save();
+                }
+                babyid=me->query("child_"+i+"/id");
+
+				baby = new(baby_D);
+				baby->set("long",me->query("child_"+i+"/long"));
+				baby->set("gender",me->query("child_"+i+"/gender"));
+				baby->set("parents",me->query("child_"+i+"/parents"));
+				baby->reload_baby(me, i);
+				baby->set_name(me->query("child_"+i+"/name"),me->query("child_"+i+"/id") );
+				baby->move(environment(me));
+				baby->set_leader(me);
+                message_vision("你忽然看到床底下"+
+                   ({"探出一颗小脑瓜","伸出一双小脚丫","伸出一支小手"})
+                   [random(3)]+"．．．\n",me);
+            }
+            else
+            {
+                write("Error: don't have data for baby "+i+". Please report to wiz. :)\n");
+            }
+        }
+    }
+    return 1;
+}
+/*
+int do_findbaby()
+{
+    object me = this_player();
+    object baby, *obs, ob;
+    int serial, i, baby_num;
+    int *baby_ready;
+
+    baby_num=me->query("child");
+    if(baby_num==0) return notify_fail("您还没有生下孩子呢。:)\n");
+
+//    message_vision("$N拖长了声音道：来人哪。。。\n", me);
+    baby_ready = allocate(baby_num+1);
+    for (i=0; i<baby_num+1; i++){
+        baby_ready[i] = 0;
+    }
+
+    obs = filter_array(children(baby_D), (: clonep :));
+    foreach (ob in obs) {
+        if ((serial = ob->is_baby_of(me))){
+            baby_ready[serial] = 1;
+	    if (ob->is_busy() ||
+	        ob->has_task() ||
+	  	ob->is_fighting()) {
+		tell_object(me, ob->name()+"派人捎信来说他正忙着公务呢。\n");
+	    } else {
+		if (environment(me) != environment(ob)){
+                    ob->move(environment(me));
+					message_vision("你忽然看到床底下"+
+                   ({"探出一颗小脑瓜","伸出一双小脚丫","伸出一支小手"})
+                   [random(3)]+"．．．\n",baby);
+		}else{
+		    message_vision("$N答应道：我在这里呢。\n", baby);
+		}
+            }
+        }
+    }
+
+    for (i=1; i<baby_num+1; i++){
+	if (baby_ready[i] == 0) {
+	    baby = new(baby_D);
+		baby->set("long",me->query("child_"+i+"/long"));
+		baby->set("gender",me->query("child_"+i+"/gender"));
+		baby->set("parents",me->query("child_"+i+"/parents"));
+	    baby->reload_baby(me, i);
+		baby->set_name(me->query("child_"+i+"/name"),me->query("child_"+i+"/id") );
+	    baby->move(environment(me));
+	    baby->set_leader(me);
+//	    message_vision("$N快步走了过来。\n", baby);
+		                message_vision("你忽然看到床底下"+
+                   ({"探出一颗小脑瓜","伸出一双小脚丫","伸出一支小手"})
+                   [random(3)]+"．．．\n",baby);
+	}
+    }
+    return 1;
+}
+*/

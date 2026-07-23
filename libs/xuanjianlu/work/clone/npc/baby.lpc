@@ -1,0 +1,449 @@
+//Cracked by Roath
+
+#include <ansi.h>
+
+#ifndef NPCDATA
+#define NPCDATA "/data/npc/baby/"
+#endif
+
+inherit NPC;
+inherit F_SAVE;
+inherit F_SSERVER;
+
+int auto_perform();
+void get_baby_name();
+int is_baby_of(object player);
+string answer_inqiry(string question);
+int reload_baby(object player, int serial);
+int ask_quit();
+void create()
+{
+		seteuid(getuid());
+		set_name("宝宝", ({"xiao baobao","baby"}) );
+        set("long","乖宝宝。\n");
+        set("gender", "男性");
+        set("age", 1);
+
+        set("parents",({"dad","mom"}));
+		set("chat_chance_combat", 50);
+
+        setup();
+        carry_object("/clone/armor/cloth")->wear();
+}
+
+void init()
+{
+		add_action("do_get","get");
+		add_action("do_drop","drop");
+		save();
+}
+int do_drop(string arg)
+{
+      object me=this_object(),who=this_player(),env;
+      if(!arg) return 0;
+      env = environment(who);
+      if(present(arg,who)!=me) return 0;
+      if(me->move(env))
+      {
+             message_vision("$N把$n从怀里放了下来。\n",who,me);
+             return 1;
+      }
+      return 0;
+}
+
+int do_get(string arg)
+{
+      object me=this_object(),who=this_player(),env;
+
+      if(!arg) return 0;
+      env = environment(who);
+      if(present(arg,env)!=me) return 0;
+      if(member_array(who->query("id"),
+             me->query("parents"))>-1)
+      {
+             if(me->move(who))
+             {
+                   message_vision("$N弯下腰把$n抱了起来，搂在怀里。\n",who,me);
+             }
+             else
+             {
+                   message_vision("$N弯下腰一抱却没把$n抱起来，小家伙好沉哪！\n",who,me);
+             }
+      }
+      else
+      {
+             message_vision("$N蹲下身朝$n伸开双手，$n却一下子闪开了．．．\n",who,me);
+      }
+      return 1;
+}
+void relay_emote(object ob, string verb)
+{
+      if( !userp(ob) ) return;
+
+      switch(verb)
+      {
+            case "kick":
+                 command("say 爹～～，娘～～，"  + ob->query("name") + "踢我耶！");
+                 command("kick " + ob->query("id"));
+                 break;
+            case "slap":
+                 command("say 爹～～，娘～～，"  + ob->query("name") +
+                 "打我耶，好痛啊～～～～");
+                 command("slap " + ob->query("id"));
+                 break;
+            case "hit":
+                 command("pain " + ob->query("id"));
+                 break;
+            case "bite":
+                 command("face " + ob->query("id"));
+                 break;  
+            case "papaya":
+                 command("angry");
+                 break;  
+      }
+}
+void relay_whisper(object me, string msg)
+{
+      if (member_array(me->query("id"),query("parents"))==-1)
+      {
+            message_vision((string)this_object()->query("name")
+                        + "疑惑地看着$N。\n", me);
+            return;
+      }
+
+      //note, do not allow the order contain "chat", "tell"...
+      //may need disable more later...
+      if( strsrch(msg, "chat") != -1 ||
+          strsrch(msg, "tell") != -1 ||
+//          strsrch(msg, "follow") != -1 ||
+          strsrch(msg, "apprentice") != -1 ||
+          strsrch(msg, "recruit") != -1 )
+            return;
+
+      if (msg)
+      {
+            remove_call_out ("relaying");
+            call_out ("relaying", 1+random(3), msg);
+      }
+}
+
+void relaying (string msg)
+{
+//execute the order.
+      command (msg);
+}
+string answer_inqiry(string ques)
+{
+    object me = this_object();
+    object player = this_player();
+    object ob;
+    string name, msg, info;
+
+    name = me->query("master");
+    switch (ques) {
+    case "healme" :
+	if (me->is_baby_of(player)) {
+	    command("yun lifeheal "+player->query("id"));
+	    return "好的。";
+	}
+   	return "我干吗要给你疗伤啊？";
+    case "unarmed" :
+	if (me->is_baby_of(player)) {
+	    remove_call_out("drop_all_weapon");
+	    me->delete("default_weapon");
+	    call_out("drop_all_weapon", 1);
+	    return "遵命。";
+	}
+	return "现在是使用拳脚的时候了。";
+    case "exp":
+	if (me->is_baby_of(player)){
+	    msg = "我的情况：";
+	    info = "经验 "+me->query("combat_exp")+" 点";
+	    command("whisper "+name+" "+msg+info);
+	    return "大概就是这个样子了吧。";
+    }
+	break;
+    }
+    return "什么？";
+}
+
+string query_save_file()
+{
+    object me = this_object();
+    string master = query("master");
+    int serial = query("serial");
+
+    if (master){
+	return NPCDATA+"baby/"+master+serial;
+    }else{
+	return NPCDATA+"baby/none";
+    }
+}
+
+void new_master(object player, int serial, string menpai)
+{
+    set("master", player->query("id"));
+    set("serial", serial);
+
+    // TODO: we can set the init status of the
+    // baby according to the status of the player.
+
+    save();	
+    reload_baby(player, serial);
+}
+
+
+int is_baby_of(object player)
+{
+    if (player->query("id") == query("master")){
+        return query("serial");
+    }else{
+	return 0;
+    }
+}
+
+int reload_baby(object player, int serial)
+{
+    set("master", player->query("id"));
+    set("serial", serial);
+
+    restore();    
+    set_name(query("name"), ({query("id_long"), query("id_short")}));
+
+    set("inquiry", ([
+	"拳脚" : (: answer_inqiry, "unarmed" :),
+	"unarmed" : (: answer_inqiry, "unarmed" :),
+	"barehand" : (: answer_inqiry, "unarmed" :),
+	"疗伤" : (: answer_inqiry, "healme" :),
+	"healme" : (: answer_inqiry, "healme" :),
+	"休息" : (: ask_quit, "quit" :),
+	"xiuxi" : (: ask_quit, "quit" :),
+	"save" : (: ask_quit, "quit" :),
+	"quit" : (: ask_quit, "quit" :),
+	"exp" : (: answer_inqiry, "exp" :),
+	"经验" : (: answer_inqiry, "exp" :),
+    ]));
+
+    set("chat_msg_combat", ({ (: auto_perform :) }));
+}
+int ask_quit()
+{
+	object me = this_object();
+    object player = this_player();
+
+	me->set("xiuxi_time", player->query("mud_age"));
+	me->save();
+	tell_object(player, "好的，让"+me->query("name")+
+		    "保存数据退出。\n");
+	message_vision("$N离开了。\n", me);
+	destruct(me);
+	return 1;
+}
+int auto_perform()
+{
+        object me=this_object();
+        object weapon=me->query_temp("weapon");
+        object opp=me->select_opponent();
+	int    i=0, limit;
+
+	if (me->is_busy() ) return 1;
+
+	if (me->query("eff_qi") < me->query("max_qi")-300) {
+	    COMMAND_DIR"std/halt"->main(me);
+	    while(me->query("neili")>100 && i<20 && 
+		(me->query("eff_qi") < me->query("max_qi"))) {
+		i++;
+		exert_function("heal");
+	    }
+        }
+
+ 	if (me->query("qi") < me->query("eff_qi")/3) {
+	    COMMAND_DIR"std/halt"->main(me);
+	    exert_function("recover");
+	}
+
+ 	if (me->query("jingli") < me->query("max_jingli")/2) {
+	    COMMAND_DIR"std/halt"->main(me);
+	    i=0;
+	    while(me->query("neili")>100 && i<20 && 
+		(me->query("jingli") < me->query("max_jingli"))) {
+		i++;
+		exert_function("refresh");
+	    }
+	}
+
+ 	if (me->query("jing") < me->query("max_jing")/2) {
+	    COMMAND_DIR"std/halt"->main(me);
+	    exert_function("regenerate");
+	}
+	if (! me->query_temp("nian")) me->set("jiali", 100);
+	
+	if (!me->is_fighting() && objectp(opp)) me->kill_ob(opp);
+
+	switch (me->query("menpai")){
+	case "huashan" :
+	    if ( objectp(weapon) ) {
+		if ( weapon->query("skill_type") == "sword" )
+		    return perform_action("sword.jianzhang");
+		if ( weapon->query("skill_type") == "blade" )
+		    return perform_action("blade.sanshen");
+	    }
+	    else {
+		map_skill("parry", "pishi-poyu");
+		if ( !me->query_temp("leidong") ) {
+		    return perform_action("cuff.leidong");
+		}
+	        if ( !me->query_temp("wuji") && opp->query_condition("hyz_damage") <= 5 ) {
+		    return perform_action("strike.wuji");
+		}
+	    }
+	    break;
+	case "wudang":
+	    if ( objectp(weapon) ) {
+		if ( weapon->query("skill_type") == "sword" )
+		    return perform_action("sword.chan");
+	    }
+	    else {
+		map_skill("parry", "taiji-quan");
+		if ( random(5) == 1) return perform_action("cuff.zhen");
+		set("jiali", 0);
+		return perform_action("cuff.nian");
+	    }
+	    break;
+	case "emei":
+	    if ( objectp(weapon) ) {
+		if ( weapon->query("skill_type") == "sword" )
+		    return perform_action("sword.mie");
+		if ( weapon->query("skill_type") == "blade" )
+		    return perform_action("blade.huanying");
+	    }else{
+		map_skill("parry", "tiangang-zhi");
+	    }
+	    break;
+	case "shaolin":
+	    if ( objectp(weapon) ) {
+		if ( weapon->query("skill_type") == "sword" && !me->query_temp("sanjue"))
+		    return perform_action("sword.sanjue");
+		if ( weapon->query("skill_type") == "club" && !me->query_temp("zui-da")) {
+		    limit = me->query("con") + me->query("max_neili")/25;
+		    me->apply_condition("drunk", limit/2);
+		    return perform_action("club.zuida");
+		}
+	    }
+	    else {
+		map_skill("parry", "yizhi-chan");
+		if (opp && opp->is_busy()) return 1;
+		return perform_action("finger.jingmo");
+	    }
+	    break;
+	case "gaibang":
+	    if ( objectp(weapon) ) {
+		if ( weapon->query("skill_type") == "blade" ) {
+	            if (!me->query_temp("shengang")) command("exert shengang");
+		    if (!me->query_temp("lianhuan"))
+			return perform_action("blade.lianhuan");
+		}
+	    }else {
+		map_skill("parry", "shexing-diaoshou");
+	    }
+	    break;
+	case "taohua":
+	    if ( ! query_temp("wuzhuan") ) command("exert wuzhuan");
+	    if ( ! objectp(weapon) ) {
+		if (random(3) == 1) 
+		    return perform_action("strike.kuangfeng");
+	    }else {
+		map_skill("parry", "luoying-shenjian");
+	    }
+	    break;
+	case "baituo":
+	    if ( objectp(weapon) ) {
+		if ( weapon->query("skill_type") == "staff" ) {
+			return perform_action("staff.shoot");
+		}
+	    }
+	    break;
+	case "xueshan":
+	    if ( objectp(weapon) ) {
+		if ( weapon->query("skill_type") == "blade" ) {
+		    if (me->query("eff_qi") > 500 && 
+			random(5) == 1) {
+			set("shen", -query("combat_exp"));
+			perform_action("blade.shendao");
+			set("shen", 0);
+			return 1;
+		    }
+		}
+	    }else{
+		map_skill("parry", "huoyan-dao");
+		if (random(5) == 1) {
+		    return perform_action("strike.fen");
+		}
+	    }
+	    break;
+	case "xingxiu":
+	    if ( objectp(weapon) ) {
+		if ( weapon->query("skill_type") == "staff" ) {
+			return perform_action("staff.jinxian");
+		}else{
+		map_skill("parry", "sanyin-zhua");
+		if (random(5) == 1) {
+		    return perform_action("claw.sanyin");
+		}
+	    }
+		}
+	    break;
+	case "gumu":
+	    if ( objectp(weapon) ) {
+		if ( weapon->query("skill_type") == "whip" ) {
+			return perform_action("whip.sanwu");
+		}else{
+		map_skill("parry", "chilian-shenzhang");
+		if (random(5) == 1) {
+		    return perform_action("strike.xue");
+		}
+	    }
+		}
+	    break;
+	default:
+	case "lingjiu":
+	    if ( objectp(weapon) ) {
+		if ( weapon->query("skill_type") == "sword" ) {
+			return perform_action("sword.san");
+		}else{
+		map_skill("parry", "liuyang-zhang");
+		if (random(5) == 1) {
+		    return perform_action("strike.baihong");
+		}
+	    }
+		}
+	    break;
+	}
+	return 1;
+}
+
+void die()
+{
+    object me=this_object();
+    mapping skill_status;
+    int     skill_num, i, slvl;
+    string  *sname;
+ 
+    skill_status = me->query_skills();
+ 
+    if (mapp(skill_status)){
+        sname = keys(skill_status);
+        skill_num = sizeof(skill_status);
+        for (i=0; i<skill_num; i++) {
+	    slvl = me->query_skill(sname[i], 1);
+	    if (slvl > 0) {
+		me->set_skill(sname[i], slvl-1);
+            }
+        }
+    }
+	
+    me->add("combat_exp", -5000);
+    me->set("died", 1);
+    save();
+    ::die();
+}

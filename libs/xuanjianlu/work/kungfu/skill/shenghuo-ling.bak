@@ -1,0 +1,237 @@
+//shenghuo-ling.c 圣火令法(古波斯武功)
+//lbc 2002/3
+//应左则前 须右乃后 三虚七实 无中生有 天方地圆
+
+#include <ansi.h>
+inherit SKILL;
+
+int yinfeng_attack(object me, object victim, object weapon, int damage);
+
+mapping *action = ({
+([  "action": "$N踏上一步，忽地在地上一坐，已抱住了$n小腿。十指扣住了$n小腿上
+的‘中都’‘筑宾’两穴，$n只觉下半身酸麻难动，大吃一惊",
+	"force" : 80,
+    "dodge": -10,
+    "damage": 30,
+	"lvl" : 0,
+	"post_action" : (: yinfeng_attack :),
+    "damage_type": "挫伤"
+]),
+([  "action": "突然之间，$N身形晃动，同时欺近，手中$w往$n身上划去。脚下不知如何
+移动，身形早变。右手同时抓住$n后领，一抖之下，将$n向外远远掷了出去",
+	"force" : 120,
+    "dodge": -20,
+    "damage": 50,
+	"lvl" : 20,
+	"post_action" : (: yinfeng_attack :),
+    "damage_type": "挫伤"
+]),
+([  "action": "$N欺身直进，左手持$w向$n天灵盖上拍落。便在这一瞬之间，$n滚身向
+左，已然一拳打在$n腿上。$n一个踉跄，$N横过$w戳向$n后心",
+	"force" : 140,
+    "dodge": -30,
+    "damage": 60,
+	"lvl" : 40,
+	"post_action" : (: yinfeng_attack :),
+    "damage_type": "刺伤"
+]),
+([  "action": "$N忽地放手，手中那柄$w尾端向上弹起，拍的一响，正好打中$n手腕。",
+	"force" : 160,
+    "dodge": -20,
+    "damage": 70,
+	"lvl" : 60,
+	"post_action" : (: yinfeng_attack :),
+    "damage_type": "刺伤"
+]),
+([  "action": "$N忽然低头，一个头锤向$n撞来，$n不动声色，向旁又是一让，突觉胸口
+一痛，已被$N手肘撞中",
+	"force" : 200,
+    "dodge": -20,
+    "damage": 80,
+	"lvl" : 80,
+	"post_action" : (: yinfeng_attack :),
+    "damage_type": "瘀伤"
+]),
+([  "action": "$N手中$w急挥横扫，突然连翻三个空心筋斗。$n不知对方是何用意，心想还是避之
+为妙，刚向左踏开一步，眼前白光急闪，$N的$w已到右肩",
+	"force" : 240,
+    "dodge": -20,
+    "damage": 90,
+	"lvl" : 90,
+	"post_action" : (: yinfeng_attack :),
+    "damage_type": "挫伤"
+]),
+([  "action": "$N忽然低头，一个头锤向$n撞来，$n不动声色，向旁又是一让，突觉胸口
+一痛，已被$N手肘撞中",
+	"force" : 260,
+    "dodge": -20,
+    "damage": 150,
+	"lvl" : 100,
+	"post_action" : (: yinfeng_attack :),
+    "damage_type": "挫伤"
+]),
+([	"action" : "$N欺身直进，左手$w向$n天灵盖上拍落。$n正欲招架，便在这一瞬之间，$N滚身向左，已然一拳打在$n$l",
+	"force" : 300,
+    "dodge" : 300,
+    "parry" : 5,
+	"damage": 100,
+	"lvl" : 120,
+//	"skill_name" : "应左则前",
+	"post_action" : (: yinfeng_attack :),
+	"damage_type" : "内伤"
+]),
+([	"action" : "突然$N连翻三个空心筋斗，手中$w急挥横扫。$n刚向左踏开一步，眼前白光急闪，$l已被$w重重击中",
+	"force" : 330,
+    "dodge" : 330,
+    "parry" : 10,
+	"damage": 105,
+	"lvl" : 130,
+//	"skill_name" : "需右乃后",
+	"post_action" : (: yinfeng_attack :),
+	"damage_type" : "割伤"
+]),
+([	"action" : "$N直抢而前，脚下一踬，忽然一个筋斗摔了过去，似是向前摔跌，手中$w却已向$n$l递了过去",
+	"force" : 360,
+    "dodge" : 360,
+    "parry" : 5,
+	"damage": 110,
+	"lvl" : 140,
+//	"skill_name" : "三虚七实",
+	"post_action" : (: yinfeng_attack :),
+	"damage_type" : "割伤"
+]),
+([	"action" : "$N突然横腿疾扫，卷起地下大片沙尘，猛向$n洒了过去。乘$n眼目被迷之际，$N手中$w已经刺到",
+	"force" : 400,
+    "dodge" : 400,
+    "parry" : 5,
+	"damage": 120,
+	"lvl" : 150,
+//	"skill_name" : "无中生有",
+	"post_action" : (: yinfeng_attack :),
+	"damage_type" : "刺伤",
+]),
+
+([	"action" : "蓦地里$N脑袋乱摆，划着一个个圈子，$N突然一低头，将脑袋往$n撞去，接着忽地卧倒，向前扑出，$w直指$n的$l",
+	"force" : 420,
+    "dodge" : 420,
+    "parry" : 25,
+	"damage": 140,
+	"lvl" : 160,
+//	"skill_name" : "天方地圆",
+	"post_action" : (: yinfeng_attack :),
+	"damage_type" : "刺伤"
+]),
+});
+
+// 武功类型：适合任何兵器。
+int valid_enable(string usage) { return (usage == "sword") || (usage == "parry")
+					|| (usage == "blade") || (usage == "hammer")
+					|| (usage == "staff") || (usage == "stick")
+					|| (usage == "axe") || (usage == "whip")
+					|| (usage == "pike") || (usage == "club"); }   // more?
+
+int valid_learn(object me)
+{
+	if ( me->query("gender") == "无性" && (int)me->query_skill("shenghuo-ling", 1) > 49)
+		return notify_fail("你先天不足，再学下去难免走火入魔。\n");
+
+	if ((int)me->query("max_neili") < 500)
+		return notify_fail("就这么点内力还想学圣火令法？\n");
+
+	if ((int)me->query_skill("shenghuo-xuanming", 1) < 100)
+		return notify_fail("你的圣火玄冥功火候太浅。\n");
+	return 1;
+}
+
+string query_skill_name(int level)
+{
+        int i;
+        for(i = sizeof(action)-1; i >= 0; i--)
+                if(level >= action[i]["lvl"])
+                        return action[i]["skill_name"];
+}
+
+mapping query_action(object me, object weapon)
+{
+        int i, level;
+		level   = (int) me->query_skill("shenghuo-ling",1);
+
+    if (random(me->query_skill("sword",1)) > 120 &&
+        me->query_skill("shenghuo-xuanming",1) > 120 &&
+        me->query("neili") > 500 &&
+        (string)weapon->query("id") == "shenghuo ling" ) {
+        me->add("neili", -100);
+        return ([
+      "action": WHT"$N眼中射出一道青芒，飞身而前，手中$w相互一击，铮的一响，
+$n心神一荡，身子从半空中直堕下来，但觉腰胁中一阵疼痛，已被$N踢中了一脚。
+砰的一下，$N的$w却又击中了$n的$l"NOR,
+      "damage": 500,
+      "post_action" : (: yinfeng_attack :),
+      "damage_type": "刺伤"]);
+		}
+
+        for(i = sizeof(action); i > 0; i--)
+                if(level > action[i-1]["lvl"])
+                        return action[NewRandom(i, 20, level/5)];
+}
+
+int practice_skill(object me)
+{
+	object weapon;
+/*
+	if (!objectp(weapon = me->query_temp("weapon"))
+	|| ((string)weapon->query("skill_type") != "blade" && (string)weapon->query("skill_type") != "sword" ))
+		return notify_fail("你使用的武器不对。\n");
+*/
+	if (!objectp(weapon = me->query_temp("weapon")))
+		return notify_fail("你没有武器。\n");
+	if ((int)me->query("jingli") < 50)
+		return notify_fail("你的精力不够练古波斯武功。\n");
+	me->receive_damage("jingli", 35);
+	me->add("neili", -5);
+	return 1;
+}
+
+void yinfeng_attack(object me, object victim, object weapon, int damage)
+{
+	string *msg, weapon_name;
+	int skill;
+	weapon_name = weapon->query("name");
+    msg = ({
+		WHT"\n$N突然招式变得更加怪异，胡踢瞎打，却招招落在$n薄弱之处！" NOR,
+        WHT"\n$N趁$n被阴风刀内力所伤之际，手中" + weapon_name + "长驱直入，直击向$n！"NOR,
+        WHT"\n$N哈哈哈仰天三笑，" + weapon_name + "闪电般挥向$n，却不带半点风声！"NOR,
+		WHT"\n$n穴道被阴寒内力所闭，无法动弹，只得眼看着$N一招招向自己攻来！"NOR,
+		});
+	skill = me->query_skill("shenghuo-ling", 1);
+	if ( (skill > 160) 
+		&& victim->query_temp("bosi/yinfeng") 
+		&& me->query("neili") > 200
+		&& (random(10) > 5))
+	{
+		skill = skill / 2;
+		if (skill>200)
+			skill = 200;
+		message_vision(msg[random(sizeof(msg))], me, victim );
+
+		me->add("neili", -(25+random(50)));
+		me->add_temp("apply/attack", skill);
+		me->add_temp("apply/damage", skill);
+		COMBAT_D->do_attack(me, victim, me->query_temp("weapon"));
+		me->add_temp("apply/attack", -skill);
+		me->add_temp("apply/damage", -skill);
+
+		me->add_temp("yinfeng_attack", 1);
+		if ( me->query_temp("yinfeng_attack") > 1)
+		{
+			me->delete_temp("yinfeng_attack");
+			return;
+		}
+	}
+	return;
+}
+
+string perform_action_file(string action)
+{
+	return __DIR__"shenghuo-ling/" + action;
+}

@@ -1,0 +1,353 @@
+//Cracked by Roath
+// /d/xueshan/obj/jitan.c
+// play 2002.7.10
+#include <ansi.h>
+inherit ITEM;
+int suyou_destruct(object me);
+
+void create()
+{
+        set_name(HIY"法坛"NOR, ({ "fa tan", "altar", "tan" }) );
+        set_weight(300000);
+        set_max_encumbrance(5000000);
+        if( clonep() )
+                set_default_object(__FILE__);
+        else {
+                set("unit", "个");
+                set("long", "这是一个极其庞大的铜制祭坛，高约三丈，方圆约有五丈，乃是当年吐番国王亲\n"
+                            "自指挥铸造的，耗倾国之力，十年方成。\n");
+                set("value", 1000);
+                set("material", "shone");
+                set("no_get",1);
+        }
+        setup();
+}
+
+int is_container() { return 1; }
+
+void init()
+{
+        add_action("do_put", "put");
+        add_action("do_light", "light");
+        add_action("do_spray", ({"peng","spray"}));
+        add_action("do_dazuo", "dazuo");
+        add_action("do_wave", "wave");
+}
+
+int do_put(string arg)
+{
+        object me, obj;
+        string item, target; 
+        int amount;
+
+        me = this_player();
+
+        if( !me->query_temp("xsjob")||me->query_temp("xsjob/content")!="chaodu"){
+                write("你不能往祭坛里放这样东西。\n");
+                return 1;
+        }
+        if( me->query_temp("xsjob_over"))
+        {
+                write("你已经完成了超渡亡魂的工作。\n");
+                return 1;
+        }
+        if (me->is_busy()
+        || me->query_temp("exit_blocked"))
+                return notify_fail("你现在正忙着呢。\n");
+
+        if( !arg || sscanf(arg, "%s in %s", item, target) != 2 )
+                return notify_fail("你要将什么东西放进哪里？\n");
+                
+        if( item == "all" ) {
+                write("还是一样一样来吧。\n");
+                return 1;
+        }
+                                                                
+        sscanf(item, "%d %s", amount, item);
+        
+        if( !objectp(obj = present(item, me)) )
+        {
+                write("你要给谁什么东西？\n");
+                return 1;
+        }
+
+        if( obj->query("id") != "corpse"){
+                write("你不能往祭坛里放这样东西。\n");
+                return 1;
+        }
+        
+        if(!id(target))
+        {
+                write("格式: put 物件名 in tan\n");
+                return 1;
+        }
+        if(query("in_use")||query("pending")) 
+        {
+                write("这座祭坛已经在使用中了。\n");
+                return 1;
+        }
+        obj->set("no_get", 1);
+        set("in_use", 1);
+        set("pending", me->query("id"));
+        set("xsjob_chaodu", me);
+        remove_call_out("renewing");
+        call_out("renewing", 300 , this_object());
+
+        return 0;
+}
+int do_light(string arg)
+{
+        object me,ob,obj,*inv;
+        int i;
+        me = this_player();
+
+        if (me->query("id") != query("pending"))
+                return notify_fail("你跟这儿凑什么热闹？\n");
+         if (!present("fire", me))
+                return notify_fail("你要用什么点火？\n");
+        if (!query("in_use"))
+                return notify_fail("你要点燃什么？\n");
+        if (!id(arg))
+                return notify_fail("你要点燃什么？\n");
+        if (!suyou_destruct(me))
+                return notify_fail("现在遍照雪海中缺少酥油不能点燃法坛。\n");
+        if (!(obj = present("corpse", this_object())))
+        {
+                this_object()->delete("in_use");
+                this_object()->delete("pending");
+                this_object()->delete("xsjob_chaodu");
+                return notify_fail("法坛中没有尸体。\n");
+        }
+        inv = all_inventory(environment(this_object()));
+        for(i=0;i<sizeof(inv);i++)
+        {
+                if(!inv[i]->is_character() ) continue;
+                if(inv[i] == me ) continue;
+                message_vision("$N快步向中央平台离开。\n", inv[i]);
+                inv[i]->move("/d/xueshan/pingtai");
+        }
+        destruct(obj);
+        message_vision(HIR"$N点燃了祭坛中的木柴与酥油，熊熊烈火冲天而起。\n"NOR, me);
+        set("burning", 1);
+        set("long", query("long") + HIR"里面燃着熊熊的火焰。\n"NOR);
+        set("in_use", 0);
+        
+        ob=new("/d/xueshan/npc/xs_job/xs_npc/xs_corpse.lpc");
+        ob->set("xs_chaodu", me);
+        ob->move(this_object());
+        remove_call_out("burning");
+        call_out("burning",20+random(20),me);
+        return 1;
+}
+void burning(object me)
+{
+        message_vision(HIB"一丝魂魄升出祭坛，冉冉而起。魂魄受$N佛法感召，徘徊不去。\n"NOR, me);
+        set("wait_for_spray", 1);
+}
+int do_spray(string arg)
+{
+        object  ob, me = this_player();
+        ob = (present("lubo", me));
+        
+        if (!ob)  return 0;
+        if (me->query("id") != query("pending"))
+                return notify_fail("你跟这儿凑什么热闹？\n");
+        if (!query("wait_for_spray"))
+                return notify_fail("时辰未到！\n");
+        if (!id(arg))
+                return notify_fail("你想往哪儿喷？\n");
+        if (ob->query("liquid/remaining") < 1)
+                return notify_fail("颅钵里面的水已经所剩无几了。\n");
+
+        message_vision(HIC"$N端起颅钵吸进一口水，「噗」的一声猛地朝那熊熊火焰喷将过去。\n"NOR, me);
+        ob->add("liquid/remaining", -1);
+        set("wait_for_spray", 0);
+        set("time_to_dazuo", 1);
+        return 1;
+}
+
+int do_dazuo()      
+{
+        object me = this_player();
+
+        if (me->is_busy()
+        || me->query_temp("pending/exercising")
+        || me->query_temp("exit_blocked"))
+                return notify_fail("你现在正忙着呢。\n");
+        
+        if (me->query("id") != query("pending"))
+                return notify_fail("你凑什么热闹？\n");
+        if (me->query("neili") < 600)
+                return notify_fail("你内力不够！\n");
+        if (!query("time_to_dazuo"))
+                return notify_fail("这不是你打坐的时候。\n");
+
+        message_vision(HIY"$N盘腿打坐，神光内蕴，口中念念有辞，渐渐有一丝魂魄在$N面前凝聚成形。\n"NOR, me);
+        me->start_busy(10);
+        remove_call_out("rise");
+        call_out("rise",20+random(20), me);
+        return 1;
+}
+void rise(object me)
+{
+        object ob,obj;
+        message_vision(HIB"魂魄越聚越多，竟然呈出人形！ $N手指人形，口念真言，指引往生之路。\n"NOR, me);
+        me->add("neili", -me->query("max_neili")/4);
+        set("time_to_dazuo", 0);
+        if(query("out_ghost"))
+        {
+                obj = present("ranshao shiti", this_object());
+                if(obj) destruct(obj);
+                ob=new("/d/xueshan/npc/xs_job/xs_npc/xs_ghost.lpc");
+                ob->set("xs_chaodu", me);
+                ob->move(environment(this_object()));
+                message_vision(HIG"突然成形的魂魄化成一缕幽魂向你扑来！\n"NOR, me,ob);
+                ob->kill_ob(me);
+                me->kill_ob(ob);
+                remove_call_out("delete_ghost");
+                call_out("delete_ghost",6,this_object());
+        }
+        set("time_to_wave", 1);
+}
+void delete_ghost(object ob)
+{
+        object obj;
+        obj = present("you hun", environment(ob));
+        remove_call_out("delete_ghost");
+        if(obj)
+        {
+                call_out("delete_ghost",6,ob);
+                return;
+        }
+        ob->set("out_ghost", 0);
+}
+int do_wave(string arg)
+{
+        object weapon, me = this_player();
+
+        if (!arg && arg != "ling" && arg != "fa ling")
+                return notify_fail("你要摇什么？\n");
+                
+        if (!present("fa ling", me))
+                return notify_fail("你要摇什么？\n");
+
+        if (me->query("id") != query("pending"))
+                return notify_fail("你跟这儿凑什么热闹？\n");
+
+        if ( !objectp(weapon = me->query_temp("weapon"))
+        || (me->query_temp("weapon"))->query("name") != "法铃")
+                return notify_fail("你手中没有这样东西。\n");
+        
+        if (!query("time_to_wave"))
+                return notify_fail("时辰未到！\n");
+        
+        if(query("out_ghost"))
+                return notify_fail("幽灵伺伏你不能静心念动咒文！\n");
+
+        message_vision(CYN"$N手持法铃，边走边摇，高声诵读密传经咒。突然大喝一声，声似雷霆。\n"NOR, me);
+        set("time_to_wave", 0);
+        remove_call_out("close_up");
+        call_out("close_up",20+random(20), me);
+        me->start_busy(20);
+        return 1;
+}
+void close_up(object me)
+{
+        object *inv, ob, room, gang, suyou;
+        int gaining, butter, i;
+
+        ob = this_object();
+
+        message_vision(HIW"高耸的平台上光茫四起，一声巨响过后，又恢复了平静。超度完毕。\n"NOR, me);
+        set("long", "这是一个极其庞大的铜制祭坛，高约三丈，方圆约有五丈，乃是当年吐番国王亲\n"
+                    "自指挥铸造的，耗倾国之力，十年方成。\n");
+        set("long", query("long") + RED"里面燃着的火焰快熄灭了。\n"NOR);
+        me->improve_skill("lamaism", me->query("int"));
+        me->add("jingli", -300, "把自己超度了");
+        set("burning", 0);
+        delete("xsjob_chaodu"); 
+        inv = all_inventory(ob);
+        for (i=0; i < sizeof(inv); i++) 
+                {
+                        destruct(inv[i]);
+                }
+        if(me->query_temp("xsjob")&&me->query_temp("xsjob/content")=="chaodu")
+        {
+                write(HIW"你完成了超渡亡魂的工作。\n"NOR);
+                me->set_temp("xsjob_over",1);
+                me->add_temp("xsjob_hortation",1);
+        }
+        remove_call_out("renewing");
+        call_out("renewing", 10 , this_object());
+}
+
+void renewing(object ob)
+{
+        object obj , *inv;
+        int i;
+        obj = present(query("pending"), environment(ob));
+        if(obj&&!obj->query_temp("xsjob_over")&&query("xsjob_chaodu"))
+        {
+                remove_call_out("renewing");
+                call_out("renewing", 30 , this_object());
+                return;
+        }
+        inv = all_inventory(ob);
+        for (i=0; i < sizeof(inv); i++) 
+                {
+                        destruct(inv[i]);
+                }
+        delete("xsjob_chaodu"); 
+        ob->set("last_burner", ob->query("pending"));
+        ob->set("pending", 0);
+        ob->set("long", "这是一个极其庞大的铜制祭坛，高约三丈，方圆约有五丈，乃是当年吐番国王亲\n"
+                        "自指挥铸造的，耗倾国之力，十年方成。\n");
+}                                
+
+int suyou_destruct(object me)
+{
+        object room,ob,obj;
+        remove_call_out("suyou_destruct");
+
+        me->add("jingli", -80, "超度失败精尽而亡");
+        if(!( room = find_object("/d/xueshan/dumudian.lpc")) )
+        room = load_object("/d/xueshan/dumudian.lpc");
+        if(room)
+        {
+                if(objectp(obj = present("tong gang", room)))
+                {
+                        //减少遍照雪海内的油
+                        if(objectp(ob = present("su you", obj)))
+                        {
+                                if(obj->query_current_liquid())
+                                {
+                                        obj->add_current_liquid(-2);
+                                        obj->add("liquid_remaining",-2);
+                                        ob->add_amount(-2);
+                                }
+                                if(ob->query_amount()<1||obj->query_current_liquid()<1)
+                                {
+                                        obj->set_current_liquid(0);
+                                        obj->set("liquid_remaining",0);
+                                        destruct(ob);
+                                }
+                                obj->save();
+                                if(query("xsjob_chaodu"))
+                                call_out("suyou_destruct", 20,me);
+                                if( query("wait_for_spray") || query("time_to_dazuo")){
+                                if( (random(10)<2||random(10)>8)||query("out_ghost"))
+                                {
+                                        if(!query("out_ghost"))
+                                        set("out_ghost", 1);
+                                        message("vision",HIG"法坛中惨绿色的烈火熊熊燃烧。\n"NOR, environment(this_object()));
+                                }
+                               }else
+                                if(query("xsjob_chaodu"))
+                                        message("vision",RED"法坛中烈火熊熊燃烧。\n"NOR, environment(this_object()));                            
+                                return 1;
+                        }
+                me->add_temp("xsjob_hortation",-1);
+                }
+        }
+        return 0;
+}

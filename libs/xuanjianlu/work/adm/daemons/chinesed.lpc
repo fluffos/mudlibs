@@ -1,0 +1,245 @@
+//Cracked by Kafei
+// chinesed.c
+// by Annihilator@ES
+// modified by Xiang@XKX
+
+#include <localtime.h>
+
+#ifndef DATA_DIR
+#define DATA_DIR 	"/data/"
+#endif
+#define E2C_DICTIONARY	DATA_DIR + "e2c_dict"
+
+inherit F_SAVE;
+
+// some constatns
+nosave string *c_digit = ({ "零","十","百","千","万","亿","兆" });
+nosave string *c_num = ({"零","一","二","三","四","五","六","七","八","九","十"});
+nosave string *sym_tian = ({ "甲","乙","丙","丁","戊","己","庚","辛","壬","癸" });
+nosave string *sym_di = ({ "子","丑","寅","卯","辰","巳","午","未","申","酉","戌","亥" });
+
+mapping dict = ([]);
+
+void add_translate(string key, string chn);
+void remove_translate(string key);
+
+void create()
+{
+	seteuid(getuid());
+	restore();
+}
+
+void remove()
+{
+	save();
+}
+
+string chinese_number(int i)
+{
+	if (i < 0)
+		return "负" + chinese_number(-i);
+	if (i < 11)
+		return c_num[i];
+	if (i < 20)
+		return c_digit[1] + c_num[i - 10];
+	if (i < 100) {
+		if (i % 10)
+			return c_num[i / 10] + c_digit[1] + c_num[i % 10];
+		else
+			return c_num[i / 10] + c_digit[1];
+	}
+	if (i < 1000) {
+		if (i % 100 == 0)
+			return c_num[i / 100] + c_digit[2];
+		else if (i % 100 < 10)
+			return c_num[i / 100] + c_digit[2] +
+			c_num[0] + chinese_number(i % 100);
+		else if (i % 100 < 10)
+			return c_num[i / 100] + c_digit[2] +
+			c_num[1] + chinese_number(i % 100);
+		else
+			return c_num[i / 100] + c_digit[2] + 
+			chinese_number(i % 100);
+	}
+	if (i < 10000) {
+		if (i % 1000 == 0)
+			return c_num[i / 1000] + c_digit[3];
+		else if (i % 1000 < 100)
+			return c_num[i / 1000] + c_digit[3] +
+			c_num[0] + chinese_number(i % 1000);
+		else 
+			return c_num[i / 1000] + c_digit[3] +
+			chinese_number(i % 1000);
+	}
+	if (i < 100000000) {
+		if (i % 10000 == 0)
+			return chinese_number(i / 10000) + c_digit[4];
+		else if (i % 10000 < 1000)
+			return chinese_number(i / 10000) + c_digit[4] +
+			c_num[0] + chinese_number(i % 10000);
+		else
+			return chinese_number(i / 10000) + c_digit[4] +
+			chinese_number(i % 10000);
+	}
+	if (i < 1000000000000) {
+		if (i % 100000000 == 0)
+			return chinese_number(i / 100000000) + c_digit[5];
+		else if (i % 100000000 < 1000000)
+			return chinese_number(i / 100000000) + c_digit[5] +
+			c_num[0] + chinese_number(i % 100000000);
+		else 
+			return chinese_number(i / 100000000) + c_digit[5] +
+			chinese_number(i % 100000000);
+	}
+	if (i % 1000000000000 == 0)
+		return chinese_number(i / 1000000000000) + c_digit[6];
+	else if (i % 1000000000000 < 100000000)
+		return chinese_number(i / 1000000000000) + c_digit[6] +
+		c_num[0] + chinese_number(i % 1000000000000);
+	else
+		return chinese_number(i / 1000000000000) + c_digit[6] +
+		chinese_number(i % 1000000000000);
+}
+
+string getchinese(int sum)
+{
+        return sum>2000000000?"数十亿":
+        sum>1000000000?"十数亿":
+        sum>200000000?"数亿":
+        sum>100000000?"上亿":
+        sum>20000000?"数千万":
+        sum>10000000?"千余万":
+        sum>2000000?"数百万":
+        sum>1000000?"百余万":
+        sum>200000?"数十万":
+        sum>100000?"十余万":
+        sum>20000?"数万":
+        sum>10000?"万余":
+        sum>2000?"数千":
+        sum>1000?"千余":
+        sum>200?"数百":
+        sum>99?"百余":
+        sum>39? "数十":
+        sum>19&&sum<40? "二三十":
+        sum>9? "十余":
+        chinese_number(sum);
+}
+
+string query_save_file()
+{
+	return E2C_DICTIONARY;
+}
+
+string chinese(string str)
+{
+	if (!undefinedp(dict[str]))
+		return dict[str];
+	else
+		return str;
+}
+
+void remove_translate(string key)
+{
+	map_delete(dict, key);
+	save();
+}
+
+void add_translate(string key, string chn)
+{
+	dict[key] = chn;
+	save();
+}
+
+void dump_translate()
+{
+	string *k, str;
+	int i;
+	
+	str = "";
+	k = keys(dict);
+	for (i = 0; i < sizeof(k); i++) 
+		str += sprintf("%-30s %s\n", k[i], dict[k[i]]);
+	write_file("/CHINESE_DUMP", str);
+}
+
+string chinese_date(int date)
+{
+	mixed *local;
+
+	local = localtime(date);
+	
+	return sprintf("%s%s年%s月%s日%s时%s刻",
+                sym_tian[local[LT_YEAR] % 10], sym_di[local[LT_YEAR] % 12],
+                chinese_number(local[LT_MON] + 1),
+                chinese_number(local[LT_MDAY] + (local[LT_HOUR] > 23 ? 1 : 0)),
+                sym_di[((local[LT_HOUR] + 1) % 24) / 2],
+                chinese_number((local[LT_MIN]+1) % 2 * 2 + 
+		local[LT_MIN] / 30 + 1) );
+}
+
+//Used in natured.c to as a condition to judge which season should be
+//to use different weather discription.
+string chinese_month(int date)
+{
+        mixed *local;
+        local = localtime(date);
+        return sprintf("%s",chinese_number(local[LT_MON] + 1));
+}
+string chinese_monthday(int date)
+{
+        mixed *local;
+        local = localtime(date);
+        return sprintf("%s月%s日",chinese_number(local[LT_MON] + 1),
+                chinese_number(local[LT_MDAY]+1));
+}
+//end of appendance
+string chinese_time(int type,string get_time)
+{
+        string e_time, week, month, year;
+        string c_week, c_year, c_month, c_time;
+        int day, hour, minute, second;
+        string *month_name = ({"Jan","Feb","Mar","Apr","May","Jun","Jul",
+		"Aug","Sep","Oct","Nov","Dec"});
+        string *week_name = ({"Mon","Tue","Wed","Thu","Fri","Sat","Sun"});
+
+        if ( stringp(get_time) )
+                e_time = get_time;
+        else e_time = ctime(time());
+
+        // e_time must is ctime(time string) like "Sun May  3 00:52:12 1998"
+        sscanf(e_time,"%s %s %d %d:%d:%d %s", week, month, day, hour, minute, second, year);
+
+        c_week  = chinese_number(member_array(week, week_name) + 1);
+        c_month = chinese_number(member_array(month, month_name) + 1);
+
+        c_year  = sprintf("%s%s%s%s",
+                         chinese_number(year[0]-48),
+                         chinese_number(year[1]-48),
+                         chinese_number(year[2]-48),
+                         chinese_number(year[3]-48));
+
+        c_year = c_year + "年";
+        c_month  = c_month + "月";
+        c_week = " 星期"+c_week;
+
+        c_time = chinese_number(day) + "日";
+        c_time += chinese_number(hour) + "点";
+        c_time += chinese_number(minute) + "分";
+        // maybe not need srcond to show
+        // c_time += chinese_number(second) + "秒";
+
+        if (type) {
+                switch( type ) {
+                        case 1: return c_year+c_month+c_time+c_week;
+                        case 2: return c_year+c_month+c_time;
+                        case 3: return c_month+c_time+c_week;
+                        case 4: return c_month+c_time;
+                        case 5: return year+"年"+(member_array(month, month_name) + 1)+
+				"月"+day+"日"+hour+"点"+minute+"分";
+                        case 6: return (member_array(month, month_name) + 1)+
+				"月"+day+"日"+hour+"点"+minute+"分";
+                        default: return c_year+c_month+c_time+c_week;
+                        }
+                }
+        return c_year+c_month+c_time+c_week;
+}

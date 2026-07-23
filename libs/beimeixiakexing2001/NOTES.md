@@ -43,6 +43,19 @@ pass, just with the core registration-path fixes already known.
    attempt. `/adm/daemons/network/http` is ALSO in preload but confirmed
    safe to leave (its socket setup is deferred via `call_out("setup",
    5)`, non-blocking to preload).
+5. **Retroactive fix, AGENTS.md §15ae** (added after the original pass
+   above — the original registration test here never continued past the
+   password prompt, so this was missed): `feature/command.lpc` declared
+   its `add_action`-dispatched command hook as `private nomask int
+   command_hook(string arg)`. This driver treats `private` as opaque to
+   `add_action`'s external dispatch once inherited into the player body
+   class, so **every single post-login command silently did nothing at
+   all** — no error, no output, indistinguishable from a hung connection.
+   Found independently on `xuanjianlu` (archive #70, same underlying
+   bug), which flagged this lib as also affected. Fixed by dropping
+   `private` (keeping `nomask`). Re-verified with a fresh registration
+   (id `hookabcd`, real Chinese name `秦淮`) followed by re-login and
+   `look`/`score`, both now producing correct output.
 
 ## Interactive test result — full registration flow
 

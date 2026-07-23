@@ -1,0 +1,76 @@
+//Cracked by Polybao
+//huanying.c 金花幻影
+
+#include <ansi.h>
+#include <localtime.h>
+
+inherit F_DBASE;
+inherit F_SSERVER;
+
+int perform(object me, object target)
+{
+	string weapon;
+	object weapon1, anqi;
+	int   i, lvl1, lvl2, lvl3, amount, num;
+	if( !target ) target = offensive_target(me);
+
+	if( !target
+	||	!target->is_character()
+	||	!me->is_fighting(target) )
+		return notify_fail("金花幻影只能对战斗中的对手使用。\n");
+
+	weapon1 = me->query_temp("weapon");
+        if( !objectp(weapon1) || weapon1->query("skill_type") != "staff" )
+                return notify_fail("你手中无杖，如何使得金花幻影？\n");
+
+	if( me->query_skill_mapped("force") != "shenghuo-xuanming" )
+		return notify_fail("你所用的并非圣火玄冥功，无法施展金花幻影！\n");
+
+	if( me->query_skill("shenghuo-xuanming", 1) < 100 )
+		return notify_fail("你的圣火玄冥功火候未到，无法施展金花幻影！\n");
+
+	if( (lvl2=me->query_skill("staff")) < 100 )
+		return notify_fail("你金花杖修为不足，还不会使用金花幻影！\n");
+
+	amount = (lvl1+lvl2) / 10;
+
+	if ( amount < 40 ) amount = 40;
+	if ( amount > 80 ) amount = 80;
+
+	if( me->query("neili") <= 300 )
+		return notify_fail("你的内力不够使用金花幻影！\n");
+	if( me->query("jingli") <= 100 )
+		return notify_fail("你的精力不够使用金花幻影！\n");
+
+	weapon = me->query_temp("weapon");
+
+	me->add_temp("apply/damage", amount*2);
+	me->add_temp("apply/attack", amount*2);
+
+	message_vision(HIY "\n突然间$N拐杖一封，跟着还击一杖腾身而起，手中杖幻做一片杖影直向$n压来！\n\n" NOR, me, target);
+
+	COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+	COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+	COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+	COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+	
+	lvl3 = me->query_skill("jinhua-biao");
+        num = lvl3/50;
+	if( me->query_skill("jinhua-biao", 1) > 100 ) {
+        if ( objectp(anqi=present("jinhua biao", me)) ) {
+        message_vision(HIY "\n\n忽听得飕飕数声，黄光闪动，$N倏左倏右连发数枚金花镖，教$n顾得了东边的顾不了西边！\n\n" NOR, me, target);
+        for (i=1; i<num+1; i++) {
+                   anqi->throw_ob(me, target);
+                   me->add("neili", -5);
+                   me->add("jingli", -5);
+           }
+        }
+	}
+	me->add_temp("apply/damage", -amount*2);
+	me->add_temp("apply/attack", -amount*2);
+	me->add("neili", -300);
+	me->add("jingli", -100);
+	me->start_busy(3+random(3));
+
+	return 1;
+}

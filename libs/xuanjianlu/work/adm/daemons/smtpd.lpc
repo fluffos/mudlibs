@@ -1,0 +1,591 @@
+// /adm/daemons/smtp_d.c  *
+// by Find@TX.            *
+// Modified by jjgod@TXYH. 01/01/13
+
+// modified by lbc for xjl, 5/26/2002
+// 第320行，改成直接输入AUTH LOGIN , lbc 9/2002
+
+// 有一个小小的问题，就是：服务器如果发送邮件的同时网络带宽资源被耗尽，就会发不出去
+
+#include <net/socket.h>
+#include <login.h>
+#include <ansi.h>
+#include <origin.h>
+#include <mudlib.h>
+
+// 可以用的smtp服务器
+// 域名            地址              账号        密码      发信人信箱
+// "smtp.163.com"  "202.108.255.203" "lubocheng" "979797" "lubocheng@163.net"
+// "www.zisai.com" "202.99.174.188" 
+// "202.102.29.101"	"202.102.29.101"  "test"      "test123" "xuanyuanhong@netease.com" 
+#define SMTP_SERVER "smtp.163.com"
+#define SMTP_IP "202.108.44.212"
+#define SMTP_USER "xuanjianlureg"
+#define SMTP_PASSWD "xuanyuan"
+#define PUBLIC_MUD_MAIL "xuanjianlureg@163.com" 
+
+// 这个信箱必须是注册的可以使用smtp服务的信箱
+// 说白了，就是你在电子邮件网站注册的账号
+// 你必须用这个账号来登陆smtp服务器， 因为现在所有的服务器都要验证了！！！
+
+#define XJL_MAIL "轩辕虹" // 这是是信件标题中和巫师联系的信箱, 轩辕自己改吧
+
+#define SMTP_DEBUG 0      // 1 就是报告debug信息， 0 就是不报告
+
+inherit F_SAVE;
+
+// 这里设定你的 SMTP 服务器的域名和 IP 地址 
+// 下面是可以用的smtp服务器, 现在只有一个，xuanyuan自己去找些吧，下面这个说不定那天就没了
+// 我都把信箱捐出来了:(
+// smtp.163.net 
+// 202.108.255.203 
+// 账号lubocheng 
+// 密码979797
+
+//protected string domain_name = "smtp.163.com",address = "202.108.255.203";
+protected string domain_name = SMTP_SERVER, address = SMTP_IP;
+protected string mailname = SMTP_USER, mailpasswd = SMTP_PASSWD;
+
+
+// class类型是C++新增的，想不到LPC也支持
+class email
+{
+	string rcpt;	// 收件者地址
+	string body;	// 内容
+	int status;		// 状态码
+	string id;		// 用户 ID
+	string passwd;	// 密码
+	object user;
+	int normal;
+}
+
+protected void read_callback(int fd,string message);
+protected void write_callback(int fd,string outgoing);
+protected varargs void write_callback(int fd,string outgoing);
+protected void close_callback(int fd);
+protected int permit_reg_email(string mail);
+protected int mail_have_reg(object user,string mail);
+/*
+ * 这里是服务器你的登陆名和密码。有一些服务器发信也是要进行
+ * 身份认证的，现在不少提供商深受垃圾邮件毁坏名誉之苦，越来
+ * 越多的采用发信身份认证，就像用 Outlook express 设置服务
+ * 器必须选择“我的服务器要求身份认证”。
+ * 这个程序 SMTP 和 ESMTP 都可用，如果你的服务提供商不要求
+ * 身份认证，你尽可以不理会这个设定。
+ */
+// ESMTP在新的FoxMail v3.11也支持。
+
+// 现在没有不要求验证身份的了！！！！ 我(lbc)花了一晚上才找到1个能用的
+
+protected mixed content = ([]);
+
+///////////////////////////////////////////////////////////////////////////////////////////
+// base64 的函数声明
+protected string base64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+protected string base64_encode(string ascii);
+protected string base64_decode(string b64);
+protected string four_to_three(string base);
+protected string three_to_four(string asc);
+
+/*
+ * 下面这部分是进行 SMTP 服务器 IP 地址的解析用的。
+ * 一般 SMTP 服务器的域名是不会变的，但 IP 地址有可
+ * 能变化。而且在游戏运行中很少会注意这个。一旦出现
+ * 变化是很麻烦的，263 有一次就改变了 IP 地址也没有
+ * 通知我们，我到三天以后才发现，搞的我很尴尬，因此
+ * 加上了这个功能。
+ */
+protected void resolve_callback( string o_address, string resolved, int key )
+{
+	if( stringp(resolved) && (resolved != "") && (address != resolved) )
+	{
+		address = resolved;
+		save();
+		log_file("smtp",sprintf("SMTP: 远程 SMTP 邮件服务器IP地址被转换为 %s\n",address));
+	}
+}
+
+/* 这个函数我们是由 CRON_D 定时呼叫的，我们是1小时检查一次。*/
+// 检查个头啊！！
+// 但是这个函数有用，留着
+
+void update_mail_server_ip()
+{	
+	resolve( domain_name, "resolve_callback" );
+}
+
+protected void create()
+{
+	printf("\n现在使用的smtp服务器域名: %s\n", domain_name);
+	resolve( domain_name, "resolve_callback" );
+	printf("\n现在使用的smtp服务器地址: %s\n", domain_name);
+}
+
+/*
+ * 这个函数是由玩家注册用的那个房间里的注册命令
+ * 呼叫的，user 是进行注册的玩家物件，mail 是注
+ * 册的电子邮件地址。
+ * 谨慎的人应当对呼叫此函数的物件进行一下检查。
+ */
+int send_mail(object user, string mail, string passwd)
+{
+	object link;
+	string msg, server;
+	int s,err;
+	class email newmail;
+
+	if(!user) 
+		return 0;
+	if(!stringp(mail) || mail == "") 
+		return 0;
+	
+	mail = lower_case(mail);
+
+	if(!objectp(link = user->query_temp("link_ob")))
+	{
+		tell_object(user,"您的档案不完全，无法进行注册，请重新连线完成注册.\n\n");
+		destruct(user);
+		return 0;
+	}
+	
+	if(strsrch(mail,',') >= 0)
+	{
+		write(sprintf("你的电子邮件地址：%s 里包含非法字符，\n请认真检查后重新注册。\n",mail));
+		return 0;
+	}
+
+	if(mail_have_reg(user,mail)) return;
+
+	server = sprintf("%s 25",address);
+
+	/*
+	 * PUBLIC_MUD_MAIL 是在其它的地方定义的，就是游戏
+	 * 对外交流的电子邮件地址。
+	 // 这个定义被我改了，总不能让玩家看lubocheng@163.net吧
+	 // 所以要用前面提到的XJL_MAIL 来设定这个信箱
+	 */
+	msg = sprintf("From: \"%s\" <%s>\nTo: %s\nSubject: 您在《%s》的密码\n\n",
+	MUD_NAME, XJL_MAIL, mail, MUD_NAME);
+	msg += sprintf("欢迎您光临" + MUD_NAME 
+		+ "。\n\n您的账号：%s\n密码：%s\n", user->query("id"), passwd);
+	msg += "如有注册登陆方面的问题可以与 "+ XJL_MAIL + " 联系。\n";
+	msg += "\n本游戏的论坛在 http://61.172.249.45/cgi-bin/xjl/leoboard.cgi\n那里有详细的帮助和玩家写的新手指南、经验介绍，\n相信会对你很有用处。祝您在《"+ MUD_NAME +"》玩的愉快！";
+
+	newmail = new(class email);
+	newmail->rcpt = mail;
+	newmail->body = msg;
+	newmail->id = user->query("id");
+	newmail->passwd = passwd;
+	newmail->user = user;
+	user->start_busy(1);
+
+	s = socket_create(STREAM,"read_callback", "close_callback");
+	if(s<0)
+	{
+		log_file("socket","Socket create err: "+socket_error(s)+"\n");
+		tell_object(user,"注册过程中服务器发生错误，请再注册一次。\n");
+		return 0;
+	}
+
+	content += ([ s : newmail ]);
+
+	err = socket_connect(s,server,"read_callback", "write_call_back");
+	if(err < 0)
+	{
+		map_delete(content,s);
+		log_file("socket","Socket connect err: "+socket_error(err)+"\n");
+		tell_object(user,"注册过程中服务器发生错误，请再注册一次。\n");
+		socket_close(s);
+		return 0;
+	}
+	tell_object(user,"邮件发送中，请稍候．．．．．\n");
+	call_out("time_out", 30, s);
+	return 1;
+}
+
+protected void time_out(int fd)
+{
+	class email mailmsg;
+
+	if(undefinedp(content[fd]))
+		return;
+
+	mailmsg = content[fd];
+
+	if(objectp(mailmsg->user))
+	{
+		tell_object(mailmsg->user,"\n发送过程超时，请重新再注册一次。
+		问题有可能是：SMTP邮件服务器的IP地址已经更改。\n请向巫师报告，谢谢。\n");
+		(mailmsg->user)->stop_busy();
+	}
+
+	map_delete(content,fd);
+	socket_close(fd);
+}
+
+// 这个函数其实没有用，玄剑录处理注册成功的代码在/adm/daemons/regid.c
+// 我把这个函数删了
+protected void success_register(int fd)
+{
+	//do nothing
+}
+
+/* 此函数处理发送过程中的致命错误 */
+protected void mail_error(int fd,string message)
+{
+	class email mailmsg;
+
+	mailmsg = content[fd];
+
+	log_file("smtp_err",sprintf("ERROR:\n%s\nid: %s\nmail: %s\n\n",
+			message,mailmsg->id,mailmsg->rcpt));
+
+	if(objectp(mailmsg->user))
+	{
+		tell_object(mailmsg->user,sprintf("\n发送过程中出现异常错误：\n%s\n请重新再注册一次。\n\n",	message));
+		(mailmsg->user)->stop_busy();
+	}
+
+	map_delete(content,fd);
+	socket_close(fd);
+}
+
+
+protected void read_callback(int fd,string message)
+{
+	int rcode,err;
+	string mechanism;
+	class email mailmsg;
+	object ob;
+
+	// 这段是我加的debug信息，可以看到smtp服务器应答信息
+	if (SMTP_DEBUG)
+	{
+		if (objectp(ob = find_player("xuanyuan")) )
+			tell_object(ob, message);
+	}
+	
+	if(undefinedp(content[fd]))
+	{
+		socket_close(fd);
+		return;
+	}
+
+	mailmsg = content[fd];
+
+	rcode = atoi(message[0..2]);
+
+	if(!rcode || (rcode > 500))
+	{
+		mail_error(fd,message);
+		return;
+	}
+
+	if(!mailmsg->status)  // 握手连通
+	{
+		socket_write(fd,sprintf("EHLO %s\r\n",query_host_name()));
+		mailmsg->status++;
+		return;
+	}
+
+	if(mailmsg->status == 1) // server ready
+	{
+		if((rcode == 500))	// command not recognized
+		{
+			if(mailmsg->normal)
+			{
+				mail_error(fd,message);
+				return;
+			}
+
+			socket_write(fd,sprintf("HELO %s\r\n",query_host_name()));
+			mailmsg->normal = 1;
+			return;
+		}
+
+		if(mailmsg->normal)
+		{
+			socket_write(fd,sprintf("MAIL FROM: <%s>\r\n", PUBLIC_MUD_MAIL));
+			mailmsg->status = 3;
+			return;
+		}
+
+		// 这个算法有bug:
+		// 有时候服务器应答是: AUTH xxx, AUTH-xxx, 不一定都是AUTH=xxx
+		// 我已经改了
+		if(sscanf(message,"%*sAUTH%s\n%*s",mechanism) == 3)
+		{
+			//socket_write(fd, sprintf("AUTH %s\r\n", mechanism[1..sizeof(mechanism)]));
+			socket_write(fd, sprintf("AUTH LOGIN\r\n"));
+			mailmsg->status = 2;
+			return;
+		}
+
+		// ESMTP 协议不需要认证的情况
+		socket_write(fd,sprintf("MAIL FROM: <%s>\r\n",PUBLIC_MUD_MAIL));
+		mailmsg->status = 3;
+		return;
+	}
+
+	if(mailmsg->status == 2)	// Authentication
+	{
+		string quest;
+
+		if(rcode == 334)	// 认证提问
+		{
+			/*
+			 * 这里是 ESMTP 协议的认证部分，ESMTP 协议规定
+			 * 认证信息使用 BASE64 编码。
+			 * 这里的 base64_decode 和 base64_encode 函数
+			 * 就是 base64_d 里面的 decode 和 encode 函数，
+			 * 我们是定义成了 simul_efun。
+			 */
+			// 这里还是base64_decode, 因为我把base64搬到这个文件里来了
+			
+			quest = message[4..sizeof(message)];
+			quest = replace_string(quest,"\n","");
+			quest = replace_string(quest,"\r","");
+			quest = base64_decode(quest);
+			
+//			tell_object(find_player("lbc"), "quest is " + quest);
+			if(quest[0..3] == "User")
+			{
+//				tell_object(find_player("lbc"), "Name is " + base64_encode(mailname) + " ");
+				socket_write(fd,sprintf("%s\r\n",base64_encode(mailname)));
+				return;
+			}
+			else if(quest[0..3] == "Pass")
+			{
+//				tell_object(find_player("lbc"), "Pass is " + base64_encode(mailpasswd));
+				socket_write(fd,sprintf("%s\r\n", base64_encode(mailpasswd)));
+				return;
+			}
+		}
+
+		// 认证通过
+		socket_write(fd,sprintf("MAIL FROM: <%s>\r\n",PUBLIC_MUD_MAIL));
+		mailmsg->status = 3;
+		return;
+	}
+
+	if(mailmsg->status == 3)
+	{
+		socket_write(fd,sprintf("RCPT TO: <%s>\r\n",mailmsg->rcpt));
+		mailmsg->status = 4;
+		return;
+	}
+
+	if(mailmsg->status == 4)
+	{
+		socket_write(fd,sprintf("DATA\r\n"));
+		mailmsg->status = 5;
+		return;
+	}
+
+	if(mailmsg->status == 5)
+	{
+		if(rcode == 354)	// ready receive data
+		{
+			err = socket_write(fd,sprintf("%s\r\n.\r\n",mailmsg->body));
+			if( (err < 0) && (err != EEALREADY) )
+			{
+				call_out("write_callback",1,fd,sprintf("%s\r\n.\r\n",mailmsg->body));
+			}
+			mailmsg->status = 6;
+			return;
+		}
+		else
+		{
+			mail_error(fd,message);
+			return;
+		}
+	}
+
+	if(mailmsg->status == 6)
+	{
+		socket_write(fd,sprintf("QUIT\r\n"));
+		mailmsg->status = 7;
+		return;
+	}
+
+	if((mailmsg->status == 7) && (rcode == 221))
+	{
+		success_register(fd);
+		return;
+	}
+
+	mail_error(fd,message);
+}
+
+protected varargs void write_callback(int fd,string outgoing)
+{
+	int err;
+
+	tell_object(this_player(), "write call back\n");
+	if(stringp(outgoing) && (outgoing != ""))
+	{
+		err = socket_write(fd,outgoing);
+
+		if( (err < 0) && (err != EEALREADY) )
+		{
+			call_out("write_callback",1,fd,outgoing);
+			return;
+		}
+	}
+}
+
+protected void close_callback(int fd)
+{
+	socket_close(fd);
+}
+
+/*
+ * 对玩家注册的电子邮件地址的各类检查就在这里实现，可以根据自己的需要增减代码。
+ * 要加入对某些 mail 地址的限制，也在这里实现。
+ */
+// 暂时不管他
+// 这个函数返回 0 则可以注册, 返回1不能注册
+// 如果以后需要限制什么轩辕自己加吧
+protected int mail_have_reg(object user,string mail)
+{
+	// if ( 你不想让这个人注册 )
+	//		return 1;
+	return 0;
+}
+
+////////////////////// 下面是base64 算法代码, 是用来给邮件服务器验证身份用的/////////////////
+////////////////////// 一点也不要动 /////////////////////////////
+
+/****************************************
+ *                                      *
+ * BASE64 编码和解码。我是为了 ESMTP 协 *
+ * 议的认证信息写的这个玩意，因为我们是 *
+ * 要用的。                             *
+ *                                      *
+ * by Find@TX.                          *
+ ****************************************/
+
+
+/* 对传入的字符串进行 BASE64 编码 */
+protected string base64_encode(string ascii)
+{
+	int l,b;
+	string out = "";
+
+	if(!stringp(ascii) || ascii == "")
+		return "";
+
+	l = strlen(ascii);
+
+	b = l/3;
+	if(l%3)
+		b++;
+
+	for(int i=0;i<b;i++)
+	{
+		int start = i*3;
+
+		if( (start+2) > l )
+			out += three_to_four(ascii[start..]);
+		else
+			out += three_to_four(ascii[start..(start+2)]);
+	}
+	return out;
+}
+
+/* 对传入的 BASE64 编码字符串进行解码 */
+protected string base64_decode(string b64)
+{
+	int l,b;
+	string out = "";
+
+	if(!stringp(b64) || b64 == "")
+		return "";
+
+	l = strlen(b64);
+
+	if( l%4 )	// 错误！
+		return "";
+
+	b = l/4;
+
+	for(int i=0;i<b;i++)
+	{
+		int start = i*4;
+
+		out += four_to_three(b64[start..(start+3)]);
+	}
+	return out;
+}
+
+protected string four_to_three(string base)
+{
+	string out;
+	int a1,a2,a3,a4,end,o1,o2,o3,n;
+
+	if( strlen(base) != 4)
+		return "";
+
+	a1 = strsrch(base64,base[0..0]);
+	a2 = strsrch(base64,base[1..1]);
+	if(base[2] != '=')
+	{
+		a3 = strsrch(base64,base[2..2]);
+		if(base[3] != '=')
+			a4 = strsrch(base64,base[3..3]);
+		else
+			n = 2;
+	}
+	else
+		n = 1;
+
+	end = (a1<<6)|a2;
+	end = (end<<6)|a3;
+	end = (end<<6)|a4;
+
+	o1 = end>>16;
+	o2 = (end>>8)&255;
+	o3 = end&255;
+
+	if(n == 1)
+		out = sprintf("%c",o1);
+	else if( n == 2 )
+		out = sprintf("%c%c",o1,o2);
+	else
+		out = sprintf("%c%c%c",o1,o2,o3);
+
+	return out;
+}
+
+protected string three_to_four(string asc)
+{
+	int a1,a2,a3,end,o1,o2,o3,o4,n;
+	string out;
+
+	if(!stringp(asc) || asc =="")
+		return "";
+	n = strlen(asc);
+
+	a1 = asc[0];
+	if( n > 1 )
+		a2 = asc[1];
+	if( n > 2 )
+		a3 = asc[2];
+
+	end = (a1<<8)|a2;
+	end = (end<<8)|a3;
+
+	o1 = end>>18;
+	o2 = (end>>12)&63;
+	o3 = (end>>6)&63;
+	o4 = end&63;
+
+	if( n == 1 )
+		out = sprintf("%c%c==",base64[o1],base64[o2]);
+	else if( n == 2 )
+		out = sprintf("%c%c%c=",base64[o1],base64[o2],base64[o3]);
+	else
+		out = sprintf("%c%c%c%c",base64[o1],base64[o2],base64[o3],base64[o4]);
+
+	return out;
+}

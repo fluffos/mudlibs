@@ -1,0 +1,59 @@
+// xingyi.c 斗转星移
+
+#include <ansi.h>
+#include <combat.h>
+
+inherit F_SSERVER;
+
+void remove_effect(object me, int improve);
+
+int exert(object me, object target)
+{
+	int damage, improve;
+        object weapon;
+
+    if( !me->is_fighting() )
+	    return notify_fail("你不在战斗中。\n");
+
+	if( (int)me->query_skill("douzhuan-xingyi", 1) < 150 )
+			return notify_fail("你的星移斗转还未练成，不能使用「星移斗转」！\n");
+
+	if( (int)me->query("neili", 1) < 1500 )
+			return notify_fail("你现在内力不足，不能使用「星移斗转」！\n");	
+
+	if( (int)me->query("max_neili", 1) < 2000 )
+			return notify_fail("你现在内力修为不足，不能使用「星移斗转」！\n");	
+
+	if( (int)me->query_skill("parry", 1) < 150 )
+			return notify_fail("你的基本招架之法不够娴熟，不能使用「星移斗转」。\n");
+
+	if( (int)me->query_dex() < 20 )
+			return notify_fail("你的身法太低，不能使用「星移斗转」！\n");
+      
+	if( (int)me->query_skill("dodge",1) < 150 )
+			return notify_fail("你的基本轻功太差，身体笨拙，不能使用「星移斗转」！\n");
+    
+	if (me->query_skill_mapped("parry") != "douzhuan-xingyi")
+			return notify_fail("你使用的招架不对。\n");      
+	
+	if( me->query_temp("dzxy") )
+			return notify_fail("你正在使用「星移斗转」！\n");
+
+	message_vision(HIB"$N突然深吸一口气，运转斗转星移神功，将对手的攻击尽数引向其身！\n" NOR, me);
+
+      improve = (int)me->query_dex() * 2;
+      me->add_temp("apply/parry", improve);
+      me->set_temp("dzxy",1);  
+      me->add("neili", -(int)me->query_skill("douzhuan-xingyi",1)*3);    
+            
+      me->start_call_out( (: call_other, __FILE__, "remove_effect", me, improve :), me->query_skill("douzhuan-xingyi") * 2/3 );
+      return 1;
+}
+
+void remove_effect(object me, int improve)
+{
+      me->add_temp("apply/parry", - improve);
+      me->delete_temp("dzxy");
+      tell_object(me, HIR"你散去丹田凝聚的内力，混身经脉真气流动，气定神闲，精神弈弈。\n"NOR);
+      tell_room(environment(me), HIW + me->name()+"全身骨头一阵轻响，散去了混身的功力。\n" NOR,  ({ me }));
+}

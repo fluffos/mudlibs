@@ -1,0 +1,276 @@
+//Cracked by play
+// npc: laoshu.c
+
+#include <ansi.h>
+inherit NPC;
+#define JOB_G ("/d/xueshan/npc/xs_job/inherit/xsjobs.lpc")
+string *laoshu_msg = ({
+"$N贼头贼脑的看着四周。。。\n",
+"只见$N眯着绿豆般大的眼睛，盯着地上的酥油。。。\n",
+"$N闻到酥油的香气，小心翼翼的挪动着脚步。。。\n",
+"酥油的香气吸引了$N的注意力。。。\n",
+"$N向前跑了几步。。。\n",
+});
+void create()
+{
+	set_name("老鼠", ({ "lao shu", "shu", "rat" }));
+	set("long","灰毛肥胖的大老鼠。\n");
+	set("unit", "只");
+	set("age", random(10)+1);
+        set("str", 25);
+        set("dex", 30);
+        set("con", 25);
+        set("int", 10000);
+        set("max_qi", 300);
+        set("max_jing", 100);
+        set("neili", 200);
+        set("max_neili", 200);
+        set("xs_job", 1);
+        set("no_get", 1);
+        set("chat_chance", 30);
+        set("chat_msg", ({
+                (: random_move :)
+        }) );
+
+        setup();
+ 	remove_call_out("self_destruct");
+	call_out("self_destruct", 600);
+
+}
+
+void init()
+{
+	::init();
+	add_action("do_killing", "kill");
+        add_action("do_yinyou", ({"yinyou","yin","you"}));
+}
+int do_yinyou(string arg)
+{
+	object me,ob,obj,who,*inv;
+	mapping exits;
+	string target,exit,*path;
+	int i,j,k;
+	me = this_player();
+	ob = this_object();
+        if( !arg||sscanf(arg, "%s to %s", target,exit)!=2 )
+                return notify_fail("格式：yinyou someone to exit\n");
+	if( !ob->id(target) )
+		return notify_fail("你要引诱甚么？\n");
+	exits = environment(ob)->query("exits");
+	path = keys(exits);
+	j=sizeof(path);
+	while(j--)
+	{
+		if(path[j]!=exit) continue;
+		k++;
+	}
+	if(!k)
+		return notify_fail("你所处的环境没有这个出口。\n");
+	
+        if (me->query_busy())
+                return notify_fail("你正忙着呢！\n");
+        if (me->is_fighting())
+                return notify_fail("你正忙着呢！\n");
+	if( query_temp("xs_yinyou") )
+		return notify_fail("这只老鼠正处于被引诱状态。\n");
+	if( !living(ob) )
+		return notify_fail("它正晕着呢，怎么引诱？\n");
+		
+        inv = all_inventory(me);
+        for(i=0;i<sizeof(inv);i++)
+        {
+        	if(!inv[i]->query_max_liquid()) continue;
+        	if( present("su you", inv[i]))
+        	{
+        		obj=inv[i];
+        		who = present("su you", obj);
+        	}
+        	
+        }
+	if(!obj) return notify_fail("你身上没有引诱老鼠用的酥油。\n");
+	if(!who) return notify_fail("你身上没有引诱老鼠用的酥油。\n");
+	me->start_busy(2);
+	who->add_amount(-1);
+	obj->add_current_liquid(-1);
+	
+	message_vision("$N从"+obj->name()+"中取出一些" +who->name()
+        		+ "洒在向"+exit+"的方向，引诱$n！\n", me, ob );
+        set_temp("xs_yinyou", 1);
+        set("chat_chance", 0);
+	if(obj->query_current_liquid()<1||!who||who->query_amount()<1)
+	destruct(who);
+	remove_call_out("wait_go");
+        call_out("wait_go",2 ,ob,me,exits,path,exit);
+        return 1;
+}
+void wait_go(object ob,object me,mapping exits,string *path,string exit)
+{
+	string msg;
+	if(query_temp("xs_yinyou")>1+random(3))
+	{
+		remove_call_out("go_exit");
+		call_out("go_exit",1 ,ob,me,exits,path,exit);
+		return;
+	}
+	msg = laoshu_msg[random(sizeof(laoshu_msg))];
+	message_vision(msg, ob);
+
+	add_temp("xs_yinyou", 1);
+	call_out("wait_go",random(3)+2 ,ob,me,exits,path,exit);
+}
+void go_exit(object ob,object me,mapping exits,string *path,string exit)
+{
+        string file;
+        object room,who;
+	int i,j=3;
+	i = random(10);
+        if(me->query_leader()&&me->query_leader()==ob)
+                me->set_leader(0);
+	if( i == 0 )
+	{
+		file = "/d/xueshan/"+JOB_G->file_shuhuan();
+		while(j--)
+		{
+                        if(file == base_name(environment(ob)))// continue;
+			file = "/d/xueshan/"+JOB_G->file_shuhuan();
+                }
+               if(!( room = find_object(file)) )
+                     room = load_object(file);
+               if(!room)
+               message_vision("$N在原地一动没动。。。\n", ob);
+               else{
+               message_vision("$N钻进一个地洞不见了。。。\n", ob);
+               message("vision", "一只肥胖的老鼠不知从什么地方钻了出来。\n",({room}));
+               ob->move(room);
+               }
+               ob->set_temp("xs_yinyou",0);
+               set("chat_chance", 20);
+               return;
+	}
+	if( i == 9)
+	{
+  	       who=new(__DIR__"xs_mao.lpc");
+	       who->move(environment(ob));
+               message_vision("$N突然一只野猫不知从什么地方钻了出来。。。\n", who);
+	       me->start_busy(1);
+	       who->kill_ob(me);
+	       me->kill_ob(who);
+	       who->set_leader(me);
+ 	       command("go "+path[random(sizeof(path))]);
+               ob->set_temp("xs_yinyou",0);
+               set("chat_chance", 20);
+               return;
+	}
+	if( i > 6 )
+	{
+		if(sizeof(path)>1)
+		{
+			path -= ({exit});
+			command("go "+path[random(sizeof(path))]);
+		}
+		else
+			command("go "+exit);
+                ob->set_temp("xs_yinyou",0);
+	        set("chat_chance", 15);
+		return;
+	}
+        set("chat_chance", 10);
+        ob->set_temp("xs_yinyou",0);
+	command("go "+exit);
+}
+int accept_fight(object me)
+{
+	mapping exits;
+	string *path;
+	exits = environment(this_object())->query("exits");
+        path = keys(exits);
+        command("go "+path[random(sizeof(path))]);
+        return 1;
+}
+int do_killing(string arg)
+{
+	object victim;
+	mapping exits;
+	string *path;
+        if ( !arg || arg == "")	return 0;
+        if( objectp(victim = present(arg, environment(this_object()))) && living(victim))
+          {
+        	if(victim == this_object())
+          	{
+          		exits = environment(this_object())->query("exits");
+          		path = keys(exits);
+          		command("go "+path[random(sizeof(path))]);
+          		return 1;
+          	}
+          }
+        return 0;               
+}
+
+void self_destruct()
+{
+	object me,room,ob,obj;
+	me = this_object();
+	if(me->query_temp("xs_yinyou"))
+	{
+        	remove_call_out("self_destruct");
+        	call_out("self_destruct", 180);
+		return;
+	}
+        if(!( room = find_object("/d/xueshan/dumudian.lpc")) )
+        room = load_object("/d/xueshan/dumudian.lpc");
+        if(room)
+        {
+        	if(objectp(obj = present("tong gang", room)))
+        	{
+        		//老鼠跑掉，则减少遍照雪海内的油
+        		if(objectp(ob = present("su you", obj)))
+        		{
+	if(obj->query_current_liquid())
+	{
+		obj->add_current_liquid(-3);
+                obj->add("liquid_remaining",-3);
+	        ob->add_amount(-3);
+        }
+        if(ob->query_amount()<1||obj->query_current_liquid()<1)
+        {
+        	obj->set_current_liquid(0);
+                obj->set("liquid_remaining",0);
+        	destruct(ob);
+        }
+        			obj->save();
+        		}
+        	}
+        } 
+    
+    message_vision( "满身酥油的$N钻到一个地洞中不见了。\n", this_object());
+    tell_object(query("xs_shuhuan"),"你要捕捉的老鼠跑掉了。\n");
+    destruct(me);
+}
+int die()
+{
+        object me,room,ob;
+        mapping exits;
+        
+        string file, *path;
+        int j=3;
+        me = this_object()->query_temp("last_damage_from");
+        ob=this_object();
+	exits = environment(ob)->query("exits");
+	path = keys(exits);
+		file = "/d/xueshan/"+JOB_G->file_shuhuan();
+		while(j--)
+		{
+                        if(file == base_name(environment(ob)))// continue;
+			file = "/d/xueshan/"+JOB_G->file_shuhuan();
+                }
+               if(!( room = find_object(file)) )
+                     room = load_object(file);
+               if(!room)
+          		command("go "+path[random(sizeof(path))]);
+               else{
+               message_vision("$N钻进一个地洞不见了。。。\n", ob);
+               message("vision", "一只肥胖的老鼠不知从什么地方钻了出来。\n",({room}));
+               ob->move(room);
+               }
+               return 1;
+}

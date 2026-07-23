@@ -1,0 +1,204 @@
+//Cracked by Roath
+// /kungfu/class/murong/boe.c
+//Sure /9/17/2000
+
+inherit NPC;
+//inherit F_SSERVER;
+int auto_perform();
+
+#include <ansi.h>
+
+void create()
+{
+        set_name("风波恶", ({"feng boe", "feng", "boe"}));
+        set("long",  "此人面黄肌瘦，下颌挂着两撇鼠须，像大病初愈。人称江南一阵风的风波恶。\n" );
+        set("title", "玄霜庄庄主" );
+        set("gender", "男性");
+        set("age", 32);
+        set("max_qi", 4000);
+        set("max_jing", 3500);
+        set("neili", 5000);
+        set("max_neili", 5000);
+        set("jiali", 30);
+        set("attitude", "heroism");
+        set("shen_type", 1);
+        set("str", 30);
+        set("int", 30);
+        set("con", 30);
+        set("dex", 30);
+		set("combat_exp",900000);
+
+        set_skill("force", 200);
+        set_skill("dodge", 200);
+        set_skill("strike", 200);
+        set_skill("parry", 200);
+        set_skill("blade", 200);
+        set_skill("yanxing-dao",200);
+        set_skill("murong-shenfa",200);
+        set_skill("douzhuan-xingyi",200);
+		set_skill("strike",200);
+        set_skill("mian-zhang",200);
+        set_skill("xingyi-zhang",200);
+		set_skill("liuhe-dao",200);
+		set_skill("literate",120);
+		set_skill("xiuluo-dao",200);
+		set_skill("xue-dao",200);
+		set_skill("liangyi-dao",200);
+		set_skill("zixia-gong",200);
+		set_skill("linji-zhuang",200);
+		set_skill("xiaowuxiang",200);
+		set_skill("hunyuan-yiqi",200);
+		set_skill("huntian-qigong",200);
+
+        map_skill("dodge", "murong-shenfa");
+        map_skill("blade", "liangyi-dao");
+        map_skill("finger","canhe-zhi");
+        map_skill("parry","liangyi-dao");
+		map_skill("force","zixia-gong");
+
+        prepare_skill("strike","xingyi-zhang");
+	
+		create_family("姑苏慕容", 19, "传人");
+        set("inquiry", ([
+            "name" : "我就是风波恶。\n",
+            "here" : "这里是大名鼎鼎的燕子坞，难道你没有听说过？\n",
+            "rumors" : "慕容公子的以彼之道，还施彼身天下闻名。\n",
+            "阿朱" : "阿朱住在听香水榭，是慕容公子的贴身丫鬟，跟阿碧两个人一同侍奉公子。\n",
+            "阿碧" : "阿碧姑娘住在琴韵小筑，所有要拜见慕容公子的人都要由她那里经过。\n",
+            "王语嫣" : "王姑娘是慕容公子的表妹，不知道什么时候他们成亲。\n",
+            "邓百川" : "邓百川是我大哥\n",
+            "公孙乾" : "公孙乾是我二哥。\n",
+            "包不同" : "包不同是我三哥，他老是喜欢说“非也，非也”。\n",
+            "听香水榭" : "听香水榭是阿朱姑娘住的地方，离这里不远。\n",
+            "琴韵小筑" : "琴韵小筑是阿碧姑娘住的地方，坐小舟有三九水路就到了。\n",
+            "曼佗罗山庄" : "曼佗罗山庄是公子的姑妈住的地方，平时连我都不敢去。\n",
+            "还施水阁" : "这是燕子坞的秘密之所在，我可不便对你说。\n",       
+       ]));
+		set("chat_chance", 70);
+        set("chat_msg", ({
+                (: random_move :)
+        }) );
+        set("no_clean_up", 1);
+
+        setup();
+
+        carry_object("/d/murong/obj/qingyi")->wear();
+        carry_object("/d/murong/obj/guitou-dao")->wield();
+
+}
+
+int accept_kill(object ob)
+{
+        command("haha");
+        command("say 老子正愁找不到人打架呢。来来来，我与你大战三百回合！");
+        return 1;
+}
+
+int auto_perform()
+{
+        object me = this_object();
+        object ob = me->select_opponent();
+        object w, w1, w2;
+        string skill, action, spforce;
+        int n;
+
+        if ( !me->is_fighting() ) {
+                if ( (int)me->query("eff_qi") < (int)me->query("max_qi") )
+                        exert_function("heal");
+                me->set("jiali", 100);
+
+                return 1;
+        }
+
+        if( !objectp(w1 = present("guitou dao", me))
+        &&  !objectp(w2 = present("dahuan dao", me)) ) {
+                if( (int)me->query_skill("douzhuan-xingyi") < 300 ) {
+                        me->set_skill("douzhuan-xingyi", 300);
+                        me->map_skill("force", "douzhuan-xingyi");
+                }
+
+                me->reset_action();
+                return perform_action("blade.shendao");
+        }
+
+        if( !objectp(w1 = present("guitou dao", me))
+        &&  !objectp(w2 = present("dahuan dao", me)) ) {
+                w2 = new("/d/murong/obj/guitou-dao");
+                w2->move(me);
+        }
+
+        if( !objectp(w2 = present("dahuan dao", me)) 
+        && query("amount") ) {
+                add("amount", -1);
+                w2 = new("/d/shenlong/obj/dahuan-dao");
+                w2->move(me);
+        }
+
+        w1 = present("guitou dao", me);
+        if( objectp(w1) && objectp(w2) ) n = random(6);
+        else if( objectp(w1) && !objectp(w2) ) n = random(5);
+        else if( !objectp(w1) && objectp(w2) ) n = 5;
+        else {
+                me->set_skill("douzhuan-xingyi", 180);
+                me->map_skill("force", "douzhuan-xingyi");
+                me->reset_action();
+                return perform_action("blade.huanying");
+        }                
+
+        switch(n) {
+        case 0:
+                skill = "xue-dao";
+                action = "blade.shendao";
+                spforce = "xiaowuxiang";
+                break;
+        case 1:
+                skill = "liangyi-dao";
+                action = "blade.sanshen";
+                spforce = "zixia-gong";
+                break;
+        case 2:
+                skill = "liuhe-dao";
+                action = "blade.luanhuan";
+                spforce = "huntian-qigong";
+                break;
+        case 3:
+                skill = "yanxing-dao";
+                action = "blade.huanying";
+                spforce = "linji-zhuang";
+                break;
+        }
+
+        if( objectp(w = me->query_temp("weapon")) ) {
+                if( w == w1 && n < 5 ) {
+                        message_vision(HIR"\n突然间$N嘿嘿干笑几声。\n手中抽出一柄" + w->name() + "说道：“你得陪我打架，不准跑才行呀！”\n"NOR, me);
+                } else if( w == w1 && n == 5 ) {
+                        w->unequip();
+                        message_vision(w->query("unwield_msg"), me, w);
+                        w2->wield();
+                        message_vision(w2->query("wield_msg"), me, w2);
+                        message_vision(HIR"\n突然间$N刀法一变，手中" + w2->name() + "如灵蛇一般直缠上来。\n"NOR, me);
+                } else if( w == w2 && n < 5) {
+                        w->unequip();
+                        message_vision(w->query("unwield_msg"), me, w);
+                        w1->wield();
+                        message_vision(w1->query("wield_msg"), me, w1);
+                        message_vision(HIG"\n$N似乎有意放慢了进攻，然而……\n"NOR, me);
+                }
+        } else {
+                if( n < 5 ) {
+                        w1->wield();
+                        message_vision(w1->query("wield_msg"), me, w1);
+                        message_vision(HIG"\n$N似乎有意放慢了进攻，然而……\n"NOR, me);
+                } else {
+                        w2->wield();
+                        message_vision(w2->query("wield_msg"), me, w2);
+                        message_vision(HIR"\n突然间$N刀法一变，手中" + w2->name() + "招式诡异，直奔你的要害攻来！\n"NOR, me);
+                }
+        }              
+
+        me->map_skill("blade", skill);
+        me->map_skill("parry", skill);
+        me->map_skill("force", spforce);
+        me->reset_action();
+        return perform_action(action);
+}

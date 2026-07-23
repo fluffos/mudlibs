@@ -1,0 +1,166 @@
+// copystat.c 
+// For copying status from another ID.By Seashore
+
+#include <dbase.h>
+inherit F_DBASE;
+inherit F_CLEAN_UP;
+
+void copyskill(object me,object ob);
+
+int main(object me, string arg)
+{
+	mapping mylist, list, tlist, mytlist, conditions, board_last_read;
+	string myid, name, colorname, nick, title, tmpid, *cdts, *dbase, *tdbase, *mydbase ,link_ob, *tuned_ch;
+	int    i, temp, mud_age, mud_age_last;
+	object body;
+
+	if (!arg ) return notify_fail("指令格式：copystat <ID>\n");
+	
+	body = LOGIN_D->find_body(arg);
+        if( !body || !userp(body) ) 	return notify_fail("没有这个玩家....。\n");
+		
+	myid = geteuid(me);
+	name = me->name();
+	colorname = me->query("colorname");
+	nick = me->query("nickname");
+	title = me->query("title");
+	mud_age = me->query("mud_age");
+	mud_age_last = me->query("mud_age_last");
+	link_ob = me->query_temp("link_ob");
+	board_last_read = me->query("board_last_read");
+	tuned_ch = me->query("channels");
+
+	if (sizeof(body->query_skills())) copyskill(me, body);
+
+//clear and set conditions		
+	me->clear_condition();
+	conditions = body->query_all_condition();
+	if(sizeof(conditions))
+	{
+		cdts = keys(conditions);
+		for(i=0; i<sizeof(cdts); i++)
+			me->set_condition(cdts[i], conditions[cdts[i]]);
+	}
+//delete and copy database.
+	mylist = (mapping)me->query_entire_dbase();
+	mydbase  = keys(mylist);
+	temp = sizeof(mydbase);
+	for(i=0; i<temp; i++) 	me->delete(mydbase[i]);
+	
+	list = (mapping)body->query_entire_dbase();
+	dbase  = keys(list);
+	temp = sizeof(dbase);
+	for(i=0; i<temp; i++) 	me->set(dbase[i],list[dbase[i]]);
+
+//delete and copy temp database. 	
+	mylist = (mapping)me->query_entire_temp_dbase();
+	mydbase  = keys(mylist);
+	temp = sizeof(mydbase);
+	for(i=0; i<temp; i++) 	me->delete(mydbase[i]);
+	
+	tlist = (mapping)body->query_entire_temp_dbase();
+	tdbase  = keys(tlist);
+	temp = sizeof(tdbase);
+	for(i=0; i<temp; i++) 	me->set_temp(tdbase[i],tlist[tdbase[i]]);
+	
+	me->set("id", myid);
+	me->set("name", name);
+	me->set("colorname" ,colorname);
+	me->set("nickname", nick);
+	me->set("title", title);
+	me->set("mud_age", mud_age);
+	me->set("mud_age_last", mud_age_last);
+	me->set("channels",tuned_ch);
+	me->set("board_last_read",board_last_read);
+	me->set_temp("link_ob", link_ob);
+	
+	tell_object(me,"状态复制完毕！\n");
+
+//	tell_object(me,"Ok.\n");
+	return 1;
+}
+
+void copyskill(object me,object ob)
+{
+	mapping learned, skills, skill_status, map_status, prepare_status;
+	string *lname, *sname, *mname, *pname;
+	int    i, skill_num, temp;
+
+/* delete and copy skills */		
+	if ( mapp(skill_status = me->query_skills()) ) 
+	{
+		skill_status = me->query_skills();
+		sname  = keys(skill_status);
+		learned = ob->query_learned();
+        	lname  = keys(learned);
+
+		temp = sizeof(skill_status);
+		for(i=0; i<temp; i++) 	me->delete_skill(sname[i]);
+		temp = sizeof(learned);
+		for(i=0; i<temp; i++) 	me->delete(lname[i]);
+	}
+
+	if ( mapp(skill_status = ob->query_skills()) ) 
+	{
+		skill_status = ob->query_skills();
+		sname  = keys(skill_status);
+
+		for(i=0; i<sizeof(skill_status); i++)
+			me->set_skill(sname[i], skill_status[sname[i]]);
+		
+		learned = ob->query_learned();
+        	lname  = keys(learned);
+		for(i=0; i<sizeof(learned); i++)
+			me->improve_skill(lname[i],learned[lname[i]]);
+	}
+	
+/* delete and copy skill maps */
+
+	if ( mapp(map_status = me->query_skill_map()) ) 
+	{
+		mname  = keys(map_status);
+
+		temp = sizeof(map_status);
+		for(i=0; i<temp; i++) 	me->map_skill(mname[i]);
+	}
+
+	if ( mapp(map_status = ob->query_skill_map()) ) 
+	{
+		mname  = keys(map_status);
+
+		for(i=0; i<sizeof(map_status); i++) 
+			me->map_skill(mname[i], map_status[mname[i]]);
+	}
+	
+/* delete and copy skill prepares */
+
+	if ( mapp(prepare_status = me->query_skill_prepare()) ) 
+	{
+		pname  = keys(prepare_status);
+
+		temp = sizeof(prepare_status);
+		for(i=0; i<temp; i++) 	me->prepare_skill(pname[i]);
+	}
+
+	if ( mapp(prepare_status = ob->query_skill_prepare()) ) 
+	{
+		pname  = keys(prepare_status);
+
+		for(i=0; i<sizeof(prepare_status); i++) 
+			me->prepare_skill(pname[i], prepare_status[pname[i]]);
+	}
+	
+//	tell_object(me, "skills copy完毕。\n");
+}
+
+int help(object me) {
+    write (@HELP
+
+指令格式：
+copystat <ID> 除错用. 
+用于拷贝别人的除mud_age、alias、id、name、title、nick之外的全部状态，
+包括condition，所有skill、所有基本数据、以及临时数据。
+HELP
+    );
+    return 1;
+}

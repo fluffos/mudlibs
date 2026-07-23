@@ -1,0 +1,51 @@
+//Cracked by Roath
+// by xuanyuan 11/15/2001
+
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+
+void remove_effect(object me, int amount);
+
+int exert(object me, object target)
+{
+        int skill;
+
+        if( (int)me->query("neili") < 1000  ) 
+                return notify_fail("你的内力不足使用五毒心法护身。\n");
+
+        if( (int)me->query("max_neili") < 2000  )
+                return notify_fail("你的内力修为不够。\n");
+
+        if( (int)me->query_temp("wudu/shield") )
+                return notify_fail("你已经在运用五毒心法护身。\n");
+
+        if( (int)me->query_skill("wudu-xinfa", 1) < 150)
+                return notify_fail("你的五毒心法修为不够！\n");
+
+		if ( me->query("gender") == "无性" )
+				return notify_fail("你无根无性，阴阳不调，难以运用五毒心法。\n");
+
+        skill = me->query_skill("wudu-xinfa", 1);
+ 
+        me->add("neili", -400);
+
+        message_vision(YEL"$N冷笑一声，双掌互擦，周围登时腥臭弥漫，中人欲呕。\n"NOR, me);
+
+        me->add_temp("apply/parry",  skill/2);
+        me->set_temp("wudu/shield", 1);
+
+        me->start_call_out( (: call_other, __FILE__, "remove_effect", me, skill :), skill/2);
+
+        if( me->is_fighting() ) me->start_busy(1);
+
+        return 1;
+}
+
+void remove_effect(object me, int skill)
+{
+        me->delete_temp("wudu/shield",1);
+        me->delete_temp("apply/parry",  skill/2);                       
+        message_vision(HIY"$N微觉疲惫，收回了五毒心法的内力。\n"NOR,me);
+}
+

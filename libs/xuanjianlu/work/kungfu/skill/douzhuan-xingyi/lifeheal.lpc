@@ -1,0 +1,120 @@
+/******************
+Cname:  医疗术
+Ename:  lifeheal
+Create: Play
+Time:   3/10/2002
+********************/
+
+#include <ansi.h>
+inherit F_SSERVER;
+
+string *points=
+({
+  "内关穴","外关穴","中府穴","云门穴","尺泽穴","风府穴",
+  "太渊穴","商阳穴","合谷穴","曲池穴","五里穴","迎香穴",
+  "极泉穴","少海穴","通里穴","神门穴","少府穴","曲泽穴",
+  "劳宫穴","阳池穴","天井穴","少泽穴","肩贞穴","中注穴",
+  "巨阙穴","阳关穴","大椎穴","环跳穴","悬钟穴","风市穴",
+  "气舍穴","阳白穴","委中穴","商邱穴","灵道穴","少冲穴",
+  "百会穴","膻中穴","气海穴","太阳穴",
+});
+string *lists=
+({
+        "哇的一声，吐出一口淤血",
+        "面色恢复了一些血色",
+        "紧皱的眉头逐渐的舒展开来",
+        "身体随之一颤",
+        "头顶升起缕缕白色的雾气",
+        "轻轻的哼了一声"
+});
+int exert(object me, object target)
+{
+        mapping M_dbase,T_dbase;
+        int skill,level;
+
+        if( !target ) target = me;
+
+        M_dbase = me->query_entire_dbase();
+        T_dbase = target->query_entire_dbase();
+        skill   = me->query_skill("douzhuan-xingyi",1);
+        level = skill/20;
+
+        if (me->query("family/family_name") != "姑苏慕容") 
+                return notify_fail("什么?\n");
+
+        if( me->is_fighting() || target->is_fighting())
+                return notify_fail("在战斗中无法集中精力运功疗伤！\n");
+        if( skill < 60 )
+                return notify_fail("你还没领悟到斗转星移心法中的疗伤技巧。\n");
+
+        if( M_dbase["max_neili"] < 500 )
+                return notify_fail("你的基本内力修为不够。\n");
+
+        if( M_dbase["neili"] < 500 )
+                return notify_fail("你的真气不足，无法疗伤。\n");
+
+        if( T_dbase["eff_qi"] < T_dbase["max_qi"] / level )
+                return notify_fail( "你所掌握的疗伤技法治愈不了"+
+                                     target->name()+"的伤。\n");
+
+        if( T_dbase["eff_qi"] >= T_dbase["max_qi"] )
+                return notify_fail("看清楚对方现在身体无伤。\n");
+
+        message_vision(HIG"$N运起神功，左掌抵住$n前心，右手食指如飞点向$n的穴道。。。\n"NOR, me, target);
+
+        me->start_busy(4);
+        target->start_busy(4);
+        call_out("heal",2,me,target,M_dbase,T_dbase);
+
+}
+int heal(object me,object target,mapping M_dbase,mapping T_dbase)
+{
+        int i;
+        
+        if(T_dbase["eff_qi"]>=T_dbase["max_qi"]&&living(target))
+        {
+                target->set("eff_qi",T_dbase["max_qi"]);
+                me->start_busy(0);
+                target->start_busy(0);
+                message_vision(HIC"$N将真气收回缓缓的舒了口气，$n的伤势看样子已经痊愈了。\n"NOR, me, target);
+                return 1;
+        }
+        if(M_dbase["neili"]<1||M_dbase["jingli"]<1)
+        {
+                if(M_dbase["neili"]<1)
+                me->set("neili",0);
+                else
+                me->set("jingli",0);            
+                me->stop_busy(0);
+                target->stop_busy(0);
+                message_vision(HIM"$N真元耗尽，停止为$n疗伤。\n"NOR, me, target);
+                return 1;
+        }
+        if(me->is_fighting()||target->is_fighting())
+        {
+                me->start_busy(0);
+                target->start_busy(0);
+                return 1;
+        }
+        //如果受伤者同时被慕容弟子使用慕容星爆击伤，并流血不止，
+        if(target->query_condition("murong-xingbao"))
+                //第一个条件：同时实施疗伤者设有为本类伤治疗
+                if(me->query("env/douzhuan-xingyi"))
+                //第二个条件：实施疗伤者的心法等级要大于120     
+                if(me->query_skill("douzhuan-xingyi",1) > 120 )
+                //那么这个伤者的星爆击伤就痊愈了
+                target->clear_one_condition("murong-xingbao");
+        i = M_dbase["jiali"]+T_dbase["jiali"]/2;
+        i = i/2+30;
+        me->add("neili", - i*2);
+        me->add("jingli", - 10);
+        target->receive_curing("qi", i );
+        me->start_busy(3);
+        target->start_busy(3);
+        message_vision("$N运指点向$n的"HIW+points[random(sizeof(points))]+NOR"，$n"
+                       + lists[random(sizeof(lists))]+"。。。\n",me,target);
+        //如果被医疗者是晕倒状态，则将其救醒
+        if(!living(target)) target->revive();
+        call_out("heal",2+random(2),me,target,M_dbase,T_dbase);
+        return 1;
+}

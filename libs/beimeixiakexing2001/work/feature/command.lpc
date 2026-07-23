@@ -29,7 +29,7 @@ string remove_leading_space(string arg)
 
 // This is the add_action hook handling movement, commands, emotes and
 // channels. Optimization is needed.
-private nomask int command_hook(string arg)
+nomask int command_hook(string arg)
 {
 	string verb, file;
 

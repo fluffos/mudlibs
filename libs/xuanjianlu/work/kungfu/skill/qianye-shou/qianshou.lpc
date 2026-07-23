@@ -1,0 +1,116 @@
+// qianshou 千手如来
+// liu 2002
+/*
+当下更不耽搁，轻飘飘拍出一掌，叫道：
+“任施主，请接掌。”这一掌招式寻常，但掌到中途，忽然微微摇晃，登时一掌变
+两掌，两掌变四掌，四掌变八掌。任我行脱口叫道：“千手如来掌！”知道只须迟
+得顷刻，他便八掌变十六掌，进而幻化为三十二掌，当即呼的一掌拍出，攻向方证
+右肩。方证左掌从右掌掌底穿出，仍是微微晃动，一变二、二变四的掌影飞舞。任
+我行身子跃起，呼呼还了两掌。
+
+    令狐冲居高临下，凝神细看，但见方证大师掌法变幻莫测，每一掌击出，甫到
+中途，已变为好几个方位，掌法如此奇幻，直是生平所未睹。
+
+左冷禅心想：“幸亏任老怪挑上了方证大师，否则他这似拙实巧的掌法，我
+便不知如何对付才好。本门的大嵩阳神掌与之相比，显得招数太繁，变化太多，不
+如他这掌法的攻其一点，不及其余。”向问天却想：“少林派武功享名千载，果然
+非同小可。方证大师这‘千手如来掌’掌法虽繁，功力不散，那真是千难万难。倘
+若教我遇上了，只好跟他硬拚内力，掌法是比他不过的了。”岳不群、余沧海等各
+人心中，也均以本身武功，与二人的掌法相印证。任我行酣斗良久，渐觉方证大师
+的掌法稍形缓慢，心中暗喜：“你掌法虽妙，终究年纪老了，难以持久。”当即急
+攻数掌，劈到第四掌时，猛觉收掌时右臂微微一麻，内力运转，不甚舒畅，不由得
+大惊，知道这是自身内力的干扰，心想：“这老和尚所练的易筋经内功竟如此厉害，
+掌力没和我掌力相交，却已在克制我的内力。”心知再斗下去，对方深厚的内力发
+将出来，自己势须处于下风，眼见方证大师左掌拍到，一声呼喝，左掌迅捷无伦的
+迎了上去，拍的一声响，双掌相交，两人各退了一步。任我行只觉对方内力虽然柔
+和，却是浑厚无比，自己使出了“吸星大法”，竟然吸不到他丝毫内力，心下更是
+惊讶。方证大师道：“善哉！善哉！”跟着右掌击将过来。任我行又出右掌与之相
+交。两人身子一晃，任我行但觉全身气血都是晃了一晃，当即疾退两步，陡地转身，
+右手已抓住了余沧海的胸口，左掌往他天灵盖疾拍下去。
+*/
+#include <ansi.h>
+
+inherit F_SSERVER;
+
+int perform(object me, object target)
+{
+        object weapon;
+        string msg;
+        int lv, hit, i, num;
+
+        if( !target ) target = offensive_target(me);
+
+        if( !target || !me->is_fighting(target) )
+                return notify_fail("「千手如来掌」只能在战斗中对对手使用。\n");
+
+        if( me->query_skill_mapped("force") != "hunyuan-yiqi" )
+                return notify_fail("你所用的并非混元一气功，施展不出「千手如来掌」。\n");
+
+        if( (int)me->query("neili") < 1000 )
+                return notify_fail("你现在内力太弱，不能使用「千手如来掌」。\n");
+
+        if( me->query_temp("qs_effect") )
+                return notify_fail("你真气翻涌，一时难以再行抢攻！\n");
+
+        weapon = me->query_temp("weapon");
+        lv = me->query_skill("hand");
+        hit = (random(lv)/20);
+        if(hit <2) hit = 2;
+        if(hit >= 2) hit = 2;
+        if(hit >= 4) hit = 4;
+        if(hit >= 8) hit = 8;
+        if(hit >= 16) hit = 16;
+        if(hit >= 32) hit = 32;
+
+        me->add_temp("apply/speed", lv/2);
+        me->add_temp("apply/attack", lv/4);
+        me->add_temp("apply/damage", lv/4);
+
+        msg = NOR "\n$N当下更不耽搁，轻飘飘拍出一掌，叫道：“施主，请接掌。”\n" NOR;
+        msg += HIY "这一掌招式寻常，但掌到中途，忽然微微摇晃，登时";
+
+        if(hit = 2)msg += "一掌变两掌";
+        if(hit = 4)msg += "，两掌变四掌";
+        if(hit = 8)msg += "，四掌变八掌";
+        if(hit = 16)msg += "，八掌变十六掌";
+        if(hit = 32)msg += "，十六掌变三十二掌";
+        
+        msg += "！"+NOR+CYN+"\n$n脱口叫道：“千手如来掌！”知道只须迟得顷刻，$N便"+chinese_number(hit)+"掌变"+chinese_number(hit*2)+"掌，进而幻化为"+chinese_number(hit*4)+"掌！\n"NOR;
+
+        message_vision(msg, me, target);
+
+        if(hit >= 2) num = 2;
+        if(hit >= 4) num = 4;
+        if(hit >= 8) num = 6;
+        if(hit >= 16) num = 8;
+        if(hit = 32) num = 10;
+
+        if( me->query_skill_prepared("claw") == "longzhua-gong" ) {
+                me->set_temp("restore", 1);
+                me->prepare_skill("claw");
+        }
+
+        for( i=0; i < num; i++ )
+        {
+                COMBAT_D->do_attack(me, target, weapon);
+        }
+
+        me->add_temp("apply/speed", -lv/2);
+        me->add_temp("apply/attack", -lv/4);
+        me->add_temp("apply/damage", -lv/4);
+
+        if( me->query_temp("restore") ) {
+                me->prepare_skill("claw", "longzhua-gong");
+                me->delete_temp("restore");
+        }
+        me->add("neili", -hit*50);
+        me->set_temp("qs_effect",1);
+        call_out("remove_effect", num, me);
+        return 1;
+}
+
+void remove_effect(object me)
+{
+        if (!me) return;
+        me->delete_temp("qs_effect");
+}

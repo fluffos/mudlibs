@@ -1,0 +1,128 @@
+// jinhua-zhang.c  金花杖
+inherit SKILL;
+#include <ansi.h>;
+
+mapping *action = ({
+([      "action" : "$N使一招「金花银叶」手中$w舞出朵朵金花，击向$n的$l",
+        "damage" : 40,
+        "parry": 40,
+        "force": 150,
+        "lvl" : 0,
+        "damage_type" : "挫伤",
+        "skill_name" : "金花银叶"
+]),
+([      "action": "$N却不回身，倒转$w，一招「羚羊挂角」,反手往$n砸去",
+        "damage" : 50,
+        "dodge": 80,
+        "parry": 10,
+        "force": 250,
+        "lvl" : 20,
+        "damage_type": "挫伤",
+        "skill_name" : "羚羊挂角"
+]),
+([      "action": "$N双眼凝视对方双眼，一瞬也不瞬，突然一招「一心一意」，举起手中拐杖，往$n$l疾点。",
+        "damage" : 60,
+        "dodge": 80,
+        "parry": 20,
+        "force": 250,
+        "lvl" : 30,
+        "damage_type": "刺伤",
+        "skill_name" : "一心一意"
+]),
+([      "action" : "$N使一式「金蛇探海」，手中$w直奔$n下三路急射而来",
+        "damage" : 70,
+        "force" : 350,
+        "dodge" : 50,
+        "lvl" : 40,
+        "damage_type" : "刺伤",
+        "skill_name" : "金蛇探海"
+]),
+([      "action": "$N忽的飞身而起，使一招「力劈华山」，手中$w从上而下直击$n头顶",
+        "damage" : 80,
+        "dodge": 70,
+        "parry": 30,
+        "force": 350,
+        "lvl" : 60,
+        "damage_type": "淤伤",
+        "skill_name" : "力劈华山"
+]),
+([      "action": "$N使一招「暗里乾坤」，手中杖明击$n要害，暗里飞出一脚，直向$n小腹踢去",
+        "dodge": -25,
+        "parry": -10,
+        "damage" : 80,
+        "force": 400,
+        "lvl" : 70,
+        "damage_type": "内伤",
+        "skill_name" : "暗里乾坤"
+]),
+([      "action": "$N单掌一封，一招「如影随形」，举重若轻，手中$w直若无物，直击$n背心",
+        "dodge": 80,
+        "damage" : 80,
+        "parry": 100,
+        "force": 400,
+        "lvl" : 80,
+        "damage_type": "刺伤",
+        "skill_name" : "如影随形"
+]),
+([      "action": "$N左腿向右横扫，手中杖由右向左横扫，一招「横扫千军」直向$n击来",
+        "dodge": 70,
+        "damage" : 90,
+        "parry": 30,
+        "force": 400,
+        "lvl" : 100,
+        "damage_type": "内伤",
+        "skill_name" : "横扫千军"
+]),
+});
+
+int valid_enable(string usage) { return usage=="staff"|| usage=="parry"; }
+
+int valid_learn(object me)
+{
+        object weapon;
+
+        if (objectp(weapon = me->query_temp("weapon")))
+        if ((string)weapon->query("skill_type") != "staff")
+                return notify_fail("你使用的武器不对。\n");
+        if ((int)me->query_skill("shenghuo-xuanming", 1) < 25)
+                return notify_fail("你的圣火玄冥功火候不够，无法练金花杖。\n");
+        if ((int)me->query("max_neili") < 100)
+                return notify_fail("你的内力太弱，无法练金花杖。");
+        return 1;
+}
+
+mapping query_action(object me, object weapon)
+{
+	if (random(me->query_skill("staff")) > 60
+	&& me->query_skill("force") > 90
+	&& me->query("neili") > 120 && random(2) == 0) {
+		return ([
+		"action": HIY"$N突然将$w"+HIY"向地上一插，以身为杖，使出一招「横扫千军」，横扫向$n"NOR,
+		"force" : 500,
+		"damage": 150,
+		"damage_type": "瘀伤"]);
+	}
+
+	return action[random(sizeof(action))];
+}
+
+int practice_skill(object me)
+{
+
+        if ((int)me->query("jingli") < 50)
+                return notify_fail("你的精力太低了。\n");
+        if ((int)me->query("neili") < 8)
+                return notify_fail("你的内力不够练金花杖。\n");
+
+        if (me->query_skill("jinhua-zhang", 1) < 50)
+                me->receive_damage("jingli", 20, "精力透支过度死了。");
+        else
+                me->receive_damage("jingli", 30, "精力透支过度死了。");
+        me->add("neili", -5);
+        return 1;
+}
+
+string perform_action_file(string action)
+{
+        return __DIR__"jinhua-zhang/" + action;
+}

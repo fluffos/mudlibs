@@ -1,0 +1,169 @@
+//tougu.c 透骨针
+//lbc 3/2002
+
+//突然之间，张无忌胸口一痛，似乎被一枚极细的尖针刺了一下。
+//这一下刺痛突如其来，直钻入心肺，
+//但这两下刺痛似有形，实无质，一股寒气突破他护体的九阳神功，直侵内脏。
+//波斯三使一股极阴寒的内力，积贮于一点，从圣火令上传来，攻坚而入。
+//阴劲入体，立即消失，但这一刺可当真疼痛入骨。
+
+#include <ansi.h>
+
+inherit F_DBASE;
+inherit F_SSERVER;
+
+int attack_power(object user);
+int dodge_power(object user); // 当内劲袭来时, 一般应选择先闪避, 只有避无可避, 或是胸有成竹, 才会选择硬接
+int defense_power(object user);
+int damage_force(object me, object target);
+int damage_exert(object me, object target);
+int damage_neili(object me, object target);
+
+#include "tougu_method.lpc"
+
+int perform(object me, object target)
+{
+	string weapon, force_skill, dodge_skill, dodge_msg, w_name;
+	int lvl1, lvl2, ap, dgp, dfp;
+
+	if( !target ) 
+		target = offensive_target(me);
+
+	if( !target
+	||	!target->is_character()
+	||	!me->is_fighting(target) )
+		return notify_fail("「透骨针」只能对战斗中的对手使用。\n");
+
+	if( (lvl1 = me->query_skill("shenghuo-ling", 1 )) < 150 )
+		return notify_fail("你的古波斯武功修为不够，不能将阴寒之气汇聚一点！\n");
+
+	if( (lvl2 = me->query_skill("force")) < 200 )
+		return notify_fail("你的内功修为不够，阴劲无法穿透对方护体内功。\n");
+
+	if( !me->query_skill_mapped("force"))
+		return notify_fail("你没用运用内功，无法施展透骨针。\n");
+
+	if (!target->query_skill_mapped("force"))
+		return notify_fail("对手没有使用内功，无需使用阴毒内劲伤人了。\n");
+	
+	if ( target->query("neili") < 1)
+		return notify_fail("对手内力涣散，何需再用阴毒内劲伤人。\n");
+	
+	if (me->query("neili") < (lvl1+lvl2)/3)
+		return notify_fail("你的内力不够。\n");
+
+	if (me->query("jingli") < (lvl1+lvl2)/4)
+		return notify_fail("你的精力不够。\n");
+
+	ap = attack_power(me);
+
+	dgp = dodge_power(target);
+
+	dfp = defense_power(target);
+
+	if (wizardp(me))
+		printf("ap = %d , dgp = %d , dfp = %d.\n",ap, dgp, dfp);
+
+	weapon = me->query_temp("weapon");
+	if (weapon)
+		w_name = weapon->query("name");
+	else 
+		w_name = "手掌"; //暂时测试用
+	force_skill = target->query_skill_mapped("force");
+	dodge_skill = target->query_skill_mapped("dodge");
+
+	message_vision(BLU "$N" BLU "使一股极阴寒的内力，积贮于一点，从"+ w_name+ BLU "上向$n射去。\n\n" NOR, me, target);
+	
+	me->add("neili" , -(lvl1+lvl2)/3);
+	me->add("jingli", -(lvl1+lvl2)/4);
+	
+	if (random(ap) < dgp / 3 && (!target->query_temp("bosi/duo/ling_num") ) )
+	{
+		dodge_msg="$n" BLU "感觉一股阴寒之气从"+ w_name + BLU "上传来，急忙使出";
+		if (dodge_skill)
+			dodge_msg+=to_chinese(dodge_skill);
+		else dodge_msg+="轻功";
+		dodge_msg+="，从旁纵开，躲开了这下寒气针刺。 \n\n";
+		
+		message_vision(HIG+dodge_msg+NOR, me, target);
+		me->start_busy(2 + random(2));
+		return 1;
+	}
+
+	if (random(ap) < (dfp / 3))
+	{
+		tell_object(target, HIB"突然之间，你胸口一痛，似乎被一枚极细的尖针刺了一下。这一下刺痛突如其来，直钻入心肺。\n\n"NOR);
+		message_vision(HIC"$n" HIC "急运"+ to_chinese(force_skill) + "与阴寒之气相抗。\n\n"NOR, me, target);
+		tell_object(target, HIB"阴劲入体，立即消失，但这一刺可当真疼痛入骨。\n\n"NOR);
+		if (target->query("neili") > 200 )
+			target->add("neili", -random(200));
+		else target->set("neili", 1);
+		target->start_busy(target->query_busy() + 1 + random(2));
+		me->start_busy(2 + random(2));
+	}
+	else 
+	{
+		tell_object(target, HIB"突然一下刺痛似有形，实无质，一股寒气突破你护体的"+ to_chinese(force_skill) +"，直侵内脏。\n\n"NOR);
+		message_vision(HIC"$n眉头一皱，脸现痛苦之色，似乎在无形之中已经受了内伤。\n\n" NOR, me, target);
+		target->start_busy(target->query_busy() + 1 + random(2));
+		me->start_busy(me->query_busy() + 1);
+		//这一条这样写是为了duo 的时候不出问题
+		//在正常情况下, query_busy()总是0的, 
+		//因为只有是0你才能perform tougu....
+
+		if (lvl1 >= 320)
+		{
+			message_vision(HIR"这股寒气着实非同小可，$n" HIR "受伤太重，体内真气再也无法运转自如。\n\n" NOR, me, target);
+			damage_neili(me, target);
+			damage_exert(me, target);
+			damage_force(me, target);
+//			printf("dm force\n");
+		}
+		if (lvl1 >= 240 && lvl1 < 320)
+		{
+			message_vision(HIR"这股寒气着实非同小可，$n" HIR "受伤不轻，" + to_chinese(force_skill) + "无法继续运转自如。\n\n" NOR, me, target);
+			damage_neili(me, target);
+			damage_exert(me, target);
+//			printf("dm ex\n");
+		}
+		if (lvl1 >= 160 && lvl1 < 240)
+		{
+			damage_neili(me, target);
+//			printf("dm neili\n");
+		}
+	}
+		
+//	printf("test ok\n");
+	return 1;
+}
+
+int attack_power(object user)
+{
+	int force, neili, intellect, power;
+	//这种高级且阴毒的内功其实应该包括使用者的运用技巧, 所以加入了int的计算
+	force = user->query_skill("force") / 2;
+	neili = user->query("neili") / 10 ;
+	intellect = user->query_int() * 4 / 3;//鉴于literate的学习难度, 此处提高一些数值
+	power = force * neili * intellect;
+	return power;
+}
+
+int dodge_power(object user)
+{
+	int dodge, jingli, dex, power;
+	dodge = user->query_skill("dodge") / 2;
+	jingli = user->query("jingli") * 7 / 6 / 10;
+	dex = user->query_dex();
+	power = dodge * jingli * dex;
+	return power;
+}
+
+int defense_power(object user)
+{
+	int force, neili, con, power;
+	force = user->query_skill("force") / 2 ;
+	neili = user->query("neili") / 10;
+	con = user->query_con();
+	power = force * neili * con;
+	return power;
+}

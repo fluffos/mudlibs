@@ -1934,6 +1934,36 @@ actually trying to accomplish and whether it already succeeded before the
 line that errors, the same "read the actual code, don't just react to the
 log line" discipline used throughout this catalog.
 
+### 15ae. A `private nomask` command-hook function silently stops receiving `add_action()` dispatch once inherited into another object — breaks EVERY post-login command with zero visible error, and is easy to miss if testing stops at the login/registration prompt
+
+Found on `xuanjianlu` (archive #70), and — once flagged — confirmed to
+also affect the already-shipped `beimeixiakexing2001` (#45), which never
+caught it because its own registration testing stopped at "reaches the
+password prompt" rather than continuing into real post-login play. The
+shape: `feature/command.lpc` declares its central command-dispatch
+function (here, `command_hook(string arg)`) as `private nomask`, then
+`inherit`s that feature into the player body class and registers it via
+`add_action("command_hook", "", 1)`. On the *original* driver this
+targeted, `private` scoped the function to same-file callers only but
+still let the driver's own `add_action` dispatch call it externally. This
+driver, however, treats a `private` function as `DECL_HIDDEN` for
+dispatch purposes too, so `add_action`'s external call into the inherited
+function silently fails — no error, no crash, just no command ever
+executes. **This is uniquely dangerous because the symptom appears
+nowhere near the cause**: registration completes fine (it's driven by
+`input_to`/direct method calls, not `add_action`), the player lands in
+the game world, and then every single typed command — including as basic
+as `look` — does nothing at all, with zero output and zero `debug.log`
+entry, indistinguishable from a hung connection or a client-side issue.
+Fix: drop `private` (keep `nomask` if the lib relies on it elsewhere) so
+the function is a plain visible method reachable from `add_action`'s
+external dispatch, matching how sibling libs in the same lineage that
+*don't* exhibit the bug already have it written. **Lesson, now standing
+policy**: never mark a lib "done" without testing at least one ordinary
+post-login command (`look` is enough) after registration completes —
+reaching the game world is not the same as being able to play in it, and
+this exact failure mode produces literally no signal in any log.
+
 ---
 
 ## Per-archive gotchas index
