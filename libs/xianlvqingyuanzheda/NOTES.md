@@ -124,3 +124,38 @@ scroll past), and matches the sibling lib's own precedent of being
 noted-but-not-investigated. Flagging here in more detail than the
 original one-line note in case a future pass sees it escalate to
 something that actually blocks a flow — this pass didn't observe that.
+
+## Driver rebuild / formatter / WASM pass (2026-07-23)
+
+- **LPC formatter** run over all `work/*.lpc`: 7,952 total, 7,948
+  written, 3 already-idempotent, 1 refused (self-check error, expected).
+  One genuine **formatter regression found and fixed**: `d/sky/xitian.lpc`'s
+  `valid_leave()` had `if (::valid_leave(me,dir)) return notify_fail(...)`
+  mangled into `if (: : valid_leave(me, dir)\n)\nreturn notify_fail(...)`
+  — the formatter breaks on the `::` parent-call scope operator followed
+  immediately by `(`, inserting a space between the colons and corrupting
+  the surrounding statement. This file (a high-level "heaven" zone room,
+  not on the registration path) wasn't reached by the interactive test so
+  the corruption didn't surface as a boot failure, but was caught by
+  cross-checking for the same pattern found live-breaking a sibling lib
+  (`xiaoaojianghu2`) in this same pass. Fixed by hand-restoring the
+  original single-line form. Worth flagging as a general formatter bug:
+  **any `::methodname(...)` call appears to be at risk of this
+  corruption** — a sweep for `': : '` (colon-space-colon-space) across a
+  lib's `work/` after running the formatter is a cheap, effective check.
+- **Native retest against the freshly-rebuilt driver**: clean boot, zero
+  fatal errors, trimmed-preload boot time still well under 15 seconds.
+  Full registration flow re-verified in one continuous connection (id
+  `qinjiab`, real Chinese name `秦岭江`, gender `m`, gift roll accepted):
+  entered the game world at 南城客栈/South City Inn with real NPCs,
+  `look` and `score` produced correct real content, `quit` showed the
+  proper flavor-text sequence. The previously-documented
+  `default error message` noise (`你发现事情不大对了...`) reproduced again
+  at a highly variable count (consistent with the prior pass's
+  host-load/timing-sensitive diagnosis) — never blocked any step.
+- **WASM test**: boots clean, reaches the Chinese-name prompt without
+  crashing (this lib's registration-counter code apparently tolerates
+  the WASM harness's log-subdirectory-copy gap better than some
+  siblings — shows a real, non-zero registered-player count rather than
+  crashing). No IP-gating or other blocking issue observed in the
+  portion exercised; did not push to a full playthrough (not required).
