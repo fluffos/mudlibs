@@ -302,3 +302,31 @@ Zero real errors in `debug.log` across all four sessions (only benign
 compile warnings: "Illegal to declare nosave function" from `nosave`
 functions -- §3's own footnote that this warning is harmless -- and
 "Unused local variable").
+
+## Re-verification pass: driver rebuild + LPC formatter + WASM build
+
+- **Formatter**: `format-corpus.mjs` over all 3765 `.lpc` files; 3741
+  reformatted, 2 unchanged, 22 refused (self-check `errors`, expected).
+- **Native retest against rebuilt driver**: clean, zero fixes needed.
+  Full registration + `look`/`score`/`quit` re-verified with a fresh
+  real Chinese name (任我行/一灯), zero debug.log errors.
+- **WASM test — 1 WASM-specific bug found + fixed** (does NOT reproduce
+  natively, confirmed by re-testing the unpatched code natively first):
+  `adm/daemons/securityd.lpc`'s `create()` called `resolve(
+  query_host_name(), "resolve_callback")` — pure decorative intermud
+  housekeeping — as its FIRST statement, before allocating the
+  `wiz_status` mapping used by `get_status()` (called on every single
+  login via `wizhood()`). Under WASM there is no DNS resolver
+  (`*resolve: DNS resolver is not available`, one of the documented
+  no-sockets-package WASM restrictions), and since that error was
+  uncaught inside `create()` itself, it aborted the rest of the
+  function — `wiz_status` was left permanently un-allocated (`0`), so
+  every subsequent login crashed with `*Value being indexed is zero.`
+  in `get_status()`. Fixed by reordering `create()` to build
+  `wiz_status` first and wrapping the `resolve()` call in `catch()` as
+  a second layer of defense — this is a different, non-blocklisted
+  WASM restriction than the documented `query_ip_number()` IP-format
+  issue (see AGENTS.md), so it was fixed rather than just documented.
+  Re-verified clean both natively (no regression) and under WASM: full
+  registration with a real Chinese name (令狐冲), `look`, and `quit` all
+  completed with zero errors, boots+plays fully under WASM now.
