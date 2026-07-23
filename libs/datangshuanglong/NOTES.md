@@ -249,3 +249,32 @@ registration/look/score actions being tested, and matches this project's
 established "content gap in non-critical-path daemon content" pattern
 (AGENTS.md §13) rather than a registration-blocking defect — not chased
 further given time constraints.
+
+## Re-verification pass (2026-07-23): driver rebuild + LPC formatter + WASM build
+
+- **Formatter**: ran `format-corpus.mjs` over all of `work/` (6,874
+  files, 6,720 written/reformatted, 30 already-clean, 124 refused with
+  an error — expected on legacy code, not chased individually).
+- **Native retest against rebuilt driver** (`build-debug/src/driver`,
+  rebuilt from latest upstream master): clean boot, zero fatal errors in
+  `debug.log`. Full registration re-verified end-to-end on the
+  now-reformatted source with a fresh real Chinese name (`秦欢`, ID
+  `qinhuan`, following this lib's own ID→confirm→Chinese name→password
+  (5-8 chars)→email→gender→4-stat-point-allocation flow) reaching the
+  actual game world (大唐学院 starting room); `look`/`score`/`quit` all
+  produced correct output (full 个人档案 stat card rendered correctly,
+  new-account save-eligibility prompt handled correctly by declining
+  with `n`), zero real errors in `debug.log`. No regressions from the
+  reformat or the fresh driver build.
+- **WASM build**: preload completes with only the expected non-fatal
+  `sockets`-package gap (`adm/daemons/ftpd.lpc`/`include/net/
+  ftpdsupp.h`'s `socket_create`/`socket_close`/`socket_address` →
+  `Undefined function`, caught non-fatally, `Initializations complete.`
+  still printed). Unlike several sibling libs, this lib's login path
+  does **not** gate on `query_ip_number()`'s format, so a full
+  registration proceeded all the way through under WASM too: ID
+  `qinlei` → Chinese name `秦雷` → password → email → gender → stat
+  allocation → reached the actual game world (大唐学院 starting room),
+  `look` produced correct room output, and `quit` correctly surfaced
+  this lib's own new-account save-confirmation prompt. **This lib is
+  confirmed fully playable under WASM**, not just "boots."
