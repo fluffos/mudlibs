@@ -581,3 +581,36 @@ larger array/mapping/string-length caps) — `config.sz` was used as the
 base since it uses the plain `port number` directive this driver reads
 directly; the resource-limit deltas between the two originals are minor
 and not consequential for this environment.
+
+## Rebuilt-driver / formatter / WASM re-verification pass (2026-07-23)
+
+1. **LPC formatter** applied across all 12,742 `.lpc` files in `work/`:
+   `{"total":12742,"written":12597,"wouldChange":0,"unchanged":89,
+   "errors":56}`. Checked for the `copy(::fn())`-adjacent formatter bug
+   found elsewhere this pass (see `tianxia/NOTES.md` for the full
+   writeup) — zero hits of the broken `(: :` signature anywhere in this
+   lib's reformatted tree. `feature/command.lpc`'s `command_hook` is
+   still plain `nomask`.
+2. **Native re-test against the rebuilt `build-debug/src/driver`**:
+   booted clean (zero fatal errors). Full registration verified
+   end-to-end via `mudclient.py` (this lib asks a BIG5-font Y/N question
+   before the ID prompt, has a separate ≥10-character "保密密码"
+   recovery-password step in addition to the normal login password, and
+   caps Chinese names at 4 characters — all discovered by iterating the
+   flow live rather than assumed): id `szfmte` → confirm → real Chinese
+   name **`秦风戊`** → login password ×2 → recovery password ×2 →
+   attribute roll (`0`/random) → accept → email `abc@abc.com` → gender
+   `m` → entered the game world at 新手的殿堂, `look`/`score`/`i`/`quit`
+   all producing correct real output (character sheet stats matched the
+   just-rolled attributes). `debug.log`: zero `error in error
+   handler`/`denied`/`undefined function`/`bad argument` lines. No new
+   fixes needed.
+3. **WASM test**: boots cleanly with **zero** `Undefined function`/
+   `denied`/`Bad argument` lines anywhere (this lib apparently doesn't
+   preload any socket/db-dependent daemon that would hit the
+   no-sockets-package wasm restriction). **Full registration completed
+   successfully under wasm**, same flow as the native test above,
+   through to `look`/`quit` producing correct real output at 新手的殿堂.
+   This lib has **no IP-format-dependent login gate**, so — like
+   `shujianpiaoling2` — it is **fully playable under wasm**, one of the
+   best wasm results in this batch.
