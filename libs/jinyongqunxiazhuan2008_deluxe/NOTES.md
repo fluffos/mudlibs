@@ -503,3 +503,26 @@ available before/after each run, well clear of pressure; no other
   reserved for the concurrent archive #92 agent; TODO.md's own "next
   free port" counter said 40084 at the time this task started, so 40085
   is the next port after that reservation).
+
+## 2026-07-23 re-verification pass (driver rebuild + formatter + WASM)
+
+- **LPC reformat**: ran `format-corpus.mjs` over all of `work/` (3,171
+  `.lpc` files) — 3,151 written, 0 already-idempotent, 20 refused
+  (self-checked round-trip failures on messy legacy syntax, expected).
+- **Native retest against the freshly-rebuilt driver**: booted clean on
+  port 40085, zero fatal preload errors. Full registration flow with a
+  fresh real Chinese name ("秦风肆"/`qinfengjysi`, distinct from all
+  prior test ids on this lib) through the complete wizard (id → confirm
+  → Chinese name → password → confirm → gift accept → email → gender)
+  into the actual game world (客店); `look`, `score` (correct
+  stats/combat-power/HP/potential), and `quit` (correct item-drop +
+  clean save) all verified with real output, zero runtime errors in the
+  session. No regressions from the reformat or the new driver binary.
+- **WASM test** (`scripts/wasm_client.js` against `build-wasm/src`):
+  boots cleanly, same preload warnings as native. **Full registration +
+  login + look + quit all work end-to-end under WASM**, same as #91/
+  #92 — this codebase doesn't gate login on `query_ip_number()`'s
+  format, so the documented WASM IP-check limitation doesn't apply.
+  Same harmless cosmetic artifact as the other two variants: a fresh
+  registration's "上次连线" timestamp shows the Unix epoch ("Wed Dec 31
+  16:00:00 1969") under WASM's synthetic clock — not a functional issue.
