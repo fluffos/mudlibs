@@ -159,6 +159,19 @@ lib fully playable) unless a specific lib is called out for deeper work.
   try plain `tar -xf` first (fast path for normal tars), and if THAT
   fails with `Member name contains '..'`, use the Python `tarfile`
   workaround above.
+- **Found on archive #90 (`金庸文字版.exe`)**: `7z x` on this self-
+  extracting RAR-SFX exe reported "success" (exit 0) but silently
+  produced 6,409 **zero-byte placeholder files** — every single member
+  actually failed with an `Unsupported Method` error internally, but `7z`
+  didn't surface that as a fatal exit. `unrar x` extracted the same
+  archive correctly (`All OK`, real file sizes). **Symptom to watch
+  for**: an extraction that "succeeds" but produces a suspiciously
+  uniform tree of exactly-zero-byte files is not evidence the archive is
+  empty/corrupted — it can just mean the wrong extraction tool silently
+  choked on the specific RAR variant/compression method used. Always
+  spot-check a few extracted files' sizes before concluding an archive
+  has no real content, and try `unrar` as a fallback if `7z`'s output
+  looks suspiciously empty despite a zero exit code.
 
 ## Encoding — `file`'s text/binary guess is not reliable enough to gate on
 
