@@ -139,3 +139,49 @@ range check to test the CJK Unicode block instead, and halved the
 GBK-byte-calibrated length bounds in `check_legal_name` to match. See
 AGENTS.md §15h for the full writeup; confirmed via a real interactive
 registration test (Chinese surname + given name reaching the next prompt).
+
+## Driver-rebuild retest + LPC reformat + WASM pass (this session)
+
+- **LPC formatter applied** (`tools/lpc-syntax`, all `work/*.lpc`):
+  8,074 files reformatted, 46 unchanged, 9 refused (self-check failures
+  on messy legacy code, expected). Confirmed the §15s `tell_room()` fix
+  in `adm/simul_efun/message.lpc` survived reformatting intact.
+- **Native re-test against the freshly rebuilt driver**
+  (`~/src/fluffos/build-debug/src/driver`, rebuilt from latest upstream
+  master): boots clean, zero `FATAL`/`SIGSEGV`/`执行时段错误` in
+  `debug.log`. Full registration verified end-to-end with real Chinese
+  names, including this lib's distinctive onboarding mechanic: id/name/
+  password/gift/email/gender -> lands on the "侠客岛" beach ->
+  greeter NPC `follow`-escorts the player (auto-drags after a delay) to
+  the "侠客岛挂名处" (registration desk) -> `register <email>` generates
+  a brand-new system password and disconnects -> reconnect with the new
+  id+password -> `look`/`score`/`quit` all correct in the real starting
+  room. Verified with id `qretkxr`/real name **秦云归来** (male),
+  new password `ychif` issued by `register`, reconnect succeeded and
+  reached the beach's continuation room with correct character sheet.
+- **WASM build tested** (`~/src/fluffos/build-wasm/src` via
+  `scripts/wasm_client.js`): boots cleanly (only expected non-fatal
+  preload warnings, e.g. `Macro 'ROOM' redefined` and no-`sockets`-
+  package notices). **Registration succeeded end-to-end under WASM,
+  including the full beach -> follow -> register-desk -> new-password
+  flow** — real Chinese name **秦云网四** (id `qfwaskc`), `register`
+  correctly issued a new password (`slrze`) and disconnected, exactly
+  matching native behavior. **Contrary to this project's general
+  expectation for this lib** (this lib's own login/ban checks —
+  `BAN_D->is_banned(query_ip_name(ob))` and
+  `REGBAN_D->is_banned(query_ip_name(ob))` in `logind.lpc` — use
+  `query_ip_name()`, not `query_ip_number()`, and neither gated the
+  registration path in this pass's testing), **this lib's own
+  registration flow was NOT observed to be blocked by the documented
+  `query_ip_number()`-format WASM limitation** in the portion tested.
+  The one step not further exercised under WASM: reconnecting with the
+  `register`-issued new password to complete the loop, since
+  `wasm_client.js` boots a fresh in-memory filesystem per invocation
+  and has no built-in way to reconnect to an already-disconnected
+  session within one process (a harness limitation, not a mudlib or
+  driver bug) — the native re-test above already fully covers that
+  final step. The general `query_ip_number()` WASM limitation described
+  in AGENTS.md remains real and does affect other libs in this batch
+  (see `xiyangzaixian_fengkuang`/`xiyangzaixian_fengyun2`'s NOTES.md,
+  whose `BAN_D` checks use `query_ip_number()` directly) — it just
+  doesn't reach this particular lib's tested registration path.
