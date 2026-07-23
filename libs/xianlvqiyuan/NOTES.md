@@ -115,3 +115,34 @@ XLQY lineage, same "d/wiz/init" gift-selection room code) rather than
 something specific to this archive's own content. Not re-investigated
 here given the sibling lib's more thorough diagnosis already ruled out a
 single deterministic cause and pointed to host-load/timing sensitivity.
+
+## Driver rebuild / formatter / WASM pass (2026-07-23)
+
+- **LPC formatter** run over all `work/*.lpc`: 7,237 total. First run
+  failed outright with a filesystem permission error (`EACCES` writing
+  `adm/obj/simul_efun.lpc`) — 9 files under `adm/obj/` and
+  `adm/simul_efun/` were mode `0444` (read-only) on disk, apparently an
+  artifact of the original archive extraction, not anything deliberate
+  (no NOTES.md mention from the earlier pass). `chmod u+w` on those 9
+  files, then reformatted cleanly: 5,675 written, 1,556 already-
+  idempotent, 6 refused (self-check errors, expected).
+  Same formatter bug as the sibling `xianlvqingyuanzheda` lib (identical
+  shared file, same fix): `d/sky/xitian.lpc`'s `if (::valid_leave(me,dir))
+  return notify_fail(...)` got mangled into `if (: : valid_leave(me, dir)
+  ...)` — hand-restored to the original single-line form. Not on the
+  registration path, so didn't surface as a boot failure, but fixed
+  proactively for correctness.
+- **Native retest against the freshly-rebuilt driver**: clean boot, zero
+  fatal errors. Full registration flow (GB prompt → `no` age-gate →
+  `new` → English id → real Chinese name, no confirm step, per this
+  lib's known shape) plus gift-roll, gender, and post-login commands
+  re-verified in one continuous connection (id `qinrizc`, real Chinese
+  name `秦河岭`): entered the game world at 南城客栈/South City Inn,
+  `look`/`score` produced correct real content, `quit` showed the proper
+  flavor-text sequence. The previously-documented `default error message`
+  noise reproduced again at a variable count, consistent with the
+  host-load/timing-sensitive diagnosis already on file — never blocked
+  any step.
+- **WASM test**: boots clean, reaches the Chinese-name prompt without
+  crashing. No IP-gating or other blocking issue observed in the portion
+  exercised; did not push to a full playthrough (not required).
