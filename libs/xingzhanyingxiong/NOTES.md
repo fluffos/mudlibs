@@ -108,3 +108,28 @@ range check to test the CJK Unicode block instead, and halved the
 GBK-byte-calibrated length bounds in `check_legal_name` to match. See
 AGENTS.md §15h for the full writeup; confirmed via a real interactive
 registration test (Chinese surname + given name reaching the next prompt).
+
+## Re-verification pass: driver rebuild + formatter + WASM (2026-07-23)
+
+- **LPC formatter** applied to all `work/*.lpc` (1909 files): 1876
+  reformatted, 19 already-clean/unchanged, 14 self-checked errors
+  (skipped, expected on legacy code).
+- **Native re-test against the rebuilt driver** (`~/src/fluffos/build-debug/src/driver`):
+  booted clean (only pre-existing compile warnings, no fatals). Full
+  registration flow re-verified end-to-end with a fresh real Chinese
+  name ("秦风廿一") — English id → confirm y/n → surname/Chinese name →
+  password ×2 → attribute-roll accept (y) → email → gender → entered
+  the actual 新手集中营 starting zone; `look`/`score`/`quit` all
+  produced correct Chinese output. `log/debug.log` free of real errors.
+  Reformat + new driver build introduced no regressions.
+- **WASM test** (`scripts/wasm_client.js` against `build-wasm/src`): boots
+  cleanly — the only preload-time errors are the expected non-fatal
+  `Undefined function socket_create`/`socket_bind`/`socket_close` in
+  `adm/daemons/httpd.lpc` (no `sockets` package under WASM, same known
+  category as other libs, does not stop the boot). Full registration
+  flow **completed successfully** under WASM with a real Chinese name
+  ("秦风测试") — identical prompt sequence to the native run, reaching
+  the same 新手集中营 room, `look` and `quit` both producing correct
+  output. This lib does **not** gate its login/registration path on
+  `query_ip_number()` format, so it isn't affected by the documented
+  WASM IP-formatting limitation — a clean, fully-playable WASM result.

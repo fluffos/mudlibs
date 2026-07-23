@@ -16,296 +16,295 @@
 #include <ansi.h>
 inherit F_CLEAN_UP;
 
-varargs int clan_line(string msg,int emote);
+varargs int clan_line(string msg, int emote);
 
-int main(object me, string arg)
-{
-    object who, obj;
-    string target;
+int main(object me, string arg) {
+  object who, obj;
+  string target;
 
-    // function 1: check all clans
-    if( !arg ) {
-	seteuid( getuid() );
-	write("目前已有的帮派如下: \n\n");
-        write( read_file("/obj/CLAN") );
-	write("\n欲加入一个帮派请找长老级以上玩家申请加入帮派。\n");
-	return 1;
-    }
-
-    seteuid( getuid() );
-
-    // function 2: verify - get clan symbol for a clan member
-    if( arg == "verify" ) {	
-	if( !me->query("clan/clan_name") ) 
-	    return notify_fail("你并非帮派成员。\n");
-	if( !present("clan symbol", me) ) {
-	    obj = new("/obj/clan_symbol");
-	    tell_object(me, "你得到一个新的帮派信物。\n");
-	    obj->move(me);
-	    return 1; }
-	else return notify_fail("你已经有一个信物了。\n");
-    }
-
-    // function 3: leave - leave this clan
-    if( arg == "leave" ) {
-	if( me->query("clan/clan_level") > 1 )
-	    return notify_fail("请先把职位降至一般帮众。\n");
-	log_file("CLAN",sprintf("[%s] %s: %s(%s) leaves\n",
-	    ctime(time()), me->query("clan/clan_name"), me->name(),
-	    me->query("id")) );
-	clan_line("本人宣布, 即刻起退出" + me->query("clan/clan_name")
-	    + "。\n");
-	me->delete("clan/clan_name");
-	me->delete("clan/clan_level");
-	me->delete("clan/nick");
-	me->delete("clan/rank");
-	if( obj = present("clan symbol", me) )
-	    destruct(obj);
-#ifdef SAVE_USER
-	me->save();
-#endif
-	return 1;
-    }
- 
-    // following function should classify function name
-    if( sscanf(arg, "%s %s", arg, target)!=2 ) 
-	return notify_fail("请用help ccmd查询正确的指令格式。\n");
-
-    // function 4: nick - change clan nickname
-    if( arg == "nick" ) {
-	me->set("clan/nick", target);
-	tell_object(me, "Ok.\n");
-	return 1 ;
-    }
-
-    // searching target
-    //who = present(target, environment(me));
-    who = find_player(target);
-    if( !who || !userp(who) ) return notify_fail("没有这个人。\n");
-
-    // function 5: join - apply to join a clan
-    if( arg == "join" ) {
-        if( me->query("clan/clan_name") ) 
-	    return notify_fail("你已加入过帮派，请先脱离原来帮派。\n");
-	if( who->query("clan/clan_level") < 2 )
-	    return notify_fail("此人并非帮派长老。\n");
-
-	if( !present(target, environment(me)) )
-	    return notify_fail("这里没有这个人。\n");
-
-	message_vision(HIW"$N向$n申请加入"+who->query("clan/clan_name")
-	+"。\n"NOR, me, who);
-	me->set_temp("clan/apply", 1);
-	return 1;
-    }
-
-    // following cmds only clan member can use them
-    if( !me->query("clan/clan_name") ) return notify_fail("你并非帮派成员。\n");
-    // the cmds need clan_level > 1 
-    if( me->query("clan/clan_level") < 2 )
-	return notify_fail("错误指令用法，或帮派职等不足。\n");    
-
-    // function 6: accept - accept somebody join my clan
-    if( arg == "accept" ) {
-	if( !arg ) return notify_fail("你想收谁入帮??\n");
-
-        if( !present(target, environment(me)) )
-            return notify_fail("这里没有这个人。\n");
-
-	if( who->query_temp("clan/apply") ) {
-	    obj = new("/obj/clan_symbol");
-	    obj->move(who);
-	    seteuid( geteuid() );
-	    who->delete_temp("clan/apply");
-	    who->set("clan/clan_name", me->query("clan/clan_name"));
-	    who->set("clan/rank", "帮众");
-	    who->set("clan/nick", "无");
-	    who->set("clan/clan_level", 1);
-
-	    log_file("CLAN", sprintf("[%s] %s: %s(%s) accepts %s(%s)\n",
-		ctime(time()), me->query("clan/clan_name"), me->name(),
-		me->query("id"), who->name(), who->query("id")));
-
-	    tell_object(who, HIY+me->name() + "交给你一个帮派信物。\n"NOR);
-	    clan_line("欢迎"+who->name()+"加入" +
-		me->query("clan/clan_name") + "!!\n"); }
-        else {
-            tell_object(me, "此人并未向你申请加入帮派。\n");
-	}
-	return 1;
-    }
-
-    // check if same clan
-    if( who->query("clan/clan_name") != me->query("clan/clan_name") )
-	return notify_fail("他不是本帮成员。\n");
-
-    // function 7: kickout - kickout someone from clan members  
-    if( arg == "kickout" ) {
-	if( target == me->query("id") ) 
-	    return notify_fail("要叛帮请用: ccmd leave.\n");
-	if( who->query("clan/clan_level") == 2 
-	&& me->query("clan/clan_level") != 3 ) 
-	    return notify_fail("长老必需由帮主亲自处理。\n");
-	if( who->query("clan/clan_level") == 3 )
-	    return notify_fail("不行。\n");
-
-        seteuid( getuid() );
-	if( who->query("clan/clan_level") == 2 ) {
-	    // 重设长老数目
-	    me->add("clan/elder", -1); }
-	clan_line("即刻起, " + who->name() + "不再是本帮帮众。\n");
-	log_file("CLAN",sprintf("[%s] %s: %s(%s) kickouts %s(%s)\n",
-	    ctime(time()), me->query("clan/clan_name"), me->name(),
-	    me->query("id"), who->name(), who->query("id")) );
-	tell_object(who, HIY"你已经不再是" +
-	    who->query("clan/clan_name") + "的帮众了。\n"NOR);
-	who->delete("clan/clan_name");
-	who->delete("clan/clan_nick");
-	who->delete("clan/clan_level");
-	who->delete("clan/rank");
-	if( obj = present("clan symbol", who) )
-	    destruct(obj);
-#ifdef SAVE_USER
-	me->save();
-	who->save();
-#endif
-	return 1;
-    }
-
-    // the cmds for clan leader
-    if( me->query("clan/clan_level") < 3 )
-	return notify_fail("错误指令用法，或帮派职等不足。\n");
-
-    // function : promote - promote the level of clan member
-    if( arg == "promote" ) {
-	if( target == me->query("id") ) return notify_fail("不行!\n");
-	if( who->query("class") == "commoner" )
-	    return notify_fail("平民能力不足以担任要职。\n");
-	if( me->query_temp("clan/change_leader") ) {
-	    me->delete_temp("clan/change_leader");
-	    clan_line("本人已完成让位仪式, 即刻起, 由"
-		+ who->name() + "继任" + me->query("clan/clan_name")
-		+ me->query("clan/rank") + "之职。\n");
-
-	    seteuid( getuid() );
-	    who->set("clan/clan_level", 3);
-	    who->set("clan/elder", me->query("clan/elder"));
-	    who->set("clan/rank", me->query("clan/rank"));
-	    tell_object(who, HIY"你的职位由长老升为" +
-	    	me->query("clan/rank") + "。\n"NOR);
-	    me->delete("clan/elder");
-	    me->set("clan/clan_level", 2);
-	    me->set("clan/rank", "长老");
-	    tell_object(me, HIY"你的职位由" + who->query("clan/rank") +
-		"降为长老。\n"NOR);
-#ifdef SAVE_USER
-	    me->save();
-	    who->save();
-#endif
-	    log_file("CLAN", sprintf("[%s] %s changes %s: %s(%s) to %s(%s)\n",
-		ctime(time()), me->query("clan/clan_name"), 
-		who->query("clan/rank"), me->name(), me->query("id"),
-		who->name(), who->query("id")) );
-	    return 1;
-	}
-
-	if( who->query("clan/clan_level") == 2 ) {
-	    if( who->query("level") < 40 ) {
-		tell_object(me, "此人能力不足以担当"
-		    + me->query("clan/rank")+"之职。\n");
-		return 1;
-	    }
-	    tell_object(me, HIY"注意!! 此举将使" + who->name() +
-		"取代你目前的" + me->query("clan/rank") + "地位," +
-		"若是正确请再输入一次。\n"NOR);
-	    me->set_temp("clan/change_leader", 1);
-	    return 1;
-	}
-
-	if( me->query("clan/elder") > 2 )
-	    return notify_fail("本帮长老人数已满, 无法再收新长老。\n");
-
-	if( who->query("level") < 20 ) 
-	    return notify_fail("此人能力不足以担当长老之职。\n");
-
-	clan_line("即刻起, " + who->name() + "升为" + 
-	    me->query("clan/clan_name") + "长老。\n");
-	seteuid( getuid() );
-	me->add("clan/elder", 1);
-	if( who->query("clan/elder") )
-	    who->delete("clan/elder");
-	who->set("clan/clan_level", 2);
-	who->set("clan/rank", "长老");
-	log_file("CLAN", sprintf("[%s] %s: %s(%s) promotes %s(%s)\n",
-	    ctime(time()), me->query("clan/clan_name"), me->name(),
-	    me->query("id"), who->name(), who->query("id")) );
-#ifdef SAVE_USER
-	me->save();
-	who->save();
-#endif
-	return 1;
-    }
-
-    // function 9 : demote - demote the level of clan member
-    if( arg == "demote" ) {
-	if( target == me->query("id") ) 
-	    return notify_fail("你必需先传位给长老\n");
-
-	if( who->query("clan/clan_level") == 1 )
-	    return notify_fail("他的职等已是最低了, 无法再降。\n");
-
-	clan_line("即刻起, 取消 " + who->name() + "长老之职, 降为一般帮众。\n");
-	seteuid( getuid() );
-	me->add("clan/elder", -1);
-	who->set("clan/clan_level", 1);
-	who->set("clan/rank","帮众");
-	log_file("CLAN", sprintf("[%s] %s: %s(%s) demotes %s(%s)\n",
-	    ctime(time()), me->query("clan/clan_name"), me->name(),
-	    me->query("id"), who->name(), who->query("id")) );
-#ifdef SAVE_USER
-	me->save();
-	who->save();
-#endif
-	return 1;
-    }
-}
-
-varargs int clan_line(string msg, int emote) 
-{
-    object *usr, me, obj;
-    int i, tmp;
-
-    me = this_player();
-
-    if(!msg) return notify_fail("你要对本帮派的同伴说什么？\n");
-
-    if( me->query_temp("pending/hidden") ) {
-        tmp = me->query_temp("pending/hidden");
-        me->delete_temp("pending/hidden");
-    }
-
-    if( !obj = present("clan symbol", me) )
-	return notify_fail("请先取得帮派信物。\n");
-
-    usr = filter_array(users(), "filter_clan", obj);
-    if(sizeof(usr))
-        for(i=0; i<sizeof(usr); i++)
-            if (emote)
-                message("system", HIY"【"+me->query("clan/clan_name")+"】"
-                HIW+msg+"\n"NOR, usr[i]);
-            else
-                message("system", HIY"【"+me->query("clan/clan_name")+"】"
-                +me->name()+"("+me->query("id")+")："HIW
-                +msg+"\n"NOR, usr[i]);
-
-    if( tmp > 0 ) {
-        me->set_temp("pending/hidden", tmp); }
+  // function 1: check all clans
+  if (!arg) {
+    seteuid(getuid());
+    write("目前已有的帮派如下: \n\n");
+    write(read_file("/obj/CLAN"));
+    write("\n欲加入一个帮派请找长老级以上玩家申请加入帮派。\n");
     return 1;
+  }
+
+  seteuid(getuid());
+
+  // function 2: verify - get clan symbol for a clan member
+  if (arg == "verify") {
+    if (!me->query("clan/clan_name"))
+      return notify_fail("你并非帮派成员。\n");
+    if (!present("clan symbol", me)) {
+      obj = new("/obj/clan_symbol");
+      tell_object(me, "你得到一个新的帮派信物。\n");
+      obj->move(me);
+      return 1;
+    } else return notify_fail("你已经有一个信物了。\n");
+  }
+
+  // function 3: leave - leave this clan
+  if (arg == "leave") {
+    if (me->query("clan/clan_level") > 1)
+      return notify_fail("请先把职位降至一般帮众。\n");
+    log_file("CLAN", sprintf("[%s] %s: %s(%s) leaves\n",
+      ctime(time()), me->query("clan/clan_name"), me->name(),
+      me->query("id")));
+    clan_line("本人宣布, 即刻起退出" + me->query("clan/clan_name")
+      + "。\n");
+    me->delete("clan/clan_name");
+    me->delete("clan/clan_level");
+    me->delete("clan/nick");
+    me->delete("clan/rank");
+    if (obj = present("clan symbol", me))
+      destruct(obj);
+#ifdef SAVE_USER
+    me->save();
+#endif
+    return 1;
+  }
+
+  // following function should classify function name
+  if (sscanf(arg, "%s %s", arg, target) != 2)
+    return notify_fail("请用help ccmd查询正确的指令格式。\n");
+
+  // function 4: nick - change clan nickname
+  if (arg == "nick") {
+    me->set("clan/nick", target);
+    tell_object(me, "Ok.\n");
+    return 1;
+  }
+
+  // searching target
+  //who = present(target, environment(me));
+  who = find_player(target);
+  if (!who || !userp(who)) return notify_fail("没有这个人。\n");
+
+  // function 5: join - apply to join a clan
+  if (arg == "join") {
+    if (me->query("clan/clan_name"))
+      return notify_fail("你已加入过帮派，请先脱离原来帮派。\n");
+    if (who->query("clan/clan_level") < 2)
+      return notify_fail("此人并非帮派长老。\n");
+
+    if (!present(target, environment(me)))
+      return notify_fail("这里没有这个人。\n");
+
+    message_vision(HIW "$N向$n申请加入" + who->query("clan/clan_name")
+      + "。\n" NOR, me, who);
+    me->set_temp("clan/apply", 1);
+    return 1;
+  }
+
+  // following cmds only clan member can use them
+  if (!me->query("clan/clan_name")) return notify_fail("你并非帮派成员。\n");
+  // the cmds need clan_level > 1 
+  if (me->query("clan/clan_level") < 2)
+    return notify_fail("错误指令用法，或帮派职等不足。\n");
+
+  // function 6: accept - accept somebody join my clan
+  if (arg == "accept") {
+    if (!arg) return notify_fail("你想收谁入帮??\n");
+
+    if (!present(target, environment(me)))
+      return notify_fail("这里没有这个人。\n");
+
+    if (who->query_temp("clan/apply")) {
+      obj = new("/obj/clan_symbol");
+      obj->move(who);
+      seteuid(geteuid());
+      who->delete_temp("clan/apply");
+      who->set("clan/clan_name", me->query("clan/clan_name"));
+      who->set("clan/rank", "帮众");
+      who->set("clan/nick", "无");
+      who->set("clan/clan_level", 1);
+
+      log_file("CLAN", sprintf("[%s] %s: %s(%s) accepts %s(%s)\n",
+        ctime(time()), me->query("clan/clan_name"), me->name(),
+        me->query("id"), who->name(), who->query("id")));
+
+      tell_object(who, HIY + me->name() + "交给你一个帮派信物。\n" NOR);
+      clan_line("欢迎" + who->name() + "加入" +
+        me->query("clan/clan_name") + "!!\n");
+    } else {
+      tell_object(me, "此人并未向你申请加入帮派。\n");
+    }
+    return 1;
+  }
+
+  // check if same clan
+  if (who->query("clan/clan_name") != me->query("clan/clan_name"))
+    return notify_fail("他不是本帮成员。\n");
+
+  // function 7: kickout - kickout someone from clan members  
+  if (arg == "kickout") {
+    if (target == me->query("id"))
+      return notify_fail("要叛帮请用: ccmd leave.\n");
+    if (who->query("clan/clan_level") == 2
+      && me->query("clan/clan_level") != 3)
+      return notify_fail("长老必需由帮主亲自处理。\n");
+    if (who->query("clan/clan_level") == 3)
+      return notify_fail("不行。\n");
+
+    seteuid(getuid());
+    if (who->query("clan/clan_level") == 2) {
+      // 重设长老数目
+      me->add("clan/elder", -1);
+    }
+    clan_line("即刻起, " + who->name() + "不再是本帮帮众。\n");
+    log_file("CLAN", sprintf("[%s] %s: %s(%s) kickouts %s(%s)\n",
+      ctime(time()), me->query("clan/clan_name"), me->name(),
+      me->query("id"), who->name(), who->query("id")));
+    tell_object(who, HIY "你已经不再是" +
+      who->query("clan/clan_name") + "的帮众了。\n" NOR);
+    who->delete("clan/clan_name");
+    who->delete("clan/clan_nick");
+    who->delete("clan/clan_level");
+    who->delete("clan/rank");
+    if (obj = present("clan symbol", who))
+      destruct(obj);
+#ifdef SAVE_USER
+    me->save();
+    who->save();
+#endif
+    return 1;
+  }
+
+  // the cmds for clan leader
+  if (me->query("clan/clan_level") < 3)
+    return notify_fail("错误指令用法，或帮派职等不足。\n");
+
+  // function : promote - promote the level of clan member
+  if (arg == "promote") {
+    if (target == me->query("id")) return notify_fail("不行!\n");
+    if (who->query("class") == "commoner")
+      return notify_fail("平民能力不足以担任要职。\n");
+    if (me->query_temp("clan/change_leader")) {
+      me->delete_temp("clan/change_leader");
+      clan_line("本人已完成让位仪式, 即刻起, 由"
+        +who->name() + "继任" + me->query("clan/clan_name")
+        +me->query("clan/rank") + "之职。\n");
+
+      seteuid(getuid());
+      who->set("clan/clan_level", 3);
+      who->set("clan/elder", me->query("clan/elder"));
+      who->set("clan/rank", me->query("clan/rank"));
+      tell_object(who, HIY "你的职位由长老升为" +
+        me->query("clan/rank") + "。\n" NOR);
+      me->delete("clan/elder");
+      me->set("clan/clan_level", 2);
+      me->set("clan/rank", "长老");
+      tell_object(me, HIY "你的职位由" + who->query("clan/rank") +
+        "降为长老。\n" NOR);
+#ifdef SAVE_USER
+      me->save();
+      who->save();
+#endif
+      log_file("CLAN", sprintf("[%s] %s changes %s: %s(%s) to %s(%s)\n",
+        ctime(time()), me->query("clan/clan_name"),
+        who->query("clan/rank"), me->name(), me->query("id"),
+        who->name(), who->query("id")));
+      return 1;
+    }
+
+    if (who->query("clan/clan_level") == 2) {
+      if (who->query("level") < 40) {
+        tell_object(me, "此人能力不足以担当"
+          +me->query("clan/rank") + "之职。\n");
+        return 1;
+      }
+      tell_object(me, HIY "注意!! 此举将使" + who->name() +
+        "取代你目前的" + me->query("clan/rank") + "地位," +
+        "若是正确请再输入一次。\n" NOR);
+      me->set_temp("clan/change_leader", 1);
+      return 1;
+    }
+
+    if (me->query("clan/elder") > 2)
+      return notify_fail("本帮长老人数已满, 无法再收新长老。\n");
+
+    if (who->query("level") < 20)
+      return notify_fail("此人能力不足以担当长老之职。\n");
+
+    clan_line("即刻起, " + who->name() + "升为" +
+      me->query("clan/clan_name") + "长老。\n");
+    seteuid(getuid());
+    me->add("clan/elder", 1);
+    if (who->query("clan/elder"))
+      who->delete("clan/elder");
+    who->set("clan/clan_level", 2);
+    who->set("clan/rank", "长老");
+    log_file("CLAN", sprintf("[%s] %s: %s(%s) promotes %s(%s)\n",
+      ctime(time()), me->query("clan/clan_name"), me->name(),
+      me->query("id"), who->name(), who->query("id")));
+#ifdef SAVE_USER
+    me->save();
+    who->save();
+#endif
+    return 1;
+  }
+
+  // function 9 : demote - demote the level of clan member
+  if (arg == "demote") {
+    if (target == me->query("id"))
+      return notify_fail("你必需先传位给长老\n");
+
+    if (who->query("clan/clan_level") == 1)
+      return notify_fail("他的职等已是最低了, 无法再降。\n");
+
+    clan_line("即刻起, 取消 " + who->name() + "长老之职, 降为一般帮众。\n");
+    seteuid(getuid());
+    me->add("clan/elder", -1);
+    who->set("clan/clan_level", 1);
+    who->set("clan/rank", "帮众");
+    log_file("CLAN", sprintf("[%s] %s: %s(%s) demotes %s(%s)\n",
+      ctime(time()), me->query("clan/clan_name"), me->name(),
+      me->query("id"), who->name(), who->query("id")));
+#ifdef SAVE_USER
+    me->save();
+    who->save();
+#endif
+    return 1;
+  }
 }
 
-int help(object me)
-{
-write(@HELP
+varargs int clan_line(string msg, int emote) {
+  object *usr, me, obj;
+  int i, tmp;
+
+  me = this_player();
+
+  if (!msg) return notify_fail("你要对本帮派的同伴说什么？\n");
+
+  if (me->query_temp("pending/hidden")) {
+    tmp = me->query_temp("pending/hidden");
+    me->delete_temp("pending/hidden");
+  }
+
+  if (!obj = present("clan symbol", me))
+    return notify_fail("请先取得帮派信物。\n");
+
+  usr = filter_array(users(), "filter_clan", obj);
+  if (sizeof(usr))
+    for (i = 0; i < sizeof(usr); i++)
+      if (emote)
+        message("system", HIY "【" + me->query("clan/clan_name") + "】"
+          HIW + msg + "\n" NOR, usr[i]);
+      else
+        message("system", HIY "【" + me->query("clan/clan_name") + "】"
+          +me->name() + "(" + me->query("id") + ")：" HIW
+          +msg + "\n" NOR, usr[i]);
+
+  if (tmp > 0) {
+    me->set_temp("pending/hidden", tmp);
+  }
+  return 1;
+}
+
+int help(object me) {
+  write(@HELP
 本指令为帮派专用指令, 指令格式:
    1. ccmd: 可查询目前已成立的帮派及负责人
    2. ccmd verify: 补发信物
@@ -313,22 +312,22 @@ write(@HELP
    4. ccmd nick <叙述>: 更改你在帮派的匿称
    5. ccmd join <玩家id>: 申请加入帮派
 HELP
-	);
+  );
 
-    if( me->query("clan/clan_level") > 1 ) {
-write(@HELP
+  if (me->query("clan/clan_level") > 1) {
+    write(@HELP
    6. ccmd accept <玩家id>: 接受加入帮派申请
    7. ccmd kickout <玩家id>: 取消该玩家之帮派资格
 HELP
-        );
-    }
+    );
+  }
 
-    if( me->query("clan/clan_level") > 2 ) {
-write(@HELP
+  if (me->query("clan/clan_level") > 2) {
+    write(@HELP
    8. ccmd promote <玩家id>: 提升帮众职等
    9. ccmd demote <玩家id>: 降低帮众职等
 HELP
-	);
-    }
-	return 1;
+    );
+  }
+  return 1;
 }
