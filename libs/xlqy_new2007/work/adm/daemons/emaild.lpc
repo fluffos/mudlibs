@@ -17,7 +17,7 @@ email属性：
 
 //检查是否有待发邮件的间隔时间，以秒为单位
 #define CK_DELAY 60*1
-	
+
 #include <ansi.h>
 #include <net/dns.h>
 #include <net/telnet.h>
@@ -29,322 +29,280 @@ email属性：
 inherit F_SAVE;
 inherit F_DBASE;
 //建立连接使用的socket号和发送标志
-nosave int my_socket,status=0,scount=0;
+nosave int my_socket, status = 0, scount = 0;
 //缺省的发送邮件服务器地址
-nosave mapping d_smtp=([
-	"ip":"202.102.170.165",
-	"port":"25",
-	"name":"lusq@yestock.com",
-	]);
+nosave mapping d_smtp = ([
+  "ip": "202.102.170.165",
+  "port": "25",
+  "name": "lusq@yestock.com",
+]);
 //正式使用的发送邮件服务器地址
 nosave mapping smtp;
 //邮件的收件人，发件人，主题和信息！
-nosave string rcpt_to,mail_from,subject,msg,en;
+nosave string rcpt_to, mail_from, subject, msg, en;
 
 int write_message(string);
 void check_email();
 int close_socket();
-void read_callback(int fd,mixed message);
+void read_callback(int fd, mixed message);
 void write_callback(int fd);
 int write_message(string arg);
 void send_email();
 
-string query_save_file()
-{
-	return __DIR__"emaild.o";
+string query_save_file() {
+  return __DIR__ "emaild.o";
 }
 
-void setup()
-{
-	restore();
-	//设置初始值
+void setup() {
+  restore();
+  //设置初始值
 
-	//调用email检查函数
-	call_out("check_email",1,this_object());
+  //调用email检查函数
+  call_out("check_email", 1, this_object());
 }
 
-void create()
-{
-	set("channel_id", "电子邮件精灵");
-	setup();
+void create() {
+  set("channel_id", "电子邮件精灵");
+  setup();
 }
 
-void chat(string arg,string opt)
-{
-	CHANNEL_D->do_channel(this_object(),opt,arg);
-	return;
+void chat(string arg, string opt) {
+  CHANNEL_D->do_channel(this_object(), opt, arg);
+  return;
 }
 
-int add_email(string m_from,string r_to,string title,string msg,mixed smtp)
-{
-	string tmp_en;
-	mapping tmp_em;
-	
-	tmp_em=([]);
-	//应该检查地址和信息的合法性！
-	tmp_en=CHINESE_D->chinese_time(5,ctime(time()));
-	if(query("email/"+tmp_en))
-	{
-		//如果遇到有相同的项目了，则延迟60秒再尝试
-		call_out("add_email",60+random(5),m_from,r_to,title,msg,smtp);
-		return 1;
-	}
-	tmp_em["mail_from"]=m_from;
-	tmp_em["rcpt_to"]=r_to;
-	tmp_em["subject"]=title;
-	tmp_em["msg"]=msg;
-	if(mapp(smtp))
-		tmp_em["smtp"]=smtp;
-	set("email/"+tmp_en,tmp_em);
-	save();
-	return 1;
+int add_email(string m_from, string r_to, string title, string msg, mixed smtp) {
+  string tmp_en;
+  mapping tmp_em;
+
+  tmp_em = ([]);
+  //应该检查地址和信息的合法性！
+  tmp_en = CHINESE_D->chinese_time(5, ctime(time()));
+  if (query("email/" + tmp_en)) {
+    //如果遇到有相同的项目了，则延迟60秒再尝试
+    call_out("add_email", 60 + random(5), m_from, r_to, title, msg, smtp);
+    return 1;
+  }
+  tmp_em["mail_from"] = m_from;
+  tmp_em["rcpt_to"] = r_to;
+  tmp_em["subject"] = title;
+  tmp_em["msg"] = msg;
+  if (mapp(smtp))
+    tmp_em["smtp"] = smtp;
+  set("email/" + tmp_en, tmp_em);
+  save();
+  return 1;
 }
 
-int delete_email(string tmp_en,int opt)
-{
-	mapping tmp_em;
-	chat("删除邮件操作："+tmp_en+"\n","sys");
-	if(!tmp_en)
-		return 0;
-	if(opt)
-	{
-		if(!tmp_em=query("email/"+tmp_en))
-			log_file("emaild.log","欲删除不存在的邮件："+tmp_en+"\n");
-		else
-			log_file("emaild.log","删除邮件：\n"+
-				"Mail From: "+tmp_em["mail_from"]+"\n"+
-				"RCPT To:   "+tmp_em["rcpt_to"]+"\n"+
-				"Subject:   "+tmp_em["subject"]+"\n"+
-				"Smtp Server:"+smtp["name"]+"("+smtp["ip"]+")"+" Port:"+smtp["port"]+"\n"+
-				"MSG:\n"+tmp_em["msg"]+"\n");
-	}
-	delete("email/"+tmp_en);
-	return 1;
+int delete_email(string tmp_en, int opt) {
+  mapping tmp_em;
+  chat("删除邮件操作：" + tmp_en + "\n", "sys");
+  if (!tmp_en)
+    return 0;
+  if (opt) {
+    if (!tmp_em = query("email/" + tmp_en))
+      log_file("emaild.log", "欲删除不存在的邮件：" + tmp_en + "\n");
+    else
+      log_file("emaild.log", "删除邮件：\n" +
+        "Mail From: " + tmp_em["mail_from"] + "\n" +
+        "RCPT To:   " + tmp_em["rcpt_to"] + "\n" +
+        "Subject:   " + tmp_em["subject"] + "\n" +
+        "Smtp Server:" + smtp["name"] + "(" + smtp["ip"] + ")" + " Port:" + smtp["port"] + "\n" +
+        "MSG:\n" + tmp_em["msg"] + "\n");
+  }
+  delete("email/" + tmp_en);
+  return 1;
 }
 
-int close_socket()
-{
-	if( query("connected") )
-	{
-		if( socket_close(my_socket) ) 
-		{
-			chat("关闭socket，恢复断线状态。\n","sys");
-			delete("connected");
-		}
-		else
-			chat("关闭socket失败。\n","sys");
-	}
-	else
-		chat("还没有连接。\n","sys");
-	if(!delete_email(en,0))
-		chat("删除邮件出错!\n","sys");
-	en=0;//stringp对这个值会如何判断呢？
-	status=0;//发完信，对这些值重新初始化
-	my_socket=0;
-	chat("重新设置en为："+en+"\n","sys");
-	save();
-	return 1;
+int close_socket() {
+  if (query("connected")) {
+    if (socket_close(my_socket)) {
+      chat("关闭socket，恢复断线状态。\n", "sys");
+      delete("connected");
+    } else
+      chat("关闭socket失败。\n", "sys");
+  } else
+    chat("还没有连接。\n", "sys");
+  if (!delete_email(en, 0))
+    chat("删除邮件出错!\n", "sys");
+  en = 0;  //stringp对这个值会如何判断呢？
+  status = 0;  //发完信，对这些值重新初始化
+  my_socket = 0;
+  chat("重新设置en为：" + en + "\n", "sys");
+  save();
+  return 1;
 }
 
-int do_telnet(string arg)
-{
-	int err;
-	if( query("connected") )
-		socket_close(my_socket);
-	my_socket = socket_create( STREAM, "in_read_callback","in_close_callback" );
-	if ( my_socket < 0 ) 
-	{
-		chat("创建socket失败。\n","sys");
-		return 1;
-	}
-	err = socket_connect( my_socket, arg , "read_callback","write_callback" );
-	if( err==EESUCCESS ) 
-	{
-		chat("已经连接" + arg + "\n","sys");
-		set("connected",1);
-	}
-	else
-	{
-		chat("无法连接" + arg + "\n","sys");
-		close_socket();
-	}
-	return 1;
+int do_telnet(string arg) {
+  int err;
+  if (query("connected"))
+    socket_close(my_socket);
+  my_socket = socket_create(STREAM, "in_read_callback", "in_close_callback");
+  if (my_socket < 0) {
+    chat("创建socket失败。\n", "sys");
+    return 1;
+  }
+  err = socket_connect(my_socket, arg, "read_callback", "write_callback");
+  if (err == EESUCCESS) {
+    chat("已经连接" + arg + "\n", "sys");
+    set("connected", 1);
+  } else {
+    chat("无法连接" + arg + "\n", "sys");
+    close_socket();
+  }
+  return 1;
 }
 
 
-void read_callback(int fd,mixed message)
-{
-    chat( BOLD + "远端返回：" + NOR + message+status ,"sys");
-    status = 0;
-	switch(status)
-    {
-    	case 0:
-    		{
-    			status++;
-    			write_message("HELO " +smtp["name"] );
-    			return;
-    		}
-    		break;
-    	case 1:
-    		{
-    			status++;
-    			write_message("MAIL FROM:<"+mail_from+">");
-    			return ;
-    		}
-			break;
-    	case 2:
-    		{
-    			status++;
-    			write_message("RCPT TO:<"+rcpt_to+">");
-    			return ;
-    		}
-    		break;
-    	case 3:
-    		{
-    			status++;
-    			write_message("DATA");
-    			return;
-    		}
-    		break;
-    	case 4:
-//    		if(sscanf(message,"354%*s"))
-    		{
-    			status++;
-    			if(sscanf(msg,"%*s\r\n.\r\n%*s"))
-    			{
-    				chat("正在发送的邮件包含非法数据，可能会无法发送。\n","sys");
-    				log_file("emaild","\n试图发送数据：\n"+
-    					smtp["name"]+"("+smtp["ip"]+")"+smtp["port"]+"\n"+msg+"\n");
-    			}
-    			write_message(msg+"\n.\n");
-    			return;
-    		}
-    		break;
-    	case 5:
-    		if(sscanf(message,"451%*s"))
-    			chat("Smtp Server接收数据出错！请另选服务器。\n","sys");
-    		else
-    			chat("信件已经正确发送了!\n","sys");
-    		break;    			
-    }
-    if(status!=5||!sscanf(message,"250%*s"))
-    	chat("发送出错","sys");
-    status=0;
-	write_message("QUIT");
-	close_socket();
-	return ;     			
+void read_callback(int fd, mixed message) {
+  chat(BOLD + "远端返回：" + NOR + message + status, "sys");
+  status = 0;
+  switch (status) {
+    case 0:
+      {
+        status++;
+        write_message("HELO " + smtp["name"]);
+        return;
+      }
+      break;
+    case 1:
+      {
+        status++;
+        write_message("MAIL FROM:<" + mail_from + ">");
+        return;
+      }
+      break;
+    case 2:
+      {
+        status++;
+        write_message("RCPT TO:<" + rcpt_to + ">");
+        return;
+      }
+      break;
+    case 3:
+      {
+        status++;
+        write_message("DATA");
+        return;
+      }
+      break;
+    case 4:
+      //    		if(sscanf(message,"354%*s"))
+      {
+        status++;
+        if (sscanf(msg, "%*s\r\n.\r\n%*s")) {
+          chat("正在发送的邮件包含非法数据，可能会无法发送。\n", "sys");
+          log_file("emaild", "\n试图发送数据：\n" +
+            smtp["name"] + "(" + smtp["ip"] + ")" + smtp["port"] + "\n" + msg + "\n");
+        }
+        write_message(msg + "\n.\n");
+        return;
+      }
+      break;
+    case 5:
+      if (sscanf(message, "451%*s"))
+        chat("Smtp Server接收数据出错！请另选服务器。\n", "sys");
+      else
+        chat("信件已经正确发送了!\n", "sys");
+      break;
+  }
+  if (status != 5 || !sscanf(message, "250%*s"))
+    chat("发送出错", "sys");
+  status = 0;
+  write_message("QUIT");
+  close_socket();
+  return;
 }
 
-void write_callback(int fd)
-{
-	int res;
-	if(query("connect"))return ;
-	res = socket_write( fd,"");
-	if (res == EESUCCESS || res == EECALLBACK) 
-		set("connected",1);
+void write_callback(int fd) {
+  int res;
+  if (query("connect")) return;
+  res = socket_write(fd, "");
+  if (res == EESUCCESS || res == EECALLBACK)
+    set("connected", 1);
 }
 
-int write_message(string arg)
-{
-	if( !arg ) arg="";
-	socket_write(my_socket,arg+"\n");
-	return 1;
+int write_message(string arg) {
+  if (!arg) arg = "";
+  socket_write(my_socket, arg + "\n");
+  return 1;
 }
-void send_email()
-{
-	mapping email;
-	string ATTACH;
-	
-	if(!stringp(en))
-		return;
-	if(!email=query("email/"+en))
-	{
-		close_socket();
-		chat("发送邮件丢失，发送记录号为："+en+"\n","sys");
-		log_file("emaild.log","发送邮件丢失，发送记录号为："+en+"\n");
-		return;
-	}
-	ATTACH="\n\n" +
-		"仙侣情缘连线地址：202.102.170.172 6666\n"+
-		"              \n"+
-		"              \n"+
-		"仙侣情缘总站主页 ：http://www.mudfan.com\n" +
-		"\n" +
-		"\n\n" +
-		"                                    " +
-		"仙侣情缘巫师公会\n本邮件由【"+CHINESE_MUD_NAME+"】电子邮件系统发送!\n"+
-		"信件提交时间："+en+"\n"+
-		"信件发出时间："+CHINESE_D->chinese_time(0,(string)localtime(time()));
+void send_email() {
+  mapping email;
+  string ATTACH;
 
-	rcpt_to=email["rcpt_to"];
-	subject=email["subject"];
-	mail_from=email["mail_from"];
-	msg=email["msg"];
-	msg="FROM:"+CHINESE_MUD_NAME+"<jackyboy@126.com>\n"+
-		"TO:"+rcpt_to+"\n"+
-		"SUBJECT:"+subject+"【"+CHINESE_MUD_NAME+"】\n"+
-		"MIME-Version:1.0\n"+
-		"DATE:"+time()+"\n"+
-		"X-MAILER:LPMUD电子邮件精灵v0.1\n"+"\n"+msg+ATTACH;
-	//设置邮件服务器地址！
-	smtp=(mapp(email["smtp"]))?email["smtp"]:d_smtp;
-	//准备开始telnet发邮件
-	if(!my_socket&&do_telnet(smtp["ip"]+" "+smtp["port"])==0)
-	{
-		chat("重复创建连接或者无法连接邮件服务器：\n"+
-			smtp["name"]+"("+smtp["ip"]+")"+" 端口"+smtp["port"]+"\n","sys");
-		close_socket();
-		return;
-	}
-	else
-		chat("系统依然处于连接状态！\n","sys");//应该设置连接次数和超时控制
-	return ;
+  if (!stringp(en))
+    return;
+  if (!email = query("email/" + en)) {
+    close_socket();
+    chat("发送邮件丢失，发送记录号为：" + en + "\n", "sys");
+    log_file("emaild.log", "发送邮件丢失，发送记录号为：" + en + "\n");
+    return;
+  }
+  ATTACH = "\n\n" +
+    "仙侣情缘连线地址：202.102.170.172 6666\n" +
+    "              \n" +
+    "              \n" +
+    "仙侣情缘总站主页 ：http://www.mudfan.com\n" +
+    "\n" +
+    "\n\n" +
+    "                                    " +
+    "仙侣情缘巫师公会\n本邮件由【" + CHINESE_MUD_NAME + "】电子邮件系统发送!\n" +
+    "信件提交时间：" + en + "\n" +
+    "信件发出时间：" + CHINESE_D->chinese_time(0, (string)localtime(time()));
+
+  rcpt_to = email["rcpt_to"];
+  subject = email["subject"];
+  mail_from = email["mail_from"];
+  msg = email["msg"];
+  msg = "FROM:" + CHINESE_MUD_NAME + "<jackyboy@126.com>\n" +
+    "TO:" + rcpt_to + "\n" +
+    "SUBJECT:" + subject + "【" + CHINESE_MUD_NAME + "】\n" +
+    "MIME-Version:1.0\n" +
+    "DATE:" + time() + "\n" +
+    "X-MAILER:LPMUD电子邮件精灵v0.1\n" + "\n" + msg + ATTACH;
+  //设置邮件服务器地址！
+  smtp = (mapp(email["smtp"])) ? email["smtp"] : d_smtp;
+  //准备开始telnet发邮件
+  if (!my_socket && do_telnet(smtp["ip"] + " " + smtp["port"]) == 0) {
+    chat("重复创建连接或者无法连接邮件服务器：\n" +
+      smtp["name"] + "(" + smtp["ip"] + ")" + " 端口" + smtp["port"] + "\n", "sys");
+    close_socket();
+    return;
+  } else
+    chat("系统依然处于连接状态！\n", "sys");  //应该设置连接次数和超时控制
+    return;
 }
 
 
-void check_email()
-{
-	string *earray;
-	if(en!=""&&stringp(en))
-	{
-		//应该记录失败次数，如果60秒内没有发信成功就去除！
-		if(++scount>20)
-			close_socket();//此时造成信件丢失！
-		else
-		{
-			chat("正在发信("+en+")，等候...\n","sys");
-			call_out("check_email",6,this_object());
-		}
-		return;
-	}
-	scount=0;//发送未成功次数
-	if(!query("email"))//如果没有邮件或者正在发信，隔CK_DELAY秒后再检查
-	{
-		chat("无电子邮件!\n","sys");
-		call_out("check_email",CK_DELAY,this_object());
-		return;
-	}
-	earray=keys(query("email"));
-	if(sizeof(earray)<1)
-	{
-		call_out("check_email",CK_DELAY,this_object());
-		return;
-	}
-	en=earray[0];//使用en作为发送邮件标志，但是这里不一定要0的，否则总是先发最后进入的信！
-	chat("开始发电子邮件:"+en+"\n","sys");
-	status=0;
-	send_email();
-	call_out("check_email",10,this_object());
-	//一般才发了信的话应该马上检查一编！
+void check_email() {
+  string *earray;
+  if (en != "" && stringp(en)) {
+    //应该记录失败次数，如果60秒内没有发信成功就去除！
+    if (++scount > 20)
+      close_socket();  //此时造成信件丢失！
+      else {
+        chat("正在发信(" + en + ")，等候...\n", "sys");
+        call_out("check_email", 6, this_object());
+      }
+    return;
+  }
+  scount = 0;  //发送未成功次数
+  if (!query("email"))  //如果没有邮件或者正在发信，隔CK_DELAY秒后再检查
+  {
+    chat("无电子邮件!\n", "sys");
+    call_out("check_email", CK_DELAY, this_object());
+    return;
+  }
+  earray = keys(query("email"));
+  if (sizeof(earray) < 1) {
+    call_out("check_email", CK_DELAY, this_object());
+    return;
+  }
+  en = earray[0];  //使用en作为发送邮件标志，但是这里不一定要0的，否则总是先发最后进入的信！
+  chat("开始发电子邮件:" + en + "\n", "sys");
+  status = 0;
+  send_email();
+  call_out("check_email", 10, this_object());
+  //一般才发了信的话应该马上检查一编！
 }
-
-
-
-
-
-
-
-
-
-
-

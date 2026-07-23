@@ -92,3 +92,29 @@ range check to test the CJK Unicode block instead, and halved the
 GBK-byte-calibrated length bounds in `check_legal_name` to match. See
 AGENTS.md §15h for the full writeup; confirmed via a real interactive
 registration test (Chinese surname + given name reaching the next prompt).
+
+## 2026-07-23: driver rebuild retest + LPC formatter + WASM check
+
+- **Formatter**: ran `tools/lpc-syntax`'s `format-corpus.mjs` over all
+  9060 `.lpc` files in `work/`; 9043 written, 6 already-conformant, 11
+  errors (files the formatter refused to touch — expected/fine on
+  messy legacy code, not chased individually).
+- **Native retest**: rebuilt `~/src/fluffos/build-debug/src/driver`
+  booted this lib clean (zero fatal errors in `log/debug.log`). Went
+  further than the previous pass's testing (which stopped at the
+  age-verification gate) into a **full end-to-end registration**: real
+  Chinese name 秦淑, gb/no/new/english-id/Chinese-name/password/email/
+  gender/gift-allocation (`9`+`y` confirm) all completed, landed in
+  聚见亭; `look` showed the correct room, `score` produced a correct
+  full character sheet, `quit` gave the correct farewell text. Zero
+  `debug.log` errors this session — the previously-noted "one
+  non-fatal unexplained runtime error during login" from the original
+  pass did not reproduce here.
+- **WASM**: booted cleanly under `build-wasm` (only expected non-fatal
+  preload warnings). Full registration flow (real Chinese name 秦岚)
+  completed successfully end-to-end under WASM too, reaching 聚见亭;
+  `look`/`quit` worked correctly. Same cosmetic
+  `query_ip_number()`-under-WASM glitch as its `xlqy_early` sibling
+  (last-connected-address line shows a garbled/timestamp-like value
+  instead of an IP) — non-fatal, doesn't gate login. **Verdict: fully
+  playable under WASM.**
