@@ -1,0 +1,131 @@
+//autoresetd.c
+//by int
+
+
+
+#include <ansi.h>
+#include <localtime.h>
+
+inherit F_DBASE;
+
+int UpdateFiles(string file);
+int UpdateFile(string file);
+int filter_listener( object );
+void AutoRoomReset();
+void eventreset();
+int force_update = 0;
+
+void create()
+{
+    seteuid( ROOT_UID );
+    set( "name", "自动更新精灵" );
+    set( "id", "autoreset" );
+    eventreset();
+}
+
+void eventreset()
+{
+    AutoRoomReset();
+    call_out( "eventreset",600 );
+}
+
+
+void AutoRoomReset()
+{
+    object * listener;
+    int i;
+    string *roomlist,str;
+    listener = filter_array( users(),"filter_listener",this_object() );
+    message( "autoreset",CYN"\n自动更新开始\n"NOR,listener );
+    str = read_file("/etc/roomreset");
+    roomlist = explode (str, "\n");
+    for (i = 0 ; i<sizeof(roomlist); i++)
+    {
+        if(roomlist[i][0] != '#' )
+        {
+            UpdateFiles(roomlist[i]);
+            message( "autoreset",CYN"自动更新"+roomlist[i]+"\n"NOR,listener );
+
+        }
+    }
+
+}
+
+
+int filter_listener( object ppl )
+{
+    string filename,* dir ;
+    if( !environment( ppl ) ) return 0;
+    filename = file_name( environment( ppl ) );
+    dir = explode( filename,"/" );
+    if( dir[2] =="iwiz" )
+        return 0;
+    else 
+       // return 1;//测试使用
+        return 0;//不给用户信息
+}
+
+int UpdateFiles(string file)
+{
+    string *to_update,cur_dir;
+    int p;
+    if (!sscanf(file, "%*s.lpc"))
+        file += ".lpc";
+    to_update = get_dir(file);
+    p = strsrch(file, '/' ,-1);
+    cur_dir = file[0..p];
+    foreach (string f in to_update)
+        UpdateFile(cur_dir + f);
+    return 1;
+}        
+int UpdateFile( string file )
+{
+    int i;
+    object * inv,obj;
+    string err;
+
+//    object me = this_player();
+    
+    if (obj = find_object(file))
+    {
+        if ( file_name(obj) == VOID_OB )
+            return notify_fail("你不能在 VOID_OB 里重新编译 VOID_OB。\n");
+        inv = all_inventory(obj);
+        i = sizeof(inv);
+        while (i--)
+            if ( userp(inv[i]) )
+                inv[i]->move(VOID_OB, 1);
+            else
+                inv[i] = 0;
+        destruct(obj);
+    }
+
+    if (obj) return notify_fail("无法清除旧的程序。\n");
+
+    // rm the .b s
+    if ( file[<1] == 'c' )
+        err = "/bin" + file[0..strlen(file)-2] + "b";
+    else
+        err = "/bin" + file + ".b";
+    if ( force_update )
+    {
+        printf("删除文件:%s\n",err);
+        rm (err);
+    }
+	//write("重新编译 " + file + "：");
+    err = catch( call_other(file, "???") );
+    if (err)
+        printf( "发生错误：\n%s\n", err );
+    else
+    {
+        //write("成功！\n");
+        if ( (i = sizeof(inv)) && (obj = find_object(file)))
+        {
+            while (i--)
+                if ( inv[i] && userp(inv[i]) ) 
+                    inv[i]->move(obj, 1);
+        }    
+    }
+                
+    return 1;
+}

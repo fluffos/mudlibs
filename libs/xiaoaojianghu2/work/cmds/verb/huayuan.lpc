@@ -1,0 +1,163 @@
+//mmis 2003.4.19
+// huayuan
+
+#include <ansi.h>
+
+
+
+inherit F_CLEAN_UP;
+
+int main(object me, string arg)
+{
+	string what, who;
+	object ob, victim;
+	int sp, dp;
+		
+	seteuid(getuid());
+
+        if( me->query("class")!="bonze" )
+          return notify_fail("你又不是和尚，去当乞丐还差不多！\n");
+	if( !me->can_act() )
+		return notify_fail("你正忙着呢，怎么化缘啊！\n");
+        if( me->query("water")>me->max_water_capacity()/2||me->query("food")>me->max_food_capacity()/2)
+          return notify_fail("你现在吃得这么饱，还去化缘干什么?\n");
+	if( me->query_temp("huayuanging") )
+		return notify_fail("你已经在向人家化缘了了！\n");
+
+	if( !arg || sscanf(arg, "%s from %s", what, who)!=2 ) return
+		notify_fail("指令格式：huayuan <物品> from <人物>\n");
+
+	victim = present(who, environment(me));
+
+	if( !victim || victim == me) return notify_fail("你想化缘的对象不在这里。\n");
+
+	if( !living(victim) || !objectp(victim))
+		return notify_fail("你要向谁化缘？\n");
+
+	if( (int)me->query("age") < 20)
+		return notify_fail("还是大点再出来混吧，走江湖不容易的。\n");
+
+        if ( victim->query("class")=="bonze" )
+                return notify_fail("大家都是和尚，没必要化缘了吧！\n");
+
+	if( victim->is_fighting() ) 
+                return notify_fail(victim->name() + "正在打架，没空理你！\n");
+
+	if( !victim->can_act() )
+                return notify_fail(victim->name() + "正忙着，没空理你！\n");
+
+	if( !ob = present(what, victim) ) {
+		object *inv;
+		inv = all_inventory(victim);
+		if( !sizeof(inv) )
+			return notify_fail( victim->name() + "身上看起来没有什麽让你感兴趣的东西。\n");
+		ob = inv[random(sizeof(inv))];
+	}
+
+	if ( ob->query("no_give") || ob->query("no_drop")||ob->is_equipped() )
+		return notify_fail("这是东西对人家很重要，肯定不会给你啦。\n");
+
+	sp = ((int)me->query_jibie("buddhism")/2 + (int)me->query("spi")+ (int)me->query("per"));
+	if( sp < 1 ) sp = 1;
+
+	dp = ((int)victim->query("PKS") + (int)me->query("kar")*2 + (int)victim->query( "social_exp" )/1000);
+	if (dp < 1 ) dp = 1;
+
+	tell_object(me, "你双手合十，拨弄着佛珠，，慢慢地向" + victim->name() + "走过去，说道：阿弥陀佛，我佛普度众生。\n"
+			"众生供奉我佛。说罢向"+ victim->name()+"化缘，想要"+ ob->query("unit") + ob->name() +"...\n\n");
+	tell_object(victim, me->name() + "双手合十，拨弄着佛珠说道：阿弥陀佛，我佛普度众生，，众生供奉我佛，这位" + RANK_D->query_respect(victim) + "捐点香火钱吧。\n" 
+			"能不能把"+ ob->query("unit") + ob->name() + "布施给贫僧啊 ...！\n\n");
+	message("vision", "只见" + me->name() + "双手合十，拨弄着佛珠，，慢慢地向" 
+		+ victim->name() + "走过去，说道：阿弥陀佛。\n"
+		"这位"+ RANK_D->query_respect(victim) + "，我佛普度众生，众生供奉我佛，能不能给点布施啊。\n\n", environment(me), ({ me, victim }) );
+
+	me->add("water", -10);
+	me->receive_damage("sen", 25 );
+	
+	me->set_temp("huayuanging", 1);
+	call_out( "compelete_huayuan", random(10), me, victim, ob, sp, dp);
+
+	return 1;
+}
+
+void compelete_huayuan(object me, object victim, object ob, int sp, int dp)
+{
+	int amount;
+	object ob1;
+	object where = environment(me);
+
+	me->delete_temp("huayuanging");
+	
+
+	if( !objectp(victim) || environment(victim) != environment(me) ) {
+		tell_object(me, "太可惜了，你要化缘的人已经走了。\n");
+		return;
+	}
+
+    if( living(victim) && (sp > dp+random(25)) ) 
+       {
+	    if (random(10) > 6 )
+	   {
+		if ( ob->query("money_id") )
+		{
+			amount = ob->query_amount();
+			if( amount < 5 )
+			{
+				tell_object(me, "看来还是走吧，这家伙身上已经没有多余的东西可以给你了。\n");
+				return;	}
+			ob->set_amount(amount - amount/5);	
+			ob1=new("/clone/money/" + ob->query("money_id"));
+			ob1->set_amount(amount/5);
+			ob1->move(me);
+		}
+		else if( !ob->move(me) ) {
+			ob->move(where);
+			tell_object(me, "你化缘到一" + ob->query("unit") + ob->name() 
+				+ "，可是对你而言太重了，不得丢在地下。\n");
+			return;}
+		tell_object(me, victim->name() + "低头想了一会，又看了看你，双手合十，叹了口气，递给你一" 
+				+ ob->query("unit") + ob->name() + "。\n");
+		tell_object(victim, "你看了看" +  me->name() +"，似乎突然心存佛念，双手合十，叹了口气，递给他一" 
+				+ ob->query("unit") + ob->name() + "。\n");
+	        if ( random(me->query("social_exp")+victim->query("social_exp"))
+		     > (int)me->query("social_exp")*2/3 ){
+			me->add("social_exp",1);}
+		me->start_busy(3);
+		return;}
+	    else {
+	      message_vision(victim->name() + "狠狠地瞪了$N一眼，喝道：快滚，我不信佛！ $N无奈的摇了摇头。\n", me);
+	      tell_object(me, victim->name() + "冷笑一声：“居然想来偷我的东西，看招！”\n");
+	      victim->bihua_ob(me);
+	      return;}	
+	   } 
+	else 
+	{
+		if( sp < dp+random(10)) 
+		{
+			message_vision(victim->name() + "狠狠地瞪了$N一眼，喝道：快滚，我不信佛！ $N无奈的摇了摇头。\n", me);
+			return;
+		}
+	
+		tell_object(me, victim->name() + "扭过头去，对你理都不理。\n");
+		tell_object(victim, "你扭过头去，对" + me->name() + "理都不理。\n");
+		message("vision", victim->name() + "扭过头去，对" + me->name() + "理都不理。\n", 
+			environment(me), ({ me, victim }) );
+
+		me->start_busy(5);
+	}
+}
+
+int help(object me)
+{
+write(@HELP
+指令格式 : huayuan <某物> from <某人>
+
+这个指令让和尚利用自己的佛法修为向施主索要布施化缘， 如果成功
+的话，你就能获得该样物品。可是, 有可能人家不信佛，不信神, 那么
+你难免打扰了人家。碰到脾气大的，可能你会付出一些代价, 至于是什
+么代价......估计要打架了，呵呵。
+
+HELP
+    );
+    return 1;
+}

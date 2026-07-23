@@ -1,0 +1,238 @@
+// /d/menpai/duanshi/npc/shutong.c
+// By lala on Sept. 1, 1997
+
+#include <ansi.h>
+#include "guard.h";
+
+int do_borrow(string arg);
+
+void create()
+{
+    string name, id;
+    int i, j;
+    i = random(sizeof(second_name));
+    j = random(sizeof(last_name));
+    name = "段";
+    name += second_name[i];
+    name += last_name[j];
+    id = second_id[i];
+    id += last_id[j];
+    set_name(name, ({ "duan " + id, id }) );
+    set("title", HIW"镇南王府书童"NOR);
+    set("attitude", "friendly");
+    set("gender",   "男性");
+    set("age",          15);
+    set("combat_exp",  500);
+    set("class", "duanshi");
+    set("max_force",   100);
+    set("force",       100);
+    set("force_factor",  0);
+
+    set_wugong("duanshi-neigong", 20, 20, 1);
+    set_wugong("jiben-qinggong",  20, 20, 1);
+    set_wugong("unarmed",         20, 20 ,1);
+
+    set_xiuwei_by_type("unarmed", 20);
+    set_xiuwei_by_type("dodge",   20);
+
+    set("env/attack", 55);
+
+    create_family("镇南王府", 2, "书童");
+    
+    setup();
+    
+    carry_object(CLONE_DIR"wear/cloth/qingsha_xiaogua")->wear();
+}
+
+void init()
+{
+    object ob = this_object();
+
+    ::init();
+
+    if( ob->can_act() 
+    && !ob->is_fighting()
+    && !this_player()->query_condition( "kill_dali" ) )
+    { 
+        remove_call_out( "greeting" );
+        call_out( "greeting", 1 );
+    }
+}
+
+void greeting()
+{ 
+      object ob,me,here;
+
+    me = this_player();
+    ob = this_object();
+    here = environment();
+
+    if( !me || environment(ob)!=here || here->query("short")!="外书房" ) return;
+    add_action( "do_borrow", "jie" );
+    add_action( "do_shake", "shake" );
+    add_action( "do_nod", "nod" );
+
+    if( me->query("class")!="duanshi" )
+    {
+        command( "say “这位"+RANK_D->query_respect(me)+"怎么到这儿来了？”\n" );
+        command( "say “趁王爷没发现，您赶快出去吧！”\n" );
+        return;
+    }
+    command( "say “这位"+RANK_D->query_respect(me)+"可是要借(jie)本书看么？”" );
+    command( "say “桌上的那张单子(paper)上写了都有什么书，我记性不好，记不住。”" );
+    command( "xixi " + me->query( "id" ) );
+}
+
+int do_borrow(string arg)
+{
+    object me, ob, here, obj;
+
+    ob = this_object();
+    me = this_player();
+    here = environment(ob);    
+
+//不借给外门派的弟子
+    if( me->query("class")!="duanshi" )
+    {
+        command( "no" );
+        command( "say “王爷有令，书只能借给本门的弟子，不能借给外派的弟子！”" );
+        return 1;
+    }
+//不借给按照规定不能来的本门弟子
+    if( me->query("title")=="镇南王府见习家丁"
+     || ( me->query( "class_score/镇南王府" )<700 )
+     || me->query("title")=="镇南王府家丁"
+     || me->query("title")==BLU"镇南王府家丁"NOR )
+    {
+        command( "? " + me->query( "id" ) );
+        command( "say "+
+"“按照定制你是不能进入内宅的啊！还不速速离开！\n"+
+"            居然还跑过来借什么书！”" );
+        return 1;
+    }
+//不借给大理国武官！！！ add by tea 12.11.98
+    if( me->query("title")==CYN"大理国"WHT"武官"NOR
+     || me->query("title")==CYN"大理国"GRN"武官"NOR
+     || me->query("title")==CYN"大理国"RED"武官"NOR )
+    {
+        command( "say 大人武功高强，已经不需要看这些书了。怎么还来和下人们来抢书呀！");
+        return 1;
+    }
+//不借给已经借了书的
+    if( me->query("marks/段/已借书名") != 0 )
+    {
+        me->set_temp("pending/is_returning", 1);
+        command( "shrug " );
+        command( "say “你先把上次借的那本书还给我啊！有借有还，再借不难嘛……”" );
+        command( "? " + me->query( "id") );
+        command( "say “呀！你把那本书弄丢了？是不是(nod/shake)？”" );
+        command( ":(" );
+        return 1;
+    }
+//再也不借给老是丢书的人
+    if( me->query("marks/段/信用度")<0 )
+    {
+        command( "shake " + me->query( "id" ) );
+        command( "say “这位"+RANK_D->query_respect(me)+"，你老是借了书不还，让我在\n"+
+                 "            王爷面前很难交待啊！再不敢把书借给你了，请原谅。”" );
+        return 1;
+    }
+//对头一次来的人，给10次不还书的机会
+    if( me->query("marks/段/信用度")==0 )
+    {
+        command( "say “这位"+RANK_D->query_respect(me)+"是新来的吧。我说怎么面生呢。”" );
+        me->set( "marks/段/信用度", 10 );
+    }
+//条件都符合了就借书给他。    
+    if( !arg )
+    {
+        command( "say “要借什么书？把号码告诉我啊！不然我怎么猜得到？！”" );
+        return 1;
+    }
+    if( here->query("bookstore_"+arg)<=0 )
+    {
+        command( "say “啊呀，这本书已经借完了，不然就是我们没有这本书。”" );
+        command( "say “你换一本书吧……看看那单子上还有什么你喜欢的书？”" );
+        command( "sorry "+ me->query( "id" ) );
+        return 1;
+    }
+    here->add("bookstore_"+arg, -1);
+    obj = new(__DIR__"obj/book/book_"+arg);
+    me->set("marks/段/已借书名", obj->query("name"));
+    obj->move( me );
+    message_vision( "$N交给$n一本"+obj->query("name")+
+    "，然后拿起一支毛笔，在一个簿子上写下：\n"+me->query("name")+
+    "借走"+obj->query("name")+"一本。\n", ob, me );
+    command( "say “好了，拿去吧，可要记着还啊！”" );    
+    return 1;
+}
+         
+int do_nod(object ob)
+{
+    object me = this_player();
+
+    if( !me->query_temp("pending/is_returning") ) return 0;
+    remove_call_out("do_nod_2");
+    call_out("do_nod_2", 1, me);
+    return 0;
+}
+
+void do_nod_2(object me)
+{    
+    command( "sigh" );
+    command( "say “这下我向王爷不好交待了！”" ); 
+    me->add(  "marks/段/信用度", -1 );
+    me->delete( "marks/段/已借书名" );
+    if( me->query( "marks/段/信用度" )==0 ) me->set( "marks/段/信用度", -1 );
+    command( "say “算了，到时候我去向王爷说吧。”" );
+    command( "shake " );
+    me->delete_temp("pending/is_returning");
+}
+
+int do_shake(object ob)
+{
+    object me = this_player();
+
+    if( !me->query_temp("pending/is_returning") ) return 0;
+    remove_call_out("do_shake_2");
+    call_out("do_shake_2", 1, me);
+    return 0;
+}
+
+int do_shake_2(object me)
+{
+    command( "nod" );
+    command( "say “那就等看完了那本书，还了以后再借新的吧！”" ); 
+    me->delete_temp("pending/is_returning");
+}
+
+int accept_object( object me, object obj)
+{
+    object here =environment();    
+
+    if( me->query("class") != "duanshi" ) return 0;
+    if( !me->query("marks/段/已借书名") ) return 0;
+    if( userp( obj ) ) return 0;
+    if( me->query("marks/段/已借书名") != obj->query("name") )
+    {
+        command("say “你上次借的是一本"+me->query("marks/段/已借书名")+
+"，不是这本书。”");
+        return 0;
+    }
+    me->delete("marks/段/已借书名");
+    here->add( "bookstore_"+obj->query("num"), 1 );
+    if ( !random(10) ) me->add( "marks/段/信用度", 1 );   
+    command( "nod "+ me->query( "name" ) );
+    command( "say “好，"+me->query("name")+"果然讲信用，有借有还。”" );
+    remove_call_out( "accept2" );
+    call_out( "accept2", 2, obj );
+    return 1;
+}
+
+void accept2( object obj )
+{
+    if( !obj ) 
+        return;
+    destruct( obj );
+    return;
+}            

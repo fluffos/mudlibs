@@ -1,0 +1,111 @@
+// chufang.c
+// Ffox 98-4-13 20:05
+
+#include "kl_r.h"
+
+
+
+void create()
+{
+    set( "short", "厨房" );
+    set( "long", @LONG
+虽然是厨房，但是一点都不显杂乱，一个大师傅在忙着做饭，还有一个伙夫
+在旁边帮忙，厨房里打扫的很整洁。两张大桌子，摆在中央，就是饭桌了。用饭
+的时候，弟子们都这里来进餐。如果不到吃饭的时候，也可以向大师傅要一些。
+LONG );
+    set("exits", ([ /* sizeof() == 1 */
+    "south" : __DIR__"huilang01",
+]) );
+    set( "kunlun/water", 1 );
+    set( "objects", ([
+    __DIR__"npc/cooker" : 1,
+    __DIR__"npc/firedizi" : 2,
+]) );
+//    set( "no_fight",1);
+    setup();
+}
+
+void init()
+{
+    add_action( "do_full", "zuo" );
+    if( kl_dizi( this_player() ) ){
+      add_action( "do_tiao", "tiao" );
+      add_action( "do_put", "fang" );
+      add_action( "dao_shui","daoshui" );
+    }
+}
+
+int do_full()
+{
+    object me = this_player();
+    if( !kl_dizi(me) )
+        return notify_fail( "有人对你喊道：你是哪儿来的，跑到这里来混饭吃？\n" );
+    if ( !me->can_act() || me->is_fighting() || me->is_duilianing() )
+        return notify_fail( "你还是将你正在做的事情处理完再来吃饭吧！\n" );
+    if ( (me->query("food")>me->max_food_capacity()/2)
+       &&(me->query("water")>me->max_water_capacity()/2) )
+        return notify_fail( "还不到吃饭的时间吧！这么好_____吃？\n" );
+    message_vision( "$N在饭桌旁边找了个位子坐了下来。\n", me );
+    message_vision( "霎时间狼吞虎咽起来，向从来没有吃饱过是的。\n", me );
+    me->set( "food", me->max_food_capacity() );
+    me->set( "water", me->max_water_capacity() );
+    message_vision( "过了一会儿，$N神采奕奕的站了起来，抹了抹嘴。不好意思的笑了笑。\n", me );
+    return 1;
+}    
+
+int do_tiao(string str)
+{
+    object me=this_player();
+    if( !str ) return notify_fail( "你要挑什么东西？\n" );
+    if(str!="tong"&&str!="mutong"&&str!="mu tong"&&str!="木桶"&&str!="桶")
+        return notify_fail("这里没有这样东西可以挑。\n" );
+    if( kl_mark("query",me,"tong/tiao",0,0) ) 
+        return notify_fail( "你不久前挑走的桶呢？\n" );
+    message_vision( "$N从墙边挑起一对木桶。\n", me );
+    new( __DIR__"obj/mutong" )->move( me );
+    kl_mark( "set",me,"tong/tiao", 1,0 );
+    return 1;
+}
+
+int do_put(string str)
+{
+    object me=this_player();
+    object tong;
+    if(str!="tong"&&str!="mutong"&&str!="mu tong"&&str!="木桶"&&str!="桶")
+        return 0;
+    tong=present( "mu tong", me );
+    if( !objectp(tong) ) return notify_fail("你要放什么东西？\n");
+    message_vision( "$N将身上挑着的木桶放到墙边摆好。\n", me );
+    destruct(tong);
+    kl_mark("delete",me,"tong/tiao",0,0);
+    return 1;
+} 
+
+int dao_shui(string arg)
+{
+        object me, tong;
+        me = this_player();
+        if( !kl_dizi(me) ) 
+            return notify_fail("你来这里做好事？\n");
+//        if( !arg || ( arg != "水" && arg != "shui" ) )
+//           return notify_fail("你要倒什么？\n");
+	arg="水";
+        if( !me->can_act() ) return notify_fail("你现在无法倒水。\n");
+        if( !tong = present("mu tong", me) )
+        return notify_fail("你没有桶，倒什么水呀？\n");
+        if( !tong->query("full_water") )
+        return notify_fail("这桶是空的，里面没有水。\n");
+        if( query_temp_marks("daoshui_times") >= 4 )
+        return notify_fail("水缸已经盛满了水，倒不下了。\n");
+        if( arg == "水" || arg == "shui" )
+        {
+                tell_object(me, "你把木桶里的水全部倒进角落的水缸里。\n");
+                tong->delete("full_water");
+                tong->set("name", "木桶");
+                tong->set("liquid/remaining",10);
+                add_temp_marks("daoshui_times", 1 );
+                if( kl_mark("query",me,"kunlun_work/name",1,1)== "挑水" )
+                    kl_mark("set",me,"kunlun_task/done", "挑水",1 );
+        }
+        return 1;
+}

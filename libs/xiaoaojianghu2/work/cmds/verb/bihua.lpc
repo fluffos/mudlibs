@@ -1,0 +1,150 @@
+// Filename : /cmds/verb/bihua.c
+
+#include <ansi.h>
+
+
+inherit F_CLEAN_UP;
+
+int main(object me, string arg)
+{
+	object obj, old_target, *inv;
+	int i;
+
+        inv=all_inventory( environment(me) );			    
+	for ( i = 0; i < sizeof( inv ); i++ )
+	{
+	   if ( inv[i]&&sizeof(inv[i]->query_killer())>0)	
+	   if ( member_array(me->query("id"), inv[i]->query_killer())!=-1 )
+	   return notify_fail("这里有人正想杀你呢！你不要命了么？\n");
+	}
+       if ( environment(me)->query("wiz") )
+        return notify_fail(HIR "这是属于神的房间，不能用来练功\n" NOR);
+
+	if ( !wizardp(me) && environment(me)->query("no_fight") )
+		return notify_fail("这里禁止战斗。\n");
+
+	if ( !arg || !objectp(obj = present(arg, environment(me))) )
+		return notify_fail("你想攻击谁？\n");
+
+	if ( !obj->is_character() )
+		return notify_fail("看清楚一点，那并不是生物。\n");
+
+	if ( !living(obj) )
+		return notify_fail(obj->name() + "已经无法战斗了。\n"); 
+
+	if ( obj == me )
+        return notify_fail("你不能攻击自己。\n");
+        
+    if ( obj->query_temp("exercise_cost") )
+	return notify_fail("他正在修炼呢。\n");
+
+    if ( me->query_temp("exercise_cost") || me->query_temp("jingxiu_cost"))
+	return notify_fail("你正在修炼呢。\n");
+		
+    if ( me->is_lianing() )
+        return notify_fail("练习时请专心，别惦记着战斗。\n");
+
+    if ( me->is_duanling() )
+        return notify_fail("你最好等对练结束再进行战斗。\n");
+    
+    if ( me->is_killing() )
+        return notify_fail("你心中杀气太盛，恐怕会伤着人家，不妨暂且收敛(stop)一下。\n");
+/*    if( me->query("age")==15||me->query("age")==17||me->query("age")==20
+    ||me->query("age")==24||me->query("age")==29||me->query("age")==35
+    ||me->query("age")==42||me->query("age")==50||me->query("age")==59
+    ||me->query("age")==69) 
+    bihuaer=2;
+    else
+    bihuaer=0;
+    if ( me->is_bihuaing()||sizeof(me->query_bihua())>bihuaer ) // 正在比划
+*/    if ( me->is_bihuaing() ) // 正在比划
+         return notify_fail("你已经在和人比划了，专心点吧！\n");     // end
+    if ( userp( obj ) )
+    {
+        if ( (object)obj->query_temp( "pending/bihua" ) != me )
+        {
+		    message_vision("\n$N对着$n说道：这位"
+                + RANK_D->query_respect( obj )
+                + "是否愿意与" 
+			    + RANK_D->query_self( me ) 
+			    + "比划比划！\n", me, obj );
+		    old_target = me->query_temp( "pending/bihua" );
+		    if ( objectp( old_target ) && old_target != obj )
+			    tell_object( old_target,
+                    YEL + me->name() + "取消了向你挑战的念头。\n" NOR );
+		    me->set_temp( "pending/bihua", obj );
+		    tell_object( obj, YEL "如果你愿意接受对方的挑战，请你也对"
+                + me->name() + "(" + (string)me->query("id") + ")"
+                + "下一次 bihua 指令。\n" NOR );
+        }
+        else
+        {
+		    message_vision("\n$N对着$n说道：既然这位"
+                + RANK_D->query_respect( obj )
+                + "有心指点，" 
+			    + RANK_D->query_self( me ) 
+			    + "当然奉陪几招！\n", me, obj );
+		    me->bihua_ob( obj );
+		    obj->bihua_ob( me );
+/*	for ( i = 0; i < sizeof( inv ); i++ )
+	{
+	   if ( living(inv[i])||userp(inv[i]) )
+	   continue;
+           message_vision("$N被踩得稀巴烂了。\n",inv[i]);
+	   inv[i]->move("/d/city/hangzhou/mumu/void");	
+	}		    
+*/        }
+		me->delete_temp("exercise_cost");    	
+    		obj->delete_temp("exercise_cost");  
+        return 1;
+	}
+	
+        if( objectp (obj)&& obj->query("kee")*100/obj->query("max_kee")>20&&obj->query("sen")*100/obj->query("max_sen")>20)
+        {
+           	obj->set("eff_kee",obj->query("max_kee"));
+           	obj->set("force",obj->query("max_force"));           	
+        	obj->set("kee",obj->query("max_kee"));
+        	obj->set("sen",obj->query("max_sen"));
+        }
+         if ( obj->query("can_speak") )
+    {
+		message_vision("\n$N对着$n说道：这位"
+            + RANK_D->query_respect( obj )
+            + "是否愿意与" 
+			+ RANK_D->query_self( me ) 
+			+ "比划比划！\n\n", me, obj );
+
+		notify_fail("看起来" + obj->name() + "并不想跟你较量。\n");
+		if ( !obj->accept_bihua( me ) ) return 0;
+		
+	    message_vision("\n$N对着$n说道：动手吧!\n", obj, me );
+		me->bihua_ob( obj );
+		obj->bihua_ob( me );
+	}
+    else
+    {
+		message_vision("\n$N大喝一声，开始对$n发动攻击！\n\n", me, obj);
+		me->kill_ob( obj );
+		obj->kill_ob( me );	
+	}
+		me->delete_temp("exercise_cost");    	
+    		obj->delete_temp("exercise_cost");  
+	return 1;
+}
+
+int help(object me)
+{
+  write(@HELP
+指令格式 : bihua <某人> | tiaozhan <某人> 
+
+在某些场合，双方不可能只击中一招就停止战斗，因为点到为止有很大的偶然
+性，而双方也不需要拼个你死我活。这个命令就是用于这些场合的，双方战斗
+到生命或体能小于 20% 就自动停止战斗。 
+ 
+其他相关指令: duilian, kill( sha ), qiecuo
+
+HELP
+    );
+    return 1;
+}
+ 

@@ -1,0 +1,401 @@
+// filename : /feature/damage.c
+
+// checked by lnwm&nerd 98/01/20
+
+#include <ansi.h>
+#include <dbase.h>
+#include <login.h>
+#include <move.h>
+
+#define DAY_BEAT    60
+
+int ghost = 0;
+
+// 饥饿计数器, 当水或食物其中一个在零以下时, 每次心跳我们就增加一次,
+// 现在设定为饿或渴三天没有事, 第四天开始减少三要素值.
+// 12hour 等于 1year, 2m = 1d, 所以一天有 60 次心跳.
+int hungry_tick = 0;
+
+////////////////////////////////////////////////////////////////////////////
+// function prototype
+int heal_amount();
+int heal_body( string );
+void check_damage_type( string );
+
+int is_ghost() { return ghost; }
+
+varargs int receive_damage( string type, int damage, object who )
+{
+    int val;
+
+    if ( damage < 0 )
+    {
+        printf("错误：F_DAMAGE: 伤害值为负值。\n请向巫师报告。。\n\n" );
+        return 0;//by nerd 98-8-29
+    }
+        
+    check_damage_type( type );
+
+    if ( objectp( who ) )
+        set_temp( "last_damage_from", who );
+    val = ( int )query( type ) - damage;
+
+    if ( val >= 0 )
+        set( type, val );
+    else
+        set( type, -1 );
+
+    set_heart_beat( 1 );
+
+    return damage;
+}
+
+varargs int receive_wound( string type, int damage, object who )
+{
+    int val;
+
+    if ( damage < 0 )
+        error( "F_DAMAGE: 伤害值为负值。\n" );
+    check_damage_type( type );
+
+    if ( objectp( who ) )
+        set_temp( "last_damage_from", who );
+    val = ( int )query( "eff_" + type ) - damage;
+
+    if ( val >= 0 )
+        set( "eff_" + type, val );
+    else
+    {
+        set( "eff_" + type, -1 );
+        val = -1;
+    }
+
+    if ( ( int )query( type ) > val )
+        set( type, val );
+
+    set_heart_beat( 1 );
+
+    return damage;
+}
+
+int receive_heal( string type, int heal )
+{
+    int val;
+
+    if ( heal < 0 )
+        error( "F_DAMAGE: 恢复值为负值。\n" );
+    check_damage_type( type );
+
+    val = ( int )query( type ) + heal;
+
+    if ( val > ( int )query( "eff_" + type ) )
+        set( type, ( int )query( "eff_" + type ) );
+    else
+        set( type, val );
+
+    return heal;
+}
+
+int receive_curing( string type, int heal )
+{
+    int max, val;
+
+    if ( heal < 0 )
+        error( "F_DAMAGE: 恢复值为负值。\n" );
+    check_damage_type( type );
+
+    val = ( int )query( "eff_" + type );
+    max = ( int )query( "max_" + type );
+
+    if ( val + heal > max )
+    {
+        set( "eff_" + type, max );
+        return max - val;
+    }
+    else
+    {
+        set( "eff_" + type, val + heal );
+        return heal;
+    }
+}
+
+void unconcious()
+{
+    object defeater;
+    object this;
+
+    hungry_tick = 0;
+    this = this_object();
+    if ( !living( this ) ) return;
+
+    if ( wizardp( this ) && query( "env/immortal" ) )return;
+
+    if ( geteuid( this ) == "lnwm" ) return;
+
+    message( "system",
+        HIR "\n你的眼前一黑，接着什么也不知道了……\n\n" NOR, this );
+    this->disable_player( " <昏迷不醒>" );
+
+    set( "gin", 0 );
+    set( "kee", 0 );
+    set( "sen", 0 );
+    set_temp( "block_msg/all", 1 );
+    COMBAT_D->announce( this, "unconcious" );
+
+    // 消除战斗标记
+    this->remove_all_enemy();
+
+    // added by yuhj, 消除对练标记
+    this->remove_all_duishou();
+
+    defeater = query_temp( "last_damage_from" );
+    this->set_temp( "faint_by", defeater );
+    call_out( "revive", random( 100 - query( "con" ) ) + 30 );
+}
+
+varargs void revive( int quiet )
+{
+    object this = this_object();
+
+    remove_call_out( "revive" );
+    while ( environment()->is_character() )
+        this->move( environment( environment() ) );
+    this->enable_player();
+    set_temp( "block_msg/all", 0 );
+    if ( !quiet )
+    {
+        COMBAT_D->announce( this, "revive" );
+        message( "system",
+            HIY "\n不知过了多久。。。。。。。。慢慢地你又恢复了知觉。\n\n" NOR, this );
+    }
+}
+
+void die()
+{
+    object corpse, killer;
+    object this;
+
+    hungry_tick=0;
+    this = this_object();
+
+    if ( wizardp( this )                    //设了不死的巫师不死。
+        && query( "env/immortal" ) )
+        return;
+
+    all_inventory( environment() )->remove_killer( this );
+
+    if ( environment( this )->query( "no_die" )         //是比武的场所，而且这
+        && this->query_temp( "pending/biwu" ) )         //个人在比武中。
+    {
+        this->remove_killer( this->query_temp( "last_damage_from" ) );
+        this->revive();
+        this->delete_temp( "last_damage_from" );
+        COMBAT_D->announce( this, "biwu" ); //在这里加了个比武时的表现。——Lala
+        return;
+    }
+
+    REWARD_D->killer_reward( this );        // 凶手得到报应。
+    this->delete("vendetta");		    // 删除仇杀！
+    this->clear_condition();                // Clear all the conditions by death.
+    this->add( "max_age", -1 );             // 死一次少活一年。
+    this->enable_player();
+    corpse = CHAR_D->make_corpse( this, killer );
+    if ( objectp( corpse ) )
+    {
+        //有标志"edible"为 1 ,在尸体上加可加工的标志
+        if ( this->query( "edible" ) )
+        {
+            corpse->set( "refine_name", this->query( "refine_name" ) );
+            corpse->set( "number", this->query( "number" ) );
+            if ( this->query( "refine_msg" ) )
+            {
+              corpse->set( "refine_msg", this->query( "refine_msg" ) );
+            }
+        }
+        corpse->move( environment() );
+    }
+
+    remove_call_out( "revive" );
+    this->revive( 1 );
+
+    COMBAT_D->announce( this, "dead" );     //把宣布死亡挪到这里来了。——Lala
+
+    this->remove_all_killer();
+
+//    this->dismiss_team();
+//  哪个傻瓜加的这句??? dismiss_team()要带参数的. --by lnwm
+    if ( userp( this ) )
+    {
+        set( "gin", 1 );
+        set( "kee", 1 );
+        set( "sen", 1 );
+        set( "eff_gin", 1 );
+        set( "eff_kee", 1 );
+        set( "eff_sen", 1 );
+        ghost = 1;
+        this->delete_temp( "last_damage_from" );
+        this->delete_all_marks();
+        this->delete_all_temp_marks();
+        //MARRY_D->divorce( this );
+        this->move( DEATH_ROOM );
+    }
+    else
+        destruct( this );
+}
+
+void reincarnate()
+{
+    ghost = 0;
+    set( "eff_gin", query( "max_gin" ) );
+    set( "eff_kee", query( "max_kee" ) );
+    set( "eff_sen", query( "max_sen" ) );
+}
+
+int max_food_capacity() { return query_weight() / 200; }
+
+int max_water_capacity() { return query_weight() / 200; }
+
+int heal_up()
+{
+    int update_flag;
+    mapping my;
+    object this;
+
+    //if( this_object()->is_fighting() ) return -1;
+    this = this_object();
+
+    update_flag = 0;
+
+    my = query_entire_dbase();
+
+    if ( my["water"] > 0 )
+    {
+        if ( userp( this ) )
+        {
+            hungry_tick = 0;
+            my["water"] -= 1;
+        }
+        update_flag++;
+    }
+    else
+        tell_object(this_object(), "你感到口渴。\n" );
+
+    if ( my["food"] > 0 )
+    {
+        if ( userp( this ) )
+        {
+            hungry_tick = 0;
+            my["food"] -= 1;
+        }
+        update_flag++;
+    }
+    else
+        tell_object(this_object(), "你感到肚子好饿。\n" );
+
+    if ( userp( this_object() ) )
+    {
+        if ( ( my[ "water" ] < 1 ) || ( my[ "food" ] < 1 ) )
+        {
+            hungry_tick++;
+            if ( hungry_tick > 3 * DAY_BEAT )
+            {
+                receive_damage( "gin", 1 );
+                receive_damage( "kee", 1 );
+                receive_damage( "sen", 1 );
+            }
+            return update_flag;
+        }
+    }
+
+    my["gin"] += heal_amount()/2;
+    if ( heal_body( "gin" ) ) update_flag++;
+
+    my["kee"] += heal_amount();
+    if ( heal_body( "kee" ) ) update_flag++;
+
+    my["sen"] += heal_amount();
+    if ( heal_body( "sen" ) ) update_flag++;
+
+    //if ( my["food"] < 1 && userp( this_object() ) )
+    //    return update_flag;
+
+    if ( my["max_force"] && my["force"] < my["max_force"] )
+    {
+    	if(random(500)==1) this->apply_condition("ganmao",30);
+        my["force"] += this->query_jibie( my["using_force"] );
+        if ( my["force"] > my["max_force"] )
+            my["force"] = my["max_force"];
+        update_flag++;
+    }
+
+    return update_flag;
+}
+
+//////////////////////////////////////////////////////////////////////////
+// Helper function
+
+void check_damage_type( string type )
+{
+    if ( type != "gin" && type != "kee" && type != "sen" )
+        error( "F_DAMAGE: 伤害种类错误( 只能是 gin, kee, sen 其中之一 )。\n" );
+}
+
+// 返回每次可能恢复的数量
+int heal_amount()
+{
+    mapping my;
+    int amount;
+
+    my = query_entire_dbase();
+    amount =  (my[ "con" ] + random( my[ "con" ] ))*2 ;
+    // 除以一个固定的数并不一定好
+    amount += my[ "max_force" ] / 10;
+    return amount;
+}
+
+// 用来恢复三要素的有效值, 返回 1 表示需要 update_flag++
+int heal_body( string prop )
+{
+    mapping my;
+
+    my = query_entire_dbase();
+    if ( my[ prop ] >= my[ "eff_" + prop ] )
+    {
+        my[ prop ] = my[ "eff_" + prop ];
+        if ( my[ "eff_" + prop ] < my[ "max_" + prop ] )
+        {
+            my[ "eff_" + prop ]++;
+            return 1;
+        }
+        return 0;
+    }
+    return 1;
+}
+
+// 用来实现走火入魔造成的伤害
+void check_force()
+{
+    object this;
+    this = this_object();
+    if ( !living( this ) ) return;
+    if ( wizardp( this ) && query( "env/immortal" ) ) return;
+
+    this->remove_all_enemy();
+
+    message( "system",
+        HIW "\n突然，你感觉到体内的阴阳二气冲撞越来越剧烈。\n"NOR
+        HIR "你只觉得体内的气息越流越快，隐隐有控制不住的感觉……\n\n" NOR
+        HIR "强烈的内气在你的经脉里四处游走，你渐渐地失去了知觉……"NOR, this );
+    this->disable_player( "<走火入魔>" );
+    set( "gin", 0 );
+    set( "kee", 0 );
+    set( "sen", 0 );
+    add( "max_force", -400 );
+    add( "yin", -200 );
+    add( "yang", -200 );
+    set( "force", 0 );
+    set_temp( "block_msg/all", 1 );
+    COMBAT_D->announce( this, "unconcious" );
+}
+
+

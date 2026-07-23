@@ -1,0 +1,144 @@
+// filename : /feature/message.c
+
+#include <ansi.h>
+#include <dbase.h>
+#include <command.h>
+
+#define MAX_MSG_BUF_SIZE        2000
+
+private nosave int html_user = 0; // 默认不是html用户
+private nosave string *msg_buffer = ({});
+//nosave string temp_msg;
+//nosave int Mark;
+
+mixed query (mixed x);
+
+void receive_message (string msgclass, string msg)
+{
+    string subclass, *ch;
+    object this;
+
+    this = this_object ();
+    if (!interactive (this))
+    {
+        this->relay_message (msgclass, msg);
+        return;
+    }
+
+    if (sscanf (msgclass, "%s:%s", subclass, msgclass) == 2)
+    {
+        switch (subclass)
+        {
+        case "channel":
+            ch = query ("channels");
+            if (!pointerp (ch) || member_array (msgclass, ch) == -1)
+            return;
+            break;
+        case "outdoor":
+            if (!environment () || !environment ()->query ("outdoors"))
+            return;
+            break;
+        default:
+            error ("Message: Invalid Subclass " + subclass + ".\n");
+        }
+    }
+
+    if (query_temp ("block_msg/all")
+        || query_temp ("block_msg/" + msgclass)
+        || query ("blind"))
+        return;
+
+    if ( (in_input (this))  || in_edit (this) && msgclass != "editor" )
+    {
+        if (sizeof (msg_buffer) < MAX_MSG_BUF_SIZE)
+            msg_buffer += ({ msg });
+    }
+    else
+    {
+		if (html_user)
+        	receive (translate(msg));
+		else
+			receive (msg);
+    }
+}
+
+protected string write_prompt ()
+{
+    if (sizeof (msg_buffer))
+    {
+        receive (BLU "【输入时暂存讯息】\n" NOR);
+        map_array ( msg_buffer, (: receive :) );
+        msg_buffer = ({ });
+    }
+    // AGENTS.md-style driver-compat note (same root cause as
+    // system/feature/user/editor.lpc): this driver build is __OLD_ED__,
+    // so query_ed_mode() doesn't exist -- and isn't needed here anyway,
+    // since write_prompt() itself is never called by the driver while an
+    // OLD_ED session is active (comm.cc's print_prompt() short-circuits
+    // straight to ip->prompt for `ip->ed_buffer`-active connections,
+    // bypassing APPLY_WRITE_PROMPT entirely). This branch was therefore
+    // always dead code under this driver; removed rather than reimplemented.
+    if (this_object ())
+    {
+        mixed prompt = query ("env/prompt");
+        mapping my;
+        string *dir, hp, cwd = query ("cwd");
+        if (!cwd)
+            cwd = "";
+        else
+            cwd = sprintf ("%s", cwd == "/" ? "/" : cwd[0.. < 2]);
+        if (stringp (prompt))
+        {
+            my = this_object ()->query_entire_dbase ();
+            dir = explode (file_name (environment (this_object ())), "/");
+            if (strsrch (prompt, "$HP") > -1)
+            {
+                hp = sprintf ("精神:%s%d%%" NOR " 生命:%s%d%%" NOR " 体能:%s%d%%" NOR,
+                HP_CMD->status_color (my["gin"], my["max_gin"]),
+                      my["gin"] * 100 / my["max_gin"],
+                HP_CMD->status_color (my["kee"], my["max_kee"]),
+                      my["kee"] * 100 / my["max_kee"],
+                HP_CMD->status_color (my["sen"], my["max_sen"]),
+                      my["sen"] * 100 / my["max_sen"]);
+                prompt = replace_string (prompt, "$HP", hp);
+            }
+            prompt = replace_string(prompt,"$D","日期:" + ctime(time())[0..9]);
+            prompt = replace_string(prompt,"$T","时间:" + ctime(time())[11..18]);
+            if (wizardp(this_object()))
+            {
+                prompt = replace_string (prompt, "$L", "位置:" +
+                           chinese_place_name (dir[2]));
+                prompt = replace_string (prompt, "$P", "工作目录:" + cwd);
+            }
+            prompt = replace_string (prompt, "$$", "$");
+            prompt = replace_string (prompt, "$_", "\n");
+            prompt += ">";
+        }
+        else
+            prompt = ">";
+        receive( prompt + " " );
+        //return prompt ;
+    }
+}
+
+void receive_snoop (string msg)
+{
+    receive ("#" + msg);
+}
+
+// www mud suport
+int is_html_user()
+{
+	return html_user;
+}
+
+int set_html_user(int h)
+{
+	return html_user = h;
+}
+
+// 奇怪。 为什么printf打不出来呢？
+void force_recv(string msg)
+{
+	    receive(msg);
+}

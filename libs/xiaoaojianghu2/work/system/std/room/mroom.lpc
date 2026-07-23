@@ -1,0 +1,142 @@
+// marry_room.c
+// by trill 06/25/97
+// last modified by nerd 98-10-02
+
+#include <channels.h>
+
+#define SYNTAX "指令的格式是：marry <MALE> with <FEMALE>\n"
+private nosave int bBegin = 0;
+private nosave object m;
+private nosave string mMale = "";
+private nosave string mFemale = "";
+private nosave string mLnwm = "";  //主持的人。
+
+// 这里，我们要一个high mortal来主持婚礼。
+int do_annouce(string arg)
+{
+    string male, female;
+    object f;
+    if ( ! high_mortalp(this_player(1))
+        && !avatarp(this_player(1))
+        && !wizardp(this_player(1)) )
+        return notify_fail("你现在的资格还不足以来主持婚礼。\n");
+    if ( ! arg )
+        return notify_fail(SYNTAX);   // TODO: add cancel for marry.
+    if ( mLnwm )
+    {
+    	if ( ! present(mLnwm,this_object()) )
+    		mLnwm = "";		//走了？算了。别人还要用呢？
+    	else
+    		return notify_fail("看来有人在这里结婚，还是等会儿吧。\n");
+    }
+    if ( sscanf (arg, "%s with %s",male, female) != 2 )
+        return notify_fail(SYNTAX);
+    if ( ! ( m = present( male , this_object() ) )||
+         ! ( f = present( female, this_object() ) ) )
+        return notify_fail("有没有搞错啊？这里没有这两个人耶。\n");
+    if ( m->query("gender") != "男性" ||
+         f->query("gender") != "女性" )
+        return notify_fail("呵呵，这两个怎么能结婚能？搞笑了一点点吧。\n");
+    // TODO: check ...  who begin and how ends...
+    mMale = male;
+    mFemale = female;
+    mLnwm = this_player(1)->query("id");
+    message("vision", sprintf( YEL"◆"CYN"婚礼"YEL"◆"
+            "%s宣布：%s和%s的婚礼正式开始。\n" NOR,
+            this_player(1)->query("name"), f->query("name"),m->query("name")),
+            filter(users(), (: environment($1) :) ) );
+    return 1;
+}
+
+int do_swear()
+{
+    object me, she;//, ob, *all;
+    string my_id, her_id;
+//    int sign, i;
+
+    me = this_player();
+    my_id = me->query( "id" );
+	if ( me->query( "have_married" ) )
+    {
+        tell_object( me, "你已经发过你的誓言了。\n" );
+        return 1;
+    }
+    her_id = me->query( "will_marry" );
+    if ( !her_id || !objectp( she = present( her_id, environment( me ) ) ) )
+    {
+        tell_object( me, "你自己嫁给自己啊？好主意，不过这是不允许的。\n" );
+        return 1;
+    }
+
+	if ( !mLnwm || mLnwm == "" )
+	{
+		tell_object(me,"没有人来主持你的婚礼耶——找个高级玩家吧。\n");
+		return 1;
+	}
+    if ( !present(mLnwm, this_object()) )
+    {
+    	tell_object(me,"可惜，主持婚礼的人走了，你是等等还是改天？\n");
+    	return 1;
+    }
+/*    all = all_inventory( environment( me ) );
+    // 看看在场的有没有活口。
+    for ( i = 0; i < sizeof( all ); i ++ )
+    {
+        if ( all[ i ] == me || all[ i ] == she ) continue;
+        if ( all[ i ]->can_act() )
+        {
+            sign ++;
+            ob = all[ i ];
+        }
+    }
+
+    if ( !me->query( "can_swear" ) || !she->query( "can_swear" ) )
+    {
+        if ( sign )
+        {
+            message_vision( "$N对$n说道：未有师傅同意，你们不得在此发誓结成夫妇。\n", ob, me );
+            tell_object( me, "你此刻无法在此发誓。\n" );
+            return 1;
+        }
+    }*/
+    if ( me->query( "gender" ) == "男性" )
+    {
+        if ( me->query("id") != mMale )
+            return notify_fail("这样子横刀夺爱是不对的！\n");
+        else
+            message_vision( GRN"\n◇"NOR+YEL"$N跪下低声祝祷：“弟子" + GRN"" +me->name() + ""NOR + YEL"和"NOR + GRN"" + she->name() + ""NOR +                            YEL"真心相爱，始终不渝，\n" + "愿生生世世，结为夫妇。"NOR+GRN"◇\n"NOR, me );
+    }
+    else
+    {
+        if ( me->query("id") != mFemale )
+        	return notify_fail("呵呵，你的心情可以理解，但是这样子是不对的。\n");
+        else
+            message_vision( GRN"\n◇"NOR+ YEL"$N跪下低声祝祷：“上天保佑，小女子" + GRN"" +me->name() + ""NOR + YEL"愿跟随"NOR + GRN"" + m->name() + "\n"NOR + YEL"，生生世世，结为夫妇。"NOR +GRN"◇\n"NOR , me );
+    }
+    me->set_temp( "sweared", 1 );
+    if ( she->query_temp( "sweared" ) )
+    {
+    	mMale = "";
+    	mFemale = "";
+    	mLnwm = "";
+
+        me->clear_condition( "will_marry" );
+        she->clear_condition( "will_marry" );
+        me->delete("will_marry");
+        she->delete("will_marry");
+//        me->delete( "can_swear" );
+//        she->delete( "can_swear" );
+        me->delete_temp( "sweared" );
+        she->delete_temp( "sweared" );
+        me->set( "have_married" , ([ "id" : her_id , "name": she->name() ]) );
+        she->set( "have_married" , ([ "id" : my_id , "name": me->name() ]) );
+        tell_object( me,  "\n从此之后，你和" + she->name() + "就是夫妇了，愿能白头到老。\n " );
+        tell_object( she, "\n从次之后，你和" + me->name() + "就是夫妇了，愿能白头到老。\n" );
+        MARRY_D->marry( my_id, her_id );
+        LOG_D->do_log( me, "你和" + she->name() + "结为夫妇。" );
+        LOG_D->do_log( she, "你和" + me->name() + "结为夫妇。" );
+        // TODO 如果强行结婚，相当于一次判师惩罚。
+        // if ( sign )
+    }
+    return 1;
+}

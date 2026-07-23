@@ -1,0 +1,128 @@
+// human.c
+
+// A normal human is at least 40 kg weight
+#define BASE_WEIGHT 40000
+
+inherit F_DBASE;
+
+int new_random();
+
+void create()
+{
+	seteuid(getuid());
+	set("unit", "位");
+    // 怎么能全是男的呢？！
+    if ( random(2) )
+        set("gender", "男性");
+    else 
+        set("gender","女性");
+	set("can_speak", 1);
+	set("attitude", "peaceful");
+    // ? all will not accept fight? strange...
+    // 我想这是说缺省的, 有必要时再设置
+	set("limbs", ({
+		"头部",	"颈部",	"胸口",	"後心",	"左肩",	"右肩",	"左臂",
+		"右臂",	"左手",	"右手",	"腰间",	"小腹",	"左腿",	"右腿",
+		"左脚",	"右脚"
+	}) );
+}
+
+void setup_human(object ob)
+{
+	mapping my;
+    int str,con;
+        
+	my = ob->query_entire_dbase();
+
+	//ob->set("default_actions", (: call_other, __FILE__, "query_action" :));
+	
+	if ( undefinedp(my["age"]) ) my["age"] = random(30) + 15;
+
+    // NPC也应该用新的随机函数产生天赋。
+	if ( undefinedp(my["str"]) ) my["str"] = new_random() + 10;
+	if ( undefinedp(my["cor"]) ) my["cor"] = new_random() + 10;
+	if ( undefinedp(my["int"]) ) my["int"] = new_random() + 10;
+	if ( undefinedp(my["spi"]) ) my["spi"] = new_random() + 10;
+	if ( undefinedp(my["cps"]) ) my["cps"] = new_random() + 10;
+	if ( undefinedp(my["per"]) ) my["per"] = new_random() + 10;
+	if ( undefinedp(my["con"]) ) my["con"] = new_random() + 10;
+	if ( undefinedp(my["kar"]) ) my["kar"] = new_random() + 10;
+	if ( undefinedp(my["dex"]) ) my["dex"] = new_random() + 10;
+
+        str = my["str"];
+        con = ob->query_con();
+
+    // NPC 建立时应该有满的食物和饮水，以便恢复体能，否则会产生BUG
+    // 只要死缠着打个没完，NPC就死定了。
+    if ( !userp(ob) && undefinedp(my["food"]) )
+        my["food"] = (str + 10) * 10;
+    if ( !userp(ob) && undefinedp(my["water"]))
+        my["water"] = (str + 10) * 10;
+
+    if ( !my[ "max_force" ] ) my[ "max_force" ] = 0;
+
+    // 以下是4.4 1997新修改的内容。( by lin )
+    // 然后在19980916根据实际运行情况做适当调整。
+    // 因为战斗太短，为增加多样性而适当增加气。(by lnwm)
+	if ( userp(ob) || undefinedp(my["max_gin"]) )
+    {
+        // 二十岁后，四十岁前每年加十五。四十岁后每年减 5.
+		if ( my["age"] <= 19 )
+            my["max_gin"] = 100;
+		else if ( my["age"] <= 40 )
+            my["max_gin"] = 100 + ( my[ "age" ] - 19 ) * ob->query( "spi" );
+		else
+            my["max_gin"] = 100 + 21 * ob->query( "spi" )  - (my["age"] - 40) * 50 / ob->query( "spi" );
+	    if ( my["max_gin"] < 100 ) my["max_gin"] = 100;
+    }
+	if ( userp(ob) || undefinedp(my["max_kee"]) ) 
+    {
+        // 生命只和内力有关。
+        my["max_kee"] = 750 + my["max_force"] / 4;
+	                //原为100                 原为4 (by lnwm)
+    }
+    // 在这里，由于设定了新的sen的概念，我们现在把体能作成未成年以前（<=20），
+    // 每年增加很多，成年后不变，五十岁后开始减。
+	if ( userp( ob ) || undefinedp( my[ "max_sen" ] ) ) 
+    {
+        if ( my["age"] <= 14 )
+            my["max_sen"] = 100;
+		else if ( my["age"] <= 20 )
+            my["max_sen"] = 100 + my[ "max_force" ] / 12 + ( my[ "age" ] - 14 ) * ( ( str + con ) / 2 + 20 );
+
+        // 体能在二十岁前每年加(臂力(原始的)+根骨(可以增加))/2+20;
+
+        else if ( my[ "age" ] <= 50 )
+            my[ "max_sen" ] = 100 + my[ "max_force" ] / 12 + 6 * ( ( str + con ) / 2 + 20 );
+
+        // 五十岁以前保持不变（？是不是应该和根骨，臂力的变化而变化呢？
+        // 是的,my[]是变化前的，所以根骨应该用ob->query_con();
+        // 五十岁后每年减十。
+
+		else
+            my[ "max_sen" ] = 100 + my[ "max_force" ] / 12 + 6 * ( ( str + con ) / 2 + 20 ) - ( my[ "age" ] - 50 ) * 10;
+	    if ( my["max_sen"] < 100 ) my["max_sen"] = 100;
+    }
+
+	ob->set_default_object(__FILE__);
+    // 这个负重量应该和enforce后的str有关，现在先不改了。
+	if ( !ob->query_weight() )
+        ob->set_weight(BASE_WEIGHT + (my["str"] - 10) * 2000);
+}
+// by locker
+int new_random()
+{
+   float base, u1, u2, n, N;
+
+    N = -0.1;
+    while ( N < 0 )
+    {
+        base = random( 9999 ) + 1;
+        u1 = base / 10000;
+        base = random( 9999 ) + 1;
+        u2 = base / 10000;
+        n = sqrt( -2 * log( u1 ) ) * cos( 2 * 3.1415 * u2 );
+        N = n * 4.7 +10.5;
+    }
+    return to_int( N );
+}

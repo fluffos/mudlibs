@@ -1,0 +1,337 @@
+//  标准的玩家住房  /system/std/room/pplroom.c                            //
+//************************************************************************//
+//  Edit by lala, on March 7, 1998                                        //
+//  Last modified : 98-10-02 by nerd.
+//************************************************************************//
+
+#include <ansi.h>
+inherit ROOM;
+
+int save_me();
+
+void create()
+{
+    set( "not_startroom",   1 );            //不是可以存储的地点。
+    set( "sleep_room",  "inn" );            //是可以睡觉的地方。  
+    set( "short", "空空屋" );
+    set( "long" , "这里就是著名的迷雾之岛了.\n");
+    set("item_desc", ([ "out" : "从门口看出去，可以看到繁华的通泗街。\n" ]) );
+    setup();
+}
+
+void init()
+{
+    string my_id, owner;
+    owner= query("owner");
+    my_id = getuid(this_player());
+    if ( my_id == owner ||
+         this_player()->query("have_married/id") == owner
+         || wizardp(this_player()) )
+    {
+        add_action( "do_change", ({"change", "gaibian" }) );  //改变描述的函数。
+        add_action( "do_invite", ({"invite", "yaoqing" }) );  //邀请玩家的函数。
+        add_action( "do_letout", ({ "letout", "ganzou" }) );  //赶走客人的函数。
+        add_action( "do_sleep",  "sleep" );                   //控制睡觉的函数。
+    }
+}
+
+int do_change( string arg )                 //改变描述的函数。
+{                                           //arg：要改变的对象。                
+    string long; //, my_id, owner_id;
+/*    object ppl;
+
+    ppl = this_player();                    //ppl：玩家本身。
+    my_id = ppl->query( "id" );             //my_id：玩家id。
+    owner_id = query( "owner" );            //owner_id：房间的主人id。
+    if ( my_id != owner_id                  //若非房主或其配偶，指令无效。
+        && !ppl->query( "have_married/" + owner_id ) )
+        return 0; */
+    switch ( arg )
+    {
+        case "short" : case "住宅名称" :    //改变住宅的名称。
+            write( @TEXT
+───────────────────────────────────────
+你想对你的住宅起什么名称？（请用二十个以内的汉字命名）
+TEXT
+            );
+            write( "->" );                  //显示提示符。
+            input_to( "change_short" );     //调用efun输入。
+            break;
+        case "long" : case "住宅描述" :     //改变住宅的描述。
+            write( @TEXT
+───────────────────────────────────────
+你想怎样装修你的住宅？（用“.”结束输入）
+TEXT
+            );
+            write( "->" );                  //显示提示符。
+            long = "";                      //long：新的长描述。
+            input_to( "change_long", long );
+            break;
+        default :                           //没有参数的提示。
+            write( @TEXT
+    你能改变房子的如下性质：
+    住宅的名称：    change/gaibian 住宅名称(short)
+    住宅的描述：    change/gaibian 住宅描述(long)
+    比如: change long 
+TEXT    
+            );
+            break;
+    }
+    return 1;
+}
+
+int change_short( string msg )              //改变短描述的函数。
+{                                           //msg：短描述内容。
+    if ( msg                                //若长度在一个汉字以内，重新输入。
+        && strlen( msg ) < 2 )         
+    {
+        write( "你输入的住宅名称不合要求。请重新输入。\n->" );
+        input_to( "change_short" );
+        return 1;
+    }
+    else if ( strlen( msg ) > 40 )          //若长度在八个汉字以外，重新输入。
+    {
+        write( "你起的住宅的名称请控制在二十个中文字以内。\n" );
+        return 1;
+    }
+    set( "short", msg );                    //改变内存中的短描述。
+    save_me();                            //调用函数改变文件中的描述。
+    write( "住宅名称改变完毕。\n" );
+    return 1;
+}
+
+int change_long( string msg, string long )  //改变长描述的函数。
+{                                           //msg：终止符号。
+                                            //long：长描述内容。
+    if ( msg=="." )                         //若收到终止符号，则终止。
+    {
+        if ( !long || strlen(long) < 4 )
+        {
+            printf("你的描述短了一点点吧．\n");
+            return 0;
+        }
+        write( "住宅描述改变完毕。\n" );
+        set( "long", long );
+                //+ long,70,1//)[4..] );  //改变内存中的长描述。
+        save_me();                        //调用函数改变文件中的描述。
+        return 1;
+    }
+    long = long + msg + "\n";               //没有受到终止符号的时候，就继续
+    write("->");                            //接收msg， 加在long的后面。
+    input_to("change_long", long);          
+    return 1;
+}
+
+int do_invite( string arg )                 //邀请玩家的函数。
+{                                           //arg：受邀请的对象id。
+    object ob, ppl;
+    string my_id, owner_id;
+
+    ppl = this_player();                    //ppl：玩家自身。
+    my_id = ppl->query( "id" );             //my_id：玩家自身的id。
+    owner_id = query( "owner" );            //owner_id：房主的id。
+    if ( my_id != owner_id                  //若非房主或其配偶，则指令无效。
+        && ppl->query( "have_married/id") != owner_id )
+    {
+        return 0;
+    }
+    if ( ! arg )                            // specify the user to invited.
+        return notify_fail( "你要邀请谁啊?\n");
+    if ( arg == my_id )                     //如果对象是玩家自身，无效。
+        return notify_fail( "你邀请自己？有没有搞错啊？\n " );
+    ob = find_player( arg );                //ob：受邀请的玩家。
+    if ( !ob || !ppl->visible(ob) )              //如果找不到指定玩家，失败。
+    {
+        write( "你确信这个玩家现在在线上吗？\n" );
+        return 1;
+    }
+    if ( environment( ob ) == environment( ppl ) )  //如果受邀请的玩家已经在
+    {                                               //这里，指令无效。    
+        write( ob->name() + "不就在你的身边吗？\n" );
+        return 1;
+    }
+    if ( (int)ob->query_temp( owner_id + " invited" ) > 2 )
+    {
+        write( "邀请也要适当而止，不能强求吧。\n" );
+        return 1;
+    }
+    ob->add_temp( owner_id + " invited", 1 );//受邀请的玩家得到邀请标志
+    tell_object( ob, REV MAG BWHT"\n" + ppl->name() + "邀请你去" + ppl->name()
+        + "的家：" + query( "short" ) + "。"NOR"\n" );//显示讯息。
+    tell_object( ppl, GRN"已经成功地向"             //显示成功讯息。
+        + ob->name() + "发出邀请。\n"NOR );
+    return 1;
+}
+
+/*    string long, short, owner;
+    object xinfang;
+    long = query( "long" );                 //long：住宅的长描述。
+    short = query( "short" );               //short：住宅的短描述。
+
+    xinfang=load_object("/clone/misc/xinfang");
+    if ( !xinfang )
+    {
+        printf("Failed to load xinfang :(((\n");
+        return;
+    }
+    owner = query("owner");
+    xinfang->set( owner + "/short", short );
+    xinfang->set( owner + "/long", long );
+    xinfang->save();
+    //xinfang is really a deamon...
+
+    / *    owner = query( "owner" );               //owner：住宅的房主。
+    out = query( "exits/out" );             //out：住宅的出口连接。
+    //以下都是写入新的房间文件的内容。
+// -----------------------
+    str = @LONG
+// 这是系统自动生成的玩家住宅。\n
+
+#include <room.h>
+inherit PPLROOM;
+
+void create()
+{
+LONG
+    + "    set(\"short\", \"" + short + "\");\n"
+    + "    set(\"long\", @DESC\n" + long + "DESC );\n"
+    + "    set(\"owner\", \"" + owner + "\");\n"
+    + @LONG
+    set("exits", ([
+LONG
+    + "        \"out\" : \"" + out + "\",\n"
+    + @LONG
+    ]) );
+    setup();
+}
+LONG
+    ;
+//-----------------------------------------
+
+    rm( file_name() + ".lpc" );               //删除原来旧的文件。
+    write_file( file_name() + ".lpc" , str ); //把新的内容写入到文件中去。*/
+    //return 0;
+
+int do_sleep()
+{
+    object ppl;
+    string my_id, owner_id;
+
+    ppl = this_player();                    //ppl：玩家自身。
+    my_id = ppl->query( "id" );             //my_id：玩家自身的id。
+    owner_id = query( "owner" );            //owner_id：房主的id。
+    if ( my_id != owner_id                  //若非房主或其配偶，则指令无效。
+        && ppl->query( "have_married/id") != owner_id )
+    {
+        tell_object( ppl, "这里不是你睡觉的地方。\n" );
+        return 1;
+    }
+    return 0;                               //如果是合法用户，那么正常执行
+                                            //sleep命令。
+}
+
+int do_letout( string arg )                 //赶走客人的函数。
+{                                           //arg：客人的id。
+    object ppl, ob;
+    string my_id, owner_id;
+    
+    ppl = this_player();                    //ppl：玩家自身。
+    my_id = ppl->query( "id" );             //my_id：玩家自身的id。
+    owner_id = query( "owner" );            //owner_id：房主的id。
+    if ( my_id != owner_id                  //若非房主或其配偶，则指令无效。
+        && ppl->query( "have_married/id") != owner_id
+        && !wizardp(ppl) )
+        return 0; 
+    if ( !arg )                             //如果没有参数，指令无效。
+        return notify_fail( "你想赶走谁？\n" );
+    if ( arg == my_id )                     //如果要赶出去的是自己，指令无效。
+        return notify_fail( "你要赶走自己？那自己走出去吧。\n" );
+    if ( objectp( ob = present( arg, this_object() ) ) )    //如果目标在室内。
+    {
+        if ( userp( ob )                    //如果是邀请来的玩家。
+            && ob->query_temp( owner_id + " invited" ) )
+        {                                   
+            message_vision( "$N对$n说道：“我不再欢迎你呆在这里啦，" 
+                + "请出去吧！”\n说着，就把$n推了出去。\n", ppl, ob );      
+            ob->delete_temp( owner_id + " invited" );       //删除邀请标记。
+            ob->move( query("exits/out") );  //挪到出口房间。  
+            tell_object( ob, "你被" + ppl->query("name") + "赶出了" 
+                + query( "short" ) + "。\n", ppl, ob );
+            message( "vision", "一位" + RANK_D->query_normal( ob ) 
+                + "从路旁的住宅里走出来。\n", environment( ob ), ob );
+            return 1;
+        }
+        write( "你只能把被邀请来的客人赶出去，\n"           //失败信息。
+               + "对于象" + ob->query("name") 
+               + "这样闯进来的不速之客是行不通的。\n" );
+        tell_object( ob, GRN"看来主人发逐客令了，要不要溜之大吉呢？\n"NOR );
+        return 1;
+    }
+    write( "这个人在哪儿啊？\n" );
+    return 1;
+}
+
+int restore_me( string id )
+{
+    int i = 0;
+    string * lines;
+    string datafile = sprintf(DATA_DIR "room/%c/%s", id[0], id);    
+    if ( file_size(datafile) <= 0 )
+        return 0;
+    lines = explode( read_file(datafile), "\n" );
+    while ( i < sizeof(lines) )
+    {
+        mixed key, val;
+        string line = lines[i];
+        if (line[0] == ' ')
+            return 0;
+        if (sscanf(line, "%s=%s", key, val)==2)
+        {
+            if (val == "")
+            {
+                while ( line != "end" && i < sizeof(lines) - 1 )
+                {
+                    i++;
+                    line = lines[i];
+                    if ( line[0] != ' ' )
+                        continue;
+                    val += line[1..] + "\n";
+                }
+            }
+            set(key,val);
+        }
+        i++;
+    }
+    set("owner", id);
+    set("exits", ([ "out" : "/d/city/yangzhou/tongsi_jie" ]) );
+    return 1;
+}
+
+int save_me()
+{
+    string datafile, data;
+    mapping db;
+    string id = query("owner");
+    if (!id)
+        return 0;
+       datafile = sprintf(DATA_DIR "room/%c/%s", id[0], id);    
+    db = query_entire_dbase();
+    data = "";
+    foreach( string key, mixed val in db )
+    {
+        if(key == "owner")
+            continue;
+        if( stringp(val) && strlen(val) >= 1 ) //&&
+        {
+            data += key + "=";
+            if (  strsrch(val, "\n") >= 0 )
+            {
+                data += "\n" + implode( map(explode(val,"\n"), (: " " + $1 :) ),"\n");
+                data += "\nend\n";
+            }
+            else
+                data += sprintf("%s\n",val);
+        }
+    }
+    return write_file( datafile, data, 1 );//overwrite
+}

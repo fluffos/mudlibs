@@ -1,0 +1,158 @@
+//  /system/daemon/menpai/emeid.c EMEI_D
+//  Edit by Amber On 1997-12-20
+//  地区性的DAEMON实际上相当于一个库，保存了各种放到哪儿都不太对的信息。以便
+//  可以在任何情况下没有错误地调用到。数据大量可以使用dbase和tmp_dbase变量进行
+//  处理
+//  Amber reEdit on 1998 Apr ~ July.    Program for XO edition 1.0, 1.5
+//  Amber@XO reEdit in 1999.1~2 for XO 1.5~2.0
+//  我准备在区域性的DAEMON里加很多东西，把DAEMON变得很大，而相应缩小ROOM，人物
+//  和秘密等。附加的各种函数会按照类别单独建立一些.h文件。甚至更多的是一些单独
+//  的.c文件，daemon启动时是不调用的，只有用到的时候才会用call_other来调用。这
+//  是为了应付一些平时基本上不会调用的程序，比如秘密，大的对话等等。
+//  区域性的DAEMON是preload的。由于峨眉派的NPC不多，所以EMEI_D启动时将所有门派
+//  弟子一起启动了，并开始按照弟子的所在位置分配，位置固定的调入房间（需要调入
+//  的房间正好也不超过10个）。
+
+
+inherit F_SAVE;
+inherit F_DBASE;
+
+#include <emei.h>
+#include "emeid.h"
+//#include EMEI_DIR "std/emeiskill.h"
+
+////////////////////////////////////////////////////////////////////////////////
+//  函数意义见emeid.h
+void create()
+{
+    // 因为要写文件，方便。
+    seteuid( ROOT_UID );
+    set( "name" , "峨眉祖师之灵" );// 这个名字有道理～！呵呵
+    set( "id" , "emei" );
+    set_heart_beat(1);
+    //updateDizi();
+    restore();
+}
+//  heart_beat()
+void heart_beat()
+{
+    if ( ( nHeartBeatNumber++ ) % HEART_BEAT_TICK )
+        return;
+    //  执行设定需要定时执行的函数
+    // 1.每个时辰检查一次峨眉NPC的位置。
+    //SendNpc();
+    //  执行AutoAction
+    //RunAction();
+    save();
+//    tell_object( find_player("amber"), "hello!\n" );
+}
+
+mixed GetActionRecord( string ObName, string EventID )
+{
+    if ( !m_ActionData
+        || !( m_ActionData[ ObName ] ) )
+        return 0;
+    return m_ActionData[ ObName ][ EventID ];
+}
+
+void SetActionRecord( string ObName, string EventID, mixed status )
+{
+    if ( !m_ActionData )
+        m_ActionData = ([ ObName : ([ EventID : status ]) ]);
+    else if ( !m_ActionData[ ObName ] )
+        m_ActionData[ ObName ] = ([ EventID : status ]);
+    else
+        m_ActionData[ ObName ][ EventID ] = status;
+    save();
+}
+// 存盘文件
+string query_save_file()
+{
+    return "/data/place/emei";
+}
+///////////////////////////////////////////////////////////////////////
+object * FindMembers( int IsUser )
+{
+    object *npcs = ({});
+    if ( IsUser )
+        foreach( object user in users() )
+        {
+            if ( user->query("family/family_name") == "峨眉派" )
+                npcs += ({ user });
+        }
+    else// emeid记录每个还存在的NPC的object指针
+        npcs = query_temp( "npc/峨眉弟子" );
+    return npcs;
+}
+///////////////////////////////////////////////////////////////////////
+class Pair GetBestXiuweiType( object who )
+{
+    class Pair xiuwei = new( class Pair );
+    string * xiuwei_type = ({ "blade","sword","whip","short","long","dodge"
+        ,"unarmed" });
+    string tmp, type;
+    int i = 0, j = 0;
+    foreach( tmp in xiuwei_type )
+    {
+        j = who->query_xiuwei_by_type( tmp );
+        if ( j > i )
+        {
+            i = j;
+            type = tmp;
+        }
+    }
+    xiuwei->Key = type;
+    xiuwei->Value = i;
+    return xiuwei;
+}
+////////////////////////////////////////////////////////////////////////
+string GetDayPhase()
+{
+    int shichen = NATURE_D->QueryShiChen();
+    if ( shichen >= 3 && shichen < 5 )
+        return "早晨";
+    else if ( shichen >= 5 && shichen < 7 )
+        return "上午";
+    else if ( shichen >=7 && shichen < 10 )
+        return "下午";
+    else
+        return "晚上";
+}
+//  给出两个人的师门关系（f_ob对t_ob的称呼）
+string FamilyRespect( mixed f_ob, mixed t_ob )
+{
+    int f_age, t_age;
+    if ( objectp( f_ob ) )
+        f_age = f_ob->query("age");
+    else
+        f_age = f_ob;
+    if ( objectp( t_ob ) )
+        t_age = t_ob->query("age");
+    else
+        t_age = t_ob;
+    if ( f_age > t_age )
+        return "师妹";
+    else
+        return "师姐";
+}
+//  恢复一个人的所有力量
+void Full( object who )
+{
+    int gin, kee, sen, force;
+    if ( !who )
+        who = previous_object();
+    if ( !who )
+        return;
+    gin = who->query("max_gin");
+    kee = who->query("max_kee");
+    sen = who->query("max_sen");
+    force = who->query("max_force");
+    who->set( "eff_gin", gin );
+    who->set( "eff_kee", kee );
+    who->set( "eff_sen", sen );
+    who->set( "gin", gin );
+    who->set( "kee", kee );
+    who->set( "sen", sen );
+    who->set( "force", force );
+    who->start_busy(0);
+}

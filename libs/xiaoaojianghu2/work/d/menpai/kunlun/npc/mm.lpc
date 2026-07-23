@@ -1,0 +1,293 @@
+// master.c 昆仑派掌门人。
+// Ffox 98-1-17 9:12
+
+inherit F_MASTER;
+#include "kunlun_quest.h"
+int do_xiuxing( object );
+int do_shengji( object );
+int do_lilian( object  );
+int do_kaixiao( object );
+
+string *skill_name=({
+    "kunwu-jian", "xuanzhu-jian", "liangyi-jian",
+    "baihe-quan", "panheng-zhang",
+    "kunlun-bu", "yinzhi-bufa",
+    "liangyi-xinfa"
+});
+
+string when(int timep)
+{
+        int t, d, h, m, s;
+        string time;
+        t = timep;
+        s = t % 60;             t /= 60;
+        m = t % 60;             t /= 60;
+        h = t % 24;             t /= 24;
+        d = t;
+        if(d) time = chinese_number(d) + "天";
+        else time = "";
+        if(h) time += chinese_number(h) + "小时";
+        if(m) time += chinese_number(m) + "分";
+        time += chinese_number(s) + "秒";
+        return (time);
+}
+
+mapping *go_where=({
+([
+    "where"    : "厨房",
+    "give_msg" : "白鹿子对$N说道：听厨房大师傅说厨房现在缺人手，你去那儿帮忙吧。",
+]),
+([
+    "where"    : "药房",
+    "give_msg" : "白鹿子对$N说道：听药房执事说药房现在缺人手，你去那儿帮忙吧。",
+]),
+([
+    "where"    : "蔬圃",
+    "give_msg" : "白鹿子对$N说道：蔬圃现在正是忙的时候，你去帮帮忙吧。"
+]),
+});
+
+
+
+void create()
+{
+    set_name( "白鹿子", ({ "bai luzi", "bai", "master" }) );
+    set( "title" , "昆仑派第三代掌门人" );
+    set( "gender", "男性");
+    set( "age", 55);
+    set( "long", @LONG
+昔日英雄，走遍关外，罕逢对手，曾生擒白虎于昆仑，为人耿直。得上代掌门之
+真传，对弟子谆谆教导，昆仑派在他手下，如今是逐渐发扬光大。作为昆仑第三
+代掌门人，此人名振江湖。武林中有谁不识？
+LONG );
+    set( "attitude",  "peaceful" );
+    set( "per", 40 );
+    set( "str", 40 );
+    set( "int", 40 );
+    set( "con", 40 );
+    set( "dex", 40 );
+    set( "inquiry", ([
+    "此地" : (:about_here:),
+    ]) );
+    set( "chat_chance", 5 );
+    set( "chat_msg", ({
+        "白鹿子在大厅里面踱来踱去，看见你来了也没有怎么注意。\n",
+        "白鹿子对你说道：昆仑派现在是一片昌盛的势头啊！\n",
+        "白鹿子抚摩了一下神像，一副若有所思的样子。\n",
+     }));
+    
+    create_family( "昆仑派", 3, "掌门人" );
+    set_wugong( "kunwu-jian", 120, 120, 1 );
+    set_wugong( "xuanzhu-jian", 150, 150, 1 );
+    set_wugong( "liangyi-jian", 150, 150, 1 );
+    set_wugong( "baihe-quan", 120, 120, 1 );
+    set_wugong( "panheng-zhang", 150, 150, 1 );
+    set_wugong( "kunlun-bu", 120, 120, 1 );
+    set_wugong( "yinzhi-bufa", 150, 150, 1 );
+    set_wugong( "liangyi-xinfa", 120, 120, 1 );
+    set_wugong( "literate", 150, 150, 0 );
+    set_xiuwei( "sword", 5300 );
+    set_xiuwei( "dodge", 3000 );
+    set_xiuwei( "unarmed", 3000 );
+    set( "max_force", 3000 );
+    set( "force", 3000 );
+    set( "force_factor", 240 );
+    set( "combat_exp", 500000 );
+    setup();
+    carry_object( "/clone/wear/cloth/cloth5" )->wear();    
+    carry_object( "/clone/weapon/sword/sword1" )->wield();
+}
+
+void init()
+{
+    object me = this_player();
+    add_action( "do_qingjiao", "qingjiao" );
+    add_action( "do_quest", "quest" );
+    if( kl_dizi(me) ) add_action( "do_shenqing", "shenqing" );
+    call_out("greeting",1,me);
+}
+
+void attempt_apprentice(object ob)
+{
+    if( ob->query_condition("kill_kunlun") )
+    return;
+    if(ob->query("family")){
+     command("sorry "+ob->query("id"));
+     command("say 我昆仑派乃是江湖正派，不收来历不明的弟子。");   
+     return;
+     }
+    if( ob->query("have_enter_kunlun") ){
+     command( "angry "+ob->query("id") );
+     command( "say 你还想回到昆仑派来？" );
+     return;
+    }
+    command( "say 嗯，不错，不错，你很有眼光。\n"
+"            将来光大我昆仑派还需依靠你了。" );
+    if( ob->query("kunlun_task") )
+      ob->delete("kunlun_task");
+    if( ob->query("kunlun_work") )
+      ob->delete("kunlun_work");
+    if( ob->query("canyue") )
+      ob->delete("canyue");
+    command( "recruit " + ob->query("id") );
+    ob->delete("ffox");
+    ob->set( "class", "kunlun" );
+    ob->set( "have_enter_kunlun", 1 );
+}	
+
+int do_qingjiao( string str )
+{
+    object me = this_player();
+    string skname,who;
+    int i;
+    int last_time=0, now_time=0;
+    if( !kl_dizi(me) ) return 0;
+    if( !str ) return 0;
+    if( sscanf( str,"%s from %s",skname,who )!=2) 
+    if( sscanf( str,"%s %s",who,skname )!=2) return 0;
+    if( wizardp(me) ) printf( "who is "+who+"?\n" );
+    if( me->query( "class_score/昆仑派" ) < 1200 ) {
+         command( "say 你还是多做一点事情吧，闲时可以去参阅一下典籍。" );
+         return 1;
+         }
+    last_time = kl_mark( "query", me, "last_time", 1, 1 );
+    now_time = time();
+    if( (now_time - last_time - 1800) > 0 ){
+    //如果半个小时没有完成过quest ，就不让请教武功了。
+        message_vision( "白鹿子很疑惑地看了$N一眼，接着摇了摇头。\n", me );
+        write( "白鹿子对你这几天的表现好象不太满意！\n" );
+        write( "你上次任务的时间已经是："+when( now_time - last_time )+"以前了。\n" );
+        return 1;
+        }
+    for( i=0;i<sizeof(skill_name);i++)
+        if( skname==skill_name[i] ) return 0;
+    command( "sorry "+me->query("id") );
+    write( "看起来他不想教你这门功夫。\n" );
+    return 1;
+}
+
+
+int do_quest( string str )
+{
+    object me = this_player();
+    string add_level="canyue/level";
+    mapping work;
+    int level;
+    int last_time;
+    if(!kl_dizi(me)) return 0;
+    if(kl_mark("query",me,"kunlun_task/where",1,1)){           //如果有干活的地方
+      if(kl_mark("query",me,"kunlun_task/success",1,1)>=2){    //如果成功点数为2奖励
+        command("nod "+me->query("id"));
+        command("say 听说你这一段时间在那边干得不错啊！");
+        me->add("class_score/昆仑派",
+                kl_mark("query",me,"kunlun_task/point",1,1) ); 
+        add_level+=sprintf("%1d",kl_mark("query",me,"kunlun_task/level",1,1));
+        kl_mark("add",me,add_level,2,1);
+        kl_mark("add",me,"kunlun_task/level",1,1);
+       }
+      else if(kl_mark("query",me,"kunlun_task/success",1,1)<=-2){
+        command("shake "+me->query("id"));        //如果成功点数为-2…
+        command("say 你真是个好吃懒做的家伙，这么点事都干不好。");
+        me->add("class_score/昆仑派",
+                kl_mark("query",me,"kunlun_task/point",1,1) );
+        kl_mark("add",me,"kunlun_task/level",-1,1);
+        }
+      else {
+        command("angry "+me->query("id"));
+        command("say 不是让你到"+
+             kl_mark("query",me,"kunlun_task/where",1,1)+"去帮忙吗？");
+        return 1;
+        }
+     if(kl_mark("query",me,"kunlun_task/point",1,1)>=0)
+       write("你的师门忠诚度升高"+chinese_number(
+           kl_mark("query",me,"kunlun_task/point",1,1) )+"点。\n");
+     else write("你的师门忠诚度下降"+chinese_number(
+           0-kl_mark("query",me,"kunlun_task/point",1,1))+"点。\n");
+     kl_mark("delete",me,"kunlun_task/where",1,1);
+     kl_mark("delete",me,"kunlun_task/point",1,1);
+     me->delete("task_time");
+     kl_mark("delete",me,"kunlun_task/success",1,1);
+     me->delete("quest");
+     last_time = time();
+     kl_mark( "set", me, "last_time", last_time, 1 );
+     return 1;
+     }
+    level=kl_mark("query",me,"kunlun_task/level",1,1);         //任务等级参数
+    if(level<=3) {
+      if(level==0) kl_mark("set",me,"kunlun_task/level",1,1);
+      work=go_where[random(3)];
+      kl_mark("set",me,"kunlun_task/where",work["where"],1);
+      message_vision( work["give_msg"]+"\n",me );
+      me->set("quest/quest","到"+work["where"]+"帮忙");
+      me->set("task_time",time()+500000);
+      return 1;
+      }
+     last_time = time();
+     kl_mark( "set", me, "last_time", last_time, 1 );
+    if(!give_quest()) return 0;
+     return 1;
+}
+
+int do_shenqing( string arg )
+{
+    object me = this_player();
+    int i, no = -1;
+    string * whats = ({
+        "xiuxing",
+        "lilian",
+        "shengji",
+        "kaixiao",
+        });
+    if( !kl_dizi(me) ) return 0;
+    if( !arg ) {
+        write( "你可以向师父提出以下申请：\n\n" );
+        write( "    一、修行[xiuxing ]\n" );
+        write( "    二、历练[lilian  ]\n" );
+        write( "    三、升级[shengji ]\n" );
+        write( "    四、开销[kaixiao ]\n\n" );
+        write( "    -----其中，修行和历练是到中原去锻炼，\n" );
+        write( "         升级可以获得本门在中原的一些指挥\n" );
+        write( "         的权利。开销可以在每一次任务之前\n" );
+        write( "         申请，师父会根据任务的难度给你一\n" );
+        write( "         些钱。\n" );
+    }
+    for( i=0; i<sizeof(whats); i++) {
+        if( arg == whats[i] ) no = i;
+    }
+    if( no == -1 ) return notify_fail( "请按照说明进行申请！\n" );
+    switch ( no ) {
+        case 0:
+            do_xiuxing( me );
+            break;
+        case 1:
+            do_lilian( me );
+            break;
+        case 2:
+            do_shengji( me );
+            break;
+        case 3:
+            do_kaixiao( me );
+            break;
+        default:
+        break;
+    }
+    if( wizardp( me ) ) write( "Ok.\n" );
+    return 1;
+}
+
+int do_xiuxing ( object me )
+{
+    return 1;
+}
+int do_lilian( object me )
+{
+    return 1;
+}
+int do_shengji( object me )
+{
+    return 1;
+}
+int do_kaixiao( object me )
+{
+    return 1;
+}

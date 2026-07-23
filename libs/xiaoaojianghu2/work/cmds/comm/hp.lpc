@@ -1,0 +1,199 @@
+// hp.c
+//rewrited by qyz
+//modify by nerd: add numeric hp.
+
+#include <ansi.h>
+#include <combat.h>
+
+
+
+inherit F_CLEAN_UP;
+
+string *force_status_msg = ({
+    	HIR"纯阳"NOR,
+    	RED"偏阳"NOR,
+    	HIW"兼修"NOR, 
+        HIC"偏阴"NOR,
+    	MAG"纯阴"NOR, 
+    	MAG"纯阴"NOR    	
+    });
+
+string empty_string = "                                                  ";
+string bar_string = "■■■■■■■■■■■■■■■■■■■■■■■■■";
+string blank_string = "□□□□□□□□□□□□□□□□□□□□□□□□□";
+
+string status_color(int current, int max);
+string tribar_graph(object who, string which);
+
+int num_flag;
+
+int main(object me, string arg)
+{
+    object ob;
+    mapping my;
+    string line, skill_type,force_status;
+    object weapon;
+    int i,force_factor;
+
+    num_flag = 0;
+    if ( !arg )
+    	ob = me;
+    else if ( arg=="-n" && wizardp(me) )
+    {
+        ob = me;
+        num_flag = 1;
+    }
+    else if ( wizardp(me) )
+    {
+        if(sscanf(arg,"-n %s",arg)==1)
+            num_flag = 1;
+        ob = get_object(arg);
+    	//ob = present(arg, environment(me));
+    	//if (!ob) ob = find_player(arg);
+    	//if (!ob) ob = find_living(arg);
+    	if (!ob || !ob->is_character()) 
+            return notify_fail("你要察看谁的状态？\n");
+    }
+    else
+    	return notify_fail("只有神仙才能察看别人的状态。\n");
+    my = ob->query_entire_dbase();
+    if (ob->query_temp("force_factor"))
+    force_factor=ob->query_temp("force_factor");
+    else force_factor=ob->query("force_factor");
+    if (wizardp(me) && (me->query("env/score")))
+        num_flag = 1;
+
+    line = sprintf("\n"+"〖精神〗 " + tribar_graph(ob,"gin")
+                 + "( %s%3d%%"NOR" )  〖食物〗 " + 
+                 tribar_graph(ob,"food") +"\n",
+                 status_color(my["eff_gin"],my["max_gin"]),
+                 (1+my["eff_gin"])*100/(my["max_gin"]+1) );
+    line += sprintf("〖生命〗 " + tribar_graph(ob,"kee") + 
+        "( %s%3d%%"NOR" )  〖饮水〗 " + tribar_graph(ob,"water") + "\n",
+                status_color(my["eff_kee"],(my["max_kee"]+1)),
+                (1+my["eff_kee"])*100/(my["max_kee"]+1) );
+    line += sprintf("〖体能〗 " + tribar_graph(ob,"sen")
+                + "( %s%3d%%"NOR" )  〖内力〗 %s%4d/ %4d (+%d)\n" NOR,
+                status_color(my["eff_sen"],my["max_sen"]),
+                (1+my["eff_sen"])*100/(my["max_sen"]+1),
+                status_color(my["force"], my["max_force"]),
+                my["force"], my["max_force"],
+                force_factor );
+    if ( objectp(weapon = ob->query_temp("weapon")) )
+    	skill_type = weapon->query("skill_type");
+    else
+    	skill_type = "unarmed";
+
+    if ( my["yin"] || my["yang"] )
+    {
+        if (my["yin"]<0) my["yin"]=0;
+        if (my["yang"]<0) my["yang"]=0;
+        i = my["yin"] * 5 / ( my["yin"] + my["yang"]+1 );    
+        force_status = force_status_msg[i];
+        if (me->query("force_ok"))
+        force_status = HIR"兼"HIG"修"NOR;        
+    }
+    else 
+        force_status = "中性";
+    line += sprintf(WHT"〖攻防〗 ( %3d%% )   〖实力〗 ( %3d%% )  〖属性〗 ( %s "+WHT")  〖经脉〗 ( %2d  )\n"NOR, 
+      ob->query_gongfang(), ob->query_shili(),force_status,(int)ob->query("rendumai") );
+
+    line += sprintf(WHT"〖兵器〗 (  +%-3d)   〖护具〗 ( +%-3d )  〖安全〗 ( %3O%% )  〖资金〗 ( %-4d)\n"NOR,
+        ob->query_temp("apply/damage"),ob->query_temp("apply/armor") ,ob->query("env/wimpy"),(int)ob->query("savemoney")/10000);
+    write(line);
+    if (me->query("savemoney")>10000000)
+    {me->set("savemoney",10000000);
+    message_vision("$N的钱被locker同学没收了一部分！\n",me);
+      }
+     if ( file_size( SKILL_D(my["using_force"]) + ".lpc" ) == -1 )
+        ob->delete("using_force");
+    return 1;
+}
+
+string status_color(int current, int max)
+{
+    int percent;
+
+    if ( max )
+        percent = current * 100 / max;
+    else
+        percent = 100;
+
+    if ( percent > 100 ) return CYN;
+    if ( percent >= 90 ) return GRN;
+    if ( percent >= 60 ) return YEL;
+    if ( percent >= 30 ) return MAG;
+    if ( percent >= 10 ) return RED;
+    return RED;
+}
+
+string tribar_graph(object who,string which)
+{
+    string color;
+    int val,eff,max;
+    if(which=="gin" || which=="sen" || which=="kee")
+    {
+        switch(which)
+        {
+        case "gin":
+            color = GRN;break;
+        case "kee":
+            color = RED;break;
+        case "sen":
+            color = BLU; break;
+        }
+        max = (int)who->query("max_"+which);
+        val = (int)who->query(which);
+        eff = (int)who->query("eff_"+which);
+    }
+    else if(which=="food")
+    {
+        color = YEL;
+        max = who->max_food_capacity();
+        eff = max;
+        val = (int)who->query("food");
+    }
+    else if(which=="water")
+    {
+        color = CYN;
+        max = who->max_water_capacity();
+        eff = max;
+        val = (int)who->query("water");
+    }
+    else return "???";
+    if ( val > eff ) val = eff;
+    if ( eff > max ) eff = max;
+    if(num_flag)
+    {
+        if(which == "kee" || which=="sen" ||which =="gin")
+            return sprintf(color + "%3d/%3d/%3d "NOR,val,eff,max);
+        else
+            return sprintf(color + "%3d/%3d "NOR,val,max);
+    }
+    return color + bar_string[0..(val*10/max)*2-1]
+    	+ ((eff > val) ? blank_string[(val*10/max)*2..(eff*10/max)*2-1] : "") + ((max > eff) ? empty_string[(eff*10/max)*2..19] : "")+NOR;
+}
+
+int help(object me)
+{
+    write(@HELP
+指令格式 : hp
+
+    HP中定义的各种参数如下:
+
+〖精神〗 ■■■■■■■■■■( 100% )  〖食物〗 ■■■■■■■■■■
+〖生命〗 ■■■■■■■■■■( 100% )  〖饮水〗 ■■■■■■■■■■
+〖体能〗 ■■■■■■■■■■( 100% )  〖内力〗 10012/ 10012 (+0)
+ 攻防比例： 50                          实力发挥比： 100 
+ 兵刃：  ( +0   )                       护具：  ( +102 )
+
+    其中精神，生命，体能三项中的百分数是你受到严重的内伤.外伤的程度。
+  而前面的方格表示你这一项消耗的程度。当你只是方格表示的项减少时，恢
+  复的速度就很快，而当百分数所表示的项受到了损伤的时候，恢复的就很慢，
+  有时甚至有生命危险。
+
+see also : score
+HELP
+    );
+    return 1;
+}

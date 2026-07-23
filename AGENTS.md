@@ -1999,6 +1999,57 @@ substring/case comparison in these handlers against the driver's actual
 diagnostic text, not the text you'd expect from the original MudOS-era
 convention.
 
+### 15ag. This driver build has `__OLD_ED__`, so `ed_start()`/`ed_cmd()`/`query_ed_mode()` don't exist — a lib whose player body or command-prompt logic inherits an editor feature using those calls can crash `make_body()` mid-registration with zero visible error
+
+Found on `xiaoaojianghu2` (archive #74), the highest-impact fix in that
+pass: `feature/editor.lpc` (inherited into the player body class) and
+`message.lpc`'s `write_prompt()` both called `ed_start`/`ed_cmd`/
+`query_ed_mode` — real applies/efuns on some driver targets, but this
+build was compiled with `__OLD_ED__` defined instead, meaning the
+in-game line editor uses the older, different `ed()` efun interface, and
+none of those three names exist at all. Since `feature/editor.lpc` is
+inherited directly into the player body class, the compile failure took
+`make_body()` down with it — silently, right at the moment gender
+selection completes, with no message anywhere (not even a debug.log
+line, since this compiles fine as a *standalone* file — the failure only
+surfaces when the whole inheritance chain is exercised by an actual
+registration). Fixed by rewriting the editor-invoking call sites to use
+the real `ed()` efun instead (confirmed via `~/src/fluffos/src/comm.cc`
+that this driver bypasses the normal `process_input`/`write_prompt` path
+entirely while an `ed()` session is active, which is why `write_prompt()`
+needed its own fix too). **Lesson**: `grep -r "ed_start\|ed_cmd\|query_ed_mode"`
+early on any lib, and cross-check against which editor mode this
+project's driver build was actually compiled with, rather than assuming
+editor-related code is dead/unreachable just because it never surfaced
+in a boot log.
+
+### 15ah. A missing save-data directory (e.g. `/log/nosave/`) can make an unguarded `write_file()`/`log_file()` call silently abort an entire in-progress multi-step flow, logging the failure ONLY to the mudlib's own internal error channel — not to `debug.log`, not to the player, nowhere a normal check would look
+
+Found on `xiaoaojianghu2` (archive #74), described by the processing
+agent as the hardest bug in that pass to diagnose: the raw archive
+simply didn't ship a `/log/nosave/` directory, and some step of the
+post-gender-selection registration chain wrote a routine log entry there
+via an uncaught `write_file()`. On this driver, `write_file()` to a
+directory that doesn't exist fails, and the surrounding code had no
+`catch()` — but because the call sat inside a chain of `call_other()`s
+already several frames deep in the registration flow, the failure never
+reached the ordinary error-reporting path at all; it only appeared in
+the mudlib's own separate `/log/runtime/secure` log (a custom, non-
+standard log file this lib's own security layer maintains), completely
+invisible to `debug.log` or anything the player saw. The registration
+simply stopped silently right after gender selection with the connection
+just sitting there. Fix: create the missing directory proactively as
+part of the standard pre-boot checklist (`mkdir -p` every directory any
+`log_file()`/`write_file()` call references, not just the ones obviously
+tied to player-save paths), and wrap the specific call site in `catch()`
+as defense in depth. **Lesson**: when a registration flow silently stalls
+with literally no error anywhere in `debug.log`, don't stop looking after
+checking the obvious channels — grep the whole lib for any custom
+log-file path the mudlib itself might write failures to (`log_file(`/
+`write_file(` calls with a hardcoded path other than the standard ones),
+since a driver-level failure with no `catch()` can be swallowed by a
+completely separate, easy-to-miss logging convention.
+
 ---
 
 ## Per-archive gotchas index

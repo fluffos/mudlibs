@@ -18,9 +18,7 @@ worked; keep status values consistent so the table stays greppable:
 
 Port assignments: sequential from 40001, recorded here so re-running
 several libs at once never collides. **Next free port: 40071** (40001-40070
-assigned/reserved -- 40066-40070 are reserved for archives #72-76, being
-processed in parallel by background agents as of this update; 40007 is
-ds386, deprioritized/partial). On mega-libs (tens of
+assigned; 40007 is ds386, deprioritized/partial). On mega-libs (tens of
 thousands of files, the "nitan" family), skip the full `lpcc_check.sh`
 sweep — it can OOM the host before finishing (see AGENTS.md §6b) — and
 rely on the boot + interactive-connect test as the verification gate.
@@ -32,7 +30,7 @@ rely on the boot + interactive-connect test as the verification gate.
   majority of this collection. If an archive turns out to be English
   (like ds386/Dead Souls), do the minimum to note what it is, don't sink
   deep debugging time into it -- move on to the next Chinese one.
-- **Done: 67 / 100** (shanhaizhanshen, xingzhanyingxiong,
+- **Done: 68 / 100** (shanhaizhanshen, xingzhanyingxiong,
   unknownlib20150716 [小雨西游II], bxsj [书剑天下], bxsj1 [书剑·经典],
   chidi [江湖I], ..., nitan170911 [仙剑奇侠传], nitan6 [笑傲江湖], rzrmud
   [大唐西游], xo, xo_final, zzfy [郑州风云3], shiji [世纪],
@@ -71,7 +69,8 @@ rely on the boot + interactive-connect test as the verification gate.
   shenzhou [神州, ES II lineage], xiaoaojianghu_client [笑傲江湖服务端+
   客户端, actually a genuine mudlib (not client-only), 夕阳再现 lineage],
   xiaoaojianghu_xo [笑傲江湖XO, third TMI-2/ES2/Falcon snapshot alongside
-  xo #28/xo_final #29])
+  xo #28/xo_final #29], xiaoaojianghu2 [笑傲江湖II, ALSO TMI-2/ES2/Falcon
+  lineage not nitan-family, a fourth snapshot])
 - **New AGENTS.md §15q (hidden client-protocol-version gate)**: found on
   xiyangzaixian3 -- a pre-id prompt can check the input against a
   hardcoded literal (client version string), not just a BIG5/student
@@ -105,8 +104,18 @@ rely on the boot + interactive-connect test as the verification gate.
   pass found a new bug class (§15ae, `private nomask` command-hook
   breaking every post-login command silently) that turned out to
   retroactively affect the already-shipped beimeixiakexing2001 (#45) too
-  -- fixed and re-verified there as well. This mode continues for
-  archive #72 onward.
+  -- fixed and re-verified there as well. A sixth batch of 5 (archives
+  #72-76: shenzhou, shenmo, xiaoaojianghu_xo, xiaoaojianghu2,
+  xiaoaojianghu_client) also followed the same pattern and is all done;
+  #74/#75/#76 were flagged in advance for lineage cross-checks against
+  nitan6/xo/xo_final -- all confirmed as belonging to the TMI-2/ES2/
+  Falcon "XO" lineage (a third and fourth snapshot) rather than
+  nitan-family, despite sharing "笑傲江湖" in the title; #76 also turned
+  out to be a genuine mudlib despite its "server+client" name (the
+  "client" half is just a second wire protocol, no separate client
+  program bundled). Every agent in this batch was instructed to test a
+  post-login command per §15ae, and all confirmed clean. This mode
+  continues for archive #77 onward.
 - **New standing policy from §15ae**: never mark a lib "done" without
   testing at least one ordinary post-login command (e.g. `look`) after
   registration completes -- reaching the game world is not the same as
@@ -386,7 +395,7 @@ rely on the boot + interactive-connect test as the verification gate.
 | 71 | 碧血残阳之豪侠晚歌.rar | bixiecanyang | 40065 | done | self-IDs exactly as archive title; own readme credits "夕阳再现-江湖风云2-风云再起" -- confirmed genuine member of the 夕阳再现 lineage (#46/#47/#55/#59), chinese.c byte-identical across all 5, securityd.c matches xiyangzaixian_fengyun2(#47) specifically as closest sibling; confirmed NOT related to datangshuanglong(#49) in either direction (differing chinese.c/master.c/logind.c) -- found a SECOND piece of evidence for #49's stale-copy-paste theory: its raw config file is literally named `config.bxcy`, the template extended to the filename itself; standard §15h fix + §15z protected-shim collision (5 files) + §3 counterexample revert (22 files) + §14/§15p/§15s fixes + new message_combatd() alias (§15aa-shaped ordering gotcha, first attempt broke the whole simul_efun compile until reordered after message_vision) + 19 individual pre-existing content typos fixed; confirmed NOT needed: §15x (hardcoded TOMUD_PORT=8888 only sets a cosmetic flag, never rejects connections) + a §15q-shaped client-version gate confirmed structurally unreachable on our assigned port; full registration flow verified twice incl. real names 秦风(male, 武庙 start room)/林风(female, 北疆小镇, correct female honorific), zero real debug.log errors either time; 98.6% lpcc pass (13374/13559, up from 98.5%); see libs/bixiecanyang/NOTES.md |
 | 72 | 神州.rar | shenzhou | 40066 | done | self-IDs as 【神州】; ES II lineage (same family as es1_win/esI/xkx2001/rzrmud/xo/beimeixiakexing2001/xinkuangxiangkongjian2/yueyingqiyuan/wuhanzhan/haiyang2/yanhuangwuhun/yanhuangyingxiongshi/xuanjianlu) with a ShenZhou-specific layer; standard §15h/§14/§8d-§15o/§15ae/§8e/§15s/§15n fixes + NEW log_error() bug (unconditional wizardp(this_player(1)) lazily loaded securityd mid-compile, crashing every boot on the first preloaded daemon before securityd existed, + a "Warning:"/"warning:" case-sensitivity bug in the same function) + §3 counterexample revert (52 files) + is_killing() typo (5 files) + stale corrupted data/npc/map.o moved aside + pre-existing PUA-character/octal-escape corruption in several files reconstructed from an uncorrupted sibling copy + missing auto_perform.h shared header (7 files); full registration + post-login-command flow verified twice with real names 秦风(male)/林风(female), look/score/i/quit all working, zero debug.log errors either session -- confirms the command_hook fix (already correctly `nomask` without `private` here) genuinely works; 97.95% lpcc pass (12481/12742, up from 97.79%); see libs/shenzhou/NOTES.md |
 | 73 | 神魔20190924版本.rar | shenmo | 40067 | done | self-IDs as 西游记之神魔传说 (root dir xyj/); ES II/Neolith 0.0.2 lineage, same large family as es1_win/esI/xkx2001/rzrmud/beimeixiakexing2001/xinkuangxiangkongjian2/yueyingqiyuan/wuhanzhan/yanhuangwuhun/haiyang2/kuangxiangkongjian/huoying; long-lived multi-author lib (1994-2013), mega-lib (33,199 .lpc files, 740MB); standard §15h fix (chinese/named/logind) + §8d/§15o get_include_path (1706 same-dir includes) + §3 counterexample revert (82 files) + §15w fix + NEW uppercase `.C` extension (363 files, convert_lib.sh's glob missed them, manually renamed -- worth adding to AGENTS.md); §15ae explicitly checked hardest per new policy -- already independently fixed in this lib's own source (`private` commented out); full registration + post-login-command flow verified twice with real name 秦风六, look/score/quit all working correctly reaching actual start room 南城客栈; full lpcc sweep skipped per §6b mega-lib policy, individual per-file lpcc checks on critical path files passed clean; see libs/shenmo/NOTES.md |
-| 74 | 笑傲江湖II.rar | | | not started | |
+| 74 | 笑傲江湖II.rar | xiaoaojianghu2 | 40068 | done | NOT nitan-family despite sharing the "笑傲江湖" title with nitan6(#22) -- confirmed TMI-2/ES2/Falcon "XO mudlib" lineage instead, same family as xo(#28)/xo_final(#29) but a distinct non-duplicate 2003-dated snapshot; F_DBASE confirmed real per-object storage, §15 dbase bug definitively does not apply; standard §15h fix + §4 reentrancy guard (ported from xo) + NEW combatd.lpc all-cases-commented-out switch bug + NEW high-impact __OLD_ED__ driver-build gap (ed_start/ed_cmd/query_ed_mode don't exist, broke editor.lpc inherited into player-body class + message.lpc's write_prompt(), silently killing make_body() mid-registration with zero visible error -- rewrote to use the old ed() efun) + NEW hardest-to-diagnose bug: missing /log/nosave/ directory caused an uncaught write_file() error to silently abort the entire post-gender registration chain with zero visible error anywhere except the mudlib's own /log/runtime/secure (not debug.log) -- created the dir + wrapped log_file() in catch() + §15i-shaped comment-eats-if/else-chain bug (2 files) + a few pre-existing typos; §15ae confirmed clean both by code read and empirically (score works); full registration + post-login-command flow verified with real name 秦风, score produces full correct character sheet, look hits a genuine pre-existing missing-room content gap (documented not fixed), quit's 10-point save gate works correctly; 97.65% lpcc pass pre-final-fixes (4242/4344); 5 new bug classes flagged for AGENTS.md; see libs/xiaoaojianghu2/NOTES.md |
 | 75 | 笑傲江湖XO .rar | xiaoaojianghu_xo | 40069 | done | same TMI-2/ES2/Falcon lineage as xo(#28)/xo_final(#29) confirmed via identical master.lpc header credit, but a third independently-evolved snapshot (4922 files, between xo's/xo_final's sizes, own hybrid secure/obj/ layout) -- core files closer to xo by diff-size but game/skill content closer to xo_final (several identical corrupted skill files + a hami.npc header reconstructed verbatim from xo_final's byte-identical hami.h); standard §4/§15h/§15g fixes (incl. a NEW finding: `class Action` never defined anywhere, ported from xo's include/action.h) + 3 new §8g-variant missing-macro cascades (GROUP_TASK 42 files, EXERT_DIR 6 files, ZUOJI 3 files) + a class task field-name mismatch (45-file cascade) + missing hami.npc + missing armor.h include + undefined LIB_ROOM base class + §3 counterexample (14 files) + §15w fix + ~12 individual pre-existing typos; full registration + post-login-command flow verified 3 times with real names 秦风/秦岭/秦风三 each reaching different randomly-selected start rooms, look/score/i all working per §15ae; 97.6% lpcc pass (4202/4304, up from 95.9%); see libs/xiaoaojianghu_xo/NOTES.md |
 | 76 | 笑傲江湖服务端+客户端.rar | xiaoaojianghu_client | 40070 | done | despite the name, confirmed genuine mudlib not client+server bundle -- "server+client" refers to bundling 2 wire protocols (telnet/ZMUD + TOMUD menu-client handshake) on different ports, not a separate client program; NOT related to nitan6/xo/xo_final despite "笑傲江湖" title -- confirmed genuine independent fork of the 夕阳再现 lineage (#46/#47/#48/#55/#59/#68/#71) via readme credit + md5sum (chinesed.lpc matches 4 siblings, chinese.lpc matches bixiecanyang specifically); standard §15h fix + §15z (3 files) + §3 counterexample (7 files) + §14/§15s(+new shout() variant)/§15ac(3 files)/§15ab/§15w fixes + new message_combatd/message_sort aliases + highest-impact: missing shared d/city/obj/cloth.lpc (referenced by 47 NPC files across a dozen zones) restored verbatim from an identical sibling template + 5 iconv-eaten-newline fixes; §15q hidden client-version gate IS live here (get_version unconditional first callback, unlike bixiecanyang); full registration + post-login-command flow verified twice with real names 秦风(male,铁枪庙)/林风(female,武庙 w/ correct gender-specific flavor text), score also tested per §15ae, zero debug.log errors; 97.59% lpcc pass (11138/11413, up from 97.06%); see libs/xiaoaojianghu_client/NOTES.md |
 | 77 | 紫藤站.rar | | | not started | large (40MB) |

@@ -1,0 +1,284 @@
+/*BIWU_D 
+ *system/daemon/biwud.c
+ *by lnwm@XO_GROUP 1999-6-21
+ *
+ *暂不考虑lala的等级分比武大会规划，直接一天定胜负。
+ *
+ * 基本思路：
+ * 1：比武开始时，宣布，所有其他战斗停止，屏蔽wiz外其他频道。
+ * 2：宣布比武开始后，所有参加比武的人都自动抓到比武者休息室
+ *    其他玩家如果想观看的话，用accept指令可以邀请去看台观看
+ * 3：给一段时间允许玩家下注赌二号和三号博彩   
+ * 4：比武场处于比武状态。看台启动。
+ * 5：系统或巫师开始组织比武。
+ * 6：在某场比武开始前允许玩家下注赌谁获胜（一号博彩）
+ * 7：比武场只允许当时参赛双方进入。
+ * 8：比武规程与奖励：
+ *     分年龄组：20-35组，36-50，50以上。三组。
+ *               
+ *     简单淘汰制，每两个人3局2胜。
+ */
+
+#include <biwu.h>
+#include <ansi.h>
+#include <family.h>
+#include <command.h>
+
+inherit F_DBASE;
+
+private int inBiwu = 0;
+private int inBaoming = 0;
+private object * group1 = ({}); //50以上参赛者
+private object * group2 = ({}); //35-50
+private object * group3 = ({}); //20-35
+private object * biwu_list =({});
+
+int StartBiwu();
+int EndBiwu();
+int query_biwu();
+// add by xli 1999.6.25 for Bao Ming
+int StartBaoming();
+int EndBaoming();
+int query_baoming();
+// end add
+int SortPlayers();
+int Group1Fight();
+int Group2Fight();
+int Group3Fight();
+int QueryXplor(object);
+void SummonPlayer();            //把所有的比武者抓到比武休息室
+object * SortByPower( object * group );
+string * ReadPlayers();         //读取所有报名者名字数组
+object * QueryPlayers();        //返回所有在线的报名了的玩家
+
+void create()
+{
+    seteuid(getuid());
+    set( "name","比武精灵" );
+}
+
+int StartBiwu()
+{
+    inBiwu = 1;
+    message("shout",YEL"比武大会现在开始！\n"NOR,users() );    
+    foreach( object me in users() )
+    {
+        if( me->is_fighting() )
+        {
+            me->remove_all_killer();
+        }
+        tell_object( me, CYN"比武大会开始，所有战斗暂时终止。\n\n"NOR,users());
+        tell_object( me,YEL"如果你想观看比武大会的话，请用accept指令接收邀请。\n"NOR,users());
+    }
+    BET_D -> StartBet2();
+    SortPlayers();
+    SummonPlayer();
+    //call_out()    TODO 延迟一段时间比武开始；
+        return 1;
+}
+
+int EndBiwu()
+{
+    inBiwu = 0;    
+    message("shout",YEL"比武大会现在结束！\n"NOR,users() );    
+        return 1;
+}
+
+int query_biwu()
+{
+    return inBiwu;    
+}
+
+int StartBaoming()
+{
+    inBaoming=1;
+    message("shout",HIY"比武大会报名工作现在开始！\n"NOR,users());
+    foreach( object me in users() )
+    {
+        tell_object( me,CYN"如果你想去报名参加比武大会，请用join指令前往。\n"NOR,users());
+    }
+    return 1;
+}
+int EndBaoming()
+{
+    inBaoming=0;
+    message("shout",YEL"报名工作现在结束！\n"NOR,users());
+    return 1;
+}
+int query_baoming()
+{
+    return inBaoming;
+}
+
+//读取报名文件，返回所有报名者ID的数组
+string * ReadPlayers()
+{
+    string filename = "/log/nosave/baoming";
+    string all_players;     //从baoming中读出来的字符串
+    string * players_name;   //所有参赛者名字    
+    
+    if ( file_size( filename ) == -1 )
+    {
+        return ({});
+    }
+    if ( !stringp( all_players = read_file( filename ) ) )
+    {
+        return ({});
+    }
+    players_name = explode( all_players,"\n");
+    return players_name;
+}
+
+//给所有在线的报名者分组
+int SortPlayers()
+{
+        object ppl;
+        int i,age;
+        string * players;
+        
+        players = ReadPlayers();
+        for( i=0;i<sizeof(players);i++ )                                //按年龄分类先
+        {
+                if( objectp( ppl = find_player( players[i] ) )
+                        && ( member_array( ppl, group1 ) == -1 )
+                        && ( member_array( ppl, group2 ) == -1 )
+                        && ( member_array( ppl, group3 ) == -1 ) )
+                {
+                        age = ppl->query("age");
+                        if( age>20 && age<=35 )
+                                group3 += ({ppl});
+            else if( age>35 && age<=50 )
+                                group2 += ({ppl});
+                        else
+                                group1 += ({ppl});
+                }
+        }
+        Group1Fight();
+        return 1;
+}
+
+//返回传入的对象的等级因子，后面的SortByPower调用
+int QueryXplor( object ppl )
+{
+        if ( objectp(ppl) )
+        return XPLOR_CMD -> QueryLevel(ppl);
+}
+
+object * SortByPower( object * group )                          //按等级因子从大到小排序
+{
+        object temp_ppl;
+        object * temp_group = allocate( sizeof(group) );
+    //temp_group = sort_array( group,"QueryXplor",);
+    
+        int i,j,num,power1,power2;
+        
+        num = sizeof( group );
+        message("shout",sprintf("starting sort...\n"), users() );
+        
+        for( i=0; i < num; i++)
+        {
+                temp_group[i] = group[0];
+                power1 = "/cmds/arch/xplor"->QueryLevel( temp_group[i] );
+                
+                for( j=0; j<sizeof( group ); j++)       
+                {
+                        power2 = "/cmds/arch/xplor"->QueryLevel( group[j] );
+                        if( power1 <= power2 )
+                        {
+                                temp_ppl = group[j];
+                                temp_group[i] = group[j];
+                                power1 = power2;
+                        }
+                }
+                group -= ({temp_ppl});          //有点泛晕，最土的排序方法啊。。
+        }
+        
+        return temp_group;
+}
+
+int Group1Fight()
+{
+        int i;
+        object * sort;
+        for( i=0;i<sizeof( group1 ); i++)
+        {
+                message("shout",sprintf("开始排名是%s\n",group1[i]->query("id") ) , users() );
+        }
+        sort = SortByPower( group1 );
+        for( i=0;i<sizeof( sort ); i++)
+        {
+                message("shout",sprintf("排序后排名是%s\n",sort[i]->query("id") ), users() );
+        }
+        return 1;
+}
+
+int Group2Fight()
+{
+        return 1;
+}
+int Group3Fight()
+{
+        return 1;
+}
+
+void SummonPlayer()
+{
+        string room;
+        object * all_players = group1+group2+group3;
+        
+        foreach ( object me in all_players )
+        {
+        if ( objectp( environment(me) ) )
+        {
+            if ( !environment(me) -> query( "not_startroom" ) )
+                room = file_name( environment( me ) );
+            else
+                room = me -> query( "startroom" );
+        }
+        else
+            room = "/clone/misc/void";
+    
+        me -> set( "startroom" ,room );    
+    
+        tell_object ( me,YEL"你已经报名参加了这次比武大会。\n现在请先去本门的看台等候\n\n"NOR );
+        message_vision ( GRN"只见空中伸出一只大手把$N抓了起来。。。\n"NOR,me );
+        switch ( me -> query( "family/family_name") )
+        {
+            case EAST:
+                me -> move(EAST_ROOM);
+                break;
+            case WEST:
+              me -> move(WEST_ROOM);
+                break;
+            case KONGDONG:
+                me -> move(KONGDONG_ROOM);
+                break;
+            case DUANSHI:
+                me -> move(DUAN_ROOM);
+                    break;
+            case SHAOLIN:
+                me -> move(SHAOLIN_ROOM);
+                break;
+            case KUNLUN:
+                me -> move(KUNLUN_ROOM);
+                break;
+        
+            case PENGLAI:
+            case FUNIU:
+            default:
+                me -> move(COMMON_ROOM);
+        }
+        tell_object( me,GRN"你安安稳稳地落在看台上。\n"NOR );
+        message("vision", sprintf(GRN"只见%s从空中飘了下来，安安稳稳地落在看台上\n"NOR,me->name() ),environment(me),me );       
+    }
+}
+
+object * QueryPlayers()
+{
+    return group1+group2+group3;
+}
+
+
+
+
+

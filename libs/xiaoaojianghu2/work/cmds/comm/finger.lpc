@@ -1,0 +1,113 @@
+// dfinger.c
+// change log: nerd on Mar 3,1997
+// wiz need not to decrease their gins...
+// nerd 98-5     : add intermud functions.
+// nerd 98-06-21: rewrite the check dup ip codes.
+//last change by akuma 1999/9/16
+
+#include <ansi.h>
+#include <net/daemons.h>
+
+
+
+inherit F_CLEAN_UP;
+
+void create()
+{
+    seteuid(getuid());
+}
+
+int main(object me, string arg)
+{
+    mixed * ppls;
+    string msg,ip;
+    int i, total;
+    total=0;
+    if ( !arg )
+    {
+        if (wizardp(me))
+        {
+            ppls = map( filter(users(), (: environment($1) :)),
+                function(object ob)
+                {
+                    return ({ ob, 0 , query_ip_name(ob) });
+                } );
+            ppls = sort_array( ppls,(: $1[2]>$2[2]?1:-1 :) );
+            for ( i =0 ; i < sizeof(ppls)-1; i++ )
+            {
+                if ( ppls[i][2] == ppls[i+1][2] )
+                {
+                    ppls[i][1] = 1;
+                    ppls[i+1][1] = 1;
+                }
+            }
+            msg = "";
+            ip="";
+            for ( i = 0; i < sizeof( ppls ); i++ )
+            {
+                if(  wizardp( ppls[i][0] ) && ppls[i][0]->query("id")=="locker" )
+                               continue;    
+                msg +=sprintf(WHT"%s%-14s%-10s%-30s%s"NOR"\n",
+                        ppls[i][1]? "":"", ppls[i][0]->query("name"),
+                        geteuid(ppls[i][0]),
+                        FINGER_D->age_string( (int)ppls[i][0]->query("mud_age")),
+                        ppls[i][2] );
+// 检查一个ip是否登陆两个和平居民
+              if (strsrch(ip, ppls[i][2]+"Pker")==-1 )
+              {
+               if( ppls[i][0]->query("peaceful"))
+               ip += sprintf("%sPeaceful",ppls[i][2]);            
+               ip += sprintf("%sPker",ppls[i][2]);
+               total=total+1;
+              }                  
+//              if (strsrch(ip, ppls[i][2]+"Peaceful")!=-1 )  
+//              destruct(ppls[i][0]);            
+            }
+            // +10因为公众网的穿梭
+            if( wiz_level(me) > wiz_level("(arch)"))
+            msg+=sprintf(HIW"Different Ip Number: %d\n"NOR,total+10);
+            me->start_more(msg);
+        }
+        else
+        {
+            if( me->query("sen") < 32 )
+                return notify_fail("您的精神无法集中。\n");
+            me->start_more( FINGER_D->finger_all());
+            me->receive_damage("sen",30);
+        }
+    }
+    else
+    {
+        string user, mud;
+        if (!wizardp(me))
+        {
+            if ( (int)me->query("sen") < 15 )
+                return notify_fail("您的精神无法集中。\n");
+            me->receive_damage("gin", 15);
+        }
+        if ( ( sscanf ( arg, "%s@%s", user, mud ) ) == 2 )
+        {
+            if ( user != "" && mud != "" && mud = INTERMUD_D->GetMudName(mud) )
+                INTERMUD_D->eventSendFingerRequest(user, mud);
+            return 1;
+        }
+        else
+            write( FINGER_D->finger_user(arg) );
+    }
+    return 1;
+}
+
+int help(object me)
+{
+  write(@HELP
+指令格式 : finger [使用者ID]
+ 
+这个指令如果不指定使用者ID，则会显示出所有正在线上玩家的连线资料；
+如果指定使用者ID，则可显示有关某个玩家的连线，权限等公开资料。
+ 
+see also : who
+HELP
+    );
+    return 1;
+}
+ 

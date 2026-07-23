@@ -1,0 +1,385 @@
+// filename : /system/std/char.c
+//
+// ChangeLog :
+//      Falcon  1996-11-27      add lian feature
+// ChangeLog :
+//      Qyz     1996-4-25       增加走火入魔的内容
+
+
+
+#include <action.h>
+#include <ansi.h>
+#include <command.h>
+#include <condition.h>
+#include <dbase.h>
+#include <move.h>
+#include <name.h>
+#include <skill.h>
+#include <team.h>
+#include <user.h>
+
+inherit F_AUTOLOAD;
+inherit F_SAVE;
+inherit F_AUTOSAVE;
+inherit F_ALIAS;
+inherit F_EDITOR;
+inherit F_INTERFACE;
+inherit F_INTERACTIVE;
+inherit F_MESSAGE;
+inherit F_MORE;
+inherit F_APPRENTICE;
+inherit F_ATTACK;
+inherit F_ATTRIBUTE;
+inherit F_COMMAND;
+inherit F_CONDITION;
+//inherit F_DAMAGE;
+inherit F_DBASE;
+inherit F_FINANCE;
+inherit F_MOVE;
+inherit F_NAME;
+inherit F_SKILL;
+inherit F_TEAM;
+inherit F_FAMILY;
+inherit F_ZUZHI;
+
+// Use a tick with longer period than heart beat to save cpu's work
+private int bVisible    = 1;        // 1: 所有可见，0:巫师可见。
+private string strShort = 0;
+
+
+
+void create()
+{
+    // so LOGIN_D can export uid to us
+    seteuid( 0 );
+    set_name("使用者物件", ({ "user object", "user", "object" }) );
+}
+
+string query_save_file()
+{
+    string id;
+
+    id = geteuid();
+    if ( !id ) 
+		id = getuid();
+    if ( !stringp(id) ) 
+		return 0;
+    return
+		sprintf( DATA_DIR "user/%c/%s", id[0], id );
+}
+
+int save()
+{
+    int res;
+
+    save_autoload();
+    res = ::save();
+    clean_up_autoload();        // To save memory
+    return res;
+}
+
+// Use this function to identify if an object is a character.
+int is_character() { return 1; }
+
+// setup: used to configure attributes that aren't known by this_object()
+// at create() time such as living_name (and so can't be done in create()).
+void setup()
+{
+    seteuid( getuid( this_object() ) );
+    set_heart_beat( 1 );
+    enable_player();
+    CHAR_D->setup_char( this_object() );
+    restore_autoload();
+//    efun::add_action("FullMe",({"fullme"}));
+//    efun::add_action("do_to", ({ "to" }));
+}
+
+void do_sth(string arg, string str)
+{
+    if ( ! str &&  ! arg )
+        return;
+    if( arg )
+        command(arg + " " + str);
+    else
+        command(str);
+}
+
+int do_to(string arg)
+{
+    edit( (: do_sth, arg :) );
+    return 1;
+}
+
+int FullMe()
+{
+    return "/cmds/imm/full"->main(this_object());
+}
+
+void heart_beat()
+{
+    remove_all_killer();
+}
+
+int is_ghost()
+{   return 0;   }
+
+int unshow(object who)
+{
+    if ( wizardp(who) || bVisible )
+        return 0;
+    return 1;
+}
+
+int visible(object ob)
+{
+    return 1;   // see every thing.... :)
+}
+
+int query_char_ratio( string type )
+{
+    if ( type != "gin" && type != "kee" && type != "sen" )
+        error("STD_CHAR: 种类只能是 gin, kee, sen 其中之一。\n");
+    return query( type ) * 100 / query( "max_" + type );
+}
+
+int query_char_eff_ratio( string type )
+{
+    if ( type != "gin" && type != "kee" && type != "sen" )
+    error("STD_CHAR: 种类只能是 gin, kee, sen 其中之一。\n");
+    return query( type ) * 100 / query( "eff_" + type );
+}
+
+int query_lingwu_ratio( string skill ){    return 100;  }
+
+int query_jilei_ratio( string skill ){    return 100;   }
+
+int query_gongfang(){   return 50;  }
+
+int query_shili(){    return 50;    }
+
+int query_combat_brief()
+{
+    int combat_brief;
+
+    if( !userp(this_object()) )
+        return 1;
+    if ( undefinedp( query("env/combat_brief") ) ||
+     !intp( query("env/combat_brief") ) )
+    {
+    combat_brief = 0;
+    }
+    else
+    {
+    combat_brief = query("env/combat_brief");
+    }
+    return combat_brief;
+}
+
+////////////////////////////////////////////////////////////////////
+// Lian interface
+
+int is_lianing()
+{
+    return 0;
+}
+
+void start_lian(string skill)
+{
+    printf("由于你是不死身，故不能练习武功。\n");
+}
+
+void stop_lian()
+{
+}
+
+void do_lian()
+{
+    printf("由于你是不死身，故不能练习武功。\n");
+}
+
+// set_force ( force, max_force, force_factor )
+// nerd 98-10-02
+varargs int set_force(int force, int max_force, int factor)
+{
+    set("force",force);
+    set("max_force", max_force);
+    set("force_factor", factor);
+}
+
+// -- overrides ------------
+string short(int raw)
+{
+    string str = name::short(raw);
+    string mask = query_temp_marks("apply/short");
+    
+    if ( strShort )
+    {
+        if ( strsrch(strShort,"$N") >= 0 )
+            str = replace_string(strShort, "$N", str);
+        else
+            str = strShort + " " + str;
+        return str;
+    }
+
+    if ( sizeof( mask ) )
+        str = (string)mask[ sizeof( mask ) - 1 ];
+    else if (!raw)
+    {
+        string nick = query("nickname");
+        if ( stringp( nick ) )
+            str = sprintf( "「%s」%s", nick, str );
+    }
+
+    if ( !raw )
+    {
+        if ( is_ghost() )
+            str = HIB "(鬼气) " NOR + str;
+        else if ( query_temp( "netdead" ) )
+            str += "断线了。";
+        else if ( in_input() )
+            str += "正在输入文字。"; 
+        else if ( query_temp( "mask_exercising" ) )
+            str += "正在修炼内力。";
+        else if ( query_temp( "mask/dazuo" ) )
+            str += "正在修炼内力。";
+        else if ( in_edit() )
+            str += "在编辑什么东西。";
+        else if ( interactive( this_object() ) && query_idle( this_object() ) > 120 )
+            str += "站在这里发呆。";
+        if ( !living(this_player()) )
+            str += HIR + query("disable_type") + NOR;
+        // if NPC is not human, no title for it
+        if ( query( "race" ) == "人类" && !sizeof( mask ))
+        {
+            string title = query("title");
+            // if NPC has title, don't display zhiye
+            // add for hms and wizad to free change title :)
+            if (( !userp( this_object() ) ) && stringp( query( "title" ) ))
+            {
+                str = sprintf( "%s %s", query( "title" ), str );
+            }
+            else
+                str = sprintf( "%s %s",RANK_D->query_zhiye(this_object()),str);
+        }
+    }
+    return str;
+}
+
+protected void user_dump(int type)
+{
+}
+
+// net_dead: called by the gamedriver when an interactive player loses
+// hir network connection to the mud.
+private void net_dead()
+{
+    object link_ob;
+
+    set_heart_beat(0);
+    if ( objectp(link_ob = query_temp("link_ob")) )
+        destruct(link_ob);
+
+    // Stop fighting, we'll be back soon.
+    remove_all_enemy();
+
+    set_temp("netdead", 1);
+    if ( userp(this_object()) )
+    {
+        tell_room(environment(), query("name") + "断线了。", this_object());
+        CHANNEL_D->do_channel(this_object(), "sys", "断线了。");
+    }
+}
+
+// reconnect: called by the LOGIN_D when a netdead player reconnects.
+void reconnect()
+{
+    set_heart_beat(1);
+    set_temp("netdead",0);
+    remove_call_out("user_dump");
+    tell_object(this_object(), "重新连线返回。\n");
+}
+
+// process-input
+private string process_input(string cmd)
+{
+	string ret = editor::process_input(cmd);
+	if ( ret == "" )
+		return "";
+    if ( strsrch ( cmd, ';' ) != -1 )
+    {
+        string *arrCmd = explode(cmd,";");
+        if ( sizeof(arrCmd) > 10 )
+        {
+            printf("指令个数太多。。不能大于10个。。\n");
+            return "";
+        }
+        foreach (string s in arrCmd)
+        {
+            if ( s != "" )
+                command(s);
+        }
+        return "";
+    }
+	return alias::process_input(cmd);
+}
+
+void die()
+{
+    message("vision", "要不是你是不死身，你早就死了。\n",this_object());
+}
+
+varargs int receive_damage( string type, int damage, object who )
+{
+    return damage;
+}
+
+varargs int receive_wound( string type, int damage, object who )
+{
+    return damage;
+}
+
+int receive_heal( string type, int heal )
+{
+    return heal;
+}
+
+int receive_curing( string type, int heal )
+{
+    return heal;
+}
+
+void unconcious()
+{
+}
+
+varargs void revive( int quiet )
+{
+}
+
+void reincarnate()
+{
+}
+
+int max_food_capacity() { return query_weight() / 200; }
+
+int max_water_capacity() { return query_weight() / 200; }
+
+int heal_up(){}
+
+mixed start_busy(){ return 0;}
+
+varargs int move(mixed dest, int silent)
+{
+    if ( ::move(dest,silent) )
+    {
+        if ( living(this_object())
+            && interactive(this_object()) && !silent )
+        {
+            eventDescribeEnv(environment(), (int)query("env/brief"));
+            environment()->welcome_visitor(this_object());
+        }
+        return 1;
+    }
+    return 0;
+}
+

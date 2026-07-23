@@ -1,0 +1,81 @@
+// filename : /std/force.c
+
+inherit SKILL;
+
+// add this by tea 10.15.98
+int exert_function(object me, string arg)
+{
+	string func, target, file;
+	object target_ob;
+	int amount=0;
+
+        if( sscanf(arg, "%s %s %d", func, target, amount)==3 ) {
+            if( !objectp( target_ob = present(target, environment(me)) ) )
+		return notify_fail("这里没有 " + target + "。\n");
+        } else if( sscanf(arg, "%s %d", func, amount)==2 ) {
+            target_ob = me;
+        } else if( sscanf(arg, "%s %s", func, target)==2 ) {
+            if( !objectp( target_ob = present(target, environment(me)) ) )
+		return notify_fail("这里没有 " + target + "。\n");
+        } else {
+            func = arg;
+            target_ob = me;
+        }
+
+        if( !stringp(file = this_object()->exert_function_file(func))
+        || file_size(file+".lpc") <= 0 )
+	    return notify_fail("你所用的内功中没有这种功能。\n");
+
+        return (int)call_other( file, "exert", me, target_ob, amount);
+}
+
+mixed hit_ob(object me, object victim, int damage_bonus, int factor)
+{
+    int damage;
+    int my_force, his_force;
+    int my_force_jibie, his_force_jibie;
+    string my_using_force, his_using_force;
+
+    if( factor > me->query("force") )
+        factor = me->query("force");
+    me->add( "force", - factor );
+    my_force = me->query( "force" );
+    his_force = victim->query( "force" );
+    damage = my_force / 20 + factor - his_force / 25;
+    my_using_force = me->query( "using_force" );
+    his_using_force = victim->query( "using_force" );
+    my_force_jibie = me->query_jibie( my_using_force );
+    his_force_jibie = victim->query_jibie( his_using_force );
+
+    // 原来的damage太大了，造成enforce就是damage主要部分了
+    damage = damage / 3;//damage本来就应该是主要由enforce引起的
+
+    if ( damage < 0 )
+    {
+        if ( !me->query_temp( "weapon" ) &&
+            random( his_force_jibie ) > my_force_jibie / 2 )
+        {
+            damage = - damage;
+            me->receive_damage( "kee", damage * 2 );
+            me->receive_wound( "kee", damage );
+            if ( damage < 10 )
+                return "$N受到$n的内力反震，闷哼一声。\n";
+            else if ( damage < 20 )
+                return "$N被$n以内力反震，「嘿」地一声退了两步。\n";
+            else if ( damage < 40 )
+                return "$N被$N以内力反震，胸口如遭重击，连退了五六步！\n";
+            else
+                return "$N被$n的内力反震，眼前一黑，身子向后直飞出去！！\n";
+        }
+        if ( damage_bonus + damage < 0 )
+            return - damage_bonus;
+        return damage;
+    }
+
+    damage -= victim->query_temp( "apply/armor_vs_force" );
+    if ( damage_bonus + damage < 0 )
+        return - damage_bonus;
+    if ( random( my_force_jibie ) < damage )
+        return damage;
+}
+ 

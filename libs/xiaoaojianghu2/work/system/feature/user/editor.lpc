@@ -1,0 +1,81 @@
+/*    /system/feature/user/editor.c
+ *    from the XOA Object Library
+ *    the new version of editor ...
+ *    created by nerd 08/29/98
+ *    Version: @(#) editor.c 1.0@(#)
+ *    Last modified: 08/29/98
+ */
+private nosave function fnCallback;
+private nosave string fpFile;
+private nosave int flgTemp;
+
+private void create()
+{
+    flgTemp = 0;
+    fnCallback = 0;
+}
+
+// AGENTS.md-style driver-compat fix (new bug class, this lib): this driver
+// build was compiled with __OLD_ED__ defined (see core.spec's #ifdef
+// OLD_ED/#else split), so only the OLD-style `ed(file, exit_fn,
+// restricted)` efun exists -- `ed_start`/`ed_cmd`/`query_ed_mode` (the
+// "new" ed API this file originally targeted) are simply not compiled
+// into this build at all ("Undefined function" at compile time, not a
+// runtime gap). This matters far beyond just the edit command: this file
+// is inherited straight into /clone/user/user.lpc (the player body
+// class), so the whole player-body object failed to COMPILE at all,
+// silently breaking make_body() during registration with zero error
+// shown to the player (same failure shape as AGENTS.md §15b's "player-
+// body class object itself failing to compile").
+//
+// Under __OLD_ED__, the driver's own C-level input loop intercepts every
+// line of input directly (comm.cc: `if (ip->ed_buffer) { ed_cmd(...);
+// goto exit; }`) for as long as an edit session is active, completely
+// bypassing input_to() AND the process_input() apply below -- so there is
+// no LPC-level per-keystroke routing left to do here at all; the manual
+// ed_cmd()-per-line forwarding this file used to do in process_input() is
+// simply unreachable code under this model, not something to reimplement.
+varargs int edit(function callback, string file)
+{
+    if ( ! file )
+    {
+        fpFile = TEMP_DIR + geteuid(this_player()) + sprintf("%d",time());
+        flgTemp = 1;  // this is a temp file, rm it after edit.
+    }
+    else
+        fpFile = file;
+    fnCallback = callback;
+    if ( !wizardp(this_object()) )
+        write("输入结束请用 `.'，离开用 `x'，取消输入用 `Q'。\n");
+    ed( fpFile, "editor_exit_fn", !wizardp(this_object()) );
+    return 1;
+}
+
+// Callback the driver invokes (on this_object()) when the OLD_ED session
+// started by edit() above finishes -- replaces the old manual
+// "query_ed_mode()==-1" detection in process_input().
+void editor_exit_fn()
+{
+    string content;
+
+    content = read_file( fpFile );
+    if ( flgTemp )
+        rm( fpFile );
+    if ( !content )
+        printf("取消.\n");
+    else if ( functionp(fnCallback) )
+        evaluate(fnCallback, content);
+    fnCallback = 0;
+    fpFile = 0;
+    flgTemp = 0;
+}
+
+// Never actually invoked while a real OLD_ED session is active (the
+// driver intercepts input at the C level before process_input() -- see
+// the comment above edit()); kept as a harmless passthrough purely so
+// callers chaining editor::process_input() (clone/user/user.lpc,
+// immortal.lpc) keep working unchanged.
+string process_input(string str)
+{
+    return str;
+}

@@ -1,0 +1,480 @@
+//writen by lnwm on 97/07/14
+//shanpo.c
+//写这个地方，累死我了，呜呜。。。。。。。。。。。
+
+#define TYPE_ATTACK     0
+#define TYPE_DODGE      1
+#define TYPE_PARRY      2
+
+#include <ansi.h>
+#include <skill.h>
+
+inherit ROOM;
+
+int get_gain_xiuwei( object me, string type );
+
+void create()
+{
+    set("short", "小山坡");
+    set("long", @LONG
+你弯过山坳，眼前出现了一座小小的山坡，山坡背依群山，朝南向阳，在山坡
+上有一座小小的茅屋。用细细的青竹一棵一棵围成四壁，以茅草铺顶，简陋但十分
+干净整洁。茅屋正面是小小的柴扉，柴扉两侧开着两个小小的窗户。
+LONG
+        );
+    set("exits", ([ 
+        "south"     :       __DIR__ "gudi",
+        "enter"     :       __DIR__ "maowu",
+    ]));
+    set("outdoors","lnwm");
+    setup();
+}
+
+void init()
+{
+    add_action("do_lian","lian");
+    add_action("do_app","apprentice");
+    add_action("do_qingjiao","qingjiao");
+    add_action("do_ketou","ketou");
+    add_action("do_test","tongyi");
+    add_action("do_test","agree");
+}
+
+int welcome_visitor( object who )
+{
+    if ( time() - who->query_marks("peacock/maowu/last_advise_time") > 1800 )
+    {
+        who->delete_marks("peacock/maowu/last_advise_time");
+        who->delete_temp_marks("lnwm/maowu/正在指点");
+    }
+
+    if ( who->query_temp("lnwm/不可进") == 1 ) return 1;
+
+    if ( who->query("lnwm/maowu/来过") != 1 )
+    {
+        tell_object(who,CYN"茅屋中突然有人说话：外面是谁？\n"NOR);
+        if ( who->query("family/family_name") == 0 )
+        {
+            tell_object(who,CYN"\n茅屋中的人哼了一声。"NOR);
+        }
+        else
+        {
+            tell_object(who,CYN"\n茅屋中的人哼了一声：外面是"+
+            (string) who->query("family/family_name")+"弟子么。\n"NOR);
+        }
+        tell_object(who,CYN"\n茅屋中的人冷冷地说：你就站在外面说话，不许踏进我的屋子一步！！\n"NOR);
+        who->set("lnwm/maowu/来过",1);
+        return 1;
+    }
+
+    if ( who->query_marks("lnwm/maowu/可以指点") == 1)
+    {
+        tell_object(who,CYN"\n茅屋中的老人说：你又来了，你站在外面，让我看看你练得如何了。\n"NOR);
+        return 1;
+    }
+
+    if ( who->query_marks("lnwm/maowu/可以指点") == 2 )
+    {
+        tell_object(who,CYN"\n茅屋中的老人说：你来了。有什么话就在院子里说吧。\n"NOR);
+        return 1;
+    }
+
+	return 1;
+}
+
+int do_lian( string skill )
+{
+    object me;
+    me = this_player();
+
+    if (( me->query_marks("lnwm/maowu/可以指点") != 1 ) ||
+        ( me->query_temp_marks("lnwm/maowu/正在指点") == 1 ) )
+        return 0;
+
+//    if ( random( 30 + me->query_kar() ) < 30 ) return 0;
+    if ( !skill || skill == 0) return notify_fail("你要练习哪种武功？\n");
+    if ( SKILL_D(skill)->query_xiuwei_type() != "sword" ) return 0;
+
+//    if ( me->query_xiuwei_dengji("sword") > 3) return 0;
+
+    if ( call_other("/cmds/skill/lian", "main", me, skill ) )
+    {
+        if ( random(20) == 10 )
+        {
+            message_vision(CYN"屋中的老人忽然叹了口气，喃喃自语道：玉壁上的仙人现在在何处呢？\n"NOR,me);
+        }
+        set_temp_marks("lnwm/maowu/正在指点", 1);
+        call_out("give_advice", 6, me, skill );
+        return 1;
+    }
+    else return 0;
+}
+
+void give_advice( object me, string skill )
+{
+    int lingwu;
+
+    if ( !me || this_object() != environment(me) || !me->is_lianing() || me->is_fighting() )
+        return;
+
+    if ( me->query_marks("lnwm/maowu/可以指点") != 1 ) return;
+
+    if ( me->query_temp_marks("lnwm/maowu/正在指点") == 2)
+    {
+        tell_object(me, CYN "\n老人冷笑道：反正我说的话你也不放在心上，还站在那里作甚？\n" NOR);
+        return;
+    }
+
+    if ( time() - me->query_marks("peacock/maowu/last_advise_time") < 1800 ) 
+    {
+        tell_object(me,CYN"\n屋内的老人怒道：我今天已经指点过你了，还站在那干嘛？\n"NOR);
+        return;
+    }
+
+    lingwu = me->query_lingwu( skill );
+	
+    if( lingwu > 60 )
+    {
+        message_vision(CYN"屋内的老人突然发话：练得还可以，但有些地方有点问题。\n"NOR, me);
+        call_out("check_lianing", 7, me, skill );
+        return;
+    }
+    else
+    {
+        message_vision(CYN"屋内的老人突然发话：这也算"+ to_chinese(skill) + "？\n"NOR, me );
+        call_out("check_lianing", 3, me, skill );
+    	return;
+	}
+}
+
+void check_lianing( object me, string skill )
+{
+    int xiuwei;
+
+    if( me->is_lianing() )
+    {
+        message_vision(CYN"屋内的老人忽然哼了一声：我可没求着指点于你！\n"NOR, me );
+        me->set_temp_marks("lnwm/maowu/正在指点", 2);
+        return;
+    }
+    else
+    {
+        xiuwei = me->query_xiuwei( skill );
+
+        tell_object(me, YEL"屋内的老人开始指点你的剑术，你听了指点，若有所悟。\n"NOR);
+        if ( me->query_xiuwei_by_type( "sword" ) < 1200 )
+        {
+            me->improve_xiuwei( "sword" , random((int)me->query("int"))/3 + random((int)me->query("kar"))/3  );
+            me->set_marks("peacock/maowu/last_advise_time", time());
+        }
+        else
+        {
+            tell_object(me,CYN"\n只听屋内的老人说：你现在的功夫已经不错，我已不用指点于你了。\n"NOR);
+            me->delete_marks("lnwm/maowu/可以指点");
+            if ((me->query("family/family_name") == "无量剑派西宗") ||
+                (me->query("family/family_name") == "无量剑派东宗"))
+                me->set("lnwm/maowu/问左子穆",1);
+        }
+    }
+    return;
+}
+
+int do_app( string arg )
+{
+    object me = this_player();
+
+    if (!arg || arg == "") return 0;
+
+    if ( arg == "老人" || arg == "白衣老人" || arg == "laoren" || arg == "baiyi laoren")
+    {
+        if ( me->query("family/family_name") == 0 )
+        {
+            message_vision( CYN"老人道：你既无师承来历，在我这里也学不到什么，你还是去吧。\n"NOR,me);
+            return 1;
+        }
+        message_vision( CYN "老人道：能找到这里，也算是有缘了。但不知你的剑术如何？\n"
+                            "你若真有心便接我三招试试。\n" NOR, me);
+        me->set_temp_marks("peacock/maowu/试招", 1);
+        return 1;
+    }
+}
+
+int do_qingjiao(string arg)
+{
+    string skill, master, zhaoshi;
+    int my_dengji, skill_dengji, dengji_cha;
+    int master_jibie = 120, my_jibie, my_lingwu;
+    int gain_xiuwei, gain_jibie, gin_cost;
+    object me = this_player();
+
+    if ( me->is_busy() )
+    {
+        write("你现在无法静下心来求教。\n");
+        return 1;
+    }
+    if (( !arg ) || 
+        (( sscanf(arg, "%s from %s", skill, master) != 2 ) && 
+         ( sscanf(arg, "%s %s", master, skill) != 2 )))
+    {
+        write ( "指令格式：qingjiao <某人> <技能> 或 qingjiao <"
+                "技能> from <某人> \n");
+        return 1;
+    }
+
+    if( master != "白衣老人" && master != "baiyi laoren" &&
+        master != "老人"     && master != "laoren")
+    {
+        write(" 你要向谁请教?\n" );
+        return 1;
+    }
+
+    if ( me->is_fighting() || me->is_duilianing() )
+    {		
+        write("临阵磨枪？来不及啦。\n");
+        return 1;
+    }
+    if ( !me->can_act() )
+    {
+        write("你现在无法请教！\n");
+        return 1;
+    }
+    
+    if ( me->query_xiuwei_dengji("sword") < 4)
+    {
+        tell_object( me, CYN "老人道：你先将你以前学的剑法练来看看。\n" NOR);
+        return 1;
+    }
+
+    if ((me->query("family/family_name") != "无量剑派西宗") &&
+        (me->query("family/family_name") != "无量剑派东宗"))
+    {
+        tell_object( me, CYN
+            "老人笑道：现在你的剑法已经没有什么瑕疵了，只要不是遇上绝顶的高手，\n"
+            "总有一战的能力。以后你自己好自为之吧。\n" NOR);
+        return 1;
+    }
+
+    if ( me->query_marks("lnwm/maowu/可以指点") != 2)
+    {
+        tell_object( me, CYN
+            "老人的声音听起来有些犹豫：你......\n"
+            "终于叹了口气，道：你走吧。\n" NOR);
+        return 1;
+    }
+
+    if ( skill != "yubi-jian" )
+    {
+        tell_object(me, CYN
+            "老人说：把这门剑法学好，别的将来再说。我已经时日无多了...\n" NOR);
+        return 1;
+    }
+
+    printf("你向白衣老人请教有关「%s」的疑问。\n", to_chinese(skill) );
+
+    master_jibie = 120;                             //lnwm:剑法的级别
+    my_jibie = me->query_jibie("yubi-jian");
+    my_lingwu = me->query_lingwu(skill);
+
+    gain_jibie = random( 3 ) + 1;
+    if ( gain_jibie + my_jibie > master_jibie )
+        gain_jibie = master_jibie - my_jibie;
+
+    if ( gain_jibie < 1 )
+    {
+        tell_object( me, CYN
+            "白衣老人欣然道：我已将这三十余年的参悟尽数传授予你，\n"
+            "所欠的唯有体悟而已。日后只要刻苦修习，自能青出于蓝。\n"
+            "无量一脉日后就靠你了。\n" NOR);
+        return 1;
+    }
+
+    gin_cost = 10 + 2 * gain_jibie;
+
+    if( gin_cost > 100 )
+        gin_cost = 100;
+
+    if ( !my_jibie ) gin_cost *= 2;
+
+    if ( me->query("gin") < gin_cost )
+    {
+        gin_cost = me->query( "gin" );
+        printf( "你今天太累了，结果没有领会到什么。\n" );
+        return 1;
+    }
+
+    if ( my_jibie && me->query_lingwu_ratio( skill ) < 90 )
+    {
+        tell_object( me, CYN 
+            "白衣老人的话从屋中传出：习剑之道，最忌的是好高骛远！\n" 
+            "你先将我教与你的练熟吃透。\n" NOR);
+        return 1;
+    }
+    if ( zhaoshi = SKILL_D( skill )->query_zhaoshi(my_jibie) )
+        printf( "你听了白衣老人的指导，对%s这招似乎有了些心得。\n", zhaoshi );
+    else
+        printf( "你听了白衣老人的指导，对%s有了更深的理解。\n", to_chinese(skill) );
+    me->improve_jibie( skill, gain_jibie );
+
+    gain_xiuwei = get_gain_xiuwei( me, "sword" );
+
+    if ( gain_xiuwei && gain_jibie && 
+        me->query_xiuwei_by_type( "sword" ) < 1901 )
+    {
+        skill_dengji = SKILL_D( skill )->query_dengji();
+        dengji_cha = my_dengji - skill_dengji + 1;
+        if ( (gain_xiuwei >> dengji_cha) > 0)
+            me->improve_xiuwei( "sword", ( gain_xiuwei >> dengji_cha ));
+        else if ( random ( 1 << dengji_cha ) < gain_xiuwei )
+            me->improve_xiuwei( "sword", 1);
+    }
+    
+    me->receive_damage( "gin", gin_cost );
+    return 1;
+}
+
+int get_gain_xiuwei( object me, string type )
+{
+    int my_int, master_int, my_dengji, master_dengji;
+    int temp, diff;
+
+    my_int = me->query_int();
+    master_int = 32;                                //lnwm:老头的悟性
+    my_dengji = me->query_xiuwei_dengji( type );
+    master_dengji = 5;								//lnwm:老头的修为等级				
+    if ( my_dengji > master_dengji )
+        return 0;
+    else if ( my_dengji < master_dengji )
+        diff = ( master_dengji - my_dengji + 1 ) / 2;
+    else
+        diff = 2;
+    temp = master_dengji * my_dengji/2 + master_int /10 * (my_int + 5) / 10; 
+    
+    return random( temp / diff + 3 );
+}
+
+int do_test()
+{
+    object me = this_player(), weapon = me->query_temp( "weapon" );
+    string wugong=me->query_wugong("sword");
+    int pp;
+
+    if ( ! me->query_temp_marks("peacock/maowu/试招") ) return 0;
+    me->delete_temp_marks("peacock/maowu/试招");
+
+    message_vision( "$N将衣衫扎束停当，冲茅屋一拱手：" + me->query("family/family_name") +
+                    CHINESE_D->chinese_number( me->query("family/generation")) + "代弟子" +
+                    me->name() + "，恭请前辈赐招。\n\n", me);
+
+    if ( !weapon )
+    {
+        message_vision( CYN "屋中的老人哼了一声：拿出你的武器来。\n" NOR, me );
+    }
+    else
+    {
+        if ( weapon->query("weapon_type")!= "sword")
+        {
+            message_vision( CYN "屋中的老人说：拔出你的剑，我只测你的剑术。\n" NOR, me );
+        }
+        else 
+        {
+            if ( !wugong) 
+                message_vision( CYN "老人道：只看你拿剑的姿势，就知道你根本不会用剑。回去下份苦功再来吧。\n" NOR, me);
+            else
+            {
+                message_vision( CYN "屋中的老人道：好，你仔细了！\n\n"
+                                WHT "只听得砰的一声，小屋的门倏然敞开，一团白影破空而出。\n\n"
+                                ,me);
+                message_vision2("$N方待看清来势，忽然间发现身前身后都是其寒彻骨的剑气，"
+                                "四面八方尽是闪动的白影。休说老人的身形，便是自己立足的"
+                                "地面都仿佛虚幻了起来。\n\n" NOR, me);
+
+                pp =  COMBAT_D->wugong_power( me, wugong, TYPE_PARRY );
+               if ( pp < 3500 )
+                {
+                    tell_object(me, "你还没弄明白是怎么一回事，就觉得脑门上挨了一掌。\n");
+                    me->unconcious();
+                    message_vision( WHT "白影倏地一敛，只听得砰的一声，小屋的门又闭上了。\n" NOR
+                                    "只留下$N一个人孤伶伶的躺在地上。\n", me);
+                    message_vision( CYN "老人的声音从屋里传来：就这等武功也敢在江湖上走动，"
+                                        "真是活得不耐烦了。\n" NOR, me);
+                }
+                else
+                {
+                    message_vision( CYN "$N不由得心胆俱寒，足根发力向后暴退，同时拼命狂舞手中\n"
+                                        "的$n，护住周身要害。口中大叫：前辈手下留情！\n\n" NOR,
+                                    me, weapon);
+
+                    me->start_busy( 2 );
+                    call_out("do_test1", 2, me, weapon, pp);
+                }
+            }
+        }
+    }
+    return 1;
+}
+
+void do_test1( object me, object weapon, int pp)
+{
+
+    if ( pp < 5000 )
+    {
+        message_vision( "$N只觉自己象一条困在网中的鱼，虽然左冲右突，却走投无路。\n"
+                        "猛地手中一紧，$n已然脱手飞了出去。\n\n", me, weapon);
+        tell_object(me, CYN "只听得老人的声音在你耳边响起：就这点功夫也敢拿来现眼！\n"
+                        NOR "你指觉得仿佛有只手在你后脑按了一下。\n\n");
+        me->unconcious();
+        message_vision( WHT "\n白影倏地一敛，只听得砰的一声，小屋的门又闭上了。\n\n"NOR, me);
+    }
+    else
+    {
+        message_vision2("$N只觉得仿佛被卷入了惊涛骇浪之中，平日练剑时轻盈灵动"
+                        "的感觉都不知那里去了，每出一剑都仿佛挽着千斤重担，又"
+                        "仿佛手中的$n已有了生命，要挣脱你的掌握。\n\n", me, weapon);
+        me->start_busy( 2 );
+        call_out("do_test2", 2, me, weapon, pp);
+    }
+    return;
+}
+
+void do_test2( object me, object weapon, int pp)
+{
+
+    message_vision( WHT "\n白影倏地一敛，只听得砰的一声，小屋的门又闭上了。\n\n", me);
+    message_vision( CYN "老人的声音从屋子里传来：能接住我三招也算是不易了。\n"
+                        "以后你剑术上有什么疑问，不妨来告诉我。看看我能帮你什么。\n\n"NOR, me);
+
+    message_vision2( "$N只觉得以前所经历的任何一场恶战，都不及方才那般"
+                    "生死悬于一线来得凶险，但觉手足俱软，连手中$n也几"
+                    "乎握不住了，仿佛方才片刻之间已将生命里每一分潜力"
+                    "都毫尽了。\n", me, weapon);
+    me->set_marks("lnwm/maowu/可以指点",1);
+    me->start_busy( 2 + random(3), "你只觉得手脚酸软，每一块肌肉都不听使唤了。\n");
+    return;
+}
+
+int do_ketou(string arg)
+{
+    object me = this_player();
+
+    if (!arg || arg == "") return 0;
+
+    if ( arg == "老人" || arg == "白衣老人" || arg == "laoren" || arg == "baiyi laoren")
+    {
+        message_vision( "$N跪倒在地，朝茅屋恭恭敬敬的磕了三个头。\n" , me);
+        if ( me->query("lnwm/maowu/师叔"))
+	{
+       		if ( me->query_marks("lnwm/maowu/可以指点") == 2 )
+		return notify_fail( CYN "老人叹口气；不必多礼了。起来吧。\n"NOR);
+		me->set_marks("lnwm/maowu/可以指点", 2);
+        	return notify_fail( CYN "老人颤声道：你..你师傅都已经告诉你了？罢了，罢了。\n"
+                            "不错，我就是你那个不成器的师叔。\n" NOR);
+    	}
+	if ( !me->query_marks("lnwm/maowu/可以指点"))
+            return notify_fail( CYN "老人道：你若不能接我三招，便是跪死也是无用。\n" NOR);
+        if ( (me->query_marks("lnwm/maowu/可以指点") == 1) ||
+             (me->query("family/family_name") != "无量剑派西宗") &&
+             (me->query("family/family_name") != "无量剑派东宗"))
+            return notify_fail( CYN "老人哼了一声道：不用多礼了。\n" NOR);
+        
+    }
+}

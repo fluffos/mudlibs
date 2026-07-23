@@ -1,0 +1,100 @@
+// filename : /system/feature/equip.c
+
+// checked by lnwm&nerd 98/01/20
+// last modified by nerd 08/27/98
+// last modified by akuma 12/15/98
+// last modified by nerd 2001/10/8 : OOnize
+
+#include <dbase.h>
+#include <armor.h>
+#include <weapon.h> // for EQUIP_WORN definintion..
+inherit ITEM;
+
+private nosave int m_equipped = 0;
+private int m_dodge_effect = 0;
+private string m_armor_type = "unknown";
+private int m_armor;
+
+int is_equipped() { return m_equipped; }
+int is_armor() { return 1; }
+
+void set_armor_type( string t ) { m_armor_type = t; }
+string get_armor_type() { return m_armor_type; }
+
+void set_armor( int a ) { m_armor = a; }
+int get_armor() { return m_armor; }
+int set_dodge_effect( int de ) { return (m_dodge_effect = de); }
+int get_dodge_effect() { return m_dodge_effect; }
+
+void setup()
+{
+    if ( !get_dodge_effect() && weight() >= 3000 )
+    {
+        int d = query("armor_prop/dodge");
+        if ( d )
+            set_dodge_effect( d );
+        else
+            set_dodge_effect( -weight()/3000 );
+    }
+
+    // backward campatibility
+    if ( !get_armor() )
+        set_armor( query("armor_prop/armor") );
+    if ( get_armor_type() == "unknown" )
+        set_armor_type( query("armor_type") );
+    /*
+    if ( !query( "armor_prop/dodge" ) && ( weight() >= 3000 )
+            && query("armor_prop"))
+        set( "armor_prop/dodge", - weight() / 3000 );
+        */
+}
+
+int wear()
+{
+    object old;
+    object owner = environment();
+
+    // Only character object can wear armors.
+    if ( !owner || !owner->is_character() ) 
+        return 0;
+
+    // If already worn, just recognize it.
+    if ( is_equipped() ) 
+        return notify_fail("你已经穿上了" + name() + "。\n" );;
+
+    // Check if we have "armor_prop" defined.
+    old = owner->query_temp( "armor/" + get_armor_type() );
+    if ( old )
+        return notify_fail( "你已经穿戴了" + old->name() 
+                + "，必须先把它脱下来才能穿" + name() + "。\n" );
+
+    m_equipped = EQUIP_WORN;
+    owner->set_temp( "armor/" + get_armor_type(), this_object() );
+
+    owner->add_temp( "apply/armor", get_armor() );
+    owner->add_temp( "apply/dodge", get_dodge_effect() );
+    // 开始折旧
+    if( query("value") >= 1000 )
+        set("value", query("value") / 3 );
+    else
+        delete("value");
+    return 1;
+}
+
+int unequip()
+{
+    object owner = environment();
+    if ( !owner->is_character() )
+        return 0;
+
+    if ( !is_equipped() )
+        return notify_fail( "你目前并没有装备这样东西。\n" );
+
+    owner->delete_temp( "armor/" + get_armor_type() );
+
+    owner->add_temp( "apply/armor", -get_armor() );
+    owner->add_temp( "apply/dodge", -get_dodge_effect() );
+
+    m_equipped = 0;
+    return 1;
+}

@@ -1,0 +1,198 @@
+#include "httpd.h"
+
+private void create()
+{
+    seteuid("nobody");
+    //log_file("nosave/httpd", "connection created at " + ctime(time()) + "\n");
+    // for security...
+}
+
+// figures out what is being requested, and how to get there
+private nomask string convert_to_actual_path (string path)
+{
+    string file;
+	if (!path || path == "")
+	{
+		log_file("error", "convert to act path: null path?");
+		return "";
+	}
+    if (path == "/")
+        return HTTP_ROOT + "/" + DEFAULT_PAGE;
+    if (path[<1] == '/')
+        path = path[0..<2];
+    //if (path[<2] == ".lpc")    /* this is ugly, but works for now */
+        /*file = SECURE_CGI_DIR + "/" + explode (path, "/")[<1];
+    else
+    {*/
+    if (path[1] == '~')
+    {
+        string user;
+        if (sscanf (path[2..], "%s/%s", user, file) == 2)
+        file = WIZ_DIR + "/" + user + HTTP_USER_HOME + "/" + file;
+        else
+        file = WIZ_DIR + "/" + path[2..] + HTTP_USER_HOME;
+    }
+    else
+        file = HTTP_ROOT + path;
+    //}
+    /* if its a dir, so we want the default page */
+    if (file_size (file) == -2)
+        (file[<1] == '/') ? file += DEFAULT_PAGE : file += "/" + DEFAULT_PAGE;
+    return file;
+}
+
+// convert %DIGITAL to string
+private nomask string convert_cgistr( string input )
+{
+	int i = 0;
+	string re = "";
+	while ( i < strlen(input) )
+	{
+		int ch = input[i];
+		if ( ch == '%' )
+		{
+			int f1 , f2;
+			f1 = input[i+1];
+			f1 = f1 >= 'A' ? f1 - 'A' + 10 : f1 - '0';
+			f2 = input[i+2];
+			f2 = f2 >= 'A' ? f2 - 'A' + 10 : f2 - '0';
+			re += sprintf("%c",f1 * 16 + f2);
+			i += 2; // 后面还要 ++ 所以只加 2
+		}
+		else
+			re += sprintf("%c", input[i]);
+		i++;
+	}
+	return re;
+}
+
+private string content_type(string file)
+{
+    if ( strlen(file) < 5 )
+        return "text/plain";
+    if ( file[<5..] == "class" )
+    return "application/octet-stream";
+    if ( file [ strlen(file)-5 ] == '.' )
+    switch (file[<4..])
+    {
+        case "html":
+            return "text/html";
+        case "jpeg":
+            return "image/jpeg";
+        default:
+            return "text/plain";
+    }
+    else if ( file [ strlen(file) - 4 ] == '.' )
+    switch ( file [<3..] )
+    {
+        case "htm":
+            return "text/html";
+        case "gif":
+            return "image/gif";
+        case "jpg":
+            return "image/jpeg";
+        default:
+            return "text/plain";
+    }
+    return "text/unknown";
+}
+
+nomask string process_input (buffer data)
+{
+    string * lines;
+    string file, args, request, method;
+
+    // initial connect
+    request = read_buffer (data);
+    if (!request)
+        return "";
+
+    // We arent doing anything with the HTTP version  
+
+    //if (sscanf (request, "GET %s %*s", file) != 2)
+    //    return "";
+    lines = explode(request, "\n");
+    if ( sscanf( lines[0], "GET %s %*s", file ) == 2 )
+    {
+        sscanf (file, "%s?%s", file, args);
+        method = "get";
+    }
+    else if ( sscanf( lines[0], "POST %s %*s", file ) == 2 )
+    {
+        int i;
+        method = "post";
+        for( i = 1 ; i < sizeof(lines) ; i++ )
+        {
+            if ( lines[i] == "" || lines[i] == "\r" )
+            {
+                // 这个如果post内容为空就出错了. 不管.
+                args = lines[i+1];
+                break;
+            }
+        }
+    }
+    log_file ("nosave/httpd", sprintf("|%s|%s|: %s | %s | %s |\n",
+            ctime(time())[4..15], query_ip_number(this_object()),
+			method, file , args) );
+    file = convert_to_actual_path (file);
+    if (file_size (file) < 1)
+    {
+        receive ("HTTP/1.1 404 Not Found\n\n");
+        receive (read_file(NOT_FOUND_PAGE));
+    }
+    else if (file[<2..] == ".lpc")    // assume this is a cgi-bin :)
+    {
+        string result, err;
+        mapping arg;
+        // convert the args to mapping...
+        // this should in another routine :)
+		string * temp;
+		if ( args )
+        	temp = explode(args, "&") - ({ });
+        if ( sizeof( temp ) )
+        {
+            arg = allocate_mapping(sizeof(temp));
+            foreach( string t in temp )
+            {
+                string * x = explode(t,"=");
+                if ( sizeof(x) >= 2 )
+                    arg[x[0]] = x[1];
+            }
+        }
+        if ( sizeof( arg ) ) //bug: if the speical char in the keys...
+        {
+            arg = map(arg, (: replace_string($2, "+", " ") :) );
+            arg = map(arg, (: $2 = convert_cgistr($2) :) );
+        }
+		arg["method"] = method;
+
+        err = catch(result = file->main (arg));
+        if (!this_object()) //exec'd?
+            return "";
+
+        if (!result)
+            result = "\n<title>ERROR</title><h1>Error in gateway</h1>" + err;
+        
+        receive ("HTTP/1.1 200 OK\nServer: Mudos v22.1b20 XO 1.25\n");
+    receive (result + "\n");
+    }
+    else
+    {
+        receive("HTTP/1.1 200 OK\n");
+        receive("Content-length: " + file_size(file) + "\n");
+        receive( sprintf("Content-type: %s\n\n", content_type(file) ));
+        receive (read_buffer (file));
+    }
+
+    destruct (this_object ());
+}
+
+void net_dead()
+{
+    destruct(this_object());
+}
+
+void receive_message( string msgclass, string msg )
+{
+    receive(translate(msg));
+}

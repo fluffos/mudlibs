@@ -1,0 +1,215 @@
+// ban.c
+
+inherit F_CLEAN_UP;
+inherit F_SAVE;
+inherit F_DBASE;
+
+private string array __Sites            = 0;
+private string array __Names            = 0;
+private nosave string array __tmpSites  = 0;
+private nosave string array __tmpNames  = 0;
+private nosave mapping __NewIps    = 0;
+private string array __MultiAllow       = 0;
+private string array __MUltiDeny        = 0;
+
+void create()
+{
+    set("no_clean_up",1);
+    seteuid(getuid());
+    restore();
+}
+
+string query_save_file()
+{
+    return DATA_DIR "daemon/band";
+}
+
+private int AddTo(string array ref dest, string n)
+{
+    if ( !n )
+        return 0;
+    if ( ! sizeof( dest ) )
+    {
+        dest = allocate(1);
+        dest = ({ n });
+    }
+    else
+    {
+        if (member_array(n, dest) == -1)
+        {
+            dest += ({ n });
+            return 1;
+        }
+        else
+        {
+            return -1;
+        }
+    }
+    return 1;
+}
+
+int RemoveFrom(string array ref from, string what)
+{
+    int ret;
+    string array rest;
+    if ( ! what || !sizeof(from) )
+        return 0;
+    rest = regexp( from, what );
+    ret = sizeof(from) - sizeof(rest);
+    from -= rest;
+    return ret;
+}
+
+int IsMemberOf(string array arr, string what)
+{
+    if ( ! what || !sizeof(arr) )
+        return 0;
+    foreach ( string n in arr )
+    {
+    	if (regexp( what , n ))
+    	    return 1;
+    }
+    return 0;
+}
+
+// --------begin sites ----------
+int AddBannedSite(string ip)
+{
+    //if (geteuid(previous_object()) != ROOT_UID
+    int r = AddTo( ref __Sites, ip );
+    save();
+    return r;
+}
+
+string array GetBannedSites()
+{
+    return __Sites;
+}
+
+int RemoveBannedSite(string ip)
+{
+    int r = RemoveFrom( ref __Sites,ip );
+    save();
+    return r;
+}
+
+int IsBannedSite(string ip)
+{
+    return IsMemberOf(__Sites,ip);
+}
+//end sites..
+
+// names.
+int AddBannedName(string name)
+{
+    //if (geteuid(previous_object()) != ROOT_UID
+        //|| !name )
+    int r = AddTo( ref __Names, name );
+    save();
+    return r;
+}
+
+string array GetBannedNames()
+{
+    return __Names;
+}
+
+int RemoveBannedName(string name)
+{
+    int ret = RemoveFrom( ref __Names, name );
+    save();
+    return ret;
+}
+
+int IsBannedName(string name)
+{
+    return IsMemberOf( __Names, name );
+}
+// end names. 
+
+int AddTmpBannedSite(string ip)
+{
+    int r = AddTo( ref __tmpSites, ip );
+    save();
+    return r;
+}
+
+string array GetTmpBannedSites()
+{
+    return __tmpSites;
+}
+
+int RemoveTmpBannedSite(string ip)
+{
+    int r = RemoveFrom( ref __tmpSites,ip );
+    save();
+    return r;
+}
+
+int IsTmpBannedSite(string ip)
+{
+    return IsMemberOf(__tmpSites,ip);
+}
+
+int AddTmpBannedName(string name)
+{
+    //if (geteuid(previous_object()) != ROOT_UID
+        //|| !name )
+    int r = AddTo( ref __tmpNames, name );
+    save();
+    return r;
+}
+
+string array GetTmpBannedNames()
+{
+    return __tmpNames;
+}
+
+int RemoveTmpBannedName(string name)
+{
+    int ret = RemoveFrom( ref __tmpNames, name );
+    save();
+    return ret;
+}
+
+int IsTmpBannedName(string name)
+{
+    return IsMemberOf( __tmpNames, name );
+}
+// end temp ban name ----
+
+// Mutli.Deny and Mutli.Allow...
+int CheckDupIp(object ob)
+{
+    return FALSE;
+}
+
+// new 的检查 -- 5 min才能new一个
+int RegisterNew(object ob)
+{
+    string my_ip = query_ip_number(ob);
+    if ( !ob )
+        return 0;
+    if ( ! sizeof(__NewIps) )
+    {
+        __NewIps = ([ my_ip : time() ]);
+        return 1;
+    }
+    foreach ( string ip, int t in __NewIps )
+    {
+        if ( ip == my_ip )
+        {
+            if ( time() - t > 5 * 60 )
+            {
+                __NewIps[ip] = time();
+                return 1;
+            }
+            else
+            {
+                return 0;
+            }
+        }
+    }
+    __NewIps[my_ip] = time();
+    return 1;
+}

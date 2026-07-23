@@ -1,0 +1,322 @@
+// Npc: xuan ci : /d/shaolin/xuanci.c
+//modified by hydra 19980504
+
+#include <ansi.h>
+
+inherit NPC;
+
+string ask_ye();
+string ask_biguan();
+string ask_kaoyan( object );
+string ask_luohanzhen( object );
+int arrest_killer( object );
+int filter_killer( object );
+
+
+
+void create()
+{
+    seteuid(getuid());
+	set_name("玄慈", ({"xuan ci","xuanci","xuan","ci"}));
+	set("long",
+		"他是一位白须白眉的老僧，矮矮的身材，却透着一股英气。\n"
+		"他便是少林寺的方丈\n"
+	);
+
+	set("title", RED"少林寺" HIY"方丈"NOR);
+	set("gender", "男性");
+	set("attitude", "friendly");
+	set("class", "bonze");
+
+	set("age", 76);
+	set("str", 30);
+	set("int", 35);
+	set("con", 30);
+	set("dex", 30);
+	set("per",35);
+	
+	set("max_kee", 1500);
+	set("max_gin", 1000);
+    set("max_sen", 1000); 
+    
+	set("force", 5400);
+	set("max_force",5400);
+	set("force_factor", 200);
+	
+	set("combat_exp", 10000000);
+    set("social_exp", 300000);
+    set("class_score",100000);
+    set("positive_score",160000);
+
+    set_wugong( "buddhism",300,300,0);          //禅宗心法            
+    set_wugong( "jingang-zhang",300,300,1);     //大金刚掌 7
+    set_wugong( "banruo-zhang",200,200,0);      //般若掌 5
+    set_wugong( "jimie-zhua",  240,240,0);      //寂灭抓 5
+    set_wugong( "xiangmo-zhang",140,140,1);   //降魔杖法
+    set_wugong("ruying-suixing",180,180,1);     //如影随形5 
+    set_wugong("lixue-bufa",250,250,0);         //立雪步法 4
+    set_wugong("banruo-xinfa",150,140,0);      //般若心法
+    set_wugong("jiuyang-gong",150,150,0);        //少林九阳功
+        set("chat_chance_combat", 20);      
+        set("chat_msg_combat", ({
+        (: SKILL_D("jingang-zhang")->perform_action(this_object(), "jingang-xiansheng") :),
+           }) );  
+    set_xiuwei_by_type( "unarmed",4000 );
+    set_xiuwei_by_type( "dodge",3500 );
+    set_xiuwei_by_type( "long",3500 );
+    set_xiuwei_by_type( "zonggang",8701 );
+
+	create_family("少林派", 36, "掌门方丈");
+
+    set("inquiry",([
+        "叶二娘" : (: ask_ye :),
+        "虚竹" : "他是本寺的一位小僧人，你去问他的师父慧轮吧。",
+        "石屋" : "后院石屋，乃历代方丈闭关静修之处。",
+        "考验" : (: ask_kaoyan :),
+        "罗汉阵": (: ask_luohanzhen :),
+        "罗汉大阵":(: ask_luohanzhen :),
+        //"闭关" : (: ask_biguan :),
+    ]) );
+
+    set("no_kill","shaolin");
+	setup();
+
+    carry_object(CLOTH_DIR"jiasha2")->wear();
+}
+
+string ask_ye()
+{
+    this_player()->set_temp("marks/叶", 1);
+    return "......你究竟是谁？";
+}
+
+//Hydra added kaoyan at 19980523
+string ask_kaoyan( object me )
+{
+    string msg;
+    me = this_player();
+    //had passed kaoyan
+    if ( me->query("hydra/shaolin/pass_kaoyan") )
+    {
+        return "你已经通过考验了，不错，不错，我佛门弟子就该这样！";
+    }
+    //had lost kaoyan
+    if ( me->query("hydra/shaolin/lose_kaoyan") )
+    {
+        return "作为我少林弟子，又不行侠仗义，学武何用！";
+    }
+    //not allow to accept kaoyan
+    if ( !me->query("hydra/shaolin/can_ask_kaoyan") )
+    {
+        return "你现在还没有到接收考验的时候！";
+    }
+    if ( !me->query("hydra/shaolin/received_letter" ))
+    {
+        return "你打败降龙伏虎罗汉了吗？玄生师弟的推荐函呢？";
+    }
+    //PPl's kaoyan is arrest PKer
+    if ( me->query("hydra/shaolin/kaoyan_arrest") )
+    {
+        return "你把杀人魔抓到戒律堂就可以了。";
+    }
+    //Ppl have not completed the task,and he has time to complete it
+    if ( me->query("hydra/shaolin/pending_kaoyan") 
+        && me->query("hydra/shaolin/pending_kaoyan") < 2
+        && me->query("mud_age") < me->query("hydra/shaolin/kaoyan_time"))
+    {
+        return "我上次给你的考验通过了吗？你说说你所做的？";
+    }
+    //Ppl have not compelted the task ,and time is over
+    if ( me->query("mud_age") > me->query("hydra/shaolin/kaoyan_time")
+        && me->query("hydra/shaolin/pending_kaoyan") 
+        && me->query("hydra/shaolin/pending_kaoyan") < 2)
+    {
+        me->delete("hydra/shaolin/can_ask_kaoyan");
+        me->delete("hydra/shaolin/pending_kaoyan");
+        me->delete("hydra/shaolin/kaoyan_time");
+        me->delete("hydra/shaolin/received_letter");
+        me->set("hydra/shaolin/lose_kaoyan",1);
+        log_file( "shaolin_kaoyan",sprintf( 
+            "[%s]:%s(%s)在规定的时间内未能完成方丈的考验：做善事。\n",ctime(time()),
+            me->name(1),geteuid(me) ));            
+        command("sigh");        
+        return "这些日子你出去到底干什么去了？";
+    }
+    //Completed the task successfully
+    if ( me->query("hydra/shaolin/pending_kaoyan") >= 2 )
+    {
+        //But time is over:-(
+        if ( me->query("mud_age") > me->query("hydra/shaolin/kaoyan_time") )
+        {
+            me->delete("hydra/shaolin/can_ask_kaoyan");
+            me->delete("hydra/shaolin/pending_kaoyan");
+            me->delete("hydra/shaolin/kaoyan_time");
+            me->delete("hydra/shaolin/received_letter");
+            me->set("hydra/shaolin/lose_kaoyan",1);
+            log_file( "shaolin_kaoyan",sprintf( 
+                "[%s]:%s(%s)完成了方丈的考验，可时间已过：做善事。\n",ctime(time()),
+                me->name(1),geteuid(me) ));            
+            command("sigh");
+            command( "say 行侠仗义是做的不错，可惜时间过了。");
+            me->set("hydra/shaolin/allow_enter_shuku",3);
+            return "念你行善有功，特许你进藏经阁书库参阅典籍三次，好自为之吧。";
+        }            
+        //Yeah! passed kaoyan :-)))
+        me->delete("hydra/shaolin/can_ask_kaoyan");
+        me->delete("hydra/shaolin/pending_kaoyan");
+        me->delete("hydra/shaolin/kaoyan_time");
+        me->delete("hydra/shaolin/received_letter");
+        me->set("hydra/shaolin/pass_kaoyan",1);
+        LOG_D->do_log(me,"你成功地通过了方丈的考验，允许拜玄字辈为师！");
+        log_file( "shaolin_kaoyan",sprintf( 
+            "[%s]:%s(%s)在规定的时间内顺利完成了方丈的考验：做善事。\n",ctime(time()),
+            me->name(1),geteuid(me) ));            
+        
+        msg = "不错，不错，行侠仗义当为我佛门弟子楷模！\n";
+        msg += "好，现在，你可以找玄字辈师傅拜师去了！";
+        return msg;
+    }
+    //Give the task,addoil *_^
+ 
+    //Hydra comment this "if" at 20001017
+    //I have commented this "if" many times before..but ...
+    //if ( arrest_killer(me) ) return "你可以到般若堂去打听一下他的下落。";
+    
+    me -> set("hydra/shaolin/pending_kaoyan",1);
+    me -> set("hydra/shaolin/kaoyan_time",me->query("mud_age")+172800);
+    msg =  "我少林向来以行侠仗义在江湖上闻名，这么多年来，少林\n";
+    msg += "一直被认为是江湖的泰斗，这些都与少林弟子一贯行侠是分不开的。\n";
+    msg += "少林弟子学武的目的，一是为了健体强身，再有就是除善扬恶，为黎\n";
+    msg += "民百姓造福！\n";
+    msg += "现命你在一年之内，到江湖闯荡一番，完成一件善事，回来见我！\n";
+    return msg;
+}
+
+int arrest_killer( object ppl )
+{
+    object * killer,ob;
+    string msg1;
+    killer = filter_array( users(),"filter_killer",this_object() );
+    if( sizeof(killer) )
+    {
+        ob = killer[random(sizeof(killer))];
+        msg1 = "杀人魔"RED+ob->query("name")+"("+ob->query("id")+NOR")又在江湖上";
+        msg1 += "为非作歹,残害我武林同道，\n为我侠义人士所不耻。想我少林，乃";
+        msg1 += "江湖泰斗，怎能容他继续为害武林。\n";
+        msg1 += YEL"现命你半年之内把他缉拿到戒律院。\n";
+        ppl -> set("hydra/shaolin/kaoyan_time",ppl->query("mud_age")+86400);
+        ppl -> set("hydra/shaolin/kaoyan_arrest",ob->query("id") );
+        tell_object(ppl,msg1);
+        return 1;
+    }
+    else
+        return 0;
+}
+    
+int filter_killer( object ppl)
+{
+    if( !environment(ppl) ) return 0;
+    if( ppl->query("PKS") > 100 )
+        return 1;
+    else
+        return 0;
+}    
+
+//Hydra added 1998/10/20
+void give_letter( object ppl )
+{
+    object letter,me;
+//  string lon;
+    me = this_object();
+    letter = new( __DIR__"obj/letter" );
+    letter -> set("chuang_luohan_zhen",ppl->query("id"));
+    letter -> move( ppl );
+    tell_object( ppl,me->query("name")+"给你一封推荐信。\n");
+}
+
+string ask_luohanzhen(object ppl)
+{
+    ppl = this_player();
+    
+    if( ppl->query("hydra/shaolin/闯阵成功") )
+    {
+    	if (ppl->query("hydra/shaolin/have_allowed_enter"))
+    		return "不是已经允许你进入过书库了吗？";
+        command("say 嗯，不错不错。");
+        ppl->set("hydra/shaolin/allow_enter_shuku",5);
+        ppl->set("hydra/shaolin/have_allowed_enter",1);
+        return "你现在可以去藏经阁参阅典籍了。\n";
+    }
+    
+    if( !ppl->query("hydra/shaolin/can_ask_luohanzhen") )
+    {
+        if( ppl->query("family/generation") != 37 ||
+            ppl->query("family/master_id")[0..3] != "xuan" )
+        {
+            return "你还是用心练功为上，争取能够打过罗汉阵！";
+        }
+        else
+        {
+            return "你先回去跟你师傅比划一下再作决定！";
+        }
+    }
+    else
+    {   
+        give_letter(ppl);
+        return "你去找罗汉堂首座玄悲吧。";
+    }
+}
+
+int accept_object( object ppl,object obj )
+{
+    if( obj->query( "id" ) != "tuijian han" )
+    {
+        command("say 多谢了，不过这东西贫僧不需要。");
+        return 0;
+    }
+    command( "say 哦，是一封信！");
+    message_vision("$N拆开信阅读了起来。。。\n",this_object());
+    remove_call_out("read_letter");
+    call_out( "read_letter",1,ppl,obj );
+    return 1;
+    
+}
+
+void read_letter( object ppl,object obj )
+{    
+    if( obj->query("owner") != ppl->query("id") )
+    {
+        command("say 不过这封信推荐的不是你啊？");
+    }
+    else
+    {
+        command("say 原来你已打败了降龙伏虎，不错啊");
+        ppl -> set("hydra/shaolin/received_letter",1);
+    }    
+}    
+
+int valid_teach( object me,string skill) 
+{
+    if( me->query("locker/passluohan") &&me->query("family/family_name")=="少林派")
+    return 1;
+    return 0;
+}
+
+/*
+string ask_biguan()
+{
+	object me;
+
+	me=this_player();
+
+    if( me->query_temp("marks/关1") ) 
+    {
+	    me->set_temp("marks/关2", 1);
+	    me->set_temp("marks/关1", 0);
+	    return "后院有一间石屋，可以进去闭关静修。";
+	}
+
+	return "你还不够资格闭关静修。";
+
+}
+*/
