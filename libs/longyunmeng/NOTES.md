@@ -560,3 +560,36 @@ paths — all PASS. Did not re-run the full 15,926-file sweep a second time
 given the dominant remaining category is confirmed to be a test-harness
 artifact rather than fixable content, and the time budget for closing out
 the very last archive in this ~100-archive project.
+
+## Re-verification pass: driver rebuild + LPC formatter + WASM build
+
+- **LPC formatter**: ran `format-corpus.mjs` over all 15,925 `.lpc`
+  files — 15,804 reformatted in place, 39 already-idempotent, 82
+  refused (nonzero `errors` expected/fine per the tool's own contract,
+  unsurprising on this scale of legacy source).
+- **Native retest against rebuilt driver** (`~/src/fluffos/build-debug/
+  src/driver`, freshly rebuilt from upstream master): booted clean,
+  zero fatal errors. Full registration re-verified with a fresh real
+  name (秦风欧) via the documented flow (id → confirm → Chinese name →
+  password ×2 → identity token ×2 → gift `0`/`y` → magic element →
+  email → gender); arrived correctly in 假日客店, `look`/`score`/`i`
+  all produced correct output (including the starter 布衣/新手礼物包
+  inventory). No regressions from the rebuilt driver or the reformat
+  pass; nothing to fix.
+- **WASM build test** (`scripts/wasm_client.js` against
+  `build-wasm/src`): boots cleanly in-process (the `server_2000.lpc`
+  network daemon's `socket_create()`/`socket_error()` calls correctly
+  throw `Undefined function` under WASM's no-`sockets`-package build,
+  caught non-fatally by `master.lpc`'s own preload `catch()`, same as
+  natively when the sockets package is absent — no cascading boot
+  failure). **Login itself is blocked**: `adm/daemons/logind.lpc`'s
+  `logon()` calls `str = query_ip_number(ob); if (BAN_D->is_banned(str)
+  == 1) { ...reject... }` — under WASM's malformed `query_ip_number()`
+  return value (AGENTS.md's documented limitation), this trips the ban
+  check and every connection is rejected with "你的地址在本 MUD 不受
+  欢迎" before even the id prompt renders. This is the documented
+  driver-side WASM limitation, not a mudlib bug (the exact same code
+  path works fine natively on `127.0.0.1`, confirmed by the native
+  retest above) — no mudlib fix attempted. Classified as: boots under
+  WASM; login blocked by the driver's known `query_ip_number()`
+  limitation.

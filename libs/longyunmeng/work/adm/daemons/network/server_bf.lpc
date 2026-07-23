@@ -58,10 +58,10 @@
 
 inherit F_DBASE;
 
-nosave private int vfd = -1; // 服务端侦听 SOCKET
-nosave private mapping sv_info; // 服务端信息
-nosave private int cfd = -1; // 客户端 SOCKET
-nosave private mapping cv_info; // 客户端信息
+nosave private int vfd = -1;  // 服务端侦听 SOCKET
+nosave private mapping sv_info;  // 服务端信息
+nosave private int cfd = -1;  // 客户端 SOCKET
+nosave private mapping cv_info;  // 客户端信息
 
 //___________________提外部调用的函数_____________________
 void connect_to(string arg);
@@ -84,808 +84,707 @@ protected void send_read_callback(int fd, mixed mess);
 protected void send_write_callback(int fd, mixed mess);
 protected void send_close_callback(int fd);
 
-void create()
-{
-	seteuid(getuid());
-	set("channel_id", "版本服务");
-	sys_msg("版本服务已经启动。"NOR);
-	setup(); // 初始化
+void create() {
+  seteuid(getuid());
+  set("channel_id", "版本服务");
+  sys_msg("版本服务已经启动。" NOR);
+  setup();  // 初始化
 }
 
-protected void setup()
-{
-	// 创建侦听 socket
-	vfd = socket_create(STREAM_BINARY, "in_read_callback", "in_close_callback" );
+protected void setup() {
+  // 创建侦听 socket
+  vfd = socket_create(STREAM_BINARY, "in_read_callback", "in_close_callback");
 
-	if ( vfd < 0 )
-	{ // 失败
-		sys_msg("创建侦听 socket 失败");
-		log_msg("创建侦听 socket 失败");
-		return;
-	}
-	if ( socket_bind(vfd, SV_PORT) < 0 )
-	{ // 绑定端口失败
-		sys_msg("侦听 socket 绑定端口失败");
-		log_msg("侦听 socket 绑定端口失败");
-		socket_close(vfd);
-		return;
-	}
-	if ( socket_listen(vfd, "in_listen_callback" ) < 0 )
-	{ // 侦听失败
-		sys_msg("侦听失败");
-		log_msg("侦听失败");
-		socket_close(vfd);
-		return;
-	}
+  if (vfd < 0) {  // 失败
+    sys_msg("创建侦听 socket 失败");
+    log_msg("创建侦听 socket 失败");
+    return;
+  }
+  if (socket_bind(vfd, SV_PORT) < 0) {  // 绑定端口失败
+    sys_msg("侦听 socket 绑定端口失败");
+    log_msg("侦听 socket 绑定端口失败");
+    socket_close(vfd);
+    return;
+  }
+  if (socket_listen(vfd, "in_listen_callback") < 0) {  // 侦听失败
+    sys_msg("侦听失败");
+    log_msg("侦听失败");
+    socket_close(vfd);
+    return;
+  }
 
-	sv_info = ([ ]); // 初始化
-	sys_msg("开始在端口 "+SV_PORT+" 上侦听");
+  sv_info = ([]);  // 初始化
+  sys_msg("开始在端口 " + SV_PORT + " 上侦听");
 }
 
-protected void in_listen_callback(int fd)
-{
-	int new_fd;
+protected void in_listen_callback(int fd) {
+  int new_fd;
 
-	if ( (new_fd = socket_accept(fd, "in_read_callback", "in_write_callback")) < 0 ) 
-	{ // 接受连接失败
-		sys_msg("接受连接失败");
-		log_msg("接受连接失败");
-		in_close_callback(new_fd);
-		return;
-	}
+  if ((new_fd = socket_accept(fd, "in_read_callback", "in_write_callback")) < 0) {  // 接受连接失败
+    sys_msg("接受连接失败");
+    log_msg("接受连接失败");
+    in_close_callback(new_fd);
+    return;
+  }
 
-	sv_info[new_fd] = ([ ]); // 初始化
-	sv_info[new_fd][STATE] = WAIT; // 处于等待接收文件状态
+  sv_info[new_fd] = ([]);  // 初始化
+  sv_info[new_fd][STATE] = WAIT;  // 处于等待接收文件状态
 }
 
-protected void in_read_callback(int fd, mixed mess)
-{
-	string show, pass, file_name, msg;
-	string send, get_dir, *fname_list;
-	int i, file_size, type;
-	
-	// 检查初始化参数
-	if ( !mapp(sv_info) ) sv_info = ([ ]);
-	if ( !mapp(sv_info[fd]) ) sv_info[fd] = ([ ]);
-	
-	if ( stringp(mess) ) msg = mess;
-	else if ( bufferp(mess) ) msg = read_buffer(mess, 0, (sizeof(mess)));
-	else 
-	{ // 不符合的数据类型
-		sys_msg("接收的数据类型错误");
-		log_msg("接收的数据类型错误");
-		return;
-	}
+protected void in_read_callback(int fd, mixed mess) {
+  string show, pass, file_name, msg;
+  string send, get_dir, *fname_list;
+  int i, file_size, type;
 
-	if ( sscanf(msg, VALID_CHECK, show, pass, file_name, file_size, type) == 5 )
-	{ // 验证
-		if ( pass != SERVER_PASS )
-		{ // 验证密码
-			sys_msg("服务密码验证失败");
-			log_msg("服务密码验证失败");
-			return;
-		}
-		if ( type == 5 )
-		{ // 收到发送全部完成的信息
-			sys_msg(show);
-			// 关闭套接字
-			in_close_callback(fd);
-			return;
-		}
-		//____________________________创建目录_______________________
+  // 检查初始化参数
+  if (!mapp(sv_info)) sv_info = ([]);
+  if (!mapp(sv_info[fd])) sv_info[fd] = ([]);
+
+  if (stringp(mess)) msg = mess;
+  else if (bufferp(mess)) msg = read_buffer(mess, 0, (sizeof(mess)));
+  else {  // 不符合的数据类型
+    sys_msg("接收的数据类型错误");
+    log_msg("接收的数据类型错误");
+    return;
+  }
+
+  if (sscanf(msg, VALID_CHECK, show, pass, file_name, file_size, type) == 5) {  // 验证
+    if (pass != SERVER_PASS) {  // 验证密码
+      sys_msg("服务密码验证失败");
+      log_msg("服务密码验证失败");
+      return;
+    }
+    if (type == 5) {  // 收到发送全部完成的信息
+      sys_msg(show);
+      // 关闭套接字
+      in_close_callback(fd);
+      return;
+    }
+    //____________________________创建目录_______________________
 #ifdef DEBUG
-		file_name = "/temp"+file_name;
+    file_name = "/temp" + file_name;
 #endif
-		if ( file_name[0..0] != "/" ) file_name = "/" + file_name;
-		
-		get_dir = "/";
-		fname_list = explode(file_name, "/");
-		for ( i=0; i<sizeof(fname_list)-1; i++ )
-		{
-			get_dir += fname_list[i];
-			mkdir(get_dir);
-			get_dir += "/";
-		}
-		//____________________________创建完成________________________
-		if ( !write_file(file_name, "", 1) )
-		{ // 删除原来的文件
-			sys_msg("删除旧的文件("+file_name+")失败");
-			log_msg("删除旧的文件("+file_name+")失败");
-			return;
-		}
-		// 应答信息列表
-		if ( !arrayp(sv_info[fd][WAIT_FILE]) ) sv_info[fd][WAIT_FILE] = ({ });
-		// 是空文件
-		if ( file_size == 0 )
-		{ // 通知发送下一个文件
-			sys_msg("开始接收文件("HIC+file_name+HIW")("HIY+file_size+"字节"HIW")");
-			send = sprintf(REPLY_MESSAGE, FINISH, file_name);
-			if ( member_array(send, sv_info[fd][WAIT_FILE]) == -1 ) 
-				sv_info[fd][WAIT_FILE] += ({ send });
-			send_message(fd, SFLAG);
-			sv_info[fd][STATE] = FINISH;
-			sv_info[fd][VALID] = 0;
-			sys_msg("文件("HIC+file_name+HIW")接收完成(共"HIY+file_size+"字节"HIW")");
-			return;
-		}
-		if ( sv_info[fd][STATE] == DOING && file_name != sv_info[fd][FILE_NAME] )
-		{ // 上一个文件还没有发送完，无法接收新的文件，告知对方稍候发送
-			send = sprintf(REPLY_MESSAGE, RESET_SEND, file_name);
-			if ( member_array(send, sv_info[fd][WAIT_FILE]) == -1 ) 
-				sv_info[fd][WAIT_FILE] += ({ send });
-			send_message(fd, SFLAG);
-			return;
-		}
-		sv_info[fd][FILE_NAME] = file_name;
-		sv_info[fd][FILE_SIZE] = file_size;
-		sv_info[fd][TYPE] = type;
-		sv_info[fd][BUFFER] = "";
-		sv_info[fd][VALID] = 1;
-		sv_info[fd][FILE_POS] = 0;
-		sv_info[fd][STATE] = DOING;
-		sv_info[fd][RATE] = 0;
-		sv_info[fd][SHOW] = show;
+    if (file_name[0..0] != "/") file_name = "/" + file_name;
 
-		// 验证通过，发送一条消息通知发送文件
-		send = sprintf(REPLY_MESSAGE, VALID_SEND, file_name);
-		if ( member_array(send, sv_info[fd][WAIT_FILE]) == -1 ) 
-			sv_info[fd][WAIT_FILE] += ({ send });
-		send_message(fd, SFLAG);
-		if ( sv_info[fd][FILE_SIZE] > MAX_SHOW_RATE )
-			sys_msg("接收文件 "HIG+sv_info[fd][FILE_NAME]+HIW" ("HIY+sv_info[fd][FILE_SIZE]+"字节"HIW")");
-		return;
-	}
+    get_dir = "/";
+    fname_list = explode(file_name, "/");
+    for (i = 0; i < sizeof(fname_list) - 1; i++) {
+      get_dir += fname_list[i];
+      mkdir(get_dir);
+      get_dir += "/";
+    }
+    //____________________________创建完成________________________
+    if (!write_file(file_name, "", 1)) {  // 删除原来的文件
+      sys_msg("删除旧的文件(" + file_name + ")失败");
+      log_msg("删除旧的文件(" + file_name + ")失败");
+      return;
+    }
+    // 应答信息列表
+    if (!arrayp(sv_info[fd][WAIT_FILE])) sv_info[fd][WAIT_FILE] = ({});
+    // 是空文件
+    if (file_size == 0) {  // 通知发送下一个文件
+      sys_msg("开始接收文件(" HIC + file_name + HIW ")(" HIY + file_size + "字节" HIW ")");
+      send = sprintf(REPLY_MESSAGE, FINISH, file_name);
+      if (member_array(send, sv_info[fd][WAIT_FILE]) == -1)
+        sv_info[fd][WAIT_FILE] += ({ send });
+      send_message(fd, SFLAG);
+      sv_info[fd][STATE] = FINISH;
+      sv_info[fd][VALID] = 0;
+      sys_msg("文件(" HIC + file_name + HIW ")接收完成(共" HIY + file_size + "字节" HIW ")");
+      return;
+    }
+    if (sv_info[fd][STATE] == DOING && file_name != sv_info[fd][FILE_NAME]) {  // 上一个文件还没有发送完，无法接收新的文件，告知对方稍候发送
+      send = sprintf(REPLY_MESSAGE, RESET_SEND, file_name);
+      if (member_array(send, sv_info[fd][WAIT_FILE]) == -1)
+        sv_info[fd][WAIT_FILE] += ({ send });
+      send_message(fd, SFLAG);
+      return;
+    }
+    sv_info[fd][FILE_NAME] = file_name;
+    sv_info[fd][FILE_SIZE] = file_size;
+    sv_info[fd][TYPE] = type;
+    sv_info[fd][BUFFER] = "";
+    sv_info[fd][VALID] = 1;
+    sv_info[fd][FILE_POS] = 0;
+    sv_info[fd][STATE] = DOING;
+    sv_info[fd][RATE] = 0;
+    sv_info[fd][SHOW] = show;
 
-	if ( sv_info[fd][VALID] )
-	{
-		sv_info[fd][FILE_POS] += sizeof(mess);
-		sv_info[fd][RATE] += sizeof(mess);
-		sv_info[fd][BUFFER] = msg;
-		
-		if ( sv_info[fd][FILE_NAME] )
-		{
-			// 写入文件
-			if ( sv_info[fd][TYPE] == ASCII )
-			{ // ASCII 文件
-				sv_info[fd][BUFFER] = replace_string(sv_info[fd][BUFFER], "\r", "");
-				if ( write_file(sv_info[fd][FILE_NAME], sv_info[fd][BUFFER]) )
-				{
-					if ( sv_info[fd][FILE_SIZE] > MAX_SHOW_RATE )
-					{ // 比较大的文件显示进度
-						if ( sv_info[fd][RATE]/(sv_info[fd][FILE_SIZE]/100) >= RATE_SHOW )
-						{
-							sys_msg("接收进度 "HIY+sv_info[fd][FILE_POS]+" 字节 "HIW"("HIG+(sv_info[fd][FILE_POS]*10/(sv_info[fd][FILE_SIZE]/10))+"%"HIW")");
-							sv_info[fd][RATE] = 0;
-						}
-					}
-				}
-				else
-				{
-					log_msg("写入 ASCII 文件("+sv_info[fd][FILE_NAME]+")失败");
-					sv_info[fd][VALID] = 0;
-					return;
-				}
-			}
-			else if ( sv_info[fd][TYPE] == BINARY ) 
-			{ // binary文件
-				if ( write_buffer(sv_info[fd][FILE_NAME], file_size(sv_info[fd][FILE_NAME]), mess) )
-				{
-					if ( sv_info[fd][FILE_SIZE] > MAX_SHOW_RATE )
-					{ // 比较大的文件显示进度
-						if ( sv_info[fd][RATE]/(sv_info[fd][FILE_SIZE]/100) >= RATE_SHOW )
-						{
-							sys_msg("接收进度 "HIY+sv_info[fd][FILE_POS]+" 字节 "HIW"("HIG+(sv_info[fd][FILE_POS]*10/(sv_info[fd][FILE_SIZE]/10))+"%"HIW")");
-							sv_info[fd][RATE] = 0;
-						}
-					}
-				}
-				else
-				{
-					log_msg("写入 BINARY 文件("+sv_info[fd][FILE_NAME]+")失败");
-					sv_info[fd][VALID] = 0;
-					return;
-				}
-			}
-			//_____________________重置参数表____________________
-			if ( sv_info[fd][FILE_POS] == sv_info[fd][FILE_SIZE] )
-			{ // 发送完成
-				if ( sv_info[fd][FILE_SIZE] > MAX_SHOW_RATE )
-					sys_msg("接收进度 "HIY+sv_info[fd][FILE_POS]+" 字节 "HIW"("HIG+(sv_info[fd][FILE_POS]*10/(sv_info[fd][FILE_SIZE]/10))+"%"HIW")");
-				sv_info[fd][FILE_NAME] = 0;
-				sv_info[fd][FILE_SIZE] = 0;
-				sv_info[fd][TYPE] = 0;
-				sv_info[fd][BUFFER] = "";
-				sv_info[fd][FILE_POS] = 0;
-				sv_info[fd][VALID] = 0;
-				sv_info[fd][STATE] = FINISH;
-				sv_info[fd][RATE] = 0;
-				// 这个文件接收完毕，发条信息通知发送下一个文件
-				send = sprintf(REPLY_MESSAGE, FINISH, file_name);
-				if ( member_array(send, sv_info[fd][WAIT_FILE]) == -1 ) 
-					sv_info[fd][WAIT_FILE] += ({ send });
-				send_message(fd, SFLAG);
-				sys_msg(sv_info[fd][SHOW]); // 显示进度
-			}
-			else if ( sv_info[fd][FILE_POS] > sv_info[fd][FILE_SIZE] )
-			{ // 文件长度不对，要求重新发送
-				send = sprintf(REPLY_MESSAGE, RESET_SEND, sv_info[fd][FILE_NAME]);
-				if ( member_array(send, sv_info[fd][WAIT_FILE]) == -1 ) 
-					sv_info[fd][WAIT_FILE] += ({ send });
-				send_message(fd, SFLAG);
-				// 重置参数
-				sv_info[fd][FILE_NAME] = 0;
-				sv_info[fd][FILE_SIZE] = 0;
-				sv_info[fd][TYPE] = 0;
-				sv_info[fd][BUFFER] = "";
-				sv_info[fd][FILE_POS] = 0;
-				sv_info[fd][VALID] = 0;
-				sv_info[fd][STATE] = FINISH;
-				sv_info[fd][RATE] = 0;
-			}
-			//______________________重置完成_____________________
-		}
-		return;
-	}
+    // 验证通过，发送一条消息通知发送文件
+    send = sprintf(REPLY_MESSAGE, VALID_SEND, file_name);
+    if (member_array(send, sv_info[fd][WAIT_FILE]) == -1)
+      sv_info[fd][WAIT_FILE] += ({ send });
+    send_message(fd, SFLAG);
+    if (sv_info[fd][FILE_SIZE] > MAX_SHOW_RATE)
+      sys_msg("接收文件 " HIG + sv_info[fd][FILE_NAME] + HIW " (" HIY + sv_info[fd][FILE_SIZE] + "字节" HIW ")");
+    return;
+  }
 
-	sys_msg("非法数据");
+  if (sv_info[fd][VALID]) {
+    sv_info[fd][FILE_POS] += sizeof(mess);
+    sv_info[fd][RATE] += sizeof(mess);
+    sv_info[fd][BUFFER] = msg;
+
+    if (sv_info[fd][FILE_NAME]) {
+      // 写入文件
+      if (sv_info[fd][TYPE] == ASCII) {  // ASCII 文件
+        sv_info[fd][BUFFER] = replace_string(sv_info[fd][BUFFER], "\r", "");
+        if (write_file(sv_info[fd][FILE_NAME], sv_info[fd][BUFFER])) {
+          if (sv_info[fd][FILE_SIZE] > MAX_SHOW_RATE) {  // 比较大的文件显示进度
+            if (sv_info[fd][RATE] / (sv_info[fd][FILE_SIZE] / 100) >= RATE_SHOW) {
+              sys_msg("接收进度 " HIY + sv_info[fd][FILE_POS] + " 字节 " HIW "(" HIG + (sv_info[fd][FILE_POS] * 10 / (sv_info[fd][FILE_SIZE] / 10)) + "%" HIW ")");
+              sv_info[fd][RATE] = 0;
+            }
+          }
+        } else {
+          log_msg("写入 ASCII 文件(" + sv_info[fd][FILE_NAME] + ")失败");
+          sv_info[fd][VALID] = 0;
+          return;
+        }
+      } else if (sv_info[fd][TYPE] == BINARY) {  // binary文件
+        if (write_buffer(sv_info[fd][FILE_NAME], file_size(sv_info[fd][FILE_NAME]), mess)) {
+          if (sv_info[fd][FILE_SIZE] > MAX_SHOW_RATE) {  // 比较大的文件显示进度
+            if (sv_info[fd][RATE] / (sv_info[fd][FILE_SIZE] / 100) >= RATE_SHOW) {
+              sys_msg("接收进度 " HIY + sv_info[fd][FILE_POS] + " 字节 " HIW "(" HIG + (sv_info[fd][FILE_POS] * 10 / (sv_info[fd][FILE_SIZE] / 10)) + "%" HIW ")");
+              sv_info[fd][RATE] = 0;
+            }
+          }
+        } else {
+          log_msg("写入 BINARY 文件(" + sv_info[fd][FILE_NAME] + ")失败");
+          sv_info[fd][VALID] = 0;
+          return;
+        }
+      }
+      //_____________________重置参数表____________________
+      if (sv_info[fd][FILE_POS] == sv_info[fd][FILE_SIZE]) {  // 发送完成
+        if (sv_info[fd][FILE_SIZE] > MAX_SHOW_RATE)
+          sys_msg("接收进度 " HIY + sv_info[fd][FILE_POS] + " 字节 " HIW "(" HIG + (sv_info[fd][FILE_POS] * 10 / (sv_info[fd][FILE_SIZE] / 10)) + "%" HIW ")");
+        sv_info[fd][FILE_NAME] = 0;
+        sv_info[fd][FILE_SIZE] = 0;
+        sv_info[fd][TYPE] = 0;
+        sv_info[fd][BUFFER] = "";
+        sv_info[fd][FILE_POS] = 0;
+        sv_info[fd][VALID] = 0;
+        sv_info[fd][STATE] = FINISH;
+        sv_info[fd][RATE] = 0;
+        // 这个文件接收完毕，发条信息通知发送下一个文件
+        send = sprintf(REPLY_MESSAGE, FINISH, file_name);
+        if (member_array(send, sv_info[fd][WAIT_FILE]) == -1)
+          sv_info[fd][WAIT_FILE] += ({ send });
+        send_message(fd, SFLAG);
+        sys_msg(sv_info[fd][SHOW]);  // 显示进度
+      } else if (sv_info[fd][FILE_POS] > sv_info[fd][FILE_SIZE]) {  // 文件长度不对，要求重新发送
+        send = sprintf(REPLY_MESSAGE, RESET_SEND, sv_info[fd][FILE_NAME]);
+        if (member_array(send, sv_info[fd][WAIT_FILE]) == -1)
+          sv_info[fd][WAIT_FILE] += ({ send });
+        send_message(fd, SFLAG);
+        // 重置参数
+        sv_info[fd][FILE_NAME] = 0;
+        sv_info[fd][FILE_SIZE] = 0;
+        sv_info[fd][TYPE] = 0;
+        sv_info[fd][BUFFER] = "";
+        sv_info[fd][FILE_POS] = 0;
+        sv_info[fd][VALID] = 0;
+        sv_info[fd][STATE] = FINISH;
+        sv_info[fd][RATE] = 0;
+      }
+      //______________________重置完成_____________________
+    }
+    return;
+  }
+
+  sys_msg("非法数据");
 }
 
-protected void in_write_callback(int fd, mixed mess)
-{
-	sys_msg("服务器应答");
-	send_to_remote(fd, "服务器应答", SFLAG);
+protected void in_write_callback(int fd, mixed mess) {
+  sys_msg("服务器应答");
+  send_to_remote(fd, "服务器应答", SFLAG);
 }
 
-protected void in_close_callback(int fd)
-{
-	if ( fd > -1 ) 
-	{
-		socket_close(fd);
-		sys_msg("服务端套接字( "+fd+" )断开连接");
-	}
+protected void in_close_callback(int fd) {
+  if (fd > -1) {
+    socket_close(fd);
+    sys_msg("服务端套接字( " + fd + " )断开连接");
+  }
 
-	map_delete(sv_info, fd);
+  map_delete(sv_info, fd);
 }
 
 // 调试信息
-protected void sys_msg(string msg)
-{
-	CHANNEL_D->do_channel(this_object(), "sys", HIW""+msg+NOR);
+protected void sys_msg(string msg) {
+  CHANNEL_D->do_channel(this_object(), "sys", HIW "" + msg + NOR);
 }
 
 // 记录
-protected void log_msg(string msg)
-{
-	log_file("/net/server", sprintf("%s：%s\n", CHINESE_D->chinese_time(7, time()), msg));
+protected void log_msg(string msg) {
+  log_file("/net/server", sprintf("%s：%s\n", CHINESE_D->chinese_time(7, time()), msg));
 }
 
-void connect_to(string arg)
-{
-	string ip, file_name, pass, show;
-	int flag, port, name_size;
-	
-	if ( !mapp(cv_info) ) cv_info = ([ ]);
-	if ( !arrayp(cv_info[WAIT_POT]) ) cv_info[WAIT_POT] = ({ });
-	if ( !arrayp(cv_info[WAIT_FILE]) ) cv_info[WAIT_FILE] = ({ });
+void connect_to(string arg) {
+  string ip, file_name, pass, show;
+  int flag, port, name_size;
 
-	if ( sscanf(arg, "%s %d,%s,%s", ip, port, file_name, pass) == 4 )
-	{ // 检查命令格式
-		name_size = strlen(file_name)-1;
-		if ( file_name[name_size..name_size] == "/" )
-		{ // 是目录
-			send_dir(ip, port, file_name, pass);
-			return;
-		}
-		if ( file_size(file_name) < 0 )
-		{ // 发送的文件不存在
-			sys_msg("要发送的文件("+file_name+")不存在");
-			return;
-		}
-		if ( cfd > -1 )
-		{ // 客户端套接字存在
-			if ( ip==cv_info[IP] && port==cv_info[PORT] 
-				&& cv_info[VALID] )
-			{ // 和目前的套接字连接的是同一地址，则直接把文件加入到队列等待发送
-				cv_info[WAIT_POT] -= ({ 0 });
-				flag = sizeof(cv_info[WAIT_POT]);
-				if ( member_array(file_name, cv_info[WAIT_FILE]) == -1 )
-				{
-					cv_info[WAIT_FILE] += ({ file_name });
-					cv_info[MAX_FILE]++;
-				}
-				if ( !flag ) send_read_callback(cfd, sprintf(REPLY_MESSAGE, FINISH, "reset"));
-				return;
-			}
-			// 不是同一地址，则先清楚目前状态重新连接
-			remove_call_out("send_message");
-			send_close_callback(cfd);
-		}
-		//______________________________初始化参数___________________________
-		cv_info = ([ ]);
-		cv_info[WAIT_POT] = ({ });
-		cv_info[WAIT_FILE] = ({ });
-		cv_info[IP] = ip;
-		cv_info[PORT] = port;
-		cv_info[FILE_NAME] = file_name;
-		cv_info[FILE_SIZE] = file_size(file_name);
-		cv_info[PASS] = pass;
-		cv_info[TYPE] = BINARY;
-		cv_info[MAX_FILE] = 1;
-		cv_info[FINISH_FILE] = 0;
-		cv_info[VALID] = 0;
-		cv_info[RATE] = 0;
-		cv_info[FILE_POS] = 0;
-		show = "完成度("HIY+(cv_info[FINISH_FILE]*100/cv_info[MAX_FILE])+"%"+HIW")："HIG + 
-			cv_info[FINISH_FILE]+HIY" / "HIC+cv_info[MAX_FILE];
-		cv_info[BUFFER] = sprintf(VALID_CHECK, show, pass, file_name, cv_info[FILE_SIZE], cv_info[TYPE]);
-	}
-	else
-	{
-		sys_msg("命令格式错误");
-		return;
-	}
-	
-	sys_msg("正在连接服务器("+cv_info[IP]+" "+cv_info[PORT]+")，请稍候...");
-	resolve(cv_info[IP], "resolve_callback");
+  if (!mapp(cv_info)) cv_info = ([]);
+  if (!arrayp(cv_info[WAIT_POT])) cv_info[WAIT_POT] = ({});
+  if (!arrayp(cv_info[WAIT_FILE])) cv_info[WAIT_FILE] = ({});
+
+  if (sscanf(arg, "%s %d,%s,%s", ip, port, file_name, pass) == 4) {  // 检查命令格式
+    name_size = strlen(file_name) - 1;
+    if (file_name[name_size..name_size] == "/") {  // 是目录
+      send_dir(ip, port, file_name, pass);
+      return;
+    }
+    if (file_size(file_name) < 0) {  // 发送的文件不存在
+      sys_msg("要发送的文件(" + file_name + ")不存在");
+      return;
+    }
+    if (cfd > -1) {  // 客户端套接字存在
+      if (ip == cv_info[IP] && port == cv_info[PORT]
+        && cv_info[VALID]) {  // 和目前的套接字连接的是同一地址，则直接把文件加入到队列等待发送
+        cv_info[WAIT_POT] -= ({ 0 });
+        flag = sizeof(cv_info[WAIT_POT]);
+        if (member_array(file_name, cv_info[WAIT_FILE]) == -1) {
+          cv_info[WAIT_FILE] += ({ file_name });
+          cv_info[MAX_FILE]++;
+        }
+        if (!flag) send_read_callback(cfd, sprintf(REPLY_MESSAGE, FINISH, "reset"));
+        return;
+      }
+      // 不是同一地址，则先清楚目前状态重新连接
+      remove_call_out("send_message");
+      send_close_callback(cfd);
+    }
+    //______________________________初始化参数___________________________
+    cv_info = ([]);
+    cv_info[WAIT_POT] = ({});
+    cv_info[WAIT_FILE] = ({});
+    cv_info[IP] = ip;
+    cv_info[PORT] = port;
+    cv_info[FILE_NAME] = file_name;
+    cv_info[FILE_SIZE] = file_size(file_name);
+    cv_info[PASS] = pass;
+    cv_info[TYPE] = BINARY;
+    cv_info[MAX_FILE] = 1;
+    cv_info[FINISH_FILE] = 0;
+    cv_info[VALID] = 0;
+    cv_info[RATE] = 0;
+    cv_info[FILE_POS] = 0;
+    show = "完成度(" HIY + (cv_info[FINISH_FILE] * 100 / cv_info[MAX_FILE]) + "%" + HIW ")：" HIG + cv_info[FINISH_FILE] + HIY " / " HIC + cv_info[MAX_FILE];
+    cv_info[BUFFER] = sprintf(
+      VALID_CHECK,
+      show,
+      pass,
+      file_name,
+      cv_info[FILE_SIZE],
+      cv_info[TYPE]
+    );
+  } else {
+    sys_msg("命令格式错误");
+    return;
+  }
+
+  sys_msg("正在连接服务器(" + cv_info[IP] + " " + cv_info[PORT] + ")，请稍候...");
+  resolve(cv_info[IP], "resolve_callback");
 }
 
-protected void resolve_callback(string address, string resolved, int key)
-{
-	string full_addr;
-	int ret;
-	
-	if ( !resolved )
-	{ // 域名解析失败
-		if ( sscanf(cv_info[IP], "%*d.%*d.%*d.%*d") == 4 )
-			resolved = cv_info[IP];
-		else
-		{
-			sys_msg("域名("+cv_info[IP]+")解析失败");
-			return;
-		}
-	} 
-	else if ( resolved != cv_info[IP] )
-		sys_msg("解析域名 "+cv_info[IP]+" = "+resolved);
-	
-	cv_info[IP] = resolved;
-	full_addr = sprintf("%s %d", resolved, cv_info[PORT]);
-	cfd = socket_create(STREAM_BINARY, "send_read_callback", "send_close_callback" );
-		
-	if ( cfd < 0 )
-	{
-		sys_msg("创建客户端 socket 失败");
-		log_msg("创建客户端 socket 失败");
-		return;
-	}
-		
-	ret = socket_connect(cfd, full_addr, "send_read_callback", "send_write_callback");
-		
-	if ( ret != EESUCCESS )
-	{
-		sys_msg("无法连接服务器("+full_addr+")");
-		log_msg("无法连接服务器("+full_addr+")");
-		send_close_callback(cfd);
-		return;
-	}
-	
-	sys_msg("连接成功");
+protected void resolve_callback(string address, string resolved, int key) {
+  string full_addr;
+  int ret;
+
+  if (!resolved) {  // 域名解析失败
+    if (sscanf(cv_info[IP], "%*d.%*d.%*d.%*d") == 4)
+      resolved = cv_info[IP];
+    else {
+      sys_msg("域名(" + cv_info[IP] + ")解析失败");
+      return;
+    }
+  } else if (resolved != cv_info[IP])
+    sys_msg("解析域名 " + cv_info[IP] + " = " + resolved);
+
+  cv_info[IP] = resolved;
+  full_addr = sprintf("%s %d", resolved, cv_info[PORT]);
+  cfd = socket_create(STREAM_BINARY, "send_read_callback", "send_close_callback");
+
+  if (cfd < 0) {
+    sys_msg("创建客户端 socket 失败");
+    log_msg("创建客户端 socket 失败");
+    return;
+  }
+
+  ret = socket_connect(cfd, full_addr, "send_read_callback", "send_write_callback");
+
+  if (ret != EESUCCESS) {
+    sys_msg("无法连接服务器(" + full_addr + ")");
+    log_msg("无法连接服务器(" + full_addr + ")");
+    send_close_callback(cfd);
+    return;
+  }
+
+  sys_msg("连接成功");
 }
 
-protected void send_read_callback(int fd, mixed mess)
-{
-	string msg, filename, show;
-	int i, max, type, filesize, rate;
-	mixed send;
-	
-	if ( stringp(mess) ) msg = mess;
-	else if ( bufferp(mess) ) msg = read_buffer(mess, 0, (sizeof(mess)));
-	else return;
+protected void send_read_callback(int fd, mixed mess) {
+  string msg, filename, show;
+  int i, max, type, filesize, rate;
+  mixed send;
+
+  if (stringp(mess)) msg = mess;
+  else if (bufferp(mess)) msg = read_buffer(mess, 0, (sizeof(mess)));
+  else return;
 
 #ifdef DEBUG
-	msg = replace_string(msg, "/temp/", "/");
+  msg = replace_string(msg, "/temp/", "/");
 #endif
 
-	if ( sscanf(msg, REPLY_MESSAGE, type, filename) == 2 )
-	{
-		cv_info[VALID] = 1;
+  if (sscanf(msg, REPLY_MESSAGE, type, filename) == 2) {
+    cv_info[VALID] = 1;
 
-		switch ( type )
-		{
-			// 开始发送文件
-			case VALID_SEND :
-				if ( (filesize=file_size(filename)) < 0 ) 
-				{ // 文件不存在
-					sys_msg("文件("+filename+")不存在");
-					return;
-				}
-				if ( !arrayp(cv_info[WAIT_POT]) ) cv_info[WAIT_POT] = ({ });
-				if ( filesize < MAX_SIZE )
-				{
-					send = read_buffer(filename);
-					cv_info[WAIT_POT] += ({ send });
-				}
-				else
-				{
-					rate = 0;
-					do
-					{
-						send = read_buffer(filename, rate, MAX_SIZE);
-						cv_info[WAIT_POT] += ({ send });
-						rate += MAX_SIZE;
-					}
-					while ( rate < filesize );
-				}
-				
-				if ( filesize > MAX_SHOW_RATE )
-					sys_msg("发送文件 "HIC+filename+HIW" ("HIY+filesize+"字节"HIW")");
+    switch (type) {
+      // 开始发送文件
+      case VALID_SEND:
+        if ((filesize = file_size(filename)) < 0) {  // 文件不存在
+          sys_msg("文件(" + filename + ")不存在");
+          return;
+        }
+        if (!arrayp(cv_info[WAIT_POT])) cv_info[WAIT_POT] = ({});
+        if (filesize < MAX_SIZE) {
+          send = read_buffer(filename);
+          cv_info[WAIT_POT] += ({ send });
+        } else {
+          rate = 0;
+          do {
+            send = read_buffer(filename, rate, MAX_SIZE);
+            cv_info[WAIT_POT] += ({ send });
+            rate += MAX_SIZE;
+          } while (rate < filesize);
+        }
 
-				send_message(fd, CFLAG);
-				return;
-			// 未成功接收到的文件放入队列等待下次发送
-			case RESET_SEND :
-				if ( (filesize=file_size(filename)) < 0 ) 
-				{ // 文件不存在
-					sys_msg("文件("+filename+")不存在");
-					return;
-				}
-				if ( !arrayp(cv_info[WAIT_FILE]) ) cv_info[WAIT_FILE] = ({ });
-				if ( member_array(filename, cv_info[WAIT_FILE]) == -1 ) 
-					cv_info[WAIT_FILE] += ({ filename });
-				// 检查如果已停止了发送，则继续发送未成功完成的
-				cv_info[WAIT_POT] -= ({ 0 });
-				if ( !(sizeof(cv_info[WAIT_POT])) ) 
-					send_read_callback(fd, sprintf(REPLY_MESSAGE, FINISH, "reset"));
-				return;
-			// 上个文件已成功发送，继续发送下个文件
-			case FINISH :
-				if ( filename != "reset" ) cv_info[FINISH_FILE]++;
-				if ( cv_info[FINISH_FILE] <= cv_info[MAX_FILE] )
-				{
-					show = "完成度("HIY+(cv_info[FINISH_FILE]*100/cv_info[MAX_FILE])+"%"+HIW")："HIG + 
-						cv_info[FINISH_FILE]+HIY" / "HIC+cv_info[MAX_FILE];
-					sys_msg(show);
-					if ( cv_info[FINISH_FILE] == cv_info[MAX_FILE] )
-					{ // 全部发送完成，发送一条信息通知
-						send = sprintf(VALID_CHECK, show, cv_info[PASS], "out", 0, 5);
-						cv_info[WAIT_POT] += ({ send });
-						send_message(fd, CFLAG);
+        if (filesize > MAX_SHOW_RATE)
+          sys_msg("发送文件 " HIC + filename + HIW " (" HIY + filesize + "字节" HIW ")");
 
-						if ( !mapp(cv_info) ) cv_info = ([ ]);
-						if ( !arrayp(cv_info[WAIT_FILE]) ) cv_info[WAIT_FILE] = ({ });
+        send_message(fd, CFLAG);
+        return;
+        // 未成功接收到的文件放入队列等待下次发送
+      case RESET_SEND:
+        if ((filesize = file_size(filename)) < 0) {  // 文件不存在
+          sys_msg("文件(" + filename + ")不存在");
+          return;
+        }
+        if (!arrayp(cv_info[WAIT_FILE])) cv_info[WAIT_FILE] = ({});
+        if (member_array(filename, cv_info[WAIT_FILE]) == -1)
+          cv_info[WAIT_FILE] += ({ filename });
+        // 检查如果已停止了发送，则继续发送未成功完成的
+        cv_info[WAIT_POT] -= ({ 0 });
+        if (!(sizeof(cv_info[WAIT_POT])))
+          send_read_callback(fd, sprintf(REPLY_MESSAGE, FINISH, "reset"));
+        return;
+        // 上个文件已成功发送，继续发送下个文件
+      case FINISH:
+        if (filename != "reset") cv_info[FINISH_FILE]++;
+        if (cv_info[FINISH_FILE] <= cv_info[MAX_FILE]) {
+          show = "完成度(" HIY + (cv_info[FINISH_FILE] * 100 / cv_info[MAX_FILE]) + "%" + HIW ")：" HIG + cv_info[FINISH_FILE] + HIY " / " HIC + cv_info[MAX_FILE];
+          sys_msg(show);
+          if (cv_info[FINISH_FILE] == cv_info[MAX_FILE]) {  // 全部发送完成，发送一条信息通知
+            send = sprintf(VALID_CHECK, show, cv_info[PASS], "out", 0, 5);
+            cv_info[WAIT_POT] += ({ send });
+            send_message(fd, CFLAG);
 
-						cv_info[WAIT_FILE] -= ({ 0 });
+            if (!mapp(cv_info)) cv_info = ([]);
+            if (!arrayp(cv_info[WAIT_FILE])) cv_info[WAIT_FILE] = ({});
 
-						if ( sizeof(cv_info[WAIT_FILE]) && filename != "reset" ) 
-							sys_msg(HIR"发生错误，缓冲区还有文件未成功发送");
-						return;
-					}
-				}
+            cv_info[WAIT_FILE] -= ({ 0 });
 
-				if ( !mapp(cv_info) ) return;
-				if ( !arrayp(cv_info[WAIT_FILE]) ) return;
+            if (sizeof(cv_info[WAIT_FILE]) && filename != "reset")
+              sys_msg(HIR "发生错误，缓冲区还有文件未成功发送");
+            return;
+          }
+        }
 
-				cv_info[WAIT_FILE] -= ({ 0 });
+        if (!mapp(cv_info)) return;
+        if (!arrayp(cv_info[WAIT_FILE])) return;
 
-				if ( !(max=sizeof(cv_info[WAIT_FILE])) ) return;
-				
-				for ( i=0; i<max; i++ )
-				{
-					send = cv_info[WAIT_FILE][i];
+        cv_info[WAIT_FILE] -= ({ 0 });
 
-					if ( !stringp(send) && !bufferp(send) )
-					{ // 无效的文件名
-						cv_info[WAIT_FILE][i] = 0;
-						continue;
-					}
-					if ( (filesize=file_size(send)) < 0 )
-					{ // 没有这个文件
-						cv_info[WAIT_FILE][i] = 0;
-						continue;
-					}
-					//____________________更新状态信息__________________
-					cv_info[FILE_NAME] = send;
-					cv_info[FILE_SIZE] = filesize;
-					cv_info[TYPE] = BINARY;
-					show = "完成度("HIY+(cv_info[FINISH_FILE]*100/cv_info[MAX_FILE])+"%"+HIW")："HIG + 
-						cv_info[FINISH_FILE]+HIY" / "HIC+cv_info[MAX_FILE];
-					cv_info[BUFFER] = sprintf(VALID_CHECK, show, cv_info[PASS], send, filesize, cv_info[TYPE]);
-					//_____________________发送信息_____________________
-					cv_info[WAIT_POT] += ({ cv_info[BUFFER] });
-					cv_info[WAIT_FILE][i] = 0;
-					break;
-				}
-				send_message(fd, CFLAG);
-				return;
-			// 其他
-			default:
-				return;
-		}
-	} 
-	else if ( sscanf(msg, SHOW_MESSAGE, type, filename) == 2 )
-	{
-		cv_info[VALID] = 1;
+        if (!(max = sizeof(cv_info[WAIT_FILE]))) return;
 
-		switch ( type )
-		{
-			// 状态显示信息
-			case SHOW_SEND :
-				sys_msg(filename);
-				return;
-			// 其他
-			default:
-				return;
-		}
-	}
+        for (i = 0; i < max; i++) {
+          send = cv_info[WAIT_FILE][i];
+
+          if (!stringp(send) && !bufferp(send)) {  // 无效的文件名
+            cv_info[WAIT_FILE][i] = 0;
+            continue;
+          }
+          if ((filesize = file_size(send)) < 0) {  // 没有这个文件
+            cv_info[WAIT_FILE][i] = 0;
+            continue;
+          }
+          //____________________更新状态信息__________________
+          cv_info[FILE_NAME] = send;
+          cv_info[FILE_SIZE] = filesize;
+          cv_info[TYPE] = BINARY;
+          show = "完成度(" HIY + (cv_info[FINISH_FILE] * 100 / cv_info[MAX_FILE]) + "%" + HIW ")：" HIG + cv_info[FINISH_FILE] + HIY " / " HIC + cv_info[MAX_FILE];
+          cv_info[BUFFER] = sprintf(
+            VALID_CHECK,
+            show,
+            cv_info[PASS],
+            send,
+            filesize,
+            cv_info[TYPE]
+          );
+          //_____________________发送信息_____________________
+          cv_info[WAIT_POT] += ({ cv_info[BUFFER] });
+          cv_info[WAIT_FILE][i] = 0;
+          break;
+        }
+        send_message(fd, CFLAG);
+        return;
+        // 其他
+      default:
+        return;
+    }
+  } else if (sscanf(msg, SHOW_MESSAGE, type, filename) == 2) {
+    cv_info[VALID] = 1;
+
+    switch (type) {
+      // 状态显示信息
+      case SHOW_SEND:
+        sys_msg(filename);
+        return;
+        // 其他
+      default:
+        return;
+    }
+  }
 }
 
-protected void send_write_callback(int fd, mixed mess)
-{
-	cv_info[WAIT_POT] += ({ cv_info[BUFFER] });
-	send_message(fd, CFLAG);
+protected void send_write_callback(int fd, mixed mess) {
+  cv_info[WAIT_POT] += ({ cv_info[BUFFER] });
+  send_message(fd, CFLAG);
 }
 
-protected void send_close_callback(int fd)
-{
-	if ( fd > -1 ) 
-	{
-		socket_close(fd);
-		sys_msg("客户端套接字( "+fd+" )断开连接");
-	}
-	
-	cfd = -1;
-	cv_info = ([ ]);
+protected void send_close_callback(int fd) {
+  if (fd > -1) {
+    socket_close(fd);
+    sys_msg("客户端套接字( " + fd + " )断开连接");
+  }
+
+  cfd = -1;
+  cv_info = ([]);
 }
 
-protected int send_to_remote(int fd, mixed mess, int flag)
-{	
-	switch ( socket_write(fd, mess) )
-	{
-		// 发送成功了
-		case EESUCCESS:
-		case EECALLBACK:
-			return 1;
-		// 发送数据阻塞
-		case EEWOULDBLOCK:
-			return 0;
-		default:
-			// 发送过程中出现错误
-			return -1;
-	}
+protected int send_to_remote(int fd, mixed mess, int flag) {
+  switch (socket_write(fd, mess)) {
+    // 发送成功了
+    case EESUCCESS:
+    case EECALLBACK:
+      return 1;
+      // 发送数据阻塞
+    case EEWOULDBLOCK:
+      return 0;
+    default:
+      // 发送过程中出现错误
+      return -1;
+  }
 }
 
-protected void send_message(int fd, int flag)
-{
-	mixed send;
-	int i, max, type;
+protected void send_message(int fd, int flag) {
+  mixed send;
+  int i, max, type;
 
-	switch ( flag )
-	{
-		// 客户端处理
-		case CFLAG :
-			if ( !mapp(cv_info) ) return;
-			if ( !arrayp(cv_info[WAIT_POT]) ) return;
+  switch (flag) {
+    // 客户端处理
+    case CFLAG:
+      if (!mapp(cv_info)) return;
+      if (!arrayp(cv_info[WAIT_POT])) return;
 
-			cv_info[WAIT_POT] -= ({ 0 });
+      cv_info[WAIT_POT] -= ({ 0 });
 
-			if ( !(max=sizeof(cv_info[WAIT_POT])) ) return;
-			
-			for ( i=0; i<max; i++ )
-			{
-				send = cv_info[WAIT_POT][i];
+      if (!(max = sizeof(cv_info[WAIT_POT]))) return;
 
-				if ( !stringp(send) && !bufferp(send) )
-				{ // 未知数据类型
-					cv_info[WAIT_POT][i] = 0;
-					continue;
-				}
-				if ( !(type=send_to_remote(fd, send, flag)) )
-				{ // 信息阻塞，重新发送
-					call_out("send_message", 0, fd, flag);
-					return;
-				}
-				if ( type == -1 ) 
-				{
-					sys_msg(HIY"发送过程中出现错误");
-					send_close_callback(fd);
-					return;
-				}
-				if ( bufferp(cv_info[WAIT_POT][i]) 
-					&& cv_info[FILE_SIZE] > MAX_SHOW_RATE )
-				{ // 较大文件显示发送进度
-					cv_info[FILE_POS] += sizeof(cv_info[WAIT_POT][i]);
-					cv_info[RATE] += sizeof(cv_info[WAIT_POT][i]);
-					if ( cv_info[RATE]/(cv_info[FILE_SIZE]/100) > RATE_SHOW 
-						|| cv_info[FILE_POS] == cv_info[FILE_SIZE] )
-					{
-						cv_info[RATE] = 0;
-						sys_msg("发送进度 "HIG+cv_info[FILE_POS]+" 字节 "HIW"("HIM+(cv_info[FILE_POS]*10/(cv_info[FILE_SIZE]/10))+"%"HIW")");
-					}
-				}
-				else
-				{ // 不是文件内容，重置发送进度参数
-					cv_info[RATE] = 0;
-					cv_info[FILE_POS] = 0;
-				}
+      for (i = 0; i < max; i++) {
+        send = cv_info[WAIT_POT][i];
 
-				cv_info[WAIT_POT][i] = 0;
-				break;
-			}
+        if (!stringp(send) && !bufferp(send)) {  // 未知数据类型
+          cv_info[WAIT_POT][i] = 0;
+          continue;
+        }
+        if (!(type = send_to_remote(fd, send, flag))) {  // 信息阻塞，重新发送
+          call_out("send_message", 0, fd, flag);
+          return;
+        }
+        if (type == -1) {
+          sys_msg(HIY "发送过程中出现错误");
+          send_close_callback(fd);
+          return;
+        }
+        if (bufferp(cv_info[WAIT_POT][i])
+          && cv_info[FILE_SIZE] > MAX_SHOW_RATE) {  // 较大文件显示发送进度
+          cv_info[FILE_POS] += sizeof(cv_info[WAIT_POT][i]);
+          cv_info[RATE] += sizeof(cv_info[WAIT_POT][i]);
+          if (cv_info[RATE] / (cv_info[FILE_SIZE] / 100) > RATE_SHOW
+            || cv_info[FILE_POS] == cv_info[FILE_SIZE]) {
+            cv_info[RATE] = 0;
+            sys_msg("发送进度 " HIG + cv_info[FILE_POS] + " 字节 " HIW "(" HIM + (cv_info[FILE_POS] * 10 / (cv_info[FILE_SIZE] / 10)) + "%" HIW ")");
+          }
+        } else {  // 不是文件内容，重置发送进度参数
+          cv_info[RATE] = 0;
+          cv_info[FILE_POS] = 0;
+        }
 
-			send_message(fd, flag);
-			return;
-		// 服务端处理
-		case SFLAG :			
-			if ( !mapp(sv_info) ) return;
-			if ( !mapp(sv_info[fd]) ) return;
-			if ( !arrayp(sv_info[fd][WAIT_FILE]) ) return;
+        cv_info[WAIT_POT][i] = 0;
+        break;
+      }
 
-			sv_info[fd][WAIT_FILE] -= ({ 0 });
+      send_message(fd, flag);
+      return;
+      // 服务端处理
+    case SFLAG:
+      if (!mapp(sv_info)) return;
+      if (!mapp(sv_info[fd])) return;
+      if (!arrayp(sv_info[fd][WAIT_FILE])) return;
 
-			if ( !(max=sizeof(sv_info[fd][WAIT_FILE])) ) return;
-			
-			for ( i=0; i<max; i++ )
-			{
-				send = sv_info[fd][WAIT_FILE][i];
+      sv_info[fd][WAIT_FILE] -= ({ 0 });
 
-				if ( !stringp(send) && !bufferp(send) )
-				{ // 未知数据类型
-					sv_info[fd][WAIT_FILE][i] = 0;
-					continue;
-				}
-				if ( !(type=send_to_remote(fd, send, flag)) )
-				{ // 信息阻塞，重新发送
-					call_out("send_message", 0, fd, flag);
-					return;
-				}
-				if ( type == -1 ) 
-				{
-					sys_msg(HIY"发送过程中出现错误");
-					in_close_callback(fd);
-					return;
-				}
+      if (!(max = sizeof(sv_info[fd][WAIT_FILE]))) return;
 
-				sv_info[fd][WAIT_FILE][i] = 0;
-				break;
-			}
+      for (i = 0; i < max; i++) {
+        send = sv_info[fd][WAIT_FILE][i];
 
-			send_message(fd, flag);
-			return;
-		// 其他
-		default:
-	}
+        if (!stringp(send) && !bufferp(send)) {  // 未知数据类型
+          sv_info[fd][WAIT_FILE][i] = 0;
+          continue;
+        }
+        if (!(type = send_to_remote(fd, send, flag))) {  // 信息阻塞，重新发送
+          call_out("send_message", 0, fd, flag);
+          return;
+        }
+        if (type == -1) {
+          sys_msg(HIY "发送过程中出现错误");
+          in_close_callback(fd);
+          return;
+        }
+
+        sv_info[fd][WAIT_FILE][i] = 0;
+        break;
+      }
+
+      send_message(fd, flag);
+      return;
+      // 其他
+    default:
+  }
 }
 
-protected void send_dir(string ip, int port, string dir, string pass)
-{
-	mixed send, show;
-	int i, max, filesize;
+protected void send_dir(string ip, int port, string dir, string pass) {
+  mixed send, show;
+  int i, max, filesize;
 
-	if ( !get_file(dir, 1) ) return;
+  if (!get_file(dir, 1)) return;
 
-	cv_info[WAIT_FILE] -= ({ 0 });
+  cv_info[WAIT_FILE] -= ({ 0 });
 
-	if ( !(max = sizeof(cv_info[WAIT_FILE])) )
-	{
-		sys_msg("目录("HIY+dir+HIW")目录下没有任何文件");
-		return;
-	}
+  if (!(max = sizeof(cv_info[WAIT_FILE]))) {
+    sys_msg("目录(" HIY + dir + HIW ")目录下没有任何文件");
+    return;
+  }
 
-	cv_info[MAX_FILE] = max;
-	cv_info[FINISH_FILE] = 0;
+  cv_info[MAX_FILE] = max;
+  cv_info[FINISH_FILE] = 0;
 
-	for ( i=0; i<max; i++ )
-	{
-		send = cv_info[WAIT_FILE][i];
-		
-		if ( !stringp(send) && !bufferp(send) )
-		{ // 无效的文件名
-			cv_info[WAIT_FILE][i] = 0;
-			continue;
-		}
-		if ( (filesize=file_size(send)) < 0 )
-		{ // 没有这个文件
-			cv_info[WAIT_FILE][i] = 0;
-			continue;
-		}
-		//______________________________初始化参数___________________________
-		cv_info[IP] = ip;
-		cv_info[PORT] = port;
-		cv_info[FILE_NAME] = send;
-		cv_info[FILE_SIZE] = filesize;
-		cv_info[TYPE] = BINARY;
-		cv_info[PASS] = pass;
-		cv_info[VALID] = 0;
-		cv_info[RATE] = 0;
-		cv_info[FILE_POS] = 0;
-		show = "完成度("HIY+(cv_info[FINISH_FILE]*100/cv_info[MAX_FILE])+"%"+HIW")："HIG + 
-			cv_info[FINISH_FILE]+HIY" / "HIC+cv_info[MAX_FILE];
-		cv_info[BUFFER] = sprintf(VALID_CHECK, show, pass, send, filesize, cv_info[TYPE]);
-		cv_info[WAIT_FILE][i] = 0;
-		break;
-	}
-	
-	sys_msg("正在连接服务器("+cv_info[IP]+" "+cv_info[PORT]+")，请稍候...");
-	resolve(cv_info[IP], "resolve_callback");
+  for (i = 0; i < max; i++) {
+    send = cv_info[WAIT_FILE][i];
+
+    if (!stringp(send) && !bufferp(send)) {  // 无效的文件名
+      cv_info[WAIT_FILE][i] = 0;
+      continue;
+    }
+    if ((filesize = file_size(send)) < 0) {  // 没有这个文件
+      cv_info[WAIT_FILE][i] = 0;
+      continue;
+    }
+    //______________________________初始化参数___________________________
+    cv_info[IP] = ip;
+    cv_info[PORT] = port;
+    cv_info[FILE_NAME] = send;
+    cv_info[FILE_SIZE] = filesize;
+    cv_info[TYPE] = BINARY;
+    cv_info[PASS] = pass;
+    cv_info[VALID] = 0;
+    cv_info[RATE] = 0;
+    cv_info[FILE_POS] = 0;
+    show = "完成度(" HIY + (cv_info[FINISH_FILE] * 100 / cv_info[MAX_FILE]) + "%" + HIW ")：" HIG + cv_info[FINISH_FILE] + HIY " / " HIC + cv_info[MAX_FILE];
+    cv_info[BUFFER] = sprintf(VALID_CHECK, show, pass, send, filesize, cv_info[TYPE]);
+    cv_info[WAIT_FILE][i] = 0;
+    break;
+  }
+
+  sys_msg("正在连接服务器(" + cv_info[IP] + " " + cv_info[PORT] + ")，请稍候...");
+  resolve(cv_info[IP], "resolve_callback");
 }
 
-protected int get_file(string dir, int type)
-{
-	mixed *file;
-	int i, j;
-	
-	// 取得目录内文件
-	file = get_dir(dir, -1);
-	
-	if ( type )
-	{
-		if ( !sizeof(file) )
-		{ // 没有文件
-			if ( file_size(dir) == -2 ) sys_msg("目录("HIY+dir+HIW")是空的");
-			else sys_msg("没有这个目录("HIY+dir+HIW")");
-			return 0;
-		}
-		if ( cfd > -1 )
-		{ // 已有连接，则先清除
-			remove_call_out("send_message");
-			send_close_callback(cfd);
-			//必须初始化下面三个参数
-			cv_info = ([ ]);
-			cv_info[WAIT_POT] = ({ });
-			cv_info[WAIT_FILE] = ({ });
-		}
-	}
+protected int get_file(string dir, int type) {
+  mixed *file;
+  int i, j;
 
-	i = sizeof(file);
-	while ( i-- ) 
-	{ // 是子目录
-		if ( file[i][1]==-2 ) file[i][0] += "/";
-	}
-	
-	sys_msg(HIG"读入目录：" + dir);
+  // 取得目录内文件
+  file = get_dir(dir, -1);
 
-	if ( sizeof(file) )
-	{
-		for ( i=0, j = sizeof(file); i<j; i++ )
-		{
-			if ( file[i][1] > -1 ) 
-			{
-				cv_info[WAIT_FILE] += ({ (dir+file[i][0]) });
-				sys_msg(NOR"读入文件：" + dir+file[i][0]);
-			}
-			else if ( file[i][1] == -2 ) 
-				call_other(__FILE__, "get_file", dir+file[i][0], 0);
-		}
-	}
-	else
-		sys_msg(HIY"没有任何档案");
+  if (type) {
+    if (!sizeof(file)) {  // 没有文件
+      if (file_size(dir) == -2) sys_msg("目录(" HIY + dir + HIW ")是空的");
+      else sys_msg("没有这个目录(" HIY + dir + HIW ")");
+      return 0;
+    }
+    if (cfd > -1) {  // 已有连接，则先清除
+      remove_call_out("send_message");
+      send_close_callback(cfd);
+      //必须初始化下面三个参数
+      cv_info = ([]);
+      cv_info[WAIT_POT] = ({});
+      cv_info[WAIT_FILE] = ({});
+    }
+  }
 
-	return 1;
+  i = sizeof(file);
+  while (i--) {  // 是子目录
+    if (file[i][1] == -2) file[i][0] += "/";
+  }
+
+  sys_msg(HIG "读入目录：" + dir);
+
+  if (sizeof(file)) {
+    for (i = 0, j = sizeof(file); i < j; i++) {
+      if (file[i][1] > -1) {
+        cv_info[WAIT_FILE] += ({ (dir + file[i][0]) });
+        sys_msg(NOR "读入文件：" + dir + file[i][0]);
+      } else if (file[i][1] == -2)
+        call_other(__FILE__, "get_file", dir + file[i][0], 0);
+    }
+  } else
+    sys_msg(HIY "没有任何档案");
+
+  return 1;
 }
 
 // 析构函数
-void remove()
-{
-	int i, *fd;
+void remove() {
+  int i, *fd;
 
-	if ( mapp(sv_info) )
-	{
-		fd = keys(sv_info);
-		for ( i=0; i<sizeof(fd); i++ )
-		{
-			in_close_callback(fd[i]);
-		}
-	}
+  if (mapp(sv_info)) {
+    fd = keys(sv_info);
+    for (i = 0; i < sizeof(fd); i++) {
+      in_close_callback(fd[i]);
+    }
+  }
 
-	in_close_callback(vfd);
-	send_close_callback(cfd);
+  in_close_callback(vfd);
+  send_close_callback(cfd);
 }
 
-mapping get_info1()
-{
-	return sv_info;
+mapping get_info1() {
+  return sv_info;
 }
 
-mapping get_info2()
-{
-	return cv_info;
+mapping get_info2() {
+  return cv_info;
 }
