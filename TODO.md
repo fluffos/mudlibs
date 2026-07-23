@@ -17,8 +17,11 @@ worked; keep status values consistent so the table stays greppable:
   etc.; see AGENTS.md's non-mudlib list — skipped, not converted)
 
 Port assignments: sequential from 40001, recorded here so re-running
-several libs at once never collides. **Next free port: 40089** (40001-40088
-assigned; 40007 is ds386, deprioritized/partial). On mega-libs (tens of
+several libs at once never collides. **Next free port: 40095** (40001-40094
+assigned/reserved -- 40089-40094 are reserved for archives #97-103, the
+FINAL batch of the whole project, being processed in parallel by
+background agents as of this update; 40007 is ds386,
+deprioritized/partial). On mega-libs (tens of
 thousands of files, the "nitan" family), skip the full `lpcc_check.sh`
 sweep — it can OOM the host before finishing (see AGENTS.md §6b) — and
 rely on the boot + interactive-connect test as the verification gate.
