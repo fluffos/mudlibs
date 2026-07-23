@@ -1916,6 +1916,24 @@ reference with `__SAVE_EXTENSION__`. Cheap to grep for on any lib as part
 of the standard fix pass, same spirit as checking for `F_DBASE`/
 `F_UNIQUE`-style macro gaps.
 
+### 15ad. A non-fatal `versiond.lpc`/`socket_bind()` config-ID-mismatch error can appear harmlessly in `debug.log` on an otherwise clean boot — don't chase it if `version_ok` (or equivalent) is already set synchronously before the broken call fires
+
+Found on `yanhuangyingxiongshi` (archive #67): a `versiond.lpc`-family
+daemon's `create()` calls `socket_bind()` using a numeric config-ID that
+doesn't match this driver's `runtime_config.h` numbering (an old-MudOS
+convention drift, similar in spirit to §15r's `check_config.lpc` but
+without the fatal `error()` — this one just logs a socket error and
+moves on). Confirmed harmless by reading the surrounding code: the
+daemon's actual purpose (setting a `version_ok`/ready flag consumed by
+other code) already completes synchronously earlier in `create()`,
+before the broken `socket_bind()` call ever executes — so the daemon's
+real job is done regardless of whether the socket call itself succeeds.
+**Lesson**: one stray non-fatal error line in an otherwise clean boot log
+doesn't automatically need a fix — confirm what the surrounding code was
+actually trying to accomplish and whether it already succeeded before the
+line that errors, the same "read the actual code, don't just react to the
+log line" discipline used throughout this catalog.
+
 ---
 
 ## Per-archive gotchas index
