@@ -523,3 +523,62 @@ testing. Confirmed via `ss -tlnp`/`ps` after each kill that the port was
 actually freed and no stray process remained. Multiple other sibling
 agents' driver processes were observed running concurrently on this host
 throughout (archives #92-95) — none were touched.
+
+## Rebuilt-driver / formatter / WASM re-verification pass (2026-07-23)
+
+1. **LPC formatter** applied across all 7,509 `.lpc` files in `work/`:
+   `{"total":7509,"written":7454,"wouldChange":0,"unchanged":6,
+   "errors":49}`. Verified post-format `feature/command.lpc`'s
+   `command_hook` is still plain `nomask`. **Found and fixed the same
+   formatter bug discovered across this pass's other libs** (full
+   writeup in `tianxia/NOTES.md`): a bare `::fn(...)` call immediately
+   after `(` with no space is mis-lexed as a `(: ... :)` closure
+   literal. Hit once, in `adm/object/bm.lpc`'s `short()`:
+   `capitalize(::query("id"))` got rewritten to the syntactically broken
+   `capitalize (: : query("id")\n)\n+ ")"`. Hand-fixed back to
+   `return ::name(1) + "(" + capitalize(::query("id")) + ")";`.
+   Re-verified via a full `lpcc_check.sh` sweep: 7,306/7,508 pass (202
+   fail, matching the pre-format baseline below), `bm.lpc` not in the
+   failure log.
+2. **Native re-test against the rebuilt `build-debug/src/driver`**:
+   booted clean (zero fatal errors). Full registration verified
+   end-to-end via `mudclient.py` (this lib prompts for a GB/Big5
+   encoding choice before the ID prompt, first send `"g"`): id
+   `syxfmte` → confirm → real Chinese name **`秦风廿八`** → password ×2
+   → attribute roll (`0`/random) → accept → email `abc@abc.com` →
+   gender `m` → entered the game world at 随缘客栈, `look` displayed the
+   room (correctly re-shown), `score` showed a correctly-populated
+   character card matching registration, `quit` dropped items and
+   printed "欢迎下次再来！". `debug.log`: zero `error in error
+   handler`/`denied`/`undefined function`/`bad argument` lines. No new
+   fixes needed; the reformatted source is still fully sound.
+3. **WASM test**: boots cleanly through `Initializations complete`
+   (only the expected missing-sockets-package compile errors for
+   `ftpd`/`httpd`/`emaild`). **A real registration playthrough could not
+   be driven through this specific harness**, for a reason distinct from
+   the documented `query_ip_number()` limitation: `cmds/usr/uptime.lpc`'s
+   `main()` does `write(read_file("/log/static/LASTCRASH"))` with no
+   type-check on `read_file()`'s return, called from `logind.lpc`'s
+   `login()` on every new connection to print the "上次当机原因" banner
+   line. `scripts/wasm_client.js` deliberately does not copy the
+   *contents* of `work/log/` into the wasm instance's in-memory FS (see
+   the script's own comment — avoids wasting time/memory on runtime-churn
+   log files), so `/log/static/LASTCRASH` — a legitimate small reference
+   file, not actually churn — doesn't exist there, `read_file()` returns
+   `0`, and `write(0)` throws `Bad argument 1 to receive()` uncaught
+   mid-`login()`. Because this happens before `login()` reaches the code
+   that prints the ID prompt and registers `input_to()`, the connection
+   is left with no input handler at all — every subsequent line sent
+   just falls through to the ordinary (empty-environment) command parser
+   ("What?") instead of being treated as an ID/name/password answer.
+   **Assessment**: this is a wasm-harness/no-persistent-log-data
+   interaction, not a mudlib bug in the sense of "broken on a real
+   server" (the archive ships `LASTCRASH`, and the native session above
+   is proof registration works perfectly there) — but it is a genuine
+   latent fragility (`write(read_file(x))` with no string-type guard)
+   that would reproduce identically on ANY from-scratch deployment
+   lacking pre-existing `/log/static/LASTCRASH` data (e.g. a real
+   from-scratch browser/wasm deployment with no prior log history), so
+   it's worth flagging even though it isn't the already-catalogued
+   `query_ip_number()` limitation. Not patched, per the task's "note,
+   don't force a fix for wasm-specific gaps" guidance.
