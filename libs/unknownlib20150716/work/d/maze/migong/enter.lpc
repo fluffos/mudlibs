@@ -2,163 +2,148 @@
 #include <ansi.h>
 inherit ITEM;
 
-void create()
-{
-	set_name("长平迷宫券",({"changping quan","quan","seal"}));
-        set("long","进入(enter)长平迷宫的道具。\n");
-        set_weight(1);
-        set("unit","张");
-        set("value",500000);
-        set("no_sell",1);
-        setup();
+void create() {
+  set_name("长平迷宫券", ({ "changping quan", "quan", "seal" }));
+  set("long", "进入(enter)长平迷宫的道具。\n");
+  set_weight(1);
+  set("unit", "张");
+  set("value", 500000);
+  set("no_sell", 1);
+  setup();
 }
 
-void init()
-{
-	add_action("do_enter","enter");
+void init() {
+  add_action("do_enter", "enter");
 }
 
-string query_today()
-{
-	mixed *local;
-	local = localtime(time());      
-	return sprintf("%d年%d月%d日",local[5],local[4],local[3]);
-}		
-
-int have_player(object who)
-{
-	int i;
-	object *inv;
-	if( !who )
-		return 0;
-	inv = all_inventory(who);
-	for(i=0;i<sizeof(inv);i++) 
-	{
-		if(userp(inv[i])) 
-			return 1; 	
-	}
-	return 0;		
+string query_today() {
+  mixed *local;
+  local = localtime(time());
+  return sprintf("%d年%d月%d日", local[5], local[4], local[3]);
 }
 
-void dest_ob()
-{
-	if( !environment() )
-		return;
-	destruct(this_object());
-}	
-
-int is_first_enter(object who)
-{
-	string str1,str2,temp,d1,d2,tmp;
-	int t,tt;
-	if( !who )
-		return 0;
-	if( !intp(t=who->query("Migong/mud_time")) 
-	 || t<1 )
-	 	return 1;
-	tt = time();
-	str1 = CHINESE_D->chinese_date(t);
-	str2 = CHINESE_D->chinese_date(tt);
-	if( wizardp(who) )
-		tell_object(who,"str1 = "+str1+" str2= "+str2+"\n");
-	sscanf(str1,"%s月%s日%s",temp,d1,tmp);
-	sscanf(str2,"%s月%s日%s",temp,d2,tmp);
-	if( wizardp(who) )
-		tell_object(who,"str1 = "+d1+" str2= "+d2+"\n");
-	return d1!=d2;	
-} 		
-
-void get_input(string arg, object me)
-{
-	object room;
-	int v;
-	string an;
-	if( !me )
-		return;
-	if( !environment() || !present(this_object(),me)
-	 || !living(me) )
-	{
-		me->delete_temp("MG_quest");
-		remove_call_out("dest_ob");
-		call_out("dest_ob",1);
-		return;
-	}
-	if( !stringp(an=me->query_temp("MG_quest"))
-	 || strlen(an)<2 )
-	{
-		remove_call_out("dest_ob");
-		call_out("dest_ob",1);
-		return;
-	}
-	if( !arg )
-	{
-		tell_object(me,HIR"请输入验证文字："NOR);
-		input_to("get_input",me);
-		return;
-	}
-	if( arg!=an )
-	{
-		me->delete_temp("MG_quest");
-		tell_object(me,HIR"输入错误，验证码为"HIY+an+HIR"，你输入的是"HIY+arg+HIR"。"NOR"\n");
-		return;
-	}
-	if( intp(v=me->query("Migong/clear_num")) 
-	 && v>0 )
-	 	v++;
-	else	v = 1;	
-	if( is_first_enter(me) )
-		v = 1;
-	if( objectp(room=me->query("Migong/Room")) ) 
-		REMOVE_D->remove_room(room);
-	room = clone_object("/d/maze/migong/room.lpc");
-	room->set_owner(me);
-	room->set("num",v);
-	if( !room->init_guai(me) )
-	{
-		destruct(room);
-		me->delete_temp("MG_quest");
-		write(HIR"\n耳边忽地传来一阵令人心烦的哭声，你有点疑神疑鬼。。。。\n\n"NOR);
-		return;
-	}
-	message_vision("\n\n"NOR HBRED HIY"你进入长平副本！"NOR"\n\n",me);
-	me->move(room);
-	me->set("Migong/mud_time",time());
-	me->set("Migong/Room",room);
-	REMOVE_D->add_room(room,3600);
-	if( room->query("guai") )
-	{
-		(room->query("guai"))->kill_ob(me);
-		me->fight_ob(room->query("guai"));
-	}
-	remove_call_out("dest_ob");
-	call_out("dest_ob",1);
-	return;
+int have_player(object who) {
+  int i;
+  object *inv;
+  if (!who)
+    return 0;
+  inv = all_inventory(who);
+  for (i = 0; i < sizeof(inv); i++) {
+    if (userp(inv[i]))
+      return 1;
+  }
+  return 0;
 }
 
-int do_enter()
-{
-	mapping ns;
-	string msg,quest,answer,color;
-	object me=this_player();
+void dest_ob() {
+  if (!environment())
+    return;
+  destruct(this_object());
+}
 
-	if( !userp(me) || !living(me) 
-	 || !present(this_object(),me) )
-		return 0;
-	if( environment(me)->query("virtual_room") )
-		return notify_fail("副本中不能使用。\n");
-	if( have_player(me) )
-		return notify_fail("你背着人，准备去哪里？\n");				
-	if( me->query("Migong/last_enter")==query_today() )
-		return notify_fail("你今天已经失败了。\n");
-	color = ({ HIC,HIR,HIM,HIY,HIG,HIW,HIB,CYN,RED,MAG,YEL,GRN,WHT,BLU, })[random(14)];		
-	ns = NAME_D->random_name2(1, 1, 0, 0, 0);
-	answer = ns["name"];
-	answer = sprintf("%s",answer[2..5]);
-	quest = CODE_D->Display(answer,26," "," ",REV+color,BLK);
-	me->set_temp("MG_quest",answer);
-	write(CLR);
-	write("\n"+quest+"\n");
-	write(HIR"请输入上面列出的验证文字："NOR);
-	input_to("get_input",me);
-	return 1;
+int is_first_enter(object who) {
+  string str1, str2, temp, d1, d2, tmp;
+  int t, tt;
+  if (!who)
+    return 0;
+  if (!intp(t = who->query("Migong/mud_time"))
+    || t < 1)
+    return 1;
+  tt = time();
+  str1 = CHINESE_D->chinese_date(t);
+  str2 = CHINESE_D->chinese_date(tt);
+  if (wizardp(who))
+    tell_object(who, "str1 = " + str1 + " str2= " + str2 + "\n");
+  sscanf(str1, "%s月%s日%s", temp, d1, tmp);
+  sscanf(str2, "%s月%s日%s", temp, d2, tmp);
+  if (wizardp(who))
+    tell_object(who, "str1 = " + d1 + " str2= " + d2 + "\n");
+  return d1 != d2;
+}
+
+void get_input(string arg, object me) {
+  object room;
+  int v;
+  string an;
+  if (!me)
+    return;
+  if (!environment() || !present(this_object(), me)
+    || !living(me)) {
+    me->delete_temp("MG_quest");
+    remove_call_out("dest_ob");
+    call_out("dest_ob", 1);
+    return;
+  }
+  if (!stringp(an = me->query_temp("MG_quest"))
+    || strlen(an) < 2) {
+    remove_call_out("dest_ob");
+    call_out("dest_ob", 1);
+    return;
+  }
+  if (!arg) {
+    tell_object(me, HIR "请输入验证文字：" NOR);
+    input_to("get_input", me);
+    return;
+  }
+  if (arg != an) {
+    me->delete_temp("MG_quest");
+    tell_object(me, HIR "输入错误，验证码为" HIY + an + HIR "，你输入的是" HIY + arg + HIR "。" NOR "\n");
+    return;
+  }
+  if (intp(v = me->query("Migong/clear_num"))
+    && v > 0)
+    v++;
+  else v = 1;
+  if (is_first_enter(me))
+    v = 1;
+  if (objectp(room = me->query("Migong/Room")))
+    REMOVE_D->remove_room(room);
+  room = clone_object("/d/maze/migong/room.lpc");
+  room->set_owner(me);
+  room->set("num", v);
+  if (!room->init_guai(me)) {
+    destruct(room);
+    me->delete_temp("MG_quest");
+    write(HIR "\n耳边忽地传来一阵令人心烦的哭声，你有点疑神疑鬼。。。。\n\n" NOR);
+    return;
+  }
+  message_vision("\n\n" NOR HBRED HIY "你进入长平副本！" NOR "\n\n", me);
+  me->move(room);
+  me->set("Migong/mud_time", time());
+  me->set("Migong/Room", room);
+  REMOVE_D->add_room(room, 3600);
+  if (room->query("guai")) {
+    (room->query("guai"))->kill_ob(me);
+    me->fight_ob(room->query("guai"));
+  }
+  remove_call_out("dest_ob");
+  call_out("dest_ob", 1);
+  return;
+}
+
+int do_enter() {
+  mapping ns;
+  string msg, quest, answer, color;
+  object me = this_player();
+
+  if (!userp(me) || !living(me)
+    || !present(this_object(), me))
+    return 0;
+  if (environment(me)->query("virtual_room"))
+    return notify_fail("副本中不能使用。\n");
+  if (have_player(me))
+    return notify_fail("你背着人，准备去哪里？\n");
+  if (me->query("Migong/last_enter") == query_today())
+    return notify_fail("你今天已经失败了。\n");
+  color = ({ HIC, HIR, HIM, HIY, HIG, HIW, HIB, CYN, RED, MAG, YEL, GRN, WHT, BLU, })[random(14)];
+  ns = NAME_D->random_name2(1, 1, 0, 0, 0);
+  answer = ns["name"];
+  answer = sprintf("%s", answer[2..5]);
+  quest = CODE_D->Display(answer, 26, " ", " ", REV + color, BLK);
+  me->set_temp("MG_quest", answer);
+  write(CLR);
+  write("\n" + quest + "\n");
+  write(HIR "请输入上面列出的验证文字：" NOR);
+  input_to("get_input", me);
+  return 1;
 }

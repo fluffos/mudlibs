@@ -4,748 +4,716 @@
 #include <weapon.h>
 #include <combat.h>
 #include <dbase.h>
-inherit EQUIP; 
+inherit EQUIP;
 inherit F_SAVE;
 
 varargs int update_combination(string type);
 
-string query_name(){return "特殊武器(+激发)";}
+string query_name() { return "特殊武器(+激发)"; }
 
-string query_save_file()
-{
-	string name;
-	if( !query("owner_id") || !stringp(query("owner_id")) )
-        	return 0;
-        name = this_object()->name();
-        if( !name || !stringp(name) )
-        	return 0;
-        name = COLOR_D->clean_color(name);
-    	return sprintf("/data/equip/%c/%s/%s_%d_%s", query("owner_id")[0],query("owner_id"),query("skill_type"),query("valid_time"),name);
+string query_save_file() {
+  string name;
+  if (!query("owner_id") || !stringp(query("owner_id")))
+    return 0;
+  name = this_object()->name();
+  if (!name || !stringp(name))
+    return 0;
+  name = COLOR_D->clean_color(name);
+  return sprintf(
+    "/data/equip/%c/%s/%s_%d_%s",
+    query("owner_id")[0],
+    query("owner_id"),
+    query("skill_type"),
+    query("valid_time"),
+    name
+  );
 }
 
-void leave()
-{
-	remove_call_out("leave");
-	write("\n"+this_object()->name()+HIY"化作一道金光冲天而去。\n\n"NOR);
-	destruct(this_object());
+void leave() {
+  remove_call_out("leave");
+  write("\n" + this_object()->name() + HIY "化作一道金光冲天而去。\n\n" NOR);
+  destruct(this_object());
 }
 
-void _leave()
-{
-	call_out("leave",2+random(5));
-}               
-
-void check_owner()
-{
-	object env = environment();
-	if( env )
-	{
-	    	if( !userp(env) )
-                	_leave();
-            	if( query("owner_id") && query("owner_id")!=env->query("id") )
-                	_leave();                       
-	}         
+void _leave() {
+  call_out("leave", 2 + random(5));
 }
 
-int err_msgs(string arg)
-{
-	write(arg);
-    	return 0;
+void check_owner() {
+  object env = environment();
+  if (env) {
+    if (!userp(env))
+      _leave();
+    if (query("owner_id") && query("owner_id") != env->query("id"))
+      _leave();
+  }
 }
 
-int to_save()
-{
-	int t;
-	string type,name;
-	mixed *ar;
-	object me = environment();
-	if( !me || !query("owner_id") 
-	 || me->query("id")!=query("owner_id") || query("no_save") )
-		return 0;
-	if( me->is_busy() )
-		return err_msgs("你正忙着。\n");
-	if( !type=query("skill_type") )
-		return 0;		
-	if( query("equipped") )
-		return err_msgs("你必须先将"+this_object()->query("name")+"卸下。\n");
-	if( (me->query("potential")-me->query("learned_points"))<500 )   
-		return err_msgs("你的潜能不够,无法保存法宝。\n");
-	me->start_busy(1); 		
-	t = time();
-	set("valid_time",t);
-	ar = me->query("euqips");
-	if( !ar || !arrayp(ar) || sizeof(ar)<1 )
-		ar = ({});
-	ar-= ({0});	
-	if( save() )
-	{
-		set("no_give",1);
-        	me->add("potential",-500);
-        	name = this_object()->name();
-        	if( !name || !stringp(name) )
-        		name = "无名";
-        	name = COLOR_D->clean_color(name);
-        	ar+= ({type+"_"+t+"_"+name});
-		me->set("euqips",ar);
-		me->save(1);
-		tell_object(me,HIY"【系统】"+this_object()->name()+HIY"绑定成功，如果消失，你可以通过 zhaohuan 命令来重新获得。"NOR"\n");
-        	return 1;
-	}
-	return 0;
-}        
-
-string _query_dest_name(mapping pro)
-{
-	string cls,name = pro["name"];
-        if( !undefinedp(pro["weapon_title"]) )
-                name = pro["weapon_title"]+"之"+name;
-	if( !undefinedp(pro["weapon_color"]) )
-	{
-                if( pro["weapon_color"]=="HIM" )
-		{
-			if( undefinedp(pro["level"]) ) 
-				name = "(鬼)"+name;
-			else if( pro["level"]<30 )
-				name = "(鬼)"+name;
-			else if( undefinedp(pro["class"]) )
-				name = "(灵)"+name;
-			else if( !stringp(cls = pro["class"]) )
-				name = "(灵)"+name;
-			else
-			{
-				switch(cls)
-				{
-					case "shen" : 
-					case "dragon" :
-					case "fighter" :
-					case "xian" : name = "(仙)"+name;break;
-					case "youling" :
-					case "ghost" : name = "(鬼)"+name;break;
-					case "seng"  :
-					case "bonze" : name = "(佛)"+name;break;
-					case "taoist": name = "(道)"+name;break;
-					case "scholar" : name = "(儒)"+name;break;
-					case "dancer" : name = "(魅)"+name;break;
-					case "yaomo" : name = "(妖)"+name;break;
-					case "tianmo" : name = "(魔)"+name;break;
-					default : name = "(灵)"+name;break;
-				}
-			}	
-		}
-	}
-	return name;
+int err_msgs(string arg) {
+  write(arg);
+  return 0;
 }
 
-void dest_com(string arg, object me)
-{
-	mixed *ar,*com_ar,*types;
-	string type,other,*others;
-	mapping pro;
-	int i;
-	if( !me || !living(me)
-	 || !present(this_object(),me) )
-	 	return;
-	if( !arg )
-	{
-		write("\n"+name()+HIR"是组合武器，你确定要注销它吗？"HIY"(Y/N)："NOR);
-		input_to("dest_com",me);
-		return;
-	}
-	arg = sprintf("%c",arg[0]);
-	if( arg!="Y" && arg!="y" )
-	{
-		if( arg=="N" || arg=="n" )
-			return;
-		else
-		{
-			write("\n"+name()+HIR"是组合武器，你确定要注销它吗？"HIY"(Y/N)："NOR);
-			input_to("dest_com",me);
-			return;
-		}	
-	}		
-	if( !arrayp(ar=me->query("euqips"))
-	 || sizeof(ar)<1 )
-		return;
-	if( !arrayp(types=query("skill_types")) 
-	 || sizeof(types)<1 )
-	 	return;		
-	if( !arrayp(com_ar=me->query("combination_euqips"))
-	 || sizeof(com_ar)<1 )
-		com_ar = ({});
-	type = sprintf("%s_%d_%s",query("skill_type"),query("valid_time"),this_object()->name());
-	type = COLOR_D->clean_color(type);
-	
-	others = ({});
-	for(i=0;i<sizeof(types);i++)
-	{
-		if( types[i]==query("skill_type") )
-			continue;
-		if( !mapp(pro = query("combination_dbase/"+types[i]))
-		 || sizeof(pro)<1 )
-		 	break;
-		other = sprintf("%s_%d_%s",types[i],pro["valid_time"],_query_dest_name(pro));
-		others+= ({other});
-	}
-	
-	seteuid(getuid());
-        if( !rm(query_save_file()+ __SAVE_EXTENSION__) )
-        {
-        	tell_object(me,HIR"注销失败。\n"NOR);
-        	return;
+int to_save() {
+  int t;
+  string type, name;
+  mixed *ar;
+  object me = environment();
+  if (!me || !query("owner_id")
+    || me->query("id") != query("owner_id") || query("no_save"))
+    return 0;
+  if (me->is_busy())
+    return err_msgs("你正忙着。\n");
+  if (!type = query("skill_type"))
+    return 0;
+  if (query("equipped"))
+    return err_msgs("你必须先将" + this_object()->query("name") + "卸下。\n");
+  if ((me->query("potential") - me->query("learned_points")) < 500)
+    return err_msgs("你的潜能不够,无法保存法宝。\n");
+  me->start_busy(1);
+  t = time();
+  set("valid_time", t);
+  ar = me->query("euqips");
+  if (!ar || !arrayp(ar) || sizeof(ar) < 1)
+    ar = ({});
+  ar -= ({ 0 });
+  if (save()) {
+    set("no_give", 1);
+    me->add("potential", -500);
+    name = this_object()->name();
+    if (!name || !stringp(name))
+      name = "无名";
+    name = COLOR_D->clean_color(name);
+    ar += ({ type + "_" + t + "_" + name });
+    me->set("euqips", ar);
+    me->save(1);
+    tell_object(
+      me,
+      HIY "【系统】" + this_object()->name() + HIY "绑定成功，如果消失，你可以通过 zhaohuan 命令来重新获得。" NOR "\n"
+    );
+    return 1;
+  }
+  return 0;
+}
+
+string _query_dest_name(mapping pro) {
+  string cls, name = pro["name"];
+  if (!undefinedp(pro["weapon_title"]))
+    name = pro["weapon_title"] + "之" + name;
+  if (!undefinedp(pro["weapon_color"])) {
+    if (pro["weapon_color"] == "HIM") {
+      if (undefinedp(pro["level"]))
+        name = "(鬼)" + name;
+      else if (pro["level"] < 30)
+        name = "(鬼)" + name;
+      else if (undefinedp(pro["class"]))
+        name = "(灵)" + name;
+      else if (!stringp(cls = pro["class"]))
+        name = "(灵)" + name;
+      else {
+        switch (cls) {
+          case "shen":
+          case "dragon":
+          case "fighter":
+          case "xian": name = "(仙)" + name; break;
+          case "youling":
+          case "ghost": name = "(鬼)" + name; break;
+          case "seng":
+          case "bonze": name = "(佛)" + name; break;
+          case "taoist": name = "(道)" + name; break;
+          case "scholar": name = "(儒)" + name; break;
+          case "dancer": name = "(魅)" + name; break;
+          case "yaomo": name = "(妖)" + name; break;
+          case "tianmo": name = "(魔)" + name; break;
+          default: name = "(灵)" + name; break;
         }
-        if( member_array(type,ar)!=-1 )
-        	ar-= ({type});
-	ar-= ({0});	
-        if( member_array(type,com_ar)!=-1 )	
-		com_ar-= ({type});
-	if( intp(i=sizeof(others)) 
-	 && i>0 )	
-	{
-		while(i--)
-			com_ar-= ({others[i]});
-	}		
-	com_ar-= ({0});
-	me->add("potential",-500);
-	tell_object(me,"注销成功。\n");
-	if( sizeof(ar)>0 )
-		me->set("euqips",ar);
-	else	me->delete("euqips");
-	if( sizeof(com_ar)>0 )
-		me->set("combination_euqips",com_ar);
-	else	me->delete("combination_euqips");
-	me->save(1);
-	message_vision("$N手中的$n轰的一声炸成了碎片。。。。\n",me,this_object());
-	this_object()->move("/obj/empty");
-	REMOVE_D->add_obj(this_object(),1);
-	return;
+      }
+    }
+  }
+  return name;
 }
 
-int do_dest(string arg)
-{
-	mixed *ar;
-	string type;
-	object me = this_player();
-	if( !arg || !id(arg) )
-        	return 0;
-	if( me!=environment() )
-        	return 0;  
-	if( !query("owner_id") || !query("valid_time") )
-        	return 0;
-	if( !query("skill_type") )
-		return err_msg(name()+"武器类型缺失。\n");
-	if( query("equipped") )
-		return err_msg("你得先卸除"+name()+"。\n");		
-	type = sprintf("%s_%d_%s",query("skill_type"),query("valid_time"),this_object()->name());
-	type = COLOR_D->clean_color(type);
-	if( !arrayp(ar=me->query("euqips"))
-	 || sizeof(ar)<1 
-	 || member_array(type,ar)==-1 )
-	{
-		if( !query("combination") )
-			return err_msg(name()+"不是你的绑定装备。\n");
-		else	return err_msg(name()+"为组合武器，你需要将之先变幻(bianhua)为"+("/cmds/std/look.lpc")->weapon_type(query("skill_types")[0])+"("+query("skill_types")[0]+")的形态。\n");
-	}		
-	if( query("owner_id")
-  	 && me->query("id")!=query("owner_id") )
-        	return err_msg(name()+"是"+query("owner_id")+"的专属武器。\n");
-	if( (me->query("potential")-me->query("learned_points"))<500 )   
-        	return err_msg("你的潜能不够,无法注销法宝。\n");
-        	
-	if( query("combination") )
-	{
-		write("\n"+name()+HIR"是组合武器，你确定要注销它吗？"HIY"(Y/N)："NOR);
-		input_to("dest_com",me);
-		return 1;
-	}
-        	
-        seteuid(getuid());
-        if( !rm(query_save_file()+ __SAVE_EXTENSION__) )
-        	return err_msg("注销失败。\n");
-        if( member_array(type,ar)!=-1 )	
-		ar-= ({type});
-	ar-= ({0});	
-	me->add("potential",-500);
-	write("注销成功。\n");
-	if( sizeof(ar)>0 )
-		me->set("euqips",ar);
-	else	me->delete("euqips");
-	me->save(1);
-	message_vision("$N手中的$n轰的一声炸成了碎片。。。。\n",me,this_object());
-	this_object()->move("/obj/empty");
-	REMOVE_D->add_obj(this_object(),1);
-	return 1;
+void dest_com(string arg, object me) {
+  mixed *ar, *com_ar, *types;
+  string type, other, *others;
+  mapping pro;
+  int i;
+  if (!me || !living(me)
+    || !present(this_object(), me))
+    return;
+  if (!arg) {
+    write("\n" + name() + HIR "是组合武器，你确定要注销它吗？" HIY "(Y/N)：" NOR);
+    input_to("dest_com", me);
+    return;
+  }
+  arg = sprintf("%c", arg[0]);
+  if (arg != "Y" && arg != "y") {
+    if (arg == "N" || arg == "n")
+      return;
+    else {
+      write("\n" + name() + HIR "是组合武器，你确定要注销它吗？" HIY "(Y/N)：" NOR);
+      input_to("dest_com", me);
+      return;
+    }
+  }
+  if (!arrayp(ar = me->query("euqips"))
+    || sizeof(ar) < 1)
+    return;
+  if (!arrayp(types = query("skill_types"))
+    || sizeof(types) < 1)
+    return;
+  if (!arrayp(com_ar = me->query("combination_euqips"))
+    || sizeof(com_ar) < 1)
+    com_ar = ({});
+  type = sprintf("%s_%d_%s", query("skill_type"), query("valid_time"), this_object()->name());
+  type = COLOR_D->clean_color(type);
+
+  others = ({});
+  for (i = 0; i < sizeof(types); i++) {
+    if (types[i] == query("skill_type"))
+      continue;
+    if (!mapp(pro = query("combination_dbase/" + types[i]))
+      || sizeof(pro) < 1)
+      break;
+    other = sprintf("%s_%d_%s", types[i], pro["valid_time"], _query_dest_name(pro));
+    others += ({ other });
+  }
+
+  seteuid(getuid());
+  if (!rm(query_save_file() + __SAVE_EXTENSION__)) {
+    tell_object(me, HIR "注销失败。\n" NOR);
+    return;
+  }
+  if (member_array(type, ar) != -1)
+    ar -= ({ type });
+  ar -= ({ 0 });
+  if (member_array(type, com_ar) != -1)
+    com_ar -= ({ type });
+  if (intp(i = sizeof(others))
+    && i > 0) {
+    while (i--)
+      com_ar -= ({ others[i] });
+  }
+  com_ar -= ({ 0 });
+  me->add("potential", -500);
+  tell_object(me, "注销成功。\n");
+  if (sizeof(ar) > 0)
+    me->set("euqips", ar);
+  else me->delete("euqips");
+  if (sizeof(com_ar) > 0)
+    me->set("combination_euqips", com_ar);
+  else me->delete("combination_euqips");
+  me->save(1);
+  message_vision("$N手中的$n轰的一声炸成了碎片。。。。\n", me, this_object());
+  this_object()->move("/obj/empty");
+  REMOVE_D->add_obj(this_object(), 1);
+  return;
 }
 
-void init()
-{
-    	check_owner();
-        add_action("do_dest",({"destruct","zhuxiao"}) );
-        add_action("do_install", ({"install","zhuang"}));
-        add_action("do_uninstall", "uninstall");
-        add_action("do_bian", "bianhua");        
+int do_dest(string arg) {
+  mixed *ar;
+  string type;
+  object me = this_player();
+  if (!arg || !id(arg))
+    return 0;
+  if (me != environment())
+    return 0;
+  if (!query("owner_id") || !query("valid_time"))
+    return 0;
+  if (!query("skill_type"))
+    return err_msg(name() + "武器类型缺失。\n");
+  if (query("equipped"))
+    return err_msg("你得先卸除" + name() + "。\n");
+  type = sprintf("%s_%d_%s", query("skill_type"), query("valid_time"), this_object()->name());
+  type = COLOR_D->clean_color(type);
+  if (!arrayp(ar = me->query("euqips"))
+    || sizeof(ar) < 1
+    || member_array(type, ar) == -1) {
+    if (!query("combination"))
+      return err_msg(name() + "不是你的绑定装备。\n");
+    else return err_msg(name() + "为组合武器，你需要将之先变幻(bianhua)为" + ("/cmds/std/look.lpc")->weapon_type(query("skill_types")[0]) + "(" + query("skill_types")[0] + ")的形态。\n");
+  }
+  if (query("owner_id")
+    && me->query("id") != query("owner_id"))
+    return err_msg(name() + "是" + query("owner_id") + "的专属武器。\n");
+  if ((me->query("potential") - me->query("learned_points")) < 500)
+    return err_msg("你的潜能不够,无法注销法宝。\n");
+
+  if (query("combination")) {
+    write("\n" + name() + HIR "是组合武器，你确定要注销它吗？" HIY "(Y/N)：" NOR);
+    input_to("dest_com", me);
+    return 1;
+  }
+
+  seteuid(getuid());
+  if (!rm(query_save_file() + __SAVE_EXTENSION__))
+    return err_msg("注销失败。\n");
+  if (member_array(type, ar) != -1)
+    ar -= ({ type });
+  ar -= ({ 0 });
+  me->add("potential", -500);
+  write("注销成功。\n");
+  if (sizeof(ar) > 0)
+    me->set("euqips", ar);
+  else me->delete("euqips");
+  me->save(1);
+  message_vision("$N手中的$n轰的一声炸成了碎片。。。。\n", me, this_object());
+  this_object()->move("/obj/empty");
+  REMOVE_D->add_obj(this_object(), 1);
+  return 1;
 }
 
-int do_bian(string arg)
-{
-	string name,now,*types,str;
-	int i,wielded;
-	object me = this_player();
-	if( !query("combination") )
-		return 0;
-	if( !present(this_object(),me)
-	 || query("owner_id")!=me->query("id") )
-	 	return 0;
-	if( !arrayp(types = query("skill_types"))
-	 || sizeof(types)<1 )
-	 	return 0;
-	now = query("skill_type");
-	if( member_array(now,types)==-1 )
-		return 0;
-	str = "";	
-	for(i=0;i<sizeof(types);i++)
-	{
-		str+= sprintf("%s(%s)",("/cmds/std/look.lpc")->weapon_type(types[i]),types[i]);
-		if( i<sizeof(types)-1 )
-			str+= "、";
-	}	
-	if( !arg || member_array(arg,types)==-1 )
-		return err_msg(name()+"可以变幻为："+str+"的形态，目前形态为"+("/cmds/std/look.lpc")->weapon_type(now)+"("+now+")，你要把它变幻为什么形态？\n");
-	if( arg==now )
-		return err_msg("没有这个必要了。\n");
-	if( me->query("mana")<50 )
-		return err_msg("你的法力不够充沛。\n");
-
-	wielded = query("equipped");
-	if( wielded )
-		this_object()->unequip();	
-	name = name();
-	if( !update_combination(arg) )
-	{
-		if( wielded )
-			this_object()->wield();
-		return err_msg(HIR+name()+HIR"变幻失败！"NOR"\n");
-	}
-	
-	write(HIG"你一掐口诀，手中"+name+HIG"瞬间霞光四溢，化作了一"+query("unit")+name()+HIG"。"NOR"\n");
-	if( wielded )
-		this_object()->wield();
-	me->reset_action();	
-	return 1;
+void init() {
+  check_owner();
+  add_action("do_dest", ({ "destruct", "zhuxiao" }));
+  add_action("do_install", ({ "install", "zhuang" }));
+  add_action("do_uninstall", "uninstall");
+  add_action("do_bian", "bianhua");
 }
 
-int do_install(string arg)
-{
-	object me=this_object();
-   	object who=this_player();
-   	object aq;
-   	string long,file;
-   	int remain,max;
-	
-   	if( !arg || who->query_skill("throwing",2)<1 )
-   		return 0;
-	if( who->is_busy() )
-		return err_msg("你正忙着呢。\n");
-   	aq=present(arg, who);
-   	if( !present(arg, who) ) 
-		return err_msg("你身上没有"+arg+"。\n");
-   	if( aq==me ) 
-   		return 0;
-	if( aq->query("skill_type")!= "throwing" )
-		return notify_fail("这玩艺太大了，装不进去。\n");
-	
-	max = me->query_level()*15;	
-		
-	if( me->query_temp("anqi/now") >= max )
-        	return err_msg(me->query("name")+"已经装满暗器了。\n");
-   	if( me->query_temp("anqi/now") >0 
-   	 && me->query_temp("anqi/type") != aq->query("name") )
-		return err_msg(name()+"里面已经装了"+me->query_temp("anqi/type")+"了，不能再装其他暗器了。\n");
-	
-	if( !stringp(long = me->query("long"))
-	 || strlen(long)<4 )
-		long = "";
-     	message_vision( "$N打开"+me->query("name")+"的机关，将一"+aq->query("unit")+aq->query("name")+"装了进去。\n",who);
-     	who->start_busy(1);
-     	if( !me->query("ori_long") )
-     		me->set("ori_long",long);
-     	if( me->query_temp("anqi/now")==0 ) 
-     		me->set_temp("anqi/type",aq->query("name"));
-     	write("max="+max+"\n");	
-     	me->set_temp("anqi/file",base_name(aq));	
-     	if( me->query_temp("anqi/now") + aq->query_amount() > max ) 
-	{
-        	remain=me->query_temp("anqi/now") + aq->query_amount() - max;
-         	me->set_temp("anqi/now",max);
-         	me->set("long",name(1)+"里面已经装了" +chinese_number(me->query_temp("anqi/now"))+aq->query("base_unit")+aq->query("name")+"，想拆掉用uninstall。\n");
-         	aq->set_amount(remain);
-	}
-     	else 
-	{
-        	me->add_temp("anqi/now",aq->query_amount());
-         	me->set("long",me->name(1)+"里面已经装了"+chinese_number(me->query_temp("anqi/now"))+aq->query("base_unit")+aq->query("name")+"，想拆掉用uninstall。\n");
-		aq->move("/obj/empty");
-		REMOVE_D->add_obj(aq,1);
-	}
-     	return 1;
+int do_bian(string arg) {
+  string name, now, *types, str;
+  int i, wielded;
+  object me = this_player();
+  if (!query("combination"))
+    return 0;
+  if (!present(this_object(), me)
+    || query("owner_id") != me->query("id"))
+    return 0;
+  if (!arrayp(types = query("skill_types"))
+    || sizeof(types) < 1)
+    return 0;
+  now = query("skill_type");
+  if (member_array(now, types) == -1)
+    return 0;
+  str = "";
+  for (i = 0; i < sizeof(types); i++) {
+    str += sprintf("%s(%s)", ("/cmds/std/look.lpc")->weapon_type(types[i]), types[i]);
+    if (i < sizeof(types) - 1)
+      str += "、";
+  }
+  if (!arg || member_array(arg, types) == -1)
+    return err_msg(name() + "可以变幻为：" + str + "的形态，目前形态为" + ("/cmds/std/look.lpc")->weapon_type(now) + "(" + now + ")，你要把它变幻为什么形态？\n");
+  if (arg == now)
+    return err_msg("没有这个必要了。\n");
+  if (me->query("mana") < 50)
+    return err_msg("你的法力不够充沛。\n");
+
+  wielded = query("equipped");
+  if (wielded)
+    this_object()->unequip();
+  name = name();
+  if (!update_combination(arg)) {
+    if (wielded)
+      this_object()->wield();
+    return err_msg(HIR + name() + HIR "变幻失败！" NOR "\n");
+  }
+
+  write(HIG "你一掐口诀，手中" + name + HIG "瞬间霞光四溢，化作了一" + query("unit") + name() + HIG "。" NOR "\n");
+  if (wielded)
+    this_object()->wield();
+  me->reset_action();
+  return 1;
 }
 
-int do_uninstall(string arg)
-{
-	object ob;
-   	object me=this_object();
-   	object who=this_player();
-	string long,file;
-	
-	if( !arg || !id(arg) )
-		return 0;
-	if( who->query_skill("throwing",2)<1 )
-		return 0;
-	if( me->query_temp("anqi/now")==0) 
-		return notify_fail(me->query("name")+"里面什么也没有。\n");
-	if( !stringp(file=query_temp("anqi/file")) )
-		return notify_fail(me->query("name")+"里面什么也没有。\n");
-	if( who->is_busy() )
-		return err_msg("你正忙着呢。\n");	
-	if( !stringp(long = me->query("ori_long")) 
-	 || strlen(long)< 4 )
-		long = "";	
-	ob=new(file);
-	ob->set_amount(me->query_temp("anqi/now"));
-      	ob->move(who);
-      	me->set("long",long);
-      	me->set_temp("anqi/now", 0);
-      	message_vision("$N从"+me->query("name")+"里面拆出一"+ob->query("unit")+ob->query("name")+"。\n", who);
-      	me->start_busy(1);
-	return 1;               
+int do_install(string arg) {
+  object me = this_object();
+  object who = this_player();
+  object aq;
+  string long, file;
+  int remain, max;
+
+  if (!arg || who->query_skill("throwing", 2) < 1)
+    return 0;
+  if (who->is_busy())
+    return err_msg("你正忙着呢。\n");
+  aq = present(arg, who);
+  if (!present(arg, who))
+    return err_msg("你身上没有" + arg + "。\n");
+  if (aq == me)
+    return 0;
+  if (aq->query("skill_type") != "throwing")
+    return notify_fail("这玩艺太大了，装不进去。\n");
+
+  max = me->query_level() * 15;
+
+  if (me->query_temp("anqi/now") >= max)
+    return err_msg(me->query("name") + "已经装满暗器了。\n");
+  if (me->query_temp("anqi/now") > 0
+    && me->query_temp("anqi/type") != aq->query("name"))
+    return err_msg(name() + "里面已经装了" + me->query_temp("anqi/type") + "了，不能再装其他暗器了。\n");
+
+  if (!stringp(long = me->query("long"))
+    || strlen(long) < 4)
+    long = "";
+  message_vision(
+    "$N打开" + me->query("name") + "的机关，将一" + aq->query("unit") + aq->query("name") + "装了进去。\n",
+    who
+  );
+  who->start_busy(1);
+  if (!me->query("ori_long"))
+    me->set("ori_long", long);
+  if (me->query_temp("anqi/now") == 0)
+    me->set_temp("anqi/type", aq->query("name"));
+  write("max=" + max + "\n");
+  me->set_temp("anqi/file", base_name(aq));
+  if (me->query_temp("anqi/now") + aq->query_amount() > max) {
+    remain = me->query_temp("anqi/now") + aq->query_amount() - max;
+    me->set_temp("anqi/now", max);
+    me->set(
+      "long",
+      name(1) + "里面已经装了" + chinese_number(me->query_temp("anqi/now")) + aq->query("base_unit") + aq->query("name") + "，想拆掉用uninstall。\n"
+    );
+    aq->set_amount(remain);
+  } else {
+    me->add_temp("anqi/now", aq->query_amount());
+    me->set(
+      "long",
+      me->name(1) + "里面已经装了" + chinese_number(me->query_temp("anqi/now")) + aq->query("base_unit") + aq->query("name") + "，想拆掉用uninstall。\n"
+    );
+    aq->move("/obj/empty");
+    REMOVE_D->add_obj(aq, 1);
+  }
+  return 1;
 }
 
-int do_move()
-{
-    	int i,t,tt;
-    	object ridee,me=this_player(); 
-    	string room,tmp;
+int do_uninstall(string arg) {
+  object ob;
+  object me = this_object();
+  object who = this_player();
+  string long, file;
 
-    	if( query("weapon_level")<100 || !query("fly") )
-        	return 0;
-    	if( this_object()!=me->query_temp("weapon") )  
-        	return 0;
-    	if( query("owner_id")!=me->query("id") )
-        	return 0;
-    	if( query("weapon_level")<150 )  
-        	t = 3;
-    	else if( query("weapon_level")<200 )  
-        	t = 2;
-    	else t = 1;
-    	if( time()<me->query_temp("last_weapon_move")+t 
-        || ( !wizardp(me) && environment(me)->query("no_move") )
-        || ( !wizardp(me) && environment(me)->query("no_magic") ) )
-		return notify_fail(name()+"闪了一闪，没有什么反应。 \n"); 
+  if (!arg || !id(arg))
+    return 0;
+  if (who->query_skill("throwing", 2) < 1)
+    return 0;
+  if (me->query_temp("anqi/now") == 0)
+    return notify_fail(me->query("name") + "里面什么也没有。\n");
+  if (!stringp(file = query_temp("anqi/file")))
+    return notify_fail(me->query("name") + "里面什么也没有。\n");
+  if (who->is_busy())
+    return err_msg("你正忙着呢。\n");
+  if (!stringp(long = me->query("ori_long"))
+    || strlen(long) < 4)
+    long = "";
+  ob = new(file);
+  ob->set_amount(me->query_temp("anqi/now"));
+  ob->move(who);
+  me->set("long", long);
+  me->set_temp("anqi/now", 0);
+  message_vision(
+    "$N从" + me->query("name") + "里面拆出一" + ob->query("unit") + ob->query("name") + "。\n",
+    who
+  );
+  me->start_busy(1);
+  return 1;
+}
 
-    	if( me->is_fighting() )
-        	return notify_fail("你现在正忙着，无法驾驭"+name()+"！\n");
-    	if( me->query("mana")<1500 )
-        	return notify_fail("你的法力不够，无法驭"+name()+"飞行。\n");
-    	ridee = me->ride();
-    	if( ridee )
-    	{
-        	if( !ridee->move("/d/changan/nbridge") )       
-        		return notify_fail("你的坐骑现在动弹不得。\n");
-    	}
-	message("vision",me->name()+"将手中"+name()+"一摆，口中念咒，喝了一声“疾！”"+name()+"仿佛有灵性一般，似一道飞虹般飞弛而出！
+int do_move() {
+  int i, t, tt;
+  object ridee, me = this_player();
+  string room, tmp;
+
+  if (query("weapon_level") < 100 || !query("fly"))
+    return 0;
+  if (this_object() != me->query_temp("weapon"))
+    return 0;
+  if (query("owner_id") != me->query("id"))
+    return 0;
+  if (query("weapon_level") < 150)
+    t = 3;
+  else if (query("weapon_level") < 200)
+    t = 2;
+  else t = 1;
+  if (time() < me->query_temp("last_weapon_move") + t
+    || (!wizardp(me) && environment(me)->query("no_move"))
+    || (!wizardp(me) && environment(me)->query("no_magic")))
+    return notify_fail(name() + "闪了一闪，没有什么反应。 \n");
+
+  if (me->is_fighting())
+    return notify_fail("你现在正忙着，无法驾驭" + name() + "！\n");
+  if (me->query("mana") < 1500)
+    return notify_fail("你的法力不够，无法驭" + name() + "飞行。\n");
+  ridee = me->ride();
+  if (ridee) {
+    if (!ridee->move("/d/changan/nbridge"))
+      return notify_fail("你的坐骑现在动弹不得。\n");
+  }
+  message(
+    "vision",
+    me->name() + "将手中" + name() + "一摆，口中念咒，喝了一声“疾！”" + name() + "仿佛有灵性一般，似一道飞虹般飞弛而出！
 
         一时狂沙漫天。。。。
         
-等你张开眼时,"+me->name()+"的身影已随之消失在漫天风沙之中。\n"NOR,environment(me),me);
-    	tell_object(me,"你将"+name()+"一摆，口中念咒，喝了一声“疾！”"+name()+"仿佛有灵性一般，似一道飞虹般飞弛而出！
+等你张开眼时," + me->name() + "的身影已随之消失在漫天风沙之中。\n" NOR,
+    environment(me),
+    me
+  );
+  tell_object(me, "你将" + name() + "一摆，口中念咒，喝了一声“疾！”" + name() + "仿佛有灵性一般，似一道飞虹般飞弛而出！
 
         一时狂沙漫天。。。。
         
-等你张开眼时,你已随之在半空飞驰。\n"NOR);
+等你张开眼时,你已随之在半空飞驰。\n" NOR);
 
-    	me->set_temp("last_weapon_move",time());
-    	room = "/d/changan/nbridge";
-    	if( !me->move(room) )
-    	{
-        	write("你在天上转了半天也不知该往那边飞。。。\n");
-        	message_vision("\n$N失望地从云上跳了下来！\n", me);
-    	}
-    	message_vision("$N的身影突然出现在一阵狂风之中。\n", me);
-    	tt = query("weapon_level")*6;
-    	if( me->query("mana")<=tt )
-	        tt = me->query("mana")-1;
-    	me->add("mana",-tt);
-    	return 1;
+  me->set_temp("last_weapon_move", time());
+  room = "/d/changan/nbridge";
+  if (!me->move(room)) {
+    write("你在天上转了半天也不知该往那边飞。。。\n");
+    message_vision("\n$N失望地从云上跳了下来！\n", me);
+  }
+  message_vision("$N的身影突然出现在一阵狂风之中。\n", me);
+  tt = query("weapon_level") * 6;
+  if (me->query("mana") <= tt)
+    tt = me->query("mana") - 1;
+  me->add("mana", -tt);
+  return 1;
 }
 
-void create()
-{
-	set_name("◆武器",({"wu qi"}));
+void create() {
+  set_name("◆武器", ({ "wu qi" }));
 }
 
-string short()
-{
-    	string str;
-    	str = query("shorts");
-    	if( !str || !stringp(str) )
-        	str = ::short();  
-	if( query("combination") )
-		str = HIC"["HIG"组"HIC"]"NOR+str;
-    	if( !query("equipped") )  
-        	return str;
-    	if( this_object()==environment()->query_temp("secondary_weapon") ) 
-        	return sprintf("%25-s %s",str,"<副手武器>");
-    	else    return sprintf("%25-s %s",str,"<主手武器>");
+string short() {
+  string str;
+  str = query("shorts");
+  if (!str || !stringp(str))
+    str = ::short();
+  if (query("combination"))
+    str = HIC "[" HIG "组" HIC "]" NOR + str;
+  if (!query("equipped"))
+    return str;
+  if (this_object() == environment()->query_temp("secondary_weapon"))
+    return sprintf("%25-s %s", str, "<副手武器>");
+  else return sprintf("%25-s %s", str, "<主手武器>");
 }
 
-int is_zhaohuan(){ return 1; }    
+int is_zhaohuan() { return 1; }
 
-int hit_ob(object me,object target)
-{
-	object weapon;
-    	int i,ap,dp,damage;
-    	mapping act;
-    	string tmp,str,*limbs,limb,damage_type,*tt;
+int hit_ob(object me, object target) {
+  object weapon;
+  int i, ap, dp, damage;
+  mapping act;
+  string tmp, str, *limbs, limb, damage_type, *tt;
 
-    	if( !me || !target || !me->is_fighting(target) )
-        	return 0;
+  if (!me || !target || !me->is_fighting(target))
+    return 0;
 
-    	if( i=query("cure")>0 && me->query("max_kee")-me->query("eff_kee")>= i && query("weapon_level")>20 )
-    	{
-        	message_combatd("\n$N手中"+name()+"闪出一道柔和之光，$P浸沐其中，伤势渐渐恢复了。。。。\n",me,target);
-        	me->receive_curing("kee",i);
-    	}
-    	
-    	if( i=query("busy")>0 && !target->is_busy() && random(me->query_spi())>target->query("spi") && random(10)>5 && query("weapon_level")>30 )
-    	{
-        	message_combatd("\n$N手中"+name()+"划出一道冰棱，$n冷不丁给冰棱带慢了脚步。\n\n",me,target); 
-        	if( i>8 )  i = 8;
-        	target->start_busy(i);
-    	}
-    	
-    	if( random(query("weapon_level"))<35 )   
-        	return 0;
+  if (i = query("cure") > 0 && me->query("max_kee") - me->query("eff_kee") >= i && query("weapon_level") > 20) {
+    message_combatd("\n$N手中" + name() + "闪出一道柔和之光，$P浸沐其中，伤势渐渐恢复了。。。。\n", me, target);
+    me->receive_curing("kee", i);
+  }
 
-    	tt = query("condition");
-    	if( tt && arrayp(tt) && sizeof(tt) && query("weapon_level")>50 
-    	 && !query("be_feng") )
-    	{
-        	i = sizeof(tt);
-        	while(i--)
-        	{
-            		if( tt[i] && file_size("/daemon/condition/"+tt[i]+".lpc")>0 
-             		&& query("weapon_level")>=50 )
-                		target->apply_condition(tt[i],query("weapon_level")/3);
-        	}
-        	if( target->update_condition() )
-            		message_combatd("\n$N手中"+name()+"带出一点绿光，$n闪避不及，绿光在他胸前一闪而没！\n\n",me,target);  
-    	}
-        
-    	weapon = me->query_temp("secondary_weapon");
-    	if( !weapon || !objectp(weapon) || !mapp(act=weapon->query("actions"))
-    	|| !weapon->is_zhaohuan() )
-        	return 0;
-	tmp = weapon->query("skill_type");
-    	if( me->query_skill(tmp,1) )
-    	{
-        	tmp = me->query_skill_mapped(tmp);
-        	if( tmp && stringp(tmp) )
-            		act = SKILL_D(tmp)->query_action(me,weapon);
-    	}
-    	if( !act || !mapp(act) )
-        	act = weapon->query("actions");
-    	if( !act || !mapp(act) )
-        	return 0;
-        me->set("actions",act);
-	str = "\n$N将"+query("name")+"交于左手，拿起$w对着$n就是一击。\n";
-    	return COMBAT_D->do_attack(me,target,weapon,TYPE_QUICK,str);
+  if (i = query("busy") > 0 && !target->is_busy() && random(me->query_spi()) > target->query("spi") && random(10) > 5 && query("weapon_level") > 30) {
+    message_combatd("\n$N手中" + name() + "划出一道冰棱，$n冷不丁给冰棱带慢了脚步。\n\n", me, target);
+    if (i > 8) i = 8;
+    target->start_busy(i);
+  }
+
+  if (random(query("weapon_level")) < 35)
+    return 0;
+
+  tt = query("condition");
+  if (tt && arrayp(tt) && sizeof(tt) && query("weapon_level") > 50
+    && !query("be_feng")) {
+    i = sizeof(tt);
+    while (i--) {
+      if (tt[i] && file_size("/daemon/condition/" + tt[i] + ".lpc") > 0
+        && query("weapon_level") >= 50)
+        target->apply_condition(tt[i], query("weapon_level") / 3);
+    }
+    if (target->update_condition())
+      message_combatd("\n$N手中" + name() + "带出一点绿光，$n闪避不及，绿光在他胸前一闪而没！\n\n", me, target);
+  }
+
+  weapon = me->query_temp("secondary_weapon");
+  if (!weapon || !objectp(weapon) || !mapp(act = weapon->query("actions"))
+    || !weapon->is_zhaohuan())
+    return 0;
+  tmp = weapon->query("skill_type");
+  if (me->query_skill(tmp, 1)) {
+    tmp = me->query_skill_mapped(tmp);
+    if (tmp && stringp(tmp))
+      act = SKILL_D(tmp)->query_action(me, weapon);
+  }
+  if (!act || !mapp(act))
+    act = weapon->query("actions");
+  if (!act || !mapp(act))
+    return 0;
+  me->set("actions", act);
+  str = "\n$N将" + query("name") + "交于左手，拿起$w对着$n就是一击。\n";
+  return COMBAT_D->do_attack(me, target, weapon, TYPE_QUICK, str);
 }
 
-int apply_conditions(string cnd)
-{
-	string *cnds = query("condition");
-    	string *oo = ({});      
-    	int i;
+int apply_conditions(string cnd) {
+  string *cnds = query("condition");
+  string *oo = ({});
+  int i;
 
-    	if( !cnds || !arrayp(cnds) )
-        	cnds = ({});
-    	i = sizeof(cnds);     
-    	while(i--)
-        	if( cnds[i] )  
-            		oo+= ({cnds[i]});
-    	oo+= ({cnd});
-    	set("condition",oo);
-    	return 1;    
+  if (!cnds || !arrayp(cnds))
+    cnds = ({});
+  i = sizeof(cnds);
+  while (i--)
+    if (cnds[i])
+      oo += ({ cnds[i] });
+  oo += ({ cnd });
+  set("condition", oo);
+  return 1;
 }
 
-int do_feng(string arg)
-{
-	object ding,ob = this_object();
-    	object me = this_player();
-    	string type,tmp;
+int do_feng(string arg) {
+  object ding, ob = this_object();
+  object me = this_player();
+  string type, tmp;
 
-    	if( !arg || !id(arg) )
-        	return 0;
-    	if( !present(ob,me) )
-        	return 0;
-    	if( me->is_busy() || me->query("mana")<500 || me->query("sen")<100 )
-        	return err_msg("你目前的状态无法封住"+name()+"的毒性。\n");
-	if( ob->query("equipped") )
-		return err_msg("你得先将"+name()+"卸除。\n");
-    	if( ob->query("be_feng") )
-    	{
-        	ob->delete("be_feng");
-        	write("你将"+name()+"的毒性解封了。\n");
-    	}
-    	else    
-    	{
-        	ob->set("be_feng",1);
-        	write("你将"+name()+"的毒性封起了。\n");
-    	}
-    	me->add("mana",-500);
-    	ob->save();
-    	return 1;
+  if (!arg || !id(arg))
+    return 0;
+  if (!present(ob, me))
+    return 0;
+  if (me->is_busy() || me->query("mana") < 500 || me->query("sen") < 100)
+    return err_msg("你目前的状态无法封住" + name() + "的毒性。\n");
+  if (ob->query("equipped"))
+    return err_msg("你得先将" + name() + "卸除。\n");
+  if (ob->query("be_feng")) {
+    ob->delete("be_feng");
+    write("你将" + name() + "的毒性解封了。\n");
+  } else {
+    ob->set("be_feng", 1);
+    write("你将" + name() + "的毒性封起了。\n");
+  }
+  me->add("mana", -500);
+  ob->save();
+  return 1;
 }
 
 // 发挥特殊功能
-int do_touch(string arg)
-{
-    	object me = this_player(),item = this_object();
-    	string msg;
+int do_touch(string arg) {
+  object me = this_player(), item = this_object();
+  string msg;
 
-    	if( !arg || !id(arg) )
-        	return 0;
-        if( me->query_level()<40 )
-        	return 0;
-    	if( !present(item,me) 
-     	|| item->query("owner_id")!=me->query("id") )
-		return 0;
-	if( item->query("equipped") )
-        	return err_msg("首先你得将"+item->query("name")+"卸除。\n");
-    	if( !item->query("authenticate") )
-        	return err_msg(item->query("name")+"尚未鉴定，无法安抚。\n");        
-	if( me->query("mana")<2000 
-     	 || me->query("mana") < me->query_maxmana()
-     	 || me->query("force")<2000 
-     	 || me->query("force") < me->query_maxforce() )
-        	return err_msg(CYN "\n你凝视" + item->name()+CYN "许久，悠悠一声长叹。\n" NOR);
+  if (!arg || !id(arg))
+    return 0;
+  if (me->query_level() < 40)
+    return 0;
+  if (!present(item, me)
+    || item->query("owner_id") != me->query("id"))
+    return 0;
+  if (item->query("equipped"))
+    return err_msg("首先你得将" + item->query("name") + "卸除。\n");
+  if (!item->query("authenticate"))
+    return err_msg(item->query("name") + "尚未鉴定，无法安抚。\n");
+  if (me->query("mana") < 2000
+    || me->query("mana") < me->query_maxmana()
+    || me->query("force") < 2000
+    || me->query("force") < me->query_maxforce())
+    return err_msg(CYN "\n你凝视" + item->name() + CYN "许久，悠悠一声长叹。\n" NOR);
 
-    	me->add("mana",-1000);
-	me->add("force",-1000);
-	
-    	switch (random(3))
-    	{
-        	case 0: msg = CYN "\n$N" CYN "轻轻一弹$n" CYN "，长吟道：「别来无恙乎？」\n" NOR;break;
-        	case 1: msg = CYN "\n$N" CYN "轻轻抚过$n" CYN "，作古风一首，$n" CYN "铃铃作响，似以和之。\n" NOR;break;
-        	default:msg = CYN "\n$N" CYN "悠然一声长叹，轻抚$n"CYN "，沉思良久，不禁感慨万千。\n" NOR;break;
-    	}
-    	item->add("mana",500+random(500));
-    	if( item->query("mana")>=item->query("max_mana")*2 )
-    	{
-        	item->set("mana",item->query("max_mana")*2 );
-        	switch (random(3))
-        	{
-            		case 0: msg += HIM "忽然只见$n" HIM "闪过一道光华，飞跃而起，散作千百流离。\n" NOR;break;
-            		case 1: msg += HIM "顿听$n" HIM "一声龙吟，悠悠不绝，直沁入到你的心肺中去。\n" NOR;break;
-            		default:msg += HIM "霎时间$n" HIM "光芒四射，如蕴琉璃异彩，逼得你难以目视。\n" NOR;break;
-        	}
-	}
-    	msg = replace_string(msg, "$n", item->name());
-    	message_vision(msg, me);
-    	item->save();    
-    	return 1;
+  me->add("mana", -1000);
+  me->add("force", -1000);
+
+  switch (random(3)) {
+    case 0: msg = CYN "\n$N" CYN "轻轻一弹$n" CYN "，长吟道：「别来无恙乎？」\n" NOR; break;
+    case 1: msg = CYN "\n$N" CYN "轻轻抚过$n" CYN "，作古风一首，$n" CYN "铃铃作响，似以和之。\n" NOR; break;
+    default: msg = CYN "\n$N" CYN "悠然一声长叹，轻抚$n" CYN "，沉思良久，不禁感慨万千。\n" NOR; break;
+  }
+  item->add("mana", 500 + random(500));
+  if (item->query("mana") >= item->query("max_mana") * 2) {
+    item->set("mana", item->query("max_mana") * 2);
+    switch (random(3)) {
+      case 0: msg += HIM "忽然只见$n" HIM "闪过一道光华，飞跃而起，散作千百流离。\n" NOR; break;
+      case 1: msg += HIM "顿听$n" HIM "一声龙吟，悠悠不绝，直沁入到你的心肺中去。\n" NOR; break;
+      default: msg += HIM "霎时间$n" HIM "光芒四射，如蕴琉璃异彩，逼得你难以目视。\n" NOR; break;
+    }
+  }
+  msg = replace_string(msg, "$n", item->name());
+  message_vision(msg, me);
+  item->save();
+  return 1;
 }
 
 //更新组合信息，默认为第一个形态
-varargs int update_combination(string type)
-{
-	mapping dbase,base_pro,weapon_pro,new_pro,tmp,old;
-	string *strs,*types;
-	int i;
-	object ob = this_object();
-	if( !ob->query("combination") )
-		return 0;
-	if( !mapp(dbase=ob->query("combination_dbase"))
-	 || sizeof(dbase)<1 )
-	 	return 0;
-	if( !arrayp(types=ob->query("skill_types"))
-	 || sizeof(types)<1 )
-	 	return 0;	 	
-	if( !type )	 	
-		type = types[0];
-	if( undefinedp(dbase[type]) )
-		return 0;
-
-	old = ob->query_entire_dbase();
-	strs = keys(old);
-	for(i=0;i<sizeof(strs);i++)
-	{
-		if( strs[i]=="combination"
-		 || strs[i]=="combination_dbase"
-		 || strs[i]=="skill_types" )
-		 	continue;
-		ob->delete(strs[i]);
-	}
-		
-	tmp = dbase[type];
-	strs = keys(tmp);
-	for(i=0;i<sizeof(strs);i++)
-	{
-		if( strs[i]=="base_prop" || strs[i]=="weapon_pro" )
-			continue;
-		ob->set(strs[i],tmp[strs[i]]);
-	}
-	
-	new_pro = ([]);
-	base_pro = tmp["base_prop"];
-	strs = keys(base_pro);
-	for(i=0;i<sizeof(strs);i++)
-		new_pro[strs[i]] = base_pro[strs[i]];
-	
-	weapon_pro = tmp["weapon_pro"];
-	strs = keys(weapon_pro);
-	for(i=0;i<sizeof(strs);i++)
-		new_pro[strs[i]] = weapon_pro[strs[i]];	
-	ob->set("weapon_prop",new_pro);
-	ob->set("skill_type",type);
-	ob->delete("use_apply_skill");
-	ob->setup();
-	ob->set_name(query("name"),query("ids"));
-	return 1;
-}
-
-string combination_type(object who)
-{
-	int i,t;
-	string *equips,*com_data,temp,type,name;
-	if( !who || !living(who) || !present(this_object(),who) )
-		return 0;
-	if( !arrayp(equips=who->query("euqips")) 
-	 || sizeof(equips)<1 )
-	 	return 0;
-	if( !arrayp(com_data=who->query("combination_euqips"))
-	 || sizeof(com_data)<1 )
-	 	return 0;
-	for(i=0;i<sizeof(com_data);i++)
-	{
-		temp = com_data[i];
-		//sword_1417328259_(灵)何仙姑之太阿
-		if( sscanf(temp,"%s_%d_%s",type,t,name)!=3 )
-			continue;
-		if( member_array(temp,equips)!=-1 )
-			return type;
-	}
-	return 0;	 	
-}
-
-int restore()
-{
-	if( ::restore() )
-    	{
-        	update_combination();    		
-        	set_name(query("name"),query("ids"));
-	       	return 1;
-    	}
+varargs int update_combination(string type) {
+  mapping dbase, base_pro, weapon_pro, new_pro, tmp, old;
+  string *strs, *types;
+  int i;
+  object ob = this_object();
+  if (!ob->query("combination"))
     return 0;
+  if (!mapp(dbase = ob->query("combination_dbase"))
+    || sizeof(dbase) < 1)
+    return 0;
+  if (!arrayp(types = ob->query("skill_types"))
+    || sizeof(types) < 1)
+    return 0;
+  if (!type)
+    type = types[0];
+  if (undefinedp(dbase[type]))
+    return 0;
+
+  old = ob->query_entire_dbase();
+  strs = keys(old);
+  for (i = 0; i < sizeof(strs); i++) {
+    if (strs[i] == "combination"
+      || strs[i] == "combination_dbase"
+      || strs[i] == "skill_types")
+      continue;
+    ob->delete(strs[i]);
+  }
+
+  tmp = dbase[type];
+  strs = keys(tmp);
+  for (i = 0; i < sizeof(strs); i++) {
+    if (strs[i] == "base_prop" || strs[i] == "weapon_pro")
+      continue;
+    ob->set(strs[i], tmp[strs[i]]);
+  }
+
+  new_pro = ([]);
+  base_pro = tmp["base_prop"];
+  strs = keys(base_pro);
+  for (i = 0; i < sizeof(strs); i++)
+    new_pro[strs[i]] = base_pro[strs[i]];
+
+  weapon_pro = tmp["weapon_pro"];
+  strs = keys(weapon_pro);
+  for (i = 0; i < sizeof(strs); i++)
+    new_pro[strs[i]] = weapon_pro[strs[i]];
+  ob->set("weapon_prop", new_pro);
+  ob->set("skill_type", type);
+  ob->delete("use_apply_skill");
+  ob->setup();
+  ob->set_name(query("name"), query("ids"));
+  return 1;
+}
+
+string combination_type(object who) {
+  int i, t;
+  string *equips, *com_data, temp, type, name;
+  if (!who || !living(who) || !present(this_object(), who))
+    return 0;
+  if (!arrayp(equips = who->query("euqips"))
+    || sizeof(equips) < 1)
+    return 0;
+  if (!arrayp(com_data = who->query("combination_euqips"))
+    || sizeof(com_data) < 1)
+    return 0;
+  for (i = 0; i < sizeof(com_data); i++) {
+    temp = com_data[i];
+    //sword_1417328259_(灵)何仙姑之太阿
+    if (sscanf(temp, "%s_%d_%s", type, t, name) != 3)
+      continue;
+    if (member_array(temp, equips) != -1)
+      return type;
+  }
+  return 0;
+}
+
+int restore() {
+  if ( ::restore()) {
+    update_combination();
+    set_name(query("name"), query("ids"));
+    return 1;
+  }
+  return 0;
 }
 /* 镶嵌物品*/
 /*
@@ -830,343 +798,317 @@ int valid_damage(object me,object target)
         return 0;
     return 1;
 }
-*/    
-string name()
-{
-	string cls,name = ::name();
-        if( query("weapon_title") )
-                name = query("weapon_title")+"之"+name;
-	if( query("weapon_color") )
-	{
-                name = query("weapon_color")+name;       
-		name = COLOR_D->replace_color(name,1);
-                if( query("weapon_color")=="HIM" )
-		{
-			if( query("level")<30 )
-				name = HIM"(鬼)"+name;
-			else if( !stringp(cls=query("class")) )
-				name = HIM"(灵)"+name;
-			else
-			{
-				switch(cls)
-				{
-					case "shen" : 
-					case "dragon" :
-					case "fighter" :
-					case "xian" : name = HIM"(仙)"+name;break;
-					case "youling" :
-					case "ghost" : name = HIM"(鬼)"+name;break;
-					case "seng"  :
-					case "bonze" : name = HIM"(佛)"+name;break;
-					case "taoist": name = HIM"(道)"+name;break;
-					case "scholar" : name = HIM"(儒)"+name;break;
-					case "dancer" : name = HIM"(魅)"+name;break;
-					case "yaomo" : name = HIM"(妖)"+name;break;
-					case "tianmo" : name = HIM"(魔)"+name;break;
-					default : name = HIM"(灵)"+name;break;
-				}
-			}	
-		}
-	}
-	return name;
+*/
+string name() {
+  string cls, name = ::name();
+  if (query("weapon_title"))
+    name = query("weapon_title") + "之" + name;
+  if (query("weapon_color")) {
+    name = query("weapon_color") + name;
+    name = COLOR_D->replace_color(name, 1);
+    if (query("weapon_color") == "HIM") {
+      if (query("level") < 30)
+        name = HIM "(鬼)" + name;
+      else if (!stringp(cls = query("class")))
+        name = HIM "(灵)" + name;
+      else {
+        switch (cls) {
+          case "shen":
+          case "dragon":
+          case "fighter":
+          case "xian": name = HIM "(仙)" + name; break;
+          case "youling":
+          case "ghost": name = HIM "(鬼)" + name; break;
+          case "seng":
+          case "bonze": name = HIM "(佛)" + name; break;
+          case "taoist": name = HIM "(道)" + name; break;
+          case "scholar": name = HIM "(儒)" + name; break;
+          case "dancer": name = HIM "(魅)" + name; break;
+          case "yaomo": name = HIM "(妖)" + name; break;
+          case "tianmo": name = HIM "(魔)" + name; break;
+          default: name = HIM "(灵)" + name; break;
+        }
+      }
+    }
+  }
+  return name;
 }
 
-int is_weapon(){return 1;}
+int is_weapon() { return 1; }
 
-int query_max_exp()
-{
-	int p,lvl;
-	if( !query("combination") )
-		lvl = query("level")/10+1;
-	else	lvl = query("combination_dbase/"+query("skill_type")+"/level")/10+1;
-	
-	if( lvl>=100 )
-		return 100000000;
-	if( lvl<50 )		
-		p = ((lvl*lvl*lvl+60)/5*((lvl-1)*2+60))/8*10;
-	else	p = ((lvl*lvl*lvl+60)/5*((lvl-1)*2+600))/8*18;	
-	if( p<12000 )
-		p = 12000;
-	return p;	
+int query_max_exp() {
+  int p, lvl;
+  if (!query("combination"))
+    lvl = query("level") / 10 + 1;
+  else lvl = query("combination_dbase/" + query("skill_type") + "/level") / 10 + 1;
+
+  if (lvl >= 100)
+    return 100000000;
+  if (lvl < 50)
+    p = ((lvl * lvl * lvl + 60) / 5 * ((lvl - 1) * 2 + 60)) / 8 * 10;
+  else p = ((lvl * lvl * lvl + 60) / 5 * ((lvl - 1) * 2 + 600)) / 8 * 18;
+  if (p < 12000)
+    p = 12000;
+  return p;
 }
 
-int level_up()
-{
-	mapping my_data,base_data,equip_apply_prop,equip_apply_prop2,a_name;
-	string *tmp,*base_prop,str,str2,color,name,*ids,data,*euqips;
-	int i,k,j,num,lvl,t,v;
-	mixed type;	
-	object me,newob,obj = this_object();
-	
-	if( !objectp(me=environment()) || !me->is_character() 
-	 || !query("owner_id") || query("owner_id")!=me->query("id") )
-		return 0;
-	if( obj->query("equipped") )
-		return 0;
-	if( !obj->query("combination") )
-	{
-		if( obj->query("level")>=me->query_level() )
-			return 0;
-	}
-	else 
-	{
-		if( obj->query("combination_dbase/"+obj->query("skill_type")+"/level")>=me->query_level() )
-			return 0;
-	}		
-		
-	if( !pointerp(euqips=me->query("euqips"))
-	 || sizeof(euqips)<1 )
-	 	return 0;
-	data = sprintf("%s_%d_%s",obj->query("skill_type"),obj->query("valid_time"),COLOR_D->clean_color(obj->name()));
-	if( !data || !stringp(data) )
-		return 0;
-	if( member_array(data,euqips)==-1 && !obj->query("combination") )
-		return 0;	
-	
-	switch(obj->query("skill_type"))
-	{
-		case "unarmed" : newob=new("/d/obj/nweapon/unarmed");break;
-		case "sword"   : newob=new("/d/obj/nweapon/sword");break;
-		case "stick"   : newob=new("/d/obj/nweapon/stick");break;
-		case "staff"   : newob=new("/d/obj/nweapon/staff");break;
-		case "spear"   : newob=new("/d/obj/nweapon/spear");break;
-		case "mace"    : newob=new("/d/obj/nweapon/mace");break;
-		case "hammer"  : newob=new("/d/obj/nweapon/hammer");break;
-		case "fork"    : newob=new("/d/obj/nweapon/fork");break;
-		case "blade"   : newob=new("/d/obj/nweapon/blade");break;
-		case "axe"     : newob=new("/d/obj/nweapon/axe");break;
-		case "whip"    : newob=new("/d/obj/nweapon/whip");break;
-		default : return 0;
-	}
-		
-	equip_apply_prop  = ("/cmds/std/look.lpc")->query_euqip_look1();
-	equip_apply_prop2 = ("/cmds/std/look.lpc")->query_euqip_look2();   
-	
-	if( !obj->query("combination") )
-	{	
-		my_data = obj->query("weapon_prop");	
-		base_data = ("/d/obj/nweapon/newweapon.lpc")->equip_base(obj);
-	}
-	else
-	{
-		my_data = obj->query("combination_dbase/"+query("skill_type")+"/weapon_pro");	
-		base_data = obj->query("combination_dbase/"+query("skill_type")+"/base_prop");	
-	}	
-	
-	if( !obj->query("combination") )
-		color = obj->query("weapon_color");
-	else	color = obj->query("combination_dbase/"+query("skill_type")+"/weapon_color");	
-	if( color && stringp(color) )
-	{
-		switch(color)
-		{
-			case "HIY" : num = 1;break;
-			case "HIB" : num = 1;break;
-			case "HIC" : num = 2;break;
-			case "HIR" : num = 3;break;
-			case "HIM" : num = 5;break;
-			default : num = 0;break;
-		} 		
-	}
-	else	num = 0;
-	base_prop = keys(base_data);
-		
-	tmp = keys(my_data);
-	if( tmp && arrayp(tmp) )
-	{
-		j = sizeof(tmp);
-		for(i=0;i<j;i++)
-		{
-			type = tmp[i];
-			if( !stringp(type) || random(3) )
-				continue;
-			if( member_array(type,base_prop)!=-1 && random(10)<8 )
-				continue; 				
-			if( my_data[type]<=0 )
-				continue;
-			if( type=="combat_damage" || type=="spells_damage" )
-			 	continue;
-			k = random(obj->query("level")/10)+random(num*2)+1;
-			if( member_array(type,keys(equip_apply_prop2))!=-1 )
-			{
-				k = k/5+1;
-				if( k>5 )
-					k = 5;
-			}
-			if( k>0 )
-			{
-				my_data[type]+= k;
-				
-				if( !undefinedp(equip_apply_prop[type]) )
-					str = equip_apply_prop[type];
-				else if( !undefinedp(equip_apply_prop2[type]) )	
-					str = equip_apply_prop2[type];
-				else
-				{
-					str = type;
-					if( is_chinese(to_chinese(str)) )
-						str = to_chinese(str)+"有效等级";
-					else if( sscanf(str,"ad_%s",str2) )
-					{
-						if( is_chinese(to_chinese(str2)) )
-							str = to_chinese(str2)+"技能等级";
-					}
-				}
-				tell_object(me,HIG"【系统】"+obj->name()+HIG"的 "HIY+str+HIG" 增加了"HIR+k+HIG" 点。\n"NOR);	
-			}	
-		}
-	}
-	for(i=0;i<sizeof(base_prop);i++)
-	{
-		if( base_prop[i]=="combat_damage" || base_prop[i]=="spells_damage" )
-			k = random(obj->query("level")/5)+random(num*3);
-		else	k = random(obj->query("level")/20)+random(num*2);
-		if( k<1 ) k = 1;
-		if( member_array(base_prop[i],keys(equip_apply_prop2))!=-1 )
-		{
-			k = k/5+1;
-			if( k>5 )
-				k = 5;
-		}
-		
-		if( !obj->query("combination") )
-			obj->add("weapon_prop/"+base_prop[i],k);
-		else	obj->add("combination_dbase/"+obj->query("skill_type")+"/base_prop/"+base_prop[i],k);	
-		
-		if( !undefinedp(equip_apply_prop[base_prop[i]]) )
-			str = equip_apply_prop[base_prop[i]];
-		else if( !undefinedp(equip_apply_prop2[base_prop[i]]) )	
-			str = equip_apply_prop2[base_prop[i]];
-		else
-		{
-			str = base_prop[i];
-			if( is_chinese(to_chinese(str)) )
-				str = to_chinese(str)+"有效等级";
-			else if( sscanf(str,"ad_%s",str2) )
-			{
-				if( is_chinese(to_chinese(str2)) )
-					str = to_chinese(str2)+"技能等级";
-			}
-		}	
-		tell_object(me,HIG"【系统】"+obj->name()+HIG"的 "HIY+str+HIG" 增加了 "HIR+k+" 点"HIG"。\n"NOR);
-	}
-	tell_object(me,HIG"【系统】"+obj->name()+HIG"升级成功！\n"NOR);
-	obj->set("exp",0);
-	if( obj->query("combination") )
-		obj->set("combination_dbase/"+obj->query("skill_type")+"/exp",0);
-	if( !obj->query("combination") )	
-		obj->add("level",1);
-	else	obj->add("combination_dbase/"+obj->query("skill_type")+"/level",1);
-	if( obj->query("combination") )	
-	{
-		if( newob )
-		{  
-			newob->move("/obj/empty");
-			REMOVE_D->add_obj(newob,1);
-		}
-		if( obj->save() )
-			tell_object(me,HIR"【系统】"+obj->name()+HIR"数据保存成功。"NOR"\n");
-		if( update_combination(obj->query("skill_type")) )
-			tell_object(me,HIR"【系统】"+obj->name()+HIR"数据更新成功。"NOR"\n");
-		return 1;
-	}	
-	lvl = obj->query("level");
-	a_name = newob->w_names();
-	if( newob )
-	{  
-		newob->move("/obj/empty");
-		REMOVE_D->add_obj(newob,1);
-	}
-	if( undefinedp(a_name[lvl]) 
-	 || query("no_name") )
-	{
-		if( obj->save() )
-			tell_object(me,HIR"【系统】"+obj->name()+HIR"保存成功。"NOR"\n");
-		return 1;	
-	}
-	name = a_name[lvl][0];
-	if( name==obj->query("name") )
-	{
-		if( obj->save() )
-			tell_object(me,HIR"【系统】"+obj->name()+HIR"保存成功。"NOR"\n");
-		return 1;	
-	}
-	euqips-= ({data});
-	euqips-= ({0});
-	if( sizeof(euqips)<1 )
-		euqips = ({});
-	v = obj->query("valid_time");
-	obj->delete("valid_time");
-	tell_object(me,HIY"【系统】你的"+obj->query("name")+HIY"进阶为"+HIR+name+HIY"。\n"NOR);
-	ids = a_name[lvl][1];
-	obj->set_name(name,ids);
-	obj->set("names",name);
-	obj->set("ids",ids);	
-	obj->delete("no_save");
+int level_up() {
+  mapping my_data, base_data, equip_apply_prop, equip_apply_prop2, a_name;
+  string *tmp, *base_prop, str, str2, color, name, *ids, data, *euqips;
+  int i, k, j, num, lvl, t, v;
+  mixed type;
+  object me, newob, obj = this_object();
 
-	t = time();
-	obj->set("valid_time",t);
-	if( obj->save() )
-	{
-		set("no_give",1);
-        	name = obj->name();
-        	if( !name || !stringp(name) )
-        		name = "无名";
-        	name = COLOR_D->clean_color(name);
-        	type = obj->query("skill_type");
-        	euqips+= ({type+"_"+t+"_"+name});
-		me->set("euqips",euqips);
-		me->save(1);
-		tell_object(me,HIG"【系统】"+obj->name()+HIG"保存成功。"NOR"\n");
-		return 1;
-	}
-	else	
-	{
-		tell_object(me,HIR"【系统】"+obj->name()+HIR"保存失败。"NOR"\n");
-		obj->move("/obj/empty");
-		REMOVE_D->add_obj(obj,1);
-		return 0;
-	}
-}	
+  if (!objectp(me = environment()) || !me->is_character()
+    || !query("owner_id") || query("owner_id") != me->query("id"))
+    return 0;
+  if (obj->query("equipped"))
+    return 0;
+  if (!obj->query("combination")) {
+    if (obj->query("level") >= me->query_level())
+      return 0;
+  } else {
+    if (obj->query("combination_dbase/" + obj->query("skill_type") + "/level") >= me->query_level())
+      return 0;
+  }
 
-mixed add(string prop, mixed data)
-{
-	int max,lvl,old,n;
-	object who;
-	
-	if( !objectp(who=environment()) || !who->is_character() 
-	 || !query("owner_id") || query("owner_id")!=who->query("id") )
-		return 0;
-	
-	if( data && prop=="exp" )
-	{
-		if( !query("combination") )
-			old = (int)query(prop,1);
-		else	old = (int)query("combination_dbase/"+query("skill_type")+"/exp");	
-		max = this_object()->query_max_exp();
-		n = old+(int)data;
-		if( (n<0 || old>=2100000000) && (int)data>0 )
-			return 0;
-		if( (int)data>0 )
-		{
-			if( old>=max )
-				return 0;
-			if( n>=max )
-			{
-				if( !query("combination") )
-					this_object()->set("exp",max);
-				else	this_object()->set("combination_dbase/"+query("skill_type")+"/exp",max);	
-				if( time()>who->query("channel/last_equip_up")+3600 )
-				{
-					who->set("channel/last_equip_up",time());
-					tell_object(who,HIY"【系统】你的"+this_object()->name()+HIY"成长已到瓶颈，需要通过炼器师来提升等级。\n"NOR);
-				}				
-			}
-		}				
-	}
-	if( query("combination") && prop=="exp" )
-		prop = sprintf("combination_dbase/%s/%s",query("skill_type"),prop);
-	return ::add(prop, data);
+  if (!pointerp(euqips = me->query("euqips"))
+    || sizeof(euqips) < 1)
+    return 0;
+  data = sprintf(
+    "%s_%d_%s",
+    obj->query("skill_type"),
+    obj->query("valid_time"),
+    COLOR_D->clean_color(obj->name())
+  );
+  if (!data || !stringp(data))
+    return 0;
+  if (member_array(data, euqips) == -1 && !obj->query("combination"))
+    return 0;
+
+  switch (obj->query("skill_type")) {
+    case "unarmed": newob = new("/d/obj/nweapon/unarmed"); break;
+    case "sword": newob = new("/d/obj/nweapon/sword"); break;
+    case "stick": newob = new("/d/obj/nweapon/stick"); break;
+    case "staff": newob = new("/d/obj/nweapon/staff"); break;
+    case "spear": newob = new("/d/obj/nweapon/spear"); break;
+    case "mace": newob = new("/d/obj/nweapon/mace"); break;
+    case "hammer": newob = new("/d/obj/nweapon/hammer"); break;
+    case "fork": newob = new("/d/obj/nweapon/fork"); break;
+    case "blade": newob = new("/d/obj/nweapon/blade"); break;
+    case "axe": newob = new("/d/obj/nweapon/axe"); break;
+    case "whip": newob = new("/d/obj/nweapon/whip"); break;
+    default: return 0;
+  }
+
+  equip_apply_prop = ("/cmds/std/look.lpc")->query_euqip_look1();
+  equip_apply_prop2 = ("/cmds/std/look.lpc")->query_euqip_look2();
+
+  if (!obj->query("combination")) {
+    my_data = obj->query("weapon_prop");
+    base_data = ("/d/obj/nweapon/newweapon.lpc")->equip_base(obj);
+  } else {
+    my_data = obj->query("combination_dbase/" + query("skill_type") + "/weapon_pro");
+    base_data = obj->query("combination_dbase/" + query("skill_type") + "/base_prop");
+  }
+
+  if (!obj->query("combination"))
+    color = obj->query("weapon_color");
+  else color = obj->query("combination_dbase/" + query("skill_type") + "/weapon_color");
+  if (color && stringp(color)) {
+    switch (color) {
+      case "HIY": num = 1; break;
+      case "HIB": num = 1; break;
+      case "HIC": num = 2; break;
+      case "HIR": num = 3; break;
+      case "HIM": num = 5; break;
+      default: num = 0; break;
+    }
+  } else num = 0;
+  base_prop = keys(base_data);
+
+  tmp = keys(my_data);
+  if (tmp && arrayp(tmp)) {
+    j = sizeof(tmp);
+    for (i = 0; i < j; i++) {
+      type = tmp[i];
+      if (!stringp(type) || random(3))
+        continue;
+      if (member_array(type, base_prop) != -1 && random(10) < 8)
+        continue;
+      if (my_data[type] <= 0)
+        continue;
+      if (type == "combat_damage" || type == "spells_damage")
+        continue;
+      k = random(obj->query("level") / 10) + random(num * 2) + 1;
+      if (member_array(type, keys(equip_apply_prop2)) != -1) {
+        k = k / 5 + 1;
+        if (k > 5)
+          k = 5;
+      }
+      if (k > 0) {
+        my_data[type] += k;
+
+        if (!undefinedp(equip_apply_prop[type]))
+          str = equip_apply_prop[type];
+        else if (!undefinedp(equip_apply_prop2[type]))
+          str = equip_apply_prop2[type];
+        else {
+          str = type;
+          if (is_chinese(to_chinese(str)))
+            str = to_chinese(str) + "有效等级";
+          else if (sscanf(str, "ad_%s", str2)) {
+            if (is_chinese(to_chinese(str2)))
+              str = to_chinese(str2) + "技能等级";
+          }
+        }
+        tell_object(
+          me,
+          HIG "【系统】" + obj->name() + HIG "的 " HIY + str + HIG " 增加了" HIR + k + HIG " 点。\n" NOR
+        );
+      }
+    }
+  }
+  for (i = 0; i < sizeof(base_prop); i++) {
+    if (base_prop[i] == "combat_damage" || base_prop[i] == "spells_damage")
+      k = random(obj->query("level") / 5) + random(num * 3);
+    else k = random(obj->query("level") / 20) + random(num * 2);
+    if (k < 1) k = 1;
+    if (member_array(base_prop[i], keys(equip_apply_prop2)) != -1) {
+      k = k / 5 + 1;
+      if (k > 5)
+        k = 5;
+    }
+
+    if (!obj->query("combination"))
+      obj->add("weapon_prop/" + base_prop[i], k);
+    else obj->add(
+      "combination_dbase/" + obj->query("skill_type") + "/base_prop/" + base_prop[i],
+      k
+    );
+
+    if (!undefinedp(equip_apply_prop[base_prop[i]]))
+      str = equip_apply_prop[base_prop[i]];
+    else if (!undefinedp(equip_apply_prop2[base_prop[i]]))
+      str = equip_apply_prop2[base_prop[i]];
+    else {
+      str = base_prop[i];
+      if (is_chinese(to_chinese(str)))
+        str = to_chinese(str) + "有效等级";
+      else if (sscanf(str, "ad_%s", str2)) {
+        if (is_chinese(to_chinese(str2)))
+          str = to_chinese(str2) + "技能等级";
+      }
+    }
+    tell_object(
+      me,
+      HIG "【系统】" + obj->name() + HIG "的 " HIY + str + HIG " 增加了 " HIR + k + " 点" HIG "。\n" NOR
+    );
+  }
+  tell_object(me, HIG "【系统】" + obj->name() + HIG "升级成功！\n" NOR);
+  obj->set("exp", 0);
+  if (obj->query("combination"))
+    obj->set("combination_dbase/" + obj->query("skill_type") + "/exp", 0);
+  if (!obj->query("combination"))
+    obj->add("level", 1);
+  else obj->add("combination_dbase/" + obj->query("skill_type") + "/level", 1);
+  if (obj->query("combination")) {
+    if (newob) {
+      newob->move("/obj/empty");
+      REMOVE_D->add_obj(newob, 1);
+    }
+    if (obj->save())
+      tell_object(me, HIR "【系统】" + obj->name() + HIR "数据保存成功。" NOR "\n");
+    if (update_combination(obj->query("skill_type")))
+      tell_object(me, HIR "【系统】" + obj->name() + HIR "数据更新成功。" NOR "\n");
+    return 1;
+  }
+  lvl = obj->query("level");
+  a_name = newob->w_names();
+  if (newob) {
+    newob->move("/obj/empty");
+    REMOVE_D->add_obj(newob, 1);
+  }
+  if (undefinedp(a_name[lvl])
+    || query("no_name")) {
+    if (obj->save())
+      tell_object(me, HIR "【系统】" + obj->name() + HIR "保存成功。" NOR "\n");
+    return 1;
+  }
+  name = a_name[lvl][0];
+  if (name == obj->query("name")) {
+    if (obj->save())
+      tell_object(me, HIR "【系统】" + obj->name() + HIR "保存成功。" NOR "\n");
+    return 1;
+  }
+  euqips -= ({ data });
+  euqips -= ({ 0 });
+  if (sizeof(euqips) < 1)
+    euqips = ({});
+  v = obj->query("valid_time");
+  obj->delete("valid_time");
+  tell_object(me, HIY "【系统】你的" + obj->query("name") + HIY "进阶为" + HIR + name + HIY "。\n" NOR);
+  ids = a_name[lvl][1];
+  obj->set_name(name, ids);
+  obj->set("names", name);
+  obj->set("ids", ids);
+  obj->delete("no_save");
+
+  t = time();
+  obj->set("valid_time", t);
+  if (obj->save()) {
+    set("no_give", 1);
+    name = obj->name();
+    if (!name || !stringp(name))
+      name = "无名";
+    name = COLOR_D->clean_color(name);
+    type = obj->query("skill_type");
+    euqips += ({ type + "_" + t + "_" + name });
+    me->set("euqips", euqips);
+    me->save(1);
+    tell_object(me, HIG "【系统】" + obj->name() + HIG "保存成功。" NOR "\n");
+    return 1;
+  } else {
+    tell_object(me, HIR "【系统】" + obj->name() + HIR "保存失败。" NOR "\n");
+    obj->move("/obj/empty");
+    REMOVE_D->add_obj(obj, 1);
+    return 0;
+  }
+}
+
+mixed add(string prop, mixed data) {
+  int max, lvl, old, n;
+  object who;
+
+  if (!objectp(who = environment()) || !who->is_character()
+    || !query("owner_id") || query("owner_id") != who->query("id"))
+    return 0;
+
+  if (data && prop == "exp") {
+    if (!query("combination"))
+      old = (int)query(prop, 1);
+    else old = (int)query("combination_dbase/" + query("skill_type") + "/exp");
+    max = this_object()->query_max_exp();
+    n = old + (int)data;
+    if ((n < 0 || old >= 2100000000) && (int)data > 0)
+      return 0;
+    if ((int)data > 0) {
+      if (old >= max)
+        return 0;
+      if (n >= max) {
+        if (!query("combination"))
+          this_object()->set("exp", max);
+        else this_object()->set("combination_dbase/" + query("skill_type") + "/exp", max);
+        if (time() > who->query("channel/last_equip_up") + 3600) {
+          who->set("channel/last_equip_up", time());
+          tell_object(who, HIY "【系统】你的" + this_object()->name() + HIY "成长已到瓶颈，需要通过炼器师来提升等级。\n" NOR);
+        }
+      }
+    }
+  }
+  if (query("combination") && prop == "exp")
+    prop = sprintf("combination_dbase/%s/%s", query("skill_type"), prop);
+  return ::add(prop, data);
 }
 /*
 mixed set(string prop, mixed data)
@@ -1176,162 +1118,143 @@ mixed set(string prop, mixed data)
 	return ::set(prop, data);
 }
 */
-string cast_spell_file(string spell)
-{
-	string dir;
-	if( !query("equipped") )
-		return 0;
-	if( !stringp(dir=query("cast_dir")) 
-	 || strlen(dir)<2 )
-		return 0;	 
-        return CLASS_D("equip") + "/cast/"+dir+"/" + spell;
+string cast_spell_file(string spell) {
+  string dir;
+  if (!query("equipped"))
+    return 0;
+  if (!stringp(dir = query("cast_dir"))
+    || strlen(dir) < 2)
+    return 0;
+  return CLASS_D("equip") + "/cast/" + dir + "/" + spell;
 }
 
-string perform_action_file(string action)
-{
-	string dir;
-	if( !query("equipped") )
-		return 0;
-	if( !stringp(dir=query("perform_dir")) 
-	 || strlen(dir)<2 )
-		return 0;	
-  	return CLASS_D("equip") + "/perform/" + dir+"/"+action;
+string perform_action_file(string action) {
+  string dir;
+  if (!query("equipped"))
+    return 0;
+  if (!stringp(dir = query("perform_dir"))
+    || strlen(dir) < 2)
+    return 0;
+  return CLASS_D("equip") + "/perform/" + dir + "/" + action;
 }
 
-string exert_function_file(string func)
-{
-	string dir;
-	if( !query("equipped") )
-		return 0;
-	if( !stringp(dir=query("exert_dir")) 
-	 || strlen(dir)<2 )
-		return 0;
-        return CLASS_D("equip") + "/exert/" + dir+"/"+func;
+string exert_function_file(string func) {
+  string dir;
+  if (!query("equipped"))
+    return 0;
+  if (!stringp(dir = query("exert_dir"))
+    || strlen(dir) < 2)
+    return 0;
+  return CLASS_D("equip") + "/exert/" + dir + "/" + func;
 }
 
-int exert_function(object me, string arg)
-{
-	string dir,action, target, file,msg;
-	object target_ob,ob;
+int exert_function(object me, string arg) {
+  string dir, action, target, file, msg;
+  object target_ob, ob;
 
-	if( !query("equipped") )
-		return 0;
-	if( !stringp(dir=query("exert_dir")) 
-	 || strlen(dir)<2 )
-	 	return 0;
-	if( sscanf(arg,"%s %s",action,target)==2 ) 
-    	{
-    		target_ob = present(target, environment(me));
-		if( !target_ob ) 
-			return notify_fail("这里没有 " + target + "。\n");
-	} 
-	else 	action = arg;
-	if( !stringp(file = (string)this_object()->exert_function_file(action))
-  	|| file_size(file + ".lpc") <= 0 ) 
-    		return 0;
+  if (!query("equipped"))
+    return 0;
+  if (!stringp(dir = query("exert_dir"))
+    || strlen(dir) < 2)
+    return 0;
+  if (sscanf(arg, "%s %s", action, target) == 2) {
+    target_ob = present(target, environment(me));
+    if (!target_ob)
+      return notify_fail("这里没有 " + target + "。\n");
+  } else action = arg;
+  if (!stringp(file = (string)this_object()->exert_function_file(action))
+    || file_size(file + ".lpc") <= 0)
+    return 0;
 
-	if( time()<(me->query_temp("no_exert/start")+me->query_temp("no_exert/time")) )
-    	{
-    		if( stringp(msg=me->query_temp("no_exert/msg")) )
-        		return notify_fail(msg+"\n"NOR);
-	}
-	me->set_temp("kill_msg","exert_equip_"+action);
-	return (int)call_other( file, "exert", me, this_object(),target_ob);	
+  if (time() < (me->query_temp("no_exert/start") + me->query_temp("no_exert/time"))) {
+    if (stringp(msg = me->query_temp("no_exert/msg")))
+      return notify_fail(msg + "\n" NOR);
+  }
+  me->set_temp("kill_msg", "exert_equip_" + action);
+  return (int)call_other(file, "exert", me, this_object(), target_ob);
 }
 
-int perform_action(object me, string arg)
-{
-	string dir,action, target, file,msg;
-	object target_ob;
-	
-	if( !query("equipped") )
-		return 0;
-	if( !stringp(dir=query("perform_dir")) 
-	 || strlen(dir)<2 )
-		return 0;
-	if( sscanf(arg,"%s %s",action,target)==2 ) 
-    	{
-    		target_ob = present(target, environment(me));
-		if( !target_ob ) 
-			return notify_fail("这里没有 " + target + "。\n");
-	} 
-	else    action = arg;
-	if( !stringp(file = (string)this_object()->perform_action_file(action))
-  	|| file_size(file + ".lpc") <= 0 ) 
-    		return 0;
-	if( time()<(me->query_temp("no_perform/start")+me->query_temp("no_perform/time")) )
-    	{
-    		if( stringp(msg=me->query_temp("no_perform/msg")) )
-        		return notify_fail(msg+"\n"NOR);
-        	else	return notify_fail("你现在不能施展外功。\n");	
-	}
-	me->set_temp("kill_msg","perform_equip_"+action);
-	return (int)call_other( file, "perform", me, this_object(),target_ob);
+int perform_action(object me, string arg) {
+  string dir, action, target, file, msg;
+  object target_ob;
+
+  if (!query("equipped"))
+    return 0;
+  if (!stringp(dir = query("perform_dir"))
+    || strlen(dir) < 2)
+    return 0;
+  if (sscanf(arg, "%s %s", action, target) == 2) {
+    target_ob = present(target, environment(me));
+    if (!target_ob)
+      return notify_fail("这里没有 " + target + "。\n");
+  } else action = arg;
+  if (!stringp(file = (string)this_object()->perform_action_file(action))
+    || file_size(file + ".lpc") <= 0)
+    return 0;
+  if (time() < (me->query_temp("no_perform/start") + me->query_temp("no_perform/time"))) {
+    if (stringp(msg = me->query_temp("no_perform/msg")))
+      return notify_fail(msg + "\n" NOR);
+    else return notify_fail("你现在不能施展外功。\n");
+  }
+  me->set_temp("kill_msg", "perform_equip_" + action);
+  return (int)call_other(file, "perform", me, this_object(), target_ob);
 }
 
-int cast_spell(object me, string arg)
-{
-	string dir,action, target, file,msg;
-	object target_ob;
+int cast_spell(object me, string arg) {
+  string dir, action, target, file, msg;
+  object target_ob;
 
-	if( !query("equipped") )
-		return 0;
-	if( !stringp(dir=query("cast_dir")) 
-	 || strlen(dir)<2 )
-		return 0;
-	if( sscanf(arg,"%s %s",action,target)==2 ) 
-    	{
-    		target_ob = present(target, environment(me));
-		if( !target_ob ) 
-			return notify_fail("这里没有 " + target + "。\n");
-	} 
-	else    action = arg;
-	if( !stringp(file = (string)this_object()->cast_spell_file(action))
-  	|| file_size(file + ".lpc") <= 0 ) 
-    		return 0;
-	if( time()<(me->query_temp("no_cast/start")+me->query_temp("no_cast/time")) )
-    	{
-    		if( stringp(msg=me->query_temp("no_cast/msg")) )
-        		return notify_fail(msg+"\n"NOR);
-        	else	return notify_fail("你现在不能施展法术。\n");	
-	}
-	me->set_temp("kill_msg","cast_equip_"+action);
-	return (int)call_other( file, "cast", me, this_object(),target_ob);
+  if (!query("equipped"))
+    return 0;
+  if (!stringp(dir = query("cast_dir"))
+    || strlen(dir) < 2)
+    return 0;
+  if (sscanf(arg, "%s %s", action, target) == 2) {
+    target_ob = present(target, environment(me));
+    if (!target_ob)
+      return notify_fail("这里没有 " + target + "。\n");
+  } else action = arg;
+  if (!stringp(file = (string)this_object()->cast_spell_file(action))
+    || file_size(file + ".lpc") <= 0)
+    return 0;
+  if (time() < (me->query_temp("no_cast/start") + me->query_temp("no_cast/time"))) {
+    if (stringp(msg = me->query_temp("no_cast/msg")))
+      return notify_fail(msg + "\n" NOR);
+    else return notify_fail("你现在不能施展法术。\n");
+  }
+  me->set_temp("kill_msg", "cast_equip_" + action);
+  return (int)call_other(file, "cast", me, this_object(), target_ob);
 }
 
-int query_fu_level(string fu)
-{
-	string type,*fus = ({
-		"寒冰",	"飞轮",	"血石",	"清风",	"惊雷",	"万寒",	"月轮",	"凝血",	"冰风",	"寒雷",	
-		"万轮",	"血轮",	"风轮",	"雷爆",	"戾血",	"腥风",	"血雷",	"飓风",	"风雷",	"万雷",
-	});
-	if( !fu || member_array(fu,fus)==-1 )
-		return 0;
-	if( this_object()->query("combination") )
-	{
-		if( !stringp(type=this_object()->query("skill_type")) )
-			return 0;
-		return (int)this_object()->query("combination_dbase/"+type+"/fu/"+fu);		
-	}
-	else	return (int)this_object()->query("fu/"+fu);
+int query_fu_level(string fu) {
+  string type, *fus = ({
+    "寒冰", "飞轮", "血石", "清风", "惊雷", "万寒", "月轮", "凝血", "冰风", "寒雷",
+    "万轮", "血轮", "风轮", "雷爆", "戾血", "腥风", "血雷", "飓风", "风雷", "万雷",
+  });
+  if (!fu || member_array(fu, fus) == -1)
+    return 0;
+  if (this_object()->query("combination")) {
+    if (!stringp(type = this_object()->query("skill_type")))
+      return 0;
+    return (int)this_object()->query("combination_dbase/" + type + "/fu/" + fu);
+  } else return (int)this_object()->query("fu/" + fu);
 }
 
-int save()
-{
-	int i;
-	object env;
-	string type,save_type;
-	if( !query("combination") )
-		return ::save();
-	if( !objectp(env=environment()) )
-		return ::save();		
-	if( !stringp(type = query("skill_type")) )
-		return ::save();
-	if( !stringp(save_type = combination_type(env)) )
-		return ::save();
-	if( !update_combination(save_type) )
-		return ::save();
-	i = ::save();
-	update_combination(type);
-	return i;
+int save() {
+  int i;
+  object env;
+  string type, save_type;
+  if (!query("combination"))
+    return ::save();
+  if (!objectp(env = environment()))
+    return ::save();
+  if (!stringp(type = query("skill_type")))
+    return ::save();
+  if (!stringp(save_type = combination_type(env)))
+    return ::save();
+  if (!update_combination(save_type))
+    return ::save();
+  i = ::save();
+  update_combination(type);
+  return i;
 }

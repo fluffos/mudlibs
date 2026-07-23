@@ -83,3 +83,35 @@ range check to test the CJK Unicode block instead, and halved the
 GBK-byte-calibrated length bounds in `check_legal_name` to match. See
 AGENTS.md §15h for the full writeup; confirmed via a real interactive
 registration test (Chinese surname + given name reaching the next prompt).
+
+## Re-verification pass (driver rebuild + LPC formatter + WASM build)
+
+- **Reformatted** all 9017 `.lpc` files under `work/` with
+  `tools/lpc-syntax/format-corpus.mjs`: 8813 written, 164 already
+  idempotent-clean, 40 refused by the tool's own token/byte-identity
+  guard (expected on messy legacy code, not chased).
+- **Native retest against the freshly-rebuilt driver**
+  (`~/src/fluffos/build-debug/src/driver`, rebuilt from latest upstream
+  master): clean boot (waited out the lib's own 30-second startup grace
+  period per its existing note above), zero fatal errors in
+  `log/debug.log`. Full registration flow re-verified end-to-end with a
+  fresh real Chinese name (id `unlrthr`/name `秦风`, then again with id
+  `unlrfour`/name `秦枫`), reaching the actual starting room (`翠香楼`),
+  `look`/`score`/`quit` all producing correct output — no regressions
+  from either the driver rebuild or the reformat.
+- **WASM build test** (`scripts/wasm_client.js` against
+  `~/src/fluffos/build-wasm/src`): boots cleanly, only benign compile-
+  warning spam, zero fatal errors. However, this lib's own intentional
+  30-second startup grace period (`uptime() < 30` in
+  `adm/daemons/logind.lpc`'s `logon()`, which unconditionally
+  `destruct(ob)`s the connection object if triggered — see "Status"
+  section above) fires every time under `wasm_client.js`, because that
+  harness calls `fluffos_connect()` immediately after `fluffos_boot()`
+  within the same single-process invocation, well before 30 seconds of
+  driver uptime can elapse. This is a **test-harness timing limitation**
+  (the harness has no way to wait out real uptime before opening the one
+  connection it drives), **not** a WASM driver bug and **not** a mudlib
+  bug — the exact same code path is only ever exercised natively after
+  real wall-clock time has passed, which is how this lib was already
+  fully verified above. Not investigated further per the pass's "honest
+  assessment, no forced full playthrough" guidance.
