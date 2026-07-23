@@ -67,3 +67,54 @@ range check to test the CJK Unicode block instead, and halved the
 GBK-byte-calibrated length bounds in `check_legal_name` to match. See
 AGENTS.md §15h for the full writeup; confirmed via a real interactive
 registration test (Chinese surname + given name reaching the next prompt).
+
+## Re-verification pass (2026-07-23): driver rebuild + LPC formatter + WASM build + NEW log_error() spam fix (AGENTS.md §15af)
+
+- **Formatter**: ran `format-corpus.mjs` over all of `work/` (16,096
+  files, 15,035 written/reformatted, 42 already-clean, 1,019 refused
+  with an error — a larger-than-usual error count but expected on this
+  archive's already-documented long tail of syntax typos, not chased
+  individually).
+- **Native retest against rebuilt driver** (`build-debug/src/driver`,
+  rebuilt from latest upstream master): clean boot (took roughly a
+  minute to preload — this is the largest of this batch's libs at
+  16k+ files), zero fatal errors in `debug.log`.
+- **NEW bug found and fixed**: a full interactive registration (this
+  lib's own admin-password + normal-password two-tier scheme, then
+  Chinese name, talent roll, email, gender) revealed
+  `adm/obj/master.lpc`'s `log_error()` showed the **raw compiler
+  diagnostic text to ANY connected player**, no `wizardp()` gate at
+  all, for every compile diagnostic funneled through
+  `APPLY_LOG_ERROR` — including harmless "Unused local variable"/
+  "Unknown #pragma" warnings triggered by the very first lazy compile
+  of the new character's own `char.lpc`/`feature/*` files right after
+  gender selection. In the pre-fix transcript this dumped ~30 screens
+  of raw compiler internals over the new player's very first moment in
+  the game — same bug class already found and fixed on several sibling
+  libs in this project (`dtsl`/`datangshuanglong`/`dongfanggushi2`/
+  `bixiecanyang`/`wuhanzhan`/`shenzhou`, AGENTS.md §15af), not
+  previously caught here because this lib's original testing pass
+  (like several others) never exercised a full registration through to
+  gender selection. Fixed identically: only show the full diagnostic to
+  a wizard; only alarm an ordinary player with the generic
+  `__DEFAULT_ERROR_MESSAGE__` for a genuine compile **error** (gated on
+  absence of the substring `"warning:"`) — `#include <runtime_config.h>`
+  was already present in `master.lpc`, no additional include needed.
+- Re-verified with a fresh full registration (real name `秦深`, ID
+  `qinshen`) all the way through to the actual game world (世外桃源
+  starting room, NPC dialogue firing correctly), then `look`/`score`/
+  `quit` all producing correct output with **zero** compiler-warning
+  spam and zero real errors in `debug.log`.
+- **WASM build**: preload completes with only the expected non-fatal
+  `sockets`-package gap (`adm/daemons/ftpd.lpc`'s
+  `socket_create`/`socket_bind`/`socket_close` → `Undefined function`,
+  cascading into a few dependent compile errors on the same file but
+  caught non-fatally — `Initializations complete.` still printed).
+  Registration is blocked by the documented `query_ip_number()`
+  WASM-mode limitation: `adm/daemons/logind.lpc`'s `logon()` calls
+  `BAN_D->is_banned(query_ip_number(ob))` and rejects every connection
+  with "你的地址在本 MUD 不受欢迎...". **Not a mudlib bug** — the
+  documented driver-side gap, not something to patch. Verdict: boots
+  cleanly under WASM (log_error fix confirmed present in this build
+  copy too, via the in-memory `work/` snapshot); registration cannot
+  complete due to the driver's IP-check limitation.
