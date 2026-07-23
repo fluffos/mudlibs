@@ -303,3 +303,28 @@ runtime) — nowhere near mega-lib territory, no backing-off needed.
 - Test id used: `qinfengstd` (distinct from #91's `qinfengwu` — separate
   lib, separate save-data namespace, no collision risk, but kept distinct
   anyway for clarity in any shared debug.log grep).
+
+## 2026-07-23 re-verification pass (driver rebuild + formatter + WASM)
+
+- **LPC reformat**: ran `format-corpus.mjs` over all of `work/` (3,135
+  `.lpc` files) — 3,102 written, 13 already-idempotent, 20 refused
+  (self-checked round-trip failures on messy legacy syntax, matching
+  #91's own reformat numbers, as expected for this near-identical
+  codebase).
+- **Native retest against the freshly-rebuilt driver**: booted clean on
+  port 40084, zero fatal preload errors. Full registration flow with a
+  fresh real Chinese name ("秦风标"/`qinfengstdb`, distinct from the
+  earlier `qinfengstd` test id) through the complete wizard (id →
+  confirm → Chinese name → password → confirm → gift accept → email →
+  gender) into the actual game world (客店); `look`, `score` (correct
+  stats/HP/potential), and `quit` (correct item-drop + clean save) all
+  verified with real output, zero runtime errors in the session. No
+  regressions from the reformat or the new driver binary.
+- **WASM test** (`scripts/wasm_client.js` against `build-wasm/src`):
+  boots cleanly, same preload warnings as native. **Full registration +
+  login + look + quit all work end-to-end under WASM**, same as #91 —
+  this codebase doesn't gate login on `query_ip_number()`'s format, so
+  the documented WASM IP-check limitation doesn't apply. Same harmless
+  cosmetic artifact as #91: a fresh registration's "上次连线" timestamp
+  shows the Unix epoch ("Wed Dec 31 16:00:00 1969") under WASM's
+  synthetic clock — not a functional issue.
