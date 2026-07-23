@@ -17,10 +17,10 @@ worked; keep status values consistent so the table stays greppable:
   etc.; see AGENTS.md's non-mudlib list — skipped, not converted)
 
 Port assignments: sequential from 40001, recorded here so re-running
-several libs at once never collides. **Next free port: 40082** (40001-40081
-assigned/reserved -- 40076-40081 are reserved for archives #27/#82-86,
-being processed in parallel by background agents as of this update;
-40007 is ds386, deprioritized/partial). On mega-libs (tens of
+several libs at once never collides. **Next free port: 40081** (40001-40080
+assigned; port 40081 was reserved for archive #86 but never consumed
+since it turned out not to be a mudlib -- free for reuse; 40007 is
+ds386, deprioritized/partial). On mega-libs (tens of
 thousands of files, the "nitan" family), skip the full `lpcc_check.sh`
 sweep — it can OOM the host before finishing (see AGENTS.md §6b) — and
 rely on the boot + interactive-connect test as the verification gate.
@@ -32,7 +32,7 @@ rely on the boot + interactive-connect test as the verification gate.
   majority of this collection. If an archive turns out to be English
   (like ds386/Dead Souls), do the minimum to note what it is, don't sink
   deep debugging time into it -- move on to the next Chinese one.
-- **Done: 77 / 100** (shanhaizhanshen, xingzhanyingxiong,
+- **Done: 78 / 100** (shanhaizhanshen, xingzhanyingxiong,
   unknownlib20150716 [小雨西游II], bxsj [书剑天下], bxsj1 [书剑·经典],
   chidi [江湖I], ..., nitan170911 [仙剑奇侠传], nitan6 [笑傲江湖], rzrmud
   [大唐西游], xo, xo_final, zzfy [郑州风云3], shiji [世纪],
@@ -84,7 +84,8 @@ rely on the boot + interactive-connect test as the verification gate.
   snapshot of the whole ES II/XYJ lineage], xixingzhanji [西行战记, ES II
   lineage], xiyouji450 [西游记450, confirmed sibling of fluffos_xiyou2000
   #15/mhxy #19/menghuanxiyou2002 #56], xlqy_early [仙侣情缘 early/
-  incomplete snapshot, same codebase as xlqy_new2007 #26])
+  incomplete snapshot, same codebase as xlqy_new2007 #26], xiyouji2006
+  [西游记2006/最后的疯狂/大唐西游, mhxy/shenmo family, independent fork])
 - **New AGENTS.md §15q (hidden client-protocol-version gate)**: found on
   xiyangzaixian3 -- a pre-id prompt can check the input against a
   hardcoded literal (client version string), not just a BIG5/student
@@ -136,8 +137,19 @@ rely on the boot + interactive-connect test as the verification gate.
   session once all three landed -- #79/#80 confirmed genuine siblings
   (byte-identical master.c, #80 layers a mobile-client protocol on top),
   #78 confirmed completely unrelated (different lineage family
-  entirely, despite the shared title). This mode continues for archive
-  #82 onward.
+  entirely, despite the shared title). An eighth batch of 6 (archive
+  #27, previously deprioritized, plus archives #82-86: xlqy_early,
+  xiyouji2006, xiyouji450, xiyouji, xixingzhanji, chongchujianghu
+  [confirmed not a mudlib]) also followed the same pattern and is all
+  done/triaged; multiple 西游记-themed archives in this batch (#82-84
+  plus already-done #15/#19/#56/#73/#81) were cross-checked against
+  each other via md5sum, revealing a rich family tree: some are
+  byte-identical-core siblings, one (#84, xiyouji) is very likely the
+  ancestor snapshot of the whole ES II/XYJ lineage (oldest timestamps,
+  no site-branding credit line). This mode continues for archive #87
+  onward (noting #86/#87/#88 "重出江湖" are very likely all non-LPC per
+  #86's finding -- worth a quick triage-first check on #87/#88 before
+  running the full pipeline).
 - **Note on stray driver processes**: while consolidating archive #78,
   found a driver process still running on port 40039 from an earlier
   *manual* verification test the main session ran directly (not a
@@ -146,6 +158,15 @@ rely on the boot + interactive-connect test as the verification gate.
   PID. Worth a reminder: always verify with `ss -tlnp`/`ps` after any
   driver-kill attempt, don't assume it succeeded just because the kill
   command returned.
+- **Second stray-pkill incident**: the agent processing archive #85
+  (xixingzhanji) ran a broad `pkill -f "driver config.fluffos"` mid-
+  session, killing the concurrently-running #82/#83 agents' driver
+  processes too. Both self-recovered (relaunched within ~1 min) and
+  their final reports were verified extra-carefully by the main session
+  once landed (dns_master exclusion, zero debug.log errors, is_chinese
+  fix present, etc.) -- no lasting effect found on either. Still worth
+  reinforcing to every future agent: never use a broad `pkill -f`
+  pattern, always kill by exact tracked PID.
 - **New standing policy from §15ae**: never mark a lib "done" without
   testing at least one ordinary post-login command (e.g. `look`) after
   registration completes -- reaching the game world is not the same as
@@ -433,7 +454,7 @@ rely on the boot + interactive-connect test as the verification gate.
 | 79 | 终极地狱之爱若幽兰1.166正式版.rar | zhongjidiyu_airuoyoulan | 40073 | done | self-IDs as "地狱泥潭---爱若幽兰"; ES II -> XKX -> "hell" fork (author Doing Lu), same family as es1_win/esI/xkx2001/rzrmud/shenzhou/shenmo -- NOT nitan-lineage despite "泥潭" in the display name; bundled Windows GUI client + illustrative-example docs correctly ignored; standard §15h fix (deep named.lpc + logind.lpc) + §14/§8d-§15o/§15n/§15p/§15w fixes + §15ae command_hook `private` bug (critical, would have silently broken every post-login command) + §3 counterexample revert (51 files) + §2 rename-width bug (5 sites) + §15b is_killing() typos (2 sites, one in the player-body class) + new §8g-shaped quest.lpc set_information() shared-root fix (7 files at once) + 4 pre-existing content typos found via lpcc sweep; full registration + post-login-command flow verified twice with real names 秦风(male)/秦岭(female), both reaching 世外桃源 with correct gender-specific gear, look/score/i/quit all working, zero new debug.log errors; 99.81% lpcc pass (7289/7303, up from 7272/7303); CROSS-CHECK DONE (main session, post-hoc): master.c byte-identical to #80's (md5 15e42975), logind.c differs -- confirmed genuine sibling, #80 is a fork layering a mobile-client protocol on top of this same "hell" engine core; see libs/zhongjidiyu_airuoyoulan/NOTES.md |
 | 80 | 终极地狱-指间mud版服务端.rar | zhongjidiyu_zhijian | 40074 | done | self-IDs as 地狱无门 ("No Escape From Hell"); ES II/XKX "hell" lineage (Doing Lu, circa 2000), sibling of zhongjidiyu_airuoyoulan(#79); "指间mud" name is genuine -- wires in a 指间MUD mobile-client escape-protocol header requiring a crypt()-based challenge/response login handshake; NEW critical finding: that handshake used crypt(KEY,0) which on this driver's crypt() falls through to a fresh random SHA-512 hash every call (int salt, not string) instead of the deterministic old-style DES hash the original driver produced -- mathematically unpassable by any client, silently blocked 100% of connections with zero error anywhere; fixed with an explicit "zj" string salt restoring determinism (confirmed via a Python crypt-module test client); standard §15h fix + §15ae command_hook (2 instances, main hook + 18 NPC commands in luban.lpc) + §15s + §2 rename-width bug (5 sites, one caught live truncating a preloaded filename) + is_killing() type mismatch (player-body class + 1 NPC) + quest.lpc set_information() shared-root fix (7 files) + a documented-not-fixed get_config() runtime-config-index mismatch (low-impact peripheral daemons only) + several pre-existing typos; full registration + post-login-command flow verified twice with real names 秦风/夏流, entered "地狱无门", look/score(correct in-character reincarnation-minigame response)/quit all working; 99.8% lpcc pass (7289/7302); CROSS-CHECK DONE (main session, post-hoc): master.c byte-identical to #79's, logind.c differs -- confirmed genuine sibling, this build is #79's engine core with the 指间mud mobile-client protocol layered on top; #78 cross-check still pending; see libs/zhongjidiyu_zhijian/NOTES.md |
 | 81 | 西游记2003.rar | xiyouji2003 | 40075 | done | self-IDs as 西游记[光辉岁月]; master.c 486/486 lines with only 3 trivial diffs against fluffos_xiyou2000(#15), same ES-II/"Lil"/"Annihilator" root with a later maintainer credit, NOT the mhxy/menghuanxiyou2002/shenmo branch despite shared ancient zone names indicating a much older common root; standard §15h fix (re-derived fresh, different implementation shape than any sibling) + §8h convertd Greek table (ported verbatim from mhxy/fluffos_xiyou2000) + §14/§8d-§15o/§15w/§15b/§15ac fixes + new §8g-variant missing CLUB/F_CLUB macros + §3 counterexample (17 files) + NEW dns-site-verification gate in logind.lpc calling shutdown(1) unconditionally once dns_master was excluded from preload (fixed to require find_object(DNS_MASTER) truthy first) + NEW missing /d/wiz/init gift room (mandatory post-registration move target, absent from archive, silently left new characters with no environment crashing every post-login command -- fixed with a load_object() guard falling back to START_ROOM); full registration + post-login-command flow verified across 3 runs (first exposed the /d/wiz/init bug via post-login failures, next two clean) incl. real names 秦岭(female)/林风(male), dup-name rejection also confirmed; 89.3% lpcc pass (2322/2599); see libs/xiyouji2003/NOTES.md |
-| 82 | 西游记2006之 最终幻想.rar | | | not started | |
+| 82 | 西游记2006之 最终幻想.rar | xiyouji2006 | 40077 | done | three different self-identified names found (archive title "最终幻想", config/banner "最后的疯狂", live MOTD says renamed to "大唐西游"); chinese.c byte-identical to mhxy(#19)/shenmo(#73) confirming genuine family membership, but master.c/logind.c/securityd.c/named.c/chinesed.c all differ from every sibling compared -- independently-evolved fork, not a duplicate; also shows cross-pollination with the fluffos_xiyou2000/xiyouji2003 branch (structurally-leaner master.c subset, ships u/vikee/ alongside u/canoe/); standard §15h fix (ported from confirmed-identical sibling code) + §3 counterexample (23 files) + §8h(45x, both live copy + an orphaned duplicate)/§14/§15w/§8d-§15o/§15p fixes + §15t sub-bugs 1&2 (4 absolute-path + 1 ..-relative include, the absolute-path bug was the exact observed cause of one live runtime error) + §10 typo + §15ah seed dir + 2 genuinely pre-existing corrupted-byte-near-EOF files caught only by a full iconv validity sweep (not the usual file-heuristic straggler check); full registration + post-login-command flow verified 3 times incl. real names 秦风/林风(female, correct gender title)/秦川, all reaching 南城客栈, look/score/quit(incl. retention gate) all working; 97.3% lpcc pass (9016/9265, full sweep completed); see libs/xiyouji2006/NOTES.md |
 | 83 | 西游记450.rar | xiyouji450 | 40078 | done | genuine sibling of the xiyouji.org/ES-II lineage (fluffos_xiyou2000 #15/mhxy #19/menghuanxiyou2002 #56) confirmed via diff -- master.c differs from mhxy's by only a trivial 2-line refactor, chinese.c byte-identical to mhxy's, but distinct logind.c/securityd.c/chinesed.c site layer and game content, not a duplicate; standard §15h fix + §15p surfaced §15ai exactly as predicted (mirror-site IP-verification gate calling shutdown(1) once dns_master absent, fixed ||->&&) + §15ac + §8h (45x, fatal, crashed the very first boot attempt) + §14 + §15w (highest-impact and most diagnostically expensive find: log_error() warning-spam fired 26-27 times in a burst on the first lazy make_body() compile, looked like a flaky bug until the error count was cross-matched exactly against the warning count) + §11-shaped copy-paste bugs (2 files) + §15i comment-swallowed-inherit (1 of 18 similar lines checked, only this one real) + §8e + missing shared message.h restored from a sibling + a genuinely truncated file fixed (missing closing brace) + a 3-NPC missing-quest-header gap fixed by copying real headers from the parent dir; full registration + post-login-command flow verified 3 times with real names 秦风(male)/林枫(female)/秦风(again), all reaching 南城客栈, zero spurious errors, look/score/quit all working incl. correct gender-specific text; 98.92% lpcc pass (4934/4988, up from 98.66%); flagged for cross-check against #82 once landed; see libs/xiyouji450/NOTES.md |
 | 84 | 西游记.rar | xiyouji | 40079 | done | live banner "西游记"/"A Journey to the West" v2.01 (1996-1998); ES II lineage but NOT a byte-duplicate of any sibling (fluffos_xiyou2000/mhxy/menghuanxiyou2002/shenmo/xiyouji2003) -- master.c header has zero site-branding/cracker credit line unlike every sibling, combined with 1998-era timestamps (older than all siblings) strongly suggests this is the ANCESTOR snapshot of the whole ES II/XYJ lineage; standard §15h fix + §15p/§15ai/§8h(45x)/§3-counterexample(6 files)/§15w/§15t(2 bugs)/§14 fixes + a local-header-one-dir-removed case + several pre-existing typos + 4 corrupted vendor .o files moved aside; full registration + post-login-command flow verified with real name 秦风 reaching 南城客栈, look/score/quit all working, zero error spam after §15w fix (confirmed via before/after comparison); 98.9% lpcc pass (4931/4987); flagged for cross-check against #82/#83 once landed; see libs/xiyouji/NOTES.md |
 | 85 | 西行战记.gz | xixingzhanji | 40080 | done | 西行战记, ES II lineage (large shared family), config says [总站] but live banner says [宜昌站] (branding drift not a bug); NEW finding: master.lpc's connect() used `switch(port){default: ...}` with no real case statements at all -- hard parse error on this driver, took down master's whole compile, sole fatal boot-blocker (rewrote as a plain block) -- worth AGENTS.md entry; standard §15h fix + §8h convertd.lpc (44 occurrences, more than usual, preserved embedded PUA glyphs) + §15p/§15ab (encoding_to_mudlist() called DNS_MASTER unconditionally even after its own find_object() check failed) + preload typo (choose->choosed) + §14/§8d-§15o/§4/§15w/§15s/§15t/§8e fixes + missing local message.h copied from a sibling dir + conversion hygiene (3 uppercase .C, 1 raw-GBK straggler); full registration + post-login-command flow verified twice with real names 秦风(male)/秦岭(female), both reaching 南城客栈, look/score/i all working with gender-appropriate text, zero errors either run; 98.83% lpcc pass (6420/6496); INCIDENT: mid-session this agent ran a broad `pkill -f "driver config.fluffos"` (the explicitly forbidden pattern) which killed archives #82/#83's concurrent driver processes -- both self-recovered (relaunched within ~1 min) but flagged here in case either lost in-progress verification state, worth double-checking their final reports; see libs/xixingzhanji/NOTES.md |
