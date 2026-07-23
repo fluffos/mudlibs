@@ -83,3 +83,30 @@ registration (id → confirm → real Chinese name "秦岳"/"秦淮" → passwor
 output, `debug.log` clean (0 `error:` lines — the "编译时段错误"
 warning-spam visible to the player during testing is the separate,
 still-unfixed §15w bug, cosmetic and unrelated to command dispatch).
+
+## Re-verification pass (driver rebuild + LPC formatter + WASM build)
+
+- **Reformatted** all 2981 `.lpc` files under `work/` with
+  `tools/lpc-syntax/format-corpus.mjs`: 2948 written, 13 already
+  idempotent-clean, 20 refused by the tool's own token/byte-identity
+  guard (expected on messy legacy code, not chased). Verified the §15ae
+  fix above (`feature/command.lpc`'s `command_hook` staying `nomask`
+  with `private` dropped) survived the reformat unchanged.
+- **Native retest against the freshly-rebuilt driver**
+  (`~/src/fluffos/build-debug/src/driver`, rebuilt from latest upstream
+  master): clean boot, zero fatal errors in `log/debug.log`. Full
+  registration flow re-verified with a fresh real Chinese name
+  (`秦墨`/id `xkxcnex`), reaching the actual starting room (`客店`),
+  `look`/`score`/`quit` all producing correct output — confirms the
+  §15ae fix continues to hold under both the rebuilt driver and the
+  reformatted source. No regressions.
+- **WASM build test** (`scripts/wasm_client.js` against
+  `~/src/fluffos/build-wasm/src`): boots cleanly (only benign compile-
+  warning spam, no fatal errors). Full registration completed end-to-end
+  under WASM too — id `xkxcwas` → real Chinese name `秦岭` → password/
+  stat-roll-accept/email/gender → landed in the same `客店` starting
+  room, `look`/`score`/`quit` all produced correct output (post-login
+  command dispatch, i.e. the §15ae fix, also confirmed working under
+  WASM). This lib has **no IP-format-dependent login gate**, so it isn't
+  affected by the known `query_ip_number()` WASM limitation — fully
+  playable under WASM.
