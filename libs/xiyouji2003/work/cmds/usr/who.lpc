@@ -8,221 +8,211 @@
 inherit F_CLEAN_UP;
 #define PREFIX(ob) (userp(ob) ? (interactive(ob) ? (query_idle(ob) > 120 ? HIM "*" NOR : " ") : stringp(ob->query("doing")) ? HIY "@" NOR : HIR "#" NOR) : " ")
 
-int sort_user(object,object);
-int sort_bang(object,object);
+int sort_user(object, object);
+int sort_bang(object, object);
 
 void create() { seteuid(getuid()); }
 
-mixed main(object me, string arg, int remote)
-{
-	string str,load,cmds,comp, *option, fname = "";
-	object *list, *ob,ob1;
-	int i, t_ppl_cnt, cnt, count, wcnt = 0;
-	int opt_long, opt_id, opt_wiz, opt_party, opt_bang;
+mixed main(object me, string arg, int remote) {
+  string str, load, cmds, comp, *option, fname = "";
+  object *list, *ob, ob1;
+  int i, t_ppl_cnt, cnt, count, wcnt = 0;
+  int opt_long, opt_id, opt_wiz, opt_party, opt_bang;
 
-	//Added by waiwai@2001/04/01
-	if( !wizardp(me) && userp(me) ){
-		if( uptime()-me->query_temp("last_who_time")<5)
-			return notify_fail(WHT"你正忙着。\n"NOR);
-	}
+  //Added by waiwai@2001/04/01
+  if (!wizardp(me) && userp(me)) {
+    if (uptime() - me->query_temp("last_who_time") < 5)
+      return notify_fail(WHT "你正忙着。\n" NOR);
+  }
 
-	me->set_temp("last_who_time",uptime());
+  me->set_temp("last_who_time", uptime());
 
-	if( arg ) {
-		option = explode(arg, " ");
-		i = sizeof(option);
-		while( i-- )
-			switch(option[i]) {
-				case "-l": opt_long = 1; break;
-				case "-i": opt_id = 1; break;
-				case "-w": opt_wiz = 1; break;
-				case "-p": opt_party = 1; break;
-                            case "-b": opt_bang = 1; break;
-				default:
-                                        if (!ob1 ) ob1 = find_player(option[i]);
-                                        if (!ob1) ob1 = find_living(option[i]);
-                                        if ((!ob1) && (option[i] =="me")) ob1=me;
-                                        if (!ob1) return notify_fail("没有这个玩家或参数错误。\n指令格式 : who [i] [-l] [-w] [-p] [<ID>]\n");
-                                        if (!ob1 || wizardp(ob1) ) return notify_fail("没有这个玩家或参数错误。\n指令格式 : who [-i] [-l] [-w] [-p] [<ID>]\n");
-                                        me = ob1; opt_party = 1;
+  if (arg) {
+    option = explode(arg, " ");
+    i = sizeof(option);
+    while (i--)
+      switch (option[i]) {
+        case "-l": opt_long = 1; break;
+        case "-i": opt_id = 1; break;
+        case "-w": opt_wiz = 1; break;
+        case "-p": opt_party = 1; break;
+        case "-b": opt_bang = 1; break;
+        default:
+          if (!ob1) ob1 = find_player(option[i]);
+          if (!ob1) ob1 = find_living(option[i]);
+          if ((!ob1) && (option[i] == "me")) ob1 = me;
+          if (!ob1) return notify_fail("没有这个玩家或参数错误。\n指令格式 : who [i] [-l] [-w] [-p] [<ID>]\n");
+          if (!ob1 || wizardp(ob1)) return notify_fail("没有这个玩家或参数错误。\n指令格式 : who [-i] [-l] [-w] [-p] [<ID>]\n");
+          me = ob1; opt_party = 1;
 
-					if( wizardp(me)
-					&&	option[i][0]=='@' ) {
-						RWHO_Q->send_rwho_q(option[i][1..sizeof(option[i])],
-							me, opt_long);
-						write("网路讯息已送出，请稍候。\n");
-						return 1;
-					}
-
-					return notify_fail("指令格式：who [-l|-i|-w|-p]\n");
-			}
-	}
-
-	if( opt_long && !wizardp(me)) {
-		if( (int)me->query("sen") < 20 )
-			return notify_fail("你的精神太差了，没有办法得知所有玩家的详细资料。\n");
-		me->receive_damage("sen", 20);
-	}
-
-	str =GRN "◎ " + INTERMUD_NAME + "目前"NOR;
-
-        if(opt_bang) {
-                if(me->query("banghui"))
-                        str += CYN+me->query("banghui")+NOR GRN"帮会的在线玩家有：";
-			else
-                        str += CYN"所属帮会"NOR"的在线玩家有：";
-	 } else
-        if(opt_party)
-                if(me->query("family/family_name"))
-                        str += CYN+me->query("family/family_name")+NOR GRN"的在线玩家有：";
-                else str += "在线"CYN"大唐布衣"NOR GRN"有：";
-        else if(opt_wiz)
-                str += "在线"WHT"巫师"NOR GRN"有：";
-        else if(opt_long) str += "玩家有：";
-
-        else str += "在线玩家有：";
-
-     str += NOR"\n──────────────────────────────────────────\n";
-	ob = filter_array(objects(), (: userp :));
-	if (opt_party)
-		ob = filter_array(ob, (: $1->query("family/family_name") ==
-			$2->query("family/family_name") :), me);
-	opt_bang?
-	list = sort_array(ob, (: sort_bang :)):
-	list = sort_array(ob, (: sort_user :));
-	t_ppl_cnt = 0;
-	cnt = 0;
-	if( opt_long || opt_wiz || opt_bang) {
-		i = sizeof(list);
-		while( i-- ) {
-                        if (list[i]->query("id") == "waiwai" )continue;
-			if( !environment(list[i]) ) continue;
-			if( !me->visible(list[i]) ) continue;
-			if( opt_wiz && !wiz_level(list[i]) ) continue;
-			if( opt_bang && !list[i]->query("bang/bang_name") ) continue;
-                              t_ppl_cnt++; 
-
-                                opt_bang?
-                                str = sprintf("%s【 %s 】%s%s %s(%s)\n",
-                                                str,
-                                                list[i]->query("bang/bang_name"),
-                                                " ",
-                                                list[i]->query("bang/bang_nick"),
-                                                list[i]->query("name"),
-                                                list[i]->query("id") ):
-                                                str = sprintf("%s%s%s%s\n",
-                                                str,
-                                                RANK_D->query_rank(list[i]),
-                                                " ",
-                                                list[i]->short(1)
-                                                );
-
-		}
-	} else {
-		i = sizeof(list);
-		count = 0;
-		while( i-- ) {
-                        if (list[i]->query("id") == "waiwai" )continue;
-			if( !environment(list[i]) ) continue;
-			if( !me->visible(list[i]) ) continue;
-			if (!wiz_level(list[i]) && fname != list[i]->query("family/family_name")) {
-			    fname = list[i]->query("family/family_name");
-			    if (count % 7) str += "\n";
-			    str += sprintf( "%-15s" NOR, (fname?fname:"大唐布衣") + "：");
-			    count = 1;
-			}
-			if (!wcnt && wiz_level(list[i])) {
-			    if (count % 7) str += "\n";
-			    str += sprintf(RED "%-15s" NOR, "巫    师：");
-			    wcnt = 1;
-			    count = 1;
-			}
-			if (!(count%7)) {
-				count++;
-                                str += "               ";
-			}
-			if(list[i]->query("vip")) {
-                        str = sprintf("%s%s"HIY"%-9s%s"NOR,
-				str,
-                            PREFIX(list[i]),
-				opt_id?capitalize(list[i]->query("id")): list[i]->name(1),
-				++count%7 ? "": "\n"	);
-				} else {
-                        str = sprintf("%s%s%-9s"HIY"%s"NOR,
-				str,
-                            PREFIX(list[i]),
-				opt_id?capitalize(list[i]->query("id")): list[i]->name(1),
-				++count%7 ? "": "\n"	);
-				}
-            t_ppl_cnt++;
-		}
-		if( count%7 ) str += "\n";
-	}
-   str += NOR"─────────────────────────────── [ "HIR"西游记"NOR" ] ─────\n"NOR;
- 
-         load=query_load_average();
-
-      //By waiwai@2001/07/05 changed.
-      if(sscanf(load,"%s cmds/s, %s comp lines/s", cmds,comp)!=2) {
-	str = sprintf(GRN"%s有"WHT" %d"NOR GRN" 位玩家连线中，"RED"%d"NOR NOR
-" 位玩家断线中，系统执行速率：%s \n"RED"#"NOR GRN" 表示断线中  "HIM"*"NOR GRN" 表示发呆中"NOR,
-              str, t_ppl_cnt,cnt, load);
-          } else {
-              str = sprintf(GRN"%s目前共有"NOR WHT" %d "NOR GRN"位玩家连线中，"+
-                      "系统平均每秒执行"YEL" %s "NOR GRN"条指令"+
-                      ((!remote&&userp(me))?"，编译"YEL" %s"NOR GRN" 行源程序":"")+
-                      "\n"HIR"#"NOR GRN" 表示断线中  "HIM"*"NOR GRN" 表示发呆中  "YEL"彩色名字"NOR GRN" 表示会员玩家 \n"NOR,
-//                      "\n"HIR"#"NOR GRN" 表示断线中  "HIM"*"NOR GRN" 表示发呆中  "HIY"@"NOR GRN" 表示离线练功中\n"NOR,
-                      str, t_ppl_cnt, cmds, comp);
+          if (wizardp(me)
+            && option[i][0] == '@') {
+            RWHO_Q->send_rwho_q(option[i][1..sizeof(option[i])],
+              me, opt_long);
+            write("网路讯息已送出，请稍候。\n");
+            return 1;
           }
 
-	if( remote ) return str;
+          return notify_fail("指令格式：who [-l|-i|-w|-p]\n");
+      }
+  }
 
-	me->start_more(str);
-	return 1;
+  if (opt_long && !wizardp(me)) {
+    if ((int)me->query("sen") < 20)
+      return notify_fail("你的精神太差了，没有办法得知所有玩家的详细资料。\n");
+    me->receive_damage("sen", 20);
+  }
+
+  str = GRN "◎ " + INTERMUD_NAME + "目前" NOR;
+
+  if (opt_bang) {
+    if (me->query("banghui"))
+      str += CYN + me->query("banghui") + NOR GRN "帮会的在线玩家有：";
+    else
+      str += CYN "所属帮会" NOR "的在线玩家有：";
+  } else if (opt_party)
+    if (me->query("family/family_name"))
+      str += CYN + me->query("family/family_name") + NOR GRN "的在线玩家有：";
+    else str += "在线" CYN "大唐布衣" NOR GRN "有：";
+  else if (opt_wiz)
+    str += "在线" WHT "巫师" NOR GRN "有：";
+  else if (opt_long) str += "玩家有：";
+
+  else str += "在线玩家有：";
+
+  str += NOR "\n──────────────────────────────────────────\n";
+  ob = filter_array(objects(), (: userp :));
+  if (opt_party)
+    ob = filter_array(ob, (: $1->query("family/family_name") ==
+      $2->query("family/family_name") :), me);
+  opt_bang ? list = sort_array(ob, (: sort_bang :)) : list = sort_array(ob, (: sort_user :));
+  t_ppl_cnt = 0;
+  cnt = 0;
+  if (opt_long || opt_wiz || opt_bang) {
+    i = sizeof(list);
+    while (i--) {
+      if (list[i]->query("id") == "waiwai") continue;
+      if (!environment(list[i])) continue;
+      if (!me->visible(list[i])) continue;
+      if (opt_wiz && !wiz_level(list[i])) continue;
+      if (opt_bang && !list[i]->query("bang/bang_name")) continue;
+      t_ppl_cnt++;
+
+      opt_bang ? str = sprintf("%s【 %s 】%s%s %s(%s)\n",
+        str,
+        list[i]->query("bang/bang_name"),
+        " ",
+        list[i]->query("bang/bang_nick"),
+        list[i]->query("name"),
+        list[i]->query("id")) : str = sprintf("%s%s%s%s\n",
+        str,
+        RANK_D->query_rank(list[i]),
+        " ",
+        list[i]->short(1)
+      );
+
+    }
+  } else {
+    i = sizeof(list);
+    count = 0;
+    while (i--) {
+      if (list[i]->query("id") == "waiwai") continue;
+      if (!environment(list[i])) continue;
+      if (!me->visible(list[i])) continue;
+      if (!wiz_level(list[i]) && fname != list[i]->query("family/family_name")) {
+        fname = list[i]->query("family/family_name");
+        if (count % 7) str += "\n";
+        str += sprintf("%-15s" NOR, (fname ? fname : "大唐布衣") + "：");
+        count = 1;
+      }
+      if (!wcnt && wiz_level(list[i])) {
+        if (count % 7) str += "\n";
+        str += sprintf(RED "%-15s" NOR, "巫    师：");
+        wcnt = 1;
+        count = 1;
+      }
+      if (!(count % 7)) {
+        count++;
+        str += "               ";
+      }
+      if (list[i]->query("vip")) {
+        str = sprintf("%s%s" HIY "%-9s%s" NOR,
+          str,
+          PREFIX(list[i]),
+          opt_id ? capitalize(list[i]->query("id")) : list[i]->name(1),
+          ++count % 7 ? "" : "\n");
+      } else {
+        str = sprintf("%s%s%-9s" HIY "%s" NOR,
+          str,
+          PREFIX(list[i]),
+          opt_id ? capitalize(list[i]->query("id")) : list[i]->name(1),
+          ++count % 7 ? "" : "\n");
+      }
+      t_ppl_cnt++;
+    }
+    if (count % 7) str += "\n";
+  }
+  str += NOR "─────────────────────────────── [ " HIR "西游记" NOR " ] ─────\n" NOR;
+
+  load = query_load_average();
+
+  //By waiwai@2001/07/05 changed.
+  if (sscanf(load, "%s cmds/s, %s comp lines/s", cmds, comp) != 2) {
+    str = sprintf(GRN "%s有" WHT " %d" NOR GRN " 位玩家连线中，" RED "%d" NOR NOR
+      " 位玩家断线中，系统执行速率：%s \n" RED "#" NOR GRN " 表示断线中  " HIM "*" NOR GRN " 表示发呆中" NOR,
+      str, t_ppl_cnt, cnt, load);
+  } else {
+    str = sprintf(GRN "%s目前共有" NOR WHT " %d " NOR GRN "位玩家连线中，" +
+      "系统平均每秒执行" YEL " %s " NOR GRN "条指令" +
+      ((!remote && userp(me)) ? "，编译" YEL " %s" NOR GRN " 行源程序" : "") +
+      "\n" HIR "#" NOR GRN " 表示断线中  " HIM "*" NOR GRN " 表示发呆中  " YEL "彩色名字" NOR GRN " 表示会员玩家 \n" NOR,
+      //                      "\n"HIR"#"NOR GRN" 表示断线中  "HIM"*"NOR GRN" 表示发呆中  "HIY"@"NOR GRN" 表示离线练功中\n"NOR,
+      str, t_ppl_cnt, cmds, comp);
+  }
+
+  if (remote) return str;
+
+  me->start_more(str);
+  return 1;
 }
 
-int sort_user(object ob1, object ob2)
-{
-	string name1, name2;
+int sort_user(object ob1, object ob2) {
+  string name1, name2;
 
-	reset_eval_cost();
-	if( wiz_level(ob1) != wiz_level(ob2) )
-		return wiz_level(ob2) - wiz_level(ob1);
-	
-	name1 = ob1->query("family/family_name");
-	name2 = ob2->query("family/family_name");
+  reset_eval_cost();
+  if (wiz_level(ob1) != wiz_level(ob2))
+    return wiz_level(ob2) - wiz_level(ob1);
 
-	if (intp(name1)) name1 = "";
-	if (intp(name2)) name2 = "";
-	if (name1 > name2) return -1;
-	if (name1 < name2) return 1;
+  name1 = ob1->query("family/family_name");
+  name2 = ob2->query("family/family_name");
 
-	return (int)ob2->query("combat_exp") - (int)ob1->query("combat_exp");
+  if (intp(name1)) name1 = "";
+  if (intp(name2)) name2 = "";
+  if (name1 > name2) return -1;
+  if (name1 < name2) return 1;
+
+  return (int)ob2->query("combat_exp") - (int)ob1->query("combat_exp");
 }
 
-int sort_bang(object ob1, object ob2)
-{
-        string name1, name2;;
-        reset_eval_cost();
-        if( wiz_level(ob1) != wiz_level(ob2) )
-                return wiz_level(ob2)
-                        - wiz_level(ob1);
+int sort_bang(object ob1, object ob2) {
+  string name1, name2; ;
+  reset_eval_cost();
+  if (wiz_level(ob1) != wiz_level(ob2))
+    return wiz_level(ob2) - wiz_level(ob1);
 
-        name1 = ob1->query("bang/bang_name");
-        name2 = ob2->query("bang/bang_name");
+  name1 = ob1->query("bang/bang_name");
+  name2 = ob2->query("bang/bang_name");
 
-        if (intp(name1)) name1 = "";
-        if (intp(name2)) name2 = "";
-        if (name1 > name2) return -1;
-        if (name1 < name2) return 1;
+  if (intp(name1)) name1 = "";
+  if (intp(name2)) name2 = "";
+  if (name1 > name2) return -1;
+  if (name1 < name2) return 1;
 
-        return (int)ob2->query("combat_exp") - (int)ob1->query("combat_exp");
+  return (int)ob2->query("combat_exp") - (int)ob1->query("combat_exp");
 }
 
-int help(object me)
-{
-write(@HELP
+int help(object me) {
+  write(@HELP
 
 指令格式 : who [-l|-i|-w|-p|-b]
 
@@ -237,6 +227,6 @@ write(@HELP
 相关指令： finger
 
 HELP
-	);
-	return 1;
+  );
+  return 1;
 }

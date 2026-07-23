@@ -9,113 +9,114 @@ inherit F_CMD;
 
 private int do_purge_players(int day);
 
-int main(object me, string arg)
-{
-   string name, reason,wiz_status;
-   string status,petfile;
-   int day;
+int main(object me, string arg) {
+  string name, reason, wiz_status;
+  string status, petfile;
+  int day;
 
-   status = wizhood(me);
+  status = wizhood(me);
 
-   if( me!=this_player(1) ) return 0;
+  if (me != this_player(1)) return 0;
 
-   wiz_status = SECURITY_D->get_status(me);
-   if( wiz_status != "(admin)" && wiz_status != "(arch)" )
-         return notify_fail(CYN"你没有权利使用这个指令！\n"NOR); //By waiwai@2001/06/05
+  wiz_status = SECURITY_D->get_status(me);
+  if (wiz_status != "(admin)" && wiz_status != "(arch)")
+    return notify_fail(CYN "你没有权利使用这个指令！\n" NOR);  //By waiwai@2001/06/05
 
-   if( !arg ) return notify_fail(SYNTAX);
+    if (!arg) return notify_fail(SYNTAX);
 
-   if( sscanf(arg, "%d", day) && day >= 0) return do_purge_players(day);
+  if (sscanf(arg, "%d", day) && day >= 0) return do_purge_players(day);
 
-   if( sscanf(arg, "%s because %s", name, reason)!=2 )
-     return notify_fail(SYNTAX);
+  if (sscanf(arg, "%s because %s", name, reason) != 2)
+    return notify_fail(SYNTAX);
 
-   seteuid(getuid());
-   if( file_size(DATA_DIR + "login/" + name[0..0] + "/" + name + __SAVE_EXTENSION__)<0 )
-     return notify_fail(WHT"没有这位使用者。\n"NOR);
+  seteuid(getuid());
+  if (file_size(DATA_DIR + "login/" + name[0..0] + "/" + name + __SAVE_EXTENSION__) < 0)
+    return notify_fail(WHT "没有这位使用者。\n" NOR);
 
-   if( (string)SECURITY_D->get_status(name)!="(player)" )
-     return notify_fail(HIR"非玩家档案禁止删除。\n"NOR); 
+  if ((string)SECURITY_D->get_status(name) != "(player)")
+    return notify_fail(HIR "非玩家档案禁止删除。\n" NOR);
 
-   UPDATE_D->remove_user(name);
+  UPDATE_D->remove_user(name);
 
-   rm(DATA_DIR + "login/" + name[0..0] + "/" + name + __SAVE_EXTENSION__);
-   rm(DATA_DIR + "user/" + name[0..0] + "/" + name + __SAVE_EXTENSION__);
-   rm( "/data/playerhomes/h_"+name+ __SAVE_EXTENSION__ );//By waiwai@2001/06/05
-   //By waiwai@2001/06/05 added. remove pet.
-   petfile=DATA_DIR"pet/"+name[0..0]+"/"+name+".o";
-   if ( file_size(petfile)>0 ) rm(petfile);
-   rm(DATA_DIR + "qingdan/" + name[0..0] + "/" + name + ".o");
-   write( WHT"使用者 " HIR+ capitalize(name) +NOR WHT" 被彻底删除掉了。\n"NOR);
+  rm(DATA_DIR + "login/" + name[0..0] + "/" + name + __SAVE_EXTENSION__);
+  rm(DATA_DIR + "user/" + name[0..0] + "/" + name + __SAVE_EXTENSION__);
+  rm("/data/playerhomes/h_" + name + __SAVE_EXTENSION__);  //By waiwai@2001/06/05
+  //By waiwai@2001/06/05 added. remove pet.
+  petfile = DATA_DIR "pet/" + name[0..0] + "/" + name + ".o";
+  if (file_size(petfile) > 0) rm(petfile);
+  rm(DATA_DIR + "qingdan/" + name[0..0] + "/" + name + ".o");
+  write(WHT "使用者 " HIR + capitalize(name) + NOR WHT " 被彻底删除掉了。\n" NOR);
 
-   //By waiwai@2001/06/05 增加了adm在线监控信息以及改写了log格式.
-   CHANNEL_D->do_channel(this_player(), "adm",
-                     "使用(purge)指令清除了"HIR+capitalize(name)+HIW"的个人数据. \n"NOR);	
-   log_file("wizcmds/purge",
-   sprintf("%s使用purge指令清除了%s的个人数据.原因：%s \n时间在:[%s] \n",
-           log_id(this_player()), name, reason, log_time() ) ); 
-   return 1;
+  //By waiwai@2001/06/05 增加了adm在线监控信息以及改写了log格式.
+  CHANNEL_D->do_channel(this_player(), "adm",
+    "使用(purge)指令清除了" HIR + capitalize(name) + HIW "的个人数据. \n" NOR);
+  log_file("wizcmds/purge",
+    sprintf("%s使用purge指令清除了%s的个人数据.原因：%s \n时间在:[%s] \n",
+      log_id(this_player()), name, reason, log_time()));
+  return 1;
 }
 
-private int do_purge_players(int day)
-{
-   int i, j, ppl_cnt, count;
-   string *dir, *ppls, name;
-   mixed info;
-object who;
+private int do_purge_players(int day) {
+  int i, j, ppl_cnt, count;
+  string *dir, *ppls, name;
+  mixed info;
+  object who;
 
-   if(day<31) return notify_fail("天数应该大于31。\n");
-   seteuid(getuid());
-//   message("system", "\n*** 整理玩家储存档中，请稍候.... ***\n", users());
-   write(WHT"档案处理中......\n"NOR);
-   count = 0;
-   ppl_cnt = 0;
-   dir = get_dir(DATA_DIR + "login/");
-   for(i=0; i<sizeof(dir); i++) {
-     reset_eval_cost();
-     write("目录"+dir[i]+": 玩家");
-     ppls = get_dir(DATA_DIR + "login/" + dir[i] + "/");
-     ppl_cnt += sizeof(ppls);
-     for(j=0; j<sizeof(ppls); j++) {
-        if( sscanf(ppls[j], "%s.o", name)==1 )
-          if( (string)SECURITY_D->get_status(name)!="(player)" )
-             continue;
+  if (day < 31) return notify_fail("天数应该大于31。\n");
+  seteuid(getuid());
+  //   message("system", "\n*** 整理玩家储存档中，请稍候.... ***\n", users());
+  write(WHT "档案处理中......\n" NOR);
+  count = 0;
+  ppl_cnt = 0;
+  dir = get_dir(DATA_DIR + "login/");
+  for (i = 0; i < sizeof(dir); i++) {
+    reset_eval_cost();
+    write("目录" + dir[i] + ": 玩家");
+    ppls = get_dir(DATA_DIR + "login/" + dir[i] + "/");
+    ppl_cnt += sizeof(ppls);
+    for (j = 0; j < sizeof(ppls); j++) {
+      if (sscanf(ppls[j], "%s.o", name) == 1)
+        if ((string)SECURITY_D->get_status(name) != "(player)")
+          continue;
 
-// Modified by dream on June 26, 1997 to avoid incorrect touching  
-// from outer sources like shell modification 
-//        info = stat(DATA_DIR + "login/" + dir[i] + "/" + ppls[j]);
-who = new(LOGIN_OB);
-who->set("id", name);
-if (! who->restore())
- continue;
-        if( (time()-who->query("last_on"))/86400 >= day ) {
-          rm(DATA_DIR + "login/" + dir[i] + "/" + ppls[j]);
-          rm(DATA_DIR + "user/" + dir[i] + "/" + ppls[j]);
-	rm(DATA_DIR + "qingdan/" + dir[i] + "/" + ppls[j]);
-write(" "+name);
-          count ++;
-        }
-destruct(who);
-     }
-write(" 被清除掉了。\n");
-   }
-   write(WHT"\n\n原来总共有 " + ppl_cnt + " 位使用者。\n");
-   write( count + " 个超过 " + day + " 天未上线的使用者数据被清除掉了。\n");
-   write("现在总共有 " + (ppl_cnt - count) + " 位使用者。\n\n"NOR);
+      // Modified by dream on June 26, 1997 to avoid incorrect touching  
+      // from outer sources like shell modification 
+      //        info = stat(DATA_DIR + "login/" + dir[i] + "/" + ppls[j]);
+      who = new(LOGIN_OB);
+      who->set("id", name);
+      if (!who->restore())
+        continue;
+      if ((time() - who->query("last_on")) / 86400 >= day) {
+        rm(DATA_DIR + "login/" + dir[i] + "/" + ppls[j]);
+        rm(DATA_DIR + "user/" + dir[i] + "/" + ppls[j]);
+        rm(DATA_DIR + "qingdan/" + dir[i] + "/" + ppls[j]);
+        write(" " + name);
+        count++;
+      }
+      destruct(who);
+    }
+    write(" 被清除掉了。\n");
+  }
+  write(WHT "\n\n原来总共有 " + ppl_cnt + " 位使用者。\n");
+  write(count + " 个超过 " + day + " 天未上线的使用者数据被清除掉了。\n");
+  write("现在总共有 " + (ppl_cnt - count) + " 位使用者。\n\n" NOR);
 
-   //By waiwai@2001/06/05
-   CHANNEL_D->do_channel(this_player(), "adm","正在使用(purge)指令清除"+day+"天未上线玩家的数据,总共清除了"HIR+count+HIW"位. \n"NOR);	
-   log_file("static/purge",
-   sprintf("%s使用purge指令清除了超过%d天未上线的玩家%d位,原有玩家数：%d位,现有玩家数：%d位 时间在:[%s] \n",
-           log_id(this_player()), day, count, ppl_cnt, ppl_cnt-count,
-		log_time() ) ); 
+  //By waiwai@2001/06/05
+  CHANNEL_D->do_channel(
+    this_player(),
+    "adm",
+    "正在使用(purge)指令清除" + day + "天未上线玩家的数据,总共清除了" HIR + count + HIW "位. \n" NOR
+  );
+  log_file("static/purge",
+    sprintf("%s使用purge指令清除了超过%d天未上线的玩家%d位,原有玩家数：%d位,现有玩家数：%d位 时间在:[%s] \n",
+      log_id(this_player()), day, count, ppl_cnt, ppl_cnt - count,
+      log_time()));
 
-   return 1;
+  return 1;
 }
 
-int help(object me)
-{
-write(@HELP
+int help(object me) {
+  write(@HELP
 
 指令格式：purge [<未上线天数>] | <使用者姓名> because <原因>
 
@@ -123,6 +124,6 @@ write(@HELP
 请各位巫师认真填写好原因.
 
 HELP
-   );
-    return 1;
+  );
+  return 1;
 }

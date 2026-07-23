@@ -543,3 +543,33 @@ python3 ../../scripts/mudclient.py 127.0.0.1 40075 --timeout 30 --idle 1.5 \
   --send "<same password>" --send "user@example.com" --send "m" \
   --send "look" --send "score" --send "quit"
 ```
+
+## Driver-rebuild retest + LPC reformat + WASM pass (this session)
+
+- **LPC formatter applied** (`tools/lpc-syntax`, all `work/*.lpc`):
+  2,506 files reformatted, 28 unchanged, 65 refused (self-check
+  failures on messy legacy code, expected). Confirmed the earlier
+  `printf("%O\n", ob);` removals (both occurrences) and the `tell_room()`
+  §15s fix in `adm/simul_efun/message.lpc` survived reformatting intact.
+- **Native re-test against the freshly rebuilt driver**
+  (`~/src/fluffos/build-debug/src/driver`, rebuilt from latest upstream
+  master): boots clean, zero `FATAL`/`SIGSEGV`/`执行时段错误` in
+  `debug.log`. Full registration verified with real Chinese name
+  **秦风归** (male, id `qinretst`), reaching the actual starting room
+  (南城客栈), `look`/`score`/`quit` all correct, including the
+  intentional "new account needs 30 min online, confirm deletion?"
+  quit gate.
+- **WASM build tested** (`~/src/fluffos/build-wasm/src` via
+  `scripts/wasm_client.js`): boots cleanly (only expected non-fatal
+  preload warnings). **Full registration + login succeeded end-to-end
+  under WASM too** — real Chinese name **秦风网** (id `qfwasmb`), through
+  gb/site-choice/new/id/name/password/email/gender, landed in the real
+  starting room (南城客栈), `look` rendered the actual room, and the
+  quit-deletion confirmation gate (`y`) worked correctly. One cosmetic-
+  only WASM artifact noted: the "您目前连线的地址是：" (your current
+  connection address) line displayed a blank IP under WASM instead of
+  the port/host shown natively — a visible symptom of the same
+  `query_ip_number()` WASM limitation documented elsewhere, but here
+  it's purely cosmetic (blank display) rather than gating — this lib's
+  registration/login path does not actually branch on the IP string's
+  format, so the login itself is unaffected.
