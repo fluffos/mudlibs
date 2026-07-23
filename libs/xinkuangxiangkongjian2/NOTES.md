@@ -379,3 +379,30 @@ memory stayed healthy throughout (`available` — the metric that
 matters, not the `free` column, which dipped much lower due to normal
 page-cache usage — stayed in the 13-19GB range out of 23GB total for
 essentially the whole run, spot-checked repeatedly via `free -h`).
+
+## Re-verification pass: driver rebuild + formatter + WASM (2026-07-23)
+
+- **LPC formatter** applied to all `work/*.lpc` (12089 files): 12064
+  reformatted, 24 already-clean/unchanged, 1 self-checked error
+  (skipped, expected on legacy code).
+- **Native re-test against the rebuilt driver** (`~/src/fluffos/build-debug/src/driver`):
+  booted clean (only pre-existing compile warnings, no fatals). Full
+  registration flow re-verified end-to-end with a fresh real Chinese
+  name ("秦风廿二") — English id → confirm y/n → Chinese name →
+  password ×2 → email → gender → 7 attribute prompts (all `20`) →
+  entered the real starting room (`狂想空间新手入门房间`);
+  `look`/`score`/`quit` all produced correct Chinese output.
+  `log/debug.log` was completely clean (no output at all beyond driver
+  startup). Reformat + new driver build introduced no regressions.
+- **WASM test** (`scripts/wasm_client.js` against `build-wasm/src`): boots
+  cleanly — the only preload-time errors are the expected non-fatal
+  `Undefined function socket_create`/`socket_bind`/`socket_close` in
+  `adm/daemons/ftpd.lpc` (no `sockets` package under WASM). Full
+  registration flow **completed successfully** under WASM with a real
+  Chinese name ("秦风测试") through the identical prompt sequence,
+  reaching the same starting room, `look`/`quit` both correct. The
+  known `query_ip_number()` WASM limitation is visible but purely
+  cosmetic here: the welcome banner's "您正以位址 ... 连线中" line
+  prints a blank IP instead of `127.0.0.1` under WASM, but this lib
+  doesn't gate login on the IP's format anywhere, so it has no
+  functional effect — a clean, fully-playable WASM result.
