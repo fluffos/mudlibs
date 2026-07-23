@@ -526,3 +526,25 @@ libs/kuangxiangkongjian/work`, run twice:
 Driver process launched via the Bash tool's own `run_in_background`
 equivalent (`setsid nohup ... & disown`), confirmed dead by exact PID
 before finishing (no broad `pkill` used).
+
+## Re-verification pass: driver rebuild + LPC formatter + WASM build
+
+- **LPC formatter**: ran `format-corpus.mjs` over all 6,323 `.lpc`
+  files — 6,279 reformatted in place, 25 already-idempotent, 19 refused
+  (nonzero `errors` expected/fine per the tool's own contract).
+- **Native retest against rebuilt driver** (`~/src/fluffos/build-debug/
+  src/driver`, freshly rebuilt from upstream master): booted clean,
+  zero fatal errors (only routine compile warnings). Full registration
+  re-verified with a fresh real name (秦风辰) via the documented flow
+  (id → confirm → Chinese name → password ×2 → gender → 7×attribute
+  points → enter world); `look`/`score`/`quit` all produce correct
+  dynamic output, arriving at 世界的入口 as before. No regressions from
+  the rebuilt driver or the reformat pass; nothing to fix.
+- **WASM build test** (`scripts/wasm_client.js` against
+  `build-wasm/src`): boots cleanly in-process, only ordinary compile
+  warnings. Full registration/login flow completed successfully under
+  WASM too (fresh name 秦风己, same attribute-point flow as native),
+  `look`/`quit` also correct, MOTD/board rendering identically to the
+  native run — this lib has no IP/site-gating daemon on its login
+  path, so it is **not** affected by the documented `query_ip_number()`
+  WASM limitation and is fully playable under WASM.

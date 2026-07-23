@@ -147,6 +147,32 @@ re-boot + re-test after formatting a lib**, same reasoning as the driver
 rebuild: the formatter's own self-checks catch token/byte-level mistakes,
 not a bug living in the tokenizer itself.
 
+**Known formatter bug, found during the rebuild+format+WASM pass — a
+mandatory check, not optional**: on a bare parent-call `::name(...)`
+immediately inside a control-flow condition (`if (::do_read(arg))`,
+`return ::valid_leave(me, dir);`), the formatter mis-tokenizes the `::`
+as two separate colons, inserts a space (`: :`), and can go on to
+mis-restructure the surrounding statement entirely — one observed case
+turned a single-line `return ::do_read(arg);` into a syntactically
+different multi-line `if (: : do_read(arg)\n)\n{` block. This is NOT
+caught by the formatter's own token-equivalence self-check (it seems to
+consider `:` and `::` as freely re-spaceable), and depending on how
+central the corrupted file is, it can silently break a boot (two
+libs' player-body classes broke this way — `::move()`/`::query()` — a
+same-file forward-reference/inherited-override situation exactly like
+§15aq) or corrupt a rarely-loaded object with nobody noticing until a
+player triggers it. **After running the formatter on any lib, always
+run this check before trusting the result**:
+```
+grep -rnE ':\s:\s*[a-zA-Z_]+\(' libs/<slug>/work
+```
+Any hit is this bug — fix by reverting just that file
+(`git checkout -- <path>`, since the formatting is cosmetic and losing
+it for one file is a fine trade for correctness) rather than
+hand-patching the mangled output. This is a formatter bug, not a
+mudlib bug — do not "work around" it by rewriting the mudlib's `::`
+call into some other form; just skip formatting the affected file(s).
+
 ### WASM build (`~/src/fluffos/docs/build-wasm.md`, `docs/driver/wasm.md`)
 
 Lets a mudlib run **inside a browser tab or under node**, no listening
