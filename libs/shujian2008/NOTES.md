@@ -155,3 +155,63 @@ globals/functions, some genuine syntax typos) — not triaged individually
 per AGENTS.md §6b/§13, boot + full interactive registration test is the
 verification gate. Memory stayed healthy throughout (~16GB free
 consistently, no pressure).
+
+## Rebuilt-driver / formatter / WASM re-verification pass (2026-07-23)
+
+1. **LPC formatter** applied across all 9,936 `.lpc` files in `work/`:
+   `{"total":9936,"written":9680,"wouldChange":0,"unchanged":102,
+   "errors":154}`. Verified post-format that all four load-bearing fixes
+   from this lib's own §15n/§15o/§15ae/§15ar diagnostic work survived
+   intact: `feature/command.lpc`'s `command_hook` is still plain
+   `nomask` (no `private`), `adm/daemons/commandd.lpc`'s `rehash()`
+   still matches `"%s.lpc$"`, `adm/daemons/securityd.lpc`'s `valid_read`
+   still allow-lists `load_object`/`recompile_object`/`include`, and
+   `adm/single/master.lpc` still defines `get_include_path()`.
+   **Found and fixed a genuine formatter bug** (same class discovered
+   while working `tianxia` this same pass — see its NOTES.md for the
+   full writeup): the formatter mis-tokenizes a `::fn(...)` call with no
+   space between the preceding `(` and the `::`, mistaking it for a
+   `(: ... :)` closure literal. Hit in **both** copies of this lib's
+   leitai-arena NPC file — `cmds/leitai/npc_leitai.lpc` and
+   `d/tanggu/npc/npc_leitai.lpc` — where `if(::move(dest, silently))`
+   got rewritten to the syntactically broken `if (: : move(dest,
+   silently)\n)`. Neither file is on the registration/boot path (both
+   are leitai/arena NPC objects, only compiled on-demand), so this
+   didn't surface during the interactive test below — caught instead by
+   comparing `lpcc_check.sh`'s pass count before/after formatting.
+   **Fixed by hand-restoring** `if (::move(dest, silently)) { ... }` in
+   both files; re-verified via a full `lpcc_check.sh` sweep afterward:
+   9,861/9,936 pass (76 fail), one MORE pass than the pre-format
+   baseline below (9,860), confirming the fix, with neither file
+   appearing in the failure log.
+2. **Native re-test against the rebuilt `build-debug/src/driver`**:
+   booted clean (zero fatal errors in `log/debug.log`, only ordinary
+   compile warnings). Full registration verified end-to-end via
+   `mudclient.py`: id `sjrfmtf` → confirm → password ×2 → real Chinese
+   name **`秦风十六`** (accepted, not a banned novel name) → attribute
+   roll (`0`/random) → accept → email `test01@abcd.com` → gender `m` →
+   entered the game world at 武馆前院, `look` displayed the room, `score`
+   showed a correctly-populated character card (name/stats matching
+   registration), `quit` produced "正在退出游戏……". `debug.log` for the
+   session: zero `error in error handler`/`denied`/`undefined
+   function`/`bad argument` lines. Confirms the reformatted source is
+   still fully sound against the rebuilt driver; no new fixes needed.
+3. **WASM test**: boots cleanly — `dns_master.lpc`'s preload failure (no
+   sockets package under wasm: `Undefined function socket_create`/
+   `socket_bind`/`socket_close`) is caught by `master.lpc`'s own
+   `preload()` `CATCH()` wrapper this time (unlike `shiji`'s uncaught
+   runtime call — this lib's preload path handles it gracefully, logging
+   "执行时段错误" but continuing to `Initializations complete.`).
+   **Login itself is blocked by the documented `query_ip_number()`
+   WASM limitation**: `adm/daemons/logind.lpc`'s `get_id()` calls
+   `adm/daemons/sited.lpc`'s `is_valid(arg, ip)`, which does
+   `sscanf(ip, "%d.%d.%*d.%*d", ip1, ip2) != 4` — exactly the
+   documented pattern (same shape as `bxsj`'s `sited.lpc`). Since
+   `query_ip_number()` doesn't return a well-formed dotted-quad under
+   this wasm build, the sscanf never matches 4 fields, `is_valid()`
+   always returns 0, and every login id is rejected with "对不起，这个
+   英文名字不能从当前地址登录。" regardless of validity. **This is the
+   known, driver-side, non-mudlib WASM limitation called out in the task
+   brief — not patched.** Assessment: boots cleanly under wasm; login
+   cannot complete due to the known IP-format limitation, not a mudlib
+   bug (native boot+login both verified working above, same session).
