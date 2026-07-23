@@ -145,3 +145,36 @@ warns about -- so this had been silently broken since this lib was first
 marked "done," undetected until the sibling codebase surfaced it. See
 AGENTS.md §15ae and the new commandd.lpc sscanf-pattern addition for the
 general writeup.
+
+## Re-verification pass (2026-07-23): driver rebuild + LPC formatter + WASM build
+
+- **Formatter**: ran `format-corpus.mjs` over all of `work/` (9,936
+  files, 9,681 written/reformatted, 102 already-clean, 153 refused with
+  an error — expected on legacy code, not chased individually).
+- **Native retest against rebuilt driver** (`build-debug/src/driver`,
+  rebuilt from latest upstream master): clean boot, zero fatal errors in
+  `debug.log`. Full registration re-verified end-to-end on the
+  now-reformatted source with a fresh real Chinese name (`秦叔`, ID
+  `qinshu`) through the complete flow (ID → password, which must contain
+  both a digit and an uppercase letter and not be "too simple"/derived
+  from the ID → Chinese name → talent roll → email → gender), reaching
+  the actual game world (武馆前院 starting room) with the welcome-NPC
+  escort dialog (`狄云`) firing correctly; `look`/`score`/`quit` all
+  produced correct output (the full 个人资料卡 stat card rendered
+  correctly), zero real errors in `debug.log`. No regressions from the
+  reformat or the fresh driver build.
+- **WASM build**: preload completes with only the expected non-fatal
+  `sockets`-package gap (`adm/daemons/network/dns_master.lpc`'s
+  `socket_create`/`socket_close` → `Undefined function`, caught by
+  `master.lpc`'s own error handler exactly as for a missing daemon
+  natively — `Initializations complete.` still printed). Registration
+  itself is blocked by the **exact** documented `query_ip_number()`
+  WASM-mode limitation this project's tooling docs call out by name for
+  this lib: `adm/daemons/sited.lpc`'s site-restriction check rejects
+  every attempted ID with "对不起，这个英文名字不能从当前地址登录。"
+  ("sorry, this name cannot log in from the current address") because
+  the wasm loopback connection's `query_ip_number()` doesn't format as a
+  real dotted-quad. **Not a mudlib bug** — this is the documented
+  driver-side gap, not something to patch. Verdict: boots cleanly under
+  WASM; registration cannot complete due to the driver's IP-check
+  limitation.
