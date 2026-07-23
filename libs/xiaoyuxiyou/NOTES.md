@@ -385,3 +385,39 @@ this — that driver instance stayed up through the entire remaining test
 session with zero issues. **Recommendation for future agents: always
 launch the boot-test driver via `run_in_background: true`, not manual
 shell backgrounding tricks**, in this harness.
+
+## Re-verification pass: driver rebuild + formatter + WASM (2026-07-23)
+
+- **LPC formatter** applied to all `work/*.lpc` (11149 files): 9931
+  reformatted, 1188 already-clean/unchanged, 30 self-checked errors
+  (skipped, expected on legacy code).
+- **Native re-test against the rebuilt driver** (`~/src/fluffos/build-debug/src/driver`):
+  booted clean (only cosmetic config-min-value warnings already
+  documented above), full registration flow re-verified end-to-end with
+  a fresh real Chinese name ("秦风十七") — encoding select → if_young
+  gate → `new` → English id → Chinese name → admin/super password →
+  login password → email → gender → default-gift entry, reaching the
+  actual game world (`翠香楼`), `look`/`score`/`quit` all producing
+  correct, correctly-encoded Chinese output; `log/debug.log` clean of
+  real errors. `setsid nohup ... & disown` (this pass's launch method,
+  per top-level AGENTS.md) stayed up fine for the whole session this
+  time — did not reproduce the earlier random-death issue noted above.
+  Reformat + new driver build introduced no regressions.
+- **WASM test** (`scripts/wasm_client.js` against `build-wasm/src`): boots
+  cleanly (same preload sequence, no fatal errors). Could **not** be
+  driven through registration, but for a lib-specific reason distinct
+  from both the mudlib and the known `query_ip_number()` gap: this lib's
+  `logind.lpc::logon()` has its own `uptime() < 30` startup-grace gate
+  (`destruct(ob)` + "驱动程序正在启动过程中，请稍候再来" if a connection
+  arrives in the first 30 real seconds after boot — see "How to run"
+  above, which already documents waiting 30s+ before connecting
+  natively). `scripts/wasm_client.js` calls `fluffos_connect()`
+  synchronously right after `fluffos_boot()` with no pre-connect delay
+  knob, so every WASM attempt hits this gate immediately and the
+  connection is destructed before a single `--send` is processed — no
+  amount of `--idle`/`--timeout` tuning helps since the object is
+  already gone. This is a **harness-timing limitation** (the harness has
+  no way to defer its one `fluffos_connect()` call), not a mudlib bug and
+  not the query_ip_number issue — noted here rather than worked around,
+  since patching either the mudlib's startup gate or the shared test
+  harness is out of scope for this pass.
