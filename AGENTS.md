@@ -2255,3 +2255,20 @@ second — both listed for traceability):
   (though the embedded `.are` world-data text looked BIG5-shaped on raw-
   byte inspection; moot since none of this content runs through our
   pipeline).
+- `重出江湖.rar` (archive #86) — confirmed NOT an LPC mudlib: a closed-
+  source, compiled Windows C++/MFC MUD server (`mud.exe`, PE32 GUI exe
+  linked against `MFC42D.DLL` etc) plus a bundled Windows GUI client,
+  zero `.c`/`.lpc` files anywhere. `data/*.o` save files ARE genuine
+  LPC-style `save_object()` text (likely descends from the same wuxia
+  gene pool as many other archives in this project), but the room/npc/
+  skill *source* that produced them isn't in this archive, only the
+  compiled driver and its runtime output. Directly cross-referenced
+  sibling archive #88 (`重出江湖完整源码linunx_2.71原版.rar`, "complete
+  source, Linux, v2.71") and confirmed its actual `.cpp` files are real
+  C++ (`#include "stdafx.h"`, MFC-style factory functions, zero
+  `inherit`/LPC syntax) — `mud.exe` is a compiled build of this same
+  C++ engine, not a MudOS/FluffOS-family driver at all. The whole
+  "重出江湖" family (#86/#87/#88) is very likely entirely non-LPC;
+  #87/#88 still need their own individual triage before being finalized
+  the same way, in case an LPC scripting layer sits on top somewhere,
+  but the evidence so far points the same direction for all three.

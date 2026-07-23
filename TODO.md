@@ -433,7 +433,7 @@ rely on the boot + interactive-connect test as the verification gate.
 | 83 | 西游记450.rar | | | not started | |
 | 84 | 西游记.rar | | | not started | |
 | 85 | 西行战记.gz | | | not started | bare gzip of a tar, not .tar.gz named |
-| 86 | 重出江湖.rar | | | not started | |
+| 86 | 重出江湖.rar | chongchujianghu | | not mudlib | confirmed: closed-source compiled Windows C++/MFC MUD server (mud.exe, PE32 GUI exe linked against MFC42D.DLL etc) + a bundled Windows GUI client, zero .c/.lpc files anywhere -- data/*.o save files ARE genuine LPC-style save_object() text (likely same wuxia gene pool as other archives) but the room/npc/skill *source* that produced them isn't in this archive; cross-referenced #88 (重出江湖完整源码linunx_2.71原版.rar)'s actual .cpp files directly and confirmed real C++ (MFC-style, #include "stdafx.h", no `inherit`/LPC syntax at all) -- the whole "重出江湖" family (#86/#87/#88) is very likely non-LPC; port not consumed, kept free; see libs/chongchujianghu/NOTES.md |
 | 87 | 重出江湖WIN完全版.rar | | | not started | |
 | 88 | 重出江湖完整源码linunx_2.71原版.rar | | | not started | |
 | 89 | 重生的世界v1.0.1.rar | | | not started | |
