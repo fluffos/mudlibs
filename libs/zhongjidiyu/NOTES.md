@@ -377,3 +377,48 @@ named.lpc`, `adm/daemons/securityd.lpc`, `adm/single/master.lpc`,
 util.lpc`, `inherit/misc/quest.lpc`, plus the ~30-file `"nosave/` →
 `"static/` revert (§3 counterexample) and directory creation (`log/`,
 `log/static/`, `log/user/`, `binaries/`).
+
+## Re-verification pass: driver rebuild + formatter + WASM (2026-07)
+
+- **LPC formatter** applied to all `.lpc` under `work/` (1,169 total,
+  1,154 written, 12 unchanged, 3 self-checked errors left untouched).
+- **Native re-test against the freshly rebuilt driver**
+  (`~/src/fluffos/build-debug/src/driver`): clean boot, only the
+  pre-existing benign `versiond.lpc`/`socket_bind()` message in
+  `debug.log` (§15ad). Full registration flow re-verified end-to-end
+  with a fresh id/real Chinese surname+given-name (`zjdytest`/秦风),
+  admin+regular password, character-type + gender selection, reaching
+  世外桃源; `look` (re-showed room), `score` (correctly returned "还没
+  有出生呐，察看什么？" — expected pre-"投胎" message, per the documented
+  design, not a bug), `quit` (clean disconnect) all confirmed correct.
+  Same `--idle 0.5` live-clock-prompt workaround from the original pass
+  (§15an) was still needed and still works.
+- **WASM test** (`scripts/wasm_client.js` against `build-wasm/src`):
+  boots (only the expected sockets-package-unavailable-class preload
+  messages), but **every login is disconnected immediately after the
+  banner, before the id prompt ever appears** — root-caused via the
+  harness's raw log: `versiond.lpc` genuinely uses
+  `socket_create()`/`socket_bind()`/`socket_listen()` (a real
+  cross-server version-sync feature), which are hard "Undefined
+  function" compile errors under WASM's `sockets`-less build, leaving
+  `/adm/daemons/versiond` as a program-less object; `logind.lpc`'s
+  `logon()` then calls `VERSION_D->is_version_ok()` with **no
+  `catch()`** (unlike the adjacent `catch(MUDLIST_CMD->main())` one line
+  above it), which throws `*No program in object '/adm/daemons/
+  versiond'!` uncaught — the driver's own `new_conn_handler()` treats
+  this as a failed `logon()` and disconnects the connection outright
+  (confirmed via `new_conn_handler: logon() on object clone/user/
+  login#0 has failed, the user is disconnected.` in the raw log,
+  appearing immediately after the versiond error). This is the exact
+  same shape independently found on `zhonghua2` (a different lineage) in
+  this same pass — evidently a common idiom across several of these
+  archives (an unguarded `VERSION_D->is_version_ok()` call right after a
+  guarded `catch(MUDLIST_CMD->main())`). Root cause is entirely the WASM
+  sandbox's missing `sockets` package colliding with a genuinely
+  socket-based feature this lib relies on — confirmed NOT a mudlib bug
+  (native boots and completes full registration/login cleanly, verified
+  above) — so, per the standing instruction for WASM-mode limitations,
+  **not patched**. This is a distinct failure mode from the documented
+  `query_ip_number()` gotcha (this lib's `logon()` doesn't even reach an
+  IP-format gate before hitting this one) — noted separately for whoever
+  next triages WASM playability across the "hell"/ES-II family.
