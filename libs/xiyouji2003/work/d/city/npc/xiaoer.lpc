@@ -1,0 +1,302 @@
+// NPC  /d/city/npc/xiaoer.c
+// Created by waiwai@2001/03/25
+// Last Modified by waiwai@2003/01/18
+// 下雨天同帮会的自动送伞，不同帮会的给钱(pay)才给伞
+
+#include <allobj.h>
+//#include <quest.h>
+//inherit KNOWER;
+//inherit F_QUESTER;
+inherit NPC;
+//int is_knower() { return 1; }
+
+inherit F_VENDOR;
+int give_san(object ob);
+//mixed accept_ask(object ob, string topic);
+int random_go(object me, string* dirs);
+
+string season  = NATURE_D->check_season();
+string seasonF  = NATURE_D->check_seasonF();
+
+void create()
+{
+       set_name("店小二", ({"xiao er","xiaoer","xiao","waiter","er"}));
+       set("gender", "男性");
+       set("combat_exp", 1000);
+       set("age", 26);
+       set("per", 14);
+       set("attitude", "friendly");
+       set("shen_type", 1);
+       set_skill("unarmed", 10);
+       set("money_need",5000);
+
+	set("inquiry", ([
+	       "san" : (: give_san :),
+	       "rain" : (: give_san :),
+	       "雨伞" : (: give_san :),
+	       "下雨" : (: give_san :),
+//	       "消息" : (: accept_ask :),
+	]) );
+
+/*
+       set("vendor_goods", ([
+              "1": MOON_OBJ"jiudai",
+              "2": HOME_OBJ"gourou",
+              "3": DOBJ"misc/tiaozhanpai",
+              "4": CITY_OBJ"ball",
+              "5": HOME_OBJ"jitui",
+              "6": HOME_OBJ"huasheng",
+              "7": DOBJ"misc/xiaqi-zhinan",
+              "8": "/obj/self/yuhua-stone",
+              "9": "/obj/self/yuhua-stone2",
+              "10": "/obj/self/gift/gaoyaotie",
+              "11": JDS_OBJ"tu",
+              "12": WAI_OBJ"jing",
+        ]) );
+*/
+
+	//Addded by waiwai@2003/01/18 
+	//死亡信息事例 带这个temp信息的NPC会优先执行这个信息显示而屏蔽系统的死亡信息
+       set_temp("die", HIR"店小二找老崔喝汤去了！！！\n"NOR);
+
+	//Addded by waiwai@2001/03/26 
+	//出生地标志
+       set("changed", "长安");
+	//帮会地域所属标志
+	set("area_name","长安城");
+//	set("information",1);
+	set("occupation", "businessman");
+
+       setup();
+//       carry_object(DOBJ"cloth/linen")->wear();
+}
+
+void init()
+{
+        object area, ob, me;
+        area=new("/obj/area");
+        area->create(query("area_name"));
+        set("banghui",(string)area->query("banghui"));
+        destruct(area);
+	me=this_object();
+
+        ::init();
+        if( interactive(ob = this_player()) && !is_fighting() ) {
+                remove_call_out("greeting");
+                call_out("greeting", 1, ob);
+        }
+
+        if( !me->query_temp("called") ){
+                call_out("no_animal", 600+random(1200));
+                me->set_temp("called", 1);
+        }
+
+        add_action("do_vendor_list", "list");
+}
+
+int no_animal()
+{
+        object me, ob, rider;
+        object *list;
+        string* dirs;
+        int i, announced=0;
+
+	me=this_object();
+
+	if(!me || !environment(me)) return 1;
+
+        list=all_inventory(environment(me));
+        i=sizeof(list);
+        me->delete_temp("called");
+        
+        dirs = ({"/d/city/"});
+        
+        while (i--)
+        {
+                ob=list[i];
+                if( ob->query("ride/dodge")) {
+			if( ob->query_temp("rider") ) {
+				rider=ob->query_temp("rider");
+				rider->set_temp("ridee", 0);
+				rider->add_temp("apply/dodge", -rider->query_temp("ride/dodge"));
+				rider->set_temp("ride/dodge", 0);
+				ob->set_temp("no_return", 0);
+				ob->set_temp("rider", 0);
+			}
+                        random_go(ob, dirs);
+			if(!announced) {
+                          message_vision(
+				  "$N说道：小店清扫，各位客官原谅则个。\n", me);
+			  announced=1;
+			}
+                        message_vision("$N挥舞着扫帚把$n轰了出去。\n", me, ob);
+                }
+        }
+        return 1;
+}
+
+int random_go(object me, string* dirs)
+{
+        int             i, j, k;
+        object  newob;
+        mixed*  file;
+
+        if( !sizeof(dirs) )  return 1;
+
+    i = random(sizeof(dirs));    // pick up one directory
+
+        file = get_dir( dirs[i]+"*.lpc", -1 );
+        if( !sizeof(file) )             return 1;
+
+        k = sizeof(file);
+        while(1)  {
+           j = random(k);
+           if( file[j][1] > 0 )         break;          // pick up a file with size > 0
+        }
+
+    if( (newob=find_object(dirs[i]+file[j][0])) )   {
+                me->move( newob ); 
+        }
+        else  {
+                seteuid(getuid(me));
+                newob = load_object(dirs[i]+file[j][0]);
+                if (newob)   // now this is not necessary, only for debug use
+                        me->move(newob);
+        else  {
+                        tell_object(me, "Error.\n");
+                }
+        }
+
+        return 1;
+}
+
+//Added by waiwai@2001/03/25
+//一天中各个时辰的问话变化
+void greeting(object ob)
+{
+       string time, respect;
+	string banghui;
+	object lp;
+
+       if( !ob || !visible(ob) || environment(ob) != environment() ) return;
+
+       if( ob->query("env/invisibility") ) return;
+
+	time = NATURE_D->outdoor_room_event(); // 调用
+	respect=RANK_D->query_respect(ob); 
+
+	banghui=(string)ob->query("banghui");
+	lp=new("/obj/lingpai");
+	lp->create(banghui);
+//	destruct(lp);
+
+	//是同帮会的下雨天进客栈主动给伞
+       if( banghui && query("banghui")== banghui ) {
+		if( season  == "Summer-Rain" 
+			|| season  == "Spring-Rain" 
+			|| season  == "Autumn-Rain" ) {//判断天气是否下雨
+		if(!present("umbrella", ob) ){//判断是否已经有伞
+		new(WAI_OBJ"san")->move(ob);
+		command("say "+log_id(ob)+"外面下雨啊，您没雨伞怎么成啊？小的给您一把吧！\n");
+              message_vision("$N拿出一把雨伞递给$n。\n", this_object(),ob); 
+		return;
+		}
+		}
+	}
+
+       if(!banghui || query("banghui")!=banghui) { //非同帮会的人的反馈信息
+              switch(time) {  // 使用switch 判断当前时间                         
+                      case "event_sunrise": // 早上
+                              message_vision("$N笑着对$n说道：「这位" + respect 
+                      + "，今儿可真早啊，欢迎光临。」\n", this_object(),ob);  
+                              break; 
+ 
+                      case "event_noon":   // 中午
+                              message_vision("$N跑过来对$n说道：「这位" + respect 
+                      + "，用过午饭了吗？快请坐。」\n", this_object(),ob);  
+                              break; 
+
+                     case "event_evening": // 傍晚
+                              message_vision("$N笑嘻嘻地对$n说道：「这位" + respect 
+                      + "，天快黑了，还是来小店歇歇吧，今天瞧把您给累的。」\n", this_object(),ob);  
+                             break; 
+
+                     case "event_night": // 初夜
+                             message_vision("$N对$n说道：「这位" + respect 
+                     + "，用过晚饭了吗？快进来喝杯茶歇会吧。」\n", this_object(),ob); 
+                             break; 
+
+                     case "event_midnight": // 午夜
+                             message_vision("$N揉着惺忪的眼睛地对$n说道：「这位" + respect 
+                     + "，这么晚了，您还不歇息啊？」\n", this_object(),ob); 
+                             break; 
+
+                     default : // 缺省的信息
+                             message_vision("$N笑咪咪地对$n说道：「这位" + respect 
+                     + "，进来喝杯香茶吧。」\n", this_object(),ob); 
+			     break;
+             }
+		return;
+	} else 
+		if((string)lp->query("bangzhu_id")==ob->query("id")) {//对帮主的特殊问候信息
+		command("say 原来是"+log_id(ob)+"帮主驾临寒店，请上房歇息如何？小的伺候着！\n");
+		command("bow "+ob->query("id"));
+		destruct(lp);
+		return;
+		}
+	else
+	command("say 这位"+RANK_D->query_respect(ob)+"，帮主最近身体可好？\n");//对一般帮众的问候信息
+//	destruct(lp);
+	return;
+}
+
+//问取雨伞的情况，雨伞的作用是雨天避免雷击
+//雨伞设置为no_sell, no_drop, no_give，不然将泛滥
+int give_san(object ob)
+{
+	string banghui;
+	object me=this_object();
+	ob=this_player();
+
+	banghui=(string)ob->query("banghui");
+
+	if( season != "Summer-Rain" 
+		&& season != "Spring-Rain" 
+		&& season != "Autumn-Rain" ) {
+		command("say "+RANK_D->query_respect(ob)+"外面没下雨啊，您要的什么雨伞啊？\n");
+		return 1;
+		}
+
+	if(present("umbrella", ob) ){//有伞的情况
+	message_vision("$N对$n说道：你不是有一把雨伞了吗？\n", me,ob);
+	command("book "+ob->query("id") );
+       return 1;
+       } 
+
+	if(ob->query_temp("oldsix/can_leave")) {  
+	new(WAI_OBJ"san")->move(ob);
+	message_vision("$N对$n说道：客官付了钱不住店就要走啊？外面可下着雨呢，这把伞给您吧！\n", me,ob);
+	message_vision("$N递给$n一把雨伞。\n", me,ob);
+	command("hehe "+ob->query("id") );
+       return 1;
+	}  
+
+       if( query("banghui") != banghui && !ob->query_temp("oldsix/can_leave")) {
+	message_vision("$N满脸堆笑地说道：这位「"+RANK_D->query_respect(me)+"」要伞请付(pay) "+
+MONEY_D->money_str(me->query("money_need"))+"。\n", me,ob);
+       return 1;
+	} else
+	new(WAI_OBJ"san")->move(ob);
+	message_vision("$N说道：都是帮内兄弟，来快拿着，拿着！\n", me,ob);
+	message_vision("$N递给$n一把雨伞。\n", me,ob);
+	command("jump");
+
+       return 1;
+}
+/*
+// 接受询问
+mixed accept_ask(object ob, string topic)
+{
+        return QUEST2_D->generate_information(this_object(), ob, topic);
+}
+*/

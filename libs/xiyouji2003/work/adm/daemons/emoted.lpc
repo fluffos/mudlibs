@@ -1,0 +1,222 @@
+// Update by waiwai@2001/11/10 
+// Last modified by waiwai@2003/01/17 
+
+#include <ansi.h>
+#include "/cmds/std/block_tell.h"  
+
+inherit F_SAVE;
+
+mapping emote;
+
+void create()
+{
+	seteuid(getuid());
+	if( !restore() && !mapp(emote) ) 
+	emote = ([]);
+}
+
+int remove()
+{
+	save();
+	return 1;
+}
+
+string query_save_file() { return DATA_DIR + "emoted"; }
+
+// 避免变人扰乱频道，玩家所有name()全部设为name(1)
+varargs mixed do_emote(object me, string verb, string arg, int channel_emote, int rumor_emote, int intermud)
+{
+	string str, my_gender, target_gender, msg_postfix;
+	object target;
+	string if_execute;
+	string user_emote;
+
+	if( !environment(me) ) return 0;
+
+	if ( !mapp(emote) || undefinedp(emote[verb]) ) return 0;
+	if(undefinedp(emote[verb])) {
+		if(!channel_emote)  return 0;
+		if(verb[0] < 0x80)  return 0;
+		if(rumor_emote)
+		   user_emote = "某人" + verb + "\n";
+                else {
+                  if(!channel_emote || ! intermud) {
+		// Added by waiwai@2003/05/27
+		if(me->query("vip") && me->query("color") )	
+		user_emote = me->query("color")+me->name(1) + verb + "\n";
+		else
+		user_emote = me->name(1) + verb + "\n";
+		} else
+		user_emote = "$N" + verb + "\n";
+              }
+	    return user_emote;
+	}
+
+	if ( stringp(arg) && arg != "" ) {
+		target = present(arg, environment(me));
+
+		notify_fail(WHT"你要对谁做这个动作？\n"NOR); 
+		
+		if(!objectp(target)) {
+			// If not channel emote, only search target in our environment.
+			if(!channel_emote) return 0;
+			target = find_player(arg);
+			if( !objectp(target) ) return 0;
+		}
+		
+		if( !target->is_character() || !me->visible(target) ) return 0;
+
+		//Modified by waiwai@2003/01/17 
+		if( wizardp(target) && target->query("env/invisibility")>8 && !channel_emote )
+		    return 0;
+
+		target_gender = target->query("gender");
+		if( target==me ) {
+			msg_postfix = "_self";
+			target = 0;
+		} else msg_postfix = "_target";
+	} else msg_postfix = "";
+
+        if(!channel_emote) {
+          if(!block_tell(me)) return 1;
+	}
+
+	my_gender = me->query("gender");
+
+	if_execute = "";
+	if( stringp(str = emote[verb]["myself" + msg_postfix]) ) {
+		if_execute = " ";
+		if(rumor_emote)
+		   str = replace_string(str, "$N", "某人");
+        else {
+		// Added by waiwai@2003/05/27
+		if(me->query("vip") && me->query("color") )	
+		str = replace_string(str, "$N", me->query("color")+me->name(1)+NOR);
+		else
+		str = replace_string(str, "$N", me->name(1));
+		}
+		str = replace_string(str, "$P", gender_self(my_gender));
+                str = replace_string(str, "$S", RANK_D->query_self(me));
+                str = replace_string(str, "$s", RANK_D->query_self_rude(me));
+		if( objectp(target) ) {
+                        str = replace_string(str, "$C", RANK_D->query_respect(me));
+                        str = replace_string(str, "$c", RANK_D->query_rude(me));
+                        str = replace_string(str, "$R", RANK_D->query_respect(target));
+                        str = replace_string(str, "$r", RANK_D->query_rude(target));
+		// Added by waiwai@2003/05/27
+		if(target->query("vip") && target->query("color") )	
+		str = replace_string(str, "$n", target->query("color")+target->name(1)+NOR);
+		else
+		str = replace_string(str, "$n", target->name(1));
+
+			str = replace_string(str, "$p", gender_pronoun(target_gender));
+		}
+		if( !channel_emote ) message("emote", WHT + filter_color(str) + NOR, me);
+	}
+  
+	if( objectp(target) && stringp(str = emote[verb]["target"]) ) {
+		if_execute = " ";
+		if(rumor_emote)
+		   str = replace_string(str, "$N", "某人");
+        else {
+		// Added by waiwai@2003/05/27
+		if(me->query("vip") && me->query("color") )	
+		str = replace_string(str, "$N", me->query("color")+me->name(1)+NOR);
+		else
+		str = replace_string(str, "$N", me->name(1));
+		}
+
+		str = replace_string(str, "$P", gender_pronoun(my_gender));
+                str = replace_string(str, "$S", RANK_D->query_self(me));
+                str = replace_string(str, "$s", RANK_D->query_self_rude(me));
+                str = replace_string(str, "$C", RANK_D->query_respect(me));
+                str = replace_string(str, "$c", RANK_D->query_rude(me));
+                str = replace_string(str, "$R", RANK_D->query_respect(target));
+                str = replace_string(str, "$r", RANK_D->query_rude(target));
+
+		// Added by waiwai@2003/05/27
+		if(target->query("vip") && target->query("color") )	
+		str = replace_string(str, "$n", target->query("color")+target->name(1)+NOR);
+		else
+		str = replace_string(str, "$n", target->name(1));
+
+		str = replace_string(str, "$p", gender_self(target_gender));
+
+		if( !channel_emote ) message("emote", YEL + filter_color(str) + NOR, target);
+	}
+
+	if( stringp(str = emote[verb]["others"+msg_postfix]) ) {
+		if_execute = " ";
+		if(rumor_emote)
+		   str = replace_string(str, "$N", "某人");
+        else if(!channel_emote || !intermud)
+		// Added by waiwai@2003/05/27
+		if(me->query("vip") && me->query("color") )	
+		   str = replace_string(str, "$N", me->query("color")+me->name(1)+NOR);
+		else
+		   str = replace_string(str, "$N", me->name(1));
+
+		str = replace_string(str, "$P", gender_pronoun(my_gender));
+                str = replace_string(str, "$S", RANK_D->query_self(me));
+                str = replace_string(str, "$s", RANK_D->query_self_rude(me));
+		if( objectp(target) ) {
+                        str = replace_string(str, "$C", RANK_D->query_respect(me));
+                        str = replace_string(str, "$c", RANK_D->query_rude(me));
+                        str = replace_string(str, "$R", RANK_D->query_respect(target));
+                        str = replace_string(str, "$r", RANK_D->query_rude(target));
+			// Added by waiwai@2003/05/27
+			if(target->query("vip") && target->query("color") )	
+			str = replace_string(str, "$n", target->query("color")+target->name(1)+NOR);
+			else
+			str = replace_string(str, "$n", target->name(1));
+
+			str = replace_string(str, "$p", gender_pronoun(target_gender));
+		}
+		if( !channel_emote ) {
+			 message("emote", WHT + filter_color(str) + NOR, environment(me), ({me, target}));
+			 if (environment(me)->query("broadcast"))
+			 	environment(me)->broadcast(WHT + filter_color(str) + NOR);
+		} else return str;
+	}
+
+	if( objectp(target) ) target->relay_emote(me, verb);
+
+	if(if_execute == "")   return 0;
+	return 1;
+}
+
+int save_emotes()
+{
+  save();
+  return 1;
+}
+
+int set_emote(string pattern, mapping def)
+{
+	emote[pattern] = def;
+	save();
+	return 1;
+}
+
+int delete_emote(string pattern)
+{
+	map_delete(emote, pattern);
+	save();
+	return 1;
+}
+
+mapping query_emote(string pattern)
+{
+	if( !undefinedp(emote[pattern]) ) return emote[pattern];
+	else return ([]);
+}
+
+string *query_all_emote()
+{
+	return keys(emote);
+}
+
+mapping query_all_emotes()
+{
+  return emote;
+}

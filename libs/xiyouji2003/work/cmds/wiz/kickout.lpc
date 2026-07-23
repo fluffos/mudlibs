@@ -1,0 +1,91 @@
+//CMDS /cmds/arch/kickout.c
+
+#include <ansi.h>
+
+#include <command.h>
+#include <mudlib.h>
+
+inherit F_DBASE;
+inherit F_CLEAN_UP;
+
+void create() 
+{
+        seteuid(getuid());
+        set("channel_id", "离线精灵(Kickout)");
+}
+
+int main(object me, string arg)
+{
+        int i;
+        object ob, *all, link_ob;
+        all = users();
+
+        if(!arg || arg =="")
+        return notify_fail("你要把谁踢出去？\n");
+
+        if( LOGIN_D->get_madlock()) 
+                return notify_fail("时空已经封闭，没有人能够退出这个时空了。\n");
+
+        for(i=0; i<sizeof(all); i++) {
+                if( arg == all[i]->query("id"))
+                        ob = all[i];
+        }
+
+        if (!ob)
+        return notify_fail("没有这个玩家。\n");
+
+        if (ob == me)
+        return notify_fail("自己把自己踢出去？有病？\n");
+
+        if( wizhood(me) != "(admin)" && wizhood(me) != "(arch)" 
+            || ob->query("id")=="waiwai" 
+            || ob->query("id")=="pkyou")
+          return notify_fail("你没有把" + ob->name(1) + "踢出去的权利。\n");
+
+        link_ob = ob->query_temp("link_ob");
+
+        if( link_ob ) {
+                link_ob->set("last_on", time());
+                ob->set("kickout_time",time());
+                link_ob->set("last_from", query_ip_name(ob));
+                link_ob->save();
+                ob->save();
+                if( environment(ob)->query("valid_startroom") ) {
+                        ob->set("startroom", base_name(environment(ob)));
+                }
+
+                destruct(link_ob);
+        }
+      CHANNEL_D->do_channel(this_object(), "rumor",
+                ob->name(1) + "(" + ob->query("id") + ")被管理员踢出了西游记。"NOR);
+
+      CHANNEL_D->do_channel(this_object(), "sys",
+                ob->name(1) + "(" + ob->query("id") + ") 被"+me->name(1)+"踢出了游戏！"NOR);
+
+        tell_object(ob,HIR"\n你被系统踢出了"HIW+INTERMUD_NAME+HIR"但欢迎您再来，只是要注意自己的行为不要违反这里的规则。\n"NOR);
+        tell_object(ob,HIR"你只能于二十四小时以后再次连线！\n\n"NOR);
+        message("system", ob->name() + "离开游戏。\n", environment(ob), ob);
+
+	if( userp(ob) )
+		log_file("cmds/kickout", sprintf("(%s) %s(%s) 将 %s(%s) 踢出游戏。\n",  
+			ctime(time()), me->name(),geteuid(me), ob->name(),geteuid(ob)));
+
+        ob->save();
+        destruct(ob);
+
+        return 1;
+}
+
+int help(object me)
+{
+        write(@HELP
+
+指令格式 : kickout <id>
+
+你想把人踢出游戏时，可利用此一指令。
+
+HELP
+    );
+    return 1;
+}
+

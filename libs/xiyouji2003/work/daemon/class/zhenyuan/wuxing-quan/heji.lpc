@@ -1,0 +1,107 @@
+#include <ansi.h>
+
+inherit F_DBASE;
+inherit SSERVER;
+
+void check_fight(object me, object target, object victim, int amount);
+int remove_effect(object me, object target, int amount);
+
+int perform(object me, object target)
+{
+   int skill, skill1, skill2;
+   object victim = offensive_target(me);
+
+   if( !target )
+     return notify_fail(HIC"你想对谁进行五行拳合击之技？\n"NOR);
+   if( target->query("id") == me->query("id") )
+     return notify_fail(HIC"你想对自己五行拳合击之技？\n"NOR);
+   if( !victim || victim->query("id") == target->query("id") )
+     return notify_fail(HIC"不能与你的对手进行五行拳合击之技。\n"NOR);
+
+   if( !victim->is_character() || !me->is_fighting(victim) )
+     return notify_fail(HIC"只能对你正在战斗中的对手使用五行拳合击之技。\n"NOR);
+   if( !target->is_fighting(victim) )
+     return notify_fail(HIC"你的同伴不在与对手战斗中。\n"NOR);
+   if( target->query_skill_mapped("unarmed") != "wuxing-quan" )
+     return notify_fail(HIC"你的同伴没有在使用五行拳合击之技。\n"NOR);
+   if( (int)target->query_temp("heji") )
+     return notify_fail(HIC"你的同伴已经在使用五行拳合击之技了。\n"NOR);
+   if( (int)me->query_temp("heji") )
+     return notify_fail(HIC"你已经在使用五行拳合击之技了。\n"NOR);
+   if((int)me->query("force") < 25+(int)me->query("force_factor") )
+     return notify_fail("你的内力不够！\n");
+   if((int)me->query("kee") < 100 )
+     return notify_fail(HIC"你的气血不足，没法子施用外功！\n"NOR);
+   if((int)target->query("force") < 25+(int)me->query("force_factor") )
+     return notify_fail(HIC"你的同伴内力不够！\n"NOR);
+   if((int)target->query("kee") < 100 )
+     return notify_fail(HIC"你的同伴气血不足，没法施用外功！\n"NOR);
+
+   if( !(int)target->query_temp("heji_request") ) {
+     me->set_temp("heji_request", 1);
+     tell_object(target, me->query("name")+HIY"向你发出合击请求。\n"NOR);
+     return 1;
+   }
+   target->delete_temp("heji_request");
+
+   me->add("force", -25-(int)me->query("force_factor"));
+   target->add("force", -25-(int)me->query("force_factor"));
+   me->receive_damage("kee", 100);
+   target->receive_damage("kee", 100);
+
+   skill1 = me->query_skill("wuxing-quan");
+   skill2 = target->query_skill("wuxing-quan");
+   skill = (skill1 + skill2)/8;
+   message_vision(HIY
+     "$N与$n双掌一拍，使出了五行拳中的 "BLINK HIR"合击之技 "+NOR+HIY"攻击顿时变得犀利无比。\n"
+     NOR, me, target);
+   me->add_temp("apply/attack", skill);
+   me->add_temp("apply/dodge",  skill);
+   me->set_temp("heji", 1);
+   target->add_temp("apply/attack", skill);
+   target->add_temp("apply/dodge",  skill);
+   target->set_temp("heji", 1);
+
+   me->start_call_out( (: call_other, __FILE__, "check_fight", me, target, victim, skill:), 1);
+   return 1;
+}
+
+void check_fight(object me, object target, object victim, int amount)
+{
+   object weapon;
+
+   if( !living(victim) || !present(victim->query("id"), environment(me)) ) 
+     remove_effect(me, target, amount);
+
+   else if( (!present(victim->query("id"), environment(me)) 
+       && target->is_fighting(victim))
+     || (!present(target->query("id"), environment(me)) 
+         && me->is_fighting(victim)) ) 
+     remove_effect(me, target, amount);
+
+   else if( !present(target->query("id"), environment(me))
+     || !target->is_fighting() || !me->is_fighting() 
+     || !living(target) )
+     remove_effect(me, target, amount);
+
+   else if( target->query_skill_mapped("unarmed") != "wuxing-quan" )
+     remove_effect(me, target, amount);
+
+   else if( me->query_skill_mapped("unarmed") != "wuxing-quan" )
+     remove_effect(me, target, amount);
+
+   else call_out("check_fight", 1, me, target, victim, amount);
+}
+
+int remove_effect(object me, object target, int amount)
+{
+   me->add_temp("apply/attack", -amount);
+   me->add_temp("apply/dodge", -amount);
+   target->add_temp("apply/attack", -amount);
+   target->add_temp("apply/dodge", -amount);
+   me->delete_temp("heji");
+   target->delete_temp("heji");
+   message_vision(HIG"$N和$n的合击之技不再发挥功效，周围的人也都松了一口气。\n"NOR, me, target);
+   return 0;
+}
+

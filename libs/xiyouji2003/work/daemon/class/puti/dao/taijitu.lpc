@@ -1,0 +1,129 @@
+// Update by waiwai@2003/04/25
+
+//#define SPELL_D "/adm/daemons/spelld2"
+#include <ansi.h>
+
+inherit SSERVER;
+
+void end_cast(object me,object target);
+void cast_person(object me,object target);
+
+int cast(object me, object target)
+{
+        string msg;
+        int howlong;
+        object env;
+
+        if( !target ) target = offensive_target(me);
+
+        if( !target
+        ||      !target->is_character()
+        ||      target->is_corpse()
+        ||      target==me)
+                return notify_fail("你要对谁施展太极图？\n");
+
+      if(!me->query("taijitu_known"))
+            return notify_fail("你还没学会使用太极图。。。\n");
+
+        if((int)me->query_skill("spells") < 550)
+            return notify_fail("你还不能自由运用太极图！\n");
+
+        if((int)me->query_skill("dao") < 550)
+            return notify_fail("你还不能自由运用太极图！\n");
+
+        if( me->query_temp("cast_taiji"))
+                return notify_fail("你已经在使用太极图！\n");
+
+        if((int)me->query("mana") < 2000 )
+                return notify_fail("你的法力不够！\n");
+        if((int)me->query("sen") < 500 )
+                return notify_fail("你无法集中精力！\n");
+
+        me->add("mana", -1500);
+        me->receive_damage("sen", 300);
+        if( random(me->query("max_mana")) < 500 ) {
+                write("你失败了！\n");
+                return 1;
+        }
+
+        msg = HIC
+        "\n$N口中念了句咒文，大喝一声：呔！。。。太极无形！。。。\n只见空中金云陡起，并迅速弥漫开来，将$N的身形隐去。\n"
+        NOR;
+        message_vision(msg,me,target);
+
+        me->set("env/invisibility", 1);
+
+        howlong=me->query_skill("spells")/5;
+
+        if( howlong > 60 ) howlong=60;
+        else if( howlong < 1 ) howlong = 5;
+
+        me->set_temp("cast_taiji",1);
+
+        env = environment(me);
+
+        if( objectp(env) && env->is_room() ) {
+                if( !env->query("oldlong") ) {
+                env->set("oldlong",env->query("long"));
+                env->set("long", HIY"\n半空中弥漫着金色的云彩，一切景色都很模糊。\n"NOR);
+                call_out("reset_room", howlong, env);
+                }
+        }
+        if( living(target) ) {
+               target->kill_ob(me);
+               me->kill_ob(target);
+          }
+
+        me->start_busy(1);
+        cast_person(me,target);
+        return 3+random(5);
+}
+
+void cast_person(object me,object target)
+{
+        int i, success_adj, damage_adj, damage;
+        string msg, *msg_type, *msg_success, *msg_fail, *damage_type;
+        string light, thunder;
+
+        if( !me ) return;
+
+        if(!target||environment(target) != environment(me)||!me->is_fighting(target)
+         || (int)me->query("mana")<200 ){
+                end_cast(me,target);
+                return;
+        }
+
+        if( !me->query_temp("cast_taiji") ) return;
+
+        if (target)     target->delete_temp("no_move");
+
+        light = __DIR__"light";
+        thunder = __DIR__"thunder";
+
+        if( random(2) )
+                light->do_cast(me, target, 1);
+        else thunder ->do_cast(me, target, 1);
+
+        call_out("cast_person",3,me,target);
+}
+
+void end_cast(object me,object target)
+{
+        if( target  ) target->delete_temp("no_move");
+
+        if( !me->query_temp("cast_taiji") ) return;
+
+        message_vision(HIC"\n半空中金云渐渐消散了，露出了$N的身影。\n" NOR,me);
+        me->delete("env/invisibility");
+        me->delete_temp("cast_taiji");
+}
+
+void reset_room(object env)
+{
+        if( !env ) return;
+
+        if( !env->query("oldlong") ) return;
+        env->set("long",env->query("oldlong"));
+        env->delete("oldlong");
+        tell_room(env, HIG+env->query("short")+HIG+"渐渐恢复了原样........\n"NOR);
+}

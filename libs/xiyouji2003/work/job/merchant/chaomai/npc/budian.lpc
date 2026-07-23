@@ -1,0 +1,131 @@
+// Created By waiwai@2001/02/08
+
+#include <ansi.h>
+
+int give_job();
+
+inherit NPC;
+
+void create()
+{
+	set_name("晕罐", ({ "emoc"}) );
+	set("title", HIW"商行老板  西游记里的靓仔"NOR);
+	set("gender", "男性" );
+	set("age", 24);
+	set("per", 40);
+	set("long", "这位就是商行的老板，可以向他要任务(job)做！\n");
+	set("attitude", "friendly");
+	set("rank_info/respect", "老板");
+	set("inquiry", ([
+		"job":		(:give_job:),
+		"炒卖货物":	(:give_job:),
+	]) );
+	setup();
+
+        set("chat_chance", 10);
+        set("chat_msg", ({
+		"晕罐嚷道：“这忽悠又去哪里偷懒了。”\n",
+		"晕罐伸出右大姆指, 道：“在这里干得活最多的自然是我晕罐。”\n",
+		"晕罐好奇地问：“西游记里这么多妹妹，哪个妹妹好呢？”。\n",
+		"晕罐叹息道，“可惜可惜，现在还没有谁能打死我！”\n",
+		"晕罐神秘一笑, 道，“听说西游记里的几乎全部的地层都是重新写过的，不知道费了多少心血啊。”\n",
+		"晕罐怒冲冲, 高声叫嚷，“我要打倒忽悠。”\n",
+		"晕罐笑嘻嘻地说道：“忽悠这家伙只会吓唬我。”\n",
+        }) );
+}
+
+void init()
+{	
+	object ob;
+
+	::init();
+	if (base_name(environment()) != query("startroom")) return;
+	if( interactive(ob = this_player()) && visible(ob) && !is_fighting() ) {
+		remove_call_out("greeting");
+		call_out("greeting", 1, ob);
+	}
+}
+
+void greeting(object ob)
+{
+	if (!ob || !present(ob, environment())) return;
+	if( ob->query("env/invisibility") ) return;
+	say( "晕罐说：“这位" + RANK_D->query_respect(ob)+ "，你是来这里做生意的吧。\n");
+}
+
+
+void relay_emote(object me,string arg)
+{
+	command(arg+" "+me->query("id"));
+}
+
+int give_job()
+{
+	object ob;
+	object me;
+	
+	ob=this_player();
+	me=this_object();
+	
+	tell_object(ob,JOB_OB2("merchant/chaomai")->ask_job(me,ob));
+	return 1;
+}
+
+int accept_object(object apper, object ob)
+{
+	object me = this_object();
+	object pinju;
+	int now_low, now;
+	now_low = (10000 - apper->query_temp("merchant/chaomai/now_money"));
+	now = now_low*90;
+
+	if ( apper->query_temp("merchant/chaomai/now_money") <= 10000 ) {
+		command("slap "+apper->query("id"));
+		command("say tnnd，砸了我的生意扣你的钱。");
+		tell_object(apper,HIR"[ 你被罚扣掉"+MONEY_D->money_num(now)+" ]\n"NOR);
+        CHANNEL_D->do_channel(this_object(),"sys",
+	sprintf("%s炒卖失败被罚掉%s\n" NOR, log_id(apper), MONEY_D->money_num(now) ));
+        log_file("player/chaomai", sprintf("%s炒卖失败被罚掉%s 时间在：[%s]\n",
+		log_id(apper), MONEY_D->money_num(now), log_time() ));
+
+		apper->add("balance",-now);
+		apper->delete_temp("merchant/chaomai");
+		apper->delete_temp("job");
+		apper->clear_condition("job_chaomai");
+		command("heng");
+		return 1;
+	}
+
+	if ( !apper->query_temp("merchant/chaomai/given")) {
+		command("say 什么意思吗？\n");
+		return 0;
+	}
+	if ( ob->query("id") != "check book" ){
+		command("say 买卖做完了，支票本想不还，没这好事。");
+		return 0;
+	}
+
+	if ( pinju=present("good check",apper) )
+		destruct(pinju);
+
+	apper->add_temp("chaomai_OK",1);
+	command("grin");
+	command("hehe "+apper->query("id"));
+	command("say 不错，欢迎下次在来炒卖货物。");
+	command("pat "+apper->query("id"));
+	if(apper->query_temp("chaomai_OK")>20) {
+        CHANNEL_D->do_channel(this_object(),"sys",
+	sprintf("%s炒卖成功20次被奖励5GOLD \n" NOR, log_id(apper) ));
+        log_file("player/chaomai", sprintf("%s成功20次被奖励5GOLD 时间在：[%s]\n",
+		log_id(apper), log_time() ));
+
+	apper->delete_temp("chaomai_OK");
+	apper->add("balance",50000);
+	command("say 酷毙了耶，额外奖励给"+apper->name(1)+HIR"5两黄金。"NOR);
+	}
+	tell_object(apper,JOB_OB2("merchant/chaomai")->give_gifts(apper));
+
+	return 1;
+}
+
+void kill_ob(object ob) { ob->die(); }

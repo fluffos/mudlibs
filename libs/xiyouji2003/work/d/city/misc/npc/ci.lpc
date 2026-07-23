@@ -1,0 +1,957 @@
+// create by Ephq@XYJ 02-9-22 23:37
+
+// 慈易针是负责刺青的NPC，首先，玩家要找到图腾，然后把图腾给(show)
+// 慈易针。并缴纳一定的黄金(普通的一个部位500，特殊的一个部位1000，
+// 全身的5000)。慈易针接收到图腾后向玩家索要黄金，在玩家缴纳黄金后
+// 询问玩家所刺的部位玩家输入（decide <部位>）后，慈易针开始刺青。
+
+// 图腾参数的说明
+// desc                 : 刺在身上的描述
+// level                : 图腾的等级
+//                        1. 普通的图腾
+//                        2. 特殊的图腾
+//                        3. 全身的图腾
+// place                : 图腾能刺的部位(脸部、胸口、后背、左臂、右臂) (数组)
+// attribute            : 图腾所增加的属性(mapping)
+// feature/no_bian      : 特殊属性(别人不能bian)
+// feature/no_check     : 特殊属性(别人不能check)
+// feature/no_find      : 特殊属性(别人不能find)
+
+// 玩家自身的参数
+// tattoo_desc           刺青后没传衣服look时所看到的描述
+// tattoo_desc_cloth     刺青后传衣服look时所看到的描述
+// 局部刺青
+//      tattoo/部位/attribute 增加的属性(mapping)
+//      tattoo/部位/desc      刺青的描述
+//      tattoo/部位/totem     刺青的图腾
+//      tattoo/部位/value     刺青的花费（单位：黄金）
+//      tattoo/部位/feature   刺青的特殊属性
+// 全身刺青
+//      capapie_tattoo/attribute 增加的属性(mapping)
+//      capapie_tattoo/desc      刺青的描述
+//      capapie_tattoo/totem     刺青的图腾
+//      capapie_tattoo/value     刺青的花费（单位：黄金）
+//      capapie_tattoo/feature   刺青的特殊属性
+// Update by waiwai@2003/04/25
+
+#include <ansi.h>
+inherit NPC;
+
+inherit F_VENDOR;
+
+//身上所能刺青的部位
+string *limbs = ({  "脸部",
+                    "胸口",
+                    "后背",
+                    "左臂",
+                    "右臂",
+                    "左肩",
+                    "右肩",
+                    "臀部",
+                    "左腿",
+                    "右腿",
+                    "腹部"
+                });
+
+mapping atts = ([
+                "kar" : "福缘",
+                "per" : "容貌",
+                "int" : "悟性",
+                "spi" : "灵性",
+                "str" : "臂力",
+                "cor" : "胆识",
+                "cps" : "定力",
+                "con" : "根骨"
+                ]);
+
+
+private string ask_quest();
+private string ask_clean();
+private string add_desc(object me);
+private string sort_desc(mapping tattoo);
+
+void create()
+{
+        set_name("慈易针", ({"ci yizhen", "ci", "yizhen"}));
+        set("title", "「" HIR "天下第一刺青师" NOR "」");
+        set("gender", "男性" );
+        set("age", 55);
+        set("class","taoist");
+        set("long", "一位大唐著名的刺青师，他的刺青功夫堪称天下第一\n"
+                    "其功底可为炉火纯青，手法细腻柔和，据说曾在别人\n"
+                    "背上雕一只白虎，月明之夜便会离开人身到深山去长\n"
+                    "啸，也曾雕过一只巨鹰在人背上，那人所到之处，天\n"
+                    "上飞禽竟都飞下来围绕着哀鸣，真是让人赞叹不惜。\n");
+        set("combat_exp", 8000);
+        set("daoxing", 80000);
+
+        set("attitude", "peaceful");
+        set("no_bid", 1); 
+        set_skill("unarmed", 10);
+        set_skill("dodge", 20);
+        set_skill("parry", 20);
+        set_skill("literate", 50);
+        set_skill("spells", 50);
+        set("per", 15);
+        set("max_kee", 350);
+        set("max_gin", 300);
+        set("max_sen", 300);
+        set("max_mana", 200);
+        set("mana", 200);
+        set("mana_factor", 5);
+        set("inquiry", ([
+                        "刺青"     : (: ask_quest :),
+                        "纹身"     : (: ask_quest :),
+                        "人体彩绘" : (: ask_quest :),
+                        "清洗"     : (: ask_clean :),
+                        "洗纹身"   : (: ask_clean :),
+                        "洗刺青"   : (: ask_clean :),
+                        "鉴定"     : "如果你有图腾的话，老夫到是可以给你免费鉴定" YEL "(jianding)" CYN "一下",
+                        "鉴赏"     : "如果你有图腾的话，老夫到是可以给你免费鉴定" YEL "(jianding)" CYN "一下",
+                        "鉴别"     : "如果你有图腾的话，老夫到是可以给你免费鉴定" YEL "(jianding)" CYN "一下",
+                        "图腾"     : "如果你有图腾的话，老夫到是可以给你免费鉴定" YEL "(jianding)" CYN "一下",
+                        "图案"     : "如果你有图案的话，老夫到是可以给你免费鉴定" YEL "(jianding)" CYN "一下",
+                        "图画"     : "如果你有图画的话，老夫到是可以给你免费鉴定" YEL "(jianding)" CYN "一下",
+                        "图"       : "如果你有图的话，老夫到是可以给你免费鉴定" YEL "(jianding)" CYN "一下"
+                        ]));
+        set("vendor_goods", ([
+                "1": "/d/obj/tattoo/totem",
+         ]));
+        setup();
+        carry_object("/d/obj/cloth/choupao")->wear();
+}
+
+void init()
+{
+        ::init();
+        add_action("do_vendor_list", "list");
+        add_action("do_decide", "decide");
+        add_action("do_show",   "show");
+        add_action("do_jianding","jianding");
+        add_action("do_clean","clean");
+}
+
+//回答刺青的信息
+private string ask_quest()
+{
+        object me = this_player();
+        mapping tattoo;
+        int     val;
+
+        if( query("busy") )
+                return "没看见老夫正在忙着吗？";
+
+        if( me->query("capapie_tattoo") )
+                return "你的全身都刺上了，还要刺青的话，待老夫给你洗掉后才能再刺。";
+
+        if( !me->query_temp("tattoo") )
+
+                return "刺青可以强身健体，还可以使你变得更有魅力。\n如果给我个合适的图样"
+                        YEL "(show <图腾>)" NOR CYN "，老夫可以为你刺上。";
+
+        else if( me->query_temp("tattoo/can_tattoo") ) {
+                object obj;
+
+                if( !objectp( obj = me->query_temp("tattoo/obj") ) )
+                        return "你不是要刺青吗？但是刚才你给我看的图呢？";
+
+                if( me->query_temp("tattoo/level") != 3 ) {
+                        if( me->query_temp("tattoo/number") > 1 )
+                                return "你决定" YEL "(decide <部位>)" NOR CYN "把" + obj->name()
+                                        + "纹在" + me->query_temp("tattoo/place_desc") +"中的哪个部位？";
+                        else return "你决定" YEL "(decide <部位>)" NOR CYN "把" + obj->name()
+                                        + "纹在" + me->query_temp("tattoo/place_desc") +"上吗？";
+                 } else return "你决定" YEL "(decide)" NOR CYN "把" + obj->name()
+                                + "纹在全身吗？";
+
+        } else if( val = me->query_temp("tattoo/value") )
+                return "要纹身，给我" + chinese_number(val) + "两黄金先，老夫从不讲价。";
+
+        else return 0;
+}
+
+//询问清洗刺青
+string ask_clean()
+{
+        object me = this_player();
+        mapping tattoo;
+
+        if( me->query("eff_kee") < me->query("max_kee") 
+         || me->query("kee") < me->query("max_kee") 
+         || me->query("eff_sen") < me->query("max_sen") 
+         || me->query("sen") < me->query("max_sen") 
+        ) return "你目前的状态清洗刺青可能对你生命有害。";
+        if( mapp( tattoo = me->query("tattoo") ) ) {
+                string msg, *place;
+
+                if( sizeof(tattoo) < 1 ) return "你刺过青了吗？";
+
+                msg = "你身上目前有" + chinese_number(sizeof(tattoo)) + "处刺青。\n";
+
+                place = keys(tattoo);
+                foreach(string limb in place) {
+                        if( member_array(limb, place) == -1 )
+                                continue;
+
+                        msg += "洗去" + limb + "上的" + tattoo[limb]["totem"]
+                               + "需要" + chinese_number((int)tattoo[limb]["value"] / 10) + "两黄金。\n";
+                }
+                msg += NOR"请用" YEL "(clean <部位>)" NOR + "来清洗。\n";
+                return msg;
+        } else if( mapp( tattoo = me->query("capapie_tattoo") ) ) {
+                if( sizeof(tattoo) < 1 ) return "你刺过青了吗？";
+
+                return "你的全身都刺上了" + tattoo["totem"] + "，如果要清洗" YEL "(clean)" CYN "的话，需"
+                       + chinese_number((int)tattoo["value"] / 10 ) + "两黄金。\n";
+        } else return "你刺过青了吗？";
+}
+
+int accept_object(object me, object ob)
+{
+        int val, need;
+        object obj;
+
+        // 收到图腾
+
+        if( query("busy") ) {
+                tell_object(me, name() + "正在忙着呢。\n");
+                return 0;
+        }
+
+        if( ob->is_totem() ) {
+                int level;
+
+                level = ob->query("level");
+
+                message_vision("$N在$n面前掏出了一" + ob->query("unit") + ob->name() + "。", me, this_object());
+                switch( level ) {
+                        case 1 : 
+                                message_vision("$N鄙倪地看了一眼$n，道：“这种图老夫从来不看，这位"
+                                                + RANK_D->query_respect(me) + "还是自己收着吧。”\n",
+                                                this_object(), ob);
+                                break;
+                        case 2 :
+                                message_vision("$N看了看$n，道：“不错，不错，堪称上品，这位"
+                                                + RANK_D->query_respect(me) + "需要老夫为你刺在身上吗？”\n",
+                                                this_object(), ob);
+                                break;
+                        case 3 :
+                                message_vision("$N一看到$n，双眼发光，惊叹道：“好、好、好，这可是画中极品，这位"
+                                                + RANK_D->query_respect(me) + "，你从哪里得来的？"
+                                                "需要老夫为你刺在身上吗？”\n", this_object(), ob);
+                                break;
+                        case 4 :
+                                message_vision("$N一看到$n，不禁呆住，喃喃道：“这、这、这，这可是上古神品，这位"
+                                                + RANK_D->query_respect(me) + "，你从哪里得来的？"
+                                                "人间难觅啊！需要老夫为您刺在身上吗？”\n", this_object(), ob);
+                                break;
+                        default: 
+                                message_vision("$N看了一眼$n，皱眉道：“这是什么东西，老夫从未见过。”\n"
+                                                , this_object(), ob);
+                                break;
+                }
+                return 0;
+        }
+
+        // 收到金子
+        if( !( val = ob->value() ) )
+                return 0;
+
+        if( !( need = me->query_temp("tattoo/value") ) ) {
+                message_vision("$N道看着$n手中的" + ob->name() + "道：“老夫从不白收钱，先拿个图给老夫看看"
+                                HIY "(show)" NOR "。”\n", this_object(), me);
+                return 0;
+        }
+
+        if( val < need * 10000 ) {
+                message_vision("$n寒寒颤颤地掏出了"
+                                + ob->query("unit") + ob->name() + "。\n"
+                                "$N看着$n手中的" + ob->name() + "皱了皱眉，怒道：“老夫从不讨价还价，一口价"
+                                + chinese_number(need) + "两金子，一个子都不能少。”\n", this_object(), me);
+                                return 0;
+        }
+
+        if( !objectp( obj = me->query_temp("tattoo/obj") ) ) {
+                message_vision("$N疑惑道：“先别忙着给钱，刚才你给我看的图呢？有钱没图可不行。”\n", this_object(), me);
+                return 0;
+        }
+
+        me->set_temp("tattoo/can_tattoo", 1);
+
+        if( (int)me->query_temp("tattoo/level") == 3 )
+                message_vision("$N对$n说道：“你决定" YEL "(decide)" NOR "把"
+                                + obj->name() + "纹在全身吗？”\n", this_object(), me);
+        else if( (int)me->query_temp("tattoo/numver") > 1 )
+                message_vision("$N对$n说道：“你决定" YEL "(decide <部位>)" NOR "把"
+                                + obj->name() + "纹在" + me->query_temp("tattoo/place_desc")
+                                +"中的哪个部位？”\n", this_object(), me);
+             else message_vision("$N对$n说道：“你决定" YEL "(decide <部位>)" NOR "把"
+                                   + obj->name() + "纹在" + me->query_temp("tattoo/place_desc")
+                                   +"吗？”\n", this_object(), me);
+        return 1;
+}
+
+private int do_jianding(string arg)
+{
+        object  me, ob;
+        mapping attribute;
+        string  msg, *place;
+        int level;
+
+        me = this_player();
+
+        if( !arg ) return notify_fail("你要把什么给慈易针做图样？\n");
+
+        if( !objectp( ob = present(arg, me) ) )
+                return notify_fail("你身上有这样东西吗？\n");
+
+        if( !ob->is_totem() )
+                return notify_fail(name() + "看了看" + ob->name() +"，道：“这是什么东西，拿走拿走，我只鉴定图腾。”\n");
+
+        if( query("busy") )
+                return notify_fail(name() + "对着你翻了翻眼，道：“没看见老夫正在忙着吗？”\n");
+
+        if( mapp( attribute = ob->query("attribute") ) ) {
+                string *attr;
+                int    i;
+
+                msg = "这" + ob->query("unit") + ob->name() + "可以加：\n";
+                attr = keys(attribute);
+
+                for( i = 0; i < sizeof(attr); i ++ ) {
+                        msg += attribute[attr[i]] + "点" + atts[attr[i]];
+//                        msg += chinese_number(attribute[attr[i]]) + "点" + atts[attr[i]];
+                        if( i < sizeof(attr)-1 ) msg += "、";
+                }
+        } else msg = "这" + ob->query("unit") + ob->name() + "没有任何用途";
+        
+
+        level = ob->query("level");
+	if( ob->query("id") != "vip") {
+        switch( level ) {
+                case 1 : msg += "，"WHT"是一般货色"NOR;
+                         break;
+                case 2 : msg += "，"HIG"是上品"NOR;
+                         break;
+                case 3 : msg += "，"HIW"是极品"NOR;
+                         break;
+                case 4 : msg += "，"HIR"是神品"NOR;
+                         break;
+                default: break;
+        }
+	} else msg += "，"HIY"是难得神品"NOR;
+
+        msg = name() + "在你耳边悄悄说道：“" + msg + "。”\n";
+
+        if( pointerp( place = ob->query("place") ) ) {
+                int size;
+
+                msg += "可以刺在";
+                size = sizeof(place);
+                if( size > 1 )
+                        msg += sprintf("%s和%s", implode(place[0..size-2], "、"),
+                                                 place[size-1]);
+                else if( size == 1 ) msg += place[0];
+                msg += "上。\n";
+        } else msg += "不能刺在身上。\n";
+
+        tell_object(me, msg);
+        return 1;
+}
+
+private int do_show(string arg)
+{
+        object me, ob;
+        string *place;
+        mixed  tattoo;
+        string msg = "";
+        int    size, level, val;
+
+        me = this_player();
+
+        if( !arg ) return notify_fail("你要把什么给慈易针做图样？\n");
+
+        if( !objectp( ob = present(arg, me) ) )
+                return notify_fail("你身上有这样东西吗？\n");
+
+        if( !ob->is_totem() )
+                return notify_fail(name() + "看了看" + ob->name() +"，道：“这是什么东西，也拿来糊弄老夫？”\n");
+
+        if( query("busy") )
+                return notify_fail(name() + "对着你翻了翻眼，道：“没看见老夫正在忙着吗？”\n");
+
+        if( me->query_temp("tattoo/can_tattoo") )
+                return notify_fail(name() + "道：“你的钱都给了，老夫从不失言，我还是先为你刺上吧。”\n");
+
+        if( me->query("capapie_tattoo") )
+                return notify_fail("慈易针看了看你，道：“你的全身都刺上了" + me->query("capapie_tattoo/totem") 
+                                   + "，如果想再刺的话，要先把它洗掉" YEL "(clean)" NOR "。”\n");
+
+        level = (int)ob->query("level");
+
+        if( level != 1 && level != 2 && level != 3 && level != 4 )
+                return notify_fail("慈易针看了看" + ob->name() + "，皱眉道：“奇怪，这是什么东西？老夫从未见过，"
+                                   "你从哪儿弄来的？”\n");
+
+        if( ( !pointerp( place = ob->query("place") ) || sizeof(place) < 1 )
+          && level != 3 )
+                return notify_fail("慈易针看了看" + ob->name() + "，皱眉道：“奇怪，奇怪，这东西好像不能刺在身上，"
+                                   "你从哪儿弄来的？”\n");
+
+        tattoo = me->query("tattoo");
+
+        if( level == 3 && mapp( tattoo ) )
+                if( sizeof(tattoo) > 1 )
+                        return notify_fail("慈易针看了看" + ob->name() + "，道：“这个是刺在全身的图腾，可是你身上"
+                                           "已经有地方刺过了，要我先帮你洗掉" YEL "(clean <部位>)" NOR "吗？”\n");
+
+        if( mapp( tattoo = me->query("tattoo") ) ) {
+
+                string *limb = keys(tattoo);
+
+                place -= limb;
+                if( sizeof(place) < 1 )
+                                return notify_fail("你身上已经没有多余的部位刺这" + ob->query("unit")
+                                                + ob->name() + "了。\n");
+        }
+
+
+        level = ob->query("level");
+
+        switch( level ) {
+                case 1 : val = 500;
+                        break;
+                case 2 : val = 1000;
+                        break;
+                case 3 : val = 5000;
+                        break;
+                case 4 : val = 8000;
+                        break;
+                default: 
+                        break;
+        }
+
+        size = sizeof(place);
+        if( size > 1 )
+                msg = sprintf("%s和%s", implode(place[0..size-2], "、"),
+                                                 place[size-1]);
+        else if( size == 1 ) msg = place[0];
+
+        if( level != 3 && level != 4) {
+                if( sizeof(place) > 1 )
+                        message_vision("$N看了看这" + ob->query("unit") + ob->name() + "对$n道：“给老夫"
+                                        + chinese_number(val) + "两黄金，我可以把它刺在你身上的" + msg
+                                        + "中的任何一个部位。”\n", this_object(), me);
+                else message_vision("$N看了看这" + ob->query("unit") + ob->name() + "对$n道：“给老夫"
+                                        + chinese_number(val) + "两黄金，我可以把它刺在你的" + msg
+                                        + "。”\n", this_object(), me);
+        } else 
+        if( level == 3 ) 
+	message_vision("$N看了看这" + ob->query("unit") + ob->name() + "对$n道：“给老夫"
+                                        + chinese_number(val) + "两黄金，我可以把它刺在你的全身。”\n", this_object(), me);
+	else
+        if( level == 4 ) {
+                if( sizeof(place) > 1 )
+                        message_vision("$N看了看这" + ob->query("unit") + ob->name() + "对$n道：“给老夫"
+                                        + chinese_number(val) + "两黄金，我可以把它刺在你身上的" + msg
+                                        + "中的任何一个部位。”\n", this_object(), me);
+                else message_vision("$N看了看这" + ob->query("unit") + ob->name() + "对$n道：“给老夫"
+                                        + chinese_number(val) + "两黄金，我可以把它刺在你的" + msg
+                                        + "。”\n", this_object(), me);
+	}
+
+        me->set_temp("tattoo/value", val);
+        me->set_temp("tattoo/place_desc", msg);
+        me->set_temp("tattoo/obj", ob);
+        me->set_temp("tattoo/number", size);
+        return 1;
+}
+        
+private int do_decide(string arg)
+{
+        object ob, me = this_player();
+        string *place;
+        int    level;
+
+        if( query("busy") )
+                return notify_fail(name() + "对着你翻了翻眼，道：“没看见老夫正在忙着吗？”\n");
+
+        if( !me->query_temp("tattoo/can_tattoo") )
+                return 0;
+
+        if( !objectp( ob = me->query_temp("tattoo/obj") )
+         || environment(ob) != me )
+                return notify_fail("慈易针疑惑道：“你刚才给我的图样哪儿去了？没图样我怎么给你刺呢？”\n");
+
+        level = (int)ob->query("level");
+
+        if( level != 1 && level != 2 && level != 3 && level != 4 )
+                return 0;
+
+        if( !pointerp( place = ob->query("place") ) 
+         && level != 3 )
+                return 0;
+
+        if( !arg && level != 3 ) {
+                if( sizeof( ob->query("place") ) > 1 )
+                        return notify_fail("你决定" YEL "(decide <部位>)" NOR "把" + ob->name()
+                                + "纹在" + me->query_temp("tattoo/place_desc") +"中的哪个部位？\n");
+                else return notify_fail("你决定" YEL "(decide <部位>)" NOR "把" + ob->name()
+                                        + "纹在" + me->query_temp("tattoo/place_desc") +"上吗？\n");
+
+        }
+
+        if( arg && member_array(arg, place) == -1 )
+                return notify_fail("你不能选择这个部位。\n");
+
+        if( sizeof( me->query_temp("armor") ) > 0 )
+                return notify_fail("身上穿着东西，怎么纹身？\n");
+
+
+        ob->move(this_object());
+        message_vision("$N把$n交给了" + name() + "，决定接受纹身。\n" + name() + "叮嘱道：“纹身的时候会疼的，可别乱动，"
+                        "那样会前功尽弃的。”\n", me, ob);
+        me->start_busy(20);
+        if( !stringp(arg) ) arg = "全身";
+        call_out("start_tattoo", 5, me, arg, ob);
+        set("busy", 1);
+        return 1;
+}
+
+private int do_clean(string arg)
+{
+        object ob, gold, me = this_player();
+        int    val, need;
+
+        if( query("busy") )
+                return notify_fail(name() + "对着你翻了翻眼，道：“没看见老夫正在忙着吗？”\n");
+
+        if( !arg && !me->query("capapie_tattoo") )
+                return notify_fail("请用" YEL "(clean <部位>)" NOR "来清洗。\n");
+
+        if( arg ) {
+                if( member_array(arg, limbs) == -1 )
+                        return notify_fail("有这个部位吗？\n");
+
+                if( !me->query("tattoo/" + arg) )
+                        return notify_fail(name() + "看了你一眼，道：“你的" + arg + "没有刺青。”\n");
+        }
+
+        if( me->query("eff_kee") < me->query("max_kee") 
+         || me->query("kee") < me->query("max_kee") 
+         || me->query("eff_sen") < me->query("max_sen") 
+         || me->query("sen") < me->query("max_sen") 
+        ) return notify_fail("慈易针对你说道：“你的身体情况太差，还是修养一段时间再来吧。”\n");
+        if( !objectp( gold = present("gold", me) ) )
+                return notify_fail(name() + "瞪了你一眼，道：“老夫向来不做亏本买卖，没钱老夫可不干。”\n");
+
+        val = gold->value();
+        if( me->query("capapie_tattoo") ) {
+
+                need = (int)me->query("capapie_tattoo/value");
+                need /= 10;
+
+                if( val < need * 10000 )
+                        return notify_fail(name() + "淡淡道：“洗掉你全身的" + me->query("capapie_tattoo/totem")
+                                + "需要" + chinese_number(need) + "两金子，你带了这么多钱吗？”\n");
+
+                message_vision("$N决定洗掉全身刺上的" + me->query("capapie_tattoo/totem") + "。\n", me);
+                gold->set_amount( (int)gold->query_amount() - need );
+                message_vision("$N对着$n叹道：“既然你不喜欢身上的刺青，老夫这就给你洗掉，唉，可惜了这张"
+                                + me->query("capapie_tattoo/totem") + "啊！”\n", this_object(), me);
+                call_out("start_clean", 3, me, 1);
+                set("busy", 1);
+                return 1;
+        } else if( me->query("tattoo") ) {
+                need = (int)me->query("tattoo/" + arg + "/value");
+                need /= 10;
+
+                if( val < need * 10000 )
+                        return notify_fail(name() + "淡淡道：“洗掉你" + arg +"的" + me->query("tattoo/" + arg + "/totem")
+                                + "需要" + chinese_number(need) + "两金子，你带了这么多钱吗？”\n");
+
+                message_vision("$N决定洗掉" + arg + "上的" + me->query("tattoo/" + arg + "/totem") + "。\n", me);
+                gold->set_amount( (int)gold->query_amount() - need );
+                message_vision("$N对着$n叹道：“既然你不喜欢" + arg +"的刺青，老夫这就给你洗掉，唉，可惜了这张"
+                                + me->query("tattoo/" + arg + "/totem") + "啊！”\n", this_object(), me);
+
+                call_out("start_clean", 3, me, arg);
+                set("busy", 1);
+                return 1;
+        } else return 0;
+
+}
+
+private void start_tattoo(object me, string arg, object ob)
+{
+        if( !objectp( me ) || environment(me) != environment() ) {
+                message_vision("N叹了口气，说道：“还没开工客人为何就去了！？罢了罢了，不做了，去就去吧，"
+                                "金子算我白赚的了，嘿嘿。”\n", this_object());
+                delete("busy");
+                return;
+        }
+
+        if( !objectp(ob) || environment(ob) != this_object() ) {
+                message_vision("N皱了皱眉，道：“那张图哪儿去了，奇怪，奇怪，没有图老夫只好停工了。”\n", this_object());
+                delete("busy");
+                return;
+        }
+
+        message_vision("$N把" + ob->name() + "摊开，放在一旁，从架子上取出檀木沉香盒，轻轻拈出一根银针，坐到了$n的旁边。\n"
+                       "用笔尖在$n身上细细描画，然后用左手的拇指、无名指和末指掂着笔，\n"
+                       "用右手拿起针，在$n的" +arg + "沿着绘画的线条挑刺。\n", this_object(), me);
+
+        call_out("tattoo_step_1", 5, me, arg, ob);
+}
+
+private void tattoo_step_1(object me, string arg, object ob)
+{
+        if( !objectp( me ) || environment(me) != environment() ) {
+                message_vision("N叹了口气，说道：“刚刚开工客人为何就去了！？罢了罢了，不做了，去就去吧，"
+                                "金子算我白赚的了，嘿嘿。”\n", this_object());
+                delete("busy");
+                return;
+        }
+
+        if( !objectp(ob) || environment(ob) != this_object() ) {
+                message_vision("N皱了皱眉，道：“那张图哪儿去了，奇怪，奇怪，没有图老夫只好停工了。”\n", this_object());
+                delete("busy");
+                return;
+        }
+
+        message_vision("$N一边看着" + ob->name() + "一边仔细的盯着$n的" +arg + "皮肤，\n"
+                        "慢慢的描绘，就好像刺青师的心灵注进了那构图中去，每注进一滴" HIR"朱砂，\n" NOR
+                        "就像他自已的" HIR "一滴血" NOR "，注进了$n的身体，混合着$n" + arg + "上流出的"
+                        HIR "鲜血" NOR "。\n$N显出满意的微笑问$n道：“它真的这么痛吗？”\n", this_object(), me);
+
+        call_out("tattoo_step_2", 6, me, arg, ob);
+}
+
+private void tattoo_step_2(object me, string arg, object ob)
+{
+        if( !objectp( me ) || environment(me) != environment() ) {
+                message_vision("N叹了口气，说道：“刚开工不久客人为何就去了！？罢了罢了，不做了，去就去吧，"
+                                "金子算我白赚的了，嘿嘿。”\n", this_object());
+                delete("busy");
+                return;
+        }
+
+        if( !objectp(ob) || environment(ob) != this_object() ) {
+                message_vision("N皱了皱眉，道：“那张图哪儿去了，奇怪，奇怪，没有图老夫只好停工了。”\n", this_object());
+                delete("busy");
+                return;
+        }
+
+        message_vision("$N根本忘了时间的消逝，过了许久，他的手坚持不懈地干着活，刺青还未做完一半呢。\n"
+                        "$N放下了，针站了起来，擦了擦额头上的汗珠，然后马上又坐下来，伸手去拿他的针了。\n"
+                        "现在第一挑刺都要花很大力气，他发出一声叹息，就像他的心能感觉到每一下挑刺似的。\n"
+                        "慢慢一点点在$n的" + arg + "开始出现了" + ob->name() + "的大概的轮廓了。\n", this_object(), me);
+
+        call_out("tattoo_step_3", 6, me, arg, ob);
+}
+
+private void tattoo_step_3(object me, string arg, object ob)
+{
+        if( !objectp( me ) || environment(me) != environment() ) {
+                message_vision("N叹了口气，说道：“刚刺了一半客人为何去了！？罢了罢了，不做了，去就去吧，"
+                                "金子算我白赚的了，嘿嘿。”\n", this_object());
+                delete("busy");
+                return;
+        }
+
+        if( !objectp(ob) || environment(ob) != this_object() ) {
+                message_vision("N皱了皱眉，道：“那张图哪儿去了，奇怪，奇怪，没有图老夫只好停工了。”\n", this_object());
+                delete("busy");
+                return;
+        }
+
+        message_vision("$N头上已经满是汗珠了，但他现在已经全身心的融入刺青中去，根本没有理会自己现在的状况。\n"
+                        "这位天下第一刺青师目前的眼里仿佛把$n和" + ob->name() + "融为了一体，而$n也渐渐感觉不到了疼痛，\n"
+                        "只感觉到身体麻木了，刺针刺在他的" + arg + "，已经没有任何感觉。\n", this_object(), me);
+
+        call_out("tattoo_step_4", 6, me, arg, ob);
+}
+
+private void tattoo_step_4(object me, string arg, object ob)
+{
+        if( !objectp( me ) || environment(me) != environment() ) {
+                message_vision("N叹了口气，说道：“都快刺完了，客人却不见了！？罢了罢了，不做了，去就去吧，"
+                                "金子算我白赚的了，嘿嘿。”\n", this_object());
+                delete("busy");
+                return;
+        }
+
+        if( !objectp(ob) || environment(ob) != this_object() ) {
+                message_vision("N皱了皱眉，道：“那张图哪儿去了，奇怪，奇怪，没有图老夫只好停工了。”\n", this_object());
+                delete("busy");
+                return;
+        }
+
+        message_vision("刺青已经快完成了，$N抑制住自己的喜悦，仍然专心的在$n的" + arg + "全神贯注的刺着。\n"
+                       "$N拿起一块布擦了擦$n的" + arg + "，一幅" + ob->name() + "呼之欲出。\n"
+                       "只见兹易针从盒子里取出"HIM"十八色瓷瓶"NOR"，分取粉末放入色盘中。\n"
+                       "慈易针用指甲尖轻轻挑出各色粉末，再分别弹入你刺青之上。\n"
+                       "过得良久，弹在刺青上的各色粉末已经渐渐渗入了你的肌肤。\n"
+                       "刺青上的颜色慢慢显露了出来，色彩明艳，与图腾更无二致。\n", this_object(), me);
+
+        call_out("tattoo_finish", 6, me, arg, ob);
+}
+
+private void tattoo_finish(object me, string arg, object ob)
+{
+        int level;
+        mapping attribute;
+
+        if( !objectp( me ) || environment(me) != environment() ) {
+                message_vision("N叹了口气，说道：“马上就完了，客人却不见了！？罢了罢了，不做了，去就去吧，"
+                                "金子算我白赚的了，嘿嘿。”\n", this_object());
+                delete("busy");
+                return;
+        }
+
+        if( !objectp(ob) || environment(ob) != this_object() ) {
+                message_vision("N皱了皱眉，道：“那张图哪儿去了，奇怪，奇怪，没有图老夫只好停工了。”\n", this_object());
+                delete("busy");
+                return;
+        }
+
+        message_vision(YEL"刺青现在完成了，看着自己的又一幅作品，不知道为什么，$N心中反倒感到空虚得发慌。\n"
+                        "但是，$N还是扶起了$n，用上等护体甘露擦干了" + arg + "，\n只见$n的" + arg + "上一幅"HIG + ob->name()
+                        + NOR YEL"和画上一模一样，不愧为天下第一刺青师。\n"NOR, this_object(), me);
+        log_file("player/ciqing", sprintf("%s刺青%s 时间在：[%s]\n",
+		log_id(me), ob->name(), log_time() ));
+
+        level = (int)ob->query("level");
+
+        if( level == 3 ) {
+                string *place, msg;
+                int    size;
+
+                me->set("capapie_tattoo/totem", ob->name(1));
+                me->set("capapie_tattoo/desc", ob->query("desc"));
+                me->set("capapie_tattoo/feature", ob->query("feature"));
+                me->set("capapie_tattoo/attribute", ob->query("attribute"));
+                me->set("capapie_tattoo/value", me->query_temp("tattoo/value"));
+                place = limbs;
+                place -= ({ "胸口", "后背", "臀部" });
+
+                size = sizeof(place);
+                if( size > 1 )
+                        msg = sprintf("%s和%s", implode(place[0..size-2], "、"),
+                                                 place[size-1]);
+                else if( size == 1 ) msg = place[0];
+
+                me->set("tattoo_desc_cloth", "%s的" + msg + "刺着" + ob->query("desc") + "\n");
+                me->set("tattoo_desc", "%s的全身刺着" + ob->query("desc") + "\n");
+
+        } else {
+                me->set("tattoo/" + arg + "/totem", ob->name(1));
+                me->set("tattoo/" + arg + "/attribute", ob->query("attribute"));
+                me->set("tattoo/" + arg + "/desc", ob->query("desc"));
+                me->set("tattoo/" + arg + "/feature", ob->query("feature"));
+                me->set("tattoo/" + arg + "/value", me->query_temp("tattoo/value"));
+
+                add_desc(me);
+        }
+
+        me->delete_temp("tattoo");
+        me->stop_busy();
+
+        delete("busy");
+
+        if( mapp( attribute = ob->query("attribute") ) ) {
+                string *attr;
+
+                attr = keys(attribute);
+                foreach(string att in attr)
+                        me->add(att, attribute[att]);
+        }
+
+        destruct(ob);
+}
+
+private string add_desc(object me)
+{
+        mapping temp, tattoo = me->query("tattoo");
+
+        temp = copy(tattoo);
+        map_delete(temp, "臀部");
+        me->set("tattoo_desc", sort_desc(temp));
+        map_delete(temp, "胸口");
+        map_delete(temp, "后背");
+        map_delete(temp, "腹部");
+        me->set("tattoo_desc_cloth", sort_desc(temp));
+}
+
+//规范look时的描述，合并同类的刺青描述
+private string sort_desc(mapping tattoo)
+{
+        string *place, *totem, msg = "";
+        mapping totems = ([]);
+
+        place = keys(tattoo);
+
+        foreach(string p in place) {
+                if( undefinedp(totems[tattoo[p]["totem"]]) )
+                        totems[tattoo[p]["totem"]] = ({p});
+                else totems[tattoo[p]["totem"]] += ({p});
+        }
+
+        totem = keys(totems);
+        foreach(string t in totem) {
+                string msg2;
+                int    size;
+                        size = sizeof(totems[t]);
+                if( size > 1 )
+                        msg2 = sprintf("%s和%s", implode(totems[t][0..size-2], "、"),
+                                                totems[t][size-1]);
+                else if( size == 1 ) msg2 = totems[t][0];
+                msg += "%s的" + msg2 + "刺着" + tattoo[totems[t][0]]["desc"] + "\n";
+        }
+        return msg;
+}
+
+private void start_clean(object me, mixed arg)
+{
+        if( !objectp( me ) || environment(me) != environment() ) {
+                message_vision("N叹了口气，说道：“还没开工客人为何就去了！？罢了罢了，不做了，去就去吧，"
+                                "金子算我白赚的了，嘿嘿。”\n", this_object());
+                delete("busy");
+                return;
+        }
+
+        message_vision("$N从架子上拿出一个药瓶和一把精致的小刀，把小刀在火上烤了烤。\n"
+                       "打开药瓶，把药水到在了$n的" + ((arg==1)?("全身"):arg) + "上，开始用刀清洗了起来。\n",
+                       this_object(), me);
+
+        if( me->query("kee") >= 80 ) me->receive_damage("kee", 80);
+
+        if( me->query("sen") >= 80 ) me->receive_damage("sen", 80);
+
+        if( me->query("max_kee") >= 80 ) me->receive_wound("kee", 80);
+
+        if( me->query("max_sen") >= 80 ) me->receive_wound("sen", 80);
+        call_out("clean_step_1", 6, me, arg);
+}
+
+private void clean_step_1(object me, mixed arg)
+{
+        if( !objectp( me ) || environment(me) != environment() ) {
+                message_vision("N叹了口气，说道：“刚开工客人为何就去了！？罢了罢了，不做了，去就去吧，"
+                                "金子算我白赚的了，嘿嘿。”\n", this_object());
+                delete("busy");
+                return;
+        }
+
+        message_vision("$n的" + ((arg==1)?("全身"):arg) + "在药水的浸泡下肤色开始发白，而上面的图案也开始模糊起来。\n"
+                       "$N一刀一刀的在$n的" + ((arg==1)?("全身"):arg) + "的每一个刺孔上挑刺。\n",
+                       this_object(), me);
+
+        if( me->query("kee") >= 100 ) me->receive_damage("kee", 100);
+
+        if( me->query("sen") >= 100 ) me->receive_damage("sen", 100);
+
+        if( me->query("max_kee") >= 100 ) me->receive_wound("kee", 100);
+
+        if( me->query("max_sen") >= 100 ) me->receive_wound("sen", 100);
+
+        call_out("clean_step_2", 6, me, arg);
+}
+
+private void clean_step_2(object me, mixed arg)
+{
+        if( !objectp( me ) || environment(me) != environment() ) {
+                message_vision("N叹了口气，说道：“刚开工不久客人为何就去了！？罢了罢了，不做了，去就去吧，"
+                                "金子算我白赚的了，嘿嘿。”\n", this_object());
+                delete("busy");
+                return;
+        }
+
+        message_vision("时间一点一点过去了，图案越发的模糊，刺孔的" HIR "鲜血" NOR" 渗了出来染红了$n的" + ((arg==1)?("全身"):arg) + "。\n"
+                       + "$N也下刀越来越快，还叮嘱$n：“不要怕痛，忍住。”\n", this_object(), me);
+
+        if( me->query("kee") >= 150 ) me->receive_damage("kee", 150);
+
+        if( me->query("sen") >= 150 ) me->receive_damage("sen", 150);
+
+        if( me->query("max_kee") >= 150 ) me->receive_wound("kee", 150);
+
+        if( me->query("max_sen") >= 150 ) me->receive_wound("sen", 150);
+        call_out("clean_step_3", 6, me, arg);
+}
+
+private void clean_step_3(object me, mixed arg)
+{
+        if( !objectp( me ) || environment(me) != environment() ) {
+                message_vision("N叹了口气，说道：“快洗完了客人为何就去了！？罢了罢了，不做了，去就去吧，"
+                                "金子算我白赚的了，嘿嘿。”\n", this_object());
+                delete("busy");
+                return;
+        }
+
+        message_vision("清洗已经到了尾声，$n的" + ((arg==1)?("全身"):arg) + "已经全是" HIR "鲜血" NOR "。\n",
+                        this_object(), me);
+
+        if( me->query("kee") >= 200 ) me->receive_damage("kee", 200);
+
+        if( me->query("sen") >= 200 ) me->receive_damage("sen", 200);
+
+        if( me->query("max_kee") >= 200 ) me->receive_wound("kee", 200);
+
+        if( me->query("max_sen") >= 200 ) me->receive_wound("sen", 200);
+
+        call_out("clean_finish", 6, me, arg);
+}
+
+private void clean_finish(object me, mixed arg)
+{
+        string totem;
+        mapping attribute;
+
+        if( !objectp( me ) || environment(me) != environment() ) {
+                message_vision("N叹了口气，说道：“马上就洗完了客人就去了！？罢了罢了，不做了，去就去吧，"
+                                "金子算我白赚的了，嘿嘿。”\n", this_object());
+                delete("busy");
+                return;
+        }
+
+        if( arg == 1 ) {
+                totem = me->query("capapie_tattoo/totem");
+                attribute = me->query("capapie_tattoo/attribute");
+        } else {
+                totem = me->query("tattoo/" + arg + "/totem");
+                attribute = me->query("tattoo/" + arg + "/attribute");
+        }
+
+        message_vision( "终于清洗完了，$N端起一盆水浇在了$n的" + ((arg==1)?("全身"):arg) + "，把" HIR "鲜血" NOR "冲去。\n"
+                        "一副" + totem + "消失无踪了，$n看着" + ((arg==1)?("全身"):arg) + "，怅然若失。\n"
+                        "$n的" + ((arg==1)?("全身"):arg) + "看上去伤痕累累，看来不修整一段时间是好不了了。\n",
+                       this_object(), me);
+
+        me->set("eff_kee",0);
+
+        me->set("eff_sen",0);
+        me->set("sen",0);
+        me->set("kee",0);
+
+        if( mapp(attribute) ) {
+                string *attr;
+
+                attr = keys(attribute);
+                foreach(string att in attr)
+                        me->add(att, -attribute[att]);
+        }
+        if( arg == 1 ) {
+                me->delete("capapie_tattoo");
+                me->delete("tattoo_desc");
+                me->delete("tattoo_desc_cloth");
+        } else {
+                me->delete("tattoo/" + arg);
+                if( sizeof(me->query("tattoo")) < 1 ) {
+                        me->delete("tattoo");
+                        me->delete("tattoo_desc");
+                        me->delete("tattoo_desc_cloth");
+                } else add_desc(me);
+        }
+        delete("busy");
+}

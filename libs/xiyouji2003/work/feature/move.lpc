@@ -1,0 +1,407 @@
+// 4/24/98 mon adds max_items related stuff.
+// Update by waiwai@2003/04/10
+
+#pragma optimize
+
+#include <dbase.h>
+#include <room.h>
+#include <ansi.h>
+//#include <nature.h>
+
+nosave int weight = 0;
+nosave int encumb = 0, max_encumb = 0;
+
+varargs int _move(mixed dest, int silently);
+void dest_obj(object obj);
+
+// max_items is the maximum number of items an object can hold.
+// note this is for non-character items.
+// there is no limitations on # of characters. (limited by encumb)
+// this is to prevent some rooms that full of items and
+// players and npcs can't even enter. :P
+nosave int max_items=10; // default max_items.
+nomask void set_max_items(int e) {max_items=e;}
+nomask int query_max_items() {return max_items;}
+
+nomask int query_encumbrance() { return encumb; }
+nomask int over_encumbranced() { return encumb > max_encumb; }
+
+nomask int query_max_encumbrance() { return max_encumb; }
+nomask void set_max_encumbrance(int e) { max_encumb = e; }
+
+nomask void add_encumbrance(int w)
+{
+	encumb += w;
+	if( encumb < 0 )
+		log_file("move.bug", file_name(this_object())+
+		this_object()->query("id")+
+		" encumbrance underflow. env:"+file_name(environment())
+		+" w:"+w+"\n");
+//		log_file("move.bug", sprintf("%O encumbrance underflow.\n", this_object()));
+	if( encumb > max_encumb ) this_object()->over_encumbrance();
+	if( environment() ) environment()->add_encumbrance(w);
+}
+
+void over_encumbrance()
+{
+	if( !userp(this_object()) ) return;
+	tell_object(this_object(), "你的负荷过重了！\n");
+}
+
+nomask int query_weight() { return weight; }
+nomask void set_weight(int w)
+{
+	if( !environment() ) {
+		weight = w;
+		return;
+	}
+	if( w!=weight ) environment()->add_encumbrance( w - weight );
+	weight = w;
+}
+
+
+// This is the "current" weight of an object, which is used on weight
+// checking in move().
+nomask int weight() { return weight + encumb; }
+
+string ride_suffix (object me)
+{
+  string ridemsg = 0;
+  object ridee = 0;
+
+  ridee = me->ride();
+  if (ridee)
+    ridemsg = ridee->query("ride/msg")+"在"+ridee->name()+"上";
+  return ridemsg;
+}
+
+// silently=1: after move, no look.
+// silently=2: when look, only show room name. (for follow command)
+// silently=0: full look.
+// mon 4/20/98
+varargs int move(mixed dest, int silently)
+{
+    if(_move(dest, silently)) return 1;
+    
+    call_out("dest_obj", 2, this_object());
+    return 0;
+}
+
+// destruct obj if it failed to move and has no environment.
+void dest_obj(object obj)
+{
+    if(obj && !environment(obj))
+	destruct(obj);
+}
+
+varargs int _move(mixed dest, int silently)
+{
+	object ob, env, *inv, me;
+	object where = environment();
+	int i;
+	mapping exits;
+	string season, make;
+	string str="", str1="", *dirs;
+	string ridemsg="", exits_describe;
+	me=this_object();
+
+	season=XYJTIME_D->check_weather_season();
+
+	// If we are equipped, unequip first.
+	if( query("equipped") && !this_object()->unequip() )
+		return notify_fail("你没有办法取下这样东西。\n");
+
+	// Find the destination ob for moving.
+	if(dest && objectp(dest) )
+		ob = dest;
+	else if( stringp(dest) ) {
+//		call_other(dest, "???");
+// by mon 10/29/97. remove call_other, use load_object to find and load.
+		ob=load_object(dest);
+		if(!ob) 
+		  return notify_fail("move: destination unavailable.\n");
+	} else
+		return notify_fail(sprintf("move: invalid destination %O.\n", dest));
+
+	// check for max_items.
+	if(!(me->is_character()) &&
+		sizeof(all_inventory(ob))>=ob->query_max_items()) {
+	    if(ob==this_player())
+		return notify_fail("你身上装不下更多东西了。\n");
+	    else if(userp(ob))
+		return notify_fail(ob->name()+"身上装不下更多东西了。\n");
+	    else  { // for rooms and container.
+		string name=ob->name();
+		if(!name) name=ob->query("short");
+		if(!name) name=ob->short();
+		return notify_fail(name+"已经太拥挤了。\n");
+	    }
+	}
+
+	// recursive check can't move sth into itself's belonging's
+	// mon 9/1/98
+	env = ob;
+        if(env==this_object()) //mon 8/25/97
+	    return notify_fail("你不能把物品放入自身之中。\n");
+	while(env=environment(env)) {
+	    if(env==this_object()) 
+		return notify_fail("你不能把物品放入自身之中。\n");
+	}
+
+	// Check if the destination ob can hold this object.
+	// Beforce checking it, we check if the destination is environment of
+	// this_object() (or environment of its environment). If it is, then
+	// this could be like get something from a bag carried by the player.
+	// Since the player can carry the bag, we assume he can carry the this
+	// object in the bag and encumbrance checking is unessessary.
+
+	env = this_object();
+	while(env = environment(env)) if( env==ob ) break;
+
+	if( !env && (int)ob->query_encumbrance() + weight()
+		> (int)ob->query_max_encumbrance() ) {
+		if( ob==this_player() )
+			return notify_fail( this_object()->name() + 
+				"对你而言太重了。\n");
+		else
+			return notify_fail( this_object()->name() + 
+				"对" + ob->name() + "而言太重了。\n");
+	}
+
+	// Move the object and update encumbrance
+	// by snowcat 3/10/1998
+	if( env=environment() ) 
+	{
+	    // check whether env allow to move out.
+	    // mon 8/9/99
+	    mixed str2;
+	    if(str2=(env->no_leave(this_object(),ob))) {
+		if(base_name(ob)!=VOID_OB) { // allow move to void.
+		  if(stringp(str2)) return notify_fail(str2);
+		  else return 
+		    notify_fail("一股神秘的力量将你阻挡住了。\n");
+		}
+	    }
+
+		env->add_encumbrance( - weight());
+		if (userp(env) &&
+    		    this_object()->value() >= 10000)
+    		    	env->save();
+	}
+	ob->add_encumbrance(weight());
+
+	/***************************************************************************************/
+	// Update By waiwai@2003/04/10 以下设置禁止随意更改
+	if( userp(ob) && this_object()->value() >= 1)  {
+	      object where1, where2;
+	      string place_me = "某";
+	      string place_ob = "某";
+
+	where1 = environment();
+	   if (where1)
+       place_me = (where1->short()?where1->short():where1->query("short"))+"["+base_name(where1)+".c]";
+	   where2 = environment(ob);
+	if (where2)
+       place_ob = (where2->short()?where2->short():where2->query("short"))+"["+base_name(where2)+".c]";
+	if (where1 != ob ) {
+	if(  place_ob != place_me  ) {
+	if( environment(ob)->query("short") != "相记钱庄" &&
+		environment(ob)->query("short") != "杨记钱庄" && 
+		environment(ob)->query("short") != "董记当铺" &&
+		environment(ob)->query("short") != "徐记当铺" ) 
+	if( ob!=this_player()) 
+       MONITOR_D->report_system_object_msg (ob,"在"+MISC_D->find_place(environment(ob))+place_ob+"
+自"+this_player()->query("name")+"("+this_player()->query("id")+")处得到："HIG+
+MONEY_D->money_num(this_object()->value())+NOR );
+
+	// 这里决定了wiz作弊给的情况，任何人不得删除和更改设置
+	if( wizardp(this_player()) &&  this_player()!=ob )
+        log_file("wizcmds/give_money", sprintf("%s在%s给%s %s 时间在：[%s]\n",
+                 log_id(this_player()),COLOR_D->clean_color(place_ob),log_id(ob),
+		MONEY_D->money_num(this_object()->value()), log_time()));
+	} else {
+
+	if( !wizardp(ob) && this_object()->query("wiz_drop") 
+		&&  log_id(ob) !=this_object()->query("wiz_drop")) {
+	seteuid(getuid());     
+       MONITOR_D->report_system_object_msg (ob,"在"+place_ob+"处捡到"+this_object()->query("wiz_drop")+
+	"仍下的："HIG+MONEY_D->money_num(this_object()->value())+NOR );
+        log_file("wizcmds/give_money", sprintf("%s在%s%s处捡到%s仍下的%s 时间在：[%s]\n",
+                 log_id(ob),MISC_D->find_place(environment(ob)), COLOR_D->clean_color(place_ob),
+		this_object()->query("wiz_drop"), MONEY_D->money_num(this_object()->value()), log_time()));
+	}
+
+	if( this_object()->query("user_drop") && log_id(ob) !=this_object()->query("user_drop"))
+        log_file("player/get_money", sprintf("%s在%s%s处捡到%s仍下的%s 时间在：[%s]\n",
+                 log_id(ob),MISC_D->find_place(environment(ob)), COLOR_D->clean_color(place_ob),
+		this_object()->query("user_drop"), MONEY_D->money_num(this_object()->value()), log_time()));
+
+	if(this_object()->value() > 500000 ) {
+	seteuid(getuid());     
+       MONITOR_D->report_system_object_msg (ob,"在"+place_ob+"处捡到："HIG+
+MONEY_D->money_num(this_object()->value())+NOR );
+
+		}
+	}
+	}  
+	}
+	/***************************************************************************************/
+
+
+	move_object(ob);
+        if(!this_object()) return 0;  //mon 8/24/97
+
+	make = environment()->query("hunpo_ok");
+	if(make) make = HIG"〆"NOR;
+	else make = "";
+
+	// If we are players, try look where we are.
+	if( interactive(this_object())		// are we linkdead?
+	&&	living(this_object())			// are we still concious?
+	&&	silently!=1 ) 
+	if (silently==2 || this_object() -> query("env/brief_all"))
+		tell_object(this_object(), environment()->query("short") ? environment()->query("short")+"\n": "\n");
+	else {
+
+	if(!environment()->query("outdoors")) {
+	   str = sprintf( "\n%s"+make+"『窗外』→ %s%s\n  %s",
+    environment()->query("short")?HIR"「"NOR CYN+(string)environment()->query("short")+HIR"」"NOR: "",
+	season, NATURE_D->check_weather(),
+    ( (!this_object() -> query("env/brief")) && (environment()->query("long")) ) ? environment()->query("long"): "");
+	} else
+	   str = sprintf( "\n%s"+make+"%s  \n  %s",
+    environment()->query("short")?HIR"「"NOR WHT+(string)environment()->query("short")+HIR"」"NOR: "",
+    NATURE_D->outdoor_room_description(),
+    ( (!this_object() -> query("env/brief")) && (environment()->query("long")) ) ? environment()->query("long"): "");
+
+/*
+		str = sprintf( "「%s」%s\n    %s",
+			environment()->query("short") ? environment()->query("short"): "",
+( (!this_object() -> query("env/brief")) && (environment()->query("outdoors")) ) ? NATURE_D->outdoor_room_description(): "",
+( (!this_object() -> query("env/brief")) && (environment()->query("long")) ) ? environment()->query("long"): "");
+*/
+	
+   if( mapp(exits = environment()->query("exits")) ) {
+      dirs = keys(exits);
+      for( i = 0; i < sizeof(dirs); i ++ )
+         if( (int)environment()->query_door(dirs[i], "status") & DOOR_CLOSED )
+            dirs[i] = 0;
+      dirs -= ({ 0 });
+	if( sizeof(dirs)==0 ) 
+        str += YEL"\n   这里没有任何明显的出路 \n"NOR;
+	 else if( sizeof(dirs)==1 )
+			str += "\n    这里唯一的〖"YEL" 出口 "NOR"〗：" BOLD + dirs[0] + NOR " \n";
+	 else if(sizeof(dirs)<=6)
+        str += sprintf("\n   〖"YEL" 出口 "NOR"〗：" BOLD "%s"NOR YEL" 和 " NOR BOLD "%s"NOR" \n", 
+	     implode(dirs[0..sizeof(dirs)-2], "、"), dirs[sizeof(dirs)-1]); 
+	     else 
+	 str += sprintf("\n   〖"YEL" 出口 "NOR"〗：" BOLD "%s\n               %s"NOR YEL" 和 "NOR BOLD "%s"NOR" \n",
+          implode(dirs[0..5], "、"),implode(dirs[6..sizeof(dirs)-2], "、"), dirs[sizeof(dirs)-1]);
+   } 
+
+//	if( exits_describe = environment()->query_temp("exits_desc") )
+//            str += exits_describe;
+
+       		inv = all_inventory(environment());
+       		i=sizeof(inv);
+		if (environment()->query("no_look"))
+		    	i=0;
+       		while(i--) {
+               		if( !me->visible(inv[i]) ) continue;
+               		if( inv[i]==me ) continue;
+               		if (ridemsg = ride_suffix(inv[i]))
+                       		str1 = "  " + inv[i]->short() + " <"+ridemsg +">\n"+str1;
+               		else
+                       		str1 = "  " + inv[i]->short() + "\n"+str1;
+       		}
+		tell_object(this_object(), str+str1);
+	}
+
+	// Modified by wawai@2003/04/10
+	if( (file_name(this_object())[0..2]=="/u/") && userp(ob)){
+	  MONITOR_D->report_system_object_msg (ob,
+		"得到了U目录下物件："+ this_object()->query("name")+"("+base_name(this_object())+".c)。");
+          }
+	else
+	if( this_object()->query("is_monitored") && userp(ob) ) {
+	  MONITOR_D->report_system_object_msg (ob,
+		"得到了监控类物件："+ this_object()->query("name")+"("+base_name(this_object())+".c)。");
+	}
+
+       // Added by wawai@2003/04/10
+	if (!silently && query("is_monitored") && userp(ob) &&  !wizardp(ob)) {
+		str = HIM"听说"+ob->name(1)+"("+ob->query("id")+")";
+		if (query("is_monitored") > 0) {
+			str += HIM"不知从哪弄到了一" + query("unit") + query("name");
+			set("is_monitored", -1);
+		} else {
+		add("is_monitored", 1);
+		if (where->query("short"))
+		str += "在" + where->query("short") + NOR HIM"意外地捡到了一" + query("unit") + query("name");
+		else{
+		str += HIM"的手中";
+		str = replace_string(str,HIM"听说",HIM"听说"+where->name(1)+HIM"("+where->query("id")+")的" HIR+
+		 query("name")+HIM"无缘无故的到了");
+			}
+		}
+		CHANNEL_D->do_channel(me, "rumor", str + ""NOR);
+	}
+
+	return 1;
+}
+
+void remove(string euid)
+{
+	object default_ob;
+
+	if( !previous_object()
+	||	base_name(previous_object()) != SIMUL_EFUN_OB )
+		error("move: remove() can only be called by destruct() simul efun.\n");
+
+	if( userp(this_object()) && euid!=ROOT_UID ) {
+		log_file("destruct", sprintf("%s attempt to destruct user object %s (%s)\n",
+			euid, this_object()->query("id"), ctime(time())));
+		error("你(" + euid + ")不能摧毁其他的使用者。\n");
+	} else if( this_object()->query("equipped")) {
+		if(	!this_object()->unequip() )
+			log_file("destruct", sprintf("Failed to unequip %s when destructed.\n",file_name(this_object())));
+	}
+
+	// We only care about our own weight here, since remove() is called once
+	// on each destruct(), so our inventory (encumbrance) will be counted as
+	// well.
+	if( environment() )	environment()->add_encumbrance( - weight );
+	if( default_ob = this_object()->query_default_object() )
+		default_ob->add("no_clean_up", -1);
+}
+
+int move_or_destruct( object dest )
+{
+	if( userp(this_object()) ) {
+		tell_object(this_object(), 
+			"一阵时空的扭曲将你传送到另一个地方．．．\n");
+		move(VOID_OB);
+	}
+}
+
+object ride ()
+{
+  object me = this_object();
+  string ridemsg = "";
+  object ridee;
+
+  if (ridee = me->query_temp("ridee")) { 
+    if ((environment(ridee) != environment(me) &&
+         environment(ridee) != me) ||
+        (ridee->is_character() && ! living(ridee))) {
+      me->set_temp("ridee",0);
+      ridee->set_temp("rider",0);
+      ridee = 0;
+    }
+  }
+  if (! ridee) {
+    me->add_temp("apply/dodge",-me->query_temp("ride/dodge"));
+    me->set_temp("ride/dodge",0);
+  }
+  return ridee;
+}

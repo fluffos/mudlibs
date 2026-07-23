@@ -1,0 +1,4 @@
+// training.c
+
+inherit SKILL;
+

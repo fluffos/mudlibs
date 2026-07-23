@@ -1,0 +1,123 @@
+// Update by waiwai@2002/12/05
+// 请勿随意移动此文件
+
+#include <ansi.h>
+inherit F_CLEAN_UP;
+
+int main(object me, string arg)
+{
+	string banghui,msg;
+	object lingpai;
+
+	if(me->is_fighting()||me->is_busy())
+		return notify_fail("你正忙着呢。\n");
+
+	if(! (banghui=me->query("banghui")))
+		return notify_fail("你没有参加任何帮会，无需脱离。\n");
+
+	if(! arg)
+		return notify_fail("你要脱离什么帮会？\n");
+
+	if(arg != banghui)
+		return notify_fail("你不是这个帮会的成员。\n");
+
+       if( (int)me->query("BHTL")>2 )
+                return notify_fail("你已经脱离过帮会"+(int)me->query("BHTL")+"次，不能再加入任何帮会了！\n");
+
+        lingpai=new("/obj/lingpai");
+        lingpai->create(banghui);
+        if(lingpai->query("no_use"))    {
+                destruct(lingpai);
+                return notify_fail("你的帮会文件有问题，请与巫师联系。\n");
+        }
+	if(me->query("id")==lingpai->query("bangzhu_id"))	{
+		msg="你是帮会「"+me->query("banghui")+"」的帮主，脱离前最好指定新任帮主！\n";
+	}
+	else	msg="你是帮会「"+me->query("banghui")+"」的帮众。\n";
+
+       if( (int)me->query("BHTL")>2 ) {
+	msg +="你已经脱离过帮会"HIR+(int)me->query("BHTL")+NOR"次了，你真的要脱离吗(y/n)？";
+	} else
+	msg +="你真的要脱离吗(y/n)？";
+	write(msg);
+	destruct(lingpai);
+	input_to("yes_or_no",me,banghui);
+	return 1;
+}
+
+int yes_or_no(string str,object me,string banghui)
+{
+	mapping data;
+	object lingpai;
+	str=lower_case(str);
+	if(str=="y"||str=="yes")	{
+		lingpai=new("/obj/lingpai");
+		lingpai->create(banghui);
+		if( lingpai->query("no_use"))	{
+			destruct(lingpai);
+			return notify_fail("你的帮会文件有问题，请与巫师联系。\n");
+		}
+		if(userp(me))	data=lingpai->query("player");
+		else	data=lingpai->query("npc");
+		if(! mapp(data))	data=([]);
+		map_delete(data,me->query("id"));
+		if(userp(me))	lingpai->set("player",data);
+		else	lingpai->set("npc",data);
+		if(me->query("id")==lingpai->query("bangzhu_id"))	{
+			lingpai->set("bangzhu_id","???");
+			lingpai->set("bangzhu","???");
+		}
+
+	message("channel:rumor",HIY"〖帮会消息〗："+me->query("name")+"("+me->query("id")+")脱离"+
+                "帮会"HIG" 「"+banghui+"」\n"NOR,users());
+	if( userp(me) ) {
+	me->add("combat_exp",-200000);
+	me->add("daoxing",-100000);
+	me->add("office_number",-300);
+	me->add("shengwang",-100);
+	me->add("BHTL",1);
+	}
+	me->delete("banghui");
+	me->delete("degree");
+	if(!undefinedp(me->query("zhongcheng")))
+		me->delete("zhongcheng");
+	if(!undefinedp(me->query("bh_rank")))
+		me->delete("bh_rank");
+	if(!undefinedp(me->query("BHPJ")))
+		me->delete("BHPJ");
+	if(!undefinedp(me->query("rank_lv")))
+		me->delete("rank_lv");
+	me->save();
+	lingpai->save();
+	if(! sizeof(lingpai->query("player")) && 
+		! sizeof(lingpai->query("npc")))	{
+		rm("/data/guild/"+banghui+".o");
+		message("channel:rumor",HIY"〖帮会消息〗：帮会「"HIG+banghui+HIY
+                        "」因领袖脱离而土崩瓦解了！！！\n"NOR,users());
+	}
+	destruct(lingpai);
+	return 1;
+	}
+	write("好吧，请想清楚后再做决定．\n");
+	return 1;
+}
+
+int help(object me)
+{
+        write(@HELP
+
+指令格式：tuoli <帮会名称>
+
+这个指令可以使你脱离帮会。前提是你必须是该帮会成员。
+
+而脱离的代价是(只限玩家)：
+武学将被减掉二十万,道行一百年,官职三百点，声望一百点。
+
+请注意如果你的帮会内包括NPC帮会那么你脱离这个帮会
+所有的帮会评价值将全部损失掉。并且再次加入别的NPC
+帮会后做帮会任务的评价值升点只能达到原先的1/3
+
+HELP
+        );
+        return 1;
+}

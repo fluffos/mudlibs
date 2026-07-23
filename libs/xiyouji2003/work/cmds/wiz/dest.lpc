@@ -1,0 +1,90 @@
+//CMDS /cmds/arch/dest.c
+//Last modified by waiwai@2001/06/05
+
+#include "/doc/help.h"
+#include <ansi.h>
+#include <command.h>
+
+inherit F_CLEAN_UP;
+
+int main(object me, string arg)
+{
+	string option, target, msg;
+	object obj,*body, ob, env;
+	int i;
+
+	if (me!=this_player(1)) return 0;
+
+	seteuid( geteuid(me) );
+
+	env = environment(me);
+
+	if (!arg) return notify_fail("指令格式 : dest <物件之名称或档名>\n" );
+
+	if( sscanf(arg, "%s %s", option, target)!=2 ) target = arg;
+	if ( option != "-r" && option != "-p" ) target = arg;
+
+        if(arg=="-p") {
+	  body=children(USER_OB);
+	  for (i=0;i<sizeof(body);i++){
+	    ob=body[i];
+	    if( clonep(ob) && ob->query("max_kee")==0)
+	      write(getuid(ob)+" "+ob->short()+"\n");
+          }
+          return 1;
+        }
+
+        if( option == "-r" && (string)SECURITY_D->get_status(me)=="(admin)" )
+		seteuid(ROOT_UID);
+	else
+		seteuid(geteuid(me));
+
+	obj = find_object(target);
+	if (!obj) obj = present(target, me);
+	if (!obj) obj = present(target, environment(me));
+	if (!obj) obj = find_object( resolve_path(me->query("cwd"), target) );
+	if (!obj) return notify_fail("没有这样物件。\n");
+
+	//Added by waiwai@2001/06/05
+	msg = sprintf( "\n成功清除物件 %s(%s) →  %s"NOR"\n",
+		obj->name(),obj->query("id"),file_name(obj) );
+
+	if( environment(me)==environment(obj) )
+
+	if( me->query("env/dest_msg") )
+	  message_vision(HIB"$N"HIB"召唤出一个黑洞，将$n"HIB"吞没了。\n", me, obj);
+	else write(msg);
+
+     CHANNEL_D->do_channel(me, "adm","正在"HIG+ env->query("short") +HIW"清除物件(dest)："HIR+
+                       obj->name() +HIR"("+obj->query("id")+") \n\t\t\t    "HIW"→ "+base_name(obj)+".c \n"NOR);	
+     log_file("wizcmds/dest",sprintf("%s用dest指令在(%s)清除过：%s(%s) %s.c 时间在:[%s]\n",
+		log_id(me), COLOR_D->clean_color(env->query("short")), 
+	COLOR_D->clean_color(obj->name()), obj->query("id"), base_name(obj), log_time() ) );
+
+	destruct(obj);
+	if(obj) write("你无法将这个物件摧毁。\n");
+
+	return 1;
+}
+
+int help(object me)
+{
+	write(@HELP
+
+指令格式 : dest [-r] <物件之名称或档名>
+           dest [-p] show damaged player objects.
+
+利用此一指令可将一个物件(object)或物件定义(class)从记忆体中清除，若清除物
+件定义(即：指定档名的情况下)则下一次参考到这个物件的时候会重新将它编译。
+
+具有 (created) 身份的巫师可以用 -r 选项以 ROOT_UID 身分来清除被保护的物件如
+使用者。
+
+设定：set msg_dest 1 则显示公众所见信息，0或者无设定则为系统内部默认显示信息。
+
+参考资料： destruct()
+
+HELP
+    );
+    return 1;
+}

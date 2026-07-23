@@ -1,0 +1,16 @@
+/u/waiwai/diablo
+/obj/diablo_box
+/include/globals.h
+/include/diablo.h
+/adm/daemons/diablod
+/adm/daemons/combatd
+/obj/user
+/data/diablo/
+/feature/attack
+/feature/damage
+/feature/skill
+/cmds/adm/adiablo
+/cmds/adm/chc
+/cmds/adm/diablo_data
+/cmds/adm/eddiablo
+/cmds/usr/quit

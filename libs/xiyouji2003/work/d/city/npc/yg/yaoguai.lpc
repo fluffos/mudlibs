@@ -1,0 +1,245 @@
+// Update by waiwai@2003/04/09
+
+#include <ansi.h>;
+
+inherit "/d/dntg/yunlou/npc/yaoguai.lpc";
+
+int yaoguai_type=0;
+
+void create() 
+{
+	::create();
+  	setname2();
+  	set("chat_chance", 3);
+ 	set("chat_msg", ({
+ 	     (: random_move :)
+ 	}) );
+        set("waiwai_lead", 1);
+
+          setup();
+}
+
+void leave() 
+{
+       if(this_object()) {
+          if(environment())
+           message("vision",HIB + name() +
+  		  "窜了几窜就不见了。\n" NOR,environment());
+         destruct(this_object());
+       }       
+	return; 
+}  
+
+string invocation(object who, int level) 
+{
+       object me=this_object(), env;
+         string *dirs;
+          int exp, i, lvl;
+ 	string where, long;
+ 	 	// make skills less.
+ 	copy_status(me, who, level-2);
+  	::_invocation(who ,level);
+  	dirs=dirs1;
+  	// choose npc type. 
+	i=random(1000);
+ 	if(i<30) {
+ 	    set("type","aggressive");
+ 	} else if(i<100) {
+ 	    set("type","blocker");
+ 	} else if(i<300) {
+ 	    set("type","aggressive_on_owner");
+ 	} else
+  	    set("type","normal");
+ 	 	if(!random_place(me, dirs)) {
+ 	    leave();
+ 	    return 0;
+ 	}
+ 	 	env=environment(me);
+
+ 	where=me->query("name")+"("+
+ 	    capitalize(me->query("id"))+")";
+
+ 	if(env)
+ 	  where+="在"+MISC_D->find_place(env);
+  	if(query("daoxing")>10000 ||
+ 		query("combat_exp")>10000)
+ 	    command("wield all");
+  	return where;
+}
+
+int accept_object (object who, object ob) 
+{
+	return 1; 
+}
+
+int do_block(string arg) 
+{
+     object me=this_object();
+     object who=this_player();
+     string verb=query_verb();
+     int t;
+
+	if(wizardp(who) && !visible(who)) return 0;
+
+       if(me->is_fighting()) return 0;
+
+	if(verb!="go" &&
+ 	    verb!="fly" &&
+ 	    !(environment() && environment()->query("exits/" + verb)))
+ 	return 0;
+
+      t=who->query_temp("mieyao/allow_to_leave");
+
+     if(t==0 || random(3)>0) {
+ 	tell_object(who,"你正要离开，忽然看见什么东西在眼前一晃，"+
+ 		"不由得停了下来。\n");
+ 	who->set_temp("mieyao/allow_to_leave",1);
+ 	return 1;     
+	}
+       
+	who->set_temp("mieyao/allow_to_leave",0);
+     return 0; 
+}
+
+void die() 
+{
+	string owner, nameM, nameY;
+        object owner_ob, kill_ob;
+       string skill;
+ 	object me=this_object();
+ 	string str, msg;
+ 	int max_kee, max_sen, ratio, exp_r, pot_r, i;
+	int X, lvl;
+
+       owner = query("owner");
+
+       if( stringp(owner) && objectp(owner_ob = find_player(owner)) ) {
+	    if(environment(owner_ob)==environment() && living(owner_ob)) {
+                    message_vision(death_msg[random(sizeof(death_msg))],
+			    owner_ob,this_object());
+
+                    message_vision(HIG"$N"HIR
+" 惨叫一声:你给我等着，十八年后某天半夜我还会回来找你的。然后两腿一蹬死了。\n"NOR,this_object());
+              owner_ob->set("mieyao/done1",1);
+		owner_ob->add("mieyao/number_fns1",1);
+              owner_ob->set("mieyao/time_finish",time());
+
+                  i = random(1000);
+
+     		    max_kee=query("max_kee");
+ 		    max_sen=query("max_sen");
+ 		    ratio=100*(max_kee-other_kee)/max_kee;
+ 		    if(ratio<0) ratio=0;
+ 		    ratio=ratio*(max_sen-other_sen)/max_sen;
+ 		    if(ratio<0) ratio=0;
+
+		// Added by waiwai@2003/04/13
+		if( me->query("yao_kill")) {
+	        if( (int)owner_ob->query("balance") >= 0 ) {
+  		    exp_r=exp_reward*ratio/100;
+ 		    pot_r=pot_reward*ratio/100;
+ 		    owner_ob->add("shengwang",1);
+		    owner_ob->add("mieyao/reward/sw",1);
+		} else {
+  		    exp_r=exp_reward*ratio/150;
+ 		    pot_r=pot_reward*ratio/150;
+ 		    owner_ob->add("shengwang",1);
+		    owner_ob->add("mieyao/reward/sw",1);
+		}
+		} else {
+		message_vision(WHT"$N"NOR WHT"忽然化作一团烟雾消失了。。。\n"NOR,this_object());
+		exp_r=0;
+		pot_r=0;
+		ratio=0;
+		}
+
+	    } else {
+		message_vision(WHT"$N"NOR WHT"忽然化作一团烟雾消失了。。。\n"NOR,this_object());
+		exp_r=0;
+		pot_r=0;
+		ratio=0;
+	    }
+
+        if( (int)owner_ob->query("balance") > 0 ) {	// Added by waiwai@2003/04/13
+                if( objectp( kill_ob = query_temp("last_damage_from") ) && kill_ob == owner_ob ) {
+                        object ob;
+                        lvl = (int)owner_ob->query_temp("mieyao/level");
+                        //1-3给20-60两银子左右，4-6给30-80两银子，7-9给50两银子---2两黄金
+                        if( lvl < 4 ) {
+                                ob = new(SILVER_OB);
+                                ob->set_amount(20 + random(41));
+                                message_vision("$N慌乱中匆匆丢下一些碎银。\n",this_object());
+                        } else if( lvl < 7 ) {
+                                ob = new(SILVER_OB);
+                                ob->set_amount(30 + random(51));
+                                message_vision("$N怀中掉下一些银子。\n",this_object());
+                        } else if( lvl < 9 ) {
+                                ob = new(GOLD_OB);
+                                message_vision("$N怀中掉下一些金子。\n",this_object());
+                                ob->set_amount(1);
+                        } else {
+                                ob = new(GOLD_OB);
+                                ob->set_amount(2);
+                                message_vision("$N怀中掉下一些金子。\n",this_object());
+                        }
+                        ob->move(environment());
+                }
+	}
+
+ 		    owner_ob->add("combat_exp",exp_r);
+		    owner_ob->add("mieyao/reward/exp",exp_r);
+
+ 		    owner_ob->add("potential",pot_r);
+		    owner_ob->add("mieyao/reward/pot",pot_r);
+
+//		owner_ob->add("balance",exp_r*2);
+//		owner_ob->add("mieyao/reward/balance",exp_r*2);
+
+//		owner_ob->add("daoxing",i);
+//		owner_ob->add("mieyao/reward/dx",i);
+
+		    nameM = owner_ob->query("name")+"("+owner_ob->query("id")+")";
+		    nameY = this_object()->query("name")+NOR WHT"("+this_object()->query("id")+")";
+
+		    str= nameM+"在"+MISC_D->find_place(environment(owner_ob))+
+			COLOR_D->clean_color(environment(owner_ob)->query("short"))+
+			"杀死"+nameY+"通过第 "+owner_ob->query_temp("mieyao/level")+" 级地妖.\n\t\t得到奖励"+
+			exp_r+"/"+exp_reward+"点武学经验和"+pot_r+"/"+pot_reward+"点潜能.\n";
+
+			// Added by waiwai@2003/04/13
+                    if (owner_ob->query_temp("mieyao/level")==9 ) {
+                       skill=give_reward(owner_ob);
+				owner_ob->add_temp("yuan/plll",1);
+
+                       str+= "得到额外奖励 "+skill+".\n";
+                    }
+
+	// Added by waiwai@2003/04/13
+       if(!present("plll dan", owner_ob) &&  owner_ob->query_temp("yuan/plll")>=5 ){
+        owner_ob->delete_temp("yuan/plll");
+        new("/obj/yaoobj/plll")->move(owner_ob);
+	owner_ob->add("mieyao/reward/plll",1);
+
+	message("channel:rumor",
+	HIG"┋"HIY"斩妖除魔"HIG"┋袁天罡(Yuan tiangang): "+owner_ob->name(1)+
+"("+owner_ob->query("id")+")协助老夫连续五轮斩妖除魔有功, 嘉奖"HIR"好东西"HIG"一颗！\n"NOR,users()); 
+	}
+
+       message("channel:sys", WHT"┋"HIG"地妖精灵"NOR WHT"┋"NOR WHT+str+"\n"NOR, users());
+	X=(5-(owner_ob->query_temp("yuan/plll")));
+	if(X<0) owner_ob->delete_temp("yuan/plll");
+
+	tell_object(owner_ob, 
+	WHT"你为百姓斩妖除魔有功,被奖励了"HIR+exp_r+NOR WHT"点武学经验和"HIR+pot_r+NOR WHT"点潜能值！\n"NOR);
+
+	if(X>0) 
+	 tell_object(owner_ob, 
+	WHT"距离得到好东西还差"HIG+X+NOR WHT"轮。。。。。\n"NOR);
+
+			} else {
+
+ 	    message_vision("$N两腿一蹬，死了。。。\n",this_object());
+	}
+  	destruct(this_object());
+}
+  

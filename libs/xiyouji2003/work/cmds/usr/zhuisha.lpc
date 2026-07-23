@@ -1,0 +1,146 @@
+// Update by waiwai@2002/12/05
+
+#include <ansi.h>
+inherit F_CLEAN_UP;
+
+int main(object me, string arg)
+{
+	object lp;
+	string banghui, msg;
+	string str;
+	object target, *name;
+	int i, cnt;
+
+	if(! (banghui=me->query("banghui")))
+			return notify_fail("只有同帮会的人使用这条命令才有效。\n");
+
+       if( me->query_temp("kill_created") )  
+	return notify_fail(HIR"由于你对创世大神的杀机行为，你现在正处于灰飞湮灭中。。。\n"NOR);
+
+
+	if(! arg)	{
+		msg=HIR+me->query("banghui")+"追杀令黑名单(只显示在线玩家)：\n"NOR;
+		msg+="━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
+		name=users();
+		cnt=0;
+		for(i=0;i<sizeof(name);i++)	{
+			if(name[i]->query("vendetta/"+banghui)) {
+			msg+=sprintf("%-18s%s",name[i]->query("name")+"("+name[i]->query("id")+")",
+			(cnt%4==3? "\n":""));
+			cnt++;
+			}
+		}
+		if(cnt==0||(cnt%4))	msg+="\n";
+		msg+="━━━━━━━━━━━━━━━━━━━━━━━━━━━ [ 西游记 ] ━━━━\n";
+		me->start_more(msg);
+		return 1;
+	}
+	if(sscanf(arg,"-a %s",str)==1)	{
+		lp=new("/obj/lingpai");
+		lp->create(banghui);
+		if((string)lp->query("bangzhu_id")!=me->query("id"))	{
+		destruct(lp);
+		return notify_fail(HIR"只有帮主才能使用追杀令。\n"NOR);
+		}
+		destruct(lp);
+
+		target=find_player(str);
+
+
+		if(! target)
+			return notify_fail("你想追杀的玩家不在游戏中。\n");
+
+              if( wiz_level(me) < wiz_level(target) )
+               return notify_fail("你想追杀的玩家不在游戏中。\n");
+
+		if(target==me)
+			return notify_fail("追杀自己？没问题吧。\n");
+
+		if( !wizardp(me) && userp(me) && wizardp(target))
+			return notify_fail("追杀巫师？你想灰飞湮灭吗？\n");
+
+		if(target->query("vendetta/"+banghui))
+			return notify_fail("此玩家已在黑名单中。\n");
+
+		if( target->is_ghost() )
+			return notify_fail("此玩家目前是鬼魂，不能被追杀。\n");
+
+		// Added By waiwai@2001/03/17
+		if( !wizardp(me) && userp(me) ){
+			if( time()-me->query_temp("last_zhuisha_time") < 1800)
+		            return notify_fail(WHT"你下达的追杀指令时间间隔必须大于30分钟。\n"NOR);
+        		me->set_temp("last_zhuisha_time",time());
+		}
+
+		target->set("ZSbanghui",me->query("banghui"));
+		target->apply_condition("bhzs",100);
+		target->set("vendettaBT",time());
+		target->set("vendetta/"+banghui,1);
+		target->save();
+
+		if(banghui==(string)target->query("banghui"))
+		message("channel:rumor",
+                  HIR"【帮会追杀令】"HIR+log_id(me)+"：帮会"HIW+banghui+HIR" 通告天下："HIR"
+
+　　　　　　  我帮内成员"+
+		target->query("name")+"("+target->query("id")+")
+
+　　　　　　  违我会规！犯我禁令！
+　　　　　　  帮内成员！如见此人！
+　　　　　　  格杀无论！致死为止！\n\n"NOR,users());
+		else
+           message("channel:rumor",
+                  HIR"【帮会追杀令】"HIR+log_id(me)+"：帮会"HIW+banghui+HIR" 通告天下："HIR"
+
+　　　　　　  大胆狂徒"+target->query("name")+"("+target->query("id")+")
+
+　　　　　　  触我天条！辱我门威！
+　　　　　　  帮内成员！如见此人！
+　　　　　　  格杀无论！不死不休！\n\n"NOR,users());
+		return 1;
+	}
+
+	if(sscanf(arg,"-d %s",str)==1)	{
+		lp=new("/obj/lingpai");
+		lp->create(banghui);
+		if((string)lp->query("bangzhu_id")!=me->query("id"))	{
+		destruct(lp);
+		return notify_fail(HIR"只有帮主才能使用追杀赦免令。\n"NOR);
+		}
+		destruct(lp);
+
+		target=find_player(str);
+		if(! target)	return notify_fail("此处没有这么个玩家。\n");
+		if(! target->query("vendetta/"+banghui))
+			return notify_fail("此玩家并不在追杀的黑名单中。\n");
+		target->delete("ZSbanghui");
+		target->clean_condition("bhzs");
+		target->delete("vendettaBT");
+		target->delete("vendetta/"+banghui);
+		target->remove_all_killer();
+		target->save();
+		message("channel:rumor",
+		HIR"【追杀赦免令】"+log_id(me)+"：帮会"HIW"「"+banghui+"」"HIR" 现在决定停止追杀"+
+target->query("name")+"("+target->query("id")+")\n"NOR,users());
+		return 1;
+	}
+	return notify_fail("指令格式：zhuisha [-a][-d]<玩家ID>\n");
+}
+
+int help(object me)
+{
+        write(@HELP
+
+指令格式：zhuisha [-a][-d] <对象ID>
+
+本指令为帮主专用，不加参数显示目前在线被追杀的玩家。
+-a 追杀某玩家，-d 取消追杀某玩家。当被追杀玩家死亡，
+则自动停止追杀。每次追杀令下达间隔时间必须在30分钟
+以上。
+
+相关指令：shalu
+
+HELP
+        );
+        return 1;
+}

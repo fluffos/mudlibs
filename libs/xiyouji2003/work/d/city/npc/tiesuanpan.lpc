@@ -1,0 +1,279 @@
+// NPC /d/city/npc/tiesuanpan.c
+// Update by waiwai@2001/06/25
+// Last modified by waiwai@2003/02/02
+// 加入帮会关联参数
+
+#include <command.h>
+
+inherit NPC;
+
+void reset_balance(object me);
+
+void create()
+{
+        set_name("铁算盘", ({"tie suanpan", "tie", "zhanggui"}));
+        set("title", "钱庄掌柜");
+        set("gender", "男性");
+        set("age", 54);
+        set("kee", 9000); 
+        set("max_kee", 9000);
+        set("sen", 9000);
+        set("max_sen", 9000);
+        set("combat_exp", 500000+random(3000000));
+        set("attitude", "friendly");
+        set("env/wimpy", 0);
+
+        set("chat_chance", 1);
+        set("chat_msg", ({
+        "铁算盘嘿嘿嘿地笑了几声：我这把算盘几十年来可从来没错过。\n",
+	"铁算盘骄傲的说道：提起本钱庄相老板，可以说是无人不晓。连当今三界之神都跟他很熟。\n"
+        }));
+
+       set_skill("unarmed", 260);
+	set_skill("parry", 260);
+       set_skill("dodge", 260);
+	set("area_name","长安城");
+	set("money_need",3000);
+        set("chat_chance_combat", 90);
+        set("chat_msg_combat", ({
+            (: command ("alert") :),
+            (: command ("alert") :),
+            (: command ("alert") :),
+            (: command ("alert") :),
+        }) );
+
+	set("no_kill", 1);
+
+	set("no_blade", 1);//不怕冰刀
+	set("no_poison", 1);//不怕用毒
+	set("no_give", 1);//By waiwai@2001/06/22 task bug fix
+
+	setup();
+	carry_object("/d/obj/cloth/choupao")->wear();
+}
+
+void init()
+{
+        object area,ob;
+//        area=new("/obj/area");
+//        area->create(query("area_name"));
+//        set("banghui",(string)area->query("banghui"));
+//        destruct(area);
+
+	call_out("reset_balance", 1, this_player());
+	::init();
+//       if( interactive(ob = this_player()) && !is_fighting() ) {
+//                remove_call_out("greeting");
+//                call_out("greeting", 1, ob);
+//        }
+	add_action("do_withdraw", "withdraw");
+	add_action("do_withdraw", "qu");
+}
+/*
+// Added by waiwai@2003/02/02
+void greeting(object ob)
+{
+	string banghui;
+	int money;
+	object lp;
+
+        if( !ob || !visible(ob) || environment(ob) != environment() ) return;
+        if( ob->query("env/invisibility") ) return;
+
+	if(! (banghui=ob->query("banghui")))	{
+		command("nod");
+		return;
+	}
+	lp=new("/obj/lingpai");
+	lp->create(banghui);
+	if(lp->query("no_use"))	{
+		destruct(lp);
+		message_vision("$N冲着$n道：“这位"+
+		RANK_D->query_respect(ob)+"的帮会文件有问题，快点与巫师联系吧。”\n",this_object(),ob);
+		return;
+	}
+	if(lp->query("bangzhu_id")=="???")	{
+		destruct(lp);
+		message_vision("$N提醒$n道：“帮主已失踪多日，快去找帮会总管商量商量吧。\n",this_object(),ob);
+		return;
+	}
+	if( lp->query("bangzhu_id")!=ob->query("id"))	{
+		destruct(lp);
+		message_vision("$N笑咪咪的对着$n道：“帮主何时来此处转帐啊？”\n",this_object(),ob);
+		return;
+	}
+	if(! (int)(money=lp->query("money")))	{
+		destruct(lp);
+		message_vision("$N对$n陪笑道：“目前贵帮无帐可转。”\n",
+		this_object(),ob);
+		return;
+	}
+	lp->set("money",0);
+	lp->save();
+	destruct(lp);
+	ob->add("balance",money);
+	ob->save();
+	message_vision("$N将"+banghui+"最近的收帐"+MONEY_D->money_str(money)+"转到了$n的帐下。\n",this_object(),ob);
+
+}
+*/
+void enough_rest()
+{
+	delete_temp("busy");
+}
+
+// Added by waiwai@2003/02/02
+int do_withdraw(string arg)
+{
+	int amount, v, rv, lixi;
+	string what, banghui;
+	object me;
+
+	if (query_temp("busy"))
+		return notify_fail("您请稍候，老板正忙呢.....\n");
+
+	me = this_player();
+
+        if (!arg || sscanf(arg, "%d %s", amount, what) != 2) {
+                return notify_fail("命令格式：withdraw <数量> <货币单位>\n");
+        }
+
+	if( me->is_busy() )
+	    return notify_fail("你现在正忙着呢...。\n");
+
+       if(me->query("title") == "普通百姓")
+                return notify_fail(CYN"你是普通百姓,钱庄不做你的生意！\n"NOR); 
+
+       if( (int)me->query("balance") <0 )
+		return notify_fail(query("name")+"不悦地说道：你在蔽庄尚欠款"+
+MONEY_D->money_num(-(int)me->query("balance"))+"，先还了再说吧。\n");
+
+        if (amount < 1) {
+                return notify_fail("你想取出多少钱？\n");
+        }
+
+        if (file_size("/obj/money/" + what + ".lpc") < 0) {
+                return notify_fail("你想取出什么钱？\n");
+        }
+
+	if (amount==1 && what=="coin")	{
+		return notify_fail(query("name")+"不悦地说道：都象你这样，岂不要俺吃西北风去？！\n");
+	}
+        what = "/obj/money/" + what;
+
+//        if ((v = amount * what->query("base_value")) > me->query("balance"))  {
+//                return notify_fail("你存的钱不够取。\n");
+//        }
+
+      if ( amount  > 
+              ( me->query("balance") / (what->query("base_value")) ) ) {
+              return notify_fail("你存的钱不够。\n");
+      }
+
+     v = (amount) * what->query("base_value");
+
+	if( v < what->query("base_value") )    {
+		return notify_fail("Don't try, or I will purge you!\n");
+	}
+
+	if((int)me->query_encumbrance() + 
+		amount* what->query("base_weight")
+		> me->query_max_encumbrance() )
+		return notify_fail("你取得钱太沉了，装不下。\n");
+
+	me->start_busy(1);
+//       rv = v;
+	set_temp("busy",1);
+
+//       v=v-pay_player(me, rv);
+       me->add("balance",  -v);
+
+	rv=what->query("base_value") * amount;
+
+	banghui=(string)me->query("banghui");
+/*
+	if(! banghui || banghui!=(string)query("banghui")) {
+        v=what->query("base_value") * amount * 9 /10 ;
+	lixi=what->query("base_value") * amount/10;
+	 if(lixi>0)	"/cmds/adm/ctom.lpc"->save_money(this_object(),lixi);
+       message_vision(sprintf("$N从银号里取出%s。\n", MONEY_D->money_str(rv)), me);
+	tell_object(me,"扣除利息"+MONEY_D->money_str(lixi)+"后，你实际取出"+MONEY_D->money_str(v)+"。\n");
+	} else {
+*/
+	v=what->query("base_value") * amount;
+       message_vision(sprintf("$N从银号里取出%s。\n", MONEY_D->money_str(v)), me);
+//	}
+
+	MONEY_D->pay_player(me, v );
+
+	CHANNEL_D->do_channel(this_object(),
+			"sys", sprintf("%s从%s%s(%O.c)取出%s \n" NOR,
+                     log_id(me), MISC_D->find_place(environment(me)), 
+			COLOR_D->clean_color(environment(me)->query("short")), 
+			environment(me), MONEY_D->money_num(v) ));
+        log_file("player/bank_money", sprintf("%s在%s%s取出%s 时间在：[%s]\n",
+		log_id(me), MISC_D->find_place(environment(me)),
+		COLOR_D->clean_color(environment(me)->query("short")),
+		MONEY_D->money_num(v), log_time() ));
+
+//       MONITOR_D->report_system_object_msg(me,"从"+MISC_D->find_place(environment(me))+
+//COLOR_D->clean_color(environment(me)->query("short"))+"取出"+MONEY_D->money_num(v) );
+
+	me->save();
+
+	remove_call_out("enough_rest");
+	call_out("enough_rest", 5);
+
+	return 1;
+}
+
+void reset_balance(object me)
+{
+    int myexp;
+    int allowed, removed_gold;
+    string myid;
+    string NPCNAME=this_object()->name();
+
+    if(!me) return;
+
+    myexp=me->query("combat_exp")/1000;
+    myid=me->query("id");
+
+    if(myexp<1) myexp=1;
+    if(myexp>100) myexp=100;
+	if( me->query("vip") )
+	allowed=myexp*5000000;
+	else
+	allowed=myexp*1000000;
+
+	//Added by waiwai@2002/06/14 暂时如此
+	if( !wizardp(me) && userp(me) && !me->query("vip") ) { 
+    	if (me->query("balance") > allowed) {
+	me->set("balance_old", me->query("balance"));
+	me->set("balance", allowed);
+	removed_gold = (me->query("balance_old") - me->query("balance"))/10000;
+	log_file("MONEY_RESET", log_time()+
+"：魏大人收缴了"+me->query("name")+"("+me->query("id")+")"+removed_gold+"两黄金。\n");
+	tell_object(me, GRN+NPCNAME+"在你的耳边悄声说道："+RANK_D->query_respect(me)+
+		"，这、这真不知怎么说是好．．．\n"NOR);
+	tell_object(me, GRN+NPCNAME+"在你的耳边悄声说道："+
+		"昨日魏大人派人前来察案，发觉你老的黄金来路．．．\n"NOR);
+	tell_object(me, GRN+NPCNAME+"在你的耳边悄声说道："+
+		"若不是在下帮你老辩解，你老的钱就全都充公了．．．\n"NOR);
+    }
+    }
+	remove_call_out("reset_balance");
+
+	return;
+}
+
+int accept_kill(object me)
+{
+        return 0;
+}
+
+int accept_fight(object me)
+{
+        return 0;
+}
+

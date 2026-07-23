@@ -1,0 +1,584 @@
+// CMDS /cmds/std/go.c
+// Created by waiwai@2001/06/11
+// Last modified by waiwai@2003/01/19
+// 结合bian.c follow.c go.c
+// 彻底解决先follow再bian为非活物而跟随的问题
+
+#pragma save_binary
+#include <command.h>
+inherit F_CLEAN_UP;
+
+#include "/cmds/std/valid_move.h";
+#define TIME_CHECK NATURE_D->outdoor_room_description()
+inherit DIR_D;
+string day_event(){return NATURE_D->outdoor_room_event();}
+
+/**************************************************************************************************/
+
+void create() { seteuid(getuid()); }
+
+// Added by waiwai@2001/06/11
+// 逃跑中随机仍掉的物品
+int drop_things(object me)
+{
+	int i,max;
+	object *inv;
+	object env;
+	env = environment(me);
+	max = me->query_max_encumbrance();
+	inv = all_inventory(me);
+	for(i=0;i<sizeof(inv);i++){
+		if(inv[i]->query("equipped")) continue;	//装备了的
+		if(inv[i]->query("owner")) continue;	//某些个人物品
+		if(inv[i]->query("keep_this")) continue;	//有keep的
+		if(inv[i]->query("keepto")) continue;	//有keepto的物品
+		if(random(max) < inv[i]->weight()) {
+			tell_object(env,YEL"在慌乱中，");
+			me->command("drop "+inv[i]->query("id"));
+		}
+	}				
+}
+
+// Added by waiwai@2001/06/11
+// 逃跑成功机率，基本上取决于武学和轻功
+int check_flee(object me, string arg) 
+{
+   object 	*enemy;
+   int		fp, bp, i;
+
+   i = me->query("combat_exp");
+   if ( (random(i) < 300) && userp(me) ) return 1;
+   enemy = me->query_enemy();
+   for(i=0; i<sizeof(enemy); i++) {
+      if( objectp(enemy[i]) && environment(enemy[i])== environment(me) && living(enemy[i])) { 
+         fp = COMBAT_D->skill_power(me, "dodge", 3);
+         if(fp<1) fp = 1;
+         bp = COMBAT_D->skill_power(enemy[i], "dodge", 3);
+         if(bp<1) bp = 1;
+         if(random(fp*2+bp) > fp*2) {
+            message_vision(HIG"$N向"+arg+"逃去！\n" NOR, me);
+            message_vision("$N身影一闪，挡在了$n的面前！\n" , enemy[i], me);
+            return 0;
+         }
+      }
+   }
+   return 1;
+}
+/**************************************************************************************************/
+
+int sen,m_sen,eq,mq;
+
+int main(object me, string arg, int silent)
+{
+    	mixed dest,target;
+	string ridemsg, mout, min, dir, array_use;
+	object env, obj, ridee, thing, ob;
+	mapping exit;
+	int valid, pts, i;
+	object *guards, *member;
+	string dir1, dir2, dir3, dir4, face, thing_msg;
+       int costj = random((int)me->query("cor"))+1;
+
+       eq = me->query("kee");
+	mq = me->query("max_kee");
+	sen = me->query("sen");
+	m_sen = me->query("max_sen");
+
+	if( !arg ) return notify_fail("你要往哪个方向走？\n");
+	if( !wizardp(me) ) {
+	if (me->is_busy()
+              || me->query_temp("pending/exercising")
+              || me->query_temp("pending/meditating")
+              || me->query_temp("baitan_on")
+		|| me->query_temp("doing_xiudao"))
+		return notify_fail("你现在正忙着呢。\n");
+	}
+
+	// Added by waiwai@2003/01/19 Fix bian bug it.
+      if(me->query_temp("k_bian")) {
+	if( me->query_temp("leader")) me->set_leader(0);
+	return 0;
+	}
+
+	// lead跟随的自动清除
+	if( me->is_fighting() && me->query("leader") ) {
+	me->set_leader(0);
+	me->delete("leader");
+	me->delete("leaderid");
+	me->delete_temp("leader");
+	return 0;
+	}
+
+       if(!valid_move(me)) return 0;
+
+	env = environment(me);
+	if(!env) return notify_fail("你哪里也去不了。\n");
+
+	if( !mapp(exit = env->query("exits")) || !exit[arg] ||  undefinedp(exit[arg]) ) {
+		if( query_verb()=="go")
+			return notify_fail(CYN"你象没头苍蝇似的到处乱撞。\n"NOR);
+		else
+			return 0;
+	}
+
+	dest = exit[arg];
+
+	// Addded by waiwai@2001/07/13
+	if (dest && objectp(dest)) obj = dest;
+       else
+	if( !(obj = load_object(dest)) ) {
+	   if(file_size(file_name(environment(me))+".lpc")>0) {
+	   message("channel:wiz",HIG"\n〖地图精灵〗 区域："+environment(me)->query("short")+
+          "("+file_name(environment(me))+")"+"连接有错，请速更正。\n\n"NOR,users());
+	   log_file("map_error","区域："+COLOR_D->clean_color(environment(me)->query("short"))+
+          "("+file_name(environment(me))+")"+"连接有错，请速更正。时间：["+log_time()+"]\n");
+	   }
+           write( WHT"你要去的区域还没有连通,请post通知巫师。\n"NOR); 
+           return 1;
+        } else 
+           if ( !(obj = find_object(dest)) )
+	    	return notify_fail( sprintf( WHT"无法向 "HIR"%s"NOR WHT" 移动。\n"NOR, dest ) ); 
+
+	// 在这里定义,比在地层上写valid_leave要好些.
+	if( obj ->query("wiz_only") && !wizardp(me))
+	   return notify_fail(CYN"那里只有巫师才能进去！\n"NOR);
+
+	if( obj ->query("building") && !wizardp(me))
+	   return notify_fail(HIG"那里还在施工，请以后再来。\n"NOR);
+
+	if( obj ->query("guo_limit") && !wizardp(me))
+	   return notify_fail(HIG"那里正在举行人参果大会，没有得到邀请你不能进去。\n"NOR);
+
+	if( me->query_temp("zuochan") )
+	   return notify_fail(CYN"心境清明，无你无我，才能参透佛理人生。。。\n"NOR);
+
+	if( obj ->query("limitgo") ) {
+	if( !wizardp(me) && userp(me) ) { 
+		write(HIW+obj->query("short")+"现在已被巫师锁住，你还是请回吧……\n"NOR);
+                return 1;
+	} else if(wizardp(me)) { 
+		write(HIW"目前("+file_name(obj)+".c)"+MISC_D->find_place(obj)+
+			obj->query("short")+HIW"是被锁住(limitgo)状态！\n"NOR);
+		}
+	}
+
+	// 频繁的走，诸如挂机器人要掉一定的气血的。。。
+	if( !obj ->query("no_limitgo")) {
+	if( me->query_temp("last_go") == time() || me->query_temp("last_go") == time() - 1 ) {
+   	  me->add_temp("go_count", 1);
+   	  if( me->query_temp("go_count") <= 5 ) {  // go 5 次以下，没有影响
+   	  } else if( me->query_temp("go_count") <= 15 ) {
+   	  	 if( me->query("kee") <= me->query_temp("go_count") - 5 ) // 避免 kee = 0
+   	  	    return notify_fail(YEL"你气血不足，走不动了。。。\n"NOR);
+//   	  	 else me->add("kee", 5 - me->query_temp("go_count"));
+   	  } else return notify_fail(YEL"你跑得太快，气血跟不上来，先歇会儿吧。。。\n"NOR);
+	} else {
+   	  me->set_temp("go_count", 1);
+   	  me->set_temp("last_go", time());
+	}
+	}
+
+       // Added by waiwai@2001/06/11 
+	// 把妖魔排除，妖魔无安全区的限制
+	// 把跟随排除，目前需要验证是否适宜
+	if (!userp(me) && obj->query("NONPC") 
+		&& !me->query("leader")
+		&& me->query("race") != "妖魔" ) return 0;
+
+       // Added by waiwai@2001/06/11 普遍用于类似城门等处
+	if( userp(me) && !wizardp(me) ) {
+        if( obj->query("close_door") )
+        	return notify_fail(CYN+obj->query("short")+NOR CYN"已经关门了，你还是稍后再来吧！\n"NOR);
+	} 
+
+       // Added by waiwai@2001/06/11 普遍用于店铺
+	if( userp(me) && !wizardp(me) ) {
+        if( obj->query("day_shop")
+        && ( day_event() == "event_night" || day_event() == "event_midnight"))
+        	return notify_fail(GRN+obj->query("short")+NOR GRN" 晚上关门了，你还是等天亮再来吧！\n"NOR);
+          } 
+
+        if ( env->query("limit_exits") ) {
+         string *limit_exits = env->query("limit_exits");
+         if (member_array(arg,limit_exits) != -1  &&   
+           sizeof( filter(  all_inventory(find_object(exit[arg])? 
+           find_object(exit[arg]):load_object(exit[arg])), 
+           (: userp :)) ) > 5 && !wizardp(me) ) 
+       	return notify_fail(WHT"那里已经人满了，你去不了那里。\n"NOR); 
+          } 
+
+	valid=(int)env->valid_leave(me, arg);
+	if( !valid ) return 0;
+	if(valid>1) return 1;
+
+	if( !undefinedp(default_dirs[arg]) )
+		dir = default_dirs[arg];
+	else
+		dir = arg;
+
+	if (ridee = me->ride())
+          ridemsg = ridee->query("ride/msg")+"着"+COLOR_D->clean_color(ridee->name());
+        else  
+          ridemsg = "";
+
+	if(ridee && !valid_move(ridee)) 
+           return notify_fail("你的座骑走动不了。\n");
+     
+	if( ridee && obj ->query("sleep_room") && !wizardp(me))
+	   return notify_fail(HIG"你不能骑着坐骑进入睡房。\n"NOR);
+
+       if(me->is_ghost() && domain_file(base_name(environment(me)))!="death") {              
+ 	        write(HIB"突然间阴风阵阵，你耳边响起一阵空洞而又阴森的声音:‘回来哟，回来哟!’\n"NOR);
+		  write(HIW"一阵白雾将你裹了起来，你又回到了鬼门关\n"NOR);
+                me->move("/d/death/gate");
+                return 1;
+	}
+
+	/***********************************************************************/
+       // Update by waiwai@2001/02/05 优化信息设置 begin.
+	dir3 =(string)env->query("short");
+	dir4 =(string)obj->query("short");
+
+	if( !undefinedp(default_dirs1[arg]) && !undefinedp(default_dirs2[arg])) {
+		dir1 = default_dirs1[arg];
+		dir2 = default_dirs2[arg];
+	} else	{
+		dir1 = arg;
+		dir2 = arg;
+	}
+
+       // Added by waiwai@2001/06/11
+       if ( me->query_temp("ridee") && !wizardp(me) && userp(me) ) {
+         if( obj->query("no_bid") || obj->query("no_ridee") || obj->query("day_shop") )
+         return notify_fail(GRN"你不能骑着 "WHT+ ridee->name() +NOR GRN" 进"+dir+"的"+obj->query("short")+"\n"NOR);
+         }
+
+	if( me->is_fighting() ) {
+		if(check_flee(me, dir) == 0) {
+			return notify_fail(HIR"你被挡了回来。\n"NOR);
+		} 
+		drop_things(me);
+		mout = GRN+ridemsg + "往" + dir1 + "落荒而逃了……\n"NOR;
+		min = GRN+ridemsg + "跌跌撞撞地从" + dir2 + "的" + dir3 + "跑了过来。\n"NOR;
+	} else
+	if( wizardp(me) && me->query("env/invisibility") && (wiz_level(me) >= wiz_level(env))) {
+		mout = "";
+		min = "";
+	} else {
+		face="";
+	if( me->query("gender") == "女性") {
+		if( userp(me) ) {
+		if (me->query("per") >= 35) face ="娇艳绝伦" + face;
+		if ((me->query("per") >= 32) && (me->query("per") < 30)) face= "清丽绝俗" + face;
+		if ((me->query("per") >= 26) && (me->query("per") < 28)) face= "风情万种" + face;
+		if ((me->query("per") >= 24) && (me->query("per") < 26)) face= "容色秀丽" + face;
+		if ((me->query("per") >= 21) && (me->query("per") < 24)) face= "面目姣好" + face;
+		}
+		if ( me->query("per") < 21) {
+			if (me->query("str") <= 16) face = "亭亭玉立" + face;
+			if ((me->query("str") <= 20) && (me->query("str") > 16)) face= "体态轻盈"+ face;
+			if ((me->query("per")<21) && (me->query("str")>20) || !userp(me)) face = "";
+			}
+	} else {
+		if( userp(me) ) {
+		if (me->query("per") >= 35) face= "玉树临风般" + face;
+		if ((me->query("per") >= 26) && (me->query("per") < 35)) face="英俊潇洒" + face;
+		if ((me->query("per") >= 22) && (me->query("per") < 26)) face="仪表堂堂" + face;
+		}
+		if (me->query("per") < 22) {
+		if (me->query("str") >=22) face = "膀大腰圆" + face;
+		if ((me->query("str") >= 15) && (me->query("str") < 22)) face= "身材壮硕"+ face;
+		if ((me->query("per") < 22) && (me->query("str") < 15) || !userp(me)) face = "";
+		}
+		} 
+
+
+       // Added by waiwai@2001/06/11
+	// 穿着的信息细致性反馈
+	if( userp(me) ) { // 是玩家
+	if((string)me->query("gender") == "男性" ) {
+		if( !me->query_temp("armor/pants") ) { //没穿裤子的情形
+        	if (objectp(thing = me->query_temp("armor/cloth") ))
+			thing_msg = CYN"光着屁股"NOR"上穿" + COLOR_D->clean_color(thing->query("name"));
+		} else
+		if( !me->query_temp("armor/cloth") ) { //没穿上衣的情形
+        	if (objectp(thing = me->query_temp("armor/pants") ))
+			thing_msg = CYN"赤裸上身"NOR"下穿" + COLOR_D->clean_color(thing->query("name"));
+		} else
+		if( me->query_temp("armor/cloth") &&  me->query_temp("armor/pants") ) {
+        	if (objectp(thing = me->query_temp("armor/cloth") || thing = me->query_temp("armor/pants")))
+			thing_msg = "身着" + COLOR_D->clean_color(thing->query("name"));
+		} else
+			thing_msg = WHT"赤身裸体地"NOR; //没穿裤子和上衣的情形
+		} else { //以下是女性
+		if( me->query_temp("armor/cloth") &&  (me->query_temp("armor/pants")
+			|| me->query_temp("armor/skirts"))) { //女性穿着正常状态的情形
+	        if (objectp(thing = me->query_temp("armor/cloth") || thing = me->query_temp("armor/skirts") ))
+			thing_msg = "身着" + COLOR_D->clean_color(thing->query("name"));
+		} else
+		if( me->query_temp("armor/cloth") &&  !me->query_temp("armor/pants")
+			&& !me->query_temp("armor/skirts")) { // 没穿裙子也没穿裤子的情形
+	        if (objectp(thing = me->query_temp("armor/cloth") ))
+			thing_msg = CYN"光着屁股"NOR"上穿" + COLOR_D->clean_color(thing->query("name"));
+		} else
+		if( !me->query_temp("armor/cloth") &&  (me->query_temp("armor/pants")
+			|| me->query_temp("armor/skirts"))) { //只穿裙子和裤子没上衣的情形
+	        if (objectp(thing = me->query_temp("armor/pants") || thing = me->query_temp("armor/skirts") )) 
+			thing_msg = CYN"赤裸上身"NOR"下着" + COLOR_D->clean_color(thing->query("name"));
+		} else
+			thing_msg = WHT"全身一丝不挂地"NOR; // 没三件的情形
+		}
+		} else
+		// 非玩家默认为cloth
+		if(objectp(thing = me->query_temp("armor/cloth") ) && !me->query("lead_to") ) {
+			thing_msg = "身着"+ COLOR_D->clean_color(thing->query("name"));
+			} else
+			thing_msg = ""; // 非玩家没有任何穿着省略
+		
+		if(!objectp(thing = me->query_temp("armor/cloth") ) && !me->query("lead_to") )
+			thing_msg = "";
+/*
+		// 武器的信息反馈
+		if( me->query_temp("armor/cloth") || 
+		me->query_temp("armor/pants") 
+		|| me->query_temp("armor/skirts")) {
+		if (objectp(thing = me->query_temp("weapon"))) 
+		thing_msg += "手执" + COLOR_D->clean_color(thing->query("name"));
+		}
+		else
+		if( !me->query_temp("armor/cloth") && !me->query_temp("armor/pants") && !me->query_temp("armor/skirts"))  {
+		if(userp(me)) {
+		if((string)me->query("gender") == "男性" ) {
+		if (objectp(thing = me->query_temp("weapon"))) 
+		thing_msg = "手执" + COLOR_D->clean_color(thing->query("name")+"赤身裸体地");
+		} else
+		if (objectp(thing = me->query_temp("weapon"))) 
+		thing_msg = "手执" + COLOR_D->clean_color(thing->query("name")+"全身一丝不挂地");
+		} else
+		if (objectp(thing = me->query_temp("weapon"))) 
+		thing_msg = "手执" + COLOR_D->clean_color(thing->query("name"));
+		}
+		else thing_msg = "";
+*/
+		// 野兽的反馈信息
+		if ( me->query("race") == "野兽") {
+		// 优先处理有arrive_msg和leave_msg设置的
+		if( mout = me->query("leave_msg")) mout = "往" + dir1 + mout +" \n";
+              else mout = "呼地往" + dir1 + "一窜就消失了。\n";
+		if( min = me->query("arrive_msg"))	 min = "从" + dir2 + min +" \n";
+              else min = "从"+dir2+"的"+dir3+"呼地窜了出来，警惕地四周张望着。\n";
+		} else { // 以下是非野兽
+		// 妖魔的信息反馈
+		// 优先处理有arrive_msg和leave_msg设置的
+		if ( me->query("race") == "妖魔" ) {
+		// 优先处理有arrive_msg和leave_msg设置的
+		if( mout = me->query("leave_msg")) mout = "往" + dir1 + mout +" \n";
+              else mout = "呼地往" + dir1 + "一窜就消失了。。。\n";
+		if( min = me->query("arrive_msg"))	 min = "从" + dir2 + min +" \n";
+              else min = "从"+dir2+"的"+dir3+"突然窜了出来。。。。\n";
+		} else
+		if( ridee && ridee->query("bird") ) { // 坐骑是飞禽类的情形
+			mout = thing_msg+ridemsg+ "往" + dir1 + "飞去。\n";
+			min = face+thing_msg+ridemsg+ "从" + dir2 + "飞了过来。\n";
+		} else
+		if( ridee && me->query_temp("ridee") ) { // 一般坐骑的反馈信息
+			mout = thing_msg+ridemsg+ "往" + dir1 + "疾驰而去。\n";
+			min = face+ridemsg+ "从" + dir2 + "一路疾驰而来。\n";
+			} else if( !ridee && !me->query_temp("ridee") ) {
+			// 没坐骑的正常情形
+                     if(100*sen/m_sen<=20) {   
+				mout = "摇摇晃晃的向"+dir1+"走去，眼看就要倒下。\n";
+				min = thing_msg+"摇摇晃晃的从"+ dir2 +"走了过来，就快累得趴下了。\n";
+			} else if(100*sen/m_sen<=40) {
+				mout = "拖着疲惫的脚步往"+dir1+"离开。\n";
+				min = thing_msg+"疲惫不堪的从"+ dir2 +"走了过来。\n";
+			} else if(100*sen/m_sen<=70) {
+				mout = "迈着沉重的脚步往"+dir1+"离开。\n";
+				min = thing_msg+"疲惫的从"+ dir2 +"走了过来。\n";
+			} else if(100*eq/mq<=30 ) {
+                            mout ="不住地呻吟，拖着遍体鳞伤的残体向" + dir1 + "爬去。地上赫然留下一道道斑斑的"HIR"血迹"NOR" \n";
+                            min = thing_msg+"不住地呻吟，拖着遍体鳞伤的残体从"+ dir2 +"爬了过来。\n";
+                     } else if(100*eq/mq<=50 ) {
+                            mout = "撑起满是"HIR"鲜血"NOR"的躯体，一瘸一拐地朝" + dir1 + "挪去。\n";
+                            min =thing_msg+"撑着满是"HIR"鲜血"NOR"的躯体，一瘸一拐地从"+ dir2 +"挪了过来。\n";
+                     } else if(100*eq/mq<=70) {
+                            mout = "一边擦着嘴角的"HIR"鲜血"NOR"，一边朝" +dir1+"走去。\n";
+                            min = thing_msg+"一边擦着嘴角的"HIR"鲜血"NOR"，一边从"+ dir2 +"走了过来，龇牙咧嘴的。\n";
+                     } else if(100*eq/mq<=90 ) {
+                            mout = "灰头土脸、狼狈不堪地向"+dir1+"离去。\n";
+                            min = thing_msg+"灰头土脸、狼狈不堪地从"+ dir2 +"走了过来。\n";  
+                     } else if(100*eq/mq<=95) {
+                            mout = "一声不吭的转身朝"+dir1+"走去，脸色好像有些难看。\n";
+                            min = thing_msg+"像斗败了的公鸡，垂头丧气地从"+ dir2 +"走了过来。\n";
+                     } else if((pts=(int)me->query("soilder"))>0) {
+                        if(me->query("train_level")<=20){
+                        mout=ridemsg+"带领"+chinese_number(pts)+"名溃不成军的士兵往"+dir1+"离去.\n";
+                        min=face+ridemsg+"带领"+chinese_number(pts)+"名士兵溃不成军的从"+ dir2 +"走了过来.\n";}
+                        else if(me->query("train_level")<=50){
+                        mout=ridemsg+"带领"+chinese_number(pts)+"名懒懒散散的士兵往"+dir1+"离去.\n";
+                        min=face+ridemsg+"带领"+chinese_number(pts)+"名士兵懒懒散散的从"+ dir2 +"走了过来.\n";}
+                        else if(me->query("train_level")<=70){
+                        mout=ridemsg+"带领"+chinese_number(pts)+"名整整齐齐的士兵往"+dir1+"离去.\n";
+                        min=face+ridemsg+"带领"+chinese_number(pts)+"名士兵整整齐齐的从"+ dir2 +"走了过来\n";} 
+                        else {
+                        mout=ridemsg+"带领"+chinese_number(pts)+"名雄赳赳气昂昂的士兵往"+dir1+"离去.\n";
+                        min=face+ridemsg+"带领"+chinese_number(pts)+"名士兵雄赳赳气昂昂的从"+ dir2 +"走了过来.\n";
+                        }
+                        } 
+				else {
+		if( !me->query("lead_to") ) { // 有跟随则不显示
+				if(wizardp(me) || me->query("go_yun") )
+				thing_msg = YEL"脚踏七彩祥云"NOR;
+		} else
+		if( me->query("lead_to") ) { // 跟随的信息
+		if( me->query("leader") )
+		thing_msg += YEL"跟随"+me->query("leader")+NOR;
+		}
+
+		// 优先处理有arrive_msg和leave_msg设置的
+		if( mout = me->query("leave_msg")) mout = "往" + dir1 + mout +" \n";
+              else mout = thing_msg+ "往" + dir1 + "的"+dir4+"离开。\n";
+		if( min = me->query("arrive_msg"))	 min = "从" + dir2 + min +" \n";
+              else min = face+thing_msg+ "从" + dir2 + "的"+dir3+"走了过来。\n";
+		}
+		}
+	}
+	}
+	/***********************************************************************/
+	// Added by waiwai@2001/06/11
+	// 需要注意骑坐骑问题
+       if( userp(me) && !wizardp(me) && !ridee ) {
+	if ( !me->query_temp("armor/boots") ) { // 没穿鞋子的情形(掉精神)
+		me->add("sen", -costj*2);   		
+              message("vision", YEL+me->name(1)+"赤着脚在地上走路，感到两脚钻心地疼。\n"NOR,environment(me), ({me}) );
+              message("vision", YEL"你赤着脚在地上走路，感到两脚钻心地疼。\n"NOR, ({me}) );              
+	}	
+	}
+
+	// Added by waiwai@2003/01/19
+       // 这是阵法部份.目前只适合sha-array
+       if (me->query_temp("leader")){
+          array_use=me->query_skill_mapped("array");
+          member = me->query_team();
+          for (i=0; i<sizeof(member); i++)
+          if(member[i])
+          if (member[i]->query_temp("use_form")==1){
+          tell_object(member[i],"你们所排的阵形被破坏了。\n");
+          if(find_object(SKILL_D(array_use)))
+          return SKILL_D(array_use)->remove_array(member,me,me->query_temp("form_mean",1),
+			me->query_temp("form_number",1));
+              }
+           }
+	/***********************************************************************/
+	// 防御(guard)的情形
+	target=me->query_temp("guarding");
+
+	if( stringp(target)){
+            guards=environment(me)->query("guarded/"+target);
+            if(arrayp(guards)){
+                guards -= ({me});
+                environment(me)->set("guarded/"+target,guards);
+               }
+            else{ environment(me)->set("guarded/"+target,guards);}   
+		me->delete_temp("guarding");
+          } else if(objectp(target) && ! living(target)) {
+                guards = target->query_temp("guarded");
+                guards -= ({ me });
+                target->set_temp("guarded", guards);
+		  me->delete_temp("guarding");
+	}
+	/***********************************************************************/
+
+	if( !wizardp(me) || !me->query("env/invisibility") ) {
+	    	if (environment(me) && environment(me)->query("no_look"))
+		    	message( "vision", "一个模糊的影子" +  mout, environment(me), ({me}) );
+		else
+			message( "vision", me->name() + mout, environment(me), ({me}) );
+	}
+	if( (! ridee || ridee->move(obj)) && me->move(obj, silent) ) {
+		me->remove_all_enemy();
+		if( !wizardp(me) || !me->query("env/invisibility") ) {
+	    			if (environment(me) && environment(me)->query("no_look"))
+		    			message( "vision", "一个模糊的影子" +  min, environment(me), ({me}) );
+				else
+					message( "vision", me->name() + min, environment(me), ({me}) );
+		}
+		me->set_temp("pending", 0);
+		if (env != obj)
+			all_inventory(env)->follow_me(me, arg);
+		if (ridee)
+			tell_object(me,"你"+min);
+		return 1;
+	}
+/*
+        if (! objectp(me)) return 1;
+
+        if (environment(me) != env) {
+                object competitor;
+                if (competitor = me->query_competitor())  {
+                        me->lost();
+                        competitor->win();
+                }
+	        all_inventory(env)->follow_me(me, arg);
+        }
+*/
+	return 0;
+}
+/**************************************************************************************************/
+// 逃跑时判断设定
+void do_flee(object me)
+{
+	mapping exits;
+       string *directions, dir;
+
+	if( !environment(me) || !living(me) ) return;
+	exits = environment(me)->query("exits");
+
+       if( !mapp(exits) || !sizeof(exits) ) {
+          write (WHT"你想逃跑，可是找不到出口。\n"NOR);
+          return;
+        } else directions = keys(exits);
+
+	//Added by waiwai@2001/06/11
+	// 有逃跑方向时的情形
+	if (!dir = me->query("env/wimpydir"))
+          dir = directions[random(sizeof(directions))];
+        else {
+          dir = abbrdir(dir);
+          if (member_array(dir, directions) == -1)
+            dir = directions[random(sizeof(directions))];
+        }
+	tell_object(me, WHT"看来该找机会逃跑了．．．\n"NOR);
+       tell_object(me, "你尝试往"+cdir(dir)+"逃跑。\n");
+
+       if( me->query_temp("no_move") ) {
+          tell_object (me, HIG"可你被定住，逃不掉了！\n"NOR);
+          return;
+        }
+	//Added by waiwai@2001/06/11 某些房间设定no_free为1的情况
+	if (environment(me) && environment(me)->query("no_flee")) {
+          write (WHT"你想逃跑，可惜这里不能逃。。。。\n"NOR);
+          return;
+	}
+
+	if( random(me->query_skill("dodge")/10 + me->query("kar")) < 10 ) {
+	   tell_object(me, WHT"你逃跑失败。\n"NOR);
+	   return;
+	}
+//       main(me, dir);
+	main(me, directions[random(sizeof(directions))], 0);
+}
+/**************************************************************************************************/
+
+int help(object me)
+{
+	write(@HELP
+
+指令格式 : go <方向>
+ 
+让你往指定的方向移动。
+ 
+HELP
+    );
+    return 1;
+}

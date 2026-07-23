@@ -1,0 +1,96 @@
+// FEATURE vendor.c
+// Last modified by waiwai@2001/07/20
+
+#include <ansi.h>
+#include <room.h>
+#include <dbase.h>
+#include <name.h>
+#include <config.h>
+
+int buy_object(object me, string what)
+{
+	string ob;
+
+	if( stringp(ob = query("vendor_goods/" + what)) )
+		return ob->query("value");
+	else
+		return 0;
+}
+
+int complete_trade(object me, string what)
+{
+	string ob_file;
+	object ob;
+
+       // Added By waiwai@2001/02/03
+	if( !wizardp(me) ) {
+       if( me->query("title") == "普通百姓")
+              return notify_fail(CYN"你是普通百姓,店铺不做你的生意！\n"NOR); 
+
+	if( me->query_condition("killer") )
+              return notify_fail(CYN"你正在被通缉中,店铺不做你的生意！\n"NOR); 
+	}
+
+	if( stringp(ob_file = query("vendor_goods/" + what)) ) {
+			ob = new(ob_file);
+			// Added By waiwai@2001/07/20
+			// 这里的定义将配合buy.c里面的设置
+			if(!ob->move(me)){
+		    	printf(CYN"由于你身上已经装不下过多的东西了,所以"+ob->name()+NOR CYN"只能放在地上。\n"NOR);
+		    	ob->move(environment(me));
+		    	}
+		message_vision("$N向$n买下一"+ ob->query("unit") + ob->query("name") + "。\n",
+			me, this_object() );
+		return 1;
+	}
+	return notify_fail(WHT"这里没有你要买的这样东西。\n"NOR);
+}
+
+int do_vendor_list(string arg)
+{
+	mapping goods;
+	string list, *name;
+	int i,turn=0;
+	string tlist;
+	object me;
+	me =this_player();
+
+       // Added By waiwai@2001/02/03
+	if( !wizardp(me) ) {
+       if( me->query("title") == "普通百姓")
+              return notify_fail(CYN"你是普通百姓,店铺不做你的生意！\n"NOR); 
+
+	if( me->query_condition("killer") )
+              return notify_fail(CYN"你正在被通缉中,店铺不做你的生意！\n"NOR); 
+	}
+
+	if( !mapp(goods = query("vendor_goods")) ) return 0;
+	if( arg && !this_object()->id(arg) ) return 0;
+	name = keys(goods);
+
+       // By waiwai@2001/07/20 chenged old code.并且为了统一格式加入clean_color.
+	if(!sizeof(name))
+		return notify_fail(WHT"这儿的东西全卖光了。\n"NOR);
+	list = "本店现货销售下列商品，概不赊帐:  \n"NOR;
+	list += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
+	list += "[序号]    [名      称]                     [单 位]   [单 价]\n";
+	list += "──────────────────────────────────────\n";
+
+	for(i=0; i<sizeof(name); i++)  {
+	tlist = sprintf("[%-2s]    %s(%s)",
+               name[i], filter_color(goods[name[i]]->query("name")),goods[name[i]]->query("id"));
+	if( goods[name[i]]->query("base_unit") )
+	list += sprintf("%-40s → 每%s     %s \n", 
+		tlist, goods[name[i]]->query("base_unit"), 
+		MONEY_D->price_num(goods[name[i]]->query("base_value") ));
+	else
+	list += sprintf("%-40s → 每%s     %s \n", tlist, goods[name[i]]->query("unit"), 
+		MONEY_D->price_num(goods[name[i]]->query("value")) );
+
+        }
+
+	list += "━━━━━━━━━━━━━━━━━━━━━━━━━ 西游记商业行会 ━━━━━\n";
+	list += "注:你可以用 buy 序号 from ID 来购买物品.\n\n";
+	write(list);
+	return 1;	
+}

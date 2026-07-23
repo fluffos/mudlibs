@@ -1,0 +1,892 @@
+// CMDS  /cmds/std/look.c
+// Created by waiwai@2001/01/01
+// Update by waiwai@2003/02/01
+
+#include <room.h>
+#include <command.h>
+#include <combat.h>
+
+inherit F_CLEAN_UP;
+
+int look_room(object me, object env);
+int look_item(object me, object obj);
+int look_living(object me, object obj);
+int look_room_item(object me, string arg);
+string status_color(int current, int max);
+string do_query(object obj);
+string getdam(object me, object obj);
+#include <desc.h>
+
+// Added by waiwai@2003/02/01
+// 物件之物质(material)
+// 武器装备物件的材质以及有明确材质的物件的材质信息
+mapping material = ([
+	"异类金属"	:"异类金属",
+	"crimsonsteel":"丹金(Crimsonsteel)",	
+	"blacksteel"	:"玄铁(Blacksteel)",	
+	"gem"		:"宝石(Gem)",
+	"jade"		:"玉(Jade)",
+	"platina"	:"铂(Platina)", //
+	"gold"		:"金(Gold)",
+	"silver"	:"银(Silver)",
+	"steel"	:"钢(Steel)",
+	"brass"	:"黄铜(Brass)",
+	"copper"	:"铜(Copper)",	
+	"iron"		:"铁(Iron)",
+	"metal"	:"金属(Metal)",
+	"wood"		:"木(Wood)",	
+	"bone"		:"骨(Bone)",	
+	"bamboo"	:"竹子(Bamboo)",
+	"leather"	:"皮革(Leather)",
+	"fur"		:"毛皮(Fur)",
+	"silk"		:"丝绸(Silk)",
+	"hair"		:"毛发(Hair)", //
+	"ivory"	:"象牙(Ivory)", //
+	"fiber"	:"麻(Fiber)",	
+	"stone"	:"无名石(Stone)",	
+	"flower"	:"无名花(Flower)",	
+	"cloth"	:"布(Cloth)",	
+	"paper"	:"纸(Paper)",
+	"ice"		:"冰(Ice)",
+	"water"	:"水(Water)",
+	"thread"	:"线(Thread)",
+	"crystal"	:"水晶(Crystal)",
+	"gunpowder"	:"火药(Gunpowder)", 
+]);
+
+string query_cz(string name)
+{
+	if(material[name]) return material[name];
+	return "无";
+}
+
+string ride_suffix (object me)
+{
+	string ridemsg = 0;
+	object ridee = 0;
+
+	ridee = me->ride();
+	if (ridee)
+		ridemsg = ridee->query("ride/msg")+"在"+ridee->name()+"上";
+	return ridemsg;
+}
+
+string day_event(){return NATURE_D->outdoor_room_event();}
+
+void create() { seteuid(getuid()); }
+
+int main(object me, string arg)
+{
+	object obj;
+	int result;
+
+	if( !arg ) result = look_room(me, environment(me));
+		else if(arg=="me") result=look_living(me, me);//added.
+	else if( (obj = present(arg, me)) || (obj = present(arg, environment(me)))) {
+	if( obj->is_character() ) result = look_living(me, obj);
+		else result = look_item(me, obj);
+	} else result = look_room_item(me, arg);
+
+	return result;
+}
+
+int look_room(object me, object env)
+{
+	int i;
+	object *inv;
+	mapping exits, data;
+	string str, str1="", *dirs;
+	string ridemsg = "", exits_describe;
+	string season, make; 
+
+	season=XYJTIME_D->check_weather_season();
+
+	if( !env ) {
+		write(WHT"你的四周灰蒙蒙地一片，什么也没有 \n"NOR);
+	return 1;
+	}
+	if( me != this_player(1) ) return 0;
+
+	make = env->query("hunpo_ok");
+	if(make)
+	make = HIG"〆"NOR;
+	else make = "";
+/*
+	if( family ) { 
+	if( makeO == family || makeI == family) make = HIG"〆"NOR;
+	else make = "";
+	}
+*/
+
+	/***************************************************************************/
+	if( !env->query("outdoors") ) {
+	str = sprintf( "\n%s"+make+"『窗外』→ %s%s  \n    %s",
+		env->query("short")?(env->query("outdoors")?HIR"「"NOR CYN+(string)env->query("short")+
+	HIR"」"NOR:HIR"「"NOR CYN+(string)env->query("short")+HIR"」"NOR): ""NOR, 
+		season, NATURE_D->check_weather(), env->query("long")? env->query("long"): "\n");
+	} else
+	str = sprintf( "\n%s"+make+"%s  \n    %s",
+		env->query("short")?(env->query("outdoors")?HIR"「"NOR WHT+(string)env->query("short")+
+	HIR"」"NOR:HIR"「"NOR WHT+(string)env->query("short")+HIR"」"NOR): ""NOR,
+		env->query("outdoors")? NATURE_D->outdoor_room_description() : "" ,
+		env->query("long")? env->query("long"): "\n");
+/*
+
+       if( wizardp(me) && wizhood(me) == "(admin)" && me->query("env/wiz_look") )
+	str = sprintf( "「%s」→ %s.c [%s]\n    %s",
+		env->query("short")?env->query("short"): "",
+		wizardp(me)? base_name(env): "",
+		env->query("outdoors")? "室外" : "室内",
+		env->query("long")? env->query("long"): "\n");
+	else
+	str = sprintf( "「%s」%s\n    %s",
+		env->query("short")?env->query("short"): "",
+	env->query("outdoors")? NATURE_D->outdoor_room_description() : "",
+		env->query("long")? env->query("long"): "\n"
+		);
+*/
+
+
+   if( mapp(exits = env->query("exits")) ) {
+      dirs = keys(exits);
+      for( i = 0; i < sizeof(dirs); i ++ )
+         if( (int)env->query_door(dirs[i], "status") & DOOR_CLOSED )
+            dirs[i] = 0;
+      dirs -= ({ 0 });
+	if( sizeof(dirs)==0 ) 
+        str += YEL"\n   这里没有任何明显的出路 \n"NOR;
+	 else if( sizeof(dirs)==1 )
+			str += "\n    这里唯一的〖"YEL" 出口 "NOR"〗：" BOLD + dirs[0] + NOR " \n";
+	 else if(sizeof(dirs)<=6)
+        str += sprintf("\n   〖"YEL" 出口 "NOR"〗：" BOLD "%s"NOR YEL" 和 " NOR BOLD "%s"NOR" \n", 
+	     implode(dirs[0..sizeof(dirs)-2], "、"), dirs[sizeof(dirs)-1]); 
+	     else 
+	 str += sprintf("\n   〖"YEL" 出口 "NOR"〗：" BOLD "%s\n               %s"NOR YEL" 和 "NOR BOLD "%s"NOR" \n",
+          implode(dirs[0..5], "、"),implode(dirs[6..sizeof(dirs)-2], "、"), dirs[sizeof(dirs)-1]);
+   } 
+//     if( exits_describe = environment(me)->query_temp("exits_desc") )
+//        str += exits_describe;
+
+	inv = all_inventory(env);
+	i=sizeof(inv);
+	while(i--) {
+		if( !me->visible(inv[i]) ) continue;
+		if( inv[i]==me ) continue;
+
+	if (ridemsg = ride_suffix(inv[i]))
+		str1 = "  " + inv[i]->short() + " <"+ridemsg +">\n"+(me->query("env/show_file")?base_name(inv[i]):"")+str1;
+	else  str1 = "  " + inv[i]->short() +(me->query("env/show_file")?base_name(inv[i]):"")+ "\n"+str1;
+	}
+
+	/***************************************************************************/
+	// Added By waiwai@2000/11/03 lookset.
+	if(me->query("look")=="y"){
+	if(( me->query("water") > 0 ) || ( me->query("food") > 0 )){
+          str1 +=HIW"\n⊙"HIM"<"NOR CYN"气血:"HIG+me->query("kee")+"/"+me->query("max_kee")+HIM"> ";
+          str1 +=HIM"<"NOR CYN"精神:"HIG+me->query("sen")+"/"+me->query("max_sen")+HIM"> ";
+          str1 +=HIM"<"NOR CYN"内力:"HIG+me->query("force")+"/"+me->query("max_force")+HIM"> ";
+          str1 +=HIM"<"NOR CYN"法力:"HIG+me->query("mana")+"/"+me->query("max_mana")+HIM"> \n"NOR;
+          } else
+	if(( me->query("water") <= 0 ) || ( me->query("food") <= 0 )){
+          str1 +=HIW"\n⊙"HIM"<"NOR CYN"气血:"HIG+me->query("kee")+"/"+me->query("max_kee")+HIM"> ";
+          str1 +=HIM"<"NOR CYN"精神:"HIG+me->query("sen")+"/"+me->query("max_sen")+HIM"> ";
+          str1 +=HIM"<"NOR CYN"内力:"HIG+me->query("force")+"/"+me->query("max_force")+HIM"> ";
+          str1 +=HIM"<"NOR CYN"法力:"HIG+me->query("mana")+"/"+me->query("max_mana")+HIM"> ";
+          str1 +=HIM"<"NOR HIB"口渴"+HIM"> ";
+          str1 +=HIM"<"NOR WHT"饥饿"+HIM"> \n"NOR;
+	}
+	}
+	/***************************************************************************/
+
+	write(str+str1);
+
+	return 1;
+}
+
+// Added by waiwai@2001/02/25 
+// 建立破损度和防御度参数.
+// 并且反应更加详细的物件参数
+// 这是十分必要的，用户应该更加详细地
+// 了解自己拥有的东西的材质和附加参数
+int look_item(object me, object obj)
+{
+       mixed *inv;
+	int max_armor, max_weapon;
+	int protect, lost, lost2, weapon, psl;
+	string prep;
+
+	/**************************************************************/
+	if( obj->query("equipped") == "worn" && !obj->query("weapon_prop/damage"))
+	me->start_more("这是一"+obj->query("unit")+obj->query("name")+"。 "HIR"√"NOR);
+	else
+	if( obj->query("equipped") != "worn" && obj->query("weapon_prop/damage"))
+	me->start_more("这是一"+obj->query("unit")+obj->query("name")+"。 "HIW"Ψ"NOR);
+	else
+	me->start_more("这是一"+obj->query("unit")+obj->query("name")+"。");
+
+       if( obj->query("keep_this")) {
+	if( obj->query("keepto")) 
+	me->start_more(HIG"〆 "HIR"被"+obj->query("keep_id")+"做了记号给"+obj->query("keepto")+"的。\n\n"NOR+obj->long());
+	else
+	me->start_more(HIR"〆 被"+obj->query("keep_id")+"做了记号的。\n"NOR+obj->long());
+	}
+	else
+	me->start_more(obj->long());
+	/**************************************************************/
+
+	// 一个武器的破损力是与其重量，主材质，辅材质以及持有者的力量有关
+	// 这里只设定准确信息显示，定义在weapond.c里面
+	psl = (int)obj->weight() / 500 +"/adm/daemons/weapond"->query_cz((int)obj->query("Fmaterial"))
+              + (int)obj->query("rigidity")+"/adm/daemons/weapond"->query_cz((int)obj->query("material"))
+              + (int)obj->query("sharp")+ (int)me->query("str");
+
+	if( obj->query("series_no") && obj->query("fabao") ) 
+	write(obj->show_status());
+
+	weapon = me->query_temp("weapon");
+       protect=obj->query("armor_prop/armor");
+       lost2=obj->query("lost_prop");
+	lost = obj->query("weapon_prop/damage");
+       max_armor=obj->query("armor/max_armor");
+       max_weapon=obj->query("max_weapon");
+	/***************************************************************************/
+	// 破损状况的信息
+	if( obj->query("armor_type") ) { // 防具
+		if (! protect ) protect=0;
+		if(  !obj->query("no_break")) { 
+			if(  protect < max_armor  )
+			write("\n破损度：有效防御值："HIR+protect+NOR"  总防御值："HIW+max_armor+NOR"  主材质："
+		+query_cz(obj->query("material"))+"  辅材："+query_cz(obj->query("Fmaterial"))+"\n\n");
+			else
+			if(  protect = max_armor  )
+			write("\n破损度：完整无损  总防御值："HIW+max_armor+NOR"  主材质："
+		+query_cz(obj->query("material"))+"  辅材："+query_cz(obj->query("Fmaterial"))+"\n\n");
+			else
+			if( !protect )
+			write("\n破损度：没有任何防御值  主材质："
+		+query_cz(obj->query("material"))+"  辅材："+query_cz(obj->query("Fmaterial"))+"\n\n");
+		} else write(HIG"破损度：永不破损[+"+protect+"]  主材质："+query_cz(obj->query("material"))+"  辅材："
+		+query_cz(obj->query("Fmaterial"))+"\n\n"NOR);
+	} else
+	if( !obj->query("armor_type") && obj->query("weapon_prop/damage")) { // 武器
+		if( !obj->query("no_break") ) {
+			if( lost && lost2) {
+			write("\n破损度：有效攻击值："HIR+lost+NOR"  总攻击值："HIW+max_weapon+NOR"  主材质："
+		+query_cz(obj->query("material"))+"  辅材："+query_cz(obj->query("Fmaterial"))+"\n");
+			write("破损力："+psl+"  质硬度："+(int)obj->query("rigidity")+"  锋利度："
++(!obj->query("sharp") ? "不明" : obj->query("sharp"))+"\n\n");
+			} else
+			if( !lost2 ) {
+			write("\n破损度：完整无损 总攻击值："HIW+lost+NOR"  主材质："
+		+query_cz(obj->query("material"))+"  辅材："+query_cz(obj->query("Fmaterial"))+"\n");
+			write("破损力："+psl+"  质硬度："+(int)obj->query("rigidity")+"  锋利度："
++(!obj->query("sharp") ? "不明" : obj->query("sharp"))+"\n\n");
+			} else
+			if( lost =0 )
+			write("\n破损度：已完全损毁  总攻击值："HIW+max_weapon+NOR"  主材质："
+		+query_cz(obj->query("material"))+"  辅材："+query_cz(obj->query("Fmaterial"))+"\n\n");
+		}
+		else if( obj->query("no_break") )  {
+		write(HIG"\n破损度：永不破损[+"+lost+"]  主材质："
+		+query_cz(obj->query("material"))+"  辅材："+query_cz(obj->query("Fmaterial"))+"\n"NOR);
+			write("破损力："+psl+"  质硬度："+(int)obj->query("rigidity")+"  锋利度："
++(!obj->query("sharp") ? "不明" : obj->query("sharp"))+"\n\n");
+		}
+	} 
+	else
+      	if (! obj->query("armor_type") &&
+                    ! obj->query("weapon_prop/damage") ) { // 非防具武器，但有物质标识的
+	if( obj->query("material") )
+	write(WHT"\n[组成物质] → 主质："+query_cz(obj->query("material"))+"  辅质："+query_cz(obj->query("Fmaterial"))+"\n\n"NOR);
+	}
+	/***************************************************************************/
+	// Added by waiwai@2003/02/01
+	// 附加参数的信息
+	if( obj->query("armor_prop/personality") ) 
+	 write("加有效魅力点数："WHT+obj->query("armor_prop/personality")+" \n"NOR);
+	if( obj->query("weapon_prop/personality") ) 
+	 write("加有效魅力点数："WHT+obj->query("weapon_prop/personality")+" \n"NOR);
+
+	if( obj->query("armor_prop/courage") )  
+	write("加有效勇气点数："WHT+obj->query("armor_prop/courage")+" \n"NOR);
+	if( obj->query("weapon_prop/courage") )  
+	write("加有效勇气点数："WHT+obj->query("weapon_prop/courage")+" \n"NOR);
+
+	if( obj->query("armor_prop/strength") )  
+	write("加有效力量点数："WHT+obj->query("armor_prop/strength")+" \n"NOR);
+	if( obj->query("weapon_prop/strength") )  
+	write("加有效力量点数："WHT+obj->query("weapon_prop/strength")+" \n"NOR);
+
+	if( obj->query("armor_prop/intelligence") )  
+	write("加有效悟性点数："WHT+obj->query("armor_prop/intelligence")+" \n"NOR);
+	if( obj->query("weapon_prop/intelligence") )  
+	write("加有效悟性点数："WHT+obj->query("weapon_prop/intelligence")+" \n"NOR);
+
+	if( obj->query("armor_prop/spirituality") )  
+	write("加有效灵性点数："WHT+obj->query("armor_prop/spirituality")+" \n"NOR);
+	if( obj->query("weapon_prop/spirituality") )  
+	write("加有效灵性点数："WHT+obj->query("weapon_prop/spirituality")+" \n"NOR);
+
+	if( obj->query("armor_prop/composure") )  
+	write("加有效定力点数："WHT+obj->query("armor_prop/composure")+" \n"NOR);
+	if( obj->query("weapon_prop/composure") )  
+	write("加有效定力点数："WHT+obj->query("weapon_prop/composure")+" \n"NOR);
+
+	if( obj->query("armor_prop/constitution") )  
+	write("加有效根骨点数："WHT+obj->query("armor_prop/constitution")+" \n"NOR);
+	if( obj->query("weapon_prop/constitution") )  
+	write("加有效根骨点数："WHT+obj->query("weapon_prop/constitution")+" \n"NOR);
+
+	if( obj->query("armor_prop/karma") )  
+	write("加有效福缘点数："WHT+obj->query("armor_prop/karma")+" \n"NOR);
+	if( obj->query("weapon_prop/karma") )  
+	write("加有效福缘点数："WHT+obj->query("weapon_prop/karma")+" \n"NOR);
+
+	if( obj->query("armor_prop/parry") )  
+	write("加有效招架点数："CYN+obj->query("armor_prop/parry")+" \n"NOR);
+	if( obj->query("weapon_prop/parry") )  
+	write("加有效招架点数："CYN+obj->query("weapon_prop/parry")+" \n"NOR);
+
+	if( obj->query("armor_prop/force") )  
+	write("加有效内功点数："CYN+obj->query("armor_prop/force")+" \n"NOR);
+	if( obj->query("weapon_prop/force") )  
+	write("加有效内功点数："CYN+obj->query("weapon_prop/force")+" \n"NOR);
+
+	if( obj->query("armor_prop/spells") )  
+	write("加有效法术点数："CYN+obj->query("armor_prop/spells")+" \n"NOR);
+	if( obj->query("weapon_prop/spells") )  
+	write("加有效法术点数："CYN+obj->query("weapon_prop/spells")+" \n"NOR);
+
+	if( obj->query("armor_prop/unarmed") )  
+	write("加有效拳脚点数："CYN+obj->query("armor_prop/unarmed")+" \n"NOR);
+	if( obj->query("weapon_prop/unarmed") )  
+	write("加有效拳脚点数："CYN+obj->query("weapon_prop/unarmed")+" \n"NOR);
+
+	// 由于某些防具可能有一定的过份重量，所以需要反应减参数的显示
+	if( obj->query("armor_prop/dodge") && !obj->query("weapon_prop/dodge") ) {
+	if( obj->query("armor_prop/dodge") > 0 )  
+	write("加有效轻功点数："CYN+obj->query("armor_prop/dodge")+" \n"NOR);
+	else
+	write("减有效轻功点数："HIR+obj->query("armor_prop/dodge")+" \n"NOR);
+	}
+
+	if( obj->query("weapon_prop/dodge") ) {
+	if( obj->query("weapon_prop/dodge") > 0 )  
+	write("加有效轻功点数："CYN+obj->query("weapon_prop/dodge")+" \n"NOR);
+	else
+	write("减有效轻功点数："HIR+obj->query("weapon_prop/dodge")+" \n"NOR);
+	}
+
+	if( obj->query("attribute/int") )  
+	write("图腾可加悟性点数："CYN+obj->query("attribute/int")+" \n"NOR);
+	if( obj->query("attribute/karma") )  
+	write("图腾可加福缘点数："CYN+obj->query("attribute/karma")+" \n"NOR);
+	if( obj->query("attribute/per") )  
+	write("图腾可加魅力点数："CYN+obj->query("attribute/per")+" \n"NOR);
+	if( obj->query("attribute/spi") )  
+	write("图腾可加灵性点数："CYN+obj->query("attribute/spi")+" \n"NOR);
+	if( obj->query("attribute/str") )  
+	write("图腾可加力量点数："CYN+obj->query("attribute/str")+" \n"NOR);
+	if( obj->query("attribute/cor") )  
+	write("图腾可加勇气点数："CYN+obj->query("attribute/cor")+" \n"NOR);
+	if( obj->query("attribute/cps") )  
+	write("图腾可加定力点数："CYN+obj->query("attribute/cps")+" \n"NOR);
+	if( obj->query("attribute/con") )  
+	write("图腾可加根骨点数："CYN+obj->query("attribute/con")+" \n"NOR);
+
+	/***************************************************************************/
+
+       // Update by waiwai@2001/02/05
+	inv = all_inventory(obj);
+	if( !obj->is_closed() && sizeof(inv)) {
+		switch( (string)obj->query("prep") ) {
+			case "on":
+				prep = "上";
+				break;
+			case "under":
+				prep = "下";
+				break;
+			case "behind":
+				prep = "后";
+				break;
+			case "inside":
+				prep = "里";
+				break;
+			default:
+				prep = "里";
+				break;
+                        }
+		inv = map_array(inv, "inventory_look", this_object() );
+		message("vision", sprintf("%s面有：\n  %s\n", prep,
+			implode(inv, "\n  ") ), me);
+	}
+
+        return 1;
+}
+
+string per_status_msg(int age, int per, string gender)
+{
+	if (age < 14) {
+		if ( per>=25 )
+			return ( per_msg_kid1[random(sizeof(per_msg_kid1))]);
+		else if ( per>=20 )
+			return ( per_msg_kid2[random(sizeof(per_msg_kid2))]);
+		else if ( per>=15 )
+			return ( per_msg_kid3[random(sizeof(per_msg_kid3))]);
+		else 	return ( per_msg_kid4[random(sizeof(per_msg_kid4))]);
+		}
+
+	if ( gender == "男性" ) {
+		if ( per>=10&&per<=30 )
+			return ( look_level_boy[per-10]);
+		else if (per>30)
+		       return ( look_level_boy[20]);
+		else return "长得怎样你一点概念都没有。\n";
+
+		}
+		
+	if ( gender == "女性" ) {
+		if ( per>=10&&per<=29 )
+			return ( look_level_girl[per-10]);
+		else if (per>29)
+		       return ( look_level_girl[20]);
+		else return "长得怎样你一点概念都没有。\n";
+
+                }
+	else return "";
+}
+
+// Added by waiwai@2001/02/05
+string getdam(object me, object obj)
+{
+        int level;
+        string *heavy_level_desc= ({ CYN"极轻"NOR, CYN"很轻"NOR, CYN"不重"NOR, WHT"不轻"NOR, 
+                                     RED"较重"NOR, HIW"很重"NOR, HIR"极重"NOR });
+
+        level = obj->query("force_factor");
+        if(obj->query_temp("apply/damage") > 0) level += obj->query_temp("apply/damage")/3; 
+            
+        level /= 70;
+        if( level >= sizeof(heavy_level_desc) ) level = sizeof(heavy_level_desc)-1;
+        return heavy_level_desc[((int)level)];
+}
+
+int look_living(object me, object obj)
+{
+	string str, ridemsg, pro;
+	mixed *inv;
+	mapping my_fam, fam;
+	mapping ofamily,skills;
+	string ogender,orace,*skills_name;
+	int oage,exp,i;
+	int equip, wearornot;
+
+	/***************************************************************************/
+	if(obj->query_temp("d_mana")>0) {
+		ofamily=obj->query_temp("family");
+		ogender=obj->query_temp("gender");
+		orace=obj->query_temp("race");
+		oage=obj->query_temp("age");
+	} else {
+		ofamily=obj->query("family");
+		ogender=obj->query("gender");
+		orace=obj->query("race");
+		oage=obj->query("age");
+
+	if(obj->query("always_young") ) { 
+		if(oage>obj->query("fake_age")) {
+		oage=obj->query("fake_age");
+		} else {
+		obj->set("fake_age", oage);
+		}
+	} else {
+	if(obj->query("daoxing") > 3456000){
+		obj->set("always_young", 1);
+		obj->set("fake_age", oage);
+		}     
+	}
+	}
+	/***************************************************************************/
+
+	exp=me->query("combat_exp");
+
+	// Added by waiwai@2001/02/05
+	if( me!=obj && obj->visible(me) && me->query("id") != "waiwai" ) {
+	if (exp>6000000) message("vision", GRN"你觉得有人在注视着你，但你并不确定是谁。\n"NOR, obj);
+	else if (exp>5000000) message("vision", 
+	GRN+me->name(1) + GRN"眯着眼睛瞥了瞥你，干咳了两声。\n"NOR, obj);
+	else if (exp>3800000) message("vision", 
+	GRN+me->name(1) + GRN"冷冷地打量着你，脸上没有一丝表情。\n"NOR, obj);
+	else if (exp>2500000) message("vision", 
+	GRN+me->name(1) + GRN"斜着眼睛瞟了你两眼，哼了一声。\n"NOR, obj);
+	else if (exp>1600000) message("vision", 
+	GRN+me->name(1) + GRN"正睁大眼睛注视着你，直看得你不好意思。\n"NOR, obj);
+	else if (exp>800000) message("vision", 
+	GRN+me->name(1) + GRN"看了你几眼，脸上的笑容很不自然。\n"NOR, obj);
+	else if (exp>400000) message("vision", 
+	GRN+me->name(1) + GRN"趁你不注意望了你一眼，又连忙把头低了下去。\n"NOR, obj);
+       else  message("vision", 
+	GRN+me->name() + GRN"战战兢兢地看了你一眼，就躲到一边去了。\n"NOR, obj);
+       } else 
+	if(me!=obj && obj->visible(me) &&  !me->query("env/invisibility") )
+	message("vision", 
+	HIY+me->name(1) + "慈祥地打量着你，顿时一道金光笼罩了你的全身，你觉得一切心思毫无遁行。\n"NOR, obj);
+
+	// 跟随信息的必要显示
+       if( obj->query("leader")) {
+	str = CYN+obj->query("name")+"("+obj->query("id")+")目前处于跟随[lead]"+
+	obj->query("leader")+"状态。\n\n"NOR+obj->long();
+	}
+	else
+	str = obj->long();
+
+	str = replace_string(str, "$n", me->name());
+	str = replace_string(str, "$N", obj->name());
+	str = replace_string(str, "$C", RANK_D->query_respect(obj));
+	str = replace_string(str, "$c", RANK_D->query_rude(obj));
+	str = replace_string(str, "$R", RANK_D->query_respect(me));
+	str = replace_string(str, "$r", RANK_D->query_rude(me));
+
+	pro = (obj==me) ? gender_self(ogender) : gender_pronoun(ogender);
+
+	/***************************************************************************/
+	// Added by waiwai@2002/12/07 
+	if( wizardp(obj) ) {
+	if( obj->query("id") == "waiwai" )
+	str+=sprintf("%s微低着头一脸的平静。你看不清%s的脸.却深深切切
+的可以感受到%s的一双明亮的眼睛，%s在低声呓语：\n"+GRN
+"\t   ╔════════════AF\n"+
+"\t   ║"YEL" 当你回来的时候         "GRN"║\n"+
+"\t   ║"YEL" 我已不在人间           "GRN"║\n"+
+"\t   ║"YEL" 坟上的青草不需修剪     "GRN"║\n"+
+"\t   ║"YEL" 也不必给我多烧纸钱     "GRN"║\n"+
+"\t   ║"YEL" 回首离合悲欢的人世     "GRN"║\n"+
+"\t   ║"YEL" 你是我唯一的牵挂与眷恋 "GRN"║\n"+
+"\t   ╚════════════╝\n"NOR,pro,pro,pro,pro);
+	else
+	str+=sprintf(HIY"%s全身散发着耀眼的金光，看来是万物之尊的神类。\n"NOR,pro);
+	} else
+	if(userp(obj) && obj->query("vip")) { // 十二生肖图谱(只限会员)
+	str += XYJTIME_D->check_sxt(obj)+ "\n";
+	}
+
+	if( obj->query("id") != "waiwai" ) {
+	if( obj->query("looking") ){
+	str += WHT+pro +NOR+ (string)obj->query("looking") + "\n";
+	} else {
+	string looking= per_status_msg((int)obj->query("age"),
+            (int)obj->query_per(), ogender);
+              if( strlen(looking)>1 && obj->query("per") < 100 )
+                    str += WHT+ pro +NOR+ looking;
+		}
+	}
+	/***************************************************************************/
+
+	if(obj->query_temp("d_mana")==0 || obj->query_temp("is_character")) {
+	// Added by waiwai@2003/04/20 驻颜之术效果
+        if( userp(obj) && obj->query("special_skill/youth") )
+             str += sprintf("%s看起来正值青春年少，意气风发。\n", pro);
+	else
+	if( wizardp(obj) ) str += sprintf("%s看起来正值青春年少，意气风发。\n", pro);
+	else {
+       if( orace=="人类" && intp(oage) )
+         if(oage<10) {
+        str += sprintf(GRN"%s看起来显然还不到十岁。\n"NOR, pro);
+	} else {
+        str += sprintf(GRN"%s看起来约%s多岁。\n"NOR, pro, chinese_number(oage / 10 * 10));
+	}
+	}
+	//加入刺青的效果
+	if( userp(obj) ) {
+	if( obj->query_temp("armor/cloth") && stringp( obj->query("tattoo_desc_cloth") ) )
+        str += replace_string(obj->query("tattoo_desc_cloth"), "%s", pro);
+
+	if( !obj->query_temp("armor/cloth") && stringp( obj->query("tattoo_desc") ) )
+        str += replace_string(obj->query("tattoo_desc"), "%s", pro);
+	}
+
+	//Added by waiwai@2001/05/01 wife or wife2 and husband
+	if( (string)me->query("gender")=="男性" ){
+		if((obj->parse_command_id_list())[0]==me->query("couple/id") )
+      		str += sprintf(HIM"%s是你的妻子。\n"NOR, pro);
+      		else
+	if((obj->parse_command_id_list())[0]==me->query("couple2/id") )
+      		str += sprintf(HIM"%s是你的小老婆。\n"NOR, pro);
+	} else {
+	if((obj->parse_command_id_list())[0]==me->query("couple/id"))
+        	str += sprintf(YEL"%s是你的丈夫。\n"NOR, pro);
+	}
+
+	//Added by waiwai@2001/05/01 结拜
+        if (obj->is_brother(me)) {
+                // 兄弟
+                if (obj->query("gender") == "女性") {
+                        if (obj->query("mud_age") > me->query("mud_age"))
+                                str += sprintf("%s是你的义姐。\n", pro);
+                        else
+                                str += sprintf("%s是你的结义妹子。\n", pro);
+                } else  {
+                        if (obj->query("mud_age") > me->query("mud_age"))
+                                str += sprintf("%s是你的结义兄长。\n", pro);
+                        else
+                                str += sprintf("%s是你的义弟。\n", pro);
+                }
+        }
+
+	if( obj!=me && mapp(fam = ofamily)
+		&& mapp(my_fam = me->query("family")) 
+		&& fam["family_name"] == my_fam["family_name"] ) {
+	if( fam["generation"]==my_fam["generation"] ) {
+        if( ogender == "男性" )
+          str += sprintf( pro + "是你的%s%s。\n",
+             my_fam["master_id"] == fam["master_id"] ? "": "同门",
+             my_fam["enter_time"] > fam["enter_time"] ? "师兄": "师弟");
+        else
+          str += sprintf( pro + "是你的%s%s。\n",
+             my_fam["master_id"] == fam["master_id"] ? "": "同门",
+             my_fam["enter_time"] > fam["enter_time"] ? "师姐": "师妹");
+	} else if( fam["generation"] < my_fam["generation"] ) {
+        if( member_array(my_fam["master_id"],
+            obj->parse_command_id_list())>-1  )
+          str += pro + "是你的师父。\n";
+        else if( my_fam["generation"] - fam["generation"] > 1 )
+          str += pro + "是你的同门长辈。\n";
+        else if( fam["enter_time"] < my_fam["enter_time"] )
+          str += pro + "是你的师伯。\n";
+        else
+          str += pro + "是你的师叔。\n";
+	} else {
+        if( fam["generation"] - my_fam["generation"] > 1 )
+          str += pro + "是你的同门晚辈。\n";
+        else if( fam["master_id"] == me->query("id") )
+          str += pro + "是你的弟子。\n";
+        else
+          str += pro + "是你的师侄。\n";
+	}
+	}
+
+	if ( (string)obj->query("race")=="人类" ) {
+	    if( obj->is_character() && !obj->is_corpse() && !obj->query("nolook_skills")){
+		skills=obj->query_skills();
+	if (!sizeof(skills))
+		str+=sprintf("%s看起来似乎不会任何武功。\n", pro);
+	else{
+		skills_name=sort_array( keys(skills), (: strcmp :) );
+		i=random(sizeof(skills_name));
+                if (SKILL_D(skills_name[i])->type()=="knowledge")
+            str+=sprintf("%s看起来似乎不会任何武功。\n", pro);
+	}
+		str +=sprintf("%s的出手似乎",pro);
+		str +=getdam(me,obj);
+		str += sprintf("。\n");
+		}
+	}
+   
+	ridemsg = ride_suffix(obj);
+	if (ridemsg)
+		str += pro + "正" + ridemsg + "\n";
+
+	wearornot = 0;
+	inv = all_inventory(obj);
+	for(equip=0; equip<sizeof(inv); equip++) {
+                if( inv[equip]->query("equipped") ) wearornot = 1;
+	}
+
+	// Added by waiwai@2000/11/03
+	if((wearornot == 0 ) && userp(obj) && !wizardp(obj) )
+		str += WHT+pro+WHT"全身上下竟然一丝不挂耶, 难道想裸奔？\n\n";
+
+	if( sizeof(inv) ) {
+		inv = map_array(inv, "inventory_look", this_object(), obj->is_corpse()? 0 : 1 );
+		inv -= ({ 0 });
+	if( sizeof(inv) )
+		str += sprintf( obj->is_corpse() ? "%s的遗物有：\n%s\n" : "%s身上带着：\n%s\n",
+		pro, implode(inv, "\n") );
+	}
+        
+	}
+
+	me->start_more(str);
+
+	if( obj!=me && living(obj)
+	&& random((int)obj->query("bellicosity")/10) > (int)me->query_per() ) {
+	write( HIR+obj->name()+HIR"突然转过头来白了你一眼。\n"NOR);
+	COMBAT_D->auto_fight(obj, me, "berserk");
+	return 1;
+	}
+	return 1;
+}
+
+string inventory_look(object obj, int flag)
+{
+	string str;
+	str = obj->short();
+
+       if( obj->query("keep_this")) str +=   HIR" 〆"NOR;
+
+	if( obj->query("equipped")  && !obj->query("armor_type"))
+		str = HIW "  Ψ" NOR + do_query(obj);
+	else if( obj->query("equipped") && obj->query("armor_type") )
+		str = HIC "  √" NOR + do_query(obj);
+	else if( !flag )
+		str = "    " + str;
+	else return 0;
+ 
+	return str;
+}
+
+string do_query(object obj)
+{
+	string str,units,keep;
+
+	units =obj->query("unit");
+	str = obj->short();
+
+	if( obj->query("keep_this")) str +=   HIR" 〆"NOR;
+
+       if (obj->query("armor_type"))
+        switch( obj->query("armor_type") ) {
+                case "cloth":
+                        str = "上穿一"+ units + str; // 上衣
+                        break;
+                case "armor":
+                        str = "身穿一"+ units + str; // 甲胄
+                        break;
+                case "skirts":
+                        str = "身套一"+ units + str; // 长裙(女)
+                        break;
+                case "boots":
+                        str = "脚穿一" + units + str; // 鞋类
+                        break;
+                case "pants":
+                        str = "腿穿一" + units + str; // 裤子
+                        break;
+                case "neck":
+                        str ="颈饰一"+ units + str; // 护颈
+                        break;
+                case "head":
+                        str ="头戴一"+ units + str; // 头盔
+                        break;
+                case "finger":
+                        str ="指戴一"+ units + str; // 戒指
+                        break;
+                case "shield":
+                        str ="左手持一"+ units + str; // 盾牌
+                        break;
+                case "surcoat":
+                        str ="身披一"+ units + str; // 披风
+                        break;
+                case "hands":
+                        str ="手戴一"+ units + str; // 手套
+                        break;
+                case "waist":
+                        str = "腰系一"+units+str; // 短裙或腰带
+                        break;
+                case "wrists":
+                        str = "腕带一"+units+str; // 护腕
+                        break;
+                case "flower":
+                        str = "胸饰一"+units+str; // 胸饰
+                        break;
+                case "armbands":
+                        str = "臂戴一"+units+str; // 护臂
+                        break;
+                case "shoulder":
+                        str = "肩戴一"+units+str; // 护肩
+                        break;
+                case "leggings":
+                        str = "膝戴一"+units+str; // 护膝
+                        break;
+                case "cape":
+                        str = "背护一"+units+str; // 背甲
+                        break;
+                case "others":
+                        str = "配饰着一"+units+str; // 可以装备但没有装备属性的(比如护身符类) 
+                        break;
+                default:
+                        str = "装备着一"+units+str; // 默认值
+	} else
+	if( obj->wield() )
+                if (obj->query("skill_type")=="throwing")
+                str ="身上带着"+str;
+                else
+                str ="右手握一" + units + str; // 武器
+	return str;
+}
+
+int look_room_item(object me, string arg)
+{
+	object env;
+	mapping item, exits;
+
+	if( !objectp(env = environment(me)) )
+		return notify_fail(CYN"这里只有灰蒙蒙地一片，什么也没有。\n"NOR);
+
+	if( mapp(item = env->query("item_desc")) && !undefinedp(item[arg]) ) {
+		if( stringp(item[arg]) )
+		write(item[arg]);
+	else if( functionp(item[arg]) )
+		write((string)(*item[arg])(me));
+        
+	return 1;
+	}
+
+	if( mapp(exits = env->query("exits")) && !undefinedp(exits[arg]) ) {
+		if( objectp(env = load_object(exits[arg])) ){
+		look_room(me, env);
+	if( wizardp(me) )
+		tell_room(env,YEL"你忽然觉得似乎有双眼睛在背后盯着你看。\n"NOR);
+	else
+		tell_room(env,WHT+me->name()+"探头探脑地向这边张望了几眼。\n"NOR);
+	} else {
+		return notify_fail(WHT"你什么也看不见。\n"NOR);
+	look_room(me, load_object(exits[arg]));
+	}
+	return 1;
+	}
+	return notify_fail(WHT"你要看什么？\n"NOR);
+}
+
+string status_color(int current, int max)
+{
+	int percent;
+ 
+	if( max>0 ) percent = current * 100 / max;
+	else percent = 100;
+	if( percent > 100 ) return HIC;
+	if( percent >= 90 ) return HIG;
+	if( percent >= 60 ) return HIY;
+	if( percent >= 30 ) return YEL;
+	if( percent >= 10 ) return HIR;
+	return RED;
+}
+
+int help (object me)
+{
+   write(@HELP
+
+指令格式: look [<物品>|<生物>|<方向>]
+ 
+这个指令让你查看你所在的环境、某件物品、生物、或是方向。
+
+相关人物标志信息含义如下： 
+[1;37mΨ[0m  玩家武士职业标志
+[1;34m∮[0m  玩家窃贼职业标志
+[1;35mЪ[0m  玩家工匠职业标志
+[1;32mㄖ[0m  玩家医者职业标志
+[1;36mζ[0m  玩家术士职业标志
+[1;33m㊣[0m  玩家商人职业标志
+
+[33m㊣[0m  NPC地域性商人标志
+[1;33mξ[0m  NPC可收货商人标志
+[1;32mτ[0m  NPC可跟随标志
+[1;32m@[0m   NPC可被招募标志
+[1;33mω[0m  NPC可跟随异地驻留标志
+[37m╬[0m  NPC门派属性标志
+
+相关指令：lookset，keep
+
+HELP
+);
+   return 1;
+}

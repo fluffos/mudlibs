@@ -1,0 +1,187 @@
+// Update by waiwai@2002/12/05
+
+#include <ansi.h>
+string query_inquiry(object ob);
+
+inherit F_CLEAN_UP;
+
+string *msg_dunno = ({
+	"$n摇摇头，说道：没听说过。\n",
+	"$n瞪大眼睛望着$N:$P在说什么呀?\n",
+	"$n耸了耸肩，很抱歉地说：我不知道。\n",
+	"$n说道：嗯．．．这我可不清楚，你最好问问别人吧。\n",
+	"$n想了一会儿，说道：对不起，你问的事我实在没有印象。\n"
+});
+
+#define DEBUG "waiwai"
+#ifdef DEBUG
+
+void debug(string x)
+{
+    object monitor;
+    if (!stringp(x) || !stringp(DEBUG))     return;
+    monitor=find_player(DEBUG);
+    if(monitor && monitor->query("env/say"))     tell_object(monitor,x+"\n");
+}
+
+#else
+#define debug(x)
+#endif
+
+int main(object me, string arg)
+{
+	string dest, topic, msg;
+	object ob;
+	mapping inquiry;
+        object env;
+        mixed info;
+
+	seteuid(getuid());
+	if (! arg)
+		return notify_fail("指令格式：ask <某人> about <某事>  或者 ask <某人> <某事>
+注：可以用ask <某人> about all 来知道某个NPC究竟知道什么！\n");
+
+        if (sscanf(arg, "%s about %s", dest, topic) != 2 &&
+            sscanf(arg, "%s %s", dest, topic) != 2)
+		return notify_fail("指令格式：ask <某人> about <某事>  或者 ask <某人> <某事>
+注：可以用ask <某人> about all 来知道某个NPC究竟知道什么！\n");
+
+        env = environment(me);
+
+	if( !objectp(ob = present(dest, env)) )
+		return notify_fail("这里没有这个人。\n");
+
+	// Added By waiwai@2001/04/01
+	if (me->is_busy() || me->query_temp("doing_xiudao") 
+		|| me->query_temp("pending/exercising") 
+		|| me->query_temp("pending/meditating"))
+           return notify_fail("你现在正忙着呢。\n");
+
+	if( !ob->is_character() ) {
+		message_vision("$N对着$n自言自语．．．\n", me, ob);
+		return 1;
+	}
+
+        if (ob == me) {
+                message_vision("$N自己自言自语。\n", me);
+                return 1;
+        }
+
+        if (info = env->query("no_say")) {
+                if (stringp(info)) {
+                        write(info);
+                        return 1;
+                }
+
+                write("这个地方不能讲话。\n");
+                return 1;
+        }
+
+	// Added By waiwai@2001/04/01
+	if( !wizardp(me) && userp(me) ){
+	if( uptime()-me->query_temp("last_ask_time")<2)
+            return notify_fail(WHT"你正忙着。\n"NOR);
+
+        me->set_temp("last_ask_time",uptime());
+	}
+
+	if( !ob->query("can_speak") ) {
+		message_vision("$N向$n打听有关『" + topic 
+			+ "』的消息，但是$p显然听不懂人话。\n", me, ob);
+		return 1;
+	}
+
+	if( !INQUIRY_D->parse_inquiry(me, ob, topic) )
+		message_vision("$N向$n打听有关『" + topic + "』的消息。\n", me, ob);
+
+	if( !living(ob) ) {
+		message_vision("但是很显然的，$n现在的状况没有办法给$N任何答覆。\n",
+			me, ob);
+		return 1;
+	}
+
+	if ( msg = QUEST->quest_ask(me, ob, topic) ) {
+		if( stringp(msg) ) {
+			message_vision( CYN "$N说道：" + msg + "\n" NOR, ob);
+			return 1;
+		}
+	}
+	if( userp(ob) ) {
+	debug(sprintf( YEL "ㄖ私聊精灵(ASK)ㄖ%s问%s说道：%s" NOR,  log_id(me),log_id(ob), topic));
+	return 1;
+	}
+
+	if( !userp(ob)) {
+	if(topic=="name") {
+	message_vision( CYN "$N说道：我的名字就是$N," + RANK_D->query_respect(me)+ "有什么事吗？\n" NOR, ob);
+	return 1;
+	}
+/*
+	if(topic=="news") {
+	string str;
+	str=read_file("/d/wiz/news");
+	message_vision( CYN "$N对$n点了点头说到,最近听有人说过：\n\n"WHT+str+"" NOR, ob, me);
+	return 1;
+	}
+*/
+	if(topic=="all") {
+	message_vision( CYN "$N神秘地对$n说道:"+query_inquiry(ob)+"\n" NOR, ob,me);
+	return 1;
+	}
+
+	if(topic=="here") {
+	message_vision( CYN "$N对$n悄声说道:这里就是"HIW+MISC_D->find_place(environment(me))+
+NOR CYN",$n没听说过吗？\n" NOR, ob, me);
+	return 1;
+	}
+
+
+	if( msg = ob->query("inquiry/" + topic) ) {
+		if( stringp(msg) ) {
+			message_vision( CYN "$N说道：" + msg + "\n" NOR, ob);
+			return 1;
+		}
+	} else
+		message_vision(msg_dunno[random(sizeof(msg_dunno))], me, ob);
+	}
+/*
+	if (playerp(ob) || ob->is_chatter()) {
+                ob->set_temp("ask_you", me->query("id"));
+                return 1;
+        }
+*/
+	return 1;
+}
+
+string query_inquiry(object ob)
+{
+	object me;
+       int i=0;
+       mapping inq;
+       string str="", *indexs;
+        
+       if(mapp(inq=ob->query("inquiry"))) {
+                indexs=keys(inq);
+                for(i=0;i<sizeof(indexs);i++) {
+                                str=indexs[i]+" "+str;
+                                }
+                str="我所知道的事情不多，大约是这些吧：\n\n"+HIB+str+" name here news\n"NOR;
+                return str;
+                } 
+        return "很抱歉，我只知道关于 news，name，here 的事！！！";
+}
+
+int help(object me)
+{
+   write( @HELP
+
+指令格式: ask <某人> about <某事>  或者  ask <某人> <某事>
+
+这个指令在解谜时很重要, 通常必须藉由此一指令才能
+获得进一步的资讯。如果你不知道一个NPC都知道和能
+给予你回答些什么，可以ask xxx about all
+
+HELP
+   );
+   return 1;
+}

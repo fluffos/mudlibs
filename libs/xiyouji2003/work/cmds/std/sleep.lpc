@@ -1,0 +1,498 @@
+// CMDS STD sleep.c
+// Created by waiwai@2001/03/09 重新建立
+// Last modified by waiwai@2001/07/29
+// 现在设置的sleep好玩了.grin.
+
+#include <command.h>
+inherit F_DBASE;
+
+int main(object me, string arg)
+{
+	object obj, old_target, weapon,man,woman;
+	int i,qi,shen;
+	object *inv, *ob, sexid, sexid2;	
+	object where = environment(me);
+	mapping cnd;
+	string *kc,msg,msg1,msg2;
+
+	object ridee;
+	ridee=me->ride();
+
+	seteuid(getuid());
+//	if( me!=this_player(1) ) return 0;
+	if( !wizardp(me))
+	if( !where->query("sleep_room") && !me->query_temp("force_sleep") )
+		return notify_fail(WHT"这里不是睡觉的地方。\n"NOR);
+
+	if( where->query("owner") && !me->query("owner") )
+		return notify_fail(WHT"你不是这里的主人，不能在这里休息。\n"NOR);
+
+	if (me->is_busy())
+		return notify_fail(WHT"你正忙着呢！\n"NOR);
+
+       if( me->query_temp("ridee") )
+        	return notify_fail(WHT"你还是先从坐骑上下来吧。\n"NOR);
+
+	if( me->is_fighting() )
+		return notify_fail(WHT"战斗中想睡觉？你想找死呀！\n"NOR);
+        
+	if ( !wizardp(me) && (time()-me->query("last_sleep"))<30)
+		return notify_fail(WHT"你刚睡过一觉, 先活动活动吧。 \n"NOR);
+
+	//Added by waiwai@2001/07/29
+	qi = (int) me->query("kee");
+	shen   = (int) me->query("sen");
+	if (qi <= 0 || shen <= 0)
+		return notify_fail(HIR"你现在接近昏迷，睡不着觉。\n"NOR);
+	cnd = me->query_condition();
+	if (cnd && sizeof(cnd)) {
+		kc   = keys(cnd);
+		for (i = 0; i < sizeof(kc); i++) {
+			if (CONDITION_D(kc[i])->min_qi_needed(me) > qi ||
+			    CONDITION_D(kc[i])->min_shen_needed(me) > shen) {
+				message("vision", WHT+me->name() + "看样子是想睡觉，"
+					"可是辗转反侧，就是睡不着。\n"NOR,
+					environment(me), me);
+				tell_object(me, WHT"你想合上眼睛好好睡上一觉，可是"HIB +
+					    to_chinese(kc[i]) +NOR WHT "不断折磨着你，"
+					    "让你辗转难眠。\n"NOR);
+				return 1;
+			}
+		}
+	}
+
+       if((!arg)||arg==(string)me->query("id")) {
+	if (where->query("if_bed"))	{
+		me->set("last_sleep",time());
+		me->set_temp("sleeped",1);//Added by waiwai@2001/07/29
+		if( userp(me) && (me->query("env/invisibility") != 0) ) {
+		write(WHT"你往被中一钻，开始睡觉。不一会儿，你就进入了梦乡。\n"NOR);
+		me->set_temp("block_msg/all",1);
+		} else {
+		write(WHT"你往被中一钻，开始睡觉。不一会儿，你就进入了梦乡。\n"NOR);
+		me->set_temp("block_msg/all",1);
+		message_vision(HIY "$N往被中一钻，不一会便鼾声大作，进入了梦乡。\n" NOR,me);
+		}
+	} else { 
+		me->set("last_sleep",time());
+		me->set_temp("sleeped",1);//Added by waiwai@2001/07/29
+		if( userp(me) && (me->query("env/invisibility") != 0) )  {
+		write(WHT"你就地一躺，开始睡觉。不一会儿，你就进入了梦乡。\n"NOR);
+		me->set_temp("block_msg/all",1);
+		} else {
+		write(WHT"你就地一躺，开始睡觉。不一会儿，你就进入了梦乡。\n"NOR);
+		me->set_temp("block_msg/all",1);
+		message_vision(HIY "$N就地一躺，不一会便鼾声大作，进入了梦乡。\n" NOR,me);
+		}
+	}
+
+	if (me->query_temp("ridee"))
+		me->query_temp("ridee")->set_temp("rider",0);
+	me->set_temp("ridee",0);
+	me->add_temp("apply/dodge",-me->query_temp("ride/dodge"));
+	me->set_temp("ride/dodge",0);
+	me->disable_player("<睡梦中>");
+
+	if( !wizardp(me) ) {
+	if( me->query("can_sleep") )
+	call_out("wakeup1",random(90 - me->query("con")) + 10, me, where);
+	else
+	call_out("wakeup1",random(45 - me->query("con")) + 10, me, where);
+	} else { 
+	if( me->query("can_sleep") )
+	call_out("wakeup1",3, me, where);
+	else
+	call_out("wakeup1",1, me, where);
+	}
+	return 1;
+       }
+
+	if(!objectp(obj = present(arg, where)))
+		return notify_fail(WHT"你想跟谁一起睡？\n"NOR);
+
+	if( !wizardp(me) && !wizardp(obj) ) {
+	//Added By waiwai@2001/05/28 应该尊重佛门礼仪
+       if ((string)obj->query("bonze/class") =="bonze" ) 
+		return notify_fail(HIR"出家人该清心寡欲才对！！！\n"NOR);
+
+	if( !userp(obj) )
+		return notify_fail(WHT"人家不愿理你呢！\n"NOR);
+
+       if ((string)me->query("bonze/class") =="bonze" ) 
+		return notify_fail(HIR"出家人清心寡欲,不能和你睡觉！！！\n"NOR);
+
+	if(me->query("gender")==obj->query("gender"))
+		return notify_fail(HIR"对方跟你可是同性呢,要搞同性恋？ \n"NOR);
+
+	if( !obj->is_character() )
+		return notify_fail(WHT"你脑袋出毛病了？\n"NOR);
+
+	if( !living(obj) )
+		return notify_fail(WHT+obj->name() + "不在这里，没法跟你睡了。\n"NOR); 
+
+        if(!me->query("married")) { 
+        if(me->query("couple/id")!=arg && me->query("couple2/id")!=arg )
+                 return notify_fail(WHT"对方不是你的伴侣,你这样做是违法的。\n"NOR);
+             }
+       }
+
+       if(!wizardp(me) && obj->query_temp("ridee") )
+		return notify_fail(WHT+obj->name()+"正在坐骑上，没法跟你睡了。\n"NOR);
+
+	if(!wizardp(me) && !where->query("if_bed"))
+		return notify_fail(WHT"就在这里？不太好吧。\n"NOR);
+
+	if(!wizardp(me) && ((int)me->query("kee") * 100 / (int)me->query("max_kee") < 50) )
+		return notify_fail(WHT"你现在是心有余而力不足。\n"NOR);
+
+	if( userp(obj) ) {
+	if( (int)obj->query("kee") * 100 / (int)obj->query("max_kee") < 50 )
+		return notify_fail(WHT+obj->name()+"现在是心有余而力不足。\n"NOR);
+
+          if( wizardp(me) && obj->query("id") == "waiwai" )
+		return notify_fail(WHT+obj->name()+"现在懒得理你。。。。。\n"NOR);
+	}
+
+        ob = all_inventory(environment(me));
+        for(i=0; i<sizeof(ob); i++)
+                if( ob[i]->is_character() && ob[i] != me && !wizardp(me)
+                        && ob[i]!= obj && !wizardp(ob[i]) )
+                        return notify_fail(HIM"这儿还有别人呢，多不好意思呀！\n"NOR);
+
+	if( !wizardp(me) && userp(obj) && obj->query_temp("is_bearing") )
+                        return notify_fail(HIM"对方要生了，你还急啊？\n"NOR);
+
+	if(!wizardp(me) && userp(obj) && (object)obj->query_temp("pending/sleep")!=me ) {
+		message_vision(RED "\n$N含情脉脉地对$n说：亲爱的，我想要．．．\n\n" NOR, me, obj);
+		if( objectp(old_target = me->query_temp("pending/sleep")) &&
+			!((string)old_target->query("id")==(string)obj->query("id")))
+			tell_object(old_target, YEL + me->name() + "改变主意不想跟你睡了。\n" NOR);
+		me->set_temp("pending/sleep", obj);
+		tell_object(obj, YEL "看来" + me->name() +
+		"("+(string)me->query("id")+")"+ 
+		"很想跟你．．．如果你愿意，请也下一次 sleep 指令。\n" NOR);
+		write(YEL "对方正在考虑中．．．\n" NOR);
+		return 1;
+	}
+		message_vision(RED "\n$N冲着$n会心地一笑，点了点头。\n" NOR, me, obj);
+
+	inv = all_inventory(me);
+                for(i=0; i<sizeof(inv); i++)
+                                REMOVE_CMD->do_remove(me, inv[i]);
+	if (me->query_temp("weapon")) {
+		weapon=me->query_temp("weapon");
+                                weapon->unequip();}
+
+	inv = all_inventory(obj);
+                for(i=0; i<sizeof(inv); i++)
+                                REMOVE_CMD->do_remove(obj, inv[i]);
+	if (obj->query_temp("weapon")) {
+		weapon=obj->query_temp("weapon");
+                                weapon->unequip();}
+	
+
+	if(me->query("gender")=="男性"){
+		tell_object(me, HIY "\n你抱着"+obj->query("name")+
+		"温软的身体，不由得心醉神迷热血沸腾，一时不能自己．．．\n" NOR);
+		tell_object(obj, HIY "\n你躺在"+me->query("name")+
+		"的怀里，心神一荡，意乱情迷，难以自己．．．\n" NOR);
+	} else {
+		tell_object(obj, HIY "\n你靠在"+me->query("name")+
+		"热烫的胸前，心神一荡意乱情迷，难以自己．．．\n" NOR);
+		tell_object(me, HIY "\n你躺在"+obj->query("name")+
+		"的怀里，不由得心醉神迷热血沸腾，一时不能自己．．．\n" NOR);
+	}
+	message_vision( 
+        WHT"\n$N轻轻的搂着$n，双手从$n的脸颊慢慢的抚摸下去直至胸膛，只\n"
+              "见$p不由的颤动了一下，一时间意乱情迷，双手紧紧的抱住了$N，\n"
+              "把脸深深的埋在$N的怀中，磨擦着$P的胸口，霎时间满堂春意，\n"
+              "锦绣亦添光华，两人渐渐的进入了忘我的状态。\n\n"NOR,me,obj);
+		me->set("last_sleep",time());
+		obj->set("last_sleep",time());
+		me->set_temp("block_msg/all",1);
+		me->set_temp("sleeped",1);//Addded By waiwai@2001/07/29
+		obj->set_temp("block_msg/all",1);
+		obj->set_temp("sleeped",1);//Addded By waiwai@2001/07/29
+		message_vision(HIY "$N和$n钻入被中，搂在一起睡着了．．．\n\n\n" NOR,me,obj);
+
+	if (me->query_temp("ridee"))
+		me->query_temp("ridee")->set_temp("rider",0);
+	me->set_temp("ridee",0);
+	me->add_temp("apply/dodge",-me->query_temp("ride/dodge"));
+	me->set_temp("ride/dodge",0);
+	if (obj->query_temp("ridee"))
+		obj->query_temp("ridee")->set_temp("rider",0);
+	obj->set_temp("ridee",0);
+	obj->add_temp("apply/dodge",-me->query_temp("ride/dodge"));
+	obj->set_temp("ride/dodge",0);
+	me->disable_player("<做爱中>");
+	obj->disable_player("<做爱中>");
+
+	//Added By waiwai@2001/07/29 以下综合增加统计
+	sexid=me->query("couple/id");
+	sexid2=obj->query("couple/id");
+	if( userp(me) && userp(obj) ) {
+
+	if( me->query("sex_player")!=log_id(obj))
+	me->add("sex_player",log_id(obj));
+
+	if( obj->query("sex_player")!=log_id(me))
+	obj->add("sex_player",log_id(me));
+
+//	if( !me->query("sex_player") && obj->query("id") == sexid ) {
+
+	if( obj->query("id") == sexid ) {
+       me->add("sex/times", 1);
+	me->set("sex/first", obj->name(1));
+	me->set("sex/firstid", obj->query("id"));
+	} else {
+       me->add("sex/times2", 1);
+	me->set("sex/first", obj->name(1));
+	me->set("sex/firstid", obj->query("id"));
+	}
+	
+//	if( !obj->query("sex_player") && me->query("id") == sexid2 ) {
+
+	if( me->query("id") == sexid2 ) {
+       obj->add("sex/times", 1);
+	obj->set("sex/first", me->name(1));
+	obj->set("sex/firstid", me->query("id"));
+	} else {
+       obj->add("sex/times2", 1);
+	obj->set("sex/first", me->name(1));
+	obj->set("sex/firstid", me->query("id"));
+	}
+
+//       me->add("sex/" + obj->name(1), 1);
+//       obj->add("sex/" + me->name(1), 1);
+
+	if( obj->query("id") == sexid )  {
+       me->add("sex/times", 1);
+	} else {
+       me->add("sex/times2", 1);
+       me->set("sex/seced", obj->name(1));
+       me->set("sex/secedid", obj->query("id"));
+	}
+
+	if( me->query("id") == sexid2 )  {
+       obj->add("sex/times", 1);
+	} else {
+       obj->add("sex/times2", 1);
+       obj->set("sex/seced", me->name(1));
+       obj->set("sex/secedid", me->query("id"));
+	}
+	}
+	//Added By waiwai@2001/07/29
+	if( !wizardp(me) ) {
+	call_out("wakeup2",random(45 - obj->query("con")) + 10, me, obj,where);
+	call_out("wakeup2",random(45 - obj->query("con")) + 10, obj, me,where);
+	} else {
+	call_out("wakeup2",1, me, obj,where);
+	call_out("wakeup2",random(45 - obj->query("con")) + 10, obj, me,where);
+	}        
+	return 1;
+}
+
+void wakeup1(object me,object where)
+{
+       if(!me) return;
+
+	me->set("sen",(int)me->query("eff_sen"));
+            if ((int)me->query("mana") < (int)me->query("max_mana"))
+            me->set("mana", (int)me->query("max_mana"));
+
+	me->enable_player();
+
+	while( environment(me)->is_character() )
+		me->move(environment(environment(me)));
+
+  	if(interactive(me)){
+	    object pillow=present("huangliang zhen",me);
+	    if((pillow && pillow->goto_dream(me)) || random(1000)==1) {
+		if(pillow) pillow->pillow_destruct();
+		me->set("dream_place",(string)environment(me));
+		me->set_temp("block_msg/all", 0);
+		me->delete_temp("sleeped");//Added By waiwai@2001/07/29
+		write("\n\n");
+		me->move("/d/ourhome/honglou/kat");
+	       return;
+	    }
+	}
+
+	//Added By waiwai@2001/07/29
+	if( userp(me) && (me->query("env/invisibility") != 0) ) {
+	me->set_temp("block_msg/all", 0);
+	me->delete_temp("sleeped");
+	write(WHT"你一觉醒来，只觉精力充沛。该活动一下了。\n"NOR);
+	} else {
+	message_vision(HIY "$N一觉醒来，精力充沛地活动了一下筋骨。\n" NOR,me);
+	me->set_temp("block_msg/all", 0);
+	me->delete_temp("sleeped");
+	write(WHT"你一觉醒来，只觉精力充沛。该活动一下了。\n"NOR);
+	}
+}
+
+int wakeup2(object me,object slept,object where)
+{
+	int kee_cost;
+       object obj, who;
+
+	kee_cost=50+5*((int)me->query("str")-(int)me->query("con"));
+	if(kee_cost>(int)me->query("max_kee")/2) 	
+		kee_cost=(int)me->query("max_kee")/2+1;	
+
+        	me->set("sen",(int)me->query("eff_sen"));
+		if ((int)me->query("mana") < (int)me->query("max_mana"))
+		me->set("mana", (int)me->query("max_mana"));
+		me->add("max_atman",1);
+		me->add("kee", -kee_cost);	
+
+	me->enable_player();
+ 
+	while( environment(me)->is_character() )
+		me->move(environment(environment(me)));
+
+	//这个设置可能已经不是很必须，因为改变了枕头的性质
+	if(!slept->query_temp("is_bearing") && interactive(me)){
+	    object pillow=present("huangliang zhen",me);
+	    if((pillow && pillow->goto_dream(me)) || random(1000)==1) {
+		if(pillow) pillow->pillow_destruct();
+		me->set("dream_place",(string)environment(me));
+		me->set_temp("block_msg/all", 0);
+		me->delete_temp("sleeped");//Added By waiwai@2001/07/29
+		write("\n\n");
+		me->move("/d/ourhome/honglou/kat");
+                return 0;
+	    }
+	}
+	if(me->query("gender")=="男性"){
+		message_vision(HIY "$N醒了过来，似乎还沉浸在幸福之中。\n" NOR,me);
+		me->set_temp("block_msg/all", 0);
+		me->add("sex/times", -1);
+	       me->delete_temp("sleeped");//Added By waiwai@2001/07/29
+		write(WHT"你醒了过来，似乎还沉浸在幸福之中。\n\n"NOR);
+              return 1;
+		} else {
+		message_vision(HIY "$N醒了过来，脸上还挂着羞涩而甜蜜的笑容。\n" NOR,me);
+		me->set_temp("block_msg/all", 0);
+		me->add("sex/times", -1);
+	       me->delete_temp("sleeped");//Added By waiwai@2001/07/29
+              write(WHT"你醒了过来，脸上还挂着羞涩而甜蜜的笑容。\n\n"NOR);
+
+		obj=slept;
+			
+              if(me->query("sex/times")<41 || me->query("child")==3) return 1;
+
+              if (obj!=slept ){
+	       if (!obj || !userp(obj) || !find_player(obj->query("id"))) {
+		message_vision(HIY "\n$N似乎觉得腹中一阵颤痛，旋即咬咬牙，弯着腰站了起来。\n"NOR, me);
+		write(WHT"\n丈夫都不在，怎么也不能把孩子生下来，惨了耶．．．\n"NOR);
+		} else {
+		message_vision(HIY "\n$N似乎觉得腹中一阵颤痛，旋即羞红着脸，咬咬牙站了起来。\n"NOR, me);
+		write(HIG"\n怎么会让小东西给撞上了？．．．\n\n"NOR);
+                   tell_object(obj, HIW+log_id(me)+"告诉你：老公,这下是真的,我真有了耶！\n"NOR);
+		}
+		me->set("sen", me->query("sen")/2);
+		me->set("kee", me->query("kee")/2);
+		return 2;
+		} else {
+              if( me->query("sex/times")>30 && me->query("sex/times")<40 && me->query("child") <4) {
+		message_vision(HIY "\n$N忽觉腹中一阵颤动，不过马上又平静下来。\n\n"NOR,me);
+                  tell_object(obj, HIG+log_id(me)+"告诉你：老公,我好象有了耶！\n"NOR);
+		return 1;
+		} else 
+              if( me->query("sex/times")>=40 && me->query("child") <4 ) {
+		me->set("sex/times", 1);
+		me->set_temp("is_bearing",1);
+		me->start(100);
+		obj->start(100);
+		message_vision(HIY "\n$N忽觉腹中一阵颤动，赶紧拉住$n的手，柔声说道：要生了! \n\n" NOR, me,obj);
+                   tell_object(obj, HIG+log_id(me)+"告诉你：老公,我有点怕耶,别离开我啊！\n"NOR);
+		call_out("birth1",15,me,obj);
+		return 3;
+		}
+              }
+	 }
+
+}
+
+int birth1(object me,object obj)
+{
+	message_vision(HIY "\n$N已是大汗淋漓，一直都在呼天抢地，双手紧紧扣住$n的手不放。\n"+
+	 "\n婴儿已经探出了头．．．\n"NOR,me,obj);
+	call_out("birth2",15,me,obj);
+	return 1;
+}
+
+void birth2(object me,object obj)
+{
+       object baby;
+	int number;
+	message_vision(HIY "\n「哇」．．．婴儿出世了！\n"+
+"\n$N面色苍白，斜倚在床头，看看孩子满意地露出一丝微笑。\n"NOR, me);
+	me->start_busy(1);
+	obj->start_busy(1);
+	me->set("sen",0);
+	me->set("kee",0);
+	me->set("gin",0);
+       baby=new("/d/changan/playerhomes/npc/baby");
+	baby->set("long", baby->query("long")+"这是"+obj->query("name")+"和"+me->query("name")+"的孩子。\n");
+	if (random(100)<50){
+	baby->set("gender","男性");
+	baby->set("dad",log_id(obj));
+	baby->set("mom",log_id(me));
+
+	baby->set_name("小"+obj->query("name"),({"xiao "+obj->query("id"),"baby"}));
+         message("system",HIR"〖千喜天下〗"+obj->query("name")+"("+obj->query("id")+")和"+me->query("name")+
+"("+me->query("id")+")在"+MISC_D->find_place(environment(me))+
+"喜得贵子"HIW+baby->query("name")+"(xiao "+obj->query("id")+") \n"NOR,users());
+	} else {	
+	baby->set("gender","女性");
+	baby->set("dad",log_id(obj));
+	baby->set("mom",log_id(me));
+	baby->set_name("小"+me->query("name"),({"xiao "+me->query("id"),"baby"}));
+         message("system",HIR"〖千喜天下〗"+obj->query("name")+"("+obj->query("id")+")和"+me->query("name")+
+"("+me->query("id")+")在"+MISC_D->find_place(environment(me))+
+"喜得千金"HIW+baby->query("name")+"(xiao "+me->query("id")+") \n"NOR,users());
+	}
+       if(me->query("sex/times")>=40) me->set("sex/times",1);
+
+       me->add("child",1);
+       obj->add("child",1);
+	baby->set("parents",({me->query("id"),obj->query("id")}));
+	number=me->query("child");
+	me->set("child_"+number+"/gender",baby->query("gender"));
+	me->set("child_"+number+"/dad",baby->query("dad"));
+	me->set("child_"+number+"/mom",baby->query("mom"));
+
+	me->set("child_"+number+"/long",baby->query("long"));
+	me->set("child_"+number+"/name",baby->query("name"));
+	me->set("child_"+number+"/id",({baby->query("id"),"baby"}));
+	me->set("child_"+number+"/parents",baby->query("parents"));
+	number=obj->query("child");
+	obj->set("child_"+number+"/gender",baby->query("gender"));
+	obj->set("child_"+number+"/dad",baby->query("dad"));
+	obj->set("child_"+number+"/mom",baby->query("mom"));
+	obj->set("child_"+number+"/long",baby->query("long"));
+	obj->set("child_"+number+"/name",baby->query("name"));
+	obj->set("child_"+number+"/id",({baby->query("id"),"baby"}));
+	obj->set("child_"+number+"/parents",baby->query("parents"));
+	me->delete_temp("is_bearing");
+	me->save();
+	obj->save();
+       if(!baby->move(environment(me)))
+	baby->move(environment(environment(me)));
+}
+	
+int help(object me)
+{
+  write(@HELP
+
+指令格式 : sleep <人物>
+ 
+顾名思义，这个指令是用来睡觉的。
+
+HELP
+    );
+    return 1;
+}

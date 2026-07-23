@@ -1,0 +1,332 @@
+// Update by waiwai@2003/04/25
+
+#include <origin.h>
+#include <user.h>
+#include <command.h>
+#include <ansi.h>
+
+inherit CHARACTER;
+inherit F_AUTOLOAD;
+inherit F_SAVE;
+inherit F_BACKUP;
+inherit F_ENCODING;
+
+nosave int user_say = 0;                // 一定时间以内玩家做的say-action
+nosave int user_command = 0;            // 一定时间以内玩家发送的命令
+nosave int attach_flag = 0;             // 是否正在和系统联络
+
+nosave int user_cracked = 0;    
+nosave int net_dead;           
+nosave int last_age_set = 0;  
+int     time_to_leave = 0;
+int	is_stay_in_room()	{ return 1; }
+int     query_time_to_leave()   { return time_to_leave; }
+int is_player()		{ return clonep(); }
+int is_net_dead()           { return net_dead || ! interactive(this_object()); }
+varargs string calc_sec_id(int raw);
+
+#define MAX_COMMAND_ONE_SECTION         40
+#define MAX_SAY_ONE_SECTION             4
+#define BAN_SAY_PERIOD                  60
+
+int is_user() { return 1; }
+void create()
+{
+	::create();
+	set_name("使用者物件", ({ "user object", "user", "object" }) );
+}
+
+void terminal_type(string term_type)
+{
+	set_temp("terminal_type", term_type);
+	message("system", "终端机型态设定为 " + term_type + "。\n", this_object());
+}
+
+void reset()
+{
+	if( (int)query("potential") - (int)query("learned_points") < 100 )
+		add("potential", 1);
+	if( (int)query("thief") > 0 )
+		add("thief", -1 );
+}
+
+// This is used by F_SAVE to determine the filename to save our data.
+string query_save_file()
+{
+	string id;
+
+	id = query("id", 1);
+	if( !id ) id = geteuid();
+	if( !id ) id = getuid();
+	if( !stringp(id) ) return 0;
+	return sprintf(DATA_DIR "user/%c/%s", id[0], id);
+}
+
+int save(int raw)
+{
+	int res;
+
+	if(!raw) save_autoload();
+	res = ::save();
+	if(!raw) clean_up_autoload();		// To save memory
+	return res;
+}
+
+int backup()
+{
+	int res;
+
+	save_autoload();
+	res = ::backup();
+	clean_up_autoload();		// To save memory
+	return res;
+}
+
+void update_age()
+{
+        int age, newtime;
+	object env;
+
+	// Update the time we spend on mudding, using method from TMI-2 mudlib.
+	if( !last_age_set ) last_age_set = time();
+	
+	newtime=time() - last_age_set;
+	last_age_set = time();
+
+	if(newtime<=0 || newtime>3600) { // something wrong with system
+	                                // clock must happened.
+	    newtime=0;
+	}
+	
+	env=environment(this_object());
+	// won't getting older in some places.
+	if(!env || !env->query("no_upgrade_age")) {
+	    add("mud_age", newtime);
+	    delete_temp("no_heal_up/no_upgrade_age");
+	} else { // no getting older, no heal up.
+	    set_temp("no_heal_up/no_upgrade_age",1);
+	}
+
+	age=14 + (int)query("age_modify")/86400 + 
+		(int)query("mud_age")/ 86400 +
+		(int)query_temp("age_modify")/86400; // xlb && mon, 6/13/99
+	if(age<1) age=1;
+	set("age", age);
+}
+
+void setup()
+{
+	mapping	fabao_map;
+	string  *fabao_list, *id_list, *t_list;
+	int		i;
+	object	newob;
+	string  fabao_id;
+
+	// We want set age first before new player got initialized with
+	// random age.
+	update_age();
+
+	::setup();
+	restore_autoload();
+        if (query("doing"))
+        CLOSE_D->continue_doing(this_object());
+
+    // here We restore the self-made fabao
+	fabao_map = query("fabao");
+    if( !mapp(fabao_map) )
+		return;
+
+	fabao_list = keys(fabao_map);
+	for(i=0; i<sizeof(fabao_list); i++)  {
+        newob = new("/obj/fabao");
+        if( newob )   {
+            newob->set("owner_id", query("id"));
+            newob->set("series_no", fabao_map[fabao_list[i]]);
+            if( !newob->restore() )   {
+				tell_object(this_object(), "不能 restore fabao. \n");
+				destruct(newob);
+				continue;
+			}
+			fabao_id = (string)newob->query("id");
+			if(!fabao_id) { // mon 9/5/98
+			    destruct(newob);
+			    continue;
+			}
+			fabao_id = replace_string(fabao_id, " ", "_");
+			newob->set("id", fabao_id);
+			seteuid(fabao_id);
+			export_uid(newob);
+			seteuid(getuid());
+
+			id_list = ({ fabao_id });
+			t_list = explode(fabao_id, "_");
+			if( sizeof(t_list) > 1)   {
+				id_list += t_list;
+			}
+			newob->set_name(newob->query("name"), id_list);
+			if( stringp(newob->query("default_file")) )
+				newob->set_default_object( newob->query("default_file") );
+
+			newob->save();
+            newob->move(this_object());
+        }
+    }
+}
+
+//Modified By waiwai@2001/07/07
+void user_dump(int type)
+{
+	object me, where;
+	me = this_object();
+	where = environment(me);
+
+	switch(type) {
+
+	case DUMP_NET_DEAD:
+	if( !wizardp(me) && environment() ) {
+			tell_room(environment(), query("name") + "断线超过 " +
+			          NET_DEAD_TIMEOUT / 60 + " 分钟，自动退出了西游记的世界。\n");
+                }
+
+     if( wizardp(me) ) {
+      message("channel:adm",HIW "┋天神┋连线精灵："+ log_id(me) +"因"HIR"断线"HIW"在"+
+MISC_D->find_place(where)+COLOR_D->clean_color(where->query("short"))+"("+file_name(where)+".c)退出系统。\n"NOR,
+		filter_array(users(), (: wizardp :)));
+		me->add("wkzD_quit", 1); // 异常退出计数标记
+       log_file("wizcmds/wizlogin", sprintf("%s因为断线而退出系统. 时间在：[%s]\n",
+                  log_id(me), log_time() ) );
+			QUIT_CMD->force_quit(me);
+         } else {
+      message("channel:sys", WHT "┋系统┋连线精灵："+ log_id(me) +"因"HIR"断线超时"NOR WHT"在"+
+MISC_D->find_place(where)+COLOR_D->clean_color(where->query("short"))+"("+file_name(where)+".c)退出系统。\n"NOR,
+		filter_array(users(), (: wizardp :)));
+		me->add("wkzD_quit", 1); // 异常退出计数标记
+		me->set("quitY", 3); // 异常退出原因标记
+ 		me->set("quit_from",MISC_D->find_place(environment(me)) ); // 异常退出地点标记
+ 		me->set("quit_from2",COLOR_D->clean_color(environment(me)->query("short")) ); // 异常退出地点标记
+		catch(command("quit"));
+                if (this_object() && ! query("doing")) {
+			QUIT_CMD->force_quit(me);
+                }
+		}
+		break;
+
+	case DUMP_IDLE:
+       if(!me->query("env/invisibility") 	&& !environment(me)->query("chat_room") ){
+			tell_object( this_object(), "对不起，您已经发呆超过 " 
+				+ IDLE_TIMEOUT/60 + " 分钟了，请下次再来。\n");
+			tell_room( environment(), "一阵风吹来，将发呆中的" + query("name")
+				+ "化为一堆飞灰，消失了。\n", ({this_object()}));
+
+      message("channel:sys", WHT "┋系统┋连线精灵："+log_id(me)+"因"HIM"发呆超时"NOR WHT"在"+
+MISC_D->find_place(where)+COLOR_D->clean_color(where->query("short"))+"("+file_name(where)+".c)退出系统。\n"NOR,
+		filter_array(users(), (: wizardp :)));
+		me->add("wkzF_quit", 1); // 异常退出计数标记
+		me->set("quitY", 2); // 异常退出原因标记
+ 		me->set("quit_from",MISC_D->find_place(environment(me)) ); // 异常退出地点标记
+ 		me->set("quit_from2",COLOR_D->clean_color(environment(me)->query("short")) ); // 异常退出地点标记
+		    command("quit");
+                if( this_object() && ! query("doing") ) {
+			QUIT_CMD->force_quit(me);
+                }
+		}
+	              break;
+	default:
+                return;
+	}
+}
+
+private void net_dead()
+{
+	object link_ob, me, where;
+	me = this_object();
+
+        this_object()->remove_interactive();
+	me->remove_all_enemy();
+	where = environment(me);
+
+	if (! query("doing"))
+		set_heart_beat(0);
+
+	if (objectp(link_ob = query_temp("link_ob")))
+	{
+		if (link_ob->query_temp("ip_number"))
+		{
+			link_ob->set("last_on", time());
+			link_ob->set("last_from",
+			link_ob->query_temp("ip_number"));
+			link_ob->save();
+		}
+		destruct(link_ob);
+	}
+	net_dead = 1;
+       // Added by waiwai@2001/07/07
+	// 巫师断线将在10秒后退出( NET_DEAD_WIZOUT = 10 )
+	if (userp(me) && ! query("doing")) {
+	if( wizardp(me) ) { 
+	call_out("user_dump", NET_DEAD_WIZOUT, DUMP_NET_DEAD);
+       message("channel:adm", 
+	HIW "┋天神┋连线精灵："+ log_id(me)+"在"+MISC_D->find_place(where)+
+	COLOR_D->clean_color(where->query("short"))+"("+file_name(where)+".c)断线了。\n" NOR,
+		filter_array(users(), (: wizardp :)));
+	set_temp("netdead_ip", query_ip_number(me));
+	set_temp("nettimes", time());
+	set_temp("netdead",1);
+       } else {
+	call_out("user_dump", NET_DEAD_TIMEOUT, DUMP_NET_DEAD);
+       message("channel:sys", 
+	WHT "┋系统┋连线精灵："+ log_id(me)+"在"+MISC_D->find_place(where)+
+	COLOR_D->clean_color(where->query("short"))+"("+file_name(where)+".c)断线了。\n" NOR,
+		filter_array(users(), (: wizardp :)));
+	set_temp("netdead_ip", query_ip_number(me));
+	set_temp("nettimes", time());
+	set_temp("netdead",1);
+	}
+	} else {
+	if (environment())
+	message("vision", HIW+name() + "异常断线退出了。\n"NOR,environment(), ({ me }));
+	}
+
+}
+
+// reconnect: called by the LOGIN_D when a netdead player reconnects.
+void reconnect()
+{
+	set_heart_beat(1);
+	set_temp("netdead",0);
+	remove_netdead_enemy();
+	remove_call_out("user_dump");
+	remove_call_out("do_net_dead");
+	tell_object(this_object(), "重新连线完毕。\n");
+}
+
+int restore_temp()
+{
+        string file;
+        file = this_object()->save_file();
+        return restore_object(file);
+
+}
+/*
+// Added by waiwai@2003/04/25
+// 是否是结拜兄弟？
+int is_brother(mixed ob)
+{
+        string id;
+
+        if (stringp(ob))
+                id = ob;
+        else
+        if (objectp(ob))
+                id = ob->query("id");
+        else
+                return 0;
+
+        // 是否是普通结拜兄弟
+        if (query("brothers/" + id))
+                return 1;
+
+        // 是否是结盟的兄弟
+        return 0;
+}
+*/

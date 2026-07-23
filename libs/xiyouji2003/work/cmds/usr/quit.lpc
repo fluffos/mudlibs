@@ -1,0 +1,568 @@
+// [1;31m此文件禁止随意更改任何设置[0m
+// CMDS /cmds/usr/quit.c
+// Created by waiwai@2001/05/07
+// Update by waiwai@2002/12/05
+// 加入魂魄精灵退线留存于游戏中
+// 相关文件：
+// hunpo.c logind.c set.c damage.c 
+// combatd.c makestart.c score.c
+// Last modified by waiwai@2003/01/20
+// 加入临时登陆密码验证设置
+
+#include <mudlib.h>
+#include <command.h>
+inherit F_DBASE;
+inherit XYJTIME_D;
+
+int do_drop(object me, object obj);
+int clear_team(object me);
+int confirm(string yn, object me);
+//int log_usage(string id, string ip_number, string mode);
+// 不要 O 以免和 0 产生错觉
+string *ABC = ({ 
+"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", 
+"N", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"});
+
+// 不要 l 以免和 1 产生错觉
+string *abc = ({ 
+"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "m", 
+"n", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z"});
+
+void create() 
+{
+	seteuid(getuid());
+	set("name", "离线指令");
+	set("id", "quit");
+	set("channel_id", "离线指令");
+}
+
+int main(object me, string arg, int force_quit)
+{
+       object *inv, link_ob, Pseach;
+	int i, qt, qt2, B, L, F, D, M, X;
+       object *my_friend, one_of_friend;
+       string name, sxt, *friends, make;
+       object user, where, hunpo, diablo_box;
+	int HPOK, HPF, ELF;
+	string startroom;
+
+       where = environment(me);
+	if( where )
+	startroom = file_name(where);
+	HPOK = (int)me->query("hunpo_OK");
+	HPF = (int)me->query("hunpo_F");
+	ELF = (int)me->query("hunpo_ELF");
+
+	// Added by waiwai@2001/01/02
+	if(!force_quit) {
+
+	if( where->query("short") == "相记钱庄" ||
+		where->query("short") == "杨记钱庄" || 
+		where->query("short") == "董记当铺" ||
+		where->query("short") == "徐记当铺" ) 
+		return notify_fail(WHT"你还是到外面去退线吧！\n"NOR); 
+
+
+	// 非正常魂魄合体状态，就回复默认起点
+	if(me->query("Sroom")) {
+	me->delete("Sroom");
+	me->set("startroom","/d/city/kezhan");
+	}
+
+	if( !wizardp(me) ) {
+	if ( me->query_temp("no_move") )
+		return notify_fail(HIC"你被定住了，哪里退得出游戏！\n"NOR);
+
+	if( me->query_temp("quit_noway"))
+     		return notify_fail("你现在不能退出游戏！\n");
+
+	if( me->query_temp("attacking"))
+     		return notify_fail(HIW"你的要塞正在进行战争,现在不能退出游戏！\n"NOR);
+
+	if( me->query_condition("killer"))
+		return notify_fail(HIR"你正在被通辑中，不能退出游戏！\n"NOR);
+
+	if( me->query_condition("ghost"))
+		return notify_fail(HIR"你目前厉鬼缠身，不能退出游戏！\n"NOR);
+
+	if( me->query_condition("job_chaomai"))
+		return notify_fail(HIW"你正在进行炒卖货物中，不能退出游戏！\n"NOR);
+
+	// Modified by waiwai@2001/01/02
+       if( !me->query_temp("suicide_countdown")) {
+	if (me->is_busy() && ! me->query("doing"))
+                return notify_fail("你现在正忙着做其他事，不能退出游戏！\n");
+	}
+        if( objectp( diablo_box = me->query_temp("diablo_box") ) ) {
+                object *diablos;
+                diablo_box->save();
+                diablos = diablo_box->query_diablo_obs();
+                destruct(diablo_box);
+                foreach(object diablo in diablos)
+                        if( objectp(diablo) ) destruct(diablo);
+        }
+
+	// -lovexyj作为预留
+	if( arg != "-lovexyj" && me->query("mud_age") < 1800 ) {
+         write(CYN"\n你的账号是新建的，本站规定新建账号必须连续在线半小时才能被有效保留，
+退出游戏将删除你的账号(请注意一般的安全区是不会增长你的在线时间的)，
+你确定要放弃该帐号而退出吗？(y/n)\n"NOR);
+         input_to((: confirm :), me);
+         return 1;
+      }
+
+        if (me->run_override("quit"))
+                return 1;
+
+        if( !wizardp(me) && where && where->query("no_quit") && link_ob )
+                        return notify_fail(HIC"这里不准退出游戏。\n"NOR);
+	}
+	}
+	/*******************************************************************************/
+	inv = all_inventory(me);
+
+	if( !wizardp(me) && (!link_ob || ( link_ob && !link_ob->is_character()) ) ) {
+		for(i=0; i<sizeof(inv); i++)
+			if (! inv[i]->query_autoload() && ! inv[i]->query("equipped"))
+//			if( !inv[i]->query_autoload() )
+				do_drop(me, inv[i]);
+	}
+	/*******************************************************************************/
+	link_ob = me->query_temp("link_ob");
+	X= random(10000);
+	if(X >9999) X = 9999;
+	if(X <1000) X = 1000;
+
+	if( link_ob ) {
+		if( link_ob->is_character() ) {
+			write(HIB"你的魂魄回到" + link_ob->name(1) + "的身上。\n"NOR);
+			exec(link_ob, me);
+			link_ob->setup();
+			return 1;
+		}
+
+		// Added by waiwai@2002/12/05 以下综合增加离线状态参数
+		me->set("last_on", time());
+		// 这里避免显示问题而增加
+		me->set("last_from", query_ip_number(me));
+		me->set("last_port", query_ip_port(me));
+		me->add("last_quit", 1); 	// 目前login调用标记
+		me->add("wkz_quit", 1); 	// 正常退出计数标记
+		if(!me->query("quitY") || me->query("quitY") != 2) { // 正常退出原因，地点标记
+		me->set("quitY", 1); 	// 退出标记( 正常为1，发呆为2，断线为3 )
+ 		me->set("quit_from",MISC_D->find_place(where) );
+ 		me->set("quit_from2",COLOR_D->clean_color(where->query("short")) );
+		link_ob->set("quitY", 1);
+ 		link_ob->set("quit_from",MISC_D->find_place(where) );
+ 		link_ob->set("quit_from2",COLOR_D->clean_color(where->query("short")) );
+		}
+		link_ob->set("last_on", time());
+		link_ob->set("last_from", query_ip_number(me));
+		link_ob->set("last_port", query_ip_port(me)); // Added by waiwai@2001/03/06
+
+		/********************************************************************/
+		X= random(10000);
+		if(X >9999) X = 9999;
+		if(X <1000) X = 1000;
+
+		// Added by waiwai@2003/01/19
+		// 临时登陆密码设置，让用户选择这个功能是否打开
+		if( me->query("env/quit_pass") ) {
+		me->set("seach", ABC[random(sizeof(ABC))]+X+abc[random(sizeof(abc))]);
+		// 只是为了提示判断
+		me->set("Pseach", me->query("seach"));
+		link_ob->set("Pseach", crypt(me->query("seach"),0) ); // 加密设置到 LOGIN_OB
+		// 为了避免用户忘记删除set，这里做自动删除
+		// 用户需要每次需要set一次即可
+		me->delete("env/quit_pass");
+		} else 
+		if( !me->query("env/quit_pass") ) {
+		// 如果没打开设置便清除上次的标记，这样Login便不会要验证码了
+		link_ob->delete("Pseach"); 
+		}
+		/********************************************************************/
+		if( !link_ob->query("12sxt")) 
+		link_ob->set("12sxt",XYJTIME_D->check_sxt(me));
+		link_ob->save();
+		destruct(link_ob);
+	}
+
+
+        if (me->query("doing")) {
+		if (! interactive(me))
+			return 1;
+	CHANNEL_D->do_channel(this_object(), "sys",
+	log_id(me)+"由"+query_ip_number(me)+"("+query_ip_port(me)+")离线"HIG"进行计划"NOR WHT" ["+
+log_time()+"] ["+HPF+"/"+HPOK+"/"+ELF+"]
+清除 "+reclaim_objects()+" 个变数。连线：["+(me->query("login_count")-1)+
+"]  地点："+MISC_D->find_place(where)+COLOR_D->clean_color(where->query("short")) +"  停留："
++XYJTIME_D->query_time(me->query_temp("temp_time"))+"\n"NOR);
+
+                write(HIG"你选择暂时离线退出游戏，人物将保留在西游记的世界中继续成长。。。\n"NOR);
+                message("vision", me->name() + "离线练功了。。。\n", environment(me), ({ me }));
+                me->set("doing_time", time());
+
+                me->save();
+                link_ob = new(LOGIN_OB);
+                exec(link_ob, me);
+                destruct(link_ob);
+                return 1;
+        }
+	// Update by waiwai@2001/06/24
+	me->set("channels",({ })); // 配合logind.c 为了频道安全
+	me->set("quit_time",time()); 
+	if(me->query("seach")) me->delete("seach"); // 清除USER_OB里面的明码
+	if(!wizardp(me)) { 
+	if(me->query("env/invisibility"))	me->delete("env/invisibility");
+	}
+
+	if(wizardp(me)) { // Added by waiwai@2001/07/07
+	if(me->query("Pseach")) me->delete("Pseach");
+       log_file("wizcmds/wizlogin", sprintf("%s从(%s)退出系统. 时间在：[%s] 停留时间：%s \n",
+       log_id(me), query_ip_number(me), log_time(), query_time(me->query_temp("temp_time"))));
+       }
+
+	if(!wizardp(me) || !me->query("env/invisibility"))
+	message("system", log_id(me)+"退出"+INTERMUD_NAME+"。\n", environment(me), me);
+
+	/*******************************************************************************/
+	// Added by waiwai@2002/12/05
+	L=me->query("wkz_quit");
+	F=me->query("wkzF_quit");
+	D=me->query("wkzD_quit");
+	B=((int)me->query("login_count")-1);
+	qt= L+F+D;
+	M= B-qt;
+	qt2= qt+M;
+
+	// 以下是简单综合校正
+	if( M > qt ) { 
+	me->set("wkz_quit",B);
+	me->set("wkz_Fquit",0);
+	me->set("wkz_Dquit",0);
+	}
+
+	if( M < 0 ) { 
+	M=M+F+D;
+	L=L+M;
+	if(M<0) M=0;
+	}
+
+	if( qt2 < B ) qt2=B;
+	if( qt2 < 0 ) qt2=1;
+
+	if( qt > B ) {
+	qt2=B;
+	F=0;
+	D=0;
+	M=0;
+	}
+	/*******************************************************************************/
+	if( HPF > HPOK+ELF ) HPF = 0;
+
+	if( !me->query("env/makestart") ) {
+	// Added by waiwai@2002/12/05
+	write("\n"+log_id(me)+
+"这是您第 "+qt2+" 次退出"+INTERMUD_NAME+" 本次上线你的累计游戏时间为："RED+query_time(me->query_temp("temp_time"))+NOR"
+────────────────────────────────────────────
+离线状态：[正常："+L+"次 发呆："+F+"次 断线："+D+"次 异常："+M+"] 精灵转化：[失败："+HPF+"次 成功："+HPOK+"/"+ELF+"次]
+───────────────────────────────── "YEL"西 游 记"NOR" ──────\n");
+	write(GRN"[现在北京时间为："+COLOR_D->clean_color(BJTIME_CMD->chinese_time(1,ctime(time())))+"]  本站IP："+MUD_IP+"\n\n"NOR);
+	if( me->query("Pseach") ) {
+	write(HIR"[警告]："HIW"您的临时登陆验证码为："BLINK HIG+me->query("Pseach")+NOR HIW"  请认真做记录，以免无法再次登陆系统。\n\n"NOR);
+	me->delete("Pseach");
+	}
+	}
+
+	/*******************************************************************************/
+	if( !me->query("env/makestart") ) {
+	// Added by waiwai@2002/12/05
+	reclaim_objects();
+	if(wizardp(me)) {
+	CHANNEL_D->do_channel(this_object(), "adm",
+	log_id(me)+"由"+query_ip_number(me)+"("+query_ip_port(me)+")离线。["+
+log_time()+"] ["+HPF+"/"+HPOK+"/"+ELF+"]
+清除 "+reclaim_objects()+" 个变数。连线：["+(me->query("login_count")-1)+"]  退线：[ "+
+L+"/"+F+"/"+D+"/"+M+" ]  地点："+MISC_D->find_place(where)+COLOR_D->clean_color(where->query("short")) +"  停留："
++XYJTIME_D->query_time(me->query_temp("temp_time"))+"\n"NOR);
+          } else {
+	CHANNEL_D->do_channel(this_object(), "sys",
+	log_id(me)+"由"+me->query("last_from")+"("+me->query("last_port")+")离线。["+
+log_time()+"] ["+HPF+"/"+HPOK+"/"+ELF+"]
+清除 "+reclaim_objects()+" 个变数。连线：["+(me->query("login_count")-1)+"]  退线：[ "+
+L+"/"+F+"/"+D+"/"+M+" ]  地点："+MISC_D->find_place(where)+COLOR_D->clean_color(where->query("short"))+"  停留："
++query_time(me->query_temp("temp_time"))+"\n"NOR);
+	}
+	}
+	/*******************************************************************************/
+	// Added by waiwai@2002/12/05 以下综合设置魂魄精灵
+	if( where->query("hunpo_ok") ) { // 在地点
+	if( HPF > (HPOK+ELF) ) { // 失败次数过多
+	me->delete("env/makestart");
+       tell_object(me, HIR"你的魂魄精灵转化失败次数("+HPF+")大于成功次数("+(HPOK+ELF)+")，不能再次顺利转化了。。。\n"NOR);
+	CHANNEL_D->do_channel(this_object(), "sys", 
+	log_id(me)+"在"+MISC_D->find_place(where)+COLOR_D->clean_color(where->query("short"))+
+	"离线，魂魄精灵驻留"HIY"失败("+HPF+"/"+HPOK+"/"+ELF+")。。。\n"NOR);
+	return 1;
+	}
+	// 尚有魂魄不能出现第二个。已在Set里面禁止，这里作为保险而设
+//	if( me->query("hunpo") && me->query("env/makestart") ) {
+	if( me->query("hunpo") ) { 
+       tell_object(me, HIG"\n你没有与你的魂魄精灵成功合体，目前处于驻留禁止状态。。。\n"NOR);
+	me->apply_condition("makestart", 500);	
+	me->delete("env/makestart");
+	clear_team(me);
+	me->save();
+	destruct(me);
+	return 1;
+	} else
+	if( !me->query("hunpo") && me->query("env/makestart") ) { // 正常转化离线
+	seteuid(getuid());
+	hunpo= new("/u/waiwai/npc/elfnpc");
+//	hunpo= new("/std/char/elfnpc");
+
+	hunpo->move(where);
+	hunpo->invocation(me);
+	hunpo->set("makestart",1);
+	hunpo->set("nettimes",time()); // 标记真身离去时间
+	hunpo->set("owner",(string)me->query("id"));
+	hunpo->save();
+	me->set("hunpo", 1); // 标记魂魄是否存在
+	// 标记"毒"，在毒过之后清除魂魄标记
+	me->apply_condition("makestart", time()); 
+	me->add("hunpo_OK", 1); // 记录成功次数
+	me->set("startroom", startroom); // 在哪驻留在哪进入
+	me->set("Sroom", startroom); // 在哪驻留在哪进入，做清除标记用
+	me->set("nowstart", time()); // 标记转化时间
+	me->delete("env/makestart");
+
+       message("channel:sys", HIG+
+	"┋魂魄精灵┋"+log_id(me)+"在"+MISC_D->find_place(where)+COLOR_D->clean_color(where->query("short"))+
+	"("+file_name(where)+".c)离线，魂魄精灵驻留"HIG"成功("+HPF+"/"+HPOK+"/"+ELF+")。。。\n"NOR, users());
+
+	message("vision", HIW+log_id(me) + "离线了，魂魄瞬间化成精灵驻留在这里。。。\n\n"NOR, where, ({ me }));
+       tell_object(me, HIG"你的魂魄成功地化成精灵驻留在西游记的世界里了("+HPF+"/"+HPOK+"/"+ELF+")。。。\n"NOR);
+	reclaim_objects();
+
+	CHANNEL_D->do_channel(this_object(), "sys",
+	log_id(me)+"由"+me->query("last_from")+"("+me->query("last_port")+")离线。["+
+log_time()+"] ["+HPF+"/"+HPOK+"/"+ELF+"]
+清除 "+reclaim_objects()+" 个变数。连线：["+(me->query("login_count")-1)+"]  退线：[ "+
+L+"/"+F+"/"+D+"/"+M+" ]  地点："+MISC_D->find_place(where)+COLOR_D->clean_color(where->query("short"))+"  停留："
++query_time(me->query_temp("temp_time"))+"\n"NOR);
+
+	write("\n"+log_id(me)+
+"这是您第 "+qt2+" 次退出"+INTERMUD_NAME+" 
+离线状态：[正常："+L+"次 发呆："+F+"次 断线："+D+"次 异常："+M+"] 精灵转化：[失败："+HPF+"次 成功："+HPOK+"/"+ELF+"次]
+────────────────────────────────────────────
+本次上线你的累计游戏时间为："RED+query_time(me->query_temp("temp_time"))+NOR"    本次上线你的个人主要统计参数没有变动
+───────────────────────────────── "YEL"西 游 记"NOR" ──────\n");
+	write(GRN"[现在北京时间为："+COLOR_D->clean_color(BJTIME_CMD->chinese_time(1,ctime(time())))+"]  本站IP："+MUD_IP+"\n\n"NOR);
+	if( me->query("Pseach") ) {
+	write(HIR"[警告]："HIW"您的临时登陆验证码为："BLINK HIG+me->query("Pseach")+NOR HIW"  请认真做记录，以免无法再次登陆系统。\n\n"NOR);
+	me->delete("Pseach");
+	}
+
+	clear_team(me);
+	me->save();
+	destruct(me);
+	return 1;
+	} else
+	if( !me->query("hunpo") && !me->query("env/makestart") ) { // 没有魂魄，没有标记
+	clear_team(me);
+	me->save();
+	destruct(me);
+	return 1;
+	} else
+	if( me->query("hunpo") && !me->query("env/makestart") ) { // 有魂魄，没有标记
+       tell_object(me, HIG"\n你的魂魄精灵尚驻留在游戏中。。。\n"NOR);
+	me->apply_condition("makestart", 500);	
+	clear_team(me);
+	me->save();
+	destruct(me);
+	return 1;
+	}
+	} else
+	/*******************************************************************************/
+	if( !where->query("hunpo_ok") ) { // 不在地点
+	if( me->query("env/makestart") ) { // 有记号不能quit
+	if( HPF > (HPOK+ELF) ) { // 失败次数过多
+	me->delete("env/makestart");
+       tell_object(me, 
+	HIR"你未在适宜地点退出切你的魂魄精灵转化失败次数("+HPF+")大于成功次数("+(HPOK+ELF)+")，魂魄精灵驻留"HIR"失败。。。\n"NOR);
+	CHANNEL_D->do_channel(this_object(), "sys", 
+	log_id(me)+"在"+MISC_D->find_place(where)+COLOR_D->clean_color(where->query("short"))+
+	"离线，魂魄精灵驻留"HIR"失败("+HPF+"/"+HPOK+"/"+ELF+")。。。\n"NOR);
+	return 1;
+	}
+	if( me->query("hunpo") ) { // 不能让玩家冤枉了标记失败次数
+	me->apply_condition("makestart", 500);	
+	me->delete("env/makestart");
+       tell_object(me, HIY"\n这不是适宜的地点且你的魂魄精灵尚驻留在游戏中。。。\n"NOR);
+	return 1;
+	}
+	// 如果没有魂魄存在又未在地点，那么惩罚是理所当然的了
+	me->add("hunpo_F", 1); // 记录失败次数
+	me->delete("env/makestart"); // 删除标记
+	CHANNEL_D->do_channel(this_object(), "sys", 
+	log_id(me)+"在"+MISC_D->find_place(where)+COLOR_D->clean_color(where->query("short"))+
+	"离线，魂魄精灵留存"HIR"失败("+HPF+"/"+HPOK+"/"+ELF+")。。。\n"NOR);
+       tell_object(me, HIR"\n你未在适宜地点退出，魂魄精灵驻留失败("+HPF+"/"+HPOK+"/"+ELF+")。。。\n\n"NOR);
+	return 1;
+	}
+	else if( !me->query("env/makestart") ) { // 不在地点没记号
+	if( me->query("hunpo") )
+       tell_object(me, HIG"\n你的魂魄精灵尚驻留在游戏中。。。\n\n"NOR);
+
+	clear_team(me);
+	me->save();
+	destruct(me);
+	}
+	}
+	return 1;
+}
+
+int force_quit(object me)
+{
+	string name;
+	object where;
+	where = environment(me);
+
+	if (previous_object() != me ||
+	    ! playerp(me))
+		return notify_fail("你不能摧毁这个对象。\n");
+
+	name = me->query("id");
+
+	seteuid(getuid());
+
+	// Added by waiwai@2003/04/12
+	// 避免利用断线保留档案
+	if( me->query("mud_age") < 1800 ) {
+	rm(DATA_DIR + "login/" + name[0..0] + "/" + name + __SAVE_EXTENSION__);
+	rm(DATA_DIR + "user/" + name[0..0] + "/" + name + __SAVE_EXTENSION__);
+	CHANNEL_D->do_channel(this_object(), "sys", 
+	log_id(me)+"在"+MISC_D->find_place(where)+COLOR_D->clean_color(where->query("short"))+
+	"异常离线退出，档案被删除。。。\n"NOR);
+	NAME_D->remove_name(me->query("name"), me->query("id"));
+	write(HIW"由于您登陆不足30分钟而退出西游记，档案被系统自动删除。。。。。。\n"NOR);
+	destruct(me);
+	return 1;
+	}
+
+	me->save();
+        if (environment(me) != find_object(VOID_OB))
+                me->move(VOID_OB, 1);
+	destruct(me);
+	return 1;
+}
+
+int confirm(string yn, object me)
+{
+	int i;
+	object *inv, link_ob, where;
+	where = environment(me);
+
+	if( upper_case(yn) == "Y" ) {
+
+	link_ob = me->query_temp("link_ob");
+
+	if( !wizardp(me) && ( !link_ob || ( link_ob && !link_ob->is_character()) ) ) {
+         inv = all_inventory(me);
+         for( i = 0; i < sizeof(inv); i ++ )
+            if( !inv[i]->query_autoload() ) do_drop(me, inv[i]);
+	}
+
+	write(HIW"您选择了放弃账号退出西游记，档案被删除。。。。。。\n"NOR);
+
+	CHANNEL_D->do_channel(this_object(), "sys", 
+	log_id(me)+"在"+MISC_D->find_place(where)+COLOR_D->clean_color(where->query("short"))+
+	"放弃帐号离线退出，档案被删除。。。\n"NOR);
+
+	NAME_D->remove_name(me->query("name"), me->query("id"));
+	seteuid(getuid());
+
+	rm( link_ob->query_save_file() + __SAVE_EXTENSION__ );
+	rm( me->query_save_file() + __SAVE_EXTENSION__ );
+	destruct(link_ob);
+
+	destruct(me);
+	return 1;
+	} else {
+	write(CYN"您选择了放弃退出(Quit)，继续游戏。\n"NOR);
+	return 1;
+	}
+}
+
+
+// 去掉quit的多余显示信息，够乱
+int do_drop(object me, object obj)
+{
+        if( obj->query("no_drop") ){
+                destruct(obj);
+                return 0;
+        }
+
+	// 标记物件的清除
+        if( obj->query("keep_this") || obj->query("keepto") ){
+                destruct(obj);
+                return 0;
+        }
+	if( (string)obj->query("material") == "water" || (int)obj->query("des"))  {
+                destruct(obj);
+                return 0;
+        }
+
+        if (obj->move(environment(me))) {
+                if( obj->is_character() )
+                        message_vision("$N将$n从背上放了下来，躺在地上。\n", me, obj);
+                else {
+                        if( !obj->query("value") && !obj->value() ) {
+                                destruct(obj);
+                        }
+                }
+                return 1;
+        }
+        return 0;
+}
+
+int clear_team(object me)
+{
+	object *member;
+       int i;
+	
+	if(me->is_team_leader())	me->dismiss_team();
+        else {
+		member=me->query_team();
+        	for(i=0;i<sizeof(member);i++) {
+                	if(member[i]!=me) {
+                        	if(objectp(member[i]))
+                                	member[i]->dismiss_team();
+	                }	
+        	}	
+	}
+	return 1;
+}
+/*
+private int log_usage(string id, string ip_number, string mode)
+{
+    IP_USAGE_D->log_ip(id, ip_number, mode);
+    USAGE_D->log_id(id, ip_number, mode);
+}
+*/
+int help(object me)
+{
+	write(@HELP
+
+指令格式 : quit
+
+当你想暂时离开游戏时时, 可利用此一指令。
+因为某些原因也许系统并不能允许你顺利的退出系统。
+比如被通缉或者正在进行战争等原因。。。
+
+相关指令：save，backup，set
+
+HELP
+    );
+    return 1;
+}

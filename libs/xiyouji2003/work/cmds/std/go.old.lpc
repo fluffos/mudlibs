@@ -1,0 +1,236 @@
+// Last Modified By Pkyou@xyj 2002-06-12 19:00
+// Update by waiwai@2003/04/09
+
+#include <command.h>
+
+inherit F_CLEAN_UP;
+#include "/cmds/std/valid_move.h";
+inherit DIR_D;
+
+void create() { seteuid(getuid()); }
+
+// Added by waiwai@2001/06/11
+// 逃跑中随机仍掉的物品
+int drop_things(object me)
+{
+	int i,max;
+	object *inv;
+	object env;
+	env = environment(me);
+	max = me->query_max_encumbrance();
+	inv = all_inventory(me);
+	for(i=0;i<sizeof(inv);i++){
+		if(inv[i]->query("equipped")) continue;	//装备了的
+		if(inv[i]->query("owner")) continue;	//某些个人物品
+		if(inv[i]->query("keep_this")) continue;	//有keep的
+		if(inv[i]->query("keepto")) continue;	//有keepto的物品
+		if(random(max) < inv[i]->weight()) {
+			tell_object(env,YEL"在慌乱中，");
+			me->command("drop "+inv[i]->query("id"));
+		}
+	}				
+}
+
+// follow will have silent=2, so as to reduce the CPU load.
+int main(object me, string arg, int silent)
+{
+    	mixed dest;
+	string ridemsg, mout, min, dir;
+	object env, obj, ridee;
+	mapping exit;
+	int valid;
+
+	if( !arg ) return notify_fail("你要往哪个方向走？\n");
+
+	if( !wizardp(me) && userp(me) ) {
+	if (me->is_busy()
+              || me->query_temp("pending/exercising")
+		|| me->query_temp("doing_xiudao"))
+		return notify_fail("你现在正忙着呢。\n");
+	}
+	// Added by waiwai@2003/01/19 Fix bian bug it.
+      if(me->query_temp("k_bian")) {
+	if( me->query_temp("leader")) me->set_leader(0);
+	return 0;
+	}
+	// lead跟随的自动清除
+	if( me->is_fighting() && me->query("leader") ) {
+	me->set_leader(0);
+	me->delete("leader");
+	me->delete("leaderid");
+	me->delete_temp("leader");
+	return 0;
+	}
+
+        if(!valid_move(me)) return 0;
+
+	env = environment(me);
+	if(!env) return notify_fail("你哪里也去不了。\n");
+//        if (me->query_temp("on_bantan")) return notify_fail("你还是先(shoutan)再离开吧。\n");
+
+	if( !mapp(exit = env->query("exits")) || !exit[arg] ||  undefinedp(exit[arg]) ) {
+		if( query_verb()=="go")
+			return notify_fail("这个方向没有出路。\n");
+		else
+			return 0;
+	}
+
+	dest = exit[arg];
+
+	/**************************************************************/
+	if (dest && objectp(dest))
+	    obj = dest;
+	if( !(obj = load_object(dest)) ) {
+	// Added by waiwai@2003/04/09
+	   if(file_size(file_name(environment(me))+".lpc")>0) {
+	   message("channel:wiz",HIG"\n〖地图精灵〗 区域："+environment(me)->query("short")+
+          "("+file_name(environment(me))+")"+"连接有错，请速更正。\n\n"NOR,users());
+	   log_file("map_error","区域："+COLOR_D->clean_color(environment(me)->query("short"))+
+          "("+file_name(environment(me))+")"+"连接有错，请速更正。时间：["+
+COLOR_D->clean_color(BJTIME_CMD->chinese_time(7,ctime(time())))+"]\n");
+	   }
+           write( WHT"你要去的区域还没有连通,请post通知巫师。\n"NOR); 
+           return 1;
+        } else 
+	if( !(obj = find_object(dest)) )
+	    	return notify_fail( sprintf( WHT"无法向 "HIR"%s"NOR WHT" 移动。\n"NOR, dest ) ); 
+
+	// Added by waiwai@2003/04/09
+	// 在这里定义,比在地层上写valid_leave要好些.
+	if( obj ->query("wiz_only") && !wizardp(me))
+	   return notify_fail(CYN"那里只有巫师才能进去！\n"NOR);
+
+
+/*
+	// 频繁的走，诸如挂机器人可以得到一定的限制。。。
+	if( me->query_temp("last_go") == time() || me->query_temp("last_go") == time() - 1 ) {
+   	  me->add_temp("go_count", 1);
+   	  if( me->query_temp("go_count") <= 5 ) {  // go 5 次以下，没有影响
+   	  } else if( me->query_temp("go_count") <= 15 ) {
+   	  	 if( me->query("kee") <= me->query_temp("go_count") - 5 ) // 避免 kee = 0
+   	  	    return notify_fail(YEL"你气血不足，走不动了。。。\n"NOR);
+   	  } else return notify_fail(YEL"你跑得太快，气血跟不上来，先歇会儿吧。。。\n"NOR);
+	} else {
+   	  me->set_temp("go_count", 1);
+   	  me->set_temp("last_go", time());
+	}
+*/
+       // Added by waiwai@2001/06/11 
+	// 把妖魔排除，妖魔无安全区的限制
+	// 把跟随排除，目前需要验证是否适宜
+	if (!userp(me) && obj->query("NONPC") 
+		&& !me->query("leader")
+		&& me->query("race") != "妖魔" ) return 0;
+
+       // Added by waiwai@2001/06/11 普遍用于店铺
+	if( userp(me) && !wizardp(me) ) {
+        if( obj->query("day_shop")
+        && ( day_event() == "event_night" || day_event() == "event_midnight"))
+        	return notify_fail(GRN+obj->query("short")+NOR GRN" 晚上关门了，你还是等天亮再来吧！\n"NOR);
+          } 
+
+	/**************************************************************/
+
+	valid=(int)env->valid_leave(me, arg);
+	if( !valid ) return 0;
+	// valid>1 also indicates fail, but return 1 here, not 0.
+	if(valid>1) return 1;
+
+	if( !undefinedp(default_dirs[arg]) )
+		dir = default_dirs[arg];
+	else
+		dir = arg;
+
+        // snowcat 12/20/97
+        if (ridee = me->ride())
+          ridemsg = ridee->query("ride/msg")+"着"+ridee->name();
+        else  
+          ridemsg = "";
+
+        if(ridee && !valid_move(ridee)) 
+           return notify_fail("你的座骑走动不了。\n");
+
+	if( me->is_fighting() ) {
+		mout = ridemsg + "往" + dir + "落荒而逃了。\n";
+		min = ridemsg + "跌跌撞撞地跑了过来，模样有些狼狈。\n";
+	} else {
+		//Jiz. 02/11
+		if( ridee && ridee->query("bird") ) {
+			mout = ridemsg+ "往" + dir + "飞去。\n";
+			min = ridemsg+ "飞了过来。\n";
+		} else {
+ 		 	mout = ridemsg+ "往" + dir + "离开。\n";
+			min = ridemsg+ "走了过来。\n";
+		}
+	}
+
+	if( !wizardp(me) || !me->query("env/invisibility") )
+	{
+	    	if (environment(me) && environment(me)->query("no_look"))
+		    	//message( "vision", "一个模糊的影子" +  mout, environment(me), ({me}) );
+		    	tell_room(environment(me),"一个模糊的影子" +  mout, 
+				({me}) );
+		else
+			//message( "vision", me->name() + mout, environment(me), ({me}) );
+			tell_room(environment(me), me->name() + mout, 
+			        ({me}) );
+	}
+	if( (! ridee || ridee->move(obj)) && me->move(obj, silent) ) {
+		me->remove_all_enemy();
+		if( !wizardp(me) || !me->query("env/invisibility") ) {
+	    			if (environment(me) && environment(me)->query("no_look"))
+		    			//message( "vision", "一个模糊的影子" +  min, environment(me), ({me}) );
+		    			tell_room(environment(me), 
+						"一个模糊的影子"+min,({me}) );
+				else
+					//message( "vision", me->name() + min, environment(me), ({me}) );
+					tell_room(environment(me), me->name() 
+						+ min, ({me}) );
+		}
+		me->set_temp("pending", 0);
+		// added by snowcat, to fix the bug of recursive move of mutual follow + move to same room 
+		if (env != obj)
+			all_inventory(env)->follow_me(me, arg);
+		if (ridee)
+			tell_object (me,"你"+min);
+		return 1;
+	}
+
+	return 0;
+}
+
+void do_flee(object me)
+{
+	mapping exits;
+	string *directions;
+
+	if( !environment(me) || !living(me) ) return;
+	exits = environment(me)->query("exits");
+	if( !mapp(exits) || !sizeof(exits) ) return;
+	directions = keys(exits);
+	if (environment(me) && environment(me)->query("no_flee")) return;
+	tell_object(me, "看来该找机会逃跑了．．．\n");
+        if( me->query_temp("no_move") ) {
+          tell_object (me, "可你被定住了，逃不掉！\n");
+          return;
+        }
+
+	if( random(me->query_skill("dodge")/10 + me->query("kar")) < 10 ) {
+	   tell_object(me, "你逃跑失败。\n");
+	   return;
+	}
+
+	main(me, directions[random(sizeof(directions))], 0);
+}
+
+int help(object me)
+{
+	write(@HELP
+指令格式 : go <方向>
+ 
+让你往指定的方向移动。
+ 
+HELP
+    );
+    return 1;
+}

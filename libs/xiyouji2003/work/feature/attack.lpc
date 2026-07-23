@@ -1,0 +1,431 @@
+// Update by waiwai@2003/04/23
+
+#include <ansi.h>
+#include <dbase.h>
+#include <origin.h>
+#include <skill.h>
+
+#include "/cmds/std/valid_kill.h"
+//check whether allow PK.
+
+#define MAX_OPPONENT	4
+
+nosave object *enemy = ({});
+nosave object *netdead_enemy = ({});
+nosave string *killer = ({});
+
+// prototypes
+
+object *query_enemy() { return enemy; }
+object *query_netdead_enemy() { return netdead_enemy; }
+string *query_killer() { return killer; }
+
+// This function returns 1 if we are fighting anyone (or with ob)
+varargs int is_fighting(object ob)
+{
+	if( !ob ) return sizeof(enemy) > 0;
+
+	return member_array(ob, enemy)!=-1;
+}
+
+// This function returns 1 if we are fighting anyone (or with ob)
+varargs int is_killing(string id)
+{
+	if( !id ) return sizeof(killer) > 0;
+
+	return member_array(id, killer)!=-1;
+}
+
+void fight_ob(object ob)
+{
+	object *guard;
+	int i;
+
+       //Added By waiwai@2001/07/17 because guard so limit no_kill
+	if( this_object()->query("race") != "妖魔" || !this_object()->query("openkill") ) {
+	if(environment(ob)->query("no_fight") 
+          || environment(ob)->query("no_guard")) return;
+	}
+
+	if(!ob || ob==this_object() ) return;
+
+	set_heart_beat(1);
+
+       // Added By waiwai@2001/07/17
+	guard=ob->query_temp("guarded");
+	if(sizeof(guard))	{
+		for(i=0;i<sizeof(guard);i++)	{
+		if(! objectp(guard[i]))	continue;
+		if(environment(guard[i])!=environment(ob))	continue;
+		if(this_object()->query("no_kill"))	return;
+		if(guard[i]==this_object())	continue;
+		if( member_array(guard[i], enemy)==-1 ) 
+			enemy += ({ guard[i] });
+			message_vision(HIW"$N"HIW"的保护者"HIR+guard[i]->query("name")+HIW"加入战斗！\n"NOR,ob);
+			guard[i]->kill_ob(this_object());
+		}
+	}
+	if( member_array(ob, enemy)==-1 ) 	enemy += ({ ob });
+}
+
+void kill_ob(object ob)
+{
+	object env;
+	env=environment(this_object());
+
+	if(!ob) return;
+
+        if(ob->query_temp("netdead")){//Modified By waiwai@2001/07/06
+             tell_object(this_object(),HIR "断线玩家不能被杀害！\n\n" NOR);
+             return;
+	}
+
+	// Added By waiwai@2001/07/06
+       if(ob->query("no_kill")){
+             tell_object(this_object(),HIR "这个人不能被杀害！\n\n" NOR);
+             return;
+	}
+
+       if( wizardp(ob) && ob->query("env/invisibility")) return;
+
+       // Added By waiwai@2001/07/13
+       if(ob->query_temp("sleeped") ) {
+             tell_object(this_object(),WHT"趁人家睡觉的时候下手？嘿嘿，你也太缺德了！\n" NOR);
+             return;
+	}
+
+       // Added By waiwai@2001/03/03 no_kill
+	if( this_object()->query("race") != "妖魔" || !this_object()->query("openkill") ) {
+	if(env && env->query("no_fight") && env->query("no_kill")
+		&& env->query("no_magic")) return;
+	}
+	if( member_array(ob->query("id"), killer)==-1 )
+		killer += ({ ob->query("id") });
+
+	tell_object(ob, HIR"看起来"HIY+ this_object()->name()+HIR"显然想至你于死地。。。\n" NOR);
+
+	fight_ob(ob);
+}
+
+void add_netdead_enemy()
+{
+	for(int i=0; i<sizeof(enemy); i++)  {
+		netdead_enemy += ({ enemy[i] });
+	}
+}
+
+void remove_netdead_enemy()
+{
+	for(int i=0; i<sizeof(netdead_enemy); i++)  {
+		netdead_enemy[i] = 0;
+	}
+	netdead_enemy = ({});
+}
+
+void clean_up_enemy()
+{
+	if( sizeof(enemy) > 0 ) {
+		for(int i=0; i<sizeof(enemy); i++) {
+			if( !objectp(enemy[i])
+			||	environment(enemy[i])!=environment()
+			||	(!living(enemy[i]) && !is_killing(enemy[i]->query("id"))) )
+				enemy[i] = 0;
+		}
+		enemy -= ({ 0 });
+	}
+}
+
+// This function checks if the current opponent is available or
+// select a new one.
+object select_opponent()
+{
+	int which;
+
+	if( !sizeof(enemy) ) return 0;
+
+	which = random(MAX_OPPONENT);
+
+	return which < sizeof(enemy) ? enemy[which] : enemy[0];
+}
+
+// Stop fighting ob.
+int remove_enemy(object ob)
+{
+	if( is_killing(ob->query("id")) ) return 0;
+
+	enemy -= ({ ob });
+	return 1;
+}
+
+// Stop killing ob.
+int remove_killer(object ob)
+{
+	if( is_killing(ob->query("id")) ) {
+		killer -= ({ ob->query("id") });
+		remove_enemy(ob);
+		return 1;
+	}
+
+	return remove_enemy(ob);
+}
+
+// Stop all fighting, but killer remains.
+void remove_all_enemy()
+{
+	for(int i=0; i<sizeof(enemy); i++) {
+		// We ask our enemy to stop fight, but not nessessary to confirm
+		// if the fight is succeffully stopped, bcz the fight will start
+		// again if our enemy keeping call COMBAT_D->fight() on us.
+		if( objectp(enemy[i]) ) enemy[i]->remove_enemy(this_object());
+		enemy[i] = 0;;
+	}
+
+	enemy = ({});
+}
+
+// Stop all fighting and killing.
+void remove_all_killer()
+{
+	killer = ({});
+	enemy -= ({ 0 });
+
+	for(int i=0; i<sizeof(enemy); i++)
+		if( enemy[i]->remove_killer(this_object()) )
+			enemy[i] = 0;;
+
+	enemy -= ({ 0 });
+}
+
+
+void reset_action()
+{
+	object ob;
+	string type, skill;
+	
+	if ( ob = query_temp("weapon") )
+	    type = ob->query("skill_type");
+	else 
+		type = "unarmed";
+
+	if( stringp(skill = query_skill_mapped(type)) ) {
+		// If using a mapped skill, call the skill daemon.
+		set("actions", (: call_other, SKILL_D(skill), "query_action" :) );
+	} else {
+		// Else, let weapon handle it.
+		if( ob ) set("actions", ob->query("actions",1) );
+		else set("actions", query("default_actions",1) );
+	}
+}
+
+/*
+void reset_action()
+{
+	object me,ob;
+	mapping prepare;
+	string type, skill;
+
+        me = this_object();
+	prepare = query_skill_prepare();
+	
+	if( ob = query_temp("weapon") ) type = ob->query("skill_type");
+	else if ( sizeof(prepare) == 0)	type = "unarmed";
+	else if ( sizeof(prepare) == 1)	type = (keys(prepare))[0];
+	else if ( sizeof(prepare) == 2)	
+		type = (keys(prepare))[query_temp("action_flag")];
+
+
+	if( stringp(skill = query_skill_mapped(type)) && query_skill(skill, 1)) {
+		// If using a mapped skill, call the skill daemon.
+                if ( ob )
+	         	set("actions", (: call_other, SKILL_D(skill), "query_action", me, ob :) );
+                else
+                        set("actions", (: call_other, SKILL_D(skill), "query_action" :) );
+	} else {
+		// Else, let weapon handle it.
+		if( ob ) set("actions", ob->query("actions",1) );
+		else set("actions", query("default_actions",1) );
+	}
+}
+*/
+void reset_apply_action()
+{
+	object ob;
+	string type, skill;
+
+	if( ob = query_temp("weapon") )
+	    type = ob->query("apply/skill_type");
+	else 
+		type = "unarmed";
+
+	if( stringp(skill = query_skill_mapped(type)) ) {
+		// If using a mapped skill, call the skill daemon.
+		set("actions", (: call_other, SKILL_D(skill), "query_action" :) );
+	} else {
+		// Else, let weapon handle it.
+		if( ob ) set("actions", ob->query("apply/actions",1) );
+		else set("actions", query("default_actions",1) );
+	}
+}
+
+// This is called in heart_beat() to perform attack action.
+//private int attack()
+int attack()
+{
+	object opponent;
+
+	clean_up_enemy();
+
+	opponent = select_opponent();
+	if( objectp(opponent) ) {
+		set_temp("last_opponent", opponent);
+		COMBAT_D->fight(this_object(), opponent);
+		return 1;
+	} else
+		return 0;
+}
+
+//
+// init() - called by MudOS when another object is moved to us.
+//
+void init()
+{
+	object ob, env=environment();
+	string vendetta_mark;
+
+	if( this_object()->query("race") != "妖魔" || !this_object()->query("openkill") ) 
+	if(env && (env->query("no_fight") || env->query("no_magic"))) return;
+
+	if(	is_fighting()
+	||	!living(this_object())
+	||	!(ob = this_player()) 
+	||	environment(ob)!=env
+	||	!living(ob)
+	||	ob->query("linkdead") )
+		return;
+
+       // Added By waiwai@2001/03/03
+	if(stringp(query("banghui"))&& query("banghui")==(string)ob->query("banghui")
+                  && !userp(this_object()) && userp(ob)) {
+	if(! ob->is_killing(query("id")))
+		remove_killer(ob);
+	call_out("canjian",0,this_object(),ob);
+	}
+
+       // Added By waiwai@2001/03/03
+	if(stringp(query("family/family_name"))
+	&& query("family/family_name")==(string)ob->query("family/family_name")
+                  && !userp(this_object()) && userp(ob)) {
+	if(! ob->is_killing(query("id")))
+		remove_killer(ob);
+	call_out("family_K",0,this_object(),ob);
+	}
+
+	if(!valid_kill(this_object(), ob,1)) return;
+
+	if( userp(ob) && is_killing(ob->query("id")) ) {
+		COMBAT_D->auto_fight(this_object(), ob, "hatred");
+		return;
+	} else if( stringp(vendetta_mark = query("banghui"))
+	&& ob->query("vendetta/" + vendetta_mark) ) {
+		COMBAT_D->auto_fight(this_object(), ob, "vendetta");
+		return;
+	} else if( stringp(vendetta_mark = query("family/family_name"))
+	&& ob->query("vendetta/" + vendetta_mark) ) {
+		COMBAT_D->auto_fight(this_object(), ob, "vendetta");
+		return;
+	} else if( userp(ob) && (string)query("attitude")=="aggressive" ) {
+		COMBAT_D->auto_fight(this_object(), ob, "aggressive");
+		return;
+	} 
+	else if( random((int)query("bellicosity") / 30) > (int)query("cps")) {
+	    // mark my_killer_list in combatd/auto_fight.
+		COMBAT_D->auto_fight(this_object(), ob, "berserk");
+		return;
+	} 
+}
+
+// Added By waiwai@2001/03/03
+// 门派追杀
+void family_K(object ob,object me)
+{
+	if(! me || environment(me)!=environment(ob))	return;
+       if( me->query("env/invisibility") ) return;
+
+	if( ob->query("env/no_zs") ) return;
+
+	if(me->query("hatred/" +ob->query("family/family_name")))
+	message_vision(HIY"\n$N对着$n道："+RANK_D->query_self(ob)+
+	"奉门派之命行事，要你这"+RANK_D->query_rude(me)+"给个公道。\n"NOR,ob,me);
+
+	if(is_killing(me->query("id"))) 
+	message_vision(HIR"\n$N大喝一声：$n，今天"+
+	RANK_D->query_self_rude(ob)+"要讨个公道！\n"NOR,ob,me);
+	else
+	if(me->query("vendetta/" +ob->query("family/family_name")))
+	message_vision(HIY"\n$N对着$n道："+RANK_D->query_self(ob)+
+	"奉门派追杀之命行事，还请"+RANK_D->query_respect(me)+"多多担待。\n"NOR,ob,me);
+	else {
+ 	// 叩见师傅
+	if( !ob->query("leader") && !wizardp(me) ) { // 有跟随的不显示，以免过乱
+	if( me->is_apprentice_of(ob) )
+	message_vision(WHT"\n$N"NOR WHT"躬身对$n"NOR WHT"道：弟子叩见师傅。。。\n"NOR, me, ob);
+	} else
+	// 叩见掌门
+	if(!stringp(ob->query("zhangmen/title"))) { // 对方不是掌门
+	if( !ob->query("leader") ) { // 有跟随的不显示，以免过乱
+	if(stringp(me->query("zhangmen/title")))
+	message_vision(WHT"\n$N躬身对$n道：属下叩见 "+me->query("zhangmen/title")+WHT" 掌门。\n"NOR,ob,me);
+	}
+	}
+
+	}
+}
+
+// Added By waiwai@2001/03/03
+// 帮会追杀
+void canjian(object ob,object me)
+{
+	string banghui;
+	object lp;
+
+	if( ob->query("env/no_zs") ) return;
+
+	if(! me || environment(me)!=environment(ob))	return;
+       if( me->query("env/invisibility") ) return;
+	banghui=(string)ob->query("banghui");
+
+	if(me->query("hatred/" +ob->query("banghui")))
+	message_vision(HIG"\n$N对着$n道："+RANK_D->query_self(ob)+
+	"奉帮会之命行事，要你这"+RANK_D->query_rude(me)+"给个公道。\n"NOR,ob,me);
+/*
+	if(me->query("BHSL/" +ob->query("banghui")))
+	message_vision(HIR"\n$N对着$n道："+RANK_D->query_self(ob)+
+	"奉帮会之命行事，要你这"+RANK_D->query_rude(me)+"给个公道。\n"NOR,ob,me);
+*/
+	if(is_killing(me->query("id"))) 
+	message_vision(HIR"\n$N大喝一声：$n，今天"+
+	RANK_D->query_self_rude(ob)+"要讨个公道！\n"NOR,ob,me);
+	else
+	if(me->query("vendetta/" +ob->query("banghui")))
+	message_vision(HIG"\n$N对着$n道："+RANK_D->query_self(ob)+
+	"奉帮会追杀之命行事，还请"+RANK_D->query_respect(me)+"多多担待。\n"NOR,ob,me);
+	else {
+	lp=new("/obj/lingpai");
+	lp->create(banghui);
+	// 参见帮主，对帮主的特殊问候信息
+       if( banghui && me->query("banghui")== banghui ) {
+	if((string)lp->query("bangzhu_id")==me->query("id") && userp(me) ) { 
+		message_vision(WHT"\n$N躬身对$n道：属下参见"+me->query("name")+WHT"帮主。\n"NOR, ob, me);
+	destruct(lp);
+	}
+	else
+	if(!stringp(ob->query("bh_rank"))) {
+		if( !ob->query("leader") ) {
+		if(stringp(me->query("bh_rank")))
+		message_vision(WHT"\n$N躬身对$n道：属下参见"+me->query("bh_rank")+"。\n"NOR,ob,me);
+		}
+		}
+	}
+	}
+}
+

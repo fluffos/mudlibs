@@ -1,0 +1,164 @@
+// CMDS /cmds/usr/suicide.c
+// Created by waiwai@2000/12/10 重新建立
+// 此文件在线慎用更新update
+
+#include <command.h>
+inherit F_CLEAN_UP;
+private int slow_suicide(object me);
+private int halt_suicide(object me);
+
+int main(object me, string arg)
+{
+	object *inv;
+	int i;
+
+   if( me->is_busy() )
+     return notify_fail("你上一个动作还没完成。\n");
+
+   if (wizardp(me)) return notify_fail(WHT"你不能自杀掉巫师的帐号。\n"NOR);
+
+   //Added By waiwai@2001/03/17
+   if(me->query("mud_age") < 1800) 
+	   return notify_fail(WHT"如果你的登陆时间不足30分钟,不能使用自杀指令，如果要放弃档案，quit即可。\n"NOR);
+
+        inv = deep_inventory(me);
+        for (i = 0; i < sizeof(inv); i++) {
+                if (! userp(inv[i]) && ! playerp(inv[i])) continue;
+		return notify_fail("你身上还有个大活人呢，想不开也别急呀？\n");
+        }
+
+	if (!me->query_temp("link_ob"))
+		return notify_fail("你不是正常连线进入的，不能自杀。\n");
+
+//	if(me->query("bang")&&me->query("/bang/bang_flag")>0)
+//        return notify_fail("请先去退出帮派，谢谢！\n");
+
+	if( me->query("vip"))
+        return notify_fail("很抱歉，你不能自杀掉会员帐号！\n");
+
+	if( me->query("limit_over"))
+        return notify_fail(HIR"嘿嘿死妖怪，你给我老实呆着吧，想自杀，窗都没有，别找门！\n"NOR);
+
+	write(
+		HIG"虚拟世界虽然险恶，现实生活毕竟美好，请不要轻言自杀......\n"
+		"选择自杀意味着这个人物的资料就永远删除了，请务必考虑清楚\n\n"
+		HIY"确定的话请输入您的密码："NOR);
+//		HIY"确定的话请输入您的身份标识码："NOR);
+	input_to("check_superpasswd", 1, me, 1);
+	return 1;
+
+}
+
+private void check_superpasswd(string superpasswd, object me, int forever)
+{
+   object link_ob;
+   string old_superpass;
+
+   link_ob = me->query_temp("link_ob");
+//   old_superpass = link_ob->query("superpasswd");
+   old_superpass = link_ob->query("password");
+
+   if( crypt(superpasswd, old_superpass)!=old_superpass ) {
+//     write(HIR"身份标识码错误！\n"NOR);
+		write("密码错误！\n");
+
+     return;
+   }
+
+   if (forever) {
+     tell_object( me,
+        HIR "\n\n你决定要自杀了，如果二十秒钟内不后悔(quit)，就真的永别了......\n\n\n" NOR);
+     me->set_temp("suicide_countdown", 20);
+	me->start_busy((: slow_suicide, me :), (: halt_suicide, me :));
+     me->command("backup");
+   }
+}
+
+private int slow_suicide(object me)
+{
+   string banghui;
+   object lingpai;
+   object link_ob;
+   int stage;
+   string myid, couple, petfile;
+
+   stage = me->query_temp("suicide_countdown");
+   me->add_temp("suicide_countdown", -1);
+   if( stage > 1 ) {
+     if( stage%5 == 0 )
+        tell_object(me, HIR "\n你还有 " + stage + " 秒的时间可以后悔(quit)......\n" NOR);
+     return 1;
+   }
+
+   link_ob = me->query_temp("link_ob");
+   if( !link_ob ) return 0;
+
+   log_file("static/SUICIDE",
+     sprintf("%s(%s)自杀于：[%s]  IP地址来自：%s \n", 
+	geteuid(me), me->name(), log_time(), (string)query_ip_number(me) ) );
+
+/*
+      //Added By waiwai@2001/07/18
+      if((string)(banghui=me->query("banghui"))) {
+                lingpai=new("/obj/lingpai");
+                lingpai->create(banghui);
+                if(! lingpai->query("no_use"))
+                "/cmds/usr/tuoli.lpc"->yes_or_no("yes",me,banghui);
+                destruct(lingpai);
+        }
+*/
+   seteuid(getuid());
+   rm( link_ob->query_save_file() + __SAVE_EXTENSION__ );
+   rm( me->query_save_file() + __SAVE_EXTENSION__ );
+   myid=me->query("id");
+
+   rm( "/data/playerhomes/h_"+myid+ __SAVE_EXTENSION__ );
+
+   rm( "/data/mail/"+myid[0..0]+"/"+myid+ __SAVE_EXTENSION__ );
+
+   couple=me->query("coupld/id");
+   if(couple)
+     rm("/data/mail/"+couple[0..0]+"/"+couple+__SAVE_EXTENSION__);
+
+   //Added By waiwai@2001/07/20 remove pet.
+   petfile=DATA_DIR"pet/"+me->query("id")[0..0]+"/"+me->query("id")+".o";
+   if ( file_size(petfile)>0 ) rm(petfile);
+
+   //Added By waiwai@2001/07/20 remove bank.
+   rm(DATA_DIR + "qingdan/" + me->query("id")[0..0] + "/" + me->query("id") + ".o");
+
+   write(HIG"\n好吧，永别了朋友.....祝你在现实生活的每一天都会有好心情.....\n"NOR);
+	message("channel:rumor",HIR"\n┋湮灭┋"+this_player()->name(1)+"("+
+	this_player()->query("id")+")化作一屡轻烟，渐渐从西游记的世界消失了......\n"NOR,users());
+
+	tell_room(environment(me), "\n"+me->name()+"在你的面前化作轻烟，渐渐消失了...\n", ({me}));
+
+       NAME_D->remove_name(me->query("name"), me->query("id"));
+
+   destruct(me);
+   return 0;
+}
+
+private int halt_suicide(object me)
+{
+	tell_object(me, HIG "你打消了寻死的念头。\n" NOR);
+	me->delete_temp("suicide");
+	return 1;
+}
+
+int help (object me)
+{
+        write(@HELP
+
+指令格式: suicide/zisha
+ 
+如果因为某种原因你不想活了, 你可以选择自杀:
+ 
+suicide/zisha : 永远的除去玩家资料, 系统会要求你输入身份标识码以确认身份.
+ 
+注意：注册后不足30分钟者禁止自杀。请慎重选择 :)
+ 
+HELP
+);
+        return 1;
+}

@@ -32,7 +32,7 @@ rely on the boot + interactive-connect test as the verification gate.
   majority of this collection. If an archive turns out to be English
   (like ds386/Dead Souls), do the minimum to note what it is, don't sink
   deep debugging time into it -- move on to the next Chinese one.
-- **Done: 68 / 100** (shanhaizhanshen, xingzhanyingxiong,
+- **Done: 69 / 100** (shanhaizhanshen, xingzhanyingxiong,
   unknownlib20150716 [小雨西游II], bxsj [书剑天下], bxsj1 [书剑·经典],
   chidi [江湖I], ..., nitan170911 [仙剑奇侠传], nitan6 [笑傲江湖], rzrmud
   [大唐西游], xo, xo_final, zzfy [郑州风云3], shiji [世纪],
@@ -72,7 +72,8 @@ rely on the boot + interactive-connect test as the verification gate.
   客户端, actually a genuine mudlib (not client-only), 夕阳再现 lineage],
   xiaoaojianghu_xo [笑傲江湖XO, third TMI-2/ES2/Falcon snapshot alongside
   xo #28/xo_final #29], xiaoaojianghu2 [笑傲江湖II, ALSO TMI-2/ES2/Falcon
-  lineage not nitan-family, a fourth snapshot])
+  lineage not nitan-family, a fourth snapshot], xiyouji2003 [西游记2003/
+  光辉岁月, ES II lineage close to fluffos_xiyou2000 #15])
 - **New AGENTS.md §15q (hidden client-protocol-version gate)**: found on
   xiyangzaixian3 -- a pre-id prompt can check the input against a
   hardcoded literal (client version string), not just a BIG5/student
@@ -404,7 +405,7 @@ rely on the boot + interactive-connect test as the verification gate.
 | 78 | 终极地狱.rar | | | not started | |
 | 79 | 终极地狱之爱若幽兰1.166正式版.rar | | | not started | |
 | 80 | 终极地狱-指间mud版服务端.rar | | | not started | |
-| 81 | 西游记2003.rar | | | not started | |
+| 81 | 西游记2003.rar | xiyouji2003 | 40075 | done | self-IDs as 西游记[光辉岁月]; master.c 486/486 lines with only 3 trivial diffs against fluffos_xiyou2000(#15), same ES-II/"Lil"/"Annihilator" root with a later maintainer credit, NOT the mhxy/menghuanxiyou2002/shenmo branch despite shared ancient zone names indicating a much older common root; standard §15h fix (re-derived fresh, different implementation shape than any sibling) + §8h convertd Greek table (ported verbatim from mhxy/fluffos_xiyou2000) + §14/§8d-§15o/§15w/§15b/§15ac fixes + new §8g-variant missing CLUB/F_CLUB macros + §3 counterexample (17 files) + NEW dns-site-verification gate in logind.lpc calling shutdown(1) unconditionally once dns_master was excluded from preload (fixed to require find_object(DNS_MASTER) truthy first) + NEW missing /d/wiz/init gift room (mandatory post-registration move target, absent from archive, silently left new characters with no environment crashing every post-login command -- fixed with a load_object() guard falling back to START_ROOM); full registration + post-login-command flow verified across 3 runs (first exposed the /d/wiz/init bug via post-login failures, next two clean) incl. real names 秦岭(female)/林风(male), dup-name rejection also confirmed; 89.3% lpcc pass (2322/2599); see libs/xiyouji2003/NOTES.md |
 | 82 | 西游记2006之 最终幻想.rar | | | not started | |
 | 83 | 西游记450.rar | | | not started | |
 | 84 | 西游记.rar | | | not started | |

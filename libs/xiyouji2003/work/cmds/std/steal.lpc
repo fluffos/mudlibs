@@ -1,0 +1,151 @@
+// CMDS /cmds/std/steal.c
+// Update by waiwai@2001/03/07
+// Last modified by waiwai@2003/02/05
+
+#include <ansi.h>
+#include "valid_kill.h";
+
+inherit F_CLEAN_UP;
+
+int main(object me, string arg)
+{
+	string what, who;
+	object ob, victim;
+	int sp, dp;
+
+	// Added By waiwai@2001/03/07 设置特殊npc无限制区域可以steal
+  	if (userp(me) && !wizardp(me)){
+	if (me->is_busy() || me->query_temp("doing_xiudao") 
+		|| me->query_temp("pending/exercising"))
+   		return notify_fail("你现在正忙着呢。\n");
+
+	if( environment(me)->query("no_fight")
+           || environment(me)->query("no_kill")
+           || environment(me)->query("no_steal") )
+		return notify_fail("这里禁止行窃。\n");
+
+	if( me->query_temp("stealing") )
+		return notify_fail("你已经在找机会下手了！\n");
+       }
+
+	if( !arg || sscanf(arg, "%s from %s", what, who)!=2 ) return
+		notify_fail("指令格式：steal <物品> from <人物>\n");
+
+	victim = present(who, environment(me));
+
+	if( !victim || victim==me) return notify_fail("你想行窃的对象不在这里。\n");
+
+       if(!valid_kill(me,victim,0)) return 0;
+
+	if( !wizardp(me) && wizardp(victim) )
+		return notify_fail("玩家不能偷巫师身上的东西。\n");
+
+      // Added By waiwai@2001/07/13
+      if( !wizardp(me) && userp(victim) ) {
+      if(victim->query("disable_type")=="<睡梦中>")
+            return notify_fail(HIR"趁人家睡觉的时候下手？嘿嘿，你也太缺德了！\n"NOR);
+
+      if( victim->query("disable_type")==" <昏迷不醒中>" )
+            return notify_fail(HIR"趁人家昏迷不醒的时候下手？嘿嘿，你也太缺德了！\n"NOR);
+
+      if(victim->query_temp("netdead"))
+                return notify_fail("你不能这样无耻的偷断线的人.\n");
+            }
+/*
+      if (userp(me) && !wizardp(me)){
+           if(userp(victim))
+               return notify_fail(HIR"你不能随便偷玩家的东西！！！\n"NOR);
+             }
+*/
+	if( !ob = present(what, victim) ) {
+		object *inv;
+		inv = all_inventory(victim);
+		if( !sizeof(inv) )
+			return notify_fail( victim->name() + "身上看起来没有什么值钱的东西好偷。\n");
+		ob = inv[random(sizeof(inv))];
+	}
+	sp = (int)me->query_skill("stealing",1) * 5 +((int)me->query("kar")+(int)me->query("age"))*2
+		- (int)me->query("thief") * 20;
+	if( sp < 1 ) sp = 1;
+	if( me->is_fighting() ) {
+		sp /= 2;
+             if (userp(me) && !wizardp(me)) { me->start_busy(3+random(3)); }
+	}
+	dp = ((int)victim->query("sen")+(int)victim->query("age")+(int)victim->query_kar())*2+
+(int)ob->weight()/25;
+	if( victim->is_fighting() ) dp *= 10;
+	if( ob->query("equipped") ) dp *= 10;
+
+	write("你不动声色地慢慢靠近" + victim->name() + "，等待机会下手 ...\n\n");
+
+	me->set_temp("stealing", 1);
+	me->add("steal_times",1);
+	call_out( "complete_steal", 3, me, victim, ob, sp, dp);
+
+	return 1;
+}
+
+private void complete_steal(object me, object victim, object ob, int sp, int dp)
+{
+        int no_steal;
+        object env;
+
+       if(!me || !victim) return;
+	me->delete_temp("stealing");
+
+	if( environment(victim) != environment(me) ) {
+		tell_object(me, "太可惜了，你下手的目标已经走了。\n");
+		return;
+	}
+
+        if(!ob) {
+	  tell_object(me, "你要偷的东西不见了。\n");
+	  return;
+        }   
+
+	// Modified by waiwai@2003/02/05 装备的和做记号的不能被偷
+	no_steal=(ob->query("no_give")) ||
+	         (ob->query("no_break")) ||
+	         (ob->query("equipped")) ||
+	         (ob->query("no_drop")) ||
+	         (ob->query("keep_this")) ||
+		  (ob->query("no_get")); // can't steal these stuffs.
+
+	if( (!living(victim) || (random(sp+dp) > dp)) &&
+	 !no_steal ) {
+		if( !ob->move(me) ) {
+			tell_object(me, "你摸到一" + ob->query("unit") + ob->name() 
+				+ "，可是对你而言太重了，不得不放弃。\n");
+			return;
+		}
+		tell_object(me, HIW "得手了！\n\n" NOR);
+		tell_object(me, "你成功地偷到一" + ob->query("unit") + ob->name() + "！\n");
+
+              // Added By waiwai@2000/10/30
+              env=environment(me);
+              message("channel:rumor",WHT"┋小道消息┋有人看到"+me->query("name")+
+NOR WHT"在"+env->query("short")+"鬼鬼祟祟地从"+victim->query("name")+"身上偷走了一"+ 
+ob->query("unit")+ ob->name()+" \n"NOR,users());
+		me->add("thief", 1);
+
+		if( living(victim) )
+			me->improve_skill("stealing", random(me->query("int")));
+		if( random(sp) < dp/2 )
+			message("vision", "你看到" + me->name() + "鬼鬼祟祟地从"
+				+ victim->name() + "身上偷走了一" + ob->query("unit")
+				+ ob->name() + "！\n", environment(me), ({ me, victim }) );
+	} else {
+		if( random(sp) > dp/2 || no_steal ) {
+			tell_object(me, victim->name() + "不经意地一转头，你急忙将手缩了回去！\n"
+				"还好，没有被发现。\n");
+			return;
+		}
+		tell_object(me, HIR "糟糕！你失手了！\n\n" NOR);
+		message_vision("$N一回头，正好发现$n的手正抓着$P身上的" + ob->name() + "！\n\n"
+			+ "$N喝道：「干什么！」\n\n", victim, me);
+		me->improve_skill("stealing", 1, 1);
+		me->add("thief", 1);
+	}
+
+}
+

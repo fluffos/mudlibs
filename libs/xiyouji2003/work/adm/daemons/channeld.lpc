@@ -1,0 +1,862 @@
+// [1;31m此文件禁止随意更改任何设置[0m
+// Created by waiwai@2000/10/06
+// Update by waiwai@2001/03/10
+// 可单独关闭系统的某个频道，关闭后任何人无法使用
+// 该频道，避免类似潭际频道的混乱而无法制止的问题
+// 也可全部关闭系统的所有的公用频道( chblk forever)
+// 比如 chblk chat 则整个系统的聊天频道被关闭掉而
+// 无法使用了，巫师不在限制之列
+// Update by xigua@2002/05/23
+// 定义时间，如果xxx为forever, 则永远关闭
+// Last modified by waiwai@2003/01/15
+// 频道管理设置请阅读 chblk.c unchblk.c vote.c 等
+// 文件。频道目前采用硬性设置，在 Login.c 和 Quit.c 
+// 里面配合设置，根据系统级别自动设定用户可收听的频
+// 道种类。Tune.c 指令目前可查看用户的频道收听情况，
+// 并可单独关闭某用户的某个频道。。。
+
+#pragma save_binary
+
+#include <mudlib.h>
+#include <command.h>
+#include <net/dns.h>
+#include <net/macros.h>
+#include <localtime.h>
+inherit F_SAVE; 
+
+inherit F_DBASE;
+string remove_addresses(string, int all);
+#define ALLOW_LIST ({ })
+#define SPECIAL_NPC     ({ "/adm/npc/youxun" })
+
+#define RRUM 20
+string record;
+
+// 污言秽语禁止词语在这里面添加
+//string *msg_d = explode(read_file(WORDS("banned_words")),"\n");
+//#include <limit.h>
+string *msg_d = ({
+"他妈的","你妈的","傻B","我操","操你","和你妈睡","有活的没有","没死会？","弹子",
+"fuck","FUCK","Fuck","婊子","有没有活的","想死?","shit","SHIT","Shit","蛋子",
+"你奶奶的","和你妈做爱","她妈的","你爷爷的","有没有喘气的","cao","CAO","Cao",
+"放你妈的屁","tmd","TMD","tmmd","TMMD","操你妈","日死你","干你娘","没死回？",
+"操你姐","狗屁wiz","狗wiz","破wiz","死wiz","日死你","Nnd","kao","KAO","Kao",
+"干你妈","干你的","ｆｕｃｋ","ＦＵＣＫ","F u c k","f u c k","nnd","NND","SB",
+"Kao","K a o","KAO","K  A  O","k  a  o","KAo","kAo","kaO","mlgb","MLGB",
+"mcb","Sb","sb","shabi","SHABI","MCB","danzi","蛋子","你妈","你爹","我草","尿",
+"牛比","放屁","吃屎","你大爷","操你妈","打炮","6mang","大便","小便","caobi",
+"避孕套","手淫","老处女","小处女","j8","J8","娼妇","日你妈","贱b","贱B","杂种",});
+
+mapping channels = ([
+	// 天神(admin) (arch) 可用频道
+	"imud":([ "msg_speak": CYN "┋网络┋%s：%s\n" NOR,
+				"msg_emote": CYN "┋网络┋%s" NOR,
+				"arch_only": 1,
+				"wiz_only": 1 ]),
+
+	// 天神(admin) 可用频道
+	"adm":	([ "msg_speak": HIW "┋天神┋%s：%s\n" NOR,
+				"msg_emote": HIW "┋天神┋%s" NOR,
+				"adm_only": 1 ]),
+
+	// 天神(admin) 可用频道
+	"err": ([ "msg_speak": HIR "┋错误┋%s：%s\n" NOR,
+				"msg_emote": HIR "┋错误┋%s" NOR,
+				"adm_only": 1 ]),
+
+	// 天神(admin) 可用频道
+	"debug":([ "msg_speak": HIW "┋调试┋%s：%s\n" NOR,
+				"msg_emote": HIY "┋调试┋%s" NOR,
+				"adm_only": 1]),
+
+	// 全体巫师可用频道
+	"sys": ([ "msg_speak": WHT "┋系统┋%s：%s\n" NOR,
+				"msg_emote": WHT "┋系统┋%s" NOR,
+				"wiz_only": 1 ]),
+
+	// 全体巫师可用频道
+	"wiz": ([ "msg_speak": HIY "┋神界┋%s：%s\n" NOR,
+				"msg_emote": HIY "┋神界┋%s" NOR,
+				"msg_color": HIY,
+				"wiz_only": 1,]),
+
+	// 所有用户可收听的频道
+       "music":  (["msg_speak": "┋"HIG"天籁"NOR"┋"HIG"%s点播：%s\n"NOR,
+			"xx_only" : 1 ]),
+
+	// 所有用户可用频道
+      "sldh": ([     "msg_speak": HIC "┋水陆大会┋%s：%s\n" NOR,
+			"msg_color": HIC,
+                     "msg_emote": HIC "┋水陆大会┋%s\n" NOR,
+			"xx_only" : 1 ]),
+
+	// 所有用户可用频道
+	"chat":([	"msg_speak": HIC "┋闲聊┋%s：%s\n" NOR,
+			"msg_color": HIC,
+			"msg_emote": HIC "┋闲聊┋%s\n" NOR,
+			"natured_only":1,
+			"wiz_spe": 1,
+			 ]),
+/*
+	// 仅限于新手(<16岁)可用频道，大于16岁则可收听而无法使用
+	"new": ([ "msg_speak": WHT "〖"HIG"初来乍到"NOR WHT"〗%s：%s\n" NOR,
+			"msg_color": WHT,
+			"msg_emote": WHT "〖"HIY"初来乍到"NOR WHT"〗%s" NOR,
+			"wiz_spe": 1 ]),
+*/
+	// 所有用户可用频道
+	"rumor":([	"msg_speak": HIM "┋谣言┋%s：%s\n" NOR,
+			"msg_color": HIM,
+		       "msg_emote": HIM "┋谣言┋%s\n" NOR,
+			"anonymous": "某人"
+			]),
+
+	// 用户门派可用频道
+	"party":([ "msg_speak": HIG "┋门派┋%s：%s\n" NOR,
+				"msg_emote": HIG "┋门派┋%s" NOR,
+				"msg_color": HIG,
+				"wiz_spe": 1,
+				"party_only": 1 ]), 
+/*
+	// 仅限于用户处于摆摊时可用频道
+	"sale": ([ "msg_speak": HIG"※"HIR"摊贩叫卖"HIG"※%s：%s\n" NOR,
+			"msg_color": HIG,
+			"msg_emote": HIG"※"HIR"摊贩叫卖"HIG"※%s" NOR,
+			"sale_only": 1,
+			"wiz_spe": 1 ]),
+*/
+
+	// 仅限于用户夫妻关系之间可用频道
+	"ct" :([ "msg_speak": HIM "┋情意绵绵┋%s：%s\n" NOR,
+	              "msg_emote": HIM "┋情意绵绵┋%s" NOR,
+			"msg_color": HIM,
+			"couple_only":1 ]),
+
+	// 系统频道，任何用户无权关闭，用于公用信息，类似于rumor
+	"xiaodao":   ([ "msg_speak": WHT"┋"HIR"小道消息"NOR WHT"┋%s：%s\n" NOR,
+			"msg_emote": WHT"┋"HIR"小道消息"NOR WHT"┋%s\n" NOR,
+			"msg_color": WHT,
+			"anonymous": "听说" ,
+			"xx_only" : 1 ]),
+
+	// 用户大宗师扩展频道，符合条件给予设定
+	"ultra": ([ "msg_speak": HIY "┋ "HIR"大罗仙"HIY" ┋"HIG"%s：%s\n" NOR,
+       	       "msg_color": HIG,
+  			"msg_emote": HIY "┋ "HIR"大罗仙"HIY" ┋"HIG"%s" NOR,
+                     "name"     : "佛祖",
+                     "intermud" : GCHANNEL,
+                     "intermud_emote"    : 1,
+			"xx_only" : 1,
+                     "intermud_channel"  : "rultra",
+                     "filter"   : (: $1["MUDLIB"] == MUDLIB_NAME :)	]),
+
+	// 用户扩展频道，符合条件给予设定
+       "rultra":([ "msg_speak": HIR "┋"HIY"异域佛祖"HIR"┋"HIY"%s：%s\n" NOR,
+                   "msg_emote": HIR "┋"HIY"异域佛祖"HIR"┋"HIY"%s" NOR,
+                   "msg_color": HIY,
+                   "name"     : "千里传音",
+			"xx_only" : 1,
+                   "for_listen": 1,  ]),
+
+    "xyj":  ([  "msg_speak": HIR "┋西游记┋%s：%s\n" NOR,
+			"msg_color": HIR,
+            "msg_emote": HIR "┋西游记┋%s\n" NOR,
+			"intermud": GCHANNEL, "channel": "xyj",
+			"filter": (:$1["MUDLIB"]=="A Journey to the West" :) ]),
+
+]);
+
+int block_chat = 0;
+int block_party = 0;
+int block_rumor = 0;
+int block_sldh = 0;
+int block_xyj = 0;
+int block_music = 0;
+int block_all = 0;
+int block_forever = 0;
+
+string party;
+string chat;
+string natured;
+string couple_id;
+void add_rumor(object me,string msg);
+// 记录临时谣言人，结果功能放在巫师区域信使身上ask。。。
+nosave string *rumorer = ({ "","","","","","","","","","" });
+nosave int rumor_p = 0;
+string query_save_file() { return DATA_DIR + "channeld"; }
+
+void create()
+{
+	seteuid(getuid());     
+	set("channel_id", "频道精灵");
+       this_object()->set("rumor_point",0);
+}
+
+varargs int do_channel(object me, string verb, string arg, int emote, int remote)
+{
+	int cost, count;
+	object *ob, couple;
+    	string arg_bk,localmsg;
+	string *tuned_ch, who;
+	string tmp, color;
+	string vb, emote_arg, season;
+	// 所要记录的频道种类 Log
+	string *verb_record = ({ "xyj", "chat", "rumor", "sldh", "party" });
+	reset_eval_cost();
+
+	// Update by waiwai@2002/12/03 不记录Emote的Log及Npc的log，限制Log大小<5M
+	// prevent file size too big, about 5M limit
+	if(member_array(verb,verb_record)!=-1&&file_size("channel/"+verb+"_log")<5012000) 
+	if(userp(me) && !wizardp(me) )
+	log_file("player/chat/"+verb+"_log", 
+	"["+log_time() +"] "+log_id(me)+" ["+query_ip_number(me)+"]:"+arg+"\n");
+
+	if(sizeof(verb)>2) {
+           if( verb[sizeof(verb)-1] == '*' ) {
+		emote = 1;
+		verb = verb[0..<2];
+		}
+	}
+
+	if( userp(me) && !wizardp(me)){
+	if(arg && strlen(arg)>240) {
+          return notify_fail(RED"\n请不要一次性输入太多文字。\n"NOR);
+		}
+	}
+
+	if( !mapp(channels) || undefinedp(channels[verb]) ) return 0;
+		
+	if(remote) arg_bk = arg;
+
+	if( !userp(me) ) {
+		if( sprintf("/%O", previous_object()) == GCHANNEL
+			&& channels[verb]["intermud"] != GCHANNEL ) {			
+			log_file("channel",
+				sprintf("\nfrom: %O \n"
+					"who: %s\n"
+					"channel: %s\n"
+					"message: %s\n"
+					"error: remote host want use gchannel send local channel message.\n"
+					"time: %s\n",
+					previous_object(),
+					me->query("channel_id"),
+					verb, arg, log_time() ) );
+			return 1;
+			}
+	}
+
+	if( channels[verb]["adm_only"] )
+	if( wizardp(me) && wizhood(me) != "(admin)" )
+		return notify_fail("你不能使用这个频道。\n");
+
+	if( channels[verb]["arch_only"] )
+	if( wizardp(me) && (wizhood(me) != "(admin)" || wizhood(me) != "(arch)") )
+		return notify_fail("你不能使用这个频道。\n");
+
+	/**************************************************************/
+	// Added By waiwai@2001/03/10
+	if ( userp(me) && !wizardp(me)){
+	if (mapp(me->query("chblk_channel"))) me->delete("chblk_channel");
+
+	if(me->query_condition("killer"))
+		return notify_fail(HIR"你正在被通辑中，不能使用公共频道！\n"NOR);
+
+       if( me->query("chblk/forever") ) 
+		return notify_fail(HIR"很遗憾，你的所有公共交谈频道被无限期永久地关闭了！ \n"NOR);
+
+       if (time()-(int)me->query("chblk/all")<0)
+		return notify_fail(HIG"你的所有公共交谈频道只能于"HIR+
+		(-((time()-(int)me->query("chblk/all"))/60))+HIG"分钟后再次使用！\n"NOR);
+	else {
+	if( (time()-(int)me->query("chblk/party")<0) && (verb == "party"||verb=="party*"))
+		return notify_fail("对不起！你的门派交谈频道(party)被关闭了，只能于"HIR+
+		(-((time()-(int)me->query("chblk/party"))/60))+NOR"分钟后再次使用！\n");
+
+	if( (time()-(int)me->query("chblk/rumor")<0) && (verb == "rumor"||verb=="rumor*"))
+		return notify_fail("对不起！你的谣言交谈频道(rumor)被关闭了，只能于"HIR+
+		(-((time()-(int)me->query("chblk/rumor"))/60))+NOR"分钟后再次使用！\n");
+
+	if( (time()-(int)me->query("chblk/chat")<0) && (verb == "chat"||verb=="chat*"))
+		return notify_fail("对不起！你的聊天交谈频道(chat)被关闭了，只能于"HIR+
+		(-((time()-(int)me->query("chblk/chat"))/60))+NOR"分钟后再次使用！\n");
+
+	if( (time()-(int)me->query("chblk/sldh")<0) && (verb == "sldh"||verb=="sldh*"))
+		return notify_fail("对不起！你的水陆大会频道(sldh)被关闭了，只能于"HIR+
+		(-((time()-(int)me->query("chblk/sldh"))/60))+NOR"分钟后再次使用！\n");
+
+	if( (time()-(int)me->query("chblk/music")<0) && verb == "music")
+		return notify_fail("对不起！你的天籁频道(music)被关闭了，只能于"HIR+
+		(-((time()-(int)me->query("chblk/music"))/60))+NOR"分钟后再次使用！\n");
+
+	if( (time()-(int)me->query("chblk/xyj")<0) && (verb == "xyj"||verb=="xyj*"))
+		return notify_fail("对不起！你的潭际飞梭频道(wkz)被关闭了，只能于"HIR+
+		(-((time()-(int)me->query("chblk/xyj"))/60))+NOR"分钟后再次使用！\n");
+
+	}
+	/**************************************************************/
+	// Added By waiwai@2001/03/10
+	// 关闭整个系统的某个频道，比如xyj某个频道有人捣乱等。。。。。 
+	if((int)block_forever && ( verb == "chat" || verb == "rumor" || verb == "party"
+	|| verb == "sldh" || verb == "xyj" || verb == "music" ) )
+      		return notify_fail(HIR"很抱歉，现在整个西游记系统的公用频道全部处于关闭状态！！！\n"NOR);
+ 
+	if ((int)block_chat && verb == "chat" )
+		return notify_fail(HIR"现在整个西游记系统的闲聊频道处于关闭状态。！！！\n"NOR);
+
+	if ((int)block_party && verb == "party" )
+		return notify_fail(HIR"现在整个西游记系统的门派频道处于关闭状态！！！\n"NOR);
+
+	if ( ( (time()-(int)block_rumor)<0 ) && verb == "rumor" )
+		return notify_fail(HIR"现在整个西游记系统的谣言频道处于关闭状态只能于"HIR+
+			(-(time()-(int)block_rumor)/60)+"分钟后再次使用！\n"NOR);
+
+	if ((int)block_xyj && verb == "xyj" )
+		return notify_fail(HIR"现在整个西游记系统的潭际飞梭频道处于关闭状态！！！\n"NOR);
+
+	if ((int)block_sldh && verb == "sldh" )
+		return notify_fail(HIR"现在整个西游记系统的水陆大会频道处于关闭状态！！！\n"NOR);
+
+	if ((int)block_sldh && verb == "music" )
+		return notify_fail(HIR"现在整个西游记系统的天籁频道处于关闭状态！！！\n"NOR);
+
+	/**************************************************************/
+        
+	if (!stringp(arg) || arg == "") {
+		arg = "...";
+		if (emote) arg = "自言自语地不知道在说些什么。";
+	}
+
+	if(channels[verb]["wiz_only"] && !wizardp(me) && userp(me))
+		return 0;
+		
+	if(channels[verb]["adm_only"] && wizhood(me)!= "(admin)" && userp(me)) 
+		return 0;
+
+	if(channels[verb]["party_only"] && !me->query("family/family_name"))
+		return notify_fail("你还是先加入一个门派再说吧。\n");
+
+	if( !wizardp(me) && userp(me) ) {
+	if(channels[verb]["sale_only"] && !me->query_temp("on_baitan") )
+		return notify_fail("你必须是商人并且在摆摊才能使用这个频道。\n");
+
+	// 特定房间不允许使用公用频道
+	if( environment(me)->query("no_chat") )
+		return notify_fail(HIC"这里禁止使用公用频道。\n"NOR);
+
+	// 系统预留不允许玩家使用的，目前仅设定在 xiaodao和music 频道
+	if( channels[verb]["xx_only"] )
+		return notify_fail("你不能使用这个频道。\n");
+	}
+
+	if (channels[verb]["party_only"]) {
+		party = me->query("family/family_name");
+		channels[verb]["msg_speak"] = HIG "┋"+party+"┋%s：%s\n" NOR;
+		channels[verb]["msg_emote"] = HIG "┋"+party+"┋%s" NOR;
+	}
+
+	/**************************************************************/
+	season = NATURE_D->check_season();
+
+	// Added by waiwai@2002/04/03
+	if(channels[verb]["natured_only"]) {
+		// Modified by waiwai@2003/01/15 
+		if(me->query("family/family_name") == "方寸山三星洞" && me->query("zhangmen/title") ) {
+          	channels[verb]["msg_speak"] = HIC "┋"HIG"斜月三星"HIC"┋"HIC"%s：%s\n" NOR;
+              channels[verb]["msg_emote"] = HIC "┋"HIG"斜月三星"HIC"┋%s\n" NOR;
+		} else
+		if(me->query("family/family_name") == "南海普陀山" && me->query("zhangmen/title") ) {
+          	channels[verb]["msg_speak"] = HIC "┋"HIY"慈悲红尘"HIC"┋"HIC"%s：%s\n" NOR;
+              channels[verb]["msg_emote"] = HIC "┋"HIY"慈悲红尘"HIC"┋%s\n" NOR;
+		} else
+		if(me->query("family/family_name") == "将军府" && me->query("zhangmen/title") ) {
+          	channels[verb]["msg_speak"] = HIC "┋"HIW"沙场战神"HIC"┋"HIC"%s：%s\n" NOR;
+              channels[verb]["msg_emote"] = HIC "┋"HIW"沙场战神"HIC"┋%s\n" NOR;
+		} else
+		if(me->query("family/family_name") == "五庄观" && me->query("zhangmen/title") ) {
+          	channels[verb]["msg_speak"] = HIC "┋"HIM"真武道尊"HIC"┋"HIC"%s：%s\n" NOR;
+              channels[verb]["msg_emote"] = HIC "┋"HIM"真武道尊"HIC"┋%s\n" NOR;
+		} else
+		if(me->query("family/family_name") == "天蓬府" && me->query("zhangmen/title") ) {
+          	channels[verb]["msg_speak"] = HIC "┋"HIW"天河之尊"HIC"┋"HIC"%s：%s\n" NOR;
+              channels[verb]["msg_emote"] = HIC "┋"HIW"天河之尊"HIC"┋%s\n" NOR;
+		} else
+		if(me->query("family/family_name") == "阎罗地府" && me->query("zhangmen/title") ) {
+		if( me->query("gender") == "男性") {
+          	channels[verb]["msg_speak"] = HIC "┋"HIG"大力鬼王"HIC"┋"HIC"%s：%s\n" NOR;
+              channels[verb]["msg_emote"] = HIC "┋"HIG"大力鬼王"HIC"┋%s\n" NOR;
+		} else {
+          	channels[verb]["msg_speak"] = HIC "┋"HIG"地府女主"HIC"┋"HIC"%s：%s\n" NOR;
+              channels[verb]["msg_emote"] = HIC "┋"HIG"地府女主"HIC"┋%s\n" NOR;
+		}
+		} else
+		if(me->query("family/family_name") == "月宫" && me->query("zhangmen/title") ) {
+          	channels[verb]["msg_speak"] = HIC "┋"HIR"广寒宫主"HIC"┋"HIC"%s：%s\n" NOR;
+              channels[verb]["msg_emote"] = HIC "┋"HIR"广寒宫主"HIC"┋%s\n" NOR;
+		} else
+		if(me->query("family/family_name") == "东海龙宫" && me->query("zhangmen/title") ) {
+          	channels[verb]["msg_speak"] = HIC "┋"HIW"东海龙神"HIC"┋"HIC"%s：%s\n" NOR;
+              channels[verb]["msg_emote"] = HIC "┋"HIW"东海龙神"HIC"┋%s\n" NOR;
+		} else
+		if(me->query("family/family_name") == "大雪山" && me->query("zhangmen/title") ) {
+		if( me->query("gender") == "男性") {
+          	channels[verb]["msg_speak"] = HIC "┋"HIW"魔毒神君"HIC"┋"HIC"%s：%s\n" NOR;
+              channels[verb]["msg_emote"] = HIC "┋"HIW"魔毒神君"HIC"┋%s\n" NOR;
+		} else {
+          	channels[verb]["msg_speak"] = HIC "┋"HIW"魔毒神姬"HIC"┋"HIC"%s：%s\n" NOR;
+              channels[verb]["msg_emote"] = HIC "┋"HIW"魔毒神姬"HIC"┋%s\n" NOR;
+		}
+		} else
+		if(me->query("family/family_name") == "陷空山无底洞" && me->query("zhangmen/title") ) {
+          	channels[verb]["msg_speak"] = HIC "┋"HIR"嗜血精灵"HIC"┋"HIC"%s：%s\n" NOR;
+              channels[verb]["msg_emote"] = HIC "┋"HIR"嗜血精灵"HIC"┋%s\n" NOR;
+		} else
+		if(me->query("family/family_name") == "火云洞" && me->query("zhangmen/title") ) {
+          	channels[verb]["msg_speak"] = HIC "┋"HIR"焚心似火"HIC"┋"HIC"%s：%s\n" NOR;
+              channels[verb]["msg_emote"] = HIC "┋"HIR"焚心似火"HIC"┋%s\n" NOR;
+		} /*else
+		if( (int)me->query("child")>2 ) {
+          	channels[verb]["msg_speak"] = HIC "┋"HIY"格桑花"HIC"┋"HIC"%s：%s\n" NOR;
+              channels[verb]["msg_emote"] = HIC "┋"HIY"格桑花"HIC"┋%s\n" NOR;
+		}*/
+              else
+        switch(season) {
+              case "Spring-Sun":
+              case "Spring-Wind":
+              case "Spring-Rain":
+		natured = "春之絮";
+              channels[verb]["msg_speak"] = HIC "┋"+natured+HIC"┋%s：%s\n" NOR;
+              channels[verb]["msg_emote"] = HIC "┋"HIG+natured+HIC"┋%s\n" NOR;
+              break;
+              case "Summer-Sun":
+              case "Summer-Wind":
+              case "Summer-Rain":
+		natured = "夏之语";
+              channels[verb]["msg_speak"] = HIC "┋"+natured+HIC"┋%s：%s\n" NOR;
+              channels[verb]["msg_emote"] = HIC "┋"HIR+natured+HIC"┋%s\n" NOR;
+              break;
+              case "Autumn-Sun":
+              case "Autumn-Wind":
+              case "Autumn-Rain":
+		natured = "秋之情";
+              channels[verb]["msg_speak"] = HIC "┋"+natured+HIC"┋%s：%s\n" NOR;
+              channels[verb]["msg_emote"] = HIC "┋"HIY+natured+HIC"┋%s\n" NOR;
+              break;
+              case "Winter-Sun":
+              case "Winter-Wind":
+              case "Winter-Snow":
+		natured = "冬之思";
+              channels[verb]["msg_speak"] = HIC "┋"+natured+HIC"┋%s：%s\n" NOR;
+              channels[verb]["msg_emote"] = HIC "┋"HIW+natured+HIC"┋%s\n" NOR;
+              break;
+              case "Default-Sun":
+		natured = "谈天说地";
+              channels[verb]["msg_speak"] = HIC "┋"+natured+HIC"┋%s：%s\n" NOR;
+              channels[verb]["msg_emote"] = HIC "┋"HIY+natured+HIC"┋%s\n" NOR;
+//              break;
+		} 
+
+	}
+	/**************************************************************/
+	// 夫妻
+	if (verb=="ct"||verb=="ct*") {
+		if (!me->query("couple/id")) 
+			return notify_fail("你现在还没有伴侣，要跟谁说悄悄话呢？！\n");
+		if(!(couple=find_player(me->query("couple/id"))))
+			return notify_fail("你的伴侣目前不在线上。\n");
+		      couple_id=me->query("id");
+	}  
+/*
+	// 摊贩
+	if (channels[verb]["sale"]) {
+		ob = users();
+		message( "channel:" + verb, sprintf( channels[verb]["msg_speak"], arg ), ob );
+		return 1;
+		}
+*/
+	}
+
+	tuned_ch = me->query("channels");
+	if( !pointerp(tuned_ch) )
+		me->set("channels", ({ verb }) );
+	else if( member_array(verb, tuned_ch)==-1 )
+		me->set("channels", tuned_ch + ({ verb }) );
+
+	// 新手
+	if ( !wizardp(me) && userp(me) ){
+
+        if((time() - (int)me->query_temp("chat_times")) < 2 )
+		return notify_fail("慢点说。。。。。想被噎死啊？？？\n");
+/*
+	if( (int)me->query("dntg/number") !=10 ) {
+	     if ( me->query("age")<16 && verb!="new" )
+	          return notify_fail(WHT"对不起，不满16岁前你只能使用新手"HIG"(new)"NOR WHT"频道。\n"NOR);
+	     if ( me->query("age")>=16 && verb=="new" )
+	          return notify_fail(WHT"对不起，你已年满16岁了，不适宜再使用新手"HIG"(new)"NOR WHT"频道。\n"NOR);
+ 		}     
+       if((time() - (int)me->query_temp("chat_times")) < 10 ) {            
+	if(me->query("mud_age") < 1800 && verb=="new" ) 
+	   return notify_fail(WHT"很抱歉,如果你的的登陆时间不足30分钟,用频道讲话只能10秒一句。\n"NOR);
+	}
+*/
+	}
+
+
+	me->set_temp("chat_times",time());
+
+        // now we can be sure it's indeed a channel message:
+        if (! stringp(arg) || arg == "" || arg == " " ) arg = "......";
+
+        if (ultrap(me)) {
+                if (verb == "chat" && ! me->query("env/no_autoultra"))
+                        verb = "ultra";
+        } else
+                if (!wizardp(me) && userp(me) && verb == "ultra")
+                        return notify_fail("等你成了大宗师再"
+					   "使用这个频道吧！\n");
+
+	if( emote && me->is_character() && !remote) {	
+                if (undefinedp(channels[verb]["msg_emote"]))
+                        return notify_fail("这个频道不支持表情动词。\n");
+
+	       if( nullp(arg) ) return 0;
+		if( sscanf(arg, "%s %s", vb, emote_arg)!= 2 ) {
+			vb = arg;
+			emote_arg = "";
+		}
+/*
+		if( channels[verb]["intermud_emote"] && sscanf(emote_arg, "%s@%s", id, mud)==2  ) {
+			REMOTE_Q->send_remote_q(mud, verb, me->query("id"), id, vb);
+			write("网路讯息已送出，请稍候。\n");
+			return 1;
+		}
+*/
+		if( channels[verb]["intermud_emote"] )
+			arg = EMOTE_D->do_emote(me, vb, emote_arg, 3);
+		else if( verb == "rumor" )
+			arg = EMOTE_D->do_emote(me, vb, emote_arg, 2,
+ random(100)>10 ? channels[verb]["anonymous"] : me->name()+"[" + capitalize(me->query("id")) + "]");
+		else arg = EMOTE_D->do_emote(me, vb, emote_arg, 1);
+
+		if (!arg && emote) {
+			if (vb[0]<128) arg = EMOTE_D->do_emote(me, vb, emote_arg, 1,
+ channels[verb]["anonymous"]);
+
+			if (!stringp(arg) && vb[0]<161) return notify_fail("你想表达什么？\n");
+			if (!stringp(arg))
+				arg = (channels[verb]["anonymous"]?channels[verb]["anonymous"]:me->name(1)) +
+ vb + " " + emote_arg + "\n";
+		}
+
+		if( !arg ) {
+			if( channels[verb]["anonymous"] ) 
+				arg = channels[verb]["anonymous"]+vb+" "+emote_arg+"\n"; 
+			else if( channels[verb]["intermud_emote"] )
+				arg = sprintf("%s[%s@%s]%s %s\n", me->name(1),capitalize(me->query("id")),
+ INTERMUD_MUD_NAME, vb, emote_arg);
+			else arg = me->name(1)+vb+" "+emote_arg+"\n"; 
+			if(!arg) arg="...";
+		}
+	}
+
+	if ( userp(me) ) {
+	if( verb == "adm" ) {
+		who = sprintf("┋%s┋", me->rank());
+		who = replace_string(who," ","");
+		who = replace_string(who,NOR,"");
+		who += sprintf("%s[%s]", me->name(1),capitalize(me->query("id")));
+		}
+	}
+
+	if (stringp(arg) && verb != "sys") {	
+		if (stringp(color = channels[verb]["msg_color"]))
+			while (sscanf(arg, "%s"NOR"%s", arg, tmp)) arg += color + tmp; 
+		else while (sscanf(arg, "%s*sm%s", arg, tmp)) arg += tmp;
+	}
+
+	/* By waiwai added.
+	if( !wizardp(me) && userp(me) ) { 
+	if (strsrch(arg, "\n┋闲聊┋") > 0)
+		return notify_fail("不准伪造闲聊信息！\n");
+	if (strsrch(arg, "\n┋谣言┋") > 0)
+		return notify_fail("不准伪造谣言信息！\n");
+	if (strsrch(arg, "\n┋"+party+"┋") > 0)
+		return notify_fail("不准伪造门派信息！\n");
+	*/
+	if( arg == me->query_temp("last_channel_msg") )
+		return notify_fail("用公共频道说话请不要重复相同的讯息。\n");
+//	}
+		
+	if( channels[verb]["anonymous"] && random(RRUM)>1 ) {
+                who = channels[verb]["anonymous"];
+		if (userp(me) && !wizardp(me)) {
+			count = me->add_temp("rumor_count", 1);
+			if (count < 0 || count > 100) cost = 100;
+			while (--count) cost += cost;
+			if ((int)me->query("sen") < cost)
+				return notify_fail("你已经没有精力散布谣言了。\n");
+			me->add("sen", -cost);
+			rumorer[rumor_p] = log_id(me)+" ["+log_time()+"]"; // 记录临时谣言
+			rumor_p = (rumor_p++) % 10;
+			me->add("rumor", 1);
+		}
+		who = channels[verb]["anonymous"];
+		if (userp(me) && !wizardp(me)) {
+			do_channel( this_object(), "sys", sprintf(NOR "%s" HIR " 在造谣。", me->short(1) ));
+                SPECIAL_NPC->receive_report(me, verb);
+		}
+		} else {
+			me->delete_temp("rumor_count");
+			if( userp(me) || !stringp(who = me->query("channel_id")) )
+				who = me->name(1) + "[" + capitalize(me->query("id")) + "]";
+
+                if(!emote && wizardp(me) && channels[verb]["wiz_spe"]) {
+			// Added by waiwai@2003/05/27
+			if (me->query("color"))
+			who = me->query("color") + log_id(me);
+			else
+			who = log_id(me) + "说道";
+			arg = HIY+arg+NOR;
+			if(me->query("env/invisibility") > 0)
+			do_channel( this_object(), "adm", sprintf(NOR "%s" HIR " 在隐身说话。", me->short(1) ));
+		}
+	}
+
+	if ( userp(me) ) {
+       if (emote && me->name() != me->name(1) && !channels[verb]["anonymous"]) {
+		do_channel( this_object(), "adm", sprintf(NOR"%s = %s", me->name(1), me->short(1)));
+            }
+	}
+			
+	if( verb=="ct"||verb=="ct*" )
+        ob = ({ couple,me });
+	else 
+		ob = filter_array( users(), "filter_listener", this_object(), verb );
+
+        if( !arg || arg == "" || arg == " " ) arg = "．．．";
+
+	if( emote ) {
+		if(remote) {
+			arg=arg_bk;
+		}
+
+		if (!stringp(arg) || arg == "．．．" ) return 0;
+
+		localmsg = arg;
+
+		if ( channels[verb]["msg_emote"] )
+			localmsg = remove_addresses(arg, 0);
+
+		if( channels[verb]["omit_address"] ) localmsg = remove_addresses(arg, 1);
+		else if( channels[verb]["intermud_emote"] ) localmsg = remove_addresses(arg, 0);
+
+		if( !stringp(localmsg) ) return 0;
+		message( "channel:" + verb,	sprintf( channels[verb]["msg_emote"], arg ), ob );
+	}
+        else message("channel:" + verb, sprintf( channels[verb]["msg_speak"], who, arg ), ob );
+
+	if(!emote) { 
+	for(int i=0; i<sizeof(msg_d); i++) {
+       if( userp(me) && !wizardp(me) && !me->query("vip") && strsrch(arg, msg_d[i]) >= 0) {                    
+	message("channel:rumor",HIW"\n┋频道巡捕┋"HIW+log_id(me)+
+	HIW" 在聊天频道使用不雅言词，暂时关闭所有频道10分钟。\n"NOR, users());
+ 	CHANNEL_D->do_channel( this_object(), "sys","因为"+log_id(me)+
+	"在聊天频道使用脏话，暂时关闭所有频道。");
+	me->set("chblk/all", time()+600); // 关闭10分钟                                              
+                    }
+        }
+	}
+
+	if( arrayp(channels[verb]["extra_listener"]) ) {
+		channels[verb]["extra_listener"] -= ({ 0 });
+		if( sizeof(channels[verb]["extra_listener"]) )
+			channels[verb]["extra_listener"]->relay_channel(me, verb, arg);
+	}	
+	if( !undefinedp(channels[verb]["intermud"]) && me->is_character()) {
+		channels[verb]["intermud"]->send_msg(
+			channels[verb]["channel"], me->query("id"), me->name(1), arg, emote,
+			channels[verb]["filter"] );
+	}
+
+	if (userp(me) && !wizardp(me)) {
+		if (stringp(me->query_temp("last_channel_msg"))
+			&& (strsrch(arg, me->query_temp("last_channel_msg")) >= 0
+			|| strsrch(me->query_temp("last_channel_msg"), arg) >= 0))
+			
+		me->add_temp("channel_repeat", 1);
+		else me->delete_temp("channel_repeat");
+		
+        if (me->query_temp("channel_repeat") > 1) {
+			me->set("chblk/"+verb, time()+190);// 关闭3分钟 
+			switch (verb) {
+					case "chat":  verb = "聊天"; break;
+					case "rumor": verb = "谣言"; break;
+			       	case "sldh":  verb = "水陆大会"; break;
+          				case "xyj":    verb = "潭际"; break;
+          				case "music": verb = "天籁"; break;
+					case "party": verb = "门派"; break;
+				       default:      verb = "交谈";
+		         }
+	do_channel(this_object(), "rumor", 
+"由于讲话太罗嗦，" + me->name(1) +"("+capitalize(me->query("id"))+") 的" + verb +"频道被系统自动关闭3分钟。");
+		 }
+		
+	me->set_temp("last_channel_msg", arg);
+	if (me->add_temp("channel_count", 1) > 1) {
+	                me->delete_temp("channel_count");
+                if(me->query_temp("last_channel_time") == uptime()) {
+			 me->set("chblk/"+verb, time()+190);// 关闭3分钟 
+			 switch (verb) {
+					case "chat":  verb = "聊天"; break;
+					case "rumor": verb = "谣言"; break;
+ 		       	       case "sldh":  verb = "水陆大会"; break;
+          				case "xyj":    verb = "潭际"; break;
+          				case "music": verb = "天籁"; break;
+					case "party": verb = "门派"; break;
+					default:      verb = "交谈";
+		         }
+	do_channel(this_object(), "rumor",
+"由于讲话太多太快，"+ me->name(1)+"("+capitalize(me->query("id"))+") 的"+ verb +"频道被系统自动关闭3分钟。");
+			}
+			me->set_temp("last_channel_time", uptime());
+		}
+	}
+//        if( userp(me) && channels[verb]["anonymous"] ) add_rumor(me,arg); ////
+
+	return 1;
+}
+
+int filter_listener(object ppl, string verb)
+{
+	mapping ch;
+	string *chs;
+	
+	if( !environment(ppl) ) return 0;
+	
+	if( !pointerp(chs = ppl->query("channels")) || member_array(verb, chs)==-1 )
+		return 0;
+		
+	ch = channels[verb];
+
+	if( ch["adm_only"])
+	  if( userp(ppl) && wizardp(ppl) )
+	  if( wiz_level(ppl) < wiz_level("(admin)") ) return 0;
+
+	if( ch["wiz_only"] ) return wizardp(ppl);
+
+	if (ch["party_only"])
+		return (wizardp(ppl)&& (!ppl->query("env/party") 
+	|| ppl->query("env/party")==party))
+	|| party == ppl->query("family/family_name");
+
+       if( ch["couple_only"]) {
+   	if ( !wizardp(ppl) && couple_id !=ppl->query("couple/id") 
+   	&& couple_id !=ppl->query("id")  ) return 0;
+        }	
+
+       if( ch["sale_only"]) {
+   	if ( !wizardp(ppl) && userp(ppl) 
+	&& !ppl->query_temp("on_baitan") ) return 0;
+       }	
+
+	return 1;
+}
+
+void register_relay_channel(string channel)
+{
+	object ob;
+	
+	ob = previous_object();
+	if( undefinedp(channels[channel]) || !ob) return;
+	if( arrayp(channels[channel]["extra_listener"]) ) {
+		if( member_array(ob, channels[channel]["extra_listener"]) >=0 ) return;
+		channels[channel]["extra_listener"] += ({ ob });
+	} else
+		channels[channel]["extra_listener"] = ({ ob });
+}
+
+int set_block(string channel, int d)
+{
+	if( channel == "chat" )	block_chat = d;
+	if( channel == "party" )	block_party = d;
+	if( channel == "xyj" )	block_xyj = d;
+	if( channel == "sldh" )	block_sldh = d;
+	if( channel == "rumor" )	block_rumor = d;
+	if( channel == "music" )	block_music = d;
+	if( channel == "all" )	block_all = d;
+	if( channel == "forever" )	block_forever = d;
+
+	return 1;
+}
+
+void add_rumor(object me,string msg)
+{
+        object ob=this_object();
+        string msg_id;
+        int i;
+        int detect_chance;
+        int rumor_point=ob->query("rumor_point");
+        rumor_point++;
+        if (rumor_point>10) rumor_point-=10;
+        i=sizeof(msg_id);
+        msg_id="rumor_msg_0";
+        i=sizeof(msg_id);
+        msg_id[i-1]+=rumor_point;
+        ob->set(msg_id,msg);
+        msg_id="rumor_id_0";
+        i=sizeof(msg_id);
+        msg_id[i-1]+=rumor_point;
+        ob->set("rumor_point",rumor_point);
+        detect_chance=31-(int)(me->query("daoxing")/33333);
+        if(!userp(me) || wizardp(me) || random(100)>detect_chance) {
+           ob->set(msg_id,"none");
+           return;
+         } else
+        ob->set(msg_id,me->query("name")+"("+me->query("id")+")");
+        return;                 
+}
+
+string query_rumor_msg(int num)
+{
+        string msg_id;
+        int i;
+        msg_id="rumor_msg_0";
+        i=sizeof(msg_id);
+        msg_id[i-1]+=num;
+        return this_object()->query(msg_id);
+}
+
+string query_rumor_id(int num)
+{
+        string msg_id;
+        int i;
+        msg_id="rumor_id_0";
+        i=sizeof(msg_id);
+        msg_id[i-1]+=num;
+        return this_object()->query(msg_id);
+}
+
+string remove_addresses(string msg, int all)
+{
+	int i;
+	mixed tmp;
+	string pattern;
+
+	if(!stringp(msg)) return msg;
+	if( all )
+		pattern = "[(][A-Za-z]+@[a-zA-Z]+[0-9]+[.]?[)]";
+	else
+		pattern = "[(][A-Za-z]+@"+Mud_name()+"[)]";
+
+	tmp = reg_assoc(msg, ({pattern}), ({1}));
+
+	if(!arrayp(tmp)) return msg;
+	msg = "";
+	for(i=0; i< sizeof(tmp[0]); i++)
+		if( tmp[1][i] == 0 ) msg += tmp[0][i];
+	return msg;
+}
+
+string *query_rumorer() 
+{
+	return rumorer;
+}

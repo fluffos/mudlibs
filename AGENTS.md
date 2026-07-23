@@ -2050,6 +2050,54 @@ log-file path the mudlib itself might write failures to (`log_file(`/
 since a driver-level failure with no `catch()` can be swallowed by a
 completely separate, easy-to-miss logging convention.
 
+### 15ai. Excluding `dns_master` from preload (§15p) can surface a SECOND, independent problem: a "site verification" gate elsewhere in `logind.lpc` that assumes the daemon exists and calls `shutdown(1)` unconditionally on the very first connection
+
+Found on `xiyouji2003` (archive #81): once `dns_master` was proactively
+removed from preload per §15p's standing policy, the very next boot's
+first connection attempt immediately disconnected everyone — traced to
+a `logind.lpc` check (originally meant to verify the mud is registered
+with an intermud directory before allowing play, a common circa-2000
+anti-piracy/registration gate) that called `find_object(DNS_MASTER)` and
+then called methods on the result unconditionally, without checking
+whether `find_object` actually returned an object — since the daemon was
+now never loaded, this returned `0`, and the resulting `0->method()`
+call path led to the gate's failure branch, which calls `shutdown(1)`.
+Fix: guard the check with an explicit `find_object(DNS_MASTER)` truthiness
+test before proceeding, treating "daemon absent" as "skip the gate" rather
+than "gate failed." **Lesson**: §15p's exclusion is not risk-free by
+itself — after removing a DNS/intermud daemon from preload, boot the
+driver AND actually attempt a real connection before considering the
+exclusion complete, since some libs have OTHER code elsewhere that
+assumes the daemon's presence and can fail in an even more disruptive
+way (killing every connection) than the daemon's own hang would have.
+
+### 15aj. A mandatory post-registration "choose your gift"/first-room object can be missing from the archive entirely — new characters get moved to a nonexistent destination and are left with no environment at all, silently crashing every subsequent command
+
+Found on `xiyouji2003` (archive #81): `logind.lpc`'s registration
+completion step unconditionally moves the new player object to a
+hardcoded room (here, `/d/wiz/init`, a "select your starting gift" room)
+— but that file simply doesn't exist anywhere in this archive (likely an
+already-known gap even in the original, unconverted game, not something
+our pipeline broke). Since `move_object`/`->move()` to a nonexistent
+destination silently fails to actually relocate the player, the new
+character ends up with **no environment object at all**, and every
+subsequent command that assumes `environment(this_object())` is non-null
+(which is nearly all of them — `look`, `score`, movement) crashes or does
+nothing. This is symptomatically identical to §15ae's "post-login
+commands silently do nothing" failure mode, but with a totally different
+root cause (missing content, not a dispatch bug) — a second, now
+recognized, class of "commands stop working right after registration"
+bug. Fix: guard the move with `load_object()`/`find_object()` before
+attempting it, falling back to whatever the lib's own normal
+`START_ROOM` constant is (matching the same fallback pattern most libs
+already use a few lines below for the *ordinary* returning-player case —
+just extend it to also cover the fresh-registration gift-room path).
+**Lesson**: when §15ae's checklist (test `look`/`score` after
+registration) turns up a failure, don't assume it's automatically the
+`private`-command-hook bug — check whether the player actually has a
+valid environment first; a missing destination room produces the exact
+same "commands do nothing" symptom.
+
 ---
 
 ## Per-archive gotchas index

@@ -1,0 +1,129 @@
+//Created by waiwai@2000/12/02
+//Last modified by waiwai@2001/06/20
+//"no_break" sample.
+ 
+#include <ansi.h>
+ 
+inherit SSERVER;
+ 
+int perform(object me)
+{
+	string msg;
+	object weapon, target, *inv;
+	int skill, equip;
+	int force_wound, mana_wound;
+
+	me->clean_up_enemy();
+	target = me->select_opponent();
+
+       skill = me->query_skill("huoyan-spear",1);
+
+       if( !target ) target = offensive_target(me);
+       if( !target
+        || !target->is_character()
+        || !me->is_fighting(target) || !living(target))
+                return notify_fail(WHT"「焚心似火」只能对战斗中的对手使用。\n"NOR);
+
+       if(!objectp(weapon = me->query_temp("weapon")) || (string)weapon->query("skill_type") != "spear")
+                return notify_fail(WHT"你必须装备枪才能使用「焚心似火」\n"NOR);
+
+       if( me->query_skill_mapped("force")!="huomoforce")
+                return notify_fail(WHT"「焚心似火」必须配合火魔心法才能使用。\n"NOR);
+
+       if( me->query_skill_mapped("spells")!="pingtian-dafa")
+                return notify_fail(WHT"「焚心似火」必须配合平天大法才能使用。\n"NOR);
+
+	if( skill < 150)
+                return notify_fail(WHT"你的「火焰枪法」等级不够, 不能使出「焚心似火」！\n"NOR);
+
+	if( me->query_skill("huomoforce",1) < 150)
+                return notify_fail(WHT"你的「火魔心法」等级不够, 不能使出「焚心似火」！\n"NOR);
+
+	if( me->query_skill("pingtian-dafa",1) < 150)
+                return notify_fail(WHT"你的「平天大法」等级不够, 不能使出「焚心似火」！\n"NOR);
+
+       if( me->query("combat_exp") < 1800000 )
+                return notify_fail(WHT"你的武学太差,不能使出「焚心似火」！\n"NOR);
+
+	if( me->query("force") < 600 )
+                return notify_fail("你的内力不够，无法运功！\n");
+ 
+       msg = HIW"$N"HIW"聚真气于手中的"HIG+
+             weapon->name()+HIW"，使出一招"BLINK HIR"「焚心似火」"NOR HIW"，漫天枪影向$n"HIW"击去。\n"NOR;
+
+	//By waiai@2001/06/20 用武学控制比用skills控制合理些.
+	if( random(me->query("combat_exp")) > (int)target->query("combat_exp")/3) {
+		if(userp(me)) //这里是否真的需要,需要考虑
+		me->add("force",-400);
+
+		force_wound = skill*5 + random(skill*5);//这里做双动态设置是为了区分级别差异和随机性
+		if(force_wound > target->query("force"))
+		force_wound = target->query("max_kee");
+		if(force_wound > target->query("mana"))
+		mana_wound = target->query("max_sen");
+
+              //杀伤应该控制好范围.
+		target->receive_damage("kee", force_wound,me);//me不可缺少.
+		target->receive_wound("kee", mana_wound,me);//这里设置mana_wound对使用法术的玩家不利.
+		if(target->query("force")>force_wound/10)
+		target->add("force", -force_wound/10);
+		if(target->query("mana")>mana_wound/10)
+		target->add("mana", -mana_wound/10);
+              //战斗中应该加强动态busy的设置.体现灵活性.这里最好不要设置target的busy.
+              //特别是在类西游记的系统里面,设置target的busy往往会产生出来大米id的副作用.
+		me->start_busy(2+random(2));
+
+		inv = all_inventory(target);
+              msg += HIW"$n"HIR"只觉得眼前一黑，一阵热焰扑面而来，“哇”的一声喷出一口鲜血！\n"NOR;
+		for(equip=0; equip<sizeof(inv); equip++)	{
+                     //下面这句是去除有no_break参数的cloth和weapon不会被break,并且不装备的也不会被break
+                     //通俗的说就是烧衣服和武器,但是不能烧有no_break参数的以及不装备的
+//			if( inv[equip]->query("equipped") &&  !inv[equip]->query("no_break"))
+                     //下面这句是去除武器和有no_break参数的cloth不会被break,并且不装备的也不会被break
+                     //通俗的说就是只烧衣服,但是不能烧有no_break参数和不装备的cloth
+			if( !inv[equip]->query("no_break") && inv[equip]->query("equipped") == "worn"
+                         && inv[equip]->query("equipped") != "wielded" )
+			{
+                     msg += HIW"$n"HIR"闻到一股焦味，发现身上的"HIB+
+                     inv[equip]->query("name")+HIR"已被烧得残破不堪，掉在了地上！\n"NOR;
+			inv[equip]->unequip();
+			inv[equip]->reset_action();
+			inv[equip]->set("name", inv[equip]->query("name") + "的碎片");
+			inv[equip]->set("value", 0);
+//			inv[equip]->set("liquid", 0);//这里是以前所忽略的.
+			inv[equip]->set("armor_prop", 0);
+//			inv[equip]->set("weapon_prop", 0);
+			inv[equip]->set("long", HIC"一堆破碎的"+inv[equip]->query("name")+" \n"NOR);
+//			inv[equip]->move(target);
+			if( inv[equip] )
+			call_out("remove_broken_obj",random(30)+30,inv[equip]);//时间应该尽量短些.
+			}
+		}
+	 }
+	else {
+              msg += HIG "只见$n"HIG"不慌不忙，轻轻一闪，躲过了$N的必杀一击！\n"NOR;
+		if(userp(me)) //还有这里.
+              me->add("force",-150);
+		me->start_busy(3);//而失败的情况下,一般busy设置为定值.
+	}
+	message_vision(msg, me, target);
+       return notify_fail(""WHT+target->name()+NOR WHT"被打了个措手不及。。。\n"NOR); 
+
+       //这里如果是缺省的设置,有时也容易产生大米id.
+       if( !target->is_fighting(me) ) {
+                if( living(target) ) {
+                        if( userp(target) ) target->fight_ob(me);
+                        else target->kill_ob(me);
+                }
+        }
+	return 1;
+}
+
+//这里是不该缺少的.
+void remove_broken_obj(object obj)
+{
+  if(obj && environment(obj)) {
+    tell_object(environment(obj),"一阵微风吹过，"+obj->name()+"化为片片尘土，消失不见了。\n");
+    destruct(obj);
+  }
+}

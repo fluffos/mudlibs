@@ -1,0 +1,29 @@
+Apache来实现基本的用户身份认证有很多种方式，比如最常见的txt文本和DBM格式，但在负载很重的server上-这些都不是理想的方法，文本的形式是基于平面的，性能很差而且也不安全；DBM好些但在千或万级用户时还是力不从心，于是用database做后台存储则是很好的方法-比平面搜索更有效而且安全，用户口令以DES加密形式存储在数据库的表中。 
+这种实现要归功于Apache本身出色的模块化结构--以及开放的DSO方式，可以使开发人员完成大量的第三方模块，并扩充Apache的功能。我在本文中只写了用Mysql做后台存储--此外还可用Postgresql,Oracle等来完成，原理一样-都是用各自的模块。 
+让我们开始吧--先去modules.apache.org(这可是Apache第三方模块的大本营）找到mod_auth_mysql--会有两个我们要用DSO那个-事实上直接去ftp://ftp.kcilink.com/pub/下一个mod_auth_mysql.c.gz就行-好-把它解开是一个mod_auth_mysql.c-好-我们用apxs来生成DSO模块（前题是你用DSO模式编译的Apache)--apxs -c -i -a -L/usr/local/lib/mysql -lmysqlclient >-lm mod_auth_mysql.c即可--这里注意一定要这么写---L/usr/local/lib/mysql是mysql的客户库位置，我假定mysql是用的缺省安装）---如果不加在起动Apache时会报错-无法装载此模块。 
+好-看看httpd.conf中应该有LoadModule mysql_auth_module libexec/mod_auth_mysql.so和AddModule mod_auth_mysql.c这两句了，重起Apache也不应该有问题。 
+然后我们进入mysql,mysql>create database auth; 
+mysql>use auth; 
+mysql> create table mysql_auth ( 
+-> user_name char(20) not null, 
+-> user_passwd char(25), 
+-> groups char(25), 
+-> primary key (username) ); 
+注意字段名一定是user_name和user_passwd这个。再插入几条记录： 
+mysql> insert into mysql_auth values('xingfei2',encrypt("abcde"),'xingfei'); 
+Query OK, 1 row affected (0.00 sec) 
+mysql> insert into mysql_auth values('xingfei',encrypt("abcde"),'xingfei'); 
+Query OK, 1 row affected (0.00 sec) 
+这里abcde是口令-用encrypt函数来进行加密，用的是DES算法-这是和unix的password等同的算法-而不是mysql本身加密的password()函数。 
+最后在要保护的目录里建一个.htaccess(别忘了把AllowOverride all打开）内容如下： 
+authname "xingfei" 
+authtype basic 
+AuthMySQLHost localhost ---mysql主机名 
+authmysqluser root ---mysql用户 
+authmysqlpassword abc ---mysql用户的口令 
+AuthMySQLDB auth ---用户所用的库-也就是我们建的库 
+AuthMySQLUserTable mysql_auth ---所用的表 
+AuthMySQLGroupField groups ---用户组的字段名 
+require group xingfei 
+require user xingfei 
+可以把用户都放在一个组里-只要是这个组里的用户即可通过认证。-也可require单个或多个用户。

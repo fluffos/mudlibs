@@ -1,0 +1,243 @@
+// Update By waiwai@2003/05/06
+
+#pragma save_binary
+
+#include <action.h>
+#include <ansi.h>
+#include <command.h>
+#include <condition.h>
+#include <dbase.h>
+#include <move.h>
+#include <name.h>
+#include <skill.h>
+#include <team.h>
+#include <user.h>
+#include <combat.h>
+
+inherit F_ACTION;
+inherit F_ALIAS;
+inherit F_APPRENTICE;
+inherit F_ATTACK;
+inherit F_ATTRIBUTE;
+inherit F_COMMAND;
+inherit F_CONDITION;
+inherit F_DAMAGE;
+inherit F_DBASE;
+inherit F_EDIT;
+inherit F_FINANCE;
+inherit F_MESSAGE;
+inherit F_MORE;
+inherit F_MOVE;
+inherit F_NAME;
+inherit F_SKILL;
+inherit F_TEAM;
+#define SCHEME_CMD      "/cmds/usr/scheme"
+nosave int next_beat;
+nosave int keep_beat_flag = 0;
+nosave string short_desc = 0;
+
+void create() { seteuid(0); }
+
+int is_character() { return 1; }
+
+void setup()
+{
+	seteuid(getuid(this_object()));
+
+	set_heart_beat(1);
+       next_beat = time() + 5 + random(10);
+       enable_player();
+    set_max_items(50);
+
+	this_object()->update_age(); 
+	CHAR_D->setup_char( this_object() );
+}
+
+void keep_heart_beat()
+{
+        set_heart_beat(1);
+        keep_beat_flag = 1;
+}
+
+void not_keep_heat_beat()
+{
+        keep_beat_flag = 0;
+}
+
+void heart_beat()
+{
+       int t, final;
+       int period;
+	int wimpy_ratio, cnd_flag;
+	mapping my;
+	object ob;
+	object me;
+//	string prompt;
+
+	me = this_object();
+	my = query_entire_dbase();
+/*
+        if (userp(me) && living(me) && mapp(my["env"])) {
+		prompt = my["env"]["prompt"];
+                if ((prompt == "time" || prompt == "mud" || prompt == "hp") &&
+		    is_waiting_command() && ! me->is_attach_system()) {
+                        write_prompt();
+                }
+                
+        }
+*/
+	if( my["eff_kee"] < 0 || my["eff_sen"] < 0 ) {
+		QUEST->quest_kill(this_object());
+		remove_all_enemy();
+		die();
+		return;
+	}
+
+	if( my["kee"] < 0 || my["sen"] < 0 ) {
+		QUEST->quest_kill(this_object());
+		remove_all_enemy();
+		if( !living(this_object()) ) die();
+		else unconcious();
+		return;
+	}
+
+	if( is_busy() ) {
+		continue_action();
+		return;
+	}
+	if ( query_temp("no_move") ) {
+		continue_action();
+		return;
+	} else {
+		if( is_fighting()
+		&&	intp(wimpy_ratio = (int)query("env/wimpy"))
+		&&	wimpy_ratio > 0
+		&&	(	my["kee"] * 100 / my["max_kee"] <= wimpy_ratio
+			||	my["sen"] * 100 / my["max_sen"] <= wimpy_ratio) )
+			GO_CMD->do_flee(this_object());
+		attack();
+	}
+        if (my["doing"] == "scheme")
+                // executing schedule now
+                SCHEME_CMD->execute_schedule(me);
+
+	if( !userp(this_object()) && living(this_object()) ) {
+		this_object()->chat();
+		this_object()->down_zc();
+		if( !this_object() ) return;	
+	}
+
+       if ((t = time()) < next_beat) return;
+       else next_beat = t + 5 + random(10);
+
+	cnd_flag = update_condition();
+
+	if( ((cnd_flag & CND_NO_HEAL_UP) || !heal_up())
+	&&	!is_fighting() 
+	&&	!interactive(this_object())) {
+		if( environment() ) {
+			ob = first_inventory(environment());
+			while(ob && !interactive(ob))
+				ob = next_inventory(ob);
+		}
+		if( !ob && !query("zhengzhao"))	set_heart_beat(0);
+	}
+
+	// Added by waiwai@2003/05/05
+       if(!objectp(this_object()) ) return;
+
+	if( !interactive(this_object()) ) return;
+
+	this_object()->update_age();
+
+       if (living(me)) {
+            	period = t - ((int) my["last_save"]);
+            	if (period < 0 || period > 15 * 60) {
+                	string msg;
+                	msg = GRN"「"GRN"档案储存"GRN"」"NOR GRN"您的档案已经自动存盘。\n" NOR;;
+                	if (! me->save())
+                    	msg = HIR "『数据保护』由于数据异常，您的档案本次存盘失败。\n" NOR;
+                	set("last_save", t);
+                	tell_object(me, msg);
+            }
+        }
+
+	if( !wizardp( me ) && query_idle(this_object()) > IDLE_TIMEOUT)
+		this_object()->user_dump(DUMP_IDLE);
+}
+
+int command_function (string arg)
+{
+	command (arg);
+	return 1;
+}
+
+//Modified By waiwai@2003/05/06 注意有关隐身的有效动作级别是需要数字大于2
+//比如对方的隐身级别是5，你需要设为7以上，才算有效，对方才无法看到你和做动作
+//以下设置请勿随意更改，其作用将影响系统中的userp()和!userp()的所有object属性
+int visible(object ob)
+{
+       int lvl, invis;
+
+       if (wizhood(this_player()) == "(admin)") return 1;
+        lvl = wiz_level(this_object());
+        if (lvl && lvl >= wiz_level(ob)) return 1;
+
+	invis = ob->query("env/invisibility");
+	if( !invis ) invis = ob->query_temp("invisiblity");
+
+	if( invis ) {
+        if( intp(invis) && (invis > lvl) ) return 0;
+		if( query("env/invisibility") ) return 1;
+		return 0;
+	}
+
+        if( ob->is_ghost() ) {
+                if( is_ghost() ) return 1;
+                if( query_temp("apply/astral_vision") ) return 1;
+                return 0;
+        }
+
+	return 1;
+}
+
+
+varargs int eff_skill_level(int level, int usage)
+{
+   if( query("guild") == "fighter" )  {
+	  switch( usage )  {
+		 case SKILL_USAGE_ATTACK:
+		 case SKILL_USAGE_DEFENSE:
+			if( level > 300 )	level += 35 + (level-300)*2/5; 
+			else if( level > 200 )	level += 15 + (level-200)/5;
+			else if( level > 100 )	level += 5 + (level-100)/10;
+			else 				level += level / 20;
+			break;
+		 case SKILL_USAGE_SPELL:
+			level -= level / 10;
+			break;
+	  }
+   }
+   else if( query("guild") == "magician" )  {
+	  switch( usage )  {
+		 case SKILL_USAGE_ATTACK:
+		 case SKILL_USAGE_DEFENSE:
+			level -= level / 10;
+			break;
+		 case SKILL_USAGE_SPELL:
+			if( level > 300 )	level += 35 + (level-300)*2/5; 
+			else if( level > 200 )	level += 15 + (level-200)/5;
+			else if( level > 100 )	level += 5 + (level-100)/10;
+			else 				level += level / 20;
+			break;
+	  } 
+   }
+
+   return level;
+}
+
+int command( string str )
+{
+    reset_eval_cost();
+    return efun::command(str);
+}

@@ -1,0 +1,142 @@
+// Created by waiwai@2001/04/17 
+
+#include <ansi.h>
+
+inherit SSERVER;
+
+void end_cast(object me,object target);
+void cast_person(object me,object target);
+
+int cast(object me, object target)
+{
+        string msg;
+        int howlong;
+
+        if( !target ) target = offensive_target(me);
+
+        if( !target
+        ||      !target->is_character()
+        ||      !me->is_fighting(target) || !living(target))
+                return notify_fail(HIW"你只能在战斗中使用。\n"NOR);
+
+      if(!me->query("taijitu_known"))
+            return notify_fail("你还没学会使用太极图。。。\n");
+
+	if((int)me->query_skill("taiyi",1) < 500)
+            return notify_fail("你还不能自由运用太极图！\n");
+
+	if( me->query_temp("cast_taiji"))
+	        return notify_fail("你已经在使用太极图！\n");        
+
+        if((int)me->query("mana") < 2000 )
+                return notify_fail("你的法力不够！\n");
+        if((int)me->query("sen") < 500 )
+                return notify_fail("你无法集中精力！\n");
+
+        me->add("mana", -1500);
+        me->receive_damage("sen", 300);
+        if( random(me->query("max_mana")) < 500 ) {
+                write("你失败了！\n");
+                return 1;
+        }
+        
+	msg = HIY
+	"\n$N口中念了句咒文，大喝一声：呔！。。。太极无形！。。。\n只见空中金云陡起，并迅速弥漫开来，将$N的身形隐去。\n"
+	NOR;
+	message_vision(msg,me,target);
+	me->set("env/invisibility", 1);
+	howlong=me->query_skill("spells")/5;
+	if(howlong>60)howlong=60;
+	me->set_temp("cast_taiji",1);
+    cast_person(me,target);
+	call_out("end_cast",howlong,me,target);
+    environment(me)->set("oldlong",environment(me)->query("long"));
+  environment(me)->set("long", environment(me)->query("oldlong")+"\n半空中弥漫着金色的云彩，一切景色都很模糊。\n\n");
+	
+       if( !target->is_fighting(me) ) {
+       if( living(target) ) {
+             if( userp(target) ) target->fight_ob(me);
+             else
+		target->kill_ob(me);
+             }
+                me->kill_ob(target);
+        }
+
+	
+        me->start_busy(1);
+        return 3+random(5);
+}
+
+void cast_person(object me,object target)
+{
+  int ap,dp,damage;
+  string msg;
+
+  if(!target||environment(target) != environment(me)||!me->is_fighting(target)){
+  	remove_call_out("cast_person");
+  	remove_call_out("end_cast");
+  	end_cast(me,target);
+  	return;
+  }
+if (target)     target->delete_temp("no_move");
+  if(random(2)){
+    msg = HIG
+         "\n半空中金云翻腾，刀光剑影，似有万把光刀飞向 $n\n"NOR;
+
+	if( random(me->query("combat_exp")) > (int)target->query("combat_exp")/3) {
+       damage = (int)me->query("max_mana") / 10 +
+           random((int)me->query("eff_sen") / 5);
+       damage -= (int)target->query("max_mana") / 10 +
+           random((int)target->query("eff_sen") / 5);                   
+       damage+=(int)me->query("mana_factor")-random((int)target->query("mana_factor"));
+//here we can see if 2 players are at same status, the attacker has higher chance.
+       if( damage > 0 ) {
+           msg +=  HIR "\n$n"HIR"被乱刀穿心，差点跌倒在地！\n" NOR;
+          target->set_temp("no_move",1);
+          //finally damage also depends on enabled spells level.
+           damage +=random((damage*(int)me->query_skill("spells"))/200);
+                        target->receive_damage("sen", damage/4, me);//4
+                        target->receive_wound("sen", damage/4, me);//8
+         }else msg += HIC"\n谁知$n"HIC"毫无反应，依旧一心一意地和$N战斗。\n"NOR;
+    }else msg += HIC"\n谁知$n"HIC"毫无反应，依旧一心一意地和$N战斗。\n"NOR;     
+    message_vision(msg, me, target);
+  }else {
+     msg = HIG
+     "\n半空中金云翻腾，金光流转之际，忽的闪出一道刀光射向 $n\n" NOR;
+
+	if( random(me->query("combat_exp")) > (int)target->query("combat_exp")/3) {
+         damage = (int)me->query("max_mana") / 10 +
+            random((int)me->query("eff_sen") / 5);
+         damage -= (int)target->query("max_mana") / 10 +
+	    random((int)target->query("eff_sen") / 5);                   
+         damage+=(int)me->query("mana_factor")-random((int)target->query("mana_factor"));
+         //here we can see if 2 players are at same status, the attacker has higher chance.
+         if( damage > 0 ) {
+            msg +=  HIR "\n结果一柄寒刀之光从$n"HIR"身上透体穿过，血箭直射到三丈开外！\n" NOR;
+             target->set_temp("no_move",1);
+            //finally damage also depends on enabled spells level.
+            damage +=random((damage*(int)me->query_skill("spells"))/200);
+            target->receive_damage("kee", damage/6, me);//6
+            target->receive_wound("kee", damage/6, me);//10
+          }else msg += HIC"\n但是被$n"HIC"躲开了。\n"NOR;
+      }
+      else msg += HIC"\n但是被$n"HIC"躲开了。\n"NOR;
+      message_vision(msg, me, target);
+  }
+  call_out("cast_person",5,me,target);    	
+}
+
+void end_cast(object me,object target)
+{
+    string msg;
+    	
+    msg = HIW
+     "\n半空中金云渐渐消散了，露出了$N的身影。\n" NOR;
+    message_vision(msg,me);
+    me->set("env/invisibility", 0);
+if (target)     target->delete_temp("no_move");
+    if(environment(me)->query("oldlong"))
+       environment(me)->set("long",environment(me)->query("oldlong"));
+    me->delete_temp("cast_taiji");
+    remove_call_out("cast_person");	
+}
