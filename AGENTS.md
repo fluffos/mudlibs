@@ -2128,6 +2128,33 @@ same-basename collisions before trusting the converted tree; diff each
 pair and pick whichever content is actually correct/current, not
 whichever the rename happened to prioritize.
 
+### 15al. `crypt(str, 0)` (an `int` salt, not a string) silently falls through to a fresh RANDOM hash every call on this driver instead of the deterministic old-style DES hash the original driver produced — can make a client-challenge/response login handshake mathematically unpassable by any client, with zero error anywhere
+
+Found on `zhongjidiyu_zhijian` (archive #80): this lib wires in a mobile
+"指间MUD" client protocol whose login flow requires the client to answer
+a `crypt()`-based challenge — the mudlib computes `crypt(KEY, 0)` and
+expects the connecting client to independently compute the same value
+and echo it back. On the original driver target, `crypt(str, 0)` (or any
+non-string salt) fell back to a default 2-character DES salt, producing
+a **deterministic** hash for a given `KEY` — both sides could compute the
+identical value. This driver's `crypt()`, when given a non-string salt,
+instead generates a **fresh random** SHA-512 salt on every single call —
+so the mudlib's own expected value changes every time it's computed, and
+no client (real or scripted) can ever produce a matching response. This
+silently blocks 100% of connections through that login path, with no
+error anywhere (the crypt call itself succeeds, it just doesn't produce
+what the mudlib's design assumes). Fix: pass an explicit string salt
+(matching the original protocol's expected salt shape/prefix, e.g. `"zj"`
+here) instead of `0`/an int, restoring deterministic output. Verify the
+fix by writing a small Python script using the `crypt` module to compute
+the expected response the same way a real client would, and confirming
+it now matches across repeated calls. **Lesson**: any lib with a custom
+client-handshake/challenge-response step built on `crypt()` needs its
+salt argument checked specifically — a call that "worked" on the
+original driver by relying on a fixed-format non-string salt can silently
+turn into a per-call-random generator here, and this failure mode
+produces literally no signal since the crypt call never errors.
+
 ---
 
 ## Per-archive gotchas index
