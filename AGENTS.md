@@ -1973,6 +1973,32 @@ post-login command (`look` is enough) after registration completes —
 reaching the game world is not the same as being able to play in it, and
 this exact failure mode produces literally no signal in any log.
 
+### 15af. `log_error()`/`APPLY_LOG_ERROR` calling `wizardp(this_player(1))` (or any other check that lazily `load_object()`s the security daemon) during a compile-time WARNING can crash the very first preloaded daemon, before securityd itself has ever loaded
+
+Found on `shenzhou` (archive #72): `master.lpc`'s `log_error()` (already
+known from §15w to receive both warnings and real errors) called
+`wizardp(this_player(1))` unconditionally to decide whether to echo the
+message — but `wizardp()` on a not-yet-loaded uid needs to consult the
+security daemon, triggering a lazy `load_object(SECURITY_D)` mid-compile.
+Since `log_error()` can fire from the very FIRST file the driver ever
+compiles during preload (here: the first-listed daemon, before securityd
+itself has been preloaded), this crashed every single boot attempt at
+the earliest possible point — a different, earlier-firing variant of §4's
+"lazy security-daemon load recurses" family, but through a compile-
+warning path rather than a `valid_read`/`valid_write` apply. **Same file,
+second bug**: the case-sensitivity of the warning-detection substring
+itself was wrong (checking for `"Warning:"` when the driver's actual
+compile diagnostic text is lowercase `"warning:"`), which would have
+made §15w's own fix silently do nothing once the crash above was
+resolved. **Lesson**: any code in `log_error()`/`error_handler()` that
+calls into player/uid-checking functions (`wizardp`, `query_ip_name`, ACL
+lookups) should be treated with the same suspicion as §4's lazy-load
+family — it can fire before the daemon's own preload has completed, not
+just from ordinary runtime traffic. Also worth double-checking every
+substring/case comparison in these handlers against the driver's actual
+diagnostic text, not the text you'd expect from the original MudOS-era
+convention.
+
 ---
 
 ## Per-archive gotchas index
