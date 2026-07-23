@@ -114,6 +114,134 @@ lib fully playable) unless a specific lib is called out for deeper work.
 
 ---
 
+## Post-conversion tooling: driver rebuild, LPC formatter, WASM build
+
+Added when the project moved from "convert once" to "re-verify against a
+moving driver target, in two modes, with consistent formatting." All three
+tools ship in the FluffOS repo itself (`~/src/fluffos`), not this one.
+
+### Rebuilding the native driver
+
+`~/src/fluffos` tracks upstream; after `git pull origin master`:
+```
+cd ~/src/fluffos/build-debug && cmake --build . --target driver -- -j8
+```
+Boot-test one lib against the fresh binary before trusting it for a sweep
+(see the pipeline's own boot-test step) — a driver-level regression would
+otherwise look identical to a mudlib regression.
+
+### The LPC formatter (`tools/lpc-syntax/`)
+
+Dependency-free, needs only Node ≥18 (this host has no system Node — a
+portable build is unpacked at `~/.local/opt/node/`, on PATH via
+`~/.bashrc`). Full docs: `~/src/fluffos/docs/lpc/formatter.md`.
+```
+find libs/<slug>/work -name '*.lpc' | node ~/src/fluffos/tools/lpc-syntax/bin/format-corpus.mjs           # in place
+find libs/<slug>/work -name '*.lpc' | node ~/src/fluffos/tools/lpc-syntax/bin/format-corpus.mjs --check  # verify only
+```
+Every write is gated on token-sequence equivalence + literal byte-identity
++ idempotency (see the doc) — it refuses to touch a file it can't fully
+round-trip rather than guess, so a nonzero `errors` count in its summary
+JSON is expected on messy legacy code and not itself a problem. **Always
+re-boot + re-test after formatting a lib**, same reasoning as the driver
+rebuild: the formatter's own self-checks catch token/byte-level mistakes,
+not a bug living in the tokenizer itself.
+
+### WASM build (`~/src/fluffos/docs/build-wasm.md`, `docs/driver/wasm.md`)
+
+Lets a mudlib run **inside a browser tab or under node**, no listening
+socket. On this host, neither Emscripten nor Node was preinstalled —
+both were bootstrapped without sudo:
+```
+# Node (portable tarball, no package manager needed)
+~/.local/opt/node/bin/          # already on PATH
+
+# emsdk (version pinned in .github/actions/build-wasm/action.yml)
+cd ~/.local/opt/emsdk && ./emsdk install 6.0.3 && ./emsdk activate 6.0.3
+source ~/.local/opt/emsdk/emsdk_env.sh   # per shell session; do NOT pipe this through anything
+                                          # (a `source ... | tail` subshell drops the exported PATH)
+```
+Build steps, in order:
+```
+cd ~/src/fluffos
+tools/wasm/build-deps.sh PREFIX=/opt/wasm-deps   # ICU, once
+cmake --preset native-tools && cmake --build --preset native-tools -- -j8
+emcmake cmake --preset wasm  && cmake --build --preset wasm -- -j8
+```
+Output: `build-wasm/src/fluffos.js` + `fluffos.wasm`.
+
+**Known gotcha (this host, emsdk 6.0.3 + ICU 74-2)**: `build-deps.sh`'s
+data-archive step (`icupkg`/`genccode`, native host-built tools) failed
+with `error while loading shared libraries: libicutu.so.74` — the host
+ICU build is shared-lib by default and its own tools aren't run with
+their own `lib/` on `LD_LIBRARY_PATH`. Fix: re-run just that step (see
+the script's step 3) with
+`LD_LIBRARY_PATH=$WORK/icu/source/build-host/lib` exported first. Without
+this, `libicuuc.a`/`libicui18n.a` build fine but `libicudata.a` silently
+never gets produced, which fails the later cmake configure (`Could NOT
+find ICU_DATA` or a missing-symbol link error) rather than failing loudly
+at the deps step itself — check `ls /opt/wasm-deps/lib/` has all three
+`.a` files before moving on to the driver build.
+
+### `scripts/wasm_client.js` — smoke-testing a lib under WASM
+
+Mirrors `mudclient.py`'s interface (`--send`, `--timeout`, `--idle`) but
+drives an in-process WASM driver instance instead of a real socket:
+```
+node scripts/wasm_client.js ~/src/fluffos/build-wasm/src libs/<slug> \
+    --timeout 20 --idle 1.0 --send "" --send "look" --send "quit"
+```
+First argument is the wasm build's `src/` dir, second is the lib's ROOT
+(the directory containing both `config.fluffos` and `work/`, matching the
+native `cd work && driver ../config.fluffos` convention) — NOT `work/`
+itself; the script copies `work/` into the WASM instance's in-memory FS at
+`/mudlib/work` and rewrites `config.fluffos`'s `mudlib directory :` line
+to that in-memory path (the real host absolute path is meaningless
+inside the sandboxed FS).
+
+**Critical bug found and fixed while building this harness**: `fluffos_tick()`
+expects a monotonic clock starting near 0 (mirrors a browser's
+`performance.now()`, used directly in the driver's own JS example) — NOT
+`Date.now()`'s absolute Unix-epoch milliseconds. Passing epoch time makes
+the *first* tick call compute a multi-decade "pending ticks" backlog; the
+driver's own catch-up cap (100 gameticks, `backend_wasm.cc`) then replays
+all 100 at once before a single scripted line has been sent — e.g. a
+lib's `call_out("time_check", 30)` login-timeout fires within the first
+~2 real seconds instead of 30. Fix: track your own start time
+(`process.hrtime.bigint()` at script start) and pass elapsed-ms-since-start,
+never the raw epoch value.
+
+**Known WASM-mode limitation (driver-level, not a mudlib bug)**:
+`query_ip_number()` does not reliably return a real dotted-quad string on
+this build for a `wasm_console_connect()`-created connection (observed
+returning a single `"("` character on one lib, rather than `"127.0.0.1"`
+despite `comm_wasm.cc` setting `INADDR_LOOPBACK` on the connection's
+`sockaddr_in`). Any lib whose login/registration path gates on
+`query_ip_number()`'s format (site-restriction daemons doing
+`sscanf(ip, "%d.%d.%*d.%*d", ...)`, IP-based ban/multi-login checks, etc.
+— `bxsj`'s `adm/daemons/sited.lpc` is one concrete example) will reject
+every login attempt under WASM even though the exact same lib logs in
+fine natively on `127.0.0.1`. **Do not "fix" this by patching the
+mudlib** — it's a driver-side gap on this specific build, not a bug in
+the lib. Document it as a known WASM-mode limitation in that lib's
+README/NOTES and move on; a lib blocked this way should be marked
+"boots under wasm, login gated by IP-check limitation" rather than
+"fails under wasm."
+
+Other documented WASM-mode restrictions worth knowing before triaging a
+"why doesn't this work under wasm" finding (see `docs/build-wasm.md`'s
+own "Notes & limits"): no `sockets`/`db`/`ffi`/`pcre`/`crypto`/`async`/
+`compress` packages (a preloaded daemon using any of their efuns —
+`dns_master` calling `socket_create()` is the common case — throws
+`Undefined function` during preload; this is normally already caught by
+each lib's own error handler and non-fatal, same as a missing daemon
+natively, but confirm it doesn't cascade into an actual boot failure); no
+zlib (compressed saves silently degrade, `.gz` isn't auto-decompressed);
+only algorithmic charsets ship (GBK/Big5 `string_encode()` raises an
+error — shouldn't matter, every lib here is already UTF-8 post-conversion).
+
+---
+
 ## Archive tooling
 
 - `unzip`, `unrar`, `7z`/`7za`/`p7zip`, `tar` are all available.
@@ -2344,6 +2472,16 @@ second — both listed for traceability):
 | 风云II (清华仿写版）.ZIP | 风云II (清华仿写版） (1).ZIP |
 
 ## Non-mudlib / needs-triage files at repo root
+
+**Do not create a `libs/<slug>/` directory for a confirmed non-mudlib
+archive.** Its `raw/` extraction is gitignored, so in git such a
+directory ends up containing nothing but a `NOTES.md` — a directory that
+exists in the repo purely to hold one file explaining why it's empty.
+Write the confirmation directly into this list (or the relevant TODO.md
+row) instead. (Six of these — `atlantis`, `chongchujianghu`,
+`chongchujianghu_linux_src`, `chongchujianghu_win`, `longyunmeng_binary`,
+`mofaleidemuba` — existed as exactly this NOTES.md-only shape and were
+removed once their findings were confirmed already fully duplicated here.)
 
 - `eval.c` — stray single C file, not part of any archive. Purpose unknown,
   investigate before assuming it's disposable.
