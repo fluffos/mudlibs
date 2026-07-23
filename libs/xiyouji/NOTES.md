@@ -484,3 +484,29 @@ top level or `work/` (checked and removed a stray `work/trace_lpcc.json`
 before finishing). `lpcc_batch_raw.log` and `lpcc_fail.log` at the
 top level are the standard `lpcc_check.sh` output artifacts, kept per the
 same convention every other already-done lib in this project follows.
+
+## Driver-rebuild retest + LPC reformat + WASM pass (this session)
+
+- **LPC formatter applied** (`tools/lpc-syntax`, all `work/*.lpc`):
+  4,930 files reformatted, 53 unchanged, 4 refused (self-check failures
+  on messy legacy code, expected). Confirmed the `adm/daemons/
+  logind.lpc` `printf("%O\n", ob);` removal from the earlier
+  re-verification pass survived reformatting untouched.
+- **Native re-test against the freshly rebuilt driver**
+  (`~/src/fluffos/build-debug/src/driver`, rebuilt from latest upstream
+  master): boots clean, zero `FATAL`/`SIGSEGV`/`执行时段错误` in
+  `debug.log`. Full registration verified with real Chinese name
+  **秦风回** (male, id `qfrevb`), reaching the actual starting room
+  (南城客栈/South City Inn), `look`/`score`/`quit` all producing
+  correct output.
+- **WASM build tested** (`~/src/fluffos/build-wasm/src` via
+  `scripts/wasm_client.js`): boots cleanly (only expected non-fatal
+  preload warnings, no `sockets` package built in). **Full registration
+  + login succeeded end-to-end under WASM too** — real Chinese name
+  **秦风网** (id `qfwasma`), through gb/age-gate/id/name/password/email/
+  gender/gift-accept, landed in the real starting room (南城客栈),
+  `look` rendered the actual room description, `quit` disconnected
+  cleanly. This lib's `logon()`/registration path does not gate on
+  `query_ip_number()`'s format, so it is **not** affected by the
+  documented WASM IP-format limitation — a genuinely clean WASM result,
+  not just a partial one.
