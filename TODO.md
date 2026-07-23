@@ -33,7 +33,7 @@ rely on the boot + interactive-connect test as the verification gate.
   majority of this collection. If an archive turns out to be English
   (like ds386/Dead Souls), do the minimum to note what it is, don't sink
   deep debugging time into it -- move on to the next Chinese one.
-- **Done: 78 / 100** (shanhaizhanshen, xingzhanyingxiong,
+- **Done: 79 / 100** (shanhaizhanshen, xingzhanyingxiong,
   unknownlib20150716 [小雨西游II], bxsj [书剑天下], bxsj1 [书剑·经典],
   chidi [江湖I], ..., nitan170911 [仙剑奇侠传], nitan6 [笑傲江湖], rzrmud
   [大唐西游], xo, xo_final, zzfy [郑州风云3], shiji [世纪],
@@ -86,7 +86,9 @@ rely on the boot + interactive-connect test as the verification gate.
   lineage], xiyouji450 [西游记450, confirmed sibling of fluffos_xiyou2000
   #15/mhxy #19/menghuanxiyou2002 #56], xlqy_early [仙侣情缘 early/
   incomplete snapshot, same codebase as xlqy_new2007 #26], xiyouji2006
-  [西游记2006/最后的疯狂/大唐西游, mhxy/shenmo family, independent fork])
+  [西游记2006/最后的疯狂/大唐西游, mhxy/shenmo family, independent fork],
+  jinyongwenzi [金庸文字版/书剑2002, literal same codebase as bxsj #4/
+  bxsj1 #5])
 - **New AGENTS.md §15q (hidden client-protocol-version gate)**: found on
   xiyangzaixian3 -- a pre-id prompt can check the input against a
   hardcoded literal (client version string), not just a BIG5/student
@@ -173,6 +175,17 @@ rely on the boot + interactive-connect test as the verification gate.
   registration completes -- reaching the game world is not the same as
   being able to play in it, and the `private`-command-hook failure mode
   produces literally zero signal in any log.
+- **Second retroactive fix from this policy**: archive #90's processing
+  (jinyongwenzi) discovered it's the literal same codebase as bxsj(#4)/
+  bxsj1(#5) -- both already-shipped libs, from very early in this
+  project, carried the identical private-command_hook bug PLUS a second
+  independent bug (§15ar, a dead commandd.lpc sscanf(".c$") pattern),
+  either alone sufficient to leave every post-login command silently
+  broken. Both bugs fixed retroactively in both libs, re-verified with a
+  fresh registration + look/score/quit all producing correct output.
+  Their original testing (very early in the project, before §15ae was
+  even discovered) never checked a post-login command -- exactly the
+  gap this policy now closes.
 - **Caution for future batches**: one agent in the #57-61 batch used a
   broad `pkill -f "build-debug/src/driver config.fluffos"` mid-session
   before switching to exact-PID kills -- since every lib's driver shares
@@ -377,8 +390,8 @@ rely on the boot + interactive-connect test as the verification gate.
 | 1 | 山海战神.rar | shanhaizhanshen | 40001 | done | pilot lib; see libs/shanhaizhanshen/NOTES.md |
 | 2 | 星战英雄.rar | xingzhanyingxiong | 40002 | done | 2nd pilot; found driver bug (AGENTS.md §8) + message_combatd mudlib bug; see libs/xingzhanyingxiong/NOTES.md |
 | 3 | 20150716未知lib.zip | unknownlib20150716 | 40003 | done | actually 小雨西游II; found get_include_path fix (§8d); see libs/unknownlib20150716/NOTES.md |
-| 4 | bxsj.rar | bxsj | 40004 | done | 书剑天下; found 3 new bugs incl. the this_player()-override footgun (§8c); see libs/bxsj/NOTES.md |
-| 5 | bxsj1.rar | bxsj1 | 40005 | done | 书剑·经典, same lineage as #4; 3 known fixes applied proactively; see libs/bxsj1/NOTES.md |
+| 4 | bxsj.rar | bxsj | 40004 | done | 书剑天下; found 3 new bugs incl. the this_player()-override footgun (§8c); RETROACTIVE FIX (2026-07-23, found via archive #90 jinyongwenzi -- the literal same codebase, processed much later after §15ae was discovered): this lib was completely command-dead after registration (private command_hook + a commandd.lpc sscanf "%s.c$" pattern that never matched anything post-rename, two independent causes of the same symptom) -- both fixed, re-verified with a fresh registration + look/score/quit all working, zero debug.log errors; see libs/bxsj/NOTES.md |
+| 5 | bxsj1.rar | bxsj1 | 40005 | done | 书剑·经典, same lineage as #4; 3 known fixes applied proactively; RETROACTIVE FIX (2026-07-23, same as #4 above, identical two bugs in the shared codebase): private command_hook + commandd.lpc sscanf pattern both fixed, re-verified with a fresh registration + look/score/quit all working, zero debug.log errors; see libs/bxsj1/NOTES.md |
 | 6 | chidi.rar | chidi | 40006 | done | 江湖I; found tail() missing-efun + include-angle-bracket bugs (§8e, convert_lib.sh fix); see libs/chidi/NOTES.md |
 | 7 | ds3.8.6.zip | ds386 | 40007 | partial/deprioritized | Dead Souls, English-language -- user directed to deprioritize non-Chinese libs; boots + admin wizard runs but not polished; see libs/ds386/NOTES.md |
 | 8 | dtsl.rar | dtsl | 40008 | done | 大唐双龙传, lib #1 lineage, booted with zero fixes; found F_UNIQUE macro gap + diamond-inherit issue; see libs/dtsl/NOTES.md |
@@ -463,7 +476,7 @@ rely on the boot + interactive-connect test as the verification gate.
 | 87 | 重出江湖WIN完全版.rar | chongchujianghu_win | | not mudlib | confirmed same non-LPC C++/MFC engine as #86 -- same config.txt (port 6600, mud name 烟雨红尘), zero .c/.lpc/inherit anywhere, just a "complete edition" bundling 2 GUI clients instead of 1; see libs/chongchujianghu_win/NOTES.md |
 | 88 | 重出江湖完整源码linunx_2.71原版.rar | chongchujianghu_linux_src | | not mudlib | confirmed pure C++ despite an LPC-mimicking directory shape (d/<city>/,npc/,item/,std/) -- ROOM_BEGIN/NPC_BEGIN/SKILL_BEGIN macros expand to real C++ classes (verified in server/Npc.h), builds with plain g++/ar producing a native ELF, zero `inherit` across 5,961 files; confirms mud.exe in #86/#87 is a compiled build of this exact engine; closes out the "重出江湖" family (#86/#87/#88) as entirely non-LPC; see libs/chongchujianghu_linux_src/NOTES.md |
 | 89 | 重生的世界v1.0.1.rar | | | not started | |
-| 90 | 金庸文字版.exe | | | not started | Windows self-extracting exe -- may not be an LPC mudlib at all, triage first |
+| 90 | 金庸文字版.exe | jinyongwenzi | 40083 | done | dup: 金庸文字版 (1).exe (byte-identical); self-extracting RAR-SFX bundling a genuine MudOS mudlib ("书剑2002" per config.sj) + a prebuilt MudOS.exe driver + 2 Windows telnet clients (all correctly ignored, only the shujian/ subtree is real mudlib source); confirmed via diff (CRLF-normalized) to be the LITERAL SAME CODEBASE as bxsj(#4)/bxsj1(#5) -- 100% byte-identical core files, not just related naming; standard §15h fix (proactive) + §4/§14/§8c fixes ported from bxsj + §15c/§15p/§15ah fixes + NEW discovery: command_hook was `private` (§15ae) AND commandd.lpc's rehash() used a dead sscanf(".c$") pattern (§15ar, new) -- BOTH present simultaneously, either alone would have broken every post-login command; fixing this pass's discovery led to retroactively fixing the identical bugs in already-shipped bxsj/bxsj1 (see their rows); full registration + post-login-command flow verified with real name 秦风 reaching an actual start room, look/score/quit all working; 99.0% lpcc pass (4866/4915); see libs/jinyongwenzi/NOTES.md |
 | 91 | 金庸群侠传2008加强版.rar | | | not started | |
 | 92 | 金庸群侠传2008版.rar | | | not started | |
 | 93 | 金庸群侠传2008超豪华版.rar | | | not started | |

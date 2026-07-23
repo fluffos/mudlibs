@@ -74,3 +74,19 @@ range check to test the CJK Unicode block instead, and halved the
 GBK-byte-calibrated length bounds in `check_legal_name` to match. See
 AGENTS.md §15h for the full writeup; confirmed via a real interactive
 registration test (Chinese surname + given name reaching the next prompt).
+
+## Retroactive fix (found via archive #90, jinyongwenzi): this lib was completely command-dead after registration (AGENTS.md §15ae + a new commandd.lpc variant)
+
+Same shared lineage as `bxsj` -- carried the identical two bugs `bxsj`'s
+own NOTES.md documents in full: `feature/command.lpc`'s `command_hook()`
+was `private nomask` (§15ae, unreachable via `add_action`'s external
+dispatch), AND `adm/daemons/commandd.lpc`'s `rehash()` used a live
+`sscanf(cmds[i]+"$", "%s.c$", cmds[i])` that never matched anything after
+the `.c`→`.lpc` rename, leaving `commandd`'s command table permanently
+empty. Both fixed (dropped `private`; sscanf pattern → `"%s.lpc$"`), then
+re-verified with a fresh full registration (real name "秦河") followed by
+`look`/`score`/`quit` all producing correct output, `debug.log` clean (0
+`error:` lines). See `bxsj`'s NOTES.md for the full discovery story --
+this lib's own original testing pass had the same blind spot (never
+tested a post-login command), so it was silently broken since first
+marked "done."

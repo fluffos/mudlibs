@@ -2267,6 +2267,32 @@ yet; it is NOT safe when overriding an inherited function of the same
 name — in that specific case, the real definition needs to physically
 precede every same-file call site, no exceptions.
 
+### 15ar. A `commandd.lpc`-style command-directory indexer's `sscanf(name+"$", "%s.c$", name)` filter matches nothing forever after the `.c`→`.lpc` rename — invisible to BOTH the standard `.c`-reference fixers, and can compound with §15ae to double-cause the same "every command does nothing" symptom
+
+Found on `jinyongwenzi` (archive #90), a literal byte-identical sibling of
+`bxsj`/`bxsj1` (archives #4/#5) — confirming both of those already-
+shipped libs carry the identical bug, unnoticed because their own
+original testing never checked a post-login command (see §15ae).
+`adm/daemons/commandd.lpc`'s `rehash()` builds each directory's live
+command table by listing files and filtering with `sscanf(cmds[i]+"$",
+"%s.c$", cmds[i])` to strip the `.c` extension — a **live runtime
+`sscanf` call**, not a string literal or a bare data-file reference, so
+it's invisible to both §2's quoted-`".c"`-reference fixer and §15c's
+bare-preload-data-file fixer. After the blanket rename, every real
+command file is now `.lpc`, so this pattern matches zero files, forever
+— `commandd`'s command-search table stays permanently empty, and
+`find_command()` (whatever dispatches ordinary typed commands through
+this daemon) always returns 0. **This can compound with §15ae**: on
+`jinyongwenzi`, BOTH this bug and a `private`-declared `command_hook()`
+were present simultaneously and independently produced the exact same
+"every post-login command silently does nothing" symptom — fixing only
+one would still have left the lib fully broken. Fix: change the pattern
+to `"%s.lpc$"`. **Lesson**: when hunting for §15ae's symptom, don't stop
+looking once you've found and fixed a `private` command-hook — grep for
+`sscanf` patterns containing a literal `.c$`/`.c"` anywhere in daemon
+files that index/dispatch commands (not just `command.lpc` itself), since
+more than one independent cause can be present in the same lib.
+
 ---
 
 ## Per-archive gotchas index

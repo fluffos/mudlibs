@@ -112,3 +112,36 @@ range check to test the CJK Unicode block instead, and halved the
 GBK-byte-calibrated length bounds in `check_legal_name` to match. See
 AGENTS.md §15h for the full writeup; confirmed via a real interactive
 registration test (Chinese surname + given name reaching the next prompt).
+
+## Retroactive fix (found via archive #90, jinyongwenzi): this lib was completely command-dead after registration (AGENTS.md §15ae + a new commandd.lpc variant)
+
+Archive #90 (`金庸文字版.exe`) turned out to be the literal same codebase as
+this lib (byte-identical `master.c`/`securityd.c`/`chinese.c` after CRLF
+normalization -- confirmed via diff, not assumed) processed much later in
+the project, after §15ae (the `private nomask` command-hook bug) had
+already been discovered and fixed elsewhere. That later pass found this
+exact lib had TWO independent bugs compounding into the same symptom --
+every single post-login command (even `look`) silently doing nothing at
+all, with zero error anywhere:
+
+1. **`feature/command.lpc`'s `command_hook()`** was `private nomask` --
+   unreachable via `add_action`'s external dispatch on this driver (§15ae).
+2. **`adm/daemons/commandd.lpc`'s `rehash()`** filtered `get_dir()` output
+   via `sscanf(cmds[i]+"$", "%s.c$", cmds[i])` -- a live `sscanf` pattern
+   invisible to both the `.c`→`.lpc` rename's quoted-string fixer and the
+   bare-data-file fixer, since it's neither. After the rename this matched
+   zero files forever, so `commandd`'s command-search table was never
+   populated and `find_command()` always returned 0 -- a second,
+   independent cause of the exact same symptom. Fixing only one of the two
+   would still have left every command dead.
+
+Both fixed here (dropped `private`; changed the sscanf pattern to
+`"%s.lpc$"`), then re-verified with a full fresh registration (real name,
+one of "秦风"/"秦岭"/"秦河" tested across a few runs) followed by `look`,
+`score`, and `quit` all producing correct real output, and `debug.log`
+confirmed clean (0 `error:` lines). This lib's ORIGINAL testing pass (see
+above) never verified a post-login command -- exactly the blind spot §15ae
+warns about -- so this had been silently broken since this lib was first
+marked "done," undetected until the sibling codebase surfaced it. See
+AGENTS.md §15ae and the new commandd.lpc sscanf-pattern addition for the
+general writeup.
