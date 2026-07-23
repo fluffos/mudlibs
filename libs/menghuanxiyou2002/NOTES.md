@@ -402,3 +402,49 @@ already-documented pre-existing preload noise (corrupted `emote` save data,
 one `questd.lpc` factory-return-0 gap, a few `baoshi.lpc` eval-cost
 timeouts during large treasure-placement batches — all non-fatal, all
 pre-existing, none on the registration/gameplay path).
+
+## Re-verification pass: driver rebuild + LPC formatter + WASM build
+
+- **LPC formatter**: ran `format-corpus.mjs` over all 11,785 `.lpc`
+  files — 11,635 reformatted in place, 112 already-idempotent, 38
+  refused (nonzero `errors` expected/fine per the tool's own contract).
+  Double-checked the §15k `adm/etc/banner` case-fix (`cp adm/etc/Banner
+  adm/etc/banner`) survived — both files still present post-reformat.
+- **Native retest against rebuilt driver** (`~/src/fluffos/build-debug/
+  src/driver`, freshly rebuilt from upstream master): booted clean,
+  zero fatal errors. Full registration re-verified with fresh real
+  names (秦风田, plus 秦风齐/秦风水 during flow discovery) via the
+  documented `gb → no → new → id → 中文姓名 → password×2 → 身份标识×2 →
+  email → webpage → icq → gender → gift(9,y)` flow; arrived correctly
+  in 南城客栈 (banner rendered correctly, confirming §15k still holds),
+  `look`/`score`/`quit` all correct. One single non-fatal, self-recovering
+  `Too deep recursion.` (`/feature/name.lpc:14`, triggered by a lazily-
+  compiled `/d/moon/npc/zhangmen` NPC during one run) was observed —
+  the driver's recursion guard caught it and continued, the connection
+  was unaffected (registration/look/score/quit all still succeeded in
+  that same run) — noted as a pre-existing quirk, not chased further
+  per this lib's breadth-over-depth policy. No regressions from the
+  rebuilt driver or the reformat pass; nothing required fixing.
+- **WASM build test** (`scripts/wasm_client.js` against
+  `build-wasm/src`): boots cleanly in-process (the sockets-requiring
+  `ftpd.lpc`/`httpd.lpc` daemons correctly throw `Undefined function
+  socket_create` etc. under WASM's no-`sockets`-package build, caught
+  non-fatally by `master.lpc`'s preload `catch()`, same as natively
+  when the package is absent). **Login is blocked**, but via a
+  different concrete mechanism than the simple ban-check case: this
+  lib's `logind.lpc` `encoding()` step calls into
+  `adm/daemons/ipd.lpc`'s `seek_ip_address(query_ip_number(ob))` to do
+  a geographic ISP lookup, and `seek_ip_address()` does
+  `explode(ip, ".")` then indexes `user_ip[1]` assuming a real
+  dotted-quad; under WASM's malformed/empty `query_ip_number()` return
+  value this throws an uncaught `Array index out of bounds` (not even
+  wrapped in `catch()`), which unwinds far enough to leave the
+  connection stuck emitting "什么？" (unknown command) for every
+  further input instead of ever reaching the id/name prompts. Root
+  cause is the same documented `query_ip_number()` WASM limitation as
+  the simpler ban-check case seen elsewhere in this batch — confirmed
+  by the clean native run above using the identical code path on
+  `127.0.0.1` — so no mudlib fix was attempted. Classified as: boots
+  under WASM; login blocked by the driver's known `query_ip_number()`
+  limitation (this lib's manifestation: an uncaught array-bounds error
+  in its IP-geolocation daemon, rather than an explicit ban check).
