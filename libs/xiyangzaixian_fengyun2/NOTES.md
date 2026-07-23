@@ -132,6 +132,36 @@ lines appear in the transcript during first-time lazy compiles of
 errors" in its Chinese message text) — cosmetic only, does not affect
 gameplay; the same pragma warnings appear in the clean boot log too.
 
+## Re-verification pass (QA sweep, later session)
+
+Re-tested the full flow end-to-end this pass (`feature/command.lpc`'s
+`command_hook()` confirmed `protected nomask`, not `private` -- §15ae does
+not apply). **Found and fixed a real bug**: `adm/obj/master.lpc`'s
+`log_error()` showed EVERY compile-time diagnostic to the connected
+player unconditionally (§15w), including harmless WARNINGS (`Unknown
+#pragma, ignored`, etc) from the first-ever lazy compile of a
+never-preloaded room/NPC file -- confirmed live: a fresh registration
+showed several spurious `编译时段错误：... warning: ...` lines
+interleaved with the real welcome banner. Fixed by gating the
+player-facing broadcast on the message NOT containing `"warning:"` (still
+logs everything to disk regardless, matching the established fix pattern
+used across this project and applied to sibling lib
+`xiyangzaixian_fengkuang` in the same pass). Re-verified with a fresh
+registration (`qinruo`/秦若, female) after restarting the driver: **zero**
+spurious messages, `look`/`score`/`quit` all correct (correct
+female-specific title "芊芊民女", landed in 铁枪庙).
+
+Also noted: `logind.lpc`'s `logon()` has a `uptime() < 30` gate that
+rejects ALL logins (with a "游戏正在启动过程中，请稍候再login" message)
+for the first 30 seconds after the driver starts -- a genuine, intentional
+startup-settling guard, not a bug; just wait past 30s uptime before
+attempting to connect after a fresh boot.
+
+Full registration + post-login-command flow now confirmed working with
+real Chinese names 秦朔(male, landed in 北疆小镇)/秦若(female, landed in
+铁枪庙), `look`/`score`/`quit` all producing correct output, zero
+`执行时段错误` in `debug.log` after the fix.
+
 ## lpcc sweep
 
 13,560 files: **13,364 pass / 196 fail (98.6%)**, after fixing the 4

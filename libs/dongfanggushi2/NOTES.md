@@ -87,15 +87,50 @@ continuous connection:
 
 ## Known remaining issues (documented, not fixed)
 
-- `std/char/npc.lpc`'s `eval_chat()` has a pre-existing (not
-  UTF8-related) bug: `switch(typeof(chat)) { case STRING: ... case
-  MATCH: ... }` where `MATCH` is never `#define`d anywhere in the tree,
-  producing a compile error ("Mixed case label list not allowed") when
-  the undefined bare identifier mixes with the string-constant case
-  labels (`STRING`/`ARRAY`/`FUNCTION` from `include/type.h`). Cascades
-  into every NPC inheriting `std/char/npc` (e.g. `/d/snow/npc/innkeeper`).
-  Off the critical registration/boot path — affects only the NPC-chat
-  feature — not fixed given the scale of the rest of the queue.
+(none outstanding — the `eval_chat()` issue formerly documented here was
+fixed during the 2026-07-23 QA re-verification pass; see below.)
+
+## Retroactive fixes (QA re-verification pass, 2026-07-23)
+
+Found during a routine re-verification pass (full registration + post-login
+`look`/`score`/`quit` test in a fresh session) — both are genuine bugs, not
+present in the original conversion notes above:
+
+1. **`adm/obj/master.lpc`'s `log_error()` showed raw compiler diagnostics
+   (including harmless warnings) to ANY connected player, not just
+   wizards** (AGENTS.md §15af family, but a distinct/worse variant: this
+   lib's version had no `wizardp()` gate at all, so ordinary players saw
+   the full `"编译时段错误：" + message` text — file paths, line numbers,
+   "Unused local variable" noise — every time an as-yet-uncompiled
+   room/NPC was first touched, e.g. simply typing `look` in the starting
+   room). Fixed to only show the full diagnostic to a wizard, and only
+   alarm an ordinary player with the generic `default error message` for
+   a genuine compile **error** (gated on absence of `"warning:"` in the
+   message, same pattern as `dtsl`/`wuhanzhan`/`shenzhou`). This also
+   required `#include "/include/runtime_config.h"` at the top of
+   `master.lpc` (for the `__DEFAULT_ERROR_MESSAGE__` macro used in the
+   fix) since the file had no includes at all before.
+2. **The previously-documented `eval_chat()` bug (see git history) was
+   actually blocking the starting-room innkeeper NPC from compiling at
+   all** — once (1) above stopped masking it with raw compiler spam, it
+   became clear this fires on literally every single new character's
+   first room entry (`/d/snow/npc/innkeeper` inherits the broken
+   `std/char/npc.lpc`). Given the outsized, first-impression impact and
+   the trivial/safe fix, this was resolved rather than left as a
+   documented gap: `eval_chat()`'s `switch(typeof(chat))` had a dead
+   `case MATCH:` (an int constant, `0x102`) with a body byte-identical to
+   the preceding `case STRING:` — this driver's `typeof()` returns string
+   type-name constants (`STRING`/`ARRAY`/`FUNCTION` from `include/type.h`
+   are themselves strings), so mixing the stray int case label in was a
+   hard "Mixed case label list not allowed" compile error, not a
+   different behavior being lost. Removed the redundant `case MATCH:`
+   label (its body was already covered by `case STRING:`) — not
+   fabricating new behavior, just deleting dead/incorrect duplicate code.
+
+Re-verified with a fresh registration (real name `秦兰`, female) followed
+by `look`/`score`/`quit`: the innkeeper NPC now greets the player
+correctly ("掌柜说道：欢迎！欢迎！请里面坐！"), zero spam, zero real
+`error:` lines in `debug.log`.
 
 ## lpcc sweep
 

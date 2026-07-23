@@ -88,7 +88,45 @@ the short version):
   wrapped in `catch()` (the target file doesn't even exist in this
   archive; harmless either way).
 
-## Interactive test result — full registration flow
+## Re-verification pass (2026-07-23) — two new bugs found and fixed
+
+The original pass above never tested a post-login command — exactly the
+gap AGENTS.md §15ae's standing policy (adopted after this lib's original
+pass) warns about. Re-testing the full flow through `look`/`score`/`quit`
+found this lib was actually **fully broken post-registration** (every
+command after landing in the game world silently produced `什么？` — "What?"
+— with zero output), caused by TWO independent, compounding bugs:
+
+1. **AGENTS.md §15ae**: `feature/command.lpc` declared its central dispatch
+   function `private nomask int command_hook(string arg)`, inherited into
+   the player body and registered via `add_action("command_hook", "", 1)`.
+   This driver treats `private` as hidden from `add_action`'s own external
+   dispatch, not just same-file callers — silently breaking every
+   post-login command with zero visible error. Fixed by dropping `private`
+   (kept `nomask`).
+2. **AGENTS.md §15ar**: `adm/daemons/commandd.lpc`'s `rehash()` filters
+   `get_dir()`'s listing with `sscanf(cmds[i]+"$", "%s.c$", cmds[i])` to
+   strip the old `.c` extension — after this project's blanket
+   `.c`→`.lpc` rename, every real command file is `.lpc`, so this pattern
+   matched **zero** files, forever, leaving `commandd`'s command-search
+   table permanently empty and `find_command()` always failing. This is a
+   live runtime `sscanf`, invisible to both the quoted-`".c"`-reference
+   fixer and the bare-preload-data-file fixer, and is a SEPARATE root
+   cause from #1 above that independently produces the exact same "every
+   command does nothing" symptom (per AGENTS.md §15ar's own precedent that
+   more than one cause can compound in the same lib). Fixed by changing
+   the pattern to `"%s.lpc$"`.
+
+Both bugs had to be fixed before any post-login command worked at all —
+fixing only one would still have left the lib fully broken. Re-verified
+with a full fresh registration (id `sjqfdd`, real Chinese name `秦风十`,
+male) through to `look` (re-displayed the actual starting room, 武馆前院/
+Martial-arts-hall Front Courtyard), `score` (real character card with
+correct name/stats), and `quit` (clean exit) — all producing genuine,
+correct output. `debug.log` for the session has zero `denied`/`cannot`/
+`undefined function`/`bad argument`/`error in error handler` lines.
+
+## Interactive test result — full registration flow (original pass)
 
 Verified the complete registration path in one continuous connection,
 including an incidental but valuable extra check:

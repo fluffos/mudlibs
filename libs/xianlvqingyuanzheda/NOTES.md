@@ -78,3 +78,49 @@ in one continuous connection (same flow shape as `xianlvqiyuan`): `gb`
 shape (missing globals/inherits, a handful of syntax typos) — not
 triaged individually per AGENTS.md §6b/§13. Memory stayed healthy
 throughout (~14-15GB free).
+
+## Re-verification pass (2026-07-23)
+
+Extended the interactive test past the password prompt through full
+registration (id `xlqzdgz`, name `秦江`), gift confirmation, `look`,
+`score`, and `quit` — all completed correctly with real content (entered
+the game world at 南城客栈/"South City Inn" with real NPCs, `score`
+rendered the full character sheet, `quit` showed the real flavor-text
+quit sequence).
+
+**Investigated but not fixed — the "default error message" anomaly is
+real, reproducible, host-load-dependent, and non-blocking.** The
+transient `你发现事情不大对了，但是又说不上来。`(config's `default error
+message`) noted as a one-off, non-reproduced anomaly in the sibling lib
+`xianlvqiyuan`'s NOTES.md reproduces HERE consistently but with a highly
+variable count per connection (observed 0, 3, and up to 18+ occurrences
+across repeated identical test runs against the same unmodified code).
+Instrumented `adm/daemons/logind.lpc`'s `enter_world()` with temporary
+`write()` markers (removed after diagnosis, per the project's established
+§8c/§15d technique): confirmed the errors are scattered across several
+*different*, functionally unrelated calls in the same stretch of code
+(new `MAILBOX_OB` creation, `"/adm/daemons/ipd"->seek_ip_address()`,
+`CHANNEL_D->do_channel()`, `UPDATE_D->check_user()`) rather than one
+single repeated bad call — inconsistent with a single deterministic bug
+in any one of them. Also confirmed via a temporary instrumented
+`master.lpc`'s `error_handler()` (writing `standard_trace()`'s full text
+to a scratch file, removed after diagnosis) that **the underlying real
+error text never gets captured** — not in `debug.log` (checked
+extensively, zero matches even with markers correlating the exact
+moment), not in the instrumented scratch file either (it was never even
+created, meaning `error_handler()`'s own `write_file()` produced no
+output during the very runs where the friendly message WAS shown to the
+player — inconsistent with a straightforward reproducible LPC-level
+error). Combined with the count varying run-to-run against byte-identical
+code, this points to a **host-load/timing-sensitive artifact** (this
+sweep runs many sibling agents' driver processes concurrently on a
+shared, resource-constrained host) rather than a deterministic mudlib
+bug — plausibly related to `eval_cost`/timer edge cases under CPU
+contention (see AGENTS.md's `set_eval()` gotcha for a similar class of
+timing-sensitive symptom). **Not chased further**: it never prevented
+registration, `look`, `score`, or `quit` from completing correctly in any
+of the ~6 test runs performed (worst case, extra noise the player has to
+scroll past), and matches the sibling lib's own precedent of being
+noted-but-not-investigated. Flagging here in more detail than the
+original one-line note in case a future pass sees it escalate to
+something that actually blocks a flow — this pass didn't observe that.

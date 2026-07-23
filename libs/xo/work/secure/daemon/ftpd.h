@@ -3,7 +3,7 @@
 #define FTP_DEBUG
 
 #define MAX_IDLE_TIME 540     // 9分钟
-#define LOG(str) log_file("nosave/ftpd", str)
+#define LOG(str) log_file("static/ftpd", str)
 
 
 #define FTP_USERS ({ "nerd", "pig" })
@@ -15,7 +15,7 @@
 #define BINARY 1
 
 #ifdef FTP_DEBUG
-#define DBG(str) log_file("nosave/ftp_debug", str)
+#define DBG(str) log_file("static/ftp_debug", str)
 #else
 #define DBG(str)
 #endif //FTP_DEBUG

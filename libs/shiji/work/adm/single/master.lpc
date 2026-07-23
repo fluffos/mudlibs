@@ -212,7 +212,19 @@ string standard_trace(mapping error, int caught)
         }
         res += HIG+"---------------------------------------------------\n"+NOR;
         res += "\n";
-        CHANNEL_D->do_channel(this_object(), "err", res);
+        // UTF8/driver-compat FIX (AGENTS.md §15af): CHANNEL_D may not be
+        // loaded yet (e.g. a compile warning fired while an earlier preload
+        // daemon like securd is still mid-compile) -- calling it here would
+        // try to load_object() it, which this driver forbids during
+        // compilation. That specific "cannot load during compilation"
+        // condition turns out to NOT be catchable at this call site either
+        // (verified: even wrapped in catch(), it still cascades into "Error
+        // in error handler") -- so check find_object() first and skip the
+        // call entirely rather than trying and relying on catch(). Always
+        // keep a permanent log write as insurance so the error is never
+        // silently lost regardless of whether do_channel ran.
+        if (find_object(CHANNEL_D)) catch(CHANNEL_D->do_channel(this_object(), "err", res));
+        efun::write_file("/log/RUNTIME_ERRORS", res);
         return res;
 }
 
@@ -253,10 +265,22 @@ void log_error(string file, string message)
         if (name) home = user_path(name);
         else home = LOG_DIR;
 
-        if(this_player(1)) efun::write(HIW+"\n编译时段错误：" + HIG +message );
-        
-        efun::write_file(home + "error.log", sprintf("[%s]%s", ctime(time())[4..18], message));
-        CHANNEL_D->do_channel(this_object(), "err", message);
+        if(this_player(1) && strsrch(message, "warning:") == -1) efun::write(HIW+"\n编译时段错误：" + HIG +message );
+
+        // UTF8/driver-compat FIX (AGENTS.md §4/§15af): a compile warning
+        // fired WHILE securd itself is still mid-compile (e.g. via its own
+        // inherited /feature/dbase -> /feature/treemap chain) reaches this
+        // function before SECURITY_D exists; write_file()'s valid_write()
+        // then tries to load_object(SECURITY_D) while that exact object is
+        // mid-compile, an operation this driver forbids -- and that specific
+        // condition is NOT catchable at this call site either (verified: an
+        // outer catch() around it still cascades into "Error in mudlib
+        // error handler"). Guard with find_object() and skip entirely rather
+        // than try-and-catch; same for CHANNEL_D. Purely boot-time-only
+        // noise either way -- never reaches a connected player.
+        if (find_object(SECURITY_D))
+                efun::write_file(home + "error.log", sprintf("[%s]%s", ctime(time())[4..18], message));
+        if (find_object(CHANNEL_D)) catch(CHANNEL_D->do_channel(this_object(), "err", message));
 }
 
 /* valid_shadow - 控制哪些物件可以作为投影 (shadow).

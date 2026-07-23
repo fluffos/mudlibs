@@ -360,6 +360,28 @@ Failure categories (triaged, not blindly re-swept):
   accidentally removed them along with test save data (caught and fixed
   before the final verification run).
 
+## Re-verification pass (2026-07-23)
+
+Clean boot re-confirmed (zero fatal errors). First interactive attempt hit
+AGENTS.md §15j head-on: a `new` registration sent from a SECOND, separate
+`mudclient.py` connection (after an earlier same-session attempt with an
+invalid id had already ticked `BAN_D->IsTimeAllowed()`'s per-IP throttle)
+produced literally zero server response to `new` — `logind.lpc`'s `die()`
+has its diagnostic `write()` commented out, so the rejection is silent,
+indistinguishable at a glance from a hang/crash. Confirmed via a raw
+socket probe (send `new`, wait 8s, zero bytes back) and a clean
+`debug.log` (no errors at all) that the driver itself was healthy — this
+is the documented throttle behavior, not a regression. Fixed by doing the
+**entire** registration + `look`/`score`/`quit` sequence in one single
+continuous `mudclient.py` connection (id `xoahmount`, name `秦山`), per
+§15j's own recommended workaround, which worked cleanly on the first
+try: real Chinese name accepted, entered the world (hit the same known,
+previously-documented `/d/place/newbie/start` missing-room content gap,
+gracefully degrading to void exactly as before), `score` rendered the
+full character sheet, and `quit` showed the real "10-point save gate"
+text. Zero genuine runtime errors in `debug.log`. No code changes needed
+— this pass was a clean re-confirmation.
+
 ## Port / process hygiene
 
 Port 40068 (next free after 40066-40067, reserved for archives #72-73).

@@ -146,8 +146,14 @@ void log_error(string file, string message)
 
 //    if(this_player(1) && wizardp(this_player(1))) efun::write("编译时段错误：" + message+"\n");
 
-	efun::write_file(home + "log", message);
-	CHANNEL_D->do_channel(this_object(), "err", message);
+	// UTF8/driver-compat FIX (AGENTS.md §4/§15af, ported from shujian2008):
+	// a compile warning firing WHILE SECURITY_D/CHANNEL_D are themselves
+	// still mid-compile makes write_file()/CHANNEL_D try to load_object()
+	// a target that's mid-compile -- forbidden on this driver, and NOT
+	// catchable at this call site. Guard with find_object() and skip
+	// entirely instead of try-and-catch. Boot-time-only noise either way.
+	if (find_object(SECURITY_D)) efun::write_file(home + "log", message);
+	if (find_object(CHANNEL_D)) catch(CHANNEL_D->do_channel(this_object(), "err", message));
 }
 
 // save_ed_setup and restore_ed_setup are called by the ed to maintain
@@ -252,7 +258,9 @@ string standard_trace(mapping error, int caught)
             error["trace"][i]["line"],
             error["trace"][i]["object"] );
     }
-    CHANNEL_D->do_channel(this_object(), "err", res);
+    // UTF8/driver-compat FIX (AGENTS.md §15af): guard as insurance, same
+    // reasoning as log_error()'s fix above.
+    if (find_object(CHANNEL_D)) catch(CHANNEL_D->do_channel(this_object(), "err", res));
     return res;
 }
 

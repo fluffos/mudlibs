@@ -3,7 +3,7 @@
 
 void log( string s )
 {
-    log_file("nosave/money", sprintf("%s %s %d %O %s\n",
+    log_file("static/money", sprintf("%s %s %d %O %s\n",
                 ctime(time())[4..15],
                 name(),
                 query_amount(),

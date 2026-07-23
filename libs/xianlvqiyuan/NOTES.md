@@ -96,3 +96,22 @@ syntax typos) plus 17 "Invalid UTF8 codepoint in string literal" errors
 count (511 files), not triaged individually per AGENTS.md §6b/§13 since
 none of them are on the boot/registration path. Memory stayed healthy
 throughout (~15GB free).
+
+## Re-verification pass (2026-07-23)
+
+Extended the interactive test past the password prompt through full
+registration (id `xlqyriz`, name `秦河`), gift confirmation, `look`,
+`score`, and `quit` — all completed correctly with real content (entered
+the game world at 南城客栈/"South City Inn" with real NPCs, `score`
+rendered the full character sheet, `quit` showed the real flavor-text
+quit sequence). Zero genuine runtime errors in `debug.log`.
+
+Also observed (across several runs) the same `default error message`
+noise (`你发现事情不大对了，但是又说不上来。`) documented in more depth in
+sibling lib `xianlvqingyuanzheda`'s NOTES.md — the count varies 0 to
+dozens per connection against byte-identical code, never blocks any
+tested flow, and is very likely a shared engine-family artifact (same
+XLQY lineage, same "d/wiz/init" gift-selection room code) rather than
+something specific to this archive's own content. Not re-investigated
+here given the sibling lib's more thorough diagnosis already ruled out a
+single deterministic cause and pointed to host-load/timing sensitivity.

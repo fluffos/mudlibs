@@ -76,3 +76,45 @@ remaining ~1,199 failures are the usual long tail (illegal-character/
 encoding edge cases, syntax typos in individual files) — not triaged
 individually per AGENTS.md §6b/§13. Memory stayed healthy throughout
 (~12GB free).
+
+## Retroactive fix (QA re-verification pass, 2026-07-23): tell_room() 2-arg call crashed the starting room (AGENTS.md §15s)
+
+Found during a routine re-verification pass: a fresh registration reached
+the password prompt fine, but the resulting character landed with **no
+environment at all** — `look` printed "你的四周灰蒙蒙地一片，什么也没有。"
+(the standard "you are nowhere" fallback), i.e. exactly the §15t-shaped
+symptom of a new character silently ending up in the void. Root cause was
+the classic §15s bug, not previously caught here: `adm/simul_efun/
+message.lpc`'s `tell_room(ob, str)` 2-arg call form leaves the `varargs
+object *exclude` parameter as its default `int 0`, which flows straight
+into `message("tell_room", str, ob, exclude)` — this driver's `message()`
+efun rejects a literal `int 0` in that 4th argument slot at runtime. The
+starting room (`/d/xiakedao/shatan1.lpc`, picked randomly for every new
+character) calls `tell_room()` from its own `reset()`→`make_inventory()`
+chain, so this crashed the room's own creation on every single new
+registration, leaving the new character with no valid environment.
+Verified directly with `lpcc <config> d/xiakedao/shatan1` — reproduced the
+exact crash (`*Bad argument 4 to EFUN message()`) outside a full boot.
+
+**Fix**: `message("tell_room", str, ob, exclude || ({}));` (same pattern as
+every other lib in this project with the same bug). Re-verified with
+`lpcc` (clean load, no error) and a fresh full registration + `look` in a
+real driver boot — the character now correctly lands on "沙滩" (the beach)
+with full room text and the escort NPC's greeting, `debug.log` clean.
+
+Also investigated (and confirmed NOT a bug) while diagnosing the above:
+`score`/other non-allow-listed commands produce **no visible output** for
+a few moments right after registration — this is intentional content, not
+a broken command dispatcher. `d/xiakedao/shatan1.lpc`'s `init()` installs
+`add_action("block_cmd", "", 1)` for any non-wizard, and `block_cmd()`
+silently swallows every verb except `quit`/`goto`/`suicide`/`follow`/
+`tell`/`say`/`reply`/`look` until the player follows the escort NPC to
+the registration room and confirms an email via `register <email>` — the
+same restriction is present in `d/xiakedao/register.lpc`'s own room too.
+Confirmed via a temporary `write_file()` instrumentation of
+`command_hook()` (removed after diagnosis) that `look` reaches
+`find_command`/dispatch correctly while `score` never reaches
+`command_hook` at all in this state — i.e. the driver's dispatch layer
+itself is healthy; this is a deliberate "you can't do anything except
+follow/register yet" onboarding gate, not the §15ae dead-command-hook
+class of bug. `look` was used as this lib's verified post-login command.

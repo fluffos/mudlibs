@@ -63,6 +63,25 @@ cd libs/dtsl
 python3 ../../scripts/mudclient.py 127.0.0.1 40008 --timeout 10 --send "" --send "look" --send "quit"
 ```
 
+## Retroactive fix (QA re-verification pass, 2026-07-23): log_error() compile-warning spam (AGENTS.md §15af)
+
+Found during a routine re-verification pass (full registration + post-login
+`look`/`score`/`quit` test): `adm/obj/master.lpc`'s `log_error()` showed the
+config's scary `default error message` ("你发现事情不大对了，但是又说不上
+来。") to the connected (non-wizard) player for **every** compile-time
+diagnostic funneled through `APPLY_LOG_ERROR` — including harmless "Unused
+local variable" **warnings** triggered by the first lazy compile of an
+ordinary room/NPC the player merely walked into (e.g. `/d/job/...`'s
+`job_money.h`-included files, `/cmds/std/look.lpc`, etc). In a real
+registration+play session this fired dozens of times per minute of walking
+around — same bug class already documented and fixed on `wuhanzhan`/
+`shenzhou` (§15af). Fixed identically: only show the default-error message
+when `message` does NOT contain the substring `"warning:"` (still logs every
+diagnostic to the per-file log either way; only the in-band player-visible
+alarm is gated). Re-verified with a fresh registration (real name `秦北`)
+followed by `look`/`score`/`quit` — zero spam, zero real `error:` lines in
+`debug.log`.
+
 ## Post-hoc fix: UTF8-native is_chinese/registration (AGENTS.md §15h)
 
 Applied in a later batch pass across the whole project: `is_chinese`/`is_chinese2`

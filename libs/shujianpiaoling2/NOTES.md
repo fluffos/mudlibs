@@ -50,7 +50,31 @@ similar Chinese title alone — always verify via layout/file diff.
      source rather than needing to reproduce the crash first, per the
      lesson learned on `shujian2008`.
 
-## Interactive test result — full registration flow
+## Re-verification pass (2026-07-23) — found and fixed a §15w-class bug
+
+The original pass above never tested a post-login command. Re-testing the
+full flow through `look`/`score`/`quit` found `adm/obj/master.lpc`'s
+`log_error()` unconditionally broadcasting every compile *warning* (not
+just real errors) to the connected player — wizards saw `编译时段错误：...`,
+and ordinary players saw an even vaguer but equally alarming
+`你发现事情不大对了，但是又说不上来。`("something's wrong, but I can't
+say what") on literally every lazily-compiled file's first warning,
+which in practice fired repeatedly right after registration and on every
+`look`/`score` in a fresh session (AGENTS.md §15w). Fixed by gating both
+branches on the message not containing `"warning:"` (still always logged
+to file). **Also checked, not a live bug**: `feature/command_new.lpc` has
+the exact §15ae `private nomask int command_hook` shape, but it's dead
+code — nothing in the whole lib references `command_new` by path; the
+actually-inherited command feature (`F_COMMAND` = `feature/command.lpc`,
+confirmed via `std/char.lpc`) already declares `command_hook` as plain
+`nomask`, no `private`. Verified via 2 full registration sessions
+(id `sjplhh`/`sjplii`, real Chinese names `秦风十四`/`秦风十五`) that
+`look`/`score`/`quit` all produce correct real output with zero spurious
+"something's wrong" messages after the fix. `debug.log` clean of
+`denied`/`cannot`/`undefined function`/`error in error handler` in both
+sessions.
+
+## Interactive test result — full registration flow (original pass)
 
 Verified the complete registration path in one continuous connection:
 

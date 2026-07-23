@@ -491,6 +491,20 @@ guidance):
   content from an earlier engine revision; their lpcc-sweep failures are
   pure noise, not live bugs.
 
+## Re-verification pass (2026-07-23)
+
+Clean re-boot confirmed (zero fatal errors, empty `etc/preload` boots in
+well under 5 seconds). Ran the full registration + `look`/`score`/`quit`
+flow once more in a single continuous connection (id `qinchuan`, real
+Chinese name `秦川`, male): `2060` client-version gate → `new` → id →
+`y` confirm → Chinese name accepted → admin password (2x) → real
+password (2x) → gift roll `0`/`y` → email → gender `m` → entered the
+world at 客店/"the inn", saw real NPC (店小二/innkeeper) and board
+content, `look` re-rendered the room correctly, `score` produced the
+full character sheet, `quit` disconnected cleanly ("欢迎下次再来！"). Zero
+runtime errors in `debug.log`. No code changes needed — clean
+re-confirmation of the original pass's findings.
+
 ## Config notes
 
 `config.fluffos` adapted from the raw `config.cfg` (name "夕阳再现", the

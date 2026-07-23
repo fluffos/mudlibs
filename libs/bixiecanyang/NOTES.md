@@ -491,3 +491,25 @@ python3 ../../scripts/mudclient.py 127.0.0.1 40065 --timeout 25 --idle 1.5 \
   --send "you@example.com" --send "m" \
   --send "look" --send "quit"
 ```
+
+## Retroactive fix (QA re-verification pass, 2026-07-23): log_error() compile-warning spam (AGENTS.md §15af)
+
+Found (proactively, before the first re-verification boot — same shape as
+several sibling libs in this project's ES II/夕阳再现-adjacent families)
+during a routine re-verification pass: `adm/obj/master.lpc`'s
+`log_error()` showed the raw compiler diagnostic text to ANY connected
+player, not just wizards — no `wizardp()` gate at all — for every compile
+diagnostic funneled through `APPLY_LOG_ERROR`, including harmless "Unused
+local variable" warnings triggered by the first lazy compile of an
+ordinary room/command file. Fixed proactively before booting (same pattern
+as `dtsl`/`datangshuanglong`/`dongfanggushi2`/`wuhanzhan`/`shenzhou`): only
+show the full diagnostic to a wizard; only alarm an ordinary player with
+the generic `default error message` for a genuine compile **error** (gated
+on absence of `"warning:"` in the message) — `#include <runtime_config.h>`
+was already present, so no additional include was needed here.
+
+Re-verified with a fresh full registration (real name `秦湖`, following the
+documented wizpwd→password→gift→email→gender flow) reaching the actual
+game world (铁枪庙 starting room), then `look`/`score` both producing
+correct, clean output with zero compiler-warning spam and zero real
+`error:`/`denied`/`too deep recursion` lines in `debug.log`.

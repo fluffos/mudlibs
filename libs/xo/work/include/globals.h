@@ -82,14 +82,14 @@
 #define WRITE_FAIL_LOG      "write_fail"
 #define READ_FAIL_LOG       "read_fail"
 #define ROOM_LOG            "room_log"
-#define PPL_USAGE_LOG       "nosave/usage"
-#define WIZ_USAGE_LOG       "nosave/wiz_usage"
-#define PURGE_LOG           "nosave/purge"
-#define COMMAND_LIMIT_LOG   "nosave/command_limit"
-#define PROMOTE_LOG         "nosave/promote"
-#define MULTI_LOGIN_LOG     "nosave/multi_login"
-#define WIZ_LOGIN_ERR_LOG   "nosave/wiz_login_err"
-#define ACTION_LOG          "nosave/action_log"
+#define PPL_USAGE_LOG       "static/usage"
+#define WIZ_USAGE_LOG       "static/wiz_usage"
+#define PURGE_LOG           "static/purge"
+#define COMMAND_LIMIT_LOG   "static/command_limit"
+#define PROMOTE_LOG         "static/promote"
+#define MULTI_LOGIN_LOG     "static/multi_login"
+#define WIZ_LOGIN_ERR_LOG   "static/wiz_login_err"
+#define ACTION_LOG          "static/action_log"
 
 // Security Daemons
 

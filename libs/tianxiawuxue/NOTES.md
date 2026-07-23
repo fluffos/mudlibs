@@ -113,6 +113,41 @@ lines — only benign "Unknown #pragma, ignored" and "Unused local
 variable" compiler warnings (both non-fatal, both extremely common
 across this whole codebase family).
 
+## Re-verification pass (2026-07-23) — found and fixed a §15w bug; noted a rare, non-reproducible void-room anomaly
+
+The original pass tested `look` but not `score`. Re-testing surfaced two
+things:
+
+1. **AGENTS.md §15w, fixed**: `adm/obj/master.lpc`'s `log_error()`
+   unconditionally broadcast every compile *warning* to the connected
+   player as `编译时段错误：...warning:...` — this lib's boot log shows
+   plenty of ordinary "Unknown #pragma" warnings, so any lazily-compiled
+   file would have spammed this. Fixed with the same `strsrch(message,
+   "warning:") == -1` guard already applied to `tianxia`/`shiji`/
+   `shujian2008` this pass. Still always logged to file.
+2. **A rare, one-off "new character lands with no environment" anomaly —
+   observed once, NOT reproduced despite 13 further attempts, not fixed**:
+   on the very first registration test after the §15w fix (id `qftxwx`,
+   real Chinese name `秦风茜`, female), `look` immediately after entering
+   the world printed the void-room fallback text
+   (`你的四周灰蒙蒙地一片，什么也没有。`, from `cmds/look.lpc`'s
+   `!env` branch) instead of a real room — `enter_world()`'s
+   `user->move(startroom)` (picking randomly among 4 known-good, existing
+   start rooms via `random(4)`) apparently silently failed to place the
+   character anywhere. `score` still worked (showed a normal, correctly-
+   populated character sheet), and `debug.log` for that session shows
+   **zero** errors of any kind. Re-ran 13 more full registrations
+   afterward (across a driver restart, both genders, deliberately
+   targeting a fresh "first connection of the session" scenario a second
+   time to test for a boot-order race) and every single one landed
+   correctly in one of the 4 real start rooms (北疆小镇/铁枪庙/武庙/客店)
+   — the anomaly did not recur. Given it's not reproducible, produces no
+   error signal to chase, and 13/14 real registrations this pass (plus the
+   original pass's own successful run) landed correctly, this is
+   documented as an observed rarity rather than fixed blind — flagging
+   here in case a future pass sees it recur and can capture a live
+   repro/debug.log snapshot at the moment it happens.
+
 ## lpcc sweep
 
 Right after the driver was killed post-registration-test, `free -h`

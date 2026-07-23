@@ -361,6 +361,32 @@ this mirror-kit's apparent late-90s/2002-ish vintage) or a separate fork.
   `adm/obj/`/`adm/daemons/` (the two directories most likely to carry a
   stray backup of `master`/`securityd`/`logind`).
 
+## Re-verification pass (QA sweep, later session)
+
+Re-tested the full flow end-to-end this pass and found two real bugs:
+
+1. **Stray pre-existing debug leftover `printf("%O\n", ob);`** in
+   `adm/daemons/logind.lpc`'s Chinese-name-confirmation step -- dumps a
+   raw internal object reference (e.g. `/obj/login#0`) straight to the
+   connecting player right after their Chinese name is accepted, on
+   every single registration. Confirmed live during a fresh registration
+   test. The exact same leftover was found (and removed) in all three
+   sibling libs processed in this same session (`xiyouji`, `xiyouji2003`
+   -- 2 occurrences, `xiyouji2006`), confirming shared lineage at the
+   source level. Removed here too; re-verified with a fresh registration
+   (`qfmei`/秦美): no stray object-reference text anywhere in the
+   transcript, `look`/`score`/`quit` all still correct (correct
+   female-specific "你目前待字闺中" text).
+2. **§15s, `tell_room()`'s raw-`int 0`-as-4th-arg bug, ported
+   defensively.** This file's own earlier pass concluded (via source
+   reading) that the driver tolerates a raw `0` in `message()`'s exclude
+   slot -- but a live crash of the exact same call shape was
+   subsequently confirmed on siblings `xkx2001` and `xiyouji2006` in this
+   same later session. Ported the standard fix (`exclude || ({})`) here
+   too, even though this archive's own boot/registration path never
+   actually triggered the crash, since the underlying call shape is
+   identical. Re-verified with a clean boot: zero regressions.
+
 ## Registration-flow test — exact transcript/outcome (real Chinese names, full continuous connections)
 
 Shape (read from `logind.lpc`'s actual `input_to` chain, not inferred from

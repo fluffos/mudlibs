@@ -93,6 +93,35 @@ byte-identical bugs.
 
 ## Status: DONE — boots clean, full registration + post-login-command flow verified twice in independent continuous connections
 
+## Re-verification pass (QA sweep, later session)
+
+Re-tested the full flow end-to-end again this pass (still clean, zero
+`执行时段错误` in `debug.log`). Found and fixed two real bugs shared
+across this whole "西游记" sibling family:
+
+1. **§15s, `tell_room()`'s raw-`int 0`-as-4th-arg bug, re-examined and
+   found to actually apply here after all.** This file's own earlier
+   pass explicitly noted the driver "tolerates a raw `0`" in
+   `message()`'s exclude slot and left it unfixed -- but a live crash of
+   the exact same call shape was subsequently confirmed on sibling libs
+   `xkx2001` and `xiyouji2006` in this same later session (bridge-room
+   `close_bridge()`/room `create()` chains hitting `Bad argument 4 to
+   EFUN message() ... Got: int(0)`). Ported the standard fix
+   (`exclude || ({})`) here too, defensively, since the underlying call
+   shape is identical even though this specific archive's boot/
+   registration path happened not to trigger it. Re-verified with a
+   clean boot + fresh registration: zero regressions, zero new errors.
+2. **Stray pre-existing debug leftover `printf("%O\n", ob);`** in TWO
+   places in `adm/daemons/logind.lpc` (the Chinese-name-confirmation step
+   and a related `get_resp`-style retry path) -- dumps a raw internal
+   object reference straight to the connecting player right after their
+   Chinese name is accepted, on every registration. Same shared-lineage
+   leftover found (and removed) in siblings `xiyouji`/`xiyouji2006`/
+   `xiyouji450`. Removed both occurrences; re-verified with a fresh
+   registration (`qfmingyu`/明玉): no stray object-reference text
+   anywhere in the transcript, `look`/`score` both still correct, correct
+   female-specific fields.
+
 ## Conversion
 
 `scripts/convert_lib.sh libs/xiyouji2003/raw/xyj200341 libs/xiyouji2003/work`:

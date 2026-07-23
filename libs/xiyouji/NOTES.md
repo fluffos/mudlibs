@@ -372,6 +372,25 @@ error/lpcc-FAIL demonstrates matters, not every cosmetic warning.
   this was fixed, per item 12 above — the missing target itself is a
   content gap, not something to invent).
 
+## Re-verification pass (QA sweep, later session)
+
+Re-tested the full flow end-to-end again this pass (still clean, zero
+`执行时段错误` in `debug.log`). **Found and fixed one real, shared-lineage
+bug while cross-checking against sibling `xiyouji450`'s own re-verification
+pass**: `adm/daemons/logind.lpc`'s `get_name()` had a stray, pre-existing
+debug leftover `printf("%O\n", ob);` right after a new player's Chinese
+name is accepted -- dumps a raw internal object reference (e.g.
+`/obj/login#0`) straight to the connecting player, on every single
+registration. Purely cosmetic (never affected registration itself --
+confirmed the Chinese name still gets set and stored correctly either
+way) but visibly unprofessional. **The exact same leftover was found in
+all three other siblings in this session's batch**
+(`xiyouji2003` -- 2 occurrences, `xiyouji2006`, `xiyouji450`), confirming
+shared lineage at the source level; removed in all four. Re-verified with
+a fresh registration (`qfrong`/秦荣) after restarting the driver: no
+stray object-reference text anywhere in the transcript, `look`/`score`/
+`quit` all still correct.
+
 ## Boot + registration + post-login command test (the actual verification)
 
 Booted `~/src/fluffos/build-debug/src/driver config.fluffos` from

@@ -347,3 +347,58 @@ under `data/login/q/qinfeng.o` and `data/user/q/qinfeng.o`.)
 Driver process was killed after testing — confirmed no lingering
 `driver config.fluffos` process left running on port 40050 or
 otherwise.
+
+## QA re-verification pass (2026-07-23) — found and fixed a real, intermittent bug plus two minor robustness gaps
+
+**Bug found: ~1-in-6 chance every connection silently died with zero output
+at the very first prompt.** `adm/daemons/logind.lpc`'s `logon()` picks a
+random banner via `switch(random(6))` between `BANNER`/`BANNER1`..`BANNER5`
+(`include/login.h`: `/adm/etc/banner`, `/adm/etc/banner1`..`banner5`). Only
+`banner1`..`banner5` existed on disk — the base `/adm/etc/banner` (no
+numeric suffix) did not, only a differently-cased `/adm/etc/Banner` (a
+Windows-origin case-sensitivity mismatch, AGENTS.md §15k's pattern). Since
+`cat()` is `write(read_file(file))`, a missing file makes `read_file()`
+return `0`, and `write(0)` then threw inside the player object's
+`receive_message()`, which the driver's `new_conn_handler` catches by
+silently disconnecting the connection with **zero output at all** — exactly
+matching an apparently "hung"/dead server, but only on the `random(6)==0`
+branch (~16.7% of connections). Confirmed by direct read of `logon()` and by
+reproducing it live (my first test connection hit exactly this branch).
+Fixed by `cp adm/etc/Banner adm/etc/banner` (matching AGENTS.md §15k's
+established fix pattern — copy to the exact case-sensitive path the code
+expects, leave the original in place too). Re-verified with 8 quick
+connection attempts plus a full registration — no further silent
+disconnects, and the previously-missing banner variant now renders correctly
+when selected.
+
+**Second fix**: `adm/obj/master.lpc`'s `log_error()` broadcast every message
+reaching it — including ordinary compile *warnings*, not just real errors —
+to a connected non-wizard player as the alarming generic `default error
+message`. A real registration session showed several of these lines
+interleaved with the registration prompts (this was already noted as
+"preload noise" in the original pass's NOTES above, but not fixed). Applied
+the standard AGENTS.md §15w fix: gate the broadcast on the message NOT
+containing `"warning:"`, still logging everything to file regardless.
+Verified: a post-fix registration session showed zero such lines.
+
+**Third, minor fix**: the gift-finalization step (`d/wiz/init.lpc`'s
+`do_finish()`) triggers a `log_error()`-adjacent write to
+`/u/npc/log` (a lazily-compiled file's `file_owner()` resolves to wizard
+"npc", whose home directory was never shipped in this archive) — every new
+character's registration hit `*Wrong permissions for opening file
+/u/npc/log for append. "No such file or directory"` (caught, non-fatal, same
+class as the already-documented `/u/feizei/log` fix from the original pass,
+just a different user). Fixed the same way: created `/u/npc/` and an empty
+`/u/npc/log` file (not a directory).
+
+**Re-verified after all three fixes**: full registration (`gb → no → new →
+id → 中文姓名 → password ×2 → 身份标识 ×2 → email → webpage → icq → gender →
+gift-accept(9,y)`) followed by `look`/`score`/`quit`, with both genders
+(male "秦岭十三" / female "秦岭十四" — the female run also showed correct
+gender-specific NPC dialogue "这位小姑娘"). Both landed correctly in the real
+starting room (南城客栈), `look` and `score` rendered correctly, zero
+`"你发现事情不大对了"` spam and zero new runtime errors beyond the
+already-documented pre-existing preload noise (corrupted `emote` save data,
+one `questd.lpc` factory-return-0 gap, a few `baoshi.lpc` eval-cost
+timeouts during large treasure-placement batches — all non-fatal, all
+pre-existing, none on the registration/gameplay path).

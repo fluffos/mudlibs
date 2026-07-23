@@ -294,6 +294,23 @@ files, 5,786 `.lpc`/`.h` files after the `.c`→`.lpc` rename.
   substitute. Affects 2 leaf item files plus the 2 NPC files that
   reference them (`obj/npc/jingang`, `obj/npc/hell_guard`).
 
+## Re-verification pass (2026-07-23) — found and fixed a §15w bug, added `score` to the test
+
+The original pass tested `look` but not `score` — re-testing the fuller
+post-login flow surfaced `adm/obj/master.lpc`'s `log_error()` broadcasting
+every compile *warning* (not just real errors) to the connected player as
+a scary `编译时段错误：...warning:...` line (AGENTS.md §15w). Seen firing
+10 times in a row for `/std/char.lpc:4: warning: Unknown #pragma, ignored`
+during a routine registration, plus once more for `/std/room.lpc` — right
+in the middle of an otherwise-correct session. Fixed by gating the
+broadcast on the message not containing `"warning:"` (still always logged
+to file). Re-verified with a fresh registration (id `qftxac`, real Chinese
+name `秦风霜`, female) through `look`/`score`/`quit`: zero
+`编译时段错误` lines this time, all three commands produced correct real
+output (room description, full attribute/status sheet, clean save-and-quit
+message), and `debug.log` stayed clean of `denied`/`cannot`/`undefined
+function`/`bad argument`/`error in error handler`.
+
 ## Preload
 
 `adm/etc/preload` reviewed entry-by-entry; only `network/dns_master`

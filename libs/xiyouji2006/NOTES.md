@@ -531,6 +531,64 @@ in `debug.log` across this entire session (checked via
 `grep -icE "FATAL|SIGSEGV|Read access denied|Cannot #include" log/debug.log`
 → 0).
 
+## Re-verification pass (QA sweep, later session)
+
+Re-tested the full flow end-to-end this pass and found two real,
+previously-uncaught bugs:
+
+1. **§15s — `adm/simul_efun/message.lpc`'s `tell_room()` passed a raw,
+   unset `int 0` as `message()`'s 4th ("exclude") argument.** This
+   crashed during PRELOAD the first time either bridge room
+   (`d/qujing/baoxiang/qiao1.lpc`/`qiao2.lpc`) called its own
+   `close_bridge()` (`Bad argument 4 to EFUN message() ... Got:
+   int(0)`). Fixed with the standard pattern: `exclude || ({})`.
+   Re-verified: the specific error is gone from a fresh boot's
+   `debug.log`.
+2. **Missing `/data/topten/` directory** (§15ah-shaped): the raw archive
+   never shipped this directory, but `adm/daemons/toptend.lpc`'s
+   `topten_checkplayer()` -- called from `enter_world()` on **every
+   single new registration** -- tries to `write_file()` 11 different
+   leaderboard files there (`rich.o`, `pker.o`, `kill.o`, `exp.o`, etc),
+   failing with `Wrong permissions for opening file
+   /data/topten/rich.o for overwrite. "No such file or directory"` every
+   time. Created `libs/xiyouji2006/work/data/topten/` (directory only,
+   no seed data) proactively; re-verified with a fresh registration
+   afterward -- zero `topten`-related errors.
+3. **Noted, not fixed -- a recurring (not just one-off) "Too long
+   evaluation" eval-abort from the ambient wandering-pilgrim NPC system**:
+   `d/npc/ts.lpc`'s `tudi()`/`random_place()`/`invocation()` chain (the
+   "唐僧师徒" group periodically relocating and re-spawning apprentice
+   NPCs via `d/npc/qujing.lpc`'s `choose_npc()`) hits the eval-cost limit
+   repeatedly -- observed **9 times in a single boot+one-registration
+   session**, not just once at preload as first suspected. Each
+   occurrence is caught/non-fatal (never affected registration, `look`,
+   `score`, or `quit` in any test run) and appears to stem from
+   `random_place()`'s 30-attempt randomized directory scan lazily
+   `load_object()`-ing still-uncompiled room/NPC files each time it
+   relocates the pilgrim group to a fresh, never-before-visited zone --
+   a genuine, if repetitive, ambient-content performance issue rather
+   than a driver-compat bug or a registration-blocking defect. Left as a
+   known, documented, non-critical issue per the project's breadth-over-
+   depth policy (fixing it properly would mean redesigning this NPC's
+   own placement/spawn algorithm, out of scope for a QA pass).
+
+Full registration + post-login-command flow re-verified twice after both
+fixes with real Chinese names 木兰/木梅 (both female), both landing in
+南城客栈, `look`/`score`/`quit` all correct, zero `topten`/`message()`-4th-arg
+errors in either session (only the known, documented eval-abort noise
+above, which never affected the tested flow).
+
+**A fourth fix found during a subsequent same-session cross-check against
+siblings `xiyouji`/`xiyouji2003`/`xiyouji450`**: `adm/daemons/logind.lpc`'s
+Chinese-name-confirmation step (right after `// by canoe for suppwd`) had
+the same stray pre-existing debug leftover `printf("%O\n", ob);` found in
+all three other siblings -- dumped a raw internal object reference
+straight to the connecting player on every registration. Removed;
+re-verified with a fresh registration (`qfzhulan`/竹兰): no stray
+object-reference text, `look`/`score`/`quit` all still correct, only the
+already-documented eval-abort noise (8 occurrences this run, same known
+cause, unrelated to and unaffected by this fix) in `debug.log`.
+
 ## How to run
 
 ```

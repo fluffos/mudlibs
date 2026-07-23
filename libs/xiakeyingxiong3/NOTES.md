@@ -50,3 +50,29 @@ accepted, proceeds straight to "请设定您的密码：".
 shape (missing globals, a handful of syntax typos) — not triaged
 individually per AGENTS.md §6b/§13. Memory stayed healthy throughout
 (~13GB free).
+
+## Re-verification pass (2026-07-23)
+
+Boot + registration re-tested end-to-end (real Chinese name 秦岭, English
+id + race selection this time, since the original pass only verified up
+to the password prompt). Found and fixed one new regression, same bug
+class as AGENTS.md §15ah:
+
+- **Missing `/log/nosave/` directory** (archive shipped without it, same
+  "RAR/zip drops empty dirs" class as several sibling libs): `enter_world()`
+  in `adm/daemons/logind.lpc` unconditionally `log_file("nosave/WARNING",
+  ...)`s a potential/exp sanity-check note for every new player, and
+  `adm/simul_efun/file.lpc`'s `log_file()` did an unguarded
+  `write_file()` with no directory to write into — this **runtime error
+  aborted the rest of `enter_world()`**, so the new character was never
+  actually `move()`d to the start room (`look` showed the literal empty
+  void, "你的四周灰蒙蒙地一片"), and `quit`'s `message("system", ...,
+  environment(me), me)` then crashed on `environment(me)` being `0`
+  (`Bad argument 3 to EFUN message()`). Fixed by creating `work/log/nosave/`
+  and hardening `log_file()` (wrap `write_file()` in `catch()`) and `cat()`
+  (guard with `stringp()`) in `adm/simul_efun/file.lpc`, matching the
+  established pattern from sibling libs. Re-verified with a fresh
+  registration (id `xkyxfixver`, name `秦岭`): `look` now shows the real
+  start room content (the color-dog greeting from `d/beginner/start1.lpc`),
+  `score` renders correctly, and `quit` completes cleanly with zero
+  runtime errors in `debug.log`.

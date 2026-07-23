@@ -214,3 +214,38 @@ python3 ../../scripts/mudclient.py 127.0.0.1 40043 --timeout 20 --idle 1.5 \
   --send "<password>" --send "<password>" --send "you@example.com" \
   --send "m" --send "20 20 20 20" --send "yes" --send "look" --send "quit"
 ```
+
+## Retroactive fix (QA re-verification pass, 2026-07-23): log_error() compile-warning spam (AGENTS.md §15af)
+
+Found during a routine re-verification pass (full registration + post-login
+`look`/`score`/`quit` test): `adm/obj/master.lpc`'s `log_error()` showed the
+raw compiler diagnostic text to ANY connected player — no wizard check at
+all — for every compile diagnostic funneled through `APPLY_LOG_ERROR`,
+including harmless "Unused local variable"/"Unknown #pragma" warnings
+triggered by the first lazy compile of an ordinary room/command file the
+player merely walked into or typed (`/cmds/std/look.lpc`, `/adm/daemons/
+examined.lpc`, `/adm/daemons/combatd.lpc`, `/cmds/std/score.lpc`, etc). In
+the pre-fix test transcript this showed up as several screens of raw
+compiler internals interleaved with normal game text right after
+registration — exactly the same bug already found and fixed on `dtsl`(#8)
+(this lib's own `chinese.c`-sharing but otherwise-distinct sibling) and
+`wuhanzhan`/`shenzhou`/`dongfanggushi2` elsewhere in this project. Fixed
+identically: only show the full diagnostic to a wizard; only alarm an
+ordinary player with the generic `default error message` for a genuine
+compile **error** (gated on absence of `"warning:"` in the message). Also
+needed `#include "/include/runtime_config.h"` added to the top of
+`master.lpc` (for the `__DEFAULT_ERROR_MESSAGE__` macro) since the file had
+no includes before. Re-verified with a fresh registration (real name
+`秦海`) followed by `look`/`score` — zero spam, clean output, matching what
+a real player should see.
+
+Also observed (not fixed, off the critical path): one background-daemon
+`*Read access denied.` runtime error appeared once during this test,
+rooted in a job-system NPC (`/d/gaoli/npc/xiake`, spawned by `/adm/daemons/
+jobmond.lpc`'s periodic job-posting logic) trying to `new()` a carried item
+that hits an ACL denial somewhere in its own chain. This fires from the
+job/quest daemon's own independent heartbeat, unrelated to the player's
+registration/look/score actions being tested, and matches this project's
+established "content gap in non-critical-path daemon content" pattern
+(AGENTS.md §13) rather than a registration-blocking defect — not chased
+further given time constraints.

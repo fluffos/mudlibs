@@ -34,7 +34,23 @@ AGENTS.md §15n/§15o for the full technical writeup of these bug classes
 ported fixes transfer correctly to a byte-identical codebase — a much
 faster pass than `shujian2008`'s multi-round diagnostic process.
 
-## Interactive test result — full registration flow
+## Re-verification pass (2026-07-23) — ported shujian2008's two new bug fixes
+
+The original pass above never tested a post-login command (same gap as
+`shujian2008`'s original pass, since it predates AGENTS.md §15ae's standing
+policy). Re-testing found this lib had the exact same TWO compounding bugs
+already found+fixed in `shujian2008` this same pass (unsurprising, given
+the byte-identical source): `feature/command.lpc`'s `private nomask int
+command_hook(string arg)` (§15ae — `private` hides it from `add_action`'s
+external dispatch on this driver) and `adm/daemons/commandd.lpc`'s
+`sscanf(cmds[i]+"$", "%s.c$", cmds[i])` (§15ar — matches zero files after
+the `.c`→`.lpc` rename, leaving the command table permanently empty).
+Ported both fixes directly (drop `private`; `.c$`→`.lpc$`). Verified with a
+full fresh registration (id `sjtxee`, real Chinese name `秦风十一`, male)
+through to `look`/`score`/`quit`, all producing correct real output.
+`debug.log` clean.
+
+## Interactive test result — full registration flow (original pass)
 
 Verified the complete registration path in one continuous connection:
 id `tianxiab` → confirm `y` → password `Pass1234` (twice) → real Chinese

@@ -82,3 +82,43 @@ lib in this batch by file count) but recovered normally, host stayed at
 usual shape (missing `message_combatd`/`skillN`/combat globals, some
 syntax typos) — not triaged individually per AGENTS.md §6b/§13, boot +
 full interactive registration test is the verification gate.
+
+## Re-verification pass (2026-07-23)
+
+Extended the interactive test past the password prompt (the original
+pass stopped there) through full registration, `look`/`score`/`quit`.
+Found and fixed one new regression, same class as fix #3 above:
+
+- **Missing `/log/nosave/` directory**: `adm/simul_efun/file.lpc`'s
+  `log_file()` (unlike `cat()`, already hardened in fix #3) still did a
+  bare `write_file()`. `cmds/usr/quit.lpc`'s `do_quit()` calls
+  `log_file("nosave/EXP", ...)` for an experience-sanity-check note
+  *before* `me->save(); destruct(me);` — with the directory missing, this
+  threw and **aborted the rest of `do_quit()`, skipping `me->save()`
+  entirely** (silent character-progress loss on every single quit, not
+  just a cosmetic log failure). Fixed by wrapping `log_file()`'s
+  `write_file()` in `catch()` (matching the project's established
+  pattern) and creating `work/log/nosave/`. Re-verified with a fresh
+  registration (id `xjcqfixd`, name `秦岳`): `quit` now completes with no
+  runtime errors.
+- **Noted, not fixed (pre-existing, non-blocking)**: two other runtime
+  errors appear in every boot/session and are unrelated to the above —
+  (a) ~21 benign `*Object cannot be loaded during compilation.` traces
+  during early preload, from `master.lpc`'s `log_error()` unconditionally
+  calling `CHANNEL_D->do_channel(...)` to broadcast a compile *warning*
+  before `CHANNEL_D` itself has preloaded (a new variant of AGENTS.md
+  §15af's family — here the trigger is an unguarded daemon call inside
+  `log_error()`, not a `wizardp()` check, and the driver's own top-level
+  error handling absorbs each occurrence without cascading) — purely
+  cosmetic (suppresses a wizard-channel broadcast of a warning nobody is
+  online to see during preload), does not block boot or any tested flow.
+  (b) `*restore_object(): Illegal mapping format while restoring dbase.`
+  for `/clone/board/news_b` — the archive's own `data/board/news_b.o` seed
+  file contains several bulletin-board posts with literal unescaped
+  newline characters embedded inside quoted string values (2001-era save
+  data, not something this conversion pass introduced), which this
+  driver's stricter `restore_object()` parser rejects. Degrades
+  gracefully (the news board just starts empty) and does not affect
+  registration, `look`, `score`, or `quit` — a pre-existing content/seed-
+  data gap, not a driver-compat bug, left unfixed per the project's
+  "known non-critical content gap" policy.

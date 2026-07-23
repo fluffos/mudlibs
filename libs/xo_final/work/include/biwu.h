@@ -3,7 +3,7 @@
 #define BIWU_DENGJI_2   "如狼似虎组"              //36-50组名称
 #define BIWU_DENGJI_3   "青春靓丽组"              //20-35组名称
 
-#define BAOMING_FILE    "nosave/baoming"          //报名参加的玩家id列表文件
+#define BAOMING_FILE    "static/baoming"          //报名参加的玩家id列表文件
 #define BAOMING_ROOM    "/d/place/biwu/restroom.lpc" //报名处休息室（中原）
 #define BAOMING_ROOM2   "/d/place/biwu/restroom2.lpc" //报名处休息室（西域）
 #define BIWU_DATING     "/d/place/biwu/biwu_dating.lpc" //比武大厅

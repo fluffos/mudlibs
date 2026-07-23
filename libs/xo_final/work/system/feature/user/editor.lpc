@@ -15,6 +15,25 @@ private void create()
     fnCallback = 0;
 }
 
+// AGENTS.md §15ag-style driver-compat fix (same bug already found/fixed on
+// xiaoaojianghu2, xo_final's TMI-2/ES2 sibling): this driver build was
+// compiled with __OLD_ED__ defined, so only the OLD-style `ed(file,
+// exit_fn, restricted)` efun exists -- `ed_start`/`ed_cmd`/`query_ed_mode`
+// (the "new" ed API this file originally targeted) are simply not
+// compiled into this build at all ("Undefined function" at compile time,
+// not a runtime gap). This file is inherited directly into
+// /clone/user/user.lpc (the player body class), so the whole player-body
+// object failed to COMPILE at all, silently breaking make_body() during
+// registration right after the email prompt with zero error shown to the
+// player.
+//
+// Under __OLD_ED__, the driver's own C-level input loop intercepts every
+// line of input directly for as long as an edit session is active,
+// completely bypassing input_to() AND the process_input() apply below --
+// so there is no LPC-level per-keystroke routing left to do here at all;
+// the manual ed_cmd()-per-line forwarding this file used to do in
+// process_input() is simply unreachable code under this model, not
+// something to reimplement.
 varargs int edit(function callback, string file)
 {
     if ( ! file )
@@ -34,66 +53,41 @@ varargs int edit(function callback, string file)
     }
 
     assure_file(fpFile);
-    ed_start( fpFile, !wizardp(this_object()) );
-    //write("—————————————————————————————\n");
-    //input_to( "input_line", "", callback );
-
-    if ( !wizardp(this_object()) || file_size(fpFile) < 1 )
-    {
-        ed_cmd( "$a" );
-    }
+    ed( fpFile, "editor_exit_fn", !wizardp(this_object()) );
 
     return 1;
 }
 
-string process_input(string str)
+// Callback the driver invokes (on this_object()) when the OLD_ED session
+// started by edit() above finishes -- replaces the old manual
+// "query_ed_mode()==-1" detection in process_input().
+void editor_exit_fn()
 {
-    int x;
+    string content;
 
-    if ((x = query_ed_mode()) == -1)
+    content = read_file( fpFile );
+    if ( flgTemp )
     {
-        return str;
+        rm ( fpFile );
     }
-
-    if (str && str[0..0] == "!" && strlen(str) > 1)
+    if ( !content )
     {
-        return str[1..];
+        printf("取消.\n");
     }
-
-    if ( !x )
+    else if ( functionp(fnCallback) )
     {
-        str = ed_cmd(str);
-        message("editor", str, this_object());
-
-        if (query_ed_mode() == -1)
-        {
-            if (functionp(fnCallback))
-            {
-                string content = read_file ( fpFile );
-                if ( flgTemp )
-                {
-                    rm ( fpFile );
-                }
-                if (!content)
-                {
-                    printf("取消.\n");
-                }
-                else
-                {
-                    evaluate(fnCallback, content);
-                }
-            }
-            fnCallback = 0;
-            fpFile = 0;
-            flgTemp = 0;
-            return "";
-        }
-
-        return "";
+        evaluate(fnCallback, content);
     }
-
-    str = ed_cmd(str);
-    message("editor", str, this_object());
-    return "";
+    fnCallback = 0;
+    fpFile = 0;
+    flgTemp = 0;
 }
 
+// Never actually invoked while a real OLD_ED session is active (the
+// driver intercepts input at the C level before process_input() -- see
+// the comment above edit()); kept as a harmless passthrough purely so
+// callers chaining editor::process_input() keep working unchanged.
+string process_input(string str)
+{
+    return str;
+}

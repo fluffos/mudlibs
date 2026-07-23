@@ -58,3 +58,67 @@ range check to test the CJK Unicode block instead, and halved the
 GBK-byte-calibrated length bounds in `check_legal_name` to match. See
 AGENTS.md §15h for the full writeup; confirmed via a real interactive
 registration test (Chinese surname + given name reaching the next prompt).
+
+## QA re-verification pass (2026-07-23) — found and fixed a real, high-impact bug
+
+The earlier passes above never actually completed a full registration through
+to a live post-login `look`/`score`, so this genuine gap went undetected until
+this pass followed the project's standing policy of testing a real command
+after registration completes.
+
+**Bug found: every candidate starting room failed to load, silently stranding
+every new character in `VOID` instead of a real room** (AGENTS.md §15s
+pattern). `adm/simul_efun/message.lpc`'s `tell_room(ob, str, exclude)` (2-arg
+call form, ~99% of call sites) left `exclude` unset (`0`, an int, not an
+array) and passed it straight through to the real `message()` efun's 4th
+argument, which this driver rejects for a non-object/non-array value. Since
+`tell_room()` fires from `feature/move.lpc`'s `move()` whenever any NPC's
+`create()` carries an item into itself (i.e. almost every populated room),
+this made **every room containing an NPC with inventory throw an uncaught
+error out of its own `create()`**, which the driver treats as a failed
+compile (`Fail to load object ...`). Confirmed directly via
+`lpcc config.fluffos /d/yangzhou/zuihualou` (the configured `START_ROOM`)
+failing with exactly this error before the fix, and compiling clean after.
+
+Effect on a real registration: `logind.lpc`'s `enter_world()` tries
+`/d/newbie/door` (the real new-player start room) first, and since it also
+has an NPC with inventory, IT failed to load too; the `catch()`-guarded
+fallback to `START_ROOM` then also failed to load for the identical reason,
+and neither failure's return value is checked, so the newly-created character
+was left with **no environment at all**. The very first `look` command's own
+`!env` safety-net (`cmds/std/look.lpc`) then silently dumped the player into
+`/clone/misc/void` ("最後乐园") instead — indistinguishable from a normal room
+without inspecting `debug.log`, since the void room has its own flavor
+description and exit.
+
+**Fix**: `adm/simul_efun/message.lpc`, `tell_room()` — `exclude || ({})`
+before the `message()` call; `shout()` — `this_player() || ({})` likewise
+(same latent bug, same file, not yet observed live but same shape per
+AGENTS.md §15s's precedent on other libs).
+
+**Second fix, same pass**: `adm/obj/master.lpc`'s `log_error()` broadcast
+EVERY message reaching it — including ordinary compile *warnings*, not just
+real errors — to the connected non-wizard player as the alarming generic
+`default error message` ("你发现事情不大对了，但是又说不上来。"). Since the
+`tell_room`/`shout` bug above was firing constantly (any NPC anywhere with
+inventory), a real registration session before the fix showed dozens of these
+lines during ordinary preload/gameplay. Gated the broadcast on the message NOT
+containing `"warning:"` (AGENTS.md §15w's standard fix), still logging
+everything to file regardless. Verified: a post-fix session showed zero such
+lines.
+
+**Third, minor fix**: `d/gaoli/npc/xiake.lpc` had a double-slash path typo
+(`carry_object("//d/gaoli/obj/armor")`) causing one `*Read access denied.`
+runtime error whenever this background NPC's job-daemon-driven room load
+fires while a player is connected — pre-existing content typo, unrelated to
+the two fixes above, fixed to the correct single-slash path.
+
+**Re-verified after all three fixes**: full registration (`id → y → 中文姓名
+→ password ×2 → email → gender → 4-attribute allocation → y`) followed by
+`look`/`score`/`quit`, across 2 fresh characters (male "秦岭七"/female
+"秦岭八" — the female run also confirmed gender-specific starting clothes
+"粉红绸衫"/"绣花小鞋"). Both landed correctly in the real starting room
+(`大唐学院`/Tang Academy, `/d/newbie/door`), not VOID; `look` re-rendered the
+room, `score` showed the full correct character sheet; zero
+`"你发现事情不大对了"` lines and zero uncaught runtime errors in `debug.log`
+in the final run.
