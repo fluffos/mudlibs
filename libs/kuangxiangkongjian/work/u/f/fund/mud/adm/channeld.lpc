@@ -1,0 +1,180 @@
+// channeld.c
+
+#include <ansi.h>
+#include <net/dns.h>
+
+inherit COLOR_D;
+
+void create()
+{
+  seteuid(getuid());  // This is required to pass intermud access check.
+}
+
+mapping channels = ([
+  "sys":  (["msg_speak": HIY "【系统】%s"NOR"：%s\n", "wiz_only": 1 ]),
+  "wiz":  (["msg_speak": HIY "【神话鬼话】%s"NOR"：%s\n", "wiz_only": 1 ]),
+  "gwiz":  (["msg_speak": HIG "【网际巫师】%s"NOR"：%s\n",
+      "msg_emote": HIG "【网际巫师】%s"NOR" %s.\n",
+      "wiz_only": 1, "intermud": GWIZ, "channel": "CREATOR",
+      "filter": 1 ]),
+  "es":  (["msg_speak": HIR "【东方故事】%s"NOR"：%s\n",
+      "msg_emote": HIR "【东方故事】%s %s.\n" NOR,
+      "intermud": GCHANNEL, "channel": "es",
+      "filter": (: $1["MUDLIB"]=="Eastern Stories" :) ]),
+  "twiz":  (["msg_speak": HIW "【台湾巫师】%s"NOR"：%s\n",
+      "msg_emote": HIW "【台湾巫师】%s"NOR" %s.\n",
+      "wiz_only":1, "intermud": GCHANNEL, "channel": "twiz",
+      "filter": (: $1["HOSTADDRESS"][0..2]=="140" :) ]),
+  "chat":  (["msg_speak": HIC "【闲聊】%s"NOR"：%s\n"]),
+  "shout":(["msg_speak": HIY "%s纵声大叫：%s\n" NOR]),
+  "gamble":(["msg_speak": WHT "%s\n" NOR,
+      "mud_only": 1,
+    ]),
+  "mud":  (["msg_speak": WHT "%s\n" NOR,
+      "mud_only": 1,
+    ]),
+  "rumor":(["msg_speak": HIM "【谣言】"NOR"%s：%s\n",
+            "anonymous": "某人",
+    ]),
+]);
+
+varargs int do_channel(object me, string verb, string arg, int emote)
+{
+  object *ob;
+  string *tuned_ch, who, emote_verb, emote_arg, class;
+  object *usr;
+  int i, n, emotes;
+
+  // 把 * 拿掉, 让 chat* 属于 chat 频道
+  emotes = 0;
+  if (verb == "chat*") {
+    verb = "chat";
+    emotes = 1;
+  }
+  // 而 reply 则特殊处理
+  else if (verb == "reply*") {
+    verb = "reply";
+    emotes = 1;
+  }
+
+  // 检查是否有此频道, 增加公会频道的使用
+  // 如前述, reply 特殊处理过
+  if( (!mapp(channels) || undefinedp(channels[verb])) &&
+      verb != me->query("class") && verb != "reply" )
+    return 0;
+
+  // 如果是玩家, 该考虑是否打开该频道, 或者有没有权使用该频道
+  if( mapp(channels) && channels[verb] && userp(me) ) {
+    // 非巫师不能打开巫师频道
+    if ( channels[verb]["wiz_only"] && !wizardp(me) )
+      return 1;
+
+    // 打开该频道
+    tuned_ch = me->query_temp("channels");
+    if( !pointerp(tuned_ch) )
+      me->set_temp("channels", ({ verb }) );
+    else if( member_array(verb, tuned_ch)==-1 )
+      me->set_temp("channels", tuned_ch + ({ verb }) );
+
+    // 玩家可以打开 mud 频道收听, 但是不能使用 mud 频道
+    if ( channels[verb]["mud_only"] && !wizardp(me) )
+      return 1;
+
+    if( arg==(string)me->query_temp("last_channel_msg") )
+          return notify_fail("说话请不要重复相同的讯息。\n");
+    me->set_temp("last_channel_msg", arg);
+  }
+
+  // 先滤掉 gage 部份, 听的一方也许不想听此人的讯息
+  // 再滤掉 wiz_only 部份
+  // 考滤公会频道
+  if (userp (me))
+	usr = filter_array(users(), "listen_me", this_object(), verb);
+  else	usr = users();
+
+  // 增加在 chat 中的 emote
+  // 包括 chat* 跟 reply* 两种
+  if (emotes) {
+    notify_fail ("用法: chat* <emote> [<对象> [<其它>]]\n"
+		 "或者 reply* <emote> [<对象> [<其它>]]\n");
+    if (!arg) return 0;
+
+    if (sscanf (arg, "%s %s", emote_verb, emote_arg) != 2) {
+      emote_verb = arg;
+    }
+    if (!EMOTE_D->do_emote( me, emote_verb, emote_arg, usr ))
+	return 0;
+    else 
+	return 1;
+  }
+
+  if (channels[verb] && channels[verb]["anonymous"] )
+    who = channels[verb]["anonymous"];
+  else if (!who = me->query_temp("channel_id"))
+    who = me->query("name") + "(" + me->query("id") + ")";
+
+  arg = trans_color(arg);
+  if( !arg ) arg = "...";
+
+  // 公会频道
+  if (!channels[verb]) {
+    if (verb == (class=me->query("class"))) {
+	if (me->query("gender") == "女性")
+          class = to_chinese("f_"+class);
+	else
+          class = to_chinese(class);
+ 
+	message( "class_channel",
+		sprintf(HIG "%s%s"NOR"说道: %s\n", class, who, arg ),
+		usr );
+    }
+    else return 0;
+  }
+  else if (channels[verb]["mud_only"])
+    message( "channel:" + verb,
+    sprintf( channels[verb]["msg_speak"], arg ), usr );
+  else {
+    message( "channel:" + verb,
+    sprintf( emote ? channels[verb]["msg_emote"] : channels[verb]["msg_speak"],
+	who, arg ), usr );
+    // apprentice 以下散布谣言会受损
+    if (channels[verb]["anonymous"] && userp(me) && wiz_level(me) <=2) {
+	write ("由于你到处散布谣言, 感觉全身虚脱无力.\n");
+	me->receive_damage("gin", 10);
+	me->receive_damage("kee", 10);
+	me->receive_damage("sen", 10);
+	do_channel(this_object(), "wiz",
+	  me->name()+"("+me->query("id")+")"+"散布谣言道: "+arg, 0);
+    }
+  }
+
+  if( channels[verb] && !undefinedp(channels[verb]["intermud"])
+  &&  base_name(me) != channels[verb]["intermud"] )
+    channels[verb]["intermud"]->send_msg(
+      channels[verb]["channel"], me->query("id"), me->name(1), arg, 0,
+      channels[verb]["filter"] );
+
+  return 1;
+}
+
+int listen_me(object who, string verb)
+{
+  object	me;
+
+  me = this_player();
+  if (me == who) return 1;
+  // 正在连线的听不到
+  if( !environment(who)) return 0;
+
+  if (!me)
+    return 1;
+  if (who->gage(me)) return 0;
+  if (!channels[verb]) {        // 也许是公会频道
+    if (verb == who->query("class")) return 1;
+    else if (verb == "reply" && me->query_temp("reply") == who->query("id"))
+	return 1;
+    else return 0;
+  }
+  else if( channels[verb]["wiz_only"] ) return wizardp(who);
+  else return 1;
+}

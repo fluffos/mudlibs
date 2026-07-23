@@ -1,0 +1,382 @@
+//  securityd.c
+
+#include <login.h>
+
+// By Annihilator@Eastern.Stories (11/25/94)
+
+// This is the "effective" access status compare to the "status" property
+// in login object that this mapping determine wizards' access rights
+// directly. It is important to make the "status" property matches this
+// mapping for wizards higher than regular wizard such as sage, arch and
+// admin. For thoese users whose name doesnot appear in this mapping, they
+// are divided into three groups (wizard),(player) and (object) using
+// wizardp() and interactive() efun.
+// The parenthesis is nessessary to prevend players naming themself "admin"
+// to hack the security system.
+// 
+// 01/14/95 Annihilator - wiz_status are defined outside this daemon in the
+//                        WIZLIST file.
+
+private mapping wiz_status;
+private mapping wiz_boss;
+
+private string *wiz_levels = ({
+	"(player)",
+	"(immortal)",
+	"(apprentice)",
+	"(wizard)",
+	"(arch)",
+	"(admin)",
+	"(guest)",
+	"(manager)"
+});
+
+// A valid write attempt must pass 2 checks: your uid or status must not be
+// "excluded" and must be "trusted" on that directory in order to write in 
+// that directory. The directories containing the file is searched backward
+// from the current directory to root. And exclude is checked prior than
+// trusted.
+
+// 加在底下的是允许有写的权力, 各区域负责人应该有读写该区域的能力
+private mapping trusted_write = ([
+	"/"			:	({ "(manager)", "(guest)", "(admin)" }),
+	"player"		:	({ "(player)" }),
+	"u"			:	({ "(arch)" }),
+	"daemon"		:	({ "(arch)" }),
+	"data"			:	({ "(arch)" }),
+	"doc"			:	({ "(arch)" }),
+	"include"		:	({ "(arch)" }),
+	"obj"			:	({ "(arch)" }),
+	"open/ping"		:	({ "ccat", "onion" }),
+	"open/center"		:	({ "powell","lotus" }),
+        "open/main"		:	({ "ccat", "bigcat", "coolest", "hitler", "lys", "oda", "onion", "sky", "wugi"  }),
+	"open/gsword"		: 	({ "ccat", "bigcat", "wugi", "onmyway" }),
+	"open/wu"		:	({ "hitler", "devils" }),
+	"open/start"		:	({ "oda" }),
+	"open/badman"		:	({ "oda", "cheryl", "powell" }),
+        "open/biau"             :       ({ "jcder", "onion" }),
+        "open/capital"          :       ({ "onion", "anmy", "smallfat", "momo", "smirk","carol" }),
+	"open/hall"		:	({ "sky", "lsf" }),
+	"open/snow"		:	({ "chhu", "abcdef", "eiei", "tide" }),
+	"open/poison"		:	({ "lys", "ranko" }),
+	"open/gblade"		:	({ "wugi", "longhair" }),
+	"record/quest"		:	({ "(arch)" }),
+	"cmds/usr"		:	({ "onion" }),
+	"open/dancer"		:	({ "lys" }),
+]);
+
+private mapping trusted_read = ([
+  "/"		:	({ "(manager)", "(guest)", "(admin)", "(arch)" }),
+]);
+
+//  限定某些等级的巫师的读取权
+private mapping exclude_read = ([
+  "adm"		:	({ "(immortal)", "(apprentice)", "(wizard)","(arch)" }),
+  "data"	:	({ "(immortal)", "(apprentice)", "(wizard)" }),
+  "log"		:	({ "(immortal)", "(apprentice)", "(wizard)" }),
+  "obj"		:	({ "(immortal)" }),
+  "cmds"	:	({ "(immortal)", "(apprentice)" }),
+  "std"		:	({ "(immortal)" }),
+  "feature"	:	({ "(immortal)" }),
+  // immortal 只要专心读文件档即可
+  "open"	:	({ "(immortal)" }),
+  "daemon"	:	({ "(immortal)", "(apprentice)", "(wizard)" }),
+  "record"	:	({ "(immortal)", "(apprentice)", "(wizard)" }),
+]);
+
+
+void create()
+{
+	string *wizlist, wiz_name, wiz_level, boss;
+	int i;
+
+	wizlist = explode(read_file(WIZLIST), "\n");
+	wiz_status = allocate_mapping(sizeof(wizlist));
+	for(i=0; i<sizeof(wizlist); i++) {
+		if( wizlist[i][0]=='#' 
+		|| sscanf(wizlist[i], "%s %s", wiz_name, wiz_level)!=2 ) continue;
+		wiz_status[wiz_name] = wiz_level;
+	}
+
+	wizlist = explode(read_file(WIZBOSS), "\n");
+        wiz_boss = allocate_mapping(sizeof(wizlist));
+        for(i=0; i<sizeof(wizlist); i++) {
+                if( wizlist[i][0]=='#' 
+                || sscanf(wizlist[i], "%s %s", wiz_name, boss)!=2 ) continue;
+                wiz_boss[wiz_name] = boss;
+        }
+}
+
+string *query_wizlist()   { return keys(wiz_status); }
+
+// This function returns the status of an uid.
+string get_status(mixed ob)
+{
+	string euid;
+	
+	if( objectp(ob) ) {
+		euid = geteuid(ob);
+		if( !euid ) euid = getuid(ob);
+	}
+	else if( stringp(ob) ) euid = ob;
+	
+	if( !undefinedp(wiz_status[euid]) ) return wiz_status[euid];
+	else return "(player)";
+}
+
+int get_wiz_level(object ob)
+{
+	return member_array(get_status(ob), wiz_levels);
+}
+
+string get_boss(mixed ob)
+{
+        string euid;
+
+        if( objectp(ob) ) {
+                euid = geteuid(ob);
+                if( !euid ) euid = getuid(ob);
+        }
+        else if( stringp(ob) ) euid = ob;
+
+        if( !undefinedp(wiz_boss[euid]) ) return wiz_boss[euid];
+        else return "";
+}
+
+int set_boss(mixed ob, string boss)
+{
+	string uid, *wiz, wizlist;
+	int i;
+
+	if( geteuid(previous_object())!= ROOT_UID ) return 0;
+
+//	if( userp(ob) )	uid = getuid(ob);
+//	else if(stringp(ob)) uid = ob;
+	if(stringp(ob)) uid = ob;
+	else return 0;
+
+	if( boss == "(none)" )
+	{
+		map_delete(wiz_boss, uid);
+	}
+	else
+	{
+		wiz_boss[uid] = boss;
+	}
+
+        wiz = keys(wiz_boss);
+        for(wizlist = "", i=0; i<sizeof(wiz); i++)
+                wizlist += wiz[i] + " " + wiz_boss[wiz[i]] + "\n";
+        rm(WIZBOSS);
+        write_file(WIZBOSS, wizlist);
+}
+
+int query_valid_level(string status)
+{
+  return member_array(status, wiz_levels);
+}
+
+int set_status(object me, mixed ob, string status)
+{
+	string uid, *wiz, wizlist;
+	int i;
+
+	if( geteuid(previous_object())!= ROOT_UID ) return 0;
+
+//	if( userp(ob) )	uid = getuid(ob);
+//	else if(stringp(ob)) uid = ob;
+	if(stringp(ob)) uid = ob;
+	else return 0;
+
+//	if( wiz_status[uid] && wiz_boss[uid] && wiz_boss[uid]!=me->query("id") && get_status(me->query("id"))!="admin")
+//		return 0;
+
+	if( status == "(player)" )
+	{
+		map_delete(wiz_status, uid);
+		map_delete(wiz_boss, uid);
+	}
+	else
+	{
+		wiz_status[uid] = status;
+		wiz_boss[uid] = me->query("id");
+	}
+
+	wiz = keys(wiz_status);
+	for(wizlist = "", i=0; i<sizeof(wiz); i++)
+		wizlist += wiz[i] + " " + wiz_status[wiz[i]] + "\n";
+	rm(WIZLIST);
+	write_file(WIZLIST, wizlist);
+
+        wiz = keys(wiz_boss);
+        for(wizlist = "", i=0; i<sizeof(wiz); i++)
+                wizlist += wiz[i] + " " + wiz_boss[wiz[i]] + "\n";
+        rm(WIZBOSS);
+        write_file(WIZBOSS, wizlist);
+
+	log_file( "static/promotion", capitalize(uid)
+	 + " become a " + status + " by " + me->query("id")  
+	 + " on " + ctime(time()) + "\n" );
+	return 1;
+}
+
+int set_player(string name)
+{
+	string uid, *wiz, wizlist;
+	int i;
+
+	if( geteuid(previous_object())!= ROOT_UID ) return 0;
+
+	else if(stringp(name))	uid = name;
+	else return 0;
+
+        map_delete(wiz_boss, uid);
+	map_delete(wiz_status, uid);
+	wiz = keys(wiz_status);
+	for(wizlist = "", i=0; i<sizeof(wiz); i++)
+		wizlist += wiz[i] + " " + wiz_status[wiz[i]] + "\n";
+	rm(WIZLIST);
+	write_file(WIZLIST, wizlist);
+
+        wiz = keys(wiz_boss);
+        for(wizlist = "", i=0; i<sizeof(wiz); i++)
+                wizlist += wiz[i] + " " + wiz_boss[wiz[i]] + "\n";
+        rm(WIZBOSS);
+        write_file(WIZBOSS, wizlist);
+
+	log_file( "static/promotion", capitalize(uid)
+	 + " become a (player) by " + previous_object()->id()  
+	 + " on " + ctime(time()) + "\n" );
+	return 1;
+}
+
+string *get_wizlist() { return keys(wiz_status); }
+
+// valid_write - called by the master object to determine whether if an user
+//               is allowed to write on a certain file.
+// NOTE:
+//     The argument user should be an object according to the source code
+// of driver. However, it is a mixed type in the released docs. We assume
+// it is an object in normal case here and issue an error if it was not
+// an object. 												- Annihilator
+
+int valid_write(string file, mixed user, string func)
+{
+	string euid, status, *path, dir;
+	int i;
+
+	if( !objectp(user) )
+		error("TRUST_D->valid_write: Invalid argument type of user.\n");
+
+	if( sscanf(file, LOG_DIR + "%*s") && func=="write_file" ) return 1;
+
+	// Let user save their save file
+	if( func=="save_object" ) {
+		if( sscanf(base_name(user), "/obj/%*s")
+		&&	sscanf(file, "/data/%*s")
+		&&	file == (string)user->query_save_file() )
+			return 1;
+	}
+
+	// Get the euid and status of the user.
+	euid = geteuid(user);
+	if( !euid ) return 0;
+	status = get_status(user);
+
+	if( euid==ROOT_UID ) return 1;
+
+	// 自己的根目录
+	if( sscanf(file, "/u/" + euid[0..0] + "/" + euid + "/%*s") )
+		return 1;
+
+	path = explode(file, "/");
+
+	// And then check if we are trusted in one of the directories containing
+	// the file.
+	if( member_array(euid, trusted_write["/"])!=-1 ) return 1;
+	if( member_array(status, trusted_write["/"])!=-1 ) return 1;
+
+	// Check if we are excluded in one of the directories containing the file.
+
+	for(i=sizeof(path)-1; i>=0; i--) {
+		dir = implode(path[0..i], "/");
+		if( undefinedp(trusted_write[dir]) ) continue;
+		if( member_array(euid, trusted_write[dir])!=-1 ) return 1;
+		if( member_array(status, trusted_write[dir])!=-1 ) return 1;
+	}
+
+	return 0;
+}
+
+int valid_read (string file, mixed user, string func)
+{
+	object ob;
+	string euid, status, *path, dir;
+	int i;
+
+	if( !objectp(user) ) return 1;
+
+	if( sscanf(file, LOG_DIR + "%*s") && func=="read_file" ) return 1;
+
+	// 要取回玩家的物件资料当然是准许的
+	if( func=="restore_object" ) {
+		if( sscanf(base_name(user), "/obj/%*s")
+		&&	sscanf(file, "/data/%*s")
+		&&	file == (string)user->query_save_file() )
+			return 1;
+	}
+
+	// Get the euid and status of the user.
+	euid = geteuid(user);
+	if (!euid) return 1;
+	if (!ob=find_player(euid)) return 1;
+	euid=ob->query("id");
+
+	if( euid==ROOT_UID || euid=="wade" || euid == "ice" || euid == "fund" || euid=="chun") return 1;
+
+	status = get_status(user);
+
+	// 自己的根目录
+	if( sscanf(file, "/u/" + euid[0..0] + "/" + euid + "/%*s") )
+		return 1;
+
+	path = explode(file, "/");
+
+	// 跟 valid_write 一样的写法, 对根目录谁拥有绝对的读取权
+	if( member_array(euid, trusted_read["/"])!=-1 ) return 1;
+	if( member_array(status, trusted_read["/"])!=-1 ) return 1;
+
+	// 是否玩家被列为拒绝往来户, 如是, 传回 0
+	for(i=sizeof(path)-1; i>=0; i--) {
+		dir = implode(path[0..i], "/");
+		if( undefinedp(exclude_read[dir]) ) continue;
+		if( member_array(euid, exclude_read[dir])!=-1 ) return 0;
+		if( member_array(status, exclude_read[dir])!=-1 ) return 0;
+	}
+
+	// 是否玩家是在受信赖的名单中. 如是, 传回 1
+/*
+	for(i=sizeof(path)-1; i>=0; i--) {
+		dir = implode(path[0..i], "/");
+		if( undefinedp(trusted_read[dir]) ) continue;
+		if( member_array(euid, trusted_read[dir])!=-1 ) return 1;
+		if( member_array(status, trusted_read[dir])!=-1 ) return 1;
+	}
+*/
+	return 1;
+}
+
+int valid_seteuid( object ob, string uid )
+{
+	if( uid==0 ) return 1;
+	if( uid==getuid(ob) ) return 1;
+	if( getuid(ob)==ROOT_UID ) return 1;
+	if( sscanf(file_name(ob), "/adm/%*s") ) return 1;
+	if( wiz_status[uid] != "(manager)"
+        &&      wiz_status[getuid(ob)] == "(manager)" )
+                return 1;
+	if( wiz_status[uid] != "(admin)"
+	&&	wiz_status[getuid(ob)] == "(admin)" )
+		return 1;
+	return 0;
+}

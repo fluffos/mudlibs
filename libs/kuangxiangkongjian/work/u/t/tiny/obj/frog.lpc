@@ -1,0 +1,372 @@
+#include <ansi.h>
+#include <dbase.h>
+
+inherit ITEM;
+//inherit F_AUTOLOAD;
+inherit F_CLEAN_UP;
+
+
+void create()
+
+{
+     set_name("传呼蛙", ({"call frog", "call", "frog"}) );
+     set_weight(10);
+     set("unit", "只");
+     set("long", "泰山工作室专用灵蛙");
+     set("value", 1000);
+     set("material", "天地灵气");
+
+}
+
+//int query_autoload() { return 1; }
+
+void init()
+{
+                     add_action("do_people", "people");
+                     add_action("do_equipment","equipment");
+                     add_action ("do_cure", "cure");
+                     add_action("do_potential", "potential");
+                     add_action("do_combat", "combat");
+                     add_action("do_knowledge", "knowledge");
+                     add_action("do_name", "name");
+                     add_action("do_goto", "goto");
+                     add_action("do_ls", "ls");
+                     add_action("do_cd", "cd");
+                     add_action("do_more", "more");
+                     add_action("do_summon", "summon");
+                     add_action("do_clone", "clone");
+
+}
+
+
+int do_clone(object me, string file)
+{
+	object obj;
+	string err, msg;
+
+	seteuid( geteuid(me) );
+
+	if (!file) file = me->query("cwf");
+	if (!file)
+		return notify_fail("你要复制什么物件？\n");
+
+	file = resolve_path(me->query("cwd"), file);
+	if( sscanf(file, "%*s.lpc") != 1 ) file += ".lpc";
+	me->set("cwf", file);
+
+	if( file_size(file) < 0 )
+		return notify_fail("没有这个档案(" + file + ")。\n");
+
+        obj = find_object(file);
+
+	if( !obj ) {
+		err = catch(call_other(file, "???"));
+		if (err) {
+			write("载入失败：" + err + "\n");
+			return 1;
+		}
+	}
+        else if (obj) destruct(obj);
+        if (obj) return notify_fail ("你无法将这个物件摧毁。\n");
+
+	err = catch(obj = new(file));
+	if (err) {
+		write("复制失败：" + err + "\n");
+		return 1;
+	}
+
+	if( !stringp(msg = me->query("msg_clone")) )
+		msg = "只见$N伸手凌空一指，变出了$n。\n";
+	else msg += "\n";	// 用 call 设定字串似乎无法换行....
+
+	if( !obj->is_character() && obj->move(me) ) {
+		write(obj->query("name") + "复制成功\，放在你的物品栏。\n");
+		message_vision(msg, me, obj);
+		return 1;
+	}
+	if( obj->move(environment(me)) ) {
+		write(obj->query("name") + "复制成功\，放在这个房间。\n");
+		message_vision(msg, me, obj);
+		return 1;
+	}
+
+	destruct(obj);
+	return notify_fail("无法复制不能移动的物件(" + file + ")。\n");
+}
+
+int do_goto(string arg)
+{
+        int goto_inventory = 0;
+        object obj, me;
+        me = this_player();
+
+        if( !arg ) return notify_fail("你要去哪里？\n");
+        if( sscanf(arg, "-i %s", arg) ) goto_inventory = 1;
+        if( !arg ) return notify_fail("你要去哪里？\n");
+
+        obj = find_player(arg);
+        if(!obj) obj = find_living(arg);
+        if(!obj || !me->visible(obj)) {
+         arg = resolve_path(me->query("cwd"), arg);
+         if( !sscanf(arg, "%*s.lpc") ) arg += ".lpc";
+         if( !(obj = find_object(arg)) ) {
+            if( file_size(arg)>=0 )
+              return me->move(arg);
+           return notify_fail("没有这个玩家、生物、或地方。\n");
+         }
+      }
+        if(!goto_inventory && environment(obj))
+           obj = environment(obj);
+           if( !obj ) return notify_fail("这个物件没有环境可以 goto。\n");
+        printf("闭上双眼，你会去你想去的地方。\n");
+        me->move(obj);
+       return 1;
+}
+
+
+int do_cure()
+{
+        printf("传呼蛙口中念念有辞，一团紫雾笼罩了你的全身。\n");
+        this_player()->set("gin", this_player()->query("max_gin"));
+        this_player()->set("kee", this_player()->query("max_kee"));
+        this_player()->set("sen", this_player()->query("max_sen"));
+        printf("你感到全身充满了力量。传呼蛙也呱呱地叫了起来。\n");
+        return 1;
+}
+
+int do_potential()
+{
+   printf("传呼蛙口中念念有辞，一团光环出现在你脑后。\n");
+this_player()->add("potential", 80);
+   printf("啊!睿智之光!传呼蛙高兴地跳了起来。妳顿时觉得变聪明了。\n");
+   return 1;
+}
+
+int do_combat()
+{
+     printf("传呼蛙口中念念有辞，一个战神模样的人出现了。\n");
+     printf("战神在你头上拍了两下。你仿佛经历了十多场战斗。\n");
+     this_player()->add("combat_exp", 500);
+     printf("刹那间，你浑身充满了斗志。\n");
+     return 1;
+}
+
+
+int do_knowledge(string str)
+{
+    int i,j,k;
+    if (!str) {
+    printf("传呼蛙说道:主人不告诉我项目，我就帮不上忙。\n");
+    return 1;  }
+    printf("传呼蛙口中念念有辞，你的脑海顿时有了波澜。\n");
+
+     i = this_player()->query_skill(str);
+     k = random(1) + 10;
+     j = i + k;
+     this_player()->set_skill(str, j);
+     printf("当你再度恢复平静时，你发觉又学到了新的知识。\n");
+     return 1;
+}
+
+int do_name(string new_name)
+{    string old_name;
+     if (!new_name){
+        printf ("传呼蛙问道:主人想改个什么名字?\n");
+      }
+     else{
+        old_name = this_player()->query("name");
+        printf("传呼蛙笑道:我也觉得%s这名字不好听。\n", old_name);
+        this_player()->set("name", new_name);
+        printf("传呼蛙笑道:我已按您的要求改了你的名字。\n");
+        printf("传呼蛙咯咯地笑着说:您现在叫作%s。\n", new_name);
+       }
+     return 1;
+}
+
+
+
+int do_equipment(string arg)
+{  object *inv,ob;
+   int i;
+   if (!arg) ob = this_player();
+   else{
+         ob = find_player(arg);
+         if (!ob){
+         printf("传呼蛙无可奈何地摇了摇头。\n");
+         printf("报告主人，你要找的人目前不在线上。\n");
+         printf("请给我新的指令。我很乐意为主人效力。\n");
+         printf("我先报告一下您的装备情况。\n");
+         ob = this_player();
+         }
+        }
+   inv=all_inventory(ob);
+   if( !sizeof(inv) ) {
+                write((ob==this_player())? "目前你身上没有任何东西。\n"
+                        : ob->name() + "身上没有携带任何东西。\n");
+                return 1;
+        }
+        printf("%s身上带着下列这些东西(负重 %d%%)：\n===========================
+===================================================\n%s\n",
+                (ob==this_player())? "你": ob->name(),
+                (int)ob->query_encumbrance() * 100 / (int)ob->query_max_encumbrance(),
+                implode(map_array(inv, "inventory_desc", this_object()), "\n") )
+;
+
+        return 1;
+}
+string inventory_desc(object ob)
+{
+        return sprintf("%s%32s%44s",
+                ob->query("equipped")? HIC "ˇ" NOR:"  ",
+                ob->short(),
+                file_name(ob)
+        );
+}
+
+
+int do_people(string arg)
+{
+        string str;
+        object *list;
+        int i, j, ppl_cnt;
+        object me;
+        me = this_player();
+        str += "───────────────────────────────□─────\n";
+        str += "    目前权限      使用代号          中文姓名                连线
+地址          \n";
+    str += "──────────────────────────────────
+───\n";
+        list = users();
+    j = sizeof(list);
+    while( j-- ) {
+        // Skip those users in login limbo.
+        if( !environment(list[j]) ) continue;
+        str = sprintf("%s%12s%14s%18s%30s\n",
+                                str,
+                                SECURITY_D->get_status(list[j]),
+                                list[j]->query("id"),
+                                list[j]->query("name"),
+                        query_ip_name(list[j])
+                        );
+                }
+        str += "────────────────────────────────
+─────\n";
+        str = sprintf("%s共有 %d 位使用者连线中，系统负担：%s\n", str, sizeof(list),
+                query_load_average() + "\n");
+    me->start_more(str);
+}
+
+int do_where(string arg)
+{
+        string str;
+        object *list;
+        int i, j, ppl_cnt;
+        object me;
+        me = this_player();
+        str += "--------------------------------------------------------------------------\n";
+        str += "      使用代号          中文姓名                            目前
+位置      \n";
+    str += "──────────────────────────────────
+──\n";
+        list = users();
+    j = sizeof(list);
+    while( j-- ) {
+        // Skip those users in login limbo.
+        if( !environment(list[j]) ) continue;
+        str = sprintf("%s%14s%18s%42s\n",
+                                str,
+                                list[j]->query("id"),
+                                list[j]->query("name"),
+            file_name(environment(list[j]))
+                        );
+                }
+      str += "─────────────────────────────────
+──\n";
+    me->start_more(str);
+}
+
+int do_ls(string arg)
+{
+       int mark_loaded;
+       int i, j, w, col;
+       string dir;
+       mixed *file;
+       object me;
+
+       me = this_player();
+       dir = resolve_path(me->query("cwd"), arg);
+       if( file_size(dir)==-2 && dir[strlen(dir)-1] != '/' ) dir += "/";
+       file = get_dir(dir, -1);
+       if( !sizeof(file) )
+       {if (file_size(dir) == -2) return notify_fail("目录是空的。\n");
+            else
+       return notify_fail("没有这个目录。\n");
+       }
+
+       i = sizeof(file);
+       w = 0;
+       while(i--) {
+        if (file[i][1]==-2) file[i][0] += "/";
+        if (strlen(file[i][0])>w) w = strlen(file[i][0]) + 1;
+      }
+      write("目录：" + dir + "\n");
+       col = 70 / (w+6);
+     if (sizeof(file))
+         for(i=0, j = sizeof(file); i<j; i++)
+       printf("%4d %-*s%s", file[i][1]/1024 + 1, w+1,
+         file[i][0] + (find_object(dir + file[i][0])? "*":" ") ,
+         ((i+1)%col)?"  ":"\n");
+      else write("    没有任何档案。\n");
+      write("\n");
+      return 1;
+}
+
+int do_cd(string arg)
+{
+      object me;
+      string dir;
+      me = this_player();
+      if( !arg )
+         arg = user_path(me->query("id"));
+      dir = resolve_path(me->query("cwd"), arg);
+      if(file_size(dir)!=-2) return notify_fail("没有这个目录。\n");
+      if(dir[strlen(dir)-1]!='/') dir += "/";
+      me->set("cwd", dir);
+      write(dir + "\n");
+      return 1;
+}
+
+int do_more(string arg)
+{
+      string file;
+      object ob, me;
+      me = this_player();
+
+      seteuid(geteuid(me));
+      if (!arg) return notify_fail("指令格式 : more <档名>|<物件名> \n");
+      file = resolve_path(me->query("cwd"), arg);
+       if( file_size(file) < 0 ) {
+         ob = present(arg, me);
+          if( !ob ) ob = present(arg, environment(me));
+            if( !ob ) return notify_fail("没有这个档案。\n");
+          file = base_name(ob) + ".lpc";
+          }
+      me->start_more( read_file(file));
+      return 1;
+}
+
+int do_summon(string str)
+{
+     object ob, me;
+     int i;
+     if (!str) return notify_fail("<Syntax>: Summon <player id>\n");
+     ob = LOGIN_D->find_body(str);
+     me = this_player();
+     if (!ob) return notify_fail("咦... 有这个人吗?\n");
+     tell_object(ob,"一只手把你抓了起来, 你眼前一阵黑....\n");
+     ob->move(environment(me));
+     tell_object(me, "你把"+(string)ob->query("name")+"抓到你的面前.\n");
+     tell_object(ob,".... 醒来时发现是"+(string)me->query("name")+
+       "把你弄过来的.\n");
+     return 1;
+}

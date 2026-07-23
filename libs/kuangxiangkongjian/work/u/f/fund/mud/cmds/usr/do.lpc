@@ -1,0 +1,115 @@
+#include <ansi.h>
+ 
+// 取得第一个逗号的位置
+int parse (string arg)
+{
+  int           i, in, n;
+
+  i = 0; in = 0; n = strlen (arg);
+  arg += ",";   // 这样才可以让 ,, 的判断正常
+
+  for (i=0; i<n; i++) {
+    if (arg[i] == '"')
+        if (arg[i+1] == '"') {
+          i++;
+          continue;
+        }
+        else in = !in;
+    else if (arg[i] != ',') continue;
+    else if (in) continue;
+    else if (arg[i+1] == ',')
+        i++;
+    else break;
+  }
+
+  return i-1;
+}
+
+// 跳过空白部份, 使得 "l,hp", "l, hp" 跟 "l,     hp" 都可以用
+int skip_space(string arg)
+{
+  int           i, n;
+
+  i = 0; n = strlen (arg);
+
+  while ( i<n && arg[i] == ' ') i++;
+  return i;
+}
+
+// 放弃特殊字元, 如两个双括号, 以及两个逗号其实只是一个逗号而已
+string discard (string arg)
+{
+  string msg;
+  int   i, n;
+
+  if (!arg || arg == "") return arg;
+  n = strlen(arg);
+  arg += ",";   // 这理由跟 parse() 里的一样
+  msg = "";
+  for (i=0; i<n; i++)
+    if ((arg[i] == ',' && arg[i+1] == ',') ||
+        (arg[i] == '"' && arg[i+1] == '"'))
+    {
+        i++;
+        msg += arg[i..i];
+    }
+    else if (arg[i] == '"') continue;
+    else msg += arg[i..i];
+  return msg;
+}
+
+int main(object me, string cmds, int depth, int in_do)
+{
+  string        verb, arg, cmd, other;
+  int           i, j, n;
+
+  if (!cmds || cmds == "") return 0;
+  
+  // 最多十九层
+  if (depth >= 19) return 0;
+
+  // 取出第一个逗号位置
+  if (cmds == "") return 1;
+  i = parse(cmds);
+  if (i == -1) return 0;
+  j = skip_space(cmds);
+  if (i<j) return 0;
+  // 顺便保留其他部份
+  cmd = cmds[j..i];
+  if ((i+2) < (n=strlen(cmds))) other = cmds[i+2..n-1];
+  cmd = discard(cmd);
+ 
+  // 此时 cmd 已经是 do 里的内容, 我们不允许 do 里还有 do
+  if (cmd[0..1] == "do") return 0;
+
+  // 硬性规定在 do 里头的一定是 brief mode
+  if (!in_do) {
+    n = me->query_temp("brief_mode");
+    me->set_temp("brief_mode",1);
+  }
+
+  // 每个命令本身可能是 alias, 所以先送去 alias.c 里的 process_input 处理过
+  // 然后再送进 /feature/commamd.c 处理
+  me->do_command(me->process_input (cmd));
+  if ( other && other != "" )
+    // 最后的参数 1 代表在 do 命令里, 这是为了 brief mode 用的
+    // call_other(this_object(),"main", me, other, depth+1, 1);
+    main (me, other, depth+1, 1);
+
+  // 把 brief mode 还原
+  me->set_temp("brief_mode",n);
+  return 1;
+}
+ 
+int help(object me)
+{
+	write(@HELP
+指令格式 : do
+ 
+这个指令可以让你以更方便的方式下命令，详情请见 help command
+
+see also : tune, alias, semote
+HELP
+    );
+    return 1;
+}

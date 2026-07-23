@@ -1,0 +1,137 @@
+// pkla.c by konn
+#include <ansi.h>
+inherit F_CLEAN_UP;
+int help(object);
+
+int main(object me, string arg)
+{
+  object	officer;
+  string	pk, myid=me->query("id");
+  int		number;
+
+  seteuid(getuid());
+
+  if (!officer=find_living("pkla officer"))
+    return notify_fail("噫? 蔡总管不晓得跑去哪里骆驼了, 你等会儿再来.\n");
+
+  if (!stringp(arg)) return help(me);
+
+  // 列印出目前受挑战的玩家
+  if (arg == "list")
+    return officer->list();
+
+  // 巫师不可有其他参数.
+  else if(wizardp(me))
+    return notify_fail("巫师不能够参加擂台pk!\n");
+  // 当然, 鬼也不能啰.
+  else if(me->is_ghost()) 
+    return notify_fail("鬼魂想作什么?\n");
+
+  // 押赌注
+  else if(sscanf(arg,"bet %d %s", number, pk) == 2) {
+    if (!officer->pkla() || !officer->is_waiting())
+      return notify_fail("现在不是压赌擂台的时候, 等开始擂台时再来.\n");
+    if (officer->is_pking())
+      return notify_fail("已经开打了, 等下一回合吧!\n");
+    if (myid == officer->master_id() || myid == officer->pker_id())
+      return notify_fail("擂台参赛者不能押赌注!\n");
+    if (officer->me_bet(myid))
+      return notify_fail("你已经押过赌注了, 请耐心等待结果!\n");
+    if (me->query_skill("gamble",1) < 50)
+      return notify_fail("赌术需 50 级才可押注, 请再多多加油!\n");
+    if (pk != officer->pker_id() && pk != officer->master_id())
+      return notify_fail("擂台赛中并没有这个玩家!\n请用 pkla list 看参赛者.");
+
+    if (number > 500000)
+      return notify_fail("你押的赌注不合规定, 最多五十金!\n");
+    if (number < 0)
+      return notify_fail("你押的赌注不合规定, 押的钱一定要是正数!\n");
+
+    if(!me->pay_money(number))
+      return notify_fail("嘿! 小子, 钱不够还敢来参一脚? 去筹钱再来吧.\n");
+
+    if (me->query("combat_exp") < 200)
+      return notify_fail("经验值要大于 200 才能赌喔.\n");
+
+    officer->pk_bet(myid, pk, number);
+    return notify_fail("你付给蔡总管"+chinese_number(number)+"分钱!\n");
+  }
+  else if(me->query("combat_exp") < 20000)
+    return notify_fail("经验要两万以上才能参加擂台赛!\n");
+  else if((me->query("potential") - me->query("learned_points")) < 200)
+    return notify_fail("潜能要两百以上才能参加擂台赛!!\n");
+  // 对其他玩家下挑战书
+  else if(arg == "me") {
+    if (myid == officer->master_id())
+      return notify_fail("你已经对其他玩家下战书了!\n");
+    if (myid == officer->pker_id())
+      return notify_fail("你已经接受别人的挑战, 不能再对别人下战书!\n");
+    if (officer->pkla())
+      return notify_fail("已经有人下战书, 请接受挑战, 或者等下一轮吧.\n");
+
+    shout(HIC"\n蔡总管喝道: "HIW+me->name()+HIC"愿意接受擂台挑战! "+
+		"请各位武林好手前来奉茶观战!\n"NOR);
+    tell_object(me,HIC"\n蔡总管喝道: "HIW+me->name()+HIC"愿意接受擂"+
+		"台挑战! 请各位武林好手前来奉茶观战!\n"NOR);
+    officer->set_master(myid);
+
+    return 1;
+  }
+  // 接受玩家的挑战
+  else if(arg == "accept") {
+    if (!officer->pkla())
+      return notify_fail("噫? 没人下战书, 你想跟谁打擂台啊!\n");
+    if (officer->accept())
+      return notify_fail("有人抢先一步接受挑战了, 看来只好等下一轮了, "
+		"否则压注赌一把吧.\n");
+    if(myid == officer->master_id())
+      return notify_fail("你想自己挑自己啊!!\n");
+    if (!officer->master()) {
+      write ("哇! 擂台主 "+officer->master_id()+" 跑掉了!\n");
+      officer->end();
+      return 1;
+    }
+
+    officer->set_pker(myid);
+    shout(HIC"蔡总管喝道: "
+	HIW+me->name()+HIC"与"
+	HIW+officer->master_name()+HIC"将在二分钟后开始比赛!\n"NOR);
+    tell_object(me, HIC"蔡总管喝道: "
+	HIW+me->name()+HIC"与"
+	HIW+officer->master_name()+HIC"将在二分钟后开始比赛!\n"NOR);
+    officer->start();
+    return 1;
+  }
+// 放弃叫阵
+  else if(arg == "end") {
+    if (me != officer->master_id())
+      return notify_fail("只有擂台主才能放弃挑战其他人.\n");
+    if (officer->pking())
+      return notify_fail("已经开打了, 无法放弃挑战.\n");
+
+    officer->end();
+    return 1;
+  }
+  else return help(me);
+}
+
+int help(object me) {
+        write(@HELP
+
+指令格式: pkla <me>|<accept>|<end>|<list>
+
+pkla me       是用来叫阵, 以寻求玩家来与你pk。若想
+              放弃可下pkla end。
+pkla accept   用来接受对方的挑战, 但无法决定对手。
+pkla end      可用此命令来取消对其他玩家所下的挑战
+              , 若挑战被接受, 则此命令无效!
+pkla list     列出现在接受挑战的玩家们。
+pkla bet      可以对正在pk 的玩家作输赢的赌注!
+              其中种类有money , combat_exp 和potential
+
+    格式: pkla bet <player> <数量> <种类>
+
+
+HELP);
+        return 1;
+}

@@ -1,0 +1,212 @@
+// Room: /open/center/room/auroom.c
+
+#include <login.h>
+#include <room.h>
+#include <ansi.h>
+
+inherit NPC;
+
+object	auc_ob;	// 拍卖的东西
+string	ob_name;
+string	name;	// 抢标的人
+int	times;	// 第几次拍卖
+int	value;	// 抢标的价钱
+int	had_auc;
+
+void create()
+{
+	seteuid(geteuid());
+  set_name("交易所老版",({ "boss" }) );
+        set("long",@LONG
+这是交易所的老版，为人正直。
+LONG );
+
+        set("no_clean_up",1);
+	set("channels", ({ "mud" }) );
+	set("no_kill",1);
+	times = 0;
+	name = "";
+	ob_name = "";
+        setup();
+}
+
+void auction()
+{
+  object	*objs, me, auc_man=this_object(), who;
+  int		half;
+
+  remove_call_out("auction");
+  who = find_player(name);
+  if (times == 0) {
+    ob_name = "";
+    objs = all_inventory(this_object());
+    if (half = sizeof(objs)) {
+	auc_ob = objs[random(sizeof(objs))];
+	ob_name = auc_ob->query("id");
+	half = auc_ob->query("value")/2;
+	if (!half) half = 1;
+	value = random(4*half)+1;
+	CHANNEL_D->do_channel(this_object(), "mud", "㊣黑市交易㊣"
+	  "来来来！"+
+	  auc_ob->query_temp("auc_master")+
+	  "拍卖"+auc_ob->name()+"一"+auc_ob->query("unit")+"!!"+
+	  "起价"+CHINESE_D->cvalue(value)+"。\n");
+	times = 1;
+	name = "";
+	had_auc = 0;
+	call_out ("auction", 10);
+    }
+    return;
+  }
+
+  if (!auc_ob = present (ob_name, auc_man)) {
+    ob_name = "";
+    CHANNEL_D->do_channel(auc_man, "mud", "㊣黑市交易㊣"
+      "拍卖品消失，取消本次拍卖。\n", users());
+    if (arrayp(all_inventory(auc_man))) {
+      times = 0;
+      call_out ("auction", 10);
+    }
+    return;
+  }
+  
+  me = find_player(auc_ob->query_temp("auc_master"));
+  if ((name=="" && times > 3) || (name!="" && !who)) {	// 退货
+    ob_name = "";
+    if (!me) {
+      CHANNEL_D->do_channel(auc_man, "mud", "㊣黑市交易㊣"
+	"物主不在，"+auc_ob->name()+"充公。\n", users());
+      destruct(auc_ob);
+    }
+    else {
+      auc_ob->move(environment(me));
+      CHANNEL_D->do_channel(auc_man, "mud", "㊣黑市交易㊣"
+	  "太可惜了，竟然没人想要买"+auc_ob->name()+"。\n");
+      CHANNEL_D->do_channel(auc_man, "mud", "㊣黑市交易㊣"
+	  "黑市公司送货员退还"+auc_ob->name()+"给原主"+me->name()+"。\n");
+    }
+    if (arrayp(all_inventory(auc_man))) {
+      times = 0;
+      call_out ("auction", 10);
+    }
+    return;
+  }
+  if (times <= 3) {
+    if (had_auc) {
+      had_auc = 0;
+      CHANNEL_D->do_channel(auc_man, "mud", "㊣黑市交易㊣"
+        "嘿呦! 有人以"+CHINESE_D->cvalue(value)+"抢标! 欢迎加价!!\n");
+      times = 1;
+    }
+    else {
+      CHANNEL_D->do_channel(this_object(), "mud", "㊣黑市交易㊣"
+        "第"+chinese_number(times)+"次拍卖"+auc_ob->name()+"! 叫价"+
+        CHINESE_D->cvalue(value)+"! 请出价!\n");
+      times++;
+    }
+    call_out ("auction", 10);
+    return;
+  }
+  else {
+    ob_name = "";
+    if (who->pay_money(value)) {
+      CHANNEL_D->do_channel(this_object(), "mud", "㊣黑市交易㊣"+
+	"买方付钱了。\n");
+      CHANNEL_D->do_channel(this_object(), "mud", "㊣黑市交易㊣"+
+        auc_ob->name()+"以"+CHINESE_D->cvalue(value)+
+        "拍卖给"+who->name()+"。\n");
+      if (!auc_ob->move(environment(who))) {
+        CHANNEL_D->do_channel(this_object(), "mud", "㊣黑市交易㊣"
+          "喔喔, 你的房间出问题啰!\n");
+        destruct(auc_ob);
+      }
+        
+      if (me) {
+        me->pay_player(value);
+	if (value>20000)
+          tell_object(me, "㊣黑市交易㊣"
+	    "你卖出一"+auc_ob->query("unit")+auc_ob->name()+"，获得"+
+	    CHINESE_D->cvalue(value/3)+"。\n");
+	if (value>5000)
+          tell_object(me, "㊣黑市交易㊣"
+	    "你卖出一"+auc_ob->query("unit")+auc_ob->name()+"，获得"+
+	    CHINESE_D->cvalue(value/2)+"。\n");
+	else
+          tell_object(me, "㊣黑市交易㊣"
+	    "你卖出一"+auc_ob->query("unit")+auc_ob->name()+"，获得"+
+	    CHINESE_D->cvalue(value)+"。\n");
+      }
+      else
+        CHANNEL_D->do_channel(this_object(), "mud", "㊣黑市交易㊣"
+	  "卖了一把无主孤魂的东东, 赚死了。\n");
+    }
+    else {
+        CHANNEL_D->do_channel(this_object(), "mud", "㊣黑市交易㊣"
+          "哇勒, "+who->name()+"怎么把钱花光了? 下次记得准备好钱喔!\n");
+      if (me)
+	auc_ob->move(me);
+    }
+    if (arrayp(all_inventory(auc_man))) {
+      times = 0;
+      call_out("auction", 10);
+    }
+    return;
+  }
+  if (!all_inventory(auc_man)) {
+    times = 0;
+    call_out("auction",10);
+  }
+}
+
+void do_buy (object me, int new_value)
+{
+  int		diff, exp;
+
+  if (!auc_ob) {
+    CHANNEL_D->do_channel(this_object(), "mud", "㊣黑市交易㊣"
+      "哇! 东西消失了。无法拍卖啦!\n");
+    return;
+  }
+  if (new_value <= value) {
+    tell_object (me, "㊣黑市交易㊣"
+      "嘿嘿，想比黑市还黑? 干脆自己开黑市好了。\n");
+    return;
+  }
+  exp = me->query("combat_exp");
+  if	  (exp < 100)    { diff = value/1000; if (diff < 10)	diff = 10; }
+  else if (exp < 1000)   { diff = value/100;  if (diff < 20)	diff = 20; }
+  else if (exp < 10000)	 { diff = value/10;   if (diff < 40)	diff = 40; }
+  else if (exp < 100000) { diff = value/4;    if (diff < 100)	diff = 100; }
+  else if (exp < 500000) { diff = value/2;    if (diff < 400)	diff = 400; }
+  else 			 { diff = value;      if (diff < 1000)	diff = 1000; }
+
+  if (new_value - value < diff) {
+    tell_object (me, "㊣黑市交易㊣"
+      "你出的价钱并不符合黑市运作规则，请提高至少"+
+      CHINESE_D->cvalue(diff)+"。\n");
+    return;
+  }
+  times = 1;
+  name=me->query("id");
+  value = new_value;
+  had_auc = 1;
+  call_out("auction", 1);
+}
+
+int do_sell(object me, object ob)
+{
+  if (!ob || !ob->move(this_object())) {
+    tell_object(me, "㊣黑市交易㊣"
+      "嘿嘿, 你想欺骗黑市公司的人员啊。\n");
+    return 0;
+  }
+  ob->set_temp("auc_master", me->query("id"));
+  if (ob_name == "") {
+    times = 0;
+    tell_object(me, "㊣黑市交易㊣"" 开卖啦\n");
+    call_out ("auction", 1);
+  }
+  else
+    tell_object(me, "㊣黑市交易㊣"" 开卖中\n");
+  return 1;
+}

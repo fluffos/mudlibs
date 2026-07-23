@@ -1,0 +1,141 @@
+// lungshan.c
+#include <combat.h>
+inherit SKILL;
+inherit SSERVER;
+
+void berserk(object me,object victim,object weapon,int damage);
+
+
+mapping *action = ({
+        ([      
+                "action"     :               "$N使出泷山绝学的起手式，一招[1m「飞瀑入山”[0m，对准$n的$l打出难以捉摸的一拳",
+                "dodge"      :               -25,
+                "parry"      :               -20,
+                "damage"     :                30,
+                "force"      :                50,
+                "damage_type":               "瘀伤"
+        ]),
+        ([     
+                "action"     :               "$N犹如流水般随$n的攻势，使出一招[1m「追瀑溯源”[0m便往$n的$l反击过去",
+                "dodge"      :               -50,
+                "parry"      :               -10,
+                "damage"     :                20,
+                "force"      :                80,
+                "damage_type":               "瘀伤"
+        ]),
+        ([   
+                "action"     :               "$N大喝一声，双拳一提，一招[1m「五岳顶天”[0m往$n的五个要害击出",
+                "dodge"      :               -10,
+                "parry"      :               -25,
+                "damage"     :                70,
+                "force"      :                100,
+                "damage_type":               "瘀伤"
+        ]),
+        ([  
+                "action"     :               "$N步履一沉，凝神聚气，双拳连下使出[1m「千川百岳”[0m击向$n$l",
+                "dodge"      :               -30,
+                "parry"      :               -5,
+                "damage"     :                90,
+                "force"      :                190,
+                "damage_type":               "瘀伤"
+        ]),
+        ([ 
+                "action"     :               "$N纵身一跃，使出泷山拳奥义[36m「山泉群涌”[0m，拳如连珠般一连数十拳击向$n$l",
+                "dodge"      :               -30,
+                "parry"      :               -30,
+                "damage"     :                110,
+                "force"      :                150,
+                "post_action":               (: berserk :),
+                "damage_type":               "瘀伤"
+        ]),
+        ([
+                "action"     :               "$N双拳交错，运足真气，使出泷山拳奥义[1;36m「山穷水尽”[0m，万钧之力击向$n$l，难以招架",
+                "dodge"      :               -20,
+                "parry"      :               -45,
+                "damage"     :                130,
+                "force"      :                240,
+                "damage_type":               "瘀伤"
+        ]),
+        ([
+                "action"     :               "$N拳散灵气，霎时狂风四起，无穷真气自$N身旁涌出，使出泷山拳秘奥义[1;32m「山河俱灭”[0m，$n$l将受可怕之力所毁灭",
+                "dodge"      :               -50,
+                "parry"      :               -50,
+                "damage"     :                150,
+                "force"      :                350,
+                "damage_type":               "瘀伤"
+        ]),
+});
+
+int valid_learn(object me)
+{
+        if( me->query_temp("weapon") || me->query_temp("secondary_weapon") )
+        return   notify_fail("学泷山绝学必须空手。\n");
+        return   1;
+}
+
+int valid_enable(string usage)
+{
+        return ( usage=="unarmed" )||(usage=="parry");
+}
+
+
+mapping query_action(object me, object weapon)
+{
+int skill_level, limit;
+        skill_level = (int)(me->query_skill("lungshan", 1));
+        limit= (int)(skill_level/10);
+        if (limit < 4 )
+                return action[random(4)];
+        if (limit < 7 )
+                return action[random(limit)];
+        else if (limit < 9)
+                      return action[random(4)+2];
+        else
+                    return action[random(4)+3];
+}
+
+void berserk(object me, object victim, object  weapon, int damage)
+{
+    int lose, i, test,pow,pow1;
+        pow1 = 0;
+        pow  = 0;
+        if(!me->query_temp("berserk" ))
+        {
+                lose = (int)(me->query_skill("lungshan", 1)/20 + 1);
+                me->set_temp("berserk", 1);
+                for(i = 0;i < lose; i++)
+                {
+                          pow = random(10)+4;
+                          pow1 = pow1+0.5*pow;
+                        me->set_temp("apply/attack", pow1);
+                        message_vision(
+                        "[1;33m$N使出泷山拳法之狂击技，如山泉涌出般打向$n各致命弱点。[0m\n" , me, victim);
+                        victim->add("kee",-2*pow1);
+                        me->add("force",-3);
+           COMBAT_D->report_status(victim);
+                }
+                me->delete_temp("apply/attack");
+                me->delete_temp("berserk");
+        }
+} 
+
+
+int practice_skill(object me)
+{
+        if( (int)me->query("kee") < 40 )
+                return notify_fail("你的体力不够了，休息一下再练吧。\n");
+        if( (int)me->query("force") < 3 )
+                return notify_fail("你的内力不够了，休息一下再练吧。\n");
+        if( (int)me->query_skill("literate") <= ( (int)(me->query_skill("lungshan", 1)*0.75) ) )
+                return notify_fail("你的武学知识不足，似乎无法参透绝学中山水之义。");
+        me->receive_damage("kee", 40);
+        me->add("force", -5);
+        return 1;
+}
+
+/*
+string perform_action_file(string action)
+{
+        return CLASS_D("fighter")+"/lungshan/"+action;
+}
+*/

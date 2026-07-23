@@ -1,0 +1,86 @@
+/*  mailout.c
+
+    本档会把 mud 来的信件寄到 internet 上去.
+    因此从 mud 来的信件格式一定要对, 否则无法判读.
+    至于格式很简单, 第一行是 #mailto: WHO
+    其余则是信件内容, 例如要寄给 jjchen@ice.ntnu.edu.tw 一封
+    内容是: Hello, jjchen!
+    #mailto: jjchen@ice.ntnu.edu.tw
+    Hello, jjchen!
+
+    在执行时, 要指定从哪一个档读信, 该档当然是存 mud 来的信啰
+    如 mailout ../data/internet_o
+*/
+
+#include <stdio.h>
+
+/*  暂时的档  */
+#define TMP_MBOX	"TMP"
+/*  十分钟检查一次  */
+#define DELAY        600
+
+main (int argc, char *argv[])
+{
+  FILE       *fp;
+  char       tmp[81], mailto[81];
+  char       mail[100][255][81];
+  int        s[100];
+  int        m;                /*  m 封信  */
+  int        n;                /*  每封信的行数  */
+  int        i, j, k;
+
+  if (argc != 2) {
+    fprintf (stderr, "用法: %s 读哪里的档\n如:\n\n%s ../data/intermail_o\n",
+        argv[0], argv[0]);
+    return (1);
+  }
+
+  while (1) {        /*  无限循环  */
+    fp = fopen (argv[1], "r");
+    if (fp) {
+      m = -1;
+      n = -1;
+      fgets (tmp, 80, fp);
+      while (!feof (fp)) {
+        if (sscanf (tmp, "#mailto:%s", mailto) == 1) {
+          if (m >= 0) {        /*  算是读完一封了, 要重新另一封  */
+            s[m] = n+1;
+          }
+          m++;
+          n = 0;
+        }
+        else
+          n++;
+        strcpy (mail[m][n], tmp);
+        fgets (tmp, 80, fp);
+      }
+      fclose (fp);
+      s[m++] = n+1;
+      /*  读完了, 可以砍掉了  */
+      fp = fopen (argv[1], "w");
+      fclose (fp);
+  
+      for (i=0; i<m; i++) {
+        k = 0;
+        strcpy (tmp, "");
+        fp = fopen (TMP_MBOX, "w");
+        for (j=0; j<s[i]; j++) {
+          if (k == 0) {
+            if (sscanf (mail[i][j], "#mailto:%s", tmp) == 1) {
+              k = 1;
+            }
+          }
+          else if (k == 1) {        /*  表示有找到 #mailto: 字样.  */
+            fprintf (fp, "%s", mail[i][j]);
+          }
+        }
+	fclose (fp);
+        if (k == 1) {	/*  表示有读到  */
+	  sprintf (mailto, "mail %s < %s", tmp, TMP_MBOX);
+	  system (mailto);
+        }
+      }
+    }
+    sleep (DELAY);
+  }
+}

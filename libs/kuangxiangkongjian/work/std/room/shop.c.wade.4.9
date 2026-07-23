@@ -1,0 +1,182 @@
+//shop.c by chun 1995.10.19
+#include <ansi.h>
+#include <room.h>
+
+inherit ROOM;
+inherit CHINESE_D;
+inherit F_FINANCE;
+inherit F_MORE;
+
+mapping sells = ([ ]);		//	sells[id] = short();
+mapping names = ([ ]);		//	names[id] = file_name(id);
+mapping v = ([ ]);		//	v[id] = value;
+mapping tradename = ([ ]);	//	tradename[id] = id;
+
+void do_more(string cmd , int line );
+void create()
+{
+  set("no_clean_up",1);
+}
+
+void init()
+{
+  add_action("do_sell","sell");
+  add_action("do_buy","trade");
+  add_action("do_list","list");
+  add_action("do_value","value");
+}
+
+void buy_thing(string arg)
+{
+  map_delete( tradename , arg );
+  map_delete( sells , arg );
+  map_delete( names , arg );
+  map_delete( v , arg );
+}
+
+
+int do_value(string arg)
+{
+  object *inv;
+  if(arg)
+  return 0;
+  inv=all_inventory(this_player());
+  if(!inv)
+  return notify_fail("你身上没有任何东西可供估价。\n");
+  printf(HIC "你身上带着这些东西：\n%s" NOR,
+    implode(map_array(inv,"ob_value",this_object()),"") );
+  return 1;
+}
+
+int do_sell(string arg)
+{
+  object ob, me=this_player(), *inv;
+  int valu, trade_lv, index=1, i;
+
+  if( !arg )
+    return notify_fail("你要卖什么东西？\n");
+  if (sscanf (arg, "%s %d", arg, index) == 2)
+    if (index < 1) index = 1;
+
+  if( !(ob = present(arg+" "+index, me)) )
+    return notify_fail("要卖空？\n");
+  valu=ob->query("value");
+  if( ob->query("no_drop") || ob->query_temp("secured") || ob->query("no_sell") )
+    return notify_fail("你不能卖这东西\n");
+  if (!valu || valu <= 0) {
+    printf ("你卖掉没价值的东西, 店老板看了一眼就丢进垃圾桶了.\n");
+    destruct(ob);
+    return 1;
+  }
+  if(!trade_lv = me->query_skill("trade",1) )
+    trade_lv = 1;
+  if (trade_lv>100) trade_lv = 100;
+  valu=valu*(300+trade_lv)/400;
+  printf("回收的中古货要打个折扣，\n你卖掉%s得到%s\n",ob->short(),
+        cvalue(valu) );
+  me->pay_player(valu);
+  message_vision(HIC "$N卖掉一"+ob->query("unit")+ob->query("name")+"\n" NOR,
+    me );
+  if(      me->query_skill("trade",1)
+        || me->query_skill("trade") < 100 )
+    me->improve_skill("trade",(random(me->query("int"))+
+          random(me->query("per"))/2) );
+
+  if(names[arg] != base_name(ob)) {
+    v[arg] = (int)ob->query("value");
+    names[arg] = base_name(ob);
+    sells[arg] = ob->short();
+    tradename[arg] = arg;
+  }
+  destruct(ob);
+  return 1;
+}
+
+int do_list(string arg)
+{
+  string *k;
+  if(arg) return 0;
+  printf("在这你可以买到：\n");
+  if(!k=keys(sells)) return 1;
+  else
+  {
+    do_more("",0);
+  }
+  return 1;
+}
+
+
+int do_buy(string arg)
+{
+  object ob, me=this_player();
+  int trade_lv,valu;
+
+  if(!trade_lv=me->query_skill("trade",1) )
+    trade_lv = 1;
+  if( !arg )
+    return notify_fail("你要买什么东西？\n");
+  if( arg != tradename[arg] )
+    return notify_fail("这里没有卖这种东西\n");
+  if (trade_lv > 100) trade_lv = 100;
+  valu=v[arg]*90/100 + v[arg]*(110-trade_lv)/100;
+  if(me->can_afford(valu))
+  {
+    me->pay_money(valu);
+    ob = new(names[arg]);
+    ob->move(me);
+    buy_thing(arg);
+    message_vision("$N花了"+cvalue(valu)+
+    		   "买下了一"+ob->query("unit")+ob->short()+"\n",
+                   me );
+    if (me->query_skill("trade",1) ||
+       me->query_skill("trade") < 100 )
+    {
+      me->improve_skill("trade",(random(me->query("int"))+
+      random(me->query("per"))/2) );
+    }
+    else {
+      tell_object(me,HIB "你没有适合的货币来买" NOR+
+      sells[arg]+"\n");
+    }
+  }
+  else
+    message_vision("$N身上没有足够的钱币买东西。", me);
+  return 1;
+}
+
+void do_more(string cmd , int line )
+{
+  int i;
+  string *k;
+  k = keys(sells);
+
+  switch(cmd) {
+    case " ":
+    case "":
+    if( line < 1)
+    {
+    for( i = line;line<sizeof(k);line++)
+      printf("%-50s价格：%s\n",sells[k[line]],
+             cvalue(v[k[line]]) );
+    if( line >= sizeof(k) ) return;
+    break;
+    }
+    else {
+      for( i = line + 20; line<sizeof(k) && line<i;line++)
+        printf("%-50s价格：%s\n",sells[k[line]], cvalue(v[k[line]]) );
+      if( line >=sizeof(k) ) return;
+          break;
+    }
+    case "b":
+      line = line - 40;
+      if(line<-19) return;
+      for(i=line + 20; line < i;line++)
+        printf("%-50s价格：%s\n",sells[k[line]], cvalue(v[k[line]]) );
+      break;
+    case "q":
+      return;
+  }
+  printf("== [test]未完继续 " HIY "%d%%" NOR " == (ENTER 继续下一页，q 离开，b 前一页)",
+    (line*100/sizeof(k)) );
+  input_to("do_more",line);
+}

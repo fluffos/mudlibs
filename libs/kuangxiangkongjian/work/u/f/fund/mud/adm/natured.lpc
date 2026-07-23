@@ -1,0 +1,292 @@
+// natured.c
+
+#include <ansi.h>
+
+#define JOKE "/data/joke/joke"
+
+nosave int current_day_phase;
+nosave int current_reather=0;
+nosave int c=0;
+nosave int reather_hurt=0, reather_light=1;
+mapping *day_phase;
+mapping *reather;
+
+mapping *read_table(string file);
+void init_day_phase();
+void init_reather();
+void simul_time();
+
+void create()
+{
+	day_phase = read_table("/adm/etc/nature/day_phase");
+	init_day_phase();
+
+	reather = read_table("/adm/etc/nature/reather");
+	init_reather();
+
+	call_out("simul_time", 2);
+}
+
+void init_day_phase()
+{
+	mixed *local;
+	int i, t;
+
+	// Get minutes of today.
+	local = localtime(time()*60);
+	t = local[2] * 60 + local[1];		// hour * 60 + minutes
+
+	// Find the day phase for now.
+	for( i=0; i < sizeof(day_phase); i++)
+		if( t >= day_phase[i]["length"] )
+			t -= (int)day_phase[i]["length"];
+		else
+			break;
+
+	current_day_phase = (i==0? sizeof(day_phase)-1: i - 1);
+
+	// Since in our time scale, 1 minute == 1 second in RL, so we don't need
+	// any conversion before using this number as call_out dalay, if you 
+	// changed the time scale, be sure to convert it.
+
+	call_out("update_day_phase",
+		(int)day_phase[(current_day_phase+1) % sizeof(day_phase)]["length"] - t);
+}
+
+void init_reather ()
+{
+	reather_light = 1;
+        call_out("update_reather", (int)reather[1]["length"] + random(31)-15);
+}
+
+void update_reather ()
+{
+        int             r, n, t, tt;
+
+	reather_hurt = 0;
+
+	remove_call_out("update_reather");
+	if ( c > 0 || (c == -1 && random(4)) ) {
+	  c = 0;
+          tt = current_reather;
+	  // 尽量往好天气走
+	  r = random (12)-6;
+	  if (r > 0) r = 1; else if (r < 0) r = -1;
+	  t = tt + r;
+	  // 保证每次天气都不一样
+	  if ( t == tt )
+	    if (t >= 5) t--;
+	    else       t++;
+	  if (t < 0) t = 1;
+	  else if (t > 9) t = 8;
+	}
+	else
+	  t = random(5);
+
+	current_reather = t;
+
+	message("outdoor:vision", reather[current_reather]["reather_msg"]+"。\n",
+                users());
+	if( !undefinedp(reather[current_reather]["event_fun"]) )
+		call_other (this_object(),reather[current_reather]["event_fun"]);
+
+	if ((c=reather[current_reather]["length"]) <= 0) {
+	  call_out("update_reather", 10+random(11));
+ 	}
+	else
+	  call_out("update_reather", reather[current_reather]["length"]+random(11));
+}
+
+void update_day_phase ()
+{
+        remove_call_out("update_day_phase");
+
+        current_day_phase = (++current_day_phase) % sizeof(day_phase);
+        message("outdoor:vision", day_phase[current_day_phase]["time_msg"] + "\n",
+	        users());
+        if( !undefinedp(day_phase[current_day_phase]["event_fun"]) )
+                call_other(this_object(), day_phase[current_day_phase]["event_fun"]);
+
+        call_out("update_day_phase", day_phase[current_day_phase]["length"]);
+}
+
+
+// 雷雨一来就....hehe....
+void event_thunder ()
+{
+  random(3)>0?reather_light = 1:reather_light=-1;
+  message("outdoor:vision", "\n不远的高空画过一道闪电\n\n"+
+	  "不久后, 传来震耳欲聋的雷声....久久不绝....\n\n", users());
+  call_out ("kill_badman", 3);
+}
+
+void kill_badman()
+{
+  object bad, *ob;
+  int i, skill, b, m, r;
+
+  remove_call_out ("kill_badman");
+
+  m = 0;
+  // 三次里有一次会打雷, 恶人会遭报应
+  r = random(3);
+  ob = users();
+  if (r == 0) {
+    for(i=0; i<sizeof(ob); i++) {
+      if( !environment(ob[i]) ) continue;
+      if( !environment(ob[i])->query("outdoors") ) continue;
+      b = ob[i]->query("bellicosity");
+      if (b > m) { m = b; bad = ob[i]; }
+    }
+    if (m != 0 && bad) {
+      // bad->query_temp("thunder") 是避雷效果，给以后的避雷针用
+      m = bad->query_temp("thunder");
+      r = bad->query("kee");
+      if (m < 0) m = 0;
+      if (m > 100) m = 100;
+      m = m*2/3 + random(m/3);
+      // 杀孽太重会被雷劈
+      if (b > 100) {
+        message("outdoor:vision",
+          "霹雳的一声，跟着传来一道惊人的呼救声，看来是有人因杀罹难了。\n",
+          ob, bad);
+        tell_object (bad,
+        "一道闪电从不远的天上直直的命中你，你身上到处都是闪电过后留下的焦痕。\n");
+        bad->set("bellicosity", bad->query("bellicosity")*9/10);
+        bad->receive_damage("kee", 100-m);
+      }
+    }
+  }
+  else
+      message("outdoor:vision", "轰隆隆的雷声似乎渐渐远去.......\n", ob);
+}
+
+string outdoor_room_description()
+{
+  string msg;
+
+  msg = "    " + reather[current_reather]["desc_msg"] + "。\n";
+
+  // 坏天气看不到太阳，无法预测时间
+  if (current_reather <= 5)
+	msg += "    " + day_phase[current_day_phase]["desc_msg"] + "。\n";
+  return msg;
+}
+
+string game_time()
+{
+	return CHINESE_D->chinese_date(time()*60);
+}
+
+// This function is to read a regular type of data table for day_phase and
+// etc.
+mapping *read_table(string file)
+{
+	string *line, *field, *format;
+	mapping *data;
+	int i, rn, fn;
+
+	line = explode(read_file(file), "\n");
+	data = ({});
+	for(i=0; i<sizeof(line); i++) {
+		if( line[i]=="" || line[i][0]=='#' ) continue;
+		if( !pointerp(field) ) {
+			field = explode( line[i], ":" );
+			continue;
+		}
+		if( !pointerp(format) ) {
+			format = explode( line[i], ":" );
+			continue;
+		}
+		break;
+	}
+
+	for( rn = 0, fn = 0; i<sizeof(line); i++) {
+		if( line[i]=="" || line[i][0]=='#' ) continue;
+		if( !fn ) data += ({ allocate_mapping(sizeof(field)) });
+		sscanf( line[i], format[fn], data[rn][field[fn]] );
+		fn = (++fn) % sizeof(field);
+		if( !fn ) ++rn;
+	}
+	return data;
+}
+
+
+mapping *query_day_phase() { return day_phase; }
+
+int query_reather_hurt() { return reather_hurt; }
+
+void event_good_reather ()	{ reather_hurt = 0; reather_light = 1; }
+void event_water_reather()	{ reather_hurt = 0; reather_light = -1; }
+void event_light_rain ()	{ reather_hurt = 1; reather_light = -1; }
+void event_heave_rain ()	{ reather_hurt = 2; reather_light = 0; }
+void event_ice_rain ()		{ reather_hurt = 3; reather_light = 1; }
+void event_super_bad_reather () { reather_hurt = 4; reather_light = 0; }
+
+int vision(object me)
+{
+  int           user, room, outdoors, rlight;
+  object        env, *light;
+  int           result;
+
+  me = this_player();
+
+  env = environment(me);
+
+  if ( !env ) {
+    me->move(VOID_OB);
+    env = environment(me);
+    if ( !env )
+      return notify_fail ("你身处在虚无飘缈中，蒙蒙地一片，什么也没有。\n");
+  }
+
+  if (wizardp(me)) return 1;
+
+  // light 代表人物身上是否有照明设备, 变数名称取跟房间一样
+  light = all_inventory(me);
+  for (result=0; result<sizeof(light); result++)
+    if (light[result]->query("light_up") == -1 ||
+	light[result]->query("had_light")) return 1;
+
+  // 三更半夜
+  if (current_day_phase == 11) rlight = 0;
+  else if (current_day_phase == 0 || current_day_phase == 10)
+    // 天暗外加坏天气就看不见
+    if (!reather_light) rlight = 0;
+    // 天色昏暗
+    else rlight = -1;
+  // 坏天气就视线模糊
+  else rlight = reather_light;
+
+  // 表示室内或室外
+  if (env->query("outdoors")) outdoors = 1;
+
+  // light_up 是定义在房间里的变数, 代表有没有灯光
+  // 室外这变数无效, 只跟天候有关
+  else room = env->query("light_up");
+
+  user = 0;
+  if (outdoors) user = rlight;
+  else user = room;
+
+  return user;
+}
+
+// 每天中午跟半夜说个笑话
+void event_noon()
+{
+  string	msg;
+
+  msg = HIY"\n□□□□□□□□  来来来, 菠萝面包讲个听来的笑话给各位听 □□□□□□□□\n";
+  msg += read_file(JOKE+random(JOKE_SIZE));
+  msg +=     "□□□□□□□□□ 本笑话来自交大资科 BBS 笑话版精华区 □□□□□□□□□\n\n"NOR;
+  message("mud", msg, users());
+}
+
+void event_dawn()
+{
+}
+
+void event_afternoon()
+{
+}

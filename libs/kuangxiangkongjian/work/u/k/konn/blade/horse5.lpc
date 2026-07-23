@@ -1,0 +1,152 @@
+// horse5.c by konn
+
+#include <ansi.h>
+#include <mudlib.h>
+inherit NPC;
+
+void create() {
+        set_name("騊駼驹", ({"Tau horse" , "horse"}));
+        set("title", "千里马");
+        set("long","
+    牠是一匹日跑百里, 夜奔百里的好马!\n");
+
+        set("age", 68);
+        set("race", "野兽");
+        set("gender", "雄性");
+        set("combat_exp", 60000);
+        set("attitude", "friendly");
+
+        set("gold", 10);
+        set("silver", 0);
+        set("exp", 100000);
+
+        set_skill("move", 200);
+        set_skill("dodge", 200);
+        set_skill("unarmed", 200);
+
+        set("limbs",({"马头","马脚","马腿","马背","马腹"}));
+        set("verbs",({"bite","claw"}));
+
+        setup();
+}
+
+void init() {
+        object me;
+        me = this_player();
+
+        add_action("do_ride","ride");
+        add_action("do_dismount","dismount");
+	if(me->query_temp("is_riding") &&
+           me->query("family/family_name") == "金刀门")
+           add_action("do_full","addforce");
+}
+
+int do_ride(string str) {
+        object me,horse;
+        me = this_player();
+        horse = this_object();
+
+        if((str != "horse") && (str != horse->query("id")))
+           return notify_fail("你想骑什么?\n");
+
+        if(me->query_skill("riding")*2 < 40)
+           return notify_fail("你的骑术不够, 无法驾驭牠。\n");
+
+        if(me->query("id") != horse->query_temp("my_boss")) {
+           message_vision("$N被"+(string)horse->query("name")+
+                          "狠狠的踢了一脚, 似乎受了点伤!\n",me);
+           me->add("kee", -50);
+           return 1;
+        }
+
+        if(me->query_temp("is_riding"))
+           return notify_fail("你已经骑在马上了。\n");
+
+        message_vision("$N一个翻身, 已骑在"+horse->query("name")+"的背上!\n",me);
+                       
+	if(me->query("family/family_name") == "金刀门")
+           add_action("do_full","addforce");
+
+        me->set_temp("is_riding", 1);
+        me->set_temp("horse",(string)horse->query("id"));
+        
+        me->add_temp("apply/attack", 20);
+        me->add_temp("apply/armor", 20);
+        me->add_temp("apply/move", 20);
+        me->add_temp("apply/parry", 25);
+	me->set_temp("ride_name",
+                     me->name()+"骑在一匹"+horse->name()+"上");
+
+        return notify_fail(HIG+horse->query("name")+"仰天长鸣一声! "+
+                           "人马合一, 你的力量增加了不少!\n"NOR);
+}
+
+int do_dismount() {
+        object me,horse;
+        me = this_player();
+        horse = this_object();
+
+        if(!me->query_temp("is_riding"))
+           return notify_fail("你现在并没有骑马!\n");
+
+        if(me->query("id") != horse->query_temp("my_boss"))
+           return notify_fail("这匹马不是你的座骑!\n");
+
+	if(me->query("family/family_name") == "金刀门")
+           add_action("do_delete","addforce");
+
+        me->delete_temp("is_riding");
+        me->delete_temp("horse");
+        me->add_temp("apply/attack", -20);
+        me->add_temp("apply/armor", -20);
+        me->add_temp("apply/move", -20);
+        me->add_temp("apply/parry", -25);
+	me->delete_temp("ride_name");
+
+        message_vision("$N一个翻身下了马来!\n",me);
+        return 1;
+}
+
+int do_full() {
+        object me;
+        me = this_player();
+
+	if(!me->query_temp("is_riding"))
+           return notify_fail("addforce? 看不懂啦, 请用 help cmds 查一般指令!\n"
+);
+        if(me->query("max_force") == 0)
+           return notify_fail("你并没有内力!\n");
+
+        if(me->query("force") >= me->query("max_force"))
+           return notify_fail("你的内力已满!\n");
+
+        me->add("force", me->query("max_force")/18);
+        return notify_fail("你的内力增加了!\n");
+}
+
+void die() {
+        object me;
+
+        me = find_living((string)this_object()->query_temp("my_boss"));
+
+	if(me->query_temp("is_riding")) {
+           me->add_temp("apply/attack", -20);
+           me->add_temp("apply/armor", -20);
+           me->add_temp("apply/move", -20);
+           me->add_temp("apply/parry", -25);
+	   me->delete_temp("ride_name");
+	}
+
+	me->delete_temp("horse");
+        me->delete_temp("is_riding");
+        me->delete_temp("have_horse");
+	destruct(this_object());
+}
+
+int accept_fight(object me) {
+        return notify_fail("这是别人的财产, 你杀不得!\n");
+}
+
+int accept_kill(object me) {
+        return notify_fail("这是别人的财产, 你杀不得!\n");
+}

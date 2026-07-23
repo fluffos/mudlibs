@@ -1,0 +1,247 @@
+// 拿掉用 who 会伤神的部份
+// 增加 sort IP 的方式
+// who.c
+
+#include <net/dns.h>
+#include <dbase.h>
+
+inherit F_DBASE;
+inherit F_CLEAN_UP;
+
+void create() { seteuid(getuid()); }
+
+string age_string(int);
+int sort_user(object ob1, object ob2);
+int sort_ip(object ob1, object ob2);
+
+mixed main(object me, string arg, int remote)
+{
+  string	str, *option, tmp;
+  object	*list, *list_tmp, tmp_obj;
+  int		i, j, ppl_cnt, count;
+  int		opt_long, opt_id, opt_ip;
+  int 		opt_c,opt_g;
+  string 	st1,st2;
+  int		wiz;
+
+  wiz = wiz_level(me);
+  if ( arg ) {
+    option = explode(arg, " ");
+    i = sizeof(option);
+    while ( i-- )
+      switch (option[i]) {
+        case "-l":
+          opt_long = 1;
+          break;
+        case "-i":
+          opt_id = 1;
+          break;
+	case "-ip":
+	  opt_ip = 1;
+	  break;
+
+        default:
+		if(sscanf(arg,"%s %s",st1,st2)==2){
+		switch(st1){
+		case "-c": opt_c=1; break;
+		case "-g":  opt_g=1; break;
+		}
+		}
+		if(opt_c==1||opt_g==1) break;
+		if(wiz&&option[i][0]=='@')
+		{
+            RWHO_Q->send_rwho_q(option[i][1..sizeof(option[i])], me, 0);
+            write("网路讯息已送出，请稍候。\n");
+            return 1;
+          }
+          else
+            return notify_fail ("指令格式：who [-l|-i]\n");
+      }
+  }
+  count = 0;
+
+  str = "◎ " + MUD_NAME + "\n";
+  str += "─────────────────────────────────────\n";
+  // 底下这行只有没断线玩家才会列出
+  list = users();
+  list_tmp = livings();
+  
+  ppl_cnt = sizeof(list);
+  for (i=0; i<sizeof(list_tmp); i++)
+    if (userp(list_tmp[i])&&userp(list[i])->query("family/family_name","仙剑派")) {
+      count = 1;
+      for (j=0; j<ppl_cnt; j++)
+        if (list[j]->query("id") == list_tmp[i]->query("id")) {
+	  count = 0;
+	  break;
+	}
+      if (count) list += ({ list_tmp[i] });
+    }
+
+  ppl_cnt = sizeof(list);
+
+  if (opt_ip)
+    list = sort_array(list, "sort_ip", this_object());
+  else
+    list = sort_array(list, "sort_user", this_object());
+
+  // 巫师看的跟玩家不一样
+  if (wiz) {
+    j = ppl_cnt;
+    while( j-- ) {
+	if( !environment(list[j]) ) continue;
+      // 只有大巫师可以隐身
+	if (wiz_level(me) < 4) {
+	  if (!list[j]->visible(list[j])) continue;
+	}
+      if ((list[j]->query("env/invisibility")!=0) && (wiz_level(list[j]) > wiz_level(me))) continue;
+      if (!tmp=list[j]->query("id")) tmp = "创角色中";
+	if(opt_long!=1)
+      str = sprintf("%s%12s %14s%-12s %6s %-15s %2s%2s%2s%2s%s\n",
+                    str,
+                    RANK_D->query_rank(list[j]),
+                    list[j]->name(1),
+                    "("+capitalize(tmp)+")",
+                    age_string ((int)list[j]->query("mud_age")),
+                    (string)query_ip_name(list[j]),
+		    interactive(list[j])?"":"断",
+		    environment(list[j])?"":"虚",
+                    in_edit(list[j])?"编":"",
+                    in_input(list[j])?"读":"",
+                    (interactive(list[j]) && query_idle(list[j]) > 120)?"呆"+query_idle(list[j])/60+"分":"",
+                   );
+	else
+	str=sprintf("%s%12s %-s\n",
+		str,
+		RANK_D->query_rank(list[j]),
+		list[j]->query("title")+
+		( list[j]->query("nickname") ? "「"+list[j]->query("nickname")+"”" : " " )+
+		list[j]->query("name")+"("+
+		list[j]->query("id")+")"
+		);
+      count++;
+    }
+  }
+  else {
+    if ( opt_long ) {
+      j = ppl_cnt;
+      while( j-- ) {
+        // Skip those users in login limbo.
+        if( !environment(list[j]) ) continue;
+	if(wizardp(list[j])) continue;
+        str = sprintf ("%s%12s%2s%2s%2s%2s %s\n",
+                       str,
+                       RANK_D->query_rank(list[j]),
+                       (in_edit(list[j])||in_input(list[j]))?"文":"",
+                       (interactive(list[j]) && query_idle(list[j]) > 120)?"呆":"",
+                       list[j]->query_temp("netdead")?"断":"",
+		       environment(list[j])?"":"虚",
+                       list[j]->short(1)
+                      );
+      count++;
+      }
+    }
+  else if(opt_c==1)
+	{
+	for(j=0;j<sizeof(list);j++)
+	{
+	if(list[j]->query("class")==st2)
+	if(!wizardp(list[j]))
+	{
+	str=sprintf("%s%12s %-s\n",
+	str,
+	RANK_D->query_rank(list[j]),
+	list[j]->query("title")+( list[j]->query("nickname") ? "「"+list[j]->query("nickname")+"”" : " ")+
+	list[j]->query("name")+
+	"("+list[j]->query("id")+")");
+	count++;
+	}
+	}
+	}
+    else {
+      ppl_cnt = 0;
+      j = sizeof (list);
+      while( j-- ) {
+        // Skip those users in login limbo.
+        if ( !environment (list[j]) ) continue;
+	if (list[j]->query_temp("netdead")) continue;
+	if ( wizardp(list[j]) ) continue;
+        if (!tmp=list[j]->query("id")) tmp = "创角色中";
+        str = sprintf ("%s%-15s%s",
+                str,
+                opt_id?capitalize(tmp):list[j]->name(1),
+                (ppl_cnt%5==4? "\n": "")
+              );
+        ppl_cnt++;
+	count++;
+      }
+      if( ppl_cnt%5 ) str += "\n";
+    }
+  }
+
+  str += "─────────────────────────────────────\n";
+  if(opt_c!=1&&opt_g!=1)
+  str = sprintf("%s共有 %d 位使用者连线中，系统负担：%s\n", str, count,
+  query_load_average()+"\n");
+  else
+  str=sprintf("%s共有 %d 位%s连线中。\n",str,count,to_chinese(st2));
+
+  if( remote ) return str;
+
+  me->start_more (str);
+  return 1;
+}
+
+int sort_user(object ob1, object ob2)
+{
+  int	level;
+
+  level = wiz_level(ob1) - wiz_level(ob2);
+  if (level != 0)
+    return level;
+  else
+    return (int)ob2->query("combat_exp") - (int)ob1->query("combat_exp");
+}
+
+int sort_ip(object ob1, object ob2)
+{
+  int	level;
+
+  if (!interactive(ob1)) return -1;
+  else if (!interactive(ob2)) return 1;
+  level = wiz_level(ob1) - wiz_level(ob2);
+  if (level != 0)
+    return level;
+  else
+    return -strcmp(query_ip_name(ob1), query_ip_name(ob2));
+}
+
+string age_string(int time)
+{
+        int month, day, hour;
+
+        time /= 3600;
+        hour = time % 24;
+        time /= 24;
+        day = time % 30;
+        month = time / 30;
+        return (month?month + "m":"") + (day?day + "d":"") + hour + "h";
+}
+
+int help(object me)
+{
+write(@HELP
+指令格式 : who [-l|-i]
+
+这个指令可以列出所有在线上的玩家及其等级。
+
+-l 选项列出较长的讯息。
+-i 只列出玩家的英文代号。
+-ip 以 ip 排列顺序
+-c <职业代号> 列出该职业所有玩者。
+
+相关指令： finger
+HELP
+    );
+    return 1;
+}

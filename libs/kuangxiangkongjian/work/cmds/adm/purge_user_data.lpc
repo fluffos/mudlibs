@@ -1,0 +1,54 @@
+// purge_user_data.c
+//
+// 本档案由 wade 所增加, 可以用来清除一个月都没上过线的玩家
+// 目前设定成一个月没上线的玩家会被清掉
+// 至于被清掉的档案, 事实上是被搬去 /data/backup 下,
+// 会搬动的有 /data/login 跟 /data/user,
+// 如果有人申诉, 可以用 restore -1 XXX 将档案放回原处.
+// 被清掉的同时, 会把清除时, 该玩家上次连线时间记录在 /data/removed_player 下
+
+inherit F_CLEAN_UP;
+
+// 三十天没上线的玩家会被清掉
+#define PURGE_TIME 30*24*60*60
+
+int main(object me, string arg)
+{
+  string dir;
+  int    delay, cur;
+
+  if (me != previous_object()) return 0;
+
+  cur = time();
+  for (delay=1,dir="a"; dir<="z"; dir[0]++, delay+=20) {
+    call_out ("process_dir", delay, dir, cur);
+  }
+
+  return 1;
+}
+
+void process_dir (string dir, int cur)
+{
+  string cdir, backup1, backup2;
+  mixed  *fns;
+  int    i;
+
+  backup1 = "/data/backup/login/"+dir;
+  backup2 = "/data/backup/user/"+dir;
+  cdir = "/data/login/"+dir+"/*";
+  fns = get_dir (cdir, -1);
+  for (i=0; i<sizeof(fns); i++) {
+    if (fns[i][0] == "." || fns[i][0] == "..") continue;
+    if (cur - fns[i][2] > PURGE_TIME) {
+      log_file ("removed_player",
+        sprintf ("%s 已经超过一个月没上线了, 他上次上线时间是: %s\n",
+          fns[i][0][0..<3], ctime (fns[i][2]))
+      );
+      if (file_size ("/data/user/"+fns[i][0][0..0] +"/"+fns[i][0]) > 0)
+        rename ("/data/user/"+fns[i][0][0..0] +"/"+fns[i][0],
+                backup2+"/"+fns[i][0]);
+      rename ("/data/login/"+fns[i][0][0..0] +"/"+fns[i][0],
+              backup1+"/"+fns[i][0]);
+    }
+  }
+}

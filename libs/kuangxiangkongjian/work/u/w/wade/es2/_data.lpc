@@ -1,0 +1,112 @@
+ 
+//	File	:  /cmds/xtra/_data.c
+//	Creator	:  Watcher@TMI  (04/10/93)
+//	Update	:  Watcher@TMI  (5/2/93)  to allow protection of secured
+//			properties to all but Admins.
+//
+//	This wizard command produces a printout of an object's 
+//	stored data set.
+// modify by Fir
+#include <priv.h>
+#include <mudlib.h>
+
+inherit DAEMON ;
+
+#define SYNTAX	"用法: data [物件]\n"
+
+int cmd_data(string str) {
+   mapping list, tlist;
+   mixed *klist, *tlist2;
+   object what;
+   string text;
+   int loop;
+
+   if(!str || str == "")  str = "me";
+ 
+   str = lower_case(str);
+ 
+   what = get_object(str);
+
+   if(!what) {
+   notify_fail("Data: 无法找到此物件。\n");
+   return 0; }
+ 
+   list = (mapping)what->query_ob_data();
+   tlist = (mapping)what->query_temp_ob_data();
+ 
+   if(!list || !mapp(list)) 
+   	if(!tlist || !mapp(tlist)) 
+	{
+   	    notify_fail("Data: 此物件并没有任何的资料。\n");
+   	    return 0; 
+	}
+ 
+   if (sizeof(list))
+   {
+   	klist = keys(list);
+   	klist = sort_array(klist, "sort_keys", this_object());
+   }
+
+   if (sizeof(tlist))
+   {
+    	tlist2 = keys(tlist);
+   	tlist2 = sort_array(tlist2, "sort_keys", this_object());
+   }
+ 
+   if(!member_group(geteuid(this_player()), "admin"))
+	klist = filter_array(klist, "filter_props", this_object(), what);
+
+   if(!klist || !sizeof(klist)) {
+   notify_fail("Data: 此物件并没有储存任何资料。\n");
+   return 0; }
+ 
+   text = "Object :\t" + identify(what) + "\n\n";
+ 
+   for(loop=0; loop<sizeof(klist); loop++)  {
+ 
+      if(strlen(klist[loop]) > 7)  text += klist[loop] + "\t: ";
+      else text += klist[loop] + "\t\t: ";
+ 
+      text += wrap( identify(list[klist[loop]]), 60);
+   }
+ 
+   text += "\n总共有 " + sizeof(klist) + " 个储存的资料。\n\n";
+
+   text += "TEMP DATA :\n\n";
+ 
+   for(loop=0; loop<sizeof(tlist2); loop++)  {
+ 
+      if(strlen(tlist2[loop]) > 7)  text += tlist2[loop] + "\t: ";
+      else text += tlist2[loop] + "\t\t: ";
+ 
+      text += wrap( identify(tlist[tlist2[loop]]), 60);
+   }
+ 
+   text += "\n总共有 " + sizeof(tlist2) + " 个暂存的资料。\n\n";
+ 
+   this_player()->more( explode(text, "\n") );
+ 
+return 1; }
+ 
+//  This function is used to sort the key array.
+ 
+nosave int sort_keys(string one, string two) {
+   return strcmp(one, two);  }
+ 
+//  This function strips out the secured props from the data array.
+ 
+nosave int filter_props(string prop, object target) {
+ 
+   if(member_array((int)target->query_permission(prop),
+	({ MASTER_ONLY, PRIVATE, OWNER_ONLY })) != -1)   return 0;
+ 
+return 1; }
+
+int help() {
+
+   write( SYNTAX + "\n" +
+     "此命令让你可以观看所指定物件的资料，且将会以 \"more\" 的方式\n" +
+     "输出，如果没有指定数，则自动以使用者为参数。\n");
+ 
+return 1; }
+ 
