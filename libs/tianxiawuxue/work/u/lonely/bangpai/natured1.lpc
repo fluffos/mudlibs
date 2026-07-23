@@ -1,240 +1,216 @@
-
-int backup()
-{
+int backup() {
 
   reset_eval_cost();
-  foreach (object userob in children(USER_OB) )
-    {
-       if (!userob || !environment(userob)) continue;
-       userob->save();
+  foreach (object userob in children(USER_OB)) {
+    if (!userob || !environment(userob)) continue;
+    userob->save();
+  }
+  shutdown(0);
+  return 1;
+}
+
+void banghui_start(string *dirs) {
+  if (sizeof(dirs) < 1) return;
+
+  if (current_area >= sizeof(dirs)) {
+    remove_call_out("banghui_start");
+    current_area = 0;
+    return;
+  }
+
+  banghui_manage(dirs);
+
+  remove_call_out("banghui_start");
+  call_out("banghui_start", 5, dirs);
+  return;
+}
+
+void banghui_manage(string *dirs) {
+  object area, lp, npc, room, *ulist, *bh = ({});
+  string file, area_name, banghui, str;
+  int k, bad, kaifa, jizhi, zhongcheng, area_money, bad_money, rest_money, count,
+    piece, reward;
+  mapping data;
+
+  if (sizeof(dirs) < 1) return;
+  file = dirs[current_area];
+  current_area++;
+
+  if (file[strlen(file) - 2..strlen(file)] != ".o")
+    return;
+
+  if (sscanf(file, "%s.o", area_name)) {
+    area = new("/clone/misc/area");
+    area->create(area_name);
+
+    if (!stringp(area->query("banghui"))) {
+      destruct(area);
+      return;
     }
-    shutdown(0);
-    return 1;
-}
 
-void banghui_start(string *dirs)
-{
-        if(sizeof(dirs) < 1 ) return;
+    if (area->query("npc_room")) {
+      room = find_object(area->query("npc_room"));
+      if (!room) room = load_object(area->query("npc_room"));
+    }
+    if (room && area->query("npc") &&
+      objectp(npc = present(area->query("npc"), room)) &&
+      npc->query("area") == area_name) {
+      kaifa = npc->query("kaifa");
+      jizhi = npc->query("jizhi");
+      zhongcheng = npc->query("zhongcheng");
+      kaifa = kaifa - random(10);
+      jizhi = jizhi + random(20) - 10;
+      if (zhongcheng > npc->query("max_zhongcheng"))
+        zhongcheng = npc->query("max_zhongcheng");
+      zhongcheng = zhongcheng - random(3);
+      npc->set("zhongcheng", zhongcheng < 10 ? 10 : zhongcheng);
+      area->set("zhongcheng", zhongcheng < 10 ? 10 : zhongcheng);
+    } else {
+      destruct(area);
+      return;
+    }
 
-        if( current_area >= sizeof(dirs) )
-        {
-           remove_call_out("banghui_start");
-           current_area = 0;
-           return;
+    if (random(kaifa) < jizhi / 3) bad = 1;
+    else bad = 0;
+
+    area_money = area->query("money");
+    if (!intp(area_money)) area_money = 0;
+    if (jizhi > 60) jizhi = 60;
+    if (jizhi < 6) jizhi = 6;
+    if (!intp(kaifa) || kaifa < 20) kaifa = 20;
+
+    if (bad) {
+      if (jizhi && kaifa) {
+        bad_money = (kaifa + 1) * jizhi * 10000;
+        area_money -= bad_money;
+      }
+    } else
+      area_money += (kaifa / 2 + random(kaifa / 2) + 1) * jizhi * 10000;
+
+    area->set("money", area_money);
+    rest_money = area_money - 10000000;
+    if (rest_money > 0)
+      area->add("money", -rest_money);
+    else rest_money = 0;
+    area->set("last_money", rest_money);
+    area->set("kaifa", kaifa);
+    area->set("jizhi", jizhi);
+    npc->set("jizhi", jizhi);
+    npc->set("kaifa", kaifa);
+    banghui = area->query("banghui");
+
+    if (file_size("/data/guild/" + banghui + ".o") == -1) {
+      message("channel:rumor", HIM "【浴血帮会】由于经营不善，"
+        +area->query("name") + "宣布脱离帮会" + "「" + banghui + "」"
+        + "的控制！\n" NOR, users());
+      area->delete("banghui");
+      area->set("money", 0);
+      area->set("last_money", 0);
+      area->delete("zhongcheng");
+      npc->delete("banghui");
+      npc->set("zhongcheng", 11 + random(20));
+      area->save();
+      destruct(area);
+      return;
+    }
+  }
+
+  if (stringp(banghui)) {
+    if (!bad)
+      message("channel:rumor", YEL "【浴血帮会】" + area_name
+        + "地盘收入良好。\n" NOR, users());
+    else {
+      str = bad_weather[random(sizeof(bad_weather))];
+      str = replace_string(str, "$N", area_name);
+      message("channel:rumor", YEL "【浴血帮会】" + str +
+        MONEY_D->money_str(bad_money) + "！\n" NOR, users());
+    }
+
+    lp = new("/clone/misc/lingpai");
+    lp->create(banghui);
+    data = lp->query("area");
+    if (lp->query("money") < 100000000 * (1 + sizeof(keys(data)))
+      || rest_money < 0) {
+      lp->add("money", rest_money);
+      rest_money = 0;
+    }
+    lp->set("bang_money", 0);
+
+    if (objectp(npc) && area->query("money") < -10000000) {
+      message("channel:rumor", HIM "【浴血帮会】由于经营不善，"
+        +area->query("name") + "宣布脱离帮会" + "「" + banghui + "」"
+        + "的控制！\n" NOR, users());
+
+      area->delete("banghui");
+      area->set("money", 0);
+      area->set("last_money", 0);
+      area->delete("zhongcheng");
+      npc->delete("banghui");
+      npc->set("zhongcheng", 11 + random(20));
+      data = lp->query("area");
+      if (!mapp(data)) data = ([]);
+      map_delete(data, area_name);
+      lp->set("area", data);
+      data = lp->query("npc");
+      if (!mapp(data)) data = ([]);
+      map_delete(data, npc->query("id"));
+      lp->set("npc", data);
+      lp->save();
+      destruct(lp);
+      area->save();
+      destruct(area);
+
+      return;
+    }
+
+    if (rest_money > 0) {
+      ulist = users();
+      for (k = 0, count = 0; k < sizeof(ulist); k++) {
+        if (!environment(ulist[k]) || !ulist[k]->query("banghui/name")
+          || ulist[k]->query("banghui/name") != banghui)
+          continue;
+        bh += ({ ulist[k] });
+        count++;
+        piece += 1 + ulist[k]->query("banghui/rank_lv");
+      }
+      if (count) {
+        lp->add("money", -rest_money);
+        lp->set("bang_money", rest_money);
+        rest_money /= piece;
+        for (k = 0; k < count; k++) {
+          rest_money = rest_money * (bh[k]->query("banghui/rank_lv") + 1);
+          tell_object(bh[k], "「" + banghui
+            + "」" + "发饷，你的帐上增加了"
+            +MONEY_D->money_str(rest_money) + "！\n");
+
+          if (bh[k]->query("banghui/quest") >= 4) {
+            reward = rest_money / 10000;
+            reward = reward * (random(4) + 1);
+            bh[k]->add("combat_exp", reward);
+            bh[k]->add("potential", reward / 3);
+            bh[k]->add("score", reward / 50);
+            tell_object(bh[k], HIG "由于你积极为帮会振兴"
+              + "做贡献，「" + banghui + "」" + "奖励你\n"
+              +chinese_number(reward) + "点经验、"
+              +chinese_number(reward / 3) + "点潜能和"
+              +chinese_number(reward / 50) + "点综合评价！\n" NOR);
+            bh[k]->set("banghui/quest", 0);
+          }
+          rest_money = bh[k]->query("money") + rest_money;
+          if (rest_money > 100000000) {
+            bh[k]->add("more_money", rest_money / 100000000);
+            bh[k]->set("money", rest_money % 100000000);
+          } else
+            bh[k]->set("money", rest_money);
         }
+      }
+    }
 
-        banghui_manage(dirs);
+    area->save();
+    destruct(area);
+    lp->save();
+    destruct(lp);
+  }
 
-        remove_call_out("banghui_start");
-        call_out("banghui_start",5,dirs);
-        return;
-}
-
-void banghui_manage(string *dirs)
-{
-        object area,lp,npc,room,*ulist,*bh=({});
-        string file,area_name,banghui,str;
-        int k,bad,kaifa,jizhi,zhongcheng,area_money,bad_money,rest_money,count,
-            piece,reward;
-        mapping data;
-
-        if( sizeof(dirs) < 1 ) return;
-        file=dirs[current_area];
-        current_area++;
-
-        if(file[strlen(file)-2..strlen(file)] != ".o")
-        return;
-
-        if( sscanf(file,"%s.o",area_name) )
-        {
-            area=new("/clone/misc/area");
-            area->create(area_name);
-
-            if( !stringp(area->query("banghui")) )
-            {
-                destruct(area);
-                return;                   
-            }  
-
-            if( area->query("npc_room") )
-            {
-                room = find_object(area->query("npc_room"));
-                if(!room) room = load_object(area->query("npc_room"));
-            }
-            if( room && area->query("npc") &&
-                objectp(npc=present(area->query("npc"),room)) &&
-                npc->query("area") == area_name ) 
-            {
-                kaifa = npc->query("kaifa");
-                jizhi = npc->query("jizhi");
-                zhongcheng = npc->query("zhongcheng");
-                kaifa = kaifa - random(10);
-                jizhi = jizhi + random(20)-10;
-                if( zhongcheng > npc->query("max_zhongcheng") )
-                zhongcheng = npc->query("max_zhongcheng");                  
-                zhongcheng = zhongcheng-random(3);   
-                npc->set("zhongcheng",zhongcheng<10?10:zhongcheng);
-                area->set("zhongcheng",zhongcheng<10?10:zhongcheng);
-            } else
-            {
-                destruct(area);
-                return;
-            }
-
-            if( random(kaifa) < jizhi/3 ) bad=1;
-            else bad=0;
-
-            area_money=area->query("money");
-            if(!intp(area_money)) area_money=0;
-            if( jizhi > 60 ) jizhi=60;
-            if( jizhi < 6  ) jizhi=6;  
-            if(!intp(kaifa) || kaifa<20 ) kaifa=20;
-
-            if( bad )
-            {
-               if( jizhi && kaifa )
-               {
-                  bad_money= (kaifa+1)*jizhi*10000;
-                  area_money -= bad_money;
-               }
-            } else
-                  area_money+=(kaifa/2+random(kaifa/2)+1)*jizhi*10000;
-
-            area->set("money",area_money);
-            rest_money = area_money - 10000000;  
-            if( rest_money > 0 )
-            area->add("money",-rest_money);
-            else rest_money=0;
-            area->set("last_money",rest_money);  
-            area->set("kaifa",kaifa);
-            area->set("jizhi",jizhi);
-            npc->set("jizhi",jizhi);
-            npc->set("kaifa",kaifa);
-            banghui = area->query("banghui");
-
-            if( file_size("/data/guild/"+banghui+".o") == -1 )
-            {
-                   message("channel:rumor",HIM"【浴血帮会】由于经营不善，"
-                         +area->query("name")+"宣布脱离帮会"+"「"+banghui+"」"
-                         +"的控制！\n"NOR,users()); 
-                   area->delete("banghui");
-                   area->set("money",0);
-                   area->set("last_money",0);
-                   area->delete("zhongcheng"); 
-                   npc->delete("banghui");
-                   npc->set("zhongcheng",11+random(20));
-                   area->save();
-                   destruct(area);
-                   return;
-            }
-        } 
-
-        if(stringp(banghui))
-        {
-            if( !bad )
-                  message("channel:rumor",YEL"【浴血帮会】"+area_name
-                                      +"地盘收入良好。\n"NOR,users());
-            else
-            {
-                   str=bad_weather[random(sizeof(bad_weather))];
-                   str=replace_string(str,"$N",area_name);
-                   message("channel:rumor",YEL"【浴血帮会】"+str+
-                      MONEY_D->money_str(bad_money)+"！\n"NOR,users());
-            }
-
-            lp=new("/clone/misc/lingpai");
-            lp->create(banghui);
-            data=lp->query("area");
-            if( lp->query("money") < 100000000*(1+sizeof(keys(data)))
-                || rest_money<0 )
-            {
-                 lp->add("money",rest_money);
-                 rest_money=0;
-            }
-            lp->set("bang_money",0);  
-
-            if( objectp(npc) && area->query("money") < -10000000 )
-            {
-                   message("channel:rumor",HIM"【浴血帮会】由于经营不善，"
-                         +area->query("name")+"宣布脱离帮会"+"「"+banghui+"」"
-                         +"的控制！\n"NOR,users());
-
-                   area->delete("banghui");
-                   area->set("money",0);
-                   area->set("last_money",0);
-                   area->delete("zhongcheng");
-                   npc->delete("banghui");
-                   npc->set("zhongcheng",11+random(20)); 
-                   data=lp->query("area");
-                   if(! mapp(data)) data=([]);
-                   map_delete(data,area_name);
-                   lp->set("area",data);
-                   data=lp->query("npc");
-                   if(! mapp(data)) data=([]); 
-                   map_delete(data,npc->query("id"));
-                   lp->set("npc",data);
-                   lp->save();
-                   destruct(lp);
-                   area->save();
-                   destruct(area);
-
-                   return;
-            }
-
-            if( rest_money > 0 )
-            {
-               ulist=users();
-               for(k=0,count=0;k<sizeof(ulist);k++)
-               {
-                  if(!environment(ulist[k]) || !ulist[k]->query("banghui/name")
-                      || ulist[k]->query("banghui/name") != banghui )
-                  continue;
-                  bh += ({ulist[k]});
-                  count++;
-                  piece+=1+ulist[k]->query("banghui/rank_lv");
-               }
-               if( count )
-               {
-                  lp->add("money",-rest_money);
-                  lp->set("bang_money",rest_money); 
-                  rest_money /= piece; 
-                  for(k=0;k<count;k++)
-                  {
-                       rest_money = rest_money*(bh[k]->query("banghui/rank_lv")+1);
-                       tell_object(bh[k],"「"+banghui
-                                   +"」"+"发饷，你的帐上增加了"
-                                   +MONEY_D->money_str(rest_money)+"！\n");
-
-                           if( bh[k]->query("banghui/quest") >= 4 )
-                          {
-                              reward = rest_money/10000;
-                              reward = reward * (random(4)+1);
-                              bh[k]->add("combat_exp",reward);
-                              bh[k]->add("potential",reward/3);
-                              bh[k]->add("score",reward/50);
-                              tell_object(bh[k],HIG"由于你积极为帮会振兴"
-                              +"做贡献，「"+banghui+"」"+"奖励你\n"
-                              +chinese_number(reward)+"点经验、"
-                              +chinese_number(reward/3)+"点潜能和"
-                              +chinese_number(reward/50)+"点综合评价！\n"NOR);
-                              bh[k]->set("banghui/quest",0);
-                       }    
-                       rest_money = bh[k]->query("money")+rest_money;
-                       if( rest_money > 100000000 )
-                       {
-                          bh[k]->add("more_money",rest_money/100000000);
-                          bh[k]->set("money",rest_money%100000000);
-                       } else
-                          bh[k]->set("money",rest_money);
-                   }
-                }
-             }
-
-             area->save();
-             destruct(area);
-             lp->save();
-             destruct(lp);
-        }
-
-        return;
+  return;
 }

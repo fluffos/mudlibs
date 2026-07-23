@@ -220,3 +220,48 @@ skill content, not registration-blocking):
   (`kungfu/class/*` are individual boss/NPC "class" instances, not
   preloaded or reachable from character creation) — logged as a known
   long-tail content gap per AGENTS.md §6b, not fixed file-by-file.
+
+## Rebuilt-driver / formatter / WASM re-verification pass (2026-07-23)
+
+1. **LPC formatter** applied across all 12,168 `.lpc` files in `work/`:
+   `{"total":12168,"written":12007,"wouldChange":0,"unchanged":28,
+   "errors":133}`. Checked for the `::fn()`-after-`(` formatter bug
+   found elsewhere this pass (see `tianxia/NOTES.md`) — zero hits of the
+   `(: :` corruption signature anywhere in this lib. Verified
+   `adm/obj/master.lpc`'s §14 3-arg `valid_override` and §15w
+   `strsrch(message, "warning:") == -1` guard both survived reformatting
+   intact.
+2. **Native re-test against the rebuilt `build-debug/src/driver`**:
+   booted clean (zero fatal/`error in error handler`/`denied` lines).
+   Full registration verified end-to-end via `mudclient.py`: id
+   `txwxfmta` → confirm → real Chinese name **`秦风庚`** → password ×2
+   → gift/attribute selection (`0`/random, confirm `y`) → email
+   `qin@test.com` → gender `m` → entered the game world at 武庙 (one of
+   the 4 known-good start rooms from the original pass), `look`/`score`/
+   `quit` all producing correct real output. `debug.log` for the
+   verified session: zero `denied`/`undefined function`/`bad
+   argument`/`error in error handler` lines. (One transient,
+   non-reproduced observation, noted in the same spirit as this lib's
+   own already-documented void-room anomaly above: an early boot-time
+   check briefly showed a `Bad argument 4 to EFUN message()` runtime
+   error attributed to `adm/daemons/dynamicd.lpc`'s `regenerate_map()` →
+   `tell_room()`, a `call_out`-scheduled map-regen daemon unrelated to
+   registration; it was not present in the debug.log by the time the
+   full session above ran clean, and repeated checks afterward found no
+   trace of it — logged here per this lib's own convention of flagging
+   non-reproducible oddities rather than silently dropping them, not
+   chased further since it never affected any interactive test.) No new
+   fixes needed.
+3. **WASM test**: boots cleanly through `Initializations complete`.
+   **Login blocked by the documented `query_ip_number()` limitation**,
+   in its most direct form yet seen this pass: `adm/daemons/band.lpc`'s
+   `is_banned(site)` explicitly does `if (!site) return 1;` and
+   `if (sscanf(site, "%s.%s.%s.%s", ...) != 4) return 1;` — i.e. treats
+   any string that fails to parse as a 4-part dotted-quad as banned BY
+   DEFAULT (fail-closed), and `logind.lpc`'s `get_id()` calls
+   `BAN_D->is_banned(query_ip_number(ob))` before accepting any ID.
+   Since `query_ip_number()` doesn't return a well-formed address under
+   wasm, every connection is rejected with "你的地址在本 MUD 不受欢迎。"
+   (your address is not welcome on this MUD) regardless of the id typed.
+   **Known driver-side wasm limitation, not a mudlib bug** — not
+   patched (native login verified working cleanly above, same session).

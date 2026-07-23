@@ -1,4 +1,3 @@
-
 #pragma save_binary
 //rongg的话:唉，总算把这个东西写了出来，不过只是实现了功能而已,但是根本没有考虑到优化问题
 //如果有人对这个东西有兴趣，不妨优化它一下
@@ -31,10 +30,10 @@ nosave mixed *maze_room=({
         });
 */
 //二维坐标总共25个方格
-int attack_flag=0;
+int attack_flag = 0;
 // prototypes
-object select_opponent();//回传所有在me的攻击范围之内的生物集合
-int refresh_maze_map(object me,object target);
+object select_opponent();  //回传所有在me的攻击范围之内的生物集合
+int refresh_maze_map(object me, object target);
 int check_my_magic(string magicname);
 mixed find_all_opponent_beside();
 object *query_enemy() { return enemy; }
@@ -44,66 +43,59 @@ int get_enemy_number();
 object enum_enemy(int i);
 
 // This function returns 1 if we are fighting anyone (or with ob)
-varargs int is_fighting(object ob)
-{
-        int i;
-        if( !ob ) 
-        {
-             if(!sizeof(enemy)) return 0;
-             for(i=0;i<sizeof(enemy);i++)
-             {
-                 if(!objectp(enemy[i])) continue;
-                 if(!environment(enemy[i])) continue;
-                 if(environment(enemy[i])!=environment(this_object())) continue;
-                     return 1;
-             }
-             return sizeof(enemy) > 0;
-        }
+varargs int is_fighting(object ob) {
+  int i;
+  if (!ob) {
+    if (!sizeof(enemy)) return 0;
+    for (i = 0; i < sizeof(enemy); i++) {
+      if (!objectp(enemy[i])) continue;
+      if (!environment(enemy[i])) continue;
+      if (environment(enemy[i]) != environment(this_object())) continue;
+      return 1;
+    }
+    return sizeof(enemy) > 0;
+  }
 
-        return member_array(ob, enemy)!=-1;
+  return member_array(ob, enemy) != -1;
 }
 
 // This function returns 1 if we are fighting anyone (or with ob)
-varargs int is_killing(string id)
-{
-        if( !id ) return sizeof(killer) > 0;
+varargs int is_killing(string id) {
+  if (!id) return sizeof(killer) > 0;
 
-        return member_array(id, killer)!=-1;
+  return member_array(id, killer) != -1;
 }
 
 
 //This function starts fight between this_object() and ob
-void fight_ob(object ob)
-{
-        if(!ob || ob==this_object()) return;
-        
-        if("/feature/team"->is_team_member(this_object(),ob)!=-1) return ;
-        if(ob==this_object()->query_temp("protecting")) return ;
-        if(this_object()==ob->query_temp("protecting")) return ;
-        //队员和保护人与被保护人之间不能战斗        
-        if(refresh_maze_map(this_object(),ob)==0)
-        {//分配位置
-            return;//找不到位置放置,无法战斗
-        }
-        set_heart_beat(1);
+void fight_ob(object ob) {
+  if (!ob || ob == this_object()) return;
 
-        if( member_array(ob, enemy)==-1 ) 
-                enemy += ({ ob });
-        if(!ob->is_fighting(this_object())) ob->fight_ob(this_object());
+  if ("/feature/team"->is_team_member(this_object(), ob) != -1) return;
+  if (ob == this_object()->query_temp("protecting")) return;
+  if (this_object() == ob->query_temp("protecting")) return;
+  //队员和保护人与被保护人之间不能战斗        
+  if (refresh_maze_map(this_object(), ob) == 0) {  //分配位置
+    return;  //找不到位置放置,无法战斗
+  }
+  set_heart_beat(1);
+
+  if (member_array(ob, enemy) == -1)
+    enemy += ({ ob });
+  if (!ob->is_fighting(this_object())) ob->fight_ob(this_object());
 }
 
 // This function starts killing between this_object() and ob
-void kill_ob(object ob)
-{
-        object *guards,*member;
-        int i;
-        
+void kill_ob(object ob) {
+  object *guards, *member;
+  int i;
 
-        if("/feature/team"->is_team_member(this_object(),ob)!=-1) return ;
-        if(ob==this_object()->query_temp("protecting")) return ;
-        if(this_object()==ob->query_temp("protecting")) return ;
-        //队员之间不能战斗以及保护人之间不能发生战斗
-        /*if( ob==query_temp("protecting") ) 
+
+  if ("/feature/team"->is_team_member(this_object(), ob) != -1) return;
+  if (ob == this_object()->query_temp("protecting")) return;
+  if (this_object() == ob->query_temp("protecting")) return;
+  //队员之间不能战斗以及保护人之间不能发生战斗
+  /*if( ob==query_temp("protecting") ) 
         {
                 delete_temp("protecting");
                 guards = ob->query_temp("protected");
@@ -113,333 +105,296 @@ void kill_ob(object ob)
                 tell_object(ob, HIY + this_object()->name() + "停止保护你。\n" NOR);
         }
         */
-        if( member_array(ob->query("id"), killer)==-1 )
-                killer += ({ ob->query("id") });
+  if (member_array(ob->query("id"), killer) == -1)
+    killer += ({ ob->query("id") });
 
-        tell_object(ob, HIR "看起来" + this_object()->name() + "想杀死你！\n" NOR);
-        //if(refresh_maze_map(this_object(),ob)==0)//分配位置
-        //    return;//找不到位置放置,无法战斗
-        // If we were protecting the target, cancel the protection.
-        //如果ob和this_object()是一个队伍的,那么ob将离队
+  tell_object(ob, HIR "看起来" + this_object()->name() + "想杀死你！\n" NOR);
+  //if(refresh_maze_map(this_object(),ob)==0)//分配位置
+  //    return;//找不到位置放置,无法战斗
+  // If we were protecting the target, cancel the protection.
+  //如果ob和this_object()是一个队伍的,那么ob将离队
 
-        
 
-        // Check if anyone are is guarding the target, let them join the combat too.
-        fight_ob(ob);
-        if( pointerp(guards = ob->query_temp("protected")) ) 
-        {
-                guards = filter_array(guards, (:objectp($1)&&living($1)&&
-                  $1 != this_object()&&present($1, environment())&&
-                  !$1->query_temp("disable_command")&&
-                 !is_fighting($1)&&$1->visible(this_object()):));
-/*
+
+  // Check if anyone are is guarding the target, let them join the combat too.
+  fight_ob(ob);
+  if (pointerp(guards = ob->query_temp("protected"))) {
+    guards = filter_array(guards, (: objectp($1) && living($1) &&
+      $1 != this_object() && present($1, environment()) &&
+      !$1->query_temp("disable_command") &&
+      !is_fighting($1) && $1->visible(this_object()) :));
+    /*
                         &&      living($1)
                         &&      $1 != this_object()
                         &&      present($1, environment())
                         &&      !is_fighting($1)
                         &&      $1->visible(this_object()) :));
 */
-                if( sizeof(guards) > 0 ) 
-                {
-                        // guards must be added to enemy prior to call guards join the fight
-                        // thus can prevent infinite loop in the mutual guard case.
-                        enemy += guards;
-                        message("vision", HIR + ob->name() + "受到攻击！你挺身加入战团！\n" NOR,
-                                guards);
-                        guards->kill_ob(this_object());
-                }
-        }
+    if (sizeof(guards) > 0) {
+      // guards must be added to enemy prior to call guards join the fight
+      // thus can prevent infinite loop in the mutual guard case.
+      enemy += guards;
+      message("vision", HIR + ob->name() + "受到攻击！你挺身加入战团！\n" NOR,
+        guards);
+      guards->kill_ob(this_object());
+    }
+  }
 
-        if(pointerp(member=this_object()->query_team()))
-        {
-                for(i=0;i<sizeof(member);i++)
-                {
-                   if(member[i]!=this_object())
-                   {
-                        if(!member[i]->is_killing(ob->query("id")))
-                        {
-                                tell_room(environment(this_object()),member[i]->name()+member[i]->query("id")+"加入战斗\n");
-                                member[i]->kill_ob(ob);
-                                member[i]->fight_ob(ob);
-                        }
-                   }
-                }
-                return ;
+  if (pointerp(member = this_object()->query_team())) {
+    for (i = 0; i < sizeof(member); i++) {
+      if (member[i] != this_object()) {
+        if (!member[i]->is_killing(ob->query("id"))) {
+          tell_room(
+            environment(this_object()),
+            member[i]->name() + member[i]->query("id") + "加入战斗\n"
+          );
+          member[i]->kill_ob(ob);
+          member[i]->fight_ob(ob);
         }
+      }
+    }
+    return;
+  }
 
-        if(pointerp(member=ob->query_team()))
-        {
-                for(i=0;i<sizeof(member);i++)
-                {
-                   if(member[i]!=ob)
-                   {
-                        if(!member[i]->is_killing(this_object()->query("id")))
-                        {
-                                tell_room(environment(ob),member[i]->name()+member[i]->query("id")+"加入战斗\n");
-                                member[i]->kill_ob(this_object());
-                                member[i]->fight_ob(this_object());
-                        }
-                   }
-                }
-                return ;
+  if (pointerp(member = ob->query_team())) {
+    for (i = 0; i < sizeof(member); i++) {
+      if (member[i] != ob) {
+        if (!member[i]->is_killing(this_object()->query("id"))) {
+          tell_room(environment(ob), member[i]->name() + member[i]->query("id") + "加入战斗\n");
+          member[i]->kill_ob(this_object());
+          member[i]->fight_ob(this_object());
         }
+      }
+    }
+    return;
+  }
 
 
 }
 
-int refresh_maze_map(object me,object target)//分配战斗迷宫的坐标位置
+int refresh_maze_map(object me, object target)  //分配战斗迷宫的坐标位置
 {
-        int i,map_x,map_y,rx,ry,x,y;
-        object *all_players,room;
-        mixed *all_players_coor,*remain,*mazee;
-        
-        all_players_coor=({});
-        remain=({});
-        mazee=({});
-        
-        room=environment(me);
-        if(!room||!room->is_room()) return 0;
-        rx=room->get_matrix_x();
-        ry=room->get_matrix_y();
-        
-        for(x=1,y=1;x<=rx*ry;x++)
-        {
-            mazee+=({y*rx+x});
-            if(y%ry==0) y++;
-        }
-       
-       all_players=all_inventory(environment(this_object()));
-       for(i=0;i<sizeof(all_players);i++)
-       {
-           if(!living(all_players[i])) continue;
-           map_x=all_players[i]->query_temp("map/x");
-           map_y=all_players[i]->query_temp("map/y");
-           if(map_x&&map_y)
-                 all_players_coor+=({map_y*rx+map_x});
+  int i, map_x, map_y, rx, ry, x, y;
+  object *all_players, room;
+  mixed *all_players_coor, *remain, *mazee;
 
-       }
-       
-       remain=mazee-all_players_coor;
-       
+  all_players_coor = ({});
+  remain = ({});
+  mazee = ({});
 
-       if( sizeof(remain)<=9)   return 0;//打架的人太多了,最多允许16-17个生物在一个房间战斗
-       else
-       {
-           //me_x=me->query_temp("map/x");
-           //me_y=me->query_temp("map/y");
-           if(!target->query_temp("map/x")||!target->query_temp("map/y"))
-           {//target不在战斗迷宫内,分配位置
-               i=random(sizeof(remain));
-               x=remain[i]-remain[i]/rx*rx;
-               y=remain[i]/rx;
-               if(x==0) {x=rx,y=y-1;}
-               target->set_temp("map/x",x);
-               target->set_temp("map/y",y);
-               remain-=({remain[i]});
+  room = environment(me);
+  if (!room || !room->is_room()) return 0;
+  rx = room->get_matrix_x();
+  ry = room->get_matrix_y();
 
-           }           
-           //先将敌人的坐标分好,这样做对于组队有好处,比较容易将队员分布在敌人周围
-           if(!me->query_temp("map/x")||!me->query_temp("map/y"))
-           {//me不在战斗迷宫内,分配位置
-               i=random(sizeof(remain));
-              // j=sizeof(remain[i]); //remain[i]=({x,y})
-               x=remain[i]-remain[i]/rx*rx;//这里的x,y是换算出来的,前面已经提过
-               y=remain[i]/rx;
-               if(x==0) {x=rx,y=y-1;}
-               me->set_temp("map/x",x);
-               me->set_temp("map/y",y);
-               remain-=({remain[i]});
-        
-               
+  for (x = 1, y = 1; x <= rx * ry; x++) {
+    mazee += ({ y * rx + x });
+    if (y % ry == 0) y++;
+  }
 
-           }
+  all_players = all_inventory(environment(this_object()));
+  for (i = 0; i < sizeof(all_players); i++) {
+    if (!living(all_players[i])) continue;
+    map_x = all_players[i]->query_temp("map/x");
+    map_y = all_players[i]->query_temp("map/y");
+    if (map_x && map_y)
+      all_players_coor += ({ map_y * rx + map_x });
 
-           return 1;
-       }
-       return 0;
+  }
+
+  remain = mazee - all_players_coor;
+
+
+  if (sizeof(remain) <= 9) return 0;  //打架的人太多了,最多允许16-17个生物在一个房间战斗
+  else {
+    //me_x=me->query_temp("map/x");
+    //me_y=me->query_temp("map/y");
+    if (!target->query_temp("map/x") || !target->query_temp("map/y")) {  //target不在战斗迷宫内,分配位置
+      i = random(sizeof(remain));
+      x = remain[i] - remain[i] / rx * rx;
+      y = remain[i] / rx;
+      if (x == 0) { x = rx, y = y - 1; }
+      target->set_temp("map/x", x);
+      target->set_temp("map/y", y);
+      remain -= ({ remain[i] });
+
+    }
+    //先将敌人的坐标分好,这样做对于组队有好处,比较容易将队员分布在敌人周围
+    if (!me->query_temp("map/x") || !me->query_temp("map/y")) {  //me不在战斗迷宫内,分配位置
+      i = random(sizeof(remain));
+      // j=sizeof(remain[i]); //remain[i]=({x,y})
+      x = remain[i] - remain[i] / rx * rx;  //这里的x,y是换算出来的,前面已经提过
+      y = remain[i] / rx;
+      if (x == 0) { x = rx, y = y - 1; }
+      me->set_temp("map/x", x);
+      me->set_temp("map/y", y);
+      remain -= ({ remain[i] });
+
+
+
+    }
+
+    return 1;
+  }
+  return 0;
 }
 
 
-void clean_up_enemy()
-{
-        if( sizeof(enemy) > 0 ) {
-                for(int i=0; i<sizeof(enemy); i++) 
-                {
-                        if( !objectp(enemy[i])
-                        ||      environment(enemy[i])!=environment()
-                        ||      (!living(enemy[i]) && !is_killing(enemy[i]->query("id"))) )
-                                enemy[i] = 0;
-                }
-                enemy -= ({ 0 });
-        }
+void clean_up_enemy() {
+  if (sizeof(enemy) > 0) {
+    for (int i = 0; i < sizeof(enemy); i++) {
+      if (!objectp(enemy[i])
+        || environment(enemy[i]) != environment()
+        || (!living(enemy[i]) && !is_killing(enemy[i]->query("id"))))
+        enemy[i] = 0;
+    }
+    enemy -= ({ 0 });
+  }
 }
 
 // This function promotes ob to the first ordered target to attack.
-void charge_ob(object ob)
-{
-        if( !arrayp(enemy) || member_array(ob, enemy)==-1 ) return;
-        enemy -= ({ ob });
-        enemy = ({ ob }) + enemy;       
-        tell_object(this_object(), HIY "你选择" + ob->name() + "为首要攻击目标！\n" NOR);
-        charge_target = ob;
+void charge_ob(object ob) {
+  if (!arrayp(enemy) || member_array(ob, enemy) == -1) return;
+  enemy -= ({ ob });
+  enemy = ({ ob }) + enemy;
+  tell_object(this_object(), HIY "你选择" + ob->name() + "为首要攻击目标！\n" NOR);
+  charge_target = ob;
 }
-void remove_charge_ob()
-{
-        charge_target=0;        
+void remove_charge_ob() {
+  charge_target = 0;
 }
 object query_charge_target() { return charge_target; }
 // This function checks if the current opponent is available or
 // select a new one.
-object select_opponent()//选择能够与之近身肉搏的敌人
+object select_opponent()  //选择能够与之近身肉搏的敌人
 {
-        int which;
-        object *opponent_beside;//所有贴身的敌人
-        if( !sizeof(enemy) ) return 0;
-        opponent_beside=find_all_opponent_beside();
-        if(!opponent_beside||opponent_beside==({})) return 0;
-        //如果玩家周围没有贴身的敌人，攻击将停止,但是还是处于战斗状态
-        else 
-        {
-            if( charge_target && member_array(charge_target, opponent_beside)!=-1 )
-                return charge_target;//首要攻击目标也是贴身敌人
-             which=random(sizeof(opponent_beside));
-             return opponent_beside[which];
+  int which;
+  object *opponent_beside;  //所有贴身的敌人
+  if (!sizeof(enemy)) return 0;
+  opponent_beside = find_all_opponent_beside();
+  if (!opponent_beside || opponent_beside == ({})) return 0;
+  //如果玩家周围没有贴身的敌人，攻击将停止,但是还是处于战斗状态
+  else {
+    if (charge_target && member_array(charge_target, opponent_beside) != -1)
+      return charge_target;  //首要攻击目标也是贴身敌人
+      which = random(sizeof(opponent_beside));
+    return opponent_beside[which];
+  }
+  return 0;
+}
+
+
+mixed find_all_opponent_beside() {
+
+  //兵器有自身的攻击范围,剑,刀,锤,匕首,手的攻击范围为1.
+  //鞭子,长枪,禅杖为2,斜方向为1.魔法攻击的范围最大
+
+  int i, mmap_x, mmap_y, vmap_x, vmap_y, x_x, y_y, attack_distance;
+  object *opponent_beside, weapon, me;
+
+
+  me = this_object();
+  opponent_beside = ({});
+  for (i = 0; i < sizeof(enemy); i++) {
+    if (!objectp(enemy[i])) continue;
+    if (!environment(enemy[i]) || environment(enemy[i]) != environment(this_object())) continue;
+    mmap_x = me->query_temp("map/x");
+    mmap_y = me->query_temp("map/y");
+    vmap_x = enemy[i]->query_temp("map/x");
+    vmap_y = enemy[i]->query_temp("map/y");
+    if (!mmap_x || !mmap_y || !vmap_x || !vmap_y) continue;
+    x_x = mmap_x - vmap_x;
+    y_y = mmap_y - vmap_y;
+    if (x_x < 0) x_x *= -1; if (y_y < 0) y_y *= -1;
+    weapon = me->query_temp("weapon");
+
+    if (!objectp(weapon)) {  //空手只能攻击前后左右四个方向
+
+      if ((x_x > 1) || (y_y > 1)) continue;  //距离超过1,没有贴身
+      if (x_x == 1 && y_y == 1) continue;  //斜方向
+
+    } else {
+      attack_distance = weapon->query("attack_distance");
+      if (attack_distance >= 2) {
+        if (x_x == 2 && y_y == 2) continue;  //斜方向2格
+        if (x_x > 2 || y_y > 2) continue;  //距离超过2
+        if (x_x == 2 && y_y != 0 || y_y == 2 && x_x != 0) continue;
+      } else {
+        if (x_x > 1 || y_y > 1) continue;
+
+      }
+    }
+
+    opponent_beside += ({ enemy[i] });  //所有贴身敌人的集合
+  }
+  //if(opponent_beside==({})) return ({});//没有敌人贴身
+  return opponent_beside;  //返回所有贴身的敌人集合,8个方向的敌人
+}
+
+int check_my_magic(string magicname) {
+  string spells;
+  object me;
+  me = this_object();
+  if (stringp(spells = me->query_skill_mapped("spells"))) {
+    if (SKILL_D(spells)->cast_spell_file(magicname))
+      return 1;  //虽然有这个魔法,但是未必this_object()可以使用
+      else {
+        magicname = "/daemon/magicpool/" + magicname + ".lpc";
+        if (file_size(magicname) > 0) {
+          return 1;
         }
-        return 0;
+      }
+    return 0;
+  } else {  //虽然指定了魔法,但是其实该生物没有学会该技能或者没有enable
+    magicname = "/daemon/magicpool/" + magicname + ".lpc";
+    if (file_size(magicname) > 0)
+      return 1;
+  }
+  return 0;
+
 }
 
+int remove_enemy(object ob) {
+  if (is_killing(ob->query("id"))) return 0;
 
-mixed find_all_opponent_beside()
-{
-        
-        //兵器有自身的攻击范围,剑,刀,锤,匕首,手的攻击范围为1.
-        //鞭子,长枪,禅杖为2,斜方向为1.魔法攻击的范围最大
-
-        int i,mmap_x,mmap_y,vmap_x,vmap_y,x_x,y_y,attack_distance;
-        object *opponent_beside,weapon,me;
-
-        
-        me=this_object();
-        opponent_beside=({});
-        for(i=0;i<sizeof(enemy);i++)
-        {
-            if(!objectp(enemy[i])) continue;
-            if(!environment(enemy[i])||environment(enemy[i])!=environment(this_object())) continue;
-            mmap_x=me->query_temp("map/x");
-            mmap_y=me->query_temp("map/y");
-            vmap_x=enemy[i]->query_temp("map/x");
-            vmap_y=enemy[i]->query_temp("map/y");
-            if(!mmap_x||!mmap_y||!vmap_x||!vmap_y) continue;
-            x_x=mmap_x-vmap_x;
-            y_y=mmap_y-vmap_y;
-            if(x_x<0) x_x*=-1; if(y_y<0) y_y*=-1;
-            weapon=me->query_temp("weapon");
-
-            if(!objectp(weapon))
-            {//空手只能攻击前后左右四个方向
-
-                if((x_x>1)||(y_y>1)) continue;//距离超过1,没有贴身
-                if(x_x==1&&y_y==1)   continue;//斜方向
-
-            }
-            else
-            {
-                attack_distance=weapon->query("attack_distance");
-                if(attack_distance>=2)
-                { 
-                          if(x_x==2&&y_y==2)   continue;//斜方向2格
-                          if(x_x>2||y_y>2)     continue;//距离超过2
-                          if(x_x==2&&y_y!=0||y_y==2&&x_x!=0) continue;
-                }
-                else
-                {
-                          if(x_x>1||y_y>1) continue;
-                 
-                }
-            }
-
-            opponent_beside+=({enemy[i]});//所有贴身敌人的集合
-        }
-        //if(opponent_beside==({})) return ({});//没有敌人贴身
-        return opponent_beside;//返回所有贴身的敌人集合,8个方向的敌人
-}
-
-int check_my_magic(string magicname)
-{
-         string spells;
-         object me;
-         me=this_object();
-         if( stringp(spells = me->query_skill_mapped("spells")) )
-         {
-             if(SKILL_D(spells)->cast_spell_file(magicname))
-                     return 1;//虽然有这个魔法,但是未必this_object()可以使用
-             else
-             {
-                  magicname="/daemon/magicpool/"+magicname+".lpc";
-                  if(file_size(magicname)>0)
-                  {
-                     return 1;  
-                  }
-             }
-             return 0;
-          }
-          else
-          {//虽然指定了魔法,但是其实该生物没有学会该技能或者没有enable
-                  magicname="/daemon/magicpool/"+magicname+".lpc";
-                  if(file_size(magicname)>0)
-                     return 1;  
-          }
-          return 0;
-        
-}
-
-int remove_enemy(object ob)
-{
-        if( is_killing(ob->query("id")) ) return 0;
-
-        enemy -= ({ ob });
-        return 1;
+  enemy -= ({ ob });
+  return 1;
 }
 
 // Stop killing ob.
-int remove_killer(object ob)
-{
-        if( is_killing(ob->query("id")) ) 
-        {
-                killer -= ({ ob->query("id") });
-                remove_enemy(ob);
-                return 1;
-        }
+int remove_killer(object ob) {
+  if (is_killing(ob->query("id"))) {
+    killer -= ({ ob->query("id") });
+    remove_enemy(ob);
+    return 1;
+  }
 
-        return remove_enemy(ob);
+  return remove_enemy(ob);
 }
 
 // Stop all fighting, but killer remains.
-void remove_all_enemy()
-{
-        for(int i=0; i<sizeof(enemy); i++) 
-        {
-                // We ask our enemy to stop fight, but not nessessary to confirm
-                // if the fight is succeffully stopped, bcz the fight will start
-                // again if our enemy keeping call COMBAT_D->fight() on us.
-                if( objectp(enemy[i]) ) enemy[i]->remove_enemy(this_object());
-                enemy[i] = 0;;
-        }
+void remove_all_enemy() {
+  for (int i = 0; i < sizeof(enemy); i++) {
+    // We ask our enemy to stop fight, but not nessessary to confirm
+    // if the fight is succeffully stopped, bcz the fight will start
+    // again if our enemy keeping call COMBAT_D->fight() on us.
+    if (objectp(enemy[i])) enemy[i]->remove_enemy(this_object());
+    enemy[i] = 0; ;
+  }
 
-        enemy = ({});
+  enemy = ({});
 }
 
 // Stop all fighting and killing.
-void remove_all_killer()
-{
-        killer = ({});
-        enemy -= ({ 0 });
+void remove_all_killer() {
+  killer = ({});
+  enemy -= ({ 0 });
 
-        for(int i=0; i<sizeof(enemy); i++)
-                if( enemy[i]->remove_killer(this_object()) )
-                        enemy[i] = 0;;
+  for (int i = 0; i < sizeof(enemy); i++)
+    if (enemy[i]->remove_killer(this_object()))
+      enemy[i] = 0; ;
 
-        enemy -= ({ 0 });
+  enemy -= ({ 0 });
 }
 
 // reset_action()
@@ -447,306 +402,257 @@ void remove_all_killer()
 // This function serves as a interface of F_ATTACK and wielded, worn objects.
 // When the living's fighting action need update, call this function.
 //
-void reset_action()
-{
-    object me,ob;
-    mapping prepare;
-    string type, skill;
+void reset_action() {
+  object me, ob;
+  mapping prepare;
+  string type, skill;
 
-    me = this_object();
-    prepare = ([]);
-    
-    if( ob = query_temp("weapon") ) type = ob->query("skill_type");
-    else if ( sizeof(prepare) == 0) type = "unarmed";
-    else if ( sizeof(prepare) == 1) type = (keys(prepare))[0];
-    else if ( sizeof(prepare) == 2) 
-        type = (keys(prepare))[query_temp("action_flag")];
+  me = this_object();
+  prepare = ([]);
+
+  if (ob = query_temp("weapon")) type = ob->query("skill_type");
+  else if (sizeof(prepare) == 0) type = "unarmed";
+  else if (sizeof(prepare) == 1) type = (keys(prepare))[0];
+  else if (sizeof(prepare) == 2)
+    type = (keys(prepare))[query_temp("action_flag")];
 
 
-    if( stringp(skill = query_skill_mapped(type)) ) 
-    {
-        // If using a mapped skill, call the skill daemon.
-        if ( ob )
-           set("actions", (: call_other, SKILL_D(skill), "query_action", me, ob :) );
-        else
-           set("actions", (: call_other, SKILL_D(skill), "query_action" :) );
-    }
+  if (stringp(skill = query_skill_mapped(type))) {
+    // If using a mapped skill, call the skill daemon.
+    if (ob)
+      set("actions", (: call_other, SKILL_D(skill), "query_action", me, ob :));
     else
-    {
-        // Else, let weapon handle it.
-        if( ob ) set("actions", ob->query("actions",1) );
-        else  set("actions", query("default_actions",1) );
-    }
+      set("actions", (: call_other, SKILL_D(skill), "query_action" :));
+  } else {
+    // Else, let weapon handle it.
+    if (ob) set("actions", ob->query("actions", 1));
+    else set("actions", query("default_actions", 1));
+  }
 }
 
 
 // This is called in heart_beat() to perform attack action.
 //  int attack()
 
-int refresh_attack_flag(int i)
-{
-    attack_flag=i;//这个东西的作用如下.如果在一个命令里面加上这句话
-                  //this_object()->refresh_attack_flag(0),那么该物件
-                  //将停止战斗一次      
+int refresh_attack_flag(int i) {
+  attack_flag = i;  //这个东西的作用如下.如果在一个命令里面加上这句话
+  //this_object()->refresh_attack_flag(0),那么该物件
+  //将停止战斗一次      
 }
-int attack()
-{
-        object opponent,me,*opponent_beside;
-        string appointed,spells,file;
-        int i;
-        me=this_object();
+int attack() {
+  object opponent, me, *opponent_beside;
+  string appointed, spells, file;
+  int i;
+  me = this_object();
 
-        if(attack_flag<2)
-        {//这里可以放慢战斗速度,数值越大战斗速度越慢
-            attack_flag++;
+  if (attack_flag < 2) {  //这里可以放慢战斗速度,数值越大战斗速度越慢
+    attack_flag++;
+    return 1;
+  } else
+    attack_flag = 0;
+
+  clean_up_enemy();
+  //如果一个魔法师指定了在受到攻击的时候使用的魔法,那么就要使用他指定的魔法
+  if (!me->is_fighting() &&
+    !query_temp("block_msg/all") &&
+    !query_temp("disable_command") &&
+    !me->query_temp("netdead"))
+    me->delete_temp("map");  //生物昏迷状态处于非战斗状态
+    if (me->query_temp("execration")) return 1;  //正在念咒的情况下面不能出招
+    opponent = select_opponent();
+
+
+  if (objectp(opponent)) {
+
+    appointed = (string)this_object()->query("env/appointed");
+    if (!appointed || appointed && appointed == "attack") {  //指定攻击模式是近身肉搏
+      set_temp("last_opponent", opponent);
+      COMBAT_D->fight(this_object(), opponent);
+      return 1;
+      //没有指定攻击模式默认为attack
+    } else {  //除了attack,剩下的全部算魔法名称
+      if (me->query_temp("execration")) return 1;  //正在念咒的情况下面不能出招
+
+      if (stringp(spells = me->query_skill_mapped("spells"))) {
+        if (SKILL_D(spells)->cast_spell(me, appointed, opponent)) {
+          set_temp("last_opponent", opponent);
+          return 1;
+        } else {
+          file = "/daemon/magicpool/" + appointed + ".lpc";
+          if (file_size(file) > 0) {
+            if ((int)call_other(file, "cast", me, opponent) == 1) {
+              set_temp("last_opponent", opponent);
+              return 1;
+            } else {
+              set_temp("last_opponent", opponent);
+              COMBAT_D->fight(this_object(), opponent);
+              return 1;
+            }
+          } else {
+            set_temp("last_opponent", opponent);
+            COMBAT_D->fight(this_object(), opponent);
             return 1;
-        }else
-            attack_flag=0;
-
-        clean_up_enemy();
-        //如果一个魔法师指定了在受到攻击的时候使用的魔法,那么就要使用他指定的魔法
-        if(!me->is_fighting()&&
-           !query_temp("block_msg/all")&&
-           !query_temp("disable_command")&&
-           !me->query_temp("netdead"))
-            me->delete_temp("map");//生物昏迷状态处于非战斗状态
-        if(me->query_temp("execration")) return 1;//正在念咒的情况下面不能出招
-        opponent = select_opponent();
-
-
-        if( objectp(opponent) ) 
-        {
-
-                appointed=(string)this_object()->query("env/appointed");
-                if(!appointed||appointed&&appointed=="attack")
-                {//指定攻击模式是近身肉搏
-                     set_temp("last_opponent",opponent);
-                     COMBAT_D->fight(this_object(), opponent);
-                     return 1;
-                //没有指定攻击模式默认为attack
-                }     
-                else
-                {//除了attack,剩下的全部算魔法名称
-                    if(me->query_temp("execration")) return 1;//正在念咒的情况下面不能出招
-
-                    if( stringp(spells = me->query_skill_mapped("spells")) )
-                    {
-                        if(SKILL_D(spells)->cast_spell(me,appointed, opponent))
-                        {
-                            set_temp("last_opponent", opponent);
-                            return 1;                    
-                         }
-                         else
-                         {
-                             file="/daemon/magicpool/"+appointed+".lpc";
-                             if(file_size(file)>0){
-                                 if((int)call_other( file, "cast", me, opponent)==1)
-                                 {
-                                     set_temp("last_opponent", opponent);
-                                     return 1;
-                                 }
-                                 else
-                                 {
-                                     set_temp("last_opponent", opponent);
-                                     COMBAT_D->fight(this_object(), opponent);                          
-                                     return 1;
-                                 }
-                             }
-                             else
-                             {
-                                 set_temp("last_opponent", opponent);
-                                 COMBAT_D->fight(this_object(), opponent);                          
-                                 return 1;
-                             }                             
-                         }
-                    }
-                    else
-                    {//虽然指定了魔法,但是其实该生物没有学会该技能或者没有enable
-                         file="/daemon/magicpool/"+appointed+".lpc";
-                         if(file_size(file)>0)
-                         {
-                             if((int)call_other( file, "cast", me, opponent)==1)
-                             {
-                                 set_temp("last_opponent", opponent);
-                                 return 1;
-                             }
-                             else
-                             {
-                                 set_temp("last_opponent", opponent);
-                                 COMBAT_D->fight(this_object(), opponent);                          
-                                 return 1;
-                             }
-                         }
-                         else
-                         {
-                             set_temp("last_opponent", opponent);
-                             COMBAT_D->fight(this_object(), opponent);                          
-                             return 1;
-                         }
-                    }
-                }
-                return 1;
+          }
         }
-        else
-        {//既然没有能够近身肉搏的生物,只好用魔法攻击,前提是me会魔法,并且准备了魔法
-            if( !sizeof(enemy) )
-            {
-                //me->delete_temp("map");
-                return 0;//结束战斗
-            }
-
-            opponent_beside=({});
-            for(i=0;i<sizeof(enemy);i++)
-            {
-                if(!objectp(enemy[i])) continue;
-                if(!environment(enemy[i])||environment(enemy[i])!=environment(me)) continue;
-                if(!living(enemy[i])) continue;
-                opponent_beside+=({enemy[i]});
-            }
-            if(!opponent_beside||opponent_beside==({}))
-            {
-                //me->delete_temp("map");
-                return 0;//结束战斗
-            }
-
-            //如果玩家周围没有敌人，攻击将停止,但是还是处于战斗状态
-            else
-            {
-                if( charge_target && member_array(charge_target, opponent_beside)!=-1 )
-                    opponent=charge_target;//首要攻击目标
-                    i=random(sizeof(opponent_beside));
-                    opponent=opponent_beside[i];
-            }
-            if(userp(me)) appointed=(string)this_object()->query("env/appointed");
-            else appointed=(string)this_object()->query("appointed");
-            if(userp(me)&&(string)appointed=="attack"||
-                (!userp(me)&&!appointed))
-            {
-                if(!userp(me)&&
-                   (!me->query("appointed")||me->query("appointed")=="attack")) 
-                {
-                        
-                        me->auto_move(me,0);//npc此处开始移动
-                }
-                
-                if(userp(me)&& me->query("env/automove") )
-                //只用肉搏类型的玩家爱才会自动移动
-                  me->auto_move(me,0);
-
-
-                if(random(20)==1&&userp(me)) tell_object(this_player(),"敌人不在你的任何攻击范围之内,赶快移动,不然只有挨打的份\n");
-                return 1;//该玩家没有指定使用魔法,仍旧处于战斗状态
-            }                  
-            else
-            {//除了attack,剩下的全部算魔法名称
-                if(me->query_temp("execration")) return 1;//正在念咒的情况下面不能出招
-                if( stringp(spells = me->query_skill_mapped("spells")) )
-                {
-                    if(SKILL_D(spells)->cast_spell(me,appointed, opponent))
-                    {
-                        set_temp("last_opponent", opponent);
-                        return 1;                        
-                     }
-                     else
-                     {
-                         file="/daemon/magicpool/"+appointed+".lpc";
-                         if(file_size(file)>0)
-                         {
-                             if((int)call_other( file, "cast", me, opponent)==1)
-                             {
-                                 set_temp("last_opponent", opponent);
-                                 return 1;
-                             }
-                         }
-                        
-                     }
-                }
-                else
-                {//虽然指定了魔法,但是其实该生物没有学会该技能或者没有enable
-                     file="/daemon/magicpool/"+appointed+".lpc";
-                     if(file_size(file)>0)
-                     {
-                         if((int)call_other( file, "cast", me, opponent)==1)
-                         {
-                             set_temp("last_opponent", opponent);
-                             return 1;
-                         }
-                      }
-                }
-            return 1;//即使魔法出了问题,玩家照样处于战斗状态
-            }
-        return 1;
+      } else {  //虽然指定了魔法,但是其实该生物没有学会该技能或者没有enable
+        file = "/daemon/magicpool/" + appointed + ".lpc";
+        if (file_size(file) > 0) {
+          if ((int)call_other(file, "cast", me, opponent) == 1) {
+            set_temp("last_opponent", opponent);
+            return 1;
+          } else {
+            set_temp("last_opponent", opponent);
+            COMBAT_D->fight(this_object(), opponent);
+            return 1;
+          }
+        } else {
+          set_temp("last_opponent", opponent);
+          COMBAT_D->fight(this_object(), opponent);
+          return 1;
         }
-        
-        //me->delete_temp("map");
-        return 0;
+      }
+    }
+    return 1;
+  } else {  //既然没有能够近身肉搏的生物,只好用魔法攻击,前提是me会魔法,并且准备了魔法
+    if (!sizeof(enemy)) {
+      //me->delete_temp("map");
+      return 0;  //结束战斗
+    }
+
+    opponent_beside = ({});
+    for (i = 0; i < sizeof(enemy); i++) {
+      if (!objectp(enemy[i])) continue;
+      if (!environment(enemy[i]) || environment(enemy[i]) != environment(me)) continue;
+      if (!living(enemy[i])) continue;
+      opponent_beside += ({ enemy[i] });
+    }
+    if (!opponent_beside || opponent_beside == ({})) {
+      //me->delete_temp("map");
+      return 0;  //结束战斗
+    }
+
+    //如果玩家周围没有敌人，攻击将停止,但是还是处于战斗状态
+    else {
+      if (charge_target && member_array(charge_target, opponent_beside) != -1)
+        opponent = charge_target;  //首要攻击目标
+        i = random(sizeof(opponent_beside));
+      opponent = opponent_beside[i];
+    }
+    if (userp(me)) appointed = (string)this_object()->query("env/appointed");
+    else appointed = (string)this_object()->query("appointed");
+    if (userp(me) && (string)appointed == "attack" ||
+      (!userp(me) && !appointed)) {
+      if (!userp(me) &&
+        (!me->query("appointed") || me->query("appointed") == "attack")) {
+
+        me->auto_move(me, 0);  //npc此处开始移动
+      }
+
+      if (userp(me) && me->query("env/automove"))
+        //只用肉搏类型的玩家爱才会自动移动
+        me->auto_move(me, 0);
+
+
+      if (random(20) == 1 && userp(me)) tell_object(
+        this_player(),
+        "敌人不在你的任何攻击范围之内,赶快移动,不然只有挨打的份\n"
+      );
+      return 1;  //该玩家没有指定使用魔法,仍旧处于战斗状态
+    } else {  //除了attack,剩下的全部算魔法名称
+      if (me->query_temp("execration")) return 1;  //正在念咒的情况下面不能出招
+      if (stringp(spells = me->query_skill_mapped("spells"))) {
+        if (SKILL_D(spells)->cast_spell(me, appointed, opponent)) {
+          set_temp("last_opponent", opponent);
+          return 1;
+        } else {
+          file = "/daemon/magicpool/" + appointed + ".lpc";
+          if (file_size(file) > 0) {
+            if ((int)call_other(file, "cast", me, opponent) == 1) {
+              set_temp("last_opponent", opponent);
+              return 1;
+            }
+          }
+
+        }
+      } else {  //虽然指定了魔法,但是其实该生物没有学会该技能或者没有enable
+        file = "/daemon/magicpool/" + appointed + ".lpc";
+        if (file_size(file) > 0) {
+          if ((int)call_other(file, "cast", me, opponent) == 1) {
+            set_temp("last_opponent", opponent);
+            return 1;
+          }
+        }
+      }
+      return 1;  //即使魔法出了问题,玩家照样处于战斗状态
+    }
+    return 1;
+  }
+
+  //me->delete_temp("map");
+  return 0;
 }
 
 
 //
 // init() - called by MudOS when another object is moved to us.
 //
-void init()
-{
-        object ob;
-        string vendetta_mark,victim;
-        int adverse=0;
+void init() {
+  object ob;
+  string vendetta_mark, victim;
+  int adverse = 0;
 
-        // We check these conditions here prior to handle auto fights. Although
-        // most of these conditions are checked again in COMBAT_D's auto_fight()
-        // function, these check reduces lots of possible failure in the call_out
-        // launched by auto_fight() and saves some overhead.
-        if(     is_fighting()
-    ||  !living(this_object())||query_temp("disable_command")
-        ||      !(ob = this_player()) 
-        ||      environment(ob)!=environment()
-    ||  !living(ob)||ob->query_temp("disable_command")
-    ||  wizardp(ob) || wizardp(this_object())
-        ||      ob->query("linkdead") )
-                return;
+  // We check these conditions here prior to handle auto fights. Although
+  // most of these conditions are checked again in COMBAT_D's auto_fight()
+  // function, these check reduces lots of possible failure in the call_out
+  // launched by auto_fight() and saves some overhead.
+  if (is_fighting()
+    || !living(this_object()) || query_temp("disable_command")
+    || !(ob = this_player())
+    || environment(ob) != environment()
+    || !living(ob) || ob->query_temp("disable_command")
+    || wizardp(ob) || wizardp(this_object())
+    || ob->query("linkdead"))
+    return;
 
-        if( stringp(vendetta_mark = query("family/family_name"))
-                && stringp(victim=ob->query("family/family_name")) )
-                if(ADVERSE_D->query_adverse(vendetta_mark,victim)>800)
-                        adverse=1;
-        // Now start check the auto fight cases.
-        if( userp(ob) && is_killing(ob->query("id")) ) {
-                COMBAT_D->auto_fight(this_object(), ob, "hatred");
-                return;
-    } else if( stringp(vendetta_mark = query("vendetta_mark"))
-    && ob->query("vendetta/" + vendetta_mark)&&ob->query("vendetta_mark")!=vendetta_mark ) {
-                COMBAT_D->auto_fight(this_object(), ob, "vendetta");
-                return;
-        } else if( stringp(vendetta_mark = query("family/family_name"))
-        && ob->query("fambet/" + vendetta_mark) ) {
-                COMBAT_D->auto_fight(this_object(), ob, "fambet");
-                return;
-        } else if( adverse ) {
-                COMBAT_D->auto_fight(this_object(), ob, "adverse");
-                return;
-        } else if( userp(ob) && (string)query("attitude")=="aggressive" ) {
-                COMBAT_D->auto_fight(this_object(), ob, "aggressive");
-                return;
-/*
+  if (stringp(vendetta_mark = query("family/family_name"))
+    && stringp(victim = ob->query("family/family_name")))
+    if (ADVERSE_D->query_adverse(vendetta_mark, victim) > 800)
+      adverse = 1;
+  // Now start check the auto fight cases.
+  if (userp(ob) && is_killing(ob->query("id"))) {
+    COMBAT_D->auto_fight(this_object(), ob, "hatred");
+    return;
+  } else if (stringp(vendetta_mark = query("vendetta_mark"))
+    && ob->query("vendetta/" + vendetta_mark) && ob->query("vendetta_mark") != vendetta_mark) {
+    COMBAT_D->auto_fight(this_object(), ob, "vendetta");
+    return;
+  } else if (stringp(vendetta_mark = query("family/family_name"))
+    && ob->query("fambet/" + vendetta_mark)) {
+    COMBAT_D->auto_fight(this_object(), ob, "fambet");
+    return;
+  } else if (adverse) {
+    COMBAT_D->auto_fight(this_object(), ob, "adverse");
+    return;
+  } else if (userp(ob) && (string)query("attitude") == "aggressive") {
+    COMBAT_D->auto_fight(this_object(), ob, "aggressive");
+    return;
+    /*
     } else if( ob->query_condition("killer") && (string)query("family/family_name")=="朝廷" ) {
         COMBAT_D->auto_fight(this_object(), ob, "wanted");
         return;
 */
-        } else if( random((int)query("bellicosity") / 70) > (int) this_object() ->query_cps() ) {
-                COMBAT_D->auto_fight(this_object(), ob, "berserk");
-                return;
-        } 
+  } else if (random((int)query("bellicosity") / 70) > (int)this_object()->query_cps()) {
+    COMBAT_D->auto_fight(this_object(), ob, "berserk");
+    return;
+  }
 }
 
 
-int get_enemy_number()
-{
-    if (!enemy)
-        return 0;
-    return sizeof(enemy);
+int get_enemy_number() {
+  if (!enemy)
+    return 0;
+  return sizeof(enemy);
 }
-object enum_enemy(int i)
-{
-    return enemy[i];
+object enum_enemy(int i) {
+  return enemy[i];
 }
-
