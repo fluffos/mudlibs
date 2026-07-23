@@ -1,0 +1,168 @@
+#include <ansi.h>
+#include <skill.h>
+#include <weapon.h>
+#include <combat.h>
+
+inherit F_SSERVER;
+
+int perform(object me, object target)
+{
+	object weapon;
+	int damage,ap,dp,skill;
+	string msg;
+
+	if (! target) target = me->select_opponent();
+	if (! target || !target->is_character() || ! me->is_fighting(target))
+		return notify_fail("御剑飞升只能对战斗中的对手使用。\n");
+	if( !objectp(weapon = me->query_temp("weapon")) ||  weapon->query("skill_type") != "sword" )
+		return notify_fail("你使用的武器不对。\n");
+//	if (target && target->query_temp("apply/shade_vision")) 
+//		return notify_fail("对方隐身了，你看不到"+target->query("name")+"。\n"); 		
+	if ((int)me->query_skill("yujianshu", 1) < 1000)
+		return notify_fail("你的御剑术尚达不到「御剑飞升」的境界。\n");
+	if ((int)me->query_skill("fumozhang", 1) < 1000)
+		return notify_fail("你的伏魔掌尚达不到「御剑飞升」的境界。\n");
+	if ((int)me->query_skill("shushan-force",1) < 1000)
+		return notify_fail("你的蜀山内功火候尚达不到「御剑飞升」的境界。\n");
+	if( me->query("max_neili") < 1000000 )
+		return notify_fail("你的内力修为太弱，无法灵活的御驾内力。\n");
+	if( me->query("neili") < 10000 )
+		return notify_fail("你现在内力不够。\n");
+	if ((int)me->query("max_jingli") < 1000000)								
+		return notify_fail("你的精力修为不够。\n");
+	if( (int)me->query("jingli") < 10000 )
+		return notify_fail("你的精力不够。\n");		
+	if ( me->query_skill_mapped("force") != "shushan-force" )
+		return notify_fail("你不使用本门内功，如何能使用本门绝技！\n");	
+	if (me->query_skill_mapped("sword") != "yujianshu")
+		return notify_fail("你没正确激发该技能 。\n");	
+	if (!(int)me->query("breakup"))
+		return notify_fail("你任督二脉未通,无法使用[" HIR "御剑飞升" NOR "]\n"); 
+	if (me->is_busy()) 
+		return notify_fail("你现在正忙着呢！\n");
+	if (me->query_temp("autolian"))
+		return notify_fail("你正在发动自动连招！\n"); 	
+	if ( me->query_temp("cooldown") )	//CD写法	2017.9.7添加
+		return notify_fail("你处于技能冷却状态中，过会在使用吧。\n");
+		
+	message_vision(HBWHT "$N贯通蜀山剑派武学，使出了蜀山剑派的绝学之精髓！\n" NOR, me, target);	
+	me->set_temp("cooldown", 1);	//CD写法	2017.9.7添加
+	call_out("del_cooldown", 5, me);	//CD写法1	
+	msg = HIW "\n$N" HIW "一声巨喝，聚气入腕，只听破空声一响，手中"
+	      + weapon->name() + HIW "携着隐隐风雷之劲向$n" HIW "澎湃贯"
+	      "\n出，疾若电闪，势如雷霆。\n" NOR;
+	message_vision(msg, me, target);
+	ap = me->query("xyzx_sys/level") + me->query_skill("yujianshu", 1) +me->query_skill("fumozhang",1)+ me->query_skill("sword") + me->query_skill("force");
+	dp = target->query("xyzx_sys/level") + target->query_skill("dodge") + target->query_skill("parry");
+	damage = me->query_skill("shushan-force", 1) + me->query_skill("fumozhang",1) + me->query_skill("yujianshu", 1);
+	damage = damage + random(damage);
+	skill = me->query_skill("fumozhang",1) + me->query_skill("yujianshu", 1);
+        me->add_temp("apply/damage", skill);
+        me->add_temp("apply/attack", skill); 	
+	COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+	COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+	COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+	COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+	COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+	COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+        me->add_temp("apply/damage", -skill);
+        me->add_temp("apply/attack", -skill); 	
+		me->add("neili", -1000);
+		me->add("jingli", -1000);
+	if (random(ap) > dp/3)
+	{
+		me->add("neili", -1000);
+		me->add("jingli", -1000);
+		target->receive_damage("qi",damage,me);
+		target->receive_wound("qi",damage,me);	
+		msg =  HIR "$n" HIR "看到$N" HIR "这气拔千钧的一击，竟不知如何招架，登时受了重创！\n" NOR;
+		message_vision(msg, me, target);
+		if (userp(me) && me->query("env/no_combat_msg")<4) tell_object(me, HIW"该绝招对敌人气血的外伤为"+ damage +"，内伤为"+ damage +"。\n" NOR);
+	}
+	else
+	{
+		msg = CYN "可是$p" CYN "看破了$P" CYN "的企图，斜跃避开。\n" NOR;
+		message_vision(msg, me, target);
+		me->add("neili", -300);
+	}
+
+	
+	
+if (me->query_skill("yujianshu",1)>2000 && me->query_skill("fumozhang",1)>2000)
+{
+	msg =  HIW "你运转内力，仰天一声清啸，剑在空中盘旋了一圈，又飞回了你的手中。！\n" NOR;
+	message_vision(msg, me, target);
+	damage = (int)me->query_skill("shushan-force", 1) +me->query_skill("fumozhang",1)+ (int)me->query_skill("force", 1) + (int)me->query_skill("sword", 1) + (int)me->query_skill("yujianshu", 1);
+	damage = damage + random(damage);
+	if (random(ap) > dp/3)
+	{
+		me->add("neili", -1000);
+		me->add("jingli", -1000);
+		target->receive_damage("qi",damage,me);
+		target->receive_wound("qi",damage,me);
+		target->receive_damage("jing",damage/2,me);
+		target->receive_wound("jing",damage/2,me);		
+		msg = HIW "\n$N" HIW "手中御剑凌驾如飞，宛若游龙，灵转千变，一道道"
+	      "凌厉剑气疾射而出。\n" NOR;
+		message_vision(msg, me, target);
+		if (userp(me) && me->query("env/no_combat_msg")<4) tell_object(me, HIW"该绝招对敌人气血的外伤为"+ damage +"，内伤为"+ damage +"，精神的外伤为"+ damage/2 +"，内伤为"+ damage/2 +"。\n" NOR);
+	}
+	else
+	{
+		msg = HIW "你剑至中途，可怎奈被$n击中风府穴，内息不稳，只好停止御剑。\n" NOR;
+		message_vision(msg, me, target);
+		me->add("neili", -300);
+	}
+}
+
+
+
+if (me->query_skill("yujianshu",1)>3000 && me->query_skill("fumozhang",1)>3000)
+{
+		msg = HIR "御剑乘风来，除魔天地间，有酒乐逍遥，无酒我亦颠，一饮尽江河，再饮吞日月，千杯醉不倒，唯我酒剑仙。\n" NOR;
+		message_vision(msg, me, target);
+		if (me->query("jm/shushan")) damage = (int)me->query_skill("sword", 1) + (int)me->query_skill("force", 1) + (int)me->query_skill("parry", 1) + (int)me->query_skill("fumozhang", 1)*me->query("con",1)*3/2 + (int)me->query_skill("shushan-force", 1)*me->query("con",1)*3/2 + (int)me->query_skill("yujianshu", 1)*me->query("int",1)*3/2 + (int)me->query_skill("songhe-sword", 1)*me->query("int",1)/2;
+		else damage = (int)me->query_skill("sword", 1) + (int)me->query_skill("force", 1) + (int)me->query_skill("parry", 1) + (int)me->query_skill("fumozhang", 1)*me->query("con",1) + (int)me->query_skill("shushan-force", 1)*me->query("con",1) + (int)me->query_skill("yujianshu", 1)*me->query("int",1);
+		damage = damage + random(damage);
+	if (random(ap) > dp/3)
+	{
+		me->add("neili", -2000);
+		me->add("jingli", -2000);
+		target->receive_damage("qi",damage,me);
+		target->receive_wound("qi",damage,me);
+		target->receive_damage("jing",damage/2,me);
+		target->receive_wound("jing",damage/2,me);	
+		target->add("neili",-damage/5);
+		msg= HIR "只听「嗤啦」一声，" HIW "无形剑气" NOR +
+		      HIR "竟在$n" HIR "上身刺出一个血洞，数股血柱"
+		      "疾射而出！\n" NOR;
+		message_vision(msg, me, target);
+		if (userp(me) && me->query("env/no_combat_msg")<4) tell_object(me, HIW"该绝招对敌人气血的外伤为"+ damage +"，内伤为"+ damage +"，精神的外伤为"+ damage/2 +"，内伤为"+ damage/2 +"。\n" NOR);
+	}
+	else
+	{
+		msg = CYN "可是$p" CYN "看破了$P" CYN "的企图，斜跃避开。\n" NOR;
+		msg += RED "然而$N" CYN "以意御剑，剑身再次急转而回，$n见摆脱不了，只好硬拼一招。\n" NOR;
+		message_vision(msg, me, target);
+		target->receive_damage("qi",damage/3,me);
+		target->receive_wound("qi",damage/3,me);
+		me->receive_damage("qi",damage/4,target);
+		me->receive_wound("qi",damage/4,target);		
+		me->add("neili", -1000);
+		me->add("jingli", -1000);
+		if (userp(me) && me->query("env/no_combat_msg")<4) tell_object(me, HIW"该绝招对敌人气血的外伤为"+ damage/3 +"，内伤为"+ damage/3 +"，对自己气血的外伤为"+ damage/4 +"，内伤为"+ damage/4 +"。\n" NOR);
+	}
+}
+  me->start_busy(1);
+	return 1;
+}
+
+void del_cooldown(object me)	//CD写法1
+{ 
+	if ( !objectp(me) ) return;
+	if ( me->query_temp("cooldown") )	
+	{
+		me->delete_temp("cooldown");
+		tell_object(me, HIM"你呼出一口气，缓缓的将内力收回丹田。\n"NOR);
+	}	
+}

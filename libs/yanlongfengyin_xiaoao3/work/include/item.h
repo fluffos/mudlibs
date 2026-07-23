@@ -1,0 +1,9 @@
+#ifndef _ITEM_H_
+#define _ITEM_H_
+
+#define WEAPON_SWORD_PIC_NUM_ODD 21
+#define WEAPON_SWORD_PIC_NUM_BOTH 6
+#define WEAPON_BLADE_PIC_NUM_ODD 21
+#define WEAPON_BLADE_PIC_NUM_BOTH 11
+
+#endif

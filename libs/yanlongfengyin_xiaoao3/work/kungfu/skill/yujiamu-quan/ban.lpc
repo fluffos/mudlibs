@@ -1,0 +1,130 @@
+// Copyright (C) 2003, by Lonely. All rights reserved.
+// This software can not be used, copied, or modified 
+// in any form without the written permission from authors.
+
+#include <ansi.h>
+#include <skill.h>
+#include <weapon.h>
+#include <combat.h>
+
+#define BAN "「" HIW "般若极" NOR "」"
+
+inherit F_SSERVER;
+
+
+int perform(object me, object target)
+{
+        object weapon;
+        int ap, dp;
+        int damage;
+        string msg;
+		weapon = me->query_temp("weapon");
+
+
+	if (!target ) target = offensive_target(me);
+	if (!target || !target->is_character() || !me->is_fighting(target) )
+		return notify_fail(BAN "只能对战斗中的对手使用。\n");
+    if (me->is_busy())
+        return notify_fail("你现在正忙着！\n");
+	if (objectp(me->query_temp("weapon")) || objectp(me->query_temp("secondary_weapon")))
+		return notify_fail(BAN "只能空手施展。\n");
+	if (target && target->query_temp("apply/shade_vision")) 
+		return notify_fail("对方隐身了，你看不到"+target->query("name")+"。\n"); 		
+	if ((int)me->query_skill("longxiang", 1) < 500 && (int)me->query_skill("xiaowuxiang", 1) < 500)
+		return notify_fail("你对本寺内功不够了解，难以施展" BAN "。\n");	
+	if ((int)me->query_skill("yujiamu-quan", 1) < 500)
+		return notify_fail("你的金刚瑜伽母拳修为不够，难以施展" BAN "。\n");
+	if (me->query("max_neili") < 200000)
+		return notify_fail("你的内力修为不足，难以施展" BAN "。\n");
+	if ((int)me->query("max_jingli") < 200000)								
+		return notify_fail("你的精力修为不够。\n");
+	if( (int)me->query("jingli") < 1000 )
+		return notify_fail("你的精力不够。\n");		
+	if (me->query_skill_mapped("unarmed") != "yujiamu-quan")
+		return notify_fail("你没有激发为拳脚，难以施展" BAN "。\n");
+	if (me->query_skill_mapped("force") != "longxiang" && me->query_skill_mapped("force") != "xiaowuxiang")
+		return notify_fail("你没有本门内功，难以施展" BAN "。\n");
+	if (me->query("neili") < 1000)
+		return notify_fail("你现在的真气不足，难以施展" BAN "。\n");
+	if (target && !living(target))
+		return notify_fail("对方都已经这样了，用不着这么费力吧？\n");
+	if (me->query_temp("autolian"))
+		return notify_fail("你正在发动自动连招！\n"); 	
+	if ( me->query_temp("cooldown") )	//CD写法	2017.9.7添加
+		return notify_fail("你处于技能冷却状态中，过会在使用吧。\n");
+		
+		
+        msg = HIY "$N" HIY "仰天一声怒嚎，将龙象般若功提运至极限，全身顿时罡劲"
+              "迸发，真气蒸腾而出，笼罩$N" HIY "\n四方！电光火石间，$N" HIY "双"
+              "拳已携着雷霆万钧之势崩击而出，卷起万里尘埃，正是密宗绝学：\n\n" NOR;
+		message_vision(msg, me, target);
+	me->set_temp("cooldown", 1);	//CD写法	2017.9.7添加
+	call_out("del_cooldown", 3, me);	//CD写法1
+	
+        msg = HIW
+        "        般      般般般           若        若           极    极极极极极极\n"
+        "    般般般般    般  般       若若若若若若若若若若       极       极    极\n"
+        "    般    般    般  般           若        若       极极极极极  极    极\n"
+        "    般 般 般 般般    般般          若                 极极极  极极极 极极极\n"
+        "  般般般般般般             若若若若若若若若若若若若  极 极 极  极极     极\n"
+        "    般    般   般般般般         若                   极 极 极  极 极   极\n"
+        "    般 般 般    般  般        若 若若若若若若若      极 极 极 极   极极\n"
+        "    般    般     般般       若   若          若         极   极     极\n"
+        "   般    般   般般  般般         若若若若若若若         极  极  极极极极极\n\n" NOR;
+
+        msg += HIY "$N" HIY "一道掌力打出，接着便涌出了第二道、第三道掌力，掌势"
+               "连绵不绝，气势如虹！直到$N" HIY "\n第十三道掌力打完，四周所笼罩"
+               "着的罡劲方才慢慢消退！而$n" HIY "此时却已是避无可避！\n\n" NOR;
+		message_vision(msg, me, target);
+	ap = me->query("xyzx_sys/level") + me->query_skill("yujiamu-quan", 1) + me->query_skill("unarmed") + me->query_skill("force");
+	dp = target->query("xyzx_sys/level") + target->query_skill("dodge") + target->query_skill("parry");
+	damage = 150 + me->query("xyzx_sys/level") + me->query_skill("yujiamu-quan", 1)*3 + me->query_skill("unarmed") + me->query_skill("force");
+	damage = damage + random(damage);
+        if (me->query("max_neili") + random(me->query("max_neili") / 2) > target->query("max_neili"))
+        {
+                msg = HIR "$n" HIR "全然无力阻挡，竟被$N"
+                       HIR "一拳击得飞起，重重的跌落在地上。\n" NOR;
+					   message_vision(msg, me, target);
+                me->add("neili", -300);
+				me->add("jingli", -300);
+				target->receive_damage("qi",damage,me);
+				target->receive_wound("qi",damage,me);		
+                message_vision(msg, me, target);
+				if (userp(me) && me->query("env/no_combat_msg")<4) tell_object(me, HIW"该绝招对敌人气血的外伤为"+ damage +"，内伤为"+ damage +"。\n" NOR);
+
+        } else 
+		{
+			    msg = CYN "可是$n" CYN "识破了$N"
+                       CYN "这一招，斜斜一跃避开。\n" NOR;
+					   message_vision(msg, me, target);	   
+		}
+
+		
+	if (random(ap) > dp/3)
+        {
+                me->add("neili", -300);
+				me->add("jingli", -300);
+                msg = HIR "$n" HIR "见$N" HIR "来势迅猛之极，一时不知该如"
+                       "何作出抵挡，竟呆立当场。\n" NOR;
+				message_vision(msg, me, target);
+				target->receive_damage("jing",damage,me);
+				target->receive_wound("jing",damage,me);
+				if (userp(me) && me->query("env/no_combat_msg")<4) tell_object(me, HIW"该绝招对敌人精神的外伤为"+ damage +"，内伤为"+ damage +"。\n" NOR);
+        } else
+        {
+                msg = HIY "$n" HIY "见$N" HIY "来势迅猛之极，甚难防备，连"
+                       "忙振作精神，小心抵挡。\n" NOR;
+					   message_vision(msg, me, target);
+        }
+	me->start_busy(1);
+	return 1;
+}
+void del_cooldown(object me)	//CD写法1
+{ 
+	if ( !objectp(me) ) return;
+	if ( me->query_temp("cooldown") )	
+	{
+		me->delete_temp("cooldown");
+		tell_object(me, HIM"你呼出一口气，缓缓的将内力收回丹田。\n"NOR);
+	}	
+}

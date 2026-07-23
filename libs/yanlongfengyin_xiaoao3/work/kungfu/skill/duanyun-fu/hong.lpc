@@ -1,0 +1,150 @@
+//hongtianza.c 夺命三斧之「轰天砸」
+// Modified by Venus Oct.1997
+#include <ansi.h>
+#include <skill.h>
+#include <weapon.h>
+#include <combat.h>
+
+inherit F_SSERVER;
+string* xuedao = ({
+        "巨骨穴",
+        "地仓穴",
+        "肩井穴",
+        "颊车穴",
+        "承泣穴",
+        "风池穴",
+        "章门穴",
+        "风府穴",
+        "精促穴",
+        "陶道穴",
+        "强间穴",
+        "少海穴",
+        "犊鼻穴",
+        "神门穴",
+        "华盖穴",
+        "大椎穴",
+        "太阳穴",
+        "膻中穴",
+        "命门穴",
+        "鸠尾穴",
+        "三阴交",
+        "天柱穴"
+});
+int perform(object me, object target)
+{
+	object weapon,weapon2;
+	string msg,xue;
+	int i,size,damage,wp_damage;
+	int ap,dp,skill;
+
+	if( !target ) target = offensive_target(me);
+	if( !target || !target->is_character() || !me->is_fighting(target) )
+		return notify_fail("「轰天砸」只能在战斗中使用。\n");
+	if (!objectp(weapon = me->query_temp("weapon")) || (string)weapon->query("skill_type") != "axe")
+		return notify_fail("你使用的武器不对。\n");
+	if (target && target->query_temp("apply/shade_vision")) 
+		return notify_fail("对方隐身了，你看不到"+target->query("name")+"。\n"); 	
+	if( me->is_busy() )
+		return notify_fail("你现在正忙着呢，哪有空运功？\n");
+	if( target && target->is_busy() )
+		return notify_fail("对方已经手脚忙乱了，没必要再砸了吧？\n");
+    if (me->query_skill_mapped("force") != "guiyuan-tunafa")
+        return notify_fail("不使用本门内功，如何能使用本门绝技。\n");	
+	if( (int)me->query_skill("duanyun-fu",1) < 500)
+		return notify_fail("你目前断云斧功力不够，还使不出「轰天砸」。\n");
+	if( (int)me->query_skill("guiyuan-tunafa",1) < 500)
+		return notify_fail("你目前归元吐纳法功力不够，还使不出「轰天砸」。\n");	
+	if( (int)me->query("neili") < 1000 )
+		return notify_fail("你的内力不够。\n");
+	if( (int)me->query("jingli") < 1000 )
+		return notify_fail("你的精力不够。\n");	
+	if( (int)me->query("max_neili") < 100000 )
+		return notify_fail("你的内力修为不够。\n");	
+	if (me->query_skill_mapped("axe") != "duanyun-fu")
+		return notify_fail("你没正确激发该技能 。\n");
+	if ( target && target->query_temp("busy_mianyi") )	//冲穴成功后免疫busy，2017.9.29阿飞添加
+		return notify_fail(target->name() + "奇经八脉浑然一体，真气浩浩荡荡，点穴似乎没什么作用。\n");	
+	if (me->query_temp("autolian"))
+		return notify_fail("你正在发动自动连招！\n"); 		
+	if ( me->query_temp("cooldown") )	//CD写法	2017.9.7添加
+		return notify_fail("你处于技能冷却状态中，过会在使用吧。\n");
+		
+
+	me->set_temp("cooldown", 1);	//CD写法	2017.9.7添加
+	call_out("del_cooldown", 3, me);	//CD写法1
+	
+	ap = me->query("xyzx_sys/level") + me->query_skill("duanyun-fu", 1) + me->query_skill("axe") + me->query_skill("force");
+	dp = target->query("xyzx_sys/level") + target->query_skill("dodge") + target->query_skill("parry");
+	skill = me->query_skill("duanyun-fu", 1);
+	if ( objectp(weapon2 = target->query_temp("weapon")) || objectp(weapon2 = target->query_temp("secondary_weapon")))
+	{
+		msg = CYN"$N看见$n手中拿着"+weapon2->query("name")+"，突然暴吼一声：“我砸！我砸！我砸砸砸！”！\n"NOR;
+		message_vision(msg,me,target);	
+		wp_damage = target->query("weapon_prop/damage");
+		if (wp_damage < 100) wp_damage = 100;
+		if( random(ap)>dp/3 )
+		{
+			msg = HIC"只见$n手中的"+weapon2->query("name")+"竟然被砸断作数段，并且受到$N的劲气的激荡而向$n迅速射去！\n"NOR;
+			message_vision(msg,me,target);
+			me->add("neili", -400);			
+			weapon2->unequip();
+			weapon2->move(environment(target));
+			weapon2->set("name", weapon2->query("name") + "的碎片");
+			weapon2->set("value", 0);
+			weapon2->set("weapon_prop", 0);
+			target->reset_action();
+			xue = xuedao[random(sizeof(xuedao))];
+			size = (int)me->query_skill("duanyun-fu")/100;
+			if (size<1) size = 1;			
+			for(i=0; i<=random(size); i++)
+			{
+				damage = 10+random(me->query_skill("duanyun-fu",1)+wp_damage)*5/size;
+				if (damage<10) damage = 10;
+				msg =HIB"“嗤”，碎片射入$n的"+xue+"！\n"NOR;
+				message_vision(msg,me,target);
+				target->receive_damage("qi",damage,me);
+				target->receive_wound("qi",damage/2,me);
+				if (userp(me) && me->query("env/no_combat_msg")<4) tell_object(me, HIW"该绝招对敌人气血的外伤为"+ damage +"，内伤为"+ damage/2 +"。\n" NOR);
+			}
+		}
+		else
+		{
+			msg = "可是$n急忙将自己的兵刃闪开，并没有让$N的计谋得逞。\n" NOR;
+			message_vision(msg,me,target);
+		}		
+	} else  
+	{
+		msg = HIG "$n手中没有兵器，$N掉转斧头使出夺命三斧「挑眼式」，斧尖疾挑$n双眼。\n";
+		message_vision(msg,me,target);
+		damage = (int)me->query_skill("duanyun-fu",1);
+		damage = damage + random(damage);
+		if( random(ap) > dp/3 )
+		{
+			msg = "结果$n只觉得眼前一黑，双眼一阵剧痛，接着什么也看不见了。\n" NOR;
+			message_vision(msg,me,target);
+			target->start_busy( (30*skill)/(skill+2000) + 5);
+			tell_object(target, HIY"你陷入忙乱之中，一时无法动弹。\n"NOR);
+			target->receive_damage("qi",damage,me);
+			if (userp(me) && me->query("env/no_combat_msg")<4) tell_object(me, HIW"该绝招对敌人气血的外伤为"+ damage +"。\n" NOR);
+			me->add("neili",-300);
+		}
+		else
+		{
+			msg = "可是$n看破了$N的企图，并急忙躲开了。\n" NOR;
+			message_vision(msg,me,target);
+		}				
+	}
+	
+	me->start_busy(1);
+	return 1;
+}
+
+void del_cooldown(object me)	//CD写法1
+{ 
+	if ( !objectp(me) ) return;
+	if ( me->query_temp("cooldown") )	
+	{
+		me->delete_temp("cooldown");
+		tell_object(me, HIM"你呼出一口气，缓缓的将内力收回丹田。\n"NOR);
+	}	
+}

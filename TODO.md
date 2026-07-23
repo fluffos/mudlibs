@@ -18,9 +18,7 @@ worked; keep status values consistent so the table stays greppable:
 
 Port assignments: sequential from 40001, recorded here so re-running
 several libs at once never collides. **Next free port: 40066** (40001-40065
-assigned/reserved -- 40061-40065 are reserved for archives #67-71, being
-processed in parallel by background agents as of this update; 40007 is
-ds386, deprioritized/partial). On mega-libs (tens of
+assigned; 40007 is ds386, deprioritized/partial). On mega-libs (tens of
 thousands of files, the "nitan" family), skip the full `lpcc_check.sh`
 sweep — it can OOM the host before finishing (see AGENTS.md §6b) — and
 rely on the boot + interactive-connect test as the verification gate.
@@ -32,7 +30,7 @@ rely on the boot + interactive-connect test as the verification gate.
   majority of this collection. If an archive turns out to be English
   (like ds386/Dead Souls), do the minimum to note what it is, don't sink
   deep debugging time into it -- move on to the next Chinese one.
-- **Done: 62 / 100** (shanhaizhanshen, xingzhanyingxiong,
+- **Done: 63 / 100** (shanhaizhanshen, xingzhanyingxiong,
   unknownlib20150716 [小雨西游II], bxsj [书剑天下], bxsj1 [书剑·经典],
   chidi [江湖I], ..., nitan170911 [仙剑奇侠传], nitan6 [笑傲江湖], rzrmud
   [大唐西游], xo, xo_final, zzfy [郑州风云3], shiji [世纪],
@@ -65,7 +63,9 @@ rely on the boot + interactive-connect test as the verification gate.
   yanhuangyingxiongshi [炎黄英雄史/炎黄英雄传, sibling of yanhuangwuhun
   #66], xuanjianlu [玄剑录, ES II/XKX lineage shared with xkx2001
   #25/beimeixiakexing2001 #45], bixiecanyang [碧血残阳之豪侠晚歌,
-  夕阳再现 lineage shared with #46/#47/#55/#59])
+  夕阳再现 lineage shared with #46/#47/#55/#59], yanlongfengyin_xiaoao3
+  [炎龙封印-笑傲江湖3阿飞站, heavier fork of xiyangzaixian3 #48's XYZX
+  lineage])
 - **New AGENTS.md §15q (hidden client-protocol-version gate)**: found on
   xiyangzaixian3 -- a pre-id prompt can check the input against a
   hardcoded literal (client version string), not just a BIG5/student
@@ -90,8 +90,22 @@ rely on the boot + interactive-connect test as the verification gate.
   confirmed as a related-but-earlier snapshot that predates §15's core
   dbase bug. A fourth batch of 5 (archives #62-66: yuxuechongsheng,
   haiyang2, atlantis [confirmed not a mudlib], huoying, yanhuangwuhun)
-  also followed the same pattern and is all done/triaged. This mode
-  continues for archive #67 onward.
+  also followed the same pattern and is all done/triaged. A fifth batch
+  of 5 (archives #67-71: yanhuangyingxiongshi, yanlongfengyin_xiaoao3,
+  kuangxiangkongjian, xuanjianlu, bixiecanyang) also followed the same
+  pattern and is all done; #69/#71 were flagged in advance for lineage
+  cross-checks against #53/#49 respectively (both confirmed as related-
+  but-distinct or unrelated, not hidden duplicates). Also: xuanjianlu's
+  pass found a new bug class (§15ae, `private nomask` command-hook
+  breaking every post-login command silently) that turned out to
+  retroactively affect the already-shipped beimeixiakexing2001 (#45) too
+  -- fixed and re-verified there as well. This mode continues for
+  archive #72 onward.
+- **New standing policy from §15ae**: never mark a lib "done" without
+  testing at least one ordinary post-login command (e.g. `look`) after
+  registration completes -- reaching the game world is not the same as
+  being able to play in it, and the `private`-command-hook failure mode
+  produces literally zero signal in any log.
 - **Caution for future batches**: one agent in the #57-61 batch used a
   broad `pkill -f "build-debug/src/driver config.fluffos"` mid-session
   before switching to exact-PID kills -- since every lib's driver shares
@@ -360,7 +374,7 @@ rely on the boot + interactive-connect test as the verification gate.
 | 65 | 火影.rar | huoying | 40059 | done | dup: 火影 (1).rar; self-IDs as 火影 (Naruto-themed, "Neolith 0.0.2" engine by Annihilator 2000, ES2 lineage same family as wuhanzhan/xinkuangxiangkongjian2/yueyingqiyuan); §4 recursion-guard fix (existing catch() wasn't sufficient, recursion re-enters via a new outer call) + standard §15h fix incl. a fullwidth-space byte-vs-char equality variant + §15w log_error() warning-spam gate + NEW hardcoded MUD_PORT=8000 mismatch silently rejecting every connection at the TCP layer despite a clean boot log (fixed to 40059) + NEW mixed-GBK+BIG5 config.cfg (BIG5 bytes decode to valid-but-wrong mojibake under GB18030, undetectable by convert_lib.sh's lossy-conversion check, fixed 4 lines manually) + one pre-existing typo; full registration flow verified with real names "秦风"/"王小虎" both reaching an actual starting room ("巫师神殿"), reconnect/quit save-restore lifecycle also confirmed; 98.1% lpcc pass; dns_master already commented out in the raw archive itself, nothing to fix there; see libs/huoying/NOTES.md |
 | 66 | 炎黄武魂_64bit.rar | yanhuangwuhun | 40060 | done | self-IDs as 「武林群侠传」之炎黄武魂Ⅱ; ES II lineage (same family as es1_win/esI/xkx2001/rzrmud/xo/beimeixiakexing2001/xinkuangxiangkongjian2/yueyingqiyuan/wuhanzhan), master.lpc header traces the full chain to "Linux@lxtx for yh 2003.3"; "64bit" in the name refers to a bundled prebuilt Cygwin driver, ignored; standard §15h fix (3 files) + §15n securityd allowlist + §14 valid_override + NEW §15s/§8b interaction (message.lpc's own tell_room/shout/say called bare `message()` before its own override was textually defined, compiler silently bound straight to the real efun bypassing the exclude-arg guard entirely -- fixed with a varargs forward declaration, crashed 9 preload daemons) + nitan-family [0..<3]->[0..<5] rename-width bug recurring in 3 files (not a nitan lineage lib, same bug independently) + §3 counterexample (105 static/nosave string-literal collisions across 60 files reverted) + several pre-existing content typos/missing macros; dns_master never in preload at all, nothing to exclude; full registration flow verified 3 times with real names 秦风/秦岭/秦淮, each reaching the actual starting room (世外桃源), final run had zero debug.log errors; 99.92% lpcc pass (10747/10756); see libs/yanhuangwuhun/NOTES.md |
 | 67 | 炎黄英雄史.rar | yanhuangyingxiongshi | 40061 | done | config self-names 炎黄英雄传 but live banner says 炎黄英雄史 (matching archive title); confirmed genuine close-cousin sibling of yanhuangwuhun(#66)'s same "yh 2003" ES II-derivative codebase via diff (identical master.lpc author credit, byte-identical is_chinese/message.lpc bugs), independent gameplay content not a duplicate; ported #66's proven fixes directly (§15h/§14/§15n/§15aa/§15s/§15p/§15w) + §3 counterexample revert (104 occurrences/64 files) + NEW is_killing() type-mismatch recurrence blocking the player body class (2 files) + nitan-family [0..<3]->[0..<5] rename-width bug (not itself nitan lineage) + a new questd11.lpc split-identifier/string corruption pattern (9 sites, confirmed pre-existing) + quest set_information() signature fix (7 files at once); full registration flow verified 3 times incl. real names 秦岭/秦淮 plus a returning-user login, all reaching the actual starting room (世外桃源); 99.81% lpcc pass (10980/11001); one harmless versiond.lpc socket_bind() config-mismatch error noted (confirmed non-fatal, not yet catalogued in AGENTS.md); see libs/yanhuangyingxiongshi/NOTES.md |
-| 68 | 炎龙封印-笑傲江湖3阿飞站.rar | | | not started | |
+| 68 | 炎龙封印-笑傲江湖3阿飞站.rar | yanlongfengyin_xiaoao3 | 40062 | done | self-IDs as 炎龙封印, live banner「夕阳再现」之「笑傲江湖」; genuine shared "XYZX"/夕阳再现 lineage with xiyangzaixian3(#48) via near-verbatim master.lpc matches, but a substantially heavier independent fork (1.5-2x larger, credited to "阿飞" further-modifying "碎梦"'s branch) -- only is_chinese ported directly, everything else freshly discovered; standard §15h fix + §14/§8d-§15o/§15n/§15w/§15s fixes + §3 counterexample revert (13 files) + neutralized a nosave/protected/private shim bug (would have wrongly aliased private->protected) + NEW 32-file double-leading-slash carry_object() typo (likely root cause of a pre-fix segfault a few minutes into first boot, correlated with the exact broken NPCs) + 4-file lossy-conversion-eaten-newline bug silently deleting NPC names (set_name() calls) + 3 heredoc-closing-tag newline drops + one call_out() unquoted-identifier typo; dns_master already commented out in raw archive; full registration flow verified twice (crash-free 6.5+ min post-fix) incl. real names 秦风(male, 悦来客栈)/秦岭(female, different room w/ correct gender-specific gift); 99.95% lpcc pass (16173/16181); see libs/yanlongfengyin_xiaoao3/NOTES.md |
 | 69 | 狂想空间.rar | kuangxiangkongjian | 40063 | done | dup: 狂想空间 (1).rar; NOT a duplicate of xinkuangxiangkongjian2(#53) despite both self-identifying as "狂想空间" -- confirmed distinct via diff (different file counts/sizes/mtimes, #53's registration flow has an extra email step this one lacks), but same ES II lineage + same 小熊泥苑 distribution site, an independently-circulated earlier snapshot (own bugfix readme dated Dec 2002); ported #53's proven fixes directly: standard §15h fix + §15t all 3 sub-bugs (172 absolute-path angle-bracket includes, 94 disallowed ..-relative includes incl. reconstructing 2 genuinely-missing headers, 187-file inherit-after-globals cluster) + get_include_path + §3 counterexample revert (31 files) + §15b is_killing() typo (4-file cascade) + §15w log_error fix + NEW bare SAVE_EXTENSION vs real __SAVE_EXTENSION__ constant bug (11 files, worth cataloging); full registration flow verified twice with real names "秦风"/"秦风二" reaching an actual starting room, zero debug.log errors; 95.0% lpcc pass (6004/6323, up from 91.8%); see libs/kuangxiangkongjian/NOTES.md |
 | 70 | 玄剑录.rar | xuanjianlu | 40064 | done | distributed via 小熊泥苑 (same site as #35/#36); chinese.c/master.c byte-identical to xkx2001(#25)/beimeixiakexing2001(#45), ES II/XKX engine family, distinct game-world content (明教/昆仑/侠客岛); standard §15h fix (incl. removing a corrupting name[j]+=128 "auto-correct" hack) + §15p/§14/§8d-§15o/§8e/§15c fixes + NEW `private nomask command_hook` bug (private gets demoted to DECL_HIDDEN once inherited, add_action silently refused to call it, breaking EVERY post-login command incl. `look` with zero visible error -- same bug present but never caught in beimeixiakexing2001 since testing there stopped at the password prompt; recommend new AGENTS.md catalog entry) + securityd.lpc ACL lazy-init fix (no seed save data shipped) + §3 counterexample (23 files, incl. rebuilding an accidentally-deleted work/log/ seed subtree) + several lpcc-sweep content fixes (misplaced shared header, missing HALBERD macro, iconv-eaten-newline merges); full registration+post-login-command flow verified 3 times with real names 秦岭/林风/秦风, incl. look/score/i/quit all working correctly; final run had zero debug.log errors; 96.6% lpcc pass (10244/10605); see libs/xuanjianlu/NOTES.md |
 | 71 | 碧血残阳之豪侠晚歌.rar | bixiecanyang | 40065 | done | self-IDs exactly as archive title; own readme credits "夕阳再现-江湖风云2-风云再起" -- confirmed genuine member of the 夕阳再现 lineage (#46/#47/#55/#59), chinese.c byte-identical across all 5, securityd.c matches xiyangzaixian_fengyun2(#47) specifically as closest sibling; confirmed NOT related to datangshuanglong(#49) in either direction (differing chinese.c/master.c/logind.c) -- found a SECOND piece of evidence for #49's stale-copy-paste theory: its raw config file is literally named `config.bxcy`, the template extended to the filename itself; standard §15h fix + §15z protected-shim collision (5 files) + §3 counterexample revert (22 files) + §14/§15p/§15s fixes + new message_combatd() alias (§15aa-shaped ordering gotcha, first attempt broke the whole simul_efun compile until reordered after message_vision) + 19 individual pre-existing content typos fixed; confirmed NOT needed: §15x (hardcoded TOMUD_PORT=8888 only sets a cosmetic flag, never rejects connections) + a §15q-shaped client-version gate confirmed structurally unreachable on our assigned port; full registration flow verified twice incl. real names 秦风(male, 武庙 start room)/林风(female, 北疆小镇, correct female honorific), zero real debug.log errors either time; 98.6% lpcc pass (13374/13559, up from 98.5%); see libs/bixiecanyang/NOTES.md |

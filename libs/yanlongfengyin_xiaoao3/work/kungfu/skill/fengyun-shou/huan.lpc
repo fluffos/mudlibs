@@ -1,0 +1,224 @@
+// huan.c  - 幻
+// Written by Doing Lu 1999/2/27
+
+#include <ansi.h>
+#include <skill.h>
+#include <weapon.h>
+#include <combat.h>
+
+inherit F_SSERVER;
+int perform(object me, object target)
+{
+	object weapon;
+	object ob;		// 对手的武器
+	string msg;
+	int qi_wound,damage,damagetype,busy;
+	int ap,dp;
+	
+	if( !target ) target = offensive_target(me);
+	if( !target || !target->is_character() || !me->is_fighting(target) )
+		return notify_fail("绝技「幻」字决指法只能对战斗中的对手使用。\n");
+	if (objectp(weapon = me->query_temp("weapon")))
+		return notify_fail("你不能使用武器！\n");
+	if (target && target->query_temp("apply/shade_vision")) 
+		return notify_fail("对方隐身了，你看不到"+target->query("name")+"。\n"); 
+    if((int)me->query_skill("hunyuan-yiqi",1) < 300 && (int)me->query_skill("yijing-force",1) < 300 && (int)me->query_skill("yijinjing",1) < 300 && (int)me->query_skill("damo-force",1) < 300)
+        return  notify_fail("你佛门内功修为不够，不能使用这一绝技!\n");
+  	if (me->query_skill_mapped("force") != "yijinjing" && me->query_skill_mapped("force") != "hunyuan-yiqi" && me->query_skill_mapped("force") != "yijing-force" && me->query_skill_mapped("force") != "damo-force") 
+		return notify_fail("你未使用佛门内功, 不能使用这一绝技 !\n"); 
+	if (me->is_busy()) 
+		return notify_fail("你现在正忙着呢！\n");
+	if( (int)me->query_skill("fengyun-shou", 1) < 300 )
+		return notify_fail("你的风云手太生疏，不会使用「幻」字决。\n");
+	if (me->query_skill_mapped("unarmed") != "fengyun-shou")
+		return notify_fail("你没正确激发该技能 。\n");
+	if ( me->query("neili") < 1000)
+		return notify_fail("你的内力不够，现在无法使用「幻」字决。\n");
+	if( (int)me->query("jingli") < 1000 )
+		return notify_fail("你的精力不够。\n");		
+	if ( me->query("max_neili") < 10000)
+		return notify_fail("你的内力修为不够，现在无法使用「幻」字决。\n");
+	if ( me->query("max_jingli") < 10000)
+		return notify_fail("你的精力修为不够，现在无法使用「幻」字决。\n");
+	if (me->query_temp("autolian"))
+		return notify_fail("你正在发动自动连招！\n"); 	
+	if ( me->query_temp("cooldown") )	//CD写法	2017.9.7添加
+		return notify_fail("你处于技能冷却状态中，过会在使用吧。\n");
+		
+	ap = me->query("xyzx_sys/level") + me->query_skill("fengyun-shou", 1) + me->query_skill("unarmed") + me->query_skill("force");
+	dp = target->query("xyzx_sys/level") + target->query_skill("dodge") + target->query_skill("parry");
+
+	msg = HIY " $N深深吸了一口气，双手变化万千，使出佛门伏魔无上绝技掌法。\n"NOR;
+	message_vision(msg, me, target);
+	
+	me->set_temp("cooldown", 1);	//CD写法	2017.9.7添加
+	call_out("del_cooldown", 3, me);	//CD写法1	
+	me->add("neili", -100);
+	ob = target->query_temp("weapon");
+	damagetype = 0;
+	busy = 0;
+	msg = HIY "只见漫天的掌影，散发着佛光，慢慢得向$n拍了过去。\n";
+	if( random(ap)> dp/3 )
+	{
+		qi_wound = target->query("qi")/10;
+		if (qi_wound < 10)qi_wound=10;
+
+		if (! objectp(ob))
+		{
+			if (target->query_skill("dodge",1) > 500 && random(2) == 0)
+			{
+				switch (random(2))
+				{
+				case 0:
+					msg += HIR " $n连续变了几种上乘身法，终于没能躲过，"
+					       "$N的这一掌正好拍在$n的丹田上，\n$n只觉得一口"
+					       "凉气，自丹田而上，心里有种说不出的难受。\n";
+					damagetype = 3;
+					break;
+				case 1:
+					msg += HIR " $n轻身飘开，身法灵动之极，众人正要喝彩，"
+					       "听「噗」的一声，如击败革，$n脸色煞白，摇摇欲坠。\n";
+					damagetype = 5;
+					break;
+				}
+			}
+			else if (target->query_skill("force",1) > 500 && random(2) == 0)
+			{
+				switch(random(2))
+				{
+				case 0:
+					msg += HIR " $n冷哼一声，自持内力高强，反手出招，「啵」"
+					       "的一声二掌相交，$n身行微晃，脸如金纸。\n";
+					damagetype = 3;
+					break;
+				case 1:
+					msg += HIR " $n一声长啸，双手幻化出无数掌影，护住身前。"
+					       "只听「嗤」的一声，掌影顿消，$n已经变得脸色惨白。\n";
+					damagetype = 4;
+					break;
+				}
+			}
+			else
+			{
+				switch(random(2))
+				{
+				case 0:
+					msg += HIR " $n看到这招，竟然不知躲避，「嗤」的一声，$N"
+					       "这一掌正拍在$n的檀中大穴。\n";
+					target->receive_damage("qi", qi_wound/2,me);
+					target->receive_wound("qi", qi_wound/3,me);
+					if (userp(me) && me->query("env/no_combat_msg")<4) tell_object(me, HIW"该绝招对敌人气血的外伤为"+ qi_wound/2 +"，内伤为"+ qi_wound/3 +"。\n" NOR);
+//					target->unconcious();
+					damagetype = 0;
+					break;
+				case 1:
+					msg += HIR " $n一转念，已经想出了九十九种化解的办法，"
+					       "尚未来得及施展，只听「嗤」的一声，已被$N拍中檀"
+					       "中大穴。\n";
+					target->receive_damage("jing", qi_wound/2,me);
+					target->receive_wound("jing", qi_wound/3,me);
+					if (userp(me) && me->query("env/no_combat_msg")<4) tell_object(me, HIW"该绝招对敌人精神的外伤为"+ qi_wound/2 +"，内伤为"+ qi_wound/3 +"。\n" NOR);
+//					target->unconcious();
+					damagetype = 0;
+					break;
+				}
+			}
+			if (damagetype > 0)
+			{
+				damage = target->query("max_qi") * damagetype/100 + me->query_skill("fengyun-shou",1);
+				damage = damage + random(damage);
+				target->receive_damage("qi",damage ,me);
+				target->receive_wound("qi",damage/2 ,me);
+				if (userp(me) && me->query("env/no_combat_msg")<4) tell_object(me, HIW"该绝招对敌人气血的外伤为"+ damage +"，内伤为"+ damage/2 +"。\n" NOR);
+			}
+			message_vision(msg + NOR, me, target);			
+			return 1;
+		}
+		if (random(3) >=1 )
+		{
+			msg += HIR " $n忙用" + ob->query("name") + "招架，只觉得虎口剧震，所幸兵器完好无损。\n" NOR;
+		}
+		else
+		{
+			msg += HIW " $n连忙招架，只听见「啪」地一声，$n手中的" + ob->name() + "寸寸断裂，散落一地！\n";
+			ob->unequip();
+			ob->move(environment(target));
+			ob->set("name", "断掉的" + ob->query("name"));
+			ob->set("value", 0);
+			ob->set("weapon_prop", 0);
+			
+		}
+	//	if (!target->is_busy()) target->start_busy(2);
+	}
+	else
+	{
+		if (target->query_skill("dodge",1) > 500 && random(2) == 0)
+		{
+			switch (random(2))
+			{
+			case 0:
+				msg += " $n一声轻笑，连续变化了几次身法，扰人耳目，一时让$N无法进攻。\n";
+				busy = 3;
+				break;
+			case 1:
+				msg += " $n突然向后飘去，疾若闪电，令$N这一掌所有的后继变化无从施展。\n";
+				busy = 5;
+				break;
+			}
+		}
+		else if (target->query_skill("force",1) > 500 && random(2) == 0)
+		{
+			switch (random(2))
+			{
+			case 0:
+				msg += " $n脸色凝重，缓缓出掌，以拙对拙，竟然让$N无从下手，只得收掌。\n";
+				busy = 4;
+				break;
+			case 1:
+				msg += " $n满脸不屑，冷笑一声，双掌齐出，其快无比，令$N只能回招自救。\n";
+				busy = 3;
+				break;
+			}
+		}
+		else
+		{
+			switch (random(3))
+			{
+			case 0:
+				msg += " $n左摇右晃，看上去毫无章法，偏偏躲过了$N这一击。\n";
+				busy = 3;
+				break;
+			case 1:
+				msg += " $n一掌拍出，看上去恍若也是佛门精妙掌法，$N一呆，攻势顿缓。\n";
+				busy = 4;
+				break;
+			case 2:
+				msg += "$n摄住心神，真气贯注，堪堪封住了$N的进攻。\n";
+				busy = 5;
+				break;
+			}
+		}
+//		if (!target->is_busy()) target->start_busy(busy);
+			if (busy > 0)
+			{
+				damage = target->query("max_jing") * busy/100 + me->query_skill("fengyun-shou",1);
+				damage = damage + random(damage);
+				target->receive_damage("jing",damage ,me);
+				target->receive_wound("jing",damage/2 ,me);
+				if (userp(me) && me->query("env/no_combat_msg")<4) tell_object(me, HIW"该绝招对敌人精神的外伤为"+ damage +"，内伤为"+ damage/2 +"。\n" NOR);
+			}
+	}
+	message_vision(msg + NOR, me, target);
+	me->start_busy(1);
+	return 1;
+}
+
+void del_cooldown(object me)	//CD写法1
+{ 
+	if ( !objectp(me) ) return;
+	if ( me->query_temp("cooldown") )	
+	{
+		me->delete_temp("cooldown");
+		tell_object(me, HIM"你呼出一口气，缓缓的将内力收回丹田。\n"NOR);
+	}	
+}

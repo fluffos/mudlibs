@@ -1,0 +1,319 @@
+#include <ansi.h>;
+inherit "/quest/npcskill";
+#include <command.h>;
+#include "/quest/name.h";
+
+
+string *random_item = ({
+    "/clone/map/weapon/axe",
+	"/clone/map/weapon/blade",
+	"/clone/map/weapon/club",
+	"/clone/map/weapon/dagger",
+	"/clone/map/weapon/fork",
+	"/clone/map/weapon/hammer",
+	"/clone/map/weapon/ring",
+	"/clone/map/weapon/spear",
+	"/clone/map/weapon/staff",
+	"/clone/map/weapon/whip",
+	"/clone/map/weapon/sword",
+	"/clone/map/armor/boot",
+	"/clone/map/armor/cloth",
+	"/clone/map/armor/hand",
+	"/clone/map/armor/head",
+	"/clone/map/armor/neck",
+	"/clone/map/armor/ring",
+	"/clone/map/armor/shield",
+	"/clone/map/armor/surcoat",
+	"/clone/map/armor/waist",
+	"/clone/map/armor/wrists",
+	"/clone/map/armor/armor", 
+    "/clone/map/armor/pants",
+	});
+string *random_item2 = ({
+	"/quest/baoshi/baoshis/justice light",
+	"/quest/baoshi/baoshis/earth light",
+	"/quest/baoshi/baoshis/gods light",
+	"/quest/baoshi/baoshis/love light",
+	"/quest/baoshi/baoshis/mercy light",
+	"/quest/baoshi/baoshis/sea light",
+	"/quest/baoshi/baoshis/fire light",
+	});
+
+object me=this_object(),questob,killertemp;
+string username;
+string guaiobname,*guaikeysa,*guaikeysb,*guaiobid;
+int s1,s2;
+
+void create()
+{
+   object guai;
+   string *names1, *names2;
+   string name1, name2, name3;
+   string id1, id2, id3;
+   int v1, v2, v3;
+
+   names1 = keys(guai_name1);
+   names2 = keys(guai_name2);
+   v1 = random(sizeof(names1));
+   name1 = names1[v1];
+   id1 = guai_name1[name1];
+   v2 = random(sizeof(names2));
+   name2 = names2[v2];
+   id2 = guai_name2[name2];
+   if ( random(100) < 30 )
+   {
+	   v3 = random(sizeof(names2));
+       name3 = names2[v3];
+       id3 = guai_name2[name3];
+   }
+   else
+   {
+	   name3 = "";
+	   id3 = "";
+   }
+   
+   guai=this_object();
+
+//以下程序分配怪的名字
+   guaikeysa=keys(guainame);
+   s1=random(sizeof(guaikeysa));
+   if (s1==0 || s1==sizeof(guaikeysa)) s1=0; 
+   guaikeysb=keys(guainame[guaikeysa[s1]]);
+   s2=random(sizeof(guaikeysb));
+   if (s2==0 || s2==sizeof(guaikeysa)) s2=0;
+   guaiobname=guaikeysb[s2];
+   guaiobid=guainame[guaikeysa[s1]][guaikeysb[s2]];
+   if ( random(100) < 3 ) set_name(guaiobname,guaiobid);
+   else set_name(name1+name2+name3, ({ id1+" "+id2+id3 }));
+
+//分配名字完成,
+
+   set("gender","男性");
+   set("env/wimpy", 10);
+   set("age",60);
+   set("attitude", "friendly");
+   set("no_suck",1);
+   set("jiali",100);
+
+   set("chat_chance",10);
+   set("chat_msg",({
+   (:random_move:)}));
+   set("chat_chance_combat",random(90));
+   setup();
+   
+}
+int setguaiskill(int chooseguai,int level,object guai)
+{  
+   set_std_skills(level,guai);
+   switch (chooseguai)
+    {
+      case 1:set_moon_guai(level,guai);carry_moon_weapon();break;
+      case 2:set_fangcun_guai(level,guai);carry_fangcun_weapon();break;
+      case 3:set_putuo_guai(level,guai);carry_putuo_weapon();break;
+      case 4:set_hell_guai(level,guai);carry_hell_weapon();break;
+      case 5:set_longgong_guai(level,guai);carry_longgong_weapon();break;
+      case 6:set_xueshan_guai(level,guai);carry_xueshan_weapon();break;
+      default:set_wudidong_guai(level,guai);carry_wudidong_weapon();break;
+    }
+}
+
+// 心跳清除无用的任务怪
+void heart_beat()
+{
+	int times;
+
+	times = this_object()->query("clean_up_times");
+	times--;
+
+	if ( times < 1 && this_object())
+	{
+		if ( !this_object()->is_fighting() )
+		{
+			message_vision(MAG"$N眼见情况不妙，大叫一声，溜了。\n"NOR, this_object());
+			destruct(this_object());
+			return;
+		}
+	}
+
+	this_object()->set("clean_up_times", times);
+	::heart_beat();
+}
+// 不知道为什么有些怪清除不了
+int check_time()
+{
+	if (!query_temp("appear")) 
+	{
+		set_temp("appear",1);
+//		remove_call_out("check_time");
+		call_out("check_time",30);
+		return 1;
+	}
+	if (me->is_fighting()) 
+	{
+//		remove_call_out("check_time");
+		call_out("check_time",30);
+		return 1;
+	}
+	remove_call_out("check_time");
+	message_vision(MAG"$N眼见情况不妙，大叫一声，溜了。\n"NOR, this_object());
+	destruct (this_object());
+	return 1;
+}
+
+
+void die ()
+{
+    int mylevel,pot,exp,sco,k1,renwu_exp_add;
+	int flag;
+    object killerob, me, baoshi;
+    mixed questob;
+	string username,room;
+	
+    me=this_object();
+	killerob = me->query_temp("last_damage_from");                
+    questob = me->query_temp("player");
+	if ( !objectp(questob) )
+	{
+		username=me->query_temp("killername");
+		questob = find_player(username);
+	}
+	if ( !objectp(questob) )
+	{
+		//remove_call_out("check_time");
+		message_vision("$N惨叫一声，死了。\n",this_object());
+		destruct(me);
+		return;
+	}
+	if ( !environment(questob) )
+	{
+		//remove_call_out("check_time");
+		message_vision("$N惨叫一声，死了。\n",this_object());
+		destruct(me);
+		return;
+	}
+	questob->delete_temp("kill");
+	if ( !objectp(killerob) )
+	{
+		//remove_call_out("check_time");
+		message_vision("$N惨叫一声，死了。\n",this_object());
+		tell_object(questob, "你得到了零点经验和零点潜能！\n"NOR);
+		destruct(me);
+		return;
+	}
+	if ( killerob != questob )
+	{
+		//remove_call_out("check_time");
+		message_vision("$N惨叫一声，死了。\n",this_object());
+		tell_object(questob, "你得到了零点经验和零点潜能！\n"NOR);
+		destruct(me);
+		return;
+	}
+	if ( killertemp )
+	{
+		if ( killertemp != killerob )
+		{
+			//remove_call_out("check_time");
+			message_vision("$N惨叫一声，死了。\n",this_object());
+			tell_object(questob, "你得到了零点经验和零点潜能！\n"NOR);
+			destruct(me);
+			return;
+		}
+	}
+	//remove_call_out("check_time");
+	message_vision("$N惨叫一声，死了。\n",this_object());
+	mylevel = (int)questob->query("xyzx_sys/level");
+	renwu_exp_add = 0;
+	if (questob->query_temp("renwu_exp_add")) renwu_exp_add = (int)questob->query_temp("renwu_exp_add",1);	//处于任务经验提升状态时
+	pot = me->query_temp("killrewardpot")*(renwu_exp_add+100)/100;
+    exp = me->query_temp("killrewardexp")*(2*mylevel+20000)/(mylevel+20000)*(renwu_exp_add+100)/100;
+	sco = (20+random(60))*(renwu_exp_add+100)/100;
+    questob->add("potential",pot);
+    questob->add("combat_exp",exp);
+	questob->add("score",sco);
+    tell_object(questob,"你得到了"+HIW+ chinese_number(exp*questob->query_exp_times())+NOR"点经验和"+HIW+chinese_number(pot)+NOR"点潜能和"+HIW+chinese_number(sco)+NOR"点阅历\n");
+	tell_object(questob,"你本次得到了"+exp*questob->query_exp_times()+"点经验和"+pot+"点潜能和"+sco+"点阅历。\n");
+		flag = 1;
+		if ( questob->query("xyhy_type") == 2 ) flag = 5/4;
+		k1 = 25*flag;	//物品爆率
+		// 物品奖励
+		if ( random(10000) < k1 )
+		{
+//			baoshi = new("/quest/baoshi/baoshis/baoshi");	//垃圾宝石咔嚓掉
+			if (random(4)==0)
+			{
+				baoshi = new("/clone/tzbox/one-box");
+			} else if (random(4)==1)
+			{
+				baoshi = new("/clone/tzbox/wp1-box");
+			} else if (random(4)==2)
+			{
+				baoshi = new("/clone/map/obj/youhua-fu");
+			} else
+			{
+				baoshi = new(random_item2[random(sizeof(random_item2))]);
+			}
+			tell_object(questob, "你获得了一"+baoshi->query("unit")+baoshi->name(1)+"("+baoshi->query("id")+")。\n"NOR"。\n");	
+			message("party", HIW"【"+room+"】"+HIM"听说 "HIG+questob->name(1)+HIM" 在"HIR"杀手任务"HIM"时奖励了 "HIM+baoshi->query("unit")+baoshi->name(1)+"("+baoshi->query("id")+")。\n"NOR,users() );  //2016.6.15阿飞改，增加显示物品的id
+			baoshi->move(questob);
+		}
+    destruct(me);
+   
+}
+//不能让别人帮忙打晕怪   
+void unconcious()
+{
+	killertemp = query_temp("last_damage_from");
+	::unconcious();
+}
+
+void init()
+{
+    if ( is_busy() ) return;
+    add_action("do_drive","drive");
+    username=query_temp("killername");
+    if ((int)environment(me)->query("no_fight")) return; 
+    if (this_player()->query("id")==username)
+	{ 
+		if (query_temp("firstsee")==0||!query_temp("firstsee"))
+		{
+			if(random(40)>20)
+			{     
+				message_vision(HIR"$N恶狠狠地盯着$n，大叫一声，竟然找上门来了，今天不是你死就是我亡！\n"NOR ,this_object(),this_player());
+				this_object()->kill_ob(this_player());  
+				command("follow "+this_player()->query("id"));
+			}
+			else 
+				this_object()->command("? "+this_player()->query("id"));
+			set_temp("firstsee",1);
+          
+		}
+		set_heart_beat(1);
+		if(random(40)<20) this_object()->kill_ob(this_player());
+	}   
+}
+
+int do_drive(string arg)
+{
+    mapping exits;
+    string *dirs;
+    int size;
+    if ( arg==(string)this_object()->query("id") )
+	{
+		if ( environment()->query("no_fight") )
+		{
+			exits=environment()->query("exits");      
+			dirs=keys(exits);
+			size=sizeof(dirs);
+			if ( size>0 )
+			{ 
+				this_player()->command("follow "+this_object()->query("id"));
+				command("go "+dirs[random(size)]);
+				return 1;
+			}
+		}
+		tell_object(this_player(), this_object()->name()+"现在不在不能战斗的地方，不需要驱赶。\n");
+	}
+	else
+		tell_object(this_player(), "你要驱干什么？\n");
+	return 1;
+}

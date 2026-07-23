@@ -1,0 +1,96 @@
+// yunv.c  
+#include <ansi.h>
+#include <skill.h>
+#include <weapon.h>
+#include <combat.h>
+
+inherit F_SSERVER;
+
+int perform(object me, object target)
+{
+	object weapon;
+	string msg;
+	int i, count,skill;
+	
+	if ( !target ) target = offensive_target(me);
+	if( !target || !target->is_character() || !me->is_fighting(target) )
+		return notify_fail("「玉女诀」只能在战斗中使用。\n");
+	if (!objectp(weapon = me->query_temp("weapon")) || (string)weapon->query("skill_type") != "sword")
+        return notify_fail("手中无剑怎能使出「玉女诀」？\n");  
+	if (target && target->query_temp("apply/shade_vision")) 
+		return notify_fail("对方隐身了，你看不到"+target->query("name")+"。\n"); 		
+	if (me->is_busy()) 
+		return notify_fail("你现在正忙着呢！\n");
+	if ( me->query_skill("yunv-xinjing",1) < 300 ) 
+		return notify_fail("你的玉女心经等级不够, 不能使用「玉女诀」！\n");
+	if ( me->query_skill("yunv-jianfa", 1) < 300 ) 
+		return notify_fail("你的玉女剑法等级不够, 不能使用「玉女诀」！\n");
+	if( me->query_skill_mapped("force") != "yunv-xinjing")
+	    return notify_fail("你没有激发玉女心经。\n");		
+	if( me->query_skill_mapped("sword") != "yunv-jianfa" )
+	    return notify_fail("你没有激发玉女剑法。\n");
+	if( (int)me->query("jingli") < 1000 )
+		return notify_fail("你的精力不够。\n");	
+	if ( me->query("neili") < me->query_skill("yunv-jianfa", 1)*4 ) 
+		return notify_fail("你的内力不够，无法运用「玉女诀」！\n");
+	if (me->query_temp("autolian"))
+		return notify_fail("你正在发动自动连招！\n"); 	
+	if ( me->query_temp("cooldown") )	//CD写法	2017.9.7添加
+		return notify_fail("你处于技能冷却状态中，过会在使用吧。\n");		
+
+	message_vision(WHT+"$N默运古墓心法，心如止水，使出『"+HIC+"玉女素心"+NOR+"』剑法。\n" NOR, me,target);
+	me->set_temp("cooldown", 1);	//CD写法	2017.9.7添加
+	call_out("del_cooldown", 3, me);	//CD写法1
+	skill = me->query_skill("yunv-jianfa", 1);
+	count = me->query_skill("yunv-jianfa", 1)/60;
+	if(count < 1 ) count = 1;
+	if (me->query("jm/gumu"))
+	{
+		if(count > 150 ) count = 150;
+	} else 
+	{
+		if(count > 50 ) count = 50;
+	}	
+    
+		me->add_temp("apply/strength", -skill);
+        me->add_temp("apply/attack", -skill);
+		me->add_temp("apply/damage", -skill); 
+		me->add_temp("lianzhao", count);	 //2016.6.1阿飞改，增加连招标记，用于削弱连招伤害	
+	for ( i=0; i<count; i++ )
+	{
+		switch ( random(6) )
+		{
+			case 0: msg = HIG"北方有佳人！\n" NOR;
+					break;
+			case 1: msg = HIR"绝世而独立！\n" NOR;
+					break;
+			case 2: msg = HIY"一顾倾人城！\n" NOR;
+					break;
+			case 3: msg = HIC"再顾倾人国！\n" NOR;
+					break;
+			case 4: msg = HIM"宁不知倾城与倾国！\n" NOR;
+					break;
+			case 5: msg = HIB"佳人难再得！\n" NOR;
+					break;
+		}
+		message_vision(msg, me);
+		COMBAT_D->do_attack(me, target, me->query_temp("weapon"),TYPE_REGULAR);
+	}
+		me->add_temp("apply/strength", skill);
+        me->add_temp("apply/attack", skill);
+		me->add_temp("apply/damage", skill); 
+	me->add("neili", -100*count);	
+	me->delete_temp("lianzhao");  //2016.6.1阿飞改，连招结束取消连招标记
+	 me->start_busy(1);
+	return 1;
+}
+
+void del_cooldown(object me)	//CD写法1
+{ 
+	if ( !objectp(me) ) return;
+	if ( me->query_temp("cooldown") )	
+	{
+		me->delete_temp("cooldown");
+		tell_object(me, HIM"你呼出一口气，缓缓的将内力收回丹田。\n"NOR);
+	}	
+}
