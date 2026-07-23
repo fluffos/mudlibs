@@ -442,3 +442,34 @@ the same time.
   competitor-subsystem restore) specifically to verify that change didn't
   regress the player body class, per the standing reminder that LPC
   objects don't recompile just because the source file changed on disk.
+
+## Re-verification pass: driver rebuild + formatter + WASM (2026-07)
+
+- **LPC formatter** applied to all `.lpc` under `work/` (11,992 total,
+  11,796 written, 42 unchanged, 154 self-checked errors left untouched
+  as expected on legacy code). Reformatted files include `data/area.lpc`
+  (a data file authored as LPC array literal) — cosmetic only, verified
+  no content change beyond whitespace.
+- **Native re-test against the freshly rebuilt driver**
+  (`~/src/fluffos/build-debug/src/driver`, rebuilt from latest upstream
+  master): clean boot, zero real errors in `debug.log`. Full
+  registration flow re-verified end-to-end with a fresh real Chinese
+  name (`秦风测`/`qftest`) through the gift-attribute/email/gender flow,
+  landing in 世外桃源, with `look`/`score`/`quit` all producing correct
+  output — confirms all the prior fixes (the `#define nosave nosave`/
+  `protected protected` macro rewrite, §15h, §14, §15w, §8e `tail()`,
+  §15s, the restored `feature/attack.lpc` competitor subsystem, etc.)
+  survived the reformat and the new driver build intact.
+- **WASM test** (`scripts/wasm_client.js` against `build-wasm/src`):
+  boots cleanly, zero fatal/undefined-function errors. Registration is
+  **blocked under WASM** by the known `query_ip_number()` limitation:
+  `adm/daemons/logind.lpc`'s `logon()` calls `BAN_D->is_banned(str)`
+  where `str = query_ip_number(ob)`; `band.lpc`'s `is_banned()` does
+  `if (!site) return 1;` then `if (sscanf(site, "%s.%s.%s.%s", ...) !=
+  4) return 1;` — under WASM `query_ip_number()` doesn't return a real
+  dotted-quad, so `is_banned()` returns 1 ("banned") and every
+  connection is destructed at the very first `logon()` call with
+  "本站正在进行内部调整..." before ever reaching the id/name prompt.
+  Confirmed this is the documented driver-side WASM limitation (not a
+  mudlib bug) — the exact same lib boots and completes full registration
+  cleanly natively (see above). Not patched, per standing instruction.
