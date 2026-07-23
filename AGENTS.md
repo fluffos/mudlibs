@@ -1843,6 +1843,33 @@ already-documented `"static/CRASHES"`-in-string-literal counterexample —
 check both when auditing a lib's own copy of the `static`→`nosave` sed's
 blast radius.
 
+### 15aa. A same-named wrapper function calling the bare identifier of the real efun it wraps, *before* its own definition appears in the file, can get silently bound straight to the real efun — bypassing the wrapper's own guard entirely, with no "undefined function" error to flag it
+
+Found on `yanhuangwuhun` (archive #66), a variant of the §15s
+`message()`-wrapper family: `adm/simul_efun/message.lpc` defines its own
+`message(...)` override (to patch the exclude-argument bug from §15s),
+but several functions earlier in the *same file* (`tell_room()`,
+`tell_object()`, `shout()`, `write()`, `say()`) call the bare identifier
+`message(...)` **before** the file's own `message()` definition appears
+textually. Because `message` is also a real driver efun name, the
+compiler doesn't raise "undefined function" the way it would for a
+made-up name (§8b's usual signal) — it silently resolves the earlier
+calls straight to `efun::message()`, completely bypassing the local
+override and its exclude-argument fix, for every call site that happens
+to come first in file order. This crashed 9 preload daemons on boot plus
+one live gameplay call site even after the wrapper itself had been
+"fixed." **Fix**: add a `varargs` forward declaration of the wrapper's
+own signature at the top of the file, before any caller — same rule as
+§8b's ordinary "define before use" guidance, but the trap here is
+specifically that a same-named-as-a-real-efun wrapper gives you NO
+compile-time error to notice the ordering problem exists; a
+differently-named helper would have failed loudly and obviously instead.
+**Lesson**: whenever fixing a wrapper around an efun that shares the
+efun's own name (not just `message()` — any `write()`/`tell_room()`
+-style override), grep every call site in the same file and confirm the
+wrapper's own definition (or a forward declaration of it) appears above
+all of them, not just check that the wrapper's body itself looks correct.
+
 ---
 
 ## Per-archive gotchas index
