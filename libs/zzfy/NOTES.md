@@ -64,3 +64,28 @@ harmless, left as-is (out of scope for a UTF-8 compatibility pass).
 triaged individually per AGENTS.md §6b/§13, boot + full interactive
 registration test is the verification gate. Memory stayed healthy
 throughout the sweep (~17-18GB free the whole time, no pressure).
+
+## Re-verification pass: driver rebuild + formatter + WASM (2026-07)
+
+- **LPC formatter** applied to all `.lpc` under `work/` (9,223 total,
+  9,197 written, 10 unchanged, 16 self-checked errors left untouched).
+- **Native re-test against the freshly rebuilt driver**
+  (`~/src/fluffos/build-debug/src/driver`): clean boot, zero errors of
+  any kind in `debug.log`. Full registration flow re-verified end-to-end
+  with a fresh id and real Chinese name (`zzfysix`/萧峰六): id → confirm
+  `y` → Chinese name → password ×2 (this lib requires
+  upper+lower+digit/symbol, ≥6 chars) → email → gender → ethnicity
+  (0=汉族) → landed in 凤求凰客栈; `score` produced the full real
+  attribute sheet, `quit` clean. Same live-clock-prompt `--idle 0.4`
+  pacing adjustment as other libs in this batch was needed here too.
+- **WASM test** (`scripts/wasm_client.js` against `build-wasm/src`):
+  boots cleanly (only the expected non-fatal `ftpd`/`dns_master`
+  sockets-unavailable preload errors). **Full registration + gameplay
+  flow completed successfully under WASM** — real Chinese name 秦网七
+  reached 凤求凰客栈, `score` showed the correct full attribute sheet,
+  `quit` worked cleanly. This lib's registration path does not gate on
+  `query_ip_number()`'s format. Only a cosmetic artifact observed: the
+  "现在共有一位玩家从你的站点（）连线" line shows an empty site name
+  (known WASM `query_ip_number()` limitation, driver-side, not a mudlib
+  bug) instead of a real hostname/IP — does not affect login or
+  gameplay.
