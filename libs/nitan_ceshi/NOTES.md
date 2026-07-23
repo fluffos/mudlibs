@@ -344,3 +344,52 @@ group — this is what finally produced a driver that survived across
 several independent tool-call boundaries for the final confirmation runs.
 Noted here in case it helps whoever picks up the next archive in this
 batch.
+
+## Re-verification pass: driver rebuild + formatter + WASM (2026-07-23)
+
+- **LPC formatter**: ran `format-corpus.mjs` across all 13497 `.lpc`
+  files under `work/` — 13459 reformatted, 31 unchanged, 7 refused
+  (token-mismatch safety gate, negligible at this scale). Note: unlike
+  `nitan6`/`nitan170911`, this lib's `feature/alias.lpc` does **not**
+  have the `case '''` malformed-character-literal bug (different file
+  shape entirely — confirmed via grep, no `switch(cmd[0])` pattern
+  present) — nothing to fix here.
+- **Native retest against the freshly-rebuilt driver**: booted clean
+  (`Initializations complete.`). Re-ran the full registration flow (id
+  `qflibce`, surname `秦`, given name `枫`, admin+login passwords,
+  gender) end-to-end — reached the "注册房间" prompt exactly as
+  documented above, then in a second connection (reusing the same id/
+  password, confirming the returning-player path too) ran
+  `register test14@qq.com`, which advanced the character into
+  生命之谷 with the `盘古` NPC greeting the character **by its correct
+  Chinese name** ("秦枫，你快快选择...") and presenting the
+  personality-choice step — full round-trip through registration, email
+  verification, and into real playable world state, zero fatal errors
+  in `debug.log` throughout (only the already-documented pre-existing
+  `quest/*.lpc` `set_information()` type-mismatch noise). No regression
+  from the reformat or driver rebuild.
+- **WASM build test** (`scripts/wasm_client.js`): boots cleanly (only
+  expected non-fatal preload warnings). **Could not exercise login at
+  all in this harness**, for a different reason than the usual
+  `query_ip_number()` gate: `logind.lpc`'s `logon()` unconditionally
+  destructs any connection where `uptime() < 30` (an anti-"still
+  starting up" guard, prints "正在启动过程中，请稍候再来" and
+  disconnects) as its very **first** statement, before any prompt or
+  `input_to()` is even set up. The WASM harness calls
+  `fluffos_connect()` immediately after `fluffos_boot()` in the same
+  short-lived process, so every connection attempt within one harness
+  invocation hits `uptime() < 30` and gets rejected instantly,
+  regardless of how long the script waits before sending its first
+  line (the destruct happens at connect-time, not at input-time, so
+  `--idle` padding doesn't help). **This lib also has the same
+  `sscanf`-based `query_ip_number()`-under-WASM gate as `nitan6`**
+  (`adm/daemons/band.lpc`'s `is_banned()`, identical shape) that would
+  likely block login too even past the 30-second mark — so this isn't
+  purely a harness-timing artifact, just the first of two independent
+  gates this lib's login path would need to clear under WASM. Neither
+  is a mudlib bug (both are genuine driver-side WASM gaps/harness
+  limitations); native retest above confirms the exact same code is
+  fully functional. Status: **boots under WASM; login not exercisable
+  within a single short-lived harness run (startup-uptime gate), and
+  would likely hit the query_ip_number() limitation next even if it
+  were**.
