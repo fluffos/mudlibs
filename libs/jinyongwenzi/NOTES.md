@@ -438,6 +438,32 @@ introduced by this pass's fixes):
 Full failure list: `libs/jinyongwenzi/lpcc_fail.log` (49 entries,
 1317 lines with full compiler output).
 
+## Re-verification pass: driver rebuild + LPC formatter + WASM build
+
+- **LPC formatter**: ran `format-corpus.mjs` over all 4,915 `.lpc`
+  files — 4,873 reformatted in place, 30 already-idempotent, 12 refused
+  (nonzero `errors` expected/fine per the tool's own contract).
+- **Native retest against rebuilt driver** (`~/src/fluffos/build-debug/
+  src/driver`, freshly rebuilt from upstream master): booted clean,
+  zero fatal errors (only the pre-existing, already-documented
+  non-fatal `questd.lpc` `read_table()` `catch()` hit and routine
+  compile warnings). Full registration re-verified with a fresh real
+  name (秦风丁) via the documented flow (letters-only id → confirm →
+  Chinese name → empty send → accept stats → pick skill → arrives in
+  第一关); `look`/`score`/`quit` all produce correct dynamic output. No
+  regressions from the rebuilt driver or the reformat pass; nothing to
+  fix. (Also double-checked: `qinfengc2`-style numeral-containing ids
+  still correctly get rejected and desync the scripted send sequence —
+  same pre-existing id-validation behavior/test pitfall as before, not
+  a regression.)
+- **WASM build test** (`scripts/wasm_client.js` against
+  `build-wasm/src`): boots cleanly in-process, only ordinary compile
+  warnings. Full registration/login flow completed successfully under
+  WASM too (fresh name 秦风戊, same flow as native), `look`/`quit` also
+  correct — this lib has no IP/site-gating daemon on its login path,
+  so it is **not** affected by the documented `query_ip_number()` WASM
+  limitation and is fully playable under WASM.
+
 ## How to run
 
 ```
