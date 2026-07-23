@@ -365,3 +365,56 @@ each test — no `pkill -f` pattern used.
 verified end-to-end twice, 99.81% lpcc pass rate, zero unexplained
 debug.log errors. Cross-check against archives #78/#80 flagged above for
 the main session once all three are complete.
+
+## Re-verification pass: driver rebuild + formatter + WASM (2026-07)
+
+- **LPC formatter** applied to all `.lpc` under `work/` (7,303 total,
+  7,273 written, 25 unchanged, 5 self-checked errors left untouched).
+- **Native re-test against the freshly rebuilt driver**
+  (`~/src/fluffos/build-debug/src/driver`): clean boot, only the
+  pre-existing benign `versiond.lpc`/`socket_bind()` line in
+  `debug.log`. Full registration flow re-verified end-to-end with a
+  fresh id/real Chinese surname+given-name (`aryretest`/秦岚), admin +
+  regular password, character type 2 (智慧型), gender f, reaching 世外
+  桃源 with correct gender-specific starting gear (鹅黄夹袄/绣花小鞋);
+  `look`/`score` (correct pre-投胎 message)/`quit` all produced correct
+  output.
+- **WASM test** (`scripts/wasm_client.js` against `build-wasm/src`):
+  boots, but **every connection is disconnected immediately after the
+  banner**, before the id prompt appears — root cause is DIFFERENT from
+  the `zhonghua2`/`zhongjidiyu` finding in this same batch, and is a
+  **test-harness gap, not a mudlib bug or a WASM-driver limitation**:
+  `clone/user/login.lpc`'s `logon()` unconditionally calls `log_file(
+  "static/logon", ...)` as its very first statement, with no `catch()`.
+  This lib genuinely ships a real `/log/static/` directory in the raw
+  archive (see fix #10 above — the `static`↔`nosave` naming collision
+  section), so natively this always succeeds. But `scripts/
+  wasm_client.js`'s `copyDir()` deliberately skips copying the CONTENTS
+  of any `log/` directory (to avoid wasting time/memory on runtime-churn
+  log data) and only recreates the bare `log/` directory itself in the
+  in-memory FS — it does **not** recreate `log/`'s real SUBdirectories
+  (`static/`, `user/`, `channel/`, `file/`, etc.), so `log_file(
+  "static/logon", ...)` throws `Wrong permissions for opening file
+  /log/static/logon for append. "No such file or directory"` uncaught,
+  and the driver's `new_conn_handler()` disconnects the connection
+  before `LOGIN_D->logon()` (the real registration flow) is ever
+  reached. Confirmed via the raw harness log (the error appears, then
+  immediately `new_conn_handler: logon() on object clone/user/
+  login#0 has failed, the user is disconnected.`, well before any
+  `versiond`-related message). **Flagged for the orchestrating session**:
+  `scripts/wasm_client.js`'s `copyDir()` should also recreate `log/`'s
+  known real subdirectories (or generically walk the on-disk `log/` tree
+  creating directories-only, skipping only file contents) — this likely
+  affects every OTHER lib in the project whose `logon()`/registration
+  path writes to a `log/<subdir>/` path unconditionally at connection
+  time, not just this one. Not something I patched myself since
+  `scripts/wasm_client.js` is a shared script used by other agents'
+  concurrent sessions. Separately, this lib ALSO shares the exact same
+  unguarded `VERSION_D->is_version_ok()` pattern found on `zhonghua2`/
+  `zhongjidiyu` in this batch (confirmed by grep — `adm/daemons/
+  logind.lpc` has the identical `catch(MUDLIST_CMD->main()); ... if
+  (!VERSION_D->is_version_ok() ...)` shape with no catch on the second
+  call), so even after a harness fix for the `log/static/` gap, this lib
+  would likely still hit that second, WASM-driver-level (`sockets`
+  package unavailable) limitation — not chased further since the first
+  blocker (harness-level) already fully explains the observed failure.
