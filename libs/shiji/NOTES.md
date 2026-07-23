@@ -119,3 +119,57 @@ genuine syntax typos, a few missing headers) — not triaged individually
 per AGENTS.md §6b/§13, boot + full interactive registration test is the
 verification gate. Memory stayed healthy throughout (~17GB free
 consistently, no pressure — this is a small lib).
+
+## Rebuilt-driver / formatter / WASM re-verification pass (2026-07-23)
+
+1. **LPC formatter** (`tools/lpc-syntax/format-corpus.mjs`) applied across
+   all 2642 `.lpc` files in `work/`: `{"total":2642,"written":2600,
+   "wouldChange":0,"unchanged":20,"errors":22}`. Spot-checked
+   `adm/single/master.lpc` afterward — the §4/§15af `find_object
+   (SECURITY_D)`/`find_object(CHANNEL_D)` guards and the `"warning:"`
+   §15w gate all survived reformatting intact (grepped for the exact
+   lines post-format).
+2. **Native re-test against the rebuilt `build-debug/src/driver`**: booted
+   clean (zero fatal errors, only the usual harmless compile warnings, in
+   `log/debug.log`). Full registration verified end-to-end via
+   `mudclient.py` with id `sjrfmtc` / real Chinese name **`秦风十`**:
+   id → confirm → name → password ×2 → stat-roll accept → email → gender
+   → entered the game world at 天狼中心, `look` rendered the room,
+   `score` showed a correct character sheet matching the just-entered
+   stats, `quit` produced the game's own drop-items-then-disconnect
+   sequence. `debug.log` for the session: zero `error in error
+   handler`/`denied`/`undefined function`/`bad argument` lines. Confirms
+   the reformatted source + rebuilt driver combination is still fully
+   sound; no new fixes needed.
+3. **WASM test** (`scripts/wasm_client.js` against `build-wasm/src`):
+   boots cleanly (`Initializations complete`, only the expected
+   `Undefined function socket_create`/`socket_bind`/`socket_close`
+   compile errors from `dns_master.lpc`/`ftpd.lpc` — no sockets package
+   under wasm, non-fatal to preload itself). **However, the very first
+   live connection crashes**: `adm/daemons/logind.lpc`'s `logon()`
+   unconditionally calls `DNS_MASTER->query_muds()` a few lines after
+   printing the ID prompt, with no `find_object()`/`catch()` guard.
+   Since `dns_master.lpc` failed to compile under wasm (no sockets
+   package), that object has no program, and the call throws `*No
+   program in object '/adm/daemons/network/dns_master'!`, which
+   `new_conn_handler` catches by destructing and disconnecting the
+   connection (`logon() on object clone/user/login#0 has failed, the
+   user is disconnected`). The driver/harness then re-creates a fresh
+   login object and shows the banner + ID prompt a second time, but
+   further scripted input in the same harness invocation didn't land on
+   this second instance (single in-process connection, not a real
+   reconnect) — so a full registration playthrough could not be driven
+   to completion via this harness for this lib specifically. Also
+   confirmed the already-documented `query_ip_number()` limitation
+   independently: "你所在IP" prints blank (rather than `127.0.0.1`)
+   under wasm. **This DNS_MASTER crash is a wasm-specific gap, not a
+   mudlib bug** — natively the sockets package is present, `dns_master`
+   compiles fine, and the call never fails; `shujian2008`/
+   `shujiantianxia` share this exact same `adm/etc/preload`-included
+   `dns_master` + unconditional `logind.lpc` call shape and hit the
+   identical crash under wasm (see their own NOTES.md). Not patched, per
+   the task's standing policy for wasm-only gaps — documented here
+   instead. **Assessment: boots under wasm; login cannot complete in
+   this harness due to a wasm-only dns_master-preload/no-sockets
+   interaction, orthogonal to the already-known query_ip_number
+   limitation.**
