@@ -118,3 +118,33 @@ Confirmed via a temporary `write_file()` instrumentation of
 itself is healthy; this is a deliberate "you can't do anything except
 follow/register yet" onboarding gate, not the §15ae dead-command-hook
 class of bug. `look` was used as this lib's verified post-login command.
+
+## Re-verification pass (2026-07-23): driver rebuild + LPC formatter + WASM build
+
+- **Formatter**: ran `format-corpus.mjs` over all of `work/` (8,146 files,
+  8,090 written/reformatted, 30 already-clean, 26 refused with an error —
+  expected on legacy code, not chased individually per the tool's own
+  self-check policy).
+- **Native retest against rebuilt driver** (`build-debug/src/driver`,
+  rebuilt from latest upstream master): clean boot, zero fatal errors in
+  `debug.log` (only ordinary compile-time warnings, same shapes as
+  before). Full registration re-verified end-to-end on the
+  now-reformatted source with a fresh real Chinese name (`秦山`): BIG5
+  prompt → id `qinshan` → confirm → Chinese name → password → talent
+  roll → email → gender → reaches the actual starting room (沙滩), escort
+  NPC `张三` greets by name. `look` correctly redisplays the room;
+  `score`'s no-output behavior is the pre-existing documented onboarding
+  gate above, not a regression. No new fixes were needed — the reformat
+  and the fresh driver build did not introduce any regression.
+- **WASM build**: booted cleanly under `build-wasm/src` via
+  `scripts/wasm_client.js` (the only preload-time complaint is
+  `Undefined function socket_close` in `adm/daemons/network/http.lpc`,
+  caught by the lib's own `master.lpc` error handler exactly as it is for
+  a missing daemon natively — non-fatal, `Initializations complete.`
+  still printed). Unlike some sibling libs, this lib's login/registration
+  path does **not** gate on `query_ip_number()`'s format, so registration
+  proceeded all the way through under WASM too: id `qinfeng` → Chinese
+  name `秦风` → password → talent roll → email → gender → reached the
+  actual starting room (沙滩), escort NPC greeted by name, `look`
+  produced correct room output, `quit` exited cleanly. **This lib is
+  confirmed fully playable under WASM**, not just "boots."
