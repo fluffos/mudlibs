@@ -10,201 +10,232 @@
 inherit ROOM;
 string look_sign();
 int do_play(string arg);
-void finish_play(object me,object ob,int point);
+void finish_play(object me, object ob, int point);
 
 // 球的种类，我懒得翻书了，也不知准不准确，你可以自己加上一些
 string *ball = ({
-	YEL "下旋球" NOR,YEL "上旋球" NOR,RED "快球" NOR,
-	GRN "抽球" NOR,WHT "弧旋球" NOR,CYN "削球" NOR,
-	RED "扣球" NOR,BLU "长球" NOR,CYN "短球" NOR,
+  YEL "下旋球" NOR, YEL "上旋球" NOR, RED "快球" NOR,
+  GRN "抽球" NOR, WHT "弧旋球" NOR, CYN "削球" NOR,
+  RED "扣球" NOR, BLU "长球" NOR, CYN "短球" NOR,
 });
 
-void start_play(object me,object ob,int point);
-void create()
-{
-        set("short", "体育馆四楼");
-        set("long", @LONG
+void start_play(object me, object ob, int point);
+void create() {
+  set("short", "体育馆四楼");
+  set("long", @LONG
 这里就是华师附中的体育馆了，体育馆的四楼是乒乓球场，现在这里来
 打乒乓球的同学虽然也不少，但比起阿飞初一时还是少多了，想当年……
 还是不说了。你自己试试看吧，不会不要紧。旁边的墙上挂着一张打乒乓球
 须知（sign）。
 LONG
-        );
-        set("exits", ([ /* sizeof() == 2 */
-  "down" : __DIR__"tyuguan3",
-  "east" : __DIR__"zhonglou4",
-]));
-	set("valid_startroom",1);
-	set("item_desc", ([
-	"sign" : (:look_sign:),
-	]));
-	set("objects", ([
-	__DIR__"npc/ppongplayer" : 2,
-                        ]) );
-	set("coor/x",-60);
-	set("coor/y",-20);
-	set("coor/z",80);
-	setup();
+  );
+  set("exits", ([ /* sizeof() == 2 */
+    "down": __DIR__ "tyuguan3",
+    "east": __DIR__ "zhonglou4",
+  ]));
+  set("valid_startroom", 1);
+  set("item_desc", ([
+    "sign": (: look_sign :),
+  ]));
+  set("objects", ([
+    __DIR__ "npc/ppongplayer": 2,
+  ]));
+  set("coor/x", -60);
+  set("coor/y", -20);
+  set("coor/z", 80);
+  setup();
 }
 
 // 总共只有一个add_action耶！
-void init()
-{
-        add_action("do_play", "play");
+void init() {
+  add_action("do_play", "play");
 }
 
-string look_sign()
-{
-	object me=this_player();
-	string str;
-	str=YEL"体育馆乒乓球场入场须知\n"NOR;
-	str+="\n乒乓球场打乒乓球的方法：\n请想打球者把“"WHT"play with <id> for <分数>"NOR"”指令互相使用一次即可。\n";
-	str+="分数是指两人打到多少人为胜者。两人指定的分数必须相同。\n";
-	str+="乒乓球场是公用场地，最多允许2队同时上场。每队2人。\n";
-	str+=YEL"\n请遵守以上规章制度。\n"NOR;
-	return str;
+string look_sign() {
+  object me = this_player();
+  string str;
+  str = YEL "体育馆乒乓球场入场须知\n" NOR;
+  str += "\n乒乓球场打乒乓球的方法：\n请想打球者把“" WHT "play with <id> for <分数>" NOR "”指令互相使用一次即可。\n";
+  str += "分数是指两人打到多少人为胜者。两人指定的分数必须相同。\n";
+  str += "乒乓球场是公用场地，最多允许2队同时上场。每队2人。\n";
+  str += YEL "\n请遵守以上规章制度。\n" NOR;
+  return str;
 }
 
 // 准备开打！
-int do_play(string arg)
-{
-	object me= this_player();
-	object ob,obj;
-	string who;
-	int point;
-	if(!arg || sscanf(arg, "with %s for %d", who,point)!=2 ) return notify_fail("指令格式：play with <id> for <分数>\n");
-	if (!ob=present(who,environment(me))) return notify_fail("没有这个人耶……\n");
-	if (ob->query("id")==me->query("id")) return notify_fail("和自己打？好创意！不过没用。\n");
-	if (query("playing")>2) return notify_fail("目前这里的人已经够多了，等别人打完再打吧！\n"); // 人数限制
-	if (!objectp(obj=present("pingpong",me))) return notify_fail("你都没有乒乓球具，怎么打？\n"); // 器材室的用场都在这里
-	if (point>21) return notify_fail("按照乒乓球规则，最多只能打21分。\n"); // 这个限制其实是为了防止打太久
-	if (point<5) return notify_fail("才两个人，打那么少分，有什么意思？\n"); // 当然打太短也不行
-	else {
-		if(userp(ob))
-		{
-			if(ob->query_temp("playpp/with")!=me->query("id")) {
-			message_vision("$N对著$n说道：" + ob->name()+"，我想和你打一场乒乓球，\n总分数为"+chinese_number(point)+"分，好吗？\n\n", me, ob);
-			me->set_temp("playpp/with",ob->query("id"));
-			me->set_temp("playpp/maxpoint",point);
-			tell_object(ob, YEL "如果你愿意和对方打乒乓球，请你输入play with "+me->query("id")+" for "+point+"。\n" NOR);
-			write(YEL "由于对方是由玩家控制的人物，你必须等对方同意才能和他打乒乓球。\n" NOR);
-			return 1;
-			}
-			if (ob->query_temp("playpp/maxpoint")!=point) return notify_fail("你们俩指定的分数都不一样，请想好再下指令吧。\n");
-			else {
-			message_vision("$N对着$n说道：好吧，咱们这就开始打！\n", me, ob);
-			tell_object(me,"你和"+ob->name()+"开始了总分为"+point+"分的激烈的乒乓球赛！\n");
-			tell_object(ob,"你和"+me->name()+"开始了总分为"+point+"分的激烈的乒乓球赛！\n");
-			me->set_temp("disable_inputs",1); 
-			me->set_temp("is_unconcious",1); 
-			me->set("disable_type",GRN "<乒乓球运动中>" NOR);
-			ob->set_temp("disable_inputs",1); 
-			ob->set_temp("is_unconcious",1); 
-			ob->set("disable_type",GRN "<乒乓球运动中>" NOR);
-			add("playing",1);
-			start_play(me,ob,point);
-			return 1;
-			}
-		}
-		else return notify_fail("他（她、它）都不是玩家，你怎么能和她打球呢？\n"); // 只能和玩家打！
-	}
+int do_play(string arg) {
+  object me = this_player();
+  object ob, obj;
+  string who;
+  int point;
+  if (!arg || sscanf(
+    arg,
+    "with %s for %d",
+    who,
+    point
+  ) != 2) return notify_fail("指令格式：play with <id> for <分数>\n");
+  if (!ob = present(who, environment(me))) return notify_fail("没有这个人耶……\n");
+  if (ob->query("id") == me->query("id")) return notify_fail("和自己打？好创意！不过没用。\n");
+  if (query("playing") > 2) return notify_fail("目前这里的人已经够多了，等别人打完再打吧！\n");  // 人数限制
+  if (!objectp(obj = present("pingpong", me))) return notify_fail("你都没有乒乓球具，怎么打？\n");  // 器材室的用场都在这里
+  if (point > 21) return notify_fail("按照乒乓球规则，最多只能打21分。\n");  // 这个限制其实是为了防止打太久
+  if (point < 5) return notify_fail("才两个人，打那么少分，有什么意思？\n");  // 当然打太短也不行
+  else {
+    if (userp(ob)) {
+      if (ob->query_temp("playpp/with") != me->query("id")) {
+        message_vision(
+          "$N对著$n说道：" + ob->name() + "，我想和你打一场乒乓球，\n总分数为" + chinese_number(point) + "分，好吗？\n\n",
+          me,
+          ob
+        );
+        me->set_temp("playpp/with", ob->query("id"));
+        me->set_temp("playpp/maxpoint", point);
+        tell_object(
+          ob,
+          YEL "如果你愿意和对方打乒乓球，请你输入play with " + me->query("id") + " for " + point + "。\n" NOR
+        );
+        write(YEL "由于对方是由玩家控制的人物，你必须等对方同意才能和他打乒乓球。\n" NOR);
+        return 1;
+      }
+      if (ob->query_temp("playpp/maxpoint") != point) return notify_fail("你们俩指定的分数都不一样，请想好再下指令吧。\n");
+      else {
+        message_vision("$N对着$n说道：好吧，咱们这就开始打！\n", me, ob);
+        tell_object(me, "你和" + ob->name() + "开始了总分为" + point + "分的激烈的乒乓球赛！\n");
+        tell_object(ob, "你和" + me->name() + "开始了总分为" + point + "分的激烈的乒乓球赛！\n");
+        me->set_temp("disable_inputs", 1);
+        me->set_temp("is_unconcious", 1);
+        me->set("disable_type", GRN "<乒乓球运动中>" NOR);
+        ob->set_temp("disable_inputs", 1);
+        ob->set_temp("is_unconcious", 1);
+        ob->set("disable_type", GRN "<乒乓球运动中>" NOR);
+        add("playing", 1);
+        start_play(me, ob, point);
+        return 1;
+      }
+    } else return notify_fail("他（她、它）都不是玩家，你怎么能和她打球呢？\n");  // 只能和玩家打！
+  }
 }
 
 // 整个打球过程的函数
-void start_play(object me,object ob,int point)
-{
-	int mypt=me->query_temp("playpp/point");
-	int obpt=ob->query_temp("playpp/point");
+void start_play(object me, object ob, int point) {
+  int mypt = me->query_temp("playpp/point");
+  int obpt = ob->query_temp("playpp/point");
 
-// 先判断假如谁先到达预定的分数，这场球就结束
-	if (mypt==point){
-	tell_object(me,"这场球打完了，祝贺你！你以"+chinese_number(mypt-obpt)+"分的优势"+mypt+"："+obpt+"战胜了"+ob->name()+"！\n");
-//	write("你的分数："+mypt+"。\n");
-	tell_object(ob,"这场球打完了，"+me->name()+"以"+chinese_number(mypt-obpt)+"分的优势"+obpt+"："+mypt+"战胜了你，不过别灰心！\n");
-//	write(ob->name()+"的分数："+obpt+"。\n");
-	call_out("finish_play",0,me,ob,point);
-	return;
-	}
-	if (obpt==point){
-	tell_object(ob,"这场球打完了，祝贺你！你以"+chinese_number(obpt-mypt)+"分的优势"+obpt+"："+mypt+"战胜了"+me->name()+"！\n");
-//	write("你的分数："+obpt+"。\n");
-	tell_object(me,"这场球打完了，"+ob->name()+"以"+chinese_number(obpt-mypt)+"分的优势"+mypt+"："+obpt+"战胜了你，不过别灰心！\n");
-//	write(ob->name()+"的分数："+mypt+"。\n");
-	call_out("finish_play",0,ob,me,point);
-	return;
-	}
-	switch(random(20)) { // 取了20以内随机，但只设了8个可以得分的情况，其他的都是平安的打来打去，sigh
-		case 0:
-	message_vision("$N沉着冷静，对着$n一球"+ball[random(8)]+"打来，\n$n一时大意，竟没接着！\n", me, ob);
-	me->add_temp("playpp/point",1); // 得分了！
-	call_out("start_play",3,me,ob,point); // 3秒的callout会不会短了点？
-	break;
-		case 2:
-	message_vision("$n轻挥球拍，对着$N一球"+ball[random(8)]+"打去，\n$N一挡，银球飞出球台之外！\n", me, ob);
-	ob->add_temp("playpp/point",1);
-	call_out("start_play",3,me,ob,point);
-	break;
-		case 4:
-	message_vision("$N一步踏前，横身一球"+ball[random(8)]+"向$n打了过去，\n$n的球拍怎么也碰不到飞转的球！\n", me, ob);
-	me->add_temp("playpp/point",1);
-	call_out("start_play",3,me,ob,point);
-	break;
-		case 6:
-	message_vision("$n反过球拍，从本来没有可能打出的地方一球"+ball[random(8)]+"打来，\n$N不禁大惊失色，手忙脚乱的打飞了这球！\n", me, ob);
-	ob->add_temp("playpp/point",1);
-	call_out("start_play",3,me,ob,point);
-	break;
-		case 8:
-	message_vision("$N斜身一拉，卸去$n来球的旋转，然后一个"+ball[random(8)]+"，\n$n再难接住这球！\n", me, ob);
-	me->add_temp("playpp/point",1);
-	call_out("start_play",3,me,ob,point);
-	break;
-		case 10:
-	message_vision("$n转身反手提拉，$N本来以为这球是普通的弧旋，谁知竟突然变成了\n"+ball[random(8)]+"，打在$N板上，远远飞出。\n", me, ob);
-	ob->add_temp("playpp/point",1);
-	call_out("start_play",3,me,ob,point);
-	break;
-		case 12:
-	message_vision("$N大力一球"+ball[random(8)]+"，没想到用力过猛，眼见就要出界，\n正在后悔之际，只听$n叹道：“唉，插边球！”竟赢了这一球！\n", me, ob);
-	me->add_temp("playpp/point",1);
-	call_out("start_play",3,me,ob,point);
-	break;
-		case 14:
-	message_vision("$n身形一晃，眼见就要不慎摔倒，没想到正好一球"+ball[random(8)]+"向$N打来，\n正好打在死角上！$N只好望球兴叹。\n", me, ob);
-	ob->add_temp("playpp/point",1);
-	call_out("start_play",3,me,ob,point);
-	break;
-		default:
-	message_vision("$N和$n你一球我一球，正打得难分难解。\n", me, ob);
-	call_out("start_play",3,me,ob,point);
-	break;
-	}
+  // 先判断假如谁先到达预定的分数，这场球就结束
+  if (mypt == point) {
+    tell_object(
+      me,
+      "这场球打完了，祝贺你！你以" + chinese_number(mypt - obpt) + "分的优势" + mypt + "：" + obpt + "战胜了" + ob->name() + "！\n"
+    );
+    //	write("你的分数："+mypt+"。\n");
+    tell_object(
+      ob,
+      "这场球打完了，" + me->name() + "以" + chinese_number(mypt - obpt) + "分的优势" + obpt + "：" + mypt + "战胜了你，不过别灰心！\n"
+    );
+    //	write(ob->name()+"的分数："+obpt+"。\n");
+    call_out("finish_play", 0, me, ob, point);
+    return;
+  }
+  if (obpt == point) {
+    tell_object(
+      ob,
+      "这场球打完了，祝贺你！你以" + chinese_number(obpt - mypt) + "分的优势" + obpt + "：" + mypt + "战胜了" + me->name() + "！\n"
+    );
+    //	write("你的分数："+obpt+"。\n");
+    tell_object(
+      me,
+      "这场球打完了，" + ob->name() + "以" + chinese_number(obpt - mypt) + "分的优势" + mypt + "：" + obpt + "战胜了你，不过别灰心！\n"
+    );
+    //	write(ob->name()+"的分数："+mypt+"。\n");
+    call_out("finish_play", 0, ob, me, point);
+    return;
+  }
+  switch (random(20)) {  // 取了20以内随机，但只设了8个可以得分的情况，其他的都是平安的打来打去，sigh
+    case 0:
+      message_vision("$N沉着冷静，对着$n一球" + ball[random(8)] + "打来，\n$n一时大意，竟没接着！\n", me, ob);
+      me->add_temp("playpp/point", 1);  // 得分了！
+      call_out("start_play", 3, me, ob, point);  // 3秒的callout会不会短了点？
+      break;
+    case 2:
+      message_vision("$n轻挥球拍，对着$N一球" + ball[random(8)] + "打去，\n$N一挡，银球飞出球台之外！\n", me, ob);
+      ob->add_temp("playpp/point", 1);
+      call_out("start_play", 3, me, ob, point);
+      break;
+    case 4:
+      message_vision("$N一步踏前，横身一球" + ball[random(8)] + "向$n打了过去，\n$n的球拍怎么也碰不到飞转的球！\n", me, ob);
+      me->add_temp("playpp/point", 1);
+      call_out("start_play", 3, me, ob, point);
+      break;
+    case 6:
+      message_vision(
+        "$n反过球拍，从本来没有可能打出的地方一球" + ball[random(8)] + "打来，\n$N不禁大惊失色，手忙脚乱的打飞了这球！\n",
+        me,
+        ob
+      );
+      ob->add_temp("playpp/point", 1);
+      call_out("start_play", 3, me, ob, point);
+      break;
+    case 8:
+      message_vision("$N斜身一拉，卸去$n来球的旋转，然后一个" + ball[random(8)] + "，\n$n再难接住这球！\n", me, ob);
+      me->add_temp("playpp/point", 1);
+      call_out("start_play", 3, me, ob, point);
+      break;
+    case 10:
+      message_vision(
+        "$n转身反手提拉，$N本来以为这球是普通的弧旋，谁知竟突然变成了\n" + ball[random(8)] + "，打在$N板上，远远飞出。\n",
+        me,
+        ob
+      );
+      ob->add_temp("playpp/point", 1);
+      call_out("start_play", 3, me, ob, point);
+      break;
+    case 12:
+      message_vision(
+        "$N大力一球" + ball[random(8)] + "，没想到用力过猛，眼见就要出界，\n正在后悔之际，只听$n叹道：“唉，插边球！”竟赢了这一球！\n",
+        me,
+        ob
+      );
+      me->add_temp("playpp/point", 1);
+      call_out("start_play", 3, me, ob, point);
+      break;
+    case 14:
+      message_vision(
+        "$n身形一晃，眼见就要不慎摔倒，没想到正好一球" + ball[random(8)] + "向$N打来，\n正好打在死角上！$N只好望球兴叹。\n",
+        me,
+        ob
+      );
+      ob->add_temp("playpp/point", 1);
+      call_out("start_play", 3, me, ob, point);
+      break;
+    default:
+      message_vision("$N和$n你一球我一球，正打得难分难解。\n", me, ob);
+      call_out("start_play", 3, me, ob, point);
+      break;
+  }
 }
 
-void finish_play(object me,object ob,int point)
-{
-	int i=random(me->query("int")+me->query("agi"))+point; // 这个是给胜者加的，比失败者多一些，hehe
-	int j=random(ob->query("int")+ob->query("agi"));
-// 删掉这一对正在打球的
-	if (query("playing")>0)
-	{
-	add("playing",-1);
-	}
-	me->delete_temp("is_unconcious");
-	me->delete_temp("disable_inputs");
-	me->delete_temp("playpp");
-	me->delete("disable_type");
-	me->receive_damage("gin",point/2);
-	me->receive_damage("kee",point/2);
-	me->improve_skill("parry",i);
-	tell_object(me,RED"你觉得自己十分疲惫，但拆招卸力之法方面有了不少进步。\n"NOR);
+void finish_play(object me, object ob, int point) {
+  int i = random(me->query("int") + me->query("agi")) + point;  // 这个是给胜者加的，比失败者多一些，hehe
+  int j = random(ob->query("int") + ob->query("agi"));
+  // 删掉这一对正在打球的
+  if (query("playing") > 0) {
+    add("playing", -1);
+  }
+  me->delete_temp("is_unconcious");
+  me->delete_temp("disable_inputs");
+  me->delete_temp("playpp");
+  me->delete("disable_type");
+  me->receive_damage("gin", point / 2);
+  me->receive_damage("kee", point / 2);
+  me->improve_skill("parry", i);
+  tell_object(me, RED "你觉得自己十分疲惫，但拆招卸力之法方面有了不少进步。\n" NOR);
 
-	ob->delete_temp("disable_inputs");
-	ob->delete_temp("playpp");
-	ob->delete("disable_type");
-	ob->receive_damage("gin",point/2);
-	ob->receive_damage("kee",point/2);
-	ob->improve_skill("parry",j);
-	tell_object(ob,RED"你觉得自己十分疲惫，但拆招卸力之法方面有了一些进步。\n"NOR);
-	return;
+  ob->delete_temp("disable_inputs");
+  ob->delete_temp("playpp");
+  ob->delete("disable_type");
+  ob->receive_damage("gin", point / 2);
+  ob->receive_damage("kee", point / 2);
+  ob->improve_skill("parry", j);
+  tell_object(ob, RED "你觉得自己十分疲惫，但拆招卸力之法方面有了一些进步。\n" NOR);
+  return;
 }

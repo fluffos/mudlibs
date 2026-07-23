@@ -292,3 +292,50 @@ confirmed non-critical, not fixed:
 Memory stayed healthy throughout (host had ~4GB free / ~19GB available
 before the sweep on this small, 945-file lib — nowhere near the §6b
 mega-lib OOM risk threshold).
+
+## Re-verification pass: driver rebuild + formatter + WASM (2026-07-23)
+
+- **LPC formatter**: ran `format-corpus.mjs` across all 945 `.lpc` files
+  under `work/` — 932 reformatted, 3 already-idempotent/unchanged, 10
+  refused (token-mismatch safety gate, expected on messy legacy code, not
+  investigated further per the formatter's own self-check guarantee).
+- **Native retest against the freshly-rebuilt driver**
+  (`~/src/fluffos/build-debug/src/driver`, rebuilt from latest upstream
+  master): booted clean, zero fatal errors in `debug.log`. Ran a full
+  interactive registration with a real Chinese name (`秦风二` / id
+  `qflibtwo`) through all three registration-wizard steps (name →
+  password → email → gender → class-type), reached the actual starting
+  room (模拟华附军训课程), and confirmed `look`/`score`/`quit` all
+  produce correct output (score sheet renders the character's real
+  stats; quit drops starting inventory and broadcasts departure). The
+  post-formatter reformatted source behaves identically to the
+  pre-formatter tree — no regression from either the driver rebuild or
+  the reformat.
+- **WASM build test** (`scripts/wasm_client.js` against
+  `build-wasm/src`): the lib **boots cleanly** under WASM
+  (`Initializations complete.`, only the expected non-fatal preload
+  warnings). However, **interactive registration is blocked by a real,
+  driver-documented WASM limitation, distinct from the
+  `query_ip_number()` gate**: `adm/daemons/securityd.lpc`'s `create()`
+  unconditionally calls `resolve(query_host_name(), "resolve_callback")`
+  (a DNS-lookup efun) with no guard around it. Per
+  `~/src/fluffos/docs/build-wasm.md`'s own "Notes & limits" section,
+  `resolve()` raises `"DNS resolver is not available"` on this WASM
+  build. Because `securityd` is lazily loaded (not preloaded) the first
+  time `master.lpc`'s `valid_write()` needs it — which happens on the
+  very first login attempt — the raised error aborts `create()` partway
+  through, before `wiz_status = allocate_mapping(...)` runs. The very
+  next call to `get_status()` then does `wiz_status[euid]` against an
+  uninitialized (zero) mapping and throws `*Value being indexed is
+  zero.`, which corrupts that connection's `input_to()` callback chain
+  (the session falls out of the name-entry prompt into a bare, bodyless
+  command loop that just replies "什么？" to everything). **This is a
+  WASM-driver-level gap (an unavailable/throwing efun the lib doesn't
+  guard against), not a mudlib bug** — confirmed by two clean, complete,
+  end-to-end native registrations (this pass and the original conversion
+  pass) hitting this exact same `securityd.lpc` code with zero issue,
+  because the native driver's `resolve()` actually works. Not patched,
+  per the standing "don't fix WASM-only driver gaps in the mudlib"
+  policy — documented here instead. Status: **boots under WASM;
+  interactive login blocked by a resolve()-under-WASM limitation
+  (WASM-driver gap, not this lib's bug)**.
