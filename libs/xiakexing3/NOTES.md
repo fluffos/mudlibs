@@ -58,3 +58,28 @@ needed to be avoided this time.
 shape (missing globals, a handful of syntax typos) — not triaged
 individually per AGENTS.md §6b/§13. Memory stayed healthy throughout
 (~13GB free).
+
+## Retroactive fix (found via archive #91, jinyongqunxiazhuan2008): this lib was completely command-dead after registration (AGENTS.md §15ae)
+
+Archive #91 (`金庸群侠传2008加强版.rar`) turned out to have a master.c
+byte-identical (in both `adm/single/` and `adm/obj/` locations) to this
+lib's raw archive -- confirmed via md5sum, not assumed -- explaining
+this lib's previously-unexplained "config says 侠客行三 but live banner
+says 金庸群侠传" oddity: this is a rebrand of the same underlying
+codebase. That later processing pass (after §15ae, the `private
+nomask` command-hook bug, had been discovered) flagged this lib for a
+check, since its own original testing above never verified a
+post-login command -- exactly the blind spot §15ae warns about.
+
+Checked and confirmed: `feature/command.lpc`'s `command_hook()` was
+`private nomask` (the `home/command.lpc` copy was already correct,
+`nomask` without `private`). `commandd.lpc`'s `sscanf` pattern was
+ALREADY `"%s.lpc"` (not the `".c"` variant found on `bxsj`/`bxsj1`/
+`jinyongwenzi` — so §15ar's second bug does not apply here, only
+§15ae's). Fixed by dropping `private`; re-verified with a fresh full
+registration (id → confirm → real Chinese name "秦岳"/"秦淮" → password
+→ stat-gift accept → email → gender) reaching an actual starting room
+(客店), with `look`/`score`/`quit` all now producing correct real
+output, `debug.log` clean (0 `error:` lines — the "编译时段错误"
+warning-spam visible to the player during testing is the separate,
+still-unfixed §15w bug, cosmetic and unrelated to command dispatch).
