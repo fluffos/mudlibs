@@ -2334,3 +2334,21 @@ second — both listed for traceability):
   #87/#88 still need their own individual triage before being finalized
   the same way, in case an LPC scripting layer sits on top somewhere,
   but the evidence so far points the same direction for all three.
+  **Update — #87/#88 triaged, confirmed**: #87 (`重出江湖WIN完全版.rar`)
+  is the same server (identical `config.txt`: port 6600, mud name
+  `烟雨红尘`), zero `.c`/`.lpc`/`inherit` anywhere, just a "complete
+  edition" bundling two GUI clients instead of one. #88
+  (`重出江湖完整源码linunx_2.71原版.rar`) genuinely mimics an LPC
+  directory shape (`d/<city>/`, `npc/`, `item/`, `std/`) closely enough
+  to warrant real scrutiny, but its `ROOM_BEGIN`/`NPC_BEGIN`/
+  `SKILL_BEGIN` macros expand to plain C++ classes (verified in the
+  macro definitions themselves, e.g. `server/Npc.h`), it builds with
+  plain `g++`/`ar` into a native ELF binary, and `grep -rIl inherit`
+  across all 5,961 files returns zero hits. This closes out the whole
+  "重出江湖" family (#86/#87/#88) as entirely non-LPC — a single custom
+  C++ engine (MFC on Windows, plain g++ on Linux) released three ways.
+  **Lesson**: a mudlib-shaped directory tree (`d/`, `npc/`, `std/`) is
+  not sufficient evidence of LPC content by itself — always grep for
+  `inherit` as the decisive check, since a C++ codebase can be
+  organized to visually resemble an LPC one without using the LPC
+  object model at all.
