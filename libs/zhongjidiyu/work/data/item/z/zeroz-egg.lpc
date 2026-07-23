@@ -1,0 +1,31 @@
+// ITEM Made by player(慕容鸡蛋:zeroz) /data/item/z/zeroz-egg.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Tue Jan 30 18:07:07 2001
+#include <ansi.h>
+#include <weapon.h>
+
+inherit SWORD;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("蛋壳[2;37;0m", ({ "egg" }));
+	set_weight(9000);
+	set("item_make", 1);
+	set("unit", "柄");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一柄剑。
+慕容鸡蛋出生后剩下的东东[2;37;0m
+剑柄上刻着一行小字：慕容鸡蛋(zeroz)
+");
+	set("value", 2100000);
+	set("point", 190);
+	set("material", "magic stone");
+	set("wield_msg", "[1;31m$N身形忽然变得诡秘异常，进退之间飘忽不定，令人无从捉摸。\n\n[1;37m$N身子忽前忽后，忽左忽右，一层层气浪跌宕翻涌，护住全身！\n\n[1;33m$N身子忽前忽后，忽左忽右，一层层气浪跌宕翻涌，护住全身！[2;37;0m\n");
+	set("unwield_msg", "[1;37m$N脸色一寒、如罩白霜，拂袖傲然而立，宛若得道真仙。\n\n[1;37m$N双手平举过顶，运起小无相功，全身笼罩在劲气之中！\n\n[1;32m$N将内力运遍浑身诸大要穴，然后收气丹田，双目一睁，登时精光四射！[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	init_sword(apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

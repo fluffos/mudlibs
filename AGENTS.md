@@ -2155,6 +2155,43 @@ original driver by relying on a fixed-format non-string salt can silently
 turn into a per-call-random generator here, and this failure mode
 produces literally no signal since the crypt call never errors.
 
+### 15am. `file_size()` returning `-1` (path doesn't exist) can be mistaken for truthy "the file exists" by an unguarded `if (file_size(path))` check — a virtual-object compile daemon that gets this wrong recurses infinitely against any missing path
+
+Found on `zhongjidiyu` (archive #78): `virtuald.lpc`'s check for whether
+a requested virtual-object path has a real backing file used `if
+(file_size(path))` — `file_size()` returns `-1` for a nonexistent path
+and `-2` for a directory, both non-zero, so this check is true for
+*every* path that doesn't actually exist, the opposite of the intended
+guard. Combined with a fallback that re-triggers the same virtual-object
+compile machinery on failure, this produced unbounded recursive compile
+attempts against any missing path ever requested. Fix: use `file_size(path)
+>= 0` (only a real, existing regular file has a non-negative size).
+**Lesson**: `file_size()`'s `-1`/`-2` sentinel values are a classic
+truthiness trap in any boolean-context check — grep for `file_size(`
+used as a bare condition (not compared against `0`/`>=0`) as part of the
+standard fix pass, the same way `strlen()` byte-vs-char bounds get
+checked.
+
+### 15an. A live/heartbeat prompt (e.g. a per-second updating clock in the command-line prompt) can defeat `mudclient.py`'s default idle-based send-pacing, making queued `--send` commands never actually get sent — looks exactly like §15ae's silent-command-dispatch failure and can cost significant misdirected diagnostic effort
+
+Found on `zhongjidiyu` (archive #78): this lib's prompt updates every
+second with a live clock/status line, which means the connection is
+never truly "idle" by whatever heuristic `mudclient.py` uses to decide
+when to send the next queued `--send` argument — the constant ~1-second
+trickle of prompt updates keeps resetting the idle timer, so scripted
+commands queue up but are never actually transmitted. Symptomatically
+this is indistinguishable from §15ae's failure mode (the player appears
+to be in the game world, but no post-login command ever seems to
+produce output) and cost real diagnostic effort chasing `add_action`/
+`process_input` before being correctly identified as a test-tooling
+artifact, not a mudlib bug. **Fix**: pass a short `--idle` value (0.3-
+0.5s) to `mudclient.py` on any lib whose banner/prompt shows a live-
+updating clock or other heartbeat-driven status text. **Lesson**: before
+concluding a lib has the §15ae command-hook bug because commands
+"silently do nothing" in a scripted test, try the same commands with a
+tighter `--idle` first — a live-clock prompt is a much more mundane
+explanation than a driver-compat bug, and worth ruling out first.
+
 ---
 
 ## Per-archive gotchas index
