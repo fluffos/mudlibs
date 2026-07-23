@@ -51,18 +51,31 @@ function parseArgs(argv) {
   return { positional, sends, timeout, idle };
 }
 
+function mkdirsOnly(Module, src, dst) {
+  // Recreate a directory tree's SHAPE in MEMFS without copying any file
+  // content -- used for log/ so nested log_file()/write_file() calls
+  // (e.g. write_file("/log/mud/MUDVISITOR", ...)) don't throw on a
+  // missing directory (any depth, not just the top-level log/ itself;
+  // see AGENTS.md's missing-directory-swallows-errors pattern).
+  try { Module.FS.mkdir(dst); } catch (e) { /* exists */ }
+  for (const e of fs.readdirSync(src, { withFileTypes: true })) {
+    if (e.isDirectory()) mkdirsOnly(Module, path.join(src, e.name), dst + '/' + e.name);
+  }
+}
+
 function copyDir(Module, src, dst) {
   try { Module.FS.mkdir(dst); } catch (e) { /* exists */ }
   for (const e of fs.readdirSync(src, { withFileTypes: true })) {
     // Skip the CONTENTS of the runtime-churn directories we no longer
     // track in git anyway (see .gitignore) -- copying them into MEMFS
     // wastes time/memory and they aren't needed for a fresh-boot smoke
-    // test. Still create the directory itself: several libs' log_file()/
-    // write_file() calls throw (and silently abort the caller, per
-    // AGENTS.md's missing-directory-swallows-errors pattern) if the
-    // directory doesn't exist at all, even for a brand new file.
+    // test. Still create the full directory SHAPE (recursively, not just
+    // the top level): several libs' log_file()/write_file() calls throw
+    // (and silently abort the caller, per AGENTS.md's
+    // missing-directory-swallows-errors pattern) if a directory doesn't
+    // exist at all, even a nested one, even for a brand new file.
     if (e.name === 'log' && dst.endsWith('/work') && e.isDirectory()) {
-      try { Module.FS.mkdir(dst + '/log'); } catch (err) { /* exists */ }
+      mkdirsOnly(Module, path.join(src, e.name), dst + '/log');
       continue;
     }
     const s = path.join(src, e.name);
