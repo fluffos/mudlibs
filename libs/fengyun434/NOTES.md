@@ -48,3 +48,30 @@ range check to test the CJK Unicode block instead, and halved the
 GBK-byte-calibrated length bounds in `check_legal_name` to match. See
 AGENTS.md §15h for the full writeup; confirmed via a real interactive
 registration test (Chinese surname + given name reaching the next prompt).
+
+## Re-verification pass: driver rebuild + LPC formatter + WASM build
+
+- **Formatter**: `format-corpus.mjs` over all 8238 `.lpc` files; 6477
+  reformatted, 4 unchanged, 1757 refused (self-check `errors`/token
+  mismatches, expected on a mega-lib this size — not chased down
+  individually). One explicit `TOKEN MISMATCH` reported for
+  `d/for_martea/neon_playground/migong/adm/daemons/vrm_server.lpc`
+  (left untouched by the formatter itself, per its own refuse-don't-guess
+  policy).
+- **Proactive fix applied before the first boot attempt of this pass**:
+  same `adm/daemons/securityd.lpc` `resolve()`-before-`wiz_status`
+  ordering bug as `fengyun3dianzang`/`fengyun3xiuding` (same 风云 engine
+  family) — fixed proactively before booting. (A second, empty
+  `adm/securityd.lpc` file also exists in this lib but is dead/unused —
+  `SECURITY_D` in `globals.h` points at `adm/daemons/securityd`, not it —
+  left alone.)
+- **Native retest against rebuilt driver**: clean, zero fixes needed
+  beyond the proactive one. Full registration + `look`/`score`/`quit`
+  verified with a real Chinese name (杨过), zero debug.log errors.
+- **WASM test**: boots and plays fully. Only non-fatal errors are the
+  expected no-sockets-package ones (`ftpd.lpc` and
+  `network/dns_master.lpc` both fail to compile with `Undefined function
+  socket_create`/`socket_bind`/`socket_close`, `*No program in object`
+  at preload — caught, non-cascading). Full registration with a real
+  Chinese name (郭靖), `look`, and `quit` all completed cleanly. Not
+  affected by the documented `query_ip_number()` WASM limitation.
