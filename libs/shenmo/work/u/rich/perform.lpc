@@ -1,0 +1,759 @@
+/*********************************************************
+**  		/std/perform.c				**
+**		pfm的类型文件				**
+**		利弊各参 :)				**
+**		Create By Run & Snowtu 2003		**
+*********************************************************/
+#include <ansi.h>
+#include <dbase.h>
+#include <room.h>
+
+inherit F_DBASE;
+inherit F_CLEAN_UP;
+
+void reset();
+int check_class(object me,object target);
+int perform(object me,object target);
+void hit_msg(object me,object target,int num);
+int success_hit(object me,object target,int damage,int num);
+void success_hit_msg(object me,object target,int num);
+int lost_hit(object me,object target,int num);
+void lost_hit_msg(object me,object target,int num);
+int normal_hit(object me);
+void normal_hit_msg(object me);
+void double_hit_msg(object me,object target,int i);
+void remove_eff(object me,string temp_busy);
+void normal_hit(object me);
+void remove_eff_msg(object me);
+int hit_rate(object me,object target,int persent);
+int limit_other_msg(object me,object target,string name);
+
+
+/*********************************************************
+**			查找target			**
+*********************************************************/
+object offensive_target(object me)
+{
+int sz;
+object *enemy;
+if ( !me ) return 0;
+enemy = me->query_enemy();
+if( !enemy || !arrayp(enemy) ) return 0;
+sz = sizeof(enemy);
+if( sz > 4 ) sz = 4;
+if( sz > 0 ) return enemy[random(sz)];
+else return 0;
+}
+
+
+/*********************************************************
+**	查询门派互克，克传回1，被克传回-1，其余传回0	**
+*********************************************************/
+int check_class(object me,object target)
+{
+if ( !me || !target)
+        return 0;
+if ( me->query("class")=="xian" )
+        {
+        switch ( target->query("class") )
+                {
+                case "human"      :       return 1;
+                case "yao"      :       return -1;
+                default :       return 0;
+                }
+        }
+else if ( me->query("class")=="human" )
+        {
+        switch ( target->query("class") )
+                {
+                case "yao"      :       return 1;
+                case "xian"     :       return -1;
+                default :       return 0;
+                }
+        }
+else    {
+        switch ( target->query("class") )
+                {
+                case "xian"     :       return 1;
+                case "human"      :       return -1;
+                default :       return 0;
+                }
+        }
+}
+
+
+void create(object me,object target)
+{
+perform(me,target);
+}
+
+
+int perform(object me,object target)
+{
+int i,persent,mypot,hispot,j;
+mapping limit_skill,double_hit,special_hit,limit_other,limit_other2,next2;
+string msg,*str,type = query("type");       //类型
+
+seteuid(getuid());
+reset();
+
+if ( !me )
+	return 0;
+	
+if ( (int)query("wiz_test") && !wizardp(me) )   //AddBy Snowtu For wiz test
+	return notify_fail(query("name")+"现在还处在测试阶段，暂不开放。\n");
+
+if ( (string)query("class") && me->query("class")!=query("class") )
+	return notify_fail("你不是"+to_chinese(query("class"))+"界中人，使不出此招。\n");
+
+if ( (string)query("family") && me->query("family/family_name")!=query("family") )
+        {	
+        if ( !query("betray_lvl") )
+        	return notify_fail("你不是"+query("family")+"门人，使不出此招。\n");
+        else if ( (string)query("belong") && me->query_skill((string)query("belong"),1)<(int)query("betray_lvl") )
+                return notify_fail("你的"+to_chinese(query("belong"))+"尚未到开宗创祖的地步。\n");
+	else if ( (string)query("type") && me->query_skill((string)query("type"),1)<(int)query("betray_lvl") )	
+		return notify_fail("你的"+to_chinese(query("type"))+"尚未到开宗创祖的地步。\n");
+        else    message("channel:combat",WHT"【数据中心】"+sprintf("叛离%s的%s(%s)正在调用的PFM %s 。\n",query("family"),me->query("name"),me->query("id"),this_object()->query("name")),users());   
+        }
+
+if ( (string)query("master") && me->query("family/master_id")!=(string)query("master") )
+	return notify_fail(query("name")+"必须由"+query("master")+"亲传方可使用。\n");
+
+if ( me->is_busy() )	return notify_fail("你正忙着呢。\n");
+
+if ( query("weapon")==1 
+  && objectp(me->query_temp("weapon")) )
+	return notify_fail("你必须空手才能使用「"+query("name")+NOR"」！\n");
+
+	/*************************************************
+	**		jifa限制          		**
+	**	set("enable",([				**
+	**		"force"	: "sex",		**
+	**		"splls" : "sleep",		**
+	**	]));					**
+	*************************************************/
+if ( mapp(query("enable")) )
+	{
+	str=keys(query("enable"));
+	i = sizeof(str);
+	while(i--)
+		{
+		if (me->query_skill_mapped(str[i])!=query("enable")[str[i]] )
+			return notify_fail("你必须激发"+to_chinese(str[i])+"。\n");
+		}
+	}		 		
+
+	/*************************************************
+	**		其他skill等级限制		**
+	**	set("limit_skill",([			**
+	**		skill1 : int,			**
+	**		skill2 : int, ]));		**
+	*************************************************/
+if ( mapp(limit_skill=query("limit_skill")) )   //
+        {
+        str = keys(limit_skill);
+/*
+        i = sizeof(str);
+        while(i--) 
+//这个判断有问题的
+fang@tsrj */
+        i = sizeof(str);
+return notify_fail("个数" + chinese_number(i));
+        while( (i--) >= 0 )
+                {
+                if ( (string)str[i] )
+                        {
+                        if ( me->query_skill(str[i],1)<limit_skill[str[i]] )
+                                return notify_fail("你的"+to_chinese(str[i])+"等级不够，使不出"+query("name")+"。\n");
+                        break;        
+                        }
+                }
+        }
+
+	/*************************************************
+	**		属性限制(需大于)		**
+	**	set("limit_other",([			**
+	**		abc : int,]));			**
+	*************************************************/
+if ( mapp(limit_other=query("limit_other")) )   //
+        {
+        str = keys(limit_other);
+        i = sizeof(str);
+        while(i--) 
+                {
+                if ( (string)str[i] )
+                        {
+                        if ( me->query(str[i],1) <limit_other[str[i]])
+                                return limit_other_msg(me,target,str[i]);
+                        break;        
+                        }
+                }
+        }
+
+	/*************************************************
+	**		属性限制(需小于)		**
+	**	set("limit_other2",([			**
+	**		abc : int,]));			**
+	*************************************************/
+if ( mapp(limit_other2=query("limit_other2")) )   
+        {
+        str = keys(limit_other2);
+        i = sizeof(str);
+        while(i--) 
+                {
+                if ( (string)str[i] )
+                        {
+                        if ( me->query(str[i],1) >limit_other2[str[i]])
+                                return limit_other_msg(me,target,str[i]);
+                        }
+                }
+        }
+
+	/*************************************************
+	**	需要的内力限制 >=query("need_force")	**
+	*************************************************/
+if ( (int)query("need_force") && me->query("force")<(int)query("need_force") )  
+        return notify_fail("你内力不足，难以使出"+query("name"));
+
+	/*************************************************
+	**	消耗的内力限制 =query("need_force")	**
+	*************************************************/
+if ( (int)query("force") && me->query("force")<(int)query("force") )            
+        return notify_fail("你内力不够了，难以使出"+query("name")+"\n");
+
+	/*************************************************
+	**		气血限制			**
+	*************************************************/
+if ( (int)query("kee")>0 )
+	{
+	if ( me->query("kee")<= (int)query("kee") ) 
+		return notify_fail("你现在的气血不足，使用"+query("name")+"有些勉强。\n");
+	me->receive_damage("kee",(int)query("kee") );
+	}
+
+if( !target ) target = offensive_target(me);
+
+if( !target
+ || !target->is_character()
+ || target->is_corpse()
+ || target==me
+ || environment(me)!=environment(target)  
+ || !living(target) 
+ || !me->is_fighting(target)
+ || !living(me) ) 
+ 	{
+ 	if ( query("target") )	
+                return notify_fail("你要对谁施展「"+query("name")+"」？\n");
+	else	{
+		if ( (string)query("temp") )
+			{
+			if ( me->query_temp(query("temp")) )
+				return notify_fail("绝招用多就不灵了。\n");
+			me->set_temp(query("temp"),1);
+			call_out("remove_eff",query("temp_time"),me,query("temp"));
+			}
+		return normal_hit(me); 
+		}
+	}
+
+	/*************************************************
+	**		busy性的pfm			**
+	*************************************************/
+if (query("busy_pfm")&&target->is_busy()) 
+      return notify_fail("对方已经动弹不得了\n");
+
+
+	/*************************************************
+	**	延迟busy				**
+	*************************************************/
+if ( (string)query("temp") )
+	{
+	if ( me->query_temp(query("temp")) )
+		return notify_fail("绝招用多就不灵了。\n");
+	me->set_temp(query("temp"),1);
+	call_out("remove_eff",query("temp_time"),me,query("temp"));
+	}
+
+	/*************************************************
+	**		发动攻击时的显示		**
+	*************************************************/
+hit_msg(me,target,1);
+if ( query("busy_self") || query("self_busy") )
+      me->start_busy(query("busy_self")?query("busy_self"):query("self_busy"));
+
+	/*************************************************
+	**		连续击示例 (普通攻击型)		**
+	**	set("double_hit",([			**
+        **		"num" :int 连击次数		**
+        **		"temp":string连击中加的temp名	**
+        **		"temp_num":*int 加的temp数	**
+        **		"me_del_env": int,me是否 delete_temp("env/brief_message"),1为是，0为否
+        **						**
+        **		"t_del_env" : int,target是否... **
+        **		"msg"	    : *string 攻击msg	**
+        **	]));					**
+        *************************************************/
+if ( mapp(double_hit=query("double_hit")) )
+        {
+        int num = double_hit["num"];
+        if ( double_hit["me_del_env"]==1 )
+                me->delete_temp("env/brief_message");
+        if ( double_hit["t_del_env"]==1 )
+                target->delete_temp("env/brief_message");
+        for ( i=0;i<num;i++ )
+                {
+                if ( !me || !target || !present(target,environment(me))
+		  || !living(me) || !living(target) || !me->is_fighting(target) )
+			return notify_fail("敌人不在面前。。。\n");
+               	if ( (string)double_hit["temp"] )
+                       	me->set_temp(double_hit["temp"],double_hit["temp_num"][i]);
+               	double_hit_msg(me,target,i);  
+               	COMBAT_D->do_attack(me, target, me->query_temp("weapon"),({-2,-1,0,1,2})[random(5)]); 
+                }
+        if( !target->is_fighting(me) ) 
+                {
+                if( living(target) ) 
+                        {
+                        if( userp(target) ) 
+                                target->fight_ob(me);
+                        else    target->kill_ob(me);
+                        }
+                else    message_vision(CYN"好一招「"NOR+HIG+query("name")+NOR CYN"」，端的是厉害！\n"NOR,me);
+                }
+        if ( (string)double_hit["temp"] )
+                me->delete_temp(double_hit["temp"]);
+        if ( (int)query("busy_self") )  //自己busy 直接set("busy_self",busy_time)
+                me->start_busy((int)query("busy_self"));
+        if ( (string)query("temp_busy") )       //延迟效果      set("temp_busy",(string)temp_busy)
+                {
+                me->set_temp((string)query("temp_busy"),1);
+                call_out("remove_eff",(int)query("temp_busy_time"),me,(string)query("temp_busy"));
+                }
+        return 1;
+        }
+        
+	/*************************************************
+	**		连续击示例 (自定义型)		**
+	**	set("special_hit",([			**
+	**		"num":int, 连击次数		**
+	**		"temp_persent":*int, 命中	**
+        **		"temp_damage" :*int, 威力	**
+        **		"success_next":*int, 当前一击命中后是否接下一招，0为是，1为否
+        **		"fail_next"   :*int,当前一击不中后是否接下一招，0为是，1为否
+	**	]));					**
+	*************************************************/
+else if ( mapp(special_hit=query("special_hit")) )
+	{
+	int num = special_hit["num"];
+	int next=0;
+	for (j=1;j<=num&&next==0;j++) 
+		{
+		persent = hit_rate(me,target,special_hit["temp_persent"][j-1]);          //命中
+		if (j>1) 
+			hit_msg(me,target,j);
+		if ( persent==1 )
+			{                                   // 如果 命中为1
+			success_hit(me,target,special_hit["temp_damage"][j-1],j);          // 转到 攻击成功函数
+			next=special_hit["success_next"][j-1];
+			}
+		else if ( persent==0 )
+			{                           // 失败则为0
+			lost_hit(me,target,j);      // 攻击失败
+			next=special_hit["fail_next"][j-1];
+			}
+		else normal_hit(me);                // 普通效果 ( 此处为 为 无把握取胜，收回招数之类的描述 )
+		}
+	return 1;
+	}
+else	{
+	persent = hit_rate(me,target,query("persent"));          //命中
+	if ( persent==1 )                                        // 如果 命中则为1
+		return success_hit(me,target,query("damage"),1);          // 转到 攻击成功函数
+	else if ( persent==0 )                           // 失败则为0
+		return lost_hit(me,target,1);                     // 攻击失败
+	else    return normal_hit(me);                  // 普通效果 ( 此处为 为 无把握取胜，收回招数之类的描述 )
+	}
+}
+
+int success_hit(object me,object target,int damage,int num) 
+{
+// int damage = query("damage");                   // damage在具体pfm中设置 set("damage",num);
+// if ( damage>800 ) damage = 800;                 // damage最大限  暂时封住---run
+
+if ( environment(me)!=environment(target) )
+	return 0;
+
+if (damage)
+damage =damage - ( target->query_temp("apply/armor")/2 );
+
+if (damage<me->query("force_factor")*2+me->query_temp("apply/damage")*2)
+           damage=me->query("force_factor")*2+me->query_temp("apply/damage")*2;  //加入 def ---run
+       
+if (me->query("class")=="yao") damage*=4/3;
+
+if ( me && target && living(me) && living(target) ) 
+        {
+        success_hit_msg(me,target,num);                     // 攻击成功信息 
+       target->set_temp("last_damage_from", me);
+       //防止有些pfm 做menpai不给奖励
+        switch( query("damage_type") )          // 伤害类型 kee,sen,busy,...
+                {
+                case "kee" :
+                        target->receive_damage("kee",damage);
+                        COMBAT_D->report_status(target);
+                        break;
+                case "eff_kee" :
+                        target->receive_wound("kee",damage);
+                        COMBAT_D->report_status(target,damage);
+                        break;
+
+                case "sen" :  /********  初步设定 pfm 只打 kee, 以下备用 *********/
+                        target->receive_damage("sen",damage);
+                        COMBAT_D->report_sen_status(target);
+                        break;
+                case "eff_sen" :
+                        target->receive_wound("sen",damage);
+                        COMBAT_D->report__sen_status(target,damage);
+                        break;
+                case "all" :
+                        target->receive_damage("kee",damage);
+                        COMBAT_D->report_status(target);
+                        
+                        target->receive_wound("kee",damage);
+                        COMBAT_D->report_status(target,damage);
+                        
+                        target->receive_wound("sen",damage);
+                        COMBAT_D->report__sen_status(target,damage);
+                        
+                        target->receive_damage("sen",damage);
+                        COMBAT_D->report_sen_status(target);                        
+			break;
+                default :                       //busy技能，必须跟 set("busy_time",num);
+                        target->start_busy((int)query("busy_time"));
+                }
+                         target->set_temp("last_damage_from",me);//防止用special pfm不给奖励
+        if ( (int)query("busy_self") )  //自己busy 直接set("busy_self",busy_time)
+                me->start_busy((int)query("busy_self"));
+        if ( (string)query("temp_busy") )       //延迟效果      set("temp_busy",(string)temp_busy)
+                {
+                me->set_temp((string)query("temp_busy"),1);
+                call_out("remove_eff",(int)query("temp_busy_time"),me,(string)query("temp_busy"));
+                }
+        return 1;
+        }
+return notify_fail("你见已无敌手，收起了攻击。\n");
+}
+
+void remove_eff(object me,string temp_busy)
+{
+if ( me && me->query_temp(temp_busy) )
+        {
+        me->delete_temp(temp_busy);
+        remove_eff_msg(me);                     //取消延迟的描述
+        }
+return;
+}
+        
+int lost_hit(object me,object target,int num) 
+{
+if ( me && target && living(me) && living(target) ) 
+        {
+        lost_hit_msg(me,target,num);
+        if ( (int)query("busy_lost") )  //失败busy set("busy_lost",busy_time)
+                me->start_busy((int)query("busy_lost"));
+        return 1;
+        }
+return notify_fail("你见已无敌手，收起了攻击。\n");
+}
+
+/*******************
+
+int normal_hit(object me)                       一般攻击
+{                                               攻击性pfm(query("target")) 为"无奈收招"之类的描述
+write("你是天才\n");                            辅助性pfm则为具体的功能了
+return 1;                                       到时，可能会增加具体的 set("XXX",XXX)了
+}
+
+********************/
+
+int normal_hit(object me)
+{
+mapping pfm2,applys;
+int time;
+string name,temp,*apply;
+object target;
+
+if ( query("target") )                  //攻击性质pfm
+        {
+        if ( mapp(pfm2=query("pfm2")) )  //有后发pfm
+                {
+                        /***********************
+                                set("pfm2",([
+                                        "name" : name, 调用的函数名
+                                        "time" : time, 时间
+                                        "temp" : temp, temp名
+                                        ]));
+                        ************************/
+
+                target = offensive_target(me);
+                if( !target
+                 || !target->is_character()
+                 || target->is_corpse()
+                 || target==me
+		   || environment(me)!=environment(target) )
+                        {
+                        message_vision(CYN"\n$N"CYN"见无敌手，收起来了攻势。\n"NOR,me);
+                        return 1;
+                        }
+                time =  pfm2["time"];
+                name = pfm2["name"];
+                temp = pfm2["temp"];
+                me->set_temp(temp,1);
+                if ( (int)query("busy_self") ) 
+                        me->start_busy((int)query("busy_self"));
+                call_out(name,time,me,target,temp);     //这个在具体的pfm文件中定义
+                return 1;
+                }
+        message_vision(CYN"\n$N"CYN"见对手防御紧密，难以窥得空隙，不由怅然的放弃了攻击。\n"NOR,me);
+        return 1;
+        }
+
+normal_hit_msg(me);
+
+                       //辅助性pfm
+if ( (int)query("kee") )        //加血 set("kee",num);
+        {
+        message_vision(CYN"\n$N"CYN"使出一招"+query("name")+CYN"但觉浑身精血上扬，充沛了不少。\n"NOR);
+        me->receive_heal("kee",query("kee")); 
+        if ( (int)query("need_force") )
+                me->add("force",-(int)query("need_force"));
+        else    if ( (int)query("force") )
+                me->add("force",-(int)query("force"));
+        }
+if ( (int)query("eff_kee") )    //加血 set("kee",num);
+        {
+        message_vision(CYN"\n$N"CYN"使出一招"+query("name")+CYN"但觉浑身精血充沛，伤势减轻了不少。\n"NOR);
+        me->receive_heal("kee",query("kee")); 
+        if ( (int)query("need_force") )
+                me->add("force",-(int)query("need_force"));
+        else    if ( (int)query("force") )
+                me->add("force",-(int)query("force"));
+        }
+if ( mapp(applys=query("apply")) )      //加攻等
+        {
+                /****************
+                        set("apply",([
+                                "dodge" : dodge,
+                                ....
+                        ]));
+                ***************/
+        apply = keys(applys);
+        time = sizeof(apply);
+        while(time--)
+                {
+                if ( (string)apply[time] )
+                        me->set_temp("apply/"+apply[time],applys[apply[time]]);
+                }
+        if ( (string)query("temp_busy") )       //延迟效果      set("temp_busy",(string)temp_busy)
+             {
+                me->set_temp((string)query("temp_busy"),1);
+                call_out("remove_eff",(int)query("temp_busy_time"),me,(string)query("temp_busy"));
+              }
+        }
+return 1;
+}
+
+int hit_rate(object me,object target,int persent)
+{
+string msg;	
+int myatt,tparry,tdodge,myexp,texp,xk;
+int ap,dp;
+//       int persent;
+myatt=me->query_skill( query("base_type") );
+tparry=target->query_skill("parry");
+tdodge=target->query_skill("dodge");
+myexp=me->query("combat_exp");
+texp=target->query("combat_exp");
+
+msg = sprintf("Perform 伤害设定: "NOR HIR"%d"NOR WHT"\n",query("damage"));		
+
+if ( myexp>texp*2 )
+	{
+	msg+= sprintf("：武学相差2倍以上：myexp="NOR HIR"%d"NOR WHT"  texp="NOR HIR"%d"NOR WHT" 直接命中\n",myexp,texp);	
+	message("channel:combat",WHT"【数据中心】"NOR HIG+query("name")+"("+base_name(this_object())+")"+NOR+WHT"\n\t"+msg+sprintf("\n 我方%s(%s) 敌方%s(%s)\n"NOR,me->query("name"),me->query("id"),target->query("name"),target->query("id")),users());
+	return 1;
+	}
+/*
+else if ( random(myexp)>random(texp*3/2) )
+	{
+	if ( wizardp(me) )
+		{
+		msg+= "：武学判定随机相差1.5倍以上，直接命中\n";		
+		message("channel:combat",WHT"【数据中心】"NOR HIG+query("name")+"("+base_name(this_object())+")"+NOR+WHT"\n\t"+msg+sprintf("\n 我方%s(%s) 敌方%s(%s)\n"NOR,me->query("name"),me->query("id"),target->query("name"),target->query("id")),users());
+		}
+	return 1;
+	}
+*/	
+else	{	
+	if (me->query_temp("apply/pfm_success")) 
+		persent+=me->query_temp("apply/pfm_success");
+
+	if (persent==1000) 
+		{
+		msg+= "：命中为必中 persent=1000 ，直接命中。\n";
+		message("channel:combat",WHT"【数据中心】"NOR HIG+query("name")+"("+base_name(this_object())+")"+NOR+WHT"\n\t"+msg+sprintf("\n 我方%s(%s) 敌方%s(%s)\n"NOR,me->query("name"),me->query("id"),target->query("name"),target->query("id")),users());
+		return 1;                       // pfm persent =1000时，为必中，=1时，命中为0
+		}
+		
+	if (persent==1) 
+		{
+		message("channel:combat",WHT"【数据中心】"NOR HIG+query("name")+"("+base_name(this_object())+")"+NOR+WHT"\n\t"+msg+sprintf("\n 我方%s(%s) 敌方%s(%s)\n"NOR,me->query("name"),me->query("id"),target->query("name"),target->query("id")),users());
+		return 0;
+		}
+
+	msg+= sprintf("\tPerform 命中设定: "NOR HIR"%d"NOR WHT"\n",persent);		
+                                                           //两者各属性相近且不相克时，100persent为命中50% 公式为persent/(persent+100)；
+	xk= check_class(me,target);                       // 加上class互克
+
+	msg+= sprintf("\t系(class)判定点 xk="NOR HIR"%d"NOR WHT"\n",xk);
+	
+//防止数据益处
+        ap= myatt/10 * myatt/10 * myatt /10; 
+        dp= tparry/10 * tdodge/10 * (tdodge + tparry)/20;
+
+	msg+= sprintf("\t自身判定点: ap="NOR HIR"%d"NOR WHT" 敌方判定点: dp="NOR HIR"%d"NOR WHT"\n",ap,dp);
+		
+	if ( texp<100 )
+		{
+		myexp = myexp;
+		texp= texp;
+		}    
+        else  	if ( texp<1000 )
+		{
+		myexp/= 50;
+		texp/= 50;
+		}    
+        else  	if ( texp<10000 )
+		{
+		myexp/= 500;
+		texp/= 500;
+		}    
+        else  	if ( texp<100000 )
+		{
+		myexp/= 5000;
+		texp/= 5000;
+		}    
+	else	{
+		myexp/= 10000;
+		texp/= 10000;
+		}    
+
+	msg+= sprintf("\t自身武学点: "NOR HIR"%d"NOR WHT" 敌方武学点: "NOR HIR"%d"NOR WHT"\n",myexp,texp);
+	
+	ap*= myexp;
+	dp*= texp;
+
+	msg+= sprintf("\t自身判定(含武学)点: "NOR HIR"%d"NOR WHT" 敌方判定(含武学)点: "NOR HIR"%d"NOR WHT"\n",ap,dp);
+	
+	if ( dp<100 )
+		{
+		ap = ap;
+		dp = dp;
+		}	   
+	else if ( dp<1000 )
+		{
+		ap/= 50;
+		dp/= 50;
+		}		
+	else if ( dp<10000 )
+		{
+		ap/= 500;
+		dp/= 500;
+		}		
+	else 	{
+		ap/= 5000;
+		dp/= 5000;
+		}		
+	
+	if (ap<1) ap=1;
+	if (dp<1) dp=1; 
+
+	if ( ap>dp*2 )
+		{
+		msg+= "\t判定点2倍以上，直接命中。\n";
+		message("channel:combat",WHT"【数据中心】"NOR HIG+query("name")+"("+base_name(this_object())+")"+NOR+WHT"\n\t"+msg+sprintf("\n 我方%s(%s) 敌方%s(%s)\n"NOR,me->query("name"),me->query("id"),target->query("name"),target->query("id")),users());
+		return 1;
+		}
+	
+	else	{
+		ap=ap*persent/100;
+		ap=ap*(5+xk)/5;
+		ap=random(ap);
+		dp=random(dp);
+		msg+= sprintf("\t自身判定(最终)点: "NOR HIR"%d"NOR WHT" 敌方判定(最终)点: "NOR HIR"%d"NOR WHT"\n",ap,dp);		
+		message("channel:combat",WHT"【数据中心】"NOR HIG+query("name")+"("+base_name(this_object())+")"+NOR+WHT"\n\t"+msg+sprintf("\n 我方%s(%s) 敌方%s(%s)\n"NOR,me->query("name"),me->query("id"),target->query("name"),target->query("id")),users());
+		message("channel:combat",WHT"【数据中心】"NOR HIG+query("name")+"("+base_name(this_object())+")"+NOR+WHT"\n\t"+msg+sprintf("\n 我方%s(%s) 敌方%s(%s)\n"NOR,me->query("name"),me->query("id"),target->query("name"),target->query("id")),users());
+		if (ap>=dp) 
+			return 1; 
+		else 
+			return 0;
+		}
+	}    
+}
+
+/*********************************
+**	作成OBJ类型的后遗症	**	
+**	因不是OBJ，所以不能	**
+**	使用完了destruct,但	**
+**	是其 data依然保存着	**
+**	但多人使用时，其data	**
+**	等于被多人在set着，	**
+**	所以容易出现data递增	**
+**	的bug,我将之变量的data	**
+**	至于temp里，用reset	**
+**	来清除它		**
+**	具体可以查阅 swordman	**
+**	的longxiang.c		**
+**		snowtu/2004	**
+*********************************/
+void reset()
+{
+int i;	
+mapping temp;
+string *t_data;
+temp = query_entire_temp_dbase();
+if ( !temp )
+	return;
+t_data = keys(temp);
+i = sizeof(t_data);
+while ( i-- )
+	delete_temp(t_data[i]);
+if ( query("old_persent") )
+	set("persent",query("old_persent"));
+return;
+}	
+
+void hit_msg(object me,object target,int num)
+{
+if ( !me || !target || !num || !present(target,environment(me)) )
+	return;
+}			
+
+void success_hit_msg(object me,object target,int num)
+{
+if ( !me || !target || !num || !present(target,environment(me)) )
+	return;
+}	
+
+void lost_hit_msg(object me,object target,int num)
+{
+if ( !me || !target || !num || !present(target,environment(me)) )
+	return;
+}	
+
+void normal_hit_msg(object me)
+{
+if ( !me )
+	return;
+}	

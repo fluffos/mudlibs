@@ -1,0 +1,171 @@
+//战斗类npc
+#include <ansi.h>
+inherit NPC;
+
+void create()
+{
+mapping name = NAME_D->random_name("yaoguai");
+set_name(name["name"],name["id"]);
+set("title",name["title"]);
+setup();
+}
+
+int invocation(object who)
+{
+object obj;
+int flag;
+mapping name;
+string *t,type,*types;
+
+if ( !who )
+        return 0;
+if ( !SDS_D->random_family(this_object(),who,(who->query_skill("force",1)+100)*2) )
+        return 0;
+return 1;
+}
+
+void init()
+{
+add_action("do_none","",1);
+add_action("do_eat","eat");
+if ( !userp(this_player()) || wizardp(this_player()) )
+        return;
+if ( invocation(this_player()) )
+        kill_ob(this_player());
+}
+
+int do_none()
+{
+string *no_cmds;
+object me = this_player();
+string verb = query_verb();
+
+if ( me!=query("yabiao_target") )
+        return 0;
+
+no_cmds = ({
+        "gongji","ji","apply","steal","whisper","bian","surrender","go",
+        "cast chuqiao",                 //all
+        "cast yinshen",                 //bonze
+        "cast shuidun",                 //dragon
+        "cast huimeng",                 //moon
+        "cast escape","cast chongsheng",//emei swordman
+        "burn",                         //jjf
+        "cast townportal",              //hell
+        "cast yin",                     //gumu
+        "cast arrest","cast drift","cast taijitu",
+                                        //kunlun ... so BT..
+        "cast mysticism",               //sanxian
+        "cast jieti",                   //xueshan
+        "cast tuoqiao",                 //shushan
+        "cast bagua",                   //youxia
+        "cast qimen","cast qiankun",    //wzg
+        "cast tudun",                   //wdd
+});
+
+if ( member_array(verb,no_cmds)!=-1 )
+        {
+        message_vision(HIR"$N"HIR"看起来想要杀死$n"HIR"！\n"NOR,this_object(),me);
+        return 1;
+        }
+return 0;
+}
+
+int do_pfm()
+{
+object me = this_player();
+if ( me->is_fighting(this_object())
+  || this_object()->is_fighting(me) )
+        {
+        if ( time()<(me->query_temp("yaota_eat")+5) )
+                {
+                tell_object(me,HIG"你从怀里小心翼翼的拿出一颗云丹送入嘴中，果然见你脸上慢慢泛出红光，法力和内力到了极限！\n"NOR);
+                return 1;
+                }
+        me->set_temp("yaota_eat",time());
+        }
+return 0;
+}
+
+void heart_beat()
+{
+string skill,exert;
+int i;
+object weapon,armor;
+object obj,who,me = this_object();
+::heart_beat();
+if ( !objectp(query_temp("armor/armor")) )
+        {
+        armor = new("/d/city/npc/obj/armor");
+        armor->set("armor_prop/armor",200);
+        armor->move(this_object());
+        command("wear all");
+        }
+if ( !objectp(query_temp("weapon")) && random(5) )
+        {
+        weapon = new(query("weapon_file"));
+        if ( weapon )
+                {
+                weapon->set_name("钢刀",({"gang dao"}));
+                weapon->move(me);
+                command("wield all");
+                }
+        }
+if ( !living(me) )
+        return;
+if ( query("eff_kee") < query("max_kee") )
+        SDS_D->addEffKee(me);
+if ( query("eff_sen") < query("max_sen") )
+        SDS_D->addEffSen(me);
+if ( !me->is_fighting() )
+        return;
+if ( query("kee") < query("eff_kee") )
+        SDS_D->addKee(me);
+if ( query("sen") < query("eff_sen") )
+        SDS_D->addSen(me);
+if ( objectp(weapon=me->query_temp("weapon")) )
+        skill = weapon->query("skill_type");
+else    skill = "unarmed";
+
+switch(random(10))
+        {
+        case 0 :
+        case 1 :
+        case 9 :
+        case 8 :
+        case 2 : SDS_D->randomPfm(me,skill);break;
+        case 3 :
+        case 7 :
+        case 6 : SDS_D->randomCast(me);break;
+        default: SDS_D->randomExert(me);
+        }
+}
+
+void die()
+{
+int wx,dx,pot;
+object who;
+object me = this_object();
+who = query_temp("last_damage_from");
+
+message_vision("$N死了。\n",me);
+if ( who && present(who,environment()) )
+        {
+        SDS_D->powerup(me);
+        me->remove_killer(who);
+        who->remove_killer(me);
+
+        wx = 2000;
+        wx = wx/3+random(wx);
+        dx = wx/4;
+        pot = wx/20;
+        who->add("combat_exp",wx);
+        who->add("daoxing",dx);
+        who->add("potential",pot);
+        tell_object(who,HIR"你得到了"+wx+"点武学，"+COMBAT_D->chinese_daoxing(dx)+"道行和"+pot+"点潜能。\n"NOR);
+        who->save();
+        }
+destruct(me);
+}
+
+

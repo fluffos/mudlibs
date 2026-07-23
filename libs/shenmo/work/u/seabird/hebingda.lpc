@@ -1,0 +1,183 @@
+#include <ansi.h>
+inherit ITEM;
+
+void create()
+{
+set_name("合并魄石",({"hebing poshi","po","shi"}));
+set("unit","颗");
+set("long","一颗形状古朴的魄石，用它可以合并(hebing)莲花。\n");
+set_weight(5000);
+set("value",0); 
+set("no_give",1);
+set("no_put",1);
+setup();
+}
+
+void destruct_me()
+{
+write(HIW+name()+"化作一朵莲花冲天而去！\n\n"NOR);      
+this_object()->move("/obj/empty");
+destruct(this_object());
+}       
+        
+void init()
+{
+/*
+if ( !environment() )
+        return; 
+if ( !query("owner") )
+        set("owner",environment());
+if ( !query("owner") || !userp(query("owner")) 
+  || environment()!=query("owner") )
+        {
+        destruct_me();
+        return;
+        }       
+*/
+add_action("do_hebing","hebing");
+call_out("announce",random(10),this_player());
+call_out("destruct_me",900);
+}
+
+int err_msg(string arg)
+{
+write(arg);
+if ( (__DIR__"master.lpc")->query_hebing()==this_object() )
+        (__DIR__"master.lpc")->set_is_hebing(0);
+return 0;
+}       
+
+int do_hebing(string arg)
+{
+object h1,h2,hua,me;
+string id1,id2,str,t1,t2,*tt;
+int i,k,j;
+
+me = this_player();
+if ( !present(this_object(),me) )
+        return 0;
+if ( file_size(__DIR__"master.lpc")<=0 )
+        return err_msg(name()+"的合并功能被大神封住了。\n");        
+if ( (__DIR__"master.lpc")->is_hebing() )
+        return err_msg("现在有其他在线的玩家已经开始使用"+name()+"的合并功了，你等等再试。\n");
+else    (__DIR__"master.lpc")->set_is_hebing(this_object());        
+        
+if ( !arg || sscanf(arg,"%s with %s",id1,id2)!=2 )
+        return err_msg("合并格式为  hebing <莲花1> with <莲花2> \n");
+h1 = present(id1,me);
+if ( !h1 || !h1->is_lianhua() 
+  || !me->query("莲花/"+h1->query("armor_type")) )
+        return err_msg("你身上没有这朵莲花或是此莲花无存储文件。\n");
+h2 = present(id2,me);   
+if ( !h2 || !h2->is_lianhua() 
+  || !me->query("莲花/"+h2->query("armor_type")) )
+        return err_msg("你身上没有这朵莲花或是此莲花无存储文件。\n");
+if ( me->query("id")!=h1->query("owner_id") )
+        return err_msg(h1->name()+"不是你的莲花。\n");  
+if ( me->query("id")!=h2->query("owner_id") )
+        return err_msg(h1->name()+"不是你的莲花。\n");  
+if ( !h1->save() || !h2->save() )
+        return err_msg("你先将这两朵莲花脱下来吧。\n");
+if ( h1->query("hebing2") )
+        return err_msg(h1->name()+"是合并过的莲花。\n");
+if ( h2->query("hebing2") )
+        return err_msg(h2->name()+"是合并过的莲花。\n");
+t1 = h1->query("莲花/addType");
+if ( !t1 || !arrayp(t1) )   return err_msg(h1->name()+"看来好似假货。\n");
+t2 = h2->query("莲花/addType");
+if ( !t2 || !arrayp(t2) )   return err_msg(h2->name()+"看来好似假货。\n");
+tt = ({});
+i = sizeof(t1);
+while(i--)
+        {
+        if ( t1[i] && stringp(t1[i]) )
+                tt = SDS_D->add_arr_str(tt,t1[i]);
+        }
+i = sizeof(t2);
+while(i--)
+        {
+        if ( t2[i] && stringp(t2[i]) )
+                tt = SDS_D->add_arr_str(tt,t2[i]);
+        }
+str = h1->query("save_file");
+if ( !str || !stringp(str) )
+        return err_msg(h1->name()+"无存储文件。\n");
+if ( !stringp(read_file("/c/莲花/"+str+".o")) )
+        return err_msg(h1->name()+"无存储文件。\n");
+if ( !("/cmds/wiz/rm.lpc")->main(h1,("/c/莲花/"+str+".o")) )
+        return err_msg(h1->name()+"更新失败\n");
+else    {
+        str = h2->query("save_file");
+        if ( !str || !stringp(str) )
+                {
+                h1->save();  //合并失败，重新存储       
+                return err_msg(h2->name()+"无存储文件。\n");
+                }
+        if ( !stringp(read_file("/c/莲花/"+str+".o")) )
+                {
+                h1->save();     
+                return err_msg(h2->name()+"无存储文件。\n");
+                }
+        if ( !("/cmds/wiz/rm.lpc")->main(h1,("/c/莲花/"+str+".o")) )
+                {
+                h1->save();     
+                return err_msg(h2->name()+"更新失败\n");
+                }
+        hua = new("/d/nanhai/obj/lianhua/lianhua");
+        hua->setup();
+        
+        str = h1->name()+h2->name();
+        str = SDS_D->no_color_msg(str);
+        i = strlen(str); 
+        if ( i>=4 )   i = random(i*4)/4; 
+        else   i = random(i*2)/2; 
+        if( (i+4)>strlen(str) ) i =  strlen(str) - 4;
+        arg = sprintf("%c%c%c%c",str[i],str[i+1],str[i+2],str[i+3]); 
+        str = replace_string(str,arg,""); 
+
+        hua->set_name(str,({"lian hua","hua"}));
+        hua->set("armor_type",h1->query("armor_type")+"+"+h2->query("armor_type"));
+        hua->set("莲花/lvl",h1->query("莲花/lvl")+h2->query("莲花/lvl"));
+        hua->set("莲花/addType",tt);
+        hua->set("hebing2",1);
+        hua->set_weight(25000);
+        hua->set("long","一朵由"+h1->name()+"和"+h2->name()+"合并的莲花。\n");
+        hua->set("armor_prop",([
+                "base"  : (h1->query("armor_prop/base")+h2->query("armor_prop/base")),
+                "armor" : (h1->query("armor_prop/armor")+h2->query("armor_prop/armor")),
+                "dodge" : (h1->query("armor_prop/dodge")+h2->query("armor_prop/dodge")),
+                "parry" : (h1->query("armor_prop/parry")+h2->query("armor_prop/parry")),
+                "force" : (h1->query("armor_prop/force")+h2->query("armor_prop/force")),
+                "spells": (h1->query("armor_prop/spells")+h2->query("armor_prop/spells")), 
+                "literate": (h1->query("armor_prop/literate")+h2->query("armor_prop/literate")),
+                ]));
+        hua->check_long();      
+        hua->set("owner_id",me->query("id"));
+        hua->set("save_file",(me->query("id")+"/"+hua->query("armor_type")));
+        hua->save();
+        me->set("莲花/"+hua->query("armor_type"),1);
+        me->set("莲花/"+h1->query("armor_type"),2);
+        me->set("莲花/"+h2->query("armor_type"),2);
+//         message("channel:rumor",HIM"【顺风耳】某人：听说"+me->name()+HIM"使用了"+name()+HIM"将"+h1->name()+HIM"与"+h2->name()+HIM"合并为了"+hua->name()+HIM"。\n",users());
+        destruct(h1);
+        destruct(h2);
+        hua->move(me);
+        (__DIR__"master.lpc")->set_is_hebing(0);
+        destruct(this_object());
+        return 1;
+        }
+}       
+        
+string short()
+{
+return ::short()+"(大)";
+}
+void announce(object who)
+{
+    if(!this_object()) return;
+    if(!who) return;
+//     CHANNEL_D->do_channel(this_object(), "chat",
+//             who->query("name")+"得到了"+short()+"！\n");
+//     CHANNEL_D->do_channel(this_object(), "rumor",
+//             who->query("name")+"得到了"+short()+"！\n");
+}

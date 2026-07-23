@@ -1,0 +1,173 @@
+〖JOB制作问答II - teamjob制作〗 
+    最近实在是太懒啦，这个东东本来已经应该做很久了，就是没做。这次要讲的就是team job的制作方法，虽然讲的是比较简单的，大家看看也好，呵呵。站长最近做了一个大型JOB(最多可供20人做)而且不存在传统flood的问题，大家有兴趣可以去我的DJX看看。这里我要举的范例就是SJ中魔颂崖抗敌任务。下面大家先看看介绍。
+【任务过程】在鲁有脚那里 ask lu about job 取得任务后，到摩颂崖等候西夏一品堂武士的出现，等解决掉四批武士(每次2个)后，任务自动完成。半当中不能擅离魔颂崖，否则任务算失败。 
+    这个job看来看去，大概要做3个东东，1:发job的鲁长老 2:一品堂武士 3:摩颂崖ROOM 。只比上次的wd job多了一个，嗯 :) 第一步还是从鲁做起吧。 
+
+
+#define JOB_ROOM        "xxxx"        // 定义一个jobroom 先，以后好改嘛
+
+先建立基本的NPC，接着做一个ask lu about job，这个怎么做不需要再说了吧。
+
+string ask_job();
+{
+        object room,me = this_player();
+        mapping job;
+
+// 还是老一套   
+        if(me->query("combat_exp") < xx) return "xx";   // exp太少不能做。
+        if(me->query_temp("msy_job")) return "xx";       // 已经正在做JOB了。
+        if(me->query_condition("msy_job")) return "xx";  // condition还存在，可以做为busy time
+                                                           或者防止player quit后重新领JOB。
+        if(sizeof(query("players")) > 3) return "xx";    // 最多只能4人进行，已经够flood了。
+        if(!(room = find_object(JOB_ROOM)))              // 调用jobroom, room mark，非常实用
+             room = load_object(JOB_ROOM);               
+        if(room->query("msy_job/job_started")) return "xx";      // job已经开始了
+        
+        add("players", ({ me }) );
+        me->set_temp("msy_job",1);
+        if(!query("players"))
+                call_out("job_start", 100, room);             // 再等等其他参加的人就开始        
+        return "去摩颂崖去傻等吧。";
+}
+// 任务开始
+void job_start(object room)
+{
+        object *ob;
+        int i,j;
+
+        ob=query("players");
+
+        for (i=0;idelete_temp("msy_job");
+                        tell_object(ob[i],"你错过了job"); 
+                } else {
+                ob[i]->apply_condition("msy_job",x);      // 加入一个非常简单的condition
+                // 如果你把这个condition加在前面的部份，那么要了job没去做的player会有busy :)
+                // 选取最厉害的player作为npc复制对象,所以EXP相差太大不要一起做
+                if(room->query("msy_job/level") < ob[i]->query("max_pot"))
+                        room->set("msy_job/level",ob[i]->query("max_pot"));
+                j++;  // 记录人数       
+        }               
+        if(j)   room->job_start();  // job 开始啦 如果没人当然不开始
+        delete("players");
+}
+
+lu发放JOB的简单CODE就写好啦，怎么样，不难吧。顺便提一下所加入的condition，
+只需在duration < 1中加入任务超时失败的msg 和 delete_temp("msy_job") 就够了
+。呀！前面这里怎么和上次wdjob说的话一模一样？
+(啊。。被发现了，不过本来做法就是差不多嘛，呵呵) 
+一品堂武士的制作方法如果你认真读了上面2次讲复制NPC的做法，
+应该可以说是小菜一碟。
+:) 注意：复制skill的地方要换用int do_make(int level) 
+and 下面的max_level就等于level-100了噢，code中还要加上这一段： 
+void init()
+{
+        object me=this_player();    
+        if(me->query_temp("msy_job"))   // 只杀死参加job的人
+        call_out("kill_ob",0,me);
+}
+
+void die()  
+{
+       object killer; 
+      
+       if(objectp(killer = query_temp("last_damage_from")) && killer->query_temp("msy_job"))       
+                    killer->add_temp("msy_job",1);  // 可以少用变量就少用，从小养成节约的习惯
+                        // 同时杀死武士的多少也关系到后面exp的奖励                  
+
+       ::die(); 
+}  
+这里想提一下，一些NPC在create时最好设定一个时间dest,免得一些玩家JOB不做了，
+这些NPC就变成了game的垃圾，浪费资源。
+可以用callout或者condition来调用。
+最后就剩下room的做法啦： 
+void job_start()
+{
+        tell_room(this_object(),"xxxx");  // job开始啦，免不了大堆描述
+        set("msy_job/job_started",1);
+        remove_call_out("job_going");
+        call_out("job_going",0,4);
+}
+
+void job_going(int i)
+{
+        object ob,*player;
+        int i,j,exp;
+
+        // 判断是否job失败或者没有人再在进行job 
+        player = all_inventory(this_object()); 
+        if(!player || !sizeof(player)) {
+                job_fail();
+                return; }
+
+         for(i=0; iquery_temp("msy_job")) j++;  
+         if(j<1) {
+                job_fail();
+                return; }                                       
+                
+        if(objectp(present("wushi",this_object()))) {  // 如果武士还有就继续判断
+                remove_call_out("job_going");
+                call_out("job_going",10,i);
+                return;
+                }
+
+        if(i<1) {
+                tell_room(this_object(),"xxxx");  // job完成啦，也免不了大堆描述
+                for(i=0; iquery_temp("msy_job")) continue;      
+                        exp = (player[i]->query_temp("msy_job")-1)*100;     // 杀死一个100exp                                       
+                        if(exp<1) { 
+                                ... ...   // 什么也没干，自己看着办
+                        } else {
+                         tell_object(player[i],"xxx");  // 得奖励
+                         player[i]->add("combat_exp",exp);
+                         player[i]->add("potenitial",exp/3);    
+                         // player[i]->clear_condition("msy_job"); // 看你要不要busy time             
+                        }
+                }
+           delete("msy_job");
+           return;
+           }
+
+        tell_room(this_object(),"xxxx"); // 冲出来大批武士
+        ob=new("xx"); // 一品堂武士
+        ob->do_make(query("msy_job/level")); // 复制skill
+        ob->move(this_object());        
+        ... ...  // 按上面办法再做1个 or 2个 
+                 // 算算看，这么多人一起打架，滚动的msg真是有够flood，站长不赞成
+                 // 不过作为JOB制作的例子，也只好写出来了。
+        remove_call_out("job_going");
+        call_out("job_going",0,i--);    // 循环进行4批武士                         
+}
+
+void job_fail()
+{
+        ... ...  // clean room 把room里面的武士,corpse全部dest了，当成是作业留给大家去做吧 :)
+        tell_room(this_object(),"xxxx");   // job失败了，免不了也是一大堆描述
+        delete("msy_job");
+        
+}
+
+int valid_leave(object me, string dir) 
+{ 
+    if(me->query_temp("msy_job") && dir=="xxxx") {
+                // 半途离开，job失败
+                me->delete_temp("msy_job");
+                }   
+    return ::valid_leave(me, dir); 
+} 
+// 如果想防止人帮忙可以用add_action "kill","hit"判断来实现。
+// 不过防止不了ask job来帮忙，没有好的办法，就省略了。
+/* 防止quit 可要可不要
+void init()
+{ 
+        add_action("do_quit", "quit");   
+} 
+int do_quit(string arg)
+{
+        if(this_player()->query_temp("msy_job") &&
+                this_object()->query_temp("msy_job/job_started")) {             
+                write("你不能在这里退出。\n");
+                return 1;  }
+        else return 0;
+}  */
+
+

@@ -1,0 +1,199 @@
+#include <ansi.h>
+inherit NPC;
+
+void create()
+{
+set_name("木人",({"mu ren","ren"}));
+create_family("少林寺",8,"机关");
+set("title","");
+set("life",5+random(5));
+set_skill("unarmed",400+random(50));
+if ( random(2) )
+        {
+        set_skill("banruo-zhang",400+random(50));
+        map_skill("unarmed","banruo-zhang");
+        }
+else    {
+        set_skill("jingang-leg",400+random(50));
+        map_skill("unarmed","jingang-leg");
+        }
+set_skill("chanzong",400+random(50));
+set_skill("spells",400+random(50));
+map_skill("spells","chanzong");
+
+set_skill("force",400+random(50));
+set_skill("yijinjing",400+random(50));
+map_skill("force","yijinjing");
+
+set_skill("dodge",400+random(50));
+set_skill("shaolin-shenfa",400+random(50));
+map_skill("dodge","shaolin-shenfa");
+
+set_skill("parry",400+random(50));
+set_skill("zui-gun",400+random(50));
+set_skill("stick",400+random(50));
+map_skill("parry","zui-gun");
+map_skill("stick","zui-gun");
+
+set("max_kee",3000);
+set("eff_kee",3000);
+set("kee",3000);
+
+set("max_sen",2000);
+set("eff_sen",2000);
+set("sen",2000);
+
+set("max_force",3000);
+set("force",6000);
+set("max_mana",10000);
+set("mana",20000);
+
+set("force_factor",500);
+set("mana_factor",800);
+
+set_temp("apply/manashieldflag",1);
+
+setup();
+}
+
+int heal_up()
+{
+object g;       
+if ( !this_object()->is_fighting() )    
+        SDS_D->powerup(this_object());
+if ( !this_object()->query_temp("weapon") )
+        {
+        g = present("bang",this_object());
+        if ( objectp(g) )
+                destruct(g);
+        g = new("/d/obj/weapon/stick/mugun");
+        g->set("weapon_prop/damage",150);
+        g->move(this_object());
+        this_object()->command("wield all");
+        }
+return ::heal_up()+1;
+}       
+
+void heart_beat()
+{
+object weapon; 
+string skill;   
+object me = this_object();
+::heart_beat();
+if ( living(this_object()) )
+        {
+        if ( query("eff_kee") < query("max_kee") )
+                SDS_D->addEffKee(me);
+        if ( query("kee") < query("eff_kee") )
+                SDS_D->addKee(me);
+        if ( query("sen") < query("eff_sen") )
+                SDS_D->addSen(me);
+        if ( query("eff_sen") < query("max_sen") )
+                SDS_D->addEffSen(me);
+        if ( !me->is_fighting() )
+                return;
+        if ( objectp(weapon=me->query_temp("weapon")) )
+                skill = weapon->query("skill_type");
+        else    skill = "unarmed";
+        switch(random(6)) 
+                {
+                case 1 :
+                case 4 :
+                case 5 :
+                        SDS_D->randomPfm(me,skill);break; 
+                case 2 :
+                case 3 :
+                        SDS_D->randomExert(me); break;
+                default:
+                        SDS_D->randomcast(me);
+                }
+        }        
+}
+
+void die()
+{
+mapping skills;
+string *skill;
+int i;  
+object npc,ob = this_object();
+object me = query_temp("last_opponent");
+object env = environment();
+
+SDS_D->powerup(ob);
+all_inventory(env)->remove_killer(ob); 
+ob->remove_all_enemy();
+
+if ( !me || !objectp(env) || !present(me,env) || env->query("short")!="木人巷" )
+        return;
+
+add("life",-1);
+if ( query("life")<=0 )
+        {
+        message_vision("$N“卡啦”一声，碎成一堆烂木头，散落在地。\n",ob);
+        me->add_temp("shaolin_mu_ren",1);
+        tell_object(me,"你目前已闯过了"+chinese_number(me->query_temp("shaolin_mu_ren"))+"个木人了。\n");
+        destruct(ob);
+        return;
+        }
+else    {
+        message_vision("\n$N“卡啦”一声，身上掉下一些木头渣子。。。\n\n",ob);
+
+        skills = ob->query_skills();
+        skill = keys(skills);
+        i=sizeof(skill);
+        while(i--)
+                ob->set_skill(skill[i],ob->query_skill(skill[i],1)+50 );
+        SDS_D->powerup(ob);
+        ob->kill_ob(me);
+        return;
+        }
+}
+
+void init()
+{
+add_action("do_none","move");
+add_action("do_none","go");
+add_action("do_none","cast");
+add_action("do_none","ji");
+add_action("do_none","fight");
+add_action("do_none","surrender");
+add_action("do_none","whisper");
+add_action("do_none","recall");
+
+if ( !this_object()->is_fighting() 
+  && userp(this_player()) )
+     this_object()->kill_ob(this_player());
+}
+
+int do_none()
+{
+write(HIY"你还是先把眼前的木人解决了再说。\n");
+return 1;
+}
+
+varargs int receive_damage(string type, int damage, object who)
+{
+damage = this_object()->query_temp("apply/damage");
+if ( !who )
+        who = this_object()->query_temp("last_opponent");
+if ( objectp(who) )
+        damage-= who->query_temp("apply/armor");
+if ( damage<=0 )
+        damage = random(200);
+if ( damage>500 )
+        damage = 500;   
+damage = damage/2+random(damage/2);
+return ::receive_damage(type,damage,who);
+}
+
+varargs int receive_wound(string type, int damage, object who)
+{
+damage = 1;
+return ::receive_wound(type,damage,who);
+}
+
+void unconcious()
+{
+die();
+}       
+

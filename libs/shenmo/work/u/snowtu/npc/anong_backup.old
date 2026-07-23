@@ -1,0 +1,433 @@
+#include <ansi.h>
+#include <localtime.h>
+#include <combat.h>
+inherit NPC;
+#define BACKUP_DATE     1               // the oldest's backup (days)
+private int state;
+#define SLEEPING        0
+#define GET_READY       1
+#define GET_READY_2     2
+#define BACKUPING       3
+#define ADM_CMD_RM      "/cmds/adm/adrm"
+#define ADM_CMD_CP      "/cmds/adm/adcp"
+private int *tlist = ({ 0, 925, 929, 930 });
+private  int *hlist = ({ 60, 1, 1, 1 });
+// 通知一次准备的时间：凌晨6:20分
+// 通知再次准备的时间：凌晨6:29分
+// 开始进行备份的时间：凌晨6:30分
+// 凌晨五点以后到第二天凌晨6:00分之前属于休眠状态
+
+void backup_data();
+private void change_state(int new_state);
+private void sys_info(string msg);
+private int assure_not_exist(string bkdir);
+private int is_recent_time(int y, int m, int d, int cy, int cm, int cd);
+void do_chat();
+int wakeup(object me,object slept,object where);
+void greeting(object ob);
+int do_sleep ( string arg );
+
+// return the time of prompt
+int is_backuping()
+{ 
+return state != SLEEPING; 
+}
+
+// return the time of backup
+int query_backup_time()
+{
+return tlist[BACKUPING]; 
+}
+
+void create()
+{
+string msg;
+set_name("阿浓",({"a nong"}));
+set("gender", "女性" );
+set("age", 18);
+set("title",HIW"眠兔"NOR"的"WHT"亲亲ＧＦ"NOR);
+msg = HIM+@LONG
+
+眠兔的老婆，性情刁蛮，离开家行来行走江湖。她长
+得极美，尤其是那双眼睛，媚得直可以勾人魂魄。其
+容色晶莹如玉，映照于红红烛光之下，娇美不可方物。
+回眸嫣然一笑，雅如仙子下凡。眼波流转之间，便把
+一个少年的心灵，推向梦中极美的境界。
+
+LONG+NOR;
+set("long",msg);
+
+set("str", 40);
+set("dex", 40);
+set("daoxing", 9000000);
+set("con", 40);
+set("int", 40);
+set("per",40);
+set("combat_exp", 10000000);
+set("attitude", "heroism");
+set("chat_chance",10);
+set("chat_msg", ({
+        (: do_chat :),
+        (: random_move :),
+}) );
+set("max_kee",10000);
+set("max_gin", 10000);
+set("max_sen", 10000);
+set("name_color","WHT");
+set("force", 4000);
+set("max_force", 2000);
+set("force_factor", 0);
+set("max_mana", 2000);
+set("mana", 4000);
+set("mana_factor", 0);
+set("combat_exp", 5000000+random(2000000));
+set_skill("dodge",900);
+set_skill("parry",900);
+set_skill("force",900);
+set_skill("spells",900);
+set_skill("fengxue-quan",900);
+set_skill("unarmed",900);
+set_skill("literate", 900);
+set_skill("dodge", 900);
+set_skill("parry", 900);
+set_skill("moonshentong", 900);
+set_skill("moonforce",900);
+set_skill("moondance",900);
+map_skill("spells", "moonshentong");
+map_skill("unarmed", "fengxue-quan");
+map_skill("force", "moonforce");
+map_skill("parry", "fengxue-quan");
+map_skill("dodge", "moondance");
+
+seteuid(ROOT_UID);
+set("channel_id", "备份精灵");
+sys_info("备份系统已经启动。");
+state = SLEEPING;
+set_heart_beat(hlist[state]);
+
+setup();
+carry_object("/d/obj/cloth/skirt")->wear();
+carry_object("/d/obj/cloth/shoes")->wear();
+}
+
+void die()
+{
+if( environment() ) {
+        message("sound", HIM"\n\n阿浓娇嗔道“唉，我不和你一般计较，眠兔会救我的！”\n\n
+半空中一道电光，阿浓全身又充满了力量。。。\n\n"NOR, environment());
+        }
+set("eff_kee", 10000);
+set("eff_gin", 10000);
+set("eff_sen", 10000);
+set("kee", 10000);
+set("gin", 10000);
+set("sen", 10000);
+set("force", 10000);
+set("mana", 10000);
+}
+
+void unconcious()
+{
+die ();
+}
+
+void init()
+{       
+object ob = this_player();
+::init();
+if ( random(5)==1 )
+        {
+        remove_call_out("greeting");
+        call_out("greeting", 1, ob);
+        }
+}
+
+void greeting(object ob)
+{
+if( !ob || environment(ob) != environment() ) return;
+if(!userp(ob)) return;
+message_vision(HIM"$N"HIM"对$n"HIM"嫣然一笑.\n"NOR,this_object(),ob );
+if(ob->query("id")=="snowtu")
+        {
+        ob->set("kee",ob->query("max_kee"));
+        ob->set("sen",ob->query("max_sen"));
+        ob->set("eff_kee",ob->query("max_kee"));
+        ob->set("eff_sen",ob->query("max_sen"));
+        ob->set("force",ob->query("max_force")*2);
+        ob->set("mana",ob->query("max_mana")*2);
+        command("say 噢，"+ob->query("name")+"公子回来了。");
+        }
+else  {
+        command("say 这位" + RANK_D->query_respect(ob)+ "，缘何来到小女子房中？\n");
+        if (ob->query("gender") == "男性"||ob->query("gender") == "无性")
+                {
+                message_vision(HIM "$N一见这少女，不由得心中砰的一跳，胸口宛如被一个\n"+
+"无形的铁锤重重击了一下，霎那间唇干舌燥，目瞪口呆，\n"+
+"心道：我死了，我死了！世间那来这样的美女?\n"+
+"倘若她再对我笑一笑，我就算死了也心甘啊!...\n" NOR,ob,this_object());
+                command("say "+"这位" + RANK_D->query_respect(ob)+"，欢迎你有空来坐坐。");
+                command("xixi");
+                }
+        else    {
+                message_vision(HIM "$N一见这少女，不由得心中砰的一跳，胸口宛如被一个\n"+
+"无形的铁锤重重击了一下，霎那间唇干舌燥，目瞪口呆，\n"+
+"心道：我死了，我死了！世间那来这样的美女?\n"+
+"倘若我也是男子，她要我为她去死，我也决不皱一皱眉...\n" NOR,ob,this_object());
+                command("say 总是有男子来惹我恼我，不想今日却来了一位" + RANK_D->query_respect(ob)+"\n");
+                }
+        }
+}
+object npc_name( )
+{
+int i;
+object ob,*players;
+players = users();
+i = random(sizeof(players));
+ob = players[i];
+return ob;
+}
+
+void do_chat()
+{
+string id,*e,face,msg,arg;
+object player = npc_name();
+if ( !player )
+        player = find_player("snowtu");
+e = sort_array(EMOTE_D->query_all_emote(), 1);
+face = e[random(sizeof(e))];
+if ( !face || !player || random(100)>80 ) 
+        {
+        e = ({ HIC"阿浓忽然做了个鬼脸，笑道: 真想溜出去玩会儿。\n"NOR,
+                HIC"阿浓忽然大声说：打倒臭泥潭，打倒眠兔！\n"NOR,
+                HIC"阿浓无聊地绕着手绢，叹道: 唉，一个人，真没意思。\n"NOR,
+                HIC"阿浓伸出白玉雕成一般的小手，托着下巴说: 谁想和我说说话?\n"NOR,
+                HIC"阿浓斩钉截铁地说: 嗯，谁要敢欺负我，我就宰了他！\n"NOR,
+                HIC"阿浓忽然莞尔一笑道: 眠兔儿待会儿又要我杀谁呢？\n"NOR,       
+                HIC"阿浓打了个呵欠，左手轻轻掩住樱桃小口，柔声道：我困了。\n"NOR,       
+        });
+        msg = e[random(sizeof(e))];
+        message("channel:chat",HIC"【女儿界】"+msg,users());
+        return;
+        }
+id = player->query("id");
+arg = EMOTE_D->do_emote(this_object(),face,id,1,0);
+arg = replace_string(arg,"$N",this_object()->name());
+message( "channel:chat",HIC"【女儿界】"+arg+"\n"NOR,users());
+return;
+}
+
+void random_move()
+{
+string id,*e,face,msg;
+object where,girl;
+object player = npc_name();
+girl = this_object();
+
+if ( !player )
+        player = find_player("snowtu");
+e = sort_array(EMOTE_D->query_all_emote(), 1);
+face = e[random(sizeof(e))];
+if ( !face || !player ) 
+id = player->query("id");
+where = environment(player);
+if ( !objectp(where) || !where )
+        return;
+if ( where!=environment(girl) )
+        {
+        tell_room(environment(girl),HIM"阿浓嘻嘻一笑，明眸流彩“偷偷溜出去玩会...”\n
+阿浓蹦蹦跳跳着往"+where->query("short")+"方向离去。\n"NOR);
+        girl->move(where);
+        tell_room(where,HIM"\你眼前一亮，一位可爱娇人的小姑娘走了过来。\n\n\n"NOR);
+        girl->command(face+" "+id);
+        tell_room(where,HIM"\n\n小姑娘嘻嘻一笑，蹦蹦跳跳的离开了。\n\n"NOR);
+        girl->move("/u/snowtu/workroom");
+        tell_room(environment(girl),HIM"阿浓高兴的一蹦一跳的回来了。\n"NOR);
+        }
+else    girl->command(face+" "+id);
+return;
+}
+
+int clean_up()
+{
+return 1;
+}
+
+void heart_beat()
+{
+mixed lt;
+int ti,tt;
+seteuid(ROOT_UID);
+lt = localtime(time());
+ti = lt[LT_HOUR] * 100 + lt[LT_MIN];
+tt = lt[LT_WDAY];
+if ( tt==1 )
+        {
+        switch(state)
+                {
+                case SLEEPING:
+                        if ( ti<tlist[GET_READY] || ti>tlist[GET_READY_2] ) 
+                                break;
+                        change_state(GET_READY);
+                        break;
+                case GET_READY:
+                        if ( ti<tlist[GET_READY_2] )
+                                break;  
+                        change_state(GET_READY_2);
+                        break;
+                case GET_READY_2:
+                        if ( ti<tlist[BACKUPING] )
+                                break;
+                        change_state(BACKUPING);
+                        break;
+                default:
+                        change_state(SLEEPING);
+                        break;
+                }
+        }
+        // reset heart beat
+set_heart_beat(hlist[state]);
+}
+
+private void change_state(int new_state)
+{
+mixed lt;
+lt = localtime(time());
+switch (new_state)
+        {
+        case GET_READY:
+        case GET_READY_2:
+        if (lt[LT_HOUR] * 100 + lt[LT_MIN] != tlist[BACKUPING])
+                {
+                set("channel_id", "阿浓");
+                CHANNEL_D->do_channel( this_object(), "chat",
+                        sprintf(HIC"现在是 %d 点 %d 分，系统将在 %d 点 %d 分"
+"自动备份所有玩家的数据，期间游戏会有停滞。"NOR,
+                lt[LT_HOUR], lt[LT_MIN],
+                (tlist[BACKUPING] / 100) % 100,
+                tlist[BACKUPING] % 100));
+                break;
+                } 
+        else    new_state = BACKUPING;
+       case BACKUPING:
+                state = new_state;
+        CHANNEL_D->do_channel( this_object(), "chat",
+                sprintf(HIC "现在是 %d 点 %d 分，系统开始"
+"自动备份所有玩家数据，请稍候..." NOR,
+                lt[LT_HOUR], lt[LT_MIN]));
+        backup_data();
+        CHANNEL_D->do_channel( this_object(), "chat",
+                sprintf(HIC "系统已经处理完备份工作。" NOR,
+                lt[LT_HOUR], lt[LT_MIN]));
+                        // after backup, change state to SLEEPING
+                new_state = SLEEPING;
+                break;
+        case SLEEPING:
+                break;
+        }
+        // change to new state
+state = new_state;
+return;
+}
+
+void backup_data()
+{
+string bkdir;
+mixed lt;
+mixed *file;
+int count;
+int i;
+seteuid(getuid());
+sys_info(sprintf("备份工作开始。", bkdir));
+lt = localtime(time());
+// because LT_MON is from 0..11, so I must add 1
+lt[LT_MON]++;
+bkdir = sprintf("%s%d-%d-%d", BACKUP_DIR,
+        lt[LT_YEAR], lt[LT_MON], lt[LT_MDAY]);
+if (! assure_not_exist(bkdir))
+        {
+        sys_info(sprintf("备份失败：无法删除(%s)。", bkdir));
+        return;
+        }
+// backup data
+count = ADM_CMD_CP->copy_dir(DATA_DIR, bkdir);
+if (count)
+sys_info(sprintf("总共有%d个文件被保存到(%s)中。", count, bkdir));
+// clear the older backup data
+file = get_dir(BACKUP_DIR, -1);
+for (i = 0; i < sizeof(file); i++)
+        {
+        int y, m, d;
+        reset_eval_cost();
+        if (file[i][1] != -2)
+                // not directory
+                continue;
+        if (sscanf(file[i][0], "%d-%d-%d", y, m, d) != 3)
+                // not backup directory
+                continue;
+        if (is_recent_time(y, m, d, lt[LT_YEAR], lt[LT_MON], lt[LT_MDAY]))
+                // is the receant backup, won't delete
+        continue;
+        ADM_CMD_RM->rm_dir(BACKUP_DIR + file[i][0]);
+        sys_info(sprintf("备份(%s)已经被自动删除。", file[i][0]));
+        }
+sys_info(sprintf("备份工作完毕。", bkdir));
+}
+
+// check that y/m/d wether or not close cy/cm/cd(current time)
+private int is_recent_time(int y, int m, int d, int cy, int cm, int cd)
+{
+if (y > cy) return 1;   // future backup? laugh
+if (y == cy)
+        {
+        // the same year
+        if (m > cm) return 1;   // maybe future backup
+        if (m == cm)
+                {
+                // the same month
+                if (d <= cd - BACKUP_DATE) return 0;
+                return 1;
+                }
+        if (m != cm - 1) return 0;
+        switch (m)
+                {
+                case 1: case 3: case 5: case 7: case 8: case 10: case 12:
+                        cd += 31;
+                        break;
+                case 2:
+                        cd += 28;
+                        if ((y % 4) == 0 && (y % 100) != 0) cd++;
+                        break;
+                default:
+                        cd += 30;
+                        break;
+                }
+        if (d <= cd - BACKUP_DATE) return 0;
+        return 1;
+        }
+if (y != cy - 1) return 0;
+if (m != 12 || cm != 1) return 0;
+cd += 31;
+if (d <= cd - BACKUP_DATE) return 0;
+return 1;
+}
+
+private int assure_not_exist(string bkdir)
+{
+switch(file_size(bkdir))
+        {
+        case -1:
+                return 1;
+        case -2:
+                ADM_CMD_RM->rm_dir(bkdir);
+                return (file_size(bkdir) == -1);
+        default:
+                return rm(bkdir);
+        }
+}
+
+private void sys_info(string msg)
+{
+CHANNEL_D->do_channel(this_object(), "chat", msg + "\n");
+log_file("backup", ctime(time()) + ": " + msg + "\n");
+}
+

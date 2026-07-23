@@ -1,0 +1,196 @@
+// help.c
+#include <ansi.h>
+#include "/doc/help.h"
+inherit F_CLEAN_UP;
+
+int found;
+int search_dir(string *dirs, string arg, object me, int wildcard, int wizp);
+int find_sub(mixed *filename);
+
+int main(object me, string arg)
+{
+int i;
+string skill,file,*search;
+string *default_search;
+int wildcard;
+
+//总目录
+if ( !arg ) 
+        {
+        color_cat(HELP_DIR + "help/topics");
+        return 1;
+        }
+//牛人写的ice_fire_zhang，暂时想不到法子调用她的help函数
+//临时用这个吧。。。。
+//snowtu
+if ( arg=="ice_fire_zhang_lr" && me->query_skill("ice_fire_zhang",1) )
+{string temp;    
+temp = "\t\t"+to_chinese("ice_fire_zhang")+" 100 级\n";
+temp+= "\t\t"+to_chinese("unarmed")+" 100 级\n";
+temp+= "\t\t"+to_chinese("force")+" 100 级\n";
+temp+= "\t\t内    力 600 点\n";
+temp+= "\t\t内力修为 1200 点\n";
+temp+= "\t\t战斗状态下使用\n";
+write("\n玄冰烈火掌之「寒冰烈焰」\n");
+write(@HELP
+
+        使用功效：
+                对敌人造成气血和精神的全面伤害
+        出招类型：
+                busy性外功
+                不可叛师带出
+        出手要求：              
+HELP);                          
+write(temp);
+return 1;
+}
+
+//门派        
+if ( arg=="menpai" ) 
+        { 
+        color_cat(HELP_DIR + "help/menpais/menpai"); 
+        return 1; 
+        } 
+
+
+        // Else, try if a command name is specified.
+seteuid(getuid());
+if( stringp(file = me->find_command(arg)) ) 
+        {
+        notify_fail("有这个指令存在，但是并没有详细的说明文件。\n");
+        return file->help(me);
+        }
+        //Now see if it aliases to a command.
+        //mon 10/27/97
+        if( stringp(file =
+          me->find_command(ALIAS_D->process_global_alias(arg))) ) {
+                notify_fail("有这个指令存在，但是并没有详细的说明文件。\n");
+                return file->help(me);
+        }
+
+        // Search the individual search path first.
+        if( pointerp(search = me->query("help_search_path")) ) {
+                i = sizeof(search);
+                while(i--) if( file_size(search[i] + arg)>0 ) {
+                        me->start_more( color_filter( read_file(search[i] + arg)) );
+                        return 1;
+                }
+        }
+
+        // Support efun/lfun help with same name as other topics such as
+        // ed() and ed command.
+        // Using a "()" after the function name can prevent it being
+        // interpreted as a user command with the same name. -- mon
+        sscanf(arg, "%s()", arg);
+        arg=replace_string(arg, "/", "");
+
+        if(strsrch(arg,"*")>=0 || strsrch(arg,"?")>=0) wildcard=1;
+        else wildcard=0;
+
+        found=0;
+        write("\n");
+
+        // Finally, search the default search paths.
+        // by snowcat feb 21 1998
+        if (wizardp(me))
+                default_search = DEFAULT_SEARCH_PATHS;
+        else
+                default_search = DEFAULT_PLAYER_SEARCH_PATHS;
+        if( pointerp(default_search) ) {
+          if(search_dir(default_search, arg, me, wildcard, wizardp(me))>0) {
+            if(wildcard) write("找到"+chinese_number(found)+
+              "个相关主题。\n");
+            return 1;
+          }
+        }
+
+//pfm帮助
+if ( sscanf(arg,"%s_%s",skill,arg)==2 && file_size(SKILL_D(skill)+".lpc")>1 )
+        {
+        if ( file_size(SKILL_D(skill)+".lpc")<1 )
+                return notify_fail("当前游戏中没有"+skill+"这种技能。\n");
+        if ( !me->query_skill(skill,1) )
+                return notify_fail("你目前并没有学习"+to_chinese(skill)+"。\n");
+        if ( !stringp(file=SKILL_D(skill)->perform_action_file(arg)) 
+          || file_size(file+".lpc")<1 )
+                return notify_fail("当前游戏中"+to_chinese(skill)+"并没有名为"+arg+"的外功。\n");
+        notify_fail("有此外功存在，但是无相关的帮助文件。\n");
+        file+= ".lpc";
+        if ( !file->help(me) )
+                return 0;
+        write("\n\t\t\t\ 版权所有(C)by 2006 西游记--神魔传说巫师组\n\n"NOR);
+        return 1;       
+        }
+        return notify_fail("没有针对这项主题的说明文件。\n");
+}
+
+// recursively search the help dir.
+// mon 2/26/98
+int search_dir(string *dirs, string arg, object me, int wildcard, int wizp)
+{
+    int i = sizeof(dirs), j;
+    mixed *filenames, *sub_dir;
+
+    while(i--) {
+      filenames=get_dir(dirs[i] + arg, -1);
+
+      if(pointerp(filenames) && sizeof(filenames)) {
+        if(!wildcard && filenames[0][1]>0) {
+        //without wildcard, filenames[0] must be the only match.
+        //which should be the same as "dirs[i] + arg"
+          me->start_more( color_filter( read_file(dirs[i] + arg)) );
+          return 1;
+        }
+
+        if(wildcard) {
+          j=sizeof(filenames);
+          while(j--) {
+            if(filenames[j][1]>0) {
+              write("help "+filenames[j][0]+
+                (wizp?"     ("+dirs[i]+")":"")+ "\n");
+              found++;
+            }
+          }
+        }
+      }
+
+      //check sub_directories
+      if(pointerp(filenames=get_dir(dirs[i], -1))) {
+        if(pointerp(sub_dir=filter_array(filenames, "find_sub"))) {
+          string *dirs1=({});
+
+          j=sizeof(sub_dir);
+          while(j--) {
+            dirs1+=({dirs[i]+sub_dir[j][0]+"/"}); 
+          }
+
+          if(search_dir(dirs1, arg, me, wildcard, wizp)==1 
+            && !wildcard) return 1;
+        }
+      }
+    }
+
+    return (wildcard*found);
+}
+
+int find_sub(mixed *filename)
+{
+    return (filename[1]==-2);
+}
+
+int help(object me)
+{
+        write(@HELP
+指令格式：help <主题>              例如： help cmds
+          help <函数名称>()        例如： help call_out()
+
+这个指令提供你针对某一主题的详细说明文件，若是不指定主题，则提供你有关
+主题的文件。
+
+除了有关指令名(command)的说明以外，在主题名称中 Help 支持 wildcards 
+如 '?' 和 '*'，例如： help map-m*。
+
+HELP
+        );
+        return 1;
+}

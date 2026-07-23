@@ -1,0 +1,3 @@
+// dianxue.c
+
+inherit SKILL;

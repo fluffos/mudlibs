@@ -1,0 +1,196 @@
+//金刚腿·穿云+入寂=佛至
+
+#include <ansi.h>
+inherit SSERVER;
+
+string name()
+{
+return "「佛寂·入寂」";
+}       
+
+void postfozhi(object me,object victim,object weapon, int damage);
+ 
+int check_time(object me)
+{
+int time;       
+if ( !me )
+        return 0;
+time = me->query_skill("jingang-leg",1);
+time/= 50;
+if ( time<1 ) time = 1;
+if ( time>10 ) time = 5+random(5);
+time = 10-time; 
+return time;
+}
+
+int valid_perform(object me)
+{
+if ( !me )
+        return 0; 
+if ( ( me->query("family/family_name")!= "少林寺"
+    && me->query_skill("banruo-zhang",1)<500 )
+ || me->query("class")!="human" )
+        return notify_fail(name()+"乃是少林绝招。\n");
+if ( me->query_skill("unarmed",1)<250 )
+        return notify_fail("你的"+to_chinese("unarmed")+"等级不足 250 级，不能施展"+name()+"。\n");
+if ( me->query_skill("yijinjing",1)<250 )
+        return notify_fail("你的"+to_chinese("yijinjing")+"等级不足 250 级，不能施展"+name()+"。\n");
+if ( me->query_skill("jingang-leg",1)<250 )
+        return notify_fail("你的"+to_chinese("jingang-leg")+"等级不足 250 级，不能施展"+name()+"。\n");
+if ( me->query("max_force")<1000 )
+        return notify_fail("你的内力修为不足十年，不能施展"+name()+"。\n");
+if ( me->query("force")<600 )
+        return notify_fail("你的内力不足 600 点，不能施展"+name()+"。\n");   
+if ( time()<me->query_temp("shaolin_pfm_ruji")+2+random(4) )
+        return notify_fail("绝招用多就不灵了。\n");        
+if ( !me->is_fighting() )
+        return notify_fail(name()+"只能对战斗中的对手使用。\n");        
+return 1;               
+}
+
+int set_damage(object me,object target)
+{
+int damage;
+
+if ( !me || !target )
+        return 0;
+damage = me->query_skill("jingang-leg");
+damage+= me->query("force_factor");
+damage+= me->query_temp("apply/damage");
+damage-= target->query_temp("apply/armor");
+damage-= target->query_skill("parry");
+damage-= me->query("bellicosity");
+
+if ( target->query("human/class")!="human" 
+  || !userp(me) )
+        damage+= random(damage/2);
+if ( COMBAT_D->restrain(me,target) )
+        damage+= random(damage/3);
+if ( COMBAT_D->restrain(target,me) )
+        damage-= random(damage/3);
+        
+damage = damage/4+random(damage/4);     
+damage+= 300;
+return damage;
+}
+
+int perform(object me, object target)
+{
+int damage,ap,dp;
+string msg,*limbs,limb,type,temp;
+mapping actions;
+
+if ( !valid_perform(me) )    return 0;
+if ( !target ) 
+        target = offensive_target(me);
+if ( !target
+  || !target->is_character()
+  || target->is_corpse()
+  || !me->is_fighting(target) )
+        return notify_fail("你要对谁施展这一招"+name()+"？\n");
+
+damage = set_damage(me,target);
+if ( !me->query("env/no_msg") && !target->query("env/no_msg") )
+        msg = HIC"
+$N"HIC"身形一转，双腿顺势连环横扫，使出少林金刚腿绝学"HIW+name()+NOR HIC"迅捷无伦地攻
+向$n"HIC"，一时间众人只见眼前尽是腿影！\n" NOR; 
+else    msg = HIY"$N"HIY"对$n"HIY"施展了"+name()+"！\n"NOR;
+message_vision(msg,me,target);
+me->set_temp("shaolin_pfm_ruji",time());
+me->add("force",-200);
+
+ap = COMBAT_D->skill_power(me,"unarmed",1)/10;
+dp = COMBAT_D->skill_power(target,"dodge",1)/10;
+if ( COMBAT_D->restrain(me,target) )
+        ap+= ap/2;
+if ( COMBAT_D->restrain(target,me) )
+        dp+= dp/2;
+if ( me->query("family/family_name")== "少林寺" )
+        ap+= random(ap/2);
+
+if ( random(ap+dp)>dp )
+        {
+        if ( !me->query("env/no_msg") && !target->query("env/no_msg") )
+                message_vision(HIC"$n"HIC"但觉胸中一闷，一口淤血已被这猛烈的腿风逼出！\n"NOR,me,target);
+        if ( damage<1000 && damage/5 )
+                target->receive_wound("kee",damage/5,me);       
+        target->receive_damage("kee",damage,me);
+        COMBAT_D->report_status(target);
+        }
+else if ( random(ap+dp)>dp/2 )
+        {
+        if ( !me->query("env/no_msg") && !target->query("env/no_msg") )  
+                message_vision(HIC"怎料那漫天的腿影舞到一半，$N"HIC"真气不济，忽地散去。$N"HIC"无法，只得变招换式。\n"NOR,me);
+        me->add("force",-100);  
+        SDS_D->super_attack(me,target,damage/3,"HIC");
+        }
+else    {
+        message("vision",HIC"怎料那漫天的腿影舞到一半，忽地散去。但见"+me->name()+HIC"面色惨白，低头不语。\n"NOR,environment(me),me);
+        tell_object(me,HIC"你忽觉内息不畅，那漫天的腿影舞到一半，忽地散去。。。。\n"NOR);
+        me->add("force",-200);
+        }
+if ( me->query("force")>500 
+  && time()<me->query_temp("shaolin_pfm_chuanyun")+3 
+  && me->query_skill("jingang-leg",1)>250 
+  && target && me->is_fighting(target) )
+        {
+        actions= ([
+                "damage": 80,
+                "dodge" : -30,
+                "parry" : -30,
+                "damage_type" : "内伤",
+                "weapon" : "拳风腿影",
+                "action" :  HIW"一时间，漫天的$w带着呼啸之声径直朝$n$l打去",
+                "post_action" : (: postfozhi :)
+        ]);
+        me->set("actions",actions);
+        if ( !me->query("env/no_msg") && !target->query("env/no_msg") )
+                message_vision(HIY"\n$N"HIY"将金刚腿使到兴起，般若掌不由也夹进了攻势，但见：
+\t腿影重，影内自带一丝威猛；
+\t掌风起，风中尽是万般庄重。"NOR,me,target);
+        else    message_vision(HIW"\n$N"HIW"参悟金刚腿的真髓，使出了「佛寂·佛至」一式！\n"NOR,me,target);
+        COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+        me->reset_action();
+        }
+return 1;
+}                         
+
+void postfozhi(object me,object victim,object weapon, int damage) 
+{
+if ( me && victim && me->is_fighting(victim) )
+        {
+        if ( !me->query("env/no_msg") && !victim->query("env/no_msg") )  
+                message_vision(HIW"四周皆是拳风腿影，风影之中隐隐有梵音阵阵，端是叫人惊奇。\n"NOR,me);
+        if ( me->query("combat_exp")>random(victim->query("combat_exp")) )
+                {
+                message_vision(HIW"功夫不长，$n"HIW"已是汗流浃背，心中揣测。\n"NOR,me,victim);                                  
+                damage+=me->query_skill("unarmed");
+                damage = damage/10+random(damage/8);
+                victim->receive_damage("sen",damage*2);
+                victim->receive_wound("sen",damage);
+                COMBAT_D->report_sen_status(victim);
+                }
+        }
+}
+
+int help(object me)
+{
+string temp;
+temp = "\t\t"+to_chinese("yijinjing")+" 250 级\n";  
+temp+= "\t\t"+to_chinese("unarmed")+" 250 级\n";  
+temp+= "\t\t"+to_chinese("jingang-leg")+" 250 级\n";  
+temp+= "\t\t内力修为 十年\n";
+temp+= "\t\t内    力 600点\n";
+write("\n"+to_chinese(explode(__FILE__,"/")[<2])+"之"+name()+"："NOR"\n");
+write(@HELP 
+        使用功效：  
+                给对手的气血造成严重伤害
+        出招类型：  
+                延时型外功 
+                有隐藏攻击  
+                叛师可带出  
+        出手要求：          
+HELP);           
+write(temp);  
+return 1;  
+}

@@ -1,0 +1,189 @@
+#include <ansi.h>
+#include <dbase.h>
+#include <name.h>
+#include <armor.h>
+
+inherit F_EQUIP;
+inherit F_CLEAN_UP;
+inherit F_DBASE;
+inherit F_MOVE;
+inherit F_NAME;
+
+nosave int amount;
+nosave int armor;
+nosave int add_pot;
+nosave string clr="";
+
+int query_add_pot()
+{
+return add_pot;
+}
+
+int query_amount()
+{
+return amount;
+}
+
+void set_amount(int v)
+{
+object dest;
+
+if ( v<0 )
+        {
+        amount=0; // mon 4/16/98
+        call_out("destruct_me", 1);
+        error("combine:set_amount less than 1.\n");
+        }
+if( v==0 )
+        {
+        amount = 0; // mon 4/16/98
+        seteuid(getuid());
+        dest=load_object("/cmds/std/quitroom");
+        if(environment(this_object())!=dest)
+                ::move(dest,1); // use the old move(), so
+            // that won't recursively call set_amount.
+        call_out("destruct_me", 1);
+        }
+else    {
+        amount = v;
+        add_pot*= v;
+        armor*= v;
+        this_object()->set_weight(v * (int)query("base_weight"));
+        this_object()->set("armor_prop/armor",armor);
+        }
+}
+
+void add_amount(int v)
+{
+set_amount(amount+v);
+}
+
+string short()
+{
+return chinese_number(query_amount()) + query("base_unit")+::short();
+}
+
+string long()
+{
+return this_object()->query("long")+clr+"它可以加"+chinese_number(armor)+"点防御以及恢复"+chinese_number(add_pot)+"点健康。\n"NOR;    
+}
+
+varargs int move(mixed dest, int silent)
+{
+object env, *inv;
+int i, total, total0, result;
+string file;
+result= ::move(dest, silent);
+if ( env=environment() )
+        {
+        file = base_name(this_object());
+        inv = all_inventory(env);
+        total = (int)query_amount();
+        total0=total;
+        for( i=0;i<sizeof(inv);i++ )
+                {
+                if( inv[i]==this_object()
+                 || inv[i]->query("pian_type")!=this_object()->query("pian_type")
+                 || inv[i]->query("name")!=this_object()->query("name")
+                 || inv[i]->query("equipped")=="wear" )
+                        continue;
+                if ( base_name(inv[i])==file )
+                        {
+                        total += (int)inv[i]->query_amount();
+                        destruct(inv[i]);
+                        }
+                }
+        if ( total!=total0 )
+                set_amount(total);
+        }
+return result;
+}
+
+void set_add_pot(int n)
+{
+if ( n<=0 )
+        n = 0;
+if ( n>10 )
+        n = 10;
+add_pot = n;
+}
+
+void set_armor(int v)
+{
+if ( armor<1 )
+        armor = 1;
+if ( armor>50 )
+        armor = 50;             
+armor = v;
+}
+
+int query_armor()
+{
+if ( armor<=0 )
+        armor = 1;      
+return armor;
+}               
+
+void setup()
+{
+set("armor_type","po");
+if ( !query("armor_apply/dodge")
+   && weight()>3000 )
+        add("armor_prop/dodge", -weight()/3000 );
+}
+
+private void destruct_me()
+{
+write(clr+"\n"+this_object()->name()+clr+"“喀嘣”一声，碎成了一堆粉末。\n\n"NOR);
+destruct(this_object());
+}
+
+void check_owner()
+{
+if ( !userp(environment()) )  {
+                  destruct_me();
+                  return;
+                  }
+if ( query("持久")<=0 )
+        {
+        message_vision(clr+"\n$N"+clr+"“喀嘣”一声，出现了一道裂痕。\n\n"NOR,this_object());
+        this_object()->add_amount(-1);
+        }
+}
+
+void init()
+{
+check_owner();
+}
+
+int wear()
+{
+object me = this_player();
+object ob = this_object();
+
+if ( me!=environment() )
+        return 0;
+if ( ::wear() )
+        {
+        message_vision(clr+"$N"+clr+"拿起一些$n"+clr+"一阵摩擦，只见"+chinese_number(ob->query_amount())+clr+"道霞光在$P四周围绕。\n"NOR,me,ob);
+        return 1;
+        }
+return 0;       
+}
+
+int unequip()
+{
+object me = this_player();
+object ob = this_object();
+
+if ( me!=environment() )
+        return 0;
+if ( ::unequip() )
+        {        
+        message_vision(clr+"$N"+clr+"将$n"+clr+"取了下来。\n"NOR,me,ob);
+        return 1;
+        }
+return 0;
+}
+
+

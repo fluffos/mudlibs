@@ -1,0 +1,937 @@
+//寄售系统for TSRJ
+
+#include <ansi.h>
+//#include <config.h>
+#include <localtime.h>
+#define JB HIY"金币"NOR
+#define XYD HIG"信用点"NOR
+#define GXSJ 172800
+#define LL "/cmds/usr/l"
+inherit NPC;
+inherit F_SAVE;
+int lxqxyb_me();
+int value_me();
+int me_jishou();
+int jishou_fen(string arg);
+int me_qiugou();
+int qu_qian();
+int qu_wu();
+int qu_qiugou();
+void genxin();
+int qu_qiugoum(string arg);
+int no_nojishou(object ob);
+int do_chakan(string arg);
+mapping *jilu;  //寄售记录
+mapping *qiugou;//求购记录
+mapping zwdy;   //对应的中文名字
+string *consignment = ({
+        "shengji poshi", "hebing poshi", "convert poshi", "renshen guo", "posha dan", "zhenyuan dan", "fuyuan dan", "meirong dan",
+        "shenli wan", "taiji dan", "xian dan", "xisui dan", "guihe dan", "qiong cao",
+});
+
+void create()
+{
+        set_name(HIY"沈万三"NOR, ({"shen wansan", "shen", "wansan" }));
+        set("title",HIY"寄售商人"NOR);
+        set("kaifa",38);
+        set("jizhi",46);
+        set("shen_type", 1);
+        set("gender", "男性");
+        set("age", 45);
+        set("long",
+                "神魔寄售行的大掌柜，富甲一方。听说是小男人的老乡。\n");
+        set_skill("unarmed", 5000);
+        set_skill("dodge", 5000);
+        set_temp("apply/damage", 1500);
+        set("combat_exp", 40000000);
+        set("attitude", "friendly");
+		    set("no_clean_up",1); 
+        setup();
+		
+    //    carry_object("/clone/misc/changpao")->wear();
+	            	genxin();
+                restore();
+                set("inquiry", ([
+                    "寄售":(:me_jishou:),
+                    "求购":(:me_qiugou:),
+                    "取回寄售物品":(:qu_wu:),
+                    "撤销求购":(:qu_qiugou:),
+                    "取回金钱或物品":(:qu_qian:),
+                    ]) );
+}
+
+void genxin()
+{
+	object ob,wp;
+	ob=this_object();
+  for(int i=0;i<sizeof(jilu);i++)
+{
+	if(!objectp(jilu[i]["wpm"]))
+		continue ;
+	if(ob->query("no_jishou"))
+		message( "channel:chat",HIC"〖"NOR HIG"神魔寄售行"NOR HIC"〗寄售行暂时歇业整顿，请大家尽快取回所寄售的东西！\n"NOR,users());
+
+	
+	if(jilu[i]["ctime"]+GXSJ-1200<time())
+		message( "channel:shout",HIC"〖"NOR HIG"神魔寄售行"NOR HIC"〗在此寄售的"+jilu[i]["wpm"]->query("name")+"即将到期，请速来取回 ！\n"NOR,users());
+	if(jilu[i]["ctime"]+GXSJ<time())
+	{
+		wp=jilu[i]["wpm"];
+		jilu-=({jilu[i]});	
+		 wp->move("/obj/empty",1);
+		 destruct(wp);
+		break ;
+	}
+}
+   message( "channel:chat",HIC"〖"NOR HIG"神魔寄售行"NOR HIC"〗开放宝物寄售服务，欢迎大家前来寄售各类宝物。\n"NOR,users());
+
+
+remove_call_out("genxin");
+call_out("genxin", 1800);
+
+}
+void init()
+{
+        add_action("do_list", "list");
+        add_action("do_buy", "buyy");
+        add_action("do_qiugou", "qiugou");
+        add_action("do_chakan", "chakan");
+
+}
+int me_jishou()
+{
+	string arg;
+	object ob;
+	ob=this_object();
+	
+	if(ob->query("no_jishou"))
+	{
+		write("现在暂停寄售 \n");
+		return 1;
+	}
+        if(sizeof(all_inventory(ob))>=ob->query_max_items())
+        {
+           write("这里的柜台都摆满了 \n");
+		return 1;
+        }
+	  write(HIG"请选择寄售币种"NOR"
+	  
+      1、"+XYD+"\n
+      2、"+JB+" \n");
+		  input_to("jishou_fen",arg);
+	  return 1;
+
+}
+
+int jishou_fen(string arg)
+{
+
+if(!arg)
+{
+  write("错误的输入");
+  return 1;
+}
+if(arg[0..0]!="1"&&arg[0..0]!="2")
+{
+	write("不正确的输入");
+	return 1;
+}
+  else arg[0..0]=="1" ? lxqxyb_me():value_me();
+  return 1;
+
+}
+
+int value_me()
+{
+	object me,ob;
+	ob=this_object();
+	me=this_player();
+	write("您现在是以"+JB+"方式寄售物品，\n
+  请输入您要请输入您要寄售的物品的id。\n");
+	input_to("lxqxyb_jishou",me,2);
+	return 1;
+}
+
+int lxqxyb_me()
+{
+	object me,ob;
+	me=this_player();
+	ob=this_object();
+	write("您现在是以"+XYD+"方式寄售物品，\n
+  请输入您要请输入您要寄售的物品的id。\n");
+		 input_to("lxqxyb_jishou",me,1);
+
+return 1;
+
+}
+void lxqxyb_jishou(string arg,object me,int leixin)
+{
+	string b;
+	b=leixin==1?XYD:JB;
+	write("您现在是以"+b+"方式寄售物品，\n
+  请输入您要寄售物品的价格\n");
+		input_to("lxqxyb_juding",me,arg,leixin);
+	
+
+}
+void lxqxyb_juding(string arg,object me,string brg,int leixin)
+{
+	int jiage;
+	string b;
+	b=leixin==1?"信用点":"金币";
+	jiage=atoi(arg);
+        if(jiage>100)   //超过210个金币有可能造成溢出
+	{
+  write("您输入的金额太大了\n");
+		return ;
+	} 
+	if(jiage<1)
+	{
+	write("您输入的金额太小了\n");
+		return ;
+	}
+write("您现在是以"HIY+b+NOR"方式寄售物品，\n");
+write("您要寄售"CYN+brg+NOR"的价格为"HIY+jiage+NOR"个"HIY+b+NOR"，确定吗？\n\n" 
+      HIY"如果确定请选择 Y 否则请选择 N\n");
+input_to("lxqxyb_ding",brg,jiage,leixin);
+
+}
+int lxqxyb_ding(string a,string brg,int jiage,int leixin)
+{
+	object ob,me; 
+	string ss;
+	int ctime;
+	me=this_player();
+	if(a!="Y"&&a!="y")
+	{	write("不寄售那就算了\n");
+	return 1;
+	}  
+
+	if(!objectp(ob=present(brg,me)))
+	{
+   write("别闹了，你哪有这个物品！ \n");
+   return 1;
+		}
+    if(no_nojishou(ob))              //限制寄售
+	    return 1;
+			ctime=time();
+			if(!sizeof(jilu))
+				jilu=({});
+			if(sizeof(jilu)>30)
+			{
+				write("这里已经摆满物品了！ \n");
+			  return 1;
+			}
+			  ob->move(this_object());
+
+                        query("js_bianhao")?add("js_bianhao",1) : set("js_bianhao",1);  //寄售编号改为顺序编号
+			jilu+=({(["wuzhu" : me->query("id"),"wpm" : ob,"bizhong" : leixin==1?XYD:JB,"jiage" : jiage,"ctime" : ctime,"bianhao" : query("js_bianhao")])});
+
+      write(HIR"好的您的物品已经开始寄售了，如未售出请于48小时之内前来取回，逾期物品将会以废品处理！\n"NOR);
+			if(!sizeof(zwdy))
+			{
+				zwdy=([]);
+				zwdy[ob->query("id")]=ob->query("name");
+			}
+			else if(!undefinedp(ss=zwdy[ob->query("id")]))
+				return 1;
+			else zwdy[ob->query("id")]=ob->query("name");
+		  	save();
+			
+return 1;	
+ 
+}
+
+int do_list()
+{
+	int i,l=0;
+	string arg;
+	mapping *jilu1;
+	if (sizeof(jilu))
+	{
+		jilu1=jilu;
+		if(!arg) arg=HIG"这里所寄售的物品如下： \n"NOR;
+	for(i=0;i<sizeof(jilu);i++)
+	{
+   if(!objectp(jilu[i]["wpm"]))
+    {
+	   jilu1-=({jilu1[i-l]}); //删除出错记录
+	   ++l;
+	   continue;
+    }
+
+arg+=sprintf(CYN"（%d）  %s(%s)   "NOR"寄售的价格是%d 个%s\n\n"NOR,jilu[i]["bianhao"],jilu[i]["wpm"]->query("name"),jilu[i]["wpm"]->query("id"),jilu[i]["jiage"],jilu[i]["bizhong"]);
+
+	}
+	jilu=jilu1;                //删除完毕
+	}
+
+	if (sizeof(qiugou))
+	{
+	if(!arg)
+		arg=HIG"这里所求购的物品如下：\n"NOR;
+	else arg+=HIG"这里所求购的物品如下：\n"NOR;
+
+	for(int k=0;k<sizeof(qiugou);k++)
+	{
+
+arg+=sprintf(HIY"（%d）%s "NOR"以%d个%s的价格求购"CYN"  %s (%s) \n\n"NOR,qiugou[k]["bianhao"],qiugou[k]["zwuzhu"],qiugou[k]["jiage"],qiugou[k]["bizhong"],qiugou[k]["zwpm"],qiugou[k]["wpm"]);
+
+  }
+  }
+	if(!arg)
+		arg="没有任何人寄售或求购\n";
+	  write(arg);
+    return 1;
+	
+}
+int do_buy(string arg)
+{
+	object me,ob;
+	int b=0,c=0;
+	string wpm;
+	me=this_player();
+	if(!objectp(me)) return notify_fail("未知错误，请重试！ \n");
+       if (sizeof(all_inventory(me)) >=me->query_max_items())
+	     {
+		    write("你身上的东西太多了，先处理一下再买东西吧。\n");
+		    return 1;
+	      }
+        if(!arg)
+        {write("输入格式为 buy <数字编号> <物品名>   ！ \n");
+         return 1;
+        }
+if(sscanf(arg,"%d %s",b,wpm)!=2)
+ return notify_fail("输入格式为 buy <数字编号> <物品名>   ！ \n");
+for(int i=0;i<sizeof(jilu);i++)
+{
+	if(b==jilu[i]["bianhao"])
+		if(wpm==jilu[i]["wpm"]->query("id"))
+			;
+	else return notify_fail("编号和物品不符！ \n");
+	else continue;
+	if(!objectp(ob=jilu[i]["wpm"]))
+		return  notify_fail("物品找寻失败！ \n");
+if(jilu[i]["bizhong"]==XYD)
+{
+	if(me->query("c_balance_credit")<jilu[i]["jiage"])
+		return notify_fail("您的信用点不够！ \n");
+	ob->move(me,1);
+	me->add("c_balance_credit",-jilu[i]["jiage"]);
+	
+
+	if(!query("chushou/"+jilu[i]["wuzhu"]))
+		set("chushou/"+jilu[i]["wuzhu"]+"/信用点",jilu[i]["jiage"]);
+	else {
+		c=query("chushou/"+jilu[i]["wuzhu"]+"/信用点");
+	c+=jilu[i]["jiage"];
+		set("chushou/"+jilu[i]["wuzhu"]+"/信用点",c)	;
+	}
+	jilu-=({jilu[i]});
+	write("购买成功\n");
+	return 1;
+
+	}
+	
+if(jilu[i]["bizhong"]==JB)
+{
+	if(me->query("c_balance")<jilu[i]["jiage"]*10000000)
+		return notify_fail("您的存款不够！ \n");
+ 	ob->move(me,1);
+  	me->add("c_balance",-jilu[i]["jiage"]*10000000);
+	
+
+  	if(!query("chushou/"+jilu[i]["wuzhu"]))
+		set("chushou/"+jilu[i]["wuzhu"]+"/金币",jilu[i]["jiage"]);
+	else {
+		c=query("chushou/"+jilu[i]["wuzhu"]+"/金币");
+	  c+=jilu[i]["jiage"];
+		set("chushou/"+jilu[i]["wuzhu"]+"/金币",c)	;
+	    }
+	jilu-=({jilu[i]});
+	write("购买成功\n");
+	return 1;
+
+	}	
+}
+
+	write("无此物品");
+	return 1;
+
+}
+
+int qu_qian()
+{
+	mapping qian;
+	object me,*cc;
+	int a,credit_p;
+	string *linqu;
+if(!objectp(me=this_player()))
+  return 1;
+if(!query("chushou/"+me->query("id"))&&!query("qiugou/"+me->query("id")))
+  {write("你没有任何东西在这里！ \n");
+  return 1;
+   }
+if (sizeof(all_inventory(me)) >= me->query_max_items())
+  {
+	write("你身上的东西太多了，先处理一下再买东西吧。\n");
+	return 1;
+  }
+if(query("chushou/"+me->query("id")))
+  {
+  qian =query("chushou/"+me->query("id"));
+  a=sizeof(qian);
+  credit_p=0;
+  switch (a)
+{
+case 1:
+		if(keys(qian)[0]=="信用点")
+		{
+			me->add("c_balance_credit",qian["信用点"]);
+		  write("这是您获得的"+qian["信用点"]+"信用点 \n");
+		  log_file("static/jishou","["+ctime(time())+"] "+sprintf("%s(%s) 得到了"+qian["信用点"]+"个信用点！\n", me->query("name"),me->query("id")));
+		}
+		else 
+		{ if (qian["金币"]<100){
+			me->add("c_balance",qian["金币"]*10000000);
+			//MONEY_D->pay_player(this_player(),qian["黄金"]*10000);
+			write("这是您获得的"+qian["金币"]+"个金币 \n");
+		log_file("static/jishou","["+ctime(time())+"] "+sprintf("%s(%s) 得到了"+qian["金币"]+"个金币！\n", me->query("name"),me->query("id")));}
+		 else {
+		 	    credit_p=qian["金币"]/100;
+		 	    qian["金币"]-=credit_p*100;
+		 	    me->add("c_balance",qian["金币"]*10000000);
+		 	    me->add("c_balance_credit",credit_p);
+		 	    write("这是您获得的"+credit_p+"个信用点和"+qian["金币"]+"个金币 \n");
+		 	    log_file("static/jishou","["+ctime(time())+"] "+sprintf("%s(%s) 得到了"+credit_p+"个信用点和"+qian["金币"]+"个金币！\n", me->query("name"),me->query("id")));
+		 	}
+		}
+			delete("chushou/"+me->query("id"));
+
+		break ;
+case 2 :
+	linqu=keys(qian);
+	if(linqu[0]=="信用点")
+		me->add("c_balance_credit",qian["信用点"]);
+		else {
+			 if (qian["金币"]<100){
+			me->add("c_balance",qian["金币"]*10000000);}
+		 else {
+		 	    credit_p=qian["金币"]/100;
+		 	    qian["金币"]-=credit_p*100;
+		 	    me->add("c_balance",qian["金币"]*10000000);
+		 	    me->add("c_balance_credit",credit_p);
+		 	}
+			}
+	// else MONEY_D->pay_player(this_player(),qian["黄金"]);
+	if(linqu[1]=="信用点")
+		me->add("c_balance_credit",qian["信用点"]);
+		else {
+			 if (qian["金币"]<100){
+			me->add("c_balance",qian["金币"]*10000000);}
+		 else {
+		 	    credit_p=qian["金币"]/100;
+		 	    qian["金币"]-=credit_p*100;
+		 	    me->add("c_balance",qian["金币"]*10000000);
+		 	    me->add("c_balance_credit",credit_p);
+		 	}
+			}
+	//else MONEY_D->pay_player(this_player(),qian["黄金"]*10000);
+	  write("这是您获得的"+(qian["信用点"]+credit_p)+"信用点和"+qian["金币"]+"个金币"+" \n");
+	  log_file("static/jishou","["+ctime(time())+"] "+sprintf("%s(%s) 得到了"+(qian["信用点"]+credit_p)+"个信用点和"+qian["金币"]+"个金币！\n", me->query("name"),me->query("id")));
+	  delete("chushou/"+me->query("id"));
+
+}
+}
+if(cc=query("qiugou/"+me->query("id")))
+{
+	
+	for(int j=0;j<sizeof(cc);j++)
+	{
+            if(!objectp(cc[j]))
+                continue;
+		cc[j]->move(me);
+		
+		write("这是您的"+cc[j]->query("name")+"\n");
+	  log_file("static/jishou","["+ctime(time())+"] "+sprintf("%s(%s) 得到了"+cc[j]->query("name")+"！\n", me->query("name"),me->query("id")));
+	}
+delete("qiugou/"+me->query("id"));
+}
+return 1;
+
+}
+int qu_wu()
+{
+	int i;
+	string arg;
+	object me;
+	me=this_player();
+	if (sizeof(jilu)<1)
+		return notify_fail("没有任何人在这里寄售！ \n");
+
+	if(!arg) arg=HIG"您在这里所寄售的物品如下 \n"NOR;
+	for(i=0;i<sizeof(jilu);i++)
+	{
+if(jilu[i]["wuzhu"]==me->query("id"))
+		arg+=sprintf("（%d）%s(%s)价格是%d 个%s\n",jilu[i]["bianhao"],jilu[i]["wpm"]->query("name"),jilu[i]["wpm"]->query("id"),jilu[i]["jiage"],jilu[i]["bizhong"]);
+
+	}
+	write(arg);
+	write("您要取回您的物品，请输入<编号> <物品名> ");
+	input_to("qu_wuping");
+	return 1;
+
+
+}
+int qu_wuping(string arg)
+{
+	object me,ob;
+	int b=0,c=0;
+	string wpm;
+	me=this_player();
+
+	if(!objectp(me)) return notify_fail("未知错误，请重试！ \n");
+	if (sizeof(all_inventory(me)) >= me->query_max_items())
+	{
+		write("你身上的东西太多了，先处理一下再买东西吧。\n");
+		return 1;
+	}
+	if(sscanf(arg,"%d %s",b,wpm)!=2)
+		return notify_fail("输入格式为 <数字编号> <物品名> ！ \n");
+	for(int i=0;i<sizeof(jilu);i++)
+	{
+		if(b==jilu[i]["bianhao"])
+			if(wpm==jilu[i]["wpm"]->query("id"))
+				;
+			else return notify_fail("编号和物品不符！ \n");
+		else continue;
+		if(!objectp(ob=jilu[i]["wpm"]))
+			return  notify_fail("物品找寻失败！ \n");
+	
+		if(jilu[i]["wuzhu"]!=me->query("id"))
+     return notify_fail("此物品不属于你！ \n");
+	
+
+		ob->move(me,1);
+		jilu-=({jilu[i]});
+		write("取回成功\n");
+		return 1;
+}
+}
+//
+int qu_qiugou()
+{
+	int k;
+	string arg;
+	object me;
+	me=this_player();
+	if (sizeof(qiugou)<1)
+		return notify_fail("没有任何人在这里寄售！ \n");
+
+	if(!arg) arg=HIG"您在这里所求购的物品如下 \n"NOR;
+	for(k=0;k<sizeof(qiugou);k++)
+	{
+		if(qiugou[k]["wuzhu"]==me->query("id"))
+			arg+=sprintf("（%d）%s以%d个%s的价格求购%s(%s)\n",qiugou[k]["bianhao"],qiugou[k]["zwuzhu"],qiugou[k]["jiage"],qiugou[k]["bizhong"],qiugou[k]["zwpm"],qiugou[k]["wpm"]);
+
+	}
+	write(arg);
+	write("您要取回您的物品，请输入<编号> <物品名> ");
+	input_to("qu_qiugoum");
+	return 1;
+
+
+}
+int qu_qiugoum(string arg)
+{
+	object me,ob;
+	int b=0,c=0;
+	string wpm;
+	me=this_player();
+
+	if(!objectp(me)) return notify_fail("未知错误，请重试！ \n");
+	if (sizeof(all_inventory(me)) >= me->query_max_items())
+	{
+		write("你身上的东西太多了，先处理一下再买东西吧。\n");
+		return 1;
+	}
+	if(sscanf(arg,"%d %s",b,wpm)!=2)
+		return notify_fail("输入格式为 <数字编号> <物品名> ！ \n");
+	for(int i=0;i<sizeof(qiugou);i++)
+	{
+		if(b==qiugou[i]["bianhao"])
+			if(wpm==qiugou[i]["wpm"])
+				;
+			else return notify_fail("编号和物品不符！ \n");
+		else continue;
+		
+
+		if(qiugou[i]["wuzhu"]!=me->query("id"))
+			return notify_fail("此物不属于你！ \n");
+if(qiugou[i]["bizhong"]==XYD)
+{me->add("c_balance_credit",qiugou[i]["jiage"]);
+
+		
+		qiugou-=({qiugou[i]});
+		write("取回成功\n");
+		save();
+		return 1;
+}
+if(qiugou[i]["bizhong"]==JB)
+{ me->add("c_balance",qiugou[i]["jiage"]*10000000);
+	//MONEY_D->pay_player(this_player(), qiugou[i]["jiage"] *10000);
+	qiugou-=({qiugou[i]});
+	write("取回成功\n");
+	save();
+	return 1;
+}
+	}
+     
+}
+//求购信息
+int me_qiugou()
+{
+	object me,ob;
+	ob=this_object();
+	me=this_player();
+	write("请输入您想要求购的物品id\n");
+	input_to("qiugou_id");
+	return 1;
+}
+int qiugou_id(string id)
+{
+	string zwmc,zljg;//货币种类和价格
+
+	if(!sizeof(zwdy))
+	{
+	 write("目前没有任何物品寄售 ！ \n");
+	 return 1;
+	}
+
+if(undefinedp(zwmc=zwdy[id]))
+{
+	write("找不到物品名所对应的中文名称，请检查是否输入有误
+		注意 ：只有曾经在寄售行寄售过的物品才可以求购 \n");
+	write("物品名是"+zwmc);
+	return 1;
+}
+write("您要求购的物品是"+zwmc+"("+id+") \n");
+write("请输入您要求购的货币种类和价格，格式为 货币种类 价格(例：金币 10) \n
+	  注意：只支持信用点和金币 \n");
+	input_to("qiugou_fabu",zljg,id,zwmc);
+}
+int qiugou_fabu(string arg,string id,string zwmc)
+{
+	string a,zljg,jiage;
+	int b;
+if(!arg)
+{
+	write("格式为 货币种类 价格(例：金币 10)\n");
+	return 1;
+}
+
+if(sscanf(arg,"%s %s",a,jiage)==2)
+if(a!="JB"&&a!="金币"&&a!="xyd"&&a!="信用点")
+{
+	write("您输入的货币种类错误");
+	return 1;
+}
+else ;
+else {write("格式为 货币种类 价格"); return 1;}
+b=atoi(jiage);
+if(b>100)
+{
+	write("您输入的金额太大了\n");
+	return 1;
+} 
+if(b<1)
+{
+	write("您输入的金额太小了\n");
+	return 1;
+}
+write("您要求购的物品是"+zwmc+"("+id+") 价格是"+b+"个"+HIY+a+NOR+"\n");
+write(HIY"确定输入y否则输入n \n"NOR);
+
+input_to("qiugou_qd",zljg,id,zwmc,a,b);
+
+}
+int qiugou_qd(string qd,string id,string zwmc,string a,int b)
+{
+	
+		object ob,me; 
+		int ctime;
+		me=this_player();
+		if(qd!="Y"&&qd!="y")
+		{	write("不求购那就算了\n");
+		return 1;
+		}  
+		if(a=="金币"||a=="JB")
+		{
+			if(me->query("c_balance")<b*10000000)
+			{
+				write("您的存款不够");
+				return 1;   }
+			me->add("c_balance",-b*10000000);
+			/*switch (MONEY_D->player_pay(me, b*10000))
+			{
+			case 0:
+				write(CYN + name() + "冷笑道：“你哪有这么多黄金！”\n" NOR);
+				return 1;
+			case 2:
+				write(CYN + name() + "皱眉道：“您还有没有零"
+					"钱啊？银票我可找不开。”\n" NOR);
+				return 1;
+			default:*/
+				if(!sizeof(qiugou))
+					qiugou=({});
+       query("qg_bianhao")?add("qg_bianhao",1) : set("qg_bianhao",1);  //寄售编号改为顺序编号   
+				qiugou+=({(["wuzhu" : me->query("id"),"zwuzhu" : me->query("name"),"wpm" : id,"zwpm" : zwmc,"bizhong" : JB,"jiage" : b,"bianhao":query("qg_bianhao")])});
+				command("chat "+me->query("name")+"以"+CYN+sprintf("%d",b)+NOR+"两"+JB+"求购物品"+zwmc+" \n");
+				save();
+				write("求购信息以发布\n");
+
+			}
+
+		else if(a=="xyd"||a=="信用点")
+		{
+			if(me->query("c_balance_credit")<b)
+			{
+				write("您的信用点不够");
+				return 1;   }
+			me->add("c_balance_credit",-b);
+			if(!sizeof(qiugou))
+				qiugou=({});
+			qiugou+=({(["wuzhu":me->query("id"),"zwuzhu":me->query("name"),"wpm":id,"zwpm":zwmc,"bizhong":XYD,"jiage":b,"bianhao":random(999)])});
+				command("chat "+me->query("name")+"以"+CYN+sprintf("%d",b)+NOR+"个"+XYD+"求购物品"+zwmc+" \n");
+				save();
+				write("求购信息以发布\n");
+		}
+
+
+		return 1;	
+
+	
+}
+
+
+////////
+// 接受存盘数据的接口函数
+/*
+int receive_dbase_data(mixed cunpan)
+{
+	if (! mapp(cunpan || sizeof(cunpan) < 1))
+		return 0;                
+  if (cunpan["zwdy"])
+       zwdy=cunpan["zwdy"];
+  if (cunpan["qiugou"])
+       qiugou=cunpan["qiugou"];
+
+	return 1;
+}
+
+// 进行保存数据的接口函数
+
+mixed save_dbase_data()
+{
+	mapping cunpan;
+
+	cunpan = ([ ]);
+	if(!qiugou)
+		qiugou=({});
+	if(!zwdy)
+		zwdy=([]);
+	if(sizeof(qiugou)>0)
+
+		cunpan+=(["qiugou":qiugou]);
+	if(sizeof(zwdy)>0)
+		cunpan += (["zwdy" : zwdy]);
+	return cunpan;
+}
+ */
+int do_qiugou(string arg)
+{
+	object me,ob,*c;
+	int b=0,cc;
+	string wpm;
+	me=this_player();
+	if(!arg)
+     return notify_fail("输入格式为 qiugou <数字编号> <物品名>   ！ \n");
+
+	if(!objectp(me)) return notify_fail("未知错误，请重试！ \n");
+	if (sizeof(all_inventory(me)) >= me->query_max_items())
+	{
+		write("你身上的东西太多了，先处理一下再买东西吧。\n");
+		return 1;
+	}
+
+	if(sscanf(arg,"%d %s",b,wpm)!=2)
+		return notify_fail("输入格式为 qiugou <数字编号> <物品名>   ！ \n");
+	for(int i=0;i<sizeof(qiugou);i++)
+	{
+		if(b==qiugou[i]["bianhao"])
+			if(wpm==qiugou[i]["wpm"])
+				;
+			else return notify_fail("编号和物品不符！ \n");
+		else continue;
+
+
+		if(!objectp(ob=present(wpm,me)))
+		{
+			write("别开玩笑你哪有这个物品！ \n");
+			return 1;
+		}
+                 if(no_nojishou(ob))              //限制寄售
+	  return 1;
+		if(qiugou[i]["bizhong"]==XYD)
+		{
+	
+			ob->move(this_object(),1);
+			me->add("c_balance_credit",qiugou[i]["jiage"]);
+
+
+			if(!query("qiugou/"+qiugou[i]["wuzhu"]))
+			{
+			set("qiugou/"+qiugou[i]["wuzhu"],({ob}));
+			//set("chushou/"+qiugou[i]["wuzhu"]+"/信用点",qiugou[i]["jiage"]);
+			}
+			else {
+				c=query("qiugou/"+qiugou[i]["wuzhu"]);
+				c+=({ob});
+				set("qiugou/"+qiugou[i]["wuzhu"],c)	;
+				//cc=query("chushou/"+qiugou[i]["wuzhu"]+"/信用点");
+			//	cc+=jilu[i]["jiage"];
+			//	set("chushou/"+qiugou[i]["wuzhu"]+"/信用点",cc);
+			}
+			qiugou-=({qiugou[i]});
+			////
+		
+			write("交易成功\n");
+			save();
+			return 1;
+
+		}
+		if(qiugou[i]["bizhong"]==JB)
+		{
+	  ob->move(this_object(),1);
+	  me->add("c_balance", qiugou[i]["jiage"]*10000000);
+    //MONEY_D->pay_player(this_player(), qiugou[i]["jiage"] *10000);
+	if(!query("qiugou/"+qiugou[i]["wuzhu"]))
+		set("qiugou/"+qiugou[i]["wuzhu"],({ob}));	
+	else {
+		c=query("qiugou/"+qiugou[i]["wuzhu"]);
+		c+=({ob});
+		set("qiugou/"+qiugou[i]["wuzhu"],c)	;
+	}
+	qiugou-=({qiugou[i]});
+	write("交易成功\n");
+		save();
+	return 1;
+
+		}
+	}
+
+	write("无此物品");
+	return 1;
+
+
+
+
+}
+int no_nojishou(object ob)
+{       string id;
+	      id=ob->query("id");
+         if (ob->query("money_id")&&ob->query("id")!="thousand-gold")
+        {
+                write(CYN + name() + "道：本地只可使用金票\n" NOR);
+                return 1;
+        }
+
+        if (ob->is_character())
+        {
+                write(CYN + name() + "道：哼！我这里做正经生"
+                      "意，不贩卖人口！\n" NOR);
+                return 1;
+        }
+        
+        if ( member_array(id, consignment) == 1 )
+        {
+                write(CYN + name() + "道：哼！神魔寄售行只寄售高级物品,"
+                      "那些阿猫阿狗的玩意就不要拿过来了！\n" NOR);
+                return 1;        	
+        }
+        
+        if (ob->is_item_make())
+	      {
+	            	write(CYN + name() + "摇摇头道：自己制造的物品不能拿来寄售！\n" NOR);
+	            	return 1;
+	      }
+        if (ob->query("shaolin"))
+        {
+                write(CYN + name() + "惊道：少林物品不可寄售。\n" NOR);
+                return 1;
+        }
+        
+        if (ob->query("no_jishou"))
+        {
+                write(CYN + name() + HIW"\n你这个死妖怪,是不是想搞破坏,这等宝物岂能寄售?\n" NOR);
+                return 1;
+        }
+
+        if (ob->query("mingjiao"))
+        {
+                write(CYN + name() + "忙摇头道：魔教东西不予寄售。\n" NOR);
+                return 1;
+        }
+        if(ob->query_amount())
+        {
+                write(CYN + name() + "此物禁止寄售。\n" NOR);
+                return 1;
+        }
+}
+
+string query_save_file()
+{
+  // string id;
+
+  // if( !stringp(id = query("name")) ) return 0;
+   return DATA_DIR + "jishou";
+}
+int do_chakan(string arg)
+{
+	object me,ob;
+	int b=0,c=0;
+	string wpm;
+	me=this_player();
+	if(!objectp(me)) return notify_fail("未知错误，请重试！ \n");
+/*       if (sizeof(all_inventory(me)) >=me->query_max_items())
+	{
+		write("你身上的东西太多了，先处理一下再买东西吧。\n");
+		return 1;
+	}
+ */
+        if(!arg)
+        {write("输入格式为 chakan <数字编号> <物品名>   ！ \n");
+         return 1;
+        }
+        if(sscanf(arg,"%d %s",b,wpm)!=2)
+             return notify_fail("输入格式为 chakan <数字编号> <物品名>   ！ \n");
+   for(int i=0;i<sizeof(jilu);i++)
+  {
+	  if(b==jilu[i]["bianhao"])
+	   	if(wpm==jilu[i]["wpm"]->query("id"));
+        else return notify_fail("编号和物品不符！ \n");
+	    else continue;
+	  if(!objectp(ob=jilu[i]["wpm"]))
+		  return  notify_fail("物品找寻失败！ \n");
+       if (!ob->query("ctime"))
+       	return  notify_fail("该物品没有限制时间！ \n");
+       ob->do_ll();     
+       // LL->look_item(me,ob);
+        return 1;
+}
+}
+ 
+int clean_up()
+{
+      return 0;
+}

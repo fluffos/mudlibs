@@ -1,0 +1,172 @@
+#include <ansi.h>
+inherit ITEM;
+
+void create_cao()
+{
+        set_name("草",({"cao"}));
+        set("level",100);
+        set("num",100); 
+        set("Ztime",3600);
+}       
+
+void create()
+{
+        create_cao();
+        set_weight(100);
+        if (clonep())
+                set_default_object(__FILE__);
+        else
+        {
+                set("unit","粒");
+                set("long", "这是一粒"+query("name")+"的种子，可以在药田里种植。\n");
+                set("value",0);
+                set("type","种子");
+                set("no_get",1);
+        }
+        setup();
+}
+
+void init()
+{
+        add_action("do_zhong","zhong"); //种植
+}
+
+int err_msg(string arg)
+{
+        write(arg);
+        return 1;
+}
+
+string age_string(int time)
+{
+        int month, day, hour, min, sec;
+
+        sec = time % 60;
+        time /= 60;
+        min = time % 60;
+        time /= 60;
+        hour = time % 24;
+        time /= 24;
+        day = time % 30;
+        month = time / 30;
+        return (month?chinese_number(month) + "月":"") + (day?chinese_number(day) + "天":"") + (hour?chinese_number(hour) + "小时":"") + (min?chinese_number(min) + "分钟":"")+chinese_number(sec)+"秒";
+}
+
+void zhong_finish(object me)
+{
+        string id,*ids;
+        remove_call_out("zhong_finish");
+        if( !me || !living(me) || !present(this_object(),me) 
+         || !environment(me)->is_zhongzhi() )
+                return;
+        me->set_temp("block_msg/all", 0); 
+        me->start_busy(1);
+        message_vision("$N小心翼翼的将$n放在坑中，盖满了土。\n",me,this_object());
+        set("type","幼苗");
+        set("zhong",([
+                "time" : time(),
+                "owner" : me->query("id"),
+                "num" : query("num"),
+        ]));
+        id = me->query("id")+"'s "+query("id");
+        ids = this_object()->parse_command_id_list();
+        set_name(query("name"),({id,ids[0],ids[1]}));
+        set_name(query("name"),ids);
+        set("id",id);
+        this_object()->move(environment(me));
+        return;
+}       
+
+int do_zhong(string arg)
+{
+        object me = this_player();
+        
+        if( !arg || !id(arg) )
+                return 0;
+        if( !present(this_object(),me) )
+                return err_msg("是你的吗？\n");         
+        if( query("type")!="种子" )
+                return err_msg(query("name")+"已经长成了，没有这个必要了。\n");                
+        if( me->query_skill("liandan",1)<query("level") )
+                return err_msg("你的"+to_chinese("liandan")+"小于"+query("level")+"级。\n");
+        if( me->is_busy() )
+                return err_msg("你正忙着呢。\n");
+        if( time()<me->query("last_ZHONGZHI")+7200 )
+                return err_msg("每两小时只能种一次。\n");
+        if( !environment(me)->is_zhongzhi() )                   
+                return err_msg("这里不是种植地，不用污染环境。\n");
+        if( sizeof(all_inventory(environment(me)))>25 )
+                return err_msg("这里已经种不下任何东西了。\n");
+
+        
+        message_vision("$N拿起锄头，狠命的挖了一个深深的坑。\n",me);
+        me->start_busy(2);
+        me->set_temp("block_msg/all", 1); 
+        me->set("last_ZHONGZHI",time());
+        call_out("zhong_finish",5+random(10),me);
+        return 1;
+}
+
+int do_caiji(object me)
+{
+        object ob;
+        
+        if( !me )
+                return 0;        
+                
+        if( me->query("id")!=query("zhong/owner") )
+        {
+                ob = new(base_name(this_object()));
+                ob->set("zhong",([
+                        "num" : query("num")/4,
+                ]));
+                set("zhong/num",query("zhong/num")-ob->query("zhong/num"));
+                set("cai_target/"+me->query("id"),1);
+                ob->set("type","成品");
+                ob->set("unit","株");
+                ob->query("level",query("level"));
+                ob->move(me);
+                tell_object(me,"你得到了"+ob->query("zhong/num")+"棵"+ob->query("name")+"。\n");
+                return 1;
+        }                                       
+        else
+        {
+                set("unit","株");
+                set("type","成品");
+                this_object()->move(me);
+                tell_object(me,"你得到了"+query("zhong/num")+"棵"+query("name")+"。\n");
+                return 1;
+        }
+}
+
+string short()
+{
+        if( query("type")!="成品" )
+                return sprintf("%s<%s>(%s)",query("name"),query("type"),capitalize(query("id")));
+        else    return sprintf("%d%s%s<%s>(%s)",query("zhong/num"),query("unit"),query("name"),query("type"),capitalize(query("id")));        
+}
+
+string long()
+{
+        int t;
+        if( query("type")=="幼苗" )
+        {
+                t = query("zhong/time")+query("Ztime")-time();
+                if( t>0 )
+                        return "这是一棵"+query("zhong/owner")+"种植的"+query("name")+"幼苗。它距离成熟期尚有"+age_string(t)+"。("HIR+query("zhong/num")+"/"+query("num")+NOR")\n";
+                else if( t==0 )
+                        return "这是一棵"+query("zhong/owner")+"种植的"+query("name")+"幼苗。它刚刚成熟。("HIR+query("zhong/num")+"/"+query("num")+NOR")\n";                  
+                else
+                {       
+                        t = -t;
+                        return "这是一棵"+query("zhong/owner")+"种植的"+query("name")+"幼苗。它已经成熟"+age_string(t)+"。("HIR+query("zhong/num")+"/"+query("num")+NOR")\n";              
+                }
+        }
+        else if( query("type")=="成品" )
+                return short();
+        else    return ::long();        
+}       
+
+int is_yaocao(){ return 1;}
+
+

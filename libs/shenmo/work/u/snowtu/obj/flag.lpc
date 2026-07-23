@@ -1,0 +1,139 @@
+#include <ansi.h>
+inherit ITEM;
+inherit F_EQUIP;
+
+void check_owner(object me);
+
+void setup()
+{
+::setup();
+set("armor_prop",([
+        "armor" : 100+random(901),
+        "damage" : 100+random(901),
+        "parry" : random(500)-random(400),
+        "spells" : random(500)-random(400),
+        "dodge" : random(500)-random(400),
+        "force" : random(500)-random(400),
+        "spells" : random(500)-random(400),
+]));
+set("armor_type","flags");
+}       
+                
+void create()
+{
+set_name("清风八卦旗",({"qingfeng qi","qi","bagua qi"}));
+set_weight(1000);
+if( clonep() ) 
+        set_default_object(__FILE__);   
+set("unit","面");
+set("material","cloth");
+set("long","一面八卦旗，传说是伏羲氏留下的神器，佩带起来具有驱除邪恶的功效。\n");
+setup();
+}
+
+string long()
+{
+mapping his = query_entire_dbase(); 
+string msg = "";
+if ( his["armor_prop"]["armor"]!=0 )
+        msg+= sprintf("有效物理防御增加：%d 点\n",his["armor_prop"]["armor"]);
+if ( his["armor_prop"]["damage"]!=0 )
+        msg+= sprintf("有效物理攻击增加：%d 点\n",his["armor_prop"]["damage"]);
+if ( his["armor_prop"]["parry"]!=0 )    
+        msg+= sprintf(" 招架有效等级增加：%d 点\n",his["armor_prop"]["parry"]);      
+if ( his["armor_prop"]["dodge"]!=0 )    
+        msg+= sprintf(" 闪避有效等级增加：%d 点\n",his["armor_prop"]["dodge"]);      
+if ( his["armor_prop"]["spells"]!=0 )   
+        msg+= sprintf(" 法术有效等级增加：%d 点\n",his["armor_prop"]["spells"]);     
+if ( his["armor_prop"]["force"]!=0 )    
+        msg+= sprintf(" 内功有效等级增加：%d 点\n",his["armor_prop"]["force"]);      
+return ::long()+"\n另外它还具有以下的功效：\n"+msg;
+}
+
+void init()
+{
+add_action("do_wear","wear");
+add_action("do_remove","remove");
+}
+
+int do_wear(string arg)
+{
+object me = this_player();
+if ( me!=environment() )
+        return 0;
+if ( query("equipped") )
+        return 0;
+if ( !arg || ( !id(arg) && arg!="all" ) )
+        return 0;
+                        
+if ( this_object()->wear() )
+message_vision(HIG"$N"HIG"将$n在手中一扬，立刻四周仙气直溢。\n"NOR,me,this_object());               
+remove_call_out("check_owner");
+call_out("check_owner",1,me);
+return 0;
+}
+
+int do_remove(string arg)
+{
+object me = this_player();
+if ( me!=environment() )
+        return 0;
+if ( !query("equipped") )
+        return 0;
+if ( !arg || ( !id(arg) && arg!="all" ) )
+        return 0;
+if ( this_object()->unequip() )
+message_vision(HIG"$N"HIG"将$n收回怀中。\n"NOR,me,this_object());           
+remove_call_out("check_owner");
+return 0;
+}       
+
+void check_owner(object me)
+{
+object target;
+int damage;
+string msg;
+        
+if ( !me || !living(me) || me!=environment() || !query("equipped") )
+        return;
+damage = me->query_skill("literate",1);
+damage*= 50;
+if ( damage<60 )
+        damage = 60;
+damage = damage/4+random(damage/2);             
+
+if ( me->is_fighting() )
+        {
+        target = "/std/sserver"->offensive_target(me);
+        if ( me->is_fighting(target) 
+          && time()>query_temp("be_busy")+3 )
+                {
+                msg = HIY+name()+"忽然放出万道金光，直射$n"HIY"！\n"NOR;
+                if ( random(me->query_kar())>target->query("kar")/2 )
+                        {
+                        msg+= HIG"$n"HIG"闪避不及，给照了个正着！\n"NOR;
+                        msg+= HIB+SDS_D->no_color_msg(COMBAT_D->damage_msg(damage,"刺伤"))+NOR;
+                        msg = replace_string(msg,"$w",NOR YEL"金光"NOR HIB);
+                        msg = replace_string(msg,"$l",({"顶梁门","天灵盖","泥丸宫"})[random(3)]);
+                        message_vision(msg,me,target);
+                        target->receive_damage("sen",damage);
+                        target->set_temp("last_damage_from",me);
+                        COMBAT_D->report_sen_status(target);
+                        }
+                else    {
+                        msg+= HIB"$n"HIB"连忙纵身闪开。\n"NOR;
+                        message_vision(msg,me,target);
+                        set_temp("be_busy",time());
+                        }       
+                if ( random(20)==0 && me->is_fighting(target) )               
+                        {
+                        msg+= HIY"$N"HIY"借金光遮眼之际，对$n"HIY"就是一击！\n"NOR;
+                        message_vision(msg,me,target);
+                        COMBAT_D->do_attack(me,target,me->query_temp("weapon"));
+                        }       
+                }                       
+        }
+remove_call_out("check_owner");
+call_out("check_owner",1,me);
+}               
+                        

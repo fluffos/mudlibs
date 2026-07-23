@@ -1,0 +1,229 @@
+#include <ansi.h>
+inherit ITEM;
+inherit F_SAVE;
+
+object query_npc(object who)
+{
+if ( !who )
+        return 0;
+return query("job/"+who->query("id"));
+}               
+
+void setup()
+{
+string loc;
+if( stringp(loc = query("place")) )
+     move(loc);
+set("no_get", 1);
+seteuid(getuid());
+restore();
+}
+
+string query_save_file()
+{
+string id;
+if ( !stringp(id=query("id")) ) 
+        return 0;
+return "/c/data/caiji/"+id;
+}
+
+int is_same_ip(object who,string ip)
+{
+string tmp_ip;  
+if ( !who || !ip || !stringp(ip) )
+        return 0;
+tmp_ip = query_ip_name(who);
+if ( tmp_ip==ip )
+        return 1;
+tmp_ip = who->query("last_from");
+if ( tmp_ip==ip )
+        return 1;
+return 0;
+}       
+
+string short()
+{
+mapping data;
+data = query("finished_id");
+if ( !data || !mapp(data) )
+        return ::short()+" [ 今日暂时还没有完成采集任务者 ]";
+else if ( !sizeof(keys(data)) ) 
+        return ::short()+" [ 今日还没有完成采集任务者 ]";
+else    return ::short()+" [ 今日已有"+chinese_number(sizeof(keys(data)))+"位玩家完成了采集任务 ]"; 
+}
+
+object random_item()
+{
+int  m,n,i, j, k;
+object temp,newob;
+mapping ex;
+
+mixed*  file, exit;
+string *dirs = ({
+        "/d/qujing/wuzhuang", "/d/qujing/baotou", 
+        "/d/qujing/baoxiang","/d/qujing/bibotan",
+        "/d/qujing/biqiu","/d/qujing/chechi",
+        "/d/qujing/dudi","/d/qujing/fengxian",
+        "/d/qujing/firemount","/d/qujing/jilei",
+        "/d/qujing/jindou","/d/qujing/jingjiling",
+        "/d/qujing/jinping","/d/qujing/jisaiguo",
+        "/d/qujing/maoying","/d/qujing/nuerguo",
+        "/d/qujing/pingding","/d/qujing/pansi",
+        "/d/qujing/tongtian","/d/qujing/qilin",
+        "/d/qujing/qinfa","/d/qujing/qinglong",
+        "/d/qujing/tianzhu","/d/qujing/wudidong",
+        "/d/qujing/wuji","/d/qujing/xiaoxitian",
+        "/d/qujing/yinwu","/d/qujing/yuhua",
+        "/d/qujing/zhujie","/d/qujing/zhuzi",
+        "/d/penglai","/d/pantao",
+        "/d/death",  "/d/meishan","/d/qujing/lingshan",
+});
+
+n = 0;
+i = random(sizeof(dirs));    // pick up one directory
+file = get_dir( dirs[i]+"/obj/*.lpc", -1 );
+if( !sizeof(file) )
+        return 0;
+for(k=0;k<30;k++)
+        {
+        j = random(sizeof(file));
+        if( file[j][1]>0 )
+                {
+                newob = new(dirs[i]+"/obj/"+file[j][0]);
+                if ( !newob )
+                        continue;
+                if ( newob->query("no_get") 
+                  || newob->query("no_give") 
+                  || !newob->query("unit") 
+                  || !newob->query("value") )
+                        continue;
+                if ( newob )    
+                        return newob;
+                }
+        }
+return 0;
+}
+
+string check_me(object who)
+{
+object npc2,npc,obj;
+int num,t;      
+string str = ::long()+"\n━━━━━━━━━━━━━━━━━━━━━━━━━\n";
+if ( !who )
+        return ::long();
+t = who->query("采集/last_fail");
+if ( time()<t+120 )
+        str+= "\n\t你上一次的任务未能完成，系统取消中，请稍候再试\n";           
+else    {       
+        t = who->query("采集/last_start");      
+        if ( time()<t+86400 )
+                {
+                npc2 = query_npc(who);
+                if ( !npc2 )
+                        {
+                        delete("job/"+who->query("id"));
+                        save();
+                        who->delete("采集");
+                        who->set("采集/last_fail",time());
+                        str+= "\n\t你上一次的任务未能完成，系统取消中，请稍候再试\n";
+                        }
+                else    str+= sprintf("\n\t你今天的采集任务是 帮 %s 收集 %d/%d %s %s [ %s ]\n",
+                                who->query("采集/target"),        
+                                who->query("采集/finished_num"),        
+                                who->query("采集/num"),
+                                who->query("采集/unit"),
+                                who->query("采集/short"),
+                                query_npc(who)?MISC_D->find_place(environment(query_npc(who))):"未知地点",);
+                }
+        else    {
+                obj = random_item();
+                if ( !obj )
+                          str+= "\n\t系统正忙，请稍候\n";
+                else    {
+                        npc = SDS_D->random_npc();
+                        if ( !npc )
+                                str+= "\n\t系统正忙，请稍候再试\n";
+                        else    {
+                                npc2 = new("/d/quest/caiji/npc/job_npc.lpc");
+                                if ( !npc2 )
+                                        error("采集任务文件不全！\n");
+                                if ( !npc2->infomation(npc) )
+                                        str+= "\n\t系统喘气中，请稍候\n";
+                                else    {
+                                        num = 50000/(obj->query("value")+1);
+                                        if ( num<3 )  num = 3;
+                                        who->set("采集",([
+                                                "last_start"    : time(),
+                                                "short"         : obj->short(),
+                                                "num"           : num,
+                                                "unit"          : obj->query("unit"),
+                                                "target"        : npc2->short(1),
+                                        ]));
+                                        set("job",([
+                                                who->query("id") : npc2,
+                                        ]));
+                                        save();
+                                        str+= sprintf("\n\t你今天的采集任务是 帮 %s 收集 %d/%d %s %s [ %s ]\n",
+                                                who->query("采集/target"),
+                                                who->query("采集/finished_num"),
+                                                who->query("采集/num"),
+                                                who->query("采集/unit"),
+                                                who->query("采集/short"),
+                                                query_npc(who)?MISC_D->find_place(environment(query_npc(who))):"未知地点",);
+                                        }
+                                }
+                        }
+                }
+        }                               
+str+= "\n━━━━━━━━━━━━━━━━━━━━━━━━━\n";
+return str;
+}
+
+string long()
+{
+string *ips,ip,hip;     
+object who = this_player();
+int t,k,fail=0;
+if ( !who || !userp(who) )
+        return ::long();
+hip = query_ip_name(who);
+if ( !hip || !stringp(hip) )
+        error(sprintf("%O 数据异常：未知格式的IP地址！\n",who));
+
+if ( query("finished_ip") && mapp(query("finished_ip")) )
+        {
+        ips=keys(query("finished_ip")); 
+        for(k=0;k<sizeof(ips);k++)
+                {
+                if ( is_same_ip(who,ips[k]) )
+                        {
+                        if ( hip!=ips[k] )
+                                set("finished_ip/"+hip,query("finished_ip/"+ips[k]));
+                        save();
+                        fail = 1;
+                        break;
+                        }
+                }
+        }
+t = query("finished_ip/"+hip);  
+if ( time()<t+86400 )
+        fail = 1;
+if ( fail )
+        return ::long()+"\n━━━━━━━━━━━━━━━━━━━━━━━━━
+        
+                今日暂无合适你的采集任务了
+\n━━━━━━━━━━━━━━━━━━━━━━━━━\n";
+
+return check_me(who);
+}
+
+void create()
+{
+set_name("采集任务发布板", ({ "board" }) );
+set_weight(1000000);
+set("place", "/d/kaifeng/tieta");
+set("long","这是采集任务的任务征。\n" );
+set("unit","块");
+setup();
+}
+

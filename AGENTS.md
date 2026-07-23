@@ -276,6 +276,15 @@ NOTES.md and leave that lib's non-critical/rarely-loaded files as `.c`
 (the driver runs mixed-extension trees fine), so long as the master/login
 path is fully `.lpc` and boots.
 
+**Watch for uppercase `.C`** (found on `shenmo`, archive #73, a large
+long-lived multi-author lib): `convert_lib.sh`'s glob for the rename pass
+only matches lowercase `.c`, so any files saved with an uppercase `.C`
+extension (363 of them here — likely from a Windows-originated editor or
+a case-insensitive-filesystem author's workflow) are silently skipped by
+the automated rename and need a separate manual pass (`find work/ -name
+'*.C'`, case-sensitive, then rename each). Cheap to check on every lib
+going forward, not just ones that look unusually old/large.
+
 ## Config file format
 
 Old MudOS/FluffOS config files (`config.cfg` / `config.dwar` / etc, various

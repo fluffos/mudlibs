@@ -1,0 +1,229 @@
+#include <ansi.h>
+inherit NPC;
+
+void default_post(object,object,object,int);
+void wu_post(object,object,object,int);
+void dismiss(object);
+
+mapping *action = ({
+        ([      "action":
+"$N“嘎嘎”乱叫，惨白的利爪忽然射出一块白骨，直刺$n$l",
+                "dodge" :       15,
+                "parry" :       15,
+                "damage"        :       50,
+                "damage_type"   :       "刺伤",
+                "weapon"        :       WHT"白骨"NOR,
+                "post_action" : (: default_post :),
+        ]),
+
+        ([      "action":
+"$N“嘎嘎”乱叫，惨白的利爪忽然射出一块白骨，直刺$n$l",
+                "dodge" :       10,
+                "parry" :       10,
+                "damage"        :       80,
+                "damage_type"   :       "抓伤",
+                "post_action" : (: default_post :),
+        ]),
+
+        ([      "action" :
+"$N张开空洞的嘴巴，朝着$n吹了一口腥臭的黄雾",
+                "dodge" :       -10,
+                "parry" :       5,
+                "damage"        :       20,
+                "damage_type"   :       "轻伤",
+                "post_action" : (: wu_post :),
+        ]),
+
+        ([      "action" :
+"$N忽地发出一声凄厉的叫声，吐出一阵浓烟，直冲$n"HIR"$l"NOR,
+        "damage_type"   :       "撞伤",
+        "weapon"        :       YEL"浓烟"NOR,
+        "damage"        :       20,
+        "post_action" :         (: wu_post :),
+        ]),
+});
+
+int reset_status();
+
+void create()
+{
+set_name(HIW"骷髅兵"NOR, ({ "kulou bing","bing", "guard" }) );
+set("people", 1);
+set("long", "一具被人用咒语控制着的骷髅。\n");
+set("attitude", "heroism");
+
+set("max_gin", 800);
+set("max_kee", 800);
+set("max_sen", 800);
+
+set("max_mana", 100);
+set("mana", 100);
+set("max_force", 100);
+set("force", 100);
+
+set("str", 40);
+set("per", 100);
+set("looking", "全身只有一副骨架，看起来甚是恐怖。");
+
+set("combat_exp", 50000);
+set("daoxing", 50000);
+
+set_skill("blade", 150);
+set_skill("parry", 150);
+set_skill("dodge", 150);
+
+set_temp("apply/armor",100);
+set_temp("apply/damage",60);
+
+set("actions",action[random(sizeof(action))]);
+
+setup();
+}
+
+void init()
+{
+add_action("do_attack", "attack");
+}
+
+int do_attack(string arg)
+{
+object obj, owner;
+
+if( this_player() != this_object()->query("owner") )
+        return notify_fail("骷髅兵口中呜呜两声，好像不愿理你！\n");
+
+if( !arg || !objectp(obj=present(arg,environment(this_player()))))
+        return notify_fail("你想让骷髅兵去攻击谁？\n");
+
+if( !obj->is_character() )
+        return notify_fail("看清楚一点，那并不是生物。\n");
+
+if( userp(obj) )
+        return notify_fail("骷髅兵不会去攻击玩家。\n");
+
+message_vision("$N附耳对$n说了些什么。\n", this_player(), this_object());
+message_vision("$N对$n喊道：去死吧！\n", this_object(), obj);
+
+command("kill "+obj->query("id"));
+return 1;
+}
+
+void invocation(object who)
+{
+set_leader(who);
+command("protect " + who->query("id"));
+set("owner", who);
+reset_status();
+return;
+}
+
+void die()
+{
+message_vision("\n$N倒了下去，化为一堆枯骨。\n", this_object());
+destruct(this_object());
+}
+
+void unconcious()
+{
+message_vision("\n$N倒了下去，化为一堆枯骨。\n", this_object());
+destruct(this_object());
+}
+
+int reset_status()
+{
+object owner,env;
+int n;
+        
+owner= query("owner");
+
+if(  !query("owner"))
+        {
+        message_vision("$N倒了下去，化为一堆枯骨。\n", this_object());
+        destruct( this_object());
+        return 1;
+        }
+
+if(!present(owner->query("id"), environment(this_object())))
+        {
+        env=environment(owner);
+        this_object()->move(env);
+        message_vision("$N走了过来。\n",this_object());
+        }
+        
+        
+if( (int)this_object()->query("eff_kee") < (int)this_object()->query("eff_sen") ) 
+        n=(int)this_object()->query("eff_kee")/200;
+else    n=(int)this_object()->query("eff_sen")/200;
+
+if( (int)this_object()->query("eff_kee") < 200
+  || (int)this_object()->query("eff_sen") < 200 ) 
+        n=1;
+
+set("people", n);
+set("combat_exp", 50000 + 30000 * n );
+set("combat_exp", 50000 + 30000 * n );
+set_skill("blade", 150 + 5 * n );
+set_skill("parry", 150 + 5 * n );
+set_skill("dodge", 150 + 5 * n );
+
+set("short", chinese_number(n)+"具骷髅兵(Kulou bing)");
+set("long", chinese_number(n)+"具被人用咒语控制着的骷髅。\n");
+call_out("reset_status", 3);
+return 1;
+}
+
+void default_post(object me,object target,object weapon,int damage)
+{
+object blood;
+if ( !me ) return;
+
+blood = new("/d/炼妖壶/obj/item");
+blood->set_name(WHT"白骨"NOR,({"bai gu"}));
+blood->set("no_get","脏兮兮的，还是算了吧。\n");
+blood->set_amount(1+random(9));
+blood->set("base_unit","块");
+blood->set("unit","堆");
+blood->save();
+blood->move(environment(me));
+message("vision",blood->name()+"“喀哒”掉在了地上。\n",environment(me));
+if ( target && me->is_fighting(target) && random(10)==1 )
+        {
+        message_vision("$N给吓了一跳。\n",target);
+        if ( !target->is_busy() )
+                target->start_busy(1+random(3));
+        }
+call_out("dismiss",5+random(25),blood);
+}
+
+void dismiss(object ob)
+{
+message("vision",ob->name()+"渐渐化做了粉末。。。\n"NOR,environment(ob));
+destruct(ob);
+}
+
+void wu_post(object me,object target,object weapon,int damage)
+{
+if ( !me ) return;
+
+message_vision("烟雾渐渐的扩散开来。。。",me);
+if ( target && me->is_fighting(target) )
+        {
+        if ( random(2) )
+                {
+                message_vision("$n丝毫不受其影响，继续战斗。\n",me,target);
+                return;
+                }
+        else    {
+                message_vision("$n不小心吸了一口，立刻唇青眼红，面色苍白。\n",me,target);
+                                if ( damage>400 ) damage = 400;
+                damage = damage/5+random(damage/5);
+                if ( damage<10 ) damage = 10;
+                target->receive_damage("sen",damage);
+                COMBAT_D->report_sen_status(target);
+                }
+        }
+}
+
+
+
+

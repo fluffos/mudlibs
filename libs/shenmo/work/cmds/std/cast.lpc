@@ -1,0 +1,110 @@
+// cast.c
+
+#include <ansi.h>
+#include <skill.h>
+#include "/cmds/std/valid_kill.h";
+inherit F_CLEAN_UP;
+
+void destruct_flag(object me);
+
+int main(object me, string arg)
+{
+string spells, spl, trg,msg;
+object target;
+        
+seteuid(getuid());
+
+if ( time()<(me->query_temp("no_cast/start")+me->query_temp("no_cast/time")) )
+        return notify_fail(YEL"你的魔法尚未恢复！\n"NOR);
+
+if( me->is_busy() )
+        return notify_fail("( 你上一个动作还没有完成，不能念咒文。)\n");
+
+if( !wizardp(me) && environment(me)->query("no_magic") )
+        return notify_fail("这里不准念咒文。\n");
+                
+if( !arg ) 
+        return notify_fail("指令格式：cast <法术> [on <目标>]\n");
+
+if ( time()<(me->query_temp("no_cast2/start")+me->query_temp("no_cast2/time")) ) 
+        { 
+        if ( stringp(msg=me->query_temp("no_cast2/msg")) ) 
+                return notify_fail(msg+"\n"NOR); 
+        } 
+if( sscanf(arg, "%s on %s", spl, trg)==2 ) 
+        {
+        target = present(trg, environment(me));
+        if( !target ) target = present(trg, me);
+        if( !target ) return notify_fail("这里没有 " + trg + "。\n");
+        if(!valid_kill(me,target,0)) return 0;
+
+//add by yudian for prevent pk
+        set_to_killer(me,target);
+        if ( me->query("combat_exp")<250000 && userp(target) )
+                return notify_fail("自己功夫没练好就想杀人？\n");
+        if ( me->query("daoxing")<200000 && userp(target) )
+                return notify_fail("自己功夫没练好就想杀人？\n");  
+        if ( wizardp(target)&&!wizardp(me) )  
+                return notify_fail("你被吓破了胆！\n"); 
+        if ( userp(target) && target->query("age")<17 )
+                return notify_fail("本站暂时保护新手。\n");
+        if ( (int)me->query("zhuanshi")!=(int)target->query("zhuanshi") && userp(me) && userp(target))
+                return notify_fail("生死轮回，恍如隔世！\n"); 
+        if ( target->query("KILLER")==me->query("id") && userp(me) && userp(target))
+                return notify_fail("你刚杀过这个人，难道还要杀？你的心也太狠了吧！\n"); 
+        if ( userp(me) && userp(target) && target->query_temp("netdead") )
+                return notify_fail("对方正在断线中，不能对其施法。\n");
+        if ( target->is_no_hit() )
+                return notify_fail(YEL"对方现在对魔法免疫，不能对其施法。\n"NOR);
+        } 
+else    {
+        spl = arg;
+        target = 0;
+        }
+
+spl = replace_string( spl, " ", "_");
+if( stringp(spells = me->query_skill_mapped("spells")) ) 
+        {
+        int nocast;
+        notify_fail("你所学的法术中没有这种功能。\n");
+        nocast=(int)SKILL_D(spells)->cast_spell(me, spl, target);
+                //cast_spell should return an integer as the no_cast time.
+        if (!nocast) 
+        nocast=(int)SKILL_D("spells")->cast_spell(me, spl, target);
+        if (nocast) 
+                {
+                me->set_temp("no_cast",([
+                        "start" : time(),
+                        "time"  : nocast,
+                        ]));
+                if ( target && living(target) && target!=me 
+                  && target->is_fighting(me) && functionp(target->reply_cast(me)) )
+                        target->reply_cast(me);
+                  //each cast should return an integer which is
+                  //the no_cast time fot this cast.
+                  //also, in each cast, can set busy or no_move
+                  //time individually.   --mon 8/24/97
+                return 1;
+                }
+        return 0;
+        }
+                
+return notify_fail("你请先用 enable 指令选择你要使用的咒文系。\n");
+}
+
+int help (object me)
+{
+write(@HELP
+指令格式：cast <咒文名称> [on <施咒对象>]
+ 
+施法，你必需要指定<咒文名称>，<施咒对象>则可有可无。
+在你使用某一个咒文之前，你必须先用 enable 指令来指定你要使用的咒文系。
+ 
+注：如果你改变自己的咒文系，你原本蓄积的法力并不能直接转换过去，必须
+    从 0 开始。
+ 
+HELP
+        );
+        return 1;
+}
+

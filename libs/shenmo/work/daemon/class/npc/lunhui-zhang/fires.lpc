@@ -1,0 +1,196 @@
+#include <ansi.h> 
+#include <combat.h> 
+inherit F_DBASE;  
+inherit SSERVER;  
+int remove_effect(object me);  
+       
+int perform(object me, object target)  
+{ 
+        string weapon,msg;  
+        int skill, att,damage;  
+        object ob;  
+
+        if( !target ) target = offensive_target(me);  
+
+        if( !wizardp(me) && userp(me) ) 
+                return notify_fail(HIR"对不起，『烈火杖』现在还在测试阶段。:）\n");  
+        if( !target || !target->is_character() || !me->is_fighting(target) )   
+                return notify_fail(HIR"『烈火杖』只能对战斗中的对手使用。\n"NOR);  
+        if(!objectp(weapon = me->query_temp("weapon"))|| (string)weapon->query("skill_type") != "staff")  
+                return notify_fail(HIR"没有佛杖，哪儿来的烈火！\n"NOR); 
+        if( me->query_temp("fire",1) )   
+                return notify_fail(HIR"你已在使用『烈火杖』！\n"NOR);  
+        if( me->query_skill("lotusforce", 1) < 100 ) 
+                return notify_fail(HBRED+HIW"你的内功火候未到，无法施展『烈火杖』！\n"NOR);  
+        if( me->query_skill("staff") < 100 )   
+                return notify_fail(HBRED+HIW"你的杖法修为不足，还不会使用『烈火杖』！\n"NOR);  
+        if((string)me->query("family/family_name") != "南海普陀山") 
+                return notify_fail(HIR"你非佛门弟子，无法使用『烈火杖』！\n"NOR);  
+        skill =  ( me->query_skill("lunhui-zhang") + me->query_skill("force") ) / 5;  
+        if( me->query("force") <= skill*3 )  
+                return notify_fail(HIR"你的内力不够使用『烈火杖』！\n"NOR);  
+        if( me->query("sen") <= skill )      
+                return notify_fail(HIR"你的精神不够使用『烈火杖』！\n"NOR);  
+       
+        me->set_temp("apply/speed", me->query_temp("apply/speed",1)+random(skill*3));  
+        att = skill;  
+        if( att < 45) att = 45;  
+        if(att >200 ) att = 200;  
+        me->set_temp("apply/attack", me->query_temp("apply/attack",1)+att);  
+        me->set_temp("apply/dodge", skill*3/2);  
+        me->set_temp("apply/parry", skill*3/2);  
+        message_vision(HIR"$N右手一抖，"+(me->query_temp("weapon"))->query("name")+HIR"带着奇异的弧度往$n攻去，杖尖不停的抖动，\n在空气中带出点点的火花，抖动的火花好似燃烧起来！\n"NOR+HIW"『烈火杖』五连击の第一击---"NOR+HIR"“星火燎原”"NOR+HIW"。\n" NOR, me, target);  
+
+        if(ob=target->query_temp("weapon"))  
+        { 
+                if( me->query("str") > random(target->query("str")/4) ) 
+                { 
+                        message_vision(HIR"$N"+HIR"的攻势抵受不住这强大而集于一点的攻击而散去，手中" +HIW+ob->name() + HIR"被击得把持不定，脱手飞出！\n" NOR,target); 
+                        ob->unequip(); 
+                        ob->move(target); 
+                        target->reset_action(); 
+                } 
+                else  message_vision(HIR"$N"+HIR"的攻势抵受不住这强大而集于一点的攻击而散去，手中" + HIW+ob->name() + HIR"一震，险些脱手而出！\n"NOR,target); 
+        }  
+       
+        if( random(me->query("combat_exp")) > random(target->query("combat_exp")/3)) 
+        {  
+                COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+                damage=(int)me->query_skill("staff",1)+(int)me->query_skill("lunhui-zhang",1);
+                damage=damage-(int)target->query_skill("parry",1);
+                damage=damage-random((int)target->query_skill("dodge",1)/4);
+                if( damage<0 ) damage=50;
+                target->receive_damage("kee", damage*2,me);  
+                target->start_busy(1+random(2));  
+        }
+        else  message_vision(HIR"$n"+HIR"知道这招不可硬挡，瞅准空挡避开了"+HIW+(me->query_temp("weapon"))->query("name")+HIR"的攻击。\n"NOR,me,target);  
+
+        if(me->query_skill("lunhui-zhang",1)>150 || me->query_skill("lotusforce",1)>150) 
+                call_out("perform2", 1, me, target); 
+        else  me->start_busy(1+random(2)); 
+        me->add("force", -skill ); 
+        me->set_temp("fire",1); 
+        me->start_call_out( (: call_other, __FILE__, "remove_effect", me :),8+random(2) ); 
+        return 1; 
+ } 
+       
+int remove_effect(object me)  
+{ 
+        if( !me )  return 0;
+        me->set_temp("apply/speed", 0);  
+        me->set_temp("apply/attack", 0);  
+        me->set_temp("apply/dodge", 0);  
+        me->set_temp("apply/parry", 0);  
+        me->delete_temp("fire");  
+        if( me->is_fighting() )  
+                message_vision(HIR"\n$N"+HIR"吸了一口气，将内力收回丹田，手中武器上的烈火渐渐黯淡了下来。\n\n" NOR, me);  
+        return 1;  
+} 
+       
+int perform2(object me, object target)  
+{
+        string weapon,msg;  
+        int damage,def;
+        if( !me || !target || !target->is_character() || !me->is_fighting(target) )   
+                return notify_fail(BBLU+HIR"『烈火杖』只能对战斗中的对手使用。\n"NOR);  
+        weapon = me->query_temp("weapon");    
+        if( weapon )
+        {       
+                msg = HIR"$N的"+HIW+(me->query_temp("weapon"))->query("name")+HIR"向上抛飞，只见$N一个旋身，利用刚才互击的反作用力和从$n转借来的劲道，将"+HIW+(me->query_temp("weapon"))->query("name")+HIR"向下一带，$n"+HIR"尚未站稳，"+HIW+(me->query_temp("weapon"))->query("name")+HIR"已经摇晃落下，令人不知其落点为何。\n"NOR; 
+                msg +=HIW"『烈火杖』五连击の二击---"NOR+HIR"“天雷骤落”"NOR+HIW"。\n"NOR;
+                message_vision(msg,me,target);  
+                COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+                msg = HIR"\n$N再度顺势转身，带动整支"+HIW+(me->query_temp("weapon"))->query("name")+HIR"横扫而来，滚滚的风声像是将空气撕裂一般，夹带前两式余威，加上$N巧妙的运劲，威力越来越大！\n"NOR;
+                msg+=HIW"『烈火杖』五连击の三击---"NOR+HIR"“一泄千里”"NOR+HIW"。\n"NOR;
+                message_vision(msg,me,target);  
+                COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+                if( random(me->query("combat_exp")) > random(target->query("combat_exp")/3)) 
+                {  
+                        damage = (int)me->query_skill("lunhui-zhang", 1);  
+                        damage = damage*(2+random(3) ); 
+                        target->start_busy(1+random(2));  
+                        target->receive_damage("kee", damage*2,me);  
+                        COMBAT_D->report_status(target);  
+                } 
+                else
+                {   
+                        message_vision(HBRED+HIW"$n"+HIR"知道这两招的厉害，顾不得狼狈，就地一滚，，堪堪躲过了"+HIW+(me->query_temp("weapon"))->query("name")+HBRED+HIW"的攻击范围。\n"NOR,me,target);  
+                        if( me->query_skill("lunhui-zhang",1) < 200 || me->query_skill("lotusforce",1) <200)  
+                                me->start_busy(1+random(2));  
+                }  
+        }
+        if( me->query_skill("lunhui-zhang",1) > 200 && me->query_skill("lotusforce",1) >200)
+                call_out("perform3", 1, me, target);
+        else    me->start_busy(1+random(2));  
+        return 1;  
+} 
+      
+int perform3(object me, object target)  
+{ 
+        string weapon,msg;  
+        int damage,def;  
+        if( !me || !target || !target->is_character() || !me->is_fighting(target) )   
+                return notify_fail(BBLU+HIR"『烈火杖』只能对战斗中的对手使用。\n"NOR);  
+        weapon = me->query_temp("weapon");    
+        if( weapon )
+        {
+                msg =HIR"正当$n"+HIR"手足无措之际，$N顺势甩开武器，"+HIW+(me->query_temp("weapon"))->query("name")+HIR"落地弹起，贯通隐隐风雷之声，直击$n！\n"NOR;
+                msg += HIW"『烈火杖』五连击の四击---"NOR+HIR"“擎天一击”"NOR+HIW"。\n"NOR;
+                message_vision(msg,me,target);  
+                COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+                if( random(me->query("combat_exp")) > random(target->query("combat_exp")/3)) 
+                {
+                        damage = (int)me->query_skill("lunhui-zhang", 1);  
+                        damage = damage+(int)me->query_skill("staff", 1); 
+                        damage = damage+(int)me->query_skill("lotusforce", 1);  
+                        def=(int)target->query_skill("parry",1);  
+                        def+=(int)target->query_skill("dodge",1);
+                        def+=(int)target->query_skill("force",1);
+                        damage =damage-def;  
+                        if( damage<500 )   damage=500;
+                        target->receive_damage("kee", damage,me);  
+                        target->start_busy(1+random(2));  
+                        COMBAT_D->report_status(target);  
+                }  
+                else
+                {   
+                        message_vision(HIR"$n"+HIR"在此惊险的情况下，仍然不慌不忙，身体微微一侧，硬是躲开了这一击。\n"NOR,me,target);  
+                        if(me->query_skill("lunhui-zhang",1)<250 || me->query_skill("lotusforce",1)<250)  
+                                me->start_busy(1+random(2));  
+                }  
+        }
+        if(me->query_skill("lunhui-zhang",1)>250 && me->query_skill("lotusforce",1)>250)
+                call_out("perform4", 1, me, target);  
+        else    me->start_busy(1+random(2));  
+        return 1;  
+} 
+
+int perform4(object me, object target)  
+{
+        int damage,temp_dodge,temp_spells; 
+        object obj,*inv; 
+        string msg;
+        if( !me || !target || !target->is_character() || !me->is_fighting(target) )   
+                return notify_fail(BBLU+HIR"『烈火杖』只能对战斗中的对手使用。\n"NOR);  
+        if( objectp( me->query_temp("weapon") ) )
+                msg=HIR"“喝！”$N大吼一声，将功力提至极限，瞬间火焰从"+HIW+(me->query_temp("weapon"))->query("name")+HIR"前端冲出形成一个异常清晰的形体，$N冲进那个形体那赫然是一只麒麟！\n"NOR;
+        else    msg=HIR"“喝！”$N大吼一声，将功力提至极限，瞬间火焰从"+HIW+"蟠龙拐"+HIR"前端冲出形成一个异常清晰的形体，$N冲进那个形体那赫然是一只麒麟！\n"NOR;
+        msg+=HBRED+HIW"『烈火杖』五连击最后一击---"+HIR"“麒麟再生”"+HIW"！\n"NOR;
+        msg+=HIR"$n"+HIR"连犹豫的时间也没有，眨眼间就被赤莲之火吞没了！\n"NOR;
+        message_vision(msg,me,target);  
+        COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+        if( target->query_temp("armor") ) 
+        {
+                inv = all_inventory(target);
+                obj = inv[random(sizeof(inv))];
+                message_vision(HIR"$N"+HIR"身上的"+HIW"$n"+HIR"被烧得热不可纳！\n"NOR, target,obj);
+                obj->unequip();
+                obj->move(target);
+                target->delete_temp("armor");
+        }
+        damage = (int)me->query("lunhui-zhang",1); 
+        target->receive_damage("kee", damage*20,me);  
+        target->start_busy(2+random(1));  
+        COMBAT_D->report_status(target);
+        return 1;  
+}

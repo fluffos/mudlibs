@@ -1,0 +1,150 @@
+#include <ansi.h>
+#include <room.h>
+inherit __DIR__"r.lpc";
+
+void create_room()
+{
+        set("short","东洞大门");
+        set("long",@LONG
+这里是东洞主洞大门，石壁圆门中心微微起伏，凹凸不停，
+整面大门通体青色，显得生机勃勃。
+LONG);  
+        set("exits",([
+                "south" : __DIR__"yd-e6",
+                "north" : __DIR__"zhudong-e",
+        ]));    
+        create_door("north", "大门", "south", DOOR_CLOSED); 
+}
+
+object carry_object(string file)
+{
+        object ob;
+
+        if( !objectp(ob = new(file->clone_file())) ) 
+                return 0;
+        return ob;
+}
+
+void setup()
+{
+        object ge;
+        ::setup();
+        ge = carry_object(__DIR__"obj/taiyi-xuange");
+        if( ge )
+        {
+                if( ge->move(this_object()) )
+                        ge->set_temp("invisiblity",1);
+                else    destruct(ge);
+        }               
+}
+
+void to_task(object who)
+{
+        remove_call_out("to_task");
+        if( !who || !present(who) )
+                return;
+        if( !living(who) )
+                return;
+        if( who->is_busy() )
+                return;
+        if( present("taiyi xuange",who) )
+                return;
+        message_vision("\n圆门中心凹凸处隐隐泛出青光一片，此处看来有些奥秘....\n\n",who);
+}
+
+void init()
+{
+        ::init();
+        add_action("do_search","search");
+        add_action("do_get","get");
+        add_action("do_zhi",({"zhi","point"}));
+        if( userp(this_player()) )
+        {
+                remove_call_out("to_task");
+                call_out("to_task",3+random(5),this_player());
+        }
+}
+
+int err_msg(string arg)
+{
+        write(arg);
+        return 1;
+}
+
+int do_search()
+{
+        int i;
+        object zhou,ge,me = this_player();
+        if( !userp(me) )
+                return 0;
+        ge = present("taiyi xuange");
+        if( !ge || base_name(ge)!=__DIR__"obj/taiyi-xuange" )
+                return 0;
+        if( me->is_busy() )
+                return err_msg("你正忙着。\n");
+        if( me->query("sen")<100 )
+                return err_msg("你神智不甚清醒。\n");   
+        i = random(10);
+        zhou = present("zhou qing yun");
+        if( zhou && !userp(zhou) )
+                i+= random(10);
+        if( zhou->query_temp("quest_npc") )
+                i+= random(5);
+        if( zhou->query_temp("weapon")
+         && base_name(zhou->query_temp("weapon"))=="/d/emei/huanbochi/obj/qingsuo-jian" )
+                i+= random(5);
+        i+= (int)me->query_temp("taiyi_ge_find");
+        me->start_busy(1);
+        me->receive_damage("sen",100);
+        write("你静心凝神，运用神通将此处探查了一遍。\n");
+        if( random(i)<15 )
+        {
+                me->add_temp("taiyi_ge_find",1);
+                return err_msg("结果什么反应也没有。\n");
+        }
+        write("大发现！你发现石壁之下居然藏着一柄五寸来长，银光耀眼的小戈！\n");
+        me->delete_temp("taiyi_ge_find");
+        ge->delete_temp("invisiblity");
+        return 1;       
+}       
+
+int do_get(string arg)
+{
+        object ob;
+        if( !arg )
+                return 0;
+        if( sscanf(arg,"%s from %s",arg,arg) )
+                return 0;
+        if( arg=="all" )
+                return err_msg("OK。\n");
+        ob = present(arg);
+        if( !ob || !this_player()->visible(ob) ) 
+                return 0;
+        if( ob->query_temp("invisiblity") )
+                return err_msg("这件是隐藏物品，需要探索才能发现!\n");
+        write(ob->query("name")+"发出一阵阵颤动，戈头摇摇指(zhi)向青门(door)。\n");     
+        return 0;
+}        
+
+int do_zhi(string arg)
+{
+        object ge,me = this_player();
+        
+        if( me->is_busy() )
+                return err_msg("你正忙着。\n");
+        ge = present("taiyi xuange",me);
+        if( !ge || base_name(ge)!=__DIR__"obj/taiyi-xuange" )                       
+                return err_msg(CYN"你伸手凌空一指，差点儿戳在自己身上。\n"NOR);
+        if( !arg || ( arg!="men" && arg!="门" && arg!="door") )
+                return err_msg(CYN"你伸戈凌空一指，差点儿戳在自己身上。\n"NOR);        
+        message_vision("$N将"+ge->query("name")+"往青门上一指，戈头上立有一股极强烈的白光，电一般往门中心射去。
+门心青光忽然大亮，一闪即住，跟着青雾飞涌。\n",me);
+        me->start_busy(1);
+        if( open_door("north") )
+        {
+                message_vision("\n\n青雾渐渐淡去，现出了一扇大门。\n\n",me);
+                destruct(ge);
+        }
+        else    message_vision("\n\n青雾渐渐淡去。\n\n",me);
+        return 1;
+}

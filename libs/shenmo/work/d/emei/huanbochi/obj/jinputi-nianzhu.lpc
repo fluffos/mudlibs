@@ -1,0 +1,200 @@
+#include <ansi.h>
+#include <armor.h>
+inherit EQUIP;
+inherit F_UNIQUE; 
+
+string ori_long="“女神婴”易静降魔七宝之一，佛门降魔至宝，原是一真大师的念珠，经过几辈禅真持偈修炼，无坚不摧，以意发出，轻重随心。\n";
+
+void create()
+{
+        set_name(HIY"金菩提念珠"NOR, ({ "jinputi nianzhu", "zhu","nianzhu","nian zhu","fabao" }) );
+        set_weight(3000);
+        if( clonep() )
+                set_default_object(__FILE__);
+        else {
+                set("unit", "个");
+                set("level",150);
+                set("value", 0);
+                set("material", "shuijing");
+                set("long", "“女神婴”易静降魔七宝之一，佛门降魔至宝，原是一真大师的念珠，经过几辈禅真持偈修炼，无坚不摧，以意发出，轻重随心。\n");
+                set("orilong",ori_long);
+                set("replace_file", "/d/obj/cloth/gloves"); 
+                set("armor_prop/armor",15);
+                set("series_no",2);
+                set("armor_type",TYPE_HANDS);
+                set("armor_prop/remove_eff_kee_damage",5);
+                set("armor_prop/remove_eff_sen_damage",5);
+                set("armor_prop/ad_unarmed",10);
+                set("no_steal",1);
+                set("damage",500);
+                set("no_put",1);
+                set("class","正");    
+                set("wuxing","木");    
+                set("anqi/allow", 1);
+                set("anqi/max", 50);
+                set("anqi/now", 0);
+                set("no_busy",1);                
+        }
+        setup();
+}
+
+int ji(string id)
+{
+        string msg,wx;
+        int xk,ap,dp,damage;
+        object fb,target,me;
+        me = environment();
+        if( !me || !living(me) )
+                return 0;
+        if( me->query("mana")<query("level")*2 )
+                return notify_fail("你的法力不足。\n");         
+        if( !me->is_fighting() )
+                return notify_fail("你要对谁祭法宝？\n");
+        if( me->query("level")<query("level") )
+                return notify_fail("你等级不够"+query("level")+"，祭不起"+query("name")+"。\n");
+        if( time()<query("last_ji")+5 )
+                return notify_fail(query("name")+"刚刚祭出过。\n");                    
+        if( id )
+        {
+                target = present(id, environment(me));
+                if( !target )
+                        return notify_fail("这里没有"+id+"。\n");
+        }
+        else    target = SSERVER->offensive_target(me);
+        if( !target || !me->is_fighting(target) )
+                return notify_fail("你要对谁祭"+query("name")+"？\n");
+        
+        set("last_ji",time());  
+        ap = me->query("daoxing")/100000+me->query("level")*1000;
+        dp = target->query("daoxing")/100000+target->query("level")*1000;       
+
+        if( me->query("env/no_msg") || target->query("env/no_msg") )
+                message_vision(YEL"$N"YEL"对$n"YEL"使用了法宝「"HIY+query("name")+NOR YEL"」。\n"NOR,me,target);
+        else    message_vision(HIY"$N"HIY"手中"+query("name")+HIY"忽发出一道匹练似的金光，卷向$n"HIY"！\n"NOR,me,target);
+        me->add("mana",-query("level")*2);
+        if( random(100)>dp/(ap+dp)*90 )
+        {
+                damage = me->query("mana_factor");
+                damage+= query("damage");
+                if( wx=query("wuxing") )
+                {       
+                        xk = SPELL_D->wuxing_xs(SPELL_D->query_time_wuxing(),wx);
+                        if( xk==1 )
+                                damage = damage/2;
+                        else if( xk==-1 )
+                                damage+= damage/3;
+                }                       
+                fb = target->query_temp("armor/FABAO");
+                if( fb )
+                        damage = fb->protect_qi(damage);
+                if( damage>0 )
+                {               
+                        msg = COMBAT_D->damage_msg(damage,"抽伤");
+                        msg = replace_string(msg,"$w","金光");
+                        msg = replace_string(msg,"$l","周身");
+                        message_vision(msg,me,target);                  
+                        target->receive_wound("kee",damage,me);
+                        COMBAT_D->report_status(target,1);
+                }
+                if( query("anqi/now")>0 && target && me->is_fighting(target) )
+                {
+                        damage = 100;
+                        if( query("anqi/type")!= "白眉针" && fb )
+                                damage = fb->protect_qi(damage);
+                        else    damage+= random(damage);
+                        message_vision(CYN"只见一根"+query("anqi/type")+NOR CYN"从"+query("name")+NOR CYN"中顺势射出，见孔就钻，立由$N"CYN"伤口顺气脉直攻玉海！\n"NOR,target);
+                        target->receive_damage("kee",damage,me);
+                        COMBAT_D->report_status(target);
+                        add("anqi/now",-1);
+                }
+        }
+        else    message_vision(HIC"$N"HIC"哼！了一声：米粒之珠，也放光华？说罢，将手一指，结果血光大盛，"+query("name")+HIC"发出一声哀鸣，从半空落了下来。\n"NOR,target);
+        return 1;
+}               
+
+void init()
+{              
+        ::init();                               
+        add_action("do_install", "install");
+        add_action("do_uninstall", "uninstall");
+}
+
+
+int do_install(string arg)
+{
+        string name;
+        object me=this_object();
+        object who=this_player();
+        object aq;
+        int remain;
+
+        if( !arg || !present(me,who) )  
+                return notify_fail("你想装什么？\n");
+
+        aq=present(arg, who);
+        if( ! present(arg, who)) 
+                return notify_fail("你身上没有这东西。\n");
+        if( aq->query("name") == me->query("name") ) 
+                return notify_fail("装自己？\n");
+        name = aq->query("name");
+        name = COLOR_D->clean_color(name);
+        if( name != "银针" && name != "白眉针" && name != "孔雀翎") 
+                return notify_fail("这玩艺太大了，装不进去。\n");
+        if( me->query("anqi/now") == me->query("anqi/max"))
+                return notify_fail(me->query("name")+"已经装满暗器了。\n");
+        if( me->query("anqi/now") >0 
+         && me->query("anqi/file") != base_name(aq) )
+                return notify_fail(me->query("name")+"不能装不同的暗器。\n");
+        
+        message_vision( "$N打开"+me->query("name")+"的机关，将一"+aq->query("unit")+aq->query("name")+"装了进去。\n",who);
+        if( me->query("anqi/now") ==0) 
+        {
+                me->set("anqi/type",name);
+                me->set("anqi/file",base_name(aq));
+        }
+        if( me->query("anqi/now") + aq->query_amount() > me->query("anqi/max")) 
+        {
+                remain=me->query("anqi/now") + aq->query_amount() - me->query("anqi/max");
+                me->set("anqi/now",me->query("anqi/max"));
+                me->set("long",me->query("orilong")+"里面已经装了" +chinese_number(me->query("anqi/now"))+aq->query("base_unit")+aq->query("name")+"，想拆掉用uninstall。\n");
+                aq->set_amount(remain);
+         }
+        else 
+        {
+                me->set("anqi/now",me->query("anqi/now") + aq->query_amount());
+                me->set("long",me->query("orilong")+"里面已经装了"+chinese_number(me->query("anqi/now"))+aq->query("base_unit")+aq->query("name")+"，想拆掉用uninstall。\n");
+                destruct(aq);
+        }
+        return 1;
+}
+
+int do_uninstall(string arg)
+{
+        string file;
+        object ob;
+        object me=this_object();
+        object who=this_player();
+
+        if( !arg || !id(arg) || !present(me,who) ) 
+                return notify_fail("你想拆什么？\n");
+        if( me->query("anqi/now") ==0) 
+                return notify_fail(me->query("name")+"里面什么也没有。\n");
+        if( !file=query("anqi/file") )
+                return notify_fail(me->query("name")+"里面什么也没有。\n");     
+        ob=new(file);
+        ob->set_amount(me->query("anqi/now"));
+        if( ob && ob->move(who) )
+        {
+                me->set("long",ori_long);
+                me->set("anqi/now", 0);
+                message_vision("$N从"+me->query("name")+"里面拆出一"+ob->query("unit")+ob->query("name")+"。\n", who);
+        }
+        else    
+        {
+                if( ob )
+                        destruct(ob);   
+                write("你身上东西太多了。\n");
+        }
+        return 1;               
+}
+

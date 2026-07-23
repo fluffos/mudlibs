@@ -1,0 +1,257 @@
+inherit ITEM;
+#include <ansi.h>
+
+void create()
+{
+set_name(HIM"中秋节"HIG"任务卷轴"NOR,({"gift juanzhou","juanzhou","juan","gift"}));
+set_weight(1000);
+if( clonep() )
+        set_default_object(__FILE__);
+else    {
+        set("material", "papaer");
+        set("unit", "张");
+        set("long","一张任务卷轴，可以用它来完成中秋任务。首先你得先读(read)上面的内容，\n然后根据提示来完成它给你的任务即可。\n");
+        set("value",10000);
+        set("no_sell",1);
+        }
+setup();
+}
+
+void destruct_me()
+{
+destruct(this_object());
+return;
+}
+
+void dismiss()
+{
+write("\n\n"+name()+"化作一只白鹤冲天而去！\n\n");
+this_object()->move("/obj/empty");
+remove_call_out("destruct_me");                 
+call_out("destruct_me",3+random(3));
+}
+
+void init()
+{
+if ( !environment() )
+        return;
+if ( !userp(environment()) || !living(environment()) )
+        {
+        dismiss();
+        return;
+        }
+if ( !query("owner_id") )
+        set("owner_id",environment()->query("id"));
+if ( query("owner_id")!=environment()->query("id") )
+        {
+        dismiss();
+        return;
+        }
+add_action("do_read","read");   
+add_action("do_list","list");
+add_action("do_buy","buy");                     
+add_action("do_give","give");
+}
+
+int err_msg(string arg)
+{
+write(arg);
+return 1;
+}       
+
+int do_read(string arg)
+{
+int v;  
+string str,msg; 
+object obj,npc,me = this_player();
+if ( query("used")>=1 )
+        {
+        if ( query("used")>1 )
+                dismiss();
+        return 0;
+        }       
+if ( !userp(me) || me!=environment() 
+  || query("owner_id")!=me->query("id") )
+        return 0;
+if ( !arg || !id(arg) )
+        return 0;
+if ( me->query("giftmark/2007-09-25") )
+        return 0;       
+str = query("job_msg");
+if ( str && stringp(str) )
+        return err_msg(str);
+if ( me->query("sen")<50 )
+        return err_msg("你精神不够，无法阅读任务卷。\n");
+if ( me->is_busy() || me->is_fighting() )
+        return err_msg("你现在状态不佳，无法阅读任务卷。\n");   
+me->receive_damage("sen",30);   
+me->start_busy(3);
+msg = "你静下心来，开始阅读"+name()+"，";
+npc = SDS_D->random_npc();
+if ( !npc || !objectp(npc) || !environment(npc) )
+        {
+        msg+= "结果上面一片空白，你什么提示都没得到。\n";
+        return err_msg(msg);
+        }
+obj = SDS_D->random_item(me,0);
+if ( !obj )
+        {
+        msg+= "结果上面一片空白，你什么提示都没得到。\n";
+        return err_msg(msg);
+        }
+v = obj->value();
+v+= 10000;
+v = v+random(v);        
+this_object()->set("job",([
+        "seller"        : npc,
+        "buy"           : base_name(obj),
+        "value"         : v,
+]));
+
+str = "你先去"+MISC_D->find_place(environment(npc))+"问"+npc->name()+"购买"+obj->name()+"，然后将之交给月宫的嫦娥。\n";
+this_object()->set("job_msg",str);
+msg+= "结果上面渐渐显露出一行小字：\n"+str;
+write(msg);
+return 1;
+}                                       
+        
+int do_list()
+{
+mapping data;   
+string str;     
+object obj,npc,me = this_player();
+if ( !userp(me) || me!=environment() 
+  || query("owner_id")!=me->query("id") )
+        return 0;
+if ( me->query("giftmark/2007-09-25") )
+        return 0;       
+data = query("job");
+if ( !data || !mapp(data) )
+        return 0;       
+npc = data["seller"];
+if ( !npc || !present(me,environment(npc)) )
+        return 0;
+str = "你可以购买下列这些东西：\n";
+obj = new(data["buy"]);
+if ( !obj )
+        return 0;
+str+= obj->short()+"：";
+destruct(obj);
+str+= MONEY_D->money_str(data["value"]);
+write(str+"\n");
+return 1;
+}
+
+int do_buy(string arg)
+{
+int v;  
+mapping data;   
+string id,n_id;
+object obj,target,npc,me = this_player();
+if ( !userp(me) || me!=environment() 
+  || query("owner_id")!=me->query("id") )
+        return 0;
+if ( me->query("giftmark/2007-09-25") )
+        return 0;       
+data = query("job");
+if ( !data || !mapp(data) )
+        return 0;
+if ( !arg )
+        return 0;
+if ( sscanf(arg,"%s from %s",id,n_id)!=2 )
+        return 0;
+target = present(n_id,environment(me));
+if ( !target )
+        return 0;
+if ( !living(target) )
+        return err_msg(target->name()+"现在的状况不能给你提供任何服务。\n");
+npc = data["seller"];
+if ( !npc || npc!=target )
+        return 0;
+v = data["value"];
+if ( v<=0 )
+        return 0;
+obj = new(data["buy"]);
+if ( !obj )
+        return 0;
+if ( id!=obj->query("id") )
+        return 0;       
+if ( !me->pay_money(v) )
+        return err_msg("你身上的钱不够。\n");
+message_vision("$N向$n买下一"+obj->query("unit")+obj->name()+"。\n",me,npc);
+if ( !obj->move(me) )
+        obj->move(environment(me));
+this_object()->delete("job");
+this_object()->set("give_obj",obj);
+this_object()->add("used",1);
+return 1;
+}
+
+int is_same_ip(object who)
+{
+string ip,file,*ips;
+if ( !who )
+        return 0;
+//ip = query_ip_name(who);
+ip = ("/adm/daemons/ipd.lpc")->final_ip(who);
+file = read_file("/c/log/07中秋.ip");
+if ( !file || strlen(file)<1 )
+
+        {
+    write_file("/c/log/07中秋.ip",ip+"#");
+        return 0;
+        }       
+ips = explode(file,"#");                
+if ( member_array(ip,ips)!=-1 )
+        return 1;
+write_file("/c/log/07中秋.ip",ip+"#");  
+return 0;
+}
+
+int do_give(string arg)
+{
+string id,n_id;
+object gift,obj,target,npc,me = this_player();
+if ( !userp(me) || me!=environment() 
+  || query("owner_id")!=me->query("id") )
+        return 0;
+if ( me->query("giftmark/2007-09-25") )
+        return 0;       
+if ( query("used")!=1 )
+        return 0;
+if ( !arg )
+        return 0;
+if ( sscanf(arg,"%s to %s",id,n_id)!=2
+  && sscanf(arg,"%s %s",n_id,id)!=2 )
+        return 0;
+target = present(n_id,environment(me)); 
+if ( !target )
+        return 0;
+obj = present(id,me);
+if ( !obj || obj!=query("give_obj") )
+        return 0;
+set("channel_id","中秋快乐");
+message_vision("$N将手中的"+obj->name()+"交给$n。\n",me,target);
+
+destruct(obj);
+message_vision(CYN"$n"CYN"由衷的向$N"CYN"感谢。\n"NOR,me,target);
+this_object()->add("used",1);
+me->add("combat_exp",200000);
+me->add("daoxing",100000);
+me->add("potential",50000);
+tell_object(me,HIY"中秋快乐！\n你得到了20万武学经验、100年道行以及5万潜能。\n"NOR);
+me->set("giftmark/2007-09-25",1);
+me->save();
+/*if ( !is_same_ip(me) && me->query("age")>16 && random(5)==1 )
+        {
+        if ( random(2) )
+                gift = new("/obj/weapon");
+        else    gift = new("/obj/armor");
+        if ( gift && gift->move(me) )
+                message_vision("$n递给$N一"+gift->query("unit")+gift->name()+"。\n",me,target);
+        }
+*/
+destruct(this_object());        
+return 1;
+}
+

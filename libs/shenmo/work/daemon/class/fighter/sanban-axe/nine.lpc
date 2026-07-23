@@ -1,0 +1,348 @@
+// nine.c 
+//将军府终极pfm 盘古九式 
+// snowtu
+#include <ansi.h>
+#include <combat.h>
+inherit SSERVER; 
+
+int perform2(object,object,object,int,int);
+int perform3(object,object,object,int,int);
+int perform4(object,object,object,int,int);
+void remove_eff(object);
+
+string name()
+{
+return "「"NOR YEL"盘古九式"NOR"」";
+}
+
+int valid_perform(object me)
+{
+int i;
+string sk,*skills = ({
+        "baguazhou","bawang-qiang","changquan","jinglei-mace",
+        "lengquan-force","sanban-axe","yanxing-steps","wusi-mace",
+});     
+if ( !me )
+        return 0;
+if(me->query("family/family_name") != "将军府" && !me->samsara_check("sanban-axe", 1))
+        return notify_fail(name()+"乃是将军府不传绝招。\n");
+i = sizeof(skills);
+while ( i-- )
+        {
+        sk = skills[i];
+        if ( !sk || !stringp(sk) )
+                continue;       
+        if ( me->query_skill(sk,1)<800 )
+                return notify_fail("你的"+to_chinese(sk)+"等级不足 800 级，不能施展"+name()+"。\n");       
+        }
+if ( me->query("max_force")<5000 )
+        return notify_fail("你的内力修为不足五十年，不能施展"+name()+"。\n");
+if ( me->query("force")<2500 )
+        return notify_fail("你的内力不足 2500 点，不能施展"+name()+"。\n");   
+if ( me->query_str()<25 )
+        return notify_fail(name()+"需要浑身发力，你的膂力好象还不够。\n");
+if ( time()<me->query_temp("zjpfm_jjf_nine")+10 )
+        return notify_fail("你刚刚想施展"+name()+"，只觉浑身乏力，提不起力来。\n");    
+return 1;               
+}
+
+int perform(object me, object target)
+{
+object weapon;
+int ap,dp,damage;
+string tmp;
+
+if ( !valid_perform(me) )
+        return 0;
+if ( !target ) 
+        target = offensive_target(me);
+if ( !target
+  || !target->is_character()
+  || !me->is_fighting(target) )
+        return notify_fail(name()+"只能对战斗中的对手使用。\n");
+
+weapon = me->query_temp("weapon");
+ap = COMBAT_D->skill_power(me,"axe",SKILL_USAGE_ATTACK)/60;
+ap+= COMBAT_D->skill_power(me,"mace",SKILL_USAGE_ATTACK)/60;
+ap+= COMBAT_D->skill_power(me,"spear",SKILL_USAGE_ATTACK)/60;
+ap+= COMBAT_D->skill_power(me,"force",SKILL_USAGE_ATTACK)/60;
+ap+= COMBAT_D->skill_power(me,"unarmed",SKILL_USAGE_ATTACK)/60;
+ap+= COMBAT_D->skill_power(me,"linterate",SKILL_USAGE_ATTACK)/60;
+dp = COMBAT_D->skill_power(target,"parry",SKILL_USAGE_DEFENSE)/50;
+dp+= COMBAT_D->skill_power(target,"dodge",SKILL_USAGE_DEFENSE)/50;
+dp+= COMBAT_D->skill_power(target,"force",SKILL_USAGE_DEFENSE)/50;
+dp+= COMBAT_D->skill_power(target,"unarmed",SKILL_USAGE_DEFENSE)/50;
+dp+= COMBAT_D->skill_power(target,"linterate",SKILL_USAGE_DEFENSE)/50;
+
+if ( random(me->query_str())>target->query("str") )
+        ap+= random(ap/5);
+if ( target->is_busy() )
+        ap+= ap/10;      
+if ( target->query("family/family_name")=="将军府" )
+        dp+= random(dp/5);
+if ( me->is_busy() )
+        dp+= random(dp/5);
+
+if ( wizardp(me) )  tell_object(me,HIY"ap="+ap+"  dp="+dp+"\n"NOR);
+me->set_temp("zjpfm_jjf_nine",time());
+me->add("force",-300);
+tell_object(me,HIR"你口念九字真言，划密宗手印：请神！半空之中立时显出一尊盘古幻像。\n"NOR);
+message("vision",HIR"忽地狂风骤起，大地动容，九天之上，隐隐浮显一燕额虎须，赤膊神将，手持通体血红
+的开天斧。却是将军府授道祖师盘古大神。\n"NOR,environment(me),({me,target}));
+tell_object(target,HIW"半空中，一声怒吼：以武犯禁，必诛无赦。\n"NOR);
+message_vision(YEL"$N"YEL"一声大喝“临”一道血影划过，大斧直劈$n"YEL"面门。竟
+是程咬金三板斧中“开瓜”之招式，但其威武却不可同语。\n"NOR,me,target);
+if ( random(ap+dp)>dp )
+        {
+        if ( !target->is_busy() )
+                target->start_busy(1+random(me->query_str())/5);
+       if ( target->query_temp("weapon") )
+                {
+                message("vision",HIR+target->name()+HIR"举兵刃，横于前，直落了个虎口发麻。\n"NOR,environment(target),target);
+                tell_object(target,HIW"你虎口发麻，手中"+target->query_temp("weapon")->name()+HIW"几乎脱手，顿时不成招势。\n"NOR);
+                target->query_temp("weapon")->unequip();
+                target->reset_action();
+                }
+        else    {
+                tmp = target->query_skill_mapped("force");
+                if ( !tmp || !stringp(tmp) )
+                        tmp = "内力";
+                else    tmp = to_chinese(tmp);  
+                message_vision(HIR"$n"HIR"闪避不及，只得运"+tmp+HIR"于双臂，奋力一格，虽是挡住了要害，可也鲜血淋漓。\n"NOR,me,target);
+                damage = me->query("faith")/50+me->query_temp("apply/damage");
+                damage = damage/2+random(damage/2);
+                if ( wizardp(me) )  tell_object(me,HIR"damage="+damage+"\n"NOR);
+                target->receive_wound("kee",damage,me);         
+                COMBAT_D->report_status(target,damage);
+                }
+        }
+else    {
+        message_vision(CYN"$n"CYN"瞅了个破绽，纵身一跃，将这招轻松闪过。\n"NOR,me,target);
+        me->start_busy(3);
+//        me->add("faith",-10);
+        }
+if ( !me || !target || !me->is_fighting(target)
+  || !weapon || !present(weapon,me) )
+        return 1;
+if ( me->query("force")<1000 )
+        {
+        tell_object(me,CYN"你的内力不足，难以继续下面的攻击。\n"NOR);
+        return 1;
+        }
+me->add("force",-100);        
+tell_object(target,CYN+me->name()+NOR CYN"又喝道：“兵斗！兵者，诡道也；斗者，凶道也。“\n"NOR);
+message_vision(CYN"大斧疾挑，横劈$n"CYN"面门，正是“剔牙”“掏耳朵”两式。原来是那白发老人梦中所授，
+将军府威震天下的绝杀。\n"NOR,me,target);
+if ( random(ap+dp)>dp )
+        {
+        message_vision(HIR"$n"HIR"尚惊魂未定，哪里闪得开接下来的两招，给砍得血肉模糊！\n"NOR,me,target);       
+        damage = COMBAT_D->do_attack_damage(me,target,weapon);
+        damage+= random(damage/2);                
+        if ( wizardp(me) )  tell_object(me,HIM"damage="+damage+"\n"NOR);
+        if ( damage>1000 )
+                target->receive_wound("kee",damage/5,me); 
+        target->receive_damage("kee",damage,me);                
+        COMBAT_D->report_status(target);
+        if ( !me->query_temp("zjpfm_jjf_nine_add_str") )
+                {
+                tell_object(me,HIR"三式过后，你收回"+weapon->name()+"，情形是大相同，单臂血脉贲张，暴涨了一倍有余，通臂现出血色雾气。\n"NOR,me,target);
+                message("vision",HIR+me->name()+"三招过后，单臂血脉贲张，暴涨了一倍有余，通臂现出血色雾气。"NOR,environment(me),me);
+                me->add_temp("apply/strength",20);
+                me->set_temp("zjpfm_jjf_nine_add_str",1);
+                }
+        }
+else    {
+        message_vision(YEL"$n"YEL"哪还顾得颜面，顺势向后翻身，匍匐在地，滚出圈外，已是面无血色。\n"NOR,me,target);
+        me->add("force",-100);
+        }
+if ( me->query_skill("literate",1)>300 )
+        return perform2(me,target,weapon,ap,dp);
+return 1;
+}
+
+
+int perform2(object me,object target,object weapon,int ap,int dp)
+{
+int damage;       
+if ( !me || !target || !me->is_fighting(target)
+  || !weapon || !present(weapon,me) )
+        return 1;
+if ( me->query("force")<1000 )
+        {
+        tell_object(me,CYN"你的内力不足，难以继续下面的攻击。\n"NOR);
+        return 1;
+        }
+message_vision(HIR"
+$N"HIR"单手回转，暴喝一声“者”，这一式除却斧的大力，又兼收了剑的灵动，
+刀的豪迈，如影随形，贴身而来，避无可避。"NOR,me,target);
+tell_object(target,HIR"程咬金虽也贵为有缘人，想来终究是无法参透这第四式起的古韵，终没能化为己用。\n"NOR);
+me->add("foce",-200);
+
+//damage = COMBAT_D->attacking_perform_damage(me,target,me->query_temp("apply/damage"));
+damage = COMBAT_D->attacking_perform_damage(me,target,me->query_temp("apply/damage")-target->query_temp("apply/armor"));
+damage = damage/15;
+damage = damage/2+random(damage/2);
+damage-= target->query_temp("apply/armor_vs_spells")/5;
+if ( wizardp(me) )   tell_object(me,"damage="+damage+"\n");
+if ( damage<=0 )
+        {
+        message_vision(HIR"$n"HIR"沿着"+weapon->name()+HIR"的来势，翻转腾挪，弄得是手忙脚乱，倒也算窥得“者”式的一丝破绽。\n"NOR,me,target);
+        me->add("force",-100);
+        }
+else    {
+        message_vision(HIR"$n"HIR"被"+weapon->name()+HIR"带起风势卷起，在半空翻转腾挪，弄得是手忙脚乱，心神大乱。\n"NOR,me,target);            
+        if ( !target->is_busy() )
+                target->start_busy(5);
+        target->receive_damage("sen",damage,me);                
+        COMBAT_D->report_sen_status(target);
+        }
+return perform3(me,target,weapon,ap,dp); 
+}
+
+int perform3(object me,object target,object weapon,int ap,int dp)
+{
+int damage;       
+string tmp;
+if ( !me || !target || !me->is_fighting(target)
+  || !weapon || !present(weapon,me) )
+        return 1;
+if ( me->query("force")<1000 )
+        {
+        tell_object(me,CYN"你的内力不足，难以继续下面的攻击。\n"NOR);
+        return 1;
+        }
+tmp = ({
+        "口喷鲜血整个人横飞了出去",
+        "整个人似一捆稻草般飞了出去",
+        "狂吐鲜血，身子象断了线的风筝向後飞去",
+        "血肉横飞，十命断了九条",
+        "闷哼一声，吐出一口鲜血，五脏六腑都错了位",
+})[random(4)];
+                
+message_vision(YEL"
+$N"NOR YEL"毫无停手之意，连喝“皆”“阵”，"+weapon->name()+NOR YEL"璇飞而出，只带得飞沙走石，令人难睁
+双目，待看得清了，那还来得及闪避。先是一记，紧跟再一记，招式中竟有些许鞭和棍的特质，却比鞭，
+棍的力量更浑厚，更霸道。\n"NOR,me,target);
+tell_object(target,HIR"这二式本就都以快为进，你切肤感觉到的只能是斧的冰冷和血的滚烫。\n"NOR);
+me->add("force",-200);
+if ( random(ap+dp)>dp/2 )
+        {
+        message_vision(YEL"$n"NOR YEL"但见眼前净是扑面的风沙，虽知命悬一线，可惜心神已乱，给打得"+tmp+"！\n"NOR,me,target);
+        target->apply_condition("jjf_poison",1000);
+        target->update_condition();
+        damage = target->query("eff_kee")/100*50;
+        target->receive_wound("kee",damage,me);
+        COMBAT_D->report_status(target,damage);
+        target->receive_damage("kee",damage,me);                
+        COMBAT_D->report_status(target);
+        }
+else    {
+        me->add("force",-100);
+        message_vision(YEL"$n"NOR YEL"虽双目紧闭，但凭扑面而来风沙，已知命悬一线，即刻攒起身躯，缩成一团，这才护住要害。\n"NOR,me,target);
+        }
+if ( !me->query_temp("zjpfm_jjf_nine_add_str2") )
+        {
+        message_vision(HIR"\n又三式过后，情形再变，$N"HIR"似开启了灵魂深处的烙印，转瞬间，已幻化作盘古肉身。\n"NOR,me,target);
+        tell_object(me,HIR"你只觉浑身似乎流淌出无匹大将军的彪悍，传承了上古大神开天的胆略，胸中豪气激荡澎湃，不甘与狂妄喷薄而出。\n"NOR);
+        me->add_temp("apply/strength",100);
+        me->set_temp("zjpfm_jjf_nine_add_str2",1);
+        }
+if ( me->query_skill("literate",1)>500 )
+        {
+        remove_call_out("perform4");
+        call_out("perform4",1+random(5),me,target,weapon,ap,dp);        
+        }
+return 1;
+}
+
+int perform4(object me,object target,object weapon,int ap,int dp)
+{
+int damage;       
+string tmp;
+if ( !me || !target || !me->is_fighting(target)
+  || !weapon || !present(weapon,me) )
+        return 1;
+if ( me->query("force")<1000 )
+        {
+        tell_object(me,CYN"你的内力不足，难以继续下面的攻击。\n"NOR);
+        return 1;
+        }
+me->add("force",-100);        
+message_vision(HIR"        
+$N"HIR"声音滚滚如雷，再度响起“列”"+weapon->name()+HIR"挟开天之势，化万千影像，劈头盖脸的飞出,
+$n"HIR"不知如何藏身，浑身上下有如被千刀万剐，血流如注。盘古第七式，也作“血雨”"NOR,me,target);
+damage = me->query_temp("apply/damage");
+damage+= me->query_temp("apply/attack");
+damage+= me->query("force_factor");
+damage-= target->query_temp("apply/armor");
+if ( random(ap+dp)>dp )
+        {
+        if ( damage<=0 )
+                damage = 500;
+        }
+else    damage = 0;             
+target->receive_damage("kee",damage,me);
+
+message_vision(HIR"
+七式过后，八式再起，漫天斧影，尽皆化去。$N"HIR"不再如先前般狂妄，神情倒变得更加凝重
+“在式”如混沌初开之纯粹浩荡，顿时，风雷哀号，天与地闪过一阵阵的胆怯。\n"NOR,me,target);
+me->add("force",-300);
+if ( random(ap+dp)>dp )
+        {
+        tell_object(target,HIR"你如中魔咒，再低头看向自己，身上虽一片的血色，却并无新伤。心里明白，内里已经心胆尽碎，
+肝肠寸断。这第七式，也作“肃杀”。\n"NOR);
+        damage = target->query("kee")/100*60;
+        target->receive_damage("kee",damage,me);
+        COMBAT_D->report_status(target);
+        }
+else    {
+        me->add("force",-100);
+        message_vision(HIR"     
+$n"HIR"观此气象，不敢怠慢，运足内劲，护于体内要害之穴道，但觉一股大力涌来时，爆出毕生功力将其抗出体外。"NOR,me,target);
+        }
+if ( me && target && random(me->query_int())>60 && me->is_fighting(target) && living(target) )
+        {
+        me->add("force",-300);
+        message_vision(HIR"
+可一切尚未结束，未及$n"HIR"转念，最后一声若旱地焦雷再度响起“前”，"+weapon->name()+HIR"瞬息向前刺出，
+引导着$N"HIR"整条手臂，尽皆没入$n"HIR"胸前，贯胸而出！盘古第九式，是刺，也作“命绝”。\n"NOR,me,target);
+        tell_object(target,HIR"你眼中再无天地，耳中再无声息，生命唯余这夺命的一刺。\n"NOR);
+        target->set_temp("last_damage_from",me);
+        target->unconcious();
+        remove_call_out("remove_eff");
+        call_out("remove_eff",2+random(5),target);
+        }
+message_vision(HIR"\n九式过后，半空中，盘古之形散去。。。。\n"NOR,me,target);
+tell_object(me,HIR"
+你渐渐淡定，浑然忘记刚刚做过了些什么，唯沾满鲜血的"+weapon->name()+HIR"和整一条手臂上潺潺流下的红色，似依然在诉说着杀戮...、\n"NOR);
+return 1;
+}
+
+void remove_eff(object who)
+{
+if ( !who || living(who) )
+        return;
+who->revive();
+}
+
+int help(object me)  
+{
+string temp;     
+temp = "\t\t将军府所有相关技能 800 级\n";  
+temp+= "\t\t内力修为五十年\n";  
+temp+= "\t\t内力2500点\n";  
+write("\n"+to_chinese(explode(__FILE__,"/")[<2])+"之"+name()+"："NOR"\n");    
+write(@HELP  
+             使用功效：  
+                     连续打击对手的气血和法力 
+             出招类型：  
+                     延时型外功  
+                     成功无busy, 失败有busy
+                     有隐藏攻击  
+                     叛师不可带出
+             出手要求：                
+HELP);                            
+write(temp);  
+return 1;  
+} 
+

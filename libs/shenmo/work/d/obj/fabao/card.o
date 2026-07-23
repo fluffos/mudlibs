@@ -1,0 +1,377 @@
+//by djx 2003/7/19
+//modify by fang 2005.1.7
+#include <ansi.h>
+inherit ITEM;
+string money_str(int amount);
+int pay_player(object who, int amount);
+int help(object me);
+int large_deposit( int base_value , int amount , string dep_type );
+
+void create()
+{
+set_name(HIY"富翁卡"NOR, ({"master card","card"}) );
+set_weight(10);
+set("no_get",1);
+set("no_sell",1);
+set("no_drop","这么贵重的东西怎么能丢掉呢。\n");
+if( clonep() )
+        set_default_object(__FILE__);
+else {
+        set("unit", "张");
+        set("material", "gold");
+        set("no_break", 1);
+        set("long",
+HIY+BLINK"      由天上人间大富翁银行发行的信用卡---富翁卡(Master card)           \n"NOR
+
+MAG"※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※\n"NOR
+MAG"※                 "HIR"您可以使用如下命令： "NOR+MAG"                  ※\n"NOR
+MAG"※      "HIC"取钱：    命令格式："HIG"tiqu <数量> <货币单位> "NOR+MAG"       ※\n"NOR
+MAG"※      "HIC"取潜能：  命令格式："HIG"tiqu <数量>   qn "NOR+MAG"             ※\n"NOR
+MAG"※      "HIC"存钱：    命令格式："HIG"cunru  <数量> <货币单位>"NOR+MAG"      ※\n"NOR
+MAG"※      "HIC"存潜能：  命令格式："HIG"cunru  <数量>   qn  "NOR+MAG"          ※\n"NOR
+MAG"※      "HIC"查询余额：命令格式："HIG"bank"NOR+MAG"                          ※\n"NOR
+MAG"※      "HIC"转换信誉：命令格式："HIG"credit <qn|money> <credit>"NOR+MAG"    ※\n"NOR
+MAG"※      "HIC"提取信誉：命令格式："HIG"credit <qn|money> <balance>"NOR+MAG"   ※\n"NOR
+MAG"※      "HIW"天上人间的通用信用卡，代表着你在本站的信誉。"NOR+MAG"      ※\n"NOR
+MAG"※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※\n"NOR
+);         
+        }
+}
+
+void init()
+{
+object me = this_object();
+object who = this_player();
+object where = environment();
+if (! me->query("my_owner") && interactive(who) )
+        me->set("my_owner",who->query("id"));
+if (userp(where))
+        {
+        if (me->query("owned"))
+                {
+                if (me->query("owned")!=where->query("id"))
+                        call_out("destruct_me",1,where,me);
+                }
+        else me->set("owned",where->query("id"));
+        }
+add_action("do_deposit","cunru");
+add_action("do_withdraw","tiqu");
+add_action("do_check", "bank");
+add_action("do_credit", "credit");
+
+}
+
+int do_deposit(string arg)
+{
+string what;
+int amount;
+object what_ob, me;
+string file;
+string id;
+
+me = this_player();
+
+ id = me->query("id");
+if (this_object()->query("owned")!=me->query("id"))
+        {
+        message_vision(YEL"千面怪鬼鬼祟祟地拿起"+this_object()->name()+YEL"撒脚就跑，快追！\n"NOR,me);
+        destruct (this_object());
+        }
+
+if( me->is_busy()||me->is_fight())
+        return notify_fail("你现在正忙着呢...。\n");
+        
+if(arg && sscanf(arg, "%d %s", amount, what)==2)
+        {
+        if (what=="qn")
+                {
+                if (amount < 1||me->query("potential")-me->query("learned_points") < 1)
+                        return notify_fail("你想存多少潜能？\n");
+                if (amount>me->query("potential")-me->query("learned_points"))
+                        return notify_fail("你的潜能不够存。\n");
+                message_vision(sprintf("$N拿出%s点潜能，存进了"HIY"富翁卡"NOR"。\n",chinese_number(amount)), me);
+                        large_deposit( 1 , amount , "c_potential" );
+                me->add("potential",-amount);
+                me->save();
+                return 1;
+                }
+        else what_ob = present(what + "_money", me);
+        if (!what_ob)  
+                return notify_fail("你身上没有带这种钱。\n");
+        if (amount < 1)
+                return notify_fail("你想存多少" + what_ob->query("name") + "？\n");
+        if ((int)what_ob->query_amount() < amount)
+                return notify_fail("你带的" + what_ob->query("name") + "不够。\n");
+        message_vision(sprintf("$N拿出%s%s%s，存进了"HIY"富翁卡"NOR"。\n",chinese_number(amount), what_ob->query("base_unit"),what_ob->query("name")), me);
+       large_deposit( what_ob->query("base_value") , amount , "c_balance" );
+//    log_file(file,sprintf("拿出%s%s%s，存进了"HIY"富翁卡"NOR"。\n",chinese_number(amount), what_ob->query("base_unit"),what_ob->query("name"))); 
+  log_file("card/"+geteuid(me),sprintf("[%s]拿出%s%s%s，存进了富翁卡。\n",ctime(time()),chinese_number(amount), what_ob->query("base_unit"),what_ob->query("name")));
+        if ((int)what_ob->query_amount() == amount)
+                destruct(what_ob);
+        else
+                what_ob->add_amount(-amount);
+        me->save();
+        return 1;
+        }
+else return help(me);
+}
+ 
+int do_check()
+{
+ int   credit =  (int)this_player()->query("cc_balance_credit");
+int total = (int)this_player()->query("c_balance");
+
+if (this_object()->query("owned")!=this_player()->query("id"))
+        {
+        message_vision(RED"千面怪鬼鬼祟祟地拿起"+this_object()->name()+RED"撒脚就跑，快追！\n"NOR,this_player());
+        destruct (this_object());
+        }
+if( (!total || total < 0 ) &&  ( !credit || credit < 0 ) )  
+        {
+        this_player()->set("c_balance", 0);
+            this_player()->set("cc_balance_credit", 0);
+        write("您这张卡上已经没钱了。\n");
+        }
+else {
+           write("您"HIY"富翁卡"NOR"中目前还有" + money_str(total) + "余额。\n");
+           write("您"HIY"富翁卡"NOR"中目前还有" + chinese_number( credit ) +"个"HIY"黄金"NOR"信用点。\n");
+         }
+total = (int)this_player()->query("c_potential");
+credit =  (int)this_player()->query("c_potential_credit");
+if(  (!total || total < 0 ) &&  ( !credit || credit < 0 ) )  
+        {
+        this_player()->set("c_potential", 0);
+            this_player()->set("c_potential_credit", 0);
+                return notify_fail("您这张卡上没有任何潜能余额。\n");
+        }
+write("您"HIY"富翁卡"NOR"中目前还有" + chinese_number(total)+ "点"CYN"潜能"NOR"余额。\n");
+write("您"HIY"富翁卡"NOR"中目前还有" + chinese_number(credit)+ "个"CYN"潜能"NOR"信用点。\n");
+
+return 1;
+}
+
+int do_withdraw(string arg)
+{
+int amount, v, rv;
+string what;
+object me;
+
+me = this_player();
+ 
+if (this_object()->query("owned")!=me->query("id"))
+        {
+        message_vision(CYN"千面怪鬼鬼祟祟地拿起"+this_object()->name()+CYN"撒脚就跑，快追！\n"NOR,me);
+        destruct (this_object());
+        }
+        
+if( me->is_busy()||me->is_fight())
+        return notify_fail("你现在正忙着呢...。\n");
+
+if (arg && sscanf(arg, "%d %s", amount, what) == 2)
+        {
+        if (amount < 1)
+                return notify_fail("你想取多少？\n");
+        if(what=="qn")
+                {
+                if (amount > me->query("c_potential"))
+                        return notify_fail("你卡里的潜能不够取。\n");
+        
+                me->add("c_potential",-amount);
+                me->add("potential",amount);
+                me->save();
+                message_vision(sprintf("$N从"HIY"富翁卡"NOR"里取出%s点潜能。\n",chinese_number(amount)),me);
+                return 1;
+                }
+        else if (file_size("/obj/money/" + what + ".c") < 0)
+                return notify_fail("你想取出什么钱？\n");
+        what = "/obj/money/" + what;
+        if ((v = amount * what->query("base_value")) > me->query("c_balance"))
+                return notify_fail("你卡里的钱不够取。\n");
+        if( v < what->query("base_value") ) 
+                return notify_fail("不要这样做，不然。。。！\n");
+        
+        rv = v;
+        v=v-pay_player(me, rv);
+        me->add("c_balance",  -v);
+        me->save();
+        message_vision(sprintf("$N从"HIY"富翁卡"NOR"里取出%s。\n", money_str(v)),me);
+        return 1;
+        }
+else return help(me);
+}
+
+string money_str(int amount)
+{        
+ string output;
+ if (amount / 10000) 
+        {
+        output = chinese_number(amount / 10000) + "两"HIY"黄金"NOR;
+        amount %= 10000;
+        }
+else
+        output = "";
+if (amount / 100) 
+        {
+        output = output + chinese_number(amount / 100) + "两"HIW"白银"NOR;
+        amount %= 100;
+        }
+if (amount || sizeof(output)<2)
+        return output + chinese_number(amount) + "文"YEL"铜板"NOR;
+return output;
+}
+
+int pay_player(object who, int amount)
+{
+int v;
+object ob;
+
+seteuid(getuid());
+if (amount < 1)
+        amount = 0;
+if (v = amount / 10000000) 
+        {
+        ob = new("/obj/money/jinbi");
+        ob->set_amount(amount / 10000000);
+        if(!(ob->move(who)))
+                return amount;
+        amount %= 10000000;
+        }
+
+if (v = amount / 10000) 
+        {
+        ob = new("/obj/money/gold");
+        ob->set_amount(amount / 10000);
+        if(!(ob->move(who)))
+                return amount;
+        amount %= 10000;
+        }
+        
+if (amount / 100) 
+        {
+        ob = new("/obj/money/silver");
+        ob->set_amount(amount / 100);
+        if(!(ob->move(who)))
+                return amount;
+        amount %= 100;
+        }
+        
+if (amount) 
+        {
+        ob = new("/obj/money/coin");
+        ob->set_amount(amount);
+        if(!(ob->move(who)))
+                return amount;
+        }
+        
+return 0;
+}
+
+int do_credit(string arg)
+{
+string type , oper;
+string name;
+int balance,bcredit;
+object me = this_player(),ob;
+if(!arg)
+  return notify_fail("命令格式：credit <qn|money>  <credit|balance>\n");
+if( this_player()->is_busy() )
+     return notify_fail("你现在正忙着呢...。\n");
+if (arg && sscanf(arg, "%s %s", type, oper ) == 2)
+{
+   if( type == "money" )
+     {
+           balance=me->query("c_balance");
+       bcredit=me->query("cc_balance_credit");
+       name = "黄金";
+   }else if( type == "qn" ) {
+           balance=me->query("c_potential");
+       bcredit=me->query("c_potential_credit");
+       name = "潜能";
+       }
+     else
+            return notify_fail("命令格式：credit <qn|money>  <credit|balance>\n");
+ 
+if(!balance || balance<0 ) balance=0;
+if(!bcredit || bcredit<0 ) bcredit=0;
+if(oper =="credit") 
+{
+  if(balance<1000000000) return notify_fail("您的"+name+"还不足以换取信用点。\n");
+  balance-=1000000000;
+  bcredit+=1;
+  message_vision("$N用自己的"+name+"换取了一个"+name+"信用点。\n", me);
+}
+else if(oper =="balance")
+{
+  if(balance>500000000) return notify_fail("您的"+name+"过多，请取出一些后再来兑换信用点。\n");
+  if(bcredit<1) return notify_fail("您还没有信用点可以兑换。\n");
+  balance+=1000000000;
+  bcredit-=1;
+  message_vision("$N将自己的一个信用点兑换成"+name+"。\n", me);
+}
+else 
+  return notify_fail("命令格式：credit <qn|money>  <credit|balance>\n");
+  if( type == "money" )
+     {
+       me->set("c_balance",balance);
+       me->set("cc_balance_credit",bcredit);
+   }else if( type == "qn" ) {
+           me->set("c_potential",balance);
+       me->set("c_potential_credit",bcredit);
+       }
+  
+  me->start_busy(1);
+  me->save();
+  return 1;
+}else
+   return notify_fail("命令格式：credit <qn|money>  <credit|balance>\n");
+
+}
+
+int large_deposit( int base_value , int amount , string dep_type )
+{
+string dep_credit;
+float total;
+int bcredit, balance;
+int ah,al,vh,vl;
+object me=this_player();
+
+dep_credit = dep_type+"_credit";
+
+balance=(int)me->query(dep_type,1);
+bcredit=(int)me->query(dep_credit,1);
+total=to_float(balance)+to_float(base_value) * to_float(amount)/100*99;
+bcredit+=to_int(total/1000000000.0);
+vh=base_value/10000;vl=base_value%10000;
+ah=amount/10000;al=amount%10000;
+balance=balance%1000000000+(al*vl*99/100+(ah*vl+vh*al)%100000*9900+(ah*vh)%10*99000000)%1000000000;
+me->set(dep_type ,balance%1000000000);
+me->set(dep_credit ,bcredit);
+return 1;
+}
+
+int help(object me)
+{
+write(@HELP
+        
+提取金钱：命令格式：tiqu <数量> <货币单位>
+提取潜能：命令格式：tiqu <数量> 潜能
+存入金钱：命令格式：cunru <数量> <货币单位>
+存入潜能：命令格式：cunru <数量> 潜能
+查询余额：命令格式：bank 
+转换信用：命令格式：credit <类型> <credit> 
+提取信用：命令格式：credit <类型> <balance> 
+
+HELP
+    );
+    return 1;
+}
+
+void destruct_me(object where, object me)
+{
+  message_vision("千面怪鬼鬼祟祟地拿起$n撒脚就跑，快追！\n",where,me);
+  destruct (me);
+}
+
+int query_autoload() { return 1; }      
+
+

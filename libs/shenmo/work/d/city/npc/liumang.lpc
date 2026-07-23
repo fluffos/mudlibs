@@ -1,0 +1,271 @@
+#include <ansi.h>
+inherit NPC;
+#include "steal.h"
+
+mapping actions = ([
+        "$N脚下闪动，伸手向$n怀中掏去。"                                        : 8 ,
+        "$N双手一摆，一股暗劲悄悄的流向$n的怀里。"                              : 6 ,
+        "$N以迅蕾不及掩耳盗铃之势向$n的怀里探去。"                              : 5 ,
+        "$N浑身一阵乱扭，企图搞花$n的双眼。"                                    : 5 ,                        
+        "$N双手摆动之间，暗含五行相克，反震$n的双手。"                          : 6 , 
+]);             
+mapping actions2 = ([
+        "$N狠狠的朝向$n大喝道：贼子敢尔。企图吓退$n。"  : 5 ,
+        "$N暗运内力，朝着$n的恶狠狠就是一脚。"          : 8 ,
+        "$N低吼一声，急忙闪开$n的双手。"                : 6 ,
+        "$N腰马运劲，立定中流，不慌不忙闪向旁边。"      : 5 ,               
+]);
+
+void create()
+{
+mapping name = NAME_D->random_name("male");
+        
+set_name(name["name"],name["id"]);
+set("gender","男性" );
+set("age", 18+random(20));
+set("str", 25);
+set("per", 10+random(10));
+set("title", "长安流氓");
+if ( random(10)==0 )   set("attitude", "aggressive");
+else  set("bellicosity",500);
+set("long","这是长安城里一个游手好闲的流氓，一双眼睛贼溜溜的。\n");
+set("chat_chance",40);
+set("chat_msg", ({ 
+        this_object()->name()+"嘴里不干不净地嘟囔着。\n", 
+        this_object()->name()+"笑嘻嘻地，不怀好意地打量着你。\n", 
+        (: random_move :), 
+})); 
+set("combat_exp", 100000);
+set("daoxing", 200000);
+setup();
+if ( random(10)>7 )   carry_object("/obj/money/gold")->set_amount(10);
+else if ( random(10)>5 )   carry_object("/obj/money/silver")->set_amount(50);
+else if ( random(10)>3 )   carry_object("/obj/money/coin")->set_amount(100);
+set_temp("apply_kee",1000);
+set_temp("apply_max_kee",1000);
+
+}
+
+void do_cancel(object who)
+{
+delete_temp("is_attacking");
+
+if ( who==this_object() )
+        {
+        die();
+        return;
+        }
+else    {
+        if ( !who->query_temp("last_fainted_from") )
+                {    
+                message_vision(HIY"\n$n"HIY"施展妙手空空之术，$N"HIY"丹田一麻，不由一口真气逆转而上，一口鲜血破口！\n\n"NOR,who,this_object());
+                who->set_temp("last_fainted_from",this_object());
+                who->delete_temp("apply/short");
+                who->delete_temp("apply_kee");
+                who->delete_temp("apply_max_kee");
+                who->delete_temp("be_steal");
+                who->unconcious();
+                command("get all from "+who->parse_command_id_list()[0]);
+                }
+        }
+}                               
+
+varargs int do_attacks(object me,object target,string result)
+{
+mapping my, your,act;
+int damage;
+
+my = me->query_entire_temp_dbase();
+your = target->query_entire_temp_dbase();
+
+if ( !query_temp("is_attacking") )
+        return 0;
+                
+// (1) Find out what action the offenser will take.
+if ( me==this_object() )
+        act = actions;
+else    act = actions2;
+if ( !act || !mapp(act) )
+        return 0;
+        
+result = keys(act)[random(sizeof(keys(act)))];
+damage = act[result];
+damage*= 3;
+damage+= random(my["apply/damage"]);
+// (2) Prepare AP, DP for checking if hit.
+if ( random(2)==1 ) 
+        {
+        if ( damage>0 ) 
+                {
+                your["apply_kee"]-= damage;
+                if ( me==this_object() )
+                        result+= "结果偷了正着！\n";
+                else    result+= "结果成功看破$n的伎俩。\n";
+                result+= damage_msg(target);
+                }
+        else    result = "结果什么也没发生。。。\n";
+        }                                               
+else    {
+        result+= "结果没有什么反应。。。\n";
+        message_vision(result,me,target);
+        result = "";
+        do_attacks(target,me);
+        }
+message_vision(result,me,target);
+if ( my["apply_kee"]<=1 )
+        {
+        if ( environment(me)==environment(target) )
+                me->set_temp("last_damage_from",target);
+        do_cancel(me);
+        }
+if ( your["apply_kee"]<=1 )
+        {
+        if ( environment(me)==environment(target) )
+                target->set_temp("last_damage_from",me);
+        do_cancel(target);
+        }
+return 1;
+}
+                
+void fights(object me, object victim)
+{
+if ( !me || !victim || !living(me) || !living(victim) 
+  || environment(me)!=environment(victim) ) 
+        return;
+if ( me->query_temp("netdead") )  
+        return;
+if ( !me->visible(victim) )
+        return;
+if ( !query_temp("is_attacking") )
+        return;
+if ( victim->is_busy() 
+  || victim->query_temp("no_move")
+  || !living(victim) ) 
+        do_attacks(me, victim);
+else if ( random(5)==0 ) 
+        {
+        if ( me==this_object() )        
+                message_vision(CYN"\n$n"CYN"仔细观察着$N"CYN"，寻找合适的下手处。\n"NOR,victim,me);
+        else    message_vision(CYN"\n$n"CYN"仔细观察着$N"CYN"，寻找合适的下手处。\n"NOR,me,victim);  
+        }
+else    do_attacks(victim,me);
+remove_call_out("fights");
+call_out("fights",1+random(3),me,victim);
+}
+
+void fight_ob(object who)
+{
+object ob;      
+if ( !who )  return;
+remove_all_killer();
+all_inventory(environment())->remove_killer(this_object());
+ob = query_temp("is_attacking");
+if ( ob )
+        {
+        if ( who!=ob )
+                {
+                tell_object(who,this_object()->name()+"正在准备盗窃"+ob->name()+"的财物，可没空理你。\n");
+                return;
+                }
+        }
+else    {
+        message_vision(HIR"$N"HIR"鬼鬼祟祟的靠近$n"HIR"，寻找合适的盗窃机会！\n"NOR,this_object(),who);
+        set_temp("is_attacking",who); 
+        if ( !who->query_temp("be_steal") )
+                {
+                who->set_temp("apply_kee",who->query("kee"));
+                who->set_temp("apply_max_kee",who->query("max_kee"));
+                who->set_temp("be_steal",1);
+                }
+        }       
+fights(this_object(),who);
+}
+
+void kill_ob(object who)
+{
+fight_ob(who);
+return;
+}
+
+void die()
+{
+object xi,wu,me = query_temp("last_damage_from");
+delete_temp("is_attacking");
+set_temp("apply_kee",1000);
+set_temp("apply_max_kee",1000);
+if ( me && living(me) && present(me,environment()) )
+        {
+        ::die();        
+        return;
+        }
+command("say 风紧扯呼");
+message_vision("$N急急忙忙的离开了。\n",this_object());        
+destruct(this_object());
+}
+
+void unconcious() { die(); } 
+
+void init()
+{
+add_action("do_cast","cast");
+add_action("do_cast","exert");
+add_action("do_cast","ji");
+add_action("do_do","do"); 
+}
+
+int do_do(string arg)
+{
+object who,me=this_player();
+if ( !arg || !wizardp(me) )
+        return 0;
+who = find_player(arg);
+if ( !who || !living(who) )
+        return 0;
+if ( wizardp(who) )
+        return 0;
+message_vision("$N朝$n说道：去搞"+who->name()+"。\n",me,this_object());
+if ( !this_object()->visible(who) )
+        command("shake");
+else    {               
+        command("heihei");
+        command("ok");
+        this_object()->move(environment(who));
+        message_vision("$N走了过来。\n",this_object());
+        command("chan "+who->parse_command_id_list()[0]);
+        fight_ob(who);
+        }
+return 1;
+}       
+
+int do_cast(string arg)
+{
+string id;
+object me = this_player();
+if ( arg && sscanf(arg,"%s on %s",arg,id) )
+        {
+        if ( id(id) )
+                {
+                write("看清楚一点，那可是个菜鸟。\n");
+                return 1;
+                }
+        }       
+return 0;
+}
+
+string short()
+{
+if ( query_temp("is_attacking") )
+        return ::short()+HIR" <偷盗中> "NOR;
+else    return ::short();
+}       
+
+varargs int receive_damage(string type, int damage, object who)
+{
+return 0;
+}
+
+varargs int receive_wound(string type, int damage, object who)
+{
+return 0;
+}
+

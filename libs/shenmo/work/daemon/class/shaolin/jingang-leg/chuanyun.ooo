@@ -1,0 +1,154 @@
+#include <ansi.h>
+inherit SSERVER;
+
+string name()
+{
+return "「佛寂·穿云」";    
+}
+
+string force = "";
+
+int valid_perform(object me)
+{
+if ( !me )
+        return 0; 
+if ( ( me->query("family/family_name")!= "少林寺"
+    && me->query_skill("banruo-zhang",1)<250 )
+ || me->query("class")!="human" )
+        return notify_fail(name()+"乃是少林绝招。\n");
+if ( me->query_skill("banruo-zhang",1)<100 )
+        return notify_fail("你的"+to_chinese("banruo-zhang")+"等级不足 100 级，不能施展"+name()+"。\n");
+if ( me->query_skill("unarmed",1)<100 )
+        return notify_fail("你的"+to_chinese("unarmed")+"等级不足 100 级，不能施展"+name()+"。\n");
+if ( me->query_skill("yijinjing",1)<100 )
+        return notify_fail("你的"+to_chinese("yijinjing")+"等级不足 100 级，不能施展"+name()+"。\n");
+if ( me->query_skill("jingang-leg",1)<100 )
+        return notify_fail("你的"+to_chinese("jingang-leg")+"等级不足 100 级，不能施展"+name()+"。\n");
+if ( me->query("max_force")<600 )
+        return notify_fail("你的内力修为不足六年，不能施展"+name()+"。\n");
+if ( me->query("force")<200 )
+        return notify_fail("你的内力不足 200 点，不能施展"+name()+"。\n");   
+if ( time()<me->query_temp("shaolin_pfm_chuanyun")+2+random(4) )
+        return notify_fail("绝招用多就不灵了。\n");        
+if ( !me->is_fighting() )
+        return notify_fail(name()+"只能对战斗中的对手使用。\n");        
+return 1;               
+}
+
+int perform(object me, object target)
+{
+int damage,ap,dp;
+string msg,*limbs,limb,type,temp;
+mapping m_act,t_act;
+if ( !valid_perform(me) )    return 0;
+if ( !target ) 
+        target = offensive_target(me);
+if ( !target
+  || !target->is_character()
+  || target->is_corpse()
+  || !me->is_fighting(target) )
+        return notify_fail("你要对谁施展这一招"+name()+"？\n");
+
+if ( !me->query("env/no_msg") && !target->query("env/no_msg") )
+        msg = HIY"
+$N"HIY"一声清啸，双腿连环上踢，使出少林金刚腿绝学"HIC+name()+HIY"迅捷无伦地攻
+向$n"HIY"。一时间众人只见眼前尽是腿影！\n" NOR; 
+else    msg = MAG"\n$N"MAG"一式"HIR+name()+NOR MAG"攻向$n"MAG"！\n"NOR;
+message_vision(msg,me,target);
+me->add("force",-100);
+me->set_temp("shaolin_pfm_chuanyun",time());
+
+ap = COMBAT_D->skill_power(me,"unarmed",1)/10;
+dp = COMBAT_D->skill_power(target,"dodge",1)/10;
+if ( COMBAT_D->restrain(me,target) )
+        ap+= ap/3;
+if ( COMBAT_D->restrain(target,me) )
+        dp+= dp/3;
+if ( me->query("family/family_name")== "少林寺" )
+        ap+= random(ap/3);
+
+limbs = target->query("limbs"); 
+limb = limbs[random(sizeof(limbs))];
+m_act = me->query("actions");
+t_act = target->query("actions");
+type = m_act["damage_type"];
+damage = m_act["damage"];
+damage+= me->query_temp("apply/damage");
+damage-= target->query_temp("apply/armor");
+damage+= me->query_skill("jingang-leg",1);
+damage+= me->query_skill("banruo-zhang",1);
+damage-= (target->query_skill("dodge",1)+target->query_skill("parry",1))/2;
+if ( target->is_busy() )
+        damage+= random(damage/5);
+if ( COMBAT_D->restrain(me,target) )
+        damage+= random(damage/5);
+if ( COMBAT_D->restrain(target,me) )
+        damage-= random(damage/5);
+
+if ( !me->query("env/no_msg") && !target->query("env/no_msg") )
+        msg = m_act["action"]+"。\n";
+else    msg = "";
+temp = (me->query_temp("weapon"))?me->query_temp("weapon")->name():({"左腿","右腿","双脚","右脚"})[random(4)];
+msg = replace_string(msg,"$w",temp);
+msg = replace_string(msg,"$l",limb);
+msg = SDS_D->no_color_msg(msg);
+msg = HIY+msg+NOR;
+msg = SDS_D->color_msg(msg);
+message_vision(msg,me,target);
+
+if ( random(ap+dp)>dp && damage>10 )
+        {
+        if ( !me->query("env/no_msg") && !target->query("env/no_msg") )  
+                msg = COMBAT_D->damage_msg(damage,type);
+        else    msg = "";
+        msg = replace_string(msg,"$w",temp);
+        msg = replace_string(msg,"$l",limb);
+        msg = SDS_D->no_color_msg(msg);
+        msg = HIY+msg+NOR;
+        msg = SDS_D->color_msg(msg);
+        message_vision(msg,me,target);
+        if ( me->query("family/family_name")== "少林寺" )
+                target->receive_wound("kee",damage/5,me);
+        target->receive_damage("kee",damage,me);
+        COMBAT_D->report_status(target);
+        target->set_temp("shaolin_pfm_chuanyun_hit",time());
+        }       
+else    {
+       msg = "";
+        temp = target->query_skill_mapped("dodge");
+        if ( !temp || !stringp(temp) )
+                msg+= "$n纵身在$N周身游走，将$P的攻势尽数化解。";
+        else    msg+= (SKILL_D(temp)->query_dodge_msg(limb));
+        msg+= "\n";
+        msg = SDS_D->no_color_msg(msg);
+        msg = HIY+msg+NOR;
+        msg = SDS_D->color_msg(msg);
+        message_vision(msg,me,target);
+        me->add("force",-100);
+        }
+return 1;
+}       
+        
+int help(object me)  
+{
+string temp;
+temp = "\t\t"+to_chinese("banruo-zhang")+" 100 级\n"; 
+temp+= "\t\t"+to_chinese("yijinjing")+" 100 级\n"; 
+temp+= "\t\t"+to_chinese("unarmed")+" 100 级\n"; 
+temp+= "\t\t"+to_chinese("jingang-leg")+" 100 级\n"; 
+temp+= "\t\t内力修为 六年 。\n"; 
+temp+= "\t\t内    力 200 点 。\n"; 
+write("\n"+to_chinese(explode(__FILE__,"/")[<2])+"之"+name()+"："NOR"\n");
+write(@HELP 
+        使用功效： 
+                损伤对方的气血
+        出招类型：   
+                延迟型外功  
+                有隐藏效果
+                叛师可带出   
+        出手要求： 
+HELP);  
+write(temp);  
+return 1;  
+}
+

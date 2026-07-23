@@ -1,0 +1,849 @@
+/*----------------------------
+        damage.c
+由于老出现玩家莫名其妙的死亡，
+所以去掉了对gin的伤害。
+                koker 2001
+----------------------------*/
+
+#include <ansi.h>
+#include <dbase.h>
+#include <login.h>
+#include <skill.h>
+#include <move.h>
+
+void remove_faint(object me);
+
+int ghost = 0;
+
+int is_ghost() { return ghost; }
+
+//自动full函数
+varargs void powerup(int flag,int no_condition)
+{
+if ( !this_object() )
+        return;
+if ( flag && flag>=1 )
+        message_vision(HIG"$N"HIG"从怀里小心翼翼的拿出一颗云丹送入嘴中，果然见$P脸上慢慢泛出红光，法力和内力到了极限！\n"NOR,this_object());
+this_object()->set("kee",this_object()->query("max_kee"));
+this_object()->set("eff_kee",this_object()->query("max_kee"));
+this_object()->set("sen",this_object()->query("max_sen"));
+this_object()->set("eff_sen",this_object()->query("max_sen"));
+this_object()->set("force",this_object()->query("max_force"));
+this_object()->set("mana",this_object()->query("max_mana"));
+if ( !no_condition || no_condition<1 )
+        this_object()->clear_condition();
+}
+
+int self_purge()
+{
+object me=this_object();
+object link_ob = me->query_temp("link_ob");
+
+if ( !userp(me) )
+        return 0;
+/*----------------------------
+Removed since we don't use
+this part.
+Re-removed again on the same
+day :-)
+        Dream 12/11/97.
+-----------------------------*/
+if ( (int)me->query("max_kee") > 0
+  && (int)me->query("max_sen") > 0 )
+        return 0;
+set_heart_beat(0);
+ghost =1;
+me->move("/d/death/block.lpc");
+CHANNEL_D->do_channel(me, "rumor", me->query("name")
+                + "因为年纪太大，心力交瘁，不幸与世长辞，永远离开了我们！");
+return 1;
+}
+
+void gameover()
+{
+object me = this_object();
+
+/*----------------------------
+currently, only move the
+player to /d/death/block.c
+----------------------------*/
+if ( !userp(me) ) return;
+
+
+me->move("/d/death/block.lpc");
+if( !me->query("life/death_announced") )
+        {
+        me->set("life/death_announced", 1);
+        CHANNEL_D->do_channel(load_object(COMBAT_D), "rumor", me->query("name")
+            + "寿终正寝，永远地离开了我们。");
+        }
+}
+
+/*----------------------------
+                weiqi/98/12/31
+----------------------------*/
+int check_gameover()
+{
+object me = this_object();
+
+return 0;
+
+if ( wizardp(me) || !userp(me) )
+        return 0;
+
+if ( me->query("age")<=me->query("life/life_time")
+  || me->query("life/live_forever") )
+        return 0;
+
+/*----------------------------
+        now gameover le
+----------------------------*/
+gameover();
+return 1;
+}
+
+void announce_live_forever(string reason)
+{
+object me = this_object();
+object dadi;
+
+if ( !reason )
+        return;
+
+if ( me->query("life/live_forever_announced") )
+        return;
+
+me->set("life/live_forever_announced", 1);
+me->set("life/live_forever", 1);
+
+dadi = new("/d/wiz/npc/dadi.lpc");
+dadi->move(environment(me));
+
+message_vision(HIY"只听一阵仙乐缥缈，一驾五彩云车从天缓缓而降。\n"NOR, dadi);
+message_vision(HIY"$N从车上立起身来对$n一拱手：恭喜！恭喜！\n"NOR, dadi, me);
+dadi->command_function("chat "+reason);
+message_vision(HIY"$N一挥手，云车渐渐淡去...\n"NOR, dadi);
+destruct(dadi);
+
+return;
+}
+
+varargs int receive_damage(string type, int damage, object who)
+{
+mapping shield;
+string msg;
+object fabao;
+int max_damage,val,mana,level;
+
+if ( damage < 0 ) return 0;//add by fang
+if ( damage < 0 )
+        {
+        damage = 0;
+//      error("F_DAMAGE: 伤害值为负值。\n");    
+      write_file("/c/log/伤害出错",sprintf(" %O 调用伤害，伤害值为负值。\n",this_object()) );
+        }
+
+if( type!="kee" && type!="sen" )
+        error("F_DAMAGE: 伤害种类错误( 只能是 kee, sen 其中之一 )。\n");
+
+/*----------------------------
+这里自动设置被击者的最后伤害
+者的数据，如果是护法，则最后
+伤害者为击打者的主人
+数据为 temp:invoker
+----------------------------*/
+if( objectp(who) )
+        {
+        if (objectp(who->query_temp("invoker")) )
+                who=who->query_temp("invoker");
+        set_temp("last_damage_from", who);
+        }
+
+mana=0;
+level=0;
+/*----------------------------
+        使用魔法盾
+----------------------------*/
+if ( this_object()->is_fighting() && query_temp("apply/manashieldflag")==1 )
+        {
+        val = query("mana");
+        level = query("level");
+        if ( val>100 )
+                {
+                if ( level>=100 )
+                        {
+                        max_damage = 3000;      
+                        mana=val;
+                        }
+                else if ( level>=50 )
+                        {
+                        mana=val/2;
+                        max_damage = 1200;
+                        }
+                else    {
+                        mana=0;
+                        max_damage = 500;       
+                        }
+                if ( damage>=max_damage )
+                        {
+                        message_vision(HIB"$N"HIB"周身的蓝色光晕一闪，似泡沫般碎开。\n"NOR,this_object());
+                        this_object()->delete_temp("apply/manashieldflag");
+                        damage-= max_damage;
+                        }
+                else if ( mana>=damage*4 )
+                        {
+                        if ( level>=50 )
+                                set("mana",mana-(damage*4));
+                        else if ( level>=25 )
+                                set("mana",2*(mana-(damage*4)));
+                        else    set("mana",0);
+                        damage = 0;
+                        }
+                else    {
+                        damage = damage-mana;
+                        if ( query_temp("apply/manashieldflag")==1 )
+                                set("mana",0);
+                        }
+                message_vision(HIB"$N"HIB"周身的蓝色光晕一阵波动，卸去了部分伤害。\n"NOR,this_object());
+                }
+        }
+/*----------------------------
+为超级道具而加，数据为mapp
+temp("apply/super_shield",([
+        "type"   : "kee"|"sen"|"eff_sen"|"eff_kee",
+        "persent": (int)pot 能抵挡pot%的伤害1-100%
+        "unenduring": (int)pot 减少的持久,0<pot<max_enduring
+        "fabao"  : (obj)ob 此道具
+]));
+        snowtu/2004/10/30
+----------------------------*/
+shield = query_temp("apply/super_shield");
+if ( shield && mapp(shield) && this_object()->is_fighting() )
+        {
+        fabao = shield["fabao"];
+        if ( !fabao || !present(fabao,this_object()) )
+                this_object()->delete_temp("apply/super_shield");
+        else if ( shield["type"]==type )
+                {
+                int per,unend;
+                per = shield["persent"];
+                if ( per>100 )
+                        per = 100;
+                if ( per>0 && damage>0 )
+                        {
+                        damage-= damage*per/100;
+                        msg = CYN"$n"CYN"身体微微一斜，用"+fabao->name()+CYN"硬挡了这一击。\n"NOR;
+                        }
+                if ( damage<=0 )
+                        damage = 0;
+                unend = shield["unenduring"];
+                if ( unend>0 )
+                        {
+                        msg+= CYN+fabao->name()+CYN"上现出一道裂痕。\n"NOR;
+                        fabao->add("unenduring",-unend);
+                        if ( fabao->query("unenduring")<=0 )
+                                {
+                                msg+= CYN+fabao->name()+CYN"抵挡不住伤害，碎掉了！\n"NOR;
+                                destruct(fabao);
+                                }       
+                        }
+                this_object()->set_temp("super_shiled_msg",msg);
+                }
+        }
+
+while( random((int)query_skill("jiayi-force")/100+1)>3 && query("jiayi_second")>0 )
+      damage -= damage/3;
+val = (int)query(type)-damage;
+
+if ( val>=0 )
+        set(type, val);
+else    {
+        set(type,-1);
+        /*----------------------------
+                added by mon for
+                pk and nk.
+                60秒之内未必昏迷
+        ----------------------------*/
+        if ( living(this_object()) && objectp(who)
+           && userp(who) && !query_temp("last_fainted_from") )
+                {
+                set_temp("last_fainted_from",who->query("id"));
+                if ( userp(this_object()) )
+                        call_out("remove_faint",60,this_player());
+        /*----------------------------
+        防止帮助他人打昏NPC或玩家来获得DX，
+        必须在昏迷后等待60秒
+        对于NPC,last_fainted_from的标志将
+        不会被抹去，因而第一个打昏NPC的是
+        唯一能得到dx的，从而不能打昏NPC以
+        帮助别人获得DX
+        ----------------------------*/
+                }
+        }
+set_heart_beat(1);
+return damage;
+}
+
+void remove_faint(object me)
+{
+if ( me )
+        me->delete_temp("last_fainted_from");
+}
+
+varargs int receive_wound(string type, int damage, object who)
+{
+int val;
+
+if ( damage < 0 ) return 0;//add by fang
+if ( damage<0 )
+        {
+        damage = 0;
+        write_file("/c/log/伤害出错",sprintf(" %O 调用 内伤，伤害值为负值。\n",this_object()) );
+        }
+if( type!="kee" && type!="sen" )
+        error("F_DAMAGE: 伤害种类错误( 只能是 kee, sen 其中之一 )。\n");
+
+if( objectp(who) )
+        {
+        if ( objectp(who->query_temp("invoker")) )
+                who=who->query_temp("invoker");
+        set_temp("last_damage_from", who);
+        }
+
+while( random((int)query_skill("jiayi-force")/100+1)>5 && query("jiayi_second")>1 && random(3)==1 )
+      damage -= damage/3;
+val = (int)query("eff_" + type) - damage;
+
+if ( val>=0 )
+        set("eff_" + type, val);
+else    {
+        set( "eff_" + type, -1 );
+        val = -1;
+
+        if ( living(this_object()) && objectp(who)
+          && userp(who) && !query_temp("last_fainted_from") )
+                {
+                set_temp("last_fainted_from",who->query("id"));
+                if ( userp(this_object()) )
+                        call_out("remove_faint",60,this_player());
+                }
+        }
+
+if ( (int)query(type) > val )
+        set(type, val);
+
+set_heart_beat(1);
+return damage;
+}
+
+int receive_heal(string type, int heal)
+{
+int val;
+
+if ( heal<0 )
+        error("F_DAMAGE: 恢复值为负值。\n");
+if ( type!="kee" && type!="sen" )
+        error("F_DAMAGE: 恢复种类错误( 只能是 kee, sen 其中之一 )。\n");
+
+val = (int)query(type) + heal;
+
+if ( val>(int)query("eff_" + type) )
+        set(type, (int)query("eff_" + type));
+else    set(type, val );
+
+return heal;
+}
+
+int receive_curing(string type, int heal)
+{
+int max, val;
+
+if ( heal<0 )
+        error("F_DAMAGE: 恢复值为负值。\n");
+if ( type!="kee" && type!="sen" )
+        error("F_DAMAGE: 恢复种类错误( 只能是 kee, sen 其中之一 )。\n");
+
+val = (int)query("eff_" + type);
+max = (int)query("max_" + type);
+
+if( val + heal > max )
+        {
+        set("eff_" + type, max);
+        return max - val;
+        }
+else    {
+        set( "eff_" + type, val + heal);
+        return heal;
+        }
+}
+
+
+/*----------------------------
+        snowcat feb 8 1998
+从时间来看，这个应该是因骑马
+的bug而加的了，:)
+----------------------------*/
+void remove_ride ()
+{
+object rider, ridee;
+
+if (ridee = query_temp("ridee"))
+        ridee->delete_temp("rider");
+delete_temp("ridee");
+add_temp("apply/dodge",-query_temp("ride/dodge"));
+set_temp("ride/dodge",0);
+if ( rider = query_temp("rider") )
+        rider->remove_ride();
+delete_temp("rider");
+}
+
+void unconcious()
+{
+object defeater;
+object me = this_object();
+
+/*----------------------------
+        如果是不死地
+        比如擂台一类
+----------------------------*/
+if ( environment() && environment()->query("alternative_die")
+  && me->query_temp("alternative_die")!=1 )
+        {
+        environment()->alternative_die(this_object());
+        return;
+        }
+
+if ( !living(this_object()) )
+        return;
+
+        /*----------------------------
+        加入了描述提示，以方便巫师
+        做相应的测试
+        并将poweup函数加入此，以减
+        小系统频繁的调用其他文件
+                snowtu/2004/10/28
+        ----------------------------*/
+if ( wizardp(this_object()) && query("env/immortal") )
+        {
+        message("vision",HIR+"\n"+this_object()->name()+HIR"身子一歪，险些栽倒．．．\n\n" NOR,environment(),this_object());
+        tell_object(this_object(),HIY"你使用巫师神力使自己迅速恢复了正常。\n"NOR);
+        powerup();
+        return;
+        }
+if ( objectp(defeater = query_temp("last_damage_from")) )
+        COMBAT_D->winner_reward(defeater, this_object());
+
+this_object()->remove_all_enemy();
+remove_ride();
+
+message("system", HIR "\n你的眼前一黑，接着什么也不知道了．．．\n\n" NOR,this_object());
+this_object()->disable_player(" <昏迷不醒>");
+//      set("gin", 0);
+set("kee", 0);
+set("sen", 0);
+set_temp("block_msg/all", 1);
+COMBAT_D->announce(this_object(), "unconcious");
+
+call_out("revive", random(100-query("con"))+30 );
+}
+
+varargs void revive(int quiet)
+{
+remove_call_out("revive");
+
+/*----------------------------
+delete_temp("last_fainted_from");
+revive 不能移除此标记
+----------------------------*/
+/*----------------------------
+  有的时候玩家清醒过来后
+  可能会依然不能动，从而
+  不能自行恢复HP
+  所以清除相关的标记
+----------------------------*/
+delete_temp("no_move");
+delete_temp("no_special");
+if ( this_object()->is_busy() )
+        this_object()->start_busy(1);
+
+while ( environment()->is_character() )
+        this_object()->move(environment(environment()));
+this_object()->enable_player();
+set_temp("block_msg/all", 0);
+if ( !quiet )
+        {
+        COMBAT_D->announce(this_object(), "revive");
+        message("system", HIY "\n慢慢地你终于又有了知觉．．．\n\n" NOR,this_object());
+        }
+}
+
+void die()
+{
+object corpse, killer,me, guai;
+object *inv;
+int i;
+string last_fainted_from, str;
+
+me = this_object();
+if ( environment() && environment()->query("alternative_die")
+  && me->query_temp("alternative_die")!=1 )
+        {
+        environment()->alternative_die(this_object());
+        return;
+        }
+me->delete_temp("alternative_die");
+if ( query_temp("last_fainted_from") )
+        last_fainted_from = query_temp("last_fainted_from");
+
+if ( !living(this_object()) )
+        revive(1);
+if ( wizardp(this_object()) && query("env/immortal") )
+        {
+        message("vision",HIR+"\n"+this_object()->name()+HIR"脸色一变，险些栽倒．．．\n\n" NOR,environment(),this_object());
+        tell_object(this_object(),HIY"你使用巫师神力使自己迅速恢复了正常。\n"NOR);
+        powerup();
+        return;
+        }
+
+this_object()->clear_condition();
+
+/*----------------------------
+因为last_fainted_from被revive()
+清除了，所以需要
+----------------------------*/
+if ( last_fainted_from )
+        set_temp("last_fainted_from",last_fainted_from);
+
+COMBAT_D->announce(this_object(), "dead");
+
+/*----------------------------
+        不死标志，只能一次
+----------------------------*/
+if( me->query("no_die") )
+        {
+        if( objectp(corpse=CHAR_D->make_corpse(this_object(), killer)) )
+        if( random(10)==0 )  {
+                if( objectp(corpse=CHAR_D->make_corpse(this_object(), killer)) )
+                                      corpse->move(environment());
+                }
+        this_object()->remove_all_killer();
+        all_inventory(environment())->remove_killer(this_object());
+        this_object()->dismiss_team();
+        powerup();
+        me->set("kee",me->query("max_kee")/3);
+        me->set("sen",me->query("max_sen")/3);
+        me->move("/d/city/kezhan");
+        me->delete("no_die");
+        remove_ride();
+        str = me->name()+HIM"被杀死了，所幸阳寿未尽，被阎王放归阳世。";
+        message("channel:rumor",HIM"【"HIG"顺风耳"HIM"】某人："+str+"\n"NOR,users());
+        log_file("taskdeath",sprintf("[%s] %s 使用 不死记录 一次.\n",
+                                        ctime(time()),
+                                        this_object()->query("id") )
+                );
+
+        message_vision(HIR"一阵浓雾升起，$N"HIR"的魂魄从地府里给踢了回来。\n"NOR,me);
+        return;
+        }
+
+/*----------------------------
+        如来任务
+----------------------------*/
+if ( me->query("rulaitask/get") )
+        {
+        guai = me->query("rulaitask/guai");
+        if ( guai==me->query_temp("last_damage_from")
+          || guai == me->query_temp("last_opponent") )
+                {
+                powerup();
+                me->set("kee",me->query("max_kee")/3);
+                me->set("sen",me->query("max_sen")/3);
+                me->add("combat_exp",-1000);
+                me->add("daoxing",-1000);
+                me->add("rulaitask_log/die",1);
+                me->delete("rulaitask/get");
+                me->set("rulaitask/fail",1);
+                str = me->name()+HIM"被"+guai->name()+HIM"杀死了，所幸"HIY"如来"HIM"及时出手相救，才捡回一命。";
+                message("channel:rumor",HIM"【"HIG"千里眼"HIM"】某人："+str+"\n"NOR,users());
+                log_file("taskdeath",sprintf("[%s] %s is task killed by %s.\n",
+                                                ctime(time()),
+                                                this_object()->query("id"),
+                                                guai->name() )
+                        );
+                remove_ride();
+                me->move("/d/qujing/lingshan/daxiong");
+                message_vision(HIY"如来佛一伸左手把$N"HIY"的魂魄从地府里拉了回来，再一伸右手不知道从
+哪里把$P的尸体抓了回来，接着两手一合，硬生生地把$N"HIY"魂魄逼回身体。\n"NOR,me);
+                me->unconcious();
+                me->start_busy(10);
+                return;
+                }
+        }
+
+/*----------------------------
+        销毁身上的法宝
+----------------------------*/
+inv = all_inventory(this_object());
+for(i=0; i<sizeof(inv); i++)
+        {
+        if( inv[i]->query("owner_id")==getuid(this_object()) )
+                {
+                tell_object(this_object(), HIB"你看到"+inv[i]->query("name")+HIB"破空而去，慢慢消失在天际．．．\n"NOR);
+                destruct( inv[i] );
+                }
+        }
+
+if ( (int)this_object()->query("max_kee")>0
+  && (int)this_object()->query("max_sen") > 0 )
+        {
+        if ( objectp(killer=query_temp("last_damage_from")) )
+                {
+                set_temp("my_killer", killer->query("id"));
+                COMBAT_D->killer_reward(killer, this_object());
+                if ( userp(this_object()) )
+                        log_file("death",sprintf("[%s] %s is killed by %s.\n",
+                                                ctime(time()),
+                                                this_object()->query("id"),
+                                                killer->query("id") )
+                                );
+                }
+        /*----------------------------
+                没有杀害标志
+                比如中毒等
+                可以从死亡信息 (temp death_msg)
+                中得到描述
+        ----------------------------*/
+        else    {
+                if ( userp(this_object()) )
+                        {
+                        COMBAT_D->victim_penalty(this_object());
+                        if ( str=this_object()->query_temp("death_msg") )
+                                str=this_object()->name(1)+str;
+                        else    str=this_object()->name(1)+"莫名其妙地死了。\n";
+                        COMBAT_D->announce(this_object(), "death_rumor", str);
+                        log_file("death",sprintf("[%s] %s is killed: %s.\n",
+                                                ctime(time()),
+                                                this_object()->query("id"),
+                                                str )
+                                );
+                        }
+                }
+        }
+
+remove_ride();
+
+if ( objectp(corpse = CHAR_D->make_corpse(this_object(), killer)) )
+        corpse->move(environment());
+
+this_object()->remove_all_killer();
+all_inventory(environment())->remove_killer(this_object());
+
+this_object()->dismiss_team();
+if ( this_object()->self_purge() )
+        return;
+
+if ( userp(this_object()) )
+        {
+        set("kee",1);
+        set("eff_kee",1);
+        set("sen",1);
+        set("eff_sen",1);
+
+        /*----------------------------
+                这里减少阳寿
+        ----------------------------*/
+        if ( !this_object()->query("life/life_time") )
+                this_object()->set("life/life_time",60);
+        if ( !this_object()->query("life/no_death_decrease") )
+                this_object()->set("life/life_time", (int)this_object()->query("life/life_time")-1);
+        /*----------------------------
+                检查是否阳寿已尽
+        ----------------------------*/
+        if ( check_gameover() )
+                return;
+
+        ghost = 1;
+        this_object()->move(DEATH_ROOM);
+        DEATH_ROOM->start_death(this_object());
+        }
+else    destruct(this_object());
+}
+
+void reincarnate()
+{
+ghost = 0;
+/*----------------------------
+drop all,否则会将鬼魂带出地府
+----------------------------*/
+command("drop all");
+//      set("eff_gin", query("max_gin"));
+set("eff_kee", query("max_kee"));
+set("eff_sen", query("max_sen"));
+}
+
+int max_food_capacity()
+{
+int final;
+final=(int)query_weight()/200;
+if ( final<100 )
+        final=100;
+return final;
+}
+
+int max_water_capacity()
+{
+int final;
+final=(int)query_weight()/200;
+if ( final<100 )
+        final=100;
+return final;
+}
+
+int max_level_exp()
+{
+int max_exp,lvl = query("level");
+if ( lvl<5 )
+        max_exp = 100;
+else if ( lvl<50 )
+        max_exp = (lvl+5)*(lvl+5)*1500;
+else if ( lvl<200 ) max_exp = (lvl+1)*(lvl+1)*1000;
+else    max_exp = (lvl+1)*(lvl+1)*700;
+if ( max_exp>1000000000 )   max_exp = 1000000000;
+if ( max_exp<0 )   max_exp = 1500000000;
+return max_exp;
+}               
+
+int heal_up()
+{
+int update_flag, i,lvl,exp;
+mapping my;
+string msg;
+
+my = query_entire_dbase();
+
+//升级设置
+exp = my["level_exp"];
+lvl = my["level"];
+if ( exp>=max_level_exp() && !query_temp("level_up_ing") )
+        {
+        this_object()->set_temp("level_up_ing",1);
+        msg = HIY+@MSG  
+
+           __▁           __▁                   ___
+  █     █__   █  █  █__    █      █  █  █__█
+  █__▁ █__▁ ◥__◤  █__▁  █__▁  █__█  █
+
+                %s 升级了！
+
+MSG+NOR;
+        msg = replace_string(msg,"升级了！",NOR BLINK HIR"升级了！"NOR HIY);
+        message("vision",sprintf(msg,NOR BLINK+HIR+this_object()->name()+NOR),environment(this_object()),this_object());
+        tell_object(this_object(),sprintf(msg,NOR BLINK HIR"你"NOR));
+        my["level_exp"]= 0;
+        my["level"]++;
+        tell_object(this_object(),sprintf( WHT"【"YEL"系统"WHT"】"YEL"目前等级为"HIY" %d"NOR YEL" 级！\n"NOR,my["level"] ) );
+        this_object()->save();
+        this_object()->delete_temp("level_up_ing");
+        }       
+        
+if ( environment() )
+        {
+        if ( environment()->query("no_time") )
+                return -1;
+        }
+
+update_flag = 0;
+
+
+/*----------------------------
+        mon 01/23/99
+----------------------------*/
+if ( sizeof(query_temp("no_heal_up")) )
+        return update_flag;
+
+/*----------------------------
+        mon 01/22/99
+allow_heal_up 将允许NPC战斗时
+heal up 默认为no help up.
+----------------------------*/
+if ( !userp(this_object())
+  && this_object()->is_fighting()
+  && !my["allow_heal_up"] )
+        return update_flag;
+
+if ( my["water"]>0 )
+        {
+        my["water"]-= 1;
+        update_flag++;
+        }
+if ( my["food"]>0 )
+        {
+        my["food"]-= 1;
+        update_flag++;
+        }
+
+if ( my["water"] < 1 && userp(this_object()) )
+        return update_flag;
+
+/*----------------------------
+kee和force依赖饮水来自动恢复
+----------------------------*/
+
+my["kee"] += my["con"]/3 + my["force"]/10;
+
+if ( my["kee"]>=my["eff_kee"] )
+        {
+        my["kee"] = my["eff_kee"];
+        if( my["eff_kee"]<my["max_kee"] )
+                {
+                my["eff_kee"] ++;
+                update_flag++;
+                }
+        }
+else    update_flag++;
+
+if ( my["max_force"] && my["force"]<my["max_force"] )
+        {
+        my["force"]+= (int)this_object()->query_skill("force",1)/2;
+        if( my["force"]>my["max_force"] )
+                my["force"] = my["max_force"];
+        update_flag++;
+        }
+
+if ( my["food"]<1 && userp(this_object()) )
+        return update_flag;
+
+if ( my["max_atman"] && my["atman"]<my["max_atman"] )
+        {
+        my["atman"]+= (int)this_object()->query_skill("magic",1)/2;
+        if( my["atman"]>my["max_atman"] )
+                my["atman"] = my["max_atman"];
+        update_flag++;
+        }
+
+/*----------------------------
+sen和mana依赖饮食来自动恢复
+----------------------------*/
+my["sen"] += my["con"] / 3 + my["mana"] / 10;
+if( my["sen"] >= my["eff_sen"] )
+        {
+        my["sen"] = my["eff_sen"];
+        if( my["eff_sen"]<my["max_sen"] )
+                {
+                my["eff_sen"]++;
+                update_flag++;
+                }
+        }
+else    update_flag++;
+
+if( my["max_mana"] && my["mana"]<my["max_mana"] )
+        {
+        my["mana"]+= (int)this_object()->query_skill("spells", 1)/2;
+        if( my["mana"] > my["max_mana"] ) my["mana"] = my["max_mana"];
+        update_flag++;
+        }
+return update_flag;
+}
+
+
+

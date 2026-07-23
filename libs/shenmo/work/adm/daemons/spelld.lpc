@@ -1,0 +1,414 @@
+#include <ansi.h>
+#include "/adm/daemons/spells.h"
+
+mapping xian_class=([
+        "damage_h" : ({ "buddhism","lamaism","tongtian-dafa","yuxu-spells","mysticism","taoism","mahayana","baguazhou","dengxian-dafa","youming-spells","molian-spells","mozhou","taixu-spells",}), 
+        "damage_m" : ({ "taiyi","xianfeng-spells","dao","moonshentong","chanzong","qiankun-danuoyi","mingyu-jue","tianmogong","pansi-dafa","xiuluo-yinshagong",}),      
+        "damage_l" : ({ "seatong","taixu-spells","spirit-power","feisheng","gouhunshu","renshu","tianjijue","xueying-xianfa","yaofa","pingtian-dafa","bihai-spells",}),    
+]);
+
+int check_class(object attacker, object target)
+{
+int neutral=0;
+int result=0;
+string aclass, tclass;
+    
+aclass = COMBAT_D->check_class(attacker);
+aclass = COMBAT_D->check_class(target);
+
+if (aclass=="xian")
+        { 
+        if (tclass=="xian") result=0;
+        if (tclass=="human") result=1;
+        if (tclass=="yao") result=-1;
+        }
+if (aclass=="human")
+        { 
+        if (tclass=="xian") result=-1;
+        if (tclass=="human") result=0;
+        if (tclass=="yao") result=1;
+        }
+if (aclass=="yao")
+        { 
+        if (tclass=="xian") result=1;
+        if (tclass=="human") result=-1;
+        if (tclass=="yao") result=0;
+        }
+if( aclass == "saint" )
+        {
+                if (tclass=="saint") result=0;
+        else result=1;
+
+        }
+return result;
+}
+
+int attacking_cast_success(object attacker, object target)
+{
+int ap, dp, success,success_adj;
+int xk;
+string spells;
+
+ap = attacker->query_skill("spells");
+ap = ( ap /20 * ap /20 * ap / 20 ); 
+
+ap = ap*(1+attacker->query("daoxing")/400000000);
+ap = ap+attacker->query("daoxing")/800;
+ap = ap/10;
+if ( ap < 1 )    ap = 1;
+dp = target->query("daoxing")/800 + target->query("combat_exp")/1600;
+dp = dp/10;
+success = 0;
+spells=attacker->query_skill_mapped("spells");
+success_adj=att_cast[spells]["success_adj"]; //取值
+
+if ( attacker->query_temp("apply/cast_success") ) 
+        success_adj+=attacker->query_temp("apply/cast_success");
+if ( success_adj < 20 ) 
+        success_adj = 20;
+if( success_adj > 500 ) 
+        success_adj = 500;
+ap = ap*success_adj/100;
+xk = check_class(attacker, target);
+if( xk>0 ) 
+        dp=dp *3/10;
+else if(xk<0) 
+        {
+        xk=-xk;
+        ap=ap*3/10;
+        }
+if ( random(100)>dp*100/(ap+dp) ) 
+        success = 1;
+return success; 
+}
+
+int attacking_cast_damage(object attacker, object target)
+{
+int a_fali, d_fali, a_shen, d_shen, damage;
+int xk,damage_lvl,damage_adj;
+string aspell;
+
+aspell=attacker->query_skill_mapped("spells");
+damage_adj=att_cast[aspell]["damage_adj"]; //取值
+
+if( damage_adj < 50 ) damage_adj = 50;
+if( damage_adj > 600 ) damage_adj = 600;
+
+a_fali = attacker->query("mana");
+if( a_fali > 2*attacker->query("max_mana") ) 
+        a_fali = 2*attacker->query("max_mana");
+d_fali = target->query("mana");
+if( d_fali > 2*target->query("max_mana") ) 
+        d_fali = 2*target->query("max_mana");
+
+a_shen = attacker->query("eff_sen");
+if( a_shen > 5000 && !userp(attacker) ) 
+        a_shen = 5000;
+d_shen = target->query("eff_sen");
+if( d_shen > 5000 && !userp(target) ) 
+        d_shen = 5000;
+
+        //fali and shen.
+a_fali=a_fali/20+random(a_shen / 20);
+d_fali=d_fali/20+random(d_shen / 20);
+
+//mana_factor, here the attacker has some advantage.
+//the damage_adj higher, the better for attacker.
+a_fali+=(2*damage_adj/100)*(attacker->query("mana_factor"));
+d_fali+=2*random(target->query("mana_factor"));
+
+xk=check_class(attacker, target);
+if(xk>0) 
+        d_fali=d_fali*(5-xk)/5;
+else if(xk<0) 
+        {
+        xk=-xk;
+        a_fali=a_fali*(5-xk)/5;
+        }
+damage_lvl=0;
+if ( member_array(aspell, xian_class["damage_h"])>-1 ) 
+        damage_lvl=3;
+else    { 
+        if (member_array(aspell, xian_class["damage_m"])>-1 ) 
+                damage_lvl=2;
+        else if(member_array(aspell, xian_class["damage_l"])>-1) 
+                damage_lvl=1;
+         }
+     
+damage=(a_fali-d_fali)*(10+damage_lvl*3)/30;
+if( damage < 0 ) 
+        damage = damage - target->query("mana_factor"); 
+damage = damage*damage_adj/100; //last damage scaled again.
+
+        //finally, we need let the spell level useful...
+        //the setting is, at enabled level 800, the damage will double.
+        //it is level 200 for xyj2000, but that is not fit here. by windy 2011.08
+if( damage > 0 )
+        {
+        damage += (damage*(int)attacker->query_skill("spells"))/1200;
+        }
+else if ( damage < 0 )
+        {
+        damage += (damage*(int)target->query_skill("spells"))/1200;
+        }
+return damage;
+}
+
+//weiqi 981206
+//this function can be called when want apply a damage to a victim while allow
+//the victim use his/her self-made fabao to defense.
+void apply_damage(object winner, object victim, 
+        int damage, string damage_type, string msg_hit)
+{
+int i, temp, type, damage_qi, damage_shen, adjust, success, dzxy_lvl, spells_lvl, dzxy;
+object v_ar;
+mixed foo;
+object *inv;
+int def_count = 0;
+int dzxy_count = random(3);
+int xydz_count = random(3);
+string *msg_fabao = ({
+        "只见$N的$n霞光一闪！\n",
+        "只见$N的$n霞光再闪！\n",
+        "只见$N的$n霞光又一闪！\n",
+        "只见$N的$n霞光再一闪！\n"
+});
+string *msg_dzxy = ({
+        WHT"只见$n身如飘风，恰似漫天星移，诡异的一式，竟将$N的攻势尽数化去！\n"NOR,
+        YEL"蓦地里天地间弥漫着一股神奇的力量，将$N的法力一引一带，$n则借力轻轻越起，身行落在一旁！\n"NOR,
+        BLU"$n妙悟紫薇心法，星移斗转，$N击向$n的$n的招数莫名奇妙的失了准头！\n"NOR,
+        CYN"$n右手食指斜指苍天，同时左手无名指遥指$N，瞬间将$N此招化去！\n"NOR
+});
+
+string *msg_xydz = ({
+        WHT"$n借造化之力，星移斗转，$N这招莫名其妙的在中途转了方向，直奔自己袭来！\n"NOR,
+        YEL"$n灵台空明，双手在胸前轮转不定，刹那间竟将$N的成名绝技反施于$N的身上！\n"NOR,
+        BLU"$n凝神归元，抬手隔空向$N连弹三下，$N好似受了诅咒一般，自己打起了自己！\n"NOR,
+        CYN"$n身行飘忽不定，在星移斗转之间反用$N的招数击向$N，真真令$N百思不得其解！\n"NOR
+});
+
+if( victim->query_temp("anti_magic") )
+        {
+        adjust=(int)victim->query_temp("anti_magic");
+        if( (int)victim->query("mana") < adjust)
+                success=0;
+        else    success=1;
+
+        if( success )
+                {
+                victim->add("mana", -adjust);
+                damage=damage-adjust*2-random(adjust*2);
+                if ( damage > 0 )
+                        message_vision("\n只见$N身后幻出千朵莲花，挡住了$n的攻势。\n", victim, winner);
+                else    message_vision("\n只见$N身后幻出千朵莲花，将$n的攻势尽数化解。\n", victim, winner);
+                }
+        }
+
+if((string)victim->query_skill_mapped("parry")=="douzhuan-xingyi" && (int)victim->query_skill("douzhuan-xingyi",1)>399)
+        {
+        dzxy_lvl=(int)victim->query_skill("douzhuan-xingyi", 1);
+        spells_lvl=(int)winner->query_skill("spells", 1);
+        if(random(dzxy_lvl) < spells_lvl/8 || (int)victim->query("mana") < dzxy_lvl)
+                dzxy=0;
+        else if(random(dzxy_lvl) < spells_lvl/2)
+                dzxy=1;
+        else    dzxy=2;
+
+        if( dzxy==1 )
+                {
+                victim->add("mana", -dzxy_lvl/4);
+                damage=0;
+                message_vision(msg_dzxy[dzxy_count], winner, victim);
+                }
+        else if( dzxy==2 )
+                {
+                victim->add("mana", -dzxy_lvl/2);
+                damage=0;
+                winner->receive_damage("kee",dzxy_lvl+random(dzxy_lvl),victim);
+                winner->receive_wound("kee",dzxy_lvl,victim);
+                winner->receive_damage("sen",dzxy_lvl+random(dzxy_lvl),victim);
+                winner->receive_wound("sen",dzxy_lvl,victim);
+                message_vision(msg_xydz[xydz_count], winner, victim);
+                COMBAT_D->report_status(winner);
+                COMBAT_D->report_sen_status(winner);
+                }
+        }
+        
+v_ar = present("jia sha",victim);
+if( objectp(v_ar) && v_ar->query("equipped") )
+{
+		foo = v_ar->ob_hit_msg(victim,winner,damage);
+		if( stringp(foo) )
+				msg_hit += foo;
+		foo = v_ar->ob_hit_int(victim,winner,damage);
+		if( intp(foo) )
+				damage += foo;
+}
+
+if( damage <= 0 ) return;
+if(damage_type == "qi" || damage_type == "kee") 
+        {
+        damage_qi = damage;
+        damage_shen = 0;
+        type = 0;
+        }
+else if(damage_type == "shen" || damage_type == "sen") 
+        {
+        damage_qi = 0;
+        damage_shen = damage;
+        type = 1;
+        }
+else    {
+        damage_qi = damage;
+        damage_shen = damage;
+        type = 2;
+        }
+
+//check if the victim equipped defense fabao...
+inv = all_inventory(victim);
+for( i=0; i<sizeof(inv); i++)
+        {
+        if ( !inv[i]->query("series_no") 
+          || !inv[i]->query("fabao") 
+          || !inv[i]->query("equipped") )
+                continue;//not a equipped fabao.
+        if( (type == 0) || (type == 2) ) //check if can reduce damage_qi.
+                {
+                temp = inv[i]->protect_qi(damage_qi);
+                //temp is the damage left after fabao takes effect.
+                if( temp < damage_qi ) //means fabao useful.
+                        {
+                        damage_qi = temp;
+                        message_vision(msg_fabao[def_count], victim, inv[i]);
+                        def_count++;    
+                        }
+                }
+        if( (type == 1) || (type == 2) ) //check if can reduce damage_shen.
+                {
+                temp = inv[i]->protect_shen(damage_shen);
+                //temp is the damage left after fabao takes effect.
+                if( temp < damage_shen ) //means fabao useful.
+                        {
+                        damage_shen = temp;
+                        message_vision(msg_fabao[def_count], victim, inv[i]);
+                        def_count++;    
+                        }
+                }
+        }//end of for i=0 loop.
+
+//finally we can make damage to the victim...
+if( damage_qi > 0 || damage_shen > 0 )//produce the hit message...
+        {
+        if ( !winner->query("env/no_msg") && !victim->query("env/no_msg") )  
+                message_vision(msg_hit, winner, victim);
+        }
+else    {//the fabao saved the target...
+        if ( !winner->query("env/no_msg") && !victim->query("env/no_msg") )  
+                message_vision("结果$N的攻击完全被$n的法宝挡住！\n", winner, victim);
+        }
+if( damage_qi > 0 )
+        {
+        victim->receive_damage("kee", damage_qi, winner);
+        victim->receive_wound("kee", damage_qi/2, winner);      
+        COMBAT_D->report_status(victim);        
+        }
+if( damage_shen > 0 )
+        {
+        victim->receive_damage("sen", damage_shen, winner);
+        victim->receive_wound("sen", damage_shen/2, winner);    
+        COMBAT_D->report_sen_status(victim);
+        }
+return;
+}
+
+varargs void attacking_cast(
+        object attacker, 
+        object target, 
+        string damage_type, //must be "shen"/"sen", "qi"/"kee" or "both"(default)
+        string msg_init, 
+        string msg_success, 
+        string msg_fail, 
+        string msg_backfire_init,
+        string msg_backfire_success,
+        string cast_name)
+{
+int damage;
+//first, show the initial message...
+if ( !attacker || !target )  return;
+if ( !attacker->query("env/no_msg") && !target->query("env/no_msg") ) 
+        message_vision( msg_init, attacker, target );
+else    {
+        if ( !cast_name || !stringp(cast_name) )
+                cast_name = HIB"法术"NOR;
+        message_vision(CYN"$N"CYN"使出了"+cast_name+NOR CYN"！\n"NOR, attacker, target );
+        }
+//calculate if the casting can happen...
+if ( attacking_cast_success(attacker, target) == 0 )
+        {
+        if ( !attacker->query("env/no_msg") && !target->query("env/no_msg") ) 
+                message_vision( msg_fail, attacker, target );
+        //let the target kill attacker.
+        target->kill_ob(attacker);      
+        return;
+        }
+damage = attacking_cast_damage(attacker, target);
+if( damage > 0 ) //attacker hit target
+        apply_damage(attacker, target, damage, damage_type, msg_success);
+else if( damage < 0 ) //backfire
+        {
+        if ( !attacker->query("env/no_msg") && !target->query("env/no_msg") )          
+                message_vision(msg_backfire_init, attacker, target);
+        if(attacker->query("class")=="saint" || attacker->query("class")=="xian")
+                apply_damage(target, attacker, -damage/12, damage_type, msg_backfire_success);
+        else if (attacker->query("class")=="yao")
+                apply_damage(target, attacker, -damage/6, damage_type, msg_backfire_success);
+        else    apply_damage(target, attacker, -damage/3, damage_type, msg_backfire_success);
+        //这里着重减小saint和xian的反弹伤害，作为间接的对xian族法术的强化。 by windy 2011.08
+        }
+else //damge=0
+        message_vision(HIB "结果正好被$N以法力逼住，谁也没有吃亏。\n" NOR, target);
+
+//let the target kill attacker.
+target->kill_ob(attacker);
+return;
+}
+
+
+//1克制，-1被克，0，无
+varargs int wuxing_xs(string wx1,string wx2)
+{
+        mapping wuxing = ([
+        "木" : "土", "土" : "水", "水" : "火","火" : "金", "金" : "木",
+        ]);
+        if( !wx1 || !wx2 )
+                return 0;
+        if( wuxing[wx1]==wx2 )
+                return 1;
+        else if( wuxing[wx2]==wx1 )
+                return -1;
+        else    return 0;
+}               
+
+string query_time_wuxing()
+{
+        string shi,*sym_dee = ({ "子","丑","寅","卯","辰","巳","午","未","申","酉","戌","亥" }); 
+        int t = ((time()-900000000)*60);
+        mixed *local = localtime(t);
+        shi = sym_dee[(local[2]%24)/2];
+        switch(shi)
+        {
+                case "子" : return "水";
+                case "丑" : return "土";
+                case "寅" : return "木";
+                case "卯" : return "木";
+                case "辰" : return "土";
+                case "巳" : return "火";
+                case "午" : return "火";
+                case "未" : return "土";
+                case "申" : return "金";
+                case "酉" : return "金";
+                case "戌" : return "土";
+                case "亥" : return "水";
+                default   : return 0;
+        }
+}

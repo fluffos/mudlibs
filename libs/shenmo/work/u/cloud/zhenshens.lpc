@@ -1,0 +1,316 @@
+#include <ansi.h>
+
+string help_msg()
+{
+        string str = @HELP
+
+指令格式：  zhenshens changeup   炼真身，做世间完人
+            zhenshens changedown 破己真身，复常态
+            zhenshens shengyi    取得自己的黄金圣衣
+相关指令:   Quit
+注解    ：变身之后恢复原状，需要Quit之后才能再次变身！
+
+HELP;
+        return str;
+}
+        
+int main(object me, string arg)
+{
+        string id;
+        object obj,newob,have,*inv,ob;
+        int mana,spells,dmana,level,i,k,j,hh,flag=0;
+        mapping data,armor;
+        string *strs,str,tmp;
+        
+        seteuid(getuid());
+
+        if( me->is_fighting() )
+                return notify_fail("你正在战斗，无暇变身。\n");
+        if( me->is_busy() || me->query_temp("pending/exercising"))
+                return notify_fail("你正忙着呢，没工夫变身。\n");
+        if( !arg && arg!="changedown" && arg!="changeup" 
+          && arg!="shengyi" && arg!="armor" ) 
+                return notify_fail(help_msg());
+        if(arg=="changeup")
+        {
+                spells=me->query_skill("spells");
+                mana=me->query("mana");
+                level=me->query("level");       
+                if(me->query_temp("getdd/zhenshens")) 
+                        return notify_fail("你已经是金刚护体不坏之身了。\n");
+                if(spells<25)
+                        return notify_fail("你的法术不够。\n");
+                if(mana<150)
+                        return notify_fail("你目前法力不够充盈。\n");
+                if(level<50)
+                        return notify_fail("你的等级不够。\n");
+                newob = new("/obj/necklace");
+                if( newob )   
+                {
+                        newob->set("owner_id", me->query("id"));
+                        newob->set("armor_prop/armor",level+180);
+                        newob->set("level",level+10);
+                        newob->set("armor_prop/spells", level/2);
+                }
+                newob->move(this_player());
+                me->add_temp("armor_prop/armor_vs_force", level);
+                me->add_temp("apply/attack", level/2);
+                me->add_temp("apply/damage",level/2);
+                me->add_temp("armor_prop/dodge", level/2);
+                if( userp(me) && !wizardp(me) )
+                {
+                        message_vision(HIY "$N"HIY"心神宁静，席地而坐，口念咄咄咒语，头顶一缕浊气飘然而出．．．\n"
+          +"\n只见$N"HIY"全身发出阵阵声响，顿时天空云消雾散忽降五彩神光笼罩$N全身．．．．．．\n" 
+          +"\n$N"HIY"此时精神为之一振，霎时间过往云烟似乎看的淡而无形．．．．．．\n\n" NOR,me);
+                        message("channel:rumor",HIG+"【"HIW"大唐传说"HIG"】"HIC"弥勒佛"HIW"：据说"+me->query("name")+"破红尘，去杂念，超度真灵，修成不坏之体，并得到元素项链。\n"+NOR,users());
+                }
+                me->set_temp("zhenshens_time",time());
+                me->set_temp("getdd/zhenshens",1);
+        }
+
+        if(arg=="changedown") 
+        {
+                if(!me->query_temp("getdd/zhenshens")) 
+                        return notify_fail("你没得到不坏之身，怎么能恢复原状？！\n");
+                if(me->query_temp("zhenshendown")) 
+                        return notify_fail("你没得到不坏之身，无法恢复原状。\n");
+                me->add_temp("armor_prop/armor_vs_force", -level);
+                me->delete_temp("apply/attack");
+                me->delete_temp("apply/damage");
+                me->delete_temp("armor_prop/dodge");
+                me->set_temp("zhenshendown",1);
+                inv = all_inventory(me);
+                for(i=0; i<sizeof(inv); i++)  
+                {
+                        if( inv[i]->query("id") =="yuansu xianglian") 
+                        {
+                                message_vision(HIW"\n汝等小儿竟敢心怀杂念，乱我佛宗，收尔等项链，示惩戒。\n"NOR,me,inv[i]);
+                                destruct(inv[i]);
+                        }
+                }
+                message_vision(HIY "\n$N受到如此惊吓，心神大乱．．．半天才恢复原状。\n" NOR,me);
+                return 1;
+        }
+        
+        if( arg=="shengyi" )   
+        {
+                if( !me->query("sds3/all") )
+                        return notify_fail("你还没有自己的圣衣。\n");
+                if( !stringp(me->query("cloth_name")) )
+                        return notify_fail("你还没有自己命名的星座。\n");
+                if( me->query_temp("zhenshen_gold_cloth_get") )
+                        return notify_fail("你已经取得自己的黄金圣衣了。\n");
+                newob = new("/obj/gold_cloth");                 
+                if( !newob )
+                        return notify_fail("坏了，圣衣不见了！\n");
+                newob->set("owner_id",me->query("id"));         
+                if( !newob->restore() )
+                        return notify_fail("圣衣初始>>>>>>>>>>>失败。请联系wiz.\n");
+                if( !newob->move(me) )         
+                        return notify_fail("圣衣移动失败，请与巫师联系。\n");
+                newob->delete("series_no");
+                message_vision(HIY"\n$N"HIY"对着天边"+me->query("cloth_name")+HIY"座振臂一呼，一道金光笼罩住$N"HIY"！\n\n"NOR,me);
+                message("shout",WHT"\n只见遥远天际的"+me->query("cloth_name")+WHT"座忽然掠过一道光芒径直射向了"+environment(me)->query("short")+WHT"。\n\n"NOR,users());      
+                me->set_temp("zhenshen_gold_cloth_get",1);
+                return 1;
+        }
+/*
+        if( arg=="armor" )
+        {
+                armor = me->query("new_armor");
+                if( !armor || !mapp(armor) )
+                        return notify_fail("你还没有自己的专属防具。\n");
+                if( time()<me->query_temp("cmds_zhaohuan_armor")+300 )
+                        return notify_fail("你刚刚召唤过。\n");
+//add By snowtu
+                if( SDS_D->PvP(me) && random(10)!=7 )
+                        return notify_fail("你召唤失败。\n");
+                me->start_busy(1);
+                j = flag = 0;
+                tmp = "";
+                for(i=0;i<sizeof(keys(armor));i++)
+                {
+                        str = keys(armor)[i];
+                        if( !str || !stringp(str) )
+                                continue;
+                        ob = new("/obj/armor");
+                        if( !ob )      continue;
+                        if( !ob->move(me) )
+                        {
+                                destruct(ob);
+                                continue;
+                        }       
+                        ob->set("owner_id",me->query("id"));
+                        ob->set("no_give",1);   
+                        ob->set("armor_type",str);
+                        if( ob->restore() )
+                        {
+                                inv = all_inventory(me);
+                                for(k=0;k<sizeof(inv);k++)
+                                {
+                                        if( inv[k] && inv[k]!=ob 
+                                         && inv[k]->name()==ob->name() )
+                                                flag++;
+                                }
+                                if( flag>0 )
+                                {
+                                        destruct(ob);
+                                        continue;
+                                }
+                                else    
+                                {
+                                        j++;
+                                        tmp+= ob->name(1)+" ";
+                                        //防止equipped save导致bug
+                                        ob->delete("equipped");
+                                        ob->save();
+                                }
+                        }
+                        else      destruct(ob);
+                }       
+                if( j>0 )
+                {               
+                        me->set_temp("cmds_zhaohuan_armor",time());
+                        message_vision("$N成功召唤了 "+tmp+" 。\n",me);
+                }
+                write("ok.\n");
+                return 1;
+        }
+        
+        if( arg=="weapon" )
+        {       
+                if( !mapp(data=me->query("new_item")) )
+                        return notify_fail("你没有自己的专属武器。\n");
+                if( time()<me->query_temp("cmds_zhaohuan_weapon")+300 )
+                        return notify_fail("你刚刚召唤过。\n");
+                strs = keys(data);
+                i = sizeof(strs);
+                me->start_busy(1);
+                j = 0;
+                tmp = "";
+                for(i=0;i<sizeof(strs);i++)
+                {
+                        flag = 0;       
+                        str = strs[i];
+                        if( !str || !stringp(str) )
+                                continue;
+                        ob = new("/obj/weapon");
+                        if( !ob )      continue;
+                        if( !ob->move(me) )
+                        {
+                                destruct(ob);
+                                continue;
+                        }       
+                        ob->set("owner_id",me->query("id"));
+                        ob->set("skill_type",data[str][1]);
+                        ob->set_name(ob->name(),({str}));
+                        if( !ob->restore() )
+                        {
+                                if( file_size(ob->query_save_file()+".o")<=0 )
+                                        me->delete("new_item/"+str);                      
+                                destruct(ob);
+                                continue;
+                        }       
+                        inv = all_inventory(me);
+                        for(k=0;k<sizeof(inv);k++)
+                        {
+                                if( inv[k] && inv[k]!=ob 
+                                && inv[k]->name()==ob->name()
+                                && inv[k]->query("skill_type")==ob->query("skill_type") 
+                                && inv[k]->query("id")==ob->query("id") )
+                                {
+                                        flag++; 
+                                        break;
+                                }
+                        }
+                        if( flag>0 )   
+                        {
+                                destruct(ob);
+                                continue;
+                        }
+                        else    
+                        {
+                                j++;
+                                tmp+= ob->name()+" ";
+                        }
+                }
+                if( j>0 )
+                {               
+                        me->set_temp("cmds_zhaohuan_weapon",time());
+                        message_vision("$N成功召唤了 "+tmp+" 。\n",me);
+                }
+        write("OK.\n"); 
+        return 1;       
+        }        
+        
+        if( arg=="lianhua" )
+        {
+                armor = me->query("莲花");
+                if( !armor || !mapp(armor) )
+                        return notify_fail("你还没有自己的专属莲花。\n");
+                if( time()<me->query_temp("cmds_zhaohuan_lianhua")+300 )
+                        return notify_fail("你刚刚召唤过。\n");
+//add By snowtu
+                if( SDS_D->PvP(me) && random(10)!=7 )
+                        return notify_fail("你召唤失败。\n");
+                me->start_busy(1);
+                j = flag = 0;
+                tmp = "";
+                for(i=0;i<sizeof(keys(armor));i++)
+                {
+                        str = keys(armor)[i];
+                        if( !str || !stringp(str) )
+                                continue;
+                        ob = new("/quest/lianhua/lianhua");
+                        if( !ob )      continue;
+                        ob->set("armor_type",str);
+                        if( !ob->move(me) )
+                        {
+                                destruct(ob);
+                                continue;
+                        }       
+                        ob->set("owner_id",me->query("id"));                        
+                        if( ob->restore() )
+                        {
+                                ob->set_name(ob->query("name"),armor[str]);
+                                inv = all_inventory(me);
+                                for(k=0;k<sizeof(inv);k++)
+                                {
+                                        if( inv[k] && inv[k]!=ob 
+                                         && inv[k]->name()==ob->name() 
+                                         && inv[k]->query("armor_type")==ob->query("armor_type") )
+                                                flag++;
+                                }
+                                if( flag>0 )
+                                {
+                                        destruct(ob);
+                                        continue;
+                                }
+                                else    
+                                {
+                                        j++;
+                                        tmp+= ob->name(1)+" ";
+                                        //防止equipped save导致bug
+                                        ob->delete("equipped");
+                                        ob->save();
+                                }
+                        }
+                        else      destruct(ob);
+                }       
+                if( j>0 )
+                {               
+                        me->set_temp("cmds_zhaohuan_lianhua",time());
+                        message_vision("$N成功召唤了 "+tmp+" 。\n",me);
+                }
+                write("ok.\n");
+                return 1;
+        }
+*/
+        return notify_fail(help_msg());
+}
+
+int help(object me)
+{
+        write(help_msg());      
+        return 1;
+}

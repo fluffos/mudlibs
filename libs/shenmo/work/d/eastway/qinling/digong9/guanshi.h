@@ -1,0 +1,72 @@
+// Creat by windy 2/24/06 
+#include <ansi.h> 
+inherit ROOM; 
+void create () 
+{
+set ("hell", 1);
+set ("short", HIW"地陵棺室"NOR);  
+set ("long", @LONG 
+
+走到这里忽然开阔了许多，你举火定睛观看，原来这里是一 
+个地陵棺室。你大喜之下急忙走到棺椁旁边，却发现已经被 
+人打开了，大概是盗墓者所为。
+LONG);
+set("exits", ([ /* sizeof() == 5 */ 
+"southeast" : __DIR__"sanceng"+sprintf("%d",random(39)+20), 
+"northeast" : __DIR__"sanceng"+sprintf("%d",random(39)+20), 
+"southwest" : __DIR__"sanceng"+sprintf("%d",random(39)+20), 
+"northwest" : __DIR__"sanceng"+sprintf("%d",random(39)+20), 
+])); 
+set("item_desc" , ([ /* sizeof() == 1 */  
+"southeast": "黑咕隆咚的，什么也看不清楚。\n", 
+"southwest": "黑咕隆咚的，什么也看不清楚。\n", 
+"northwest": "黑咕隆咚的，什么也看不清楚。\n", 
+"northeast": "黑咕隆咚的，什么也看不清楚。\n", 
+])); 
+set("objects", ([ /* sizeof() == 1 */ 
+"/d/eastway/obj/bingma" : random(2), 
+"/d/eastway/qinling/npc/kulou" : random(2), 
+"/d/eastway/qinling/npc/kulou2" : random(2), 
+"/d/eastway/qinling/npc/xiangyu" : 1, 
+"/d/eastway/qinling/npc/spworker" : 1, 
+])); 
+setup(); 
+}
+/*
+void init() 
+{
+add_action("do_drop", "drop"); 
+add_action("do_perform", "perform");
+}
+int do_drop() 
+{
+object me; 
+me=this_player(); 
+tell_object(me,"这里这么黑，东西扔了就找不回来了!\n"); 
+return 1; 
+}
+int do_perform (string arg)
+{
+object who = this_player();
+if (arg=="hunpofeiyang" || arg=="sanjiao" || arg=="shixie" || arg=="piyi")
+{
+tell_object(who,"你发觉自己似乎被一种邪恶的力量控制着，许多绝技竟然施展不出！\n");
+return 1;
+}
+else return 0;
+}
+*/
+void reset() 
+{
+if ( !query("last_update_time")  
+|| time()>=query("last_update_time")+1800 )  
+{
+set("last_updata_time",time());  
+::reset(); 
+}
+return; 
+}
+int is_digong() 
+{
+return 1; 
+}

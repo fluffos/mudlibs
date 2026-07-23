@@ -1,0 +1,194 @@
+inherit NPC;
+inherit F_MASTER;
+
+mapping name1 = ([
+                "普" : "pu",
+                "广" : "guang",
+                "宗" : "zong",
+]);
+mapping name2 = ([
+                "心" : "xin",
+                "意" : "yi",
+                "能" : "neng",
+                "惠" : "hui",
+                "明" : "ming",
+                "智" : "zhi",
+                "贤" : "xian",
+                "信" : "xin",
+                "仁" : "ren",
+                "义" : "yi",
+                "礼" : "li",
+                "孝" : "xiao",
+                "悌" : "ti",
+]);
+
+
+string do_check()
+{
+object me = this_player();
+if ( !me || !living(me) )
+        return 0;
+if ( me->query_temp("shaolin_job_"+query("id")) )
+        return "贫僧不是聒噪之人。";
+if ( me->query_temp("shaolin_job_"+query("id")+"_fail") )
+        return "你还是先去修炼修炼。。。";      
+if ( me->query("family/shaolin_job_"+query("id")) )
+        return "你已通过了考验。";
+me->set_temp("shaolin_job_"+query("id"),1);
+return "想拜贫僧为师，便要受我三招考验，你可愿意(yes/no)?";
+}
+
+void do_check2(object,object);
+
+void create()
+{
+string name,*ids,*n,id1,id2;
+int i;
+n = keys(name1);
+i = random(sizeof(n));
+name = n[i];    
+id1 = name1[name];
+n = keys(name2);
+i = random(sizeof(n));
+name+= n[i];    
+id2 = name2[n[i]];
+id1+= " "+id2;
+ids = ({"gu seng",id1,id2});
+set_name(name,ids);
+seteuid(geteuid());
+setup();
+set("age", 24+random(20));
+set("gender", "男性");
+set("per",random(41));
+set("class","human");
+set("str", 40);
+set("max_force", 3000+random(1000));
+set("max_mana", 2000+random(1000));
+set("force_factor",300);
+set("daoxing", 100000+random(1000000));
+set("combat_exp", 15000000);
+
+set_skill("spells", 120);
+set_skill("chanzong", 120); 
+set_skill("unarmed", 420);
+set_skill("dodge", 120);
+set_skill("shaolin-shenfa", 120);
+set_skill("parry", 220); 
+set_skill("force", 120);
+set_skill("yijinjing", 400); 
+set_skill("stick", 220);
+
+map_skill("spells", "chanzong"); 
+map_skill("dodge", "shaolin-shenfa");
+map_skill("force", "yijinjing");
+set("inquiry",([
+        "考验"  :  (: do_check :),
+]));    
+create_family("少林寺",3,"弟子");
+set("level",350);
+set("title","鼓僧");
+carry_object("/d/shaolin/obj/sengpao")->wear();
+add_temp("apply/dodge",300);
+add_temp("apply/attack",300);
+add_temp("apply/damage",300);
+}
+
+void init()
+{
+add_action("do_yes","",1);
+}
+
+int do_yes()
+{
+object me = this_player();
+string verb = query_verb();
+if ( me->query_temp("shaolin_job_"+query("id")) )
+        {
+        if ( verb=="yes" )
+                {
+                message_vision("$N说道：我愿意一试。\n",me);
+                remove_call_out("do_check2");
+                call_out("do_check2",1,me,this_object());
+                return 1;
+                }
+        else if ( verb=="no" )
+                {
+                message_vision("$N面带难色，灰溜溜的退下。\n",me);
+                me->delete_temp("shaolin_job_"+query("id"));
+                me->set_temp("shaolin_job_"+query("id")+"_fail",1);
+                return 1;
+                }
+        }
+return 0;
+}
+
+void do_check2(object me,object who)
+{
+int kee,eff_kee,max_kee;        
+if ( !who )
+        return;
+if ( !me || !present(me,environment()) || !userp(me) )
+        return;
+me->delete("env/no_msg");        
+command("zhenshens changeup");
+command("nod");
+command("say 小心了！！\n\n");
+command("say 第一招！\n");
+COMBAT_D->do_attack(who,me,who->query_temp("weapon"));                  
+message_vision("\n\n",me);
+command("say 第二招！\n");
+COMBAT_D->do_attack(who,me,who->query_temp("weapon"));                  
+message_vision("\n\n",me);
+command("say 第三招！\n");
+COMBAT_D->do_attack(who,me,who->query_temp("weapon"));                  
+message_vision("\n\n",me);
+
+kee = me->query("kee");
+eff_kee = me->query("eff_kee");
+max_kee = me->query("max_kee");
+if ( kee<eff_kee|| eff_kee<max_kee )
+        {
+        command("sigh");
+        command("say 看来"+me->name(1)+"修为还是不够啊！\n");
+        me->delete_temp("shaolin_job_"+query("id"));
+        me->set_temp("shaolin_job_"+query("id")+"_fail",1);
+        return;
+        }
+command("great "+me->parse_command_id_list()[0]);
+me->set("family/shaolin_job_"+query("id"),1);
+CHANNEL_D->do_channel(this_object(),"chat",me->name(1)+"修为了得，通过了贫僧的考验。\n");
+return;
+}
+
+void recruit_apprentice(object ob)
+{
+if ( !ob  
+  || !ob->query("family/shaolin_job_"+query("id")) )
+        return;
+::recruit_apprentice(ob);
+return;
+}
+                
+void attempt_apprentice(object ob)
+{
+if ( !ob )  return;
+if ( ob->query("family/family_name")
+  && ob->query("family/family_name")!="少林寺" )
+        {
+        command("say 这位施主，开玩笑了。。。。 \n");
+        return;
+        }  
+if ( ob->query("family/generation")<=query("family/generation") )
+        {
+        command("say 阿弥陀佛，阿弥陀佛。。。。\n");
+        return;
+        }
+if ( !ob->query("family/shaolin_job_"+query("id")) )
+        {
+        command("say 你还没通过我的考验呢。\n");
+        return;
+        }               
+command("nod "+ob->parse_command_id_list()[0]);
+command("recruit "+ob->parse_command_id_list()[0]);
+}
+

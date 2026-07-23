@@ -1,0 +1,714 @@
+/**************************************************************
+**       版权所有(C)眠兔(snowtu)·西游记--神魔传说巫师组 2004         **
+**    原码公开仅供参考,任何人等未经同意,不得将此原码拷贝     **
+**    或更改以及使用于西游记--神魔传说以外之MUD站点.                 **
+**===========================================================**
+**相关:                                                      **
+**    一. 炼妖壶功能参考于<<轩辕剑>>系列;                    **
+**    二. 壶底世界典故:                                      **
+**        后遇张申,为云合治官,常悬一壶,如五升器大,变化为     **
+**    天地,中有日月,如世间,夜宿其内,自号"壶天",人谓"壶公"    **
+**                          宋·张君房<<云笈七鉴·二十八治>>   **
+**        壶公者,不知其姓名.今世所有召军符、召鬼神治兵王府   **
+**    符凡二十余卷,皆出于壶公,故曰为壶公符,汝南费长房为市掾  **
+**    时,忽见公从远方来,入市卖药,人莫识之.其卖药口不二价,治  **
+**    百病皆愈,语买药者曰:服此药必吐出某物,某日当愈.皆如其言.**
+**    得钱日收数万,而随施与市道贫乏饥冻者,所留者甚少.常悬一  **
+**    空壶于坐上,日入之后公辄转足跳入壶中,人莫知所在,...     **
+**                          晋·葛洪<<神仙传·卷九·壶公>>      **
+**    三. 守护各神 参考于 <<山海经>>                         **
+**===========================================================**
+**备注:                                                      **
+**    某前见一同名,斯时初学,欲剽之,然不知甚解乃不达.今得软星 **
+** 新作之轩辕剑,见其壶,乃复萌前思.然彼文甚多,某遂思自作之,乃 **
+** 成.                                                       **
+**    时之仓促,故其五脏虽在,然功能尚少,需待日后渐善之.       **
+**===========================================================**
+**                      眠兔(Snowtu)序于零肆年三月早春尚寒   **
+**************************************************************/
+// lianyaohu.c
+#include <ansi.h>
+//inherit F_UNIQUE;
+inherit ITEM;
+#include "/cmds/std/valid_move.h"
+
+int errorMsg(string);
+int shouyao(object,object,object);
+int lianyao(object,object,object);
+int fangyao(object,object,object);
+int costMe(object,object);
+string chinese_daoxing(int);
+void dismiss();
+
+string *npcs = ({ "fire","arrow","fabao","fire","arrow","fabao","fire","arrow","fabao",});
+
+mapping classes = ([
+	"xian"	:	"human",
+	"human"	:	"yao",
+	"yao"	:	"xian",
+]);
+
+void create()
+{
+	set_name("炼妖壶", ({ "lianyao hu", "lianyao", "hu" }) );
+	set_weight(3000);
+    	set_max_encumbrance(10000);
+	if( clonep() )
+                set_default_object(__DIR__"lianyaohu2.lpc");
+	else	{
+		set("unit", "盏");
+		set("long","这是一个神奇的炼妖壶。你可以祭(ji)它来收妖(shouyao)、
+炼妖(lianyao)、放妖(fangyao)。\n
+	收妖:\tji hu on <id> for shouyao
+	炼妖:\tji hu on <id> for lianyao
+	放妖:\tfangyao <id>\n");
+//                set("replace_file", __DIR__"lianyaohu2.lpc");
+		set("value",0);
+		set("material", "china");
+                set("no_drop","这么大的东西只有黄帝的百宝袋才放得进去！\n");
+			//此处乃伏笔耳,便日后添之 =^-^=
+		}
+	setup();
+}
+
+int is_container() { return 1; }
+
+void init()
+{
+	object killer;
+	object hu = this_object();
+	object me = this_player();
+	if ( me!=environment(hu) || !userp(me) )
+		return;
+
+	if ( query("futureOwner") && me->query("id")!=query("futureOwner")
+	  && !wizardp(me) )
+		{
+		message_vision(HIG"$n忽体腾空而起，在半空中炸成片片绿芒，一道火红的影子从里面冲了出来！\n"NOR,me,hu);
+		killer = new("/d/炼妖壶/npc/"+npcs[random(sizeof(npcs))]);
+		killer->move(environment(me));
+		killer->kill_ob(me);
+		killer->set_leader(me);
+		call_out("dismiss",2+random(3));
+		return;
+		}
+
+        if ( !query("owner_id") && me->query("LYH_GET") )
+		set("owner_id",me->query("id"));
+	if ( me->query("id")!=query("owner_id") && !wizardp(me) )
+		{
+		call_out("dismiss",4+random(6));
+		return;
+		}
+	if ( !me->query_temp("炼妖壶/huGet") )
+		{
+                message("channel:sys",HIM"【系统】某人："NOR HIW+me->query("name")+NOR HIM"得到"+name()+"了！\n"NOR,users());
+		me->set_temp("炼妖壶/huGet",1);
+		}
+	add_action("do_ji", "ji");
+	add_action("do_ji", "fang");
+	add_action("do_fangyao", "fangyao");
+	add_action("do_enter", "enter");
+}
+
+int errorMsg(string msg)
+{
+	tell_object(this_player(),msg);
+	return 1;
+}
+
+int do_ji(string arg)
+{
+	string id,hId,type;
+	object me,hu,who;
+	hu = this_object();
+	me = this_player();
+
+	if ( me!=environment(hu) )
+		return 0;
+
+	if ( !arg )
+		return 0;
+
+	if ( sscanf(arg,"%s on %s for %s",hId,id,type)!=3 )
+		return 0;
+
+	if ( !id(hId) )
+		return errorMsg("你想祭"+name()+"做什么？
+\t收妖:\tji hu on <id> for shouyao
+\t炼妖:\tji hu on <id> for lianyao
+\t放妖:\tfangyao <id>\n");
+
+	if ( environment(me)->query("no_kill")
+	  || environment(me)->query("no_fight")
+	  || environment(me)->query("任务")
+	  || environment(me)->query("hs_world") )
+		return errorMsg("这里不能祭"+name()+"。\n");
+
+	if( me->query("sen") < 500 )
+		return errorMsg("你的精神不足，难以祭法宝！\n");
+
+	if( me->query("mana") < 1000 )
+		return errorMsg("你的法力不足以驾驭"+name()+"！\n");
+
+	if( me->query("daoxing") < 1000000 )
+		return errorMsg("凭你的道行祭"+name()+"恐怕会遭其反刍！\n");
+
+	who = present(id,environment(me));
+	if ( !who )
+		return errorMsg("这里没有这个人。\n");
+
+	if ( !living(who) || who->query("任务") )
+		return errorMsg("对方已经不需要你祭法宝了。\n");
+
+	if ( me->is_busy() )
+		return errorMsg("你正忙着呢。\n");
+
+	seteuid(getuid());
+	message_vision(HIG"$N"HIG"念动咒语，只见"+name()+HIG"从$P怀中缓缓升起，在$P面前慢慢的旋转着，映得四周一片碧绿！\n"NOR,me);
+	me->receive_damage("sen", 50);
+	me->add("mana",-50-random(50));
+	me->start_busy(1);
+	if ( !who->is_fighting(me) )
+		{
+		if ( userp(who) )
+			who->fight_ob(me);
+		else	who->kill_ob(me);
+		}
+	switch(type)
+		{
+		case "shouyao" : return shouyao(me,who,hu);
+		case "lianyao" : return lianyao(me,who,hu);
+		default	: return errorMsg("你想祭"+name()+"做什么？
+	收妖:\tji hu on <id> for shouyao
+	炼妖:\tji hu on <id> for lianyao
+	放妖:\tfangyao <id>\n");
+		}
+}
+
+int shouyao(object me,object who,object hu)
+{
+object *ob,guard,weapon,obj,*sth;
+object item,newItem;
+int mp,dp,i,wight;
+mapping skills,hisPot;
+string msg,*skill,*str;
+if ( !me )
+	{
+	message("vision",HIG+name()+HIG"在空中“嘣”的一声，炸成一堆粉末！\n"NOR,environment());
+	destruct(hu);
+	return 1;
+	}
+if ( !who || !present(who,environment(me)) )
+	{
+	message_vision(HIG"$n"HIG"在空中转动了几下，化作一道绿光，射入$N"HIG"怀中，一隐而没！\n"NOR,me,hu);
+	return 1;
+	}
+
+if ( who==me )
+	return errorMsg("还是用 suicide -f 快一点。\n");
+
+mp = me->query("daoxing")/1000000;  //daoxing must > 1000y
+if ( mp>5 ) mp = 5;
+mp+= me->query("mana")/1000;
+if ( mp>8 ) mp = 8;
+mp+= me->query("mana_factor")/100;
+if ( mp>10 ) mp = 10;
+mp+= me->query_temp("apply/spells");
+if ( mp>15 ) mp=15;
+
+dp = who->query("daoxing")/1000000;
+if ( dp>5 ) dp = 5;
+if ( dp<1  ) dp = 1;
+dp+= who->query("mana")/1000;
+if ( dp>8 ) dp = 8;
+if ( dp<2  ) dp = 2;
+dp+= who->query("mana_factor")/100;
+if ( dp>10 ) dp = 10;
+if ( dp<3  ) dp = 3;
+dp+= who->query_temp("apply/spells");
+if ( dp>15 ) dp = 15;
+if ( dp<4  ) dp = 4;
+
+if ( classes[me->query("class")]==who->query("class") )  //me克who
+	mp+= 5;
+if ( classes[who->query("class")]==me->query("class") )	 //who克me
+	dp+=5;
+
+if ( wizardp(me) )
+	tell_object(me,"mp:"+mp+"\tdp:"+dp+" .\n");
+
+msg = HIG"\n$N"HIG"左手掐咒，对着$n"HIG"大喝一声“疾”"+name()+"绽放出一道耀眼的绿光，罩向$n"HIG"！\n"NOR;
+mp+= random(mp);
+tell_object(me,"mp:"+mp+"\tdp:"+dp+" .\n");
+if ( mp<dp )
+	{
+	msg+= HIG"$n"HIG"冷笑一声，运起法力对着"+name()+"一指道：“破”，只见"+name()+"在空中立时顿住！\n"NOR;
+	message_vision(msg,me,who);
+	if ( random(10)==1 )
+		{
+		msg = HIG"“砰”的一声，"+name()+"在空中炸成点点绿星，朝四下爆开！\n"NOR;
+		message_vision(msg,me,who);
+		ob = all_inventory(environment(me));
+		i = sizeof(ob);
+		while(i--)
+			{
+			if ( !living(ob[i]) || who==ob[i] )
+				continue;
+			msg = HIG"绿星"NOR HIR"轰的一声击中"+ob[i]->name()+"！\n"NOR;
+			message("vision",msg,environment(me),ob[i]);
+			tell_object(ob[i],HIG"一道绿星“轰”的击中了你！\n"NOR);
+			ob[i]->receive_damage("sen", 50);
+			if ( !ob[i]->is_fighting(me) && ob[i]!=me )
+				{
+				if ( userp(ob[i]) )
+					ob[i]->fight_ob(me);
+				else	ob[i]->kill_ob(me);
+				}
+			}
+		if ( !me->is_busy() )
+			me->start_busy(1+random(3));
+		destruct(hu);
+		return 1;
+		}
+	msg = HIG"$n在空中晃了两晃，又飞回$N"HIG"怀中。\n"NOR;
+	message_vision(msg,me,hu);
+	if ( !me->is_busy() )
+		me->start_busy(2+random(3));
+	return 1;
+	}
+weight = hu->query_weight();
+if ( wight>100000 )
+	{
+	msg+= HIG"$n在空中晃了两晃，又飞回$N"HIG"怀中。\n"NOR;
+	message_vision(msg,me,hu);
+	return errorMsg(name()+"过重了，你可以通过放妖来减轻它的重量。\n");
+	}
+msg+= HIG"$n"HIG"被光芒笼罩在当中，那光芒逐渐收拢，立刻将$n"HIG"收入了炼妖壶中！\n"NOR;
+message_vision(msg,me,who);
+
+guard = new("/d/炼妖壶/npc/guard");
+
+guard->set_name(who->query("name"),({who->query("id"),"guard"}));
+
+hisPot = who->query_entire_dbase();
+str = keys(hisPot);
+for(i=0;i<sizeof(str);i++)
+	{
+	if ( str[i]=="inquiry" ) continue;
+	if ( str[i]=="chat_chance_combat" ) continue;
+	if ( str[i]=="chat_msg_combat" ) continue;
+	guard->set(str[i],who->query(str[i]) );
+	}
+
+if ( mapp(skills=who->query_skills()) )
+	{
+	skill = keys(skills);
+	i = sizeof(skill);
+	while(i--)
+		guard->set_skill(skill[i],who->query_skill(skill[i],1) );
+	i = sizeof(skill);
+	while(i--)
+		guard->map_skill(skill[i],who->query_skill_mapped(skill[i]) );
+	}
+
+sth = all_inventory(who);
+
+if ( sizeof(sth)>0 )
+	{
+	for (i=0;i<sizeof(sth);i++)
+		{
+		if ( !sth[i]->query("equipped") && !sth[i]->query("wielded") )
+			continue;
+		item = sth[i];
+		newItem = new(base_name(item));
+		newItem->set_weight(1);
+		newItem->save();
+		newItem->move(guard);
+		}
+	}
+guard->set("family",who->query("family"));
+guard->set("startroom",this_object());
+guard->set_weight(10);
+guard->set("owner",me);
+guard->set("owner_id",me->query("id"));
+guard->set("action",who->query("action"));
+guard->save();
+guard->move(hu);
+SDS_D->powerup(guard);
+guard->command("wield all");
+guard->command("wear all");
+guard->set_heart_beat(0);
+
+if ( !present(guard,hu) )
+	{
+	message_vision(HIG"$n"HIG"在绿芒中拼命挣扎，轰的一声，绿芒破成片片粉末！\n"NOR,me,who);
+	return 1;
+	}
+
+if ( who->is_fighting(me) )
+	{
+	who->remove_killer(me);
+	me->remove_killer(who);
+	}
+
+if ( userp(who) )
+	{
+	who->move("/d/city/kezhan");
+	message_vision("冥冥中一道人影从虚空中跌了出来！",who);
+	who->unconcious();
+	}
+else	destruct(who);
+
+return 1;
+}
+
+int lianyao(object me,object who,object hu)
+{
+int i;
+object *ob,guard;
+
+if ( !me )
+	{
+	message("vision",HIG+name()+HIG"在空中“嘣”的一声，炸成一堆粉末！\n"NOR,environment());
+	destruct(hu);
+	return 1;
+	}
+if ( !who || !present(who,environment(me)) )
+	{
+	message_vision(HIG"$n"HIG"在空中转动了几下，化作一道绿光，射入$N"HIG"怀中，一隐而没！\n"NOR,me,hu);
+	return 1;
+	}
+if ( who==me )
+	return errorMsg("暂时还不行。\n");
+
+ob = all_inventory(hu);
+i = sizeof(ob);
+if ( i<=0 )
+	{
+	message_vision(HIG"$n"HIG"在空中转动了几下，化作一道绿光，射入$N"HIG"怀中，一隐而没！\n"NOR,me,hu);
+	return 1;
+	}
+while(i--)
+	{
+	if ( !living(ob[i]) )
+		destruct(ob[i]);
+	}
+
+if ( classes[who->query("class")]==me->query("class")	 //who克me
+  || me->query("daoxing")< who->query("daoxing")/3       //道行相差太大
+  || me->query("max_mana")< who->query("max_mana")/2     //法力相差太大
+  || random(100)==1  )					 //运气衰
+	{
+	message_vision(HIG"$n"HIG"在空中转动了几下，化作一道绿光，射入$N"HIG"怀中，一隐而没！\n"NOR,me,hu);
+	tell_object(me,"你祭"+name()+"失败。\n");
+	if ( !me->is_busy() )
+		me->start_busy(1);
+	}
+
+i = random(sizeof(ob));
+guard = ob[i];
+message_vision(HIG"绿芒一闪，"+guard->name()+"从中现出身来！\n\n"NOR,me);
+guard->set_heart_beat(1);
+guard->save();
+guard->move(environment(me));
+guard->command("say 蒙主召唤，特来护法！\n");
+message_vision(HIC"$N开始保护$n。\n"NOR, guard, me);
+guard->set("owner_id",me->query("id"));
+guard->set_leader(me);
+guard->kill_ob(who);
+call_out("doLianyao",1,guard,who,me);
+return 1;
+
+}
+
+void doLianyao(object guard,object who,object me)
+{
+int wx,dx;
+remove_call_out("diLianyao");
+if ( guard && who && me && living(guard) && living(who) && living(me)
+ &&  guard->is_fighting(who) )
+ 	{
+ 	message_vision(HIG"$N"HIG"身上忽然幻起一道光华！$P浸没其中，似乎变得强壮了一些。\n\n"NOR,guard);
+ 	if ( random(2) )
+ 		{
+ 		wx = 100+who->query("combat_exp")/1000-me->query("combat_exp")/1000;
+ 		if ( wx<10 ) wx=10;
+ 		if ( wx>200 ) wx=200;
+		guard->add("combat_exp",wx);
+		guard->save();
+		tell_object(me,"你的式神"+guard->name()+"增加了"+wx+"点武学。\n");
+		}
+	dx = 200+who->query("daoxing")/500-me->query("daoxing")/500;
+ 	if ( dx<100 ) dx=100;
+ 	if ( dx>500 ) dx=500;
+	guard->add("daoxing",dx);
+	guard->save();
+	tell_object(me,"你的式神"+guard->name()+"增加了"+COMBAT_D->chinese_daoxing(dx)+"道行。\n");
+	}
+call_out("doLianyao",5+random(25),guard,who,me);
+}
+
+
+int do_fangyao(string id)
+{
+object hu,me,guard,*ob,*obj;
+string name,ids;
+
+int i,j,num=0;
+string str;
+hu = this_object();
+me = this_player();
+
+if ( me!=environment(hu) )
+	return 0;
+
+if ( me->is_busy() )
+	return notify_fail("你正忙着呢。\n");
+
+if ( !id || !present(id,hu) )
+	{
+	ob = all_inventory(hu);
+	for(i=0;i<sizeof(ob);i++)
+		{
+		if ( !living(ob[i]) )
+			{
+			destruct(ob[i]);
+			continue;
+			}
+		num++;
+		}
+	str = sprintf("┏━━━━━━━━━━━━━━━━━━━━━━━━━━┓\n");
+	name = me->query("name");
+	ids = chinese_number(num);
+	str+= sprintf("┃%8s%-8s%8s%-8s%12s%6s%2s┃\n",WHT"【"NOR HIY"法宝"NOR WHT"】"NOR,name(),WHT"【"NOR HIY"所属"NOR WHT"】"NOR,name,WHT"【"NOR HIY"式神数目"NOR WHT"】"NOR,ids,"");
+	str = replace_string(str,name,HIC+name+NOR);
+	str = replace_string(str,"炼妖壶",HIR"炼"HIB"妖"HIW"壶"NOR);
+	str = replace_string(str,ids,HIR+ids+NOR);
+	str+= sprintf("┠%52'─'s┦\n","─");
+	str+= sprintf("┃%8s%12s%13s%10s%9s┃\n", "", WHT"〖"NOR HIG"式神姓名"NOR WHT"〗"NOR, "", WHT"〖"NOR HIG"式神ID"NOR WHT"〗"NOR, "");
+	str+= sprintf("┠%24'─'s%2s%26'─'s┦\n","─","┬","─");
+	for(i=0;i<sizeof(ob);i++)
+		{
+		name = ob[i]->query("name");
+		ids = ob[i]->query("id");
+		name = SDS_D->clear_clo(name,0);
+		ids = SDS_D->clear_clo(ids,0);
+		str+= sprintf("┃%4s%-20s%s%5s%-21s┃\n","",name,"│","",ids);
+		str+= sprintf("┃%4s%-20s%s%4s%22d┃\n","","","│",HIM"武学"NOR,ob[i]->query("combat_exp"));
+		str+= sprintf("┃%4s%-20s%s%4s%22s┃\n","","","│",HIM"道行"NOR,chinese_daoxing(ob[i]->query("daoxing")));
+		str = replace_string(str,name,HIC+name+NOR);
+		str = replace_string(str,ids,HIC+ids+NOR);
+		obj = all_inventory(ob[i]);
+		if ( sizeof(obj)>0 )
+			{
+			str+= sprintf("┃%4s%-20s%s%4s%22s┃\n","","","│",WHT"物品"NOR,"");
+			for(j=0;j<sizeof(obj);j++)
+				{
+				name = obj[j]->query("name");
+				name = SDS_D->clear_clo(name,0);
+				str+= sprintf("┃%4s%-20s%s%5s%21s┃\n","","","│","",name);
+				str = replace_string(str,name,YEL+name+NOR);
+				}
+			}
+		}
+	str+= sprintf("┗%24'━'s┷%26'━'s┛\n","━","━");
+	tell_object(me,str);
+	return errorMsg("你要放弃哪个式神？\n格式：fangyao <id> \n");
+	return 1;
+	}
+
+guard = present(id,hu);
+message_vision(HIG"$N"HIG"念动咒语，只见一道绿光缓缓从"+name()+"中升起，绿光中隐约露出"+guard->name()+"的身影。\n"NOR,me);
+guard->move(environment(me));
+guard->command("say 蒙主放某归去，就此别过。\n");
+message_vision(HIG"$n"HIG"身上一道绿芒一闪而过，$p也随之消失不见。\n\n"NOR,me,guard);
+destruct(guard);
+return 1;
+}
+
+string chinese_daoxing(int gain)
+{
+int year,day,hour;
+string str;
+
+year=gain/1000;
+day=(gain-year*1000)/4;
+hour=(gain-year*1000-day*4)*3;
+str="";
+if( year ) str+= year+"年";
+if( day )  str+= day+"天";
+if( hour ) str+= hour+"时辰";
+return str;
+}
+
+
+int do_enter(string arg)
+{
+int i;
+string *files;
+string roomid;
+object room,env,*inv,hu,me;
+
+hu = this_object();
+me = this_player();
+env=environment(me);
+inv=all_inventory(env);
+
+if ( me!=environment() )
+	return 0;
+if ( !arg || arg!="hu" )
+	return 0;
+if( !valid_move(me) )
+	return 0;
+if ( environment(me)->query("任务")  || environment(me)->query("hs_world") )
+	return errorMsg("这里不能祭"+name()+"。\n");
+if ( me->query_temp("炼妖壶in") )
+	return errorMsg("这里不就是"+name()+"中。\n");
+
+message_vision(HIG"$N"HIG"念动咒语，将$n"HIG"对空一祭，大呼一声“疾”。\n"NOR,me,hu);
+message_vision(HIG"只见$n"HIG"在冉冉升起，在半空中缓缓转动。流光异彩之中，半空中仿佛
+出现了海市蜃楼般的楼台屋檐。\n"NOR,me,hu);
+message_vision(HIG"\n$N"HIG"哈哈一笑，整个人被一道光华包裹，径向半空去了。\n\n"NOR,me,hu);
+
+roomid=(me->parse_command_id_list())[0];
+files=get_dir("/data/炼妖壶/"+roomid);
+
+/********************************
+**  必须先在/data/下建立炼妖壶 **
+**  的目录 不然进不去          **
+********************************/
+if ( !sizeof(files) )
+	{
+        room=new("/d/炼妖壶/home");
+        room->set("file_name",roomid);
+        room->set("owner",me);
+        room->set("owner_id",me->query("id") );
+        room->set("no_fight",1);
+        room->set("no_magic",1);
+        room->set("exits",([
+        	"out" : base_name(env),
+        	]));
+
+	room->save();
+	room->move(env);
+	}
+
+if( i=sizeof(inv) )
+	{
+        for(i=0;i<sizeof(inv);i++)
+        	{
+		if (inv[i]->query("id")==roomid && inv[i]!=me )
+			{
+            		room=inv[i];
+            		break;
+          		}
+        	}
+	}
+
+if(!room)
+	{
+        room=new("/d/炼妖壶/home");
+        room->set("file_name",roomid);
+        room->restore();
+        room->set("no_fight",1);
+        room->set("no_magic",1);
+        room->add("exits",([
+        	"out" : base_name(env),
+        	]));
+	room->set("owner",me);
+        room->set("owner_id",me->query("id") );
+        room->save();
+        room->move(env);
+	}
+me->move(room);
+if ( !present(me,room) )
+	{
+	message_vision(HIG"半空中一声炸雷，$N不禁摔将下来！\n\n"NOR,me);
+	return 1;
+	}
+message_vision(HIG"强光散去，$N面前是一片新天地。\n"NOR,me);
+me->set_temp("炼妖壶in",1);
+return 1;
+}
+
+void dismiss()
+{
+remove_call_out("dismiss");
+write(HIG"\n\n"+name()+"“轰”的一声，化作一道绿光冲天而去！\n\n"NOR);
+destruct(this_object());
+}
+
+int query_autoload()
+{
+return 1;
+}
+
+/********************************************************************************
+**  耗用自己的数据来喂养式神                                                   **
+**  此设定务必要考虑、设想周到，否则后患无穷                                   **
+**  故，暂不可开放此功能。慎之慎之。。。                                       **
+**  另：此处只是始定，后乃未葺之不可当真，阅之乃自误尔                         **
+********************************************************************************/
+/*
+int costMe(object me,object guard)
+{
+	mapping mePot;
+	int pot;
+	string str,type;
+
+	if ( !guard || !me || !living(me) )
+		return 0;
+	message_vision("$N开始用自身的元神修炼$n。\n",me,guard);
+	mePot = me->query_entire_dbase();
+	switch(random(10))
+		{
+		case 0 : pot = mePot["combat_exp"]/10000;str = "武学";type = "combat_exp";break;
+		case 1 : pot = mePot["max_mana"];str = "法力";type = "max_mana";break;
+		case 2 : pot = mePot["max_force"];str = "内力";type = "max_force";break;
+		case 3 : pot = mePot["max_kee"];str = "气血";type = "max_kee";break;
+		case 4 : pot = mePot["max_sen"];str = "精神";type = "max_sen";break;
+		case 5 : pot = mePot["potential"];str = "潜能";type = "potential";break;
+		case 6 : pot = mePot["int"]*5;str = "悟性";type = "int";break;
+		case 7 : pot = mePot["per"]*5;str = "容貌";type = "per";break;
+		case 8 : pot = mePot["str"]*5;str = "臂力";type = "str";break;
+		default : pot = mePot["daoxing"]/10000;str = "道行";type = "daoxing";break;
+		}
+	if ( pot>1000 )
+		pot = 1000;
+	pot/= 40;
+	pot*= guard->query("int");
+	pot = pot/2+random(pot/2);
+	pot/= 2;
+
+	if ( wizardp(me) )
+		tell_object(me,"pot="+pot+"。\n");
+	if ( pot>0 )
+		{
+		if ( !guard->query_temp("busying") )
+			guard->set_temp("busying",1);
+		message_vision("$N用自身的"+str+"喂养$n....\n",me,guard);
+		me->add(type,-pot);
+		tell_object(me,"你的"+str+"减少了"+pot+"点。\n");
+		if ( random(2) )
+			{
+			guard->add("combat_exp",pot);
+			message_vision("$n的武学好似强壮了一些。\n",me,guard);
+			}
+		else	{
+			guard->add("daoxing",pot);
+			message_vision("$n的道行好似进步了一些。\n",me,guard);
+			}
+		guard->save();
+		}
+	else	{
+		message_vision("可惜$n没能领悟其中的奥妙，看起来并没什么变化。\n",me,guard);
+		pot = 1+random(99);
+		me->add(type,-pot);
+		tell_object(me,"你的"+str+"减少了"+pot+"点。\n");
+		}
+	me->save();
+	return pot;
+}
+
+*/

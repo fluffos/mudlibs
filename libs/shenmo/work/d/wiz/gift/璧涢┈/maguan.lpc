@@ -1,0 +1,243 @@
+// by snowtu/2006
+#include <ansi.h>
+inherit NPC;
+
+#define MASTER_D __DIR__"masterd.lpc"
+
+nosave int MAX = 1;
+
+object *player = ({});
+string check_me();
+string *road1 = ({
+        "/d/city/center","/d/city/qinglong-e1","/d/city/qinglong-e2",
+        "/d/city/qinglong-e3","/d/city/dongmen","/d/city/jiaowai",
+        "/d/kaifeng/east1","/d/kaifeng/east2","/d/kaifeng/east3",
+        "/d/kaifeng/east4","/d/kaifeng/east5","/d/kaifeng/chengmen",
+        "/d/kaifeng/chen1","/d/kaifeng/chen2","/d/kaifeng/tieta",
+});
+
+string *road2 = ({
+        "/d/city/center","/d/city/zhuque-s1","/d/city/zhuque-s2",
+        "/d/city/zhuque-s3","/d/city/zhuque-s4","/d/changan/nanchengkou",
+        "/d/changan/nbridge","/d/changan/bridge","/d/changan/sbridge",
+        "/d/changan/broadway1","/d/changan/zhongnan",
+        "/d/changan/broadway2","/d/changan/nanyue","/d/changan/broadway3",
+        "/d/changan/broadway4","/d/changan/broadway5","/d/changan/southseashore",
+});
+
+string gift_me()
+{
+this_player()->delete_temp("赛马/名次");
+return "目前奖励点数为"+query_temp("奖励");
+}       
+
+void create()
+{
+string *road;   
+set_name("马官", ({"ma guan","guan"}));
+set("gender", "男性");
+set("combat_exp", 200000000);
+set("daoxing", 200000000);
+set("age", 36);
+set("per", 24);
+set("attitude", "friendly");
+
+set_skill("unarmed", 800);
+set_skill("dodge", 800);
+set_skill("parry", 800);
+
+set("inquiry",([
+        "赛马"  : (: check_me :),
+        "名次"  : (: gift_me :),
+]));
+
+setup();
+if ( random(2) )
+        road = road1;
+else    road = road2;
+set_temp("路线",road);  
+carry_object("/d/obj/cloth/linen")->wear();
+}
+
+string check_me()
+{
+int i;
+string str,ip,*road;
+object book,pet,who,me = this_player();
+
+if ( time()<query_temp("上次结束")+3600 )
+        return "比赛刚刚结束，还是等等再开吧。";
+if ( MASTER_D->is_saima() )
+        return "对不起，现在比赛已经开始了，你等下轮再来吧。";        
+if ( !objectp(pet=me->query_temp("ridee")) )
+        return "你都没马，怎么赛？";
+if ( pet->query("id")==me->query("pet/pet_id") )
+        return "宠物不能参加比赛。";
+if ( strsrch(pet->query("name"),"马")==-1 )
+        return "你骑的好似不是马....";
+if ( me->query_temp("赛马/参加") )
+        return "你已经参加了。";
+if ( me->query_skill("dodge",1)<60 )
+        return "你这样的身子骨去赛马，可不行。。。";
+if ( !me->query_temp("赛马_马官") )        
+        return "你先交十两黄金的手续费吧。。。";
+if ( objectp(who=query_temp("举办者")) )
+        {
+        if ( !present(who,environment()) )
+                tell_object(who,HIG"马官(Ma guan)告诉你：对不起，因为你缺席，所以你举办的赛马取消了。\n"NOR);
+        else    return "我现在正在为"+who->query("name")+"("+capitalize(who->query("id"))+") 筹办马赛呢，你如果想参加就 join 吧。";
+        }
+book = new(__DIR__"book");
+if ( !book->move(me) )
+        return "你的负重太大，无法参加比赛。";
+me->set_temp("赛马/路线",query_temp("路线"));   
+book->information(me,pet);
+player = query_temp("参加玩家");
+if ( !player && !arrayp(player) )
+        player = ({});
+player = SDS_D->add_arr_obj(player,me);
+set_temp("参加玩家",player);    
+set_temp("举办者",me);
+add_temp("参加玩家数目",1);
+ip = query_ip_number(me);
+set_temp("赛马/"+me->query("id"),ip);
+me->set_temp("赛马/参加",1);
+
+switch(me->query("class"))
+        {
+        case "xian" :   str = "人间散仙";break;
+        case "human":   str = "大唐百姓";break;
+        default :       str = "深山异士";
+        }
+message("channel:chat",sprintf( HIC"〖"HIG"民间界"HIC"〗马官(Ma guan)：今日%s%s(%s)举办民间赛马。\n"NOR,
+                                str,me->query("name"),capitalize(me->query("id")),),
+        users() );
+return "好的，如果你觉得人数够了，就请开始(start)比赛吧。";
+}
+
+void init()
+{
+object ob;
+if ( interactive(ob = this_player()) && !is_fighting() && !query_temp("赛马/进行") )
+        {
+        remove_call_out("greeting");
+        call_out("greeting", 1, ob);
+        }
+add_action("game_join","join");
+add_action("do_start","start");
+}
+
+void greeting(object ob)
+{
+if ( !ob || !visible(ob) || environment(ob) != environment() )
+        return;
+switch( random(3) )
+        {
+        case 0:
+                say( "马官一鞠躬说道：这位" + RANK_D->query_respect(ob)+ "请进！\n");
+                break;
+        case 2:
+                say( "马官一鞠躬说道：这位" + RANK_D->query_respect(ob)+ "你想赛马吗？\n");
+                break;
+        }
+}
+
+int game_join()
+{
+string ip,*ips;
+object book,pet,me = this_player();
+
+if ( MASTER_D->is_saima() )
+        return notify_fail(CYN+name()+"说道：对不起，现在比赛已经开始了，你等下轮再来吧。\n"NOR);
+if ( !objectp(pet=me->query_temp("ridee")) )
+        return notify_fail(CYN+name()+"说道：你都没马，怎么赛？\n"NOR);
+if ( pet->query("id")==me->query("pet/pet_id") )
+        return notify_fail(CYN+name()+"说道：宠物不能参加比赛。\n"NOR);
+if ( strsrch(pet->query("name"),"马")==-1 )
+        return notify_fail(CYN+name()+"说道：你骑的好似不是马....\n"NOR);
+if ( me->query_temp("赛马/参加") )
+        return notify_fail(CYN+name()+"说道：你已经参加了。\n"NOR);
+if ( me->query_skill("dodge",1)<60 )
+        return notify_fail(CYN+name()+"说道：你这样的身子骨去赛马，可不行。。。\n"NOR);
+if ( !me->query_temp("赛马_马官") )        
+        return notify_fail(CYN+name()+"说道：你先交十两黄金的手续费吧。。。\n"NOR);
+if( query_temp("赛马") && mapp(query_temp("赛马")) ) {
+ip = query_ip_number(me);
+ips = values(query_temp("赛马"));
+if ( member_array(ip,ips)!=-1 )
+        return notify_fail(CYN+name()+"说道：对不起，与你同一IP已经有人参加了，你还是等下批吧。\n"NOR);
+      }
+book = new(__DIR__"book");
+if ( !book->move(me) )
+        return notify_fail(CYN+name()+"说道：对不起，你身上负重太大，无法参加比赛。\n"NOR);
+me->set_temp("赛马/路线",query_temp("路线"));        
+player = SDS_D->add_arr_obj(player,me);
+set_temp("参加玩家",player);    
+add_temp("参加玩家数目",1);
+book->information(me,pet);
+set_temp("赛马/"+me->query("id"),ip);
+me->set_temp("赛马/参加",1);
+message_vision("$N参加了赛马比赛。\n",me);
+message("channel:chat",sprintf( HIC"〖"HIG"民间界"HIC"〗马官(Ma guan)：%s(%s)参加了赛马比赛。\n"NOR,
+                                me->query("name"),capitalize(me->query("id")) ),
+        users() );
+return 1;
+}       
+
+int do_start()
+{
+object book,who,me = this_player();
+string *road;
+int i;
+if ( !objectp(who=query_temp("举办者")) )
+        return notify_fail(CYN+name()+"说道：目前没有玩家来提出比赛。。。\n"NOR);      
+if ( me!=who )
+        return notify_fail(CYN+name()+"说道：我现在正在为"+who->query("name")+"("+capitalize(who->query("id"))+") 筹办马赛呢，你如果想参加就 join 吧。\n"NOR);
+if ( query_temp("参加玩家数目")<MAX )
+        return notify_fail(CYN+name()+"说道：参加人数不足"+chinese_number(MAX)+"啊。。。\n"NOR);      
+if ( !MASTER_D->game_start(this_object()) )
+        return notify_fail(CYN+name()+"说道：有点小问题，正在解决。。。\n"NOR);
+road = query_temp("路线");
+i = sizeof(road);       
+message("channel:chat",sprintf( HIC"〖"HIG"民间界"HIC"〗马官(Ma guan)：%s(%s)提出的赛马比赛现在开始。地点：%s -- %s 。\n"NOR,
+                                me->query("name"),capitalize(me->query("id")),road[0]->query("short"),road[i-1]->query("short")),
+        users() );
+return 1;
+}
+
+void die()
+{
+unconcious();
+return;
+}
+
+int accept_object(object me,object obj)
+{
+if ( obj->query("money_id") || obj->value()>100000 )
+        {
+        if ( me->query_temp("赛马/名次") )
+                {
+                tell_object(me,name()+"对你说道：你还没拿比赛奖励呢。。。。\n");
+                return 0;
+                }
+        if ( me->query_temp("赛马_马官") )
+                {
+                tell_object(me,name()+"对你说道：你已经给过手续费了。。。。\n");
+                return 0;
+                }
+        me->set_temp("赛马_马官",1);
+        tell_object(me,name()+"对你说道：好，你准备参加比赛吧。。。。\n");
+        add_temp("奖励",obj->value()/10000);
+        return 1;
+        }
+return 0;
+}       
+
+void check_num(object who)
+{
+if ( !who )
+        return;
+add_temp("参加玩家数目",-1);
+if ( !query_temp("参加玩家数目") )
+        MASTER_D->game_over();
+}

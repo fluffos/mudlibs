@@ -1,0 +1,142 @@
+// ask.c
+//by djx
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+string query_inquiry(object ob);
+string *msg_dunno = ({
+        "$n摇摇头，说道：没听说过。\n",
+        "$n疑惑地看着$N，摇了摇头。\n",
+        "$n睁大眼睛望着$N，显然不知道$P在说什么。\n",
+        "$n耸了耸肩，很抱歉地说：无可奉告。\n",
+        "$n说道：嗯．．．这我可不清楚，你最好问问别人吧。\n",
+        "$n想了一会儿，说道：对不起，你问的事我实在没有印象。\n"
+});
+
+int main(object me, string arg)
+{
+        string dest, topic, msg;
+        object ob;
+        mapping inquiry;
+
+        seteuid(getuid());
+
+        if( !arg || sscanf(arg, "%s about %s", dest, topic)!=2 )
+                return notify_fail("你要问谁什么事？\n");
+
+        if( !objectp(ob = present(dest, environment(me))) )
+                return notify_fail("你看清楚点:这里没有这个人。\n");
+
+        if( !ob->is_character() ) {
+                message_vision("$N对着$n自言自语．．．\n", me, ob);
+                return 1;
+        }
+     if( time() - me->query_temp("last_ask")<0)
+             return notify_fail("为了降低系统负载，请不要频繁询问。\n"); 
+
+        if( !ob->query("can_speak") ) {
+                message_vision("$N向$n打听有关『" HIM+ topic +NOR "』的消息，但是$p显然听不懂人话。\n", me, ob);
+                return 1;
+        }
+       if ( ob->is_fighting() ) {
+                message_vision("有什么事打完架再说！\n", me, ob);
+                return 1;
+        }
+        if( !INQUIRY_D->parse_inquiry(me, ob, topic) )
+                message_vision("$N向$n打听有关『" HIC+ topic +NOR "』的消息。\n", me, ob);
+
+        if( userp(ob) ) return 1;
+        if( !living(ob) ) {
+                message_vision("但是很显然的，$n现在的状况没有办法给$N任何答覆。\n",
+                        me, ob);
+                return 1;
+        }
+        // by djx 2003-7-03
+        if(topic=="name")
+        {
+                message_vision( CYN "$N说道：我的名字就是$N," + RANK_D->query_respect(me)+ "有什么事?\n" NOR, ob);
+                return 1;
+        }
+        
+        if(topic=="all" && !ob->query("inquiry/all") )
+        {
+                message_vision( CYN "$N对你悄声说道:"+query_inquiry(ob)+"!\n" NOR, ob);
+                return 1;
+        }
+        if(topic=="here")
+        {
+                message_vision( CYN "$N对你悄声说道:这里就是"HIW+
+                HIW+environment(me)->query("short")+NOR CYN",你没听说过吗？\n" NOR, ob);
+                return 1;
+        }
+/*
+       if(topic=="news")
+        {
+                string str;
+                str=read_file("/log/NEWS");
+                message_vision( CYN "$N对你点了点头说到,最近听有人说过"+str+"" NOR, ob);
+                return 1;
+        }       
+*/
+
+
+          if(topic=="中秋")
+           {
+           if ( ob->query("name")==me->query_temp("05中秋/quest_get/name")
+                && ob->query("id")==me->query_temp("05中秋/quest_get/id") )
+                {
+                ("/d/wiz/gift/05中秋/g_master.lpc")->zhongqiu(ob); 
+                return 1;
+                }
+           }
+
+              //以上为05中秋临时所加   snowtu
+        if ( msg = QUEST->quest_ask (me, ob, topic) ) {
+                if( stringp(msg) ) {
+                        message_vision( CYN "$N说道：" + msg + "\n" NOR, ob);
+                        return 1;
+                }
+        }
+
+        if( msg = ob->query("inquiry/" + topic) ) {
+                if( stringp(msg) ) {
+                        message_vision( CYN "$N说道：" + msg + "\n" NOR, ob);
+                        me->set_temp("last_ask", time()); 
+                        return 1;
+                }
+        } else
+                message_vision(msg_dunno[random(sizeof(msg_dunno))], me, ob);
+
+        return 1;
+}
+string query_inquiry(object ob)
+{
+        int i=0;
+        mapping inq;
+        string str="", *indexs;
+        
+        if(mapp(inq=ob->query("inquiry")))
+        {
+                indexs=keys(inq);
+                for(i=0;i<sizeof(indexs);i++)
+                {
+                        str=indexs[i]+" "+str;
+                }
+                str="有关于 "HIB+str+NOR CYN"的事情,我很高兴告诉你!";
+                return str;
+        }
+        return "实在是对不起,我什么也不知道呀!";
+}
+
+int help(object me)
+{
+   write( @HELP
+指令格式: ask <someone> about <something>
+
+这个指令在解谜时很重要, 通常必须藉由此一指令才能
+获得进一步的资讯。
+HELP
+   );
+   return 1;
+}
+

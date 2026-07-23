@@ -1,0 +1,254 @@
+//djx 修改于2003/07/04 
+// message.c
+#include <ansi.h> 
+varargs void message_vision(string msg, object me, object you)
+{
+        string my_gender, your_gender, my_name, your_name;
+        string str1, str2, str3;
+        mixed temp;
+
+        if(!me) return;
+
+        my_name= me->name();
+        my_gender = me->query("gender");
+
+        if(!my_name || !my_gender) return; //mon 10/23/97
+        
+        str1 = replace_string(msg,  "$P", gender_self(my_gender));
+        str1 = replace_string(str1, "$N", gender_self(my_gender));
+        str3 = replace_string(msg,  "$P", my_name);
+        str3 = replace_string(str3, "$N", my_name);
+        if( you ) {
+                your_name= you->name();
+                your_gender= you->query("gender");
+                str2 = replace_string(msg,  "$P", gender_pronoun(my_gender));
+                str2 = replace_string(str2, "$p", gender_self(your_gender));
+                str2 = replace_string(str2, "$N", my_name);
+                str2 = replace_string(str2, "$n", gender_self(your_gender));
+                message("vision", str2, you);
+                str1 = replace_string(str1, "$p", gender_pronoun(your_gender));
+                str1 = replace_string(str1, "$n", your_name);
+                str3 = replace_string(str3, "$p", your_name);
+                str3 = replace_string(str3, "$n", your_name);
+        }
+        message("vision", str1, me);
+        if(environment(me)) { //mon 10/23/97
+	        temp = all_inventory(environment(me));//all objects are in the environment
+		temp = filter_array(temp, (: $1->query("env/no_msgs") :));//filter the objects who set the env/brief_alls
+		if( member_array(me,temp) == -1 ) //if the object "me" do not set env/brief_alls then add it
+			temp = temp + ({me});
+                if(you && member_array(you,temp ) == -1) //if the object "you" is exist and  do not set env/brief_alls then add it
+			temp = temp + ({you});
+		if( pointerp(temp) ) //check the temp point 2011/08/28 fang
+			message("vision", str3,  environment(me), temp);
+                // broadcasting to remote rooms, snowcat feb 8 1998
+                if(environment(me)->query("broadcast"))
+                        environment(me)->broadcast(str3);
+        }
+}
+
+void tell_object(object ob, string str)
+{
+        if(ob) message("tell_object", str, ob);
+}
+
+varargs void tell_room(mixed ob, string str, object *exclude)
+{
+        if (ob) {
+                message("tell_room", str, ob, exclude);
+                // broadcasting to remote rooms, snowcat feb 8 1998
+                if(ob->query("broadcast"))
+                        ob->broadcast(str);
+        }               
+}
+
+void shout(string str)
+{
+        message("shout", str, users(), this_player());
+}
+
+void write(string str)
+{
+        if( this_player() )
+                message("write", str, this_player());
+        else if( previous_object() )
+                message("write", str, previous_object());
+        else
+                efun::write(str);
+}
+
+varargs void say(string str, mixed exclude)
+{
+        object ob = 0;
+        if( living(previous_object()) ) 
+                ob = previous_object();
+        else if( this_player() ) 
+                ob = this_player();
+        if (ob && environment(ob)) {    
+                message("say", str, environment(ob), ob);
+                // broadcasting to remote rooms, snowcat feb 8 1998
+                if(environment(ob)->query("broadcast"))
+                        environment(ob)->broadcast(str);
+        }               
+}
+
+varargs void printf (string msg, mixed a1, mixed a2, mixed a3, mixed a4,
+         mixed a5, mixed a6, mixed a7, mixed a8, mixed a9, mixed a10,
+         mixed a11, mixed a12, mixed a13, mixed a14, mixed a15, mixed a16)
+{
+    msg = sprintf (msg,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13,a14,a15,a16);
+    
+//    msg = CONVERT_D->output(msg,this_player());
+    write (msg);
+}
+
+void message_system(string message)
+{
+        message("system", HIW "\n『系统提示』" + message + "\n" NOR, users(), 0);
+}
+
+int notify_fail (mixed arg)
+{
+    if (stringp(arg))
+        arg = (string) CONVERT_D->output(arg,this_player());
+    return efun::notify_fail (arg);
+}
+
+// message.c
+
+#include <ansi.h>
+#include <dbase.h>
+
+#define MAX_MSG_BUFFER 500
+#define PROMPT_WRITTEN          1
+nosave string *msg_buffer = ({});
+nosave int written = 0;
+void flush_buffer() {msg_buffer=({});}
+
+void receive_message(string msgclass, string msg)
+{
+        string subclass, *ch;
+        int len;
+
+        if(!msg || (len=strlen(msg))<1) return;
+        //added by mon 11/13/97 trying to prevent crash.
+
+        if(len>8000) 
+          msg=msg[0..8000]+"\n\n．．．\n";
+          //added by mon 11/13/97 trying to prevent crash.
+
+        msg = CONVERT_D->output(msg,this_object());
+
+        if( !interactive(this_object()) ) {
+                this_object()->relay_message(msgclass, msg);
+                return;
+        }
+
+        if( sscanf(msgclass, "%s:%s", subclass, msgclass)==2 ) {
+                switch(subclass) {
+                        case "channel":
+                                if( !pointerp(ch = query("channels"))
+                                ||      member_array(msgclass, ch)==-1 )
+                                        return;
+                                break;
+                        case "outdoor":
+                                if( !environment() || !environment()->query("outdoors") )
+                                        return;
+                                break;
+                        default:
+                                error("Message: Invalid Subclass " + subclass + ".\n");
+                }
+        }
+
+        if( query_temp("block_msg/all") || query_temp("block_msg/" + msgclass) )
+                return;
+
+        if( in_input(this_object()) || in_edit(this_object()) ) {
+                if( sizeof(msg_buffer) < MAX_MSG_BUFFER )
+                        msg_buffer += ({ msg });
+        } else
+                receive( msg );
+}
+string prompt()
+{
+        string p;
+        string prompt, path;
+        mixed list;
+
+        if (arrayp(list = query_temp("tell_list")) &&
+            sizeof(list) > 1)
+                p = HIG "> " NOR;
+        else
+                p = HIY "> " NOR;
+
+        if (! stringp(prompt = query("env/prompt")))
+                return p;
+
+        switch (prompt)
+        {
+        case "time":
+                p = HIC + ctime(time())[11..18] + p;
+                break;
+        case "date":
+                p = HIC + ctime(time())[0..9] + p;
+                break;
+        case "mud":
+                p = HIC + NATURE_D->game_time() + p;
+                break;
+        case "hp":
+                p = HIG + sprintf("气血：%d/精神：%d", query("kee"), query("sen")) + p;
+                break;
+        case "path":
+                if (! wizardp(this_object()) || wiz_level(this_object()) < 3)
+                        break;
+                if (! stringp(path = query("cwd")))
+                {
+                        path = "/";
+                        set("cwd", path);
+                }
+                p = HIC + path[0..<2] + p;
+                break;
+        default:
+                p = prompt + p;
+                break;
+        }
+
+        return p;
+}
+
+void write_prompt()
+{
+        string msg = "[输入时暂存讯息]\n" ;
+
+        msg = CONVERT_D->output(msg,this_object());
+
+        if( sizeof(msg_buffer) ) {
+                receive(BOLD + msg + NOR);
+                for(int i=0; i<sizeof(msg_buffer); i++)
+                        receive(msg_buffer[i]);
+                msg_buffer = ({});
+        }
+ if (! living(this_object()))
+                return;
+
+        if (this_object()->is_attach_system())
+                receive(HIR "执行中" HIY "> " NOR);
+        else
+                receive(ESC "[256D" + prompt());
+
+        written = PROMPT_WRITTEN;
+}
+
+void receive_snoop(string msg)
+{
+    int encode=this_object()->query_temp("snoop_encoding");
+    
+    if(encode==1) // wiz is GB, player is BIG5
+        msg=CONVERT_D->BIG2GB(msg);
+    else if(encode==10) // wiz is BIG5, player is GB
+        msg=CONVERT_D->GB2BIG(msg);
+
+        if ( msg && msg!="" && msg[0]!='%' )
+                receive("%" + msg);
+}
+

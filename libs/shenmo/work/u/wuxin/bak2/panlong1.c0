@@ -1,0 +1,142 @@
+#include <ansi.h>
+inherit SSERVER;
+
+string name()
+{
+return "「"HIY"盘龙八式"NOR"」";
+}
+
+string *clrs = ({"RED","HIR","HBRED","HIG","HIB","HIW","HIC","BBLU"});
+
+int valid_perform(object me)
+{
+if ( me->query("family/family_name")!="方寸山三星洞"  && me->query("zhuanshi") == 0 )
+        return notify_fail("你是哪儿偷学来的武功，也想用"+name()+"？\n");
+if ( me->query("class")!="xian"  && (me->query("zhuanshi")==1 || me->query("zhuanshi")==2) )
+        return notify_fail("你是哪儿偷学来的武功，也想用"+name()+"？\n");
+if ( !me->samsara_check("qianjun-bang",2)  && me->query("zhuanshi") == 3 )
+        return notify_fail("你是哪儿偷学来的武功，也想用"+name()+"？\n");
+if ( me->query("叛师/num") )
+        return notify_fail("你叛过师，也想用"+name()+"？\n");   
+        
+if ( me->query_skill("qianjun-bang",1) < 350 )
+        return notify_fail("你的"+to_chinese("qianjun-bang")+"等级不足"+350+"级，无法使出"+name()+"。\n");
+if ( me->query_skill("stick",1) < 350 )
+        return notify_fail("你的"+to_chinese("stick")+"等级不足"+350+"级，无法使出"+name()+"。\n");
+if ( me->query_skill("wuxiangforce",1) < 350 && me->query("zhuanshi")<2 )
+        return notify_fail("你的"+to_chinese("wuxiangforce")+"等级不足"+350+"级，无法使出"+name()+"。\n");
+if ( me->query_skill("dodge",1) < 350 )
+        return notify_fail("你的"+to_chinese("dodge")+"等级不足"+350+"级，无法使出"+name()+"。\n");
+if ( me->query("force")<3000 )
+        return notify_fail("你的真气不足 3000 点，不能使出"+name()+"。\n");
+if ( time()-me->query_temp("fc_panlong")<3+random(8) )  
+        return notify_fail("你刚使出盘龙，突觉体力不够！\n");
+return 1;
+}       
+        
+int perform(object me, object target)
+{
+object weapon,ob;
+int i,j,skill,damage;
+string msg,clr;
+
+if ( !valid_perform(me) )
+        return 0;
+if ( !target ) 
+        target = offensive_target(me);
+
+if ( !target
+  || !target->is_character()
+  || !me->is_fighting(target) )
+        return notify_fail(name()+"只能在战斗中使用。\n"NOR);
+if ( !me->is_fighting() )
+        return notify_fail(name()+"必须战斗中使用。\n");
+
+if (!objectp(weapon = me->query_temp("weapon"))
+|| (string)weapon->query("skill_type") != "stick")
+        return notify_fail("你使用的武器不对，无法施展"+name()+"。\n");
+skill=me->query_skill("qianjun-bang",1);
+clr = clrs[random(sizeof(clrs))];
+j = me->query_skill("qianjun-bang",1);
+j-= 350;
+j/= 50;
+if ( j<1 ) j = 1;
+j+= 1+random(j);
+if ( j>8 ) j = 8;
+damage = me->query_skill("qianjun-bang",1);
+if( me->query_skill_mapped("dodge")=="jindouyun" )
+damage+= me->query_skill("jindouyun",1);
+if( me->query_skill_mapped("unarmed")=="puti-zhi" )
+damage+= me->query_skill("puti-zhi",1)*2;
+damage+= me->query_skill("wuxiangforce",1);
+damage+= me->query_skill("dao",1);
+damage-= target->query_temp("apply/armor");
+damage+= me->query("str")*5;
+if ( damage<300 ) damage = 300;
+
+msg = HIG"\n$N"HIG"跳至空中，手中的"+weapon->name()+ HIG"好似"+HIY"盘龙出沧海"+HIG"顿时化作
+无数条影子朝$n"HIG"压来。\n"NOR;
+message_vision(msg,me,target);
+if ( target->query_temp("jldl") )
+        {
+        target->delete_temp("jldl");
+        target->set_temp("jldl_end", time() );
+        message_vision(HIW"\n$N"HIW"运起盘龙八式，面对强大的气劲，$n"HIW"的"HIC"借力打力"HIW"也失去了作用！\n\n\n"NOR,me,target);
+        }
+for(i=1;i<=j;i++)
+        {
+        msg = HIW "\n\n满天棍影中，$N"HIW"砸出第"+HIY+chinese_number(i)+HIW+"棍。\n"NOR;
+        if ( !me->query("env/no_msg") && !target->query("env/no_msg") )
+                message_vision(msg, me, weapon);
+        if ( random(me->query_skill("stick"))<target->query("dodge")/3 )
+                {
+                msg = HIW "结果$n"HIW"纵身一跃，闪开了这第"+HIY+chinese_number(i)+HIW+"棍。\n"NOR;
+                if ( !me->query("env/no_msg") && !target->query("env/no_msg") )
+                        message_vision(msg, me, target);
+                }
+        else    {
+                if ( me->query("family/family_name")!="方寸山三星洞" && !me->samsara_check("qianjun-bang",2))
+                        COMBAT_D->do_attack(me,target,me->query_temp("weapon"));
+                else    {       
+                        /* panlong也太强了，消弱fang 2011.8*/
+                        if( wizardp(me) ) {
+                        damage+= random(target->query("kee")/2);
+                        damage+= target->query("kee")/2;
+                        }
+                        damage = damage/2+random(damage/2); 
+                        SDS_D->super_attack(me,target,damage,clr);
+                        }
+                }
+        }    
+me->add("force",-100-random(500));
+me->set_temp("fc_panlong",time());
+return 1;
+}
+
+int help(object me)
+{
+string temp;    
+temp = "\t\t"+to_chinese("dodge")+" 350 级\n";
+temp+= "\t\t"+to_chinese("wuxiangforce")+" 350 级\n";
+temp+= "\t\t"+to_chinese("stick")+" 350 级\n";
+temp+= "\t\t"+to_chinese("qianjun-bang")+" 350 级\n";
+temp+= "\t\t真    气 3000 点\n";
+temp+= "\t\t战斗状态下使用\n";
+write("\n"+to_chinese(explode(__FILE__,"/")[<2])+"之"+name()+"："NOR"\n");
+write(@HELP
+
+        使用功效：
+                消耗众多的真气给予敌人致命
+                性的连续打击
+        出招类型：
+                延迟型外功
+                无隐藏攻击
+                350级后每50级出一棍
+                不可以叛师带出
+                叛师者不可使用
+        出手要求：              
+HELP);                          
+write(temp);
+return 1;
+}
+

@@ -1,0 +1,500 @@
+//modify by fang
+#include <ansi.h>
+
+void resume(object target)
+{
+if ( target->query_temp("fly") )
+	target->delete_temp("fly");
+if ( target->query_temp("tui") )
+	target->delete_temp("tui");
+return;
+}
+
+string *hits=({
+	"左脚","右脚","左小腿","右小腿","左大腿","右大腿","左胯","右胯",
+	"左腰","右腰","左腹","右腹","左胸","右胸","左肩","右肩",
+	"左膀","右膀","左臂","右臂","左手","右手","咽喉","下颚",
+	"嘴唇","鼻子","左眼","右眼","左眉","右眉","左额","右额",
+	"头顶","后背","左膝","右膝","左臀","右臀",
+});
+
+/********************************三级技******************************/
+
+int bashan(object me,object target,int damage) //霸山天升脚 最高8hit
+{
+int i,time;
+string msg,hit;
+time = me->query_skill("feiyan-cu",1);
+time/= 50;
+
+if ( !target || !me->is_fighting(target) )
+	{message_vision(RED"$N见已无敌手，收起了招式。\n"NOR,me);return 1;}
+
+me->add("force",-250);
+me->set_temp("chunli/bashan",1);
+
+if ( target->query_temp("fly") )  //浮空击 必中
+	{
+	msg = HIR"\n$N"HIR"见$n"HIR"身从空中坠下，力贯双腿，紧跟追击。\n"NOR;
+	msg+= HIR"$N足尖点地，腾空而起，身形在空中留出一道残影，使出至高奥义！\n"NOR;
+	msg+= BLINK+HBRED+HIB"霸	山	天	升	脚\n"NOR;
+	message_vision(msg,me,target);
+	for ( i=0;i<time;i++ )
+		{
+		msg = HIR"$N"HIR"腿影无数踢向$n"HIR"，正中$n"HIR"的$1！\n"NOR;
+		hit = hits[random(sizeof(hits))];
+		msg = replace_string(msg,"$1",hit);
+		message_vision(msg,me,target);
+	 	target->receive_damage("kee", damage);
+	 	target->receive_wound("kee", damage/2);
+		COMBAT_D->report_status(target);
+		}
+	}
+else	{
+	msg = HIR"$N上步窜至$n"HIR"面前近身攻击，双腿在舞出无数残影，招招自下而上踢向$n"HIR"！\n"NOR;
+	msg+= BLINK+HBRED+HIB"霸	天	天	升	脚\n"NOR;
+	message_vision(msg,me,target);
+	for ( i=0;i<time;i++ )
+		{
+		if ( (me->query("combat_exp")/10000+1)>random(target->query("combat_exp")/30000) )
+			{
+			damage = damage*3/4;
+			msg = HIR"$N"HIR"舞出腿影无数,踢向$n"HIR"，"NOR;
+			msg+= HIR"正中$n"HIR"的$1！\n"NOR;
+			hit = hits[random(sizeof(hits))];
+			msg = replace_string(msg,"$1",hit);
+			message_vision(msg,me,target);
+	 		target->receive_damage("kee", damage);
+		 	target->receive_wound("kee", damage/2);
+			COMBAT_D->report_status(target);
+			}
+		else	{
+			msg+= HIR"$n"HIR"一闪身避开了。\n"NOR;
+			}
+		}
+	if ( random(me->query_con()+target->query_con())>target->query_con() ) //浮空
+		{
+		msg = HIR"$n"HIR"给踢得气血翻腾，立足不稳，被$N"HIR"随后的跟击踢得站立不住，浮空而起！\n"NOR;
+		message_vision(msg,me,target);
+		target->set_temp("fly",1);
+		target->start_busy(2+random(3));
+		call_out("resume",5+random(5),target);
+		}
+	}
+me->delete_temp("chunli");
+me->start_busy(1);
+return 1;
+}
+
+int longxing(object me,object target,int damage)  //龙星落
+{
+int i,ap,dp,skill;
+string msg,hit;
+damage=damage;
+
+if ( !target || !me->is_fighting(target) )
+	{message_vision(RED"$N见已无敌手，收起了招式。\n"NOR,me);return 1;}
+
+me->add("force",200);
+me->set_temp("chunli/longxing",1);
+
+msg = MAG"\n只见$N"MAG"忽然招式一转，变腿为拳，双手舞动打向$n"MAG"！\n"NOR;
+msg+= MAG"$n"MAG"以为其中无甚奥妙，正想反击，却听$N"MAG"拳风一变，化作万点星光，在$n"MAG"周围乱舞！\n"NOR;
+msg+= BLINK+HBRED+HIM"龙	星	落\n"NOR;
+message_vision(msg,me,target);
+
+ap = me->query_skill("dodge");
+ap+= me->query_temp("apply/dodge");
+dp = target->query_skill("parry");
+dp+= target->query_temp("apply/dodge");
+
+skill = me->query_skill("feiyan-cu",1);
+skill/= 50;
+
+for ( i=0;i<(skill+1);i++)
+	{
+	if ( (ap+dp)>random(dp) )
+		{
+		msg = MAG"\n$n"MAG"只觉眼前一花，$1已挨了一记$2，顿时哇的一口腥血喷出！\n"NOR;
+		msg = replace_string(msg,"$1",hit);
+		msg = replace_string(msg,"$2",random(2)?"左拳":"右拳");
+		message_vision(msg,me,target);
+		target->receive_wound("sen", damage);
+	 	target->receive_wound("kee", damage);
+		COMBAT_D->report_sen_status(target,damage);
+		COMBAT_D->report_status(target,damage);
+		}
+	else	{
+		msg = MAG"$n"MAG"哈哈一笑，轻松闪开。\n"NOR;
+		message_vision(msg,me,target);
+		}
+	}
+me->delete_temp("chunli");
+me->start_busy(1);
+return 1;
+}
+
+int qianlie(object me,object target,int damage) //千裂脚
+{
+int i,time;
+string msg,hit;
+time = me->query_skill("feiyan-cu",1);
+time/= 60;
+
+if ( !target || !me->is_fighting(target) )
+	{message_vision(RED"$N见已无敌手，收起了招式。\n"NOR,me);return 1;}
+
+me->add("force",-250);
+me->set_temp("chunli/qianlie",1);
+
+if ( target->query_temp("tui") )  //迫退击 必中
+	{
+	msg = HIW"\n$N"HIW"见$n"HIW"马步难稳，步法散乱，难以站定，娇叱一声，发起猛烈的攻击！\n"NOR;
+	msg+= HIW"只见$N左脚站定，右脚乱舞，使出至高奥义！\n"NOR;
+	msg+= BLINK+HBRED+HIC"千	裂	脚\n"NOR;
+	message_vision(msg,me,target);
+	for ( i=0;i<time*2;i++ )
+		{
+		msg = HIW"无数腿影无数踢向$n"HIW"，“啪”的一声，$n"HIW"$1已中了一击！"NOR;
+		hit = hits[random(sizeof(hits))];
+		msg = replace_string(msg,"$1",hit);
+		message_vision(msg,me,target);
+		damage = damage/4;
+	 	target->receive_damage("kee", damage);
+	 	target->receive_wound("kee", damage);
+		COMBAT_D->report_status(target);
+		}
+	}
+else	{
+	msg = HIW"$N上步窜至$n"HIW"面前近身攻击，左脚站定，右脚舞出千万腿影，使出至高奥义！\n"NOR;
+	msg+= BLINK+HBRED+HIC"千	裂	脚\n"NOR;
+	message_vision(msg,me,target);
+	
+	for ( i=0;i<time*3;i++ )
+		{
+		if ( me->query("combat_exp")>random(target->query("combat_exp")/3) )
+			{
+			msg = HIW"$N"HIW"舞出腿影无数,踢向$n"HIW"，"NOR;
+			msg+= HIW"正中$n"HIW"的$1！\n"NOR;
+			hit = hits[random(sizeof(hits))];
+			msg = replace_string(msg,"$1",hit);
+			message_vision(msg,me,target);
+			damage = damage/4;
+	 		target->receive_damage("kee", damage);
+		 	target->receive_wound("kee", damage/2);
+			COMBAT_D->report_status(target);
+			}
+		else	{
+			msg+= HIW"$n"HIW"一闪身避开了。\n"NOR;
+			}
+		}
+	if ( random(me->query_con()+target->query_con())>target->query_con() ) //迫退
+		{
+		msg = HIW"$n"HIW"给踢得气血翻腾，立足不稳，被$N"HIW"随后的跟击踢得站立不住，连连后退！\n"NOR;
+		message_vision(msg,me,target);
+		target->set_temp("tui",1);
+		target->start_busy(4+random(3));
+		call_out("resume",4+random(7),target);
+		}
+	}
+me->delete_temp("chunli");
+me->start_busy(1);
+return 1;
+}
+
+/***********************************二级技*************************************/
+
+int fengyi(object me,object target,int damage)  //风翼扇
+{
+string msg;
+damage=damage*3/4;
+
+if ( !target || !me->is_fighting(target) )
+	{message_vision(RED"$N见已无敌手，收起了招式。\n"NOR,me);return 1;}
+
+me->add("force",-150);
+me->set_temp("chunli/fengyi",1);
+
+msg = HIC"\n$N"HIC"双臂伸展，整个人冲天而起，在艳阳下仿佛朝向涅盘的凤凰般，绽放出无比艳丽的光芒！\n"NOR;
+msg+= HIC"$n"HIC"正看得目瞪口呆之际，只见$N"HIC"已直冲而下，随着不住旋转的身体带出一股无比\n"NOR
+RED"炽热"NOR HIC"的"NOR RED"热浪"NOR HIC"朝$n"HIC"直逼而来！\n"NOR;
+msg+= BLINK+HBRED+RED"凤	翼	扇\n"NOR;
+message_vision(msg,me,target);
+if ( me->query("combat_exp")/10000>random(target->query("combat_exp")/30000) )
+	{
+	msg = RED"$n"RED"哪里躲闪得开，瞬时被热浪淹没了！\n"NOR;
+	message_vision(msg,me,target);
+	target->receive_damage("sen", damage);
+ 	target->receive_wound("sen", damage/2);
+	COMBAT_D->report_sen_status(target);
+	}
+else	{
+	msg = HIC"见状，情知不妙，赶紧纵身跃开。\n"NOR;
+	message_vision(msg,me,target);
+	}
+me->delete_temp("chunli/fengyi");
+return 1;
+}
+
+int tiansheng(object me,object target,int damage)  //天升脚
+{
+int i,time;
+string msg,hit;
+time = me->query_skill("feiyan-cu",1);
+time/= 100;
+damage=damage/6;
+
+if ( !target || !me->is_fighting(target) )
+	{message_vision(RED"$N见已无敌手，收起了招式。\n"NOR,me);return 1;}
+
+me->add("force",-150);
+me->add_temp("chunli/tiansheng",1);
+
+if ( target->query_temp("fly") )  //浮空击 必中
+	{
+	msg = HIR"\n$N"HIR"见$n"HIR"身从空中坠下，力贯双腿，紧跟追击。\n"NOR;
+	msg+= HIR"$N足尖点地，腾空而起，身形在空中留出一道残影，使出奥义！\n"NOR;
+	msg+= HBRED+HIB"天	升	脚\n"NOR;
+	message_vision(msg,me,target);
+	damage = damage*3/2;
+	for ( i=0;i<time;i++ )
+		{
+		msg = HIR"$N"HIR"腿影无数踢向$n"HIR"，正中$"HIR"的$1！"NOR;
+		hit = hits[random(sizeof(hits))];
+		msg = replace_string(msg,"$1",hit);
+		message_vision(msg,me,target);
+	 	target->receive_damage("kee", damage);
+	 	target->receive_wound("kee", damage/2);
+		COMBAT_D->report_status(target);
+		}
+	}
+else	{
+	msg = HIR"$N上步窜至$n"HIR"面前近身攻击，双腿在舞出无数残影，招招自下而上踢向$n"HIR"！\n"NOR;
+	msg+= HBRED+HIB"天	升	脚\n"NOR;
+	message_vision(msg,me,target);
+	for ( i=0;i<time*2;i++ )
+		{
+		if ( me->query("combat_exp")/10000>random(target->query("combat_exp")/30000) )
+			{
+			msg = HIR"$N"HIR"舞出腿影无数,踢向$n"HIR"，"NOR;
+			msg+= HIR"正中$n"HIR"的$1！\n"NOR;
+			hit = hits[random(sizeof(hits))];
+			msg = replace_string(msg,"$1",hit);
+			message_vision(msg,me,target);
+	 		target->receive_damage("kee", damage);
+		 	target->receive_wound("kee", damage/2);
+			COMBAT_D->report_status(target);
+			}
+		else	{
+			msg+= HIR"$n"HIR"一闪身避开了。\n"NOR;
+			}
+		}
+	if ( random(me->query_con()+target->query_con())>target->query_con() ) //浮空
+		{
+		msg = HIR"$n"HIR"给踢得气血翻腾，立足不稳，被$N"HIR"随后的跟击踢得站立不住，浮空而起！\n"NOR;
+		message_vision(msg,me,target);
+		target->set_temp("fly",1);
+		target->start_busy(1+random(3));
+		call_out("resume",3+random(5),target);
+		}
+	}
+me->delete_temp("chunli/tiansheng");
+return 1;
+}
+
+int bailie (object me,object target,int damage)  //百裂脚
+{
+int i,time;
+string msg,hit;
+time = me->query_skill("feiyan-cu",1);
+time/= 100;
+
+if ( !target || !me->is_fighting(target) )
+	{message_vision(RED"$N见已无敌手，收起了招式。\n"NOR,me);return 1;}
+
+me->add("force",-250);
+me->set_temp("chunli/bailie",1);
+
+if ( target->query_temp("tui") )  //迫退击 必中
+	{
+	msg = HIW"\n$N"HIW"见$n"HIW"马步难稳，步法散乱，难以站定，娇叱一声，发起猛烈的攻击！\n"NOR;
+	msg+= HIW"只见$N左脚站定，右脚乱舞，使出奥义！\n"NOR;
+	msg+= HBRED+HIC"百	裂	脚\n"NOR;
+	message_vision(msg,me,target);
+	for ( i=0;i<time;i++ )
+		{
+		msg = HIW"无数腿影无数踢向$n"HIW"，“啪”的一声，$n"HIW"$1已中了一击！"NOR;
+		hit = hits[random(sizeof(hits))];
+		msg = replace_string(msg,"$1",hit);
+		message_vision(msg,me,target);
+		damage = damage/5;
+	 	target->receive_damage("kee", damage);
+	 	target->receive_wound("kee", damage);
+		COMBAT_D->report_status(target);
+		}
+	}
+else	{
+	msg = HIW"$N上步窜至$n"HIW"面前近身攻击，左脚站定，右脚舞出千万腿影，使出至高奥义！\n"NOR;
+	msg+= HBRED+HIC"百	裂	脚\n"NOR;
+	message_vision(msg,me,target);
+	for ( i=0;i<time*2;i++ )
+		{
+		if ( me->query("combat_exp")/10000>random(target->query("combat_exp")/30000) )
+			{
+			msg = HIW"$N"HIW"舞出腿影无数,踢向$n"HIW"，"NOR;
+			msg+= HIW"正中$n"HIW"的$1！\n"NOR;
+			hit = hits[random(sizeof(hits))];
+			msg = replace_string(msg,"$1",hit);
+			message_vision(msg,me,target);
+			damage = damage/3;
+	 		target->receive_damage("kee", damage);
+		 	target->receive_wound("kee", damage/2);
+			COMBAT_D->report_status(target);
+			}
+		else	{
+			msg+= HIW"$n"HIW"一闪身避开了。\n"NOR;
+			}
+		}
+	if ( random(me->query_con()+target->query_con())>target->query_con() ) //迫退
+		{
+		msg = HIW"$n"HIW"给踢得气血翻腾，立足不稳，被$N"HIW"随后的跟击踢得站立不住，连连后退！\n"NOR;
+		message_vision(msg,me,target);
+		target->set_temp("tui",1);
+		target->start_busy(1+random(3));
+		call_out("resume",1+random(5),target);
+		}
+	}
+me->delete_temp("chunli/bailie");
+return 1;
+}
+
+
+int huxi(object me,object target,int damage)  //虎袭倒
+{
+int ap,dp;
+string msg,hit;
+damage=damage*2;
+
+if ( !target || !me->is_fighting(target) )
+	{message_vision(RED"$N见已无敌手，收起了招式。\n"NOR,me);return 1;}
+
+me->add("force",200);
+me->set_temp("chunli/huxi",1);
+
+msg = WHT"\n只见$N"WHT"在半空越舞越快，到最后只看到半空一片幻影，再不见一丝$N"WHT"的影踪！\n"NOR;
+msg+= WHT"$n"WHT"正发愣之际，只听得半空一声霹雳，$N"WHT"带着一片风雷之声直扑而下，以膝盖直撞而来！\n"NOR;
+msg+= HBRED+HIB"虎	袭	倒\n"NOR;
+
+message_vision(msg,me,target);
+
+ap = me->query_cps();
+ap+= me->query_cor();
+dp = target->query_cps();
+dp+= target->query_cor();
+
+if ( (ap+dp)>random(dp) )
+	{
+	msg = BLU"\n$n"BLU"迫不及防，$1正中一记，立时气血翻滚，整个人不由自主的向后直退！\n"NOR;
+	hit = hits[random(sizeof(hits))];
+	msg = replace_string(msg,"$1",hit);
+	message_vision(msg,me,target);
+	target->star_busy(3+random(3));
+	target->receive_damage("kee", damage);
+ 	target->receive_wound("kee", damage);
+	COMBAT_D->report_status(target,damage);
+	call_out("resume",5+random(10),target);
+	}
+else	{
+	msg = WHT"$n"WHT"怪叫一声，一个倒翻跳出了圈外，直吓了一身冷汗。\n"NOR;
+	message_vision(msg,me,target);
+	}
+me->delete_temp("chunli/huxi");
+return 1;
+}
+
+int yingzhua(object me,object target,int damage)  //鹰爪腿
+{
+int ap,dp;
+string msg,hit;
+damage=damage*2;
+
+if ( !target || !me->is_fighting(target) )
+	{message_vision(RED"$N见已无敌手，收起了招式。\n"NOR,me);return 1;}
+
+me->add("force",200);
+me->add_temp("chunli/yingzhua",1);
+
+msg = YEL"\n只见$N"YEL"在半空渐渐放慢了速度，最后猛地停住身形！\n"NOR;
+msg+= YEL"$n"YEL"正发愣之际，只听$N"YEL"一声娇叱，一个倒翻，$1顺势直点$n"YEL"周身要害！\n"NOR;
+msg+= HBRED+HIY"鹰	爪	腿\n"NOR;
+msg = replace_string(msg,"$1",random(2)?"左脚":"右脚");
+message_vision(msg,me,target);
+
+ap = me->query_skill("dodge");
+ap+= me->query_temp("apply/dodge");
+dp = target->query_skill("parry");
+dp+= target->query_temp("apply/dodge");
+
+if ( (ap+dp)>random(dp) )
+	{
+	msg = HIY"\n$n"HIY"迫不及防，$1正中一记，立时气血翻滚，哇的一口鲜血喷出！\n"NOR;
+	hit = hits[random(sizeof(hits))];
+	msg = replace_string(msg,"$1",hit);
+	message_vision(msg,me,target);
+	target->receive_damage("sen", damage);
+ 	target->receive_wound("sen", damage);
+	COMBAT_D->report_sen_status(target,damage);
+	}
+else	{
+	msg = YEL"$n"YEL"哈哈一笑，轻松闪开。\n"NOR;
+	message_vision(msg,me,target);
+	}
+me->delete_temp("chunli/yingzhua");
+return 1;
+}
+
+int tianxing(object me,object target,int damage)  //天星乱华
+{
+int i,ap,dp;
+string msg,hit;
+damage=damage/2;
+
+if ( !target || !me->is_fighting(target) )
+	{message_vision(RED"$N见已无敌手，收起了招式。\n"NOR,me);return 1;}
+
+me->add("force",200);
+me->set_temp("chunli/tianxing",1);
+
+msg = HIG"\n只见$N"HIG"忽然招式一转，变腿为拳，双手舞动打向$n"HIG"！"NOR;
+msg+= HIG"$n"HIG"以为其中无甚奥妙，正想反击，却听$N"HIG"拳风一变，化作万点星光，在$n"HIG"周围乱舞！\n"NOR;
+msg+= HBRED+HIG"天	星	乱	华\n"NOR;
+message_vision(msg,me,target);
+
+ap = me->query_skill("dodge");
+ap+= me->query_temp("apply/dodge");
+dp = target->query_skill("parry");
+dp+= target->query_temp("apply/dodge");
+
+for ( i=0;i<(random(5)+1);i++)
+	{
+	if ( (ap+dp)>random(dp) )
+		{
+		msg = HIG"\n$n"HIG"只觉眼前一花，$1已挨了一记$2，顿时哇的一口腥血喷出！\n"NOR;
+		hit = hits[random(sizeof(hits))];
+		msg = replace_string(msg,"$1",hit);
+		msg = replace_string(msg,"$2",random(2)?"左拳":"右拳");
+		message_vision(msg,me,target);
+		target->receive_wound("sen", damage);
+	 	target->receive_wound("kee", damage);
+		COMBAT_D->report_sen_status(target,damage);
+		COMBAT_D->report_status(target,damage);
+		}
+	else	{
+		msg = HIG"$n"HIG"哈哈一笑，轻松闪开。\n"NOR;
+		message_vision(msg,me,target);
+		}
+	}
+me->delete_temp("chunli/tianxing");
+return 1;
+}
+

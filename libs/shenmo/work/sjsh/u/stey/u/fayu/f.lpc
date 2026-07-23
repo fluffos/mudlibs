@@ -1,0 +1,1 @@
+ion",3,str1,this_player(),who);;  remove_call_out ("delayed_reaction");;  call_out ("delayed_reaction",4,rdm(returns)+"\n",;            this_player(),who);;  return 1;;};;void delayed_action (string str, object ob1, object ob2);{;  message_vision (str,ob1,ob2);;};;void delayed_reaction (string str, object ob1, object ob2);{;  message_vision (str,ob1,ob2);;};;

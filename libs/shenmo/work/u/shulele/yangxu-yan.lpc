@@ -1,0 +1,110 @@
+
+inherit NPC;
+
+#include <ansi.h>
+
+#define TIME_TICK1 time()*60
+string *list=({
+
+"killer",
+
+	});
+
+
+int do_kill(string arg);
+
+string do_quest1();
+void create()
+{
+   int i;
+   object *ob;
+   
+   set_name("ÄÃÇ®ÂòÃü",({ "shashou","sha" }) );
+   set("gender", "ÄĞĞÔ" );
+   set("nickname",HIR"ÄÃÈËÇ®²Æ£¬ÌæÈËÏûÔÖ"NOR);
+   set("age", 32);
+   set("long", "Õâ¾ÍÊÇÎäÁÖÖĞÎÅÃûÉ±ÊÖ¼¯ÍÅ´óÀÏ°å¡£\n");
+       
+   set("combat_exp", 10000000);
+   set("str",30);
+   set("per", 30);
+   set("dex",30);
+   
+   set("max_gin",3000);
+   set("max_kee",3000);
+   set("max_sen",3000);
+   set("force",3000);
+   set("max_force",3000);
+   
+   set_skill("force",500);
+   set_skill("dodge",500);
+   set_skill("parry",500);
+   set_skill("sword",200);
+   
+   set_skill("yingzi-jianfa",200);
+   set_skill("huanmo-shenfa",200);
+   set_skill("wanshi-jue",200);
+ 
+   set("inquiry",([
+
+	  "´ÌÉ±": "ºÃ°É£¬ÇëÓÃ cisha ÈËÎïid  À´¸æËßÎÒÉ±Ë­°É!\n",
+        
+	
+	   ]));
+   set("vocation","É±ÊÖ");
+   set("vocation_skill","yingzi-jianfa");
+   set_temp("apply/armor",100);
+   setup();
+   ob=children(__DIR__"obj/qingfeng-jian");
+   for(i=0;i<sizeof(ob);i++)
+     if(environment(ob[i])&&userp(environment(ob[i]))){
+     tell_object(environment(ob[i]),"ÄãÊÖÖĞµÄ"+ob[i]->query("name")+"±»ËüµÄÖ÷ÈËÊÕ»ØÈ¥ÁË£¡\n");
+     if(ob[i]->query("equipped"))
+      ob[i]->unequip();
+     destruct(ob[i]);}
+     else if(environment(ob[i])){
+     tell_object(environment(ob[i]),ob[i]->query("name")+"±»Ò»Õó·ç¾í×ßÁË¡£\n");
+     destruct(ob[i]);}
+     else destruct(ob[i]);
+   //carry_object(__DIR__"obj/qingfeng-jian")->wield();
+  
+}
+
+void init()
+{
+	add_action("do_kill","cisha");
+	
+}
+
+int do_kill(string arg)
+{
+	object *usr;object me,ob;int i,j;object victim;
+	int vexp,gol;int money;
+	me=this_player();
+	ob=this_object();
+	usr=users();
+	if(!arg) return notify_fail("ÄãÈÃÎÒÈ¥É±Ë­£¿Ã÷ËµºÃÁË!\n");
+	j=0;
+	if(me->query("id")==arg) return notify_fail("É±Äã×Ô¼º£¿¿ªÍæĞ¦°É£¿£¡\n");
+	for(i=0;i<sizeof(usr);i++)
+	{
+		if(usr[i]->query("id")==arg)
+		{ j=1;victim=usr[i];break;}
+	}
+	if(j==0) return notify_fail("¶÷£¿ÏÖÔÚµÄ½­ºşÖĞÓĞÕâ¸öÈËÂğ£¿ºÃºÃ¿´¿´!\n");
+	if(victim->is_ghost())
+	return notify_fail("Õâ¸öÈËÒÑ¾­ËÀÁË£¬Äã»¹ÊÇ»ıµãÒõµÂ°É£¡\n");
+	vexp=victim->query("combat_exp");
+	gol=vexp/1000+random(vexp/1000);
+	if(gol<=0) return notify_fail("ºß£¬Îä¹¦ÕâÃ´µÍÎ¢µÄÈËÒ²ÖµµÃÎÒÀ´É±?\n");
+	tell_object(me,"Õâ´ÎĞĞ¶¯Òª»¨µôÄã"+chinese_number(gol)+"Á½»Æ½ğ!\n");
+	money=gol*10000;
+	switch(MONEY_D->player_pay(this_player(), money))
+	{
+	case 0: return notify_fail("ºß£¬ÕâÃ´µãÇ®£¬Ò²ÏëÀ´ÕÒÎÒ£¿\n");
+	case 2: return notify_fail("ÄúµÄÁãÇ®²»¹»ÁË£¬ÒøÆ±ÓÖÃ»ÈËÕÒµÃ¿ª¡£\n");
+	default:
+	tell_object(me,"ÄÃÇ®ÂòÃüµãµãÍ·£¬µÀ£ºÊÕÈËÇ®²Æ£¬ÓëÈËÏûÔÖ£¬ÄãµÈ×ÅºÃÁË£¡\n");
+	if(victim->query("combat_exp")>500000)
+	ob->set("combat_exp",victim->query("combat_exp"));
+	if(!objectp(victim)) return notify_fail("°¥Ñ½£¬Õâ¸öÈËÍ»È»ÅÜÁË£

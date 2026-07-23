@@ -1,0 +1,382 @@
+#include <ansi.h>
+inherit NPC;
+
+int atk=0;
+int changed = 0;
+
+void team_reward(object who,int reward,string data)
+{
+int i,k,rewards;        
+string d_msg;   
+object *team;
+if ( !who || !objectp(who) || !reward )
+        error("给谁所在的组奖励？\n");
+if ( data!="potential" && data!="combat_exp" 
+  && data!="daoxing" && data!="level_exp" )
+        error("奖励什么？\n");
+switch(data)
+        {
+        case "combat_exp" : d_msg = "武学";break;
+        case "daoxing"  : d_msg = "道行";break;
+        case "level_exp": d_msg = "等级经验";break;
+        default         : d_msg = "潜能";break;
+        }       
+if ( reward<100 )       reward = 100;   
+reward*= 100;
+reward = reward/10+random(reward/10);
+if ( ("/d/snowtu/team/start")->is_same_ip() )   
+       reward/= 10;
+if ( reward>10000 )  reward = 10000;
+who->add(data,reward);
+team = who->query_team();
+if ( team && pointerp(team) )
+    message("team",HIW"【队伍】"+who->query("name")+HIW"：得到了"+(data=="daoxing"?SDS_D->no_color_msg(COMBAT_D->chinese_daoxing(reward)):reward)+HIW"的"+d_msg+HIW"奖励。\n"NOR,team);
+else  tell_object(who,HIY"\n『"HIR"系统"HIY"』"NOR YEL"你得到了 "WHT+(data=="daoxing"?SDS_D->no_color_msg(COMBAT_D->chinese_daoxing(reward)):reward)+NOR YEL" 的 "WHT+d_msg+YEL" 奖励。\n\n"NOR);
+who->save();
+write_file( __DIR__"evl_kill",sprintf("%s %s 杀死了 %s ，得到了 %d 的 %s 奖励\n",who->query("id"),("/cmds/usr/bjtime")->chinese_time(5,localtime(time())),query("id"),reward,d_msg) );
+i = sizeof(team);
+while(i--)
+        {
+        if ( !team[i] ) continue;
+        if ( !living(team[i]) ) continue;
+        if ( team[i]==who )     continue;
+        if ( !present(team[i],environment(who)) )
+                continue;
+        k = who->query("level")-team[i]->query("level");
+        if ( k<0 ) 
+                k = -k;
+        reward = reward/(1+k);
+        reward = reward/2+random(reward);
+        team[i]->add(data,reward);
+    message("team",HIW"【队伍】"+team[i]->query("name")+HIW"：得到了"+(data=="daoxing"?SDS_D->no_color_msg(COMBAT_D->chinese_daoxing(reward)):reward)+HIW"的"+d_msg+HIW"奖励。\n"NOR,team);
+write_file( __DIR__"evl_kill",sprintf("%s %s 杀死了 %s ，得到了 %d 的 %s 奖励\n",team[i]->query("id"),("/cmds/usr/bjtime")->chinese_time(5,localtime(time())),query("id"),reward,d_msg) );
+        team[i]->save();
+        }
+}                       
+                
+int is_no_hit()
+{
+return this_object()->query_busy();
+}
+
+string no_hit()
+{
+if ( !is_no_hit() )
+        return 0;
+return HIR"\n$N"HIR"目前处于无敌状态！\n\n"NOR;         
+}
+
+void heart_beat()
+{
+object me = this_object();
+int flag=0,lvl = me->query("level");
+::heart_beat();
+
+if ( me->is_busy() )
+        return;
+lvl = 100-lvl;
+lvl/=10;
+if ( lvl<=0 )
+        lvl = 1;
+if ( random(10)<lvl )
+        flag = 0;       
+if ( query("eff_kee") < query("max_kee") && flag )
+        SDS_D->addEffKee(me);
+if ( query("kee") < query("eff_kee") && flag )
+        SDS_D->addKee(me);
+if ( query("sen") < query("eff_sen") && flag )
+        SDS_D->addSen(me);
+if ( query("eff_sen") < query("max_sen") && flag )
+        SDS_D->addEffSen(me);
+
+if ( !me->is_fighting() )
+        return;
+SDS_D->randomPfm(this_object());
+SDS_D->randomCast(this_object());
+SDS_D->randomExert(this_object());
+}
+
+int heal_up()
+{
+mapping my = query_entire_dbase();
+if ( my["kee"]<my["eff_kee"] )
+        my["kee"]+=my["max_kee"]/10;
+if ( my["sene"]<my["eff_sen"] )
+        my["sen"]+=my["max_sen"]/10;
+if ( my["force"]<my["max_force"]*2 )  my["force"]+= 100;
+if ( my["mana"]<my["max_mana"]*2 )  my["mana"]+= 100;
+return ::heal_up()+1;
+}                
+
+int attack()
+{
+object who = select_opponent();
+string type;
+if ( !who || !objectp(who) )
+        return ::attack();
+type = query("attack_type");
+atk++;
+if ( atk%6!=0 )  return ::attack();
+if ( !type ) return ::attack();
+switch(type)
+        {
+        case "fire" :
+                message_vision(RED"\n$N"RED"张口吐出一道炙热的烈火，朝向$n"RED"烧去！\n"NOR,this_object(),who);
+                if ( random(query("combat_exp"))>who->query("combat_exp")/3 
+                  || query("level")/2>random(who->query("level"))
+                  || who->is_busy() )
+                        {
+                        message_vision(RED"$n"RED"躲闪不及，给烧得狼狈不堪！\n"NOR,this_object(),who);
+                        who->receive_damage("sen",who->query_temp("apply/damage"));
+                        who->receive_wound("sen",who->query_temp("apply/damage")/10+1);
+                        COMBAT_D->report_sen_status(who,who->query("max_sen")-who->query("sen")+1);
+                        }
+                else    message_vision(RED"$n"RED"不慌不忙，纵身闪开。\n"NOR,this_object(),who);
+                break;
+        case "water" :
+                message_vision(WHT"\n$N"WHT"张口吐出一道冰冷刺骨的霜水，朝向$n"RED"泼去！\n"NOR,this_object(),who);
+                if ( ( random(query("combat_exp"))>who->query("combat_exp")/3 
+                    || query("level")/2>random(who->query("level")) ) &&
+                    !who->is_busy() )
+                        {
+                        message_vision(WHT"$n"WHT"躲闪不及，给浇了正着，不禁浑身打颤，冻作一团！\n"NOR,this_object(),who);
+                        who->start_busy(2+random(3),"减速");
+                        }
+                else    message_vision(WHT"$n"WHT"不慌不忙，纵身闪开。\n"NOR,this_object(),who);
+                break;
+        default :
+                message_vision(YEL"\n$N"YEL"甩手，朝向$n"YEL"丢出一道暗镖！\n"NOR,this_object(),who);
+                if ( random(query("combat_exp"))>who->query("combat_exp")/3 
+                  || query("level")/2>random(who->query("level"))
+                  || who->is_busy() )
+                        {
+                        message_vision(YEL"$n"YEL"躲闪不及，给扎了一记，看来是受伤不轻！\n"NOR,this_object(),who);
+                        who->receive_damage("kee",who->query_temp("apply/damage"));
+                        who->receive_wound("kee",who->query_temp("apply/damage")/10+1);
+                        COMBAT_D->report_status(who,who->query("max_kee")-who->query("kee")+1);
+                        }
+                else    message_vision(WHT"$n"WHT"不慌不忙，纵身闪开。\n"NOR,this_object(),who);
+        }
+return ::attack();
+}       
+        
+varargs int receive_damage(string type, int damage, object who)
+{
+if ( is_no_hit() )
+        damage = 100;
+if ( damage>800 ) damage = 700+random(150);
+return ::receive_damage(type,damage,who);
+}                                               
+
+varargs int receive_wound(string type, int damage, object who)                                    
+{
+if ( is_no_hit() )
+        damage = 100;
+if ( damage>800 ) damage = 700+random(150);
+return ::receive_wound(type,damage,who);        
+}
+
+varargs void announce(object who,string id)
+{
+int i,k;
+object *t;
+string *skill;  
+mapping skills = query_skills();
+mapping his,my;
+
+if ( !who )
+        {
+        if ( !id || !stringp(id) )
+                return; 
+        who = find_player(id);
+        if ( !who || !living(who) )     
+                return;
+        }
+if( !pointerp(t=who->query_team()) )
+        return;
+        
+skill = keys(skills);
+his = who->query_entire_dbase();
+my = query_entire_dbase();
+if ( my["level"]<his["level"] )  my["level"]=his["level"];
+if ( my["max_kee"]<his["max_kee"] )  my["max_kee"]+= his["max_kee"]+random(his["max_kee"]*3);
+if ( my["max_sen"]<his["max_sen"] )   my["max_sen"] = his["max_sen"]*2+random(his["max_sen"]*3);        
+my["eff_kee"] = my["max_kee"];
+my["kee"] = my["max_kee"];
+my["eff_sen"] = my["max_sen"];
+my["sen"] = my["max_sen"];
+my["water"] = 1000;
+my["food"] = 1000;
+if ( my["combat_exp"]<his["combat_exp"] )  my["combat_exp"] = his["combat_exp"]+random(his["combat_exp"]/2);
+if ( my["daoxing"]<his["daoxing"] ) my["daoxing"] = his["daoxing"]+random(his["daoxing"]/2);
+
+k = who->query_skill("force",1);
+k = k+random(k);
+
+for(i=0;i<sizeof(skill);i++)
+        set_skill(skill[i],k);
+
+my["max_force"] = query_skill("force",1)*30/2;
+my["max_mana"] = query_skill("spells",1)/2*30;
+my["mana"] = my["max_mana"]*2;
+my["force"] = my["max_force"]*2;
+
+if ( stringp(query("family/family_name")) )
+        {
+        if ( query("family/family_name")=="月宫" )
+                my["force_factor"] = 0;
+        else    my["force_factor"] = query_skill("force",1)/2;  
+        }
+my["mana_factor"] = query_skill("spells",1)/2;  
+my["bellicosity"] = his["bellicosity"]+random(500);
+
+add_temp("apply/damage",who->query_temp("apply/damage")/3);
+add_temp("apply/armor",who->query_temp("apply/armor")/3);
+
+switch(random(4))
+        {
+        case 0 : set("attack_type","fire");break;
+        case 3 : set("attack_type","wind");break;
+        default: set("attack_type","water");
+        }
+my["kar"] = his["kar"];
+my["str"] = his["str"];
+my["con"] = his["con"];
+my["cps"] = his["cps"];
+my["per"] = his["per"];
+my["int"] = his["int"];
+message("team",HIR"『"HIW"系统"HIR"』四灵兽：随机怪物---"HIR+SDS_D->no_color_msg(query("name"))+HIW"数据生成完毕。\n"NOR,t);
+}       
+
+void die()
+{
+object who,ob,*t,corpse,*inv;
+int i,lvl,reward;
+
+SDS_D->powerup(this_object());
+this_object()->remove_all_killer();
+all_inventory(environment())->remove_killer(this_object());
+                
+if ( objectp(corpse = CHAR_D->make_corpse(this_object(), killer)) )
+        {
+        corpse->move(environment());
+        inv = all_inventory(corpse);
+        i = sizeof(inv);
+        while(i--)
+                destruct(inv[i]);
+        }
+if ( stringp(query("die_msg")) )
+        message_vision(YEL+query("die_msg")+NOR"\n",this_object());
+else    message_vision(YEL"\n$N惨叫一声，摔倒尘埃，一阵抽搐，死了。。。。\n\n"NOR,this_object());
+
+who = query_temp("last_damage_from");
+if ( !who || !living(who) || !present(who,environment()) )
+        {
+        destruct(this_object());
+        return;
+        }
+t = who->query_team();
+if ( !t || !pointerp(t) )
+        {
+        destruct(this_object());
+        return;
+        }
+
+switch(random(10))
+        {
+        case 0:
+                reward = query("combat_exp")-who->query("combat_exp");
+                reward/= 4000;
+                reward = reward/2+random(reward/2);
+                if ( reward>2000 )
+                        reward = 1800+random(1000);
+                team_reward(who,reward,"combat_exp");
+                break;
+        case 9:
+                reward = query("daoxing")-who->query("daoxing");
+                reward/= 1000;
+                reward = reward/2+random(reward/2);
+                if ( reward>2000 )
+                        reward = 1800+random(1000);
+                team_reward(who,reward,"daoxing");
+                break;
+        case 5:
+                reward = query("combat_exp")-who->query("combat_exp");
+                reward/= 8000;
+                reward = reward/3+random(reward/3);
+                if ( reward>2000 )
+                        reward = 1500+random(1000);
+                team_reward(who,reward,"potential");
+                break;
+        default:
+                lvl = query("level")-who->query("level");
+                if ( lvl<=0 )
+                        lvl = 1;
+                reward = (lvl+1)*80;
+                reward = reward/2+random(reward);
+                if ( reward<1 )
+                        reward = 1;
+                if ( reward>30000 )
+                        reward = 20000+random(10000);
+                team_reward(who,reward,"level_exp");
+        }
+if ( query("die_obj") )
+        {
+        ob = new(query("die_obj"));
+        if ( ob )
+                {
+                if ( ob->move(environment()) )
+                        message_vision(YEL"\n$N丢下了一"+ob->query("unit")+ob->name()+YEL"。\n"NOR,this_object());
+                }
+        }
+ob = new("/obj/money/gold");
+ob->set_amount(random(100)+1);
+if ( ob->move(environment()) )
+   message_vision(YEL"\n$N丢下了一"+ob->query("unit")+ob->name()+YEL"。\n"NOR,this_object());
+destruct(this_object());
+}
+
+
+void unconcious()       
+{
+this_object()->clear_condition();
+this_object()->remove_all_killer();
+all_inventory(environment())->remove_killer(this_object());
+::unconcious();
+set("kee",query("eff_kee")/10);
+set("sen",query("eff_sen")/10);
+}       
+
+int accept_kill(object who)
+{
+if ( !changed )
+    { if ( SDS_D->random_family(this_object(),who) )  { announce(who);changed++;kill_ob(who);return 1; } else return 0; 
+    }
+else    { kill_ob(who);return 1;}
+}       
+
+void kill_ob(object who)
+{
+if ( changed )  ::kill_ob(who);
+else  {
+    if ( SDS_D->random_family(this_object(),who) )
+        {
+        announce(who);
+        changed++;
+        }
+  ::kill_ob(who);
+  }
+}
+
+void init()
+{
+add_action("do_surrender","surrender");
+}
+
+int do_surrender()
+{
+if ( random(5)==3 )  return 0;
+say(HIW+query("name")+HIW"点了点头：“好，我们休息休息！”\n"NOR);
+SDS_D->powerup(this_object(),random(2));
+return 0;
+}

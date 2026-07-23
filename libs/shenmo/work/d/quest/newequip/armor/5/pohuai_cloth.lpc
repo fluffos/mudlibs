@@ -1,0 +1,33 @@
+// kuku@sjsh 2003.09.14
+
+#include <ansi.h>
+#include <armor.h>
+inherit CLOTH;
+inherit "/d/quest/newequip/calculate";
+
+void create()
+{
+        string msg = "";  
+        set_name(HIB"破坏衣"NOR, ({"pohuai yi", "cloth"}));
+        set_weight(4000);
+        if( clonep() )
+                set_default_object(__FILE__);
+        else{
+                set("material", "cloth");
+                set("unit", "件");
+                set("need_class",-1);
+                set("lvl",5);                   
+                set("Is_Diablo_Obj",1);
+                set("inset_hole",3);
+                set("value", 1000);
+                set("armor_prop/armor", 90);
+        }
+        msg += "一件薄薄的衣服。\n"+"基本防御: "+query("armor_prop/armor")+"\n"; 
+        set("old_long",msg);
+        if( query("lvl")>2){
+                if( !query("identification") ) 
+                        msg =query("old_long") + RED "这样东西还没有鉴定。\n"NOR;
+                        set("long",msg);
+        } 
+        setup();
+}

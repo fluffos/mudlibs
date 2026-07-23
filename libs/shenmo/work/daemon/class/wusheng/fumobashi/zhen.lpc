@@ -1,0 +1,174 @@
+#include <ansi.h>
+inherit SSERVER;
+
+string name()
+{
+return "「"HIR"震"NOR"」字诀";    
+}
+
+string force = "";
+
+int valid_perform(object me)
+{
+if ( !me )
+        return 0;
+if ( me->query("shilian")<1 )
+        return notify_fail("你还没有通过试炼塔的考验！\n");
+if ( me->query("class")!="xian" && !me->samsara_check("fumobashi",1) )
+        return notify_fail(name()+"乃是仙家不传之秘。\n");
+if ( me->query_skill("fumobashi",1)<50 )
+        return notify_fail("你的"+to_chinese("fumobashi")+"等级不足 50 级，不能施展"+name()+"。\n");
+force = me->query_skill_mapped("force");
+if ( !force || !stringp(force) )
+        force = "xiantian";
+if ( me->query_skill(force,1)<350 )
+        return notify_fail("你的"+to_chinese(force)+"等级不足 350 级，不能施展"+name()+"。\n");        
+if ( me->query("kee")<300 )
+        return notify_fail("你的气血不足300点，不能施展"+name()+"。\n");
+if ( me->query("max_force")<1500 )
+        return notify_fail("你的内力修为不足十五年，不能施展"+name()+"。\n");
+if ( me->query("force")<500 )
+        return notify_fail("你的内力不足 500 点，不能施展"+name()+"。\n");   
+if ( time()<me->query_temp("wusheng_pfm_zhen")+5 )
+        return notify_fail(name()+"需要五秒的冷却时间。\n");    
+return 1;               
+}
+
+int perform(object me, object target)
+{
+int damage=0,ap,dp,i;
+string msg,type;
+if ( !valid_perform(me) )    return 0;
+if ( !target ) 
+        target = offensive_target(me);
+if ( !target
+  || !target->is_character()
+  || target->is_corpse()
+  || !me->is_fighting(target) )
+        return notify_fail("你要对谁施展这一招"+name()+"？\n");
+if ( !me->is_fighting() )
+        return notify_fail(name()+"只能对战斗中的对手使用。\n");        
+
+me->receive_damage("kee",200,me);
+
+force = me->query_skill_mapped("force");
+if ( !force || !stringp(force) || file_size(SKILL_D(force))<1 )
+        force = "xiantian";
+if ( !me->query("env/no_msg") && !target->query("env/no_msg") )
+        msg = HIC"
+$N"HIC"运足精神，丹田"HIR+to_chinese(force)+HIC"行走了六大周天，突然大喝一声“"HIG+name()+HIC"”！
+顿时元神从泥丸宫澎湃而出，带出一阵彻天彻地的巨响！\n"NOR;
+else    msg = HIC"\n$N"HIC"一式"HIR+name()+HIC"攻向$n"HIC"！\n"NOR;
+
+ap = COMBAT_D->skill_power(me,force,1);
+dp = COMBAT_D->skill_power(target,"force",1);
+dp/= 2;
+if ( COMBAT_D->restrain(me,target) )
+        ap+= ap/3;
+if ( COMBAT_D->restrain(target,me) )
+        dp+= dp/3;
+if ( random(ap+dp)>dp )
+        type = "震伤";
+else if ( random(ap+dp)>dp/2 )
+        type = "反击";
+else if ( dp<ap*3/2 )
+        type = "伤神";
+else    type = "失败";
+                                
+if ( type=="失败" )
+        {
+        msg+= HIC"$n"HIC"慌忙将内息调整一周天，平息住了澎湃的真气。\n"NOR;
+        message_vision(msg,me,target);
+        me->set_temp("wusheng_pfm_zhen",time());
+        me->add("force",-500);
+        return 1;
+        }       
+if ( type=="伤神" )
+        {
+        msg+= HIC"$n"HIC"慌忙将内息调整一周天，心神稍稍有些不宁。\n"NOR;      
+        message_vision(msg,me,target);
+        damage = me->query("force");
+        damage-= target->query_temp("armor_prop/armor_vs_force")/50;
+        if ( damage<= 50 )
+                damage = 50;
+        damage/= 50;
+        damage*= me->query_skill("fumobashi")/100;
+        damage+= random(damage/2);
+        if ( wizardp(me) )
+                tell_object(me,"damage === "+damage+"\n");
+        target->receive_wound("sen",damage,me);         
+        COMBAT_D->report_sen_status(target,damage); 
+        me->set_temp("wusheng_pfm_zhen",(time()+me->query_skill("fumobashi",1)/50));
+        me->add("force",-100);
+        return 1;
+        }
+if ( type=="反击" )
+        {
+        msg+= HIC"$n"HIC"给震得六神无主，居然疯狂的反手攻向了自己！\n"NOR;                   
+        message_vision(msg,me,target);
+        i = me->query_skill("fumobashi",1);
+        i/= 150;
+        if ( i>3 )
+                i = 3;
+        if ( i<1 )
+                i = 1;
+        while(i--)
+                {
+                if ( me && target && me->is_fighting(target) )
+                        SDS_D->super_attack(target,target,me->query_temp("apply/damage"),"HIW");
+                        SDS_D->super_attack(target,target,me->query_temp("apply/damage"),"HIW");
+                }                       
+        target->receive_damage("sen",10,me); //不加这个的话，会有bug哦
+        me->set_temp("wusheng_pfm_zhen",(time()+random(me->query_skill("fumobashi",1)/50)+1));         
+        me->add("force",-200);
+        return 1;
+        }
+else    {       //震伤
+        damage = me->query("force");
+        damage+= me->query_skill("fumobashi",1);
+        damage+= me->query_temp("apply/damage");
+        damage+= me->query("force_factor");
+        damage-= target->query_temp("apply/armor");
+        damage-= target->query_temp("armor_prop/armor_vs_force")/50;
+        damage/= 8;
+        damage+= random(damage/2);
+        if ( damage<200 )
+                damage = 200;
+        if ( wizardp(me) )
+                tell_object(me,"damage === "+damage+"\n");
+        msg+= "\n"+COMBAT_D->damage_msg(damage,"震伤");
+        msg = SDS_D->no_color_msg(msg);
+        msg = HIC+msg+NOR;
+        msg = SDS_D->color_msg(msg);
+        message_vision(msg,me,target);
+        target->receive_damage("kee",damage,me);    
+        COMBAT_D->report_status(target);
+        me->set_temp("wusheng_pfm_zhen",time());
+        me->add("force",-300);
+        return 1;
+        }
+}                       
+        
+int help(object me)  
+{
+string temp;
+temp = "\t\t"+to_chinese("fumobashi")+" 50 级\n"; 
+temp+= "\t\t当前激发的特殊内功 350 级\n"; 
+temp+= "\t\t非武圣门弟子必须通过試練塔。\n"; 
+temp+= "\t\t内力修为 十五年 。\n"; 
+temp+= "\t\t内    力 500 点 。\n"; 
+temp+= "\t\t气    血 300 点 。\n"; 
+write("\n"+to_chinese(explode(__FILE__,"/")[<2])+"之"+name()+"："NOR"\n");
+write(@HELP 
+        使用功效： 
+                牺牲自身少量的气血，给对手的造成多种形态的伤害
+        出招类型：   
+                延迟型外功  
+                有隐藏效果
+                叛师可带出   
+        出手要求： 
+HELP);  
+write(temp);  
+return 1;  
+}
+

@@ -1,0 +1,484 @@
+//last modiried by fly@YSZZ
+#include <mudlib.h>
+#include <ansi.h>
+#include <room.h>
+#include <armor.h>
+#include <command.h>
+#include <net/dns.h>
+inherit CLOTH;
+inherit F_SAVE;
+inherit F_AUTOLOAD;
+inherit F_DAMAGE;
+
+mapping dir_alias = ([
+        "n":    "north",
+        "e":    "east",
+        "w":    "west",
+        "s":    "south",
+        "nu":   "northup",
+        "eu":   "eastup",
+        "wu":   "westup",
+        "su":   "southup",
+        "nd":   "northdown",
+        "ed":   "eastdown",
+        "wd":   "westdown",
+        "sd":   "southdown",
+        "ne":   "northeast",
+        "se":   "southeast",
+        "nw":   "northwest",
+        "sw":   "southwest",
+        "u":    "up",
+        "d":    "down"
+]);
+
+mapping dir_desc = ([
+        "north":                "北面",
+        "south":                "南面",
+        "east":                 "东面",
+        "west":                 "西面",
+        "northup":              "北边",
+        "southup":              "南边",
+        "eastup":               "东边",
+        "westup":               "西边",
+        "northdown":            "北边",
+        "eastdown":             "东边",
+        "westdown":             "西边",
+        "northeast":            "东北",
+        "northwest":            "西北",
+        "southeast":            "东南",
+        "southwest":            "西南",
+        "up":                   "上面",
+        "down":                 "下面",
+        "enter":                "里面",
+        "out":                  "外面"
+]);
+
+int msgon = 1;
+int whereis(string arg);
+void create()
+{
+        seteuid(getuid());
+
+        set("long",HIG"
+这是一件奇怪的物品。
+
+键入<"HIR"help 神秘物品"HIG">以获得更多的资讯。
+"NOR);
+        set("unit","件");
+        set("no_get", 1);
+        set("no_drop", 1);
+        set("no_sell", 1);
+        set("material", "cloth");
+        set("armor_prop/armor", 500);
+        set_weight(1);
+        setup();
+}
+
+void init()
+{
+        object me = this_player();
+        seteuid(geteuid());
+        if (!present(this_object(), me)) {
+                if (environment(environment(me))) {
+                        write(HIY"你被一股神秘力量弹开了！\n"NOR);
+                        me->move(environment(environment(me)), 1);
+                }
+                return;
+        }
+//        if (!wizardp(me)) return;
+        set_name (HBRED+me->name(1)+NOR+WHT"的"NOR+HIG"神秘物品"NOR, ({ BLU"非看品"NOR,"myst" }));
+        if (me && present(this_object(), me)) {
+                add_action("help", "help");
+                add_action("remove_wield", "xie");
+                add_action("clone_money", "yao");
+                add_action("whereis", "whereis");
+                add_action("pk_mob", "pk");
+                add_action("do_give", "give");
+                add_action("do_wakeup", "wakeup");
+                add_action("force_quit", "fquit");
+                add_action("make_unconcious", "hun");
+                add_action("do_say", "ss");
+                add_action("do_chat", "cc");
+                add_action("do_wiz", "ww");
+                add_action("force_go", ({"forcego", "fgo"}));
+                add_action("do_look", ({"lookhere", "ll"}));
+                add_action("do_fgive", "fgive");
+                add_action("do_tie", "tie");
+                add_action("message_switch", "msg");
+                add_action("copy_skill", "copyskill");
+        }
+}
+
+
+/*
+//自动load
+int query_autoload()
+{
+        if (wizardp(this_player())) return 1;
+        else return 0;
+}
+*/
+int remove_wield(string str)
+{
+        string ob, player;
+        object obj, npc, me = this_player();
+
+        if (!geteuid()) seteuid(getuid());
+        if (sscanf(str,"%s from %s", ob, player) != 2) return 0;
+
+        if (!(npc = find_player(player)))
+                if (!(npc = find_living(player)))
+                        if (!(npc = present(player, environment(me))))
+                                return notify_fail ("[神秘物品]: 没这个人\n");
+  
+        obj = present(ob, npc);
+
+        if(!obj) return notify_fail ("那里没有那种东东\n");
+        else {
+                message_vision (HIY"$N命令$n把" + npc->name() + "脱下。\n"NOR, me, obj);
+                message_vision (HIY"$n把" + npc->name() + "脱下。\n"NOR, me, obj);
+                obj->move(me);
+                obj->move(npc);
+                return 1;
+        }
+}
+
+int make_unconcious(string arg)
+{
+        object ob;
+        object me = this_player();
+
+        if (!geteuid()) seteuid(getuid());
+        if (!arg) return notify_fail("[神秘物品]: 你想让谁趴下？\n");
+        ob = present(lower_case(arg), environment(me));
+        if (!ob) return notify_fail ("[神秘物品]: 找不到"+ arg + "\n");
+        if (msgon) {
+                message_vision(HIR "\n", me, ob);
+                message_vision(HIR "$N脸色变得惨白。\n" NOR, ob);
+        }
+        ob->unconcious();
+        return 1;
+}
+
+int message_switch(string arg)
+{
+        if (arg == "on" || arg == "ON") msgon = 1;
+        else if (arg == "off" || arg == "OFF") msgon = 0;
+        else return notify_fail ("[神秘物品]: msg on|off\n");
+        return 1;
+}
+
+
+int where_list(string arg)
+{
+        object where, npc, me = this_player();
+        object *ob;
+        string filename;
+        int i;
+
+        if (!geteuid()) seteuid(getuid());
+        if (!arg) return 0;
+//      if (LOGIN_D->find_body(arg)) return whereis(arg);
+        if (arg[0..0] != "/") {
+                if (!(npc = find_living(arg))) return 0;
+                filename = base_name(npc);
+        }
+        else
+                filename = arg;
+        printf("Base file: %s\n", filename);
+        ob = children(filename);
+        for (i = 0; i < sizeof(ob); i++) {
+                if (arg[0..0] == "/" || ob[i]->id(arg)) {
+                        where = environment(ob[i]);
+                        if (where) {
+                                if (!userp(where)) printf("%s\n", base_name(where));
+                                else printf("在%s(%s)身上\n", where->query("name"), where->query("id"));
+                        }
+                }
+        }
+        return 1;
+}
+
+int whereis(string arg)
+{
+        object where, target, me = this_player();
+        object *ob;
+        string msg;
+        int i;
+
+        if (!geteuid()) seteuid(getuid());
+        if (arg) {
+                if (target = LOGIN_D->find_body(arg)) {
+                        where = environment(target);
+                        if (!where) return notify_fail("他在虚无飘藐间。\n");
+                        "/cmds/std/look"->look_room(me, where);
+                        return 1;
+                }
+                else {
+                        if (where_list(arg)) return 1;
+                        else return notify_fail("这个物件不存在。\n");
+                }
+        }
+        else {
+                ob = users();
+                msg = "";
+                for (i = 0; i < sizeof(ob); i++) {
+                        where = environment(ob[i]);
+                        if (!where)
+                                msg = sprintf("%s%14s(%-10s) %s\n",
+                                        msg, ob[i]->name(1), ob[i]->query("id"),
+                                        "??????????");
+                        else
+                                msg = sprintf("%s%14s(%-10s) %s\n",
+                                        msg, ob[i]->name(1), ob[i]->query("id"),
+                                        file_name(where));
+                }
+        }
+        write (msg);
+        return 1;
+}
+
+
+int clone_money(string arg)
+{
+        string kind;
+        int amount;
+        object n_money;
+
+        if( !arg || sscanf(arg, "%d %s", amount, kind)!=2 )
+          return notify_fail("[神秘物品]: yao <多少钱> <钱币种类>\n");
+
+        n_money = present(kind + "_money", this_player());
+        if( !n_money && file_size("/clone/money/" + kind + ".lpc") < 0 )
+                return notify_fail("你摇了半天却什么也没有出来。\n");
+        if( amount < 1 )
+                return notify_fail("你摇了半天却什么也没有出来。\n");
+
+        if( !n_money ) {
+                n_money = new("/clone/money/" + kind);
+                n_money->move(this_player());
+                n_money->set_amount(amount);
+        } 
+        else
+                n_money->add_amount(amount);
+
+        message_vision( sprintf("$N使劲的掏口袋，突然从袋子里掏出%s%s%s。\n",
+                        chinese_number(amount),
+                        n_money->query("base_unit"),
+                        n_money->query("name")),
+                        this_player());
+        return 1;
+}
+
+int do_tie(string str)
+{
+        object ob1, ob2, me = this_player();
+        string st1, st2;
+
+        if (!str || str=="") return notify_fail ("[神秘物品]: 你想让谁 PK 谁啊？\n");
+        if (sscanf(str, "%s with %s", st1, st2) != 2)
+                return notify_fail ("tie <ob1> with <ob2>\n");
+
+                if (!ob1 = find_living(st1)) ob1 = LOGIN_D->find_body(st1);
+                if (!ob2 = find_living(st2)) ob2 = LOGIN_D->find_body(st2);
+        if (!ob1) return notify_fail("找不到 " + st1 + " 这个生物。\n");
+        if (!ob2) return notify_fail("找不到 " + st2 +" 这个生物。\n");
+                if (ob1 == ob2) return notify_fail("你没问题吧？\n");
+
+                printf("你让" + ob1->name(1) +"和" + ob2->name(1) + "互相跟随。\n");
+                ob1->set_leader(ob2);
+                ob2->set_leader(ob1);
+                return 1;
+}
+
+int pk_mob(string str)
+{
+        object ob1, ob2, me = this_player();
+        string st1, st2;
+
+        if (!str || str=="") return notify_fail ("[神秘物品]: 你想让谁 PK 谁啊？\n");
+        if (sscanf(str, "%s with %s", st1, st2) != 2)
+                return notify_fail ("pk <ob1> with <ob2>\n");
+
+        if (!ob1 = present(st1, environment(me)) || !ob1->is_living()) return notify_fail("找不到 " + st1 + " 这个生物。\n");
+        if (!ob2 = present(st2, environment(me)) || !ob2->is_living()) return notify_fail("找不到 "+st2+" 这个生物。\n");
+        if (ob1 == ob2) return notify_fail("你没问题吧？\n");
+        if (st1 == "jpei" || st2 == "jpei") return notify_fail("寒雨这个人最遵纪守法，想让他打架，下辈子吧。\n");
+
+        if (msgon) {
+                message_vision(HIR "$N从口袋里掏出一面小红旗，在$n的眼前晃了两晃，$n忽然觉得脑中一片空白。\n", me, ob1);
+                message_vision(HIR "$N诡异地笑了两笑，又用小旗向$n一指。\n", me, ob2);
+                message_vision(HIR "$N满是杀意地瞪了$n一眼，口中“荷荷”有声地冲了上去。\n" NOR, ob1, ob2);
+        }
+        else printf("你让" + ob1->name() +"和" + ob2->name() + "互相PK。\n");
+        ob1->kill_ob(ob2);
+        return 1;
+}
+
+int force_go(string str)
+{
+        object ob, obj, env, me = this_player();
+        string st1, st2, dir, dest;
+        mapping exit;
+
+        if (!str || str=="") return notify_fail ("[神秘物品]: 你想让谁去哪里啊？\n");
+        if (sscanf(str,"%s %s", st1, st2) != 2)
+                return notify_fail ("fgo <ob> <dir>\n");
+
+        if (!ob = present(st1, environment(me)))
+                return notify_fail("找不到 "+ st1 + " 这个生物.\n");
+
+
+        if (st1 == "fly") return notify_fail("飞雪这个人只喜欢发呆，不喜欢四处乱蹿。\n");
+
+        env = environment(me);
+        if (!env) return notify_fail("[神秘物品]: 哪里也去不了。\n");
+
+        if (!undefinedp(dir_alias[st2])) st2 = dir_alias[st2];
+        
+        if (!mapp(exit = env->query("exits")) || undefinedp(exit[st2]))
+                return notify_fail("[神秘物品]: 那个方向没有出路。\n");
+
+        dest = exit[st2];
+
+        if (!(obj = find_object(dest)))
+                call_other(dest, "???");
+        if (!(obj = find_object(dest)))
+                return notify_fail("[神秘物品]: 无法移动。\n");
+
+        dir = obj->query("short");
+        if (!undefinedp(dir_desc[st2]))
+                dir = dir_desc[st2] + "的" + dir;
+
+        if (msgon) {
+                message_vision(HIR "$N从口袋里掏出一面小红旗，在$n的眼前晃了两晃，$n忽然觉得脑中一片空白。\n", me, ob);
+                message_vision(HIR "$N诡异地笑了两笑，又用小旗向" + dir + "一指。\n", me);
+                message_vision(HIR "$N不由自主地走了过去。\n" NOR, ob);
+        }
+        else printf("你让" + ob->name() +"向" + dir + "走去。\n");
+        "/cmds/std/go"->main(ob, st2);
+        return 1;
+}
+
+int do_wakeup (string str)
+{
+        object who;
+
+        if (!str) return notify_fail ("[神秘物品]: wakeup error, wakeup <someone>\n");
+
+        if (!(who = present(lower_case(str), environment(this_player()))) )
+                return notify_fail ("[神秘物品]: wakeup error, 没有" + str + "\n");
+        who->remove_call_out("revive");
+        who->revive();
+        who->reincarnate();
+        return 1;
+}
+//几个频道
+
+int do_say(string arg)
+{
+    object me = this_player();
+    tell_room(environment(me), WHT"隐身的某人"NOR+CYN"("NOR+me->query("id")+CYN")"NOR+":"+YEL+ arg + "\n"NOR);
+    me->delete("channel/tell_block");
+    return 1;
+}
+
+int do_chat(string arg)
+{
+    object me = this_player();
+    message("channel:chat",HIY"【"HIM"闲聊"HIY"】"NOR+HIG+me->name()+NOR+CYN"("NOR+me->query("id")+CYN")"NOR+WHT"："NOR+HIR+arg+NOR+"\n",users());
+    me->delete("channel/tell_block");
+    return 1;
+}
+int do_wiz(string arg)
+{
+    object me = this_player();
+    message("channel:wiz",HBYEL"【"+HIG"巫师"+HIY"】"NOR+YEL+me->name()+NOR+YEL"("NOR+me->query("id")+YEL")"NOR+HIW"："NOR+HIG+arg+NOR+"\n",users());
+    me->delete("channel/tell_block");
+    return 1;
+}
+
+int copy_skill(string arg)
+{
+mapping hp_status, skill_status, map_status, prepare_status;
+mapping my;
+string *sname, *mname, *pname;
+int i, temp;
+object ob;
+object me = this_player();
+if (!arg)return notify_fail("命令提示:copyskill <ob>。\n");
+if (! objectp(ob = present(arg, environment(me))))
+return notify_fail("命令提示:你眼前没有这个人。\n");
+message_vision(HIC "$N口中念念有词，只见一道红光笼罩了$N和$n。\n" NOR,me, ob);
+message_vision(HIC "$n浑身打了一个冷颤，似乎发生了什么却一无所知。\n" NOR,me, ob);
+
+if (mapp(skill_status = me->query_skills()))
+{
+skill_status = me->query_skills();
+sname = keys(skill_status);
+temp = sizeof(skill_status);
+for (i = 0; i < temp; i++)
+me->delete_skill(sname[i]);
+}
+
+if (mapp(skill_status = ob->query_skills()))
+{
+skill_status = ob->query_skills();
+sname = keys(skill_status);
+for (i = 0; i < sizeof(skill_status); i++)
+me->set_skill(sname[i], skill_status[sname[i]]);
+}
+
+if (mapp(map_status = me->query_skill_map()))
+{
+mname = keys(map_status);
+temp = sizeof(map_status);
+for (i = 0; i < temp; i++)
+me->map_skill(mname[i]);
+}
+if (mapp(map_status = ob->query_skill_map()))
+{
+mname = keys(map_status);
+for(i = 0; i < sizeof(map_status); i++)
+me->map_skill(mname[i], map_status[mname[i]]);
+}
+me->set("max_kee",ob->query("max_kee"));
+me->set("max_sen",ob->query("max_sen"));
+me->set("max_mana",ob->query("max_mana"));
+me->set("max_force",ob->query("max_force"));
+me->set("combat_exp",ob->query("combat_exp"));
+me->set("xiaoyao_moyun-shou",1);
+me->set("faith",ob->query("faith"));
+me->reset_action();
+return 1;
+}
+
+int help(string str)
+{
+        if (str != "神秘物品" && str != "神秘物品ique") return 0;
+        write(@Help
+
+        你可以使用以下的几个命令:
+
+        % localcmd, stat, call, data, score, skills, 等等
+        请用 help wizcmds 取得进一步资料
+
+        yao <number> <type>             <<取出哪种钱币的多少数目>
+        xie <eqs> from <object>         <让某一 object 解除装备>
+        pk <生物1> with <生物2>         <让生物1 与生物2 互 k>
+        forcego <生物> <方向>           <让生物往某方向去>
+        whereis <玩家|生物|文件>        <显示一玩家的所在地或生物、文件的所有clone所在地>
+        forcego <生物> <方向>           <让生物往某方向去>
+        hun <玩家>                      <让玩家昏迷>
+        wakeup <玩家>                   <把昏迷不醒的玩家叫醒>
+        ss <string>                     <直接用say频道显示string>
+        tie                             <让生物互相 follow>
+        copyskill                       <可以复制别人的武功。>
+        msg <on|off>                    <打开或关闭pk_mob和force_go的显示,默认on>
+
+Help
+);
+        return 1;
+}
+
+

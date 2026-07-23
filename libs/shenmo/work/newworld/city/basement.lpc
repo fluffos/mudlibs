@@ -1,0 +1,147 @@
+// basement.c
+
+#include <ansi.h>
+inherit ROOM;
+object treasure_obj;
+object findobj();
+
+void create ()
+{
+  object box;
+  set ("short",HIY"钱庄二楼"NOR );
+  set ("long", @LONG
+  
+易氏钱庄的二楼，这里专门提供寄存服务。你可以在
+这里寄存(jicun)物品，价格公道，不论物品贵贱，一律
+按原价的四成收费。可以随时取回(qu)。
+
+LONG);
+
+set("exits", ([ /* sizeof() == 1 */
+        "down" : __DIR__"bank",
+]));
+set("no_clean_up",1);
+set("no_magic",1);
+set("no_fight",1);
+  
+set("objects",([
+        __DIR__"npc/bank-boss2" :1,
+]));  
+setup();
+}
+
+object findobj()
+{
+if(treasure_obj && environment(treasure_obj)==this_object()) 
+        return treasure_obj;
+treasure_obj=new(__DIR__"obj/shopobj");
+treasure_obj->move(this_object());
+return treasure_obj;  
+}    
+
+void init()
+{
+  add_action("do_jicun","jicun");
+  add_action("do_qu","qu");
+ }
+
+int do_jicun(string arg)
+{
+int i,limit,value,afford;
+object ob,*inv;
+object me=this_object();
+object who=this_player();
+inv=all_inventory(who);
+for(i=0; i<sizeof(inv); i++) 
+        {
+        if ( inv[i]->query("id")!=arg ) continue;
+        ob=inv[i];
+        }
+
+if (!treasure_obj=findobj()) 
+        return notify_fail("对不起,本钱庄暂停营业!\n");
+
+if (!ob) 
+        return notify_fail("你要寄存什么东西?\n"NOR);
+
+if (!present(arg,who)) 
+        return notify_fail("你身上没有这样东西。\n");
+
+limit=(int)who->query("jicun_limit");
+
+if (limit && limit>10) 
+        return notify_fail("对不起,每个人最多只能寄存10个物品。\n");
+
+value=(int)ob->query("value")/4;
+
+if ( value<=0 )
+        {
+        write("这样东西不值钱。\n");
+        return 1; 
+        }   
+
+if( !(afford=who->can_afford(value)) )  
+        {
+        write("你没有足够的钱。\n");
+        return 1; 
+        }   
+else if( afford == 2 )  
+        {
+        write("你没有足够的零钱，而银票又没人找得开。\n");
+        return 1;
+        }
+treasure_obj->set("goods/"+arg+"/obj_owner",who->query("id"));
+treasure_obj->set("goods/"+arg+"/obj","+arg+");
+
+message_vision("$N寄存"+ob->name()+"一"+ob->query("unit")+"。\n"NOR,who); 
+
+if (!treasure_obj->query("goods/number")) treasure_obj->set("goods/number",0);
+treasure_obj->add("goods/number",1);
+ob->move(treasure_obj);
+who->start_busy(1);
+who->pay_money(value);
+who->add("jicun_limit",1);
+return 1;
+}
+
+int do_qu(string arg)
+{
+   object ob,me,who;
+   mapping goods;
+   string *goods_keys;
+   int goods_number,i,flag=0;
+   string obj_owner;
+   who=this_player();
+   me=this_object();
+   treasure_obj=findobj();
+   if (!treasure_obj) return notify_fail("对不起,本钱庄暂停营业!\n");
+   if (!arg) return notify_fail("你想取回什么?\n");
+   if (!treasure_obj->query("goods/number")) 
+      return notify_fail("本钱庄还没有人寄存过东西。\n");
+   goods_keys=keys(treasure_obj->query("goods"));
+   goods_number=sizeof(goods_keys);
+   if (goods_number<1) return notify_fail("本钱庄还没有人寄存过东西。\n");
+   for (i=0;i<goods_number;i++)
+     {
+       if (goods_keys[i]==arg) flag=1;
+     }
+   if (!flag) return notify_fail("本钱庄没有人寄存过这个东西!\n");
+   obj_owner=treasure_obj->query("goods/"+arg+"/obj_owner");
+   if (obj_owner!=who->query("id")) return notify_fail("你没有寄存过这样东西!\n");
+      ob=treasure_obj->query("goods/"+arg+"/obj");
+    if (!ob=present(arg,treasure_obj)) 
+       return notify_fail("你寄存的东西已经超过期限,被公开出售掉了!\n");   
+   ob->move(who);
+   message_vision("$N取出一"+ob->query("unit")+""+ob->name()+"。\n",who);
+   who->add("jicun_limit",-1);
+    treasure_obj->delete("goods/"+arg);
+   treasure_obj->add("goods/number",-1);    
+   return 1;
+}
+
+int clean_up()
+{
+return 0;
+}
+
+

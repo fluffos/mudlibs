@@ -1,0 +1,356 @@
+#include <ansi.h>
+#include <armor.h>
+
+inherit F_SAVE;
+inherit F_BACKUP;
+inherit HEAD;
+
+void resets();
+void destroy(object ob);
+
+int do_wear(string arg);
+int do_remove(string arg);
+object offensive_target(object me);
+
+void create()
+{
+        set_name(HIY"王者王冠"NOR, ({"king crown","crown"}) );
+        set_weight(1000);
+        if( clonep() )
+                set_default_object(__FILE__);
+        else {
+                set("unit", "柄");
+                set("material", "crystal");
+                set("value",10000);
+                set("no_steal",1);
+                set("no_drop", "如此宝贵的宝物再世难求啊。\n");
+                set("no_get", "送人？亏你想的出来！\n");
+                set("no_give", "这种稀世之宝怎么能轻易送人呢?\n");
+                set("no_sell", "卖?这种稀世之宝谁买得起啊!\n");
+                set("long",HIY"三界至宝，传说中的王者之冠。\n"NOR);
+                
+          }
+        setup();
+}
+
+int query_unique()  { return 1; }
+
+string query_save_file()
+{
+if ( !query("owner_id") || !stringp(query("owner_id")) )
+        return 0;
+return "/data/kingcrown/"+query("owner_id");
+}
+
+void init()
+{
+        add_action("do_wear","wear");
+        add_action("do_remove", "remove");
+                add_action("do_mend","mend");
+}
+
+// This function selects a random target for offensive spells/functions.
+object offensive_target(object me)
+{
+        int sz;
+        object *enemy;
+
+        enemy = me->query_enemy();
+        if( !enemy || !arrayp(enemy) ) return 0;
+
+        sz = sizeof(enemy);
+        if( sz > 4 ) sz = 4;
+
+        if( sz > 0 ) return enemy[random(sz)];
+        else return 0;
+}
+
+int do_wear (string arg)
+{
+  object me = this_player();
+  object zhu = this_object();
+  string name = zhu->query("name");
+  string msg;
+
+if(arg!="all"&&arg != "king crown" )
+    return notify_fail("你要佩带什么？\n");
+  msg = "$N戴上一柄"+name+"，顿感神清气爽。\n"; 
+  zhu->set("wear_msg",msg);
+remove_call_out("shengzhuconditions");
+call_out("shengzhuconditions",1,me,zhu);
+  return 0;
+}
+
+int do_remove (string arg)
+{
+  object me = this_player();
+  object zhu = this_object();
+  string name = zhu->query("name");
+  string msg;
+
+if ( arg!= "all" && arg != "king crown")
+    return notify_fail("你要摘掉什么？\n");
+
+  msg = "$N将"+name+"轻轻地从头上摘了下来！\n"; 
+  zhu->set("unequip_msg",msg);
+ remove_call_out("shengzhuconditions");
+  return 0;
+}
+
+void shengzhuconditions(object who,object ob)
+{
+     object target;
+     int ap,dp,damage;
+     string msg;
+     string type;
+     type = ob->query("armor_type");
+     if( who->query_temp("armor/" + type) && ob->query("equipped")!="worn")
+        return;
+     if( who->is_fighting())
+     {
+        target = offensive_target(who);
+        if( ! target ) return ;      
+        if( ! present( target,environment(who)) ) return ;    
+        msg = HIY"\n王者之冠发出耀眼的金光！\n"NOR;
+                ap = who->query("combat_exp")/10;
+                dp = target->query("combat_exp")/40;
+                        
+                        
+                if( random(ap + dp) > dp )
+                 {
+                        damage = 500+random(300);
+                                                damage += ob->query("level")*5;
+                        if( random(damage) > 300 ) 
+                        {
+                                msg += HIW "结果$n躲避不及，被金光照个正着。感到浑身一阵刺痛。\n气血精神顺着金光流向$N的身体\n" NOR;
+                                target->set_temp("last_damage_from",who);
+                                target->receive_damage("sen", damage*8/5);
+                                target->receive_wound("sen", damage*2/3);
+                                target->receive_damage("kee", damage*8/5);
+                                target->receive_wound("kee", damage/2);
+                                who->receive_curing("kee",damage/2);
+                                who->receive_curing("sen",damage/2);
+                        } 
+                       else
+                       //here, cast failed and the target's mana_factor will be added to the previous
+                       //damage to hurt yourself:(...note damage<0.
+                       msg += HIC "\n谁知$n毫无反应。\n" NOR;   
+                }
+                else
+                        msg += HIW"但是被$n躲开了。\n"NOR;
+
+                message_vision(msg, who, target); 
+        }
+       remove_call_out("shengzhuconditions");
+           if( ob->query("level") > 100 )
+                   call_out("shengzhuconditions",1,who,ob);
+           else
+                   call_out("shengzhuconditions",10,who,ob);
+}
+
+void destroy(object ob)
+{
+        write(ob->query("name")+"呼的不见了！ \n");
+        destruct(ob);
+        return ;
+}
+
+
+
+void reset()
+{
+        if( !environment() || query("owner_id") != getuid(environment()) )  
+                        {
+                        destroy(this_object());
+                        return;
+                        }
+}
+
+int err_msg(string arg)
+{
+        write(arg);
+        return 1;
+}       
+
+string status_color(int current, int max)
+{
+        int percent;
+
+        if( max ) 
+                        percent = current * 100 / max;
+        else    percent = 100;
+
+        if( percent > 100 ) return HIC;
+        if( percent >= 90 ) return HIG;
+        if( percent >= 60 ) return HIY;
+        if( percent >= 30 ) return YEL;
+        if( percent >= 10 ) return HIR;
+        return RED;
+}
+
+string tribar_graph(int val, int eff, int max, string bcolor, string fcolor, string dcolor)
+{
+        string ret;
+        int i, n, eff_n, max_n = 10;
+
+        if( max <15 )
+                        max = 15;
+        if ( val<10 )
+                        val = 10;
+        n = val*100/max/10;
+        eff_n = eff*100/max/10;
+
+        if( n < 1 ) n = 1;
+        if( eff_n < 1 ) eff_n = 1;
+        if( n > max_n ) n = max_n;
+        if( eff_n > max_n ) eff_n = max_n;
+
+        ret = NOR  + bcolor + fcolor ;
+        for( i = 0 ; i < max_n; i ++ )
+                        {
+                        if( i > eff_n ) ret += dcolor;
+                        if( i < n )  ret += "━";
+                        else ret += HIW"━"NOR;
+                        }
+        ret += fcolor + NOR ;
+        return ret;
+}
+
+int query_max_exp(int v)
+{
+        int n;  
+        if ( v<5 )
+                        n = 100;
+        else if ( v<10 )
+                        n = 1000;               
+        else if ( v<15 )
+                        n = 3000;               
+        else if ( v<20 )
+                        n = 5000;               
+        else if ( v<25 )
+                        n = 10000;              
+        else if ( v<30 )
+                        n = 50000;              
+        else if ( v<35 )
+                        n = 100000;             
+        else if ( v<40 )
+                        n = 500000;             
+        else if ( v<50 )
+                        n = 1000000;            
+        else if ( v<100 )
+                        n = 10000000;           
+        else    n = 50000000;           
+        return n;
+}
+
+int do_mend(string arg)
+{
+        string msg;     
+        mapping my,his;
+        object me = this_player();
+        object ob = this_object();
+
+    if( ob->query("level") < 1 )
+                return notify_fail("正在完善中。。。");
+
+        my = me->query_entire_dbase();
+        his = ob->query_entire_dbase();
+
+        if ( !his["level"] || his["level"]<1 )
+                        his["level"]=1;
+
+        if ( !arg || !id(arg) )
+                        {
+                        msg = sprintf(CYN"\t  名称"YEL" : "NOR"%s\n"NOR,his["name"]);
+                        msg+= sprintf(CYN"\t所有者"YEL" : "NOR HIR"%s\n"NOR,my["name"]+"("+capitalize(my["id"])+")" );
+                        msg+= sprintf(CYN"\t  等级"YEL" : "NOR HIR"%s\n"NOR,chinese_number(his["level"]));
+                        msg+= sprintf(CYN"\t  经验"YEL" : "NOR"%s%s "NOR HIR"%d (%d%%)\n"NOR,
+                                                                        status_color(his["level_exp"],query_max_exp(his["level"])),
+                                                                        tribar_graph(his["level_exp"],query_max_exp(his["level"]),110,NOR,HIR,HIW),                    
+                                                                        his["level_exp"],
+                                                                        his["level_exp"]*100/query_max_exp(his["level"]) );             
+                        msg+= sprintf(CYN"\t  防御"YEL" : "NOR HIR"%d "NOR CYN"点\n"NOR,his["armor_prop"]["armor"]);
+                        msg+= sprintf(CYN"\t加招架"YEL" : "NOR HIR"%d "NOR CYN"点\n"NOR,his["armor_prop"]["parry"]);
+                        msg+= sprintf(CYN"\t加闪避"YEL" : "NOR HIR"%d "NOR CYN"点\n"NOR,his["armor_prop"]["dodge"]);
+                        msg+= sprintf(CYN"\t加法术"YEL" : "NOR HIR"%d "NOR CYN"点\n"NOR,his["armor_prop"]["spells"]);
+                        msg+= sprintf(CYN"\t加内功"YEL" : "NOR HIR"%d "NOR CYN"点\n"NOR,his["armor_prop"]["force"]);
+                        tell_object(me,msg);
+                        return notify_fail("ok\n");     //为了不和其他命令(比如袈裟修炼)冲突，这里我返回值直接设为0
+                        }
+        if ( ob->query("equipped") )
+                        return err_msg("你先得把王冠脱下来。\n");       
+        if ( my["kee"]<50
+          || my["sen"]<50 )
+                        return err_msg("你现在状态不佳，实在是难以修炼王冠。\n");   
+        if ( my["force"]<my["max_force"]/3*2 )
+                        return err_msg("你的内力不够充沛。\n");         
+        if ( my["mana"]<my["mana"]/3*2 )
+                        return err_msg("你的法力不够充沛。\n");         
+        if ( my["combat_exp"]<1000000 )
+                        return err_msg("你的武学不够。\n");     
+        if ( my["daoxing"]<500000 )
+                        return err_msg("你的道行不够。\n");     
+        if ( my["max_force"]<1000 
+          || my["maximum_force"]<1000 )
+                        return err_msg("你的内力太低了。\n");             
+        if ( my["max_mana"]<1000
+          || my["maximum_mana"]<1000  )
+                        return err_msg("你的法力太低了。\n");           
+        if ( my["potential"]-my["learned_points"]<0 )
+                        return err_msg("你的潜能不够了。\n");   
+        if ( my["level"]<his["level"] )
+                        return err_msg("你的等级不够"+chinese_number(his["level"])+"。\n");
+        write(HIG"你暗运真气，以毕生的修为慢慢修炼"+ob->name()+HIG"，"NOR);
+
+        my["combat_exp"]-= 100;
+        my["daoxing"]-= 50;
+        my["maximum_force"]-= 1;
+        my["maximum_mana"]-= 1;
+        my["max_force"]-= 1;
+        my["max_mana"]-= 1;
+
+        my["learned_points"]+= 1;
+        my["kee"]-= 50;
+        my["sen"]-= 50;
+        my["force"]-= 50;
+        my["mana"]-= 50;
+
+        me->save();
+
+        if ( random(my["kar"]+my["int"]+my["spi"])<20 )
+                        write(HIG"结果什么反应也没有。\n"NOR);
+        else    {
+                        write(HIG"王冠发出一道柔和的金光。\n"NOR);
+                        his["level_exp"]+= 1;
+                        this_object()->save();
+                        if ( his["level_exp"]>=query_max_exp(his["level"]) )
+                                        {
+                                        his["level_exp"] = 0;
+                                        his["level"]+= 1;
+                                        his["armor_prop"]["armor"]+= random(5);
+                                        his["armor_prop"]["parry"]+= random(3);
+                                        his["armor_prop"]["dodge"]+= random(3);
+                                        his["armor_prop"]["spells"]+= random(3);
+                                        his["armor_prop"]["force"]+= random(3);
+                                        his["shield_time"]-= random(15);
+                                        if ( !ob->save() )
+                                                        write("王冠存储失败，请和巫师联系。\n");
+                                        if ( !ob->restore() )           
+                                                        write("王冠读取失败，请和巫师联系。\n");                
+                                        ob->setup();    
+                                        write(BLINK+ob->name()+BLINK+HIY"升级了！\n"NOR);
+                                        }
+                        }
+return 1;                               
+}
+
+string long()
+{
+        string msg;
+        if( query("level") > 0 )
+        {
+                msg = sprintf(HIY"它目前为%d级的王冠，你可以通过修炼(mend)来提高它的防御
+                以及相关属性。\n"NOR, query("level"));
+        }
+        return this_object()->query("long")+msg;
+}            

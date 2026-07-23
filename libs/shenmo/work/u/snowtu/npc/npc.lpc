@@ -1,0 +1,529 @@
+inherit NPC;
+#include <combat.h>
+#include <ansi.h>
+
+object offensive_target(object me);
+void do_spell(object me,object target,string type,int per,int damage,string hit_msg,string success_msg,string lost_msg,string back_msg );
+void random_pfm(object ob,object me);
+void dead();
+void random_talk();
+
+void add_eff_kee()
+{
+int add_kee,need_force;
+object me = this_object();
+add_kee = me->query("max_kee")-me->query("eff_sen");
+need_force = add_kee-me->query("force")/5;
+
+if ( need_force<100 ) need_force = 100;
+if ( add_kee<=0 ) return;
+if ( me->query("force")<need_force ) return;
+
+message_vision(">"HIW"$N"HIW"坐下来运功疗伤不久，吐出一口瘀血，脸色看起来好多了。\n"NOR,me);
+me->set("eff_kee",me->query("max_kee"));
+me->add("force", -need_force);
+return;
+}
+
+void add_sen()
+{
+int neilineed,diff;
+object me = this_object();
+if( !me->is_fighting() ) return;
+if( me->query("force")<20 ) return;
+diff = me->query("eff_sen")-me->query("sen");
+neilineed = diff*50/(int)me->query_skill("force");
+if( neilineed<1 ) return;
+if( neilineed>me->query("force") ) neilineed = me->query("force");
+diff = neilineed*(int)me->query_skill("force")/50;
+me->receive_heal("sen", diff);
+me->add("force", -neilineed);
+message_vision("$N略一凝神，吸了口气，精神看起来清醒多了。\n", me);
+return;
+}
+
+void add_kee()
+{
+int diff,neilineed,tou;
+object me = this_object();
+if( !me->is_fighting() ) return;
+if( me->query("force")<20 ) return;
+diff = me->query("eff_kee")-me->query("kee");
+neilineed = diff*50/(int)me->query_skill("force");
+if( neilineed<1 ) return;
+if( neilineed>me->query("force") ) 
+        neilineed = me->query("force");
+diff = neilineed*(int)me->query_skill("force")/50;
+me->receive_heal("kee", diff );
+me->add("force",-neilineed);
+message_vision("$N深深吸了几口气，脸色看起来好多了。\n", me);
+return;
+}
+
+string *talk = ({
+        "许久不杀人，手也涩难忍。",
+        "想和我试招，尽管来吧，我可不怕。",
+       "挥刀杀一人，抹刃血无痕。",
+        "杀者，人之本性；随性所发，乐乎者也。",
+        "我有好多宝贝。",
+        "...人...肉...新鲜...的人...肉...",
+});
+
+mapping exit_msg = ([
+	"south" : "南",
+	"north" : "北",
+	"west"	 : "西",
+	"east"	 : "东",
+	"southwest" : "西南",
+	"northwest" : "西北",
+	"southeast" : "东南",
+	"northeast" : "东北",
+	"down"	 : "下",
+	"up"	 : "上",
+	"enter" : "里",
+	"out"	 : "外",
+]);
+
+object npc_name( )
+{
+int i;
+object ob,*players;
+players = users();
+i = random(sizeof(players));
+ob = players[i];
+if ( ob && !wizardp(ob) )
+	return ob;
+}
+                
+void create()
+{
+string name,id,str,title,gender,long,cls;
+int max_kee,max_sen,max_gin;
+int max_force,max_mana,wx,dx;
+int damage,armor,skill,age;
+object who = npc_name();
+if ( living(who) )
+	{
+	name = who->query("name");
+	id = who->query("id");
+	if ( (string)who->query("title") )
+		title = who->query("title");
+	else	title = "普通百姓";
+	gender = who->query("gender");
+	age = who->query("age");
+	long = who->query("long");
+        cls = who->query("class");
+	max_kee = who->query("max_kee");
+	max_sen = who->query("max_sen");
+	max_gin = who->query("max_gin");
+	max_force = who->query("max_force");
+	max_mana = who->query("max_mana");
+	wx = dx = who->query("combat_exp");
+	damage = who->query_temp("apply/damage");
+	armor = who->query_temp("apply/armor");
+	skill = who->query_skill("force",1);
+	if ( skill<100 ) skill = 100;
+	}
+else	{
+	name = "千面怪";
+	id = "qianmian guai";
+        long =  title = "";
+        cls = "yao";
+	gender = random(2)?"男性":"女性";
+	age = 16;
+ 	max_kee = max_sen = max_mana = max_force = wx = dx = damage = armor = skill = 60;
+	}
+if ( !(string)cls ) cls = "yao";
+
+set_name(name, ({id,"image"}) );
+set("title",title);
+set("gender", gender);
+set("age",age);
+set("long",long);
+set("class",cls);
+set("int",30);
+set("max_kee",max_kee);
+set("kee",max_kee);
+set("eff_kee",max_kee);
+set("max_sen",max_sen);
+set("eff_sen",max_sen);
+set("sen",max_sen);
+
+set("combat_exp",wx);
+set("daoxing",dx);
+set("force",max_force*2);
+set("max_force",max_force);
+set("mana",max_mana*2);
+set("max_mana",max_force);
+set("force_factor",max_force/50);
+set("mana_factor",max_mana/50);
+
+set_skill("dodge",skill); 
+set_skill("snowsword",skill); 
+set_skill("sword",skill); 
+set_skill("parry",skill); 
+set_skill("force",skill); 
+set_skill("spells",skill); 
+set_skill("unarmed",skill); 
+set_skill("moonshentong", skill); 
+set_skill("moonforce",skill); 
+set_skill("moondance",skill); 
+set_skill("dragonfight",skill); 
+
+map_skill("spells", "moonshentong"); 
+map_skill("unarmed", "dragonfight"); 
+map_skill("force", "moonforce"); 
+map_skill("dodge", "moondance"); 
+map_skill("parry", "dragonfight"); 
+map_skill("sword", "snowsword"); 
+setup();
+set_temp("apply/damage",damage);
+set_temp("apply/armor",armor);
+carry_object("/d/city/npc/obj/armor")->wear();
+carry_object("/d/city/npc/obj/cloth")->wear();
+carry_object("/d/city/npc/obj/shoes")->wear();
+carry_object("/d/city/npc/obj/pifeng")->wear();
+carry_object("/d/city/npc/obj/kui")->wear();
+carry_object("/d/city/npc/obj/shield")->wear();
+}
+
+void random_talk()
+{
+string str;
+object ob = this_object();
+str = CYN"\n\n$N"CYN"说道：";
+str+= talk[1+random(6)]+"\n"NOR;
+message_vision(str,ob);
+return;
+}
+
+object offensive_target(object me)
+{
+int sz;
+object *enemy;
+
+enemy = me->query_enemy();
+if( !enemy || !arrayp(enemy) ) return 0;
+
+sz = sizeof(enemy);
+if( sz > 1 ) 
+        {
+        me->command("say 你们以多欺少，不是英雄所为！\n");
+        me->command("bye");
+        me->dead();
+        }
+else
+return enemy[1];
+}
+
+void dismiss(object me)
+{
+object guai = new(__DIR__"npc");
+if ( random(10)==1 ) guai->move(environment());
+if ( !me ) return;
+remove_call_out("dismiss");
+message_vision("$N摇身一变，化作一股青烟散去。\n",me);
+destruct(me);
+}
+
+void heart_beat() 
+{
+int flag = 0;
+string msg,arg,*str;
+object who,home;
+object me = this_object();
+
+if ( query("name")=="千面怪" )
+	{
+	call_out("dismiss",1+random(5),me);
+	return;
+	}
+
+if ( query("kee")<=100 || query("eff_kee")<=100 || query("sen")<=100 || query("eff_sen")<=100 )
+        dead();
+
+if ( !is_fighting() )
+	{
+	if ( !query("killer") )
+		{
+		flag++;
+		if ( flag>=30 )
+			{
+			flag = 0;
+			who = npc_name();
+			if ( !who ) 	
+				random_talk();
+			else	set("killer",who);
+			}
+		}
+	
+	else	{
+		who = query("killer");
+		if ( !who ) 
+			{
+			who->delete("killer");
+			home = find_object("/u/snowtu/workroom");
+			if ( objectp(home) ) {
+				return_home(home);
+				return;
+				}
+			else	{
+				destruct(me);   
+				return;
+				}
+			}
+		else if ( !living(who) )
+			{
+			CHANNEL_D->do_channel(   
+						me,
+						"chat",
+						"看来"+who->query("name")+"和我相比，只算的上是肉头。。。\n",
+						0,
+						0);
+			dead();
+			return ;
+       		}
+                else if ( environment()!=environment(who) )
+			{
+			message_vision("$N嘿嘿一声冷笑：看来"+who->query("name")+"蛮肥的，吃吃看去。。。\n",me);
+			message_vision("$N急急忙忙的离开了。\n",me);
+			me->move(environment(who));
+				tell_room(environment(who),name()+"走了过来。\n");
+			if ( !environment(who)->query("no_fight")
+                       && !environment(who)->query("no_magic") )
+                                me->kill_ob(who);
+			else	{
+				delete("killer");
+				if ( random(100)>55 )
+					{
+					message_vision(CYN"$N"CYN"一面用锐利的目光盯着$n"CYN"，一面「嘿嘿嘿．．．．」地奸笑着。\n"NOR,me,who);
+					me->set_leader(who); 
+					}
+				else	{
+					if ( !mapp(environment()->query("exits")) )
+						message_vision(HIY"\n\n$N"HIY"双眼微闭，嘴中念起时空穿梭咒：「波若波罗密乾坤大法，走！」
+$N"HIY"的身影已经消失在漫天风沙之中.\n\n"NOR,me);
+					else	{
+						str = keys(environment()->query("exits"));
+						arg = str[random(sizeof(str))];
+						msg = exit_msg[arg];
+						message_vision("$N向"+msg+"离开。\n",me);
+						return_home(home);
+						message_vision("$N走了回来。\n",me);
+						message_vision(CYN"$N说道："+who->query("id")+"是个怕死鬼。\n"NOR,me);
+						return;
+						}
+					}
+				}
+			}
+		else	me->kill_ob(who);
+		}
+	}
+                
+if ( query("eff_kee") < (query("max_kee")-100) )
+        add_eff_kee();
+      
+if ( query("kee") < (query("eff_kee")-100) )
+        add_kee();
+
+if ( query("sen") < (query("eff_sen")-100) ) 
+        add_sen();
+::heart_beat();
+}
+
+void kill_ob(object me)
+{
+string msg,str;
+object weapon;
+object ob = this_object();
+
+if ( !me || environment()->query("no_fight") || !living(ob) ) return;
+if ( !is_fighting() ) 
+	{ 
+	me->kill_ob(ob);
+	ob->command("kill "+me->query("id")); 
+	}
+random_pfm(ob,me);
+call_out("kill_ob",5+random(10),me);
+}
+
+void dead()
+{
+int guai_max_kee, ob_max_kee;
+object room;
+object me = this_object();
+object ob= me->query_temp("last_opponent");
+guai_max_kee  = me->query("max_kee");
+ob_max_kee = ob->query("max_kee");
+
+set("kee",query("max_kee"));
+set("eff_kee",query("max_kee"));
+set("sen",query("max_sen"));
+set("eff_sen",query("max_sen"));
+set("force",query("max_force"));
+set("mana",query("max_mana"));
+
+if ( !ob  )
+	return;
+ob->remove_killer(me);
+me->remove_killer(ob);
+                        
+if ( random(3)==1 )
+	{ 
+CHANNEL_D->do_channel(   
+			me,
+			"chat",
+			HIC+ob->query("name")+"偶不和你玩了，去休息休息，待会再来。。。\n",
+			0,
+			0);
+	message_vision(HIW"\n$N"HIW"说道：「不打了，不打了，我投降。」\n\n"NOR,me);
+	message_vision(HIY"\n\n$N"HIY"双眼微闭，嘴中念起时空穿梭咒：「波若波罗密乾坤大法，走！」
+$N"HIY"的身影已经消失在漫天风沙之中.\n\n"NOR,me);
+	room = find_object("/u/snowtu/workroom");
+	me->delete("killer");
+	if ( !room ) destruct(me);
+	return_home(room);
+	return ;
+	}
+else	{ 
+	random_talk();
+	return ;
+	}
+}
+
+void random_pfm(object ob,object me)
+{
+object weapon;
+string msg;
+
+if ( query("force")<100 || !me->is_fighting() || !present(me,environment()) ) return;
+
+switch ( random(10) )
+	{
+	case 1:
+		weapon = find_object("/d/city/npc/obj/sword");
+		if ( !weapon ) 
+			weapon = new("/d/city/npc/obj/sword");
+		(weapon)->move(ob);
+		ob->command("wield all");
+		msg = HIW"\n$N"HIW"轻叱一声，脚尖一点，身体急速上旋，在半空中一个折腰。
+同时手腕轻抖，剑光闪动幻作漫天飞雪卷向$n。\n"NOR;
+		msg+= HIC"\n$N同时使出风回雪舞剑的前三招，在半空中压向$n。\n"NOR;
+		message_vision(msg,ob,me);
+		COMBAT_D->do_attack(	ob,me,weapon);
+		COMBAT_D->do_attack(	ob,me,weapon);
+		COMBAT_D->do_attack(	ob,me,weapon);
+		destruct(weapon);
+		break;
+	
+	case 2:
+		do_spell(
+			ob, 
+			me, 
+			"sen",          
+                        80,
+                        50+random(100),
+			HIC "$N口中念了几句咒文，随着一声“后羿在此！”半空中现出一位身披虎皮的大汉。\n只见他张弓搭箭，“嗖”的一声，一只蓝汪汪的长箭向$n激射而下！\n" NOR,
+                	HIC "结果长箭从$n身上透体而过，顿时血花飞溅！\n" NOR, 
+                	HIC "只见$n轻轻一跳，长箭正好插在$N脚边，兀自颤动不休！\n" NOR, 
+ 		       HIC "但是$n以法力一拨，长箭“嗖”的一声折向$N！\n" NOR,
+        		);
+		break;
+
+	case 3 :
+		do_spell(
+			ob,
+			me,
+			"eff_sen",
+                        30,
+			(100+random(200)),
+			HIC"\n\n$N"HIC"口中念了几句咒文，半空中现出阿傩，迦叶二尊者，各人手执
+一根巨大无比的降魔杵，呼！地一声向"HIC"当头砸下！\n"NOR,
+			HIC"结果砸个正着，差点没把$n"HIC"砸扁！\n"NOR,
+			HIC"但是$n在千钧一发之际躲了开来。\n"NOR,
+			HIC"但是降魔杵被$n"HIC"以法力一引，反而砸到了$N"HIC"的顶门！\n\n"NOR,
+			);
+		break;
+
+	case 4 :
+		do_spell(
+			ob,
+			me,
+			"kee",
+                        50,
+			(200+random(200)),
+			HIR"\n\n$N"HIR"几个指头迅速捻动，突然张嘴一喷！红橙黄三道火焰呼！地一声向$n"HIR"卷去！\n"NOR,
+			HIR"结果$n"HIR"被烧得焦头烂额！\n"NOR,
+			HIR"但是$n在千钧一发之际躲了开来。\n"NOR,
+			HIR"结果被$n"HIR"以法力一引，火焰向着$N"HIR"倒卷而去！\n\n"NOR,
+			);
+		break;
+	
+	default :     
+		break;
+	}
+add("force",-100);
+}
+
+
+void do_spell(
+	object me,
+	object target,
+	string type,
+	int per,
+	int damage,
+	string hit_msg,
+	string success_msg,
+	string lost_msg,
+	string back_msg )
+	{
+if ( !me || !target ) return;
+if ( type!="kee" && type!="sen" && type!="eff_kee" && type!="eff_sen" )
+	return;
+message_vision(hit_msg,me,target);
+if ( random(per)>6 )
+	{
+	message_vision(success_msg,me,target);
+	switch(type)
+		{
+		case "kee" :	target->receive_damage("kee", damage,me); 
+                                COMBAT_D->report_status(target);
+				break;
+		case "eff_kee" :	target->receive_wound("kee", damage/2,me); 
+                                COMBAT_D->report_status(target);
+				break;
+		case "sen" :	target->receive_damage("sen", damage,me); 
+                                COMBAT_D->report_sen_status(target);
+				break;
+		case "eff_sen" :	target->receive_wound("sen", damage/2,me); 
+                                COMBAT_D->report_sen_status(target,damage/2);
+				break;
+		}
+	}
+else	if ( random(per)<2 )
+	{
+	message_vision(back_msg,me,target);
+	if ( random(3)==1 )
+		{
+		message_vision(hit_msg,target,me);
+		switch(type)
+			{
+			case "kee" :	me->receive_damage("kee", damage); 
+                                        COMBAT_D->report_status(me);
+					break;
+                        case "eff_kee" :        me->receive_wound("kee", damage/2); 
+                                        COMBAT_D->report_status(me,damage/2);
+					break;
+			case "sen" :	me->receive_damage("sen", damage); 
+                                        COMBAT_D->report_sen_status(me);
+					break;
+			case "eff_sen" :	me->receive_wound("sen", damage/2); 
+                                        COMBAT_D->report_sen_status(me,damage/2);
+					break;
+			}
+		}
+	else	message_vision(lost_msg,target,me);
+	}
+else	message_vision(lost_msg,me,target);
+return;
+}

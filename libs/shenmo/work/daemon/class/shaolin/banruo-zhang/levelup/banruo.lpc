@@ -1,0 +1,139 @@
+#include <ansi.h>
+inherit SSERVER;
+
+string name()
+{
+return "「般若无相」";    
+}
+
+string force = "";
+
+int valid_perform(object me)
+{
+if ( !me )
+        return 0; 
+if ( me->query("class")!="human" )  
+        return notify_fail(name()+"乃是人族绝招。\n");
+if ( me->query_skill("banruo-zhang",1)<60 )
+        return notify_fail("你的"+to_chinese("banruo-zhang")+"等级不足 60 级，不能施展"+name()+"。\n");
+if ( me->query_skill("unarmed",1)<60 )
+        return notify_fail("你的"+to_chinese("unarmed")+"等级不足 60 级，不能施展"+name()+"。\n");
+if ( me->query_skill("yijinjing",1)<60 )
+        return notify_fail("你的"+to_chinese("yijinjing")+"等级不足 60 级，不能施展"+name()+"。\n");
+if ( me->query("max_force")<600 )
+        return notify_fail("你的内力修为不足六年，不能施展"+name()+"。\n");
+if ( me->query("force")<200 )
+        return notify_fail("你的内力不足 200 点，不能施展"+name()+"。\n");   
+if ( time()<me->query_temp("shaolin_pfm_banruo")+2+random(4) )
+        return notify_fail("绝招用多就不灵了。\n");        
+if ( !me->is_fighting() )
+        return notify_fail(name()+"只能对战斗中的对手使用。\n");        
+return 1;               
+}
+
+int perform(object me, object target)
+{
+int damage,ap,dp;
+string msg;
+if ( !valid_perform(me) )    return 0;
+if ( !target ) 
+        target = offensive_target(me);
+if ( !target
+  || !target->is_character()
+  || target->is_corpse()
+  || !me->is_fighting(target) )
+        return notify_fail("你要对谁施展这一招"+name()+"？\n");
+
+if ( !me->query("env/no_msg") && !target->query("env/no_msg") )
+        msg = MAG"
+只见$N"MAG"面显庄严，提一口真气，飘身而上，半空中手掌交错，一股内劲狭带着热
+浪，如风如火，似雷似电，这一招拍出，击向$n"MAG"，招式平平淡淡，一成不变，但却
+挡无可挡，避无可避！\n"NOR;
+else    msg = MAG"\n$N"MAG"一式"HIR+name()+NOR MAG"攻向$n"MAG"！\n"NOR;
+message_vision(msg,me,target);
+me->add("force",-100);
+me->set_temp("shaolin_pfm_banruo",time());
+
+ap = COMBAT_D->skill_power(me,"unarmed",1);
+ap+= COMBAT_D->skill_power(me,"banruo-zhang",1);
+ap+= COMBAT_D->skill_power(me,"force",1);
+ap+= COMBAT_D->skill_power(me,"yijinjing",1);
+ap/= 4;
+dp = COMBAT_D->skill_power(target,"force",1);
+dp+= COMBAT_D->skill_power(target,"dodge",1);
+dp+= COMBAT_D->skill_power(target,"parry",1);
+dp/= 3;
+if ( COMBAT_D->restrain(me,target) )
+        ap+= ap/3;
+if ( COMBAT_D->restrain(target,me) )
+        dp+= dp/3;
+if ( me->query("family/family_name")=="少林寺" )
+           ap+= ap/3;
+
+damage = COMBAT_D->attacking_perform_damage(me,target,400);
+me->wiz_test_msg(target,damage,"初始伤害");
+           
+if ( random(ap+dp)>dp && damage )
+        {
+        damage+= me->query_skill("unarmed");
+        me->wiz_test_msg(target,damage,"加技能伤害");
+        damage-= me->query("bellicosity");
+        me->wiz_test_msg(target,damage,"减杀气伤害");
+        damage+= (me->query_skill("force")-target->query_skill("force"));
+        me->wiz_test_msg(target,damage,"加内力判定伤害");
+        damage+= random(damage);
+        me->wiz_test_msg(target,damage,"最终伤害");
+        if ( damage>0 )
+                {
+                if ( !me->query("env/no_msg") && !target->query("env/no_msg") )  
+                        message_vision(HIR"$n"HIR"登时眼前一花，两耳轰鸣,哇的喷出一口鲜血！\n"NOR,me,target);
+                target->receive_wound("kee",damage,me);         
+                COMBAT_D->report_status(target,damage); 
+                }
+        }
+else if ( random(ap+dp)>=dp/3 || COMBAT_D->restrain(me,target) )
+        {
+        msg = ({
+                HIR"$p急忙飞身向后跃出数丈，才勉强躲闪过这一击。\n"NOR,
+                HIR"$p奋力一架，将这一击堪堪挡住。\n"NOR,
+        })[random(2)];
+        if ( !me->query("env/no_msg") && !target->query("env/no_msg") )  
+                message_vision(msg,me,target);
+        me->add("force",-80);           
+        }
+else    {
+        msg = HIR"但是被$n"HIR"以内力一逼，指力尽数反挫！结果只听喀嚓几声，
+$N"HIR"十指几乎全部折断！\n"NOR;
+        if ( !me->query("env/no_msg") && !target->query("env/no_msg") )  
+                message_vision(msg,me,target);
+        damage = target->query_temp("apply/damage");
+        damage = damage/3+random(damage/3);
+        me->receive_damage("kee",damage,target);
+        COMBAT_D->report_status(me);
+        me->add("force",-50);
+        }       
+return 1;
+}                       
+        
+int help(object me)  
+{
+string temp;
+temp = "\t\t"+to_chinese("banruo-zhang")+" 60 级\n"; 
+temp+= "\t\t"+to_chinese("yijinjing")+" 60 级\n"; 
+temp+= "\t\t"+to_chinese("unarmed")+" 60 级\n"; 
+temp+= "\t\t内力修为 六年 。\n"; 
+temp+= "\t\t内    力 200 点 。\n"; 
+write("\n"+to_chinese(explode(__FILE__,"/")[<2])+"之"+name()+"："NOR"\n");
+write(@HELP 
+        使用功效： 
+                损伤对方的气血
+        出招类型：   
+                延迟型外功  
+                无隐藏效果
+                双方功夫悬殊，攻击会反弹
+                叛师可带出   
+        出手要求： 
+HELP);  
+write(temp);  
+return 1;  
+}

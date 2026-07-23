@@ -1,0 +1,228 @@
+#include <ansi.h>
+inherit NPC;
+inherit F_MASTER;
+#include <ansi.h>
+
+int handle_kill(object me);
+int accept_fight(object me);
+void check_fight (object npc, object me);
+void player_win(object me);
+void player_lose(object me);
+void do_revive(object ob);
+
+int check_me();
+void create()
+{
+       set_name("邀月宫主", ({"yaoyue gongzhu", "yaoyue", "gongzhu","master"}));
+       set("long",
+"移花宫执掌人。\n");
+       set("title",HIR "移花宫大宫主"NOR);
+       set("gender", "女性");
+       set("age", 40);
+       set("class", "human");
+       set("attitude", "friendly");
+       set("rank_info/respect", "仙姑");
+       set("per", 30);
+	set("int", 30);
+       set("max_kee", 30000);
+       set("max_gin", 30000);
+       set("max_sen", 30000);
+       set("force", 10000);
+       set("max_force", 10000);
+       set("force_factor", 250);
+       set("max_mana", 10000);
+       set("mana", 10000);
+       set("mana_factor", 240);
+       set("combat_exp", 60000000);
+       set("daoxing", 80000000);
+       set("eff_dx", 2000000);
+       set("nkgain", 350);
+        set_skill("literate", 350);
+        set_skill("unarmed", 350);
+        set_skill("dodge", 350);
+        set_skill("force", 350);
+        set_skill("parry", 350);
+        set_skill("sword", 350);
+        set_skill("spells", 350);
+              set_skill("mingyu-jue", 350); 
+        set_skill("yihua-jiemu", 350);
+        set_skill("yihua-force", 350);
+        set_skill("feihua-sword", 350);
+        set_skill("feihua-steps", 350);
+        map_skill("spells", "mingyu-jue");
+        map_skill("unarmed", "yihua-jiemu");
+        map_skill("force", "yihua-force");
+        map_skill("sword", "feihua-sword");
+        map_skill("parry", "feihua-sword");
+        map_skill("dodge", "feihua-steps");
+ create_family("移花宫", 1, "弟子");
+ set("chat_chance_combat", 50);
+       set("chat_msg_combat", ({
+                (: perform_action, "sword", "feitian" :),
+                (: exert_function, "recover" :),
+                (: exert_function, "heal" :),
+                }) );
+        set("inquiry", ([
+        "嫁衣神功": (: check_me :),
+        ]) );
+setup();
+       carry_object("/d/yhg/obj/jinchan")->wear();
+       carry_object("/d/yhg/obj/bixuesword")->wield();
+}
+
+void init()
+{
+        add_action("do_none","perform");
+ add_action("do_none","eat");
+	 add_action("do_kill", "kill");
+        add_action("do_surrender", "surrender");
+        add_action("do_none","cast");
+        add_action("do_none","ji");
+}
+int check_me()
+{
+
+     object who = this_player();
+     if( who->query("combat_exp") > 10000000 )
+     {
+          tell_object( who ,"要知道嫁衣神功，先看看你有没有这个本事！\n");
+          tell_object( who ,"考虑好了的话，fight yaoyue\n");
+      who->set_temp("jiayi_force/fight_yaoyue",1);
+         }
+      else
+       tell_object( who ,"你的经验太低了，无法学习嫁衣神功");
+     return 1;
+}
+int do_none()
+{
+        object me = this_object();
+        message_vision("邀月对你摇了摇头？\n",me);
+        return 1;
+} 
+void attempt_apprentice(object ob)
+{
+       if ( !((string)ob->query("gender")=="女性")){
+           command("shake");
+           command("say 我们移花宫只收女徒，这位" +
+RANK_D->query_respect(ob) + "还是另请高就吧。\n");
+           return;}
+        if ( (int)ob->query("per") <22){
+	  command("shake");
+	command("say 以我看这位" +
+RANK_D->query_respect(ob) + "的资质并不适于学习，还是另请高就吧。\n");
+ 	return;
+}
+ if ( (int)ob->query_skill("mingyu-jue",1) <280){
+	  command("shake");
+	command("say 以我看这位" +
+RANK_D->query_respect(ob) + "你还是过段时候再来找我吧。\n");
+ 	return;
+}
+
+       command("pat "+ob->query("id"));
+        command("say 好，希望" + RANK_D->query_respect(ob) +
+"多加努力，把我们移花宫发扬光大。\n");
+        command("recruit " + ob->query("id") );
+        message("system", HIY"移花宫又多了一个弟子  "+this_player()->name()+HIW"
+                     移花宫的势力加强了。\n"NOR,users());
+        return;
+}
+int recruit_apprentice(object ob)
+{
+        if( ::recruit_apprentice(ob) )
+                ob->set("class", "human");
+}
+
+int do_surrender()
+{
+    this_player()->delete_temp("jiayi_force/fight_yaoyue");
+    return 0;
+}
+int do_kill(string arg)
+{
+    if(!id(arg)) return 0;
+    handle_kill(this_player());
+    return 0;
+}
+int handle_kill(object me)
+{
+    if(is_fighting())
+    {
+        message_vision(CYN"邀月抱拳道：众位，既然$N想要拼命，还请稍候片刻。\n"NOR, me);
+        this_object()->remove_all_enemy();
+    }
+    do_revive(this_object());
+    command("kill "+me->query("id"));
+}
+int accept_fight(object me)
+{
+  if(me->query_temp("jiayi_force/fight_yaoyue"))
+    {
+      set("kee", query("max_kee"));
+      set("force", query("max_force"));
+      me->set_temp("jiayi/fight_yaoyue",1);
+      me->delete_temp("jiayi_force/fight_yaoyue");
+      remove_call_out("check_fight");
+      call_out("check_fight", 1, this_object(), me);
+      return 1;
+    }
+  command("say 难道你来这里就是想打架？我看还是算了吧。\n");
+  return 0;
+}
+
+void check_fight (object npc, object me)
+{
+  int npc_kee, my_kee, my_ratio, npc_ratio;
+  int npc_max_kee, my_max_kee;
+ 
+  my_kee = me->query("kee");
+  npc_kee = npc->query("kee");
+  my_max_kee = me->query("max_kee");
+  npc_max_kee = npc->query("max_kee");
+  my_ratio=my_kee*100/my_max_kee;
+  npc_ratio=npc_kee*100/npc_max_kee;
+
+  if (is_fighting())
+  {
+    call_out ("check_fight",2,npc,me);
+    return;
+  }
+  if (query_temp("last_opponent")!=me) return;
+  if (!present(me, environment(npc)))
+    return;
+  if(npc->query("kee")*100/npc->query("max_kee")
+   < me->query("kee")*100/me->query("max_kee"))
+    call_out("player_win", 1, me);
+  else call_out("player_lose", 1, me);
+  return;
+}
+void player_win(object me)
+{
+    this_object()->delete_temp("last_opponent");
+    if (me->query_temp("jiayi/fight_yaoyue"))
+      {
+         me->set_temp("mark/jiayi_defeated_yaoyue", 1);
+        me->delete_temp("jiayi/fight_yaoyue");
+        command("say "+"看来"+me->query("name")+"功夫不错，伏耳过来。");
+       command("whisper "+me->query("id")+" 嫁衣神功的秘籍让燕十三拿走了!");
+      }
+    return;
+}
+void player_lose(object me)
+{
+    this_object()->delete_temp("last_opponent");
+    command("say "+RANK_D->query_respect(me) +"不必气馁，再接再厉！");
+    return;
+}
+
+void do_revive(object ob)
+{
+    int kee=ob->query("kee"), max_kee=ob->query("max_kee"), eff_kee=ob->query("eff_kee");
+    int force=ob->query("force"), max_force=ob->query("max_force");
+    int diff_force=max_force-force, diff_kee=max_kee-kee;
+    if(diff_force<0) diff_force=0;
+    if(diff_kee<0) diff_kee=0;
+    ob->receive_curing("kee", diff_kee*2/3);
+    ob->set("force", force+diff_force*2/3);
+}
+

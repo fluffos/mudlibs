@@ -1,0 +1,159 @@
+
+// modify by windy 06/05/16
+#include <ansi.h>
+#include <combat.h> 
+inherit SSERVER; 
+
+string name()  
+{
+return "「"HIM"百鸟朝凤"NOR"」";  
+}
+
+int valid_perform(object me)
+{
+if((me->query("family/family_name") != "大雪山" ||me->query("class") != "yao") &&!me->samara_check("bainiao-jian",1))
+        return notify_fail("只有大雪山弟子才配使用"+name()+"！\n"); 
+if (me->query_skill_mapped("force")!="ningxie-force")
+        return notify_fail(name()+"必须配合冰谷凝血功才能使用。\n");
+if(me->query_skill("bainiao-jian", 1) < 50) 
+        return notify_fail("你的百鸟剑法修为太差，难以施展"+name()+"！\n"); 
+if(me->query_skill("ningxie-force", 1) < 50) 
+        return notify_fail("你的冰谷凝血功修为太差，难以施展"+name()+"！\n"); 
+if(me->query_skill("sword", 1) < 50) 
+        return notify_fail("你的基本剑术根基太差，难以施展"+name()+"！\n"); 
+if(me->query_skill("throwing", 1) < 50) 
+        return notify_fail("你的暗器使用根基太差，难以施展"+name()+"！\n"); 
+if((int)me->query("max_force") < 500 ) 
+        return notify_fail("你的内力修为不够！\n"); 
+if((int)me->query("force") < 200 ) 
+        return notify_fail("你内力不继，难以御剑飞针。\n");
+if( time()-(int)me->query_temp("chaofeng_busy") < 3+random(2) ) 
+        return notify_fail("出奇才能制胜，"+name()+"多使就不灵了。\n");
+return 1;  
+}
+
+int perform(object me, object target)
+{
+object weapon;
+string msg;
+int ii,req,num_anqi,num_hit,max_hit,hitt,damage,op,opfa,remain,taexp;
+string anqi_type,b_unit;
+int wound=0;
+
+if ( !valid_perform(me) )
+        return 0;
+if( !target ) target = offensive_target(me); 
+if( !target 
+||      !target->is_character() 
+||      target->is_corpse() 
+||      target==me) 
+        return notify_fail("你要对谁施展"+name()+"？\n"); 
+
+taexp = ((int)target->query("combat_exp")/200000);
+if (taexp<1)    taexp=1;
+weapon = me->query_temp("weapon");
+req=(int)me->query_skill("sword", 1)+(int)me->query_skill("bainiao-jian", 1)+(int)me->query_skill("throwing", 1);
+if (weapon) 
+    {
+    if (weapon->query("anqi/allow") != 1) num_anqi=0;
+    else num_anqi=weapon->query("anqi/now");
+    }
+if(req < 300 && weapon->query("anqi/now") ==0)
+        return notify_fail("以你现在的修为如果不借助暗器恐怕难以施展"+name()+"！\n");
+if(num_anqi <=0) 
+        { anqi_type="剑气"; damage=me->query("force_factor")+10; }
+else if (req < 300)
+        { anqi_type=weapon->query("anqi/type"); damage=me->query_temp("apply/damage");}
+else
+        { anqi_type=weapon->query("anqi/type")+"加着剑气";
+        damage=me->query_temp("apply/damage")+me->query("force_factor")+random(100);}
+
+msg = HIW"只见$N手中"+weapon->query("name")+HIW"急颤，幻出满天剑芒，无数"
+        +anqi_type+HIW"有如百鸟投林般向$n"HIW"扑来！\n" NOR;
+me->add("force", -100);
+if (num_anqi > 10 || num_anqi == 0) max_hit=10;
+else max_hit=weapon->query("anqi/now");
+
+num_hit=random(max_hit/2)+(max_hit/2);
+
+if (!target->is_fighting(me) || target->is_busy() || me->query("id")=="tian wang") opfa=60;
+else opfa=45;
+
+if (target->query("combat_exp")  !=0 ) 
+       op= ((int)me->query("combat_exp")/200000)*opfa/taexp;
+else op=10;
+
+hitt=0;
+
+for (ii=1;ii<=num_hit;ii++) 
+        {if (op > random(80)) hitt++;}
+
+if (weapon->query("anqi/type")=="孔雀翎") b_unit="支";
+else b_unit="根";
+if (weapon->query("anqi/now") != 0) remain=weapon->query("anqi/now")-num_hit;
+else remain=0;
+weapon->set("anqi/now",remain);
+if (weapon->query("anqi/now") == 0) 
+        {weapon->delete("anqi/type");  weapon->set("long",weapon->query("orilong"));}
+else weapon->set("long",weapon->query("orilong")+"里面已经装了"
+    +chinese_number(weapon->query("anqi/now"))+b_unit+weapon->query("anqi/type")+"，想拆掉用uninstall。\n"); 
+
+if (hitt==0)
+        {
+        msg += HIW "$n"HIW"连忙身行一转，连退数步，闪过了这满天花雨般的一击。\n"NOR;
+        message_vision(msg, me, target);
+        if (me->query("id")!="tian wang")         //强化大闹天宫第十关
+        me->start_busy(random(3));
+        }
+else    {
+        damage=damage*hitt;
+        target->receive_damage("kee",damage,me);
+        if (random(damage)>target->query_temp("apply/armor"))
+            {
+            target->receive_wound("kee",damage-target->query_temp("apply/armor"),me);
+            wound=1;
+            }
+        msg += HIW "$n躲闪不及，身上"+chinese_number(hitt)+HIW "处中了"+anqi_type+"！\n"NOR;
+        message_vision(msg, me, target);
+        COMBAT_D->report_status(target,wound);
+        if(!target->is_busy())
+        target->start_busy(1+random(3));
+     me->improve_skill("throwing",random(2),1); 
+        }
+msg = HIW "$n"HIW"对着$N高声骂道：好啊，敢放暗器，看我怎么收拾你！\n" NOR;   
+message_vision(msg, me, target);
+//target->kill_ob(me);
+//无法作killer 任务，关闭叫杀, windy
+if (me->query("id")!="tian wang")
+me->set_temp("chaofeng_busy", time());
+//隐藏攻击 
+if ( me->query_skill("ningxie-force",1)>=350 && me->query_skill("bainiao-jian",1)>=350
+   && me->query_skill("dengxian-dafa",1)>=350 && me->query_skill("xiaoyaoyou",1)>=350 && me->query_skill("throwing",1)>=350 )
+           return ("/daemon/class/yaomo/xueshan/bainiao-jian/old/gui.lpc")->perform(me,target);
+return 1;
+}
+
+int help(object me) 
+{
+string temp;    
+temp = "\t\t"+to_chinese("bainiao-jian")+" 50 级\n"; 
+temp+= "\t\t"+to_chinese("sword")+" 50 级\n"; 
+temp+= "\t\t"+to_chinese("throwing")+" 50 级\n"; 
+temp+= "\t\t"+to_chinese("ningxie-force")+" 50 级\n"; 
+temp+= "\t\t必须激发"+to_chinese("ningxie-force")+" \n"; 
+temp+= "\t\t内力修为五年\n"; 
+temp+= "\t\t内力２００点\n"; 
+write("\n"+to_chinese(explode(__FILE__,"/")[<2])+"之"+name()+"："NOR"\n"); 
+write(@HELP 
+
+        使用功效： 
+                给对手强有力的一击并牵制对手
+        出招类型： 
+                延时型武功，命中失败可能有busy
+                有隐藏攻击 
+                叛师不可带出 
+        出手要求：               
+HELP);                           
+write(temp); 
+return 1; 
+}

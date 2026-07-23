@@ -1,0 +1,230 @@
+//察看囚禁的player
+//by fly 1-2-2001
+
+inherit ROOM;
+#include <ansi.h>
+string atime(int t);
+void takeout(object who);
+void wizchannel(string result);
+
+void create()
+{
+        set("short","囚室外");
+        set("long", @LONG
+这里是囚室外的房间，通常都是巫师在这里察看犯罪纪录的地方，至
+于囚犯，他们出狱的方式是直接被送到客栈。巫师们在这里可以察看在线
+玩家的犯罪纪录(consult)，改变囚犯囚禁时间(changetime id newtime)
+释放被囚的人(shifang，请慎用),关闭新的囚犯(qiujin,请慎用).
+LONG );
+        set("exits",([
+                "enter" : __DIR__"qiushi",
+                "south" : __DIR__"workhome",
+        ]));
+        set("no_fight", 1);
+        set("no_beg",1);
+        setup();
+}
+
+void init()
+{
+        add_action("do_consult","consult");
+        add_action("do_release","shifang");
+        add_action("do_change","changetime");
+        add_action("do_qiujin","qiujin");
+}
+
+int do_consult(string arg)
+{
+        int i,j,inage,howlong,mudage;
+        object who;
+        string rep,str,s;
+        
+        if(!wizardp(this_player())) return notify_fail("[囚室}:只有巫师可以察看纪录\n");
+        if (!arg) return notify_fail("[囚室]:consult <id>\n");
+        who = find_player(arg);
+        if (!who) return notify_fail("[囚室]:没有这个人或不在线。\n");
+        rep = "\n";
+        rep+= "┌──────────────────────┬─────────┐\n";
+        str = sprintf("%s %s(%s)",who->query("title"),who->query("name"),who->query("id"));
+        rep+= sprintf("│%-43s│性别：%-12s│\n",str,who->query("gender"));
+        rep+= "├──────────────────────┴─────────┤\n";
+        if (!who->query("qiushi"))
+        {
+                rep+= "│"+HIW"此人无囚禁纪录"NOR+"　　　　　　　　　　　　　　　　　　　　　　　　　│\n";
+                rep+= "└────────────────────────────────┘\n\n";
+        } else
+        {
+                inage = who->query("qiushi/inage");
+                howlong = who->query("qiushi/howlong");
+                mudage = who->query("mud_age");
+                
+                if (file_name(environment(who))!="/u/fly/where/qiushi")
+                {
+                rep+= "│"+HIW"此人现在非囚犯"NOR+"　　　　　　　　　　　　　　　　　　　　　　　　　│\n";
+                rep+= "├────────────────┬───────────────┤\n";
+                }
+                else
+                {
+                rep+= "│"+HIW"此人正在被囚禁"NOR+"　　　　　　　　　　　　　　　　　　　　　　　　　│\n";
+                rep+= "├────────────────┬───────────────┤\n";
+                rep+= sprintf("│已被囚禁时间：%-17s│还需被囚：%-20s│\n",atime(mudage-inage),
+                atime(inage+howlong*60-mudage));
+                rep+= "├────────────────┼───────────────┤\n";
+                }
+                rep+= sprintf("│总被囚禁次数：%-15s次│总定时间：%-18s分│\n",chinese_number(who->query("qiushi/times")),
+                chinese_number(who->query("qiushi/totaltime")));
+                rep+= "├────────────────┴───────────────┤\n";
+                rep+= "│◎最近囚禁记录◎                                                │\n";
+                rep+= "├────────────────────────────────┤\n";
+                
+                str = who->query("qiushi/note");
+                while ((i = strlen(str)) > 0)
+                {
+                        j = strsrch (str, "\n");
+                        if (j < 0)
+                        {
+                                s = str;
+                                rep+= sprintf("│%s",s);
+                        }  
+                        s = str[0..j];
+                        rep+= sprintf("│%s",s);
+                        str = str[j+1..i];
+                }
+                rep+= "└────────────────────────────────┘\n\n";
+                }
+        write(rep);
+        return 1;
+}
+
+string atime(int t)
+{
+        int d, h, m, s;
+        string time;
+        
+        if (t<=0) return "——";
+        s = t % 60;
+        m = t /60;
+
+/*
+        if(d) time = chinese_number(d) + "天";
+        else time = "";
+
+        if(h) time += chinese_number(h) + "小时";
+*/      
+        if(m) time = chinese_number(m) + "分";
+        else time = "";
+        time += chinese_number(s) + "秒";
+
+        return time;
+}                                        
+
+int do_release(string arg)
+{
+        string wizname,criname,result,ttime;
+        object qiushi=load_object(__DIR__"qiushi");
+        object me= this_player();
+        object criminal;
+        
+        if(!wizardp(me)) return notify_fail("[囚室]:只有巫师可以放人！\n");
+        if(!arg || !objectp(criminal = present(arg, qiushi)))
+                return notify_fail("[囚室]:你想放谁？\n");
+        
+        wizname = me->query("name") + "("+me->query("id")+")";
+        criname = criminal->query("name") + "("+criminal->query("id")+")";
+        
+        ttime=ctime(time())[8..strlen(ctime(time()))];
+        result = sprintf("%s  %s将%s从牢房里放出\n",ttime,wizname,criname);
+        
+        criminal->set("qiushi/note",criminal->query("qiushi/note")+result);       
+        qiushi->takeout(criminal);
+        qiushi->wizchannel(result);        
+        log_file("qiujin",result);
+        
+        return 1;
+}
+
+
+
+int do_change(string arg)
+{
+        string wizname,criname,result,ttime,id;
+        object qiushi=load_object(__DIR__"qiushi");
+        object me= this_player();
+        object criminal;       
+        int otime,newtime;
+        
+        if(!wizardp(me)) return notify_fail("[囚室]:只有巫师可以！\n");
+        
+        if(!arg || arg=="" || sscanf(arg, "%s %d", id, newtime)!=2)
+                return notify_fail("[囚室]: changetime <某人> <新的时间>\n");
+        if(!objectp(criminal = present(id, qiushi)))
+                return notify_fail("[囚室]:你想改谁？\n");
+        
+        wizname = me->query("name") + "("+me->query("id")+")";
+        criname = criminal->query("name") + "("+criminal->query("id")+")";
+        
+        ttime=ctime(time())[8..strlen(ctime(time()))];
+        
+        otime = criminal->query("qiushi/howlong");
+        criminal->set("qiushi/howlong",newtime);
+        
+        result = sprintf("%s  %s将%s原囚禁时间%d分改为%d分\n",ttime,wizname,criname,otime,
+        newtime);       
+        criminal->set("qiushi/note",criminal->query("qiushi/note")+result);        
+        qiushi->wizchannel(result);       
+        log_file("qiujin",result);
+        return 1;
+}
+
+int do_qiujin(string arg)
+{
+
+        string wizname,criname,result,ttime,ob,reason; 
+        object criminal,qiushi=load_object(__DIR__"qiushi");
+        int time;
+        
+        if(!wizardp(this_player())) return notify_fail("[囚室]:只有巫师可以囚禁别人\n");
+        if(!arg  || sscanf(arg,"%s with %d for %s",ob,time,reason)!=3)
+                return notify_fail("[囚室]:指令格式 : qiujin <某人> with <时间(数字)> for <原因>\n");
+        criminal = find_player(ob);
+        if(!criminal) criminal = find_living(ob);
+        if(!criminal) return notify_fail("[囚室]:没有这个人。\n");
+
+        wizname = this_player()->query("name") + "("+this_player()->query("id")+")";
+        criname = criminal->query("name") + "("+criminal->query("id")+")";
+        ttime=ctime(time())[8..strlen(ctime(time()))];
+        criminal->set("qiushi/howlong",time);   
+        result = sprintf("%s  %s将%s囚禁时间%d分,因为%s\n",ttime,wizname,criname,time,reason);
+        criminal->set("qiushi/note",criminal->query("qiushi/note")+result);              
+        criminal->set("qiushi/temp",result);
+        criminal->set("startroom","/u/fly/where/qiushi");
+        criminal->set("qiushi/inage",criminal->query("mud_age"));
+        if (!criminal->set("qiushi/times"))
+          criminal->set("qiushi/times",1);
+        else  criminal->add("qiushi/times",1);
+        message_vision(HIY"[Wiz]巡逻队"CYN"的人突然出现，扔出索套，一下就套住$N的脖子。\n$N伸长舌头、翻着白眼地被拖走了。\n"NOR, criminal);        
+        criminal->move("/u/fly/where/qiushi");
+        message("channel:rumor",HIM"【谣言】某人：据说"NOR+criname+HIM"因为["NOR+reason+HIM"]，被"NOR+HIY"Wiz巡逻队"NOR+HIM"抓走了。\n"NOR, users());                       
+        qiushi->wizchannel(result);
+        log_file("qiujin",result);
+        return 1;
+}
+/*
+void takeout(object who)
+{
+        who->move("/d/city/kezhan");
+        who->set("startroom", "/d/city/kezhan");
+        who->save();
+        message_vision("$N被从牢房里面放了出来。\n",who);
+        message("channel:rumor",HIM"【谣言】某人：据说"+who->name()+"先被Wiz巡逻队提前释放，原因不明。\n"NOR, users());
+                        
+}
+
+void wizchannel(string result)
+{
+        CHANNEL_D->do_channel(this_object(),"wiz",result);
+}
+*/
+
+
+

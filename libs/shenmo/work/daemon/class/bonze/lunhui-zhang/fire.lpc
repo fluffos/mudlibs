@@ -1,0 +1,210 @@
+#include <ansi.h>
+inherit SSERVER;
+
+void remove_eff(object);
+void fire_attack(object,object,object);
+
+string name()
+{
+return "「"HIR"无妄之火"NOR"」";
+}
+
+int valid_perform(object me)
+{
+if ( me->query("bellicosity")>300 && me->query("shilian")<1 )
+        return notify_fail("你杀气高于 300 点，无法施展佛门绝技"+name()+"。\n");
+if ( (string)me->query("family/family_name")!= "南海普陀山" && !me->samsara_check("lunhui-zhang",1)) 
+        return notify_fail("你非佛门弟子，无法施展佛门绝技"+name()+"。\n");
+if ( me->query_skill("lotusforce",1)<250 )
+        return notify_fail("你的"+to_chinese("lotusforce")+"不足 250 级，施展不出"+name()+"。\n");
+if (  me->query_skill("force",1)<250 )
+        return notify_fail("你的"+to_chinese("force")+"不足 250 级，施展不出"+name()+"。\n");
+if (  me->query_skill("staff",1)<250 )
+        return notify_fail("你的"+to_chinese("staff")+"不足 250 级，施展不出"+name()+"。\n");
+if (  me->query_skill("lunhui-zhang",1)<250 )
+        return notify_fail("你的"+to_chinese("force")+"不足 250 级，施展不出"+name()+"。\n");
+if ( me->query_skill_mapped("force")!="lotusforce")
+        return notify_fail("你无莲台心法辅助，施展不出"+name()+"。\n");
+if ( !objectp(me->query_temp("weapon")) )
+        return notify_fail("你的杖呢？\n");
+if ( me->query("force")<800 )
+        return notify_fail("你的真气不足 800 点，施展不出"+name()+"。\n");
+if ( me->query_temp("putuo_fire") )
+        return notify_fail("你的"+name()+"尚未熄灭。\n"NOR);
+if ( me->query("class")!="xian" && !me->samsara_check("lunhui-zhang",1))
+        return notify_fail("你并非仙族,不能使用"+name()+"！\n");
+return 1;
+}
+
+int perform(object me,object target)
+{
+int damage,ap,dp,i;
+object m_weapon;
+string msg,limb;
+if (!objectp(m_weapon = me->query_temp("weapon"))
+|| (string)m_weapon->query("skill_type") != "staff")
+        return notify_fail("你使用的武器不对，无法施展"+name()+"。\n");
+if ( !valid_perform(me) )   return 0;
+if ( !target ) target = offensive_target(me);
+
+if (  !target
+   || !target->is_character()
+   || !me->is_fighting(target) )
+        return notify_fail(name()+"只能对战斗中的对手使用。\n");
+if ( !me->is_fighting() )
+        return notify_fail(name()+"必须在战斗状态下使用。\n");
+
+msg = HIR"$N"HIR"大喝一声，身形爆涨，口中念动不动明王咒，全身渐渐笼罩起一层无妄真火！\n"NOR;
+message_vision(msg,me,target);
+me->add("force",-150);
+me->set_temp("putuo_fire",1);
+me->start_call_out( (: call_other, __FILE__, "remove_eff",me:),5+random(5));
+
+if ( me->query_skill("lotusforce",1)>350 && random(me->query_spi())>random(target->query_spi()) )
+        {
+        if ( !me->query("env/no_msg") && !target->query("env/no_msg") )
+                message("vision",HIR"但见"+target->name()+HIR"微微一震，面色稍变，似是受了惊吓。\n"NOR,environment(target),({me,target}));
+        tell_object(target,HIR"只见红光一卷，你似乎见到"+me->name()+HIR"背后现出一尊不动明王之像，不禁吓的背后飕飕！\n"NOR);
+        write(HIR"你暗凝心神，捏明王咒一指"+target->name()+HIR"，对方明显受到了惊吓。\n"NOR);
+        damage = me->query_skill("buddhism");
+        target->receive_wound("sen",damage);
+        COMBAT_D->report_sen_status(target,damage);
+        target->set_temp("last_damage_from",me);
+        target->set_temp("last_opponent",me);
+        }
+
+msg = HIR"但见红光渐渐笼聚在$W"HIR"之上，仿若有生命般在$W"HIR"上跳跃不止。"NOR;
+msg+= HIR"$N左手一抽，右手攥住$W"HIR"狠狠向$n抽去！\n"NOR;
+msg = replace_string(msg,"$W",NOR HIY+m_weapon->name()+NOR HIR);
+if ( !me->query("env/no_msg") && !target->query("env/no_msg") )
+    message_vision(msg,me,target);
+ap = (int)me->query("combat_exp");
+dp = (int)target->query("combat_exp");
+if ( ap>random(dp/2) )
+        {
+        msg = HIR"$n"HIR"闪避不及，$l"HIR"重重挨了一击！\n"NOR;
+        damage = me->query_temp("apply/damage")*2;
+        damage+= me->query("force_factor");
+        damage-= target->query_temp("apply/armor");
+        if ( damage<100 )
+                damage = 100;
+        damage*= 5;
+        damage+=random(damage);
+        msg+= COMBAT_D->damage_msg(damage,({"砸伤","抽伤","劈伤"})[random(3)]);
+        limb = target->query("limbs")[random(sizeof(target->query("limbs")))];
+        msg = replace_string(msg,"$l",NOR YEL+limb+NOR);
+        msg = replace_string(msg,"$w",NOR HIY+m_weapon->name()+NOR);
+        if ( !me->query("env/no_msg") && !target->query("env/no_msg") )
+                message_vision(msg,me,target);
+        target->receive_damage("kee",damage);
+        target->receive_wound("kee",damage/3);
+        COMBAT_D->report_status(target,damage);
+        target->set_temp("last_damage_from",me);
+        target->set_temp("last_opponent",me);
+        }
+else if ( ap>random(dp/3) && me->query_skill("lunhui-zhang",1)>400 )
+        {
+        msg = HIR"$n"HIR"见势不秒，连忙架住$N"HIR"的$W"HIR"！\n"NOR;
+        msg+= HIR"$N"HIR"见招势已老，连忙撤杖换招，倒提$W"HIR"使出一招「"NOR HIM"八方火蜒"NOR HIR"」，杖风暴风骤雨般打向$n"HIR"！\n"NOR;
+        msg = replace_string(msg,"$w",NOR HIY+m_weapon->name()+NOR HIR);
+        msg = replace_string(msg,"$W",NOR HIY+m_weapon->name()+NOR HIR);
+        if ( !me->query("env/no_msg") && !target->query("env/no_msg") )
+                message_vision(msg,me,target);
+        i = me->query_skill("lunhui-zhang",1);
+        i/= 200;
+                if( i > 5 ) i = 5; //加入限制fang 2005.4.28
+        while(i--)
+                COMBAT_D->do_attack(me,target,me->query_temp("wepaon"));
+        }
+else    {  
+         if ( !me->query("env/no_msg") && !target->query("env/no_msg") )  
+                 message_vision(HIR"$n"HIR"忙撤身收招，闪在一旁，躲开了这一击。\n"NOR,me,target);
+         }
+if ( me->query_kar()>random(target->query_kar()) )
+        me->start_call_out( (: call_other, __FILE__, "fire_attack",me,target,m_weapon :),5+random(5));
+return 1;
+}
+
+
+void remove_eff(object me)
+{
+string name;
+if ( !me )
+        return;
+if ( !objectp(name=me->query_temp("weapon")) )
+        name = "禅杖";
+else name = me->query_temp("weapon")->name();
+
+if ( me->query_temp("putuo_fire") )
+        {
+        write(HIR"你缓缓的收回"+name+HIR"上的火焰。\n"NOR);
+        if ( !me->query("env/no_msg") )
+                message_vision(HIR+me->name()+HIR"将"+name+"上的"HIB"无妄之火"NOR HIR"缓缓收回。\n"NOR,environment(me),me);
+        me->delete_temp("putuo_fire");
+        }
+}
+
+void fire_attack(object me,object target,object weapon)
+{
+string msg;
+int damage;
+remove_call_out("fire_attack");
+
+if ( !me || !target || !weapon )
+        return;
+if ( !me->is_fighting(target) )
+        return;
+if ( !present(target,environment(me)) )
+        return;
+if ( !me->query_temp("putuo_fire") )
+        return;
+damage = me->query_temp("apply/damage");
+damage-= target->query_temp("apply/armor");
+damage+= me->query("force_factor");
+
+msg = HIR"\n$W"HIR"上冲出一道火焰，"NOR;
+msg = replace_string(msg,"$W",NOR HIY+weapon->name()+NOR HIR);
+if ( !me->query("env/no_msg") && !target->query("env/no_msg") )
+        message_vision(msg,me,target);
+
+if ( damage<=0 )
+        if ( !me->query("env/no_msg") && !target->query("env/no_msg") )
+                message_vision(HIR"$n"HIR"纵身闪开。\n" NOR,me,target);
+else    {
+        if ( !me->query("env/no_msg") && !target->query("env/no_msg") )
+                message_vision(HIR"烧得$n"HIR"狼狈不堪！\n\n"NOR,me,target);
+        target->receive_damage("sen",damage);
+        COMBAT_D->report_sen_status(target);
+        target->set_temp("last_damage_from",me);
+        target->set_temp("last_opponent",me);
+        }
+call_out("fire_attack",random(5),me,target,weapon);
+}
+
+int help(object me)
+{
+string temp;    
+temp = "\t\t"+to_chinese("lotusforce")+" 250 级\n";
+temp+= "\t\t"+to_chinese("lunhui-zhang")+" 250 级\n";
+temp+= "\t\t"+to_chinese("staff")+" 250 级\n";
+temp+= "\t\t"+to_chinese("force")+" 250 级\n";
+temp+= "\t\t当前的"+to_chinese("force")+"激发必须为"+to_chinese("lotusforce")+"\n";
+temp+= "\t\t真    气 800 点\n";
+temp+= "\t\t杀气低于 300 点\n";
+temp+= "\t\t战斗状态下\n";
+write("\n"+to_chinese(explode(__FILE__,"/")[<2])+"之"+name()+"："NOR"\n");
+write(@HELP
+
+        使用功效：
+                运用真气激发武器的火性攻击
+                同时对敌人造成气血的减少和
+                伤害
+        出招类型：
+                延迟型外功
+                不可叛师带出
+                隐藏八方火蜒和兵器的火性攻击    
+        出手要求：              
+HELP);                          
+write(temp);
+return 1;
+}

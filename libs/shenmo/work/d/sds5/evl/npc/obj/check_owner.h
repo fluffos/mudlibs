@@ -1,0 +1,29 @@
+#include <ansi.h>
+void check_owner();
+
+void check_owner()
+{
+object ob = this_object();
+object me = environment(ob);
+if ( userp(me) || !living(me) )
+        call_out("breaken",2+random(3),me,ob);
+return;
+}
+
+void breaken(object me,object ob)
+{
+object env;
+string msg;
+if ( !me || !ob )
+        return;
+env = environment(me);
+msg = HIB"$n"HIB"发出耀眼的光芒，化作一股强大的小宇宙，冲天而去！\n"NOR;
+msg = replace_string(msg,"$n",ob->name());
+tell_room(env,msg);
+msg = BLU"从$w"BLU"忽然冲出一股邪恶冰冷的小宇宙，直奔天际，消失在遥远的虚无。\n"NOR;
+msg = replace_string(msg,"$w",env->query("short"));
+message("channel:chat",msg,users());
+destruct(ob);
+return;
+}
+

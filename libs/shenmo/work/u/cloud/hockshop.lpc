@@ -1,0 +1,436 @@
+
+/* 可以保存的物品种类最大量 */
+#define CAN_SAVE_OBJECT 400
+
+#include <ansi.h>
+#include <mudlib.h>
+
+inherit ROOM;
+inherit F_SAVE;
+
+int do_sellt(object ob,object me);
+
+mapping pawned_objects = ([]);
+
+/* 可以保存的物品个数最大数量 */
+nosave int max_items = 500;
+
+
+
+/* 该当铺存放文件路径和名称 */
+string query_save_file()
+{
+string name;
+
+name = base_name(this_object());
+if(name[0..0] == "/")
+name = name[1..];
+name = replace_string(name,"/","_");
+
+return DATA_DIR+"hockshop/"+name;
+}
+
+void setup()
+{
+::setup();
+seteuid(getuid());
+restore();
+}
+
+void init()
+{
+add_action("do_sell", "sell");
+add_action("do_list", "list");
+add_action("do_buy", ({"buy","mai"}));
+add_action("do_go", "qu");
+}
+
+
+int do_sell(string arg)
+{
+      object ob,me;
+      int value, sale;
+
+
+      me=this_player();
+
+   if( this_player()->is_busy() )
+     return notify_fail("你现在正忙着呢。\n");
+
+   if( !arg || !(ob = present(arg, this_player())) )
+     return notify_fail("你要卖断什么物品？\n");if(!arg)
+   if( ob->query("money_id") )   return notify_fail("你要卖「钱」？\n");
+   value = ob->query("value");
+   sale=ob->query_temp("sale_price");
+   if(sale>0 && sale<value) value=sale;
+   if( !value ) return notify_fail("这样东西不值钱。\n");
+        if(ob->query("no_sell"))
+      return notify_fail("这样东西不能买卖。\n");
+
+   if( ob->query("material") == "ice" )
+     return notify_fail("掌柜的说：冰的东西我们这里没法存放。\n");
+
+
+
+	return do_sellt(ob,me);
+	return 1;
+}
+
+string value_string(int value)
+{
+   if( value < 1 ) value = 1;
+   else if( value < 100 )
+     return chinese_number(value) + "文钱";
+   else
+     return chinese_number(value/100) + "两白银"
+        + (value%100? "又" + chinese_number(value%100) + "文钱": "");
+}
+
+void pay_player(object who, int amount)
+{
+   object ob;
+
+   if( amount < 1 ) amount = 1;
+   if( amount/100 ) {
+     ob = new(SILVER_OB);
+     ob->set_amount(amount/100);
+     if(!ob->move(who))
+       ob->move(environment(who));
+     amount %= 100;
+   }
+   if( amount ) {
+     ob = new(COIN_OB);
+     ob->set_amount(amount);
+     if(!ob->move(who))
+       ob->move(environment(who));
+   }
+}
+
+int do_sellt(object ob,object me)
+{
+int value,sale;
+string file;
+
+string *sell_msg = ({
+    "破破烂烂，一文不值",
+    "质地低劣，难看之极",
+    "又脏又破，臭气熏天",
+});
+
+if(!objectp(ob) || !objectp(me))
+	return 0;
+
+   value = ob->query("value");
+   sale=ob->query_temp("sale_price");
+   if(sale>0 && sale<value) value=sale;
+   if( !value ) return notify_fail("这样东西不值钱。\n");
+   if(ob->query("no_sell"))    return notify_fail("这样东西不能买卖。\n");
+      
+
+file = ob->query("name")+"("+base_name(ob)+")";
+
+if(!undefinedp(pawned_objects[file]) )
+{
+if(pawned_objects[file] >= max_items)
+return notify_fail(query("short")+"最多收购"+max_items+"件物品，请到别处卖吧。\n");
+else if(pawned_objects[file] < max_items)
+pawned_objects[file]++;
+}
+else if(sizeof(pawned_objects) < CAN_SAVE_OBJECT)
+pawned_objects += ([ file : 1 ]);
+else
+return notify_fail(query("short")+"最多收购"+CAN_SAVE_OBJECT+"个种类的物品，请到别处卖吧。\n");
+
+   write("掌柜的唱道："+ sell_msg[random(sizeof(sell_msg))] +
+     ob->query("name") + "一" + ob->query("unit") + "，当"+
+        value_string(value*20/100)+ "。\n");
+   message_vision("$N把身上的" + ob->query("name") + "卖掉。\n",
+     this_player());
+
+   this_player()->start_busy(1);
+   pay_player(this_player(), value * 20 / 100);
+ob->move("/obj/empty");
+destruct(ob);
+if(!random(200)) save();
+
+return 1;
+}
+
+
+string get_name(string str)
+{
+    string str1, str2;
+
+    while(sscanf(str,"%s%*sm%s",str1,str2)==3)
+   str=str1+str2;
+    return str;
+}
+
+
+int do_list(string arg)
+{
+string msg,*items,itemname,itemid;
+int i,j,n,value, amount;
+object me=this_player();
+
+j=1;
+if(!sizeof(pawned_objects))
+     return notify_fail("当铺目前没有任何货物可卖。\n");
+
+   if( !arg )   {
+      msg = "你可以购买下列这些东西：\n";
+      items = keys(pawned_objects);
+      n = sizeof(items);
+      
+      for(i=0;i<n;i++)
+      {
+	if(sscanf(items[i], "%s(%s)",itemname,itemid) != 2 ) 
+		return 0;
+	
+	amount = (int)itemid->query_amount();
+	value = itemid->query("value");
+	if(!value)
+		value = items[i]->value();
+	msg += sprintf("%3d %-"+(34+color_len(itemname+"("+itemid->query("id")+")"))+"s %-20s：还剩：%3d%s \n",j++, itemname+"("+itemid->query("id")+")",value_string(value),pawned_objects[items[i]],itemid->query("unit"));
+      }
+      this_player()->start_more(msg);
+   } 
+   else if( arg == "book" )  {
+      msg = "";
+      items = keys(pawned_objects);
+      n = sizeof(items);
+      for(i=0;i<n;i++)
+      {
+	if(sscanf(items[i], "%s(%s)",itemname,itemid) != 2 ) 
+		return 0;
+	if(!itemid->query("skill")) 
+		continue;
+	
+	amount = (int)itemid->query_amount();
+	value = itemid->query("value");
+	if(!value)
+		value = items[i]->value();
+	msg += sprintf("%3d %-"+(34+color_len(itemname+"("+itemid->query("id")+")"))+"s %-20s：还剩：%3d%s \n",j++, itemname+"("+itemid->query("id")+")",value_string(value),pawned_objects[items[i]],itemid->query("unit"));
+      }
+      if( msg == "" )
+                 write("当铺目前没有这种货品．\n");
+      else {
+        msg = "你可以购买下列这些东西：\n"+msg;
+        me->start_more(msg);
+      }
+
+   } else if( arg == "axe" || arg == "blade" || arg == "dagger" || 
+        arg == "fork" || arg == "hammer" || arg == "spear" || arg == "mace" || arg == "rake" ||
+        arg == "staff" || arg == "stick" || arg == "sword" || arg == "whip" ||
+        arg == "throwing" )  {
+      msg = "";
+      items = keys(pawned_objects);
+      n = sizeof(items);
+      for(i=0;i<n;i++)
+      {
+	if(sscanf(items[i], "%s(%s)",itemname,itemid) != 2 ) 
+		return 0;
+	if(itemid->query("skill_type") != arg ) 
+		continue;
+	
+	amount = (int)itemid->query_amount();
+	value = itemid->query("value");
+	if(!value)
+		value = items[i]->value();
+	msg += sprintf("%3d %-"+(34+color_len(itemname+"("+itemid->query("id")+")"))+"s %-20s：还剩：%3d%s \n",j++, itemname+"("+itemid->query("id")+")",value_string(value),pawned_objects[items[i]],itemid->query("unit"));
+      }
+      if( msg == "" )
+                 write("当铺目前没有这种货品．\n");
+      else {
+        msg = "你可以购买下列这些东西：\n"+msg;
+        me->start_more(msg);
+      }
+   }
+   else if( arg == "armor" || arg == "boots" || arg == "cloth" ||
+         arg == "finger" || arg == "hands" || arg == "head" || arg == "neck" ||
+         arg == "shield" || arg == "surcoat" || arg == "waist" ||
+         arg == "wrists" )   {
+      msg = "";
+      items = keys(pawned_objects);
+      n = sizeof(items);
+      for(i=0;i<n;i++)
+      {
+	if(sscanf(items[i], "%s(%s)",itemname,itemid) != 2 ) 
+		return 0;
+	if(itemid->query("armor_type") != arg ) 
+		continue;
+	
+	amount = (int)itemid->query_amount();
+	value = itemid->query("value");
+	if(!value)
+		value = items[i]->value();
+	msg += sprintf("%3d %-"+(34+color_len(itemname+"("+itemid->query("id")+")"))+"s %-20s：还剩：%3d%s \n",j++, itemname+"("+itemid->query("id")+")",value_string(value),pawned_objects[items[i]],itemid->query("unit"));
+      }
+      if( msg == "" )
+                 write("当铺目前没有这种货品．\n");
+      else {
+        msg = "你可以购买下列这些东西：\n"+msg;
+        me->start_more(msg);
+      }
+   } else   {
+      msg = "";
+      items = keys(pawned_objects);
+      n = sizeof(items);
+      for(i=0;i<n;i++)
+      {
+	if(sscanf(items[i], "%s(%s)",itemname,itemid) != 2 ) 
+		return 0;
+        if( member_array(arg, itemid->parse_command_id_list()) != -1 ||strsrch(itemid, arg)>=0 )   
+	{
+	amount = (int)itemid->query_amount();
+	value = itemid->query("value");
+	if(!value)
+		value = items[i]->value();
+	msg += sprintf("%3d %-"+(34+color_len(itemname+"("+itemid->query("id")+")"))+"s %-20s：还剩：%3d%s \n",j++, itemname+"("+itemid->query("id")+")",value_string(value),pawned_objects[items[i]],itemid->query("unit"));
+	}
+      }
+      if( msg == "" )
+                 write("当铺目前没有这种货品．\n");
+      else {
+        msg = "你可以购买下列这些东西：\n"+msg;
+        me->start_more(msg);
+      }
+   }
+return 1;
+}
+
+int do_buy(string arg)
+{
+	int i,j,n,value,pay,order;
+	object ob;
+string *items,itemname,itemid,arg1, arg2,fname;
+
+if(!sizeof(pawned_objects))
+     return notify_fail("当铺目前没有任何货物可卖。\n");
+
+if( !arg )
+return notify_fail("你要买什么东西？\n");
+if( this_player()->is_busy() )
+    return notify_fail("你现在正忙着呢。\n");
+
+   if( sscanf(arg, "%s from %s", arg1, arg2) == 2 )   {
+     arg = arg1;
+   }
+
+   if( sscanf(arg, "%s %d", fname, order) != 2 )   {
+     fname = arg;
+     order = 1;
+   }
+       
+items = keys(pawned_objects);
+n = sizeof(items);
+j=0;
+for(i=0;i<n;i++)
+{
+    if(sscanf(items[i], "%s(%s)",itemname,itemid) != 2 ) 
+	return 0;
+    if(itemid->id(fname) || !strcmp(fname,itemname))
+    {	
+    	j++;
+    	if(j==order)
+   	   break;
+    }
+}
+if( i >= sizeof(pawned_objects) )
+return notify_fail("你要买什么东西？\n");
+
+value = itemid->query("value");
+if(!value)
+value = itemid->value();
+
+          if( !(pay=this_player()->can_afford(value)) )  {
+             write("你没有足够的钱。\n");
+             return 1; 
+          }
+          else if( pay == 2 )  {
+              write("你没有足够的零钱，而银票又没人找得开。\n");
+             return 1;
+          }
+
+ob = new(itemid);
+ob->set("name",itemname);
+
+if( --pawned_objects[items[i]] <= 0)
+map_delete(pawned_objects,items[i]);
+if(!random(200)) save();
+
+if(!ob->move(this_player())) {
+write("掌柜的说道：你拿不了"+ ob->query("name") +"了，就给你先放这里地上吧。\n");
+ob->move(this_object());
+}
+
+this_player()->pay_money(value);
+          message_vision("$N向当铺买下一" +
+        ob->query("unit") + ob->query("name") + "。\n", this_player() );
+   this_player()->start_busy(1);
+
+//       this_player()->save();
+       return 1;
+/*if( ob->query_amount())
+message_vision("$N掏出钱从"+query("short")+"买下一" + ob->query("base_unit") + ob->name() +
+"，花费："+price_num(value)+"。\n", this_player() );
+else
+message_vision("$N掏出钱从"+query("short")+"买下一" + ob->query("unit") + ob->name() + 
+"，花费："+price_num(value)+"。\n", this_player() );
+*/
+return 1;
+}
+
+/*
+void reset()
+{
+	write("kick\n");
+	save();
+}*/
+
+int cleanobj(int num)
+{
+	int i,j,n;
+string *items;
+
+if(!sizeof(pawned_objects))
+     return notify_fail("当铺目前没有任何货物可卖。\n");
+      
+items = keys(pawned_objects);
+n = sizeof(items);
+j=0;
+for(i=0;i<n;i++)
+{
+	if(pawned_objects[items[i]] <num)
+	{
+		write(items[i]+"  \n");			
+		map_delete(pawned_objects,items[i]);	
+	}
+}
+
+return 1;
+}
+
+int do_go(string arg)
+{
+        object ob=this_player();
+if( !arg )
+return notify_fail("你要去哪里？\n");
+if( this_player()->is_busy() )
+  return notify_fail("你现在正忙着呢。\n");
+        if( arg=="tianzhu" )   {
+          ob->move("/d/qujing/tianzhu/dangpu");
+        }
+        else
+         {
+            if( arg=="kaifeng" )   {
+              ob->move("/d/kaifeng/dangpu");
+            }
+               else {
+                 if( arg=="changan" )   {
+                 ob->move("/d/city/dangpu");
+                 }
+                 else return notify_fail("你要去哪里？\n");
+     }}
+     return 1;
+}

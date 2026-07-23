@@ -1,0 +1,168 @@
+#include <ansi.h>
+inherit ITEM;
+
+void create()
+{
+        set_name(HIR"色界魔阵妖幡"NOR, ({ "sejie zhenfan", "fan","qi" }) );
+        set_weight(1000);
+        if( clonep() )
+                set_default_object(__FILE__);
+        else {
+                set("unit", "个");
+                set("level",350);
+                set("value", 0);
+                set("material", "shuijing");
+                set("long", "五滢尊者修炼的法宝之一，能布小诸天五滢色界魔阵。\n");
+                set("replace_file", "/obj/money/silver"); 
+                set("series_no",4);
+                set("damage",100);
+                set("no_steal",1);    
+                set("no_put",1);       
+                set("fabao",1); 
+                set("class","邪");   
+                set("wuxing","火");
+                set("no_busy",1);               
+        }
+        setup();
+}
+
+void sezhen_hit(object who,int t)
+{
+        int xk,ap,dp,damage,i;
+        string wx;
+        object fb,target,*enemy;
+        remove_call_out("sezhen_hit");
+        if( !who )
+        {
+                set("last_ji",time());
+                return;
+        }
+        t = t-5;
+        if( !present(this_object(),who) 
+         || !who->query_temp("sejie-mozhen_ji") 
+         || !living(who) 
+         || environment(who)->query("no_magic")
+         || environment(who)->query("no_fight") 
+         || who->query("mana")<100
+         || t<=0 )
+        {
+                message_vision(HIC"$N"HIC"撤去了「"HIR"小诸天五滢色界魔阵"HIC"」。\n"NOR,who);
+                set("last_ji",time());
+                who->delete_temp("sejie-mozhen_ji");
+                return;
+        }
+        who->add("mana",-100);
+        if( who->is_fighting() )
+        {
+                enemy = who->query_enemy();
+                if( enemy && arrayp(enemy) && sizeof(enemy)>0 )
+                {
+                        for(i=0;i<sizeof(enemy);i++)
+                        {
+                                if( target=enemy[i] )
+                                {
+                                        ap = who->query("daoxing")/100000+who->query("level")*1000;
+                                        dp = target->query("daoxing")/100000+target->query("level")*1000;    
+                                        if( random(100)<=dp/(ap+dp)*85 )
+                                                continue;
+                                        damage = query("damage");
+                                        damage+= who->query("mana_factor");     
+                                        damage = damage/2+random(damage/2);
+                                        if( wx=query("wuxing") )
+                                        {       
+                                                xk = SPELL_D->wuxing_xs(SPELL_D->query_time_wuxing(),wx);
+                                                if( xk==1 )
+                                                        damage = damage/2;
+                                                else if( xk==-1 )
+                                                        damage+= damage/3;
+                                        }                                               
+                                        fb = target->query_temp("armor/FABAO");
+                                        if( fb )
+                                                damage = fb->protect_shen(damage);
+                                        if( damage>0 )
+                                        {
+                                                tell_object(target,HIB"\n妖旗微微拂动，你鼻端立时闻到一股温香，口生异味，耳听滢声，眼前现出诸般微妙的幻\n景，心头杂念纷呈，周身酸痛麻痒同时交加。\n"NOR);
+                                                target->receive_wound("sen",damage,who);
+                                                COMBAT_D->report_sen_status(target,1);
+                                        }
+                                }
+                        }
+                }
+        }
+        call_out("sezhen_hit",2+random(3),who,t);
+}
+
+void finish_sezhen(object who)
+{
+        int t;
+        remove_call_out("finish_sezhen");
+        if( !who )
+        {
+                set("last_ji",time());
+                return;
+        }
+        if( !present(this_object(),who) 
+         || !who->query_temp("sejie-mozhen_ji") 
+         || !living(who) )
+        {
+                tell_object(who,"你布阵失败。\n");
+                set("last_ji",time());
+                who->delete_temp("sejie-mozhen_ji");
+                return;
+        }
+                        
+        message_vision(HIY"\n只见$n"HIY"在半空中一分为九，按五行八卦分射四方，正中一旗没于$N"HIY"头顶！\n"NOR,who,this_object());
+        tell_object(who,HIY"你成功布下「"HIR"小诸天五滢色界魔阵"HIY"」。\n"NOR);
+        t = who->query_skill("spells");
+        if( t<60 ) t = 60;
+        if( t>900 ) t = 900;
+        call_out("sezhen_hit",random(3),who,t);
+}
+
+void buzhen_se(object who)
+{
+        int t;
+        remove_call_out("buzhen_se");
+        if( !who || !living(who) ) 
+        {
+                set("last_ji",time());
+                return;
+        }
+        if( !present(this_object(),who) 
+         || !who->query_temp("sejie-mozhen_ji") )
+        {
+                set("last_ji",time());
+                return;
+        }
+        t = 13- who->query_temp("sejie-mozhen_ji");
+        call_out("finish_sezhen",t,who);
+}
+
+int ji(string id)
+{
+        int t;
+        object *enemy,fb,me = environment();
+        if( me->query("mana")<query("level")*2 )
+                return notify_fail("你的法力不足。\n");                 
+        if( me->query("level")<query("level") )
+                return notify_fail("你等级不够"+query("level")+"，祭不起"+query("name")+"。\n");
+        if( time()<query("last_ji")+5 )
+                return notify_fail(query("name")+"刚刚祭出过。\n");                    
+        if( environment(me)->query("no_magic")
+         || environment(me)->query("no_fight") )
+                return notify_fail("此处不可使用法宝。\n");
+        if( me->query_temp("sejie-mozhen_ji") )
+                return notify_fail("你正在布阵。\n");
+        
+        message_vision(YEL"$N"YEL"将手一摆，大喝一声“看法宝！”，只见"+query("name")+YEL"「呼」地一下飞到半空。\n"NOR,me);
+        me->add("mana",-query("level")*2);
+        t = me->query_skill("spells");
+        t/= 10;
+        if( t>10 )  t = 10;
+        if( t<3 ) t = 3;
+        me->set_temp("sejie-mozhen_ji",t);
+        call_out("buzhen_se",1,me);
+        return 1;
+}
+        
+

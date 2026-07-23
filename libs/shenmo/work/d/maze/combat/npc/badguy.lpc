@@ -1,0 +1,355 @@
+inherit NPC;
+
+#include <ansi.h>
+#include <family.h>
+
+void create()
+{
+    ::create();
+
+    set("attitude", "friendly");
+    set_name("试招弟子", ({"combat npc"}));
+    set_living_name("combat npc");
+
+    setup();
+}
+
+//随机设置门派，并且copy玩家数据
+varargs int random_family(object npc, object who, int level, string fam)
+{
+    int i, k;
+    int maxskill;
+    string *fams, *skills, cls;
+    mapping data;
+    object weapon;
+    int lvl = level;
+
+    if ( !who || !npc )
+    {
+        return 0;
+    }
+
+    maxskill = SDS_D->maxSkill(who);
+
+    if ( !maxskill )
+    {
+        maxskill = 150 + random(100);
+    }
+
+    maxskill += maxskill / 100 * lvl;
+
+    npc->set("str", who->query("str") + who->query("str") / 100 * lvl);
+    npc->set("con", who->query("con") + who->query("con") / 100 * lvl);
+    npc->set("int", who->query("int") + who->query("int") / 100 * lvl);
+    npc->set("spi", who->query("spi") + who->query("spi") / 100 * lvl);
+    npc->set("per", who->query("per") + who->query("per") / 100 * lvl);
+    npc->set("kar", who->query("kar") + who->query("kar") / 100 * lvl);
+    npc->set("cps", who->query("cps") + who->query("cps") / 100 * lvl);
+    npc->set("cor", who->query("cor") + who->query("cor") / 100 * lvl);
+
+    npc->set("zhuanshi", who->query("zhuanshi"));
+
+    fams = keys(familys);
+    if ( !fam || -1 == member_array(fam, fams) )
+    {
+        fam = fams[random(sizeof(fams))];       //取得门派
+    }
+
+    data = familys[fam];
+
+    cls = data["class"];
+
+    weapon = new(data["weapon"]);
+    if ( !weapon )
+    {
+        message("channel:sys",sprintf(YEL"┣"WHT" 系统"YEL" ┫"WHT"圣斗士地层(Sdsd.c)：%s 文件调用随机门派时，%s门派武器文件不存在或出错。\n"NOR,
+                        base_name(npc), fam),
+                        users());
+        return 0;
+    }
+
+    skills = data["skills"];
+    for ( i = 0; i < sizeof(skills) / 2; i++ )
+    {
+        k = i * 2;
+        npc->set_skill(skills[k], maxskill);
+        npc->set_skill(skills[k + 1], maxskill);
+        npc->map_skill(skills[k], skills[k + 1]);
+    }
+
+    npc->set_skill("literate", maxskill);
+    npc->set_skill("medical", maxskill);
+    npc->map_skill("literate", "medical");
+
+    npc->set("max_force", who->query("max_force") + who->query("max_force") / 100 * lvl);
+    npc->set("max_mana", who->query("max_mana") + who->query("max_mana") / 100 * lvl);
+
+    if ( "月宫" != fam )
+    {
+        npc->set("force_factor", npc->query_skill("force") / 3);
+        npc->set("mana_factor", npc->query_skill("spells") / 3);
+    }
+    else
+    {
+        npc->set("force_factor", npc->query("max_force") * 3 / 80);
+        npc->set("mana_factor", npc->query("max_mana") * 3 / 80);
+    }
+
+    //防溢出
+    if ( who->query("combat_exp") >= 2000000000 )
+    {
+        npc->set("combat_exp", 2000000000);
+    }
+    else if ( 2000000000 - who->query("combat_exp") <= who->query("combat_exp") / 100 * lvl )
+    {
+        npc->set("combat_exp", 2000000000);
+    }
+    else
+    {
+        npc->set("combat_exp", who->query("combat_exp") + who->query("combat_exp") / 100 * lvl);
+    }
+
+    if ( who->query("daoxing") >= 2000000000 )
+    {
+        npc->set("daoxing", 2000000000);
+    }
+    else if ( 2000000000 - who->query("daoxing") <= who->query("daoxing") / 100 * lvl )
+    {
+        npc->set("daoxing", 2000000000);
+    }
+    else
+    {
+        npc->set("daoxing", who->query("daoxing") + who->query("daoxing") / 100 * lvl);
+    }
+
+    npc->set("max_kee", who->query("max_kee") / 2 * 3 + who->query("max_kee") / 100 * lvl);
+    npc->set("max_sen", who->query("max_sen") / 2 * 3 + who->query("max_sen") / 100 * lvl);
+
+    npc->set("class", cls);
+    npc->set("weapon_file", data["weapon"]);
+    npc->set("family/family_name", fam);
+
+    if ( objectp(npc->query_temp("weapon")) )
+    {
+        npc->query_temp("weapon")->unequip();
+        //destruct(npc->query_temp("weapon"));
+    }
+
+    weapon->move(npc);
+    npc->command("wield all");
+
+    npc->set_temp("apply/damage", who->query_temp("apply/damage") + who->query_temp("apply/damage") / 100 * lvl);
+    npc->set_temp("apply/armor", who->query_temp("apply/armor") + who->query_temp("apply/armor") / 100 * lvl);
+
+    SDS_D->powerup(npc);
+
+    npc->set("level", who->query("level") + who->query("level") / 100 * lvl);
+
+    return 1;
+}
+
+varargs int invocation(object who, int level)
+{
+    mapping myskills;
+    string *m_skills;
+    int i;
+
+    if ( !who )
+    {
+        return 0;
+    }
+
+    //有人进来，删除自己的原有技能
+    myskills = this_object()->query_skills();
+    if ( myskills )
+    {
+        m_skills = keys(myskills);
+        i = sizeof(m_skills);
+        while ( i-- )
+        {
+            if ( m_skills[i] && stringp(m_skills[i]) )
+            {
+                this_object()->delete_skill(m_skills[i]);
+            }
+        }
+    }
+
+    if ( !level )
+    {
+        level = 0;
+    }
+
+    this_object()->command("drop all");
+    if ( !random_family(this_object(), who, level) )
+    {
+        return 0;
+    }
+
+    return 1;
+}
+
+void init()
+{
+    object who = this_player();
+    object room = environment(this_object());
+	object *inv ;
+	int i, total = 0;
+
+    if ( !query_heart_beat(this_object()) )
+    {
+        set_heart_beat(1);
+    }
+
+    if ( !wizardp(who) && !who->query_temp("combat_time") )
+    {
+        tell_object(who, "你是怎么混进来的。\n");
+        who->move("/d/city/wuguanzhong");
+        return;
+    }
+
+    //超过1个玩家进入一个房间，bug，全部滚蛋
+	inv = all_inventory(room);
+	for ( i = 0; i < sizeof(inv); i++ )
+	{
+		if ( userp(inv[i]) && (!wizardp(inv[i])) )
+		{
+		    total++;
+
+		    if ( 1 < total )
+		    {
+				tell_room(room, "哎呀！这么多人，想利用bug啊?\n");
+				break;
+		    }
+		}
+	}
+
+	if ( 1 < total )
+	{
+        for ( i = 0; i < sizeof(inv); i++ )
+        {
+            if ( userp(inv[i]) && (!wizardp(inv[i])) )
+            {
+                inv[i]->move("/d/city/wuguanzhong");
+            }
+        }
+
+	    return;
+	}
+
+	set("service", who);
+
+    invocation(who);
+
+    add_action("do_combat", "level");
+}
+
+void unconcious()
+{
+    die();
+}
+
+int do_combat(string arg)
+{
+    int level = to_int(arg);
+
+    invocation(this_player(), level);
+    write("OK.\n");
+
+    return 1;
+}
+
+void heart_beat()
+{
+    object weapon, armor;
+    object me = this_object();
+    object who;
+
+    ::heart_beat();
+
+    if ( !living(me) )
+    {
+        return;
+    }
+
+    if ( !objectp(query_temp("armor/armor")) )
+    {
+        armor = new("/d/city/npc/obj/armor");
+        armor->set("armor_prop/armor", 2000);
+        armor->move(this_object());
+        command("wear all");
+    }
+
+    if ( !objectp(query_temp("weapon")) && random(5) && query("weapon_file") )
+    {
+        weapon = new(query("weapon_file"));
+        if ( weapon )
+        {
+            weapon->move(me);
+            command("wield all");
+        }
+    }
+
+    if ( query("eff_kee") < query("max_kee") )
+    {
+        SDS_D->addEffKee(me);
+    }
+
+    if ( query("eff_sen") < query("max_sen") )
+    {
+        SDS_D->addEffSen(me);
+    }
+
+    if ( query("kee") < query("eff_kee") )
+    {
+        SDS_D->addKee(me);
+    }
+
+    if ( query("sen") < query("eff_sen") )
+    {
+        SDS_D->addSen(me);
+    }
+
+    if ( query("force") < 2 * query("max_force") )
+    {
+        add("force", 100);
+    }
+
+    if ( query("mana") < 2 * query("max_mana") )
+    {
+        add("mana", 100);
+    }
+
+    who = me->query("service");
+    if ( who && environment(who) == environment(me)
+        && who->query_temp("combat_time")
+        && time() >= who->query_temp("combat_time") )
+    {
+        tell_object(who, "你的服务时间到了，下次再来吧!\n");
+        who->move("/d/city/wuguanzhong");
+    }
+}
+
+varargs int receive_wound(string type, int damage, object who)
+{
+    tell_object(who, HIY"Wound[" + HIW + BLINK + type + NOR + HIY + "]: " + HIW + BLINK + damage + NOR + "\n");
+
+    if ( !who || !who->query("id") )
+    {
+        return ::receive_wound(type, damage, who);
+    }
+
+    return ::receive_wound(type, damage, who);
+}
+
+varargs int receive_damage(string type, int damage, object who)
+{
+    tell_object(who, HIY"Damage[" + HIW + BLINK + type + NOR + HIY + "]: " + HIW + BLINK + damage + NOR + "\n");
+
+    if ( !who || !who->query("id") )
+    {
+        return ::receive_wound(type, damage, who);
+    }
+
+    return ::receive_damage(type, damage, who);
+}
+

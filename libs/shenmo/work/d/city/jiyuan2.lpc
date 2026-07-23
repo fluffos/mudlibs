@@ -1,0 +1,229 @@
+inherit ROOM;
+#include <ansi.h>
+
+void over(object me,int type);
+int block_cmd();
+int do_out();
+int do_redeem(string arg);
+int do_wash(string arg);
+void end(object me,int type);
+
+void create()
+{
+set ("short", "温柔乡后院");
+set ("long", @LONG
+
+这里是温柔乡后院，哪些可怜的被卖身的男男女女未接客之前，纷纷在此
+打杂，或是洗衣服，或是挑水以偿还卖身之债。稍微有些积蓄的就替自己赎身(redeem)
+待成年之后就需去前院卖笑迎客。
+井旁边边堆着小姐们换下来的衣服(cloth)，墙脚放着个大水缸(vat)。
+LONG);
+
+set("item_desc", ([ 
+                "cloth" : "小姐们换下的衣服，你想早点离开这污秽之地(out)，就得
+多洗(wash cloth)，以偿还卖身债。\n",
+                "衣服" : "小姐们换下的衣服，你想早点离开这污秽之地(out)，就得
+多洗(wash cloth)，以偿还卖身债。\n",
+                "vat"   : "一个水缸，你想早点离开这污秽之地(out)，就得多挑水(carry water)，
+以偿还卖身债。\n",
+                "水缸"  : "一个水缸，你想早点离开这污秽之地(out)，就得多挑水(carry water)，
+以偿还卖身债。\n",
+]));
+
+set("no_fight", 1);
+set("no_magic", 1);
+set("alternative_die",1);
+setup();
+}
+
+void init ()
+{
+object me=this_player();
+if(!wizardp(me))
+        {
+        add_action("block_cmd","",1);      
+        me->set("startroom","/d/city/jiyuan2.lpc");
+        me->save();
+        }
+add_action("do_out","out");
+add_action("do_redeem","redeem");
+add_action("do_wash","wash");
+add_action("do_wash","carry");
+}
+
+int block_cmd()
+{
+string verb = query_verb();
+if (verb=="wash") return 0; //allow say
+if (verb=="redeem") return 0;
+if (verb=="out") return 0;
+if (verb=="look") return 0;
+if (verb=="carry") return 0;
+if (verb=="chat") return 0;
+if (verb=="new") return 0;
+if (verb=="exert heal") return 0;
+if (verb=="exert refresh") return 0;
+if (verb=="exert recover") return 0;
+if (verb=="tell") return 0;
+return 1;
+}
+
+int do_out()
+{
+object me=this_player();
+if ( !me->query("价钱") || me->query("价钱")<=0 )
+      { 
+        message_vision("$N终于缴清了债款，赎回了自身。\n"NOR,me);
+        if ( me->query("价钱") )  me->delete("价钱");
+        me->move("/d/city/kezhan");
+        message_vision("$N面红耳赤的从温柔乡后门溜了出来，",me);
+        if ( me->query("gender")=="女性" )
+                message_vision("暗呼了一口气：幸好及时赎身，保住了贞洁之躯。\n",me);
+        else    message_vision("暗呼了一口气：幸好及时赎身，保住了后庭贞操。\n",me);
+        me->command("sweat");
+        me->set("startroom","/d/city/kezhan");
+        me->save();
+        }
+else message_vision("$N试图离开这里，可惜一屁股债，$N对天大呼：惨啊。\n"NOR,me);
+return 1;
+}
+
+void alternative_die (object me)
+{
+if ( !userp(me) )
+        return;
+
+me->set("kee",10);
+me->set("sen",10);
+me->set("force",900);
+me->set("mana",900);
+return;
+}
+
+int do_redeem(string arg)
+{
+string what;
+int amount,max,give;
+object what_ob;
+object me = this_player();
+
+if( arg && sscanf(arg, "%d %s", amount, what)==2 ) 
+        {
+        what_ob = present(what + "_money", me); 
+        if (!what_ob)   
+                return notify_fail("你身上没有带这种钱。\n"); 
+        if ((int)what_ob->query_amount() < amount)
+                return notify_fail("你带的" + what_ob->query("name") + "不够。\n"); 
+        max = me->query("价钱");
+        if ( !max || max<= 0 )
+          {
+          message_vision("老鸨笑眯眯的说：你已是自由之身了，可自行离开(out)。\n",me);
+          me->delete("价钱");
+          me->save();
+          return notify_fail("赶紧离开(out)这是非之地吧。\n");
+          }
+        switch ( what_ob->query("id") )
+                {
+                case "coin" :
+                        give = 100;
+                        break;
+                case "silver" :
+                        give = 1000;
+                        break;
+                case "gold" :
+                        give = 10000;
+                        break;
+                case "jinbi" :
+                        give = 10000000;
+                        break;
+                case "thousand_cash" :
+                        give = 1000000;
+                        break;
+                default :
+                        return notify_fail("我们不收这样的钱。\n");
+                }
+        give = give*amount;
+        message_vision("$N掏出"+MONEY_D->price_str(give)+"递给老鸨：阿姆，我想赎身......\n",me);
+        if ( give<max )
+                return notify_fail("老鸨瞟了一眼，说道：这点钱？不够不够，总共需要"+MONEY_D->price_str(max)+"!\n");
+        message_vision("老鸨仔细点算了一笑，笑得嘴都合不拢了：好，你可以自行离去(out)了，欢迎常来啊~~\n",me);
+        me->command("shit");
+        me->delete("价钱");
+        destruct(what_ob);
+        me->save();
+        return 1;
+        }
+return notify_fail("命令格式：redeem <数量> <货币类型> \n");
+}
+
+int do_wash(string arg)
+{
+int type;
+object me = this_player();
+if ( !arg )
+        return notify_fail("什么?\n");
+if ( me->query("价钱")<=0 )
+        {
+        message_vision("老鸨笑眯眯的走到$N跟前：做的不错，你可以自行离开(out)了。\n",me);
+        return 0;
+        }
+
+if ( me->is_busy() )
+        return notify_fail("你累坏了，休息休息吧。\n");
+
+if ( arg=="cloth" )
+        {
+        if ( me->query("gender")!="女性" )
+                return notify_fail("老鸨斜眼瞟了一下：你个笨手笨脚的，我不放心把衣服给你洗！\n");
+        message_vision("$N伸手拿起一件衣服在井边洗了起来。\n",me);
+        type = 0;
+        me->start_busy(5);
+        call_out("end",2+random(3),me,type);
+        return 1;
+        }
+if ( arg=="water" )
+        {
+        if ( me->query("gender")=="女性" )
+                return notify_fail("老鸨斜眼瞟了一下：你个弱不禁风的，我不放心给你挑水！\n");
+        message_vision("$N拿起木桶，挑起水来。\n",me,type);
+        type = 1;
+        me->start_busy(5);
+        call_out("end",2+random(3),me);
+        return 1;
+        }
+}
+
+void end(object me,int type)
+{
+if ( type=0 )
+        message_vision("$N洗了半天，终于把衣服洗好了，累得腰酸腿痛。\n",me);    
+else    message_vision("$N挑了半天水，终于挑满了厨房的水缸，累得腰酸腿痛。\n",me);      
+message_vision("老鸨眯眼看了看。\n",me);
+me->start_busy(4);
+call_out("over",1+random(3),me,type);
+}
+
+void over(object me,int type)
+{
+int i = 100+random(9900);
+
+if ( random(5)==1 )
+        {
+        if ( type==0 )
+                message_vision("老鸨泼口大骂：你洗的什么衣服？！",me);
+        else    message_vision("老鸨泼口大骂：你挑的什么水？！",me);
+        message_vision("不行不行！！重新来过。\n",me);
+        me->command("wuwu");
+        return;
+        }
+message_vision("老鸨满意的笑了笑，干得不错。\n",me);
+me->add("价钱",-i);
+if ( me->query("价钱")<=0 )
+    me->set("价钱",0);
+me->save();
+tell_object(me,"你的债务减少了"+MONEY_D->price_str(i)+"。\n");
+i = me->query("价钱");
+tell_object(me,"你的债务现在是："+MONEY_D->price_str(i)+"。\n");
+return ;
+}
+

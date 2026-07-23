@@ -1,0 +1,256 @@
+#include <ansi.h>
+#include <room.h>
+inherit __DIR__"r.lpc";
+
+string random_msg();
+
+void create_room()
+{
+        set("short","西二层石室");
+        set("long",@LONG
+此洞为为炼丹炉鼎所在，圣姑飞升之时，毒龙丸刚刚第
+二次炼成，尚未开炉，便即化去。那十二种仙草(cao)，也在其
+内。此洞与其余三洞相通，
+    这一层比头层还要高大出约两倍，四壁(shibi)尽是奇花异
+草，正当中设着一座大丹炉。
+LONG);  
+        set("exits",([
+                "up"            : __DIR__"yd-w3",
+                "enter"         : __DIR__"wanliu",      //万流交汇之所
+                "north"         : __DIR__"yd-zz",       //中洞甬道，已封
+                "southeast"     : __DIR__"yd-s1",       //去南洞甬道
+                "south"         : __DIR__"yd-bb",       //去北上洞甬道，已封
+                "west"          : __DIR__"feng1",       //风之道
+                "northeast"     : __DIR__"yd-ee",       //去东甬道
+                "east"          : __DIR__"huo1",        //火之道
+        ]));
+        set("objects",([
+                __DIR__"obj/danlu" : 1,
+        ]));    
+        set("item_desc",([
+                "cao"   : "当日圣姑坐化之日窥破天机，算到日后群仙劫运，故留下此十二种仙草，留予有缘之人。\n你可以掘(dig)了试试，看看有无善缘。\n",
+                "shibi" : "四壁似玉非玉，不知是什么材料制成，真是好一个造化之地。最里面有两扇方门(men)缩在石壁之内。\n",
+        ]));    
+        create_door("enter", "石壁", "out", DOOR_CLOSED); 
+        create_door("north", "石壁", "south", DOOR_CLOSED); 
+        create_door("southeast", "石壁", "northwest", DOOR_CLOSED); 
+        create_door("south", "石壁", "north", DOOR_CLOSED); 
+        create_door("west", "石壁", "east", DOOR_CLOSED); 
+        create_door("northeast", "石壁", "southwest", DOOR_CLOSED); 
+        create_door("east", "石壁", "west", DOOR_CLOSED);
+        set("no_lianhua",1);
+        set("cao",13);
+}
+
+object carry_object(string file)
+{
+        object ob;
+
+        if( !objectp(ob = new(file->clone_file())) ) 
+                return 0;
+        return ob;
+}
+
+void move_dan(object who)
+{
+        object wan;
+        remove_call_out("move_dan");
+        if( who && living(who) && present(who,this_object())
+         && time()>query("yaowan")+1800 )
+        {
+                set("yaowan",time());
+                wan = carry_object("/d/quest/occupation/medical/obj/xisui-dan1");
+                if( wan && wan->move(sprintf(__DIR__"feng%d",3+random(6))) )
+                        tell_room(this_object(),"一股幽香从"+environment(wan)->query("short")+"方向传来。\n");
+                wan = carry_object("/d/quest/occupation/medical/obj/xisui-dan2");
+                if( wan && wan->move(sprintf(__DIR__"huo%d",2+random(3))) )
+                        tell_room(this_object(),"一股幽香从"+environment(wan)->query("short")+"方向传来。\n");
+        }
+}
+
+void quest1(object who)
+{
+        object zhou;
+        remove_call_out("quest1");
+        if( !who || !living(who) || !present(who,this_object()) )
+                return;
+        if( who->is_fighting() || !who->query("huanbochi/shanghy") )
+                return;
+        zhou = who->query_temp("huanbo/zhouqingyun");
+        if( !zhou || !environment(zhou) )       
+                return;
+        if( zhou->query("owner") && zhou->query("owner")!=who )
+                return;         
+        if( !present(zhou,this_object()) )
+        {       
+                tell_room(environment(zhou),"\n\n到了地头，"+zhou->query("name")+"按下云头，化作一道霞光落将下去。\n\n");      
+                zhou->move(this_object());
+                zhou->copy_data(who);
+                message_vision(HIC"一道霞光冲进室内。\n\n"NOR,who);
+                message_vision(HIC"云彩散去，却原来是一位身段婀娜，英气逼人的青衣少女。\n"NOR,who);
+                message_vision(CYN"少女惊讶地“啊”了一声。\n"NOR,who);
+        }       
+        if( who->add_team_member(zhou) )
+        {
+                message_vision(CYN"$N"CYN"双手抱拳，对$n"CYN"作了个揖道：这位"+RANK_D->query_respect(who)+"，我们又见面了！\n"NOR,zhou,who);
+                zhou->set("owner",who);
+                zhou->set_leader(who);
+                message_vision(CYN"$N"CYN"说道：本姑娘便和你一同继续查看此处的奥秘吧。\n"NOR,zhou);
+                tell_object(who,zhou->name() + "决定开始跟随你一起行动。\n");          
+                zhou->set_temp("quest_npc",1);
+                tell_object(who,WHT"【队伍】"+zhou->query("name")+WHT"加入队伍。\n"NOR);
+                return;
+        }
+                
+        zhou->set_temp("quest_npc",0);
+        if( who->query("class")!="yao" )
+        {
+                zhou->command("say 想不到来的时辰刚刚好。\n");
+                zhou->command("open danlu");
+        }
+        else
+        {
+                zhou->command("say 诺那贼子，休想玷污圣女宝地！\n");
+                zhou->copy_data(who);
+                zhou->kill_ob(who);
+        }
+        return;
+}
+        
+void init()
+{
+        ::init();
+        if( userp(this_player()) )
+        {
+                add_action("do_dig",({"dig","wa"}));
+                add_action("do_look","look");
+                add_action("do_di","di");
+                call_out("move_dan",2+random(3),this_player());
+                call_out("quest1",5,this_player());
+        }       
+}
+
+void remove_door()
+{
+        remove_call_out("remove_door");
+        close_door("enter");
+        close_door("north");
+        close_door("southeast");
+        close_door("south");
+        close_door("west");
+        close_door("northeast");
+        close_door("east");
+        tell_room(this_object(),"\n“轰隆隆”一声巨响，两扇大门又合了起来！\n\n");
+}               
+
+int do_di(string arg)
+{
+        object me = this_player();
+        if( !arg || arg!="men" )
+                return 0;
+        if( !me->query_temp("huanbo/shishiw2open") )
+                return 0;
+        if( me->query_skill("spells",1)<250 )
+                return err_msg("你的法术修为太低。\n");         
+        if( me->query("mana")<1000 )
+                return err_msg("你的法力不够了。\n");
+        
+        message_vision("$N念动真言，聚起无上法力，双手缓缓抵住石门。\n",me);                   
+        message_vision("只见石壁之上现出莲蓬似的七个圆孔。最大的一个偏下约有三丈，其余也可通人。\n",me);
+        me->add("mana",-1000);
+        if( open_door("enter") )
+                message_vision("轰隆一声巨响，往万流交汇的洞门已经打开。\n",me);
+        if( open_door("north") )
+                message_vision("轰隆一声巨响，往中洞的洞门已经打开。\n",me);
+        if( open_door("southeast") )
+                message_vision("轰隆一声巨响，往南洞的洞门已经打开。\n",me);
+        if( open_door("south") )
+                message_vision("轰隆一声巨响，往北洞的洞门已经打开。\n",me);
+        if( open_door("west") )
+                message_vision("轰隆一声巨响，往风之道的洞门已经打开。\n",me);
+        if( open_door("northeast") )
+                message_vision("轰隆一声巨响，往东洞的洞门已经打开。\n",me);
+        if( open_door("east") )
+                message_vision("轰隆一声巨响，往火之道的洞门已经打开。\n",me);
+        call_out("remove_door",30);             
+        return 1;
+}                                               
+
+int do_look(string arg)
+{
+        string str;
+        object me = this_player();
+        if( !arg || arg!="men" )
+                return 0;
+        str = "这门宽只四五尺，却有四五尺厚，恰似两根石柱一般。\n";
+        if( random(me->query_skill("literate")/10)<10 )
+        {
+                write(str);
+                return 1;
+        }
+        str+= "这门设有圣姑仙法，需靠大法力抵(di)住两门，方能窥此间乾坤。\n";
+        me->set_temp("huanbo/shishiw2open",1);
+        write(str);
+        return 1;
+}               
+
+int do_dig(string arg)
+{
+        object cao,weapon,me = this_player();
+        
+        if( !arg )
+                return 0;
+        if( arg!="cao" )
+                return err_msg("你要挖什么？\n");
+        if( me->is_busy() )
+                return err_msg("你现在正忙着呢。\n");           
+        weapon = me->query_temp("weapon");
+        if( !weapon )
+        {
+                me->start_busy(1);
+                me->delete_temp("last_damage_from");
+                me->set_temp("death_msg","在幻波池精力衰竭而亡！");
+                me->receive_wound("kee",500);
+                return err_msg("你空手在地上挖了半天，挖得双手鲜血淋漓！\n");
+        }
+        
+        if( weapon->query("skill_type")!="sword"
+         && weapon->query("skill_type")!="blade"
+         && weapon->query("skill_type")!="axe"
+         && weapon->query("skill_type")!="dagger" )
+        {
+                me->start_busy(3);
+                return err_msg("你拿着把"+weapon->query("name")+"在地上乱舞一起，累得汗流浃背。\n");
+        }
+        message_vision("$N低头在地上挖了起来。\n",me);
+        me->start_busy(1);
+        if( wizardp(me) ) write(SPELL_D->query_time_wuxing()+"\n");
+        if( SPELL_D->query_time_wuxing()=="金" || random(2) )
+                return err_msg("结果什么也没挖到。\n");  
+        if( me->query("huanbochi/dulongcao")>=13 || query("cao")<=0 )
+                return err_msg("结果什么也没挖到。\n");                         
+        cao = new("/d/quest/occupation/medical/obj/dulongcao");
+        if( cao )
+        {
+                if( cao->move(me) )     
+                {
+                        write("大机缘，你得到了一株毒龙草！\n");        
+                        CHANNEL_D->do_channel(this_object(),"rumor",me->query("name")+"福星高照，在幻波池挖到一株毒龙草！");
+                }       
+                else    destruct(cao);
+                add("cao",-1);
+        }
+        return 1;
+}
+
+int valid_leave(object who,string dir)
+{
+        if( userp(who) && who->query_temp("huanbo/2mijing")
+         && dir!="southeast" )
+                return notify_fail("还是尽快赶往东洞大石室，看看有什么玄机。\n");       
+        if( dir=="west" && !userp(who) )
+                return 0;
+        if( !userp(who) )
+                who->set_temp("from_shishi_w2",1);      
+        return ::valid_leave(who,dir);
+}       

@@ -1,0 +1,158 @@
+inherit NPC;
+#include <ansi.h>
+#include <combat.h>
+#include <damage_msg.h>
+
+void do_fight(object me,object target)
+{
+int damage;  
+                
+if ( query("race")=="野兽" )
+        {
+        if ( target->is_busy() || target->query_temp("no_move") || !living(target) || random(5)>2 ) 
+                {
+                me->set_temp("guarding", 0);
+                if ( !target->is_fighting(me) ) 
+                        target->fight_ob(me);
+                COMBAT_D->do_attack(me, target, me->query_temp("weapon"), TYPE_QUICK);
+                } 
+        else if( !me->query_temp("guarding") ) 
+                {
+                me->set_temp("guarding", 1);
+                message_vision( guard_msg[random(sizeof(guard_msg))], me, target);
+                } 
+        else if ( random(4) )
+                {
+                damage = target->query("force");
+                if ( damage<=500 )
+                        return;         
+                message_vision("$N张开血盆大口对着$n一咬！\n",me,target);
+                damage/= 50;
+                target->add("force",-damage);
+                me->add("force",damage/5);
+                }                
+        else    {
+                damage = target->query_temp("apply/damage");
+                if ( damage<=0 || !random(3) )
+                        return;         
+                message_vision(CYN"$N张口对着$n一咬！\n"NOR,me,target);
+                target->receive_wound("kee",damage,me);
+                COMBAT_D->report_status(target,damage);
+                return; 
+                }
+        }
+else    COMBAT_D->fight(me,target);             
+}                       
+
+int attack()
+{
+object opponent;
+clean_up_enemy();
+opponent = select_opponent();
+if ( opponent && objectp(opponent) ) 
+        {
+        set_temp("last_opponent", opponent);
+        do_fight(this_object(), opponent);
+        return 1;
+        } 
+else    return 0;
+}
+
+
+void check_room()
+{
+object *obs,*inv;
+int i,k;
+if ( !environment() )
+        return;
+obs = all_inventory(environment());
+for(k=0;k<sizeof(obs);k++)
+        {       
+        if ( obs[k] && userp(obs[k]) )
+                {       
+                inv = all_inventory(obs[k]);
+                for(i=0;i<sizeof(inv);i++)
+                        {
+                        if ( inv[i] && inv[i]->is_lianhua() 
+                        && inv[i]->query("equipped") )
+                                inv[i]->unequip();
+                        }
+                }
+        }               
+}
+
+void heart_beat()
+{
+int wimpy_ratio;
+mapping my;
+object ob,me;
+string str;
+my = query_entire_dbase();
+me = this_object();
+
+check_room();
+
+if ( my["eff_kee"]<0 || my["eff_sen"]<0 )
+        {
+        remove_all_enemy();
+        die();
+        return;
+        }
+if ( my["kee"]<0 || my["sen"]<0 ) 
+        {
+        remove_all_enemy();
+        if ( !living(me) ) 
+                die();
+        else    unconcious();
+        return;
+        }
+
+if( is_busy() || query_temp("no_move") )
+        {
+        continue_action();
+        return;
+        }
+else    {
+        if ( is_fighting()
+          && intp(wimpy_ratio=query("env/wimpy"))
+          && wimpy_ratio>0
+          && ( my["kee"]*100/my["max_kee"]<=wimpy_ratio
+            || my["sen"]*100/my["max_sen"]<=wimpy_ratio ) )
+                ("/cmds/std/go.lpc")->do_flee(me);
+        attack();
+        }
+if ( query("eff_kee") < query("max_kee") )
+        SDS_D->addEffKee(me);
+if ( query("kee") < query("eff_kee") )
+        SDS_D->addKee(me);
+if ( query("sen") < query("eff_sen") )
+        SDS_D->addSen(me);
+if ( query("eff_sen") < query("max_sen") )
+        SDS_D->addEffSen(me);
+if ( me->is_fighting() && living(me) )
+        {
+        if ( objectp(query_temp("weapon")) )
+                str = query_temp("weapon")->query("skill_type");
+        else      str = "unarmed";
+        switch(random(10))
+                {
+                case 9 :
+                case 8 :        
+                case 1 :
+                case 0 : 
+                        if ( !query("no_pfm") ) 
+                                SDS_D->randomPfm(this_object(),str);
+                        break;
+                case 2 :
+                case 7 :
+                case 8 :
+                case 3 : 
+                        if ( !query("no_cast") ) 
+                                SDS_D->randomCast(this_object());
+                        break;
+                default: 
+                        SDS_D->randomPfm(this_object(),str);
+                }       
+        }
+}
+

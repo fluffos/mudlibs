@@ -1,0 +1,282 @@
+#include <ansi.h>
+inherit ITEM;
+
+int information(object);
+
+void random_name()
+{
+return; 
+}
+
+
+void create()
+{
+random_name();
+set_weight(100);
+set("no_get",1);
+set("unit","张");
+seteuid(getuid());
+}
+
+string long()
+{
+object me = this_player();
+string str = HIC"\n一张神奇的魔法牌。"NOR;
+if ( me!=query("owner") )
+        return str+"\n";
+switch(query("attack_type"))
+        {
+        case "特殊" :
+                str+= HIC"它有"HIY+query("damage_type")+HIC"的特殊效果。\n"NOR;
+                break;
+        case "伤害" :
+                str+= HIC"它会造成"HIR+query("damage")+HIC"的"HIR+query("damage_type")+NOR"。\n";
+                break;                  
+        case "增加" :
+                str+= HIC"它能增加"+HIG+query("damage")+HIC"的"HIG+query("damage_type")+NOR".\n";
+                break;
+        default :
+                str+= HIC"它的效果你看不出来。。。。\n"NOR;
+                break;
+        }
+return str;
+}
+
+object *add_arr(object *ob,object obj)
+{
+int i;
+object *oo = ({});      
+if ( !obj )
+        return 0;
+i = sizeof(ob);         
+while(i--)
+        if ( ob[i] )  oo+= ({ob[i]});
+oo+= ({obj});
+return oo;
+}       
+
+object *clear_arr(object *ob,object obj)
+{
+int i;
+object *oo = ({});      
+if ( !obj )
+        return ob;
+i = sizeof(ob);         
+while(i--)
+        {
+        if ( ob[i] && ob[i]!=obj )
+                oo+= ({ob[i]});
+        }       
+return oo;
+}                       
+
+int information(object who)
+{
+object target;
+object *pai;
+if ( !who 
+  || !objectp(target=who->query_temp("游戏_魔法牌/target"))  )
+        return 0;
+if ( !this_object()->move(environment(who)) )
+        return 0;
+this_object()->set("owner",who);
+pai = who->query("游戏_魔法牌/牌");
+if ( sizeof(pai)>4 )
+        return 0;
+pai = add_arr(pai,this_object());
+who->set("游戏_魔法牌/牌",pai);
+tell_object(who,WHT"〖"YEL"魔法牌"WHT"〗你得到了一张"+this_object()->query("name")+NOR WHT"("+capitalize(this_object()->query("id"))+") 。\n"NOR);
+return 1;
+}
+
+
+void _leave()
+{
+destruct(this_object());        
+}
+
+void leave()
+{
+this_object()->move("/obj/empty");
+call_out("_leave",1+random(5));
+}
+
+void init()
+{
+add_action("do_order","order");
+add_action("do_order","chu");
+add_action("do_order","play");
+}
+
+int do_order(string arg)
+{
+int damage;     
+object target,me = this_player();
+object *pp;
+mapping mm,hh;
+mixed temp;
+string *add_msg,*damage_msg,*con_msg;
+
+add_msg = ({
+        "$M化作一道绚丽的光芒，将$N笼罩住，$P看起来神色安逸。\n",
+        "$M在$N掌心中闪了几闪，渐渐融合进$P身体中去了。\n",
+        "$M发出一道绮丽的光彩，$N全身笼罩其中，似乎很是写意。\n",
+        "$M在$N胸前一闪，渐渐渗入$P体内。\n",
+});
+
+damage_msg = ({
+        "$M上厉芒一闪，朝着$N猛烈的刺去！强光闪去中，弥漫着一层凄厉的血雾！\n",
+        "几抹鲜血喷溅中，$M已从$N身上透体而过！\n",
+        "$M带着风雷之声，将$N撞了个踉跄。。。。\n",
+        "$M化作一道金光，将$N笼罩其中，$P露出一丝痛苦之色。\n",
+});
+
+con_msg = ({
+        "$M喷出一道雾气，丝丝的腥臭味飘向$N。\n",
+        "$M一闪而过，一切又恢复了正常。$N眉宇之间隐隐有了一层黑气....\n",
+        "$M“轰隆”一声，在$N身旁炸开，$P一个踉跄，身体渐渐虚弱下去。\n",
+});
+
+if ( !arg || !id(arg) )
+        return 0;
+if ( me!=query("owner") )
+        return 0;
+if ( !objectp(target=me->query_temp("游戏_魔法牌/target")) ) 
+        return 0;
+if ( !mapp(mm=me->query("游戏_魔法牌")) 
+    || !mapp(hh=target->query("游戏_魔法牌")) )
+        return 0;
+if ( mm["游戏状态"]!="出牌" )
+        {
+        tell_object(me,WHT"〖"YEL"魔法牌"WHT"〗还没轮到你出牌呢。\n"NOR);
+        return 1;
+        }
+if ( me->is_busy() )
+        {
+        tell_object(me,WHT"〖"YEL"魔法牌"WHT"〗你先考虑一下吧。\n"NOR);
+        return 1;
+        }
+
+message_vision(WHT"〖"YEL"魔法牌"WHT"〗$N"WHT"使用了$n"NOR WHT"。\n"NOR,me,this_object());
+mm["怒气"]-= 1;
+if ( mm["冰封"] )
+        {
+        message_vision(WHT"〖"YEL"魔法牌"WHT"〗结果什么反应也没有。\n"NOR,me);
+        mm["冰封"]=0;
+        }
+else    {       
+        switch(query("attack_type"))
+                {
+                case "增加" :
+                        {
+                        temp = query("damage_type");
+                        if ( temp=="气血" )   mm[temp]+= query("damage")+mm["恢复"];
+                        else   mm[temp]+= query("damage");
+                        arg = add_msg[random(sizeof(add_msg))];
+                        arg = replace_string(arg,"$M",this_object()->query("name"));
+                        message_vision(WHT"〖"YEL"魔法牌"WHT"〗"+arg+NOR,me);
+                        message_vision(WHT"〖"YEL"魔法牌"WHT"〗$N的"+temp+WHT"增加了"+query("damage")+WHT"点。\n"NOR,me);
+                        if ( mm["最大"+temp]>0 && mm[temp]>mm["最大"+temp] )
+                                mm[temp]=mm["最大"+temp];
+                        break;  
+                        }       
+                case "伤害" :
+                        {
+                        arg = damage_msg[random(sizeof(damage_msg))];
+                        arg = replace_string(arg,"$M",this_object()->query("name"));
+                        message_vision(WHT"〖"YEL"魔法牌"WHT"〗"+arg+NOR,target);
+                        temp = query("damage_type");
+                        if ( temp=="魔法伤害" )
+                                damage = query("damage")+mm["物理攻击"]-hh["物理防御"];
+                        else    damage = query("damage")+mm["魔法攻击"]-hh["魔法防御"];
+                        if ( damage<1 ) damage = 1;
+                        if ( damage>30 ) damage = 30;
+                        hh["气血"]-= damage;
+                        message_vision(WHT"〖"YEL"魔法牌"WHT"〗$N受到了"+damage+WHT"点的伤害。\n"NOR,target);
+                        if ( hh["反击"] )
+                                {
+                                damage/=4;
+                                damage = damage/2+random(damage/2);
+                                if ( damage<1 )
+
+                                        damage = 1;
+                        message_vision(WHT"〖"YEL"魔法牌"WHT"〗$N对$n作出了一记漂亮的反击！\n"NOR,target,me);
+                                mm["气血"]-= damage;
+                                message_vision(WHT"〖"YEL"魔法牌"WHT"〗$N受到了"+damage+WHT"点的伤害。\n"NOR,me);
+                                }
+                        break;
+                        }        
+                                                 case "特殊" :
+                        {
+                        arg = con_msg[random(sizeof(con_msg))];
+                        arg = replace_string(arg,"$M",this_object()->query("name"));
+                        message_vision(WHT"〖"YEL"魔法牌"WHT"〗"+arg+NOR,target);
+                        temp = query("damage_type");
+                        switch(temp)
+
+                                {
+                                case "中毒" : damage = query("damage");
+                                        damage = query("damage")+mm["魔法攻击"]-hh["魔法防御"];
+                                        hh["气血"]-= damage;
+                                        if ( !hh["变身"] )
+                                                {
+                                                hh["中毒"] = query("damage");
+                                                message_vision(WHT"〖"YEL"魔法牌"WHT"〗$N中毒了。\n"NOR,target);
+                                                }
+                                        message_vision(WHT"〖"YEL"魔法牌"WHT"〗$N受到了"+damage+WHT"点的伤害。\n"NOR,target);
+                                        if ( hh["反击"] )
+                                                {
+                                                damage/=4;
+                                                damage = damage/2+random(damage/2);
+                                                if ( damage<1 )
+                                                        damage = 1;
+                                                message_vision(WHT"〖"YEL"魔法牌"WHT"〗$N对$n作出了一记漂亮的反击！\n"NOR,target,me);  
+                                                mm["气血"]-= damage;
+                                                message_vision(WHT"〖"YEL"魔法牌"WHT"〗$N受到了"+damage+WHT"点的伤害。\n"NOR,me);
+                                                }
+                                        break;
+                                case "解毒" :
+                                        mm["中毒"] = 0;
+                                        message_vision(WHT"〖"YEL"魔法牌"WHT"〗$N的毒清除了。\n"NOR,me);
+                                        break;
+                                case "反击" :
+                                        mm["反击"] = 1;
+                                        message_vision(WHT"〖"YEL"魔法牌"WHT"〗$N有了反击能力。\n"NOR,me); 
+                                        break;
+                                case "冰封" :
+                                        hh["冰封"] = 1;
+                                        message_vision(WHT"〖"YEL"魔法牌"WHT"〗$N将$n封魔成功。\n"NOR,me,target);
+                                        break;
+                                case "恢复" : 
+                                        mm["恢复"] = query("damage");
+                                        break;
+                                default : error("No This Type? \n");
+                                }
+                        }       
+                break;  
+                default : error("No This Type? \n");            
+                }
+        }
+
+if ( damage=mm["恢复"] )
+        {
+        mm["气血"]+= damage;
+        message_vision(WHT"〖"YEL"魔法牌"WHT"〗$N的气血增加了"+damage+"点。\n"NOR,me);    
+        }               
+if ( damage=mm["中毒"] )
+        {
+        message_vision(WHT"〖"YEL"魔法牌"WHT"〗$N毒性发作了！\n"NOR,me);   
+        mm["气血"]-= damage;
+        message_vision(WHT"〖"YEL"魔法牌"WHT"〗$N受到了"+damage+"点的伤害！\n"NOR,me); 
+        }
+mm["游戏状态"]="等待";
+hh["游戏状态"]="出牌";
+pp = mm["牌"];
+pp = clear_arr(pp,this_object());
+mm["牌"] = pp;
+me->set_temp("游戏_魔法牌/time",0);
+target->start_busy(2);
+destruct(this_object());
+return 1;
+}
+

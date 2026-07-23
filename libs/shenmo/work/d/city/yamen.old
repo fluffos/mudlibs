@@ -1,0 +1,182 @@
+inherit ROOM;
+#include <ansi.h>
+
+int hear_start(object me,object guan,object env);
+void hear(object me,object guan,object env,object npc);
+void hear_end(object me,object guan,object env);
+
+void create()
+{
+set ("short", "京兆尹衙门");
+set ("long", @LONG
+这里是长安京兆尹的办公衙门，专门负责长安地方的治安。正对面摆着一张高
+高的虎头案，京兆尹大人端坐其后，看着案下的百姓。
+两边是红衣衙役，手里拿着红漆的水火棍。最边上的衙役手里擎着“肃静”、
+“回避”的牌匾。正堂之上高高挂着“明镜高悬”的大匾，不怒而威。
+到了此地，有事尽管向大人哭诉(kusu)
+LONG);
+set("no_fight", 1);
+set("no_magic", 1);
+set("no_clean_up",1);
+setup();
+}
+
+void init ()
+{
+object npc;
+object me = this_player();
+object env= this_object();
+
+add_action("do_none","cast");
+add_action("do_none","move");
+add_action("do_none","perform");
+add_action("do_none","burn");
+add_action("do_none","bian");
+add_action("do_none","get");
+add_action("do_none","drop");
+add_action("do_none","apply");
+add_action("do_none","quit");
+add_action("do_none","fly");
+add_action("hear_start","kusu");
+
+if ( me->query_temp("衙门/审理") )
+        return;
+message_vision("众衙役一声大吼：“威...武......”，众人皆静声不语。\n",me);
+me->set_temp("衙门/审理",1);
+me->save();
+return;
+}
+
+int do_none()
+{
+tell_object(this_player(),"衙役对你一声大喝：大胆！\n");
+return 1;
+}
+
+int hear_start(object me,object guan,object env)
+{
+object npc,*inv;
+int i;
+string msg;
+
+me = this_player();
+env = this_object();
+inv = all_inventory();
+i = sizeof(inv);
+while(i--) {
+     if ( inv[i] && !userp(inv[i]) )  destruct(inv[i]);
+    }
+guan = new(__DIR__"npc/zhaoyin");
+guan->move(env);
+npc = new(__DIR__"npc/dcboss");
+npc->move(env);
+if ( me->is_busy() )
+   return notify_fail("你忙着呢。\n");
+me->start_busy(7);
+me->command("say 冤枉啊！！我比窦娥还冤......");
+msg = "京兆尹"+guan->name()+"大人慢慢踱到堂前。\n";
+msg += guan->name()+"一拍惊堂木，道：汝等在堂前喧哗，所为何事？\n";
+message_vision(msg,me);
+msg = npc->name()+"抢步上前，诉说冤情。\n",
+message_vision(msg,me);
+npc->command("say 大人，此人在小的赌场之内出千，被我等发现，特交大人发落。\n");
+msg = "$n一拍惊堂木，道：此事属实？\n";
+msg = replace_string(msg,"$n",guan->name());
+message_vision(msg,me,guan);
+call_out("hear",2+random(3),me,guan,env,npc);
+return 1;
+}
+
+void hear(object me,object guan,object env,object npc)
+{
+if( !npc || !me || !guan )  return;
+me->command("say 大人，小的冤枉，小的只是手气好而已。\n");
+npc->command("say 呸，手气好？连赢我五把之多？？\n");
+me->command("say");
+guan->command("say 收声，此事不用查皆已一目了然！\n");
+destruct(npc);
+call_out("hear_end",1+random(3),me,guan,env);
+}
+
+void hear_end(object me,object guan,object env)
+{
+int i;
+string value,str,title,zui;
+
+title = HIC"【人间界】$N($I)：";
+title = replace_string(title,"$N",guan->name());
+title = replace_string(title,"$I",capitalize(guan->query("id")));
+
+str = "滋有人告$n"HIC"($i)于赌场扰民滋事，经本官查理：";
+str = replace_string(str,"$n",me->name());
+str = replace_string(str,"$i",capitalize(me->query("id")));
+
+message_vision("$n站将起来，道：众人不必喧哗，听本官宣判。\n");
+i = me->query("赌场/钱");
+if ( !i || i<=10000 )
+	{
+	me->delete("赌场");
+	me->set("startroom","/d/city/kezhan");
+	me->save();
+	zui = "罪名不成立，当即释放。\n"NOR;
+	message("channel:chat",title+str+zui,users());
+	message_vision("众人听说，唏嘘一番，尽数散去。\n",me,guan);
+	message_vision("堂下走来几位官差将$N拎将起来，径往外面去了。\n",me,guan);
+	me->move(__DIR__"kezhan");
+	message_vision("到了，官差将$N往地上一丢，好好告诫了一番，转身离去。\n",me);
+	return;
+	}
+i = i/20+random(i/10);
+value = MONEY_D->price_str(i);
+if ( me->query("balance") >= i || me->query("c_balance") >= i )
+        {
+        if ( random(5)==1 )
+                {
+		  zui = "证据确凿，判其入监，等候发落！\n"NOR;
+                me->delete_temp("衙门");
+                me->delete("赌场");
+                me->set("startroom","/d/city/dalao");
+                me->set("赌场/钱",i);
+                me->save();   
+
+		  message("channel:chat",title+str+zui,users());
+                message_vision("众人听说，皆大欢喜，尽数散去。\n",me,guan);
+                message_vision("堂下走来几位官差将$N拎将起来，径往大牢去了。\n",me,guan);
+                me->move(__DIR__"dalao");
+                message_vision("到了，官差将$N往牢了一丢，转身离去。\n",me,guan);
+		  return;
+                }
+	zui = "证据确凿，判其罚金"+value+"！\n"NOR;
+	if ( me->query("balance") >= i )
+		me->add("balance",-i);
+	else	me->add("c_balance",-i);
+       me->delete_temp("衙门");
+       me->delete("赌场");
+       me->set("startroom","/d/city/kezhan");
+	me->save();   
+
+	message("channel:chat",title+str+zui,users());
+	message_vision("众人听说，皆大欢喜，尽数散去。\n",me,guan);
+       message_vision("$N没甚法子，只得自认倒霉。\n",me,guan);
+       me->move(__DIR__"kezhan");
+       message_vision("$N输掉了官司，灰溜溜的回到客栈。\n",me,guan);
+	return;
+	}
+else	{
+	zui = "证据确凿，判其入监，等候发落！\n"NOR;
+	message("channel:chat",title+str+zui,users());
+	message_vision("众人听说，皆大欢喜，尽数散去。\n",me,guan);
+	message_vision("堂下走来几位官差将$N拎将起来，径往大牢去了。\n",me,guan);
+
+	me->delete_temp("衙门");
+	me->delete("赌场");
+	me->set("startroom","/d/city/dalao");
+	me->set("赌场/钱",i);
+	me->save();    
+	me->move(__DIR__"dalao");
+	message_vision("到了，官差将$N往牢了一丢，转身离去。\n",me,guan);
+	return;
+	}
+}
+
+

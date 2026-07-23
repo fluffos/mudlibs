@@ -1,0 +1,220 @@
+#include <ansi.h>
+inherit __DIR__"r.lpc";
+
+void succ_break(object who);
+
+void create_room()
+{
+        set("short","火洞");
+        set("long",@LONG
+整个洞中都是烈火熊熊，到处金色火球胡乱翻滚，一波
+一波，其大如山。
+    火光中央是一根粗一人合抱，高丈八的龙柱(longzhu)，
+龙柱上面烈火熊熊，高温袭人，火焰居然呈现出紫色。
+    烈火熊熊而生，炽焰滚滚，热浪滔滔，尤其是这柱上有
+周天之数，聚集五行灵气，借金生水，借水生木，借木生火，    
+直喷熊熊烈火炽焰，卷起了千重的热浪。
+
+LONG); 
+        set("item_desc",([
+                "longzhu" : "此柱上有周天之数，聚集五行灵气，借金生水，借水生木，借
+木生火，将之击碎(break)方能止住此处的火势。\n",
+        ]));    
+}
+
+void reset()
+{
+        ::reset();
+        set("jiguan",1);
+}
+
+void init()
+{
+        ::init();
+        add_action("do_break","break");
+        if( !userp(this_player()) )
+                call_out("succ_break",5+random(5),this_player());
+}       
+
+string status_msg(int ratio)
+{
+        string str = NOR"( 龙柱";
+        if( ratio>9 ) str+= HIG "纹丝不动，直喷熊熊炽焰。"NOR;
+        else if( ratio>8 ) str+= HIG "动了几动，看来问题不大。"NOR;
+        else if( ratio>7 ) str+= HIY "看起来喷火的速度明显的减弱了。"NOR;
+        else if( ratio>6 ) str+= HIY "晃了几晃，吐出了几丝闪烁的弱焰。"NOR;
+        else if( ratio>5 ) str+= HIR "出现了几处裂纹，火焰明显减少了。"NOR;
+        else if( ratio>4 ) str+= HIR "摇摇欲坠，随时会倒掉。"NOR;
+        else if( ratio>3 ) str+= RED "遍布裂纹，正在勉力支撑着不塌去。"NOR;
+        else str+= RED"不停的落下碎片,马上要崩塌了。"NOR;
+        str+= ")\n";
+        return str;
+}
+
+string fire_hit(object who)
+{
+        string str;
+        object bag,ob,*inv,*ch;
+        int i,k,num;
+        if( !who || !living(who)
+         || !present(who) )
+                return 0;               
+        if( random(2) )
+        {
+                who->receive_wound("kee",200);
+                return HIR"火舌一舔，结果$N"HIR"给烧的焦头烂额。\n"NOR;
+        }
+        inv = all_inventory(who);
+        reset_eval_cost();
+        for(i=0;i<sizeof(inv);i++)
+        {
+                if( !inv[i] || inv[i]->is_character() )
+                        continue;
+                if( inv[i]->query("drug_type")=="良药" )
+                {
+                        ob = inv[i];
+                        str = "你身上的"+ob->query("name");
+                        break;
+                }
+                else if( inv[i]->is_container() )
+                {
+                        bag = inv[i];
+                        ch = all_inventory(bag);
+                        for(k=0;k<sizeof(ch);k++)
+                        {
+                                if( ch[k]->query("drug_type")=="良药" )
+                                {
+                                        ob = ch[k];
+                                        str+= "你的"+bag->query("name")+HIR"里的"+ob->query("name");
+                                        break;
+                                }
+                        }
+                        if( ob )
+                                break;
+                }       
+        }
+        if( ob )
+        {
+                str = HIR"火舌一舔，结果"+str+HIR"顿时化为乌有。\n"NOR;
+                if( !ob->query_amount() )
+                        destruct(ob);
+                else
+                {
+                        num = ob->query_amount()/10;
+                        if( num<3 )
+                                num = 3;
+                        if( ob->query_amount()>num )
+                                ob->add_amount(-num);
+                        else    destruct(ob);
+                }
+                return str;     
+        }
+        else
+        {
+                who->receive_wound("kee",200);
+                return HIR"火舌一舔，结果$N"HIR"给烧的焦头烂额。\n"NOR;
+        }
+}
+
+void _break(object who,int t)
+{
+        int mt;
+        mapping action;
+        object weapon;
+        string str;
+        if( !who || !present(who) )
+                return;
+        if( t<=0 )
+        {
+                succ_break(who);
+                return;         
+        }       
+        action = who->query("actions");
+        str = "\n"+action["action"]+"\n";
+        weapon = who->query_temp("weapon");
+        str = replace_string(str,"$n","柱子");  
+        str = replace_string(str,"$w",weapon?weapon->query("name"):"双拳");
+        str = replace_string(str,"$l","");
+        if( random(3) )
+                str+= fire_hit(who);
+        else    str+= status_msg(t);
+        message_vision(str,who);
+        who->add("mana",-150);
+}
+
+void succ_break(object who)
+{
+        object ww,room;
+        if( !who || !present(who) )
+                return;
+        tell_room(this_object(),"\n地动山摇，轰隆一声，龙柱碎成了一堆垃圾。。。。\n\n");
+        set("long","\n风平浪静... ... \n");
+        set("jiguan",0);
+        message("team", WHT"【队伍】" + who->name(1)+"：我已破除了"+query("short")+WHT"的禁制。\n" NOR,who->query_team()); 
+        if( userp(who) )
+                who->add_temp("huanbo/jiguan_flag",1);
+        else if( ww=who->query("owner") )
+                ww->add_temp("huanbo/jiguan_flag",1);
+        who->delete_temp("breaking");
+        who->delete_temp("huanbo/mijing_type");
+        who->move(__DIR__"mijing-e2");
+        message_vision("\n浓雾散去，露出了$N的身影。\n\n",who);
+}
+
+void breaking(object who,int t)
+{
+        remove_call_out("breaking");
+        if( !who || !present(who) )
+                return;
+        if( who->query("mana")<150 )
+        {
+                tell_object(who,"由于法力不足，你的动作停住了。\n");
+                who->delete_temp("breaking");
+                return;
+        }
+        if( who->query("eff_kee")<200 )
+        {
+                tell_object(who,"你累得停住了手。\n");
+                who->delete_temp("breaking");
+                return;
+        }
+        if( t<=0 )
+        {
+                succ_break(who);
+                return;
+        }
+        _break(who,t);
+        t=t-1;  
+        call_out("breaking",1+random(3),who,t);
+}
+
+int do_break(string arg)
+{
+        int tt,succ = 0;
+        object weapon,me = this_player();
+        if( !arg || (arg!="longzhu" && arg!="zhu" ) )
+                return err_msg("你要击碎什么？\n");
+        if( !query("jiguan") )
+                return err_msg("此处禁制已经给破了。\n");       
+        if( me->query_temp("breaking") )
+                return err_msg("你现在正忙呢。\n");
+        if( weapon=me->query_temp("weapon") )
+                succ++;
+        if( random(me->query("mana")/100)>10 )
+                succ++;
+        if( random(me->query("mana_factor")/10)>10 )
+                succ++;
+        if( random(me->query("daoxing")/100000)>10 )
+                succ++;
+        if( random(me->query("level")/10)>10 )
+                succ++;
+        if( me->query_temp("huanbo/mijing_type")!="fire" )
+                succ = 0;
+        message_vision("$N握紧"+(weapon?weapon->query("name"):"双拳")+"，运足全身气力猛击火柱！\n",me);
+        if( random(succ)<=1 )
+                return err_msg("结果火舌一舔，你不得不放弃了攻击。\n");
+                
+        me->set_temp("breaking");
+        call_out("breaking",1,me,10);
+        return 1;
+}

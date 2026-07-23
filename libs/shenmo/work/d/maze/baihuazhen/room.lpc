@@ -1,0 +1,178 @@
+#include <ansi.h>
+inherit ROOM;
+    
+void create()
+{
+        set("short","百花谷副本");
+        set("channel_id","百花谷副本");
+        set("alternative_die",1);
+        set("item_desc",([
+                "west" : "风中突然传来一阵阵甜蜜的花香。这花香甜蜜得竟非世间所有。\n",
+                "east" : "风中突然传来一阵阵甜蜜的花香。这花香甜蜜得竟非世间所有。\n",
+                "north" : "风中突然传来一阵阵甜蜜的花香。这花香甜蜜得竟非世间所有。\n",
+                "south" : "风中突然传来一阵阵甜蜜的花香。这花香甜蜜得竟非世间所有。\n",
+        ])); 
+        set("guai",2+random(3));
+        set("no_huicheng",1);
+        set("no_chuqiao",1);
+        set("virtual_room",1);
+        setup();
+}
+
+int alternative_die(object who)
+{
+        int i,lost;
+        object target;
+        string id,file,msg;
+        if( !who )
+                return 1;
+        if( !userp(who) )
+        {
+                target = who->query_temp("last_damage_from");
+                who->powerup(0,1);
+                all_inventory()->remove_killer(who);
+                who->remove_all_killer();
+                
+                if( who->is_bhg() && target && present(target,this_object()) )
+                        who->reward_ob(target);
+                else
+                {
+                	message_vision(HIG"\n忽然一道清风夹带着一阵阵甜蜜的花香瞬间掠过，$N"HIG"但觉一阵意乱情迷，顿时不知身在何处....\n"NOR,who);
+			who->move("/d/maze/bhg-baihua/empty");
+			REMOVE_D->add_obj(who,1);
+		}	
+                return 0;                         
+        }
+        if( who->query("family/family_name")!="百花谷" )
+        	return 1;
+        
+        //玩家死亡
+        target = who->query_temp("last_damage_from");
+        
+        who->powerup(0,1);
+        if( random(2) )
+                msg = COMBAT_D->status_msg((1+random(5))*10);
+        else    msg = COMBAT_D->eff_status_msg((1+random(5))*10);
+        message_vision(NOR"\n( $N"+msg+NOR")\n",who);
+        message_vision("\n"HIW"$N"HIW"跌跌撞撞的向外逃去。\n"NOR,who);  
+        
+        lost = 5000;
+        lost = lost*9/10+random(lost/10);
+        if( who->query("combat_exp")<lost )
+                who->set("combat_exp",0);
+        else    who->add("combat_exp",-lost);
+        tell_object(who,HIR"【副本】百花谷：你身负重伤，损失了"HIY+lost+""HIR"点武学经验。"NOR"\n");
+        
+        lost = 1000;
+        lost = lost*9/10+random(lost/10);
+        if( who->query("daoxing")<lost )
+                who->set("daoxing",0);
+        else    who->add("daoxing",-lost);
+        tell_object(who,HIR"【副本】百花谷：你身负重伤，损失了"HIY+COMBAT_D->chinese_daoxing(lost)+""HIR"道行。"NOR"\n");
+        
+        lost = 1000;
+        lost = lost*9/10+random(lost/10);
+        if( who->query("potential")-who->query("learned_points")<lost )
+                who->set("potential",who->query("learned_points"));
+        else    who->add("potential",-lost);
+        tell_object(who,HIR"【副本】百花谷：你身负重伤，损失了"HIY+lost+""HIR"点修为潜能。"NOR"\n");
+                
+        who->set("kee",100);
+        who->set("eff_kee",100);
+        who->set("sen",100);
+        who->set("eff_sen",100);
+        who->set("force",0);
+        who->set("mana",0);
+        
+        id = who->query("id");
+        file = sprintf("/data/maze/%c/%s/bhg-baihua/enter",id[0],id);
+        if( !who->move(file,2) )
+        {
+        	file = ({ sprintf("%d",random(5)), sprintf("%d",10+random(5)), sprintf("%d",20+random(5)),
+        		  sprintf("%d",30+random(5)),sprintf("%d",40+random(5)), })[random(5)];
+		file = "/d/penglai/baihuagu"+file;    		  	
+        	who->move(file,2);
+        }	
+        message_vision("\n"HIW"$N"HIW"跌跌撞撞的从花海中逃了出来。\n\n"NOR,who);
+        who->delete_temp("maze");
+        return 0;
+}                       
+
+void create_guai(object who)
+{
+	int i;
+        object guai;
+        if( !who || !living(who) 
+         || !present(who,this_object()) )
+                return;
+	i = 1+random(2);
+	while(i--)
+	{                
+		if( query("guai")<=0 ) 
+			return;
+		guai = new("/d/maze/bhg-baihua/npc/yao");
+		if( !guai )
+                	return;
+                //printf("111\n");	
+        	if( !guai->information(who) )
+        	{
+                	guai->move("/d/maze/bhg-baihua/empty");
+			REMOVE_D->add_obj(guai,1);
+                	return;
+        	}
+        	//printf("222\n");
+		add("guai",-1);
+	}	
+}
+
+void init()
+{
+	add_action("do_map","map");
+        if( userp(this_player()) )
+        {
+                remove_call_out("create_guai");
+                call_out("create_guai",0,this_player());
+        }
+}
+
+int do_map(string arg)
+{
+	object me = this_player();
+	if( time()<me->query_temp("last_mazemap")+10 )
+		return err_msg("你不能频繁查看地图。\n");
+	me->set_temp("last_mazemap",time());
+	arg = MAZE_D->query_maze_mainobj(me)->display_common_map(this_object());
+	me->start_more(arg);		
+        return 1;
+}
+
+int valid_leave(object who,string dir)
+{
+	int x,y;
+        object flower,guai;
+        string *ff,nn;
+        if( !userp(who) )
+                return ::valid_leave(who,dir);
+        if( who->is_fighting() )
+                return notify_fail("你现在正忙着呢。\n");
+	if( !query("flower") )
+	{                
+		ff = ({"2,1","5,1","3,3","6,3","3,5","6,5","2,7","5,7"});                
+		x = query("maze/x");
+		y = query("maze/y");
+		nn = sprintf("%d,%d",x,y);
+		if( member_array(nn,ff)!=-1 )
+		{
+			set("flower",1);
+			flower = new("/d/maze/bhg-baihua/npc/flower");
+			if( flower && flower->move(this_object()) )
+			{
+				tell_room(this_object(),"\n"HBMAG+HIC"一阵浓郁的花香传来，只见花丛中有一朵奇花格外争奇斗艳。"NOR"\n");
+				return 2;
+			}
+		}
+	}	
+	return ::valid_leave(who,dir);
+}
+
+int is_bhg(){ return 1; }

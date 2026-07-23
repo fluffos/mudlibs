@@ -1,0 +1,133 @@
+#include <ansi.h>;
+inherit ITEM;
+
+void create()
+{
+        set_name(HIY"铜丹炉"NOR, ({"danlu", "lu"}));
+        set_weight(100000000000000);
+        if (clonep())
+                set_default_object(__FILE__);
+        else {
+                set("long", "一座黄铜做的丹炉，烫得有点让人无法接近。\n");
+                set("unit", "座");
+                set("no_get","你是大力士吧？这个也想拿起来？");
+                set("value", 2000);
+        }
+        setup();
+}
+
+int do_look(string arg)
+{
+        string str;
+        if( !arg || !id(arg) )
+                return 0;
+        str = "一座黄铜做的丹炉，烫得有点让人无法接近，";
+        if( time()>=this_player()->query("huanbochi/dulongwan")+3600 )
+        {
+                str+= "里面有：\n";
+                str+= "\t一颗"HIB"毒龙丸"NOR"(Dulong wan)\n";
+        }
+        else    str+= "里面空空如也。\n";
+        write(str);
+        return 1;
+}       
+
+void init()
+{
+        add_action("do_open","open");
+        add_action("do_look","look");
+}
+
+int err_msg(string arg)
+{
+        write(arg);
+        return 1;
+}
+
+void close_lu() 
+{
+        if( query("huanbo_danlu_open") )
+        {
+                delete("huanbo_danlu_open");
+                tell_object(environment(),"\n\n鼎盖又缓缓合上。\n");
+        }
+}       
+
+void finish_open(object who)
+{
+        object wan;
+        if( !who || !query("huanbo_danlu_open") )
+        {
+                remove_call_out("finish_open");  
+                remove_call_out("close_lu");
+                call_out("close_lu",4+random(5));
+                return;  
+        }
+        if(  !living(who) || !present(who,environment()) 
+         || base_name(environment())!="/d/emei/huanbochi/shishi-w2" 
+         || who->is_fighting() || who->query("mana")<300
+         || random(who->query_skill("spells")/10)<10 )
+        {
+                remove_call_out("finish_open");  
+                remove_call_out("close_lu");
+                call_out("close_lu",4+random(5));
+                return;  
+        }
+        remove_call_out("finish_open");  
+        message_vision("只见炉火中托着一朵青莲，昙花一现般顷刻消失。$N闻得鼎内
+异香扑鼻，比起先时所闻还要浓烈。
+    一只碧玉莲蓬，立在鼎的中心，内中含着莲子大小的一粒丹药，
+颜色翠绿，透明如晶。\n",who);
+        wan = new("/d/quest/occupation/medical/obj/dulong-wan");
+        if( wan )
+        {
+                if( wan->move(who) )
+                {
+                        CHANNEL_D->do_channel(this_object(),"rumor","听说"+who->query("name")+"得到了幻波池遗宝"+wan->query("name")+HIM"。"NOR);
+                        who->set("huanbochi/dulongwan",time());
+                }
+                else    destruct(wan);
+        }
+        remove_call_out("close_lu");
+        call_out("close_lu",4+random(5));
+        message_vision(CYN"$N"CYN"高兴得象个小孩子似的蹦蹦跳跳。\n"NOR,who);
+        return;
+}               
+
+int open_msg(object who)
+{
+        if( !who || !living(who) || !present(who,environment()) 
+         || base_name(environment())!="/d/emei/huanbochi/shishi-w2" )
+                return 0;        
+        message_vision("$N走到炉前，双膝跪地，虔诚通白一番，才将手一指，一片祥光，将鼎盖罩住。\n",who);
+        who->add("mana",-300);
+        set("huanbo_danlu_open",1);
+        call_out("finish_open",8+random(5),who);
+        return 1;
+}
+
+int do_open(string arg)
+{
+        object zhou,me = this_player();
+        
+        if( !arg || !id(arg) )
+                return 0;
+        zhou = present("zhou qing yun",environment(me));
+        if( userp(me) )
+        {
+                if( !zhou || userp(zhou) || !present(zhou,environment()) )
+                        return err_msg("有缘人尚未出现呢。\n"); 
+        }               
+        if( userp(me) && time()<me->query("huanbochi/dulongwan")+3600 )
+                return err_msg("还是留点机会给别人吧。\n");
+        if( me->is_fighting() )
+                return err_msg("你现在正忙着呢。\n");
+        if( userp(me) && me->is_busy() )
+                return err_msg("你现在正忙着呢。\n");
+        if( me->query("mana")<300 )
+                return err_msg("你的法力不足。\n");                     
+        if( query("huanbo_danlu_open") )
+                return err_msg("丹炉正在被打开。\n");
+        return open_msg(me);
+}                       
+                                                                

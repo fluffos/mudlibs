@@ -1,0 +1,176 @@
+// zxzx.c
+//write by yesi
+//yeahsi@21cn.com
+
+#include <ansi.h>
+inherit SSERVER;
+
+string *skill_ban = ({
+        "dagou-bang","changshengjue","douzhuan-xingyi","jadesword","wuhu-blade","xianglong-zhang","lingbo-weibu","skyriver-rake","dianxue",
+});
+
+void check(object me);
+void zxzx_effect(object me, object victim);
+void remove_effect(object me);
+
+int perform(object me)
+{
+        int skill;
+        int sword_skill,qixiu_skill;
+        
+        skill = me->query_skill("huntian-qigong",1);
+        if( skill > 250 ) skill=250;
+        sword_skill= me->query_skill("sword",1);
+        qixiu_skill= me->query_skill("qixiu-jian",1);
+                       
+                               
+        if( skill < 150 )  return notify_fail("你的混天气功修为不够。\n");
+        if( sword_skill < 150 )  return notify_fail("你的基本剑法未够纯熟。\n");
+        if( qixiu_skill < 160 )  return notify_fail("你的七修剑未够纯熟。\n");
+        
+        if( me->query_temp("zxzx") ) 
+//          {remove_effect(me);return 1;}
+//   这里取消主动收回，方便玩家使用，同时也取消了无限zxzx的bug。By windy。
+  return notify_fail("你已经在运功中了。\n");
+          
+        if (me->query_skill_mapped("force")!="huntian-qigong")
+            return notify_fail("「追腥逐血」必须配合混天气功才能使用。\n");
+        
+        if(me->query("family/family_name") != "陷空山无底洞" && !me->samsara_check("qixiu-jian",1))
+               return notify_fail("[追腥逐血]是陷空山无底洞不传之密！\n");     
+        
+        if( time()-(int)me->query_temp("zxzx_end") < 10 )
+                return notify_fail("你现在真气不纯！\n");       
+               
+        
+        if( (int)me->query("force") < skill )     
+                return notify_fail("你的内力不够。\n");
+ 
+        me->add("force", -skill);
+        message_vision(HIR "$N把混天气功在体内运行一周，只觉浑身杀气腾腾，看谁都不顺眼。\n" NOR, me);
+        me->set_temp("zxzx", 1);
+              skill=random(skill);
+              if (skill>120) skill=120;
+              if (skill<20) skill=20;
+        me->set_temp("zxzx_time",skill);
+              
+                   
+        call_out("check", 1, me);
+           call_out("remove_effect",skill/5,me);
+        return 1;
+}
+
+
+void check(object me)
+{       
+        object weapon;
+        
+         if(!me) return;
+                
+         if (me->query_skill_mapped("force") != "huntian-qigong"
+                 || !objectp(weapon=me->query_temp("weapon")) 
+                 || (weapon->query("apply/skill_type") != "sword" 
+                     && weapon->query("skill_type") != "sword" ) 
+                 ||  me->query_skill_mapped("sword") != "qixiu-jian" )     
+             {
+                 remove_call_out("remove_effect");
+                 remove_effect(me);                 
+                 }
+         else if(me->query_temp("zxzx_time")<1)
+             {
+                 remove_call_out("remove_effect");
+             remove_effect(me);                 
+             }
+         else {  me->add_temp("zxzx_time",-1);
+                call_out("check", 1, me);
+              }
+                     
+}
+
+
+void remove_effect(object me)
+{
+        if(!me) return;
+        remove_call_out("remove_effect");
+        remove_call_out("check");
+        me->delete_temp("zxzx");
+        me->set_temp("zxzx_end",time());
+        tell_object(me, HIR"你将混天气功收回丹田。\n"NOR);
+}
+
+void zxzx_effect(object me, object victim)
+{   int damage,ini_damage_apply;
+    string str;
+  int i;
+  string mpskill;
+  string *bskill;
+  mapping map;
+ map = me->query_skill_map();
+if( !mapp(map) || sizeof(map)==0 )
+  return;
+bskill = keys(map);
+for( i=0; i < sizeof(bskill);i++)
+{
+   mpskill = map[bskill[i]];
+   if( stringp(mpskill) && member_array(mpskill,skill_ban)!=-1 )
+      return;
+}
+
+   if ( random(2)>0 )
+          { 
+            me->add_temp("zxzx",1);
+//        if(  !me->query("env/no_msg" ) && !victim->query("env/no_msg" )  )
+            message_vision(HIR"\n$N一剑中敌，双目精光四谢，发狂般向$n又攻出一招！\n"NOR,me,victim);
+            damage = COMBAT_D->do_attack(me, victim, me->query_temp("weapon"));         
+         
+               
+   if( damage > 100 )
+          {
+//        if(  !me->query("env/no_msg" ) && !victim->query("env/no_msg" )  )
+           message_vision(HIR"\n$N看到敌人伤口上滴着的血，状近疯狂，居然在不可能的情况下又再攻出一招！\n"NOR,me);
+           damage = me->query_skill("qixiu-jian",1) + me->query_skill("huntian-qigong",1);
+           damage /= 5;
+           damage += me->query("level");
+           damage = damage+random(damage);
+           damage /=2;
+           victim->set_temp("last_damage_from",me);
+           victim->receive_damage("kee",damage,me);
+           victim->receive_wound("kee",damage/2,me);
+           COMBAT_D->report_status(victim);
+           me->add_temp("zxzx",-1);
+           }             
+    else me->add_temp("zxzx",-1);
+    
+          }
+}
+ 
+int help(object me)
+{
+string temp;
+int i;
+temp = "\t\t"+to_chinese("qixiu-jian")+" 160 级\n";
+temp+= "\t\t"+to_chinese("sword")+" 150 级\n";
+temp+= "\t\t"+to_chinese("huntian-qigong")+" 150 级\n";
+temp+= "\t\t内力 250 点\n";
+temp += HIR"\t限制条件\n\t"NOR;
+for( i=0;i < sizeof(skill_ban); i++ )
+{
+     temp += "\t%"+CHINESE_D->chinese(skill_ban[i])+"%";
+     if( i >0 && i%4==0 )
+     temp += "\n\t";
+}
+temp += "\n";
+temp += HIR"\t只要装备上述功夫之一，perform zxzx就无效\n"NOR;
+write(@HELP
+七修剑法 之 「追腥逐血」：
+        使用功效：
+                进入嗜血发狂状态
+        出招类型：
+                延时型武功
+                取消了以perform zxzx 命令作为开关而控制状态，方便挂机
+                叛师不可带出
+        出手要求：
+HELP); 
+write(temp);
+return 1;
+}

@@ -1,0 +1,152 @@
+/////////////////////////////////////////////////////////////
+//////////////////// 火焰绞绳  whip.c ///////////////////////
+////////////////////////////////////////////////////////////
+
+#include <ansi.h>
+#include <combat.h>
+inherit SSERVER;
+
+int perform(object me, object target)
+{
+string w_name,msg,*limbs;
+int i,size,damage;
+object w,target_w,*target_o;
+
+if( !target ) target = offensive_target(me);
+
+if( !target
+ || !target->is_character()
+ || !me->is_fighting(target) )
+        return notify_fail("你不在战斗中。\n");
+
+if( (int)me->query("force") < 300 )
+        return notify_fail("你的内力不够。\n");
+if ( me->query_temp("fire_whip") )
+        return notify_fail("你精神疲惫，不适宜连续发出此招。\n");
+
+me->add("force", -200);
+me->set_temp("fire_whip",1);
+
+if ( w = me->query_temp("weapon") )
+        w_name = w->name();
+else    w_name = HIM"巴比隆"NOR YEL"之"NOR WHT"鞭"NOR;
+
+msg = HIR"\n$N"HIR"舞动"+w_name+HIR"，使出绝技：“"NOR RED"火焰"NOR HIB"绞"NOR YEL"绳"NOR HIR"”！\n"NOR;
+msg+= HIR"\n但见"+w_name+HIR"卷起千层熊熊地狱之焰，扑向$n"HIR"！\n"NOR;
+message_vision(msg,me,target);
+if( me->query("combat_exp")>random(target->query("combat_exp")/3) || random(3)==1 ) 
+        {
+        target_o = all_inventory(target);
+        if ( sizeof(target_o)>1 )
+                {
+                for ( i=0;i<sizeof(target_o);i++ )
+                        {
+                        if ( !target_o[i]->query("skill_type") )
+                                continue;
+                        target_w = target_o[i];
+                        break;
+                        }
+                if ( target_w )
+                        {
+                        if ( target_w->query("equipped") )
+                                {
+                                msg = HIR"\n\n火焰一卷，$n"HIR"只觉手心一阵剧痛，已经给火舌烧伤，手中"+target_w->name()+HIR"不由拿捏不住，脱手飞出!\n\n"NOR;
+                                message_vision(msg,me,target);
+                                target_w->unequip();
+                                target_w->set("old_name",target_w->name());
+                                if ( target_w->query("no_get") )
+                                        target_w->set("no",1);
+                                target_w->set_name(HIR"烧坏了的"+target_w->name()+NOR,({target_w->query("id")}));
+                                target_w->set("value",0);
+                                target_w->set("no_get",HIR"很烫手，还是等一等吧。\n"NOR);
+                                target_w->move(environment(target));
+                                target->reset_action();
+                                call_out("back_weapon",5+random(25),target_w,target,me,environment(me));
+                                } 
+                        else    {
+                                msg = HIR"\n\n火焰一卷，$n"HIR"只觉身上一阵剧痛，已经给火舌烧伤，怀中"+target_w->name()+HIR"立刻被火舌卷走!\n\n"NOR;
+                                message_vision(msg,me,target);
+                                target_w->set("value",0);
+                                target_w->set("old_name",target_w->name());
+                                if ( target_w->query("no_get") )
+                                        target_w->set("no",1);
+                                target_w->set_name(HIR"烧坏了的"+target_w->name()+NOR,({target_w->query("id")}));
+                                target_w->set("no_get",HIR"很烫手，还是等一等吧。\n"NOR);
+                                target_w->save();
+                                target_w->move(environment(target));
+                                call_out("back_weapon",5+random(25),target_w,target,me,environment(me));
+                                }
+                        }
+                }
+        msg = HIR"\n$n"HIR"被熊熊烈火包裹，身上已是多处起了燎泡，看来是受伤不轻。\n"NOR;
+        message_vision(msg,me,target);
+        if ( !target->is_busy() )
+                target->is_busy(1+random(2));
+        damage = me->query_skill("mingwang-quan",1);
+        damage+= me->query_temp("apply/damage");
+        damage+= me->query("force_factor");
+        damage+= me->query_skill("unarmed");
+        damage-= target->query_temp("apply/armor");
+        damage = damage/2+random(damage/2);
+        target->receive_damage("sen",damage*2);
+        target->receive_wound("sen",damage);
+        COMBAT_D->report_sen_status(target);
+        }
+else    message_vision(HIR"\n$n"HIR"看见$P拿出巴比隆之鞭，飞一般的跑了，巴比隆之鞭根本就打不中！\n"NOR,me,target);
+call_out("remove_eff",2+random(5),me);
+return 1;
+}
+
+void remove_eff(object me)
+{
+if ( !me->query_temp("fire_whip") )
+        return;
+message_vision(RED"\n$N"RED"将手中的"NOR HIM"巴庇隆"NOR YEL"之"NOR HIB"鞭"NOR RED"放将下来。\n"NOR,me);
+me->delete_temp("fire_whip");
+return;
+}
+
+void back_weapon(object weapon,object target,object me,object where)
+{
+if ( !weapon )
+        return;
+if ( !me || !target || !present(me,where) || !present(target,where) )
+        {
+        call_out("dismiss_weapon",5+random(5),weapon);
+        return;
+        }
+remove_call_out("back_weapon");
+tell_room(where,HIR+weapon->name()+HIR"上的火焰渐渐熄灭啦。\n"NOR);
+weapon->set_name(weapon->query("old_name"),({weapon->query("id")}));
+weapon->delete("no_get");
+weapon->save();
+call_out("remove_weapon",5+random(5),weapon);
+return;
+}
+
+void remove_weapon(object ob)
+{
+if ( !ob ) return;
+if ( ob->query("no") )
+        {
+        ob->set("no_get",1);
+        ob->delete("no");
+        }
+ob->save();
+if ( !living(environment(ob)) )
+        {
+        write(HIR+ob->name()+HIR"忽然嘣的一声，炸成一堆粉末！\n"NOR);
+        destruct(ob);
+        }
+return;
+}
+
+void dismiss_weapon(object ob)
+{
+if ( !ob ) return;
+write(HIR+ob->name()+HIR"渐渐烧成了灰烬。\n"NOR);
+destruct(ob);
+return;
+}
+
+

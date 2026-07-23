@@ -1,0 +1,123 @@
+#include <weapon.h>
+#include <ansi.h>
+inherit SWORD;
+inherit F_UNIQUE; 
+
+void create()
+{
+        set_name(HIC"青索剑
+"NOR, ({ "qing suo jian", "sword","jian" }) );
+        set_weight(5000);
+        if( clonep() )
+                set_default_object(__FILE__);
+        else {
+                set("unit", "柄");
+                set("value", 0);
+                set("material", "iron");
+                set("long", HIC"此剑未炼到火候纯熟，非常野性，极难驾驭，所以才将它封锁地肺之内，
+受地底水火风雷昼夜淬炼，循环不息。一出地面，便有千百丈精光，照耀
+天际。\n"NOR);
+                set("replace_file", "/d/city/npc/obj/sword"); 
+                set("series_no",1);
+                set("no_steal",1);    
+                set("no_put",1);  
+                set("damage",450);
+                set("level",150);    
+                set("no_busy",1);                      
+        }
+        init_sword(300);
+        setup();
+}
+
+mixed hit_ob(object me,object victim,int damage_bonus)
+{
+        object fb;
+        int damage = 500;
+        string msg;
+        if( !me || !victim || !me->is_fighting(victim) 
+         || damage_bonus<=0 )
+                return 0;
+        add_temp("hit",1);                      
+        if( query_temp("hit")%10==0 && me->query("sen")>100 )
+        {
+                msg = HIC+query("name")+HIC"在$N"HIC"手中忽蠢蠢欲动，很难驾驭！\n"NOR;
+                me->receive_damage("sen",20);
+                set_temp("hit",1);
+                return msg;
+        }
+        return 0;
+}       
+
+int ji(string id)
+{
+        string msg,limb,*limbs,wx;
+        int xk,ap,dp,damage;
+        object fb,target,me;
+        me = environment();
+        if( !me || !living(me) )
+                return 0;
+        if( me->query("mana")<query("level")*2 )
+                return notify_fail("你的法力不足。\n");         
+        if( !me->is_fighting() )
+                return notify_fail("你要对谁祭法宝？\n");
+        if( me->query("level")<query("level") )
+                return notify_fail("你等级不够"+query("level")+"，祭不起"+query("name")+"。\n");
+        if( time()<query("last_ji")+3 )
+                return notify_fail(query("name")+"刚刚祭出过。\n");                    
+        if( id )
+        {
+                target = present(id, environment(me));
+                if( !target )
+                        return notify_fail("这里没有"+id+"。\n");
+        }
+        else    target = SSERVER->offensive_target(me);
+        if( !target || !me->is_fighting(target) )
+                return notify_fail("你要对谁祭"+query("name")+"？\n");
+        
+        set("last_ji",time());  
+        ap = me->query("daoxing")/100000+me->query("level")*1000;
+        dp = target->query("daoxing")/100000+target->query("level")*1000;       
+
+        if( me->query("env/no_msg") || target->query("env/no_msg") )
+                message_vision(HIC"$N"HIC"对$n"HIC"使用了法宝「"HIY+query("name")+NOR HIC"」。\n"NOR,me,target);
+        else
+        {
+                msg = HIC"$N"HIC"将手一指，手中青索剑
+化作一条苍背青龙，卷向$n"HIC"！\n"NOR;
+                message_vision(msg,me,target);
+        }
+        me->add("mana",-query("level")*2);
+        if( random(100)>dp/(ap+dp)*90 )
+        {
+                damage = me->query("mana_factor");
+                damage+= query("damage");
+                //法宝伤害的五行加成，
+                if( wx=query("wuxing") )
+                {       
+                        xk = SPELL_D->wuxing_xs(SPELL_D->query_time_wuxing(),wx);
+                        if( xk==1 )
+                                damage = damage/2; //如果时辰五行克制法宝五行
+                        else if( xk==-1 )
+                                damage+= damage/3; //如果法宝五行克制时辰五行
+                }                       
+                fb = target->query_temp("armor/FABAO"); //对方身上的防具类法宝，新加了这个armor_type，方便查询
+                if( fb )
+                        damage = fb->protect_qi(damage,query("wuxing")); //对方防御法宝对伤害的抵消，双方法宝的五行相克在这里单独定义
+                                                                           //同理，还有一个protect_qi(damage,wx)函数
+                                                                           //这个函数扩展自原月宫法宝      
+                if( damage>0 )
+                {               
+                        msg = HIC+COMBAT_D->damage_msg(damage,"抽伤")+NOR;
+                        msg = replace_string(msg,"$w","青龙");
+                        msg = replace_string(msg,"$l","全身");
+                        message_vision(msg,me,target);                  
+                        target->receive_wound("kee",damage,me);
+                        COMBAT_D->report_status(target,1);
+                        if( !target->is_busy() )
+                                target->start_busy(random(3));
+                }
+        }
+        else    message_vision(HIC"$N"HIC"哼！了一声：米粒之珠，也放光华？说罢，将手一指，结果血光大盛，"+query("name")+HIC"发出一声哀鸣，从半空落了下来。\n"NOR,target);
+        return 1;
+}               
+                                

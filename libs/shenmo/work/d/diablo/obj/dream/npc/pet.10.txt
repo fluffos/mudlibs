@@ -1,0 +1,2419 @@
+/*=============================================*/
+/*---------------   幻兽    -------------------*/
+/*---------------snowtu@XMxyj2000.2003.10------*/
+/*=============================================*/
+
+#include <ansi.h>
+#include <login.h>
+inherit NPC;
+inherit F_SAVE;
+
+private string SAVE_NAME="hs_save";
+private static int can_save=1;
+
+int restore();
+int save();
+void reset();
+int do_food (string arg);
+
+void huanyuan(object me,object hs);
+void dark_condition(object me,object hs);
+void tu_condition(object me,object hs);
+void shui_condition(object me,object hs);
+void feng_condition(object me,object hs);
+void lei_condition(object me,object hs);
+void huo_condition(object me,object hs);
+void light_condition(object me,object hs);
+object offensive_target(object me);
+int do_bianshen(string arg);
+
+#include "name.h"
+
+void create()
+{	
+seteuid(getuid());	
+set_name("幻兽", ({"huanshou"}) );
+set("gender",random(2)?"女性":"男性");
+set("race","野兽");
+set("age",1+random(10));
+set("base_name","兔");
+set("attitude", "friendly");
+set("long","小家伙。\n");
+set("combat_exp", 1);
+set("str",3);
+set("owner","dad");
+set("limbs", ({ "头部", "身体", "前脚", "後脚", "尾巴" }) );
+set("ride/msg", random(2)?"骑":"跨");
+set("ride/dodge", 50);
+set_skill("unarmed",10);
+set_temp("apply/attack", 80);
+set_temp("apply/armor", 80);
+set("is_pet",1);
+setup();
+}
+
+void reset()
+{
+if( !environment() || ! find_living(query("owner")) )
+	{
+	destruct(this_object());
+	return;
+	}
+}
+
+
+void unconcious()
+{
+	return die();
+}
+
+string query_save_file()
+{
+	string id;
+	id = query("owner");
+	if( !id ) return 0;
+	return sprintf(DATA_DIR"hs/%c/%s", id[0], id);
+}
+
+
+void init()
+{	
+object me=this_player();
+object hs=this_object();
+seteuid(getuid());
+
+if ( me->query("id")!=hs->query("owner") )
+	return;
+add_action("do_mount","mount");
+add_action("do_bianshen","bianshen");//变身
+add_action("do_food","food");//升级
+add_action("do_watch","watch"); //查看
+}
+
+int do_mount(string arg)
+{
+object me=this_object(),who=this_player(),env;
+
+if(!arg) return 0;
+env = environment(who);
+if(present(arg,env)!=me) 
+	return 0;
+if(me->query("owner")==who->query("id")) 
+     {
+     who->set_temp("hs",1);
+     return 0;
+     }
+message_vision("$n左躲右闪，$N累得满头大汗也没骑上去。\n",who,me);
+return 1;
+}
+
+int save()
+{
+string file;
+
+if( stringp(file = this_object()->query_save_file()) ) 
+	{
+	assure_file(file+ __SAVE_EXTENSION__);
+	return save_object(file);
+	}
+return 0;
+}
+
+int restore()
+{
+string file;
+if( stringp(file = this_object()->query_save_file()) )
+	return restore_object(file);
+return 0;
+}
+
+int do_food (string arg)
+{
+int i,rev,exp;
+string title,name,msg,sx,id,id2,add_sx;
+object hs,shuijing,me;
+hs = this_object();
+me = this_player();
+
+if (! living(me) || !id(arg) 
+  || environment(me)!=environment(hs) 
+  || hs->query("owner")!=me->query("id") )
+	return notify_fail("你要喂养什么？\n");
+
+if ( !shuijing=present("shui jing",me) ) 
+	return notify_fail("你的魔法水晶不够了。\n");
+
+if ( hs->query("lvl")>=27 )
+        return notify_fail(hs->name()+"已经是终极形态，不需要再喂养了。\n");
+
+if ( me->query("mana")<500 )
+	return notify_fail("你的法力不足。\n");
+
+if ( me->is_busy() && !wizardp(me) )
+	return notify_fail("你现在正忙着呢。\n");
+	
+/*
+-------------------------------------------------------------------------------------------------
+					幻	兽	升	级	
+-------------------------------------------------------------------------------------------------
+*/
+msg=HIW+"
+$N把$n双眼微闭，集中精神在双掌之间，口中念道：“在天的见证之下，集勇气、
+智慧、与美丽于一身的强大生物，幻兽呀！请你以最深的灵性，倾听我的倾诉，
+我"+me->query("name")+"将与你缔结永生的血之盟约，终此生惟有
+你与我为终生之盟友，契。” \n"NOR;
+exp=shuijing->query("exp");
+hs->add("exp",exp);
+me->add("mana",-100-random(400));
+if ( hs->query("exp") >=100 ) //升级
+	{
+	msg+=HIW+"
+短短三分钟不到，$n已成长了将近原来的三倍大。而$N似乎已无力为继，轻哼一声，
+双手发出的白光逐渐淡化，消失。随着$N双手白光消失，$n也停止生长。\n"NOR;
+
+	hs->set("exp",0);
+	hs->add("lvl",1);
+	hs->add("max_kee",20);
+	hs->add("max_sen",20);
+	hs->set("kee",(int)hs->query("max_kee"));
+	hs->set("sen",(int)hs->query("max_sen"));
+	hs->set("eff_kee",(int)hs->query("max_kee"));
+	hs->set("eff_sen",(int)hs->query("max_sen"));
+	tell_object(me,BLINK+HIY+"\n你的"+hs->query("name")+"升为"+chinese_number(hs->query("lvl"))+"级！\n"NOR);
+	
+	if ( hs->query("lvl")==27 ) //终极形态
+		{
+                if ( hs->query("dc")>0 )
+			{
+			title=col+"太初"NOR"·";
+			hs->set("shuxing","太初");
+			me->set("shuxing","太初");
+			hs->add("ll",15); //力量 影响物理攻击
+			hs->add("jl",15); //精力 影响法术攻击
+		}
+		else 	{
+			title=col+"太始"NOR"·";
+			hs->set("shuxing","太始");
+			me->set("shuxing","太始");
+			hs->add("qz",15); //强壮 影响所加气血
+			hs->add("mj",15); //敏捷 影响所加防御
+			}
+		if ( random(5)==2 )
+			{
+			i=(random(sizeof(end_name2)/4))*4;
+			name=end_name2[i+1];
+			id=end_name2[i+2];
+			id2=end_name2[i+3];
+			title+=end_name2[i];
+			}
+		else   {
+			i=(random(sizeof(end_name1)/3))*3;
+			name=end_name1[i];
+			id=end_name1[i+1];
+			id2=end_name1[i+2];
+			}
+		msg+=HIB+"\n"+
+hs->name()+"在强光之中，渐渐化作一个魔茧，最终"NOR+HIW+name+NOR HIB"从魔茧中破茧而破！\n"NOR;
+		hs->set_name(name,({id,id2}));
+		hs->set("title",col+title+NOR);
+		}
+				
+	else if ( hs->query("lvl")==18 ) //转换形态为三，追加属性
+		{
+		switch(random(10))
+			{
+			case 1 :
+				add_sx="暗黑";
+			break;
+			default : {
+				add_sx=shuxing[random(sizeof(shuxing))];
+				if ( !add_sx ) return notify_fail("ERROR!\n");
+				}
+			break;
+			}
+       	switch(add_sx) //"土","风","火","雷","水","光","暗黑"
+			{
+			case "土" : 
+				hs->add("dc",0); 
+			break;
+			case "风" : 
+				hs->add("dc",1); 
+			break;
+			case "火" : 
+				hs->add("dc",1); 
+			break;
+			case "雷" : 
+				hs->add("dc",1); 
+			break;
+			case "水" : 
+				hs->add("dc",0); 
+			break;
+			case "光" : 
+				hs->add("dc",0); 
+			break;
+			case "暗黑" : 
+				hs->add("dc",1); 
+			break;
+			}
+
+		me->set("shuxing",add_sx+(string)me->query("shuxing"));
+		hs->set("shuxing",(string)me->query("shuxing"));
+		i=(random(sizeof(new_name)/3))*3;
+		name=new_name[i];
+		id=new_name[i+1];
+		id2=new_name[i+2];
+		title=col+"二阶"+hs->query("shuxing")+"性幻兽"NOR;		
+		msg+=HIM+"\n"+
+hs->name()+"在强光之中，渐渐化作一个魔茧，最终"NOR+HIW+name+NOR HIM"从魔茧中破茧而破！\n"NOR;
+		hs->set_name(name,({id,id2}));
+		hs->set("title",col+title+NOR);
+		}
+
+	else if ( hs->query("lvl")==9 ) //转换形态为二，不追加属性
+		{
+       	switch( hs->query("shuxing") ) //"土","风","火","雷","水","光","暗黑"
+			{
+			case "土" : {
+				i=(random(sizeof(tu_name)/3))*3;
+				name=tu_name[i];
+				id=tu_name[i+1];
+				id2=tu_name[i+2];
+				hs->add("qz",2); //强壮 影响所加气血
+				hs->add("mj",3); //敏捷 影响所加防御
+				hs->add("ll",1); //力量 影响物理攻击
+				hs->add("jl",1); //精力 影响法术攻击
+				}
+			break;
+			case "风" : {
+				i=(random(sizeof(feng_name)/3))*3;
+				name=feng_name[i];
+				id=feng_name[i+1];
+				id2=feng_name[i+2];
+				hs->add("qz",1); //强壮 影响所加气血
+				hs->add("mj",1); //敏捷 影响所加防御
+				hs->add("ll",2); //力量 影响物理攻击
+				hs->add("jl",3); //精力 影响法术攻击
+				}
+			break;
+			case "火" : {
+				i=(random(sizeof(huo_name)/3))*3;
+				name=huo_name[i];
+				id=huo_name[i+1];
+				id2=huo_name[i+2];
+				hs->add("qz",1); //强壮 影响所加气血
+				hs->add("mj",1); //敏捷 影响所加防御
+				hs->add("ll",3); //力量 影响物理攻击
+				hs->add("jl",2); //精力 影响法术攻击
+				}
+			break;
+			case "雷" : {
+				i=(random(sizeof(tu_name)/3))*3;
+				name=lei_name[i];
+				id=lei_name[i+1];
+				id2=lei_name[i+2];
+				hs->add("qz",1); //强壮 影响所加气血
+				hs->add("mj",1); //敏捷 影响所加防御
+				hs->add("ll",3); //力量 影响物理攻击
+				hs->add("jl",3); //精力 影响法术攻击
+				}
+			break;
+			case "水" : {
+				i=(random(sizeof(shui_name)/3))*3;
+				name=shui_name[i];
+				id=shui_name[i+1];
+				id2=shui_name[i+2];
+				hs->add("qz",3); //强壮 影响所加气血
+				hs->add("mj",2); //敏捷 影响所加防御
+				hs->add("ll",1); //力量 影响物理攻击
+				hs->add("jl",1); //精力 影响法术攻击
+				}
+			break;
+			case "光" : {
+				i=(random(sizeof(light_name)/3))*3;
+				name=light_name[i];
+				id=light_name[i+1];
+				id2=light_name[i+2];
+				hs->add("qz",3); //强壮 影响所加气血
+				hs->add("mj",3); //敏捷 影响所加防御
+				hs->add("ll",1); //力量 影响物理攻击
+				hs->add("jl",1); //精力 影响法术攻击
+				}
+			break;
+			case "暗黑" : {
+				i=(random(sizeof(dark_name)/3))*3;
+				name=dark_name[i];
+				id=dark_name[i+1];
+				id2=dark_name[i+2];
+				hs->add("qz",1); //强壮 影响所加气血
+				hs->add("mj",1); //敏捷 影响所加防御
+				hs->add("ll",2); //力量 影响物理攻击
+				hs->add("jl",2); //精力 影响法术攻击
+				}
+			break;
+			}
+		msg+=HIY+"\n"+
+hs->name()+"在强光之中，渐渐化作一个魔茧，最终"NOR+HIW+name+NOR HIY"从魔茧中破茧而破！\n"NOR;
+		title=col+"二阶"+hs->query("shuxing")+"性幻兽"NOR;		
+		hs->set_name(name,({id,id2}));
+		hs->set("title",col+title+NOR);
+		}
+	hs->save();
+	}
+else  {  //不升级
+	msg+=HIW+"\n
+$n亲密的舐着$N的掌心。$N嘴角含笑，再度凝神，更强盛的白光自眉间射出。\n"NOR;
+	switch( hs->query("shuxing") ) //"土","风","火","雷","水","光","暗黑"
+		{
+		case "土" : {
+			hs->add("qz",2); //强壮 影响所加气血
+			hs->add("mj",3); //敏捷 影响所加防御
+			hs->add("ll",1); //力量 影响物理攻击
+			hs->add("jl",1); //精力 影响法术攻击
+			}
+		break;
+		case "风" : {
+			hs->add("qz",1); //强壮 影响所加气血
+			hs->add("mj",1); //敏捷 影响所加防御
+			hs->add("ll",2); //力量 影响物理攻击
+			hs->add("jl",3); //精力 影响法术攻击
+			}
+		break;
+		case "火" : {
+			hs->add("qz",1); //强壮 影响所加气血
+			hs->add("mj",1); //敏捷 影响所加防御
+			hs->add("ll",3); //力量 影响物理攻击
+			hs->add("jl",2); //精力 影响法术攻击
+			}
+		break;
+		case "雷" : {
+			hs->add("qz",1); //强壮 影响所加气血
+			hs->add("mj",1); //敏捷 影响所加防御
+			hs->add("ll",3); //力量 影响物理攻击
+			hs->add("jl",3); //精力 影响法术攻击
+			}
+		break;
+		case "水" : {
+			hs->add("qz",3); //强壮 影响所加气血
+			hs->add("mj",2); //敏捷 影响所加防御
+			hs->add("ll",1); //力量 影响物理攻击
+			hs->add("jl",1); //精力 影响法术攻击
+			}
+		break;
+		case "光" : {
+			hs->add("qz",3); //强壮 影响所加气血
+			hs->add("mj",3); //敏捷 影响所加防御
+			hs->add("ll",1); //力量 影响物理攻击
+			hs->add("jl",1); //精力 影响法术攻击
+			}
+		break;
+		case "暗黑" : {
+			hs->add("qz",1); //强壮 影响所加气血
+			hs->add("mj",1); //敏捷 影响所加防御
+			hs->add("ll",2); //力量 影响物理攻击
+			hs->add("jl",2); //精力 影响法术攻击
+			}
+		break;
+		}
+	}
+msg+="\n"NOR;
+message_vision(msg,me,hs);
+me->start_busy(1+random(3));
+//destruct(shuijing);
+me->save();
+hs->save();
+return 1;
+}
+
+int do_watch(string arg)
+{
+int qz,mj,ll,jl,lvl,exp;
+string msg,sx;
+object me=this_player();
+object hs=this_object();
+qz=hs->query("qz"); //强壮 影响所加气血
+mj=hs->query("mj"); //敏捷 影响所加防御
+ll=hs->query("ll"); //力量 影响物理攻击
+jl=hs->query("jl"); //精力 影响法术攻击
+lvl=hs->query("lvl"); //等级
+exp=hs->query("exp"); //经验值
+sx=hs->query("shuxing");
+
+if ( !arg || !id(arg) )
+        return notify_fail("你要看什么?\n");
+
+
+msg=HIY"\n
+=======================================================\n\n
+\t"+hs->query("long")+NOR HIY"\n
+=======================================================\n"NOR;
+msg+=HIG"〖名称〗"NOR"："+HIW""+hs->name()+"("+hs->query("id")+")"NOR HIG"\n
+〖经验〗"NOR"： "HIW+exp+"/100"+"("+(exp*100)/100+"%)\n"NOR;
+msg+=HIG"〖等级〗"NOR"："+HIW""+lvl+" 级\n"NOR HIG"〖属性〗"NOR"："HIC+sx+NOR+"\n";
+msg+=HIG"〖敏捷〗"NOR"："HIC+mj+NOR"\t"HIG"〖强壮〗"NOR"："HIC+qz+NOR"\n";
+msg+=HIG"〖力量〗"NOR"："HIC+ll+NOR"\t"HIG"〖精力〗"NOR"："HIC+jl+NOR HIY"\n
+=======================================================\n\n"NOR;
+tell_object(me,msg+NOR);
+return 1;
+}
+
+object offensive_target(object me)
+{
+int sz;
+object *enemy;
+
+enemy = me->query_enemy();
+if( !enemy || !arrayp(enemy) ) return 0;
+
+sz = sizeof(enemy);
+if( sz > 4 ) sz = 4;
+if( sz > 0 ) return enemy[random(sz)];
+else return 0;
+}
+
+int do_bianshen(string arg)
+{
+int i,qz,mj,ll,jl,lvl,add_dodge,add_damage,add_spells,add_kee,add_sen,add_armor,time;
+string msg,name,id,sx;
+object me=this_player();
+object hs=this_object();
+
+qz=hs->query("qz"); //强壮 影响所加气血
+mj=hs->query("mj"); //敏捷 影响所加防御
+ll=hs->query("ll"); //力量 影响物理攻击
+jl=hs->query("jl"); //精力 影响法术攻击
+lvl=hs->query("lvl"); //等级
+sx=hs->query("shuxing");
+
+if ( me->query("bianhuan") ) //还原
+	{
+	msg=HIY"\n
+忽然从$N身上窜出了一道金光，耀眼到令众人睁不开眼睛。金光在$N身上猛烈的四射
+出来，宛如个人形的太阳一般的灿烂。
+金光散去后，$N身上的"NOR+hs->query_temp("apply/name")+NOR HIY"渐渐又幻化
+成一只$n守侯在$N的身旁。\n"NOR;
+	message_vision(msg,me,hs);
+	call_out("huanyuan",1,me,hs);
+	return 1;
+	}
+
+msg=HIY"\n
+$n忽然窜出了三道金光，往$N身上一绕，霎时，一阵耀眼到令她睁不开眼睛的金光由
+$N身上猛烈的四射出来，宛如个人形的太阳一般的灿烂。\n"NOR;
+
+switch( hs->query("shuxing") ) //"土","风","火","雷","水","光","暗黑","太初","太始",
+	{
+	case "太始" : { //加防御+气血上限
+		msg+=HIY"
+好不容易，金光慢慢的消退，出现在众人面前的是一个身着一身覆盖全身，只留下双
+眼部位外露，金光闪闪铠甲的$N。\n
+只见，$N的兽幻铠发出神圣光芒，搭配他挺拔的身材，宛如"+me->query("gender")+"战神再世，尤其是在
+盔甲各处不断的散发出缥缈的白雾，令$N整个人就像是包围在一团烟雾之中，令人望之生畏。\n"NOR;
+		i=(random(sizeof(end_armor)/2))*2;
+		name=col+end_armor[i]+NOR;
+		name+=HIY"圣铠"NOR;
+		id=end_armor[i+1];
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的终极金铠。\n"NOR}));
+		add_armor=(mj+1)*(4+lvl);
+		if ( add_armor<100 ) add_armor=100;
+		if ( add_armor>1000 ) add_armor=1000;
+		add_dodge=(mj+lvl)*5;
+		if ( add_dodge<50 ) add_dodge=50;
+		if ( add_dodge>200 ) add_dodge=200;
+		add_kee=(qz+1)*(5+lvl/5);
+		if ( add_kee<500 ) add_kee=500;
+		if ( add_kee>5000 ) add_kee=5000;
+		add_sen=(qz+1)*(5+lvl/5);
+		if ( add_sen<500 ) add_sen=500;
+		if ( add_sen>5000 ) add_sen=5000;
+		tell_object(me,hs->name()+HIY"覆盖你全身，你觉得自己更加强壮了！\n"NOR);
+		me->add("max_kee",add_kee);
+		me->set_temp("add_kee",add_kee);
+		me->add("max_sen",add_sen);
+		me->set_temp("add_sen",add_sen);
+		me->add_temp("apply/dodge",add_dodge);
+		me->set_temp("add_dodge",add_dodge);
+		me->add_temp("apply/armor",add_armor);
+		me->set_temp("add_armor",add_armor);
+		me->set("kee",(int)me->query("max_kee"));
+		me->set("eff_kee",(int)me->query("max_kee"));
+		me->set("sen",(int)me->query("max_sen"));
+		me->set("eff_sen",(int)me->query("max_sen"));
+		me->set("bianhuan",1);
+                time=jl;
+		time+=lvl;
+		time/=2;	
+		if ( time<3 ) time=3;
+		if ( time>60 ) time=60;
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("huanyuan",time,me,hs);
+		return 1;
+		}
+	break;
+		
+	case "太始" : { //加防御+攻击力
+		msg+=HIB"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，不断的散发出诡异的蓝光，令$N整个人就像是包围在一团
+光芒之中，宛如"+me->query("gender")+"武神再世，令人望之生畏。\n"NOR;
+		i=(random(sizeof(end_weapon)/2))*2;
+		name=col+end_weapon[i]+NOR;
+		name+=HIB"魄"NOR;
+		id=end_weapon[i+1];
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的终极攻击虎魄。\n"NOR}));
+		add_armor=(mj+lvl)*2;
+		if ( add_armor<10 ) add_armor=10;
+		if ( add_armor>200 ) add_armor=200;
+		add_damage=(mj+lvl)*5;
+                if ( add_damage<30 ) add_damage=30;
+                if ( add_damage>300 ) add_damage=300;
+		add_spells=(mj+lvl)*2;
+		if ( add_spells<10 ) add_dodge=10;
+		if ( add_spells>100 ) add_dodge=100;
+		tell_object(me,hs->name()+HIB"的蓝光在你全身游离，你觉得自己更加厉害了！\n"NOR);
+		me->add_temp("apply/damage",add_damage);
+		me->set_temp("add_damage",add_damage);
+		me->add_temp("apply/spells",add_spells);
+		me->set_temp("add_spells",add_spells);
+		me->add_temp("apply/armor",add_armor);
+		me->set_temp("add_armor",add_armor);
+		me->set("bianhuan",1);
+                time=jl;
+		time+=lvl;
+		time/=2;	
+		if ( time<10 ) time=10;
+		if ( time>120 ) time=120;
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("huanyuan",time,me,hs);
+		return 1;
+		}
+	break;
+/****************************土	为	先*****************************/
+
+	case "土" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=YEL"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出一土地神
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(tu)/2))*2;
+		name=col+tu[i]+NOR;
+		name+=HIB"魄"NOR;
+		id=tu[i+1];
+		id+=" soul";
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("tu_condition",1,me,hs);
+		return 1;
+		}
+	break;
+	case "土土" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=YEL"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出两尊土地神
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(tu)/2))*2;
+		name=col+tu[i]+NOR;
+		name+=HIB"双魄"NOR;
+		id=tu[i+1];
+		id+=" souls";
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		add_armor=mj*3+lvl;
+		if ( add_armor>120 ) add_armor=120;
+		me->add_temp("apply/armor",add_armor);
+		me->set_temp("add_armor",add_armor);
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("tu_condition",1,me,hs);
+		call_out("tu_condition",1,me,hs);
+		return 1;
+		}
+	break;
+	case "土风" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=YEL"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出土风两尊神诋
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(tu)/2))*2;
+		name=col+tu[i]+NOR;
+		name+=col+feng[i]+NOR;
+		name+=HIB"魄"NOR;
+		id=tu[i+1];
+		id=feng[i+1];
+		
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		add_armor=mj*2+lvl;
+		if ( add_armor>100 ) add_armor=100;
+		me->add_temp("apply/armor",add_armor);
+		me->set_temp("add_armor",add_armor);
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("tu_condition",1,me,hs);
+		call_out("feng_condition",1,me,hs);
+		return 1;
+		}
+	break;
+	case "土火" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=YEL"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出土火两尊神诋
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(tu)/2))*2;
+		name=col+tu[i]+NOR;
+		name+=col+huo[i]+NOR;
+		name+=HIB"魄"NOR;
+		id=tu[i+1];
+		id+=huo[i+1];
+		
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		add_armor=mj*2+lvl;
+		if ( add_armor>100 ) add_armor=100;
+		me->add_temp("apply/armor",add_armor);
+		me->set_temp("add_armor",add_armor);
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("tu_condition",1,me,hs);
+		call_out("huo_condition",1,me,hs);
+		return 1;
+		}
+	break;
+	case "土雷" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=YEL"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出土雷两尊神诋
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(tu)/2))*2;
+		name=col+tu[i]+NOR;
+		name+=col+lei[i]+NOR;
+		name+=HIB"魄"NOR;
+		id=tu[i+1];
+		id+=lei[i+1];
+		
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		add_armor=mj*2+lvl;
+		if ( add_armor>100 ) add_armor=100;
+		me->add_temp("apply/armor",add_armor);
+		me->set_temp("add_armor",add_armor);
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("tu_condition",1,me,hs);
+		call_out("lei_condition",1,me,hs);
+		return 1;
+		}
+	break;
+	case "土水" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=YEL"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出土水两尊神诋
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(tu)/2))*2;
+		name=col+tu[i]+NOR;
+		name+=col+shui[i]+NOR;
+		name+=HIB"魄"NOR;
+		id=tu[i+1];
+		id+=shui[i+1];
+		
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		add_armor=mj*2+lvl;
+		if ( add_armor>100 ) add_armor=100;
+		me->add_temp("apply/armor",add_armor);
+		me->set_temp("add_armor",add_armor);
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("tu_condition",1,me,hs);
+		call_out("shui_condition",3,me,hs);
+		return 1;
+		}
+	break;
+	case "土光" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=YEL"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出土光两尊神诋
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(tu)/2))*2;
+		name=col+tu[i]+NOR;
+		name+=col+light[i]+NOR;
+		name+=HIB"魄"NOR;
+		id=tu[i+1];
+		id+=light[i+1];
+		
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		add_armor=mj*2+lvl;
+		if ( add_armor>120 ) add_armor=120;
+		me->add_temp("apply/armor",add_armor);
+		me->set_temp("add_armor",add_armor);
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("tu_condition",1,me,hs);
+		call_out("light_condition",5,me,hs);
+		return 1;
+		}
+	break;
+	case "土暗黑" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=YEL"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出两尊神诋
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(tu)/2))*2;
+		name=col+tu[i]+NOR;
+		name+=col+dark[i]+NOR;
+		name+=HIB"魄"NOR;
+		id=tu[i+1];
+		id=dark[i+1];
+		
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		add_armor=mj*2+lvl;
+		if ( add_armor>120 ) add_armor=120;
+		me->add_temp("apply/armor",add_armor);
+		me->set_temp("add_armor",add_armor);
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("tu_condition",1,me,hs);
+		call_out("dark_condition",1,me,hs);
+		return 1;
+		}
+	break;
+/****************************风	为	先*****************************/
+
+	case "风" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=CYN"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出一风神
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(feng)/2))*2;
+		name=col+feng[i]+NOR;
+		name+=HIB"魄"NOR;
+		id=feng[i+1];
+		
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("feng_condition",1,me,hs);
+		return 1;
+		}
+	break;
+	case "风风" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=CYN"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出两尊风神
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(feng)/2))*2;
+		name=col+feng[i]+NOR;
+		name+=HIB"双魄"NOR;
+		id=feng[i+1];
+		id+=" souls";
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		add_armor=mj*3+lvl;
+		if ( add_armor>120 ) add_armor=120;
+		me->add_temp("apply/armor",add_armor);
+		me->set_temp("add_armor",add_armor);
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("feng_condition",1,me,hs);
+		call_out("feng_condition",1,me,hs);
+		return 1;
+		}
+	break;
+	case "风土" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=CYN"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出两尊神诋
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(feng)/2))*2;
+		name=col+feng[i]+NOR;
+		name+=col+tu[i]+NOR;
+		name+=HIB"魄"NOR;
+		id=feng[i+1];
+		id+=tu[i+1];
+		
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		add_armor=mj*2+lvl;
+		if ( add_armor>100 ) add_armor=100;
+		me->add_temp("apply/armor",add_armor);
+		me->set_temp("add_armor",add_armor);
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("feng_condition",1,me,hs);
+		call_out("tu_condition",1,me,hs);
+		return 1;
+		}
+	break;
+	case "风火" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=CYN"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出两尊神诋
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(feng)/2))*2;
+		name=col+feng[i]+NOR;
+		name+=col+huo[i]+NOR;
+		name+=HIB"魄"NOR;
+		id=feng[i+1];
+		id+=huo[i+1];
+		
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		add_armor=mj*2+lvl;
+		if ( add_armor>100 ) add_armor=100;
+		me->add_temp("apply/armor",add_armor);
+		me->set_temp("add_armor",add_armor);
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("feng_condition",1,me,hs);
+		call_out("huo_condition",1,me,hs);
+		return 1;
+		}
+	break;
+	case "风雷" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=CYN"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出两尊神诋
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(feng)/2))*2;
+		name=col+feng[i]+NOR;
+		name+=col+lei[i]+NOR;
+		name+=HIB"魄"NOR;
+		id=feng[i+1];
+		id=lei[i+1];
+		
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		add_armor=mj*2+lvl;
+		if ( add_armor>100 ) add_armor=100;
+		me->add_temp("apply/armor",add_armor);
+		me->set_temp("add_armor",add_armor);
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("feng_condition",1,me,hs);
+		call_out("lei_condition",1,me,hs);
+		return 1;
+		}
+	break;
+	case "风水" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=CYN"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出两尊神诋
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(feng)/2))*2;
+		name=col+feng[i]+NOR;
+		name+=col+shui[i]+NOR;
+		name+=HIB"魄"NOR;
+		id=feng[i+1];
+		id+=shui[i+1];
+		
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		add_armor=mj*2+lvl;
+		if ( add_armor>100 ) add_armor=100;
+		me->add_temp("apply/armor",add_armor);
+		me->set_temp("add_armor",add_armor);
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("feng_condition",1,me,hs);
+		call_out("shui_condition",3,me,hs);
+		return 1;
+		}
+	break;
+	case "风光" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=CYN"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出两尊神诋
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(feng)/2))*2;
+		name=col+feng[i]+NOR;
+		name+=col+light[i]+NOR;
+		name+=HIB"魄"NOR;
+		id=feng[i+1];
+		id+=light[i+1];
+		
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		add_armor=mj*2+lvl;
+		if ( add_armor>120 ) add_armor=120;
+		me->add_temp("apply/armor",add_armor);
+		me->set_temp("add_armor",add_armor);
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("feng_condition",1,me,hs);
+		call_out("light_condition",5,me,hs);
+		return 1;
+		}
+	break;
+	case "风暗黑" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=CYN"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出两尊神诋
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(feng)/2))*2;
+		name=col+feng[i]+NOR;
+		name+=col+dark[i]+NOR;
+		name+=HIB"魄"NOR;
+		id=feng[i+1];
+		id+=dark[i+1];
+		
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		add_armor=mj*2+lvl;
+		if ( add_armor>120 ) add_armor=120;
+		me->add_temp("apply/armor",add_armor);
+		me->set_temp("add_armor",add_armor);
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("feng_condition",1,me,hs);
+		call_out("dark_condition",1,me,hs);
+		return 1;
+		}
+	break;		
+
+/****************************火	为	先*****************************/
+
+	case "火" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=HIR"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出一火神
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(huo)/2))*2;
+		name=col+huo[i]+NOR;
+		name+=HIB"魄"NOR;
+		id=huo[i+1];
+		
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("huo_condition",1,me,hs);
+		return 1;
+		}
+	break;
+	case "火火" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=RED"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出两尊火神
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(huo)/2))*2;
+		name=col+huo[i]+NOR;
+		name+=HIB"双魄"NOR;
+		id=huo[i+1];
+		id+=" souls";
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		add_armor=mj*3+lvl;
+		if ( add_armor>120 ) add_armor=120;
+		me->add_temp("apply/armor",add_armor);
+		me->set_temp("add_armor",add_armor);
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("huo_condition",1,me,hs);
+		call_out("huo_condition",1,me,hs);
+		return 1;
+		}
+	break;
+	case "火土" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=HIR"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出两尊神诋
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(huo)/2))*2;
+		name=col+huo[i]+NOR;
+		name+=col+tu[i]+NOR;
+		name+=HIB"魄"NOR;
+		id=huo[i+1];
+		id+=tu[i+1];
+		
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		add_armor=mj*2+lvl;
+		if ( add_armor>100 ) add_armor=100;
+		me->add_temp("apply/armor",add_armor);
+		me->set_temp("add_armor",add_armor);
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("huo_condition",1,me,hs);
+		call_out("tu_condition",1,me,hs);
+		return 1;
+		}
+	break;
+	case "火风" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=HIR"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出两尊神诋
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(huo)/2))*2;
+		name=col+huo[i]+NOR;
+		name+=col+feng[i]+NOR;
+		name+=HIB"魄"NOR;
+		id=huo[i+1];
+		id+=feng[i+1];
+		
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		add_armor=mj*2+lvl;
+		if ( add_armor>100 ) add_armor=100;
+		me->add_temp("apply/armor",add_armor);
+		me->set_temp("add_armor",add_armor);
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("huo_condition",1,me,hs);
+		call_out("feng_condition",1,me,hs);
+		return 1;
+		}
+	break;
+	case "火雷" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=HIR"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出两尊神诋
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(huo)/2))*2;
+		name=col+huo[i]+NOR;
+		name+=col+lei[i]+NOR;
+		name+=HIB"魄"NOR;
+		id=huo[i+1];
+		id+=lei[i+1];
+		
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		add_armor=mj*2+lvl;
+		if ( add_armor>100 ) add_armor=100;
+		me->add_temp("apply/armor",add_armor);
+		me->set_temp("add_armor",add_armor);
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("huo_condition",1,me,hs);
+		call_out("lei_condition",1,me,hs);
+		return 1;
+		}
+	break;
+	case "火水" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=HIR"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出两尊神诋
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(huo)/2))*2;
+		name=col+huo[i]+NOR;
+		name+=col+shui[i]+NOR;
+		name+=HIB"魄"NOR;
+		id=huo[i+1];
+		id+=shui[i+1];
+		
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		add_armor=mj*2+lvl;
+		if ( add_armor>100 ) add_armor=100;
+		me->add_temp("apply/armor",add_armor);
+		me->set_temp("add_armor",add_armor);
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("huo_condition",1,me,hs);
+		call_out("shui_condition",3,me,hs);
+		return 1;
+		}
+	break;
+	case "火光" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=HIR"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出两尊神诋
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(huo)/2))*2;
+		name=col+huo[i]+NOR;
+		name+=col+light[i]+NOR;
+		name+=HIB"魄"NOR;
+		id=huo[i+1];
+		id+=light[i+1];
+		
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		add_armor=mj*2+lvl;
+		if ( add_armor>120 ) add_armor=120;
+		me->add_temp("apply/armor",add_armor);
+		me->set_temp("add_armor",add_armor);
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("huo_condition",1,me,hs);
+		call_out("light_condition",5,me,hs);
+		return 1;
+		}
+	break;
+	case "火暗黑" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=HIR"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出两尊神诋
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(huo)/2))*2;
+		name=col+huo[i]+NOR;
+		name+=col+dark[i]+NOR;
+		name+=HIB"魄"NOR;
+		id=huo[i+1];
+		id+=dark[i+1];
+		
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		add_armor=mj*2+lvl;
+		if ( add_armor>120 ) add_armor=120;
+		me->add_temp("apply/armor",add_armor);
+		me->set_temp("add_armor",add_armor);
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("huo_condition",1,me,hs);
+		call_out("dark_condition",1,me,hs);
+		return 1;
+		}
+	break;		
+
+/****************************雷	为	先*****************************/
+
+	case "雷" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=HIB"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出一雷神
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(lei)/2))*2;
+		name=col+lei[i]+NOR;
+		name+=HIB"魄"NOR;
+		id=lei[i+1];
+		
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("lei_condition",1,me,hs);
+		return 1;
+		}
+	break;
+	case "雷雷" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=HIB"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出两尊雷神
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(lei)/2))*2;
+		name=col+lei[i]+NOR;
+		name+=HIB"双魄"NOR;
+		id=lei[i+1];
+		id+=" souls";
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		add_armor=mj*3+lvl;
+		if ( add_armor>120 ) add_armor=120;
+		me->add_temp("apply/armor",add_armor);
+		me->set_temp("add_armor",add_armor);
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("lei_condition",1,me,hs);
+		call_out("lei_condition",1,me,hs);
+		return 1;
+		}
+	break;
+	case "雷土" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=HIB"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出两尊神诋
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(lei)/2))*2;
+		name=col+lei[i]+NOR;
+		name+=col+tu[i]+NOR;
+		name+=HIB"魄"NOR;
+		id=lei[i+1];
+		id+=tu[i+1];
+		
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		add_armor=mj*2+lvl;
+		if ( add_armor>100 ) add_armor=100;
+		me->add_temp("apply/armor",add_armor);
+		me->set_temp("add_armor",add_armor);
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("lei_condition",1,me,hs);
+		call_out("tu_condition",1,me,hs);
+		return 1;
+		}
+	break;
+	case "雷风" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=HIB"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出两尊神诋
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(lei)/2))*2;
+		name=col+lei[i]+NOR;
+		name+=col+feng[i]+NOR;
+		name+=HIB"魄"NOR;
+		id=lei[i+1];
+		id+=feng[i+1];
+		
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		add_armor=mj*2+lvl;
+		if ( add_armor>100 ) add_armor=100;
+		me->add_temp("apply/armor",add_armor);
+		me->set_temp("add_armor",add_armor);
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("lei_condition",1,me,hs);
+		call_out("feng_condition",1,me,hs);
+		return 1;
+		}
+	break;
+	case "雷火" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=HIB"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出两尊神诋
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(lei)/2))*2;
+		name=col+lei[i]+NOR;
+		name+=col+huo[i]+NOR;
+		name+=HIB"魄"NOR;
+		id=lei[i+1];
+		id+=huo[i+1];
+		
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		add_armor=mj*2+lvl;
+		if ( add_armor>100 ) add_armor=100;
+		me->add_temp("apply/armor",add_armor);
+		me->set_temp("add_armor",add_armor);
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("lei_condition",1,me,hs);
+		call_out("huo_condition",1,me,hs);
+		return 1;
+		}
+	break;
+	case "雷水" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=HIB"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出两尊神诋
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(lei)/2))*2;
+		name=col+lei[i]+NOR;
+		name+=col+shui[i]+NOR;
+		name+=HIB"魄"NOR;
+		id=lei[i+1];
+		id+=shui[i+1];
+		
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		add_armor=mj*2+lvl;
+		if ( add_armor>100 ) add_armor=100;
+		me->add_temp("apply/armor",add_armor);
+		me->set_temp("add_armor",add_armor);
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("lei_condition",1,me,hs);
+		call_out("shui_condition",3,me,hs);
+		return 1;
+		}
+	break;
+	case "雷光" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=HIB"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出两尊神诋
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(lei)/2))*2;
+		name=col+lei[i]+NOR;
+		name+=col+light[i]+NOR;
+		name+=HIB"魄"NOR;
+		id=lei[i+1];
+		id+=light[i+1];
+		
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		add_armor=mj*2+lvl;
+		if ( add_armor>120 ) add_armor=120;
+		me->add_temp("apply/armor",add_armor);
+		me->set_temp("add_armor",add_armor);
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("lei_condition",1,me,hs);
+		call_out("light_condition",5,me,hs);
+		return 1;
+		}
+	break;
+	case "雷暗黑" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=BLU"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出两尊神诋
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(lei)/2))*2;
+		name=col+lei[i]+NOR;
+		name+=col+dark[i]+NOR;
+		name+=HIB"魄"NOR;
+		id=lei[i+1];
+		id+=dark[i+1];
+		
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		add_armor=mj*2+lvl;
+		if ( add_armor>120 ) add_armor=120;
+		me->add_temp("apply/armor",add_armor);
+		me->set_temp("add_armor",add_armor);
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("lei_condition",1,me,hs);
+		call_out("dark_condition",1,me,hs);
+		return 1;
+		}
+	break;		
+
+/****************************水	为	先*****************************/
+
+	case "水" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=WHT"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出一水神
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(shui)/2))*2;
+		name=col+shui[i]+NOR;
+		name+=HIB"魄"NOR;
+		id=shui[i+1];
+		
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("shui_condition",1,me,hs);
+		return 1;
+		}
+	break;
+	case "水水" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=HIW"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出两尊雷神
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(shui)/2))*2;
+		name=col+shui[i]+NOR;
+		name+=HIB"双魄"NOR;
+		id=shui[i+1];
+		id+=" souls";
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		add_armor=mj*3+lvl;
+		if ( add_armor>200 ) add_armor=200;
+		me->add_temp("apply/armor",add_armor);
+		me->set_temp("add_armor",add_armor);
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("shui_condition",1,me,hs);
+		return 1;
+		}
+	break;
+	case "水土" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=WHT"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出两尊神诋
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(shui)/2))*2;
+		name=col+shui[i]+NOR;
+		name+=col+tu[i]+NOR;
+		name+=HIB"魄"NOR;
+		id=shui[i+1];
+		id+=tu[i+1];
+		
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		add_armor=mj*2+lvl;
+		if ( add_armor>100 ) add_armor=100;
+		me->add_temp("apply/armor",add_armor);
+		me->set_temp("add_armor",add_armor);
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("shui_condition",2,me,hs);
+		call_out("tu_condition",1,me,hs);
+		return 1;
+		}
+	break;
+	case "水风" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=WHT"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出两尊神诋
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(shui)/2))*2;
+		name=col+shui[i]+NOR;
+		name+=col+feng[i]+NOR;
+		name+=HIB"魄"NOR;
+		id=shui[i+1];
+		id+=feng[i+1];
+		
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		add_armor=mj*2+lvl;
+		if ( add_armor>100 ) add_armor=100;
+		me->add_temp("apply/armor",add_armor);
+		me->set_temp("add_armor",add_armor);
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("shui_condition",1,me,hs);
+		call_out("feng_condition",1,me,hs);
+		return 1;
+		}
+	break;
+	case "水火" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=WHT"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出两尊神诋
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(shui)/2))*2;
+		name=col+shui[i]+NOR;
+		name+=col+huo[i]+NOR;
+		name+=HIB"魄"NOR;
+		id=shui[i+1];
+		id+=huo[i+1];
+		
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		add_armor=mj*2+lvl;
+		if ( add_armor>100 ) add_armor=100;
+		me->add_temp("apply/armor",add_armor);
+		me->set_temp("add_armor",add_armor);
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("shui_condition",2,me,hs);
+		call_out("huo_condition",1,me,hs);
+		return 1;
+		}
+	break;
+	case "水雷" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=WHT"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出两尊神诋
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(shui)/2))*2;
+		name=col+shui[i]+NOR;
+		name+=col+lei[i]+NOR;
+		name+=HIB"魄"NOR;
+		id=shui[i+1];
+		id+=lei[i+1];
+		
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		add_armor=mj*2+lvl;
+		if ( add_armor>100 ) add_armor=100;
+		me->add_temp("apply/armor",add_armor);
+		me->set_temp("add_armor",add_armor);
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("lei_condition",1,me,hs);
+		call_out("shui_condition",3,me,hs);
+		return 1;
+		}
+	break;
+	case "水光" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=HIY"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出两尊神诋
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(shui)/2))*2;
+		name=col+shui[i]+NOR;
+		name+=HIB"魄"NOR;
+		id=shui[i+1];
+		id+=light[i+1];
+		
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		add_armor=mj*2+lvl;
+		if ( add_armor>120 ) add_armor=120;
+		me->add_temp("apply/armor",add_armor);
+		me->set_temp("add_armor",add_armor);
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("light_condition",1,me,hs);
+		return 1;
+		}
+	break;
+	case "水暗黑" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=HIW"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出两尊神诋
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(shui)/2))*2;
+		name=col+shui[i]+NOR;
+		name+=col+dark[i]+NOR;
+		name+=HIB"魄"NOR;
+		id=shui[i+1];
+		id+=dark[i+1];
+		
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		add_armor=mj*2+lvl;
+		if ( add_armor>120 ) add_armor=120;
+		me->add_temp("apply/armor",add_armor);
+		me->set_temp("add_armor",add_armor);
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("shui_condition",3,me,hs);
+		call_out("dark_condition",1,me,hs);
+		return 1;
+		}
+	break;		
+/****************************光	为	先*****************************/
+
+	case "光" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=HIW"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出一光神
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(light)/2))*2;
+		name=col+light[i]+NOR;
+		name+=HIB"魄"NOR;
+		id=light[i+1];
+		
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("shui_condition",1,me,hs);
+		return 1;
+		}
+	break;
+	case "光光" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=BLINK HIW"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出两尊光神
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(light)/2))*2;
+		name=col+light[i]+NOR;
+		name+=HIB"双魄"NOR;
+		id=light[i+1];
+		id+=" souls";
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		add_armor=mj*3+lvl;
+		if ( add_armor>200 ) add_armor=200;
+		me->add_temp("apply/armor",add_armor);
+		me->set_temp("add_armor",add_armor);
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("light_condition",1,me,hs);
+		return 1;
+		}
+	break;
+	case "光土" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=HIW"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出两尊神诋
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(light)/2))*2;
+		name=col+light[i]+NOR;
+		name+=col+tu[i]+NOR;
+		name+=HIB"魄"NOR;
+		id=light[i+1];
+		id+=tu[i+1];
+		
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		add_armor=mj*2+lvl;
+		if ( add_armor>100 ) add_armor=100;
+		me->add_temp("apply/armor",add_armor);
+		me->set_temp("add_armor",add_armor);
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("light_condition",4,me,hs);
+		call_out("tu_condition",1,me,hs);
+		return 1;
+		}
+	break;
+	case "光风" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=HIG"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出两尊神诋
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(light)/2))*2;
+		name=col+light[i]+NOR;
+		name+=col+feng[i]+NOR;
+		name+=HIB"魄"NOR;
+		id=light[i+1];
+		id+=feng[i+1];
+		
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		add_armor=mj*2+lvl;
+		if ( add_armor>100 ) add_armor=100;
+		me->add_temp("apply/armor",add_armor);
+		me->set_temp("add_armor",add_armor);
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("light_condition",3,me,hs);
+		call_out("feng_condition",1,me,hs);
+		return 1;
+		}
+	break;
+	case "光火" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=HIW"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出两尊神诋
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(light)/2))*2;
+		name=col+light[i]+NOR;
+		name+=col+huo[i]+NOR;
+		name+=HIB"魄"NOR;
+		id=light[i+1];
+		id+=huo[i+1];
+		
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		add_armor=mj*2+lvl;
+		if ( add_armor>100 ) add_armor=100;
+		me->add_temp("apply/armor",add_armor);
+		me->set_temp("add_armor",add_armor);
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("light_condition",2,me,hs);
+		call_out("huo_condition",1,me,hs);
+		return 1;
+		}
+	break;
+	case "光雷" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=HIW"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出两尊神诋
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(light)/2))*2;
+		name=col+light[i]+NOR;
+		name+=col+lei[i]+NOR;
+		name+=HIB"魄"NOR;
+		id=light[i+1];
+		id+=lei[i+1];
+		
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		add_armor=mj*2+lvl;
+		if ( add_armor>100 ) add_armor=100;
+		me->add_temp("apply/armor",add_armor);
+		me->set_temp("add_armor",add_armor);
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("lei_condition",1,me,hs);
+		call_out("light_condition",3,me,hs);
+		return 1;
+		}
+	break;
+	case "光水" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=HIY"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出两尊神诋
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(light)/2))*2;
+		name=col+light[i]+NOR;
+		name+=col+shui[i]+NOR;
+		name+=HIB"魄"NOR;
+		id=light[i+1];
+		id+=shui[i+1];
+		
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		add_armor=mj*2+lvl;
+		if ( add_armor>220 ) add_armor=220;
+		me->add_temp("apply/armor",add_armor);
+		me->set_temp("add_armor",add_armor);
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("light_condition",1,me,hs);
+		return 1;
+		}
+	break;
+	case "光暗黑" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=HIC"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出两尊神诋
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(light)/2))*2;
+		name=col+light[i]+NOR;
+		name+=col+dark[i]+NOR;
+		name+=HIB"魄"NOR;
+		id=light[i+1];
+		id+=dark[i+1];
+		
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		add_armor=mj*2+lvl;
+		if ( add_armor>220 ) add_armor=220;
+		me->add_temp("apply/armor",add_armor);
+		me->set_temp("add_armor",add_armor);
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("light_condition",3,me,hs);
+		call_out("dark_condition",1,me,hs);
+		return 1;
+		}
+	break;		
+
+/****************************暗黑	为	先*****************************/
+
+	case "暗黑" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=HIM"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出一光神
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(dark)/2))*2;
+		name=col+dark[i]+NOR;
+		name+=HIB"魄"NOR;
+		id=dark[i+1];
+		
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("dark_condition",1,me,hs);
+		return 1;
+		}
+	break;
+	case "暗黑暗黑" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=RED"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出两尊光神
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(dark)/2))*2;
+		name=col+dark[i]+NOR;
+		name+=HIB"双魄"NOR;
+		id=dark[i+1];
+		id+=" souls";
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		add_armor=mj*3+lvl;
+		if ( add_armor>200 ) add_armor=200;
+		me->add_temp("apply/armor",add_armor);
+		me->set_temp("add_armor",add_armor);
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("dark_condition",1,me,hs);
+		call_out("dark_condition",1,me,hs);
+		return 1;
+		}
+	break;
+	case "暗黑土" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=HIM"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出两尊神诋
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(dark)/2))*2;
+		name=col+dark[i]+NOR;
+		name+=col+tu[i]+NOR;
+		name+=HIB"魄"NOR;
+		id=dark[i+1];
+		id+=tu[i+1];
+		
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		add_armor=mj*2+lvl;
+		if ( add_armor>100 ) add_armor=100;
+		me->add_temp("apply/armor",add_armor);
+		me->set_temp("add_armor",add_armor);
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("dark_condition",1,me,hs);
+		call_out("tu_condition",1,me,hs);
+		return 1;
+		}
+	break;
+	case "暗黑风" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=HIM"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出两尊神诋
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(dark)/2))*2;
+		name=col+dark[i]+NOR;
+		name+=col+feng[i]+NOR;
+		name+=HIB"魄"NOR;
+		id=dark[i+1];
+		id=feng[i+1];
+		
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		add_armor=mj*2+lvl;
+		if ( add_armor>100 ) add_armor=100;
+		me->add_temp("apply/armor",add_armor);
+		me->set_temp("add_armor",add_armor);
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("dark_condition",1,me,hs);
+		call_out("feng_condition",1,me,hs);
+		return 1;
+		}
+	break;
+	case "暗黑火" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=HIM"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出两尊神诋
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(dark)/2))*2;
+		name=col+dark[i]+NOR;
+		name+=col+huo[i]+NOR;
+		name+=HIB"魄"NOR;
+		id=dark[i+1];
+		id+=huo[i+1];
+		
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		add_armor=mj*2+lvl;
+		if ( add_armor>100 ) add_armor=100;
+		me->add_temp("apply/armor",add_armor);
+		me->set_temp("add_armor",add_armor);
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("dark_condition",2,me,hs);
+		call_out("huo_condition",1,me,hs);
+		return 1;
+		}
+	break;
+	case "暗黑雷" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=HIM"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出两尊神诋
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(dark)/2))*2;
+		name=col+dark[i]+NOR;
+		name+=col+lei[i]+NOR;
+		name+=HIB"魄"NOR;
+		id=dark[i+1];
+		id+=lei[i+1];
+		
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		add_armor=mj*2+lvl;
+		if ( add_armor>100 ) add_armor=100;
+		me->add_temp("apply/armor",add_armor);
+		me->set_temp("add_armor",add_armor);
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("dark_condition",1,me,hs);
+		call_out("lei_condition",1,me,hs);
+		return 1;
+		}
+	break;
+	case "暗黑水" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=HIM"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出两尊神诋
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(dark)/2))*2;
+		name=col+dark[i]+NOR;
+		name+=col+shui[i]+NOR;
+		name+=HIB"魄"NOR;
+		id=dark[i+1];
+		id+=shui[i+1];
+		
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		add_armor=mj*2+lvl;
+		if ( add_armor>220 ) add_armor=220;
+		me->add_temp("apply/armor",add_armor);
+		me->set_temp("add_armor",add_armor);
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("dark_condition",1,me,hs);
+		call_out("light_condition",2,me,hs);
+		return 1;
+		}
+	break;
+	case "暗黑光" : { //加busy "风","火","雷","水","光","暗黑",
+		msg+=HIG"
+好不容易，金光慢慢的消退，$N身上多了个神奇的魄石。\n
+只见，$N的魄石发出神秘光芒，令$N整个人就像是包围在一团光芒之中，身后现出两尊神诋
+模样的幻象守护着$P。\n"NOR;
+		i=(random(sizeof(dark)/2))*2;
+		name=col+dark[i]+NOR;
+		name+=col+light[i]+NOR;
+		name+=HIB"魄"NOR;
+		id=dark[i+1];
+		id+=light[i+1];
+		
+		hs->set_temp("apply/name",({name}));
+		hs->set_temp("apply/id",({id}));
+		hs->set_temp("apply/long", ({HIY+sx+"幻兽"+hs->query("name")+"所幻化的虎魄。\n"NOR}));
+		add_armor=mj*2+lvl;
+		if ( add_armor>220 ) add_armor=220;
+		me->add_temp("apply/armor",add_armor);
+		me->set_temp("add_armor",add_armor);
+		hs->save();
+		me->save();
+		hs->move(me);
+		call_out("dark_condition",1,me,hs);
+		call_out("light_condition",3,me,hs);
+		return 1;
+		}
+	break;	
+	default : {
+		tell_object(me,"ERROR,请联系wiz查看你的魔宠的属性\n");
+                return 1;        
+		}
+	}
+me->set("bianhuan",1);
+return 1;
+}
+
+void tu_condition(object me,object hs) //土 busy
+{
+string msg,sx;
+object target;
+int ap,dp,qz,mj,ll,jl,lvl,time,spells_time;
+qz=hs->query("qz"); //强壮 影响所加气血
+mj=hs->query("mj"); //敏捷 影响所加防御
+ll=hs->query("ll"); //力量 影响物理攻击
+jl=hs->query("jl"); //精力 影响法术攻击
+lvl=hs->query("lvl"); //等级
+sx=hs->query("shuxing");
+
+target = offensive_target(me);
+
+if( me->is_fighting() &&target) 
+	{
+	if ( !target ) return ;      
+        if ( !present(target,environment(me)) ) return ;    
+	if ( !me->query("bianhuan") ) return;
+
+	msg =YEL"\n
+"NOR+hs->name()+YEL"突发异彩，$n立刻只觉得脚下大地撼动，难以立足！\n"NOR;
+	ap = me->query("combat_exp");
+	dp = target->query("combat_exp");
+	if( random(ap + dp) > dp )
+		{
+		spells_time=jl/5;
+		if ( spells_time<1 ) spells_time=1;
+		if ( spells_time>5 ) spells_time=5;
+		msg+=YEL"
+$n立刻吓得魂飞魄散，手足无措，哪里还动弹得了？！\n"NOR;
+		target->start_busy(1+random(spells_time));
+		}
+	else msg+=YEL"\n
+$n忙收敛心神，站稳脚步！\n"NOR;
+	message_vision(msg,me,target);
+        time=jl;
+	time+=lvl;
+	time/=2;	
+	if ( time<5 ) time=5;
+	if ( time>30 ) time=30;
+	remove_call_out("tu_condition");
+	call_out("huanyuan",time,me,hs);
+	}
+call_out("tu_condition",2+random(3),me,hs);
+}
+
+void feng_condition(object me,object hs) //风 busy
+{
+string msg,sx;
+object target;
+int ap,dp,qz,mj,ll,jl,lvl,time,spells_time,damage;
+qz=hs->query("qz"); //强壮 影响所加气血
+mj=hs->query("mj"); //敏捷 影响所加防御
+ll=hs->query("ll"); //力量 影响物理攻击
+jl=hs->query("jl"); //精力 影响法术攻击
+lvl=hs->query("lvl"); //等级
+sx=hs->query("shuxing");
+
+target = offensive_target(me);
+
+if( me->is_fighting() &&target) 
+	{
+	if ( !target ) return ;      
+        if ( !present(target,environment(me)) ) return ;    
+	if ( !me->query("bianhuan") ) return;
+
+	msg =CYN"\n
+"NOR+hs->name()+CYN"突发异彩，一道猛烈无比的旋风立刻卷向$n！\n"NOR;
+	ap = me->query("combat_exp");
+	dp = target->query("combat_exp");
+	if( random(ap + dp) > dp )
+		{
+		spells_time=jl/5;
+		damage=50*jl;
+		if ( spells_time<1 ) spells_time=1;
+		if ( spells_time>5 ) spells_time=5;
+		if ( damage<50 ) damage=50;
+		if ( damage>1000 ) damage=1000;
+		msg+=CYN"
+$n闪避不及，给狂风卷得在半空翻滚不定！\n"NOR;
+		target->start_busy(1+random(spells_time));
+              target->receive_damage("sen", damage);
+              target->receive_wound("sen", damage/2);
+		COMBAT_D->report_status(target);
+		}
+	else   {
+		random(2)?
+			msg+=YEL"\n
+$n一个野驴打滚，闪开了风头！\n"NOR:
+			msg+=YEL"\n
+$n轻蔑一笑，鹤立于风头之上，好不逍遥！\n"NOR;
+		}
+	message_vision(msg,me,target);
+        time=jl;
+	time+=lvl;
+	time/=2;	
+	if ( time<5 ) time=5;
+	if ( time>30 ) time=30;
+	remove_call_out("feng_condition");
+	call_out("huanyuan",time,me,hs);
+	}
+call_out("feng_condition",2+random(3),me,hs);
+}
+
+void huo_condition(object me,object hs) //火 eff_kee,eff_sen
+{
+string msg,sx;
+object target;
+int ap,dp,qz,mj,ll,jl,lvl,time,spells_time,damage;
+qz=hs->query("qz"); //强壮 影响所加气血
+mj=hs->query("mj"); //敏捷 影响所加防御
+ll=hs->query("ll"); //力量 影响物理攻击
+jl=hs->query("jl"); //精力 影响法术攻击
+lvl=hs->query("lvl"); //等级
+sx=hs->query("shuxing");
+
+target = offensive_target(me);
+
+if( me->is_fighting() &&target) 
+	{
+	if ( !target ) return ;      
+        if ( !present(target,environment(me)) ) return ;    
+	if ( !me->query("bianhuan") ) return;
+
+	msg =HIR"\n
+"NOR+hs->name()+HIR"突发异彩，一团炙热无比的烈炎立刻卷向$n！\n"NOR;
+	ap = me->query("combat_exp");
+	dp = target->query("combat_exp");
+	if( random(ap + dp) > dp )
+		{
+		damage=50*jl;
+		if ( damage<50 ) damage=50;
+		if ( damage>1000 ) damage=1000;
+		msg+=CYN"
+$n闪避不及，给狂风卷得在半空翻滚不定！\n"NOR;
+              target->receive_wound("kee", damage/2);
+              target->receive_wound("sen", damage/2);
+		COMBAT_D->report_status(target);
+		}
+	else   {
+		random(2)?
+			msg+=HIR"\n
+$n一个旱地拔葱，跃过了火焰！\n"NOR:
+			msg+=HIR"\n
+$n哈哈一笑，张口一吹，吹歪了火向！\n"NOR;
+		}
+	message_vision(msg,me,target);
+        time=jl;
+	time+=lvl;
+	time/=2;	
+	if ( time<5 ) time=5;
+	if ( time>30 ) time=30;
+	remove_call_out("huo_condition");
+	call_out("huanyuan",time,me,hs);
+	}
+call_out("huo_condition",2+random(3),me,hs);
+}
+
+void lei_condition(object me,object hs) //雷 kee eff_kee eff_sen
+{
+string msg,sx;
+object target;
+int ap,dp,qz,mj,ll,jl,lvl,time,spells_time,damage,i;
+qz=hs->query("qz"); //强壮 影响所加气血
+mj=hs->query("mj"); //敏捷 影响所加防御
+ll=hs->query("ll"); //力量 影响物理攻击
+jl=hs->query("jl"); //精力 影响法术攻击
+lvl=hs->query("lvl"); //等级
+sx=hs->query("shuxing");
+
+target = offensive_target(me);
+
+if( me->is_fighting() &&target) 
+	{
+	if ( !target ) return ;      
+	if ( !present(target,environment(me)) ) return ;    
+	if ( !me->query("bianhuan") ) return;
+
+	msg =HIM"\n
+"NOR+hs->name()+HIM"忽然闪动起来，随之一道电光班驳的光柱从天而降，落卷向$n！\n"NOR;
+	ap = me->query("combat_exp");
+	dp = target->query("combat_exp");
+	if( random(ap + dp) > dp )
+		{
+		damage=50*jl;
+		if ( damage<50 ) damage=50;
+		if ( damage>1000 ) damage=1000;
+		msg+=HIM"
+电光一闪，$n一身惨叫，浑身给电得皮肉模糊，抽搐不止！\n"NOR;
+              target->receive_wound("kee", damage/2);
+              target->receive_wound("sen", damage*2/3);
+              target->receive_damage("sen", damage);
+		COMBAT_D->report_status(target);
+		}
+	else   {
+		random(2)?
+			msg+=HIM"\n
+$n连滚带爬，躲过了电击！\n"NOR:
+			msg+=HIM"\n
+$n将兵器对地一插，将电花引入了脚下。\n"NOR;
+		}
+	message_vision(msg,me,target);
+	time=jl;
+	time+=lvl;
+	time/=2;	
+	if ( time<5 ) time=5;
+	if ( time>30 ) time=30;
+	remove_call_out("lei_condition");
+	call_out("huanyuan",time,me,hs);
+	}
+call_out("lei_condition",2+random(3),me,hs);
+}
+
+void shui_condition(object me,object hs) // 水,busy kee,sen
+{
+string msg,sx;
+int ap,dp,qz,mj,ll,jl,lvl,time,spells_time,add_kee,add_sen;
+qz=hs->query("qz"); //强壮 影响所加气血
+jl=hs->query("jl"); //精力 影响法术攻击
+lvl=hs->query("lvl"); //等级
+sx=hs->query("shuxing");
+
+if ( !me->query("bianhuan") ) return;
+
+msg =HIW"\n
+"NOR+hs->name()+HIW"上忽然发出一道柔和的波纹，$N整个人沐浴在其中，好似渐渐恢复了气力！\n"NOR;
+message_vision(msg,me,hs);
+add_kee=jl+qz+lvl;
+add_kee*=100;
+add_kee=add_kee/2+random(add_kee/2);
+if ( add_kee<100 ) add_kee=100;
+if ( add_kee>800 ) add_kee=800;
+add_sen=add_kee;
+me->add("kee",add_kee);
+me->add("sen",add_sen);
+if ( me->query("kee")>=me->query("eff_kee") )
+	me->set("kee",me->query("eff_kee") );
+if ( me->query("sen")>=me->query("eff_sen") )
+	me->set("sen",me->query("eff_sen") );
+call_out("huanyuan",1,me,hs);
+}
+
+void light_condition(object me,object hs) // 光 kee,sen
+{
+string msg,sx;
+int ap,dp,qz,mj,ll,jl,lvl,time,spells_time,add_kee,add_sen;
+qz=hs->query("qz"); //强壮 影响所加气血
+jl=hs->query("jl"); //精力 影响法术攻击
+lvl=hs->query("lvl"); //等级
+sx=hs->query("shuxing");
+
+if ( !me->query("bianhuan") ) return;
+
+msg =WHT"\n
+"NOR+hs->name()+WHT"上忽然发出一道柔和的光线，将$N整个人包裹在其中！\n"NOR;
+message_vision(msg,me,hs);
+tell_object(me,WHT"你觉得自己的气力渐渐恢复了。。。\n"NOR);
+add_kee=jl+qz+lvl;
+add_kee*=100;
+if ( add_kee<500 ) add_kee=500;
+if ( add_kee>2000 ) add_kee=2000;
+add_sen=add_kee;
+me->add("eff_kee",add_kee);
+me->add("eff_sen",add_sen);
+if ( me->query("eff_kee")>=me->query("max_kee") )
+	me->set("eff_kee",me->query("max_kee") );
+if ( me->query("eff_sen")>=me->query("max_sen") )
+	me->set("eff_sen",me->query("max_sen") );
+me->set("kee",me->query("eff_kee") );
+me->set("sen",me->query("eff_sen") );
+call_out("huanyuan",1,me,hs);
+}
+
+void dark_condition(object me,object hs) //暗黑 pfm
+{
+string msg,sx;
+object target;
+int ap,dp,qz,mj,ll,jl,lvl,time,spells_time,damage,i;
+ll=hs->query("ll"); //力量 影响物理攻击
+jl=hs->query("jl"); //精力 影响法术攻击
+lvl=hs->query("lvl"); //等级
+sx=hs->query("shuxing");
+
+target = offensive_target(me);
+
+if( me->is_fighting() &&target) 
+	{
+	if ( !target ) return ;      
+	if ( !present(target,environment(me)) ) return ;    
+	if ( !me->query("bianhuan") ) return;
+
+	msg =RED"\n
+"NOR+hs->name()+RED"忽然闪出一道奇异的光线笼罩住$N全身！
+$N只觉浑身杀气腾腾，看谁都不顺眼。\n"NOR;
+	ap = me->query("combat_exp");
+	dp = target->query("combat_exp");
+	if( random(ap + dp) > dp )
+		{
+		spells_time=jl+qz+lvl;
+		spells_time/=3;
+		if ( spells_time<1 ) spells_time=1;
+		if ( spells_time>10 ) spells_time=10;
+		msg+=RED"\n$N身随心动，任由气驭，对着$n就是一招！\n"NOR;
+		COMBAT_D->do_attack(me,target,me->query_temp("weapon"));         
+		for ( i=0;i<spells_time;i++ )
+			{		
+			msg+=RED"\n$N一招发出，双目精光四谢，发狂般向$n又攻出一招！\n"NOR;
+			COMBAT_D->do_attack(me,target,me->query_temp("weapon"));         
+			COMBAT_D->report_status(target);
+			}
+		}
+	else   msg+=RED"\n"NOR;
+	message_vision(msg,me,target);
+	time=jl;
+	time+=lvl;
+	time/=2;	
+	if ( time<5 ) time=5;
+	if ( time>30 ) time=30;
+	remove_call_out("dark_condition");
+	call_out("huanyuan",time,me,hs);
+	}
+call_out("dark_condition",2+random(3),me,hs);
+}
+
+void huanyuan(object me,object hs)
+{
+
+	hs->delete_temp("apply/name");
+	hs->delete_temp("apply/id");
+	hs->delete_temp("apply/short");
+	hs->delete_temp("apply/long");
+	if ( environment(me)!=environment(hs) )
+		hs->move(environment(me));
+	if ( me->query_temp("add_damage") )
+		me->add_temp("apply/damage",-(int)me->query_temp("add_damage"));
+	if ( me->query_temp("add_dodge") )
+		me->add_temp("apply/dodge",-(int)me->query_temp("add_dodge"));
+	if ( me->query_temp("add_armor") )
+		me->add_temp("apply/armor",-(int)me->query_temp("add_armor"));
+	if ( me->query_temp("add_spells") )
+		me->add_temp("apply/spells",-(int)me->query_temp("add_spells"));
+	if ( me->query_temp("add_kee") )
+		me->add_temp("max_kee",-(int)me->query_temp("add_kee"));
+	if ( me->query_temp("add_sen") )
+		me->add_temp("max_sen",-(int)me->query_temp("add_sen"));
+	me->delete("bianhuan");
+	hs->save();
+	me->save();	
+	return;
+}

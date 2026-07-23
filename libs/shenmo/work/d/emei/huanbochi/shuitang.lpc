@@ -1,0 +1,172 @@
+#include <ansi.h>
+#include <room.h>
+inherit __DIR__"r.lpc";
+
+void create_room()
+{
+        set("short", "屏风中");
+        set("long", @LONG
+
+
+
+
+LONG);
+
+        set("no_clean_up",1);
+        set("no_fight", 1);
+        set("no_magic", 1);
+        set("broadcast",1);
+        set("exits",([
+                "out" : __DIR__"zhudong-e",
+        ]));
+        create_door("out", "屏风", "in", DOOR_CLOSED);  
+}
+
+void reset()
+{
+        if( time()<query("last_reset")+3600 )
+                return;
+        set("last_reset",time());
+        ::reset();
+}       
+
+void broadcast_room (object room, string str)
+{
+        string prefix = HIG"【屏风中】"NOR;
+        string s1 = str, s2 = "", s3;
+        int i;
+        
+        if( !str || strsrch(str,"金创药")!=-1 
+        || strsrch(str,"深深吸了几口气，脸色看起来好多了")!=-1 )
+                return;
+        reset_eval_cost();
+
+        s1 = replace_string(s1,"\n"NOR,"\n");
+        while(strsrch(s1,"\n\n") != -1)
+                s1 = replace_string(s1,"\n\n","\n");
+        while(sizeof(s1)>1 && s1[sizeof(s1)-1]=='\n')
+        {
+                s1 = s1[0..(sizeof(s1)-2)];
+                s2 = "\n";
+        }
+        if( sizeof(s1)<=1 )
+                return;
+
+        s1 = replace_string(s1,"\n","\n"+prefix);
+        if( room )
+                tell_room (room, prefix+s1+ NOR+"\n");     
+}
+
+void broadcast(string msg) 
+{
+        object room = load_object(__DIR__"zhudong-e");
+        if( room ) 
+                broadcast_room(room,msg);
+}
+
+int remove_room()
+{
+        int i;
+        object *inv,who;
+        
+        who = query("owner");
+        
+        if( !who || !environment(who)->is_huanbo()
+         || who->query("huanbochi/ping_feng") )
+        {
+                inv = all_inventory();
+                for(i=0;i<sizeof(inv);i++)
+                {
+                        if( !userp(inv[i]) )
+                                destruct(inv[i]);
+                }
+                delete_temp("bob");             
+                return 1;
+        }
+        return 0;
+}
+
+void quest()
+{
+        int i,damage;
+        string str;
+        object who,*inv;
+        remove_call_out("quest");
+
+        who = query("owner");
+        
+        if( !who || !environment(who)->is_huanbo()
+         || who->query("huanbochi/ping_feng") )
+        {
+                remove_room();
+                return;
+        }       
+        
+        reset_eval_cost();
+        
+        inv = all_inventory();
+        if( sizeof(inv)<=0 )    
+                return;
+        for(i=0;i<sizeof(inv);i++)
+        {
+                if( !inv[i] || userp(inv[i])
+                  || !inv[i]->query("owner") )
+                        continue;
+                inv[i]->add_temp("swim",1);                                                                    
+                if( inv[i]->query_temp("swim")<3 )
+                        message_vision("$N在水中浮沉上下，嬉乐方酣....\n",inv[i]);
+                else if( inv[i]->query_temp("swim")<4 )
+                {
+                        if( !query_temp("bob") )
+                        {
+                                set_temp("bob",1);
+                                message_vision("        
+忽见小池中水波飞涌，急流旋转，成了一个大漩涡。及至池水无端急漩，
+想是知道危险万分，一旦卷入池心漩涡之中，便没了命，在池心水花急转
+中，隐现水底红光闪闪，似有一朵木莲，开合不休。\n",inv[i]);
+                        }
+                }
+                else
+                {
+                        inv[i]->delete_temp("last_damage_from");
+                        damage = 800+random(500)*2;
+                        inv[i]->receive_wound("kee",damage);
+                        if( random(3) )
+                                continue;
+                        else if( random(2) )
+                                str = CYN"$N大叫：救命啊！救命啊！\n"NOR;
+                        else if( random(2) )
+                                str = CYN"$N说道：何方道友至此，相助一臂，我们一不小心为水遁所困，
+"CYN"如蒙道友相助释放，此地有宝鼎，宝库两处藏宝，我二人将为向导。\n"NOR;
+                        else if( random(2) )
+                                str = CYN"$N说道：我等陷在东洞入口西侧的密道之中，只需平复大五行莲
+"CYN"花化劫之法，我等便可脱困。\n"NOR;  
+                        else if( random(2) )    
+                                str = "
+$N半身原本露出水面，将双手挥动不休，时候一久，渐渐
+有些力竭势缓。\n";
+                        else    str = "
+$N放出一丝青白光华，拼命在水中喘吁吁地扎挣，逆水而
+泅，不使池波卷去。\n";
+                        if( inv[i]->query("gender")=="女性" )
+                                str+= "无奈水力太大，在久困之余，有两三次差点卷入池中漩涡
+之中，吓得小嘴乱张，似在狂呼求救，已不成声。\n";
+                        str+= COMBAT_D->damage_msg(damage,"重伤");
+                        str = replace_string(str,"$n","$N");
+                        message_vision(str,inv[i]);
+                        COMBAT_D->report_status(inv[i],1);
+                }
+        }
+        call_out("quest",3+random(5));  
+}
+
+void init()
+{
+        ::init();
+        if( !userp(this_player()) )
+        {
+                remove_call_out("quest");
+                call_out("quest",1);
+        }
+}
+        

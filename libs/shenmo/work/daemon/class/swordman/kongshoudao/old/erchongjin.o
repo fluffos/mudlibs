@@ -1,0 +1,230 @@
+// 应dxh建议 改动 命中率和damage
+//Rewrite By Snowtu 2004
+
+#include <ansi.h>
+#include "/daemon/skill/eff_msg.h";
+inherit PERFORM;
+
+int def;
+int check_damage(object me,object target)
+{
+int damage;
+damage = me->query_skill("kongshoudao");
+damage+= me->query_temp("apply/damage");
+damage+= me->query("force_factor");
+damage-= target->query_temp("apply/armor_vs_force");
+damage = damage/2+random(damage/2);
+if ( damage<100 )
+	damage = 100;
+if ( wizardp(me) )
+	tell_object(me,"原始damage = "HIR+damage+NOR"\n");	
+return damage;
+}		
+
+void create()
+{
+set("name","二重勁");
+set("target",1);
+set("family","剑客联盟");
+set("class","human");
+set("betray_lvl",300);
+set("weapon",1);
+set("belong","kongshoudao");
+set("base_type","unarmed");
+set("limit_skill",([
+	"kongshoudao"	:	100,
+	"unarmed"	:	100,
+	"force"		:	100,
+]));
+set("enable",([
+	"unarmed"	:	"kongshoudao",	//尊重原来，只是看来不需要这个 (*)
+]));	
+set("force",1200);
+set("persent",100);
+set("need_force",300);
+set("busy_self",2);
+set("damage_type","kee");
+}
+
+void hit_msg(object me,object target,int num)
+{
+int damage;	
+string msg;	
+if ( me && target && present(target,environment(me)) && num )
+	{
+	msg = HIG"\n突然$N"HIG"大喝一声:「一重勁」,飞身上前,举拳前进,浑身上下充满可怕的杀气~!\n" NOR;	
+	msg+= HIB "“嗡”的一声，一拳捣向$n"HIB"的胸口！\n\n" NOR;
+	message_vision(msg,me,target);
+	damage = check_damage(me,target);
+	set("damage",damage);
+	if ( me->query("family/family_name")=="剑客联盟" )
+		add("persent",random(50));
+	}
+}
+
+void lost_hit_msg(object me,object target,int num)
+{
+string msg;
+if ( me && target && present(target,environment(me)) )	
+	{
+	msg = HIW"可是$p伏地一滚，躲开了$N"HIW"的攻击。\n"NOR;	
+	message_vision(msg,me,target);
+	me->start_busy(2);
+	}
+}
+
+void normal_hit(object me)
+{
+string msg;	
+if ( me && me->is_fighting() )
+	{
+	msg = HIR"“轰”的一声，这一拳正砸在地面上，一时尘土飞扬....\n\n"NOR;
+	message_vision(msg,me);
+	me->start_busy(2);
+	}
+}	
+
+void success_hit_msg(object me,object target,int num)	
+{
+int damage = query("damage");	
+string msg;	
+if ( me && target && present(target,environment(me)) && num )
+	{	
+	msg = HIR"“轰”的一声，这一拳砸了个结结实实，$n"HIR"的胸骨立刻凹陷下去！\n\n"NOR;
+	message_vision(msg,me,target);
+	target->set_temp("last_damage_from", me);
+	if( me->query_skill("kongshoudao", 1) > 149 )
+		call_out("perform2", 1, me,target,damage);                        
+	}
+}
+
+int cancel_hit(object me)
+{
+message_vision(HIR"$N"HIR"见敌人已不需要自己出手了，忙收起了"+query("name")+"。\n"NOR,me);
+return 1;
+}	
+
+int perform2(object me, object target,int damage)
+{
+int p,skill;
+string msg,weapon,str;
+weapon = me->query_temp("weapon");          
+
+if ( !me || !target )
+	return 1;
+
+if ( !living(me) || !living(target) )
+	return cancel_hit(me);;
+	
+if ( !present(target,environment(me)) )
+	return cancel_hit(me);
+
+if ( !me->is_fighting(target) )
+	return cancel_hit(me);
+			
+if ( me->query("force")<200 )
+	{
+	msg = HIB"$N"HIB"正要出第二击，不料内力不够，再也发不出来了！\n"NOR;
+	message_vision(msg,me,target);
+	return 1;
+	}
+					
+msg = HIR "\n只见$N"HIR"突然大喝一声「二重勁」，" NOR;
+msg+= HIR "右拳挟风雷之势向$n"HIR"的胸口击来！\n" NOR;
+message_vision(msg, me, target); 
+if (me->query("combat_exp") > target->query("combat_exp")/3)
+	{
+	me->start_busy(1);
+	damage+= random(damage/2);
+	
+	if ( damage<query("damage")/2 )
+		damage = query("damage")/2;
+		
+	target->receive_damage("kee", damage);
+	target->receive_wound("kee", damage/2);
+	me->add("force", -200);
+	p = (int)target->query("kee")*100/(int)target->query("max_kee");
+	msg = damage_msg(damage, "内伤");
+	msg += "( $n"+eff_status_msg(p)+" )\n";
+	target->set_temp("last_damage_from", me);
+	message_vision(msg, me, target);
+	if( me->query_skill("kongshoudao", 1) > 179 )
+		call_out("perform3", 1, me, target,damage);                        
+	}	
+else	{
+	me->start_busy(1);
+	me->add("force", -200);                
+	msg = HIY"可是$p伏地一滚，躲开了对手的攻击。\n"NOR;
+	message_vision(msg, me, target);
+        }
+return 1;
+}
+
+int perform3(object me, object target,int damage)
+{
+int p,skill;
+string msg,str;
+
+if ( !me || !target )
+	return 1;
+
+if ( !living(me) || !living(target) )
+	return cancel_hit(me);;
+	
+if ( !present(target,environment(me)) )
+	return cancel_hit(me);
+
+if ( !me->is_fighting(target) )
+	return cancel_hit(me);
+
+if( (int)me->query("force") < 400 )
+	{
+	msg = HIB"$N"HIB"正要出第三击，不料内力不够，再也发不出来了！\n"NOR;
+	message_vision(msg,me,target);
+	return 1;
+	}
+
+msg = HIG "\n只见$N"HIG"起身上前,来到$n"HIG"的面前,变拳为掌用出相乐佐
+之助的奥义决学双重极限「三重勁」。\n"NOR;
+
+if ( me->query("combat_exp") > target->query("combat_exp")/3 )
+	{
+	me->start_busy(2);
+	damage+=random(damage/2);
+	target->receive_damage("kee", damage);
+	target->receive_wound("kee", damage/2);
+	me->add("force", -200);
+	p = (int)target->query("kee")*100/(int)target->query("max_kee");
+	msg += damage_msg(damage, "内伤");
+	msg += "( $n"+eff_status_msg(p)+" )\n";
+	target->set_temp("last_damage_from", me);
+	} 
+else	{       
+	me->start_busy(2);
+	me->add("force", -200);                
+	msg += HIY"可是$p伏地一滚，躲开了对手的攻击。\n"NOR;
+        }
+message_vision(msg, me, target);
+return 1;
+}
+int help(object me)  
+{
+string temp;
+temp = "\t\t"+to_chinese("kongshoudao")+" 100 级\n"; 
+temp+= "\t\t"+to_chinese("unarmed")+" 100 级\n"; 
+temp+= "\t\t"+to_chinese("dodge")+" 100 级\n"; 
+temp+= "\t\t内力 1000 点\n"; 
+write(@HELP  
+空手道　之　「二重劲」：  
+
+        使用功效：    
+                连续打击对手气血
+        出招类型： 
+                busy 型外功 
+                有隐藏攻击    
+                叛师可带出  
+        出手要求：  
+HELP);  
+write(temp); 
+return 1;   
+}

@@ -1,0 +1,131 @@
+#include <ansi.h>
+#include <weapon.h> 
+inherit THROWING; 
+
+void create()
+{
+set_name("袖里剑",({"xiuli jian","anqi"}));
+if( clonep() ) 
+	set_default_object(__FILE__); 
+else	{
+	set("long","巴掌大小的短剑，为忍者必备之物。\n");
+	set("unit","把");
+	set("base_unit","支");
+        set("base_weight",1000); 
+              set("value",150); 
+	set("type","暗器");
+	}
+set("base_damage",10);
+init_throwing(50); 
+set_amount(1);
+setup();
+}
+
+int init ()
+{
+add_action ("do_shoot", "shoot");
+}
+
+int notify_fail(string msg)
+{
+tell_object(this_player(),msg);
+return 1;
+}
+	
+int do_shoot(string arg)
+{
+int success;	
+string msg,limb,*limbs;
+int num,ap,dp,time,damage;
+object who,env;	
+object me = this_player();
+object anqi = this_object();
+
+if ( !arg || !present(anqi,me) )
+	return 0;
+
+env = environment(me);
+if ( env->query("no_fight")
+  || env->query("no_magic") )
+	return notify_fail("安全区内用暗器可是会引起公愤的噢！\n");
+if ( me->is_busy() )
+	return notify_fail("你正忙着呢。\n");
+	
+who = present(arg,env);
+if ( !who )
+	return notify_fail("这里没有这个人。\n");
+	
+num = me->query_skill("throwing",1);
+num/= 50;
+if ( num<1 )
+	num = 1;
+if ( num>anqi->query_amount() )		
+	num = anqi->query_amount();
+
+anqi->add_amount(num);
+if ( anqi->query_amount()<=0 )
+	destruct(anqi);
+
+if ( who->is_corpse() )
+	{
+	msg = "$N甩手射出"+chinese_number(num)+"支"+name()+"狠狠钉在"+who->name()+"上，很是变态...-_-!...\n";	
+	message_vision(msg,me);
+	who->add("hit_anqi_num",1);
+	if ( !who->query("longs") )
+		who->set("longs",who->query("long"));
+	who->set("long",who->query("longs")+"上面钉着"+chinese_number(who->query("hit_anqi_num"))+"支暗器，也不知是哪个变态干的....\n");	
+	me->start_busy(1);
+	return 1;
+	}
+	
+if ( who->is_busy() || !living(who) )
+	{
+	msg = "$N见$n分身不暇，心中窃喜，一甩手射出"+chinese_number(num)+"支"+name()+"!\n";	
+	success = 1;
+	}
+else	{
+	if ( me->is_fighting(who) )
+		msg = "$N抽身急退，$n不知有诈，贴身紧追，不想$N一甩手，射出"+chinese_number(num)+"支"+name()+"!\n";	
+	else	msg = "$N偷偷靠近$n,见$p不备，猛的一甩手，朝$n射出"+chinese_number(num)+"支"+name()+"!\n";	
+	if ( me->query("combat_exp")>who->query("combat_exp")*3 )
+		success = 1;
+	else	{
+		ap = me->query_skill("throwing",1);
+		dp = who->query_skill("dodge",1);
+		if ( random(ap+dp)>dp )
+			success = 1;
+		}
+	}
+
+msg+= "$n见"+chinese_number(num)+"道寒光直扑而来，连忙提身纵开。\n";
+	
+if ( success!=1 )
+	{
+	msg+= "但见"+chinese_number(num)+"道寒光从$p身边堪堪擦过，甚是惊险。\n";
+	time = 2+random(3);
+	}
+else	{
+	msg+= "可惜时机已过，只听”噗嗤“一声，$n$l带出$m道血槽踉跄后退。\n";
+	limbs = who->query("limbs");
+	limb = limbs[random(sizeof(limbs))];
+	msg = replace_string(msg,"$m",chinese_number(num));
+	msg = replace_string(msg,"$l",limb);
+	time = 1+random(2);
+	message_vision(msg,me,who);
+	damage = query("base_damage");
+	damage*= num;
+	who->receive_wound("kee",damage);
+	COMBAT_D->report_status(who,damage);
+	me->start_busy(time);
+	if ( !who->is_fighting(me) )
+		who->kill_ob(me);
+	return 1;	
+	}
+message_vision(msg,me,who);		
+me->start_busy(time);
+if ( !who->is_fighting(me) )
+	who->kill_ob(me);
+return 1;
+}
+	
+  	

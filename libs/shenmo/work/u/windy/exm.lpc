@@ -1,0 +1,144 @@
+//BT NPC 示例
+#include <ansi.h>                       //套接颜色代码，个人以为颜色越纯越好，不需要太花哨
+inherit "/d/snowtu/npc/super_npc";      //继承超级NPC文件
+
+/*******************************
+inherit与include的区别在于
+inherit后本程序还可以重新定义所
+inherit文件中的函数
+当然也可以用 ::函数名 来直接调用
+********************************/
+
+void create()
+{
+string name,*ids;                       //直接让地层出随机名字
+mapping names = NAME_D->random_name("yaoguai");                                         
+name = names["name"];
+ids = names["id"];
+set_name(name,ids);
+setup();
+}
+
+void kill_ob(object who)
+{
+/*
+this_object()函数
+传回这个物件的物件指标. 如果想呼叫
+同一个物件却非同一个程式码档案的函
+式时 (即呼叫所继承 (inherite) 
+物件的函式),可用 this_object() 达到
+目的.-----一般指NPC或OBJ
+this_player()函数
+传回呼叫此函式的玩家 (player) 物件. 
+注意，有时也可以指呼叫此函式的NPC物件
+比如在 add_action() 中加入动作的函数
+中 ------ 一般指玩家，但不排除活物NPC
+*/      
+object target,me = this_object();       
+
+//如果攻击对象是NPC
+//加个who 是防止无who存在而报错
+if ( who && !userp(who) )
+        {
+        me->remove_killer(who);
+        who->remove_killer(me);
+        return;
+        }               
+
+//如果无攻击对象或其不在身边
+if ( !who || !objectp(who) 
+  || !present(who,environment()) )
+        {
+        if ( me->is_fighting() )
+                me->command("touxiang");
+        //此NPC清除所有敌人,详解见下            
+        me->remove_all_killer();        
+        //full一下
+        SDS_D->powerup(me);             
+/*
+房间中所有生物对此NPC停止攻击
+remove_all_killer()
+remove_killer(object)
+此两函数是地层里定义好了的
+*/
+        all_inventory(environment())->remove_killer(me);
+        return;
+        }
+
+/*
+加上识别限制，这里的标志随便，不是地层里的
+这里我将之定义成
+   "战斗对象" : ([
+        "target" : 与之战斗的对象,
+        "time"   : 战斗的开始时间
+   ]);  
+        
+*/
+target = query("战斗对象/target");      
+//如果战斗对象存在且活
+if ( target && living(target) )
+        {
+        //假如战斗对象即当前攻击对象
+        //则返回正常kill_ob函数 
+        if ( target==who )
+                {
+                ::kill_ob(who);
+                return; //必须有
+                }                                       
+        else    {       //如果不是
+                if ( time()<query("战斗对象/time")+60 )  //time()函数表示当前的时间
+                        //如果时间不超过1分钟,时间单位是秒
+                        {
+                        me->remove_killer(who);
+                        who->remove_killer(me);
+                        message_vision("\n$N对$n摇了摇头：我的对手是"+target->name()+"。\n",me,who);
+                        return;
+                        }
+                else    { //超过时间，重新定义战斗对象
+                          //varargs int random_family(object npc,object who,int lvl,string fam)
+                          //函数是地层里自动对应玩家生成随机门派NPC的函数，如果失败，则返回0
+                          //如果成功则返回1
+                          //其中:
+                          //npc===当前的NPC
+                          //who===NPC所要自动对应的玩家
+                          //lvl===等级，可不选
+                          //fam===门派，可不选
+                          
+                          //如果生成失败
+                        if ( !SDS_D->random_family(me,who,who->query("level")) )
+                                {
+                                me->remove_killer(who);
+                                who->remove_killer(me);
+                                message_vision("\n$N摇了摇头：我现在没心情打架。 \n",me);
+                                return;
+                                }
+                        //如果生成成功
+                        else    {
+                                me->set("战斗对象",([
+                                        "target" : who,
+                                        "time"   : time(),
+                                ]));
+                                ::kill_ob(who);
+                                return;
+                                }
+                        }
+                }
+        }
+
+//如果无已有的战斗对象
+else    {
+        if ( !SDS_D->random_family(me,who,who->query("level")) )
+                {
+                me->remove_killer(who);
+                who->remove_killer(me);
+                message_vision("\n$N摇了摇头：我现在没心情打架。 \n",me);
+                return;
+                }
+        me->set("战斗对象",([
+                "target" : who,
+                "time"   : time(),
+        ]));
+        ::kill_ob(who);
+        return;
+        }
+}

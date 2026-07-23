@@ -1,0 +1,150 @@
+//赛马日志
+#include <ansi.h>
+inherit ITEM;
+
+#define MASTER_D __DIR__"masterd.lpc"
+
+nosave int start = 0;
+
+string *a_pet = ({
+        "你双脚一夹马鞍，$m一声长嘶，加快了脚步。。。\n",
+        "你奋力抽打着$m,速度好似快了小小。。。\n",
+        "你死命的拍打着$m,恨不能一下子冲到终点。。。\n",
+        "你一打缰绳，$m一声长嘶，向前冲了开来。。。\n",
+});
+
+string *pet_msg = ({
+        "$m无精打采的向前走了几步。。。\n",
+        "$m欢快的扬起马蹄，奔跑了起来。。。\n",
+        "$m神气活现的迈开了脚步。。。\n",
+        "$m撒开了马蹄子，向前奔跑起来。。。\n",
+});             
+
+int is_saima_item()
+{
+return 1;
+}
+                
+void create()
+{
+set_name("赛马指南",({"zhi nan","saima zhinan","book",}));
+set_weight(1000);
+if( clonep() )
+        set_default_object(__FILE__);
+else    {
+        set("unit", "本");
+        set("value", 0);
+        set("no_sell", 1);
+        set("no_put", 1);
+        set("no_give", 1);
+        set("material", "paper");
+        }
+}               
+
+string long()
+{
+string msg = @LONG
+                        〖赛马流程〗
+        开封马场 ask ma guan about 赛马;
+        参加的玩家 join;
+        人齐后，start 开始赛马;
+        第一个到达终点者优胜。
+LONG;
+return msg;
+}
+
+void init()
+{
+add_action("do_go","",1);
+}
+
+int do_walk(object who,object pet)
+{
+int i,k;        
+string str,*env,temp;
+if ( !who || !pet
+  || pet->query("id")==who->query("pet/pet_id")
+  || strsrch(pet->query("name"),"马")==-1 )
+        {
+        who->delete_temp("赛马");
+        destruct(this_object());
+        return 0;
+        }
+str = a_pet[random(sizeof(a_pet))];
+str+= pet_msg[random(sizeof(pet_msg))];
+str = replace_string(str,"$m",pet->name());     
+if ( who->is_busy() )
+        {
+        write(str);
+        return 1;
+        }
+write(str);
+env = who->query_temp("赛马/路线");
+if ( !start )
+        {
+        start++;
+        message_vision("$N牵着"+pet->name()+"来到了比赛起点。\n",who);
+        pet->move(env[0]);
+        who->move(env[0]);
+        }
+temp = base_name(environment(who));
+k = sizeof(env);
+if ( temp==env[k-1] )
+        {
+        MASTER_D->check_player(who);
+        return 1;
+        }       
+for(i=0;i<k;i++)
+        {
+        if ( env[i]==temp )
+                break;
+        }
+temp = env[i+1];
+pet->move(temp);
+who->move(temp);
+who->start_busy(random(3));
+return 1;
+}               
+
+int do_go()
+{
+object pet,me = this_player();
+string *dir,arg,str = query_verb();
+
+if ( me->query_temp("赛马_马官") )
+        me->delete_temp("赛马_马官");
+if ( !me->query_temp("赛马/参加")
+  || !objectp(pet=me->query_temp("ridee")) 
+  || pet->query("id")==me->query("pet/pet_id")
+  || strsrch(pet->query("name"),"马")==-1 )
+        {
+        me->delete_temp("赛马");
+        destruct(this_object());
+        return 0;
+        }
+dir = ({
+        "go","east","west","south","north",
+        "up","down","out","enter",
+        "northwest","southeast",
+        "northeast","southwest",
+        "northup","southdown",
+        "northdown","southup",
+        "westup","eastdown",
+        "westdown","eastup",
+});
+if ( member_array(str,dir)==-1 )
+        return 0;
+arg = a_pet[random(sizeof(a_pet))];
+arg+= pet_msg[random(sizeof(pet_msg))];
+arg = replace_string(arg,"$m",pet->name());     
+write(arg);
+return do_walk(me,pet);
+}
+
+void information(object me,object pet)
+{
+remove_call_out("information");
+if ( MASTER_D->is_saima() )
+        do_walk(me,pet);
+call_out("information",1+random(me->query("int")/10),me,pet);
+}

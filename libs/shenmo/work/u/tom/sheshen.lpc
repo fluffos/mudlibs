@@ -1,0 +1,190 @@
+// sheshen.c            舍身技
+
+#include <ansi.h>
+#include <combat.h>
+inherit SSERVER;
+
+int calculate_damage(object me, object target, int base_damage, int damge_bonus);
+int check_base_damage(object me,object target);
+
+int perform(object me, object target)
+{
+string msg, str;
+int mydf,time;
+int ap, dp, pp;
+int youcps, mycor, mystr, youstr;
+int damage_bonus, damage, wound;
+int delay;
+object ob;
+
+if( !target ) target = offensive_target(me);
+
+if( !target
+  ||!target->is_character()
+  ||!me->is_fighting(target) )
+        return notify_fail("不在战斗中，舍什么身？\n");
+
+if(me->query("family/family_name")!="东海龙宫")
+        return notify_fail("非龙宫弟子不能用「舍身技」！\n");
+mydf=(int)me->query_skill("dragonfight",1);
+if(mydf<100)
+        return notify_fail("你的修为不够深，还不能领悟舍身技的精髓。\n");
+mydf=(int)me->query_skill("dragonforce",1);
+if(mydf<100)
+        return notify_fail("你的修为不够深，还不能领悟舍身技的精髓。\n");
+
+if((int)me->query("force")<300)
+        return notify_fail("你的内力不够了。\n");
+
+if ( me->query_temp("sheshen_busy") )
+        return notify_fail("绝招用多就不灵了。\n");
+
+msg = CYN"$N"CYN"右掌挥出，捣向$n"CYN"的左肩，\n";
+mycor=me->query_cor();
+youcps=target->query_cps();
+ob=target->query_temp("weapon");
+str="右手";
+if(objectp(ob))
+        str="手中的"+ob->query("name");
+ap=COMBAT_D->skill_power(me, "unarmed", SKILL_USAGE_ATTACK);
+dp=COMBAT_D->skill_power(target,"dodge", SKILL_USAGE_DEFENSE);
+dp/=2;
+pp=COMBAT_D->skill_power(target,"unarmed", SKILL_USAGE_DEFENSE);
+pp/=2;
+if(objectp(ob))
+        pp/=2;
+mystr=(me->query_str()+me->query_kar())/2;
+youstr=me->query_str();
+damage_bonus=mystr*(100+me->query("force_factor"))/80+me->query_temp("apply/damage");
+
+if( random(youcps) < 15 || random(ap+dp)>dp)
+        {
+        msg += CYN"$n"CYN"想用"HIC+str+CYN"挡开，不料却被$N"CYN"一把抓住。\n"NOR;
+        msg += CYN"$N"CYN"顺势上步，使出了「舍身技」！\n\n" NOR;
+        msg += CYN"$N"CYN"左脚铲向$n"CYN"右腿膝盖，"NOR;
+        if(random(ap+pp)>pp)
+                {
+                msg += CYN"结果正铲在$n"CYN"的小腿上。\n" NOR;
+                damage=calculate_damage(me, target,check_base_damage(me,target),damage_bonus);
+                wound=random(damage-(int)target->query_temp("apply/armor"));
+                if(damage>0)
+                        {
+                        target->receive_damage("kee", damage, me);
+                        if(wound>0)
+                                target->receive_wound("kee", wound, me);
+                        msg+=COMBAT_D->damage_msg(damage, "内伤");
+                        if ( !target->is_busy() )
+                                target->start_busy(random(3));
+                        }
+                }
+        else msg+= CYN"结果被$n"CYN"提腿挡开了。\n" NOR;
+        msg+= CYN "\n紧跟着$N"CYN"收左脚，提左膝撞向$n"CYN"的软肋，\n";
+        msg+= "同时右手曲肘撞向$n"CYN"的面门，";
+        if(random(ap+pp)>pp || target->is_busy() )
+                {
+                msg += "结果正中$n。\n" NOR;
+                damage=calculate_damage(me, target, check_base_damage(me,target), damage_bonus);
+                wound=random(damage-(int)target->query_temp("apply/armor"));
+                if(damage>0)
+                        {
+                        target->receive_damage("kee", damage, me);
+                        if(wound>0) target->receive_wound("kee", wound, me);
+                        msg+=COMBAT_D->damage_msg(damage, "内伤");
+                        }
+                if ( target->query("force")>250 )
+                        {
+                        msg+= CYN"$n"CYN"立刻觉得肋下一麻，真气外泻，浑身不禁一阵酥软。\n"NOR;
+                        target->add("force",-250);
+                        }
+                }
+        else msg+= CYN"结果被$n"CYN"挡开了。\n" NOR;
+        msg+= CYN"\n$N"CYN"接着顺势用右手抓住$n"CYN"右臂，半转身将$p摔了出去，";
+        if(random(ap+pp)>pp || target->is_busy() )
+                {
+                msg += "结果$n"CYN"一跟头摔在地上。\n" NOR;
+                damage=calculate_damage(me, target, check_base_damage(me,target), damage_bonus);
+                wound=random(damage-(int)target->query_temp("apply/armor"));
+                if(damage>0)
+                        {
+                        target->receive_damage("kee", damage, me);
+                        if(wound>0) target->receive_wound("kee", wound, me);
+                        msg+=COMBAT_D->damage_msg(damage, "内伤");
+                        }
+                if ( !target->is_busy() )
+                        target->start_busy(1+random(3));
+                }
+        else msg+="结果被$n"CYN"一个踉跄，却没摔倒。\n" NOR;
+        message_vision(msg, me, target);
+        msg+=COMBAT_D->report_status(target, 0);
+        }
+else    {
+        msg += "可是$p看破了$P的企图，向后越开。\n" NOR;
+        message_vision(msg, me, target);
+        }
+me->add("force", -200);
+me->set_temp("sheshen_busy",1);
+if ( mydf<100 )
+        time = 5+random(5);
+if ( mydf<150 )
+        time = 4+random(4);
+if ( mydf<200 )
+        time = 3+random(5);
+if ( mydf<250 )
+        time = 2+random(5);
+if ( mydf<300 )
+        time = 2+random(3);
+if ( mydf<350 )
+        time = 1+random(4);
+else    time = 1+random(3);
+call_out("remove_eff",time,me);
+//me->start_busy(1+random(3))
+return 1;
+}
+
+void remove_eff(object me)
+{
+if ( !me )
+        return;
+write(HIY"\n你呼出一口气，将舍身技收将起来。\n\n"NOR);
+message("vision",HIY+me->name()+HIY"呼出一口气，背后的五爪金龙渐渐淡去。\n\n"NOR,environment(me),me);
+me->delete_temp("sheshen_busy");
+}
+
+int calculate_damage(object me, object target, int base_damage, int damage_bonus)
+{
+int damage;
+int myexp, youexp;
+
+damage=base_damage+(damage_bonus+random(damage_bonus))*7/10;
+myexp=me->query("combat_exp");
+youexp=target->query("combat_exp");
+
+if(random(youexp)>myexp)
+        damage-=damage/3;
+
+if (wizardp(me) && me->query("env/combat")=="verbose")
+        tell_object(me, sprintf(GRN "damage: %d\n" NOR, damage));
+
+return damage;
+}
+
+int check_base_damage(object me,object target)
+{
+int base_damage;
+if ( !me || !target || !present(me,environment(target)) )
+        return 0;
+if ( me->query_skill("dragonfight",1)>350 )
+        base_damage = 150;
+else if ( me->query_skill("dragonfight",1)>200 )
+        base_damage = 100;
+else    base_damage = 50;
+base_damage+= me->query("force_factor")/10;
+base_damage+= me->query_temp("apply/damage");
+base_damage-= target->query_temp("apply/armor")/5;
+base_damage+= me->query_str();
+if ( base_damage>300 )
+        base_damage = 300;
+return base_damage;
+}
+        
+

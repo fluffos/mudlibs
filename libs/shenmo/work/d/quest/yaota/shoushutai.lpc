@@ -1,0 +1,154 @@
+//by yhq 2004/10/12
+#include <ansi.h>
+inherit MAGIC_ROOM;
+string *ta=({ 
+       HIW"老鼠尾巴"NOR, 
+       HIC"猪鞭"NOR, 
+       WHT"狗鞭"NOR, 
+       WHT"牛鞭"NOR, 
+       WHT"鱿鱼须"NOR, 
+      
+});
+string *msg=({
+"手术师突觉洞太小，于是随手拿了根老鼠尾巴就在你鼻子上穿可起来。",
+"手术师突觉洞太小，于是随手拿了根猪鞭就在你鼻子上穿可起来。",
+"手术师突觉洞太小，于是随手拿了根牛鞭就在你鼻子上穿可起来。",
+"手术师突觉洞太小，于是随手拿了根鱿鱼须就在你鼻子上穿可起来。",
+"手术师突觉洞太小，于是随手拿了根猪鞭就在你鼻子上穿可起来。",
+});
+
+
+void create ()
+{
+        set ("short", HIW"手术台"NOR);
+        set ("long", WHT @LONG
+
+这里是三界之外的一个小小的手术台.只见台身
+却是用各种另类的尸体堆积而成.问你最后一遍，
+你愿意(agree)要我帮你打通经脉吗？ 
+
+LONG
+NOR);
+        set("exits",
+        ([
+                "down" : __DIR__"kkk",
+        ]));
+
+   set("no_fight", 1);
+   set("no_magic", 1);
+   set("objects",([
+       "/d/quest/yaota/npc/shoushushi1" : 1,
+ ]));
+
+    setup();
+}
+
+void init()
+{
+        add_action("do_agree", "agree");
+        seteuid(getuid());
+}
+
+int do_agree()
+{       
+        object me=this_player();
+        if( (me->query("combat_exp")<50000000 || me->query("level")<250 || me->query_temp("tower9")!= 1|| me->query_temp("yaota_enter")!=1 )&& userp(me) )
+         {    me->move("/d/city/kezhan");
+           tell_object(me,"你的体格不够强壮，做这种手术恐怕不行！\n"); return 1;}
+
+        if( me->is_busy() ) return notify_fail("你正忙着呢！\n");
+        if( me->query_temp("agree") ) return notify_fail("你正在手术中！\n");
+      
+        me->set_temp("agree",1);
+        tell_object(me,"你开始静卧床上，任由手术师在你身上乱来。\n");
+        call_out("finish",500,me); 
+        call_out("msgs",1,me);
+        me->start_busy(500);
+        if( me->query_temp("tower9")!= 1) {me->add("level",-10);me->set("rsg_eaten",0);}
+        me->set("shilian",1);
+}
+void finish(object me,int i)
+{
+        object newob, *inv;
+        string fabao_id;
+        if( !me ) return;
+        me->delete_temp("agree");
+        me->stop_busy();
+                
+        tell_object(me,HIY"你手术完毕，顿感全身真气贯穿自如，浑身畅快非常。\n");
+        message("channel:chat",HIY+"【巫师界】手术师(shoushu shi)："+me->query("name")+HIY+"在"HIG"不周山"HIB"底"HIG"试练塔"HIY"打通奇筋八脉，特赐不周山至宝鼻环一个。\n"NOR,users());
+                newob = new("/d/quest/yaota/obj/bihuan"); 
+                newob->set("owner_id",getuid(me));
+                newob->set("bihuan",getuid(me));
+                newob->save();
+                newob->setup();
+  if( me->query("ta/huan") )
+        {
+                inv = all_inventory(me);
+
+                for(i=0; i<sizeof(inv); i++) {
+                if( inv[i]->query("owner_id")==getuid(me) && inv[i]->query("huan")==getuid(me) )
+                {
+                destruct(inv[i]);
+                }
+                }
+                newob = new("/d/quest/yaota/obj/qihuan");
+                if( newob )
+                {
+                newob->set("owner_id", getuid(me));
+                if( !newob->restore() )   {
+                                tell_object(me, "不能 restore fabao. \n");
+                                destruct(newob);
+                                return;
+                        }
+                        fabao_id = (string)newob->query("id");
+                        if(!fabao_id) { 
+                            destruct(newob);
+                            return;
+                        }
+                        seteuid(fabao_id);
+                        export_uid(newob);
+                        seteuid(getuid());
+                        newob->save();
+                        newob->move(me);
+                tell_object(me,HIR"你的手术成功了。\n"NOR);
+            }
+        }
+        else
+        {
+                newob = new("/d/quest/yaota/obj/bihuan");
+                newob->set("value", 1);
+                newob->set("no_get", 1);
+                newob->set("no_sell", 1);
+                newob->set("no_give", "三界至宝怎能随意给人？");
+                newob->set("no_drop", 1);
+                newob->set("no_put", 1);
+                newob->set("owner_id",getuid(me));
+                newob->set("bihuan",getuid(me));
+                newob->save();
+                newob->setup();
+                newob->move(me);
+//                if( !newob->move(me) ) newob->move(environment(me));
+                tell_object(me,"手术师拿起一个环在你鼻子上一套，成功了。\n");
+                me->set("ta/huan","done");
+                me->save();
+        }
+}
+     
+void msgs(object me)
+{
+        if( !me ) return;
+        if( me->query_temp("agree") )
+        {
+        tell_object(me,COLOR_D->random_color(2,1)+"你突然感觉到鼻子一阵疼痛：\n"+NOR+COLOR_D->random_color()+msg[random(sizeof(msg))]+"\n"+NOR);
+        call_out("msgs",15,me);
+        }
+}
+
+
+int valid_leave(object me, string dir)
+{
+   if(dir=="down"&&me->query_temp("agree") )
+ return notify_fail("手术中我看你就别想跑了吧。\n");
+    return ::valid_leave(me, dir);
+}

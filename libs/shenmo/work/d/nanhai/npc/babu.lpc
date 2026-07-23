@@ -1,0 +1,546 @@
+//2011.snowtu
+//去除了无env NPC无限残留的bug
+
+#include <ansi.h>
+#include <combat.h>
+inherit "/d/snowtu/npc/super_npc";
+#include "place.h"
+
+int auto_full(object who); 
+void _leave();
+void leave();
+
+mapping t_msg = ([
+          "kee"         :  HIG"增加气血"NOR,
+          "eff_kee"     :  HIR"治疗气血"NOR,
+          "sen"         :  HIM"增加精神"NOR,
+          "eff_sen"     :  HIW"治疗精神"NOR,
+          "force"       :  HIY"内力补充"NOR,
+          "mana"        :  HIB"法力补充"NOR,
+]);
+
+mapping AR = ([
+        "heads"          : "头盔",
+        "necks"          : "护颈",
+        "cloths"         : "战衣",
+        "armors"         : "护甲",
+        "surcoats"       : "披风",
+        "waists"         : "护腰",
+        "wristss"        : "护腕",
+        "shields"        : "盾牌",
+        "fingers"        : "指套",
+        "bootss"         : "鞋类",
+]);
+public void random_name()
+{
+        int i,k,m,n;  
+        string name,*id; 
+        if( !clonep(this_object()) )
+                return;  
+        i=(random(sizeof(name1)/2))*2;   
+        k=(random(sizeof(name2)/2))*2;   
+        m=(random(sizeof(title1)));   
+        n=(random(sizeof(title2)));   
+        name=name1[i]+name2[k];  
+        id=({name1[i+1]+" "+name2[k+1],name2[k+1]});   
+        set_name(name, id);   
+        set("nickname", HIC+title1[m]+title2[n]+NOR);   
+        set("gender",((random(2)==1)?"男性":"女性"));   
+}
+
+public string check_data()
+{
+        string *da,tmp,str,need;
+        int i,k;
+        mapping data;
+        mixed temp;     
+        if( !environment() || !clonep(this_object()) )
+                return 0;
+        str = " ";       
+        temp = query("莲花/addType");
+        if ( stringp(temp) )
+                str+= t_msg[temp]+" ";
+        else if ( arrayp(temp) )
+        {
+                for(i=0;i<sizeof(temp);i++)
+                        str+= t_msg[temp[i]]+" ";
+        }
+        str = SDS_D->no_color_msg(str);
+        return str;             
+}
+
+public void create_lianhua()
+{
+        mapping LH = ([]);
+        object ob;
+        if( !clonep(this_object()) )
+                return;
+        ob = new("/d/nanhai/obj/lianhua/lianhua.lpc");            
+        if( !ob )
+                return;
+        LH = ob->query("莲花");
+	set("armor_type",ob->query("armor_type"));	
+        destruct(ob);
+        if( !LH || !mapp(LH) )
+                return;
+        set("莲花",LH);
+}                       
+
+public int create_place()
+{
+        int i;
+        string name,id,ob_name;
+        object npc,where,*old;
+        if( environment() || !clonep(this_object()) )
+                return 0;
+        npc = SDS_D->random_npc(this_object());
+        if( !npc || userp(npc) || !living(npc) )
+        {
+                CHANNEL_D->do_channel(this_object(),"rumor",HIW"密宗"HIM"风平浪静，无事发生。"NOR);
+                return 0;
+        }
+        where = SDS_D->random_place();
+        if( !where || !this_object()->move(where) )  
+        {
+                CHANNEL_D->do_channel(this_object(),"rumor",HIW"密宗"HIM"风平浪静，无事发生。"NOR);
+                return 0;
+        }
+        set_temp("spellslevel",10000);
+        set_temp("apply/name",({npc->name()}));
+        set_temp("apply/id",npc->parse_command_id_list());
+        set_temp("apply/short", ({npc->short()}));
+        set_temp("apply/long", ({npc->long()}));
+        set_temp("unit",npc->query("unit"));
+        set_temp("gender",npc->query("gender"));
+        set_temp("age",npc->query("age"));
+        set_temp("race",npc->query("race"));
+        set_temp("family",npc->query("family"));
+        set("first_time",time());
+        set_living_name(npc->parse_command_id_list()[0]);
+        
+        if ( npc )  destruct(npc);
+        
+        name = MISC_D->find_place(environment());
+        if( random(2) )   ob_name= this_object()->name();
+        else  ob_name= sprintf("%s(%s)",this_object()->name(),this_object()->parse_command_id_list()[0]);
+        id = sprintf("%s(%s)",this_object()->query("name"),capitalize(this_object()->query("id")));
+        
+        CHANNEL_D->do_channel(this_object(),"rumor","听说八部众"HIW+id+HIM"已携带着"HIW+check_data()+HIM"的密宗莲花"+"("+AR[query("armor_type")]+")，化身 "+ob_name+HIM"云游至"+name+HIM"！"NOR);
+        return 1;
+}        
+
+void create()
+{   
+        set_name("莲花八部众",({"ba bu",}));
+        random_name();
+        set("long", HIC"大乘经传道者，为湿婆麾下八部众之一。\n"NOR);   
+        set("max_sen",6000);   
+        set("eff_sen",6000);   
+        set("sen",6000);   
+        set("max_kee",6000);   
+        set("eff_kee",6000);   
+        set("kee",4000);   
+        set("combat_exp", 300000);   
+        set("bellicosity", 200+random(300));   
+        set("daoxing",3000000);   
+        set("chat_chance", 50);
+        set("chat_msg", ({ 
+                (: random_move :) ,
+        }) );
+
+        create_family("南海普陀山",2, "密宗"); 
+
+        set("任务",1);
+        set("class", "xian");   
+        set_skill("unarmed", 200);   
+        set_skill("dodge", 200);   
+        set_skill("staff", 200);   
+        set_skill("parry", 200);   
+        set_skill("force", 200);  
+        set_skill("lotusforce", 200);  
+        set_skill("jienan-zhi", 200);  
+        set_skill("lotusmove", 200);  
+        set_skill("lunhui-zhang", 200);  
+        set_skill("buddhism", 200);  
+
+        map_skill("unarmed","jienan-zhi");   
+        map_skill("dodge","lotusmove");   
+        map_skill("staff","lunhui-zhang");   
+        map_skill("parry","lunhui-zhang");   
+        map_skill("force","lotusforce");   
+        map_skill("spells","buddhism");   
+        setup( ); 
+        create_lianhua();
+} 
+       
+void random_move()
+{
+        if( !environment() )
+                return;
+        if( base_name(environment())=="/obj/empty" )
+                return; 
+        if( !living(this_object()) || this_object()->is_fighting() 
+         || this_object()->is_busy() )
+                return;
+        if( environment()->query("no_fight") 
+         || environment()->query("no_magic") 
+         || environment()->query("alternative_die") )
+                ::random_move();
+        else    ::random_move();       
+}
+
+void init() 
+{
+        if( !clonep(this_object()) )
+                return;
+        this_object()->remove_killer(this_player());   
+        this_player()->remove_killer(this_object());   
+        add_action("do_none","cast");   
+        add_action("do_none","ji");   
+        add_action("do_none","apply");   
+        add_action("do_kill","kill");  
+        add_action("do_walk","go");  
+} 
+
+void kill_ob(object ob)
+{
+        object who = this_object();
+        
+        if( !clonep(this_object()) )
+        {
+                ::kill_ob(ob);
+                return;
+        }
+        if( (who->is_fighting() && !who->is_fighting(ob)) 
+         || !living(who) )   
+        {
+                who->remove_all_killer();
+                all_inventory(environment())->remove_killer(who);
+                command ("chat "+ob->query("name")+"居然乘人之危，唉，看来人间道真的是没好孩子了！");     
+                message_vision ("$N叫嚷“想不到$n的人品这么差，真是叫人失望.....”\n",who,ob);     
+                leave();
+                return ;
+        }   
+        if( query_temp("spellslevel") )    
+        {
+                message_vision(HIY "$N"HIY"口念咒语，身形一晃，现了真身。\n"NOR,who);
+                delete_temp("spellslevel");
+                delete_temp("d_mana");
+                delete_temp("apply/name");
+                delete_temp("apply/id");
+                delete_temp("apply/short");
+                delete_temp("apply/long");
+        }
+        if( !auto_full(ob) )
+        {
+                message_vision ("$N叫嚷“累了，还是回去和佛祖谈心去.....”\n",who);
+                return;
+        }
+        ::kill_ob(ob);
+}
+
+int accept_fight(object ob){return 0;}
+       
+void die() 
+{  
+        string name,ob_name,id;
+        object npc,armor,where;
+        object me = query_temp("last_damage_from");  
+        object ob = this_object();  
+
+        if( !clonep(this_object()) )
+        {
+                ::die();
+                return;
+        }
+        if( query("force")>query("max_force")/2 )
+        {
+                SDS_D->addEffKee(ob); 
+                SDS_D->addKee(ob); 
+                SDS_D->addSen(ob); 
+                SDS_D->addEffSen(ob); 
+                ob->start_busy(1,100);
+                ob->interrupt_me(me,"super_npc");
+                ob->reset_action();
+                SDS_D->randomPfm(ob);
+                return;
+        }
+        if( !me || !present(me,environment()) )
+        {
+                remove_all_killer(); 
+                powerup();
+                return; 
+        } 
+        powerup();
+        ob->remove_all_killer();
+        all_inventory(environment())->remove_killer(ob);
+        say(HIW"\n"+name()+HIW"化作一朵莲花冲天而去！\n\n"NOR);
+        if( query_temp("spellslevel") )
+        {
+                leave();
+                return;
+        }
+        if( random(10)==1 )  
+                armor=new("/d/snowtu/obj/weapon/wuxian");
+        else    
+        {
+                armor=new("/d/nanhai/obj/lianhua/lianhua.lpc");
+                armor->setup();
+                armor->set("莲花",query("莲花"));
+        	armor->set("armor_type",query("armor_type"));
+        }       
+        if( armor && armor->is_lianhua() && (__DIR__"lianhua_master.lpc")->check_yaoguai_num() )
+        {
+                (__DIR__"lianhua_master.lpc")->add_yaoguai_num();
+                if( me->query("莲花/"+armor->query("armor_type")) )
+                {
+                        tell_object(me,YEL"\n你同类型的莲花已经有了，此次莲花自动消失，继续努力吧。\n"NOR);
+                        destruct(armor);
+                }
+                if( armor )    
+                {
+                        armor->set("owner_id",me->query("id"));
+                        armor->set("save_file",(me->query("id")+"/"+armor->query("armor_type")));
+                        if( armor->save() )   
+                                me->set("莲花/"+armor->query("armor_type"),1);
+                }
+        }
+        if( armor && armor->move(me) )  
+        {
+                message("channel:rumor",HIM"【顺风耳】某人：听说"+me->name()+HIM"夺到了密宗宝物:"+armor->query("name")+HIM"！\n"NOR,users());   
+                me->set_temp("召唤莲花/"+armor->query("armor_type"),1);
+        }
+        leave();
+} 
+
+int auto_full(object ob) 
+{ 
+        object sth; 
+        mapping skill;
+        string *skills;
+        int i,temp;
+        if( !ob )
+                return 0;
+        if( ob==query("last_target") )  return 1;
+        if( ob->query("combat_exp")>5000000 )  
+                set("combat_exp",ob->query("combat_exp"));
+        else    set("combat_exp",5000000);    
+
+        set("daoxing",ob->query("daoxing"));    
+        skill = query_skills();
+        skills = keys(skill);
+        i = sizeof(skills);
+        temp = SDS_D->maxSkill(ob);
+        if( temp<200 )  temp = 200;
+        while(i--)
+        {
+                if( skills[i] && stringp(skills[i]) )
+                        set_skill(skills[i],temp);
+        } 
+        map_skill("unarmed","jienan-zhi");   
+        map_skill("dodge","lotusmove");   
+        map_skill("staff","lunhui-zhang");   
+        map_skill("parry","lunhui-zhang");   
+        map_skill("force","lotusforce");   
+        map_skill("spells","buddhism");   
+
+        if(ob->query("max_sen")>3000)  
+                set("max_sen",ob->query("max_sen")); 
+        else    set("max_sen",3000);   
+        if(ob->query("max_kee")>3000)  
+                set("max_kee",ob->query("max_kee")); 
+        else    set("max_kee",3000);    
+        if(ob->query("max_force")>3000)  
+                set("max_force",ob->query("max_force")); 
+        else    set("max_force",3000);    
+        if(ob->query("max_mana")>3000)    
+                set("mana",ob->query("max_mana")*2); 
+        else    set("mana",6000);    
+        set("force_factory",query_skill("force")/2);    
+        set("mana_factory",query_skill("spells")/2);    
+        message_vision(YEL"\n$N"YEL"怜惜的看着$n"YEL"摇了摇头“自作孽，不可活，我来送你一程！”\n"NOR,this_object(),ob);  
+        powerup();
+        set("last_target",ob);
+        return 1; 
+} 
+
+mixed hit_ob(object ob,object me,int damage_bonus)
+{  
+        string msg;   
+        if( !clonep(this_object()) )
+                return 0;  
+        if( !me || !present(me,environment()) )  
+        {  
+                ob->delete_temp("last_damage_from");  
+                ob->powerup();
+                ob->remove_all_killer(); 
+                return 0;  
+        } 
+        if( random(8)>3 )
+                return 0;        
+        switch(random(3)) 
+        {
+                case 0:
+                        msg = HIY"$N"HIY"念动五字真言，双手捏『静心诀』，对着$n"HIY"大喝一声“定”！\n"NOR;
+                        if(random(2)==0)  
+                        {  
+                                msg+= HIY"$n"HIY"心神一颤，已挨了$N"HIY"一下重击！\n"NOR;
+                                me->receive_wound("sen",me->query("max_sen")/20,ob);
+                                me->receive_wound("kee",me->query("max_kee")/20,ob);
+                        }  
+                        else  msg+= HIW"$n"HIW"咬破舌尖，对着$N"HIW"喷了一口鲜血“妖术惑众”$N"HIW"不由法术回震，心神恍惚，不知自己身在何方。\n";
+                        return msg;
+        
+                case 1:
+                        msg = HIW+msgs[random(sizeof(msgs))]+NOR;
+                        if( random(2)==0 )  
+                        {         
+                                msg+= HIC"$n"HIC"闻此经文,不禁心神恍惚,不知身在何处。\n"NOR;
+                                me->start_busy(5); 
+                                me->move("/d/changan/zhongnan");
+                                msg+= HIC"$n"HIC"慢慢清醒了过来。\n"NOR;
+                        }  
+                        else    msg+= HIW"$n"HIW"大喝一声“我就是佛，佛就是我，佛又为何?”$N"HIW"不由浑身一震，心神恍惚。\n"NOR;
+                        return msg;
+
+                default:
+                        msg = HIC+msgs[random(sizeof(msgs))]+"\n"NOR;
+                        ob->receive_curing("kee",500);
+                        ob->receive_curing("sen",500);
+                        ob->receive_heal("kee",500);
+                        ob->receive_heal("sen",500);
+                        return msg;
+        }
+} 
+
+void heart_beat() 
+{
+        mixed t; 
+        object sth;
+        if( !clonep(this_object()) )
+                return;
+        if( !query("first_time") )
+        {
+                leave();
+                return;
+        }
+        if( this_object()->is_busy() && random(3)==0 )
+        {
+                t = this_object()->query_busy();
+                if( intp(t) )
+                {
+                        this_object()->start_busy(1,t+1);
+                        this_object()->interrupt_me(this_object(),"神圣");
+                }
+        }
+        if( !this_object()->is_fighting() 
+         && query("env/invisibility") )
+        {
+                delete_temp("yinshentime"); 
+                delete("env/invisibility"); 
+                message_vision(HIW"\n白光闪过之后，$N"HIW"又现出了身形。\n\n"NOR, this_object()); 
+                delete_temp("no_heal_up/yinshen"); 
+        }
+      
+        if( !query_temp("armor/armor") && sizeof(all_inventory())<=15 )
+        {
+                command("wear all");    
+                if( !query_temp("armor/armor") )
+                {
+                        sth=new("/d/city/npc/obj/armor");
+                        sth->move(this_object());    
+                        command("wear all");
+                }
+        }
+        
+        if( !query_temp("armor/boots") && sizeof(all_inventory())<=15 )
+        {
+                command("wear all");    
+                if( !query_temp("armor/boots") )
+                {
+                        sth=new("/d/city/npc/obj/shoes");
+                        sth->move(this_object());    
+                        command("wear all");
+                }
+        }
+        
+        if( !query_temp("armor/surcoat") && sizeof(all_inventory())<=15 )
+        {
+                command("wear all");
+                if( !query_temp("armor/surcoat") )
+                {
+                        sth=new("/d/city/npc/obj/pifeng");
+                        sth->move(this_object());    
+                        command("wear all");
+                }
+        }
+        
+        if( !query_temp("armor/shield") && sizeof(all_inventory())<=15 )
+        {       
+                command("wear all");
+                if( !query_temp("armor/shield") )
+                {       
+                        sth=new("/d/city/npc/obj/shield");
+                        sth->move(this_object()); 
+                        command("wear all");
+                }
+        }
+        
+        if( !query_temp("armor/head") && sizeof(all_inventory())<=15 )
+        {
+                command("wear all");
+                if( !query_temp("armor/head") )
+                {
+                        sth=new("/d/city/npc/obj/kui");
+                        sth->move(this_object());    
+                        command("wear all");
+                }
+        }
+        
+        if( !query_temp("weapon") && sizeof(all_inventory())<=15 )   
+        {
+                command("wield all");   
+                if( !query_temp("weapon") )    
+                {
+                        sth=new("/d/obj/weapon/staff/budd_staff");
+                        sth->move(this_object());    
+                        command("wield all");   
+                }
+        }
+        ::heart_beat();
+}       
+
+void leave()
+{
+        if( !environment() )
+                destruct(this_object());
+        else
+        {       
+                this_object()->powerup();
+                this_object()->remove_all_killer(); 
+                all_inventory(environment())->remove_killer(this_object());     
+                this_object()->move("/obj/empty");
+                call_out("_leave",2+random(3));
+        }
+}
+
+void _leave()
+{
+        destruct(this_object());
+}       
+
+void unconcious()
+{
+        die();
+}
+
+int do_walk()
+{
+        object me = this_player();
+        if( this_object()->is_fighting(me) )
+        {
+                say(name()+"一把拉住了你！\n\n");
+                return 1;
+        }
+        return 0;
+}

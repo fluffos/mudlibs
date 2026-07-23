@@ -1,0 +1,112 @@
+//snowtu
+#include <ansi.h>
+#include <combat.h>
+inherit SSERVER;
+
+void postfeijian(object,object,object,int);
+string name()  
+{
+        return "「"HIC"御剑回飞"NOR"」";  
+}
+
+int valid_perform(object me)
+{
+        if((me->query("family/family_name") != "大雪山" ||me->query("class") != "yao") &&!me->samara_check("bainiao-jian",1))
+                return notify_fail("只有大雪山弟子才配使用"+name()+"！\n"); 
+        if (me->query_skill_mapped("force")!="ningxie-force")
+                return notify_fail(name()+"必须配合冰谷凝血功才能使用。\n");
+        if(me->query_skill("bainiao-jian", 1) < 50) 
+                return notify_fail("你的百鸟剑法修为太差，难以施展"+name()+"！\n"); 
+        if(me->query_skill("ningxie-force", 1) < 50) 
+                return notify_fail("你的冰谷凝血功修为太差，难以施展"+name()+"！\n"); 
+        if(me->query_skill("sword", 1) < 50) 
+                return notify_fail("你的基本剑术根基太差，难以施展"+name()+"！\n"); 
+        if(me->query_skill("throwing", 1) < 50) 
+                return notify_fail("你的暗器使用根基太差，难以施展"+name()+"！\n"); 
+        if((int)me->query("force") < 100 ) 
+                return notify_fail("你内力不继，难以"+name()+"。\n");
+        if( time()-(int)me->query_temp("feijian_busy") < 2+random(2) ) 
+                return notify_fail("你现在状态不佳，不能使用"+name()+"。\n"); 
+        return 1;  
+}
+
+int perform(object me, object target)
+{
+        mapping feijian= ([
+                "damage": 280,
+                "dodge" : -70,
+                "parry" : -70,
+                "damage_type" : "刺伤",
+                "action" :  HIW"$w"+HIW"在空中幻出道道剑光，飞鸟投林般，向$n的$l扑去\n",
+                "post_action" : (: postfeijian :)
+        ]);
+        string str;
+        object weapon = me->query_temp("weapon");
+        if( !valid_perform(me) )
+                return 0;
+        if( !target ) target = offensive_target(me); 
+        if( !target 
+         || !target->is_character() 
+         || target->is_corpse() 
+         || target==me) 
+                return notify_fail("你要对谁施展"+name()+"？\n"); 
+        if(!me->is_fighting()) 
+                return notify_fail("你们没有在打架！\n");
+        if( !target->is_fighting(me))
+                return notify_fail("你们没有在打架！\n");
+     
+        me->add("force", -100);
+        me->set("actions",feijian);
+        me->set_temp("feijian_busy", time());
+
+        message_vision(HIW"$N突然清啸一声，掌中"+weapon->query("name")+HIW"脱手而出，化做一道长虹，直向$n飞去！\n"NOR,me,target);
+        COMBAT_D->do_attack(me, target,weapon);
+        me->reset_action();
+        return 1;
+}
+
+void postfeijian(object me,object victim,object weapon, int damage) 
+{
+        if( !me || !victim || !weapon || !me->is_fighting(victim) )
+                return;
+        if( damage>0 )
+        {                
+                damage = weapon->query("weapon_prop/damage");
+                damage-= victim->query_temp("apply/armor");
+                if( victim->query("family/family_name")!="大雪山"
+                  && ( random(me->query_skill("throwing",1))>180 || wizardp(me) ) )
+                               damage+= me->query_skill("ningxie-force",1);
+                if( damage>0 )
+                {
+                        message_vision(HIW"结果$n"HIW"被"+weapon->name()+HIW"上的寒意给冻得打了个冷战，只觉心神不宁。\n"NOR,me,victim);
+                        victim->receive_damage("sen",damage,me);
+                        COMBAT_D->report_sen_status(victim);
+                }
+        }
+        message_vision(HIW""+weapon->query("name")+HIW"在空中打了个转，又飞回到$N"HIW"手中。\n"NOR,me);               
+}
+
+int help(object me) 
+{
+        string temp;    
+        temp = "\t\t"+to_chinese("bainiao-jian")+" 50 级\n"; 
+        temp+= "\t\t"+to_chinese("sword")+" 50 级\n"; 
+        temp+= "\t\t"+to_chinese("throwing")+" 50 级\n"; 
+        temp+= "\t\t"+to_chinese("ningxie-force")+" 50 级\n"; 
+        temp+= "\t\t必须激发"+to_chinese("ningxie-force")+" \n"; 
+        temp+= "\t\t内力１００点\n"; 
+        write("\n"+to_chinese(explode(__FILE__,"/")[<2])+"之"+name()+"："NOR"\n"); 
+        write(@HELP 
+
+                使用功效： 
+                        给对手强有力的一击
+                出招类型： 
+                        延时型武功
+                        有隐藏攻击 
+                        叛师不可带出 
+                出手要求：               
+HELP);                           
+        write(temp); 
+        return 1; 
+}
+

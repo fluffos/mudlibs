@@ -1,0 +1,19 @@
+// worker.c
+
+inherit NPC;
+#include <ansi.h>
+
+void create()
+{
+       set_name("小仙童", ({"xian tong","tong","xian","xiao","xiao tong"}));
+        set("gender", "男性" );
+        set("class", "xian" );
+        create_family("昆仑山玉虚洞", 4, "弟子");
+        set("title",HIG"昆仑山玉虚洞"NOR);
+        set("age", 17);
+        set("long", "一个可爱的小仙童。\n");
+        set("combat_exp", 30);
+        set("attitude", "peaceful");
+        setup();
+}
+

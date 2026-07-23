@@ -1,0 +1,150 @@
+#include <ansi.h>
+inherit F_SAVE;
+inherit NPC;
+
+object offensive_target(object);
+varargs void invocation(object,object);
+
+string query_save_file()
+{
+return DATA_DIR"炼妖壶/npc/"+this_object()->query("save_file");
+}
+
+void die()
+{
+string name;
+object hu,who,env = environment(this_object());
+who = this_object()->query_temp("last_opponent");
+message("sound",HIW"\n\n半空传来一阵喊声“大圣归位”，"+this_object()->name()+HIW"长笑一声，身形化作一道白光冲天而去！\n\n"NOR,env);
+
+if ( who && userp(who) && env && present(who,env) )
+        {
+        SDS_D->powerup(this_object());
+        who->remove_killer(this_object());
+        this_object()->remove_killer(who);
+        message("channel:chat",sprintf(HIG"〖"HIR"大圣界"HIG"〗"HIY"%s(%s)"HIC"战胜"HIY"%s(%s)"HIC"夺得"HIR"%s"HIC"的头衔！\n"NOR,
+                                        who->query("name"),capitalize(who->query("id")),
+                                        this_object()->query("name"),capitalize(this_object()->query("id")),
+                                        this_object()->query("title") ),
+                users() );
+        invocation(this_object(),who);
+        return;
+        }
+}
+
+void unconcious()
+{
+die();
+}
+
+void heart_beat()
+{
+string skill;
+object weapon,me = this_object();
+::heart_beat();
+if ( living(me) )
+        {
+        if ( me->query("eff_kee") < me->query("max_kee") )
+                SDS_D->addEffKee(me);
+        if ( me->query("kee") < me->query("eff_kee") )
+                SDS_D->addKee(me);
+        if ( me->query("sen") < me->query("eff_sen") )
+                SDS_D->addSen(me);
+        if ( me->query("eff_sen") < me->query("max_sen") )
+                SDS_D->addEffSen(me);
+        if ( me->is_fighting() )
+                {
+                switch( random(3) )
+                        {
+                        case 1  :
+                                weapon = query_temp("weapon");
+                                if ( !weapon || !stringp(weapon->query("skill_type")) )
+                                        skill = "unarmed";
+                                else    skill = weapon->query("skill_type");
+                                SDS_D->randomPfm(me,skill);
+                                break;
+                        default :
+                                SDS_D->randomCast(me);
+                        }
+                }
+        }
+}
+
+object offensive_target(object me)
+{
+int sz;
+object *enemy;
+
+enemy = me->query_enemy();
+if( !enemy || !arrayp(enemy) )
+        return 0;
+sz = sizeof(enemy);
+if( sz>1 )
+        return 0;
+return enemy[0];
+}
+
+varargs void invocation(object npc,object who)
+{
+mapping skills,my,his;
+string *ids,*skill,*datas;
+int i;
+object *inv,obj;
+
+if ( !who || !npc || !present(who,environment(this_object()) ) )
+        return;
+if ( stringp(query("startroom"))
+  && base_name(environment()) != query("startroom") )
+        return;
+
+message_vision(HIW"\n$N"HIW"脸色一变，连忙对着$n"HIW"一作揖：这位"+RANK_D->query_respect(who)+"果是厉害，这位置便让于你了。\n\n"NOR,npc,who);
+
+skills = npc->query_skills();
+skill = keys(skills);
+for(i=0;i<sizeof(skill);i++)
+        npc->delete_skill(skill[i]);
+
+skills = who->query_skills();
+skill = keys(skills);
+for(i=0;i<sizeof(skill);i++)
+        npc->set_skill(skill[i],(int)who->query_skill(skill[i],1) );
+
+skills = npc->query_skills();
+skill = keys(skills);
+for(i=0;i<sizeof(skill);i++)
+        npc->map_skill(skill[i],(string)who->query_skill_mapped(skill[i]) );
+
+my = npc->query_entire_dbase();
+his = who->query_entire_dbase();
+datas = keys(his);
+for(i=0;i<sizeof(datas);i++)
+        {
+        if ( datas[i]=="id" || datas[i]=="title" )
+                continue;
+        my[datas[i]]=his[datas[i]];
+        }
+my["name"] = his["name"];
+my["id"] = capitalize(his["id"]);
+ids = ({my["id"],"dasheng","sheng","star"});
+npc->set_name(my["name"],ids);
+
+inv = all_inventory(who);
+for(i=0;i<sizeof(inv);i++)
+        {
+        obj = new(base_name(inv[i]));
+        obj->set("value",0);
+        obj->set("no_get",1);
+        obj->set("owner",my["id"]);
+        obj->set("owner_id",my["id"]);
+        obj->save();
+        if ( !obj->move(npc) )
+                command("say 少东西咯\n");
+        }
+npc->command("wield all");
+npc->command("wear all");
+npc->save();
+//npc->restore();
+SDS_D->powerup(npc);
+}
+
+

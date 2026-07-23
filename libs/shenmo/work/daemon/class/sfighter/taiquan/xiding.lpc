@@ -1,0 +1,142 @@
+
+#include <ansi.h>
+#include <combat.h> 
+inherit SSERVER; 
+void ding_ok(object);
+
+string name()  
+{
+return "「"HIB"膝顶噩梦"NOR"」";  
+}
+
+int valid_perform(object me)
+{
+if(me->query("family/family_name") != "格斗家" || me->query("class")!="saint")
+        return notify_fail("你不够资格使用"+name()+"！\n"); 
+if((int)me->query_skill("taiquan", 1) < 200)
+        return notify_fail("你的泰拳修为太浅，难以施展"+name()+"！\n"); 
+if((int)me->query("max_force") < 1000 ) 
+        return notify_fail("你的内力修为太浅！\n"); 
+if((int)me->query("force") < 500 ) 
+        return notify_fail("你的内力不足！\n"); 
+if((int)me->query("sen") < 300 ) 
+        return notify_fail("你的精神不足！\n"); 
+if (me->query_temp("ding_busy"))
+        return notify_fail("绝招滥使就不灵了！\n"); 
+return 1;  
+}
+
+int perform(object me, object target)
+{
+int num,m,t,damage;
+if ( !valid_perform(me) )
+        return 0;
+if( !target ) target = offensive_target(me); 
+if( !target 
+||      !target->is_character() 
+||      target->is_corpse() 
+||      target==me) 
+        return notify_fail("你要对谁施展"+name()+"？\n"); 
+if(!me->is_fighting()) 
+        return notify_fail(name()+"只能在战斗中使用！\n");   
+
+num=1;
+
+message_vision(HIC"\n$N"HIC"突然往后疾退，拉开距离，与$n"HIC"成对峙状。\n"NOR,me,target);
+message_vision(HIC"只见$N"HIC"轻松的跳了两跳，不屑的看了看$n"HIC",右手伸出两指望$n"HIC"勾了勾，挑衅味十足。$n"HIC"顿时怒火中烧，往$N"HIC"猛攻过去。\n"NOR,me,target);
+
+m=(int)me->query("combat_exp")/200000+1;
+t=(int)target->query("combat_exp")/200000+1;
+m*=(int)me->query_skill("unarmed");
+t*=(int)target->query_skill("parry");
+
+if (random(m) > t/10)
+        {
+        message_vision(HIC"$N"HIC"嘿嘿一声冷笑，轻轻一跳，避过$n"HIC"的攻击，双手乘机将$n"HIC"蒙头一抱，封住$n"HIC"的反击。\n"NOR,me,target);
+        message_vision(HIC"$N"HIC"猛提右膝往$n"HIC"的肋部撞了过去。\n"NOR,me,target);
+        damage=me->query_skill("unarmed")+me->query("force_factor")/2;
+        damage=random(damage);
+        if (damage<100) damage=100;
+        if (damage>500) damage=500;
+
+        target->receive_damage("kee", damage, me);
+        target->receive_wound("kee", damage, me);
+        COMBAT_D->report_status(target);
+
+        num=1;
+        me->start_busy(2);
+        target->start_busy(2);
+        call_out("ding",1,me,target,num);
+        }
+else    {
+        message_vision(HIY"$n"HIY"早就暗自提防，一见攻击被轻松闪过，急忙缩身后退。\n"NOR,me,target);
+        me->start_busy(random(2));
+        target->start_busy(0);
+        }
+me->add("force", -100*(num+1));
+me->set_temp("ding_busy",1);
+call_out("ding_ok",4+random(4),me);
+return 1;
+}
+
+void ding_ok(object me)
+{
+if (!me) return;
+me->delete_temp("ding_busy");
+}
+
+int ding(object me,object target,int num)
+{
+int m,t,damage;
+if (!me->is_fighting()) return 0;
+if (environment(me) != environment(target) ) return 0;
+if (!target->is_busy()||!me->is_busy()) return 0;
+if (me->query_skill_mapped("unarmed") != "taiquan") return 0;
+if (me->query("force")<100) return 0;
+if (target->query("kee")<1) return 0;
+
+m=(int)me->query_skill("force")*(120-num*2)/100;
+t=(int)target->query_skill("force");
+
+if (random(m) > t/10)
+        {
+        message_vision(HIC"\n$n"HIC"使劲挣扎却始终挣脱不开，$N"HIC"又提起右膝往$n"HIC"的肋部猛撞过去。\n"NOR,me,target);
+        damage=me->query_skill("taiquan",1)+me->query("force_factor")/2;
+        target->receive_damage("kee", damage, me);
+        target->receive_wound("kee", damage/3, me);
+        COMBAT_D->report_status(target);
+        num++;
+        me->start_busy(2);
+        target->start_busy(2);
+        call_out("ding",1,me,target,num);
+        }
+else    {
+        message_vision(HIY"\n$n"HIY"用尽浑身气力，硬是挣脱开来，急忙闪开去。\n"NOR,me,target);
+        me->start_busy(random(2));
+        target->start_busy(0);
+        }
+me->add("force", -100*num);
+return 1;
+}
+
+int help(object me)  
+{
+string temp;    
+temp = "\t\t"+to_chinese("taiquan")+" 200 级\n";  
+temp+= "\t\t内力修为十年\n"; 
+temp+= "\t\t内力５００点\n"; 
+temp+= "\t\t精神３００点\n"; 
+write("\n"+to_chinese(explode(__FILE__,"/")[<2])+"之"+name()+"："NOR"\n");   
+write(@HELP 
+
+        使用功效：   
+                连续伤害对手气血
+        出招类型：   
+                对峙型外功  
+                有隐藏效果  
+                叛师不可带出   
+        出手要求：     
+HELP);    
+write(temp); 
+return 1;   
+}

@@ -1,0 +1,150 @@
+#include <ansi.h>
+inherit SSERVER;
+
+string name()
+{
+return "「"HIW"漫天飞雪"NOR"」";
+}
+
+int valid_perform(object me)
+{
+        int time;       
+        if( ( ( me->query("family/family_name") != "月宫" 
+        && me->query_skill("snowsword",1)<350 )
+        || me->query("class")!="xian" ) && !me->samsara_check("snowsword"))
+                return notify_fail(name()+"乃是月宫不传之密。\n");
+        if( me->query_skill("snowsword", 1)<60 )
+                return notify_fail("你的"+to_chinese("snowsword")+"等级不足60，不能施展"+name()+"。\n");      
+        if( me->query_skill("sword", 1)<60 )
+                return notify_fail("你的"+to_chinese("sword")+"等级不足60，不能施展"+name()+"。\n");
+        if( me->query_skill("dodge",1)<60 ) 
+                return notify_fail("你的"+to_chinese("dodge")+"等级不足60，不能施展"+name()+"。\n");
+        if( me->query_skill("force",1)<60 ) 
+                return notify_fail("你的"+to_chinese("force")+"等级不足60，不能施展"+name()+"。\n");
+
+        if(me->query("force")<50)
+                return notify_fail("你内力不足 50 点，不能施展"+name()+"。\n");
+        if( me->query("max_force")<500 )
+                return notify_fail("你内力修为不足 500 点，不能施展"+name()+"。\n");   
+//        if( me->query("force_factor")>0 )
+//                return notify_fail(name()+"重招不重力。加力出招怎能剑走轻灵？\n");
+        if( time()<me->query_temp("moon_tian")+2+random(4) )
+                return notify_fail("绝招用多就不灵了。\n");     
+        return 1;               
+}
+
+int perform(object me, object target)
+{
+        string msg,*str;
+        object weapon;
+        int damage,k,temp=0,i,lvl,ice=0;
+
+        if( !valid_perform(me) )
+                return 0;
+        if( !target ) 
+                target = offensive_target(me);
+        if( !target
+         || !target->is_character()
+         || target->is_corpse()
+         || !me->is_fighting(target) )
+                return notify_fail(name()+"必须在战斗中使用。\n");
+        if( !me->is_fighting() )
+                return notify_fail(name()+"必须在战斗中使用。\n");
+
+        weapon = me->query_temp("weapon");
+        str = ({
+                HIC"\n$N"HIC"同时使出风回雪舞剑的前三招，在半空中压向$n"HIC"。\n"NOR,
+                HIC"\n"HIC"$N身体斜斜向上飘出，也不回头，反手就刺出了两招。\n"NOR,
+                HIC"\n$N"HIC"斜斜一再个翻身，长剑幻作千百支冰箭，夹着一股寒风扑向$n"HIC"。\n"NOR,
+                HIC"\n$N"HIC"身形愀然落地，顺势刺向扑向$n"HIC"，这一招有个名堂，叫做"+name()+"。\n"NOR,
+        });     
+        
+        lvl = me->query_skill("snowsword",1);
+        lvl+= me->query_skill("moondance",1);
+        lvl+= me->query_skill("moonforce",1);
+        lvl/= 3;
+        if( lvl<100 ) i = 1;
+        else if( lvl<150 ) i = 2;
+        else if( lvl<250 ) i = 3;
+        else    
+        {
+                i = 4;
+                ice = 1;
+        } 
+        damage = lvl;
+        damage-= random(target->query_temp("apply/armor"));
+        if( damage<200 )  damage = 200;
+        damage/= 15;
+        if( COMBAT_D->restrain(me,target) )
+                damage+= random(damage/3);
+        if( COMBAT_D->restrain(target,me) )
+                damage-= random(damage/3);
+        if( target->query("family/family_name")=="月宫" )
+                damage-= random(damage/5);
+        if( wizardp(me) )  tell_object(me,"damage每次增加"+damage+"\n");
+
+        message_vision(HIW"
+$N"HIW"轻叱一声，脚尖一点，身体急速上旋，在半空中一个折腰，同时手腕
+轻抖"+weapon->name()+HIW"，剑光闪动幻作漫天飞雪卷向$n"HIW"。\n"NOR,me,target);
+        me->set_temp("moon_tian",time());
+        me->add("force",-50);
+        if( damage )
+        {
+                me->add_temp("apply/damage",damage);
+                me->add_temp("apply/attack",damage);
+                temp+= damage;
+        }
+        COMBAT_D->do_attack(me,target,weapon);
+
+        for(k=0;k<i;k++)
+        {
+                if( !me || !target || !living(me) || !me->is_fighting(target) )
+                        continue;
+                if( !me->query("env/no_msg") && !target->query("env/no_msg") )  
+                        message_vision(str[k],me,target);
+                if( damage )
+                {                
+                        me->add_temp("apply/damage",damage);
+                        me->add_temp("apply/attack",damage);
+                        temp+= damage;
+                }
+                weapon = me->query_temp("weapon"); 
+                if( objectp(weapon) )
+                COMBAT_D->do_attack(me,target,weapon);
+                if( ice && !target->is_busy()
+                 && ( me->query("family/family_name")=="月宫"  || me->samsara_check("snowsword",1)
+                   || random(me->query_per()+target->query_per())>target->query_per() )  )
+                        target->start_busy(random(2)+1);     
+        }       
+        me->add_temp("apply/damage",-temp);
+        me->add_temp("apply/attack",-temp);
+        return 1;
+}
+
+int help(object me)
+{
+string temp;    
+temp = "\t\t"+to_chinese("snowsword")+" 60 级\n";
+//temp+= "\t\t"+to_chinese("moondance")+" 60 级\n";
+temp+= "\t\t"+to_chinese("sword")+" 60 级\n";
+temp+= "\t\t"+to_chinese("dodge")+" 60 级\n";
+temp+= "\t\t"+to_chinese("force")+" 60 级\n";
+temp+= "\t\t内    力 50 点\n";
+temp+= "\t\t内力修为 500 点\n";
+temp+= "\t\t不能加力\n";
+temp+= "\t\t战斗状态下使用\n";
+write("\n"+to_chinese(explode(__FILE__,"/")[<2])+"之"+name()+"："NOR"\n");
+write(@HELP
+
+        使用功效：
+                对敌人连续攻击
+        出招类型：
+                延迟型外功
+                月宫弟子使用将出现隐藏攻击
+                350级后可以叛师带出
+        出手要求：              
+HELP);                          
+write(temp);
+return 1;
+}
+

@@ -1,0 +1,183 @@
+#include <ansi.h>
+inherit __DIR__"r.lpc";
+
+void succ_break(object who);
+
+void create_room()
+{
+        set("short","雷洞");
+        set("long",@LONG
+此处一片虚空，在与无限边缘交接处荡漾起了阵阵的空
+气波纹。
+    虚空正中则是一只巨大的狰狞魔眼(mo yan)，开闭之间
+闪烁一出串串的雷光电火，结成网状，交织成大片大片的光
+辉。无数闪电雷光滋滋做响，声势浩大到了极点，当真是银
+蛇乱串。
+    
+LONG); 
+        set("item_desc",([
+                "mo yan" : "一只巨大的狰狞魔眼，开闭之间闪烁一出串串的雷光电火，
+将之击破(break)方能止住此处的雷电。\n",
+                "moyan"  : "一只巨大的狰狞魔眼，开闭之间闪烁一出串串的雷光电火，
+将之击破(break)方能止住此处的雷电。\n",
+        ]));    
+}
+
+void reset()
+{
+        ::reset();
+        set("jiguan",1);
+}
+
+void init()
+{
+        ::init();
+        add_action("do_break","break");
+        if( !userp(this_player()) )
+                call_out("succ_break",5+random(5),this_player());
+}       
+
+string status_msg(int ratio)
+{
+        string str = NOR"( 雷电";
+        if( ratio>9 ) str+= HIG "依旧肆虐，滋滋做响。"NOR;
+        else if( ratio>8 ) str+= HIG "稍微减弱了一点，但依旧肆虐。"NOR;
+        else if( ratio>7 ) str+= HIY "看起来很明显的减弱了。"NOR;
+        else if( ratio>6 ) str+= HIY "渐渐变弱了，但是仍然威力惊人。"NOR;
+        else if( ratio>5 ) str+= HIR "明显变细了，看起来状况并不太好。"NOR;
+        else if( ratio>4 ) str+= HIR "变得黯淡无光，看来快要停住了。"NOR;
+        else if( ratio>3 ) str+= RED "如同风中残烛，正在勉力支撑着不散去。"NOR;
+        else str+= RED"看起来马上要支持不住了。"NOR;
+        str+= ")\n";
+        return str;
+}
+
+string storm_hit(object who)
+{
+        string str;
+        if( !who || !living(who)
+         || !present(who) )
+                return 0;               
+        if( random(2) )
+        {
+                who->receive_wound("kee",200);
+                return HIY"电光一闪，结果$N"HIY"给电得全身发麻。\n"NOR;
+        }
+        if( random(2) )
+        {
+                who->receive_wound("kee",500);
+                return HIY"电光一闪，结果$N"HIY"给电得全身抽搐。\n"NOR;
+        }
+        if( random(2) )
+        {
+                who->receive_wound("sen",200);
+                return HIY"电光一闪，结果$N"HIY"给电得一阵恍惚。\n"NOR;
+        }
+        who->receive_wound("sen",500);
+        return HIY"电光一闪，结果$N"HIY"给电得呆若木鸡。\n"NOR;
+}
+
+void _break(object who,int t)
+{
+        int mt;
+        mapping action;
+        object weapon;
+        string str;
+        if( !who || !present(who) )
+                return;
+        if( t<=0 )
+        {
+                succ_break(who);
+                return;         
+        }       
+        
+        action = who->query("actions");
+        str = "\n"+action["action"]+"\n";
+        weapon = who->query_temp("weapon");
+        str = replace_string(str,"$n","魔眼");  
+        str = replace_string(str,"$w",weapon?weapon->query("name"):"双拳");
+        str = replace_string(str,"$l","");
+        if( random(3) )
+                str+= storm_hit(who);
+        else    str+= status_msg(t);
+        message_vision(str,who);
+        who->add("mana",-150);
+}
+
+void succ_break(object who)
+{
+        object ww,room;
+        if( !who || !present(who) )
+                return;
+        tell_room(this_object(),"风平浪静。。。。\n");
+        set("long","\n风平浪静... ... \n");
+        set("jiguan",0);
+        message("team", WHT"【队伍】" + who->name(1)+"：我已破除了"+query("short")+WHT"的禁制。\n" NOR,who->query_team()); 
+        if( userp(who) )
+                who->add_temp("huanbo/jiguan_flag",1);
+        else if( ww=who->query("owner") )
+                ww->add_temp("huanbo/jiguan_flag",1);
+        who->delete_temp("breaking");
+        who->delete_temp("huanbo/mijing_type");
+        who->move(__DIR__"mijing-e2");
+        message_vision("\n浓雾散去，露出了$N的身影。\n\n",who);
+}
+
+void breaking(object who,int t)
+{
+        remove_call_out("breaking");
+        if( !who || !present(who) )
+                return;
+        if( who->query("mana")<150 )
+        {
+                tell_object(who,"由于法力不足，你的动作停住了。\n");
+                who->delete_temp("breaking");
+                return;
+        }
+        if( who->query("eff_kee")<500 
+         || who->query("eff_sen")<500 )
+        {
+                tell_object(who,"你累得停住了手。\n");
+                who->delete_temp("breaking");
+                return;
+        }
+        if( t<=0 )
+        {
+                succ_break(who);
+                return;
+        }
+        _break(who,t);
+        t = t-1;        
+        call_out("breaking",1+random(3),who,t);
+}
+
+int do_break(string arg)
+{
+        int tt,succ = 0;
+        object weapon,me = this_player();
+        if( !arg || ( arg!="moyan" && arg!="mo yan" && arg!="yan" ) )
+                return err_msg("你要击碎什么？\n");
+        if( !query("jiguan") )
+                return err_msg("此处禁制已经给破了。\n");       
+        if( me->query_temp("breaking") )
+                return err_msg("你现在正忙呢。\n");
+        if( weapon=me->query_temp("weapon") )
+                succ++;
+        if( random(me->query("mana")/100)>10 )
+                succ++;
+        if( random(me->query("mana_factor")/10)>10 )
+                succ++;
+        if( random(me->query("daoxing")/100000)>10 )
+                succ++;
+        if( random(me->query("level")/10)>10 )
+                succ++;
+        if( me->query_temp("huanbo/mijing_type")!="storm" )
+                succ = 0;
+        message_vision("$N握紧"+(weapon?weapon->query("name"):"双拳")+"，运足全身气力猛击邪眼！\n",me);
+        if( random(succ)<=1 )
+                return err_msg("电光一闪，你只好先行闪避。\n");
+                
+        me->set_temp("breaking",1);
+        call_out("breaking",1,me,10);
+        return 1;
+}

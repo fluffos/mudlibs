@@ -1,0 +1,286 @@
+//战斗类npc
+#include <ansi.h>
+inherit NPC;
+
+int times=0;
+string place_name;
+
+mapping plc = ([
+        "三界山"        : "/d/sanjie/",
+        "昆仑山"        : "/d/kunlun/",
+        "万梅山庄"      : "/d/youxia/",
+        "移花宫"        : "/d/yhg/",
+        "少林寺"        : "/d/shaolin/",
+        "花果山"        : "/d/dntg/hgs/",
+        "黄风岭"        : "/d/qujing/huangfeng/",
+        "天宫"          : "/d/dntg/sky/",
+        "散仙岛"        : "/d/sanxian/",
+        "三界山"        : "/d/sanjie/",
+        "昆仑山"        : "/d/kunlun/",
+        "万梅山庄"      : "/d/youxia/",
+        "移花宫"        : "/d/yhg/",
+        "少林寺"        : "/d/shaolin/",
+        "花果山"        : "/d/dntg/hgs/",
+        "黄风岭"        : "/d/qujing/huangfeng/",
+        "天宫"          : "/d/dntg/sky/",
+        "散仙岛"        : "/d/sanxian/",
+
+]);
+
+string check_me();
+
+object random_place()
+{
+int  i, j, k;
+string *dirs,dir,title;
+object  newob;
+mixed*  file, exit;
+
+dirs = values(plc);
+
+if ( !sizeof(dirs) )  
+        return 0;
+i = random(sizeof(dirs));
+title = keys(plc)[i];
+place_name = title;
+file = get_dir( dirs[i]+"/*.lpc", -1 );
+if( !sizeof(file) )
+        return 0;
+for(k=0;k<30;k++)
+        {
+        j = random(sizeof(file));
+        if( file[j][1] > 0 )
+                {
+                newob=load_object(dirs[i]+"/"+file[j][0]);
+                if (newob)
+                        {
+                        if(newob->query("no_fight") ||
+                           newob->query("no_magic") ||
+                           newob->query("no_mieyao") ||
+                          !(exit=newob->query("exits")) ||
+                           sizeof(exit)<1 )
+                                continue;
+                        else    break;
+                        }
+                else    return 0;
+                }
+        else    return 0;
+        }
+if ( !objectp(newob) )
+        return 0;
+return newob;   
+}
+
+void create()
+{
+object ob;
+set_name("百姓",({"bai xing"}));
+
+set("inquiry",([
+        "妖怪"  : (: check_me :),
+]));    
+setup();
+ob = new("/d/obj/baowu/"+sprintf("%s",({"leizhu","fengzhu","huozhu","shuizhu","tuzhu","shengzhu"})[random(6)]));
+ob->set_name(RED"七杀珠"NOR,({"qi sha zhu"}));
+ob->move(this_object());
+ob = new("/d/city/npc/obj/armor");
+ob->set_name(({YEL"黄金甲"NOR,CYN"锁子甲"NOR,WHT"亮银甲"NOR,})[random(3)],({"kai jia","jia","armor"}));
+ob->set("value",200000);
+ob->set("no_get",0);
+ob->set("no_give",0);
+ob->set("no_sell",0);
+ob->set("no_put",0);
+ob->set("no_drop",0);
+ob->move(this_object());
+command("wear all");
+add_money("gold",10+random(21)); 
+}
+
+int invocation(object who)
+{
+object env;
+mapping name;
+
+if ( !who )
+        return 0;
+if ( !SDS_D->random_family(this_object(),who,who->query_skill("force",1)) )
+        return 0;
+env = random_place();
+if ( !env )
+        return 0;       
+name = NAME_D->random_name("yaoguai");
+set_name(name["name"],name["id"]);
+set("title",who->name()+"的");
+set("tufei_owner",who);
+this_object()->save();
+this_object()->move(env);
+message_vision("$N走了过来。\n\n"NOR,this_object());
+message_vision("$N用一种异样的眼神扫视着在场的每一个人。\n", this_object());
+return 1;
+}
+
+void init()
+{
+if ( this_player()==query("tufei_owner") )
+    set("owner_meet",1);
+add_action("do_none","",1);
+}
+
+int do_none()
+{
+string *no_cmds;
+object me = this_player();
+string verb = query_verb();
+
+if ( me!=query("tufei_owner") )
+        return 0;
+
+no_cmds = ({
+        "gongji","ji","apply","steal","whisper","bian","surrender",
+        "cast chuqiao",                 //all
+        "cast yinshen",                 //bonze
+        "cast shuidun",                 //dragon
+        "cast huimeng",                 //moon
+        "cast escape","cast chongsheng",//emei swordman
+        "burn",                         //jjf
+        "cast townportal",              //hell
+        "cast yin",                     //gumu
+        "cast arrest","cast drift","cast taijitu",
+                                        //kunlun ... so BT..
+        "cast mysticism",               //sanxian
+        "cast jieti",                   //xueshan
+        "cast tuoqiao",                 //shushan
+        "cast bagua",                   //youxia
+        "cast qimen","cast qiankun",    //wzg
+        "cast tudun",                   //wdd
+});
+
+if ( member_array(verb,no_cmds)!=-1 )
+        {
+        this_object()->kill_ob(me);
+        return 1;
+        }
+return 0;
+}
+
+void heart_beat()
+{
+string skill,exert;
+int i;
+object weapon;
+object obj,who,me = this_object();
+::heart_beat();
+
+who = query("tufei_owner");
+if ( !who || !objectp(who) )
+        return;
+if ( !present(who,environment()) )
+        {
+        if ( !environment()->query("no_magic")
+          && !environment()->query("no_fight")
+          && living(who) && query("owner_meet") )
+                {          
+                me->move(environment(who));
+                message_vision("妖风阵阵，$N"MAG"从中杀将出来！！\n\n"NOR,me);
+                tell_object(who,HIR+name()+HIR"追了过来！\n"NOR);
+                kill_ob(who);
+                }
+        }
+
+if ( query("eff_kee") < query("max_kee") )
+        SDS_D->addEffKee(me);
+if ( query("eff_sen") < query("max_sen") )
+        SDS_D->addEffSen(me);
+if ( !me->is_fighting() )
+        return;
+if ( query("kee") < query("eff_kee") )
+        SDS_D->addKee(me);
+if ( query("sen") < query("eff_sen") )
+        SDS_D->addSen(me);
+if ( objectp(weapon=me->query_temp("weapon")) )
+        skill = weapon->query("skill_type");
+else    skill = "unarmed";
+
+switch(random(10))
+        {
+        case 0 :
+        case 1 :
+        case 9 :
+        case 8 :
+        case 2 : SDS_D->randomPfm(me,skill);break;
+        case 3 :
+        case 7 :
+        case 6 : SDS_D->randomCast(me);break;
+        default: SDS_D->randomExert(me);
+        }
+}
+
+varargs int receive_wound(string type, int damage, object who)
+{
+if ( who && who!=query("tufei_owner") )
+        damage = 1;     
+else    damage = random(300);
+return ::receive_wound(type,damage,who);
+}
+
+varargs int receive_damage(string type, int damage, object who)
+{
+if ( who && who!=query("tufei_owner") )
+        damage = 1;     
+else    damage = random(300);
+return ::receive_damage(type,damage,who);
+}
+
+void die()
+{
+int i;  
+object *inv,who,ob = this_object();
+
+message_vision("$N死了。\n",ob);
+who = query_temp("last_damage_from");
+if ( who && who==query("tufei_owner") && present(who,environment()) && living(who) )
+        {
+        inv = all_inventory(ob);
+        for(i=0;i<sizeof(inv);i++)
+                {
+                if ( inv[i]->query("no_get") || inv[i]->query("no_sell") )
+                        continue;
+                if ( !inv[i]->move(environment()) || (inv[i]->query("value")<=0 && !stringp(inv[i]->query("money_id"))) )
+                        continue;
+                message_vision("$N的尸体上掉落了一"+inv[i]->query("unit")+inv[i]->name()+"。\n",ob);
+                }
+        }
+destruct(ob);
+}
+
+int heal_up()
+{
+if( environment() && !is_fighting() && !objectp(query("tufei_owner")) )
+        times++;
+if ( times>=120 )
+        {
+        die();
+        return 1;
+        }               
+return ::heal_up() + 1;
+}
+                
+string check_me()
+{
+object who  = this_player();
+if ( !visible(who) )
+        return "我看不见你，我看不见你....";
+if ( !objectp(query("tufei_owner")) )
+        {
+        if ( invocation(who) )
+                {
+                tell_room(environment(who),"土匪摇身一变，现出了真身，却是个"+name()+"！\n");
+                tell_room(environment(who),YEL"\n"+this_object()->short()+YEL"腾云驾雾，直接朝着"+place_name+YEL"飞去！\n\n"NOR);
+                return "哈哈，有种来找我哈";
+                }
+        else    return "恩，你不是我要找的人。";
+        }       
+return "下界"+query("tufei_owner")->query("name")+"正在寻我。。。。";
+}
+
+

@@ -1,0 +1,259 @@
+#include <ansi.h>
+#include <dbase.h>
+#include <room.h>
+
+inherit F_DBASE;
+inherit F_CLEAN_UP;
+
+int check_class(object me,object target);
+int perform(object me,object target);
+void hit_msg(object me,object target);
+int success_hit(object me,object target);
+void success_hit_msg(object me,object target);
+int lost_hit(object me,object target);
+void lost_hit_msg(object me,object target);
+int narmal_hit(object me);
+void double_hit_msg(object me,object target,int i);
+void remove_eff(object me,string temp_busy);
+void narmal_hit(object me);
+void remove_eff_msg(object me);
+
+object offensive_target(object me)
+{
+int sz;
+object *enemy;
+if ( !me ) return 0;
+enemy = me->query_enemy();
+if( !enemy || !arrayp(enemy) ) return 0;
+sz = sizeof(enemy);
+if( sz > 4 ) sz = 4;
+if( sz > 0 ) return enemy[random(sz)];
+else return 0;
+}
+
+//查询门派互克，克传回1，被克传回-1，其余传回0
+int check_class(object me,object target)
+{
+if ( !me || !target)
+        return 0;
+if ( me->query("class")=="xian" )
+        {
+        switch ( target->query("class") )
+                {
+                case "man"      :       return 1;
+                case "yao"      :       return -1;
+                default :       return 0;
+                }
+        }
+else if ( me->query("class")=="man" )
+        {
+        switch ( target->query("class") )
+                {
+                case "yao"      :       return 1;
+                case "xian"     :       return -1;
+                default :       return 0;
+                }
+        }
+else    {
+        switch ( target->query("class") )
+                {
+                case "xian"     :       return 1;
+                case "man"      :       return -1;
+                default :       return 0;
+                }
+        }
+}
+
+void create(object me,object target)
+{
+perform(me,target);
+}
+
+int perform(object me,object target)
+{
+int i,persent,mypot,hispot;
+mapping limit_skill,double_hit;
+string *str,type = query("type");       //类型
+seteuid(getuid());
+
+if( !target ) target = offensive_target(me);
+
+if( !target
+ || !target->is_character()
+ || target->is_corpse()
+ || target==me)
+        {
+        if ( query("target") )  // 如果set("target",1)即为攻击性pfm query("name")为pfm的名
+                return notify_fail("你要对谁施展「"+query("name")+"」？\n");
+        else    return narmal_hit(me); // 普通攻击，此处指 辅助性pfm
+        }
+
+if ( (string)query("class") )   // class 限制 必须有
+        {
+        if ( me->query("class")!=query("class") )
+                return notify_fail("你不是"+to_chinese(query("class"))+"界中人，使不出此招。\n");
+        }
+
+if ( (string)query("family") )  // 门派判定，如果有，则必须 set("betray_lvl",(int)number)
+        {
+        if ( me->query("family/family_name")!=query("family")
+          && me->query_skill((string)query("belong"),1)<(int)query("betray_lvl") )
+                return notify_fail("你的"+to_chinese(type)+"尚未到开宗创祖的地步。\n");
+        }
+
+if ( (string)query("master")    //师傅限制 如果有，则 set("master",<master_id>)
+  && me->query("family/master_id")!=(string)query("master") )
+        return notify_fail(query("name")+"必须由祖师爷亲传方可使用。\n");
+
+if ( mapp(limit_skill=query("limit_skill")) )   //其他skill等级限制  
+                                                        // set("limit_skill",([
+                                                        //      skill1 : lvl,
+                                                        //      skill2 : lvl, ]));
+        {
+        str = keys(limit_skill);
+        i = sizeof(str);
+        while(i--) 
+                {
+                if ( (string)str[i] )
+                        {
+                        if ( me->query_skill(str[i],1)<limit_skill[str[i]] )
+                                return notify_fail("你的"+to_chinese(str[i])+"等级不够，使不出"+query("name")+"。\n");
+                        }
+                }
+        }
+
+if ( (int)query("need_force") && me->query("force")<(int)query("need_force") )  //需要的内力 set("need_force",num)
+        return notify_fail("你内力不足了，难以使出"+query("name"));
+
+if ( (int)query("force") && me->query("force")<(int)query("force") )               //耗的内力 set("force",num)
+        return notify_fail("你内力不足了，难以使出"+query("name"));
+
+hit_msg(me,target);
+
+/******** 连续击示例 ***********
+set("double_hit",([
+        "num"           :       3                       连击次数
+        "temp"          :       "QJB_perform",  连击中加的temp名
+        "temp_num"      :       ({ 1,2,3,}),            加的temp数sizeof==num
+        "me_del_env"    :       1,                      me是否 delete_temp("env/brief_message"),1为是，0为否
+        "t_del_env"     :       1,                      target是否 delete_temp("env/brief_message"),1为是，0为否
+]));
+********************************/
+
+if ( mapp(double_hit=query("double_hit")) )
+        {
+        int num = double_hit["num"];
+        if ( double_hit["me_del_env"]==1 )
+                me->delete_temp("env/brief_message");
+        if ( double_hit["t_del_env"]==1 )
+                target->delete_temp("env/brief_message");
+        for ( i=0;i<num;i++ )
+                {
+                if ( (string)double_hit["temp"] )
+                        me->set_temp(double_hit["temp"],double_hit["temp_num"][i]);
+                  double_hit_msg(me,target,i);  
+                COMBAT_D->do_attack(me, target, me->query_temp("weapon")); 
+                }
+        if( !target->is_fighting(me) ) 
+                {
+                if( living(target) ) 
+                        {
+                        if( userp(target) ) 
+                                target->fight_ob(me);
+                        else    target->kill_ob(me);
+                        }
+                else    message_vision(CYN"好一招「"NOR+HIG+query("name")+NOR CYN"」，端的是厉害！\n"NOR,me);
+                }
+        if ( (string)double_hit["temp"] )
+                me->delete_temp(double_hit["temp"]);
+        if ( (int)query("busy_self") )  //自己busy 直接set("busy_self",busy_time)
+                me->start_busy((int)query("busy_self"));
+        if ( (string)query("temp_busy") )       //延迟效果      set("temp_busy",(string)temp_busy)
+                {
+                me->set_temp((string)query("temp_busy"),1);
+                call_out("remove_eff",(int)query("temp_busy_time"),me,(string)query("temp_busy"));
+                }
+        return 1;
+        }
+else    {
+        persent = query("persent");                             // 命中
+                                                        // 在具体文件中设置
+        persent+= check_class(me,target);                       // 加上class互克
+        if ( persent>0 )                                        // 如果 命中度>0 ( 不是很好，需要修改 )
+        return success_hit(me,target);          // 转到 攻击成功函数
+        else if ( persent<0 )                           // <0
+        return lost_hit(me,target);                     // 攻击失败
+        else    return narmal_hit(me);                  // 普通效果 ( 此处为 为 无把握取胜，收回招数之类的描述 )
+        }
+}
+
+int success_hit(object me,object target)
+{
+int damage = query("damage");                   // damage在具体pfm中设置 set("damage",num);
+if ( damage>800 ) damage = 800;                 // damage最大限
+if ( me && target && living(me) && living(target) ) 
+        {
+        success_hit_msg(me,target);                     // 攻击成功信息
+        switch( query("damage_type") )          // 伤害类型 kee,sen,busy,...
+                {
+                case "kee" :
+                        target->receive_damage("kee",damage);
+                        COMBAT_D->report_status(target);
+                        break;
+                case "eff_kee" :
+                        target->receive_wound("kee",damage);
+                        COMBAT_D->report_status(target,damage);
+                        break;
+
+                case "sen" :  /********  初步设定 pfm 只打 kee, 以下备用 *********/
+                        target->receive_damage("sen",damage);
+                        COMBAT_D->report_sen_status(target);
+                        break;
+                case "eff_sen" :
+                        target->receive_damage("sen",damage);
+                        COMBAT_D->report__sen_status(target,damage);
+                        break;
+                default :                       //busy技能，必须跟 set("busy_time",num);
+                        target->start_busy((int)query("busy_time"));
+                }
+        if ( (int)query("busy_self") )  //自己busy 直接set("busy_self",busy_time)
+                me->start_busy((int)query("busy_self"));
+        if ( (string)query("temp_busy") )       //延迟效果      set("temp_busy",(string)temp_busy)
+                {
+                me->set_temp((string)query("temp_busy"),1);
+                call_out("remove_eff",(int)query("temp_busy_time"),me,(string)query("temp_busy"));
+                }
+        return 1;
+        }
+return notify_fail("你见已无敌手，收起了攻击。\n");
+}
+
+void remove_eff(object me,string temp_busy)
+{
+if ( me && me->query_temp(temp_busy) )
+        {
+        me->delete_temp(temp_busy);
+        remove_eff_msg(me);                     //取消延迟的描述
+        }
+return;
+}
+        
+int lost_hit(object me,object target)
+{
+if ( me && target && living(me) && living(target) ) 
+        {
+        lost_hit_msg(me,target);
+        if ( (int)query("busy_lost") )  //失败busy set("busy_lost",busy_time)
+                me->start_busy((int)query("busy_lost"));
+        return 1;
+        }
+return notify_fail("你见已无敌手，收起了攻击。\n");
+}
+
+int narmal_hit(object me)                       //一般攻击
+{                                               //攻击性pfm(query("target")) 为"无奈收招"之类的描述
+write("你是天才\n");                            //辅助性pfm则为具体的功能了
+return 1;                                       //到时，可能会增加具体的 set("XXX",XXX)了
+}
+
+

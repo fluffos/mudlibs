@@ -1,0 +1,982 @@
+#include <ansi.h>
+inherit NPC;
+#include "yaoguai_reward.c";
+
+string _invocation(object who, int level);
+
+int exp_reward, pot_reward;
+int other_kee=0, other_sen=0;
+int announced=0;
+int check_env();
+
+string *death_msg= ({
+        "$N喝道：好好的鬼不做，偏偏跑到人间闹事，与我好好的回去做你那份有前途的鬼吧！\n
+$n无奈的耸了耸肩膀，只好化成一只魂魄附到了$N的手中。\n",
+        "$n一看不是$N的对手，只得就地一滚，变回原形，打了几个转，化作了魂魄。\n",
+        "$n大叫一声“我服了，我服了，我投降。。”乖乖地伏在$N脚下不动了。\n
+$N手一挥，$n如蒙大赦，驯服地化成一只魂魄附到了$N的手中。\n",
+        "$N喝道：孽畜，与我去见钟判！\n
+$n无可奈何，化做一只魂魄附到了$N的手中。．．．\n",
+});
+
+string *dirs1 = ({
+"/d/city",
+"/d/jjf",
+"/d/westway",
+"/d/kaifeng",
+"/d/lingtai",
+"/d/moon",
+"/d/gao",
+"/d/sea", 
+"/d/nanhai", 
+"/d/eastway",
+"/d/ourhome/honglou", 
+});
+
+string *dirs2 = ({
+"/d/xueshan",
+"/d/qujing/wuzhuang", 
+"/d/qujing/baotou", 
+"/d/qujing/baoxiang", 
+"/d/qujing/bibotan",
+"/d/qujing/biqiu",
+"/d/qujing/chechi",
+"/d/qujing/dudi",
+"/d/qujing/fengxian",
+"/d/qujing/firemount",
+"/d/qujing/jilei",
+"/d/qujing/jindou",
+"/d/qujing/jingjiling",
+"/d/qujing/jinping",
+"/d/qujing/jisaiguo",
+"/d/qujing/maoying",
+"/d/qujing/nuerguo",
+"/d/qujing/pingding",
+"/d/qujing/pansi",
+"/d/qujing/tongtian",
+"/d/qujing/qilin",
+"/d/qujing/qinfa",
+"/d/qujing/qinglong",
+"/d/qujing/tianzhu",
+"/d/qujing/wudidong",
+"/d/qujing/wuji",
+"/d/qujing/xiaoxitian",
+"/d/qujing/yinwu",
+"/d/qujing/yuhua",
+"/d/qujing/zhujie",
+"/d/qujing/zhuzi",
+"/d/penglai",
+// "/d/pantao",
+});
+
+string *dirs3 = ({
+"/d/death",  
+"/d/meishan",
+"/d/qujing/lingshan",
+});
+
+mapping names = ([
+        "gui"   : ({"鬼","诡","癸","刿","晷","宄"}),
+        "hun"   : ({"魂","阍","溷"}),
+        "xiao"  : ({"枭","魈","蛸","嚣"}),
+        "ling"  : ({"灵","铃","酃","囹","蛉","龄"}),
+        "ying"  : ({"影","蝇","萤","荧","鹦","瘿","媵","荥"}),
+        "mei"   : ({"猸","魅","没","糜","嵋","鹛","湄"}),
+        "qiu"   : ({"犰","蝤","泅","赇","鼽","蝤"}),
+        "jiu"   : ({"鸠","鹫","鬏","厩","蹴"}),
+        "an"    : ({"暗","谙","埯","黯"}),
+        "bing"  : ({"滨","鬓","玢","豳","髌"}),
+]);
+
+int yaoguai_type=0;
+
+int random_place(object me, string* dirs);
+void _leave();
+void leave();
+void leave2();
+
+void setname()
+{
+int i,j;
+string *ns,*ids;
+string name,id,id2,i2="";
+object ob,*player;
+
+player = users();
+i = random(sizeof(player));
+ob = player[i];
+
+if ( objectp(ob) && !wizardp(ob) )
+        {
+        name = ob->query("name");
+        id = capitalize(ob->query("id"));
+        set_name(name,({id}));
+        set("long",ob->query("long"));
+        set("gender",ob->query("gender"));
+        set("age",ob->query("age")+4);
+        set("title",ob->query("title"));
+        set("nickname",ob->query("nickname"));
+        set("race", ob->query("race"));
+        }
+else    {
+        ids = keys(names);
+        id = ids[random(sizeof(ids))];
+        ns = names[id];
+        name = ns[random(sizeof(ns))];
+
+        while( strlen(name)/2>(2+random(3)) )
+                {
+                id2 = ids[random(sizeof(ids))];
+                if ( id2==id ) continue;
+                ns= names[id2];
+                name+= ns[random(sizeof(ns))];
+                i2+= id2;
+                }
+        ids=({id+" "+i2,id,i2});
+        set_name(name,ids);
+        set("race", "野兽");
+        if (random(2) > 0 )
+                set("gender",random(2)?"雄性":"雌性");
+        }
+
+if ( random(10)==1 )
+        yaoguai_type=2;
+else    yaoguai_type=1;
+if ( random(2) )
+        set("died_type","break");
+else    set("died_type","give");
+}
+
+int cast_chance(int level)
+{
+    return 5+level/2;
+}
+
+void create()
+{
+setname();
+set("chat_chance", 5);
+set("chat_msg", ({
+             (: random_move :)
+}) );
+set("chat_chance_combat", 5);
+set("age", 20+random(80));
+set("class", "yao");
+set("combat_exp", 30000000);
+set("daoxing", 30000000);
+set("attitude", "heroism");
+set_skill("unarmed", 500);
+set_skill("jinghun-zhang", 500);
+map_skill("unarmed", "jinghun-zhang");
+set_skill("dodge", 500); 
+set_skill("ghost-steps", 500);
+map_skill("dodge", "ghost-steps");
+
+set_temp("apply/armor",100);
+set_temp("apply/damage",60);
+set("limbs", ({
+        "四白穴","地仓穴","大迎穴","峡车穴","头维穴","下关穴","隐白穴",
+        "太白穴","商丘穴","地机穴","少冲穴","少海穴","通理穴","神门穴",
+        "印堂穴","金律穴","玉液穴","鱼腰穴","百劳穴","百会穴","灵台穴",
+        "太阳穴","膻中穴","命门穴","鸠尾穴","气海穴"
+}) );
+set_living_name("gui guai");
+setup();
+}
+
+void set_skills(int j, int level)
+{
+object me=this_object();
+object weapon;
+
+me->set_skill("unarmed", j);
+me->set_skill("dodge", j);
+me->set_skill("parry", j);
+me->set_skill("force", j);
+me->set_skill("spells", j);
+
+me->set_skill("staff", j+random(15));
+me->set_skill("lunhui-zhang", j+random(15));
+me->set_skill("lotusmove", j+random(15));
+me->set_skill("buddhism", j+random(15));
+me->set_skill("jienan-zhi", j+random(15));
+me->set_skill("lotusforce", j+random(15));
+
+me->map_skill("force", "lotusforce");
+me->map_skill("staff", "lunhui-zhang");
+me->map_skill("parry", "lunhui-zhang");
+me->map_skill("spells", "buddhism");
+me->map_skill("dodge", "lotusmove");
+me->map_skill("unarmed", "jienan-zhi");
+
+set("chat_chance_combat", 10+2*level);
+set("chat_msg_combat", ({
+        (: cast_spell, "bighammer" :),
+}) );
+
+weapon=new("/d/obj/weapon/staff/budd_staff");
+weapon->move(me);
+carry_object("/d/obj/cloth/shoupiqun")->wear();
+command("wield all");
+}
+
+void copy_status(object me,object ob, int lv)
+{
+int j, lvl;
+mapping skill;
+int i,*level,max_level,max_sen, max_kee,base;
+object qm=new("/d/changan/npc/qianmian.c");
+base=20;
+
+lvl=lv+base-2;
+
+if( !qm )
+        {       // sth goes wrong.
+        leave();
+        return;
+        }
+
+skill=ob->query_skills();
+i=sizeof(skill);
+
+if( i>0 )
+        {
+        level=values(skill);
+        max_level=level[0];
+        while(i--)
+                {
+                if(level[i]>max_level)
+                        max_level=level[i];
+                }
+        max_level=max_level*lvl/base;
+        }
+else max_level=100;
+if ( max_level<150 )
+    max_level = 150;
+
+qm->copy_status(this_object(), ob, lvl);
+destruct(qm);
+
+set_skills(max_level, lv);
+
+max_sen=query("max_sen")/2;
+max_kee=query("max_kee")/2;
+if ( max_sen<2000 ) max_sen = 2000;
+if ( max_kee<2000 ) max_kee = 2000;
+max_kee*= 3;
+max_sen*= 3;
+add("eff_sen",max_sen);
+add("eff_kee",max_kee);
+add("sen",max_sen);
+add("kee",max_kee);
+add("max_sen",max_sen);
+add("max_kee",max_kee);
+
+//sth is wrong,i don't know where,so do it
+if ( ob->query("max_force")<2500 )
+      set("max_force",2500);
+else set("max_force",ob->query("max_force"));
+if ( ob->query("max_mana")<2500 )
+      set("max_mana",2500);
+else set("max_mana",ob->query("max_mana"));
+set("force",query("max_force")*2);
+set("mana",query("max_mana")*2);
+if( (query("daoxing")+query("combat_exp"))/2 >1000000)
+        add("force",query("force"));
+if ( query_skill("force")/20<100 )
+    set("force_factor", 100);
+else set("force_factor", query_skill("force")/20);
+if ( query("max_mana")/60<100 )
+    set("mana_factor", 100);
+else set("mana_factor", query("max_mana")/60+1);
+if ( query("combat_exp")<3000000 )
+      set("combat_exp",3000000);
+set("daoxing",(query("daoxing")*2+query("combat_exp"))/2);
+}
+
+int random_place(object me, string* dirs)
+{
+int  i, j, k;
+object  newob;
+mixed*  file, exit;
+
+if( !sizeof(dirs) )  return 1;
+i = random(sizeof(dirs));    // pick up one directory
+file = get_dir( dirs[i]+"/*.c", -1 );
+if( !sizeof(file) )
+        return 1;
+for(k=0;k<30;k++)
+        {
+        j = random(sizeof(file));
+        if( file[j][1] > 0 )
+                {
+                newob=load_object(dirs[i]+"/"+file[j][0]);
+                if (newob)
+                        {
+                        if(newob->query("no_fight") ||
+                           newob->query("no_magic") ||
+                           newob->query("no_mieyao") ||
+                          !(exit=newob->query("exits")) ||
+                          sizeof(exit)<1 )
+                                continue;
+
+                        if(me->move(newob))
+                                {
+                                message_vision("$N走了过来。\n",me);
+                                return 1;
+                                }
+                        }
+                }
+        }
+return 0;
+}
+
+void _leave()
+{
+object me=this_object();
+if( me->is_fighting() || me->is_busy() )
+        return;
+leave();
+}
+
+void leave()
+{
+if( !this_object() || !environment() )
+        return;
+message("vision",HIB+name()+HIB"身子一晃，变成一股青烟散去了。\n" NOR,environment());
+this_object()->move("/obj/empty");
+call_out("leave2",5);
+}
+
+void leave2()
+{
+remove_call_out("leave2");
+if( this_object() )
+        destruct(this_object());
+}
+
+string invocation(object who, int level)
+{
+object me=this_object();
+copy_status(me,who, level-2);
+return _invocation(who,level);
+}
+
+string _invocation(object who, int level)
+{
+object me=this_object(), env;
+string *dirs;
+int exp, i, lvl,dx;
+string where, long;
+dirs=dirs1;
+set("owner", who->query("id"));
+set("owner_ob", who);
+if ( query("race")=="野兽" )
+        {
+        if( yaoguai_type==1 )
+                {
+                long="一只"+name()+"，修练了有"+ chinese_number((query("daoxing")/1000/10)*10)+"多年道行。它";
+                if(random(2)==0)
+                        set("long",long+"通体透出一丝鬼气。\n");
+                else    set("long",long+"混身上下妖气逼人。\n");
+                }
+        else    {
+                dx=query("daoxing");
+                long="一个"+query("name")[0..<3]+"，在"+({"深山中","密林中","野外","草原上","野林中","高山中","莽林中","莽原上","深谷中",})[random(9)]+"汲取"+({"日月","天地","万物"})[random(3)]+"精华，颇有了些道行。\n";
+                set("long",long);
+                }
+        }
+lvl=level;
+i=random(1000);
+if(i<10)        set("type","aggressive");
+else if(i<120)  set("type","blocker");
+else if(i<320)  set("type","aggressive_on_owner");
+else if(i<620)  set("type","aggressive_on_owner1");
+else            set("type","normal");
+if(random(10)==0)
+        {
+        set("env/wimpy",40);
+        if(lvl<9) lvl=lvl+1; // as more difficult to kill.
+        }
+else    set("env/wimpy",1);
+exp=(who->query("combat_exp")+who->query("daoxing"))/2;
+if( exp<30000 )
+        {
+        exp_reward=500+exp/60;
+        pot_reward=200+exp/300;
+        }
+else if( exp<300000 )
+        {
+        exp_reward=1000+exp/600;
+        pot_reward=300+exp/6000;
+        dirs=dirs+dirs2;
+        }
+else if( exp<3000000 )
+        {
+        exp_reward=1500+exp/6000;
+        pot_reward=350+exp/20000;
+        dirs=dirs+dirs2;
+        }
+else    {
+        exp_reward=2000;
+        pot_reward=500;
+        dirs=dirs+dirs2+dirs3;
+        }
+pot_reward=pot_reward*(lvl+1)/5;
+exp_reward=exp_reward*(lvl+1)/5;
+me->set("stay_time", time()+1800);
+if(!random_place(me, dirs))
+        {
+        leave();
+        return 0;
+        }
+
+env=environment(me);
+where=me->query("name")+"("+capitalize(me->query("id"))+")";
+if( env )
+        where+="在"+ MISC_D->find_place(env) +
+               env->query("short");
+return  where;
+}
+
+int accept_object(object who,object ob)
+{
+object me;
+me = this_object();
+
+if ( (! ob) || ob->value() < 100000)
+        {
+        message_vision ("$N一瞪眼：就这点东西？不想活了？？？\n", me);
+        return 1;
+        }
+who->set_temp("抓鬼/allow_to_go", 1);
+message_vision ("$N嘿嘿嘿几声怪笑：算你走运，快滚！"+"可别让我再看见你！\n",me);
+return 1;
+}
+
+void check_room()
+{
+object me=this_object();
+object env=environment(me);
+
+if( !living(me) ) return;
+
+if( env && ( env->query("no_fight") ||
+             env->query("no_magic") ) )
+        random_move();
+}
+
+void init()
+{
+int exp, myexp;
+object leader;
+object me=this_object();
+object who=this_player();
+string type;
+int t=query("stay_time");
+
+::init();
+
+check_env();
+
+add_action("do_kill","kill");
+
+if ( query("died") )
+        {
+        if ( query("died_type")=="break" )
+                add_action("do_break","break");
+        else    add_action("do_give","give");
+        return;
+        }
+
+if( t && time()>(t+3600) )
+        {
+        remove_call_out("leave");
+        call_out("leave",1);
+        return;
+        }
+
+if( t && time()>t )
+        {
+        remove_call_out("_leave");
+        call_out("_leave",300);
+        }
+
+if( !userp(this_player()) )
+        return;
+
+if( !living(this_object()) )
+        return;
+
+type=query("type");
+switch (type)
+        {
+        case "aggressive":
+                leader=query_leader();
+                if( leader && present(leader, environment(me)))
+                        {
+                        if(!is_fighting())      kill_ob(leader);
+                        break;
+                        }
+                exp=(who->query("combat_exp")+who->query("daoxing"))/2;
+                myexp=(query("combat_exp")+query("daoxing"))/2;
+                if(exp>myexp*3 || exp<myexp)
+                        break;
+                set_leader(who);
+                message_vision("$N盯着$n，馋得直流口水：嘿嘿．．．\n",this_object(), who);
+                kill_ob(who);
+                break;
+
+        case "aggressive_on_owner1":
+                if( query("owner")==this_player()->query("id"))
+                        {
+                        if( !announced )
+                                {
+                                message_vision("$N看见$n，大叫一声：哈哈，送上门来的肉！\n",this_object(), who);
+                                announced=1;
+                                }
+                        kill_ob(this_player());
+                        if(random(4)>0)
+                                set_leader(who);
+                        else    set_leader(0);
+                        this_player()->kill_ob(this_object());
+                        }
+                break;
+
+        case "aggressive_on_owner":
+                if( query("owner")==this_player()->query("id"))
+                        {
+                        if( !announced )
+                                {
+                                message_vision("$N看见$n，大叫一声：哈哈，送上门来的肉！\n",this_object(),who);
+                                announced=1;
+                                }
+                        kill_ob(this_player());
+                        this_player()->kill_ob(this_object());
+                        }
+                break;
+
+        case "blocker":
+                add_action("do_block","",1);
+        }
+remove_call_out("check_room");
+call_out("check_room",2);
+}
+
+int do_block(string arg)
+{
+object me=this_object();
+object who=this_player();
+string verb=query_verb();
+int t;
+
+if( wizardp(who) && !visible(who) )
+        return 0;
+if( me->is_fighting() )
+        return 0;
+if( verb!="go" && verb!="fly" &&
+   !( environment() && environment()->query("exits/" + verb) ) )
+        return 0;
+
+if( who->query_temp("抓鬼/allow_to_go") )
+        {
+        who->delete_temp("抓鬼/allow_to_go");
+        who->delete_temp("抓鬼/leave_time");
+        return 0;
+        }
+t=who->query_temp("抓鬼/leave_time");
+if( t>0 && time()>t )
+        {
+        who->delete_temp("抓鬼/leave_time");
+        message_vision("$n乘$N一个不注意，急忙溜了过去。\n",me,who);
+        return 0;
+        }
+if(t==0 )
+        {
+        t=time()+30+random(90);
+        who->set_temp("抓鬼/leave_time",t);
+        message_vision("$N猛地跳过来拦在$n面前，高声叫道：\n"+
+                "          此山是我开，此树是我栽！\n"+
+                "          要打此路过，留下买路财！\n\n",me,who);
+        }
+
+tell_object(who,me->name()+"一把抓住了你！\n");
+return 1;
+}
+
+void unconcious()
+{
+die();
+}
+
+int do_kill(string arg)
+{
+if ( arg && id(arg) && !query_temp("be_killed") )
+        set_temp("be_killed",time());
+check_env();    
+return 0;
+}
+
+varargs int receive_wound(string type, int damage, object who)
+{
+string owner=query("owner");
+object inv;
+
+if ( time()<query_temp("be_killed")+3 )
+    {damage/= 5;if ( damage<5 ) damage = 5; if ( damage>100 ) damage=100; }
+if( who && who->query("id")!=owner )
+        {
+        if( userp(who) || ((inv=who->query_temp("invoker")) &&
+            inv->query("id")!=owner))
+                {
+                if(damage>0)
+                        {
+                        switch(type)
+                                {
+                                case "kee": other_kee+=damage; break;
+                                case "sen": other_sen+=damage; break;
+                                }
+                        }
+                }
+        }
+return ::receive_wound(type, damage, who);
+}
+
+varargs int receive_damage(string type, int damage, object who)
+{
+string owner=query("owner");
+object inv;
+
+if ( time()<query_temp("be_killed")+2 )
+    {damage/= 5;if ( damage<5 ) damage = 5; if ( damage>100 ) damage=100; }
+
+
+if( who && who->query("id")!=owner )
+        {
+        if(userp(who) || ((inv=who->query_temp("invoker")) &&
+                   inv->query("id")!=owner)) {
+           // can't use other's NPC to help kill.
+        if(damage>0) {
+            switch(type) {
+                case "kee": other_kee+=damage; break;
+                case "sen": other_sen+=damage; break;
+            }
+        }
+       }
+    }
+    return ::receive_damage(type, damage, who);
+}
+
+int attack()
+{
+object opponent;
+clean_up_enemy();
+opponent = select_opponent();
+
+if( objectp(opponent) )
+        {
+        string owner=query("owner");
+        if( opponent->query("id")==owner
+         && userp(opponent)
+         && !living(opponent)
+         && environment()==environment(opponent))
+                {
+                call_out("leave",1);
+                return 0;
+                }
+
+        set_temp("last_opponent", opponent);
+        COMBAT_D->fight(this_object(), opponent);
+        return 1;
+        }
+else    return 0;
+}
+
+void heart_beat()
+{
+string skill,exert;
+int i;
+object weapon;
+object me = this_object();
+
+::heart_beat();
+
+check_env();
+
+if ( query("died") )
+        {
+        if ( !living(environment()) )
+                {
+                message("vision","一道阴风刮过，钟馗带着黑白无常与那开路蝙蝠走到跟前，
+将"+query("oldName")+"所化的魂魄带走。\n",environment());
+                destruct(me);
+                }
+        return;
+        }
+
+if ( query("eff_kee") < query("max_kee") &&  random(10)==1 )
+        SDS_D->addEffKee(me);
+if ( query("kee") < query("eff_kee") )
+        SDS_D->addKee(me);
+if ( query("sen") < query("eff_sen") )
+        SDS_D->addSen(me);
+if ( query("eff_sen") < query("max_sen") &&  random(10)==1 )
+        SDS_D->addEffSen(me);
+
+if ( !me->is_fighting() )
+        return;
+
+
+if ( objectp(weapon=me->query_temp("weapon")) )
+        skill = weapon->query("skill_type");
+else    skill = "unarmed";
+exert = SDS_D->checkSkill(me,skill);
+if ( stringp(exert) )
+        command("perform "+exert);
+
+skill = "spells";
+exert = SDS_D->checkSkill(me,skill);
+if ( stringp(exert) )
+        command("cast "+exert);
+
+skill = "force";
+exert = SDS_D->checkSkill(me,skill);
+if ( stringp(exert) )
+        command("exert "+exert);
+}
+
+void die()
+{
+string owner,skill,str;
+object owner_ob,me=this_object(),*ob;
+int max_kee, max_sen, ratio, exp_r, pot_r,i,dx=0;
+
+owner = query("owner");
+
+if ( query("died") )
+        {
+        destruct(me);
+        return;
+        }
+
+else if( !stringp(owner) || !objectp(owner_ob = find_player(owner)) )
+        {
+        message_vision("$N嘿嘿一笑，化作阴风散去。\n",this_object()); //no主
+        destruct(me);
+        return;
+        }
+else if ( !present(owner_ob,environment()) )
+        {
+        say(name()+"说道：可恼，尚到人间没多久，就不明不白的又回去了！\n");
+        message_vision("$N惨叫一声，化作浓烟散去。\n",this_object());
+        destruct(me);
+        return;
+        }
+else if ( query_temp("last_damage_from")!=owner_ob )    //no 主杀
+        {
+        say(name()+"说道：可恼，尚到人间没多久，就给人误杀了！\n");
+        message_vision("$N惨叫一声，化作浓烟散去。\n",this_object());
+        destruct(me);
+        return;
+        }
+else    {
+        SDS_D->powerup(me);
+        me->remove_killer(owner_ob);
+        owner_ob->remove_killer(me);
+        message_vision("\n"+death_msg[random(sizeof(death_msg))]+"\n",owner_ob,this_object());
+
+        max_kee=query("max_kee");
+        max_sen=query("max_sen");
+        ratio=200*(max_kee-other_kee)/max_kee;
+        if(ratio<0) ratio=0;
+        ratio=ratio*(max_sen-other_sen)/max_sen;
+        if(ratio<0) ratio=0;
+        exp_r=exp_reward*ratio/50;
+        pot_r=pot_reward*ratio/50;
+        if ( exp_r>8000 ) 
+                exp_r = 8000;
+        if ( pot_r>8000 ) 
+                pot_r = 8000;
+        str = " got "+exp_r+"/"+exp_reward+" exp "+pot_r+"/"+pot_reward+" pot in level "+owner_ob->query_temp("抓鬼/level");
+        if ( random(20)>5 )
+                {
+                dx = exp_r*4;
+                dx = random(dx/2);
+                str+= "and got "+dx+" daoxing.\n";
+                }
+        me->set("wx",exp_r);
+        me->set("dx",dx);
+        me->set("pot",pot_r);
+        me->set("str",str);
+
+        ob = all_inventory(me);
+        i=sizeof(ob);
+        while(i--)
+                {
+                message("vision",me->name()+"身上的"+ob[i]->name()+"化作浓烟散去。\n",environment());
+                destruct(ob[i]);
+                }
+        me->set("oldName",me->query("name") );
+        me->set_name("魄石",({me->query("id")+"'s po","po"}));
+        if ( query("died_type")=="break" )
+                me->set("long","「"+query("title")+"」"+me->query("oldName")+"所化的魄.可以将它扳碎(break)以打回地府。\n");
+        else    me->set("long","「"+query("title")+"」"+me->query("oldName")+"所化的魄.可以将它交给老钟以打回地府。\n");
+        me->set("died",1);
+        me->delete("title");
+      if(me->query("env/invisibility"))
+         me->delete("env/invisibility"); 
+        me->delete("race");
+        me->delete("nickname");
+        me->set_weight(1);
+        me->set("disable_type",NOR"<"HIY+me->query("oldName")+NOR">");
+        me->set_temp("disabled",1);
+        me->save();
+        me->move(owner_ob);
+        if ( !present(me,owner_ob) )
+                error("yaoguai.c Cant't Move to his Owner. \n");
+        return;
+        }
+::die();
+}
+
+
+int do_break(string arg)
+{
+int exp_r,pot_r,dx,kar;
+string str,skill;
+
+object ob = this_object();
+object who = this_player();
+//object kar=this_player()->query("kar");
+if ( !present(ob,who) || who!=query("owner_ob") )
+        return 1;
+
+exp_r = query("wx");
+pot_r = query("pot");
+
+dx = query("dx");
+str = query("str");
+
+if ( id(arg) )
+        {
+        message_vision(HIY"$N"HIY"将$n"HIY"狠狠向地上一砸，”轰隆“一声巨响！！"NOR,who,this_object());
+
+        if ( query("died_type")!="break" )
+                {
+                message_vision(HIY"结果什么反应也没有。\n\n"NOR,who,this_object());
+                return 1;
+                }
+
+        message("vision",HIY"一道阴风刮过，钟馗带着黑白无常
+与那开路蝙蝠走到跟前，将"+query("oldName")+"所化的魂魄带走。\n\n\n"NOR,environment(who));
+        who->add("combat_exp",exp_r+random(exp_r));
+        who->add("balance",10000);
+        who->add("potential",pot_r+random(pot_r));
+        who->add("zhongkui",1);
+        tell_object(who, "你得到了"+chinese_number(exp_r)
+                        +"点"HIY"武学经验"NOR"和"+chinese_number(pot_r)+
+                        "点"HIG"潜能"NOR"！你还得到了一两黄金!\n");
+        if ( dx>0 )
+                {
+                who->add("daoxing",dx);
+                tell_object(who,"另外你还得到了"+COMBAT_D->chinese_daoxing(dx)+"道行。\n");
+                }
+
+       skill=give_reward(who);
+        str+= "and rewarded 1 lvl of "+skill+".\n";
+        MONITOR_D->report_system_object_msg(who,str);   //sys msg
+        message_vision(CYN+"钟馗由衷的向"+CYN"$N"+CYN"道谢。\n"NOR,who,this_object());
+        who->set("抓鬼/done",1);
+        destruct(ob);
+        return 1;
+        }
+}
+
+
+int do_give(string arg)
+{
+int exp_r,pot_r,dx,kar;
+string str,skill,id,kui_id;
+object kui;
+object ob = this_object();
+object who = this_player();
+if ( !present(ob,who) || who!=query("owner_ob") )
+        return 1;
+id = query("id");
+exp_r = query("wx");
+pot_r = query("pot");
+dx = query("dx");
+//kar=who->query("kar");
+str = query("str");
+
+if ( sscanf(arg,"%s to %s",id,kui_id)==2
+  || sscanf(arg,"%s %s",kui_id,id)==2 )
+        {
+        if ( !kui=present(kui_id,environment(who)) )
+                return 0;
+        if ( interactive(kui) )
+                return 0;
+        if ( kui->query("id")!="zhong kui" )
+                return 0;
+        if ( file_name(environment(who))!="/d/death/new-out6")
+                return 0;
+
+        message_vision(HIY"\n$N"HIY"将$n"HIY"交给"+kui->name()+"。\n"NOR,who,this_object());
+
+        if ( query("died_type")!="give" )       //加强难度的化，可以直接destruct,嘿嘿
+                {
+                message_vision(HIY+kui->name()+"皱了皱眉头：我现在正忙，还是你自己处理吧。\n\n"NOR,who,this_object());
+                return 1;
+                }
+
+        message("vision",HIY"钟馗对着"+query("oldName")+"的魂魄大喝：还不速速归位？！"HIY+query("oldName")+"乖乖的现出鬼形，慢慢淡去。。。\n\n\n"NOR,environment(who));
+
+        who->add("combat_exp",exp_r+random(exp_r));
+        who->add("balance",10000);
+        who->add("potential",pot_r+random(pot_r));
+ who->add("zhongkui",1);
+        tell_object(who, "你得到了"+chinese_number(exp_r)
+                        +"点"HIY"武学经验"NOR"和"+chinese_number(pot_r)+
+                        "点"HIG"潜能"NOR"！你还得到了一两黄金!\n");
+        if ( dx>0 )
+                {
+                who->add("daoxing",dx);
+                tell_object(who,"另外，你还得到了"+COMBAT_D->chinese_daoxing(dx)+"道行。\n");
+                }
+
+       skill=give_reward(who);
+        str+= "and rewarded 1 lvl of "+skill+".\n";
+        MONITOR_D->report_system_object_msg(who,str);   //sys msg
+
+        message_vision(CYN+"钟馗由衷的向"+CYN"$N"+CYN"道谢。\n"NOR,who,this_object());
+        who->set("抓鬼/done",1);
+        destruct(ob);
+        return 1;
+        }
+}
+
+int check_env()
+{
+object env;
+env = environment();
+if ( !objectp(env) )
+        return 0;
+if ( !living(this_object()) )
+        return 0;
+if ( strsrch("奇门",env->query("short"))!=-1 && !query("po_qimen") )
+        {
+        SDS_D->powerup(this_object());
+        this_object()->remove_all_killer();
+        all_inventory(env)->remove_killer(this_object());
+        environment()->self_destruct();
+        set("po_qimen",1);
+        }
+if ( env->query("alternative_die") )
+        {
+        SDS_D->powerup(this_object());
+        this_object()->remove_all_killer();
+        all_inventory(env)->remove_killer(this_object());
+        ::random_move();
+        }
+}               
+

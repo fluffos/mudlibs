@@ -1,0 +1,389 @@
+//组队任务关键文件
+//teamsd.c
+//Create By snowtu 2005
+
+#include <ansi.h>
+inherit F_VENDOR_SALE;
+
+void mission_start();
+int random_exits();
+
+static object start = 0;
+
+mapping walks = ([
+        "east" : "west",
+        "west" : "east",
+        "north": "south",
+        "south": "north",
+        "up"   : "down",
+        "down" : "up",
+        "enter": "out",
+        "out"  : "enter",
+        "northup" : "southdown",
+        "southdown" : "northup",
+        "northdown" : "southup",
+        "southup" : "northdown",
+        "northwest" : "southeast",
+        "southeast" : "northwest",
+        "northeast" : "southwest",
+        "southwest" : "northeast",
+        "westup"  : "eastdown",
+        "eastdown": "westup",
+]);
+
+void create()
+{
+reload("team_mission"); 
+set_name("组队任务",({"teamjob"}));
+set("env/invisibility",1); 
+setup();
+remove_call_out("mission_start");
+call_out("mission_start",15);
+}
+
+object random_place()
+{
+int  m,n,i, j, k;
+object temp,newob;
+mapping ex;
+
+mixed*  file, exit;
+string *dirs = ({
+        "/d/city",
+        "/d/jjf",
+        "/d/westway",
+        "/d/kaifeng",
+        "/d/lingtai",
+        "/d/moon",
+        "/d/gao",
+        "/d/sea", 
+        "/d/nanhai", 
+        "/d/eastway",
+        "/d/xueshan",
+        "/d/dntg/hgs",
+        
+        "/d/qujing/wuzhuang", 
+        "/d/qujing/baotou", 
+        "/d/qujing/baoxiang", 
+        "/d/qujing/bibotan",
+        "/d/qujing/biqiu",
+        "/d/qujing/chechi",
+        "/d/qujing/dudi",
+        "/d/qujing/fengxian",
+        "/d/qujing/firemount",
+        "/d/qujing/jilei",
+        "/d/qujing/jindou",
+        "/d/qujing/jingjiling",
+        "/d/qujing/jinping",
+        "/d/qujing/jisaiguo",
+        "/d/qujing/maoying",
+        "/d/qujing/nuerguo",
+        "/d/qujing/pingding",
+        "/d/qujing/pansi",
+        "/d/qujing/tongtian",
+        "/d/qujing/qilin",
+        "/d/qujing/qinfa",
+        "/d/qujing/qinglong",
+        "/d/qujing/tianzhu",
+        "/d/qujing/wudidong",
+        "/d/qujing/wuji",
+        "/d/qujing/xiaoxitian",
+        "/d/qujing/yinwu",
+        "/d/qujing/yuhua",
+        "/d/qujing/zhujie",
+        "/d/qujing/zhuzi",
+        "/d/penglai",
+        "/d/pantao",
+        "/d/death",  
+        "/d/meishan",
+        "/d/qujing/lingshan",
+});
+
+n = 0;
+i = random(sizeof(dirs));    // pick up one directory
+file = get_dir( dirs[i]+"/*.c", -1 );
+if( !sizeof(file) )
+        return 0;
+for(k=0;k<30;k++)
+        {
+        j = random(sizeof(file));
+        if( file[j][1] > 0 )
+                {
+                newob=load_object(dirs[i]+"/"+file[j][0]);
+                if ( !newob )
+                        continue;
+                if ( newob->query("no_fight") 
+                  || newob->query("no_magic") 
+                  || newob->query("no_mieyao") 
+                  || !(exit=newob->query("exits")) 
+                  || sizeof(keys(exit))<1 
+                  || newob->query("alternative_die") )
+                        continue;
+                if ( !mapp(ex=newob->query("exits")) )
+                        continue;
+                m = sizeof(keys(ex));
+                while(m--)
+                        {
+                        temp = load_object(ex[keys(ex)[m]]);
+                        if ( temp )
+                                {
+                                if ( temp->query("exits/"+walks[keys(ex)[m]])!=base_name(newob) )
+                                        n++;
+                                }                                       
+                        else    continue;
+                        }
+                if ( n )
+                        continue;       
+                if ( newob )    
+                        return newob;
+                }
+        }
+return 0;
+}
+
+varargs object random_npc(object obj)
+{
+object *inv,npc,where = random_place();
+int i;
+while( !where || sizeof(all_inventory(where))<1 )
+        where = random_place();
+inv = all_inventory(where);
+i = sizeof(inv);
+while(i--)
+        {
+        if ( !inv[i] || !inv[i]->is_character() 
+          || inv[i]->is_fighting() 
+          || !living(inv[i]) 
+          || !inv[i]->query("startroom")
+          || inv[i]->is_busy() )
+                continue;
+        if ( inv[i] )
+                return inv[i];
+        }
+return random_npc(obj); 
+}
+
+void mission_start()
+{
+string str,msg;     
+object key,where;
+
+msg = "组队任务控制文件开始更新>>>>>>>>>>>>";
+
+        
+if ( !environment() )
+        msg+= "组队控制文件无所在地，本次更新强制终止.\n";
+        
+else if ( time()<query("mission_start")+3600 )
+        msg+= "距离上次任务开始不超过一小时，本次更新强制终止.\n";
+else    {
+        str = "最新组队任务开始于"+ctime(time())+":\n";        
+        where = random_place();
+        environment()->delete("team_job");
+        environment()->delete("exits/door");
+        if ( !where || !this_object()->move(where) )
+                msg+= "生成随机入口失败,本次更新强制终止.\n";
+        else    {
+                key = new(__DIR__"obj/key");
+                if ( !key )
+                        msg+= "生成入口钥匙失败,本次更新强制终止.\n";
+                else if ( !key->find_owner() )
+                        {
+                        destruct(key);
+                        msg+= "入口钥匙随机掉落失败,本次更新强制终止.\n";
+                        }               
+                else    {
+                        if ( !random_exits() )
+                                msg+= "杀怪地图随机生成失败，本次更新强制终止.\n";
+                      else if ( !start )
+                            msg+= "入口随机连接失败,本次更新强制终止.\n";
+                        else  {
+                        message("channel:rumor",HIM"【千里眼】某人：听说在"HIW+MISC_D->find_place(environment())+HIM"的"HIW+environment()->query("short")+HIM"出现了一个奇怪的入口！\n"NOR,users()); 
+                        environment()->set("team_job/place",1);
+                        str+= sprintf("\t\t任务随机入口设在 %O .\n",where);
+                        str+= sprintf("\t\t任务入口之匙落在随机NPC %O 的 %O 身上。\n",environment(environment(key)),environment(key));
+                        set("mission_start",time());
+                        save();
+                        write_file("/c/任务/组队任务.log",str,1);
+                        msg+= "完成!";
+                     }
+                        }
+                }
+        }
+CHANNEL_D->do_channel( this_object(), "sys", msg);
+}
+        
+void reset()
+{
+mission_start();
+}
+
+int resets()
+{
+delete("mission_start");
+if ( !this_object()->save() )
+     return 0;
+return 1;
+}
+
+void init()
+{
+object me = this_player();      
+add_action("do_open","open");
+add_action("do_go","",1);
+if ( userp(me) && !me->query_temp("teamjob/look_room") )
+        {
+        say("\n\n地面渐渐升起团团赤红的雾气，在雾气之中隐约有道神奇的铁门(door)。。。。\n\n"NOR);
+        me->set_temp("teamjob/look_room",1);
+        }
+}
+
+int do_open(string arg)
+{
+object *team,*temp,who,env,key,me = this_player();
+int i;
+if ( wizardp(me) )  tell_object(me,"OK\n");
+if ( !arg || arg!="door" )
+        return 0;
+key = present("key",me);
+if ( !key || !key->is_tempjob_obj() )
+        return 0;
+env = environment();
+if ( env->query("exits/door") )
+        return notify_fail("门已经开了。\n");;
+if ( !env->query("team_job/place") )
+        return notify_fail("这里没有门。\n");
+message_vision("\n$N将钥匙插在门中，奋力一钮，“喀吧”一声，门开了！\n\n"NOR,me);
+message("channel:rumor",HIM"【千里眼】某人：听说"+me->query("name")+HIM"打开了朱雀窟的入口！\n"NOR,users()); 
+env->set("exits/door",start);
+temp = env->query("team_job/player");
+temp = SDS_D->add_arr_obj(temp,me);
+env->set("team_job/player",temp);
+team = me->query_teams();
+i = sizeof(team);
+while(i--)
+        {
+        who = team[i];
+        if ( who && who!=me && userp(who) && living(who)
+          && query_ip_number(who)!=query_ip_number(me) )
+                {
+                temp = SDS_D->add_arr_obj(temp,who);
+                me->command("team talk "+sprintf("%s(%s) 获准进入朱雀窟，入口在 %s 的 %s。\n",
+                              who->query("name"),
+                              capitalize(who->query("id")),
+                              MISC_D->find_place(env),
+                              env->query("short")));
+                env->set("team_job/player",temp);                             
+                }                             
+        }
+destruct(key);
+return 1;
+}
+int err_msg(string msg)
+{
+write(msg);
+return 1;
+}       
+
+int random_exits()
+{
+int i,ff=0,ss=0;
+int kk;
+object *ob,*where;
+object w0,w1,w2,w3,w4,w5,w6,w7,w8,w9,w10,w11,w12,w13,w14,w15,w16,w17,w18,w19,w20;
+object r1,r2,guai;
+string di,*dis;
+string name;
+
+w0 = find_object(__DIR__"road");
+w1 = find_object(__DIR__"road1");
+w2 = find_object(__DIR__"road2");
+w3 = find_object(__DIR__"road3");
+w4 = find_object(__DIR__"road4");
+w5 = find_object(__DIR__"road5");
+w6 = find_object(__DIR__"road6");
+w7 = find_object(__DIR__"road7");
+w8 = find_object(__DIR__"road8");
+w9 = find_object(__DIR__"road9");
+w10 = find_object(__DIR__"road10");
+w11 = find_object(__DIR__"road11");
+w12 = find_object(__DIR__"road12");
+w13 = find_object(__DIR__"road13");
+w14 = find_object(__DIR__"road14");
+w15 = find_object(__DIR__"road15");
+w16 = find_object(__DIR__"road16");
+w17 = find_object(__DIR__"road17");
+w18 = find_object(__DIR__"road18");
+w19 = find_object(__DIR__"road19");
+w20 = find_object(__DIR__"road20");
+
+where = ({w0,w1,w2,w3,w4,w5,w6,w7,w8,w9,w10,w11,w12,w13,w14,w15,w16,w17,w18,w19,w20});
+set("temp_place",where);
+ff = sizeof(where)/2;
+while(ff--)
+        {
+        r1 = where[ff];
+        if ( !r1 )
+                continue;
+        dis = keys(walks);
+        di = dis[random(sizeof(dis))];
+        if ( !r1->query("exits/"+di) ) 
+                {
+                if ( (ff+1)>sizeof(where) )
+                        continue;       
+                r2 = where[ff+1];
+                if ( r2 && !r2->query("exits/"+walks[di]) ) 
+                        {
+                        ff++;   
+                        r1->set("exits/"+di,r2);
+                        r2->set("exits/"+walks[di],r1);
+                        CHANNEL_D->do_channel( this_object(), "sys","随机通道"+ff+"连接完成\n");
+                        }
+                }
+        }
+for(kk=0;kk<30;kk++)  
+        {
+        if ( random(2) )  
+                {  
+                guai = new(__DIR__"npc/evl1");
+                if ( guai && guai->move(where[random(sizeof(where))]) )
+                        CHANNEL_D->do_channel( this_object(), "sys","怪物"+guai->name()+"随机刷新完成。\n");
+                }
+        }
+if ( ss<1 )
+        {
+        guai = new(__DIR__"npc/evl2");
+        if ( guai && guai->move(where[random(sizeof(where))]) )
+                {
+                ss++;
+                CHANNEL_D->do_channel( this_object(), "sys","高级怪物"+guai->name()+"随机刷新完成。\n");
+                }               
+        }
+start = where[random(sizeof(where))];
+return 1;
+}
+
+int do_go()
+{
+object *obs,env,me = this_player();
+string arg = query_verb();
+
+if ( arg && arg=="door" )
+        {
+        env = environment();
+        if ( !env->query("exits/door") 
+          || !env->query("team_job/place") )
+                return err_msg("什么?\n");
+        obs = env->query("team_job/player");
+        if ( !obs || !arrayp(obs) )
+                return err_msg("这里门还没开呢，你进不去。\n");
+        if ( member_array(me,obs)==-1 )
+                return err_msg("你没有进入此门的资格。\n");
+        me->command("team talk 我已进入朱雀窟！\n");
+        return 0;
+        }
+return 0;
+}
+
+
+

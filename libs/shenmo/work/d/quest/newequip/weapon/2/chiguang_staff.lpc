@@ -1,0 +1,30 @@
+// Created by kuku@sjsh 2003.09.14
+
+#include <weapon.h>
+inherit STAFF;
+#include <ansi.h>
+inherit "/d/quest/newequip/calculate";
+
+void create()
+{        
+        string msg = "";   
+        set_name(HIM"赤光杖"NOR, ({"chiguang zhang", "staff"}));    
+        set_weight(9500);                 
+        if( clonep() )
+                set_default_object(__FILE__);
+        else {
+                set("unit", "根");
+                set("value", 5000);
+                set("material", "steel");
+                set("lvl",2);
+                set("Is_Diablo_Obj",1); 
+                set("need_class",1);
+                set("wield_msg", "$N抽出一根$n握在手中。\n");
+                set("unwield_msg", "$N放下手中的$n。\n");                
+        }
+        init_staff(50);  
+        msg += "这是一根沉重的钢制的杖，打造的相当坚实。\n"+"基本攻击: "+query("weapon_prop/damage")+"\n"; 
+        msg += query_desc(); 
+        set("long",msg);
+        setup();
+}

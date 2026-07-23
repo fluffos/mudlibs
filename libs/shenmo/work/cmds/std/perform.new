@@ -1,0 +1,121 @@
+//Cracked by Snowtu
+// perform.c
+#include <ansi.h>
+#include <skill.h>
+#include "/cmds/std/valid_kill.h";
+inherit F_CLEAN_UP;
+
+int have_perform(object me,string skill,string arg)
+{
+string dir;     
+if ( !me || !skill || !stringp(skill) )
+        return 0;
+skill = me->query_skill_mapped(skill);
+if ( !skill || !stringp(skill) )
+        return 0;
+dir = SKILL_D(skill)->perform_action_file("");
+if ( !dir || !stringp(dir) )
+        return 0;
+if ( file_size(dir+arg+".c")<=0 )
+        return 0;       
+return 1;
+}               
+
+int main(object me, string arg)
+{
+object weapon, target;
+string martial, skill, perf,msg;
+string *sks;
+seteuid(getuid());
+
+if( me->is_busy() )
+        return notify_fail("( 你上一个动作还没有完成，不能施用外功。)\n");
+
+if ( time()<(me->query_temp("no_perform/start")+me->query_temp("no_perform/time")) 
+  && stringp(msg=me->query_temp("no_perform/msg")) )
+        return notify_fail(msg+"\n");
+
+if( !arg ) return notify_fail("你要用外功做什么？\n");
+if ( !wizardp(me) && environment(me)->query("no_fight")) 
+        return notify_fail("这里不能施用外功。\n");
+
+if( sscanf(arg, "%s on %s", perf, arg)==2 ) 
+        {
+        target = present(arg, environment(me));
+        if( !target ) target = present(arg, me);
+        if( !target ) return notify_fail("这里没有 " + arg + "。\n");
+        if(!valid_kill(me,target,0)) return 0;
+        set_to_killer(me,target);
+               
+        if(me->query("combat_exp")<250000 && userp(target))
+                return notify_fail("自己功夫没练好就想杀人？\n");
+        if(me->query("daoxing")<200000 && userp(target))
+                return notify_fail("自己功夫没练好就想杀人？\n");  
+        if(userp(target) && target->query("age")<17)
+                return notify_fail("本站暂时保护新手。\n");
+        if( userp(me) && userp(target) && target->query_temp("netdead") )
+                return notify_fail("对方正在断线中，不能对其施用外功。\n");
+        arg=perf+" "+arg;
+        } 
+else if(sscanf(arg, "%s %s", perf, arg)==2 ) 
+        {
+          //so can't use: perform vision id
+          //but have to use: perform vision on id
+        arg=perf;
+        }
+
+notify_fail("你所使用的外功中没有这种功能。\n");
+weapon = me->query_temp("weapon");
+if ( !weapon || !objectp(weapon) )
+        weapon = me->query_temp("secondary_weapon");
+if ( !weapon || !objectp(weapon) )
+        {
+        martial = "unarmed";
+        if ( !have_perform(me,martial,arg) )
+                martial = "dodge";              
+        if ( !have_perform(me,martial,arg) )    
+                return 0;
+        }
+else martial = weapon->query("skill_type");
+/*
+if ( !have_perform(me,martial,arg) )
+        martial = "unarmed";
+if ( !have_perform(me,martial,arg) )
+        martial = "dodge";              
+if ( !have_perform(me,martial,arg) )    
+        return 0;
+*/
+if( stringp(skill = me->query_skill_mapped(martial)) ) 
+        {
+        notify_fail("你所使用的外功中没有这种功能。\n");
+        if( SKILL_D(skill)->perform_action(me, arg) ) 
+                {
+                if ( target && living(target) && target!=me 
+                  && target->is_fighting(me) 
+                  && functionp(target->reply_perform(me)) ) 
+                        target->reply_perform(me);
+                if( random(120) < (int)me->query_skill(skill) )
+                        me->improve_skill(skill,1,1);
+                return 1;
+                }
+        return 0;       
+        } 
+return notify_fail("你请先用 enable 指令选择你要使用的外功。\n");       
+}
+
+int help (object me)
+{
+        write(@HELP
+指令格式：perfrom [<武功种类>.]<招式名称> [<施用对象>]
+
+如果你所学的外功(拳脚、剑法、刀法....)有一些特殊的攻击方式或招式，可以
+用这个指令来使用，你必须先用 enable 指令指定你使用的武功，不指定武功种
+类时，空手的外功是指你的拳脚功夫，使用武器时则是兵刃的武功。
+
+
+换句话说，只要是 enable 中的武功有特殊招式的，都可以用这个指令使用。
+HELP
+        );
+        return 1;
+}
+
