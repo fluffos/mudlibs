@@ -106,3 +106,74 @@ conversion pass).
 26,270 raw files / 23,118 `.lpc`, in the same "the sweep itself risks
 OOMing the host before finishing" territory as nitan170911). The boot +
 interactive-connect test above is the verification for a lib this size.
+
+## Re-verification pass: driver rebuild + formatter + WASM (2026-07-23)
+
+- **LPC formatter**: ran `format-corpus.mjs` across all 23120 `.lpc`
+  files under `work/` — 23042 reformatted, 25 unchanged, 53 refused
+  (token-mismatch safety gate, expected/fine at this scale).
+- **Native retest against the freshly-rebuilt driver, going further than
+  the original pass**: booted clean (`Initializations complete.`, zero
+  fatal errors). The earlier conversion pass's interactive test stopped
+  at "Chinese surname/given-name entry" — this pass pushed all the way
+  through to actually entering the game world, and found a **new,
+  genuinely blocking bug** (present in the raw archive itself, not
+  introduced by conversion or the reformatter — confirmed identical in
+  `raw/nitan/nitan/nitan/feature/alias.c`):
+  `feature/alias.lpc`'s `process_input_basic_parse()` had
+  `case ''':       //' cmd = "say " + cmd[1..];` — an unescaped/invalid
+  single-quote character literal (`'''`), a hard compile error (`Illegal
+  character constant`) on this driver. Since `feature/alias.lpc` is
+  `#include`d into `inherit/char/char.lpc`, which every player body
+  (`USER_OB`, via `clone/user/user.lpc`) inherits, this **broke
+  compilation of the player body class entirely** — `make_body()` in
+  `logind.lpc` would fail with `*No program in object '/feature/alias'!`
+  at the exact moment gender is confirmed during registration, silently
+  aborting character creation for **every single new player**, with no
+  visible error to the connecting user (just a bare fall-through to an
+  unhelpful default command loop). This is a real, pre-existing
+  content bug that simply hadn't been exercised by testing before (the
+  original pass's registration test never got as far as gender
+  confirmation/`make_body()`). **Fixed** (same shape as AGENTS.md §9's
+  fullwidth-punctuation-in-code-literal family, just a different
+  malformed character-literal variant): changed to
+  `case '\'':       // '` (properly escaped single-quote literal),
+  restoring the intended "leading `'` means shorthand for `say`" alias
+  behavior. Re-verified: full registration (`qflibnw`/`秦风霜`) now
+  completes end-to-end, reaching `/d/register/entry.lpc`'s in-fiction
+  "泥潭注册室" (registration room in 混沌届/"chaos realm") — this lib
+  layers an extra `register <email>` step *after* character creation,
+  before the character is considered "born" (a real design choice, not a
+  bug: `look`/`score` reply "还没有出生呐" — "not born yet" — until
+  `register <email>` is run). Ran `register test13@qq.com` → moved into
+  生命之谷 ("Valley of Life") with a real room description and NPC
+  (万物之神), confirming the world is genuinely reachable and playable
+  post-fix. Zero fatal errors in `debug.log` (the room does print its
+  own in-fiction `WARNING 这里发现了臭虫` bug-report hint — that's
+  mudlib content, not a driver error). **The same exact bug (byte-
+  identical raw source) also exists in `nitan170911`'s `feature/
+  alias.lpc`** (shared lineage) — fixed there too, see that lib's NOTES.
+  Did **not** re-investigate the previously-documented name-display
+  quirk in this lib's own content — left exactly as-is, per this pass's
+  scope note.
+- **WASM build test** (`scripts/wasm_client.js`): boots cleanly (only
+  the expected non-fatal preload warnings). **Login is blocked by the
+  documented `query_ip_number()` WASM limitation**, this time via
+  `adm/daemons/band.lpc`'s `is_banned(site)`: `if (sscanf(site, "%s.%s.
+  %s.%s", tmp1, tmp2, tmp3, tmp4) != 4) return 1;` — a textbook instance
+  of the exact `sscanf`-based site-ban shape AGENTS.md's WASM section
+  already calls out. Under WASM, `query_ip_number(ob)` doesn't return a
+  real dotted-quad string, the `sscanf` fails to match 4 parts, and
+  `is_banned()` returns `1` (banned) unconditionally — rejecting the
+  connection at the very top of `logon()`, before the encoding/banner
+  even fully renders, with `你的地址在本 MUD 不受欢迎，请去论坛
+  muds.cn 申述。` (“your address isn't welcome here”). **This is the
+  documented driver-level WASM gap, not a mudlib bug** — the exact same
+  `band.lpc`/`logon()` code path works fine natively (this pass's own
+  native retest above completed full registration with zero issues).
+  Not patched, per the standing policy. Status: **boots under WASM;
+  every connection is immediately banned by the query_ip_number()-under-
+  WASM limitation** (same root cause as the project's other documented
+  cases, this time the ban check triggers before any prompt is even
+  shown, the earliest-possible manifestation of this limitation seen in
+  this batch).

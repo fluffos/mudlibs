@@ -1,2 +1,2 @@
-inherit SKILL; 
-string type() { return "knowledge"; } 
+inherit SKILL;
+string type() { return "knowledge"; }
