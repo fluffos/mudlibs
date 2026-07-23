@@ -17,63 +17,71 @@
 #include <daemon.h>
 #include <message.h>
 
-void net_dead(object ob)
-{
-	string network_short = NETWORK_D->query_network_short(ob);
+void net_dead(object ob) {
+  string network_short = NETWORK_D->query_network_short(ob);
 
-	msg("$ME似乎與現實生活的連線出了差錯 ... 斷線了。\n", ob, 0, 1, 0, ({ ob }));
+  msg("$ME似乎與現實生活的連線出了差錯 ... 斷線了。\n", ob, 0, 1, 0, ({ ob }));
 
-	CHANNEL_D->channel_broadcast("sys", "登出："+ob->query_idname()+WHT"由"+network_short+"斷線，倒數五分鐘離線。", 1);	
+  CHANNEL_D->channel_broadcast(
+    "sys",
+    "登出：" + ob->query_idname() + WHT "由" + network_short + "斷線，倒數五分鐘離線。",
+    1
+  );
 
-	log_file(LOG, ob->query_idname()+" disconnect "+network_short+NOR+"\n");
-	// CHANNEL_D->remove_user(ob);
+  log_file(LOG, ob->query_idname() + " disconnect " + network_short + NOR + "\n");
+  // CHANNEL_D->remove_user(ob);
 }
 
-private void save_user_info(object ob)
-{
-	mapping current_login = copy(query_temp("login", ob));
-	
-	if( !mapp(current_login) )
-		return;
+private void save_user_info(object ob) {
+  mapping current_login = copy(query_temp("login", ob));
 
-	addn("total_online_time", time() - query("last_on/time", ob), ob );
+  if (!mapp(current_login))
+    return;
 
-	current_login["time"] = time();
-	
-	set("last_login", current_login, ob); 
-	
-	// 紀錄最後一次在線上的時間, 根據此資料由 CLEAN_D 處理帳號刪除
-	set("last_on/time", time(), ob);
+  addn("total_online_time", time() - query("last_on/time", ob), ob);
 
-	if( environment(ob) )
-		set("quit_place", copy(query_temp("location", ob)) || base_name(environment(ob)), ob);
+  current_login["time"] = time();
 
-	ob->save();
+  set("last_login", current_login, ob);
+
+  // 紀錄最後一次在線上的時間, 根據此資料由 CLEAN_D 處理帳號刪除
+  set("last_on/time", time(), ob);
+
+  if (environment(ob))
+    set("quit_place", copy(query_temp("location", ob)) || base_name(environment(ob)), ob);
+
+  ob->save();
 }
 
-varargs void quit(object ob, string arg)
-{
-	object env = environment(ob);
-	string network_short = NETWORK_D->query_network_short(ob);
-	if( !userp(ob) && !query_temp("net_dead", ob) ) return;
-	
-	save_user_info(ob);
+varargs void quit(object ob, string arg) {
+  object env = environment(ob);
+  string network_short = NETWORK_D->query_network_short(ob);
+  if (!userp(ob) && !query_temp("net_dead", ob)) return;
 
-	/* 更新 TOP 資料 */
-	TOP_D->calculate_top(ob);
+  save_user_info(ob);
 
-	CHANNEL_D->remove_user(ob);
+  /* 更新 TOP 資料 */
+  TOP_D->calculate_top(ob);
 
-	if( query_temp("net_dead", ob) )
-	{
-		msg("$ME斷線超過五分鐘，被踢出遊戲了。\n", ob, 0, 1);
-		CHANNEL_D->channel_broadcast("sys", "登出："+ob->query_idname()+WHT"由"+network_short+"斷線過久離開遊戲了。", 1);
-	}
-	else 
-	{
-		tell(ob, "\n"+pnoun(2, ob)+"本次共連線了"+CHINESE_D->chinese_period(time() - query_temp("login/time", ob))+"。\n");
+  CHANNEL_D->remove_user(ob);
 
-		tell(ob, @POEM
+  if (query_temp("net_dead", ob)) {
+    msg("$ME斷線超過五分鐘，被踢出遊戲了。\n", ob, 0, 1);
+    CHANNEL_D->channel_broadcast(
+      "sys",
+      "登出：" + ob->query_idname() + WHT "由" + network_short + "斷線過久離開遊戲了。",
+      1
+    );
+  } else {
+    tell(
+      ob,
+      "\n" + pnoun(
+        2,
+        ob
+      ) + "本次共連線了" + CHINESE_D->chinese_period(time() - query_temp("login/time", ob)) + "。\n"
+    );
+
+    tell(ob, @POEM
 
 ----------
 
@@ -89,26 +97,29 @@ varargs void quit(object ob, string arg)
 
 POEM);
 
-		if(!arg) 
-			msg("$ME離開遊戲了。\n", ob, 0, 1);
-		else
-			msg("$ME離開遊戲了，只聽到遠方細細傳來一聲：" + arg + "。\n", ob, 0, 1);
-			
-		CHANNEL_D->channel_broadcast("sys", "登出："+ob->query_idname()+WHT"由"+network_short+"離開遊戲。", 1);
-	}
-		
-	MAP_D->remove_player_icon(ob, query_temp("location", ob));
+    if (!arg)
+      msg("$ME離開遊戲了。\n", ob, 0, 1);
+    else
+      msg("$ME離開遊戲了，只聽到遠方細細傳來一聲：" + arg + "。\n", ob, 0, 1);
 
-	log_file(LOG, ob->query_idname(1)+" quit "+network_short+NOR+"\n");	
-		
-	flush_messages(ob);
-	
-	if( env )
-		env->leave(ob);
+    CHANNEL_D->channel_broadcast(
+      "sys",
+      "登出：" + ob->query_idname() + WHT "由" + network_short + "離開遊戲。",
+      1
+    );
+  }
 
-	destruct(ob);
+  MAP_D->remove_player_icon(ob, query_temp("location", ob));
+
+  log_file(LOG, ob->query_idname(1) + " quit " + network_short + NOR + "\n");
+
+  flush_messages(ob);
+
+  if (env)
+    env->leave(ob);
+
+  destruct(ob);
 }
-string query_name()
-{
-	return "登出系統(LOGOUT_D)";
+string query_name() {
+  return "登出系統(LOGOUT_D)";
 }

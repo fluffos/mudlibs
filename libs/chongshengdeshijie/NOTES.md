@@ -596,3 +596,79 @@ verified via the real interactive driver tests above.
   work-tree-relative equivalents; all other numeric limits ported
   directly from the original `config.rw` (BIG5-decoded first, per
   AGENTS.md §5, before any other edit).
+
+## Re-verification pass (2026-07-23): driver rebuild + LPC formatter + WASM build
+
+- **Formatter**: ran `format-corpus.mjs` over all of `work/` (815 files,
+  800 written/reformatted, 10 already-clean, 5 refused with an error —
+  expected on legacy code).
+- **NEW regression found and fixed — the formatter itself, not the
+  mudlib**: a full interactive registration through to gender selection
+  crashed with cascading compile errors in
+  `std/inherit/feature/living/usr/_input_usr.lpc` ("Illegal character
+  constant" / "syntax error, unexpected L_NUMBER" / "Illegal LHS"),
+  disconnecting the new character before it ever reached the game world.
+  Root cause: the pre-format source has a `case ''':	//'` (the
+  three-quote-character literal for a bare single-quote, a valid but
+  unusual LPC construct this codebase relies on for "type `'hello` to
+  say something") followed by its statement body on the *next* physical
+  line. The formatter joined the case label, its trailing `//'` comment,
+  and the next line's `cmd = "say " + cmd[1..];` statement onto one
+  physical line — but a `//` comment runs to end of *physical* line, so
+  after the join the comment silently swallowed the real statement, and
+  the character literal itself got mangled into `'' '` (an extra space
+  inserted mid-literal) in the process. This slipped past the
+  formatter's own token-equivalence self-check (the tool still wrote the
+  file, i.e. did not flag it as one of the 5 "errors" above) — a real
+  gap in the tool given a comment whose scope changes when lines are
+  merged, worth flagging upstream, not something to work around by
+  avoiding this lib's re-format. **Fixed** by restoring the case label,
+  comment, and statement to separate lines (same semantics as the
+  original, in the file's now-reformatted style):
+  ```
+  case ''':  //'
+    cmd = "say " + cmd[1..];
+    break;
+  ```
+  Confirmed no second instance of this pattern anywhere else in this
+  lib (nor across this batch's other 8 libs) via `grep -rn "'' '"`.
+- **Native retest against rebuilt driver** (`build-debug/src/driver`,
+  rebuilt from latest upstream master): clean boot, zero fatal errors in
+  `debug.log`. Full registration re-verified end-to-end on the
+  now-reformatted (and formatter-regression-fixed) source with a fresh
+  real Chinese name (`秦云`, ID `qinyun`) through the full flow (charset
+  → `new` → ID → Chinese name → password → email skip → gender →
+  reaching the actual game world, 巫师神殿 starting room); `look`/
+  `score`/`quit` all produced correct output (the full 狀態 stat card
+  rendered correctly), zero real errors in `debug.log`. Also reconfirmed
+  this lib's own `uptime() < 30` boot-grace animation (the
+  `distributed_system_preload()` progress display in `system_d.lpc`) —
+  a connection attempted within the first 30 real seconds after boot
+  gets the loading animation and a "please reconnect" message rather
+  than the real login prompt; this is pre-existing intentional behavior
+  (not a regression), just something to account for when scripting a
+  test against a freshly-started driver.
+- **WASM build**: this lib is a genuine "does not boot" case, unlike the
+  other 8 libs in this batch. `system/kernel/simul_efun.lpc` (which
+  every FluffOS driver must be able to load in order to complete
+  `fluffos_boot()`) includes `system/kernel/simul_efun/ansi.lpc`, whose
+  ANSI-color-code handling calls `pcre_replace_callback`/`pcre_replace`/
+  `pcre_match_all` directly. The WASM build ships without the `pcre`
+  package at all (documented in `docs/build-wasm.md`'s own "Notes &
+  limits", alongside `sockets`/`db`/`ffi`/`crypto`/`async`/`compress`).
+  Because this is baked into the **boot-critical** simul_efun file
+  itself (not a lazily-preloaded daemon whose failure a lib's own error
+  handler can catch), the compile error is fatal: `fluffos_boot()` logs
+  "*No program in object '/system/kernel/simul_efun'!... The simul_efun
+  ... and master ... objects must be loadable" and the driver never
+  reaches a usable state — no telnet-equivalent transcript is produced
+  at all under `scripts/wasm_client.js`. **Not a mudlib bug to patch**:
+  this lib's use of `pcre_*` for ANSI-code substitution is ordinary,
+  working code on the native driver; rewriting its core color-handling
+  simul_efun to avoid the `pcre` package entirely would be a substantial
+  rewrite well outside a verification pass's scope, and the restriction
+  itself is a documented, deliberate WASM-build limitation, not
+  something specific to this lib. Verdict: **does not boot under WASM**
+  (distinct from every other lib in this batch, all of which booted
+  cleanly) — a legitimate, honest incompatibility, not a regression to
+  chase.

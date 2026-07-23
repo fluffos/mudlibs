@@ -22,63 +22,59 @@ object *loginuser;
 
 #define	PRELOAD_PATH	"/system/kernel/etc/preload"
 
-void broadcast(string msg)
-{
-	foreach(object ob in loginuser)
-	{
-		if( objectp(ob) )
-			ob->directly_receive(msg);
-	}
+void broadcast(string msg) {
+  foreach (object ob in loginuser) {
+    if (objectp(ob))
+      ob->directly_receive(msg);
+  }
 }
 
-void distributed_preload()
-{
-	mixed err;
-	object ob;
-	
-	if( !sizeof(preload_list) )
-	{
-		foreach(ob in loginuser)
-		{
-			if( objectp(ob) )
-			{
-				ob->directly_receive("\n"MUD_FULL_NAME"啟動完畢，重新連線中...。\n");
-				destruct(ob);
-			}
-		}
+void distributed_preload() {
+  mixed err;
+  object ob;
 
-		return;
-	}
-	
-	log_file("system/preload",sprintf("載入 %s\n", preload_list[0]));
-	
-	
+  if (!sizeof(preload_list)) {
+    foreach (ob in loginuser) {
+      if (objectp(ob)) {
+        ob->directly_receive("\n" MUD_FULL_NAME "啟動完畢，重新連線中...。\n");
+        destruct(ob);
+      }
+    }
 
-	if( !(ob = find_object(preload_list[0])) ) 
-	{
-		reset_eval_cost();
+    return;
+  }
 
-		if( err = catch(ob = load_object(preload_list[0])) )
-		{
-			broadcast(sprintf(HIW+"%'0'3d "NOR"- 載入 %s ...", sizeof(preload_list), preload_list[0]));
-			broadcast(HIR"Failed\n"NOR);
-			log_file("system/preload",sprintf("載入 %s 時發生錯誤: %O\n", preload_list[0], err));
-		} 
-		else
-		{
-			broadcast(sprintf(HIW+"%'0'3d "NOR"- 載入 %s ...", sizeof(preload_list), preload_list[0]->query_name() || preload_list[0]));
-			broadcast(sprintf(HIG"Done (%.2f Kbytes)\n"NOR, memory_info(ob)/1024.));
-		}
-		preload_list = preload_list[1..];
-		call_out((: distributed_preload :), 1);
-	}
-	else
-	{
-		broadcast(sprintf(HIW+"%'0'3d "NOR"- 載入 %s ...", sizeof(preload_list), preload_list[0]->query_name() || preload_list[0]));
-		broadcast(sprintf(HIC"Loaded (%.2f Kbytes)\n"NOR, memory_info(ob)/1024.));
-		preload_list = preload_list[1..];
-		distributed_preload();
-	}
+  log_file("system/preload", sprintf("載入 %s\n", preload_list[0]));
+
+
+
+  if (!(ob = find_object(preload_list[0]))) {
+    reset_eval_cost();
+
+    if (err = catch(ob = load_object(preload_list[0]))) {
+      broadcast(sprintf(HIW + "%'0'3d " NOR "- 載入 %s ...", sizeof(preload_list), preload_list[0]));
+      broadcast(HIR "Failed\n" NOR);
+      log_file("system/preload", sprintf("載入 %s 時發生錯誤: %O\n", preload_list[0], err));
+    } else {
+      broadcast(sprintf(
+        HIW + "%'0'3d " NOR "- 載入 %s ...",
+        sizeof(preload_list),
+        preload_list[0]->query_name() || preload_list[0]
+      ));
+      broadcast(sprintf(HIG "Done (%.2f Kbytes)\n" NOR, memory_info(ob) / 1024.));
+    }
+    preload_list = preload_list[1..];
+    call_out((: distributed_preload :), 1);
+  } else {
+    broadcast(sprintf(
+      HIW + "%'0'3d " NOR "- 載入 %s ...",
+      sizeof(preload_list),
+      preload_list[0]->query_name() || preload_list[0]
+    ));
+    broadcast(sprintf(HIC "Loaded (%.2f Kbytes)\n" NOR, memory_info(ob) / 1024.));
+    preload_list = preload_list[1..];
+    distributed_preload();
+  }
 }
 
 /* 這幾個精靈會在 create() 立刻對外連線/監聽 (連往寫死的外部 intermud/
@@ -88,87 +84,76 @@ void distributed_preload()
  * 檔名。見 AGENTS.md §15p。*/
 #define PRELOAD_EXCLUDE ({ "intermud2_d.lpc", "mud_d.lpc" })
 
-void distributed_system_preload()
-{
-	string path, file;
+void distributed_system_preload() {
+  string path, file;
 
-	loginuser = allocate(0);
-	preload_list = filter_array( explode(read_file(PRELOAD_PATH), "\n") , (: $1[0]!='#' :) );
+  loginuser = allocate(0);
+  preload_list = filter_array(explode(read_file(PRELOAD_PATH), "\n"), (: $1[0] != '#' :));
 
-	foreach( path in preload_list )
-	{
-		if( path[<1] == '/' && file_size(path)==-2 )
-		{
-			foreach( file in get_dir(path) )
-			{
-				if( file[<4..<1] == ".lpc" && file_size(path+file) > 0 && member_array(file, PRELOAD_EXCLUDE) == -1 )
-					preload_list += ({ path+file });
-			}
-			preload_list -= ({ path });
-		}
-		else if( path[<4..<1] != ".lpc" || file_size(path) <= 0 )
-			preload_list -= ({ path });
-	}
-	
-	log_file("system/preload",sprintf("Preload 列表 %O\n", preload_list));
+  foreach (path in preload_list) {
+    if (path[<1] == '/' && file_size(path) == -2) {
+      foreach (file in get_dir(path)) {
+        if (file[<4..<1] == ".lpc" && file_size(path + file) > 0 && member_array(
+          file,
+          PRELOAD_EXCLUDE
+        ) == -1)
+          preload_list += ({ path + file });
+      }
+      preload_list -= ({ path });
+    } else if (path[<4..<1] != ".lpc" || file_size(path) <= 0)
+      preload_list -= ({ path });
+  }
 
-	distributed_preload();
+  log_file("system/preload", sprintf("Preload 列表 %O\n", preload_list));
+
+  distributed_preload();
 }
 
-int valid_login()
-{
-	return !preload_list || !sizeof(preload_list);
+int valid_login() {
+  return !preload_list || !sizeof(preload_list);
 }
 
-void add_loginuser(object ob)
-{
-	loginuser |= ({ ob });
+void add_loginuser(object ob) {
+  loginuser |= ({ ob });
 }
 
-string query_total_system_info()
-{
-	int module_room, module_npc, module_product;
-	string msg = "";
+string query_total_system_info() {
+  int module_room, module_npc, module_product;
+  string msg = "";
 
-	
-	foreach(object ob in objects())
-	{
-		if( ob->is_module_room() )
-			++module_room;
-		else if( ob->is_module_npc() )
-			++module_npc;
-		else if( ob->is_module_product() )
-			++module_product;
-	}
-	
-	msg += "真實時間   - "+TIME_D->replace_ctime(time())+"\n";
-	msg += "遊戲時間   - "+TIME_D->game_time_description()+"\n";
-	msg += "啟動時間   - "+CHINESE_D->chinese_period(uptime())+"\n";
-	msg += "使用者總數 - "+sizeof(users())+" 人\n";
-	msg += "物件總數   - "+sizeof(objects())+" 個\n";
-	msg += "房間模組數 - "+module_room+" 間\n";
-	msg += "員工模組數 - "+module_npc+" 員\n";
-	msg += "產品模組數 - "+module_product+" 個\n";
-	msg += "心跳總數   - "+sizeof(heart_beats())+" 個\n";
-	msg += "延遲呼叫數 - "+sizeof(call_out_info())+" 個\n";
-	msg += "系統負載   - "+query_load_average()+"\n";
-	msg += "封包傳輸   - "+NETWORK_D->query_network_packet_stats()+"\n";
-	msg += "記憶體使用 - "+sprintf("%.6f MBytes\n", memory_info()/1024./1024. );
 
-	return msg;
+  foreach (object ob in objects()) {
+    if (ob->is_module_room())
+      ++module_room;
+    else if (ob->is_module_npc())
+      ++module_npc;
+    else if (ob->is_module_product())
+      ++module_product;
+  }
+
+  msg += "真實時間   - " + TIME_D->replace_ctime(time()) + "\n";
+  msg += "遊戲時間   - " + TIME_D->game_time_description() + "\n";
+  msg += "啟動時間   - " + CHINESE_D->chinese_period(uptime()) + "\n";
+  msg += "使用者總數 - " + sizeof(users()) + " 人\n";
+  msg += "物件總數   - " + sizeof(objects()) + " 個\n";
+  msg += "房間模組數 - " + module_room + " 間\n";
+  msg += "員工模組數 - " + module_npc + " 員\n";
+  msg += "產品模組數 - " + module_product + " 個\n";
+  msg += "心跳總數   - " + sizeof(heart_beats()) + " 個\n";
+  msg += "延遲呼叫數 - " + sizeof(call_out_info()) + " 個\n";
+  msg += "系統負載   - " + query_load_average() + "\n";
+  msg += "封包傳輸   - " + NETWORK_D->query_network_packet_stats() + "\n";
+  msg += "記憶體使用 - " + sprintf("%.6f MBytes\n", memory_info() / 1024. / 1024.);
+
+  return msg;
 }
 
-void create()
-{
-	if( uptime() < 30 )
-		distributed_system_preload();
+void create() {
+  if (uptime() < 30)
+    distributed_system_preload();
 }
 
-int remove()
-{
-
-}
-string query_name()
-{
-	return "中央管理系統(SYSTEM_D)";
+int remove() {}
+string query_name() {
+  return "中央管理系統(SYSTEM_D)";
 }
