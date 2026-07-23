@@ -162,6 +162,43 @@ real Chinese names 秦朔(male, landed in 北疆小镇)/秦若(female, landed in
 铁枪庙), `look`/`score`/`quit` all producing correct output, zero
 `执行时段错误` in `debug.log` after the fix.
 
+## Driver-rebuild retest + LPC reformat + WASM pass (this session)
+
+- **LPC formatter applied** (`tools/lpc-syntax`, all `work/*.lpc`):
+  13,461 files reformatted, 37 unchanged, 62 refused (self-check
+  failures on messy legacy code, expected per the tool's docs).
+- **New bug found and fixed during this pass's native re-verification**
+  (a sibling of the same bug found in `xiyangzaixian_fengkuang` in this
+  same session): `adm/daemons/logind.lpc`'s `get_resp()`/`get_name()`
+  had the same stray, pre-existing debug leftover `printf("%O\n", ob);`
+  (2 occurrences) — dumped a raw internal object reference straight to
+  the connecting player right after their Chinese name is accepted.
+  Removed both; re-verified with a fresh registration (`qinshuoc`/
+  秦朔再, male) — no stray object-reference text, `look`/`score`/`quit`
+  all still correct.
+- **Native re-test against the freshly rebuilt driver**: boots clean,
+  zero `FATAL`/`SIGSEGV`/`执行时段错误` in `debug.log`. Full registration
+  verified with real Chinese name **秦朔再** (male), reaching the actual
+  starting room (北疆小镇), `look`/`score`/`quit` all correct. Reconfirmed
+  the pre-existing `uptime() < 30` login gate in `logon()` — logins are
+  intentionally rejected for the first 30s after boot; not a bug.
+- **WASM build tested**: boots cleanly (only expected non-fatal
+  preload warnings, no `sockets` package). Because `fluffos_connect()`
+  in the harness happens immediately at boot, the very first connection
+  attempt always lands inside the 30s `uptime()` gate and is rejected
+  with "游戏正在启动过程中，请稍候再login" — a harness/timing artifact
+  of instant-connect, not a real bug (confirmed by a one-off scratch
+  variant of the harness that delays `fluffos_connect()` past 30
+  real seconds: with that workaround, connection proceeds past the
+  uptime gate and then **is** blocked by the documented
+  `query_ip_number()` WASM limitation — `logon()`'s
+  `BAN_D->is_banned(query_ip_number(ob))` check receives a malformed IP
+  string under WASM and rejects the connection with "你的地址在本 MUD
+  不受欢迎"). Driver-side WASM gap, not a mudlib bug — not patched.
+  Native play is completely unaffected by either the uptime gate (once
+  past 30s) or the IP-format issue (native `query_ip_number()` works
+  correctly).
+
 ## lpcc sweep
 
 13,560 files: **13,364 pass / 196 fail (98.6%)**, after fixing the 4
