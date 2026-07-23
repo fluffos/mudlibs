@@ -172,6 +172,24 @@ it for one file is a fine trade for correctness) rather than
 hand-patching the mangled output. This is a formatter bug, not a
 mudlib bug — do not "work around" it by rewriting the mudlib's `::`
 call into some other form; just skip formatting the affected file(s).
+A fix for this specific bug was dispatched upstream in the fluffos
+repo itself (see its own commit history / AGENTS.md for status); once
+merged, re-run the formatter and this workaround becomes unnecessary.
+
+**A second, distinct formatter bug**, found on `chongshengdeshijie`: a
+`case 'X':` label immediately followed by a `//` trailing comment can
+get merged with the comment consuming the START of the next physical
+line's real statement — e.g. `case '\'':\t//` swallowed the following
+`cmd = "say " + cmd[1..];` line's opening into the comment, silently
+deleting the actual statement (passed the formatter's own token-
+equivalence self-check, same as the `::` bug). Symptom: a crash at
+whatever runtime path that statement covered (here, gender-selection),
+with no formatter error reported at format-time. **After formatting a
+lib with `case`-heavy switch statements, spot-check that no `case`
+line's trailing comment looks suspiciously long or is glued to what
+should be the next statement** — there's no clean single grep for
+this one (unlike the `::` bug); a diff review of files with dense
+`switch`/`case` blocks is the practical mitigation for now.
 
 ### WASM build (`~/src/fluffos/docs/build-wasm.md`, `docs/driver/wasm.md`)
 

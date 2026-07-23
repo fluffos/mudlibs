@@ -399,3 +399,64 @@ registration/starting-room path exercised by the two successful
 interactive tests above — consistent with this being real long-tail
 content-gap/typo noise rather than anything blocking the lib's core
 functionality.
+
+## 2026-07-23 re-verification pass (driver rebuild + formatter + WASM)
+
+- **LPC reformat**: ran `format-corpus.mjs` over all of `work/` (26,182
+  `.lpc` files) — 25,931 written, 19 already-idempotent/unchanged, 232
+  refused (self-checked token/byte-safety failures on messy legacy
+  syntax, expected and not chased per the tool's own contract).
+- **Native retest against the freshly-rebuilt driver** (`build-debug/src/
+  driver` rebuilt from latest upstream master today): booted clean on
+  port 40057, zero fatal preload errors. Full registration flow run with
+  a fresh real Chinese name ("秦岭丁"/`qinlingding`) through the complete
+  wizard (encoding select → id → confirm → Chinese name → password →
+  gift stat roll → email → gender) all the way into the actual game
+  world; `look`, `score`, and `quit` all produced correct output and the
+  character saved cleanly on quit. **New (non-blocking) finding**: `quit`
+  triggers a caught runtime error, `*Value being indexed is zero` in
+  `/clone/topten/magic-rice.lpc`'s `simple_sort_skill()` (line 223,
+  called via `savetopten()`'s `pks_topten`/`club_topten` entries) —
+  root-caused to the shipped `data/topten.o` save file predating the
+  `pks_topten`/`club_topten` fields added later in this leaderboard code
+  (`grep` of `data/topten.o` confirms both keys are absent from the
+  saved mapping, so `query("pks_topten")` returns `0` after `restore()`,
+  overwriting the good in-source default array with a bare `0`, and
+  indexing `0[i]` throws). This is a **pre-existing content/save-data
+  bug**, unrelated to today's reformat or driver rebuild (same shipped
+  `.o` file, same source logic, just never previously exercised by a
+  `quit` at this exact leaderboard). It's non-fatal — caught by the
+  driver's error handler, `quit`'s save-and-disconnect completes
+  normally regardless — so left undocumented-as-fixed rather than
+  patched, consistent with this project's "breadth over depth" policy
+  for scattered non-blocking content bugs. No regressions from the
+  reformat or the new driver binary itself.
+- **WASM test** (`scripts/wasm_client.js` against `build-wasm/src`):
+  boots cleanly, same preload warnings as native (no fatal preload
+  errors). Registration is blocked, but **not** by the documented
+  `query_ip_number()` limitation — instead by a distinct WASM-harness
+  gap: `wasm_client.js`'s `copyDir()` only `mkdir`s the top-level
+  `work/log` directory when it decides to skip copying "runtime churn"
+  contents, but never recreates the directory *structure* beneath it.
+  This lib's `adm/daemons/logind.lpc` calls `set_visitor()` →
+  `write_file("/log/mud/MUDVISITOR", ...)` unconditionally on every
+  connection's very first successful GB/Big5 encoding selection (before
+  the "英文名字" prompt); under WASM the `mud/` subdirectory was never
+  created, so the write throws `Wrong permissions...No such file or
+  directory`, which aborts `gb_big5()` mid-function — it never reaches
+  `input_to("get_id", ob)`, so the connection is left with no input
+  handler and every subsequent line (login id, etc.) is misinterpreted
+  as an unrecognized command. Confirmed via direct source read, not
+  guessed; confirmed **not** a mudlib bug — the identical `write_file()`
+  call succeeds natively because `work/log/mud/` already exists on disk
+  from prior test runs (both are gitignored runtime-churn paths per this
+  repo's `.gitignore`, so a truly fresh checkout would need it created
+  either way — the gap is that the harness's `mkdir` is not recursive
+  into pre-existing subdirectories under `log/`). Not patched (out of
+  scope — a shared test-harness limitation, not this mudlib's code);
+  reported upstream to the orchestrating session as a general
+  `wasm_client.js` gap likely affecting other libs that keep real data
+  under a nested `work/log/<subdir>/` path.
+- Test character (`qinlingding`) save files removed after testing;
+  driver (native, PID 2126338) killed by exact PID; no scratch files
+  left behind.
