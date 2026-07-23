@@ -90,3 +90,32 @@ re-verified with a fresh full registration (real name "秦河") followed by
 this lib's own original testing pass had the same blind spot (never
 tested a post-login command), so it was silently broken since first
 marked "done."
+
+## Re-verification pass (2026-07-23): driver rebuild + LPC formatter + WASM build
+
+- **Formatter**: ran `format-corpus.mjs` over all of `work/` (9,938
+  files, 6,195 written/reformatted, 3,589 already-clean, 154 refused
+  with an error — expected on legacy code, not chased individually).
+- **Native retest against rebuilt driver** (`build-debug/src/driver`,
+  rebuilt from latest upstream master): clean boot, zero fatal errors in
+  `debug.log`. Full registration re-verified end-to-end on the
+  now-reformatted source with a fresh real Chinese name (`秦哲`, ID
+  `qinzhe`) through the same flow documented in `bxsj`'s sibling NOTES
+  (ID → password requiring a digit+uppercase and rejecting an
+  ID-derived password → Chinese name → talent roll → email → gender),
+  reaching the actual game world (武馆前院 starting room) with the
+  welcome-NPC escort (`狄云`) firing correctly; `look`/`score`/`quit` all
+  produced correct output (full 个人资料卡 stat card rendered correctly),
+  zero real errors in `debug.log`. No regressions from the reformat or
+  the fresh driver build.
+- **WASM build**: preload completes with only the expected non-fatal
+  `sockets`-package gap (`adm/daemons/network/dns_master.lpc`'s
+  `socket_create`/`socket_bind`/`socket_close` → `Undefined function`,
+  caught non-fatally, `Initializations complete.` still printed).
+  Registration is blocked by the same documented `query_ip_number()`
+  WASM-mode limitation as `bxsj` (same lineage, same
+  `adm/daemons/sited.lpc`): every ID attempt is rejected with "对不起，
+  这个英文名字不能从当前地址登录。". **Not a mudlib bug** — the
+  documented driver-side gap, not something to patch. Verdict: boots
+  cleanly under WASM; registration cannot complete due to the driver's
+  IP-check limitation.
