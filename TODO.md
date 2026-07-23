@@ -33,7 +33,7 @@ rely on the boot + interactive-connect test as the verification gate.
   majority of this collection. If an archive turns out to be English
   (like ds386/Dead Souls), do the minimum to note what it is, don't sink
   deep debugging time into it -- move on to the next Chinese one.
-- **Done: 89 / 100** (shanhaizhanshen, xingzhanyingxiong,
+- **Done: 90 / 100** (shanhaizhanshen, xingzhanyingxiong,
   unknownlib20150716 [小雨西游II], bxsj [书剑天下], bxsj1 [书剑·经典],
   chidi [江湖I], ..., nitan170911 [仙剑奇侠传], nitan6 [笑傲江湖], rzrmud
   [大唐西游], xo, xo_final, zzfy [郑州风云3], shiji [世纪],
@@ -101,7 +101,8 @@ rely on the boot + interactive-connect test as the verification gate.
   fengyun2qinghua [风云II清华仿写版, same distribution as fy2 #17],
   fengyun3xiuding [风云III修订版, 风云3 engine core same family as
   zzfy #30/moniHuafu #57], fengyun3dianzang [风云III典藏版, same engine
-  core as #97, only logind.c differs])
+  core as #97, only logind.c differs], longyunmeng [龙云梦-炎龙封印源码版,
+  closely-related fork of yanlongfengyin_xiaoao3 #68's XYZX/YLFY engine])
 - **New AGENTS.md §15q (hidden client-protocol-version gate)**: found on
   xiyangzaixian3 -- a pre-id prompt can check the input against a
   hardcoded literal (client version string), not just a BIG5/student
@@ -532,8 +533,8 @@ rely on the boot + interactive-connect test as the verification gate.
 | 99 | 风云II (清华仿写版）.ZIP | fengyun2qinghua | 40091 | done | dup: "...(1).ZIP"; despite the "清华仿写版"/Tsinghua-imitation name suggesting an independent clone, CONFIRMED the same distribution as fy2(#17, 风云再起Ⅱ) not just similar lineage -- master.c/simul_efun.c/logind.c/securityd.c/chinese.c/chinesed.c/command.c all byte-identical (main session cross-verified master.c across all 18 copies in the tree), diff -rq of the full raw trees shows zero source differences (only save-data/logs/a different bundled driver binary), lpcc sweep result and failure-list are file-for-file identical to fy2's; standard §15h fix ported directly from fy2, no other fix needed; full registration + post-login-command flow verified twice with real names 秦风(male, 汉族, 凤求凰客栈)/赵日天(female, 苗族, different start room 沉香镇中心, confirming ethnicity-based branching), look/score/quit all working both times; 97.4% lpcc pass (2766/2839, identical to fy2's); see libs/fengyun2qinghua/NOTES.md |
 | 100 | 魔幻世纪.rar | | | not started | |
 | 101 | 魔法类的泥巴.rar | mofaleidemuba | | not mudlib | confirmed: compiled EmberMUD binary (SMAUG/ROM/DikuMUD-derivative C engine, English-language classic fantasy MUD, Midgaard zone) -- pemud.exe strings reveal "C:\My Documents\EmberMUD\src\db.c"/"Ported to EmberMUD by Thanatos and Tyrluk of ToED", zero .c/.lpc/inherit anywhere, classic Diku .are world-data format, INI-style config.cfg; "泥巴" here is just the generic phonetic loanword for "mud" (the genre), coincidentally similar-sounding to "泥潭"/nitan but a totally unrelated, non-LPC, non-Chinese game; same non-mudlib category as #31/#64/#86-88; port never consumed; see libs/mofaleidemuba/NOTES.md |
-| 102 | 龙云梦-炎龙封印-二进制版.rar | | | not started | "binary version" in name -- may not have source, triage |
-| 103 | 龙云梦-炎龙封印源码版.rar | | | not started | "source version" in name -- prefer this over the binary one above |
+| 102 | 龙云梦-炎龙封印-二进制版.rar | longyunmeng_binary | | not mudlib | confirmed: of 17,125 files, 14,395 are compiled MudOS bytecode (.b, "MUDB" magic header) and only 2,013 are real .c source -- critically adm/obj/master.c/simul_efun.c (required for ANY boot) exist ONLY as compiled bytecode, never as source, and the 2,013 real .c files that do exist all inherit ROOM/SKILL base classes that themselves only exist as binaries; archive's own internal readme confirms directly ("this version is for internal use... running in purely binary mode"); xyzx/ylfy directory-naming matches xiyangzaixian3(#48)/yanlongfengyin_xiaoao3(#68) lineage; port never consumed; see libs/longyunmeng_binary/NOTES.md |
+| 103 | 龙云梦-炎龙封印源码版.rar | longyunmeng | 40094 | done | confirmed a closely-related independent fork of yanlongfengyin_xiaoao3(#68)'s XYZX/YLFY engine via diff (chinese.c identical after CRLF-normalization, master.c near-identical 544 lines both differing only in a credit comment, securityd.c 33-line diff pure wizard-name personalization, logind.c diverged more ~16% but same callback shape), not a rebrand; standard §15h fix + §15ai/§15z/§15n/§15s/§14/§8d-§15o/§15w fixes + §15v FATAL dead count() bignum efun blocking the very first boot (util.lpc #include'd into simul_efun.lpc, + a second bare count() call in teamd.lpc) + a genuinely corrupted d/honghua/cloth.lpc (space-for-newline corruption in the raw archive, cascaded into 7 sweep failures -- this is literally the starter cloth every new character receives) + heimuya heredoc-newline gotcha (3 files) + several pre-existing typos + §15ap (__FILE__ misuse in an #include'd force.h fragment, breaking a skill-exclusivity check); full registration + post-login-command flow verified across 3 sessions with real names 秦风(male)/秦岭(female)/秦云(male), look/score/i all working, zero debug.log errors across all 3 sessions; 98.2% lpcc pass (15637/15926, ~75% of remaining failures traced to a single lpcc-isolation-only artifact on the preloaded void object, not a real bug); see libs/longyunmeng/NOTES.md |
 
 ## Non-mudlib triage items (see AGENTS.md)
 

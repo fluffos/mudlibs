@@ -2407,3 +2407,23 @@ second — both listed for traceability):
   unrelated game; verified this distinction explicitly rather than
   assuming a name-based lineage match. Same non-mudlib category as
   #31/#64/#86-88.
+- `龙云梦-炎龙封印-二进制版.rar` (archive #102) — confirmed NOT
+  convertible: a genuine "binary distribution" release of an otherwise-
+  real LPC mudlib, but shipped with almost everything precompiled.
+  Of 17,125 files, 14,395 are compiled MudOS bytecode dumps (`.b`
+  extension, `MUDB` magic header confirmed via hex dump) and only 2,013
+  are real `.c` source — critically, `adm/obj/master.c`/`simul_efun.c`
+  (required for the driver to boot at all) exist ONLY as compiled
+  bytecode, never as source anywhere in the archive, and the 2,013 real
+  `.c` files that DO exist (mostly auto-generated map rooms + skill
+  descriptions) all `inherit` `ROOM`/`SKILL` base classes that
+  themselves only exist as binaries too — there is no self-contained
+  subset of real source that could boot independently. The archive's
+  own internal readme confirms directly: "this version is for internal
+  use... running in purely binary mode." A sibling archive (#103,
+  `龙云梦-炎龙封印源码版.rar`, "source version") turned out to be the
+  genuine, fully-source release of a closely related fork — always
+  check for a "source version"/"源码版" sibling before giving up on a
+  "binary version"/"二进制版" archive; this project's own naming
+  convention across several archives ("binary" vs "source" variants)
+  makes this pattern recognizable at the filename level alone.

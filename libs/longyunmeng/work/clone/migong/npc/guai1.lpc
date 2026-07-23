@@ -1,0 +1,272 @@
+#include <ansi.h>
+
+inherit NPC;
+
+string *random_item = ({
+	"/quest/baoshi/baoshis/justice light",
+	"/quest/baoshi/baoshis/earth light",
+	"/quest/baoshi/baoshis/gods light",
+	"/quest/baoshi/baoshis/love light",
+	"/quest/baoshi/baoshis/mercy light",
+	"/quest/baoshi/baoshis/sea light",
+	"/quest/baoshi/baoshis/fire light",
+	"/clone/map/weapon/axe",
+	"/clone/map/weapon/blade",
+	"/clone/map/weapon/club",
+	"/clone/map/weapon/dagger",
+	"/clone/map/weapon/fork",
+	"/clone/map/weapon/hammer",
+	"/clone/map/weapon/ring",
+	"/clone/map/weapon/spear",
+	"/clone/map/weapon/staff",
+	"/clone/map/weapon/whip",
+	"/clone/map/weapon/sword",
+	});
+
+void create()
+{
+	seteuid(getuid());
+	
+	set_name(YEL"草莽山寇"NOR, ({"caomang shankou", "shankou", "shan kou"}) );
+    set("title", HIW "落草小贼" NOR);
+    set("gender", "男性" );
+    set("icon", "30002" );
+    set("age", random(30)+20);
+    set("long", "活动在寂静之森的小贼，专打劫、偷窃经由这里的人们做些无本生意。\n");
+    //set("attitude", "aggressive");
+	set("attitude", "peaceful");
+    set("class", "lvlin");
+    set("str", 30);
+    set("con", 30);
+    set("int", 30);
+    set("dex", 30);
+    set("max_qi", 100000);
+    set("max_jing", 100000);
+    set("neili", 500000);
+    set("max_neili", 100000);
+	set("no_suck",1);
+    set("jiali", 1000);
+    set("shen", 0);
+	set("is_boss", 1);
+	set("no_zhineng", 1);
+    set("env/wimpy", 50);
+    set_temp("apply/attack",  30);
+    set_temp("apply/defense", 30);
+    set("combat_exp", 50000000);
+    set_skill("force", 1000); 
+    set_skill("unarmed", 1000);
+    set_skill("blade", 1000);
+    set_skill("dodge", 1000);
+    set_skill("parry", 1000);
+    set_skill("jiuyin-baiguzhao", 1000); 
+    set_skill("wuhu-duanmendao", 1000); 
+    set_skill("taiji-shengong", 1000); 
+    set_skill("tiyunzong", 1000);
+    map_skill("force", "taiji-shengong");
+    map_skill("unarmed","jiuyin-baiguzhao");
+    map_skill("parry", "jiuyin-baiguzhao");
+    map_skill("blade", "wuhu-duanmendao");
+    map_skill("dodge", "tiyunzong");
+    create_family("绿林暴风盟", 3, "弟子");
+    set("chat_chance", 3);
+	set("chat_msg", ({
+		(: random_move :)
+		}) );
+    
+	setup();
+    
+	if ( random (10) > 5 )
+		carry_object("/d/city/obj/blade")->wield();
+	else
+		carry_object("/d/city/obj/gangjian")->wield();
+
+    carry_object("/clone/misc/cloth")->wear();
+    add_money("gold",random(15));
+}
+
+void init()
+{
+	object ob, me, get_ob;
+	int i, level, is_time;
+	mapping skill_status, map_status, hp_status;
+    string *sname, *mname;
+    
+	me = this_object();
+    ob = this_player();
+
+	::init();
+
+	// 怪物必须是可以动作的，并只针对玩家
+	if ( !objectp(ob) || !living(me) || !playerp(ob) ) return;
+    // 见面就打
+	me->fight_ob(ob);
+	// 拦路
+	add_action("do_go", "go");
+	// 战斗中不复制
+	if ( sizeof(me->query_enemy()) > 1 
+		&& (is_time=me->query_temp("copy_ob_time")) 
+		&& is_time < time() )
+		return;
+	// 跟随
+	command("follow "+ob->query("id"));
+	// 经验太少没有拷贝的必要
+	// if ( ob->query("combat_exp") < 210000 ) return;
+	// 获得玩家等级
+	level = ob->query("xyzx_sys/level");
+	// 只复制最高等级玩家
+	if ( me->query_temp("kill_ob_lvl") > level ) return;
+	// 防止重复复制同一人
+	if ( objectp(get_ob=me->query_temp("fight_killer_id")) && get_ob==ob ) return;
+	//__________________标记目前复制状况___________________
+	me->set_temp("fight_killer_id", ob);
+	me->set_temp("kill_ob_lvl", level);
+	me->set_temp("copy_ob_time", time()+3);
+	//______________________标记结束_______________________
+	//______________________状态拷贝___________________
+    hp_status = ob->query_entire_dbase();
+    me->set("str", hp_status["str"]);
+    me->set("int", hp_status["int"]);
+    me->set("con", hp_status["con"]);
+    me->set("dex", hp_status["dex"]);
+    me->set("max_qi",    hp_status["max_qi"] * 2);
+    me->set("eff_qi",    hp_status["max_qi"] * 2);
+    me->set("qi",        hp_status["max_qi"] * 2);
+    me->set("max_jing",  hp_status["max_jing"] * 2);
+    me->set("eff_jing",  hp_status["max_jing"] * 2);
+    me->set("jing",      hp_status["max_jing"] * 2);
+    me->set("max_neili", hp_status["max_neili"]);
+    me->set("neili",     hp_status["max_neili"] * 3);
+    me->set("max_jingli", hp_status["max_jingli"]);
+    me->set("jingli",     hp_status["max_jingli"] * 3);
+    me->command("jiali max");
+	if ( me->query("jiali") < hp_status["jiali"] )
+		me->set("jiali", (int)hp_status["jiali"]*5/4);
+	
+	if ( hp_status["combat_exp"] < 1500000000)
+		me->set("combat_exp", (int)((hp_status["combat_exp"]/4)*5));
+	else
+		me->set("combat_exp", 2100000000);
+	//__________________________等级相关参数拷贝_____________________________
+	me->set("xyzx_sys/level", ob->query("xyzx_sys/level"));
+	me->set("xyzx_sys/jingzhun", ob->query("xyzx_sys/jingzhun"));
+	me->set("xyzx_sys/minjie", ob->query("xyzx_sys/minjie"));
+	me->set("xyzx_sys/lingxing", ob->query("xyzx_sys/lingxing"));
+	me->set("xyzx_sys/fanying", ob->query("xyzx_sys/fanying"));
+	//______________________________拷贝完成_________________________________
+	//______________________拷贝完成___________________
+    // 没有可拷贝的技能
+	if ( !(skill_status = ob->query_skills()) ) return;
+	//_________________________拷贝技能________________________
+	sname  = keys(skill_status);
+    for(i=0; i<sizeof(skill_status); i++)
+	{
+		me->set_skill(sname[i], skill_status[sname[i]]);
+    }
+	//______________________技能拷贝完成_______________________
+    // 没有可拷贝的激发技能
+	if ( !(map_status = ob->query_skill_map()) ) return;
+    //______________________卸除激发技能___________________
+    me->map_skill("unarmed");
+    me->map_skill("dodge");
+    me->map_skill("parry");
+	me->map_skill("sword");
+	me->map_skill("force");
+	me->map_skill("blade");
+	//______________________卸除完毕________________________
+	//_____________________拷贝技能激发状态___________________
+	mname  = keys(map_status);
+    for(i=0; i<sizeof(map_status); i++) 
+	{
+		me->map_skill(mname[i], map_status[mname[i]]);
+    }
+	//______________________技能激发拷贝完毕__________________
+}
+
+void die()
+{
+	object ob, me, corpse, baoshi, env;
+	string room;
+	int m, flag;
+
+	ob = this_object();
+	flag = 1;
+	
+	// 先绑定到打晕的对象上
+	if ( !objectp(me = ob->query_temp("last_unconcious_from")) )
+		me = ob->query_temp("last_damage_from"); // 绑定到最后伤害对象
+
+	if ( !objectp(me) // 未成功绑定
+		|| !objectp(env=environment(ob)) 
+		|| !stringp(room=env->query("short")) ) 
+	{
+		::die();
+		return;
+	}
+
+	if ( me )
+	{
+		m = 2000+random(3000);
+		
+		if ( interactive(me) )
+		{
+			message_vision(HIG"\n$N杀死了 "+ob->name(1)+HIG" ，奖励了 "HIM+(me->query_exp_times()*m)+HIG" 点经验和 "HIY+(m/10)+HIG" 潜能。\n"NOR, me);
+			//message("party", HIG"【寂静之森】"+HIC+me->name(1)+HIW" 杀死了 "+ob->name(1)+HIW" ，奖励了 "HIM+(me->query_exp_times()*m)+HIW" 点经验和 "HIY+(m/10)+HIW" 潜能。\n"NOR,users() );	
+			me->add("combat_exp", m, 1);
+			me->add("potential", m / 10, 1);
+		}
+	}
+	
+	if ( objectp(corpse = CHAR_D->make_corpse(ob, me)) )
+		corpse->move(environment(ob));
+	// 绑定到对象，冷冻一分钟
+	corpse->set("valid_get_from", me->query("id"));
+
+	if ( objectp(me) && objectp(ob) )
+	{
+		if ( me->query("xyhy_type") == 2 ) flag = 2;
+		if ( random(100) < 10*flag )
+		{
+			baoshi = new(random_item[random(sizeof(random_item))]);
+			baoshi->set("xyzx_sys/bind_type", 2); // 拾取绑定
+			message("party", HIG"【"+room+"】"+HIW"听说 "HIC+me->name(1)+HIW" 在 "HIY+ob->name(1)+" 的尸体上发现了 "+baoshi->name(1)+HIW"。\n"NOR, users());
+			baoshi->move(corpse);
+		}
+		else if ( random(100) > 50 )
+		{
+			if ( random(100) > 80 )
+				baoshi = new("/clone/map/obj/levl_seal");
+			else
+				baoshi = new("/quest/baoshi/baoshis/baoshi");
+
+			baoshi->move(corpse);
+		}
+	}
+
+	COMBAT_D->announce(ob, "dead");
+	destruct(ob);
+	return;
+}
+
+int do_go(string arg)
+{
+	object me, ob, *killer;
+	
+	me = this_object();
+	ob = this_player();
+	
+	if ( !objectp(ob) ) return 0;
+
+	killer = ob->query_enemy();
+	
+	if ( playerp(ob) 
+		&& arrayp(killer)
+		&& sizeof(killer) > 3 
+		&& random(10) <= 5 ) 
+	{
+		message_vision(YEL "$N见势不好，转身要走，被$n"+YEL+"一把拦在面前。背后拉我一票兄弟还想走？没那么容易！\n"NOR, ob, me);
+		if ( !ob->is_busy() ) ob->start_busy(1);
+		return 1;
+	}
+	
+	return 0;
+}
