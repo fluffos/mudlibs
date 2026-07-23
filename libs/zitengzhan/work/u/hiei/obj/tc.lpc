@@ -16,285 +16,265 @@ inherit ITEM;
 nosave int my_socket;
 nosave object me;
 string connected;
-int qi,qi2,nl,nl2,jing,jing2,jl,jl2;
-int nlmax=3000, isnl=1;
-int foodcnt=0;
+int qi, qi2, nl, nl2, jing, jing2, jl, jl2;
+int nlmax = 3000, isnl = 1;
+int foodcnt = 0;
 int close_socket();
 int do_telnet(string arg);
 string *book = ({ "dodge", "parry", });
 string check_cmd = "eat mian;bath";
 string *trigger = ({
-"您的英文名字", "xuan",
-"请输入密码","abc123",
-"您要将另一个","y",
-"你起身穿","eat mian;he jiudai;out;n;e;e;n;e;enter 洞;e;hp;follow dz",
-"这里没有 read。","!read",
-//"这里不能打坐", "s;w;s;s;s;n;n;dazuo 10",
-"你现在的气","w;out;w;s;w;w;s;enter;du book 100;bath",
-//"你现在精不","w;out;w;s;w;w;n;n;n;e;sleep",
-"你要花多少气练功","dazuo 10",
-"你要花多少精","hp;follow tn",
-"你将内息","hp;follow dz",
-"你吐纳完毕","er;hp;follow tn",
-"这里没有 tn。","!tuna",
-"这里没有 dz。","!dazuo",
-"【 精 神 】","!getjing",
-"【 体 力 】","!getqi",
-"你连线进入","dazuo 10",
-"重新连线完毕","bath;dazuo 10",
+  "您的英文名字", "xuan",
+  "请输入密码", "abc123",
+  "您要将另一个", "y",
+  "你起身穿", "eat mian;he jiudai;out;n;e;e;n;e;enter 洞;e;hp;follow dz",
+  "这里没有 read。", "!read",
+  //"这里不能打坐", "s;w;s;s;s;n;n;dazuo 10",
+  "你现在的气", "w;out;w;s;w;w;s;enter;du book 100;bath",
+  //"你现在精不","w;out;w;s;w;w;n;n;n;e;sleep",
+  "你要花多少气练功", "dazuo 10",
+  "你要花多少精", "hp;follow tn",
+  "你将内息", "hp;follow dz",
+  "你吐纳完毕", "er;hp;follow tn",
+  "这里没有 tn。", "!tuna",
+  "这里没有 dz。", "!dazuo",
+  "【 精 神 】", "!getjing",
+  "【 体 力 】", "!getqi",
+  "你连线进入", "dazuo 10",
+  "重新连线完毕", "bath;dazuo 10",
 });
 
-void create()
-{
-        set_name("控制台", ({ "tc" }) );
-        set("long","可以连接其它mud的终端。xuan\\ xuanc xuanq xuant。\n");
-        set_weight(0);
-        set("no_drop", "1");
-        set("no_get","1");
-        set("value", 100);
-        set("unit", "个");
-        setup();
+void create() {
+  set_name("控制台", ({ "tc" }));
+  set("long", "可以连接其它mud的终端。xuan\\ xuanc xuanq xuant。\n");
+  set_weight(0);
+  set("no_drop", "1");
+  set("no_get", "1");
+  set("value", 100);
+  set("unit", "个");
+  setup();
 }
 
-void init()
-{       
-        object ob;
+void init() {
+  object ob;
 
-        if( (ob=this_player())->query("id") == "hiei" ) {
-                add_action("close_socket","xuanc");
-                add_action("query_connect","xuanq");
-                add_action("write_message","\\");
-                add_action("do_telnet","xuant");
-                me = ob;
+  if ((ob = this_player())->query("id") == "hiei") {
+    add_action("close_socket", "xuanc");
+    add_action("query_connect", "xuanq");
+    add_action("write_message", "\\");
+    add_action("do_telnet", "xuant");
+    me = ob;
+  }
+}
+
+string remove_ansi(string str) {
+  int i;
+  string *color = ({ BLK, RED, GRN, YEL, BLU, MAG, CYN, WHT,
+    HIR, HIG, HIY, HIB, HIM, HIC, HIW,
+    HBRED, HBGRN, HBYEL, HBBLU, HBMAG, HBCYN, HBWHT,
+    BBLK, BRED, BYEL, BBLU, BMAG, BCYN,
+    NOR, BOLD, BLINK });
+
+  if (!str || !stringp(str)) return 0;
+  i = sizeof(color);
+  reset_eval_cost();
+  while (i--) {
+    str = replace_string(str, color[i], "");
+  }
+  return str;
+}
+
+void tell_me(string arg) {
+  tell_object(environment(this_object()), arg);
+}
+
+
+void check_send(string arg) {
+  string *cmds;
+  int i;
+
+  set("check_time", time());
+  set("check_ok", 0);
+  cmds = explode(check_cmd, ";");
+  for (i = 0; i < sizeof(cmds); i++)
+    socket_write(my_socket, sprintf("%s\n", cmds[i]));
+  tell_me("[r] Check send.");
+}
+
+void retry_conn(string arg) {
+  do_telnet("118.114.245.12 6666");
+}
+
+void check_conn(string arg) {
+  if (query("check_ok") == 0) {
+    close_socket();
+    remove_call_out("check_conn");
+    remove_call_out("check_send");
+    tell_me("10秒后重新连接...\n");
+    call_out("retry_conn", 10);
+    return;
+  }
+  tell_me("[r] Check succ.");
+  call_out("check_conn", 60);
+  call_out("check_send", 10);
+}
+
+int do_telnet(string arg) {
+  int err;
+  if (!arg)
+    return notify_fail("telnet to ...？\n");
+  if (query("connected")) {
+    tell_me("已有连接。\n");
+    return 1;
+  }
+  my_socket = socket_create(STREAM, "in_read_callback", "in_close_callback");
+  if (my_socket < 0) {
+    tell_me("创建连接失败。\n");
+    return 1;
+  }
+  //err = socket_connect( my_socket, arg , "read_callback","write_callback" );
+  err = socket_connect(my_socket, "118.114.245.12 6666", "read_callback", "write_callback");
+  if (err == EESUCCESS) {
+    tell_me("正在连接到 " + arg + "\n");
+    connected = arg;
+    set("connected", 1);
+    remove_call_out("check_conn");
+    call_out("check_conn", 60);
+    remove_call_out("check_send");
+    call_out("check_send", 10);
+  } else
+    tell_me("无法连接 " + arg + "\n");
+  return 1;
+}
+
+int close_socket() {
+  if (query("connected")) {
+    if (socket_close(my_socket)) {
+      tell_me("连接关闭。\n");
+      delete("connected");
+    } else
+      tell_me("无法关闭连接。\n");
+  } else
+    tell_me("目前无任何连接。\n");
+  remove_call_out("retry_conn");
+  remove_call_out("check_conn");
+  connected = 0;
+  return 1;
+}
+
+void read_callback(int fd, mixed message) {
+  int i, j, k, cnt1, cnt2;
+  string s, *lines, *cmds;
+
+  if (query("check_ok") == 0) set("check_ok", 1);
+
+  lines = explode(message, "\n");
+  cnt1 = sizeof(lines);
+  for (i = 0; i < cnt1; i++) {
+    for (j = 0; j < sizeof(trigger); j += 2) {
+      if (strsrch((string)lines[i], trigger[j]) != -1) {
+        //tell_me( lines[i] + "==>" + trigger[j+1] + "\n" );
+        if (trigger[j + 1][0] == '!') {
+          switch (trigger[j + 1]) {
+            case "!read":
+              s = book[random(sizeof(book))];
+              socket_write(my_socket, sprintf("ec\n", s));
+              //socket_write(my_socket, sprintf("du %s 100\n", s) );
+              socket_write(my_socket, sprintf("lian %s 100\n", s));
+              foodcnt++;
+              if (foodcnt > 60) {
+                foodcnt = 0;
+                socket_write(my_socket, "s\n");
+                socket_write(my_socket, "serve\n");
+              } else {
+                socket_write(my_socket, "e\n");
+                socket_write(my_socket, "sleep\n");
+              }
+              break;
+            case "!getqi":
+              s = replace_string(lines[i], " ", "");
+              s = remove_ansi(s);
+              sscanf(s, "【体力】%d/%d(%*d%%)【内力】%d/%d(+%*d)", qi, qi2, nl, nl2);
+              //tell_me( sprintf("[hp]qi:%d,qi2:%d,nl:%d,nl2:%d\n", qi, qi2, nl, nl2) );
+              break;
+            case "!getjing":
+              s = replace_string(lines[i], " ", "");
+              s = remove_ansi(s);
+              sscanf(s, "【精神】%d/%d(%*d%%)【精力】%d/%d(%*d%%)", jing, jing2, jl, jl2);
+              //tell_me( sprintf("[hp]jing:%d,jing2:%d,jl:%d,jl2:%d\n", jing, jing2, jl, jl2) );
+              break;
+            case "!tuna":
+              cnt2 = jl2 * 2 - jl;
+              if (cnt2 > jing) {
+                if (nl < 50) socket_write(my_socket, "dazuo 99999\n");
+                else socket_write(my_socket, sprintf("tuna %d\n", jing));
+              } else {
+                if (cnt2 < 10) cnt2 = 10;
+                s = sprintf("tuna %d\n", cnt2);
+                socket_write(my_socket, s);
+              }
+              break;
+            case "!dazuo":
+              cnt2 = nl2 * 2 - nl;
+              if (nl2 >= nlmax) {
+                isnl = 0;
+                socket_write(my_socket, "halt\n");
+                socket_write(my_socket, "tuna\n");
+              }
+              //tell_me( sprintf("cnt2:%d,qi:%d\n", cnt2, qi) );
+              if (cnt2 > qi) cnt2 = qi;
+              if (cnt2 < 10) cnt2 = 10;
+              // tell_me( sprintf("final cnt2:%d\n", cnt2) );
+              s = sprintf("dazuo %d\n", cnt2);
+              if (isnl == 1) socket_write(my_socket, s);
+              else socket_write(my_socket, "tuna 19\n");
+              break;
+            default: break;
+          }
+        } else {
+          cmds = explode(trigger[j + 1], ";");
+          cnt2 = sizeof(cmds);
+          for (k = 0; k < cnt2; k++) {
+            if (cmds[k][0] == '#') {
+              //tell_me( "[mycmd]" + cmds[k][1..<1] + "\n" );
+              me->command(cmds[k][1..<1]);
+            } else {
+              //tell_me( "[cmd]"+cmds[k]+"\n");
+              socket_write(my_socket, cmds[k] + "\n");
+            }
+          }
         }
+      }
+    }
+  }
+
+  message = "[r]" + message;
+  tell_me((string)message);
 }
 
-string remove_ansi(string str)
-{
-        int i;
-        string *color = ({ BLK, RED, GRN, YEL, BLU, MAG, CYN, WHT,
-                           HIR, HIG, HIY, HIB, HIM, HIC, HIW,
-                           HBRED, HBGRN, HBYEL, HBBLU, HBMAG, HBCYN, HBWHT,
-                           BBLK, BRED, BYEL, BBLU, BMAG, BCYN,
-                           NOR, BOLD, BLINK });
-                           
-        if( !str || !stringp(str) ) return 0;
-        i = sizeof(color);
-         reset_eval_cost();
-        while( i-- ) {
-                str = replace_string(str, color[i], "");
-                }
-        return str;
+void write_callback(int fd) {
+  int res;
+  if (query("connect")) return;
+  res = socket_write(fd, "");
+  if (res == EESUCCESS || res == EECALLBACK) {
+    set("connected", 1);
+  }
 }
 
-void tell_me(string arg)
-{
-        tell_object(environment(this_object()),arg);
+int write_message(string arg) {
+  if (!arg) arg = "";
+  socket_write(my_socket, arg + "\n");
+
+  return 1;
 }
 
-
-void check_send(string arg)
-{
-        string *cmds;
-        int i;
-
-        set("check_time", time());
-        set("check_ok", 0);
-        cmds = explode(check_cmd, ";");
-        for( i = 0; i < sizeof(cmds); i++ )
-                socket_write(my_socket, sprintf("%s\n", cmds[i]));
-        tell_me("[r] Check send.");
+int query_autoload() {
+  return 1;
 }
 
-void retry_conn(string arg)
-{
-        do_telnet("118.114.245.12 6666");
+int query_connect() {
+  if (connected)
+    tell_me("现在正连接在" + connected + "\n");
+  else tell_me("现在没有任何连接。\n");
+  return 1;
 }
-
-void check_conn(string arg)
-{
-        if( query("check_ok") == 0 ) {
-                close_socket();
-                remove_call_out("check_conn");
-                remove_call_out("check_send");
-                tell_me("10秒后重新连接...\n");
-                call_out("retry_conn", 10);
-                return;
-        }
-        tell_me("[r] Check succ.");
-        call_out("check_conn", 60);
-        call_out("check_send", 10);
-}
-
-int do_telnet(string arg)
-{
-        int err;
-        if( !arg )
-                return notify_fail("telnet to ...？\n");
-        if( query("connected") ) {
-                tell_me( "已有连接。\n" );
-                return 1;
-        }
-        my_socket = socket_create( STREAM, "in_read_callback","in_close_callback" );
-        if ( my_socket < 0 ) 
-        {
-                tell_me( "创建连接失败。\n" );
-                return 1;
-        }
-        //err = socket_connect( my_socket, arg , "read_callback","write_callback" );
-        err = socket_connect( my_socket, "118.114.245.12 6666", "read_callback","write_callback" );
-        if( err==EESUCCESS ) 
-        {
-                tell_me("正在连接到 " + arg + "\n");
-                connected = arg;
-                set("connected",1);
-                remove_call_out("check_conn");
-                call_out("check_conn", 60);
-                remove_call_out("check_send");
-                call_out("check_send", 10);
-        }
-        else
-                tell_me("无法连接 " + arg + "\n");
-        return 1;
-}
-
-int close_socket()
-{
-        if( query("connected") )  {
-                        if( socket_close(my_socket) ) {
-                                tell_me("连接关闭。\n");
-                                delete("connected");
-                        }
-                        else
-                                tell_me("无法关闭连接。\n");
-               }
-        else
-               tell_me("目前无任何连接。\n");
-        remove_call_out("retry_conn");
-        remove_call_out("check_conn");
-        connected = 0;
-        return 1;
-}
-
-void read_callback(int fd, mixed message)
-{
-        int i, j, k, cnt1, cnt2;
-        string s, *lines, *cmds;
-
-        if( query("check_ok") == 0 ) set("check_ok", 1);
-
-        lines = explode(message,"\n");
-        cnt1 = sizeof(lines);
-        for(i =0; i<cnt1;i++) {
-                for( j = 0; j < sizeof(trigger);j+=2 ) {
-                        if( strsrch((string)lines[i], trigger[j]) != -1 ) {
-                                //tell_me( lines[i] + "==>" + trigger[j+1] + "\n" );
-                                if( trigger[j+1][0] == '!' ) {
-                                 switch( trigger[j+1] ) {
-                                   case "!read" :
-                                        s = book[random(sizeof(book))];
-                                        socket_write(my_socket, sprintf("ec\n", s) );
-                                        //socket_write(my_socket, sprintf("du %s 100\n", s) );
-                                        socket_write(my_socket, sprintf("lian %s 100\n", s) );
-                                        foodcnt++;
-                                        if( foodcnt>60 ) {
-                                          foodcnt=0;
-                                          socket_write(my_socket, "s\n");
-                                          socket_write(my_socket, "serve\n");
-                                        } else {
-                                          socket_write(my_socket, "e\n");
-                                          socket_write(my_socket, "sleep\n");
-                                        }
-                                        break;
-                                   case "!getqi" :
-                                        s = replace_string(lines[i]," ","");
-                                        s = remove_ansi(s);
-                                        sscanf(s, "【体力】%d/%d(%*d%%)【内力】%d/%d(+%*d)", qi,qi2,nl,nl2);
-                                        //tell_me( sprintf("[hp]qi:%d,qi2:%d,nl:%d,nl2:%d\n", qi, qi2, nl, nl2) );
-                                        break;
-                                   case "!getjing" :
-                                        s = replace_string(lines[i]," ","");
-                                        s = remove_ansi(s);
-                                        sscanf(s, "【精神】%d/%d(%*d%%)【精力】%d/%d(%*d%%)", jing,jing2,jl,jl2);
-                                        //tell_me( sprintf("[hp]jing:%d,jing2:%d,jl:%d,jl2:%d\n", jing, jing2, jl, jl2) );
-                                        break;
-                                   case "!tuna" :
-                                        cnt2 = jl2*2-jl;
-                                        if ( cnt2 > jing ) {
-                                          if( nl < 50 ) socket_write(my_socket,"dazuo 99999\n");
-                                          else socket_write(my_socket, sprintf("tuna %d\n", jing));
-                                        } else {
-                                          if ( cnt2 < 10 ) cnt2 = 10;
-                                          s = sprintf("tuna %d\n", cnt2);
-                                          socket_write(my_socket,s);
-                                        }
-                                        break;
-                                   case "!dazuo" :
-                                        cnt2 = nl2*2-nl;
-                                        if ( nl2 >= nlmax ) { 
-                                            isnl = 0; 
-                                            socket_write(my_socket,"halt\n");
-                                            socket_write(my_socket,"tuna\n");
-                                        }
-                                        //tell_me( sprintf("cnt2:%d,qi:%d\n", cnt2, qi) );
-                                        if( cnt2 > qi ) cnt2 = qi;
-                                        if( cnt2 < 10 ) cnt2 = 10;
-                                       // tell_me( sprintf("final cnt2:%d\n", cnt2) );
-                                        s = sprintf("dazuo %d\n", cnt2);
-                                        if ( isnl == 1 ) socket_write(my_socket,s);
-                                        else socket_write(my_socket,"tuna 19\n");
-                                        break;
-                                   default: break;
-                                 }
-                                } else {
-                                 cmds=explode(trigger[j+1], ";");
-                                 cnt2 = sizeof(cmds);
-                                 for( k = 0; k < cnt2; k++ ) {
-                                    if( cmds[k][0] == '#' ) {
-                                        //tell_me( "[mycmd]" + cmds[k][1..<1] + "\n" );
-                                        me->command( cmds[k][1..<1] );
-                                    } else {
-                                        //tell_me( "[cmd]"+cmds[k]+"\n");
-                                        socket_write(my_socket,cmds[k]+"\n");
-                                    }
-                                 }
-                                }
-                        }
-                }
-        }
-
-        message = "[r]" + message;
-        tell_me( (string) message );
-}
-
-void write_callback(int fd)
-{
-        int res;
-        if(query("connect")) return ;
-        res = socket_write( fd,"");
-        if (res == EESUCCESS || res == EECALLBACK) {
-                set("connected",1);
-        }
-}
-
-int write_message(string arg)
-{
-        if( !arg ) arg="";
-        socket_write(my_socket,arg+"\n");
-
-        return 1;
-}
-
-int query_autoload()
-{ 
-        return 1;
-}
-
-int query_connect()
-{
-        if ( connected )
-               tell_me( "现在正连接在" + connected + "\n" );
-        else tell_me( "现在没有任何连接。\n" );
-return 1;
-}
-

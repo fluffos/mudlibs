@@ -3,582 +3,514 @@ inherit F_DBASE;
 #include <ansi.h>
 #include "maze.h"
 
-string *cw = ({"  ","┃","━","┗","┃","┃","┏","┣","━","┛","━","┻","┓","┫","┳","╋",});
+string *cw = ({ "  ", "┃", "━", "┗", "┃", "┃", "┏", "┣", "━", "┛", "━", "┻", "┓", "┫", "┳", "╋", });
 
-void create()
-{
-    seteuid( getuid() );
+void create() {
+  seteuid(getuid());
 }
 
-string getw(mixed m,int x, int y)
-{
-    return cw[(m[x][y-1]?0:1)|(m[x+1][y]?0:2)|(m[x][y+1]?0:4)|(m[x-1][y]?0:8)];
+string getw(mixed m, int x, int y) {
+  return cw[(m[x][y - 1] ? 0 : 1) | (m[x + 1][y] ? 0 : 2) | (m[x][y + 1] ? 0 : 4) | (m[x - 1][y] ? 0 : 8)];
 }
 
-int sr(mixed m,int x,int y)
-{
-    mixed d = ({ ({0,1}), ({1,0}), ({0,-1}), ({-1,0}) });
-    int zx=x*2,zy=y*2,nx,tn=random(2)%2? 1:3,i;
-    m[zx][zy]=1;
-    reset_eval_cost();
-    for (i=0,nx=random(4);i<4;i++,nx=(nx+tn)%4)
-        if (m[zx+2*d[nx][0]][zy+2*d[nx][1]]==0)
-            m[zx+d[nx][0]][zy+d[nx][1]]=1,sr(m,x+d[nx][0],y+d[nx][1]);
-    return 0;
+int sr(mixed m, int x, int y) {
+  mixed d = ({ ({ 0, 1 }), ({ 1, 0 }), ({ 0, -1 }), ({ -1, 0 }) });
+  int zx = x * 2, zy = y * 2, nx, tn = random(2) % 2 ? 1 : 3, i;
+  m[zx][zy] = 1;
+  reset_eval_cost();
+  for (i = 0, nx = random(4); i < 4; i++, nx = (nx + tn) % 4)
+    if (m[zx + 2 * d[nx][0]][zy + 2 * d[nx][1]] == 0)
+      m[zx + d[nx][0]][zy + d[nx][1]] = 1, sr(m, x + d[nx][0], y + d[nx][1]);
+  return 0;
 }
 
-mixed make_maze(int x,int y)
-{
-    int z1,z2;
-    mixed m;
-    m = allocate(2*x+3);
-    for(int i=0;i<2*x+3;i++)
-        m[i] = allocate(2*y+3);
-    for (z1=0,z2=2*y+2;z1<=2*x+2;z1++)
-        m[z1][0]=1,m[z1][z2]=1;
-    for (z1=0,z2=2*x+2;z1<=2*y+2;z1++)
-        m[0][z1]=1,m[z2][z1]=1;
-    /*m[1][2]=1;
+mixed make_maze(int x, int y) {
+  int z1, z2;
+  mixed m;
+  m = allocate(2 * x + 3);
+  for (int i = 0; i < 2 * x + 3; i++)
+    m[i] = allocate(2 * y + 3);
+  for (z1 = 0, z2 = 2 * y + 2; z1 <= 2 * x + 2; z1++)
+    m[z1][0] = 1, m[z1][z2] = 1;
+  for (z1 = 0, z2 = 2 * x + 2; z1 <= 2 * y + 2; z1++)
+    m[0][z1] = 1, m[z2][z1] = 1;
+  /*m[1][2]=1;
     m[2*x+1][2*y]=1;*/
-    sr(m,random(x)+1,random(y)+1);
+  sr(m, random(x) + 1, random(y) + 1);
 
-    return m;
+  return m;
 }
-mixed init_view_data(string maze)
-{
-    mixed maze_data = MAZE_OB->query("mazes/"+maze+"/data");
-    mixed view_data;
-    int mx,my;
-    if(!maze_data)
-        return 0;
-    mx = sizeof(maze_data);
-    my = sizeof(maze_data[0]);
-    view_data = allocate(mx);
-    for(int i=0;i<mx;i++)
-        view_data[i] = allocate(my);
-    return view_data;
-}
-
-object* make_rooms(mixed maze_data, class maze_settings settings)
-{
-    int width = settings->width;
-    int height = settings->height;
-    object *maze_rooms = allocate(width*height);
-    
-    for(int x=0;x<width;x++)
-    {
-        for(int y=0;y<height;y++)
-        {
-            object room = new("/u/nanf/maze/maze_room.lpc");
-            mapping exits = ([]);
-            room->set("short", settings->short_desc);
-            room->set("long", settings->long_desc);
-            maze_rooms[y*width+x] = room;
-        }
-    }
-    return maze_rooms;
-}
-
-void destruct_maze(string maze)
-{
-    mixed maze_data;
-    int x,y;
-    if(!maze_data = MAZE_OB->query("mazes/"+maze+"/data"))
-        return;
-    x = sizeof(maze_data)/2-1;
-    y = sizeof(maze_data[0])/2-1;
-    for(int i=1;i<=x;i++)
-    {
-        for(int j=1;j<=y;j++)
-        {
-            object ob;
-            if( ob = find_object( sprintf("maze/%s/%d/%d",maze,i,j) ) )
-            {
-                // write(sprintf("destructing maze/%s/%d/%d\n",maze,i,j));
-                filter_array(all_inventory(ob), "remove_player", this_object());
-                destruct(ob);
-            }
-        }
-    }
-    MAZE_OB->delete("mazes/"+maze);
-}
-
-int remove_player(object ob)
-{
-    if(!ob || !userp(ob))
-        return 0;
-    tell_object(ob, HIY"你所在的世界消失了。。。\n"NOR);
-    ob->move("/d/city/kezhan.lpc");
-    message_vision(HIW"$N突然出现在一道白光之中!!\n"NOR,ob);
+mixed init_view_data(string maze) {
+  mixed maze_data = MAZE_OB->query("mazes/" + maze + "/data");
+  mixed view_data;
+  int mx, my;
+  if (!maze_data)
     return 0;
+  mx = sizeof(maze_data);
+  my = sizeof(maze_data[0]);
+  view_data = allocate(mx);
+  for (int i = 0; i < mx; i++)
+    view_data[i] = allocate(my);
+  return view_data;
 }
 
-int new_maze(object player, class maze_settings settings)
-{
-    int width = settings->width;
-    int height = settings->height;
-    mixed maze_data;
-    mixed view_data;
-    object *maze_rooms;
-    string id = player->query("id");
-    string dir;
-    int pos;
+object *make_rooms(mixed maze_data, class maze_settings settings) {
+  int width = settings->width;
+  int height = settings->height;
+  object *maze_rooms = allocate(width * height);
 
-    if(!player)
-        return 0;
-
-    if(MAZE_OB->query("mazes/"+id))
-        destruct_maze(id);    
-    // 迷宫通过递归算法构造，不能太深
-    if(width>MAX_WIDTH) width = MAX_WIDTH;
-    if(height>MAX_HEIGHT) height = MAX_HEIGHT;
-    if(width<=0) width = 1;
-    if(height<=0) height = 1;
-    // 计算出一个描述迷宫的二维数据结构
-    maze_data = make_maze(width, height);
-    // 创建入口
-    if((dir=settings->entry_dir) && (pos=settings->entry_pos))
-    {        
-        int ex=0,ey=0;
-        switch(dir)
-        {
-            case "south":
-            if(pos<0) pos+=width+1; 
-            if(pos>0 && pos<=width)
-            {
-                settings->entryx=pos;settings->entryy=height;
-                ey=height*2+1;ex=2*pos;maze_data[ex][ey]=1; 
-            }
-            break;
-            case "north":
-            if(pos<0) pos+=width+1;
-            if(pos>0 && pos<=width)
-            {
-                settings->entryx=pos;settings->entryy=1;
-                ey=1;ex=2*pos;maze_data[ex][ey]=1;
-            }
-            break;
-            case "west": 
-            if(pos<0) pos+=height+1;
-            if(pos>0 && pos<=height)
-            {
-                settings->entryx=1;settings->entryy=pos;
-                ex=1;ey=2*pos;maze_data[ex][ey]=1;
-            }
-            break;
-            case "east":
-            if(pos<0) pos+=height+1;
-            if(pos>0 && pos<=height)
-            {
-                settings->entryx=width;settings->entryy=pos;
-                ex=width*2+1;ey=2*pos;maze_data[ex][ey]=1;
-            }
-            break;                
-            default:
-            break;
-        }
-        if(ex && ey)
-        {
-            settings->entrymx = ex;
-            settings->entrymy = ey;
-        }
+  for (int x = 0; x < width; x++) {
+    for (int y = 0; y < height; y++) {
+      object room = new("/u/nanf/maze/maze_room.lpc");
+      mapping exits = ([]);
+      room->set("short", settings->short_desc);
+      room->set("long", settings->long_desc);
+      maze_rooms[y * width + x] = room;
     }
-    // 创建出口
-    if((dir=settings->exit_dir) && (pos=settings->exit_pos))
-    {        
-        int ex=0,ey=0;
-        switch(dir)
-        {
-            case "south":
-            if(pos<0) pos+=width+1; 
-            if(pos>0 && pos<=width)
-            {
-                settings->exitx=pos;settings->exity=height;
-                ey=height*2+1;ex=2*pos;maze_data[ex][ey]=1; 
-            }
-            break;
-            case "north":
-            if(pos<0) pos+=width+1;
-            if(pos>0 && pos<=width)
-            {
-                settings->exitx=pos;settings->exity=1;
-                ey=1;ex=2*pos;maze_data[ex][ey]=1;
-            }
-            break;
-            case "west": 
-            if(pos<0) pos+=height+1;
-            if(pos>0 && pos<=height)
-            {
-                settings->exitx=1;settings->exity=pos;
-                ex=1;ey=2*pos;maze_data[ex][ey]=1;
-            }
-            break;
-            case "east":
-            if(pos<0) pos+=height+1;
-            if(pos>0 && pos<=height)
-            {
-                settings->exitx=width;settings->exity=pos;
-                ex=width*2+1;ey=2*pos;maze_data[ex][ey]=1;
-            }
-            break;    
-            default:
-            break;
-        }
-        if(ex && ey)
-        {
-            settings->exitmx = ex;
-            settings->exitmy = ey;
-        }
-    }
-    // 通过创建者的player id来保存迷宫结构
-    MAZE_OB->set("mazes/"+id+"/data", maze_data);
-    MAZE_OB->set("mazes/"+id+"/settings", settings);
-    
-    player->delete_temp("maze");
-    player->set_temp("maze/view_data", init_view_data(id));
-    if(settings->initx && settings->initx>=-width && settings->initx<=width)
-    {
-        if(settings->initx<0)
-            settings->initx += width+1;
-    }
-    else
-        settings->initx = random(width)+1;
-    if(settings->inity && settings->inity>=-height && settings->inity<=height)
-    {
-        if(settings->inity<0)
-            settings->inity += height+1;
-    }
-    else
-        settings->inity = random(height)+1;
-    player->move(sprintf("maze/%s/%d/%d",id,settings->initx,settings->inity));
+  }
+  return maze_rooms;
 }
 
-object query_maze_room(string* path)
-{
-    mixed maze_data = MAZE_OB->query("mazes/"+path[1]+"/data");
-    class maze_settings settings = MAZE_OB->query("mazes/"+path[1]+"/settings");
-    int x = to_int(path[2]);
-    int y = to_int(path[3]);
-    int mx = 2*x;
-    int my = 2*y;
-    object room = new("/u/nanf/maze/maze_room.lpc");
-
-    room->set("maze", path[1]);
-    room->set("x",x);
-    room->set("y",y);
-    if(settings->maze_name)
-        room->set("maze_name", settings->maze_name);
-    if(settings->short_desc)
-        room->set("short", settings->short_desc);
-    if(settings->long_desc)
-        room->set("long", settings->long_desc);
-    if(maze_data[mx-1][my])
-        room->set("exits/west", sprintf("maze/%s/%d/%d",path[1],x-1,y));
-    else
-        room->set("exits/west", sprintf("maze/%s/%d/%d",path[1],x,y));
-    if(maze_data[mx+1][my])
-        room->set("exits/east", sprintf("maze/%s/%d/%d",path[1],x+1,y));
-    else
-        room->set("exits/east", sprintf("maze/%s/%d/%d",path[1],x,y));
-    if(maze_data[mx][my-1])
-        room->set("exits/north", sprintf("maze/%s/%d/%d",path[1],x,y-1));
-    else
-        room->set("exits/north", sprintf("maze/%s/%d/%d",path[1],x,y));
-    if(maze_data[mx][my+1])
-        room->set("exits/south", sprintf("maze/%s/%d/%d",path[1],x,y+1));
-    else
-        room->set("exits/south", sprintf("maze/%s/%d/%d",path[1],x,y));
-
-    if(settings->entryx==x && settings->entryy==y)
-    {
-        room->set("exits/"+settings->entry_dir, sprintf("maze/%s/%d/%d",path[1],x,y));
-    }
-    else if(settings->exitx==x && settings->exity==y)
-    {
-        if(settings->exit_link)
-            room->set("exits/"+settings->exit_dir, settings->exit_link);
-        else
-            room->set("exits/"+settings->exit_dir, sprintf("maze/%s/%d/%d",path[1],x,y));
-    }
-    
-    return room;
-}
-
-void go(object player, string maze, int x, int y)
-{
-    mixed m,v;
-    int mx=x*2,my=y*2;
-    if(x>MAX_WIDTH) x=MAX_WIDTH;
-    if(y>MAX_HEIGHT) x=MAX_HEIGHT;
-    m = MAZE_OB->query("mazes/"+maze+"/data");
-    v = player->query_temp("maze/view_data");
-    if(!m || !v)
-        return;
-    if(x>sizeof(m)/2-1)
-        return;
-    if(y>sizeof(m[0])/2-1)
-        return;
-    v[mx][my]=1;
-    v[mx][my+1]=1;
-    v[mx][my-1]=1;
-    v[mx+1][my]=1;
-    v[mx-1][my]=1;
-    v[mx-1][my-1]=1;
-    v[mx-1][my+1]=1;
-    v[mx+1][my-1]=1;
-    v[mx+1][my+1]=1;
-
-    player->set_temp("maze/x",x);
-    player->set_temp("maze/y",y);
-    if(!player->query_temp("maze/xmin") || player->query_temp("maze/xmin")>x)
-        player->set_temp("maze/xmin",x);
-    if(!player->query_temp("maze/xmax") || player->query_temp("maze/xmax")<x)
-        player->set_temp("maze/xmax",x);
-    if(!player->query_temp("maze/ymin") || player->query_temp("maze/ymin")>y)
-        player->set_temp("maze/ymin",y);
-    if(!player->query_temp("maze/ymax") || player->query_temp("maze/ymax")<y)
-        player->set_temp("maze/ymax",y);
-
-}
-
-void print_maze(mixed m)
-{
-    int x=sizeof(m)/2-1,y=sizeof(m[0])/2-1,z1,z2;
-    write("\n");
-    for (z2=1;z2<=y*2+1;z2++)
-    {
-        for (z1=1;z1<=x*2+1;z1++)
-        {
-            write(m[z1][z2]?"  ":getw(m,z1,z2));
-        }
-        if (z2<=y*2)
-            write("\n");
-        reset_eval_cost();
-    }
-    write("\n");
+void destruct_maze(string maze) {
+  mixed maze_data;
+  int x, y;
+  if (!maze_data = MAZE_OB->query("mazes/" + maze + "/data"))
     return;
-}
-
-string rand_wchar()
-{
-    return sprintf("%c%c",129+random(32),129+random(126));
-}
-string rand_wall()
-{
-    return cw[random(sizeof(cw))];
-}
-void write_random(int l)
-{
-    for(int i=1;i<=l;i++)
-    {
-        switch (random(10))
-        {
-            case 0: case 1: case 2:
-            write("  ");break;
-            case 3: case 4: case 5:
-            write("　");break;
-            case 6: case 7:
-            write("~~"); break;
-            case 8:
-            write(rand_wchar());break;
-            case 9:
-            write(rand_wall());break;
-        }
+  x = sizeof(maze_data) / 2 - 1;
+  y = sizeof(maze_data[0]) / 2 - 1;
+  for (int i = 1; i <= x; i++) {
+    for (int j = 1; j <= y; j++) {
+      object ob;
+      if (ob = find_object(sprintf("maze/%s/%d/%d", maze, i, j))) {
+        // write(sprintf("destructing maze/%s/%d/%d\n",maze,i,j));
+        filter_array(all_inventory(ob), "remove_player", this_object());
+        destruct(ob);
+      }
     }
+  }
+  MAZE_OB->delete("mazes/" + maze);
 }
-int draw_maze(object player, string maze, int threshold, int probability)
-{
-    int x,y,xmin,ymin,xmax,ymax;
-    int z1,z2;
-    int ix=player->query_temp("maze/x");
-    int iy=player->query_temp("maze/y");
-    mixed m,v;
-    class maze_settings settings;
-    int view = 0;
-    //string self;
-    int mask1,mask2;
 
-    if(!player)
-        return 0;
-    m = MAZE_OB->query("mazes/"+maze+"/data");
-    v = player->query_temp("maze/view_data");
-    settings = MAZE_OB->query("mazes/"+maze+"/settings");
-    if(!m || !v || !settings)
-        return 0;
-    x=sizeof(m)/2-1;
-    y=sizeof(m[0])/2-1;
-    if(xmin=player->query_temp("maze/xmin"))
-        xmin=2*xmin-1;
-    else xmin=1;
-    if(xmax=player->query_temp("maze/xmax"))
-        xmax=2*xmax+1;
+int remove_player(object ob) {
+  if (!ob || !userp(ob))
+    return 0;
+  tell_object(ob, HIY "你所在的世界消失了。。。\n" NOR);
+  ob->move("/d/city/kezhan.lpc");
+  message_vision(HIW "$N突然出现在一道白光之中!!\n" NOR, ob);
+  return 0;
+}
+
+int new_maze(object player, class maze_settings settings) {
+  int width = settings->width;
+  int height = settings->height;
+  mixed maze_data;
+  mixed view_data;
+  object *maze_rooms;
+  string id = player->query("id");
+  string dir;
+  int pos;
+
+  if (!player)
+    return 0;
+
+  if (MAZE_OB->query("mazes/" + id))
+    destruct_maze(id);
+  // 迷宫通过递归算法构造，不能太深
+  if (width > MAX_WIDTH) width = MAX_WIDTH;
+  if (height > MAX_HEIGHT) height = MAX_HEIGHT;
+  if (width <= 0) width = 1;
+  if (height <= 0) height = 1;
+  // 计算出一个描述迷宫的二维数据结构
+  maze_data = make_maze(width, height);
+  // 创建入口
+  if ((dir = settings->entry_dir) && (pos = settings->entry_pos)) {
+    int ex = 0, ey = 0;
+    switch (dir) {
+      case "south":
+        if (pos < 0) pos += width + 1;
+        if (pos > 0 && pos <= width) {
+          settings->entryx = pos; settings->entryy = height;
+          ey = height * 2 + 1; ex = 2 * pos; maze_data[ex][ey] = 1;
+        }
+        break;
+      case "north":
+        if (pos < 0) pos += width + 1;
+        if (pos > 0 && pos <= width) {
+          settings->entryx = pos; settings->entryy = 1;
+          ey = 1; ex = 2 * pos; maze_data[ex][ey] = 1;
+        }
+        break;
+      case "west":
+        if (pos < 0) pos += height + 1;
+        if (pos > 0 && pos <= height) {
+          settings->entryx = 1; settings->entryy = pos;
+          ex = 1; ey = 2 * pos; maze_data[ex][ey] = 1;
+        }
+        break;
+      case "east":
+        if (pos < 0) pos += height + 1;
+        if (pos > 0 && pos <= height) {
+          settings->entryx = width; settings->entryy = pos;
+          ex = width * 2 + 1; ey = 2 * pos; maze_data[ex][ey] = 1;
+        }
+        break;
+      default:
+        break;
+    }
+    if (ex && ey) {
+      settings->entrymx = ex;
+      settings->entrymy = ey;
+    }
+  }
+  // 创建出口
+  if ((dir = settings->exit_dir) && (pos = settings->exit_pos)) {
+    int ex = 0, ey = 0;
+    switch (dir) {
+      case "south":
+        if (pos < 0) pos += width + 1;
+        if (pos > 0 && pos <= width) {
+          settings->exitx = pos; settings->exity = height;
+          ey = height * 2 + 1; ex = 2 * pos; maze_data[ex][ey] = 1;
+        }
+        break;
+      case "north":
+        if (pos < 0) pos += width + 1;
+        if (pos > 0 && pos <= width) {
+          settings->exitx = pos; settings->exity = 1;
+          ey = 1; ex = 2 * pos; maze_data[ex][ey] = 1;
+        }
+        break;
+      case "west":
+        if (pos < 0) pos += height + 1;
+        if (pos > 0 && pos <= height) {
+          settings->exitx = 1; settings->exity = pos;
+          ex = 1; ey = 2 * pos; maze_data[ex][ey] = 1;
+        }
+        break;
+      case "east":
+        if (pos < 0) pos += height + 1;
+        if (pos > 0 && pos <= height) {
+          settings->exitx = width; settings->exity = pos;
+          ex = width * 2 + 1; ey = 2 * pos; maze_data[ex][ey] = 1;
+        }
+        break;
+      default:
+        break;
+    }
+    if (ex && ey) {
+      settings->exitmx = ex;
+      settings->exitmy = ey;
+    }
+  }
+  // 通过创建者的player id来保存迷宫结构
+  MAZE_OB->set("mazes/" + id + "/data", maze_data);
+  MAZE_OB->set("mazes/" + id + "/settings", settings);
+
+  player->delete_temp("maze");
+  player->set_temp("maze/view_data", init_view_data(id));
+  if (settings->initx && settings->initx >= -width && settings->initx <= width) {
+    if (settings->initx < 0)
+      settings->initx += width + 1;
+  } else
+    settings->initx = random(width) + 1;
+  if (settings->inity && settings->inity >= -height && settings->inity <= height) {
+    if (settings->inity < 0)
+      settings->inity += height + 1;
+  } else
+    settings->inity = random(height) + 1;
+  player->move(sprintf("maze/%s/%d/%d", id, settings->initx, settings->inity));
+}
+
+object query_maze_room(string *path) {
+  mixed maze_data = MAZE_OB->query("mazes/" + path[1] + "/data");
+  class maze_settings settings = MAZE_OB->query("mazes/" + path[1] + "/settings");
+  int x = to_int(path[2]);
+  int y = to_int(path[3]);
+  int mx = 2 * x;
+  int my = 2 * y;
+  object room = new("/u/nanf/maze/maze_room.lpc");
+
+  room->set("maze", path[1]);
+  room->set("x", x);
+  room->set("y", y);
+  if (settings->maze_name)
+    room->set("maze_name", settings->maze_name);
+  if (settings->short_desc)
+    room->set("short", settings->short_desc);
+  if (settings->long_desc)
+    room->set("long", settings->long_desc);
+  if (maze_data[mx - 1][my])
+    room->set("exits/west", sprintf("maze/%s/%d/%d", path[1], x - 1, y));
+  else
+    room->set("exits/west", sprintf("maze/%s/%d/%d", path[1], x, y));
+  if (maze_data[mx + 1][my])
+    room->set("exits/east", sprintf("maze/%s/%d/%d", path[1], x + 1, y));
+  else
+    room->set("exits/east", sprintf("maze/%s/%d/%d", path[1], x, y));
+  if (maze_data[mx][my - 1])
+    room->set("exits/north", sprintf("maze/%s/%d/%d", path[1], x, y - 1));
+  else
+    room->set("exits/north", sprintf("maze/%s/%d/%d", path[1], x, y));
+  if (maze_data[mx][my + 1])
+    room->set("exits/south", sprintf("maze/%s/%d/%d", path[1], x, y + 1));
+  else
+    room->set("exits/south", sprintf("maze/%s/%d/%d", path[1], x, y));
+
+  if (settings->entryx == x && settings->entryy == y) {
+    room->set("exits/" + settings->entry_dir, sprintf("maze/%s/%d/%d", path[1], x, y));
+  } else if (settings->exitx == x && settings->exity == y) {
+    if (settings->exit_link)
+      room->set("exits/" + settings->exit_dir, settings->exit_link);
     else
-        xmax=2*x+2;
-    if(ymin=player->query_temp("maze/ymin"))
-        ymin=2*ymin-1;
-    else 
-        ymin=1;
-    if(ymax=player->query_temp("maze/ymax"))
-        ymax=2*ymax+1;
-    else 
-        ymax=2*y+1;
+      room->set("exits/" + settings->exit_dir, sprintf("maze/%s/%d/%d", path[1], x, y));
+  }
 
-    for (z2=0;z2<=y*2+2;z2++)
-    {
-       for (z1=0;z1<=x*2+2;z1++)
-       {
-           if(v[z1][z2])
-               ++view;
-       }
+  return room;
+}
+
+void go(object player, string maze, int x, int y) {
+  mixed m, v;
+  int mx = x * 2, my = y * 2;
+  if (x > MAX_WIDTH) x = MAX_WIDTH;
+  if (y > MAX_HEIGHT) x = MAX_HEIGHT;
+  m = MAZE_OB->query("mazes/" + maze + "/data");
+  v = player->query_temp("maze/view_data");
+  if (!m || !v)
+    return;
+  if (x > sizeof(m) / 2 - 1)
+    return;
+  if (y > sizeof(m[0]) / 2 - 1)
+    return;
+  v[mx][my] = 1;
+  v[mx][my + 1] = 1;
+  v[mx][my - 1] = 1;
+  v[mx + 1][my] = 1;
+  v[mx - 1][my] = 1;
+  v[mx - 1][my - 1] = 1;
+  v[mx - 1][my + 1] = 1;
+  v[mx + 1][my - 1] = 1;
+  v[mx + 1][my + 1] = 1;
+
+  player->set_temp("maze/x", x);
+  player->set_temp("maze/y", y);
+  if (!player->query_temp("maze/xmin") || player->query_temp("maze/xmin") > x)
+    player->set_temp("maze/xmin", x);
+  if (!player->query_temp("maze/xmax") || player->query_temp("maze/xmax") < x)
+    player->set_temp("maze/xmax", x);
+  if (!player->query_temp("maze/ymin") || player->query_temp("maze/ymin") > y)
+    player->set_temp("maze/ymin", y);
+  if (!player->query_temp("maze/ymax") || player->query_temp("maze/ymax") < y)
+    player->set_temp("maze/ymax", y);
+
+}
+
+void print_maze(mixed m) {
+  int x = sizeof(m) / 2 - 1, y = sizeof(m[0]) / 2 - 1, z1, z2;
+  write("\n");
+  for (z2 = 1; z2 <= y * 2 + 1; z2++) {
+    for (z1 = 1; z1 <= x * 2 + 1; z1++) {
+      write(m[z1][z2] ? "  " : getw(m, z1, z2));
     }
+    if (z2 <= y * 2)
+      write("\n");
+    reset_eval_cost();
+  }
+  write("\n");
+  return;
+}
 
-    if(threshold)
-    {
-        if(view>threshold && !random(probability))
-        {
-            int found=0;
-            int try=10; // 尝试10次
-            while(!found && try--)
-            {
-                int* forget=({});
-                int rxmin=xmin/2+1;
-                int rxmax=xmax/2+1;
-                int rymin=ymin/2+1;
-                int rymax=ymax/2+1;
-                z1 = random(rxmax+1-rxmin)+rxmin;
-                
-                for(z2=rymin;z2<=rymax;z2++)
-                {
-                    if(z1==ix && z2==iy)
-                        continue;
-                    if(v[2*z1][2*z2])
-                        forget += ({z2});
-                }
-                if(!sizeof(forget))
-                    continue;
-                z2 = forget[random(sizeof(forget))];
-                        
-                z1 *= 2;
-                z2 *= 2;
-                switch(random(4))
-                {
-                    case 0:
-                    v[z1][z2]=-1;v[z1-1][z2]=-1;v[z1+1][z2]=-1;
-                    v[z1][z2-1]=-1;v[z1-1][z2-1]=-1;v[z1+1][z2-1]=-1;
-                    break;
-                    case 1:
-                    v[z1][z2]=-1;v[z1-1][z2]=-1;v[z1+1][z2]=-1;
-                    v[z1][z2+1]=-1;v[z1-1][z2+1]=-1;v[z1+1][z2+1]=-1;
-                    break;
-                    case 2:
-                    v[z1][z2]=-1;v[z1][z2-1]=-1;v[z1][z2+1]=-1;
-                    v[z1-1][z2]=-1;v[z1-1][z2-1]=-1;v[z1-1][z2+1]=-1;
-                    break;
-                    case 3:
-                    v[z1][z2]=-1;v[z1][z2-1]=-1;v[z1][z2+1]=-1;
-                    v[z1+1][z2]=-1;v[z1+1][z2-1]=-1;v[z1+1][z2+1]=-1;
-                    break;
-                }
-                write(BLK"\n路太长，有些地方你已经想不起来了。。。\n"NOR);
-                break;
-            }
+string rand_wchar() {
+  return sprintf("%c%c", 129 + random(32), 129 + random(126));
+}
+string rand_wall() {
+  return cw[random(sizeof(cw))];
+}
+void write_random(int l) {
+  for (int i = 1; i <= l; i++) {
+    switch (random(10)) {
+      case 0: case 1: case 2:
+        write("  "); break;
+      case 3: case 4: case 5:
+        write("　"); break;
+      case 6: case 7:
+        write("~~"); break;
+      case 8:
+        write(rand_wchar()); break;
+      case 9:
+        write(rand_wall()); break;
+    }
+  }
+}
+int draw_maze(object player, string maze, int threshold, int probability) {
+  int x, y, xmin, ymin, xmax, ymax;
+  int z1, z2;
+  int ix = player->query_temp("maze/x");
+  int iy = player->query_temp("maze/y");
+  mixed m, v;
+  class maze_settings settings;
+  int view = 0;
+  //string self;
+  int mask1, mask2;
+
+  if (!player)
+    return 0;
+  m = MAZE_OB->query("mazes/" + maze + "/data");
+  v = player->query_temp("maze/view_data");
+  settings = MAZE_OB->query("mazes/" + maze + "/settings");
+  if (!m || !v || !settings)
+    return 0;
+  x = sizeof(m) / 2 - 1;
+  y = sizeof(m[0]) / 2 - 1;
+  if (xmin = player->query_temp("maze/xmin"))
+    xmin = 2 * xmin - 1;
+  else xmin = 1;
+  if (xmax = player->query_temp("maze/xmax"))
+    xmax = 2 * xmax + 1;
+  else
+    xmax = 2 * x + 2;
+  if (ymin = player->query_temp("maze/ymin"))
+    ymin = 2 * ymin - 1;
+  else
+    ymin = 1;
+  if (ymax = player->query_temp("maze/ymax"))
+    ymax = 2 * ymax + 1;
+  else
+    ymax = 2 * y + 1;
+
+  for (z2 = 0; z2 <= y * 2 + 2; z2++) {
+    for (z1 = 0; z1 <= x * 2 + 2; z1++) {
+      if (v[z1][z2])
+        ++view;
+    }
+  }
+
+  if (threshold) {
+    if (view > threshold && !random(probability)) {
+      int found = 0;
+      int try = 10;  // 尝试10次
+      while (!found && try--) {
+        int *forget = ({});
+        int rxmin = xmin / 2 + 1;
+        int rxmax = xmax / 2 + 1;
+        int rymin = ymin / 2 + 1;
+        int rymax = ymax / 2 + 1;
+        z1 = random(rxmax + 1 - rxmin) + rxmin;
+
+        for (z2 = rymin; z2 <= rymax; z2++) {
+          if (z1 == ix && z2 == iy)
+            continue;
+          if (v[2 * z1][2 * z2])
+            forget += ({ z2 });
         }
-    }
+        if (!sizeof(forget))
+          continue;
+        z2 = forget[random(sizeof(forget))];
 
+        z1 *= 2;
+        z2 *= 2;
+        switch (random(4)) {
+          case 0:
+            v[z1][z2] = -1; v[z1 - 1][z2] = -1; v[z1 + 1][z2] = -1;
+            v[z1][z2 - 1] = -1; v[z1 - 1][z2 - 1] = -1; v[z1 + 1][z2 - 1] = -1;
+            break;
+          case 1:
+            v[z1][z2] = -1; v[z1 - 1][z2] = -1; v[z1 + 1][z2] = -1;
+            v[z1][z2 + 1] = -1; v[z1 - 1][z2 + 1] = -1; v[z1 + 1][z2 + 1] = -1;
+            break;
+          case 2:
+            v[z1][z2] = -1; v[z1][z2 - 1] = -1; v[z1][z2 + 1] = -1;
+            v[z1 - 1][z2] = -1; v[z1 - 1][z2 - 1] = -1; v[z1 - 1][z2 + 1] = -1;
+            break;
+          case 3:
+            v[z1][z2] = -1; v[z1][z2 - 1] = -1; v[z1][z2 + 1] = -1;
+            v[z1 + 1][z2] = -1; v[z1 + 1][z2 - 1] = -1; v[z1 + 1][z2 + 1] = -1;
+            break;
+        }
+        write(BLK "\n路太长，有些地方你已经想不起来了。。。\n" NOR);
+        break;
+      }
+    }
+  }
+
+  write("\n");
+  mask1 = random(4);
+  mask2 = 4 - mask1;
+  if (ymin != 1) {
+    write_random(mask1);
+    if (xmin != 1)
+      write("   ");
+    for (z1 = xmin; z1 <= xmax; z1++) {
+      write("~ ");
+    }
     write("\n");
-    mask1 = random(4);
-    mask2 = 4-mask1;
-    if(ymin!=1)
-    {
-        write_random(mask1);
-        if(xmin!=1)
-            write("   ");
-        for(z1=xmin;z1<=xmax;z1++)
-        {
-            write("~ ");
-        }
-        write("\n");
+  }
+  for (z2 = ymin; z2 <= ymax; z2++) {
+    write_random(mask1);
+    if (xmin != 1)
+      write("~  ");
+    for (z1 = xmin; z1 <= xmax; z1++) {
+      if (z1 == 2 * ix && z2 == 2 * iy) {
+        if (view <= 10)
+          write(BMAG + rand_wchar() + NOR);
+        else
+          write(rand_wchar());
+        continue;
+      }
+      if (v[z1][z2] == 1) {
+        if (z1 && z2 && settings->entrymx == z1 && settings->entrymy == z2) {
+          switch (settings->entry_dir) {
+            case "west":
+              write(BLINK WHT "→" NOR);
+              break;
+            case "east":
+              write(BLINK WHT "←" NOR);
+              break;
+            case "north":
+              write(BLINK WHT "↓" NOR);
+              break;
+            case "south":
+              write(BLINK WHT "↑" NOR);
+              break;
+          }
+        } else if (z1 && z2 && settings->exitmx == z1 && settings->exitmy == z2) {
+          switch (settings->exit_dir) {
+            case "west":
+              write(BLINK WHT "←" NOR);
+              break;
+            case "east":
+              write(BLINK WHT "→" NOR);
+              break;
+            case "north":
+              write(BLINK WHT "↑" NOR);
+              break;
+            case "south":
+              write(BLINK WHT "↓" NOR);
+              break;
+          }
+        } else if (m[z1][z2])
+          write(random(2) ? "  " : "　");
+        else
+          write(getw(m, z1, z2));
+      } else if (v[z1][z2] == -1)
+        write("??");
+      else
+        write(random(2) ? BCYN "  " NOR : BCYN "　" NOR);
     }
-    for (z2=ymin;z2<=ymax;z2++)
-    {
-        write_random(mask1);
-        if(xmin!=1)
-            write("~  ");
-        for (z1=xmin;z1<=xmax;z1++)
-        {
-            if(z1==2*ix && z2==2*iy)
-            {
-                if(view<=10)
-                    write(BMAG+rand_wchar()+NOR);
-                else
-                    write(rand_wchar());
-                continue;
-            }
-            if(v[z1][z2]==1)
-            {
-                if(z1 && z2 && settings->entrymx==z1 && settings->entrymy==z2)
-                {
-                    switch(settings->entry_dir)
-                    {
-                        case "west":
-                        write(BLINK WHT"→"NOR);
-                        break;
-                        case "east":
-                        write(BLINK WHT"←"NOR);
-                        break;
-                        case "north":
-                        write(BLINK WHT"↓"NOR);
-                        break;
-                        case "south":
-                        write(BLINK WHT"↑"NOR);
-                        break;
-                    }
-                }
-                else if(z1 && z2 && settings->exitmx==z1 && settings->exitmy==z2)
-                {
-                    switch(settings->exit_dir)
-                    {
-                        case "west":
-                        write(BLINK WHT"←"NOR);
-                        break;
-                        case "east":
-                        write(BLINK WHT"→"NOR);
-                        break;
-                        case "north":
-                        write(BLINK WHT"↑"NOR);
-                        break;
-                        case "south":
-                        write(BLINK WHT"↓"NOR);
-                        break;
-                    }
-                }
-                else if(m[z1][z2])
-                    write(random(2)?"  ":"　");
-                else
-                    write(getw(m,z1,z2));
-            }
-            else if(v[z1][z2]==-1)
-                write("??");
-            else
-                write(random(2)?BCYN"  "NOR:BCYN"　"NOR);
-        }
-        if(xmax!=2*x+1)
-            write("  ~");
-        write_random(mask2);
-        write("\n");
-    }
-    if(ymax!=2*y+1)
-    {
-        write("\n");
-        write_random(mask1);
-        if(xmin!=1)
-            write("   ");
-        for(z1=xmin;z1<=xmax;z1++)
-        {
-            write("~ ");
-        }
-    }
+    if (xmax != 2 * x + 1)
+      write("  ~");
+    write_random(mask2);
     write("\n");
+  }
+  if (ymax != 2 * y + 1) {
+    write("\n");
+    write_random(mask1);
+    if (xmin != 1)
+      write("   ");
+    for (z1 = xmin; z1 <= xmax; z1++) {
+      write("~ ");
+    }
+  }
+  write("\n");
 
-    return 1;
+  return 1;
 }

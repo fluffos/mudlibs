@@ -2,13 +2,13 @@
 // modified by huarong 2004/7
 #include <ansi.h>
 
-inherit ITEM;//继承物品
-inherit F_SAVE;//继承可save的属性
+inherit ITEM;  //继承物品
+inherit F_SAVE;  //继承可save的属性
 inherit F_UNIQUECHECK;
 
-mapping *all_biao;//全局变量，储存玩家所有数据
+mapping *all_biao;  //全局变量，储存玩家所有数据
 
-int help();//函数声明
+int help();  //函数声明
 int do_apply(int num);
 int do_cancel(int num);
 int do_view();
@@ -20,271 +20,259 @@ int do_getarmor();
 string canceltitle(string title);
 void enough_rest();
 
-void create()
-{
-        set_name(HIG "※"+HIY+"黄金圣斗士英雄榜"+HIG+"※" NOR , ({ "bang","yingxiong bang" }) );
-        set("long","英雄榜记录着夺得黄金圣斗士称号的玩家名字，而且在这里可以拿到黄金圣衣。\n如想看英雄榜就 view ；如想拿圣衣 getarmor；如想取得各种圣斗士称号 read 。\n");
-        set("unit", "张");
-        set("no_put", 1);
-        set("no_get", 1);
-        set_weight(900000000);//设大点不让玩家Get
-        seteuid(getuid());
-        restore();
+void create() {
+  set_name(HIG "※" + HIY + "黄金圣斗士英雄榜" + HIG + "※" NOR, ({ "bang", "yingxiong bang" }));
+  set(
+    "long",
+    "英雄榜记录着夺得黄金圣斗士称号的玩家名字，而且在这里可以拿到黄金圣衣。\n如想看英雄榜就 view ；如想拿圣衣 getarmor；如想取得各种圣斗士称号 read 。\n"
+  );
+  set("unit", "张");
+  set("no_put", 1);
+  set("no_get", 1);
+  set_weight(900000000);  //设大点不让玩家Get
+  seteuid(getuid());
+  restore();
 }
 
-void init()
-{
-        add_action("do_apply","apply");
-        add_action("do_view","view");
-        add_action("do_cancel","cancel");
-        add_action("do_silver","silver");
-        add_action("do_sea","sea");
-        add_action("do_dark","dark");
-        add_action("do_bronze","bronze");
-        add_action("help","read");
-        add_action("do_getarmor","getarmor");
+void init() {
+  add_action("do_apply", "apply");
+  add_action("do_view", "view");
+  add_action("do_cancel", "cancel");
+  add_action("do_silver", "silver");
+  add_action("do_sea", "sea");
+  add_action("do_dark", "dark");
+  add_action("do_bronze", "bronze");
+  add_action("help", "read");
+  add_action("do_getarmor", "getarmor");
 
 }
 
-string query_save_file()
-{
-        return DATA_DIR + "12gong/bang.o";//你可以定义一个储存文件的路径
+string query_save_file() {
+  return DATA_DIR + "12gong/bang.o";  //你可以定义一个储存文件的路径
 }
-string canceltitle(string title)
-{
-        title = replace_string(title, "白银圣斗士", "");
-        title = replace_string(title, "海洋圣斗士", "");
-        title = replace_string(title, "青铜圣斗士", "");
-        title = replace_string(title, "黑暗圣斗士", "");
-        return title;
+string canceltitle(string title) {
+  title = replace_string(title, "白银圣斗士", "");
+  title = replace_string(title, "海洋圣斗士", "");
+  title = replace_string(title, "青铜圣斗士", "");
+  title = replace_string(title, "黑暗圣斗士", "");
+  return title;
 }
 
-void confirm(string arg,object me)
+void confirm(string arg, object me) {
+  write("\n");
+  if (arg == "1" || arg == "yes" || arg == "y" || arg == "Y") {
+    write(HIR "你决定要和现任" + HIY + "黄金圣斗士" + HIR + "单挑！\n" NOR);
+    write(HIY "雅典娜" + HIR + "已经代你向对方发出了挑战书！\n\n\n" NOR);
+    me->start_busy(60);
+    call_out("invite", 1);
+    return;
+  } else if (arg == "2" || arg == "no" || arg == "n" || arg == "N") {
+    write("你打消了向现任黄金圣斗士挑战的念头！\n");
+    return;
+  }
+  input_to((: confirm :), me);
+}
+
+int do_apply(int num)  //     1<=num<=12
 {
-   write("\n");
-   if( arg == "1" || arg == "yes" || arg == "y" || arg == "Y" )    
-    {
-     write(HIR"你决定要和现任"+HIY+"黄金圣斗士"+HIR+"单挑！\n"NOR);
-     write(HIY"雅典娜"+HIR+"已经代你向对方发出了挑战书！\n\n\n"NOR);
-     me->start_busy(60);
-     call_out("invite",1);
-     return;
+  int i, j, flag = 0;
+  int time = time();
+  string title, titleold;
+  object me = this_player(), ob;
+  if (me->query("12gong/number") < 12 || me->query("12gong/shendian") != "done") {
+    printf("你还是先去救出女神，向女神申请圣斗士称号吧\n");
+    return 1;
+  }
+  if (!num || sscanf(num, "%d", num) != 1)  //分析玩家指令
+  {
+    help();
+    return 1;
+  }
+  if (num < 1 || num > 12) {
+    printf("并没有这个圣斗士头衔呀。\n");
+    help();
+    return 1;
+  }
+  if (!pointerp(all_biao) || !sizeof(all_biao))  //表示还没有数据
+  {
+    write("\n还没有数据库。\n");
+    return 1;
+  }
+  if ((me->query("combat_exp", 1) + me->query("daoxing", 1)) / 2 < 6000000) {
+    tell_object(me, "你的修为太低了，不能申请黄金圣斗士。\n");
+    return 1;
+  }
+  for (i = 0; i < sizeof(all_biao); i++)
+    if (all_biao[i]["id"] == me->query("id")) {
+      printf("你已经是%s" + HIY + "黄金圣斗士" + NOR + "了。\n", all_biao[i]["title"]);
+      me->set("title", all_biao[i]["title"] + HIY + "黄金圣斗士" + NOR);
+      me->save();
+      return 1;
     }
-   else if( arg == "2" || arg == "no" || arg == "n" || arg == "N" )    
-    {
-     write("你打消了向现任黄金圣斗士挑战的念头！\n");
-     return;
+  num = num - 1;
+  if (all_biao[num]["name"] == "暂缺" || (time - all_biao[num]["time"]) > 864000) {
+    if (FINGER_D->finger_date(all_biao[num]["id"]) == "目前正在连线中。\n") {
+      if (!me->query_temp("12gong/tiaozhan")) {
+        write(CYN "\n这个头衔任职已经超过十天，但是对方目前在线，\n想取而代之恐怕要较量一下吧？\n" NOR);
+        write(CYN "想要较量一下吗？\n" + HIY + "1. yes  \n2. no \n" NOR);
+        me->set_temp("12gong/tiaozhan", num);
+        input_to((: confirm :), me);
+      } else write(CYN "\n你已经发出挑战了！\n" NOR);
+      return 1;
+    } else {
+
+      if (all_biao[num]["name"] != "暂缺") {
+        ob = find_player(all_biao[num]["id"]);
+
+        if (!ob) {
+          flag = 1;
+          ob = new(USER_OB);
+          ob->set("id", all_biao[num]["id"]);
+          if (!ob->restore()) return 1;
+        }
+
+        titleold = ob->query("titleold");
+        ob->set("title", titleold);
+        ob->save();
+        if (flag) destruct(ob);
+
+      }
+      all_biao[num]["name"] = me->query("name");
+      all_biao[num]["id"] = me->query("id");
+      all_biao[num]["time"] = time();
+      save();  //储存进这个文件对应的.o文件里
+      title = me->query("title");
+      me->set("titleold", title);
+      me->set("title", all_biao[num]["title"] + HIY + "黄金圣斗士" + NOR);
+      me->save();
+      message(
+        "channel:chat",
+        HIB + "【" + HIG + "圣域传说" + HIB + "】" + HIY + "雅典娜(Athena)：" + HIG + me->query("name") + HIC + "顺利闯过黄道十二宫，授予 " + NOR + all_biao[num]["title"] + HIY + "黄金圣斗士 " + HIC + "头衔。" + NOR + "\n",
+        users()
+      );
+      remove_call_out("enough_rest");
+      call_out("enough_rest", 1);  //1秒后取消busy
+      return 1;
     }
-   input_to( (: confirm :), me);
+  } else {
+    write("\n这个头衔已经有人了，选个别的头衔吧。\n");
+    return 1;
+  }
+  return 0;
 }
 
-int do_apply(int num)//     1<=num<=12
-{
-        int i,j,flag=0;
-        int time=time();
-        string title,titleold;
-        object me = this_player(),ob;
-        if ( me->query("12gong/number")<12 || me->query("12gong/shendian") != "done" )
-                {
-                printf("你还是先去救出女神，向女神申请圣斗士称号吧\n");
-                return 1;
-                }
-        if(!num || sscanf(num, "%d", num) != 1)//分析玩家指令
-                {
-                help();
-                return 1;
-                }
-        if ( num<1 || num >12)
-                {
-                printf("并没有这个圣斗士头衔呀。\n");
-        help();
-                return 1;
-                }
-        if( !pointerp(all_biao) || !sizeof(all_biao) ) //表示还没有数据
-                {
-                        write("\n还没有数据库。\n");
-                        return 1;
-                }
-        if(  (me->query("combat_exp",1)+me->query("daoxing",1))/2 < 6000000)
-                {
-                tell_object(me,"你的修为太低了，不能申请黄金圣斗士。\n");
-                return 1;
-                }
-        for(i=0;i<sizeof(all_biao);i++)
-                if(all_biao[i]["id"]==me->query("id"))
-                {
-                        printf("你已经是%s"+HIY+"黄金圣斗士"+NOR+"了。\n",all_biao[i]["title"]);
-                        me->set("title",all_biao[i]["title"]+HIY+"黄金圣斗士"+NOR);
-                        me->save();
-                        return 1;
-                }
-        num=num-1;
-        if (all_biao[num]["name"]=="暂缺" || (time-all_biao[num]["time"])>864000 )
-            {
-              if(FINGER_D->finger_date(all_biao[num]["id"])=="目前正在连线中。\n")
-               {
-               	if (!me->query_temp("12gong/tiaozhan"))
-                  {
-                    write(CYN"\n这个头衔任职已经超过十天，但是对方目前在线，\n想取而代之恐怕要较量一下吧？\n"NOR);
-                    write(CYN"想要较量一下吗？\n"+HIY+"1. yes  \n2. no \n"NOR);
-                    me->set_temp("12gong/tiaozhan",num);
-                    input_to( (: confirm :), me );
-                   }
-                 else write(CYN"\n你已经发出挑战了！\n"NOR);
-                 return 1;
-                }
-              else
-               {
-               	
-               	if(all_biao[num]["name"]!="暂缺")
-               	  {
-                   ob=find_player(all_biao[num]["id"]);
-    
-	           if(!ob)
-        	        {
-        	          flag=1;
-        	          ob = new(USER_OB);
-        	          ob->set("id", all_biao[num]["id"]);
-                          if (!ob->restore()) return 1;
-        	         }        
-        
-                   titleold=ob->query("titleold");
-                   ob->set("title",titleold);        
-                   ob->save();
-                   if (flag) destruct(ob);
+int do_apply2(int num) {
+  string title, titleold, oldname;
+  object me, ob, obj;
+  me = "/d/shengdoushi/tz_place"->query_temp("12gong/tz_winner");
+  ob = "/d/shengdoushi/tz_place"->query_temp("12gong/tz_loser");
+  oldname = all_biao[num]["name"];
 
-                  }
-                all_biao[num]["name"]=me->query("name");
-                all_biao[num]["id"]=me->query("id");
-                all_biao[num]["time"]=time();
-                save();//储存进这个文件对应的.o文件里
-                title=me->query("title");
-                me->set("titleold",title);
-                me->set("title",all_biao[num]["title"]+HIY+"黄金圣斗士"+NOR);
-                me->save();
-                message("channel:chat",HIB+"【"+HIG+"圣域传说"+HIB+"】"+HIY+"雅典娜(Athena)："+HIG+me->query("name")+HIC+"顺利闯过黄道十二宫，授予 "+NOR+all_biao[num]["title"]+HIY+"黄金圣斗士 "+HIC+"头衔。"+NOR+"\n",users());
-                remove_call_out("enough_rest");
-                call_out("enough_rest", 1);//1秒后取消busy
-                return 1;
-                }
-            }
-        else
-            {
-                write("\n这个头衔已经有人了，选个别的头衔吧。\n");
-                return 1;
-            }
-        return 0;
+  all_biao[num]["name"] = me->query("name");
+  all_biao[num]["id"] = me->query("id");
+  all_biao[num]["time"] = time();
+  save();
+  title = me->query("title");
+  me->set("titleold", title);
+  me->set("title", all_biao[num]["title"] + HIY + "黄金圣斗士" + NOR);
+  me->set_temp("12gong/tz_winner");
+
+  if (me->query_temp("12gong/tiaozhan"))
+    obj = me;
+  else
+    obj = ob;
+
+  message(
+    "channel:chat",
+    HIB + "【" + HIG + "圣域传说" + HIB + "】" + HIY + "雅典娜(Athena)：" + HIG + obj->query("name") + HIC + "单挑" + NOR + all_biao[num]["title"] + HIY + "黄金圣斗士" + HIW + oldname + HIC + "！" + NOR + "\n\n",
+    users()
+  );
+
+  if (me->query_temp("12gong/tiaozhan")) {
+    titleold = ob->query("titleold");
+    ob->set("title", titleold);
+    message(
+      "channel:chat",
+      HIB + "【" + HIG + "圣域传说" + HIB + "】" + HIY + "雅典娜(Athena)：" + HIG + me->query("name") + HIC + "获胜！授予 " + NOR + all_biao[num]["title"] + HIY + "黄金圣斗士 " + HIC + "头衔。" + NOR + "\n",
+      users()
+    );
+  } else {
+    message(
+      "channel:chat",
+      HIB + "【" + HIG + "圣域传说" + HIB + "】" + HIY + "雅典娜(Athena)：" + HIG + me->query("name") + HIC + "获胜！续任 " + NOR + all_biao[num]["title"] + HIY + "黄金圣斗士 " + HIC + "头衔。" + NOR + "\n",
+      users()
+    );
+  }
+
+  me->delete_temp("12gong");
+  ob->delete_temp("12gong");
+
+
+  me->set("kee", me->query("max_kee"));
+  me->set("sen", me->query("max_kee"));
+  me->set("eff_kee", me->query("max_kee"));
+  me->set("eff_sen", me->query("max_sen"));
+  ob->set("kee", me->query("max_kee"));
+  ob->set("sen", me->query("max_kee"));
+  ob->set("eff_kee", me->query("max_kee"));
+  ob->set("eff_sen", me->query("max_sen"));
+
+  me->move("/d/city/kezhan");
+  ob->move("/d/city/kezhan");
+  me->start_busy(0);
+  ob->start_busy(0);
+  me->save();
+  ob->save();
+  remove_call_out("enough_rest");
+  call_out("enough_rest", 1);  //1秒后取消busy
+  return 1;
 }
 
-int do_apply2(int num)
-{
-	 string title,titleold,oldname;
-	 object me,ob,obj;
-         me="/d/shengdoushi/tz_place"->query_temp("12gong/tz_winner");
-         ob="/d/shengdoushi/tz_place"->query_temp("12gong/tz_loser");
-         oldname=all_biao[num]["name"]; 
+int do_getarmor() {
+  string *target = ({
+    "baiyang",
+    "jinniu",
+    "shuangzi",
+    "juxie",
+    "shizi",
+    "chunv",
+    "tianping",
+    "renma",
+    "tianxie",
+    "shanyang",
+    "baoping",
+    "shuangyu",
+  });
+  int i;
+  object me = this_player();
+  object obj;
 
-	 all_biao[num]["name"]=me->query("name");
-         all_biao[num]["id"]=me->query("id");
-         all_biao[num]["time"]=time();
-         save();         
-         title=me->query("title");
-         me->set("titleold",title);
-         me->set("title",all_biao[num]["title"]+HIY+"黄金圣斗士"+NOR);
-         me->set_temp("12gong/tz_winner");
-         
-         if ( me->query_temp("12gong/tiaozhan") )
-            obj=me;
-         else 
-            obj=ob;
-         
-        message("channel:chat",HIB+"【"+HIG+"圣域传说"+HIB+"】"+HIY+"雅典娜(Athena)："+HIG+obj->query("name")+HIC+"单挑"+NOR+all_biao[num]["title"]+HIY+"黄金圣斗士"+HIW+oldname+HIC+"！"+NOR+"\n\n",users());
-         
-	 if (me->query_temp("12gong/tiaozhan"))
-	     {
-                titleold=ob->query("titleold");
-                ob->set("title",titleold);
-                message("channel:chat",HIB+"【"+HIG+"圣域传说"+HIB+"】"+HIY+"雅典娜(Athena)："+HIG+me->query("name")+HIC+"获胜！授予 "+NOR+all_biao[num]["title"]+HIY+"黄金圣斗士 "+HIC+"头衔。"+NOR+"\n",users());
-             }
-          else
-             {
-              message("channel:chat",HIB+"【"+HIG+"圣域传说"+HIB+"】"+HIY+"雅典娜(Athena)："+HIG+me->query("name")+HIC+"获胜！续任 "+NOR+all_biao[num]["title"]+HIY+"黄金圣斗士 "+HIC+"头衔。"+NOR+"\n",users());
-             }
-
-         me->delete_temp("12gong");	  
-         ob->delete_temp("12gong");
-
-
-	  me->set("kee", me->query("max_kee"));
-	  me->set("sen", me->query("max_kee"));
-	  me->set("eff_kee",me->query("max_kee"));
-	  me->set("eff_sen",me->query("max_sen"));
-	  ob->set("kee", me->query("max_kee"));
-	  ob->set("sen", me->query("max_kee"));
-	  ob->set("eff_kee",me->query("max_kee"));
-	  ob->set("eff_sen",me->query("max_sen"));    
-	  
-	  me->move("/d/city/kezhan");
-	  ob->move("/d/city/kezhan");
-	  me->start_busy(0);
-	  ob->start_busy(0);
-          me->save();
-	  ob->save(); 
-         remove_call_out("enough_rest");
-         call_out("enough_rest", 1);//1秒后取消busy
-         return 1;
-}
-
-int do_getarmor()
-{
-        string *target =({
-        "baiyang",
-        "jinniu",
-        "shuangzi",
-        "juxie",
-        "shizi",
-        "chunv",
-        "tianping",
-        "renma",
-        "tianxie",
-        "shanyang",
-        "baoping",
-        "shuangyu",
-});
-        int i;
-        object me = this_player();
-        object obj;
-
-        if( !pointerp(all_biao) || !sizeof(all_biao) ) //表示还没有数据
-                {
-                write("\n还没有数据库。\n");
-                return 1;
-                }
-        if(wizardp (me))
-                {
-                obj=new("/d/shengdoushi/12gong/obj/shengyi/"+target[random(12)]);
-                obj->move(me);
-                message_vision(HIY"雅典娜从五彩祥云中走出来，凌空一指，变出了一件黄金圣衣交给$N。\n"NOR,me);
-                return 1;
-                }
-        if ( me->query("12gong/number")<12 || me->query("12gong/shendian") != "done" )
-                {
-                printf("你还是先去救出女神，向女神申请圣斗士称号吧\n");
-                return 1;
-                }
-        for(i=0;i<sizeof(all_biao);i++)
-                if(all_biao[i]["id"]==me->query("id"))
-                {
-                    if (check(target[i]+" golden armor")==0)
-                    {
-                     obj=new("/d/shengdoushi/12gong/obj/shengyi/"+target[i]);
-                     obj->set("no_get",1);
-                     obj->move(me);
-                     me->set("title",all_biao[i]["title"]+HIY+"黄金圣斗士"+NOR);
-                     message_vision(HIY"雅典娜从五彩祥云中走出来，凌空一指，变出了一件黄金圣衣交给$N。\n"NOR,me);
-                     return 1;
-                    }
-/*
+  if (!pointerp(all_biao) || !sizeof(all_biao))  //表示还没有数据
+  {
+    write("\n还没有数据库。\n");
+    return 1;
+  }
+  if (wizardp(me)) {
+    obj = new("/d/shengdoushi/12gong/obj/shengyi/" + target[random(12)]);
+    obj->move(me);
+    message_vision(HIY "雅典娜从五彩祥云中走出来，凌空一指，变出了一件黄金圣衣交给$N。\n" NOR, me);
+    return 1;
+  }
+  if (me->query("12gong/number") < 12 || me->query("12gong/shendian") != "done") {
+    printf("你还是先去救出女神，向女神申请圣斗士称号吧\n");
+    return 1;
+  }
+  for (i = 0; i < sizeof(all_biao); i++)
+    if (all_biao[i]["id"] == me->query("id")) {
+      if (check(target[i] + " golden armor") == 0) {
+        obj = new("/d/shengdoushi/12gong/obj/shengyi/" + target[i]);
+        obj->set("no_get", 1);
+        obj->move(me);
+        me->set("title", all_biao[i]["title"] + HIY + "黄金圣斗士" + NOR);
+        message_vision(HIY "雅典娜从五彩祥云中走出来，凌空一指，变出了一件黄金圣衣交给$N。\n" NOR, me);
+        return 1;
+      }
+      /*
                     else if ( obj=find_object(target[i]+" golden armor") )
                     {
                 tell_object(find_player("huarong"),obj->query("id"));
@@ -300,280 +288,278 @@ int do_getarmor()
                       return 1; }
                     }
 */
-                    else
-                      {
-                     message_vision(HIY"雅典娜：此黄金圣衣只有一件，如今不在我处。\n"NOR,me);
-                     return 1;
-                      }
-                }
-
-        if (i >= sizeof(all_biao))
-                {
-                int t=random(12);
-                obj=new("/d/shengdoushi/12gong/obj/shengyi/"+target[t]);
-                obj->set_name(all_biao[t]["title"]+HIY+"黄金圣衣"+NOR, ({ target[t]+" armor", "armor" }) );
-                obj->set("armor_prop/armor", 80+random(20));
-                obj->set("no_get",1);
-                obj->move(me);
-                me->set("title",all_biao[t]["title"]+HIY+"黄金圣斗士"+NOR);
-                write("看来你不是现任的黄金圣斗士，雅典娜只能给你一件防御力较小的黄金圣衣\n");
-                }
+      else {
+        message_vision(HIY "雅典娜：此黄金圣衣只有一件，如今不在我处。\n" NOR, me);
         return 1;
+      }
+    }
+
+  if (i >= sizeof(all_biao)) {
+    int t = random(12);
+    obj = new("/d/shengdoushi/12gong/obj/shengyi/" + target[t]);
+    obj->set_name(all_biao[t]["title"] + HIY + "黄金圣衣" + NOR, ({ target[t] + " armor", "armor" }));
+    obj->set("armor_prop/armor", 80 + random(20));
+    obj->set("no_get", 1);
+    obj->move(me);
+    me->set("title", all_biao[t]["title"] + HIY + "黄金圣斗士" + NOR);
+    write("看来你不是现任的黄金圣斗士，雅典娜只能给你一件防御力较小的黄金圣衣\n");
+  }
+  return 1;
 }
 
-void enough_rest()
-{
-        delete_temp("busy");
+void enough_rest() {
+  delete_temp("busy");
 }
 
-int do_view()//玩家查看
+int do_view()  //玩家查看
 {
-        int i,time;
-        time=time();
-        if( !pointerp(all_biao) || !sizeof(all_biao) ) //表示还没有数据
-                {
-                write("\n还没有数据库。\n");
-                return 1;
-                }
+  int i, time;
+  time = time();
+  if (!pointerp(all_biao) || !sizeof(all_biao))  //表示还没有数据
+  {
+    write("\n还没有数据库。\n");
+    return 1;
+  }
 
-        write(WHT+"************   "+HIY+"黄金圣斗士"+HIG+"英雄榜"+NOR+WHT+"   ************\n\n"NOR);
-        for ( i=0 ; i<12 ;i++ )
-                {
-                if(all_biao[i]["name"]=="暂缺")
-                        write(""+chinese_number(i+1)+"\t"+all_biao[i]["title"]+NOR+"\t"+all_biao[i]["name"]+"\n");
-                else
-                  {
-                  	printf(""+chinese_number(i+1)+"\t"+all_biao[i]["title"]+"\t"+all_biao[i]["name"]+"("+all_biao[i]["id"]+")\n"+NOR);//+"\t\t\t离线：%d天\n",FINGER_D->finger_date(all_biao[i]["id"]));
-                        printf("\t任职时间："+HIR+FINGER_D->age_string(time-all_biao[i]["time"])+NOR+"\n");
-//                        printf("\t\t"+CYN+FINGER_D->finger_date(all_biao[i]["id"])+NOR);
-                  }
-                }
-        return 1;
+  write(WHT + "************   " + HIY + "黄金圣斗士" + HIG + "英雄榜" + NOR + WHT + "   ************\n\n" NOR);
+  for (i = 0; i < 12; i++) {
+    if (all_biao[i]["name"] == "暂缺")
+      write("" + chinese_number(i + 1) + "\t" + all_biao[i]["title"] + NOR + "\t" + all_biao[i]["name"] + "\n");
+    else {
+      printf("" + chinese_number(i + 1) + "\t" + all_biao[i]["title"] + "\t" + all_biao[i]["name"] + "(" + all_biao[i]["id"] + ")\n" + NOR);  //+"\t\t\t离线：%d天\n",FINGER_D->finger_date(all_biao[i]["id"]));
+      printf("\t任职时间：" + HIR + FINGER_D->age_string(time - all_biao[i]["time"]) + NOR + "\n");
+      //                        printf("\t\t"+CYN+FINGER_D->finger_date(all_biao[i]["id"])+NOR);
+    }
+  }
+  return 1;
 }
 
-int do_cancel(int num)
-{
-        object me = this_player(),ob;
-        string title,titleold;
-        int flag;
-        if ( !me->query_temp("can_cancel") && !wizardp(me) )
-        {
-                write("你没有这个权限!!\n");
-                help();
-                return 1;
-        }
-        if(!num || sscanf(num, "%d", num) != 1)//分析玩家指令
-                {
-                write("指令格式不对!\n");
-                help();
-                return 1;
-                }
-        if ( num<1 || num >12)
-        {
-                printf("没有这个职位。\n");
-        help();
-                return 1;
-        }
-        if( !pointerp(all_biao) || !sizeof(all_biao) ) //表示还没有数据
-                {
-                write("\n还没有数据库。\n");
-                return 1;
-                }
-        num=num-1;
-        ob=find_player(all_biao[num]["id"]);
-    
-	if(!ob)
-        	{
-        	flag=1;
-        	ob = new(USER_OB);
-        	ob->set("id", all_biao[num]["id"]);
-                tell_object(find_player("xue"),HIM+"ob="+ob->query("id")+"\n"NOR);
-                if (!ob->restore()) return 1;
-        	}        
-        
-        titleold=ob->query("titleold");
-        ob->set("title",titleold);        
+int do_cancel(int num) {
+  object me = this_player(), ob;
+  string title, titleold;
+  int flag;
+  if (!me->query_temp("can_cancel") && !wizardp(me)) {
+    write("你没有这个权限!!\n");
+    help();
+    return 1;
+  }
+  if (!num || sscanf(num, "%d", num) != 1)  //分析玩家指令
+  {
+    write("指令格式不对!\n");
+    help();
+    return 1;
+  }
+  if (num < 1 || num > 12) {
+    printf("没有这个职位。\n");
+    help();
+    return 1;
+  }
+  if (!pointerp(all_biao) || !sizeof(all_biao))  //表示还没有数据
+  {
+    write("\n还没有数据库。\n");
+    return 1;
+  }
+  num = num - 1;
+  ob = find_player(all_biao[num]["id"]);
 
-        all_biao[num]["name"]="暂缺";
-        all_biao[num]["id"]="000000";
-        save();//储存进这个文件对应的.o文件里
-        if (flag) destruct(ob);
-        remove_call_out("enough_rest");
-        call_out("enough_rest", 1);//1秒后取消busy
-        if (!me->query_temp("can_cancel"))
-        tell_object(me,"你成功的将一个称号删除。\n");
-        return 1;
+  if (!ob) {
+    flag = 1;
+    ob = new(USER_OB);
+    ob->set("id", all_biao[num]["id"]);
+    tell_object(find_player("xue"), HIM + "ob=" + ob->query("id") + "\n" NOR);
+    if (!ob->restore()) return 1;
+  }
+
+  titleold = ob->query("titleold");
+  ob->set("title", titleold);
+
+  all_biao[num]["name"] = "暂缺";
+  all_biao[num]["id"] = "000000";
+  save();  //储存进这个文件对应的.o文件里
+  if (flag) destruct(ob);
+  remove_call_out("enough_rest");
+  call_out("enough_rest", 1);  //1秒后取消busy
+  if (!me->query_temp("can_cancel"))
+    tell_object(me, "你成功的将一个称号删除。\n");
+  return 1;
 }
 
-int do_silver()
-{
-        int i;
-        object me=this_player();
-        string title,titleold;
-        if(  (me->query("combat_exp",1)+me->query("daoxing",1))/2 < 3000000)
-                {
-                tell_object(me,"你的修为太低了，不能申请白银圣斗士。\n");
-                return 1;
-                }
-        if (me->query("12gong/banghui")||me->query("12gong/shengdoushi")) 
-                {
-                printf("你已经是圣斗士了！\n");
-                return 1;
-                }        
-        title=me->query("title");
-        me->set("titleold",title);
-        title = me->query("title");
-        title = canceltitle(title);
-        me->set("title",HIW+"白银圣斗士 "+NOR+title);
-        me->set("12gong/shengdoushi",1);
-        message("channel:chat",HIB+"【"+HIG+"圣域传说"+HIB+"】"+HIY+"雅典娜(Athena)："+HIG+me->query("name")+HIC+"被授予"+HIW+"白银圣斗士"+HIC+"头衔。"+NOR+"\n",users());
-        return 1;
+int do_silver() {
+  int i;
+  object me = this_player();
+  string title, titleold;
+  if ((me->query("combat_exp", 1) + me->query("daoxing", 1)) / 2 < 3000000) {
+    tell_object(me, "你的修为太低了，不能申请白银圣斗士。\n");
+    return 1;
+  }
+  if (me->query("12gong/banghui") || me->query("12gong/shengdoushi")) {
+    printf("你已经是圣斗士了！\n");
+    return 1;
+  }
+  title = me->query("title");
+  me->set("titleold", title);
+  title = me->query("title");
+  title = canceltitle(title);
+  me->set("title", HIW + "白银圣斗士 " + NOR + title);
+  me->set("12gong/shengdoushi", 1);
+  message(
+    "channel:chat",
+    HIB + "【" + HIG + "圣域传说" + HIB + "】" + HIY + "雅典娜(Athena)：" + HIG + me->query("name") + HIC + "被授予" + HIW + "白银圣斗士" + HIC + "头衔。" + NOR + "\n",
+    users()
+  );
+  return 1;
 }
 
-int do_sea()
-{
-        int i;
-        object me=this_player();
-        string title,titleold;
-        if(  (me->query("combat_exp",1)+me->query("daoxing",1))/2 < 2000000)
-                {
-                tell_object(me,"你的修为太低了，不能申请海洋圣斗士。\n");
-                return 1;
-                }
-        if (me->query("12gong/banghui")||me->query("12gong/shengdoushi")) 
-                {
-                printf("你已经是圣斗士了！\n");
-                return 1;
-                }        
-        title=me->query("title");
-        me->set("titleold",title);
-        title = me->query("title");
-        title=canceltitle(title);
-        me->set("title",HIB+"海洋圣斗士 "+NOR+title);
-        me->set("12gong/shengdoushi",1);
-        message("channel:chat",HIB+"【"+HIG+"圣域传说"+HIB+"】"+HIY+"雅典娜(Athena)："+HIG+me->query("name")+HIC+"被授予"+HIB+"海洋圣斗士"+HIC+"头衔。"+NOR+"\n",users());
-        return 1;
+int do_sea() {
+  int i;
+  object me = this_player();
+  string title, titleold;
+  if ((me->query("combat_exp", 1) + me->query("daoxing", 1)) / 2 < 2000000) {
+    tell_object(me, "你的修为太低了，不能申请海洋圣斗士。\n");
+    return 1;
+  }
+  if (me->query("12gong/banghui") || me->query("12gong/shengdoushi")) {
+    printf("你已经是圣斗士了！\n");
+    return 1;
+  }
+  title = me->query("title");
+  me->set("titleold", title);
+  title = me->query("title");
+  title = canceltitle(title);
+  me->set("title", HIB + "海洋圣斗士 " + NOR + title);
+  me->set("12gong/shengdoushi", 1);
+  message(
+    "channel:chat",
+    HIB + "【" + HIG + "圣域传说" + HIB + "】" + HIY + "雅典娜(Athena)：" + HIG + me->query("name") + HIC + "被授予" + HIB + "海洋圣斗士" + HIC + "头衔。" + NOR + "\n",
+    users()
+  );
+  return 1;
 }
 
-int do_bronze()
-{
-        int i;
-        object me=this_player();
-        string title,titleold;
-        if(  (me->query("combat_exp",1)+me->query("daoxing",1))/2 < 1000000)
-                {
-                tell_object(me,"你的修为太低了，不能申请青铜圣斗士。\n");
-                return 1;
-                }
-        if (me->query("12gong/banghui")||me->query("12gong/shengdoushi")) 
-                {
-                printf("你已经是圣斗士了！\n");
-                return 1;
-                }        
-        title=me->query("title");
-        me->set("titleold",title);
-        title = me->query("title");
-        title=canceltitle(title);
-        me->set("title",HIC+"青铜圣斗士 "+NOR+title);
-        me->set("12gong/shengdoushi",1);
-        message("channel:chat",HIB+"【"+HIG+"圣域传说"+HIB+"】"+HIY+"雅典娜(Athena)："+HIG+me->query("name")+HIC+"被授予"+HIC+"青铜圣斗士"+HIC+"头衔。"+NOR+"\n",users());
-        return 1;
+int do_bronze() {
+  int i;
+  object me = this_player();
+  string title, titleold;
+  if ((me->query("combat_exp", 1) + me->query("daoxing", 1)) / 2 < 1000000) {
+    tell_object(me, "你的修为太低了，不能申请青铜圣斗士。\n");
+    return 1;
+  }
+  if (me->query("12gong/banghui") || me->query("12gong/shengdoushi")) {
+    printf("你已经是圣斗士了！\n");
+    return 1;
+  }
+  title = me->query("title");
+  me->set("titleold", title);
+  title = me->query("title");
+  title = canceltitle(title);
+  me->set("title", HIC + "青铜圣斗士 " + NOR + title);
+  me->set("12gong/shengdoushi", 1);
+  message(
+    "channel:chat",
+    HIB + "【" + HIG + "圣域传说" + HIB + "】" + HIY + "雅典娜(Athena)：" + HIG + me->query("name") + HIC + "被授予" + HIC + "青铜圣斗士" + HIC + "头衔。" + NOR + "\n",
+    users()
+  );
+  return 1;
 }
 
-int do_dark()
-{
-        int i;
-        object me=this_player();
-        string title,titleold;
-        if(  (me->query("combat_exp",1)+me->query("daoxing",1))/2 < 500000)
-                {
-                tell_object(me,"你的修为太低了，不能申请黑暗圣斗士。\n");
-                return 1;
-                }
-        if (me->query("12gong/banghui")||me->query("12gong/shengdoushi")) 
-                {
-                printf("你已经是圣斗士了！\n");
-                return 1;
-                }        
-        title=me->query("title");
-        me->set("titleold",title);
-        title = me->query("title");
-        title=canceltitle(title);
-        me->set("title",WHT+"黑暗圣斗士 "+NOR+title);
-        me->set("12gong/shengdoushi",1);
-        message("channel:chat",HIB+"【"+HIG+"圣域传说"+HIB+"】"+HIY+"雅典娜(Athena)："+HIG+me->query("name")+HIC+"被授予"+NOR+WHT+"黑暗圣斗士"+HIC+"头衔。"+NOR+"\n",users());
-        return 1;
+int do_dark() {
+  int i;
+  object me = this_player();
+  string title, titleold;
+  if ((me->query("combat_exp", 1) + me->query("daoxing", 1)) / 2 < 500000) {
+    tell_object(me, "你的修为太低了，不能申请黑暗圣斗士。\n");
+    return 1;
+  }
+  if (me->query("12gong/banghui") || me->query("12gong/shengdoushi")) {
+    printf("你已经是圣斗士了！\n");
+    return 1;
+  }
+  title = me->query("title");
+  me->set("titleold", title);
+  title = me->query("title");
+  title = canceltitle(title);
+  me->set("title", WHT + "黑暗圣斗士 " + NOR + title);
+  me->set("12gong/shengdoushi", 1);
+  message(
+    "channel:chat",
+    HIB + "【" + HIG + "圣域传说" + HIB + "】" + HIY + "雅典娜(Athena)：" + HIG + me->query("name") + HIC + "被授予" + NOR + WHT + "黑暗圣斗士" + HIC + "头衔。" + NOR + "\n",
+    users()
+  );
+  return 1;
 }
 
-void invite()
-{
-	object me=this_player();
-	object oldp;
-	int num;
-	num=me->query_temp("12gong/tiaozhan",1);
+void invite() {
+  object me = this_player();
+  object oldp;
+  int num;
+  num = me->query_temp("12gong/tiaozhan", 1);
 
-        oldp=find_player(all_biao[num]["id"]);
-        
-        if(!oldp)
-         {
-           write("咦？这个人死哪儿去了？\n");
-           return;
-         }
-        else
-         {
-	oldp->set_temp("12gong/asked_tiaozhan",1);
- 	oldp->set_temp("12gong/yingzhan_man",me);
-        tell_object(oldp,HIR"\n你耳边传来"+HIY+"雅典娜"+HIR+"的声音：\n有人在挑战你"+all_biao[num]["title"]+HIY+"黄金圣斗士"+HIR+"的位置，限你在一分钟之内马上给出答复(yingzhan)！\n\n"NOR);
-        message("channel:chat",HIB+"【"+HIG+"圣域传说"+HIB+"】"+HIY+"雅典娜(Athena)："+HIG+me->query("name")+HIC+"向"+NOR+all_biao[num]["title"]+HIY+"黄金圣斗士"+HIW+oldp->query("name")+HIC+"发出挑战！"+NOR+"\n\n",users());
-	call_out("check_yingzhan",60,me,oldp);
-	    return;
-	 }
-	me->delete_temp("12gong/tiaozhan");
-	return;
+  oldp = find_player(all_biao[num]["id"]);
+
+  if (!oldp) {
+    write("咦？这个人死哪儿去了？\n");
+    return;
+  } else {
+    oldp->set_temp("12gong/asked_tiaozhan", 1);
+    oldp->set_temp("12gong/yingzhan_man", me);
+    tell_object(
+      oldp,
+      HIR "\n你耳边传来" + HIY + "雅典娜" + HIR + "的声音：\n有人在挑战你" + all_biao[num]["title"] + HIY + "黄金圣斗士" + HIR + "的位置，限你在一分钟之内马上给出答复(yingzhan)！\n\n" NOR
+    );
+    message(
+      "channel:chat",
+      HIB + "【" + HIG + "圣域传说" + HIB + "】" + HIY + "雅典娜(Athena)：" + HIG + me->query("name") + HIC + "向" + NOR + all_biao[num]["title"] + HIY + "黄金圣斗士" + HIW + oldp->query("name") + HIC + "发出挑战！" + NOR + "\n\n",
+      users()
+    );
+    call_out("check_yingzhan", 60, me, oldp);
+    return;
+  }
+  me->delete_temp("12gong/tiaozhan");
+  return;
 }
 
-void check_yingzhan(object me,object target)
-{
-     int num=me->query_temp("12gong/tiaozhan",1);
-     num=num+1;
-     if(target->query_temp("12gong/in_tiaozhan")) return 0;
-     if(target->query_temp("12gong/asked_tiaozhan"))
-	{
-	      tell_object(target,HIR"你耳边传来"+HIY+"雅典娜"+HIR+"的声音：你自动放弃了本次"+HIY+"黄金圣斗士"+HIR+"的职位！\n\n"NOR);
-	      write(CYN"你耳边传来"+HIY+"雅典娜"+NOR+CYN+"的声音："+target->query("name")+"不敢应战，你可以重新申请职位了。(apply)\n\n"NOR);
-              me->set_temp("can_cancel",1);
-              me->command("cancel "+num);
-              me->delete_temp("can_cancel");
-//              tell_object(find_player("huarong"),HIM+"num="+num+"\n"NOR);
-	      me->delete_temp("12gong/tiaozhan");
-	      target->delete_temp("12gong/asked_yingzhan");
-	}
+void check_yingzhan(object me, object target) {
+  int num = me->query_temp("12gong/tiaozhan", 1);
+  num = num + 1;
+  if (target->query_temp("12gong/in_tiaozhan")) return 0;
+  if (target->query_temp("12gong/asked_tiaozhan")) {
+    tell_object(
+      target,
+      HIR "你耳边传来" + HIY + "雅典娜" + HIR + "的声音：你自动放弃了本次" + HIY + "黄金圣斗士" + HIR + "的职位！\n\n" NOR
+    );
+    write(CYN "你耳边传来" + HIY + "雅典娜" + NOR + CYN + "的声音：" + target->query("name") + "不敢应战，你可以重新申请职位了。(apply)\n\n" NOR);
+    me->set_temp("can_cancel", 1);
+    me->command("cancel " + num);
+    me->delete_temp("can_cancel");
+    //              tell_object(find_player("huarong"),HIM+"num="+num+"\n"NOR);
+    me->delete_temp("12gong/tiaozhan");
+    target->delete_temp("12gong/asked_yingzhan");
+  }
 }
 
-int help()
-{
-        write("
+int help() {
+  write("
         英雄榜记录着夺得黄金圣斗士称号的玩家名字，而且在这里可以拿到黄金圣衣。
-        如想看英雄榜就 "+HIR+"view"+NOR+" ；如想拿圣衣"+HIR+" getarmor"+NOR+"；如想取得各种圣斗士称号"+HIR+" read "+NOR+"。
+        如想看英雄榜就 " + HIR + "view" + NOR + " ；如想拿圣衣" + HIR + " getarmor" + NOR + "；如想取得各种圣斗士称号" + HIR + " read " + NOR + "。
 
-        silver 可被授予"+HIW+"白银圣斗士"+NOR+"。
-        sea    可被授予"+HIB+"海洋圣斗士"+NOR+"。
-        bronze 可被授予"+HIC+"青铜圣斗士"+NOR+"。
-        dark   可被授予"+WHT+"黑暗圣斗士"+NOR+"。
+        silver 可被授予" + HIW + "白银圣斗士" + NOR + "。
+        sea    可被授予" + HIB + "海洋圣斗士" + NOR + "。
+        bronze 可被授予" + HIC + "青铜圣斗士" + NOR + "。
+        dark   可被授予" + WHT + "黑暗圣斗士" + NOR + "。
         各种圣斗士名称不可兼得。
 
         成功闯过黄道十二宫的玩家可以在此申请黄金圣斗士称号
         命令格式  apply  <1-12>     例如申请狮子座： apply 5
         如果你所申请称号暂缺，则可以申请。
-        如果你所申请称号的原玩家任职超过"+HIR+"10天"+NOR+"，则可以申请。
+        如果你所申请称号的原玩家任职超过" + HIR + "10天" + NOR + "，则可以申请。
         每个玩家只能申请一个黄金圣斗士称号。
 
-        榜上有名的黄金圣斗士可以取得盔甲防御力"+HIR+"一百五十点"+NOR+"的黄金圣衣(getarmor)。
-        其它玩家只要闯过十二宫也可以取得防御力"+HIR+"一百点"+NOR+"的黄金圣衣(getarmor)。
-        是否具有拿取圣衣的权利，"+HIR+"以英雄榜记载为准"+NOR+"。
+        榜上有名的黄金圣斗士可以取得盔甲防御力" + HIR + "一百五十点" + NOR + "的黄金圣衣(getarmor)。
+        其它玩家只要闯过十二宫也可以取得防御力" + HIR + "一百点" + NOR + "的黄金圣衣(getarmor)。
+        是否具有拿取圣衣的权利，" + HIR + "以英雄榜记载为准" + NOR + "。
 
         巫师可随意拿取圣衣，可随意申请称号，但不上英雄榜。
         命令 cancel <1-12> 可以删除一条英雄榜内容。(巫师专用)
         \n");
-        return 1;
+  return 1;
 }

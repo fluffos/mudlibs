@@ -371,3 +371,33 @@ created first); killed by exact PID after testing, never a pattern-based
 `pkill` (other agents had concurrent drivers running for
 `beimeixiakexing2001`, `zhongjidiyu_airuoyoulan`, and
 `zhongjidiyu_zhijian` at the same time on this host).
+
+## Re-verification pass: driver rebuild + formatter + WASM (2026-07)
+
+- **LPC formatter** applied to all `.lpc` under `work/` (14,643 total,
+  14,413 written, 175 unchanged, 55 self-checked errors left untouched
+  as expected on legacy code).
+- **Native re-test against the freshly rebuilt driver**
+  (`~/src/fluffos/build-debug/src/driver`): clean boot, zero errors of
+  any kind in `debug.log` (not even the usual benign `socket_bind`
+  line). Full registration flow re-verified end-to-end with a fresh id
+  and real Chinese name (`ztztest`/秦汉试): GB encoding, `1` → id flow,
+  `new` → English id, admin ("super") password ×2, everyday password
+  ×2, email, gender, gift-allocation menu (`9`/`y`), landed in 南城客栈
+  with the standard 4-NPC welcome; `look` (room re-render), `score`
+  (full real character sheet, not a stub), `quit` (clean "沧茫"-themed
+  farewell text) all correct.
+- **WASM test** (`scripts/wasm_client.js` against `build-wasm/src`):
+  boots cleanly. **Blocked by the documented `query_ip_number()`
+  WASM-mode limitation, textbook example**: `adm/daemons/band.lpc`'s
+  `is_strict_banned(site)` does `ip_now_list = explode(site, ".")` then
+  indexes `ip_now_list[1..3]` assuming a real 4-octet dotted-quad; under
+  WASM `query_ip_number()` returns an empty string, so `explode("", ".")`
+  yields a single-element `({ "" })` array and the very first
+  `ip_now_list[1]` access throws `*Array index out of bounds.`,
+  uncaught, and `new_conn_handler()` disconnects the connection at the
+  very first `logon()` call — before the encoding/id prompt ever
+  appears. This is exactly the driver-side WASM limitation the task
+  brief anticipated (a site-restriction daemon `sscanf`/`explode`-parsing
+  the IP format) — confirmed NOT a mudlib bug (native works perfectly,
+  see above) and NOT patched, per standing instruction.
