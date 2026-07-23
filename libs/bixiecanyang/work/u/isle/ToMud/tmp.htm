@@ -1,0 +1,131 @@
+<pre>
+TOMUD客户端协议
+协议基本规则
+TOMUD与服务器端的大部分交互都是通过命令格式的数据包来实现的。每个数据包都要求以ASCII
+码25的字符开头，以ASCII码26的字符来结束。非命令包含的数据将不做处理
+//这两个定义是跟TOMUD客户端的设置相配合的，可以由游戏管理员决定，但是建议使用默认设置
+#define TMA "\x19"  //ASCII码25
+#define TMB "\x1A"  //ASCII码26
+做如上的定义后，我们的命令将是如下形式的：
+TMA+cmdname+空格+[可选的参数]+TMB
+其中cmdname为TOMUD CLIENT已经预先支持的一些数据包类型名，或者说是协议命令名，如果该命
+令无参数，则可直接跟上TMB就结束，如果有参数，则需要隔上一个空格，然后在后面按该命令的
+格式来添加参数。原则上未以次形式传送的包，或者虽然以次形式传送但是不是可以识别的命令
+串，TOMUD客户端软件都会将该收到的数据抛弃不给予处理。
+协议基本命令
+        version 取客户端版本号，无参数，客户端将返回 版本号和本机IP地址
+        alert 以弹出窗口的形式弹出一段文字信息，参数为要显示的字符串，原则上不要带上过长的字符串
+        lbadd0/1/2 向列表中添加一项，格式为
+        lbrem0/1/2 从列表中移除一项，格式与lbadd相同
+        lbclear0/1/2 将某个列表清除，无参数，0/1/2的含义与lbadd相同
+        bnway 方向按钮控制
+        ptext 文本显示命令，将信息显示在小窗口中
+        cchat 频道或着其他信息显示命令
+        mbadd
+        mbegin 标志菜单命令串
+        mbase 缺省菜单设置，应该在游戏启动时就设置和发送到客户端
+        mitem 在菜单命令集合里，单独的添加一个菜单项
+        mendd 菜单命令串结束
+        dlurl 设置基本的根下载地址
+        licon 在行前显示指定的图标，参数为图标编号
+        cclose 将客户端关闭
+        logout 跟cclose相同
+        statu 在状态上显示字符串（可以用来显示一些重要参数），参数为要显示的字符串
+        如果需要实现点击后转到页面的连接，请用[]将URL字符串括住
+服务器端实现方法和代码示例
+简述
+服务器端主要需要增加对以下功能的支持：
+1、	列表增加和减少清除
+2、	对列表使用鼠标右键，支持弹出菜单
+3、	判断用户是否在使用TOMUD客户端
+4、	对进入的房间包含的可行走房间进行判断，即方向
+5、	根据情况修改背景或者列出图标
+6、	在主窗口显示信息
+
+示例代码：（注意，我未考虑使用ZMUD的用户不需要接收到这类信息，如何高效的让两类用户共
+存同个MUD和收同样的信息是个问题的。建议玩家完全改用TOMUD客户端）
+
+列表的形成和移除
+列表命令的例子：lbadd0 name(id) icon
+name为列表增加的中文名，()内是英文ID，icon则是一个5位的图标编号，必须是数字，而且长度必须是5位。
+要注意列表2是全局的用户列表，里面保存的是所有的ONLINE用户信息。它并没有直接可见的列表
+最为根本的修改是修改F_MOVE。在move函数里进行如下判断：
+假设移动前环境为env，移动目标对象为ob，则
+如果env是玩家（interactive），则向该玩家显示this_object的从列表1里移走的信息
+如果env是!living（非生物）则认为env是房间类物品，向该房间显示this_object从列表0里移走的信息
+如果ob是玩家（interactive），则向该玩家显示this_object出现在列表1里的信息
+如果ob是!is_character（房间类物品），则向该房间显示this_object出现在列表0里的信息
+在F_MOVE的remove函数里应该增加将自己从所处环境移走的信息，如果所处是玩家，则显示从列表1移
+走的信息，否则是从列表0移走的信息。该remove函数在传统MUD里是会在destruct时调用到的。
+下面是一段代码，只可做参考，不可以直接使用的：
+#define L_ITEM(x) RANK_D->new_short(x) //其实只要把这个L_ITEM(x)做成对下面的new_short(x)的调
+用就可以了。不一定非要放到RANK_D里
+#define CLEAN0  TMI("lbclear0")
+#define ADD0(x) TMI("lbadd0 "+L_ITEM(x)+";")
+#define REM0(x) TMI("lbrem0 "+L_ITEM(x)+";")
+//RANK_D里形成物品的ItemString By JackyBoy@TOMUD 2001/5/6
+varargs string new_short( object ob ,int withshort)
+{
+ mixed tmp;
+ string icon="", str;
+ if(!objectp(ob))
+ {
+  CHANNEL_D->do_channel(this_player(),"chat","object参数错误！");
+  return "";
+ }
+ if(!ob->query_temp("apply/id")||!ob->query_temp("apply/name")||!ob->query_temp("apply/short"))
+  str = ob->query("name") + "(" +ob->query("id") + ")" +(!withshort?"":ob->short());
+ else
+  str = ob->query_temp("apply/name")[0] + "(" +ob->query_temp("apply/id")[0] + ")" +(!withshort?"":ob->query_temp("apply/short")[0]);
+ if( (tmp = ob->query("icon")))
+ {
+  if( intp(tmp) )
+   icon = sprintf("%d",tmp);
+  else if( stringp(tmp) )
+   icon = tmp;
+  else 
+   icon = "00901";
+ }
+ else
+ {
+  if(userp(ob)) icon=( ob->query("gender") == "男性" )?"1174":"1173";
+  else if(living(ob)) icon = "00901";
+  else icon = "00961";
+ }
+ while( sizeof(icon)<5 )
+  icon = "0" + icon;
+    return str + icon;
+} 
+菜单的形成和使用
+当一个物品或者对象已经出现在列表0或者列表1后，玩家可以使用右键点击列表中的物品，来获取
+可以跟该对象相关的操作。实现这一功能的原理是在按下右键时，TOMUD客户端会发一个
+actionavailable命令，该命令的传入参数是点击的物品ID。
+actionavailable命令的实现。命令传入参数为 id,no格式，id为点中的物品ID，而no则为同id物品
+的编号。这个编号的对应一定要处理好否则就会在同ID时出现一些错误的。
+具体实现代码请参看此例子，或者写信跟TOMUD网站WEBMASTER索要。
+
+判断用户是否在使用TOMUD客户端
+在用户连线时，或者在你需要判断的时候想用户发送version命令，如果用户使用的是TOMUD客户
+端则会返回版本号。你只需要在发送后判断用户的下一个输入就行。
+
+方向判定
+bnway命令后面为要enable的方向按钮，值为MUD里常用的方向单词（非缩写），中间用分号分隔。
+如果本地没有任何出口也要发送bnway跟空参数。
+
+图标协议和图标库
+图标库已经在整理。近期将会有WEB显示出来。为了防止被他人盗链影响服务器，我们将不对外公布
+地址，将直接在客户端内部使用。（请一丁点考虑防盗链的问题）
+在连线初始化时必须以dlurl告诉TOMUD客户端本站的图形和音乐资源下载根目录，也可以使用缺省值
+licon命令可以允许在行首显示一个图标
+
+在主窗口中显示信息
+默认信息将扔到主窗口中。但是也可以使用一些预先定义的命令将信息显示到其他小窗口上，或者使
+用alert命令将信息以弹出窗口的形式来显示。
+
+所有命令可以只用5个字母的缩写。将超过5位以后的字母截除就行
+想同时使服务器端能很好的适应TOMUD客户端或者ZMUD等其他TELNET类客户端的解决方法。目前最好
+的办法就是在每个产生特殊命令的地方都判定一下接收者的连接类型。
+如果有任何应用该协议的问题，请到TOMUD网站论坛相关版面发言，或者给TOMUD@TOMUD.COM发信
+TOMUD的客户端软件目前正在重新规划，准备完全重新制作以将过去的一些弊病给排除掉，在这段时间
+内，希望对TOMUD客户端有兴趣的朋友多提建议好让我们事先避免掉一些愚蠢的错误。：）
+</pre>ove(string euid)

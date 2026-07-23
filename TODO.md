@@ -32,7 +32,7 @@ rely on the boot + interactive-connect test as the verification gate.
   majority of this collection. If an archive turns out to be English
   (like ds386/Dead Souls), do the minimum to note what it is, don't sink
   deep debugging time into it -- move on to the next Chinese one.
-- **Done: 61 / 100** (shanhaizhanshen, xingzhanyingxiong,
+- **Done: 62 / 100** (shanhaizhanshen, xingzhanyingxiong,
   unknownlib20150716 [小雨西游II], bxsj [书剑天下], bxsj1 [书剑·经典],
   chidi [江湖I], ..., nitan170911 [仙剑奇侠传], nitan6 [笑傲江湖], rzrmud
   [大唐西游], xo, xo_final, zzfy [郑州风云3], shiji [世纪],
@@ -64,7 +64,8 @@ rely on the boot + interactive-connect test as the verification gate.
   earlier snapshot of xinkuangxiangkongjian2 #53's game],
   yanhuangyingxiongshi [炎黄英雄史/炎黄英雄传, sibling of yanhuangwuhun
   #66], xuanjianlu [玄剑录, ES II/XKX lineage shared with xkx2001
-  #25/beimeixiakexing2001 #45])
+  #25/beimeixiakexing2001 #45], bixiecanyang [碧血残阳之豪侠晚歌,
+  夕阳再现 lineage shared with #46/#47/#55/#59])
 - **New AGENTS.md §15q (hidden client-protocol-version gate)**: found on
   xiyangzaixian3 -- a pre-id prompt can check the input against a
   hardcoded literal (client version string), not just a BIG5/student
@@ -362,7 +363,7 @@ rely on the boot + interactive-connect test as the verification gate.
 | 68 | 炎龙封印-笑傲江湖3阿飞站.rar | | | not started | |
 | 69 | 狂想空间.rar | kuangxiangkongjian | 40063 | done | dup: 狂想空间 (1).rar; NOT a duplicate of xinkuangxiangkongjian2(#53) despite both self-identifying as "狂想空间" -- confirmed distinct via diff (different file counts/sizes/mtimes, #53's registration flow has an extra email step this one lacks), but same ES II lineage + same 小熊泥苑 distribution site, an independently-circulated earlier snapshot (own bugfix readme dated Dec 2002); ported #53's proven fixes directly: standard §15h fix + §15t all 3 sub-bugs (172 absolute-path angle-bracket includes, 94 disallowed ..-relative includes incl. reconstructing 2 genuinely-missing headers, 187-file inherit-after-globals cluster) + get_include_path + §3 counterexample revert (31 files) + §15b is_killing() typo (4-file cascade) + §15w log_error fix + NEW bare SAVE_EXTENSION vs real __SAVE_EXTENSION__ constant bug (11 files, worth cataloging); full registration flow verified twice with real names "秦风"/"秦风二" reaching an actual starting room, zero debug.log errors; 95.0% lpcc pass (6004/6323, up from 91.8%); see libs/kuangxiangkongjian/NOTES.md |
 | 70 | 玄剑录.rar | xuanjianlu | 40064 | done | distributed via 小熊泥苑 (same site as #35/#36); chinese.c/master.c byte-identical to xkx2001(#25)/beimeixiakexing2001(#45), ES II/XKX engine family, distinct game-world content (明教/昆仑/侠客岛); standard §15h fix (incl. removing a corrupting name[j]+=128 "auto-correct" hack) + §15p/§14/§8d-§15o/§8e/§15c fixes + NEW `private nomask command_hook` bug (private gets demoted to DECL_HIDDEN once inherited, add_action silently refused to call it, breaking EVERY post-login command incl. `look` with zero visible error -- same bug present but never caught in beimeixiakexing2001 since testing there stopped at the password prompt; recommend new AGENTS.md catalog entry) + securityd.lpc ACL lazy-init fix (no seed save data shipped) + §3 counterexample (23 files, incl. rebuilding an accidentally-deleted work/log/ seed subtree) + several lpcc-sweep content fixes (misplaced shared header, missing HALBERD macro, iconv-eaten-newline merges); full registration+post-login-command flow verified 3 times with real names 秦岭/林风/秦风, incl. look/score/i/quit all working correctly; final run had zero debug.log errors; 96.6% lpcc pass (10244/10605); see libs/xuanjianlu/NOTES.md |
-| 71 | 碧血残阳之豪侠晚歌.rar | | | not started | |
+| 71 | 碧血残阳之豪侠晚歌.rar | bixiecanyang | 40065 | done | self-IDs exactly as archive title; own readme credits "夕阳再现-江湖风云2-风云再起" -- confirmed genuine member of the 夕阳再现 lineage (#46/#47/#55/#59), chinese.c byte-identical across all 5, securityd.c matches xiyangzaixian_fengyun2(#47) specifically as closest sibling; confirmed NOT related to datangshuanglong(#49) in either direction (differing chinese.c/master.c/logind.c) -- found a SECOND piece of evidence for #49's stale-copy-paste theory: its raw config file is literally named `config.bxcy`, the template extended to the filename itself; standard §15h fix + §15z protected-shim collision (5 files) + §3 counterexample revert (22 files) + §14/§15p/§15s fixes + new message_combatd() alias (§15aa-shaped ordering gotcha, first attempt broke the whole simul_efun compile until reordered after message_vision) + 19 individual pre-existing content typos fixed; confirmed NOT needed: §15x (hardcoded TOMUD_PORT=8888 only sets a cosmetic flag, never rejects connections) + a §15q-shaped client-version gate confirmed structurally unreachable on our assigned port; full registration flow verified twice incl. real names 秦风(male, 武庙 start room)/林风(female, 北疆小镇, correct female honorific), zero real debug.log errors either time; 98.6% lpcc pass (13374/13559, up from 98.5%); see libs/bixiecanyang/NOTES.md |
 | 72 | 神州.rar | | | not started | |
 | 73 | 神魔20190924版本.rar | | | not started | large (98MB) |
 | 74 | 笑傲江湖II.rar | | | not started | |
