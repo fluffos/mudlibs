@@ -457,3 +457,51 @@ positives (no real player), and 1 dead/unreachable DNS daemon file.
   — heredoc closing-tag newline (#12).
 - `doc/mudlib/efuns/shiwu.lpc` — `call_out()` string-quote fix (#13).
 - `doc/mudlib/efuns.lpc` → renamed to `doc/mudlib/efuns.txt` (#14).
+
+## 2026-07-23: driver rebuild retest + LPC formatter + WASM check
+
+- **Formatter**: ran `tools/lpc-syntax`'s `format-corpus.mjs` over all
+  16181 `.lpc` files in `work/`; 16149 written, 32 already-conformant,
+  0 errors. **Found and fixed the same `::PARENT_FUNC(...)` line-wrap
+  corruption bug documented in this pass's `yanhuangwuhun`/
+  `yanhuangyingxiongshi` NOTES.md entries** (a real bug in the
+  formatter itself, not lib-specific) in **19 files here** — the
+  largest count of any lib in this batch: 5 `clone/armor/xunzhang*
+  .lpc`/`xiongka1.lpc` files' `wear()`/`unequip()` (10 occurrences), 12
+  `clone/suit/jianming/jm-*.lpc` files' `wear()`/`unequip()` (24
+  occurrences), `d/obj/sword.lpc`'s `wield()`/`unequip()` (2
+  occurrences), and `clone/misc/board.lpc`'s `capitalize(::query("id"))`
+  (a `return (: : query("id")\n)\n+ ")"` variant, distinct shape from
+  the `if (::FUNC())` pattern but the same root corruption). All 19
+  fixed by restoring the exact original `::FUNC(...)` call + brace/
+  paren structure (verified against the pre-format git blob for each),
+  then re-ran the formatter over just those files, which now formats
+  them correctly (confirming the bug is specifically the line-wrapped
+  variant of `::`, not `::` in general). Given the volume, wrote a
+  small one-off Python script to apply the identical `wear()`/
+  `unequip()`/`wield()` fix mechanically across all 18 same-shaped
+  files at once, after manually verifying the fix on the first one.
+- **Native retest**: rebuilt `~/src/fluffos/build-debug/src/driver`
+  booted clean (zero fatal `debug.log` errors) after the formatter-bug
+  fixes above. Full registration re-verified with a real Chinese name
+  (秦波, id `qinbob`): id/confirm/name/password/identity-token/gift-
+  selection(`0`+`y`)/email/gender all completed, landed in 悦来客栈
+  (南阳城) exactly as the original pass found, complete with the
+  starter-gift welcome message; `look` re-displayed the room, `score`
+  produced a correct full character sheet, and the "注册不满 30
+  分钟退出将删除账号" warning correctly appeared at `quit` (matching
+  documented behavior, not a bug). Zero debug.log errors.
+- **WASM**: booted cleanly (only the expected non-fatal `sockets`-
+  package preload noise). Registration is **blocked immediately** by
+  this lib's own IP site-restriction check: `adm/daemons/logind.lpc`'s
+  `logon()` does `str = query_ip_number(ob); if (BAN_D->is_banned(str)
+  == 1) { ...你的地址在本MUD不受欢迎... ; destruct(ob); }` — since
+  `query_ip_number()` doesn't format correctly under this WASM build
+  (documented driver-level limitation, not a mudlib bug), the
+  malformed string spuriously matches `BAN_D`'s ban check and every
+  connection gets rejected before the username prompt. This is
+  **exactly** the documented, acceptable `query_ip_number()`-under-WASM
+  limitation described in AGENTS.md's WASM section — confirmed by
+  reading the exact code path, not just inferred. **Not patched**, per
+  the standing instruction not to "fix" this driver-level gap in the
+  mudlib. Native play is completely unaffected (verified above).

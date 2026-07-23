@@ -6,515 +6,438 @@ inherit ROOM;
 #define MAX_GOODS       40
 #define MAX_GOODS_VALUE 2000000000      //20万GOLD
 
-void init()
-{
-    object me = this_player();
-    if(me)
-    {
-        if(me->query_temp("apply/name"))
-            me->command("pretend cancel");
-    }
-    add_action("do_baitan","baitan");
-    add_action("do_buy","buy");
-    add_action("do_buy","cong");
-    add_action("do_buy","从");
-    add_action("do_list","list");
-    add_action("do_list","cha");
-    add_action("do_list","check");
-    add_action("do_fly","fly");
-    add_action("do_dingjia","dingjia");
-    add_action("do_lookitem","lookitem");
-    add_action("do_lookitem","看");
-    add_action("do_lookitem","kan");
-      if(!wizardp(me))
-    add_action("discmds",({
-	"sha","drop","attack","duanlian","ansuan","touxi","persuade","teach","exert",
-	"exercise","study","learn","sleep","kill","steal","cast","conjure","expell","fight","hit","perform",
-	"prcatice","scribe","surrender","qufeng", "guard", "sendto", "pretend"
-      }));
+void init() {
+  object me = this_player();
+  if (me) {
+    if (me->query_temp("apply/name"))
+      me->command("pretend cancel");
+  }
+  add_action("do_baitan", "baitan");
+  add_action("do_buy", "buy");
+  add_action("do_buy", "cong");
+  add_action("do_buy", "从");
+  add_action("do_list", "list");
+  add_action("do_list", "cha");
+  add_action("do_list", "check");
+  add_action("do_fly", "fly");
+  add_action("do_dingjia", "dingjia");
+  add_action("do_lookitem", "lookitem");
+  add_action("do_lookitem", "看");
+  add_action("do_lookitem", "kan");
+  if (!wizardp(me))
+    add_action("discmds", ({
+      "sha", "drop", "attack", "duanlian", "ansuan", "touxi", "persuade", "teach", "exert",
+      "exercise", "study", "learn", "sleep", "kill", "steal", "cast", "conjure", "expell", "fight", "hit", "perform",
+      "prcatice", "scribe", "surrender", "qufeng", "guard", "sendto", "pretend"
+    }));
 }
 
-int do_fly(string arg)
-{
-    object me = this_player();
-    if(me->query_temp("doing_baitan"))
-    {
-	tell_object(me,"市场里还搞那么多小动作，小心保安揍你。\n");
-	return 1;
-    }
-    return 0;
-}
-
-int discmds(string arg)
-{
-    object me=this_player();
-    tell_object(me,"市场里还搞那么多小动作，小心保安揍你。\n");
+int do_fly(string arg) {
+  object me = this_player();
+  if (me->query_temp("doing_baitan")) {
+    tell_object(me, "市场里还搞那么多小动作，小心保安揍你。\n");
     return 1;
+  }
+  return 0;
 }
 
-int valid_leave(object me,string dir)
-{
-    int ret = ::valid_leave(me,dir);
-    if(ret>0 && me->query_temp("doing_baitan"))
-    {
-	me->delete_temp("doing_baitan");
-	message_vision(HIW"$N深深叹了一口气：唉！生意不好做啊！说完把东西放进麻包袋里摇摇头走了。\n"NOR,me);
+int discmds(string arg) {
+  object me = this_player();
+  tell_object(me, "市场里还搞那么多小动作，小心保安揍你。\n");
+  return 1;
+}
+
+int valid_leave(object me, string dir) {
+  int ret = ::valid_leave(me, dir);
+  if (ret > 0 && me->query_temp("doing_baitan")) {
+    me->delete_temp("doing_baitan");
+    message_vision(HIW "$N深深叹了一口气：唉！生意不好做啊！说完把东西放进麻包袋里摇摇头走了。\n" NOR, me);
+  }
+  return ret;
+}
+
+string calc_align_tabs(string txt) {
+  string tmp;
+  int j = strlen(txt) - color_len(txt);
+  if (j <= 8)
+    tmp = "\t\t\t\t\t\t";
+  else if (j <= 16)
+    tmp = "\t\t\t\t\t";
+  else if (j <= 24)
+    tmp = "\t\t\t\t";
+  else if (j <= 32)
+    tmp = "\t\t\t";
+  else if (j <= 40)
+    tmp = "\t\t";
+  else
+    tmp = "\t";
+  return tmp;
+}
+
+int query_goods_value(object obj) {
+  int value = obj->query("sell_price");
+  if (value == 0)
+    value = obj->query("value");
+  if (value == 0)
+    value = 1;
+  return value;
+}
+
+object query_goods(object seller, string goods) {
+  object obj, *objs;
+  int i;
+  string objid, objname;
+  objs = deep_inventory(seller);
+  for (i = 0; i < sizeof(objs); i++) {
+    obj = objs[i];
+    if (!objectp(obj))
+      continue;
+    if (obj->is_character())
+      continue;
+    if (obj->query("equipped") || obj->query("money_id"))
+      continue;
+    objid = obj->query("id");
+    objname = filter_color(obj->query("name"));
+    if (objid[0..2] == "my ")
+      continue;
+    if (objid == goods || objname == goods || obj->id(goods))
+      return obj;
+  }
+  return 0;
+}
+
+object query_seller(string seller) {
+  object usr, *users;
+  int i;
+  users = all_inventory(environment(this_player()));
+  for (i = 0; i < sizeof(users); i++) {
+    usr = users[i];
+    if (!usr->query_temp("doing_baitan"))
+      continue;
+    if (usr->id(seller) || usr->query("name") == seller)
+      return usr;
+    if (usr->id(seller))
+      return usr;
+  }
+  return 0;
+}
+
+int query_seller_amount() {
+  object usr, *users;
+  int i, total;
+  total = 0;
+  users = all_inventory(environment(this_player()));
+  for (i = 0; i < sizeof(users); i++) {
+    usr = users[i];
+    if (usr->query_temp("doing_baitan"))
+      total++;
+  }
+  return total;
+}
+
+int do_baitan(string arg) {
+  object me = this_player();
+  //    object seller;	//2017.3.7阿飞记录  服务器测试有问题，该值没有定义
+  string shop_name;
+  if (!wizardp(me)) {
+    tell_object(me, "摆摊功能已被巫师查封。\n");
+    return 1;
+  }
+  if (me->query_temp("doing_baitan")) {
+    tell_object(me, "你已经摆开摊位了。\n");
+    return 1;
+  }
+  if (query_seller_amount() > MAX_SELLER) {
+    tell_object(me, "你找来找去都没找到摊位，这里的小商贩太多了。\n");
+    return 1;
+  }
+  if (arg && (strlen(arg) - color_len(arg)) > 40) {
+    tell_object(me, "地摊描述太长了，只能20个汉字或40个字母。\n");
+    return 1;
+  }
+  if (arg)
+    shop_name = arg;
+  else
+    shop_name = HIG "杂货铺" NOR;
+  me->set_temp("doing_baitan", 1);
+  me->set_temp("shop_name", trans_color(shop_name) + NOR);
+  message_vision(HIW "$N在地上铺开一张破席子，又从麻袋里掏出一堆东西摆在席子上。\n" NOR, me);
+  return 1;
+}
+
+string value_string(int value) {
+  if (value < 1) value = 1;
+  else if (value < 100)
+    return chinese_number(value) + "文钱";
+  else if (value < 10000)
+    return chinese_number(value / 100) + "两白银"
+      +(value % 100 ? "又" + chinese_number(value % 100) + "文钱" : "");
+  else
+    return chinese_number(value / 10000) + "两黄金"
+      +((value % 10000) / 100 ? chinese_number((value % 10000) / 100) + "两白银" : "") + ((value % 10000) % 100 ? "又" + chinese_number((value % 10000) % 100) + "文钱" : "");
+}
+
+void list_sellers(object me) {
+  object usr, *users;
+  string tmp;
+  //    object seller;	//2017.3.7阿飞记录  服务器测试有问题，该值没有定义
+  int i;
+  users = all_inventory(environment(me));
+  tell_object(me, HIY "商家列表\n" NOR);
+  for (i = 0; i < sizeof(users); i++) {
+    usr = users[i];
+    if (usr->query_temp("doing_baitan")) {
+      tmp = sprintf(HIW "%s(%s)" NOR, usr->query("name"), usr->query("id"));
+      tell_object(me, tmp + calc_align_tabs(tmp) + usr->query_temp("shop_name") + "\n");
     }
-    return ret;
+  }
+  tell_object(me, HIY "------------------------------------------------------------\n" NOR);
 }
 
-string calc_align_tabs(string txt)
-{
-    string tmp;
-    int j = strlen(txt) - color_len(txt);
-    if(j<=8)
-	tmp="\t\t\t\t\t\t";
-    else if(j<=16)
-	tmp="\t\t\t\t\t";
-    else if(j<=24)
-	tmp="\t\t\t\t";
-    else if(j<=32)
-	tmp="\t\t\t";
-    else if(j<=40)
-	tmp="\t\t";
-    else
-	tmp="\t";
-    return tmp;
-}
+void list_goods(object me, object seller) {
+  object obj, *objs;
+  int i, amount, total, value;
+  string objid, objname, tmp;
+  mapping goods;
+  mapping counts;
+  string *names;
+  if (seller->query("id") == "shenmi xiaofan" && !wizardp(me) && !me->query_temp("xiaofan_ask_goods")) {
+    tell_object(me, seller->query("name") + "看了看你，又左右看了看，似乎欲言又止。\n");
+    return;
+  }
 
-int query_goods_value(object obj)
-{
-    int value = obj->query("sell_price");
-    if(value == 0)
-	value = obj->query("value");
-    if(value == 0)
-	value = 1;
-    return value;
-}
-
-object query_goods(object seller,string goods)
-{
-    object obj,*objs;
-    int i;
-    string objid,objname;
-    objs = deep_inventory(seller);
-    for(i=0;i<sizeof(objs);i++)
-    {
-	obj = objs[i];
-	if(!objectp(obj))
-	    continue;
-	if(obj->is_character())
-	    continue;
-	if(obj->query("equipped") || obj->query("money_id"))
-	    continue;
-	objid = obj->query("id");
-	objname = filter_color(obj->query("name"));
-	if(objid[0..2]=="my ")
-	    continue;
-	if(objid == goods || objname == goods || obj->id(goods))
-	    return obj;
+  objs = deep_inventory(seller);
+  total = 0;
+  goods = ([]);
+  counts = ([]);
+  for (i = 0; i < sizeof(objs); i++) {
+    obj = objs[i];
+    if (!objectp(obj))
+      continue;
+    if (obj->is_character())
+      continue;
+    if (obj->query("equipped") || obj->query("money_id"))
+      continue;
+    objid = obj->query("id");
+    objname = obj->query("name");
+    if (objid[0..2] == "my ")
+      continue;
+    tmp = sprintf("%s(%s)", filter_color(objname), objid);
+    if (undefinedp(goods[tmp])) {
+      goods += ([ tmp: obj ]);
+      counts += ([ tmp: 1 ]);
+    } else
+      counts[tmp] = counts[tmp] + 1;
+  }
+  total = sizeof(goods);
+  if (total == 0) {
+    tell_object(me, sprintf(HIY "%s的地摊上没有任何东西。\n" NOR, seller->query("name")));
+    tell_object(me, HIY "------------------------------------------------------------\n" NOR);
+  } else {
+    names = keys(goods);
+    tell_object(me, sprintf(HIY "%s的地摊上有这些东西：\n" NOR, seller->query("name")));
+    for (i = 0; i < sizeof(goods); i++) {
+      obj = goods[names[i]];
+      amount = counts[names[i]];
+      if (amount > 1) {
+        tmp = chinese_number(amount);
+        tmp += sprintf("%s%s(%s)", obj->query("unit"), obj->query("name"), obj->query("id"));
+      } else
+        tmp = sprintf("%s(%s)", obj->query("name"), obj->query("id"));
+      value = query_goods_value(obj);
+      tell_object(
+        me,
+        sprintf("%s%s" HIY "%s\n" NOR, tmp, calc_align_tabs(tmp), value_string(value))
+      );
     }
-    return 0;
+    tell_object(me, HIY "------------------------------------------------------------\n" NOR);
+  }
 }
 
-object query_seller(string seller)
-{
-    object usr,*users;
-    int i;
-    users = all_inventory(environment(this_player()));
-    for(i=0;i<sizeof(users);i++)
-    {
-	usr = users[i];
-	if(!usr->query_temp("doing_baitan"))
-	    continue;
-	if(usr->id(seller) || usr->query("name") == seller)
-	    return usr;
-	if(usr->id(seller))
-	    return usr;
-    }
-    return 0;
-}
-
-int query_seller_amount()
-{
-    object usr,*users;
-    int i,total;
+int do_list(string arg) {
+  object me = this_player();
+  object obj, *objs;
+  int i, total;
+  if (!arg) {
+    list_sellers(me);
+  } else if (arg == "all") {
+    objs = all_inventory(environment(me));
     total = 0;
-    users = all_inventory(environment(this_player()));
-    for(i=0;i<sizeof(users);i++)
-    {
-	usr = users[i];
-	if(usr->query_temp("doing_baitan"))
-	    total++;
+    for (i = 0; i < sizeof(objs); i++) {
+      obj = objs[i];
+      if (!objectp(obj) || !obj->query_temp("doing_baitan"))
+        continue;
+      if (obj == me)
+        continue;
+      list_goods(me, obj);
+      total++;
     }
-    return total;
+    if (total == 0)
+      tell_object(me, HIW "还没有人来这里摆摊。\n");
+  } else {
+    objs = all_inventory(environment(me));
+    for (i = 0; i < sizeof(objs); i++) {
+      obj = objs[i];
+      if (!objectp(obj) || !obj->query_temp("doing_baitan"))
+        continue;
+      if (obj->query("id") != arg && obj->query("name") != arg && !obj->id(arg))
+        continue;
+      list_goods(me, obj);
+      return 1;
+    }
+    tell_object(me, HIW "没有这个商家。\n");
+  }
+  return 1;
 }
 
-int do_baitan(string arg)
-{
-    object me=this_player();
-//    object seller;	//2017.3.7阿飞记录  服务器测试有问题，该值没有定义
-    string shop_name;
-	if (!wizardp(me))
-	{
-	tell_object(me,"摆摊功能已被巫师查封。\n");
-	return 1;
-    }	
-    if(me->query_temp("doing_baitan"))
-    {
-	tell_object(me,"你已经摆开摊位了。\n");
-	return 1;
-    }
-    if(query_seller_amount() > MAX_SELLER)
-    {
-	tell_object(me,"你找来找去都没找到摊位，这里的小商贩太多了。\n");
-	return 1;
-    }
-    if(arg && (strlen(arg)-color_len(arg))>40)
-    {
-	tell_object(me,"地摊描述太长了，只能20个汉字或40个字母。\n");
-	return 1;
-    }
-    if(arg)
-	shop_name = arg;
-    else
-	shop_name = HIG"杂货铺"NOR;
-    me->set_temp("doing_baitan",1);
-    me->set_temp("shop_name",trans_color(shop_name)+NOR);
-    message_vision(HIW"$N在地上铺开一张破席子，又从麻袋里掏出一堆东西摆在席子上。\n"NOR,me);
+int do_buy(string arg) {
+  string sellername, goodsname;
+  object seller, goods;
+  object *objs;
+  int i, nplayer;
+  int cost, money;
+  object me = this_player();
+  if (!wizardp(me)) {
+    tell_object(me, "摆摊功能已被巫师查封。\n");
     return 1;
-}
-
-string value_string(int value)
-{
-    if( value < 1 ) value = 1;
-    else    if( value < 100 )
-	return chinese_number(value) + "文钱";
-    else    if( value < 10000 )
-	return chinese_number(value/100) + "两白银"
-	+ (value%100? "又" + chinese_number(value%100) + "文钱": "");
-    else
-	return chinese_number(value/10000) + "两黄金"
-	+( (value%10000)/100 ? chinese_number((value%10000)/100) + "两白银" : "")
-	+( (value%10000)%100 ? "又" + chinese_number((value%10000)%100) + "文钱": "");
-}
-
-void list_sellers(object me)
-{
-    object usr,*users;
-    string tmp;
-//    object seller;	//2017.3.7阿飞记录  服务器测试有问题，该值没有定义
-    int i;
-    users = all_inventory(environment(me));
-    tell_object(me,HIY"商家列表\n"NOR);
-    for(i=0;i<sizeof(users);i++)
-    {
-	usr = users[i];
-	if(usr->query_temp("doing_baitan"))
-	{
-	    tmp=sprintf(HIW"%s(%s)"NOR,usr->query("name"),usr->query("id"));
-	    tell_object(me,tmp+calc_align_tabs(tmp)+usr->query_temp("shop_name")+"\n");
-	}
-    }
-    tell_object(me,HIY"------------------------------------------------------------\n"NOR);
-}
-
-void list_goods(object me,object seller)
-{
-    object obj,*objs;
-    int i,amount,total,value;
-    string objid,objname,tmp;
-    mapping goods;
-    mapping counts;
-    string *names;
-    if(seller->query("id")=="shenmi xiaofan" && !wizardp(me) && !me->query_temp("xiaofan_ask_goods"))
-    {
-	tell_object(me,seller->query("name")+"看了看你，又左右看了看，似乎欲言又止。\n");
-	return;
-    }
-
-    objs = deep_inventory(seller);
-    total = 0;
-    goods = ([]);
-    counts = ([]);
-    for(i=0;i<sizeof(objs);i++)
-    {
-	obj = objs[i];
-	if(!objectp(obj))
-	    continue;
-	if(obj->is_character())
-	    continue;
-	if(obj->query("equipped") || obj->query("money_id"))
-	    continue;
-	objid = obj->query("id");
-	objname = obj->query("name");
-	if(objid[0..2]=="my ")
-	    continue;
-	tmp=sprintf("%s(%s)",filter_color(objname),objid);
-	if(undefinedp(goods[tmp]))
-	{
-	    goods += ([tmp : obj]);
-	    counts += ([tmp : 1]);
-	}
-	else
-	    counts[tmp] = counts[tmp]+1;
-    }
-    total = sizeof(goods);
-    if(total==0)
-    {
-	tell_object(me,sprintf(HIY"%s的地摊上没有任何东西。\n"NOR,seller->query("name")));
-	tell_object(me,HIY"------------------------------------------------------------\n"NOR);
-    }
-    else
-    {
-	names = keys(goods);
-	tell_object(me,sprintf(HIY"%s的地摊上有这些东西：\n"NOR,seller->query("name")));
-	for(i=0;i<sizeof(goods);i++)
-	{
-	    obj=goods[names[i]];
-	    amount = counts[names[i]];
-	    if(amount>1)
-	    {
-		tmp = chinese_number(amount);
-		tmp += sprintf("%s%s(%s)",obj->query("unit"),obj->query("name"),obj->query("id"));
-	    }
-	    else
-		tmp = sprintf("%s(%s)",obj->query("name"),obj->query("id"));
-	    value = query_goods_value(obj);
-	    tell_object(me,sprintf("%s%s"HIY"%s\n"NOR,tmp,calc_align_tabs(tmp),value_string(value)));
-	}
-	tell_object(me,HIY"------------------------------------------------------------\n"NOR);
-    }
-}
-
-int do_list(string arg)
-{
-    object me = this_player();
-    object obj,*objs;
-    int i,total;
-    if(!arg)
-    {
-	list_sellers(me);
-    }
-    else if(arg == "all")
-    {
-	objs = all_inventory(environment(me));
-	total=0;
-	for(i=0;i<sizeof(objs);i++)
-	{
-	    obj = objs[i];
-	    if(!objectp(obj) || !obj->query_temp("doing_baitan"))
-		continue;
-	    if(obj == me)
-		continue;
-	    list_goods(me,obj);
-	    total++;
-	}
-	if(total == 0)
-	    tell_object(me,HIW"还没有人来这里摆摊。\n");
-    }
-    else
-    {
-	objs = all_inventory(environment(me));
-	for(i=0;i<sizeof(objs);i++)
-	{
-	    obj = objs[i];
-	    if(!objectp(obj) || !obj->query_temp("doing_baitan"))
-		continue;
-	    if(obj->query("id") != arg && obj->query("name") != arg && !obj->id(arg))
-		continue;
-	    list_goods(me,obj);
-	    return 1;
-	}
-	tell_object(me,HIW"没有这个商家。\n");
-    }
+  }
+  if (!arg || (sscanf(arg, "%s 买 %s", sellername, goodsname) != 2 &&
+    sscanf(arg, "%s mai %s", sellername, goodsname) != 2 &&
+    sscanf(arg, "%s from %s", goodsname, sellername) != 2)) {
+    tell_object(me, HIY "命令格式：\n" NOR);
+    tell_object(me, HIW "从 <摊主中文或英文名> 买 <商品中文或英文名>\n" NOR);
+    tell_object(me, HIW "cong <摊主中文或英文名> mai <商品中文或英文名>\n" NOR);
+    tell_object(me, HIW "buy <商品中文或英文名> from <摊主中文或英文名>\n" NOR);
     return 1;
-}
-
-int do_buy(string arg)
-{
-    string sellername,goodsname;
-    object seller,goods;
-    object *objs;
-    int i,nplayer;
-    int cost,money;
-    object me = this_player();
-	if (!wizardp(me))
-	{
-	tell_object(me,"摆摊功能已被巫师查封。\n");
-	return 1;
-    }
-    if(!arg || (sscanf(arg,"%s 买 %s",sellername,goodsname) != 2 &&
-	sscanf(arg,"%s mai %s",sellername,goodsname) != 2 &&
-	sscanf(arg,"%s from %s",goodsname,sellername) != 2 ))
-    {
-	tell_object(me,HIY"命令格式：\n"NOR);
-	tell_object(me,HIW"从 <摊主中文或英文名> 买 <商品中文或英文名>\n"NOR);
-	tell_object(me,HIW"cong <摊主中文或英文名> mai <商品中文或英文名>\n"NOR);
-	tell_object(me,HIW"buy <商品中文或英文名> from <摊主中文或英文名>\n"NOR);
-	return 1;
-    }
-    seller = query_seller(sellername);
-    if(!seller)
-    {
-	tell_object(me,"这里没有这个摊主。\n");
-	return 1;
-    }
-    if(seller == me)
-    {
-	tell_object(me,"买自己卖的东西？\n");
-	return 1;
-    }
-    if(seller->query("id")=="shenmi xiaofan" && !wizardp(me))
-    {
-        if(me->query("lixian/biguan"))
-            return 1;
-        if(!me->query_temp("xiaofan_ask_goods"))
-        {
-            tell_object(me,seller->query("name")+"看了看你，又左右看了看，似乎欲言又止。\n");
-            return 1;
-        }
-        if(seller->query("last_buy_ip") == query_ip_number(me)  && (time()-seller->query("last_update_time")) < 300)
-        {
-            objs = all_inventory(environment(me));
-            nplayer=0;
-            for(i=0;i<sizeof(objs);i++)
-            {
-                if(playerp(objs[i]) && !wizardp(objs[i]))
-                    nplayer++;
-            }
-            if(nplayer>1)
-            {
-                tell_object(me,"给别人留个机会吧。");
-                return 1;
-            }
-        }
-    }
-
-    goods = query_goods(seller,goodsname);
-    if(!goods)
-    {
-	tell_object(me,seller->query("name")+"的摊位上没有这个东西卖。\n");
-	return 1;
-    }
-    cost = query_goods_value(goods);
-    if(!me->can_afford(cost))
-    {
-	tell_object(me,"你的银行存款不够。\n");
-	return 1;
-    }
-    me->pay_money(cost);
-    if(playerp(seller))
-    {
-	money = seller->query("money");
-	money += cost;
-	while(money >= 100000000)
-	{
-	    money -= 100000000;
-	    seller->add("more_money",1);
-	}
-	seller->set("money",money);
-    }
-    if(mapp(goods->query("bind_master_level")))
-    {
-	goods->delete("bind_master_level");
-	goods->set("bind_master_level/"+me->query("id"),2);
-    }
-    goods->move(me);
-    message_vision(sprintf("$N花了%s从$n的地摊上买走了一%s%s。\n",
-	value_string(cost),goods->query("unit"),goods->query("name")),me,seller);
-    if(seller->query("id")=="shenmi xiaofan" && !wizardp(me))
-    {
-        seller->set("last_buy_ip",query_ip_number(me));
-    }
+  }
+  seller = query_seller(sellername);
+  if (!seller) {
+    tell_object(me, "这里没有这个摊主。\n");
     return 1;
-}
-
-int do_dingjia(string arg)
-{
-    string goodsname,unit;
-    object goods;
-//    int n;	//2017.3.7阿飞记录  服务器测试有问题，该值没有定义
-	int price=0;
-    object me = this_player();
-    if(arg)
-    {
-	if(sscanf(arg,"%s as %d %s",goodsname,price,unit)==3)
-	{
-	    if(unit == "coin")
-	    {
-	    }
-	    else if(unit == "silver")
-	    {
-		price = price * 100;
-	    }
-	    else if(unit == "gold")
-	    {
-		price = price * 10000;
-	    }
-	    else
-		price = 0;
-	}
-	else
-	    price = 0;
-    }
-    if(price==0)
-    {
-	tell_object(me,HIY"命令格式：\n"NOR);
-	tell_object(me,HIW"        dingjia <物品中文或英文名> as <数字> coin\n"NOR);
-	tell_object(me,HIW"        dingjia <物品中文或英文名> as <数字> silver\n"NOR);
-	tell_object(me,HIW"        dingjia <物品中文或英文名> as <数字> gold\n"NOR);
-	return 1;
-    }
-    if(!objectp(goods=query_goods(me,goodsname)))
-    {
-	tell_object(me,"不能给这个物品定价，原因可能是：你身上没有这个物品，\n");
-	tell_object(me,"或者物品是自练装备，或者你正穿/装备着该物品，或者它是个活物。\n");
-	return 1;
-    }
-    if(price>MAX_GOODS_VALUE)
-    {
-	tell_object(me,"市场管理部最近正在严打哄抬物价的摊贩，你还是收敛点吧，定价别超过二十万黄金。\n");
-	return 1;
-    }
-    goods->set("sell_price",price);
-    tell_object(me,"你把"+goods->query("name")+"的价格定为"+value_string(price)+"\n");
+  }
+  if (seller == me) {
+    tell_object(me, "买自己卖的东西？\n");
     return 1;
-}
+  }
+  if (seller->query("id") == "shenmi xiaofan" && !wizardp(me)) {
+    if (me->query("lixian/biguan"))
+      return 1;
+    if (!me->query_temp("xiaofan_ask_goods")) {
+      tell_object(me, seller->query("name") + "看了看你，又左右看了看，似乎欲言又止。\n");
+      return 1;
+    }
+    if (seller->query("last_buy_ip") == query_ip_number(me) && (time() - seller->query("last_update_time")) < 300) {
+      objs = all_inventory(environment(me));
+      nplayer = 0;
+      for (i = 0; i < sizeof(objs); i++) {
+        if (playerp(objs[i]) && !wizardp(objs[i]))
+          nplayer++;
+      }
+      if (nplayer > 1) {
+        tell_object(me, "给别人留个机会吧。");
+        return 1;
+      }
+    }
+  }
 
-int do_lookitem(string arg)
-{
-    string sellername,goodsname;
-    object seller,goods;
-    object me = this_player();
-    if(!arg || (sscanf(arg,"%s 的 %s",sellername,goodsname) != 2 &&
-	sscanf(arg,"%s de %s",sellername,goodsname) != 2 &&
-	sscanf(arg,"%s from %s",goodsname,sellername) != 2 ))
-    {
-	tell_object(me,HIY"命令格式：\n"NOR);
-	tell_object(me,HIW"看 <摊主中文或英文名> 的 <商品中文或英文名>\n"NOR);
-	tell_object(me,HIW"kan <摊主中文或英文名> de <商品中文或英文名>\n"NOR);
-	tell_object(me,HIW"lookitem <商品中文或英文名> in <摊主中文或英文名>\n"NOR);
-	return 1;
-    }
-    seller = query_seller(sellername);
-    if(!seller)
-    {
-	tell_object(me,"这里没有这个摊主。\n");
-	return 1;
-    }
-    if(seller->query("id")=="shenmi xiaofan" && !wizardp(me) && !me->query_temp("xiaofan_ask_goods"))
-    {
-	tell_object(me,seller->query("name")+"看了看你，又左右看了看，似乎欲言又止。\n");
-	return 1;
-    }
-    goods = query_goods(seller,goodsname);
-    if(!goods)
-    {
-	tell_object(me,seller->query("name")+"的摊位上没有这个东西卖。\n");
-	return 1;
-    }
-    "/cmds/std/look"->look_item(me,goods);
+  goods = query_goods(seller, goodsname);
+  if (!goods) {
+    tell_object(me, seller->query("name") + "的摊位上没有这个东西卖。\n");
     return 1;
+  }
+  cost = query_goods_value(goods);
+  if (!me->can_afford(cost)) {
+    tell_object(me, "你的银行存款不够。\n");
+    return 1;
+  }
+  me->pay_money(cost);
+  if (playerp(seller)) {
+    money = seller->query("money");
+    money += cost;
+    while (money >= 100000000) {
+      money -= 100000000;
+      seller->add("more_money", 1);
+    }
+    seller->set("money", money);
+  }
+  if (mapp(goods->query("bind_master_level"))) {
+    goods->delete("bind_master_level");
+    goods->set("bind_master_level/" + me->query("id"), 2);
+  }
+  goods->move(me);
+  message_vision(sprintf("$N花了%s从$n的地摊上买走了一%s%s。\n",
+    value_string(cost), goods->query("unit"), goods->query("name")), me, seller);
+  if (seller->query("id") == "shenmi xiaofan" && !wizardp(me)) {
+    seller->set("last_buy_ip", query_ip_number(me));
+  }
+  return 1;
 }
 
+int do_dingjia(string arg) {
+  string goodsname, unit;
+  object goods;
+  //    int n;	//2017.3.7阿飞记录  服务器测试有问题，该值没有定义
+  int price = 0;
+  object me = this_player();
+  if (arg) {
+    if (sscanf(arg, "%s as %d %s", goodsname, price, unit) == 3) {
+      if (unit == "coin") {} else if (unit == "silver") {
+        price = price * 100;
+      } else if (unit == "gold") {
+        price = price * 10000;
+      } else
+        price = 0;
+    } else
+      price = 0;
+  }
+  if (price == 0) {
+    tell_object(me, HIY "命令格式：\n" NOR);
+    tell_object(me, HIW "        dingjia <物品中文或英文名> as <数字> coin\n" NOR);
+    tell_object(me, HIW "        dingjia <物品中文或英文名> as <数字> silver\n" NOR);
+    tell_object(me, HIW "        dingjia <物品中文或英文名> as <数字> gold\n" NOR);
+    return 1;
+  }
+  if (!objectp(goods = query_goods(me, goodsname))) {
+    tell_object(me, "不能给这个物品定价，原因可能是：你身上没有这个物品，\n");
+    tell_object(me, "或者物品是自练装备，或者你正穿/装备着该物品，或者它是个活物。\n");
+    return 1;
+  }
+  if (price > MAX_GOODS_VALUE) {
+    tell_object(me, "市场管理部最近正在严打哄抬物价的摊贩，你还是收敛点吧，定价别超过二十万黄金。\n");
+    return 1;
+  }
+  goods->set("sell_price", price);
+  tell_object(me, "你把" + goods->query("name") + "的价格定为" + value_string(price) + "\n");
+  return 1;
+}
+
+int do_lookitem(string arg) {
+  string sellername, goodsname;
+  object seller, goods;
+  object me = this_player();
+  if (!arg || (sscanf(arg, "%s 的 %s", sellername, goodsname) != 2 &&
+    sscanf(arg, "%s de %s", sellername, goodsname) != 2 &&
+    sscanf(arg, "%s from %s", goodsname, sellername) != 2)) {
+    tell_object(me, HIY "命令格式：\n" NOR);
+    tell_object(me, HIW "看 <摊主中文或英文名> 的 <商品中文或英文名>\n" NOR);
+    tell_object(me, HIW "kan <摊主中文或英文名> de <商品中文或英文名>\n" NOR);
+    tell_object(me, HIW "lookitem <商品中文或英文名> in <摊主中文或英文名>\n" NOR);
+    return 1;
+  }
+  seller = query_seller(sellername);
+  if (!seller) {
+    tell_object(me, "这里没有这个摊主。\n");
+    return 1;
+  }
+  if (seller->query("id") == "shenmi xiaofan" && !wizardp(me) && !me->query_temp("xiaofan_ask_goods")) {
+    tell_object(me, seller->query("name") + "看了看你，又左右看了看，似乎欲言又止。\n");
+    return 1;
+  }
+  goods = query_goods(seller, goodsname);
+  if (!goods) {
+    tell_object(me, seller->query("name") + "的摊位上没有这个东西卖。\n");
+    return 1;
+  }
+  "/cmds/std/look"->look_item(me, goods);
+  return 1;
+}
