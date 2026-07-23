@@ -364,3 +364,74 @@ are the documented categories above (dead network daemons, individual
 wizards' personal-workspace content bugs, the 2-file missing
 FORK/FACE weapon/armor-type gap) — none on the boot or registration
 path.
+
+## Rebuilt-driver / formatter / WASM re-verification pass (2026-07-23)
+
+1. **LPC formatter** applied across all 5,786 `.lpc` files in `work/`:
+   `{"total":5786,"written":5732,"wouldChange":0,"unchanged":36,
+   "errors":18}`.
+   **Found and fixed a genuine formatter bug, surfaced only by this
+   lib's `obj/user/user.lpc`**: the formatter mis-tokenizes
+   `copy(::query_skills())` — a `::`-prefixed (explicit-efun-override)
+   call immediately following an opening `(` with no space — as the
+   start of a `(: ... :)` closure literal. It rewrote
+   `return copy(::query_skills());` into the syntactically broken
+   `return copy (: : query_skills()\n);`, which failed to compile
+   (`syntax error, unexpected L_FUNCTION_OPEN`) the first time any
+   connected player's client called `query_skills()` (e.g. the `skills`
+   command). **Fixed by hand-restoring the original
+   `copy(::query_skills());` call** (confirmed via `git diff` against
+   the pre-format version — no other change needed to this function).
+   Re-verified via `lpcc_check.sh` (whole-lib batch compile): pass count
+   unchanged at 5,735/51 fail, `obj/user/user.lpc` not in the failure
+   list. The exact same `::fn()`-immediately-after-`(` pattern was found
+   and fixed in **3 other libs this same pass** —
+   `d/changan/chengxf.lpc`'s `if(::valid_leave(me,dir))` in this lib
+   itself (a second, independent hit), plus `shujian2008`/
+   `shujiantianxia`'s `cmds/leitai/npc_leitai.lpc` +
+   `d/tanggu/npc/npc_leitai.lpc` (`if(::move(dest,silently))`) and
+   `suiyuanxijianlu`'s `adm/object/bm.lpc`
+   (`capitalize(::query("id"))`) — see those libs' own NOTES.md. All
+   confirmed via `git diff` to be the identical `(: :` corruption
+   signature, all hand-fixed and re-verified via `lpcc_check.sh` with no
+   pass-count regression. **Worth flagging back to the formatter's own
+   maintainers/AGENTS.md as a new bug class** (not something to
+   rediscover per-lib): `X(::fn(...))` with zero whitespace between `(`
+   and `::` is mis-lexed as a closure open.
+2. **Native re-test against the rebuilt `build-debug/src/driver`**, after
+   the fix above: booted clean (zero fatal errors). Full registration
+   verified end-to-end via `mudclient.py`: id `txfmtb` → confirm →
+   real Chinese name **`秦风三十一`** → password ×2 → gender `f` →
+   attribute allocation (`0`/random) → confirm `y` → entered the game
+   world at 松竹小院, greeted by 小书童 same as the original pass,
+   `look` displayed the room, **`skills`** (exercises the just-fixed
+   `query_skills()` — "你目前并没有学会任何技能", no crash) — `score` and
+   `quit` also produced correct real output. `debug.log`: zero `error in
+   error handler`/`denied`/`undefined function`/`bad argument`/`syntax
+   error` lines. Also re-confirmed the driver's own 30-second startup
+   grace period is still in effect (`uptime() < 30` in `logind.lpc`) —
+   not a bug, just needs the test to wait, same as the original pass.
+3. **WASM test**: boots cleanly through `Initializations complete`
+   (only the expected caught missing-sockets/db-package preload errors
+   for `ftpd`/`smtp_d`/`databased`, each wrapped in `master.lpc`'s own
+   `preload()` `CATCH()`). **Could not get past this lib's own
+   30-second startup grace period within `scripts/wasm_client.js`'s
+   harness model**: the harness calls `fluffos_connect()` (which
+   immediately invokes `logon()`, and thus the `uptime() < 30` check)
+   right after boot/preload completes, *before* any `--idle`-paced
+   `--send` line is dispatched — so no amount of `--idle`/`--timeout`
+   tuning delays the connect itself, only the pacing of sends after it
+   (tried up to `--idle 33` explicitly, no effect: the "《天下》Beta正在
+   启动过程中" gate message is emitted as part of the very first output
+   burst, before any input reaches the server). **This is not a wasm
+   driver limitation or a mudlib bug** — the grace period is intentional
+   mudlib behavior that the native test above waits out fine between
+   separate shell commands — it's a harness/mudlib timing interaction
+   specific to this one-shot wasm smoke-test tool's immediate-connect
+   design. Did not force it further (e.g. by padding preload with
+   artificial delay) per the task's "honest assessment over forcing a
+   full playthrough" guidance. **Assessment**: boots cleanly under wasm;
+   this specific harness invocation cannot exercise the login flow for
+   this lib due to a startup-grace-period/connect-timing collision, not
+   because of a real wasm incompatibility (query_ip_number() was never
+   even reached to test).
