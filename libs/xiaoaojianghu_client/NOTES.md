@@ -526,3 +526,52 @@ the standard post-conversion `file -b` sweep beyond one false positive
 (`d/emei/shenshuige.lpc`, a normal, fully-valid UTF-8 room file that `file`
 misclassifies as "data" for unrelated heuristic reasons — confirmed by a
 full Python UTF-8 decode, not a real encoding problem).
+
+## Driver rebuild / formatter / WASM pass (2026-07-23)
+
+- **LPC formatter** run over all `work/*.lpc`: 11,413 total, 11,324
+  written, 35 already-idempotent, 54 refused (self-check errors,
+  expected on messy legacy code). One formatter regression found and
+  fixed (same bug class as found live-breaking a sibling lib this pass):
+  `clone/misc/board.lpc`'s `short()` had
+  `return ::name(1) + "(" + capitalize(::query("id")) + ")";` mangled
+  into `capitalize (: : query("id")\n)\n+ ")"` — the formatter corrupts
+  the `::methodname(...)` parent-call scope operator when immediately
+  followed by `(`. Fixed by hand-restoring the original single-line
+  form. (A second, unrelated `: :` match in `d/migong/12gong/renma.lpc`
+  turned out to be ASCII-art map content inside a string/comment block,
+  not code — left untouched.)
+- **Native retest against the freshly-rebuilt driver**: clean boot, zero
+  fatal/syntax errors. Full registration flow (client-version gate
+  `2060` → `new` → id → confirm → real Chinese name → admin password ×2
+  → real password ×2 → gift roll → email → gender) plus post-login
+  commands re-verified in one continuous connection (id `qinchuanc`,
+  real Chinese name `秦川岭`, gender `m`): entered the game world (this
+  run landed at 北疆小镇/a Xinjiang-themed town rather than the 客店/inn
+  from the prior pass's run — expected variance from the gift/race
+  roll, not a bug), `look` showed real room + NPC content, the
+  character sheet displayed correctly, `quit` disconnected cleanly with
+  "欢迎下次再来！". Zero runtime errors in `debug.log`.
+- **WASM test**: boots clean (only the expected non-fatal preload
+  warnings). Found a genuine, reproducible **WASM-harness/mudlib timing
+  gotcha, not a mudlib bug**: `adm/daemons/logind.lpc`'s `logon()` has
+  `if (uptime() < 10) { write("游戏服务器正在启动过程中，请稍等10秒后再
+  连线。\n"); destruct(ob); return; }` — a deliberate 10-second post-boot
+  grace period, present in the original archive, that natively is a
+  non-issue (the real-world overhead of spawning the driver process,
+  `ss` port-checking, and starting a Python client naturally exceeds 10
+  seconds by the time a real connection attempt lands). Under
+  `wasm_client.js`, `fluffos_connect()` is called synchronously
+  immediately after `fluffos_boot()` returns, with no equivalent
+  real-world gap — so every WASM test attempt hits this gate
+  deterministically and the connection is destructed before the
+  English-name prompt is ever reached. Confirmed this isn't recoverable
+  by waiting longer via `--send`/`--idle` after connecting (the
+  `uptime()` check runs once, at `logon()` time, which is effectively
+  t≈0 in the WASM harness's clock) — the harness would need to delay the
+  `fluffos_connect()` call itself by 10+ simulated seconds, which its
+  current CLI surface doesn't expose. **Not patched** — modifying the
+  shared harness is out of this pass's scope, and the mudlib's own
+  10-second gate is intentional, pre-existing design, not a bug.
+  Documenting as a known WASM-testing limitation distinct from the
+  `query_ip_number()` one.
