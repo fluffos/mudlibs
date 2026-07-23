@@ -499,3 +499,30 @@ python3 ../../scripts/mudclient.py 127.0.0.1 40078 --timeout 40 --idle 1 \
   --send "<email>" --send "m" --send "y" --send "look" --send "score" \
   --send "quit"
 ```
+
+## Driver-rebuild retest + LPC reformat + WASM pass (this session)
+
+- **LPC formatter applied** (`tools/lpc-syntax`, all `work/*.lpc`):
+  4,988 files total, 4,573 already-idempotent from an earlier partial
+  run in this same pass (interrupted by an overall time budget) plus
+  411 freshly reformatted this run, 4 refused (self-check failures,
+  expected). Confirmed the earlier `printf("%O\n", ob);` removal in
+  `adm/daemons/logind.lpc` and the `tell_room()` §15s fix in
+  `adm/simul_efun/message.lpc` both survived reformatting intact.
+- **Native re-test against the freshly rebuilt driver**
+  (`~/src/fluffos/build-debug/src/driver`, rebuilt from latest upstream
+  master): boots clean, zero `FATAL`/`SIGSEGV`/`执行时段错误` in
+  `debug.log`. Full registration verified with real Chinese name
+  **秦风复来** (male, id `qretfive`), reaching the actual starting room
+  (南城客栈), `look`/`score`/`quit` all producing correct output.
+- **WASM build tested** (`~/src/fluffos/build-wasm/src` via
+  `scripts/wasm_client.js`): boots cleanly (only expected non-fatal
+  preload warnings). **Full registration + login succeeded end-to-end
+  under WASM too** — real Chinese name **秦风网五** (id `qfwfour`),
+  through the full gb/age-gate/id/name/password/email/gender/
+  gift-accept chain, landed in the real starting room (南城客栈), `look`
+  rendered the actual room, `quit` disconnected cleanly. This lib's
+  registration/login path does not gate on `query_ip_number()`'s
+  format, so it is **not** affected by the documented WASM IP-format
+  limitation — a genuinely clean, complete WASM result, matching its
+  close sibling `xiyouji`'s outcome.
