@@ -110,3 +110,29 @@ range check to test the CJK Unicode block instead, and halved the
 GBK-byte-calibrated length bounds in `check_legal_name` to match. See
 AGENTS.md §15h for the full writeup; confirmed via a real interactive
 registration test (Chinese surname + given name reaching the next prompt).
+
+## Re-verification pass: driver rebuild + formatter + WASM (2026-07-23)
+
+- **LPC formatter**: ran `format-corpus.mjs` across all 854 `.lpc` files
+  under `work/` — all reformatted cleanly except 2 refused on the
+  token-mismatch safety gate (`adm/obj/simul_efun.lpc`,
+  `adm/simul_efun/system.lpc`), expected/fine per the formatter's own
+  self-check contract, not investigated further.
+- **Native retest against the freshly-rebuilt driver**: booted clean,
+  zero fatal errors. Ran a full interactive registration with a real
+  English id (`qflibtest`, this lib's login uses an English id + a
+  separate Chinese display name `秦风`) through name/password/email/
+  attribute-allocation/gender, reached the actual game world (梦旅馆大厅),
+  and confirmed `look`/`score`/`quit` all produced correct, real output
+  (score sheet shows the chosen 10/10/10/10/10/10 attribute split; quit
+  exits cleanly). No regressions from the reformat or the driver rebuild.
+- **WASM build test** (`scripts/wasm_client.js`): **fully playable**.
+  Boots cleanly under WASM, and the complete registration flow (id →
+  confirm → Chinese name → password ×2 → email → attributes → gender)
+  works end-to-end exactly like native, reaching the same starting room
+  with `look` producing correct output and `quit` exiting cleanly. This
+  lib does not gate login on `query_ip_number()` or on any other
+  WASM-restricted efun (its two `resolve()` call sites are in
+  `ftpd.lpc`/`dns_master.lpc`, both optional network daemons never
+  invoked during normal login) — no WASM-specific limitation applies
+  here. Status: **fully playable under WASM**.

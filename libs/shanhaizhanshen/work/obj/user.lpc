@@ -14,180 +14,167 @@ nosave object my_link;
 nosave int last_age_set;
 nosave string last_cmd;
 
-void create()
-{
-	::create();
-	set_name("使用者物件", ({ "user object", "user", "object" }) );
+void create() {
+  ::create();
+  set_name("使用者物件", ({ "user object", "user", "object" }));
 
-// Let LOGIN_D export proper uid to us.
-	seteuid(0);
+  // Let LOGIN_D export proper uid to us.
+  seteuid(0);
 }
 
-int move_or_destruct( object dest )
-{
-	if( dest ) move(dest);
-	else {
-		message("system", "一阵轻风吹来，你的身体化为缕缕轻烟随风而去....\n", this_object());
-		set_temp("last_location", base_name(environment()));
-		move(VOID_OB);
-	}
+int move_or_destruct(object dest) {
+  if (dest) move(dest);
+  else {
+    message("system", "一阵轻风吹来，你的身体化为缕缕轻烟随风而去....\n", this_object());
+    set_temp("last_location", base_name(environment()));
+    move(VOID_OB);
+  }
 }
 
-void terminal_type(string term_type)
-{
-	set_temp("terminal_type", term_type);
-	message("system", "终端机形态设定为 " + term_type + ".\n", this_object());
+void terminal_type(string term_type) {
+  set_temp("terminal_type", term_type);
+  message("system", "终端机形态设定为 " + term_type + ".\n", this_object());
 }
 
-int set_link(object link)
-{
-	if( origin()==ORIGIN_CALL_OTHER
-	&&	(geteuid(previous_object()) != ROOT_UID)
-	&&	(geteuid(previous_object()) != geteuid(this_object())) )
-		return 0;
-	my_link = link;
-	return 1;
+int set_link(object link) {
+  if (origin() == ORIGIN_CALL_OTHER
+    && (geteuid(previous_object()) != ROOT_UID)
+    && (geteuid(previous_object()) != geteuid(this_object())))
+    return 0;
+  my_link = link;
+  return 1;
 }
 
-object link() {	return my_link; }
+object link() { return my_link; }
 
-void reset()
-{
-	// To prevent the master copy of user object error out by security
-	// violation.
-	if( !userp(this_object()) ) return;
+void reset() {
+  // To prevent the master copy of user object error out by security
+  // violation.
+  if (!userp(this_object())) return;
 }
 
 // This is used by F_SAVE to determine the filename to save our data.
-string query_save_file()
-{
-	string id;
+string query_save_file() {
+  string id;
 
-	id = geteuid();
-	if( !id ) id = getuid();
-	if( !stringp(id) ) return 0;
-	return sprintf(DATA_DIR "user/%c/%s", id[0], id);
+  id = geteuid();
+  if (!id) id = getuid();
+  if (!stringp(id)) return 0;
+  return sprintf(DATA_DIR "user/%c/%s", id[0], id);
 }
 
-int save()
-{
-	int res;
+int save() {
+  int res;
 
-	if( objectp(my_link) ) my_link->save();
-	save_autoload();
-	res = ::save();
-	clean_up_autoload();		// To save memory
-	return res;
+  if (objectp(my_link)) my_link->save();
+  save_autoload();
+  res = ::save();
+  clean_up_autoload();  // To save memory
+  return res;
 }
 
 // This function updates player's age, called by heart_beat()
-void heart_beat()
-{
-	::heart_beat();
-	if( !this_object() ) return;
+void heart_beat() {
+  ::heart_beat();
+  if (!this_object()) return;
 
-// Make us older. Note this should not rely on fixed period between
-// each call to heart_beat bcz heart_beat could be stoped for various
-// reason.                                           - Annihilator
+  // Make us older. Note this should not rely on fixed period between
+  // each call to heart_beat bcz heart_beat could be stoped for various
+  // reason.                                           - Annihilator
 
-	if( !last_age_set ) last_age_set = time();
-	add("mud_age", time() - last_age_set);
-	last_age_set = time();
-	set("age", 14 + (int)query("age_modify") + ((int)query("mud_age") / 86400)
-		+ ( (int)query("combat_exp") / 86400 )
-		+ ( (int)query("knowledge") /86400 ) );
+  if (!last_age_set) last_age_set = time();
+  add("mud_age", time() - last_age_set);
+  last_age_set = time();
+  set("age", 14 + (int)query("age_modify") + ((int)query("mud_age") / 86400)
+    +((int)query("combat_exp") / 86400)
+    +((int)query("knowledge") / 86400));
 
-	seteuid( getuid() );
-	if( objectp(my_link) ) my_link->update_age();
+  seteuid(getuid());
+  if (objectp(my_link)) my_link->update_age();
 
-	if( interactive(this_object())
-	&&	query_idle(this_object()) >= IDLE_TIMEOUT )
-		user_dump(DUMP_IDLE);
+  if (interactive(this_object())
+    && query_idle(this_object()) >= IDLE_TIMEOUT)
+    user_dump(DUMP_IDLE);
 }
 
-void setup()
-{
-// We want set age first before new player got initialized with
-// random age.
-//	update_age();
+void setup() {
+  // We want set age first before new player got initialized with
+  // random age.
+  //	update_age();
 
-	::setup();
-	restore_autoload();
+  ::setup();
+  restore_autoload();
 }
 
-private void user_dump(int type)
-{
-	if( wizardp( this_object() ) ) return;
+private void user_dump(int type) {
+  if (wizardp(this_object())) return;
 
-	switch(type) {
-		case DUMP_NET_DEAD:
-			tell_room( environment(), query("name") + "断线超过 "
-				+ NET_DEAD_TIMEOUT/60 + " 分钟，离开了这个世界。\n");
-			command("quit");
-			break;
-		case DUMP_IDLE:
-			if( wizardp( this_object() ) ) return;
-			tell_object( this_object(), "对不起，您已经发呆超过 " 
-				+ IDLE_TIMEOUT/60 + " 分钟了，欢迎您下次再来。\n");
-			tell_room( environment(), "地面突然裂开一个黑黑的洞" + query("name")
-				+ "惨叫着掉了下去。\n", ({this_object()}));
-			command("quit");
-			break;
-		default: return;
-	}
+  switch (type) {
+    case DUMP_NET_DEAD:
+      tell_room(environment(), query("name") + "断线超过 "
+        +NET_DEAD_TIMEOUT / 60 + " 分钟，离开了这个世界。\n");
+      command("quit");
+      break;
+    case DUMP_IDLE:
+      if (wizardp(this_object())) return;
+      tell_object(this_object(), "对不起，您已经发呆超过 "
+        +IDLE_TIMEOUT / 60 + " 分钟了，欢迎您下次再来。\n");
+      tell_room(environment(), "地面突然裂开一个黑黑的洞" + query("name")
+        + "惨叫着掉了下去。\n", ({ this_object() }));
+      command("quit");
+      break;
+    default: return;
+  }
 }
 
 // net_dead: called by MudOS when an interactive player loses
 // hir network connection to the mud.
-private void net_dead()
-{
-	object link_ob;
+private void net_dead() {
+  object link_ob;
 
-	set_heart_beat(0);
+  set_heart_beat(0);
 
-	if( objectp(my_link) ) {
-		my_link->save();
-		destruct(my_link);
-	}
+  if (objectp(my_link)) {
+    my_link->save();
+    destruct(my_link);
+  }
 
-//	if( objectp(link_ob = query_temp("link_ob")) )
-//		destruct(link_ob);
+  //	if( objectp(link_ob = query_temp("link_ob")) )
+  //		destruct(link_ob);
 
-// Stop fighting, we'll be back soon.
-	remove_all_enemy();
+  // Stop fighting, we'll be back soon.
+  remove_all_enemy();
 
-	set_temp("netdead", 1);
+  set_temp("netdead", 1);
 
-	if( environment() )
-		set_temp("last_location", base_name(environment()) );
-	call_out("move", 0, VOID_OB, 1);
-	set_heart_beat(0);
+  if (environment())
+    set_temp("last_location", base_name(environment()));
+  call_out("move", 0, VOID_OB, 1);
+  set_heart_beat(0);
 
-	if( userp(this_object()) ) {
-		call_out("user_dump", NET_DEAD_TIMEOUT, DUMP_NET_DEAD);
-		tell_room(environment(), query("name") + "断线了。\n", this_object());
-	    CHANNEL_D->do_channel(this_object(), "sys", HIB "断线了。");
-	} else {
-		command("quit");
-	}
+  if (userp(this_object())) {
+    call_out("user_dump", NET_DEAD_TIMEOUT, DUMP_NET_DEAD);
+    tell_room(environment(), query("name") + "断线了。\n", this_object());
+    CHANNEL_D->do_channel(this_object(), "sys", HIB "断线了。");
+  } else {
+    command("quit");
+  }
 }
 
 // reconnect: called by the LOGIN_D when a netdead player reconnects.
-void reconnect()
-{
-	string last_loc;
+void reconnect() {
+  string last_loc;
 
-	set_heart_beat(1);
-	set_temp("netdead",0);
-	remove_call_out("user_dump");
-	tell_object(this_object(), "重新连线完毕。\n");
-	if( stringp(last_loc = query_temp("last_location")) )
-		move(last_loc);
+  set_heart_beat(1);
+  set_temp("netdead", 0);
+  remove_call_out("user_dump");
+  tell_object(this_object(), "重新连线完毕。\n");
+  if (stringp(last_loc = query_temp("last_location")))
+    move(last_loc);
 }
 
-void remove(string euid)
-{
-	if( euid != ROOT_UID )
-		error("remove: user object destruction security violated by " + euid + ".\n");
-	::remove();
+void remove(string euid) {
+  if (euid != ROOT_UID)
+    error("remove: user object destruction security violated by " + euid + ".\n");
+  ::remove();
 }
