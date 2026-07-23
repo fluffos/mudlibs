@@ -1,0 +1,205 @@
+/* This program is a part of RW mudlib
+ * See /doc/help/copyright for more info
+ -----------------------------------------
+ * File   : room_wizhall_4.c
+ * Author : Clode@RevivalWorld
+ * Date   : 2003-08-23
+ * Note   : 標準房間
+ * Update :
+ *  o 2000-00-00
+ *
+ -----------------------------------------
+ */
+
+#include <ansi.h>
+#include <inherit.h>
+#include <condition.h>
+#include <daemon.h>
+
+inherit STANDARD_ROOM;
+
+#define DATA	__DIR__"rwparty_data"
+
+string help = @HELP
+在這個平凡無奇的房間內並沒有任何特殊的資訊。
+HELP;
+
+mapping rwparty = allocate_mapping(0);
+mapping actions;
+
+
+int restore_rwparty()
+{
+	if( !file_exists(DATA) )
+		return 0;
+	
+	rwparty = restore_variable(read_file(DATA));	
+}
+
+int save_rwparty()
+{
+	write_file(DATA, save_variable(rwparty), 1);
+}
+
+void set_new_room_long()
+{
+	string roomlong = @TEXT
+    這裡是巫師神殿正北邊的房間，這間房間非常的高大，往樓上看去似乎有一群
+人正站在那討論著事情，但往四處查看卻找不到通往樓上的路。這間房間四周的牆
+壁上畫滿著各式各樣的圖騰，與其他的房間相較起來，似乎詭譎許多。牆角則放著
+一本破舊的書籍，上面寫著「新手培育術」，或許可以讀讀看(read)。
+TEXT;
+
+	roomlong += HIW"\n目前網聚參加名單如下：(目前共 "+sizeof(rwparty)+" 人報名)\n";
+	roomlong += sprintf("%-24s%s\n", "報名者", "交通方式");
+	roomlong += NOR WHT"──────────────────────\n"NOR;
+	
+	foreach(string id, mapping data in rwparty)
+		roomlong += sprintf("%-24s%s\n", id, data["traffic"]);
+		
+	roomlong += WHT"──────────────────────\n"NOR;
+	set("long", roomlong);
+}
+
+void choose_traffic(object me, string size, string arg)
+{
+
+	rwparty[me->query_id(1)] = ([ "size":size, "traffic":arg ]);
+	
+	save_rwparty();
+
+	set_new_room_long();
+
+	tell(me, HIY"恭喜！"+pnoun(2, me)+"完成報名手續，敬請當天準時前來。\n"NOR);
+	
+	CHANNEL_D->channel_broadcast("news", me->query_idname()+"報名參加 2006/05/13(六) 的網聚活動。");
+
+	me->finish_input();
+}
+
+void choose_clothsize(object me, string arg)
+{
+	if( !arg )
+	{
+		tell(me, "衣服尺寸輸入錯誤。\n");
+		tell(me, pnoun(2, me)+"決定不參加這次的網聚活動。\n");
+		return me->finish_input();
+	}
+	
+	arg = upper_case(arg);
+	
+	if( arg != "XL" && arg != "L" && arg != "M" && arg != "S" && arg != "NO" )
+	{
+		tell(me, "衣服尺寸輸入錯誤。\n"+pnoun(2, me)+"決定不參加這次的網聚活動。\n");
+		return me->finish_input();
+	}
+	
+	if( arg == "NO" )
+		tell(me, pnoun(2, me)+"不想要這件衣服。\n");
+	else
+		tell(me, pnoun(2, me)+"選擇的衣服尺寸為 "+arg+"。\n");
+	
+	tell(me, HIC"請輸入"+pnoun(2, me)+"當天參加網聚的交通方式(公共交通工具/開車/騎車/搭朋友車/其他?)："NOR);
+	
+	input_to( (: choose_traffic, me, arg :) );
+}
+
+void confirm_signup(object me, string arg)
+{
+	if( arg != "yes" && arg != "y" )
+	{
+		tell(me, pnoun(2, me)+"決定不參加這次的網聚活動。\n");
+		return me->finish_input();
+	}
+
+	tell(me, NOR HIY"請選擇網聚時贈送的 POLO 衫衣服尺寸(美規)(XL/L/M/S)，不想要這件衣服者請輸入NO："NOR);
+	
+	input_to( (: choose_clothsize, me :) );	
+}
+
+void do_signup(object me, string arg)
+{
+	// 取消報名
+	if( arg == "-d" )
+	{
+		if( undefinedp(rwparty[me->query_id(1)]) )
+			return tell(me, pnoun(2, me)+"本來就沒有報名。\n");
+		
+		map_delete(rwparty, me->query_id(1));
+		
+		save_rwparty();
+		set_new_room_long();
+		tell(me, pnoun(2, me)+"取消了這次的網聚活動報名。\n");
+		return;
+	}
+	else if( wizardp(me) && arg == "-l" )
+	{
+		string msg;
+		
+		msg = HIW"\n目前網聚參加名單如下：(目前共 "+sizeof(rwparty)+" 人報名)\n";
+		msg += sprintf("%-24s%-5s%s\n", "報名者", "衣服", "交通方式");
+		msg += NOR WHT"──────────────────────\n"NOR;
+		
+		foreach(string id, mapping data in rwparty)
+			msg += sprintf("%-24s%-5s%s\n", id, data["size"], data["traffic"]);
+			
+		msg += WHT"──────────────────────\n"NOR;
+		
+		return tell(me, msg);
+	}
+	else
+	{
+		return tell(me, "不好意思，已經截止報名囉，還想來的人請直接向巫師報名。\n");
+
+		tell(me, 
+			HIC"歡迎使用重生的世界第一屆網聚活動的報名系統\n"NOR
+			NOR YEL"本次網聚活動將於 "HIY"2006/05/13(六)"NOR YEL" 於 "HIY"台北"NOR YEL" 舉辦\n"
+			"請先詳讀活動資訊 "HIY"http://www.revivalworld.org/rw/activity/1strwparty\n"
+			HIG"是否報名參加(報名後請勿反悔，因為要訂作衣服...)(y/n)?："NOR);
+			
+		input_to( (: confirm_signup, me :) );
+	}
+}
+
+void do_read(object me, string arg)
+{
+	if( query("total_online_time", me) > 86400*45 )
+		return tell(me, pnoun(2, me)+"的總上線時間已經超過 45 天，無法再享用這個輔助法術了。\n");
+	
+	msg("$ME仔細地翻了翻「"HIG"新手"NOR GRN"培育術"NOR"」，突然全身上泛起一陣綠光，社會經驗值與戰鬥經驗值獲得 50% 的加成。\n", me, 0, 1);
+	
+	me->start_condition(NEWBIE);
+}
+
+void create()
+{
+	set("short", HIW"巫師"NOR WHT"神殿 "NOR YEL"正北殿"NOR);
+	set("long",@TEXT
+    這裡是巫師神殿正北邊的房間，這間房間非常的高大，往樓上看去似乎有一群
+人正站在那討論著事情，但往四處查看卻找不到通往樓上的路。這間房間四周的牆
+壁上畫滿著各式各樣的圖騰，與其他的房間相較起來，似乎詭譎許多。牆角則放著
+一本破舊的書籍，上面寫著「新手培育術」，或許可以讀讀看(read)。
+TEXT);
+
+	set("exits", ([
+		"west" : "/wiz/wizhall/room_wizhall_5",
+		"east" : "/wiz/wizhall/room_wizhall_3",
+		"south" : "/wiz/wizhall/room_wizhall_1",
+		"up" : "/wiz/wizhall/room_wizhall_7",
+	]));
+	
+	set("lock", ([
+		"up" : 6,
+	]));
+
+	actions = ([
+		"read": (: do_read :),
+		"signup": (: do_signup :),
+	]);
+	
+	restore_rwparty();
+	set_new_room_long();
+
+	::reset_objects();
+}
+

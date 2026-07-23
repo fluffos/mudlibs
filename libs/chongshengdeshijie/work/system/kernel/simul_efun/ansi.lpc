@@ -1,0 +1,256 @@
+/* This program is a part of RW mudlib
+ -----------------------------------------
+ * File   : ansi.lpc
+ * Note   : ansi()/remove_ansi()/remove_bg_ansi()/ansi_part()/
+ *          noansi_strlen()/kill_repeat_ansi()/cwrap()/B2G()/G2B() were all
+ *          originally real driver EFUNs on the original MudOS build this
+ *          lib targeted (a custom "ansi" package plus part of the
+ *          "chinese" package -- see /doc/driver/modify/source_files/
+ *          packages/ansi.c and chinese_spec.c for the reference C
+ *          implementation this file ports the semantics of). FluffOS has
+ *          none of these -- restored here as ordinary LPC simul_efuns,
+ *          included EARLY in simul_efun.lpc (before anything that calls
+ *          them, per AGENTS.md §8b/§15aa -- several of these names are
+ *          also real callable identifiers so a forward-reference could
+ *          silently misresolve).
+ *
+ * PERFORMANCE NOTE (important, hit twice while developing this file):
+ * on this driver, string indexing/slicing walks a grapheme-cluster-aware
+ * ICU break iterator that is NOT O(1) the way a byte offset would be.
+ * Two earlier hand-rolled versions here (one building the result one
+ * CHARACTER AT A TIME, a second that fixed the concatenation but still
+ * SCANNED character-by-character) both pegged the driver at very high
+ * CPU indefinitely against a real ~30-60KB HTML export string
+ * (system/daemons/html_d.lpc's map export, which pipes huge strings
+ * through remove_ansi()) -- confirmed via `gdb -p <pid> -batch -ex bt`,
+ * stuck inside EGCSmartIterator::index_to_offset / ICU's
+ * RuleBasedBreakIterator both times. This version uses the driver's real
+ * PCRE package (pcre_replace_callback()/pcre_match_all(), a native C++
+ * regex engine) instead of any LPC-level character scan -- correct AND
+ * fast regardless of string length.
+ -----------------------------------------
+ */
+
+/* 對照表: CODE 名稱 -> 真正的 ANSI 跳脫碼 (逐一移植自 doc/driver/modify/
+ * source_files/packages/ansi.c 的 code[]/color[] 表, 包含其原本 WHT/HIW
+ * 對應看起來互換的怪癖 -- 照抄，不「修正」) */
+private nosave mapping ansi_code_table = ([
+	"NOR"		: "\e[m",
+	"BLK"		: "\e[30m",
+	"RED"		: "\e[31m",
+	"GRN"		: "\e[32m",
+	"YEL"		: "\e[33m",
+	"BLU"		: "\e[34m",
+	"MAG"		: "\e[35m",
+	"CYN"		: "\e[36m",
+	"WHT"		: "\e[1;30m",
+	"HIR"		: "\e[1;31m",
+	"HIG"		: "\e[1;32m",
+	"HIY"		: "\e[1;33m",
+	"HIB"		: "\e[1;34m",
+	"HIM"		: "\e[1;35m",
+	"HIC"		: "\e[1;36m",
+	"HIW"		: "\e[1;37m",
+	"HBBLK"		: "\e[40;1m",
+	"HBRED"		: "\e[41;1m",
+	"HBGRN"		: "\e[42;1m",
+	"HBYEL"		: "\e[43;1m",
+	"HBBLU"		: "\e[44;1m",
+	"HBMAG"		: "\e[45;1m",
+	"HBCYN"		: "\e[46;1m",
+	"HBWHT"		: "\e[47;1m",
+	"BBLK"		: "\e[40m",
+	"BRED"		: "\e[41m",
+	"BGRN"		: "\e[42m",
+	"BYEL"		: "\e[43m",
+	"BBLU"		: "\e[44m",
+	"BMAG"		: "\e[45m",
+	"BCYN"		: "\e[46m",
+	"BWHT"		: "\e[47m",
+	"BOLD"		: "\e[1m",
+	"BLINK"		: "\e[5m",
+	"HIREV"		: "\e[1;7m",
+]);
+
+/* 一個合法 ESC[...m CSI 序列的 PCRE 樣式 (單一 group, 涵蓋整個序列) */
+#define CSI_PATTERN	"(\x1B\\[[0-9;]*m)"
+
+/* $CODE$ 標記 (由長到短排列, 避免 HBBLK 之類的長名稱被短名稱的分支搶先
+ * 部份比對到 -- 雖然目前這組名稱彼此都不是誰的前綴, 仍照這個順序寫比較
+ * 保險) */
+#define DOLLAR_CODE_PATTERN \
+	"(\\$(?:HBBLK|HBRED|HBGRN|HBYEL|HBBLU|HBMAG|HBCYN|HBWHT|" \
+	"HIREV|HIR|HIG|HIY|HIB|HIM|HIC|HIW|" \
+	"BBLK|BRED|BGRN|BYEL|BBLU|BMAG|BCYN|BWHT|BOLD|BLINK|" \
+	"BLK|RED|GRN|YEL|BLU|MAG|CYN|WHT|NOR)\\$)"
+
+private string ansi_code_lookup(string token, int idx)
+{
+	/* token 是包含頭尾 "$" 的完整標記 (例如 "$HIG$"), 去掉頭尾取出真正
+	 * 的代碼名稱來查表 -- capture group 必須涵蓋整個 "$CODE$"，不然
+	 * pcre_replace_callback() 只會換掉代碼名稱本身，兩側的 "$" 會被
+	 * 原樣留下。 */
+	return ansi_code_table[token[1..<2]];
+}
+
+/* 將字串中的 $CODE$ 標記轉換成真正的 ANSI 跳脫碼, 同時濾除除了 ESC[...m
+ * 序列與換行以外的控制字元 (原本用來過濾玩家輸入中的雜訊控制碼)。 */
+string ansi(string str)
+{
+	int i;
+
+	if( !stringp(str) ) return str;
+
+	str = pcre_replace_callback(str, DOLLAR_CODE_PATTERN, "ansi_code_lookup", this_object());
+
+	/* 濾除一般控制字元(換行/Tab 除外), 保留合法的 ESC[...m 序列 */
+	for( i = 1; i < 32; i++ )
+	{
+		if( i == '\n' || i == '\t' || i == '\x1B' ) continue;
+		if( strsrch(str, i) != -1 )
+			str = replace_string(str, sprintf("%c", i), "");
+	}
+
+	return str;
+}
+
+/* 去除字串中所有的 ANSI 控制碼 (ESC[...m), 保留其他所有內容 */
+string remove_ansi(string str)
+{
+	if( !stringp(str) ) return str;
+	if( strsrch(str, '\x1B') == -1 ) return str;
+
+	return pcre_replace(str, CSI_PATTERN, ({ "" }));
+}
+
+/* 計算去除 ANSI 控制碼後的實際字元數 */
+int noansi_strlen(string str)
+{
+	if( !stringp(str) ) return 0;
+
+	return strlen(remove_ansi(str));
+}
+
+/* 只保留字串中的 ANSI 控制碼本身 (拿掉一切一般文字內容) -- 用於地圖
+ * 顯示時抽出某一格原本的顏色樣式, 之後再套用到別的替代符號上 */
+string ansi_part(string str)
+{
+	mixed *matches;
+	mixed *chunks;
+
+	if( !stringp(str) || strsrch(str, '\x1B') == -1 ) return "";
+
+	matches = pcre_match_all(str, "\x1B\\[[0-9;]*m", 0);
+	if( !arrayp(matches) || !sizeof(matches) ) return "";
+
+	chunks = map(matches, (: $1[0] :));
+
+	return implode(chunks, "");
+}
+
+private string strip_bg_sgr(string csi, int idx)
+{
+	string inner, *parts, *kept;
+
+	inner = csi[1..<2];
+	parts = explode(inner, ";");
+	kept = ({});
+
+	foreach( string p in parts )
+		if( strlen(p) && p[0] != '4' )
+			kept += ({ p });
+
+	if( !sizeof(kept) ) return "";
+
+	return "\e["+implode(kept, ";")+"m";
+}
+
+/* 去除字串中的背景色 ANSI 控制碼 (SGR 代碼中以 4 開頭的部份), 保留前景色 */
+string remove_bg_ansi(string str)
+{
+	if( !stringp(str) ) return str;
+	if( strsrch(str, '\x1B') == -1 ) return str;
+
+	return pcre_replace_callback(str, CSI_PATTERN, "strip_bg_sgr", this_object());
+}
+
+nosave private string kill_repeat_last_seq;
+
+private string kill_repeat_cb(string csi, int idx)
+{
+	if( csi == kill_repeat_last_seq ) return "";
+
+	kill_repeat_last_seq = csi;
+	return csi;
+}
+
+/* 合併/簡化連續重複的 ANSI 控制碼 -- 這裡採用比原本 C 實作簡單許多的
+ * 版本: 直接刪掉「與前一個緊鄰的 ANSI 碼完全相同」的重複碼, 不去做原本
+ * 逐一屬性合併的精細邏輯。對絕大多數只是把兩段同色文字接在一起、或
+ * 完全沒有 ANSI 碼的普通字串 (例如角色 ID) 而言, 結果與原本完全相同;
+ * 只有在混雜多種不同顏色屬性交錯出現的少見情形下, 才會少做一些理論上可
+ * 以合併的最佳化, 純屬顯示上更冗長一點點, 不影響正確性。
+ * 注意: 這裡的「前一個」只看緊鄰(中間沒有其他文字)的 ANSI 碼, 一旦兩個
+ * ANSI 碼之間出現任何普通文字就重新開始比較 -- 用一個 nosave 私有變數
+ * 追蹤，每次呼叫最前面重設一次。 */
+string kill_repeat_ansi(string str)
+{
+	if( !stringp(str) ) return str;
+	if( strsrch(str, '\x1B') == -1 ) return str;
+
+	kill_repeat_last_seq = 0;
+
+	return pcre_replace_callback(str, CSI_PATTERN, "kill_repeat_cb", this_object());
+}
+
+/* 依中文字元數斷行 (預設每 78 字一行), 若斷行點恰好落在全形標點符號上,
+ * 則往後延一個字元再斷, 避免標點符號被丟到下一行開頭 */
+varargs string cwrap(string str, int width, int start)
+{
+	mixed *chunks;
+	int len, pos, w;
+
+	if( !stringp(str) ) return str;
+	if( !width ) width = 78;
+
+	len = strlen(str);
+	chunks = ({});
+	pos = 0;
+
+	while( pos < len )
+	{
+		w = width;
+		if( pos + w >= len )
+		{
+			chunks += ({ str[pos..] });
+			break;
+		}
+
+		/* 若斷行處落在常見全形標點, 往後多留一個字元 */
+		if( member_array(str[pos+w], ({ "，","。","、","；","：","！","？","）","」","』","》","】" })) != -1 )
+			w++;
+
+		if( pos + w >= len )
+		{
+			chunks += ({ str[pos..] });
+			break;
+		}
+
+		chunks += ({ str[pos..pos+w-1], "\n" });
+		pos += w;
+	}
+
+	return implode(chunks, "");
+}
+
+/* 這個 mudlib 已經全面轉為 UTF-8, 不再有 Big5/GBK 的分別 -- 兩者都是
+ * 單純的原樣傳回 (見 AGENTS.md §15b 的 B2G/G2B 判例) */
+string B2G(string str)
+{
+	return str;
+}
+
+string G2B(string str)
+{
+	return str;
+}

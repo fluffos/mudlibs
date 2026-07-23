@@ -1,0 +1,120 @@
+/* This program is a part of RW mudlib
+ -----------------------------------------
+ * File   : dbase.lpc
+ * Note   : set()/query()/set_temp()/query_temp()/addn()/addn_temp()/
+ *          delete()/delete_temp() fallback -- these were originally real
+ *          driver EFUNs (a custom "database" package, see /doc/driver/
+ *          modify/source_files/packages/database.c) that FluffOS does not
+ *          have at all. Every object that inherits STANDARD_OBJECT gets a
+ *          REAL, local, per-object implementation of these from
+ *          /std/inherit/feature/object/_database.lpc.
+ *
+ *          IMPORTANT (found the hard way -- see AGENTS.md write-up for
+ *          archive #89, chongshengdeshijie): a bare query()/set() call
+ *          made from code that lives in a *sibling*-inherited fragment
+ *          (e.g. std/inherit/feature/living/_attribution_liv.lpc, which
+ *          does NOT itself `inherit DATABASE` -- only the TOP-LEVEL
+ *          composing file like interactive.lpc/standard_npc.lpc does, a
+ *          few inherits earlier) resolves to THIS simul_efun at runtime,
+ *          not to the object's own real, locally-inherited _database.lpc
+ *          implementation -- confirmed empirically: CHAR_D->create_char()
+ *          sets "abi/stamina/max" via the 3-arg call_other-redirect path
+ *          (which correctly reaches the real per-object storage, verified
+ *          via the saved .o file), yet _attribution_liv.lpc's OWN bare
+ *          query("abi/stamina/max") on that SAME object read back 0 --
+ *          i.e. it was hitting a completely different storage than the
+ *          one CHAR_D had just populated. This affects the large fraction
+ *          of this mudlib's own code that composes behavior via these
+ *          smaller inherit/feature fragment files without each one
+ *          individually inheriting DATABASE.
+ *
+ *          Fix: for the bare (no explicit target object) call shape, do
+ *          NOT keep a separate storage bucket here at all -- delegate via
+ *          call_other back to previous_object() (the object whose code
+ *          actually made the bare call). call_other() always resolves
+ *          against the target's REAL, complete, final compiled program,
+ *          regardless of which inherited fragment the caller's own code
+ *          happens to live in -- so if previous_object() has a genuine
+ *          local query()/set() (from DATABASE, however indirectly
+ *          inherited), this correctly reaches it. Only if previous_object()
+ *          has no local implementation at all (e.g. a bare daemon that
+ *          doesn't inherit DATABASE and isn't the intended target of any
+ *          per-object storage) does call_other harmlessly return 0/no-op,
+ *          which matches this driver's normal call_other-on-missing-
+ *          function behavior (as opposed to call_other on a literal int
+ *          0, which errors -- previous_object() is always a real object
+ *          here since it's the object whose own code is running).
+ -----------------------------------------
+ */
+
+varargs mixed set(string path, mixed value, object ob)
+{
+	object target = objectp(ob) ? ob : previous_object();
+
+	if( !objectp(target) || target == this_object() ) return value;
+
+	return target->set(path, value);
+}
+
+varargs mixed query(string path, object ob)
+{
+	object target = objectp(ob) ? ob : previous_object();
+
+	if( !objectp(target) || target == this_object() ) return 0;
+
+	return target->query(path);
+}
+
+varargs mixed set_temp(string path, mixed value, object ob)
+{
+	object target = objectp(ob) ? ob : previous_object();
+
+	if( !objectp(target) || target == this_object() ) return value;
+
+	return target->set_temp(path, value);
+}
+
+varargs mixed query_temp(string path, object ob)
+{
+	object target = objectp(ob) ? ob : previous_object();
+
+	if( !objectp(target) || target == this_object() ) return 0;
+
+	return target->query_temp(path);
+}
+
+varargs mixed addn(string path, int delta, object ob)
+{
+	object target = objectp(ob) ? ob : previous_object();
+
+	if( !objectp(target) || target == this_object() ) return delta;
+
+	return target->addn(path, delta);
+}
+
+varargs mixed addn_temp(string path, int delta, object ob)
+{
+	object target = objectp(ob) ? ob : previous_object();
+
+	if( !objectp(target) || target == this_object() ) return delta;
+
+	return target->addn_temp(path, delta);
+}
+
+varargs void delete(string path, object ob)
+{
+	object target = objectp(ob) ? ob : previous_object();
+
+	if( !objectp(target) || target == this_object() ) return;
+
+	target->delete(path);
+}
+
+varargs void delete_temp(string path, object ob)
+{
+	object target = objectp(ob) ? ob : previous_object();
+
+	if( !objectp(target) || target == this_object() ) return;
+
+	target->delete_temp(path);
+}

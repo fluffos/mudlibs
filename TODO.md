@@ -17,11 +17,8 @@ worked; keep status values consistent so the table stays greppable:
   etc.; see AGENTS.md's non-mudlib list — skipped, not converted)
 
 Port assignments: sequential from 40001, recorded here so re-running
-several libs at once never collides. **Next free port: 40083** (40001-40082
-assigned/reserved -- 40081-40082 are reserved for archives #89/#91,
-being processed in parallel by background agents as of this update
-(archive #86's original 40081 reservation was reused since it was never
-consumed); 40007 is ds386, deprioritized/partial). On mega-libs (tens of
+several libs at once never collides. **Next free port: 40084** (40001-40083
+assigned; 40007 is ds386, deprioritized/partial). On mega-libs (tens of
 thousands of files, the "nitan" family), skip the full `lpcc_check.sh`
 sweep — it can OOM the host before finishing (see AGENTS.md §6b) — and
 rely on the boot + interactive-connect test as the verification gate.
@@ -33,7 +30,7 @@ rely on the boot + interactive-connect test as the verification gate.
   majority of this collection. If an archive turns out to be English
   (like ds386/Dead Souls), do the minimum to note what it is, don't sink
   deep debugging time into it -- move on to the next Chinese one.
-- **Done: 80 / 100** (shanhaizhanshen, xingzhanyingxiong,
+- **Done: 81 / 100** (shanhaizhanshen, xingzhanyingxiong,
   unknownlib20150716 [小雨西游II], bxsj [书剑天下], bxsj1 [书剑·经典],
   chidi [江湖I], ..., nitan170911 [仙剑奇侠传], nitan6 [笑傲江湖], rzrmud
   [大唐西游], xo, xo_final, zzfy [郑州风云3], shiji [世纪],
@@ -89,7 +86,9 @@ rely on the boot + interactive-connect test as the verification gate.
   [西游记2006/最后的疯狂/大唐西游, mhxy/shenmo family, independent fork],
   jinyongwenzi [金庸文字版/书剑2002, literal same codebase as bxsj #4/
   bxsj1 #5], jinyongqunxiazhuan2008 [金庸群侠传2008加强版, master.c
-  byte-identical to xiakexing3 #44])
+  byte-identical to xiakexing3 #44], chongshengdeshijie [重生的世界/
+  Revival World, GPLv2 life-sim MUD, completely distinct lineage,
+  first BIG5-encoded archive found])
 - **New AGENTS.md §15q (hidden client-protocol-version gate)**: found on
   xiyangzaixian3 -- a pre-id prompt can check the input against a
   hardcoded literal (client version string), not just a BIG5/student
@@ -154,6 +153,19 @@ rely on the boot + interactive-connect test as the verification gate.
   onward (noting #86/#87/#88 "重出江湖" are very likely all non-LPC per
   #86's finding -- worth a quick triage-first check on #87/#88 before
   running the full pipeline).
+- **Ninth batch**: archives #87/#88 (triage-only, confirmed both non-LPC
+  per #86's prediction), #89 (chongshengdeshijie, a completely distinct
+  GPLv2 life-sim lineage, first BIG5-encoded archive found), #90
+  (jinyongwenzi, triage-flagged as a possible non-mudlib exe but turned
+  out to be a genuine mudlib -- literal same codebase as bxsj #4/bxsj1
+  #5), #91 (jinyongqunxiazhuan2008, master.c byte-identical to
+  xiakexing3 #44). Archive #90's discovery of a compounding pair of
+  command-dispatch bugs (§15ae + new §15ar) led to retroactively fixing
+  both bxsj and bxsj1, which had been silently command-dead since very
+  early in the project; archive #91's md5sum match to xiakexing3 led to
+  retroactively fixing that lib's §15ae instance too. All three
+  retroactive fixes re-verified with fresh registrations. This mode
+  continues for archive #92 onward.
 - **Note on stray driver processes**: while consolidating archive #78,
   found a driver process still running on port 40039 from an earlier
   *manual* verification test the main session ran directly (not a
@@ -484,7 +496,7 @@ rely on the boot + interactive-connect test as the verification gate.
 | 86 | 重出江湖.rar | chongchujianghu | | not mudlib | confirmed: closed-source compiled Windows C++/MFC MUD server (mud.exe, PE32 GUI exe linked against MFC42D.DLL etc) + a bundled Windows GUI client, zero .c/.lpc files anywhere -- data/*.o save files ARE genuine LPC-style save_object() text (likely same wuxia gene pool as other archives) but the room/npc/skill *source* that produced them isn't in this archive; cross-referenced #88 (重出江湖完整源码linunx_2.71原版.rar)'s actual .cpp files directly and confirmed real C++ (MFC-style, #include "stdafx.h", no `inherit`/LPC syntax at all) -- the whole "重出江湖" family (#86/#87/#88) is very likely non-LPC; port not consumed, kept free; see libs/chongchujianghu/NOTES.md |
 | 87 | 重出江湖WIN完全版.rar | chongchujianghu_win | | not mudlib | confirmed same non-LPC C++/MFC engine as #86 -- same config.txt (port 6600, mud name 烟雨红尘), zero .c/.lpc/inherit anywhere, just a "complete edition" bundling 2 GUI clients instead of 1; see libs/chongchujianghu_win/NOTES.md |
 | 88 | 重出江湖完整源码linunx_2.71原版.rar | chongchujianghu_linux_src | | not mudlib | confirmed pure C++ despite an LPC-mimicking directory shape (d/<city>/,npc/,item/,std/) -- ROOM_BEGIN/NPC_BEGIN/SKILL_BEGIN macros expand to real C++ classes (verified in server/Npc.h), builds with plain g++/ar producing a native ELF, zero `inherit` across 5,961 files; confirms mud.exe in #86/#87 is a compiled build of this exact engine; closes out the "重出江湖" family (#86/#87/#88) as entirely non-LPC; see libs/chongchujianghu_linux_src/NOTES.md |
-| 89 | 重生的世界v1.0.1.rar | | | not started | |
+| 89 | 重生的世界v1.0.1.rar | chongshengdeshijie | 40081 | done | "重生的世界"/"Revival World" (RWlib v1.0.1), GPLv2 Taiwanese life-simulation/city-builder MUD (farming/fishing/ranching/real-estate/stock exchange/lottery/mahjong), MudOS v22.2b14 -- a completely distinct lineage from every other archive in this project, custom command dispatcher (never uses add_action), first BIG5/CP950-encoded archive found (not GBK, handled via custom pre-decode); many new bug classes found: system/kernel/creator.lpc silently wiped 4 core headers to empty on every boot (extension-width bug) cascading to break registration itself + §8f bare-array (470 occurrences/179 files) + missing master::creator_file() + emote_d.lpc corrupted save file crashing command_d.lpc's entire command-registration with no catch (broke every post-login command) + process_input()'s wrong return value causing double-parse of every command + a dbase.lpc bare query()/set() fallback keeping a separate storage bucket instead of delegating via previous_object() to the real object (silently corrupted state for sibling-inherited fragment files, also permanently disabled command processing) + reconstructed a missing OBJECT_ACTION_MOD base class (6 files) from an in-lib template + §15x hardcoded PPL_PORT; full registration + post-login-command flow verified across 5 sessions with real names incl. 秦风/秦岭/秦山, look/score/quit all working, duplicate-name rejection + anti-flood throttle both confirmed working as intended; lpcc sweep partial (641/816, hit a reproducible sweep-environment-specific hang never seen in real boots) -- 9 fixed, rest documented; see libs/chongshengdeshijie/NOTES.md |
 | 90 | 金庸文字版.exe | jinyongwenzi | 40083 | done | dup: 金庸文字版 (1).exe (byte-identical); self-extracting RAR-SFX bundling a genuine MudOS mudlib ("书剑2002" per config.sj) + a prebuilt MudOS.exe driver + 2 Windows telnet clients (all correctly ignored, only the shujian/ subtree is real mudlib source); confirmed via diff (CRLF-normalized) to be the LITERAL SAME CODEBASE as bxsj(#4)/bxsj1(#5) -- 100% byte-identical core files, not just related naming; standard §15h fix (proactive) + §4/§14/§8c fixes ported from bxsj + §15c/§15p/§15ah fixes + NEW discovery: command_hook was `private` (§15ae) AND commandd.lpc's rehash() used a dead sscanf(".c$") pattern (§15ar, new) -- BOTH present simultaneously, either alone would have broken every post-login command; fixing this pass's discovery led to retroactively fixing the identical bugs in already-shipped bxsj/bxsj1 (see their rows); full registration + post-login-command flow verified with real name 秦风 reaching an actual start room, look/score/quit all working; 99.0% lpcc pass (4866/4915); see libs/jinyongwenzi/NOTES.md |
 | 91 | 金庸群侠传2008加强版.rar | jinyongqunxiazhuan2008 | 40082 | done | config genuinely self-IDs as 金庸群侠传; CONFIRMED via md5sum (main session verified): master.c byte-identical in BOTH adm/single/ and adm/obj/ locations to xiakexing3(#44)'s raw archive -- explains xiakexing3's previously-unexplained "banner says 金庸群侠传 despite own config saying 侠客行三" oddity, only securityd.c/config.cfg differ between the two; standard §15h fix + §15ae command_hook (2 copies, feature/ + home/) + §15t variant-1 (absolute angle-bracket #include) + a new §15t variant-3 (inherit-after-quest.h's-global-vars, surfaced by fixing variant-1) + new capitalize()-on-0 robustness bug in name.lpc's short() fallback (crashed look on any item/board lacking a short property) + is_killing() type mismatch + duplicate inherit F_UNIQUE (3 files) + `new` used as a bare variable name colliding with the new() efun (7 files) + §15ac (6 files) + several pre-existing typos + one genuinely-truncated file closed with an empty body rather than fabricated; full registration + post-login-command flow verified 4 times across the fix cycle with real name 秦风 reaching 客店, look/score(was hard-crashing pre-fix with "No program in object combatd")/quit all working; 97.74% lpcc pass (3064/3135, up from 96.97%); flagged for cross-check against #92/#93/#94 once processed (same title family, likely same identical-core/differing-branding pattern); see libs/jinyongqunxiazhuan2008/NOTES.md |
 | 92 | 金庸群侠传2008版.rar | | | not started | |
