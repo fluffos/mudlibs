@@ -472,3 +472,28 @@ nowhere near mega-lib territory).
   file persists across driver restarts and re-prompts for a password
   instead of fresh registration — not a bug, just a test-script
   gotcha worth noting for whoever re-tests this lib later.
+
+## 2026-07-23 re-verification pass (driver rebuild + formatter + WASM)
+
+- **LPC reformat**: ran `format-corpus.mjs` over all of `work/` (3,135
+  `.lpc` files) — 3,102 written, 13 already-idempotent, 20 refused
+  (self-checked round-trip failures on messy legacy syntax, expected).
+- **Native retest against the freshly-rebuilt driver**: booted clean on
+  port 40082, zero fatal preload errors. Full registration flow with a
+  fresh real Chinese name ("秦风六"/`qinfengliu`, distinct from all
+  prior test ids on this lib) through the complete wizard (id → confirm
+  → Chinese name → password → confirm → gift accept → email → gender)
+  into the actual game world (客店); `look`, `score` (full character
+  sheet, correct stats/HP/potential), and `quit` (correct item-drop
+  flavor text + clean save) all verified with real output, zero runtime
+  errors in the whole session. No regressions from the reformat or the
+  new driver binary.
+- **WASM test** (`scripts/wasm_client.js` against `build-wasm/src`):
+  boots cleanly, same preload warnings as native. **Full registration +
+  login + look + quit all work end-to-end under WASM** — this lib does
+  not gate its login on `query_ip_number()`'s format, so the documented
+  WASM IP-check limitation doesn't apply here. Only cosmetic artifact
+  observed: the WASM session's synthetic clock reports "上次连线...Wed
+  Dec 31 16:00:00 1969" (Unix-epoch-adjacent) for the last-login
+  timestamp on a fresh registration — harmless, purely a WASM-clock
+  display quirk, not a functional issue.
