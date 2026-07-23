@@ -416,3 +416,29 @@ exact error string never appears in the real boot's `debug.log`, matching
 §6b's documented false-positive pattern exactly), and a long tail of
 1-2-file isolated content issues in personal wizard homedirs, none on the
 registration/gameplay path this pass tested.
+
+## Re-verification pass (driver rebuild + LPC formatter + WASM build)
+
+- **Reformatted** all 9190 `.lpc` files under `work/` with
+  `tools/lpc-syntax/format-corpus.mjs` (Node): 9102 written, 58 already
+  idempotent-clean, 30 refused (self-checked token/byte-identity guard,
+  expected on messy legacy code, not chased). Verified afterward that the
+  §15ae fix (`feature/command.lpc`'s `command_hook` staying `nomask` with
+  `private` still commented out) and the §15t inherit-ordering/absolute-
+  include-path fixes from the original pass all survived the reformat
+  unchanged (spot-checked directly, plus the boot/registration retest
+  below exercises them at runtime).
+- **Native retest against the freshly-rebuilt driver**
+  (`~/src/fluffos/build-debug/src/driver`, rebuilt from latest upstream
+  master): clean boot, zero fatal errors in `debug.log`. Full registration
+  flow re-verified with a fresh real Chinese name (`秦风六`/id `qtretest`)
+  through `look`/`score`/`quit`, landing in `英豪酒楼` exactly as before —
+  no regressions from either the driver rebuild or the reformat.
+- **WASM build test** (`scripts/wasm_client.js` against
+  `~/src/fluffos/build-wasm/src`): boots cleanly (only the expected
+  benign compile-warning spam and non-fatal preload notices, same as
+  native). Full registration completed end-to-end under WASM too — id
+  `wasmtxq` → real Chinese name `秦枫` → password/email/gender → landed in
+  `英豪酒楼`, `look`/`score`/`quit` all produced correct output. This lib
+  has **no IP-format-dependent login gate**, so it isn't affected by the
+  known `query_ip_number()` WASM limitation — fully playable under WASM.
