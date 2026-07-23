@@ -513,3 +513,47 @@ documented wizpwd→password→gift→email→gender flow) reaching the actual
 game world (铁枪庙 starting room), then `look`/`score` both producing
 correct, clean output with zero compiler-warning spam and zero real
 `error:`/`denied`/`too deep recursion` lines in `debug.log`.
+
+## Re-verification pass (2026-07-23): driver rebuild + LPC formatter + WASM build
+
+- **Formatter**: ran `format-corpus.mjs` over all of `work/` (13,558
+  files, 13,459 written/reformatted, 37 already-clean, 62 refused with an
+  error — expected on legacy code, not chased individually).
+- **Native retest against rebuilt driver** (`build-debug/src/driver`,
+  rebuilt from latest upstream master): clean boot, zero fatal errors in
+  `debug.log`. Full registration re-verified end-to-end on the
+  now-reformatted source with a fresh real Chinese name (`秦岳`), reaching
+  the actual game world (武庙 starting room); `look`/`score`/`quit` all
+  produced correct output (score's full character-sheet box rendered
+  correctly), zero real errors in `debug.log`. No regressions from the
+  reformat or the fresh driver build.
+- **WASM build**: preload completes and prints `Initializations
+  complete.` cleanly. Login is blocked by **two** issues, neither of
+  which is a mudlib bug and both already anticipated by this project's
+  known-limitations list:
+  1. `adm/daemons/logind.lpc`'s `logon()` enforces an intentional
+     `uptime() < 30` post-boot grace period (an anti-crash-loop
+     safeguard, same pattern this lib already needed natively — see the
+     30s config-startup message players see for real). The stock
+     `scripts/wasm_client.js` calls `fluffos_connect()` immediately after
+     boot with no delay, so it always trips this gate before any
+     `--send` is even processed (`logon()` runs at connect time, before
+     the first line of input). Confirmed this is purely a
+     harness-timing artifact, not a WASM defect, by testing with a
+     scratch variant of the harness that adds a real 31s delay before
+     calling `fluffos_connect()` — after that delay, login proceeds past
+     this check.
+  2. Past that point, login hits `adm/daemons/band.lpc`'s `is_banned()`,
+     which does `sscanf(site, "%s.%s.%s.%s", ...) != 4` on
+     `query_ip_number(ob)` and treats a non-matching result as banned —
+     this is exactly the documented `query_ip_number()` WASM-mode
+     limitation (AGENTS.md's post-conversion-tooling section): the wasm
+     build's loopback connection doesn't format as a real dotted-quad,
+     so the sscanf never matches 4 parts and every login is rejected as
+     "banned" (`你的地址在本 MUD 不受欢迎...`). **Not a mudlib bug** — do
+     not patch; this lib is a second concrete example of the same
+     driver-side gap `bxsj`'s `sited.lpc` demonstrates.
+  - **Verdict**: boots cleanly under WASM; login cannot complete due to
+    the driver's documented `query_ip_number()` limitation (once the
+    unrelated 30s harness-timing artifact is worked around). Not a
+    regression, not a mudlib bug.
