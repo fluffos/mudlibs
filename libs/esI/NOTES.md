@@ -50,3 +50,48 @@ cd libs/esI
 ~/src/fluffos/build-debug/src/driver config.fluffos
 python3 ../../scripts/mudclient.py 127.0.0.1 40010 --timeout 10 --send "" --send "look" --send "quit"
 ```
+
+## Re-verification pass: driver rebuild + LPC formatter + WASM build
+
+- **Formatter**: `format-corpus.mjs` over all 7035 `.lpc` files; 6986
+  reformatted, 5 unchanged, 44 refused (self-check `errors`, expected).
+- **Native retest against rebuilt driver — 2 regressions found + fixed**
+  (both pre-existing gaps from before this pass, only surfaced now by
+  actually running `look`/`score`/`quit` to completion rather than just
+  confirming boot + registration):
+  1. Same stray debug `write("aadsaaaaaaaaaaaaaaaaaaaa\n\n")` in
+     `std/user.lpc`'s `setup()` as `es1_win` (same lineage/root cause,
+     absent from `raw/`) — deleted.
+  2. **`quit` crashed** with `*Inherited file '/std/room' does not
+     exist!` the first time, then `*No program in object
+     '/d/std/IRC/lobby'!` after a partial fix — both trace back to the
+     same **§8d `get_include_path()` gap**: this lib's TODO.md entry
+     claims "both known fixes applied proactively" (referring to
+     `es1_win`'s §8d fix), but `adm/obj/master.lpc` was actually
+     *missing* `get_include_path()` — only `es1_win`'s copy has it. Two
+     symptoms stacked: (a) `include/globals.h`'s `ROOM` macro is stale
+     (`"/std/room"`, real file is `std/room/room.lpc`) while
+     `include/mudlib.h`'s is correct (`"/std/room/room"`) — files that
+     `#include <mudlib.h>` are fine, files relying only on the
+     auto-included `globals.h` (e.g. `logoutd.lpc`'s room lookups) got
+     the wrong path; fixed by correcting `globals.h`'s value to match
+     `mudlib.h` (single point, matches the pattern of every other macro
+     in that file). (b) once that was fixed, `d/std/IRC/lobby.lpc`
+     (lazily compiled mid-connection during `logoutd`'s post-quit
+     cleanup, not during preload) still failed with `Cannot #include
+     irc.h` — the exact §8d/§15o symptom (angle-bracket same-dir
+     `#include` needs `master.lpc`'s `get_include_path()` for compiles
+     triggered live, not preload/bare-`lpcc`); fixed by adding the
+     standard `get_include_path()` shape to `master.lpc` (identical to
+     `es1_win`'s). Re-verified: full registration + `look`/`score`/
+     `quit` all clean, zero debug.log errors, with two separate real
+     Chinese names (乔峰, 阿朱).
+- **WASM test**: boots cleanly (only the expected non-fatal
+  `Undefined function socket_create` et al. in
+  `/adm/daemons/network/cmwhod.lpc` during preload, and the same
+  cmwhod-related `*No program in object` at `quit`-time cleanup — both
+  are the documented "no sockets package under WASM" limitation, caught
+  by the existing error handling, non-cascading). Full registration with
+  a real Chinese name (慕容), `look`, and `quit` all worked end-to-end —
+  this lib's IP-check is non-blocking, so it is unaffected by the
+  documented `query_ip_number()` WASM limitation.

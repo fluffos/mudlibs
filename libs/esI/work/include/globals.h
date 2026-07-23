@@ -62,7 +62,7 @@
 #define MONEY			"/std/money"
 #define NPC				"/std/char/npc"
 #define POWDER			"/std/medicine/powder"
-#define ROOM			"/std/room"
+#define ROOM			"/std/room/room"
 #define SKILL			"/std/skill"
 #define SSERVER			"/std/sserver"
 

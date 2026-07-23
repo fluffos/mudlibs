@@ -44,6 +44,11 @@ python3 scripts/mudclient.py 127.0.0.1 40010 --timeout 25 --idle 0.5 \
 - 这份快照默认开启了"新角色自动获得巫师权限"的选项（原始测试用配置），
   实际游玩时每个新建角色都会带有管理员权限，如果只是想体验普通玩家
   视角，可自行忽略这项特权或不使用管理命令。
-- 和 `es1_win` 一样，登录进入游戏时会打印一行历史遗留的调试信息
-  （"aadsaaaaaaaaaaaaaaaaaaaa"），无害，忽略即可。
+- （已修复）此前和 `es1_win` 一样，登录时会打印一行历史遗留的调试
+  信息（"aadsaaaaaaaaaaaaaaaaaaaa"），本轮已删除；同时修复了退出
+  （`quit`）指令偶发的运行时报错（`get_include_path`/`ROOM` 路径相关，
+  详见 NOTES.md）。
 - 部分年代久远的模板区域内容不完整，但不影响主线的种族/职业/公会玩法。
+- **WASM 兼容性**：已在新的 WASM 构建下测试，注册、`look`、`quit`
+  均可正常完成（本版本 IP 检查不阻挡登录，未受已知的
+  `query_ip_number()` WASM 限制影响）。
