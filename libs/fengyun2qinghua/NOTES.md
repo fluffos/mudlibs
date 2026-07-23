@@ -202,3 +202,33 @@ python3 ../../scripts/mudclient.py 127.0.0.1 40091 --timeout 25 --idle 0.5 \
 (`m`/`f` selects gender; `0`-`3` selects ethnicity, which determines the
 starting room; the English id must be pure letters, 3-12 chars, or
 `check_legal_id` rejects it and re-prompts.)
+
+## Re-verification pass: driver rebuild + LPC formatter + WASM build
+
+- **Formatter**: `format-corpus.mjs` over all 2839 `.lpc` files; 2837
+  reformatted, 2 unchanged, **0 errors** — cleanest self-check result of
+  this batch.
+- **Native retest against rebuilt driver — 1 regression found + fixed**:
+  a mistimed test send sequence (missing the extra blank line for the
+  post-registration "请敲回车键[RETURN]" prompt, so the following
+  in-flight command landed while the character's move-into-room was
+  still completing) reproducibly crashed `quit` with `*Bad argument 3 to
+  EFUN message() ... Got: int(0)` — `cmds/usr/quit.lpc`'s farewell
+  broadcast, `message("system", ..., environment(me), me)`, assumed
+  `environment(me)` is always non-zero. Since the crash aborts the rest
+  of `quit()` (the actual disconnect never runs), the connection stays
+  open and every subsequent `quit` repeats the identical crash — a
+  narrow but real robustness gap, not just a test-script artifact, since
+  a real client racing the RETURN-prompt/room-entry sequence could hit
+  the same window. Fixed by guarding the call with `if (environment(me))`
+  (same shape as this project's other `message()`/`tell_room()`
+  null-target hardening, see AGENTS.md §15s). Re-verified clean twice:
+  once reproducing the exact mistimed sequence (no crash after the fix)
+  and once with a correctly-paced full registration + `look`/`score`/
+  `quit` run (real Chinese name 段公子), zero debug.log errors either
+  way.
+- **WASM test**: boots and plays fully — full registration with a real
+  Chinese name (慕容复), `look`, and `quit` all completed cleanly with no
+  errors of any kind (not even the usual non-fatal sockets-package
+  warnings — this lib doesn't preload a network daemon). Not affected by
+  the documented `query_ip_number()` WASM limitation.
