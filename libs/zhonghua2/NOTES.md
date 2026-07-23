@@ -113,3 +113,83 @@ typos) — not triaged individually per AGENTS.md §6b/§13, boot + full
 interactive registration test is the verification gate. Memory stayed
 healthy throughout (~16-17GB free consistently, no pressure, despite
 this being the largest lib since the nitan family by file count).
+
+## Prior regression-fix pass (repo-wide QA sweep, commit 96d2ee3436)
+
+A later repo-wide sweep found and fixed 5 real regressions in this lib
+that this NOTES.md hadn't yet documented (re-confirmed all 5 are still
+present/intact in the current source before this re-verification pass
+touched anything):
+1. **is_killing() type mismatches** (`clone/user/user.lpc`,
+   `u/smallfish/npc/user.lpc`, `d/city/npc/guidao.lpc`): `is_killing(ob)`
+   (object) → `is_killing(ob->query("id"))` (string), matching
+   `feature/attack.lpc`'s real `varargs int is_killing(string id)`
+   signature.
+2. **§15s** (`adm/simul_efun/message.lpc`): `message()`'s bare-`int 0`
+   4th-arg guard — `(objectp(exclude) || pointerp(exclude)) ? exclude :
+   ({})`.
+3. **§15w** (`adm/single/master.lpc`'s `log_error()`): player-facing
+   write gated on `strsrch(message, "warning:") == -1`.
+4. **Rename-width leftover** (`adm/daemons/eventd.lpc`): `.c`→`.lpc`
+   extension-strip slice `$1[0..<3]` → `$1[0..<5]`.
+5. **Unguarded factory-call** (`d/hangzhou/npc/shusheng.lpc`):
+   `carry_object(...)->wear()` chained straight onto a factory call with
+   no null-check → assigned to a local `cloth` var, guarded by
+   `if (objectp(cloth))`.
+
+All 5 verified intact through this pass's reformat + rebuilt-driver
+retest (see below) — none were touched or reverted.
+
+## Re-verification pass: driver rebuild + formatter + WASM (2026-07)
+
+- **LPC formatter** applied to all `.lpc` under `work/` (11,739 total,
+  11,562 written, 51 unchanged, 126 self-checked errors left untouched
+  as expected on legacy code). Spot-checked the 5 regression-fix files
+  above post-format — all 5 fixes survived unchanged in substance.
+- **Native re-test against the freshly rebuilt driver**
+  (`~/src/fluffos/build-debug/src/driver`): clean boot. The only
+  runtime message in `log/log` (this lib's debug-log file, named `log`
+  not `debug.log` — see `config.fluffos`) is the pre-existing, already-
+  documented §15ad `versiond.lpc`/`socket_bind()` config-ID-mismatch
+  non-fatal error; `data/versiond.o.stale-corrupt-disabled` (the earlier
+  stale-save-file fix) is still in place, no `Illegal mapping format`
+  restore errors. Full registration flow re-verified end-to-end: new id
+  `zhtestz`, real surname/given-name **萧**/**峰**, admin password +
+  regular password (this lib has TWO separate passwords, not one —
+  re-confirmed the full prompt chain), character-type selection (5 =
+  均衡型/balanced), gender (m), landed in 世外桃源; a SECOND connection
+  then logged back in as the same `zhtestz`/萧峰 with the regular
+  password and ran `look`/`score`/`quit` all correctly (score showed the
+  real character sheet, quit saved and disconnected cleanly) — confirms
+  persistence across reconnects still works post-reformat.
+  **Testing-methodology note**: this lib has the same per-second live
+  clock prompt (`14:32:07>`) documented on `zhongjidiyu` (AGENTS.md
+  §15an) — a normal `--idle 1.2` pace caused sends after login to be
+  swallowed/misdirected; dropping to `--idle 0.4-0.5` fixed it.
+- **NEW WASM-specific finding (distinct from the documented
+  `query_ip_number()` limitation)**: this lib's `logon()`
+  (`adm/daemons/logind.lpc`) calls `VERSION_D->is_version_ok()`
+  (`VERSION_D` = `/adm/daemons/versiond`) with **no `catch()`** (unlike
+  the adjacent `catch(MUDLIST_CMD->main())` one line above it).
+  `versiond.lpc` genuinely uses raw `socket_create()`/`socket_bind()`/
+  `socket_listen()` for its cross-server version-sync feature — under
+  WASM (no `sockets` package) these are hard "Undefined function"
+  compile errors, so `/adm/daemons/versiond` preloads as a program-less
+  object. The subsequent unguarded `VERSION_D->is_version_ok()` call
+  then throws `*No program in object '/adm/daemons/versiond'!`,
+  uncaught, and the driver's own `new_conn_handler()` treats that as a
+  failed `logon()` and **disconnects the user immediately after the
+  banner, before the id prompt ever appears** — confirmed via the
+  WASM harness's raw log (`new_conn_handler: logon() on object
+  clone/user/login#0 has failed, the user is disconnected.` appearing
+  right after the `versiond` error). This blocks **every** login attempt
+  under WASM for this lib, not just IP-gated ones. Root cause is
+  entirely the WASM sandbox's missing `sockets` package colliding with a
+  genuinely socket-based feature this lib relies on — confirmed NOT a
+  mudlib bug (native boots and completes full registration/login/persist
+  cleanly, verified extensively above) — so, per the standing instruction
+  for WASM-mode limitations, **not patched**. Documented here instead of
+  papered over; a future pass wanting WASM playability for this specific
+  lib would need to either wrap that one call in `catch()` (a real,
+  minimal, low-risk mudlib fix) or accept it as out of scope for a
+  sockets-dependent daemon.
