@@ -390,3 +390,31 @@ directories`, etc) carried over unchanged; standard modern-FluffOS
 tuning knobs (`time to clean up`, `maximum evaluation cost`, etc) copied
 from the same template used for the last several libs in this batch
 (matches `xiakexing3`'s `config.fluffos` shape).
+
+## Re-verification pass (driver rebuild + LPC formatter + WASM build)
+
+- **Reformatted** all 10641 `.lpc` files under `work/` with
+  `tools/lpc-syntax/format-corpus.mjs`: 10534 written, 41 already
+  idempotent-clean, 66 refused by the tool's own token/byte-identity
+  guard (expected on messy legacy code, not chased).
+- **Native retest against the freshly-rebuilt driver**
+  (`~/src/fluffos/build-debug/src/driver`, rebuilt from latest upstream
+  master): clean boot, zero fatal errors in `log/debug.log`. Full
+  registration flow re-verified with a fresh real Chinese name
+  (`秦岭`/id `wmkjre`), reaching the actual starting room (`客店`),
+  `look`/`score`/`quit` all producing correct output — no regressions
+  from either the driver rebuild or the reformat.
+- **WASM build test** (`scripts/wasm_client.js` against
+  `~/src/fluffos/build-wasm/src`): boots cleanly, only benign compile-
+  warning spam, zero fatal errors. Login is blocked by
+  `adm/daemons/logind.lpc`'s `logon()`: `str = query_ip_number(ob); if
+  (BAN_D->is_banned(str) == 1) { ...你的地址在本 MUD 不受欢迎...;
+  destruct(ob); }` — this is exactly the documented known WASM-mode
+  limitation (`query_ip_number()` not returning a real dotted-quad under
+  `wasm_console_connect()`, causing `BAN_D`'s IP-ban parsing to
+  misclassify the connection as banned). **Not a mudlib bug** — the
+  identical code path already works correctly natively (confirmed
+  above), and this driver-side WASM gap is documented in AGENTS.md's
+  "Post-conversion tooling" section. Marking this lib as "boots under
+  wasm, login gated by IP-check limitation" rather than "fails under
+  wasm."
