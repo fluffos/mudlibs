@@ -436,3 +436,35 @@ all 107 blind, per AGENTS.md §6b:
   name collision is with an ordinary *inherited* function, and a bare
   prototype-only forward declaration was NOT sufficient insurance the way
   it normally would be for an unrelated new name.
+
+## 2026-07-23: driver rebuild retest + LPC formatter + WASM check
+
+- **Formatter**: ran `tools/lpc-syntax`'s `format-corpus.mjs` over all
+  9177 `.lpc` files in `work/`; 9168 written, 9 already-conformant,
+  0 errors (a clean, error-free run — unusual for this batch's messier
+  libs, consistent with this codebase's otherwise-tidy source).
+- **Native retest**: rebuilt `~/src/fluffos/build-debug/src/driver`
+  booted this lib clean (zero fatal errors in `log/debug.log`, only the
+  routine `Unknown #pragma`/unused-local warnings already known from
+  earlier passes). Full registration flow verified end-to-end with a
+  fresh real Chinese name (秦月) — gb/no/new/english-id/Chinese
+  name/password/email/gender/gift-allocation all completed, landed in
+  聚见亭; `look` showed the correct room+NPCs, `score` produced a
+  correct full character sheet, `quit` gave the correct farewell text.
+  Zero `debug.log` errors this session. The reformat did not disturb
+  anything — same clean result as prior passes.
+- **WASM**: booted cleanly under `build-wasm` (only the expected
+  non-fatal preload warnings, no fatal errors). Full registration flow
+  (gb/no/new/english-id/Chinese name 秦波/password/email/gender) also
+  completed successfully under WASM, reaching the same 聚见亭 starting
+  room; `look` and `quit` both worked correctly. This lib's
+  registration does **not** gate on `query_ip_number()` format, so it
+  is unaffected by the known WASM IP-formatting limitation — however,
+  the "上次连线的地址" (last-connected-address) display line, which
+  normally prints an IP, printed a garbled/misformatted value (a
+  timestamp-looking string) under WASM instead. This is a purely
+  cosmetic manifestation of the same known `query_ip_number()`-under-WASM
+  driver limitation (see AGENTS.md's WASM section) — not a functional
+  blocker, registration/login/commands all still work. **Verdict: fully
+  playable under WASM**, one cosmetic IP-display glitch noted, not fixed
+  (driver-side, out of scope).

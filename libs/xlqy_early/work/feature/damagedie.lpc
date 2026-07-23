@@ -3,178 +3,152 @@
 #include <dbase.h>
 #include <move.h>
 
-void create()
-{
-}
+void create() {}
 
-int will_die(object me)
-{
-    object corpse, killer;
-    object *inv;
-    int i, count;
-    string last_fainted_from, str;
+int will_die(object me) {
+  object corpse, killer;
+  object *inv;
+  int i, count;
+  string last_fainted_from, str;
 
-    killer =  me->query_temp("last_damage_from");
+  killer = me->query_temp("last_damage_from");
 
-    me->clear_condition();
+  me->clear_condition();
 
-    if ( environment(me) && environment(me)->query("alternative_die") )
-    {
-        //房间保护，不死
-        environment(me)->alternative_die(me);
-        return 0;
+  if (environment(me) && environment(me)->query("alternative_die")) {
+    //房间保护，不死
+    environment(me)->alternative_die(me);
+    return 0;
+  }
+
+  if (me->query_temp("last_fainted_from")) {
+    last_fainted_from = me->query_temp("last_fainted_from");
+  }
+
+  if (!living(me)) {
+    me->revive(1);
+  }
+
+  if (wizardp(me) && me->query("env/immortal")) {
+    //巫师，不死
+    return 0;
+  }
+
+  if (last_fainted_from) {
+    me->set_temp("last_fainted_from", last_fainted_from);
+  }
+
+  COMBAT_D->announce(me, "dead");
+
+  if (me->query("alternative_die")) {
+    //有不死标志，不死，如身外化身等
+    me->move("/d/city/kezhan");
+    me->alternative_die(me, killer);
+    return 0;
+  }
+
+  if (userp(me) && !me->query_adult()) {
+    //未成年，不死
+    me->move("/d/city/kezhan");
+    me->recover_me();
+    return 0;
+  }
+
+  if (userp(me) && killer && userp(killer)) {
+    //PK，不死
+    me->move("/d/city/kezhan");
+    me->recover_me();
+    return 0;
+  }
+
+  if (me->query_temp("protect/prevent_die") && objectp(me->query_temp("protect/prevent_die"))
+    && living(me->query_temp("protect/prevent_die"))) {
+    //任务保护，不死
+    if (0 != me->query_temp("protect/prevent_die")->player_die(me, killer)) {
+      return 0;
     }
+  }
 
-    if ( me->query_temp("last_fainted_from") ) 
-    {
-        last_fainted_from = me->query_temp("last_fainted_from");
+  if (userp(me)) {
+    inv = all_inventory(me);
+    count = sizeof(inv);
+    for (i = 0; i < count; i++) {
+      if (inv[i]->query("owner_id") == getuid(me)) {
+        tell_object(me, HIB + "你看到" + inv[i]->query("name") + HIB + "破空而去，慢慢消失在天际．．．\n" + NOR);
+        destruct(inv[i]);
+      }
     }
+  }
 
-    if ( !living(me) )
-    {
-        me->revive(1);
-    }
+  if ((int)me->query("max_kee") > 0 && (int)me->query("max_sen") > 0 && (int)me->query("max_gin") > 0) {
+    //no damage to self_purged people.
+    if (objectp(killer)) {
+      me->set_temp("my_killer", killer->query("id"));
+      COMBAT_D->killer_reward(killer, me);
 
-    if ( wizardp(me) && me->query("env/immortal") )
-    {
-        //巫师，不死
-        return 0;
-    }
+      if (userp(me)) {
+        log_file(
+          "death",
+          sprintf("[%s] %s is killed by %s.\n", ctime(time()), me->query("id"), killer->query("id"))
+        );
+      }
+    } else {
+      //no obvious killer. by mon 8/17/97
+      //for example, by poison.
+      if (userp(me)) {
+        COMBAT_D->victim_penalty(me);
 
-    if ( last_fainted_from )
-    {
-        me->set_temp("last_fainted_from", last_fainted_from);
-    }
-
-    COMBAT_D->announce(me, "dead");
-
-    if ( me->query("alternative_die") )
-    {
-        //有不死标志，不死，如身外化身等
-        me->move("/d/city/kezhan");
-        me->alternative_die(me, killer);
-        return 0;
-    }
-
-    if ( userp(me) && !me->query_adult() )
-    {
-        //未成年，不死
-        me->move("/d/city/kezhan");
-        me->recover_me();
-        return 0;
-    }
-
-    if ( userp(me) && killer && userp(killer) )
-    {
-        //PK，不死
-        me->move("/d/city/kezhan");
-        me->recover_me();
-        return 0;
-    }
-
-    if ( me->query_temp("protect/prevent_die") && objectp(me->query_temp("protect/prevent_die"))
-        && living(me->query_temp("protect/prevent_die")) )
-    {
-        //任务保护，不死
-        if ( 0 != me->query_temp("protect/prevent_die")->player_die(me, killer) )
-        {
-            return 0;
+        if (str = me->query_temp("death_msg")) {
+          //can set customized death message to death_msg.
+          str = me->name(1) + str;
+        } else {
+          str = me->name(1) + "莫名其妙地死了。\n";
         }
+        COMBAT_D->announce(me, "death_rumor", str);
+
+        log_file("death", sprintf("[%s] %s is killed: %s.\n", ctime(time()), me->query("id"), str));
+      }
     }
+  }
 
-    if ( userp(me) )
-    {
-        inv = all_inventory(me);
-        count = sizeof(inv);
-        for ( i = 0; i < count; i++ )
-        {
-            if ( inv[i]->query("owner_id") == getuid(me) )
-            {
-                tell_object(me, HIB + "你看到" + inv[i]->query("name") + HIB + "破空而去，慢慢消失在天际．．．\n" + NOR);
-                destruct( inv[i] );
-             }
-        }
-    }
+  me->remove_ride();
 
-    if ( (int)me->query("max_kee") > 0 && (int)me->query("max_sen") > 0 && (int)me->query("max_gin") > 0 )
-    {
-        //no damage to self_purged people.
-        if ( objectp(killer) )
-        {
-            me->set_temp("my_killer", killer->query("id"));
-            COMBAT_D->killer_reward(killer, me);
+  if (objectp(corpse = CHAR_D->make_corpse(me, killer))) {
+    corpse->move(environment(me));
+  }
 
-            if ( userp(me) )
-            {
-                log_file("death", sprintf("[%s] %s is killed by %s.\n", ctime(time()),me->query("id"), killer->query("id")));
-            }
-        }
-        else
-        {
-            //no obvious killer. by mon 8/17/97
-            //for example, by poison.
-            if ( userp(me) )
-            {
-                COMBAT_D->victim_penalty(me);
+  me->remove_all_killer();
 
-                if ( str = me->query_temp("death_msg") )
-                {
-                    //can set customized death message to death_msg.
-                    str = me->name(1) + str;
-                }
-                else
-                {
-                    str = me->name(1) + "莫名其妙地死了。\n";
-                }
-                COMBAT_D->announce(me, "death_rumor", str);
+  all_inventory(environment(me))->remove_killer(me);
 
-                log_file("death", sprintf("[%s] %s is killed: %s.\n", ctime(time()), me->query("id"), str));
-            }
-        }
-    }
+  me->dismiss_team();
 
-    me->remove_ride();
-
-    if( objectp(corpse = CHAR_D->make_corpse(me, killer)) )
-    {
-        corpse->move(environment(me));
-    }
-
-    me->remove_all_killer();
-
-    all_inventory(environment(me))->remove_killer(me);
-
-    me->dismiss_team();
-
-/*
+  /*
     if ( me->self_purge() )
     {
         return 0;
     }
 */
 
-    return 1;
+  return 1;
 }
 
-int die(object me)
-{
-    if ( 0 >= F_DAMAGEDIE->will_die(me) )
-    {
-        return 0;
-    }
+int die(object me) {
+  if (0 >= F_DAMAGEDIE->will_die(me)) {
+    return 0;
+  }
 
-    if ( userp(me) )
-    {
-        me->set("kee", 1);
-        me->set("eff_kee", 1);
-        me->set("sen", 1);
-        me->set("eff_sen", 1);
-        me->set("gin", 1);
-        me->set("eff_gin", 1);
+  if (userp(me)) {
+    me->set("kee", 1);
+    me->set("eff_kee", 1);
+    me->set("sen", 1);
+    me->set("eff_sen", 1);
+    me->set("gin", 1);
+    me->set("eff_gin", 1);
 
-        me->add("life/death_num",1);
+    me->add("life/death_num", 1);
 
-/*
+    /*
         //here is a good point to decrease life time...weiqi,98/12/31
         if ( !me->query("life/life_time") ) me->set("life/life_time", 60);
         if( !me->query("life/no_death_decrease") )
@@ -183,18 +157,15 @@ int die(object me)
         if( me->check_gameover() ) return 0;
 */
 
-        me->delete_temp("last_damage_from");
-        me->delete_temp("last_fainted_from");
-        me->delete_temp("death_msg");
+    me->delete_temp("last_damage_from");
+    me->delete_temp("last_fainted_from");
+    me->delete_temp("death_msg");
 
-        me->move(DEATH_ROOM);
-        //DEATH_ROOM->start_death(me);
-    }
-    else
-    {
-        destruct(me);
-    }
+    me->move(DEATH_ROOM);
+    //DEATH_ROOM->start_death(me);
+  } else {
+    destruct(me);
+  }
 
-    return 1;
+  return 1;
 }
-

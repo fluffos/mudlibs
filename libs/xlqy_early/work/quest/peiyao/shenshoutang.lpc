@@ -31,229 +31,191 @@ inherit ROOM;
 
 int working(object me);
 
-int do_peiyao()
-{
-    object me;
+int do_peiyao() {
+  object me;
 
-    me = this_player();
-  
-    if ( me->is_busy() )
-    {
-        return notify_fail("你正忙着呢，别着急。\n");
-    }
+  me = this_player();
 
-    if ( !me->query_temp("job/peiyao") )
-    {
-        message_vision(CYN "$N" CYN "刚想抓几味药配制，就听见墨大夫"
-                       CYN "怒喝道：给我放下，别乱动。\n" NOR,
-                       me);
-        return 1;
-    }
+  if (me->is_busy()) {
+    return notify_fail("你正忙着呢，别着急。\n");
+  }
 
+  if (!me->query_temp("job/peiyao")) {
+    message_vision(CYN "$N" CYN "刚想抓几味药配制，就听见墨大夫"
+      CYN "怒喝道：给我放下，别乱动。\n" NOR,
+      me);
+    return 1;
+  }
+
+  me->set_temp("job/peiyao/step", 1);
+  me->start_busy((: call_other, __FILE__, "working", me :),
+    (: call_other, __FILE__, "halt_working", me :));
+
+  message_vision(HIY "$N开始工作。\n" NOR, me);
+
+  return 1;
+}
+
+int working(object me) {
+  string msg;
+  int finish;
+  int b;
+  mapping gift;
+
+  if (!me->query_temp("job/peiyao/step")) {
     me->set_temp("job/peiyao/step", 1);
-    me->start_busy( (: call_other, __FILE__, "working", me :),
-                   (: call_other, __FILE__, "halt_working", me :) );
+  }
 
-    message_vision(HIY "$N开始工作。\n" NOR, me);
-
-    return 1;
-}
-
-int working(object me)
-{
-    string msg;
-    int finish;
-    int b;
-    mapping gift;
-
-    if ( !me->query_temp("job/peiyao/step") )
-    {
-        me->set_temp("job/peiyao/step", 1);
-    }
-
-    if ( !living(me) )
-    {
-        me->delete_temp("job/peiyao");
-        return 0;
-    }
-
-    finish = 0;
-
-    switch ( me->query_temp("job/peiyao/step") )
-    {
-        case 1:
-        case 2:
-            msg = "$N东挑西拣，选好了一些药材。";
-            break;
-        case 3:
-        case 4:
-            msg = "$N把药材放进药臼，使劲捣了起来。";
-            break;
-        case 5:
-        case 6:
-            msg = "药材渐渐化作粉屑，混在一起。";
-            break;
-        case 7:
-        case 8:
-        case 9:
-            msg = "粉屑在$N的捣弄下越来越细，逐渐变成了粉末。";
-            break;
-        default:
-            msg = "$N把药材包好，递给墨大夫。";
-            finish = 1;
-            break;
-    }
-    msg += "\n";
-
-    if ( finish )
-    {
-        msg += CYN "墨大夫" CYN "看了$N" CYN "配的药，点头道：不错，不错！这是给你的报酬！\n" NOR;
-
-        me->delete_temp("job/peiyao");
-        me->add("count/peiyao", 1);
-
-        b = 100000 + random(20000);
-        gift = GIFT_D->gift_bonus(me, ([
-            "combat_exp": b,
-            "daoxing": b,
-            "potential": b / 5,
-            "silver":   b,
-            "job":  "peiyao",
-            "function": (: call_other, __FILE__, "give_medicine", me :),
-            ]));
-
-        MONITOR_D->report_job_msg(me->name() + "(" + me->query("id") + ")配药成功，奖励" 
-            + gift["combat_exp"] + "点武学及道行，" + gift["potential"] + "点潜能，" + gift["silver"] + "两银子。\n");
-    }
-
-    if ( 1 == finish || random(3) )
-    {
-        message_vision(msg, me);
-    }
-
-    if ( finish )
-    {
-        if ( b > 0 )
-        {
-            tell_object(me, HIC "\n你获得了" + COMBAT_D->chinese_daoxing(gift["daoxing"]) +
-                            "道行和" + gift["potential"] + "点潜能。\n\n" NOR);
-        }
-        return 0;
-    }
-
-    me->add_temp("job/peiyao/step", 1);
-    return 1;
-}
-
-void give_medicine(object me)
-{
-    object ob;
-    int type = random(100);
-
-    if ( type < 10 )
-    {
-        if ( !me->query("newbie/lifeiyu") && random(5) < 2 )
-        {
-            ob = new(__DIR__"obj/yaofen");
-        }
-        else
-        {
-            ob = new(__DIR__"obj/shenliwan");
-        }
-    }
-    else if ( type < 20 )
-    {
-        ob = new(__DIR__"obj/jinsuiwan");
-    }
-    else if ( type < 30 )
-    {
-        ob = new(__DIR__"obj/huanglongdan");
-    }
-    else if ( type < 40 )
-    {
-        ob = new(__DIR__"obj/xisuidan");
-    }
-    else if ( type < 50 )
-    {
-        ob = new(__DIR__"obj/qinglingsan");
-    }
-    else if ( type < 60 )
-    {
-        ob = new(__DIR__"obj/yangjingdan");
-    }
-    else if ( type < 70 )
-    {
-        ob = new(__DIR__"obj/zhuyandan");
-    }
-
-    if ( ob )
-    {
-        if ( !ob->move(me) )
-        {
-            destruct(ob);
-        }
-        else
-        {
-            ob->set("owner", me);
-
-            if ( !random(10) )
-            {
-                MONITOR_D->report_rumor_object_msg(me, "获得了天赋灵药" + ob->query("name") + "。\n");
-            }
-            MONITOR_D->report_job_msg(me->name() + "(" + me->query("id") + ")获得了天赋灵药" + ob->query("name") + "。\n");
-            tell_object(me, HIC "\n你获得了天赋灵药" + ob->query("name") + "。\n" NOR);
-        }
-    }
-}
-
-int halt_working(object me)
-{
-    message_vision(HIY "$N" HIY "把手中的活一甩，嚷嚷道：不干了，不干了！\n" NOR, me);
+  if (!living(me)) {
     me->delete_temp("job/peiyao");
+    return 0;
+  }
 
-    return 1;
+  finish = 0;
+
+  switch (me->query_temp("job/peiyao/step")) {
+    case 1:
+    case 2:
+      msg = "$N东挑西拣，选好了一些药材。";
+      break;
+    case 3:
+    case 4:
+      msg = "$N把药材放进药臼，使劲捣了起来。";
+      break;
+    case 5:
+    case 6:
+      msg = "药材渐渐化作粉屑，混在一起。";
+      break;
+    case 7:
+    case 8:
+    case 9:
+      msg = "粉屑在$N的捣弄下越来越细，逐渐变成了粉末。";
+      break;
+    default:
+      msg = "$N把药材包好，递给墨大夫。";
+      finish = 1;
+      break;
+  }
+  msg += "\n";
+
+  if (finish) {
+    msg += CYN "墨大夫" CYN "看了$N" CYN "配的药，点头道：不错，不错！这是给你的报酬！\n" NOR;
+
+    me->delete_temp("job/peiyao");
+    me->add("count/peiyao", 1);
+
+    b = 100000 + random(20000);
+    gift = GIFT_D->gift_bonus(me, ([
+      "combat_exp": b,
+      "daoxing": b,
+      "potential": b / 5,
+      "silver": b,
+      "job": "peiyao",
+      "function": (: call_other, __FILE__, "give_medicine", me :),
+    ]));
+
+    MONITOR_D->report_job_msg(me->name() + "(" + me->query("id") + ")配药成功，奖励"
+      +gift["combat_exp"] + "点武学及道行，" + gift["potential"] + "点潜能，" + gift["silver"] + "两银子。\n");
+  }
+
+  if (1 == finish || random(3)) {
+    message_vision(msg, me);
+  }
+
+  if (finish) {
+    if (b > 0) {
+      tell_object(me, HIC "\n你获得了" + COMBAT_D->chinese_daoxing(gift["daoxing"]) +
+        "道行和" + gift["potential"] + "点潜能。\n\n" NOR);
+    }
+    return 0;
+  }
+
+  me->add_temp("job/peiyao/step", 1);
+  return 1;
 }
 
-int stop_working()
-{
-    object me = this_player();
+void give_medicine(object me) {
+  object ob;
+  int type = random(100);
 
-    me->interrupt_me(me);
+  if (type < 10) {
+    if (!me->query("newbie/lifeiyu") && random(5) < 2) {
+      ob = new(__DIR__ "obj/yaofen");
+    } else {
+      ob = new(__DIR__ "obj/shenliwan");
+    }
+  } else if (type < 20) {
+    ob = new(__DIR__ "obj/jinsuiwan");
+  } else if (type < 30) {
+    ob = new(__DIR__ "obj/huanglongdan");
+  } else if (type < 40) {
+    ob = new(__DIR__ "obj/xisuidan");
+  } else if (type < 50) {
+    ob = new(__DIR__ "obj/qinglingsan");
+  } else if (type < 60) {
+    ob = new(__DIR__ "obj/yangjingdan");
+  } else if (type < 70) {
+    ob = new(__DIR__ "obj/zhuyandan");
+  }
 
-    return 1;
+  if (ob) {
+    if (!ob->move(me)) {
+      destruct(ob);
+    } else {
+      ob->set("owner", me);
+
+      if (!random(10)) {
+        MONITOR_D->report_rumor_object_msg(me, "获得了天赋灵药" + ob->query("name") + "。\n");
+      }
+      MONITOR_D->report_job_msg(me->name() + "(" + me->query("id") + ")获得了天赋灵药" + ob->query("name") + "。\n");
+      tell_object(me, HIC "\n你获得了天赋灵药" + ob->query("name") + "。\n" NOR);
+    }
+  }
 }
 
-void create ()
-{
-    set ("short", "神手堂药房" );
-    set ("long", @LONG
+int halt_working(object me) {
+  message_vision(HIY "$N" HIY "把手中的活一甩，嚷嚷道：不干了，不干了！\n" NOR, me);
+  me->delete_temp("job/peiyao");
+
+  return 1;
+}
+
+int stop_working() {
+  object me = this_player();
+
+  me->interrupt_me(me);
+
+  return 1;
+}
+
+void create() {
+  set("short", "神手堂药房");
+  set("long", @LONG
 
 这是七玄门后山的神手堂内的药房，药房中摆满了各种各样的
 药材，急需药铺伙计把这些药材磨成需要的药粉，药丸之类。
 LONG);
 
-    set("exits", 
+  set("exits",
     ([
-        "west" : "/d/city/yaopu",
-        "southdown" : __DIR__"shandao4",
-        "north" : __DIR__"houshan",
+      "west": "/d/city/yaopu",
+      "southdown": __DIR__ "shandao4",
+      "north": __DIR__ "houshan",
     ]));
 
-    create_door("north", "石门", "south", DOOR_CLOSED);
+  create_door("north", "石门", "south", DOOR_CLOSED);
 
-    set("objects", 
+  set("objects",
     ([
-        "/quest/peiyao/npc/mo" : 1,
+      "/quest/peiyao/npc/mo": 1,
     ]));
 
-    set("no_fight", 1);;
+  set("no_fight", 1); ;
 
-    setup();
+  setup();
 }
 
-void init()
-{
-    add_action("do_peiyao", "peiyao");
-    add_action("stop_working", "stop");
+void init() {
+  add_action("do_peiyao", "peiyao");
+  add_action("stop_working", "stop");
 }
-

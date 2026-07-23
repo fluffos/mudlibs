@@ -14,9 +14,8 @@ mapping *action = ({});
 string *dodge_msg = ({});
 string *parry_msg = ({});
 
-void create()
-{
-    seteuid(getuid());
+void create() {
+  seteuid(getuid());
 }
 
 //
@@ -29,14 +28,12 @@ void create()
 // this function in your skill object and make it reasonable 
 // according to the power of the skill.
 
-int valid_learn(object me)
-{
-    return 1;
+int valid_learn(object me) {
+  return 1;
 }
 
-int valid_effect(object me, object weapon, string action_name, int skill) 
-{ 
-    return 1;
+int valid_effect(object me, object weapon, string action_name, int skill) {
+  return 1;
 }
 
 // 
@@ -48,9 +45,8 @@ int valid_effect(object me, object weapon, string action_name, int skill)
 // /cmds/usr/skills.c )。
 // Currently we have only 2 types of skill: "martial" and "knowledge".
 
-string type()
-{
-    return "martial";
+string type() {
+  return "martial";
 }
 
 //
@@ -59,115 +55,92 @@ string type()
 // This function is called when a character's skill has gained a new level.
 // You can make some modify to a character according to the skill.
 
-void skill_improved(object me)
-{
+void skill_improved(object me) {}
+
+int query_dodge_power() {
+  return 0;
 }
 
-int query_dodge_power()
-{
+int query_parry_power() {
+  return 0;
+}
+
+int query_skill_power() {
+  return 0;
+}
+
+varargs object query_target(object me, object target) {
+  if (!target) {
+    target = offensive_target(me);
+  }
+
+  if (!target
+    || !target->is_character()
+    || target->is_corpse()
+    || target == me) {
     return 0;
+  }
+
+  return target;
 }
 
-int query_parry_power()
-{
+int shoot_exert(object me, object target, string action) {
+  int result;
+  string file, name;
+  string pfmcd;
+
+  if (me->query_temp("biqi")) {
+    return notify_fail("你正处于闭气状态中，不能使用内功！\n");
+  }
+
+  if (!wizardp(me) && !environment(me)->valid_fight()) {
+    return notify_fail("这里不能乱施展内功。\n");
+  }
+
+  if (me->is_busy()) {
+    return notify_fail("( 你上一个动作还没有完成，不能施用外功。)\n");
+  }
+
+  if (!stringp(file = (string)this_object()->exert_function_file(action))
+    || file_size(file + ".lpc") <= 0) {
     return 0;
-}
+  }
 
-int query_skill_power()
-{
-    return 0;
-}
+  target = query_target(me, target);
 
-varargs object query_target(object me, object target)
-{
-    if ( !target )
-    {
-        target = offensive_target(me);
+  name = call_other(file, "skill_name", me, target, file);
+
+  if (me->query_temp("using/" + replace_string(file, "/", "_") + ".lpc")) {
+    if (name) {
+      return notify_fail("你已经在使用【" + name + "】！\n");
+    } else {
+      return notify_fail("你正在使用这一绝招！\n");
     }
+  }
 
-    if ( !target
-        || !target->is_character()
-        || target->is_corpse()
-        || target == me )
-    {
-        return 0;
+  pfmcd = "exertcd/" + replace_string(file, "/", "_");
+  if (time() < (int)me->query_temp(pfmcd)) {
+    if (name) {
+      return notify_fail("你不能连续使用【" + name + "】！\n");
+    } else {
+      return notify_fail("你不能连续使用这一绝招！\n");
     }
+  }
 
-    return target;
-}
+  if (target) {
+    target->set_temp("apply/kill_msg", name);
+    target->set_temp("apply/kill_file", file);
+  }
 
-int shoot_exert(object me, object target, string action)
-{
-    int result;
-    string file, name;
-    string pfmcd;
+  result = (int)call_other(file, "exert", me, target);
+  me->set_temp(pfmcd, time() + result);
 
-    if ( me->query_temp("biqi") )
-    {
-        return notify_fail("你正处于闭气状态中，不能使用内功！\n");
-    }
+  if (target) {
+    target->delete_temp("apply/kill_msg");
+    target->delete_temp("apply/kill_file");
+  }
 
-    if ( !wizardp(me) && !environment(me)->valid_fight() )
-    {
-        return notify_fail("这里不能乱施展内功。\n");
-    }
-
-    if ( me->is_busy() )
-    {
-        return notify_fail("( 你上一个动作还没有完成，不能施用外功。)\n");
-    }
-
-    if ( !stringp(file = (string)this_object()->exert_function_file(action))
-        || file_size(file + ".lpc") <= 0 )
-    {
-        return 0;
-    }
-
-    target = query_target(me, target);
-
-    name = call_other( file, "skill_name", me, target, file);
-
-    if ( me->query_temp("using/" + replace_string(file, "/", "_") + ".lpc") )
-    {
-        if ( name )
-        {
-            return notify_fail("你已经在使用【" + name + "】！\n");
-        }
-        else
-        {
-            return notify_fail("你正在使用这一绝招！\n");
-        }
-    }
-
-    pfmcd = "exertcd/" + replace_string(file, "/", "_");
-    if ( time() < (int)me->query_temp(pfmcd) )
-    {
-        if ( name )
-        {
-            return notify_fail("你不能连续使用【" + name + "】！\n");
-        }
-        else
-        {
-            return notify_fail("你不能连续使用这一绝招！\n");
-        }
-    }
-
-    if ( target )
-    {
-        target->set_temp("apply/kill_msg", name);
-        target->set_temp("apply/kill_file", file);
-    }
-
-    result = (int)call_other( file, "exert", me, target);
-    me->set_temp(pfmcd, time() + result);
-
-    if ( target )
-    {
-        target->delete_temp("apply/kill_msg");
-        target->delete_temp("apply/kill_file");
-    }
-
-    return result;
+  return result;
 }
 
 //
@@ -181,454 +154,368 @@ int shoot_exert(object me, object target, string action)
 // a function called exert_function_file(string func) in the skill object
 // that takes the function name as argument and return the file name that
 // defines the specified function. 
-int exert_function(object me, string arg)
-{
-    string func, target, file;
-    object target_ob;
+int exert_function(object me, string arg) {
+  string func, target, file;
+  object target_ob;
 
-    if ( sscanf(arg, "%s %s", func, target) == 2 )
-    {
-        target_ob = present(target, environment(me));
-        if ( !target_ob )
-        {
-            target_ob = query_target(me);
-        }
-        if ( !target_ob )
-        {
-            return notify_fail("这里没有 " + target + "。\n");
-        }
+  if (sscanf(arg, "%s %s", func, target) == 2) {
+    target_ob = present(target, environment(me));
+    if (!target_ob) {
+      target_ob = query_target(me);
     }
-    else
-    {
-        func = arg;
-        target_ob = me;
+    if (!target_ob) {
+      return notify_fail("这里没有 " + target + "。\n");
     }
+  } else {
+    func = arg;
+    target_ob = me;
+  }
 
-    return shoot_exert(me, target_ob, func);
+  return shoot_exert(me, target_ob, func);
 }
 
-int shoot_perform(object me, object target, string action)
-{
-    int result;
-    string file, name;
-    string pfmcd;
+int shoot_perform(object me, object target, string action) {
+  int result;
+  string file, name;
+  string pfmcd;
 
-    if ( me->query_temp("fengmo") )
-    {
-        return notify_fail("你正处于封魔状态中，不能使用绝招！\n");
+  if (me->query_temp("fengmo")) {
+    return notify_fail("你正处于封魔状态中，不能使用绝招！\n");
+  }
+
+  if (me->is_busy()) {
+    return notify_fail("( 你上一个动作还没有完成，不能施用外功。)\n");
+  }
+
+  if (!stringp(file = (string)this_object()->perform_action_file(action))
+    || file_size(file + ".lpc") <= 0) {
+    return 0;
+  }
+
+  target = query_target(me, target);
+
+  name = call_other(file, "skill_name", me, target, file);
+
+  if (me->query_temp("using/" + replace_string(file, "/", "_") + ".lpc")) {
+    if (name) {
+      return notify_fail("你已经在使用【" + name + "】！\n");
+    } else {
+      return notify_fail("你正在使用这一绝招！\n");
     }
+  }
 
-    if ( me->is_busy() )
-    {
-        return notify_fail("( 你上一个动作还没有完成，不能施用外功。)\n");
+  pfmcd = "pfmcd/" + replace_string(file, "/", "_");
+  if (time() < (int)me->query_temp(pfmcd)) {
+    if (name) {
+      return notify_fail("你不能连续使用【" + name + "】！\n");
+    } else {
+      return notify_fail("你不能连续使用这一绝招！\n");
     }
+  }
 
-    if ( !stringp(file = (string)this_object()->perform_action_file(action))
-        || file_size(file + ".lpc") <= 0 )
-    {
-        return 0;
-    }
+  if (target) {
+    target->set_temp("apply/kill_msg", name);
+    target->set_temp("apply/kill_file", file);
+  }
 
-    target = query_target(me, target);
+  result = (int)call_other(file, "perform", me, target);
+  me->set_temp(pfmcd, time() + result);
 
-    name = call_other( file, "skill_name", me, target, file);
+  if (target) {
+    target->delete_temp("apply/kill_msg");
+    target->delete_temp("apply/kill_file");
+  }
 
-    if ( me->query_temp("using/" + replace_string(file, "/", "_") + ".lpc") )
-    {
-        if ( name )
-        {
-            return notify_fail("你已经在使用【" + name + "】！\n");
-        }
-        else
-        {
-            return notify_fail("你正在使用这一绝招！\n");
-        }
-    }
-
-    pfmcd = "pfmcd/" + replace_string(file, "/", "_");
-    if ( time() < (int)me->query_temp(pfmcd) )
-    {
-        if ( name )
-        {
-            return notify_fail("你不能连续使用【" + name + "】！\n");
-        }
-        else
-        {
-            return notify_fail("你不能连续使用这一绝招！\n");
-        }
-    }
-
-    if ( target )
-    {
-        target->set_temp("apply/kill_msg", name);
-        target->set_temp("apply/kill_file", file);
-    }
-
-    result = (int)call_other( file, "perform", me, target);
-    me->set_temp(pfmcd, time() + result);
-
-    if ( target )
-    {
-        target->delete_temp("apply/kill_msg");
-        target->delete_temp("apply/kill_file");
-    }
-
-    return result;
+  return result;
 }
 
-int perform_action(object me, string arg)
-{
-    string action, target;
-    object target_ob;
+int perform_action(object me, string arg) {
+  string action, target;
+  object target_ob;
 
-    if ( sscanf(arg, "%s %s", action, target) == 2 )
-    {
-        target_ob = present(target, environment(me));
-        if ( !target_ob )
-        {
-            target_ob = query_target(me);
-        }
-        if ( !target_ob )
-        {
-            return notify_fail("这里没有 " + target + "。\n");
-        }
+  if (sscanf(arg, "%s %s", action, target) == 2) {
+    target_ob = present(target, environment(me));
+    if (!target_ob) {
+      target_ob = query_target(me);
     }
-    else
-    {
-        action = arg;
+    if (!target_ob) {
+      return notify_fail("这里没有 " + target + "。\n");
     }
+  } else {
+    action = arg;
+  }
 
-    return shoot_perform(me, target_ob, action);
+  return shoot_perform(me, target_ob, action);
 }
 
-int shoot_cast(object me, object target, string action)
-{
-    int result;
-    string file, name;
-    string pfmcd;
+int shoot_cast(object me, object target, string action) {
+  int result;
+  string file, name;
+  string pfmcd;
 
-    if ( me->query_temp("jinzhou") )
-    {
-        return notify_fail("你正处于禁咒状态中，不能施展法力！\n");
+  if (me->query_temp("jinzhou")) {
+    return notify_fail("你正处于禁咒状态中，不能施展法力！\n");
+  }
+
+  if (!wizardp(me) && !environment(me)->valid_fight()) {
+    return notify_fail("这里不能乱施展法术。\n");
+  }
+
+  if (me->is_busy()) {
+    return notify_fail("( 你上一个动作还没有完成，不能施用法术。)\n");
+  }
+
+  if (!stringp(file = (string)this_object()->cast_spell_file(action))
+    || file_size(file + ".lpc") <= 0) {
+    return 0;
+  }
+
+  target = query_target(me, target);
+
+  name = call_other(file, "skill_name", me, target, file);
+
+  if (me->query_temp("using/" + replace_string(file, "/", "_") + ".lpc")) {
+    if (name) {
+      return notify_fail("你已经在使用【" + name + "】！\n");
+    } else {
+      return notify_fail("你正在使用这一绝招！\n");
     }
+  }
 
-    if ( !wizardp(me) && !environment(me)->valid_fight() )
-    {
-        return notify_fail("这里不能乱施展法术。\n");
+  pfmcd = "castcd/" + replace_string(file, "/", "_");
+  if (time() < (int)me->query_temp(pfmcd)) {
+    if (name) {
+      return notify_fail("你不能连续使用【" + name + "】！\n");
+    } else {
+      return notify_fail("你不能连续使用这一绝招！\n");
     }
+  }
 
-    if ( me->is_busy() )
-    {
-        return notify_fail("( 你上一个动作还没有完成，不能施用法术。)\n");
-    }
+  if (target) {
+    target->set_temp("apply/kill_msg", name);
+    target->set_temp("apply/kill_file", file);
+  }
 
-    if ( !stringp(file = (string)this_object()->cast_spell_file(action))
-        || file_size(file + ".lpc") <= 0 )
-    {
-        return 0;
-    }
+  result = (int)call_other(file, "cast", me, target);
+  me->set_temp(pfmcd, time() + result);
 
-    target = query_target(me, target);
+  if (target) {
+    target->delete_temp("apply/kill_msg");
+    target->delete_temp("apply/kill_file");
+  }
 
-    name = call_other( file, "skill_name", me, target, file);
-
-    if ( me->query_temp("using/" + replace_string(file, "/", "_") + ".lpc") )
-    {
-        if ( name )
-        {
-            return notify_fail("你已经在使用【" + name + "】！\n");
-        }
-        else
-        {
-            return notify_fail("你正在使用这一绝招！\n");
-        }
-    }
-
-    pfmcd = "castcd/" + replace_string(file, "/", "_");
-    if ( time() < (int)me->query_temp(pfmcd) )
-    {
-        if ( name )
-        {
-            return notify_fail("你不能连续使用【" + name + "】！\n");
-        }
-        else
-        {
-            return notify_fail("你不能连续使用这一绝招！\n");
-        }
-    }
-
-    if ( target )
-    {
-        target->set_temp("apply/kill_msg", name);
-        target->set_temp("apply/kill_file", file);
-    }
-
-    result = (int)call_other( file, "cast", me, target);
-    me->set_temp(pfmcd, time() + result);
-
-    if ( target )
-    {
-        target->delete_temp("apply/kill_msg");
-        target->delete_temp("apply/kill_file");
-    }
-
-    return result;
+  return result;
 }
 
-int cast_spell(object me, string spell, object target)
-{
-    return shoot_cast(me, target, spell);
+int cast_spell(object me, string spell, object target) {
+  return shoot_cast(me, target, spell);
 }
 
-int conjure_magic(object me, string spell, object target)
-{
-    string file;
+int conjure_magic(object me, string spell, object target) {
+  string file;
 
-    notify_fail("你所选用的法术系中没有这种法术。\n");
+  notify_fail("你所选用的法术系中没有这种法术。\n");
 
-    if ( !stringp(file = (string)this_object()->conjure_magic_file(spell))
-        || file_size(file + ".lpc") <= 0 )
-    {
-        return 0;
-    }
+  if (!stringp(file = (string)this_object()->conjure_magic_file(spell))
+    || file_size(file + ".lpc") <= 0) {
+    return 0;
+  }
 
-    me->set_temp("kill_msg", call_other( file, "skill_name", me, target, file));
+  me->set_temp("kill_msg", call_other(file, "skill_name", me, target, file));
 
-    return (int)call_other( file, "conjure", me, target);
+  return (int)call_other(file, "conjure", me, target);
 }
 
-int scribe_spell(object me, object ob, string spell)
-{
-    string file;
+int scribe_spell(object me, object ob, string spell) {
+  string file;
 
-    if ( !stringp(file = (string)this_object()->scribe_spell_file(spell))
-        || file_size(file + ".lpc") <= 0 )
-    {
-        return 0;
-    }
+  if (!stringp(file = (string)this_object()->scribe_spell_file(spell))
+    || file_size(file + ".lpc") <= 0) {
+    return 0;
+  }
 
-    me->set_temp("kill_msg", call_other( file, "skill_name", me, 0, file));
+  me->set_temp("kill_msg", call_other(file, "skill_name", me, 0, file));
 
-    return (int)call_other( file, "scribe", me, ob );
+  return (int)call_other(file, "scribe", me, ob);
 }
 
 //weiqi, 981115
 //string level_description(int level)
 //this function is to allow customerized description of skill level...
 //just override this default one.
-string level_description(int level)
-{
-    int max_level;
-    int grade;
-    string *skill_level_desc = ({
-        BLU "初学乍练" NOR,
-        BLU "初窥门径" NOR,
-        HIB "粗通皮毛" NOR,
-        HIB "略知一二" NOR,
-        YEL "半生不熟" NOR,
-        YEL "马马虎虎" NOR,
-        HIY "已有小成" NOR,
-        HIY "渐入佳境" NOR,
-        HIM "驾轻就熟" NOR,
-        HIM "了然于胸" NOR,
-        HIR "出类拔萃" NOR,
-        HIR "心领神会" NOR,
-        MAG "神乎其技" NOR,
-        MAG "出神入化" NOR,
-        CYN "豁然贯通" NOR,
-        CYN "登峰造极" NOR,
-        HIC "举世无双" NOR,
-        HIC "一代宗师" NOR,
-        HIC "震古铄今" NOR,
-        HIW "深不可测" NOR
-    });
-    string *knowledge_level_desc = ({
-        BLU "新学乍用" NOR,
-        HIB "初窥门径" NOR,
-        HIB "略知一二" NOR,
-        YEL "马马虎虎" NOR,
-        YEL "已有小成" NOR,
-        CYN "心领神会" NOR,
-        CYN "了然于胸" NOR,
-        CYN "豁然贯通" NOR,
-        HIC "举世无双" NOR,
-        HIC "震古铄今" NOR,
-        HIW "深不可测" NOR
-    });
+string level_description(int level) {
+  int max_level;
+  int grade;
+  string *skill_level_desc = ({
+    BLU "初学乍练" NOR,
+    BLU "初窥门径" NOR,
+    HIB "粗通皮毛" NOR,
+    HIB "略知一二" NOR,
+    YEL "半生不熟" NOR,
+    YEL "马马虎虎" NOR,
+    HIY "已有小成" NOR,
+    HIY "渐入佳境" NOR,
+    HIM "驾轻就熟" NOR,
+    HIM "了然于胸" NOR,
+    HIR "出类拔萃" NOR,
+    HIR "心领神会" NOR,
+    MAG "神乎其技" NOR,
+    MAG "出神入化" NOR,
+    CYN "豁然贯通" NOR,
+    CYN "登峰造极" NOR,
+    HIC "举世无双" NOR,
+    HIC "一代宗师" NOR,
+    HIC "震古铄今" NOR,
+    HIW "深不可测" NOR
+  });
+  string *knowledge_level_desc = ({
+    BLU "新学乍用" NOR,
+    HIB "初窥门径" NOR,
+    HIB "略知一二" NOR,
+    YEL "马马虎虎" NOR,
+    YEL "已有小成" NOR,
+    CYN "心领神会" NOR,
+    CYN "了然于胸" NOR,
+    CYN "豁然贯通" NOR,
+    HIC "举世无双" NOR,
+    HIC "震古铄今" NOR,
+    HIW "深不可测" NOR
+  });
 
 
-    switch (type() )
-    {
-        case "knowledge":
-            max_level = LEVEL_D->query_max_skills() * 2 / 3 / sizeof(knowledge_level_desc);
+  switch (type()) {
+    case "knowledge":
+      max_level = LEVEL_D->query_max_skills() * 2 / 3 / sizeof(knowledge_level_desc);
 
-            grade = level / max_level;
+      grade = level / max_level;
 
-            if ( grade >= sizeof(knowledge_level_desc) )
-            {
-                grade = sizeof(knowledge_level_desc) - 1;
-            }
+      if (grade >= sizeof(knowledge_level_desc)) {
+        grade = sizeof(knowledge_level_desc) - 1;
+      }
 
-            return knowledge_level_desc[grade];
-        default:
-            max_level = LEVEL_D->query_max_skills() * 2 / 3 / sizeof(skill_level_desc);
+      return knowledge_level_desc[grade];
+    default:
+      max_level = LEVEL_D->query_max_skills() * 2 / 3 / sizeof(skill_level_desc);
 
-            grade = level / max_level;
+      grade = level / max_level;
 
-            if ( grade >= sizeof(skill_level_desc) )
-            {
-                grade = sizeof(skill_level_desc) - 1;
-            }
+      if (grade >= sizeof(skill_level_desc)) {
+        grade = sizeof(skill_level_desc) - 1;
+      }
 
-            return skill_level_desc[grade];
-    }
+      return skill_level_desc[grade];
+  }
 }
 
-int sum(int n,int base,int d)
-{
+int sum(int n, int base, int d) {
   return (n * (2 * base + (n - 1) * d) / 2);
 }
 
-int NewRandom(int n,int base,int d)
-{
-    int i = 1;
-    int randnum = random(sum(n, base, d));
+int NewRandom(int n, int base, int d) {
+  int i = 1;
+  int randnum = random(sum(n, base, d));
 
-    if ( sum(6,base,d) < randnum )
-    {
-        i = 7;
-        while ( sum(i,base,d) < randnum )
-        {
-            i++;
-        }
+  if (sum(6, base, d) < randnum) {
+    i = 7;
+    while (sum(i, base, d) < randnum) {
+      i++;
     }
-    else
-    {
-        while ( sum(i,base,d) < randnum )
-        {
-            i++;
-        }
-   }
+  } else {
+    while (sum(i, base, d) < randnum) {
+      i++;
+    }
+  }
 
-    return (i - 1);
+  return (i - 1);
 }
 
-string attack_action(object me, string orig_action)
-{
-    return "";
+string attack_action(object me, string orig_action) {
+  return "";
 }
 
-void setup_skill()
-{
-}
+void setup_skill() {}
 
-mapping specify_action(object me, object weapon, int index)
-{
-    if ( 0 >= sizeof(action) )
-    {
-        setup_skill();
-    }
+mapping specify_action(object me, object weapon, int index) {
+  if (0 >= sizeof(action)) {
+    setup_skill();
+  }
 
-    if ( 0 >= sizeof(action) )
-    {
-        return 0;
-    }
-
-    if ( index >= sizeof(action) )
-    {
-        index = sizeof(action) - 1;
-    }
-
-    if ( 0 > index )
-    {
-        index = 0;
-    }
-
-    return action[index];
-}
-
-mapping query_action(object me, object weapon)
-{
-    return specify_action(me, weapon, random(sizeof(action)));
-}
-
-string query_dodge_msg(string limb)
-{
-    if ( 0 >= sizeof(dodge_msg) )
-    {
-        setup_skill();
-    }
-
-    if ( 0 >= sizeof(dodge_msg) )
-    {
-        return 0;
-    }
-
-	return dodge_msg[random(sizeof(dodge_msg))];
-}
-
-string query_parry_msg(string limb)
-{
-    if ( 0 >= sizeof(parry_msg) )
-    {
-        setup_skill();
-    }
-
-    if ( 0 >= sizeof(parry_msg) )
-    {
-        return 0;
-    }
-
-    return parry_msg[random(sizeof(parry_msg))];
-}
-
-varargs int practice_skill(object me, int kee, int sen, int force, string skill, mixed desc)
-{
-    if ( (int)me->query("kee") < kee )
-    {
-        return notify_fail("你的气不够，没有办法练习" + HIW + to_chinese(skill) + NOR + "。\n");
-    }
-
-    if ( (int)me->query("sen") < sen )
-    {
-        return notify_fail("你的神不够，没有办法练习" + HIW + to_chinese(skill) + NOR + "。\n");
-    }
-
-    if ( (int)me->query("force") < force )
-    {
-        return notify_fail("你的内力不够，没有办法练习" + HIW + to_chinese(skill) + NOR + "。\n");
-    }
-
-    me->receive_damage("kee", kee);
-    me->receive_damage("sen", sen);
-    me->add("force", -force);
-
-    if ( stringp(desc) )
-    {
-        write(desc);
-    }
-    else if ( arrayp(desc) )
-    {
-        mixed msg = desc[random(sizeof(desc))];
-        if ( stringp(msg) )
-        {
-            write(msg);
-        }
-        else
-        {
-            write("你按照所学练了一遍" + HIW + to_chinese(skill) + NOR + "。\n");
-        }
-    }
-    else
-    {
-        write("你按照所学练了一遍" + HIW + to_chinese(skill) + NOR + "。\n");
-    }
-
-    return 1;
-}
-
-int query_npc_ignore()
-{
+  if (0 >= sizeof(action)) {
     return 0;
+  }
+
+  if (index >= sizeof(action)) {
+    index = sizeof(action) - 1;
+  }
+
+  if (0 > index) {
+    index = 0;
+  }
+
+  return action[index];
 }
 
+mapping query_action(object me, object weapon) {
+  return specify_action(me, weapon, random(sizeof(action)));
+}
+
+string query_dodge_msg(string limb) {
+  if (0 >= sizeof(dodge_msg)) {
+    setup_skill();
+  }
+
+  if (0 >= sizeof(dodge_msg)) {
+    return 0;
+  }
+
+  return dodge_msg[random(sizeof(dodge_msg))];
+}
+
+string query_parry_msg(string limb) {
+  if (0 >= sizeof(parry_msg)) {
+    setup_skill();
+  }
+
+  if (0 >= sizeof(parry_msg)) {
+    return 0;
+  }
+
+  return parry_msg[random(sizeof(parry_msg))];
+}
+
+varargs int practice_skill(object me, int kee, int sen, int force, string skill, mixed desc) {
+  if ((int)me->query("kee") < kee) {
+    return notify_fail("你的气不够，没有办法练习" + HIW + to_chinese(skill) + NOR + "。\n");
+  }
+
+  if ((int)me->query("sen") < sen) {
+    return notify_fail("你的神不够，没有办法练习" + HIW + to_chinese(skill) + NOR + "。\n");
+  }
+
+  if ((int)me->query("force") < force) {
+    return notify_fail("你的内力不够，没有办法练习" + HIW + to_chinese(skill) + NOR + "。\n");
+  }
+
+  me->receive_damage("kee", kee);
+  me->receive_damage("sen", sen);
+  me->add("force", -force);
+
+  if (stringp(desc)) {
+    write(desc);
+  } else if (arrayp(desc)) {
+    mixed msg = desc[random(sizeof(desc))];
+    if (stringp(msg)) {
+      write(msg);
+    } else {
+      write("你按照所学练了一遍" + HIW + to_chinese(skill) + NOR + "。\n");
+    }
+  } else {
+    write("你按照所学练了一遍" + HIW + to_chinese(skill) + NOR + "。\n");
+  }
+
+  return 1;
+}
+
+int query_npc_ignore() {
+  return 0;
+}

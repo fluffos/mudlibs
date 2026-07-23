@@ -3,160 +3,131 @@
 
 inherit FAMILYSKILL;
 
-int normal_cast(object me, object target)
-{
-    string msg;
-    string name = HIR"“紧箍咒”"NOR;
-    int damage = 0;
+int normal_cast(object me, object target) {
+  string msg;
+  string name = HIR "“紧箍咒”" NOR;
+  int damage = 0;
 
-    msg = HIC"$N默默地将那" + name + "念了几遍。\n" NOR;
+  msg = HIC "$N默默地将那" + name + "念了几遍。\n" NOR;
 
-    if ( 0 < SPELL_D->attacking_cast_success(me, target, 0) )
-    {
-        damage = SPELL_D->get_mydamage_direct(me, target);
-        damage += (int)me->query("mana_factor") - random((int)target->query("mana_factor"));
+  if (0 < SPELL_D->attacking_cast_success(me, target, 0)) {
+    damage = SPELL_D->get_mydamage_direct(me, target);
+    damage += (int)me->query("mana_factor") - random((int)target->query("mana_factor"));
 
-        //here we can see if 2 players are at same status, the attacker has higher chance.
-        if ( damage > 0 )
-        {
-            msg += HIC "把个$n痛得竖蜻蜓，翻筋斗，耳红面赤，眼胀身麻，不由得抓破了自己的头！\n" NOR;
+    //here we can see if 2 players are at same status, the attacker has higher chance.
+    if (damage > 0) {
+      msg += HIC "把个$n痛得竖蜻蜓，翻筋斗，耳红面赤，眼胀身麻，不由得抓破了自己的头！\n" NOR;
 
-            target->receive_damage("sen", damage, me);
-            target->receive_wound("sen", damage/3, me);
-            target->receive_damage("kee", damage, me);
-            target->receive_wound("kee", damage/4, me);
-        }
-        else
-        {
-            msg += "但是什么也没发生。\n";
-        }
-    } 
-    else
-    {
-        msg += "但是什么也没发生。\n";
+      target->receive_damage("sen", damage, me);
+      target->receive_wound("sen", damage / 3, me);
+      target->receive_damage("kee", damage, me);
+      target->receive_wound("kee", damage / 4, me);
+    } else {
+      msg += "但是什么也没发生。\n";
     }
+  } else {
+    msg += "但是什么也没发生。\n";
+  }
 
-    message_cast(msg, me, target);
+  message_cast(msg, me, target);
 
-    if ( damage > 0 )
-    {
-        COMBAT_D->report_status(target, 1, me, "kee");
-        COMBAT_D->report_status(target, 1, me, "sen");
-    }
+  if (damage > 0) {
+    COMBAT_D->report_status(target, 1, me, "kee");
+    COMBAT_D->report_status(target, 1, me, "sen");
+  }
 
+  return 1;
+}
+
+int cast(object me, object target) {
+  string msg, name;
+  int damage, howlong = 0;
+  object ob;
+
+  if (userp(me) && !(ob = present("jingu zhou", me))) {
+    return notify_fail("你身上没有紧箍咒、金箍咒或禁箍咒，无法施用咒语！\n");
+  }
+
+  if (ob) {
+    name = "“" + ob->query("name") + "”";
+  } else {
+    name = HIR "“紧箍咒”" NOR;
+  }
+
+  if (!target) {
+    return notify_fail("你要对谁念" + name + "？\n");
+  }
+
+  limit_status["mana"] = 25 + (int)me->query("mana_factor");
+  limit_status["sen"] = 10;
+
+  limit_skills["spells"] = 100;
+
+  if (!can_cast(me, "南海普陀山")) {
+    return 0;
+  }
+
+  me->add("mana", -25 - (int)me->query("mana_factor"));
+  me->receive_damage("sen", 10);
+
+  if (random(me->query("max_mana")) < 50) {
+    write("你失败了！\n");
     return 1;
+  }
+
+  msg = HIC "$N默默地将那" + name + "念了几遍。\n" NOR;
+
+  if (0 < SPELL_D->attacking_cast_success(me, target, 0)) {
+    damage = SPELL_D->get_mydamage_direct(me, target);
+    damage += (int)me->query("mana_factor") - random((int)target->query("mana_factor"));
+
+    //here we can see if 2 players are at same status, the attacker has higher chance.
+    if (damage > 0) {
+      msg += HIC "把个$n痛得竖蜻蜓，翻筋斗，耳红面赤，眼胀身麻，不由得抓破了自己的头！\n" NOR;
+
+      //finally damage also depends on enabled spells level.
+      if (name != "“紧箍咒”") {
+        damage /= 2;
+      }
+
+      target->receive_damage("sen", damage, me);
+      target->receive_wound("sen", damage / 3, me);
+      target->receive_damage("kee", damage, me);
+      target->receive_wound("kee", damage / 4, me);
+
+      howlong = 15 + random((me->query_skill("spells") - 100));
+      if (howlong > 60) {
+        howlong = 60;
+      }
+      if (name != "“紧箍咒”") {
+        howlong /= 2;
+      }
+      COMBAT_D->start_nomove(target, howlong);
+
+      me->improve_skill("buddhism", 1, 1);
+      //a typical level is 100+100 ->enabled 150, so will "ding" about 1 minute in the best case.
+    } else {
+      msg += "但是什么也没发生。\n";
+    }
+  } else {
+    msg += "但是什么也没发生。\n";
+  }
+
+  message_cast(msg, me, target);
+
+  if (damage > 0) {
+    if (ob) {
+      destruct(ob);
+    }
+    COMBAT_D->report_status(target, 1, me, "kee");
+    COMBAT_D->report_status(target, 1, me, "sen");
+  }
+
+  become_enemy(me, target);
+
+  return 3 + random(5);
 }
 
-int cast(object me, object target)
-{
-    string msg, name;
-    int damage, howlong = 0;
-    object ob;
-
-    if ( userp(me) && !(ob = present("jingu zhou", me)) )
-    {
-        return notify_fail("你身上没有紧箍咒、金箍咒或禁箍咒，无法施用咒语！\n");
-    }
-
-    if ( ob )
-    {
-        name = "“" + ob->query("name") + "”";
-    }
-    else
-    {
-        name = HIR"“紧箍咒”"NOR;
-    }
-
-    if ( !target )
-    {
-        return notify_fail("你要对谁念" + name + "？\n");
-    }
-
-    limit_status["mana"] = 25 + (int)me->query("mana_factor");
-    limit_status["sen"] = 10;
-
-    limit_skills["spells"] = 100;
-
-    if ( !can_cast(me, "南海普陀山") )
-    {
-        return 0;
-    }
-
-    me->add("mana", -25 - (int)me->query("mana_factor"));
-    me->receive_damage("sen", 10);
-
-    if ( random(me->query("max_mana")) < 50 )
-    {
-        write("你失败了！\n");
-        return 1;
-    }
-
-    msg = HIC"$N默默地将那" + name + "念了几遍。\n" NOR;
-
-    if ( 0 < SPELL_D->attacking_cast_success(me, target, 0) )
-    {
-        damage = SPELL_D->get_mydamage_direct(me, target);
-        damage += (int)me->query("mana_factor") - random((int)target->query("mana_factor"));
-
-        //here we can see if 2 players are at same status, the attacker has higher chance.
-        if ( damage > 0 )
-        {
-            msg += HIC "把个$n痛得竖蜻蜓，翻筋斗，耳红面赤，眼胀身麻，不由得抓破了自己的头！\n" NOR;
-
-            //finally damage also depends on enabled spells level.
-            if ( name != "“紧箍咒”" )
-            {
-                damage /= 2;
-            }
-
-            target->receive_damage("sen", damage, me);
-            target->receive_wound("sen", damage/3, me);
-            target->receive_damage("kee", damage, me);
-            target->receive_wound("kee", damage/4, me);
-
-            howlong = 15 + random((me->query_skill("spells") - 100));
-            if ( howlong > 60 )
-            {
-                howlong = 60;
-            }
-            if ( name != "“紧箍咒”" )
-            {
-                howlong /= 2;
-            }
-            COMBAT_D->start_nomove(target, howlong);
-
-            me->improve_skill("buddhism", 1, 1);
-            //a typical level is 100+100 ->enabled 150, so will "ding" about 1 minute in the best case.
-        }
-        else
-        {
-            msg += "但是什么也没发生。\n";
-        }
-    } 
-    else
-    {
-        msg += "但是什么也没发生。\n";
-    }
-
-    message_cast(msg, me, target);
-
-    if ( damage > 0 )
-    {
-        if ( ob )
-        {
-            destruct(ob);
-        }
-        COMBAT_D->report_status(target, 1, me, "kee");
-        COMBAT_D->report_status(target, 1, me, "sen");
-    }
-
-    become_enemy(me, target);
-
-    return 3 + random(5);
+string skill_name(object me, object target, string skill) {
+  return "紧箍咒";
 }
-
-string skill_name(object me, object target, string skill)
-{
-    return "紧箍咒";
-}
-
