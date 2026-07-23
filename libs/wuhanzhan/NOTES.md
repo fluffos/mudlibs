@@ -340,3 +340,27 @@ certainly also killed other agents' concurrently-running driver processes
 time, likely collateral). Worth flagging to any concurrently-running
 agent/session in case their driver died unexpectedly around 16:07 local
 time during this session.
+
+## Re-verification pass (driver rebuild + LPC formatter + WASM build)
+
+- **Reformatted** all 9898 `.lpc` files under `work/` with
+  `tools/lpc-syntax/format-corpus.mjs`: 9829 written, 66 already
+  idempotent-clean, 3 refused by the tool's own token/byte-identity guard
+  (expected on messy legacy code, not chased).
+- **Native retest against the freshly-rebuilt driver**
+  (`~/src/fluffos/build-debug/src/driver`, rebuilt from latest upstream
+  master): clean boot, zero fatal errors in `log/debug.log` (exact-PID
+  kill used throughout, no broad `pkill`). Full registration flow
+  re-verified with a fresh real Chinese name (`秦风终七`/id `qretest`),
+  reaching the actual starting room (`南城客栈`), `look`/`score`/`quit`
+  all producing correct output — no regressions from either the driver
+  rebuild or the reformat.
+- **WASM build test** (`scripts/wasm_client.js` against
+  `~/src/fluffos/build-wasm/src`): boots cleanly (only benign compile-
+  warning spam, no fatal errors). Full registration completed end-to-end
+  under WASM too — id `wasmwhz` → real Chinese name `秦坤` → recovery
+  PIN/login password/email/gender/stat-roll accept → landed in the same
+  `南城客栈` starting room, `look`/`quit` both produced correct output.
+  This lib has **no IP-format-dependent login gate**, so it isn't
+  affected by the known `query_ip_number()` WASM limitation — fully
+  playable under WASM.
