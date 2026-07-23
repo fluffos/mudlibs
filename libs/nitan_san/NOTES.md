@@ -412,3 +412,41 @@ specific file of interest (`d/city/npc/paimaishi.lpc`, item 15 above) and
 found 3 pre-existing content errors unrelated to any of the fixes in this
 pass — noted there rather than chased, since the file is off the tested
 path (an un-preloaded, never-visited city NPC).
+
+## Re-verification pass: driver rebuild + formatter + WASM (2026-07-23)
+
+- **LPC formatter**: ran `format-corpus.mjs` across all 13559 `.lpc`
+  files under `work/` — 13521 reformatted, 31 unchanged, 7 refused
+  (token-mismatch safety gate, negligible at this scale). Confirmed (via
+  grep, same as `nitan_ceshi`) this lib's `feature/alias.lpc` does not
+  have the `nitan6`/`nitan170911` malformed-character-literal bug —
+  different file shape, nothing to fix.
+- **Native retest against the freshly-rebuilt driver**: booted clean
+  (`Initializations complete.`). Ran the full registration flow (id
+  `qflibsa`, surname `秦`, given name `岭`, admin+login passwords,
+  gender) end-to-end, reaching the "注册房间" prompt; a follow-up
+  connection (returning-player path, same id/password) ran
+  `register test15@qq.com`, advancing into 生命之谷 with `盘古`
+  correctly greeting "秦岭，你快快选择..." by the real registered
+  name — full round-trip verified, zero fatal errors in `debug.log`
+  throughout. No regression from the reformat or driver rebuild.
+- **WASM build test** (`scripts/wasm_client.js`): boots cleanly (only
+  expected non-fatal preload warnings, e.g. `versiond.lpc`'s
+  `socket_bind`/`socket_close`/`socket_listen` calls failing as
+  `Undefined function` — the `sockets` package isn't built into this
+  WASM target, same documented restriction as everywhere else in this
+  batch, non-fatal). **Same as `nitan_ceshi`**: `logind.lpc`'s `logon()`
+  destructs any connection where `uptime() < 30` as its very first
+  statement (before any prompt), and the WASM harness's
+  connect-immediately-after-boot pattern means every attempt within one
+  short-lived process hits this "还在启动中" gate — confirmed via
+  `泥潭三正在启动过程中，请稍候再来。` appearing immediately post-connect
+  regardless of `--idle` padding. This lib's `adm/daemons/band.lpc`
+  `is_banned()` also has the identical `sscanf(site, "%s.%s.%s.%s",...)
+  != 4` IP-format gate that would independently block login via the
+  documented `query_ip_number()`-under-WASM limitation even past the
+  30-second mark. Neither is a mudlib bug; the native retest above
+  confirms the exact same code registers and plays through cleanly.
+  Status: **boots under WASM; login not exercisable within a single
+  short-lived harness run** (same two-gate situation as `nitan_ceshi`,
+  consistent with them being close siblings).
