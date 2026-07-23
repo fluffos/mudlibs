@@ -524,3 +524,58 @@ unwired "指间MUD"/Tomud client-protocol headers (harmless dead code,
 documented for context); DNS/intermud calls reachable only from
 `who`/`mudlist`/`shutdown`/`telnet`/`reboot` admin commands (never
 exercised by the required test, not touched).
+
+## Re-verification pass: driver rebuild + formatter + WASM (2026-07)
+
+- **LPC formatter** applied to all `.lpc` under `work/` (7,302 total,
+  7,272 written, 25 unchanged, 5 self-checked errors left untouched).
+  Spot-checked `adm/daemons/logind.lpc`'s `crypt(ZJKEY, "zj")` fix
+  post-format — intact, unchanged in substance.
+- **Native re-test against the freshly rebuilt driver**
+  (`~/src/fluffos/build-debug/src/driver`): clean boot, only the
+  pre-existing benign `versiond.lpc`/`socket_bind()` line in
+  `debug.log`. Since `mudclient.py`'s static `--send` queue can't
+  compute the dynamic crypt-challenge response, wrote a small one-off
+  Python client (`crypt` stdlib module) that: connects, parses
+  `ver1.0,<challenge>` from the banner, computes `crypt(ZJKEY,
+  challenge[2:4])` and sends it back, then sends the `id║password║
+  crypt(ZJKEY,id)+crypt(ZJKEY,password)║email` account line and a
+  `gender║avatar║name` character-creation line. Verified end-to-end with
+  a fresh id/real Chinese name (`zjretest`/秦岭): "版本验证成功" (version
+  verified) → account accepted → character created → landed in 世外桃源
+  (地狱无门), `look`/`score` (correct pre-投胎 message)/`quit` all
+  produced correct output. **Confirmed the `crypt(ZJKEY, "zj")` fix is
+  fully deterministic run-to-run** (the challenge string and its
+  `[2:4]` salt slice were byte-identical across every connection tested
+  in this pass, as expected now that the explicit 2-char salt replaced
+  the old `crypt(key, 0)` call) — this determinism is what makes a
+  scripted test client (or a real client that recomputes the response
+  once) viable at all.
+- **WASM test**: attempted via `scripts/wasm_client.js` with the
+  crypt-response precomputed as a literal `--send` line (viable exactly
+  *because* the challenge is now deterministic — no need for a reactive
+  client). **Never reached the crypt banner at all** — root cause is the
+  SAME test-harness gap identified on `zhongjidiyu_airuoyoulan` in this
+  same batch, an independent occurrence: `clone/user/login.lpc`'s
+  `logon()` unconditionally calls `log_file("nosave/logon", ...)`
+  (`log/nosave/` — note this is this lib's post-`static`→`nosave`-sed
+  directory name, a REAL directory shipped in `work/log/nosave/` on
+  disk, confirmed) as its very first statement, no `catch()`.
+  `scripts/wasm_client.js`'s `copyDir()` only recreates the bare `log/`
+  directory itself in the in-memory FS, not real subdirectories like
+  `log/nosave/`/`log/static/`/`log/user/` — so this throws `Wrong
+  permissions for opening file /log/nosave/logon for append. "No such
+  file or directory"` uncaught, and `new_conn_handler()` disconnects the
+  connection before `logon()` ever writes the `ver1.0,...` challenge.
+  Already flagged in `zhongjidiyu_airuoyoulan`'s NOTES.md for the
+  orchestrating session to fix in the shared harness (not done here
+  myself, since it's a script other agents' concurrent sessions use).
+  Separately: this lib's `logon()` also has an unguarded
+  `VERSION_D->is_version_ok()` call later in the function (same shape as
+  `zhonghua2`/`zhongjidiyu` in this batch), which — given this lib's
+  `versiond.lpc` also uses raw `socket_*()` calls unavailable under WASM
+  — would likely block login a SECOND time even after a harness fix for
+  the `log/nosave/` gap. Both are WASM-sandbox/harness artifacts, not
+  mudlib bugs (native completes the full crypt-handshake + registration
+  + gameplay flow cleanly, verified above) — not patched, per the
+  standing instruction for WASM-mode limitations.
