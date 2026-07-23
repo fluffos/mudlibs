@@ -1870,6 +1870,39 @@ efun's own name (not just `message()` — any `write()`/`tell_room()`
 wrapper's own definition (or a forward declaration of it) appears above
 all of them, not just check that the wrapper's body itself looks correct.
 
+### 15ab. Two more findings from `haiyang2` (archive #63): a player-body `receive_message()` missing the standard `!stringp(str)` guard kills every fresh connection at the first banner; and a DNS/intermud daemon's function calls can be inlined elsewhere even when the daemon itself is correctly excluded from preload
+
+1. **Missing `!stringp(str)` guard on one code path, present everywhere
+   else**: this driver's idiom of `write(read_file(path))` (or similar)
+   relies on the receiving `receive_message()` silently no-op'ing when
+   handed `0` instead of a string — every player-body-adjacent copy of
+   `receive_message()` in this lib (`feature/message.lpc`,
+   `feature/message1.lpc`) already has this guard, but `clone/user/
+   login.lpc`'s own copy (the pre-authentication connection object,
+   reached before the real player body even exists) was missing it.
+   Since routine startup code (`uptime.lpc` reading a possibly-absent
+   `LASTCRASH` file) calls `write(0)` unconditionally on ordinary boots,
+   this crashed `receive()` on **every single fresh connection**, right
+   at the very first banner line, before any prompt appeared — the
+   `login.lpc`-stage object is easy to overlook since the "real" player
+   body's copy is correct and might be the only one checked. **Lesson**:
+   when auditing a `receive_message()`-family guard (per §15e's general
+   "guard every unchecked chained call" principle), explicitly check the
+   pre-login/pre-authentication connection object's own copy too, not
+   just the post-registration player body — they're often separate files
+   with independently-drifted implementations.
+2. **§15p can still bite even when the daemon itself is properly
+   excluded**: `DNS_MASTER`/`dns_master.lpc` was correctly absent from
+   `adm/etc/preload` in this lib from the start, but `logind.lpc`'s
+   `gb_big5()` (an intermud mud-list display shown during login) and a
+   broadly-used `Mud_name()` macro both called into the DNS/intermud
+   subsystem *inline*, independent of preload. §15p's "just exclude it
+   from preload" fix is necessary but not always sufficient — also grep
+   for direct calls into the DNS/intermud daemon's API from ordinary
+   login/display code, not only from the preload list, and either
+   disable the calling code path or reroute it to a local constant
+   (here: `Mud_name()` rewritten to return `INTERMUD_MUD_NAME` directly).
+
 ---
 
 ## Per-archive gotchas index
