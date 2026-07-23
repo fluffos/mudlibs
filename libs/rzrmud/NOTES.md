@@ -78,3 +78,41 @@ range check to test the CJK Unicode block instead, and halved the
 GBK-byte-calibrated length bounds in `check_legal_name` to match. See
 AGENTS.md §15h for the full writeup; confirmed via a real interactive
 registration test (Chinese surname + given name reaching the next prompt).
+
+## Re-verification pass: driver rebuild + formatter + WASM (2026-07-23)
+
+- **LPC formatter**: ran `format-corpus.mjs` across all 9096 `.lpc` files
+  under `work/` — 8959 reformatted, 135 unchanged, 2 refused
+  (token-mismatch safety gate, negligible on this lib).
+- **Native retest against the freshly-rebuilt driver**: booted clean
+  (`Initializations complete.`, zero fatal errors). This pass went
+  further than the original conversion pass's test (which stopped at the
+  English-name sub-prompt): ran the **complete** registration flow —
+  encoding → age-gate → `new` → English id → Chinese name (`秦风九`) →
+  admin/"super" password ×2 → login password ×2 → email (needs an
+  `x@y.z`-shaped address) → gender → an in-game gift-allocation wizard
+  (`9`/`y` to accept defaults) — and reached the actual starting room
+  (南城客栈) with working NPCs/exits, `score` rendering a complete
+  correct character sheet, and `quit` (with the standard "played <2
+  minutes, still want to keep this account?" new-account prompt)
+  working correctly. Zero fatal errors in `debug.log` across the whole
+  session. No regression from the reformat or driver rebuild.
+- **WASM build test** (`scripts/wasm_client.js`): **fully playable**,
+  including a full real-name registration (`秦风十一` / id `qflibrv`)
+  reaching 南城客栈 with correct room/NPC text, a correct `score` sheet,
+  and a working `quit`. As with `mohuanshiji`, `debug.log` shows one
+  non-fatal `*Array index out of bounds` trace from `adm/daemons/
+  ipd.lpc`'s `seek_ip_address()` — the shared-lineage
+  `query_ip_number()`-under-WASM limitation (an empty IP string breaks
+  `explode(ip, ".")[1]` indexing) — but it fires from `enter_world()`'s
+  cosmetic "connecting from…" welcome text, *after* the character
+  already exists and is in the world, so it doesn't block anything.
+  **Note for future passes**: this lib's `SECURITY_D->match_wiz_site()` /
+  `"/adm/daemons/band"->is_banned()`/`create_char_banned()` calls (both
+  IP-based) also depend on `query_ip_number()`, but neither fired during
+  this test — `match_wiz_site` only gates *wizard*-level logins (not
+  exercised here), and `is_banned`/`create_char_banned` evidently
+  tolerate the WASM-mode IP string without throwing. Status: **fully
+  playable under WASM** (same cosmetic, non-blocking IP-lookup error as
+  `mohuanshiji`, not the login-blocking shape seen in `mhxy`/
+  `moniHuafu`).
