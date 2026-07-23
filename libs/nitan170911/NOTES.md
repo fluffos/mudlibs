@@ -113,3 +113,51 @@ above is what actually found every real bug fixed in this pass (§15/§15b/
 a full sweep would mostly surface the same long-tail false positives
 described in §6b (files needing specific runtime context to load) rather
 than new architecture bugs, at real cost to run safely.
+
+## Re-verification pass: driver rebuild + formatter + WASM (2026-07-23)
+
+- **LPC formatter**: ran `format-corpus.mjs` across all 54627 `.lpc`
+  files under `work/` (mega-lib — per AGENTS.md's mega-lib guidance this
+  was run anyway, just expected to take longer) — 54596 reformatted, 28
+  unchanged, 3 refused (token-mismatch safety gate, negligible at this
+  scale).
+- **Native retest against the freshly-rebuilt driver**: booted clean
+  (`Initializations complete.`, zero fatal errors, `RSS` stayed modest —
+  this only preloads a short daemon list, not the whole 54,600-file
+  tree, so it's a fast/cheap boot despite the raw file count). Per
+  AGENTS.md's mega-lib guidance, did **not** run the full `lpcc` sweep
+  again (same reasoning as the original pass). Confirmed via
+  `mudclient.py` that registration still correctly hits the same
+  documented MySQL-unavailable gate as before, unchanged:
+  `对不起，由于连接不上数据库所在服务器，目前仙剑奇侠传暂时不接受数据
+  漫游或新玩家注册。` — expected/correct given no MySQL backend is
+  configured here, not a regression.
+- **Same `feature/alias.lpc` malformed-character-literal bug as
+  `nitan6`** (byte-identical raw source, confirmed via diff) — fixed
+  here too (`case '''` → `case '\''`), even though the MySQL gate means
+  `make_body()`/this code path can't actually be exercised in this
+  sandboxed environment (no player ever gets past registration to
+  reach the player-body class). Applied proactively for lineage
+  consistency and in case a future pass adds a real MySQL backend.
+- **WASM build test** (`scripts/wasm_client.js`): contrary to this
+  pass's own worst-case expectation ("copying the whole 506MB/61,157-
+  file `work/` tree into an in-memory FS may be slow/memory-heavy"),
+  the test **completed quickly and cleanly**, well within a bounded
+  240-second wall-clock budget — boot only loads the short
+  `adm/etc/preload` daemon list (same as native), not the full file
+  tree, so the mega-lib's sheer file count doesn't translate into a
+  slow/expensive WASM boot the way a full `lpcc` sweep would. Host
+  memory stayed healthy throughout (checked via `free -h` mid-run).
+  Login hit the **same documented `query_ip_number()`-under-WASM
+  limitation** as `nitan6`/`nitan_ceshi`/`nitan_san`: this lineage's
+  shared `BAN_D->is_banned()` (identical `sscanf(site, "%s.%s.%s.%s",
+  ...) != 4` shape) rejected the connection with `你的地址在本 MUD
+  不受欢迎，请去论坛 muds.cn 申述。` immediately after the banner — not
+  a mudlib bug, the documented driver-side WASM gap. (The MySQL-gate
+  question is moot here since the IP-ban check fires first, before the
+  registration flow is ever reached.) Status: **boots under WASM
+  quickly and without incident; login blocked by the query_ip_number()
+  -under-WASM limitation (same root cause as the rest of the NT/nitan
+  lineage in this batch)** — the mega-lib size turned out NOT to be a
+  practical obstacle for this particular test, worth noting for future
+  passes considering the same worry.
