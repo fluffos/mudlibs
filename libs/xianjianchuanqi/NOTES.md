@@ -122,3 +122,30 @@ Found and fixed one new regression, same class as fix #3 above:
   registration, `look`, `score`, or `quit` — a pre-existing content/seed-
   data gap, not a driver-compat bug, left unfixed per the project's
   "known non-critical content gap" policy.
+
+## Driver rebuild / formatter / WASM pass (2026-07-23)
+
+- **LPC formatter** run over all `work/*.lpc`: 12,241 total, 12,161
+  written, 54 already-idempotent, 26 refused (self-check errors,
+  expected on messy legacy code, not chased).
+- **Native retest against the freshly-rebuilt driver**: clean boot, zero
+  compile/fatal errors. Full registration + attribute-stat + gift-gender
+  flow re-verified end-to-end in one continuous connection (id
+  `qinlinge`, real Chinese name `秦岭岳`, gender `m`): entered the game
+  world at 中央广场/Central Plaza with real NPCs (欧阳克 among them),
+  `score` rendered the full character sheet, `quit` disconnected
+  cleanly. Only the same two pre-existing, previously-documented
+  non-blocking noise sources recurred (early-preload
+  "Object cannot be loaded during compilation" traces, and the news_b
+  `restore_object()` mapping-format warning) — no new regressions from
+  either the reformat or the new driver build.
+- **WASM test**: boots clean (only the expected non-fatal
+  `socket_create`/`socket_bind` undefined errors from `ftpd.lpc`, no
+  sockets package under WASM, same shape as documented elsewhere).
+  Notably, this lib's visitor-counter code degrades gracefully under the
+  WASM harness's log-subdirectory-copy gap (shows "零" visits instead of
+  crashing the connection, unlike a sibling lib in this same pass) —
+  registration proceeds past the English-name prompt and id-confirmation
+  step cleanly. Did not push a full playthrough to completion (not
+  required), but no IP-gating or other blocking issue was observed in
+  the portion exercised.
