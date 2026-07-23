@@ -6,7 +6,7 @@ inherit ITEM;
 #include <dbase.h>
 #include <name.h>
 inherit F_SAVE;  //play
-string SAVE_NAME; //play
+string SAVE_NAME;  //play
 
 // variables need to set:
 // liquid/container : set 1 if it's a liquid container
@@ -22,255 +22,228 @@ nosave string liquid_name;
 // current liquid is the current level of liquid inside
 // liquid_name is the current liquid inside of the container
 // play add start 2002.7.10
-void create() { seteuid( getuid() ); }
-string query_save_file()
-{
-	if(!query("file_save")) return 0;
-	return "/data/job/xueshan/"+query("file_save");
+void create() { seteuid(getuid()); }
+string query_save_file() {
+  if (!query("file_save")) return 0;
+  return "/data/job/xueshan/" + query("file_save");
 }
-void reload()
-{
-	SAVE_NAME=base_name(this_object());
-        if(!restore())
-        log_file("Xueshan_dmd",sprintf("Failed to restore(%s)     %d.\n",SAVE_NAME,time()));
+void reload() {
+  SAVE_NAME = base_name(this_object());
+  if (!restore())
+    log_file("Xueshan_dmd", sprintf("Failed to restore(%s)     %d.\n", SAVE_NAME, time()));
 }
 //play add end
-void init()
-{
-        add_action("do_pour", "pour");
-        add_action("do_fill", "fill");
-        add_action("do_empty", "empty");
+void init() {
+  add_action("do_pour", "pour");
+  add_action("do_fill", "fill");
+  add_action("do_empty", "empty");
 }
 
 int query_max_liquid() { return max_liquid; }
 int query_current_liquid() { return current_liquid; }
 string query_liquid_name() { return liquid_name; }
 
-varargs object carry_liquid(string file, int amount, string alternative)
-{
-        object ob;
+varargs object carry_liquid(string file, int amount, string alternative) {
+  object ob;
 
-        ob = new(file);
-        if( !objectp(ob) && stringp(alternative) ) ob = new(alternative);
-        if( !objectp(ob) ) return 0;
-        ob->set_amount(amount);
-        ob->move_liquid(this_object());
-         //     current_liquid=amount;
-        return ob;
+  ob = new(file);
+  if (!objectp(ob) && stringp(alternative)) ob = new(alternative);
+  if (!objectp(ob)) return 0;
+  ob->set_amount(amount);
+  ob->move_liquid(this_object());
+  //     current_liquid=amount;
+  return ob;
 }
 
-void set_liquid_name(string arg) 
-{
-    if(strlen(arg) < 1)
-        liquid_name = arg;
+void set_liquid_name(string arg) {
+  if (strlen(arg) < 1)
+    liquid_name = arg;
 }
 
-void set_max_liquid (int v)
-{
-        if( v < 0 ) error("Can't have nagative amout of liquid.\n");
+void set_max_liquid(int v) {
+  if (v < 0) error("Can't have nagative amout of liquid.\n");
+  else {
+    max_liquid = v;
+  }
+}
+
+void set_current_liquid(int v) {
+  if (v < 0) error("Can't have nagative amout of liquid.\n");
+  if (v > max_liquid) {
+    current_liquid = max_liquid;
+  } else {
+    current_liquid = v;
+  }
+}
+
+void add_current_liquid(int v) { set_current_liquid(current_liquid + v); }
+
+string extra_long() {
+  int amount, max;
+  string str;
+
+  if ((amount = query_current_liquid()) >= 0) {
+    max = query_max_liquid();
+    if (amount == max)
+      str = "看上去装得满满的。  \n";
+    else if (amount > max / 3 * 2)
+      str = "七八分满的样子。  \n";
+    else if (amount > max / 3)
+      str = "五六分满的样子。  \n";
+    else if (amount > 0 || query("xs_deng"))
+      str = "几乎已经空了。  \n";
+    else if (amount == 0)
+      str = "看上去空空如也。  \n";
+    return str;
+  } else return 0;
+}
+
+int do_pour(string arg) {
+  // bottle1 is this current container, 
+  // bottle2 is the destination container.
+  string arg1, arg2, arg3, liquid_name, *job, msg = "";
+  object me = this_player();
+  object obj = this_object();
+  object bottle1, bottle2, *inv, liquid;
+  int i, liquid_found, liquid_amu, sum, amount;
+
+  if (!living(this_player())) return 0;
+  if (this_player()->is_busy())
+    return notify_fail("你上一个动作还没有完成。\n");
+
+  if (!(arg))
+    return notify_fail("命令格式：pour <容器> into <容器>\n");
+
+  // syntex is pour bottle1 into bottle2
+  if (sscanf(arg, "%s into %s", arg1, arg2) != 2)
+    return notify_fail("命令格式：pour <容器> into <容器>\n");
+
+  // player has to have the bottle in his inventory to pour.
+  // so they can't pour something that's on the ground
+  if (!(bottle1 = present(arg1, me)))
+    if (!(bottle1 = present(arg1, environment(me))))
+      return notify_fail("你找不到这样东西。\n");
+
+  // check if the destination container is in player's inventory or on the ground
+  if (!(bottle2 = present(arg2, me))) {
+    if (!(bottle2 = present(arg2, environment(me))))
+      return notify_fail("找不到那样东西。 \n");
+  }
+  // check I am pouring the same bottle as the action, 
+  // don't know if the check is needed, leave it out for now
+  //      if (bottle1 != obj)
+  //           return  notify_fail("can find that bottle \n");
+
+  // if it's a liquid container
+  // only when it's a liquid container you are allow to pour
+  if (query("liquid/container")) {
+
+    inv = all_inventory(bottle1);
+    liquid_found = 0;
+
+    // you should only find at most 1 liquid inside the bottle
+    // and nothing else
+    // but if you do find any other kind, should destory it
+    for (i = 0; i < sizeof(inv); i++) {
+      // double check if it's liquid inside 
+      // also check if this is the first kinda of liquid found
+      if (inv[i]->query("liquid/status") && liquid_found == 0) {
+        liquid_found = 1;
+        liquid = inv[i];
+      } else if (bottle1->query("liquid/container"))
+        destruct(inv[i]);
+    }
+    // if no liquid
+    if (!(liquid_found)) {
+      if (!bottle1->query("liquid/container"))
+        return notify_fail("你不能把" + bottle1->name() + "内的东西放入" + bottle2->name() + "。\n");
+      else
+        return notify_fail("那里是空的，倒什么？\n");
+    }
+
+    //                if //(bottle1->query("xs_deng")||!bottle2->query("xsjob"))
+    //                        return  notify_fail("你不能这样做！\n");
+
+    // now check the destination bottle
+    if (bottle2->query("liquid/container")) {
+
+      if (bottle1 == bottle2)
+        return notify_fail("倒回原处，莫非你有病？\n");
+
+      liquid_name = liquid->name();
+      liquid_amu = liquid->query_amount();
+      // move liquid to the destination bottle
+      if (liquid->move_liquid(bottle2)) {
+        // if move liquid sucess, need to update bottle1's status
+        if (!liquid)
+          bottle1->set_current_liquid(0);
         else {
-                max_liquid = v;
+          if (present(liquid, bottle1))
+            bottle1->set_current_liquid(liquid->query_amount());
+          else
+            bottle1->set_current_liquid(0);
         }
+        message_vision("$N将" + bottle1->name() + "内的" + liquid_name +
+          "小心翼翼的倒入$n。\n" NOR, me, bottle2);
+      } else  //play add 2002/7/10
+        return notify_fail(bottle2->name() + "满满的已经装不下" + liquid->name() + "了。\n");
+    } else
+      return notify_fail("你不能往那里倒。\n");
+
+  } else
+    return notify_fail("这样东西不能倒。\n");
+  //play add 记录酥油量
+  if (bottle2->query("file_save")) {
+    bottle2->add("liquid_remaining", liquid_amu);
+    bottle2->save();
+    bottle2->reload();
+  }
+  //play add 油灯的判断
+  if (bottle2->query("xs_deng")) {
+    if (!(job = me->query_temp("xsjob_dengyou"))) return 1;
+    if (member_array(environment(bottle2)->query("short"), job) != -1) {
+      job -= ({ environment(bottle2)->query("short") });
+      me->set_temp("xsjob_dengyou", job);
+      sum = sizeof(job);
+      if (sum < 1) {
+        me->set_temp("xsjob_dengyou", 0);
+        me->set_temp("xsjob_over", 1);
+        write(HIW "你完成了添加灯油的任务。\n" NOR);
+      } else {
+        while (sum--) msg += GRN + job[sum] + "    " NOR;
+        write("你还需要为下列地方添加灯油:\n" + msg + "\n");
+      }
+    }
+  }  //End play
+  return 1;
 }
 
-void set_current_liquid(int v)
-{
-        if( v < 0 ) error("Can't have nagative amout of liquid.\n");
-        if( v > max_liquid ) {
-            current_liquid = max_liquid;
-        }
-        else {
-                current_liquid = v;
-        }
+int do_fill(string arg) {
+  if (!this_object()->id(arg)) return 0;
+  if (this_player()->is_busy())
+    return notify_fail("你上一个动作还没有完成。\n");
+  if (!environment(this_player())->query("resource/water"))
+    return notify_fail("这里没有地方可以装水。\n");
+  return 1;
 }
 
-void add_current_liquid(int v)  { set_current_liquid(current_liquid+v); }
+int do_empty(string arg) {
+  object *inv, bottle;
+  object me = this_player();
+  int i;
 
-string extra_long()
-{
-        int amount, max;
-        string str;
+  if (!this_object()->id(arg)) return 0;
+  if (this_player()->is_busy())
+    return notify_fail("你上一个动作还没有完成。\n");
 
-        if( (amount = query_current_liquid()) >= 0 ) {
-                max = query_max_liquid();
-                if( amount == max )
-                        str = "看上去装得满满的。  \n";
-                else if( amount > max/3*2 )
-                        str = "七八分满的样子。  \n";
-                else if( amount > max/3 )
-                        str = "五六分满的样子。  \n";
-                else if( amount > 0  || query("xs_deng"))
-                        str = "几乎已经空了。  \n";
-                else if( amount == 0 )
-                    str = "看上去空空如也。  \n";
-                return str;
-        }
-        else return 0;
-}
+  if (!(bottle = present(arg, me)))
+    return notify_fail("你身上没有这样东西。\n");
 
-int do_pour(string arg)
-{
-        // bottle1 is this current container, 
-        // bottle2 is the destination container.
-        string arg1, arg2, arg3, liquid_name,*job,msg="";
-        object me = this_player();
-        object obj = this_object();
-        object bottle1, bottle2, *inv, liquid;
-        int i, liquid_found,liquid_amu,sum,amount;
-
-        if( !living(this_player()) ) return 0;
-        if( this_player()->is_busy() )
-                return notify_fail("你上一个动作还没有完成。\n");
-
-        if( !(arg))
-             return  notify_fail("命令格式：pour <容器> into <容器>\n");
-
-        // syntex is pour bottle1 into bottle2
-        if( sscanf(arg, "%s into %s", arg1, arg2)!= 2 ) 
-             return  notify_fail("命令格式：pour <容器> into <容器>\n");
-
-        // player has to have the bottle in his inventory to pour.
-        // so they can't pour something that's on the ground
-        if( !(bottle1 = present(arg1, me)) )
-          if(  !(bottle1 = present(arg1, environment(me))) ) 
-             return  notify_fail("你找不到这样东西。\n");
-
-        // check if the destination container is in player's inventory or on the ground
-        if( !(bottle2 = present(arg2, me)) ){
-          if(  !(bottle2 = present(arg2, environment(me))) ) 
-             return  notify_fail("找不到那样东西。 \n");      
-        }
-        // check I am pouring the same bottle as the action, 
-        // don't know if the check is needed, leave it out for now
-//      if (bottle1 != obj)
-//           return  notify_fail("can find that bottle \n");
-
-        // if it's a liquid container
-        // only when it's a liquid container you are allow to pour
-        if( query("liquid/container") ){
-
-        inv = all_inventory(bottle1);
-                liquid_found = 0;
-
-                // you should only find at most 1 liquid inside the bottle
-                // and nothing else
-                // but if you do find any other kind, should destory it
-        for( i=0; i<sizeof(inv); i++ )
-        {
-                        // double check if it's liquid inside 
-                        // also check if this is the first kinda of liquid found
-                        if (inv[i]->query("liquid/status") && liquid_found == 0 ) {
-                                liquid_found = 1;
-                                liquid = inv[i];
-                        }
-                        else 
-                        if(bottle1->query("liquid/container"))
-                           destruct(inv[i]);
-                }
-                // if no liquid
-                if (!(liquid_found))
-                {
-                	if(!bottle1->query("liquid/container"))
-                	return  notify_fail("你不能把"+bottle1->name()+"内的东西放入"+bottle2->name()+"。\n");
-                	else
-                	return  notify_fail("那里是空的，倒什么？\n");
-                }
-
-//                if //(bottle1->query("xs_deng")||!bottle2->query("xsjob"))
-//                        return  notify_fail("你不能这样做！\n");
-
-                // now check the destination bottle
-                if ( bottle2->query("liquid/container") ) {
-
-                         if (bottle1 == bottle2)
-                                 return  notify_fail("倒回原处，莫非你有病？\n");
-
-                         liquid_name = liquid->name();
-                         liquid_amu = liquid->query_amount();
-                         // move liquid to the destination bottle
-                         if (liquid->move_liquid(bottle2)) {
-                                 // if move liquid sucess, need to update bottle1's status
-                                 if(!liquid)
-                                         bottle1->set_current_liquid(0);
-                 else {
-                                     if (present(liquid, bottle1)) 
-                                         bottle1->set_current_liquid(liquid->query_amount());
-                                     else
-                                         bottle1->set_current_liquid(0);
-                                 }
-                 message_vision("$N将"+bottle1->name()+"内的"+liquid_name+
-                                "小心翼翼的倒入$n。\n"NOR, me,bottle2 );
-                         }
-                 else //play add 2002/7/10
-                 return  notify_fail(bottle2->name()+"满满的已经装不下"+liquid->name()+"了。\n");
-                }
-        else 
-                 return  notify_fail("你不能往那里倒。\n");
-                
-        }
-        else 
-           return  notify_fail("这样东西不能倒。\n");
-        //play add 记录酥油量
-        if(bottle2->query("file_save"))
-        {
-        	bottle2->add("liquid_remaining",liquid_amu);
-                bottle2->save();
-                bottle2->reload();
-        }
-       //play add 油灯的判断
-       if(bottle2->query("xs_deng"))
-       {
-       	        if(!(job = me->query_temp("xsjob_dengyou"))) return 1;
-       	        if(member_array( environment(bottle2)->query("short"), job)!=-1)
-       	        {
-       	        	job -= ({environment(bottle2)->query("short")});
-       	        	me->set_temp("xsjob_dengyou",job);
-       	        	sum = sizeof(job);
-       	        	if(sum<1)
-       	        	{
-       	        		me->set_temp("xsjob_dengyou",0);
-       	        		me->set_temp("xsjob_over",1);
-       	        		write(HIW"你完成了添加灯油的任务。\n"NOR);
-       	        	}
-       	        	else
-       	        	{
-       	        		while (sum--) msg += GRN+job[sum]+"    "NOR;
-       	        		write("你还需要为下列地方添加灯油:\n"+msg+"\n");
-       	        	}
-       	        }
-       }//End play
-           return 1;
-}
-
-int do_fill(string arg)
-{
-        if( !this_object()->id(arg) ) return 0;
-        if( this_player()->is_busy() )
-                return notify_fail("你上一个动作还没有完成。\n");
-        if( !environment(this_player())->query("resource/water") )
-                return notify_fail("这里没有地方可以装水。\n");
-        return 1;
-}
-
-int do_empty(string arg)
-{
-        object *inv, bottle;
-        object me = this_player();
-        int i;
-
-        if( !this_object()->id(arg) ) return 0;
-        if( this_player()->is_busy() )
-                return notify_fail("你上一个动作还没有完成。\n");
-
-        if( !(bottle = present(arg, me)) )
-             return  notify_fail("你身上没有这样东西。\n");
-
-        inv = all_inventory(bottle);
-    for( i=0; i<sizeof(inv); i++ )
-    {
-                           destruct(inv[i]);
-        }
-        bottle->set_current_liquid(0);
-    message_vision("$N将$n倒的一干二净。\n"NOR, this_player(), this_object());
-        return 1;
+  inv = all_inventory(bottle);
+  for (i = 0; i < sizeof(inv); i++) {
+    destruct(inv[i]);
+  }
+  bottle->set_current_liquid(0);
+  message_vision("$N将$n倒的一干二净。\n" NOR, this_player(), this_object());
+  return 1;
 }

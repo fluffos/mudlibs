@@ -447,3 +447,56 @@ broad `pkill` pattern (several other agents had drivers running
 concurrently throughout this session). No driver process left running at
 the end of this pass; `work/data` (player save state from testing) and
 `log/debug.log` cleared before finishing.
+
+## 2026-07-23: driver rebuild retest + LPC formatter + WASM check
+
+- **Formatter**: ran `tools/lpc-syntax`'s `format-corpus.mjs` over all
+  10605 `.lpc` files in `work/`; only 2088 written (8450 were already
+  formatter-conformant — this lib evidently got substantial formatting
+  attention in an earlier pass), 67 errors (files it refused to touch,
+  fine/expected). Specifically verified the `nomask int command_hook`
+  fix (no `private`, §15ae's origin bug) in `feature/command.lpc`
+  survived the reformat unchanged in substance.
+- **Native retest**: rebuilt `~/src/fluffos/build-debug/src/driver`
+  booted clean (`Accepting telnet connections`/`Initializations
+  complete`); the only debug.log noise during preload is a repeating,
+  **caught** (via `CATCH()` in `master.lpc`'s `preload()`) "执行时段
+  错误：*Object cannot be loaded during compilation" from
+  `simul_efun.lpc`'s `wizardp()` — this is the same shape as AGENTS.md
+  §15af (`log_error()` calling `wizardp(this_player(1))` during a
+  compile-time warning, lazily loading securityd mid-compile), but
+  since it's wrapped in `master.lpc`'s own `CATCH()` here it's fully
+  non-fatal and boot completes normally; not previously flagged for
+  this lib, noting it here as a §15af-shaped (but harmless) instance.
+  Ran 3 fresh full registration sessions with real Chinese names
+  (秦风波/秦风陈/秦风戊): id/confirm/Chinese-name/password/gift-type/
+  email/gender all completed, landed in the same 沙滩 start room seen
+  in the original pass, with the escort NPC's name-greeting working
+  correctly; `look`/`i`/`quit` all reproduced the original pass's
+  clean results (zero real debug.log errors). **New observation**:
+  `score` (not part of the original pass's tested command set)
+  produced no visible output at all in every attempt tried, both
+  immediately after landing and after `look`; `cmds/usr/score.lpc`
+  never appears in `debug.log` at all (unlike `look`/`quit`/`drop`,
+  which show their lazy-compile warnings), meaning `find_command`
+  never resolves it to a compile attempt — worth a closer look in a
+  future pass, but not chased further here since it's a newly-noticed
+  gap outside the previously-verified/committed command set, not a
+  regression from this pass's reformat or driver rebuild (both are
+  read-only w.r.t. `cmds/usr/score.lpc`'s logic).
+- **WASM**: booted with the same non-fatal preload noise as native
+  (the §15af-shaped caught cascade above, plus the expected
+  `socket_create`/`socket_close`/`Bad left argument` compile errors
+  from `ftpd.lpc`/`network/http.lpc` since the `sockets` package isn't
+  built into this WASM binary). **Full registration + gameplay flow
+  verified end-to-end** with a real Chinese name (秦风武): same
+  id/confirm/name/password/gift/email/gender flow, landed in 沙滩,
+  `look` and `quit` both worked correctly matching the native result.
+  The "上次连线地址" (last-connect-address) line printed
+  `0( Wed Dec 31 16:00:00 1969 )` instead of a real IP+timestamp — a
+  cosmetic manifestation of the documented `query_ip_number()`-under-
+  WASM limitation (epoch 0 formatted as a date), non-fatal, doesn't
+  gate login since this lib has no IP-based site restriction. **Verdict:
+  playable under WASM** (matching the native command set actually
+  re-verified this pass), with the same cosmetic IP-display glitch
+  common to this driver's WASM build.
