@@ -557,3 +557,48 @@ sessions):
   (verified: `/adm/single/simul_efun` itself passes a direct `lpcc` check
   with zero errors, and zero mentions of `util.lpc` appear anywhere in
   `log/debug.log`).
+
+## 2026-07-23: driver rebuild retest + LPC formatter + WASM check
+
+- **Formatter**: ran `tools/lpc-syntax`'s `format-corpus.mjs` over all
+  11001 `.lpc` files in `work/`; 10966 written, 35 already-conformant,
+  0 errors. **Found and fixed the same `::PARENT_FUNC(...)` line-wrap
+  corruption bug documented in this pass's sibling `yanhuangwuhun`'s
+  NOTES.md** (a real bug in the formatter itself, not lib-specific): 2
+  files in this lib — `inherit/item/combined.lpc`'s `::move` and
+  `kungfu/class/huashan/yue-wife.lpc`'s `::recruit_apprentice` — had the
+  exact same corruption (`if (: : move(dest, silent)\n)\n{ ... }` plus a
+  stray extra `}`), byte-for-byte identical to the corresponding files
+  in `yanhuangwuhun` (confirming these two sibling libs still share this
+  template code verbatim). Fixed both by restoring the original
+  `::FUNC(...)` call + brace structure (verified against the pre-format
+  git blob), then re-ran the formatter over just those 2 files, which
+  now formats them correctly. Verified both compile clean via `lpcc`.
+- **Native retest**: rebuilt `~/src/fluffos/build-debug/src/driver`
+  booted clean apart from the already-known, harmless `versiond.lpc`
+  `socket_bind()` config-mismatch runtime error (flagged in TODO.md at
+  the time this lib was first done, confirmed still present and still
+  non-fatal — boot completes, port accepts connections). Full
+  registration re-verified with a real Chinese name (林枫, id
+  `linfengb`): id/confirm/surname/given-name/admin-password/password/
+  type/gender all completed, landed in 【世外桃源】exactly as the
+  original pass found; `look` correctly re-displayed the room, `quit`
+  gave the correct farewell ("欢迎下次再来！"). Re-confirmed the §15an
+  live-clock-prompt gotcha from AGENTS.md applies here too (this lib's
+  prompt shows a live per-second clock) — used `--idle 0.4` per the
+  documented workaround, worked cleanly. Zero real debug.log errors
+  (only the known versiond noise).
+- **WASM**: booted with the expected non-fatal `socket_*` preload
+  noise. **Reproduces the exact same WASM-specific registration
+  blocker documented in `yanhuangwuhun`'s NOTES.md**: `adm/daemons/
+  logind.lpc`'s `logon()` calls `!VERSION_D->is_version_ok()` uncaught,
+  `versiond.lpc` fails to compile entirely under WASM (missing
+  `sockets` package), so the resulting runtime error aborts `logon()`
+  before the username prompt ever appears — registration cannot
+  proceed at all under WASM. Confirmed this is the shared sibling code
+  (`yanhuangwuhun`'s exact same `VERSION_D` call, same `versiond.lpc`
+  shape) failing identically, not a new independent bug. Not present
+  natively (full playthrough above was clean). Not patched, same
+  reasoning as `yanhuangwuhun`'s entry — a real gap but rooted in the
+  WASM build's documented lack of the `sockets` package, not a mudlib
+  defect or something in scope to fix here.
