@@ -11,115 +11,96 @@
 
 private mapping tasks;
 
-nosave void create()
-{
-    tasks = ([ ]);
-    RehashTask();
+nosave void create() {
+  tasks = ([]);
+  RehashTask();
 }
 
-void RehashTask()
-{
-    string task_name = "";
-    foreach(string name in keys(tasks))
-        task_name += name + tasks[name]; 
-    foreach(mixed * dir_name in get_dir(TASK_DIR, -1))
-        if (dir_name[1] == -2)
-            load_task(dir_name[0], get_dir(TASK_DIR + dir_name[0] + "/"));
-    remove_call_out("RehashTask");
-    call_out("RehashTask", 1000);
+void RehashTask() {
+  string task_name = "";
+  foreach (string name in keys(tasks))
+    task_name += name + tasks[name];
+  foreach (mixed *dir_name in get_dir(TASK_DIR, -1))
+    if (dir_name[1] == -2)
+      load_task(dir_name[0], get_dir(TASK_DIR + dir_name[0] + "/"));
+  remove_call_out("RehashTask");
+  call_out("RehashTask", 1000);
 }
 
-varargs void TaskBegin(object ppl, string zuzhi_name, string task_name) 
-{
-    int level = ppl->GetTaskLevel(zuzhi_name);
-    if (stringp(task_name))
-    {
-        object obj = find_task_object(zuzhi_name, level, task_name);
-        if (objectp(obj))
-        {
-            obj->AddPlayer(ppl);
-            ppl->AddTaskObject(zuzhi_name, obj);
-        }
+varargs void TaskBegin(object ppl, string zuzhi_name, string task_name) {
+  int level = ppl->GetTaskLevel(zuzhi_name);
+  if (stringp(task_name)) {
+    object obj = find_task_object(zuzhi_name, level, task_name);
+    if (objectp(obj)) {
+      obj->AddPlayer(ppl);
+      ppl->AddTaskObject(zuzhi_name, obj);
     }
-    else
-    {
-        foreach(object ob in SearchTasks(zuzhi_name, level))
-            if (objectp(ob) && !ob->IsFollower() && !random(TASK_TIME))
-            {
-                ob->AddPlayer(ppl);
-                ppl->AddTaskObject(zuzhi_name, ob);
-            }    
+  } else {
+    foreach (object ob in SearchTasks(zuzhi_name, level))
+      if (objectp(ob) && !ob->IsFollower() && !random(TASK_TIME)) {
+        ob->AddPlayer(ppl);
+        ppl->AddTaskObject(zuzhi_name, ob);
+      }
+  }
+}
+
+void DestructTask(object ob) {
+  string index;
+  if (stringp(index = find_task_index(ob)))
+    tasks[index] = 0;
+  destruct(ob);
+}
+
+mapping FindTasks() {
+  return tasks;
+}
+
+object *SearchTasks(string zuzhi, int level) {
+  object *ob;
+  ob = ({});
+  foreach (string index in keys(tasks)) {
+    string zuzhi_name, name;
+    int lvl;
+    sscanf(index, "%s|%d|%s", zuzhi_name, lvl, name);
+    if (zuzhi_name == zuzhi && lvl == level && tasks[index])
+      ob += ({ find_object(tasks[index]) });
+  }
+  return ob;
+}
+
+private string find_task_index(object ob) {
+  return ob->GetZuzhiId() + ob->GetLevel() + ob->GetKeyName();
+}
+
+private object find_task_object(string zuzhi, int level, string name) {
+  string index = zuzhi + "|" + level + "|" + name;
+  if (stringp(tasks[index]))
+    return find_object(tasks[index]);
+  else
+    return 0;
+}
+
+private void load_task(string dir, string *arg) {
+  foreach (string file_name in arg) {
+    int level;
+    object task_ob;
+    string tmp;
+    if (sscanf(file_name, "%s%d", tmp, level) != 2) return 0;
+    file_name = TASK_DIR + dir + "/" + file_name;
+    if (!objectp(task_ob = find_object(file_name)))
+      task_ob = load_object(file_name);
+    foreach (string name in keys(task_ob->GetTasks())) {
+      string index = dir + "|" + level + "| " + name;
+      if (!tasks[index] || !find_object(tasks[index]))
+        tasks[index] = compile_task(task_ob, name);
     }
+  }
 }
 
-void DestructTask(object ob)
-{
-    string index;
-    if (stringp(index = find_task_index(ob)))
-        tasks[index] = 0;
-    destruct(ob);
+private string compile_task(object s_ob, string name) {
+  object task;
+  task = new(TASK);
+  if (!objectp(task)) return 0;
+  task->InitTask(s_ob, s_ob->GetTask(name));
+  return file_name(task);
 }
-
-mapping FindTasks()
-{
-    return tasks;
-}
-
-object * SearchTasks(string zuzhi, int level)
-{
-    object * ob;
-    ob = ({});
-    foreach(string index in keys(tasks))
-    {
-        string zuzhi_name, name;
-        int lvl;
-        sscanf(index , "%s|%d|%s", zuzhi_name, lvl, name);
-        if (zuzhi_name == zuzhi && lvl == level && tasks[index])
-            ob += ({find_object(tasks[index])});
-    }
-    return ob;
-}
-
-private string find_task_index(object ob)
-{
-    return ob->GetZuzhiId() + ob->GetLevel() + ob->GetKeyName();
-}
-
-private object find_task_object(string zuzhi, int level, string name)
-{
-    string index = zuzhi + "|" + level + "|" + name;
-    if (stringp(tasks[index]))
-        return find_object(tasks[index]);
-    else
-        return 0;
-}
-
-private void load_task(string dir, string * arg)
-{
-    foreach(string file_name in arg)
-    {
-        int level;
-        object task_ob;
-        string tmp;
-        if (sscanf(file_name, "%s%d", tmp, level) != 2) return 0;
-        file_name = TASK_DIR + dir + "/" + file_name; 
-        if (!objectp(task_ob = find_object(file_name))) 
-            task_ob = load_object(file_name);
-        foreach(string name in keys(task_ob->GetTasks()))
-        {
-            string index = dir + "|" + level + "| " + name;
-            if (!tasks[index] || !find_object(tasks[index]))
-                tasks[index] = compile_task(task_ob, name);
-        }
-    }
-}
-
-private string compile_task(object s_ob, string name)
-{
-    object task;
-    task = new(TASK);
-    if (!objectp(task)) return 0;
-    task->InitTask(s_ob, s_ob->GetTask(name));
-    return file_name(task);
-}
-

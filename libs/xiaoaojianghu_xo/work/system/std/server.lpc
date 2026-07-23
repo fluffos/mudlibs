@@ -16,293 +16,279 @@ inherit LIB_DAEMON;
 inherit F_DBASE;
 
 class server {
-    int         Descriptor;
-    int         Blocking;
-    int         Closing;
-    object      Owner;
-    mixed * Buffer;
+  int Descriptor;
+  int Blocking;
+  int Closing;
+  object Owner;
+  mixed *Buffer;
 }
 
-private nosave int          DestructOnClose= 0;
-private nosave class server Listen         = 0;
-private nosave int          MaxBytes       = get_config(__MAX_BYTE_TRANSFER__);
-private nosave int          Port           = 0;
-private nosave string       SocketObject   = 0;
-private nosave int          SocketType     = STREAM;
-private nosave mapping      Sockets        = ([]);
+private nosave int DestructOnClose = 0;
+private nosave class server Listen = 0;
+private nosave int MaxBytes = get_config(__MAX_BYTE_TRANSFER__);
+private nosave int Port = 0;
+private nosave string SocketObject = 0;
+private nosave int SocketType = STREAM;
+private nosave mapping Sockets = ([]);
 
 nosave void eventSocketError(string msg, int code);
 
 /* ******************* server.c attributes ************************ */
 int GetDestructOnClose() {
-    return DestructOnClose;
+  return DestructOnClose;
 }
 
 nosave int SetDestructOnClose(int x) {
-    return (DestructOnClose = x);
+  return (DestructOnClose = x);
 }
 
 int GetSocketType() {
-    return SocketType;
+  return SocketType;
 }
 
-nosave int SetSocketType(int x ) {
-    return (SocketType = x);
+nosave int SetSocketType(int x) {
+  return (SocketType = x);
 }
 
 /* ******************** server.c events *************************** */
 nosave int eventClose(mixed sock) {
-    class server s;
+  class server s;
 
-    if( intp(sock) ) {
-        sock = Sockets[sock];
-    }
-    else if( objectp(sock) ) {
-        sock = Sockets[sock->GetDescriptor()];
-    }
-    if( !sock ) {
-        return 0;
-    }
-    s = sock;
-    if( s->Blocking ) {
-        s->Closing = 1;
-        return 1;
-    }
-    if( Sockets[s->Descriptor] ) {
-        map_delete(Sockets, s->Descriptor);
-    }
-    socket_close(s->Descriptor);
-    //    eventSocketClosed(s->Owner);
-    if( s->Owner ) {
-        s->Owner->eventSocketClosed();
-    }
-    if( DestructOnClose && sock == Listen ) {
-        eventDestruct();
-    }
-    sock = 0;
+  if (intp(sock)) {
+    sock = Sockets[sock];
+  } else if (objectp(sock)) {
+    sock = Sockets[sock->GetDescriptor()];
+  }
+  if (!sock) {
+    return 0;
+  }
+  s = sock;
+  if (s->Blocking) {
+    s->Closing = 1;
+    return 1;
+  }
+  if (Sockets[s->Descriptor]) {
+    map_delete(Sockets, s->Descriptor);
+  }
+  socket_close(s->Descriptor);
+  //    eventSocketClosed(s->Owner);
+  if (s->Owner) {
+    s->Owner->eventSocketClosed();
+  }
+  if (DestructOnClose && sock == Listen) {
+    eventDestruct();
+  }
+  sock = 0;
 }
 
 int eventCreateSocket(int port) {
-    int x;
+  int x;
 
-    Listen = new(class server);
-    Listen->Blocking = 0; /* servers are not blocking to start */
-    x = socket_create(SocketType,
-                      "eventServerReadCallback", 
-                      "eventServerAbortCallback");
-    if( x < 0 ) {
-        eventSocketError("Error in socket_create().", x);
-        return x;
-    }
-    Listen->Descriptor = x;
-    x = socket_bind(Listen->Descriptor, port);
-    if( x != EESUCCESS ) {
-        eventClose(Listen);
-        eventSocketError("Error in socket_bind().", x);
-        return x;
-    }
-    x = socket_listen(Listen->Descriptor, "eventServerListenCallback");
-    if( x != EESUCCESS ) {
-        eventClose(Listen);
-        eventSocketError("Error in socket_listen().", x);
-        return x;
-    }
-    debug("listen socket at port: " + port + "\n");
+  Listen = new(class server);
+  Listen->Blocking = 0; /* servers are not blocking to start */ x = socket_create(SocketType,
+    "eventServerReadCallback",
+    "eventServerAbortCallback");
+  if (x < 0) {
+    eventSocketError("Error in socket_create().", x);
+    return x;
+  }
+  Listen->Descriptor = x;
+  x = socket_bind(Listen->Descriptor, port);
+  if (x != EESUCCESS) {
+    eventClose(Listen);
+    eventSocketError("Error in socket_bind().", x);
+    return x;
+  }
+  x = socket_listen(Listen->Descriptor, "eventServerListenCallback");
+  if (x != EESUCCESS) {
+    eventClose(Listen);
+    eventSocketError("Error in socket_listen().", x);
+    return x;
+  }
+  debug("listen socket at port: " + port + "\n");
 }
 
 nosave int Destruct() {
-    if( daemon::eventDestruct() ) {
-        foreach(int fd, class server socket in Sockets) {
-            socket->Owner->evenShutdown();
-        }
-        eventClose(Listen);
-        return 1;
+  if (daemon::eventDestruct()) {
+    foreach (int fd, class server socket in Sockets) {
+      socket->Owner->evenShutdown();
     }
-    else {
-        return 0;
-    }
+    eventClose(Listen);
+    return 1;
+  } else {
+    return 0;
+  }
 }
 
 int eventDestruct() {
-    if( !master()->valid_apply(({})) ) {
-        return 0;
-    }
-    return daemon::eventDestruct();
+  if (!master()->valid_apply(({}))) {
+    return 0;
+  }
+  return daemon::eventDestruct();
 }
 
 nosave void eventNewConnection(object socket) {
-    class server s = new(class server);
-    
-    s->Descriptor = socket->GetDescriptor();
-    s->Blocking = 0;
-    s->Owner = socket;
-    Sockets[s->Descriptor] = s;
+  class server s = new(class server);
+
+  s->Descriptor = socket->GetDescriptor();
+  s->Blocking = 0;
+  s->Owner = socket;
+  Sockets[s->Descriptor] = s;
 }
 
 nosave void eventServerAbortCallback(int fd) {
-    eventClose(fd);
+  eventClose(fd);
 }
 
 int eventShutdown() {
-/*    if( previous_object() != find_object(INET_D) ) {
+  /*    if( previous_object() != find_object(INET_D) ) {
         return 0;
     }
 */
-    eventDestruct();
-    return 1;
+  eventDestruct();
+  return 1;
 }
 
 nosave void eventServerListenCallback(int fd) {
-    int x;
+  int x;
 
-    x = socket_accept(fd,
-                      "eventServerReadCallback", 
-                      "eventServerWriteCallback");
-    if( x < 0 ) {
-        eventSocketError("Error in socket_accept().", x);
-        return;
-    }
-    if( Sockets[x] ) {
-        eventClose(Sockets[x]);
-    }
-    if( !new(SocketObject, x, this_object()) )
-        return;
-    eventNewConnection(new(SocketObject, x, this_object()));
+  x = socket_accept(fd,
+    "eventServerReadCallback",
+    "eventServerWriteCallback");
+  if (x < 0) {
+    eventSocketError("Error in socket_accept().", x);
+    return;
+  }
+  if (Sockets[x]) {
+    eventClose(Sockets[x]);
+  }
+  if (!new(SocketObject, x, this_object()))
+    return;
+  eventNewConnection(new(SocketObject, x, this_object()));
 }
 
 nosave void eventServerReadCallback(int fd, mixed val) {
-    class server s = Sockets[fd];
+  class server s = Sockets[fd];
 
-    if( !s || !s->Owner ) {
-        eventClose(fd);
-        return;
-    }
-    else {
-        s->Owner->eventRead(val);
-    }
+  if (!s || !s->Owner) {
+    eventClose(fd);
+    return;
+  } else {
+    s->Owner->eventRead(val);
+  }
 }
 
 nosave void eventServerWriteCallback(int fd) {
-    class server sock;
-    int x;
+  class server sock;
+  int x;
 
-    if( Listen && Listen->Descriptor == fd ) {
-        sock = Listen;
-    }
-    else if( Sockets[fd] ) {
-        sock = Sockets[fd];
-    }
-    else {
+  if (Listen && Listen->Descriptor == fd) {
+    sock = Listen;
+  } else if (Sockets[fd]) {
+    sock = Sockets[fd];
+  } else {
+    return;
+  }
+  sock->Blocking = 0;
+  if (!sock->Buffer && sock->Closing) {
+    eventClose(sock);
+    return;
+  }
+  x = EESUCCESS;
+  while (sock->Buffer && x == EESUCCESS) {
+    switch (x = socket_write(sock->Descriptor, sock->Buffer[0])) {
+      case EESUCCESS:
+        break;
+      case EECALLBACK:
+        sock->Blocking = 1;
+        break;
+      case EEWOULDBLOCK:
+        call_out((: eventServerWriteCallback :), 0, fd);
         return;
-    }
-    sock->Blocking = 0;
-    if( !sock->Buffer && sock->Closing ) {
+      case EEALREADY:
+        sock->Blocking = 1;
+        return;
+      default:
         eventClose(sock);
+        eventSocketError("Error in socket_write().", x);
         return;
     }
-    x = EESUCCESS;
-    while( sock->Buffer && x == EESUCCESS ) {
-        switch( x = socket_write(sock->Descriptor, sock->Buffer[0]) ) {
-            case EESUCCESS:
-                break;
-            case EECALLBACK:
-                sock->Blocking = 1;
-                break;
-            case EEWOULDBLOCK: 
-                call_out( (: eventServerWriteCallback :), 0, fd);
-                return;
-            case EEALREADY:
-                sock->Blocking = 1;
-                return;
-            default:
-                eventClose(sock);
-                eventSocketError("Error in socket_write().", x);
-                return;
-        }
-        if( sizeof(sock->Buffer) == 1 ) {
-            sock->Buffer = 0;
-            if( sock->Closing && !sock->Blocking ) {
-                eventClose(sock);
-            }
-        }
-        else {
-            sock->Buffer = sock->Buffer[1..];
-        }
+    if (sizeof(sock->Buffer) == 1) {
+      sock->Buffer = 0;
+      if (sock->Closing && !sock->Blocking) {
+        eventClose(sock);
+      }
+    } else {
+      sock->Buffer = sock->Buffer[1..];
     }
+  }
 }
 
 nosave void eventSocketError(string msg, int code) {
-    log_file("servers", "Error code: " + code + "\n" + msg + "\n");
+  log_file("servers", "Error code: " + code + "\n" + msg + "\n");
 }
 
 varargs int eventWrite(object owner, mixed val, int close) {
-    class server sock;
-    int fd = owner->GetDescriptor();
+  class server sock;
+  int fd = owner->GetDescriptor();
 
-    if( Listen && Listen->Descriptor == fd ) {
-        sock = Listen;
+  if (Listen && Listen->Descriptor == fd) {
+    sock = Listen;
+  } else if (Sockets[fd]) {
+    sock = Sockets[fd];
+  } else {
+    return 0;
+  }
+  if (owner != sock->Owner) {
+    return 0;
+  }
+  if (SocketType != STREAM) {
+    if (sock->Buffer) {
+      sock->Buffer += ({ val });
+    } else {
+      sock->Buffer = ({ val });
     }
-    else if( Sockets[fd] ) {
-        sock = Sockets[fd];
+  } else {
+    buffer data = val;
+    int size = sizeof(data);
+    int count = (size / MaxBytes) + 1;
+
+    if (!sock->Buffer) {
+      sock->Buffer = ({});
     }
-    else {
-        return 0;
+    for (int i = 0; i < count; i++) {
+      int length, ptr;
+      buffer b;
+
+      ptr = count * MaxBytes;
+      if (size - ptr > MaxBytes) {
+        length = MaxBytes;
+      } else {
+        length = size - ptr;
+      }
+      b = read_buffer(data, ptr, length);
+      sock->Buffer = ({ sock->Buffer..., b });
     }
-    if( owner != sock->Owner ) {
-        return 0;
-    }
-    if( SocketType != STREAM ) {
-        if( sock->Buffer ) {
-            sock->Buffer += ({ val });
-        }
-        else {
-            sock->Buffer = ({ val });
-        }
-    }
-    else {
-        buffer data = val;
-        int size = sizeof(data);
-        int count = (size/MaxBytes) + 1;
-        
-        if( !sock->Buffer ) {
-            sock->Buffer = ({});
-        }
-        for(int i=0; i<count; i++) {
-            int length, ptr;
-            buffer b;
-            
-            ptr = count * MaxBytes;
-            if( size - ptr > MaxBytes ) {
-                length = MaxBytes;
-            }
-            else {
-                length = size - ptr;
-            }
-            b = read_buffer(data, ptr, length);
-            sock->Buffer = ({ sock->Buffer..., b });
-        }
-    }
-    sock->Closing = close;
-    if( !sock->Blocking ) {
-        eventServerWriteCallback(sock->Descriptor);
-    }
-    return 1;
+  }
+  sock->Closing = close;
+  if (!sock->Blocking) {
+    eventServerWriteCallback(sock->Descriptor);
+  }
+  return 1;
 }
 
 /* ******************** server.c driver applies ******************* */
 varargs nosave void create(int port, int type, string socket_obj) {
-    daemon::create();
-    set("no_clean_up",1);
-    if( socket_obj ) {
-        SocketObject = socket_obj;
-    }
-    if( !undefinedp(type) ) {
-        SocketType = type;
-    }
-    if( !undefinedp(port) ) {
-        Port = port;
-        call_out((: eventCreateSocket :), 1, Port);
-    }
+  daemon::create();
+  set("no_clean_up", 1);
+  if (socket_obj) {
+    SocketObject = socket_obj;
+  }
+  if (!undefinedp(type)) {
+    SocketType = type;
+  }
+  if (!undefinedp(port)) {
+    Port = port;
+    call_out((: eventCreateSocket :), 1, Port);
+  }
 }
-
-

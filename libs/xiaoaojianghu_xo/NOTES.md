@@ -435,3 +435,45 @@ confirms the lineage has at least 3 independently-evolved snapshots, not
 just 2, and world-content sharing (skill files, zone NPCs) doesn't always
 correlate with which sibling a new snapshot's core security/master files
 most resemble.
+
+## Re-verification pass: driver rebuild + formatter + WASM (2026-07-23)
+
+- **LPC formatter** applied to all `work/*.lpc` (4304 files): 4113
+  reformatted, 16 already-clean/unchanged, 175 self-checked errors
+  (skipped, expected on legacy code per the formatter's own
+  token/byte-identity gate — not investigated further).
+- **Native re-test against the rebuilt driver** (`~/src/fluffos/build-debug/src/driver`,
+  freshly rebuilt from upstream master): booted clean (no fatal errors,
+  only the same pre-existing compile warnings), full registration flow
+  verified again end-to-end with a fresh real Chinese name ("秦风七")
+  through `look`/`score`/`i`/`quit`, all producing correct output;
+  `log/debug.log` clean of `error|denied|bad argument|undefined|crash|
+  segfault|recursion` beyond expected config-dump lines. The reformat
+  did not break anything — no fixes needed this pass.
+- **WASM test** (`scripts/wasm_client.js` against `build-wasm/src`): boots
+  cleanly (same preload sequence, no fatal errors — only the expected
+  non-fatal warnings, no `sockets` package needed by this lib's preload
+  set). Registration proceeds correctly through English name → confirm
+  → **real Chinese name** → password → confirm → email, all matching
+  the native flow byte-for-byte. However, character-creation did **not**
+  reliably complete past the gender (m/f) prompt in repeated attempts:
+  one run produced zero output after sending `m` (subsequent `look`/
+  `quit` fell through to the driver's generic "什么? 你想干嘛?" fail
+  message, as if no player body was ever wired to the connection);
+  another run instead re-looped on the very first name prompt several
+  times. This is **not** the documented `query_ip_number()` limitation
+  (this lib's gender-selection path doesn't gate on IP format) and it is
+  **not reproducible natively** — the identical post-formatter code
+  completes this exact flow cleanly and repeatedly under the native
+  driver. Given the inconsistency between runs (sometimes stalling,
+  sometimes re-looping an earlier prompt), this looks like a timing/
+  event-loop-jitter interaction specific to the WASM harness/driver
+  around the `get_email()`→`get_gender()` `input_to()` handoff (the one
+  call in this lib's registration chain with 2 bound extra args, notably
+  more than the earlier steps), not a deterministic mudlib bug — logged
+  here rather than "fixed" per this pass's instructions not to patch the
+  mudlib for WASM-side gaps. Verdict: **boots under WASM, registration
+  proceeds through name/password/email, but character-creation finalization
+  (gender → entering the game world) is unreliable under this WASM build**;
+  no further attempt made to force it through, per the pass's own
+  "honest assessment, not a full playthrough" guidance.

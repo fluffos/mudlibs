@@ -3,123 +3,107 @@
 inherit F_DBASE;
 inherit F_SAVE;
 
-void create()
-{
-    seteuid( getuid() );
-    set( "name", "红娘" );
-    set( "id", "hongniang" );
-    restore();
+void create() {
+  seteuid(getuid());
+  set("name", "红娘");
+  set("id", "hongniang");
+  restore();
 }
 
-string query_save_file()
-{
-    return DATA_DIR + "marriage";
+string query_save_file() {
+  return DATA_DIR + "marriage";
 }
 
-int will_marry( object me, string your_id )
-{
-    return your_id == me->query( "will_marry" );
+int will_marry(object me, string your_id) {
+  return your_id == me->query("will_marry");
 }
 
-void check_will_marry( object me )
-{
-    string your_id, my_id;
-    object you;
+void check_will_marry(object me) {
+  string your_id, my_id;
+  object you;
 
-    your_id = me->query( "will_marry" );
-    my_id = me->query( "id" );
-    if ( !your_id ) return;
-    if ( find_player( your_id ) )
-    {
-        you = find_player( your_id );
-        if ( you->query( "will_marry" ) != my_id || 
-            !you->query_condition( "will_marry" ) )
-        {
-            // 由于me的长期不上线，或者you被杀,
-            // you的will_marry承诺可能已经清除。
-            me->clear_condition( "will_marry" );
-            me->delete( "will_marry" );
-        }
+  your_id = me->query("will_marry");
+  my_id = me->query("id");
+  if (!your_id) return;
+  if (find_player(your_id)) {
+    you = find_player(your_id);
+    if (you->query("will_marry") != my_id ||
+      !you->query_condition("will_marry")) {
+      // 由于me的长期不上线，或者you被杀,
+      // you的will_marry承诺可能已经清除。
+      me->clear_condition("will_marry");
+      me->delete("will_marry");
     }
+  }
+  return;
+}
+
+void marry(string my_id, string your_id) {
+  set(my_id + "/" + your_id, 1);
+  set(your_id + "/" + my_id, 1);
+  save();
+}
+void check_marriage(object me) {
+  mapping consort;
+  string *id, my_id;
+  int i;
+
+  my_id = me->query("id");
+  consort = me->query("have_married");
+  if (!consort) return;
+  id = keys(consort);
+  for (i = 0; i < sizeof(id); i++) {
+    if (!query(my_id + "/" + id[i]) ||
+      !query(id[i] + "/" + my_id))
+      me->delete("have_married/" + id[i]);
+  }
+}
+
+int is_consort(object me, string your_id) {
+  string my_id;
+  mapping temp;
+
+  my_id = me->query("id");
+  if (query(my_id + "/" + your_id) &&
+    query(your_id + "/" + my_id) &&
+    me->query("have_married/" + your_id))
+    return 1;
+  else {
+    delete(my_id + "/" + your_id);
+    delete(your_id + "/" + my_id);
+    me->delete("have_married/" + your_id);
+    temp = me->query("have_married");
+    if (!sizeof(keys(temp)))
+      me->delete("have_married");
+    save();
+    return 0;
+  }
+}
+
+void divorce(mixed me) {
+  object you;
+  string *id, my_id;
+  int i;
+
+
+  if (objectp(me))
+    my_id = me->query("id");
+  else if (stringp(me))
+    my_id = me;
+  else
     return;
-}
 
-void marry( string my_id, string your_id )
-{
-    set( my_id + "/" + your_id, 1 );
-    set( your_id + "/" + my_id, 1 );
-    save();
-}
-void check_marriage( object me )
-{
-    mapping consort;
-    string *id, my_id;
-    int i;    
+  if (!mapp(query(my_id))) return;
 
-    my_id = me->query( "id" );
-    consort = me->query( "have_married" );
-    if ( !consort ) return;
-    id = keys( consort );
-    for( i = 0; i < sizeof( id ); i ++ )
-    {
-        if ( !query( my_id + "/" + id[ i ] ) ||
-            !query( id[ i ] + "/" + my_id ) )
-            me->delete( "have_married/" + id[ i ] );
-    }    
-}
-
-int is_consort( object me, string your_id )
-{
-    string my_id;
-    mapping temp;
-
-    my_id = me->query( "id" );
-    if ( query( my_id + "/" + your_id ) &&
-        query( your_id + "/" + my_id ) &&
-        me->query( "have_married/" + your_id ) )
-        return 1;
-    else
-    {
-        delete( my_id + "/" + your_id );
-        delete( your_id + "/" + my_id );
-        me->delete( "have_married/" + your_id );
-        temp = me->query( "have_married" );
-        if ( !sizeof( keys( temp ) ) )
-            me->delete( "have_married" );
-        save();
-        return 0;
+  id = keys(query(my_id));
+  for (i = 0; i < sizeof(id); i++) {
+    delete(id[i] + "/" + my_id);
+    if (find_player(id[i])) {
+      you = find_player(id[i]);
+      you->delete("have_married/" + my_id);
     }
+  }
+  delete(my_id);
+  save();
+  me->delete("have_married");
 }
-
-void divorce( mixed me )
-{
-    object you;
-    string *id, my_id;
-    int i;
-
-
-    if ( objectp( me ) )
-        my_id = me->query( "id" );
-    else if ( stringp( me ) )
-        my_id = me;
-    else
-        return;
- 
-    if( !mapp( query(my_id )) ) return;
-
-    id = keys( query( my_id ) );
-    for ( i = 0; i < sizeof( id ); i ++ )
-    {
-        delete( id[ i ] + "/" + my_id );
-        if ( find_player( id[ i ] ) )
-        {
-            you = find_player( id[ i ] );
-            you->delete( "have_married/" + my_id );
-        }
-    }
-    delete( my_id );
-    save();
-    me->delete( "have_married" );
-}
-
-

@@ -26,126 +26,114 @@
 inherit F_DBASE;
 inherit F_CLEAN_UP;
 
-int AcclaimAction( object actor, object acceptor, string verb, mixed status );
-void eventAfterAction( object actor, object acceptor, string verb, mixed status );
-private mapping * AddEffect( object effector, string verb, mapping * effect );
-private mapping * SortEffect( mapping * effect );
-private void report( string arg );
+int AcclaimAction(object actor, object acceptor, string verb, mixed status);
+void eventAfterAction(object actor, object acceptor, string verb, mixed status);
+private mapping *AddEffect(object effector, string verb, mapping *effect);
+private mapping *SortEffect(mapping *effect);
+private void report(string arg);
 
-void create()
-{
-    set( "name", "中断处理器" );
-    set( "id", "auto_d" );
-    seteuid(getuid());
+void create() {
+  set("name", "中断处理器");
+  set("id", "auto_d");
+  seteuid(getuid());
 }
 
 // 我们先去掉这个acceptor，应该用不着。 Amber 1998-04-25 09:22
-int AcclaimAction( object actor, object acceptor, string verb, mixed status )
-{
-    mapping *effect, tmp;
-    object ActEnv, AccEnv, env, *inv, ob;
-    int level;//中断级别
-    mixed i;
+int AcclaimAction(object actor, object acceptor, string verb, mixed status) {
+  mapping *effect, tmp;
+  object ActEnv, AccEnv, env, *inv, ob;
+  int level;  //中断级别
+  mixed i;
 
-    // collect all information for the effection of this action.
-    // actor身上的实际相当于附加命令。
-    // actor理论上是应该有环境的。
-    ActEnv = environment( actor );
-    AccEnv = environment( acceptor );
-    // 得到最终环境
-    env = actor;
-    while ( environment( env ) )
-    {
-        env = environment( env );
-    }
-    if ( !env )
-        return 0;
-    if ( env = ActEnv || env == AccEnv )
-        effect = AddEffect( env, verb, effect );
-    effect = AddEffect( actor, verb, effect );
-    if ( actor != acceptor )
-        effect = AddEffect( acceptor, verb, effect );
-    // 寻找方法：如果ob和actor或acceptor同处于一个环境中，那么就应该可以
-    // 参加连锁反应。Amber 1998-04-25 16:58
-    foreach ( ob in ( deep_inventory( env ) - ({ actor, acceptor }) ) )
-    {
-        if ( environment( ob ) == ActEnv )
-            effect = AddEffect( ob, verb, effect );
-        else if ( actor == acceptor )
-            continue;
-        else if ( environment( ob ) == AccEnv )
-            effect = AddEffect( ob, verb, effect );
-    }
+  // collect all information for the effection of this action.
+  // actor身上的实际相当于附加命令。
+  // actor理论上是应该有环境的。
+  ActEnv = environment(actor);
+  AccEnv = environment(acceptor);
+  // 得到最终环境
+  env = actor;
+  while (environment(env)) {
+    env = environment(env);
+  }
+  if (!env)
+    return 0;
+  if (env = ActEnv || env == AccEnv)
+    effect = AddEffect(env, verb, effect);
+  effect = AddEffect(actor, verb, effect);
+  if (actor != acceptor)
+    effect = AddEffect(acceptor, verb, effect);
+  // 寻找方法：如果ob和actor或acceptor同处于一个环境中，那么就应该可以
+  // 参加连锁反应。Amber 1998-04-25 16:58
+  foreach (ob in (deep_inventory(env) - ({ actor, acceptor }))) {
+    if (environment(ob) == ActEnv)
+      effect = AddEffect(ob, verb, effect);
+    else if (actor == acceptor)
+      continue;
+    else if (environment(ob) == AccEnv)
+      effect = AddEffect(ob, verb, effect);
+  }
 
-    if ( !effect )
-        return 0;
+  if (!effect)
+    return 0;
 
-    // Now go on to make effect
-    //  先要按照中断优先级高低排序
-    effect = SortEffect( effect );
-    // 执行
-    level = 0;
-    foreach ( mapping act in effect )
-    {
-        if ( level > act[ "int_level" ] )
-            break;
-        if ( functionp( act[ "funcname" ] ) 
-            && intp( i = evaluate( act[ "funcname" ], actor, acceptor, status ) ) && i )
-            if ( !level )
-                level = act[ "int_level" ];
-        else if ( act[ "funcfile" ] 
-            && call_other( act[ "funcfile" ], act[ "funcname" ], actor, acceptor, status ) )
+  // Now go on to make effect
+  //  先要按照中断优先级高低排序
+  effect = SortEffect(effect);
+  // 执行
+  level = 0;
+  foreach (mapping act in effect) {
+    if (level > act["int_level"])
+      break;
+    if (functionp(act["funcname"])
+      && intp(i = evaluate(act["funcname"], actor, acceptor, status)) && i)
+      if (!level)
+        level = act["int_level"];
+      else if (act["funcfile"]
+        && call_other(act["funcfile"], act["funcname"], actor, acceptor, status))
         // 这里只传送动作的双方，需要什么参数由执行的函数自己去query得了。
-            if ( !level )
-                level = act["int_level"];
-                // 执行成功（就是说必须返回大于0，我想不出好办法了）
-    }
-    report( "level is " + level );
-    report( "actor is " + actor->name() );
-    return level;
+        if (!level)
+          level = act["int_level"];
+    // 执行成功（就是说必须返回大于0，我想不出好办法了）
+  }
+  report("level is " + level);
+  report("actor is " + actor->name());
+  return level;
 }
 
-void eventAfterAction( object actor, object acceptor, string verb, mixed status )
-{
-}
+void eventAfterAction(object actor, object acceptor, string verb, mixed status) {}
 
-mapping * AddEffect( object effector, string verb, mapping * effect )
-{
-    mapping tmp;
-    if ( !arrayp( effect ) )
-        effect = ({});
-    if ( tmp = effector->query_temp( "EnvEffect/" + verb  ) )
-        effect += ({ tmp });
-    else if ( tmp = effector->query( "EnvEffect/" + verb ) )
-        effect += ({ tmp });
-    return effect;
+mapping *AddEffect(object effector, string verb, mapping *effect) {
+  mapping tmp;
+  if (!arrayp(effect))
+    effect = ({});
+  if (tmp = effector->query_temp("EnvEffect/" + verb))
+    effect += ({ tmp });
+  else if (tmp = effector->query("EnvEffect/" + verb))
+    effect += ({ tmp });
+  return effect;
 }
 
 // 将effect中的中断按照优先级别排序。Amber 1998-04-25 17:14
 // TODO：冒泡法也太土了，得换个好一点儿的。Amber 1998-04-26 19:38
-mapping * SortEffect( mapping * effect )
-{
-    mapping tmp;
-    int i,j;
-    for ( i = 0; i < ( sizeof( effect ) - 1 ); i++ )
-        for( j = i + 1; j < sizeof( effect ); j++ )
-            if ( effect[j]["int_level"] > effect[i]["int_level"] )
-            {
-                tmp = effect[i];
-                effect[i] = effect[j];
-                effect[j] = tmp;
-            }
-    return effect;
+mapping *SortEffect(mapping *effect) {
+  mapping tmp;
+  int i, j;
+  for (i = 0; i < (sizeof(effect) - 1); i++)
+    for (j = i + 1; j < sizeof(effect); j++)
+      if (effect[j]["int_level"] > effect[i]["int_level"]) {
+        tmp = effect[i];
+        effect[i] = effect[j];
+        effect[j] = tmp;
+      }
+  return effect;
 }
 
-private void report( string arg )
-{
-    object ob;
-    if ( !ob = LOGIN_D->find_body( "amber" ) )
-        return;
-    if ( ob->query("no_report") )
-        return;
-    tell_object( ob, arg + "\n" );
+private void report(string arg) {
+  object ob;
+  if (!ob = LOGIN_D->find_body("amber"))
     return;
+  if (ob->query("no_report"))
+    return;
+  tell_object(ob, arg + "\n");
+  return;
 }
-

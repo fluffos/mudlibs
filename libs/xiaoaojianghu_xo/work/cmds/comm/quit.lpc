@@ -10,145 +10,130 @@ inherit F_CLEAN_UP;
 
 int later_quit(object);
 
-void create()
-{
-    seteuid(getuid());
-    set("name", "退出指令");
-    set("id", "quit");
+void create() {
+  seteuid(getuid());
+  set("name", "退出指令");
+  set("id", "quit");
 }
 
-int main(object me, string arg)
-{
-    int livetime;
-    object *inv, link_ob,env;
+int main(object me, string arg) {
+  int livetime;
+  object *inv, link_ob, env;
 
-    if ( me->is_fighting() )
-        return notify_fail(HIR "您现在在厮杀中，无法退出!!!\n" NOR);
+  if (me->is_fighting())
+    return notify_fail(HIR "您现在在厮杀中，无法退出!!!\n" NOR);
 
-    env = environment(me);
+  env = environment(me);
 
-    // Are we possessing in others body ?
-    link_ob = me->query_temp("link_ob");
-    if ( link_ob && link_ob->is_character() )
-    {
-        write("你的魂魄回到" + link_ob->name(1) + "的身上。\n");
-        exec(link_ob, me);
-        link_ob->setup();
-        return 1;
-    }
-    if ( me->query_temp("valid_quit") )
-    {
-        later_quit(me);
-        return 1;
-    }
-    if ( me->is_busy() && !wizardp(me) )
-        return notify_fail("你现在忙着呢，不能退出。\n");
-    if ( objectp(env) && env->query("no_quit") )
-        return notify_fail("对不起，这里不能退出。\n");
-
-    livetime = time() - me->query("birthday");
-    if  ( !wizardp( me ) && livetime <= CAN_SAVE_LIMIT_TIME )
-    {
-        tell_object( me, "你初次在\"笑傲江湖\"中必须玩够 30 分才可以"
-            "保存数据！\n所以请确定你是否真的要退出(y/n)？" );
-        input_to( "confirm_quit_with_nosave", me );
-        return 1;
-    }
-
-    if ( me->query_temp("will_quit") )
-        return notify_fail("你已经准备退出了。\n");
-
-    me->set_temp("will_quit",1);
-
-    if ( !wizardp(me) )
-    {
-        call_out("later_quit",30,me);
-        write(HIW "你决定退出游戏，请等待。。。。\n" NOR);
-    }
-    else
-        later_quit(me);
+  // Are we possessing in others body ?
+  link_ob = me->query_temp("link_ob");
+  if (link_ob && link_ob->is_character()) {
+    write("你的魂魄回到" + link_ob->name(1) + "的身上。\n");
+    exec(link_ob, me);
+    link_ob->setup();
     return 1;
+  }
+  if (me->query_temp("valid_quit")) {
+    later_quit(me);
+    return 1;
+  }
+  if (me->is_busy() && !wizardp(me))
+    return notify_fail("你现在忙着呢，不能退出。\n");
+  if (objectp(env) && env->query("no_quit"))
+    return notify_fail("对不起，这里不能退出。\n");
+
+  livetime = time() - me->query("birthday");
+  if (!wizardp(me) && livetime <= CAN_SAVE_LIMIT_TIME) {
+    tell_object(me, "你初次在\"笑傲江湖\"中必须玩够 30 分才可以"
+      "保存数据！\n所以请确定你是否真的要退出(y/n)？");
+    input_to("confirm_quit_with_nosave", me);
+    return 1;
+  }
+
+  if (me->query_temp("will_quit"))
+    return notify_fail("你已经准备退出了。\n");
+
+  me->set_temp("will_quit", 1);
+
+  if (!wizardp(me)) {
+    call_out("later_quit", 30, me);
+    write(HIW "你决定退出游戏，请等待。。。。\n" NOR);
+  } else
+    later_quit(me);
+  return 1;
 }
 
-int later_quit(object me)
-{
-    int i;
-    object *inv, link_ob;
+int later_quit(object me) {
+  int i;
+  object *inv, link_ob;
 
-    if ( !wizardp(me) )
-    {
-        inv = all_inventory(me);
-        for ( i = 0; i < sizeof(inv); i++ )
-            if ( !inv[i]->query_autoload() )
-                DROP_CMD->do_drop(me, inv[i]);
-    }
-    UNIQUE_D->check_unique_for_delete( me );
-    //remove_call_out("change_unique");
-    //call_out("change_unique", 1, me);
+  if (!wizardp(me)) {
     inv = all_inventory(me);
-    for ( i = 0; i < sizeof( inv ); i++ )
-        if ( inv[i]->is_unique() )
-            UNIQUE_D->change_user_for_unique( inv[i], me ); 
+    for (i = 0; i < sizeof(inv); i++)
+      if (!inv[i]->query_autoload())
+        DROP_CMD->do_drop(me, inv[i]);
+  }
+  UNIQUE_D->check_unique_for_delete(me);
+  //remove_call_out("change_unique");
+  //call_out("change_unique", 1, me);
+  inv = all_inventory(me);
+  for (i = 0; i < sizeof(inv); i++)
+    if (inv[i]->is_unique())
+      UNIQUE_D->change_user_for_unique(inv[i], me);
 
-    link_ob = me->query_temp("link_ob");
+  link_ob = me->query_temp("link_ob");
 
-    // We might be called on a link_dead player, so check this.
-    if ( link_ob )
-    {
-        link_ob->set("last_on", time());
-        link_ob->set("last_from", query_ip_name(me));
-        link_ob->save();
-        destruct(link_ob);
-    }
-    if ( objectp( environment( me ) ) &&
-         !environment(me)->query("not_startroom") )
-    {
-        me->set( "startroom", file_name( environment( me ) ) );
-    }
-    me->eventQuit();
-    me->save();
-    write(HIY "欢迎再次光临\"笑傲江湖\"！\n" NOR);
-    message("system", me->name() + "离开了这个世界。\n",
-        environment(me), me);
-    CHANNEL_D->do_channel(this_object(), "sys",
-        me->name() + "(" + me->query( "id" ) + ")" + "离开游戏了。");
-    destruct(me);
-    return 1;
+  // We might be called on a link_dead player, so check this.
+  if (link_ob) {
+    link_ob->set("last_on", time());
+    link_ob->set("last_from", query_ip_name(me));
+    link_ob->save();
+    destruct(link_ob);
+  }
+  if (objectp(environment(me)) &&
+    !environment(me)->query("not_startroom")) {
+    me->set("startroom", file_name(environment(me)));
+  }
+  me->eventQuit();
+  me->save();
+  write(HIY "欢迎再次光临\"笑傲江湖\"！\n" NOR);
+  message("system", me->name() + "离开了这个世界。\n",
+    environment(me), me);
+  CHANNEL_D->do_channel(this_object(), "sys",
+    me->name() + "(" + me->query("id") + ")" + "离开游戏了。");
+  destruct(me);
+  return 1;
 }
 
-int confirm_quit_with_nosave( string arg, object me )
-{
-    string login_file, body_file, name;
+int confirm_quit_with_nosave(string arg, object me) {
+  string login_file, body_file, name;
 
-    if ( arg[ 0 ] == 'y' || arg[ 0 ] == 'Y' )
-    {
-        write( "好吧，欢迎下次再来。\n" );
-        name = me->query("id");
-        login_file = DATA_DIR + "login/" + name[0..0] + "/" + name + ".o";
-        body_file = DATA_DIR + "user/" + name[0..0] + "/" + name + ".o";
-        rm( login_file );
-        rm( body_file );
-        destruct( me );
-    }
-    return 1;
+  if (arg[0] == 'y' || arg[0] == 'Y') {
+    write("好吧，欢迎下次再来。\n");
+    name = me->query("id");
+    login_file = DATA_DIR + "login/" + name[0..0] + "/" + name + ".o";
+    body_file = DATA_DIR + "user/" + name[0..0] + "/" + name + ".o";
+    rm(login_file);
+    rm(body_file);
+    destruct(me);
+  }
+  return 1;
 }
 
 // this function has no use for now
-int change_unique( object me )
-{
-    object *inv;
-    int i;
-    inv = all_inventory(me);
-    for ( i = 0; i < sizeof( inv ); i++ )
-        if ( inv[i]->is_unique() )
-            UNIQUE_D->change_user_for_unique( inv[i], me ); 
-    destruct( me );
-    return 1;
+int change_unique(object me) {
+  object *inv;
+  int i;
+  inv = all_inventory(me);
+  for (i = 0; i < sizeof(inv); i++)
+    if (inv[i]->is_unique())
+      UNIQUE_D->change_user_for_unique(inv[i], me);
+  destruct(me);
+  return 1;
 }
 
-int help(object me)
-{
-    write(@HELP
+int help(object me) {
+  write(@HELP
 指令格式 : quit
 
 这个指令用来在你想离开游戏时帮助你处理你的数据并退出，每次
@@ -158,7 +143,6 @@ int help(object me)
     动作没有完成时，
     特殊的房间里，当然这样的房间是很少的。
 HELP
-    );
-    return 1;
+  );
+  return 1;
 }
-
