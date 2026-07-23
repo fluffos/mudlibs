@@ -93,3 +93,38 @@ range check to test the CJK Unicode block instead, and halved the
 GBK-byte-calibrated length bounds in `check_legal_name` to match. See
 AGENTS.md §15h for the full writeup; confirmed via a real interactive
 registration test (Chinese surname + given name reaching the next prompt).
+
+## Re-verification pass (2026-07-23): driver rebuild + LPC formatter + WASM build
+
+- **Formatter**: ran `format-corpus.mjs` over all of `work/` (6,521
+  files, 6,369 written/reformatted, 29 already-clean, 123 refused with
+  an error — expected on legacy code, not chased individually).
+- **Native retest against rebuilt driver** (`build-debug/src/driver`,
+  rebuilt from latest upstream master): clean boot, zero fatal errors in
+  `debug.log`. Full registration re-verified end-to-end on the
+  now-reformatted source with a fresh real Chinese name (`秦诺`, ID
+  `qinnuo`, following the same ID→confirm→Chinese name→password (5-8
+  chars)→email→gender→4-stat-point-allocation flow as sibling
+  `datangshuanglong`) reaching the actual game world (大唐学院 starting
+  room); `look`/`score` both produced correct output (full 人物档案
+  stat card rendered correctly), `quit` exited cleanly. One background
+  `*Read access denied.` runtime error appeared during this run, same
+  pre-existing job-daemon content gap already documented in
+  `datangshuanglong`'s NOTES (`adm/daemons/jobmond.lpc`'s periodic
+  job-posting logic trying to move an NPC into a room via a chain that
+  hits an ACL denial) — fires from that daemon's own independent
+  heartbeat, unrelated to the registration/look/score/quit path under
+  test, not a regression. No regressions from the reformat or the fresh
+  driver build.
+- **WASM build**: preload completes with only the expected non-fatal
+  `sockets`-package gap (`adm/daemons/ftpd.lpc`/`include/net/
+  ftpdsupp.h` and `adm/daemons/network/dns_master.lpc`'s
+  `socket_create`/`socket_bind`/`socket_close`/`socket_address` →
+  `Undefined function`, caught non-fatally, `Initializations complete.`
+  still printed). Like `datangshuanglong`, this lib's login path does
+  **not** gate on `query_ip_number()`'s format, so a full registration
+  proceeded all the way through under WASM too: ID `qinao` → Chinese
+  name `秦傲` → password → email → gender → stat allocation → reached
+  the actual game world (大唐学院), `look` produced correct room
+  output, `quit` exited cleanly. **This lib is confirmed fully playable
+  under WASM**, not just "boots."
