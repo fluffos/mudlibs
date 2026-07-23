@@ -2391,3 +2391,19 @@ second — both listed for traceability):
   `inherit` as the decisive check, since a C++ codebase can be
   organized to visually resemble an LPC one without using the LPC
   object model at all.
+- `魔法类的泥巴.rar` (archive #101) — confirmed NOT an LPC mudlib: a
+  compiled **EmberMUD** binary (`pemud.exe`, a SMAUG/ROM/DikuMUD-
+  derivative C engine — `strings` on the binary directly reveals
+  `C:\My Documents\EmberMUD\src\db.c` and a "Ported to EmberMUD by
+  Thanatos and Tyrluk of ToED" credit line), an English-language
+  classic fantasy MUD (Midgaard zone, wizard/mage classes) — not
+  Chinese wuxia content at all despite the Chinese archive filename.
+  Zero `.c`/`.lpc`/`inherit` anywhere; classic Diku `.are` world-data
+  format; `config.cfg` uses INI `[Section]`/`Key = "value"` syntax, not
+  the MudOS/FluffOS `key : value` format every genuine archive in this
+  project uses. The archive's own filename ("泥巴") is just the
+  generic phonetic loanword for "mud" (the genre) — coincidentally
+  similar-sounding to "泥潭"/nitan but referring to a totally
+  unrelated game; verified this distinction explicitly rather than
+  assuming a name-based lineage match. Same non-mudlib category as
+  #31/#64/#86-88.

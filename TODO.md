@@ -527,7 +527,7 @@ rely on the boot + interactive-connect test as the verification gate.
 | 98 | 风云III典藏版.rar | | | not started | dup: "...(1).rar" |
 | 99 | 风云II (清华仿写版）.ZIP | | | not started | dup: "...(1).ZIP" |
 | 100 | 魔幻世纪.rar | | | not started | |
-| 101 | 魔法类的泥巴.rar | | | not started | |
+| 101 | 魔法类的泥巴.rar | mofaleidemuba | | not mudlib | confirmed: compiled EmberMUD binary (SMAUG/ROM/DikuMUD-derivative C engine, English-language classic fantasy MUD, Midgaard zone) -- pemud.exe strings reveal "C:\My Documents\EmberMUD\src\db.c"/"Ported to EmberMUD by Thanatos and Tyrluk of ToED", zero .c/.lpc/inherit anywhere, classic Diku .are world-data format, INI-style config.cfg; "泥巴" here is just the generic phonetic loanword for "mud" (the genre), coincidentally similar-sounding to "泥潭"/nitan but a totally unrelated, non-LPC, non-Chinese game; same non-mudlib category as #31/#64/#86-88; port never consumed; see libs/mofaleidemuba/NOTES.md |
 | 102 | 龙云梦-炎龙封印-二进制版.rar | | | not started | "binary version" in name -- may not have source, triage |
 | 103 | 龙云梦-炎龙封印源码版.rar | | | not started | "source version" in name -- prefer this over the binary one above |
 
