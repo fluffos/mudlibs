@@ -1,0 +1,241 @@
+// 五行项链.c
+
+#include <armor.h>
+#include <ansi.h>
+inherit NECK;
+
+int compare(string a,string b,int damage);
+void jin_extra(object me,object ob);
+void mu_extra(object me,object ob);
+void shui_extra(object me,object ob);
+void huo_extra(object me,object ob);
+void tu_extra(object me,object ob);
+
+mapping xiangsheng=(["huo":"tu"   ,"tu":"jin"   ,"jin":"shui"     ,"shui":"mu"    ,"mu":"huo"]);
+mapping xiangke=(["jin":"mu"  ,"mu":"tu"   ,"tu":"shui"    ,"shui":"huo"   ,"huo":"jin"]);
+mapping tochinese=(["jin":"金"  ,"mu":"木"  ,"shui":"水"   ,"huo":"火"   ,"tu":"土"]);
+
+mapping force_type=([
+"wuxiangforce":({4,2,0,2,-4}),
+"lengquan-force":({3,1,-1,0,1}),
+"moonforce":({2,0,2,3,-3}),
+"lotusforce":({2,4,1,-3,1}),
+"huomoforce":({2,1,1,-5,5}),
+"huntian-qigong":({0,-4,4,2,2}),
+"jiuyin-xinjing":({-3,4,1,1,1}),
+"zhenyuan-force":({0,5,1,-4,2}),
+"dragonforce":({1,1,-4,5,1}),
+"ningxie-force":({1,-4,2,4,1}),
+"tonsillit":({-3,1,1,1,4}),
+"zixia-shengong":({0,-3,4,2,1}),
+]);
+void create()
+{
+        set_name("五行项链", ({"wuxing xianglian","xianglian","necklace"}));
+        set_weight(800);
+        if( clonep() )
+                set_default_object(__FILE__);
+        else {
+                set("unit", "个");
+	    set("long", "传说中的五行项链，拿到了它，就可以运用五行的力量。\n");
+	    set("no_sell", 1);
+	    set("material", "steel");
+                set("armor_prop/armor",10);
+                set("armor_prop/wuxing_necklace",1);
+        }
+	setup();
+}
+void init()
+{
+     add_action("do_settype","settype");
+}
+
+int do_settype(string arg)
+{
+      object me=this_player();
+     if(!arg) return notify_fail("你要设定什么属性？\n");
+     if(arg=="jin"|| arg=="mu" || arg=="shui" || arg=="tu" || arg=="huo") {
+          me->set("wuxingtype",arg);
+          tell_object(me,"你设定攻击带"+tochinese[arg]+"系伤害。\n");
+          return 1;
+       }
+     return notify_fail("你只能设定五行中的一种属性。\n");
+}
+int ob_hit(object ob,object me)
+{
+      string obtype,metype,ch,str,force1,force2;
+      object weapon;
+      int obris,meattack,k,obmaxris,forcealpha;
+      int add_damage,damage0,damage1,damage2;
+// 决定基础伤害 ，由武器的伤害和enforce 决定 
+      if (!me->query_temp("weapon")) {
+            add_damage=me->query("force_factor")*3; }
+      else {
+            weapon=me->query_temp("weapon");
+            add_damage=weapon->query("weapon_prop/damage")+me->query("force_factor");
+      }
+     damage0=(int)add_damage;
+// 攻击双方有一个没有wuxing 属性，则不产生附加伤害
+// 暂时不开放两个player fight 时的附加伤害 
+      if (!ob->query("wuxingtype")) return 1;
+       if (userp(ob) && userp(me)) return 1;
+      if (!me->query("wuxingtype")) return 1;
+// 计算装备决定的wuxing 属性和抗性对 附加伤害的贡献
+      obtype=ob->query("wuxingtype");
+      metype=me->query("wuxingtype");
+      ch="apply/"+metype+"_ris";
+      obris=ob->query_temp("apply/all_ris")+ob->query_temp(ch);
+      ch="apply/"+metype+"_maxris";
+      obmaxris=ob->query_temp(ch);
+      if (obris>80+obmaxris) obris=80+obmaxris;
+      ch="apply/"+metype+"_type";
+      meattack=me->query_temp("apply/all_type")+me->query_temp(ch);
+      add_damage=(int) add_damage*(1+meattack*0.01)*(1-obris*0.01);
+     damage1=(int)add_damage;
+//  计算五行相生相克因素
+      add_damage=compare(metype,obtype,add_damage);
+     damage2=(int)add_damage;
+// 计算特殊内功对附加伤害的贡献
+      force1=me->query_skill_mapped("force");
+      force2=ob->query_skill_mapped("force");
+      if (force1 && force2)
+      {
+        switch (metype)
+        {
+        case "jin":k=0;
+                break;
+        case "mu":k=1;
+                break;
+        case "tu":k=2;
+                break;
+        case "shui":k=3;
+                break;
+        case "huo":k=4;
+                break;
+        }
+        forcealpha=(int) force_type[force1][k]-force_type[force2][k];
+        add_damage=(int) add_damage*(1+forcealpha*0.1);
+      }
+// 如果被攻击者是player，将不产生加kee 的效果
+      if (add_damage<0 && userp(ob)) add_damage=0;
+      if (add_damage==0) return 1;
+      if (add_damage>0) {
+             ob->receive_damage("kee",(int) add_damage);
+             ob->receive_wound("kee",(int) add_damage/3);
+message_vision(HIB+"$N"+HIB+"对$n"+HIB+"造成了额外的"+tochinese[metype]+"系伤害。\n"+NOR,me,ob);
+  //           str=HIB+"$N对$n造成了额外的"+tochinese[metype]+"系伤害。\n"+NOR;
+			 COMBAT_D->report_status(ob,1);
+      } else {
+             ob->add("kee",-add_damage);
+             ob->add("eff_kee",-add_damage);
+message_vision(HIM+"$n"+HIM+"吸收了$N"+HIM+"的所有"+tochinese[metype]+"系伤害。\n"+NOR,me,ob);
+ //            str=HIM+"$n吸收了$N的所有"+tochinese[metype]+"系伤害。\n"+NOR;
+			 COMBAT_D->report_status(ob,1);
+      }
+//  特殊攻击效果
+    if (forcealpha>1) 
+    {
+      switch(metype)
+      {
+         case "jin":jin_extra(me,ob);
+                 break;
+         case "mu":mu_extra(me,ob);
+                 break;
+         case "shui":shui_extra(me,ob);
+                 break;
+         case "huo":huo_extra(me,ob);
+                 break;
+         case "tu":tu_extra(me,ob);
+                 break;
+      }
+    }
+    if( wizardp(me) && (string)me->query("env/combat")=="verbose" ) {
+ tell_object(me,sprintf(GRN"TYPE1：%s，TYPE2：%s，Force1：%s，Force2：%s\n",metype,obtype,force1,force2)); 
+ tell_object(me,sprintf(GRN"Forcealpha：%d，Damage：%d\n"NOR,forcealpha,add_damage)); 
+ tell_object(me,sprintf(GRN"Damage1：%d，"NOR,damage0));
+ tell_object(me,sprintf(GRN"Damage2：%d，"NOR,damage1));
+ tell_object(me,sprintf(GRN"Damage3：%d\n"NOR,damage2));
+// tell_object(me,sprintf(GRN"Dam0：%d，Dam1：%f\n"NOR,damage0,damage1));
+}
+  if( wizardp(ob) && (string)ob->query("env/combat")=="verbose" ) {
+ tell_object(ob,sprintf(GRN"TYPE1：%s，TYPE2：%s，Force1：%s，Force2：%s\n",metype,obtype,force1,force2)); 
+ tell_object(ob,sprintf(GRN"Forcealpha：%d，Damage：%d\n"NOR,forcealpha,add_damage)); 
+ tell_object(ob,sprintf(GRN"Dam0：%d，Dam1：%d，Dam2：%d\n"NOR,damage0,damage1,damage2));
+}
+      return 1;
+}
+
+int compare(string a,string b,int damage)
+{
+    if (xiangsheng[a]==b) return (int) -damage;
+    if (xiangsheng[b]==a) return (int) damage*3/2;
+    if (xiangke[a]==b) return (int) damage*2;
+    if (xiangke[b]==a) return (int) damage/2;
+    return damage;
+}
+
+void jin_extra(object me,object ob)
+{
+  int i;
+  i=(int) ob->query("max_sen")*0.05;
+  if (ob->query("sen")>i)
+  ob->add("sen",- i);
+  else ob->set("sen",-1);
+  if (ob->query("eff_sen")>i)
+  ob->add("eff_sen",-i);
+  else ob->set("eff_sen",-1);
+  i=(int) me->query("max_sen")*0.05;
+  if (me->query("max_sen")-me->query("sen")>i)
+  me->add("sen",i);
+  else me->set("sen",me->query("max_sen"));
+  if (me->query("max_sen")-me->query("eff_sen")>i)
+  me->add("eff_sen",i);
+  else me->set("eff_sen",me->query("max_sen"));
+  message_vision(HIY"=================金=================\n"NOR,me);  
+}
+
+void mu_extra(object me,object ob)
+{
+  if (ob->query("force")>500)
+    ob->add("force",-500);
+  else ob->set("force",0);
+  if (ob->query("mana")>500)
+    ob->add("mana",-500);
+  else ob->set("mana",0);
+  me->add("force",200);
+  me->add("mana",200);
+  message_vision(HIG"=================木=================\n"NOR,me);
+}
+
+void shui_extra(object me,object ob)
+{
+  ob->start_busy(1+random(2));
+  message_vision(HIB"=================水=================\n"NOR,me);
+}
+
+void huo_extra(object me,object ob)
+{
+  int i;
+  i=(int) ob->query("max_kee")*0.03;
+  if (ob->query("kee")>i)
+  ob->add("kee",-i);
+  else ob->set("kee",-1);
+  if (ob->query("eff_kee")>i)
+  ob->add("eff_kee",-i);
+  else ob->set("eff_kee",-1);
+  i=(int) me->query("max_kee")*0.03;
+  if (me->query("max_kee")-me->query("kee")>i)
+  me->add("kee",i);
+  else me->set("kee",me->query("max_kee"));
+  if (me->query("max_kee")-me->query("eff_kee")>i)
+  me->add("eff_kee",i);
+  else me->set("eff_kee",me->query("max_kee"));
+  message_vision(HIR"=================火=================\n"NOR,me);
+}
+
+void tu_extra(object me,object ob)
+{
+  COMBAT_D->do_attack(me,ob,me->query_temp("weapon"),2);
+  message_vision(YEL"=================土=================\n"NOR,me);
+}
+

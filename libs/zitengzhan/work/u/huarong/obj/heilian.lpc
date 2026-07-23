@@ -1,0 +1,222 @@
+#include <ansi.h>
+#include <weapon.h>
+inherit F_UNIQUE;
+inherit ITEM;
+void create()
+{
+set_name(BLK"原神黑莲"NOR,({"heilian", "yuanshen heilian"}));
+set_weight(4500);
+set_max_encumbrance(10000000000);
+if(clonep())
+set_default_object(__FILE__);
+else {
+set("unit","只");
+set("value", 100000);
+set("material","cloth");
+set("long","这就是无天的原神黑莲,能收取三界之内任何事物。\n");
+}
+set("no_fight", 1);
+set("no_magic", 1);
+set("unique", 1);
+set("no_sell", "这样东西不能买卖。\n");
+set("no_drop", "原神黑莲你也敢乱丢?\n");
+set("no_give", "自己的法宝自己用。\n");
+set("is_monitored",1);
+setup();
+}
+void init ()
+{
+check_owner();
+add_action ("do_yell", "yell");
+}
+int do_yell (string arg)
+{
+object me = this_player();
+object mingwang = present("kongque mingwang",environment(me));
+if (arg != "mingwang")
+{
+message_vision("只见$N仰首大喊了几声.\n",me);
+return 1;
+}
+message_vision("只见$N仰头大喊道："+
+RANK_D->query_self(me)+
+"拜见佛母孔雀大明王菩萨！\n",me);
+if (me->query("daoxing")<2500000)
+return notify_fail("你道行不够,恐怕没有人会理你了!\n");
+if (mingwang)
+message_vision("头顶上隐隐约约有人说:找我何事?。\n",mingwang,me);
+else
+{
+message_vision("头顶上隐隐约约有东西飞过。\n",me);
+call_out("mingwang_appear",10+random(10),me);
+}
+return 1;
+}
+void mingwang_appear(object me)
+{
+object mingwang ;
+if (environment(me) != this_object())
+return;
+if (present("kongque mingwang",environment(me)))
+return;
+mingwang = new ("/d/mojie/npc/mingwang");
+mingwang->move(environment(me));
+message_vision("孔雀大明王从天而降,慢慢落在你的面前。\n",mingwang);
+}
+int ji_ob (object victim)
+{
+object heilian = this_object ();
+object me = environment(heilian);
+string heilianname = heilian->query("name");
+int damage, ap, dp, myspells, myexp, victimspells, victimexp, duration;
+int mykar=me->query("kar"), victimkar;
+if (me->is_busy())
+{
+tell_object (me, "你无法忙中偷闲祭"+heilianname+"。\n");
+return notify_fail("你正忙着呢。\n");
+}
+if (sizeof(all_inventory(heilian))>0)
+{
+tell_object (me, heilianname+"里已经有人了,你无法再祭"+heilianname+"。\n");
+return notify_fail("你祭"+heilianname+"失败。\n");
+}
+if (!victim)
+{
+tell_object (me, "你想祭的人不在这里。\n");
+return notify_fail("你祭"+heilianname+"失败。\n");
+}
+if (!living(victim))
+{
+tell_object (me, victim->query("name")+"已经毫无抵抗能力，不必祭了。\n");
+return notify_fail("你祭"+heilianname+"失败。\n");
+}
+if (!me->is_fighting())
+{
+tell_object (me, "只有战斗中才能祭"+heilianname+"。\n");
+return notify_fail("你祭"+heilianname+"失败。\n");
+}
+if ((int)me->query("mana") < 500)
+{
+tell_object (me, "你的法力不足，祭不了"+heilianname+"。\n");
+return notify_fail("你祭"+heilianname+"失败。\n");
+}
+if( (int)me->query("sen") < 500)
+{
+tell_object (me, "你无法集中精神念咒语。\n");
+return notify_fail("你祭"+heilianname+"失败。\n");
+}
+message_vision ("\n$N口中念着咒语，轻轻地将"+heilianname+"想上一抛,黑莲瞬间飞到了空中.\n",me);
+if (heilian->query("interactive_usage") > (me->query("kar")/2))
+{
+message_vision (""+heilianname+"突然无声无息的消失在了空气中。\n",me);
+destruct (heilian);
+return notify_fail("你祭"+heilianname+"失败。\n");
+}
+me->start_busy(60/mykar);
+victimkar=victim->query("kar");
+myspells=me->query_skill("spells")/10;
+myexp=me->query("combat_exp")/1000;
+victimspells=victim->query_skill("spells")/10;
+victimexp=victim->query("combat_exp")/1000;
+ap=(myexp+myspells*myspells*myspells/3)*me->query("sen")/me->query("max_sen");
+ap=ap*mykar/1000;
+dp=(victimexp+victimspells*victimspells*victimspells/3)*victim->query("sen")/victim->query("max_sen");
+dp=dp*victimkar/1000;
+if (wizardp(me) && me->query("env/combat")=="verbose")
+tell_object(me, GRN "进攻："+ap+"，防守："+dp+"。\n" NOR);
+if(random(ap+dp)>dp)
+{
+message_vision ("倾刻之间$n被"+heilianname+"的黑光罩住,无声无息得被吸了进去！\n",me,victim);
+victim->move(heilian);
+duration = (50-victim->query("kar"))*10;
+if (duration < 60)
+duration = 60;
+victim->set_temp("no_move",1);
+victim->start_busy(duration,1);
+victim->set_temp("fabao/gin",victim->query("gin"));
+victim->set_temp("fabao/kee",victim->query("kee"));
+victim->set_temp("fabao/sen",victim->query("sen"));
+victim->set_temp("fabao/eff_gin",victim->query("eff_gin"));
+victim->set_temp("fabao/eff_kee",victim->query("eff_kee"));
+victim->set_temp("fabao/eff_sen",victim->query("eff_sen"));
+victim->unconcious();
+call_out ("reviving",1,victim);
+call_out ("releasing",duration,victim);
+me->add("mana", -400);
+}
+else
+{
+message_vision ("\n$n轻轻一跳便躲过了黑莲的黑光。\n",me,victim);
+me->add("mana", -200);
+}
+if (victim)
+victim->kill_ob(me);
+if (interactive(me))
+heilian->add("interactive_usage",1);
+return 1;
+}
+void reviving (object who)
+{
+object me = this_object();
+if (! who->query_temp("block_msg/all"))
+return;
+if (environment(who) != me)
+{
+if(!userp(who)){
+call_out("wake", 1, who);
+who->set("gin",who->query_temp("fabao/gin")*50/100);
+who->set("kee",who->query_temp("fabao/kee")*50/100);
+who->set("sen",who->query_temp("fabao/sen")*50/100);
+who->set("eff_gin",who->query_temp("fabao/eff_gin"));
+who->set("eff_kee",who->query_temp("fabao/eff_kee"));
+who->set("eff_sen",who->query_temp("fabao/eff_sen"));
+who->start_busy(2);
+return;
+}
+else
+call_out("wake", 1, who);
+who->set("gin",who->query_temp("fabao/gin")*25/100);
+who->set("kee",who->query_temp("fabao/kee")*25/100);
+who->set("sen",who->query_temp("fabao/sen")*25/100);
+who->set("eff_gin",who->query_temp("fabao/eff_gin"));
+who->set("eff_kee",who->query_temp("fabao/eff_kee"));
+who->set("eff_sen",who->query_temp("fabao/eff_sen"));
+who->start_busy(3);
+return;
+}
+call_out("reviving", 1, who);
+}
+void wake(object who)
+{
+who->revive();
+return;
+}
+void releasing (object who)
+{
+object me = this_object();
+object room = environment(me);
+if (room->is_character())
+room = environment(room);
+if (! who)
+return;
+who->set_temp("no_move",0);
+who->interrupt_me();
+if (! who || interactive (who))
+return;
+if (environment(who) != me)
+return;
+who->move(room);
+message_vision ("$N费了九牛二虎之力,才从黑莲里挣脱出来。\n",who);
+}
+int ji (string target)
+{
+object heilian = this_object ();
+object me = this_player();
+string heilianname = heilian->query("name");
+object victim;
+if (!target)
+return notify_fail("你想对谁祭"+heilianname+"？\n");
+victim=present(target,environment(me));
+heilian->ji_ob(victim);
+return 1;
+}

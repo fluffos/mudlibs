@@ -1,0 +1,303 @@
+#include <ansi.h>
+#include <dbase.h>
+#include <weapon.h>
+inherit EQUIP;
+
+void do_gift(object me,int i);
+
+void setup()
+{
+set("weapon_prop/damage",20+random(31));
+set("flag", EDGED | SECONDARY );
+set("skill_type","unarmed");
+if( !query("actions") )
+        {
+        set("actions", (: call_other, WEAPON_D, "query_action" :) );
+        set("verbs", ({ "slash", "slice", "hack", "chop"  }) );
+        }
+::setup();
+}
+
+int is_gameitem()
+{
+return 1;
+}
+
+void create()
+{
+set_name("马鞭",({"ma bian","bian"}));
+set_weight(500);
+set("long","一根麻绳模样的马鞭,你可以用它来驾驭(jiayu)坐骑.\n");
+set("value",0);
+set("no_give",1);
+set("no_put",1);
+set("no_get",1);
+set("unit","根");
+setup();
+}
+
+int check_player(object me)
+{
+object pet = me->query_temp("ridee");
+if ( !me->query_temp("saima") )
+        return 0;
+if ( !pet || !living(pet) || strsrch(pet->name(),"马")==-1 )
+        {
+        message("channel:chat",sprintf(WHT"【"HIG" 民间界 "NOR WHT"】"NOR HIC"马官(Ma guan):%s失去了坐骑,退出了本次赛马比赛!\n"NOR,
+                                me->query("name"),
+                                ),
+                users() );
+        me->delete_temp("saima");
+        return 0;
+        }
+return 1;       
+}       
+
+void init()
+{
+add_action("do_da","jiayu");
+add_action("do_go","go");
+add_action("do_halt","quit");
+add_action("do_halt","halt");
+add_action("do_cmds","",1);
+remove_call_out("check_owner");
+call_out("check_owner",0,this_player());
+}
+
+int do_halt()
+{
+object me = this_player();
+message("channel:chat",sprintf(WHT"【"HIG" 民间界 "NOR WHT"】"NOR HIC"马官(Ma guan): %s 临阵退缩,退出了本次赛马比赛!\n"NOR,
+                                me->query("name"),),
+        users() );
+me->delete_temp("saima");
+destruct(this_object());
+return 1;
+}
+        
+int do_cmds()
+{
+string verb = query_verb();
+object me = this_player();
+
+if ( wizardp(me) )
+        return 0;
+if ( me!=environment() )
+        return 0;
+if ( !me->query_temp("saima") )
+        return 0;
+        
+if ( verb=="go" || verb=="jiayu" || verb=="look"
+  || verb=="exert" || verb=="hp" || verb=="inventory" 
+  || verb=="quit"  || verb=="halt" )
+        return 0;
+write(HIR"赛马中，还是安心比赛吧。\n"NOR);
+return 1;
+}
+
+int do_go(string arg)
+{
+string *msgs;   
+object pet,me = this_player();
+if ( me!=environment() )
+        return 0;
+if ( !arg )
+        return 0;
+if ( !check_player(me) )
+        return 0;
+msgs = ({
+        "$n扬了扬前蹄，停止不前了。。。。\n",
+        "$n懒洋洋的摇了摇尾巴，懒得再往前走了。。。。\n",
+        "$n打了趔趄，险些把$N颠下马去！\n",
+        "$n磨磨蹭蹭的，不再往前走了。。。。\n",
+        "$n一声嘶叫，停住脚步，任$N怎么拉缰绳就是不再往前走。\n",
+});
+pet = me->query_temp("ridee");
+if ( random(me->query("kar"))<15 || !random(5) || pet->query_temp("no_go") 
+   || time()<me->query_temp("saima_go")+2 )
+        {
+        message_vision(msgs[random(sizeof(msgs))],me,pet);
+        if ( !pet->query_temp("no_go") )
+                pet->set_temp("no_go",1);
+        return 1;
+        }
+me->set_temp("saima_go",time());
+return 0;
+}
+
+int do_da(string arg)
+{
+string msg,*msgs;       
+object pet,me = this_player();
+if ( me!=environment() )
+        return 0;
+if ( !check_player(me) )
+        return 0;
+msgs = ({
+        "$N拿出$w狠狠抽打$n，",
+        "$N用$w狠抽了$n一下，",
+        "$N扬起$w,朝$n狠狠抽去，",
+        "$N拿$w狠抽着$n，",
+});
+pet = me->query_temp("ridee");
+                                
+if ( !pet->query_temp("no_go") )
+        return notify_fail("需要吗？\n");
+
+msg = msgs[random(sizeof(msgs))];
+
+if ( random(me->query("kar"))<10 )
+        msg+= "结果$n没有丝毫反应。。。。\n";
+else    {
+        msg+= "$n扬起前蹄，长嘶一声，开始精神抖擞起来。\n";
+        pet->delete_temp("no_go");      
+        }
+msg = replace_string(msg,"$w",query("name"));
+message_vision(msg,me,pet);                             
+return 1;
+}
+
+void check_owner(object me)
+{
+int i,tt=0;     
+if ( !me )
+        return;
+if ( me!=environment() )
+        return;
+if ( !me->query_temp("saima") )
+        return;         
+if ( !living(me) )
+        return;
+if ( environment(me)==me->query_temp("saima_zhongdian") )
+        {
+        environment(me)->add_temp("saima_num",1);
+        i = environment(me)->query_temp("saima_num");
+        do_gift(me,i);
+        return;
+        }
+tt++;
+if ( wizardp(me) )
+        tell_object(me,"ok\n");
+if ( tt>900 )
+        {
+        message("channel:chat",sprintf(WHT"【"HIG" 民间界 "NOR WHT"】"NOR HIC"马官(Ma guan): %s 用尽比赛时间，自动退出比赛 !\n"NOR,
+                me->query("name"),environment(me)->name(),
+                                ),
+                users() );
+        me->delete_temp("saima");
+        destruct(this_object());
+        return;
+        }
+                        
+if ( tt%10==0 )
+        message("channel:chat",sprintf(WHT"【"HIG" 民间界 "NOR WHT"】"NOR HIC"马官(Ma guan): %s 到达了 %s !\n"NOR,
+                me->query("name"),environment(me)->name(),
+                                ),
+                users() );
+remove_call_out("check_owner"); 
+call_out("check_owner",0,me);           
+}
+
+void do_gift(object me,int i)
+{
+if ( !me || !i || i>5 )
+        return;
+message("channel:chat",sprintf(WHT"【"HIG" 民间界 "NOR WHT"】"NOR HIC"马官(Ma guan):%s到达比赛终点,比赛名次为 %s !\n"NOR,
+                me->query("name"),chinese_number(i),
+                                ),
+                users() );
+me->delete_temp("saima");
+if ( i==1 )
+        {
+        if ( time()<me->query("saima_win")+600 )
+                tell_object(me,HIY"你虽然取得了第一名，但是距离上次赢出时间太短了。\n"NOR);
+        if ( random(100) > 30 )  {
+                tell_object(me,HIY"你得到了二十五金币的奖励,没听错！快掐自己一下来证明这是事实\n");
+                  me->add("c_balance",250000000);
+                  me->add("saima_num",-9);
+                message("channel:chat",sprintf(WHT"【"HIG" 民间界 "NOR WHT"】"NOR HIC"马官(Ma guan):%s 赢得赛马状元，特奖励二十五金币 !\n"NOR,me->query("name"), ),users() );
+                }
+        else    {       
+                me->add("haomao",5);
+                me->add("saima_num",5);
+                message("channel:chat",sprintf(WHT"【"HIG" 民间界 "NOR WHT"】"NOR HIC"马官(Ma guan):%s 赢得赛马状元，特奖励救命毫毛五根 !\n"NOR,
+                                        me->query("name"), ),
+                        users() );
+                }
+        me->set("saima_win",time());            
+        me->save();     
+        return;
+        }
+if ( i==2 )
+        {
+        if ( time()<me->query("saima_win")+600 )
+                tell_object(me,HIY"你虽然取得了第二名，但是距离上次赢出时间太短了。\n");
+        if ( random(100) > 30 )  {
+                    tell_object(me,HIY"你得到了十五金币的奖励。\n"); 
+                me->add("c_balance",150000000);
+                me->add("saima_num",-6);
+    message("channel:chat",sprintf(WHT"【"HIG" 民间界 "NOR WHT"】"NOR HIC"马官(Ma guan):%s 赢得赛马榜眼，得到了十五金币的奖励 !\n"NOR,me->query("name"), ),users() );
+                }
+        else    {       
+                me->add("haomao",3);
+                me->add("saima_num",3);
+                message("channel:chat",sprintf(WHT"【"HIG" 民间界 "NOR WHT"】"NOR HIC"马官(Ma guan):%s 赢得赛马榜眼，特奖励救命毫毛三根 !\n"NOR,
+                                        me->query("name"), ),
+                        users() );
+                }
+        me->set("saima_win",time());            
+        me->save();     
+        return;
+        }
+if ( i==3 )
+        {
+        if ( time()<me->query("saima_win")+600 )
+                tell_object(me,HIY"你虽然取得了第三名，但是距离上次赢出时间太短了。\n");
+        if ( random(100) > 30 )  {
+                        tell_object(me,HIY"得到了八金币的奖励。\n");  
+                 me->add("c_balance",80000000);
+                me->add("saima_num",-3);
+  message("channel:chat",sprintf(WHT"【"HIG" 民间界 "NOR WHT"】"NOR HIC"马官(Ma guan):%s 赢得赛马探花，得到了八金币的奖励 !\n"NOR,me->query("name"), ),users() ); 
+                }
+        else    {       
+                me->add("haomao",1);
+                me->add("saima_num",1);
+                message("channel:chat",sprintf(WHT"【"HIG" 民间界 "NOR WHT"】"NOR HIC"马官(Ma guan):%s 赢得赛马探花，特奖励救命毫毛一根 !\n"NOR,
+                                        me->query("name"), ),
+                        users() );
+                }
+        me->set("saima_win",time());            
+        me->save();     
+        return;
+        }
+if ( i==4 )
+        {
+        if ( time()<me->query("saima_win")+600 )
+                tell_object(me,HIY"你虽然取得了第四名，但是距离上次赢出时间太短了。\n");
+       
+	tell_object(me,HIY"得到五金币的奖励。\n");  
+        me->add("c_balance",50000000);
+       	message("channel:chat",sprintf(WHT"【"HIG" 民间界 "NOR WHT"】"NOR HIC"马官(Ma guan):%s 赢得赛马第四名，得到了五金币的鼓励奖 !\n"NOR,me->query("name"), ),users() ); 
+               
+        me->set("saima_win",time());            
+        me->save();     
+        return;
+        }        
+if ( i==5 )
+        {
+        if ( time()<me->query("saima_win")+600 )
+                tell_object(me,HIY"你虽然取得了第五名，但是距离上次赢出时间太短了。\n");
+       
+	tell_object(me,HIY"得到三金币的奖励。\n");  
+        me->add("c_balance",30000000);
+        message("channel:chat",sprintf(WHT"【"HIG" 民间界 "NOR WHT"】"NOR HIC"马官(Ma guan):%s 赢得赛马第五名，得到了三金币的鼓励奖 !\n"NOR,me->query("name"), ),users() ); 
+               
+        me->set("saima_win",time());            
+        me->save();     
+        return;
+        }                
+tell_object(me,HIY"你没有取得好成绩，加油加油。\n");
+destruct(this_object());
+return ;
+}
+

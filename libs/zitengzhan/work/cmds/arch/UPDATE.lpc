@@ -1,0 +1,220 @@
+#include "/doc/help.h"
+
+inherit F_CLEAN_UP;
+
+int update_player(object me);
+void updatedir(object me , string dir);
+
+int main(object me, string file)
+{
+        int i;
+        object obj, *inv;
+        string err;
+
+        seteuid( geteuid(me) );
+
+        if (!file) file = me->query("cwf");
+        if (!file)
+                return notify_fail("你要重新编译什麽档案？\n");
+
+        if (file=="*.lpc")
+        {
+                write("您确认要重新编译"+me->query("cwd")+"下的所有C文件吗？(y/n)");
+                input_to("check_update", 0, me);
+                return 1;
+        }
+        if( (obj = present(file, environment(me))) && interactive(obj) )
+                return update_player(obj);
+
+        if( file == "me" )
+                return update_player(me);
+        else {
+                file = resolve_path(me->query("cwd"), file);
+                if( !sscanf(file, "%*s.lpc") ) file += ".lpc"; 
+        }
+
+        if( file_size(file)==-1 )
+                return notify_fail("没有这个档案。\n");
+
+        me->set("cwf", file);
+
+        if (obj = find_object(file)) {
+                if( obj==environment(me) ) {
+                        if( file_name(obj)==VOID_OB )
+                                return notify_fail("你不能在 VOID_OB 里重新编译 VOID_OB。\n");
+                        inv = all_inventory(obj);
+                        i = sizeof(inv);
+                        while(i--)
+                                if( userp(inv[i]) ) inv[i]->move(VOID_OB, 1);
+                                else inv[i] = 0;
+                }
+                destruct(obj);
+        }
+
+        if (obj) return notify_fail("无法清除旧程式码。\n");
+
+        write("重新编译 " + file + "：");
+        err = catch( call_other(file, "???") );
+        if (err)
+                printf( "发生错误：\n%s\n", err );
+        else {
+                write("成功！\n");
+                if( (i=sizeof(inv)) && (obj = find_object(file))) {
+                        while(i--)
+                                if( inv[i] && userp(inv[i]) ) inv[i]->move(obj, 1);
+                }
+        }
+                
+        return 1;
+}
+
+int update_player(object me)
+{
+        object env, link_ob, obj;
+
+        env = environment(me);
+        seteuid(ROOT_UID);
+
+        // First, create the new body.
+        link_ob = me->query_temp("link_ob");
+        obj = LOGIN_D->make_body(link_ob);
+        if (!obj) return 0;
+
+        // Save the data and exec the player to his/her link object.
+        me->save();
+        exec(link_ob, me);
+        destruct(me);
+
+        // Restore new body and exec to it via enter_world in LOGIN_D
+        obj->restore();
+        LOGIN_D->enter_world(link_ob, obj, 1);
+
+        write("身体更新完毕。\n\n");
+        obj->move(env);
+        obj->write_prompt();
+
+        return 1;
+}
+
+void check_update(string arg, object me)
+{
+        string dir,dfile,tdest,err;
+        mixed* files;
+        int i;
+
+        if ( arg != "y" )       
+                return;
+
+        dir=me->query("cwd");
+        write(dir);
+        files=get_dir(dir);
+        if( !sizeof(files))
+        {
+                if (file_size(dir) == -2) {
+                        write ("这个目录是空的。\n");
+                        return;
+                }
+                else
+                {
+                        write ("没有这个目录。\n");
+                        return ;
+                }
+        }
+
+        for (i=0;i<sizeof(files);i++)
+        {
+                dfile=files[i];
+                if(file_size(resolve_path(dir, dfile)) ==-1)
+                {
+                        write (sprintf("你要的更新档案%s不存在！\n",resolve_path(dir, dfile)));
+                        continue;
+                }       
+                if(file_size(resolve_path(dir, dfile)) ==-2)
+                {
+                        updatedir(me,resolve_path(dir, dfile));
+                        continue;
+                }       
+
+                tdest=dir+dfile;
+                if( strsrch( tdest,".lpc")==-1)
+                        continue;
+                write("重新编译 " + tdest + "：");
+                err = catch( call_other(tdest, "???") );
+                if (err)
+                        printf( "发生错误：\n%s\n", err );
+                else 
+                        write("成功！\n");
+                
+        }
+        write ("ok!");
+        return;
+        
+}       
+
+void updatedir(object me , string src)
+{
+        
+        string dfile,tdest,err,dir;
+        mixed* files;
+        int i;
+
+
+        if(src[sizeof(src)-1]!='/')
+                dir=src+"/";
+//      write(dir);
+        files=get_dir(dir);
+        if( !sizeof(files))
+        {
+                if (file_size(dir) == -2) {
+                        write ("这个目录是空的。\n");
+                        return;
+                }
+                else
+                {
+                        write ("没有这个目录。\n");
+                        return ;
+                }
+        }
+
+        for (i=0;i<sizeof(files);i++)
+        {
+                dfile=files[i];
+                if(file_size(resolve_path(dir, dfile)) ==-1)
+                {
+                        write (sprintf("你要的更新档案%s不存在！\n",resolve_path(dir, dfile)));
+                        continue;
+                }       
+                if(file_size(resolve_path(dir, dfile)) ==-2)
+                {
+                        updatedir(me,resolve_path(dir, dfile));
+                        continue;
+                }       
+
+                tdest=dir+dfile;
+                if( strsrch( tdest,".lpc")==-1)
+                        continue;
+                write("重新编译 " + tdest + "：");
+                err = catch( call_other(tdest, "???") );
+                if (err)
+                        printf( "发生错误：\n%s\n", err );
+                else 
+                        write("成功！\n");
+                
+        }
+        return ;
+
+}       
+int help(object me)
+{
+  write(@HELP
+指令格式 : update <档名|here|me|玩家名>
+ 
+这个指令可以更新档案, 并将新档的内容载入记忆体内. 若目标为
+'here' 则更新所在环境. 若目标为 'me' 则更新自己的人物. 若目
+标为玩家则可更新玩家物件.
+ 
+HELP
+    );
+    return 1;
+}
+ 

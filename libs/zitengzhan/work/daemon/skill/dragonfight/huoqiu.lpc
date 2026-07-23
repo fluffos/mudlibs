@@ -1,0 +1,149 @@
+#include <ansi.h>
+//#include <combat.h>
+inherit SSERVER;
+int check_armor(object me, object target);
+int perform(object me, object target)
+{
+if(!wizardp(me)) return 0;
+	if( !target ) target = offensive_target(me);
+	if( !target
+	||      !target->is_character()
+	||      !me->is_fighting(target) )
+		return notify_fail(HIY"「龙神怒火」"NOR"只能对战斗中的对手使用。\n");
+        if( objectp(me->query_temp("weapon")) )
+                return notify_fail("你必须空手才能使用"HIY"「龙神怒火」"NOR"！\n"); 
+	if((me->query("family/family_name") != "东海龙宫")&&(!wizardp(me)))
+                return notify_fail("你非我龙王弟子，怎能使用龙宫绝招?\n");
+	if((int)me->query_skill("dragonfight",1)<120
+	   ||(int)me->query_skill("dragonforce",1)<120) 
+		return notify_fail("你的修为不够深，还不能领悟"HIY"「龙神怒火」"NOR"的精髓。\n");
+	if((int)me->query("max_force") < 1000 )
+                return notify_fail("你的内功太差。\n");
+        if((int)me->query("force") < 1000 )
+                return notify_fail("你的内力不足！\n");
+        if((int)me->query("sen") < 500 )
+                return notify_fail("你的精神不足，没法子施用外功！\n");
+        if(time()-me->query_temp("lsnh_end")<8)
+               return notify_fail(HIY"「龙神怒火」"NOR"不能用得这么频繁！\n");         
+        if((int)me->query("bellicosity")<200)
+               return notify_fail(HIY"「龙神怒火」"NOR"需要很高的杀气！\n");   
+        me->set_temp("lsnh_end",time());
+        
+	message_vision(HIR"\n$N厉声大喝，掌力加盛，手中突然生出一个斗大的"RED"火球"HIR"，竟是凌厉的杀气所致！\n\n"NOR,me);
+	me->start_busy(1);
+	me->add("bellicosity",-100);
+        me->add("force",-200);
+	if(random(me->query_kar()) > 15)
+      	check_armor(me, target);
+	else call_out("check_armor", random(6), me, target);
+	return 1;
+}
+
+int check_armor(object me, object target)
+{
+int i,temp_dodge,temp_spells,ap,dp,damage;
+object *inv, obj;
+if(!living(me) || me->is_ghost())
+       return 1;
+if(me->query("force") < 800)
+	{
+        message_vision(HIY"$N发现自己现在内力实在太弱，不能再用"HIY"「龙神怒火」"HIY"进行攻击。\n"NOR,me);       
+        return 1;
+        }
+if(!living(target) || !target || environment(me)->query("no_fight"))
+                {
+                 message_vision(HIY"$N轻蔑的一笑，衣袖再拂，将抬起的"HIR"火球"HIY"压回火焰之中。\n"NOR,me);
+                return 1;
+                }
+message_vision(HIW"\n此时$N脸上都是怒气，一掌掌真气不住向"RED"火球"WHT"中推去 !!\n"NOR,me);
+message_vision(HIR"\n火势大盛，嗤嗤两声轻响，爆出几朵火花，"HIW"火球"HIR"陡然变大向$n疾冲过来！\n"NOR,me,target);
+ap = me->query_skill("dragonfight", 1);
+ap = ( ap * ap * ap / (4 * 400) );
+ap = ap*250 + (int)me->query("combat_exp");
+dp = target->query_skill("parry");
+dp = ( dp * dp * dp / (4 * 400) );
+dp = dp*250 + target->query("combat_exp");      
+ if( random((ap + dp)/1000+1) <  dp/2000 )
+     {
+           message_vision(HIY"\n$n眼看就要被打中，冒死一个“铁板桥”，全身自膝盖处向后倒去，堪堪避过"HIY"！\n"NOR,me,target);
+           if(!target->is_busy()) target->start_busy(2);
+           return 1;
+     } 
+else
+{
+ inv = all_inventory(target);
+ i = sizeof(inv);
+  damage = (int)me->query_skill("dragonfight",1) / 10 +
+        (int)me->query("sen") / 300 + random((int)me->query("sen") / 200 ) +
+        (int)me->query("kee") / 300 + random((int)me->query("kee") / 200 );
+ if ( i < 1 )     // no armor
+        {
+        me->start_busy(3);
+	target->start_busy(2);
+	message_vision(HIY"\n$N手中火球急速滚动，火光四溅，掀起阵阵火焰撞向$n怀里！\n"NOR,me,target);
+	damage+=random(10)+10;
+	target->receive_damage("sen", me->query("eff_sen")/100*damage, me);
+        target->receive_damage("kee", me->query("eff_kee")/100*damage, me);
+	target->receive_wound("sen", me->query("eff_sen")/300*damage, me);
+        target->receive_wound("kee", me->query("eff_kee")/300*damage, me);
+	COMBAT_D->report_status(target);  
+	COMBAT_D->report_sen_status(target);      
+        return 1;          
+	}
+else //if(target->query_temp("armor")||target->query_temp("weapon")) // armor
+	{
+	if( target->query_temp("armor") ) 
+		{
+ 		for (i=1; i < sizeof(inv); i++ )
+ 			{
+			obj = inv[i];
+			if( obj->query("equipped") != "worn" ) continue;
+			obj->delete("equipped");
+			obj->set("value", 0);
+			obj->set("No_Wear", 1);
+			message_vision(HIY"猛烈间火球温度飙升，火花迸射，$N身上的$n被炸成灰烬！\n"NOR, target,obj);
+			temp_dodge=(int)obj->query("armor_prop/dodge",1);
+			temp_spells=(int)obj->query("armor_prop/spells",1);
+			if (temp_dodge)
+				target->add_temp("apply/dodge",-temp_dodge);
+			if (temp_spells)
+				target->add_temp("apply/spells",-temp_spells);
+			obj->set("name", "炸开的"+obj->query("name"));
+                        obj->set("no_get","这样的破烂你也要？");	    
+			target->reset_action();
+			target->delete_temp("armor");
+			call_out("remove_broken_cloth",random(300)+60,obj);
+			obj->move(environment(target));
+			}
+	      	}	
+       if (target->query_temp("weapon")) 
+       	      	{
+		obj=target->query_temp("weapon");
+		obj->unequip();
+		obj->set("value", 0);
+		message_vision(HIW "猛烈间火球温度飙升，火花迸射，$N手中的$n竟然烧成一块废铁！\n" NOR, target,obj);
+		obj->set("name", "熔化了的" + obj->query("name"));
+		obj->set("weapon_prop", 0);
+	        obj->set("armor_prop", 0);	                		          		
+                     obj->set("no_get","这样的破烂你也要？");	    
+		obj->move(environment(target));
+		target->reset_action();
+		target->delete_temp("apply");	
+		call_out("remove_broken_cloth",random(300)+60,obj);
+		}
+	target->receive_damage("sen", me->query("eff_sen")/100*damage, me);
+        target->receive_damage("kee", me->query("eff_kee")/100*damage, me);
+        COMBAT_D->report_status(target); 
+        COMBAT_D->report_sen_status(target); 
+	}
+    return 1;
+   }
+}
+void remove_broken_cloth(object obj)
+{
+  if(obj && environment(obj)) {
+    tell_object(environment(obj),
+      "一阵微风吹过，"+obj->name()+"化为片片尘土，消失不见了。\n");
+    destruct(obj);
+  }
+}

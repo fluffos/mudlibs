@@ -1,0 +1,229 @@
+inherit ITEM;
+inherit F_SAVE;
+#include <ansi.h>
+#define ZY "/u/xdao/jbd/obj/zhanyi" 
+
+int no_open();
+
+void create()
+{
+        if(! restore()) {
+         set_name(HIW"封印天碑"NOR,({"tian bei","bei"}));
+        }
+       else
+           {
+         set_name(HIW"封印天碑"NOR,({"tian bei","bei"}));
+        }
+         set("long","这是封印整个金鳖岛的天碑，你可以试着解(relieve)封它。\n");
+        set("unit","块");
+       set("no_get",1);
+       set("no_clean_up",1);
+        seteuid(getuid());
+}
+
+string query_save_file() { return DATA_DIR + "hgs/owner.o"; }
+
+void init()
+{
+        add_action("add_owner","relieve");
+        add_action("do_bian", "bian");
+        add_action("do_stroke", "stroke");
+}
+
+int do_stroke(string arg)
+{
+object me = this_object();
+object who = this_player();
+int i;
+object *inv;
+
+if(arg != "tian bei")
+return notify_fail(HIY"你要摸什么？\n"NOR); 
+
+inv = all_inventory(this_player());
+for(i=0; i<sizeof(inv); i++)
+        if (userp(inv[i]))
+        {
+                         message_vision(HIM"你心不正！拒绝入内。\n"NOR,this_player());
+                         who->start_busy(3);
+                         return notify_fail("");
+         }
+
+if (!me->query("owner"))
+return notify_fail(HIY"非占领公会进不了万仙阵遗址！\n"NOR); 
+
+if (!who->query("banghui"))
+return notify_fail(HIY"非占领公会进不了万仙阵遗址！\n"NOR);
+
+if (who->query("banghui")!=me->query("owner"))
+return notify_fail(HIY"非占领公会进不了万仙阵遗址！\n"NOR);
+
+if (who->query_temp("jbd_begin") || who->query_temp("ljs_begin") || who->query_temp("hgs_begin")  )
+return notify_fail(HIY"战役期间进不了万仙阵遗址！\n"NOR);
+
+message_vision(HIY"$N轻轻抚摸着封印天碑，只见天碑发出一道亮光，$N消失不见了。\n"NOR,who,me);
+who->move("/u/xdao/jbd/mz0");
+return 1;
+}
+
+int do_bian(string arg)
+{
+write("你不能这么做\n");
+return 1;
+}
+
+int add_owner(string arg)
+{
+object me = this_object();
+object who = this_player();
+object zy;
+int i;
+
+if(!userp(who)) return 0;
+
+if(me->query("owner")&&who->query("banghui")){
+ if(me->query("owner") == who->query("banghui"))
+return notify_fail(HIY"你已经是天碑的拥有者了！\n"NOR);}
+
+zy = new(ZY);
+if(!zy) 
+return notify_fail(HIY"战役文件出错，找不到战役令牌！\n"NOR);
+
+if(!zy->query("jbd_begin"))
+{
+  destruct(zy);
+return notify_fail(HIY"战役未开启不能解封！\n"NOR); }
+else destruct(zy);
+
+if(!who->query("banghui"))
+return notify_fail(HIY"先去加入个公会吧！\n"NOR);
+
+if(me->query_temp("relieve"))
+return notify_fail(HIY"已经有人在解封印了！\n"NOR);
+
+if(who->query_temp("relieve"))
+return notify_fail(HIY"你已经在解封印了！\n"NOR);
+
+if(!who->query_temp("jbd_begin"))
+return notify_fail(HIY"你是怎么进来的！\n"NOR);
+
+message("channel:chat",MAG"【金鳖岛上】"+CYN+""+who->query("name")+"运起法力祭向天碑，试图揭开天碑的封印!\n"NOR,users());
+      me->set_temp("relieve",1);
+      me->set_temp("open_man",who);
+      who->set_temp("relieve",1);
+      who->start_busy(30);
+      i = 1;
+      remove_call_out("finish1");
+      call_out("finish1",2,i,me,who);
+return 1;
+}
+
+void finish1(int i,object me,object who)
+{
+if(!me) return 0;
+if(!who) {
+me->delete_temp("relieve");
+return 0;
+}
+ i+=2;
+if(i >= 120) {
+ remove_call_out("finish1");
+call_out("finish",0,me,who);
+return 0;}
+else {
+if(environment(me) != environment(who))
+{
+ remove_call_out("finish1");
+message("channel:chat",MAG"【金鳖岛上】"+CYN+""+who->query("name")+"功亏一篑!解除金鳖岛封印失败了！\n"NOR,users());
+ call_out("finish2",0,me,who);
+ return 0;
+  }
+else {
+remove_call_out("finish1");
+call_out("finish1",2,i,me,who);
+return 0;
+     }
+   }
+}
+
+void finish(object me,object who)
+{
+if(!me) return 0;
+if(!who) {
+me->delete_temp("relieve");
+return 0;
+}
+if(environment(me) != environment(who))
+  {
+message("channel:chat",MAG"【金鳖岛上】"+CYN+""+who->query("name")+"功亏一篑!解除金鳖岛封印失败了！\n"NOR,users());
+ call_out("finish2",0,me,who);
+ return 0;
+  }
+    if(!who->query("banghui"))
+    {
+message("channel:chat",MAG"【金鳖岛上】"+CYN+""+who->query("name")+"中途退出公会!解除金鳖岛封印失败了！\n"NOR,users());
+ call_out("finish2",0,me,who);
+ return 0;
+     }
+  else
+    {
+      me->set("owner",who->query("banghui"));
+      me->delete_temp("relieve");
+      who->delete_temp("relieve");
+    who->start_busy(1);
+      me->save();
+     call_out("close",0,me,who);
+     }
+ }
+
+void finish2(object me,object who)
+{
+me->delete_temp("relieve");
+if(who) {
+who->delete_temp("relieve");
+    who->start_busy(1);
+        }
+}
+
+void close(object me,object who)
+{
+object *player;
+object zy,statues;
+int m,i;
+player = users();
+m=sizeof(player);
+
+ if(!me) return 0;
+if(!who) return 0;
+message("channel:chat",MAG"【金鳖岛】"+CYN+""+who->query("banghui")+"公会成功解除了金鳖岛的封印，从今往后金鳖岛内资源由"+who->query("banghui")+"公会独享！\n"NOR,users());
+      for(i=0;i<m;i++){
+          if(player[i]->query_temp("jbd_begin"))
+               {
+                player[i]->remove_all_killer();
+                player[i]->delete_temp("jbd_begin");
+               if(!player[i]->query("banghui")||player[i]->query("banghui")!=me->query("owner"))
+                player[i]->move("/d/city/kezhan");
+                }
+                       }
+zy = new(ZY);
+if(zy) {
+zy->delete("jbd_begin");
+zy->save();
+destruct(zy);}
+
+statues = find_living("sword statues");
+if(!statues) statues = find_object("sword statues");
+if(statues) {
+statues->set("owner",who->query("banghui"));
+set("title",HIW+who->query("banghui")+NOR);
+statues->save();
+statues->restore();
+statues->setup();}
+else {
+statues = new("/u/xdao/jbd/npc/statues");
+if(statues) {
+ statues->set("owner",who->query("banghui"));
+ statues->save();
+ destruct(statues); }
+     }
+}

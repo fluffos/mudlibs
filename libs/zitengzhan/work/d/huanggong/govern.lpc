@@ -1,0 +1,113 @@
+ inherit ROOM;
+#include <ansi.h>
+void create()
+{
+        set("short", "长安衙门");
+        set("long", @LONG
+这里是朝廷所设，附近城里的纠纷都可以在这里上状请求处理。大厅南首一张卷
+檐木案，案上有个小竹桶，里面插着几根有知府官印的竹签。木案后的太师椅上铺着
+雪绒皮，椅后屏风上红日青云图。上悬金边匾：
+                                明察秋毫
+凡朝廷命官都可在这发号令（ａｒｒｅｓｔ）
+LONG
+        );
+    set("exits", ([ /* sizeof() == 4 */
+        "east" : __DIR__"chaoyangmen",
+    ]));
+    set("objects", ([
+        __DIR__"npc/yayi" : 8,
+        __DIR__"npc/liyi" : 1,
+    ]) );
+        setup(); 
+} 
+void init()
+{               
+        add_action("do_arrest","arrest");       
+} 
+int do_arrest(string arg)
+{
+        
+        object me, target,li;
+        int texp,tdao,mexp,mdao;
+        if(!arg)
+                return notify_fail(HIC"你要下令缉拿谁？\n"NOR);
+        me = this_player();
+         if(me->query("family/family_name")!="将军府")
+                return notify_fail(HIC"你不是朝廷官员，不可缉拿疑犯！\n"NOR);
+  
+        if(!li=present("li yi",this_object()))
+                return notify_fail(HIC"李总捕头不在，无法下令拘捕犯人。\n"NOR);
+          if( (int)me->query("sen") < 500 )
+                return notify_fail(HIC"你的心神不够！无法下拘捕的命令。\n"NOR);    
+   
+        if (me->is_busy())
+           return notify_fail(HIC"你现在没空！！\n"NOR);
+   if (me->query_temp("jjf_arrest"))
+      return notify_fail(HIC"别急捕快们正在帮你缉拿！！\n"NOR);
+        
+        if(!objectp(target = find_living(arg)))
+                return notify_fail(HIC"李总捕头对你说道：“下官无能，没有关于这个人的线索，无法拘捕。”\n"NOR);
+        if( !userp(target) && !environment(target))
+                return notify_fail(HIC"李总捕头对你说道：“下官明察暗访，此人似乎已潜伏起来了，找不到线索，等些时候再说吧。”\n"NOR);
+       // if( userp(target) || !environment(target))
+         //       return notify_fail("李总捕头对你说道：“请恕小人多言，此人并无过犯，还是得饶人处且饶人吧。”\n"NOR);
+        if( environment(target)->query("no_fight"))
+                return notify_fail(HIC"李总捕头叹了口气说：“此人所在之处不属官府管辖范围，有心擒贼，无力回天啊。”\n"NOR);
+        if (target->is_fighting())
+                return notify_fail(HIC"李总捕头沉思片刻说：此人已经有仇家找上门了，我们且静观其变。\n"NOR);
+if (wizardp(target)||target->query("vrm_guard")||target->query("baolv"))
+                return notify_fail(HIC"李总捕头惊慌失措的说道：此人乃天上神仙，下官得罪不起。\n"NOR);
+
+        if (environment(target)==this_object())
+                return notify_fail(HIC"李总捕头得意地说：下官已经把此人拘拿归案了。\n"NOR);           
+                
+        me->add("sen",-500);
+        
+        message_vision(HIW"$N大声下令道：来人那．．把$n给我拿来！！\n"NOR,me,target);
+        message_vision(HIW"$N说道：“捕快何在？还不快去执行"+me->query("name")+"大人的命令！！。\n"NOR,li);
+        
+        texp = (int) target->query("combat_exp");
+        tdao = (int) target->query("daoxing");
+        mexp = (int) me->query("combat_exp");
+        mdao = (int) me->query("daoxing");          
+        if( texp+tdao > mexp+mdao) {
+                me->start_busy(3);
+                return notify_fail(HIC"李总捕头对你说道：“下官无能，让"+target->query("name")+"逃脱了！\n"NOR);
+        }
+        
+        me->start_busy(2);
+me->set_temp("jjf_arrest", 1);
+        call_out("gethim",20,target,me);
+        return 1;
+} 
+int gethim(object target,object me)
+{
+if(me) me->delete_temp("jjf_arrest");
+        if(!target || !me ) return 1;
+        if (target->is_fighting()) {
+                tell_object(me,HIC"李总捕头对你说道：“下官无能，让"+target->query("name")+"逃脱了！\n"NOR);
+me->delete_temp("jjf_arrest");
+           return 1;
+        }
+        if( environment(target)->query("no_fight"))
+{
+me->delete_temp("jjf_arrest");
+                return notify_fail(HIC"李总捕头叹了口气说：“此人所在之处不属官府管辖范围，有心擒贼，无力回天啊。”\n"NOR);
+}
+
+        if(environment(me) == this_object())
+        {
+        message_vision(HIC"忽然一群捕快冲了过来，二话不说就将$N铐走了。\n"NOR,target);
+        target->set_temp("fanren",1);
+        target->move(this_object());
+        message_vision(HIC"$N被官兵押了进来。\n"NOR,target);
+        if(me){
+        me->kill_ob(target);
+        target->kill_ob(me);
+        target->start_busy(3);
+me->delete_temp("jjf_arrest");
+                }
+        return 1;
+        }
+        return 1;
+} 

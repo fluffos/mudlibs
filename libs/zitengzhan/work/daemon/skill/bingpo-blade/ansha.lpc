@@ -1,0 +1,124 @@
+#include <ansi.h>
+//#include <skill.h>
+#include <weapon.h>
+//#include <combat.h>
+
+inherit SSERVER;
+//#include "/cmds/std/valid_kill.h"
+
+int perform(object me, object target)
+{
+       string who;
+       object weapon=me->query_temp("weapon");
+
+if( environment(me)->query("no_fight") || environment(me)->query("no_magic")  )
+		return notify_fail("这里禁止杀戮。\n");
+
+        if( !target ) target = offensive_target(me);
+
+        if( !target
+        ||  !target->is_character()
+        ||   target->is_corpse()
+        ||   target==me)
+           return notify_fail("你要暗杀谁？\n");
+
+        
+       if(me->query("family/family_name")!="大雪山")
+              return notify_fail("「暗杀术」只有大雪山门人才可以用！\n");
+
+      // if(me->is_fighting() )
+        //      return notify_fail("战斗中不能使用暗杀术\n");
+
+        if( me->is_busy() )
+                return notify_fail("你正忙着呢！\n");
+
+       if( me->query_temp("ansha"))
+                return notify_fail("你正在施展暗杀术！\n");
+
+        if( (int)me->query("sen") < 500 )
+                return notify_fail("你的精神状况不太好！\n");
+
+        if( (int)me->query("force") < 500 )
+                return notify_fail("你的内力不够！\n");
+
+        if( (int)me->query_skill("blade") < 249 ||
+            me->query_skill_mapped("blade") != "bingpo-blade")
+                return notify_fail("你的「基本刀法」还不到家，无法使用「暗杀术」！\n");
+        
+       if( (int)me->query_skill("blade") < 249 )
+            return notify_fail("你的「冰魄寒刀」还不到家，无法使用「暗杀术」！\n");
+
+       if( time()-(int)me->query_temp("ansha_end") < 60 )
+          return notify_fail("绝招用多就不灵了！\n");
+          
+       tell_object (me,HIC"  你抽出手中的"+weapon->query("name")+""+HIC"慢慢向"+target->query("name")+"靠拢！\n"NOR);
+        me->start_busy(50);
+        me->add("sen",-500);
+        me->add("force",-500);
+        me->set_temp("ansha",1);
+        me->set_temp("ansha_end",time());
+        call_out("ansha",5,me,target,weapon);
+        return 1;
+     }
+
+void ansha(object me,object target,object weapon)
+   {
+    string msg;
+   int myexp, mydao, myskill, texp, tdao, damage;
+     if(!me) return 0;
+
+           if(!target || target->is_corpse() || !living(target) )
+        {
+     tell_object (me,HIC"  你要暗杀的对象已经死了，似乎有人下手比你快！\n"NOR);
+      me->delete_temp("ansha");
+      me->start_busy(1);  
+      return 0;
+        }
+
+     if( environment(me) != environment(target) )
+        {
+     tell_object (me,HIC"  似乎有所察觉逃走了你只好收起"+weapon->query("name")+""+HIC"等待下次机会！\n"NOR);
+      me->delete_temp("ansha");
+      me->start_busy(1);  
+      return 0;
+        }
+
+if(!weapon) {
+tell_object (me,HIC" 你刚想施展暗杀术突然发现手中的武器不见了！\n"NOR);
+    me->delete_temp("ansha");
+    me->start_busy(1);  
+    return 0;
+}
+     myexp = (int)me->query("combat_exp",1)/10;
+     mydao = (int)me->query("daoxing",1)/10;
+     texp = (int)target->query("combat_exp",1)/10;
+     tdao = (int)target->query("daoxing",1)/10;
+ damage = (int)target->query("kee",1);
+     damage /= 2;
+if(damage < 1) damage = 1;
+     damage +=  (int)me->query_skill("blade",1);
+     damage += (int)me->query_temp("apply/damage");
+
+    msg = HIR "$N杀机毕露！挥起手上的"+weapon->query("name")+"向$n的喉咙割去!!\n" NOR;
+     if(myexp+mydao+random(myexp+mydao) > (texp+tdao)/2 + random(texp+tdao)/2 )
+      {
+    msg += HIR "还没等$n来得及反应，"+weapon->query("name")+"已在$n的喉咙上一闪而过!!\n" NOR;
+    msg += HIR "一道血痕在$n的脖子上显现，越裂越大，鲜血狂飙而出！$n死死的盯住$N不敢相信这是事实!\n" NOR;
+        message_vision(msg, me,target);
+    target->kill_ob(me);
+      target->set_temp("last_damage_from",me);
+      target->add("eff_kee",-damage);
+      target->add("kee",-damage);
+      me->start_busy(1);
+      me->delete_temp("ansha");
+      }
+    else
+      {
+    msg += HIY "幸好$n武功高超，条件反射的向旁边一跳，差之毫厘的躲开了$N势在必得的一击!!\n" NOR;
+      message_vision(msg, me,target);
+      target->kill_ob(me);
+      me->start_busy(5);
+      me->delete_temp("ansha");
+      }
+ }
+

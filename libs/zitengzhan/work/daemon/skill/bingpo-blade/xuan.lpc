@@ -1,0 +1,97 @@
+#include <ansi.h>
+#include <skill.h>
+#include <weapon.h>
+#include <combat.h>
+
+inherit SSERVER;
+int get_current_day_phase();
+nosave mapping *day_phase = NATURE_D->query_day_phase(); 
+
+int perform(object me, object target)
+{
+       object weapon;
+        string msg; 
+        int phase = get_current_day_phase(); 
+       int myexp,youexp,t,delay,myblade;
+ 
+        if( !target ) target = offensive_target(me);
+       if( !target || !target->is_character() || !me->is_fighting(target) )
+              return notify_fail("「眩刀」只能对战斗中的对手使用。\n");
+        
+     //  if(me->query("family/family_name")!="大雪山")
+if (!PFM_D->valid_family(me, "大雪山"))
+              return notify_fail("「眩刀」只有大雪山门人才可以用！\n");
+        
+
+        if( (int)me->query("force") < 200 )
+                return notify_fail("你的内力不够了！\n");
+
+        if( (int)me->query_skill("blade") < 80 ||
+            me->query_skill_mapped("blade") != "bingpo-blade")
+                return notify_fail("你的「基本刀法」还不到家，无法使用「眩刀」！\n");
+        
+       if( (int)me->query_skill("blade") < 80 )
+            return notify_fail("你的「冰魄寒刀」还不到家，无法使用「眩刀」！\n");
+
+       if( time()-(int)me->query_temp("xuan_end") < 5 )
+          return notify_fail("绝招用多就不灵了！\n");
+
+        if( target->is_busy() )
+                return notify_fail(target->name() + "目前正自顾不暇，放胆攻击吧！\n");
+
+        myexp=(int)me->query("combat_exp");
+        youexp=(int)target->query("combat_exp");
+         myblade=(int)me->query_skill("bingpo-blade",1);
+         delay=myblade / 40;
+         if(myblade>240) myblade=240;
+        t=random(myexp);
+
+       if (phase < 0 || phase > 5) 
+           msg = HIY "\n$N猛然将刀身一横，明晃晃的刀身在月光下聚焦反射一片皎洁的月光，\n"
+                +"直射$n的面门！\n\n" NOR;
+       else 
+           msg = HIW "\n$N"+HIW+"猛然将刀身一横，明晃晃的刀身在日光下聚焦反射出一片耀眼的白光，\n"
+                +"直射$n"+HIW+"的面门！\n\n" NOR;
+        message_vision(msg, me, target);
+        if( random(myexp+youexp) > youexp/2 ) 
+          {
+           msg = HIW "$N"+HIW+"只觉一道眩光刺得双眼什么都看不见了。\n" NOR;     
+           message_vision(msg, target,me);
+           target->start_busy((1+delay*t/myexp>2)?(1+delay*t/myexp):3);
+           me->start_busy(1+random(1));
+           }
+       else
+          {
+           msg = HIB"可是$n"+HIB+"看破了$N"+HIB+"的企图，往旁一闪躲了过去。\n" NOR;
+           message_vision(msg, me, target);
+           me->start_busy(2+random(1));
+           }
+        me->receive_damage("sen", 50);
+        me->add("force", -150);
+        me->receive_damage("kee", 50);
+        if( !target->is_fighting(me) ) {
+                if( living(target) ) {
+                        if( userp(target) ) target->fight_ob(me);
+                        else target->kill_ob(me);
+                }
+                me->kill_ob(target);
+        }
+      me->set_temp("xuan_end",time());
+        return 1;
+}
+
+
+
+int get_current_day_phase() {
+    // ref. /adm/daemons/natured.c:init_day_phase()
+    mixed *local = localtime(time()*60);
+    int t = local[2] * 60 + local[1];
+    int i;
+    for (i=0; i<sizeof(day_phase); i++)
+        if (t>=day_phase[i]["length"])
+            t -= (int)day_phase[i]["length"];
+        else
+            break;
+    return (i==0 ? sizeof(day_phase)-1 : i-1);
+}
+

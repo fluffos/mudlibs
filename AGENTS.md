@@ -2098,6 +2098,36 @@ registration) turns up a failure, don't assume it's automatically the
 valid environment first; a missing destination room produces the exact
 same "commands do nothing" symptom.
 
+### 15ak. A same-named extensionless "live" file sitting alongside a `.c` backup copy in the raw archive — the `.c`→`.lpc` rename can silently make the BACKUP authoritative instead of the file the original author was actually editing
+
+Found on `zitengzhan` (archive #77), 35 such pairs: some editors/authors
+kept a working extensionless copy of a critical file (e.g. `adm/obj/
+master`, `adm/daemons/securityd`, `feature/message`) side-by-side with a
+`.c`-suffixed backup of an earlier revision. On the *original* driver
+target, config/macro paths that reference the file without an extension
+(e.g. `master file : /adm/obj/master` in `config.fluffos`) resolved to
+the literal extensionless filename if one existed — so the live,
+currently-edited file was the one actually loaded, with the `.c` sibling
+just inert backup content. This driver's resolution order for an
+extensionless path is different — confirmed via `~/src/fluffos/src/
+vm/internal/simulate.cc`, it tries `.lpc` then `.c`, never a literal
+zero-extension match — so after the blanket rename turns the backup's
+`.c` into `.lpc`, THAT becomes the first match, silently promoting the
+stale backup over the live file the author actually intended, with no
+error of any kind (both compile fine, they're just different content).
+Found because two real bugs (a dead-code stray `return;` making
+`log_error()` a permanent no-op, and an old force-load boot-spam trick)
+were present in the master file that "shouldn't" have been there, and
+turned out to live in a promoted-by-accident backup copy. **Direction is
+not consistent within a single archive** — some `.c` siblings on
+`zitengzhan` were actually the newer/better version — so every such pair
+needs its own diff, not a blanket "trust the extensionless one" rule.
+**Lesson**: `find work/ -name '*.lpc'` and cross-reference against
+`find raw/ -type f -not -name '*.c' -not -name '*.h'` for same-directory,
+same-basename collisions before trusting the converted tree; diff each
+pair and pick whichever content is actually correct/current, not
+whichever the rename happened to prioritize.
+
 ---
 
 ## Per-archive gotchas index

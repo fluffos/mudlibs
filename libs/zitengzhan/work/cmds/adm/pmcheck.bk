@@ -1,0 +1,172 @@
+// pmaster.c
+
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+
+int main(object me, string arg)
+{
+	int opt;
+	mapping records;
+	mapping record;
+	string *keys_master;
+	string key_master;
+	string *keys_student;
+	string key_student;
+	object pmob;
+	string msg = "";
+
+	if(!arg)
+	{
+		pmob = new("/u/nanf/npc/pmaster.c");
+		pmob->restore();
+		records = pmob->query_entire_dbase();
+
+		if(! records || !(keys_master = keys(records)) )
+		{
+			write("暂时没有玩家提出拜师申请！\n");
+		}
+		else
+		{
+			foreach(key_master in keys_master)
+			{
+				if(!records[key_master]["undercheck"])
+					continue;
+				keys_student = keys(records[key_master]["undercheck"]);
+				foreach(key_student in keys_student)
+				{
+					record = records[key_master]["undercheck"][key_student];
+					if(!record["confirmed"])
+					{
+						msg += "pmcheck "+key_master+" "+key_student+" 1  pmcheck "+key_master+" "+key_student+" 0\n";
+					}
+				}
+			}
+			if(msg == "")
+				write("暂时没有玩家提出拜师申请！\n");
+			else
+				write(msg);
+		}
+		destruct(pmob);
+	}
+	else if(arg == "all")
+	{
+		pmob = new("/u/nanf/npc/pmaster.c");
+		pmob->restore();
+		records = pmob->query_entire_dbase();
+
+		if(! records || !(keys_master = keys(records)) )
+		{
+			write("暂时没有玩家提出拜师申请！\n");
+		}
+		else
+		{
+			foreach(key_master in keys_master)
+			{
+				msg += key_master+"\n";
+				if(records[key_master]["undercheck"])
+				{
+					msg += "   undercheck:\n";
+					keys_student = keys(records[key_master]["undercheck"]);
+					foreach(key_student in keys_student)
+					{
+						record = records[key_master]["undercheck"][key_student];
+						msg += "      "+key_student+"   confirmed "+record["confirmed"]+"\n";
+					}
+				}
+				if(records[key_master]["dismissed"])
+				{
+					msg += "   dismissed:\n";
+						keys_student = keys(records[key_master]["dismissed"]);
+					foreach(key_student in keys_student)
+					{
+						record = records[key_master]["dismissed"][key_student];
+						msg += "      "+key_student+"\n";
+					}
+				}
+				if(records[key_master]["graduated"])
+				{
+					msg += "   graduated:\n";
+					keys_student = keys(records[key_master]["graduated"]);
+					foreach(key_student in keys_student)
+					{
+						record = records[key_master]["graduated"][key_student];
+						msg += "      "+key_student+"\n";
+					}
+				}
+				if(records[key_master]["failedcheck"])
+				{
+					msg += "   failedcheck:\n";
+					keys_student = keys(records[key_master]["failedcheck"]);
+					foreach(key_student in keys_student)
+					{
+						record = records[key_master]["failedcheck"][key_student];
+						msg += "      "+key_student+"\n";
+					}
+				}
+			}
+			if(msg == "")
+				write("没有任何玩家师徒信息！\n");
+			else
+				write(msg);
+		}
+		destruct(pmob);
+	}
+	else if(sscanf(arg, "%s %s %d", key_master, key_student, opt) == 3)
+	{
+		pmob = new("/u/nanf/npc/pmaster.c");
+		pmob->restore();
+
+		if(opt>0)
+		{
+			if(!pmob->query(key_master+"/undercheck/"+key_student))
+			{
+				write("没有这份申请。\n");
+			}
+			else if(pmob->query(key_master+"/undercheck/"+key_student+"/confirmed"))
+			{
+				write("该用户已经审核过了。\n");
+			}
+			else
+			{
+				write("你审核通过了"+key_student+"拜"+key_master+"为玩家师傅的申请。\n");
+				pmob->set(key_master+"/undercheck/"+key_student+"/confirmed",1);
+				pmob->save();
+			}
+		}
+		else
+		{
+			if(!pmob->query(key_master+"/undercheck/"+key_student))
+			{
+				write("没有这份申请。\n");
+			}
+			else
+			{
+				write("你审核否决了"+key_student+"拜"+key_master+"为玩家师傅的申请。\n");
+				pmob->set(key_master+"/failedcheck/"+key_student, pmob->query(key_master+"/undercheck/"+key_student));
+				pmob->delete(key_master+"/undercheck/"+key_student);
+				if(!sizeof(pmob->query(key_master+"/undercheck")))
+					pmob->delete(key_master+"/undercheck");
+				pmob->save();
+			}
+		}
+
+		destruct(pmob);
+	}
+	else
+	{
+		write("指令格式错误。\n");
+	}
+
+	return 1;
+}
+
+int help(object me)
+{
+    write(@HELP
+使用这个命令审核玩家师徒关系
+HELP
+    );
+    return 1;
+}
+

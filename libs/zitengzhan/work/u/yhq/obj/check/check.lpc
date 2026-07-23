@@ -1,0 +1,187 @@
+#include <ansi.h>
+inherit ITEM;
+
+void checking(object who);
+
+mapping score;
+string type;
+
+void create()
+{
+set_name("混天仪",({"huntian yi","yi"}));
+set("unit","个");
+setup();
+}
+
+int query_autoload(){return 1;}
+
+void init()
+{
+add_action("do_check","check");
+}
+
+string check_str(mapping dir,string arg)
+{
+int i;  
+string *str,msg;
+if ( !dir || !arg )
+        return 0;
+str = keys(dir);
+i = sizeof(str);
+while(i--)
+        {
+        if ( dir[str[i]]==arg )
+                msg = str[i];
+        }
+if ( !msg || !stringp(msg) )
+        return 0;
+return msg;
+}                                       
+
+int do_check(string arg)
+{
+int num,i,k,flag=0;        
+string *data;
+object *usrs,who,me = this_player();
+if ( !arg || !wizardp(me) )
+        return 0;
+if ( sscanf(arg,"%s -msg",arg)==1 )
+        flag = 1;        
+switch(arg)
+        {
+        case "damage" : type = "武器";break;
+        case "armor"  : type = "盔甲";break;
+        case "level"  : type = "等级";break;
+        case "balance": type = "钱庄";break;
+        case "pot"  : type = "潜能";break;
+          case "mudage"  : type = "在线时间";break;
+        case "combat_exp": type = "武学";break;
+        case "daoxing": type = "道行";break;
+        case "speed"  : type = "成长速度";break;
+        case "vip"  : type = "VIP.值";break;
+        default : return 0;
+        }
+usrs = users();         
+num = sizeof(usrs);
+score=([]);
+message("channel:sys",YEL"┝ "HIR"系统"NOR YEL" ┥：游戏者数据检测系统"WHT">>>>>>>>>>>>>>>>>>>"YEL"开始运作\n"NOR,users());
+while(num--)
+        checking(usrs[num]);
+
+data = sort_array(values(score),-1);
+if ( !flag )
+        {
+        if ( sizeof(data)>3 )
+                {
+                message("channel:chat",YEL"\n\t\t\t┝  "HIY"天"HIG"上"HIC"人"HIW"间"HIM"Ⅱ"HIR+type+"排名"NOR YEL"  ┥\n\n"NOR,users());    
+                for(i=0;i<3;i++)
+                        {
+                        message("channel:chat",sprintf("\t\t\t\t"WHT"第"HIR"%2-s"NOR WHT"名 : %10-s \n"NOR,
+                                        chinese_number(i+1),check_str(score,data[i]))
+                                ,users());              
+                        }
+                message("channel:chat","\n\n"NOR,users());
+                }
+        }
+else    {
+        message("channel:wiz",YEL"\n\t\t\t┝  "HIY"天"HIG"上"HIC"人"HIW"间"HIM"Ⅱ"HIR+type+"排名"NOR YEL"  ┥\n\n"NOR,users());    
+        for(i=0;i<sizeof(data);i++)
+                {
+                message("channel:wiz",sprintf("\t\t\t\t"WHT"第"HIR"%2-s"NOR WHT"名 : %10-s %d 点\n"NOR,
+                                chinese_number(i+1),check_str(score,data[i]),data[i])
+                        ,users());              
+                }
+        message("channel:wiz","\n\n"NOR,users());
+        }       
+message("channel:sys",YEL"┝ "HIR"系统"NOR YEL" ┥：游戏者数据检测系统"WHT">>>>>>>>>>>>>>>>>>>"YEL"运作完毕\n"NOR,users());    
+return 1;
+}
+
+void checking(object who)
+{
+int i,k;  
+object obj,*inv;
+
+if ( !who ) return;
+if ( who && !wizardp(who) )
+        {
+        switch(type)
+                {       
+                case "武器" : 
+                        score[who->query("id")] = who->query_temp("apply/damage");
+                        break;
+                case "等级" : 
+                        score[who->query("id")] = who->query("level");
+                        break;
+                case "盔甲"  : 
+                        score[who->query("id")] = who->query_temp("apply/armor");
+                        break;
+                case "钱庄": 
+                        {
+                        inv = all_inventory(who);
+                        k = 0;
+                        for(i=0;i<sizeof(inv);i++)
+                                {
+                                if ( inv[i]->query("money_id") )
+                                        k+= inv[i]->value();
+                                }
+                        score[who->query("id")] = who->query("balance")+who->query("c_balance")+k;
+                        break;
+                        }
+                case "武学" :
+                        score[who->query("id")] = who->query("combat_exp");       
+                        break;
+                 case "在线时间" :
+                          score[who->query("id")] = who->query("mud_age");  
+break;
+                case "道行" :
+                        score[who->query("id")] = who->query("daoxing");  
+                        break;
+                case "潜能" :
+                        score[who->query("id")] = who->query("c_potential")+who->query("potential")+who->query("qn_balance")-who->query("learned_points");      
+                        break;
+                case "成长速度" :
+                        score[who->query("id")] = who->query("combat_exp")-who->query("last_combat_exp");
+                        break;
+                case "VIP.值" : score[who->query("id")] = who->query("vip");break;
+                }
+        }       
+}                       
+
+object offensive_target(object me)
+{
+int sz;
+object *enemy;
+object victim;
+
+me->clean_up_enemy();
+enemy = me->query_enemy();
+if( !enemy || !arrayp(enemy) ) return 0;
+sz = sizeof(enemy);
+if( sz > 0 ) victim=enemy[random(sz)];
+else return 0;
+if(!victim) return 0;
+if( victim->query_temp("netdead") )   
+        {
+        if( member_array( me, victim->query_netdead_enemy() ) == -1 )
+        return 0; // can't start fight if the 
+               //victim is already netdead
+        }
+return victim;
+}
+
+int ji(string t_id)
+{
+object me = this_player();
+object target = present(t_id,environment(me));
+if ( !target )
+        target = offensive_target(me);
+if ( !target || !living(target) )
+        return notify_fail("你想对谁祭"+name()+"\n");
+COMBAT_D->auto_fabao(me,target);
+return 1;
+}
+
+
+                        
+

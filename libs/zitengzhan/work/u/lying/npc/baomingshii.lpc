@@ -1,0 +1,740 @@
+//Created with Ice Mud Editor V0.95
+//Email:smilespring@126.com
+//水陆大会报名使
+//created by smile 8/27/1999
+// /d/kaifeng/npc/baomingshi.c
+#include <ansi.h>
+inherit NPC;
+inherit F_SAVE;
+#define DEBUG 0
+#define DOC "/d/kaifeng/obj/sldhdoc" 
+mapping JOINER=([]);
+
+private int query_kinds(int min_num,int max_num);
+private string listone(object who,int num);
+void announce(string str);
+int notify_failed(object ob,string str);
+int start(object who,string arg);
+int age(object who,string arg);
+int dx(object who,string arg);
+int delkind(object who,string arg);
+int use(object who,string arg);
+int closekind(object who);
+int finish(object who);
+int list(object who,string arg);
+
+void announcing(string str)
+{
+  if (DEBUG) {
+    object smile = find_player ("smile");
+    if (wizardp(smile))
+      tell_object (smile," ◇ "+str);
+  }  else command_function("chat "+str);
+}
+
+void announce(string str)
+{
+  string s = str;
+  int i, j;
+  
+  while ((i = strlen(s)) > 0)
+  {
+    j = strsrch (s, "\n");
+    if (j < 0)
+    {
+      announcing (s);
+      return;
+    }  
+    announcing (s[0..j]);
+    s = s[j+1..i];
+  }
+}
+
+int notify_failed(object ob,string str)
+{
+ if(!ob) return 0;
+ tell_object(ob,str);
+ return 1; 
+}
+
+int start(object who,string arg)
+{
+ string types;
+ string str;
+ mapping typestring;
+
+  if(!arg)
+   return notify_failed(who,"请用start age或start dx来指示本次报名采用的分类。\n");
+
+  types=lower_case(arg);
+ if(types!="age"&&types!="dx") 
+   return notify_failed(who,"无效的组别分类，请用age或dx来指示本次报名采用的分类。\n");
+
+  if(types=="age") this_object()->set("type","1");
+  if(types=="dx")  this_object()->set("type","2");
+  str=this_object()->query("type")=="1"?"年龄分组制":"道行分组制";
+//initializing this_object's values
+  this_object()->set("min_combat_exp",20);
+  this_object()->set("min_age",14);
+  this_object()->delete("kinds");
+  this_object()->delete("kindlist");
+  this_object()->delete("ages");
+  this_object()->delete("dxs");
+  this_object()->delete("curkind");
+  typestring=([]);
+  typestring["1"]="年龄分组";
+  typestring["2"]="道行分组";
+  JOINER=([]);
+  this_object()->set("typestring",typestring);
+  this_object()->save();
+  tell_object(this_player(),"本次水陆大会报名采用"+str+"\n");
+  str="本次水陆大会报名采用"+str+"\n";
+  announce(str);
+  return 1;
+}
+
+//查找是否有相同的组别，或者重叠的组别
+int query_kinds(int min_num,int max_num)
+{
+ mapping kindlist;
+ string kindstr;
+ int kind,i;
+ if(!mapp(this_object()->query("kindlist")))
+   return 0;//返回false表示没有发现
+ kindlist=this_object()->query("kindlist");
+ if(!(kind=this_object()->query("kinds")))
+   return 0;//返回false表示没有发现
+ for(i=1;i<=kind;i++)
+  {
+   kindstr=sprintf("%d",i);
+//大致有a1属于[a2,b2],b1属于[a2,b2],[a1,b1]包含[a2,b2]几种可能。
+   if((min_num>=kindlist[kindstr]["min_num"]&&min_num<=kindlist[kindstr]["max_num"])||
+      (max_num>=kindlist[kindstr]["min_num"]&&max_num<=kindlist[kindstr]["max_num"])||
+      (min_num<kindlist[kindstr]["min_num"]&&max_num>kindlist[kindstr]["max_num"]))
+     return 1;//返回true表示发现范围
+  }
+ return 0;
+}
+
+int age(object who,string arg)
+{
+ int min_age,max_age;
+ int kinds;
+ string kindstr;
+ mapping kindlist;
+
+ if(!arg) 
+   return notify_failed(who,"参数不能为空!\n");
+ if(this_object()->query("type")!="1")
+  return notify_failed(who,"对不起，本次水陆大会使用的不是年龄分组制，不能设定年龄。\n");
+ if(sscanf(arg,"%d %d",min_age,max_age)!=2)
+  return notify_failed(who,"请用addage 最小年龄 最大年龄来增加年龄分组。\n"+
+                           "示例：adddx 14 17 表示增加一组14到17岁的年龄组。\n");
+ if(min_age>=max_age||min_age<this_object()->query("min_age"))
+  return notify_failed(who,"最小年龄必须小于最大年龄及大于等于"+
+                       chinese_number(this_object()->query("min_age"))+"岁。\n");
+ if(query_kinds(min_age,max_age))
+  return notify_failed(who,"设定的年龄分组与前面设定的其他组别范围有重叠的地方，"+
+                           "请用lists命令看具体的分组，然后重设。\n");
+ if(!(kinds=this_object()->query("kinds")))
+    kinds=1;
+ else kinds=this_object()->query("kinds")+1;
+ this_object()->set("kinds",kinds);
+
+ kindlist=([]);
+ kindstr=sprintf("%d",kinds); 
+ kindlist[kindstr]=([]);
+ kindlist[kindstr]["min_num"]=min_age;
+ kindlist[kindstr]["max_num"]=max_age;
+//加入者也加入种类组 
+ JOINER[kindstr]=([]);
+ if(this_object()->query("kindlist"))
+   kindlist+=this_object()->query("kindlist");
+   
+ this_object()->set("kindlist",kindlist);
+ tell_object(who,"增加年龄组第"+kindstr+"组"+chinese_number(min_age)+"岁至"+chinese_number(max_age)+"岁。\n");
+ this_object()->save();
+ return 1;
+  
+}
+
+int dx(object who,string arg)
+{
+ int min_dx,max_dx;
+ int kinds;
+ string kindstr;
+ mapping kindlist;
+
+ if(!wizardp(who))
+   return notify_failed(who,"你使用的指令不符合你的身份。\n");
+ if(!arg) return notify_failed(who,"参数不能为空!\n");
+ if(this_object()->query("type")!="2")
+  return notify_failed(who,"对不起，本次水陆大会使用的不是道行分组制，不能设定道行。\n");
+ if(sscanf(arg,"%d %d",min_dx,max_dx)!=2)
+  return notify_failed(who,"请用adddx 最小道行 最大道行来增加道行分组。\n示例：adddx 300 1000 表示增加一组300到1000年的道行组。\n");
+ if(min_dx>=max_dx||min_dx<this_object()->query("min_combat_exp"))
+  return notify_failed(who,"最小道行必须小于最大道行及大于"+chinese_number(this_object()->query("min_combat_exp"))+"年。\n");
+ if(query_kinds(min_dx,max_dx))
+  return notify_failed(who,"设定的道行分组与前面设定的其他组别范围有重叠的地方，请用lists命令看具体的分组，然后重设。\n");
+
+ if(!(kinds=this_object()->query("kinds")))
+    kinds=1;
+ else kinds=this_object()->query("kinds")+1;
+ this_object()->set("kinds",kinds);
+
+ kindlist=([]);
+ kindstr=sprintf("%d",kinds); 
+ kindlist[kindstr]=([]);
+ kindlist[kindstr]["min_num"]=min_dx;
+ kindlist[kindstr]["max_num"]=max_dx;
+//加入者也加入种类组 
+ JOINER[kindstr]=([]);
+ if(this_object()->query("kindlist"))
+   kindlist+=this_object()->query("kindlist");
+
+ this_object()->set("kindlist",kindlist);
+ tell_object(who,"增加道行组第"+kindstr+"组"+chinese_number(min_dx)+"年至"+chinese_number(max_dx)+"年。\n");
+ this_object()->save();
+ return 1;
+}
+
+int use(object who,string arg)
+{
+ int num,i;
+ mapping kindlist;
+ string kinds,msg;
+ object doc;
+
+ if(!arg) return notify_failed(who,"参数不能为空!\n");
+ if(!(num=this_object()->query("kinds")))
+  return notify_failed(who,"非法的参数发现，可能是没有增加分组，可以使用addage或adddx来增加。\n"+
+                           "请重新设置本次水陆大会报名使。\n");
+ if(num<1) 
+  return notify_failed(who,"你还没增加组别呢，请用addage或adddx增加组别。\n");
+ if(sscanf(arg,"%d",i)!=1)
+  return notify_failed(who,"请使用usekind 分组来设置当前可以报名的组别。\n"+
+                           "例如：usekind 1表示当前报名使用第一分组，比如14-17岁组。\n");
+ if(i>num||i<1)
+  return notify_failed(who,"使用的组别超过了当前具有的组别数，请降低组别重新设定。\n"); 
+ this_object()->set("curkind",i); 
+ this_object()->set("stop_report",0);
+ tell_object(who,"设定当前组别为"+chinese_number(i)+"组。\n");
+
+ kindlist=this_object()->query("kindlist");
+ kinds=sprintf("%d",i);
+ if(this_object()->query("type")=="1")
+  {
+   this_object()->set("ages/min_cur_age",kindlist[kinds]["min_num"]);
+   this_object()->set("ages/max_cur_age",kindlist[kinds]["max_num"]);
+   tell_object(who,"设定当前组最小年龄为"+chinese_number(kindlist[kinds]["min_num"])+"岁,最大年龄为"+chinese_number(kindlist[kinds]["max_num"])+"岁。\n");
+   msg="第"+chinese_number(this_object()->query("sldh_num"))+"届水陆大会"+chinese_number(kindlist[kinds]["min_num"])+"岁至"+chinese_number(kindlist[kinds]["max_num"])+"岁年龄组开始报名。\n"; 
+  }
+ if(this_object()->query("type")=="2")
+  {
+   this_object()->set("dxs/min_cur_dx",kindlist[kinds]["min_num"]);
+   this_object()->set("dxs/max_cur_dx",kindlist[kinds]["max_num"]);
+   tell_object(who,"设定当前组最小道行为"+chinese_number(kindlist[kinds]["min_num"])+"年,最大道行为"+chinese_number(kindlist[kinds]["max_num"])+"年。\n");
+   msg="第"+chinese_number(this_object()->query("sldh_num"))+"届水陆大会"+chinese_number(kindlist[kinds]["min_num"])+"年至"+chinese_number(kindlist[kinds]["max_num"])+"年道行组开始报名。\n"; 
+  }
+  msg=msg+"请符合条件的参加者到长安城十字街头钟楼处用report命令报名。\n";
+  announce(msg);
+  this_object()->save();
+ return 1;
+}
+
+
+int delkind(object who,string arg)
+{
+ int num,i,curkind;
+ mapping kindlist,joinerlist;
+ string kinds;
+ object doc;
+
+ if(!arg) return notify_failed(who,"参数不能为空!\n");
+ if(!(num=this_object()->query("kinds")))
+  return notify_failed(who,"非法的参数发现，可能是没有增加分组，可以使用addage或"+
+                           "adddx来增加。\n请重新设置本次水陆大会报名使。\n");
+ if(num<1) 
+  return notify_failed(who,"你还没增加组别呢，没什么好删的。\n");
+ if(sscanf(arg,"%d",i)!=1)
+  return notify_failed(who,"请使用delkind 分组来删除可用的组别。\n"+
+                           "例如：delkind 1表示删除当前使用组，比如14-17岁组。\n");
+ if(i>num||i<1)
+  return notify_failed(who,"使用的组别超过了当前具有的组别数，请降低组别重新设定。\n"); 
+ curkind=this_object()->query("curkind"); 
+ this_object()->set("stop_report",1);
+
+  kindlist=this_object()->query("kindlist");
+  kinds=sprintf("%d",i);
+  if(mapp(kindlist))
+    map_delete(kindlist,kinds);
+  if(mapp(JOINER[kinds]))
+    map_delete(JOINER,kinds);  
+  this_object()->set("kindlist",kindlist);
+  num-=1;
+  this_object()->set("kinds",num);
+  if(curkind>i) curkind-=1;
+  else if(curkind==i)
+        {
+         curkind=0;
+         this_object()->delete("dxs");
+         this_object()->delete("ages");
+        }
+ 
+  this_object()->set("curkind",curkind); 
+  this_object()->save();
+
+  doc=new(DOC);
+  doc->set("file_name",DATA_DIR+"sldh/joiner"+sprintf("%d",this_object()->query("sldh_num")));
+  doc->restore();
+  doc->set("joiner",JOINER);
+  doc->set("kindlist",this_object()->query("kindlist"));
+  doc->set("type",this_object()->query("type"));
+  doc->set("typestring",this_object()->query("typestring"));
+  doc->set("kinds",this_object()->query("kinds"));
+  doc->set("curkind",this_object()->query("curkind"));
+  doc->save();
+  destruct(doc);
+ tell_object(who,"删除第"+chinese_number(i)+"组成功！\n");
+ return 1;
+}
+
+int closekind(object who)
+{
+ int num,i;
+ mapping kindlist;
+ string kinds,msg;
+ object doc;
+
+ if(!wizardp(who))
+   return notify_failed(who,"你使用的指令不符合你的身份。\n");
+ if(!(num=this_object()->query("kinds")))
+  return notify_failed(who,"非法的参数发现，可能是没有增加分组，可以使用addage或"+
+                           "adddx来增加。\n请重新设置本次水陆大会报名使。\n");
+ if(num<1) 
+  return notify_failed(who,"你还没增加组别呢，请用addage或adddx增加组别。\n");
+ i=this_object()->query("curkind");
+ if(i>num||i<1)
+  return notify_failed(who,"使用的组别超过了当前具有的组别数，请降低组别重新设定。\n"); 
+ if(!this_object()->query("curkind"))
+  return notify_failed(who,"对不起，当前还没有报名组别指定，请先用usekind指明报名组别，\n"+
+                           "然后才能使用closekind来结束该组别的报名。\n");
+ this_object()->set("stop_report",1);
+
+ kindlist=this_object()->query("kindlist");
+ kinds=sprintf("%d",i);
+ if(this_object()->query("type")=="1")
+   msg="第"+chinese_number(this_object()->query("sldh_num"))+"届水陆大会"+
+        chinese_number(kindlist[kinds]["min_num"])+"岁至"+
+        chinese_number(kindlist[kinds]["max_num"])+"岁年龄组报名结束。\n"; 
+ if(this_object()->query("type")=="2")
+   msg="第"+chinese_number(this_object()->query("sldh_num"))+"届水陆大会"+
+        chinese_number(kindlist[kinds]["min_num"])+"年至"+
+        chinese_number(kindlist[kinds]["max_num"])+"年道行组报名结束。\n"; 
+   
+  msg=msg+"\n请该组报名者到水陆大会举行处参加比武。\n";
+  announce(msg);
+  this_object()->save();
+  //save the data
+   doc=new(DOC);
+   doc->set("file_name",DATA_DIR+"sldh/joiner"+sprintf("%d",this_object()->query("sldh_num")));
+   doc->restore();
+   doc->set("kindlist",this_object()->query("kindlist"));
+   doc->set("type",this_object()->query("type"));
+   doc->set("typestring",this_object()->query("typestring"));
+   doc->set("kinds",this_object()->query("kinds"));
+   doc->set("curkind",this_object()->query("curkind"));
+   doc->set("joiner",JOINER);
+   doc->save();
+   destruct(doc);   
+  
+ return 1;
+
+}
+
+int finish(object who)
+{
+ object doc,env;
+ string msg;
+   this_object()->set("stop_report",1);
+   this_object()->save();
+  if(env=environment(this_object()))
+   {
+     env->delete("no_fight");
+     env->delete("no_magic");
+     env->delete("no_clean_up");
+   }
+   doc=new(DOC);
+   doc->set("file_name",DATA_DIR+"sldh/joiner"+sprintf("%d",this_object()->query("sldh_num")));
+   doc->restore();
+   doc->set("kindlist",this_object()->query("kindlist"));
+   doc->set("type",this_object()->query("type"));
+   doc->set("typestring",this_object()->query("typestring"));
+   doc->set("kinds",this_object()->query("kinds"));
+   doc->set("curkind",this_object()->query("curkind"));
+   doc->set("joiner",JOINER);
+   doc->save();
+   destruct(doc);   
+   msg="第"+chinese_number(this_object()->query("sldh_num"))+"届水陆大会报名工作全部完成！";
+   announce(msg);
+   msg="老夫愿本次大会圆满成功。\n";
+   announce(msg);
+ return 1;
+}
+
+private string listone(object who,int num)
+{
+ int i;
+ string msg,kindstr,str;
+ mapping kindlist,joinerlist,typestr; 
+ string *list,type;
+ object doc;
+ doc=new(DOC);
+ if(!doc) 
+  {
+   notify_failed(who,"异常出错，可能是目标文件"+DOC+"不存在。\n");
+   return "异常出错。\n";
+  }
+
+ doc->set("file_name",DATA_DIR+"sldh/joiner"+sprintf("%d",this_object()->query("sldh_num")));
+ doc->restore();
+ kindstr=sprintf("%d",num);
+ kindlist=this_object()->query("kindlist");
+ joinerlist=doc->query("joiner");
+ typestr=this_object()->query("typestring");
+ type=this_object()->query("type");
+ str="\n";
+ if(mapp(kindlist))
+  msg="　第"+chinese_number(num)+typestr[type]+"("+HIR+
+       chinese_number(kindlist[kindstr]["min_num"])+"岁至"+
+       chinese_number(kindlist[kindstr]["max_num"])+"岁"+NOR+")：\n";
+ if(mapp(joinerlist)&&mapp(joinerlist[kindstr]))
+  {
+   list=keys(joinerlist[kindstr]);
+   if(!list) msg+="　本组没有玩家参加报名。\n";
+   else
+   { 
+     if(sizeof(list)==0) {
+     	msg+="　本组没有玩家参加报名。\n";
+     	return msg;
+      }	
+     
+     for(i=1;i<=sizeof(list);i++) {
+       string str1;
+       str1=sprintf("%-10s",list[i-1]);
+       if((i%7)==0) str1=str1+"\n\n";
+       if((i%7)==1) str1="　"+str1;
+       str+=str1;
+      } 
+     (i-1)%7!=0?str+="\n\n":str=str;
+     msg+=HIC+str+NOR;
+     msg+=HIW+"　总共"+chinese_number(sizeof(list))+"名玩家参加本组报名。"+NOR+"\n";
+     if(!this_object()->query("total_num")) this_object()->set("total_num",sizeof(list));
+     else this_object()->set("total_num",this_object()->query("total_num")+sizeof(list));
+   }
+  }
+ else msg+="　本组没有玩家参加报名。\n";
+ return msg;
+}
+
+int list(object who,string arg)
+{
+ int i,num,kinds;
+ string msg,str;
+ this_object()->set("total_num",0);
+ msg=HIY"第"+chinese_number(this_object()->query("sldh_num"))+"届水陆大会分组及报名者列表：\n"NOR;
+ msg+=HIG"┏————————————————————————————————————————┓"NOR+"\n";
+ kinds=this_object()->query("kinds");
+ if(!arg)
+  if(kinds>0)
+   for(i=1;i<=kinds;i++) {
+    msg+=listone(who,i);
+   if(i!=kinds) 
+ msg+=HIG"┡————————————————————————————————————————┩"NOR+"\n";    
+   } 
+ msg+=HIG"┗————————————————————————————————————————┛"NOR+"\n";       
+ str=sprintf("%70s","总共有"+chinese_number(this_object()->query("total_num"))+"名玩家参加本次水陆大会报名");
+ str=HIY+str+NOR+"\n\n";
+ msg+=str;
+ tell_object(who,msg);
+ return 1;
+}
+
+void create()
+{
+        set_name("水陆大会报名使", ({ "sldh baoming shi", "shi zhe"}) );
+        set("age",100);
+        set("combat_exp",5000000);
+        set("force",5000);
+        set("max_force",5000);
+        set("mana",8000);
+        set("max_mana",5000);
+	set_skill("spells", 400);
+        set("inquiry", ([
+            "rumors":  "要报名就在这里用report命令参加。",
+        ]) );
+        setup();
+        carry_object("/d/obj/armor/jinjia")->wear();
+}
+
+string short()
+{
+ return "第"+chinese_number(this_object()->query("sldh_num"))+"届水陆大会报名使"+"("+this_object()->query("id")+")";
+}
+
+string long()
+{
+  return "\n水陆大会报名使执掌水陆大会报名大权，是举办水陆大会的巫师的得力助手。\n你有什么疑问可以打入help report看帮助。\n";
+}
+
+string query_save_file()
+{
+  return DATA_DIR "sldh/reporter";
+}
+
+
+void init()
+{
+  object env;
+  object ob=this_object();
+ if(!(env=environment(ob))) destruct(ob);
+  env->set("no_fight",1);
+  env->set("no_magic",1);
+ if(!env->query("has_stand_here"))
+  {
+   env->set("has_stand_here",1);
+   env->set("no_clean_up",1);
+   this_object()->restore();
+   if(!this_object()->query("sldh_num"))
+     this_object()->set("sldh_num",1);
+   else this_object()->set("sldh_num",this_object()->query("sldh_num")+1);
+   this_object()->save();
+   remove_call_out("greeting");
+   call_out("greeting",5);
+   this_object()->delete("kinds");
+   this_object()->delete("kindlist");
+   this_object()->delete("ages");
+   this_object()->delete("dxs");
+   this_object()->delete("curkind");
+  }
+
+  add_action("do_report","report");
+  add_action("do_help","help");
+  add_action("do_list","lists");
+  
+ if(wizardp(this_player())) {
+  add_action("do_start","start");
+  add_action("do_age","addage");
+  add_action("do_dx","adddx");
+  add_action("do_delkind","delkind");
+  add_action("do_use","usekind");
+  add_action("do_closekind","closekind");
+  add_action("do_finish","finish");
+ } 
+}
+
+void greeting()
+{
+ string msg;
+ msg="第"+chinese_number(this_object()->query("sldh_num"))+"届水陆大会正式报名即将开始，请大家到长安城十字街头使用report命令报名。";
+ announce(msg);
+ remove_call_out("greeting");
+}
+
+int do_report()
+{
+ object player=this_player();
+ object doc;
+ int num,j;
+ string msg,kindstr,ids,i;
+ string *list;
+ mapping temp=([]);
+ 
+ if(wizardp(player))
+  return notify_fail("巫师不能参加水陆大会。\n");
+
+ if(userp(player))
+  {
+    if(!(i=this_object()->query("type")))
+      return notify_fail("对不起，巫师还没作好准备，请稍候再来。\n"); 
+    if(!this_object()->query("kinds"))
+     return notify_fail("对不起，巫师还没准备好，请等候巫师准备妥当再来报名。\n");
+    if(!this_object()->query("curkind"))
+     return notify_fail("对不起，巫师还没准备好，请等候巫师准备妥当再来报名。\n");
+    if(this_object()->query("stop_report"))
+     return notify_fail("对不起，"+msg+"已经停止报名。\n");
+//进行玩家报名条件的核对   
+    switch(i) {
+//年龄分组
+     case "1":num=player->query("age");
+            if(num<this_object()->query("min_age"))
+              return notify_fail("对不起，你的岁数太小，至少要"+chinese_number(this_object()->query("min_age"))+"岁才能参加水陆大会。\n");
+            if(player->query("combat_exp")/1000<this_object()->query("min_combat_exp"))
+              return notify_fail("对不起，你的道行太少，至少要"+chinese_number(this_object()->query("min_combat_exp"))+"年才能参加水陆大会。\n");
+            if(num<this_object()->query("ages/min_cur_age")||num>this_object()->query("ages/max_cur_age"))
+              return notify_fail("对不起，现在还没轮到你这个岁数的人参加水陆大会。\n");
+            msg=chinese_number(this_object()->query("ages/min_cur_age"))+"岁至"+chinese_number(this_object()->query("ages/max_cur_age"))+"岁年龄组";
+            break;
+//道行分组
+     case "2":num=player->query("combat_exp")/1000;
+            if(num<this_object()->query("min_combat_exp"))
+              return notify_fail("对不起，你的道行太少，至少要"+chinese_number(this_object()->query("min_combat_exp"))+"年才能参加水陆大会。\n");
+            if(player->query("age")<this_object()->query("min_age"))
+              return notify_fail("对不起，你的岁数太小，至少要"+chinese_number(this_object()->query("min_age"))+"岁才能参加水陆大会。\n");
+            if(num<this_object()->query("dxs/min_cur_dx")||num>this_object()->query("dxs/max_cur_dx"))
+              return notify_fail("对不起，现在还没轮到你这个道行的人参加水陆大会。\n");
+            msg=chinese_number(this_object()->query("dxs/min_cur_dx"))+"年至"+chinese_number(this_object()->query("dxs/max_cur_dx"))+"年道行组";
+            break;
+     default: return notify_fail("对不起，现在还没开始水陆大会报名，请稍候。\n");
+    }
+    doc=new(DOC);
+    doc->set("file_name",DATA_DIR+"sldh/joiner"+sprintf("%d",this_object()->query("sldh_num")));
+    doc->restore();
+    kindstr=sprintf("%d",this_object()->query("curkind"));
+    ids=player->query("id");
+   if(mapp(JOINER)&&mapp(JOINER[kindstr]))
+    {
+     list=keys(JOINER[kindstr]);
+    for(j=0;j<sizeof(list);j++)
+      if(list[j]==ids) return notify_fail("你不是已经报了名吗？\n");
+    }
+
+    temp[ids]=([]);
+    temp[ids]["price"]="N";//这个指示该报名者是否获得了水陆大会奖励
+    temp[ids]["fight"]="N";//这个指示该报名者是否参加了水陆大会
+    //还有一个参数指示该名报名者参加水陆大会获得的名次，通常只指示冠军或非就行
+    temp[ids]["winnum"]=1;//1指示champion,0指示normal
+    if(mapp(JOINER[kindstr]))
+     JOINER[kindstr]+=temp;
+    else {
+    	JOINER[kindstr]=([]);
+    	JOINER[kindstr]+=temp;
+    }
+    doc->set("joiner",JOINER);
+    doc->save();
+    msg="第"+chinese_number(this_object()->query("sldh_num"))+"届水陆大会"+msg+
+        "\n新加报名者"+player->query("name")+"("+player->query("id")+")"+"一名。";
+    announce(msg);
+    destruct(doc);
+  }
+  return 1;
+}
+
+int do_start(string arg)
+{
+ object me=this_player();
+ if(!me) return 0;
+  start(me,arg);
+ return 1;
+}
+
+int do_age(string arg)
+{
+ object me=this_player();
+ if(!me) return 0;
+ age(me,arg);
+ return 1;
+}
+
+int do_dx(string arg)
+{
+ object me=this_player();
+ if(!me) return 0;
+ dx(me,arg);
+ return 1;
+}
+
+int do_use(string arg)
+{
+  object me=this_player();
+ if(!me) return 0;
+  use(me,arg);
+ return 1;
+}
+
+int do_delkind(string arg)
+{
+  object me=this_player();
+ if(!me) return 0;
+  delkind(me,arg);
+ return 1;
+}
+
+int do_closekind()
+{
+  object me=this_player();
+ if(!me) return 0;
+  closekind(me);
+ return 1;
+}
+
+void destroy_me()
+{
+ message_vision(HIG"只见一阵青烟从地底冒起，报名使倏忽间居然不见了！\n"NOR,this_object());
+ destruct(this_object());
+}
+
+int do_finish()
+{
+ object me=this_player();
+ if(!me) return 0;
+  finish(me);
+  remove_call_out("destroy_me");
+  call_out("destroy_me",2);
+ return 1;
+}
+
+int do_list(string arg)
+{
+ object me=this_player();
+ if(!me) return 0;
+ list(me,arg);
+ return 1;
+}
+
+int help(object who)
+{
+ string msg;
+ msg ="水陆大会报名须知：\n";
+ msg+="水陆大会报名者在报名使所在的房间使用report命令即可报\n";
+ msg+="名，当然报名成功与否要看你是否符合当时报名条件。\n";
+if(wizardp(who))
+ {
+ msg+="
+做为巫师可使用的指令按执行的先后顺序依次为：\n";
+ msg+="
+1、start：每次采用新的分组类别就必须使用start age或s
+tart dx来判别，这个命令会清除原来的设定。\n";
+ msg+="
+2、addage,adddx：addage或adddx都是用来增加一个分组的
+，你可以不带参数使用看使用帮助。\n";
+ msg+="
+3、usekind,closekind,delkind：usekind,closekind需配
+对使用，delkind则是用来删除多余的组别或错误的组别，应
+该先usekind，然后才是closekind,发现有错误就用delkind
+来修正，delkind指令当删除的组别等于当前组别时删除一切
+当前设置包括已报名的玩家。设定usekind指定当前报名分组
+而closekind则宣告当前组别报名结束，准备比赛。\n";
+ msg+="
+4、lists：lists主要用来观看当前的报名情况，它可以列出
+组别，每个组别报名者，报名人数，总的报名人数。\n";
+ msg+="
+5、finish：这个指令指示当前报名一切结束,报名使的身上数
+据应该存盘,包括报名者数据,并清扫报名使在当前环境设下的
+变化，然后毁灭报名使。\n";
+ }
+ tell_object(who,msg);
+ return 1;
+}
+
+int do_help(string arg)
+{
+ object me=this_player();
+ if(!me) return 0;
+ if(!arg) return 0;
+ if(lower_case(arg)=="report")
+  help(me);
+ else return 0;
+
+ return 1;
+}

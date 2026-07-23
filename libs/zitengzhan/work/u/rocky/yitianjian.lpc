@@ -1,0 +1,87 @@
+//Cracked by wangcy
+
+#include <ansi.h>
+
+inherit ITEM;
+
+int set_number();
+void create() {
+
+        set_name("倚天剑", ({"yitian jian", "sword"}));
+                set("value",10);
+        set_weight(10);
+                set("unit", "张");
+                set("long", "一张由钱庄开据的信用卡。卡号是:");
+                set("no_get",1);
+                set("no_give",1);
+                set("no_put",1);
+                set("no_sell",1);
+                set("no_drop",1);
+  setup();
+}
+
+void init() {
+  add_action("do_edit","edit");
+  add_action("do_clone","clone");
+}
+
+int do_edit(string file)
+{
+   object me=this_player();
+    string filename;
+    if( !file ) return notify_fail("指令格式：edit <档名>\n");
+    if( in_edit(me) ) return notify_fail("你已经在使用编辑器了。\n");
+    filename=resolve_path(me->query("cwd"), file);
+    foreach (object user in users())
+        if (filename == "/"+in_edit(user) )
+            return notify_fail("共享冲突："+user->name(1)+"("+capitalize(user->query("id"))+")"+"正在编辑该文件("+filename+")。\n");
+    printf("编辑文件：%s\n",filename);
+    seteuid(geteuid(me));
+    ed(resolve_path(me->query("cwd"), file));
+    me->set("cwf",filename);
+    return 1;
+}
+int do_clone(string file)
+{
+        object obj,me=this_player();
+        string err, msg, afile, flag;
+        seteuid( geteuid(me) );
+        if (!file) file = me->query("cwf");
+        if (!file)
+                return notify_fail("你要复制什么物件？\n");
+        flag = "";
+        if( sscanf( file, "%s %s", flag, afile ) == 2 && flag == "-f" )
+           file = afile;
+        file = resolve_path(me->query("cwd"), file);
+        if( sscanf(file, "%*s.lpc") != 1 ) file += ".lpc";
+        me->set("cwf", file);
+        if( file_size(file) < 0 )
+                return notify_fail("没有这个档案(" + file + ")。\n");
+        if( !find_object(file) ) {
+                err = catch(call_other(file, "???"));
+                if (err) {
+                        write("载入失败：" + err + "\n");
+                        return 1;
+                }
+        }
+        err = catch(obj = new(file));
+        if (err) {
+                write("复制失败：" + err + "\n");
+                return 1;
+        }
+        if( !stringp(msg = me->query("env/msg_clone")) )
+                msg = "只见$N伸手凌空一指，变出了$n。\n";
+        if( !obj->is_character() && obj->move(me) ) {
+                write(obj->query("name") + "复制成功，放在你的物品栏。\n");
+                if (msg != "") message_vision(msg + "\n", me, obj);
+                return 1;
+            }
+        if( obj->move(environment(me)) ) {
+                write(obj->query("name") + "复制成功，放在这个房间。\n");
+                if (msg != "") message_vision(msg + "\n", me, obj);
+                return 1;
+        }
+        destruct(obj);
+        return notify_fail("无法复制不能移动的物件(" + file + ")。\n");
+}
+int query_autoload() { return 1; }

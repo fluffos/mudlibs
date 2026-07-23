@@ -1,0 +1,330 @@
+// pmaster.c
+
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+
+int main(object me, string arg)
+{
+	int i,size;
+	object *t;
+	string *msg;
+	mapping show; 
+	string master, student;
+	object pmob;
+
+	pmob = new("/u/nanf/npc/pmaster.c");
+	pmob->restore();
+
+	// 同步已解除的关系
+	if( master = (me->query("pmasterid")) )
+	{
+		if(pmob->query(master+"/dismissed/"+me->query("id")))
+		{
+			write("你的师傅"+master+"解除了和你的师徒关系，节哀吧！\n");
+			me->delete("pmasterid");
+			me->delete("pmastername");
+		}
+	}
+	if( (show = me->query("pdizi")) )
+	{
+		msg = keys(show);
+		size = sizeof(show);
+		for (i = 0; i < size; i++)
+		{
+			student = msg[i];
+			if(pmob->query(me->query("id")+"/dismissed/"+student))
+			{
+				write("你的徒弟"+student+"解除了和你的师徒关系，这个不肖徒！\n");
+				me->delete("pdizi/"+student);
+			}
+		}
+		if(!sizeof(me->query("pdizi")))
+			me->delete("pdizi");
+	}
+	if( !arg ) 
+	{
+		mapping recordme;
+		string status="";
+
+		recordme = pmob->query(me->query("id"));
+
+		if( !me->query("pmasterid"))
+			write("你现在还没有正式的玩家师傅。\n");
+		else 
+			write("你现在的玩家师傅是： "+me->query("pmastername")+"("+me->query("pmasterid")+") \n");
+		if( !me->query("pdizi"))
+			write("你现在还没有正式的玩家徒弟。\n");
+		else
+		{
+			show = me->query("pdizi");
+			msg = keys(show);
+			size = sizeof(show);
+			write("你现在的玩家徒弟共"+size+"位：\n");
+			for (i = 0; i < size; i++)
+			{
+				write("     "+msg[i]+" "+me->query("pdizi/"+msg[i])+"\n");
+			}
+		}
+
+		if(recordme)
+		{
+			if (recordme["undercheck"])
+			{
+				size = sizeof(recordme["undercheck"]);
+				write("你有"+size+"位玩家徒弟在审核中：\n");
+				msg = keys(recordme["undercheck"]);
+				for(i=0; i<size; i++)
+				{
+					if(!recordme["undercheck"][msg[i]]["confirmed"])
+					{
+						status ="   状态：等待审核中";
+					}
+					else
+					{
+						status ="   状态：已通过审核";
+					}
+					write("     "+msg[i]+" "+recordme["undercheck"][msg[i]]["name"]+status+"\n");
+				}
+			}
+			if (recordme["failedcheck"])
+			{
+				size = sizeof(recordme["failedcheck"]);
+				write("以下"+size+"位玩家徒弟未能通过审核：\n");
+				msg = keys(recordme["failedcheck"]);
+				for(i=0; i<size; i++)
+				{
+					write("     "+msg[i]+" "+recordme["failedcheck"][msg[i]]["name"]+"\n");
+				}
+			}
+			if (recordme["dismissed"])
+			{
+				size = sizeof(recordme["dismissed"]);
+				write("以下"+size+"位玩家徒弟已与你脱离了关系：\n");
+				msg = keys(recordme["dismissed"]);
+				for(i=0; i<size; i++)
+				{
+					write("     "+msg[i]+" "+recordme["dismissed"][msg[i]]["name"]+"\n");
+				}
+			}
+			if (recordme["graduated"])
+			{
+				size = sizeof(recordme["graduated"]);
+				write("以下"+size+"位玩家徒弟已经出山：\n");
+				msg = keys(recordme["graduated"]);
+				for(i=0; i<size; i++)
+				{
+					write("     "+msg[i]+" "+recordme["graduated"][msg[i]]["name"]+"\n");
+				}
+			}
+		}
+		i=0;
+		i = (int)me->query("qinmidu");
+		write("\n你现在的师徒荣誉为："+i+"\n");
+	}
+	else if( sscanf(arg, "confirm with %s", arg) == 1)
+	{
+		object ob;
+		mapping recordme;
+		mapping recordyou;
+		string id, yid;
+
+		if( !(ob = present(arg, environment(me))) || !living(ob)|| !userp(ob)|| ob==me )
+			write("你想和谁确认师徒关系？\n");
+		else
+		{
+			id = me->query("id");
+			yid = ob->query("id");
+
+			if(pmob->query(id+"/undercheck/"+yid+"/confirmed"))
+			{
+				log_file("static/pmaster",log_time()+id+"新收徒弟"+yid+"\n");
+				ob->set("pmasterid",id);
+				ob->set("pmastername",me->query("name"));
+				me->set("pdizi/"+yid, ob->query("name"));
+				pmob->delete(id+"/undercheck/"+yid);
+				if(!sizeof(pmob->query(id+"/undercheck")))
+					pmob->delete(id+"/undercheck");
+				pmob->save();
+				message("channel:chat",YEL"\n【玩家师徒】"+GRN+ob->name()+CYN"拜"+GRN+me->name()+CYN"为玩家师傅一事已通过审核，正式确立了师徒关系！\n\n"NOR,users());
+			}
+			else if(pmob->query(yid+"/undercheck/"+id+"/confirmed"))
+			{
+				log_file("static/pmaster",log_time()+yid+"新收徒弟"+id+"\n");
+				me->set("pmasterid",yid);
+				me->set("pmastername",ob->query("name"));
+				ob->set("pdizi/"+id, me->query("name"));
+				pmob->delete(yid+"/undercheck/"+id);
+				if(!sizeof(pmob->query(yid+"/undercheck")))
+					pmob->delete(yid+"/undercheck");
+				pmob->save();
+				message("channel:chat",YEL"\n【玩家师徒】"+GRN+me->name()+CYN"拜"+GRN+ob->name()+CYN"为玩家师傅一事已通过审核，正式确立了师徒关系！\n\n"NOR,users());
+			}
+			else if(me->query("pmasterid") == yid || ob->query("pmasterid") == id)
+			{
+				write("你们已经确认了师徒关系。\n");
+			}
+			else
+			{
+				write("要先拜师，通过审核，才能确认师徒关系！\n");
+			}
+		}
+	}
+	else if( sscanf(arg, "with %s", arg)==1 ) 
+	{
+		object ob;
+		mapping recordme;
+		mapping recordyou;
+		string id,yid;
+		string *dizi;
+
+		if( !(ob = present(arg, environment(me))) || !living(ob)|| !userp(ob)|| ob==me )
+			write("你想收谁做你的徒弟？\n");
+		else
+		{
+			id = me->query("id");
+			yid = arg;
+
+			
+			if( me==(object)ob->query_temp("shoutu") ) 
+			{
+				ob->delete_temp("shoutu");
+				recordme = pmob->query(id);
+				if( (recordme = pmob->query(id)) && recordme["undercheck/"+yid] )
+				{
+					write("你不能拜"+ob->name()+"为师。\n");
+				}
+				else if ( (recordyou = pmob->query(yid)) && recordyou["undercheck/"+id] )
+				{
+					write("你已经拜过"+ob->name()+"为师了。\n");
+				}
+				else
+				{
+					pmob->set(yid+"/"+"undercheck/"+id+"/id", id); // id
+					pmob->set(yid+"/"+"undercheck/"+id+"/name", me->query("name")); // name
+					pmob->save();
+					message_vision("$N决定拜$n为师。\n", me, ob);
+					message("channel:chat",YEL"\n【玩家师徒】"+GRN+me->name()+CYN"决定拜"+GRN+ob->name()+CYN"为玩家师傅，已经提交审核！\n\n"NOR,users());
+				}
+			} 
+			else
+			{
+				me->delete_temp("shoutu");
+				show =me->query("pdizi");
+				recordme = pmob->query(id);
+				recordyou = pmob->query(yid);
+
+				if(ob->query("pmasterid") == id)
+				{
+					write("你已经是"+ob->name()+"的师傅了。\n");
+				}
+				else if(ob->query("pmasterid"))
+				{
+					write("人家已经有师傅了！\n");
+				}
+				else if(me->query("pmasterid") == ob->query("id"))
+				{
+					write("你想做你师傅的师傅？\n");
+				}
+				else if( pmob->query(id+"/undercheck/"+yid))
+				{
+					write("你已经收他为徒了，耐心等待审核吧。\n");
+				}
+				else if( pmob->query(yid+"/undercheck/"+id))
+				{
+					write("你们俩到底谁要收谁为徒？\n");
+				}
+				else if(pmob->query(id+"/dismissed/"+yid))
+				{
+					write("你二人缘分已尽，还是散了吧。\n");
+				}
+				else if(pmob->query(id+"/failedcheck/"+yid) || pmob->query(yid+"/failedcheck/"+id))
+				{
+					write("你还想再审核失败一次吗？\n");
+				}
+				else if(pmob->query(id+"/graduated/"+yid))
+				{
+					write("人家已经出山了，你就放手吧。\n");
+				}
+				else if(pmob->query(yid+"/dismissed/"+id))
+				{
+					write("你二人缘分已尽，还是散了吧。\n");
+				}
+				else if(pmob->query(yid+"/graduated/"+id))
+				{
+					write("别开玩笑了，所谓一日为师，终生为父也！");
+				}
+				else if((int)ob->query("combat_exp")+(int)ob->query("daoxing") > (int)me->query("combat_exp")+(int)me->query("daoxing"))
+				{
+					write("别开玩笑了，别人做你师傅还差不多！\n");
+				}
+				else if((int)me->query("combat_exp")+(int)me->query("daoxing") < 4*(int)ob->query("combat_exp")+4*(int)ob->query("daoxing"))
+				{
+					write("你们俩修为没差多远，还是拜把子比较合适！\n");
+				}
+				else if((int)ob->query("combat_exp")+(int)ob->query("daoxing") >5000000)
+				{
+					write("以"+ob->query("name")+"的修为，已经不需要拜玩家师傅了！\n");
+				}
+				else if((int)me->query("combat_exp")+(int)me->query("daoxing")<20000000)
+				{
+					write("以你的修为，还想收徒弟？别把人大牙笑掉了。\n");
+				}
+				else if( sizeof(show) + sizeof(pmob->query(id+"/undercheck"))>=4 ) 
+				{
+					write("一名师傅同时只能收4名弟子！！\n");
+				}
+				else if( sizeof(show) + sizeof(pmob->query(id+"/undercheck")) + sizeof(pmob->query(id+"/dismissed")) + sizeof(pmob->query(id+"/graduated")) + sizeof(pmob->query(id+"/failedcheck")) >= 10 ) 
+				{
+					write("一名师傅一生最多收10名弟子！\n");
+				}
+				else
+				{
+					message_vision("$N想收$n为徒。\n", me, ob);
+					tell_object(ob, YEL "如果你愿意做"+me->query("name")+"的徒弟，请用 pmaster with " + me->query("id") + "。\n" NOR);
+					me->set_temp("shoutu", ob);
+				}
+			}
+		}
+	}
+	else
+	{
+		write("使用方法：pmaster with <id> 或 pmaster confirm with <id>\n");
+	}
+
+	destruct(pmob);
+	return 1;
+}
+
+int help(object me)
+{
+    write(@HELP
+
+pmaster with <某人> - 收某玩家为徒弟或拜某玩家为师
+
+pmaster confirm with <某人> - 确认师徒关系
+
+上面两种格式，师徒二人须在一起
+
+直接下 pmaster 指令时则会显示你目前的师徒情况
+
+拜师方法：
+	nanf要收wxs为徒为例：
+	1 nanf 用 pmaster with wxs 收wxs为徒
+	2 如果wxs同意，pmaster with nanf，此时会产生一份拜师申请
+	3 申请经巫师审核通过后，nanf 用 pmaster confirm with wxs
+	  或wxs用pmaster confirm with nanf  师徒关系正式生效
+注意：
+	师傅的经验要求：exp+dx > 20M
+	徒弟的经验要求：exp+dx < 5M
+	拜师要求：师傅的exp+dx是徒弟的4倍以上
+	一个玩家同时最多收4名玩家徒弟
+	一个玩家同时只能有1名玩家师傅
+	玩家徒弟到达一定经验值(exp+dx>=10M)时，将自动出山
+	玩家徒弟可以判离其玩家师傅，玩家师傅可以逐出其玩家弟子(help dispmaster)
+	一个玩家一生最多收10名玩家徒弟，包括当前弟子、出山弟子、解除关系弟子和审核未通过的弟子
+HELP
+    );
+    return 1;
+}
+
