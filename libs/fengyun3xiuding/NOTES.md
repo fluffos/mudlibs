@@ -337,6 +337,37 @@ python3 ../../scripts/mudclient.py 127.0.0.1 40089 --timeout 25 --idle 0.8 \
   --send "look" --send "score" --send "quit"
 ```
 
+## Re-verification pass: driver rebuild + LPC formatter + WASM build
+
+- **Formatter**: `format-corpus.mjs` over all 3714 `.lpc` files; 3690
+  reformatted, 2 unchanged, 22 refused (self-check `errors`, expected).
+- **Proactive fix applied before the first boot attempt of this pass**:
+  found (via `fengyun3dianzang`'s sibling investigation the same
+  session — same 风云3 engine lineage) that `adm/daemons/securityd.lpc`'s
+  `create()` calls `resolve(query_host_name(), "resolve_callback")`
+  BEFORE allocating the `wiz_status` mapping that `get_status()` (called
+  on every login) depends on; under WASM (no DNS resolver) that
+  `resolve()` throws uncaught and silently aborts the rest of `create()`,
+  leaving `wiz_status` permanently `0` and crashing every later login
+  with `*Value being indexed is zero.`. Reordered `wiz_status`
+  allocation first and wrapped `resolve()` in `catch()`, applied
+  proactively before booting (not discovered reactively here, since the
+  sibling lib's fix landed first).
+- **Native retest against rebuilt driver**: clean, zero fixes needed
+  beyond the proactive one above (which doesn't change native behavior
+  at all — native has a working resolver, so the reorder is a no-op
+  there). Full registration + `look`/`score`/`quit` verified with a real
+  Chinese name (慕容复), zero debug.log errors.
+- **WASM test**: boots and plays fully. Only non-fatal errors are the
+  expected no-sockets-package ones (`Undefined function socket_close`/
+  `socket_create`/`socket_bind` in `adm/daemons/ftpd.lpc`, `*No program
+  in object '/adm/daemons/ftpd'!` at preload — caught, non-cascading,
+  same shape as a missing daemon natively). Full registration with a
+  real Chinese name (王语嫣, female), `look`, and `quit` all completed
+  cleanly — the proactive securityd fix meant this lib never hit the
+  crash `fengyun3dianzang` did. Not affected by the documented
+  `query_ip_number()` WASM limitation.
+
 ## Process hygiene note
 
 While this archive was being processed, a sibling agent was concurrently
