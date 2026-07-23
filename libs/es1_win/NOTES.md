@@ -77,3 +77,38 @@ cd libs/es1_win
 ~/src/fluffos/build-debug/src/driver config.fluffos
 python3 ../../scripts/mudclient.py 127.0.0.1 40009 --timeout 10 --send "" --send "look" --send "quit"
 ```
+
+## Re-verification pass: driver rebuild + LPC formatter + WASM build
+
+- **Formatter**: ran `format-corpus.mjs` over all 6933 `.lpc` files;
+  6772 reformatted in place, 5 already-clean/unchanged, 156 refused
+  (`errors`, expected on messy legacy code per the tool's own
+  token/byte-identity self-check) — not chased down individually.
+- **Native retest against rebuilt driver**: booted clean (zero fatal
+  errors, "Initializations complete") against the freshly-rebuilt
+  `build-debug/src/driver`. Full registration verified with a real
+  Chinese name ("令狐冲"/Linghuchong, human male) all the way into the
+  starting room (远风镇冒险者公会); `look`, `score`, `quit` all produced
+  correct, real output (score showed the right race/gender/age line,
+  quit produced the real farewell/drop-inventory text).
+  **Regression found + fixed** (pre-existing since the original
+  conversion commit, not caused by the reformat or driver rebuild, but
+  only now caught by this pass's post-login-output check): `std/user.lpc`'s
+  `setup()` unconditionally `write()`s a literal debug/garbage string
+  `"aadsaaaaaaaaaaaaaaaaaaaa\n\n"` to every player on every login, right
+  before the real "last logon" message. Confirmed absent from
+  `raw/es1/std/user.c` under any encoding, so it was accidentally
+  introduced (not original content) at some point before or during the
+  initial conversion commit. Fixed by deleting the stray `write()` call;
+  re-verified clean (no more garbage line) on a second full
+  registration + login run, zero debug.log errors either run.
+- **WASM test**: booted cleanly under `build-wasm` (the only errors are
+  the expected non-fatal `Undefined function socket_create`/
+  `socket_error`/`socket_bind` in `/adm/daemons/network/cmwhod.lpc`
+  during `master.lpc`'s `socket_preload()` — caught by the master's own
+  error handler, same as a missing daemon natively, no cascade). Logged
+  into the existing test character over WASM, reached the game room, and
+  `look` produced the correct room description. This lib's own IP-check
+  step (`[OKIP]`) merely warns ("你没有设定任何 IP Address 检查") rather
+  than gating login, so it is **not** affected by the documented
+  `query_ip_number()` WASM limitation — full WASM login + play works.

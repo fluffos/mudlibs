@@ -14,116 +14,109 @@
 
 inherit DAEMON;
 
-int query_gain_spell_exp(int level)
-{
-	switch( level ) {
-		case 0 : return  10;
-		case 1 : return  30;
-		case 2 : return  50;
-		case 3 : return 100;
-		case 4 : return 200;
-		default : return 0;
-	}
+int query_gain_spell_exp(int level) {
+  switch (level) {
+    case 0: return 10;
+    case 1: return 30;
+    case 2: return 50;
+    case 3: return 100;
+    case 4: return 200;
+    default: return 0;
+  }
 }
 
-int query_need_spell_level(int level)
-{
-	return 5+level*10;
+int query_need_spell_level(int level) {
+  return 5 + level * 10;
 }
 
-int query_sp_cost(object caster, int level)
-{
-	return modify_sp_cost(caster, 10+5*level, TYPE, query_need_spell_level(level));
+int query_sp_cost(object caster, int level) {
+  return modify_sp_cost(caster, 10 + 5 * level, TYPE, query_need_spell_level(level));
 }
 
-int query_need_skill(int level)
-{
-	return 10+15*level;
+int query_need_skill(int level) {
+  return 10 + 15 * level;
 }
 
-int query_size(int level) 
-{
-    switch( level ) {
-      case 1 : return  3;
-      case 2 : return  5;
-      case 3 : return  7;
-      case 4 : return 10;
-     default : return  2;
+int query_size(int level) {
+  switch (level) {
+    case 1: return 3;
+    case 2: return 5;
+    case 3: return 7;
+    case 4: return 10;
+    default: return 2;
+  }
+}
+
+void eye_effect(object caster) {
+  caster->delete_temp("cast_busy");
+}
+
+int cast(int level) {
+  int x, y, i, j, size, color;
+  object player, env, v_server;
+  string tk, tk_color, str, bar, legend;
+
+  size = query_size(level);
+  player = this_player();
+  env = environment(player);
+  if ((string)this_player()->query_env("vt100") == "color") color = 1;
+
+  if ((int)player->query_skill(TYPE) < query_need_skill(level)) {
+    tell_object(player, "你现在的" + to_chinese(TYPE) + "不足以使用这等级的魔法!\n");
+    return 0;
+  }
+  if (!env || !(v_server = env->query("virtual_server"))) {
+    tell_object(player, "巫师之眼只有在野外才能使用。\n");
+    return 0;
+  }
+
+  player->set_temp("cast_busy", 1);
+
+  tell_object(player, "你施展巫师之眼，在你的面前显示出这附近地形地物。\n");
+  tell_room(env, player->query("c_name") + "开始喃喃自语。\n", player);
+  gain_spell_experience(player, TYPE, query_gain_spell_exp(level));
+  x = (int)env->query("x_coordinate");
+  y = (int)env->query("y_coordinate");
+
+  bar = "+-";
+  for (i = 0; i < size * 2 + 1; i++) bar += "---";
+  bar += "+\n";
+
+  str = bar;
+  for (i = -size; i <= size; i++) {
+    str += "| ";
+    for (j = -size; j <= size; j++) {
+      legend = v_server->query_legend(x + j, y + i);
+      switch (legend[0]) {
+        case 'P': tk = "::"; tk_color = HBGRN; break;
+        case 'F': tk = "OO"; tk_color = HBGRN; break;
+        case 'B': tk = "oo"; tk_color = HBGRN; break;
+        case 'M': tk = "/\\"; tk_color = HBYEL; break;
+        case 'H': tk = "^^"; tk_color = HBYEL; break;
+        case 'R': tk = "++"; tk_color = HBRED; break;
+        case 'T': tk = "[]"; tk_color = HBMAG; break;
+        case 'S': tk = "%%"; tk_color = HBYEL; break;
+        case 'W': tk = "=="; tk_color = HBCYN; break;
+        case 'O': tk = "~~"; tk_color = HBBLU; break;
+        case 'D': tk = "&&"; tk_color = HBYEL; break;
+        default: tk = "  "; tk_color = NOR; break;
+      }
+      if (legend[1] == 'X') tk = extract(tk, 0, 0) + "*";
+      tk += " ";
+
+      if (color) str += tk_color;
+
+      if (i == 0 && j == 0) str += blink("<*>");
+      else str += tk;
     }
+    if (color) str += NOR;
+    str += "|\n";
+  }
+  str += bar;
+  str += sprintf("你目前的位置: (X = %d, Y = %d)\n", x, y);
+  tell_object(player, str);
+
+  call_out("eye_effect", 2, player);
+
+  return 1;
 }
-
-void eye_effect(object caster)
-{
-	caster->delete_temp("cast_busy");
-}
-
-int cast(int level)
-{  	int x, y, i, j, size,color;
-  	object player, env, v_server;
-	string tk,tk_color, str, bar, legend;
-	
-	size = query_size(level);
- 	player = this_player();
-	env = environment( player );
-	if ((string)this_player()->query_env("vt100") == "color") color = 1;
-
-	if( (int)player->query_skill(TYPE) < query_need_skill(level) )
-	{	tell_object( player,"你现在的"+to_chinese(TYPE)+"不足以使用这等级的魔法!\n");
-    		return 0;
-	}
-	if( !env || !(v_server = env->query("virtual_server")) )
-	{	tell_object( player,"巫师之眼只有在野外才能使用。\n");
-		return 0;
-	}
-
-	player->set_temp("cast_busy",1);
-
-	tell_object( player,"你施展巫师之眼，在你的面前显示出这附近地形地物。\n" );
-	tell_room( env, player->query("c_name")+"开始喃喃自语。\n", player );
-	gain_spell_experience(player, TYPE, query_gain_spell_exp(level));
-	x = (int)env->query("x_coordinate");
-	y = (int)env->query("y_coordinate");
-
-	bar = "+-";
-	for( i=0; i<size*2+1; i++ ) bar += "---";
-	bar += "+\n";
-
-	str = bar;
-	for( i=-size; i<=size; i++ )
-	{	str += "| ";
-		for( j=-size; j<=size; j++ )
-		{	legend = v_server->query_legend( x+j, y+i );
-			switch( legend[0] )
-			{	case 'P' : tk = "::";	tk_color = HBGRN;	break;
-				case 'F' : tk = "OO";	tk_color = HBGRN;	break;
-				case 'B' : tk = "oo";	tk_color = HBGRN;	break;
-				case 'M' : tk = "/\\";	tk_color = HBYEL;	break;
-				case 'H' : tk = "^^";	tk_color = HBYEL;	break;
-				case 'R' : tk = "++";	tk_color = HBRED;	break;
-				case 'T' : tk = "[]";	tk_color = HBMAG;	break;
-				case 'S' : tk = "%%";	tk_color = HBYEL;	break;
-				case 'W' : tk = "==";	tk_color = HBCYN;	break;
-				case 'O' : tk = "~~";	tk_color = HBBLU;	break;
-				case 'D' : tk = "&&";   tk_color = HBYEL;	break;
-				default :  tk = "  ";	tk_color = NOR; 	break;
-			}
-			if( legend[1]=='X' ) tk = extract(tk,0,0) + "*";
-			tk += " ";
-			
-			if (color) str += tk_color;
-
-			if( i==0 && j==0 ) str += blink( "<*>" );
-			else str += tk;
-		}
-		if (color) str += NOR;
-		str += "|\n";
-	}
-	str += bar;
-	str += sprintf("你目前的位置: (X = %d, Y = %d)\n", x, y);
-	tell_object(player, str);
-
-	call_out("eye_effect", 2,player);
-
-	return 1;
-}
-

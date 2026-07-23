@@ -55,6 +55,8 @@ python3 scripts/mudclient.py 127.0.0.1 40009 --timeout 25 --idle 0.5 \
 - 部分很老的模板/示例区域（如 `noden`/`drow`/`hawk` 等目录下的房间）
   缺少必要的头文件引用，无法正常加载，但这些区域似乎并非正式游戏内容
   的一部分，不影响主线游玩。
-- 进入游戏后系统设置（`setup()`）阶段会打印一行明显是当年作者调试遗留
-  的乱码字符（"aadsaaaaaaaaaaaaaaaaaaaa"），纯属历史遗留的无害小瑕疵，
-  忽略即可。
+- （已修复）此前登录时系统设置（`setup()`）阶段会打印一行调试遗留的
+  乱码字符（"aadsaaaaaaaaaaaaaaaaaaaa"），本轮重新测试中已删除。
+- **WASM 兼容性**：已在新的 WASM 构建下测试，可以正常启动、登录、
+  `look` 等指令均正常（本版本的 IP 检查只是提示性警告，不会阻挡登录，
+  未受已知的 `query_ip_number()` WASM 限制影响）。
