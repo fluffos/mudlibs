@@ -12,383 +12,341 @@
 
 inherit ROOM;
 
-int query_viplevel(object me)
-{
-    return PRIVILEGE_VIP + 1;//如果要给予特权，就大于PRIVILEGE_VIP
+int query_viplevel(object me) {
+  return PRIVILEGE_VIP + 1;  //如果要给予特权，就大于PRIVILEGE_VIP
 }
 
-int clean_up()
-{
-    return 1;
+int clean_up() {
+  return 1;
 }
 
 string look_pai(object me);
 
-int do_restart2()
-{
-    set("lgt/entertime", time() / 86400);//用途等于uid
-    set("lgt/timesign", "更新于：" + ctime(time()) + "\n");
-    CHANNEL_D->do_sys_channel(CHANL_NAME, 
-        HIG + "开封城的上空突然风起云涌，一座高耸入云的"+HIY+"铁塔"+HIG+"轰隆隆地摇晃起来，当地百姓一片哗然...\n" + NOR);
+int do_restart2() {
+  set("lgt/entertime", time() / 86400);  //用途等于uid
+  set("lgt/timesign", "更新于：" + ctime(time()) + "\n");
+  CHANNEL_D->do_sys_channel(CHANL_NAME,
+    HIG + "开封城的上空突然风起云涌，一座高耸入云的" + HIY + "铁塔" + HIG + "轰隆隆地摇晃起来，当地百姓一片哗然...\n" + NOR);
+  return 1;
+}
+
+int do_restart() {
+  object me = this_player();
+
+  if (wiz_level(me) > 5) {
+    do_restart2();
+  }
+
+  return 1;
+}
+
+int do_stop2() {
+  object me = this_player();
+
+  if (query("lgt/stop")) {
+    delete("lgt/stop");
+    tell_object(me, YEL + "维修完毕，开放使用！\n" + NOR);
+  } else {
+    set("lgt/stop", 1);
+    tell_object(me, YEL + "开始维修，暂停使用！\n" + NOR);
+  }
+
+  return 1;
+}
+
+int do_stop() {
+  object me = this_player();
+
+  if (wiz_level(me) > 5) {
+    do_stop2();
+  }
+
+  return 1;
+}
+
+void create() {
+  set("short", "灵感塔底");
+  set("long",
+    "这里是灵感塔底，进入后顿显另有玄机，完全不像是只有十三层高的\n"
+    "样子。少林寺别院的十三高僧坚守在此看押塔上的无数邪道高手。另有几\n"
+    "个少年人聚集在旁边的一个角落里，大呼小叫地生着篝火，烧烤着黑狗肉\n"
+    "并喝酒，搞得塔内浓烟滚滚，却全然没有在意旁人感受。\n"
+    "    通往上层的楼梯边贴着一个" + CYN + "牌子" + NOR + "。\n"
+  );
+
+  set("my_entry", ({ "westup, eastup, northup, southup" }));
+
+  set("exits", ([
+    "westup": __DIR__ "lgtxxw",
+    "eastup": __DIR__ "lgtxxe",
+    "northup": __DIR__ "lgtxxn",
+    "southup": __DIR__ "lgtxxs",
+    //上面四个出口一定要跟my_entry对应
+    "up": __DIR__ "lgtxxu",
+    "out": "/d/kaifeng/tieta",
+  ]));
+
+  set("objects", ([
+    __DIR__ "npc/yang": 1,
+    __DIR__ "npc/ding": 1,
+    __DIR__ "npc/qi": 1,
+    __DIR__ "npc/a3": 1,
+    __DIR__ "npc/a4": 1,
+  ]));
+
+  set("item_desc", ([
+    "牌子": (: look_pai :),
+    "pai": (: look_pai :),
+    "paizi": (: look_pai :),
+  ]));
+
+  set("no_magic", 1);
+  set("no_clean_up", 1);
+  set("no_fight", 1);
+  do_restart2();  //缺少这个时间会导致新人进不去。
+
+  setup();
+}
+
+void init() {
+  object me = this_player();
+
+  if (me && wiz_level(me) > 5) {
+    add_action("do_restart", "restart");
+    add_action("do_stop", "stop");
+  }
+}
+
+int total_gold() {
+  mapping ia;
+  int t, i;
+  string *ks;
+
+  ia = query("lgt/owner");
+  if (!mapp(ia) || !sizeof(ia)) {
+    return 10000;
+  }
+
+  t = 10000;
+
+  ks = keys(ia);
+  for (i = 0; i < sizeof(ks); i++) {
+    t += to_int(ks[i]) * 10;
+  }
+
+  if (t > 80000000000) {
+    t = 80000000000;
+  }
+
+  return t;
+}
+
+int pay_gold(object me) {
+  mapping ia;
+  int t, i, i2;
+  string *ks;
+  object target;
+
+  if (!me) {
     return 1;
+  }
+
+  ia = query("lgt/owner");
+  if (!mapp(ia) || !sizeof(ia)) {
+    me->add("balance", -10000 * 10000);  //只扣除杨小邪押金
+    return 10000;
+  }
+
+  me->add("balance", -10000 * 10000);  //扣除杨小邪押金
+  t = 10000;
+
+  ks = keys(ia);
+  for (i = 0; i < sizeof(ks); i++) {
+    target = find_player(ia[ks[i]]);
+    if (objectp(target)) {
+      if (target != me) {
+        i2 = to_int(ks[i]) * 10;
+        me->add("balance", -i2 * 10000);  //扣除
+        tell_object(
+          target,
+          HIG + "杨小邪偷偷告诉你道：" + me->query("name") + HIG + "挑战失败，照规矩向你转账" + chinese_number(i2) + "两黄金！\n" + NOR
+        );
+        target->add("balance", i2 * 10000);  //转入
+        t += i2;
+      }
+    }
+  }
+
+  return t;
 }
 
-int do_restart()
-{
-    object me = this_player();
+int valid_leave(object me, string dir) {
+  object *inv, ob;
+  int amount;
 
-    if ( wiz_level(me) > 5 )
-    {
-        do_restart2();
+  //防止从塔上昏迷下来的玩家被背走到up或out去暗害
+  inv = deep_inventory(me);
+  if (sizeof(inv) > 0) {
+    foreach (object ob2 in inv) {
+      if (interactive(ob2) || userp(ob2)) {
+        return notify_fail(me, NOR "你不能在大众面前将其他玩家背来背去的。\n" NOR);
+      }
+    }
+  }
+
+  if (dir != "out") {
+    if (!userp(me)) {
+      return 0;
     }
 
-    return 1;
-}
-
-int do_stop2()
-{
-    object me = this_player();
-
-    if ( query("lgt/stop") )
-    {
-        delete("lgt/stop");
-        tell_object(me, YEL + "维修完毕，开放使用！\n" + NOR); 
-    }
-    else
-    {
-        set("lgt/stop", 1);
-        tell_object(me, YEL + "开始维修，暂停使用！\n" + NOR); 
+    if (query("lgt/stop")) {
+      return notify_fail(CYN + "杨小邪拦住你道：灵感塔正在维修 ... \n" NOR);
     }
 
-    return 1;
-}
+    message_vision(YEL + "$N鬼鬼祟祟地张望少林众僧和通吃帮众人，看样子是想溜上塔去。\n" NOR, me);
+    me->start_busy(2 + random(2));
 
-int do_stop()
-{
-    object me = this_player();
-
-    if ( wiz_level(me) > 5 )
-    {
-        do_stop2();
+    if (me->query("level") < REQUIRE_LEVEL) {
+      tell_object(
+        me,
+        CYN + "小丁急匆匆地跑过来拦住你说道：" + RANK_D->query_respect(me) + CYN + "请三思，你等级不足" + chinese_number(REQUIRE_LEVEL) + "级，上去恐怕遭遇不测啊！\n" + NOR
+      );
+      return notify_fail(CYN + "阿三(a san)对著你，笑得在地上打滚，满脸“真是扯蛋，想出名也不是这样心急的吧？”的样子 ... \n" NOR);
     }
 
-    return 1;
-}
-
-void create()
-{
-    set("short", "灵感塔底");
-    set("long",
-"这里是灵感塔底，进入后顿显另有玄机，完全不像是只有十三层高的\n"
-"样子。少林寺别院的十三高僧坚守在此看押塔上的无数邪道高手。另有几\n"
-"个少年人聚集在旁边的一个角落里，大呼小叫地生着篝火，烧烤着黑狗肉\n"
-"并喝酒，搞得塔内浓烟滚滚，却全然没有在意旁人感受。\n"
-"    通往上层的楼梯边贴着一个"+CYN+"牌子"+NOR+"。\n"
-);
-
-    set("my_entry", ({"westup, eastup, northup, southup"}));
-
-    set("exits", ([
-        "westup"   : __DIR__"lgtxxw",
-        "eastup"   : __DIR__"lgtxxe",
-        "northup"   : __DIR__"lgtxxn",
-        "southup"   : __DIR__"lgtxxs",
-        //上面四个出口一定要跟my_entry对应
-        "up"   : __DIR__"lgtxxu",
-        "out"   : "/d/kaifeng/tieta", 
-    ]));
-
-    set("objects", ([ 
-        __DIR__"npc/yang" : 1, 
-        __DIR__"npc/ding" : 1, 
-        __DIR__"npc/qi" : 1, 
-        __DIR__"npc/a3" : 1, 
-        __DIR__"npc/a4" : 1, 
-    ])); 
-
-    set("item_desc", ([
-        "牌子": (: look_pai :),
-        "pai": (: look_pai :),
-        "paizi": (: look_pai :),
-    ]) );
-
-    set("no_magic", 1); 
-    set("no_clean_up", 1);
-    set("no_fight", 1); 
-    do_restart2();//缺少这个时间会导致新人进不去。
-
-    setup();
-}
-
-void init()
-{
-    object me = this_player();
-
-    if ( me && wiz_level(me) > 5 )
-    {
-        add_action("do_restart", "restart");
-        add_action("do_stop", "stop");
-    }
-}
-
-int total_gold()
-{
-    mapping ia;
-    int t, i;
-    string *ks;
-
-    ia = query("lgt/owner");
-    if ( !mapp(ia) || ! sizeof(ia) )
-    {
-        return 10000;
+    // 增加vip9的特权，by Lonely
+    if (query("lgt/entertime") == me->query("lgt/entertime") && (query_viplevel(me) < PRIVILEGE_VIP || query("lgt/entertime") == me->query("lgt/entertime2"))) {
+      return notify_fail(NOR "本日闯关你已经试过了，明天中午十二点后请早。\n" NOR);
     }
 
-    t = 10000;
-
-    ks = keys(ia);
-    for ( i = 0; i < sizeof(ks); i++ )
-    {
-        t += to_int(ks[i]) * 10;
+    if (pointerp(me->query_team())) {
+      return notify_fail("你不能组队进入灵感塔试炼！\n");
     }
 
-    if ( t > 80000000000 )
-    {
-        t = 80000000000;
+    if (objectp(me->query_temp("ridee"))) {
+      return notify_fail("你骑着马没法上灵感塔去！\n");
     }
 
-    return t;
-}
-
-int pay_gold(object me)
-{
-    mapping ia;
-    int t, i, i2;
-    string *ks;
-    object target;
-
-    if ( !me )
-    {
-        return 1;
+    if (me->query("balance") < total_gold() * 10000) {
+      me->start_busy(3);
+      return notify_fail(((random(2)) ? CYN "阿三挡在你前面，呲牙咧嘴地对你说道：就这么想上去了？问过通吃小霸王没有？？\n" NOR : CYN "阿四挡在你前面，歪瓜裂枣地对你笑道：阁下身家几何呀？是否婚配？看和尚我如何？？\n" NOR));
     }
 
-    ia  =  query("lgt/owner");
-    if ( !mapp(ia) || ! sizeof(ia) )
-    {
-        me->add("balance", -10000 * 10000);//只扣除杨小邪押金
-        return 10000;
-    }
-
-    me->add("balance", -10000 * 10000);//扣除杨小邪押金
-    t = 10000;
-
-    ks = keys(ia);
-    for ( i = 0; i < sizeof(ks); i++ )
-    {
-        target = find_player(ia[ks[i]]);
-        if ( objectp(target) )
-        {
-            if ( target != me )
-            {
-                i2 = to_int(ks[i]) * 10;
-                me->add("balance", -i2 * 10000);//扣除
-                tell_object(target, HIG + "杨小邪偷偷告诉你道：" + me->query("name") + HIG + "挑战失败，照规矩向你转账" + chinese_number(i2) + "两黄金！\n" + NOR);    
-                target->add("balance", i2 * 10000);//转入
-                t += i2;
+    if (member_array(dir, query("my_entry")) != -1) {
+      ob = find_object(query("exits")[dir]);
+      if (ob) {
+        inv = deep_inventory(ob);
+        if (sizeof(inv) > 0) {
+          foreach (object ob3 in inv) {
+            if (userp(ob3)) {
+              me->start_busy(3);
+              return notify_fail(
+                me,
+                NOR "你再等等吧，现在" + ob3->query("name") + NOR + "正在" + HIC + ob->query("short") + NOR + "全力闯关中！\n" NOR
+              );
             }
+          }
         }
+      }
+
+      if (ob) {
+        destruct(ob);
+      }
+
+      load_object(query("exits")[dir] + ".lpc")->create();
     }
 
-    return t;
+    if (dir == "up") {
+      ob = find_object(query("exits")[dir]);
+
+      if (ob) {
+        inv = deep_inventory(ob);
+        if (sizeof(inv) > 0) {
+          foreach (object ob3 in inv) {
+            if (userp(ob3)) {
+              me->start_busy(3);
+              return notify_fail(
+                me,
+                NOR "你再等等吧，现在" + ob3->query("name") + NOR + "正在" + HIC + ob->query("short") + NOR + "全力闯关中！\n" NOR
+              );
+            }
+          }
+        }
+      }
+
+      if (ob) {
+        destruct(ob);
+      }
+
+      if (!me->query_temp("lgt/wantup")) {
+        me->set_temp("lgt/wantup", 1);
+        me->start_busy(1);
+        return notify_fail(
+          me,
+          NOR "提示：你如果想通往up方向的塔，需要被扣除" + (string)UP_PRICE + "点比特币的VIP服务费。确定的话，请再次up。\n" NOR
+        );
+      }
+
+      amount = me->query("magicbt_coin");
+      if (amount < UP_PRICE) {
+        return notify_fail(NOR + "你账户上没有那么多比特币！\n" + NOR);
+      }
+
+      me->add("magicbt_coin", -UP_PRICE);
+
+      load_object(query("exits")[dir] + ".lpc")->create();
+    }
+
+    me->delete_temp("lgt");  //防止玩家没有quit过
+
+    if (me->query("lgt/entertime") == query("lgt/entertime"))  // 增加vip9特权，by Lonely
+    {
+      me->set("lgt/entertime2", query("lgt/entertime"));
+    }
+
+    me->set("lgt/entertime", query("lgt/entertime"));
+    me->set("lgt/can_die", CAN_DIE + ((dir == "up") ? 3 : 0));
+
+    message_vision(
+      YEL + "杨小邪嘿嘿一笑，悄悄塞给$N" + chinese_number(me->query("lgt/can_die")) + "张灵符。$N一溜烟跑上楼梯去了。\n" NOR,
+      me
+    );
+  }
+
+  me->set_temp("lgt/next_lvl", 2);
+
+  return ::valid_leave(me, dir);
 }
 
-int valid_leave(object me, string dir)
-{
-    object *inv, ob;
-    int amount; 
+void log_hero(object me, int i) {
+  string msgs;
 
-    //防止从塔上昏迷下来的玩家被背走到up或out去暗害
-    inv = deep_inventory(me);
-    if ( sizeof(inv) > 0 )
-    {
-        foreach ( object ob2 in inv )
-        {
-            if( interactive(ob2) || userp(ob2) )
-            {
-                return notify_fail(me, NOR"你不能在大众面前将其他玩家背来背去的。\n"NOR);
-            }
-        }
-    }
+  set("lgt/owner/" + sprintf("%d", i), me->query("id"));
 
-    if ( dir != "out" )
-    {
-        if ( !userp(me) )
-        {
-            return 0;
-        }
+  msgs = query("msg_hero");
+  if (!msgs) {
+    msgs = "";
+  }
 
-        if ( query("lgt/stop") )
-        {
-            return notify_fail(CYN + "杨小邪拦住你道：灵感塔正在维修 ... \n" NOR);
-        }
+  msgs += "  " + HIC + me->query("family/family_name") + me->query("title") + "-" + RED + me->query("name") + NOR + "(" + me->query("id") + ")-" + HIG + environment(me)->query("short",) + "  " + NOR;
+  msgs += "\n";
 
-        message_vision(YEL + "$N鬼鬼祟祟地张望少林众僧和通吃帮众人，看样子是想溜上塔去。\n" NOR, me);
-        me->start_busy(2 + random(2));
-
-        if ( me->query("level") < REQUIRE_LEVEL )
-        {
-            tell_object(me,CYN + "小丁急匆匆地跑过来拦住你说道：" + RANK_D->query_respect(me)  + CYN + "请三思，你等级不足" + chinese_number(REQUIRE_LEVEL) + "级，上去恐怕遭遇不测啊！\n" + NOR); 
-            return notify_fail(CYN + "阿三(a san)对著你，笑得在地上打滚，满脸“真是扯蛋，想出名也不是这样心急的吧？”的样子 ... \n" NOR);
-        }
-
-        // 增加vip9的特权，by Lonely
-        if ( query("lgt/entertime") == me->query("lgt/entertime") && (query_viplevel(me) < PRIVILEGE_VIP || query("lgt/entertime") == me->query("lgt/entertime2")) )
-        {
-            return notify_fail(NOR"本日闯关你已经试过了，明天中午十二点后请早。\n"NOR); 
-        }
-
-        if ( pointerp(me->query_team()) )
-        {
-            return notify_fail("你不能组队进入灵感塔试炼！\n");
-        }
-
-        if ( objectp(me->query_temp("ridee")) )
-        {
-            return notify_fail("你骑着马没法上灵感塔去！\n");
-        }
-
-        if ( me->query("balance") < total_gold() * 10000 )
-        {
-            me->start_busy(3);
-            return notify_fail(( (random(2)) ? CYN"阿三挡在你前面，呲牙咧嘴地对你说道：就这么想上去了？问过通吃小霸王没有？？\n"NOR : CYN"阿四挡在你前面，歪瓜裂枣地对你笑道：阁下身家几何呀？是否婚配？看和尚我如何？？\n"NOR) ); 
-        }
-
-        if ( member_array(dir, query("my_entry")) != -1 )
-        {
-            ob = find_object(query("exits")[dir]); 
-            if ( ob )
-            {
-                inv = deep_inventory(ob);
-                if ( sizeof(inv) > 0 )
-                {
-                    foreach ( object ob3 in inv )
-                    {
-                        if ( userp(ob3) )
-                        {
-                            me->start_busy(3);
-                            return notify_fail(me, NOR"你再等等吧，现在" + ob3->query("name") + NOR + "正在" + HIC + ob->query("short") + NOR + "全力闯关中！\n"NOR); 
-                        }
-                    }
-                }
-            }
-
-            if ( ob )
-            {
-                destruct(ob);
-            }
-
-            load_object(query("exits")[dir] + ".lpc")->create();
-        }
-
-        if ( dir == "up" )
-        {
-            ob = find_object(query("exits")[dir]); 
-
-            if ( ob )
-            {
-                inv = deep_inventory(ob);
-                if ( sizeof(inv) > 0 )
-                {
-                    foreach ( object ob3 in inv )
-                    {
-                        if ( userp(ob3) )
-                        {
-                            me->start_busy(3);
-                            return notify_fail(me, NOR"你再等等吧，现在" + ob3->query("name") + NOR + "正在" + HIC + ob->query("short") + NOR + "全力闯关中！\n"NOR); 
-                        }
-                    }
-                }
-            }
-
-            if ( ob )
-            {
-                destruct(ob);
-            }
-
-            if ( !me->query_temp("lgt/wantup") )
-            {
-                me->set_temp("lgt/wantup", 1);
-                me->start_busy(1);
-                return notify_fail(me, NOR"提示：你如果想通往up方向的塔，需要被扣除" + (string)UP_PRICE + "点比特币的VIP服务费。确定的话，请再次up。\n"NOR); 
-            }
-
-            amount = me->query("magicbt_coin"); 
-            if ( amount < UP_PRICE )
-            { 
-                return notify_fail(NOR + "你账户上没有那么多比特币！\n" + NOR);  
-            } 
-
-            me->add("magicbt_coin", -UP_PRICE);
-
-            load_object(query("exits")[dir] + ".lpc")->create();
-        }                
-
-        me->delete_temp("lgt");//防止玩家没有quit过
-
-        if ( me->query("lgt/entertime") == query("lgt/entertime") ) // 增加vip9特权，by Lonely
-        {
-            me->set("lgt/entertime2", query("lgt/entertime"));
-        }
-
-        me->set("lgt/entertime", query("lgt/entertime"));
-        me->set("lgt/can_die", CAN_DIE + ((dir == "up") ? 3 : 0));
-
-        message_vision(YEL + "杨小邪嘿嘿一笑，悄悄塞给$N" + chinese_number(me->query("lgt/can_die")) + "张灵符。$N一溜烟跑上楼梯去了。\n" NOR, me);
-    }
-
-    me->set_temp("lgt/next_lvl", 2);
-
-    return ::valid_leave(me, dir);
+  set("msg_hero", msgs);
 }
 
-void log_hero(object me, int i)
-{
-    string msgs;
+string look_pai(object me) {
+  int j;
+  string msgsn = "\n";
 
-    set("lgt/owner/" + sprintf("%d", i), me->query("id"));
+  if (time() - me->query("lgt/lookpai") < 10) {
+    return YEL "十三少林棍僧对你齐声一喝，你赶紧低头不敢再看，后背冷汗如雨...\n" NOR;
+  }
 
-    msgs = query("msg_hero");
-    if ( !msgs )
-    {
-        msgs = "";
-    }
+  me->set("lgt/lookpai", time());
+  j = sizeof(query("lgt/owner"));
+  if (j % 2 == 0) {
+    msgsn = "";
+  }
 
-    msgs += "  " + HIC + me->query("family/family_name") + me->query("title") + "-" + RED + me->query("name") + NOR + "(" + me->query("id") +")-" + HIG + environment(me)->query("short", ) + "  " + NOR;
-    msgs += "\n";
-
-    set("msg_hero", msgs);
+  return HIC + "※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※\n" + NOR + ((!query("msg_hero")) ? "目前暂时还没有人登上灵感塔并功成身退！\n" : query("msg_hero")) + NOR + msgsn + HIC + "※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※\n" + NOR + query("lgt/timesign") + NOR;
 }
-
-string look_pai(object me)
-{
-    int j;
-    string msgsn = "\n";
-
-    if ( time() - me->query("lgt/lookpai") < 10 )
-    {
-        return YEL"十三少林棍僧对你齐声一喝，你赶紧低头不敢再看，后背冷汗如雨...\n"NOR; 
-    }
-
-    me->set("lgt/lookpai", time());
-    j = sizeof(query("lgt/owner"));
-    if ( j % 2 == 0 )
-    {
-        msgsn = "";
-    }
-
-    return 
-        HIC + "※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※\n" + NOR +
-        ((!query("msg_hero")) ? "目前暂时还没有人登上灵感塔并功成身退！\n" : query("msg_hero") ) + NOR + msgsn + 
-        HIC + "※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※※\n" + NOR + query("lgt/timesign") + NOR
-    ;
-}
-

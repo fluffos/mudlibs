@@ -383,3 +383,72 @@ Full sweep skipped (mega-lib, see above). Individual `lpcc` runs against the boo
 chain (`master`, `named`, `logind`, `securityd`, `chinese`, and the actual start room
 `d/city/kezhan`) all passed clean (exit 0, no compile errors) before the first full driver
 boot.
+
+## Rebuilt-driver / formatter / WASM re-verification pass (2026-07-23)
+
+1. **LPC formatter** applied across all 33,199 `.lpc` files in `work/`
+   (~703MB): `{"total":33199,"written":32148,"wouldChange":0,
+   "unchanged":625,"errors":426}` — took a few minutes given the file
+   count, run in the background per this lib's own established
+   mega-lib-scale conventions. Checked for the `::fn()`-after-`(`
+   formatter bug found on `tianxia`/`shujian2008`/`shujiantianxia`/
+   `suiyuanxijianlu` this same pass (see `tianxia/NOTES.md` for the full
+   writeup) — **zero hits** of the `(: :` corruption signature anywhere
+   in this lib's 33k+ reformatted files. Spot-verified the three
+   critical fixes survived reformatting intact: `feature/command.lpc`'s
+   `command_hook` still plain `nomask` (with the original commented-out
+   `private` line preserved as a comment), `adm/obj/master.lpc`'s §15w
+   `strsrch(message, "warning:") == -1` guard, and its §8d/§15o
+   `get_include_path()` apply.
+2. **Native re-test against the rebuilt `build-debug/src/driver`**:
+   booted clean in a few seconds despite the 33k-file scale (zero fatal
+   errors, only the one already-documented `emoted.o` restore warning
+   plus ordinary compile warnings). Full registration verified
+   end-to-end via `mudclient.py`, following the exact flow already
+   documented above (youth-gate → `new` → id → Chinese name → admin
+   password ×2 → regular password ×2 → email → optional
+   webpage/ICQ → race → gender → gift accept/confirm → world): id
+   `smfmtb`, real Chinese name **`秦风壬`**, reached 南城客栈 (the
+   documented start room), `look` showed the correct room, `score`
+   showed a correctly-populated character sheet, `quit` produced the
+   game's own farewell text. `debug.log`: zero `error in error
+   handler`/`denied`/`undefined function`/`bad argument` lines beyond
+   the one pre-known `emoted.o` restore message. No new fixes needed —
+   confirms the reformatted 33k-file tree is still fully sound against
+   the rebuilt driver.
+3. **WASM test**: per this pass's own scope note for mega-libs, expected
+   this might be slow/memory-heavy enough to just document a
+   timeout/hang rather than force it through — **it was not**: the
+   whole `scripts/wasm_client.js` run (copying `work/`'s ~700MB into
+   MEMFS, compiling the preload chain, and driving a full registration)
+   completed in under a minute, peak host memory usage stayed modest
+   (~4.2GB used, ~18GB available throughout, no swap pressure beyond the
+   pre-existing baseline from other concurrent agents' sessions on this
+   host). **Full registration completed successfully under wasm**, same
+   flow as the native test above (id `smwasma`, real Chinese name
+   `秦风癸`), reaching 南城客栈 with `look` producing the correct room
+   and `quit` producing the correct farewell — a genuinely full,
+   working wasm playthrough for a 33k-file mega-lib. Two caught,
+   non-blocking runtime errors observed along the way, both logged but
+   neither interrupting registration:
+   - The already-documented `emoted.o` restore-format error (same as
+     native, unrelated to wasm).
+   - **A new, minor `query_ip_number()`-adjacent finding**:
+     `adm/daemons/ipd.lpc`'s `seek_ip_address(ip)` does
+     `user_ip = explode(ip, ".")` then unconditionally indexes
+     `user_ip[1]` for some branches — since `query_ip_number()` doesn't
+     return a real dotted-quad under wasm, `explode()` yields a
+     single-element array and indexing `user_ip[1]` throws `Array index
+     out of bounds`. Called from `logind.lpc`'s `confirm_gift()` →
+     `enter_world()` path (an ISP-routing/regional lookup, not an actual
+     login gate), so — unlike `shujian2008`/`tianxiawuxue`'s
+     hard-rejecting `is_banned()`/`is_valid()` checks — this one is
+     purely cosmetic/non-blocking here: the driver's own error handler
+     catches it and registration proceeds straight through to the game
+     world regardless. **Not patched** — same "known
+     `query_ip_number()` wasm limitation, not a mudlib bug" reasoning,
+     just a different, non-blocking manifestation of it than seen on
+     other libs this pass. **Assessment: shenmo is fully playable under
+     wasm**, the best possible outcome for a mega-lib, and the
+     mega-lib-scale wasm risk flagged in this pass's own brief did not
+     materialize.

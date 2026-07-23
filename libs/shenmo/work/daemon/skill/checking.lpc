@@ -4,4 +4,3 @@
 // checking.c
 
 inherit SKILL;
-

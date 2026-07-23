@@ -5,26 +5,24 @@ inherit F_TREEMAP;
 mapping dbase;
 nosave mapping tmp_dbase;
 nosave mixed default_ob;
-varargs mixed query_temp(string,int);
+varargs mixed query_temp(string, int);
 int delete_temp(string);
 
-void set_default_object(mixed ob)
-{
-if ( !geteuid() ) 
-        seteuid(getuid());
-default_ob = ob;
-ob->add("no_clean_up", 1);
+void set_default_object(mixed ob) {
+  if (!geteuid())
+    seteuid(getuid());
+  default_ob = ob;
+  ob->add("no_clean_up", 1);
 }
 
-mixed set(string prop, mixed data)
-{
-int v;  
-string str,file;        
-if ( !mapp(dbase) ) 
-        dbase = ([]);
-if ( strsrch(prop, '/')!=-1 )
-        return _set( dbase, explode(prop, "/"), data );
-/*
+mixed set(string prop, mixed data) {
+  int v;
+  string str, file;
+  if (!mapp(dbase))
+    dbase = ([]);
+  if (strsrch(prop, '/') != -1)
+    return _set(dbase, explode(prop, "/"), data);
+  /*
 没必要了,所以屏蔽掉 fang 2007.9.15
 //增加异常的日志 snowtu       
 if ( data && intp(data) && userp(this_object()) )
@@ -62,165 +60,149 @@ if ( data && intp(data) && userp(this_object()) )
                 }
         }
 */
-return dbase[prop] = data;
+  return dbase[prop] = data;
 }
 
-varargs mixed query(string prop, int raw)
-{
-mixed data;
+varargs mixed query(string prop, int raw) {
+  mixed data;
 
-if ( !mapp(dbase) ) 
-        return 0;
-if ( undefinedp(dbase[prop]) && (strsrch(prop, '/')!=-1) )
-        data = _query(dbase, explode(prop, "/"));
-else    data = dbase[prop];
-if ( undefinedp(data) && default_ob )
-        data = default_ob->query(prop, 1);
-if ( raw ) 
-        return data;
-return evaluate( data, this_object() );
+  if (!mapp(dbase))
+    return 0;
+  if (undefinedp(dbase[prop]) && (strsrch(prop, '/') != -1))
+    data = _query(dbase, explode(prop, "/"));
+  else data = dbase[prop];
+  if (undefinedp(data) && default_ob)
+    data = default_ob->query(prop, 1);
+  if (raw)
+    return data;
+  return evaluate(data, this_object());
 }
 
-int delete(string prop)
-{
-if ( !mapp(dbase) ) 
-        return 0;
-if ( strsrch(prop, '/')!=-1 )
-        return _delete(dbase, explode(prop, "/"));
-else    {
-        map_delete(dbase, prop);
-        return 1;
+int delete(string prop) {
+  if (!mapp(dbase))
+    return 0;
+  if (strsrch(prop, '/') != -1)
+    return _delete(dbase, explode(prop, "/"));
+  else {
+    map_delete(dbase, prop);
+    return 1;
+  }
+}
+
+mixed add(string prop, mixed data) {
+  string str, file;
+  mixed old;
+  mapping temp, nn;
+  int p;
+
+  nn = ([
+    "daoxing": "道行",
+    "combat_exp": "武学经验",
+    "potential": "潜能",
+
+    "str": "膂力",
+    "cor": "胆识",
+    "int": "悟性",
+    "spi": "灵性",
+    "cps": "定力",
+    "per": "魅力",
+    "con": "根骨",
+    "kar": "福缘",
+
+    "kee": "气血",
+    "sen": "精神",
+    "force": "内力",
+    "mana": "法力",
+  ]);
+
+  if (data && intp(data) && data > 0) {
+    temp = query_temp("ad_apply/" + prop);
+    if (temp && mapp(temp)) {
+      if (time() <= temp["start"] + temp["time"]) {
+        p = temp["pot"];
+        if (p && intp(p)) {
+          if (p < 10) p = 10;
+          if (p > 300) p = 300;
+          data = data * p / 100;
         }
+      } else delete_temp("ad_apply/" + prop);
+    }
+  }
+
+  if (!mapp(dbase) || !(old = query(prop, 1)))
+    return set(prop, data);
+
+  if (functionp(old))
+    error("dbase: add() - called on a function type property.\n");
+
+  if (environment()
+    && userp(this_object())
+    && !this_object()->query("env/no_msg")
+    && member_array(prop, keys(nn)) != -1
+    && (data && intp(data) && data > 0)) {
+    if (prop == "daoxing")
+      tell_object(this_object(), "你的" + nn[prop] + "增加了" + COMBAT_D->chinese_daoxing(data) + "。\n");
+    else tell_object(this_object(), "你的" + nn[prop] + "增加了" + data + "点。\n");
+  }
+  return set(prop, old + data);
 }
 
-mixed add(string prop, mixed data)
-{
-string str,file;        
-mixed old;
-mapping temp,nn;
-int p;
-
-nn = ([
-        "daoxing"       : "道行",
-        "combat_exp"    : "武学经验",
-        "potential"     : "潜能",
-        
-        "str"           : "膂力",
-        "cor"           : "胆识",
-        "int"           : "悟性",
-        "spi"           : "灵性",
-        "cps"           : "定力",
-        "per"           : "魅力",
-        "con"           : "根骨",
-        "kar"           : "福缘",
-
-        "kee"           : "气血",
-        "sen"           : "精神",
-        "force"         : "内力",
-        "mana"          : "法力",
-]);      
-
-if ( data && intp(data) && data>0 )
-        {
-        temp = query_temp("ad_apply/"+prop);
-        if ( temp && mapp(temp) )
-                {
-                if ( time()<=temp["start"]+temp["time"] )
-                        {
-                        p = temp["pot"];
-                        if ( p && intp(p) )
-                                {
-                                if ( p<10 ) p = 10;
-                                if ( p>300 ) p = 300;
-                                data = data*p/100;
-                                }
-                        }
-                else    delete_temp("ad_apply/"+prop);                            
-                }
-        }                                                                                          
-
-if ( !mapp(dbase) || !(old = query(prop, 1)) )
-        return set(prop, data);
-
-if ( functionp(old) )
-        error("dbase: add() - called on a function type property.\n");
-
-if ( environment()   
-  && userp(this_object()) 
-  && !this_object()->query("env/no_msg")
-  && member_array(prop,keys(nn))!=-1 
-  && ( data && intp(data) && data>0 )  )
-        {
-        if ( prop=="daoxing" )
-                tell_object(this_object(),"你的"+nn[prop]+"增加了"+COMBAT_D->chinese_daoxing(data)+"。\n");
-        else    tell_object(this_object(),"你的"+nn[prop]+"增加了"+data+"点。\n");
-        }
-return set(prop, old + data);
+mapping query_entire_dbase() {
+  return dbase;
 }
 
-mapping query_entire_dbase()
-{
-return dbase;
+mixed set_temp(string prop, mixed data) {
+  if (!mapp(tmp_dbase))
+    tmp_dbase = ([]);
+  if (strsrch(prop, '/') != -1)
+    return _set(tmp_dbase, explode(prop, "/"), data);
+  return tmp_dbase[prop] = data;
 }
 
-mixed set_temp(string prop, mixed data)
-{
-if ( !mapp(tmp_dbase) ) 
-        tmp_dbase = ([]);
-if ( strsrch(prop, '/')!=-1 )
-        return _set( tmp_dbase, explode(prop, "/"), data );
-return tmp_dbase[prop] = data;
+varargs mixed query_temp(string prop, int raw) {
+  mixed data;
+
+  if (!mapp(tmp_dbase))
+    return 0;
+  if (strsrch(prop, '/') != -1)
+    data = _query(tmp_dbase, explode(prop, "/"));
+  else data = tmp_dbase[prop];
+  if (functionp(data) && !raw)
+    return (* data) (this_object());
+  else return data;
 }
 
-varargs mixed query_temp(string prop, int raw)
-{
-mixed data;
-
-if ( !mapp(tmp_dbase) ) 
-        return 0;
-if ( strsrch(prop, '/')!=-1 )
-        data = _query(tmp_dbase, explode(prop, "/"));
-else    data = tmp_dbase[prop];
-if ( functionp(data) && !raw )
-        return (*data)( this_object() );
-else    return data;
+int delete_temp(string prop) {
+  if (!mapp(tmp_dbase))
+    return 0;
+  if (strsrch(prop, '/') != -1)
+    return _delete(tmp_dbase, explode(prop, "/"));
+  else {
+    map_delete(tmp_dbase, prop);
+    return 1;
+  }
 }
 
-int delete_temp(string prop)
-{
-if ( !mapp(tmp_dbase) ) 
-        return 0;
-if ( strsrch(prop, '/')!=-1 )
-        return _delete(tmp_dbase, explode(prop, "/"));
-else    {
-        map_delete(tmp_dbase, prop);
-        return 1;
-        }
+mixed add_temp(string prop, mixed data) {
+  mixed old;
+
+  if (!mapp(tmp_dbase) || !(old = query_temp(prop, 1)))
+    return set_temp(prop, data);
+  if (functionp(old))
+    error("dbase: add_temp() - called on a function type property.\n");
+  return set_temp(prop, old + data);
 }
 
-mixed add_temp(string prop, mixed data)
-{
-mixed old;
-
-if ( !mapp(tmp_dbase) || !(old = query_temp(prop, 1)) )
-        return set_temp(prop, data);
-if ( functionp(old) )
-        error("dbase: add_temp() - called on a function type property.\n");
-return set_temp(prop, old + data);
+mapping query_entire_temp_dbase() {
+  return tmp_dbase;
 }
 
-mapping query_entire_temp_dbase()
-{
-return tmp_dbase;
+varargs void wiz_test_msg(object who, int v, string arg) {
+  string str;
+  if (!who) return;
+  str = arg ? arg : "数值";
+  if (wizardp(who) && who->query("env/test"))
+    tell_object(who, sprintf(" %s = %d\n", str, v));
+  if (wizardp(this_object()) && this_object()->query("env/test"))
+    tell_object(this_object(), sprintf(" %s = %d\n", str, v));
 }
-
-varargs void wiz_test_msg(object who,int v,string arg)
-{
-string str;     
-if ( !who )  return;
-str = arg?arg:"数值";
-if ( wizardp(who) && who->query("env/test") )
-        tell_object(who,sprintf(" %s = %d\n",str,v));
-if ( wizardp(this_object()) && this_object()->query("env/test") )
-        tell_object(this_object(),sprintf(" %s = %d\n",str,v));
-}     
