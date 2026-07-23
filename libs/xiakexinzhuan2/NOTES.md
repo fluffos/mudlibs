@@ -73,3 +73,33 @@ shape (a `set_information` type-mismatch cluster, several `nomask`
 function redefinition conflicts, missing `skillN`/`set_ghost` globals)
 — not triaged individually per AGENTS.md §6b/§13. Memory stayed healthy
 throughout (~13GB free).
+
+## Re-verification pass (driver rebuild + LPC formatter + WASM build)
+
+- **Reformatted** all 6903 `.lpc` files under `work/` with
+  `tools/lpc-syntax/format-corpus.mjs`: 6814 written, 32 already
+  idempotent-clean, 57 refused by the tool's own token/byte-identity
+  guard (expected on messy legacy code, not chased). Verified the §15ae
+  fix (`feature/command.lpc`'s `command_hook` staying `nomask` with
+  `private` commented out) and the §15t include-path fixes survived the
+  reformat unchanged.
+- **Native retest against the freshly-rebuilt driver**
+  (`~/src/fluffos/build-debug/src/driver`, rebuilt from latest upstream
+  master): clean boot, zero fatal errors in `log/debug.log`. Full
+  registration flow re-verified with a fresh real Chinese name
+  (`秦墨`/id `xkxzreu`), through the BIG5-prompt gotcha documented above
+  (still present and still easy to miss — re-confirmed by scripting one
+  input at a time), landing in the actual starting room (`世外桃源`),
+  `look`/`score`/`quit` all producing correct output (`score` before
+  the archetype's "birth" step correctly replies "还没有出生呐，察看
+  什么？", matching this lib's own game-design flow, not an error). No
+  regressions from either the driver rebuild or the reformat.
+- **WASM build test** (`scripts/wasm_client.js` against
+  `~/src/fluffos/build-wasm/src`): boots cleanly (only benign compile-
+  warning spam, no fatal errors). Full registration completed end-to-end
+  under WASM too, byte-for-byte matching the native transcript — BIG5
+  prompt → id `xkxzwas` → password → real Chinese name `秦岭` →
+  archetype/gender → landed in the same `世外桃源` starting room,
+  `look`/`score`/`quit` all produced correct output. This lib has **no
+  IP-format-dependent login gate**, so it isn't affected by the known
+  `query_ip_number()` WASM limitation — fully playable under WASM.

@@ -5,140 +5,123 @@
 inherit F_CLEAN_UP;
 
 int help(object me);
-int main(object me, string arg)
-{
-        string path;
-        string *files;
-        string info;
-        int    version;
-        mixed  data;
-        
-        version = VERSION_D->query_version();
-        if (! arg)
-        {
-                if (! version)
-                        return notify_fail(MUD_NAME + "目前并没有构建任何可用版本。\n");
-                write(HIG + MUD_NAME + NOR "目前运行的版本是：" +
-                      version + "[" + ctime(version) + "生成]。\n");
-                return 1;
+int main(object me, string arg) {
+  string path;
+  string *files;
+  string info;
+  int version;
+  mixed data;
+
+  version = VERSION_D->query_version();
+  if (!arg) {
+    if (!version)
+      return notify_fail(MUD_NAME + "目前并没有构建任何可用版本。\n");
+    write(HIG + MUD_NAME + NOR "目前运行的版本是：" +
+      version + "[" + ctime(version) + "生成]。\n");
+    return 1;
+  }
+
+  if (arg == "build") {
+    if (!SECURITY_D->valid_grant(me, "(admin)"))
+      return notify_fail("你没有权限构建" + MUD_NAME + "的版本。\n");
+
+    path = "/";
+  }
+
+  if (sscanf(arg, "build %s", path) ||
+    stringp(path)) {
+    if (!SECURITY_D->valid_grant(me, "(admin)"))
+      return notify_fail("你没有权限构建" + MUD_NAME + "的版本。\n");
+
+    info = "";
+    path = resolve_path(me->query("cwd"), path);
+    if (path[strlen(path) - 1] != '/') path += "/";
+
+    if (file_size(path) == -2) {
+      message_system(MUD_NAME + "现在开始构建可发行的版本，您的速度会"
+        "有所停滞。");
+      if (!version) {
+        write(HIR "\n现在开始整理版本。\n" NOR);
+
+        version = VERSION_D->new_version();
+        VERSION_D->build_version();
+
+        info += HIR "\n整理完毕，生成版本" + version + "。" NOR;
+        log_file("version", sprintf(WHT "Date: " CYN "%s\n"
+          WHT "Generated version: ["
+          CYN " %d " WHT "]\n"),
+          ctime(version), version);
+      } else {
+        write(HIR "\n现在开始重新构建版本。\n\n" NOR);
+        files = VERSION_D->rebuild_version(path, 0);
+
+        if (!arrayp(files) || !sizeof(files)) {
+          info += HIR "整理完毕，没有任何文件被更新。" NOR;
+        } else {
+          info += "\n" + CYN + implode(files, "\n") + NOR;
+          version = VERSION_D->new_version();
+          VERSION_D->copy_file(files);
+
+          info += HIR "\n\n一共有 " + sizeof(files) + " 个文件"
+            "被更新，生成版本" + version + "。" NOR;
+          log_file("version", sprintf(WHT "\nDate:" CYN " %s\n"
+            WHT "Changed Files:\n" CYN "%s"
+            "\n" WHT "Total Changed %d fil"
+            "e(s).[ " CYN "%d" WHT " ]\n" NOR,
+            ctime(version), implode(files, "\n"),
+            sizeof(files), version));
         }
-        
-        if (arg == "build")
-        {
-                if (! SECURITY_D->valid_grant(me, "(admin)"))
-                        return notify_fail("你没有权限构建" + MUD_NAME + "的版本。\n");
+      }
+      VERSION_D->save();
+      me->start_more(info);
+      message_system("版本构建完毕，生成版本" + version + "。\n");
+      return 1;
+    }
+  }
 
-                path = "/";
-        }
+  if (sscanf(arg, "query %s", arg)) {
+    if (!SECURITY_D->valid_grant(me, "(wizard)"))
+      return notify_fail("你没有权限进行" + MUD_NAME + "的版本查询。\n");
 
-        if (sscanf(arg, "build %s", path) ||
-            stringp(path))
-        {
-                if (! SECURITY_D->valid_grant(me, "(admin)"))
-                        return notify_fail("你没有权限构建" + MUD_NAME + "的版本。\n");
+    if (!undefinedp(data = VERSION_D->query(arg)))
+      info = sprintf(HIR "版本精灵中关键字『" HIW "%s" + HIR "』的"
+        "查询结果是：\n" NOR CYN "%O" NOR, arg, data);
+    else
+      info = CYN "版本精灵中没有任何关于此关键字的纪录。" NOR;
+    me->start_more(info);
+    return 1;
+  }
 
-                info = "";
-                path = resolve_path(me->query("cwd"), path);
-                if (path[strlen(path) - 1] != '/') path += "/";
-                
-                if (file_size(path) == -2)
-                {
-                        message_system(MUD_NAME + "现在开始构建可发行的版本，您的速度会"
-                                       "有所停滞。");
-                        if (! version)
-                        {
-                                write(HIR "\n现在开始整理版本。\n" NOR);
-                
-                                version = VERSION_D->new_version();
-                                VERSION_D->build_version();
-                                
-                                info += HIR "\n整理完毕，生成版本" + version + "。" NOR;
-                                log_file("version", sprintf(WHT "Date: " CYN "%s\n"
-                                                            WHT "Generated version: ["
-                                                            CYN " %d " WHT "]\n"),
-                                                            ctime(version), version);
-                        }
-                        else
-                        {
-                                write(HIR "\n现在开始重新构建版本。\n\n" NOR);
-                                files = VERSION_D->rebuild_version(path, 0);
-                
-                                if (! arrayp(files) || ! sizeof(files))
-                                {
-                                        info += HIR "整理完毕，没有任何文件被更新。" NOR;
-                                }
-                                else
-                                {
-                                        info += "\n" + CYN + implode(files, "\n") + NOR;
-                                        version = VERSION_D->new_version();
-                                        VERSION_D->copy_file(files);
+  if (sscanf(arg, "delete %s", arg)) {
+    if (!SECURITY_D->valid_grant(me, "(admin)"))
+      return notify_fail("你没有权限进行" + MUD_NAME + "的版本处理。\n");
 
-                                        info += HIR "\n\n一共有 " + sizeof(files) + " 个文件"
-                                                "被更新，生成版本" + version + "。" NOR;
-                                        log_file("version", sprintf(WHT "\nDate:" CYN " %s\n"
-                                                                    WHT "Changed Files:\n" CYN "%s"
-                                                                    "\n" WHT "Total Changed %d fil"
-                                                                    "e(s).[ " CYN "%d" WHT " ]\n" NOR,
-                                                                    ctime(version), implode(files, "\n"),
-                                                                    sizeof(files), version));
-                                }
-                        }
-                        VERSION_D->save();
-                        me->start_more(info);
-                        message_system("版本构建完毕，生成版本" + version + "。\n");
-                        return 1;
-                }
-        }
-        
-        if (sscanf(arg, "query %s", arg))
-        {
-                if (! SECURITY_D->valid_grant(me, "(wizard)"))
-                        return notify_fail("你没有权限进行" + MUD_NAME + "的版本查询。\n");
+    if (!undefinedp(VERSION_D->query(arg))) {
+      VERSION_D->delete(arg);
+      VERSION_D->save();
+      info = CYN "记录 " WHT + arg + CYN " 删除成功。" NOR;
+    } else
+      info = CYN "版本精灵中没有任何关于此关键字的记录。" NOR;
+    me->start_more(info);
+    return 1;
+  }
 
-                if (! undefinedp(data = VERSION_D->query(arg)))
-                        info = sprintf(HIR "版本精灵中关键字『" HIW "%s" + HIR "』的"
-                                       "查询结果是：\n" NOR CYN "%O" NOR, arg, data);
-                else
-                        info = CYN "版本精灵中没有任何关于此关键字的纪录。" NOR;
-                me->start_more(info);
-                return 1;
-        }
-        
-        if (sscanf(arg, "delete %s", arg))
-        {
-                if (! SECURITY_D->valid_grant(me, "(admin)"))
-                        return notify_fail("你没有权限进行" + MUD_NAME + "的版本处理。\n");
+  if (sscanf(arg, "set %s %d", arg, data) == 2) {
+    if (!SECURITY_D->valid_grant(me, "(admin)"))
+      return notify_fail("你没有权限进行" + MUD_NAME + "的版本处理。\n");
 
-                if (! undefinedp(VERSION_D->query(arg)))
-                {
-                        VERSION_D->delete(arg);
-                        VERSION_D->save();
-                        info = CYN "记录 " WHT + arg + CYN " 删除成功。" NOR;
-                }
-                else
-                        info = CYN "版本精灵中没有任何关于此关键字的记录。" NOR;
-                me->start_more(info);
-                return 1;
-        }
+    VERSION_D->set(arg, data);
+    VERSION_D->save();
 
-        if (sscanf(arg, "set %s %d", arg, data) == 2)
-        {
-                if (! SECURITY_D->valid_grant(me, "(admin)"))
-                        return notify_fail("你没有权限进行" + MUD_NAME + "的版本处理。\n");
+    me->start_more(CYN "设定 " WHT + arg + CYN " = " WHT + data + CYN "。" NOR);
+    return 1;
+  }
 
-                VERSION_D->set(arg, data);
-                VERSION_D->save();
-
-                me->start_more(CYN "设定 " WHT + arg + CYN " = " WHT + data + CYN "。" NOR);
-                return 1;
-        }
-
-        return help(me);
+  return help(me);
 }
 
-int help(object me)
-{
-        write(@HELP
+int help(object me) {
+  write(@HELP
 指令格式 : version [build | query | set | delete] [path] [data]
  
 这个指令会显示游戏目前的文件版本。
@@ -148,6 +131,6 @@ int help(object me)
 使用 query path 参数为内容查询，set path data 为直接修改
 内容设置，delete path 参数为删除内容。
 HELP
-    );
-        return 1;
+  );
+  return 1;
 }
