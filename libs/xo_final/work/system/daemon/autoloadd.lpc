@@ -1,60 +1,53 @@
 #include <autoload.h>
 
-void save_autoload(object who)
-{
-    object *invs;
-    int j;
-    class Item *AutoLoad = who->query_autoload();
+void save_autoload(object who) {
+  object *invs;
+  int j;
+  class Item * AutoLoad = who->query_autoload();
 
-    invs = filter ( all_inventory(who), (: $1->query_autoload() :) );
-    AutoLoad = allocate( sizeof( invs ) );
+  invs = filter(all_inventory(who), (: $1->query_autoload() :));
+  AutoLoad = allocate(sizeof(invs));
 
-    j = 0;
-    foreach ( object inv in invs )
-    {
-        AutoLoad[ j ] = new( class Item );
-        AutoLoad[ j ]->BaseName = base_name( inv );
-        AutoLoad[ j ]->ItemInfo = inv->query_autoload(); //一般是数量。
-        j++;
-    }
+  j = 0;
+  foreach (object inv in invs) {
+    AutoLoad[j] = new(class Item);
+    AutoLoad[j]->BaseName = base_name(inv);
+    AutoLoad[j]->ItemInfo = inv->query_autoload();  //一般是数量。
+    j++;
+  }
 
-    //AutoLoad = AutoLoad[ 0..j - 1 ];
-    who->set_autoload(AutoLoad);
+  //AutoLoad = AutoLoad[ 0..j - 1 ];
+  who->set_autoload(AutoLoad);
 }
 
-void restore_autoload(object who)
-{
-    object ob;
-    string err;
-    class Item *AutoLoad = who->query_autoload();
+void restore_autoload(object who) {
+  object ob;
+  string err;
+  class Item * AutoLoad = who->query_autoload();
 
-    if ( !pointerp( AutoLoad ) )
-    {
-        return;
+  if (!pointerp(AutoLoad)) {
+    return;
+  }
+
+  foreach (class Item item in AutoLoad) {
+    err = catch(ob = new(item->BaseName));
+
+    //如果创生失败或初始化失败，那就是说恢复不了物品了。
+    //摧毁掉，记录失败原因。
+    if (err || !ob) {
+      tell_object(who, "你觉得似乎失落了什麽重要的东西，最好通知一下巫师。\n");
+      log_file(AUTOLOAD_LOG,
+        sprintf("Fail to autoload %s of %s, error %s\n",
+          item->BaseName, who->query("id"), err));
+      continue;
     }
 
-    foreach( class Item item in AutoLoad )
-    {
-        err = catch( ob = new( item->BaseName ) );
+    ob->autoload(item->ItemInfo);
 
-        //如果创生失败或初始化失败，那就是说恢复不了物品了。
-        //摧毁掉，记录失败原因。
-        if ( err || !ob )
-        {
-            tell_object(who, "你觉得似乎失落了什麽重要的东西，最好通知一下巫师。\n");
-            log_file( AUTOLOAD_LOG,
-                sprintf( "Fail to autoload %s of %s, error %s\n",
-                    item->BaseName, who->query( "id" ), err ) );
-            continue;
-        }
+    //物品恢复成功，设置uid ，然后移到玩家身上。
+    export_uid(ob);
+    ob->move(who);
+  }
 
-        ob->autoload(item->ItemInfo);
-
-        //物品恢复成功，设置uid ，然后移到玩家身上。
-        export_uid( ob );
-        ob->move( who );
-    }
-
-    who->clean_up_autoload();// To save memory.
+  who->clean_up_autoload();  // To save memory.
 }
-

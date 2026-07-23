@@ -76,3 +76,39 @@ does not predict memory blowup risk. Monitor `free -h`/process RSS on
 *any* sweep, not just presumed-large ones, and kill proactively if
 pressure gets severe. Reached a clean boot (zero compile errors in the
 boot log) after the fixes above.
+
+## 2026-07-23: driver rebuild retest + LPC formatter + WASM check
+
+- **Formatter**: ran `tools/lpc-syntax`'s `format-corpus.mjs` over all
+  7174 `.lpc` files in `work/`; 7154 written, 9 already-conformant, 11
+  errors (files it refused to touch, expected/fine on legacy code).
+  Confirmed the `__OLD_ED__`-compat rewrite in `system/feature/user/
+  editor.lpc` and the (disabled) `private`/`nosave` compatibility shim
+  in `include/globals.h` both survived the reformat unchanged in
+  substance.
+- **Native retest**: rebuilt `~/src/fluffos/build-debug/src/driver`
+  booted clean (zero fatal `debug.log` errors). Ran a **full
+  end-to-end registration + play session** in one continuous
+  connection with a real Chinese name (赵云): English id `zhaoyun` →
+  confirm → Chinese name → password → email → gender all completed,
+  dropped into the newbie training area (新手培训站); `look` showed the
+  correct room, `score` produced a correct full character sheet,
+  `quit` correctly enforced the "10 real minutes before saving" gate.
+  One operational note (not a bug): this lib's `BAN_D->IsTimeAllowed`
+  anti-flood throttle (documented in the original pass) meant a second
+  `new` attempt shortly after a first one from this same host got
+  silently ignored — resolved by restarting the driver (clears the
+  in-memory throttle map) rather than waiting out the real-time window.
+- **WASM**: booted cleanly (only the expected non-fatal
+  `socket_create`/`socket_bind`/`socket_connect` preload warnings from
+  the missing `sockets` package). **Full registration + play flow
+  completed successfully end-to-end under WASM** — real Chinese name
+  赵云乙, English id/confirm/Chinese name/password/email/gender all
+  completed, dropped into 新手培训站 exactly like the native run;
+  `look` and `quit` both worked correctly (10-minute save gate
+  correctly triggered its confirmation prompt). Notably, this lib's own
+  `enter_world()`/registration chain — despite being near-identical in
+  shape to its `xo` (#28) sibling's — does **not** exhibit the
+  world-entry hang `xo` shows under the identical WASM harness (see
+  `xo`'s own NOTES.md). **Verdict: fully playable under WASM**, no
+  issues found.

@@ -9,222 +9,200 @@
 
 #include <ansi.h>
 
-#define YIPIN_TASK_TIME             60 
-#define YIPIN_TASK_TIME_RANDOM      60 
+#define YIPIN_TASK_TIME             60
+#define YIPIN_TASK_TIME_RANDOM      60
 #define YIPIN_TASK(x) ("/d/zuzhi/yipin_tang/yipin_task/" + x )
 
-string* anhao1 = ({ "河", "水", "灵", "秀", "泉", "山", "柏", "松", "清", "钰" });
-string* anhao2 = ({ "图", "木", "华", "石", "散", "洒", "萍", "影", "鸣", "晴" });
+string *anhao1 = ({ "河", "水", "灵", "秀", "泉", "山", "柏", "松", "清", "钰" });
+string *anhao2 = ({ "图", "木", "华", "石", "散", "洒", "萍", "影", "鸣", "晴" });
 
 void update_yipin_task();
 int time_period(int timep, object me);
-void give_yipin_task( object me );
-void end_yipin_task( string keyname, object me, object ob  );
-void crash( object ob );
+void give_yipin_task(object me);
+void end_yipin_task(string keyname, object me, object ob);
+void crash(object ob);
 
-void create()
-{
-    seteuid( getuid() );
-    update_yipin_task();
+void create() {
+  seteuid(getuid());
+  update_yipin_task();
 }
 
-void update_yipin_task()
-{
-    
-    remove_call_out("update_yipin_task");
-    
-    foreach( object me in users() ) 
-    {
-        if( me->IsMemberOf("yipin") && !me->query_condition("can_stay_in_xuanwu") )
-        {
-            if( me->ZuzhiScore("yipin") < -100 )
-                me->SetZuzhiScore("yipin", -100 );
-            if( !me->query("taskoff") )
-                give_yipin_task( me );
-        }    
+void update_yipin_task() {
+
+  remove_call_out("update_yipin_task");
+
+  foreach (object me in users()) {
+    if (me->IsMemberOf("yipin") && !me->query_condition("can_stay_in_xuanwu")) {
+      if (me->ZuzhiScore("yipin") < -100)
+        me->SetZuzhiScore("yipin", -100);
+      if (!me->query("taskoff"))
+        give_yipin_task(me);
     }
-    
-    call_out("update_yipin_task", YIPIN_TASK_TIME + random(YIPIN_TASK_TIME_RANDOM) );
+  }
+
+  call_out("update_yipin_task", YIPIN_TASK_TIME + random(YIPIN_TASK_TIME_RANDOM));
 }
 
-void give_yipin_task( object me )
-{
-    int start_time = time();
-    // yipin_task的结构 
-    //          yipin_task/task_type    "long"or"short"
-    //                    /start_time   发任务时间(秒)
-    //                    /time_limit   任务期限(秒)
-    //                    /bonus        奖励组织信任度
-    //                                   (可缺省)                        
-    //                    /fail         失败惩罚
-    //                                   (可缺省)                                
-    //                    /keyname      "杀"or"取"or"活捉"
-    //                    /obname       任务对象(中文名)
-    //                    /task_message 发任务时显示的信息
-    //                    /need_type    任务前可发的东西
-    //                                  1 -- 兵刃  
-    //                                  2 -- 易容药
-    //                                  3 -- 毒药
-    //                                   (可缺省)
-    //    对"long"另加的：
-    //                   /start_mud_age    发任务时玩家岁数
+void give_yipin_task(object me) {
+  int start_time = time();
+  // yipin_task的结构 
+  //          yipin_task/task_type    "long"or"short"
+  //                    /start_time   发任务时间(秒)
+  //                    /time_limit   任务期限(秒)
+  //                    /bonus        奖励组织信任度
+  //                                   (可缺省)                        
+  //                    /fail         失败惩罚
+  //                                   (可缺省)                                
+  //                    /keyname      "杀"or"取"or"活捉"
+  //                    /obname       任务对象(中文名)
+  //                    /task_message 发任务时显示的信息
+  //                    /need_type    任务前可发的东西
+  //                                  1 -- 兵刃  
+  //                                  2 -- 易容药
+  //                                  3 -- 毒药
+  //                                   (可缺省)
+  //    对"long"另加的：
+  //                   /start_mud_age    发任务时玩家岁数
 
-    mapping yipin_task,give_task;
-    int score = me->ZuzhiScore("yipin");
-    
-    yipin_task = me->query("yipin_task");
-#define YIPIN_LOG 
+  mapping yipin_task, give_task;
+  int score = me->ZuzhiScore("yipin");
+
+  yipin_task = me->query("yipin_task");
+#define YIPIN_LOG
 #ifdef YIPIN_LOG
 
-    log_file("static/yipin_log",sprintf("%s %s的zuzhi_score是%d.\n",
-            score > 0 ? "+" : "-" , me->query("id"),score) );
+  log_file("static/yipin_log", sprintf("%s %s的zuzhi_score是%d.\n",
+    score > 0 ? "+" : "-", me->query("id"), score));
 
 #endif
-   
-    if( mapp( yipin_task ) )
-    {    
-        if( yipin_task["task_type"] == "long" )
-        {
-            if( me->query("mud_age") - yipin_task["start_mud_age"] 
-                                     > yipin_task["time_limit"] )
-            {
-                tell_object( me, YEL"一品堂交给你的任务期限已到，你没有完成。\n"NOR);
-                me->delete("yipin_task");
-                if( yipin_task["fail"] )
-                    me->AddZuzhiScore("yipin", -yipin_task["fail"]);
-                else
-                    me->AddZuzhiScore("yipin", -5 );
-                return;
-            }
-        }
 
-        if( time() - yipin_task["start_time"] > yipin_task["time_limit"] )
-        {
-            tell_object( me, YEL"你没能完成一品堂交给你的任务。\n"NOR);
-            me->delete("yipin_task");
-            if( yipin_task["fail"] )
-                me->AddZuzhiScore("yipin", -yipin_task["fail"]);
-            else
-                me->AddZuzhiScore("yipin", -5 );
-            return;
-        }
+  if (mapp(yipin_task)) {
+    if (yipin_task["task_type"] == "long") {
+      if (me->query("mud_age") - yipin_task["start_mud_age"]
+        > yipin_task["time_limit"]) {
+        tell_object(me, YEL "一品堂交给你的任务期限已到，你没有完成。\n" NOR);
+        me->delete("yipin_task");
+        if (yipin_task["fail"])
+          me->AddZuzhiScore("yipin", -yipin_task["fail"]);
+        else
+          me->AddZuzhiScore("yipin", -5);
         return;
-    }
-    
-    if( random(2)) return;
-    
-    if( me->ZuzhiZhiwu("yipin") == "玄阳堂" )
-    {
-        give_task = YIPIN_TASK("task_xuanyang")->get_yipin_task();
-        me->set("yipin_task", give_task);
-    }
-    else
-    {
-        give_task = YIPIN_TASK("task_xuancai")->get_yipin_task();
-        me->set("yipin_task", give_task);
+      }
     }
 
-    if( give_task["task_type"] == "long" )
-    {
-        me->set("yipin_task/start_mud_age", me->query("mud_age") );
+    if (time() - yipin_task["start_time"] > yipin_task["time_limit"]) {
+      tell_object(me, YEL "你没能完成一品堂交给你的任务。\n" NOR);
+      me->delete("yipin_task");
+      if (yipin_task["fail"])
+        me->AddZuzhiScore("yipin", -yipin_task["fail"]);
+      else
+        me->AddZuzhiScore("yipin", -5);
+      return;
     }
-    me->set("yipin_task/start_time", start_time );
+    return;
+  }
 
-    tell_object( me, YEL"一品堂令：\n"NOR);
-    tell_object( me, give_task["task_message"] );
-    
-    if( give_task["task_type"] != "long" )
-    {
-        time_period( give_task["time_limit"], me );
+  if (random(2)) return;
+
+  if (me->ZuzhiZhiwu("yipin") == "玄阳堂") {
+    give_task = YIPIN_TASK("task_xuanyang")->get_yipin_task();
+    me->set("yipin_task", give_task);
+  } else {
+    give_task = YIPIN_TASK("task_xuancai")->get_yipin_task();
+    me->set("yipin_task", give_task);
+  }
+
+  if (give_task["task_type"] == "long") {
+    me->set("yipin_task/start_mud_age", me->query("mud_age"));
+  }
+  me->set("yipin_task/start_time", start_time);
+
+  tell_object(me, YEL "一品堂令：\n" NOR);
+  tell_object(me, give_task["task_message"]);
+
+  if (give_task["task_type"] != "long") {
+    time_period(give_task["time_limit"], me);
+  }
+  if (give_task["need_type"])
+    switch (give_task["need_type"]) {
+      case 1:
+        me->set("lnwm/yipin/task/领武器", 1);
+        tell_object(me, "你可以去地下领件趁手的兵器。\n");
+        break;
+      case 2:
+        me->set("lnwm/yipin/task/领药", 1);
+        tell_object(me, "你可以去地下领些易容药品。\n");
+        break;
+      default:
+        break;
     }
-    if( give_task["need_type"] )
-        switch( give_task["need_type"] )
-        {   
-            case 1:
-                me->set("lnwm/yipin/task/领武器", 1 );
-                tell_object( me, "你可以去地下领件趁手的兵器。\n");
-                break;
-            case 2:
-                me->set("lnwm/yipin/task/领药", 1 );
-                tell_object( me, "你可以去地下领些易容药品。\n");
-                break;
-            default:
-                break;
+  return;
+}
+
+int time_period(int timep, object me) {
+  int t, d, h, m, s;
+  string time;
+  t = timep;
+  s = t % 60; t /= 60;
+  m = t % 60; t /= 60;
+  h = t % 24; t /= 24;
+  d = t;
+
+  if (d) time = chinese_number(d) + "天";
+  else time = "";
+
+  if (h) time += chinese_number(h) + "小时";
+  if (m) time += chinese_number(m) + "分";
+  time += chinese_number(s) + "秒";
+  tell_object(me, WHT "你必须在" + time + "的时间内去完成这个任务。\n" NOR);
+  return 1;
+}
+
+void end_yipin_task(string keyname, object me, object ob) {
+
+  switch (keyname) {
+    case "杀":
+      if (interactive(me) &&
+        (me->query("yipin_task/keyname") == "杀")
+        && (me->query("yipin_task/obname") == ob->query("name"))) {
+        if (!userp(ob) && me->IsMemberOf("yipin")) {
+          tell_object(me, YEL "你完成了一品堂交给你的任务。\n" NOR);
+          if (me->query("yipin_task/bonus"))
+            me->AddZuzhiScore("yipin", me->query("yipin_task/bonus"));
+          else
+            me->AddZuzhiScore("yipin", 5);
+          me->delete("yipin_task");
         }
-    return;	    	
+      };
+      break;
+    case "取":
+      if (me->query("yipin_task/bonus"))
+        me->AddZuzhiScore("yipin", me->query("yipin_task/bonus"));
+      else
+        me->AddZuzhiScore("yipin", 5);
+      me->delete("yipin_task");
+      call_out("crash", 1, ob);
+      break;
+    case "活捉":
+      if (me->query("yipin_task/bonus"))
+        me->AddZuzhiScore("yipin", me->query("yipin_task/bonus"));
+      else
+        me->AddZuzhiScore("yipin", 5);
+      me->delete("yipin_task");
+      call_out("crash", 1, ob);
+      break;
+    default:
+      break;
+  }
 }
 
-int time_period(int timep, object me)
-{
-    int t, d, h, m, s;
-    string time;
-    t = timep;
-    s = t % 60;             t /= 60;
-    m = t % 60;             t /= 60;
-    h = t % 24;             t /= 24;
-    d = t;
-
-    if(d) time = chinese_number(d) + "天";
-    else time = "";
-
-    if(h) time += chinese_number(h) + "小时";
-    if(m) time += chinese_number(m) + "分";
-    time += chinese_number(s) + "秒";
-    tell_object(me,WHT"你必须在" + time + "的时间内去完成这个任务。\n"NOR);
-    return 1;
+string anhao() {
+  string a1, a2;
+  a1 = anhao1[random(sizeof(anhao1))];
+  a2 = anhao2[random(sizeof(anhao2))];
+  return a1 + a2;
 }
 
-void end_yipin_task( string keyname, object me , object ob )
-{
-    
-    switch( keyname )
-    {
-        case "杀":
-            if ( interactive( me ) &&
-                      ( me->query("yipin_task/keyname") == "杀" )
-                    && ( me->query("yipin_task/obname") == ob->query("name")) )
-            {
-                if ( !userp( ob ) && me->IsMemberOf("yipin") )
-                {
-                    tell_object( me, YEL"你完成了一品堂交给你的任务。\n"NOR);
-                    if( me->query("yipin_task/bonus" ) )
-                        me->AddZuzhiScore("yipin", me->query("yipin_task/bonus") );
-                    else
-                        me->AddZuzhiScore("yipin", 5 );
-                        me->delete("yipin_task");
-                }
-            };
-            break;
-        case "取":
-            if( me->query("yipin_task/bonus" ) )
-                me->AddZuzhiScore("yipin", me->query("yipin_task/bonus") );
-            else
-                me->AddZuzhiScore("yipin", 5 );
-            me->delete("yipin_task");
-            call_out("crash",1,ob);
-            break;
-        case "活捉":
-            if( me->query("yipin_task/bonus" ) )
-                me->AddZuzhiScore("yipin", me->query("yipin_task/bonus") );
-            else
-                me->AddZuzhiScore("yipin", 5 );
-            me->delete("yipin_task");
-            call_out("crash",1,ob);
-            break;
-        default:
-            break;
-    }
-}
-
-string anhao()
-{
-    string a1,a2;
-    a1 = anhao1[random(sizeof(anhao1))];
-    a2 = anhao2[random(sizeof(anhao2))];
-    return a1+a2;
-}
-
-void crash( object ob )
-{
-    destruct( ob );
+void crash(object ob) {
+  destruct(ob);
 }

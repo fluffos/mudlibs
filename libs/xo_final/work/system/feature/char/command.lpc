@@ -22,13 +22,13 @@ inherit F_ACTION;
 // Functions prototype
 int force_me(string);
 nomask void disable_player(string type);
-nomask void enable_player();       
-nomask int valid_command( object this, string file );
-varargs nomask void disable_command( string path, string reason );
+nomask void enable_player();
+nomask int valid_command(object this, string file);
+varargs nomask void disable_command(string path, string reason);
 nomask void enable_path();
 int can_act();
 
-private int EnvEffect( object this, string verb, string arg );
+private int EnvEffect(object this, string verb, string arg);
 
 // Let command path be private, thus we can make sure no one can get command
 // path directly from restore_object().
@@ -36,27 +36,25 @@ private nosave string *path;
 
 // Leave this to allow other objects can search your commands such as
 // help, which...
-string find_command(string verb)
-{
-    return (string)COMMAND_D->find_command( verb, path );
+string find_command(string verb) {
+  return (string)COMMAND_D->find_command(verb, path);
 }
 
 // This is the add_action hook handling movement, commands, emotes and
 // channels. Optimization is needed.
-nomask int command_hook(string arg)
-{
-    string verb, file;
-    object this;
+nomask int command_hook(string arg) {
+  string verb, file;
+  object this;
 
-    this = this_object();          
-    // 这里本来是指令限制，move to user.c
+  this = this_object();
+  // 这里本来是指令限制，move to user.c
 
-    verb = query_verb();
-    // LALA add to detected riding limit.( Amber 1998-04-25 08:18 )
-    // 蠢人也不留个说明。
-    file = find_command( verb );
-    
-/*    if ( stringp( file ) && BIWU_D->query_biwu() )
+  verb = query_verb();
+  // LALA add to detected riding limit.( Amber 1998-04-25 08:18 )
+  // 蠢人也不留个说明。
+  file = find_command(verb);
+
+  /*    if ( stringp( file ) && BIWU_D->query_biwu() )
        //  && !environment( this_object() )->query("biwu") )
        {
             string * file_name = explode( file, "/" );
@@ -75,147 +73,123 @@ nomask int command_hook(string arg)
         };//by lnwm for biwu 990621
 */
 
-    return COMMAND_D->command_hook(this, verb, file, arg);
+  return COMMAND_D->command_hook(this, verb, file, arg);
 }
 
-nomask void set_path(string *p)
-{
-    if ( origin() != ORIGIN_LOCAL &&
-         geteuid( previous_object() ) != ROOT_UID )
-    {
-        error("Security violidation. Must be root to set_path.\n");
-    }
+nomask void set_path(string *p) {
+  if (origin() != ORIGIN_LOCAL &&
+    geteuid(previous_object()) != ROOT_UID) {
+    error("Security violidation. Must be root to set_path.\n");
+  }
 
-    path = p;
+  path = p;
 }
 
 string *query_path() { return path; }
 
-mixed* query_commands() { return commands(); }
+mixed *query_commands() { return commands(); }
 
-int force_me(string cmd)
-{
-    if ( geteuid( previous_object() ) != ROOT_UID )
-    {
-        return 0;
-    }
+int force_me(string cmd) {
+  if (geteuid(previous_object()) != ROOT_UID) {
+    return 0;
+  }
 
-    return command( cmd );
+  return command(cmd);
 }
 
-nomask void enable_player()
-{
-    //干什么用的?
-    //string disable_path;
-    //disable_path = query_temp("disable_path");
-    mixed * m_paths = ({ NPC_PATH, PLAYER_PATH, IMM_PATH, APP_PATH,
-            WIZ_PATH, ARCH_PATH, ADMIN_PATH });
+nomask void enable_player() {
+  //干什么用的?
+  //string disable_path;
+  //disable_path = query_temp("disable_path");
+  mixed *m_paths = ({ NPC_PATH, PLAYER_PATH, IMM_PATH, APP_PATH,
+    WIZ_PATH, ARCH_PATH, ADMIN_PATH });
 
-    if ( stringp( query( "id" ) ) )
-    {
-        set_living_name( query( "id" ) );
+  if (stringp(query("id"))) {
+    set_living_name(query("id"));
+  } else {
+    set_living_name(query("name"));
+  }
+
+  enable_commands();
+  efun::add_action("command_hook", "", 1);
+  //last_time = time();
+  //last_count = 0;    
+
+  if (!userp(this_object())) {
+    set_path(NPC_PATH);
+  } else {
+    int i;
+    string *p = NPC_PATH;
+    int level = wiz_level(this_object());
+
+    for (i = 1; i <= level + 1; i++) {
+      if (0 > member_array(m_paths[i], p)) {
+        p += ({ m_paths[i] });
+      }
     }
-    else
+    set_path(p);
+
+    if (level)  // wizard
     {
-        set_living_name( query( "name" ) );
+      enable_wizard();
     }
-
-    enable_commands();
-    efun::add_action( "command_hook", "", 1 );
-    //last_time = time();
-    //last_count = 0;    
-
-    if ( !userp( this_object() )  )
-    {
-        set_path( NPC_PATH );
-    }
-    else
-    {
-        int i;
-        string *p = NPC_PATH;
-        int level = wiz_level(this_object());
-
-        for ( i = 1; i <= level + 1; i++ )
-        {
-            if ( 0 > member_array(m_paths[i], p) )
-            {
-                p += ({ m_paths[i] });
-            }
-        }
-        set_path(p);
-
-        if ( level ) // wizard
-        {
-            enable_wizard();
-        }
-    }
+  }
 }
 
-nomask void disable_player(string type)
-{
-    object prev, this;
+nomask void disable_player(string type) {
+  object prev, this;
 
-    prev = previous_object();
-    this = this_object();
+  prev = previous_object();
+  this = this_object();
 
-    if ( geteuid( prev ) != ROOT_UID && prev != this && prev != find_object(CHAR_D) )
-    {
-        return;
-    }
+  if (geteuid(prev) != ROOT_UID && prev != this && prev != find_object(CHAR_D)) {
+    return;
+  }
 
-    set( "disable_type", type );
-    disable_commands();
+  set("disable_type", type);
+  disable_commands();
 }
 
-nomask int valid_command( object this, string file )
-{
-    mapping path_level = ([
-                    "comm"  : 1,
-                    "verb"  : 2,
-                    "skill" : 3,
-                    ]);
-    string path,cmd,disable_path;
+nomask int valid_command(object this, string file) {
+  mapping path_level = ([
+    "comm": 1,
+    "verb": 2,
+    "skill": 3,
+  ]);
+  string path, cmd, disable_path;
 
-    if ( wizardp( this ) )
-    {
-        return 1;
-    }
-
-    if ( sscanf( file, "/cmds/%s/%s", path, cmd ) != 2 )
-    {
-        return 0;
-    }
-
-    disable_path = this->query_temp("disable_path");
-    if ( disable_path && path_level[path] >= path_level[disable_path] )
-    {
-        return 0;
-    }
-
+  if (wizardp(this)) {
     return 1;
+  }
+
+  if (sscanf(file, "/cmds/%s/%s", path, cmd) != 2) {
+    return 0;
+  }
+
+  disable_path = this->query_temp("disable_path");
+  if (disable_path && path_level[path] >= path_level[disable_path]) {
+    return 0;
+  }
+
+  return 1;
 }
 
-varargs nomask void disable_command( string path, string reason )
-{
-    object this = this_object();
+varargs nomask void disable_command(string path, string reason) {
+  object this = this_object();
 
-    this->set_temp("disable_path", path );
-    if ( reason )
-    {
-        this->set_temp("disable_status", reason );
-    }
+  this->set_temp("disable_path", path);
+  if (reason) {
+    this->set_temp("disable_status", reason);
+  }
 }
 
-nomask void enable_path()
-{
-    object this = this_object();
+nomask void enable_path() {
+  object this = this_object();
 
-    this->delete_temp("disable_path");
-    this->delete_temp("disable_status");
+  this->delete_temp("disable_path");
+  this->delete_temp("disable_status");
 }
 
-int can_act()
-{
-    return CHAR_D->can_act(this_object());
+int can_act() {
+  return CHAR_D->can_act(this_object());
 }
-
