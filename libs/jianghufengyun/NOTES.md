@@ -459,3 +459,32 @@ the last several libs in this batch (`weimingkongjian`/`xiakexing3` shape).
 `work/`), driver always launched via `cd libs/jianghufengyun && setsid
 nohup .../driver config.fluffos` (see the "Driver process management note"
 above for why `setsid` specifically was needed in this session).
+
+## 2026-07-23 re-verification pass (driver rebuild + formatter + WASM)
+
+- **LPC reformat**: ran `format-corpus.mjs` over all of `work/` (8,071
+  `.lpc` files) — 8,004 written, 36 already-idempotent, 31 refused
+  (self-checked round-trip failures on messy legacy syntax, expected).
+- **Native retest against the freshly-rebuilt driver**: booted clean on
+  port 40053, zero fatal preload errors. Full registration flow with a
+  fresh real Chinese name ("秦风九"/`qinfengjiu`) through the complete
+  wizard (id → confirm → Chinese name → password → confirm → gift roll
+  → email → gender) into the actual game world (客店); `look` (room
+  description correct, shown consistently), `score` (full character
+  sheet correct: attributes/天赋/HP-food-water bars/potential all
+  populated) and `quit` (correct item-drop-on-quit flavor text + clean
+  disconnect) all verified with real output. No runtime errors in the
+  session, no regressions from the reformat or the new driver binary.
+- **WASM test** (`scripts/wasm_client.js` against `build-wasm/src`):
+  boots cleanly, same preload warnings as native, no fatal preload
+  errors. Login is blocked immediately on connect by the **documented
+  `query_ip_number()` WASM limitation** (see AGENTS.md): `adm/daemons/
+  logind.lpc`'s `logon()` does `str = query_ip_number(ob); if
+  (BAN_D->is_banned(str) == 1) { ...destruct(ob)... }` — under WASM
+  `query_ip_number()` doesn't return a well-formed dotted-quad, so
+  `BAN_D`'s ban-list matching misfires and every connection is rejected
+  with "你的地址在本 MUD 不受欢迎" before ever reaching the id prompt.
+  Confirmed via direct source read as the documented driver-side gap,
+  not a mudlib bug — not patched. Marking this lib as "boots under wasm,
+  login gated by the documented IP-check limitation" per the task's
+  guidance, not "fails under wasm."
