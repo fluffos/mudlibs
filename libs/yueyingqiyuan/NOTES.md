@@ -289,3 +289,58 @@ agents' concurrent sweeps running on the same host at the time).
 
 Driver was killed after testing; verified no `driver config.fluffos`
 process remains with cwd under `libs/yueyingqiyuan/` before finishing.
+
+## Re-verification pass: driver rebuild + formatter + WASM (2026-07)
+
+- **LPC formatter** applied to all `.lpc` under `work/` via
+  `tools/lpc-syntax/bin/format-corpus.mjs` (9,498 total, 9,361 written,
+  115 unchanged, 22 self-checked errors left untouched — expected on
+  legacy code, not chased).
+- **Native re-test against the freshly rebuilt driver**
+  (`~/src/fluffos/build-debug/src/driver`, rebuilt from latest upstream
+  master): clean boot, zero fatal errors in `debug.log` (only the
+  pre-existing benign `emoted.o` restore warning and ordinary compile
+  warnings). Full registration flow re-verified end-to-end with a fresh
+  real Chinese name (`秦风试`/`Zfretwo`) through `look`/`score`/`quit`,
+  all correct.
+- **NEW bug found during this pass (pre-existing, not caused by the
+  reformat or driver rebuild)**: `adm/etc/banned_name` — the static,
+  read-only Chinese name-blocklist file `check_legal_name()` in
+  `adm/daemons/logind.lpc` reads via `explode(read_file(BANNED_NAME),
+  "\n")` — was **entirely missing from `work/`**, present in `raw/`
+  (500 GBK-encoded lines) and confirmed **never written to anywhere in
+  the codebase** (grep for `BANNED_NAME` — only the one `read_file()`
+  call site). `read_file()` on a missing path returns `0`, and
+  `explode(0, "\n")` throws `Bad argument 1 to explode()`, uncaught,
+  aborting **every** Chinese-name submission during registration —
+  this silently blocked all new-character creation. Root cause traced:
+  the repo-wide QA sweep commit that added
+  `libs/*/work/adm/etc/banned_name` to `.gitignore` (intending to stop
+  tracking *runtime-churn* ban-lists that some OTHER libs' code
+  generates/appends to at runtime) also **deleted this lib's
+  already-committed copy** — but here the file is genuine static
+  shipped content (an authored blocklist), never runtime-written, so
+  the blanket path-based `.gitignore` rule doesn't distinguish the two
+  cases and this lib got its real content silently deleted. Fixed by
+  regenerating it from `raw/yy/yueying/adm/etc/banned_name` via
+  `iconv -f GBK -t UTF-8` (matches the same encoding-conversion the
+  rest of the archive underwent). **Flagged for the orchestrating
+  session**: the shared `.gitignore` rule
+  `libs/*/work/adm/etc/banned_name` is unsafe as a blanket pattern and
+  should be re-scoped or the other 90 libs re-checked for the same
+  false-positive wipe (checked the other 7 libs in this batch —
+  `yuxuechongsheng` uses a differently-named `BANNED_NAMES` file that
+  IS genuinely runtime-managed via `write_file()` in `band.lpc`, so
+  that one gitignore hit is correct; the remaining 5 libs in this batch
+  have no `BANNED_NAME`-shaped gate at all).
+- **WASM test** (`scripts/wasm_client.js` against `build-wasm/src`):
+  boots cleanly (only the expected non-fatal "sockets package not
+  available"-class preload messages). Full registration flow completed
+  end-to-end under WASM too — real Chinese name `秦风瓦`/`Zfrewasm`
+  reached the actual starting room (南城客栈), `look`/`score`/`quit`
+  all produced correct output. This lib's registration path does not
+  gate on `query_ip_number()`'s format — the only WASM-side artifact
+  observed was **cosmetic**: the "你现在从 ... 连线进入" banner line
+  prints an empty IP substring (known WASM-mode `query_ip_number()`
+  limitation, driver-side, not a mudlib bug) instead of `127.0.0.1`.
+  Does not affect login/registration/gameplay in this lib.
