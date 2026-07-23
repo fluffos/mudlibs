@@ -42,3 +42,28 @@ range check to test the CJK Unicode block instead, and halved the
 GBK-byte-calibrated length bounds in `check_legal_name` to match. See
 AGENTS.md §15h for the full writeup; confirmed via a real interactive
 registration test (Chinese surname + given name reaching the next prompt).
+
+## Re-verification pass (driver rebuild + LPC formatter + WASM build)
+
+- **Reformatted** all 3266 `.lpc` files under `work/` with
+  `tools/lpc-syntax/format-corpus.mjs`: 3238 written, 0 already
+  idempotent-clean, 28 refused by the tool's own token/byte-identity
+  guard (expected on messy legacy code, not chased). Verified the
+  earlier §15ae fix (`feature/command.lpc`'s `command_hook` staying
+  `nomask` with `private` still commented out, in both `feature/` and
+  `home/` copies) survived unchanged.
+- **Native retest against the freshly-rebuilt driver**
+  (`~/src/fluffos/build-debug/src/driver`, rebuilt from latest upstream
+  master): clean boot, zero fatal errors in `log/debug.log`. Full
+  registration flow re-verified with a fresh real Chinese name
+  (`秦岳`/id `xkxbnem`), reaching an actual starting room, `look`/
+  `score`/`quit` all producing correct output — no regressions from
+  either the driver rebuild or the reformat.
+- **WASM build test** (`scripts/wasm_client.js` against
+  `~/src/fluffos/build-wasm/src`): boots cleanly (only benign compile-
+  warning spam, no fatal errors). Full registration completed end-to-end
+  under WASM too — id `xkxwasme` → real Chinese name `秦徽` → password/
+  stat-roll-accept/email/gender → landed in the game world, `look`/
+  `score`/`quit` all produced correct output. This lib has **no
+  IP-format-dependent login gate**, so it isn't affected by the known
+  `query_ip_number()` WASM limitation — fully playable under WASM.
