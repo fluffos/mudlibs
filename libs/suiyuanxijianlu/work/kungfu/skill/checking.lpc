@@ -1,0 +1,8 @@
+// checking.c
+
+
+
+inherit SKILL;
+
+
+

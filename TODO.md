@@ -18,9 +18,7 @@ worked; keep status values consistent so the table stays greppable:
 
 Port assignments: sequential from 40001, recorded here so re-running
 several libs at once never collides. **Next free port: 40089** (40001-40088
-assigned/reserved -- 40084-40088 are reserved for archives #92-96, being
-processed in parallel by background agents as of this update; 40007 is
-ds386, deprioritized/partial). On mega-libs (tens of
+assigned; 40007 is ds386, deprioritized/partial). On mega-libs (tens of
 thousands of files, the "nitan" family), skip the full `lpcc_check.sh`
 sweep — it can OOM the host before finishing (see AGENTS.md §6b) — and
 rely on the boot + interactive-connect test as the verification gate.
@@ -32,7 +30,7 @@ rely on the boot + interactive-connect test as the verification gate.
   majority of this collection. If an archive turns out to be English
   (like ds386/Dead Souls), do the minimum to note what it is, don't sink
   deep debugging time into it -- move on to the next Chinese one.
-- **Done: 85 / 100** (shanhaizhanshen, xingzhanyingxiong,
+- **Done: 86 / 100** (shanhaizhanshen, xingzhanyingxiong,
   unknownlib20150716 [小雨西游II], bxsj [书剑天下], bxsj1 [书剑·经典],
   chidi [江湖I], ..., nitan170911 [仙剑奇侠传], nitan6 [笑傲江湖], rzrmud
   [大唐西游], xo, xo_final, zzfy [郑州风云3], shiji [世纪],
@@ -95,7 +93,8 @@ rely on the boot + interactive-connect test as the verification gate.
   jinyongqunxiazhuan2008_deluxe [金庸群侠传2008超豪华版, same engine as
   #91/#92, different content build], jinyongqunxiazhuan2015 [金庸群侠传
   2015版, same engine core 7 years later, evolved content],
-  tiexuejianghu [铁血江湖, ES II lineage, distinct fork])
+  tiexuejianghu [铁血江湖, ES II lineage, distinct fork],
+  suiyuanxijianlu [随缘洗剑录, ES II lineage, distinct fork])
 - **New AGENTS.md §15q (hidden client-protocol-version gate)**: found on
   xiyangzaixian3 -- a pre-id prompt can check the input against a
   hardcoded literal (client version string), not just a BIG5/student
@@ -173,6 +172,16 @@ rely on the boot + interactive-connect test as the verification gate.
   retroactively fixing that lib's §15ae instance too. All three
   retroactive fixes re-verified with fresh registrations. This mode
   continues for archive #92 onward.
+- **Tenth batch**: archives #92-96 (jinyongqunxiazhuan2008_std,
+  jinyongqunxiazhuan2008_deluxe, jinyongqunxiazhuan2015, tiexuejianghu,
+  suiyuanxijianlu) followed the same pattern and is all done. #92/#93/
+  #94 confirmed (as predicted) to all share the same "金庸群侠传" ES II
+  engine core as #91/xiakexing3(#44), each a different content-build
+  snapshot -- fixes ported directly across all of them. Archive #93's
+  discovery of a genuinely truncated zhengmen.lpc (2 missing closing
+  braces) led to retroactively fixing the identical truncation in #91's
+  own shipped work/ copy too, re-verified compiles clean. This mode
+  continues for archive #97 onward.
 - **Note on stray driver processes**: while consolidating archive #78,
   found a driver process still running on port 40039 from an earlier
   *manual* verification test the main session ran directly (not a
@@ -510,7 +519,7 @@ rely on the boot + interactive-connect test as the verification gate.
 | 93 | 金庸群侠传2008超豪华版.rar | jinyongqunxiazhuan2008_deluxe | 40085 | done | same engine as jinyongqunxiazhuan2008(#91)/jinyongqunxiazhuan2008_std(#92) confirmed via md5sum (master.c both locations/logind.c/securityd.c/chinese.c/chinesed.c all byte-identical) but a genuinely different content build (3811 vs 3773 raw files, dozens of differing zone/NPC/combat files) -- same-engine-different-snapshot pattern; ported all of #91's proven fixes directly (each re-verified applicable, not assumed) + 2 new archive-specific fixes (bowl.lpc set_name() type bug, zhengmen.lpc genuine truncation -- flagged that this exact same truncation bug also exists UNFIXED in #91's shipped work/, worth a follow-up); full registration + post-login-command flow verified 3 times with real names 秦风/秦风二/秦风三 all reaching 客店, look/score/quit all working; 97.95% lpcc pass (3106/3171); see libs/jinyongqunxiazhuan2008_deluxe/NOTES.md |
 | 94 | 金庸群侠传2015版.rar | jinyongqunxiazhuan2015 | 40086 | done | same ES II/金庸群侠传 engine core as #91-93 confirmed via md5sum (master.c both locations/securityd.c/chinesed.c/simul_efun.c/chinese.c/command.c/name.c/commandd.c/guidao.c/ouyangfeng.c/shuitan.c all byte-identical to #91's raw archive, 7 years later), logind.c differs by one blank line, but game content evolved substantially (+187/-67 files net) while engine/daemon layer stayed essentially frozen; ported all of #91's fixes directly + confirmed §15ar NOT independently needed here (commandd.lpc's sscanf uses a plain quoted literal, already caught by convert_lib.sh's standard fixer) + 2 new archive-specific fixes (quest.h itself had 2 more macro-adjacent-string-literal errors, only reachable once combatd.lpc's include was fixed; bowl.lpc set_name() array-type bug) + same zhengmen.lpc truncation as #91/#93 fixed identically; full registration + post-login-command flow verified twice with real names 秦风(male)/秦岭(female, correct gender-specific greeting), both reaching 客店, look/score(previously would have crashed with "No program in object combatd")/quit all working; 98.16% lpcc pass (3196/3256, up from 3194/3256 pre-fix); see libs/jinyongqunxiazhuan2015/NOTES.md |
 | 95 | 铁血江湖.rar | tiexuejianghu | 40087 | done | real name 铁血江湖 by author "hxsd" (config.cfg's own name field was a stale "风云三（本地）" leftover) -- guild/NPC-recruitment-focused wuxia mud with a merchant subsystem, ES II lineage, not a rebrand of any shipped sibling; standard §15h fix + §15ae + §15p/§14 fixes + NEW ftpd preload exclusion (its #include <flock.h> doesn't exist in this archive at all, fatal preload compile error) + §8g one-shared-cause fix (re-enabled 8 commented-out armor macros + missing F_SSERVER + ported sum()/NewRandom() from a newer sibling into skill.lpc, fixed 21+ files at once) + several pre-existing typos (missing quote, corrupted array literal from an invalid GB18030 byte in 3 files, duplicate merged-room file) + §15t variant-3 (8 files) + bad inherit GUN->BLADE + 8-file wrong #include path + §8e + static/nosave false-positive reverts (10) + uppercase .C rename (7 files); full registration + post-login-command flow verified 3 times across 3 separate boots incl. real names 秦风二/秦风三/秦风四 and the female-gender branch, all reaching 英豪酒楼, look/score/quit all working; 91.96%+ lpcc pass (8449+/9190-9191, up from 90.65%); see libs/tiexuejianghu/NOTES.md |
-| 96 | 随缘洗剑录.rar | | | not started | |
+| 96 | 随缘洗剑录.rar | suiyuanxijianlu | 40088 | done | ES II-derived MudOS v22 wuxia mud (master.c header: "for ES II mudlib"/"rewritten by Annihilator"); genuine local feature/dbase.c (F_TREEMAP-based), NOT affected by the nitan-family dbase bug; standard §15h fix + §15ao (switch/default parse error, same class as xixingzhanji #85) + §15p/§15ai (guarded logind.lpc's unconditional DNS_MASTER->query_muds() call too) + §3 counterexample (39 files, incl. /log/nosave/LASTCRASH in uptime.lpc crashing receive() on every connection) + a whole-file self-duplicating eff_msg.h header bug (6 kungfu skill files) + missing message_combatd simul_efun (the exact function §8b is named after, restored as alias) + several pre-existing typos (missing quotes 7 files, stray pager-text pasted into source 3 files, `new` as reserved-word variable 7 files matching #91's known class, duplicate inherit F_UNIQUE 3 files, 21-file wrong #include path, __DIR_ single-underscore typo 4 files) + uppercase .C rename (6 files); full registration + post-login-command flow verified twice with real name 秦风寒 reaching 随缘客栈, look/score/i/quit all working, debug.log clean bar one harmless lstat line; 97.3% lpcc pass (7306/7508, up from 96.5%); see libs/suiyuanxijianlu/NOTES.md |
 | 97 | 风云III修订版 .rar | | | not started | dup: "...  (1).rar" |
 | 98 | 风云III典藏版.rar | | | not started | dup: "...(1).rar" |
 | 99 | 风云II (清华仿写版）.ZIP | | | not started | dup: "...(1).ZIP" |

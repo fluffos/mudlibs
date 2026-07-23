@@ -1,0 +1,1062 @@
+// create by five
+
+inherit __DIR__"ground1";
+
+#include <ground.h>
+
+void randomize_schedule (mapping events, int total, int sessions)
+{
+  int base = total - sessions;
+  int times = sessions*4;
+
+  while (times--)
+  {
+    int *item;
+    int i = base + (times%sessions);
+    int j = base + random(sessions);
+    int k;
+
+    reset_eval_cost();
+    item = events[i];
+    if (random(2))
+    {
+      k = item[0];
+      item[0] = item[2];
+      item[2] = k;
+      k = item[1];
+      item[1] = item[3];
+      item[3] = k;
+    }  
+    
+    events[i] = events[j];  
+    events[j] = item;
+  }
+}
+
+void schedule_teams_dz (mapping teams)
+{
+  int cycles = teams[0]["number"];
+  int sessions = 0;
+  int total = 0;
+  int nb_teams = teams["number"];
+  int i, j, k;
+  mapping events = ([ ]);
+  
+  for (i = 0; i < cycles; i++)
+  {
+    sessions = 0;
+    reset_eval_cost();
+    for (j = 0; j < nb_teams-1; j++)
+    {
+      for (k = j+1; k < nb_teams; k++)
+      {
+        events[total] = ({j,i,k,i,0});
+        sessions++;
+        total++;
+      }
+    }
+    randomize_schedule(events,total,sessions);
+  }
+  teams["cycles"] = cycles;
+  teams["sessions"] = sessions;
+  teams["total"] = total;
+  teams["events"] = events;
+}
+
+void schedule_teams_xh (mapping teams)
+{
+  int cycles = teams[0]["number"];
+  int sessions = 0;
+  int total = 0;
+  int nb_teams = teams["number"];
+  int i, j, k, l;
+  mapping events = ([ ]);
+  
+  for (i = 0; i < cycles; i++)
+  {
+    sessions = 0;
+    reset_eval_cost();
+    for (j = 0; j < nb_teams-1; j++)
+    {
+      for (k = j+1; k < nb_teams; k++)
+      {
+        for (l = 0; l < cycles; l++)
+        {
+          events[total] = ({j,i,k,l,0});
+          sessions++;
+          total++;
+        }
+      }
+    }
+    //randomize_schedule(events,total,sessions);
+  }
+  randomize_schedule(events,total,total);
+  teams["cycles"] = cycles;
+  teams["sessions"] = sessions;
+  teams["total"] = total;
+  teams["events"] = events;
+}
+
+string show_team (mapping team)
+{
+  int i;
+  string str = "  ";
+
+  for (i = 0; i < team["number"]; i++)
+  {
+    mapping member = team[i];
+
+    str += member["name"]+"("+member["id"]+") ";
+  }
+  str += "\n";
+  return str;
+}
+
+string show_teams (mapping teams)
+{
+  int i;
+  string str = "";
+
+  for (i = 0; i < teams["number"]; i++)
+  {
+    mapping team = teams[i];
+
+    str += "  第"+chinese_number(i+1)+"队“"+team["info"]["team_name"]+"”：";
+    str += show_team (team);
+  }
+  return str;
+}
+
+void announcing_start ()
+{
+  int mode = this_room()->query("match/mode");
+  mapping teams = this_room()->query("match/teams");
+  mapping team;
+  string msg = "本大会比赛方式乃是“"+modes[mode]+"”，"+
+                mode_hints[mode]+"。\n";
+
+  announce (msg);
+  teams["start"] = 1;
+  if (teams && teams["number"] > 0)
+  {
+    int i;
+
+    teams["current_winner_name"]  = 0;
+    teams["current_winner_id"]  = 0;
+    teams["current_player0_name"] = 0;
+    teams["current_player0_id"] = 0;
+    teams["current_player1_name"] = 0;
+    teams["current_player1_id"] = 0;
+    for (i = 0; i < teams["number"]; i++)
+    {
+      teams[i]["current_index"] = 0;
+    }
+  }
+
+  switch (mode)
+  {
+    case MODE_SINGLE_SD:
+    {
+      announce (modes[mode]+"无须组队，请巫师将两名玩家邀入场内比赛！\n");
+      break;
+    }
+    case MODE_SINGLE_LT:
+    {
+      team = teams[0];
+      msg = modes[mode]+"，选手按以下弱强顺序依次上场打擂：\n";
+      msg += show_team(team);
+      announce (msg);
+      break;
+    }
+    case MODE_TEAM_LT:
+    {
+      msg = modes[mode]+"，共有"+chinese_number(teams["number"])+"组参赛队伍：\n";
+      msg += show_teams(teams);
+      announce (msg);
+      announce ("各队将依按弱强顺序依次上场打擂！\n");
+      break;
+    }
+    case MODE_TEAM_DZ:
+    {
+      msg = modes[mode]+"，共有"+chinese_number(teams["number"])+"组参赛队伍：\n";
+      msg += show_teams(teams);
+      announce (msg);
+      schedule_teams_dz (teams);
+      announce ("本赛将有"+chinese_number(teams["cycles"])+"轮对阵，"+
+                "每轮将有"+chinese_number(teams["sessions"])+"场比赛！\n");
+      break;
+    }
+    case MODE_TEAM_XH:
+    {
+      msg = modes[mode]+"，共有"+chinese_number(teams["number"])+"组参赛队伍：\n";
+      msg += show_teams(teams);
+      announce (msg);
+      schedule_teams_xh (teams);
+      announce ("本赛将有"+chinese_number(teams["cycles"])+"轮循环，"+
+                "每轮将有"+chinese_number(teams["sessions"])+"场比赛！\n");
+      break;
+    }
+  }
+  call_out ("announcing_next",3);
+}
+
+
+void announcing_next ()
+{
+  object who = this_player();
+  int mode = this_room()->query("match/mode");
+  mapping teams = this_room()->query("match/teams");
+  mapping team0;
+  mapping team1;
+  string name0;
+  string name1;
+  mapping member0;
+  mapping member1;
+  int done = 0;
+
+  if (mode != MODE_SINGLE_SD)
+  {
+    tell_room (this_room(),"\n公平子从衣袖子里抽出透明丝绢迅速一瞥。\n");
+  }
+  switch (mode)
+  {
+    case MODE_SINGLE_SD:
+    {
+      inform (who, "现邀请两名玩家前来入场比赛！\n");
+      break;
+    }
+    case MODE_SINGLE_LT:
+    {
+      team0 = teams[0];
+      if (! teams["current_winner_id"])
+      {
+        int current_index = 0;
+
+        team0["current_index"] = 2;
+        member0 = team0[0];
+        member1 = team0[1];
+        teams["current_player0_name"] = member0["name"];
+        teams["current_player0_id"] = member0["id"];
+        teams["current_player1_name"] = member1["name"];
+        teams["current_player1_id"] = member1["id"];
+        announce ("现邀请玩家"+teams["current_player1_name"]+
+                   "("+teams["current_player1_id"]+")"+
+                  "与玩家"+teams["current_player0_name"]+
+                   "("+teams["current_player0_id"]+")"+
+                  "前来摆阵打擂！\n");
+      }
+      else if (team0["current_index"] < team0["number"])
+      {
+        int current_index = team0["current_index"];
+
+        team0["current_index"] = current_index+1;
+        member1 = team0[current_index];
+        teams["current_player0_name"] = teams["current_winner_name"];
+        teams["current_player0_id"] = teams["current_winner_id"];
+        teams["current_player1_name"] = member1["name"];
+        teams["current_player1_id"] = member1["id"];
+        announce ("现邀请玩家"+teams["current_player1_name"]+
+                   "("+teams["current_player1_id"]+")"+
+                  "前来挑战擂主"+teams["current_player0_name"]+
+                   "("+teams["current_player0_id"]+")"+
+                  "！\n");
+      }
+      else
+      {
+        done = 1;
+      }
+      break;
+    }
+    case MODE_TEAM_LT:
+    {
+      int i, j, k;
+
+      if (! teams["current_winner_id"])
+      {
+        int current_index = 0;
+
+        j = random(teams["number"]);
+        team0 = teams[j];
+        member0 = team0[0];
+        team0["current_index"] = 1;
+        teams["current_player0_name"] = member0["name"];
+        teams["current_player0_id"] = member0["id"];
+      }
+      else
+      {
+        team0 = find_teams_team(teams,teams["current_winner_id"]);
+        teams["current_player0_name"] = teams["current_winner_name"];
+        teams["current_player0_id"] = teams["current_winner_id"];
+      }
+      
+      teams["current_player1_name"] = 0;
+      teams["current_player1_id"] = 0;
+      k = teams[0]["number"];
+      for (i = 0; i < teams["number"]; i++)
+      {
+        team1 = teams[i];
+        if (find_team_member(team1,teams["current_player0_id"]))
+          continue;
+        if (k > team1["current_index"])
+        { 
+          k = team1["current_index"];
+          j = i;
+        }
+      }
+
+      if (k < teams[0]["number"])
+      {
+        team1 = teams[j];
+        member1 = team1[k];
+
+        team1["current_index"] = k+1;
+        teams["current_player1_name"] = member1["name"];
+        teams["current_player1_id"] = member1["id"];
+
+        name0 = "“"+team0["info"]["team_name"]+"”队";
+        name1 = "“"+team1["info"]["team_name"]+"”队";
+        if (! teams["current_winner_id"])
+          announce ("现邀请"+name1+"选手"+teams["current_player1_name"]+
+                     "("+teams["current_player1_id"]+")"+
+                    "与"+name0+"选手"+teams["current_player0_name"]+
+                     "("+teams["current_player0_id"]+")"+
+                    "前来摆阵打擂！\n");
+        else
+          announce ("现邀请"+name1+"选手"+teams["current_player1_name"]+
+                     "("+teams["current_player1_id"]+")"+
+                    "前来挑战"+name0+"擂主"+teams["current_player0_name"]+
+                     "("+teams["current_player0_id"]+")"+
+                    "！\n");
+      }
+      else
+      {
+        done = 1;
+      }
+      break;
+    }
+    case MODE_TEAM_DZ:
+    case MODE_TEAM_XH:
+    {
+      int cycles = teams["cycles"];
+      int sessions = teams["sessions"];
+      int total = teams["total"];
+      int index = teams["index"];
+      mapping events = teams["events"];
+   
+      if (index < total)
+      {
+        int *item = events[index];
+
+        team0 = teams[item[0]];
+        team1 = teams[item[2]];
+        member0 = team0[item[1]];
+        member1 = team1[item[3]];
+        teams["current_player0_name"] = member0["name"];
+        teams["current_player0_id"] = member0["id"];
+        teams["current_player1_name"] = member1["name"];
+        teams["current_player1_id"] = member1["id"];
+        teams["index"] = index+1;
+        name0 = "“"+team0["info"]["team_name"]+"”队";
+        name1 = "“"+team1["info"]["team_name"]+"”队";
+        announce ("大会第"+chinese_number(index/sessions+1)+"轮第"+
+                  chinese_number(index%sessions+1)+"场比赛：\n");
+        announce ("现邀请"+name1+"选手"+teams["current_player1_name"]+
+                   "("+teams["current_player1_id"]+")"+
+                  "与"+name0+"选手"+teams["current_player0_name"]+
+                   "("+teams["current_player0_id"]+")"+
+                  "前来上场较量！\n");
+      }
+      else
+      {(q 离开，b 前一页，其他继续下一页)
+        done = 1;
+      }
+      break;
+    }
+  }
+  teams["done"] = done;
+  if (done)
+    inform (who, "差不多了，可以结束比赛了！\n");
+}
+
+string report_check (int brief)
+{
+  int mode = this_room()->query("match/mode");
+  mapping teams = this_room()->query("match/teams");
+  mapping team;
+  string msg = "比赛方式“"+modes[mode]+"”，"+
+                mode_hints[mode]+"。\n";
+
+  switch (mode)
+  {
+    case MO
+    {
+      if (brief)== (q 离开，b 前一页，其他继续下一页)
+        return msg;
+      msg += "\n请巫师将任意两名玩家邀入场内比赛。\n";
+      break;
+    }
+    case MODE_SINGLE_LT:
+    {
+      msg += modes[mode]+"，选手按以下弱强顺序依次上场打擂：\n";
+      msg += show_team(teams[0]);
+      if (brief)
+        return msg;
+      msg += "\n赢者为擂主，接受新选手的挑战。\n";
+      break;
+    }
+    case MODE_TEAM_LT:
+    {
+      msg += modes[mode]+"，共有"+chinese_number(teams["number"])+"组参赛队伍：\n";
+      msg += show_teams(teams);
+      if (brief)
+        return msg;
+      msg += "\n各队将依按输赢结果依次上场打擂。\n";
+      break;
+    }
+    case MODE_TEAM_DZ:
+    {
+      msg += modes[mode]+"，共有"+chinese_number(teams["number"])+"组参赛队伍：\n";
+      msg += (show_teams(teams));
+      if (brief)
+        return msg;
+      msg += "\n每队选手依次与别队同级选手较量。\n";
+      break;
+    }
+    case MODE_TEAM_XH:
+    {
+      msg += modes[mode]+"，共有"+chinese_number(teams["number"])+"组参赛队伍：\n";
+      msg += (show_teams(teams));
+      if (brief)
+        return msg;
+      msg += "\n每队选手依次与别队所有的选手较量。\n";
+      break;
+    }
+  }
+  return msg;
+}
+
+string report_contest (int brief)
+{
+  int mode = this_room()->query("match/mode");
+  mapping teams = this_room()->query("match/teams");
+  mapping team0;
+  mapping team1;
+  string name0;
+  string name1;
+  string msg = "";
+  
+  if (teams && ! teams["start"])
+    return "比赛还没有开始。\n";
+    
+  if (! teams["current_player0_id"] &&
+      (mode != MODE_SINGLE_SD))
+    return "赛场尚未准备就绪，请稍候几秒。\n";
+
+  switch (mode)
+  {
+
+    case MODE_SINGLE_SD:
+    {
+      msg += modes[mode]+"，任意两名玩家均可参加比赛。\n";
+      break;
+    }
+    case MODE_SINGLE_LT:
+    {
+      if (! teams["current_player1_id"])
+        msg += "玩家"+teams["current_player0_name"]+
+               "("+teams["current_player0_id"]+")"+
+               "上场打擂。\n";
+      else if (! teams["current_winner_id"])
+        msg += "玩家"+teams["current_player1_name"]+
+                 "("+teams["current_player1_id"]+")"+
+                "与玩家"+teams["current_player0_name"]+
+                 "("+teams["current_player0_id"]+")"+
+                "摆阵打擂。\n";
+      else
+        msg += "玩家"+teams["current_player1_name"]+
+                 "("+teams["current_player1_id"]+")"+
+                "前来挑战擂主"+teams["current_player0_name"]+
+                 "("+teams["current_player0_id"]+")"+
+                "。\n";
+      break;
+    }
+    case MODE_TEAM_LT:
+    {
+
+      team0 = find_teams_team(teams,teams["current_player0_id"]);
+      team1 = find_teams_team(teams,teams["current_player1_id"]);
+      name0 = "“"+team0["info"]["team_name"]+"”队";
+      if (team1)
+        name1 = "“"+team1["info"]["team_name"]+"”队";
+
+      if (! teams["current_player1_id"])
+        msg += name0+"选手"+teams["current_player0_name"]+
+               "("+teams["current_player0_id"]+")"+
+               "上场打擂。\n";
+      else if (! teams["current_winner_id"])
+        msg += name1+"选手"+teams["current_player1_name"]+
+               "("+teams["current_player1_id"]+")"+
+               "与"+name0+"选手"+teams["current_player0_name"]+
+               "("+teams["current_player0_id"]+")"+
+               "摆阵打擂。\n";
+      else
+        msg += name1+"选手"+teams["current_player1_name"]+
+               "("+teams["current_player1_id"]+")"+
+               "前来挑战"+name0+"擂主"+teams["current_player0_name"]+
+               "("+teams["current_player0_id"]+")"+
+               "。\n";
+      break;
+    }
+    case MODE_TEAM_DZ:
+    case MODE_TEAM_XH:
+    {
+      team0 = find_teams_team(teams,teams["current_player0_id"]);
+      team1 = find_teams_team(teams,teams["current_player1_id"]);
+      name0 = "“"+team0["info"]["team_name"]+"”队";
+      if (team1)
+        name1 = "“"+team1["info"]["team_name"]+"”队";
+
+      if (! teams["current_player1_id"])
+        msg += name0+"选手"+teams["current_player0_name"]+
+               "("+teams["current_player0_id"]+")"+
+               "上场。\n";
+      else         
+        msg += name1+"选手"+teams["current_player1_name"]+
+               "("+teams["current_player1_id"]+")"+
+               "与"+name0+"选手"+teams["current_player0_name"]+
+               "("+teams["current_player0_id"]+")"+
+               "比赛。\n";
+      break;
+    }
+  }
+  if (brief)
+    return msg;          
+  if (!  teams["done"])  
+    msg += "\n请巫师将他们邀入(summon)场内比赛。\n";
+  return msg;
+}
+
+string report_events (mapping teams)
+{
+  int mode = this_room()->query("match/mode");
+  int cycles = teams["cycles"];
+  int sessions = teams["sessions"];
+  int total = teams["total"];
+  int index = teams["index"];
+  mapping events = teams["events"];
+  mapping team0;
+  mapping team1;
+  mapping member0;
+  mapping member1;
+  string name0;
+  string name1;
+  string msg = "";
+  int *item;
+  int win;
+  int i, j;
+   
+  if (! events)
+    return "";
+    
+  if (teams["done"])
+    j = total; // done, index is not incremented
+  else
+    j = index - 1;  
+  msg += "比赛结果：\n";
+  for (i = 0; i < j; i++)
+  {
+    item = events[i];
+    team0 = teams[item[0]];
+    team1 = teams[item[2]];
+    member0 = team0[item[1]];
+    member1 = team1[item[3]];
+    win = item[4];
+    if (mode == MODE_SINGLE_SD ||
+        mode == MODE_SINGLE_LT)
+    {
+      name0 = "";
+      name1 = "";
+    }    
+    else
+    {
+      //name0 = "“"+team0["info"]["team_name"]+"”队选手";
+      //name1 = "“"+team1["info"]["team_name"]+"”队选手";
+      name0 = "“"+team0["info"]["team_name"]+"”队";
+      name1 = "“"+team1["info"]["team_name"]+"”队";
+    }  
+    msg += "  "+to_chinese(i+1)+". ";
+    msg += name0+member0["name"]+"("+member0["id"]+")";
+    if (win)
+      msg += "战胜";
+    else
+      msg += "输给";
+    msg += name1+member1["name"]+"("+member1["id"]+")\n";
+  }
+  
+  if (index >= total)
+    return msg;
+    
+  msg += "即将开始的比赛：\n";
+  for (i = index; i < total; i++)
+  {
+    item = events[i];
+    team0 = teams[item[0]];
+    team1 = teams[item[2]];
+    member0 = team0[item[1]];
+    member1 = team1[item[3]];
+    win = item[4];
+    name0 = "“"+team0["info"]["team_name"]+"”队";
+    name1 = "“"+team1["info"]["team_name"]+"”队";
+    msg += "  "+to_chinese(i-index+1)+". ";
+    msg += name0+"选手"+member0["name"]+"("+member0["id"]+")";
+    msg += "迎战";
+    msg += name1+"选手"+member1["name"]+"("+member1["id"]+")\n";
+  }
+  return msg;
+}
+
+string report_result  ()
+{
+  int mode = this_room()->query("match/mode");
+  mapping teams = this_room()->query("match/teams");
+  mapping team0;
+  mapping team1;
+  mapping member0;
+  mapping member1;
+  int *item;
+  int win;
+  string name0;
+  string name1;
+  string msg = "";
+  int i, j, k;
+
+  if (teams && ! teams["start"])
+    return "请稍候几秒，比赛马上就开始。\n";
+
+  if (! teams["current_player0_id"] &&
+      (mode != MODE_SINGLE_SD))
+    return "请稍候几秒，赛场立刻就准备就绪。\n";
+    
+  switch (mode)
+  {
+    case MODE_SINGLE_SD:
+    {
+      msg = report_events (teams);
+      if (msg == "")
+        msg = "请稍候几秒，比赛立刻就开始。\n";
+      return msg;  
+      break;
+    }
+    case MODE_SINGLE_LT:
+    {
+      int current_index;
+      
+      team0 = teams[0];
+      current_index = team0["current_index"];
+
+      msg += modes[mode]+"：";
+      if (! teams["current_winner_id"])
+        return msg+"还没有赛出擂主。\n";
+
+      msg += "擂主是"+teams["current_winner_name"]+
+             "("+teams["current_winner_id"]+")";
+      if (teams["current_player1_id"])
+      {
+        msg += "，接受"+teams["current_player1_name"]+
+               "("+teams["current_player1_id"]+")"+"的挑战。\n";
+      }
+      else
+      {
+        msg += "。\n";
+      }
+      msg += report_events (teams);
+      if (current_index < team0["number"])
+        msg += "尚未上场的玩家是：";
+      for (i = current_index; i < team0["number"]; i++)
+      {
+        mapping member = team0[i];
+        
+        msg += member["name"]+"("+member["id"]+") ";
+      }
+      msg += "\n";
+      break;
+    }
+    case MODE_TEAM_LT:
+    {
+      msg += modes[mode]+"：";
+      if (! teams["current_winner_id"])
+        return msg+"还没有赛出擂主。\n";
+
+      team0 = find_teams_team(teams,teams["current_winner_id"]);
+      name0 = "“"+team0["info"]["team_name"]+"”队";
+      msg += "擂主是"+name0+"的"+teams["current_winner_name"]+
+             "("+teams["current_winner_id"]+")";
+      if (teams["current_player1_id"])
+      {
+        team1 = find_teams_team(teams,teams["current_player1_id"]);
+        name1 = "“"+team1["info"]["team_name"]+"”队";
+        msg += "，接受"+name1+"的"+teams["current_player1_name"]+
+               "("+teams["current_player1_id"]+")"+"的挑战。\n";
+      }
+      else
+      {
+        msg += "。\n";
+      }
+
+      msg += report_events (teams);
+      msg += "各队战况：\n";
+      for (i = 0; i < teams["number"]; i++)
+      {
+        int current_index;
+        
+        team0 = teams[i];
+        current_index = team0["current_index"];
+        name0 = "“"+team0["info"]["team_name"]+"”队";
+        msg += "  "+name0+"：";
+        msg += "赢了"+chinese_number(team0["info"]["wins"])+"场，";
+        msg += "输了"+chinese_number(team0["info"]["loses"])+"场。\n";
+        msg += "    尚未上场的选手是：";
+        for (j = current_index; j < team0["number"]; j++)
+        {
+          mapping member = team0[j];
+        
+          msg += member["name"]+"("+member["id"]+") ";
+        }
+        msg += "\n";
+      }
+      break;
+    }
+    case MODE_TEAM_DZ:
+    case MODE_TEAM_XH:
+    {
+      int cycles = teams["cycles"];
+      int sessions = teams["sessions"];
+      int total = teams["total"];
+      int index = teams["index"];
+      mapping events = teams["events"];
+   
+      msg += "总共有"+chinese_number(cycles)+"轮，每轮有"+
+              chinese_number(sessions)+"场比赛。\n";
+      if (teams["done"])
+      {
+        msg += "现在赛事已完。\n";
+      }
+      else if (index/sessions+1 <= cycles)
+      { 
+        msg += "现在是第"+chinese_number((index-1)/sessions+1)+"轮第"+
+                chinese_number((index-1)%sessions+1)+"场，";
+        msg += "合计第"+chinese_number(index)+"场。\n";
+      }  
+      msg += "现在上场的是";
+      team0 = find_teams_team(teams,teams["current_player0_id"]);
+      name0 = "“"+team0["info"]["team_name"]+"”队";
+      if (teams["current_player1_id"])
+      {
+        team1 = find_teams_team(teams,teams["current_player1_id"]);
+        name1 = "“"+team1["info"]["team_name"]+"”队";
+        msg += name1+"选手"+teams["current_player1_name"]+
+               "("+teams["current_player1_id"]+")"+
+               "与"+name0+"选手"+teams["current_player0_name"]+
+               "("+teams["current_player0_id"]+")"+
+               "比赛。\n";
+      }  
+      else
+        msg += name0+"选手"+teams["current_player0_name"]+
+               "("+teams["current_player0_id"]+")"+"。\n";
+
+      msg += "\n各队战况：\n";
+      for (i = 0; i < teams["number"]; i++)
+      {
+        team0 = teams[i];
+        name0 = "“"+team0["info"]["team_name"]+"”队";
+        msg += "  "+name0+"：";
+        msg += "赢了"+chinese_number(team0["info"]["wins"])+"场，";
+        msg += "输了"+chinese_number(team0["info"]["loses"])+"场。\n";
+      }
+      
+      msg += report_events (teams);
+      break;
+    }
+  }
+  return msg;
+}
+
+int do_report2()
+{
+  string line = "\n-------------------------------------------------------------------\n";
+  string msg = line;
+  
+  msg += "\n";
+  msg += "大会比赛阶段：\n";
+  msg += "\n";
+  msg += report_check(1);
+  msg += "[检查正在进行的比赛：check]\n";
+  msg += "\n";
+  msg += report_contest(1);
+  msg += "[察看上场选手：contest]\n";
+  msg += "\n";
+  msg += "[察看已赛出的结果：result]\n";
+  msg += "\n";
+  msg += "[正常结束比赛：finish]\n";
+  msg += "[紧急取消比赛：abort]\n";
+  msg += "\n";
+  msg += line;
+  this_player()->start_more(msg);
+  return 1;
+}
+
+int do_check ()
+{
+  int step = this_room()->query("match/step");
+  object who = this_player();
+
+  if (step != STEP_FIGHT)
+  {  
+    write ("现在并没有比赛！\n\n");
+    return 1;
+  }
+  who->start_more(report_check(0));
+  return 1;
+}
+
+int do_contest ()
+{
+  int step = this_room()->query("match/step");
+  object who = this_player();
+
+  if (step != STEP_FIGHT)
+  {  
+    write ("现在并没有比赛！\n\n");
+    return 1;
+  }
+  who->start_more(report_contest(0));
+  return 1;
+}
+
+int do_result ()
+{
+  int step = this_room()->query("match/step");
+  object who = this_player();
+
+  if (step != STEP_FIGHT)
+  {  
+    write ("现在并没有比赛！\n\n");
+    return 1;
+  }
+  inform (who, report_result(), "公平子告诉$N说，比赛近况总结如下：\n");
+  //who->start_more(report_result());
+  return 1;
+}
+// linzhennan.c 林震南
+// modified by Jay 4/7/96
+
+#include <ansi.h>
+
+inherit NPC;
+#define CART_PATH "/feature/cart"
+//string do_quest();
+
+string* dart_area=({"/d/city2/dangpu","/d/city2/qianzhua"});
+string* dart_short=({"北京当铺","北京钱庄"});
+string* dart_id=({"jia laoliu","qian laoben"});
+string* dart_name=({"贾老六","钱老本"});
+
+string do_job();
+string do_give();
+int ask_fuwei();
+int ask_yuantu();
+int ask_pixie();
+int ask_tong();
+
+void create()
+{
+        set_name("林震南", ({ "lin zhennan", "lin", "zhennan" }));
+        set("gender", "男性");
+        set("age", 45);
+        set("title", "福威镖局总镖头");
+        set("long", "他就是「福威镖局」的总镖头－－林震南。\n");
+        set("combat_exp", 30000);
+        set("shen_type", 1);
+        set("max_neili", 500);
+        set("neili", 500);
+        set("jiali", 10);
+        set_skill("force", 40);
+        set("per",19);
+        set_skill("unarmed", 50);
+        set_skill("dodge", 50);
+        set_skill("parry", 50);
+        set("inquiry", ([
+                "向阳老宅" : "林震南说道：那是我从前在福建时住的家院，已经破败了。\n",
+                "福威镖局" : (: ask_fuwei :),
+                "远图公" : (: ask_yuantu :),
+                "林远图" : "林震南大怒：小孩子这么没礼貌，直呼先人名讳！\n",
+                "辟邪剑法" : (: ask_pixie:),
+                "铜钱" : (: ask_tong:),
+                "铜板" : (: ask_tong:),
+                "运镖" : (: do_job :),
+                "镖"   : (: do_job :),
+                "工作" : (: do_job :),
+                "job"  : (: do_job :),
+                "领赏" : (: do_give :),
+                "over" : (: do_give :),
+        ]) );
+        set_temp("apply/attack", 50);
+        set_temp("apply/defense", 50);
+        set_temp("apply/damage", 15);
+        setup();
+        carry_object("/clone/weapon/changjian")->wield();
+        carry_object("/clone/misc/cloth")->wear();
+}
+
+int ask_fuwei()
+{
+        say("林震南炫耀地说：我们林家三代走镖，一来仗着先祖远图公当年闯下的威名，二\n"
+        "来靠著我们林家家传的玩艺儿不算含糊，这才有今日的局面，成为大江以南首屈\n"
+        "一指的大镖局。江湖上提到『福威镖局』四字，谁都要翘起大拇指，说一声：『\n"
+        "好福气！好威风！』哈哈，哈哈！\n");
+        this_player()->set_temp("marks/林1", 1);
+        return 1;
+}
+
+int ask_yuantu()
+{
+        if ((int)this_player()->query_temp("marks/林1")) {
+                say("林震南磕一磕烟斗，说道：远图公是我的祖父，福威镖局是他一手创办的。当年\n"
+                "祖父以七十二路辟邪剑法开创镖局，当真是打遍黑道无敌手。其时白道上英雄见\n"
+                "他太过威风，也有去找他比试武艺的，青城派掌门余观主的师父长青子少年之时\n"
+                "便在他辟邪剑法下输了几招。\n");
+                this_player()->set_temp("marks/林2", 1);
+                return 1;
+        }
+        else {
+                say("林震南说道：远图公是我的祖父。\n");
+                return 1;
+        }
+}
+
+int ask_pixie()
+{
+        int p1, p2, p3, p4;
+        if ((int)this_player()->query("passwd")) {
+                say("林震南不悦地说道：我不是都告诉你了吗？我的剑法不及先祖。\n");
+        }
+        else if ((int)this_player()->query_temp("marks/林2")) {
+                say("林震南一惊，说道：你怎么知道的？噢，我刚才说露嘴了。嗨，在下的功夫外人\n"
+                "不知底细，其实及不上先祖。。\n");
+                write("林震南顿一顿，接着对你低声说：先祖去世前，曾给家父留下");
+                p1=random(4)+1;
+                p2=random(4)+1;
+                p3=random(4)+1;
+                p4=random(4)+1;
+                this_player()->set("passwd",p1*1000+p2*100+p3*10+p4);
+                write(CHINESE_D->chinese_number(p1)+"千"+CHINESE_D->chinese_number(p2)+
+                        "百"+CHINESE_D->chinese_number(p3)+"十"+CHINESE_D->chinese_number(p4));
+                write("个\n铜钱，我一直未解其中奥秘。\n");
+        }
+        else {
+                message("vision", HIY "林震南勃然大怒，喝道：你也窥视我们林家的辟邪剑谱？！我跟你拼了！\n"
+                        NOR, environment(), this_object() );
+                kill_ob(this_player());
+        }
+        this_player()->delete_temp("marks/林1");
+        this_player()->delete_temp("marks/林2");
+        return 1;
+}
+
+int ask_tong()
+{
+        int p, p1, p2, p3, p4;
+        if (!(p=(int)this_player()->query("passwd"))) {
+                say("林震南一脸讥笑的样子，说：怎么混到这一步了到处要钱？\n");
+        }
+        else {
+                write("林震南低声说：先祖去世前，曾给家父留下");
+                p1=(int)p/1000;
+                p2=(int)(p-p1*1000)/100;
+                p3=(int)(p-p1*1000-p2*100)/10;
+                p4=(int)(p-p1*1000-p2*100-p3*10);
+                write(CHINESE_D->chinese_number(p1)+"千"+CHINESE_D->chinese_number(p2)+
+                        "百"+CHINESE_D->chinese_number(p3)+"十"+CHINESE_D->chinese_number(p4));
+                write("个\n铜钱，我一直未解其中奥秘。\n");
+        }
+        return 1;
+}
+
+string chinese_time(int t)
+{
+        int d, h, m, s;
+        string time;
+        s = t % 60;     t /= 60;
+        m = t % 60;     t /= 60;
+        h = t % 24;     t /= 24;
+        d = t;
+        if(d) time = chinese_number(d) + "天";
+        else time = "";
+        if(h) time += chinese_number(h) + "小时";
+        if(m) time += chinese_number(m) + "分";
+        time += chinese_number(s) + "秒";
+        return time;
+}
+
+string do_job()
+{   int n;
+    object ob,cart;
+    ob=this_player(); 
+    n=random(sizeof(dart_area));   
+
+    if ( ob->query_temp("in_dart"))
+       return "你不是才要了任务吗？\n";
+
+    if ( (int)ob->query_condition("dart_limit" ) > 0 )
+       return "你好象没完成任务吧。\n";
+
+    if ( ob->is_busy() || ob->query_temp("pending/exercising"))
+                return "你现在正忙着呢。\n";
+
+    if ( (int)ob->query("combat_exp") < 20000 )
+       return "护镖是件危险工作，我看"+RANK_D->query_respect(ob)+"似乎没有这能力！\n";
+
+    ob->set_temp("in_dart",1);
+    ob->set_temp("dart_area",dart_area[n]);
+    ob->set_temp("dart_id",dart_id[n]);
+    ob->set_temp("dart_name",dart_name[n]);
+    ob->apply_condition("dart_limit", 60);
+
+    cart=new(CART_PATH);
+    cart->set("master",ob->query("name"));
+    cart->set("masterid",ob->query("id"));
+    cart->move("/d/city/biaoju");
+    command("nod");
+    message_vision(CYN "几个伙计将镖推了出来。\n" NOR,ob); 
+    return "你把这批红货送到"+dart_short[n]+"的"+dart_name[n]+"手中。\n";
+    
+}
+
+string do_give()
+{
+  object ob;
+// int max_pot;
+
+  ob=this_player();
+//   max_pot=(int)this_player()->query("max_pot");
+
+  if ( !ob->query_temp("in_dart"))
+    return "我没让你走镖啊？\n";
+
+  if ( !ob->query_temp("over_dart") )
+    return "镖车没有送到地头，莫非是你吞了！？\n";
+
+  ob->delete_temp("in_dart");
+  ob->delete_temp("over_dart");
+  ob->delete_temp("dart_name");
+  ob->delete_temp("dart_id");
+  ob->delete_temp("dart_area");
+  
+    ob->add("combat_exp",random(400)+800);
+ob->add("potential",random(50)+100);
+// ob->set("potential",max_pot);
+      MONEY_D->pay_player(ob, random(40000)+10000);
+  command("pat "+ob->query("id"));
+  return RANK_D->query_respect(ob)+"果然是栋梁之才！\n";
+}
+

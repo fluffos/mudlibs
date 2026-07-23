@@ -1,0 +1,369 @@
+
+int do_finish ()
+{
+  int step = this_room()->query("match/step");
+  int mode = this_room()->query("match/mode");
+  mapping teams = this_room()->query("match/teams");
+  string msg = "";
+
+  object who = this_player();
+
+  if (step != STEP_FIGHT)
+  {  
+    write ("现在并没有比赛！\n\n");
+    return 1;
+  }
+
+  if (teams && ! teams["start"])
+  {
+    write ("比赛还没有开始。\n");
+    return 1;
+  }
+
+  if ((mode == MODE_SINGLE_SD && teams["number"] == 0) ||
+      (mode != MODE_SINGLE_SD && ! teams["done"]))
+  {
+    write ("比赛还没有赛完！\n");
+    return 1;
+  }
+  this_room()->set("match/step",STEP_FINISH);
+  inform (who, "那就结束比赛吧。\n");
+  return 1;
+}
+
+void aborting (string arg, object who)
+{
+  if (arg == "y" || arg == "Y")
+  {
+    inform (who, "比赛紧急取消。\n");
+    this_room()->delete("match");
+  }
+  else
+  {
+    write("好，继续比赛。\n");
+  }
+}
+
+int do_abort ()
+{
+  int step = this_room()->query("match/step");
+  mapping teams = this_room()->query("match/teams");
+
+  object who = this_player();
+
+//  if (step != STEP_FIGHT)
+//  {  
+//    write ("现在并没有比赛！\n\n");
+//    return 1;
+//  }
+
+  write ("如果取消比赛，现有比赛结果将全部丢失！\n");
+  write ("您真的要紧急取消比赛？(Y/N)\n");
+  input_to ((: aborting :), who);
+  return 1;
+
+}
+
+int valid_player (object who)
+{
+  int mode = this_room()->query("match/mode");
+  mapping teams = this_room()->query("match/teams");
+    
+  if (mode == MODE_SINGLE_SD)
+    return 1;
+  if (! teams)
+    return 0;  
+  if (who->query("id") == teams["current_player0_id"])
+    return 1;
+  if (who->query("id") == teams["current_player1_id"])
+    return 1;
+  return 0;  
+}
+
+int arbit (string arg)
+{
+  int mode = this_room()->query("match/mode");
+  mapping teams = this_room()->query("match/teams");
+  mapping team0;
+  mapping team1;
+  mapping team_info0;
+  mapping team_info1;
+  mapping events;
+  int total;
+  int index;
+  int wins;
+  object ob;
+  
+  // check valid fight here:
+  team0 = find_teams_team(teams,teams["current_player0_id"]);
+  team1 = find_teams_team(teams,teams["current_player1_id"]);
+  if (team0)
+    team_info0 = team0["info"];
+  if (team1)
+    team_info1 = team1["info"];
+  events = teams["events"];
+  total = teams["total"];
+  index = teams["index"];
+  
+  wins = (arg  && arg != "0");
+
+  if (mode == MODE_SINGLE_SD ||
+      mode == MODE_SINGLE_LT ||
+      mode == MODE_TEAM_LT)
+  {
+    int i, j, k, l;
+    
+    if (mode == MODE_SINGLE_SD)
+    {
+      if (teams["number"] == 0)
+      {
+        team_info0 = ([ ]);
+        team0 = ([ "number" : 0, "info" : team_info0 ]);
+        teams["number"] = 1;
+        teams[0] = team0;
+      }
+      else
+      {
+        team0 = teams[0];
+        team_info0 = team0["info"];
+      }
+      team1 = team0;  
+      team_info1 = team_info0;  
+      if (find_member_index (team0, teams["current_player0_id"]) == -1)
+        add_team_member (team0, find_player(teams["current_player0_id"]),1);
+      if (find_member_index (team0, teams["current_player1_id"]) == -1)
+        add_team_member (team0, find_player(teams["current_player1_id"]),1);
+    }
+        
+    i = find_team_index (teams, team0);
+    j = find_member_index (team0, teams["current_player0_id"]);
+    k = find_team_index (teams, team1);
+    l = find_member_index (team1, teams["current_player1_id"]);
+    if (! events)
+    {
+      events = ([ ]);
+      teams["events"] = events;
+    }  
+    events[total] = ({i,j,k,l,wins});
+    teams["total"] = total+1;
+    teams["index"] = total+2;
+  }
+  else
+  {
+    events[index-1][4] = wins;
+  }
+  
+  if (wins)
+  {
+    teams["current_winner_name"]  = teams["current_player0_name"];
+    teams["current_winner_id"]  =  teams["current_player0_id"];
+    if (team_info0)
+      team_info0["wins"]++;
+    if (team_info1)  
+      team_info1["loses"]++;
+  }
+  else
+  {
+    teams["current_winner_name"]  = teams["current_player1_name"];
+    teams["current_winner_id"]  =  teams["current_player1_id"];
+    if (team_info0)
+      team_info0["loses"]++;
+    if (team_info1)  
+      team_info1["wins"]++;
+    teams["current_player0_name"] = teams["current_winner_name"];
+    teams["current_player0_id"] = teams["current_winner_id"];
+    team0 = team1;
+    team_info0 = team_info1;
+  }
+  teams["current_player1_name"] = 0;
+  teams["current_player1_id"] = 0;
+  announce (teams["current_winner_name"]+"比武获胜！\n");
+  announce ("赐"+teams["current_winner_name"]+"个人"+chinese_number(REWARD)+"点潜能！\n");
+  ob = find_player (teams["current_winner_id"]);
+  if (! ob)
+    ob =  LOGIN_D->find_body(teams["current_winner_id"]);
+  if (! team_info0)
+  {
+    team_info0 = ([ ]);
+    team0["info"] = team_info0;
+  }  
+  if (! team_info0["reward"])
+    team_info0["reward"] = ([ ]);
+  team_info0["reward"][teams["current_winner_id"]] += REWARD;
+  if (ob && !DEBUG)
+  {
+    ob->add("potential",REWARD);
+    tell_object (ob,"你获得了"+chinese_number(REWARD)+"点潜能！\n");
+  }  
+  else if (ob && DEBUG)
+  {
+    //write ("debug:"+ob->query("name")+"获得了"+chinese_number(REWARD)+"点潜能！\n");
+  }
+  if (mode == MODE_TEAM_LT ||
+      mode == MODE_TEAM_DZ ||
+      mode == MODE_TEAM_XH)
+  {
+    int i;
+    announce ("赐"+team_info0["team_name"]+"队其他选手每人"+
+              chinese_number(REWARD/4)+"点潜能！\n");
+    team_info0["reward"]["all of us"] += REWARD/4;
+    for (i = 0; i < team0["number"]; i++)
+    {
+      ob = find_player (team0[i]["id"]);
+      if (! ob)
+        continue;
+      if (teams["current_winner_id"]==ob->query("id"))
+        continue;
+      team_info0["reward"][ob->query("id")] += REWARD/4;
+      if (ob && !DEBUG)
+      {
+        ob->add("potential",REWARD/4);
+        tell_object (ob,"你获得了"+chinese_number(REWARD/4)+"点潜能！\n");
+         ob->set("eff_jing", (int)ob->query("max_jing"));
+         ob->set("jing", (int)ob->query("max_jing"));
+         ob->set("jingli", (int)ob->query("max_jingli"));
+         ob->set("eff_qi", (int)ob->query("max_qi"));
+         ob->set("qi", (int)ob->query("max_qi"));
+         ob->set("neili", (int)ob->query("max_neili"));
+         ob->set("food", (int)ob->max_food_capacity());
+         ob->set("water", (int)ob->max_water_capacity());
+
+      }  
+      else if (ob && DEBUG)
+      {
+        //write ("debug:"+ob->query("name")+"获得了"+chinese_number(REWARD/4)+"点潜能！\n");
+      }
+                  
+    }
+  }
+  call_out ("announcing_next",3);
+  return 1;
+}
+
+void alternative_die (object me)
+{
+  int mode = this_room()->query("match/mode");
+  mapping teams = this_room()->query("match/teams");
+  object ob = me->query_temp("last_opponent");
+  me->set("eff_jing", (int)me->query("max_jing"));
+  me->set("jing", (int)me->query("max_jing"));
+  me->set("jingli", (int)me->query("max_jingli"));
+  me->set("eff_qi", (int)me->query("max_qi"));
+  me->set("qi", (int)me->query("max_qi"));
+  me->set("neili", (int)me->query("max_neili"));
+  me->set("food", (int)me->max_food_capacity());
+  me->set("water", (int)me->max_water_capacity());
+ 
+  me->remove_all_killer();
+  all_inventory(environment(me))->remove_killer(me);
+      
+  if (! userp(me))
+  {
+    message_vision ("\n$N重重地摔倒在地，被候在两边的伺官扶走。\n",me);
+    destruct(me);
+    return;
+  }
+  message_vision ("\n$N重重地摔倒在地，公平子急忙上来将两人拉开。\n",me);
+  message_vision ("地下传来白无常的声音：大会比武，不伤阳寿！\n",me);
+  message_vision ("\n$N慢慢从地上爬将起来，被候在两边的伺官扶起向南走去。\n",me);
+  me->move(__DIR__"south");
+  message_vision ("$N被人扶着慢慢走了过来。\n",me);
+  
+  if (! ob)
+    ob = me->query_temp("last_damage_from");
+  if (! ob)
+    return;  
+  if (! teams)
+    return;  
+  if (mode != MODE_SINGLE_LT &&
+      mode != MODE_TEAM_LT)  
+  {
+    message_vision ("\n几位伺官上来拥着得胜的$N向北走去。\n",ob);
+    ob->move(__DIR__"north");
+    message_vision ("$N由几位伺官拥着走了过来。\n",ob);
+  }
+      
+  if (mode == MODE_SINGLE_SD)
+  {
+    teams["current_player0_id"] = ob->query("id");
+    teams["current_player0_name"] = ob->query("name");
+    teams["current_player1_id"] = me->query("id");
+    teams["current_player1_name"] = me->query("name");
+    arbit ("1");
+  }
+  else if (teams["current_player0_id"] == ob->query("id") &&
+           teams["current_player1_id"] == me->query("id"))
+  {
+    arbit ("1");
+  }
+  else if (teams["current_player0_id"] == me->query("id") &&
+           teams["current_player1_id"] == ob->query("id"))
+  {
+    arbit ("0");
+  }
+  else if (DEBUG)
+  {
+    write ("current_player0_id:"+teams["current_player0_id"]+" "+
+           "current_player1_id:"+teams["current_player1_id"]+" "+
+           "my id:"+me->query("id") + " " + "ob id:"+ob->query("id"));
+  }
+}
+
+int do_debug (string arg)
+{
+  mapping teams = this_room()->query("match/teams");
+  string s0, s1, s2;
+  object ob0, ob1;
+  
+  if (sscanf(arg, "%s %s %s", s0, s1, s2) != 3)
+  {
+    write ("debug: @debug@ id0 id1 0/1\n");
+    return 1;
+  }
+  if (! teams)
+  {
+    write ("debug: no teams\n");
+    return 1;
+  }
+  if (s0 != "-" && s1 != "-")
+  {
+    ob0 = find_player(s0);
+    ob1 = find_player(s1);
+    if (! ob0)
+    {
+      write ("debug: no player ob 0\n");
+      return 1;
+    }
+    if (! ob1)
+    {
+      write ("debug: no player ob 1\n");
+      return 1;
+    }
+    teams["current_player0_id"] = s0;
+    teams["current_player0_name"] = ob0->query("name");
+    teams["current_player1_id"] = s1;
+    teams["current_player1_name"] = ob1->query("name");
+  }  
+  if (s0 == "-" && ! teams["current_player0_id"])
+  {
+    write ("debug: no player ob 0\n");
+    return 1;
+  }
+  if (s1 == "-" && ! teams["current_player1_id"])
+  {
+    write ("debug: no player ob 1\n");
+    return 1;
+  }
+  arbit (s2);
+  return 1;
+}
+
+void init2()
+{
+  add_action ("do_check","check");
+  add_action ("do_contest","contest");
+  add_action ("do_result","result");
+  add_action ("do_finish","finish");
+  add_action ("do_abort","abort");
+  add_action ("do_debug","@debug@");
+}

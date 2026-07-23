@@ -1,0 +1,8 @@
+// stealing.c
+
+
+
+inherit SKILL;
+
+
+

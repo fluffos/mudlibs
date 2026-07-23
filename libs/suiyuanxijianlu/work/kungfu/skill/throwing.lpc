@@ -1,0 +1,6 @@
+// throwing.c
+
+
+
+inherit SKILL;
+

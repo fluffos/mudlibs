@@ -1,0 +1,6 @@
+// whip.c
+
+
+
+inherit SKILL;
+
