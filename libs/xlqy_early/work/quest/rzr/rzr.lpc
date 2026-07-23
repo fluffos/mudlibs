@@ -1,0 +1,686 @@
+inherit NEWNPC;
+//inherit NEWSAVE;
+
+#include <ansi.h>
+
+#define TASK_IDLE       0
+#define TASK_WORK       1
+#define TASK_SHOUCHENG  2
+#define TASK_PEIYAO     3
+#define TASK_MENPAI     4
+#define TASK_DAJIU      5
+
+private nosave int in_task = TASK_IDLE;
+private nosave int quest_tick = time();
+
+private mapping all_tasks = 
+([
+    TASK_IDLE:([
+        "start":    (: call_other, __FILE__, "random_move" :),
+    ]),
+    TASK_WORK:([
+        "name": "打工",
+        "start":    (: call_other, __FILE__, "do_work" :),
+        "finish":   (: call_other, __FILE__, "finish_work" :),
+    ]),
+    TASK_SHOUCHENG:([
+        "name": "长安守城",
+        "start":    (: call_other, __FILE__, "do_shoucheng" :),
+        "finish":   (: call_other, __FILE__, "finish_shoucheng" :),
+    ]),
+    TASK_PEIYAO:([
+        "name": "七玄门配药",
+        "start":    (: call_other, __FILE__, "do_peiyao" :),
+        "finish":   (: call_other, __FILE__, "finish_peiyao" :),
+    ]),
+    TASK_MENPAI:([
+        "name": "门派锄奸",
+        "start":    (: call_other, __FILE__, "do_menpai" :),
+        "finish":   (: call_other, __FILE__, "finish_menpai" :),
+    ]),
+    TASK_DAJIU:([
+        "name": "搭救花仙",
+        "start":    (: call_other, __FILE__, "do_dajiu" :),
+        "finish":   (: call_other, __FILE__, "finish_dajiu" :),
+    ]),
+]);
+
+private nosave string *task_msg =
+({
+    "今日闲来无事，$T去!\n",
+    "听说$T任务奖励颇高，试试去!\n",
+});
+
+private int random_task();
+void reload();
+int random_move();
+
+void create()
+{
+    ::create();
+
+    set("env/msgout", "一道耀眼的光芒闪过，$T $N已经震碎虚空而去。。。\n");
+    set("env/msgin", "电闪雷鸣中，$T $N撕裂虚空而来!\n");
+
+    set_temp("apply/armor", 100000);
+    set_temp("apply/defense", 100000);
+
+    if ( clonep() )
+    {
+        call_out("reload", 10);
+    }
+}
+
+varargs void generate_me(object who, int level, int ratio, string menpai, int chance, int combatchance, string name, string *id, int userflag)
+{
+    ::generate_me(who, level, ratio, menpai, chance, combatchance, name, id, userflag);
+}
+
+void reload()
+{
+    //set_savepath("rzr/");
+
+    //::reload();
+
+    set("chat_chance", 100);
+    set("chat_msg", ({
+         (: random_task :)
+    }) );
+
+    set_temp("in_task", TASK_IDLE);
+}
+
+void full_me(object me)
+{
+    if ( !me )
+    {
+        return;
+    }
+
+    ::full_me();
+
+    me->set("eff_kee", me->query("max_kee"));
+    me->set("kee", me->query("eff_kee"));
+    me->set("eff_sen", me->query("max_sen"));
+    me->set("sen", me->query("eff_sen"));
+    me->set("eff_gin", me->query("max_gin"));
+    me->set("gin", me->query("eff_gin"));
+}
+
+void remove_callout(string func_name, object who)
+{
+    int iRet = 0;
+
+    if ( !who )
+    {
+        return;
+    }
+
+    if ( iRet = who->query_temp("callout/" + func_name) )
+    {
+        remove_call_out(iRet);
+    }
+
+    who->delete_temp("callout/" + func_name);
+}
+
+void start_callout(string func_name, int delay, object who)
+{
+    int iRet = 0;
+
+    if ( !who )
+    {
+        return;
+    }
+
+    remove_callout(func_name, who);
+
+    iRet = call_out(func_name, delay, who);
+
+    who->set_temp("callout/" + func_name, iRet);
+}
+
+void start_quest(int questtype)
+{
+    string color;
+    string msg;
+
+    this_object()->set_temp("in_task", questtype);
+    quest_tick = time();
+
+    if ( TASK_IDLE == questtype )
+    {
+        remove_callout("init_me", this_object());
+    }
+    else
+    {
+        color = CHANNEL_D->msg_color("rzr");
+        msg = color + task_msg[random(sizeof(task_msg))];
+        msg = replace_string(msg, "$T", HIR + all_tasks[questtype]["name"] + NOR + color);
+
+        CHANNEL_D->do_channel(this_object(), "rzr", msg);
+    }
+}
+
+void init_me(object me)
+{
+    if ( !me )
+    {
+        return;
+    }
+
+    if ( TASK_SHOUCHENG == me->query_temp("in_task") )
+    {
+        me->new_move("/d/huanggong/damen");
+        me->set("job/xue/step", "finish");
+        me->command("ask xue rengui about done");
+    }
+
+    me->delete("job");
+    me->delete_temp("job");
+    start_quest(TASK_IDLE);
+}
+
+int do_work(object me)
+{
+    if ( !me )
+    {
+        return 0;
+    }
+
+    if ( me->query_temp("job/work") )
+    {
+        return 0;
+    }
+
+    me->new_move("/d/city/workroom" + (random(3) + 1));
+    me->command("work");
+    start_callout("init_me", 20, me);
+
+    return 1;
+}
+
+int finish_work(object me)
+{
+    if ( !me )
+    {
+        return 1;
+    }
+
+    if ( TASK_WORK != me->query_temp("in_task") )
+    {
+        return 0;
+    }
+
+    if ( me->query_temp("job/work") )
+    {
+        return 0;
+    }
+
+    return 1;
+}
+
+int do_peiyao(object me)
+{
+    if ( !me )
+    {
+        return 0;
+    }
+
+    if ( me->query_temp("job/peiyao") )
+    {
+        return 0;
+    }
+
+    me->new_move("/quest/peiyao/shenshoutang");
+    me->command("ask mo daifu about job");
+    me->command("peiyao");
+    start_callout("init_me", 30, me);
+
+    return 1;
+}
+
+int finish_peiyao(object me)
+{
+    if ( !me )
+    {
+        return 1;
+    }
+
+    if ( TASK_PEIYAO != me->query_temp("in_task") )
+    {
+        return 0;
+    }
+
+    if ( me->query_temp("job/peiyao") )
+    {
+        return 0;
+    }
+
+    me->command("eat dan");
+    me->command("eat wan");
+    me->command("eat san");
+
+    return 1;
+}
+
+void shoucheng_ing(object me)
+{
+    if ( !me )
+    {
+        return;
+    }
+
+    if ( TASK_SHOUCHENG != me->query_temp("in_task") )
+    {
+        remove_callout("shoucheng_ing", me);
+        return;
+    }
+
+    if ( "done" == me->query("job/xue/step") )
+    {
+        me->delete_temp("job/xue/where");
+        me->new_move("/d/huanggong/damen");
+        me->set("job/xue/step", "finish");
+        me->command("ask xue rengui about done");
+        return;
+    }
+
+    if ( me->is_fighting() )
+    {
+        start_callout("shoucheng_ing", 1, me);
+        return;
+    }
+
+    start_callout("shoucheng_ing", 1, me);
+
+    if ( me->query_temp("job/xue/where") )
+    {
+        full_me(me);
+        me->new_move(me->query_temp("job/xue/where"));
+        me->delete_temp("job/xue/where");
+        me->command("kill " + me->query("id") + " yao guai");
+        return;
+    }
+
+    return;
+}
+
+int do_shoucheng(object me)
+{
+    if ( !me )
+    {
+        return 0;
+    }
+
+    if ( me->query("job/xue") && me->query_condition("sxy-job") && "done" != me->query("job/xue/step") )
+    {
+        return 0;
+    }
+
+    me->new_move("/d/huanggong/damen");
+    me->command("ask xue rengui about job");
+
+    start_callout("shoucheng_ing", 5, me);
+
+    start_callout("init_me", 300, me);
+
+    return 1;
+}
+
+int finish_shoucheng(object me)
+{
+    if ( !me )
+    {
+        return 1;
+    }
+
+    if ( TASK_SHOUCHENG != me->query_temp("in_task") )
+    {
+        remove_callout("shoucheng_ing", me);
+        return 0;
+    }
+
+    if ( me->query_condition("sxy-job") )
+    {
+        return 0;
+    }
+
+    if ( me->query("job/xue") && "finish" != me->query("job/xue/step") )
+    {
+        me->delete_temp("job/xue/where");
+        me->new_move("/d/huanggong/damen");
+        me->set("job/xue/step", "finish");
+        me->command("ask xue rengui about done");
+    }
+
+    me->delete("job/xue");
+    return 1;
+}
+
+int do_menpai(object me)
+{
+    object target;
+    mapping jobmaster = FAMILY_D->job_master(me->query_family());
+
+    if ( !me )
+    {
+        return 0;
+    }
+
+    if ( me->query("job/menpai") && "done" != me->query("job/menpai/step") )
+    {
+        return 0;
+    }
+
+    me->new_move(jobmaster["location"]);
+    me->command("ask " + jobmaster["masterid"] + " about " + jobmaster["job"]);
+
+    if ( !me->query("job/menpai") )
+    {
+        return 0;
+    }
+
+    target = me->query_temp("job/target");
+
+    if ( target && living(target) )
+    {
+        full_me(me);
+        me->new_move(target->query_temp("guai/location"));
+
+        me->command("follow " + me->query("id") + " " + me->query("job/menpai/id"));
+        me->command("kill " + me->query("id") + " " + me->query("job/menpai/id"));
+
+        start_callout("init_me", 300, me);
+
+        return 1;
+    }
+
+    return 0;
+}
+
+int finish_menpai(object me)
+{
+    if ( !me )
+    {
+        return 1;
+    }
+
+    if ( TASK_MENPAI != me->query_temp("in_task") )
+    {
+        return 0;
+    }
+
+    if ( "done" != me->query("job/menpai/step") )
+    {
+        return 0;
+    }
+
+    me->delete("job/menpai");
+    return 1;
+}
+
+void dajiu_ing(object me)
+{
+    if ( !me )
+    {
+        return;
+    }
+
+    if ( TASK_DAJIU != me->query_temp("in_task") )
+    {
+        remove_callout("dajiu_ing", me);
+        return;
+    }
+
+    if ( me->is_fighting() )
+    {
+        start_callout("dajiu_ing", 3, me);
+        return;
+    }
+
+    if ( !environment(me) )
+    {
+        return;
+    }
+
+    me->command("heal");
+    me->command("heal");
+    me->command("heal");
+    me->command("heal");
+    me->command("heal");
+
+    if ( "killed" == me->query("job/dajiu/step") )
+    {
+        me->command("give shuijing xie to " + me->query("id") + " hua xian");
+    }
+    else
+    {
+        if ( present(me->query("id") + " lao guai", environment(me)) )
+        {
+            me->command("kill " + me->query("id") + " lao guai");
+            start_callout("dajiu_ing", 3, me);
+        }
+        else
+        {
+            init_me(me);
+        }
+    }
+
+    return;
+}
+
+int do_dajiu(object me)
+{
+    object target;
+
+    if ( !me )
+    {
+        return 0;
+    }
+
+    if ( me->query("job/dajiu") && "done" != me->query("job/dajiu/step") )
+    {
+        return 0;
+    }
+
+    me->new_move("/d/lingtai/guanjin");
+    me->command("dajiu");
+
+    if ( !me->query("job/dajiu") )
+    {
+        return 0;
+    }
+
+    target = me->query_temp("job/target");
+
+    if ( target && living(target) )
+    {
+        full_me(me);
+        me->new_move(target->query_temp("guai/location"));
+
+        me->command("follow " + me->query("id") + " hua xian");
+        me->command("dajiu");
+        me->command("kill " + me->query("id") + " lao guai");
+
+        start_callout("dajiu_ing", 3, me);
+
+        start_callout("init_me", 300, me);
+
+        return 1;
+    }
+
+    return 0;
+}
+
+int finish_dajiu(object me)
+{
+    if ( !me )
+    {
+        return 1;
+    }
+
+    if ( TASK_DAJIU != me->query_temp("in_task") )
+    {
+        return 0;
+    }
+
+    if ( !present(me->query("id") + " hua xian", environment(me)) )
+    {
+        remove_callout("dajiu_ing", me);
+        init_me(me);
+        return 1;
+    }
+
+    if ( "done" != me->query("job/dajiu/step") )
+    {
+        return 0;
+    }
+
+    me->delete("job/dajiu");
+    return 1;
+}
+
+int current_task()
+{
+    return this_object()->query_temp("in_task");
+}
+
+int random_task()
+{
+    int i, count;
+    object me = this_object();
+
+    count = sizeof(all_tasks);
+    for ( i = 0; i < count; i++ )
+    {
+        if ( !functionp(all_tasks[i]["finish"]) )
+        {
+            continue;
+        }
+
+        if ( 0 < evaluate(all_tasks[i]["finish"], me) )
+        {
+            start_quest(TASK_IDLE);
+            break;
+        }
+    }
+
+    if ( TASK_IDLE != me->query_temp("in_task") )
+    {
+        return 1;
+    }
+
+    if ( me->is_busy() || me->query_temp("no_move") )
+    {
+        return 1;
+    }
+
+    if ( random(100) > 50 )
+    {
+        random_move();
+        return;
+    }
+
+    full_me(me);
+
+    i = random(sizeof(all_tasks));
+    //i = TASK_SHOUCHENG;
+    if ( functionp(all_tasks[i]["start"]) && (0 < evaluate(all_tasks[i]["start"], me)) )
+    {
+        start_quest(i);
+    }
+
+    return 1;
+}
+
+int random_move()
+{
+    if ( TASK_IDLE != this_object()->query_temp("in_task") )
+    {
+        return 0;
+    }
+
+    ::random_move();
+
+    return 1;
+}
+
+void test(int level, int period)
+{
+    object newguai = new("/quest/rzr/rzr");
+
+    if ( !newguai )
+    {
+        write("new failed!\n");
+        return;
+    }
+
+    newguai->move(environment(this_player()));
+
+    newguai->generate_me(this_player(), level, level, NPCSCHOOL_D->random_class(), 0, 100, "新版人造人", ({"rzr" + (1 + random(100))}));
+
+    newguai->set_period(period);
+
+    newguai->reload();
+}
+
+varargs void die(int force)
+{
+    object killer = query_temp("last_damage_from");
+
+    if ( !force )
+    {
+        if ( !killer || !userp(killer) )
+        {
+            //人造人只能被玩家杀死
+            if ( killer )
+            {
+                MONITOR_D->report_system_msg(query("name") + "(" + query("id") + ")在" + base_name(environment(this_object())) + "被" + killer->name(1) + "(" + killer->query("id") + ")杀死了。\n");
+            }
+            else
+            {
+                MONITOR_D->report_system_msg(query("name") + "(" + query("id") + ")在" + base_name(environment(this_object())) + "莫名其妙的死了。\n");
+            }
+            move("/d/city/kezhan");
+            recover_me();
+            return;
+        }
+
+        if ( 0 >= F_DAMAGEDIE->will_die(this_object()) )
+        {
+            return;
+        }
+
+        MONITOR_D->report_system_msg(query("name") + "(" + query("id") + ")在" + base_name(environment(this_object())) + "被" + killer->name(1) + "(" + killer->query("id") + ")彻底毁灭了。\n");
+    }
+
+    //purge();
+
+	destruct(this_object());
+}
+
+private nosave mapping my_reward = 
+([
+    "combat_exp":   1000,
+    "daoxing":      1000,
+    "potential":    1000,
+    "skill":        2,
+]);
+
+mapping get_myreward()
+{
+    return my_reward;
+}
+
+object should_reward(object me, object killer)
+{
+    if ( !killer || !userp(killer) )
+    {
+        //只有玩家杀死人造人，才有奖励
+        return 0;
+    }
+
+    return killer;
+}
+

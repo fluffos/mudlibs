@@ -32,7 +32,7 @@ rely on the boot + interactive-connect test as the verification gate.
   majority of this collection. If an archive turns out to be English
   (like ds386/Dead Souls), do the minimum to note what it is, don't sink
   deep debugging time into it -- move on to the next Chinese one.
-- **Done: 76 / 100** (shanhaizhanshen, xingzhanyingxiong,
+- **Done: 77 / 100** (shanhaizhanshen, xingzhanyingxiong,
   unknownlib20150716 [小雨西游II], bxsj [书剑天下], bxsj1 [书剑·经典],
   chidi [江湖I], ..., nitan170911 [仙剑奇侠传], nitan6 [笑傲江湖], rzrmud
   [大唐西游], xo, xo_final, zzfy [郑州风云3], shiji [世纪],
@@ -83,7 +83,8 @@ rely on the boot + interactive-connect test as the verification gate.
   shared title], xiyouji [西游记 v2.01 1996-1998, likely the ANCESTOR
   snapshot of the whole ES II/XYJ lineage], xixingzhanji [西行战记, ES II
   lineage], xiyouji450 [西游记450, confirmed sibling of fluffos_xiyou2000
-  #15/mhxy #19/menghuanxiyou2002 #56])
+  #15/mhxy #19/menghuanxiyou2002 #56], xlqy_early [仙侣情缘 early/
+  incomplete snapshot, same codebase as xlqy_new2007 #26])
 - **New AGENTS.md §15q (hidden client-protocol-version gate)**: found on
   xiyangzaixian3 -- a pre-id prompt can check the input against a
   hardcoded literal (client version string), not just a BIG5/student
@@ -377,7 +378,7 @@ rely on the boot + interactive-connect test as the verification gate.
 | 24 | TOMud_VC源代码.rar | | | not mudlib | confirmed: "MyMud", a Windows MFC/VC++ GUI mud CLIENT (MainFrm.cpp, DialogGame.cpp, MudSock.cpp, ...), not LPC source -- skipped, see AGENTS.md's non-mudlib list |
 | 25 | xkx2001测试用老lib.zip | xkx2001 | 40021 | done | 侠客行Ⅰ, "ES II" lineage (shares master.c almost verbatim with rzrmud #23 despite adm/single/ layout resembling bxsj); booted with zero fixes, 84.7% lpcc pass; missing EDITOR_D daemon noted (bulletin-board feature gap, not fixed); see libs/xkx2001/NOTES.md |
 | 26 | xlqy_new2007.rar | xlqy_new2007 | 40022 | done | 新仙侣情缘之飘渺纪元, ES II lineage; found + fixed an extract.sh bug (relative .rar paths silently failed) + the recurring convertd.lpc Greek-table backslash typo (§8h); 98.6% lpcc pass after fix; one non-fatal unexplained runtime error during login noted but not chased; see libs/xlqy_new2007/NOTES.md |
-| 27 | xlqy-解压看readme.rar | | | not started | probed: extracts fine (no password/special step needed despite the name), root `xlqy/`, same "仙侣情缘" name/config as #26 (xlqy_new2007) but a different, EARLIER/incomplete snapshot -- its own readme.txt says (translated) "this lib is very incomplete, mainly used to test the driver ... many things are incompatible, no tech support provided". Not a byte-duplicate of #26 (9174 vs 9060 .c files). Lower priority given #26 already covers this game; process with standard pipeline when its turn comes, expect a rougher lpcc pass rate per the author's own disclaimer |
+| 27 | xlqy-解压看readme.rar | xlqy_early | 40076 | done | same 仙侣情缘 codebase/authorship as xlqy_new2007(#26) confirmed via diff (master.lpc/chinese.lpc are pure whitespace/brace reformatting of the same content, but logind.lpc/chinesed.lpc differ substantially) -- a genuinely earlier, rougher development snapshot matching the archive's own "very incomplete, for driver testing" disclaimer, not a duplicate; standard §15h fix (ported from #26) + §14/§8d-§15o(was entirely absent)/§15w/§8h/§15t fixes + eventd.lpc rename-width bug + uppercase .C rename (3 files) + missing save-data directories created (data/{login,user,npc,fabao,gold,pet}/{a-z}/ + log/nosave/, none existed and save_object() does a bare fopen() with no mkdir) + NEW __FILE__-in-#include-not-inherit bug (workroom.h expanded to its own path not the includer's, 100+ runtime errors/session) + NEW same-file forward-reference silently binding to an inherited function instead of the local override (a bare forward decl was insufficient, had to move the real body earlier) + 3 undeclared-variable bugs in cndd.lpc; full registration + post-login-command flow verified in 4 independent sessions with real names 秦风/秦岭/秦天/秦水, each confirmed via score+quit; notable: this archive's manmade_npcd spawns 100 autonomous NPCs lazily compiling the whole ~9,177-file map on boot, driving CPU to 75-85% for minutes -- a genuine intentional feature matching the readme, not a bug; 98.8% lpcc pass (9070/9177); see libs/xlqy_early/NOTES.md |
 | 28 | xo.zip | xo | 40023 | done | 笑傲江湖迷你版, TMI-2/ES2 lineage (Falcon), secure/daemon/ layout; found a case-sensitivity #include bug (Action.h vs action.h, new §15g) that was causing 209/1395 lpcc failures, fixed to 72; applied §4's security-daemon reentrancy guard proactively; see libs/xo/NOTES.md |
 | 29 | xo最终版1.2.rar | xo_final | 40024 | done | same TMI-2/ES2 lineage as xo(#28), full "final" build (~7,174 files vs xo's 1395); found the "comment eats next line" typo (2x) + ~8 lossy-conversion corrupted string literals; full registration flow verified incl. real Chinese name "赵云" reaching the password prompt; see libs/xo_final/NOTES.md |
 | 30 | zzfy (full).rar | zzfy | 40025 | done | 郑州风云3, same 风云 lineage as fy2/fy2005/fengyun434; simpler registration architecture (no separate "new" keyword branch -- "new" is itself banned as an id, any unused id goes straight to character creation); §15h fix applied proactively; full registration flow verified incl. real Chinese name "萧峰" reaching the password prompt; 89.5% lpcc pass; see libs/zzfy/NOTES.md |

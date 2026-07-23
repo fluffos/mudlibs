@@ -1,0 +1,203 @@
+#include <ansi.h>
+#include <wuxing.h>
+
+inherit F_DBASE;
+
+mapping fixed_animas = ([//固定五行区域
+    "/d/sea/": WUXING_SHUI,
+    "/d/qujing/firemount/": WUXING_HUO,
+    "/d/qujing/jingjiling/": WUXING_MU,
+    "/d/qujing/tianzhu/": WUXING_JIN,
+    "/d/qujing/wudidong/": WUXING_TU,
+    "/d/death/": WUXING_NONE,
+    "/d/qujing/lingshan": WUXING_ALL,
+]);
+
+string *second_path = ({"qujing", "dntg", "southern", "huashan"});
+
+mapping area_animas = ([]);
+mapping area_bonus = ([]);
+mapping area_maxbonus = ([]);
+
+void charge_anima(object ob)
+{
+    int i, count;
+    string *room;
+
+    count = sizeof(area_bonus);
+    room = keys(area_bonus);
+
+    for ( i = 0; i < count; i++ )
+    {
+        if ( area_bonus[room[i]] < area_maxbonus[room[i]] )
+        {
+            area_bonus[room[i]] += area_maxbonus[room[i]] / 4;
+        }
+    }
+
+    call_out("charge_anima", 15 * 60, this_object());
+}
+
+private void update_anima_x(object ob, string path)
+{
+    string *dirs, *room;
+    int i, count, j;
+    string wuxing;
+
+    dirs = get_dir(path);
+    count = sizeof(dirs);
+
+    for ( i = 0; i < count; i++ )
+    {
+        if ( "/d/" == path && -1 != member_array(dirs[i], second_path) )
+        {
+            update_anima_x(ob, path + dirs[i] + "/");
+        }
+        else
+        {
+            if ( undefinedp(area_animas[path + dirs[i] + "/"]) )
+            {
+                area_animas[path + dirs[i] + "/"] = WUXING_D->random_wuxing();
+                room = get_dir(path + dirs[i] + "/" + "*.lpc");
+                area_bonus[path + dirs[i] + "/"] = 100 * sizeof(room);
+                area_maxbonus[path + dirs[i] + "/"] = 100 * sizeof(room);
+            }
+            else
+            {
+                for ( j = 0; j < 30; j++ )
+                {
+                    if ( area_animas[path + dirs[i] + "/"] == (wuxing = WUXING_D->random_wuxing()))
+                    {
+                        continue;
+                    }
+
+                    break;
+                }
+
+                area_animas[path + dirs[i] + "/"] = WUXING_D->random_wuxing();
+                room = get_dir(path + dirs[i] + "/" + "*.lpc");
+                area_bonus[path + dirs[i] + "/"] = 100 * sizeof(room);
+                area_maxbonus[path + dirs[i] + "/"] = 100 * sizeof(room);
+            }
+        }
+    }
+}
+
+void update_anima(object ob, string path)
+{
+    int duration;
+    int i, count;
+    string *fixedarea;
+
+    update_anima_x(ob, path);
+
+    count = sizeof(fixed_animas);
+    fixedarea = keys(fixed_animas);
+
+    for ( i = 0; i < count; i++ )
+    {
+        area_animas[fixedarea[i]] = fixed_animas[fixedarea[i]];
+    }
+
+    CHANNEL_D->do_channel(ob, "rumor", "天地玄黄，元气震荡，据说此界灵气就此改变!");
+
+    remove_call_out("charge_anima");
+    call_out("charge_anima", 15 * 60, this_object());
+
+    duration = 2 * 3600 + random(4 * 3600);
+    call_out("update_anima", duration, this_object(), "/d/");
+}
+
+mapping query_area_animas()
+{
+    return area_animas;
+}
+
+mapping query_area_bonus()
+{
+    return area_bonus;
+}
+
+string get_room_area(object room)
+{
+    string *path;
+    int count;
+    string area;
+
+    if ( !room || !objectp(room) || !room->query("is_room") )
+    {
+        return "";
+    }
+
+    path = explode(base_name(room), "/");
+
+    count = sizeof(path);
+
+    if ( 1 >= count || "d" != path[0] )
+    {
+        return "";
+    }
+
+    if ( 2 == count && -1 != member_array(path[1], second_path) )
+    {
+        return "";
+    }
+
+    if ( -1 != member_array(path[1], second_path) )
+    {
+        area = "/" + path[0] + "/" + path[1] + "/" + path[2] + "/";
+    }
+    else
+    {
+        area = "/" + path[0] + "/" + path[1] + "/";
+    }
+
+    return area;
+}
+
+mixed room_wuxing_type(object room)
+{
+    string area = get_room_area(room);
+
+    if ( undefinedp(area_animas[area]) )
+    {
+        return WUXING_NONE;
+    }
+
+    return area_animas[area];
+}
+
+mixed room_wuxing_bonus(object room)
+{
+    string area = get_room_area(room);
+
+    if ( undefinedp(area_bonus[area]) )
+    {
+        return 0;
+    }
+
+    return area_bonus[area];
+}
+
+void use_room_wuxing(object room, int bonus)
+{
+    string area = get_room_area(room);
+
+    if ( undefinedp(area_bonus[area]) )
+    {
+        return;
+    }
+
+    area_bonus[area] -= bonus;
+}
+
+void create()
+{
+    seteuid(getuid());
+    set("name", "天地元气");
+    set("id", "animad");
+
+    remove_call_out("update_anima");
+    call_out("update_anima", 3, this_object(), "/d/");
+}
+

@@ -1,0 +1,438 @@
+# xlqy_early — 仙侣情缘 (early/incomplete "driver test" snapshot)
+
+Archive: `xlqy-解压看readme.rar` (archive #27). Port: 40076. Status: **done**
+(boots clean, full registration flow verified end-to-end multiple times
+incl. real Chinese names, `score`/`look`/`quit` all confirmed working
+post-login).
+
+## What this is / lineage confirmation vs xlqy_new2007 (#26)
+
+Extracts cleanly (no password/special step needed despite the `xlqy-解压看
+readme.rar` "unzip and read the readme" filename) to a root `xlqy/`
+directory. `readme.txt`'s own text (translated): *"start with
+`startxlqy64.bat`... this lib is very incomplete, mainly used to test the
+driver... you can open the `rzr` channel, it's mostly `rzr` [artificial
+NPCs] running around... configure the number of `rzr` in
+`/adm/daemons/manmade_npcd`'s `max_npcs`... the underlying engine has been
+heavily rewritten, many things are incompatible, no tech support
+provided."* — an unpolished, pre-#26 snapshot of the same "仙侣情缘"
+codebase, explicitly shipped for driver-compatibility testing rather than
+play.
+
+**Lineage confirmed via diff, not assumed from the shared title** (this
+project's own repeated lesson: similar Chinese titles are not a reliable
+lineage signal — see xianlvqiyuan vs xlqy_new2007, shujianpiaoling2 vs
+shujian2008):
+- `adm/simul_efun/chinese.lpc` — identical logic to xlqy_new2007's copy,
+  differing only in whitespace/brace style (`diff` shows only reformatting,
+  confirmed with `diff -bw` too — same GBK-byte `is_chinese()` bug, same
+  §15h fix needed).
+- `adm/obj/master.lpc` — same story: `diff -bw` shows only brace-style/
+  whitespace reformatting, not a content fork; same `valid_read`/
+  `valid_write`/`valid_override`/`get_root_uid`/`get_bb_uid` shapes as #26.
+- `adm/daemons/logind.lpc`, `adm/daemons/chinesed.lpc` — **do** differ
+  substantially in content (1957 and 309 diff lines respectively) — this
+  is a genuinely earlier/rougher build of the same game, not a byte-clone.
+- File counts: 9177 raw `.c` files here vs 9060 in xlqy_new2007's raw
+  archive (matches the pre-existing TODO.md note of "9174 vs 9060").
+
+**Net conclusion**: same base engine/authorship (`bugbug & alading @
+缥缈水云间, 2003-4-5` credited in nearly every file header), an earlier
+development snapshot with a rougher/smaller `logind.lpc`/`chinesed.lpc`,
+NOT a duplicate archive. xlqy_new2007's proven `master.lpc`/`chinese.lpc`
+fixes ported directly and worked unchanged; `logind.lpc`'s
+`check_legal_name` needed its own independent §15h fix since that file's
+content differs.
+
+## Fixes applied
+
+1. **AGENTS.md §15h (chinese.lpc)**: `is_chinese()`'s GBK lead-byte range
+   check (`str[0] > 160 && str[0] < 255`, `strlen(str) >= 2`) replaced with
+   a CJK Unicode codepoint range check (`str[0] >= 0x4e00 && str[0] <=
+   0x9fff`, `strlen(str) >= 1`). Ported the same shape already proven on
+   xlqy_new2007.
+2. **AGENTS.md §15h (logind.lpc `check_legal_name`)**: byte-calibrated
+   bound `strlen(name) < 2 || > 12` → `< 1 || > 6` (message already says
+   "必须是一到六个中文字" — 1 to 6 Chinese characters — halving the byte
+   bound just makes the code match what the message already promised);
+   dropped the `i%2==0 &&` GBK-lead-byte-alternation gate from the
+   sliding-window loop so every character position is checked, not every
+   other one.
+3. **AGENTS.md §14 (`valid_override`)**: upgraded from the 2-arg
+   `(file, name)` signature to the documented 3-arg `(file, name,
+   main_file)` form, checking `main_file == SIMUL_EFUN_OB/MASTER_OB` too
+   — free insurance for `#include`-composed simul_efun fragments (confirmed
+   this specific gap causes an lpcc-sweep-only failure on
+   `adm/simul_efun/object.lpc`, see lpcc section below; never actually
+   surfaces on a real boot).
+4. **AGENTS.md §8d/§15o (`get_include_path()`)**: added to `master.lpc`
+   (was entirely absent) — prepends the compiling file's own directory to
+   the include search path so `#include "local.h"`-next-to-its-user
+   resolves for compiles triggered live mid-connection (this lineage has
+   several such local headers: `d/city/workroom.h`, `d/obj/misc/
+   message.h`, `d/obj/quest/quest.h`, `d/*/npc/reporting.h`,
+   `d/city/misc/banned.h`).
+5. **AGENTS.md §15w (`log_error`)**: gated the player-facing broadcast on
+   the message NOT containing `"warning:"` (this driver funnels every
+   compile *warning* — e.g. the harmless `nosave`-function warnings that
+   `static`→`nosave` renaming produces — through the same apply as real
+   fatal errors; without the gate, any lazily-compiled file with a
+   cosmetic warning would flash the scary default-error message at
+   whichever player happened to be online).
+6. **AGENTS.md §8h (`convertd.lpc` Greek-table typo)**: one instance,
+   line 258, `"α\",` → `"α",` (plain LF file, verified with `cat -A`
+   before choosing the non-CRLF sed pattern per the documented lesson).
+7. **`niu.lpc` disallowed `..`-relative include (§15t #2)**:
+   `d/ourhome/honglou/npc/niu.lpc` had `#include "../honglou.h"` — this
+   driver disallows `..` in `#include` paths outright. Fixed to the real
+   absolute quoted path `"/d/ourhome/honglou/honglou.h"`.
+8. **`eventd.lpc` fixed-width extension-strip bug (AGENTS.md §2's
+   `[0..<3]`→`[0..<5]` nitan-family-shaped variant, found independently
+   here in a non-nitan-lineage lib)**: `collect_all_event()`'s
+   `map_array(get_dir(EVENT_DIR+"*.lpc"), (: $1[0..<3] :))` was correct
+   for stripping the original 2-char `.c` extension but left a stray
+   trailing `.l` after the `.c`→`.lpc` rename (`"emei.lpc"[0..<3]` →
+   `"emei.l"`, not `"emei"`) — every event failed to resolve
+   (`call_other() couldn't find object '.../emei.l'`, one per preload,
+   non-fatal since wrapped in the daemon's own `catch()`). Widened to
+   `[0..<5]` per the established +2 formula.
+9. **`d/city/workroom.h` broken `__FILE__` usage (new finding, not yet in
+   AGENTS.md)**: this header is `#include`d (not inherited) into 3
+   sibling rooms (`workroom1/2/3.lpc`), and used `__FILE__` inside a
+   `start_busy()` closure intending "the room that's actually running
+   this code" — but `__FILE__` is a preprocessor macro that expands to
+   whatever file is textually being *scanned* at that point, which for a
+   `#include`d fragment is always the header's own path
+   (`/d/city/workroom.h`, never a loadable object on its own), not
+   whichever of the 3 rooms actually included it. This produced ~130+
+   `call_other() couldn't find object '/d/city/workroom.h'` runtime
+   errors per test session (the highest-volume error category by far,
+   generated continuously by autonomous NPCs' "work for money" AI
+   behavior in these rooms). Fixed by replacing both `__FILE__` uses with
+   `file_name(this_object())` (resolves correctly at runtime regardless
+   of which of the 3 rooms is actually executing). **Worth adding to
+   AGENTS.md as a new catalog entry** — this is a generic trap for any
+   lib with a `#include`d (not inherited) fragment that uses `__FILE__`
+   expecting "the including object," since standard C-style preprocessor
+   semantics (this driver's `__FILE__` genuinely matches plain C here,
+   confirmed by reading `lexer_rules_pp.cc`) never behaved that way.
+10. **`daemon/skill/dao/taijitu.lpc` — AGENTS.md §15aa-shaped same-file
+    forward-reference bug (new instance, different mechanism than §15aa's
+    original "same name as a real efun" trap)**: `cast_person()` (defined
+    early in the file) calls `remove_effect_using(me, target)` before the
+    file's OWN 2-arg `(object me, object target)` override of that name
+    is defined later in the file. Because the base class `std/sserver.lpc`
+    (reached via `inherit FAMILYSKILL`) already defines an INHERITED
+    `remove_effect_using(object me, string file)`, the compiler bound the
+    early call to that inherited (wrong-arity) version instead — `error:
+    Bad type for argument 2 of remove_effect_using ( string vs object
+    )`. A first attempt at a fix (changing the call site to pass
+    `__FILE__` instead of `target`, matching every sibling skill file's
+    convention) compiled but was WRONG: it silently changed behavior to
+    call the generic inherited cleanup instead of this file's own
+    invisibility-removal/room-restoration logic. **Corrected fix**: moved
+    the actual function body (not just a prototype — a bare forward
+    *declaration* alone was insufficient here, still bound to the wrong
+    inherited version) to appear before `cast_person()`'s first call to
+    it. Confirmed clean via `lpcc` before and after. This skill is only
+    reachable via actual "太极图" (taijitu) spell casting in combat, not
+    the registration/boot path, but was a real semantic bug worth fixing
+    correctly rather than papering over.
+11. **`adm/daemons/cndd.lpc` — THREE separate undeclared-variable/
+    forward-reference bugs in the condition-tracking daemon, found via the
+    lpcc sweep, all pre-existing in the raw archive (confirmed by
+    grepping the raw `.c` file directly — none of these declarations were
+    ever present, not something our conversion dropped)**:
+    - `clear_condition(object me, string cnd)` used a bare `conditions`
+      mapping throughout with NO declaration/fetch at all. Every sibling
+      function in the same file (`query_entire_conditions()` right above
+      it) fetches the equivalent value via
+      `me->query_temp("conditions")` — added the same fetch as a local
+      declaration at the top of the function (unambiguous fix, not a
+      guess, matching an existing sibling idiom in the same file).
+    - `clear_conditions_by_type(string required_type)` had the identical
+      `conditions`-undeclared bug, but this function takes NO `me`
+      parameter (unlike `clear_condition`) — fixed via
+      `this_object()->query_temp("conditions")` instead.
+    - A SEPARATE, parallel `hb_conditions` mapping (heartbeat-scoped
+      condition store, used by `update_hb_condition()`/
+      `apply_hb_condition()`/`query_hb_condition()`/
+      `clear_hb_condition()`) was used identically across all four
+      functions with **no declaration anywhere in the file at all** (not
+      even a `query_temp` fetch — this one is genuinely meant to be a
+      persistent per-object global, since it needs to survive across
+      calls with no explicit save-back). Added
+      `nosave mapping hb_conditions;` as a real file-level global,
+      resolving all four call sites at once.
+    - Bonus: `clear_condition()` calls `clear_hb_condition()` (defined
+      much later in the same file) before that definition appears —
+      "Undefined function clear_hb_condition" (AGENTS.md §8b's classic
+      "same-file forward reference" shape). Fixed with a one-line forward
+      declaration near the top of the file (this one DID work as a bare
+      declaration — unlike the taijitu.lpc case above, since there's no
+      competing inherited function of the same name to shadow it).
+    - Verified compiles clean via `lpcc` after all four fixes.
+12. **Uppercase `.C` rename (AGENTS.md's "watch for uppercase .C" check)**:
+    3 files missed by `convert_lib.sh`'s lowercase-only glob
+    (`d/obj/drug/YUNDAN.C`, `d/guzhanchang/obj/{DIAMOND,BAG}.C`) —
+    manually renamed to `.lpc`; all three were already UTF-8 (not GBK),
+    so no additional encoding pass was needed. Confirmed no dangling `.c`/
+    `.C`-suffixed string references to these three basenames anywhere
+    else in the lib (only stale `.bak`/timestamp-suffixed backup copies
+    reference the related zone, none of them live `.lpc` code).
+13. **Created missing save-data directories** (not present anywhere in
+    the raw archive — `data/` shipped completely empty): `data/{login,
+    user,npc,fabao,gold,pet}/{a..z}/` — this driver's `save_object()`
+    (`vm/internal/base/object.cc`) does a plain `fopen()` with **no
+    mkdir**, so saving to a nonexistent sharded directory throws an
+    uncaught `error()` ("Could not open ... for a save"). Since
+    `enter_world()`'s `user->save(); ob->save();` calls have no
+    `catch()` around them, this would have silently killed every new
+    registration right after gender selection (the same failure shape as
+    AGENTS.md §15ah, just for `save_object()` rather than `log_file()`).
+    Also created `log/nosave/` (referenced by `master.lpc`'s crash
+    handler and several `log_file("nosave/...")` calls, same §15ah
+    pattern, lower-impact since only reachable on an actual crash).
+
+## Confirmed NOT needed (checked via source reading, not assumption)
+
+- **§4** (lazy `load_object(SECURITY_D)` recursion in `valid_read`/
+  `valid_write`): `master.lpc`'s versions only do `find_object()`, never
+  `load_object()` — same as xlqy_new2007, not the recursion-prone shape.
+- **§7** (`get_root_uid`/`get_bb_uid` missing): both already present.
+- **§15n/§15o func-allowlist** for a custom `securityd.lpc` ACL: this
+  lib's `valid_read`/`valid_write` already use an allow-by-default-
+  unless-a-known-data-op pattern (`if (func != "read_file" && func !=
+  "file_size" && func != "stat" && func != "read_bytes" && func != "tail"
+  && func != "ed_start") return 1;`) that already implicitly allows
+  `load_object`/`recompile_object`/`include` without needing an explicit
+  allowlist addition — confirmed by reading the function body, not by
+  hitting the crash.
+- **§8c** (`this_player()`-override-in-valid_read footgun): `get_status()`
+  is called directly with the passed `user`, no `this_player()`
+  substitution anywhere in `securityd.lpc`.
+- **§15p** (dns_master preload exclusion): `adm/etc/preload` never
+  listed `dns_master`/`network/dns_master` to begin with — nothing to
+  exclude. The `adm/daemons/network/` tree exists (intermud daemons,
+  mail/ping/telnet services) but is entirely unreachable from
+  registration/normal play; its own missing headers (`post.h`, `uid.h`,
+  `priv.h` — genuinely absent from the archive) only surface as lpcc-sweep
+  noise (see below), never a boot/connect issue.
+- **§15l** (`destruct(SIMUL_EFUN_OB)` in master's `create()`): no such
+  call anywhere in `master.lpc`.
+- **§15ae** (`private nomask command_hook` breaking post-login commands):
+  `feature/command.lpc`'s `command_hook` is already `nomask int
+  command_hook(...)` with `private` **commented out** in the source
+  (`// private nomask int command_hook(string arg)`) — already fixed by
+  whoever last touched this codebase (or never had the bug). Confirmed
+  both by reading the source AND empirically: `score`/`look`/`quit` all
+  produced correct real output in every test run.
+- **§15ag** (`ed_start`/`ed_cmd`/`query_ed_mode`): only appears as a
+  string literal inside `securityd.lpc`'s func-name comparison list
+  (classifying which read ops are "sensitive"), never actually called.
+- **§15al** (`crypt(str, 0)` random-hash trap): `logind.lpc` uses
+  `crypt(pass, 0)` only to set a NEW password at registration time (the
+  resulting hash string itself, containing its own embedded salt, is
+  what gets compared against on subsequent logins via `crypt(pass,
+  my_pass)` — the stored hash IS the salt for verification, so a fresh
+  random salt at set-time is completely fine here). This is the ordinary
+  password-hashing idiom, not the client-challenge-handshake shape §15al
+  actually warns about (no client-side independent computation of the
+  hash is expected anywhere in this lib).
+- **§15am** (`file_size()==-1` truthiness trap): the two `file_size(...)
+  >= 0` checks in `logind.lpc` are already written correctly.
+- **§8e** (`tail()` missing efun): only reachable from `cmds/wiz/tail.lpc`
+  (an admin command, confirmed non-fatal, not on the boot/simul_efun
+  compile path) — never touches the fatal `adm/simul_efun/file.lpc`
+  case some other libs hit.
+- **LONELY_IMPROVED / `count()` bignum family**: zero hits — this is not
+  a nitan/Lonely-lineage lib, no `efun::set/query/delete`-family
+  simul_efun architecture bug applies either (this codebase's `feature/
+  dbase.lpc` already implements real per-object `set`/`query`/`delete`).
+- **§15u dormant anti-piracy self-destruct**: no `shutdown()`/mass-delete
+  pattern found in `securityd.lpc`/`master.lpc`.
+- **§15z `#define nosave static`/`#define protected static` shim
+  collision**: no such compatibility macro present anywhere.
+
+## Interactive test results — full registration + post-login commands
+
+Registration shape (read from `logind.lpc`'s actual callback chain, not
+inferred from prompt text): GB/BIG5 selection → "are you a student"
+age-gate (any non-"no" ends the session) → English id prompt (`new` must
+be typed literally) → English id → **no y/n confirmation step** → Chinese
+name prompt → password → password confirmation → email → gender (m/f) →
+an always-instant, non-interactive "gift allocation" step (the `d/wiz/
+init.lpc` room's own `input_to("get_input", ...)` line is commented out
+in the source, so `get_start()` calls `do_finish()` synchronously via a
+`call_out(0)` right when the player enters — no real stat customization
+ever happens, matching the archive's own "not fully finished" nature) →
+drops the new character into an actual starting room (`聚见亭`, chosen at
+random from several candidates per `d/wiz/init.lpc`'s own logic).
+
+**Verified successfully in FOUR independent full continuous sessions**,
+each incl. a real Chinese name reaching the actual game world and at
+least one post-login command producing correct output:
+- **秦风 (Qinfeng, male)** — fast/clean run right after a cold boot.
+  `look` → room description (聚见亭) with correct NPCs listed; `score` →
+  full, correct character sheet (仙衔/职称/attributes/gender all correct);
+  `quit` → correct farewell flavor text. Zero `debug.log` errors this
+  session.
+- **秦岭 (Qinling, female)** — same result, incl. correct female
+  honorific/gender fields on the character sheet.
+- **秦天 (Qintian, male)** — same result again after a full driver
+  restart with every fix above applied (including the corrected
+  `taijitu.lpc`/`cndd.lpc` fixes), confirming a clean state from a fresh
+  boot: `score` produced the correct sheet, `quit` the correct farewell,
+  zero `debug.log` runtime errors for the whole session.
+- **秦水 (Qinshui, male)** — registered successfully under heavy
+  background CPU load (see below); confirmed via the actual saved
+  `data/user/q/qinshui.o`/`data/login/q/qinshui.o` files (correct name,
+  gender, stats, SHA-512 password hash) even though the live telnet
+  transcript itself got cut short by the test script's own timeout
+  budget before showing the final room — not a functional failure, see
+  next section.
+
+One recurring, understood-and-benign cosmetic quirk: `get_name()` in
+`logind.lpc` has a leftover debug statement, `printf("%O\n", ob);`,
+printed right after a Chinese name is accepted — shows the raw login
+object reference (e.g. `/obj/login#16`) to the player. Pre-existing in
+the original source (not something this pass introduced), purely
+cosmetic, does not block anything. A second cosmetic-only artifact seen
+once: sending an early command (`9`/`look`) in the split-second window
+between entering `d/wiz/init` and its `call_out(0)`-triggered
+`do_finish()` firing can get silently swallowed by `d/wiz/init.lpc`'s own
+`add_action("do_block", "", 1)` catch-all (which only allows `look`/
+`help`/`story`/`say` while in that room) and shows the driver's generic
+`default fail message` ("什么？") once — harmless, and the very next
+line in every affected transcript is the correct room entry/gift
+completion; not a registration or command-dispatch defect.
+
+## Known characteristic, not a bug: heavy CPU load from autonomous "rzr" NPC roaming
+
+This archive ships with `adm/daemons/manmade_npcd.lpc`'s `max_npcs = 100`
+— per the readme's own description, up to 100 autonomous "rzr" (人造人/
+artificial-human) NPCs wander the ~9,177-file map continuously from boot,
+lazily compiling every room/NPC/item file they touch for the first time.
+Observed: driver CPU climbed from ~7-20% right after boot to a sustained
+75-85% within a few minutes and stayed there for the ~12+ minutes this
+pass kept the driver running, visible in `debug.log` as a continuous
+stream of "In file included from ..." compile-cascade lines across every
+zone in the map. This is a genuine, intentional feature of this
+particular "for driver testing" snapshot (explicitly what the readme
+describes), not a conversion defect — no crash, no fatal error, the
+driver stayed fully responsive to new connections throughout (confirmed:
+a fresh registration completed correctly even while this was happening,
+just with higher latency on some responses since this driver's game-tick
+processing is single-threaded and a heavy background lazy-compile pass
+competes for the same thread). Two of the six test connections in this
+pass hit this slowdown directly (the `qinbao`/`qinchuan`/`qinhuai` runs
+issued in the middle of this pass, while the storm was in full swing,
+never actually completed within their allotted test-script timeout
+budgets — confirmed via the absence of a corresponding `data/user/`/
+`data/login/` save file for those three ids, i.e. these were test-harness
+timeouts, not silent registration failures). Not fixed/tuned down since
+it's original game-balance content, not a driver-compat defect; flagging
+here so a future session isn't surprised by it.
+
+## lpcc sweep
+
+**9177 files, 9070 pass / 107 fail (98.8%)** (`libs/xlqy_early/
+lpcc_batch_raw.log` / `lpcc_fail.log`, both left in place per the
+established per-lib convention). Triaged by category rather than fixing
+all 107 blind, per AGENTS.md §6b:
+
+- **~26 files** (`d/kaifeng/npc/**/quest*.lpc`, incl. `.../backup/` and a
+  `d/dntg/yunlou/npc/**/quest.lpc` sibling): `Cannot #include colors.h` /
+  `reporting.h`, cascading into `Undefined function query`/`Unable to
+  find inherited function 'setup'` etc. Root cause: these files live one
+  directory level below (`.../kaifeng/npc/kaifeng/`) where `colors.h`/
+  `reporting.h` actually reside (`.../kaifeng/npc/`), so a plain quoted
+  `#include` fails to find them **specifically when compiled via bare
+  `lpcc`** — the newly-added `get_include_path()` (fix #4 above) computes
+  exactly the right parent directory for real mid-connection compiles,
+  but per AGENTS.md §15o's documented caveat, `get_include_path()` is
+  never consulted for `lpcc`-batch/no-VM-context compiles at all, so this
+  category is expected sweep noise, not a live defect — confirmed absent
+  from every real boot/interactive-test `debug.log` in this pass (grepped
+  for both header names, zero hits). Not independently proven at true
+  runtime (none of our test sessions happened to visit this specific
+  Kaifeng zone), but matches the well-established pattern from many prior
+  libs closely enough to trust without further chasing.
+- **~16 files** in directories literally named `old`/`backup` (`d/baoshi/
+  obj/old/{bs,js}_{b,g,r,y,z}1.lpc`, `d/kaifeng/npc/{old,backup/old}/
+  {bei,shan,zhi}.lpc`): missing `build_gold.h`/similar shared headers.
+  Confirmed via `grep -rl` that nothing outside these `old`/`backup`
+  directories references any of these files by path — genuinely dead,
+  superseded content, not reachable in play.
+- **6 files** under `adm/daemons/network/` (`mail_serv`, `netmail`,
+  `pingd`, `pingtcp`, `telnetd`, `userid`): missing `post.h`/`uid.h`/
+  `priv.h` — confirmed genuinely absent from the whole archive (not a
+  local-include-path issue), an entire never-fully-shipped intermud/mail
+  subsystem. None of these files are in `adm/etc/preload` and none are
+  reachable from registration/ordinary play.
+- **7 files** with genuine raw pre-existing byte corruption (`Illegal
+  character` errors decoding to garbage/mixed CJK+control bytes):
+  `quest/xunbao/obj/shuijingqiu.lpc` (+ its `d/obj/quest/` duplicate),
+  `d/moon/obj/poem.lpc`, `d/obj/books-nonskill/hmeng014.lpc`,
+  `d/shendian/obj/niepan.lpc`, `d/wiz/angell/hp.lpc`, `story/
+  pifeng2.lpc`. Confirmed for `shuijingqiu.c` by inspecting the RAW
+  pre-conversion bytes directly (`locate_quest(this_player(),arg` followed
+  immediately by `\xab\xc9\x85w)\xf6\xe6\xbb6o~m#\xa3y\x9e\xf4\x8a`) — this
+  garbage is already present in the original archive, not introduced by
+  our GB18030 conversion (iconv just decoded already-corrupt bytes into
+  equally nonsensical but valid UTF-8). Not reconstructed/guessed at;
+  documented as pre-existing archive bit-rot.
+- **2 genuine bugs found and FIXED** (see Fixes #10/#11 above):
+  `daemon/skill/dao/taijitu.lpc` (same-file forward-reference
+  mis-binding) and `adm/daemons/cndd.lpc` (3 separate undeclared-variable/
+  forward-reference issues). Both now compile clean, verified via
+  individual `lpcc` re-checks (a full re-sweep was not re-run afterward
+  to conserve host resources given other agents were sweeping
+  concurrently — memory stayed healthy throughout this pass's own sweep,
+  15-19GB available the whole time, well clear of the danger zone).
+- **`adm/simul_efun/object.lpc`**: `Invalid simulated efunction override`
+  — this is precisely AGENTS.md §14's documented "only ever surfaces when
+  `lpcc` compiles the fragment as a standalone top-level object" false
+  positive; the 3-arg `valid_override()` fix (#3 above) is already in
+  place and this error is confirmed absent from every real boot's
+  `debug.log`.
+- **`cmds/wiz/tail.lpc`**: `Undefined function tail` — AGENTS.md §8e's
+  documented benign case (admin command only, not the fatal
+  simul_efun-compile-path variant).
+- **`cmds/adm/{socket,dumpsocket}.lpc`**: `Undefined function
+  dump_socket_status` — peripheral admin socket-debugging tools, never
+  reached by registration/ordinary play, not chased further.
+- **Remaining ~40 files**: a long tail of individual NPC/item/room
+  content, one example fully diagnosed (`d/city/npc/aluoben.lpc` — the
+  file itself compiles with ZERO errors, but its `create()` calls
+  `carry_object("/d/city/npc/obj/sengpao")` for a monk's-robe item that
+  doesn't exist anywhere in this archive — a genuine, narrow missing-item
+  content gap, AGENTS.md §13/§15e's category, not a driver-compat bug).
+  The rest were not individually opened given the sample already
+  confirmed the expected mix (missing-content gaps and isolated
+  pre-existing content typos) rather than a shared systemic cause, per
+  §6b's explicit guidance not to exhaustively diagnose every last item on
+  a lib this size once the failure categories are understood.
+
+## Suggested new AGENTS.md catalog entries (not added — instructed not to edit AGENTS.md directly)
+
+- A `#include`d (not inherited) fragment file using `__FILE__` to mean
+  "whichever object actually included me" is always wrong on this driver
+  — `__FILE__` expands to the file currently being *lexically scanned*
+  (standard C-preprocessor semantics, confirmed in `lexer_rules_pp.cc`),
+  which for an `#include`d header is the header's own path, never the
+  includer's. Fix: `file_name(this_object())` instead, which resolves
+  correctly at runtime. Found in `d/city/workroom.h`, the highest-volume
+  single error source in this lib's own testing (100+ runtime errors per
+  session from autonomous NPCs repeatedly triggering the broken path).
+- A same-file forward-reference to a locally-overridden function name
+  that ALSO exists on an inherited base class can bind to the WRONG
+  (inherited) version even with an explicit forward *declaration*
+  present — only moving the real function body (not just a prototype)
+  above its first caller fixed it in this instance
+  (`daemon/skill/dao/taijitu.lpc`'s `remove_effect_using`). This is a
+  stronger/different failure mode than §15aa's original finding (which
+  was specifically about a same-named-as-a-real-*efun* wrapper); here the
+  name collision is with an ordinary *inherited* function, and a bare
+  prototype-only forward declaration was NOT sufficient insurance the way
+  it normally would be for an unrelated new name.

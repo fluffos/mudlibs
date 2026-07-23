@@ -1,0 +1,111 @@
+#include <ansi.h>
+#include <combat.h>
+
+inherit FAMILYSKILL;
+
+void remove_effect(object target,object me);
+
+int cast(object me, object target)
+{
+    string msg;
+    mixed ap, dp;
+    int howlong;
+    object weapon = me->query_temp("weapon");
+    object qingwang;
+
+    if ( !target )
+    {
+        return notify_fail("你想对谁使用情网？\n");  
+    }
+
+    limit_status["mana"] = 200;
+    limit_status["sen"] = 10;
+
+    limit_skills["spells"] = 150;
+    limit_skills["moonshentong"] = 100;
+    limit_skills["whip"] = 150;
+    limit_skills["jueqingbian"] = 100;
+
+    if ( !can_cast(me, "月宫") )
+    {
+        return 0;
+    }
+
+    if ( !weapon || weapon->query("skill_type") != "whip" )
+    {
+        return notify_fail("没有鞭子，你拿什么织情网啊？\n");
+    }
+
+    if ( me->query_skill_mapped("whip") != "jueqingbian" )
+    {
+        return notify_fail("你没在用绝情鞭，使不出情网。\n");
+    }
+
+    me->add("mana", -200);
+    me->receive_damage("sen", 10);
+
+    message_cast(HIB"$N催动法力，将手中" + weapon->name() + "舞成一团，化做一张大网，向$n当头罩来。\n"NOR, me, target);
+
+    ap = COMBAT_D->cast_power(me, target, SKILL_USAGE_ATTACK);
+    dp = COMBAT_D->cast_power(me, target, SKILL_USAGE_DEFENSE);
+
+    ap = COMBAT_D->power_add(ap, COMBAT_D->_skill_power(me, "whip", SKILL_USAGE_ATTACK));
+    dp = COMBAT_D->power_add(dp, COMBAT_D->_skill_power(target, "dodge", SKILL_USAGE_DEFENSE));
+
+    if ( 0 < COMBAT_D->cast_hit(ap, dp) )
+    {
+        message_cast(HIB"$n脑子里一片混乱，鬼使神差般突然发呆，甚至忘记了躲闪，被情网当头罩住。\n"NOR, me, target);
+
+        howlong = random(me->query_skill("jueqingbian", 1) + me->query_skill("moonshentong", 1)) / 15 + 5;
+        if ( howlong > 20 )
+        {
+            howlong = 20;
+        }
+
+        seteuid(getuid());
+
+        qingwang = new("/d/obj/fabao/qingwang");
+        qingwang->set("target", target);
+        qingwang->set("owner", me);
+        qingwang->set("weapon", weapon);
+        qingwang->set_temp("time_expired", time() + howlong);
+
+        if ( !qingwang->move(environment(target)) )
+        {
+            message_cast(HIY"$n身上发出一道护体金光，将情网击的粉碎。\n"NOR, me, target);
+            destruct(qingwang);
+        }
+
+        set_using(me, __FILE__);
+		call_out("remove_effect_using", howlong, me);
+
+        return howlong;
+    }
+    else
+    {
+        message_cast(HIG"$n神智清醒，不为情所困，轻轻向旁一跃，躲过了情网的袭击。\n"NOR, me, target);
+        if ( living(target) )
+        {
+            target->kill_ob(me);
+        }
+
+        return 5 + random(5);
+    }
+}
+
+void remove_effect_using(object me)
+{
+    if ( me && me->query_temp("qingwang") )
+    {
+        me->query_temp("qingwang")->self_destruct();
+        me->delete_temp("qingwang");
+    }
+
+    ::remove_effect_using(me, __FILE__);
+}
+
+string skill_name(object me, object target, string skill)
+{
+    return "情网";
+}
+

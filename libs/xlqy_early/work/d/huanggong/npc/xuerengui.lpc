@@ -1,0 +1,199 @@
+inherit JOBMASTER;
+
+#include <ansi.h>
+#include "greeting.h"
+
+#define MY_NAME "薛仁贵"
+
+private int do_job();
+private int ask_done();
+
+void create()
+{
+    set_name(MY_NAME, ({ "xue rengui", "xue", "rengui" }) );
+    set("gender", "男性");
+    set("age", 35);
+    set("long", MY_NAME"是长安城九门提督，负责皇宫内外安全。\n");
+    set("combat_exp", 35000000);
+    set("title", HIR"九门提督"NOR);
+    set("nickname", HIY"勇冠三军"NOR);
+    set("attitude", "friendly");
+
+    set("per", 25);
+    set("str", 35);
+
+    set("max_kee", 20000);
+    set("max_gin", 16000);
+    set("max_mana", 50000);
+    set("mana", 50000);
+    set("force", 50000);
+    set("max_force", 50000);
+    set("force_factor", 500);
+
+    set_skill("spear", 800);
+    set_skill("unarmed", 800);
+    set_skill("changquan", 700);
+    set_skill("parry", 800);
+    set_skill("dodge", 800);
+    set_skill("bawang-qiang", 700);
+    set_skill("yanxing-steps", 700);
+
+    map_skill("spear", "bawang-qiang");
+    map_skill("parry", "bawang-qiang");
+    map_skill("dodge", "yanxing-steps");
+    map_skill("unarmed", "changquan");
+
+    set("inquiry", ([
+        "守城" : (: do_job :),
+        "job"  : (: do_job :),
+        "完成" : (: ask_done    :),
+        "done" : (: ask_done    :),
+        ]));
+
+    setup();
+
+    carry_object("/d/obj/weapon/spear/tiespear")->wield();
+    carry_object("/d/obj/armor/tongjia")->wear();
+
+    ::create();
+}
+
+void init ()
+{
+    greeting2(this_player());
+
+    ::init();
+}
+
+private int do_job()
+{      
+    object me;
+
+    me = this_player();
+
+	if ( "done" == me->query("job/xue/step") )
+    {
+        tell_object(me, "你必须先把上次的任务报告了以后才能再要任务。\n");
+        return 1;
+    }
+
+    if ( "asked" == me->query("job/xue/step") )
+    {
+        tell_object(me, "你已在这儿要过任务了，快去守城。\n");
+        return 1;
+    }
+
+    if ( 200000000 <= me->query("combat_exp") || 200000000 <= me->query("daoxing")
+        || me->query("newbie/xue") )
+    {
+        if ( userp(me) && !wizardp(me) )
+        {
+            tell_object(me, "你现在不适合这项任务。\n");
+            if ( !me->query("newbie/xue") )
+            {
+                me->set("newbie/xue", 1);
+                tell_object(me, "现在就凭我这封举荐信去回春药铺吧。\n");
+            }
+            else
+            {
+                tell_object(me, "不是让你去回春药铺吗?\n");
+            }
+            return 1;
+        }
+    }
+
+    message_vision(CYN"$N对$n说道：你这就去吧，为朝廷效力，才是升官捷径者。\n"NOR, this_object(), me);
+
+    me->set("job/xue/step", "asked");
+
+    me->apply_condition("sxy-job", 8);
+
+    MONITOR_D->report_job_msg(me->name() + "(" + me->query("id") + ")接到了一个守城任务！\n");
+
+    return 1;
+}
+
+mapping calc_reward_64(int gong)
+{
+    mapping reward = ([]);
+
+    reward["combat_exp"] = gong * 140000;
+    reward["daoxing"] = gong * 140000;
+    reward["potential"] = gong * 28000;
+    reward["silver"] = gong * 10000;
+    reward["office_number"] = gong * 750;
+    reward["job"] = "xue";
+
+    return reward;
+}
+
+mapping calc_reward_32(int gong)
+{
+    mapping reward = ([]);
+
+    reward["combat_exp"] = gong * 140000;
+    reward["daoxing"] = gong * 140000;
+    reward["potential"] = gong * 28000;
+    reward["silver"] = gong * 10000;
+    reward["office_number"] = gong * 750;
+    reward["job"] = "xue";
+
+    return reward;
+}
+
+private int ask_done()
+{      
+    object me;
+    mapping reward;
+
+    int gong, exp, pot, money, office_number;
+
+    me = this_player();
+
+    if ( !me->query("job/xue") )
+    {
+        tell_object(me, "你有要过任务吗。\n");
+        return 1;
+    }
+
+    if ( me->query_condition("sxy-job") && "done" != me->query("job/xue/step") )
+    {
+        tell_object(me, "你的任务还没完成呢。\n");
+        return 1;
+    }
+
+    gong = me->query("job/xue/gong");
+
+    if ( 8 < gong )
+    {
+        gong = 8;
+    }
+
+    /*
+    守城效率设计--平均约15秒左右一个怪，一轮需要2分钟，设定为6小时完成守城
+    6小时可以守城到100万年，以此为基础进行设计。
+    */
+    reward = system_call((: call_other, __FILE__, "calc_reward_64" :), 
+        (: call_other, __FILE__, "calc_reward_32" :), gong, gong);
+
+    reward = GIFT_D->gift_bonus(me, reward);
+
+    exp = (int)reward["combat_exp"];
+    pot = (int)reward["potential"];
+    money = (int)reward["silver"];
+    office_number = (int)reward["office_number"];
+
+    message_vision(CYN"$N对$n说道：做得不错！为国出力就应如此。\n"NOR, this_object(), me);
+    message_vision(CYN"$N对$n说道：你总共立了" + gong + "件功。\n"NOR, this_object(), me);
+    message_vision(CYN"$N对$n说道：该奖励你" + exp + "点武学及道行，" + pot + "点潜能，" + money + "两银子，" + office_number + "点官值。\n"NOR, this_object(), me);
+
+    message("channel:rumor", HIG"【大唐皇宫】：" + me->name(1) + "(" + me->query("id") + ")" + HIM"守城立功" + gong + "件，奖励" + exp + "点武学及道行，" + pot + "点潜能，" + money + "两银子，" + office_number + "点官值。\n"NOR, users());
+    MONITOR_D->report_job_msg(me->name(1) + "(" + me->query("id") + ")守城立功" + gong + "件，奖励" + exp + "点武学及道行，" + pot + "点潜能，" + money + "两银子，" + office_number + "点官值。\n");
+
+    me->add("count/xue", gong);
+
+    me->delete("job/xue");
+
+    return 1;
+}
+

@@ -1,0 +1,907 @@
+// by bugbug & alading @ 缥缈水云间, 2003-4-5 
+// damage.c 
+//modified by gamer@88 2004.02 
+#include <ansi.h>
+#include <dbase.h>
+#include <login.h>
+#include <move.h>
+
+int ghost = 0;
+
+int is_ghost()
+{
+    return ghost;
+}
+
+int query_adult()
+{
+    return (query("age") >= 18);
+}
+
+int query_realadult()
+{
+    return (query("real_age") >= 18);
+}
+
+int can_special(string spskill)
+{
+    return (query_adult() && query("special_skill/" + spskill));
+}
+
+int query_force_limit()
+{
+    return 2 * query("max_force");
+}
+
+int query_mana_limit()
+{
+    return 2 * query("max_mana");
+}
+
+object query_realone(object who)
+{
+    object who2 = who;
+
+    while ( who2 && objectp(who2) && objectp(who2->query_temp("invoker")) )
+    {
+        who2 = who2->query_temp("invoker");
+    }
+
+    return who2;
+}
+
+int self_purge()
+{
+    object me = this_object();
+    object link_ob = me->query_temp("link_ob");
+
+    if ( !userp(me) )
+    {
+        return 0;
+    }
+
+    if ( (int)me->query("max_kee") > 0 && (int)me->query("max_sen") > 0 && (int)me->query("max_gin") > 0 )
+    {
+        return 0;
+    }
+
+    set_heart_beat(0);
+    ghost =1;
+    me->move("/d/death/block.lpc");
+    CHANNEL_D->do_channel(me, "rumor", me->query("name") + "因为年纪太大，心力交瘁，不幸与世长辞，永远离开了我们！");
+
+    return 1;
+}
+
+void gameover()
+{
+    object me = this_object();
+
+    //currently, only move the player to /d/death/block.c
+    if ( !userp(me) )
+    {
+        return;
+    }
+
+    me->move("/d/death/block.lpc");
+    if ( !me->query("life/death_announced") )
+    {
+        me->set("life/death_announced", 1);
+        CHANNEL_D->do_channel(load_object(COMBAT_D), "rumor", me->query("name") + "寿终正寝，永远地离开了我们。");
+    }
+}
+
+int check_gameover()
+{//weiqi, 981231
+    object me = this_object();
+
+    //永远不会老死
+    return 0;
+
+    if ( wizardp(me) )
+    {
+        return 0;
+    }
+    if ( !userp(me) )
+    {
+        return 0;
+    }
+
+    if ( me->query("age") <= me->query("life/life_time") )
+    {
+        return 0;
+    }
+
+    //now gameover le 
+    gameover();
+    return 1;
+}
+
+void announce_live_forever(string reason)
+{
+    object me = this_object();
+    object dadi;
+
+    if( !reason )
+    {
+        return;
+    }
+
+    if ( me->query("life/live_forever_announced") )
+    {
+        return;
+    }
+
+    me->set("life/live_forever_announced", 1);
+    me->set("life/live_forever", 1);
+    me->set("life/life_time", 188 + random(12));
+
+    dadi = new("/d/wiz/npc/dadi.lpc");
+    dadi->move(environment(me));
+
+    message_vision(HIY"只听一阵仙乐缥缈，一驾五彩云车从天缓缓而降。\n"NOR, dadi);
+    message_vision(HIY"$N从车上立起身来对$n一拱手：恭喜！恭喜！\n"NOR, dadi, me);
+    dadi->command_function("chat " + reason);
+    message_vision(HIY"$N一挥手，云车渐渐淡去...\n"NOR, dadi);
+    destruct(dadi);
+
+    return;
+}
+
+varargs int receive_damage(string type, int damage, object who, string kind)
+{
+    int val, lucky;
+    string msg;
+
+    object me, who2 = who;
+
+    me = this_object();
+
+    who2 = query_realone(who);
+
+    if ( damage < 0 ) 
+    {
+        if ( 0 )
+        {
+            object myenv = environment();
+            string where = "null";
+            if ( myenv )
+            {
+                where = file_name(myenv);
+            }
+            log_file("damage",sprintf("[%s] %s make %d[%s] damage to %s at %s.\n", 
+                ctime(time()), who2->query("id"), damage, type, me->query("id"), where));
+            damage = 0;
+        }
+        else
+        {
+            error("F_DAMAGE: 伤害值为负值。\n");
+        }
+    }
+
+    if ( type != "kee" && type != "sen" && type != "gin" )
+    {
+        error("F_DAMAGE: 伤害种类" + type + "错误( 只能是 kee, sen, gin 其中之一 )。\n");
+    }
+
+    if ( objectp(who) && kind )
+    {
+        damage = FAMILY_D->query_total_damage(who, me, damage, type, kind); // who is the attacker,me is the receiver
+        if ( 0 < damage )
+        {
+            damage = WUXING_D->query_total_damage(who, me, damage, type, kind); // who is the attacker,me is the receiver
+        }
+    }
+
+    who = who2;    
+    set_temp("last_damage_from", who);
+
+    if ( me->query_temp("combat/lucky")
+        && !me->query_temp("pending/exercising") && !me->query_temp("pending/meditating") ) //ranger from -10 to 10
+    { 
+        lucky = random(13 + me->query_temp("combat/lucky"));
+
+        if ( me->query_temp("combat/lucky") > 9 )
+        {
+            lucky = 10 + random(11);
+        }
+
+        if ( me->query_temp("combat/lucky") < -9 )
+        {
+            lucky = random(3);
+        }
+
+        if ( me->query_temp("combat/lucky") < 0 )
+        {
+            if ( lucky < 1 )
+            {
+                damage += damage / 3;
+            }
+            else if ( lucky < 3 )
+            {
+                damage += damage / 6;
+            }
+            else if ( lucky < 5 )
+            {
+                damage += damage / 10;
+            }
+        }
+        else
+        {
+            if ( lucky > 18 )
+            {
+                damage -= damage / 5;
+            }
+            else if ( lucky > 15 )
+            {
+                damage -= damage / 8;
+            }
+            else if ( lucky > 10 )
+            {
+                damage -= damage / 15;
+            }
+        }
+    }
+
+    if ( me && me->is_fighting() && ((wizardp(me) && (string)me->query("env/combat") == "verbose")
+        || (userp(me) && "YES" == (string)me->query("env/combat_test"))) )
+    {
+        msg = sprintf( GRN "ATTACK：%s，DEFNSE：%s，TYPE：%s，DAMAGE：%d\n" NOR, 
+            (who2 && who2->query("id")) ? who2->query("id") : "none", me->query("id"), stringp(type) ? type : "none", damage);
+        tell_object(me, msg);
+    }
+    if ( who2 && who2->is_fighting() && ((wizardp(who2) && (string)who2->query("env/combat") == "verbose")
+        || (userp(who2) && "YES" == (string)who2->query("env/combat_test"))) )
+    {
+        msg = sprintf( GRN "ATTACK：%s，DEFNSE：%s，TYPE：%s，DAMAGE：%d\n" NOR, 
+            who2->query("id"), (me && me->query("id")) ? me->query("id") : "none", stringp(type) ? type : "none", damage);
+        tell_object(who2, msg);
+    }
+
+    if ( 0 < damage )
+    {
+        if ( query_temp("apply/kill_msg") && query_temp("apply/kill_file") )
+        {
+            set_temp("kill_msg", query_temp("apply/kill_msg"));
+            set_temp("kill_file", query_temp("apply/kill_file"));
+        }
+    }
+
+    val = (int)query(type) - damage;
+
+    if ( val >= 0 )
+    {
+        set(type, val);
+    }
+    else
+    {
+        set( type, -1 );
+    }
+
+    set_heart_beat(HEART_BEAT_TICK);
+
+    return damage;
+}
+
+varargs int receive_wound(string type, int damage, object who)
+{
+    int val;
+    string msg;
+    object who2 = who;
+    object me = this_object();
+
+    who2 = query_realone(who);
+
+    if ( damage < 0 ) 
+    {
+        if ( 0 )
+        {
+            object myenv = environment();
+            string where = "null";
+            if ( myenv )
+            {
+                where = file_name(myenv);
+            }
+            log_file("wound",sprintf("[%s] %s make %d[%s] wound to %s at %s.\n", 
+                ctime(time()), who2->query("id"), damage, type, this_object()->query("id"), where));
+            damage = 0;
+        }
+        else
+        {
+            error("F_WOUND: 伤害值为负值。\n");
+        }
+    }
+
+    if ( type != "kee" && type != "sen" )
+    {
+        error("F_WOUND: 伤害种类错误( 只能是 kee, sen 其中之一 )。\n");
+    }
+
+    set_temp("last_damage_from", who2);
+
+    if ( me && me->is_fighting() && ((wizardp(me) && (string)me->query("env/combat") == "verbose")
+        || (userp(me) && "YES" == (string)me->query("env/combat_test"))) )
+    {
+        msg = sprintf( GRN "ATTACK：%s，DEFNSE：%s，TYPE：%s，WOUND：%d\n" NOR, 
+                (who2 && who2->query("id")) ? who2->query("id") : "none", me->query("id"), stringp(type) ? type : "none", damage);
+        tell_object(me, msg);
+    }
+    if ( who2 && who2->is_fighting() && ((wizardp(who2) && (string)who2->query("env/combat") == "verbose")
+        || (userp(who2) && "YES" == (string)who2->query("env/combat_test"))) )
+    {
+        msg = sprintf( GRN "ATTACK：%s，DEFNSE：%s，TYPE：%s，WOUND：%d\n" NOR, 
+                who2->query("id"), (me && me->query("id")) ? me->query("id") : "none", stringp(type) ? type : "none", damage);
+        tell_object(who2, msg);
+    }
+
+    if ( 0 < damage )
+    {
+        if ( query_temp("apply/kill_msg") && query_temp("apply/kill_file") )
+        {
+            set_temp("kill_msg", query_temp("apply/kill_msg"));
+            set_temp("kill_file", query_temp("apply/kill_file"));
+        }
+    }
+
+    val = (int)query("eff_" + type) - damage;
+
+    if ( val >= 0 )
+    {
+        set("eff_" + type, val);
+    }
+    else
+    {
+        set( "eff_" + type, -1 );
+        val = -1;
+    }
+
+    if ( (int)query(type) > val )
+    {
+        set(type, val);
+    }
+
+    set_heart_beat(HEART_BEAT_TICK);
+
+    return damage;
+}
+
+int receive_heal(string type, int heal)
+{
+    int val, max;
+
+    if ( heal < 0 )
+    {
+        error("F_HEAL: 恢复值为负值。\n");
+    }
+
+    if ( type != "kee" && type != "sen" )
+    {
+        error("F_HEAL: 恢复种类错误( 只能是 kee, sen 其中之一 )。\n");
+    }
+
+    if ( can_special("constitution") && type == "kee" )
+    {
+        //镇蕴七星
+        heal += heal / 4;
+    }
+    else if ( can_special("spirituality") && type == "sen" )
+    {
+        //灵蕴天成
+        heal += heal/4;
+    }
+
+    val = (int)query(type);
+    max = (int)query("eff_" + type);
+
+    if ( val + heal > max )
+    {
+        set(type, max);
+        return max - val;
+    }
+    else
+    {
+        set( type, val + heal );
+        return heal;
+    }
+}
+
+int receive_curing(string type, int heal)
+{
+    int max, val;
+
+    if ( heal < 0 )
+    {
+        error("F_CURE: 恢复值为负值。\n");
+    }
+
+    if ( type != "kee" && type != "sen" && type != "gin" )
+    {
+        error("F_CURE: 恢复种类错误( 只能是 kee, sen, gin 其中之一 )。\n");
+    }
+
+    if ( can_special("constitution") && type == "kee" )
+    {
+        //镇蕴七星
+        heal += heal / 4;
+    }
+    else if ( can_special("spirituality") && type == "sen" )
+    {
+        //灵蕴天成
+        heal += heal/4;
+    }
+
+    val = (int)query("eff_" + type);
+    max = (int)query("max_" + type);
+
+    if( val + heal > max )
+    {
+        set("eff_" + type, max);
+        return max - val;
+    }
+    else
+    {
+        set( "eff_" + type, val + heal);
+        return heal;
+    }
+}
+
+// snowcat feb 8 1998
+void remove_ride ()
+{
+    object rider, ridee;
+
+    if ( ridee = query_temp("ridee") )
+    {
+        ridee->delete_temp("rider");
+    }
+
+    delete_temp("ridee");
+
+    add_temp("apply/dodge", -query_temp("ride/dodge"));
+    set_temp("ride/dodge",0);
+
+    if ( rider = query_temp("rider") )
+    {
+        rider->remove_ride(); 
+    }
+
+    delete_temp("rider");
+}
+
+int candie(object me)
+{
+    if ( wizardp(me) && me->query("env/immortal") )
+    {
+        return 0;
+    }
+
+    if ( environment(me) && environment(me)->query("alternative_die") )
+    {
+        environment(me)->alternative_die(this_object());
+        return 0;
+    }
+
+    if ( me->query_temp("xunbao") && !userp(me) )
+    {
+        object ob = me->query_temp("last_damage_from");
+        me->remove_killer(ob);
+        ob->remove_killer(me);
+        me->recover_me();
+        me->command("say 大侠饶命啊!");
+        me->command("surrender");
+        me->command("drop box");
+        me->command("drop box");
+        me->command("drop box");
+        me->command("drop box");
+        me->command("drop box");
+        return 0;
+    }
+
+    return 1;
+}
+
+void unconcious()
+{
+    if ( !living(this_object()) )
+    {
+        return;
+    }
+
+    if ( !candie(this_object()) )
+    {
+        return;
+    }
+
+    this_object()->remove_all_enemy();
+
+    remove_ride();
+
+    message("system", HIR "\n你的眼前一黑，接着什么也不知道了．．．\n\n" NOR, this_object());
+    this_object()->disable_player(" <昏迷不醒>");
+
+    set("kee", 0);
+    set("sen", 0);
+    set("gin", 0);
+
+    set_temp("block_msg/all", 1);
+
+    COMBAT_D->announce(this_object(), "unconcious");
+
+    call_out("revive", random(108 - query("con")) + 36);
+}
+
+varargs void revive(int quiet)
+{
+    remove_call_out("revive");
+
+    //  delete_temp("last_fainted_from");
+    // revive will not remove this mark.
+
+    delete_temp("no_move");
+    //sometimes players still set no_move after death 
+    //and can't be cleared. 
+
+    if ( this_object()->is_busy() )
+    {
+        this_object()->start_busy(1); //clear the busy flag.
+    }
+
+    while ( environment()->is_character() ) 
+    {
+        this_object()->move(environment(environment()));
+    }
+
+    this_object()->enable_player();
+
+    set_temp("block_msg/all", 0);
+
+    if ( !quiet )
+    {
+        COMBAT_D->announce(this_object(), "revive");
+        message("system", HIY"\n慢慢地你终于又有了知觉．．．\n\n" NOR, this_object());
+    }
+}
+
+void die()
+{
+    //开封杀妖任务标志
+    QUEST->quest_kill(this_object());
+
+    if ( !candie(this_object()) )
+    {
+        return;
+    }
+
+    ghost = "/feature/damagedie"->die(this_object());
+}
+
+void reincarnate()
+{
+    ghost = 0;
+
+    // drop all, or they could take a ghost out of hell.
+    command("drop all");
+
+    set("eff_kee", query("max_kee")); 
+    set("eff_sen", query("max_sen"));
+    set("eff_gin", query("max_gin"));
+}
+
+int max_food_capacity()
+{
+    int final;
+
+    final = (int)query_weight() / 200;
+
+    if ( final < 100 )
+    {
+        final = 100;
+    }
+
+    if ( can_special("greedy") )
+    {
+        //饕餮转世
+        final += final / 2;
+    }
+
+    return final;
+}
+
+int max_water_capacity()
+{
+    int final;
+
+    final = (int)query_weight() / 200;
+
+    if ( final < 100 )
+    {
+        final=100;
+    }
+
+    if ( can_special("greedy") )
+    {
+        //饕餮转世
+        final += final / 2;
+    }
+
+    return final;
+}
+
+///////////gamer add regenerate effect... 
+int regenerate(int effect)
+{
+    int kee, sen, force, mana;
+    mapping my;
+
+    if ( environment() && environment()->query("no_time") )
+    {
+        return 0;
+    }
+
+    if ( random(3) )
+    {
+        return 1;
+    }
+
+    my = query_entire_dbase();
+
+    //apply/regenerate_max_kee---暂时没有这个属性
+    //apply/regenerate_kee---增加额外恢复气血
+    //apply/regenerate_max_sen---暂时没有这个属性
+    //apply/regenerate_sen---增加额外恢复精神
+    kee = query_temp("apply/regenerate_max_kee") * my["max_kee"] / 100 + query_temp("apply/regenerate_kee");
+    sen = query_temp("apply/regenerate_max_sen") * my["max_sen"] / 100 + query_temp("apply/regenerate_sen");
+
+    //apply/regenerate_max_force---暂时没有这个属性
+    //apply/regenerate_force---增加额外恢复内力
+    //apply/regenerate_max_mana---暂时没有这个属性
+    //apply/regenerate_mana---增加额外恢复法力
+    force = query_temp("apply/regenerate_max_force") * my["max_force"] / 100 + query_temp("apply/regenerate_force");
+    mana = query_temp("apply/regenerate_max_mana") * my["max_mana"] / 100 + query_temp("apply/regenerate_mana");        
+
+    kee = kee / effect;
+    sen = sen / effect;
+    force = force / effect;
+    mana = mana / effect;
+
+    my["kee"] += kee;
+    my["sen"] += sen;
+    my["force"] += force;
+    my["mana"] += mana;
+    my["eff_kee"] += kee;
+    my["eff_sen"] += sen;
+
+    if ( my["eff_kee"] >= my["max_kee"] )
+    {
+        my["eff_kee"] = my ["max_kee"];
+    }
+    if ( my["kee"] >= my["eff_kee"] )
+    {
+        my["kee"] = my ["eff_kee"];
+    }
+    if ( my["eff_sen"] >= my["max_sen"] )
+    {
+        my["eff_sen"] = my ["max_sen"];
+    }
+    if ( my["sen"] >= my["eff_sen"] )
+    {
+        my["sen"] = my["eff_sen"];
+    }
+
+    if ( my["force"] >= query_force_limit() )
+    {
+        my["force"] = query_force_limit();
+    }
+    if ( my["mana"] >= query_mana_limit() )
+    {
+        my["mana"] = query_mana_limit();
+    }
+}
+
+int heal_up()
+{
+    int update_flag, i;
+    mapping my;
+
+    update_flag = 0;
+
+    my = query_entire_dbase();
+
+    // mon 01/23/99
+    if ( sizeof(query_temp("no_heal_up")) )
+    {
+        //变化或隐身后，不允许自动heal_up
+        return update_flag;
+    }
+
+    // mon 0122/99 
+    // allow_heal_up will allow a NPC to heal up
+    // when fighting. default is no help up.
+    //战斗中的NPC默认不允许自动heal_up
+    if ( !userp(this_object()) && this_object()->is_fighting() && !my["allow_heal_up"] )
+    {
+        return update_flag;
+    }
+
+    if ( my["water"] > 0 )
+    {
+        my["water"] -= 1;
+        update_flag++;
+    }
+    if ( my["food"] > 0 )
+    {
+        my["food"] -= 1;
+        update_flag++;
+    }
+
+    if ( (my["water"] < 1 && my["food"] < 1) && userp(this_object()) )
+    {
+        //用户的食物和饮水掉为0后，不允许自动heal_up
+        return update_flag;
+    }
+
+    if ( wizardp(this_object()) && query("env/immortal") )
+    {
+        //不死巫师
+        if ( my["eff_kee"] < my["max_kee"] )
+        {
+            my["eff_kee"] = my["max_kee"]; 
+        }
+        if ( my["kee"] < my["eff_kee"] )
+        {
+            my["kee"] = my["eff_kee"];
+        }
+        if ( my["eff_sen"] < my["max_sen"] )
+        {
+            my["eff_sen"] = my["max_sen"];
+        }
+        if ( my["sen"] < my["eff_sen"] ) 
+        {
+            my["sen"] = my["eff_sen"];
+        }
+        if ( my["force"] < query_force_limit())
+        {
+            my["force"] = query_force_limit();
+        }
+        if ( my["mana"] < query_mana_limit() )
+        {
+            my["mana"] = query_mana_limit();
+        }
+
+        return update_flag;
+    }
+
+    // kee and force depends on drink to heal.
+    if ( my["con"] / 3 + my["force"] / 10  > 0 )
+    //bugbug,2001,12,4
+    {
+        my["kee"] += my["con"] / 3 + my["force"] / 10;
+
+        if ( can_special("constitution") )
+        {
+            //镇蕴七星
+            my["kee"] += my["con"] / 6 + my["force"] / 20;
+        }
+    }
+
+    if ( my["kee"] >= my["eff_kee"] )
+    {
+        my["kee"] = my["eff_kee"];
+
+        if ( my["eff_kee"] < my["max_kee"] )
+        {
+            my["eff_kee"] ++;
+            update_flag++;
+        }
+    }
+    else
+    {
+        update_flag++;
+    }
+
+    if ( my["max_force"] && my["force"] < my["max_force"] )
+    {
+        my["force"] =  to_int(my["force"]) + (int)this_object()->query_skill("force", 1) / 2;
+
+        if ( can_special("constitution") )
+        {
+            //镇蕴七星
+            my["force"] =  to_int(my["force"]) + (int)this_object()->query_skill("force", 1) / 4;
+        }
+
+        if ( my["force"] > my["max_force"] )
+        {
+            my["force"] = my["max_force"];
+        }
+
+        update_flag++;
+    }
+
+    if ( my["food"] < 1 && userp(this_object()) )
+    {
+        return update_flag;
+    }
+
+    // sen and mana depends on food for heal.
+    if ( my["spi"] / 3 + my["mana"] / 10 > 0 )
+    //bugbug,2001,12,4
+    { 
+        my["sen"] += my["spi"] / 3 + my["mana"] / 10;
+
+        if ( can_special("spirituality") )
+        {
+            //灵蕴天成
+            my["sen"] += my["spi"] / 6 + my["mana"] / 20;
+        }
+    }
+
+    if ( my["sen"] >= my["eff_sen"] )
+    {
+        my["sen"] = my["eff_sen"];
+
+        if ( my["eff_sen"] < my["max_sen"] ) 
+        {
+            my["eff_sen"] ++;
+            update_flag++;
+        }
+    }
+    else
+    {
+        update_flag++;
+    }
+
+    if ( my["max_mana"] && my["mana"] < my["max_mana"] )
+    {
+        my["mana"] += (int)this_object()->query_skill("spells", 1) / 2;
+
+        if ( can_special("spirituality") )
+        {
+            //灵蕴天成
+            my["mana"] += (int)this_object()->query_skill("spells", 1) / 4;
+        }
+
+        if ( my["mana"] > my["max_mana"] )
+        {
+            my["mana"] = my["max_mana"];
+        }
+
+        update_flag++;
+    }
+
+    return update_flag;
+}
+
+void recover_me()
+{
+    int jin, qi, sen, fali, neili, shiwu, yinshui;
+    object me = this_object();
+
+    me->revive();
+
+    if ( !me->query_condition("sxy-job") )
+    {
+        me->clear_condition();
+    }
+
+    sen = me->query("max_sen");
+    qi =me->query("max_kee");
+    jin = me->query("max_jin");
+    fali = me->query("max_mana");
+    neili = me->query("max_force");
+    shiwu = me->max_food_capacity();
+    yinshui = me->max_water_capacity();
+
+    me->set("eff_sen", sen);
+    me->set("eff_kee", qi);
+    me->set("eff_gin", jin);
+    me->set("sen", sen);
+    me->set("kee", qi);
+    me->set("gin", jin);
+
+    me->set("mana", fali * 2);
+    me->set("force", neili * 2);
+
+    me->set("food", shiwu);
+    me->set("water", yinshui);
+}
+

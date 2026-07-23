@@ -1,0 +1,593 @@
+// by bugbug & alading @ 缥缈水云间, 2003-4-5
+// skill.c
+
+#include <ansi.h>
+#include <dbase.h>
+
+mapping skills;
+mapping learned;
+mapping skill_map;
+
+mapping query_skills()
+{
+    return skills;
+}
+
+mapping query_learned()
+{
+    return learned;
+}
+
+int delete_skill(string skill)
+{
+    if ( mapp(skills) )
+    {
+        map_delete(skills, skill);
+
+        if ( mapp(learned) )
+        {
+            map_delete(learned, skill);
+            return undefinedp(learned[skill]);
+        }
+        return undefinedp(skills[skill]);
+    }
+    return 0;
+}
+
+void set_skill(string skill, int val)
+{
+    if ( 0 >= val )
+    {
+        delete_skill(skill);
+        return;
+    }
+
+    if ( !find_object(SKILL_D(skill) )
+        && file_size(SKILL_D(skill)+".lpc") < 0 )
+    {
+        error("F_SKILL: No such skill (" + skill + ")\n");
+    }
+
+    if ( !mapp(skills) )
+    {
+        skills = ([ skill: val ]);
+    }
+    else
+    {
+        skills[skill] = val;
+    }
+    
+    if ( !mapp(learned) )
+    {
+        learned = ([ skill: 0]);
+    }
+    else if ( undefinedp(learned[skill]) )
+    {
+        (int)learned[skill] = 0;
+    }
+}
+
+// This function 'map' a skill <skill> to another skill <mapped_to>.
+// If 2nd argument not given, cancel the mapped skill <skill>.
+varargs void map_skill(string skill, string mapped_to)
+{
+    if ( !mapped_to && mapp(skill_map) )
+    {
+        map_delete(skill_map, skill);
+        return;
+    }
+
+    if ( !find_object(SKILL_D(skill))
+        && file_size(SKILL_D(skill)+".lpc") < 0 )
+    {
+        error("F_SKILL: No such skill (" + skill + ")\n");
+    }
+
+    if ( !mapp(skills) || undefinedp(skills[mapped_to]) )
+    {
+        return;
+    }
+        
+    if ( !mapp(skill_map) )
+    {
+        skill_map = ([ skill: mapped_to ]);
+    }
+    else
+    {
+        skill_map[skill] = mapped_to;
+    }
+}
+
+string query_skill_mapped(string skill)
+{
+    if ( mapp(skill_map) && !undefinedp(skill_map[skill]) )
+    {
+        return skill_map[skill];
+    }
+
+    return 0;
+}
+
+int query_char_mana()
+{
+    int s, spi, level;
+
+    s = 0;
+    level = query("level");
+    spi = query("spi") ;
+
+    if ( mapp(skills) )
+    {
+        s += LEVEL_D->query_skill_level(this_object(), "spells", skills["spells"]);
+
+        if( mapp(skill_map) )
+        { 
+            s += skills[skill_map["spells"]];
+        }
+    }
+
+    s = s * 10 + level * level * spi / 100;
+
+    s += s / REBORN_D->query_max_reborns(this_object()) * 999 * this_object()->query_reborn_times();
+
+    return s;
+}
+
+int query_max_mana()
+{
+    int s = query_char_mana();
+
+    s += this_object()->query_temp("apply/max_mana");
+
+    return s;
+}
+
+int query_char_force()
+{
+    int s, con, level;
+
+    con = query("con");
+    level = query("level");
+    s = 0;
+
+    if ( mapp(skills) )
+    {
+        s += LEVEL_D->query_skill_level(this_object(), "force", skills["force"]);
+
+        if( mapp(skill_map) )
+        { 
+            s += skills[skill_map["force"]];
+        }
+    }
+
+    s = s * 10 + level * level * con / 100;
+
+    s += s / REBORN_D->query_max_reborns(this_object()) * 999 * this_object()->query_reborn_times();
+
+    return s;
+}
+
+int query_max_force()
+{
+    int s = query_char_force();
+
+    s += this_object()->query_temp("apply/max_force");
+
+    return s;
+}
+
+int query_max_atman()
+{
+    int s, spi, level;
+
+    s = 0;
+    level = query("level");
+    spi = query("spi") ;
+
+    if ( mapp(skills) )
+    {
+        s += LEVEL_D->query_skill_level(this_object(), "spells", skills["spells"]);
+
+        if( mapp(skill_map) )
+        { 
+            s += skills[skill_map["spells"]];
+        }
+    }
+
+    s = s * 10 + level * level * spi / 100;
+
+    s += s / REBORN_D->query_max_reborns(this_object()) * 999 * this_object()->query_reborn_times();
+
+    return s;
+}
+
+varargs int query_should_skill(string skill, int level)
+{
+    int s;
+
+    s = query_temp("apply/" + skill);
+
+    s += LEVEL_D->query_skill_level(this_object(), skill, level);
+    s += level;
+
+    return s;
+}
+
+varargs int query_skill(string skill, int raw)
+{
+    if ( !raw )
+    {
+        int s;
+
+        s = query_temp("apply/" + skill);
+
+        if ( mapp(skills) )
+        {
+            s += LEVEL_D->query_skill_level(this_object(), skill, skills[skill]);
+
+            if ( mapp(skill_map) )
+            {
+                s += skills[skill_map[skill]];
+            
+            }
+        }
+
+        return s;
+    }
+
+    if ( mapp(skills) && !undefinedp(skills[skill]) )
+    {
+        return skills[skill];
+    }
+
+    return 0;
+}
+
+int query_max_enforce()
+{
+    int count = 0;
+
+	if ( this_object()->can_special("might") )
+	{
+        count = query_skill("force", 1) / 15 + query("con") / 2;
+	}
+
+    return (int)query_skill("force") / 2 + (int)query_temp("apply/enforce") + count;
+}
+
+int query_max_enchant()
+{
+    return (int)query("max_mana") / 20 + 1 + (int)query_temp("apply/enchant");
+}
+
+int query_max_jialing()
+{
+    return (int)query("max_atman") / 20 + 1 + (int)query_temp("apply/jialing");
+}
+
+int add_maximum_mana(int amount)
+{
+    int j = query("maximum_mana");
+    
+    j = j + amount;
+
+    // note: here if (j>query_max_mana()) can't set 
+    // maximum_mana to query_max_mana().
+    // because that might not be the maximum possible
+    // number the player can get. (may use another
+    // spells to get higher). so here return fail.
+    if ( j > query_max_mana() )
+    {
+        return 0;
+    }
+    else if ( j < 0 )
+    {
+        j=0;
+    }
+
+    set("maximum_mana", j);
+    set("max_mana", j); // note here j always <= query_max_mana()
+                       // so no problem to set max_mana = j.
+    set("mana", 0);
+
+    return 1;
+}
+
+int add_maximum_force(int amount)
+{
+    int j = query("maximum_force");
+    
+    j = j + amount;
+
+    if ( j > query_max_force() )
+    {
+        return 0;
+    }
+    else if ( j < 0 )
+    {
+        j = 0;
+    }
+
+    set("maximum_force", j);
+    set("max_force", j);
+    set("force", 0);
+
+    return 1;
+}
+
+mapping query_skill_map()
+{
+    return skill_map;
+}
+
+int skill_death_penalty()
+{
+    string *sk;
+    int i, count;
+
+    if ( wizardp(this_object()) || !mapp(skills) )
+    {
+        return 0;
+    }
+
+    sk = keys(skills);
+    count = sizeof(sk);
+    if ( !mapp(learned) )
+    {
+        for ( i = 0; i < count; i++ )
+        {
+            skills[sk[i]]--;
+            if ( skills[sk[i]] < 0 )
+            {
+                map_delete(skills, sk[i]);
+            }
+        }
+    }
+    else
+    {
+        for ( i = 0; i < count; i++ )
+        {
+            if ( (int)learned[sk[i]] > (skills[sk[i]] + 1) * (skills[sk[i]] + 1) / 2 )
+            {
+                map_delete(learned, sk[i]);
+            }
+            else
+            {
+                skills[sk[i]]--;
+                if ( skills[sk[i]] < 0 )
+                {
+                    map_delete(skills, sk[i]);
+                }
+            }
+        }
+    }
+
+    skill_map = 0;
+
+    if ( userp(this_object()) )
+    {
+        log_file("death", sprintf("[%s] %s lost skill.\n", ctime(time()), this_object()->query("id")));
+    }
+
+    return 1;
+}
+
+int skill_death_recover()
+{
+   
+    string *sk;
+    int i, count, amount;
+
+    if ( !mapp(skills) )
+    {
+        return 0;
+    }
+
+    sk = keys(skills);
+    count = sizeof(sk);
+    if ( !mapp(learned) )
+    {
+        learned = ([]);
+
+        for ( i = 0; i < count; i++ )
+        {
+            amount = (skills[sk[i]] + 1) * (skills[sk[i]] + 1) * 3 / 4;
+            learned += ([ sk[i] : amount ]); 
+        }
+    }    
+    else
+    {
+        for ( i = 0; i < count; i++ )
+        {
+            if ( undefinedp(learned[sk[i]]) )
+            {
+                amount = (skills[sk[i]] + 1) * (skills[sk[i]] + 1) * 3 / 4;
+                learned += ([ sk[i] : amount ]);
+            }
+            else
+            {
+                skills[sk[i]]++;
+            }
+        }
+    }    
+    return 1;
+}
+
+int can_improve_skill(string skill)
+{
+    int lvl;
+    int exp;
+    mixed result;
+
+    if ( !find_object(SKILL_D(skill)) &&
+        file_size(SKILL_D(skill) + ".lpc") < 0)
+    {
+        error("F_SKILL: No such skill (" + skill + ")\n");
+    }
+
+    if ( result = SKILL_D(skill)->cannot_improve(this_object()) )
+    {
+        if ( stringp(result) )
+        {
+            write(result);
+        }
+        return 0;
+    }
+
+    if ( result = FAMILY_D->cannot_improve_skill(this_object(), skill) )
+    {
+        if ( stringp(result) )
+        {
+            write(result);
+        }
+        return 0;
+    }
+
+    return 1;
+
+    switch (SKILL_D(skill)->type())
+    {
+        case "knowledge":
+            // 知识类技能
+            return 1;
+
+        case "magic":
+        case "spells":
+            lvl = query_skill(skill, 1);
+            exp = this_object()->query("daoxing");
+            if ( lvl * lvl * lvl / 10 > exp )
+            {
+                return 0;
+            }
+            return 1;
+
+        case "martial":
+        case "poison":
+            lvl = query_skill(skill, 1);
+            exp = this_object()->query("combat_exp");
+            if ( lvl * lvl * lvl / 10 > exp )
+            {
+                return 0;
+            }
+            return 1;
+
+        default:
+            return 1;
+    }
+}
+
+varargs void improve_skill(string skill, int amount, int weak_mode)
+{
+    int spi;
+
+    if ( !find_object(SKILL_D(skill) )
+        && file_size(SKILL_D(skill) + ".lpc") < 0 )
+    {
+        error("F_SKILL: No such skill (" + skill + ")\n");
+    }
+
+    if ( !weak_mode || !userp(this_object()) )
+    {
+        if ( !mapp(skills) )
+        {
+            skills = ([]);
+        }
+
+        if ( undefinedp(skills[skill]) )
+        {
+            skills[skill] = 0;
+        }
+    }
+
+    // Give learning penalty to those learning too much skills.
+    spi = query("spi");
+    if ( sizeof(learned) > spi && !query("special_skill/spirituality") )
+    {
+        amount /= sizeof(learned) - spi;
+    }
+
+    if ( !amount || 0 > amount )
+    {
+        amount = 0;
+    }
+
+    if ( !mapp(learned) )
+    {
+        learned = ([ skill : amount ]);
+    }
+    else
+    {
+        (int)learned[skill] += amount;
+    }
+
+    if ( (!weak_mode || !userp(this_object()) )
+        && learned[skill] > (skills[skill] + 1) * (skills[skill] + 1) )
+    {
+        skills[skill]++;
+        learned[skill] = 0;
+        tell_object(this_object(), HIC "你的「" + to_chinese(skill) + "」进步了！\n" NOR);
+        SKILL_D(skill)->skill_improved(this_object());
+    }
+}
+
+void add_skill(string skill, int level)
+{
+    int i;
+
+    if ( 0 == level )
+    {
+        return;
+    }
+
+    if ( !find_object(SKILL_D(skill) )
+        && file_size(SKILL_D(skill) + ".lpc") < 0 )
+    {
+        error("F_SKILL: No such skill (" + skill + ")\n");
+    }
+
+    if ( !mapp(skills) )
+    {
+        skills = ([]);
+    }
+
+    if ( undefinedp(skills[skill]) )
+    {
+        skills[skill] = 0;
+    }
+
+    if ( !mapp(learned) )
+    {
+        learned = ([]);
+    }
+    
+    if ( undefinedp(learned[skill]) )
+    {
+        learned[skill] = 0;
+    }
+
+    skills[skill] += level;
+    learned[skill] = 0;
+    if ( skills[skill] < 0 )
+    {
+        map_delete(skills, skill);
+        map_delete(learned, skill);
+    }
+
+    if ( 0 < level )
+    {
+        for ( i = 0; i < level; i++ )
+        {
+            tell_object(this_object(), HIC "你的「" + to_chinese(skill) + "」进步了！\n" NOR);
+            SKILL_D(skill)->skill_improved(this_object());
+        }
+    }
+    else
+    {
+        level = -level;
+        for ( i = 0; i < level; i++ )
+        {
+            tell_object(this_object(), HIC "你的「" + to_chinese(skill) + "」退步了！\n" NOR);
+        }
+    }
+}
+

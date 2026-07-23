@@ -1,0 +1,172 @@
+// by bugbug & alading @ 缥缈水云间, 2003-4-5
+//Cracked by Roath
+// sserver.c
+
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+inherit F_OFFENSIVE;
+
+mapping limit_status = ([]);
+mapping limit_skills = ([]);
+
+varargs string skill_name(object me, object target, string skill)
+{
+    if ( wizardp(me) )
+    {
+        return "无名绝招" + skill;
+    }
+    else
+    {
+        return 0;
+    }
+}
+
+varargs object query_target(object me, object target)
+{
+    if ( !target )
+    {
+        target = offensive_target(me);
+    }
+
+    if ( !target
+        || !target->is_character()
+        || target->is_corpse()
+        || target == me )
+    {
+        notify_fail("你要对谁施展这一招？\n");
+        return 0;
+    }
+
+    return target;
+}
+
+varargs int can_perform(object me, string family)
+{
+    int i, count;
+    string *prop;
+    string name;
+
+    prop = keys(limit_status);
+    count = sizeof(limit_status);
+    for ( i = 0; i < count; i++ )
+    {
+        switch ( prop[i] )
+        {
+            case "max_force":
+                name = "最大内力";
+                break;
+            case "force":
+                name = "当前内力";
+                break;
+            case "max_kee":
+                name = "最大气血";
+                break;
+            case "kee":
+                name = "当前气血";
+                break;
+            case "max_sen":
+                name = "最大心神";
+                break;
+            case "sen":
+                name = "当前心神";
+                break;
+            default:
+                name = prop[i];
+                break;
+        }
+
+        if ( me->query(prop[i]) < limit_status[prop[i]] )
+        {
+            return notify_fail("你的" + name + "不足，没法子施用外功！" + limit_status[prop[i]] + "\n");
+        }
+    }
+
+    prop = keys(limit_skills);
+    count = sizeof(limit_skills);
+    for ( i = 0; i < count; i++ )
+    {
+        if ( me->query_skill(prop[i], 1) < limit_skills[prop[i]] )
+        {
+            return notify_fail("你的" + to_chinese(prop[i]) + "级别还不够！" + limit_skills[prop[i]] + "\n");
+        }
+    }
+
+    return 1;
+}
+
+varargs int can_exert(object me, string family)
+{
+    return can_perform(me, family);
+}
+
+varargs int can_cast(object me, string family)
+{
+    return can_perform(me, family);
+}
+
+varargs void set_using(object me, string file)
+{
+    me->set_temp("using/" + replace_string(file, "/", "_"), 1);
+}
+
+void remove_effect_using(object me, string file)
+{
+    me->delete_temp("using/" + replace_string(file, "/", "_"));
+}
+
+void become_enemy(object me, object target)
+{
+    if ( !target->is_fighting(me) )
+    {
+        if ( living(target) )
+        {
+            if ( userp(target) )
+            {
+                target->fight_ob(me);
+            }
+            else
+            {
+                target->kill_ob(me);
+            }
+        }
+    }
+}
+
+void break_equip(object me, object target, object obj)
+{
+    if ( !obj )
+    {
+        return;
+    }
+
+    if ( obj->is_diablo_ob() || obj->is_ultimate_ob() )
+    {
+        message_perform(HIW "只见一道耀眼的光芒，$N身上的" + obj->name() + HIW"抵挡住了这一击！\n" NOR, target);
+        return;
+    }
+
+    message_perform(HIW "只听见「啪」地一声，$N身上的" + obj->name() + HIW"已被一招击的粉碎！\n" NOR, target);
+
+    obj->unequip();
+    obj->set("no_get", 1);
+    obj->set("value", 0);
+    obj->set("name", "碎裂的" + obj->query("name"));
+    obj->set("weapon_prop", 0);
+    obj->set("armor_prop", 0);
+    obj->move(environment(target));
+
+    target->reset_action();
+
+    call_out("remove_broken_cloth", random(30) + 30, obj);
+}
+
+void remove_broken_cloth(object obj)
+{
+    if ( obj && environment(obj) )
+    {
+        tell_object(environment(obj), "一阵微风吹过，" + obj->name() + "化为片片尘土，消失不见了。\n");
+        destruct(obj);
+    }
+}
+

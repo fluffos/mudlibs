@@ -1,0 +1,442 @@
+// by bugbug & alading @ 缥缈水云间, 2003-4-5
+// condition.c
+
+#include <condition.h>
+
+mapping conditions;
+mapping type_conditions;
+mapping hb_conditions;
+
+nomask varargs void clear_hb_condition(string cnd);
+
+nomask int update_condition()
+{
+    mixed *cnd, err;
+    int i, flag, update_flag;
+    object cnd_d;
+
+    if ( !mapp(conditions) || !(i = sizeof(conditions)) )
+    {
+        return 0;
+    }
+
+    cnd = keys(conditions);
+    update_flag = 0;
+    while ( i-- )
+    {
+        cnd_d = find_object(CONDITION_D(cnd[i]));
+        if ( !cnd_d )
+        {
+            //使用 call_other(filename, "???")  或是在 ??? 处填入任意不存在的方法函式名称，则只会载入物件
+            err = catch(call_other(CONDITION_D(cnd[i]), "???"));
+
+            cnd_d = find_object(CONDITION_D(cnd[i]));
+
+            if ( err || !cnd_d )
+            {
+                log_file("condition.err", sprintf("Failed to load condition daemon %s, removed from %O\nError: %s\n",
+                    CONDITION_D(cnd[i]), this_object(), err));
+                if ( mapp(conditions) )
+                {
+                    map_delete(conditions, cnd[i]);
+                }
+
+                continue;
+            }
+        }
+
+        flag = call_other(cnd_d, "update_condition", this_object(), conditions[cnd[i]]);
+        if ( !( flag & CND_CONTINUE ) )
+        {
+            if ( mapp(conditions) )
+            {
+                map_delete(conditions, cnd[i]);
+            }
+        }
+
+        update_flag |= flag;
+    }
+
+    if ( !sizeof(conditions) )
+    {
+        conditions = 0;
+    }
+
+    return update_flag;
+}
+
+nomask void apply_condition(string cnd, mixed info)
+{
+    if ( !mapp(conditions) )
+    {
+        conditions = ([ cnd : info ]);
+    }
+    else
+    {
+        conditions[cnd] = info;
+    }
+}
+
+nomask mixed query_condition(string cnd)
+{
+    if ( !mapp(conditions) || undefinedp(conditions[cnd]) )
+    {
+        return 0;
+    }
+
+    return conditions[cnd];
+}
+
+nomask mapping query_entire_conditions()
+{
+    return conditions;
+}
+
+nomask mapping query_conditions_by_type(string required_type)
+{
+    object cnd_d;
+    int i;
+    string cnd_type;
+    mixed *cnd, err;
+
+    if ( !mapp(conditions) || !(i = sizeof(conditions)) )
+    {
+        return 0;
+    }
+
+    type_conditions = 0;
+    cnd = keys(conditions);
+
+    while ( i-- )
+    {
+        cnd_d = find_object(CONDITION_D(cnd[i]));
+
+        if ( !cnd_d )
+        {
+            err = catch(call_other(CONDITION_D(cnd[i]), "???"));
+            cnd_d = find_object(CONDITION_D(cnd[i]));
+
+            if ( err || !cnd_d )
+            {
+                log_file("condition.err", sprintf("Failed to load condition daemon %s, removed from %O\nError: %s\n", CONDITION_D(cnd[i]), this_object(), err));
+                if ( mapp(conditions) )
+                {
+                    map_delete(conditions, cnd[i]);
+                }
+                continue;
+            }
+        }
+
+        cnd_type = call_other(cnd_d, "query_type", this_object());
+        if ( cnd_type == required_type )
+        {
+            if ( !mapp(type_conditions) )
+            {
+                type_conditions = ([ cnd[i] : conditions[cnd[i]] ]);
+            }
+            else
+            {
+                type_conditions[cnd[i]] = conditions[cnd[i]];
+            }
+        }
+    }
+
+    return type_conditions;
+}
+
+nomask varargs void clear_condition(string cnd)
+{
+    mixed *thiscnd, err;
+    int i;
+    object cnd_d;
+
+    if ( !mapp(conditions) || !(i = sizeof(conditions)) )
+    {
+        return;
+    }
+
+    if ( cnd && undefinedp(conditions[cnd]) )
+    {
+        return;
+    }
+
+    if ( cnd )
+    {
+        cnd_d = find_object(CONDITION_D(cnd));
+        if ( !cnd_d )
+        {
+            //使用 call_other(filename, "???")  或是在 ??? 处填入任意不存在的方法函式名称，则只会载入物件
+            err = catch(call_other(CONDITION_D(cnd), "???"));
+
+            cnd_d = find_object(CONDITION_D(cnd));
+
+            if ( err || !cnd_d )
+            {
+                log_file("condition.err", sprintf("Failed to load condition daemon %s, removed from %O\nError: %s\n",
+                    CONDITION_D(cnd), this_object(), err));
+                if ( mapp(conditions) )
+                {
+                    map_delete(conditions, cnd);
+                }
+                cnd_d = 0;
+            }
+        }
+
+        if ( cnd_d )
+        {
+            call_other(cnd_d, "clear_condition", this_object(), conditions[cnd]);
+        }
+    }
+    else
+    {
+        thiscnd = keys(conditions);
+        while ( i-- )
+        {
+            cnd_d = find_object(CONDITION_D(thiscnd[i]));
+            if ( !cnd_d )
+            {
+                //使用 call_other(filename, "???")  或是在 ??? 处填入任意不存在的方法函式名称，则只会载入物件
+                err = catch(call_other(CONDITION_D(thiscnd[i]), "???"));
+
+                cnd_d = find_object(CONDITION_D(thiscnd[i]));
+
+                if ( err || !cnd_d )
+                {
+                    log_file("condition.err", sprintf("Failed to load condition daemon %s, removed from %O\nError: %s\n",
+                        CONDITION_D(thiscnd[i]), this_object(), err));
+                    if ( mapp(conditions) )
+                    {
+                        map_delete(conditions, thiscnd[i]);
+                    }
+
+                    continue;
+                }
+            }
+
+            call_other(cnd_d, "clear_condition", this_object(), conditions[thiscnd[i]]);
+        }
+    }
+
+    if ( !sizeof(conditions) )
+    {
+        conditions = 0;
+    }
+
+    if ( !cnd )
+    {
+        conditions = 0;
+    }
+    else if ( mapp(conditions) )
+    {
+        map_delete(conditions, cnd);
+    }
+
+    clear_hb_condition(cnd);
+}
+
+nomask void clear_conditions_by_type(string required_type)
+{
+    object cnd_d;
+    int i;
+    string cnd_type;
+    mixed *cnd, err;
+
+    if ( !mapp(conditions) || !(i = sizeof(conditions)) )
+    {
+        return;
+    }
+    cnd = keys(conditions);
+
+    while ( i-- )
+    {
+        cnd_d = find_object(CONDITION_D(cnd[i]));
+        if ( !cnd_d )
+        {
+            err = catch(call_other(CONDITION_D(cnd[i]), "???"));
+            cnd_d = find_object(CONDITION_D(cnd[i]));
+
+            if ( err || !cnd_d )
+            {
+                log_file("condition.err", sprintf("Failed to load condition daemon %s, removed from %O\nError: %s\n", CONDITION_D(cnd[i]), this_object(), err));
+                if ( mapp(conditions) )
+                {
+                    map_delete(conditions, cnd[i]);
+                }
+                continue;
+            }
+        }
+
+        cnd_type = call_other(cnd_d, "query_type", this_object());
+        if ( cnd_type == required_type )
+        {
+            map_delete(conditions, cnd[i]);
+        }
+    }
+}
+
+nomask int update_hb_condition()
+{
+    mixed *cnd, err;
+    int i, flag, update_flag;
+    object cnd_d;
+
+    if ( !mapp(hb_conditions) || !(i = sizeof(hb_conditions)) )
+    {
+        return 0;
+    }
+
+    cnd = keys(hb_conditions);
+    update_flag = 0;
+    while ( i-- )
+    {
+        cnd_d = find_object(CONDITION_D(cnd[i]));
+        if ( !cnd_d )
+        {
+            //使用 call_other(filename, "???")  或是在 ??? 处填入任意不存在的方法函式名称，则只会载入物件
+            err = catch(call_other(CONDITION_D(cnd[i]), "???"));
+
+            cnd_d = find_object(CONDITION_D(cnd[i]));
+
+            if ( err || !cnd_d )
+            {
+                log_file("condition.err", sprintf("Failed to load condition daemon %s, removed from %O\nError: %s\n",
+                    CONDITION_D(cnd[i]), this_object(), err));
+                if ( mapp(hb_conditions) )
+                {
+                    map_delete(hb_conditions, cnd[i]);
+                }
+
+                continue;
+            }
+        }
+
+        flag = call_other(cnd_d, "update_condition", this_object(), hb_conditions[cnd[i]]);
+        if ( !( flag & CND_CONTINUE ) )
+        {
+            if ( mapp(hb_conditions) )
+            {
+                map_delete(hb_conditions, cnd[i]);
+            }
+        }
+
+        update_flag |= flag;
+    }
+
+    if ( !sizeof(hb_conditions) )
+    {
+        hb_conditions = 0;
+    }
+
+    return update_flag;
+}
+
+nomask void apply_hb_condition(string cnd, mixed info)
+{
+    if ( !mapp(hb_conditions) )
+    {
+        hb_conditions = ([ cnd : info ]);
+    }
+    else
+    {
+        hb_conditions[cnd] = info;
+    }
+}
+
+nomask mixed query_hb_condition(string cnd)
+{
+    if ( !mapp(hb_conditions) || undefinedp(hb_conditions[cnd]) )
+    {
+        return 0;
+    }
+
+    return hb_conditions[cnd];
+}
+
+nomask varargs void clear_hb_condition(string cnd)
+{
+    mixed *thiscnd, err;
+    int i;
+    object cnd_d;
+
+    if ( !mapp(hb_conditions) || !(i = sizeof(hb_conditions)) )
+    {
+        return;
+    }
+
+    if ( cnd && undefinedp(hb_conditions[cnd]) )
+    {
+        return;
+    }
+
+    if ( cnd )
+    {
+        cnd_d = find_object(CONDITION_D(cnd));
+        if ( !cnd_d )
+        {
+            //使用 call_other(filename, "???")  或是在 ??? 处填入任意不存在的方法函式名称，则只会载入物件
+            err = catch(call_other(CONDITION_D(cnd), "???"));
+
+            cnd_d = find_object(CONDITION_D(cnd));
+
+            if ( err || !cnd_d )
+            {
+                log_file("condition.err", sprintf("Failed to load condition daemon %s, removed from %O\nError: %s\n",
+                    CONDITION_D(cnd), this_object(), err));
+                if ( mapp(hb_conditions) )
+                {
+                    map_delete(hb_conditions, cnd);
+                }
+                cnd_d = 0;
+            }
+        }
+
+        if ( cnd_d )
+        {
+            call_other(cnd_d, "clear_condition", this_object(), hb_conditions[cnd]);
+        }
+    }
+    else
+    {
+        thiscnd = keys(hb_conditions);
+        while ( i-- )
+        {
+            cnd_d = find_object(CONDITION_D(thiscnd[i]));
+            if ( !cnd_d )
+            {
+                //使用 call_other(filename, "???")  或是在 ??? 处填入任意不存在的方法函式名称，则只会载入物件
+                err = catch(call_other(CONDITION_D(thiscnd[i]), "???"));
+
+                cnd_d = find_object(CONDITION_D(thiscnd[i]));
+
+                if ( err || !cnd_d )
+                {
+                    log_file("condition.err", sprintf("Failed to load condition daemon %s, removed from %O\nError: %s\n",
+                        CONDITION_D(thiscnd[i]), this_object(), err));
+                    if ( mapp(hb_conditions) )
+                    {
+                        map_delete(hb_conditions, thiscnd[i]);
+                    }
+
+                    continue;
+                }
+            }
+
+            call_other(cnd_d, "clear_condition", this_object(), hb_conditions[thiscnd[i]]);
+        }
+    }
+
+    if ( !cnd )
+    {
+        hb_conditions = 0;
+    }
+    else if ( mapp(hb_conditions) )
+    {
+        map_delete(hb_conditions, cnd);
+    }
+}
+
+nomask void clear_all_condition()
+{
+    clear_condition();
+}
+

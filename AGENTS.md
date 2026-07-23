@@ -2209,6 +2209,51 @@ quick proactive check — a `switch` with no real `case` is a distinctive,
 easy-to-miss anti-pattern that reads as syntactically fine to a human
 skim but isn't accepted by this driver's grammar.
 
+### 15ap. `__FILE__` inside a `#include`d (not `inherit`ed) fragment expands to the FRAGMENT's own path, not the file that included it — a common source of "wrong file blamed" runtime errors when a shared snippet uses `__FILE__` for self-identification
+
+Found on `xlqy_early` (archive #27): `d/city/workroom.h` — a plain
+`#include`d text fragment, not a class/inherit target — used `__FILE__`
+expecting it to resolve to whichever room file happened to `#include`
+it (a common LPC idiom for a shared "genericize this snippet to my own
+object" trick). But `#include` is a textual/preprocessor operation, not
+an object-boundary one — `__FILE__` is a compile-time macro that expands
+to the *source file currently being parsed*, which at that point in the
+token stream is still conceptually "this header," not the includer,
+regardless of the fact that after preprocessing it's all one compilation
+unit. This produced 100+ runtime errors per session, each one
+misidentifying itself as coming from the header rather than the actual
+room object. Fix: replace `__FILE__` with `file_name(this_object())` (a
+real runtime call that correctly resolves to the actual object identity,
+not a compile-time text substitution). **Lesson**: `__FILE__` is only
+safe to rely on for self-identification inside a file that is itself
+directly loaded/inherited as an object — grep for `__FILE__` inside any
+`.h` file that's `#include`d (not `inherit`ed) as a proactive check,
+since this pattern is easy to write correctly-looking and only manifests
+as a wrong-attribution runtime error, never a compile error.
+
+### 15aq. A same-file forward reference to a locally-defined override of an inherited function needs the real function body to appear before its first caller — a bare forward *declaration* is not sufficient if a same-named inherited function already exists
+
+Found on `xlqy_early` (archive #27): `daemon/skill/dao/taijitu.lpc`
+defined its own `remove_effect_using(...)`, overriding a same-named
+function from something it inherits — but a caller earlier in the same
+file referenced `remove_effect_using` before the local override's body
+appeared, with only a forward *declaration* (prototype) in between, not
+the actual implementation. Unlike the ordinary §8b "define before use"
+case (where the alternative is "undefined function" if nothing exists
+yet), here something ALREADY resolves at that point — the inherited
+version — so the compiler silently binds the early call to the
+*inherited* function instead of the file's own override, with no error
+at all, since both are valid, type-compatible resolutions. Fix: move the
+actual function body earlier in the file, above every caller, rather
+than relying on a forward declaration (which is sufficient to satisfy the
+compiler's "is this a known symbol" check, but does NOT retroactively
+rebind earlier calls to the later-defined body once an inherited
+candidate already existed). **Lesson**: §8b's forward-declaration
+technique is safe when there is no other function of that name reachable
+yet; it is NOT safe when overriding an inherited function of the same
+name — in that specific case, the real definition needs to physically
+precede every same-file call site, no exceptions.
+
 ---
 
 ## Per-archive gotchas index

@@ -1,0 +1,617 @@
+#include <ansi.h>
+
+inherit JOBMASTER;
+
+void autoloading(string arg, object ob,object who);
+void disloading(string arg, object ob,object who);
+string check_blank_slot(object me);
+string check_scblank_slot(object me);
+
+void create()
+{
+	object oba, obb, obc;
+
+	set_name(HIY"装备总管"NOR, ({"zong guan", "asdf"}));
+	set("long", @LONG
+
+[1;37;1m金风玉露一相逢 便胜却人间无数 [m
+ 
+[0;33;1mxlqy新一代的装备总管，你可以list看能要(yao)的东西，要是你的装备有什么问题，[m
+[0;33;1m也可以找他修理(repair <物品>)。你也可以让他帮你把随机装备autoload或disload。[m
+[0;33;1m要是有什么不要的随机物品，也可以卖给他(sell <物品>)，嘿嘿，价钱嘛，好商量~~[m
+[0;33;1m要是你文化水平低，鉴定不了随机物品(jianding <物品>)，找我，一次10两黄金而已~~~[m	
+LONG);
+	set("gender", "男性");
+	set("no_arrest", 1);
+	set("age", 24);
+	set("per", 1);
+	set("title", HIG"装备总管"NOR);
+
+	set_skill("literate", 333);
+
+	set("chat_chance",3);
+    set("chat_msg", ({
+        "装备总管笑道：随机装备有两大特性，一曰等级，二曰品级。\n",
+        "装备总管笑道：要想获得更好的随机装备，最主要的是rp，其次是你的魔法物品找寻力，再次嘛...\n",
+        "装备总管笑道：随机装备的等级只和你杀的npc的经验值、道行相关，而品级....\n",
+        "装备总管说道：要想能成功鉴定随机装备物品，自然要提高自己的见识，要增广见识就要多读书。\n",
+        "装备总管说道：光读死书还不行，要读万卷书，行万里路，更需要高人的指点，方能使你的见识更上一层楼。\n",
+        "装备总管说道：见识广了，不但能增加自己悟性，还能增加魔法物品找寻力！\n",
+        "装备总管说道：随机装备共有三种，一种是武器，一种是盔甲，还有一种是魔法饰件。\n",	
+        "装备总管说道：随机装备目前有一百一十多种随机属性，七十多种固定属性，日后还能有更强大的功能出现。\n",
+        "装备总管说道：随机装备固定属性虽然威力或许不如随机属性，然不需要鉴定，也不需要装备条件！\n",		        	
+        }));
+
+	setup();
+
+	oba = carry_object("/d/obj/armor/standard/finger");
+	oba->set("name",""HIM"结婚"HIY"戒指"NOR"");
+	oba->set("id","Eternal love");
+	oba->set("unit","枚");
+	oba->wear();
+
+	obb = carry_object("/d/obj/armor/standard/surcoat");
+	obb->set("name",""HIG"诸神"HIW"的"HIB"黄昏"NOR"");
+	obb->set("id","End of Cosmos");
+	obb->wear();
+}
+
+void init()
+{
+    ::init();
+
+    add_action("do_yao", "yao");  
+    add_action("do_repair", "repair");  
+    add_action("do_jianding", "jianding");  
+    add_action("do_sell", "sell"); 
+    add_action("do_autoload", "autoload");	
+    add_action("do_disload", "disload");
+    add_action("do_hebing", "hebing");
+}
+
+int do_hebing(string arg)
+{
+	object sa,sb,who;
+	string said,sbid;
+	string *prop;
+	int i;
+	mapping sabase,sbbase;
+	who = this_player();
+	if(!arg) 
+		return notify_fail("你需要总管帮忙合并什么神符？\n");	
+  if(sscanf(arg,"%s to %s",said,sbid)!=2)
+ 	 return notify_fail("hebing <charm id> to <charm id>!\n");	
+ 	if(said == sbid)
+ 	 return notify_fail("hebing <charm id> to <other charm id>!\n");	
+ 	 if(!sa=present(said,who))
+		return notify_fail("你需要总管帮忙合并什么神符？\n");
+	 if(!sb=present(sbid,who))
+		return notify_fail("你需要总管帮忙合并什么神符？\n");	
+ 	 
+ 	 if(!sa->query("charm")||!sb->query("charm"))
+ 	 return notify_fail("什么乱七八糟的也拿来合啊合。\n");	
+	if(sa->is_diablo_ob()&&sb->is_diablo_ob())
+	{
+		if(sa->query("diablo_ob_autoloaded"))
+		return notify_fail("自动加载的神符可没法合。\n");	
+		if(sb->query("diablo_ob_autoloaded"))
+		return notify_fail("自动加载的神符可没法合。\n");		
+		
+		if(sa->query("kind") >= sb->query("kind"))		
+				return notify_fail("只能把低等级的神符合到高等级去。\n");	
+		
+		if(!sb->query("can_inset_charm"))
+			return notify_fail("这个神符已经没有多余的地方可以合了。\n");	
+		sa->move("/obj/void");
+		sb->move("/obj/void");
+		
+		sabase = sa->query("diablo_prop");
+		if(!sabase) return 1;
+		prop = keys(sabase);
+		for(i = 0;i <sizeof(prop);i++)
+		{
+			sb->add("diablo_prop/"+prop[i],sabase[prop[i]]);
+	  }
+		sb->set("can_inset_charm",sb->query("can_inset_charm")-1);
+		
+		sb->move(who);
+		destruct(sa);
+		this_object()->command("grin");
+		this_object()->command("sweat");
+	}
+	return 1;
+}
+int do_jianding(string arg)
+{
+	
+	object ob,who;
+	int level,kind,gold,value;
+	who = this_player();
+	
+	
+	if(!arg) 
+		return notify_fail("你需要总管帮忙鉴定什么物品？\n");	
+	if(!ob=present(arg,who))
+		return notify_fail("你需要总管帮忙鉴定什么物品？\n");
+	if(ob->is_character())
+		return notify_fail("看起来...是个ppmm啊..口水ing~~\n");
+	
+	if(ob->is_diablo_ob())
+	{
+		if(ob->query("identification"))
+			return notify_fail("这个..似乎鉴定过了吧，你想照顾照顾我生意？\n");
+		if(who->query("balance") < 100000)
+			return notify_fail("我很想帮你...不过你得先付清昨晚上的过叶汇呀...\n");
+			
+		message_vision("$N瞄了一眼"+ob->name()+"，对$n笑道：这玩意啊，是这么这么....#%#@#$&#@回事...\n",this_object(),who);
+		ob->set("identification",1);
+		who->add("balance",-100000);
+			return 1;
+			
+	}
+	else 
+		return notify_fail("这种玩意你也不认识？吐血...\n");	
+
+}
+int do_sell(string arg)
+{
+	object ob,who;
+	int level,kind,gold,value;
+	who = this_player();
+	
+	
+	if(!arg) 
+		return notify_fail("你卖什么物品？\n");	
+	if(!ob=present(arg,who))
+		return notify_fail("你卖什么物品？\n");
+	if(ob->is_character())
+		return notify_fail("贩卖人口？可惜不是美女..不要~~\n");
+	
+	if(ob->is_diablo_ob())
+	{
+		if(ob->query("diablo_ob_autoloaded"))
+			return notify_fail("哈，连家底都拿来卖了啊？\n");
+				
+		level = ob->query("level");
+		kind = ob->query("kind");
+		if(ob->query("armor_prop"))
+		{
+			
+			gold = kind*kind*1000+level*500;
+			gold = gold+random(gold);
+			tell_object(who,ob->query("name")+"可以卖"+MONEY_D->money_str(gold)+"，已经加到你的户头上了!\n");
+			ob->move("/obj/void");
+			destruct(ob);
+			who->add("balance",gold);
+			return 1;
+				
+		}
+		else {
+			
+			gold = kind*kind*1500+level*1000;
+			gold = gold+random(gold);
+			tell_object(who,ob->query("name")+"可以卖"+MONEY_D->money_str(gold)+"，已经加到你的户头上了!\n");
+			ob->move("/obj/void");
+			destruct(ob);
+			who->add("balance",gold);
+			return 1;
+				
+			}	
+	}
+	else 
+		return notify_fail("这种玩意啊..我这有的是，你上别处卖去吧。\n");
+	
+	
+}
+int do_repair(string arg)
+{
+	object ob,who;
+	int i,j,rigidity,level,kind,gold,value;
+	who = this_player();
+	
+	
+	if(!arg) 
+		return notify_fail("你修理什么物品？\n");	
+	if(!ob=present(arg,who))
+		return notify_fail("你修理什么物品？\n");
+	if(ob->is_character())
+		return notify_fail("你要修理活物啊？外面大街去修理吧~~\n");
+	if(!ob->query_temp("init_rigidity"))
+		return notify_fail("这件东西坏了么？！\n");
+	rigidity =ob->query_temp("init_rigidity");
+	if(ob->is_diablo_ob())
+	{
+		i = ob->query("diablo_prop/rigidity");
+		level = ob->query("level");
+		kind = ob->query("kind");
+		if(ob->query("armor_prop"))
+		{
+			j = rigidity - i;
+			if(j <  1 )
+			{	ob->set_temp("init_rigidity",i);
+				j = 0;
+				return notify_fail("这件东西坏了么？！\n");
+			}
+			gold = j*(kind*5+level*2)*10000/rigidity;
+			tell_object(who,"修理"+ob->query("name")+"需要存款:"+MONEY_D->money_str(gold)+"!\n");
+			if(who->query("balance") < gold)
+				return notify_fail("你的存款不够修理费！\n");
+			ob->set("diablo_prop/rigidity",rigidity);	
+			who->add("balance",-gold);
+			tell_object(who,ob->query("name")+"修好了!\n");
+			return 1;
+				
+		}
+		else 
+		{
+			j = rigidity - i;
+			if(j < 1 )
+			{	ob->set_temp("init_rigidity",i);
+				j = 0;
+				return notify_fail("这件东西坏了么？！\n");
+			}
+			gold = j*(kind*4+level*3)*10000/rigidity;
+			tell_object(who,"修理"+ob->query("name")+"需要存款:"+MONEY_D->money_str(gold)+"!\n");
+			if(who->query("balance") < gold)
+				return notify_fail("你的存款不够修理费！\n");
+			ob->set("diablo_prop/rigidity",rigidity);
+			who->add("balance",-gold);	
+			tell_object(who,ob->query("name")+"修好了!\n");
+			return 1;	
+			
+			
+		}
+	}
+	else 
+	{
+		i = ob->query("rigidity");	
+		value = ob->query("value");
+		if(!value)
+	        	value = 100+random(20000);
+		j = rigidity - i;	  	
+		if(j < 1 )
+		{	ob->set_temp("init_rigidity",i);
+				j = 0;
+			return notify_fail("这件东西坏了么？！\n");
+		}	
+			gold = j*value*3/2/rigidity;
+			tell_object(who,"修理"+ob->query("name")+"需要存款:"+MONEY_D->money_str(gold)+"!\n");
+			if(who->query("balance") < gold)
+				return notify_fail("你的存款不够修理费！\n");
+			ob->set("rigidity",rigidity);
+			who->add("balance",-gold);	
+			tell_object(who,ob->query("name")+"修好了!\n");
+			return 1;
+		
+		
+	}
+	return 1;
+
+}
+string check_blank_slot(object me)
+{
+	
+	if(!me->query("diablo_armor_autoload/A"))	
+		return "A";
+	else if(!me->query("diablo_armor_autoload/B"))	
+		return "B";
+	else if(!me->query("diablo_armor_autoload/C"))	
+		return "C";
+	else if(!me->query("diablo_armor_autoload/D"))	
+		return "D";
+	else if(!me->query("diablo_armor_autoload/E"))	
+		return "E";
+	else if(!me->query("diablo_armor_autoload/F"))	
+		return "F";
+	else if(!me->query("diablo_armor_autoload/G"))	
+		return "G";
+	else if(!me->query("diablo_armor_autoload/H"))	
+		return "H";
+	else if(!me->query("diablo_armor_autoload/I"))	
+		return "I";
+	else if(!me->query("diablo_armor_autoload/J"))	
+		return "J";
+	else if(!me->query("diablo_armor_autoload/K"))	
+		return "K";
+	else if(!me->query("diablo_armor_autoload/L"))	
+		return "L";
+	else if(!me->query("diablo_armor_autoload/M"))
+		return "M";	
+	else if(!me->query("diablo_armor_autoload/N"))	
+		return "N";
+	else if(!me->query("diablo_armor_autoload/O"))
+		return "O";	
+
+	
+	else return "none";
+	
+	
+	
+	
+}
+string check_scblank_slot(object me)
+{
+	
+	if(!me->query("diablo_charm_autoload/A"))	
+		return "A";
+	else if(!me->query("diablo_charm_autoload/B"))	
+		return "B";
+	else if(!me->query("diablo_charm_autoload/C"))	
+		return "C";
+	else if(!me->query("diablo_charm_autoload/D"))	
+		return "D";
+	else if(!me->query("diablo_charm_autoload/E"))	
+		return "E";
+	else if(!me->query("diablo_charm_autoload/F"))	
+		return "F";
+	else if(!me->query("diablo_charm_autoload/G"))	
+		return "G";
+	else if(!me->query("diablo_charm_autoload/H"))	
+		return "H";
+	else if(!me->query("diablo_charm_autoload/I"))	
+		return "I";
+	else if(!me->query("diablo_charm_autoload/J"))	
+		return "J";
+	else return "none";
+	
+	
+	
+	
+}
+int do_autoload(string arg)
+{
+	object ob,who;
+	mapping num,ob_dbase;
+	who = this_player();
+	if(!userp(who))
+		return 0;
+	if(!arg)
+		return notify_fail("你要设定什么为自动加载物品？\n");
+	if(!ob=present(arg,who))
+		return notify_fail("你要设定什么为自动加载物品？\n");
+	if(!ob->is_diablo_ob())
+		return notify_fail("这件东西不能设为自动加载！\n");
+	if(!ob->query("weapon_prop")&&!ob->query("armor_prop")&&!ob->query("charm"))
+		return notify_fail("这件东西不能设为自动加载！\n");
+	if(!ob->query("identification"))
+		return notify_fail("这件东西还没经过鉴定，不能设为自动加载！\n");
+	if(ob->query("diablo_ob_autoloaded"))
+			return notify_fail("这件东西已经是自动加载物品了！\n");
+	
+	if( ob->query("equipped") )
+	{
+		tell_object(who,"你必须先放下这样东西。\n");
+      		return 1;
+      	}
+	tell_object(who,"你确定要把"+ob->query("name")+"设为自动加载物品吗？(yes/no)\n");
+	input_to( (: autoloading :), ob ,who);
+	
+	return 1;
+	
+}
+
+void autoloading(string arg, object ob,object who)
+{
+	mapping ob_dbase;
+	int num;
+	string files;
+	string slot,cslot;
+	if(arg!="y"&&arg!="yes")
+		return ;
+		
+       if(who->query("diablo_weapon_autoload_num") > 19&&ob->query("weapon_prop"))
+      	  {
+                tell_object(who,"你已经设定过二十件自动加载的武器了，请用disload <物品id>取消某件的自动加载。\n");
+        	 return ;
+          }
+          else if(who->query("diablo_armor_autoload_num")>14&&ob->query("armor_prop"))
+          {
+          	tell_object(who,"你已经有十五件设定过自动加载的盔甲了，请用disload <物品id>取消某一件的自动加载。\n");
+        	 return ;
+          	
+          }
+           else if(who->query("diablo_charm_autoload_num")>9&&ob->query("charm"))
+          {
+          	tell_object(who,"你已经有十件设定过自动加载的神符了，请用disload <物品id>取消某一件的自动加载。\n");
+        	 return ;
+          	
+          }
+           slot = check_blank_slot(who);
+           if(slot =="none"&&ob->query("armor_prop"))
+           {
+          	tell_object(who,"你的自动加载盔甲可能有问题，请联系巫师。\n");
+        	 return ;
+          	
+          }
+          cslot = check_scblank_slot(who);
+            if(cslot =="none"&&ob->query("charm"))
+           {
+          	tell_object(who,"你的自动加载神符可能有问题，请联系巫师。\n");
+        	 return ;
+          	
+          }
+          if(who->query("diablo_weapon_autoload/"+ob->query("name")))
+           {
+          	tell_object(who,"你已经加载过一件同名的物品了，还是先改个名吧。\n");
+        	 return ;
+          	
+          }
+	 ob_dbase=ob->query_entire_dbase();
+        files=base_name(ob)+".lpc";
+        ob_dbase+=(["files":files]);
+        map_delete(ob_dbase, "equipped");
+        map_delete(ob_dbase,"actions");
+       
+   	if(ob->query("weapon_prop"))
+   	{
+   	//	who->delete("diablo_weapon_autoload");
+	        who->set("diablo_weapon_autoload/"+ob->query("name"),ob_dbase);
+	        who->add("diablo_weapon_autoload_num",1);
+	}
+	else if(ob->query("armor_prop"))
+   	{
+	        who->set("diablo_armor_autoload/"+slot,ob_dbase);
+	        who->add("diablo_armor_autoload_num",1);
+	        if(who->query("diablo_armor_autoload_num") > 15)
+	        	{
+	        		
+	        		who->delete("diablo_armor_autoload/"+slot);
+	        		who->add("diablo_armor_autoload_num",-1);
+      		          	tell_object(who,"sorry ,bug!\n");
+	        		return;
+	        	}
+	        ob->set("diablo_slot",slot);
+	}
+	else if(ob->query("charm"))
+   	{
+	        who->set("diablo_charm_autoload/"+cslot,ob_dbase);
+	        who->add("diablo_charm_autoload_num",1);
+	        if(who->query("diablo_charm_autoload_num") > 10)
+	        	{
+	        		
+	        		who->delete("diablo_charm_autoload/"+cslot);
+	        		who->add("diablo_charm_autoload_num",-1);
+      		          	tell_object(who,"sorry ,bug!\n");
+	        		return;
+	        	}
+	        ob->set("diablo_slot",cslot);
+	}
+	ob->set("diablo_ob_autoloaded",1);
+	ob->set("autoloaded",1);
+	ob->set("no_give",1);
+	ob->set("owner_id",getuid(who));
+	
+	ob->set("no_get",1);
+	ob->set("no_put",1);
+	ob->set("no_sell",1);
+	ob->set("no_drop",1);
+	this_object()->command("walkby "+who->query("id"));
+	tell_object(who,ob->query("name")+"已经被设定为自动加载物品！\n");
+	return ;
+	
+}
+int do_disload(string arg)
+{
+	object ob,who;
+	
+	mapping num,ob_dbase;
+	who = this_player();
+	if(!userp(who))
+		return 0;
+	if(!arg)
+		return notify_fail("你要取消哪个自动加载物品？\n");
+	if(!ob=present(arg,who))
+		return notify_fail("你要取消哪个自动加载物品？\n");
+	
+	if(!ob->query("diablo_ob_autoloaded"))
+			return notify_fail("这件东西不是自动加载物品！\n");
+	if( ob->query("equipped") )
+	{
+		tell_object(who,"你必须先放下这样东西。\n");
+      		return 1;
+      	}
+	tell_object(who,"你确定要把"+ob->query("name")+"取消自动加载吗？(yes/no)\n");
+//	tell_object(who,HIR"取消这件物品的自动加载，同时会摧毁这件物品！请慎重！\n"NOR);
+	input_to( (: disloading :), ob ,who);
+	
+	return 1;
+	
+}
+
+void disloading(string arg, object ob,object me)
+{
+	mapping ob_dbase;
+	int num;
+	if(arg!="y"&&arg!="yes")
+		return ;
+		
+   	if(ob->query("weapon_prop"))
+   	{
+	        me->delete("diablo_weapon_autoload/"+ob->query("name"));
+	        me->add("diablo_weapon_autoload_num",-1);
+	}
+	else if(ob->query("armor_prop"))
+   	{
+	        me->delete("diablo_armor_autoload/"+ob->query("diablo_slot"));
+	        me->add("diablo_armor_autoload_num",-1);
+	        ob->delete("diablo_slot");
+	}
+		else if(ob->query("charm"))
+   	{
+	        me->delete("diablo_charm_autoload/"+ob->query("diablo_slot"));
+	        me->add("diablo_charm_autoload_num",-1);
+	        ob->delete("diablo_slot");
+	}
+	this_object()->command("die1 "+me->query("id"));
+	tell_object(me,ob->query("name")+"已经被取消自动加载！\n");
+	ob->delete("diablo_ob_autoloaded");
+	ob->delete("autoloaded");
+	if(ob->query("no_diablo_disload_give"))
+	{	
+		ob->set("no_give",1);
+		ob->set("no_get",1);
+		ob->set("no_sell",1);
+		ob->set("no_drop",1);
+	}
+	else
+	{
+		ob->set("no_give",0);
+		ob->set("no_get",0);
+		ob->set("no_sell",0);
+		ob->set("no_drop",0);
+	
+	}
+	ob->delete("owner_id");
+	
+	
+//	message_vision(HIW"“砰”的一声，"+ob->query("name")+"化为微尘消失无形。\n"NOR,me);
+//	ob->move("/obj/void");
+//	destruct(ob);
+	return ;
+	
+}
+
+int do_yao(string arg)
+{
+    object obj;
+
+    if ( 100 <= this_player()->query("level") )
+    {
+        return notify_fail("踏入修仙界，还需要新手装备?\n");
+    }
+
+    if ( "pifeng" == arg )
+    {
+        obj = new("/d/npc/obj/pifeng");
+
+        if ( obj )
+        {
+            obj->set("armor_prop/armor", 1000000);
+            obj->set("armor_prop/dodge", 1000000);
+        }
+    }
+    else if ( "sword" == arg )
+    {
+        obj = new("/d/zhuxian/obj/wuchen");
+
+        if ( obj )
+        {
+            obj->set("weapon_prop/damage", 2500);
+            obj->set("living_time", 24 * 3600); //24小时后自动消失
+        }
+    }
+    else
+    {
+        return notify_fail("目前只能提供pifeng和sword\n");
+    }
+
+    if ( obj )
+    {
+        obj->move(this_player());
+    }
+
+    tell_object(this_player(), "装备总管给你一套新手装备。\n");
+
+    return 1;
+}
+

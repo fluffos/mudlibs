@@ -1,0 +1,137 @@
+#include <ansi.h>
+#include <combat.h>
+
+inherit FAMILYSKILL;
+
+int cast(object me, object target)
+{
+    if ( !target )
+    {
+        return notify_fail("你要对谁布道？\n");
+    }
+
+    limit_status["mana"] = 70;
+    limit_status["sen"] = 70;
+
+    limit_skills["spells"] = 100;
+
+    if ( !can_cast(me, "方寸山三星洞") )
+    {
+        return 0;
+    }
+
+    if( me->query_temp("preaching") )
+    {
+        return notify_fail("你正在布道！\n");
+    }
+
+    if ( me->is_fighting() )
+    {
+        return notify_fail("不可以一边打架一边布道！\n");
+    }
+
+    if ( target->is_fighting() )
+    {
+        return notify_fail(target->name() + "正在打架，没空理你！\n");
+    }
+
+    write("你要布道他身上的什么东西？");
+    input_to( (: call_other, __FILE__, "select_object", me, target :));        
+
+    return 1;
+}
+
+void select_object(object me, object target, string name)
+{
+    object ob;
+    mapping sp, dp;
+
+    if ( !name || name == "" )
+    {
+        write("停止布道。\n");
+        return;
+    }        
+
+    if ( !ob = present(name, target) )
+    {
+        object *inv;
+
+        inv = all_inventory(target);
+        if ( !sizeof(inv) )
+        {
+            write( target->name() + "身上看起来没有什麽让你值得布道东西。\n");
+            return;
+        }
+
+        ob = inv[random(sizeof(inv))];
+    }
+
+    if ( ob->query("no_drop") || ob->query("no_give") || ob->query("owner") )
+    {
+        write(target->name()+"好象不会理会你似的。\n");
+        return;
+    }
+
+    sp = COMBAT_D->cast_power(me, target, SKILL_USAGE_ATTACK);
+    dp = COMBAT_D->cast_power(me, target, SKILL_USAGE_DEFENSE);
+
+    tell_object(me, "你庄严地向" + target->name() + "诉说身揣" + ob->query("unit") + ob->name() +"的种种坏处...\n\n");
+    tell_object(target, me->name() + "满面庄严，向你耐心诉说道：这位" + RANK_D->query_respect(target) + "，人生如梦，放弃" 
+        + ob->query("unit") + ob->name() + "吧 ...！\n\n");
+    message("vision", "只见" + me->name() + "满面庄严，神情严肃，\n向" 
+        + target->name() + "不厌其烦地布道着．．．", environment(me), ({ me, target }) );
+
+    me->set_temp("preaching", 1);
+
+    me->add("mana", -50);
+    me->receive_damage("sen", 50);
+
+    call_out( "compelete_preach", random(3) + 1, me, target, ob, sp, dp);
+}
+
+private void compelete_preach(object me, object target, object ob, mapping sp, mapping dp)
+{
+    int amount;
+    object ob1;
+
+    me->delete_temp("preaching");
+
+    if ( !target )
+    {
+        tell_object(me, "太可惜了，你给布道的人已经不见了。\n");
+        return;
+    }
+
+    if ( environment(target) != environment(me) )
+    {
+        tell_object(me, "太可惜了，你给布道的人已经走了。\n");
+        return;
+    }
+
+    if ( !target->query("spi") )
+    {
+        tell_object(me, target->name() + "对你的布道无动于衷！\n");
+        return;
+    }
+
+    if ( living(target) && COMBAT_D->cast_hit(sp, dp) && ob->move(environment(me))) 
+    {
+        message_cast("$N听着$n的布道，深有感触，一激动，将一" + ob->query("unit") + ob->name() + "丢在地下。\n", target, me);
+        if ( ! me->is_busy() )
+        {
+            if ( ! me->is_busy() )
+            {
+                me->start_busy(3 + random(4));
+            }
+        }
+    } 
+    else 
+    {
+        message_cast("$N象一块顽石般，对$n的布道毫不理会。\n", target, me);
+        if ( ! me->is_busy() )
+        {
+            me->start_busy(3);
+        }
+    }
+}
+

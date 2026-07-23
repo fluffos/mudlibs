@@ -1,0 +1,352 @@
+#include <ansi.h>
+
+inherit F_DBASE;
+inherit F_CLEAN_UP;
+
+mapping task_gift = ([
+    "dajiu": ([
+        "name": "搭救",
+        "basic": 2,
+        "multi": 2,
+        "expire": 0,
+    ]),
+    "menpai": ([
+        "name": "门派",
+        "basic": 2,
+        "multi": 2,
+        "expire": 0,
+    ]),
+    "xue": ([
+        "name": "守城",
+        "basic": 10,
+        "multi": 10,
+        "expire": 0,
+    ]),
+    "peiyao": ([
+        "name": "配药",
+        "basic": 10,
+        "multi": 10,
+        "expire": 0,
+    ]),
+    "xunbao": ([
+        "name": "寻宝",
+        "basic": 2,
+        "multi": 2,
+        "expire": 0,
+    ]),
+]);
+
+void create()
+{
+    seteuid(getuid());
+    set("channel_id", "奖励精灵");
+
+    remove_call_out("double_gift");
+    call_out("double_gift", 3);
+}
+
+string report_str(int t)
+{
+    int d, h, m, s;
+    string time;
+
+    s = t % 60;		t /= 60;
+    m = t % 60;		t /= 60;
+    h = t % 24;		t /= 24;
+    d = t;
+
+    if(d) time = chinese_number(d) + "天";
+    else time = "";
+
+    if(h) time += chinese_number(h) + "小时";
+    if(m) time += chinese_number(m) + "分";
+    time += chinese_number(s) + "秒";
+
+    return(time);
+}
+
+void show_gifts()
+{
+    string *alltask = keys(task_gift);
+    int i, count = sizeof(alltask);
+    int expire;
+
+    for ( i = 0; i < count; i++ )
+    {
+        expire = task_gift[alltask[i]]["expire"];
+        if ( 0 < expire && time() < expire )
+        {
+            expire -= time();
+            write(task_gift[alltask[i]]["name"] + " " + chinese_number(task_gift[alltask[i]]["multi"]) + "倍 " 
+                + report_str(expire) + "\n");
+        }
+        else
+        {
+            write(task_gift[alltask[i]]["name"] + " " + chinese_number(task_gift[alltask[i]]["multi"]) + "倍" + "\n");
+        }
+    }
+}
+
+void double_gift()
+{
+    string *alltask = keys(task_gift);
+    int i, count = sizeof(alltask);
+    int expire;
+
+    for ( i = 0; i < count; i++ )
+    {
+        if ( 0 == task_gift[alltask[i]]["expire"] && 100 > random(300) )
+        {
+            task_gift[alltask[i]]["multi"] = task_gift[alltask[i]]["basic"] * (2 + random(2));
+            expire = 1800 + random(3600);
+            task_gift[alltask[i]]["expire"] = time() + expire;
+            CHANNEL_D->do_channel(this_object(), "rumor", "开荒了，" + task_gift[alltask[i]]["name"] + "任务" 
+                + chinese_number(task_gift[alltask[i]]["multi"]) + "倍奖励" + report_str(expire) + "!");
+        }
+
+        if ( 0 < task_gift[alltask[i]]["expire"] && time() >= task_gift[alltask[i]]["expire"] )
+        {
+            task_gift[alltask[i]]["multi"] = task_gift[alltask[i]]["basic"];
+            task_gift[alltask[i]]["expire"] = 0;
+            CHANNEL_D->do_channel(this_object(), "rumor", task_gift[alltask[i]]["name"] + "任务" 
+                + chinese_number(task_gift[alltask[i]]["multi"]) + "倍奖励结束!");
+        }
+    }
+
+    call_out("double_gift", 3600);
+}
+
+int get_taskmulti(string task)
+{
+    if ( !task || undefinedp(task_gift[task]) )
+    {
+        return 1;
+    }
+
+    if ( 0 < task_gift[task]["expire"] && time() >= task_gift[task]["expire"] )
+    {
+        task_gift[task]["multi"] = task_gift[task]["basic"];
+        task_gift[task]["expire"] = 0;
+        CHANNEL_D->do_channel(this_object(), "rumor", task_gift[task]["name"] + "任务" 
+            + chinese_number(task_gift[task]["multi"]) + "倍奖励结束!");
+    }
+
+    return task_gift[task]["multi"];
+}
+
+int query_potential(object me)
+{
+    if ( me->query("potential_count") )
+    {
+        return system_maxpotential();
+    }
+
+    return me->query("potential");
+}
+
+int add_potential(object me, int value)
+{
+    string name;
+    int balance;
+    int result = 0;
+    int i;
+    int max = system_maxpotential();
+
+    if ( 0 == value )
+    {
+        return result;
+    }
+
+    while ( value )
+    {
+        balance = me->query("potential");
+
+        if ( max - balance >= value )
+        {
+            result += value;
+            me->add2("potential", value);
+            return result;
+        }
+
+        value -= (max - balance);
+        result += (max - balance);
+        me->add2("potential_count", 1);
+        me->set("potential", 0);
+    }
+
+    return result;
+}
+
+int add_property(object me, string name, int value)
+{
+    int balance;
+    int result = 0;
+    int max = system_maxint();
+
+    if ( 0 == value )
+    {
+        return result;
+    }
+
+    balance = me->query(name);
+
+    if ( 0 < value )
+    {
+        if ( max - balance >= value )
+        {
+            me->add2(name, value);
+            result += value;
+            return result;
+        }
+        else
+        {
+            me->add2(name, max - balance);
+            result += max - balance;
+            return result;
+        }
+    }
+    else
+    {
+        if ( balance >= -value )
+        {
+            me->add2(name, value);
+            result += value;
+            return result;
+        }
+        else
+        {
+            me->set(name, 0);
+            result += -balance;
+            return result;
+        }
+    }
+
+    return result;
+}
+
+int more_gift(object me)
+{
+    if ( !me->query("more_gift") )
+    {
+        return 1;
+    }
+
+    return (int)me->query("more_gift");
+}
+
+varargs mapping gift_bonus(object who, mapping b)
+{
+    string msg;             // 奖励的描述信息
+    int i, count;
+    mixed value;
+    string *giftkeys;
+    int multi;
+
+    if ( !who || !b )
+    {
+        return ([]);
+    }
+
+    count = sizeof(b);
+    if ( 0 >= count )
+    {
+        return ([]);
+    }
+
+    multi = more_gift(who);
+    multi *= get_taskmulti(b["job"]);
+
+    giftkeys = keys(b);
+    for ( i = 0; i < count; i++ )
+    {
+        if ( "function" == giftkeys[i] )
+        {
+            for ( int j = 0; j < multi; j++ )
+            {
+                evaluate(b[giftkeys[i]]);
+            }
+            continue;
+        }
+
+        if ( intp(b[giftkeys[i]]) )
+        {
+            value = b[giftkeys[i]];
+        }
+        else if ( stringp(b[giftkeys[i]]) )
+        {
+            value = 0;
+        }
+        else if ( functionp(b[giftkeys[i]]) )
+        {
+            value = evaluate(b[giftkeys[i]], who, b);
+        }
+
+        value = (int)value * multi;
+        if ( "silver" == giftkeys[i] )
+        {
+            value = who->add_silver((int)value);
+        }
+        else if ( "gold" == giftkeys[i] )
+        {
+            value = who->add_gold((int)value);
+        }
+        else if ( "coin" == giftkeys[i] )
+        {
+            value = who->add_coin((int)value);
+        }
+        else if ( "money" == giftkeys[i] )
+        {
+            value = who->add_coin((int)value);
+        }
+        else if ( "potential" == giftkeys[i] )
+        {
+            value = who->add_potential((int)value);
+        }
+        else if ( "job" != giftkeys[i] )
+        {
+            who->add(giftkeys[i], (int)value);
+        }
+        b[giftkeys[i]] = value;
+    }
+
+    return b;
+}
+
+int can_addprop(object me, string prop, mixed data)
+{
+    int level = me->query("level");
+
+    switch ( prop )
+    {
+        case "combat_exp":
+        case "daoxing":
+            add_property(me, prop, data);
+            if ( 0 < (int)data && 100 > level )
+            {
+                if ( LEVEL_D->query_level_need_exp(level + 1) <= me->query("combat_exp") 
+                    && LEVEL_D->query_level_need_dx(level + 1) <= me->query("daoxing") )
+                {
+                    tell_object(me, HIR"一缕红光透体而过，你感觉自己又变厉害了。\n"NOR);
+                    LEVEL_D->player_levelup(me, 1);
+                }
+            }
+            return 0;
+            break;
+
+        case "potential":
+            add_potential(me, data);
+            return 0;
+            break;
+
+        case "balance":
+            MONEY_D->add_coin(me, data);
+            return 0;
+            break;
+
+        default:
+            break;
+    }
+
+    return 1;
+}
+

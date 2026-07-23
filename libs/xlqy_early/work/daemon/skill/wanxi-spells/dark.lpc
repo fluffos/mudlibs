@@ -1,0 +1,84 @@
+// 作者：tonii@飘渺水云间，2003-4-25于浙大，修改请保留此行。
+// wind.c 【暗魔鬼灭杀】
+//化解对方内力
+
+#include <ansi.h>
+
+inherit SSERVER;
+
+int cast(object me, object target)
+{
+
+       int success_adj=150;
+	int damage_adj=100;//不能设得过高，SPELLD中规定超过200，按200计算
+ int damage=0;
+int success=0;
+if(me->query_temp("magic_set")) {
+success_adj = 210;
+damage_adj = 150;
+}
+                          //因此，将damage在attacking_cast_damage()后再作调整
+
+      if(me->query("family/family_name")!="幻世魔导")
+               return notify_fail("非幻世魔导不能使用此项技能！\n");
+        
+	if( !target ) target = offensive_target(me);
+
+	if( !target
+	||      !target->is_character()
+	||      target->is_corpse()
+	||      target==me)
+		return notify_fail("你要对谁施展「暗魔鬼灭杀」？\n");
+
+	if((int)me->query("mana") < 100+(int)me->query("mana_factor") )
+		return notify_fail("你的法力不够！\n");
+
+	if((int)me->query("sen") < 100 )
+		return notify_fail("你无法集中精力！\n");
+
+       if(target->query("mana")<=0)
+              return notify_fail("对方已经丧失法力了！\n");
+
+	me->add("mana", -25-(int)me->query("mana_factor"));
+	me->receive_damage("sen", 50);
+
+	if( random(me->query("max_mana")) < 50 ) {
+		write("你一不小心，念错了咒语。\n");
+	       return 1;
+	}
+	message_vision(RED"「暗魔鬼灭杀」"NOR+HIY"！
+$N低声念了一句咒语，召唤出烈火地狱中的至邪魔魂，悄无声息地飘向$n！\n"NOR, me, target);
+
+//调用spelld的成功判断函数
+
+       success=SPELL_D->attacking_cast_success(me, target, success_adj);
+       if(success)
+       {
+          //调用spelld的伤害计算函数
+          damage=SPELL_D->attacking_cast_damage(me, target, damage_adj);
+
+          if(damage>0)
+           {
+                message_vision(HIR"魔魂从$n的身体穿过，$n顿时觉得灵魂的力量大大削弱了！\n"NOR, me, target);
+                target->add("mana",-5*damage);
+                if ( target->query("mana")<0)
+                    target->set("mana",0);
+            }
+           else if(damage==0)
+                message_vision(HIC"结果被$n的法力一逼，魔魂消失了！\n"NOR, me, target);
+           else   //backfire
+            {
+               message_vision(HIC"结果被$n的法力反击，魔魂反而向$N飘去！\n"NOR, me, target);
+               message_vision(HIR"$N被自己召唤的魔魂穿透身体！\n"NOR, me, target);
+               me->add("mana",2*damage);
+              }
+        }
+       else 
+              message_vision(HIC"可能是$N念错了一两个词，魔魂飘了几步，就升向天空消失了！\n"NOR, me, target);
+       me->add("mana",-50-me->query("mana_factor"));
+       if( me->query("mana")<0)
+             me->set("mana",0);
+	me->start_busy(1+random(2));
+       target->kill_ob(me);
+	return 3+random(3);
+}

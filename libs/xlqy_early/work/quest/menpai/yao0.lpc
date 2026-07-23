@@ -1,0 +1,132 @@
+inherit NEWNPC;
+
+#include <ansi.h>
+
+void create()
+{
+    ::create();
+}
+
+void generate_me(object who, int level, int period, string name, string *id)
+{
+    ::generate_me(who, level * 2, 100, FAMILY_D->random_class(), 0, level * 5, name, id, 1);
+    ::set_period(3);
+
+    set("long", "来凡间吃人的妖怪。\n");
+    set("attitude", "peaceful");
+    set("menpai/level", level);
+    set("new_time", time());
+}
+
+mapping calc_reward_64(object who)
+{
+    int level = who->query("level");
+    int guailevel = who->query_temp("menpai/guailevel");
+    mapping reward = ([]);
+
+    reward["combat_exp"] = LEVEL_D->query_level_jobreward_exp(level) + LEVEL_D->query_level_jobreward_exp(level) / 100 * (guailevel - 1);
+    reward["daoxing"] = LEVEL_D->query_level_jobreward_dx(level) + LEVEL_D->query_level_jobreward_dx(level) / 100 * (guailevel - 1);
+    reward["potential"] = LEVEL_D->query_level_jobreward_qn(level) + LEVEL_D->query_level_jobreward_qn(level) / 100 * (guailevel - 1);
+    reward["gold"] = guailevel * 50;
+    reward["job"] = "menpai";
+    if ( random(100) > 25 )
+    {
+        reward["faith"] = guailevel;
+    }
+    else
+    {
+        reward["weiwang"] = guailevel;
+    }
+
+    return reward;
+}
+
+mapping calc_reward_32(object who)
+{
+    int level = who->query("level");
+    int guailevel = who->query_temp("menpai/guailevel");
+    mapping reward = ([]);
+
+    reward["combat_exp"] = LEVEL_D->query_level_jobreward_exp(level) + LEVEL_D->query_level_jobreward_exp(level) / 100 * (guailevel - 1);
+    reward["daoxing"] = LEVEL_D->query_level_jobreward_dx(level) + LEVEL_D->query_level_jobreward_dx(level) / 100 * (guailevel - 1);
+    reward["potential"] = LEVEL_D->query_level_jobreward_qn(level) + LEVEL_D->query_level_jobreward_qn(level) / 100 * (guailevel - 1);
+    reward["gold"] = guailevel * 50;
+    reward["job"] = "menpai";
+    if ( random(100) > 25 )
+    {
+        reward["faith"] = guailevel;
+    }
+    else
+    {
+        reward["weiwang"] = guailevel;
+    }
+
+    return reward;
+}
+
+void die()
+{
+    object killer = query_temp("last_damage_from");
+    mapping reward;
+    int exp, dx, pot, money;
+
+    command("say 咱们走着瞧。");
+    tell_room(environment(), "说完，" + query("name") + "往地下一钻，消失了。\n");
+
+    if ( killer && killer == query("owner") && "asked" == killer->query("job/menpai/step")
+        && this_object() == killer->query_temp("job/target") )
+    {
+        killer->add("count/menpai", 1);
+        killer->set("job/menpai/step", "done");
+        tell_object(killer, "恭喜你得到了奖赏，你的道行和潜能提高了。\n");
+
+        killer->set_temp("menpai/guailevel", query("menpai/level"));
+        reward = system_call((: call_other, __FILE__, "calc_reward_64" :), 
+            (: call_other, __FILE__, "calc_reward_32" :), killer, killer);
+
+        reward = GIFT_D->gift_bonus(killer, reward);
+
+        exp = (int)reward["combat_exp"];
+        dx = (int)reward["daoxing"];
+        pot = (int)reward["potential"];
+        money = (int)reward["gold"];
+
+        FAMILY_D->family_chat(killer, killer->name(1) + "杀死本门仇敌" + name(1) + "，真乃大快人心，"
+            "奖励" + exp + "点武学及" + COMBAT_D->chinese_daoxing(dx) + "道行，" + pot + "点潜能，" + money + "两黄金。\n");
+        MONITOR_D->report_job_msg(killer->name() + "(" + killer->query("id") + ")杀死本门仇敌" + name(1) 
+            + "，奖励" + exp + "点武学及" + COMBAT_D->chinese_daoxing(dx) + "道行，" + pot + "点潜能，" + money + "两黄金。\n");
+
+        this_object()->set("is_diablo_npc", 1);
+        this_object()->set("magic_find", 1 + 20 * (1 + killer->query_temp("menpai/guailevel")));
+        DIABLO_D->diablo_drop(this_object(), killer);
+    }
+
+    destruct(this_object());
+}
+
+int heal_up()
+{
+    if ( environment() && time() - query("new_time") > 480 && !is_fighting() )
+    {
+        call_out("leave", 1);
+        return 1;
+    }
+
+    return ::heal_up() + 1;
+}
+
+void leave()
+{
+    if ( this_object() )
+    {
+        if ( environment() )
+        {
+            message("vision", HIB + name() + "如同一阵风般消失了！\n" NOR, environment());
+        }
+
+        destruct(this_object());
+    }
+
+    return;
+}
+

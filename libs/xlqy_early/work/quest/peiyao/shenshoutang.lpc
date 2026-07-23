@@ -1,0 +1,259 @@
+#include <ansi.h>
+#include <room.h>
+inherit ROOM;
+
+/*
+在这些药里面，“黄龙丹”和“金髓丸”对他练功帮助最大，都有增加功力、脱胎换骨的妙用；
+而“清灵散”则是世间少有的解毒圣药，能解天下千百种剧毒；
+最后的“养精丹”是一种对内外伤都有奇效的灵药，不论是受了多严重的内外伤，
+只要吃了这药一颗，即使不能起死回生，使伤势立刻痊愈，也可让伤势大为减轻，可保住性命。
+
+在这期间，韩立通过其他人的口中对七玄门和墨大夫有了比较详细的了解。
+七玄门有一位拥有七绝上人嫡传后人身份叫王陆的正门主，和其他三位副门主，门内分为外门和内门两大部分。
+外门有飞鸟堂，聚宝堂，四海堂，外刃堂四个分堂，内门有百锻堂，七绝堂，供奉堂，血刃堂四个分堂
+，另外还有一个只在正门主之下和其他副门主并驾齐驱的长老会。
+
+能够正式加入内门的记名弟子只有一小部分，大部分被考查的弟子都没能通过这一关，没过去的只好背着包裹下山去当外门弟子。
+这些未能通过的童子，大都会被划入聚宝堂和飞鸟堂。其中有杰出点的，估计会受到进一步的训练，
+才有可能被招入待遇更好的外刃堂。当然外门待遇最好的是四海堂，可惜四海堂只招收武林道上的成名人物，
+没有一两手拿得出手的功夫，那是想也别想了，更别说这些乳臭未干的童子们。
+
+瓶子通体都是一种淡淡的浅绿色，在瓶面上还印着几个墨绿色花纹，花纹呈叶片状，栩栩如生，
+摸上去有一种凸出来的感觉，似是用真的树叶直接镶嵌上去一样。
+
+这里生长着密密麻麻的荆棘林，它们占据了这里的大片土地，只留下一小片空地，可以让韩立插足。
+在山沟的顶部，有数不清的不知名滕蔓编织在一起，形成了一个天然的绿色天幕
+
+一张原本冷酷的面容因痛苦拧成了一团，嘴角不停地往外流着白沫，很明显这位厉师兄已经疼痛的神智不清了。
+
+绝对服从命令、体力惊人，从不开口说话、没有丝毫感情，虽然尚不知他武功怎样，但绝不会太弱
+*/
+
+int working(object me);
+
+int do_peiyao()
+{
+    object me;
+
+    me = this_player();
+  
+    if ( me->is_busy() )
+    {
+        return notify_fail("你正忙着呢，别着急。\n");
+    }
+
+    if ( !me->query_temp("job/peiyao") )
+    {
+        message_vision(CYN "$N" CYN "刚想抓几味药配制，就听见墨大夫"
+                       CYN "怒喝道：给我放下，别乱动。\n" NOR,
+                       me);
+        return 1;
+    }
+
+    me->set_temp("job/peiyao/step", 1);
+    me->start_busy( (: call_other, __FILE__, "working", me :),
+                   (: call_other, __FILE__, "halt_working", me :) );
+
+    message_vision(HIY "$N开始工作。\n" NOR, me);
+
+    return 1;
+}
+
+int working(object me)
+{
+    string msg;
+    int finish;
+    int b;
+    mapping gift;
+
+    if ( !me->query_temp("job/peiyao/step") )
+    {
+        me->set_temp("job/peiyao/step", 1);
+    }
+
+    if ( !living(me) )
+    {
+        me->delete_temp("job/peiyao");
+        return 0;
+    }
+
+    finish = 0;
+
+    switch ( me->query_temp("job/peiyao/step") )
+    {
+        case 1:
+        case 2:
+            msg = "$N东挑西拣，选好了一些药材。";
+            break;
+        case 3:
+        case 4:
+            msg = "$N把药材放进药臼，使劲捣了起来。";
+            break;
+        case 5:
+        case 6:
+            msg = "药材渐渐化作粉屑，混在一起。";
+            break;
+        case 7:
+        case 8:
+        case 9:
+            msg = "粉屑在$N的捣弄下越来越细，逐渐变成了粉末。";
+            break;
+        default:
+            msg = "$N把药材包好，递给墨大夫。";
+            finish = 1;
+            break;
+    }
+    msg += "\n";
+
+    if ( finish )
+    {
+        msg += CYN "墨大夫" CYN "看了$N" CYN "配的药，点头道：不错，不错！这是给你的报酬！\n" NOR;
+
+        me->delete_temp("job/peiyao");
+        me->add("count/peiyao", 1);
+
+        b = 100000 + random(20000);
+        gift = GIFT_D->gift_bonus(me, ([
+            "combat_exp": b,
+            "daoxing": b,
+            "potential": b / 5,
+            "silver":   b,
+            "job":  "peiyao",
+            "function": (: call_other, __FILE__, "give_medicine", me :),
+            ]));
+
+        MONITOR_D->report_job_msg(me->name() + "(" + me->query("id") + ")配药成功，奖励" 
+            + gift["combat_exp"] + "点武学及道行，" + gift["potential"] + "点潜能，" + gift["silver"] + "两银子。\n");
+    }
+
+    if ( 1 == finish || random(3) )
+    {
+        message_vision(msg, me);
+    }
+
+    if ( finish )
+    {
+        if ( b > 0 )
+        {
+            tell_object(me, HIC "\n你获得了" + COMBAT_D->chinese_daoxing(gift["daoxing"]) +
+                            "道行和" + gift["potential"] + "点潜能。\n\n" NOR);
+        }
+        return 0;
+    }
+
+    me->add_temp("job/peiyao/step", 1);
+    return 1;
+}
+
+void give_medicine(object me)
+{
+    object ob;
+    int type = random(100);
+
+    if ( type < 10 )
+    {
+        if ( !me->query("newbie/lifeiyu") && random(5) < 2 )
+        {
+            ob = new(__DIR__"obj/yaofen");
+        }
+        else
+        {
+            ob = new(__DIR__"obj/shenliwan");
+        }
+    }
+    else if ( type < 20 )
+    {
+        ob = new(__DIR__"obj/jinsuiwan");
+    }
+    else if ( type < 30 )
+    {
+        ob = new(__DIR__"obj/huanglongdan");
+    }
+    else if ( type < 40 )
+    {
+        ob = new(__DIR__"obj/xisuidan");
+    }
+    else if ( type < 50 )
+    {
+        ob = new(__DIR__"obj/qinglingsan");
+    }
+    else if ( type < 60 )
+    {
+        ob = new(__DIR__"obj/yangjingdan");
+    }
+    else if ( type < 70 )
+    {
+        ob = new(__DIR__"obj/zhuyandan");
+    }
+
+    if ( ob )
+    {
+        if ( !ob->move(me) )
+        {
+            destruct(ob);
+        }
+        else
+        {
+            ob->set("owner", me);
+
+            if ( !random(10) )
+            {
+                MONITOR_D->report_rumor_object_msg(me, "获得了天赋灵药" + ob->query("name") + "。\n");
+            }
+            MONITOR_D->report_job_msg(me->name() + "(" + me->query("id") + ")获得了天赋灵药" + ob->query("name") + "。\n");
+            tell_object(me, HIC "\n你获得了天赋灵药" + ob->query("name") + "。\n" NOR);
+        }
+    }
+}
+
+int halt_working(object me)
+{
+    message_vision(HIY "$N" HIY "把手中的活一甩，嚷嚷道：不干了，不干了！\n" NOR, me);
+    me->delete_temp("job/peiyao");
+
+    return 1;
+}
+
+int stop_working()
+{
+    object me = this_player();
+
+    me->interrupt_me(me);
+
+    return 1;
+}
+
+void create ()
+{
+    set ("short", "神手堂药房" );
+    set ("long", @LONG
+
+这是七玄门后山的神手堂内的药房，药房中摆满了各种各样的
+药材，急需药铺伙计把这些药材磨成需要的药粉，药丸之类。
+LONG);
+
+    set("exits", 
+    ([
+        "west" : "/d/city/yaopu",
+        "southdown" : __DIR__"shandao4",
+        "north" : __DIR__"houshan",
+    ]));
+
+    create_door("north", "石门", "south", DOOR_CLOSED);
+
+    set("objects", 
+    ([
+        "/quest/peiyao/npc/mo" : 1,
+    ]));
+
+    set("no_fight", 1);;
+
+    setup();
+}
+
+void init()
+{
+    add_action("do_peiyao", "peiyao");
+    add_action("stop_working", "stop");
+}
+

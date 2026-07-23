@@ -1,0 +1,406 @@
+
+//by gamer@88
+#include <ansi.h>
+inherit NPC;
+
+void backattack();
+void set_skills(int max_value, int level);
+
+void create()
+{ 
+    string *order = ({"零零一", "零零二", "零零三", "零零四", "零零五", "零零六", "零零七", "零零八", "零零九"});
+
+    set_name("密探" + (order[random(9)]) , ({ "palaceguard"}) );
+    set("long", "这是唐王手下的九大密探之一。专门负责保护官员，刺杀以及窃取情报等任务。\n");
+    set("attitude", "friendly");
+    set("no_arrest",1); 
+    set("max_atman", 100);
+    set("atman", 100);
+    set("max_mana", 100);
+    set("age",25+random(10));
+    set("max_gin",2000);
+    set("gin",2000);
+    set("eff_gin",2000);
+    set("mana", 100); 
+    set("str", 40);
+    set("cor", 30);
+    set("cps", 25); 
+    set_skill("unarmed",10);
+    set_skill("changquan",  10);  
+    map_skill("unarmed", "changquan");
+    set("combat_exp", 80000);
+    create_family("将军府", 3, "弟子");
+    set_temp("wuxing/init_done",1);   //防止在setup中初始化错误的五行属性..
+    setup();
+}
+
+void init()
+{
+    add_action("do_kill","kill");
+}
+
+int do_kill(string arg)
+{
+    object *inv;
+    object who = this_player();
+
+    inv = all_inventory(environment());
+
+    if ( arg == query("owner")->query("id") )
+    {
+        if ( who == query("owner") )
+        {
+            return 0;
+        }
+        message_vision("$N喝道：快保护好大人！\n",this_object());
+        query("owner")->remove_killer(who);
+
+        for ( int i = 0; i < sizeof(inv); i++ )
+        {
+            if ( inv[i]->query("owner") == query("owner") && inv[i]->is_character() )
+            {
+                inv[i]->kill_ob(who);
+            }
+        }
+        return 1;
+    }
+
+    return 0;
+}
+
+int heal_up()
+{
+    if ( environment() && !is_fighting() )
+    {
+        call_out("leave", 1);
+        return 1;
+    }
+
+    if ( query("eff_kee")*100<query("max_kee")*95 )
+    {
+        command("eat yao");
+        command("exert recover");
+    }
+
+    if ( query("eff_sen")*100<query("max_sen")*95 )
+    {
+        command("eat dan");
+        command("exert refresh");
+    }    
+
+    if ( query("kee")*100<query("max_kee")*80 )
+    {
+        command("exert recover");
+    }
+
+    if ( query("sen")*100<query("max_sen")*80 )
+    {
+        command("exert refresh");
+    }
+ 
+    return ::heal_up() + 1;
+} 
+void leave()
+{
+    object owner;
+
+    message("vision",
+             name() + "说道：如再有变化，发哨为警！属下先行告退。\n\n"
+            + name() + "闪了闪就消失不见了。\n" , environment(),
+            this_object() );
+
+    if ( objectp(owner = this_object()->query("possessed")) )
+    {
+        owner->add_temp("max_guard",-1);
+    }
+
+    destruct(this_object());
+}
+
+void invocation(object who, int level)
+{
+    int i;
+    object *enemy;
+    object yao,dan;
+
+    set("str",12+level/24+random(level/24));
+
+    if ( query("str") > 40 )
+    {
+        set("str",40);
+    }
+
+    set_skills(level,(int)level/150); 
+
+    yao = carry_object("/d/obj/drug/jinchuang");
+    yao->set_amount(2+((int)(level/120)));
+    yao->set("no_get",1);
+
+    dan = carry_object("/d/obj/drug/hunyuandan");
+    dan->set_amount(2+(int)(level/150));
+    dan->set("no_get",1);
+
+    set("daoxing", who->query("daoxing")*2/(8-level/150) + random(who->query("daoxing")/(8-level/150))); 
+    set("combat_exp", who->query("combat_exp")*2/(8-level/150) + random(who->query("combat_exp")/(8-level/150))); 
+
+    set_temp("apply/damage", 10*(level/120+1));
+    set_temp("apply/armor", 24*(level/120+1));
+
+    message("vision",
+        name() + "喝道：大胆！竟敢和朝廷命官作对！\n" NOR,
+        environment(), this_object() );
+    enemy = who->query_enemy();
+    i = sizeof(enemy);
+
+    while ( i-- )
+    {
+        if ( enemy[i] && living(enemy[i]) )
+        {
+            kill_ob(enemy[i]);
+
+            if ( userp(enemy[i]) )
+            {
+                enemy[i]->fight_ob(this_object());
+            }
+            else
+            {
+                enemy[i]->kill_ob(this_object());
+            }
+        }
+    }
+
+    set_leader(who);
+    set("possessed",who);
+}
+
+void set_skills(int max_value, int level)
+{
+    
+    int i;
+    int kee,sen;
+    object ob1,ob2,ob3;
+
+    i = random(5);
+    kee = 750*(level+1)+random(400);
+    sen = 600*(level+1)+random(250);
+
+    set("kee",kee);
+    set("max_kee",kee);
+    set("eff_kee",kee);
+    set("sen",sen);
+    set("max_sen",sen);
+    set("eff_sen",sen);
+
+    switch ( i )
+    {
+        case 0:     //unarmed
+            set_skill("parry", 10+max_value/5 + random(max_value/6)+level*5);
+            set_skill("dodge", 15+max_value/5 + random(max_value/6)+level*7);
+            set_skill("unarmed",15+max_value/5+ random(max_value/5)+level*7);
+            set_skill("force",  8+max_value/5+ random(max_value/6)+level*5);     
+            set_skill("lengquan-force",  8+max_value/5+ random(max_value/6)+level*5);
+            set_skill("changquan",   15+max_value/5+ random(max_value/5)+level*7);  
+            set_skill("yanxing-steps",   15+max_value/5+ random(max_value/5)+level*7);
+            set_skill("spells",30+random(10));    
+            map_skill("unarmed", "changquan");
+            map_skill("dodge", "yanxing-steps");
+            map_skill("force", "lengquan-force");
+            set("force",query_skill("force")*18);
+            set("max_force",query_skill("force")*10);
+            set("force_factor",query_skill("force")/2);
+            set("mana",600+300*(level-1));
+            set("max_mana",400+300*(level-1));
+            set("mana_factor",20*(level+1));
+            set("chat_chance_combat", 12*(level+1));
+            set("chat_msg_combat", ({
+                (: perform_action,"unarmed","zhiqi" :),
+                (: exert_function,"jingxin":), 
+                (: exert_function,"haste":), 
+            }) );
+
+            ob1=carry_object("/d/obj/armor/jinjia");
+            ob1->wear();
+            ob1->set("no_sell","掌柜一看，说道：这东西一看就是伪劣产品，不要，不要。\n");
+            break;
+        case 1:      //mace
+            set_skill("parry", 10+max_value/5 + random(max_value/6)+level*5);
+            set_skill("unarmed",10+max_value/5+ random(max_value/6)+level*5);
+            set_skill("changquan", 10+max_value/5+ random(max_value/6)+level*5);
+            set_skill("dodge", 10+max_value/5 + random(max_value/6)+level*5);
+            set_skill("mace",15+max_value/5+ random(max_value/5)+level*7);
+            set_skill("force",  8+max_value/5+ random(max_value/6)+level*5);     
+            set_skill("lengquan-force",  8+max_value/5+ random(max_value/6)+level*5);
+            set_skill("jinglei-mace",   15+max_value/5+ random(max_value/5)+level*7);  
+            set_skill("wusi-mace",   15+max_value/5+ random(max_value/5)+level*7);  
+            set_skill("yanxing-steps",   10+max_value/5+ random(max_value/6)+level*5);  
+            set_skill("spells",30+random(10));    
+            map_skill("mace", "jinglei-mace");
+            map_skill("dodge", "yanxing-steps");
+            map_skill("force", "lengquan-force");
+            map_skill("parry","wusi-mace");
+            map_skill("unarmed", "changquan");
+            set("force",query_skill("force")*18);
+            set("max_force",query_skill("force")*10);
+            set("force_factor",query_skill("force")/2);
+            set("mana",600+300*(level-1));
+            set("max_mana",400+300*(level-1));
+            set("mana_factor",20*(level+1));
+            set("chat_chance_combat", 15*(level+1));
+            set("chat_msg_combat", ({
+                (: perform_action,"mace","combine" :),
+                (: exert_function,"jingxin":), 
+                (: exert_function,"haste":), 
+            }) );
+            ob1= carry_object("/d/obj/armor/jinjia");ob1->wear();
+            ob1->set("no_sell","掌柜一看，说道：这东西一看就是伪劣产品，不要，不要。\n");
+            ob2=carry_object("/d/obj/weapon/mace/mace");ob2->wield();
+            ob2->set("no_sell","掌柜一看，说道：这东西一看就是伪劣产品，不要，不要。\n");
+            break;
+
+        case 2:    
+            set_skill("parry", 15+max_value/5 + random(max_value/5)+level*7);
+            set_skill("unarmed",10+max_value/5+ random(max_value/6)+level*5);
+            set_skill("changquan", 10+max_value/5+ random(max_value/6)+level*5);
+            set_skill("dodge", 10+max_value/5 + random(max_value/6)+level*5);
+            set_skill("spear",15+max_value/5+ random(max_value/6)+level*7);
+            set_skill("force",  8+max_value/5+ random(max_value/6)+level*5);     
+            set_skill("lengquan-force",  8+max_value/5+ random(max_value/6)+level*5);
+            set_skill("bawang-qiang",   15+max_value/5+ random(max_value/5)+level*7);  
+            set_skill("yanxing-steps",   10+max_value/5+ random(max_value/6)+level*5); 
+            set_skill("wusi-mace",   8+max_value/5+ random(max_value/6)+level*5);  
+            set_skill("mace",15+max_value/5+ random(max_value/5)+level*7);
+            set_skill("spells",30+random(10)); 
+            map_skill("spear", "bawang-qiang");
+            map_skill("dodge", "yanxing-steps");
+            map_skill("force", "lengquan-force");
+            map_skill("parry","bawang-qiang");
+            map_skill("mace","wusi-mace");
+            map_skill("unarmed", "changquan");
+            set("force",query_skill("force")*18);
+            set("max_force",query_skill("force")*10);
+            set("force_factor",query_skill("force")/2);
+            set("mana",600+300*(level-1));
+            set("max_mana",400+300*(level-1));
+            set("mana_factor",20*(level+1));
+            set("chat_chance_combat", 15*(level+1));
+            set("chat_msg_combat", ({
+                (: perform_action,"spear","meihua" :),
+                (: perform_action,"spear","qiangjian" :),
+                (: exert_function,"jingxin":), 
+                (: exert_function,"haste":), 
+            }) );
+            ob1=carry_object("/d/obj/armor/jinjia");ob1->wear();
+            ob1->set("no_sell","掌柜一看，说道：这东西一看就是伪劣产品，不要，不要。\n");
+            ob2=carry_object("/d/obj/weapon/spear/jinqiang");ob2->wield();
+            ob2->set("no_sell","掌柜一看，说道：这东西一看就是伪劣产品，不要，不要。\n");
+            ob3=carry_object("/d/obj/weapon/mace/mace");
+            ob3->set("no_sell","掌柜一看，说道：这东西一看就是伪劣产品，不要，不要。\n");
+            break;
+
+        case 3:      //blade
+            set_skill("parry", 10+max_value/5 + random(max_value/6)+level*5);
+            set_skill("unarmed",10+max_value/5+ random(max_value/6)+level*5);
+            set_skill("changquan", 10+max_value/5+ random(max_value/6)+level*5);
+            set_skill("dodge", 10+max_value/5 + random(max_value/6)+level*5);
+            set_skill("blade",15+max_value/5 + random(max_value/6)+level*7);
+            set_skill("force",  8+max_value/5 + random(max_value/6)+level*5);     
+            set_skill("lengquan-force",  8+max_value/5 + random(max_value/6)+level*5);
+            set_skill("wuhu-blade",   15+max_value/5 + random(max_value/5)+level*7);  
+            set_skill("yanxing-steps",   10+max_value/5 + random(max_value/6)+level*5);
+            map_skill("unarmed", "changquan");
+            map_skill("blade", "wuhu-blade");
+            map_skill("dodge", "yanxing-steps");
+            map_skill("force", "lengquan-force");
+            set_skill("spells",30+random(10));  
+            set("force",query_skill("force")*18);
+            set("max_force",query_skill("force")*10);
+            set("force_factor",query_skill("force")/2);
+            set("mana",600+300*(level-1));
+            set("max_mana",400+300*(level-1));
+            set("mana_factor",20*(level+1));
+
+            set("chat_chance_combat", 15*(level+1));
+            set("chat_msg_combat", ({
+                (: perform_action,"blade","lianhuan" :),
+                (: exert_function,"jingxin":), 
+                (: exert_function,"haste":), 
+            }) );
+            ob1=carry_object("/d/obj/armor/jinjia");ob1->wear();
+            ob1->set("no_sell","掌柜一看，说道：这东西一看就是伪劣产品，不要，不要。\n");
+            ob2=carry_object("/d/obj/weapon/blade/jindao");ob2->wield();
+            ob2->set("no_sell","掌柜一看，说道：这东西一看就是伪劣产品，不要，不要。\n");
+            break;
+
+        case 4:      //axe
+        default:
+            set_skill("parry", 10+max_value/5 + random(max_value/6)+level*5);
+            set_skill("unarmed",10+max_value/5+ random(max_value/6)+level*5);
+            set_skill("changquan", 10+max_value/5+ random(max_value/6)+level*5);
+            set_skill("dodge", 8+max_value/5 + random(max_value/6)+level*5);
+            set_skill("axe",15+max_value/5 + random(max_value/5)+level*7);
+            set_skill("force",  15+max_value/5 + random(max_value/6)+level*7);     
+            set_skill("lengquan-force",  15+max_value/5 + random(max_value/6)+level*7);
+            set_skill("sanban-axe",   15+max_value/5 + random(max_value/5)+level*7);  
+            set_skill("yanxing-steps",   8+max_value/5 + random(max_value/6)+level*5);  
+            set_skill("spells",30+random(10));
+            map_skill("unarmed", "changquan");
+            map_skill("force", "lengquan-force");
+            map_skill("axe", "sanban-axe");
+            map_skill("dodge", "yanxing-steps");
+            map_skill("force", "lengquan-force");
+            set("max_force",query_skill("force")*10);
+            set("force",query_skill("force")*18);
+            set("force_factor",query_skill("force")/2);
+            set("mana",600+300*(level-1));
+            set("max_mana",400+300*(level-1));
+            set("mana_factor",20*(level+1));
+
+            set("chat_chance_combat", 15*(level+1));
+            set("chat_msg_combat", ({
+                (: perform_action,"axe","kai" :),
+                (: exert_function,"jingxin":), 
+                (: exert_function,"haste":), 
+            }) );
+            ob1=carry_object("/d/obj/armor/jinjia");ob1->wear();
+            ob1->set("no_sell","掌柜一看，说道：这东西一看就是伪劣产品，不要，不要。\n");
+            ob2=carry_object("/d/obj/weapon/axe/huafu");ob2->wield();
+            ob2->set("no_sell","掌柜一看，说道：这东西一看就是伪劣产品，不要，不要。\n");
+            break;
+    }
+
+    delete_temp("wuxing/init_done");
+    WUXING_D->init_user_wuxing(this_object());
+}
+
+void backattack()
+{
+    int i;
+    object owner, *enemy;
+
+    if ( objectp(owner=this_object()->query("possessed")) )
+    {
+        enemy = this_object()->query_enemy();
+        i = sizeof(enemy);
+
+        while ( i-- )
+        {
+            if ( enemy[i] && living(enemy[i]) )
+            {
+                owner->kill_ob(enemy[i]);
+                enemy[i]->kill_ob(owner);
+            }
+        } 
+    } 
+}
+
+void die()
+{
+    object owner;
+
+    if ( objectp(owner=this_object()->query("possessed")) )
+    {
+        owner->add_temp("max_guard",-1);
+    }
+    backattack();
+    ::die();
+}      
