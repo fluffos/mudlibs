@@ -33,7 +33,7 @@ rely on the boot + interactive-connect test as the verification gate.
   majority of this collection. If an archive turns out to be English
   (like ds386/Dead Souls), do the minimum to note what it is, don't sink
   deep debugging time into it -- move on to the next Chinese one.
-- **Done: 86 / 100** (shanhaizhanshen, xingzhanyingxiong,
+- **Done: 87 / 100** (shanhaizhanshen, xingzhanyingxiong,
   unknownlib20150716 [小雨西游II], bxsj [书剑天下], bxsj1 [书剑·经典],
   chidi [江湖I], ..., nitan170911 [仙剑奇侠传], nitan6 [笑傲江湖], rzrmud
   [大唐西游], xo, xo_final, zzfy [郑州风云3], shiji [世纪],
@@ -97,7 +97,8 @@ rely on the boot + interactive-connect test as the verification gate.
   #91/#92, different content build], jinyongqunxiazhuan2015 [金庸群侠传
   2015版, same engine core 7 years later, evolved content],
   tiexuejianghu [铁血江湖, ES II lineage, distinct fork],
-  suiyuanxijianlu [随缘洗剑录, ES II lineage, distinct fork])
+  suiyuanxijianlu [随缘洗剑录, ES II lineage, distinct fork],
+  fengyun2qinghua [风云II清华仿写版, same distribution as fy2 #17])
 - **New AGENTS.md §15q (hidden client-protocol-version gate)**: found on
   xiyangzaixian3 -- a pre-id prompt can check the input against a
   hardcoded literal (client version string), not just a BIG5/student
@@ -525,7 +526,7 @@ rely on the boot + interactive-connect test as the verification gate.
 | 96 | 随缘洗剑录.rar | suiyuanxijianlu | 40088 | done | ES II-derived MudOS v22 wuxia mud (master.c header: "for ES II mudlib"/"rewritten by Annihilator"); genuine local feature/dbase.c (F_TREEMAP-based), NOT affected by the nitan-family dbase bug; standard §15h fix + §15ao (switch/default parse error, same class as xixingzhanji #85) + §15p/§15ai (guarded logind.lpc's unconditional DNS_MASTER->query_muds() call too) + §3 counterexample (39 files, incl. /log/nosave/LASTCRASH in uptime.lpc crashing receive() on every connection) + a whole-file self-duplicating eff_msg.h header bug (6 kungfu skill files) + missing message_combatd simul_efun (the exact function §8b is named after, restored as alias) + several pre-existing typos (missing quotes 7 files, stray pager-text pasted into source 3 files, `new` as reserved-word variable 7 files matching #91's known class, duplicate inherit F_UNIQUE 3 files, 21-file wrong #include path, __DIR_ single-underscore typo 4 files) + uppercase .C rename (6 files); full registration + post-login-command flow verified twice with real name 秦风寒 reaching 随缘客栈, look/score/i/quit all working, debug.log clean bar one harmless lstat line; 97.3% lpcc pass (7306/7508, up from 96.5%); see libs/suiyuanxijianlu/NOTES.md |
 | 97 | 风云III修订版 .rar | | | not started | dup: "...  (1).rar" |
 | 98 | 风云III典藏版.rar | | | not started | dup: "...(1).rar" |
-| 99 | 风云II (清华仿写版）.ZIP | | | not started | dup: "...(1).ZIP" |
+| 99 | 风云II (清华仿写版）.ZIP | fengyun2qinghua | 40091 | done | dup: "...(1).ZIP"; despite the "清华仿写版"/Tsinghua-imitation name suggesting an independent clone, CONFIRMED the same distribution as fy2(#17, 风云再起Ⅱ) not just similar lineage -- master.c/simul_efun.c/logind.c/securityd.c/chinese.c/chinesed.c/command.c all byte-identical (main session cross-verified master.c across all 18 copies in the tree), diff -rq of the full raw trees shows zero source differences (only save-data/logs/a different bundled driver binary), lpcc sweep result and failure-list are file-for-file identical to fy2's; standard §15h fix ported directly from fy2, no other fix needed; full registration + post-login-command flow verified twice with real names 秦风(male, 汉族, 凤求凰客栈)/赵日天(female, 苗族, different start room 沉香镇中心, confirming ethnicity-based branching), look/score/quit all working both times; 97.4% lpcc pass (2766/2839, identical to fy2's); see libs/fengyun2qinghua/NOTES.md |
 | 100 | 魔幻世纪.rar | | | not started | |
 | 101 | 魔法类的泥巴.rar | mofaleidemuba | | not mudlib | confirmed: compiled EmberMUD binary (SMAUG/ROM/DikuMUD-derivative C engine, English-language classic fantasy MUD, Midgaard zone) -- pemud.exe strings reveal "C:\My Documents\EmberMUD\src\db.c"/"Ported to EmberMUD by Thanatos and Tyrluk of ToED", zero .c/.lpc/inherit anywhere, classic Diku .are world-data format, INI-style config.cfg; "泥巴" here is just the generic phonetic loanword for "mud" (the genre), coincidentally similar-sounding to "泥潭"/nitan but a totally unrelated, non-LPC, non-Chinese game; same non-mudlib category as #31/#64/#86-88; port never consumed; see libs/mofaleidemuba/NOTES.md |
 | 102 | 龙云梦-炎龙封印-二进制版.rar | | | not started | "binary version" in name -- may not have source, triage |
