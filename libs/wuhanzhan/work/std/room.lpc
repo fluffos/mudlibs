@@ -13,6 +13,17 @@ inherit F_CLEAN_UP;
 
 nosave mapping doors;
 
+// AGENTS.md #7.17: setup() calls reset() synchronously as the last step
+// of create(), but the driver's own standard reset-pass behavior can
+// also fire on the same freshly-loaded room around the same trigger (a
+// player's first move() into it) -- so reset() can run twice, genuinely
+// reentrant, on a room's very first compile. A reentrant second call
+// would see query_temp("objects") still empty and clone a full second
+// set of NPCs, and cloning+moving them can synchronously trigger deeper
+// reentrancy in turn (see the zhangmen/create_identity chain). Guard
+// against running reset() more than once at a time on the same room.
+nosave int resetting_now;
+
 int query_max_encumbrance() { return 100000000000; }
 int query_max_items() { return 30; }
 
@@ -37,9 +48,15 @@ void reset() {
   // and query_temp("objects") is
   // ([ <object filename>: ({ob1, ob2, ...}), .... ])
   //
+  if (resetting_now) return;
+  resetting_now = 1;
+
   set("no_clean_up", 0);
   ob_list = query("objects");
-  if (!mapp(ob_list)) return;
+  if (!mapp(ob_list)) {
+    resetting_now = 0;
+    return;
+  }
 
   if (!mapp(ob = query_temp("objects")))
     ob = allocate_mapping(sizeof(ob_list));
@@ -77,6 +94,7 @@ void reset() {
     }
   }
   set_temp("objects", ob);
+  resetting_now = 0;
 }
 
 // Redirect item_desc of the door to this function in default.

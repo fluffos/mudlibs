@@ -715,7 +715,12 @@ cause, fix, detection, known-affected lineages.
   silently break only lazily-loaded objects, e.g. sending every new
   character into the void room instead of the start room. Convert to
   quoted form. (359 files on `xinkuangxiangkongjian2`, 172 on
-  `kuangxiangkongjian`, recurs across ES II.)
+  `kuangxiangkongjian`, recurs across ES II. Also found live on
+  `wuhanzhan` via its §10.7 deep functional test — a single surviving
+  instance that an earlier grep-based sweep missed because the grep
+  pattern was case-sensitive and only matched uppercase absolute paths
+  (`<ABS/...>`); this one was lowercase (`<d/qujing/...>`). When
+  re-sweeping for this class, grep case-insensitively.)
 - **`..` in include paths is disallowed entirely** (security rule).
   Point at the real absolute quoted path. (Same libs.)
 - **Case-sensitivity**: `#include <Action.h>` vs on-disk `action.h` —
@@ -1315,6 +1320,43 @@ used elsewhere in the same flow for the same purpose (here, `START_ROOM`
 missing custom startroom) rather than resurrecting the disconnected old
 zone, which would reconnect deliberately-superseded content back into
 the live map.
+
+### 7.19 Calling a create()-only driver primitive from `init()` re-triggers that object's own `init()` — first-visit-only "Too deep recursion"
+
+Found on `wuhanzhan`'s deep functional test (§10.7). Same first-visit-
+only symptom shape as §7.17 (a room's very first compile crashes with
+"Too deep recursion", caught, corrupting NPC state into a stray `0` in
+the title) but a **different, more general root cause** — not a
+room-`reset()` double-fire, not a hardcoded self-locate path. This one
+is driver-API misuse and can recur independent of lineage, in any lib.
+
+`enable_commands()` (and any lib's `enable_player()`-style wrapper
+around it) is documented (driver source tree,
+`docs/efun/interactive/enable_commands.md`, BUGS section) as safe to
+call ONLY from `create()` — calling it again on an object that's already
+`living()` makes the driver re-invoke that same object's `init()` as a
+side effect of registering command hooks on its environment/siblings/
+inventory. If an NPC's own `init()` → `setup()` chain calls
+`enable_player()` again (redundantly, on an object that already went
+through it once during a normal `create()`), the driver's re-invocation
+of `init()` happens while the ORIGINAL `init()` call is still on the
+stack — genuinely reentrant, not merely called-again-later — and
+repeats until the call-depth limit aborts it.
+
+Detection: grep call sites of `enable_commands(`/`enable_player(` (or
+whatever a lib's own wrapper is named) and check whether any of them are
+reachable from `init()`, directly or via a chain like `init() →
+setup() → enable_player()`. Root-cause it the way this instance was
+found (§10.3-style `efun::write()` instrumentation) if the crash's
+blamed file:line moves around between runs — that's the same reentrancy
+tell as §7.17.
+
+Fix: guard the wrapper function itself (the shared choke point, cheaper
+than chasing every call site) — `if (living(this_object())) return;` at
+the top. `living()` reliably reflects whether `enable_commands()` has
+already run for this object, so the guard is inert for every legitimate
+call site (the real `create()` call, or a call after a genuine
+`disable_commands()`) and only blocks the pathological repeat-call.
 
 ---
 

@@ -98,6 +98,24 @@ int force_me(string cmd) {
 }
 
 nomask void enable_player() {
+  // Driver docs (efun/interactive/enable_commands.md), BUGS: "Do not call
+  // this function in any other place than create() or strange things will
+  // likely occur." enable_commands() (called below, with no explicit
+  // setup_actions arg) re-runs init() on this object's environment,
+  // siblings, AND inventory as a side effect -- calling enable_player()
+  // a second time on an already-living object (e.g. from init() itself,
+  // as several sect NPCs' init()->setup()->enable_player() chains do)
+  // makes the driver call this object's own init() again while the
+  // current init() call is still on the stack, genuinely reentrant,
+  // repeating until the driver's call-depth limit aborts with "Too deep
+  // recursion." (reproduced live on d/jjf/npc/zhangmen.lpc, first-ever
+  // visit to d/jjf/front_yard2). living() reliably reflects whether
+  // enable_commands() already ran for this object (and disable_player()
+  // below re-enables it correctly on its own path), so this guard is
+  // inert for every legitimate call site (create(), or after a real
+  // disable) and only blocks the pathological repeat-call case.
+  if (living(this_object())) return;
+
   if (stringp(query("id"))) set_living_name(query("id"));
   else set_living_name(query("name"));
 

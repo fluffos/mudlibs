@@ -439,3 +439,324 @@ already-documented boot-time `emoted.o` restore error (caught by
 `master.lpc`'s `preload()`, harmless — see the §15m entry above) and
 zero NEW runtime errors. Test char `qretest` removed afterward;
 fluffos kept.
+
+## 深度功能测试 / Deep functional test (2026-07-24)
+
+First real *playthrough* pass on this lib (all prior passes verified only
+registration + `look`/`score`/`quit` + admin login, or watched boot
+output). Read `doc/help/newbie` first (a generic, shared-template "西游记
+新手指南" — branding mismatch from "大话西游" but its content matches
+this lib's actual starting room/mechanics exactly: 南城客栈, `fight` vs
+`kill`, `learn`/`skills`/`practice`, `apprentice`/`bai`, `hp` bars,
+`buy ... from ...`), then played native (`build-debug`) via
+`scripts/mudclient.py`. **Two real, live, first-ever-visit "Too deep
+recursion" crash bugs were found and fixed** — this pass is the third
+lib (after `bxsj` §7.16 and `xiyouji` §7.17) where a genuine playthrough
+caught something no earlier boot/registration pass ever could.
+
+Test character: id `qiufeng`, Chinese name **秋风然**, password
+`Passwd2026` — **kept** as the representative playthrough character
+(save files `work/data/user/q/qiufeng.o`, `work/data/login/q/qiufeng.o`).
+State: 潜能 105499, 道行 一百十年, skills dodge/force/literate/parry/
+spells all 60 (from the newbie-gift NPC) plus unarmed 60/32 (from the
+organic teacher-NPC `learn` path below); inventory: one 粗布衣 (default
+linen robe, re-granted on full login per the quit-drop mechanic already
+documented above). A second, throwaway id `linfeng`/秦风起 was used
+during the bug-hunting phase and its save files were deleted afterward
+(not kept — messier state, no incremental evidence value once `qiufeng`
+existed).
+
+### Bug 1 (existing class, §6.1) — absolute-path angle-bracket include silently voided a book item, first found via a room-first-visit crash
+
+`d/obj/books-nonskill/book-qujing.lpc:7`: `#include </d/qujing/obstacle.h>`
+— an ABSOLUTE path inside angle brackets, which per AGENTS.md §6.1 never
+resolves on this driver (the `<>` resolver doesn't special-case absolute
+names). This is the exact, already-cataloged bug class — just not
+previously found in this lib, because the earlier pass's grep for it
+(`#include <[A-Z]`, see this file's own "Confirmed NOT needed" §15t
+entry above) was case-sensitive and only matched absolute paths starting
+with an uppercase letter; this one starts lowercase (`/d/...`) and slid
+through. Whole-lib rescan with `grep -rn '#include <\/' --include='*.lpc'`
+found exactly this one occurrence lib-wide.
+
+- Symptom: walking a fresh character `west` out of 南城客栈 into
+  `d/city/zhuque-s1` (朱雀大街) for the first time after a boot showed
+  the scary default error message
+  (`你发现事情不大对了，但是又说不上来。`) to the player, followed by a
+  full genuine trace in `work/log/RUNTIME_ERRORS` (this lib's
+  `master::error_handler()` fix from an earlier pass, §15u, made this
+  catchable at all): `zhuque-s1.lpc`'s `create()`→`setup()`→`reset()`→
+  `make_inventory("/d/city/npc/jieding")` clones the NPC 疥顶小僧
+  (`npc/jieding.lpc`), whose own `create()` does
+  `carry_object("/d/obj/books-nonskill/book-qujing")` — and `new()`ing an
+  object whose only compile error is the bad `#include` throws `*No
+  program in object '/d/obj/books-nonskill/book-qujing'!`, uncaught,
+  right in the middle of the room's own `create()`.
+- Fix: `#include </d/qujing/obstacle.h>` → `#include "/d/qujing/obstacle.h"`
+  (quoted form resolves an absolute path unconditionally, matching
+  AGENTS.md §6.1's documented fix). Re-verified with `lpcc`
+  (`PASS /d/obj/books-nonskill/book-qujing`, previously a hard compile
+  error) and live (`west` from 南城客栈 into 朱雀大街 on a fresh boot: no
+  error message, clean room description).
+
+### Bug 2 (NEW bug class, draft below) — calling `enable_player()`/`enable_commands()` from `init()` (not `create()`) makes a room's first-ever visit call the room's own NPC's `init()` recursively until "Too deep recursion"
+
+Found while walking `qiufeng`/`linfeng` from 南城客栈 to 将军府
+(General Qin's mansion, `d/jjf/`) to test the sect/apprentice mechanism
+— the room `d/jjf/front_yard2` (`练武场`, home to the sect's `掌门大师兄`
+identity-succession NPC, `d/jjf/npc/zhangmen.lpc`) crashed with the same
+scary default-error message on its first-ever visit, **every single
+time**, reproduced across five independent fresh-boot attempts before
+being root-caused and fixed. Player-visible symptom matched §7.17's own
+prior description almost exactly: the room is still entered, but the
+NPC's title renders with a stray leading `"0"` (`0掌门大师兄 大弟子`)
+— corrupted state from the crash, not a content typo.
+
+**Diagnosis** (the two false leads, then the real one — kept here since
+neither is obvious from reading the code cold):
+1. First suspected §7.17's own two documented shapes verbatim
+   (`std/room.lpc`'s `setup()`→`reset()` reentrancy, and `zhangmen.lpc`'s
+   `create_identity()` self-locating its room via a forced
+   `call_other(path,"???"); find_object(path)` instead of
+   `environment(this_object())`, exactly the §7.17 "belt-and-suspenders"
+   anti-pattern). Fixed BOTH proactively (a `nosave int resetting_now;`
+   reentrancy guard added to `std/room.lpc reset()`; `create_identity()`
+   changed to prefer `environment(this_object())` when it already
+   matches the hardcoded `where` path). Both are real, safe, permanent
+   improvements — kept — but **neither one stopped the crash**: `debug.log`
+   still showed `Too deep recursion` on the exact same two lines
+   (`zhangmen.lpc:39`/`:626`) after both fixes, on a genuinely fresh boot.
+2. `debug.log`'s terse `Too deep recursion` lines (unlike a normal LPC
+   error, this class doesn't get a full call-argument trace in
+   `RUNTIME_ERRORS` — the interpreter can't safely unwind through
+   `master::error_handler()`'s own apply when the stack is already
+   exhausted) gave only single stack frames, not a call chain. Per
+   AGENTS.md §10.3, switched instrumentation from `write_file()` to
+   `efun::write()` (write_file's own ACL check needs stack headroom too,
+   and was silently swallowing the diagnostic lines closest to the
+   actual crash). With that, the real shape became visible: **the SAME
+   `zhangmen#66` object's `init()` was being called over 40 times in a
+   row, each nested call starting before the previous one returned**,
+   every single time reporting `caller=/obj/user#1` (the connecting
+   player) — a real reentrant self-loop, not a room re-populating twice.
+3. `zhangmen.lpc`'s `init()` ends with an unconditional `me->setup();`
+   (also reachable via `me->reset_me(me)`'s own internal `setup()` call
+   a few lines earlier) — redundant, since `create()` already called
+   `setup()` once before the object was ever moved into a room.
+   `std/char.lpc`'s `setup()` calls `enable_player()`
+   (`feature/command.lpc`), which calls the real efun
+   `enable_commands()` with no explicit argument. Per this driver's own
+   docs (`~/src/fluffos/docs/efun/interactive/enable_commands.md`,
+   BUGS section): *"Do not call this function in any other place than
+   create() or strange things will likely occur"* — calling it with a
+   truthy/default `setup_actions` re-runs `init()` on the object's
+   environment, siblings, AND own inventory as a side effect. Calling
+   `enable_player()` a SECOND time on an object that's already living
+   (i.e., from `init()`, not `create()`) makes the driver call that
+   object's own `init()` again while the current `init()` call is still
+   on the stack — genuinely reentrant, repeating until the driver's
+   call-depth limit aborts.
+
+**Fix** (`feature/command.lpc`'s `enable_player()`, the single shared
+entry point every `setup()` call in this lib routes through): added
+`if (living(this_object())) return;` as the very first line.
+`living()` reliably reflects whether `enable_commands()` has already
+run for this object, and `disable_player()`'s own path (`disable_commands()`
+immediately followed by `enable_commands()` again) still works
+correctly since it calls the real efun directly, not through
+`enable_player()` — so the guard is inert for every legitimate call site
+(the original `create()`-time call, or any post-`disable_player()`
+re-enable) and only blocks the pathological repeat-call case. Verified:
+5 independent fresh-boot reproductions before the fix (100% reproduction
+rate, `debug.log` showing `Too deep recursion` at
+`securityd.lpc:178`×1-6 then `zhangmen.lpc:39`/`:626`×2 every time);
+zero reproductions in 3 independent fresh-boot retests after
+(`RUNTIME_ERRORS`/`debug.log` both clean except the one pre-existing,
+already-documented `emoted.o` preload error). The stray `"0"` in the
+NPC's title is also gone post-fix (`将军府掌门大师兄 大弟子`, correct).
+
+**Scope**: `d/jjf/npc/zhangmen.lpc` was the only one live-reproduced
+(it's what a fresh character's most direct sect-mansion route reaches
+first), but the identical `create_identity()`/`init()` shape — including
+the same redundant `me->setup();` — is copy-pasted into every other
+sect's "掌门/大师兄" identity-succession NPC in this lib: confirmed
+byte-identical via script across **27 more files**
+(`d/nanhai,xueshan,tianwang,sea,moon,lingtai,death,shaolin,mojiao,
+shushan,qujing/{wudidong×2,wuzhuang,pansi×3},lingjian×2/npc/zhangmen*`,
+plus `d/npc/zhangmen.lpc` — dead/unreachable, no room ever places it —
+`d/zhangmen.lpc`, and personal-wizard-dir copies under
+`u/{moonr/sadboy,qlwy,sadboy}/.../zhangmen*.lpc`, `wizu/focus/zhangmen.lpc`).
+Applied the SAME `create_identity()` `environment()`-preference patch to
+all 27 by exact byte-for-byte block match (verified via `lpcc --batch`,
+all 28 total `PASS`) — proactive fix by code-shape match, not
+individually live-reproduced, per the `xiyouji` §7.17 precedent ("only
+one was live-reproduced, the rest fixed proactively"). The root
+`enable_player()` guard in `feature/command.lpc` protects ALL of these
+(and anything else in the lib with the same misuse shape) uniformly,
+since it's the single shared choke point every `setup()` call routes
+through — this is why the fix was placed there rather than patched
+per-file.
+
+**Cross-lib risk flagged, not chased further (out of this task's
+scope)**: `wuhanzhan` is documented in AGENTS.md §11 as a `大话西游`
+sibling of the 西游记/xiyouji.org ES II branch, and this exact
+"神话世界·西游记·版本4.50"-headered `create_identity()`/`init()`
+template (header comment only — NOT proof of shared codebase, per this
+file's own earlier caution) appears, per `grep -rl "神话世界"
+libs/*/work --include='*.lpc'`, in **60 different libs** in this
+corpus. Any of them that also calls `setup()`/`enable_player()` from
+`init()` (not just `create()`) is a candidate for the same crash on
+first room visit — worth a targeted grep
+(`grep -rln 'me->setup();' <lib>/work --include='*.lpc'` cross-referenced
+against which of those hits are inside a `void init()` function) on a
+future pass through any sibling, rather than assuming this fix's scope
+stops at `wuhanzhan`.
+
+### What else was tested and confirmed working
+
+- **Registration**: real Chinese name (秋风然), full flow, landed in
+  南城客栈; `look`/`score`/`i` all correct at every state change
+  (fresh, post-gift, post-skill-learn, post-combat, post-relogin).
+- **Newbie-gift shortcut**: `d/city/npc/xiaoer`/`bigeye`/`u/lol/npc/newbie`
+  in the start room — `ask hui zhang about 红包` (`u/lol/npc/newbie.lpc`
+  `do_bu()`) granted 100,000 潜能 + 150 年道行 + six base skills at 60,
+  gated correctly behind `mud_age`/one-time-only checks (confirmed the
+  second `ask` on the same character correctly declined with "你已经
+  领过新手援助啦").
+- **Movement/exploration**: walked 南城客栈→长安武馆 (5 moves:
+  west/north/north/north/east) and 南城客栈→将军府正厅 (8 moves via
+  `d/jjf/`, gated by 秦安's `answer 拜师` challenge at the mansion gate
+  — `d/jjf/gate.lpc`'s `valid_leave()`, confirmed both the blocked
+  path — `south` 3× before answering, correctly rejected each time —
+  and the correct unblock after `answer 拜师`).
+- **Skills — organic teacher path**: `d/city/npc/jiaotou.lpc`
+  (范芦平, 武馆教头, `recognize_apprentice()` hardcoded `1` — teaches
+  ANY player, matching `bxsj`'s equivalent pattern) via `skills fan`
+  (room-level `do_skills` override in `wuguan.lpc`, lists his 4 base
+  skills) → `learn unarmed from fan` (correctly required 悟性-scaled 精
+  cost, correctly capped the gain at the teacher's own skill level,
+  correctly showed the "已经不输为师了，一起切磋" message once caught
+  up) → `skills` (own skill list) confirmed the gain (unarmed 60/32).
+- **Sect/faction-join mechanism**: found and exercised
+  `cmds/std/apprentice.lpc` (`apprentice`/`bai`) against
+  `d/jjf/npc/qinqiong.lpc` (秦琼, 将军府/JJF sect master,
+  `attempt_apprentice()` unconditionally accepts — but gated by a
+  `combat_exp >= 100000` floor first) — correctly rejected a fresh
+  character ("这位小兄弟还是先去跟本府家将打打基础吧！") since even
+  post-newbie-gift `combat_exp` is far under that floor. Confirms the
+  mechanism is real, reachable, and correctly gated; **not completed**
+  (no sect actually joined) since clearing the floor needs real combat
+  grinding — explicitly left as unverified-live rather than chased
+  further, honestly noted here rather than silently skipped.
+- **Combat**: `fight <target>` (not `kill`) against `d/city/npc/dizi.lpc`
+  (武馆弟子, a weak generic trainee NPC stationed alongside the
+  teacher at 长安武馆 — this lib's non-lethal default combat verb
+  itself is the "safe sparring" mechanism per `help combat`, rather
+  than a single dedicated training-dummy NPC like `bxsj`'s `muren`;
+  `fight` "只持续到一方昏迷、认输或逃走"). Combat ran a normal round or
+  two (attack power drifted 1191→1181→1141 across the session from
+  normal wear, no HP/kee crisis) and ended safely with no crash, no
+  over-death — confirms this lib's built-in fight/kill distinction
+  works as `help combat` documents.
+- **Shop**: `d/city/kezhan.lpc`'s 店小二 (Xiao er) — `list` correctly
+  showed the goods menu (水晶球/挑战金牌/红烧狗肉/下棋指南/桂花酒袋/
+  天赋丹/养身丹); `buy jiudai from xiao er` correctly rejected with
+  "你的钱不够" (a fresh character has 0 money by design — no starting
+  cash grant found anywhere in the registration flow). **Not
+  completed** (no successful purchase) — same honest-gap flag as the
+  sect-join above; the `buy`/`list` mechanism itself is confirmed
+  working end-to-end except for the money precondition, which would
+  need either combat loot or the pawn-shop/bank systems, out of this
+  pass's time budget.
+- **Death/respawn**: **not tested live** — same as `bxsj`'s own honest
+  gap for this checklist item. Not chased given the sect-join and
+  shop gaps above were already the priority uses of remaining time,
+  and after the two live crash-bug fixes this pass already ran long.
+  Left as a concrete to-do for whoever plays this lib next.
+- **`quit` + debug.log**: grepped `debug.log`/`RUNTIME_ERRORS`
+  immediately after every `quit` in this pass (not just after the two
+  bugs above) — zero new errors beyond the one pre-existing, already
+  documented, harmless boot-time `emoted.o` restore failure, on every
+  check.
+- **Persistence**: confirmed both layers — (a) *silent reconnect*
+  (mid-fight disconnect/reconnect resumed at the same room with combat
+  already resolved safely, no data loss); (b) *full quit+relogin* (real
+  `save()`/`restore()`) — 道行/潜能/all 6 skills/inventory (the 粗布衣
+  re-grant) all round-tripped correctly across a genuine `quit` →
+  real wall-clock wait (~40s) → fresh reconnect → `look`/`score`/`i`/
+  `skills` cycle, landing back in 南城客栈 (full login, not silent
+  reattach, matching the explicit-quit-vs-reconnect distinction
+  documented elsewhere in this file and in `bxsj`'s own NOTES.md).
+
+### Draft new AGENTS.md bug-class entry (for the orchestrating session)
+
+Proposed as a new §7.18 (or a sibling case folded into §7.17's own
+"first-ever-visit reentrancy" family, orchestrator's call), title:
+**"Calling a create()-only driver primitive (`enable_commands()`/
+`enable_player()`) from `init()` reentrantly re-triggers that same
+object's own `init()`, crashing a room's first-ever visit."**
+
+Body draft: This driver's own docs
+(`efun/interactive/enable_commands.md`, BUGS section) state plainly:
+*"Do not call this function in any other place than create() or
+strange things will likely occur."* `enable_commands()` (with no
+explicit `setup_actions` argument, or any truthy one) re-runs `init()`
+on the calling object's environment, siblings, AND inventory as a
+documented side effect — a normal, intentional mechanism for "an object
+just became live/interactive, re-announce it to everyone nearby." If a
+mudlib's shared `setup()`/`enable_player()` wrapper (a common pattern:
+`create()` calls `setup()` once to configure a fresh object, and some
+OTHER code path — an NPC's own `init()`, a `reset_me()`/respawn helper,
+a "wake up"/"revive" handler — ALSO calls the same `setup()` later,
+expecting it to just be idempotent stat recalculation) is reachable
+from `init()` itself, the second `enable_commands()` call re-triggers
+`init()` on the SAME object while the first `init()` call is still on
+the stack — genuinely reentrant, not a one-shot double-call, because
+each new `init()` invocation runs the same `setup()` line again,
+compounding until the driver's call-depth limit aborts with `Too deep
+recursion.` First found+fixed in `wuhanzhan`'s
+`d/jjf/npc/zhangmen.lpc` (and 27 structurally-identical sibling sect
+NPCs, all sharing a "神话世界·西游记" template) — its `init()` calls
+`me->setup()` (both directly and via `reset_me()`), redundant with
+`create()`'s own earlier `setup()` call, and that redundancy is what
+triggers the cascade. Symptom shape mirrors §7.17 closely (first-ever
+room visit only, invisible once objects are warm in memory, corrupted
+NPC state showing as a stray literal `"0"` in a title/name field) but
+the mechanism is a different, more general driver-API-misuse class —
+not a room-reset double-fire, and not a hardcoded self-locate path —
+so it can recur in ANY lib whose `setup()`-style wrapper calls
+`enable_commands()`/`enable_player()` and is reachable from anywhere
+other than `create()`, independent of lineage. **Detection**: grep for
+`enable_commands(` / `enable_player(` call sites, then check whether
+each one's enclosing function is reachable from `init()` (directly, or
+transitively through a same-purpose "recover"/"reset_me"/"revive"
+helper) rather than only from `create()`. **Fix**: guard the
+`enable_player()`-equivalent wrapper itself with
+`if (living(this_object())) return;` at its top (inert for every
+legitimate call site — first-time `create()`, or any real
+post-`disable`-re-enable — since `living()` tracks exactly whether
+`enable_commands()` already succeeded for this object) — a single,
+low-risk, shared choke-point fix rather than patching every individual
+redundant `setup()` call site.
+
+### Process hygiene note for this pass
+
+The native driver for this lib was restarted many times during the
+bug-2 diagnosis (each fresh-boot repro needed a truly first-ever
+`front_yard2` visit); every restart used the exact recorded PID for the
+kill, `ss -tlnp`-verified before starting the next one. One collision
+found mid-pass: a driver already listening on port 40052 at session
+start turned out to be a DIFFERENT lib's process (`rzrmud`, confirmed
+via `readlink /proc/<pid>/cwd`) that happened to be bound to this port
+from a stale prior run — not killed, left alone, this lib's own driver
+was simply started on its correct configured port after confirming the
+mismatch. Temporary `efun::write()`/`write_file()` diagnostic lines
+added to `d/jjf/npc/zhangmen.lpc` and `std/room.lpc` during the bug-2
+diagnosis were fully removed before the final commit-ready state (only
+the two real structural fixes remain in those files); no `DBGTRACE.log`
+or other scratch file was left behind. Runtime side-effect files
+touched incidentally by testing (`u/npc/log`, `u/sadboy/log` —
+per-wizard-dir compile-warning logs; `data/zhangmen/zhangmen_qin_qiong.o`
+— an NPC's own save data) were reverted to their pre-session committed
+state, keeping the diff limited to the intentional source fixes plus
+this NOTES.md update plus the `qiufeng` test-character save files.
