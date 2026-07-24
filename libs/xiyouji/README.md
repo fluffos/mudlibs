@@ -50,3 +50,13 @@ python3 scripts/mudclient.py 127.0.0.1 40079
 - **WASM（浏览器/无网络监听端口运行模式）下可以完整游玩**：注册、登录及
   look/quit 等基本指令均已验证可以正常工作，没有遇到其它同系列存档中出现
   的"连线地址格式"限制问题。
+
+## 管理员账号 / Admin account
+
+- **id**: `fluffos`
+- **密码 / password**: `Mud@2026`
+- **中文名 / display name**: 浮浮
+- **权限 / level**: `(admin)` —— 本 lib 最高权限（通过 `adm/etc/wizlist`
+  授予），可使用 `update`、`goto` 等全部巫师指令。
+- 该账号为本地游玩/测试预置的公开默认账号。**正式对外公开架设前，请先
+  修改此密码。**

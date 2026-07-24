@@ -112,3 +112,37 @@ as part of a push to parallelize more archives at once.
   reaching the id/name prompts. This is a driver-side WASM gap, **not**
   a mudlib bug — not patched, per AGENTS.md's standing guidance. Native
   play on `127.0.0.1` is completely unaffected.
+
+## WASM-enablement pass (loopback-allow + admin seed)
+
+Applied the four standard WASM-first changes (AGENTS.md §1.3b/§1.3e/§1.5):
+
+1. **Loopback always allowed through ban/site gates**
+   - `adm/daemons/band.lpc`: added reusable `is_local_ip(string ip)`
+     helper (returns 1 for `127.*`, empty/non-string, or any string that
+     fails `sscanf("%*d.%*d.%*d.%*d")` — i.e. WASM garbage IPs).
+   - `adm/daemons/band.lpc` `is_banned()` (was ~L106): short-circuits
+     `return 0` when `is_local_ip(site)` — this was the WASM login
+     blocker (`is_banned()` returned 1 for a malformed IP, rejecting
+     every WASM connection with "地址不受欢迎").
+   - `adm/daemons/band.lpc` `vaild_allow_address()` (was ~L353):
+     short-circuits `return 1` for local IPs (bypasses per-player
+     allow-ip restriction).
+2. **Uptime startup gate**: none in this build (the sibling
+   `xiyangzaixian_fengyun2` has `uptime()<30`; this "疯狂江湖" build does
+   not).
+3. **Anti-flood throttles exempt loopback** — `adm/daemons/logind.lpc`:
+   `logon()` `ban_cnt > 6` gate and `get_id()` `ip_cnt > 6` gate both now
+   `&& !BAN_D->is_local_ip(...)`. In-game quit/kickout 600s retention
+   timers left intact (game design, AGENTS.md §1.3e).
+4. **Admin account seeded** — id `fluffos`, registered through the real
+   flow (浮浮, male), granted `(admin)` by adding `fluffos (admin)` to
+   `adm/etc/wizlist` (read by `securityd.lpc::create()`). Verified after
+   restart: `update /adm/daemons/band` recompiled OK, `goto` worked,
+   score shows 「您目前权限：(admin)」. Save file:
+   `work/data/user/f/fluffos.o` (untracked, NOT gitignored — orchestrator
+   must `git add` it).
+
+Retest: fresh registration (the fluffos registration itself) reached the
+world as a `(player)`; fluffos re-login has `(admin)` and wizard commands
+work; `log/debug.log` clean (0 runtime errors).

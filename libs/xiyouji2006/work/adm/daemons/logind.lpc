@@ -100,7 +100,8 @@ void logon(object ob) {
       logon_cnt = logon_cnt + 1;
   }
 
-  if (logon_cnt > 15) {
+  // WASM/loopback exempt from the reconnect-flood cap (AGENTS.md §1.3e).
+  if (logon_cnt > 15 && !"/adm/daemons/band"->is_local_ip(query_ip_number(ob))) {
 
     log_file("login", sprintf("%s:恶意reconnet:%s\n", ctime(time()), query_ip_number(ob)));
     write(HIW "请你稍候再进入本MUD...... \n");
@@ -162,18 +163,22 @@ private void encoding(string arg, object ob) {
 
 
   // try not accept "name" as IP
-
-  if (!ip_name) {
-    destruct(ob);
-    log_file("ALLCONT", sprintf("kicked out, No IP\n"));
-    return;
-  }
-
-  for (ii = 0; ii < sizeof(ip_number); ii++) {
-    if ((ip_number[ii] != '.') && (ip_number[ii] > '9')) {
+  // WASM/loopback: both checks below reject a missing/garbage IP, which is
+  // exactly what WASM connections produce — skip them for local connections
+  // (AGENTS.md §1.3b).
+  if (!"/adm/daemons/band"->is_local_ip(ip_number)) {
+    if (!ip_name) {
       destruct(ob);
-      log_file("ALLCONT", sprintf("kicked out, Non_number\n"));
+      log_file("ALLCONT", sprintf("kicked out, No IP\n"));
       return;
+    }
+
+    for (ii = 0; ii < sizeof(ip_number); ii++) {
+      if ((ip_number[ii] != '.') && (ip_number[ii] > '9')) {
+        destruct(ob);
+        log_file("ALLCONT", sprintf("kicked out, Non_number\n"));
+        return;
+      }
     }
   }
 
@@ -349,7 +354,10 @@ private void get_id1(string arg, object ob) {
   // MAX_LOGIN and LOGIN_SITE should be defined in login.h
 #ifdef MAX_LOGIN
 
-  if (!ppl) {  // only check this for new login.
+  // WASM/loopback: local connections exempt from the per-IP multi-login
+  // cap (AGENTS.md §1.3e).
+  if (!ppl && !"/adm/daemons/band"->is_local_ip(query_ip_number(ob))) {
+    // only check this for new login.
     // allow existing players to reconnect.
     my_ip = query_ip_number(ob);
 

@@ -526,3 +526,40 @@ python3 ../../scripts/mudclient.py 127.0.0.1 40078 --timeout 40 --idle 1 \
   format, so it is **not** affected by the documented WASM IP-format
   limitation — a genuinely clean, complete WASM result, matching its
   close sibling `xiyouji`'s outcome.
+
+## WASM-enablement pass (loopback-allow + admin seed)
+
+Applied the standard WASM-first changes (AGENTS.md §1.3b/§1.3e/§1.5),
+same shape as sibling `xiyouji` (band.lpc is byte-identical between the
+two apart from this patch):
+
+1. **Loopback always allowed through ban gates** —
+   `adm/daemons/band.lpc`: added `is_local_ip(string ip)` helper (127.*,
+   empty/non-string, or non-dotted-quad => local) and short-circuited
+   `is_banned()`, `create_char_banned()`, `is_strict_banned()` to
+   `return 0` for local IPs. Shipped ban lists are empty, so this is a
+   defensive standard patch, not a live-blocker fix.
+2. **Uptime startup gate**: none in this lib.
+3. **Anti-flood throttles**: none per-IP (global player-count caps and
+   `match_wiz_site()` — which allows wizards with no wiz_sites entry —
+   left intact as game/security design).
+4. **Admin account seeded** — id `fluffos`, password `Mud@2026`, 浮浮
+   (male), via the real flow (`gb` → `no` → id → y → name → password ×2
+   → email; NOTE unlike sibling `xiyouji` there is no gender/talent
+   prompt — after email the character enters the world directly).
+   Granted `(admin)` via `adm/etc/wizlist`. Verified after restart:
+   目前权限：(admin), `update /adm/daemons/band` OK (only pre-existing
+   unused-variable warnings), `goto` OK. Save files:
+   `work/data/user/f/fluffos.o` + `work/data/login/f/fluffos.o`
+   (untracked, NOT gitignored — orchestrator must `git add`).
+
+Flaky-first-registration note (environment, not a code bug): the very
+first registration attempt after a cold boot aborted at `make_body()`
+with `Too long evaluation` (config caps eval at 400000 usec) while
+lazily compiling the whole `/std/char` inherit chain, with several other
+drivers loading the host concurrently. The immediate retry (chain now
+cached) completed normally. No mudlib change made for this.
+
+Retest: fresh registration reached 南城客栈, `look` correct; fluffos
+re-login `(admin)` + wizard commands OK; debug.log has no runtime errors
+beyond the documented first-attempt eval-cost abort (which did not recur).

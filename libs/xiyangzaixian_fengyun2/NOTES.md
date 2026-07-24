@@ -257,3 +257,37 @@ fixes). Notable failure categories, triaged but not further pursued:
   individual quest/room/skill files scattered across the world tree —
   consistent with every other lib in this batch, not triaged file-by-file
   per AGENTS.md §6b.
+
+## WASM-enablement pass (loopback-allow + admin seed)
+
+Applied the four standard WASM-first changes (AGENTS.md §1.3b/§1.3e/§1.5):
+
+1. **Loopback always allowed through ban/site gates**
+   - `adm/daemons/band.lpc`: added reusable `is_local_ip(string ip)`
+     helper (returns 1 for `127.*`, empty/non-string, or any string that
+     fails `sscanf("%*d.%*d.%*d.%*d")` — WASM garbage IPs).
+   - `band.lpc` `is_banned()` (~L108): short-circuit `return 0` for local
+     IPs (this was the WASM login blocker).
+   - `band.lpc` `vaild_allow_address()` (~L370): short-circuit `return 1`
+     for local IPs.
+2. **Uptime startup gate bypassed** — `adm/daemons/logind.lpc` `logon()`
+   (~L80): `uptime()<30` destruct gate now `&& !BAN_D->is_local_ip(str)`
+   (moved `str = query_ip_number(ob)` above it). Remote connections still
+   see the startup-grace gate.
+3. **Anti-flood throttles exempt loopback** — `logind.lpc`: `ban_cnt > 3`
+   (~L142) and `ip_cnt > 8` (~L227) gates now `&& !BAN_D->is_local_ip(...)`.
+   In-game kickout/last_on retention timers left intact (game design).
+4. **Admin account seeded** — id `fluffos`, registered through the real
+   flow. NOTE: this "风云再起Ⅱ" build's registration requires TWO
+   passwords — a 管理密码 (wizpwd) *and* a 普通密码 (login password), and
+   forbids them being equal. Set login password (普通密码) = `Mud@2026`
+   and 管理密码 = `Adm@2026`. Display name 浮浮, male. Granted `(admin)`
+   via `adm/etc/wizlist` (`fluffos (admin)`), read by
+   `securityd.lpc::create()`. Verified after restart: score shows
+   「您目前权限：(admin)」, `update /adm/daemons/band` recompiled OK,
+   `goto` worked. Save files: `work/data/user/f/fluffos.o` and
+   `work/data/login/f/fluffos.o` (both untracked, NOT gitignored —
+   orchestrator must `git add`).
+
+Retest: fresh registration reached 北疆小镇 as `(player)`; fluffos
+re-login `(admin)` + wizard commands OK; `log/debug.log` 0 runtime errors.

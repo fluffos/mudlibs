@@ -634,3 +634,39 @@ python3 ../../scripts/mudclient.py 127.0.0.1 40077 --timeout 45 --idle 1.0 \
   `query_ip_number()`'s format, so it is **not** affected by the
   documented WASM IP-format limitation — a genuinely clean, complete
   WASM result.
+
+## WASM-enablement pass (loopback-allow + admin seed)
+
+Applied the standard WASM-first changes (AGENTS.md §1.3b/§1.3e/§1.5):
+
+1. **Loopback always allowed through ban gates** —
+   `adm/daemons/band.lpc`: added `is_local_ip(string ip)` helper (127.*,
+   empty/non-string, or non-dotted-quad => local) and short-circuited
+   `is_banned()`, `create_char_banned()`, `is_strict_banned()` to
+   `return 0` for local IPs.
+   `adm/daemons/logind.lpc` `encoding()`: the two IP-format kill gates —
+   `if (!ip_name) destruct` and the "every char must be digit or dot"
+   scan over `ip_number` (both destruct exactly the garbage IPs WASM
+   produces) — are now skipped when
+   `"/adm/daemons/band"->is_local_ip(ip_number)`.
+2. **Uptime startup gate**: none in this lib (`UPTIME_CMD->report()` is
+   display-only).
+3. **Anti-flood throttles exempt loopback** — `logind.lpc`: (a) the
+   `logon_cnt > 15` 恶意reconnect per-IP cap in `logon()`; (b) the
+   `#ifdef MAX_LOGIN` per-IP multi-login cap in `get_id()` — both now
+   skipped for local IPs. KEPT: the new-account 1-hour save-retention
+   quit prompt (game design; wizards exempt).
+4. **Admin account seeded** — id `fluffos`, display name 浮浮 (male),
+   registered through the real flow (`2060` version handshake → `new` →
+   id → name → 管理密码 `Adm@2026` ×2 → 登录密码 `Mud@2026` ×2 → email →
+   gender → `9` → `y`). Re-login accepts EITHER password at its single
+   密码 prompt ("管理密码或登陆密码") — `Mud@2026` works. Granted
+   `(admin)` via `adm/etc/wizlist` (`fluffos (admin)`). Verified after
+   restart: 目前权限：(admin), `update /adm/daemons/band` → 成功,
+   `goto` worked. Save files: `work/data/user/f/fluffos.o` +
+   `work/data/login/f/fluffos.o` (untracked, NOT gitignored —
+   orchestrator must `git add`).
+
+Retest: fresh registration (fluffos itself) reached 南城客栈 with `look`
+correct; fluffos re-login `(admin)` + wizard commands OK; debug.log has
+zero runtime errors.

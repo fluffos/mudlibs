@@ -510,3 +510,35 @@ same convention every other already-done lib in this project follows.
   `query_ip_number()`'s format, so it is **not** affected by the
   documented WASM IP-format limitation — a genuinely clean WASM result,
   not just a partial one.
+
+## WASM-enablement pass (loopback-allow + admin seed)
+
+Applied the standard WASM-first changes (AGENTS.md §1.3b/§1.3e/§1.5):
+
+1. **Loopback always allowed through ban gates** —
+   `adm/daemons/band.lpc`: added `is_local_ip(string ip)` helper
+   (127.*, empty/non-string, or non-dotted-quad => local) and
+   short-circuited all three entry points the login flow calls:
+   `is_banned()`, `create_char_banned()`, `is_strict_banned()`
+   (each now `return 0` immediately for local IPs). These gates were
+   not actively blocking (shipped ban lists are empty) but are patched
+   per standing policy so runtime-added bans can never lock out local/
+   WASM play.
+2. **Uptime startup gate**: none in this lib (checked `logind.lpc`).
+3. **Anti-flood throttles**: none per-IP in this lib. The "玩家已经太多"
+   gates are global player-count caps, not per-IP throttles — left
+   intact. `SECURITY_D->match_wiz_site()` returns 1 when a wizard has
+   no wiz_sites entry, so it does not block fluffos — left intact.
+4. **Admin account seeded** — id `fluffos`, password `Mud@2026`,
+   display name 浮浮 (male), registered through the real flow
+   (`gb` → `no` student gate → id → y → name → password ×2 → email →
+   gender → accept talents). Granted `(admin)` via `adm/etc/wizlist`
+   (`fluffos (admin)`), read by `securityd.lpc::create()`. Verified
+   after restart: re-login shows 目前权限：(admin),
+   `update /adm/daemons/band` recompiled OK, `goto` worked. Save files:
+   `work/data/user/f/fluffos.o` + `work/data/login/f/fluffos.o`
+   (untracked, NOT gitignored — orchestrator must `git add`).
+
+Retest: fresh registration (fluffos itself) reached 南城客栈 as
+`(player)`, `look` correct; fluffos re-login as `(admin)` with working
+wizard commands; `log/debug.log` clean (0 errors).

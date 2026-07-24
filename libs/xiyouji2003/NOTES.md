@@ -573,3 +573,42 @@ python3 ../../scripts/mudclient.py 127.0.0.1 40075 --timeout 30 --idle 1.5 \
   it's purely cosmetic (blank display) rather than gating — this lib's
   registration/login path does not actually branch on the IP string's
   format, so the login itself is unaffected.
+
+## WASM-enablement pass (loopback-allow + admin seed)
+
+Applied the standard WASM-first changes (AGENTS.md §1.3b/§1.3e/§1.5):
+
+1. **Loopback always allowed through ban gates** —
+   `adm/daemons/band.lpc`: added `is_local_ip(string ip)` helper (127.*,
+   empty/non-string, or non-dotted-quad => local) and short-circuited
+   `is_banned()`, `create_char_banned()`, `is_strict_banned()` to
+   `return 0` for local IPs. (Shipped ban lists empty — defensive
+   standard patch. The `check_ip_()` DNS-mirror gate was already
+   neutralized in an earlier pass.)
+2. **Uptime startup gate**: none in this lib.
+3. **Anti-flood throttles exempt loopback** — `adm/daemons/logind.lpc`:
+   (a) `logon()`'s per-IP concurrent-connection cap (`logon_cnt > 8`,
+   was ~L186) now skipped for local IPs; (b) the `#ifdef MAX_LOGIN`
+   per-IP multi-login cap in `get_id()` (was ~L491,
+   `allow_multi_login`) now skipped for local IPs. KEPT: the
+   new-account 30-minute quit-retention window in `cmds/usr/quit.lpc`
+   (game design; wizards are exempt from it anyway).
+4. **Admin account seeded** — id `fluffos`, password `Mud@2026`, 浮浮
+   (male), via the real flow (`gb` → `1` 进入 → `new` → id → name →
+   password ×2 → email → gender). Granted `(admin)` via
+   `adm/etc/wizlist` (`fluffos (admin)`; file previously lacked a
+   trailing newline — rewritten with one so the appended line parses).
+   NOTE this lineage forces wizards to set a separate 巫师专用密码 on
+   first wizard login (must contain upper+lower+other chars, differ
+   from the normal password): set to `Wiz@2026`. So fluffos login is:
+   normal password `Mud@2026`, then wizard password `Wiz@2026`.
+   Verified after restart: 目前权限：主管天神(admin),
+   `update /adm/daemons/band` → 文件顺利更新成功, `goto` worked, quit
+   clean (wizardp exempt from the new-account deletion prompt).
+   Save files: `work/data/user/f/fluffos.o` +
+   `work/data/login/f/fluffos.o` (untracked, NOT gitignored —
+   orchestrator must `git add`).
+
+Retest: fresh registration (fluffos itself) reached 南城客栈 with
+`look` correct; fluffos wizard re-login verified; debug.log free of
+runtime errors.

@@ -185,3 +185,47 @@ registration test (Chinese surname + given name reaching the next prompt).
   (see `xiyangzaixian_fengkuang`/`xiyangzaixian_fengyun2`'s NOTES.md,
   whose `BAN_D` checks use `query_ip_number()` directly) — it just
   doesn't reach this particular lib's tested registration path.
+
+## WASM-enablement pass (loopback-allow + admin seed)
+
+Applied the standard WASM-first changes (AGENTS.md §1.3b/§1.3e/§1.5):
+
+1. **Loopback always allowed through ban gates** — this lineage gates on
+   `query_ip_name()` (hostname), not the IP:
+   - `adm/daemons/band.lpc`: added `is_local_ip(string site)` helper
+     (empty/non-string, `localhost`, `127.*` => local) and
+     short-circuited `is_banned()` to `return 0` for local sites.
+   - `adm/daemons/regband.lpc` `is_banned()` (the registration-ban gate
+     called from `logind.lpc` before new-character creation): same
+     inline local short-circuit. (regband is also matched against email
+     patterns; the local check only matches localhost-shaped strings so
+     email matching is unaffected.)
+2. **Uptime startup gate**: none in this lib.
+3. **Anti-flood throttles**: none per-IP (`MAX_USERS` is a global cap —
+   left intact). `SECURITY_D->valid_wiz_login()` requires a wiz_sites
+   entry for every wizard — fluffos is seeded with pattern `.*` so this
+   gate passes from anywhere including WASM garbage IPs; gate itself
+   left intact.
+4. **Admin account seeded** — id `fluffos`, display name 浮浮 (male).
+   Registered through the REAL flow including this lib's quirks:
+   initial password at creation, landing on the 侠客岛 beach, escort to
+   侠客岛挂名处, `register fluffos@mud.local` which ASSIGNS A RANDOM
+   password (was `zfbod`) and disconnects. Then granted `(admin)` by
+   editing `data/securityd.o` (the lineage's ACL save data — NOT the
+   `adm/etc/wizlist.h` file, which this securityd only uses as a
+   fallback when the save is absent): added
+   `"fluffos":"(admin)"` to `wiz_status` and `"fluffos":".*"` to
+   `wiz_sites` (required by `valid_wiz_login`). After restart, logged
+   in and used the game's own `passwd` command to change the random
+   password to the standard `Mud@2026`. Verified: 目前权限：(admin),
+   `update /adm/daemons/band` recompiled OK, wizard-view `look` shows
+   file paths. (`goto` on a non-room daemon object is a no-op in this
+   lib; `update` is the canonical ACL check.) Save files:
+   `work/data/user/f/fluffos.o` + `work/data/login/f/fluffos.o`
+   (untracked, NOT gitignored — orchestrator must `git add`), plus the
+   modified `work/data/securityd.o` (already tracked).
+
+Retest: fresh registration (fluffos itself) through beach → 挂名处 →
+`register` → random password → re-login all worked natively; fluffos
+re-login with `Mud@2026` + `update` verified; debug.log free of runtime
+errors.

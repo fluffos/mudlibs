@@ -62,3 +62,14 @@ python3 scripts/mudclient.py 127.0.0.1 40021
   文件系统，无法在同一进程内模拟"断线后用新密码重新连线"），本轮未在 WASM
   下进一步验证重新连线之后的 look/score/quit，但原生模式下该完整流程已经
   过完整验证，均正常工作。
+
+## 管理员账号 / Admin account
+
+- **id**: `fluffos`
+- **密码 / password**: `Mud@2026`
+  （已通过游戏内 `passwd` 指令将注册流程随机分配的密码改为该标准密码。）
+- **中文名 / display name**: 浮浮
+- **权限 / level**: `(admin)` —— 本 lib 最高权限。授权数据存放在
+  `data/securityd.o`（`wiz_status` + `wiz_sites`，后者必须有 `.*` 之类的
+  登录地址模式，否则巫师账号无法登录）。
+- 公开默认账号，**正式对外架设前请务必修改此密码**（游戏内 `passwd` 指令）。
