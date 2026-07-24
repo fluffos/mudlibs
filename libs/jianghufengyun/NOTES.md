@@ -488,3 +488,41 @@ above for why `setsid` specifically was needed in this session).
   not a mudlib bug — not patched. Marking this lib as "boots under wasm,
   login gated by the documented IP-check limitation" per the task's
   guidance, not "fails under wasm."
+
+## WASM-enablement pass (2026-07: loopback-allow + throttle exemptions + admin seeding)
+
+Standard pass per AGENTS.md §1.3b/e + §1.5. Gates found and patched:
+
+- `adm/daemons/band.lpc:106` `is_banned()`: short-circuit `return 0`
+  (allow) for loopback/empty/malformed site strings BEFORE the original
+  `sscanf(site, "%s.%s.%s.%s") != 4 => return 1 (banned)` check. This is
+  the exact gate that made this lib "WASM 下无法登录" (README): under
+  WASM `query_ip_number()` returns a malformed string, the dotted-quad
+  sscanf fails, and every connection was rejected as banned. With the
+  short-circuit, malformed == local == allowed; the anti-virtual-IP
+  (.0/.255) and regexp ban-list logic below is unchanged for real
+  remote dotted-quads.
+- `adm/daemons/logind.lpc:72` new helper `is_loopback_conn()` (declared
+  :35); used to exempt loopback from:
+  - `:173` — `ban_cnt > 16` cap on concurrent same-IP pre-login
+    connections in `logon()`;
+  - `:235` — `ip_cnt > 8` same-IP player cap in `get_id()` (the
+    non-welcome/non-netclub branch).
+- No `uptime()` startup-grace gate exists in this lib (all `uptime()`
+  uses are content randomness).
+
+Admin account: `fluffos` / `Mud@2026` / 浮浮, registered through the
+real native flow (id → y → Chinese name → password ×2 → gift 0/y →
+email → gender m). Granted **`(boss)`** — NOT `(admin)` — via
+`adm/etc/wizlist` (added `fluffos (boss)` alongside the original
+`fyue (boss)`): this lineage extends the ES II wiz_levels ladder with
+`(president)`/`(admin)`/`(boss)`/`(ceo)` above `(arch)`, and `(boss)` is
+the top rank the securityd ACL tables actually trust (`trusted_read/
+trusted_write "/"`), as well as what the original admin `fyue` holds.
+Verified after restart: login shows `您目前权限：(boss)`,
+`update /cmds/usr/score` recompiles successfully. Save files (must be
+committed): `work/data/user/f/fluffos.o`, `work/data/login/f/fluffos.o`.
+
+Retest: fresh registration (秦风/ceshizhe) end-to-end + look/score/quit
+clean; fluffos login + update clean; debug.log free of errors; test
+character saves removed.
