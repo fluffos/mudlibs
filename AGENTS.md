@@ -150,13 +150,12 @@ regardless: the loopback-allow-through-ban-gates patch (b), the
 uptime-gate/throttle bypass (e), and the `fluffos`/`Mud@2026` admin
 seeding (§1.5).
 
-#### (b) The loopback-allow patch (standard, per user direction)
+#### (b) The loopback-allow patch (standard, per user direction) — FAIL-CLOSED
 
-Every lib gets a small patch making connections from `127.0.0.1` (and,
-defensively, any *malformed* IP string, which is what WASM currently
-produces) bypass ban lists, site-restriction gates, and per-IP
-registration throttles. Shape — short-circuit at the TOP of the gating
-function(s), before any parsing of the IP:
+Every lib gets a small patch making connections from `127.0.0.1` bypass
+ban lists, site-restriction gates, and per-IP registration throttles.
+Shape — short-circuit at the TOP of the gating function(s), before any
+parsing of the IP:
 
 ```lpc
 // in BAN_D/band.lpc's is_banned(), sited.lpc's site check,
@@ -164,13 +163,28 @@ function(s), before any parsing of the IP:
 int is_banned(object ob)
 {
     string ip = query_ip_number(ob);
-    // local/WASM connections are always allowed; also guards against
-    // malformed IP strings crashing the parser below.
-    if (!stringp(ip) || ip == "127.0.0.1" || sscanf(ip, "%*d.%*d.%*d.%*d") != 4)
+    // local/WASM connections are always allowed.
+    if (ip == "127.0.0.1" || ip == "::1" || strsrch(ip, "127.") == 0)
         return 0;
     ... original logic unchanged ...
 }
 ```
+
+**Do NOT treat a malformed/empty/non-string IP as loopback.** An
+earlier version of this pattern also matched `!stringp(ip)` and any IP
+that failed `sscanf(ip, "%*d.%*d.%*d.%*d") != 4`, on the reasoning that
+older WASM driver builds returned garbage for `query_ip_number()`. That
+was fail-open: a spoofed or garbled IP from a REAL remote connection
+would silently bypass every ban/throttle, not just genuine loopback
+ones. The driver bug that motivated it is now fixed (§1.3a's
+`query_ip_number()`/`resolve()` fixes are merged upstream, both drivers
+rebuilt) — WASM connections report a clean `"127.0.0.1"` same as
+native — so the fallback has no remaining justification. An unparseable
+IP must fall through to the ORIGINAL gate logic, not bypass it. (This
+was caught and fixed after several libs had already shipped the
+fail-open version; if you find `!stringp(ip) ||` or an
+`sscanf(...) != 4` disjunct feeding an "is local" check in any lib,
+that's this bug — tighten it.)
 
 Rules: patch the *entry points* the login flow actually calls (read
 `logind.lpc`'s chain — ban check, site check, multi-login check,
@@ -1397,6 +1411,24 @@ same interface via `scripts/wasm_client.js` (§1.2).
   SHIPPED static `banned_name` content file (`yueyingqiyuan`),
   breaking name registration in fresh clones — prefer lib-scoped
   ignore patterns over repo-wide ones.
+- **Merge queue for parallel batches: `scripts/safe_commit_batch.sh`.**
+  All batch agents share ONE working tree (no per-agent worktrees), so
+  several batches routinely have unstaged edits under different
+  `libs/<slug>/` trees at the same moment. Never `git add -A` or
+  hand-eyeball a giant `git status` dump to decide what's "this
+  batch's" — use the script:
+  `scripts/safe_commit_batch.sh [--dry-run] <slug1> [slug2 ...] [+ extra_path ...] -- <msg-file>`.
+  It resets the index, stages only `libs/<slug>/` for each given slug
+  (plus any explicit extra paths after a literal `+`), verifies every
+  staged path actually falls under an owned prefix, and REFUSES (fully
+  unstaging, no commit) if anything else snuck in — that's the signal
+  another batch's in-flight write landed somewhere unexpected, or the
+  slug list handed to it was wrong. Only on success does it commit and
+  `git push origin main`. Use `--dry-run` to check a batch's isolation
+  before it's actually ready to land (stages, validates, prints the
+  diff, unstages, no commit/push). This formalizes — and should fully
+  replace — manually re-deriving "what belongs to this batch" from
+  `git status` output.
 - **Publishing: normal `git push origin main`.** This worktree tracks
   `origin/main` (`github.com/fluffos/mudlibs`) directly. `archives/`
   is gitignored — the original archive files live there locally for
