@@ -1,0 +1,139 @@
+# Build & deploy the playable-in-browser mudlib site to GitHub Pages.
+#
+# Pipeline (each push of a lib -> a playable static website):
+#   1. Download the latest prebuilt WASM driver (fluffos-<ver>-wasm.zip) from
+#      fluffos/fluffos releases: fluffos.js/fluffos.wasm + the web terminal
+#      (index.html, telnet.js, vendor/xterm).
+#   2. scripts/build_site.sh packs every lib in libs/<slug>/ into a browser
+#      bundle (scripts/pack_lib_for_web.sh: trimmed tree -> mudlib.data/.js
+#      via emscripten's file_packager, config rewritten to the in-memory
+#      mount, per-lib page patched to load the driver from ONE shared copy
+#      at site/_driver/ instead of duplicating ~3.5MB x 90 libs).
+#   3. scripts/gen_site_index.py renders the index (game names from each
+#      lib's README.md, playable/limited/noboot status derived from
+#      the checked-in scripts/wasm_status.json status mapping).
+#   4. Upload site/ as the Pages artifact and deploy.
+#
+# INCREMENTAL packing: the packed bundles persist in ONE actions/cache entry
+# (see build_site.sh's manifest: driver tag + packer blob sha + per-lib
+# `git rev-parse HEAD:libs/<slug>` tree hashes).  A run only repacks libs
+# whose tree hash changed (or everything when the driver release / packer
+# script changed) and prunes bundles for removed libs.  The cache key embeds
+# the commit sha so every run with changes saves a fresh snapshot;
+# restore-keys fall back to the newest previous entry.  GitHub's cache is
+# 10GB/repo with LRU eviction -- the ~2GB packed site fits; a cache miss
+# (eviction/expiry) just means one slow full repack, not a failure.
+# The deploy itself is always full-site: actions/deploy-pages replaces the
+# site atomically, so only the packing step can be (and is) incremental.
+#
+# Trigger note: push is filtered to the paths that actually change the site
+# (lib content, scripts, this workflow) so unrelated
+# pushes (archive blobs, top-level docs) don't burn 30+ CI minutes.
+
+name: Deploy mudlib site to Pages
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+    paths:
+      - 'libs/**'
+      - 'scripts/**'
+      - '.github/workflows/pages.yml'
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy pipeline at a time; superseded runs are cancelled.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # The repo carries ~4GB of history (original archives); a shallow
+      # clone is mandatory.  HEAD's tree objects are enough for the
+      # per-lib `git rev-parse HEAD:libs/<slug>` cache keys.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Fetch latest prebuilt WASM driver release
+        id: driver
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag=$(gh release view --repo fluffos/fluffos --json tagName -q .tagName)
+          echo "latest fluffos release: $tag"
+          gh release download "$tag" --repo fluffos/fluffos \
+              --pattern '*-wasm.zip' --dir "$RUNNER_TEMP/wasm-release" \
+            || { echo "::error::release $tag has no *-wasm.zip asset (the pipeline needs the prebuilt WASM driver)"; exit 1; }
+          zip=$(ls "$RUNNER_TEMP"/wasm-release/*-wasm.zip | head -1)
+          unzip -q "$zip" -d "$RUNNER_TEMP/wasm-release/rel"
+          for f in fluffos.js fluffos.wasm index.html telnet.js pack-mudlib.sh; do
+            [ -f "$RUNNER_TEMP/wasm-release/rel/$f" ] \
+              || { echo "::error::release zip is missing $f"; exit 1; }
+          done
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      # Only emscripten's file_packager is needed (no compile), so any
+      # recent emsdk works; 'latest' keeps it maintenance-free.
+      - uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: latest
+
+      - name: Restore packed-lib cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/packed-cache
+          key: packed-site-v1-${{ steps.driver.outputs.tag }}-${{ github.sha }}
+          restore-keys: |
+            packed-site-v1-${{ steps.driver.outputs.tag }}-
+            packed-site-v1-
+
+      - name: Build site (incremental repack + index)
+        id: build
+        run: |
+          scripts/build_site.sh "$RUNNER_TEMP/wasm-release/rel" \
+              "${{ steps.driver.outputs.tag }}" \
+              "$RUNNER_TEMP/packed-cache" site
+
+      # Boot one packed bundle inside the WASM driver under node -- proves
+      # the trimmed, packed image + release driver actually start a game
+      # (catches over-trimming and packer/driver drift before deploying).
+      - name: Boot smoke test (packed image under node)
+        run: |
+          node scripts/wasm_boot_check.js site/dongfanggushi2 site/_driver \
+              --timeout 60
+
+      - name: Save packed-lib cache
+        if: steps.build.outputs.changed != '0'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/packed-cache
+          key: packed-site-v1-${{ steps.driver.outputs.tag }}-${{ github.sha }}
+
+      # enablement: true lets the very first run switch the repo's Pages
+      # source to "GitHub Actions" itself.
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
