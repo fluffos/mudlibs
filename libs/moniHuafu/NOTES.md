@@ -339,3 +339,48 @@ mega-lib OOM risk threshold).
   policy — documented here instead. Status: **boots under WASM;
   interactive login blocked by a resolve()-under-WASM limitation
   (WASM-driver gap, not this lib's bug)**.
+
+## WASM-enablement pass (2026-07-23): loopback-allow + admin seeding
+
+Gates patched:
+
+- `adm/daemons/band.lpc` `is_banned()` (~line 51) — short-circuit return 0
+  for loopback ("127.0.0.1"/"localhost"/any "127." prefix) or
+  empty/non-string input (WASM builds pass garbage; this gate is called
+  with both `query_ip_name()` and `query_ip_number()` from `logind.lpc`
+  `logon()`).
+- `adm/daemons/logind.lpc` `logon()` (~line 80) — the per-IP
+  three-connections cap now fully exempts loopback/malformed-IP
+  connections (previously it only special-cased the literal ip_name
+  "127.0.0.1", which WASM never produces).
+- `adm/daemons/securityd.lpc` `create()` — the unguarded
+  `resolve(query_host_name(), ...)` call was moved AFTER the
+  `wiz_status` state init and wrapped in `catch()` (the AGENTS.md §1.3c
+  风云-family idiom): under WASM the throw used to abort `create()`
+  mid-way, leaving `wiz_status` uninitialized and crashing the first ACL
+  lookup ("*Value being indexed is zero"). This unblocks the documented
+  WASM login blocker for this lib.
+- No `uptime()` startup gate and no registration throttle exist here
+  (checked).
+
+Admin account: `fluffos` / `Mud@2026`, Chinese name 浮浮, granted
+`(admin)` via `/adm/etc/wizlist` (file normalized CRLF→LF). Verified:
+registration via the real flow, re-login restore path, and
+`update /adm/daemons/band.lpc` succeeds. Saves at
+`data/login/f/fluffos/fluffos.o` + `data/user/f/fluffos/fluffos.o` (not
+gitignored). Fresh normal registration (秦风/testqa) re-verified
+end-to-end and the test char removed; debug.log clean.
+
+### Fail-closed retrofit (2026-07-24)
+
+The `band.lpc` `is_banned()` carve-out and `logind.lpc`'s `nowip`
+multi-login-cap bypass originally ALSO treated any empty/non-string/
+unparseable IP (or `query_ip_name()` value) as trusted-local (fail-open,
+defensive against an older WASM `query_ip_number()`/`resolve()` bug now
+fixed upstream). Tightened both to strict loopback only (`"127.0.0.1"`,
+`"::1"`, `"localhost"`, or a `"127."` prefix) — malformed input now falls
+through to the same regexp-based ban check / multi-login count as any
+other site string (this lib's original `is_banned()` had no separate
+non-string fast-path, so no additional fail-safe was needed there).
+Re-verified loopback login, `look`, `update`, and quit all still work
+after tightening.

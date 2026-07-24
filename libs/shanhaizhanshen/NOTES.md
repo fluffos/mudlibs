@@ -136,3 +136,37 @@ registration test (Chinese surname + given name reaching the next prompt).
   `ftpd.lpc`/`dns_master.lpc`, both optional network daemons never
   invoked during normal login) — no WASM-specific limitation applies
   here. Status: **fully playable under WASM**.
+
+## WASM-enablement pass (2026-07-24): admin seeding only (no gates found)
+
+Checked for all four standard gate classes (AGENTS.md §1.3b/e): no
+`band.lpc`/`BAN_D`-style ban daemon, no site-restriction daemon, no
+`uptime()` check anywhere in the login path, and no per-IP anti-flood/
+multi-login throttle (`logind.lpc`/`logind2.lpc` only use
+`query_ip_number`/`query_ip_name` cosmetically, in log lines and "who
+connected from where" messages — confirmed by grep, not just absence of
+symptoms). So items 1-3 of the standard pass (loopback-allow,
+uptime-bypass, throttle-exemption) are **not applicable** to this lib —
+nothing to patch.
+
+Admin account: registered `fluffos` / `Mud@2026` through the real
+registration flow (id `fluffos` accepted directly — no length/reserved-
+word conflict), Chinese name 浮浮, gender m, attributes 10/10/10/10/10/10.
+Granted `(admin)` via `/adm/etc/wizlist` (this file already had a
+`fluffos (admin)` line staged from an earlier interrupted pass; verified
+`/adm/daemons/securityd.lpc` reads this file for wizard-level decisions).
+Verified in ONE continuous session: login as fluffos, `look`, then
+`update /adm/daemons/securityd.lpc` recompiled successfully (ACL grants
+write/compile access), then clean `quit`. Re-verified a fresh normal
+registration end-to-end afterwards (id `qinfeng`, name 秦风, same
+attribute split) reaching 梦旅馆大厅 with working look/score/quit; its
+test save (`data/login/q/qinfeng.o`, `data/user/q/qinfeng.o`) was removed
+afterwards. debug.log clean (compiler warnings only, no errors) across
+both sessions. Save files for the orchestrator to force-add:
+`data/login/f/fluffos.o`, `data/user/f/fluffos.o` (untracked, not
+gitignored).
+
+Note: an earlier same-batch agent's driver process for this lib (PID
+4045698, started 00:37, before this session began) was found still bound
+to port 40001 with no admin work done yet; it was killed (exact PID) and
+the driver relaunched fresh before doing the registration above.

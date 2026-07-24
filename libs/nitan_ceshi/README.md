@@ -66,3 +66,20 @@ python3 scripts/mudclient.py 127.0.0.1 40054
   两者叠加导致无法在一次性测试里走到登录提示。这些都是 WASM 驱动/测试
   工具本身的限制，不是本库的 bug——原生（native）驱动下注册、进入
   生命之谷、盘古 NPC 正确称呼玩家中文名等全部验证通过。
+
+## 管理员账号 / Admin account
+
+- **ID**: `fluffos`
+- **普通密码 / Password**: `Mud@2026`（平时登录用这个）
+- **管理密码 / Admin(recovery) password**: `Mud@2026admin`
+  （本库注册时强制设置一个与普通密码不同的"管理密码"，用于找回；
+  用管理密码登录会强制要求重设普通密码）
+- **中文名 / Display name**: 浮浮（姓"浮"名"浮"，注册时需按提示再输入
+  一次全名"浮浮"确认）
+- **权限 / Level**: `(admin)`（最高级别），通过 `/adm/etc/wizlist` 授予
+  （`fluffos (admin)`；`/adm/daemons/securityd.lpc` 读取）。
+- 已验证 `update /adm/daemons/band.lpc` 重新编译成功。
+- **警告**：对外公开架设前请务必修改这两个密码。
+
+存档文件（登录凭据 + 角色数据）：
+`work/data/login/f/fluffos.o` 与 `work/data/user/f/fluffos.o`。

@@ -177,3 +177,55 @@ interactive-connect test above is the verification for a lib this size.
   cases, this time the ban check triggers before any prompt is even
   shown, the earliest-possible manifestation of this limitation seen in
   this batch).
+
+## WASM-enablement pass (2026-07-24): loopback-allow + throttle bypass + admin seeding
+
+Gates patched (loopback = `127.0.0.1`, any `127.*`, or an empty/malformed
+non-dotted-quad string, which is what current WASM builds return; in
+`logon()` a loopback/malformed IP sets `str = 0`, and every per-IP gate
+below is now `str &&`-guarded):
+
+- `adm/daemons/logind.lpc` `logon()` (~line 109) — loopback bypasses:
+  the `blocks[]` punish-list check, the >30-stale-connections
+  `block_ip()` blocker, the same-IP `ban_cnt > 10` cap, and the
+  `ip_cnt > MULTI_LOGIN` same-IP multi-login cap.
+- `adm/daemons/band.lpc` `is_banned()` — loopback short-circuit return 0;
+  malformed IPs (previously `return 1` = banned — the WASM login killer
+  in this lineage) now return 0. `is_multi_login()` — loopback always
+  allowed.
+- No `uptime()` startup gate in this lib (it uses a
+  `SYSTEM_D->valid_login()` boot-wait queue instead, which is graceful —
+  left alone).
+- Kept (game design): 30-minute new-account quit-retention self-delete.
+
+Admin account: `fluffos`, normal password `Mud@2026`, 管理密码
+`Mud@2026admin`, Chinese name 浮浮, granted `(boss)` (top rank) via
+`/adm/etc/wizlist`. Verified: real-flow registration, wizard-password
+warning branch on re-login, `update /adm/daemons/band.lpc` succeeds,
+`goto` works, birth flow completed (register email + choose/washto/born),
+`score` renders. **Trap discovered and documented**: deleting a
+wizard-ranked account via the 30-min quit self-delete makes securityd
+REWRITE `/adm/etc/wizlist` without that account — this silently wiped the
+first seeding attempt; re-seeded and avoided quit-based exits for
+fluffos since. Fresh normal registration re-verified end-to-end in two
+sessions (testqb: create, then re-login → register email → choose/washto/
+born → look/score → quit self-delete). Tracked runtime churn
+(`data/daemon/mrtg*`) reverted via `git show HEAD:`. debug.log clean.
+Save files for the orchestrator: `data/login/f/fluffos.o`,
+`data/user/f/fluffos.o`, `data/user/f/fluffos.package.o`.
+
+### Fail-closed retrofit (2026-07-24)
+
+Same correction and same bug as documented in detail on sibling
+`nitan170911` (identical `logind.lpc`/`band.lpc` shapes): the loopback
+carve-out originally ALSO trusted any empty/non-string/unparseable IP as
+local (fail-open); tightened to strict loopback only, restored
+`band.lpc`'s original fail-safe (malformed format ⇒ banned) below the
+carve-out, and fixed a real bug where `logon()`'s reuse of `str` as both
+"the real IP" and a "0 = skip anti-flood gates" sentinel caused
+`BAN_D->is_banned(str)` to be called with `0` for every loopback
+connection — which, after restoring the fail-safe, started rejecting
+loopback logins outright. Introduced a separate `local_conn` flag; `str`
+now stays the real IP throughout. Re-verified in one continuous session:
+fluffos login, `look`, `update /adm/daemons/band.lpc` (succeeded), clean
+reconnect — no regression from the tightening.

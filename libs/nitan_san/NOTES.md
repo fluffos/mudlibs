@@ -450,3 +450,41 @@ path (an un-preloaded, never-visited city NPC).
   Status: **boots under WASM; login not exercisable within a single
   short-lived harness run** (same two-gate situation as `nitan_ceshi`,
   consistent with them being close siblings).
+
+## WASM-enablement pass (2026-07-23): loopback-allow + uptime bypass + admin seeding
+
+Same patch set as sibling `nitan_ceshi` (identical gate shapes):
+
+- `adm/daemons/logind.lpc` `logon()` (~line 97) — `uptime() < 30`
+  startup-grace destruct now only applies to non-loopback connections.
+- `adm/daemons/logind.lpc` `logon()` (~line 180) — per-IP multi-login cap
+  (`iplimit > 12 || > 4`) exempts loopback.
+- `adm/daemons/band.lpc` `is_banned()` — loopback short-circuit return 0;
+  malformed IPs (previously `return 1` = banned, the WASM login killer)
+  now return 0.
+- `adm/daemons/band.lpc` `is_multi_login()` — loopback always allowed.
+- Kept: 30-minute new-account quit-retention gate (game design);
+  `blocks_ip` invalid-ID spam blocker (enforcement commented out
+  upstream, unchanged).
+
+Admin account: `fluffos`, normal password `Mud@2026`, 管理密码
+`Mud@2026admin`, Chinese name 浮浮 (姓浮名浮 + full-name confirm step).
+Granted `(admin)` via `/adm/etc/wizlist` (目前权限：(admin) shown at
+entry). Verified: real-flow registration, reconnect, and
+`update /adm/daemons/band.lpc` succeeds. Saves at
+`data/login/f/fluffos.o` + `data/user/f/fluffos.o` (untracked, not
+gitignored — orchestrator must add). Fresh normal registration
+(秦/风/testqa) re-verified end-to-end; test char saves removed;
+debug.log clean.
+
+### Fail-closed retrofit (2026-07-24)
+
+Same correction as documented in detail on sibling `nitan_ceshi`
+(identical gate shapes): the `uptime()`/multi-login-cap carve-outs'
+"only apply the gate if the IP parses AND isn't loopback" logic silently
+exempted malformed IPs too; tightened to "apply the gate unless the IP is
+strictly loopback". `band.lpc`'s explicit `!stringp`-as-loopback clauses
+tightened the same way, with its original malformed-format fail-safe
+(`return 1` = banned) restored. Re-verified loopback fluffos login,
+`look`, `update /adm/daemons/band.lpc`, and quit all still work after
+tightening.

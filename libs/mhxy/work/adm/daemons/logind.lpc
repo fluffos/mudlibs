@@ -132,6 +132,7 @@ private void encoding(string arg, object ob) {
   int ii;
   mixed info;
   int encode;
+  int local_conn;
 
 
   if (!arg || arg == "") {
@@ -153,7 +154,11 @@ private void encoding(string arg, object ob) {
   ip_name = query_ip_name(ob);
   ip_number = query_ip_number(ob);
 
-
+  // Loopback connections bypass the address-based gates below; anything
+  // else (including a string the driver failed to resolve) is untrusted
+  // and stays subject to the normal checks.
+  local_conn = stringp(ip_number) && (ip_number == "127.0.0.1" ||
+    ip_number == "::1" || (strlen(ip_number) > 3 && ip_number[0..3] == "127."));
 
   // snowcat dec 10 1997
   // try strict ban here...weiqi.
@@ -168,19 +173,20 @@ private void encoding(string arg, object ob) {
 
   // try not accept "name" as IP
 
-  if (!ip_name) {
+  if (!local_conn && !ip_name) {
     destruct(ob);
     log_file("ALLCONT", sprintf("kicked out, No IP\n"));
     return;
   }
 
-  for (ii = 0; ii < sizeof(ip_number); ii++) {
-    if ((ip_number[ii] != '.') && (ip_number[ii] > '9')) {
-      destruct(ob);
-      log_file("ALLCONT", sprintf("kicked out, Non_number\n"));
-      return;
+  if (!local_conn)
+    for (ii = 0; ii < sizeof(ip_number); ii++) {
+      if ((ip_number[ii] != '.') && (ip_number[ii] > '9')) {
+        destruct(ob);
+        log_file("ALLCONT", sprintf("kicked out, Non_number\n"));
+        return;
+      }
     }
-  }
 
   write(CLR);
   cat(WELCOME);
@@ -511,6 +517,7 @@ private void get_new_id(string arg, object ob) {
 private void get_passwd(string pass, object ob) {
   string my_pass, id;
   object user;
+  string reconn_ip;
 
   write("\n");
   my_pass = ob->query("password");
@@ -558,7 +565,14 @@ private void get_passwd(string pass, object ob) {
         return;
       }
 
-      if (!wizardp(user) && time() - (int)user->query("quit_time") < 40) {
+      // Loopback connections are exempt from the reconnect throttle
+      // (browser tabs reconnect constantly); anything else stays subject
+      // to it, including a string the driver failed to resolve.
+      reconn_ip = query_ip_number(ob);
+      if (!(stringp(reconn_ip) && (reconn_ip == "127.0.0.1" ||
+        reconn_ip == "::1" || (strlen(reconn_ip) > 3 &&
+        reconn_ip[0..3] == "127."))) &&
+        !wizardp(user) && time() - (int)user->query("quit_time") < 40) {
         write("刚退出就想进来？为了降低系统负荷，还是等一小会再连入吧！\n");
         destruct(user);
         destruct(ob);

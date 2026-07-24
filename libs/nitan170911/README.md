@@ -49,3 +49,15 @@ python3 scripts/mudclient.py 127.0.0.1 40018
   拖慢 WASM 启动），但每一次连线都会被地址黑名单机制直接拒绝——这是
   因为 WASM 驱动目前无法提供真实的连线 IP 格式，而本库恰好依赖这个
   格式做地址检查。这是 WASM 驱动本身的已知限制，不是本库的 bug。
+
+## 管理员账号 / Admin account
+
+**未能预置（见下）/ NOT seeded.** 本库的注册与角色存取完全走 MySQL 后端
+（`include/unixconf.h` 中 `#define DB_SAVE 1`；`clone/user/user.lpc` 的
+`save()`/`restore()` 都经由 `DATABASE_D->db_save_all/db_restore_all`）。
+在没有配置 MySQL 服务器的环境下，注册流程会在英文名输入后被
+「对不起，由于连接不上数据库所在服务器……」正常拒绝，因此无法通过
+真实注册流程创建 `fluffos` 管理员账号。若将来为本库配置了 MySQL
+后端（或改造为本地文件存档），请按同族库（nitan6/nitan_ceshi/
+nitan_san）的惯例注册 `fluffos` / `Mud@2026`（中文名 浮浮）并在
+`/adm/etc/wizlist` 中加入 `fluffos (boss)`。

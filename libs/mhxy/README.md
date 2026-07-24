@@ -55,3 +55,16 @@ python3 scripts/mudclient.py 127.0.0.1 40016
   完整体验。这是 WASM 驱动本身的已知限制，不是本库的 bug——同一段代码
   在原生（native）驱动下已完整验证可以走完注册、进入长安城南城客栈、
   查看属性等全部流程。
+
+## 管理员账号 / Admin account
+
+- **ID**: `fluffos`
+- **密码 / Password**: `Mud@2026`（"身份标识"/SuperPassWord 同样是 `Mud@2026`）
+- **中文名 / Display name**: 浮浮
+- **权限 / Level**: `(admin)`（最高级别），通过 `/adm/etc/wizlist` 授予
+  （`fluffos (admin)` 一行；`/adm/daemons/securityd.lpc` 启动时读取该文件）。
+- 已验证 `update /d/city/kezhan.lpc` 重新编译成功（巫师 ACL 生效）。
+- **警告**：对外公开架设前请务必修改此密码（及 SuperPassWord）。
+
+存档文件（登录凭据 + 角色数据）：
+`work/data/login/f/fluffos.o` 与 `work/data/user/f/fluffos.o`。

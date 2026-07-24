@@ -57,3 +57,16 @@ NPC 招呼语等）也会正确区分男女。
   体验。日志里有一条无害的、不影响游戏的报错（进入游戏时查询连线 IP
   归属地信息失败，只是少显示一行欢迎文字），这是 WASM 驱动本身对连线
   IP 格式支持不完整导致的已知限制，不影响实际登录和游玩。
+
+## 管理员账号 / Admin account
+
+- **ID**: `fluffos`
+- **密码 / Password**: `Mud@2026`
+- **中文名 / Display name**: 浮浮
+- **权限 / Level**: `(admin)`（最高级别），通过 `/adm/etc/wizlist` 授予
+  （`fluffos (admin)` 一行；`/adm/daemons/securityd.lpc` 启动时读取该文件）。
+- 已验证 `update /d/city/kezhan.lpc` 重新编译成功（巫师 ACL 生效）。
+- **警告**：对外公开架设前请务必修改此密码。
+
+存档文件（登录凭据 + 角色数据）：
+`work/data/login/f/fluffos.o` 与 `work/data/user/f/fluffos.o`。

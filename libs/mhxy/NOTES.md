@@ -123,3 +123,45 @@ registration test (Chinese surname + given name reaching the next prompt).
   **boots under WASM; login blocked by a query_ip_number()-under-WASM
   limitation** (different trigger site than the already-documented
   `sscanf`-ban-check shape, same root cause).
+
+## WASM-enablement pass (2026-07-23): loopback-allow + throttle bypass + admin seeding
+
+Gates patched (loopback = `127.0.0.1`, any `127.*`, or an empty/malformed
+non-dotted-quad string, which is what current WASM builds return):
+
+- `adm/daemons/band.lpc` — `is_banned()`, `create_char_banned()`,
+  `is_strict_banned()` short-circuit return 0 for loopback;
+  `allow_multi_login()` returns 1000 (effectively unlimited) for loopback.
+- `adm/daemons/logind.lpc` `encoding()` — new `local_conn` flag; the
+  `!ip_name` destruct and the "Non_number" character-scan destruct are
+  skipped for loopback/malformed IPs (this was the WASM login blocker).
+- `adm/daemons/logind.lpc` (~line 567) — the 40-second "刚退出就想进来"
+  quick-reconnect throttle now exempts loopback (kickout punishment timer
+  kept — game design).
+- `adm/daemons/ipd.lpc` `seek_ip_address()` — returns "本地连接" for
+  loopback/short IPs instead of crashing on `explode(ip,".")[1]` (this was
+  the documented WASM `Array index out of bounds` blocker).
+- `adm/daemons/securityd.lpc` `match_wiz_site()` — loopback always passes
+  wizard site restriction.
+- No `uptime()` startup gate exists in this lib (checked; only cosmetic
+  uses in httpd/cmwhod).
+
+Admin account: `fluffos` / `Mud@2026` (SuperPassWord also `Mud@2026`),
+Chinese name 浮浮, granted `(admin)` via `/adm/etc/wizlist` (file also
+normalized from CRLF to LF; previously the CR was absorbed into the parsed
+level string). Verified: registration via real flow, re-login, and
+`update /d/city/kezhan.lpc` succeeds. Saves at `data/login/f/fluffos.o` +
+`data/user/f/fluffos.o` (not gitignored). Fresh normal registration
+re-verified end-to-end (test char removed); debug.log clean.
+
+### Fail-closed retrofit (2026-07-24)
+
+The loopback carve-out above was originally written to ALSO treat any
+empty/non-string/unparseable IP as trusted-local (a fail-open pattern,
+written defensively against an older WASM `query_ip_number()` bug that is
+now fixed upstream). Corrected to strict loopback only (`"127.0.0.1"`,
+`"::1"`, or a `"127."` prefix) in `band.lpc` (×4), `securityd.lpc`'s
+`match_wiz_site`, `ipd.lpc` (now falls back to an "未知地区" placeholder
+for unparseable input instead of "本地连接"), and `logind.lpc`'s
+`local_conn` flag and reconnect throttle. Re-verified the loopback path
+still logs in, looks, and quits cleanly after tightening.

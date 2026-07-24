@@ -161,3 +161,57 @@ than new architecture bugs, at real cost to run safely.
   lineage in this batch)** — the mega-lib size turned out NOT to be a
   practical obstacle for this particular test, worth noting for future
   passes considering the same worry.
+
+## WASM-enablement pass (2026-07-24): loopback-allow (admin seeding skipped)
+
+Gates patched (same shapes as the rest of the NT/nitan lineage; loopback
+= `127.0.0.1`, any `127.*`, or an empty/malformed non-dotted-quad string):
+
+- `adm/daemons/band.lpc` `is_banned()` — loopback short-circuit return 0;
+  malformed IPs (previously `return 1` = banned — this was the documented
+  WASM login blocker for this lib) now return 0. `is_multi_login()` —
+  loopback always allowed.
+- `adm/daemons/logind.lpc` `logon()` (~line 109) — loopback/malformed IPs
+  set `str = 0` and bypass: the `blocks[]` punish list, the
+  >30-stale-connections `block_ip()` blocker, the same-IP `ban_cnt > 20`
+  cap, and the `ip_cnt > MULTI_LOGIN` cap.
+- No `uptime()` startup gate in this lib (uses the graceful
+  `SYSTEM_D->valid_login()` wait queue).
+
+**Admin seeding SKIPPED** — registration and character save/restore are
+MySQL-backed (`DB_SAVE` defined; `DATABASE_D->db_save_all/db_restore_all`
+in the save path, `do_sql()` user lookups in `logind.lpc`). With no DB
+server the flow correctly rejects new registrations ("连接不上数据库所在
+服务器"), so the real registration flow cannot produce a fluffos account,
+and hand-crafting a save would not survive the DB-backed restore path.
+Making this lib DB-less is real (WASM-relevant, since WASM builds have no
+`db` package at all) but is an architecture change beyond this pass —
+flagged as future work.
+
+Retest: boots clean, banner + id prompt + the documented DB-unavailable
+rejection all behave exactly as before the patch; debug.log clean.
+
+### Fail-closed retrofit (2026-07-24)
+
+The `band.lpc`/`logind.lpc` carve-outs above originally ALSO treated any
+empty/non-string/unparseable IP as trusted-local (fail-open, defensive
+against an older WASM `query_ip_number()` bug now fixed upstream).
+Tightened to strict loopback only (`"127.0.0.1"`, `"::1"`, `"127."`
+prefix); `band.lpc`'s `is_banned()`/`is_multi_login()` also had their
+pre-existing malformed-format fallback restored to the ORIGINAL fail-safe
+(`return 1` = banned for anything that isn't a clean loopback address or
+a valid 4-part dotted quad, matching the codebase's own convention before
+this pass touched it).
+
+**Bug found and fixed during the retrofit**: `logind.lpc`'s `logon()`
+reused the same `str` variable both as "the real IP" (later passed
+verbatim to `BAN_D->is_banned(str)`) and as a "0 = loopback, skip
+anti-flood gates" sentinel. Zeroing `str` for loopback connections meant
+`is_banned(0)` was called for every local connection — which, after the
+fail-safe restore above, now correctly rejects non-string input, so
+**loopback connections were being banned** ("你的地址在本 MUD 不受欢迎")
+until this was caught by retest. Fixed by introducing a separate
+`local_conn` boolean for the anti-flood gates and leaving `str` as the
+real IP throughout (same fix applied to sibling `nitan6`, which has the
+identical shape). Re-verified: loopback connection reaches the id prompt
+and the documented DB-unavailable rejection again, no ban message.

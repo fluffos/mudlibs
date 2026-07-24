@@ -98,6 +98,7 @@ void logon(object ob) {
   int now_time;
   int i, wiz_cnt, ppl_cnt, ip_cnt, ban_cnt, login_cnt;
   int reg_usr, max_usr, max_ips, time1, time2;
+  int local_conn;
 
   if (!SYSTEM_D->valid_login()) {
     write(HIY + MUD_FULL_NAME + "载入中，请稍后 ...\n" NOR);
@@ -108,7 +109,15 @@ void logon(object ob) {
 
   str = query_ip_number(ob);
   now_time = time() & 0xFFFFFFFE;
-  if (mapp(tmp_time = blocks[str])) {
+  // Loopback connections bypass the per-IP anti-flood gates below
+  // (block list, stale-connection blocker, same-IP caps); anything else,
+  // including a string the driver failed to resolve, stays subject to them.
+  // NOTE: `str` itself is kept as the real query_ip_number() value (it is
+  // also passed to BAN_D->is_banned() below, which has its own stricter
+  // loopback carve-out) -- only the local_conn flag toggles the gates.
+  local_conn = stringp(str) && (str == "127.0.0.1" || str == "::1" ||
+    (strlen(str) > 3 && str[0..3] == "127."));
+  if (!local_conn && mapp(tmp_time = blocks[str])) {
     if (now_time - tmp_time["time"] < tmp_time["punish"]) {
       write(tmp_time["reason"] + "请过" +
         appromix_time(tmp_time["time"] + tmp_time["punish"] - now_time) + "再尝试连线。\n");
@@ -118,8 +127,8 @@ void logon(object ob) {
     unblock_ip(str);
   }
 
-  login_usr = filter_array(children(LOGIN_OB), (: query_ip_number($1) == $2 :), str);
-  if ((sizeof(login_usr) > 30 && str != PUBLIC_IP)) {
+  login_usr = !local_conn ? filter_array(children(LOGIN_OB), (: query_ip_number($1) == $2 :), str) : ({});
+  if ((!local_conn && sizeof(login_usr) > 30 && str != PUBLIC_IP)) {
     block_ip(str, 300, "您的IP产生了大量废弃连接！");
     /*
                 for (i = 0; i < sizeof(login_usr); i ++)
@@ -202,13 +211,13 @@ void logon(object ob) {
   if (sizeof(ips) > max_ips)
     write_file(CONFIG_DIR "max_ips", sprintf("%d:%d", sizeof(ips), time()), 1);
 
-  if (ban_cnt > 10) {
+  if (!local_conn && ban_cnt > 10) {
     write("这个IP上同时正在连线的玩家太多了，请稍候再尝试！！ \n");
     call_out("destruct_ob", 0, ob);
     return;
   }
 
-  if (ip_cnt > MULTI_LOGIN && str != PUBLIC_IP && !BAN_D->is_netclub(str)) {
+  if (!local_conn && ip_cnt > MULTI_LOGIN && str != PUBLIC_IP && !BAN_D->is_netclub(str)) {
     write("对不起，" + MUD_NAME + "限制相同ip多重登录。\n");
     call_out("destruct_ob", 0, ob);
     return;

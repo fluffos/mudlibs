@@ -70,3 +70,23 @@ python3 scripts/mudclient.py 127.0.0.1 40019
   提供真实的连线 IP 格式，而本库的地址黑名单检查恰好依赖这个格式——
   这是 WASM 驱动本身的已知限制，不是本库的 bug，原生（native）驱动下
   完全没有这个问题。
+
+## 管理员账号 / Admin account
+
+- **ID**: `fluffos`
+- **普通密码 / Password**: `Mud@2026`（平时登录用这个）
+- **管理密码 / Admin(recovery) password**: `Mud@2026admin`
+- **中文名 / Display name**: 浮浮（姓"浮"名"浮"）
+- **权限 / Level**: `(boss)`（本库的最高级别，高于 `(admin)`），通过
+  `/adm/etc/wizlist` 授予（`fluffos (boss)`；
+  `/adm/daemons/securityd.lpc` 读取）。
+- 已验证 `update /adm/daemons/band.lpc` 重新编译成功、`goto` 可用；
+  角色已完成出生流程（choose/washto/born 扬州人氏），`score` 正常。
+- **注意**：本库中新账号 30 分钟内用 `quit` + `y` 退出会**自删账号**，
+  且删除巫师账号时 securityd 会同步把该账号从 wizlist 中移除——
+  不要用这种方式退出 fluffos。
+- **警告**：对外公开架设前请务必修改这两个密码。
+
+存档文件（登录凭据 + 角色数据）：
+`work/data/login/f/fluffos.o`、`work/data/user/f/fluffos.o`
+（以及运行时生成的 `work/data/user/f/fluffos.package.o`）。

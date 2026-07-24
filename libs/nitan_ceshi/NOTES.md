@@ -393,3 +393,49 @@ batch.
   within a single short-lived harness run (startup-uptime gate), and
   would likely hit the query_ip_number() limitation next even if it
   were**.
+
+## WASM-enablement pass (2026-07-23): loopback-allow + uptime bypass + admin seeding
+
+Gates patched (loopback = `127.0.0.1`, any `127.*`, or an empty/malformed
+non-dotted-quad string, which is what current WASM builds return):
+
+- `adm/daemons/logind.lpc` `logon()` (~line 96) — the `uptime() < 30`
+  startup-grace destruct now only applies to non-loopback connections.
+- `adm/daemons/logind.lpc` `logon()` (~line 180) — the per-IP
+  multi-login cap (`iplimit > 12 || > 4`) now exempts loopback.
+- `adm/daemons/band.lpc` `is_banned()` — loopback/malformed short-circuit
+  return 0. IMPORTANT: the original returned **1 (banned)** for any
+  malformed IP (`sscanf(site,"%s.%s.%s.%s") != 4 → return 1`), which is
+  exactly what killed WASM logins; malformed now returns 0.
+- `adm/daemons/band.lpc` `is_multi_login()` — loopback always allowed.
+- Left as-is: the `blocks_ip()` invalid-ID spam blocker (its enforcement
+  at `logon()` is already commented out in this lib) and the
+  30-minute new-account quit-retention gate in `cmds/usr/quit.lpc`
+  (game design, per policy).
+
+Admin account: `fluffos`, normal password `Mud@2026`, 管理密码 (recovery
+password, must differ from normal per this lib's rules) `Mud@2026admin`,
+Chinese name 浮浮 (surname 浮 + given 浮 + full-name re-confirmation step).
+Granted `(admin)` via `/adm/etc/wizlist`. Verified: registration via the
+real flow (目前权限：(admin) at entry), reconnect, and
+`update /adm/daemons/band.lpc` succeeds. Saves at
+`data/login/f/fluffos.o` + `data/user/f/fluffos.o` (untracked but not
+gitignored — orchestrator must add). Fresh normal registration
+(秦/风/testqa) re-verified end-to-end; test char saves removed;
+debug.log clean apart from the documented pre-existing quest
+`set_information` noise.
+
+### Fail-closed retrofit (2026-07-24)
+
+The `uptime()` startup-grace bypass and the per-IP multi-login cap
+exemption above originally applied their loopback carve-out backwards in
+one respect: both required `sscanf(ipname, ...) == 4` to SUCCEED before
+exempting anything, which meant a malformed/unparseable IP (falling that
+parse) skipped the gate too — i.e. malformed was fail-open by omission,
+the same class of bug as the other libs' explicit `!stringp` clauses.
+`band.lpc`'s `is_banned()`/`is_multi_login()` had the more usual explicit
+`!stringp(...)`-as-loopback form. All four tightened to strict loopback
+only (`"127.0.0.1"`, `"::1"`, `"127."` prefix); `is_banned()`'s original
+fail-safe (malformed format ⇒ banned, `return 1`) restored below the
+carve-out. Re-verified loopback fluffos login, `look`, `score`,
+`update /adm/daemons/band.lpc`, and quit all still work after tightening.

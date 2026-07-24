@@ -54,3 +54,22 @@ python3 scripts/mudclient.py 127.0.0.1 40001
 - WASM 版本经过完整测试：可以正常启动，注册流程（英文代号、中文姓名、
   密码、邮箱、属性分配、性别）全部走完，能进入实际游戏世界，look/score/
   quit 均正常，是可以完整体验的。
+
+## 管理员账号 / Admin account
+
+- **ID**: `fluffos`
+- **密码 / Password**: `Mud@2026`
+- **中文名 / Display name**: 浮浮
+- **权限 / Level**: `(admin)`（最高级别），通过 `/adm/etc/wizlist` 授予
+  （`fluffos (admin)` 一行；`/adm/daemons/securityd.lpc` 读取该文件判定
+  `wizardp()`/权限等级）。
+- 已验证：`update /adm/daemons/securityd.lpc` 重新编译成功（巫师 ACL 生效）。
+- 本库没有基于连线地址的封禁/限流机制（未发现 ban/site 限制守护进程、
+  `uptime()` 启动保护或按 IP 节流的逻辑），因此本次 WASM 化改造中第 1-3
+  项（loopback 放行、uptime 绕过、防洪节流豁免）均不适用，只需要第 4 项
+  管理员账号播种。
+- **警告**：对外公开架设前请务必修改此密码。
+
+存档文件（登录凭据 + 角色数据）：
+`work/data/login/f/fluffos.o` 与 `work/data/user/f/fluffos.o`（当前未被
+gitignore 排除，但也未被追踪 —— orchestrator 需要 force-add 这两个文件）。

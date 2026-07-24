@@ -116,3 +116,49 @@ registration test (Chinese surname + given name reaching the next prompt).
   playable under WASM** (same cosmetic, non-blocking IP-lookup error as
   `mohuanshiji`, not the login-blocking shape seen in `mhxy`/
   `moniHuafu`).
+
+## WASM-enablement pass (2026-07-24): loopback-allow + admin seeding
+
+Gates patched (same 西游记-lineage shapes as `mhxy`/`mohuanshiji`;
+loopback = `127.0.0.1`, any `127.*`, or an empty/malformed
+non-dotted-quad string, which is what current WASM builds return):
+
+- `adm/daemons/band.lpc` — `is_banned()`, `create_char_banned()`,
+  `is_strict_banned()` short-circuit return 0 for loopback;
+  `allow_multi_login()` returns 1000 for loopback.
+- `adm/daemons/logind.lpc` `encoding()` — new `local_conn` flag; the
+  `!ip_name` destruct and the "Non_number" IP-character-scan destruct are
+  skipped for loopback/malformed IPs.
+- `adm/daemons/ipd.lpc` `seek_ip_address()` — returns "本地连接" for
+  loopback/short IPs instead of the `explode(ip,".")[1]` out-of-bounds
+  throw (previously cosmetic-only under WASM here, now gone entirely).
+- `adm/daemons/securityd.lpc` `match_wiz_site()` — loopback always passes
+  wizard site restrictions.
+- No `uptime()` startup gate or reconnect throttle in this lib (checked);
+  the `kickout_time` 10-minute punishment timer kept (game design).
+
+Admin account: `fluffos`, 登陆密码 `Mud@2026`, 管理密码 `Mud@2026admin`
+(this lineage sets the admin/recovery password FIRST and requires the two
+to differ), Chinese name 浮浮, granted `(admin)` via `/adm/etc/wizlist`
+(normalized CRLF→LF). Verified: real-flow registration reaching 南城客栈,
+re-login ("您使用了登陆密码成功登陆！"), `update /adm/daemons/band.lpc`
+succeeds. Saves at `data/login/f/fluffos.o` + `data/user/f/fluffos.o`
+(untracked, not gitignored — orchestrator must add; note this lib also
+ships a large pre-existing tracked player base under `data/user/`, which
+was left untouched). Fresh normal registration (秦风/testqa) re-verified
+end-to-end and its saves removed. debug.log: only transient cold-cache
+"Eval interrupted / Too long evaluation" lines during the first world
+entry (lazy compiles of big content files; a warm-cache login+look+score
+session afterwards added zero new error lines) — same known mega-content
+shape as `mhxy`, not introduced by this pass.
+
+### Fail-closed retrofit (2026-07-24)
+
+Same correction as the sibling `mhxy`/`mohuanshiji`: the loopback
+carve-out originally ALSO treated any empty/non-string/unparseable IP as
+trusted-local (fail-open, defensive against an older WASM
+`query_ip_number()` bug now fixed upstream). Tightened to strict loopback
+only across `band.lpc` (×4), `securityd.lpc`'s `match_wiz_site`,
+`ipd.lpc` (falls back to "未知地区" for unparseable input instead of
+"本地连接"), and `logind.lpc`'s `local_conn` flag. Re-verified loopback
+login, `look`, `update`, and quit all still work after tightening.

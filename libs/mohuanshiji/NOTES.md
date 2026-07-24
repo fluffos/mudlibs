@@ -498,3 +498,42 @@ pass (97.4%)**. Remaining 219 failures triaged by category:
   `quit` worked. Status: **fully playable under WASM** (with one
   cosmetic, non-blocking IP-lookup error logged, same driver-level root
   cause as `mhxy`'s WASM limitation but not blocking here).
+
+## WASM-enablement pass (2026-07-23): loopback-allow + admin seeding
+
+Gates patched (loopback = `127.0.0.1`, any `127.*`, or an empty/malformed
+non-dotted-quad string, which is what current WASM builds return):
+
+- `adm/daemons/band.lpc` — `is_banned()` (~line 149),
+  `create_char_banned()` (~168), `is_strict_banned()` (~187)
+  short-circuit return 0 for loopback; `allow_multi_login()` (~242)
+  returns 1000 for loopback.
+- `adm/daemons/logind.lpc` `encoding()` — new `local_conn` flag; the
+  `!ip_name` destruct and the "Non_number" character-scan destruct
+  (~lines 158-175) are skipped for loopback/malformed IPs.
+- `adm/daemons/ipd.lpc` `seek_ip_address()` — returns "本地连接" for
+  loopback/short IPs instead of the (previously cosmetic-only under WASM)
+  `explode(ip,".")[1]` out-of-bounds throw.
+- `adm/daemons/securityd.lpc` `match_wiz_site()` (~line 97) — loopback
+  always passes wizard site restriction.
+- No `uptime()` startup gate, no multi-login cap use, and no reconnect
+  throttle exist in this lib's logind (checked).
+
+Admin account: `fluffos` / `Mud@2026`, Chinese name 浮浮, granted
+`(admin)` via `/adm/etc/wizlist` (file normalized CRLF→LF). Verified:
+registration via the real flow (login banner even shows 目前权限：(admin)),
+re-login, `update /d/city/kezhan.lpc` succeeds. Saves at
+`data/login/f/fluffos.o` + `data/user/f/fluffos.o` (not gitignored).
+Fresh normal registration (秦风/testqa, female branch) re-verified
+end-to-end and the test char removed; debug.log clean.
+
+### Fail-closed retrofit (2026-07-24)
+
+The loopback carve-out above originally ALSO treated any empty/
+non-string/unparseable IP as trusted-local (fail-open, defensive against
+an older WASM `query_ip_number()` bug now fixed upstream). Tightened to
+strict loopback only (`"127.0.0.1"`, `"::1"`, `"127."` prefix) across
+`band.lpc` (×4), `securityd.lpc`'s `match_wiz_site`, `ipd.lpc` (falls back
+to "未知地区" for unparseable input instead of "本地连接"), and
+`logind.lpc`'s `local_conn` flag. Re-verified loopback login/look/`update`/
+quit all still work after tightening.

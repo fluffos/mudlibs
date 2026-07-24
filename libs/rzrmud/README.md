@@ -56,3 +56,18 @@ python3 scripts/mudclient.py 127.0.0.1 40020
   体验。日志里有一条无害的、不影响游戏的报错（进入游戏时查询连线 IP
   归属地信息失败），这是 WASM 驱动本身对连线 IP 格式支持不完整导致的
   已知限制，不影响实际登录和游玩。
+
+## 管理员账号 / Admin account
+
+- **ID**: `fluffos`
+- **登陆密码 / Password**: `Mud@2026`（平时登录用这个）
+- **管理密码 / Admin(recovery) password**: `Mud@2026admin`
+  （本库注册时先设管理密码，且登陆密码不能与管理密码相同）
+- **中文名 / Display name**: 浮浮
+- **权限 / Level**: `(admin)`（最高级别），通过 `/adm/etc/wizlist` 授予
+  （`fluffos (admin)`；`/adm/daemons/securityd.lpc` 启动时读取）。
+- 已验证 `update /adm/daemons/band.lpc` 重新编译成功。
+- **警告**：对外公开架设前请务必修改这两个密码。
+
+存档文件（登录凭据 + 角色数据）：
+`work/data/login/f/fluffos.o` 与 `work/data/user/f/fluffos.o`。

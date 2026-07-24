@@ -56,3 +56,16 @@ python3 scripts/mudclient.py 127.0.0.1 40051
   WASM 版驱动明确不支持真实 DNS 解析，导致第一次登录时的权限检查报错，
   卡在角色名提示之前。这是 WASM 驱动本身的已知限制，不是本库的 bug——
   同一段代码在原生（native）驱动下已反复验证可以完整走完注册流程。
+
+## 管理员账号 / Admin account
+
+- **ID**: `fluffos`
+- **密码 / Password**: `Mud@2026`（满足本库"大写+小写+数字、至少6位"的密码规则）
+- **中文名 / Display name**: 浮浮
+- **权限 / Level**: `(admin)`（最高级别），通过 `/adm/etc/wizlist` 授予
+  （`fluffos (admin)` 一行；`/adm/daemons/securityd.lpc` 启动时读取）。
+- 已验证 `update /adm/daemons/band.lpc` 重新编译成功（巫师 ACL 生效）。
+- **警告**：对外公开架设前请务必修改此密码。
+
+存档文件（登录凭据 + 角色数据）：
+`work/data/login/f/fluffos/fluffos.o` 与 `work/data/user/f/fluffos/fluffos.o`。
