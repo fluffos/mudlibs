@@ -252,3 +252,309 @@ Four driver instances started/killed by exact PID during this pass
 (one extra cycle for the diagnostic instrumentation added and then
 removed while root-causing the restore bug). Test character `ceshiba`'s
 saves removed afterward; `fluffos`'s kept.
+
+## 深度功能测试 / Deep functional test (2026-07-24)
+
+Round-two deep playthrough pass (see `libs/bxsj/NOTES.md` and
+`libs/xiyouji/NOTES.md`'s own "深度功能测试" sections for the worked
+examples this follows — both found real quit-time/first-visit crashes
+invisible to every earlier verification layer). This lib has no
+`doc/help/` directory at all (`work/doc/` only has `wiz/`, and
+`cmds/usr/help.lpc`'s `DEFAULT_SEARCH_PATHS` point at `/doc/help/`,
+`/doc/skill/`, `/doc/efuns/`, `/doc/lfuns/`, `/doc/applies/` — none of
+which exist in this archive), so there is no shipped `help newbie` to
+read; planning was done by reading room/NPC `.lpc` source directly, per
+the checklist's own fallback instruction. Native driver (`build-debug`),
+played as an ordinary new player through registration, exploration,
+safe sparring, the organic apprentice/class-join path, a real `quit`,
+and a real-wall-clock-gap reconnect.
+
+**Test character** (kept, not cleaned up, as playthrough evidence): id
+`shenluoy`, Chinese name 沈落雁 (male), password `TestPass1`. State at
+end of pass: 【方士】(alchemist-class apprentice of 陈维侠/Chen Weixia),
+skills `dodge` (0/8) and `parry` (0/2) learned passively from the
+sparring fight below, 30/30 精气神, food/water ticking down normally,
+empty inventory, located at 小客栈 (its saved `startroom`). Saves:
+`work/data/user/s/shenluoy.o`, `work/data/login/s/shenluoy.o`.
+
+### Bug found and fixed: 4 rooms reference their own objects via the wrong subdirectory, crashing the town square's first-ever visit every boot
+
+**New bug shape for this project's catalog** — not the §7.16 stale-
+timestamp class, not the §7.17 reset/init-reentrancy class. This is a
+plain wrong-path typo (per §6.6's "pre-existing typo classes" family)
+but promoted here because of its severity: it crashes `/d/snow/square`
+("广场中央", the town's central 4-way hub, one hop from the inn in every
+direction) on literally the first move any fresh character makes past
+the starting room, on every fresh boot.
+
+- **Symptom** (reproduced live, pre-fix, fresh boot, fresh character):
+  walking `小客栈` → `east` (广场) → `east` (广场中央) throws
+  ```
+  执行时段错误: *Bad argument 1 to EFUN call_other()
+  Expected: object, string, array,  Got: int(0).
+  程式: /std/room.lpc:76
+  物件: /d/snow/square
+  呼叫调用错误在:
+  command_hook()            /feature/char/command.lpc:37
+  main()                    /cmds/std/go.lpc:65
+  create()                  /d/snow/square.lpc:32
+  setup()                   /std/room.lpc:362
+  reset()                   /std/room.lpc:101
+  make_inventory()          /std/room.lpc:76
+  ```
+  The crash is caught (driver error handler), so the room is still
+  entered and looks superficially fine on screen — exactly the class of
+  bug `quit`-and-eyeball testing (and even a `look` right after) will
+  never catch; only `debug.log` shows it. Because it fires on the
+  room's *first* `reset()` of the process's life, once the object is in
+  memory every later visit is clean — invisible to boot-log watching and
+  to any registration smoke test that doesn't specifically walk a fresh
+  character past the starting room's immediate neighbors.
+- **Root cause**: `d/snow/square.lpc:14` declares its `"objects"`
+  mapping with `__DIR__ "obj/pot": 1`. `square.lpc` lives directly under
+  `/d/snow/`, so `__DIR__` there is `/d/snow/`, and `/d/snow/obj/pot`
+  **does not exist** — this archive keeps ALL of `d/snow`'s plain
+  (non-NPC) object files under `/d/snow/npc/obj/`, not `/d/snow/obj/`
+  (confirmed against the pristine `raw/` extraction too — this is a
+  pre-existing authorial typo, not a conversion artifact). `std/
+  room.lpc`'s `make_inventory()` does `ob = new(file); if
+  (ob->violate_unique()) ...` with no null-check between the two —
+  `new()` on a nonexistent file returns `0`, and `0->violate_unique()`
+  is exactly the "Got: int(0)" `call_other()` crash above. Every other
+  `d/snow` file that references `__DIR__ "obj/..."` lives under `/d/
+  snow/npc/`, where the path resolves correctly (confirmed by grepping
+  every `__DIR__ "obj/` hit in the tree) — `square.lpc`, plus 3 more
+  files living directly under `/d/snow/` (not `/d/snow/npc/`), all have
+  the identical wrong-subdirectory typo:
+  - `d/snow/square.lpc:14` — `"objects"` mapping entry `obj/pot`
+    (**the one live-reproduced above** — 广场中央 is unavoidable
+    starting-zone traffic).
+  - `d/snow/fireplace.lpc:18` — `"objects"` mapping entry `obj/
+    woodsword` (same `make_inventory()` crash shape, on first entry to
+    `大灶内`, a hideable side-room off the inn's kitchen).
+  - `d/snow/kitchen.lpc:16` — `"objects"` mapping entry `obj/dumpling`
+    (same shape, a private-house kitchen reachable by climbing a wall
+    from `/d/snow/epath`).
+  - `d/snow/ruin1.lpc:62` — `ob = new(__DIR__ "obj/hairpin"); ob-
+    >move(this_player());` inside `do_search()`'s "search 杂草" player
+    action (only active 10:00–13:00 game-time) — same `new()`-returns-0
+    root cause, but the crash site is `ob->move(...)` instead of `ob-
+    >violate_unique()` since this call bypasses `make_inventory()`
+    entirely; not live-reproduced (would require hitting the exact
+    in-game hour window) but fixed by the identical code-shape match,
+    consistent with this project's standing "port the sibling's proven
+    fix" practice (AGENTS.md §2.1) — flagged here as the one-of-four not
+    directly reproduced live.
+- **Fix**: change all 4 to the correct `npc/obj/...` subpath (the actual
+  location of `pot.lpc`/`woodsword.lpc`/`dumpling.lpc`/`hairpin.lpc`,
+  confirmed present on disk in every case — this is a wrong path to
+  *existing* content, not missing content, so fixing the reference is
+  correct per AGENTS.md's "missing zone content is an archive gap,
+  don't fabricate" vs. "wrong path" distinction):
+  ```diff
+  -    __DIR__ "obj/pot": 1,
+  +    __DIR__ "npc/obj/pot": 1,
+  ```
+  (and the same `obj/` → `npc/obj/` change at `fireplace.lpc:18`,
+  `kitchen.lpc:16`, `ruin1.lpc:62`).
+- **Verified**: post-fix, fresh driver restart, fresh walk `小客栈` →
+  `east` → `east` reaches `广场中央` cleanly, `大水缸(Pot)` now visible
+  in the room's object listing (`look` output), `debug.log` grepped for
+  `error:`/`fatal`/`Too deep recursion`/`Too long evaluation` after the
+  full session (registration → exploration → sparring → apprentice →
+  acquire → `quit`) — **zero hits**. `fireplace.lpc`/`kitchen.lpc`/
+  `ruin1.lpc` fixed by code-shape match and code-read confirmation
+  (file existence at the corrected path checked for each) but not
+  independently walked to live, given the time budget for this pass —
+  a future pass reaching `大灶内`/private-house `厨房`/`search 杂草` at
+  10–13点 in `破旧大宅` should spot-check these three specifically.
+
+### What was tested and confirmed working
+
+- **Registration**: one real Chinese name (沈落雁/Shenluoy, male),
+  reaching 小客栈, innkeeper greeting correctly (already verified in
+  earlier passes above, re-confirmed here as the entry point for this
+  playthrough).
+- **Exploration**: walked 小客栈 → 广场(west) → 广场中央 → 广场(north,
+  child NPCs) → back through 广场 → 广场(west) → 广场(southwest) →
+  街道(wstreet1) → 私塾(school, teacher+alchemist NPCs). Room
+  descriptions, exits, and day-time flavor text (太阳正高挂在东方的天空
+  中 etc.) all correct throughout.
+- **Character info**: `score` (title/attributes/精气神 bars/食物饮水/
+  经验评价) and `hp` both correct at every stage (fresh, post-sparring,
+  post-apprentice); `i`/`skills` correct throughout.
+- **Safe sparring** (checklist step 5): this lib's `cmds/std/fight.lpc`
+  implements safe/lethal combat as a `query("civilized")` branch per
+  target, not a dedicated training-dummy object — `"civilized"` is set
+  to `1` generically by every human-race daemon's `initialize()`
+  (`daemon/race/human.lpc` etc.; `daemon/race/beast.lpc` pointedly has
+  the same line **commented out**, so non-human "beast"-race NPCs would
+  get the real `kill_ob()` path instead — none exist in this archive's
+  reachable content to confirm live). Used `fight child` against one of
+  the two `小孩`(child) NPCs in 广场(north) — both `child1.lpc`/
+  `child2.lpc` have `accept_fight()` return `1` unconditionally, an
+  explicit "always spar" village-kid pair, matching the checklist's
+  "safe sparring before a real fight" mechanism. Produced a normal
+  turn-by-turn bout, child fled crying ("哇地一声哭了起来：你打我！妈妈
+  ！") then resumed playing, both fighters ended at full 精/气/神 —
+  confirmed non-lethal, `combat`/`unarmed mastery` exp gained, and (a
+  side finding, not tested for further depth) `dodge`/`parry` skills
+  were silently auto-granted at level 0 purely from having fought once
+  — this lib's skill-acquisition-by-doing path, separate from the
+  broken `acquire` NPC-teacher path below.
+- **Sect/class-join mechanism** (checklist step 6, sect half): the
+  `apprentice <NPC>` command is this lib's class-join mechanism (no
+  separate menpai/sect system exists in this small archive — see intro
+  section above, 564 raw files vs. es1_win's ~8000+). Confirmed the full
+  2-step organic flow live: `feature/char/master.lpc`'s
+  `accept_apprentice()` is deliberately unimplemented in the base class
+  (commented out, so `ob->accept_apprentice(me)` on any NPC that doesn't
+  override it silently `call_other`s to nothing and returns 0) —
+  **`d/snow/npc/alchemist.lpc` (陈维侠) is the ONLY NPC in the entire
+  codebase that overrides `accept_apprentice`/`init_apprentice`**
+  (confirmed via `grep -rl accept_apprentice`), so it is also the only
+  reachable class-join path in this archive. First `apprentice chen`
+  attempt correctly fails with a queued multi-line persuasion dialogue
+  (`陈维侠说道：拜我为师？呵呵...` → ... → an internal `set_flag`
+  closure that flips a `pending/alchemist` temp flag once the dialogue
+  finishes draining over several heartbeats); a SECOND `apprentice chen`
+  after waiting for the chat queue to drain succeeds
+  (`你跪下来恭恭敬敬地向陈维侠磕了四个响头，叫道：师父！`), title
+  changes from `【 平民 】` to `【 方士 】`, `score` gains a new
+  `alchemy` score category. This 2-attempt "convince them first" shape
+  is a legitimate designed mechanic, not a bug — worth recording so a
+  future tester doesn't mistake the first `notify_fail` for a dead end.
+
+### Finding, not a crash bug: the organic skill-teacher path is a dead end for every NPC in this archive (documented, not fabricated)
+
+Checklist step 6's other half — "learn at least one skill via the
+organic NPC-teacher path" — **could not be completed live, and static
+analysis says it cannot succeed for ANY NPC in this codebase, not just
+the ones tried**. This is a content-completeness gap, not a crash, so
+per AGENTS.md's "missing zone content is an archive gap, not a bug...
+don't fabricate" precedent (§7.14) this was **left as documented, not
+implemented** — filling in real skill-teaching values (which skills,
+what levels, what cost/gating) would be inventing game balance not
+present in the source, unlike the wrong-path bug above which restores
+an already-authored reference.
+
+- `cmds/std/acquire.lpc`'s `acquire <skill> from <NPC>` command (the
+  only skill-learning verb in this archive — there is no separate
+  `learn` command) always ends in `return ob->acquire_skill(me,
+  skill)`. `grep -rl acquire_skill` across the whole tree finds exactly
+  **one** implementation in the entire codebase,
+  `d/snow/npc/alchemist.lpc`:
+  ```lpc
+  int acquire_skill(object ob, string skill) {
+    switch (skill) {
+      case "alchemy-medication":
+      case "alchemy-wealth":
+      case "alchemy-magic":
+      case "alchemy-immortality":
+      default:
+    }
+    return 0;
+  }
+  ```
+  every case (including the real alchemy skills 陈维侠 himself knows,
+  set via `set_skill()` in his own `create()`) falls through to an empty
+  body and an unconditional `return 0` — this is a stub/placeholder, not
+  wired to actually call `me->improve_skill()`/`advance_skill()` for
+  any skill, ever. `d/snow/npc/teacher.lpc` (王怀芝, teaches `literate`
+  per its `set_skill("literate", 60)` and its room's flavor text) has no
+  `acquire_skill` override at all, and (per the apprentice finding
+  above) no `accept_apprentice` either, so he can never accept a student
+  in the first place.
+- **Live-verified** (post successfully becoming 陈维侠's apprentice):
+  `acquire alchemy-medication from chen` → the flavored master-request
+  message prints correctly (`你向陈维侠磕头行礼，恭恭敬敬地说道：师父在
+  上，求您传授徒儿「alchemy-medication」！`) then
+  `看起来陈维侠不想教你这项技能` (the command's own generic failure
+  message) — confirming the stub really does refuse unconditionally,
+  live, not just on paper. Also tried `acquire literate from wang`
+  (未曾拜师/never apprenticed to him) — same generic refusal, expected
+  given no `accept_apprentice` exists for him either.
+- Net effect: a new player can walk the entire intended "become a
+  disciple" ritual (the multi-stage persuasion dialogue, the kowtow
+  message, the class-title change, the `score` category) and it *reads*
+  complete, but the promised payoff — actually learning a skill from
+  your new master — never fires for anyone, for any skill, in this
+  archive as shipped. This is consistent with the intro section's
+  characterization of this lib as a genuinely smaller/less-finished
+  codebase than its `es1_win`/`esI` siblings, not a regression from
+  conversion.
+
+### Explicitly not verified live (time/reachability budget), stated per §10.7 item 6
+
+- **Shop purchase**: `buy <item> from <NPC>` was exercised live against
+  `店小二`(waiter) in 小客栈, but a fresh character starts with **zero
+  money** (no starting-money grant found anywhere in `logind.lpc`/
+  `CHAR_D->setup_char`) and this archive's only discovered in-world
+  income source is a day-labor job at `货栈`(store, `d/snow/store.lpc`)
+  run by `工头`(foreman) — moving crates for 5 coin each. `buy dumpling
+  from waiter` correctly hit the `can_afford()` rejection path
+  (`你身上的钱不够`), proving that half of the transaction code live,
+  but earning money first (and then a full successful `buy` →
+  `deliver_merchandise` → `handover` round trip) was not pursued given
+  this pass's time budget. The underlying code
+  (`feature/npc/vendor.lpc`, `d/snow/npc/waiter.lpc`) was read and
+  appears structurally sound (mirrors the same pattern verified working
+  in other libs' NOTES).
+- **Real combat and death/respawn**: not reached live. `fight.lpc`'s
+  lethal branch only triggers against NPCs whose race daemon does NOT
+  grant `"civilized"` (every human-race NPC gets it automatically; see
+  above) — no non-human/"beast"-race NPC exists anywhere in this
+  archive's reachable content to test that branch against, and the
+  only other candidate hostile content (`d/goat`, 野羊山 bandits) is
+  permanently unreachable: `d/snow/ngate.lpc`'s only northward exit
+  clones `/d/domain/snow2goat`, a file that **does not exist anywhere
+  in the archive** (confirmed — genuinely missing content, not a typo:
+  no `snow2goat` file exists under any plausible path in `raw/`
+  either), and is additionally blocked by 4 `garrison` NPCs + 1
+  `lieutenant` at the same gate whose `intercept()` unconditionally
+  refuses any `go north` with an in-character "盗匪出没" excuse. Reaching
+  real combat would require deliberately attacking one of these
+  civilized guard NPCs (triggering `soldier_assist` group retaliation)
+  purely to force the non-civilized `kill_ob` path — assessed as a
+  time-costly, one-way (character-risking) grind not justified by this
+  pass's remaining budget, so explicitly left unverified rather than
+  attempted partially. `d/hell` (阴曹地府, the death realm) exists and
+  is presumably the intended post-death destination
+  (`DEATH_ROOM`/`user->is_ghost()` handling seen in `logind.lpc`'s
+  `enter_world()`) but was not reached or reviewed further.
+
+### State persistence across quit/reconnect (checklist step 8)
+
+`quit` (typed explicitly, not a connection timeout) produced the
+expected `欢迎下次再来！` message; `debug.log` grepped immediately after
+(`error:`/`fatal`/`Too deep recursion`/`Too long evaluation`) —
+**zero hits**, across the whole session including the fix verification,
+the sparring fight, and both apprentice attempts. Waited a real ~2.5
+minutes of wall-clock time (backgrounded `sleep`, confirmed elapsed via
+`date` before/after, not simulated), then reconnected with `shenluoy`/
+`TestPass1` — this exercised the actual save/restore path (the
+"目前权限：(player)" banner reprinted, confirming a real reload from
+disk rather than the same-process "linkless reconnect" seen during
+mid-session probing, where a dropped-but-not-quit connection can rejoin
+with just id+password and skip straight back into the still-live
+object). Post-reconnect `score`/`skills` showed 【方士】 title and the
+`alchemy` score category, `dodge`/`parry` skills, and 精气神/食物/饮水
+all correctly persisted; location correctly returned to `小客栈` (NOT
+`私塾`, where the character was standing at `quit` time) — confirmed by
+reading `cmds/usr/quit.lpc`/`cmds/usr/save.lpc` that this is **by
+design**, not a bug: only rooms flagged `"valid_startroom"` (e.g. 小客栈
+itself) can ever become a saved login point via the separate `save`
+command, and plain `quit` never updates `"startroom"` on its own — so
+relogging back at the inn rather than at the last-visited room is
+correct, intended behavior for this codebase, not a state-loss bug.
+
+### Process hygiene for this pass
+
+Two driver instances (pre-fix reproduction, post-fix verification),
+started with `setsid nohup ... & disown`, killed by exact recorded PID
+(`1377932`, then `1387464`) — both confirmed dead via `ps`/`ss` after
+kill, not `pkill -f`. `log/debug.log` cleared once between the two runs
+to isolate the pre/post-fix comparison; no other scratch/instrumentation
+files were created. `shenluoy`'s saves kept as playthrough evidence per
+this pass's own test-character convention (matching `xiyouji`'s
+`shenqy`/`shenqf`).
