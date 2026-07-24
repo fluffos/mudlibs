@@ -97,3 +97,42 @@ Same shape as `shujian2008`'s own re-verification pass this same day
    Not patched — known driver-side wasm limitation, not a mudlib bug
    (native login verified working above). See `shujian2008/NOTES.md`
    for the full technical writeup, not repeated here.
+
+## WASM-enablement pass (2026-07-23)
+
+Same codebase as `shujian2008` — its patched `adm/daemons/{logind,sited,
+band}.lpc` were ported wholesale (files were byte-identical at HEAD) and
+re-verified here. See shujian2008's NOTES for the per-gate detail:
+
+1. Loopback-allow (empty/non-string/`127.*` IP): logind `logon()`
+   flood cap, logind `get_passwd()` wrong-password per-IP lockout,
+   sited `is_valid()` (the former WASM blocker + wizard address
+   restriction), sited `is_multi()` throttle, band `is_banned()`.
+2. Uptime gate: none present.
+3. Admin seeded: `fluffos` / `Mud@2026` / 浮浮 → `(admin)` via
+   `/adm/etc/wizlist` (was empty). Save files:
+   `work/data/login/f/fluffos.o`, `work/data/user/f/fluffos.o`.
+   Verified: login lands in 巫师休息室, `update /cmds/imm/update.lpc`
+   succeeds.
+4. Retest: fresh registration (sjtxqf/秦风, deleted after test) into
+   武馆前院 with look/score/quit OK. debug.log: one pre-existing content
+   error unrelated to login (`baoshid.lpc choose_baosi()` returns 0 →
+   `call_other` on 0 when `/d/wudang/npc/th.lpc` loads — §7.14
+   factory-call class, fires on random NPC load, also present before
+   this pass).
+
+### Retrofit: fail-closed loopback check (2026-07-24)
+
+The loopback-allow gates above were originally written per the (now
+superseded) defensive instruction to also treat an empty/non-string/
+malformed `query_ip_number()` result as loopback, since older WASM
+driver builds returned garbage. That driver bug is now fixed upstream
+(`query_ip_number()`/`resolve()` return real values under WASM too), so
+the "malformed IP = trust it" fallback was a fail-open bypass with no
+remaining justification. Tightened every gate listed above to the
+strict pattern: loopback is ONLY `ip == "127.0.0.1"`, `ip == "::1"`, or
+a leading `"127."` prefix — a non-string/empty/malformed IP is now
+treated as untrusted/remote and subject to the gate normally, not
+silently allowed through. Retested: fluffos login (127.0.0.1, real
+value under the current driver) still passes every gate; debug.log
+stayed clean of `denied`/`undefined function`/`error in error handler`.

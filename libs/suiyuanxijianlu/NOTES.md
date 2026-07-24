@@ -582,3 +582,54 @@ throughout (archives #92-95) — none were touched.
    it's worth flagging even though it isn't the already-catalogued
    `query_ip_number()` limitation. Not patched, per the task's "note,
    don't force a fix for wasm-specific gaps" guidance.
+
+## WASM-enablement pass (2026-07-24)
+
+Standard four-change pass (AGENTS.md §1.3b/§1.3e/§1.5):
+
+1. **Loopback-allow** (empty/non-string/`127.*` IP treated as loopback):
+   - `adm/daemons/logind.lpc` `login()` — `BAN_D->is_banned()` gate and
+     the `ip_cnt >= 20` same-host cap both skipped for loopback.
+   - `adm/daemons/band.lpc` `is_banned()` — loopback/localhost/malformed
+     sites never banned. (The `sited` is_valid/is_multi calls in this
+     lib were already commented out upstream.)
+2. **Uptime gate**: none present.
+3. **`cmds/usr/uptime.lpc` LASTCRASH crash FIXED** (was documented-only):
+   `write(read_file("/log/static/LASTCRASH"))` now guarded with
+   `stringp()` (§7.9 fresh-checkout bomb — log/ is gitignored, so every
+   fresh checkout/WASM bundle lacked the file and `write(0)` killed the
+   whole login chain before the ID prompt; this was the lib's documented
+   WASM blocker).
+4. **Admin seeded**: `fluffos` / `Mud@2026` / 浮浮 → `(admin)` appended
+   to `/adm/etc/wizlist`. Save files: `work/data/login/f/fluffos.o`,
+   `work/data/user/f/fluffos.o` (data/ not gitignored). Verified:
+   `update /cmds/usr/uptime` → 重新编译成功 (conveniently recompiling
+   the patched file itself cleanly).
+5. Retest: fresh registration (syqfc/秦风, deleted after test) into
+   随缘客栈 with look/score/quit OK. debug.log: the only runtime error
+   was `/topten/source: lstat failed` (caught; §7.11 missing-runtime-dir
+   class — `work/topten/` is gitignored churn; created
+   `work/topten/source/` locally). Removed the runtime-regenerated
+   `adm/etc/banned_name` (the lib rewrites it from its built-in list on
+   demand — NOT the yueyingqiyuan shipped-content case; nothing was
+   deleted from git).
+   Flow gotcha documented for future scripting: after the GB/BIG5
+   answer there is a hidden "Press Enter to Continue..." `input_to`
+   (easily lost in the mudlist banner) — the first line sent after `gb`
+   is swallowed by it.
+
+### Retrofit: fail-closed loopback check (2026-07-24)
+
+The loopback-allow gates above were originally written per the (now
+superseded) defensive instruction to also treat an empty/non-string/
+malformed `query_ip_number()` result as loopback, since older WASM
+driver builds returned garbage. That driver bug is now fixed upstream
+(`query_ip_number()`/`resolve()` return real values under WASM too), so
+the "malformed IP = trust it" fallback was a fail-open bypass with no
+remaining justification. Tightened every gate listed above to the
+strict pattern: loopback is ONLY `ip == "127.0.0.1"`, `ip == "::1"`, or
+a leading `"127."` prefix — a non-string/empty/malformed IP is now
+treated as untrusted/remote and subject to the gate normally, not
+silently allowed through. Retested: fluffos login (127.0.0.1, real
+value under the current driver) still passes every gate; debug.log
+stayed clean of `denied`/`undefined function`/`error in error handler`.

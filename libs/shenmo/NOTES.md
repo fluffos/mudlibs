@@ -452,3 +452,59 @@ boot.
      wasm**, the best possible outcome for a mega-lib, and the
      mega-lib-scale wasm risk flagged in this pass's own brief did not
      materialize.
+
+## WASM-enablement pass (2026-07-24)
+
+Standard four-change pass (AGENTS.md §1.3b/§1.3e/§1.5), applied with
+targeted edits only (mega-lib — no sweeps):
+
+1. **Loopback-allow** (empty/non-string/`127.*` IP treated as loopback):
+   - `adm/daemons/logind.lpc` `logon()` (~line 179) — the
+     `is_strict_banned()` gate, the `!ip_name` kick AND the per-character
+     IP-format kick (`kicked out, Non_number` — this one
+     destructed every WASM connection, since WASM's garbage IP contains
+     non-digit chars) are all now skipped for loopback/malformed IPs.
+   - `adm/daemons/logind.lpc` `enter_world()` (~line 1086) — the
+     `create_char_banned()`/`is_banned()` move-to-guest-room gate
+     skipped for loopback.
+   - `adm/daemons/band.lpc` — `is_banned()`, `create_char_banned()`,
+     `is_strict_banned()` all short-circuit to 0 for
+     loopback/localhost/malformed sites.
+   - `adm/daemons/ipd.lpc` `seek_ip_address()` — returns "本地" for
+     loopback/malformed IPs instead of crashing on `user_ip[1]`
+     (previously documented-only WASM finding, now fixed).
+2. **Uptime gate**: none (uptime() in logind is only bookkeeping for the
+   newid-temp cleanup). **Anti-flood**: no per-IP throttle; the
+   `newid/<id>` temp guard is per-ID double-registration protection
+   (cleared every 300s / on restart), left alone as game logic.
+3. **Admin seeded**: `fluffos` / `Mud@2026` / 浮浮 → `(admin)` appended
+   to `/adm/etc/wizlist` (3rd wizlist column = login-site restriction,
+   left empty = unrestricted). Registration also required the lib's
+   separate "管理密码" (recovery): `Admin@2026`. Save files:
+   `work/data/login/f/fluffos.o`, `work/data/user/f/fluffos.o` (data/
+   not gitignored). Verified: `update /cmds/usr/bjtime` → 重新编译
+   成功.
+4. Retest: fresh registration (smqfb/秦风, deleted after test) into
+   南城客栈 with look/score/quit OK. debug.log: only the pre-existing
+   `restore_object(): Illegal mapping format while restoring emote`
+   (known emoted.o data quirk, documented in earlier passes). Removed
+   one runtime-churn file the boot created (`u/snowtu/data/user/s/
+   sajia.dzxy`). Registration flow gotcha (for future scripting): after
+   email there are TWO skippable prompts (homepage AND ICQ/QQ) — a
+   single empty send desyncs the race prompt.
+
+### Retrofit: fail-closed loopback check (2026-07-24)
+
+The loopback-allow gates above were originally written per the (now
+superseded) defensive instruction to also treat an empty/non-string/
+malformed `query_ip_number()` result as loopback, since older WASM
+driver builds returned garbage. That driver bug is now fixed upstream
+(`query_ip_number()`/`resolve()` return real values under WASM too), so
+the "malformed IP = trust it" fallback was a fail-open bypass with no
+remaining justification. Tightened every gate listed above to the
+strict pattern: loopback is ONLY `ip == "127.0.0.1"`, `ip == "::1"`, or
+a leading `"127."` prefix — a non-string/empty/malformed IP is now
+treated as untrusted/remote and subject to the gate normally, not
+silently allowed through. Retested: fluffos login (127.0.0.1, real
+value under the current driver) still passes every gate; debug.log
+stayed clean of `denied`/`undefined function`/`error in error handler`.

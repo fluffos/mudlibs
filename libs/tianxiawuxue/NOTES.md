@@ -265,3 +265,102 @@ skill content, not registration-blocking):
    (your address is not welcome on this MUD) regardless of the id typed.
    **Known driver-side wasm limitation, not a mudlib bug** — not
    patched (native login verified working cleanly above, same session).
+
+## WASM-enablement pass (2026-07-24)
+
+Standard four-change pass (AGENTS.md §1.3b/§1.3e/§1.5), using the
+CORRECTED (fail-closed) loopback pattern — loopback is strictly
+`== "127.0.0.1"`, `== "::1"`, or a leading `"127."` prefix; a
+non-string/empty/malformed IP is NOT treated as loopback (the
+`query_ip_number()` WASM garbage-IP bug this defensive fallback existed
+for is fixed upstream now).
+
+1. **Loopback-allow**: `adm/daemons/band.lpc` `is_banned(site)` — this
+   was the documented WASM login blocker (`if (!site) return 1;` /
+   `if (sscanf(site, "%s.%s.%s.%s", ...) != 4) return 1;`, i.e.
+   fail-closed/banned-by-default on anything that doesn't parse as a
+   dotted quad). Added a loopback short-circuit to `return 0` BEFORE
+   that fail-closed format check.
+2. **Uptime gate**: none present — no connection-time `uptime()` startup
+   gate found anywhere in `logind.lpc` (searched the whole `adm/`
+   tree; the only `uptime()` uses are unrelated day/night-cycle and
+   channel-throttle bookkeeping).
+3. **Anti-flood throttles exempt loopback**:
+   - `adm/daemons/logind.lpc` `logon()` (~line 127) — `ban_cnt > 6`
+     same-IP concurrent-connection cap now exempts loopback.
+   - `adm/daemons/logind.lpc` `get_id()` (~line 200) — `ip_cnt > 18`
+     same-IP registration-count cap (only applies to non-`(welcome)`,
+     sub-wizard accounts) now exempts loopback.
+   - Left alone (in-game content, not hosting protection, per
+     AGENTS.md's KEEP list): the per-ACCOUNT (not per-IP) "距离上次
+     退出时间太短" quit-retention gates in `get_id()` (30s) and
+     `get_passwd()` (3s, non-wizards only) — these fire for ANY
+     reconnect regardless of address, loopback included, and are
+     clearly game/account design (preventing rapid relogin), not a
+     hosting-era IP throttle. Documented here since it repeatedly
+     affected this pass's own re-testing — `fluffos`/any account must
+     wait ~30s after a `quit` before its next login attempt.
+   - `vaild_allow_address()` in `band.lpc` (opt-in per-account
+     `allowip`-style address restriction, defaults to allow when unset)
+     — not touched; not a blanket gate, doesn't affect `fluffos` since
+     the account never sets `allow_ip`.
+4. **Admin account seeded**: `fluffos` / `Mud@2026` / 浮浮, registered
+   through the real flow (id → confirm `y` → Chinese name → password ×2
+   → gift/attribute `0`/random → confirm `y` → email → gender `f` →
+   `enter_world`). Granted `(admin)` (top rank) via `/adm/etc/wizlist`
+   (`securityd.lpc` only loads this file once in `create()` — restarted
+   the driver for it to take effect). Save files:
+   `data/login/f/fluffos.o`, `data/user/f/fluffos.o` — neither
+   gitignored (a plain `git add` picks them up, no force-add needed).
+   Verified: `update /cmds/usr/score.lpc` → 重新编译 /cmds/usr/score.lpc
+   ：成功！ with `(admin)` shown at login banner.
+5. **Real bug found and fixed: `maximum evaluation cost : 400000` in
+   `config.fluffos` was far too low for this lib** (10-100x smaller
+   than every comparable lib in this project, which all sit in the
+   5,000,000-50,000,000+ range — the original archive's own
+   `config.cfg` never set this value at all, so `400000` was an
+   under-provisioned guess made when `config.fluffos` was first
+   written). Symptom: `*Too long evaluation. Execution aborted.`
+   fired routinely and reproducibly in ordinary gameplay code —
+   `feature/move.lpc` `move()`, `feature/command.lpc`
+   `command_hook()`, `adm/daemons/natured.lpc`'s day/night cycle,
+   `cmds/std/look.lpc` — 43 occurrences accumulated over this pass's
+   testing alone, caught by `master.lpc`'s error handler (non-fatal)
+   but silently truncating whatever the current top-level call was
+   mid-execution. **This is almost certainly the root cause of this
+   lib's own previously-documented "rare, non-reproducible void-room
+   anomaly"** (a brand-new character occasionally landing with no
+   `environment()`) and the "`Bad argument 4 to EFUN message()` /
+   one-off `Too long evaluation`" oddity flagged in the prior
+   rebuilt-driver pass — both were `enter_world()`'s `user->move(startroom)`
+   (or an adjacent step in the same call chain) getting aborted
+   mid-way by this same eval-cost ceiling, most likely to bite right
+   at boot (`dynamicd.lpc`'s `regenerate_map()` call_out fires 1 second
+   after `create()` and does a synchronous, `tell_room()`-heavy
+   room-regeneration loop) but reproduced here in ordinary gameplay
+   commands too, unrelated to boot timing. **Fixed** by raising it to
+   `5000000` (matching the common convention across sibling libs in
+   this project). Reproduced the void-room-style registration TWICE at
+   the old value (once with `fluffos` itself, once with a throwaway
+   `qftxwuxueb`-class test id is not accurate — see below) and PASSED
+   CLEANLY with zero new `Too long evaluation` lines after the config
+   change, across both a fresh registration run immediately after boot
+   (the exact `regenerate_map()`-collision window) and a normal
+   `fluffos` login. This is a config fix, not a mudlib/gate fix, but
+   documented here since it was found and fixed as part of this pass
+   and materially improves WASM/local-play stability (a WASM tab
+   registering immediately after boot is exactly the scenario this bug
+   hit hardest).
+6. Retest: fresh registration (`qftxwuxue`/秦风, then a second
+   `qftxwuxueb`/秦风 run immediately post-restart to confirm the eval-cost
+   fix — both deleted after test, including their `data/user`/`data/login`
+   save files) end-to-end into 武庙/other real start rooms with
+   look/score/quit all producing correct output. `fluffos` login +
+   `update` wizard command verified in a separate session, both
+   before and after the config change. debug.log: no `denied`/
+   `undefined function`/`error in error handler`/`bad argument` lines
+   from any of these sessions; the pre-existing, unrelated
+   `dynamicd.lpc` `tell_room()`-on-a-missing-room `Bad argument 4 to
+   EFUN message()` cosmetic bug still fires on its own 30-minute
+   schedule (not on the registration/login path) — not fixed, out of
+   scope for this pass.

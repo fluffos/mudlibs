@@ -45,3 +45,18 @@ python3 scripts/mudclient.py 127.0.0.1 40031
 - **WASM 版本兼容性**：在新的 WASM 构建下不仅能正常启动，完整的注册、
   登录、look、quit 流程也全部验证成功——本 lib 没有依赖 IP 地址格式的
   登录限制机制，是本批次测试中少数可以在 WASM 下完整游玩的库之一。
+
+## 管理员账号 / Admin account
+
+- **ID**: `fluffos`
+- **密码**: `Mud@2026`
+- **中文名**: 浮浮
+- **权限**: `(admin)`（本 mudlib 巫师等级表的最高级别，登录时显示
+  「目前权限：(admin)」，已验证 `update`、`cd`、`whoami` 等巫师命令正常）
+- 权限授予方式：`/adm/etc/wizlist` 数据文件末尾追加 `fluffos (admin)`
+  （`securityd.lpc` 启动时读取该表）。
+- 小提示：`update` 命令不能用来更新它自己（`update /cmds/wiz/update.lpc`
+  会在执行中把自己 destruct 掉、无任何输出——这是原始代码的固有行为），
+  更新其他文件一切正常。
+- **警告**：这是本项目所有 mudlib 统一预置的本地游玩默认账号。若要对
+  公网开放主机，请先修改此密码。

@@ -146,15 +146,21 @@ void logon(object ob) {
   }
 
 
-  if (BAN_D->is_banned(query_ip_name(ob)) == 1) {
-    write(HIG "你的地址在本 MUD 不受欢迎。\n" NOR);
-    destruct(ob);
-    return;
-  }
-  if (!WIZIP && iplimit > 3) {
-    write(HIG "对不起，" + MUD_NAME + "限制相同ip多重登录。\n" NOR);
-    destruct(ob);
-    return;
+  // WASM/local-play policy: loopback connections bypass the ban list and
+  // the same-IP multi-login cap unconditionally.
+  if (!(stringp(query_ip_number(ob)) &&
+        (query_ip_number(ob) == "127.0.0.1" || query_ip_number(ob) == "::1" ||
+         sscanf(query_ip_number(ob), "127.%*s") == 1))) {
+    if (BAN_D->is_banned(query_ip_name(ob)) == 1) {
+      write(HIG "你的地址在本 MUD 不受欢迎。\n" NOR);
+      destruct(ob);
+      return;
+    }
+    if (!WIZIP && iplimit > 3) {
+      write(HIG "对不起，" + MUD_NAME + "限制相同ip多重登录。\n" NOR);
+      destruct(ob);
+      return;
+    }
   }
 
   switch (random(5)) {
@@ -197,6 +203,9 @@ void logon(object ob) {
 
     write(BLU "\n您的英文名字(ID)：" NOR);
     input_to("get_id", ob);
+    // WASM: dns_master cannot compile without the sockets package; without
+    // this return the fall-through call below crashes every connection.
+    return;
   }
   //      Obtain mapping containing mud data
   mud_list = (mapping)DNS_MASTER->query_muds();
@@ -507,7 +516,9 @@ int check_player_allowip(object ob, string site) {
   string *line, *terms;
   mapping allowip;
   //为防止意外，以下两个IP永远合法。
-  if (site == "127.0.0.1")
+  // WASM/local-play: also treat any 127.* address as loopback.
+  if (stringp(site) && (site == "127.0.0.1" || site == "::1" ||
+      sscanf(site, "127.%*s") == 1))
     return 1;
   allowip = ob->query("allowip");
   //没有设定合法IP范围。

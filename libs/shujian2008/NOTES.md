@@ -215,3 +215,52 @@ consistently, no pressure).
    brief — not patched.** Assessment: boots cleanly under wasm; login
    cannot complete due to the known IP-format limitation, not a mudlib
    bug (native boot+login both verified working above, same session).
+
+## WASM-enablement pass (2026-07-23)
+
+Standard four-change pass (AGENTS.md §1.3b/§1.3e/§1.5):
+
+1. **Loopback-allow** (empty/non-string/`127.*` IP treated as loopback in
+   all cases):
+   - `adm/daemons/logind.lpc` `logon()` — per-IP connection-flood cap
+     (`login_cnt > 3` over login clones) now skipped for loopback.
+   - `adm/daemons/logind.lpc` `get_passwd()` — per-IP wrong-password
+     lockout counters (`step1/`/`step2/` temp mappings, 10-min ban) now
+     skipped for loopback; non-loopback behavior unchanged.
+   - `adm/daemons/sited.lpc` `is_valid()` — loopback short-circuits to
+     valid BEFORE the `sscanf("%d.%d.%*d.%*d")` format check (which
+     rejected every WASM login — this was the documented WASM blocker)
+     and before the wizard-address-restriction check (which would
+     otherwise refuse ANY wizard id not present in its `valid_login`
+     whitelist, including the new `fluffos` admin).
+   - `adm/daemons/sited.lpc` `is_multi()` — loopback exempt from the
+     "your address just had someone log in, wait" 10-second throttle and
+     all per-IP multi-login caps.
+   - `adm/daemons/band.lpc` `is_banned()` — loopback/malformed sites
+     never banned.
+2. **Uptime gate**: none present.
+3. **Admin account seeded**: `fluffos` / `Mud@2026` / 浮浮, granted
+   `(admin)` (top rank) via `/adm/etc/wizlist` (was empty; securityd
+   reads it at load). Save files: `work/data/login/f/fluffos.o`,
+   `work/data/user/f/fluffos.o` (data/ is not gitignored — plain adds).
+   Verified live: password login lands in the wizard workroom, `update
+   /cmds/imm/update.lpc` recompiles successfully.
+4. Retest: fresh registration (sjtestqf/秦风, deleted after test)
+   end-to-end into 武馆前院 with look/score/quit OK; debug.log free of
+   runtime errors.
+
+### Retrofit: fail-closed loopback check (2026-07-24)
+
+The loopback-allow gates above were originally written per the (now
+superseded) defensive instruction to also treat an empty/non-string/
+malformed `query_ip_number()` result as loopback, since older WASM
+driver builds returned garbage. That driver bug is now fixed upstream
+(`query_ip_number()`/`resolve()` return real values under WASM too), so
+the "malformed IP = trust it" fallback was a fail-open bypass with no
+remaining justification. Tightened every gate listed above to the
+strict pattern: loopback is ONLY `ip == "127.0.0.1"`, `ip == "::1"`, or
+a leading `"127."` prefix — a non-string/empty/malformed IP is now
+treated as untrusted/remote and subject to the gate normally, not
+silently allowed through. Retested: fluffos login (127.0.0.1, real
+value under the current driver) still passes every gate; debug.log
+stayed clean of `denied`/`undefined function`/`error in error handler`.

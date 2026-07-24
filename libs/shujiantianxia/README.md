@@ -44,3 +44,15 @@ python3 scripts/mudclient.py 127.0.0.1 40030
   WASM 环境下 `query_ip_number()` 无法返回正常格式的地址，导致任何
   英文名字都会被拒绝登录。这是 WASM 驱动本身的已知限制，不是本 mudlib
   的缺陷，未做修改。
+
+## 管理员账号 / Admin account
+
+- **ID**: `fluffos`
+- **密码**: `Mud@2026`
+- **中文名**: 浮浮
+- **权限**: `(admin)`（本 mudlib 巫师等级表的最高级别，注册后直接落在
+  巫师休息室，已验证 `update` 可正常重编译文件）
+- 权限授予方式：`/adm/etc/wizlist` 数据文件（格式 `id (级别)`，
+  `securityd.lpc` 启动时读取），现内容为 `fluffos (admin)`。
+- **警告**：这是本项目所有 mudlib 统一预置的本地游玩默认账号。若要对
+  公网开放主机，请先修改此密码。

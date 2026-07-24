@@ -95,7 +95,11 @@ void logon(object ob) {
   usr = filter_array(children(LOGIN_OB), (: interactive :));
   foreach (object item in usr)
     login_cnt += query_ip_number(item) == ip;
-  if (login_cnt > 3) {
+  // WASM/local-play policy: loopback is exempt from the per-IP connection
+  // flood cap.
+  if (login_cnt > 3 &&
+      !(stringp(ip) && (ip == "127.0.0.1" || ip == "::1" ||
+                         sscanf(ip, "127.%*s") == 1))) {
     destruct(ob);
     return;
   }
@@ -246,18 +250,25 @@ private void get_passwd(string pass, object ob) {
   mixed rows;
   string ip_number = query_ip_number(ob);
 
-  if (query_temp("step2/" + ip_number) >= 3) {
-    write("系统检测到这个地址有人多次输入错误的密码，暂时禁止登录。\n");
-    destruct(ob);
-    return;
-  }
+  // WASM/local-play policy: loopback is exempt from the per-IP
+  // wrong-password lockout counters (testing trips them constantly).
+  // Non-loopback behavior unchanged.
+  if (!(stringp(ip_number) &&
+        (ip_number == "127.0.0.1" || ip_number == "::1" ||
+         sscanf(ip_number, "127.%*s") == 1))) {
+    if (query_temp("step2/" + ip_number) >= 3) {
+      write("系统检测到这个地址有人多次输入错误的密码，暂时禁止登录。\n");
+      destruct(ob);
+      return;
+    }
 
-  if (query_temp("step1/" + ip_number) >= 3) {
-    if (add_temp("step2/" + ip_number, 1) == 1)  // YUJ@SJ 2001-12-11
-      call_out("delete_temp", 600, "step2/" + ip_number);
-    write("系统检测到这个地址有人多次输入错误的密码，暂时禁止登录。\n");
-    destruct(ob);
-    return;
+    if (query_temp("step1/" + ip_number) >= 3) {
+      if (add_temp("step2/" + ip_number, 1) == 1)  // YUJ@SJ 2001-12-11
+        call_out("delete_temp", 600, "step2/" + ip_number);
+      write("系统检测到这个地址有人多次输入错误的密码，暂时禁止登录。\n");
+      destruct(ob);
+      return;
+    }
   }
 
   write("\n");

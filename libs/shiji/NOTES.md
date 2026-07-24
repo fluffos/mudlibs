@@ -173,3 +173,58 @@ consistently, no pressure — this is a small lib).
    this harness due to a wasm-only dns_master-preload/no-sockets
    interaction, orthogonal to the already-known query_ip_number
    limitation.**
+
+## WASM-enablement pass (2026-07-23)
+
+Standard four-change pass (AGENTS.md §1.3b/§1.3e/§1.5):
+
+1. **Loopback-allow**: `adm/daemons/logind.lpc` `logon()` (~line 149) — the
+   `BAN_D->is_banned(query_ip_name(ob))` ban gate and the `iplimit > 3`
+   same-IP multi-login cap are now both skipped entirely when
+   `query_ip_number(ob)` is empty/non-string/`127.*` (loopback or the
+   malformed IP older WASM builds produce). `check_player_allowip()`
+   (same file, ~line 510) extended: previously only exact `"127.0.0.1"`
+   was always-allowed, now any 127.* / empty / non-string IP passes.
+   `adm/daemons/band.lpc` `is_banned()` also short-circuits to 0 for
+   loopback/localhost/malformed sites.
+2. **Uptime gate**: none active (the `uptime()<10` gate was already
+   commented out in the original source). Nothing to do.
+3. **Anti-flood throttle**: none present beyond the multi-login cap
+   covered in (1).
+4. **WASM dns_master crash FIXED** (was previously documented-only): in
+   `logon()`, the `if (!find_object(DNS_MASTER))` fallback branch printed
+   the banner and prompted for the id but then FELL THROUGH into
+   `DNS_MASTER->query_muds()`, crashing every WASM connection (no sockets
+   package → dns_master never compiles). Added the missing `return;`
+   after `input_to("get_id", ob)`. Native behavior unchanged (daemon
+   present → branch not taken).
+5. **Admin account seeded**: `fluffos` / `Mud@2026` / 浮浮, granted
+   `(zhuguan)` (top rank) via `wiz_status` in `adm/daemons/securd.o`
+   (binary-safe edit — file is CRLF, a newline-normalizing edit breaks
+   `restore_object()` and zeroes securd's globals; keep \r\n intact).
+   Save files: `work/data/login/f/fluffos.o` (account+password),
+   `work/data/user/f/fluffos.o` (body). Verified live: password login →
+   `update /feature/name.lpc` → 重新编译成功.
+6. **Runtime dir**: created `work/log/nosave/` — every `quit` logged a
+   caught "Wrong permissions opening /log/nosave/EXP" error without it
+   (§7.11 class; log/ is gitignored so this is a local/runtime fix only).
+
+Retest: fresh registration (qftest/秦风, deleted after test) end-to-end OK,
+fluffos login + wizard `update` OK, debug.log clean apart from the usual
+compile warnings (and the now-fixed /log/nosave/EXP error).
+
+### Retrofit: fail-closed loopback check (2026-07-24)
+
+The loopback-allow gates above were originally written per the (now
+superseded) defensive instruction to also treat an empty/non-string/
+malformed `query_ip_number()` result as loopback, since older WASM
+driver builds returned garbage. That driver bug is now fixed upstream
+(`query_ip_number()`/`resolve()` return real values under WASM too), so
+the "malformed IP = trust it" fallback was a fail-open bypass with no
+remaining justification. Tightened every gate listed above to the
+strict pattern: loopback is ONLY `ip == "127.0.0.1"`, `ip == "::1"`, or
+a leading `"127."` prefix — a non-string/empty/malformed IP is now
+treated as untrusted/remote and subject to the gate normally, not
+silently allowed through. Retested: fluffos login (127.0.0.1, real
+value under the current driver) still passes every gate; debug.log
+stayed clean of `denied`/`undefined function`/`error in error handler`.

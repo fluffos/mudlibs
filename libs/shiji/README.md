@@ -49,3 +49,17 @@ python3 scripts/mudclient.py 127.0.0.1 40026
   工具无法在此新连线上继续走完注册流程）。这是 WASM 构建本身的限制
   （原生驱动有 sockets 包，从未出现此问题），不是本 mudlib 的缺陷，
   未做修改。
+
+## 管理员账号 / Admin account
+
+- **ID**: `fluffos`
+- **密码**: `Mud@2026`
+- **中文名**: 浮浮
+- **权限**: `(zhuguan)`（宇宙特警，本 mudlib 的最高权限级别，可使用
+  `/cmds/zhu` `/cmds/adm` `/cmds/arch` `/cmds/wiz` `/cmds/imm` 等全部巫师命令，
+  已验证 `update` 可正常重编译文件）
+- 权限授予方式：`/adm/daemons/securd.o` 存档中 `wiz_status` 映射内加入
+  `"fluffos":"(zhuguan)"`（该 mudlib 的巫师表存于安全精灵的存档文件，
+  不使用 `/adm/etc/wizlist`）。若存档被重置，按同样方式重新添加即可。
+- **警告**：这是本项目所有 mudlib 统一预置的本地游玩默认账号。若要对
+  公网开放主机，请先修改此密码。

@@ -614,3 +614,46 @@ and not consequential for this environment.
    This lib has **no IP-format-dependent login gate**, so — like
    `shujianpiaoling2` — it is **fully playable under wasm**, one of the
    best wasm results in this batch.
+
+## WASM-enablement pass (2026-07-24)
+
+Standard four-change pass (AGENTS.md §1.3b/§1.3e/§1.5):
+
+1. **Loopback-allow** (empty/non-string/`127.*` IP treated as loopback):
+   - `adm/daemons/logind.lpc` `logon()` — `BAN_D->is_banned()` gate and
+     the `iplimit > 20` same-IP online cap skipped for loopback.
+   - `adm/daemons/logind.lpc` `get_id()` — `REGBAN_D->is_banned()`
+     registration-ban gate skipped for loopback.
+   - `adm/daemons/securityd.lpc` `valid_wiz_login()` — wizard logins
+     from loopback always allowed (otherwise a wizard id absent from
+     `wiz_sites` is refused outright: "请从登记的地址使用巫师帐号").
+   - `adm/daemons/band.lpc` + `adm/daemons/regband.lpc` `is_banned()` —
+     loopback/localhost/malformed sites never banned.
+2. **Uptime gate**: none present. **Other throttles**: none beyond the
+   above.
+3. **Admin seeded**: `fluffos` / `Mud@2026` / 浮浮 → `(admin)` via
+   `data/securityd.o` (`wiz_status` + `wiz_sites` `".*"` + `wiz_renwus`;
+   CRLF file, edited binary-safe). Registration also required the lib's
+   separate >=10-char recovery password: `Recovery@2026`. Save files:
+   `work/data/login/f/fluffos.o`, `work/data/user/f/fluffos.o` (data/
+   not gitignored). Verified: `update /cmds/usr/score` → 成功 with the
+   system-wide update announcement.
+4. Retest: fresh registration (szqfa/秦风, deleted after test) into
+   新手的殿堂 with look/score/quit OK; debug.log completely free of
+   runtime errors.
+
+### Retrofit: fail-closed loopback check (2026-07-24)
+
+The loopback-allow gates above were originally written per the (now
+superseded) defensive instruction to also treat an empty/non-string/
+malformed `query_ip_number()` result as loopback, since older WASM
+driver builds returned garbage. That driver bug is now fixed upstream
+(`query_ip_number()`/`resolve()` return real values under WASM too), so
+the "malformed IP = trust it" fallback was a fail-open bypass with no
+remaining justification. Tightened every gate listed above to the
+strict pattern: loopback is ONLY `ip == "127.0.0.1"`, `ip == "::1"`, or
+a leading `"127."` prefix — a non-string/empty/malformed IP is now
+treated as untrusted/remote and subject to the gate normally, not
+silently allowed through. Retested: fluffos login (127.0.0.1, real
+value under the current driver) still passes every gate; debug.log
+stayed clean of `denied`/`undefined function`/`error in error handler`.

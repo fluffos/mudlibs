@@ -132,3 +132,47 @@ consistently, no pressure).
    connections), so it is **fully playable under wasm**, unlike several
    sibling libs in this batch — the best-case wasm result observed this
    pass.
+
+## WASM-enablement pass (2026-07-24)
+
+Standard four-change pass (AGENTS.md §1.3b/§1.3e/§1.5):
+
+1. **Loopback-allow**: `adm/daemons/logind.lpc` `logon()` (~line 74) —
+   the `BAN_D->is_banned(query_ip_name/query_ip_number)` gate is skipped
+   when `query_ip_number(ob)` is empty/non-string/`127.*`.
+   `adm/daemons/band.lpc` `is_banned()` also short-circuits to 0 for
+   loopback/localhost/malformed sites.
+2. **Uptime gate / anti-flood throttle**: none present at connection
+   time (the per-command flood counters in `feature/alias.lpc` are
+   in-game robot protection, left alone per the KEEP-content-timers
+   rule).
+3. **Admin seeded**: `fluffos` / `Mud@2026` / 浮浮 → `(admin)` appended
+   to `/adm/etc/wizlist`. Save files: `work/data/login/f/fluffos/fluffos.o`
+   and `work/data/user/f/fluffos/fluffos.o` (per-id subdirectory layout;
+   data/ not gitignored). Verified: login shows 目前权限：(admin);
+   `update /cmds/usr/score.lpc` → 成功; `cd`/`whoami` work.
+   Gotcha discovered while verifying: `update` on its OWN file
+   (`/cmds/wiz/update.lpc`) silently no-ops — main() destructs the
+   command object it is executing from before reaching the write();
+   original behavior, not a bug introduced here.
+4. Retest: fresh registration (sjplqf/秦风, deleted after test) into the
+   start room with look/score/quit OK. debug.log: only pre-existing
+   noise (`restore_object(): Invalid utf8 string ... emote` from
+   emoted.o — known; `/cmds/wiz/tail` uses the never-existed `tail()`
+   efun (§6.2 class) — pre-existing, hit only by my probe command).
+
+### Retrofit: fail-closed loopback check (2026-07-24)
+
+The loopback-allow gates above were originally written per the (now
+superseded) defensive instruction to also treat an empty/non-string/
+malformed `query_ip_number()` result as loopback, since older WASM
+driver builds returned garbage. That driver bug is now fixed upstream
+(`query_ip_number()`/`resolve()` return real values under WASM too), so
+the "malformed IP = trust it" fallback was a fail-open bypass with no
+remaining justification. Tightened every gate listed above to the
+strict pattern: loopback is ONLY `ip == "127.0.0.1"`, `ip == "::1"`, or
+a leading `"127."` prefix — a non-string/empty/malformed IP is now
+treated as untrusted/remote and subject to the gate normally, not
+silently allowed through. Retested: fluffos login (127.0.0.1, real
+value under the current driver) still passes every gate; debug.log
+stayed clean of `denied`/`undefined function`/`error in error handler`.

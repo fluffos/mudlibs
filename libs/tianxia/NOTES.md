@@ -435,3 +435,73 @@ path.
    this lib due to a startup-grace-period/connect-timing collision, not
    because of a real wasm incompatibility (query_ip_number() was never
    even reached to test).
+
+## WASM-enablement pass (2026-07-24)
+
+Standard four-change pass (AGENTS.md §1.3b/§1.3e/§1.5). Applied the
+CORRECTED (fail-closed) loopback pattern throughout — loopback is
+strictly `query_ip_number(ob) == "127.0.0.1"`, `== "::1"`, or a leading
+`"127."` prefix; a non-string/empty/malformed IP is NOT treated as
+loopback (the earlier WASM `query_ip_number()`/`resolve()` garbage-IP
+bug this defensive fallback existed for is now fixed upstream).
+
+1. **Loopback-allow**:
+   - `adm/daemons/logind.lpc` `begain_enter()` (~line 127) — the
+     `BAN_D->is_banned(query_ip_number(ob), 2)` IP-ban gate now
+     short-circuits to allowed for loopback.
+   - `adm/daemons/logind.lpc` `get_id()` (~line 192) — the
+     `IP_D->identify_ip(arg, query_ip_number(ob))` wizard-address
+     whitelist gate (self-registers a wizard's first-ever login IP as
+     their allowed pattern, destructs on any later login from an
+     unregistered address) now always passes for loopback. Without
+     this, a wizard connecting from a second/different loopback-facing
+     interface, or before their first-ever `identify_ip` self-registers,
+     could be destructed — now moot for 127.0.0.1/::1.
+   - `adm/daemons/ban_d.lpc` NOT touched directly — the call site gate
+     above is sufficient (this daemon's `is_banned()` also handles
+     id/name/word bans via the same function with a different `n`
+     argument, so patching the call site keyed on the loopback IP is
+     cleaner than threading a loopback exception through the shared
+     multi-purpose function).
+2. **Uptime gate**: `adm/daemons/logind.lpc` `logon()` (~line 62) —
+   `if (uptime() < 30) { ...destruct(ob); }` (documented in AGENTS.md
+   §1.3e as one of the known affected libs) now only applies to
+   non-loopback connections; loopback connects immediately regardless
+   of driver uptime.
+3. **Anti-flood throttle**: none active — the only same-IP counter
+   (`Same_Ip`/`MAX_SAME_IP` in `begain_enter()`) is already commented
+   out in the original source (dead code), nothing to patch.
+4. **Admin account seeded**: `fluffos`, registered through the real
+   flow (`qinfengx`-style: id → confirm `y` → Chinese name 浮浮 →
+   password → confirm → gender `f` → attribute alloc `0`/random →
+   confirm `y` → entered 松竹小院). Granted `(admin)` via
+   `/adm/etc/wizlist` (append `fluffos (admin)`; `securityd.lpc` only
+   loads this file in `create()`, so the driver needed a restart for it
+   to take effect — no hot-reload command found).
+   **Password deviation, found and handled**: this lib enforces a
+   SEPARATE, stricter password rule for any account whose status is not
+   `(player)` (`WIZ_PASSWD_CHK` → `check_wiz_legal_password()`: >=10
+   chars, must contain uppercase, lowercase, AND a symbol). The
+   registration-time-only 8-char `Mud@2026` (fine under the *player*
+   rule of >=5 chars) fails this the moment the account becomes
+   `(admin)` and is not caught until the FIRST subsequent login attempt,
+   where `get_passwd()` forces an interactive password reset before
+   completing login. Handled it live: entered `Mud@2026Admin` (13
+   chars, satisfies the rule, does not overlap with the id
+   `fluffos`/its substrings per the similarity check) when prompted —
+   this is now `fluffos`'s real login password, documented in
+   README.md. Save files: `data/login/f/fluffos.o`,
+   `data/user/f/fluffos.o`. Neither path is gitignored in this lib
+   (its `data/` tree is already partly tracked, unlike several sibling
+   libs) — a plain `git add` picks them up, no force-add needed.
+   Verified: `update /cmds/usr/score.lpc` → 成功 (confirmed the
+   self-update-destructs-silently quirk also applies here, same as
+   `shujianpiaoling2`/others — not a bug introduced by this pass).
+5. Retest: fresh registration (`qftxwasm`/秦风, deleted after test,
+   including its `data/news/y100m1d15s452.p.1` "new player" announcement
+   file) end-to-end into 松竹小院 with look/score/quit all producing
+   correct output, immediately after boot (no 30s wait needed from
+   loopback — confirms the uptime patch). `fluffos` login (with the new
+   password) + `update` wizard command verified in a separate session.
+   debug.log: no new `denied`/`undefined function`/`error in error
+   handler`/`bad argument` lines from either session.
