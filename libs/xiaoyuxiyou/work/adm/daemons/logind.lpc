@@ -106,10 +106,11 @@ void logon(object ob) {
   int logon_cnt;
   int i;
   string lip = query_ip_number(ob);
-  // WASM/loopback: local (browser-tab) connections bypass the startup-grace
-  // gate and the per-IP anti-flood throttle. Empty/non-string/malformed IP
-  // (older WASM query_ip_number() garbage) is treated as loopback too.
-  int is_loopback = (!stringp(lip) || lip == "" || lip == "127.0.0.1" || lip[0..3] == "127." || sscanf(lip, "%*d.%*d.%*d.%*d") != 4);
+  // Local (browser-tab/loopback) connections bypass the startup-grace
+  // gate and the per-IP anti-flood throttle. Fail-closed: only a real
+  // 127.0.0.1/127.*/::1 value counts as loopback; malformed/empty/
+  // non-string input is NOT treated as local.
+  int is_loopback = (stringp(lip) && (lip == "127.0.0.1" || lip == "::1" || (strlen(lip) >= 4 && lip[0..3] == "127.")));
   if (!is_loopback && uptime() < 30) {
     write(HIY "\n\t\t驱动程序正在启动过程中，请稍候再来。\n\n" NOR,);
     destruct(ob);
@@ -161,11 +162,12 @@ private void encoding(string arg, object ob) {
   ip_name = query_ip_number(ob);
   ip_number = query_ip_number(ob);
 
-  // WASM/loopback: local connections bypass the ban gate and the IP-format
-  // (no-IP / non-numeric) destructs below. Empty/non-string/malformed IP
-  // (older WASM query_ip_number() garbage) counts as loopback.
-  if (stringp(ip_number) && ip_number != "" && ip_number != "127.0.0.1"
-    && ip_number[0..3] != "127." && sscanf(ip_number, "%*d.%*d.%*d.%*d") == 4) {
+  // Local connections bypass the ban gate and the IP-format (no-IP /
+  // non-numeric) destructs below. Fail-closed: only a real
+  // 127.0.0.1/127.*/::1 value counts as loopback; malformed/empty/
+  // non-string input is NOT exempt (still goes through the checks below).
+  if (!(stringp(ip_number) && (ip_number == "127.0.0.1" || ip_number == "::1"
+    || (strlen(ip_number) >= 4 && ip_number[0..3] == "127.")))) {
     // snowcat dec 10 1997
     // try strict ban here...weiqi.
     if ("/adm/daemons/band"->is_strict_banned(query_ip_number(ob)) == 1) {
@@ -334,8 +336,11 @@ private void get_id(string arg, object ob) {
         if (my_ip == new_ip)
           NowLogin++;
       }
-    // WASM/loopback: local connections are exempt from the multi-login cap.
-    if (!(!stringp(my_ip) || my_ip == "" || my_ip == "127.0.0.1" || my_ip[0..3] == "127.")
+    // Local connections are exempt from the multi-login cap. Fail-closed:
+    // only a real 127.0.0.1/127.*/::1 value counts as loopback;
+    // malformed/empty/non-string input is NOT exempt.
+    if (!(stringp(my_ip) && (my_ip == "127.0.0.1" || my_ip == "::1"
+      || (strlen(my_ip) >= 4 && my_ip[0..3] == "127.")))
       && NowLogin >= 50) {
       write(sprintf("对不起，从你的IP地址不能同时登录%s位人物。\n", chinese_number(MaxLimit + 1)));
       destruct(ob);

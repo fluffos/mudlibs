@@ -109,16 +109,20 @@ int is_banned(string site) {
   string *line = ({ site });
   string tmp1, tmp2, tmp3, tmp4;
   int i;
-  // WASM/loopback: local connections are always allowed; an empty/
-  // non-string/malformed IP (older WASM query_ip_number() garbage) is
-  // treated as loopback too — the original code *banned* any IP that
-  // failed to parse, which rejected every WASM browser-tab connection.
-  if (!stringp(site) || site == "" || site == "127.0.0.1" || site[0..3] == "127.")
+  // Local (loopback) connections are always allowed. Fail-closed: only a
+  // real 127.0.0.1/127.*/::1 value counts as loopback; malformed/empty/
+  // non-string input is NOT treated as local (the upstream
+  // query_ip_number()/resolve() driver bug this used to work around is
+  // now fixed).
+  if (stringp(site) && (site == "127.0.0.1" || site == "::1"
+    || (strlen(site) >= 4 && site[0..3] == "127.")))
     return 0;
   if (!site) return 1;
 
   if (sscanf(site, "%s.%s.%s.%s", tmp1, tmp2, tmp3, tmp4) != 4)
-    return 0;  // was: return 1 — malformed IP now treated as local, not banned
+    return 1;  // malformed/unparseable IP -- deny by default (restored;
+               // was briefly changed to `return 0` to paper over the
+               // now-fixed WASM query_ip_number() bug)
   // 禁止使用虚拟ip 或 route
   if (tmp4 == "0" || tmp4 == "255")
     return 1;
@@ -365,11 +369,12 @@ int vaild_allow_address(object ob) {
   int i;
 
   if (!ob) return 0;
-  // WASM/loopback: local connections always pass the per-account
-  // allowed-address check (empty/malformed IP counts as loopback).
+  // Local connections always pass the per-account allowed-address check.
+  // Fail-closed: only a real 127.0.0.1/127.*/::1 value counts as
+  // loopback; malformed/empty/non-string input is NOT exempt.
   vip = query_ip_number(ob);
-  if (!stringp(vip) || vip == "" || vip == "127.0.0.1" || vip[0..3] == "127."
-    || sscanf(vip, "%*d.%*d.%*d.%*d") != 4)
+  if (stringp(vip) && (vip == "127.0.0.1" || vip == "::1"
+    || (strlen(vip) >= 4 && vip[0..3] == "127.")))
     return 1;
   address = ob->query("allow_ip");
   if (!sizeof(address)) {

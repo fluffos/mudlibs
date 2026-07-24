@@ -89,11 +89,13 @@ void logon(object ob) {
   i = sizeof(usr);
   login_cnt = 0;
   while (i--) if (query_ip_number(usr[i]) == query_ip_number(ob)) login_cnt++;
-  // WASM/loopback: local (browser-tab) connections are exempt from the
-  // per-IP anti-flood throttle. Empty/non-string/malformed IP counts as loopback.
+  // Local (browser-tab/loopback) connections are exempt from the per-IP
+  // anti-flood throttle. Fail-closed: only a real 127.0.0.1/127.*/::1
+  // value counts as loopback; malformed/empty/non-string input is NOT
+  // treated as local.
   {
     string lip = query_ip_number(ob);
-    int is_loopback = (!stringp(lip) || lip == "" || lip == "127.0.0.1" || lip[0..3] == "127." || sscanf(lip, "%*d.%*d.%*d.%*d") != 4);
+    int is_loopback = (stringp(lip) && (lip == "127.0.0.1" || lip == "::1" || (strlen(lip) >= 4 && lip[0..3] == "127.")));
     if (!is_loopback && login_cnt > 19) {
       destruct(ob);
       return;
@@ -177,10 +179,12 @@ void login(string arg, object ob) {
         || (intp(wiz_cnt2) && (wiz_cnt2 <= 0)))
         && !usr[i]->is_ghost()) {
         if (query_ip_name(ob) == query_ip_name(usr[i])) ip_cnt++;
-        // WASM/loopback: local connections are exempt from the per-host cap.
+        // Local connections are exempt from the per-host cap. Fail-closed:
+        // only a real 127.0.0.1/127.*/::1 value counts as loopback;
+        // malformed/empty/non-string input is NOT exempt.
         cip = query_ip_number(ob);
-        if (stringp(cip) && cip != "" && cip != "127.0.0.1"
-          && cip[0..3] != "127." && sscanf(cip, "%*d.%*d.%*d.%*d") == 4
+        if (!(stringp(cip) && (cip == "127.0.0.1" || cip == "::1"
+          || (strlen(cip) >= 4 && cip[0..3] == "127.")))
           && ip_cnt >= 30) {
           write("从您的主机创造的人物太多了，您的主机将被拒绝往来一段时间。\n");
           destruct(ob);

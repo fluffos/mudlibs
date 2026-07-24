@@ -201,12 +201,12 @@ void logon(object ob) {
 
 
   // by ACKY
-  // WASM/loopback: local connections are exempt from the 10-second
-  // reconnect block (empty/non-string/malformed IP counts as loopback).
-  if (stringp(query_ip_number(ob)) && query_ip_number(ob) != ""
-    && query_ip_number(ob) != "127.0.0.1"
-    && query_ip_number(ob)[0..3] != "127."
-    && sscanf(query_ip_number(ob), "%*d.%*d.%*d.%*d") == 4
+  // Local connections are exempt from the 10-second reconnect block.
+  // Fail-closed: only a real 127.0.0.1/127.*/::1 value counts as
+  // loopback; malformed/empty/non-string input is NOT exempt.
+  if (!(stringp(query_ip_number(ob)) && (query_ip_number(ob) == "127.0.0.1"
+    || query_ip_number(ob) == "::1"
+    || (strlen(query_ip_number(ob)) >= 4 && query_ip_number(ob)[0..3] == "127.")))
     && blocks[query_ip_number(ob)] > time()) {
     write("请勿连续尝试，请您稍后再连线。\n");
     new_destruct(ob);
@@ -1182,11 +1182,13 @@ object find_body(string name) {
 void new_destruct(object ob) {
   string nip;
   if (!ob) return;
-  // WASM/loopback: never record local connections in the reconnect-block/
-  // auto-ban counters (empty/non-string/malformed IP counts as loopback).
+  // Never record local connections in the reconnect-block/auto-ban
+  // counters. Fail-closed: only a real 127.0.0.1/127.*/::1 value counts
+  // as loopback; malformed/empty/non-string input is NOT exempt (falls
+  // through to the normal recording path below).
   nip = query_ip_number(ob);
-  if (!stringp(nip) || nip == "" || nip == "127.0.0.1"
-    || nip[0..3] == "127." || sscanf(nip, "%*d.%*d.%*d.%*d") != 4) {
+  if (stringp(nip) && (nip == "127.0.0.1" || nip == "::1"
+    || (strlen(nip) >= 4 && nip[0..3] == "127."))) {
     destruct(ob);
     return;
   }
