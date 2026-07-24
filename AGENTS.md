@@ -1397,6 +1397,19 @@ same interface via `scripts/wasm_client.js` (§1.2).
   SHIPPED static `banned_name` content file (`yueyingqiyuan`),
   breaking name registration in fresh clones — prefer lib-scoped
   ignore patterns over repo-wide ones.
+- **Publishing: never `git push` this repo directly.** The GitHub copy
+  (`github.com/fluffos/mudlibs`) was created from a `git-filter-repo`
+  pass that stripped `archives/` (copyrighted third-party content) and
+  all >20MB blobs from history — the two histories are permanently
+  unrelated, and a direct push would attempt to upload the full
+  unfiltered multi-GB history, archives included. `origin` is
+  configured fetch-only here (its push URL is an intentionally-invalid
+  guard string). To publish: replicate file-level changes into a
+  normal clone of the GitHub repo, commit there with the same message,
+  and push that. Pattern: diff the local commit
+  (`git diff-tree --name-status -r -z OLD NEW`), copy A/M files into
+  the clone (never anything under `archives/`), `git rm` the D files,
+  commit, push.
 
 ### 10.6 English-language archives
 
