@@ -14,7 +14,15 @@
 #define nntoh(x) capitalize(replace_string((x)?(x):"","."," "))
 
 // macros for getting resources
-#define Mud_name() (string)DNS_MASTER->query_mud_name()
+// dns_master (a sockets-package daemon, absent under WASM -- AGENTS.md
+// 1.3c/7.6) never loads there, so DNS_MASTER->query_mud_name() throws
+// "No program in object" -- and this macro is called unconditionally
+// from many unrelated places (channeld.lpc's remove_addresses(), NPC
+// chat/emote heart_beat()s, etc.), spamming a runtime error on every
+// single call once the daemon is absent. query_mud_name() just returns
+// the compile-time INTERMUD_MUD_NAME constant anyway (see dns_master.lpc),
+// so fall back to it directly when the daemon isn't loaded.
+#define Mud_name() (find_object(DNS_MASTER) ? (string)DNS_MASTER->query_mud_name() : INTERMUD_MUD_NAME)
 #define mud_nname() htonn( Mud_name() )
 #define mud_port() __PORT__
 #define udp_port() (int)DNS_MASTER->query_udp_port()

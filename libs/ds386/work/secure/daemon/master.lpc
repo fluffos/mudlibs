@@ -44,6 +44,7 @@ inherit LIB_DAEMON;
 #include <mssp.h>
 
 private nosave int incept_date, ResetNumber, heart_count, in_reset;
+private nosave int loading_web_sessions;
 private nosave int eval_threshold, reset_handle = -1;
 private int BootScore, PerformanceScore, globalpmsg;
 private nosave object Unguarded, gguy;
@@ -692,7 +693,20 @@ void log_error(string file, string msg) {
     }
     if(!this_player()){
         object *object_stack = call_stack(1);
-        object web_sessions = load_object(WEB_SESSIONS_D);
+        // log_error() also receives plain compile WARNINGS (AGENTS.md
+        // 7.10), which fire constantly during preload while no player is
+        // connected -- and this driver forbids load_object() mid-compile
+        // (7.1). An unconditional load_object() here re-enters the error
+        // handler ("Object cannot be loaded during compilation") on every
+        // single preload warning, cascading "Error in error handler"
+        // continuously. Guard with a re-entrancy flag + catch(),
+        // degrading to "no web_sessions object" like 7.1's fix.
+        object web_sessions = find_object(WEB_SESSIONS_D);
+        if( !web_sessions && !loading_web_sessions ){
+            loading_web_sessions = 1;
+            catch(web_sessions = load_object(WEB_SESSIONS_D));
+            loading_web_sessions = 0;
+        }
         if(web_sessions && member_array(web_sessions, object_stack) != -1){
             web_sessions->ReceiveErrorReport(msg);
         }

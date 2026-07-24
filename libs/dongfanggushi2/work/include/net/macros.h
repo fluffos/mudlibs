@@ -14,7 +14,12 @@
 #define nntoh(x) capitalize(replace_string((x)?(x):"","."," "))
 
 // macros for getting resources
-#define Mud_name() (string)DNS_MASTER->query_mud_name()
+// dns_master (sockets package, absent under WASM -- AGENTS.md 1.3c/7.6)
+// never loads there; Mud_name() is called unconditionally from many
+// unrelated places (channeld.lpc, emoted.lpc chat lines, ...), so it
+// must not assume the daemon exists. query_mud_name() just returns the
+// compile-time INTERMUD_MUD_NAME constant, so fall back to it directly.
+#define Mud_name() (find_object(DNS_MASTER) ? (string)DNS_MASTER->query_mud_name() : INTERMUD_MUD_NAME)
 #define mud_nname() htonn( Mud_name() )
 #define mud_port() __PORT__
 #define udp_port() (int)DNS_MASTER->query_udp_port()
