@@ -52,3 +52,13 @@ python3 scripts/mudclient.py 127.0.0.1 40059
   询，而当前 WASM 版本驱动不包含 socket 功能包，导致该查询代码编译失败
   、玩家最终未能真正进入游戏世界；这是 WASM 构建本身的已知限制，并非本
   mudlib 的缺陷，原生（native）驱动下完全不受影响，可正常游玩。
+
+## 管理员账号 / Admin account
+
+- 账号 id：`fluffos`　密码：`Mud@2026`　中文名：浮浮
+- 权限：`(admin)`（本 mudlib 的最高巫师等级），通过 `adm/etc/wizlist`
+  数据文件授予（新增一行 `fluffos (admin)`，与原有的 `acme (admin)` 并列）。
+  存档文件：`work/data/user/f/fluffos.o` 与 `work/data/login/f/fluffos.o`。
+- 已验证登录后权限显示 `(admin)`，`update` 巫师指令可正常重新编译文件。
+- **警告**：这是为本地/浏览器单机游玩预置的公开默认密码，如要对外公网
+  开服，请务必先修改此账号密码（或从 wizlist 中删除该账号）。

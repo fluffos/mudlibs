@@ -458,3 +458,43 @@ gaps/incompatibilities rather than conversion bugs — left unfixed per the
   not a mudlib bug — not patched, since "fixing" it would mean removing
   a real feature (the ident lookup) to work around a driver-build
   limitation rather than fixing an actual bug.
+
+## WASM-enablement pass (2026-07: loopback-allow + throttle exemptions + admin seeding)
+
+Standard pass per AGENTS.md §1.3b/e + §1.5. Gates found and patched
+(loopback = `127.0.0.1`/`127.*`/empty/non-string/malformed IP, defending
+against the WASM `query_ip_number()` garbage-return bug):
+
+- `adm/daemons/logind.lpc:80` new helper `is_loopback_conn()` (declared
+  :73); used to exempt loopback from:
+  - `:120` — `ENABLE_ANTISPAM` per-IP registration throttle in `logon()`
+    ("创造的人物太多" ≥10 registrations per IP per reset → reject);
+  - `:180` — `ENABLE_BAN_SITE` banned_ip/banned_hostname pattern gate in
+    `get_id()` (both lists ship empty, but the gate is live);
+  - `:589` — `check_ip()` per-account IP whitelist (`okip` property):
+    loopback always passes.
+- No `uptime()` startup-grace gate exists in this lib (zero non-cosmetic
+  `uptime()` call sites).
+- Incidental fix while verifying the admin account: created
+  `work/log/nosave/` — the wizard `update` command's audit
+  `log_file("nosave/UPDATE", ...)` threw "Wrong permissions/No such file
+  or directory" on every use because the archive never shipped that
+  subdirectory (AGENTS.md §7.11 class; never seen before because no
+  admin account existed to run `update`). Clean after mkdir.
+
+Admin account: `fluffos` / `Mud@2026` / 浮浮, registered through the
+real native flow (id → y → password ×2 → email → gender m → Chinese
+name). Granted `(admin)` via `adm/etc/wizlist` (added `fluffos (admin)`
+alongside the original `acme (admin)`). Verified after restart: login
+shows `目前权限﹕(admin)`, wizard-vision file paths visible in room
+descriptions, `update /world/area/wizard/guildhall` recompiles the room.
+Save files (must be committed): `work/data/user/f/fluffos.o`,
+`work/data/login/f/fluffos.o`.
+
+Retest: fresh registration (秦风/ceshizhe) end-to-end + look/score/quit
+clean; fluffos login + update clean; a stray typo character (`flufos`)
+created during testing was deleted; one single "Too long evaluation"
+eval-cost overrun was observed once in `world/area/wizard` NPC-inventory
+creation during a first-touch lazy-compile burst (content-side, did not
+recur on subsequent sessions, unrelated to this pass's patches);
+`data/chinese.o` runtime churn reverted.

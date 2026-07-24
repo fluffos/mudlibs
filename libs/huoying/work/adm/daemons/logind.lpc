@@ -68,10 +68,22 @@ int check_legal_name(string arg);
 private int list_user_race(object link);
 private void increment_visitor_count();
 private int check_ip(object link);
+// WASM/local-play: loopback / empty / malformed IPs are exempt from the
+// per-IP anti-spam throttle and site bans (AGENTS.md 1.3b,e).
+int is_loopback_conn(object ob);
 
 private void create() {
   seteuid(getuid());
   set("channel_id", "连线精灵");
+}
+
+int is_loopback_conn(object ob) {
+  string ip = query_ip_number(ob);
+  if (!stringp(ip) || ip == "" || ip == "127.0.0.1"
+    || (strlen(ip) >= 4 && ip[0..3] == "127.")
+    || sscanf(ip, "%*d.%*d.%*d.%*d") != 4)
+    return 1;
+  return 0;
 }
 
 private void reset() {
@@ -105,7 +117,7 @@ void logon(object ob) {
   int i, wiz_cnt, ppl_cnt, login_cnt;
 
 #ifdef ENABLE_ANTISPAM
-  if (spammer_ip[query_ip_number(ob)] >= 10) {
+  if (spammer_ip[query_ip_number(ob)] >= 10 && !is_loopback_conn(ob)) {
     write("从您连线的主机创造的人物太多了﹐您的主机将被拒绝往来一段时间。\n");
     destruct(ob);
     return;
@@ -165,7 +177,7 @@ private void get_id(string arg, object ob) {
 
 #ifdef ENABLE_BAN_SITE
   // Rework by Annihilator (11/10/1999), support IP address and hostname
-  if (wizhood(arg) == "(player)") {
+  if (wizhood(arg) == "(player)" && !is_loopback_conn(ob)) {
     string ip, pattern;
 
     ip = query_ip_number(ob);
@@ -571,6 +583,10 @@ object make_body(object link_ob) {
 private int check_ip(object link) {
   string okip, cur_ip, cur_ip_num, ip_part, num_part, be_checked;
   int len, ed;
+
+  // WASM/local-play: loopback connections always pass the account IP
+  // whitelist (AGENTS.md 1.3b).
+  if (is_loopback_conn(link)) return 1;
 
   cur_ip = query_ip_name(link);
   cur_ip_num = query_ip_number(link);
