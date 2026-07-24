@@ -66,3 +66,15 @@ Big5 只是切换客户端解码方式，不建议使用）。之后依次会问
   后（英文名字提示之前）被阻塞，属于本项目 WASM 测试工具的已知限制
   （工具未在内存文件系统中重建 `work/log` 目录下的子目录结构，与本
   mudlib 代码无关），原生（native）驱动下不受影响，可正常游玩。
+
+## 管理员账号 / Admin account
+
+- 账号 id：`fluffos`　密码：`Mud@2026`　中文名：浮浮
+- 权限：`(admin)`（本 mudlib 的最高巫师等级），通过 `adm/daemons/securd.lpc`
+  中与原作者预留的 `hxsd` 相同的"硬编码后门"机制授予
+  （`set("wiz_status/fluffos", "(admin)")`），即使 `securd.o` 存档被重置
+  也依然有效。存档文件：`work/data/user/f/fluffos.o` 与
+  `work/data/login/f/fluffos.o`。
+- 已验证登录后 `update` 巫师指令可正常执行（重新编译成功）。
+- **警告**：这是为本地/浏览器单机游玩预置的公开默认密码，如要对外公网
+  开服，请务必先修改此账号密码（或删除该账号及 securd.lpc 中的授权行）。

@@ -13,6 +13,10 @@ nosave string loginnip;
 nosave int loginntime;
 
 int check_legal_password(object ob, string arg);
+// WASM/local-play: a connection whose IP is loopback, empty, or a
+// malformed (non dotted-quad) string is treated as local and exempt from
+// all per-IP anti-flood caps / registration throttles (AGENTS.md 1.3b,e).
+int is_loopback_conn(object ob);
 int wiz_lock_level = WIZ_LOCK_LEVEL;
 //tentop
 int mad_lock = 0;
@@ -144,6 +148,15 @@ void random_gift(mapping my, int select) {
 void create() {
   seteuid(getuid());
   set("channel_id", "连线精灵");
+}
+
+int is_loopback_conn(object ob) {
+  string ip = query_ip_number(ob);
+  if (!stringp(ip) || ip == "" || ip == "127.0.0.1"
+    || (strlen(ip) >= 4 && ip[0..3] == "127.")
+    || sscanf(ip, "%*d.%*d.%*d.%*d") != 4)
+    return 1;
+  return 0;
 }
 
 void logon(object ob) {
@@ -315,14 +328,14 @@ void gb_big5(string arg, object ob) {
   }
 
   //目前暂时限制每IP最多连接15 ID
-  if (iplimit > 50 && query_ip_name(ob) != "NATSERV") {
+  if (!is_loopback_conn(ob) && iplimit > 50 && query_ip_name(ob) != "NATSERV") {
     write("对不起，" + MUD_NAME + "你的IP连接超过12用户，谢谢你对海洋的支持，我们会尽快处理。\n");
     destruct(ob);
     return;
   }
 
   //目前暂时限制每IP最多连接15 ID
-  if (iplimit > 80 && query_ip_name(ob) == "NATSERV") {
+  if (!is_loopback_conn(ob) && iplimit > 80 && query_ip_name(ob) == "NATSERV") {
     write("对不起，" + MUD_NAME + "你的IP连接超过80用户，谢谢你对海洋的支持，我们会尽快处理。\n");
     destruct(ob);
     return;
@@ -528,7 +541,7 @@ return;
   usr = filter_array(children(LOGIN_OB), (: interactive :));
   i = sizeof(usr);
   while (i--) if (usr[i] != ob && query_ip_number(usr[i]) == query_ip_number(ob)) break;
-  if (i >= 0) {
+  if (i >= 0 && !is_loopback_conn(ob)) {
     write("有同一IP,的其他玩家正在登陆游戏,请等一会再登陆。\n");
     destruct(ob);
     return;
@@ -557,14 +570,14 @@ void get_passwd(string pass, object ob) {
   my_pass = ob->query("password");
   time_rl = time() - ob->query("last_on");
   time_pwd = time() - ob->query("lastpwd");
-  if (time_rl >= 0 && time_rl <= 60) {
+  if (time_rl >= 0 && time_rl <= 60 && !is_loopback_conn(ob)) {
     temps = sprintf("你距上次退出仅 %d 秒?\n", time_rl);
     write(temps);
     write("对不起，为了降低系统负荷，请稍后再login，多谢您的合作。\n");
     destruct(ob);
     return;
   }
-  if (ob->query("last_from") == ip) {
+  if (ob->query("last_from") == ip && !is_loopback_conn(ob)) {
     if (time_pwd >= 0 && time_pwd <= 10) {
       temps = sprintf("你距上次打错密码,仅 %d 秒?\n", time_pwd);
       write(temps);
@@ -688,7 +701,7 @@ void confirm_relogin(string yn, object ob, object user) {
 
 void confirm_id(string yn, object ob) {
   if (query_ip_name(ob) == loginnip
-    && (time() - loginntime) <= 60) {
+    && (time() - loginntime) <= 60 && !is_loopback_conn(ob)) {
     write("\n本MUD注册同一IP新玩家60秒内只能进行一次!!,请稍后再注册!\n");
     destruct(ob);
     return;

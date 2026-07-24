@@ -460,3 +460,37 @@ functionality.
 - Test character (`qinlingding`) save files removed after testing;
   driver (native, PID 2126338) killed by exact PID; no scratch files
   left behind.
+
+## WASM-enablement pass (2026-07: loopback-allow + throttle exemptions + admin seeding)
+
+Standard pass per AGENTS.md §1.3b/e + §1.5. Gates found and patched
+(loopback = `query_ip_number()` of `127.0.0.1`, any `127.*`, an empty
+string, or a non-string/malformed non-dotted-quad value — the latter two
+defend against WASM builds where the efun returns garbage):
+
+- `adm/daemons/band.lpc:39` `is_banned()`: short-circuit `return 0` for
+  loopback/empty/malformed site strings before the regexp ban-list scan.
+- `adm/daemons/logind.lpc:153` new helper `is_loopback_conn()` (forward
+  declared at :19); used to exempt loopback from:
+  - `:331`/`:338` — per-IP concurrent-connection caps (iplimit > 50 /
+    NATSERV > 80);
+  - `:544` — "同一IP login 1人" one-login-attempt-per-IP-at-a-time gate;
+  - `:573` — 60-second relogin-after-quit throttle;
+  - `:580` — 10-second wrong-password retry throttle (same-IP branch);
+  - `:704` — `confirm_id()`'s 60-second same-IP new-registration
+    throttle (the one documented in the registration-flow section above).
+- No `uptime()` startup-grace gate exists in this lib (checked; all
+  `uptime()` uses are content timers/randomness — left alone).
+
+Admin account: `fluffos` / `Mud@2026` / 浮浮, registered through the real
+native flow (encoding `g` → id → y → name → password ×2 → gift 0/y →
+email → gender m). Granted `(admin)` via `adm/daemons/securd.lpc:34`'s
+hardcoded-door mechanism (same idiom as the author's own `hxsd` entry in
+`restore_list()` — survives `securd.o` resets). Verified after restart:
+login shows `目前权限：(admin)`, `update /cmds/wiz/update` recompiles
+successfully. Save files (must be committed):
+`work/data/user/f/fluffos.o`, `work/data/login/f/fluffos.o`.
+
+Retest: fresh registration (秦风/ceshizhe) end-to-end + look/score/quit
+clean; fluffos login + update clean; debug.log free of new errors; test
+character saves removed; `data/topten.o` runtime churn reverted.
