@@ -1,0 +1,616 @@
+#include <ansi.h>
+#include <room.h>
+inherit F_SAVE;
+mixed title_base;
+string query_save_file() { return DATA_DIR "pinfo"; }
+
+void remove_title(object ob);
+void set_title(object ob);
+object global_find_player(string user);
+void global_destruct_player(object ob, int raw);
+int append_sn(string file);
+void create()
+{
+  seteuid(getuid());
+  restore();
+  if (arrayp(title_base))
+    title_base = filter_array(title_base, (: arrayp($1) && sizeof($1) == 2 :));
+  else
+    title_base = 0;
+}
+
+//#define LUBAN           "/adm/npc/luban"
+//#define RING_DIR        "/data/item/ring/"
+#define JICUN_WHERE       "/d/wiz/playerhome"
+void check_user(object ob, int reconnect)
+{
+  mapping my;
+  mapping party;
+  int i;
+  mapping skill_status;
+  string *sname;
+  int combat_exp,daoxing;
+  int level;
+
+  my = ob->query_entire_dbase();
+  if (ob->query("family/generation") == 0)
+    ob->delete("family");
+  if (ob->query("gender") == "无性")
+    ob->set("class", "eunach");
+  if ((int)ob->query("combat/today/which_day") != time() / 86400)
+    ob->delete("combat/today");
+  if (ob->query("couple") && ! ob->query("static/marry"))
+    ob->set("static/marry", 1);
+  if (mapp(party = my["party"]) && stringp(party["party_name"]))
+    party["party_name"] = filter_color(party["party_name"]);
+// 记录名字
+  NAME_D->map_name(ob->query("name"), ob->query("id"));
+// 重新设置运行计时器
+  reset_eval_cost();
+// 赋予称号
+  set_title(ob);
+  combat_exp = (int)ob->query("combat_exp");
+  daoxing = (int)ob->query("daoxing");
+  if (! mapp(skill_status = ob->query_skills()))
+    return;
+  sname  = keys(skill_status);
+  for (i = 0; i < sizeof(skill_status); i++)
+  {
+    level = skill_status[sname[i]];
+    if (file_size(SKILL_D(sname[i]) + ".lpc") == -1)
+    {
+      tell_object(ob, "No such skill:" + sname[i] + "\n");
+      continue;
+    }
+
+    if (SKILL_D(sname[i])->type() == "martial")
+    {
+      while (level &&
+            (level - 1) * (level -1 ) * (level - 1) / 10 > combat_exp)
+        level--;
+      ob->set_skill(sname[i], level);
+    }
+
+    if (SKILL_D(sname[i])->type() == "magic")
+    {
+      while (level &&
+            (level - 1) * (level -1 ) * (level - 1) / 10 > daoxing)
+        level--;
+      ob->set_skill(sname[i], level);
+    }
+
+  }
+
+//check if daoxing 不堕轮回
+  if( RANK_D->grade_dx( RANK_D->describe_dx( (int)ob->query("daoxing") ) )
+       >= RANK_D->grade_dx(HIC "不堕轮回" NOR) )
+  {
+    ob->announce_live_forever(ob->query("name")
+         + "的道行达到了不堕轮回的境界，从此跳出三界外，不在五行中，永无生死大限了！");
+  }
+
+//set player's life time here.
+  if( !ob->query("life/init_life_time") || ob->query("life/init_life_time") < 80)
+  {
+    ob->set("life/init_life_time", 60+2*ob->query("kar")+random(30));
+	    //average is 60+40+5=105, lowest=60+20+0=80, highest=60+60+30=150
+  }
+
+  if( !ob->query("life/life_time") )
+  {
+    ob->set("life/life_time", ob->query("life/init_life_time"));
+  }
+
+//now check if gameover...player too old?
+  if( ob->check_gameover() )
+    return;
+//note, if gameover, the function check_gameover() return 1.
+
+// player body is a safe room. mon 8/2/98
+// can't practice, ... inside a body.
+  ob->set("no_magic", 1);
+
+  my = ob->query_entire_dbase();
+  if( undefinedp(my["eff_gin"]) )
+    my["eff_gin"] = my["max_gin"];
+  if( undefinedp(my["eff_kee"]) )
+    my["eff_kee"] = my["max_kee"];
+  if( undefinedp(my["eff_sen"]) )
+    my["eff_sen"] = my["max_sen"];
+  if( undefinedp(my["eff_douzhi"]) )
+    my["eff_douzhi"] = my["max_douzhi"];
+
+  if( my["eff_gin"] > my["max_gin"] )
+    my["eff_gin"] = my["max_gin"];
+  if( my["eff_kee"] > my["max_kee"] )
+    my["eff_kee"] = my["max_kee"];
+  if( my["eff_sen"] > my["max_sen"] )
+    my["eff_sen"] = my["max_sen"];
+  if( my["gin"] > my["eff_gin"] )
+    my["gin"] = my["eff_gin"];
+  if( my["kee"] > my["eff_kee"] )
+    my["kee"] = my["eff_kee"];
+  if( my["sen"] > my["eff_sen"] )
+    my["sen"] = my["eff_sen"];
+  if( my["douzhi"] > my["eff_douzhi"] )
+    my["douzhi"] = my["eff_douzhi"];
+// by snowcat - adjust title
+  if (ob->query("zhangmen"))
+  {
+    object zhangmen = new (ob->query("zhangmen/base_name"));
+    if (zhangmen)
+    {
+      zhangmen->set_save_file(ob->query("zhangmen/data_name"));
+      zhangmen->restore();
+      if (zhangmen->query("family/family_name")!=ob->query("family/family_name"))
+      {  // already betrayed
+        if (ob->query("title")==ob->query("zhangmen/title") ||
+            ob->query("title")==ob->query("zhangmen/title_old"))
+        {
+          if (ob->query("family/family_name"))
+           ob->set("title", sprintf("%s第%s代%s", ob->query("family/family_name"),
+   chinese_number(ob->query("family/generation")), ob->query("family/title")));
+        }
+
+        if (zhangmen->query("current_player")==ob->query("id"))
+        {
+          zhangmen->reset_me(zhangmen);
+          zhangmen->save();
+        }
+
+        ob->delete("zhangmen");
+      }
+
+      else if (zhangmen->query("current_player")==ob->query("id"))
+      {
+        ob->set("title",ob->query("zhangmen/title"));
+      }
+
+      else
+      {
+        ob->set("title",ob->query("zhangmen/title_old"));
+        ob->delete("zhangmen");
+      }
+
+      ob->save();
+    }
+
+  }
+
+}
+
+string clear_user_data(string user, string cat)
+{
+  object ob, tmp_load;
+  string couple_id;
+  string path, file_name;
+  string *dirs;
+  string brothers;
+  string bro_id;
+  string *ks;
+  mapping bro;
+  int flag;
+  int i;
+// only root uid can does it
+  if (previous_object() &&
+      getuid(previous_object()) != ROOT_UID &&
+            geteuid(previous_object()) != user)
+    return "你无权清除该玩家的数据。\n";
+// find the user's body
+  seteuid(getuid());
+  tmp_load = 0;
+  ob = find_player(user);
+  if (!objectp(ob))
+  {
+    tmp_load = global_find_player(user);
+    ob = tmp_load;
+  }
+
+  if (! ob)
+    return "没有这个玩家。\n";
+// no catalog? treat it as "all"
+  if (! cat)
+    cat = "all";
+  flag = 0;
+// remove name information
+  if (cat == "name" || cat == "all")
+    NAME_D->remove_name(ob->query("name"), ob->query("id"));
+
+// remove room information
+  if ((cat == "room" || cat == "all"))
+  {
+    PLAYERHOME_D->delete_player_home(ob->query("id"),3);
+    flag++;
+  }
+
+// remove item information
+  if (cat == "item" || cat == "all")
+  {
+    object item;
+    mapping sum;
+// clear the all item
+    path = ITEM_DIR + ob->query("id")[0..0] + "/";
+    dirs = get_dir(path + ob->query("id") + "-*");
+    for (i = 0; i < sizeof(dirs); i++)
+    {
+      file_name = path + dirs[i];
+      if ((item = find_object(file_name)) && environment(item))
+      {
+        message("vision", HIM + item->name() +
+                "忽然化作一股轻烟，不见了！\n" NOR, environment(item));
+      }
+
+      ob->delete("build/" + dirs[i]);
+      DBASE_D->clear_object(file_name);
+      rm(file_name);
+    }
+
+    DBASE_D->save();
+
+    sum = ob->query("can_summon");
+    if (mapp(sum) && sizeof(sum) > 0)
+    {
+      ks = keys(sum);
+      for (i = 0; i < sizeof(ks); i++)
+        if (sscanf(sum[ks[i]], path + ob->query("id") + "-%*s") == 1)
+          map_delete(sum, ks[i]);
+      ob->delete("can_summon");
+    }
+
+  }
+
+// remove marriage information
+  if (cat == "couple" || cat == "all")
+  {
+    if (mapp(ob->query("couple")) && sizeof(ob->query("couple")) > 0)
+    {
+      couple_id = ob->query("couple/id");
+      ob->delete("couple");
+      flag++;
+      if (couple_id)
+        clear_user_data(couple_id, "couple");
+    }
+
+  }
+
+// remove haterd information
+  if (cat == "hatred" || cat == "all")
+  {
+// remove the hatred information about the
+// familys & leagues to this player
+    FAMILY_D->remove_hatred(ob->query("id"));
+//    LEAGUE_D->remove_hatred(ob->query("id"));
+  }
+
+// remove brothers information
+  if (mapp(bro = ob->query("brothers")) &&
+       (sscanf(cat, "brothers:%s", brothers) == 1 || cat == "all"))
+  {
+// remove all the brothers information
+    if (cat == "all")
+      brothers = "all";
+// here, I remove the brothers information of
+// ob, when brothers equal to "all", then I
+// will remove all brothers for this ob, Does it
+// cause a BUG? I won't, because the ID "all"
+// can not be registered for this MUD.
+    if (brothers == "all")
+    {
+      foreach (bro_id in keys(bro))
+// remove my brother's data for me
+        clear_user_data(bro_id, "brothers:" + ob->query("id"));
+      ob->delete("brothers");
+    }
+
+    else if (! undefinedp(bro[brothers]) != -1)
+    {
+// remove this brother
+      map_delete(bro, brothers);
+      if (sizeof(bro) < 1)
+        ob->delete("brothers");
+      else
+        ob->set("brothers", bro);
+    }
+
+    flag++;
+  }
+
+// remove league information
+  if (cat == "league" || cat == "all")
+  {
+// remove the user's league info
+    LEAGUE_D->leave_league(ob);
+    ob->delete("league");
+  }
+
+// remove title information
+  if (cat == "title" || cat == "all")
+    remove_title(ob);
+
+// remove jicun information
+  if (cat == "jicun" || cat == "all")
+  {
+    object np, notebook;
+    mapping id_list;
+    string *kpid;
+
+    write(sprintf("准备删除%s的寄存物品！\n",user));
+    np = find_object(JICUN_WHERE);
+    if (!objectp(np))
+      np = load_object(JICUN_WHERE);
+    notebook = present("jicun list",np);
+    if (objectp(notebook))
+    {
+      id_list = notebook->query("id_list");
+      if (mapp(id_list) && sizeof(id_list) > 0)
+      {
+        kpid = keys(id_list);
+        if(member_array(user,kpid)!=-1)
+        {
+          map_delete(id_list,user);
+          notebook->set("id_list",id_list);
+          notebook->save();
+          write(sprintf("删除%s的寄存物品！\n",user));
+        }
+
+        else
+          write(sprintf("%s没有物品寄存！\n",user));
+      }
+
+      else
+        write("没有物品寄存信息！\n");
+     }
+
+  }
+
+// remove other information
+  if (cat == "all")
+  {
+    rm( "/data/playerhomes/h_" + ob->query("id") +  __SAVE_EXTENSION__ );
+    rm( "/data/mail/" + ob->query("id")[0..0] + "/" + ob->query("id") +  __SAVE_EXTENSION__ );
+  }
+
+// save the data of the user
+  if (flag)
+    ob->save();
+// Destrut the object if create temporate
+  UPDATE_D->global_destruct_player(tmp_load, 1);
+  if (tmp_load && objectp(ob))
+  {
+    catch(destruct(ob));
+  }
+
+  return "成功。\n";
+}
+
+// remove an user
+string remove_user(string user)
+{
+  object ob;
+  string result;
+// destruct the user object
+  if (ob = find_player(user))
+  {
+    if (ob->query_temp("link_ob"))
+      catch(destruct(ob->query_temp("link_ob")));
+      catch(destruct(ob));
+  }
+
+// clear the data of user first
+  result = clear_user_data(user, "all");
+// remove the file of the user
+  rm(DATA_DIR + "login/" + user[0..0] + "/" + user + __SAVE_EXTENSION__);
+  rm(DATA_DIR + "user/" + user[0..0] + "/" + user + __SAVE_EXTENSION__);
+}
+
+// user born
+void born_player(object me)
+{
+  mixed files;
+  int i;
+  string special;
+  string msg;
+  msg = WHT "\n\t经过万年仙石培育，吸收日月精华，你与生俱来的天赋是： " NOR;
+// 查看所有的特殊技能文件
+  files = get_dir("/daemon/special/");
+  me->delete("special_skill");
+  if (sizeof(files))
+  {
+// 整理所有的技能文件
+    for (i = 0; i < sizeof(files); i++)
+    {
+      if ( !sscanf(files[i], "%s.lpc", files[i]) )
+        continue;
+      if (sscanf(files[i], "%*s.c.bak") )
+        continue;
+//      sscanf(files[i], "%s.lpc", files[i]);
+    }
+
+// 特殊先天属性先行排除
+    files -= ({ "lighting" });
+// 性格不符不会愤怒之心
+    if (me->query("character") != "光明磊落"
+     && me->query("character") != "心狠手辣")
+      files -= ({ "wrath" });
+// 先天膂力 < 26 不会麒麟血臂
+    if (me->query("str") < 26)
+     files -= ({ "strength" });
+// 先天悟性 < 26 不会罡睿神慧
+    if (me->query("int") < 26)
+      files -= ({ "intellect" });
+// 先天根骨 < 26 不会镇蕴七星
+    if (me->query("con") < 26)
+      files -= ({ "constitution" });
+// 先天身法 < 26 不会玲珑玉躯
+    if (me->query("dex") < 26)
+      files -= ({ "dexterity" });
+// 先天容貌 < 20 不会天颜永驻
+    if (me->query("per") < 20)
+     files -= ({ "youth" });
+// 先天灵性 < 25 不会灵慧天成
+    if (me->query("spi") < 25)
+     files -= ({ "spirituality" });
+
+// 先天福缘 < 20 不会福星高照
+    if (me->query("kar") < 20)
+     files -= ({ "lucky" });
+// 祛除真命天子
+    files -= ({"emperor"});
+// 获得第一项技能
+    special = element_of(files);
+    me->set("special_skill/" + special, 1);
+    msg += SPECIAL_D(special)->name();
+// 麒麟血臂增加1点膂力
+    if (me->query("special_skill/strength"))
+      me->add("str", 1);
+// 罡睿神慧增加1点悟性
+    if (me->query("special_skill/intellect"))
+      me->add("int", 1);
+// 镇蕴七星增加1点根骨
+    if (me->query("special_skill/constitution"))
+      me->add("con", 1);
+// 灵慧天成增加1点灵性
+    if (me->query("special_skill/spirituality"))
+      me->add("spi", 1);
+// 玲珑玉躯增加1点身法
+    if (me->query("special_skill/dexterity"))
+      me->add("dex", 1);
+
+// 天颜永驻增加1点容貌
+    if (me->query("special_skill/youth"))
+      me->add("per", 1);
+
+// 福星高照增加1点福缘
+    if (me->query("special_skill/lucky"))
+      me->add("kar", 1);
+    msg += HIG "。\n" NOR + HIC "如果你对此有任何疑问，可以重新"
+               "阅读天赋属性(" HIY "help gift" NOR + HIC ")介绍。\n"NOR;
+
+    msg += "\n\n您的系统ID认证识别编码为： "HIR + me->query("birthday")
+        + NOR" 请您认真做记录！在您人物被盗和遗失密码时，您的有效认证电子信箱和认证码"
+        + "将是您能找回人物的唯一途径！\n\n" NOR;
+    me->start_call_out((: call_other, __FILE__, "notice_player", me, msg :), 1);
+  }
+
+  me->set("xyj_born",1);
+}
+
+// notice user a piece of message, delay call by born user
+void notice_player(object me, string msg)
+{
+  tell_object(me, msg);
+}
+
+// query title dbase
+mixed query_title_base()
+{
+  if (! is_root(previous_object()))
+    return 0;
+  return title_base;
+}
+
+// set title dbase
+mixed set_title_base(mixed ts)
+{
+  if (! is_root(previous_object()))
+    return 0;
+  title_base = ts;
+}
+
+// 清除某个玩家的 title
+void remove_title(object ob)
+{
+  int i;
+  if (! arrayp(title_base) || ! ob->query("granted_title"))
+    return;
+  ob->delete_temp("title");
+  ob->delete("granted_title");
+  for (i = 0; i < sizeof(title_base); i++)
+  {
+// 搜索所有的 title
+    if (title_base[i][1] == ob->query("id"))
+// 去掉title
+      title_base[i][1] = 0;
+  }
+
+  save();
+  return;
+}
+
+// 设置某个玩家的 title
+void set_title(object ob)
+{
+  string id;
+  int i;
+  if (! arrayp(title_base) || ! ob->query("granted_title"))
+    return;
+  id = ob->query("id");
+  for (i = 0; i < sizeof(title_base); i++)
+    if (title_base[i][1] == id)
+    {
+// 加上title
+      ob->set_temp("title", title_base[i][0]);
+      return;
+    }
+
+// 这个用户并没有分配的称号
+  ob->delete("granted_title");
+}
+
+// 寻找或调入某一个玩家
+// 如果程序处理中需要更新那些不在线的玩家，则可以使用该函数
+// 将这个玩家调入并且进行修改，请注意：修改完毕以后程序必须
+// 保存玩家，并且使用 global_destruct_player 将玩家析构，如
+// 果没有调用这个函数，则赋予玩家的定时器会自动析构玩家。
+object global_find_player(string user)
+{
+  object ob;
+  object login_ob;
+  if(!stringp(user) ||
+     file_size(DATA_DIR + "login/" + user[0..0] + "/" + user + __SAVE_EXTENSION__)<0 )
+    return 0;
+  ob = find_player(user);
+  if (! ob)
+  {
+    login_ob = new(LOGIN_OB);
+    if( (string)login_ob->set("id", user) != user )
+    {
+      catch(destruct(login_ob));
+      return 0;
+    }
+
+    login_ob->set("body", USER_OB);
+    ob = LOGIN_D->make_body(login_ob);
+    if (! ob)
+    {
+      catch(destruct(login_ob));
+      return 0;
+    }
+
+    evaluate(bind((: seteuid(getuid()) :), ob));
+    if (! ob->restore())
+    {
+      catch(destruct(login_ob));
+      catch(destruct(ob));
+      return 0;
+    }
+
+    ob->set_temp("temp_loaded", 1);
+    ob->start_call_out((: call_other, __FILE__, "global_destruct_player", ob, 0 :), 1);
+    catch(destruct(login_ob));
+  }
+
+  return ob;
+}
+
+// 析构一个被 UPDATE_D 调入的玩家
+void global_destruct_player(object ob, int raw)
+{
+  if (objectp(ob) && ob->query_temp("temp_loaded"))
+  {
+    if (raw)
+      ob->save();
+    destruct(ob);
+  }
+
+}

@@ -1,0 +1,178 @@
+// Room: /d/shaolin/guangchang1.c
+// Date: YZC 96/01/19
+
+inherit ROOM;
+
+void init();
+void close_gate();
+int do_open();
+int valid_leave();
+string look_gate();
+
+void create()
+{
+    set("short", "廣場");
+    set("long", @LONG
+這里是少林寺前的廣場，整個廣場由大塊的青石鋪成，極為
+平坦。但因年代久遠，都有些破損。叢叢小草從石板的縫隙中長
+了出來。廣場周圍都是密密的松樹林，四角上各放了几塊石碑，
+字跡都甚為模糊。正前方黃牆碧瓦，飛檐翹檁，正中一道二丈來
+寬，三丈來高的朱紅杉木包銅大門(gate)。上方一塊大匾，龍飛
+鳳舞地書著『少林寺』三個大字。寺前三三兩兩的站著几個僧人。
+LONG );
+    set("exits", ([
+        "east" : __DIR__"guangchang1e",
+        "south" : __DIR__"shijie11",
+        "west" : __DIR__"guangchang1w",
+    ]));
+
+    set("outdoors", "shaolin");
+    set("item_desc",([
+        "gate"        :    (: look_gate :),
+    ]));
+    set("objects",([
+        CLASS_D("shaolin") + "/qing-fa" : 1,
+    ]));
+//    set("no_clean_up", 0);
+    setup();
+    "/clone/board/shaolin_b"->foo();
+}
+
+
+/* TODO
+ 此處改為：(knock gate) 敲門后一僧人應聲打開大門：
+“吱”的一聲，大門打了開來，一位壯年僧人上上下下打量了你
+（他，她，人名） 一會，
+（如為本寺僧人，且無罪過，正神提高或無增減）側身讓開，說道：師兄辛苦了，請進。
+（如為本寺僧人，正神降低或有負神）沉下臉來，說道：戒律院主持玄痛大師請師兄火
+　　　　　　　　　　　　　　　　　　　　　　　　　速去戒律院陳述此行過犯。
+　　　　　　　　　　　　　　　　　（直接送交戒律院處治查問后，打入僧監關押）。
+（如非本寺僧人，男性，有正神）說道：這位施主請回罷，本寺不接待俗人。
+（如非本寺僧人，女性，有正神）說道：這位女施主還是請回罷，本寺從不接待女客。
+（如非本寺僧人，無論男女，有負神）立時從身畔摯出一把雪亮的戒刀來，把明晃晃的
+　　　　　　　　　　　　　　　　　刀尖對准你的胸口，橫眉怒目地說道：你等邪魔
+　　　　　　　　　　　　　　　　　外道，還不給我滾開！以后再敢走近少林一步，
+　　　　　　　　　　　　　　　　　我立時就斬斷你們的狗腿！
+對不起，俗家弟子不得入寺修行
+ */
+void init()
+{
+    add_action("do_knock", "knock");
+}
+
+int close_gate()
+{
+    object room;
+
+    if(!( room = find_object(__DIR__"smdian")) )
+        room = load_object(__DIR__"smdian");
+    if(objectp(room))
+    {
+        delete("exits/north");
+        message("vision", "乒地一聲，里面有人把大門關上了。\n",
+            this_object());
+        room->delete("exits/south");
+        if (objectp(present("qingguan", room)))
+            message("vision", "清觀上前把大門關了起來。\n", room);
+        else
+            message("vision", "壯年僧人上前把大門關了起來。\n", room);
+    }
+    else message("vision", "ERROR: gate not found(close).\n", room);
+}
+
+int do_knock(string arg)
+{
+    object room;
+
+    if (query("exits/north"))
+        return notify_fail("大門已經是開著了。\n");
+
+    if (!arg || (arg != "gate" && arg != "north"))
+        return notify_fail("你要敲什么？\n");
+
+    if(!( room = find_object(__DIR__"smdian")) )
+        room = load_object(__DIR__"smdian");
+    if(objectp(room))
+    {
+        set("exits/north", __DIR__"smdian");
+        message_vision("$N輕輕地敲了敲門，只聽吱地一聲，"
+            "一位壯年僧人應聲打開大門，\n"
+            "他用銳利的目光上上下下打量著$N。\n",
+            this_player());
+        room->set("exits/south", __FILE__);
+        message("vision", "外面傳來一陣敲門聲，壯年僧人應聲上前把大門開。\n", room);
+        remove_call_out("close_gate");
+        call_out("close_gate", 10);
+    }
+
+    return 1;
+}
+
+int valid_leave(object me, string dir)
+{
+    if ( dir != "north" )
+    {
+        return ::valid_leave(me, dir);
+    }
+
+    if (!::valid_leave(me, dir))
+        return 0;
+
+    if ( (me->query("family/family_name") == "少林派"))
+    {
+        if (me->query("class") != "bonze")
+        {
+            return notify_fail("壯年僧人說道：對不起，俗家弟子不得入寺修行。\n");
+        }
+
+        if (((int)me->query("guilty") == 0) && ((int)me->query("K_record") ==
+            ((int)me->query("PKS") + (int)me->query("MKS"))))
+        {
+            write("壯年僧人側身讓開，說道：師兄辛苦了，請進。\n");
+            return 1;
+        }
+        else
+        {
+            if((int)me->query("guilty") == 0) {
+                if((int)me->query("shen_record") > (int)me->query("shen"))
+                    me->set("guilty", 1);
+                else
+                    me->set("guilty", 2);
+                me->set("K_record", me->query("PKS") + me->query("MKS"));
+                me->set("shen_record", me->query("shen"));
+            }
+
+            me->move(__DIR__"smdian");
+            return notify_fail("壯年僧人沉下臉來，說道：戒律院主持玄痛大師請師兄\n"
+                "火速去戒律院陳述此行過犯。\n");
+        }
+    }
+    else if( present("yingxiong ling", me) )
+    {
+        write("壯年僧人合十為禮，側身讓開，說道：原來是貴客駕到，請進請進！\n");
+        return 1;
+    }
+    
+    if (me->query("shen") >= 0)
+    {
+        if (me->query("gender") == "女性")
+        {
+            return notify_fail("壯年僧人說道：這位女施主還是請回罷，"
+                "本寺從不接待女客。\n");
+        }
+        else
+        {
+            return notify_fail("壯年僧人說道：這位施主請回罷，本寺不接待俗人。\n");
+        }
+    }
+
+    return notify_fail("壯年僧人立時從身畔摯出一把雪亮的戒刀來，把明晃晃的\n"
+		"刀尖對准你的胸口，橫眉怒目地說道：你等邪魔外道，還不給我滾開！\n"
+		"以后再敢走近少林一步，我立時就斬斷你們的狗腿！\n");
+
+}
+
+string look_gate()
+{
+    return "一道三丈來高的朱紅杉木包銅大門。\n";
+}

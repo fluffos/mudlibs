@@ -1,0 +1,491 @@
+//hockshop.c
+#include <command.h>
+inherit ROOM;
+inherit SAFTYROOM;
+int is_hockshop_room() { return 1; }
+
+string *sell_msg = ({
+     "破破烂烂，一文不值",
+     "质地低劣，难看之极",
+     "又脏又破，臭气熏天",
+});
+object shop_box;
+int query_max_items() {return 100;}
+
+void init()
+{
+   add_action("do_value", "gujia");
+   add_action("do_value", "value");
+   add_action("do_pawn", "pawn");
+   add_action("do_sell", "sell");
+   add_action("do_retrieve", "retrieve");
+   add_action("do_buy", "buy");
+   add_action("do_list", "list");
+   set("no_clean_up", 1);
+}
+
+// find the shopbox object for this shop to hold sold items.
+object findbox()
+{
+  if(shop_box && environment(shop_box)==this_object())
+    return shop_box;
+  shop_box=new("/std/misc/shopbox");
+  shop_box->move(this_object());
+  return shop_box;
+}
+
+string value_string(int value)
+{
+  if( value < 1 )
+    value = 1;
+  else if( value < 100 )
+    return chinese_number(value) + "文钱";
+  else
+    return chinese_number(value/100) + "两白银"
+      + (value%100? "又" + chinese_number(value%100) + "文钱": "");
+}
+
+void pay_player(object who, int amount)
+{
+  object ob;
+  if( amount < 1 )
+    amount = 1;
+  if( amount/100 )
+  {
+    ob = new(SILVER_OB);
+    ob->set_amount(amount/100);
+    if(!ob->move(who))
+      ob->move(environment(who));
+    amount %= 100;
+  }
+
+  if( amount )
+  {
+    ob = new(COIN_OB);
+    ob->set_amount(amount);
+    if(!ob->move(who))
+      ob->move(environment(who));
+  }
+
+}
+
+int do_value(string arg)
+{
+  object ob;
+  int value, sale;
+  if( !arg || !(ob = present(arg, this_player())) )
+    return notify_fail("你要拿什么物品给当铺估价？\n");
+  if( ob->query("money_id") )
+    return notify_fail("这是「钱」，你没见过吗？\n");
+  value = ob->query("value");
+  sale=ob->query_temp("sale_price");
+  if(sale>0 && sale<value)
+    value=sale;
+  if( !value)
+    printf("%s一文不值。\n", ob->query("name"));
+  else
+    printf("%s价值%s。\n如果你要典当(pawn)，可以拿到%s及一张当票。\n如果卖断(sell)，可以拿到%s。\n",
+        ob->query("name"), value_string(value), value_string(value * 20 / 100),
+        value_string(value * 30 / 100));
+  return 1;
+}
+
+int can_sell(object ob)
+{
+  int value, sale;
+
+  if (!objectp(ob))
+    return 0;
+  if( ob->query("money_id") )
+  {
+    write("你要当「钱」？\n");
+    return 0;
+  }
+
+  if( ob->query("material") == "ice" )
+  {
+    write("掌柜的说：冰的东西我们这里没法存放。\n");
+    return 0;
+  }
+
+  if( ob->query("material") == "water" )
+  {
+    write("掌柜的说：水的东西我们这里没法存放。\n");
+    return 0;
+  }
+
+  value = ob->query("value");
+  sale=ob->query_temp("sale_price");
+  if(sale>0 && sale<value)
+    value=sale;
+  if( !value || value < 10)
+  {
+    write(WHT"这样东西不值钱,你还是自己留着吧。\n"NOR);
+    return 0;
+  }
+
+  if(ob->query("no_sell"))
+  {
+    write("掌柜的说：" + ob->query("name") + "是西游记商业行会禁止买卖的，这里不收购。\n");
+    return 0;
+  }
+
+  if( ob->query("no_break") )
+  {
+    write("掌柜的说：神器物品我们这里不敢收购。\n");
+    return 0;
+  }
+
+  if( ob->query("npc_only") || ob->query("deadfly") || ob->query("combine") )
+  {
+    write("掌柜的说：我们这里不收购这样东西。\n");
+    return 0;
+  }
+
+  if( ob->is_character())
+  {
+    write(CYN"掌柜的道：“哼！我这里做正经生意，不贩卖人口！”\n" NOR);
+    return 0;
+  }
+
+  if (ob->query("max_liquid")
+     && ob->query("liquid/remaining")<ob->query("max_liquid"))
+  {
+    write(WHT"拿个喝过的也想来骗钱啊！\n"NOR);
+    return 0;
+  }
+
+  if (ob->query_max_encumbrance())
+  {
+    write(WHT"这里不收购容器！\n"NOR);
+    return 0;
+  }
+
+  if (ob->query("armor_prop/armor")!=ob->query("armor/max_armor"))
+  {
+    write(WHT"这个装备已破损不能拿来典当！\n"NOR);
+    return 0;
+  }
+
+  if (ob->query("weapon_prop/damage")!=ob->query("max_weapon"))
+  {
+    write(WHT"这个武器已破损不能拿来典当！\n"NOR);
+    return 0;
+  }
+
+// 如果是帮会属性物品
+  if(ob->query("area_name"))
+  {
+    write(CYN"掌柜的惊道：“小的胆子很小，可不敢收购"+ob->query("area_name")+"的东西。”\n" NOR);
+    return 0;
+  }
+
+  if (ob->query("wiz_only"))
+  {
+    write(CYN"掌柜的忙摇头道：“小的只有一个脑袋，可不敢收购大神的东西。”\n" NOR);
+    return 0;
+  }
+
+  if (ob->is_item_make())
+  {
+    write("这东西可不能典当！\n");
+    return 0;
+  }
+
+  if (ob->query("auto_dest") || ob->query_temp("auto_dest"))
+  {
+    write("这东西没有办法长期保存！\n");
+    return 0;
+  }
+
+  if (ob->query("is_monitored"))
+  {
+    write("这东西可不好私藏啊！\n");
+    return 0;
+  }
+
+  if (ob->query("equipped"))
+    ob->unequip();
+  return 1;
+}
+
+int do_pawn(string arg)
+{
+  object ob, stamp_ob;
+  int value;
+  string owner;
+  object me;
+  me = this_player();
+  if (!objectp(me) || !playerp(me))
+    return 0;
+
+  if (!objectp(environment(me)))
+    return 0;
+
+  if( me->is_busy() )
+    return notify_fail("你现在正忙着呢。\n");
+
+  if( !arg || !(ob = present(arg, this_player())) )
+    return notify_fail("你要典当什么物品？\n");
+
+  if (!can_sell(ob))
+    return notify_fail("不要！不要！！\n");
+  stamp_ob = new("/obj/stamps");
+  if (!objectp(stamp_ob))
+  {
+    tell_object(me,WHT"系统无法生成当票，当票文件出错！请和wiz联系！\n"NOR);
+    return 1;
+  }
+
+  write("掌柜的唱道："+ element_of(sell_msg) +
+        ob->query("name") + "一" + ob->query("unit") + "，押"+
+        value_string(value*20/100)+ "。\n");
+  message_vision("$N把身上的" + ob->query("name") + "拿出来典当了"
+                + value_string(value * 20 / 100) + "。\n", me);
+  stamp_ob->move(me,1);
+  stamp_ob->set_temp("file", base_name(ob));
+  if (ob->query_amount() > 1)
+    stamp_ob->set_temp("amount",ob->query_amount());
+  stamp_ob->set_temp("value", value*30/100);
+  stamp_ob->set_temp("player", me->query("id"));
+  owner = ob->query("owner");
+  stamp_ob->set_temp("ob_owner",owner);
+  stamp_ob->set_temp("name",ob->query("name"));
+  stamp_ob->set_temp("id",ob->query("id"));
+  stamp_ob->set_temp("long_1", me->name()+"典当" +
+           ob->query("name") + "一" + ob->query("unit") + "讫，破烂缺损不堪。");
+  stamp_ob->set_temp("long_2", "赎回应付"+
+         value_string(value*30/100)+"整，一手交钱，一手交货。");
+  pay_player(me, value * 20 / 100);
+  ob->move(findbox());
+  if (!me->is_busy())
+    me->start_busy(1);
+  destruct(ob);
+  return 1;
+}
+
+int do_sell(string arg)
+{
+  object ob, me;
+  int value,amount;
+  string obname,sunit;
+  me = this_player();
+  if (!objectp(me) || !playerp(me))
+    return 0;
+  if (!objectp(environment(me)))
+    return 0;
+
+  if( me->is_busy() )
+    return notify_fail("你现在正忙着呢。\n");
+  if( !arg )
+    return notify_fail("你要卖断什么物品？\n");
+  ob = present(arg, me);
+  if (!objectp(ob))
+  {
+    write("你身上没有这种东西啊！\n");
+    return 1;
+  }
+
+  if (!can_sell(ob))
+    return notify_fail("不要，不要！\n");
+  amount = ob->query_amount();
+  if (amount < 1)
+    amount = 1;
+  value = ob->query("value");
+  if (!value)
+    value = ob->query("base_value")*amount;
+  if (!value)
+    return notify_fail("这东西根本就不值钱！\n");
+
+  sunit = ob->query("base_unit");
+  if (!stringp(sunit))
+    sunit = ob->query("unit");
+
+  obname = ob->query("name");
+
+  if (findbox()->add_goods(ob))
+  {
+    write(sprintf("掌柜的唱道：%s%s%s%s，当%s。\n",
+               element_of(sell_msg),
+               obname,
+               chinese_number(amount),
+               sunit,
+               value_string(value*30/100)));
+    pay_player(me, value * 30 / 100);
+    message_vision("$N把身上的" + obname + "卖掉。\n", this_player());
+  }
+
+  else
+  {
+    write("不要了，不要了！\n");
+  }
+
+  if (!me->is_busy())
+    me->start_busy(2);
+  return 1;
+}
+
+int do_retrieve(string arg)
+{
+  object ob,me;
+  int value, afford,ob_num;
+  string ob_file, owner;
+  object pawn_ob;
+  string *obj_id;
+  string o_name, o_id;
+  me = this_player();
+  if (!objectp(me) || !playerp(me))
+    return 0;
+  if (!objectp(environment(me)))
+    return 0;
+
+  if( me->is_busy() )
+    return notify_fail("你现在正忙着呢。\n");
+  if( !arg || !(ob = present(arg, this_player())) )
+    return notify_fail("你要赎回什么物品。\n");
+  if( ob->query("id") != "pawn stamp")
+    return notify_fail("你要用当票才能赎回物品。\n");
+  value = ob->query_temp("value");
+  if(!value)
+    return notify_fail("用空白当票来赎物，光天化日之下想打劫不成！\n");
+  if( !(afford = me->can_afford(value)) )
+  {
+    return notify_fail("你没有足够的钱来赎回。\n");
+  }
+
+  else if( afford == 2 )
+    return notify_fail("你没有足够的零钱，而银票又没人找得开。\n");
+  if( ob->query_temp("player") != me->query("id"))
+    return notify_fail("又不是你当的，想趁火打劫啊！\n");
+  ob_file = ob->query_temp("file");
+  owner = ob->query_temp("ob_owner");
+  if (!stringp(ob_file))
+  {
+    destruct(ob);
+    return notify_fail("掌柜的惊道：糟糕！你要的东西找不着了。\n");
+  }
+
+  pawn_ob = new(ob_file);
+  if(!objectp(pawn_ob))
+  {
+    destruct(ob);
+    return notify_fail("掌柜的惊道：糟糕！你要的东西找不着了。\n");
+  }
+
+  ob_num = (int)ob->query_temp("amount");
+  if (ob_num > 1)
+    pawn_ob->set_amount(ob_num);
+  o_name = ob->query_temp("name");
+  o_id = ob->query_temp("id");
+
+  if (o_name != pawn_ob->query("name") || o_id != pawn_ob->query("id"))
+  {
+    obj_id = pawn_ob->query_my_id();
+    obj_id[0] = o_id;
+    pawn_ob->set_name(o_name,obj_id);
+    pawn_ob->set("owner",owner);
+    pawn_ob->setup();
+  }
+
+  write("掌柜的唱道："+ element_of(sell_msg) +
+        pawn_ob->query("name") + "一" + pawn_ob->query("unit") + "，赎银"+
+        value_string(value)+ "。\n");
+  message_vision("$N用当票赎回一"+pawn_ob->query("unit")+
+        pawn_ob->query("name")+"。\n", this_player());
+  pawn_ob->move(me,1);
+  destruct(ob);
+  me->pay_money(value);
+  me->save();
+  if (!me->is_busy())
+    me->start_busy(2);
+  return 1;
+}
+
+int do_list(string arg)
+{
+   string list;
+   object me;
+  me = this_player();
+  if (!objectp(me))
+    return 0;
+  if (!objectp(environment(me)))
+    return 0;
+
+  if( me->is_busy() )
+    return notify_fail("你现在正忙着呢。\n");
+  list = findbox()->goods_list(arg);
+  if (stringp(list))
+  {
+    me->start_more(list);
+    if (!me->is_busy())
+      me->start_busy(1);
+    return 1;
+  }
+
+  return notify_fail("当铺目前没有任何货物可卖。\n");
+}
+
+int do_buy(string arg)
+{
+  object me, ob;
+  int afford,value,amount;
+  string sunit;
+
+  me = this_player();
+  if (!objectp(me))
+    return 0;
+  if (!objectp(environment(me)))
+    return 0;
+
+  if( me->is_busy() )
+    return notify_fail("你现在正忙着呢。\n");
+  if( !arg )
+  {
+    write("指令格式：buy <物品序列号码>\n");
+    return 1;
+  }
+
+  notify_fail("当铺目前没有任何货物可卖。\n");
+  ob = findbox()->buy_goods(arg);
+  if (!objectp(ob))
+    return 0;
+  value = ob->query("value");
+  if (value < 1)
+    value = ob->query("base_value")*ob->query_amount();
+
+  afford=me->can_afford(value);
+  if(!afford)
+  {
+    write("你没有足够的钱。\n");
+    return 1;
+  }
+
+  else if( afford == 2 )
+  {
+    write("你没有足够的零钱，而银票又没人找得开。\n");
+    return 1;
+  }
+
+  me->pay_money(value);
+  ob->move(me,1);
+  amount = ob->query_amount();
+  if (amount < 1)
+    amount = 1;
+  sunit = ob->query("base_unit");
+  if (!stringp(sunit))
+    sunit = ob->query("unit");
+
+  message_vision("$N掏钱向当铺买下" + chinese_number(amount) +
+       sunit + ob->query("name") + "。\n", this_player() );
+  me->save();
+  findbox()->reduce_goods(arg);
+  if (!me->is_busy())
+    me->start_busy(1);
+  return 1;
+}
+
+int clean_up()
+{
+  return 0;
+}
+

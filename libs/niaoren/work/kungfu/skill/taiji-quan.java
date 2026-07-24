@@ -1,0 +1,70 @@
+// taiji-quan.c 太極拳
+
+inherit SKILL;
+
+mapping *action = ({
+([      "action" : "$N使一招「攬雀尾」，雙手划了個半圈，按向$n的$l",
+        "force" : 150,
+        "dodge" : 30,
+        "skill_name" : "攬雀尾",
+        "damage_type" : "瘀傷"
+]),
+([      "action" : "$N左手虛按，右手使一招「白蛇吐信」，向$n的$l插去",
+        "force" : 250,
+        "dodge" : 25,
+        "skill_name" : "白蛇吐信",
+        "damage_type" : "瘀傷"
+]),
+([      "action" : "$N雙手握拳，向前向后划弧，一招「雙風貫耳」打向$n的$l",
+        "force" : 300,
+        "dodge" : 20,
+        "skill_name" : "雙風貫耳",
+        "damage_type" : "瘀傷"
+]),
+([      "action" : "$N左手虛划，右手一記「指襠錘」擊向$n的襠部",
+        "force" : 320,
+        "dodge" : 15,
+        "skill_name" : "指襠錘",
+        "damage_type" : "瘀傷"
+]),
+([      "action" : "$N施出「伏虎式」，右手擊向$n的$l，左手攻向$n的襠部",
+        "force" : 370,
+        "dodge" : 10,
+        "skill_name" : "伏虎式",
+        "damage_type" : "瘀傷"
+])
+});
+
+int valid_enable(string usage) { return usage=="unarmed" || usage=="parry"; }
+
+int valid_learn(object me)
+{
+        if (me->query_temp("weapon") || me->query_temp("secondary_weapon"))
+                return notify_fail("練太極拳必須空手。\n");
+        if ((int)me->query_skill("taiji-shengong", 1) < 20)
+                return notify_fail("你的太極神功\火候不夠，無法學太極拳。\n");
+        if ((int)me->query("max_neili") < 100)
+                return notify_fail("你的內力太弱，無法練太極拳。\n");
+        return 1;
+}
+
+mapping query_action(object me, object weapon)
+{
+        return action[random(sizeof(action))];
+}
+
+int practice_skill(object me)
+{
+        if ((int)me->query("qi") < 30)
+                return notify_fail("你的體力太低了。\n");
+        if ((int)me->query("neili") < 20)
+                return notify_fail("你的內力不夠練太極拳。\n");
+        me->receive_damage("qi", 25);
+        me->add("neili", -10);
+        return 1;
+}
+
+string perform_action_file(string action)
+{
+        return __DIR__"taiji-quan/" + action;
+}

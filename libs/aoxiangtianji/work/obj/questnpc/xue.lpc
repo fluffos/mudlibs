@@ -1,0 +1,136 @@
+#include <ansi.h>
+inherit "/obj/questnpc/tasknpc";
+void create()
+{
+  ::create();
+  set_name("妖怪","xue yaoguai");
+  setup();
+  if (clonep())
+    keep_heart_beat();
+}
+
+void full_me(object me)
+{
+  me->set("kee",me->query("max_kee"));
+  me->set("eff_kee",me->query("max_kee"));
+  me->set("sen",me->query("max_sen"));
+  me->set("eff_sen",me->query("max_sen"));
+  me->set("force",me->query("max_force"))*2;
+  me->set("mana",me->query("max_mana"))*2;
+  me->clear_condition();
+  return;
+}
+
+void die(object killer)
+{
+  object dob, weapon;
+  string quester;
+  int exp,dx,qn,weiwang,score, mylvl;
+  int count;
+  quester = query("quester");
+  if (stringp(quester) && objectp(dob = find_player(quester)))
+    dob->set("quest_xyj/xue/npc_die",1);
+  if (!query_temp("my_killer"))
+  {
+    message_vision("$N一看不是对手，急急忙忙的溜了。\n", this_object());
+    destruct(this_object());
+    return;
+  }
+
+  if (! objectp(dob = killer))
+    dob = query_last_damage_from();
+  if (objectp(dob) && dob->query_temp("owner"))
+    dob = dob->query_temp("owner");
+  if (dob && dob->query("quest_xyj/xue/npc_id") != query("id"))
+  {
+    CHANNEL_D->do_channel(this_object(), "rumor",
+                          sprintf("听说%s被人杀死了。", name()));
+    log_file("static/killed_die", sprintf("%s %s(%s) died at %s because %s.\n",
+           ctime(time()),
+           name(),
+           query("id"),
+           environment()->short(),
+           dob ? sprintf("%s(%s)", dob->name(1), dob->query("id")) : "none"));
+    dob->delete("quest_xyj/xue");
+    SYSQ_D->delete_quest("xue",dob);
+    destruct(this_object());
+    return;
+  }
+
+  mylvl = (int)dob->query("level");
+  count = dob->query("quest_info/xue/count");
+  dx = 150 + mylvl*4 + count;
+//  dx = dx/2 + random(dx);
+  exp = dx/4 + random(dx/2);
+  count++;
+  qn = dx/3 + random(dx/3);
+  weiwang = 1 + random(3);
+  score = 2 + random(3);
+  if (count > 500)
+    count = 0;
+  dob->set("quest_info/xue/count",count);
+  message_vision("$N惨叫一声，死了。\n",this_object());
+  dob->add("quest_info/xue/total_num",1);
+  if (dob->query("office_number") < 500)
+    dob->add("office_number",1);
+  dob->add("balance",5000 + random(5000));
+  tell_object(dob,"你除害有功，唐皇给了你一些金钱奖励。你银行的存款有所增加！\n");
+  GIFT_D->delay_bonus(dob, ([ "exp"     : exp ,
+                              "daoxing" : dx,
+                              "pot"     : qn ,
+                              "mar"     : random(1 + qn/3*2),
+                              "weiwang" : weiwang,
+                              "score"   : score,
+                              "prompt"  : "击毙" + name() + "之后" ]),"xue");
+  if (weapon = dob->query_temp("weapon") ||
+      weapon = dob->query_temp("armor/hands"))
+    weapon->killer_reward(dob, this_object());
+  dob->delete("quest_xyj/xue");
+  SYSQ_D->delete_quest("xue",dob);
+  destruct(this_object());
+  return;
+}
+
+int accept_fight(object ob)
+{
+  command("say 我正忙着呢！");
+  return 0;
+}
+
+void kill_ob(object ob)
+{
+  if (ob->query("quest_xyj/xue/npc_id") != query("id"))
+  {
+    delete_temp("my_killer");
+    ::kill_ob(ob);
+    return;
+  }
+
+  if (!query_temp("my_killer"))
+    full_me(this_object());
+  set_temp("my_killer",ob);
+  ::kill_ob(ob);
+  return;
+}
+
+void scan()
+{
+  object ob = this_object();
+  ::scan();
+  if ((time() - (int)query("born_time")) > query("stay_time") &&
+      ! is_fighting() && living(ob))
+  {
+    message_vision("$N急急忙忙的走了。\n", ob);
+    CHANNEL_D->do_channel(ob, "rumor",
+             sprintf("听说%s隐居到了深山老泽，从此不再出没在世间。", name()));
+    log_file("static/killed_die", sprintf("%s %s(%s) vanished because timeout(%d:%d).\n",
+             log_time(), name(), query("id"), time() - query("born_time"),
+             query("stay_time")));
+    SYSQ_D->delete_quest(ob->query("quest_type"),ob->query("quester"));
+    destruct(this_object());
+    return;
+  }
+
+  return;
+}
+

@@ -1,0 +1,84 @@
+#include <ansi.h>
+#include <combat.h>
+#define SHA "「" HIW "玉碎" NOR "」"
+inherit F_SSERVER;
+int valid_pfm(object me, object target)
+{
+  if(userp(me) && (string)me->query("family/family_name") != "月宫")
+    return notify_fail(SHA"是月宫不传之密！\n");
+  if (me->is_busy())
+    return notify_fail("你正忙着呢！\n");
+
+  if (me->query_skill("snowsword", 1) < 180)
+    return notify_fail("你的风回雪舞剑法修为不够，难以施展" SHA "。\n");
+  if (me->query_skill_mapped("force")!="moonforce")
+    return notify_fail(SHA"必须配合圆月心法才能使用。\n");
+  if (me->query_skill_mapped("sword") != "snowsword")
+    return notify_fail("你没有激发风回雪舞剑法，难以施展" SHA "。\n");
+  if (me->query("force") < 500)
+    return notify_fail("你的真气不够，难以施展" SHA "。\n");
+  return 1;
+}
+
+int perform(object me, object target)
+{
+  string msg;
+  object weapon;
+  int ap, dp;
+  int eff_qi,max_qi,qi_pcg;
+  object ob;
+
+  if (!target->is_killing(me->query("id")))
+    return notify_fail("好端端的比武，何必性命相搏？\n");
+  if (! target->is_want_kill(me->query("id")))
+    return notify_fail(sprintf("并不是%s想杀你，你怎么和他拼命？\n",target->name()));
+  if (! objectp(weapon = me->query_temp("weapon")) ||
+      (string)weapon->query("skill_type") != "sword")
+    return notify_fail("你使用的武器不对，难以施展" SHA "。\n");
+  ob = me->query_last_damage_from();
+  if (objectp(ob) && ob != target)
+    return notify_fail(sprintf("%s并没有把你怎么样，你为什么要和他拼命呢？\n",target->name()));
+
+  eff_qi = (int)me->query("eff_kee");
+  max_qi = (int)me->query("max_kee");
+  qi_pcg = eff_qi*100/max_qi;
+
+  if (qi_pcg >= 50)
+    return notify_fail("还未到山穷水尽的地步，不要胡乱出手。\n");
+
+  me->set("kee", 0);
+  me->set("eff_kee",eff_qi*random((qi_pcg/10)+1)/100);
+  me->set("sen",0);
+  me->set("eff_sen",me->query("eff_sen")*random(10)/100);
+  me->set("force",0);
+  me->set("mana",0);
+  msg = HIR"$N眼见不敌，银牙一咬，突然高高纵起，凝聚全身功力，人剑合一，"
+        + weapon->name() + "化做一道白光，疾风般扑向$n！\n" NOR;
+
+  ap = COMBAT_D->math_ap(me,"sword");
+  dp = COMBAT_D->math_dp(me,target,0,0,0);
+  ap = ap*150/(qi_pcg+1);
+  dp = dp*qi_pcg/150;
+
+  if (COMBAT_D->perform_success(me, target,ap,dp,120))
+  {
+    msg += HIW "$n不料$N如此决绝，为此气势所慑，竟然楞在当地，忘了招架。\n"
+           "说时迟，那时快，这道白光已在$n身上当胸穿过！\n"NOR;
+    target->start_busy(2);
+    target->receive_damage("kee",2*target->query("max_kee"),me);
+    target->receive_wound("kee",2*target->query("max_kee"),me);
+    target->receive_damage("sen",2*target->query("max_sen"),me);
+    target->receive_wound("sen",2*target->query("max_sen"),me);
+  }
+
+  else
+  {
+    msg += HIW"$n一见情势不妙，连忙就地一滚，虽于千钧一发之际躲过雷霆一击，却也狼狈"
+              "不堪，吓得魂飞魄散，一时间动弹不得。\n"NOR;
+  }
+
+  message_combatd(msg, me, target);
+  me->start_busy(3+random(3));
+  target->start_busy(3+random(3));
+  return 1;
+}

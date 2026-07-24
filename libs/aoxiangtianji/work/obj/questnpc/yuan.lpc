@@ -1,0 +1,302 @@
+#include <ansi.h>
+inherit "/obj/questnpc/tasknpc";
+void create()
+{
+  int i;
+  ::create();
+  set_name("妖怪","yuan yaoguai");
+
+  i = random(1000);
+  if(i<10)
+  {
+    set("type","aggressive");
+  }
+
+  else if(i<20)
+  {
+    set("type","blocker");
+  }
+
+  else if(i<220)
+  {
+    set("type","aggressive_on_owner");
+  }
+
+  else if(i<320)
+  {
+    set("type","aggressive_on_owner1");
+  }
+
+  else
+    set("type","normal");
+
+  if(random(10)==0)
+  {
+    set("env/wimpy",40);
+    set("extra_diff",1);
+  }
+
+  setup();
+  if (clonep())
+    keep_heart_beat();
+}
+
+void init()
+{
+  object me=this_object();
+  object who=this_player();
+  string type;
+  ::init();
+
+  if(!playerp(who))
+    return;
+  if(!living(me))
+    return;
+
+  type=query("type");
+  switch (type)
+  {
+    case "aggressive" :
+    {
+      object leader = query_leader();
+      int exp, myexp;
+      if(leader && present(leader, environment(me)))
+      {
+        if(!is_fighting())
+          kill_ob(leader);
+        break;
+      }
+
+      exp=(who->query("combat_exp")+ who->query("daoxing"))/2;
+      myexp=(query("combat_exp")+ query("daoxing"))/2;
+      if(exp>myexp*3 || exp<myexp)
+        break;
+      set_leader(who);
+      message_vision("$N盯着$n，馋得直流口水：嘿嘿．．．\n", me, who);
+      kill_ob(who);
+      break;
+    }
+
+    case "aggressive_on_owner1":
+      if(who->query("quest_xyj/yuan/npc_id") == query("id"))
+      {
+        if(!me->query("announced"))
+        {
+          message_vision("$N看见$n，大叫一声：哈哈，送上门来的肉！\n", me, who);
+          me->set("announced",1);
+        }
+
+        kill_ob(who);
+        if(random(4)>0)
+          set_leader(who);
+        else
+          set_leader(0);
+        who->kill_ob(me);
+      }
+
+      break;
+    case "aggressive_on_owner":
+      if(who->query("quest_xyj/yuan/npc_id") == query("id"))
+      {
+        if(!me->query("announced"))
+        {
+          message_vision("$N看见$n，大叫一声：哈哈，送上门来的肉！\n", me, who);
+          me->set("announced",1);
+        }
+
+        kill_ob(who);
+        who->kill_ob(me);
+      }
+
+      break;
+    case "blocker":
+    {
+      add_action("do_block","",1);
+      break;
+    }
+
+  }
+
+}
+
+int do_block(string arg)
+{
+  object me=this_object();
+  object who=this_player();
+  string verb=query_verb();
+  int t;
+
+  if(wizardp(who) && !visible(who))
+    return 0;
+  if(me->is_fighting())
+    return 0;
+  if(verb!="go" &&
+     verb!="fly" &&
+     !(environment() && environment()->query("exits/" + verb)))
+    return 0;
+  if(who->query_temp("mieyao/allow_to_go"))
+  {
+    who->delete_temp("mieyao/allow_to_go");
+    who->delete_temp("mieyao/leave_time");
+    return 0;
+  }
+
+  t=who->query_temp("mieyao/leave_time");
+  if(t>0 && time()>t)
+  {
+    who->delete_temp("mieyao/leave_time");
+    message_vision("$n乘$N一个不注意，急忙溜了过去。\n",me,who);
+    return 0;
+  }
+
+  if(t==0)
+  {
+    t=time()+30+random(90);
+    who->set_temp("mieyao/leave_time",t);
+    message_vision("$N猛地跳过来拦在$n面前，高声叫道：\n"+
+                "          此山是我开，此树是我栽！\n"+
+                "          要打此路过，留下买路财！\n\n",me,who);
+  }
+
+  tell_object(who,me->name()+"一把抓住了你！\n");
+  return 1;
+}
+
+void full_me(object me)
+{
+  me->set("kee",me->query("max_kee"));
+  me->set("eff_kee",me->query("max_kee"));
+  me->set("sen",me->query("max_sen"));
+  me->set("eff_sen",me->query("max_sen"));
+  me->set("force",me->query("max_force"))*2;
+  me->set("mana",me->query("max_mana"))*2;
+  me->clear_condition();
+  return;
+}
+
+void die(object killer)
+{
+  object dob, weapon;
+  string quester;
+  int exp,dx,qn,weiwang,score, mylvl;
+  int count, money;
+  quester = query("quester");
+  if (stringp(quester) && objectp(dob = find_player(quester)))
+    dob->set("quest_xyj/yuan/npc_die",1);
+  if (!query_temp("my_killer"))
+  {
+    message_vision("$N一看不是对手，急急忙忙的溜了。\n", this_object());
+    destruct(this_object());
+    return;
+  }
+
+  if (! objectp(dob = killer))
+    dob = query_last_damage_from();
+  if (objectp(dob) && dob->query_temp("owner"))
+    dob = dob->query_temp("owner");
+  if (dob && dob->query("quest_xyj/yuan/npc_id") != query("id"))
+  {
+    CHANNEL_D->do_channel(this_object(), "rumor",
+                          sprintf("听说%s被人杀死了。", name()));
+    log_file("static/killed_die", sprintf("%s %s(%s) died at %s because %s.\n",
+           ctime(time()),
+           name(),
+           query("id"),
+           environment()->short(),
+           dob ? sprintf("%s(%s)", dob->name(1), dob->query("id")) : "none"));
+    destruct(this_object());
+    return;
+  }
+
+  mylvl = (int)dob->query("level");
+  count = dob->query_temp("yuan/next_lv");
+  exp = 100 + mylvl*3 + count*30;
+//  exp = exp/2 + random(exp);
+  dx = exp/4 + random(exp/2);
+  count++;
+  qn = exp/3 + random(exp/3);
+  weiwang = 1 + random(count/2 + 1);
+  score = 2 + random(count/2 + 1);
+  money = 10000;
+  if (count > 9)
+  {
+    count = 0;
+    if (random(2))
+    {
+      exp += 100;
+      dx += 300;
+      qn += 150;
+      tell_object(dob,"你灭妖有功，获得了一些额外的奖励！\n");
+    }
+
+    else
+    {
+      money += 20000;
+    }
+
+  }
+
+  dob->set_temp("yuan/next_lv",count);
+  message_vision("$N惨叫一声，死了。\n",this_object());
+  dob->add("quest_info/yuan/total_num",1);
+  tell_object(dob,"唐王因你灭妖有功，奖励了你一些金钱。你银行的存款有所增加！\n");
+  dob->add("balance",money + random(money + 1));
+  GIFT_D->delay_bonus(dob, ([ "exp"     : exp ,
+                              "daoxing" : dx,
+                              "pot"     : qn ,
+                              "mar"     : random(1 + qn/3*2),
+                              "weiwang" : weiwang,
+                              "score"   : score,
+                              "prompt"  : "击毙" + name() + "之后" ]),"yuan");
+  if (weapon = dob->query_temp("weapon") ||
+      weapon = dob->query_temp("armor/hands"))
+    weapon->killer_reward(dob, this_object());
+  dob->delete("quest_xyj/yuan");
+  SYSQ_D->delete_quest("yuan",dob);
+  destruct(this_object());
+  return;
+}
+
+int accept_fight(object ob)
+{
+  command("say 我正忙着呢！");
+  return 0;
+}
+
+void kill_ob(object ob)
+{
+  if (ob->query("quest_xyj/yuan/npc_id") != query("id"))
+  {
+    delete_temp("my_killer");
+    ::kill_ob(ob);
+    return;
+  }
+
+  if (!query_temp("my_killer"))
+    full_me(this_object());
+  set_temp("my_killer",ob);
+  ::kill_ob(ob);
+  return;
+}
+
+void scan()
+{
+  object ob = this_object();
+  ::scan();
+  if ((time() - (int)query("born_time")) > query("stay_time") &&
+      ! is_fighting() && living(ob))
+  {
+    message_vision("$N急急忙忙的走了。\n", ob);
+    CHANNEL_D->do_channel(ob, "rumor",
+             sprintf("听说%s隐居到了深山老泽，从此不再出没在世间。", name()));
+    log_file("static/killed_die", sprintf("%s %s(%s) vanished because timeout(%d:%d).\n",
+             log_time(), name(), query("id"), time() - query("born_time"),
+             query("stay_time")));
+    SYSQ_D->delete_quest(ob->query("quest_type"),ob->query("quester"));
+    destruct(this_object());
+    return;
+  }
+
+  return;
+}
+

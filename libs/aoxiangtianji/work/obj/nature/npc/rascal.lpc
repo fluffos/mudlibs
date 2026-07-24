@@ -1,0 +1,110 @@
+#include <ansi.h>
+inherit "/obj/questnpc/tasknpc";
+string *my_name = ({ HIW"恶棍"NOR, HIM"恶霸"NOR, CYN"流氓"NOR });
+void create()
+{
+  string *ob_name = ({ HIB"小男孩"NOR,
+                       HIB"小女孩"NOR,
+                       HIG"年轻人"NOR,
+                       HIG"小姑娘"NOR,
+                       HIG"姑娘"NOR,
+                       HIG"老头子"NOR,
+                       HIG"老太太"NOR });
+
+  ::create();
+  set_name("恶霸", ({ "rascal" }) );
+  set("help_ob_name", ob_name[ random( sizeof(ob_name) ) ]);
+  set("long", sprintf("这是一名%s，样子很凶狠。\n", name()));
+  set("chat_chance_combat", 10);
+  set("chat_msg_combat", ({
+       sprintf("%s喝道：今天不给点教训你，也不知道老子的厉害！\n", name()),
+       sprintf("%s喝道：多管闲事，你活得不耐烦了吧！\n", name()),
+       sprintf("%s喝道：呸！大爷的事也管，去死吧！\n", name()),
+  }) );
+  set("chat_chance", 10);
+  set("chat_msg", ({
+     (: random_move :)
+  }) );
+
+  setup();
+  if (clonep())
+    keep_heart_beat();
+}
+
+void do_move()
+{
+  object *ob, me, player;
+  int i;
+  ob = filter_array(users(),(:
+                          userp($1) && !wizardp($1) && objectp(environment($1))
+                       && environment($1)->query("outdoors")
+                       && !environment($1)->is_safty()
+                       && living($1)
+                       && $1->query("age") > 15
+                       && !$1->is_fighting()
+                       && !$1->is_busy()
+                       && (int)$1->query("level") > 20
+                            :));
+  i = sizeof(ob);
+  if( i< 1)
+    return;
+
+  me = this_object();
+  player = ob[ random(i) ];
+  me->set_npc_family(player, 0, 0, 0);
+  me->set_name(my_name[ random( sizeof(my_name) ) ], ({ "rascal" }) );
+  me->setup();
+  NPC_D->set_from_me(me,player,90 + random(20));
+  me->move(environment(player));
+  message("system",WHT"〖"HIR"小道消息"NOR WHT"〗听说："+me->name()
+        +NOR WHT" 正在为非作歹，欺负一位可怜的"NOR WHT+me->query("help_ob_name")+" \n"NOR,users());
+  tell_object(player, HIR"你突然听到远处传来一阵呼救声：“救命啊，救救我啊……”\n"NOR);
+  tell_object(player, sprintf(WHT"你急忙跑过去一看，原来是一个%s正在欺负一位可怜的%s。\n"NOR,
+                         me->name(), me->query("help_ob_name")));
+  message_vision( sprintf( HIR"$N对%s喝道：“大胆狂徒，敢在光天化日之下欺压百姓！”\n"NOR, me->name() ), player);
+  message_vision( sprintf( HIR"%s对$N喝道：“不要命了，敢管大爷的闲事！”\n"NOR, me->name() ), player);
+  me->kill_ob(player);
+  me->set_temp("my_killer",player);
+  player->kill_ob(me);
+}
+
+void die(object killer)
+{
+  object me,dob,k;
+  int exp, dx, pot, weiwang,score;
+  me = this_object();
+
+  k = me->query_temp("my_killer");
+  if (!objectp(k))
+  {
+    message_vision("$N一看不是对手，急急忙忙的溜了。\n", this_object());
+    destruct(this_object());
+    return;
+  }
+
+  if (! objectp(dob = killer))
+    dob = query_last_damage_from();
+  if (objectp(dob) && dob->query_temp("owner"))
+    dob = dob->query_temp("owner");
+  message_vision("$N惨叫一声，死了。\n",me);
+  message("system", WHT"〖"HIR"小道消息" WHT"〗听说：" + dob->name(1) +
+                    WHT"(" + dob->query("id") + ")打败了" + me->name() +
+                    WHT"，帮助了可怜的" + me->query("help_ob_name") + WHT" ！\n" NOR, users() );
+  message_vision( sprintf( "$N打败了%s，帮助了可怜的%s。\n",me->name(1), me->query("help_ob_name") ), dob);
+  message_vision( "由于$N的侠义表现，$N得到了奖励。\n", dob);
+  exp = 300 + random(800);
+  dx = exp/4 + random(exp/2);
+  pot = exp/2;
+  weiwang = 2+random(3);
+  score = weiwang/2 + random(weiwang);
+
+  GIFT_D->delay_bonus(dob, ([ "exp"     : exp ,
+                              "daoxing" : dx,
+                              "pot"     : pot ,
+                              "weiwang" : weiwang,
+                              "score"   : score,
+                              "prompt"  : "击毙" + name() + "之后" ]),"freequest");
+  destruct(me);
+  return;
+}
+

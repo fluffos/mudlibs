@@ -1,0 +1,1157 @@
+#include <command.h>
+#include <mudlib.h>
+#define BOARD_CAPACITY query("capacity")
+inherit ITEM;
+inherit F_SAVE;
+int do_readgroup(string msg);
+void do_readnewsgroup(object ob, int idx);
+void do_readarticle(object ob, int idx, int sidx);
+void do_startmore(string cmd, string *text, int line,
+                  object ob, int idx, int sidx, int jinghua);
+void read_jinghua(object ob, int idx);
+void setup()
+{
+  string loc;
+  if( stringp(loc = query("location")) )
+    move(loc);
+  set("no_get", 1);
+  restore();
+}
+
+void init()
+{
+  mapping *news;
+  int    i, j;
+
+  add_action("do_makegroup", "mkgroup");
+  add_action("do_rmgroup", "rmgroup");
+  add_action("do_readgroup", "read");
+  add_action("do_cpbboard", "cpbboard");
+  news = query("news");
+  if( !pointerp(news) || !sizeof(news) )
+    return;
+
+  for(i=0; i<sizeof(news); i++)
+  {
+    news[i]["used"] = 0;
+    for(j=0; j<sizeof(news[i]["index"]); j++)
+    {
+      news[i]["index"][j]["used"] = 0;
+     }
+
+  }
+
+  set("news", news);
+  save();
+
+  return;
+}
+
+string query_save_file()
+{
+  string id;
+  if( !stringp(id = query("board_id")) )
+    return 0;
+  return DATA_DIR + "board/" + id;
+}
+
+string short()
+{
+  mapping *news;
+  news = query("news");
+  if( !pointerp(news) || !sizeof(news) )
+    return ::short() + " ["WHT" 目前没有任何讨论组"NOR" ]";
+
+  return sprintf("%s [ 目前共有"HIR" %d "NOR"个讨论组 ]",
+              ::short(), sizeof(news));
+}
+
+string query_master(mapping n_g)
+{
+  if (stringp(n_g["master"]))
+    return n_g["master"];
+  else
+    return "暂时空缺";
+}
+
+string long()
+{
+  mapping *news;
+  int i;
+  string msg;
+  news = query("news");
+  msg ="讨论泥巴发展建设用的留言交流板。\n";
+  msg +=WHT"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+         + "━━━━━━━━━━━━\n"NOR;
+  if( !pointerp(news) || !sizeof(news) )
+    return query("long");
+  for(i=0; i<sizeof(news); i++)
+  {
+    msg += sprintf("[%2d]    %3d      %-20s   %12s   %12s\n",
+      i+1, sizeof(news[i]["index"]), news[i]["name"], news[i]["id"], query_master(news[i]));
+  }
+
+  msg += WHT"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+      + " "HIG"["HIR" 翱翔天际·擎日挽月"HIG" ] \n"
+      + BLINK + HIW"进入讨论组，请用 read board \n"NOR;
+
+  return msg;
+}
+
+void done_postnews(object ob, int idx, int sidx, mapping note, string text)
+{
+  mapping *news;
+  int  last, n, i, pl;
+  string sign, pure;
+
+  n = ob->query("env/default_sign");
+  if (! stringp(sign = ob->query(sprintf("env/sign%d", n))))
+  { // auto select the first none null sign
+    for (i = 1; i <= 4; i++)
+    {
+      sign = ob->query(sprintf("env/sign%d", i));
+      if (stringp(sign)) break;
+    }
+
+  }
+
+  if (stringp(sign))
+  {
+    sign = replace_string(sign, "\\n", "\n");
+    sign = trans_color(sign, 1);
+    pure = filter_color(sign);
+    if (strlen(pure) >= 1 &&
+      pure[<1] != '\n')
+    sign += "\n";
+    pure = filter_color(text);
+    pl = strlen(pure);
+    if (pl >= 1 && pure[<1] != '\n')
+      text += "\n\n" + sign;
+    else if (pl >= 2 && pure[<2] != '\n')
+      text += "\n------\n" + sign;
+    else
+      text += "------\n" + sign;
+  }
+
+  note["msg"] = text;
+  news = query("news");
+  news[idx]["time"] = time();
+  if( !sizeof(news[idx]["index"]) )
+    news[idx]["index"] = ({ });
+
+  news[idx]["index"] += ({ note });
+  note["time"] = time();
+
+  if(sidx != -1)
+  {
+    last = sidx;
+    while(1)
+    {
+      news[idx]["index"][last]["used"] -= 1;
+      if(!news[idx]["index"][last]["next"])
+        break;
+      last += news[idx]["index"][last]["next"];
+    }
+
+    news[idx]["index"][last]["next"] =
+        (sizeof(news[idx]["index"]) - last -1);
+  }
+
+  if( sizeof(news[idx]["index"]) > 100 )
+    news[idx]["index"] = news[idx]["index"][50..100];
+  set("news", news);
+  tell_object(ob, WHT"留言完毕。\n\n\n"NOR);
+  message("channel:adm", HIW"【天神之眼】" + ob->name()
+          + "("+ob->query("id")+")刚刚在"HIG+::short()+HIW
+            "发表了一个帖子。\n\n"NOR, users());
+  save();
+  do_readnewsgroup(ob, idx);
+}
+
+void do_postnews(object ob, int idx, int sidx, string title)
+{
+  mapping note;
+  note = allocate_mapping(8);
+  note["title"] = title;
+  if(sidx == -1)
+     note["reply"] = "f";
+  else
+     note["reply"] = "t";
+  note["next"] = 0;
+  note["used"] = 0;
+  note["jinghua"] = 0;
+  note["author"] = ob->query("name") + "(" + capitalize(ob->query("id"))+")";
+  ob->edit( (: done_postnews, ob, idx, sidx, note :) );
+  return;
+}
+
+void inside_group(string line, object ob, int idx, int sidx)
+{
+  int cur;
+  mapping  *news;
+
+  news = query("news");
+  if(line == "q" )
+  {
+    cur =  sidx;
+    while(1)
+    {
+      news[idx]["index"][cur]["used"] -= 1;
+      if(!news[idx]["index"][cur]["next"])
+        break;
+      cur += news[idx]["index"][cur]["next"];
+    }
+
+    do_readnewsgroup(ob, idx);
+  }
+
+  else
+  {
+    write("\n("HIR"q"NOR" 退出)\n");
+    input_to("inside_group", ob, idx, sidx);
+  }
+
+}
+
+void do_readarticle(object ob, int idx, int sidx)
+{
+  mapping *news;
+  mapping last_read_time;
+  string msg, myid;
+  int cur;
+
+  myid = query("board_id");
+  last_read_time = ob->query("bbs_last_read/"+myid);
+
+  news = query("news");
+// add group check here
+
+  msg = "\n\n", cur = sidx;
+  while( 1 )
+  {
+    msg += sprintf("%s%s%s [%d] %-30s %s(%s)\n", HIC,
+    news[idx]["name"], NOR, cur+1, news[idx]["index"][cur]["title"],
+    news[idx]["index"][cur]["author"],
+    BJTIME_CMD->chinese_time(7, ctime(news[idx]["index"][cur]["time"])) );
+    msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+         + "━━━━━━━━\n";
+    msg += news[idx]["index"][cur]["msg"];
+    msg += "\n\n";
+    news[idx]["index"][cur]["used"] += 1;
+
+    if( !news[idx]["index"][cur]["next"] )
+      break;
+
+    cur += news[idx]["index"][cur]["next"];
+  }
+
+  if( !mapp(last_read_time) )
+  {
+    ob->set("bbs_last_read/"+myid,
+    ([ news[idx]["id"]: news[idx]["index"][cur]["time"] ]) );
+  }
+
+  else
+  {
+    if( undefinedp(last_read_time[news[idx]["id"]]) ||
+       news[idx]["index"][cur]["time"] > last_read_time[news[idx]["id"]] )
+      last_read_time[news[idx]["id"]] = news[idx]["index"][cur]["time"];
+  }
+
+  do_startmore("", explode(msg, "\n"), 0, ob, idx, sidx, 0);
+  return;
+}
+
+void do_readjinghua(object ob, int idx, int sidx)
+{
+  mapping *news, *jinghua;
+  string msg;
+  int cur;
+  news = query("news");
+  jinghua = news[idx]["jinghua"];
+// add group check here
+
+  msg = "\n\n", cur = sidx;
+  while( 1 )
+  {
+    msg += sprintf("%s%s%s [%d] %-30s %s(%s)\n", HIC,
+    news[idx]["name"], NOR, cur+1, jinghua[cur]["title"],
+    jinghua[cur]["author"],
+    BJTIME_CMD->chinese_time(7, ctime(jinghua[cur]["time"])) );
+    msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+         + "━━━━━━━━\n";
+    msg += jinghua[cur]["msg"];
+    msg += "\n\n";
+    jinghua[cur]["used"] += 1;
+
+    if( !jinghua[cur]["next"] )
+      break;
+
+    cur += jinghua[cur]["next"];
+  }
+
+  do_startmore("", explode(msg, "\n"), 0, ob, idx, sidx, 1);
+  return;
+}
+
+void in_jinghua(string line, object ob, int idx)
+{
+  int i, num;
+  mapping  *news, *jinghua, *nnews;
+  string  cmds, msg;
+
+  news = query("news");
+  jinghua = news[idx]["jinghua"];
+  if (line == "h" || line == "help")
+  {
+    msg = HIC"通用命令：\n"NOR;
+    msg += HIY"\tq 退出本讨论组精华版\n"NOR;
+    msg += HIY"\t[帖子编号] 查看指定的帖子\n\n"NOR;
+    msg += HIC"版主命令：\n"NOR;
+    msg += HIW"\td [帖子编号] 把指定的帖子移出精华版\n"NOR;
+    write(msg);
+    read_jinghua(ob, idx);
+    return;
+  }
+
+  else if( line == "q")
+  {
+    news[idx]["used"] -= 1;
+    do_readnewsgroup(ob, idx);
+    return;
+  }
+
+  else if( line[0..1] == "d ")
+  {
+    if(!wizardp(ob) &&
+       ob->query("id") != news[idx]["master"])
+    {
+      write("你没有这个权利！\n");
+      read_jinghua(ob, idx);
+      return;
+    }
+
+    sscanf(line, "%s %d", cmds, num);
+    if( num < 1 || num > sizeof(news[idx]["index"]) )
+    {
+      write(WHT"没有这个留言。\n"NOR);
+      read_jinghua(ob, idx);
+      return;
+    }
+
+    nnews = ({ });
+    for(i=0; i<num-1;i++)
+    {
+      if(jinghua[i]["next"] == num-1-i)
+      {
+        if(jinghua[num-1]["next"] == 0)
+          jinghua[i]["next"] = 0;
+        else
+          jinghua[i]["next"] += (jinghua[num-1]["next"]-1);
+      }
+
+      else if(jinghua[i]["next"] != 0 && jinghua[i]["next"] > num-1-i)
+        jinghua[i]["next"] -= 1;
+      nnews += ({ jinghua[i] });
+    }
+
+    for(i=num; i<sizeof(jinghua); i++)
+      nnews += ({ jinghua[i] });
+    jinghua = nnews;
+    msg = sprintf(WHT"移出第 "HIR"%d"NOR WHT" 号精华文章....Ok"NOR, num);
+    tell_object(ob, msg);
+    news[idx]["jinghua"] = jinghua;
+    save();
+    read_jinghua(ob, idx);
+    return;
+  }
+
+  else
+  {
+    sscanf(line, "%d", num);
+    if( num < 1 || num > sizeof(jinghua) )
+    {
+      write(HIC"没有这个留言。\n"NOR);
+      read_jinghua(ob, idx);
+    }
+
+    else
+    {
+      do_readjinghua(ob, idx, num-1);
+    }
+
+  }
+
+}
+
+void read_jinghua(object ob, int idx)
+{
+  mapping *news, *jinghua;
+  int i, j, sum, cur;
+  string msg;
+  int next;
+
+  news = query("news");
+  jinghua = news[idx]["jinghua"];
+
+  write(HIR"\n**************************************************"
+          +"*********************************\n"NOR);
+  write(HIY"\t\tt欢迎来到 "HIW"翱翔天际·擎日挽月 "HIW
+            + news[idx]["name"] + HIY" 精华版！！！\n"NOR);
+  write(HIR"****************************************************"
+         + "*******************************\n"NOR);
+  if(!sizeof(news[idx]["jinghua"]))
+  {
+    write(HIC"本版还没有任何精华文章。\n"NOR);
+    do_readnewsgroup(ob, idx);
+    return;
+  }
+
+  else
+  {
+    for(i=0; i<sizeof(news[idx]["jinghua"]); i++)
+    {
+      news[idx]["jinghua"][i]["reply"] = "f";
+    }
+
+    for(i=0, j=0; i<sizeof(news[idx]["jinghua"]); i++)
+    {
+      if(news[idx]["jinghua"][i]["reply"] == "f")
+      {
+        sum = 1,   cur = i,   j++;
+        next = news[idx]["jinghua"][cur]["next"];
+        while( next != 0 )
+        {
+          news[idx]["jinghua"][cur+next]["reply"] = "t";
+          sum++;  cur += next;     //
+          next = news[idx]["jinghua"][cur]["next"];
+        }
+
+        msg = sprintf("[%2d] %32-s  %18s(%s)\n",
+               i+1,
+               news[idx]["jinghua"][i]["title"],
+               news[idx]["jinghua"][i]["author"],
+               BJTIME_CMD->chinese_time(7,
+                      ctime(news[idx]["jinghua"][i]["time"])) );
+         write(msg);
+      }
+
+    }
+
+    write("\n");
+    write("("HIR"h"NOR" 帮助"HIR"q"NOR" 退出 号码进入): ");
+    input_to("in_jinghua", ob, idx);
+  }
+
+}
+
+void  in_group(string line, object ob, int idx, int restricted)
+{
+  int i, num;
+  mapping  *news, *nnews;
+  mapping note;
+  string  cmds, title, msg;
+  string  myid, who_id, type;
+  object who;
+
+  news = query("news");
+
+  if (line == "h" || line == "help")
+  {
+    msg = HIC"通用命令：\n"NOR;
+    msg += HIY"\tq 退出本讨论组\n"NOR;
+    msg += HIY"\tl 重新排列本讨论组的帖子\n"NOR;
+    msg += HIY"\tjinghua 进入到本版的精华版\n"NOR;
+    msg += HIY"\tp [标题] 留言\n"NOR;
+    msg += HIY"\t[帖子编号] 查看指定的帖子\n\n"NOR;
+    msg += HIC"版主命令：\n"NOR;
+    msg += HIW"\tj [帖子编号] 把指定的帖子作为精华帖子，加入到精华版\n"NOR;
+    msg += HIW"\td [帖子编号] 删除指定的帖子，必须是巫师或者版主或者帖子作者\n"NOR;
+    msg += HIW"\tb [玩家id] 禁止某个玩家在本版发布帖子\n"NOR;
+    msg += HIW"\tb -d[玩家id] 解除某个玩家在本版发布帖子的禁令\n"NOR;
+    write(msg);
+    do_readnewsgroup(ob, idx);
+    return;
+  }
+
+  else if( line == "q")
+  {
+    news[idx]["used"] -= 1;
+    do_readgroup("board");
+    return;
+  }
+
+  else if( line == "l" && !restricted )
+  {
+    do_readnewsgroup(ob, idx);
+    return;
+  }
+
+  else if ( line == "jinghua")
+  {
+    read_jinghua(ob,idx);
+    return;
+  }
+
+  else if( line[0..1] == "b ")
+  {
+    if(!wizardp(ob) &&
+       ob->query("id") != news[idx]["master"])
+    {
+      write("你没有这个权利！\n");
+      do_readnewsgroup(ob, idx);
+      return;
+    }
+
+    sscanf(line,"%s %s",cmds,who_id);
+    if (sscanf(who_id,"%s %s",type,who_id) != 2)
+      type = 0;
+    who = find_player(who_id);
+    if (!objectp(who))
+    {
+      write("没有这个玩家！\n");
+      do_readnewsgroup(ob, idx);
+      return;
+    }
+
+    if (stringp(type) && type == "-d")
+    {
+      if (who->query("bbs/ban_all"))
+      {
+        write("这个玩家被禁止在所有的bbs上发贴，你无法单独解除这个版面的禁令！\n");
+        do_readnewsgroup(ob, idx);
+        return;
+      }
+
+      write("你决定解除对 " + who->query("name") + " 在本版的发贴禁令！\n");
+      tell_object(who,"你被恢复了在" + news[idx]["name"] + "上的发贴权利！\n");
+      message("system",HIR"〖BBS公告〗" + ob->query("id") + HIR"恢复 "HIG + who->query("id")
+          + HIR" 在" HIR + news[idx]["name"] + HIR"上发布帖子的权利！\n"NOR,users());
+      who->delete("bbs/ban_" + news[idx]["id"]);
+      do_readnewsgroup(ob, idx);
+      return;
+    }
+
+    if (who->query("bbs/ban_"+news[idx]["id"]) ||
+        who->query("bbs/ban_all"))
+    {
+      write("这个玩家已经被禁止了在这里发贴！\n");
+      do_readnewsgroup(ob, idx);
+      return;
+    }
+
+    write("你决定取消" + who->query("name") + " 在本版的发贴权利！\n");
+    tell_object(who,"你被禁止在" + news[idx]["name"] + "发布帖子！\n");
+    who->set("bbs/ban_" + news[idx]["id"], 1);
+    message("system",HIR"〖BBS公告〗" + ob->query("id") + HIR"禁止 "HIG + who->query("id")
+           + HIR" 在" HIR + news[idx]["name"] + HIR"上发布帖子！\n"NOR,users());
+    do_readnewsgroup(ob, idx);
+    return;
+  }
+
+  else if (line[0..1] == "j ")
+  {
+    if(!wizardp(ob) &&
+       ob->query("id") != news[idx]["master"])
+    {
+      write("你没有这个权利！\n");
+      do_readnewsgroup(ob, idx);
+      return;
+    }
+
+    sscanf(line, "%s %d", cmds, num);
+    if( num < 1 || num > sizeof(news[idx]["index"]) )
+    {
+      write(WHT"没有这个留言。\n"NOR);
+      do_readnewsgroup(ob, idx);
+      return;
+    }
+
+    if (news[idx]["index"][num-1]["jinghua"])
+    {
+      write(WHT"已经是精华帖子了。\n"NOR);
+      do_readnewsgroup(ob, idx);
+      return;
+    }
+
+    note = allocate_mapping(7);
+    note["title"] = news[idx]["index"][num-1]["title"];
+    note["reply"] = news[idx]["index"][num-1]["reply"];
+    note["next"] = news[idx]["index"][num-1]["next"];
+    note["used"] = news[idx]["index"][num-1]["used"];
+    note["author"] = news[idx]["index"][num-1]["author"];
+    note["msg"] = news[idx]["index"][num-1]["msg"];
+    note["time"] = news[idx]["index"][num-1]["time"];
+    news[idx]["index"][num-1]["jinghua"] = 1;
+    if (sizeof(news[idx]["jinghua"]) < 1)
+      news[idx]["jinghua"] = ({ });
+    news[idx]["jinghua"] += ({ note });
+    save();
+    write("OK！\n");
+    do_readnewsgroup(ob, idx);
+    return;
+  }
+
+  else if( line[0..1] == "d " && !restricted )
+  {
+    sscanf(line, "%s %d", cmds, num);
+    if( num < 1 || num > sizeof(news[idx]["index"]) )
+    {
+      write(WHT"没有这个留言。\n"NOR);
+    }
+
+    else if( news[idx]["index"][num-1]["used"] > 0)
+    {
+      write(HIR"这个留言正被人使用，你不能删去！\n"NOR);
+    }
+
+    else
+    {
+      myid = ob->query("name")+"("+capitalize(ob->query("id"))+")";
+      if(wizhood(ob) != "(admin)" &&
+         myid != news[idx]["index"][num-1]["author"] &&
+         ob->query("id") != news[idx]["master"])
+      {
+        write(HIR"你无权删去这个留言！！\n"NOR);
+      }
+
+      else
+      {
+        nnews = ({ });
+        for(i=0; i<num-1;i++)
+        {
+          if(news[idx]["index"][i]["next"] == num-1-i)
+          {
+            if(news[idx]["index"][num-1]["next"] == 0)
+              news[idx]["index"][i]["next"] = 0;
+            else
+              news[idx]["index"][i]["next"] +=
+                   (news[idx]["index"][num-1]["next"]-1);
+          }
+
+          else  if(news[idx]["index"][i]["next"] != 0 &&
+                   news[idx]["index"][i]["next"] > num-1-i)
+             news[idx]["index"][i]["next"] -= 1;
+          nnews += ({ news[idx]["index"][i] });
+        }
+
+        for(i=num; i<sizeof(news[idx]["index"]); i++)
+          nnews += ({ news[idx]["index"][i] });
+        news[idx]["index"] = nnews;
+        msg = sprintf(WHT"删除第 "HIR"%d"NOR WHT" 号留言....Ok"NOR, num);
+        tell_object(ob, msg);
+        set("news", news);
+        save();
+      }
+
+    }
+
+    do_readnewsgroup(ob, idx);
+  }
+
+  else if( line[0..1] == "p " )
+  {
+    if (ob->query("bbs/ban_"+news[idx]["id"]) ||
+        ob->query("bbs/ban_all"))
+    {
+      write("你被禁止了在这里发贴！\n");
+      return;
+    }
+
+    sscanf(line, "%s %s", cmds, title);
+    if(!title)
+    {
+      write(HIC"留言请指定一个标题。\n"NOR);
+      do_readnewsgroup(ob, idx);
+    }
+
+    else
+      do_postnews(ob, idx, -1,  title);
+  }
+
+  else
+  {
+    sscanf(line, "%d", num);
+    if( num < 1 || num > sizeof(news[idx]["index"]) )
+    {
+      write(HIC"没有这个留言。\n"NOR);
+      do_readnewsgroup(ob, idx);
+    }
+
+    else
+    {
+      do_readarticle(ob, idx, num-1);
+    }
+
+  }
+
+}
+
+void do_readnewsgroup(object ob, int idx)
+{
+  mapping *news, last_read_time;
+  string myid;
+  int   i, j, sum, cur;
+  string msg, readflag;
+  int   last_time, next;
+
+  myid = query("board_id");
+  last_read_time = ob->query("bbs_last_read/"+myid);
+  news = query("news");
+
+  if( !mapp(last_read_time) || undefinedp(last_read_time[news[idx]["id"]]) )
+    last_time = 0;
+  else
+    last_time = last_read_time[news[idx]["id"]];
+
+  write(HIR"\n**************************************************"
+          +"*********************************\n"NOR);
+  write(HIY"\t\t\t欢迎来到 "HIW"翱翔天际·擎日挽月 "HIW
+            + news[idx]["name"] + HIY" 讨论组！！！\n"NOR);
+  write(HIW"\t\t\t本版版主： " + HIR + query_master(news[idx]) + HIW + " \n"NOR);
+  write(HIR"****************************************************"
+         + "*******************************\n"NOR);
+  if(!sizeof(news[idx]["index"]))
+  {
+    write(HIC"这个讨论组目前没有任何留言。\n"NOR);
+    write("你要留言吗？("HIR"h"NOR" 帮助 "HIR"p"NOR" 留言 "HIR" q"NOR" 退出)");
+    input_to("in_group", ob, idx, 1);
+  }
+
+  else
+  {
+    for(i=0; i<sizeof(news[idx]["index"]); i++)
+    {
+      news[idx]["index"][i]["reply"] = "f";
+    }
+
+    for(i=0, j=0; i<sizeof(news[idx]["index"]); i++)
+    {
+      if(news[idx]["index"][i]["reply"] == "f")
+      {
+         sum = 1,   cur = i,   j++;
+         readflag = WHT"(已读)"NOR;
+         next = news[idx]["index"][cur]["next"];
+         while( next != 0 )
+         {
+           if(news[idx]["index"][cur+next]["time"] > last_time)
+             readflag = HIR"(未读)"NOR;
+           news[idx]["index"][cur+next]["reply"] = "t";
+           sum++;  cur += next;     //
+           next = news[idx]["index"][cur]["next"];
+         }
+
+         msg = sprintf("%2s [%2d] %32-s  %18s(%s)\n",
+               ( news[idx]["index"][i]["time"]
+                  > last_time ? HIR"(未读)"NOR : WHT"(已读)"NOR),
+               i+1,
+               news[idx]["index"][i]["title"],
+               news[idx]["index"][i]["author"],
+               BJTIME_CMD->chinese_time(7,
+                      ctime(news[idx]["index"][i]["time"])) );
+         write(msg);
+      }
+
+    }
+
+    write("\n");
+    write("("HIR"h"NOR" 帮助 "HIR"q"NOR" 退出"HIR" l"NOR" 重列"
+             HIR" jinghua"NOR" 精华版"HIR"  p"NOR" 贴文标题 号码进入): ");
+    input_to("in_group", ob, idx, 0);
+  }
+
+}
+
+int do_makegroup(string arg)
+{
+  int  num, i;
+  mapping *news;
+  mapping one_news;
+  string name, id;
+
+  if(wizhood(this_player()) != "(admin)")
+    return notify_fail(HIY"你没有创建讨论组的权利！\n"NOR);
+  if( !arg )
+    return notify_fail(WHT"请用 "HIR"mkgroup"NOR
+                       WHT" 讨论组中文名 讨论组英文名\n去创建一个新的讨论组。\n"NOR);
+  if(sscanf(arg, "%s %s", name, id) != 2)
+    return notify_fail(WHT"请用 "HIR"mkgroup"NOR
+                       WHT" 讨论组中文名 讨论组英文名\n去创建一个新的讨论组。\n"NOR);
+
+  news = query("news");
+  if( !pointerp(news) || !sizeof(news) )
+    num = 0;
+  else
+    num = sizeof(news);
+
+  if( num == BOARD_CAPACITY )
+    return notify_fail("已经有太多的讨论组，请先用 rmgroup 删去一些不常用的。\n");
+
+  for(i=0; i<num; i++)
+  {
+    if(news[i]["id"] == id)
+      return notify_fail(HIR"该讨论组已存在。\n"NOR);
+  }
+
+   one_news = allocate_mapping(6);
+   one_news["id"] = id;
+   one_news["name"] = name;
+   one_news["index"] = ({ });
+   one_news["time"] = time();
+   one_news["used"] = 0;
+   one_news["maker"] = this_player()->query("name");
+
+   if(!num)
+      news = ({ one_news });
+   else
+      news += ({ one_news });
+
+   set("news", news);
+   tell_object(this_player(), HIR"讨论组创建成功！\n"NOR);
+
+   save();
+   return 1;
+}
+
+int do_rmgroup(string arg)
+{
+   int  num, i, delflag;
+   mapping *news, *nnews;
+   string msg;
+
+   if(wizhood(this_player()) != "(admin)")
+     return notify_fail("你没有删讨论组的权利！\n");
+
+   if(!arg)
+     return notify_fail("请用 rmgroup 讨论组英文名 去删一个讨论组。\n");
+
+   news = query("news");
+   if( !pointerp(news) || !sizeof(news) )
+     num = 0;
+   else
+     num = sizeof(news);
+
+   for(i=0; i<num; i++)
+   {
+     if(news[i]["id"] == arg)
+     {
+       if( news[i]["used"] > 0 )
+       {
+         msg = sprintf("%s%d%s", WHT"目前共有HIR", news[i]["used"],
+               NOR WHT"人使用"HIW+news[i]["name"]
+              +NOR WHT"讨论组，请慎重考虑处理！"NOR);
+         write(msg);
+         return 0;
+       }
+
+     }
+
+   }
+
+   nnews = ({ });
+   delflag = 0;
+   for(i=0; i<num; i++)
+   {
+     if(news[i]["id"] != arg)
+       nnews += ({ news[i] });
+     else
+       delflag = 1;
+   }
+
+   if(delflag)
+     tell_object(this_player(), HIW"讨论组删去成功！\n"NOR);
+   else
+     tell_object(this_player(), HIR"没有这个讨论组！\n"NOR);
+
+   set("news", nnews);
+   save();
+   return 1;
+}
+
+void enter_group(string line)
+{
+  object me, who;
+  int num;
+  mapping *news;
+  string master, msg;
+
+  news = query("news");
+
+  me = this_player(1);
+  if (line == "h" || line == "help")
+  {
+    msg = HIC"通用命令：\n"NOR;
+    msg += HIY"\tq 推出讨论组\n"NOR;
+    msg += HIY"\tl 重新排列帖子\n"NOR;
+    msg += HIY"\t[讨论组编号] 进入指定的讨论组\n\n"NOR;
+    msg += HIC"版主命令：\n"NOR;
+    msg += HIW"\tbanzhu [讨论组编号] [新版主id] 任命新版主\n"NOR;
+    msg += HIW"\tbamian [讨论组编号] 罢免讨论组的版主\n\n"NOR;
+    msg += "请选择要阅读的讨论组：("HIR"q"NOR" 退出 号码进入)";
+    write(msg);
+    input_to("enter_group");
+    return;
+  }
+
+  else if( line == "q")
+  {
+    write(HIC"退出讨论组。\n"NOR);
+    return;
+  }
+
+  else if( line == "l" )
+  {
+    do_readgroup("board");
+  }
+
+  else
+  {
+    if (sscanf(line, "banzhu %d %s", num,master) == 2)
+    {
+      if(wizhood(me) != "(admin)" &&
+         wizhood(me) != "(arch)" )
+      {
+        write("你无权进行这种操作！\n");
+        write("\n请选择要阅读的讨论组：("HIR"h"NOR" 帮助 "HIR"q"NOR" 退出 号码进入)");
+        input_to("enter_group");
+        return;
+      }
+
+      who = present(master,environment(me));
+      if( !objectp(who) || !playerp(who))
+      {
+        write("你指定的玩家不再这里！\n");
+        write("\n请选择要阅读的讨论组：("HIR"h"NOR" 帮助 "HIR"q"NOR" 退出 号码进入)");
+        input_to("enter_group");
+        return;
+      }
+
+      if( num < 1 || num > sizeof(news) )
+      {
+        write(WHT"\n没有这个讨论组。\n"NOR);
+        write("\n请选择要阅读的讨论组：("HIR"h"NOR" 帮助 "HIR"q"NOR" 退出 号码进入)");
+        input_to("enter_group");
+        return;
+      }
+
+      news[num-1]["master"] = master ;
+      save();
+      message("system",HIR"〖版主公告〗" + me->query("id") + "任命 "HIG + master
+              + HIR" 为 "HIW + news[num-1]["name"] + HIW"(" + HIW
+              + news[num-1]["id"] + HIW")" + HIR" 版主！\n"NOR,users());
+      write("\n请选择要阅读的讨论组：("HIR"q"NOR" 退出 号码进入)");
+      input_to("enter_group");
+      return;
+    }
+
+    else if (sscanf(line, "bamian %d", num) == 1)
+    {
+      if( num < 1 || num > sizeof(news) )
+      {
+        write(WHT"\n没有这个讨论组。\n"NOR);
+        write("\n请选择要阅读的讨论组：("HIR"h"NOR" 帮助 "HIR"q"NOR" 退出 号码进入)");
+        input_to("enter_group");
+        return;
+      }
+
+      if(wizhood(me) != "(admin)" &&
+         wizhood(me) != "(arch)" &&
+         news[num-1]["master"] != me->query("id"))
+      {
+        write("你无权进行这种操作！\n");
+        write("\n请选择要阅读的讨论组：("HIR"h"NOR" 帮助 "HIR"q"NOR" 退出 号码进入)");
+        input_to("enter_group");
+        return;
+      }
+
+      if (news[num-1]["master"] == me->query("id"))
+      {
+        message("system",HIR"〖版主公告〗" + me->query("id") + HIR"辞去了 " +
+                HIW + news[num-1]["name"] + HIW"(" + HIW + news[num-1]["id"] +
+                HIW")" + HIR" 的版主职位！\n"NOR,users());
+      }
+
+      else
+      {
+        message("system",HIR"〖版主公告〗" + me->query("id") + HIR"罢免了 " +
+                HIW + news[num-1]["name"] + HIW"(" + HIW + news[num-1]["id"] +
+                HIW")" + HIR" 的版主" + HIW + news[num-1]["master"]+
+                HIR"的职位！\n"NOR,users());
+      }
+
+      news[num-1]["master"] = 0 ;
+      save();
+      write("\n请选择要阅读的讨论组：("HIR"h"NOR" 帮助 "HIR"q"NOR" 退出 号码进入)");
+      input_to("enter_group");
+      return;
+    }
+
+    sscanf(line, "%d", num);
+    if( num < 1 || num > sizeof(news) )
+    {
+      write(WHT"\n没有这个讨论组。\n"NOR);
+      write("\n请选择要阅读的讨论组：("HIR"h"NOR" 帮助 "HIR"q"NOR" 退出 号码进入)");
+      input_to("enter_group");
+      return;
+    }
+
+    else
+    {
+      news[num-1]["used"] += 1;
+      do_readnewsgroup(me, num-1);
+    }
+
+  }
+
+}
+
+int do_readgroup(string arg)
+{
+  mapping *news, last_read_time;
+  string myid;
+  int   i, last_read;
+  string msg;
+
+  myid = query("board_id");
+  last_read_time = this_player()->query("bbs_last_read/"+myid);
+  news = query("news");
+
+  if( !pointerp(news) || !sizeof(news) )
+    return notify_fail(HIG"BBS"NOR WHT"板尚没有建立任何门派讨论组。\n"NOR);
+
+  if( !arg || arg != "board")
+    return notify_fail(WHT"指令格式："HIR"read board\n"NOR);
+
+  write(HIR"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+         + "━━━━━━━━━\n"NOR);
+  write(HIY"\t\t\t欢迎使用翱翔天际·擎日挽月讨论板！\n"NOR);
+  write(HIR"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+         + "━━━━━━━━\n"NOR);
+  for(i=0; i<sizeof(news); i++)
+  {
+    if( !mapp(last_read_time) )
+      last_read = 0;
+    else if( undefinedp(last_read_time[news[i]["id"]]) )
+      last_read = 0;
+    else
+      last_read = last_read_time[news[i]["id"]];
+    msg = sprintf("%2s [%2d]  %4d    %-36s   %14s\n",
+       ( news[i]["time"] > last_read ? HIR"(未读)"NOR : WHT"(已读)"NOR),
+       i+1, sizeof(news[i]["index"]), news[i]["name"], news[i]["id"]);
+    write(msg);
+  }
+
+  write(HIR"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" +
+           "━━━━━━\n"NOR);
+  write("请选择要阅读的讨论组：("HIR"h"NOR" 帮助 "HIR"q"NOR" 退出"HIR" l"NOR" 重列 "
+                               HIR"输入对应号码"NOR"进入)");
+  input_to("enter_group");
+  return 1;
+}
+
+int do_cpbboard(string arg)
+{
+  string  bb, bb_file, newsgroup;
+  mapping *news, *notes, note;
+  int     i, j, k;
+  if( !arg )
+    return notify_fail(WHT"指令格式："HIR"cpbboard b_board newsgroup\n"NOR);
+
+  if( sscanf(arg, "%s %s", bb, newsgroup) != 2 )
+    return notify_fail(WHT"指令格式："HIR"cpbboard b_board newsgroup\n"NOR);
+
+  bb_file = "/obj/board/" + bb;
+  if( file_size(bb_file+".lpc") <= 0 )
+    return notify_fail(WHT"找不到 " HIR+ bb_file + ".c "NOR WHT"这个文件。\n"NOR);
+
+  news = query("news");
+  if( !pointerp(news) || !sizeof(news) )
+    return 0;
+
+  k=-1;
+  for(i=0; i<sizeof(news); i++)
+  {
+    if( news[i]["id"] ==  newsgroup )
+    {
+       k = i;
+       break;
+    }
+
+  }
+
+  if(k == -1)
+    return notify_fail(WHT"没有 "HIR+ newsgroup +NOR WHT " 这个讨论组。\n"NOR);
+
+  notes = bb_file->query("notes");
+  if( !pointerp(notes) || !sizeof(notes) )
+     return 0;
+
+  for(j=0; j<sizeof(notes); j++)
+  {
+    note = allocate_mapping(7);
+    note["title"] = notes[j]["title"];
+    note["author"] = notes[j]["author"];
+    note["time"] = notes[j]["time"];
+    note["reply"] = "f";
+    note["next"] = 0;
+    note["used"] = 0;
+    note["msg"] = notes[j]["msg"];
+
+    news[k]["index"] += ({ note });
+  }
+
+  set("news", news);
+  tell_object(this_player(), HIW"拷贝完毕！\n"NOR);
+
+  save();
+  return 1;
+}
+
+void do_startmore(string cmd, string *text, int line,
+                  object ob, int idx, int sidx, int jinghua)
+{
+  int i;
+  switch(cmd)
+  {
+    case "":
+      for(i=line + 23; line<sizeof(text) && line<i; line++)
+        write(text[line] + "\n");
+      if( line>=sizeof(text) )
+      {
+        if (!jinghua)
+        {
+          write("\n("HIR"q"NOR" 退出)");
+          input_to("inside_group", ob, idx, sidx);
+        }
+
+        else
+        {
+          write("\n("HIR"q"NOR" 退出)");
+          input_to("in_jinghua", ob, idx);
+        }
+
+        return;
+      }
+
+      break;
+    case "b":
+      line = line - 46;
+      if(line<-22)
+        return;
+      for(i=line + 23; line < i;line++)
+        write(text[line]+"\n");
+      break;
+    case "q":
+      write("\n("HIR"q"NOR" 退出)");
+      if (!jinghua)
+        input_to("inside_group", ob, idx, sidx);
+      else
+        input_to("in_jinghua", ob, idx);
+      return;
+  }
+
+  printf("== 未完继续 " HIY "%d%%" NOR " == (ENTER 继续下一页，q 离开，b 前一页)",
+        (line*100/sizeof(text)) );
+  input_to("do_startmore", text, line, ob, idx, sidx, jinghua);
+}
+

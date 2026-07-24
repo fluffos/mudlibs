@@ -1,0 +1,474 @@
+inherit NPC;
+#include <obstacle.h>
+#include <ansi.h>
+#define DEBUG 0
+#define LEVEL_NONE 0
+#define LEVEL_ASKED 1
+string reward_player ();
+string recover_death ();
+int is_rulai() {return 1; }
+
+void create()
+{
+  set_name("如来佛", ({ "rulai fo", "rulai", "fo" }));
+  set("title", "佛祖多陀阿伽陀");
+  set("long", "大慈大悲灵山雷音古刹佛祖多陀阿伽陀如来佛爷。\n");
+  set("gender", "男性");
+  set("age", 10000);
+  set("attitude", "peaceful");
+  set("rank_info/self", "贫僧");
+  set("rank_info/respect", "佛祖爷爷");
+  set("class", "bonze");
+  set("str",100);
+  set("per",100);
+  set("max_kee", 20000);
+  set("max_sen", 20000);
+  set("force", 20000);
+  set("max_force", 10000);
+  set("force_factor", 500);
+  set("max_mana", 10000);
+  set("mana", 20000);
+  set("mana_factor", 500);
+  set("combat_exp", 8000000);
+  set("daoxing", 20000000);
+  set_skill("literate", 500);
+  set_skill("force", 500);
+  set_skill("spells", 500);
+  set_skill("dodge", 500);
+  set_skill("unarmed", 500);
+  set_skill("parry", 500);
+  set_skill("staff", 500);
+
+  set_skill("lotusforce", 500);
+  set_skill("buddhism", 500);
+  set_skill("lotusmove", 500);
+  set_skill("jienan-zhi", 500);
+  set_skill("lunhui-staff", 500);
+  map_skill("force", "lotusforce");
+  map_skill("spells", "buddhism");
+  map_skill("dodge", "lotusmove");
+  map_skill("unarmed", "jienan-zhi");
+  map_skill("parry", "lunhui-staff");
+  map_skill("staff", "lunhui-staff");
+  set("chat_chance_combat", 80);
+  set("chat_msg_combat", ({
+   (: cast_spell, "bighammer" :),
+  }) );
+  set("inquiry", ([
+    "die" : (: recover_death :),
+    "recover" : (: recover_death :),
+    "起死回生" : (: recover_death :),
+    "死" : (: recover_death :),
+    "qujing" : (: reward_player :),
+    "obstacle" : (: reward_player :),
+    "obstacles" : (: reward_player :),
+    "取经" : (: reward_player :),
+    "经" : (: reward_player :),
+  ]) );
+  set("my_level",LEVEL_NONE);
+  setup();
+  carry_object("/obj/cloth/y-jiasha")->wear();
+}
+
+void init ()
+{
+  add_action("do_back", "back");
+}
+
+void announce (object me, string str)
+{
+  CHANNEL_D->do_channel(me,"chat",str);
+}
+
+string recover_death()
+{
+  object me = this_object();
+  object who = this_player(1);
+  if (who->query("obstacle/mud_age") > who->query("death/mud_age"))
+  {
+    message_vision ("$N对$n摇了摇头：老夫未闻死迅也。\n",me,who);
+    return "你想欺骗如来啊？\n";
+  }
+
+  if (!who->query("death/last_exp_loss"))
+  {
+    message_vision ("$N对$n摇了摇头：老夫未闻死迅也。\n",me,who);
+    return "你想欺骗佛祖啊！\n";
+  }
+
+  if (!who->query("obstacle/reward"))
+  {
+    message_vision ("$N对$n摇了摇头：你先去西域过关吧。\n",me,who);
+    return "快去过关！\n";
+  }
+
+  if (who->query("obstacle/rebirth") >= 3)
+  {
+    message_vision ("$N对$n摇了摇头：你三根救命毫毛已用尽也。\n",me,who);
+    return "可惜啊，可惜！\n";
+  }
+
+  who->add("obstacle/rebirth",1);
+  message_vision ("\n$N拔出一根救命毫毛，佛手一扬……。\n",me);
+  message_vision ("\n$N顿觉天悬地转乾坤倒置，刹那间禁不住浑身颤抖！\n",who);
+  if (who->query("death/last_exp_loss"))
+  {
+    tell_object (who,"你突然发现你的武学全部恢复了！\n");
+    who->add("combat_exp", (int)who->query("death/last_exp_loss"));
+  }
+
+  if (who->query("death/last_dx_loss"))
+  {
+    tell_object (who,"你突然发现你的道行全部恢复了！\n");
+    who->add("daoxing", (int)who->query("death/last_dx_loss"));
+  }
+
+  if (who->query("death/last_qn_loss"))
+  {
+    tell_object (who,"你突然发现你的潜能全部恢复了！\n");
+    who->add("potential", (int)who->query("death/last_qn_loss"));
+  }
+
+  if (who->query("death/skill_loss"))
+  {
+    tell_object (who,"你突然发现你的武功全部恢复了！\n");
+    who->skill_death_recover();
+  }
+
+  log_file("RECOVER","["+ctime(time())+"] "+sprintf("%s(%s)使用了救命毫毛.\n",
+            who->query("name"),who->query("id")));
+  who->delete("death/last_exp_loss");
+  who->delete("death/last_dx_loss");
+  who->delete("death/last_qn_loss");
+  who->delete("death/skill_loss");
+  who->save();
+  return "你用掉了一根救命毫毛！\n";
+}
+
+void do_reward (object who)
+{
+  object me = this_object();
+  int size1 = sizeof(obstacles);
+  mapping skills = who->query_skills();
+  int size2 = sizeof(skills);
+  int i;
+  if (!interactive (who))
+    return;
+  if (who->query("obstacle/reward"))
+    return ;
+  if (who->query_temp("no_move"))
+    return;
+  if (who->query("obstacle/number") < size1)
+    return;
+  message_vision ("宝殿里紫霞缭绕金光万道，$N见到如来真身浑身一软拜倒在地！\n",who);
+  message_vision ("\n$N对$n说："+RANK_D->query_respect(who)+
+                  "一路上历经灾愆患难，万里迢迢苦尽功成也。\n",me,who);
+  i = (size1+size2+2)*3;
+  who->start_busy(i,i);
+  who->set_temp("no_move",1);
+  call_out("rewarding1",3,me,who,0);
+  return;
+}
+
+void rewarding1 (object me, object who, int num)
+{
+  int i;
+  string str;
+
+  if (!me || !who || environment(me) != environment(who))
+    return;
+
+  if (num > 33)
+    return;
+  i = 1000+random(who->query_kar()*30);
+  str = obstacles[num];
+  who->add("obstacle/reward",i);
+  who->add("potential",i);
+  message_vision ("\n$N说道："+str+"一关，奖$n"+chinese_number(i)+
+                  "点潜能！\n",me,who);
+  tell_object(who,"你的潜能增加了"+chinese_number(i)+"点！\n");
+  if (num < sizeof(obstacles) - 1)
+  {
+    num++;
+    call_out("rewarding1",3,me,who,num);
+  }
+
+  else
+  {
+    call_out("rewarded1",3,me,who);
+  }
+}
+
+void rewarded1 (object me, object who)
+{
+  int i;
+  if (!me || !who || environment(me) != environment(who))
+    return;
+
+  i = who->query("obstacle/reward");
+  remove_call_out("rewarding1");
+  message_vision ("\n$N一点头：共计"+chinese_number(i)+"点潜能！\n",me);
+  announce (me,who->query("name")+"西天取经历经灾愆，奖励"+
+            chinese_number(i)+"点潜能！\n");
+  call_out("rewarding2",3,me,who);
+}
+
+void rewarding2 (object me, object who)
+{
+  mapping skills;
+  int s;
+  string str,*strs;
+  int i,j;
+  if (!me || !who || environment(me) != environment(who))
+    return;
+  skills = who->query_skills();
+  s = sizeof(skills);
+  strs = keys(skills);
+  for (i = 0;i < s; i++)
+  {
+    str = strs[i];
+    j = who->query_skill(str,1);
+    if (j > 10)
+      who->set_skill(str,j+1);
+  }
+
+  message_vision ("\n$N说道：各种技能增加一级！\n",me);
+  tell_object(who,"你的技能增加了一级！\n");
+  call_out("informing",1,me,who);
+}
+
+void informing (object me, object who)
+{
+  mapping guanka;
+  string *gname;
+  int i;
+
+  if (!me || !who || environment(me) != environment(who))
+    return;
+
+  who->interrupt_me();
+  who->set_temp("no_move",0);
+  who->save();
+  me->set("my_level",LEVEL_NONE);
+  me->delete_temp("invite");
+  message_vision ("\n$N对$n说：起身，可去宝阁取真经一本。\n",me,who);
+  message_vision ("\n$N又补充道：日后若有不测，可来大雄宝殿起死回生三次。\n",me);
+  guanka = who->query("obstacle");
+  gname = keys(guanka);
+  for (i=0;i<sizeof(gname);i++)
+    if (guanka[gname[i]] == "done")
+      map_delete(guanka,gname[i]);
+  who->set("obstacle",guanka);
+}
+
+string reward_player ()
+{
+  object me = this_object();
+  object who = this_player();
+  object *all, *list;
+  int size1 = sizeof(obstacles);
+  int i, j, k;
+  if (me->query("my_level") == LEVEL_ASKED)
+  {
+    message_vision ("$N对$n摇头说道：贫僧正忙。\n",me,who);
+    return "正忙着呢！\n";
+  }
+
+  if (who->query("obstacle/reward"))
+  {
+    message_vision ("$N对$n说道：你不是已经来过了吗？\n",me,who);
+    return "你想欺骗佛祖吗？\n";
+  }
+
+  if (who->query_temp("no_move"))
+  {
+    message_vision ("$N对$n摇摇头。\n",me,who);
+    return "你正忙着呢！\n";
+  }
+
+  if (who->query("obstacle/number") < size1)
+  {
+    message_vision ("$N对$n摇头说道：你尚未历尽难关。\n",me,who);
+    return "快去过关吧！\n";
+  }
+
+  if (me->query("last_player") != who)
+  {
+    me->set("last_player",who);
+    me->set_temp("invite","public");
+    announce (me,who->query("name")+"不远万里前来取真经！");
+    announce (me,"诸位仙贤如愿观礼，使accept rulai fo便可！\n");
+    remove_call_out ("inviting");
+    call_out ("inviting",1,me);
+    return "";
+  }
+
+  all = users();
+  i = sizeof(all);
+  list = all_inventory(environment(me));
+  j = sizeof(filter_array(list, (:userp:))) - 1;
+  k = i/15;
+  if (k > 8)
+    k = 8;
+  if ((k-j) > 0)
+  {
+    message_vision ("$N对$n摇摇头：西游记现有"+chinese_number(i)+"位玩家，"
+                    "此处仅有数位仙贤在邀，可否再邀"+chinese_number(k-j)+
+                    "位仙贤前来观礼？\n",me,who);
+    return "";
+  }
+
+  announce (me,"西游记西天取真经观礼："+who->query("name")+"大雄宝殿拜礼！\n");
+  me->set("my_level",LEVEL_ASKED);
+  do_reward (who);
+  return "";
+}
+
+void inviting (object me)
+{
+  int i;
+  object *list;
+  if (! me->query_temp("invite"))
+    return;
+
+  remove_call_out ("inviting");
+  call_out ("inviting",4+random(4),me);
+  list = users();
+  i = sizeof(list);
+  while  (i--)
+  {
+    string here, there;
+    reset_eval_cost();
+    if (!environment(list[i]))
+      continue;
+    if (environment(list[i])->query("unit"))
+      continue;
+    if (list[i]->is_fighting())
+      continue;
+    if (list[i]->is_busy())
+      continue;
+    if (list[i]->query_temp("no_move"))
+      continue;
+    if (list[i]->is_ghost())
+      continue;
+    if (!living(list[i]))
+      continue;
+    if ((string)list[i]->query_temp("accept") != me->query("id"))
+      continue;
+    list[i]->set_temp("accept",0);
+    here = base_name(environment(me));
+    there = base_name(environment(list[i]));
+    if (here == there)
+      continue;
+    message_vision("$N若有所思地向远方伸出手……\n",me);
+//    list[i]->set_temp("accept",0);
+    list[i]->set_temp("lingshan/from",there);
+    message_vision("一团祥云飘来，云中伸出一只巨大的佛手将$N轻轻托起，消失在天空。\n",list[i]);
+    list[i]->move(here);
+    message_vision("……$N轻轻一翻掌，$n稳稳地跳下来落在地上。\n",me,list[i]);
+    break;
+  }
+
+}
+
+int do_back(string arg)
+{
+  string *list_p = ({
+      "/d/city/skezhan",
+      "/d/city/nkezhan",
+      "/d/city/ekezhan",
+      "/d/city/wkezhan",
+      "/d/city/scenter",
+      "/d/city/ncenter",
+      "/d/city/wcenter",
+      "/d/city/ecenter",
+  });
+  object ridee;
+  object who = this_player();
+  object me = this_object();
+  string there = who->query_temp("lingshan/from");
+  if (who->is_busy() || who->is_fighting())
+    return 0;
+  if (who->query_temp("accept") != me->query("id"))
+    return 0;
+
+  ridee = who->query_temp("is_riding");
+
+  message_vision("$N请求$n送$N回返。\n",who,me);
+
+  there = element_of(list_p);
+  who->set_temp("accept",0);
+  message_vision("$N的手掌轻轻托起$n向远方伸去……\n",me,who);
+  who->move(there);
+  if (objectp(ridee))
+    ridee->move(there);
+  message_vision("……云中伸出一只巨大的佛手轻轻一翻，只见$N从里面跳出来。\n",who);
+  return 1;
+}
+
+void die()
+{
+  if (environment())
+    message("sound", "\n\n如来缓缓一点头：佛法无边！\n\n", environment());
+  set("eff_kee", 10000);
+  set("eff_sen", 10000);
+  set("kee", 10000);
+  set("sen", 10000);
+  set("force", 20000);
+  set("mana", 20000);
+}
+
+void unconcious()
+{
+  die ();
+}
+
+string accept_ask(object me, string topic)
+{
+  int number;
+  string msg;
+  object rulai = this_object();
+  if (topic == "18" || topic == "18hell")
+  {
+    if (me->query("obstacle/number") < 34)
+      return "施主尚未取经化解人间的困惑，何谈渡化冤魂恶鬼呢？\n";
+
+    number = (int)me->query("18hell/entrance");
+    if (!number)
+    {
+      message_vision("$N低头沉思了一会，说道：常有冤魂恶鬼哭泣沉沦，令我心不安！\n",rulai);
+      msg = HIM"弟子愿走遍那一八层地狱，渡化冤魂恶鬼\n"NOR;
+      me->command("chat " + msg);
+      msg = HIY"何为渡化？\n"NOR;
+      rulai->command("chat " + msg);
+      msg = HIM"令其明前世之错，解心中之戾！\n"NOR;
+      me->command("chat " + msg);
+      msg = HIY"如何渡之？\n"NOR;
+      rulai->command("chat " + msg);
+      msg = HIM"以佛心，以勇心，以耐心！\n"NOR;
+      me->command("chat " + msg);
+      msg = HIY"善哉！我不入地狱，谁入地狱？\n"NOR;
+      rulai->command("chat " + msg);
+      message_vision("$N伸出双手，翻转之间，天地色变！\n",rulai);
+      me->set_temp("18hell/in_dong",1);
+      message_vision("刹那间青气包裹了$N，天地慢慢明朗了，$N的身形已不见！\n",me);
+      me->move("/d/18hell/dong/dong1");
+      tell_object(me,"你飘飘荡荡，忽的堕入了无边的黑暗中！\n");
+      message("system",HIW"〖" + HIR"如来佛祖" HIW"〗" CYN"：" + me->name() + CYN"自愿前往那 " +
+                       HIM + "十八层地狱" +
+                       CYN" ！以渡化冤魂恶鬼！\n"NOR,users());
+    }
+
+    else
+    {
+      message_vision("$N轻轻的点点头！\n",rulai);
+      me->move(sprintf("/d/18hell/%d/entrance",number));
+      message_vision("$N从天而降，落了下来！\n",me);
+    }
+
+    return "阿弥佗佛！善哉！！\n";
+  }
+
+  return 0;
+}
+

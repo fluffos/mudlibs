@@ -1,0 +1,176 @@
+// 玩家任务守护进程：search.c
+#include <ansi.h>
+string *lost_objs = ({
+        "/obj/questob/bsdao",
+        "/obj/questob/chouyin",
+        "/obj/questob/guanyin",
+        "/obj/questob/gumu",
+        "/obj/questob/jinbagua",
+        "/obj/questob/jinfw",
+        "/obj/questob/jingui",
+        "/obj/questob/jinyd",
+        "/obj/questob/jinyt",
+        "/obj/questob/longxu",
+        "/obj/questob/maozy",
+        "/obj/questob/plbi",
+        "/obj/questob/ruyiqiu",
+        "/obj/questob/xrzhi",
+        "/obj/questob/xyta",
+        "/obj/questob/yufo",
+        "/obj/questob/yugy",
+        "/obj/questob/yulong",
+        "/obj/questob/zisj",
+        "/obj/questob/zizhubi",
+});
+// 接受供应的NPC：要求这些人必须在指定的场景，所以这里指明的
+// 是场景和NPC的ID。
+mapping rcv_npcs = ([
+   "/d/beiping/dangpu"            : "zhang degui",
+   "/d/changan-e/ehouse2"         : "dibao",
+   "/d/changan-e/shop"            : "li si",
+   "/d/changan-s/eside2"          : "fisher",
+   "/d/changan-s/wside3"          : "lu sheng",
+   "/d/chengdu/chufang"           : "chu niang",
+   "/d/chengdu/wuguan"            : "ma wude",
+   "/d/chengdu/jiudian"           : "tang hua",
+   "/d/chengdu/bingqidian"        : "tang huai",
+   "/d/city/shoushi-dian"         : "chen laoban",
+   "/d/city/qingxuguan"           : "wuyuan daozhang",
+   "/d/city/wuguanzhong"          : "fan qingping",
+   "/d/city/zhubaohang"           : "jin fuhuan",
+   "/d/city/by-zahuopu"           : "wei luqi",
+   "/d/city/qx-yaopu"             : "shi jiugong",
+   "/d/city/biaoju-dating"        : "wan",
+   "/d/guanwai/road5"             : "er hu",
+   "/d/guanwai/jishi"             : "ha dani",
+   "/d/guanwai/tuwu"              : "he ersu",
+   "/d/hangzhou/dxbaodian2"       : "dabei zunzhe",
+   "/d/henshan/baihuzhai"         : "du fenge",
+   "/d/henshan/zahuopu"           : "huang laoban",
+   "/d/jingzhou/chaliao"          : "afang",
+   "/d/jingzhou/qianzhuang"       : "qian defa",
+   "/d/jingzhou/shuyuan"          : "xiao xiangzi",
+   "/d/jjf/gate"                  : "qin an",
+   "/d/kaifeng/chufang"           : "kong guanren",
+   "/d/kaifeng/ciqi"              : "liu zhanggui",
+   "/d/kaifeng/cangjing"          : "zhifa zhanglao",
+   "/d/kunming/dangpu"            : "liu tong",
+   "/d/lanzhou/qianzhuang"        : "qian mixin",
+   "/d/lanzhou/shandong"          : "lao ren",
+   "/d/lingzhou/daodian"          : "xiao huoji",
+   "/d/luoyang/xinluofang"        : "gaoli shang",
+   "/d/luoyang/ciqi"              : "han yun",
+   "/d/luoyang/huqing"            : "hu xueyuan",
+   "/d/luoyang/xiaoshe"           : "lvzhu weng",
+   "/d/luoyang/dangpu"            : "qi laoer",
+   "/d/luoyang/tangsancai"        : "qin zhanggui",
+   "/d/luoyang/shoushi"           : "zhou yifeng",
+   "/d/luoyang/armor"             : "zhu zheng",
+   "/d/luoyang/weapon"            : "zhu yin",
+   "/d/suzhou/chitang"            : "xiao yu",
+   "/d/suzhou/yanyutang"          : "xiao yatou",
+   "/d/suzhou/tangyuan"           : "ling tangyuan",
+   "/d/suzhou/jubaozhai"          : "sun baopi",
+   "/d/suzhou/dangpu"             : "wang heji",
+   "/d/yangzhou/chaguan"          : "aqing sao",
+   "/d/yangzhou/wuguan"           : "chen youde",
+   "/d/yangzhou/shan"             : "liu susu",
+   "/d/yangzhou/qianzhuang"       : "qian yankai",
+   "/d/yangzhou/dangpu"           : "tang nan",
+   "/d/yangzhou/zuixianlou2"      : "xian laoban",
+   "/d/yangzhou/zahuopu"          : "yang yongfu",
+   "/d/yangzhou/lichunyuan"       : "wei chunfang",
+]);
+void startup();
+// 任务对象创建
+void create()
+{
+  seteuid(getuid());
+  if (! clonep() && find_object(QUEST_D))
+    startup();
+}
+
+void start_quest()
+{
+  object qob;
+  string qob_name;
+  string room;
+  object env;
+  object npc;
+  string *ob_names;
+  string *env_rooms;
+  object *obs;
+  string zone, *files;
+// 选择一个新的地点(目前没有EXPLORE任务的)
+  env_rooms = keys(rcv_npcs);
+  obs = children("/obj/quest/explore");
+  if (arrayp(obs) && sizeof(obs) > 0)
+    env_rooms -= obs->query("quest_position");
+  if (sizeof(env_rooms) < 1)   // 无法找到这样的地点
+    return;
+  room = element_of(env_rooms);
+  env = get_object(room);
+// rcwiz add
+  if (!objectp(env))
+    return;
+// 选择该地点中的人
+  if (! objectp(npc = present(rcv_npcs[room], env)) ||
+      npc->query("startroom") != base_name(env))
+// 无法找到该地点中合适的NPC来接收
+    return;
+// 派生其它的任务对象：必须有可用物品，当前任务 < 3
+  ob_names = filter_array(lost_objs, (: ! find_object($1) || ! $1->query_temp("quest_ob") :));
+  if (sizeof(ob_names) < 3)
+    return;
+  if (sizeof(children("/obj/quest/explore")) > 6)
+// 系统中最多10个寻找物品的任务
+    return;
+// 寻找一个放置宝物的地点
+  if (sscanf(file_name(environment(npc)), "/d/%s/%*s", zone) == 2)
+    zone = "/d/" + zone + "/";
+  else
+  {  // 必须有一个在/d下面的地点
+    return;
+  }
+
+  files = get_dir(zone + "*.lpc");
+// 初始化任务的一些信息（启动地点）
+  qob_name = element_of(ob_names);
+  qob = new("/obj/quest/explore");
+  qob->set("quest_position", room);
+// 交由任务自己进行初始化
+  qob->init_quest(npc, qob_name, zone, files);
+  CHANNEL_D->do_channel(find_object(QUEST_D),
+                       "sys", "进程(EXPLORE)"
+                       HIR "利用" + qob_name->name() +
+                       HIR "和" + npc->name() +
+                       HIR "创建了一个任务。");
+}
+
+private void heart_beat()
+{
+  if (! find_object(QUEST_D))
+    return;
+// 如果可以，每次心跳(4分钟)产生一个QUEST
+  start_quest();
+}
+
+// 任务守护进程唤醒这个进程
+void startup()
+{
+// 启动
+  if (! find_object(QUEST_D))
+    return;
+  if (! query_heart_beat())
+    CHANNEL_D->do_channel(find_object(QUEST_D),
+                          "sys", "进程(EXPLORE)启动了。");
+// 平均每四分钟产生一个任务
+  set_heart_beat(200 + random(20));
+}
+
+// 停止这个任务进程
+void stop()
+{
+  set_heart_beat(0);
+}
+

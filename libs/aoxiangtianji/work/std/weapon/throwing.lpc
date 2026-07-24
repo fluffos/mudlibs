@@ -1,0 +1,166 @@
+#include <ansi.h>
+#include <combat.h>
+inherit COMBINED_ITEM;
+int is_throwing()
+{
+  return 1;
+}
+
+void init()
+{
+  if (this_player() == environment())
+    add_action("do_throw", "throw");
+}
+
+#include "/cmds/std/valid_kill.h"
+int can_use(object me,object victim,object ob)
+{
+  object env;
+  int amount;
+
+  env = environment(me);
+  if (! objectp(env) ||
+      env->is_safty() ||
+      env->query("no_fight") ||
+      env->query("no_magic") ||
+      env->query("no_kill") )
+    return notify_fail("这里不能发射暗器。\n");
+  if (me->is_busy())
+    return notify_fail("你现在忙着呢。\n");
+  if (! victim->is_character() || !living(victim))
+    return notify_fail("什么你都想杀？\n");
+
+  if( victim->query("no_fight") )
+    return 0;
+  if(!valid_kill(me,victim,0))
+    return 0;
+  if (me->query("sen") < 80)
+    return notify_fail("你现在精神不够好，无法使用" + ob->name() + "攻击对手。\n");
+  if ((amount = ob->query_amount()) < 1)
+    return notify_fail("你身上的" + ob->name() + "不够用了。\n");
+
+  if (!me->is_fighting(victim))
+    return notify_fail("你这样不太好吧？不在战斗中，使用暗器会招人唾骂的！\n");
+  return 1;
+}
+
+void hit_victim(object me, object victim, object ob)
+{
+  int ap,dp,percep;
+  int jiali,dam,wound;
+  string msg;
+
+  if (!objectp(me) || !objectp(victim) || !objectp(ob))
+    return;
+  if (environment(me) != environment(victim))
+    return;
+
+  switch (random(4))
+  {
+    case 0:
+      msg = HIY"$N"HIY"突的一声低喝，左手微微一抬，“嗖”的一声，一道寒光直扑$n而去！\n"NOR;
+      break;
+    case 1 :
+      msg = HIW"$N"HIW"突然间放慢了攻击节奏，电光火石间，$n觉得一阵寒风扑面袭来！\n"NOR
+            HIR"$n"HIR"大吃一惊，急忙大叫道，“暗器”！\n"NOR;
+      break;
+    default :
+      msg = HIY"$N"HIY"伸手从怀里掏出一"+ ob->query("base_unit")
+            + ob->query("name")+"，向$n射了过去。只见一道寒光飞向$n的面门！\n"NOR;
+      break;
+  }
+
+  ap = COMBACC_D->math_ap(me,"throwing");
+  if (me->query("special_skill/accuracy"))
+    ap += ap/5 ;
+  if (userp(victim))
+    ap /= 3;
+
+  if (ap < 10)
+    ap = 10;
+
+  dp = COMBACC_D->math_dp(me,victim,0,0);
+  dp = (dp/100)*80 ;
+  percep = (int)victim->query_skill("perception",1);
+  if (percep > 80)
+  {
+    percep = percep /8;
+    if (percep > 80)
+      percep = 80 ;
+    dp += dp*(random(percep))/100;
+  }
+
+  if (dp < 10)
+    dp = 10;
+
+  if (ap*100/(ap+dp) < random(100))
+  {
+    switch (random(3))
+    {
+      case 0:
+        msg += CYN "却见$n" CYN "轻轻一闪，已将$N" CYN "射出"
+                   "的暗器避了开去。\n" NOR;
+        break;
+      case 1:
+        msg += CYN "只见$n" CYN "不慌不忙，身子向一旁横移数"
+                   "尺，躲开了$N" CYN "这一招。\n" NOR;
+        break;
+      default:
+        msg += CYN "可是$n" CYN "身子往后一仰，顿时让$N" CYN
+                   "射出的暗器落空。\n";
+        break;
+    }
+
+  }
+
+  else
+  {
+    dam = (int)ob->query("weapon_prop/damage");
+    jiali = (int)me->query("force_factor");
+    if (jiali > 1)
+      dam += random(jiali/2 + 1);
+    wound = ob->query("wound_percent") + random((int)ob->query("weapon_prop/damage")/5 + 1);
+
+    msg += COMBAT_D->do_damage(me, victim, REMOTE_ATTACK, dam, wound,
+                               HIR "只见$p" HIR "一个闪避不及，正中$P"
+                               HIR "这一" + ob->name() + HIR "，登时"
+                                   "鲜血飞溅！\n" NOR);
+  }
+
+  ob->add_amount(-1);
+  message_combatd(msg, me, victim);
+}
+
+int do_throw(string arg)
+{
+  string target, item;
+  object me, victim;
+  object ob;
+  me = this_player();
+  if( !arg || sscanf(arg, "%s on %s", item, target)!=2 )
+    return notify_fail("指令格式：throw <某物> on <某人>\n");
+  if( !objectp(victim = present(target, environment(me))) )
+    return notify_fail("你想向谁投掷暗器？\n");
+  if( !objectp(ob = present(item, me)))
+    return notify_fail("你身上没有 "+item+"\n");
+  if ((amount = ob->query_amount()) < 1)
+    return notify_fail("你身上的" + ob->name() + "不够用了。\n");
+  notify_fail("你不能使用暗器！\n");
+  if (!can_use(me,victim,ob))
+    return 0;
+  hit_victim(me, victim, ob);
+
+  me->start_busy(2);
+
+  me->receive_damage("sen", 10);
+  if (userp(me) && userp(victim) && ! victim->is_want_kill(me->query("id")))
+    me->want_kill(victim);
+  me->kill_ob(victim);
+
+  if (living(victim) && ! userp(victim))
+    victim->kill_ob(me);
+  else
+    victim->fight_ob(me);
+  return 1;
+}
+

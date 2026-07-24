@@ -1,0 +1,237 @@
+// toptend.c
+#include <ansi.h>
+#include <mudlib.h>
+#define FORMAT  ([ "id"  : getuid(player), "title" : player->short(1),  "total" : player->query(var)   ])
+#define TOPTEN_PATH       DATA_DIR "topten/"
+inherit F_DBASE;
+inherit F_SAVE;
+mapping *topten_save;
+nosave mapping type = ([ "道行" : "dx",
+                         "武学" : "exp",
+                         "内力" : "force",
+                         "法力" : "mana",
+                         "魔头" : "PK",
+                         "寿星" : "age",
+                         "富豪" : "gold",
+                         "使命" : "task",
+                         "阅历" : "score",
+                         "声望" : "weiwang",
+                         "高官" : "office",
+                         "俊男" : "per_M",
+                         "靓女" : "per_F",
+                         "悲情" : "dietimes",
+                         "任务.李靖" : "lijing",
+                         "任务.薛仁贵" : "xue",
+                         "任务.袁天罡" : "yuan",
+                         "任务.门派" : "menpai",
+                         "任务.门派综合" : "itask",
+                         "任务.无天" : "wutian",
+                         "任务.叛徒" : "pantu",
+                         "任务.如来" : "rulai",
+                        ]);
+nosave mapping topten = ([]);
+nosave string type_name;
+nosave int change = 0;
+void checkplayers(object player);
+void sort_player(object player, string name, string var);
+void refresh();
+void create()
+{
+  int i;
+  string *types;
+  seteuid(getuid());
+  message("channel:sys", WHT"〖系统〗高手排名精灵启动。\n"NOR, users());
+  refresh();
+  set_heart_beat(10800);
+
+  types = keys(type);
+  for( i = 0; i < sizeof(types); i ++ )
+  {
+    type_name = types[i];
+    topten_save = topten[types[i]];
+    restore();
+    topten[types[i]] = topten_save;
+  }
+
+}
+
+string query_save_file() { return TOPTEN_PATH + type_name; }
+
+void checkplayers(object player)
+{
+  int i;
+  string *types;
+  if( wizardp(player) || !playerp(player))
+    return;
+  types = keys(type);
+  for( i = 0; i < sizeof(types); i ++ )
+  {
+    change = 0;
+    if( types[i] == "俊男" && player->query("gender") != "男性" )
+      continue;
+    if( types[i] == "靓女" && player->query("gender") != "女性" )
+      continue;
+    sort_player(player, types[i], type[types[i]]);
+    if( change == 0 )
+      continue;
+    type_name = types[i];
+    topten_save = topten[types[i]];
+    save();
+  }
+
+}
+
+void sort_player(object player, string name, string var)
+{
+  int i;
+  change = 1;
+
+  if (var == "dx")
+    var = "daoxing";
+  else if (var == "exp")
+    var = "combat_exp";
+  else if (var == "force")
+    var = "max_force";
+  else if (var == "mana")
+    var = "max_mana";
+  else if (var == "PK")
+    var = "combat/PKS";
+  else if (var == "age")
+    var = "age";
+  else if (var == "gold")
+    var = "balance";
+  else if (var == "task")
+    var = "work/dynamic_find";
+  else if (var == "score")
+    var = "score";
+  else if (var == "weiwang")
+    var = "weiwang";
+  else if (var == "office")
+    var = "office_number";
+  else if (var == "per_M" || var == "per_F")
+    var = "per";
+  else if (var == "dietimes")
+    var = "killed/dietimes";
+  else if (var == "lijing" ||
+           var == "xue" ||
+           var == "yuan" ||
+           var == "pantu" ||
+           var == "itask" ||
+           var == "wutian" ||
+           var == "rulai" ||
+           var == "menpai")
+    var = "quest_info/" + var + "/total_num";
+
+  if( sizeof(topten[name]) < 1 )
+  {
+    topten[name] = ({ FORMAT });
+    return;
+  }
+
+  for(i = 0; i < sizeof(topten[name]); i ++ )
+  {
+    if( topten[name][i]["id"] == getuid(player) )
+    {
+      topten[name] = sort_array(topten[name], (: $2["total"] - $1["total"]:));
+      return;
+    }
+
+  }
+
+  if( sizeof(topten[name]) < 10 )
+  {
+    topten[name] += ({ FORMAT });
+    topten[name] = sort_array(topten[name], (: $2["total"] - $1["total"]:));
+    return;
+  }
+
+  if( topten[name][9]["total"] < player->query(var) )
+  {
+    topten[name] += ({ FORMAT });
+    topten[name] = sort_array(topten[name], (: $2["total"] - $1["total"]:));
+    topten[name] = topten[name][0..9];
+    return;
+  }
+
+  change = 0;
+}
+
+string topten_query(string arg)
+{
+  int i;
+  string *ks,msg, str;
+  ks = keys(type);
+
+  i = 0;
+  if (member_array(arg,ks) == -1)
+  {
+    for (;i<sizeof(ks);i++)
+    {
+      if (type[ks[i]] == arg)
+      {
+        str = ks[i];
+        break;
+      }
+
+    }
+
+  }
+
+  else
+    str = arg;
+
+  if (i >= sizeof(ks))
+//  if( undefinedp(type[arg]) )
+    return "目前没有这个排名。\n";
+
+  msg = HIG "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        + BBLU HIY"                     " + INTERMUD_NAME + "十大" HIR + str
+        + HIY"排行榜                     \n"NOR
+        + HIG "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"NOR;
+  for( i = 0; i < sizeof(topten[str]); i ++ )
+    msg += HIC "第" + (i+1) + "名：" NOR + topten[str][i]["title"] + "\n"NOR;
+  msg += HIG "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"NOR;
+  return msg;
+}
+
+protected void heart_beat()
+{
+  refresh();
+}
+
+void refresh()
+{
+  int i;
+  object *usrs;
+  if (!this_object())
+    return;
+  usrs = users();
+  if (sizeof(usrs) < 1)
+    return;
+  message("channel:sys", WHT"〖系统〗高手排名刷新。\n"NOR, users());
+  for( i = 0; i < sizeof(usrs); i++ )
+  {
+    reset_eval_cost();
+    checkplayers(usrs[i]);
+  }
+
+  return;
+}
+
+void checkplayer(string arg)
+{
+  checkplayers(find_player(arg));
+}
+
+string query_type()
+{
+  string msg, *ks;
+  int i;
+
+  msg = HIW"有如下类型可以查询：\n"NOR;
+  ks = keys(type);
+  for (i=0;i<sizeof(ks);i++)
+    msg += HIB"\t" + ks[i] + " ：" + HIM + type[ks[i]] + "\n"NOR;
+  return msg;
+}
+

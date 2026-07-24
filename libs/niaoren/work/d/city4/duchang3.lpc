@@ -1,0 +1,401 @@
+/*  <SecCrypt CPL V3R05>  */
+ 
+//  Room:  /d/changan/duchang3
+//  by  snowcat  7/5/1997
+inherit  ROOM;
+
+int  room_status  =  0;
+object  hg_ji  =  0;
+object  lw_ji  =  0;
+
+mapping  jis  =  ([  
+    "hg"    :  "紅冠雞",
+    "lw"    :  "綠尾雞",
+  ]);  
+
+int  random2  (int  i)
+{
+    return  (random(i)+uptime())  %  i;
+}
+
+void  create()
+{
+    set  ("short",  "斗雞房");
+    set  ("long",  @LONG 
+斗雞房里一左一右放著兩個青竹雞籠，一個雞籠里關著一群紅
+冠雞，另一個雞籠里關著一群綠尾雞。屋子正中是七尺見方的斗雞
+場，由一圈低低的青玉欄杆圍成。一位白髯雞仙正在張羅著斗雞。
+在他的后面牆上有一個牌子(paizi)。
+LONG);
+
+    set("item_desc",([
+        "paizi"  :  "押紅冠雞：  dou hg <amount> <money>\n"+  
+                    "押綠尾雞：  dou lw <amount> <money>\n",  
+    ]));  
+    set("objects",  ([  /*  sizeof()  ==  1  */
+        __DIR__"npc/jixian"  :  1,
+    ]));
+    set("exits",  ([  /*  sizeof()  ==  1  */
+        "south"  :  __DIR__"clubup",
+    ]));
+    set("light_up",  1);
+    set("no_fight",  1);
+    set("no_magic",  1);
+    setup();
+}
+
+void  init  ()
+{
+    add_action  ("do_dou","dou");
+    add_action  ("do_bian","bian");
+    add_action  ("do_fight","fight");
+    add_action  ("do_steal","steal");
+    add_action  ("do_kill","kill");
+    add_action  ("do_ji","ji");
+    add_action  ("do_cast","cast");
+    add_action  ("do_exert","exert");
+    add_action  ("do_perform","perform");
+
+    if  (room_status  >  0)
+        return;
+
+    remove_call_out  ("gamble_prepare");
+    remove_call_out  ("gamble_start");
+    remove_call_out  ("gamble_perform");
+    remove_call_out  ("gamble_finish");
+    call_out  ("gamble_prepare",2);
+    room_status  =  1;
+}
+
+int  do_dou  (string  arg)
+{
+    object  me  =  this_player();
+    string  what;
+    int  amount;
+    string  money;
+    object  ob;
+
+    if  (!  arg  ||
+            sscanf  (arg,"%s %d %s",what,amount,money)  !=  3)
+        return  notify_fail("請使用：  dou <押雞種類> <數目> <貨幣>\n");
+
+    if  (what  !=  "hg"  &&
+            what  !=  "lw")
+        return  notify_fail("你要押什么樣的雞？\n");
+
+    ob  =  present  (money+"_money",  me);
+    if  (!  ob)
+        return  notify_fail("你身上沒有這種貨幣。\n");
+    if  (amount  <  1)
+        return  notify_fail("請多押一些錢。\n");
+    if  (amount  >  ob->query_amount())
+        return  notify_fail("你身上的錢不夠押。\n");
+    if  (amount * (ob->query("base_value")) > 10000 )
+        return  notify_fail("你想豪賭啊，拜托！官兵就上來了。\n");
+
+    if  (me->query_temp  ("gamble_ji/amount")  >  0)
+        return  notify_fail("你已經押過了。\n");
+
+    if  (room_status  >  1)
+        return  notify_fail("現在正在斗雞呢，稍等片刻。\n");
+
+    me->set_temp("gamble_ji/kind",what);
+    me->set_temp("gamble_ji/amount",amount);
+    me->set_temp("gamble_ji/money",money);
+    message_vision  (sprintf("$N拿出%s%s%s往青玉欄杆上一放，押在%s上。\n",
+                                                    chinese_number(amount),
+                                                    ob->query("base_unit"),
+                                                    ob->query("name"),
+                                                    jis[what]),
+                                    me);
+    if  (amount  ==  ob->query_amount())
+        destruct  (ob);
+    else
+        ob->add_amount(-amount);
+
+    return  1;
+}
+
+int  valid_leave(object  me,  string  dir)
+{
+    if  (dir  ==  "south")
+    {
+        if  (me->query_temp  ("gamble_ji/amount")  >  0)  
+            message_vision  ("$N扔下押雞的錢不要了。\n",me);
+        me->delete_temp("gamble_ji");
+    }
+    return  ::valid_leave(me,dir);
+}
+
+void  gamble_prepare  ()
+{
+    object  room  =  this_object();
+    tell_room  (room,"白髯雞仙從左右雞籠里各拿出一只紅冠雞和一只綠尾雞。\n");
+    hg_ji  =  new(__DIR__+"npc/douji");
+    hg_ji->set("name","紅冠雞");
+    hg_ji->move(room);
+    lw_ji  =  new(__DIR__+"npc/douji");
+    lw_ji->set("name","綠尾雞");
+    lw_ji->move(room);
+    tell_room  (room,"白髯雞仙說：好，可以押錢了，一贏二。\n");
+    room_status  =  1;
+    call_out  ("gamble_start",20);
+}
+  
+void  gamble_start  ()
+{
+    object  room  =  this_object();
+    tell_room  (room,"白髯雞仙說聲：停押，斗雞。\n");
+    tell_room  (room,"然后將兩只雞抱起，拿出鐵啄熟練地安上，把雞放進欄內。\n");
+    room_status  =  2;
+    hg_ji->kill_ob(lw_ji);
+    lw_ji->kill_ob(hg_ji);
+    call_out  ("gamble_perform",1);
+}
+
+object  present_ji  (object  room)
+{
+    object  *list  =  all_inventory(room);
+    int  i;
+    i  =  sizeof(list);
+    while  (i--)
+    {
+        if  (userp(list[i]))
+            continue;
+        if  (list[i]->id("ji"))
+            return  list[i];
+    }
+}
+
+void  gamble_perform  ()
+{
+    object  room  =  this_object();
+    object  ji;
+
+    if  (!  living(hg_ji))
+        hg_ji->die();
+    if  (!  living(lw_ji))
+        lw_ji->die();
+
+    ji  =  present_ji  (room);
+    if  (ji  &&  ji->is_fighting())
+    {
+        remove_call_out  ("gamble_perform");
+        call_out  ("gamble_perform",1);
+        return;
+    }
+
+    if  (ji->query("kee")<15)
+    {
+        ji->unconcious();
+        ji->die();
+    }
+
+    call_out  ("gamble_finish",1);
+    
+}
+
+void  player_wins  (object  who,  int  total)
+{
+    object  money  =  new  ("/clone/money/"+who->query_temp("gamble_ji/money"));
+    int  amount  =  who->query_temp("gamble_ji/amount");
+    total  =  total  *  amount;
+    money->set_amount(total);
+    message_vision  (sprintf("$N贏了%s%s%s！\n",
+                                                    chinese_number(total),
+                                                    money->query("base_unit"),
+                                                    money->query("name")),
+                                    who);
+    money->move(who);
+}
+
+void  player_loses  (object  who,  int  total)
+{
+    object  money  =  new  ("/clone/money/"+who->query_temp("gamble_ji/money"));
+    total  =  who->query_temp("gamble_ji/amount");
+    message_vision  (sprintf("白髯雞仙將$N留在玉欄上的%s%s%s收走。\n",
+                                                    chinese_number(total),
+                                                    money->query("base_unit"),
+                                                    money->query("name")),
+                                    who);
+    destruct  (money);
+}
+
+void  clean_ji  ()
+{
+    object  room  =  this_object();
+    object  ji;
+    ji  =  present_ji  (room);
+    if  (ji)
+    {
+        tell_room  (room,"白髯雞仙將"+ji->query("name")+"遞到屋內。\n");
+        destruct  (ji);
+    }
+    ji  =  present_ji  (room);
+    if  (ji)
+    {
+        tell_room  (room,"白髯雞仙將"+ji->query("name")+"遞到屋內。\n");
+        destruct  (ji);
+    }
+    ji  =  present("corpse",room);
+    if  (ji)
+    {
+        tell_room  (room,"白髯雞仙拎起"+ji->query("name")+"回頭一扔。\n");
+        destruct  (ji);
+    }
+    ji  =  present("corpse",room);
+    if  (ji)
+    {
+        tell_room  (room,"白髯雞仙拎起"+ji->query("name")+"回頭一扔。\n");
+        destruct  (ji);
+    }
+}
+
+void  gamble_finish  ()
+{
+    string  win;
+    int  total,  i;
+    object  room  =  this_object();
+    object  ji  =  present_ji  (room);
+    object  *list  =  all_inventory(room);
+    if  (!  ji)
+    {
+        total  =  0;
+        win  =  "none  of  them";
+    }
+    else  if  (ji->query("name")=="紅冠雞")
+    {
+        total  =  2;
+        win  =  "hg";
+    }
+    else  //if  (ji->query("name")=="綠尾雞")
+    {
+        total  =  2;
+        win  =  "lw";
+    }
+    if  (total  >  0)
+        tell_room  (room,"白髯雞仙說道："+jis[win]+"獲勝！\n");
+    else
+        tell_room  (room,"白髯雞仙嘆息道：雙敗陪本！\n");
+    i  =  sizeof(list);
+    while  (i--)
+    {
+        if  (!userp(list[i]))
+            continue;
+        if  (list[i]->query_temp("gamble_ji/kind")  ==  win)
+            player_wins(list[i],total);
+        else  if  (list[i]->query_temp("gamble_ji/kind"))
+            player_loses(list[i],total);
+        list[i]->delete_temp("gamble_ji");
+    }
+    tell_room  (room,"\n");
+    call_out  ("clean_ji",8);
+    call_out  ("gamble_prepare",10+random(3));
+}
+
+int  do_bian  (string  arg)
+{
+    object  who  =  this_player();
+    object  room  =  this_object();
+    object  ob;
+
+    if  (!arg)
+        return  0;
+
+    ob  =  present(arg,room);
+    if  (ob  ==  hg_ji  ||  ob  ==  lw_ji)
+    {
+        message_vision  ("$N頭往雞肚下一鑽，想變成雞。\n",who);
+        message_vision  ("白髯雞仙對$N說道：是看雞呢還是看你？\n",who);
+        return  1;
+    }
+    return  0;
+}
+
+int  do_fight  (string  arg)
+{
+    object  who  =  this_player();
+    object  room  =  this_object();
+    object  ob;
+
+    if  (!arg)
+        return  0;
+
+    ob  =  present(arg,room);
+    if  (ob  ==  hg_ji  ||  ob  ==  lw_ji)
+    {
+        message_vision  ("$N向雞提出挑戰。\n",who);
+        message_vision  ("白髯雞仙對$N說道：是看雞斗雞呢還是人斗雞？\n",who);
+        return  1;
+    }
+    return  0;
+}
+
+int  do_steal  (string  arg)
+{
+    object  who  =  this_player();
+    object  room  =  this_object();
+
+    message_vision  ("$N偷偷摸摸地伸出手。\n",who);
+    message_vision  ("白髯雞仙對$N說道：你真的要偷雞摸狗不成？\n",who);
+    return  1;
+}
+
+int  do_kill  (string  arg)
+{
+    object  who  =  this_player();
+    object  room  =  this_object();
+    object  ob;
+
+    if  (!arg)
+        return  0;
+
+    ob  =  present(arg,room);
+    if  (ob  ==  hg_ji  ||  ob  ==  lw_ji)
+    {
+        message_vision  ("$N惡狠狠地想殺雞。\n",who);
+        message_vision  ("白髯雞仙對$N說道：想吃雞自個上館子去。\n",who);
+        return  1;
+    }
+    return  0;
+}
+
+int  do_ji  (string  arg)
+{
+    object  who  =  this_player();
+    object  room  =  this_object();
+
+    message_vision  ("$N雞頭雞腦地想要祭什么。\n",who);
+    message_vision  ("白髯雞仙對$N說道：雞又不是祖宗，對雞祭什么祭。\n",who);
+    return  1;
+}
+
+int  do_cast  (string  arg)
+{
+    object  who  =  this_player();
+    object  room  =  this_object();
+
+    message_vision  ("$N雞頭雞腦地念了几句咒語。\n",who);
+    message_vision  ("白髯雞仙對$N說道：有雞妨礙您施法您就出門去念吧。\n",who);
+    return  1;
+}
+
+int  do_exert  (string  arg)
+{
+    object  who  =  this_player();
+    object  room  =  this_object();
+
+    message_vision  ("$N想施內功。\n",who);
+    message_vision  ("白髯雞仙對$N說道：別在這里練功，練出雞胸怎辦？\n",who);
+    return  1;
+}
+
+int  do_perform  (string  arg)
+{
+    object  who  =  this_player();
+    object  room  =  this_object();
+
+    message_vision  ("$N想施外功。\n",who);
+    message_vision  ("白髯雞仙對$N說道：別在這里練功，練出雞胸怎辦？\n",who);
+    return  1;
+}

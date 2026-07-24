@@ -1,0 +1,155 @@
+#include <skill.h>
+#include <ansi.h>
+//inherit F_CLEAN_UP;
+int finishb(object me);
+int main(object me, string arg)
+{
+  int sen_cost;
+  string spell, msg;
+  object where;
+  seteuid(getuid());
+  where = environment(me);
+  if(where->is_safty() ||
+     where->query("no_fight")  ||
+     where->query("sleep_room") ||
+     where->query("no_book") ||
+     where->query("no_magic") )
+    return notify_fail("这里不是修炼法力的地方。\n");
+  if( !arg || !sscanf(arg, "%d", sen_cost) )
+    return notify_fail("你要花多少气练功？\n");
+  if( sen_cost <= 0 && me->query_temp("pending/meditating") )
+  {
+    me->delete_temp("pending/meditating");
+    me->set_short_desc(0);
+    me->start_busy(1);
+    return 1;
+  }
+
+  if (me->is_busy()
+   || me->query_temp("doing_xiudao")
+   || me->query_temp("pending/exercising")
+   || me->query_temp("pending/meditating"))
+    return notify_fail("你现在正忙着呢。\n");
+  if( me->is_fighting() )
+    return notify_fail("战斗中不能练法力，会走火入魔。\n");
+  if (! stringp(spell = me->query_skill_mapped("spells")))
+    return notify_fail("你必须先用 enable 选择你要用的法术。\n");
+  if( sen_cost < 20 )
+    return notify_fail("你最少要花 20 点「神」才能练功。\n");
+  if( (int)me->query("sen") < sen_cost )
+    return notify_fail("你现在神智不清,不能再想入非非了。\n");
+  if ((int)me->query("sen") * 100 / (int)me->query("max_sen") < 50)
+    return notify_fail("你现在精神不够，无法控制内息的流动！\n");
+  notify_fail("你无法静心凝神。\n");
+  if (SKILL_D(spell)->do_effect(me))
+    return 0;
+  msg = SKILL_D(spell)->query_mingsi_msg(me);
+  if (stringp(msg))
+    write(msg);
+  else
+    write("你盘膝而坐，静坐冥思了一会儿。\n");
+  me->set_temp("pending/meditating", 1);
+  me->set_temp("sen_cost", sen_cost);
+  me->set_short_desc("正坐在地下修炼法力。");
+  message_vision("$N盘膝坐下，开始修炼法力。\n", me);
+  me->start_busy(bind((:call_other, __FILE__, "meditating" :), me),
+                 bind((:call_other, __FILE__, "halt_meditate" :), me));
+  return 1;
+}
+
+int meditating(object me)
+{
+  int sen_cost = (int)me->query_temp("sen_cost");
+  int mana_gain = (int)me->query_skill("spells")/4;
+  mana_gain = 1 + mana_gain/2
+                + random(mana_gain)
+                + (int)me->query_spi()/2
+                + (int)environment(me)->query("meditate_improve");
+
+  if (mana_gain < 0) mana_gain = 1;
+  if (sen_cost > 0)
+  {  //继续mingsi
+    if (mana_gain > sen_cost)
+      mana_gain = sen_cost;
+
+    if (mana_gain > me->query("sen"))
+    {
+      mana_gain = me->query("sen");
+      me->set_temp("sen_cost", 0);
+      me->set_short_desc(0);
+      sen_cost = 0;
+    }
+
+    else
+    {
+      sen_cost -= 2*mana_gain;
+      if (sen_cost < 0)
+        sen_cost = 0 ;
+      me->set_temp("sen_cost", sen_cost);
+    }
+
+    me->add("mana", mana_gain*3);
+    if ((int)me->query("mana") >= (int)me->query("max_mana") * 2)
+    {
+      me->set_temp("sen_cost", 0);
+      me->set_short_desc(0);
+      sen_cost = 0;
+    }
+    me->add("sen", -mana_gain);
+
+    if (sen_cost > 0)
+      return 1;
+  }
+
+  me->set_temp("pending/meditating", 0);
+  me->set_short_desc(0);
+  message_vision("$N冥思完毕，深深吸了口气，站了起来。\n", me);
+  if ((int)me->query("mana") < (int)me->query("max_mana") * 2)
+    return 0;
+  else
+  {
+    if ((int)me->query("max_mana") >= (int)me->query_max_mana())
+    {
+      write("你的法力修为似乎已经达到了瓶颈。\n");
+      me->set("mana", (int)me->query("max_mana"));
+      return 0;
+    }
+
+    else
+    {
+      me->add("max_mana", 1);
+      me->set("mana", (int)me->query("max_mana"));
+      write("你的法力增加了！！\n");
+      if ( (int)me->query("max_mana") > (int)me->query("maximum_mana"))
+        me->set("maximum_mana", (int)me->query("max_mana"));
+      return 0;
+    }
+
+  }
+
+}
+
+int halt_meditate(object me)
+{
+  tell_object(me, "你凝神收回游思，站了起来。\n");
+  tell_room(environment(me), me->name() + "深吸一口气，站了起来。\n", me);
+  if ((int)me->query("mana") > (int)me->query("max_mana") * 2)
+    me->set("mana", (int)me->query("max_mana") * 2);
+  me->set_temp("pending/meditating", 0);
+  me->set_short_desc(0);
+  return 1;
+}
+
+int help(object me)
+{
+        write(@HELP
+指令格式 : meditate|mingsi [<耗费「神」的量，预设值 30>]
+	   meditate|mingsi 0 ：停止冥思
+
+静坐冥思，将游离的精神力有效地集中凝聚成能够用来施展法术的能量
+藉以增加自己的法力。
+HELP
+        );
+        return 1;
+}
+

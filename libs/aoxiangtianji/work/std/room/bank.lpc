@@ -1,0 +1,560 @@
+#include <ansi.h>
+inherit ROOM;
+inherit SAFTYROOM;
+#define IMPAWN_RATE	80/100	/* 抵押比例 */
+#define ACCRUAL_RATE	1/100	/* 抵押比例 */
+int query_max_items() { return 100; }
+
+int is_bank_room() {return 1;}
+
+protected void go_on_pawn(string arg,object me,object home);
+protected void go_impawn(string arg,object me,string *domains);
+protected void go_redeem(string arg,object me,string *domains);
+
+void init()
+{
+  add_action("do_convert", "convert");
+  add_action("do_convert", "duihuan");
+  add_action("do_deposit", "deposit");
+  add_action("do_deposit", "cun");
+  add_action("do_check"  , "check");
+  add_action("do_check"  , "chazhang");
+  add_action("do_withdraw", "withdraw");
+  add_action("do_withdraw", "qu");
+  add_action("do_qn","qn");
+  add_action("do_impawn",({ "impawn","diya" }));
+  add_action("do_redeem",({ "redeem","shuhui"}));
+}
+
+int do_convert(string arg)
+{
+  string from, to;
+  int amount, bv1, bv2;
+  object from_ob, to_ob;
+  object me;
+  me = this_player();
+  if( !arg || sscanf(arg, "%d %s to %s", amount, from, to)!=3 )
+    return notify_fail("指令格式：convert <数量> <货币种类> to <货币种类>\n");
+  if( me->is_busy() )
+    return notify_fail("你现在正忙着呢...。\n");
+  from_ob = present(from + "_money", me);
+  to_ob = present(to + "_money", me);
+  if( !to_ob && file_size("/obj/money/" + to + ".lpc") < 0 )
+    return notify_fail("你想兑换哪一种钱？\n");
+  if( !from_ob )
+    return notify_fail("你身上没有这种货币。\n");
+  if( amount < 1 )
+    return notify_fail("兑换货币一次至少要兑换一个。\n");
+
+  if( (int)from_ob->query_amount() < amount )
+    return notify_fail("你身上没有那么多" + from_ob->query("name") + "。\n");
+  bv1 = from_ob->query("base_value");
+  if( !bv1 )
+    return notify_fail("这种东西不值钱。\n");
+  bv2 = to_ob ? to_ob->query("base_value")
+        : call_other("/obj/money/" + to, "query", "base_value" );
+  if( bv1 < bv2 )
+    amount -= amount % (bv2 / bv1);
+  if( amount==0 )
+    return notify_fail("这些" + from_ob->query("name") + "的价值太低了，换不起。\n");
+  me->start_busy(1);
+  if( !to_ob )
+  {
+    to_ob = new("/obj/money/" + to);
+    if(!(to_ob->move(me)))
+      return notify_fail("你身上装不下这么多钱。\n");
+    to_ob->set_amount(amount * bv1 / bv2);
+  }
+
+  else
+    to_ob->add_amount(amount * bv1 / bv2);
+  message_vision( sprintf("$N从身上拿出%s%s%s，换成%s%s%s。\n",
+    chinese_number(amount), from_ob->query("base_unit"),
+    from_ob->query("name"), chinese_number(amount * bv1 / bv2),
+    to_ob->query("base_unit"), to_ob->query("name")),me );
+  if( (int)from_ob->query_amount() == amount )
+    destruct(from_ob);
+  else
+    from_ob->add_amount(-amount);
+  me->save();
+  return 1;
+}
+
+// 加入全存
+int do_deposit(string arg)
+{
+  string money;
+  int amount;
+  object money_ob, me,coin,silver,gold,cash;
+  if (!arg)
+    return 0;
+  me = this_player();
+  if( me->is_busy() )
+    return notify_fail("你现在正忙着呢...。\n");
+  if (arg=="all")
+  {
+    coin=present("coin_money",me);
+    silver=present("silver_money",me);
+    gold=present("gold_money",me);
+    cash=present("thousand-cash_money",me);
+    amount=0;
+    if (coin)
+    {
+      amount+=coin->value();
+      destruct(coin);
+    }
+
+    if (silver)
+    {
+      amount+=silver->value();
+      destruct(silver);
+    }
+
+    if (gold)
+    {
+      amount+=gold->value();
+      destruct(gold);
+    }
+
+    if (cash)
+    {
+      amount+=cash->value();
+      destruct(cash);
+    }
+
+    me->add("balance",amount);
+    message_vision("$N把身上所有的钱都存进了钱庄。\n",me);
+  }
+
+  else
+  {
+    if (sscanf(arg,"%d %s",amount,money)!=2)
+    {
+      amount=-1;
+      money=arg;
+    }
+
+    else if ( amount < 1 )
+      return notify_fail("货币计量至少要一个单位。\n");
+    money_ob=present(money+"_money",me);
+    if (!money_ob)
+      return notify_fail("你身上没有这种货币。\n");
+    if (amount==-1)
+    {
+      amount=money_ob->query_amount();
+      if (!amount)
+        return notify_fail("你身上没有这种货币。\n");
+    }
+
+    else if( money_ob->query_amount() < amount )
+      return notify_fail("你身上没有那多"+money_ob->query("name")+"。\n");
+    money_ob->add_amount(-amount);
+    me->add("balance",money_ob->query("base_value")*amount);
+    message_vision("$N拿出一些钱存进了钱庄。\n",me);
+    if (!money_ob->query_amount())
+      destruct(money_ob);
+  }
+
+  me->save();
+  write("OK.\n");
+  return 1;
+}
+
+int do_check(string arg)
+{
+  int value;
+  object me;
+
+  me = this_player(1);
+
+  if (stringp(arg) && arg == "qn")
+  {
+    if ((int)me->query("qn_balance") <= 0 )
+    {
+      write("你现在没有任何潜能存款！\n\n");
+      return 1;
+    }
+
+    tell_object(me,sprintf("你现在的潜能存款是：%d\n\n",(int)me->query("qn_balance")));
+    return 1;
+  }
+
+  value = (int) this_player()->query("balance");
+  if(value == 0)
+    return notify_fail("你目前没有存款。\n");
+  if(value > 0)
+    tell_object(this_player(), "你现在共有存款：" );
+  else
+  {
+    tell_object(this_player(), "你现在共有欠款：" );
+    value = -value;
+  }
+
+  tell_object(this_player(), MONEY_D->price_num(value) + "\n" );
+  return 1;
+}
+
+int do_withdraw(string arg)
+{
+  int amount, v;
+  string what;
+  object me;
+  me = this_player();
+  if (!arg || sscanf(arg, "%d %s", amount, what) != 2)
+    return notify_fail("命令格式：withdraw <数量> <货币单位>\n");
+
+  if( this_player()->is_busy() )
+    return notify_fail("你现在正忙着呢...。\n");
+  if (amount < 1 || amount > 200000)
+    return notify_fail("你想取出多少钱？\n");
+
+  if (file_size("/obj/money/" + what + ".lpc") < 0)
+    return notify_fail("你想取出什么钱？\n");
+
+  what = "/obj/money/" + what;
+  if ((v = amount * what->query("base_value")) > me->query("balance"))
+    return notify_fail("你存的钱不够取。\n");
+
+  if( v < what->query("base_value") )
+    return notify_fail("Don't try, or I will purge you!\n");
+  me->start_busy(1);
+  MONEY_D->pay_player(me, v);
+  me->add("balance",  -v);
+  me->save();
+  message_vision(sprintf("$N从银号里取出%s。\n", MONEY_D->money_str(v)),me);
+  return 1;
+}
+
+int do_qn(string arg)
+{
+  int amount,qn1,qn2,qn3;
+  string type;
+  object me;
+
+  me = this_player(1);
+  if (!objectp(me) || !playerp(me))
+    return 0;
+  if (me->is_busy())
+    return notify_fail("你正忙着呢！\n");
+  if (me->is_fighting())
+    return notify_fail("你正忙着打架呢！\n");
+  if (!arg || sscanf(arg, "%d %s", amount, type) != 2)
+    return notify_fail("命令格式：qn <数量> <cun/qu>\n"
+                       "         cun/deposit表示存入潜能，qu/withdraw表示取出潜能！\n");
+
+  qn1 = (int)me->query("potential");
+  qn2 = (int)me->query("learned_points");
+
+  if (amount < 1)
+    return notify_fail("当心受到wiz的严厉惩罚！不要再尝试！\n");
+
+  if (amount > 100000)
+    return notify_fail("潜能操作一次不能超过10万.\n");
+
+  if (type == "cun" || type == "deposit")
+  {
+    if ((qn1 - qn2) < amount )
+      return notify_fail("你身上没有那么多的潜能！\n");
+    message_vision("$N把一些潜能存进了钱庄。\n",me);
+    me->add("potential", -amount);
+    me->add("qn_balance",amount);
+    me->save();
+    me->start_busy(2);
+    return 1;
+  }
+
+  if (type == "qu" || type == "withdraw")
+  {
+    qn3 = (int)me->query("qn_balance");
+    qn3 -= amount;
+    if (qn3 < 0)
+      return notify_fail("你没有那么多潜能存款！\n");
+    me->add("potential", amount);
+    me->set("qn_balance",qn3);
+    message_vision("$N从钱庄取出了一些潜能！\n",me);
+    me->save();
+    me->start_busy(2);
+    return 1;
+  }
+
+  return notify_fail("命令格式：qn <数量> <cun/qu>\n"
+                     "         cun/deposit表示存入潜能，qu/withdraw表示取出潜能！\n");
+}
+
+nomask int do_impawn(string arg)
+{
+  string *homes, *domains = ({});
+  int i,n,l,bk;
+  object me = this_player();
+  if(!arg || arg != "home")
+    return notify_fail("你要把什么拿来抵押？\n");
+  homes = PLAYERHOME_D->user_have_home(me->query("id"));
+  if( !arrayp(homes) || sizeof(homes) < 1)
+    return notify_fail("你还没有自己的住宅拿什么抵押！\n");
+  n = sizeof(homes);
+  for(i=0;i<n;i++)
+  {
+    string domain;
+    if(sscanf(homes[i],PHOME_DIR+"%s/%*s",domain))
+       domains += ({ domain });
+  }
+
+  n=sizeof(domains);
+  if( n == 1 )
+    go_impawn("1",me,domains);
+  else
+  {
+    string out = "";
+    for(i=0;i<n;i++)
+      if(strlen(domains[i]) > l)
+        l = strlen(domains[i]);
+    bk = to_int(60/(l+4));
+    l++;
+    for(i=0;i<n;i++)
+      out += sprintf("%-2d.%-"+(string)l+"s%s",(i+1),domains[i],(i%bk==(bk-1))?"\n":"" );
+    write("你在以下"+chinese_number(n)+"处地区都建有自己的住宅，请你选择一处：\n"+out+"\n");
+    write("quit 或者 q放弃本次操作！\n\n");
+    input_to( (: go_impawn :),me, domains );
+  }
+
+  return 1;
+}
+
+protected void go_impawn(string arg,object me,string *domains)
+{
+  object home;
+  string file;
+  int level,time,n, v;
+  if (!objectp(me) || !playerp(me))
+    return;
+
+  if(arg[0] == 'q')
+    return;
+  n = to_int(arg);
+  --n;
+  if( (n<0) || (n>=sizeof(domains)) || !me)
+    return;
+  file = sprintf("%s%s/%s_home",PHOME_DIR,domains[n],me->query("id"));
+  home = find_object(file);
+  if(!objectp(home))
+    home = load_object(file);
+  if(!objectp(home))
+  {
+    write("你的住宅有问题，请向巫师申报处理。\n");
+    return;
+  }
+
+  if(mapp(home->query("bank")))
+  {
+    write(sprintf("你在%s的住宅已经抵押过了，同一物品不允许多重抵押。\n",
+                  to_chinese(domains[n])));
+    return;
+  }
+
+  time = time() - home->query("built_time");
+  if(time > 788400) /* 一年半 */
+  {
+    write(sprintf("你在%s的住宅已经快要倒塌了，不能抵押。\n", to_chinese(domains[n])));
+    return;
+  }
+
+  else if(time > 525600) /* 一年 */
+  {
+    write(sprintf("你在%s的住宅已经年久失修、破旧不堪了，不能抵押。\n", to_chinese(domains[n])));
+    return;
+  }
+
+  level = home->home_level();
+  v = PLAYERHOME_D->home_value(level);
+  write(sprintf("你的住房当前价值：%s。\n可以抵押：%s。\n\n",
+                MONEY_D->money_str(v),
+                MONEY_D->money_str(v*IMPAWN_RATE)));
+  write("你要抵押多少个月？(q 退出)\n");
+  input_to((: go_on_pawn :),me,home);
+  return;
+}
+
+protected void go_on_pawn(string arg,object me,object home)
+{
+  int m,pay;
+  int time,i,level, v;
+  object *homes;
+  if(!objectp(me) || !playerp(me))
+    return;
+
+  if (me->is_busy())
+  {
+    write("你正忙着呢！\n");
+  }
+
+  if(arg[0] == 'q')
+    return;
+  if(!m = to_int(arg))
+  {
+    write("你要抵押多少个月？(q 退出)\n");
+    input_to((: go_on_pawn :),me,home);
+    return;
+  }
+
+  time = home->query("built_time");
+  if( (time() + m*43200 - time) >= 525600 )
+  {
+    write("您的住宅在贷款期间需要进行维修才能保持现有价值，\n请到工部预交足修缮费后再来办理。\n");
+    return;
+  }
+
+  level = home->home_level();
+  v = PLAYERHOME_D->home_value(level)*IMPAWN_RATE;
+  write(sprintf("你把私人住宅向鄙行进行抵押，应得%s。\n",MONEY_D->money_str(v)));
+  homes = PLAYERHOME_D->player_homes(me,home);
+  for(i=0;i<sizeof(homes);i++)
+  {
+    homes[i]->set("bank/time",time()+m*43200);
+    homes[i]->set("bank/value",pay);
+    homes[i]->save();
+  }
+
+  write(sprintf("扣去%s个月的贷款利息：%s。\n",
+                chinese_number(m),
+                MONEY_D->money_str(v*ACCRUAL_RATE)));
+  v = v - v*ACCRUAL_RATE;
+  write(sprintf("实得：%s。\n",MONEY_D->money_str(v)));
+  me->add("balance",v);
+  me->save();
+  me->start_busy(2);
+  write("此款项已存入您的银行账户。\n");
+  return;
+}
+
+nomask int do_redeem(string arg)
+{
+  string *homes, file, *domains=({});
+  int i,n,l,bk;
+  object home, me=this_player();
+  if(!arg || arg != "home")
+    return notify_fail("你要赎回什么？\n");
+  homes = PLAYERHOME_D->user_have_home(me->query("id"));
+  if( !arrayp(homes) || sizeof(homes) < 1)
+    return notify_fail("你还没有自己的住宅！\n");
+  n = sizeof(homes);
+  if(n == 1)
+  {
+    string domain;
+    file = homes[0];
+    if (!stringp(file))
+      return notify_fail("你的住宅有问题，请向巫师申报处理。\n");
+    home = find_object(file);
+    if(!objectp(home))
+      home = load_object(file);
+    if(!objectp(home))
+      return notify_fail("你的住宅有问题，请向巫师申报处理。\n");
+    if(!mapp(home->query("bank")) || sizeof(home->query("bank")) < 1)
+      return notify_fail("你的住宅没有进行过抵押。\n");
+    if(sscanf(homes[0],PHOME_DIR+"%s/%*s",domain))
+    {
+      domains += ({ domain });
+      go_redeem("1",me,domains);
+      return 1;
+    }
+
+    else
+      return notify_fail("你的住宅有问题，请向巫师申报处理。\n");
+  }
+
+  for(i=0;i<n;i++)
+  {
+    string domain;
+    file = homes[i];
+    if (!stringp(file))
+      continue;
+    home = find_object(file);
+    if(!objectp(home))
+      home = load_object(file);
+    if(!objectp(home))
+      continue;
+    if(!mapp(home->query("bank")) || sizeof(home->query("bank")) < 1)
+      continue;
+    if(sscanf(homes[i],PHOME_DIR+"%s/%*s",domain))
+      domains += ({ domain });
+  }
+
+  n = sizeof(domains);
+  if(n < 1)
+    return notify_fail("你没有进行过抵押的住宅。\n");
+  if( n == 1 )
+  {
+    go_redeem("1",me,domains);
+    return 1;
+  }
+
+  else
+  {
+    string out = "";
+    for(i=0;i<n;i++)
+      if(strlen(domains[i]) > l)
+        l = strlen(domains[i]);
+    bk = to_int(60/(l+4));
+    l++;
+    for(i=0;i<n;i++)
+    out += sprintf("%-2d.%-"+(string)l+"s%s",(i+1),domains[i],(i%bk==(bk-1))?"\n":"" );
+    write("你在以下"+chinese_number(n)+"处地区的住宅都进行过抵押，请你选择一处：\n"+out+"\n");
+    write("quit 或者 q放弃本次操作！\n\n");
+    input_to( (: go_redeem :),me, domains );
+  }
+
+  return 1;
+}
+
+protected void go_redeem(string arg,object me,string *domains)
+{
+  string file;
+  object home,*homes;
+  mapping bank;
+  int value,i,n;
+  if(!objectp(me) || !playerp(me))
+    return;
+  if(arg[0] == 'q')
+    return;
+  n = to_int(arg);
+  n--;
+  if( (n<0) || (n>=sizeof(domains)) || !me)
+    return;
+  file = sprintf("%s%s/%s_home",PHOME_DIR,domains[n],me->query("id"));
+  home = find_object(file);
+  if(!objectp(home))
+    home = load_object(file);
+  if(!objectp(home))
+  {
+    write("你的住宅有问题，请向巫师申报处理。\n");
+    return;
+  }
+
+  bank = home->query("bank");
+  if(!mapp(bank) || sizeof(bank) < 1)
+  {
+    write("你的住宅没有进行过抵押。\n");
+    return;
+  }
+
+  value = PLAYERHOME_D->home_value(home->home_level())*IMPAWN_RATE;
+  write(sprintf("赎回你的住宅你需归还抵押贷款：%s。\n",MONEY_D->money_str(value)));
+
+  if ((int)me->query("balance") < value)
+  {
+    write("但是，你银行里没有足够的存款。\n");
+    return;
+  }
+
+  homes = PLAYERHOME_D->player_homes(me,home);
+  for(i=0;i<sizeof(homes);i++)
+  {
+    homes[i]->delete("bank");
+    homes[i]->save();
+  }
+
+  me->add("balance",-value);
+  me->save();
+  write("还款额已从您的银行账户划拨出，您以后有生意望多多照顾小的。\n");
+  return;
+}
+

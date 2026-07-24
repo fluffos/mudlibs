@@ -1,0 +1,388 @@
+//created by yekai for gift manager
+inherit NPC;
+#include <ansi.h>
+#include "/d/wiz/gift/gift.h"
+int ask_gift();
+int ask_newgift();
+int ask_bug();
+void create()
+{
+  set_name("礼物管理员", ({"gift manager","manager","gifter"}));
+
+  set ("long", @LONG
+他是叶开派到这里管理礼物发放的使者。如果你符合发送礼物的条件，就赶快（ask）。
+LONG);
+  set("gender", "男性");
+  set("title",HIY"神奇的礼物管理员"NOR);
+  set("age", 33);
+  set("per", 40);
+  set("attitude", "peaceful");
+  set("inquiry", ([
+     "节日礼物"  : (: ask_gift :),
+     "新手礼物"  : (: ask_newgift :),
+     "gift" : (: ask_newgift :),
+     "害虫"  : (: ask_bug :),
+     "bug"  : (: ask_bug :),
+]));
+  setup();
+  carry_object("/obj/cloth/jinduan")->wear();
+  carry_object("/obj/cloth/xianlv")->wear();
+}
+
+void init()
+{
+  object me;
+  if (! objectp(me = this_player())
+   || ! userp(me))
+    return;
+
+  remove_call_out("greeting");
+  call_out("greeting", 1, me);
+}
+
+void greeting(object me)
+{
+  string msg;
+
+  if (playerp(me) && environment(me) == environment())
+  {
+    msg = "";
+    if (!me->query("gift/newbiegift"))
+    {
+      msg += "$N笑着对$n说：你好，欢迎来到翱翔天际！\n";
+      msg += "新手礼物必须要战斗等级达到25，force等级达到50才可以领取。\n";
+      msg += "领取新手礼物，请注意自己的潜能上限，否则会浪费哦。！\n";
+      msg += "新手礼物是：武学经验8万，道行80年，潜能5万，实战体会3万。\n";
+    }
+
+    msg += "如果今天是节日，巫师可能发放节日礼物哦。这个要注意巫师的通告。\n";
+    message_vision(msg, this_object(), me);
+  }
+
+}
+
+int ask_gift()
+{
+  object me ;
+  object ob ;
+  object where ;
+  object gift ;
+  object notebook ;
+  int t ;
+  string festival ;
+  string today_gift ;
+  string year;
+
+  me = this_object();
+  ob = this_player(1);
+  where = environment(me) ;
+
+  if (!where)
+    return 0 ;
+  if ((string)where->query("short") != FIXLOC)
+    return 0 ;
+
+  notebook = present("note book",where);
+  if (!notebook)
+    return 0 ;
+
+  t = uptime();
+
+  if (t == ob->query_temp("last_ask_yekai"))
+  {
+    ob->add_temp("invalid_yekai",1) ;
+    if (ob->query_temp("invalid_yekai") >= 3)
+    {
+      message_vision(HIR"$N大怒，飞起一脚，把$n踢到了半空中。\n"NOR,me,ob);
+      ob->move("/d/city/nkezhan");
+      message_vision(HIW"半空中传来了一声惨叫，$N直挺挺的跌了下来，摔了个半死！\n",ob);
+      tell_object(ob,"你已经非法骚扰叶开的礼物管理员 "
+              + chinese_number(ob->query_temp("invalid_yekai")) + "次。\n");
+      tell_object(ob,"警告，如果非法骚扰叶开的礼物管理员达三次，将被关死牢！\n");
+      ob->unconcious();
+      return 1;
+    }
+
+  }
+
+  ob->set_temp("last_ask_yekai",uptime());
+
+  festival = notebook->query("jieri/newgift/festival");
+  year  = notebook->query("jieri/newgift/year");
+  today_gift = notebook->query("jieri/newgift/today_gift");
+  if (!festival
+      || !year
+      || !today_gift)
+  {
+    if (!festival && !year && !today_gift)
+    {
+      message_vision(HIY"$N疑惑的看着$n,没有巫师说今天是节日啊！\n"NOR,me,ob);
+      return 1 ;
+    }
+
+    else
+    {
+      message_vision(BLINK + HIR"$N吃惊的大声叫了起来，不得了了，出问题！\n"NOR,me);
+      message_vision(HIY"$N急得象热锅上的蚂蚁，不停的说，快去找巫师！！\n"NOR,me);
+      return 1 ;
+    }
+
+  }
+
+  else
+  {
+    if ( ob->query("gift/"+year + "/"+ gift_type[festival][JIERI_E]) )
+    {
+      message_vision("$N对着$n嘿嘿一阵冷笑！\n",me,ob);
+      me->command("hammer " + ob->query("id"));
+      me->command("nip " + ob->query("id"));
+      message_vision("$N飞起一脚，把$n踢到了北客栈！\n",me,ob);
+      ob->move("/d/city/nkezhan");
+      return 1 ;
+    }
+
+    message_vision(HIY"$N高兴的说到，今天是"+ BLINK +
+       HIR + festival + NOR + HIY"耶！\n祝$n" + festival + "快乐！\n"NOR,me,ob);
+    if (ob->query("level") < 16 ||
+        ob->query_skill("force",1) < 50)
+    {
+      tell_object(ob,me->name() + "悄悄说道：战斗等级不小于16，"
+                            "并且基本内功等级不小于50，才可以领取礼物！\n");
+      tell_object(ob,"这个条件非常容易就达到了，加油哦！\n");
+      return 1;
+    }
+
+    if (stringp(today_gift))
+    {
+      gift = new(today_gift);
+      if (gift && gift->move(ob))
+      {
+         gift->set("owner",ob->query("id"));
+         ob->set("gift/"+year+"/"+gift_type[festival][JIERI_E],1);
+         notebook->add("jieri/log/"
+                      +year+"/"
+                      +gift_type[festival][JIERI_E]
+                      +"/total",1);
+         notebook->save();
+         message_vision("$N得到了节日礼物！\n",ob);
+         tell_object(ob,me->name() + "给了你一个大礼包，希望你游戏快乐！\n");
+         log_file("festival_gift",sprintf("%s(%s ip:%s) get a new gift at %s\n",
+                                           ob->query("name"),
+                                           ob->query("id"),
+                                           query_ip_number(ob),
+                                           ctime(time())));
+         return 1;
+      }
+
+      else
+      {
+        message_vision("$N伸手去拿礼物，可惜礼物掉到了地上！\n",ob);
+        if (gift)
+        {
+          tell_object(ob,"你没有得到你的节日礼物，可能是你身上的东西实在是太多了！\n");
+          destruct(gift);
+          return 1;
+        }
+
+        else
+        {
+          tell_object(ob,HIR"你没有得到你的节日礼物，可能是礼物出了问题！\n"
+                         "你必须找巫师解决！\n"NOR);
+          return 1;
+        }
+
+      }
+
+    }
+
+    else
+    {
+      tell_object(ob,HIR"你不能得到你的节日礼物(today_gift)，因为礼物系统出点问题！\n"
+                        "你必须找巫师解决！\n"NOR);
+      return 1;
+    }
+
+  }
+
+}
+
+int ask_bug()
+{
+  object me ;
+  object ob ;
+  int bug_value ;
+  int bug_total ;
+  int bug_conv  ;
+
+  me = this_object();
+  ob = this_player();
+
+  bug_total = (int)ob->query("gift/bug_total");
+  if (!bug_total)
+  {
+    message_vision(HIY"$N冷冷地看了$n一眼，懒洋洋的一副不想理会的模样！\n"NOR,me,ob);
+    return 1;
+  }
+
+  message_vision(HIY"$N说到，$n共有害虫积分："+ chinese_number(bug_total)
+                 + "\n"NOR,me,ob);
+  message_vision(HIR"$N说到，转换害虫积分的命令是： convert 分数\n",me);
+
+  bug_conv = (int)ob->query("gift/bug_conv");
+  if (!bug_conv)
+    message_vision(HIY"$N说到，$n还没有转换过害虫积分！\n"NOR,me,ob);
+  else
+    message_vision(HIY"$N说到，$n已经转换了害虫积分："+chinese_number(bug_conv)
+                   + "\n"NOR,me,ob);
+
+  bug_value = bug_total - bug_conv ;
+
+  if (bug_value <= 0)
+  {
+    message_vision(HIY"$N冷冷地看了$n一眼，懒洋洋的一副不想理会的模样！\n"NOR,me,ob);
+    return 1;
+  }
+
+  else if (bug_value <= 10 )
+  {
+    message_vision(HIY"$N有气无力地说到，$n的可转换积分有："NOR + HIW
+      + chinese_number(bug_value) + " 分！\n"NOR,me,ob);
+    return 1 ;
+  }
+
+  else if (bug_value <= 20 )
+  {
+    message_vision(HIY"$N懒洋洋地说到，$n的可转换积分有： "NOR+HIW
+      + chinese_number(bug_value)+" 分！\n"NOR,me,ob);
+    return 1 ;
+  }
+
+  else if (bug_value <= 50 )
+  {
+    message_vision(HIY"$N无精打采地说到，$n的可转换积分有： "NOR + HIW
+      + chinese_number(bug_value) + " 分！\n"NOR,me,ob);
+    return 1 ;
+  }
+
+  else if (bug_value <= 100 )
+  {
+    message_vision(HIY"$N有点不耐烦地说到，$n的可转换积分有： "NOR + HIW
+       + chinese_number(bug_value) + " 分！\n"NOR,me,ob);
+    return 1 ;
+  }
+
+  else if (bug_value <= 150 )
+  {
+    message_vision(HIY"$N平淡地说到，$n的可转换积分有： "NOR + HIW +
+      chinese_number(bug_value) + " 分！\n"NOR,me,ob);
+    return 1 ;
+  }
+
+  else if (bug_value <= 200 )
+  {
+    message_vision(HIY"$N高兴地说到，$n的可转换积分有： "NOR + HIW +
+      chinese_number(bug_value) + " 分！\n"NOR,me,ob);
+    return 1 ;
+  }
+
+  else if (bug_value <= 300 )
+  {
+    message_vision(HIY"$N兴奋地说到，$n的可转换积分有： "NOR + HIW +
+      chinese_number(bug_value) + " 分！\n"NOR,me,ob);
+    return 1 ;
+  }
+
+  else if (bug_value <= 400 )
+  {
+    message_vision(HIY"$N喜出望外地说到，$n的可转换积分有： "NOR + HIW +
+      chinese_number(bug_value) + " 分！\n"NOR,me,ob);
+    return 1 ;
+  }
+
+  else if (bug_value <= 500 )
+  {
+    message_vision(HIY"$N情不自禁地说到，$n的可转换积分有： "NOR + HIW +
+      chinese_number(bug_value) + " 分！\n"NOR,me,ob);
+    return 1 ;
+  }
+
+  else if (bug_value <= 1000 )
+  {
+    message_vision(HIY"$N惊奇地跳了起来，语气有点颤抖地说到，$n的可转换积分有： "NOR
+      +HIW + chinese_number(bug_value) + " 分！\n"NOR,me,ob);
+    return 1 ;
+  }
+
+  else
+  {
+    message_vision(HIY"$N起身站起来，毕恭毕敬地说到，$n的可转换积分有： "NOR + HIW
+      + chinese_number(bug_value) + " 分！\n"NOR,me,ob);
+    return 1 ;
+  }
+
+  return 1;
+}
+
+int ask_newgift()
+{
+  object me ;
+  object ob ;
+  object where ;
+  int t ;
+  me = this_object();
+  ob = this_player(1);
+  where = environment(me) ;
+
+  if (!where)
+    return 0 ;
+  if ((string)where->query("short") != FIXLOC)
+    return 0 ;
+  t = uptime();
+
+  if (t == ob->query_temp("last_ask_yekai"))
+  {
+    ob->add_temp("invalid_yekai",1) ;
+    if (ob->query_temp("invalid_yekai") >= 3)
+    {
+      message_vision(HIR"$N大怒，飞起一脚，把$n踢到了半空中。\n"NOR,me,ob);
+      ob->move("/d/city/nkezhan");
+      message_vision(HIW"半空中传来了一声惨叫，$N直挺挺的跌了下来，摔了个半死！\n",ob);
+      tell_object(ob,"你已经非法骚扰叶开的礼物管理员 "
+              + chinese_number(ob->query_temp("invalid_yekai")) + "次。\n");
+      tell_object(ob,"警告，如果非法骚扰叶开的礼物管理员达三次，将被关死牢！\n");
+      ob->unconcious();
+      return 1;
+    }
+
+  }
+
+  if (ob->query("gift/newbiegift"))
+  {
+    message_vision("$N对着$n嘿嘿一阵冷笑！\n",me,ob);
+    me->command("hammer " + ob->query("id"));
+    me->command("nip " + ob->query("id"));
+    message_vision("$N飞起一脚，把$n踢到了北客栈！\n",me,ob);
+    ob->move("/d/city/nkezhan");
+    return 1 ;
+  }
+
+  if (ob->query("level") < 25 ||
+      ob->query_skill("force",1) < 50)
+  {
+    tell_object(ob,me->name() + "悄悄说道：战斗等级不小于25，"
+                          "并且基本内功等级不小于50，才可以领取礼物！\n");
+    tell_object(ob,"这个条件非常容易就达到了，加油哦！\n");
+    return 1;
+  }
+
+  ob->add("combat_exp",80000);
+  ob->add("daoxing",80000);
+  ob->improve_potential(50000);
+  ob->add("experience", 30000);
+  ob->set("gift/newbiegift",1);
+  ob->save();
+  tell_object(ob,"你获得了新手礼物，请注意检查！\n");
+  if (!ob->is_busy())
+    ob->start_busy(2);
+  return 1;
+}

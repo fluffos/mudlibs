@@ -1,0 +1,167 @@
+#include <ansi.h>
+#include <combat.h>
+#define DUO "「" HIB "歌舞阎罗" NOR "」"
+#define YANLUO CLASS_D("ghost") + "/zhuihun-sword/yanluo"
+#define CAUSED "yanluo"
+
+inherit F_SSERVER;
+int valid_pfm(object me, object target)
+{
+  int t = time();
+  if(userp(me) && (string)me->query("family/family_name") != "阎罗地府")
+    return notify_fail(sprintf("%s是阎罗地府不传之密！\n",DUO));
+  if (me->is_busy())
+    return notify_fail("你正忙着呢！\n");
+
+  if ((int)me->query_skill("zhuihun-sword", 1) < 150)
+    return notify_fail(sprintf("你追魂剑法不够娴熟，难以施展%s。\n",DUO));
+  if (me->query_skill_mapped("sword") != "zhuihun-sword")
+    return notify_fail(sprintf("你没有激发追魂剑法，难以施展%s。\n",DUO));
+  if ((int)me->query_skill("force",1) < 150 )
+    return notify_fail(sprintf("你的内功火候不够，难以施展%s。\n",DUO));
+
+  if ((int)me->query("force") < 500)
+    return notify_fail(sprintf("你现在的真气不够，难以施展%s。\n",DUO));
+
+  if (me->query_temp("tick/"+CAUSED))
+    return notify_fail(sprintf("你已经在使用%s。\n",DUO));
+
+  if ((t- me->query_temp("last_yanluo")) < 5)
+    return notify_fail(sprintf("你刚刚用完%s，无法再次使用！\n",DUO));
+  return 1;
+}
+
+int perform(object me, object target)
+{
+  object weapon;
+  int i;
+  weapon = me->query_temp("weapon");
+  if( !objectp(weapon) || weapon->query("skill_type") != "sword" )
+    return notify_fail("你手中无剑，如何能施展「歌舞阎罗」？\n");
+  message_vision(HIC"\n但见寒光陡闪，$N手中" + weapon->name() +
+                 HIC"越使越快，如梦如幻，招招紧逼$n，正是追魂剑绝技" +
+                 DUO + HIC"！\n" NOR, me, target);
+  me->set_temp("HELLJ_perform",1 + random(5));
+  COMBAT_D->do_attack(me, target, weapon);
+  COMBAT_D->do_attack(me, target, weapon);
+  if (living(target))
+  {
+    i = me->query_skill("sword");
+    i = i/10 + random(i/10);
+    if (i > 60)
+      i = 60;
+
+    me->set_pfm_tick(YANLUO, CAUSED,i, target);
+    me->set_temp("busy_for_pfm",DUO);
+  }
+
+  me->add("force", -120);
+  return 1;
+}
+
+int check(object me, object target)
+{
+  object weapon;
+
+  if (!living(me))
+  {
+    me->delete_temp("HELLJ_perform");
+    me->delete_temp("busy_for_pfm");
+    me->delete_temp("HELLJ_hit");
+    return 0;
+  }
+
+  weapon = me->query_temp("weapon");
+  if (!objectp(weapon) || (string)weapon->query("skill_type") != "sword")
+  {
+    tell_object(me, sprintf("你手中没有持剑，%s的攻势便即瓦解！\n" NOR,DUO));
+    me->delete_temp("HELLJ_perform");
+    me->delete_temp("busy_for_pfm");
+    me->delete_temp("HELLJ_hit");
+    me->set_temp("last_yanluo",time());
+    return 0;
+  }
+
+  if ( weapon->query("weapon_prop") == 0 )
+  {
+    tell_object(me, sprintf("你的%s已毁，无法持续%s的攻势！\n"NOR,
+                             weapon->name(),DUO));
+    me->delete_temp("HELLJ_perform");
+    me->delete_temp("busy_for_pfm");
+    me->delete_temp("HELLJ_hit");
+    me->set_temp("last_yanluo",time());
+    return 0;
+  }
+
+  if (!objectp(target) || (environment(me) != environment(target)))
+  {
+    tell_object(me, sprintf("你没有了对手，%s的攻势便即瓦解！\n",DUO));
+    me->delete_temp("HELLJ_perform");
+    me->delete_temp("busy_for_pfm");
+    me->delete_temp("HELLJ_hit");
+    me->set_temp("last_yanluo",time());
+    return 0;
+  }
+
+  if (!living(target))
+  {
+    tell_object(me, sprintf("你的对手已经无法反击了，%s的攻势便即瓦解！\n",DUO));
+    me->delete_temp("HELLJ_perform");
+    me->delete_temp("busy_for_pfm");
+    me->delete_temp("HELLJ_hit");
+    me->set_temp("last_yanluo",time());
+    return 0;
+  }
+
+  if (!me->is_fighting(target))
+  {
+    tell_object(me,sprintf("\n你现在没有和%s过招，当下收回了%s的攻势。\n\n"NOR,target->name(),DUO));
+    me->delete_temp("HELLJ_perform");
+    me->delete_temp("busy_for_pfm");
+    me->delete_temp("HELLJ_hit");
+    me->set_temp("last_yanluo",time());
+    return 0;
+  }
+
+  if ( (string)me->query_skill_mapped("sword") != "zhuihun-sword" )
+  {
+    tell_object(me, sprintf("你转而施展其他剑法，无法再以%s攻敌！\n"NOR,DUO));
+    me->delete_temp("HELLJ_perform");
+    me->delete_temp("busy_for_pfm");
+    me->delete_temp("HELLJ_hit");
+    me->set_temp("last_yanluo",time());
+    if (!me->is_busy())
+      me->start_busy(1+random(2));
+    return 0;
+  }
+
+  if ( (int)me->query("force") < 400  )
+  {
+    tell_object(me, sprintf("你的内力后继不足，难以持续%s的威力，只好收缓剑招。\n"NOR,DUO));
+    me->delete_temp("HELLJ_perform");
+    me->delete_temp("busy_for_pfm");
+    me->delete_temp("HELLJ_hit");
+    me->set_temp("last_yanluo",time());
+    if (!me->is_busy())
+      me->start_busy(1+random(2));
+    return 0;
+  }
+
+  me->set_temp("HELLJ_perform",1 + random(5));
+  if (!me->query_temp("busy_for_pfm"))
+    me->set_temp("busy_for_pfm",DUO);
+
+  if ((random(3) == 0) && (!target->is_busy()) )
+    target->start_busy(2);
+  return 1;
+}
+
+void remove_effect(object me, object target)
+{
+  message_vision(HIW"\n$N" HIW"剑招渐缓，已将一套"+DUO+HIW"使完！\n" NOR, me);
+  me->delete_temp("HELLJ_perform");
+  me->delete_temp("busy_for_pfm");
+  me->delete_temp("HELLJ_hit");
+  me->set_temp("last_yanluo",time());
+  return;
+}

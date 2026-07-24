@@ -1,0 +1,85 @@
+#include <ansi.h>
+#include <combat.h>
+#define FU "「" HIG "回梦" NOR "」"
+inherit F_SSERVER;
+int is_not_attack(object me)
+{
+  return 1;
+}
+
+int valid_cast(object me, object target)
+{
+  int t = time();
+
+//  if(userp(me) && (string)me->query("family/family_name") != "月宫")
+//    return notify_fail(sprintf("%s是月宫不传之密！\n",FU));
+  if (me->is_busy())
+    return notify_fail("你正忙着呢！\n");
+
+  if (me->query_skill("moonshentong", 1) < 120)
+    return notify_fail(sprintf("你的晚月神通修为不够，难以施展%s。\n",FU));
+
+  if( (int)me->query("max_mana") < 1200 )
+    return notify_fail(sprintf("你的法力修为不够，难以施展%s。\n",FU));
+
+  if( (int)me->query("force") < 100 )
+    return notify_fail("你的真气不够。\n");
+  if((int)me->query("mana") < 400+2*(int)me->query("mana_factor") )
+    return notify_fail("你的法力不够！\n");
+  if((int)me->query("sen") < 300 )
+    return notify_fail("你无法集中精力！\n");
+
+  if ((t - (int)me->query_temp("last_huimeng")) < 5)
+    return notify_fail("你刚刚施展过了，等会才可以继续用！\n");
+  return 1;
+}
+
+int cast(object me, object target)
+{
+  string msg;
+  int success_adj, result, your_cps;
+  if( !target ) target = offensive_target(me);
+  success_adj = SKILL_D("moonshentong")->query_power_effect(me);
+  if( !target )
+    return notify_fail(sprintf("你要对谁施%s？\n",FU));
+  if (!living(target))
+    return notify_fail("有这个必要吗？\n");
+  if (target->is_fighting())
+    return notify_fail(sprintf("%s正在战斗，没有时间睡觉！\n",target->name()));
+  if (playerp(target))
+    return notify_fail("你不可以对玩家施展回梦！\n");
+
+  me->add("mana", -400);
+  me->receive_damage("sen", 20);
+  msg = HIM"$N" HIM"凝视着" HIM"$n" HIM"的双眼，温柔地拍着" HIM"$n"
+        HIM"的头，在" HIM"$n" HIM"耳边轻声唱着：“小宝宝，快睡觉。。。”\n"
+        HIM"$n" HIM"顿时觉得神倦眼困，全身无力。\n"NOR;
+  your_cps = target->query_cps();
+
+  success_adj -= random(your_cps/3);
+
+  result = SPELL_D->attacking_cast_success(me,target,success_adj);
+
+  if (result > 0)
+  {
+    msg +=  HIM"$n" HIM"不知不觉的哈欠连连，眼皮沉重，终于支持不住，合上了双眼。\n"NOR;
+    message_vision(msg, me, target);
+    target->set_temp("force_sleep",1);
+    if (!target->command("sleep"))
+      message_vision(HIM"$N晃了晃脑袋，似乎清醒了不少，又把眼睛睁开了。\n"NOR,target);
+    target->delete_temp("force_sleep");
+    me->start_busy(2+random(2));
+  }
+  else
+  {
+    msg += HIM"$n忽觉不妥，大喝一声，双目一张，精光四射！$N猝不及防，吓了一跳！\n" NOR;
+    message_vision(msg, me, target);
+    if (userp(me) && userp(target) && ! target->is_want_kill(me->query("id")))
+       me->want_kill(target);
+    me->kill_ob(target);
+    target->kill_ob(me);
+    me->start_busy(5+random(5));
+  }
+
+  return 1;
+}

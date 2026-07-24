@@ -1,0 +1,156 @@
+#include "/doc/help.h"
+#include <ansi.h>
+inherit F_CLEAN_UP;
+int update_player(object me);
+mixed query(string arg)
+{
+  if (arg && arg=="channel_id")
+    return  "编译精灵";
+  return 0;
+}
+
+int main(object me, string file)
+{
+  int i;
+  object obj, *inv;
+  string err, new_name;
+
+  seteuid( geteuid(me) );
+
+  if (!file)
+    file = me->query("cwf");
+  if (!file)
+    return notify_fail("你要重新编译什么档案？\n");
+
+  if( (obj = present(file, environment(me))) && interactive(obj) )
+  {
+    if(wizardp(obj) && wiz_level(me) < wiz_level(obj))
+      return notify_fail("你不能更新等级比你高的巫师状态。\n");
+    return update_player(obj);
+  }
+
+  if( file == "me" )
+    return update_player(me);
+  else
+  {
+    file = resolve_path(me->query("cwd"), file);
+    //if( !sscanf(file, "%*s.lpc") )
+	if( file[<2..]!=".lpc"&& file[<2..]!=".C")
+      file += ".lpc";
+  }
+
+  me->set("cwf", file);
+  if (!load_object(file))
+    return notify_fail(sprintf("不能发现这个档案 : %s！\n",file));
+
+  if( file_name(load_object(file))==VOID_OB )
+    return notify_fail("你不能在 VOID_OB 里重新编译 VOID_OB。\n");
+
+ if( file_size(file)>-1 )
+ {
+  new_name=file[0..<5]+uptime()+".lpc";  // strip 4-char ".lpc", not the archive's original 2-char ".c" (see adm/daemons/eventd.lpc)
+  seteuid(ROOT_UID);
+  if(catch(cp(file,new_name)) && file_size(new_name)<0)
+  {
+    write("创建临时文件失败。\n");
+    return 1;
+  }
+
+  err=catch(load_object(new_name));
+  if(err)
+  {
+    replace_string(err,new_name,file);
+    write("无法载入object:\n");
+    rm(new_name);
+    write(err);
+    return 1;
+  }
+
+  if(!obj=find_object(new_name))
+  {
+    write("无法载入临时object,可能是在create()中destruct了自身.\n");
+  }
+
+  err=catch(destruct(obj));
+  if(err)
+  {
+    replace_string(err,new_name,file);
+    write("无法清除object:\n");
+    write(err);
+    return 1;
+  }
+
+  rm(new_name);
+ }
+
+  seteuid(geteuid(me));
+
+  write(WHT"开始重新编译 " + file + NOR);
+
+  obj=find_object(file);
+  inv = all_inventory(obj);
+  i = sizeof(inv);
+  while(i--)
+    if( userp(inv[i]) )
+      inv[i]->move(VOID_OB, 1);
+    else
+      inv[i] = 0;
+  destruct(obj);
+
+  err = catch( call_other(file, "???") );
+  if (err)
+    printf( "发生错误：\n%s\n", err );
+  else
+  {
+    write(HIG" → 文件顺利更新成功！\n"NOR);
+    CHANNEL_D->do_channel(this_object(), "adm",log_id(me)+"正在重新编译(update)文件："+file+"\n"NOR);
+    if( (i=sizeof(inv)) && (obj = find_object(file)))
+    {
+      while(i--)
+      {
+        reset_eval_cost();
+        if( inv[i] && userp(inv[i]) )
+          inv[i]->move(obj, 1);
+      }
+    }
+  }
+
+  return 1;
+}
+
+int update_player(object me)
+{
+  object env, link_ob, obj;
+  env = environment(me);
+// First, create the new body.
+  link_ob = me->query_temp("link_ob");
+  obj = LOGIN_D->make_body(link_ob);
+  if (!obj)
+    return 0;
+// Save the data and exec the player to his/her link object.
+  me->save();
+  exec(link_ob, me);
+  destruct(me);
+// Restore new body and exec to it via enter_world in LOGIN_D
+  obj->restore();
+  LOGIN_D->enter_world(link_ob, obj, 1);
+  obj->move(env,1);
+  obj->write_prompt();
+  write("身体更新完毕。\n\n");
+  return 1;
+}
+
+int help(object me)
+{
+  write(@HELP
+指令格式 : update <档名|here|me|玩家名>
+
+这个指令可以更新档案, 并将新档的内容载入记忆体内. 若目标为
+'here' 则更新所在环境. 若目标为 'me' 则更新自己的人物. 若目
+标为玩家则可更新玩家物件.
+
+HELP
+    );
+    return 1;
+}
+

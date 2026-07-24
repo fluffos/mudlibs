@@ -1,0 +1,185 @@
+#include <ansi.h>
+#include <combat.h>
+inherit SKILL;
+int valid_learn(object me)
+{
+  if(userp(me) && !wizardp(me) && me->query("family/family_name") != "陷空山无底洞")
+    return notify_fail("“满天星”是陷空山无底洞不传之密！\n");
+  if ((int)me->query("max_force") < 500)
+    return notify_fail("你的内力不够，没有办法练满天星。\n");
+  if ((int)me->query_skill("force") < 80)
+    return notify_fail("你的内功火候不够，没有办法练满天星。\n");
+  if ((int)me->query_skill("throwing", 1) < (int)me->query_skill("mantianxing", 1))
+    return notify_fail("你的基本暗器水平有限，无法领会更高深的满天星。\n");
+  return 1;
+}
+
+int valid_enable(string usage)
+{
+  return usage == "throwing";
+}
+
+int practice_skill(object me)
+{
+  if ((int)me->query("kee") < 40)
+    return notify_fail("你的气不够，没有办法练习满天星。\n");
+  if ((int)me->query("force") < 50)
+    return notify_fail("你的内力不够，没有办法练习满天星。\n");
+  me->receive_damage("kee", 30);
+  me->add("force", -40);
+  return 1;
+}
+
+int expell_delete()
+{
+  return 1;
+}
+
+int learn_bonus()
+{
+  return 8;
+}
+
+int practice_bonus()
+{
+  return 6;
+}
+
+mapping black_white_ness()
+{
+  return (["skill_level" : 150 ,
+           "effect"      : 18  ,
+         ]);
+}
+
+void throw_victim(object me, object victim, object ob, int num)
+{
+  int ap,dp,percep;
+  int jiali,dam,wound;
+  string msg;
+
+  if (!objectp(me) || !objectp(victim) || !objectp(ob))
+    return;
+  if (environment(me) != environment(victim))
+    return;
+
+  ap = COMBACC_D->math_ap(me,"throwing");
+  if (me->query("special_skill/accuracy"))
+    ap += ap/5 ;
+  ap += ap*(num*20)/100;
+
+  if (userp(victim))
+    ap /= 3;
+
+  dp = COMBACC_D->math_dp(me,victim,0,0);
+  dp = (dp/100)*80 ;
+  percep = (int)victim->query_skill("perception",1);
+  if (percep > 80)
+  {
+    percep = percep /8;
+    if (percep > 80)
+      percep = 80 ;
+    dp += dp*(random(percep))/100;
+  }
+
+  if (ap*100/(ap+dp) < random(100))
+  {
+    switch (random(3))
+    {
+      case 0:
+        msg = CYN "却见$n" CYN "轻轻一闪，已将$N" CYN "射出"
+                   "的暗器避了开去。\n" NOR;
+        break;
+      case 1:
+        msg = CYN "只见$n" CYN "不慌不忙，身子向一旁横移数"
+                   "尺，躲开了$N" CYN "这一招。\n" NOR;
+        break;
+      default:
+        msg = CYN "可是$n" CYN "身子往后一仰，顿时让$N" CYN
+                   "射出的暗器落空。\n";
+        break;
+    }
+
+  }
+
+  else
+  {
+    dam = (int)ob->query("weapon_prop/damage");
+    jiali = (int)me->query("force_factor");
+    if (jiali > 1)
+      dam += random(jiali/2 + 1);
+    wound = ob->query("wound_percent") + random((int)ob->query("weapon_prop/damage")/5 + 1);
+
+    msg = COMBAT_D->do_damage(me, victim, REMOTE_ATTACK, dam, wound,
+                               HIR "只见$p" HIR "一个闪避不及，正中$P"
+                               HIR "这一" + ob->name() + HIR "，登时"
+                                   "鲜血飞溅！\n" NOR);
+  }
+
+  message_combatd(msg, me, victim);
+  COMBAT_D->hit_poison(me, victim, ob);
+  ob->add_amount(-1);
+  if (ob->query_amount() < 1)
+    destruct(ob);
+  return;
+}
+
+int perform(object me, object target)
+{
+  int sk, num, t_num, i;
+  object *obs;
+
+  sk = me->query_skill("mantianxing",1);
+
+  if (sk < 100)
+    return notify_fail("你的满天星还不够熟练！\n");
+  if (me->query_skill_mapped("throwing") != "mantianxing")
+    return notify_fail("你没有激发满天星，难以施展满天星的绝技。\n");
+
+  if(userp(me) && !wizardp(me) && me->query("family/family_name") != "陷空山无底洞")
+    return notify_fail("“满天星”是陷空山无底洞不传之密！\n");
+
+  sk = me->query_skill("throwing");
+  num = sk/110;
+  if (num > 4)
+    num = 4;
+
+  obs = all_inventory(me);
+  obs = filter_array(obs,(: $1->is_throwing() :));
+
+  if (sizeof(obs) < 1)
+    return notify_fail("你身上没有可以发射的暗器！\n");
+
+  t_num = 0;
+  for (i = 0; i < sizeof(obs); i++)
+    t_num += obs[i]->query_amount();
+  if (num > t_num)
+    num = t_num;
+  message_vision(HIM"$N" HIM"身形一闪，往后急退了几步，陡然扬手撒出了满天星。"
+                 "漫天的寒星闪烁呼叫，直扑$n" HIM"而去！\n"NOR,me,target);
+
+  for (i = 0;i<num;i++)
+  {
+    if (!me->is_fighting(target))
+      break;
+    obs = all_inventory(me);
+    obs = filter_array(obs,(: $1->is_throwing() :));
+
+    if (sizeof(obs) < 1)
+      break;
+    throw_victim(me,target,obs[0],i);
+    me->receive_damage("sen", 10);
+  }
+
+  me->start_busy(2 + random(i + 1));
+  if (userp(me) && userp(target) && ! target->is_want_kill(me->query("id")))
+    me->want_kill(target);
+  me->kill_ob(target);
+
+  if (living(target) && ! userp(target))
+    target->kill_ob(me);
+  else
+    target->fight_ob(me);
+  return 1;
+}
+

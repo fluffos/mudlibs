@@ -1,0 +1,299 @@
+// CMDS /cmds/usr/quit.c
+#include <mudlib.h>
+#include <command.h>
+inherit F_DBASE;
+inherit XYJTIME_D;
+int do_drop(object me, object obj);
+int clear_team(object me);
+int confirm(string yn, object me);
+//int log_usage(string id, string ip_number, string mode);
+void create()
+{
+  seteuid(getuid());
+  set("name", "离线指令");
+  set("id", "quit");
+  set("channel_id", "离线指令");
+}
+
+int main(object me, string arg, int force_quit)
+{
+  object *inv, link_ob;
+  int i;
+  object where;
+  string startroom;
+  link_ob = me->query_temp("link_ob");
+  where = environment(me);
+  if( objectp(where) )
+    startroom = file_name(where);
+  if(!force_quit)
+  {
+    if (objectp(where) &&
+        (where->is_hockshop_room() ||
+         where->is_bank_room() ||
+         where->query("no_quit")))
+      return notify_fail(WHT"你还是换个地方去退线吧！\n"NOR);
+    if( !wizardp(me) )
+    {
+      if ( me->query_temp("no_move") )
+        return notify_fail(HIC"你被定住了，哪里退得出游戏！\n"NOR);
+     if ((int)me->query_temp("in_qingwang")==1)
+       return notify_fail(MAG"你眼前出现那个熟悉的身影，搅的你心烦气燥，"
+                             "似离情，剪不断，理还乱。\n"NOR);
+      if( me->query_temp("no_quit"))
+        return notify_fail("你现在不能退出游戏！\n");
+      if( me->query_condition("killer"))
+        return notify_fail(HIR"你正在被通辑中，不能退出游戏！\n"NOR);
+      if(!me->query_temp("suicide_countdown"))
+      {
+        if (me->is_busy()
+         || me->query_temp("doing_xiudao")
+         || me->query_temp("pending/exercising")
+         || me->query_temp("pending/meditating"))
+          return notify_fail("你现在正忙着做其他事，不能退出游戏！\n");
+      }
+
+      if( me->query("mud_age") < 1800 )
+      {
+         write(CYN"\n你的账号是新建的，本站规定新建账号必须连续在线半小时才能被有效保留，
+                     退出游戏将删除你的账号(请注意一般的安全区是不会增长你的在线时间的)，
+                     你确定要放弃该帐号而退出吗？(y/n)\n"NOR);
+         input_to((: confirm :), me);
+         return 1;
+      }
+
+      if (me->run_override("quit"))
+        return 1;
+      if( !wizardp(me) && where && where->query("no_quit") && link_ob )
+        return notify_fail(HIC"这里不准退出游戏。\n"NOR);
+    }
+
+  }
+
+  inv = all_inventory(me);
+  if( !wizardp(me) && (!link_ob || ( link_ob && !link_ob->is_character()) ) )
+  {
+    for(i=0; i<sizeof(inv); i++)
+      if (! inv[i]->query_autoload() && ! inv[i]->query("equipped"))
+        do_drop(me, inv[i]);
+  }
+
+  if( link_ob )
+  {
+    if( link_ob->is_character() )
+    {
+      write(HIB"你的魂魄回到" + link_ob->name(1) + "的身上。\n"NOR);
+      exec(link_ob, me);
+      link_ob->setup();
+      return 1;
+    }
+
+    link_ob->set("last_on", time());
+    link_ob->set("last_from", query_ip_number(me));
+    link_ob->set("last_port", query_ip_port(me));
+    if( !link_ob->query("12sxt"))
+      link_ob->set("12sxt",XYJTIME_D->check_sxt(me));
+    link_ob->save();
+    destruct(link_ob);
+  }
+
+  if (me->query("doing"))
+  {
+    if (! interactive(me))
+      return 1;
+    CHANNEL_D->do_channel(this_object(), "sys",
+       log_id(me)+"由"+query_ip_number(me)+"("+query_ip_port(me)+")离线"HIG"进行计划"NOR WHT" ["+
+       log_time()+"]"+"\n"NOR);
+    write(HIG"你选择暂时离线退出游戏，人物将保留在西游记的世界中继续成长。。。\n"NOR);
+    message("vision", me->name() + "离线练功了。。。\n", environment(me), ({ me }));
+    me->set("doing_time", time());
+    clear_team(me);
+    me->save();
+    link_ob = new(LOGIN_OB);
+    exec(link_ob, me);
+    destruct(link_ob);
+    return 1;
+  }
+
+  write("欢迎下次再来！\n");
+  me->set("channels",({ })); // 配合logind.c 为了频道安全
+  me->set("last_on",time());
+  if(me->query("seach"))
+    me->delete("seach"); // 清除USER_OB里面的明码
+  if(!wizardp(me))
+  {
+    if(me->query("env/invisibility"))
+      me->delete("env/invisibility");
+  }
+
+  if(wizardp(me))
+  { // Added by waiwai@2001/07/07
+    log_file("wizcmds/wizlogin", sprintf("%s从(%s)退出系统. 时间在：[%s] 停留时间：%s \n",
+          log_id(me), query_ip_number(me), log_time(), query_time(me->query_temp("temp_time"))));
+  }
+
+  if (environment(me))
+  {
+    message("vision", me->name() + "离开游戏。\n",
+             environment(me), ({ me }));
+  }
+
+  CHANNEL_D->do_channel(this_object(), "sys",
+        me->name(1) + "(" + me->query("id") + ")离开游戏了。");
+
+  clear_team(me);
+  me->save();
+  me->set_magic_move();
+  me->end_log();
+  destruct(me);
+  return 1;
+}
+
+int force_quit(object me)
+{
+  string name;
+  object where;
+  where = environment(me);
+
+  if (previous_object() != me || ! playerp(me))
+    return notify_fail("你不能摧毁这个对象。\n");
+  name = me->query("id");
+  seteuid(getuid());
+
+  if( me->query("mud_age") < 1800 )
+  {
+    rm(DATA_DIR + "login/" + name[0..0] + "/" + name + __SAVE_EXTENSION__);
+    rm(DATA_DIR + "user/" + name[0..0] + "/" + name + __SAVE_EXTENSION__);
+    CHANNEL_D->do_channel(this_object(), "sys",
+        log_id(me)+"在"+MISC_D->find_place(where)
+        +COLOR_D->clean_color(where->query("short"))
+        +"异常离线退出，档案被删除。。。\n"NOR);
+    NAME_D->remove_name(me->query("name"), me->query("id"));
+    write(HIW"由于您登陆不足30分钟而退出西游记，档案被cmds/usr/quit系统自动删除。。。。。。\n"NOR);
+    destruct(me);
+    return 1;
+  }
+
+  me->save();
+  if (environment(me) != find_object(VOID_OB))
+    me->move(VOID_OB, 1);
+  destruct(me);
+  return 1;
+}
+
+int confirm(string yn, object me)
+{
+  int i;
+  object *inv, link_ob, where;
+  where = environment(me);
+  if( upper_case(yn) == "Y" )
+  {
+    link_ob = me->query_temp("link_ob");
+    if( !wizardp(me) && ( !link_ob || ( link_ob && !link_ob->is_character()) ) )
+    {
+      inv = all_inventory(me);
+      for( i = 0; i < sizeof(inv); i ++ )
+        if( !inv[i]->query_autoload() ) do_drop(me, inv[i]);
+    }
+
+    write(HIW"您选择了放弃账号退出西游记，档案被删除。。。。。。\n"NOR);
+    CHANNEL_D->do_channel(this_object(), "sys",
+       log_id(me)+"在"+MISC_D->find_place(where)+COLOR_D->clean_color(where->query("short"))+
+       "放弃帐号离线退出，档案被删除。。。\n"NOR);
+    NAME_D->remove_name(me->query("name"), me->query("id"));
+    seteuid(getuid());
+    rm( link_ob->query_save_file() + __SAVE_EXTENSION__ );
+    rm( me->query_save_file() + __SAVE_EXTENSION__ );
+    destruct(link_ob);
+    destruct(me);
+    return 1;
+  }
+
+  else
+  {
+    write(CYN"您选择了放弃退出(Quit)，继续游戏。\n"NOR);
+    return 1;
+  }
+
+}
+
+// 去掉quit的多余显示信息，够乱
+int do_drop(object me, object obj)
+{
+  if( obj->query("no_drop") )
+  {
+    destruct(obj);
+    return 0;
+  }
+
+// 标记物件的清除
+  if( obj->query("keep_id") || obj->query("keepto") )
+  {
+    destruct(obj);
+    return 0;
+  }
+
+  if( (string)obj->query("material") == "water"
+    || (string)obj->query("material") == "ice"
+    || (int)obj->query("des"))
+  {
+    destruct(obj);
+    return 0;
+  }
+
+  if (obj->move(environment(me)))
+  {
+    if( obj->is_character() )
+      message_vision("$N将$n从背上放了下来，躺在地上。\n", me, obj);
+    else
+    {
+      if( !obj->query("value") && !obj->value() )
+      {
+        destruct(obj);
+      }
+
+    }
+
+    return 1;
+  }
+
+  return 0;
+}
+
+int clear_team(object me)
+{
+  object *member;
+  int i;
+
+  if(me->is_team_leader())
+    me->dismiss_team();
+  else
+  {
+    member=me->query_team();
+    for(i=0;i<sizeof(member);i++)
+    {
+      if(member[i]!=me)
+      {
+        if(objectp(member[i]))
+          member[i]->dismiss_team();
+      }
+
+    }
+
+  }
+
+  return 1;
+}
+
+int help(object me)
+{
+	write(@HELP
+指令格式 : quit
+当你想暂时离开游戏时时, 可利用此一指令。
+因为某些原因也许系统并不能允许你顺利的退出系统。
+比如被通缉或者正在进行战争等原因。。。
+相关指令：save，backup，set
+HELP
+    );
+    return 1;
+}
+

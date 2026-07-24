@@ -1,0 +1,307 @@
+#include <command.h>
+#include <dbase.h>
+#include <origin.h>
+#define DEBUGER "hcifml"
+#define DEBUG(x) tell_object(find_player(DEBUGER), x)
+// Let command path be nosave, thus we can make sure no one can get command
+// path directly from restore_object().
+nosave string *path;
+nosave int enabled = 0;
+// Leave this to allow other objects can search your commands such as
+// help, which...
+string find_command(string verb)
+{
+  return (string)COMMAND_D->find_command(verb, path);
+}
+
+string remove_leading_space(string arg)
+{
+  int i;
+  for (i = 0; i < strlen(arg); i++)
+    if (arg[i..i] != " ")
+      return arg[i..];
+  return "";
+}
+
+protected nomask int command_hook(string arg)
+{
+  string verb, file;
+  object me, env;
+  mapping para;
+#ifdef PROFILE_COMMANDS
+  int mem, utime, stime;
+  mapping info;
+  int ecost;
+  mem = memory_info();
+  info = rusage();
+  utime = info["utime"];
+  stime = info["stime"];
+  ecost=eval_cost();
+#endif
+  me = this_object();
+  if (!objectp(me))
+    return 0;
+
+  env=environment(me);
+  if (!objectp(env))
+    return 0;
+
+  verb = query_verb();
+  if ((verb = remove_leading_space(verb)) == "")
+    return 0;
+  para = me->query_entire_dbase();
+  para = para["env"];
+  if (mapp(para) && para["pure_say"] && ! me->is_direct_command())
+  {      // 不是做动作，而是说话
+    if (stringp(file = find_command("say")) &&
+         call_other(file, "main", me, me->query_orginal_input()))
+// 执行完毕说话的动作
+      return 1;
+    else    // 无法说话
+      return 0;
+  }
+
+  if (env->is_wiz() && !wizardp(me))
+  {
+    if(verb != "chat" &&
+       verb != "say" &&
+       verb != "look" &&
+       verb != "quit")
+    {
+      write(WHT"这里是巫师的地盘。。。。。。\n"NOR);
+      return 1;
+    }
+
+  }
+
+  if( userp(me) && (me->query_temp("zuochan") || env->query("limit_cmds")) )
+  {
+    if(verb != "halt" && verb != "say" && verb != "look" && verb != "go"
+       && verb != "shutdown" && verb != "call" && verb != "surrender")
+    {
+      write(WHT"你还是安心点吧。。。。。。\n"NOR);
+      return 1;
+    }
+
+  }
+
+// 用这里的设置替代Npc身上的一堆的禁止参数
+// 比如百花谷仙子身上啦，挑战掌门处，皇宫进士处等。。。
+  if( userp(me) && !wizardp(me) && env->query("zm_limit") )
+  {
+    if(verb!="fight" && verb!="say" && verb!="look" && verb!="go" && verb!="surrender"
+      && verb!="shutdown" && verb!="call" && verb!="eat" && verb!="hp" && verb!="score"
+      && verb!="ask" && verb!="lead" && verb!="unlead" && verb!="skills2" && verb!="water")
+    {
+      write(WHT"你还是省省吧。。。。。。\n"NOR);
+      return 1;
+    }
+
+  }
+
+// 用于战役ROOM
+  if( userp(me) && !wizardp(me) && env->query("zy_limit") )
+  {
+    if(verb!="kill" && verb!="say" && verb!="look" && verb!="go" && verb!="surrender"
+       && verb!="perform" && verb!="halt" && verb!="goto" && verb!="chat" && verb!="bh"
+       && verb!="exert" && verb!="cast" && verb!="tell" && verb!="reply" && verb!="parry"
+       && verb!="sldh" && verb!="es" && verb!="rumor" && verb!="hp" && verb!="score"
+       && verb!="inventory" && verb!="unwield" && verb!="wield" && verb!="wear"
+       && verb!="remove" && verb!="keepto" && verb!="keep" && verb!="lead" && verb!="unlead"
+       && verb!="who" && verb!="skills" && verb!="skills2" && verb!="ask" && verb!="give"
+       && verb!="put" && verb!="eat" && verb!="drink" && verb!="cls" && verb!="enforce"
+       && verb!="meditate" && verb!="follow" && verb!="exercise" && verb!="check" && verb!="enchant"
+       && verb!="drop" && verb!="get" && verb!="enable" )
+    {
+      write(WHT"你还是省省吧。。。。。。\n"NOR);
+      return 1;
+    }
+
+  }
+
+// 用于通缉犯
+  if( me->query_condition("killer")>0 && userp(me) && !wizardp(me) )
+  {
+    if(verb!="say" && verb!="look" && verb!="go" && verb!="surrender"
+    && verb!="halt" && verb!="goto" && verb!="chat" && verb!="bh"
+    && verb!="exert" && verb!="tell" && verb!="reply" && verb!="parry"
+    && verb!="hp" && verb!="score" && verb!="inventory" && verb!="unwield"
+    && verb!="wield" && verb!="wear" && verb!="remove" && verb!="who"
+    && verb!="skills" && verb!="skills2" && verb!="ask" && verb!="give"
+    && verb!="eat" && verb!="drink" && verb!="help" && verb!="enable"
+    && verb!="cls" && verb!="enforce" 	&& verb!="meditate" && verb!="follow"
+    && verb!="exercise" && verb!="check" && verb!="enchant" && verb!="sos"
+    && verb!="drop" && verb!="get" )
+    {
+       write(HIR"你正被通缉，还是省省吧。。。。。。\n"NOR);
+       return 1;
+    }
+
+  }
+
+  if( userp(me) && !wizardp(me) && (me->query_temp("d_mana"))>0 )
+  {
+    if(me->query_temp("is_living")!=1 || me->query_temp("k_bian") )
+    {
+      if(verb!="bian" && verb!="say" && verb!="look" )
+      {
+        write("别忘了你现在是一"+(undefinedp(me->query_temp("unit"))?
+                       "个":me->query_temp("unit"))+me->name()+"！\n");
+        return 1;
+      }
+
+    }
+
+  }
+
+  if( !arg
+    && (objectp(environment())
+        && environment()->query("exits/" + verb))
+    && stringp(file = find_command("go"))
+    && call_other(file, "main", this_object(), verb));
+  else if( stringp(file = find_command(verb))
+         && call_other(file, "main", this_object(), arg));
+  else if (me->is_in_prison())
+  {
+    return notify_fail("狱卒喝道：你老老实实的呆着别动！" +
+          appromix_time(me->query_time_to_leave(), 1) +
+          "放你出去！\n");
+  }
+
+  else if( EMOTE_D->do_emote( this_object(), verb, arg ) );
+  else if( CHANNEL_D->do_channel( this_object(), verb, arg ) );
+  else if (mapp(para) && para["auto_say"] &&
+            query_fail_msg() == "什么？\n" &&
+            stringp(file = find_command("say")) &&
+            ! me->is_direct_command() &&
+            call_other(file, "main", me, me->query_orginal_input()));
+  else
+    return 0;
+#ifdef PROFILE_COMMANDS
+  info = rusage();
+  PROFILE_D->log_command(verb, memory_info() - mem, info["stime"] - stime,
+     info["utime"] - utime, ecost-eval_cost());
+#endif
+  return 1;
+}
+
+protected nomask void set_path(string *p)
+{
+
+  if( origin() != ORIGIN_LOCAL
+    && geteuid(previous_object()) != ROOT_UID )
+    return;
+
+  path = p;
+}
+
+string *query_path()
+{
+  return path;
+}
+
+mixed *query_commands()
+{
+  return commands();
+}
+
+int force_me(string cmd)
+{
+  int ret;
+  if (! is_root(previous_object()))
+    return 0;
+  ret = command(this_object()->process_input(cmd));
+  if (objectp(this_object()) && ! in_input())
+    this_object()->write_prompt();
+  return ret;
+}
+
+nomask void enable_player()
+{
+  object me;
+  string *my_path;
+  if (stringp(query("id")))
+    set_living_name(query("id"));
+  else
+    set_living_name(query("name"));
+/*
+  delete_temp("disabled");
+  delete("disable_type");
+  enable_commands();
+  add_action("command_hook", "", 1);
+*/
+  if( !enabled ) {
+          enable_commands(1);
+          enabled = 1;
+          // 由evaluate_command替代
+          add_action("command_hook", "", 1);
+  }
+
+  me = this_object();
+  if (! playerp(me) &&
+      ! interactive(me) &&
+      ! me->is_chatter())
+     my_path = NPC_PATH;
+  else
+    switch (wizhood(me))
+    {
+      case "(admin)":
+        my_path = ADM_PATH;
+        enable_wizard();
+        break;
+      case "(arch)":
+        my_path = ARC_PATH;
+        enable_wizard();
+        break;
+      case "(wizard)":
+        my_path = WIZ_PATH;
+        enable_wizard();
+        break;
+      case "(apprentice)":
+        my_path = APR_PATH;
+        enable_wizard();
+        break;
+      case "(immortal)":
+        my_path = IMM_PATH;
+        enable_wizard();
+        break;
+      default:
+        if (this_object()->is_in_prison())
+          my_path = PNE_PATH;
+        else
+          my_path = PLR_PATH;
+  }
+
+  if (me->is_chatter()) // remove skill cmds & usr cmds
+    my_path -= ({ "/cmds/skill/", "/cmds/usr/" });
+  set_path(my_path);
+}
+
+nomask void disable_player(string type)
+{
+    //  object env;
+        if( !is_root(previous_object()) &&
+            previous_object() != this_object() ) return;
+        set("disable_type", type);
+        //set_temp("disable_input", 1);
+        if (enabled)
+        {
+                disable_commands();
+                enabled = 0;
+        }
+
+}
+
+/*
+nomask void disable_player(string type)
+{
+  if (! is_root(previous_object()) &&
+      previous_object() != this_object())
+    return;
+  set("disable_type", type);
+  set_temp("disabled", 1);
+  disable_commands();
+  enable_commands();
+}
+
+*/

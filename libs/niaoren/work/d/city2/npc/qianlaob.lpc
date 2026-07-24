@@ -1,0 +1,353 @@
+// qianlaob.c
+#include <ansi.h>
+
+inherit NPC;
+inherit F_BANKER;
+int ask_weiwang();
+
+void create()
+{
+	set_name("錢老本", ({"qian laoben", "qian", "laoben"}));
+//	set("title", "錢庄老板");
+	set("title", HIR "天地會"HIG"青木堂"NOR"會眾");
+	set("gender", "男性");
+	set("age", 34);
+
+	set("str", 22);
+	set("int", 24);
+	set("dex", 18);
+	set("con", 18);
+
+	set("qi", 500); 
+	set("max_qi", 500);
+	set("jing", 100);
+	set("max_jing", 100);
+	set("shen", 0);
+
+	set("combat_exp", 50000);
+	set("shen_type", 1);
+	set("attitude", "friendly");
+	set("env/wimpy", 50);
+	set("chat_chance", 5);
+	set("chat_msg", ({
+	"錢老本說道：我叫錢老本，就是因為做生意連老本也賠了。\n",
+	"錢老本笑著說道：在本店存錢利息至少百分之一，客官您只管存吧。\n",
+	"錢老本說：只有對本派弟子我才這么客氣，對別的人啊，哼哼......\n",
+	"錢老本突然說道: 江湖威望很重要，威望值高大有好處啊。\n",
+        "錢老本突然說：五人分開一首詩，身上洪英無人知。\n",
+	}));
+        set("inquiry", ([
+		"利息" :  "\n想要利息先入會！\n",
+		"陳近南" :  "\n想見總舵主可沒那么容易。\n",
+		"天地會" :  "\n只要是英雄好漢，都可以入我天地會(join tiandihui)。\n",
+		"加入" :  "\n只要入了我天地會，可以向會中各位好手學武藝。\n",
+		"入會" :  "\n只要入了我天地會，可以向會中各位好手學武藝。\n",
+                "威望" :  (: ask_weiwang :),
+                "江湖威望" : (: ask_weiwang :),
+       ]) );
+
+	set_skill("unarmed", 50);
+	set_skill("dodge", 50);
+	set_temp("apply/attack", 100);
+	set_temp("apply/defense", 100);
+	set_temp("apply/damage", 40);
+
+	setup();
+	carry_object("/clone/misc/cloth")->wear();
+	add_money("gold", 5);
+}
+
+void init()
+{
+	add_action("do_check", "check");
+	add_action("do_check", "chazhang");
+	add_action("do_convert", "convert");
+	add_action("do_convert", "duihuan");
+	add_action("do_deposit", "deposit");
+	add_action("do_deposit", "cun");
+	add_action("do_withdraw", "withdraw");
+	add_action("do_withdraw", "qu");
+	add_action("do_join","join");
+	delete_temp("busy");
+}
+
+int ask_weiwang()
+{
+command("tell "+this_player()->query("id")+" 你現在的江湖威望是 " +(string)(this_player()->query("weiwang")));
+say("\n錢老本說：如果你威望值很高，有些人見了你不但不會殺你，還會教你武功，送你寶貝。\n"
++"而且你還可以加入幫會，率領會眾去攻打目標，就連去錢庄取錢也會有利息 。。。。。\n");
+say("錢老本又說：殺某些壞人或救某些好人可以提高江湖威望。\n");
+return 1;
+}
+/*
+void enough_rest()
+{
+	delete_temp("busy");
+}
+
+int do_check()
+{
+	// here we use 3 units to display bank infos
+	int total = (int)this_player()->query("balance");
+	
+	if (!total || total < 0) {
+		this_player()->set("balance", 0);
+		return notify_fail("您在敝商號沒有存錢。\n");
+	}
+	write("錢老本悄悄告訴你：您在弊商號共存有" + 
+		MONEY_D->money_str(total) + "\n");
+
+	return 1;
+}
+int do_convert(string arg)
+{
+	string from, to;
+	int amount, bv1, bv2;
+	object from_ob, to_ob;
+	object me;
+	
+	if (query_temp("busy"))
+		return notify_fail("喲，抱歉啊，我這兒正忙著呢……您請稍候。\n");
+
+	me = this_player();
+
+	if (!arg || sscanf(arg, "%d %s to %s", amount, from, to) != 3)
+	{
+		return notify_fail("命令格式：convert|duihuan <數量> <貨幣單位> to <新貨幣單位>\n");
+	}
+
+	from_ob = present(from + "_money", me);
+	to_ob = present(to + "_money", me);
+
+	if (!to_ob && file_size("/clone/money/" + to + ".lpc") < 0)
+	{
+		return notify_fail("你想兌換成什么？\n");
+	}
+	if (!from_ob)
+	{
+		return notify_fail("你身上沒有帶這種錢。\n");
+	}
+	if (amount < 1)
+	{
+		return notify_fail("你想白賺啊？\n");
+	}
+	if ((int)from_ob->query_amount() < amount)
+	{
+		return notify_fail("你帶的" + from_ob->query("name") + "不夠。\n");
+	}
+	
+	bv1 = from_ob->query("base_value");
+	if (!bv1)
+	{
+		return notify_fail("這樣東西不值錢。\n");
+	}
+
+	bv2 = to_ob ? to_ob->query("base_value") : call_other("/clone/money/" + to, "query", "base_value" );
+	
+	if (bv1 < bv2)
+		amount -= amount % (bv2 / bv1);	
+
+	if (amount == 0)
+	{
+		return notify_fail("這些" + from_ob->query("name") + "不夠換。\n");
+	}
+
+	// allowed to convert now
+	set_temp("busy", 1);	
+
+	from_ob->add_amount(-amount);
+
+	if (!to_ob) {
+		to_ob = new("/clone/money/" + to);
+		to_ob->set_amount(amount * bv1 * 9 / (bv2 * 10));
+		to_ob->move(me);
+	}
+	else
+		to_ob->add_amount(amount * bv1 * 9 / (bv2 * 10));
+	
+	message_vision(sprintf("$N從身上取出%s%s%s，換成了%s%s%s。\n",
+	chinese_number(amount), from_ob->query("base_unit"), from_ob->query("name"),
+	chinese_number(amount * bv1 * 9 / (bv2 * 10)), to_ob->query("base_unit"), 
+	to_ob->query("name")), me);
+
+//	from_ob->add_amount(-amount);
+
+	remove_call_out("enough_rest");
+	call_out("enough_rest", 5);
+
+	return 1;
+}
+
+
+int do_deposit(string arg)
+{
+	string what;
+	int amount, money_limit;
+	object what_ob, me;
+
+	if (query_temp("busy"))
+		return notify_fail("喲，抱歉啊，我這兒正忙著呢……您請稍候。\n");
+
+	me = this_player();
+	if (!arg || sscanf(arg, "%d %s", amount, what) != 2)
+	{
+		return notify_fail("命令格式：deposit:cun <數量> <貨幣單位>\n");
+	}
+
+	what_ob = present(what + "_money", me);
+	if (!what_ob)
+	{
+		return notify_fail("你身上沒有帶這種錢。\n");
+	}
+	if (amount < 1)
+	{
+		return notify_fail("你想存多少" + what_ob->query("name") + "？\n");
+	}
+	if ((int)what_ob->query_amount() < amount)
+	{
+		return notify_fail("你帶的" + what_ob->query("name") + "不夠。\n");
+	}
+
+	// deposit it
+	set_temp("busy", 1);	
+	if (me->query("age")==14) money_limit = 100;
+	if (me->query("age")>14) money_limit = 100 + (me->query("age")-15) * 20;
+	if (me->query("age")>20) money_limit = 200 + (me->query("age")-20) * 20;
+	if (me->query("age")>30) money_limit = 400 + (me->query("age")-30) * 30;
+	if (me->query("age")>40) money_limit = 800 + (me->query("age")-40) * 40;
+	money_limit = money_limit*10000;
+
+	if (me->query("balance") + what_ob->query("base_value") * amount > money_limit)
+	{
+                return notify_fail("你的存款額度已經用滿了。\n");
+	}
+
+	me->add("balance", what_ob->query("base_value") * amount);
+	what_ob->add_amount(-amount);
+	message_vision(sprintf("$N拿出%s%s%s，存進了銀號。\n", 
+	chinese_number(amount), what_ob->query("base_unit"), 
+	what_ob->query("name")), me);
+
+	remove_call_out("enough_rest");
+	call_out("enough_rest", 5);
+
+return 1;
+}
+*/
+/*
+int do_withdraw(string arg)
+{
+	int amount, v;
+	string what;
+	object me;
+
+	if (query_temp("busy"))
+		return notify_fail("喲，抱歉啊，我這兒正忙著呢……您請稍候。\n");
+
+	me = this_player();
+
+	if (!arg || sscanf(arg, "%d %s", amount, what) != 2)
+	{
+		return notify_fail("命令格式：withdraw|qu <數量> <貨幣單位>\n");
+	}
+	if (amount < 1)
+	{
+		return notify_fail("你想取出多少錢？\n");
+	}
+	if (amount > 210000)
+	{
+		return notify_fail("真抱歉，小店一時沒這么多現金。\n");
+	}
+	if (file_size("/clone/money/" + what + ".lpc") < 0)
+	{
+		return notify_fail("你想取出什么錢？\n");
+	}
+	what = "/clone/money/" + what;
+	if ((v = amount * what->query("base_value")) > me->query("balance"))
+	{
+		return notify_fail("你存的錢不夠取。\n");
+	}
+	
+	if(v>30000) 
+	{
+	if((int)me->query("weiwang")>=50)
+	return notify_fail("\n錢老本怒道：身為天地會弟子，你還敢如此揮霍！一次最多取三兩黃金！\n");
+	}
+	set_temp("busy", 1);	
+
+	me->add("balance",  -v);
+	if((int)me->query("weiwang")>=50)
+	{
+	MONEY_D->pay_player(me, v = v * ((((int)me->query("weiwang")-40)/10)+100)/ 100);
+	message_vision(sprintf("$N從銀號里取出%s。\n", MONEY_D->money_str(v)),
+		me);
+	message_vision("\n$N發現果然有利息，高興得跳了起來！", me);
+        command("goodkid "+this_player()->query("id"));
+	}
+	else 
+	{
+	message_vision("\n錢老本說: 想白賺啊？對不起，你在本庄取錢沒利息。\n",me); 
+	MONEY_D->pay_player(me, v = v * 4/5);
+	message_vision(sprintf("$N從銀號里取出%s。\n", MONEY_D->money_str(v)),
+		me);
+	}
+	remove_call_out("enough_rest");
+	call_out("enough_rest", 5);
+return 1;
+}
+
+*/
+/*
+int do_withdraw(string arg)
+{
+	int amount, v;
+	string what;
+	object me;
+
+	if (query_temp("busy"))
+		return notify_fail("喲，抱歉啊，我這兒正忙著呢……您請稍候。\n");
+
+	me = this_player();
+
+	if( (int)me->query("balance") > 2000000 )
+	{
+		me->set("balance",2000000);
+		return notify_fail("你以前存的多于200兩黃金的錢被官府沒收了.\n");
+	}
+	
+	if (!arg || sscanf(arg, "%d %s", amount, what) != 2)
+	{
+		return notify_fail("命令格式：withdraw|qu <數量> <貨幣單位>\n");
+	}
+	if(amount >= 100)
+	{
+		return notify_fail("說清楚數目。本店沒這么多麻煩數字。\n");
+	}
+	if (amount < 1)
+	{
+		return notify_fail("你想取出多少錢？\n");
+	}
+	if (file_size("/clone/money/" + what + ".lpc") < 0)
+	{
+		return notify_fail("你想取出什么錢？\n");
+	}
+	what = "/clone/money/" + what;
+	if ((v = amount * what->query("base_value")) > me->query("balance"))
+	{
+        return notify_fail("你存的錢不夠取。\n");
+	}
+
+	set_temp("busy", 1);	
+
+	me->add("balance",  -v);
+	MONEY_D->pay_player(me, v = v * 8 / 10);
+	
+	message_vision(sprintf("$N從銀號里取出%s。\n", MONEY_D->money_str(v)),
+		me);
+
+	remove_call_out("enough_rest");
+	call_out("enough_rest", 5);
+	return 1;
+}
+*/
+#include "/kungfu/class/yunlong/tiandihui.h";

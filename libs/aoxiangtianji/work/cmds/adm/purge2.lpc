@@ -1,0 +1,100 @@
+//Last modified by waiwai@2001/06/05
+#include <ansi.h>
+#define SYNTAX   "指令格式：purge2 [<未上线天数>] | <使用者ID> because <原因>\n"
+inherit F_CLEAN_UP;
+private int do_purge_players(int day);
+int main(object me, string arg)
+{
+   string name, reason;
+   string status,petfile,wiz_status;
+   int day;
+   status = wizhood(me);
+
+   wiz_status = SECURITY_D->get_status(me);
+   if( wiz_status != "(admin)" )
+     return notify_fail("只有 (admin) 级别的巫师才能使用这个指令！\n");
+   if( !arg )
+     return notify_fail(SYNTAX);
+   if( sscanf(arg, "%d", day) && day >= 0)
+     return do_purge_players(day);
+   if( sscanf(arg, "%s because %s", name, reason)!=2 )
+     return notify_fail(SYNTAX);
+   seteuid(getuid());
+   if( file_size(DATA_DIR + "login/" + name[0..0] + "/" + name + __SAVE_EXTENSION__)<0 )
+     return notify_fail(WHT"没有这位使用者。\n"NOR);
+   rm(DATA_DIR + "login/" + name[0..0] + "/" + name + __SAVE_EXTENSION__);
+   rm(DATA_DIR + "user/" + name[0..0] + "/" + name + __SAVE_EXTENSION__);
+   rm( "/data/playerhomes/h_"+name+ __SAVE_EXTENSION__ );//By waiwai@2001/06/05
+   petfile=DATA_DIR"pet/"+name[0..0]+"/"+name+".o";
+   if ( file_size(petfile)>0 ) rm(petfile);
+   rm(DATA_DIR + "qingdan/" + name[0..0] + "/" + name + ".o");
+   write( WHT"使用者 " HIR+ capitalize(name) +NOR WHT" 被彻底删除掉了。\n"NOR);
+   CHANNEL_D->do_channel(this_player(), "adm",
+                     "使用(purge2)指令清除了"HIR+capitalize(name)+HIW"的个人数据. \n"NOR);
+   log_file("static/purge2",
+   sprintf("%s(%s)使用purge2指令清除了%s的个人数据.原因：%s \n时间在:(%s) \n",
+           this_player()->name(1),geteuid(this_player(1)),name,reason,ctime(time()) ) );
+   return 1;
+}
+
+private int do_purge_players(int day)
+{
+   int i, j, ppl_cnt, count;
+   string *dir, *ppls, name;
+   object who;
+   if(day<1) return notify_fail("天数应该大于1。\n");
+   seteuid(getuid());
+   write(WHT"档案处理中......\n"NOR);
+   count = 0;
+   ppl_cnt = 0;
+   dir = get_dir(DATA_DIR + "login/");
+   for(i=0; i<sizeof(dir); i++)
+   {
+     reset_eval_cost();
+     write("目录"+dir[i]+": 玩家");
+     ppls = get_dir(DATA_DIR + "login/" + dir[i] + "/");
+     ppl_cnt += sizeof(ppls);
+     for(j=0; j<sizeof(ppls); j++)
+     {
+        if( sscanf(ppls[j], "%s.o", name)==1 )
+          if( (string)SECURITY_D->get_status(name)!="(player)" )
+             continue;
+        who = new(LOGIN_OB);
+        who->set("id", name);
+        if (! who->restore())
+          continue;
+        if( (time()-who->query("last_on"))/86400 >= day )
+        {
+          rm(DATA_DIR + "login/" + dir[i] + "/" + ppls[j]);
+          rm(DATA_DIR + "user/" + dir[i] + "/" + ppls[j]);
+          write(" "+name);
+          count ++;
+        }
+
+        destruct(who);
+     }
+
+     write(" 被清除掉了。\n");
+   }
+
+   write(WHT"\n\n原来总共有 " + ppl_cnt + " 位使用者。\n");
+   write( count + " 个超过 " + day + " 天未上线的使用者数据被清除掉了。\n");
+   write("现在总共有 " + (ppl_cnt - count) + " 位使用者。\n\n"NOR);
+   CHANNEL_D->do_channel(this_player(), "adm","正在使用(purge2)指令清除"+day+"天未上线玩家的数据,总共清除了"HIR+count+HIW"位. \n"NOR);
+   log_file("static/purge2",
+   sprintf("%s(%s)使用purge2指令清除了超过%d天未上线的玩家%d位,原有玩家数：%d位,现有玩家数：%d位 时间在:(%s) \n",
+           this_player()->name(1),geteuid(this_player(1)),day,count,ppl_cnt,ppl_cnt-count,ctime(time()) ) );
+   return 1;
+}
+
+int help(object me)
+{
+write(@HELP
+指令格式：purge2 [<未上线天数>] | <使用者姓名> because <原因>
+可清除一个使用者或清除超过一天以上不曾上线的使用者和巫师档案。
+请各位巫师认真填写好原因.
+HELP
+   );
+    return 1;
+}
+

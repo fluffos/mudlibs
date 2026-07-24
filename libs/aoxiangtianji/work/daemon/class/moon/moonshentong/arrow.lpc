@@ -1,0 +1,70 @@
+#include <ansi.h>
+#include <combat.h>
+#define FU "「" HIR "落日神箭" NOR "」"
+inherit F_SSERVER;
+int valid_cast(object me, object target)
+{
+  if(userp(me) && (string)me->query("family/family_name") != "月宫")
+    return notify_fail(sprintf("%s是月宫不传之密！\n",FU));
+  if (me->is_busy())
+    return notify_fail("你正忙着呢！\n");
+
+  if (me->query_skill("moonshentong", 1) < 100)
+    return notify_fail(sprintf("你的晚月神通修为不够，难以施展%s。\n",FU));
+
+  if( (int)me->query("max_mana") < 500 )
+    return notify_fail(sprintf("你的法力修为不够，难以施展%s。\n",FU));
+
+  if( (int)me->query("force") < 100 )
+    return notify_fail("你的真气不够。\n");
+  if((int)me->query("mana") < 100+2*(int)me->query("mana_factor") )
+    return notify_fail("你的法力不够！\n");
+  if((int)me->query("sen") < 100 )
+    return notify_fail("你无法集中精力！\n");
+
+  return 1;
+}
+
+int cast_attack(object me, object target)
+{
+  int success_adj;
+  int damage;
+  string msg_init,msg_success,msg_fail,msg_backfire_init,msg_backfire_success;
+
+  success_adj = SKILL_D("moonshentong")->query_power_effect(me);
+  if( !target )
+    target = offensive_target(me);
+  if( !target
+   || !target->is_character()
+   || target->is_corpse()
+   || target==me)
+    return notify_fail(sprintf("你要对谁施%s？\n",FU));
+  me->add("mana", -25-2*(int)me->query("mana_factor"));
+  me->receive_damage("sen", 50);
+  if( random(me->query("max_mana")) < 100 )
+  {
+    write("你一着急竟然忘了咒语。\n");
+    return 1;
+  }
+
+  msg_init = HIC "$N" HIC"口中念了几句咒文，随着一声“后羿在此！”半空中现出一位身披虎皮的大汉。"
+             +"\n只见他张弓搭箭，“嗖”的一声，一只蓝汪汪的长箭向" HIC"$n" HIC"激射而下！\n"NOR ;
+  msg_success = HIC "结果长箭从" HIC"$n" HIC"身上透体而过，顿时血花飞溅！\n" NOR;
+  msg_fail = HIC "只见" HIC"$n" HIC"轻轻一跳，长箭正好插在" HIC"$n" HIC"脚边，兀自颤动不休！\n" NOR;
+  msg_backfire_init = HIC "但是" HIC"$n" HIC"以法力一拨，长箭“嗖”的一声折向$N！\n" NOR;
+  msg_backfire_success = HIC "结果长箭从" HIC"$n" HIC"身上透体而过，顿时血花飞溅！\n" NOR;
+
+  damage = SPELL_D->attacking_cast(
+       me,             //attacker
+       target,         //target
+       success_adj,    //success adjustment
+       BACKFIRE,       //backfire or not
+       "both",          //damage type: "both", "kee"/"qi", "sen"/"shen"
+       msg_init,
+       msg_success,
+       msg_fail,
+       msg_backfire_init,
+       msg_backfire_success);
+  me->start_busy(1+random(3));
+  return 1;
+}

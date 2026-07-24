@@ -1,0 +1,111 @@
+#include <ansi.h>
+#include <teamjob.h>
+inherit F_DBASE;
+mixed teamjob_name;
+mixed teamjob_id;
+nosave int destructing;         // 析构对象时候的标志
+nosave string status;           // 任务对象的状态
+ int is_teamjob() { return clonep(this_object()); }
+
+//int is_teamjob() { return 1; }
+
+// 任务的名字
+varargs string name()
+{
+  if (stringp(teamjob_name))
+    return teamjob_name;
+  if (functionp(teamjob_name))
+    return evaluate(teamjob_name);
+  return "未名任务";
+}
+
+// 任务的id
+varargs string id()
+{
+  if (stringp(teamjob_id))
+    return teamjob_id;
+  if (functionp(teamjob_id))
+    return evaluate(teamjob_id);
+  return "unknown-teamjob";
+}
+
+// 设置名字
+void set_name(string name)
+{
+  teamjob_name = name;
+}
+
+// 设置id
+void set_id(string id)
+{
+  teamjob_id = id;
+}
+
+// 任务的初始化
+void setup()
+{
+  if (! this_object()->is_teamjob())
+    return;
+// 这是一个任务
+  status = TEAMJOB_CREATE;
+  set("start_time", time());
+  TEAMJOB_D->set_teamjob_name(this_object());
+}
+
+void remove()
+{
+  if (! destructing && this_object()->is_teamjob())
+  {
+    destructing = 1;
+// 在析构前取消任务
+    this_object()->end_teamjob();
+  }
+
+}
+
+// 结束任务的函数
+// 直接调用析构函数
+void end_teamjob()
+{
+  object ob;
+
+  set("finish_time", time());
+  TEAMJOB_D->end_teamjob(this_object());
+// 如果没有析构这个任务，则设置标识，然后析构这个任务
+  if (! destructing)
+  {
+    destructing = 1;
+    foreach (ob in children(base_name(this_object())))
+      destruct(ob);
+  }
+
+}
+
+// 查询任务状态
+string query_status()
+{
+  return status;
+}
+
+// 任务改变状态
+void change_status(string new_state)
+{
+  if (status == new_state)     // 状态没有变化
+    return;
+  status = new_state;
+  if (status == TEAMJOB_FINISH)
+  {   // 迁移到结束状态？析构对象。
+    this_object()->end_teamjob();
+  }
+
+}
+
+int is_create() {return status == TEAMJOB_CREATE;}
+
+int is_ready() {return status == TEAMJOB_READY;}
+
+int is_ongoing() {return status == TEAMJOB_ONGOING;}
+
+int is_finish() {return status == TEAMJOB_FINISH;}
+
+int is_error() {return status == TEAMJOB_ERROR;}

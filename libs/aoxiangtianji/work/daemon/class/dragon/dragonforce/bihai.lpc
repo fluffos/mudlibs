@@ -1,0 +1,262 @@
+#include <ansi.h>
+#include <combat.h>
+#define BIHAI "「" HIW "碧海潮生按玉箫" NOR "」"
+inherit F_SSERVER;
+int attack2(object me, object target);
+int attack3(object me, object target);
+int attack4(object me, object target);
+int valid_exert(object me, object target)
+{
+  object ob;
+  int t = time();
+  if(userp(me) && (string)me->query("family/family_name") != "东海龙宫")
+    return notify_fail(BIHAI"是东海龙宫不传之密！\n");
+  if (me->is_busy())
+    return notify_fail("你正忙着呢！\n");
+  if (! objectp(ob = me->query_temp("handing")) || ! ob->valid_as_xiao())
+  {
+    if (! objectp(ob = me->query_temp("weapon"))
+       || ! ob->valid_as_xiao())
+    {   // 手里的兵器也不能作为萧使用
+       tell_object(me,"你手里没有拿萧，难以继续施展" BIHAI "。\n");
+       me->set_temp("last_bihai",time());
+       return 0;
+    }
+
+ }
+
+  if (me->query_skill("dragonforce", 1) < 180)
+    return notify_fail("你的龙神心法修为不够，难以施展" BIHAI "。\n");
+  if (me->query_skill_mapped("force") != "dragonforce")
+    return notify_fail("你没有激发夺龙神心法，难以施展" BIHAI "。\n");
+  if (me->query("force") < 1200)
+    return notify_fail("你的真气不够，难以施展" BIHAI "。\n");
+  if ((int)me->query_skill("bihai-chaosheng", 1) < 180)
+     return notify_fail("你的碧海潮生曲太低，难以施展" BIHAI "。\n");
+
+  if ((t - (int)me->query_temp("last_bihai")) < 15)
+    return notify_fail("你刚刚演奏完毕，休息一会吧！\n");
+
+  me->set_temp("last_bihai",time());
+  return 1;
+}
+
+int continue_or_not(object me, object target)
+{
+  object ob;
+
+  if (!objectp(me) || !objectp(target))
+    return 0;
+
+  if (!living(me))
+    return 0;
+
+  if (! objectp(ob = me->query_temp("handing")) || ! ob->valid_as_xiao())
+  {
+    if (! objectp(ob = me->query_temp("weapon"))
+       || ! ob->valid_as_xiao())
+    {   // 手里的兵器也不能作为萧使用
+       tell_object(me,"你手里没有拿萧，难以继续施展" BIHAI "。\n");
+       me->set_temp("last_bihai",time());
+       return 0;
+    }
+
+ }
+
+  if ((int)me->query("force") < 500)
+  {
+    tell_object(me,sprintf("你的内力不足，无法继续演奏%s了！\n", BIHAI));
+    me->set_temp("last_bihai",time());
+    return 0;
+  }
+
+  if (me->query_skill_mapped("force") != "dragonforce")
+  {
+    tell_object(me,sprintf("你改用了别的内功心法，无法继续演奏%s了！\n", BIHAI));
+    me->set_temp("last_bihai",time());
+    return 0;
+  }
+
+  if (!living(target) || (environment(me) != environment(target)))
+  {
+    tell_object(me,sprintf("你眼见%s倒地不起，停止了演奏%s！\n",target->name(),BIHAI));
+    me->set_temp("last_bihai",time());
+    return 0;
+  }
+
+  if (!target->is_fighting(me))
+  {
+    tell_object(me,sprintf("%s没有和你战斗了，你只好停止了演奏%s！\n",target->name(),BIHAI));
+    me->set_temp("last_bihai",time());
+    return 0;
+  }
+
+  return 1;
+}
+
+int exert_attack(object me, object target)
+{
+  string msg;
+  int damage;
+  if (! target)
+  {
+    me->clean_up_enemy();
+    target = me->select_opponent();
+  }
+
+  if (! target || ! me->is_fighting(target))
+    return notify_fail(BIHAI "只能对战斗中的对手使用。\n");
+  if (! living(target))
+    return notify_fail("对方都已经这样了，用不着这么费力吧？\n");
+  msg = HIW "\n只见$N" HIW "手按玉箫，脚踏八卦四方之位，奏出"
+        "一曲"NOR + BIHAI + HIW"。便听得那箫声如鸣琴击玉，轻轻"
+        "发了几声，接着悠悠扬扬，飘下清亮柔和的洞箫声来。\n" NOR;
+  if (COMBAT_D->perform_success(me, target,
+                                ({(int)me->query_skill("force"),
+                                  (int)me->query_skill("bihai-chaosheng",1)}),
+                                ({(int)target->query_skill("force"),
+                                  (int)target->query_skill("chuixiao-jifa", 1),
+                                       target->query_cps()}),
+                                105))
+  {
+    msg += HIR "$n" HIR "只感心头一震，脸上情不自禁的露出了一丝微笑。\n" NOR;
+    damage = me->query_skill("force") +
+             me->query_skill("bihai-chaosheng", 1);
+    damage = damage/2 + random(damage);
+    target->receive_damage("sen",damage,me);
+    target->receive_wound("sen",random(damage)+1,me);
+    if (!target->is_busy())
+      target->start_busy(2+random(2));
+    me->add("force", -50);
+  }
+
+  else
+  {
+    msg += HIC "$n" HIC "暗暗凝神守一，对这箫声自是应付裕如。\n" NOR;
+    me->add("force", -30);
+  }
+
+  message_sort(msg, me, target);
+  call_out("attack2",1,me,target);
+  return 1;
+}
+
+int attack2(object me, object target)
+{
+  string msg;
+  int damage;
+  if (!continue_or_not(me, target))
+    return 0;
+
+  msg = HIW "\n突然又听那洞箫声情致飘忽，缠绵宛转，便似一个女"
+        "子一会儿叹息，一会儿又似呻吟，一会儿却又软语温存或柔"
+        "声叫唤。\n" NOR;
+  if (COMBAT_D->perform_success(me, target,
+                                ({(int)me->query_skill("force"),
+                                  (int)me->query_skill("bihai-chaosheng",1)}),
+                                ({(int)target->query_skill("force"),
+                                  (int)target->query_skill("chuixiao-jifa", 1),
+                                       target->query_cps()}),
+                                110))
+  {
+    msg += HIR "$n" HIR "只感全身热血沸腾，就只想手舞足蹈的乱动一番。\n" NOR;
+    damage = me->query_skill("force") +
+             me->query_skill("bihai-chaosheng", 1);
+    damage = damage/2 + random(damage);
+    target->receive_damage("sen",damage,me);
+    target->receive_wound("sen",random(damage)+1,me);
+    if (!target->is_busy())
+      target->start_busy(2+random(2));
+    me->add("force", -50);
+  }
+
+  else
+  {
+    msg += HIC "$n" HIC "暗暗凝神守一，对这箫声自是应付裕如。\n" NOR;
+    me->add("force", -30);
+  }
+
+  message_sort(msg, me, target);
+  call_out("attack3",2,me,target);
+  return 1;
+}
+
+int attack3(object me, object target)
+{
+  string msg;
+  int damage;
+  if (!continue_or_not(me, target))
+    return 0;
+  msg = HIW "\n那箫声清亮宛如大海浩淼，万里无波，远处潮水缓缓"
+            "推近，渐近渐快，其后洪涛汹涌，白浪连山，而潮水中鱼跃"
+            "鲸浮，海面风啸鸥飞，水妖海怪群魔弄潮，极尽变幻之能事"
+            "。\n" NOR;
+  if (COMBAT_D->perform_success(me, target,
+                                ({(int)me->query_skill("force"),
+                                  (int)me->query_skill("bihai-chaosheng",1)}),
+                                ({(int)target->query_skill("force"),
+                                  (int)target->query_skill("chuixiao-jifa", 1),
+                                       target->query_cps()}),
+                                120))
+  {
+    msg += HIR "霎时间$n" HIR "只感心头滚热，喉干舌燥，说不出的难受。\n" NOR;
+    damage = me->query_skill("force") +
+             me->query_skill("bihai-chaosheng", 1);
+    damage = damage/2 + random(damage);
+    target->receive_damage("sen",damage,me);
+    target->receive_wound("sen",random(damage)+1,me);
+    if (!target->is_busy())
+      target->start_busy(2+random(2));
+    me->add("force", -80);
+  }
+
+  else
+  {
+    msg += HIC "$n" HIC "暗暗凝神守一，对这箫声自是应付裕如。\n" NOR;
+    me->add("force", -40);
+  }
+
+  message_sort(msg, me, target);
+  call_out("attack4",2,me,target);
+  return 1;
+}
+
+int attack4(object me, object target)
+{
+  string msg;
+  int damage;
+  if (!continue_or_not(me, target))
+    return 0;
+  msg = HIW "\n时至最后，却听那箫声愈来愈细，几乎难以听闻，便"
+        "尤如大海潮退后水平如镜一般，但海底却又是暗流湍急，汹"
+        "涌澎湃。\n" NOR;
+  if (COMBAT_D->perform_success(me, target,
+                                ({(int)me->query_skill("force"),
+                                  (int)me->query_skill("bihai-chaosheng",1)}),
+                                ({(int)target->query_skill("force"),
+                                  (int)target->query_skill("chuixiao-jifa", 1),
+                                       target->query_cps()}),
+                                130))
+  {
+    msg += HIR "此时$n" HIR "已身陷绝境，全身气血逆流，再也无法脱身。\n" NOR;
+    damage = me->query_skill("force") +
+             me->query_skill("bihai-chaosheng", 1);
+    damage = damage/2 + random(damage);
+    target->receive_damage("sen",damage,me);
+    target->receive_wound("sen",random(damage)+1,me);
+    if (!target->is_busy())
+      target->start_busy(2+random(2));
+    me->add("force", -100);
+  }
+
+  else
+  {
+    msg += HIC "$n" HIC "暗暗凝神守一，对这箫声自是应付裕如。\n" NOR;
+    me->add("force", -60);
+  }
+
+  message_sort(msg, me, target);
+  me->start_busy(2+random(2));
+  me->set_temp("last_bihai",time());
+  return 1;
+}

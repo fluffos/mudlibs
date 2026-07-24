@@ -1,0 +1,245 @@
+#include <ansi.h>
+#include <combat.h>
+#define SHANDIAN "「" HIR "闪电连击" NOR "」"
+inherit F_SSERVER;
+int valid_pfm(object me, object target)
+{
+  if(userp(me) && !wizardp(me) && (string)me->query("family/family_name") != "陷空山无底洞")
+    return notify_fail(SHANDIAN"是无底洞不传之密！\n");
+  if (me->is_busy())
+    return notify_fail("你正忙着呢！\n");
+
+  if (me->query_skill("chike-dagger", 1) < 150)
+    return notify_fail("你的刺客匕修为不够，难以施展" SHANDIAN "。\n");
+  if (me->query_skill("huntian-qigong", 1) < 150)
+    return notify_fail("你的混天气功修为不够，难以施展" SHANDIAN "。\n");
+  if (me->query_skill_mapped("dagger") != "chike-dagger")
+    return notify_fail("你没有激发刺客匕，难以施展" SHANDIAN "。\n");
+  if (me->query_skill_mapped("force")!="huntian-qigong")
+    return notify_fail(SHANDIAN"必须配合混天气功才能使用。\n");
+  if (me->query("force") < 1000)
+    return notify_fail("你的真气不够，难以施展" SHANDIAN "。\n");
+  if ((int)me->query("max_force") < 2200)
+    return notify_fail("你的内力修为不够，难以施展" SHANDIAN "。\n");
+  return 1;
+}
+
+int perform2(object me, object target);
+int perform3(object me, object target);
+int perform(object me, object target)
+{
+  object weapon;
+  string msg, wn;
+  int ap, dp;
+  int damage;
+
+  if (! objectp(weapon = me->query_temp("weapon")) ||
+      (string)weapon->query("skill_type") != "dagger")
+    return notify_fail("你使用的武器不对，难以施展" SHANDIAN "。\n");
+  wn = weapon->name();
+
+  msg = HIR"$N" HIR"身形闪动如电，双目紧紧锁定"HIW"$n"HIR"，眨眼已经紧紧贴住了" HIW"$n"
+        HIR"！\n\n"NOR;
+
+  msg += HIW"$n" HIR"寒气及体，只觉得寒星点点，突得化作了闪电直劈而来。\n"
+         HIR"$N手中的"NOR + wn + HIR"泛出点点红光，身形更是如附骨之蛆，眨眼把"
+         "$n团团笼住。\n"NOR;
+  damage = me->query_skill("dagger");
+  damage = random(damage/10) + 1;
+  if (damage > 50)
+    damage = 50;
+  ap = COMBACC_D->math_ap(me,"dagger");
+  dp = COMBACC_D->math_dp(me,target,-damage,0,0);
+
+  if (COMBAT_D->perform_success(me, target,ap,dp,105))
+  {
+    damage = me->query_skill("dagger");
+    damage += me->query_skill("force")/2;
+    damage = damage/2 + random(damage);
+    me->add("force", -50);
+    msg += COMBAT_D->do_damage(me, target, WEAPON_ATTACK, damage, 60,
+                    HIC"$n只觉得胸腹一凉，伤口处鲜血淋漓而出。\n:割伤@?"NOR);
+  }
+
+  else
+  {
+    me->add("force", -30);
+    msg += HIC"$n急忙腾身后跃，把这阴冷之招化解了。\n\n"NOR;
+  }
+
+  message_combatd(msg, me, target);
+
+  if (me->query_skill("chike-dagger",1) > 180)
+  {
+    if (!target->is_busy())
+      target->start_busy(1);
+    call_out("perform2",1,me,target);
+  }
+
+  else
+  {
+    message_vision("$N的匕首运用还未完全纯熟，" + SHANDIAN + "的攻势停止了！\n",me);
+    me->start_busy(1+random(3));
+  }
+
+  return 1;
+}
+
+int perform2(object me, object target)
+{
+  object weapon;
+  string msg, wn;
+  int ap, dp;
+  int damage;
+
+  if (!objectp(me) || !objectp(target))
+    return 0;
+
+  if (!living(me))
+    return 0;
+
+  if (! objectp(weapon = me->query_temp("weapon")) ||
+      (string)weapon->query("skill_type") != "dagger")
+  {
+    tell_object(me,sprintf("你换了兵器，%s的攻势瓦解了！\n",SHANDIAN));
+    message_vision(sprintf("$N缓缓收拢了%s的攻势！\n",SHANDIAN),me);
+    return 0;
+  }
+
+  if ((int)me->query("force") < 200)
+  {
+    tell_object(me,sprintf("你的内力不足，%s的攻势瓦解了！\n",SHANDIAN));
+    message_vision(sprintf("$N缓缓收拢了%s的攻势！\n",SHANDIAN),me);
+    return 0;
+  }
+
+  if (me->query_skill_mapped("dagger") != "chike-dagger")
+  {
+    tell_object(me,sprintf("你改用了别的技能，%s的攻势瓦解了！\n",SHANDIAN));
+    message_vision(sprintf("$N缓缓收拢了%s的攻势！\n",SHANDIAN),me);
+    return 0;
+  }
+
+  if (me->query_skill_mapped("force")!="huntian-qigong")
+  {
+    tell_object(me,sprintf("你改用了别的内功，%s的攻势瓦解了！\n",SHANDIAN));
+    message_vision(sprintf("$N缓缓收拢了%s的攻势！\n",SHANDIAN),me);
+    return 0;
+  }
+
+  if (!living(target) || (environment(me) != environment(target)))
+  {
+    message_vision("$N眼见$n已经倒地不起，缓缓收回了攻势！\n",me,target);
+    me->start_busy(3);
+    return 0;
+  }
+
+  wn = weapon->name();
+  msg = HIY"$N" HIY"冷冷一笑，突的一口鲜血喷在"NOR + wn + HIR"锋刃。\n"NOR;
+  msg += wn + HIY"骤然跳起一抹血焰，如受万魔之咒，带着十分的诡异刺往" HIW"$n。\n\n"NOR;
+  damage = (int)me->query_skill("dagger");
+  damage = random(damage/10) + 1;
+  if (damage > 50)
+    damage = 50;
+  ap = COMBACC_D->math_ap(me,"dagger");
+  dp = COMBACC_D->math_dp(me,target,-damage,0,0);
+  if (COMBAT_D->perform_success(me, target,ap,dp))
+  {
+    damage = (int)me->query_skill("dagger");
+    damage += (int)me->query_skill("force")/2;
+    damage = damage/2 + random(damage);
+    me->add("force", -80);
+    msg += COMBAT_D->do_damage(me, target, WEAPON_ATTACK, damage, 60,
+                HIC"$n仿佛呆了一般！眼看着那凌厉的寒光透体而过！\n:割伤@?"NOR);
+  }
+
+  else
+  {
+    me->add("force", -50);
+    msg = HIC"$n的头脑这刻依然冷静，身形一退再退，避过了这诡异的攻击。\n\n"NOR;
+  }
+
+  message_combatd(msg, me, target);
+  if (me->query_skill("chike-dagger",1) > 220)
+  {
+    if (!target->is_busy())
+      target->start_busy(1);
+    call_out("perform3",1,me,target);
+  }
+
+  else
+  {
+    message_vision("$N的匕首运用还未完全纯熟，" + SHANDIAN + "的攻势停止了！\n",me);
+    me->start_busy(1+random(3));
+  }
+
+  return 1;
+}
+
+int perform3(object me, object target)
+{
+  object weapon;
+  string wn;
+
+  if (!objectp(me) || !objectp(target))
+    return 0;
+
+  if (!living(me))
+    return 0;
+
+  if (! objectp(weapon = me->query_temp("weapon")) ||
+      (string)weapon->query("skill_type") != "dagger")
+  {
+    tell_object(me,sprintf("你换了兵器，%s的攻势瓦解了！\n",SHANDIAN));
+    message_vision(sprintf("$N缓缓收拢了%s的攻势！\n",SHANDIAN),me);
+    return 0;
+  }
+
+  if ((int)me->query("force") < 200)
+  {
+    tell_object(me,sprintf("你的内力不足，%s的攻势瓦解了！\n",SHANDIAN));
+    message_vision(sprintf("$N缓缓收拢了%s的攻势！\n",SHANDIAN),me);
+    return 0;
+  }
+
+  if (me->query_skill_mapped("dagger") != "chike-dagger")
+  {
+    tell_object(me,sprintf("你改用了别的技能，%s的攻势瓦解了！\n",SHANDIAN));
+    message_vision(sprintf("$N缓缓收拢了%s的攻势！\n",SHANDIAN),me);
+    return 0;
+  }
+
+  if (me->query_skill_mapped("force")!="huntian-qigong")
+  {
+    tell_object(me,sprintf("你改用了别的内功，%s的攻势瓦解了！\n",SHANDIAN));
+    message_vision(sprintf("$N缓缓收拢了%s的攻势！\n",SHANDIAN),me);
+    return 0;
+  }
+
+  if (!living(target) || (environment(me) != environment(target)))
+  {
+    message_vision("$N眼见$n已经倒地不起，缓缓收回了攻势！\n",me,target);
+    me->start_busy(3);
+    return 0;
+  }
+
+  wn = weapon->name();
+  message_vision(HIR"\n\n$N" HIR"转眼两击倾力而出，但攻势却未结束！\n"NOR,me);
+  message_vision(HIY"匕首的寒光依然在$N四周盘绕，而这正是刺客匕首的精髓了！\n\n"NOR,target);
+  message_vision(HIR"“「名可名 非常名」”！$N手中的 " + wn + HIR" 分心刺杀而来！\n"NOR,me);
+  if (!target->is_busy())
+    target->start_busy(2);
+  me->add_temp("apply/attack",100);
+  me->set_temp("CKD_perform",4);
+  COMBAT_D->do_attack(me, target, weapon,3);
+  message_vision(HIR"\t“『道可道 非常道』”！$N手中的 " + wn + HIR" 挥劈而来！\n"NOR,me);
+  me->set_temp("CKD_perform",5);
+  COMBAT_D->do_attack(me, target, weapon,3);
+  message_vision(HIR"\t\t“『易水潇潇 白虹贯日』”！$N手中的 " + wn + HIR" 惊若矫龙，扑击而来！\n"NOR,me);
+  me->set_temp("CKD_perform",6);
+  COMBAT_D->do_attack(me, target, weapon,3);
+  me->delete_temp("CKD_perform");
+  me->add_temp("apply/attack",-100);
+  me->start_busy(2+random(3));
+  return 1;
+}

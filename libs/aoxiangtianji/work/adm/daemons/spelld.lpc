@@ -1,0 +1,635 @@
+// spell_d.c
+#include <ansi.h>
+nosave mapping t_ke = ([
+                "jin": "mu",
+                "mu": "tu",
+                "tu": "shui",
+                "shui": "huo",
+                "huo": "jin",
+                ]);
+nosave mapping t_sheng = ([
+                "jin": "shui",
+                "mu": "huo",
+                "tu": "jin",
+                "shui": "mu",
+                "huo": "tu",
+                ]);
+mapping sx_name = ([
+                "jin" : "金",
+                "mu"  : "木",
+                "shui": "水",
+                "huo" : "火",
+                "tu"  : "土",
+                ]);
+string query_shuxing_chinese(string name)
+{
+  if(sx_name[name])
+    return sx_name[name];
+  return "未知";
+}
+
+/* determine whether two 法术 are 相克制
+   if spell1 克制 spell2, then return = 1.
+   if spell1 生   spell2, then return = -1.
+   otherwise, return 0.
+   */
+int skill_xiangke(string spell1, string spell2)
+{
+  int neutral=0;
+  int result;
+  if(t_ke[spell1]==spell2)   // spell1 can 克制 spell2.
+    result=1;
+  else if(t_sheng[spell1]==spell2)
+    result=-1;
+  else
+    result=neutral;
+  return result;
+}
+
+/* determine whether two players' 法术 are 相克制
+   only effective between two players,
+   or a NPC against a player,
+   can't a player take advantage of a npc.
+   if obj1 克制 obj2, then return = 1.
+   if obj2 克制 obj1, then return = -1.
+   otherwise, return 0.
+   */
+int check_xiangke(object obj1, object obj2)
+{
+  int neutral=0;
+  int result;
+  string skill1, skill2;
+  if (!objectp(obj1) || !objectp(obj2))
+    return 0;
+  skill1=obj1->query_skill_mapped("spells");
+  skill2=obj2->query_skill_mapped("spells");
+
+  if(!stringp(skill1) || !stringp(skill2))
+    return 0;
+    // need at least 20 level of special spells.
+  if((int)obj1->query_skill(skill1,1)<20)
+    return neutral;
+  if((int)obj2->query_skill(skill2,1)<20)
+    return neutral;
+
+  skill1 = SKILL_D(skill1)->query_shuxing();
+  skill2 = SKILL_D(skill2)->query_shuxing();
+  result = skill_xiangke(skill1, skill2);
+  return result;
+}
+
+int skill_power(object me)
+{
+  int power;
+
+  if (!objectp(me))
+    return 1;
+  power = me->query_skill("spells");
+  power += me->query_skill("magic-cognize")/5;
+  power = power/10;
+  power = power*power*power/3;
+  power += (int)me->query("daoxing")/1000;
+  return power;
+}
+
+int math_ap(object me)
+{
+  int ap;
+  int eff_sen, sen, max_sen, ratio;
+  string s_spells;
+
+  if (!objectp(me))
+    return 1;
+  ap = skill_power(me);
+
+  if (me->query_temp("no_move"))
+    ap = ap/3;
+  if ((string)me->query("occupation") == "术士")
+    ap += ap/5 ;
+
+  ap += ap*me->query_spi()/100;
+  s_spells = me->query_skill_mapped("spells");
+
+  if (stringp(s_spells))
+  {
+    ratio = SKILL_D(s_spells)->query_power_effect(me);
+    if (ratio)
+      ap = ap*ratio/100;
+  }
+
+  sen = (int)me->query("sen");
+  eff_sen = (int)me->query("eff_sen");
+  if (eff_sen < 1)
+    return 0;
+  if (sen > eff_sen)
+    sen = eff_sen;
+  ratio = sen*100/eff_sen;
+  ap = ap*ratio/100;
+
+  max_sen = (int)me->query("max_sen");
+  if (max_sen < 1)
+    return 0;
+  if (eff_sen > max_sen)
+    eff_sen = max_sen;
+  ratio = eff_sen*100/max_sen;
+  ap = ap*ratio/100;
+  return ap;
+}
+
+int math_dp(object me)
+{
+  int dp;
+  int eff_sen, sen, max_sen, ratio;
+  string s_spells;
+
+  if (!objectp(me))
+    return 1;
+  dp = skill_power(me);
+  if (me->query_temp("no_move"))
+    dp -= dp/3;
+  if ((string)me->query("occupation") == "术士")
+    dp += dp/5 ;
+
+  dp += dp*me->query_spi()/100;
+  s_spells = me->query_skill_mapped("spells");
+  if (stringp(s_spells))
+  {
+    ratio = SKILL_D(s_spells)->query_power_effect(me);
+    if (ratio)
+      dp = dp*ratio/100;
+  }
+
+  dp -= dp/10;
+  sen = (int)me->query("sen");
+  eff_sen = (int)me->query("eff_sen");
+  if (eff_sen < 1)
+    return 0;
+  if (sen > eff_sen)
+    sen = eff_sen;
+  ratio = sen*100/eff_sen;
+  dp = dp*ratio/100;
+
+  max_sen = (int)me->query("max_sen");
+  if (max_sen < 1)
+    return 0;
+  if (eff_sen > max_sen)
+    eff_sen = max_sen;
+  ratio = eff_sen*100/max_sen;
+  dp = dp*ratio/100;
+  return dp;
+}
+
+int math_damage(object attacker,object target)
+{
+  int damage;
+  int min_damage, max_damage, damage_range;
+  int my_lucky;
+
+  min_damage = (int)attacker->query_spi();
+  max_damage = (int)attacker->query_spi()*2;
+  min_damage += (int)attacker->query("mana_factor");
+  max_damage += (int)attacker->query("mana_factor")*2;
+  min_damage += (int)attacker->query_skill("spells")/3;
+  max_damage += (int)attacker->query_skill("spells")*2;
+  max_damage += max_damage;
+
+  my_lucky = attacker->query_kar()+10;
+  damage_range = max_damage - min_damage;
+
+  damage = min_damage +
+           damage_range*my_lucky/100 +
+           random(damage_range*(100-my_lucky)/100);
+  damage -= (int)target->query("mana_factor");
+  damage -= (int)target->query_temp("apply/armor_vs_spells");
+
+  if (damage < 1)
+    return 0;
+  if ((string)attacker->query("occupation") == "术士")
+    damage += damage/4;
+  if ((string)target->query("occupation") == "术士")
+    damage -= damage/4;
+  return damage;
+}
+
+int math_back_damage(object winner, object target)
+{
+  int damage;
+
+  damage = math_damage(winner,target);
+  if (damage < 1)
+    return 0;
+  damage = damage/3 + random(damage/3);
+  return damage;
+}
+
+int attacking_cast_success(object attacker, object target, int success_adj)
+{
+  int ap, dp, success;
+  int xk;
+
+  ap = math_ap(attacker);
+  dp = math_dp(target);
+  if (ap<100)
+    ap = 100;
+  if (dp<100)
+    dp = 100;
+
+  if ( success_adj < 20 )
+    success_adj = 20;
+  else if( success_adj > 120 )
+    success_adj = 120 + random(success_adj - 120);
+  if (success_adj > 300)
+    success_adj = 300;
+
+  ap = ap/100*success_adj;
+
+  xk = check_xiangke(attacker, target);
+
+  if(xk==1)
+  {
+    dp -= dp/3;
+  }
+
+  else if(xk==-1)
+  {
+    ap -= ap/3;
+  }
+
+  if ( random(ap+dp) > dp)
+    success = 1;
+  else if (random(2*ap + dp) < random(dp))
+    success = -1;
+  else
+    success = 0;
+  return success;
+}
+
+int apply_damage(object winner,
+                  object victim,
+                  string damage_type,
+                  string msg_hit,
+                  int damage_adj,
+                  int backfire)
+{
+  int damage, ratio, wound;
+  int xk;
+  mixed foo;
+  mapping armor;
+  object cloth, weapon, faqi;
+  string msg , s_spells;
+  if(!living(winner) || !living(victim))
+    return 0;
+  if (environment(winner) != environment(victim))
+    return 0;
+
+  if( damage_adj < 20 )
+    damage_adj = 20;
+  else if( damage_adj > 110 )
+    damage_adj = 110 + random(damage_adj - 110) ;
+  if (damage_adj > 300)
+    damage_adj = 300;
+
+  msg = msg_hit;
+  if (backfire)
+  {
+    damage = math_back_damage(winner,victim);
+    if (damage_adj > 100)
+      damage_adj = 100 + random((damage_adj-100));
+    damage = damage*damage_adj/100;
+  }
+
+  else
+  {
+    damage = math_damage(winner,victim);
+    damage = damage*damage_adj/100 ;
+  }
+
+  xk = check_xiangke(winner, victim);
+  if(xk==1)
+  {
+    damage += damage/3;
+  }
+
+  else if(xk==-1)
+  {
+    damage -= damage/3;
+  }
+
+  if (!backfire)
+  {
+    s_spells = winner->query_skill_mapped("spells");
+    if (stringp(s_spells))
+    {
+      ratio = SKILL_D(s_spells)->query_power_effect(winner);
+      if (ratio)
+        damage = damage*ratio/100;
+
+      foo = SKILL_D(s_spells)->attack_ob(winner, victim, damage);
+      if (stringp(foo))
+        msg += foo;
+      else if (intp(foo))
+        damage += foo;
+      else if (mapp(foo))
+      {
+        msg += foo["msg"];
+        damage += foo["damage"];
+      }
+
+    }
+
+  }
+
+  s_spells = victim->query_skill_mapped("spells");
+  if (stringp(s_spells))
+  {
+    foo = SKILL_D(s_spells)->valid_damage(winner, victim, damage);
+    if (stringp(foo))
+      msg += foo;
+    else if (intp(foo))
+      damage += foo;
+    else if (mapp(foo))
+    {
+      msg += foo["msg"];
+      damage += foo["damage"];
+    }
+
+  }
+
+  while (damage > 0)
+  {
+    if(damage<1)
+      break;
+    armor = victim->query_temp("armor");
+    if (mapp(armor) && objectp(cloth = victim->query_temp("armor/armor")))
+    {
+      foo = cloth->valid_spells_damage(winner, victim, damage);
+      if (stringp(foo))
+        msg += foo;
+      else if (intp(foo))
+        damage += foo;
+      else if (mapp(foo))
+      {
+        msg += foo["msg"];
+        damage += foo["damage"];
+      }
+
+    }
+
+    if (mapp(armor) && objectp(cloth = victim->query_temp("armor/cloth")))
+    {
+      foo = cloth->valid_spells_damage(winner, victim, damage);
+      if (stringp(foo))
+        msg += foo;
+      else if (intp(foo))
+        damage += foo;
+      else if (mapp(foo))
+      {
+        msg += foo["msg"];
+        damage += foo["damage"];
+      }
+
+    }
+
+    faqi = victim->query_temp("handing");
+    if (objectp(faqi))
+    {
+      foo = faqi->valid_spells_damage(winner, victim, damage);
+      if (stringp(foo))
+        msg += foo;
+      else if (intp(foo))
+        damage += foo;
+      else if (mapp(foo))
+      {
+        msg += foo["msg"];
+        damage += foo["damage"];
+      }
+
+    }
+
+    if (damage < 1)
+      break;
+
+    weapon = winner->query_temp("weapon");
+    if (objectp(weapon))
+    {
+      foo = weapon->attack_ob(winner, victim, damage);
+      if (stringp(foo))
+        msg += foo;
+      else if (intp(foo))
+        damage += foo;
+      else if (mapp(foo))
+      {
+        msg += foo["msg"];
+        damage += foo["damage"];
+      }
+
+    }
+
+    faqi = winner->query_temp("handing");
+    if (objectp(faqi))
+    {
+      foo = faqi->attack_ob(winner, victim, damage);
+      if (stringp(foo))
+        msg += foo;
+      else if (intp(foo))
+        damage += foo;
+      else if (mapp(foo))
+      {
+        msg += foo["msg"];
+        damage += foo["damage"];
+      }
+
+    }
+
+    break;
+  }
+
+  if (damage > 2400)
+    damage = random((damage - 2000)/2) + 2000;
+  else if (damage > 1800)
+    damage = random((damage - 1500)*2/3) + 1500;
+  else if (damage > 1000)
+    damage = random(damage - 800) + 800;
+  else if (damage < 1)
+    damage = 0;
+  s_spells = (string)winner->query_skill_mapped("spells");
+
+  if(stringp(s_spells))
+  {
+    s_spells = SKILL_D(s_spells)->query_shuxing();
+    damage -= 2*(int)victim->query_temp("apply/resist_" + s_spells);
+  }
+
+  if (damage < 3)
+  {
+    message_vision("结果$N和$n法力相当，双方谁也没有吃亏！\n",winner,victim);
+    return 0;
+  }
+
+  if (stringp(msg))
+    message_combatd(msg, winner, victim);
+  if (victim->query_temp("tick/anti_magic"))
+  {
+    message_vision(HIG"$N" HIG"身后突然五彩光华闪现，原来是$N"
+                   HIG"布置的「" HIR"抗魔" HIG"」消除了大部分的伤害！\n"NOR,victim);
+    damage = damage/3;
+  }
+
+  if ((int)victim->query_temp("free_hit") > 0)
+  {
+    victim->add_temp("free_hit",-1);
+    damage = 0;
+    message_vision(HIG"\n突然一道绿色光华笼罩住了$n"
+           HIG"了全身，$N"
+           HIG"不由得吃了一惊，这一击竟然没有任何效果了！\n\n"NOR,winner,victim);
+    return 0;
+  }
+
+  if (winner->query_temp("tick/shixue"))
+    damage += damage/3;
+  if (damage > 0)
+  {
+    if (victim->is_busy())
+    {
+      if ((string)victim->query("character") == "狡黠多变")
+        victim->interrupt_me(victim,2 + random(2));
+      else
+        victim->interrupt_me(victim,1);
+    }
+
+  }
+
+  if (damage_type == "both")
+  {
+    wound = random(damage + 1);
+    victim->receive_damage("kee",damage,winner);
+    victim->receive_damage("sen",damage,winner);
+    victim->receive_wound("kee",wound,winner);
+    victim->receive_wound("sen",wound,winner);
+    COMBACC_D->adjust_douzi(winner, victim,wound);
+    COMBAT_D->report_status(victim);
+    COMBAT_D->report_sen_status(victim);
+    if (victim->query_temp("tick/mirror"))  //魔镜反射
+    {
+      message_vision(HIB"$N" HIB"身后的法力结界突然光华闪烁，把$n"
+                     HIB"的攻击反射了部分回来！\n"NOR,victim,winner);
+      winner->receive_damage("kee",damage/2,victim);
+      winner->receive_damage("sen",damage/2,victim);
+      winner->receive_wound("kee",wound/2,victim);
+      winner->receive_wound("sen",wound/2,victim);
+      COMBACC_D->adjust_douzi(victim, winner,wound/2);
+      COMBAT_D->report_status(winner);
+      COMBAT_D->report_sen_status(winner);
+      if (userp(winner))
+        winner->command("hpstat");
+    }
+
+    if (userp(victim))
+      victim->command("hpstat");
+  }
+
+  else if (damage_type == "kee" || damage_type == "qi" )
+  {
+    wound = random(damage+1);
+    victim->receive_damage("kee",damage,winner);
+    victim->receive_wound("kee",wound,winner);
+    COMBACC_D->adjust_douzi(winner, victim,wound);
+    COMBAT_D->report_status(victim);
+    if (victim->query_temp("tick/mirror"))  //魔镜反射
+    {
+      message_vision(HIB"$N" HIB"身后的法力结界突然光华闪烁，把$n"
+                     HIB"的攻击反射了部分回来！\n"NOR,victim,winner);
+      winner->receive_damage("kee",damage/2,victim);
+      winner->receive_wound("kee",wound/2,victim);
+      COMBACC_D->adjust_douzi(victim, winner,wound/2);
+      COMBAT_D->report_status(winner);
+      if (userp(winner))
+        winner->command("hpkee");
+    }
+
+    if (userp(victim))
+      victim->command("hpkee");
+  }
+
+  else if (damage_type == "sen" || damage_type == "shen" )
+  {
+    wound = random(damage+1);
+    victim->receive_damage("sen",damage,winner);
+    victim->receive_wound("sen",wound,winner);
+    COMBACC_D->adjust_douzi(winner, victim,wound);
+    COMBAT_D->report_sen_status(victim);
+    if (victim->query_temp("tick/mirror"))  //魔镜反射
+    {
+      message_vision(HIB"$N" HIB"身后的法力结界突然光华闪烁，把$n"
+                     HIB"的攻击反射了部分回来！\n"NOR,victim,winner);
+      winner->receive_damage("sen",damage/2,victim);
+      winner->receive_wound("sen",wound/2,victim);
+      COMBACC_D->adjust_douzi(victim, winner,wound/2);
+      COMBAT_D->report_sen_status(winner);
+      if (userp(winner))
+        winner->command("hpsen");
+    }
+
+    if (userp(victim))
+      victim->command("hpsen");
+  }
+
+#if INSTALL_COMBAT_TEST
+  if (wizardp(winner) && winner->query("env/combat_test"))
+    tell_object(winner, sprintf(HIY"【法术测试精灵】：你对%s造成%d伤害，受伤%d。\n"NOR,
+                            victim->name(),damage,wound));
+  if (wizardp(victim) && victim->query("env/combat_test"))
+    tell_object(victim, sprintf(HIY"【法术测试精灵】：你受到%s造成的%d伤害，受伤%d。\n"NOR,
+                            winner->name(),damage,wound));
+#endif
+
+  return damage;
+}
+
+int attacking_cast(object attacker,
+                    object target,
+                    int success_adj,
+                    int back_or_no,
+                    string damage_type,
+                    string msg_init,
+                    string msg_success,
+                    string msg_fail,
+                    string msg_backfire_init,
+                    string msg_backfire_success)
+{
+  int damage, result;
+
+ //first, show the initial message...
+  message_combatd( msg_init, attacker, target );
+
+  if (userp(attacker) && userp(target) && !target->is_want_kill(attacker->query("id")))
+  {
+     attacker->want_kill(target);
+     attacker->kill_ob(target);
+  }
+
+ //calculate if the casting can happen...
+  result = attacking_cast_success(attacker, target, success_adj);
+
+  damage = 0;
+
+  if (result == 0)  // not sucess
+  {
+    message_combatd(msg_fail,attacker,target);
+    return 0;
+  }
+
+  else if (back_or_no && (result == -1))  //not sucess and backfire
+  {
+    message_combatd(msg_backfire_init,attacker,target);
+    damage = apply_damage(target, attacker, damage_type,
+                          msg_backfire_success, success_adj, 1);
+    return -damage;
+  }
+
+  else if (result > 0)  //attack sucess
+    damage = apply_damage(attacker, target, damage_type,
+                          msg_success, success_adj, 0);
+
+  return damage;
+}

@@ -1,0 +1,380 @@
+//战场令牌
+#include <ansi.h>
+inherit ITEM;
+
+int do_sos();
+int do_retreat();
+int do_finish();
+int do_ready();
+int do_help(string arg);
+
+void create()
+{
+  set_name("军令牌", ({"junling pai", "pai"}));
+  set_weight(100);
+  if (clonep())
+    set_default_object(__FILE__);
+  else
+  {
+    set("unit", "个");
+    set("long", "一个小铜牌，上面还雕着花，写着字．\n");
+    set("no_sell", 1);
+    set("drop_des", 1);
+    set("no_give", 1);
+    set("no_put", 1);
+  }
+}
+
+void init()
+{
+  object env=environment();
+
+  if(!clonep())
+    return;
+
+  if(!objectp(env) ||
+     !playerp(env) ||
+     !environment(env) ||
+     !env->query_temp("teamwar/in_warfield") ||
+     query("owner") != env->query("id"))
+  {
+    call_out("self_destroy",1);
+    return;
+  }
+
+  add_action("do_sos",({"sos","qiujiu"}));
+  add_action("do_retreat",({"retreat","chetui"}));
+  add_action("do_finish", ({"finish","jiaoling"}));
+  add_action("do_ready",({"ready","jiuxu"}));
+  add_action("do_help",({"help","bangzhu"}));
+}
+
+void self_destroy()
+{
+  object env;
+
+  if (!this_object())
+    return;
+
+  env = environment();
+
+  if(env)
+  {
+    if(env->is_character())
+    {
+      tell_object(env,"这军牌与你无用，兵马大元帅下令收回。\n");
+    }
+  }
+  destruct(this_object());
+  return;
+}
+
+object get_owner()
+{
+  object env = environment();
+
+  if(!objectp(env) ||
+     !playerp(env) ||
+     !environment(env) ||
+     !environment(env)->is_warfield() ||
+     !env->query_temp("teamwar/in_warfield"))
+    return 0;
+
+  if (query("owner") != env->query("id"))
+    return 0;
+  return env;
+}
+
+object find_qob()
+{
+  object env, leader,leader_flag;
+
+  env = get_owner();
+  if (!objectp(env))
+    return 0;
+
+  leader = env->query_temp("teamwar/leader");
+  if (!objectp(leader))
+    return 0;
+
+  leader_flag = present("leader flag",leader);
+  if (!objectp(leader_flag))
+    return 0;
+
+  return leader_flag->find_qob();
+}
+
+void return_city(object ob)
+{
+  object retreat_p;
+  string p_str;
+  string *fix_p = ({
+    "/d/city/scenter",
+    "/d/city/ncenter",
+    "/d/city/ecenter",
+    "/d/city/wcenter",
+  });
+
+  p_str = (string)ob->query_temp("teamwar/retreat_p");
+  retreat_p = 0;
+  if (stringp(p_str))
+  {
+    retreat_p = find_object(p_str);
+    if (!objectp(retreat_p))
+      retreat_p = load_object(p_str);
+  }
+  if (objectp(retreat_p))
+    ob->move(retreat_p,1);
+  else
+    ob->move(element_of(fix_p));
+  message_vision("只见$N满脸尘土的从远处奔逃了过来！\n",ob);
+  tell_object(ob,"你从战场成功的撤退了！\n");
+  ob->set_temp("teamwar/failure",1);
+}
+
+int do_ready()
+{
+  object env;
+  object leader, leader_flag;
+  string war_p;
+
+  env = get_owner();
+  if(!objectp(env))
+    return 0;
+
+  if (env->is_fighting() || env->is_busy())
+    return notify_fail("你正忙着呢！\n");
+
+  if ((string)env->query_temp("teamwar/stage") != "mass")
+    return notify_fail("你现在不处于[扎营]状态，怎么开始准备呢？\n");
+
+  war_p = (string)env->query_temp("teamwar/place");
+  if (!stringp(war_p))
+    return notify_fail("领军还没有吩咐你守卫地点呢！\n");
+
+  if (war_p != base_name(environment(env)))
+    return notify_fail("这不是领军交待的地点！\n");
+
+  leader = env->query_temp("teamwar/leader");
+
+  if (!objectp(leader) ||
+      !leader->query_temp("teamwar/in_warfield") ||
+      !environment(leader)->is_warfield() ||
+      leader->query_temp("teamwar/failure"))
+  {
+    write("太气愤了，还没有开始，领军就跑了！本次任务失败，立刻撤退吧！\n");
+    env->set_temp("teamwar/can_retreat",1);
+    env->set_temp("teamwar/failure",1);
+    return_city(env);
+    destruct(this_object());
+    return 1;
+  }
+
+  leader_flag = present("leader flag",leader);
+  if (!objectp(leader_flag))
+  {
+    tell_object(env,"不好，有消息传来，领军把令旗给丢了！还没开始就失败了，撤退！\n");
+    env->set_temp("teamwar/can_retreat",1);
+    env->set_temp("teamwar/failure",1);
+    return_city(env);
+    destruct(this_object());
+    return 1;
+  }
+  message_vision("$N四下张望了一番，确定这就是领军吩咐的守卫地点！\n",env);
+  message_vision("四周静悄悄的，敌人还没有到。$N小心得检查了一番，做好一切战斗准备！\n",env);
+  env->set_temp("teamwar/stage","ready");
+  leader_flag->ready_task(env);
+  return 1;
+}
+
+int do_sos()
+{
+  object env;
+  object leader;
+  int t = time();
+
+  env = get_owner();
+  if(!objectp(env))
+    return 0;
+
+  if ((string)env->query_temp("teamwar/stage") != "combat")
+  {
+    write("你目前不处于" HIR"[战斗]"NOR "阶段，给谁发求救信号？\n");
+    return 1;
+  }
+
+  if (t - (int)env->query_temp("teamwar/last_war_sos") < 3)
+  {
+    write("你刚刚发出了求救信号，等等吧！\n");
+    return 1;
+  }
+
+  if (env->query_temp("teamwar/sos"))
+  {
+    write("你已经发出了求救信号，耐心等待领军的处理吧！\n");
+    return 1;
+  }
+
+  message_vision("$N眼见敌人攻势十分凶猛，自己已经无法抵挡了，只得向领军求救！\n",env);
+  leader = env->query_temp("teamwar/leader");
+  if (!objectp(leader) ||
+      !living(leader) ||
+      !environment(leader)->is_warfield() ||
+      leader->query_temp("teamwar/failure"))
+  {
+    write("不好，领军已经抵挡不了敌人的进攻了，甚至可能已经撤退了！本次任务失败，撤退吧！\n");
+    env->set_temp("teamwar/can_retreat",1);
+    env->set_temp("teamwar/failure",1);
+    return 1;
+  }
+
+  if (leader->is_fighting() || leader->is_busy())
+  {
+    write("领军正忙呢，估计战场的情况很不好！\n");
+    return 1;
+  }
+
+  tell_object(leader,sprintf(HIR"%s" HIR"碰到了敌人的猛烈进攻，"
+                      "有些抵挡不住了，正向你求救呢！\n"NOR,env->name()));
+
+  tell_object(env,"你向领军发出了求救信号！\n");
+  env->set_temp("teamwar/last_war_sos",t);
+  env->set_temp("teamwar/sos",1);
+  return 1;
+}
+
+int do_retreat()
+{
+  object env;
+  object leader;
+  object ob, obs;
+  int t = time();
+
+  env = get_owner();
+  if(!objectp(env))
+    return 0;
+
+  leader = env->query_temp("teamwar/leader");
+
+  if (env->query_temp("teamwar/can_retreat"))
+  {
+    tell_object(env,"你眼见大势已去，只得撤退了！\n");
+    if (env->is_fighting())
+    {
+      message_vision("$N眼看形势不妙，突然一声怒喝，一副拼命模样！\n",env);
+      message_vision("$N乘敌人略一愣神，稍稍后退之机会，身体凌空飞跃，眨眼就从战场消失了！\n",env);
+    }
+    env->set_temp("teamwar/failure",1);
+    return_city(env);
+    if (objectp(leader) && leader->query_temp("teamwar/in_warfield"))
+    {
+      tell_object(leader,sprintf("%s从战场撤退了！\n",env->name()));
+      if (objectp(find_qob()))
+      {
+        TEAMJOB_D->remove_teamjob_member(env, find_qob());
+        TEAMJOB_D->message_team(find_qob(),
+             env->name() + CYN"从战场撤退了，这打击了大家的斗志！\n"NOR);
+        obs = TEAMJOB_D->query_member(find_qob());
+        foreach (ob in obs)
+          ob->set("douzhi",(int)ob->query("douzhi")/4);
+      }
+    }
+    destruct(this_object());
+    return 1;
+  }
+
+  if (t - (int)env->query_temp("teamwar/last_war_retreat") < 1)
+  {
+    write("你刚刚发出了请求撤退的信号，等等吧！\n");
+    return 1;
+  }
+
+  if (env->query_temp("teamwar/retreat_req"))
+  {
+    write("你已经向领军申请了撤退，但领军还没有答复！！\n");
+    return 1;
+  }
+
+  if (objectp(leader))
+  {
+    env->set_temp("teamwar/last_war_retreat",t);
+    env->set_temp("teamwar/retreat_req",1);
+    message_vision("$N眼见无法抵挡，只得决定向领军申请撤退了！\n",env);
+    tell_object(env,"你向领军申请撤退，只有领军同意以后，你才可以撤离战场！\n");
+    tell_object(leader,sprintf(HIR"%s" HIR"受到了猛烈的攻击，抵挡不住了，"
+                                "请求撤退！\n"NOR,env->name()));
+    tell_object(leader,sprintf("如果你同意，请使用 retreate %s 允许%s撤退！\n",
+                                env->query("id"),
+                                env->name()));
+  }
+  else
+  {
+    tell_object(env,"哇靠，领军都逃跑了！赶紧撤退吧！\n");
+    env->set_temp("teamwar/can_retreat",1);
+    tell_object(env,"你现在可以撤退了，请再用一次retreat \n");
+  }
+  return 1;
+}
+
+int do_finish()
+{
+  object env;
+  object leader, lead_flag;
+
+  env = get_owner();
+  if(!objectp(env))
+    return 0;
+
+  if ((string)env->query_temp("teamwar/stage") != "finish")
+  {
+    write("战争还在进行中，怎么交令？\n");
+    return 1;
+  }
+
+  if (env->is_fighting() || env->is_busy())
+    return notify_fail("你正忙着呢！\n");
+
+  leader = env->query_temp("teamwar/leader");
+  if (objectp(leader) &&
+      leader->query_temp("teamwar/in_warfield") &&
+      environment(leader) &&
+      environment(leader)->is_warfield())
+  {
+    if (environment(env) != environment(leader))
+      return notify_fail("你快去找领军交令吧！\n");
+    message_vision("$N向$n一抱拳，躬身行礼：完成任务，特来交令！\n",env,leader);
+    message_vision("$N呵呵大笑，你这次任务完满结束，请稍等片刻，我们凯旋回京！\n",leader);
+    lead_flag = present("leader flag",leader);
+    if (objectp(lead_flag))
+      lead_flag->finish_task(env);
+    env->start_busy(1);
+    destruct(this_object());
+  }
+  else
+  {
+    env->set_temp("teamwar/can_retreat",1);
+    env->set_temp("teamwar/failure",1);
+    write("领军都不在战场了，把令交给谁啊？快点撤退吧！\n");
+    return 1;
+  }
+  return 1;
+}
+
+int do_help(string arg)
+{
+  string msg;
+
+  if (arg && arg != "lingpai")
+    return 0;
+  msg = HIW"令牌使用说明：\n"NOR;
+  msg += HIY"-----------\n"NOR;
+  msg += HIW"\t1。ready/jiuxu 到达指定的地点，做好战斗准备！\n"NOR;
+  msg += HIW"\t2。sos/qiujiu 请求领军给予帮助！\n"NOR;
+  msg += HIW"\t3。retreat/chetui 战斗不利的情况下，向领军申请撤退。\n"
+            "\t   每个成员的撤退，都会对其他成员的斗志带来影响！\n"NOR;
+  msg += HIW"\t4。finish/jiaoling 完成战斗后，向领军交令！\n"NOR;
+  msg += HIW"\t5。help/bangzhu 查看本帮助去了结令牌的使用方法！\n"NOR;
+  msg += HIY"-----------\n"NOR;
+  write(msg);
+  return 1;
+}

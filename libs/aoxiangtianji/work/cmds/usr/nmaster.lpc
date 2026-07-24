@@ -1,0 +1,174 @@
+#include <command.h>
+inherit F_CLEAN_UP;
+#define MASTER "/adm/etc/newbie_master"
+void create()
+{
+  seteuid(getuid());
+}
+
+int main(object me, string arg)
+{
+  string *file_line, msg;
+  mixed mynewbie;
+  int i,choose;
+  object ob, user;
+
+  msg = "";
+  if (!playerp(me))
+    return 0;
+
+  if (!arg)
+  {
+    if( file_size(MASTER) != -1 )
+    {
+      file_line = explode(read_file(MASTER), "\n");
+      msg += GRN "◎ " + "翱翔天际目前新手导师有：\n"NOR;
+      for(i=0; i<sizeof(file_line); i++)
+      {
+        if( file_line[i]=="" || file_line[i][0]=='#' )
+          continue;
+        msg += HIW + file_line[i] + NOR;
+        ob = find_player(file_line[i]);
+        if (objectp(ob))
+        {
+          msg += HIY" (在线)\n"NOR;
+          if (!interactive(ob))
+            msg += HIW" (断线中)\n"NOR;
+          else if (query_idle(ob) > 120)
+            msg += HIW" (发呆中)\n"NOR;
+        }
+
+        else
+          msg += HIB" (离线)\n"NOR;
+      }
+
+    }
+
+    msg += "\n\n";
+    if (me->query("newbie_master"))
+    {
+      user = me->query_temp("pengding/newbie_student");
+      if (objectp(user) && userp(user))
+        msg += user->name() + "正等待你的答复呢！如果你想收他为徒弟，请nmaster "
+            + user->query("id") + "\n";
+    }
+
+    else
+    {
+      user = me->query_temp("pengding/newbie_master");
+      if (objectp(user) && userp(user))
+        msg += "你准备投师" + user->name() + "门下，正等待答复呢！\n";
+    }
+
+    write(msg);
+    return 1;
+  }
+
+  choose = 0;
+  if (sscanf(arg, "-cancel %s", arg))
+    choose = -1;
+
+  ob = find_player(arg);
+  if (!objectp(ob) || !userp(ob))
+    return notify_fail("没有这个玩家！\n");
+
+  if (choose < 0)
+  {
+    msg = me->name() + "想要和你断绝师徒关系！";
+    if (!me->query("newbie_master"))
+    {
+      if (me->query("level") < 35)
+        msg += "看来他想另投名师了！:-)\n";
+      else
+        msg += "他已经过了新手阶段，想要独自展翅高飞了！\n";
+    }
+
+    else
+    {
+      if (ob->query("level") < 35)
+        msg += "看来他没有时间指导你了！你还是另投名师，或者自力更生吧！\n";
+      else
+        msg += "你已经可以独自展翅高飞了！希望你mud路上一帆风顺！\n";
+    }
+
+    tell_object(ob,msg);
+    return 1;
+  }
+
+  user = me->query_temp("pengding/newbie_student");
+  if (objectp(user) && user == ob)
+  {
+    if (!me->query("newbie_master"))
+    {
+      write("你不是新手导师，无法收徒！\n");
+      tell_object(me,"对方不是新手导师，无法收你为徒！\n");
+      me->delete_temp("pengding/newbie_student");
+      ob->delete_temp("pengding/newbie_master");
+      return 1;
+    }
+
+    mynewbie = me->query("mynewbie");
+    if (!mynewbie)
+      mynewbie = ({});
+    if (sizeof(mynewbie) >= 10)
+    {
+      write("你想要收" + ob->name() + "为徒，无奈你的徒弟实在是太多了(>=10)！\n");
+      tell_object(ob,me->name() + "想要收你为徒，无奈他的徒弟实在是太多了！你另投师傅吧！\n");
+      me->delete_temp("pengding/newbie_student");
+      ob->delete_temp("pengding/newbie_master");
+      return 1;
+    }
+
+    write("你同意了收" + ob->name() + "为徒，今后将负责向他传授江湖经验！\n");
+    tell_object(ob,me->name() + "同意了收你为徒，今后将向你传授江湖经验！\n");
+    mynewbie = me->query("mynewbie");
+    if (!mynewbie)
+      mynewbie = ({});
+    mynewbie += ({ob->query("id")});
+    me->set("mynewbie",mynewbie);
+    me->save();
+    ob->set("mudmaster",me->query("id"));
+    ob->save();
+    me->delete_temp("pengding/newbie_student");
+    ob->delete_temp("pengding/newbie_master");
+    return 1;
+  }
+
+  if (!playerp(ob) || !ob->query("newbie_master"))
+    return notify_fail(ob->name() + "不是新手导师，你无法投师他的门下！\n");
+
+  if (wizardp(me) || me->query("level") >= 35)
+    return notify_fail("你的经验已经很高了，无需投师别人的门下！\n");
+
+  if (time() - (int)me->query_temp("last_newbie_master") < 10)
+    return notify_fail("请稍候。。。等待答复！\n");
+
+  user = me->query_temp("pengding/newbie_master");
+  if (objectp(user))
+  {
+    if (user != ob)
+    {
+      write("你决定转投" + ob->name() + "的门下，学习江湖经验！\n");
+      if (playerp(user))
+        tell_object(user,me->name() + "不想投入你的门下了！\n");
+      tell_object(ob,me->name() + "想投入你的门下，学习一些江湖经验！\n"
+                     "如果你同意，请nmaster <对方id>表示同意！\n");
+      ob->set_temp("pengding/newbie_student",me);
+      me->set_temp("pengding/newbie_master",ob);
+      me->set_temp("last_newbie_master",time());
+      return 1;
+    }
+
+    write("请稍候。。。等待对方答复！\n");
+    return 1;
+  }
+
+  write("你决定投入" + ob->name() + "的门下，学习江湖经验！\n");
+  tell_object(ob,me->name() + "想投入你的门下，学习一些江湖经验！\n"
+                              "如果你同意，请nmaster <对方id>表示同意！\n");
+  ob->set_temp("pengding/newbie_student",me);
+  me->set_temp("pengding/newbie_master",ob);
+  me->set_temp("last_newbie_master",time());
+  return 1;
+}
+

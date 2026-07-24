@@ -1,0 +1,237 @@
+#include <ansi.h>
+#define MAX_NUMBER               20
+#define MPTOP_PATH               DATA_DIR + "mptop/"
+#define BAN_MPTOP_ID             "/adm/etc/ban_mptop_id"
+inherit F_SAVE;
+mapping *family = ({});
+int min;
+string menpai;
+int get_all_score(string file);
+int get_score(object ob);
+string query_mptop(string arg);
+string query_save_file()
+{
+  return MPTOP_PATH+menpai;
+}
+
+void create()
+{
+  seteuid(getuid());
+}
+
+void check_mp_player(object ob)
+{
+  string id, name, title, *ban_id;
+  int score, n;
+  mapping mp = allocate_mapping(4);
+  if( !ob )
+    return;
+  if( wizardp(ob) )
+    return;
+
+  if( file_size(BAN_MPTOP_ID) )
+  {
+     ban_id = explode(read_file(BAN_MPTOP_ID),"\n");
+     if( member_array(getuid(ob), ban_id) != -1 )
+       return;
+  }
+
+  if( !stringp(menpai = ob->query("family/family_name") ))
+    return;
+  score = get_score(ob);
+  if( score<1 )
+    return;
+  id=getuid(ob);
+  name = ob->name(1);
+  title = ob->short(1);
+  family = ({});
+  min = 0;
+  mp = ([ "id"    : id,
+       "score" : score,
+       "name"  : name,
+       "title" : title
+       ]);
+  restore();
+  if (!arrayp(family))
+    family = ({});
+  if(sizeof(family) < 1)
+  {
+    family += ({mp});
+    min = score;
+    save();
+  }
+
+  else
+  {
+    n = sizeof(family);  //排名未满，加入排名
+    if( n < MAX_NUMBER )
+    {
+      family  = filter_array(family, (: ( $1["id"] != $2 ) :), id);
+      family += ({ mp });
+      family = sort_array(family, (: $2["score"] - $1["score"]:));
+      min = family[(sizeof(family)-1)]["score"];
+      save();
+      tell_object(ob,
+           GRN"\n\n你目前名列 "GRN+menpai+GRN" 第 "WHT+chinese_number(member_array(mp, family)+1)+GRN" 高手。\n"
+              "你目前的门派等级分是 "GRN+(string)score+GRN" 。\n\n"NOR);
+    }
+
+    else if( score >= min )   //比最低排名高，则加入排名
+    {
+      family  = filter_array(family, (: ( $1["id"] != $2 ) :), id);
+      family += ({mp});
+      family = sort_array(family, (: $2["score"] - $1["score"]:));
+     if( sizeof(family) > MAX_NUMBER )
+       family = family[0..MAX_NUMBER-1];
+     min = family[MAX_NUMBER-1]["score"];
+     save();
+     tell_object(ob,
+          GRN"\n\n你目前名列 "GRN+menpai+GRN" 第 "WHT+chinese_number(member_array(mp, family)+1)+GRN" 高手。\n"
+             "你目前的门派等级分是 "GRN+(string)score+GRN" 。\n\n"NOR);
+    }
+
+  }
+
+  family = 0;
+  min = 0;
+  menpai = 0;
+}
+
+string query_mptop(string arg)
+{
+  int i;
+  string msg;
+  if( !stringp(arg) )
+    return "";
+  menpai = arg;
+  if( !restore() )
+    return "这个门派暂时还没有排名。\n";
+  msg = HIG"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        BBLU+HIY+sprintf("%18s%12s%-36s","",menpai,"门派排名榜")+NOR
+        HIG"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"NOR;
+  for( i = 0; i < sizeof(family); i++ )
+    msg += (i<10?" ":"")+HIR"第"+chinese_number(i+1)+"名"+(i<10?" ":"")+"： "NOR+family[i]["title"]+"\n"NOR;
+  msg +=HIG"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"NOR;
+  family = 0;
+  min = 0;
+  menpai = 0;
+  return msg;
+}
+
+string total_paiming()
+{
+  mixed *file;
+  mapping *fam=({});
+  int i;
+  string msg;
+  file = get_dir(MPTOP_PATH, -1);
+  file = filter_array(file, (: ( $1[1] != -2 && sscanf($1[0], "%*s.o") ) :));
+  for( i = 0; i<sizeof(file); i++ )
+  {
+    fam +=({ ([ "family"     : replace_string(file[i][0], ".o", ""),
+                "total_score": get_all_score(file[i][0]) ]) });
+  }
+
+  fam = sort_array(fam, (: $2["total_score"] - $1["total_score"] :));
+  msg  = GRN"\n┏━━━━━━━━━━━━━━━━━━━━━━━━━━┓\n"
+              "┃"GRN"         西  游  神  话  之  门  派  总  评  榜    "NOR+GRN"┃\n"
+           GRN"┣━━━━━┳━━━━━━━━━━━┳━━━━━━━━┫\n"
+              "┃"GRN"  名  次  "NOR+GRN"┃"GRN"      门      派      "NOR
+          +GRN"┃"GRN"    总    评    "NOR+GRN"┃\n"
+              "┣━━━━━╋━━━━━━━━━━━╋━━━━━━━━┫\n"NOR;
+  for( i = 0; i < sizeof(fam); i++ )
+  {
+    msg += sprintf(GRN"┃"GRN"%10s"GRN"┃"GRN"    %-12s      "GRN"┃"GRN" %10d     "GRN"┃\n",
+           "第"+chinese_number(i+1)+"名：",
+           fam[i]["family"],
+           fam[i]["total_score"]);
+  }
+
+  msg += "┗━━━━━┻━━━━━━━━━━━┻━━━━━━━━┛\n"NOR;
+  return msg;
+}
+
+string sub_paiming(string arg)
+{
+  string id, msg;
+  if( !stringp(arg) )
+    return "你的输入不正确。\n";
+  if( sscanf(arg, "%s from %s", id, menpai)!=2 )
+    return "指令格式：mpsub <id> from <门派>\n";
+  if( !restore() )
+    return "你输入的门派不正确。\n";
+  family  = filter_array(family, (: ( $1["id"] != $2 ) :), id);
+  save();
+  msg = "指令成功："+menpai + "新的排名如下：\n";
+  msg +=query_mptop(menpai);
+  family = 0;
+  menpai = 0;
+  return msg;
+}
+
+int get_all_score(string file)
+{
+  int i, total = 0;
+  if( !stringp(file) )
+    return 0;
+  menpai = file;
+  if( !restore() ) return 0;
+  for( i = 0; i < sizeof(family); i++ )
+  {
+    total += (int)family[i]["score"];
+  }
+
+  return total;
+}
+
+int get_score(object ob)
+{
+  int tlvl,score;
+  mapping skills;
+  object weapon ;
+  string martial,mskill;
+  reset_eval_cost();
+  skills = ob->query_skills();
+  if (!sizeof(skills))
+    return 1;
+  tlvl = ob->query_skill("force");
+  mskill = ob->query_skill_mapped("force");
+  if (stringp(mskill))
+    tlvl += ob->query_skill(mskill);
+  tlvl = ob->query_skill("spells");
+  mskill = ob->query_skill_mapped("spells");
+  if (stringp(mskill))
+    tlvl += ob->query_skill(mskill);
+
+  tlvl += ob->query_skill("dodge");
+  mskill = ob->query_skill_mapped("dodge");
+  if (stringp(mskill))
+    tlvl += ob->query_skill(mskill);
+
+  tlvl += ob->query_skill("parry");
+  mskill = ob->query_skill_mapped("parry");
+  if (stringp(mskill))
+    tlvl += ob->query_skill(mskill)*2/3;
+
+  if (weapon = ob->query_temp("weapon"))
+    martial = weapon->query("skill_type");
+  else
+    martial = "unarmed";
+
+  tlvl += ob->query_skill(martial);
+  mskill = ob->query_skill_mapped(martial);
+  if (stringp(mskill))
+    tlvl += ob->query_skill(mskill)*4/3;
+
+  tlvl = tlvl/8 ;
+
+  score = tlvl*tlvl*tlvl/125000 + ob->query("max_force")/20
+        + ob->query("max_mana")/20;
+  score += ob->query_str() + ob->query_int()
+         + ob->query_spi() + ob->query_con();
+  score += ob->query("combat_exp")/200/1000 + ob->query("daoxing")/120/1000;
+  if (score < 1)
+    score = 1 ;
+  return score;
+}
+

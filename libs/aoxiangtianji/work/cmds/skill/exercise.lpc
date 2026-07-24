@@ -1,0 +1,155 @@
+#include <skill.h>
+#include <ansi.h>
+//inherit F_CLEAN_UP;
+int finishb(object me);
+int main(object me, string arg)
+{
+  int kee_cost;
+  string force, msg;
+  object where;
+  seteuid(getuid());
+  where = environment(me);
+  if(where->is_safty() ||
+     where->query("no_fight")  ||
+     where->query("sleep_room") ||
+     where->query("no_book") ||
+     where->query("no_magic") )
+    return notify_fail("这里不是修炼内力的地方。\n");
+  if( !arg || !sscanf(arg, "%d", kee_cost) )
+    return notify_fail("你要花多少气练功？\n");
+  if( kee_cost <= 0 && me->query_temp("pending/exercising") )
+  {
+    me->delete_temp("pending/exercising");
+    me->set_short_desc(0);
+    me->start_busy(1);
+    return 1;
+  }
+
+  if (me->is_busy()
+   || me->query_temp("doing_xiudao")
+   || me->query_temp("pending/exercising")
+   || me->query_temp("pending/meditating"))
+    return notify_fail("你现在正忙着呢。\n");
+  if( me->is_fighting() )
+    return notify_fail("战斗中不能练内功，会走火入魔。\n");
+  if (! stringp(force = me->query_skill_mapped("force")))
+    return notify_fail("你必须先用 enable 选择你要用的内功心法。\n");
+  if( kee_cost < 20 )
+    return notify_fail("你最少要花 50 点「气」才能练功。\n");
+  if( (int)me->query("kee") < kee_cost )
+    return notify_fail("你现在的气太少了，无法产生内息运行全身经脉。\n");
+  if ((int)me->query("sen") * 100 / (int)me->query("max_sen") < 50)
+    return notify_fail("你现在精神不够，无法控制内息的流动！\n");
+  notify_fail("你无法顺利的运转内息。\n");
+  if (SKILL_D(force)->do_effect(me))
+    return 0;
+  msg = SKILL_D(force)->query_dazuo_msg(me);
+  if (stringp(msg))
+    write(msg);
+  else
+    write("你坐下来运气用功，一股内息开始在体内流动。\n");
+  me->set_temp("pending/exercising", 1);
+  me->set_temp("kee_cost", kee_cost);
+  me->set_short_desc("正坐在地下修炼内力。");
+  message_vision("$N盘膝坐下，开始修炼内力。\n", me);
+  me->start_busy(bind((:call_other, __FILE__, "exercising" :), me),
+                 bind((:call_other, __FILE__, "halt_exercise" :), me));
+  return 1;
+}
+
+int exercising(object me)
+{
+  int kee_cost = (int)me->query_temp("kee_cost");
+  int force_gain = (int)me->query_skill("force")/4;
+  force_gain = 1 + force_gain/2
+                 + random(force_gain)
+                 + (int)me->query_con()/2
+                 + (int)environment(me)->query("exercise_improve");
+
+  if (force_gain < 0) force_gain = 1;
+  if (kee_cost > 0)
+  {  //继续dazuo
+    if (force_gain > kee_cost)
+      force_gain = kee_cost;
+
+    if (force_gain > me->query("kee"))
+    {
+      force_gain = me->query("kee");
+      me->set_temp("kee_cost", 0);
+      me->set_short_desc(0);
+      kee_cost = 0;
+    }
+
+    else
+    {
+      kee_cost -= 2*force_gain;
+      if (kee_cost < 0)
+        kee_cost = 0 ;
+      me->set_temp("kee_cost", kee_cost);
+    }
+
+    me->add("force", force_gain*3);
+    if ((int)me->query("force") >= (int)me->query("max_force") * 2)
+    {
+      me->set_temp("kee_cost", 0);
+      me->set_short_desc(0);
+      kee_cost = 0;
+    }
+    me->add("kee", -force_gain);
+
+    if (kee_cost > 0)
+      return 1;
+  }
+
+  me->set_temp("pending/exercising", 0);
+  me->set_short_desc(0);
+  message_vision("$N运功完毕，深深吸了口气，站了起来。\n", me);
+  if ((int)me->query("force") < (int)me->query("max_force") * 2)
+    return 0;
+  else
+  {
+    if ((int)me->query("max_force") >= (int)me->query_max_force())
+    {
+      write("你的内力修为似乎已经达到了瓶颈。\n");
+      me->set("force", (int)me->query("max_force"));
+      return 0;
+    }
+
+    else
+    {
+      me->add("max_force", 1);
+      me->set("force", (int)me->query("max_force"));
+      write("你的内力增加了！！\n");
+      if ( (int)me->query("max_force") > (int)me->query("maximum_force"))
+        me->set("maximum_force", (int)me->query("max_force"));
+      return 0;
+    }
+
+  }
+
+}
+
+int halt_exercise(object me)
+{
+  tell_object(me, "你将真气压回丹田，站了起来。\n");
+  tell_room(environment(me), me->name() + "深吸一口气，站了起来。\n", me);
+  if ((int)me->query("force") > (int)me->query("max_force") * 2)
+    me->set("force", (int)me->query("max_force") * 2);
+  me->set_temp("pending/exercising", 0);
+  me->set_short_desc(0);
+  return 1;
+}
+
+int help(object me)
+{
+  write(@HELP
+指令格式 : exercise|dazuo [<耗费「气」的量>]
+	   exercise|dazuo 0 ：停止打坐
+运气练功，控制体内的气在各经脉间流动，藉以训练人体肌肉骨骼的耐
+力、爆发力，并且用内力的形式将能量储备下来。
+请参考 help stats
+HELP
+        );
+        return 1;
+}
+

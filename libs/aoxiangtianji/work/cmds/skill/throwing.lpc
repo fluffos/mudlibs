@@ -1,0 +1,213 @@
+#include <ansi.h>
+#include <combat.h>
+#include "/cmds/std/valid_kill.h"
+inherit F_CLEAN_UP;
+void create()
+{
+  seteuid(getuid());
+}
+
+int can_use(object me,object victim,object ob)
+{
+  object env;
+  int amount;
+
+  env = environment(me);
+  if (! objectp(env) ||
+      env->is_safty() ||
+      env->query("no_fight") ||
+      env->query("no_magic") ||
+      env->query("no_kill") )
+    return notify_fail("这里不能发射暗器。\n");
+  if (me->is_busy())
+    return notify_fail("你现在忙着呢。\n");
+  if (! victim->is_character() || !living(victim))
+    return notify_fail("什么你都想杀？\n");
+
+  if( victim->query("no_fight") || victim->query("no_throw"))
+    return 0;
+  if(!valid_kill(me,victim,0))
+    return 0;
+  if (me->query("sen") < 80)
+    return notify_fail("你现在精神不够好，无法使用" + ob->name() + "攻击对手。\n");
+  if ((amount = ob->query_amount()) < 1)
+    return notify_fail("你身上的" + ob->name() + "不够用了。\n");
+
+  if (!me->is_fighting(victim))
+    return notify_fail("你这样不太好吧？不在战斗中，使用暗器会招人唾骂的！\n");
+  return 1;
+}
+
+void hit_victim(object me, object victim, object ob)
+{
+  int ap,dp,percep;
+  int jiali,dam,wound;
+  string msg;
+
+  if (!objectp(me) || !objectp(victim) || !objectp(ob))
+    return;
+  if (environment(me) != environment(victim))
+    return;
+
+  switch (random(4))
+  {
+    case 0:
+      msg = HIY"$N"HIY"突的一声低喝，左手微微一抬，“嗖”的一声，一道寒光直扑$n而去！\n"NOR;
+      break;
+    case 1 :
+      msg = HIW"$N"HIW"突然间放慢了攻击节奏，电光火石间，$n觉得一阵寒风扑面袭来！\n"NOR
+            HIR"$n"HIR"大吃一惊，急忙大叫道，“暗器”！\n"NOR;
+      break;
+    default :
+      msg = HIY"$N"HIY"伸手从怀里掏出一"+ ob->query("base_unit")
+            + ob->query("name")+"，向$n射了过去。只见一道寒光飞向$n的面门！\n"NOR;
+      break;
+  }
+
+  ap = COMBACC_D->math_ap(me,"throwing");
+  if (me->query("special_skill/accuracy"))
+    ap += ap/5 ;
+  percep = (int)me->query_skill("count",1);
+  if (percep > 80)
+  {
+    percep = percep/8;
+    if (percep > 80)
+      percep = 80 + random(percep- 80) ;
+    ap += ap*(random(percep))/100;
+  }
+
+  if (userp(victim))
+    ap /= 3;
+
+  dp = COMBACC_D->math_dp(me,victim,0,0);
+  dp = (dp/100)*80 ;
+  percep = (int)victim->query_skill("perception",1);
+  if (percep > 80)
+  {
+    percep = percep /8;
+    if (percep > 80)
+      percep = 80 ;
+    dp += dp*(random(percep))/100;
+  }
+
+  percep = (int)victim->query_skill("count",1);
+  if (percep > 50)
+  {
+    percep = percep/5;
+    if (percep > 80)
+      percep = 80 + random(percep- 80) ;
+    dp += dp*(random(percep))/100;
+  }
+
+  if (ap*100/(ap+dp) < random(100))
+  {
+    switch (random(3))
+    {
+      case 0:
+        msg += CYN "却见$n" CYN "轻轻一闪，已将$N" CYN "射出"
+                   "的暗器避了开去。\n" NOR;
+        break;
+      case 1:
+        msg += CYN "只见$n" CYN "不慌不忙，身子向一旁横移数"
+                   "尺，躲开了$N" CYN "这一招。\n" NOR;
+        break;
+      default:
+        msg += CYN "可是$n" CYN "身子往后一仰，顿时让$N" CYN
+                   "射出的暗器落空。\n";
+        break;
+    }
+
+  }
+
+  else
+  {
+    dam = (int)ob->query("weapon_prop/damage");
+    jiali = (int)me->query("force_factor");
+    if (jiali > 1)
+      dam += random(jiali/2 + 1);
+    wound = ob->query("wound_percent") + random((int)ob->query("weapon_prop/damage")/5 + 1);
+
+    msg += COMBAT_D->do_damage(me, victim, REMOTE_ATTACK, dam, wound,
+                               HIR "只见$p" HIR "一个闪避不及，正中$P"
+                               HIR "这一" + ob->name() + HIR "，登时"
+                                   "鲜血飞溅！\n" NOR);
+  }
+
+  message_combatd(msg, me, victim);
+  COMBAT_D->hit_poison(me, victim, ob);
+  ob->add_amount(-1);
+  if (ob->query_amount() < 1)
+    destruct(ob);
+  return;
+}
+
+int main(object me, string arg)
+{
+  string target, spskill;
+  object victim;
+  object *obs, ob;
+  if( !arg)
+    return notify_fail("指令格式：throw <某人> with <特技>\n");
+  if (sscanf(arg, "%s with %s", target, spskill)!=2)
+  {
+    target = arg;
+    spskill = 0;
+  }
+
+  if( !objectp(victim = present(target, environment(me))) )
+    return notify_fail("你想向谁投掷暗器？\n");
+  obs = all_inventory(me);
+  obs = filter_array(obs,(: $1->is_throwing() :));
+
+  if (sizeof(obs) < 1)
+    return notify_fail("你身上没有可以发射的暗器！\n");
+
+  ob = obs[0];
+  notify_fail("你不能使用暗器！\n");
+  if (!can_use(me,victim,ob))
+    return 0;
+  if (!spskill)
+  {
+    hit_victim(me, victim, ob);
+
+    me->start_busy(2);
+
+    me->receive_damage("sen", 10);
+  }
+
+  else
+  {
+    if( !find_object(SKILL_D(spskill))
+        && !objectp(load_object(SKILL_D(spskill)))
+        && file_size(SKILL_D(spskill)+".lpc") < 0 )
+      return notify_fail("没有这种暗器使用方法！\n");
+    SKILL_D(spskill)->perform(me,victim);
+  }
+
+  if (userp(me) && userp(victim) && ! victim->is_want_kill(me->query("id")))
+    me->want_kill(victim);
+  me->kill_ob(victim);
+
+  if (living(victim) && ! userp(victim))
+    victim->kill_ob(me);
+  else
+    victim->fight_ob(me);
+  if (me->query_skill("throwing",1) < 300)
+    me->improve_skill("throwing", random(10));
+  else
+    me->improve_skill("throwing", random(10),1);
+  return 1;
+}
+
+int help(object me)
+{
+        write( @HELP
+指令格式: throwing <攻击对象> [with <特殊技能>]
+这个命令用来使用暗器攻击敌人。要使用暗器攻击敌人，首先必须
+身上带有可以发射的暗器。你只能在近距离战斗的时候使用暗器攻击
+敌人，并且只能攻击正在和你战斗的敌人。
+see also : shot
+HELP );
+        return 1;
+}
+

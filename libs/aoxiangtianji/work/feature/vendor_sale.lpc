@@ -1,0 +1,633 @@
+// FEATURE vendor_sale.c
+#include <dbase.h>
+#include <ansi.h>
+inherit NPC_SAVE;
+#define PERIOD 72000
+#define MINIMUM 100
+int price_ratio=10;
+string owner_id, owner_name;
+string owner_long;
+string bidder, bidder_name;
+string bidder_long;
+int bid;
+int deposit;
+int close_time;
+int profit;
+int last_profit;
+int take_money(int paid, int price);
+void set_new_owner(string id, string name, string long);
+void set_default_owner();
+int query_price() {return price_ratio;}
+
+int pay_back(string id, int amount);
+void new_owner();
+int is_vendor() {return 1;}
+
+void set_time(int tim)
+{
+  close_time=time()+tim;
+}
+
+int buy_object(object me, string what)
+{
+  string ob;
+  if( stringp(ob = query("vendor_goods/" + what)) )
+    return ob->query("value")*price_ratio/10;
+  else
+    return 0;
+}
+
+int complete_trade(object me, string what, int amount)
+{
+  string ob_file, msg;
+  object ob;
+  int num, price;
+  if( !wizardp(me) )
+  {
+    if( me->query_condition("killer") )
+      return notify_fail(CYN"你正在被通缉中,店铺不做你的生意！\n"NOR);
+  }
+
+  if (!amount)
+    amount = 1;
+
+  if( stringp(ob_file = query("vendor_goods/" + what)) )
+  {
+    int sale_price=price_ratio;
+    ob = new(ob_file);
+    num = ob->query_amount();
+    if(num > 0)
+      ob->set_amount(amount*num);
+    else if (amount > 1)
+      return notify_fail("这样东西无法一次买很多！请用buy <某物序号> from <某人>\n");
+    else
+      amount = 1;
+    if(!ob->move(me))
+    {
+      printf(CYN"由于你身上已经装不下过多的东西了,所以"
+          +ob->name()+NOR CYN"只能放在地上。\n"NOR);
+      ob->move(environment(me));
+    }
+
+    price=ob->query("value");
+    if(sale_price>5)
+      sale_price=5;
+    ob->set_temp("sale_price", price*sale_price/10);
+    if(!take_money(price*price_ratio/10, price))
+    {
+      destruct(ob);
+      return 0;
+    }
+
+    msg = "$N" HIW"向$n" HIW"买下"NOR + chinese_number(amount);
+    if (ob->query("unit"))
+      msg += ob->query("unit");
+    else
+      msg += ob->query("base_unit");
+    msg += ob->query("name") + HIW"。\n"NOR;
+
+    message_vision(msg, me, this_object() );
+    return 1;
+  }
+
+  return notify_fail("没有这样东西卖。\n");
+}
+
+int take_money(int paid, int price)
+{
+  int earn;
+  earn=paid-price/2;
+  if(earn>=0)
+  {
+    profit+=earn;
+    if (profit < 0)
+      profit = 0;
+    if (profit > deposit*3 )
+      profit = deposit*3;
+    if (profit > 2000*10000)
+      profit = 2000*10000;
+  }
+
+  else
+  {
+    if(deposit+earn<0)
+    {
+      message_vision("\n$N破产了！\n\n",this_object());
+      new_owner();
+      return notify_fail("the owner bankrupted\n");
+    }
+
+    deposit+=earn;
+  }
+
+  return 1;
+}
+
+string price_string(int v)
+{
+  string str="";
+  int val;
+
+  val=v/10000;
+  if(val)
+    str+=(val) + "两黄金";
+  val=(v%10000)/100;
+  if(val)
+    str+=(val) + "两银子";
+  val=(v%100);
+  if(val)
+    str+=(val)  + "文钱";
+  if(str=="")
+    str="零文钱";
+  return str;
+}
+
+int do_vendor_list(string arg)
+{
+  mapping goods;
+  string list, *name;
+  int i, amount;
+  string tlist, num_str, o_name;
+  object me;
+
+  me = this_player();
+  if( !wizardp(me) )
+  {
+    if( me->query_condition("killer") )
+      return notify_fail(CYN"你正在被通缉中,店铺不做你的生意！\n"NOR);
+  }
+
+  if( !mapp(goods = query("vendor_goods")) )
+    return 0;
+  if( arg && !this_object()->id(arg) )
+    return 0;
+  name = keys(goods);
+  if(!sizeof(name))
+    return notify_fail(WHT"这儿的东西全卖光了。\n"NOR);
+  list = "本店现货销售下列商品，概不赊帐:  "HIR"㊣宝号盘租㊣\n"NOR;
+  list+="━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
+  list += "[序号]    [名      称]                     [单 位]   [单 价]\n";
+  list += "──────────────────────────────────────\n";
+  for(i=0; i<sizeof(name); i++)
+  {
+    num_str = sprintf("%d",i+1);
+    o_name = goods[num_str]->query("name");
+    tlist = sprintf("[%-2s]    %-"+(34+color_len(o_name))+"s",
+            num_str,
+            goods[num_str]->query("name") +
+                "(" + goods[num_str]->query("id") + ")");
+
+    amount = goods[num_str]->query_amount();
+    if (amount < 1)
+      amount = 1;
+
+    if( goods[num_str]->query("base_unit") )
+      list += sprintf("%s → 每%4s %3d     %s \n",
+              tlist,
+              goods[num_str]->query("base_unit"),
+              amount,
+              MONEY_D->price_num(goods[num_str]->query("base_value")) );
+    else
+      list += sprintf("%s → 每%4s  %3d    %s \n",
+              tlist,
+              goods[num_str]->query("unit"),
+              amount,
+              MONEY_D->price_num(goods[num_str]->query("value")) );
+  }
+
+  list+="━━━━━━━━━━━━━━━━━━━━━━━━━ 仙剑奇侠传商业行会 ━━━━\n";
+  list += "注:你可以用 buy 序号 from ID 来购买物品.\n\n";
+  write(list);
+  return 1;
+}
+
+void init()
+{
+  ::init();
+
+  if(close_time<time()+60)
+    new_owner();
+  if(!userp(this_player()))
+    return;
+
+  add_action("do_bid","bid");
+  add_action("do_deposit","deposit");
+  add_action("do_setprice", "set_price");
+  add_action("do_status","status");
+}
+
+int do_bid(string arg)
+{
+  int minimum, amount;
+  string money;
+  object who=this_player();
+  object who1;
+  string roomname;
+  object env;
+
+  if( !wizardp(who) )
+  {
+    if(who ->query("title") == "普通百姓")
+      return notify_fail(WHT"你是普通百姓,不能盘租店铺！\n"NOR);
+    if( who ->query_condition("killer") )
+      return notify_fail(CYN"你正在被通缉中,不能盘租店铺！\n"NOR);
+    if((int)who ->query("combat_exp", 1) < 1000000)
+      return notify_fail(WHT"你的武学不足100万，不能盘租店铺！\n"NOR);
+    if((int)who ->query("daoxing", 1) < 1000000)
+      return notify_fail(WHT"你的道行不足1000年，不能盘租店铺！\n"NOR);
+    if( environment(who)->query("no_bid") )
+      return notify_fail(WHT"这个店不对外盘价！\n"NOR);
+    if( uptime()-who->query_temp("last_bid_time")<600)
+      return notify_fail(WHT"你不能连续竟价,请在10分钟后再来试试运气吧。\n"NOR);
+  }
+
+  notify_fail("指令格式: bid <数值> <gold|silver> \n");
+  if(!arg)
+    return 0;
+  if(sscanf(arg,"%d %s", amount, money)!=2)
+    return 0;
+  if(money=="gold")
+    amount*=10000;
+  else if(money=="silver")
+    amount*=100;
+  else
+    return 0;
+  if(amount<1)
+    return 0;
+  if(!bid)
+    minimum=MINIMUM;
+  else
+  {
+    minimum=bid;
+    if(minimum>MINIMUM*10)
+      minimum+=minimum/10;
+    else
+      minimum+=MINIMUM;
+  }
+
+  minimum=(minimum/100)*100;
+  if(amount<minimum)
+    return notify_fail(HIC"你至少需要出 "HIR+price_string(minimum)+" \n"NOR);
+  if(who->query("balance")<amount)
+    return notify_fail(HIC"你钱庄里没有这么多钱。\n"NOR);
+  if(who->query("balance")<0)
+    return notify_fail(HIC"你不能贷款竟价店铺。\n"NOR);
+  env=environment(this_object());
+  if(base_name(env)!=this_object()->query("startroom"))
+    roomname=this_object()->query("name");
+  else
+    roomname=env->query("short");
+  if(bidder)
+  {
+    pay_back(bidder, bid);
+    if(getuid(who)!=bidder)
+    {
+      who1=find_player(bidder);
+      if(who1)
+        tell_object(who1,who->name()+"出价"HIR+price_string(amount)
+            +NOR"收购"HIY+roomname+NOR"，你的投标失败了,哈哈！\n");
+    }
+
+  }
+
+  if(close_time<time()+120)
+    close_time+=60;
+  who->add("balance",-amount);
+  who->set_temp("last_bid_time",uptime());
+  who->save();
+  bidder=who->query("id");
+  bidder_name=who->query("name");
+  bidder_long=who->long();
+  bid=amount;
+  save();
+  message_vision("$N出价"HIR+price_string(amount)
+               +NOR"收购"+ roomname+" \n"NOR,who);
+  CHANNEL_D->do_channel(who,	"sys",
+     sprintf("出价%s收购%s \n"NOR, price_string(amount),roomname  ));
+  return 1;
+}
+
+int pay_back(string id, int amount)
+{
+  object who;
+
+  who=find_player(id);
+  if(objectp(who))
+  {
+    who->add("balance",amount);
+    if(!who->save())
+    {
+      log_file("shop_log","Failed to return "+amount+" coin to "+id+"(online)\n");
+      return 0;
+    }
+
+    log_file("shop_log","pay "+amount+" to "+id+"\n");
+    return 1;
+  }
+
+  else
+  {
+    who = UPDATE_D->global_find_player(id);
+    if (!who)
+    {
+      log_file("shop_log","Failed to return "+amount+" coin to "+id+"(offline)\n");
+      return 0;
+    }
+
+    who->add("balance",amount);
+    log_file("shop_log","pay "+amount+" to "+id+"(offline)\n");
+    UPDATE_D->global_destruct_player(who, 1);
+    return 1;
+  }
+
+}
+
+int do_deposit(string arg)
+{
+  object who=this_player();
+  string money;
+  int amount;
+
+  if( !wizardp(who) && getuid(who)!=owner_id)
+    return notify_fail(WHT"只有店主能用这个命令。\n"NOR);
+
+  notify_fail("指令格式: deposit <数值> <gold|silver>\n");
+  if(!arg)
+    return 0;
+  if(sscanf(arg,"%d %s", amount, money)!=2)
+    return 0;
+  if(money=="gold")
+    amount*=10000;
+  else if(money=="silver")
+    amount*=100;
+  else
+    return 0;
+  if(amount<10000)
+    return notify_fail(WHT"一次至少要一两金子。\n"NOR);
+
+  if(who->query("balance")<amount)
+    return notify_fail(HIC"你钱庄里没有这么多钱。\n"NOR);
+  who->add("balance",-amount);
+  who->start_busy(2);
+  who->save();
+  deposit+=amount;
+  save();
+  write("现在共有"HIR+price_string(deposit)+NOR"预付金。\n");
+  return 1;
+}
+
+int do_setprice(string arg)
+{
+  object who=this_player();
+  int ratio, max_price;
+  string str;
+
+  if( !wizardp(who) && getuid(who)!=owner_id )
+    return notify_fail(WHT"只有店主能用这个命令。\n"NOR);
+  if( !wizardp(who) && uptime()-who->query_temp("last_setprice_time")<600)
+    return notify_fail(WHT"你不能连续变动物价,你只能在5分钟重新设定。\n"NOR);
+  notify_fail("指令格式: set_price <折扣/倍数 数值> \n"+
+            "<数值> 范围需要在 1 到 100 之间\n");
+  if(!arg)
+    return 0;
+  if(sscanf(arg,"%d",ratio)!=1)
+    return 0;
+  if(ratio<1)
+    return 0;
+  max_price=this_object()->query("max_price");
+  if(!max_price)
+    max_price=50;
+  if(ratio>max_price)
+    return notify_fail("定价必须少于"+chinese_number(max_price)+"。\n");
+
+  if( ratio<5 && deposit<1 && !wizardp(who) )
+    return notify_fail("你的定价少于成本，必须先付定金(deposit)。\n");
+  price_ratio=ratio;
+  save();
+  if(ratio<10)
+  {
+    who->set_temp("last_setprice_time",uptime());
+    message_vision("$N决定所有物品 "HIR+chinese_number(ratio)
+                   +NOR" 折出售。\n", who);
+  }
+
+  else if(ratio==10)
+  {
+    who->set_temp("last_setprice_time",uptime());
+    message_vision("$N决定所有物品按原价出售。\n", who);
+  }
+
+  else
+  {
+    str=chinese_number(ratio/10);
+    ratio=ratio-(ratio/10)*10;
+    if(ratio)
+      str+="点"+chinese_number(ratio);
+    message_vision("$N决定所有物品按原价的 "HIR+str+NOR" 倍出售。\n", who);
+    who->set_temp("last_setprice_time",uptime());
+  }
+
+  return 1;
+}
+
+int do_status(string arg)
+{
+  object who=this_player();
+  int hour, next;
+  string str;
+
+  if(!close_time)
+  {
+    close_time=time()+PERIOD;
+    save();
+  }
+
+  next=close_time-time();
+  if(next<60)
+    new_owner();
+  else
+  {
+    hour=next/3600;
+    if(hour)
+      str=chinese_number(hour)+"小时";
+    else
+      str="";
+    hour=(next-hour*3600)/60;
+    if(hour)
+      str+=chinese_number(hour)+"分种";
+    write("投标获胜者将于 "HIR+str+NOR" 后成为新店主。\n");
+  }
+
+  if(bidder)
+    write("当前最高投标是 "HIR+bidder_name
+          +"("+bidder+")： "HIY+price_string(bid)+NOR"\n");
+  else
+    write(HIC"目前还没有人投标。\n"NOR);
+  write(HIC"昨日盈利："HIY+price_string(last_profit)+NOR"\n");
+  if(wizardp(who) || getuid(who)==owner_id)
+  {
+    write("\n盈利　　　："+price_string(profit)+"\n");
+    write("剩余预付金："+price_string(deposit)+"\n");
+    write("价格指数　："+price_ratio+"\n");
+    if(save())
+      write("\n盈利存储完毕。\n"); // when owner check price, save data.
+  }
+
+  return 1;
+}
+
+void new_owner()
+{
+  int prof;
+  object old;
+  mapping mail;
+  object mbx;
+  string msg;
+  close_time=time()+PERIOD;
+
+  if(owner_id)
+  {
+    prof=profit+deposit;
+    if(prof>0)
+      pay_back(owner_id, prof);
+    old=find_player(owner_id);
+    msg="你的店主("+name(1)+")任期结束，结余"HIR
+        +price_string(prof)+NOR"已存入你的户头。\n";
+    msg+="其中盈利"+price_string(profit)+"，"
+        +"剩余预付金"+price_string(deposit)+"。\n\n";
+    if(old)
+      tell_object(old,msg);
+    mail = ([
+     "from": name(1) + "(" + query("id") + ")",
+     "title": name(1)+"：帐目结算",
+     "to": owner_id,
+     "time": time(),
+     "status": "N",
+     "text": msg
+    ]);
+    seteuid(getuid());
+    mbx=new(MAILBOX_OB);
+    mbx->set_owner("vendor_sale");
+    mbx->send_mail(owner_id,mail,1);
+    destruct(mbx);
+  }
+
+  if(bidder)
+  {
+    owner_id=bidder;
+    owner_name=bidder_name;
+    owner_long=bidder_long;
+    set_new_owner(owner_id, owner_name, owner_long);
+  }
+
+  else
+  {
+    owner_id=0;
+    owner_name=0;
+    owner_long=0;
+    set_default_owner();
+  }
+
+  last_profit=profit;
+  profit=0;
+  deposit=0;
+  bidder=0;
+  bidder_name=0;
+  bid=0;
+  price_ratio=10;
+  save();
+}
+
+void set_new_owner(string id, string name, string long)
+{
+  string short;
+  string *newid;
+  set_temp("apply/name",({name}));
+
+  if(pointerp(newid=query("shop_id")))
+  {
+    newid=({newid[0]+" "+id})+newid;
+  }
+
+  else
+  {
+    newid=({"boss "+id, "boss"}); // default setting
+  }
+
+  set_temp("apply/id",newid);
+  set_temp("apply/long",({long}));
+  if(stringp(short=query("shop_title")))
+  {
+    short+=" ";
+  }
+
+  else if(stringp(short=query("title")))
+  {
+    short+=" ";
+  }
+
+  else
+    short=query("name")+" ";
+
+  short+=name+"("+capitalize(newid[0])+")";
+  set_temp("apply/short",({short}));
+//  message_vision("\n此处新店主 "HIR+name+NOR" 即刻走马上任！\n\n", this_object());
+  message("channel:rumor",
+    HIG"〖"HIR"开业大吉"HIG"〗"NOR CYN" 新店主"
+    +short+NOR CYN"的店铺顺利开张了！！！ \n\n"NOR, users());
+}
+
+void set_default_owner()
+{
+  delete_temp("apply/name");
+  delete_temp("apply/id");
+  delete_temp("apply/short");
+  delete_temp("apply/long");
+}
+
+void reload(string filename)
+{
+  object me;
+  ::reload(filename);
+
+  if(owner_id)
+    set_new_owner(owner_id, owner_name, owner_long);
+  if(close_time<time()+120)
+    close_time+=120;
+  me=this_object();
+  me->set("eff_gin", (int)me->query("max_gin"));
+  me->set("gin", (int)me->query("max_gin"));
+  me->set("eff_kee", (int)me->query("max_kee"));
+  me->set("kee", (int)me->query("max_kee"));
+  me->set("eff_sen", (int)me->query("max_sen"));
+  me->set("sen", (int)me->query("max_sen"));
+  me->set("force", (int)me->query("max_force"));
+  me->set("atman", (int)me->query("max_atman"));
+  me->set("mana", (int)me->query("max_mana"));
+  me->clear_conditon();
+}
+
+string query_save_file()
+{
+  string id;
+  id = query_save_name();
+  if( !stringp(id) )
+    return 0;
+  return sprintf(DATA_DIR "npc/boss/%s", id);
+}
+
+void die()
+{
+  set("bellicosity",0);
+  if(price_ratio>22)
+    price_ratio=price_ratio*9/10;
+  save();
+  ::die();
+}
+
+void remove(string euid)
+{
+  save();
+  ::remove(euid);
+}
+

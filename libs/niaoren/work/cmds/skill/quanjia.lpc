@@ -1,0 +1,117 @@
+// du.c
+
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+inherit SKILL;
+
+int main(object me, string arg)
+{
+	string what, who;
+	object ob, victim;
+	mapping myfam, vtfam;
+	int sp, dp;
+
+	object where = environment(me);
+	
+	seteuid(getuid());
+
+    if ( (!(myfam = me->query("family")) || myfam["family_name"] != "峨嵋派") )
+        return notify_fail("只有峨嵋派才能用渡世濟人！\n");
+
+	if( environment(me)->query("no_fight") )
+		return notify_fail("這里沒有人打斗！\n");
+
+	if( me->query_temp("dushi") )
+		return notify_fail("你已經在勸人家罷斗了！\n");
+
+	if( !arg || sscanf(arg, "%s halt", who)!=1 ) return
+		notify_fail("指令格式：dushi <人物> halt\n");
+
+	victim = present(who, environment(me));
+
+	if( !victim || victim == me) return notify_fail("你想找的對象不在這里。\n");
+
+	if( !living(victim) || !objectp(victim))
+		return notify_fail("你要勸誰罷斗？\n");
+
+    if ( (vtfam = victim->query("family")) && vtfam["family_name"] == "峨嵋派" )
+        return notify_fail("你不能向本派的使用渡世濟人！\n");
+
+	if( !wizardp(me) && wizardp(victim) )
+		return notify_fail("玩家不能勸巫師罷斗。\n");
+
+	if( me->is_fighting() )
+                return notify_fail("一邊打架一邊勸別人罷斗？你真是虛偽到家了！\n");
+
+
+	sp = (int)me->query_skill("dushi-jiren") * 15 + (int)me->query("kar") * 5;
+//		- (int)me->query("begger") * 2;
+	if( sp < 1 ) sp = 1;
+	dp = (int)victim->query("jing");
+
+	tell_object(me, "你搖搖了頭，慢慢地向" + victim->name() + "走過去，雙手合十，開始念誦佛經"
+			+ "...\n\n");
+	tell_object(victim, me->name() + "搖搖了頭向你慢慢走過來，雙手合十，說道：我佛慈悲普度渡眾生, 還請" + RANK_D->query_respect(victim) + "罷斗, 免增罪孽吧 ...！\n\n");
+
+	message("vision", "只見" + me->name() + "搖搖了頭，慢慢地向" 
+		+ victim->name() + "走過去，\n出雙手合十，說道: 請"
+		+ RANK_D->query_respect(victim) + "，停手吧 ...\n\n", environment(me), ({ me, victim }) );
+
+	me->set_temp("dushi", 1);
+	call_out( "compelete_dushi", 3, me, victim, ob, sp, dp);
+
+	return 1;
+}
+
+void compelete_dushi(object me, object victim, object ob, int sp, int dp)
+{
+	int amount;
+	object ob1;
+	object where = environment(me);
+
+	me->delete_temp("dushi");
+
+	if( environment(victim) != environment(me) ) {
+		tell_object(me, "太可惜了，你要找的人已經走了。\n");
+		return;
+	}
+
+	if( living(victim) && (random(sp+dp) > dp) ) 
+	{
+		victim ->remove_all_enemy();
+		tell_object(me, victim->name() + "低頭想了一會，又看了看你，搖搖頭，嘆了口氣，停止了打斗。\n");
+		tell_object(victim, "你聽了之后，心中不覺一緊，不再想繼續打下去了。\n");
+
+		me->improve_skill("dushi-jiren", random(me->query("int")));
+		if(((int)me->query("learned_points") + 120) > (int)me->query("potential"))
+			me->add("potential",1);
+		me->add("combat_exp",2);
+
+		me->start_busy(3);
+	} 
+	else 
+	{
+		if( random(sp) > dp/2 ) {
+			message_vision(victim->name() + "狠狠地瞪了$N一眼，喝道：我都快讓人給打死了，能罷斗嗎! $N嘆了口氣轉身走開了。\n", me);
+			
+			return;
+		}
+	
+		tell_object(me, victim->name() + "扭過頭去，對你理都不理。\n");
+		tell_object(victim, "你扭過頭去，對" + me->name() + "理都不理。\n");
+		message("vision", victim->name() + "扭過頭去，對" + me->name() + "理都不理。\n", 
+			environment(me), ({ me, victim }) );
+
+	}
+}
+
+int help(object me)
+{
+write(@HELP
+指令格式 : dushi <某人> halt
+
+HELP
+    );
+    return 1;
+}

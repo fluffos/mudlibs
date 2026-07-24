@@ -1,0 +1,153 @@
+#include <ansi.h>
+#include <combat.h>
+#define XUE "「" HIR "追腥逐血" NOR "」"
+#define ZXZX CLASS_D("wudidong") + "/qixiu-sword/zxzx"
+#define CAUSED "zxzx"
+inherit F_SSERVER;
+int valid_pfm(object me, object target)
+{
+  int t= time();
+  if(userp(me) && (string)me->query("family/family_name") != "陷空山无底洞")
+    return notify_fail(XUE"是陷空山无底洞不传之密！\n");
+  if (me->is_busy())
+    return notify_fail("你正忙着呢！\n");
+
+  if (me->query_skill("qixiu-sword", 1) < 180)
+    return notify_fail("你的七修剑法修为不够，难以施展" XUE "。\n");
+  if (me->query_skill("huntian-qigong", 1) < 180)
+    return notify_fail("你的混天气功修为不够，难以施展" XUE "。\n");
+  if (me->query_skill_mapped("sword") != "qixiu-sword")
+    return notify_fail("你没有激发七修剑法，难以施展" XUE "。\n");
+  if (me->query_skill_mapped("force") != "huntian-qigong")
+    return notify_fail("你没有激发混天气功，难以施展" XUE "。\n");
+  if (me->query("force") < 500)
+    return notify_fail("你的真气不够，难以施展" XUE "。\n");
+
+  if (me->query_temp("tick/"+CAUSED))
+    return notify_fail(sprintf("你已经在使用%s。\n",XUE));
+
+  if ((t- me->query_temp("last_zxzx")) < 5)
+    return notify_fail(sprintf("你刚刚用完%s，无法再次使用！\n",XUE));
+
+  return 1;
+}
+
+int perform(object me, object target)
+{
+  object weapon;
+  int i;
+
+  if (! objectp(weapon = me->query_temp("weapon"))
+    || (string)weapon->query("skill_type") != "sword")
+    return notify_fail("你所使用的武器不对，难以施展" XUE "。\n");
+  message_vision(HIR "$N把混天气功在体内运行一周，只觉浑身杀气腾腾，"
+                     "看谁都不顺眼。\n" NOR, me);
+  me->add_temp("apply/attack",100);
+  me->set_temp("QXS_perform",6);
+  COMBAT_D->do_attack(me, target, weapon);
+  me->add_temp("apply/attack",-100);
+  me->delete_temp("QXS_perform");
+
+  if (living(target))
+  {
+    i = me->query_skill("qixiu-sword",1);
+    i = i/10;
+    if (i > 60)
+      i = 60;
+
+    me->set_temp("QXS_perform",1+random(6));
+    me->set_pfm_tick(ZXZX, CAUSED,i, target);
+    me->set_temp("busy_for_pfm",XUE);
+  }
+
+  me->add("force",-100);
+  return 1;
+}
+
+int check(object me, object target)
+{
+  object weapon;
+
+  if (!living(me))
+  {
+    me->delete_temp("QXS_perform");
+    me->delete_temp("busy_for_pfm");
+    return 0;
+  }
+
+  weapon = me->query_temp("weapon");
+  if (!objectp(weapon) || (string)weapon->query("skill_type") != "sword")
+  {
+    tell_object(me, sprintf("你手中没有持剑，%s的攻势便即瓦解！\n" NOR,XUE));
+    me->delete_temp("QXS_perform");
+    me->delete_temp("busy_for_pfm");
+    return 0;
+  }
+
+  if ( weapon->query("weapon_prop") == 0 )
+  {
+    tell_object(me, sprintf("你的%s已毁，无法持续%s的攻势！\n"NOR,
+                             weapon->name(),XUE));
+    me->delete_temp("QXS_perform");
+    me->delete_temp("busy_for_pfm");
+    return 0;
+  }
+
+  if (!objectp(target) || (environment(me) != environment(target)))
+  {
+    tell_object(me, sprintf("你没有了对手，%s的攻势便即瓦解！\n",XUE));
+    me->delete_temp("QXS_perform");
+    me->delete_temp("busy_for_pfm");
+    return 0;
+  }
+
+  if (!living(target))
+  {
+    tell_object(me, sprintf("你的对手已经无法反击了，%s的攻势便即瓦解！\n",XUE));
+    me->delete_temp("QXS_perform");
+    me->delete_temp("busy_for_pfm");
+    return 0;
+  }
+
+  if (!me->is_fighting(target))
+  {
+    tell_object(me,sprintf("\n你现在没有和%s过招，当下收回了%s的攻势。\n\n"NOR,target->name(),XUE));
+    me->delete_temp("QXS_perform");
+    me->delete_temp("busy_for_pfm");
+    return 0;
+  }
+
+  if ( (string)me->query_skill_mapped("sword") != "qixiu-sword" )
+  {
+    tell_object(me, sprintf("你转而施展其他剑法，无法再以%s攻敌！\n"NOR,XUE));
+    me->delete_temp("QXS_perform");
+    me->delete_temp("busy_for_pfm");
+    if (!me->is_busy())
+      me->start_busy(1+random(2));
+    return 0;
+  }
+
+  if ( (int)me->query("force") < 200  )
+  {
+    tell_object(me, sprintf("你的内力后继不足，难以持续%s的威力，只好收缓剑招。\n"NOR,XUE));
+    me->delete_temp("QXS_perform");
+    me->delete_temp("busy_for_pfm");
+    if (!me->is_busy())
+      me->start_busy(1+random(2));
+    return 0;
+  }
+
+  me->set_temp("QXS_perform",1 + random(6));
+  if (!me->query_temp("busy_for_pfm"))
+    me->set_temp("busy_for_pfm",XUE);
+  return 1;
+}
+
+void remove_effect(object me, object target)
+{
+  message_vision(HIW"\n$N慢慢恢复了常态！\n" NOR, me);
+  me->delete_temp("QXS_perform");
+  me->delete_temp("busy_for_pfm");
+  me->set_temp("last_zxzx",time());
+  return;
+}

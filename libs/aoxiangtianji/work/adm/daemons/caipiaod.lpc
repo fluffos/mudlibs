@@ -1,0 +1,738 @@
+// caipiaod.c 彩票系统 created by yekai
+#include <ansi.h>
+#include <localtime.h>
+#pragma optimize
+
+inherit F_SAVE;
+inherit F_DBASE;
+// 奖池累计最大金额
+#define MAX_SAVE_GOLD  1000000
+//中奖历史情况
+//reward_history = ([
+//    期数 : ([
+//              中奖号码 : ,
+//              每个号码奖励的奖金 : ,
+//              中奖名单("list") : ({}),
+//           ])
+mapping reward_history;
+//本期中奖玩家名单
+//reward_list = ([
+//    "玩家id" : "注数"
+// ]);
+mapping reward_list;
+//领奖名单
+string *gotten_list;
+//奖池奖金
+int total_reward;
+//本期购买状况
+//buyer = ([
+//  购买玩家id : (["号码" : 数目]),
+//        ]);
+//
+mapping buyer;
+//期数
+int count;
+//上次开奖时间
+int last_day;
+nosave int state;
+nosave int special = 0;
+nosave int ready_time = 0;
+nosave int last_msg_time = 0;
+#define SLEEPING        0
+#define GET_READY       1
+#define STARTING        2
+#define GET_READY_TIME  300
+private void change_state(int new_state);
+void clear_last_turn();
+void start_lucky();
+void create()
+{
+  seteuid(getuid());
+  restore();
+  state = SLEEPING;
+  set_heart_beat(30);
+  if (!mapp(reward_list))
+    reward_list = ([]);
+  if (!arrayp(gotten_list))
+    gotten_list = ({});
+  if (!mapp(buyer))
+    buyer = ([]);
+  if (total_reward < 0)
+    total_reward = 0;
+  if (!last_day)
+    last_day = time() / 86400;
+}
+
+void remove()
+{
+  save();
+}
+
+public void mud_shutdown()
+{
+  save();
+}
+
+public string query_save_file()
+{
+  return DATA_DIR "caipiaod";
+}
+
+private void heart_beat()
+{
+  mixed lt;
+  int ti;
+  int today;
+  int left_time, left_min;
+  seteuid(ROOT_UID);
+  lt = localtime(time());
+  ti = lt[LT_HOUR] * 100 + lt[LT_MIN];
+  switch (state)
+  {
+    case SLEEPING:
+      today = time() / 86400;
+      if (ti >= 2000 && ti <= 2015)
+      {
+        if (last_day != today)  // this day has do it
+        {
+          last_day = today;
+          change_state(GET_READY);
+        }
+
+      }
+
+      break;
+    case GET_READY:
+      left_time = ready_time + GET_READY_TIME - time();
+      if (left_time > 0)
+      {
+        left_min = left_time % 60;
+        left_time /= 60;
+        if (left_time && left_min == 1)
+        {
+          message("system",HIG"〖" HIW"彩票信息" HIG"〗" HIW"：" HIY"翱翔天际第" +
+          chinese_number(count+1) + "期彩票在大约" + HIW + chinese_number(left_time) +
+          HIY"分钟后就要开奖了！\n"NOR,users());
+        }
+
+        break;
+      }
+
+      change_state(STARTING);
+      break;
+    case STARTING:
+      break;
+  }
+
+}
+
+private void change_state(int new_state)
+{
+  mixed lt;
+  lt = localtime(time());
+  switch (new_state)
+  {
+    case GET_READY:
+      clear_last_turn();
+      ready_time = time();
+      set_heart_beat(1);
+      break;
+    case STARTING:
+      start_lucky();
+      new_state = SLEEPING;
+      break;
+    default:
+      break;
+  }
+
+// change to new state
+  state = new_state;
+  if (state == SLEEPING)
+    set_heart_beat(30);
+  return;
+}
+
+public mapping query_reward_list()
+{
+  return reward_list;
+}
+
+public string *query_gotten_list()
+{
+  return gotten_list;
+}
+
+public mapping query_buyer()
+{
+  return buyer;
+}
+
+public int query_count()
+{
+  return count;
+}
+
+public int query_total_reward()
+{
+  return total_reward;
+}
+
+public int query_reward_gold()
+{
+  int v;
+  v = 100;
+  v += v*special;
+  return v;
+}
+
+public int is_buyer(mixed ob)
+{
+  mapping b = query_buyer();
+  string id, *kb;
+
+  kb = keys(b);
+  if (!arrayp(kb) || sizeof(kb) < 1)
+    return 0;
+
+  if (stringp(ob))
+  {
+    id = ob;
+  }
+
+  else if (objectp(ob))
+  {
+    id = ob->query("id");
+  }
+
+  else
+    return 0;
+
+  return (member_array(id,kb) != -1);
+}
+
+void set_lastday(int v)
+{
+  last_day = v;
+  save();
+}
+
+public int is_reward_me(mixed ob)
+{
+  string id,*kr;
+  if (stringp(ob))
+    id = ob;
+  else if (objectp(ob))
+    id = ob->query("id");
+  else
+    return 0;
+  kr = keys(reward_list);
+  return (member_array(id,kr) != -1);
+}
+
+public int is_gotten_by_me(mixed ob)
+{
+  string id;
+  if (stringp(ob))
+    id = ob;
+  else if (objectp(ob))
+    id = ob->query("id");
+  else
+    return 0;
+  return (member_array(id,keys(reward_list)) != -1);
+}
+
+public string query_my_info(mixed ob)
+{
+  mapping b;
+  string msg,id,*kb;
+  int i, total;
+
+  if (!is_buyer(ob))
+    return "没有买本期彩票！\n";
+
+  if (stringp(ob))
+    id = ob;
+  else if (objectp(ob))
+    id = ob->query("id");
+  else
+    return "？\n";
+  b = buyer[id];
+  if (!mapp(b) || sizeof(b) < 1)
+    return "查询不到" + id + "的购买情况！\n";
+  kb = keys(b);
+  msg = HBBLU"第"NOR + HIM + chinese_number(count+1) + NOR +
+        HBBLU"期"NOR + HIR"天天彩"NOR + HBBLU"购买状况如下：\n"NOR;
+  msg += HIY"===========\n"NOR;
+  msg += HIY"号码"NOR HIW"    注数\n"NOR;
+  total = 0;
+  for (i=0;i<sizeof(kb);i++)
+  {
+    msg += sprintf(HIY"%-8s"NOR HIW"%-4d\n"NOR,
+                   kb[i],
+                   b[kb[i]]);
+    total += b[kb[i]];
+  }
+
+  msg += sprintf("共 %d 注，投注金额：%s两黄金！\n",total,chinese_number(total));
+  msg += "\n";
+  if (arrayp(reward_list) && sizeof(reward_list) > 0)
+  {
+    msg += HIW"本期中奖号码已经出来了．"NOR;
+    if (!is_reward_me(id))
+      msg += HIB"很可惜，你未中奖．下次努力！\n"NOR;
+    else
+    {
+      if (is_gotten_by_me(id))
+        msg += HIR"恭喜！恭喜！本期彩票你中奖了！奖金已经被你领取了！\n"NOR;
+      else
+        msg += HIR"恭喜！恭喜！本期彩票你中奖了！快去领取奖金吧！\n"NOR;
+    }
+
+  }
+
+  else
+  {
+    msg += HIG"第" + chinese_number(count+1) + "期中奖号码还没有出来！预祝你中奖！！\n"NOR;
+  }
+
+  return msg;
+}
+
+public string query_history(string arg)
+{
+  string msg, type, str, *kh;
+  int i,j,base_num,which;
+  mapping mn;
+  mapping t = (["number" : "中奖号码",
+                "list"   : "中奖玩家",
+                "gold"   : "单注奖金",
+              ]);
+  string fail_msg = "请用如下格式查询：\n"
+                    "chaxun me  查询自己的购买信息．\n"
+                    "chaxun number of [all | 期数]  查询[所有 | 指定]期数的中奖号码！\n"
+                    "chaxun list of [all | 期数]    查询[所有 | 指定]期数的中奖玩家！\n"
+                    "chaxun gold of [all | 期数]    查询[所有 | 指定]期数的中奖奖金(单注)！\n";
+  if (!arg)
+    return fail_msg;
+  if (!mapp(reward_history) || sizeof(reward_history) < 1)
+    return "彩票系统目前没有任何信息可以查询！\n";
+
+  if (sscanf(arg,"%s of %s",type,str) != 2)
+    return fail_msg;
+
+  if (type != "number" && type != "list" && type != "gold")
+    return fail_msg;
+
+  which = 0;
+  if (str != "all")
+    which = to_int(str);
+  if (str != "all" && !which)
+    return fail_msg;
+  kh = keys(reward_history);
+  if (which>0 && (which>count+1 || which < count-98) )
+    return "当前可以查询的资料：第" + chinese_number(count-98) +
+           "期到"+chinese_number(count+1)+"期！\n";
+
+  msg = sprintf("你查询%s期的%s情况：\n",
+                 which ? "第" + chinese_number(which) : "所有",
+                 t[type]);
+  if (!which)
+  {
+    if (count < 100)
+      base_num = 1;
+    else
+      base_num = count - 99 + 1;
+    for (i=0;i<sizeof(kh);i++)
+    {
+      mn = reward_history[sprintf("%d",base_num + i)];
+      msg += "第" + chinese_number(base_num+i) + "期" + t[type] + "：";
+      if (!mapp(mn) || sizeof(mn) < 1)
+      {
+        msg += "空缺！\n";
+        continue;
+      }
+
+      switch (type)
+      {
+        case "number" :
+          msg += mn[type];
+          break;
+        case "gold" :
+          msg += chinese_number((int)mn[type]) + "两";
+          break;
+        case "list" :
+          if (arrayp(mn[type]) && sizeof(mn[type]) > 0)
+            for (j=0;j<sizeof(mn[type]);j++)
+              msg += mn[type][j] + " ";
+          else
+            msg += "名单空缺！";
+      }
+
+      msg += "\n";
+    }
+
+  }
+
+  else
+  {
+    mn = reward_history[sprintf("%d",which)];
+    msg += "第" + chinese_number(which) + "期" + t[type] + "：";
+    if (!mapp(mn) || sizeof(mn) < 1)
+      msg += "空缺！\n";
+    else
+    {
+      switch (type)
+      {
+        case "number" :
+          msg += mn[type];
+          break;
+        case "gold" :
+          msg += chinese_number((int)mn[type]) + "两";
+          break;
+        case "list" :
+          if (arrayp(mn[type]) && sizeof(mn[type]) > 0)
+            for (j=0;j<sizeof(mn[type]);j++)
+              msg += mn[type][j] + " ";
+          else
+            msg += "名单空缺！";
+          break;
+      }
+
+      msg += "\n";
+    }
+
+  }
+
+  return msg;
+}
+
+void add_total_reward(int val)
+{
+  total_reward += val;
+  if (total_reward < 0)
+    total_reward = 0;
+  save();
+}
+
+int accept_buy(object who,string arg)
+{
+  string f,s,t,extf,exts,extt, msg, *kc;
+  int num,i,j,k,snum;
+  mapping cp1,cp=([]);
+  string fail_msg = "投注彩票的格式如下：touzhu [号码1] [号码2] [号码3] for [数量]\n"
+                    "[号码]格式说明：\n"
+                    "\t所有的号码必须是数字0-9！\n"
+                    "\t格式可以是单个的数字，3，也可以2-7，表示2到7所有的数值．\n"
+                    "[数量]必须是1-100，可以不带有数量，系统默认是1注．\n"
+                    "例子如下：\n"
+                    "touzhu 1 2 3 for 5  ==> 购买号码123，买5注．\n"
+                    "touzhu 1-3 2-3 9 for 5 ==> 购买号码129 139 229 239 329 339，每个号码5注．\n"
+                    "touzhu 1 2 3  ==> 购买号码123，1注．\n";
+
+  if (!playerp(who))
+    return 0;
+
+  if (!arg)
+  {
+    tell_object(who,fail_msg);
+    return 0;
+  }
+
+  if (state != SLEEPING)
+  {
+    tell_object(who,"彩票中心正在开奖中，请稍候购买！\n");
+    return 0;
+  }
+
+  if (sscanf(arg,"%s %s %s for %d",f,s,t,num) != 4)
+  {
+    num = 1;
+    if (sscanf(arg,"%s %s %s",f,s,t) != 3)
+    {
+      tell_object(who,fail_msg);
+      return 0;
+    }
+
+  }
+
+  if (num < 1 || num > 100)
+  {
+    tell_object(who,fail_msg);
+    return 0;
+  }
+
+  if (sscanf(f,"%s-%s",f,extf) != 2)
+    extf = f;
+  if (sscanf(s,"%s-%s",s,exts) != 2)
+    exts = s;
+  if (sscanf(t,"%s-%s",t,extt) != 2)
+    extt = t;
+  if (strlen(f) > 1 || strlen(extf) > 1 ||
+      strlen(s) > 1 || strlen(exts) > 1 ||
+      strlen(t) > 1 || strlen(extt) > 1)
+  {
+    tell_object(who,fail_msg);
+    return 0;
+  }
+
+  if (to_int(f) < 0 ||
+      to_int(s) < 0 ||
+      to_int(t) < 0)
+  {
+    tell_object(who,"不要输入小于0的数值！\n");
+    return 0;
+  }
+
+  f = sprintf("%d",to_int(f));
+  s = sprintf("%d",to_int(s));
+  t = sprintf("%d",to_int(t));
+  extf = sprintf("%d",to_int(extf));
+  exts = sprintf("%d",to_int(exts));
+  extt = sprintf("%d",to_int(extt));
+  if (to_int(f) > to_int(extf))
+    extf = f;
+  if (to_int(s) > to_int(exts))
+    exts = s;
+  if (to_int(t) > to_int(extt))
+    extt = t;
+  snum = 0;
+  for (i=to_int(f);i<=to_int(extf);i++)
+  {
+    for (j=to_int(s);j<=to_int(exts);j++)
+    {
+      for (k=to_int(t);k<=to_int(extt);k++)
+      {
+        snum += num;
+        cp += ([sprintf("%d%d%d",i,j,k) : num]);
+      }
+
+    }
+
+  }
+
+  if ((int)who->query("balance") < snum*10000)
+  {
+    tell_object(who,"你银行存款不够买这么多！\n");
+    return 0;
+  }
+
+  msg = "你购买了如下号码：\n";
+  kc = keys(cp);
+  for (i=0;i<sizeof(kc);i++)
+    msg += sprintf("%-10s%-3d\n",kc[i],num);
+  msg += "预祝你中奖！\n";
+  msg += "\n每注1GOLD．\n";
+  cp1 = buyer[who->query("id")];
+  if (mapp(cp1) && sizeof(cp1) > 0)
+    cp = cp + cp1;
+  buyer += ([who->query("id") : cp]);
+  who->add("balance",-snum*10000);
+  total_reward += snum;
+  save();
+  tell_object(who,msg);
+  return 1;
+}
+
+void add_a_rewarder(mixed ob, string *right_number)
+{
+  string id;
+  int num, i;
+  mapping b;
+  string *kb;
+
+  if (!is_buyer(ob) || !arrayp(right_number) || sizeof(right_number) < 1)
+    return;
+
+  if (stringp(ob))
+    id = ob;
+  else if (objectp(ob))
+    id = ob->query("id");
+  else
+    return;
+  num = 0;
+  b = buyer[id];
+  kb = keys(b);
+  for (i=0;i<sizeof(kb);i++)
+    if (member_array(kb[i],right_number) != -1)
+      num += b[kb[i]];
+  if (num > 0)
+    reward_list += ([id : num]);
+}
+
+void add_a_gotten(mixed ob)
+{
+  string id;
+  if (!is_buyer(ob) || !is_reward_me(ob))
+    return;
+  if (stringp(ob))
+    id = ob;
+  else if (objectp(ob))
+    id = ob->query("id");
+  else
+    return;
+  gotten_list += ({id});
+  save();
+}
+
+void add_reward_history(string right_number)
+{
+  int i;
+  mapping mn, new_h;
+
+  if (!mapp(reward_history))
+    reward_history = ([]);
+  mn = (["number" : right_number,
+         "gold" : query_reward_gold(),
+         "list" : sizeof(reward_list) ? keys(reward_list) : 0,
+       ]);
+  reward_history += ([sprintf("%d",count+1) : mn]);
+  if (sizeof(reward_history) > 100)
+  {
+    new_h = ([]);
+    for (i=count-98;i<count+1;i++)
+      new_h += ([sprintf("%d",i) : reward_history[sprintf("%d",i)] ]);
+    reward_history = new_h;
+  }
+
+  save();
+}
+
+void clear_buyer()
+{
+  buyer = ([]);
+  save();
+}
+
+void clear_last_turn()
+{
+  reward_list = ([]);
+  gotten_list = ({});
+  save();
+}
+
+void give_reward()
+{
+  string lp,*kr;
+  int num, total;
+  object who;
+
+  kr = keys(reward_list) - ({});
+  if (!arrayp(kr) || sizeof(kr) < 0)
+    return;
+  foreach (lp in kr)
+  {
+    num = reward_list[lp];
+    if (num < 1)
+      continue;
+    who = find_player(lp);
+    if (!objectp(who))
+      who = UPDATE_D->global_find_player(lp);
+    total = query_reward_gold()*num;
+    who->add("balance",total*10000);
+    UPDATE_D->global_destruct_player(who, 1);
+    add_a_gotten(lp);
+    add_total_reward(-total);
+  }
+
+  save();
+}
+
+string *get_reward_right_number(string rn)
+{
+  string *right_number,tmp_num;
+  int rv,mod,v1,v2,v3;
+
+  rv = to_int(rn);
+  if (rv < 0 || rv > 999)
+    return 0;
+  v1 = rv/100;
+  mod = rv % 100;
+  v2 = mod/10;
+  v3 = mod %10;
+  right_number = ({});
+  tmp_num = sprintf("%d%d%d",v1,v2,v3);
+  right_number += ({tmp_num});
+  tmp_num = sprintf("%d%d%d",v1,v3,v2);
+  if (member_array(tmp_num,right_number) == -1)
+    right_number += ({tmp_num});
+  tmp_num = sprintf("%d%d%d",v2,v1,v3);
+  if (member_array(tmp_num,right_number) == -1)
+    right_number += ({tmp_num});
+  tmp_num = sprintf("%d%d%d",v2,v3,v1);
+  if (member_array(tmp_num,right_number) == -1)
+    right_number += ({tmp_num});
+  tmp_num = sprintf("%d%d%d",v3,v1,v2);
+  if (member_array(tmp_num,right_number) == -1)
+    right_number += ({tmp_num});
+  tmp_num = sprintf("%d%d%d",v3,v2,v1);
+  if (member_array(tmp_num,right_number) == -1)
+    right_number += ({tmp_num});
+  if (v1==v2 && v1 == v3)
+    special = 9;
+  else if (v1 == v2 || v1 == v3 || v2 == v3)
+    special = 1;
+  return right_number;
+}
+
+void start_lucky()
+{
+  string msg,lucky_number,other_number, *right_number;
+  string eplayer,*kb, *kr;
+  message("system",HIG"〖" HIW"彩票信息" HIG"〗" HIW"：" HIY"翱翔天际第" +
+          chinese_number(count+1) + "期彩票准备开奖！\n"NOR,users());
+  if (sizeof(buyer) < 1)
+  {
+    message("system",HIG"〖" HIW"彩票信息" HIG"〗" HIW"：" HIY"翱翔天际第" +
+          chinese_number(count+1) + "期彩票因为无人购买而取消！\n"NOR,users());
+    return;
+  }
+
+  kb = keys(buyer) - ({0});;
+  if (!arrayp(kb) || sizeof(kb) < 1)
+    return;
+  lucky_number = sprintf("%d%d%d",random(10),random(10),random(10));
+  right_number = get_reward_right_number(lucky_number);
+  if (!arrayp(right_number) || sizeof(right_number)<1)
+    return;
+  message("system",HIG"〖" HIW"彩票信息" HIG"〗" HIW"：" HIY"翱翔天际第" +
+          chinese_number(count+1) + "期彩票中奖号码： " + HIW + lucky_number +
+          HIY" ！\n"NOR,users());
+  other_number = "没有";
+  if (total_reward>1200)
+  {
+    other_number = sprintf("%d%d%d",random(10),random(10),random(10));
+    right_number += get_reward_right_number(lucky_number);
+    message("system",HIG"〖" HIW"彩票信息" HIG"〗" HIW"：" HIY"翱翔天际第" +
+          chinese_number(count+1) + "期彩票额外补充中奖号码： " + HIW +
+          other_number + HIY" ！\n"NOR,users());
+  }
+
+  count++;
+  foreach(eplayer in kb)
+    add_a_rewarder(eplayer,right_number);
+  if (sizeof(reward_list) > 0)
+  {
+    message("system",HIG"〖" HIW"彩票信息" HIG"〗" HIW"：" HIY"翱翔天际第" +
+          chinese_number(count) + "期彩票共有" + HIW + chinese_number(sizeof(reward_list)) +
+          HIY"位玩家中奖，恭喜！恭喜 ！\n"NOR,users());
+    log_file("caipiao",sprintf("第%s期彩票，号码：%s(%s)\n",
+                                chinese_number(count),
+                                lucky_number,
+                                other_number));
+    kr = keys(reward_list);
+    msg = "中奖情况：\n";
+    for(int i=0;i<sizeof(kr);i++)
+      msg += sprintf("%-8s -> %-4d\n",kr[i],reward_list[kr[i]]);
+    msg += "\n";
+    log_file("caipiao",msg);
+  }
+
+  else
+    message("system",HIG"〖" HIW"彩票信息" HIG"〗" HIW"：" HIY"翱翔天际第" +
+          chinese_number(count) + "期彩票无人中奖！\n"NOR,users());
+  add_reward_history(lucky_number);
+  give_reward();
+  clear_buyer();
+  change_state(SLEEPING);
+}
+

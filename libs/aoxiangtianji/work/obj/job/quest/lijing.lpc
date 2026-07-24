@@ -1,0 +1,221 @@
+#include <ansi.h>
+inherit F_CLEAN_UP;
+void create()
+{
+  seteuid(getuid());
+}
+
+public int ask_RW(object me, object ob)
+{
+  mapping quest_lj ;
+  string msg;
+  object quest_npc;
+  int lv;
+  int t = time();
+  if (!playerp(me))
+    return 0;
+  if (!ob->is_lijing())
+    return 1;
+
+  if (me->query("level") < 25)
+  {
+    tell_object(me,"你现在的能力还不足以领取我的任务！\n");
+    return 1;
+  }
+
+  if ((t - (int)me->query_temp("quest_xyj/last_lj_time")) < 80)
+  {
+    if ((int)me->query_temp("lijing/next_lv") < 11)
+    {
+      tell_object(me,"你刚刚领过任务！\n");
+      return 1;
+    }
+
+  }
+
+  if (playerp(ob) || !living(ob) || ob->is_fighting())
+  {
+    tell_object(me,"你现在不能从" + ob->name() + "领任务！\n");
+    return 1;
+  }
+
+  quest_lj = me->query("quest_xyj/lijing");
+  if (mapp(quest_lj) && sizeof(quest_lj) > 0)
+  {
+    tell_object(me,"你上次领取的任务还没有完成！\n");
+    return 1;
+  }
+
+  lv = (int)me->query("level");
+  if (lv <= 30)
+    quest_npc = NPC_D->create_quest_npc(me,ob,"lijing",1);
+  else if (lv <= 40)
+    quest_npc = NPC_D->create_quest_npc(me,ob,"lijing",2);
+  else
+    quest_npc = NPC_D->create_quest_npc(me,ob,"lijing",3);
+
+  if (objectp(quest_npc))
+  {
+    if (!SYSQ_D->quest_reg(me,ob,quest_npc, "lijing"))
+    {
+      me->delete("quest_xyj/lijing");
+      if (objectp(quest_npc))
+        destruct(quest_npc);
+      return 1;
+    }
+
+    me->set_temp("quest_xyj/last_lj_time",t);
+    ob->command("good "+me->query("id"));
+    switch (random(8))
+    {
+      case 0 :
+        msg = sprintf(HIW"现有 %s " HIW"在 %s " HIW"为非作歹，你去灭了他！\n"NOR,
+               me->query("quest_xyj/lijing/npc_name"),
+               me->query("quest_xyj/lijing/npc_place"));
+        break;
+      case 1:
+        msg = sprintf(HIY"%s" HIY"说道：“在%s" HIY"有个%s" HIY"肆意妄为，骚扰百姓！”\n"NOR,
+               ob->name(),
+               me->query("quest_xyj/lijing/npc_place"),
+               me->query("quest_xyj/lijing/npc_name"));
+        break;
+      case 2:
+        msg = sprintf(HIG"%s" HIG"掐指一算，说道：“近来有个 %s" HIG" 在 %s " HIG"横行霸道，你去处理了吧！”\n"NOR,
+               ob->name(),
+               me->query("quest_xyj/lijing/npc_name"),
+               me->query("quest_xyj/lijing/npc_place"));
+        break;
+      case 3 :
+        msg = sprintf(HIR"你去解决了%s" HIR"，据说最近在%s" HIR"可以查到他的踪迹！\n",
+               me->query("quest_xyj/lijing/npc_name"),
+               me->query("quest_xyj/lijing/npc_place"));
+        break;
+      case 4 :
+        msg = sprintf(HIB"你去降服了%s" HIB"，在%s" HIB"可以查找他的踪迹！\n"NOR,
+               me->query("quest_xyj/lijing/npc_name"),
+               me->query("quest_xyj/lijing/npc_place"));
+        break;
+      case 5 :
+        msg = sprintf(HIC"那个叫 %s" HIC" 的，在 %s " HIC"屡次为难仙家，办了他！\n"NOR,
+               me->query("quest_xyj/lijing/npc_name"),
+               me->query("quest_xyj/lijing/npc_place"));
+        break;
+      case 6 :
+        msg = sprintf(HIG"最近在%s" HIG"出了一个%s" HIG"，罪行罄竹难书，快去！\n"NOR,
+               me->query("quest_xyj/lijing/npc_place"),
+               me->query("quest_xyj/lijing/npc_name"));
+        break;
+      default :
+        msg = sprintf(HIM"在%s" HIM"有个%s" HIM"屡屡对天庭不敬，提头来见！\n"NOR,
+               me->query("quest_xyj/lijing/npc_place"),
+               me->query("quest_xyj/lijing/npc_name"));
+        break;
+    }
+
+    tell_object(me,msg);
+    tell_object(me,"这是你本轮的第 " + chinese_number(me->query_temp("lijing/next_lv") +1)
+                 + " 个任务了！\n");
+    message_vision("$N" HIC"对$n" HIC"悄声说了些什么！\n",ob,me);
+    return 1;
+  }
+
+  else
+  {
+    tell_object(me,"你没有成功的获得这次申请的任务！系统已经做好的了纪录，也可以就此向wiz反应！");
+    log_file("quest_xyj/lijing",sprintf("%s(%s)在%s没有成功的获得任务！\n",
+                                  me->name(1),
+                                  me->query("id"),
+                                  ctime(t)));
+  }
+
+  return 0;
+}
+
+public int ask_JC(object me, object ob)
+{
+  mapping quest_lj ;
+  object quest_npc;
+  string msg;
+
+  if (!playerp(me))
+    return 0;
+
+  if (playerp(ob) || !living(ob) || ob->is_fighting())
+  {
+    tell_object(me,"你现在无法和" + ob->name() + "交流！\n");
+    return 0;
+  }
+
+  quest_lj = me->query("quest_xyj/lijing");
+  if (!mapp(quest_lj) || sizeof(quest_lj) < 1)
+  {
+    tell_object(me,"你现在没有任务，取消什么？\n");
+    return 0;
+  }
+
+  if (quest_lj["npc_die"] >= 1 )
+  {
+    msg = "$N" HIW"说道，那家伙已经被干掉了。你不用再管了！\n"NOR;
+    message_vision(msg,ob);
+    me->delete("quest_xyj/lijing");
+    if (SYSQ_D->quest_exist(me,"lijing"))
+      SYSQ_D->delete_quest("lijing",me);
+    return 1;
+  }
+
+  message_vision("$N" HIY"对$n" HIY"说道，“我没有办法完成这次任务了！”\n"NOR,me,ob);
+  if (stringp(quest_lj["npc_id"]))
+    quest_npc = find_living(quest_lj["npc_id"]);
+  if (quest_npc && objectp(quest_npc) && !quest_npc->is_fighting() && living(quest_npc))
+  {
+    if (environment(quest_npc))
+      message_vision(HIC "$N" HIC "看了看四周，急急忙忙的走掉了。\n" NOR, quest_npc);
+    destruct(quest_npc);
+    if (SYSQ_D->quest_exist(me,"lijing"))
+      SYSQ_D->delete_quest("lijing",me);
+  }
+
+  switch (random(6))
+  {
+    case 0 :
+      msg = "$N" HIC"不高兴的对着$n" HIC"嘟哝了几句，叹了口气！\n"NOR;
+      break;
+    case 1 :
+      msg = "$N" HIY"无可奈何的朝$n" HIY"点点了头！\n"NOR;
+      break;
+    case 2 :
+      msg = "$N" HIW"的一张脸瞬间变了颜色，张口结舌的看着$n" HIW"，别提有多难看了！\n"NOR;
+      break;
+    case 3 :
+      msg = "$N" CYN"狠狠的在自己脑门上拍了几下，看来是对$n" CYN"很不高兴了！\n"NOR;
+      break;
+    case 4 :
+      msg = "$N" HIW"狠狠的踹了$n" HIW"几脚！\n"NOR;
+      break;
+    case 5 :
+      msg = "$N" HIR"大吃一惊，看着$n" HIR"好半天说不出话来！良久，一声轻叹！\n"NOR;
+      break;
+    default :
+      msg = "$N" HIM"微微叹息了一声，对$n" HIM"说道，“下次注意了！”\n"NOR;
+      break;
+  }
+
+  message_vision(msg,ob,me);
+  if ((int)me->query_temp("lijing/next_lv") < 4)
+  {
+    me->add("combat_exp",-500);
+    me->add("score",-3);
+    if ((int)me->query("score") < 0)
+      me->set("score",0);
+    me->add("weiwang",-3);
+    if ((int)me->query("weiwang") < 0)
+      me->set("weiwang",0);
+  }
+
+  me->delete_temp("lijing/next_lv");
+  me->delete("quest_xyj/lijing");
+  if (SYSQ_D->quest_exist(me,"lijing"))
+    SYSQ_D->delete_quest("lijing",me);
+  return 1;
+}
+

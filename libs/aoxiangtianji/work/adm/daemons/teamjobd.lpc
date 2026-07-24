@@ -1,0 +1,584 @@
+#include <ansi.h>
+#include <teamjob.h>
+#pragma optimize
+
+inherit F_DBASE;
+#define JOB_DIR "/obj/quest/teamjob/"
+/* teamjob的管理和监控模式：
+  job-object-id : leader object,
+                  member *object,
+                  start_time int,
+                  teamflag string
+*/
+string *joblist = ({
+        "teamwar",
+       });
+
+// 定义提供给外部调用的接口函数
+public string*  query_jobname();
+public int is_teamjob(mixed jobname);
+public object query_teamjob_leader(mixed jobname);
+public object* query_member(mixed jobname);
+public int is_teamjob_member(object ob, mixed jobname);
+public int query_member_number(mixed jobname);
+public int is_teamjob_start(mixed jobname);
+public string query_teamjob_flag(mixed jobname);
+public int query_teamjob_time(mixed jobname);
+public string teamjob_time_str(mixed jobname);
+public void set_teamjob_name(mixed jobname);
+public int add_teamjob_member(object ob, mixed jobname);
+public int set_leader(object ob,mixed jobname);
+public int remove_teamjob_leader(object ob, mixed jobname);
+public int remove_teamjob_member(object ob, mixed jobname);
+public varargs void set_team_flag(mixed jobname, string team_flag);
+public varargs int start_teamjob(mixed jobname, string team_flag);
+public void message_team(mixed jobname,string msg);
+public void rmove_teamjob(mixed jobname);
+public void clean_team_flag(mixed jobname);
+public varargs void end_teamjob(mixed jobname, string msg);
+void teamjob_check();
+void create()
+{
+  seteuid(getuid());
+  set("channel_id", "团队精灵");
+  set_heart_beat(3600);
+}
+
+public object teamobj(mixed jobname)
+{
+  object *obs;
+  if (objectp(jobname))
+    return jobname;
+  if (!stringp(jobname))
+    return 0;
+
+  obs = children(JOB_DIR + jobname);
+  obs = filter_array(obs, (: $1->name() == "团队战争" &&
+                             $1->query("live_time") > 1 :));
+
+  if (!arrayp(obs) || sizeof(obs) < 1)
+    return 0;
+
+  return obs[0];
+}
+
+private void heart_beat()
+{
+  string *total;
+  string key;
+  int live_time;
+  int t;
+  object qob;
+  mapping jobinfo = query("jobinfo");
+
+// 重新启动所有的任务进程：如果因为某种故障停止运行，
+// 此时可以将它们重新启动，如果他们原本没有出故障，
+// 那么此时重新启动会修改它们的心跳时间。
+  teamjob_check();
+  total = query_jobname();
+  if (! arrayp(total) || sizeof(total) < 1)
+    return;
+// 计算当前时间
+  t = time();
+// 扫描所有的任务，只保留有效的任务
+  foreach (key in total)
+  {
+    reset_eval_cost();
+    qob = teamobj(key);
+    if (! objectp(qob))
+    {
+      map_delete(jobinfo,key);
+      set("jobinfo",jobinfo);
+    }
+
+    else
+      switch (qob->query_status())
+      {
+        case TEAMJOB_CREATE:
+          if (t - qob->query("start_time") > TEAMJOB_CREATE_PERIOD*60)
+          { // 创建任务超过有效时间了，结束之
+            log_file("static/quest", sprintf("%s quest: %s create timeout\n",
+                                             log_time(),
+                                             base_name(key)));
+            catch(qob->change_status(TEAMJOB_FINISH));
+            map_delete(jobinfo, key);
+            set("jobinfo",jobinfo);
+          }
+
+          break;
+        case TEAMJOB_FINISH:
+          if (t - qob->query("finish_time") > TEAMJOB_FINISH_PERIOD*60) // 结束任务超过有效时间了
+             qob->change_status(TEAMJOB_ERROR);
+             break;
+        case TEAMJOB_ERROR :  // 任务在运行错误状态中
+          break;
+        default :  // 任务在通常运行状态中
+          if ((live_time = qob->query("live_time")) > 0 &&
+               live_time < t - qob->query("start_time"))
+          {  // 生存超过了时间
+            catch(qob->change_status(TEAMJOB_FINISH));
+            map_delete(jobinfo, key);
+            set("jobinfo",jobinfo);
+          }
+
+          break;
+      }
+
+  }
+
+}
+
+public string* query_jobname()
+{
+  mapping jobinfo = query("jobinfo");
+
+  if (!mapp(jobinfo) || sizeof(jobinfo) < 1)
+    return 0;
+
+  return keys(jobinfo);
+}
+
+public int is_teamjob(mixed jobname)
+{
+  string *kob;
+  object qob;
+
+  qob = teamobj(jobname);
+  if (!qob)
+    return 0;
+
+  if (!stringp(qob->id()))
+    return 0;
+
+  kob = query_jobname();
+  if (!arrayp(kob) || sizeof(kob) < 1)
+    return 0;
+
+  if (member_array(qob->id(),kob) == -1)
+    return 0;
+  return 1;
+}
+
+public object query_teamjob_leader(mixed jobname)
+{
+  mapping jobinfo = query("jobinfo");
+
+  if (!mapp(jobinfo) || sizeof(jobinfo) < 1)
+    return 0;
+  if (!is_teamjob(jobname))
+    return 0;
+
+  if (stringp(jobname))
+    return jobinfo[jobname]["leader"];
+  else if (objectp(jobname))
+    return jobinfo[jobname->id()]["leader"];
+  return 0;
+}
+
+public object* query_member(mixed jobname)
+{
+  mapping jobinfo = query("jobinfo");
+
+  if (!mapp(jobinfo) || sizeof(jobinfo) < 1)
+    return 0;
+  if (!is_teamjob(jobname))
+    return 0;
+  if (!stringp(jobname->id()))
+    return 0;
+  if (stringp(jobname))
+    return jobinfo[jobname]["member"];
+  else if (objectp(jobname))
+    return jobinfo[jobname->id()]["member"];
+  return 0;
+}
+
+public int is_teamjob_member(object ob, mixed jobname)
+{
+  object* mem;
+
+  if (!objectp(ob) || !is_teamjob(jobname))
+    return 0;
+
+  mem = query_member(jobname);
+  if (!arrayp(mem) || sizeof(mem) < 1)
+    return 0;
+  if (member_array(ob,mem) == -1)
+    return 0;
+  return 1;
+}
+
+public int query_member_number(mixed jobname)
+{
+  object *mem;
+  if (!is_teamjob(jobname))
+    return 0;
+
+  mem = query_member(jobname);
+  if (!arrayp(mem) || sizeof(mem) < 1)
+    return 0;
+  return sizeof(mem);
+}
+
+public int is_teamjob_start(mixed jobname)
+{
+  mapping jobinfo = query("jobinfo");
+
+  if (!mapp(jobinfo) || sizeof(jobinfo) < 1)
+    return 0;
+  if (!is_teamjob(jobname))
+    return 0;
+  if (stringp(jobname) && jobinfo[jobname]["start_time"] < 1)
+    return 0;
+  else if (objectp(jobname) && jobinfo[jobname->id()]["start_time"] < 1)
+    return 0;
+  return 1;
+}
+
+public string query_teamjob_flag(mixed jobname)
+{
+  mapping jobinfo = query("jobinfo");
+
+  if (!mapp(jobinfo) || sizeof(jobinfo) < 1)
+    return 0;
+  if (!is_teamjob(jobname))
+    return 0;
+
+  if (stringp(jobname))
+    return jobinfo[jobname]["teamflag"];
+  else if (objectp(jobname))
+    return jobinfo[jobname->id()]["teamflag"];
+  else
+    return 0;
+}
+
+public int query_teamjob_time(mixed jobname)
+{
+  mapping jobinfo = query("jobinfo");
+
+  if (!mapp(jobinfo) || sizeof(jobinfo) < 1)
+    return 0;
+  if (!is_teamjob(jobname) || !is_teamjob_start(jobname))
+    return 0;
+
+  if (stringp(jobname))
+    return time() - jobinfo[jobname]["start_time"];
+  else if (objectp(jobname))
+    return time() - jobinfo[jobname->id()]["start_time"];
+  else
+    return 0;
+}
+
+public string teamjob_time_str(mixed jobname)
+{
+  int t = query_teamjob_time(jobname);
+  if (!t)
+    return 0;
+  return XYJTIME_D->query_time(t);
+}
+
+public void set_teamjob_name(mixed jobname)
+{
+  mapping job = allocate_mapping(4);
+  object qob;
+  mapping jobinfo = query("jobinfo");
+
+  qob = teamobj(jobname);
+
+  if (!qob)
+    return;
+  job[qob->id()] = (["leader"     : 0,
+                     "member"     : ({}),
+                     "start_time" : 0,
+                     "teamflag"   : "teamjob/" + qob->id(),]);
+  if (!mapp(jobinfo) || sizeof(jobinfo) < 1)
+    jobinfo = job;
+  else
+    jobinfo += job;
+  set("jobinfo",jobinfo);
+}
+
+/*
+0 : 不是一个teamjob
+-1 : 已经加入了这个team
+1 : 指定成功
+*/
+public int add_teamjob_member(object ob, mixed jobname)
+{
+  object * mem;
+  object qob;
+  mapping jobinfo = query("jobinfo");
+
+  if (!playerp(ob) || !mapp(jobinfo) || sizeof(jobinfo) < 1)
+    return 0;
+  qob = teamobj(jobname);
+  if (!qob)
+    return 0;
+
+  if (!stringp(qob->id()))
+    return 0;
+
+  if (is_teamjob_member(ob, jobname))
+    return -1;
+
+  mem = query_member(jobname);
+
+  if (!arrayp(mem))
+    mem = ({});
+  mem += ({ob});
+  jobinfo[qob->id()]["member"] = mem;
+  set("jobinfo",jobinfo);
+  return 1;
+}
+
+/*
+0 : 不是一个teamjob
+-1 : 这个team已经有了leader
+1 : 指定成功
+*/
+public int set_leader(object ob,mixed jobname)
+{
+  object qob;
+  mapping jobinfo = query("jobinfo");
+
+  if (!mapp(jobinfo) || sizeof(jobinfo) < 1)
+    return 0;
+
+  qob = teamobj(jobname);
+
+  if (!ob || !qob || !is_teamjob(jobname))
+    return 0;                                 //不是一个teamjob
+  if (objectp(query_teamjob_leader(qob)))
+    return -1;                                //已经有了team的leader
+  jobinfo[qob->id()]["leader"] = ob;
+  if (!is_teamjob_member(ob,jobname))
+    add_teamjob_member(ob,jobname);
+  set("jobinfo",jobinfo);
+  return 1;
+}
+
+/*
+0 : 没有指定的teamjob
+-1 : 不是job leader
+1 : 成功
+*/
+public int remove_teamjob_leader(object ob, mixed jobname)
+{
+  object qob;
+  mapping jobinfo = query("jobinfo");
+
+  if (!mapp(jobinfo) || sizeof(jobinfo) < 1)
+    return 0;
+
+  qob = teamobj(jobname);
+
+  if (!ob || !qob || !is_teamjob(jobname))
+    return 0;
+  if (ob != query_teamjob_leader(qob))
+    return -1;
+  jobinfo[qob->id()]["leader"] = 0;
+  set("jobinfo",jobinfo);
+  return 1;
+}
+
+/*
+0 : 没有指定的teamjob
+-1 : 不是teamjob成员
+1 : 成功
+*/
+public int remove_teamjob_member(object ob, mixed jobname)
+{
+  object *mem;
+  object qob;
+  mapping jobinfo = query("jobinfo");
+
+  if (!mapp(jobinfo) || sizeof(jobinfo) < 1)
+    return 0;
+
+  qob = teamobj(jobname);
+
+  if (!ob || !qob || !is_teamjob(jobname))
+    return 0;
+
+  if (!is_teamjob_member(ob, jobname))
+    return -1;
+
+  if (ob == query_teamjob_leader(jobname)) //if leader, pls at first to remove leader
+    remove_teamjob_leader(ob,jobname);
+  mem = query_member(jobname);
+  mem -= ({ob});
+  jobinfo[qob->id()]["member"] = mem;
+  set("jobinfo",jobinfo);
+  return 1;
+}
+
+public varargs void set_team_flag(mixed jobname, string team_flag)
+{
+  object member, *mem;
+  object qob;
+  string temp_flag;
+  mapping jobinfo = query("jobinfo");
+
+  if (!mapp(jobinfo) || sizeof(jobinfo) < 1)
+    return 0;
+
+  qob = teamobj(jobname);
+
+  if (!qob || !is_teamjob(jobname))
+    return;
+
+  mem = query_member(qob);
+  if (!arrayp(mem) || sizeof(mem) < 2)
+    return;
+
+  if (stringp(team_flag))
+    temp_flag = team_flag;
+  else
+    temp_flag = "teamjob/" + qob->id();
+  foreach (member in mem)
+  {
+    jobinfo[qob->id()]["teamflag"] = temp_flag;
+    member->set_temp(temp_flag,1);
+    set("jobinfo",jobinfo);
+  }
+
+}
+
+/*
+0 : 不是一个teamjob
+-1 : 该teamjob还没有指定一个leader
+-2 : 该teamjob没有成员或者仅有leader一个成员
+1 : 启动该teamjob成功，系统开始计时
+*/
+public varargs int start_teamjob(mixed jobname, string team_flag)
+{
+  object leader, *mem;
+  object qob;
+  mapping jobinfo = query("jobinfo");
+
+  if (!mapp(jobinfo) || sizeof(jobinfo) < 1)
+    return 0;
+
+  qob = teamobj(jobname);
+
+  if (!objectp(qob) || !is_teamjob(qob))
+    return 0;
+  leader = query_teamjob_leader(jobname);
+  if (!objectp(leader))
+    return -1;                              //没有leader
+  mem = query_member(jobname);
+  if (!arrayp(mem) || sizeof(mem) < 2)
+    return -2;
+  jobinfo[qob->id()]["start_time"] = time()-1;
+  set_team_flag(jobname, team_flag);
+  message_team(jobname,"本次任务正式开始了！\n");
+  set("jobinfo",jobinfo);
+  return 1;
+}
+
+public void message_team(mixed jobname,string msg)
+{
+  object *mem;
+  if (!is_teamjob(jobname))
+    return;
+  mem = query_member(jobname);
+  if (!arrayp(mem) || sizeof(mem) < 1)
+    return;
+  message("team", HIY"【团队信息】："NOR + msg + HIY"\n"NOR, mem);
+}
+
+public void remove_teamjob(mixed jobname)
+{
+  object qob;
+  mapping jobinfo = query("jobinfo");
+
+  if (!mapp(jobinfo) || sizeof(jobinfo) < 1)
+    return 0;
+
+  qob = teamobj(jobname);
+
+  if (!qob || !is_teamjob(jobname))
+    return 0;
+  map_delete(jobinfo,qob->id());
+  set("jobinfo",jobinfo);
+}
+
+public void clean_team_flag(mixed jobname)
+{
+  string teamflag;
+  object member, *mem;
+  object qob;
+  mapping jobinfo = query("jobinfo");
+
+  if (!mapp(jobinfo) || sizeof(jobinfo) < 1)
+    return 0;
+
+  qob = teamobj(jobname);
+
+  if (!qob || !is_teamjob(jobname))
+    return 0;
+  mem = query_member(jobname);
+  if (!arrayp(mem) || sizeof(mem) < 1)
+    return;
+  teamflag = jobinfo[qob->id()]["teamflag"];
+  foreach (member in mem)
+  {
+    if (!objectp(member))
+      continue;
+    if (member == query_teamjob_leader(jobname))
+      remove_teamjob_leader(member, jobname);
+    remove_teamjob_member(member, jobname);
+    if (objectp(member) && stringp(teamflag))
+      member->delete_temp(teamflag);
+    else if (objectp(member))
+      member->delete_temp("teamjob/"+qob->id());
+  }
+
+}
+
+public varargs void end_teamjob(mixed jobname, string msg)
+{
+  object qob;
+
+  qob = teamobj(jobname);
+
+  if (!qob || !is_teamjob(jobname))
+    return 0;
+  if (msg && stringp(msg))
+    message_team(qob,msg);
+  else
+    message_team(qob,"本次任务结束了！\n");
+  clean_team_flag(jobname);
+  remove_teamjob(jobname);
+}
+
+private void teamjob_check()
+{
+  string jobname;
+  object *obs,qob;
+
+  CHANNEL_D->do_channel(this_object(), "sys", "团体任务开始启动了。\n");
+
+  foreach (jobname in joblist)
+  {
+    obs = children(JOB_DIR + jobname);
+    if (arrayp(obs) && sizeof(obs) > 0)
+    foreach (qob in obs)
+    {
+      if (qob->name() == "未名任务" && qob->query("live_time") < 1)
+        destruct(qob);
+      else
+        qob->end_teamjob();
+    }
+
+    if (sizeof(children(JOB_DIR + jobname)) > 0)
+      return;
+    qob = new(JOB_DIR + jobname);
+    set_teamjob_name(qob);
+    qob->init_quest();
+    CHANNEL_D->do_channel(this_object(),
+                          "sys", "进程(teamwar)"
+                           HIR "创建了一个任务。");
+  }
+
+}
+

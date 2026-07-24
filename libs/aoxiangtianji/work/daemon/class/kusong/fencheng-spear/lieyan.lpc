@@ -1,0 +1,267 @@
+#include <ansi.h>
+#include <combat.h>
+#define HUO "「" HIR "烈焰焚城" NOR "」"
+inherit F_SSERVER;
+int valid_pfm(object me, object target)
+{
+  if(userp(me) && (string)me->query("family/family_name") != "火云洞")
+    return notify_fail(HUO"是火云洞不传之密！\n");
+  if (me->is_busy())
+    return notify_fail("你正忙着呢！\n");
+
+  if (me->query_skill("fencheng-spear", 1) < 250)
+    return notify_fail("你的焚城枪修为不够，难以施展" HUO "。\n");
+  if (me->query_skill("huomoforce", 1) < 250)
+    return notify_fail("你的火魔心法修为不够，难以施展" HUO "。\n");
+  if (me->query_skill_mapped("spear") != "fencheng-spear")
+    return notify_fail("你没有激发焚城枪，难以施展" HUO "。\n");
+  if (me->query_skill_mapped("force")!="huomoforce")
+    return notify_fail(HUO"必须配合火魔心法才能使用。\n");
+  if (me->query("force") < 1000)
+    return notify_fail("你的真气不够，难以施展" HUO "。\n");
+  if ((int)me->query("max_force") < 3200)
+    return notify_fail("你的内力修为不够，难以施展" HUO "。\n");
+  return 1;
+}
+
+int perform2(object me, object target);
+int perform3(object me, object target);
+int perform(object me, object target)
+{
+  object weapon;
+  string msg, wn;
+  int ap;
+  int damage;
+
+  if (! objectp(weapon = me->query_temp("weapon")) ||
+      (string)weapon->query("skill_type") != "spear")
+    return notify_fail("你使用的武器不对，难以施展" HUO "。\n");
+  wn = weapon->name();
+
+  msg = HIR"$N" HIR"飞身跃起，"HIW"$n"HIR"只觉得眼前一热，$p猛然觉得天空的云彩"
+        "都变成了红色，空气在燃烧！\n\n"NOR;
+
+  msg += HIR"$N" HIR"人在半空，来势看似缓慢实则迅疾无伦，手中"NOR + wn +
+         HIR"更是因凝注了$P毕生的功力而绽发出淡红色的光辉，\n笼罩在$P的四周，"
+         "笼罩在$n的周围。\n"NOR;
+
+  if (COMBAT_D->perform_success(me, target,
+                                ({"spear","force"}),
+                                ({"dodge","force"}),
+                                130))
+  {
+    damage = me->query_skill("spear");
+    damage += me->query_skill("force")/2;
+    damage = ap/2 + random(ap);
+    me->add("force", -80);
+    msg += COMBAT_D->do_damage(me, target, WEAPON_ATTACK, damage, 30,
+                    HIC"$n只觉得这热浪层层袭来，猛烈的撞击在胸口！"
+                       "“哇”的一声，$p喷出一大口鲜血！\n\n"NOR);
+  }
+
+  else
+  {
+    me->add("force", -50);
+    msg += HIC"$n忙运功向抗，深厚的内力将$N的这火魔攻势化解了。\n\n"NOR;
+  }
+
+  message_combatd(msg, me, target);
+
+  if (!target->is_busy())
+    target->start_busy(1);
+  call_out("perform2",1,me,target);
+  return 1;
+}
+
+int perform2(object me, object target)
+{
+  object weapon;
+  string msg, wn;
+  int ap, dp;
+  int damage;
+
+  if (!objectp(me) || !objectp(target))
+    return 0;
+
+  if (!living(me))
+    return 0;
+
+  if (! objectp(weapon = me->query_temp("weapon")) ||
+      (string)weapon->query("skill_type") != "spear")
+  {
+    tell_object(me,sprintf("你换了兵器，%s的攻势瓦解了！\n",HUO));
+    message_vision(sprintf("$N缓缓收拢了%s的攻势！\n",HUO),me);
+    return 0;
+  }
+
+  if ((int)me->query("force") < 200)
+  {
+    tell_object(me,sprintf("你的内力不足，%s的攻势瓦解了！\n",HUO));
+    message_vision(sprintf("$N缓缓收拢了%s的攻势！\n",HUO),me);
+    return 0;
+  }
+
+  if (me->query_skill_mapped("spear") != "fencheng-spear")
+  {
+    tell_object(me,sprintf("你改用了别的枪法，%s的攻势瓦解了！\n",HUO));
+    message_vision(sprintf("$N缓缓收拢了%s的攻势！\n",HUO),me);
+    return 0;
+  }
+
+  if (me->query_skill_mapped("force")!="huomoforce")
+  {
+    tell_object(me,sprintf("你改用了别的内功，%s的攻势瓦解了！\n",HUO));
+    message_vision(sprintf("$N缓缓收拢了%s的攻势！\n",HUO),me);
+    return 0;
+  }
+
+  if (!living(target) || (environment(me) != environment(target)))
+  {
+    message_vision("$N眼见$n已经倒地不起，缓缓收回了枪势！\n",me,target);
+    me->start_busy(3);
+    return 0;
+  }
+
+  wn = weapon->name();
+  msg = HIY"$N" HIY"冷叱一声，深吸一口气，喷在"NOR + wn + "枪锋。\n"NOR;
+  msg += HIY"枪芒骤然一亮，伴随着枪锋震动发出的“嘶嘶”之声，如烟花在荒野的寒夜绽放，"
+            "赤红的光辉淹没了$n。\n\n"NOR;
+  msg += HIY"$N" HIY"的身体在空中微微一侧，"NOR + wn + HIY"枪身扭曲着弯出一个奇异"
+         "的弧度，又“倏”的弹直，带起的气流形成一个\n清晰可见的旋涡。$n已经陷入到了这漩"
+         "涡之中！\n"NOR;
+  message_combatd(msg, me, target);
+  damage = (int)me->query_skill("spear");
+  damage = random(damage/10);
+  if (damage > 50)
+    damage = 50;
+  ap = COMBACC_D->math_ap(me,"spear");
+  dp = COMBACC_D->math_dp(me,target,-damage,0,0);
+
+  if (COMBAT_D->perform_success(me, target,ap,dp,120))
+  {
+    damage = (int)me->query_skill("spear");
+    damage += random((int)me->query_skill("force") + 1);
+    damage = damage*2/3 + random(damage);
+    me->add("force", -80);
+    msg = COMBAT_D->do_damage(me, target, WEAPON_ATTACK, damage, 40,
+                HIC"$n如同狂风中飘落的残叶，飘动间完全无法把握自己！"
+                "\n那强烈的罡风劲气，如同刮骨的钢刀，转瞬间,$n已经"
+                "遍体鳞伤了！\n\n"NOR);
+  }
+
+  else
+  {
+    me->add("force", -50);
+    msg = HIC"可是$n虽然被带动得飘舞而起，如风中的落叶，却也依势变化，并未受到什么伤害。\n\n"NOR;
+  }
+
+  message_combatd(msg, me, target);
+  if (!target->is_busy())
+    target->start_busy(1);
+  call_out("perform3",1,me,target);
+  return 1;
+}
+
+int perform3(object me, object target)
+{
+  object weapon;
+  string msg, wn;
+  int ap, dp;
+  int damage;
+
+  if (!objectp(me) || !objectp(target))
+    return 0;
+
+  if (!living(me))
+    return 0;
+
+  if (! objectp(weapon = me->query_temp("weapon")) ||
+      (string)weapon->query("skill_type") != "spear")
+  {
+    tell_object(me,sprintf("你换了兵器，%s的攻势瓦解了！\n",HUO));
+    message_vision(sprintf("$N缓缓收拢了%s的攻势！\n",HUO),me);
+    return 0;
+  }
+
+  if ((int)me->query("force") < 200)
+  {
+    tell_object(me,sprintf("你的内力不足，%s的攻势瓦解了！\n",HUO));
+    message_vision(sprintf("$N缓缓收拢了%s的攻势！\n",HUO),me);
+    return 0;
+  }
+
+  if (me->query_skill_mapped("spear") != "fencheng-spear")
+  {
+    tell_object(me,sprintf("你改用了别的枪法，%s的攻势瓦解了！\n",HUO));
+    message_vision(sprintf("$N缓缓收拢了%s的攻势！\n",HUO),me);
+    return 0;
+  }
+
+  if (me->query_skill_mapped("force")!="huomoforce")
+  {
+    tell_object(me,sprintf("你改用了别的内功，%s的攻势瓦解了！\n",HUO));
+    message_vision(sprintf("$N缓缓收拢了%s的攻势！\n",HUO),me);
+    return 0;
+  }
+
+  if (!living(target) || (environment(me) != environment(target)))
+  {
+    message_vision("$N眼见$n已经倒地不起，缓缓收回了枪势！\n",me,target);
+    me->start_busy(3);
+    return 0;
+  }
+
+  wn = weapon->name();
+
+  msg = HIW"\t一阵热风过处，$N攻势真的到了。\n"NOR;
+  msg += HIW"\t短兵相接。\n"NOR;
+  msg += HIW"\t枪花盛开，年华如火。\n"NOR;
+  msg += HIW"\t一朵，两朵----\n"NOR;
+  msg += HIR"枪花如伞，光耀长天，遮蔽了剑影刀光的折射，宛如烈火织成血色的帷箩；\n"
+            "枪芒如星，繁熠碧空，每一次闪烁都成为与天地同辉的永恒；\n"
+            "枪影如云，风流云散，销蚀了至坚至硬的重重阻隔。\n\n"NOR;
+  msg += HIR"$n骤然在枪花中迷失！\n\n"NOR;
+
+  message_combatd(msg, me, target);
+
+  damage = (int)me->query_skill("spear");
+  damage = damage/10 + random(damage/10);
+  if (damage > 50)
+    damage = 50 ;
+  ap = COMBACC_D->math_ap(me,"spear");
+  dp = COMBACC_D->math_pp(me,target,-damage,0);
+  if (COMBAT_D->perform_success(me, target,ap,dp))
+  {
+    damage = (int)me->query_skill("spear");
+    damage = random((int)me->query_skill("force") + 1);
+    damage = damage*2/3 + random(damage*3/2 + 1);
+    me->add("force", -200);
+    msg = COMBAT_D->do_damage(me, target, WEAPON_ATTACK, damage, 70,
+                HIC"$N" HIC"的"NOR + wn + HIC"没有丝毫阻碍，径直贯入$n前"
+                "心，透体而过！\n"NOR);
+  }
+
+  else
+  {
+    me->add("force", -100);
+    msg = HIC"$n大惊失色，这天地间最凌厉的一枪，实在是无人可以正面抵挡的。\n"
+           "但好在不能抵挡时，$p还可以躲，重要的是$p依然清醒和镇定！\n"
+           "$n以最快的速度后仰倒地，一口气滚出了$N"NOR + wn +
+           HIC"的烈焰攻击范围！\n"NOR;
+  }
+
+  message_combatd(msg, me, target);
+  if (living(target) &&
+      me->is_fighting(target) &&
+      me->query_skill("fencheng-spear",1) > 300)
+  {
+    message_vision(HIR"$N" HIR"火魔心法催动攻势如同火浪，一波一波拍击而来！\n"NOR,me);
+    if (!target->is_busy())
+      target->start_busy(1+random(3));
+    COMBAT_D->do_attack(me,target,weapon,3);
+    COMBAT_D->do_attack(me,target,weapon,3);
+  }
+
+  me->start_busy(2+random(3));
+  return 1;
+}

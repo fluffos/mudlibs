@@ -1,0 +1,164 @@
+// unchblk.c
+#include <ansi.h>
+inherit F_CLEAN_UP;
+inherit F_DBASE;
+void create()
+{
+  seteuid(getuid());
+  set("channel_id", HIG"公用频道管理精灵(UNCHBLK)");
+}
+
+int main(object me, string arg)
+{
+  object ob;
+  string who, ch_name;
+  string *channel_list;
+  int i,j,t ;
+  if( me!=this_player(1) )
+    return 0;
+
+  if (! SECURITY_D->valid_grant(me, "(wizard)"))
+    return 0;
+
+  if (!arg)
+    return notify_fail("指令格式: unchblk <用户ID> <频道名称>\n");
+
+  channel_list = CHANNEL_D->query_all_channel();
+
+  if (sscanf(arg, "%s %s", who, ch_name) != 2)
+  {
+    if (arg == "forever")
+    {
+      if (! SECURITY_D->valid_grant(me, "(admin)"))
+        return 0;
+      CHANNEL_D->set_block(ch_name, 0);
+      CHANNEL_D->do_channel(this_object(), "sys", "整个系统的公用频道被"
+                + log_id(me)+"重新开启！！！");
+      log_file("wizcmds/channeld",
+               sprintf("%s开启了整个系统的公用频道 时间在：[%s]\n",
+               log_id(me), log_time() ));
+      return 1;
+    }
+
+    if (member_array(arg, channel_list) == -1)
+      return notify_fail("指令格式: unchblk <用户ID> <频道名称>\n");
+
+    CHANNEL_D->set_block(arg, 0);
+    CHANNEL_D->do_channel(this_object(), "sys",
+               sprintf("整个系统的%s频道被%s重新开启！\n",arg,log_id(me)));
+    log_file("wizcmds/channeld",
+               sprintf("%s开启了整个系统的%s频道 时间在：[%s]\n",
+               log_id(me), arg, log_time() ));
+    return 1;
+  }
+
+  ob = LOGIN_D->find_body(who);
+  if (!objectp(ob))
+    return notify_fail("这个人不在！\n");
+
+  if (ch_name == "" || ch_name == " ")
+  {
+    if ( ob->query("chblk/forever") )
+    {
+      tell_object(me, sprintf(HIG"%s的公用频道已经被设定为永久性关闭(forever)状态。。。\n"NOR,
+                      ob->name()));
+      return 1;
+    }
+
+    else
+    {
+      t = (int)ob->query("chblk/all");
+      if (t && (t - time() > 0))
+      {
+      	t = t - time();
+        tell_object(me,sprintf(WHT"%s所有频道被关闭：%d分钟\n"NOR,ob->name(),t));
+      }
+
+      else
+      {
+      	for (i = 0, j = 0; i < sizeof(channel_list); i++)
+      	{
+      	  t = (int)ob->query("chblk/"+channel_list[i]);
+      	  if (t && (t - time() > 0))
+      	  {
+      	    j++ ;
+      	    t = t-time();
+      	    tell_object(me,sprintf(WHT"%s的%s频道被关闭：%d分钟！\n"NOR,
+      	                ob->name(),channel_list[i],t));
+      	  }
+
+      	}
+
+      }
+
+      if (!j)
+        tell_object(me,sprintf("%s没有频道被关闭！\n",ob->name()));
+      return 1;
+    }
+
+  }
+
+  if(ch_name == "forever")
+  {
+    if ((int)ob->query("chblk/forever"))
+      ob->delete("chblk/forever");
+    tell_object(me, sprintf(HIG"%s的公用频道永久性关闭状态被清除了！\n"NOR,ob->name()));
+    log_file("wizcmds/chblk_player",
+             sprintf("%s将%s的公用频道永久性关闭(forever)状态清除 时间在：[%s]\n",
+             log_id(me), log_id(ob), log_time() ));
+    return 1;
+  }
+
+  else if( ch_name == "all" )
+  {
+    if ((int)ob->query("chblk/forever"))
+    {
+      tell_object(me,sprintf("%s尚有永久性关闭标志(forever)，不能开启其频道！\n",ob->name()));
+      return 1;
+    }
+
+    else
+    {
+      for (i = 0; i < sizeof(channel_list); i++)
+      	if ((int)ob->query("chblk/"+channel_list[i]))
+          ob->delete("chblk/"+channel_list[i]);
+      tell_object(me, sprintf("%s的所有频道都被打开了！\n",ob->name()));
+    }
+
+  }
+
+  else
+  {
+    if (member_array(ch_name, channel_list) == -1)
+      return notify_fail("指令格式: unchblk <用户ID> <频道名称>\n");
+
+    if ((int)ob->query("chblk/"+ch_name))
+    {
+      if ((int)ob->query("chblk/all"))
+        ob->delete("chblk/all");
+      ob->delete("chblk/"+ch_name);
+      tell_object(me, sprintf("%s的%s频道被打开了。\n",ob->name(),ch_name));
+    }
+
+  }
+
+  return 1;
+}
+
+int help(object me)
+{
+write(@HELP
+指令格式 : unchblk <用户ID> <频道名称>
+	   unchblk <频道名称>
+此命令将打开某人的频道。如果没有频道名就打开所有合法频道。
+<频道名称>：(10个常规类别)
+rumor、chat、party、sale、wkz、music、sldh、new、bh或all。
+如果不提供频道名，则显示某人当前的频道状态。
+注意：打开某个频道也将同时去除all属性，forever状态除外。
+解除私聊频道限制请用block
+相关指令：chblk，block
+HELP
+    );
+    return 1;
+}
+

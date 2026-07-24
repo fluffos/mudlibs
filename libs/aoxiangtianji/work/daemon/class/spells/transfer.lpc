@@ -1,0 +1,86 @@
+// transfer.c
+#include <ansi.h>
+inherit SSERVER;
+int is_not_attack()
+{
+  return 1;
+}
+
+int valid_cast(object me, object target)
+{
+  int t = time();
+
+  if (me->is_busy() || me->is_fighting())
+    return notify_fail("你正忙着呢！\n");
+
+  if ( me->is_ghost() )
+    return notify_fail("你已经是鬼了，还要干什么？\n");
+  if( (int)me->query("max_mana") <1000 )
+    return notify_fail("你的法力修为不够！\n");
+  if( (int)me->query("mana") < 200 )
+    return notify_fail("你的法力不够！\n");
+
+  if ((t- me->query_temp("last_transfer")) < 2)
+    return notify_fail("你刚刚使用过了，需要等会才能继续使用！\n");
+
+  if (me->query_condition("killer"))
+    return notify_fail("你身上杀气正浓，无法使用法术！\n");
+
+  return 1;
+}
+
+int cast(object me, object target)
+{
+  int neiligain, manacost, diff;
+  int eff, spellslev, mymaxmana, mymaxforce;
+  int myforce, mymana, temp;
+
+  if(!objectp(target))
+    target=me;
+  if( target != me )
+    return notify_fail("你只能以法力恢复自己的真气。\n");
+
+  spellslev=me->query_skill("spells");
+  if (spellslev > 300) spellslev=300;
+  if( spellslev < 50 )
+    return notify_fail("你的法术修为太低。\n");
+
+  mymana=me->query("mana");
+
+  mymaxforce=me->query("max_force");
+  myforce=me->query("force");
+  diff = mymaxforce - myforce;
+  if( diff < 100 )
+    return notify_fail("你现在真气充盈。\n");
+
+  manacost = diff;
+  if( manacost > (mymana-100))
+    manacost = mymana;
+
+  me->add("mana", -manacost);
+  mymaxmana=me->query("max_mana");
+  neiligain = manacost*mymaxmana/(1+mymaxforce);
+  if (neiligain>manacost) neiligain=manacost;
+  eff=spellslev;
+  eff=eff/3;
+  temp=100-eff;
+  temp=temp*temp/100;
+  eff=(100-temp)*80/100;
+  neiligain=neiligain*eff/100;
+  me->add("force", neiligain);
+  if(wizardp(me))
+    tell_object(me,GRN "用 "+manacost+" 法力，得到 "+neiligain+" 内力，有效率为 "+eff+"。\n"NOR);
+  if(me->query("force")>mymaxforce)
+  {
+    me->set("force", mymaxforce);
+  }
+
+  message_vision("$N嘴里嘀咕了几句，觉得真气充盈多了。\n", me);
+
+  if(me->is_fighting())
+    me->start_busy(1);
+  else
+    me->start_busy(1 + random(1 + 30/me->query_kar()));
+
+  return 1;
+}

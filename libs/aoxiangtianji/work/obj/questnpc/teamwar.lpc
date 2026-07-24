@@ -1,0 +1,133 @@
+#include <ansi.h>
+inherit "/obj/questnpc/tasknpc";
+int is_war_npc() {return 1;}
+
+void create()
+{
+  ::create();
+  set_name("进攻敌人","teamwar enemy");
+  setup();
+  if (clonep())
+    keep_heart_beat();
+}
+
+void init()
+{
+  ::init();
+
+  if (playerp(this_player()))
+    kill_ob(this_player());
+}
+
+void full_me()
+{
+  object me=this_object();
+  if (!objectp(me))
+    return;
+  me->set("kee",me->query("max_kee"));
+  me->set("eff_kee",me->query("max_kee"));
+  me->set("sen",me->query("max_sen"));
+  me->set("eff_sen",me->query("max_sen"));
+  me->set("force",me->query("max_force"))*2;
+  me->set("mana",me->query("max_mana"))*2;
+  me->clear_condition(0);
+  return;
+}
+
+void die(object killer)
+{
+  object dob, weapon;
+  int count;
+  if (!objectp(dob = killer))
+    dob = query_last_damage_from();
+  if (objectp(dob) && dob->query_temp("owner"))
+    dob = dob->query_temp("owner");
+  if (!objectp(dob) ||
+      !dob->query_temp("teamwar") ||
+      !environment(dob)->is_warfield())
+  {
+    message_vision("$N一看不是对手，身子一晃，转眼就逃了！\n",this_object());
+    destruct(this_object());
+    return;
+  }
+
+  count = dob->query_temp("teamwar/capture_num");
+  count++;
+  tell_object(dob,"你杀死了第 " + chinese_number(count) + " 个前来进攻的敌人！\n");
+  dob->set_temp("teamwar/capture_num",count);
+
+  if (weapon = dob->query_temp("weapon") ||
+      weapon = dob->query_temp("armor/hands"))
+    weapon->killer_reward(dob, this_object());
+  destruct(this_object());
+  return;
+}
+
+void scan()
+{
+  object ob = this_object();
+  object env = environment();
+  if (!ob)
+    return;
+
+  ::scan();
+  if ((time() - (int)query("born_time")) > query("stay_time") &&
+      ! is_fighting() && living(ob))
+  {
+    message_vision("$N哈哈大笑，继续进攻！\n", ob);
+    destruct(this_object());
+    return;
+  }
+
+  if (objectp(env) &&
+      base_name(env) == (string)query("master_place") &&
+      !is_fighting())
+  {
+    object member, *p_team, *inv;
+    inv = all_inventory(ob);
+    inv = filter_array(inv, (: playerp($1) &&
+                               living($1) :));
+    if (sizeof(inv) > 0)
+    {
+      if(objectp(query("master_player")) &&
+         member_array(query("master_player"), inv) == -1 )
+      {
+        foreach (member in inv)
+        {
+          ob->kill_ob(member);
+          member->kill_ob(ob);
+        }
+
+      }
+
+      else if (objectp(query("master_player")))
+        ob->kill_ob(query("master_player"));
+    }
+
+    else
+    {
+      p_team = query("pteam");
+      if (arrayp(p_team) && sizeof(p_team) > 0)
+      {
+        foreach (member in p_team)
+        {
+          if (!member->query_temp("teamwar/can_retreat") &&
+              !member->query_temp("teamwar/failure"))
+          {
+            tell_object(member,"敌人已经攻占了营地，本次任务失败了！请速撤离(retreat)战场！\n");
+            member->set_temp("teamwar/can_retreat",1);
+            member->set_temp("teamwar/failure",1);
+          }
+
+        }
+
+      }
+
+      message_vision("$N哈哈大笑，继续进攻！\n", ob);
+      destruct(this_object());
+    }
+
+  }
+
+}
+

@@ -1,0 +1,109 @@
+#include <ansi.h>
+inherit SSERVER;
+int is_not_attack()
+{
+  return 1;
+}
+
+int valid_cast(object me, object target)
+{
+  int t = time();
+
+  if (me->is_busy())
+    return notify_fail("你正忙着呢！\n");
+
+  if ( me->is_ghost() )
+    return notify_fail("你已经是鬼了，还要干什么？\n");
+  if( (int)me->query("max_mana") < 1000 )
+    return notify_fail("你的法力不够！\n");
+  if( (int)me->query("mana") < 200 )
+    return notify_fail("你的法力不够了！\n");
+  if( (int)me->query("sen") < (int)me->query("max_sen")/5 )
+    return notify_fail("你精神太差，难以集中精力念咒。\n");
+
+  if( (int)me->query("daoxing") < 30000 )
+    return notify_fail("你的道行不够，难以脱壳而走。\n");
+
+  if ((t- me->query_temp("last_tuoqiao")) < 30)
+    return notify_fail("你刚刚出过壳了，需要等会才能继续使用！\n");
+
+  if (me->query_condition("killer"))
+    return notify_fail("你身上杀气正浓，无法使用法术！\n");
+
+  return 1;
+}
+
+int cast(object me, object target)
+{
+  string msg,start, fam, *kf;
+  int result;
+  mapping alter_loc = ([
+    "南海普陀山" : "/d/nanhai/gate",
+    "东海龙宫"   : "/d/eastsea/gate",
+    "将军府"     : "/d/jjf/gate",
+    "阎罗地府"   : "/d/hell/gateway",
+    "火云洞"     : "/d/qujing/kusong/guaishiya",
+    "月宫"       : "/d/moon/ontop2",
+    "方寸山三星洞" : "/d/lingtai/gate",
+    "陷空山无底洞" : "/d/qujing/wudidong/dong1",
+    "大雪山"      : "/d/xueshan/binggu",
+    "五庄观"      : "/d/qujing/wuzhuang/gate",
+  ]);
+  int success = 0;
+
+  fam = me->query("family/family_name");
+  if (!stringp(fam))
+    return notify_fail("你现在没有能力使用这个法术！\n");
+
+  kf = keys(alter_loc);
+
+  if (member_array(fam,kf) == -1)
+    return notify_fail("你没有正式的门派，不能使用这个法术！\n");
+
+  start = alter_loc[fam];
+
+  if(!me->is_fighting() )
+  {
+    message_vision(YEL"$N口中吐出几团丝线，将身形包在茧中。\n"NOR,me);
+    message_vision(YEL"只见一只金蝉破茧而飞，只留下几缕蚕丝。\n"NOR,me);
+    me->add("sen", -me->query("max_sen")/8);
+    me->add("mana", -80);
+    success = 1;
+  }
+
+  else
+  {
+    if (!objectp(target))
+      target = offensive_target(me);
+    msg=YEL"$N口中吐出几团丝线，将身形包在茧中。\n"NOR;
+    result = SPELL_D->attacking_cast_success(me,target,105);
+    if(result > 0)
+    {
+      msg+=YEL"只见一只金蝉破茧而飞，只留下几缕蚕丝。\n"NOR;
+      me->add("sen", -me->query("max_sen")/6);
+      me->add("mana", -50);
+      success=1;
+    }
+
+    else
+      msg+=YEL"但$n不为所动，斩破茧壳，又与$N战在了一处。\n"NOR;
+    me->add("mana", -50);
+    message_vision(msg, me, target);
+  }
+
+  if(success)
+  {
+    if (find_object(start) ||
+        load_object(start))
+      me->move(start);
+    else
+      me->move("/d/city/scenter");
+    me->set_temp("last_tuoqiao",time());
+    message("vision", YEL+me->name()+"的身影一闪，不只何时一到了你的面前。\n"NOR,
+            environment(me), me);
+    tell_object(me, YEL"你的身形一聚，再回首，已是万里开外。\n"NOR);
+  }
+
+  me->start_busy(1);
+  return 5+random(5);
+}

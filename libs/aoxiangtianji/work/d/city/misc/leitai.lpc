@@ -1,0 +1,303 @@
+#include <ansi.h>
+inherit F_SAVE;
+inherit ROOM;
+#include "banned.h"
+void finish(int);
+void fullup(object);
+void pre_status(object);
+void create ()
+{
+  restore();
+  set ("short", "擂台");
+  set ("long", "\n\t       八  仙  过  海         各  显  神  通\n\n");
+  set("broadcast",1);
+  set("alternative_die",1);
+  set("no_fight",1);
+  set("busy",0);
+  set("can_skill",1);
+  setup();
+}
+
+void init()
+{
+  object me, p1, p2;
+  object *inv;
+
+  me = this_player();
+
+  inv = all_inventory(this_object());
+  inv = filter_array(inv,
+                (: userp($1) &&
+                   ! wizardp($1)
+                :));
+
+  if (sizeof(inv) > 2)
+  {
+    message_vision("这里的人已经够多了！$N马上离开！\n",me);
+    me->move(__DIR__"kantai");
+    return;
+  }
+/*
+  cnd = me->query_condition();
+  if (mapp(cnd) && sizeof(cnd) > 0)
+  {
+    message_vision("$N必须要清楚身上的毒，才可以开始比赛！\n", me);
+    me->move(__DIR__"kantai");
+    return;
+  }
+
+*/
+  p1 = query("player1");
+  p2 = query("player2");
+  if (p1 && p2)
+  {
+    if ((p1 != me) && (p2 != me) )
+    {
+      message_vision("$N是怎么到了这里？\n", me);
+      me->move(__DIR__"kantai");
+      return;
+    }
+
+  }
+
+  if (!me->query_temp("pre_status"))
+  {
+    pre_status(me);
+    me->set_temp("pre_status",1);
+  }
+
+  add_action("do_quit",banned_action);
+  add_action("do_cast","cast");
+}
+
+int do_quit(string arg)
+{
+  write("你不能在这里用这条命令。\n");
+  if (wizardp(this_player()))
+    write("巫师请参阅同一路径内的banned.h文档。\n");
+  return 1;
+}
+
+int do_cast(string arg)
+{
+  string spell, id_str;
+
+  if(!arg)
+    return 0;
+  if(member_array(arg,banned_cast) == -1)
+  {
+    if (sscanf(arg,"%s %s",spell,id_str)==2)
+    {
+      if(member_array(spell,banned_cast)==-1)
+        return 0;
+    }
+
+    else if (sscanf(arg,"%s on %s",spell,id_str)==2)
+    {
+      if(member_array(spell,banned_cast)==-1)
+        return 0;
+    }
+
+    return 0;
+  }
+
+  write(sprintf("擂台上请勿使用%s,多谢合作。\n",arg));
+  return 1;
+}
+
+void alternative_die(object who)
+{
+  object p1 = query("player1");
+  object p2 = query("player2");
+  int winner=0;
+  if (!userp(who))
+  {
+    message_vision("$N死了。\n",who);
+    destruct(who);
+    return;
+  }
+
+  who->receive_damage("kee",0);
+  who->receive_wound("kee",0);
+  who->receive_damage("sen",0);
+  who->receive_wound("sen",0);
+
+  if (!p1 || !p2)
+  {
+    fullup(who);
+    who->move(__DIR__"kantai");
+    return;
+  }
+
+  if (p1 == who)
+    winner=2;
+  else
+    winner=1;
+  finish(winner);
+}
+
+void finish(int r)
+{
+  object winner,loser;
+  remove_call_out("finish");
+
+  set("no_fight",1);
+  if (r==1)
+  {
+    winner=query("player1");
+    loser=query("player2");
+  }
+
+  else
+  {
+     winner=query("player2");
+     loser=query("player1");
+  }
+
+  fullup(loser);
+  fullup(winner);
+  winner->remove_killer(loser);
+  loser->remove_killer(winner);
+  winner->remove_enemy(loser);
+  loser->remove_enemy(winner);
+  if (!r)
+  {
+    message_vision(HIG"$N和$n大战三百回合，不分胜败，各自离场，改日再战！\n"NOR,winner,loser);
+    loser->move(__DIR__"kantai");
+  }
+
+  else
+  {
+    message_vision(HIG"$N把$n打翻在地，飞起一脚，将$n踢下了擂台。\n"NOR,winner,loser);
+    loser->move(__DIR__"kantai");
+    message_vision(HIG"$N在观众的欢呼声中，高高兴兴地下场休息了。\n"NOR,winner);
+  }
+
+  winner->move(__DIR__"kantai");
+
+  loser->delete("in_leitai");
+  winner->delete("in_leitai");
+  delete("player1");
+  delete("player2");
+  delete("busy");
+}
+
+void fullup(object obj)
+{
+  if (!obj)
+    return;
+  obj->set("kee",(int)obj->query_temp("leitai/kee"));
+  obj->set("eff_kee",(int)obj->query_temp("leitai/eff_kee"));
+  obj->set("sen",(int)obj->query_temp("leitai/sen"));
+  obj->set("eff_sen",(int)obj->query_temp("leitai/eff_sen"));
+  obj->set("force", (int)obj->query_temp("leitai/force"));
+  obj->set("mana",(int)obj->query_temp("leitai/mana"));
+  obj->clear_condition();
+  obj->revive(1);
+  obj->delete_temp("leitai");
+  obj->delete_temp("pre_status");
+}
+
+void pre_status(object obj)
+{
+  if (!obj)
+    return;
+  obj->set_temp("leitai/kee",(int)obj->query("kee"));
+  obj->set_temp("leitai/eff_kee",(int)obj->query("eff_kee"));
+  obj->set_temp("leitai/sen",(int)obj->query("sen"));
+  obj->set_temp("leitai/eff_sen",(int)obj->query("eff_sen"));
+  obj->set_temp("leitai/force", (int)obj->query("force"));
+  obj->set_temp("leitai/mana",(int)obj->query("mana"));
+}
+
+int do_assign(string arg)
+{
+  object player;
+  if (!arg)
+    return notify_fail("select a player.\n");
+  if (!player=present(arg,this_object()))
+    return notify_fail("player not found.\n");
+  if (!query("player1"))
+  {
+    write("Player 1: "+player->name()+" ("+player->query("id")+ ")\n");
+    set("player1",player);
+    return 1;
+  }
+
+  if (!query("player2"))
+  {
+    write("Player 2: "+player->name()+" ( "+player->query("id")+ ")\n");
+    set("player2",player);
+    return 1;
+  }
+
+  return notify_fail("2 players already selected.\n");
+}
+
+void start()
+{
+  mapping cnd;
+  object p1=query("player1");
+  object p2=query("player2");
+  if ((!p1) || (!p2))
+    return;
+
+  cnd = p1->query_condition();
+  if (mapp(cnd) && sizeof(cnd) > 0)
+  {
+    message_vision("$N身上有毒，无法比赛了！\n", p1);
+    p1->move(__DIR__"kantai");
+    p2->move(__DIR__"kantai");
+    return;
+  }
+  cnd = p2->query_condition();
+  if (mapp(cnd) && sizeof(cnd) > 0)
+  {
+    message_vision("$N身上有毒，无法比赛了！\n", p2);
+    p1->move(__DIR__"kantai");
+    p2->move(__DIR__"kantai");
+    return;
+  }
+  message_vision(HIW"$N和$n比武开始！限时五分钟！\n"NOR,p1,p2);
+
+  delete("no_fight");
+  delete("no_magic");
+  delete("no_kill");
+  p1->set("in_leitai",1);
+  p2->set("in_leitai",1);
+  p1->kill_ob(p2);
+  p2->kill_ob(p1);
+  call_out("finish",300,0);
+}
+
+void broadcast_room (object room, string str)
+{
+  string prefix = HIR"【擂台上】"NOR;
+  string s1 = str, s2 = "";
+  reset_eval_cost();
+  s1=replace_string(s1,"\n"NOR,"\n");
+  while (strsrch(s1,"\n\n") != -1)
+    s1 = replace_string(s1,"\n\n","\n");
+  while (sizeof(s1)>1 && s1[sizeof(s1)-1]=='\n')
+  {
+    s1 = s1[0..(sizeof(s1)-2)];
+    s2 = "\n";
+  }
+
+  if (sizeof(s1) <= 1)
+    return;
+  s1 = replace_string(s1,"\n","\n"+prefix);
+  if (room)
+  {
+   tell_room (room, prefix+s1+ NOR+"\n");
+  }
+
+}
+
+void broadcast(string msg)
+{
+  object room=load_object(__DIR__"kantai");
+  if (room)
+    broadcast_room(room,msg);
+}
+

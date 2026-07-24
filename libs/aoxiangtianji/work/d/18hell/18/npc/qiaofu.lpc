@@ -1,0 +1,365 @@
+#include <ansi.h>
+inherit NPC;
+string ask_futou();
+string ask_kanchai();
+string ask_chi();
+void create()
+{
+  set_name(HIW"樵夫"NOR,({"qiaofu","gui","ghost"}));
+  set("gender", "男性" );
+  set("age",100 + random(100));
+  set("long","这是个粗胳膊的砍柴鬼，拿把斧头，正坐在石头上休息呢。\n");
+  set("combat_exp",3000000 + random(2000000));
+  set("daoxing",3000000 + random(2000000));
+  set("con",30 + random(20));
+  set("spi",30 + random(20));
+  set("dex",30 + random(20));
+  set("str",30 + random(20));
+  set("int",30 + random(20));
+  set("cor",30 + random(20));
+  set("cps",30 + random(20));
+  set("kar",30 + random(20));
+  set("per",30 + random(20));
+  set("attitude", "peaful");
+  set("max_kee",5000);
+  set("max_sen",5000);
+  set("max_force",3500);
+  set("force",7000);
+  set("max_mana",3500);
+  set("mana",7000);
+  set_skill("force",280+random(100));
+  set_skill("spells",280+random(100));
+  set_skill("dodge",280 + random(100));
+  set_skill("unarmed",280+random(100));
+  set_skill("parry",280+random(100));
+  set_skill("stick",280+random(100));
+
+  set_skill("tonsillit",280+random(100));
+  set_skill("gouhunshu",280+random(100));
+  set_skill("ghost-steps",280 + random(100));
+  set_skill("jinghun-zhang",280+random(100));
+  set_skill("kusang-stick",280+random(100));
+
+  map_skill("force","tonsillit");
+  map_skill("spells","gouhunshu");
+  map_skill("dodge","ghost-steps");
+  map_skill("unarmed","jinghun-zhang");
+  map_skill("stick","kusang-stick");
+  map_skill("parry","kusang-stick");
+
+  set("chat_chance", 40);
+  set("chat_msg", ({
+     CYN "樵夫道：砍了一辈子柴，做了鬼，还是觉得砍柴有意思。看到一群不知“耻”的家伙就恶心！\n" NOR,
+     HIW "樵夫叹道：这斧头坏了，也没有个地方修理修理！\n" NOR,
+     HIW "樵夫愁眉苦脸的说道：怎么办啊？我今天可要砍柴20担的啊！\n" NOR,
+  }) );
+  set("chat_chance_combat",20);
+  set("chat_msg_combat", ({
+     (: cast_spell, "gouhun" :),
+  }) );
+  set("inquiry", ([
+    "斧头" : (: ask_futou :),
+    "砍柴" : (: ask_kanchai :),
+    "耻" : (: ask_chi :),
+  ]));
+  setup();
+  carry_object("/obj/cloth/cloth")->wear();
+}
+
+void init()
+{
+  if (playerp(this_player()))
+  {
+    add_action("do_answer",({"answer","huida"}));
+    add_action("do_repair",({"repair","xiuli"}));
+  }
+
+}
+
+int do_answer(string arg)
+{
+  object futou;
+  object me = this_object();
+  object who = this_player();
+  if (!who->query_temp("18hell/ask_chi"))
+    return 0;
+  if (!arg)
+    return notify_fail("你回答什么？\n");
+  if (arg != "愿意")
+  {
+    message_vision("$N说道：我也很忙，可没有时间帮你！\n",who);
+    command("heng " + who->query("id"));
+    message_vision("$N一扭头，看到不看$n一眼了！\n",me,who);
+    who->delete_temp("18hell/futou-ask");
+    who->delete_temp("18hell/kanchai-ask");
+    return 1;
+  }
+
+  message_vision("$N急忙说道：我愿意！\n",who);
+  if (who->query_temp("18hell/futou-ask"))
+  {
+    futou = new("/d/18hell/obj/futou");
+    futou->set("owner",who->query("id"));
+    futou->move(who,1);
+    message_vision("$N拿出了一把斧头，递给了$n，口中还直说：你看！你看！\n",me,who);
+    who->delete_temp("18hell/futou-ask");
+  }
+
+  else if (who->query_temp("18hell/kanchai-ask"))
+  {
+    message_vision("$N呵呵笑道，一看就知道$n是个好人！那快点去砍柴(kanchai)吧！\n",me,who);
+    message_vision("$N说道：你就用你修好的斧头去砍柴吧！！\n");
+  }
+
+  return 1;
+}
+
+int do_repair(string arg)
+{
+  object futou;
+  int num, t = time();
+  object me = this_object();
+  object who = this_player();
+  if (!who->query_temp("18hell/ask_chi"))
+    return 0;
+  if (!arg)
+    return notify_fail("你要修理什么？\n");
+
+  futou = present(arg,who);
+  if (!objectp(futou) ||
+      futou->query("owner") != who->query("id") ||
+      !futou->query("need_repair") ||
+      who->query_temp("18hell/axe_repair"))
+    return notify_fail("这东西有必要让你来修理吗？\n");
+
+  if (who->is_busy())
+    return notify_fail("你正忙着呢！\n");
+
+  if (who->query("sen") < 200 ||
+      who->query("kee") < 200)
+    return notify_fail("你满头大汗的，先休息一下吧！\n");
+
+  if (t == who->query_temp("last_repair_axe"))
+    return notify_fail("修理斧头是个细活，这么急忙怎么能修得好！\n");
+  who->set_temp("last_repair_axe",t);
+
+  message_vision("$N埋头开始修理斧头！\n");
+  if (!who->query_temp("18hell/repair_fen"))
+  {
+    num = (int)who->query_temp("18hell/repair_num");
+    if (!num)
+      message_vision("$N低头看了看这把坏的斧头，决定先把斧头拆开再说！\n",who);
+    if (random(num+1) > 5)
+    {
+      message_vision("$N费了好大的劲才把这斧柄和斧头分开！\n",who);
+      who->set_temp("18hell/repair_fen",1);
+      num = 0;
+    }
+
+    else
+    {
+      message_vision("$N使劲的拉扯斧头，斧柄，可惜这斧头和斧柄就是无法分开！\n",who);
+      num++;
+    }
+
+    who->set_temp("18hell/repair_num",num);
+    who->receive_damage("kee",30 + random(30));
+    who->receive_damage("sen",20 + random(20));
+    who->start_busy(2 + random(2));
+    return 1;
+  }
+
+  if (!who->query_temp("18hell/repair_mo"))
+  {
+    num = (int)who->query_temp("18hell/repair_num");
+    if (!num)
+      message_vision("$N找了块石头，随手浇了点水，开始磨斧头！\n",who);
+    if (random(num+1) > 5)
+    {
+      message_vision("$N看了看斧刃，满意的点点头！\n",who);
+      who->set_temp("18hell/repair_mo",1);
+      num = 0;
+    }
+
+    else
+    {
+      message_vision("$N“喀喀”的磨斧头，不时的浇点水！\n",who);
+      num++;
+    }
+
+    who->set_temp("18hell/repair_num",num);
+    who->receive_damage("kee",30 + random(30));
+    who->receive_damage("sen",20 + random(20));
+    who->start_busy(2 + random(2));
+    return 1;
+  }
+
+  if (!who->query_temp("18hell/repair_he"))
+  {
+    num = (int)who->query_temp("18hell/repair_num");
+    if (!num)
+      message_vision("$N开始把斧头和斧柄嵌合在一起！\n",who);
+    if (random(num+1) > 5)
+    {
+      message_vision("$N用力把斧头安装在了斧柄上一切都很顺利！\n",who);
+      who->set_temp("18hell/repair_he",1);
+      num = 0;
+    }
+
+    else
+    {
+      message_vision("$N用力把斧头往斧柄上安装，可惜显然不是很顺利！\n",who);
+      num++;
+    }
+
+    who->set_temp("18hell/repair_num",num);
+    who->receive_damage("kee",30 + random(30));
+    who->receive_damage("sen",20 + random(20));
+    who->start_busy(2 + random(2));
+    return 1;
+  }
+
+  message_vision("$N满意的看了看修好的斧头，用手挥了挥，看来是完全修好了！\n",who);
+  destruct(futou);
+  futou = new("/d/18hell/obj/kanchai-axe");
+  futou->set("owner",who->query("id"));
+  futou->move(who,1);
+  who->delete_temp("18hell/repair_fen");
+  who->delete_temp("18hell/repair_mo");
+  who->delete_temp("18hell/repair_he");
+  who->delete_temp("18hell/repair_num");
+  who->set_temp("18hell/axe_repair",1);
+  message_vision("$N看了看修好的斧头，向$n点点头！\n",me,who);
+  return 1;
+}
+
+string ask_futou()
+{
+
+  object me = this_object();
+  object who = this_player();
+
+  if (!who->query_temp("18hell/ask_chi"))
+    return "去！去！！正烦着呢！\n";
+  if (who->query_temp("18hell/axe_repair"))
+    return "多谢！\n";
+
+  message_vision("$N叹了口气，说道：砍柴的斧头坏了，这附近根本没有地方可以去修理啊！\n",me);
+  message_vision("$N上下打量了$n几眼，说道：你愿意帮我修理一下吗？\n");
+  who->set_temp("18hell/futou-ask",1);
+  return "如果你愿意，请answer 愿意\n";
+}
+
+string ask_kanchai()
+{
+  object me = this_object();
+  object who = this_player();
+
+  if (!who->query_temp("18hell/ask_chi"))
+    return "去！去！！正烦着呢！\n";
+  if (!who->query_temp("18hell/axe_repair"))
+    return "我的斧头都坏了，怎么砍柴？\n";
+
+  message_vision("$N说道：我一个孤居山间，每天定下的目标是：10担松柴，10担枣柴，10担桃柴！\n",me);
+  message_vision("$N继续说道：可惜今天，坏斧头浪费了我大半天的时间。。。！\n",me);
+  message_vision("$N向$n叹了口气！\n",me,who);
+  command("wuwu");
+  message_vision("$N看了看$n，笑道：不如你帮我分担一半的任务吧？\n",me,who);
+  who->set_temp("18hell/kanchai-ask",1);
+  return "如果你愿意，请answer 愿意\n";
+}
+
+string ask_chi()
+{
+  int i;
+  string msg;
+  object me = this_object();
+  object who = this_player();
+
+  if (!who->query_temp("18hell/ask_chi"))
+    return "去！你问这个干什么？\n";
+  if (who->query_temp("18hell/chai_song") < 5 ||
+      who->query_temp("18hell/chai_zao") < 5 ||
+      who->query_temp("18hell/chai_tao") < 5)
+    return "我还在想着砍柴的事情呢，还管你的“羞耻”？\n";
+
+  msg = HIY"$N" HIY"笑道，$n" HIY"是不是有点糊涂了，这么简单的道理不明白？\n"NOR;
+  i = 1 + random(3);
+  switch (i)
+  {
+    case 1 :
+      msg += HIY"$N" HIY"正色对$n" HIY"说道：这“耻”是："
+             HIR"心不能比煤炭黑" HIY"！\n"NOR;
+      break;
+    case 2 :
+      msg += HIY"$N" HIY"对着$n" HIY"大声说道：这“耻”就是："
+             HIR"没有狼心狗肺" HIY"！\n"NOR;
+      break;
+    default :
+      msg += HIY"$N" HIY"向$n" HIY"说道：这“耻”就是："
+             HIR"做了坏事会良心不安" HIY"！\n"NOR;
+      break;
+  }
+
+  message_vision(msg,me,who);
+  who->set_temp("18hell/mapigui-chi",i);
+  who->delete_temp("18hell/chai_song");
+  who->delete_temp("18hell/chai_zao");
+  who->delete_temp("18hell/chai_tao");
+  return "哈哈，这“羞耻”就是如此啊！\n";
+}
+
+int accept_object(object who, object ob)
+{
+  int num;
+  string chai;
+  object me = this_object();
+  if (ob->query("id") != "18hell chai")
+  {
+    message_vision("$N摇摇头，说道：不要！\n",me);
+    return 0;
+  }
+
+  if (ob->query("owner") != who->query("id"))
+  {
+    command("哈哈，不是自己砍的吧！\n");
+    return 0;
+  }
+
+  message_vision("$N满意的点点了头，说道：多谢谢！\n",me);
+  chai = ob->query("name");
+  if (chai == "松柴")
+  {
+    num = (int)who->query_temp("18hell/chai_song");
+    num++;
+    if (num >= 5)
+      message_vision("$N高兴的说，松柴总算够了！\n",me);
+    else
+      message_vision("$N说道：还要" + chinese_number(5-num) + "担松柴！\n",me);
+    who->set_temp("18hell/chai_song",num);
+  }
+
+  else if (chai == "枣柴")
+  {
+    num = (int)who->query_temp("18hell/chai_zao");
+    num++;
+    if (num >= 5)
+      message_vision("$N擦擦汗，说，枣柴总算够了！\n",me);
+    else
+      message_vision("$N说道：还要" + chinese_number(5-num) + "担枣柴！\n",me);
+    who->set_temp("18hell/chai_zao",num);
+  }
+
+  else if (chai == "桃柴")
+  {
+    num = (int)who->query_temp("18hell/chai_tao");
+    num++;
+    if (num >= 5)
+      message_vision("$N跳了起来，说，桃柴够了，哈哈！\n",me);
+    else
+      message_vision("$N说道：还要" + chinese_number(5-num) + "担桃柴！\n",me);
+    who->set_temp("18hell/chai_tao",num);
+  }
+
+  return 1;
+}

@@ -1,0 +1,744 @@
+#include <ansi.h>
+#include <combat.h>
+int valid_power(int combat_exp)
+{
+  if (combat_exp < 2000000)
+    return combat_exp;
+  return 2000000 + random((combat_exp - 2000000)/2 + 1);
+}
+
+// This function calculates the combined skill/combat_exp power of a certain
+// skill. This value is used for A/(A+B) probability use.
+// room_size :
+//     big
+//     middle
+//     small
+varargs int skill_power(object ob, string skill, int usage, int delta)
+{
+  int level, power, m_level;
+  mapping dbase;
+  mapping temp;
+  mapping fight;
+  mapping apply;
+  object where, weapon;
+  int ratio;
+  string room_size;
+  if (!objectp(ob)) return 0;
+
+  where = environment(ob);
+
+  if (!objectp(where)) return 0;
+
+  if (! living(ob)) return 0;
+
+  room_size = where->query_room_size();
+  if (!room_size)
+    room_size = where->query("room_size");
+
+  if (!room_size)
+  {
+    if (where->query("outdoors"))
+      room_size = "big";
+    else
+      room_size = "small";
+  }
+
+  ratio = 100;
+  weapon = ob->query_temp("weapon");
+  if (objectp(weapon))
+  {
+    if (room_size == "big")
+    {
+      if (weapon->query_attack_distance() > 80 )
+        ratio += 10 ;
+      else if (weapon->query_attack_distance() > 50 )
+        ratio += 2 ;
+      else
+        ratio -= 5 ;
+    }
+
+    else if (room_size == "small")
+    {
+      if (weapon->query_attack_distance() > 80 )
+        ratio -= 20 ;
+      else if (weapon->query_attack_distance() > 50 )
+        ratio -= 5 ;
+      else
+        ratio += 10 ;
+    }
+
+  }
+
+  if (ratio < 10)
+    ratio = 10 ;
+
+  level = ob->query_skill(skill);
+  m_level = ob->query_skill("martial-cognize",1);
+  dbase = ob->query_entire_dbase();
+  temp = ob->query_entire_temp_dbase();
+  if (temp)
+  {
+    apply = temp["apply"];
+    fight = temp["fight"];
+  }
+
+  switch (usage)
+  {
+    case SKILL_USAGE_ATTACK:
+      if (apply)
+        level += apply["attack"];
+      break;
+    case SKILL_USAGE_DEFENSE:
+      if (apply)
+        level += apply["dodge"];
+      break;
+  }
+
+  level += delta;
+  level += m_level/5;
+  if (level < 1)
+  {
+    power = valid_power((int)ob->query("combat_exp")) / 30;
+    if (usage == SKILL_USAGE_ATTACK)
+      power = power/60*(dbase["str"] + dbase["cor"]);
+    else
+      power = power/60*(dbase["dex"] + dbase["cps"]);
+    if (power < 100)
+      power = 100;
+    return  power/100*ratio;
+  }
+
+  if (level > 500)
+    power = (level / 100) * level * level;
+  else
+    power = level * level * level / 100;
+
+  power += valid_power(dbase["combat_exp"])/30;
+  if (power < 100)
+    power = 100 ;
+
+  if (usage == SKILL_USAGE_ATTACK)
+  {
+    power = power/60*(dbase["str"] + dbase["cor"] + (temp ? temp["str"] : 0));
+    if (fight && ob->is_fighting())
+      power += power/100*fight["attack"];
+    if ((string)ob->query("occupation") == "勇士")
+      power += power/5;
+  }
+
+  else
+  {
+     power = power/60*(dbase["dex"] + dbase["cps"] + (temp ? temp["dex"] : 0));
+     if (fight && ob->is_fighting())
+       power += power / 100 * fight["defense"];
+  }
+
+  if (power < 100)
+    power = 100 ;
+
+  return power/100*ratio;
+}
+
+int effect_by_douzi(object me,int num)
+{
+  int eff_dz,dz,ratio ;
+
+  dz = (int)me->query("douzhi");
+  eff_dz = (int)me->query("eff_douzhi");
+  if (eff_dz < 1)
+    eff_dz = 1;
+  ratio = (dz*100)/eff_dz;
+  if (ratio > 90)
+    num += num/20;
+  else if (ratio > 70)
+    ;
+  else if (ratio > 50)
+    num -= num/10;
+  else if (ratio > 30)
+    num -= num/5;
+  else if (ratio > 10)
+    num -= num/3;
+  else
+    num = num/3;
+  return num;
+}
+
+nomask int math_ap(object me,string attack_skill)
+{
+  int ap;
+  int force_skill;
+
+  if (me->is_busy() || me->query_temp("no_move"))
+    return 1;
+  force_skill = 0;
+  if ((string)me->query("occupation") == "炼气士")
+  {
+    force_skill = me->query_skill("force");
+    force_skill /= 20;
+    if (force_skill < 1)
+      force_skill = 1;
+  }
+
+  ap = skill_power(me, attack_skill, SKILL_USAGE_ATTACK, random(force_skill+1));
+
+  if (ap < 1) ap = 1;
+  if ((string)me->query("character") == "阴险奸诈")
+    ap += ap * 20 / 100;
+
+  ap = effect_by_douzi(me,ap);
+  return ap;
+}
+
+// terrain :
+//     land
+//     muddy
+//     snow
+//     wood
+//     sand
+//     water
+//     hill
+nomask int terrain_eff(string dodge_skill, string terrain,int dodge_level)
+{
+  int dodge_terrain, ratio;
+
+  if (stringp(terrain) && terrain != "land")
+    ratio = 80;
+  else
+    ratio = 100 ;
+
+  if (stringp(terrain) && stringp(dodge_skill))
+  {
+    dodge_terrain = SKILL_D(dodge_skill)->query_terrain(terrain);
+    if (dodge_level > 500)
+    {
+      if (dodge_terrain > 0)
+        ratio += dodge_terrain*10;
+      else
+        ratio += dodge_terrain*2;
+    }
+
+    else if (dodge_level > 300)
+    {
+      if (dodge_terrain > 0)
+        ratio += dodge_terrain*5;
+      else
+        ratio += dodge_terrain*5;
+    }
+
+    else if (dodge_level > 100)
+    {
+      if (dodge_terrain > 0)
+        ratio += dodge_terrain*3;
+      else
+        ratio += dodge_terrain*8;
+    }
+
+    else
+    {
+      if (dodge_terrain > 0)
+        ratio += dodge_terrain;
+      else
+        ratio += dodge_terrain*10;
+    }
+
+  }
+
+  return ratio;
+}
+
+nomask int weather_eff(object me, string dodge_skill)
+{
+  string weather;
+  int ratio = 100;
+
+  weather = NATURE_D->query_weather();
+  if (environment(me)->query("outdoors"))
+  {
+    if (weather == "rain")
+      ratio = terrain_eff(dodge_skill,"muddy",(int)me->query_skill(dodge_skill,1));
+    else if (weather == "snow")
+      ratio = terrain_eff(dodge_skill,"snow",(int)me->query_skill(dodge_skill,1));
+  }
+
+  return ratio;
+}
+
+nomask int math_dp(object me,object victim,
+                   int a_adj,int d_adj,
+                   string dodge_skill)
+{
+  object where;
+  int dp, mod_val;
+  int ratio;
+  string terrain;
+  dp = skill_power(victim, "dodge", SKILL_USAGE_DEFENSE, 0);  //base power
+
+  if ((string)victim->query("occupation") == "游侠" ||
+      (string)victim->query("occupation") == "暗器名家")
+    dp += dp/5 ;
+  if (stringp(dodge_skill))
+    dp += dp / 100 * SKILL_D(dodge_skill)->query_effect_dodge(me, victim);
+  mod_val = a_adj + d_adj;
+  if (mod_val < -50)
+    mod_val = -50;
+  if( dp > 1000000 )
+    dp = dp / 100 * (100 + mod_val);
+  else
+    dp = (100 + mod_val) * dp / 100;
+  if (victim->is_busy() || victim->query_temp("no_move"))
+  {
+    if ((string)victim->query("character") == "狡黠多变")
+      dp -= dp/3 ;
+    else
+      dp = dp/3;
+  }
+
+  where = environment(me);
+  if (!objectp(where))
+    return 1;
+
+  if (where != environment(victim))
+    return 1;
+
+  terrain = where->query_terrain();
+  if (!terrain)
+    terrain = where->query("terrain");
+  if (!terrain)
+    terrain = "land";
+
+  ratio = terrain_eff(dodge_skill,terrain,(int)victim->query_skill(dodge_skill,1));
+
+  if (dp > 100000)
+    dp = (dp/100)*ratio;
+  else
+    dp = (dp*ratio)/100;
+
+  ratio = weather_eff(victim,dodge_skill);
+  if (dp > 100000)
+    dp = (dp/100)*ratio;
+  else
+    dp = (dp*ratio)/100;
+
+  dp = effect_by_douzi(victim,dp);
+
+  if( dp < 1 || victim->query("env/attack"))
+    dp = 1;
+
+  return dp;
+}
+
+nomask int math_pp(object me,object victim, int p_adj,string parry_skill)
+{
+  int pp, delta;
+  object weapon, weapon2;
+  delta = 0;
+  weapon = me->query_temp("weapon");
+  weapon2 = victim->query_temp("weapon");
+  if (objectp(weapon2))
+  {
+    if (!objectp(weapon))
+      delta = 10;
+  }
+
+  else
+  {
+    if (objectp(weapon))
+     delta = -10;
+  }
+
+  pp = skill_power(victim, "parry", SKILL_USAGE_DEFENSE, delta);
+  if (stringp(parry_skill))
+    pp += pp / 100 * SKILL_D(parry_skill)->query_effect_parry(me, victim);
+
+  if (p_adj < -50)
+    p_adj = -50;
+
+  if( pp > 1000000 )
+    pp = pp / 100 * (100 + p_adj);
+  else
+    pp = (100 + p_adj) * pp / 100;
+  if (victim->is_busy() || victim->query_temp("no_move"))
+  {
+    if ((string)victim->query("character") != "狡黠多变")
+      pp /= 3;
+  }
+
+  pp = effect_by_douzi(victim,pp);
+  if (pp < 1 || victim->query("env/attack"))
+    pp = 1;
+
+  return pp;
+}
+
+mapping math_damage(object me, object target, int d_adj, int f_adj)
+{
+  mapping base_dam;
+  int damage, damage_bonus, skill_lev, angry, lucky;
+  int min_damage, max_damage, min_bonus, max_bonus;
+  string attack_skill;
+  object weapon;
+
+  base_dam = allocate_mapping(2);
+  base_dam["damage"] = 0;
+  base_dam["bonus"] = 0;
+  damage = 0;
+  damage_bonus = 0;
+  min_damage = 0;
+  max_damage = 0;
+  min_bonus = 0;
+  max_bonus = 0;
+
+  weapon = me->query_temp("weapon");
+  if (objectp(weapon))
+  {
+    if( weapon->query("use_apply_skill") )
+      attack_skill = weapon->query("apply/skill_type");
+    else
+      attack_skill = weapon->query("skill_type");
+    min_damage = (int)weapon->query("weapon_prop/damage")/5;
+    max_damage = (int)weapon->query("weapon_prop/damage");
+    min_bonus = me->query_str()/5;
+    max_bonus = me->query_str();
+    max_bonus += (int)me->query_temp("apply/damage");
+    if (d_adj > 200 || d_adj < 0)
+    {
+      log_file("skill_err",sprintf("%s error found in damage!\n",me->query_skill_mapped(attack_skill)));
+      d_adj = 20;
+    }
+
+    if (f_adj > 150 || f_adj < 0)
+    {
+      log_file("skill_err",sprintf("%s error found in force!\n",me->query_skill_mapped(attack_skill)));
+      f_adj = 20;
+    }
+
+  }
+
+  else
+  {
+    attack_skill = "unarmed";
+    min_damage = (int)me->query_temp("apply/unarmed_damage")/4;
+    max_damage = (int)me->query_temp("apply/unarmed_damage")/2 + random(min_damage+1);
+    min_bonus = me->query_str()/2;
+    max_bonus = me->query_str();
+    if (d_adj > 100 || d_adj < 0)
+    {
+      log_file("skill_err",sprintf("%s error found in damage!\n",me->query_skill_mapped(attack_skill)));
+      d_adj = 20;
+    }
+
+    if (f_adj > 250 || f_adj < 0)
+    {
+      log_file("skill_err",sprintf("%s error found in force!\n",me->query_skill_mapped(attack_skill)));
+      f_adj = 20;
+    }
+
+  }
+
+  skill_lev = (int)me->query_skill(attack_skill);
+  min_damage += skill_lev/3;
+  max_damage += skill_lev;
+  lucky = me->query_kar()+10;
+#if INSTALL_COMBAT_TEST
+    if (wizardp(me) && me->query("env/combat_test"))
+      tell_object(me, HIY "【测试精灵】：min damage：" + min_damage
+                     + "，max_damage：" + max_damage
+                     + "，d_adj: " + d_adj
+                     + "，f_adj:" + f_adj + "。\n" NOR);
+    if (wizardp(target) && target->query("env/combat_test"))
+      tell_object(target, HIC "【测试精灵】：对方 min_damage：" + min_damage +
+                       "，max_damage：" + max_damage
+                     + "，d_adj: " + d_adj
+                     + "，f_adj:" + f_adj + "。\n" NOR);
+#endif
+  damage = min_damage;
+  damage += (max_damage-min_damage)*lucky/100;
+  damage += random((max_damage-min_damage)*(100-lucky)/100 + 1);
+
+  damage_bonus = min_bonus;
+  damage_bonus += (max_bonus-min_bonus)*lucky/100;
+  damage_bonus += random((max_bonus-min_bonus)*(100-lucky)/100 + 1);
+
+  damage -= (int)target->query_temp("apply/defense");
+  if ((string)me->query("occupation") == "炼气士")
+  {
+    damage_bonus += damage_bonus/5;
+  }
+
+  if ((string)target->query("occupation") == "炼气士")
+  {
+    damage_bonus -= damage_bonus/5;
+  }
+
+  damage += damage*d_adj/100;
+  damage_bonus += damage_bonus*f_adj/100;
+  angry = (int)me->query("jianu");
+  if (angry)
+  {  // does angry bnous
+    damage_bonus += me->cost_craze(angry);
+    if (me->query_craze() > 1000 && random(angry + 200) > 200)
+    {
+      me->cost_craze(200 + random(300));
+      damage_bonus += angry * 2;
+    }
+
+  }
+
+  if (damage < 0)
+    damage = 0;
+  if (damage_bonus < 0)
+    damage_bonus = 0;
+  base_dam["damage"] = damage;
+  base_dam["bonus"] = damage_bonus;
+  return base_dam;
+}
+
+void adjust_douzi(object me, object target,int wound)
+{
+  int my_level, your_level ;
+  string my_char, your_char ;
+  int eff_kee, ratio;
+  int my_dz, your_dz;
+  int my_cor,your_cps;
+
+  if (!me->query("level"))
+    UPEXP_D->query_upexp(me);
+  if (!target->query("level"))
+    UPEXP_D->query_upexp(target);
+  my_level = (int)me->query("level");
+  your_level = (int)target->query("level");
+  eff_kee = (int)target->query("eff_kee");
+  if (eff_kee < 1)
+    eff_kee = 1;
+  ratio = wound*100/eff_kee;
+  my_char = (string)me->query("character");
+  your_char = (string)target->query("character");
+  my_dz = (int)me->query("douzhi");
+  your_dz = (int)target->query("douzhi");
+  my_cor = me->query_cor();
+  your_cps = target->query_cps();
+
+  if ((ratio >= 10) && (ratio < 20) )
+  {
+    if (random(your_cps) > 100)
+      your_dz -= 1;
+    else
+      your_dz -= 3;
+    if (your_char == "光明磊落")
+      your_dz += 1;
+    if (random(my_level +1) < random(your_level + 5))
+      my_dz += 1;
+    if (my_char == "心狠手辣")
+      my_dz += 1;
+  }
+
+  else if ((ratio>=20) && (ratio < 30) )
+  {
+    if (random(your_cps) > 100)
+      your_dz -= 2;
+    else
+      your_dz -= 4;
+    if (your_char == "光明磊落")
+      your_dz += 1;
+    if (random(my_level +1) < random(your_level + 5))
+    {
+      if (random(my_cor) > 40)
+        my_dz += 3;
+      else
+        my_dz += 2;
+    }
+
+    if (my_char == "心狠手辣")
+      my_dz += 1;
+  }
+
+  else if ((ratio>=30) && (ratio < 40) )
+  {
+    if (random(your_cps) > 100)
+      your_dz -= 2;
+    else
+      your_dz -= 8;
+    if (your_char == "光明磊落")
+      your_dz += 1;
+    if (random(my_level +1) < random(your_level + 5))
+    {
+      if (random(my_cor) > 40)
+        my_dz += 4;
+      else
+        my_dz += 3;
+    }
+
+    if (my_char == "心狠手辣")
+      my_dz += 1;
+  }
+
+  else if ((ratio>=40) && (ratio < 50) )
+  {
+    if (random(your_cps) > 100)
+      your_dz -= 4;
+    else
+      your_dz -= 12;
+    if (your_char == "光明磊落")
+      your_dz += 1;
+    if (random(my_level +1) < random(your_level + 5))
+    {
+      if (random(my_cor) > 40)
+        my_dz += 5;
+      else
+        my_dz += 4;
+    }
+
+    if (my_char == "心狠手辣")
+      my_dz += 1;
+  }
+
+  else if (ratio >= 50)
+  {
+    if (random(your_cps) > 100)
+      your_dz -= 5;
+    else
+      your_dz -= 15;
+    if (your_char == "光明磊落")
+      your_dz += 1;
+    if (random(my_level +1) < random(your_level + 5))
+    {
+      if (random(my_cor) > 40)
+        my_dz += 6;
+      else
+        my_dz += 5;
+    }
+
+    if (my_char == "心狠手辣")
+      my_dz += 1;
+  }
+
+  if (my_dz > (int)me->query("eff_douzhi"))
+    my_dz = (int)me->query("eff_douzhi");
+
+  if (your_dz <0)
+    your_dz = 0;
+
+  me->set("douzhi",my_dz);
+  target->set("douzhi",your_dz);
+}
+
+mixed apply_damage(object me, object victim, int damage, string damage_type, string limb, int percent)
+{
+  int wounded;
+  int armor_v;
+  object weapon,cloth;
+  string epart, msg;
+
+  if (damage < 1)
+    return 0;
+
+  if ((string)me->query("character") == "心狠手辣")
+    damage += damage * 10 / 100;
+  armor_v = (int)victim->query_temp("apply/armor_vs_force");
+  if (armor_v > 300)
+    armor_v = 300 + random(armor_v-300);
+  if (armor_v > 0)
+  {
+    if (!percent)
+      damage -= armor_v;
+    else
+      damage -= armor_v/3 + random(armor_v/3*2 + 1);
+  }
+
+  armor_v = "/adm/daemons/humanbodyd"->query_parts_armor_value(victim, limb);
+  if (armor_v > 200)
+    armor_v = 200 + (armor_v-200)/2;
+
+  if (armor_v > 0)
+  {
+    if (!percent)
+    {
+      damage -= armor_v;
+      if ((int)victim->query_temp("apply/armor") > 0)
+        damage -= (int)victim->query_temp("apply/armor");
+    }
+
+    else
+    {
+      damage -= random(armor_v);
+      if ((int)victim->query_temp("apply/armor") > 0)
+        damage -= (int)victim->query_temp("apply/armor")/2;
+    }
+
+  }
+
+  epart = "/adm/daemons/humanbodyd"->query_ename(limb);
+  if (damage < 1)
+    return 0;
+// recalculate damage
+  if (damage > 1200)
+    damage = 1200 + random((damage - 1200));
+  if (damage > 2000)
+    damage = 2000 + random(damage - 2000);
+// calculate wounded
+  wounded = damage/3 + random(damage/2 + 1);
+  wounded += wounded*percent/100;
+  if (wounded > damage)
+    wounded = damage;
+
+  if (wounded > 1200)
+    wounded = 1200 + random(wounded - 1200);
+  if (wounded > 2000)
+    wounded = 2000 + random(wounded - 2000);
+  if (damage < 1)
+    return 0;
+
+  if ((string)victim->query("character") == "光明磊落" && wounded > 0)
+    wounded -= wounded * 20 / 100;
+  damage = victim->receive_damage("kee", damage, me);
+  weapon = me->query_temp("weapon");
+  msg = 0;
+  if( (me->is_killing(victim) ||
+       objectp(weapon)) &&
+      epart == "body" &&
+      (damage_type == "割伤" ||
+       damage_type == "劈伤" ||
+       damage_type == "刺伤") &&
+      random(damage)/5 > armor_v )
+  {
+    if (mapp(victim->query_temp("armor")))
+    {
+      if(objectp(cloth = victim->query_temp("armor/armor"))
+         && !cloth->query("no_break") )
+      {
+        msg = WHT"\n只听见[铿]的一声巨响，"HIY+cloth->name()
+                     + WHT"裂成无数碎片，散落一地！\n"NOR;
+        cloth->unequip();
+        destruct(cloth);
+      }
+
+      else if(objectp(cloth = victim->query_temp("armor/cloth"))
+              && !cloth->query("owner_id") )
+      {
+        msg = WHT"\n只听见[嗤啦]的一声，"HIY+cloth->name()
+                      +WHT"被撕裂成无数碎片，纷纷扬扬飘落在地！\n"NOR;
+        cloth->unequip();
+        destruct(cloth);
+      }
+
+    }
+
+  }
+
+  if( wounded > 0
+      && (me->is_killing(victim) || weapon) )
+  {  // We are sure that damage is greater than victim's armor here.
+    adjust_douzi(me, victim, wounded);
+    victim->receive_wound("kee", wounded, me);
+  }
+
+#if INSTALL_COMBAT_TEST
+  if (wizardp(me) && me->query("env/combat_test"))
+    tell_object(me, sprintf(HIY"【测试精灵】：你对%s造成%d伤害，受伤%d。\n"NOR,
+                            victim->name(),damage,wounded));
+  if (wizardp(victim) && victim->query("env/combat_test"))
+    tell_object(victim, sprintf(HIY"【测试精灵】：你受到%s造成的%d伤害，受伤%d。\n"NOR,
+                            me->name(),damage,wounded));
+#endif
+  return msg;
+}

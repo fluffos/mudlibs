@@ -1,0 +1,446 @@
+//	skill.c
+//
+// 	This is the standard skill daemon object. All objects defining a skill
+//	should inherit this as its skeleton.
+#include <ansi.h>
+inherit F_CLEAN_UP;
+inherit F_SSERVER;
+void create()
+{
+  seteuid(getuid());
+}
+
+// Check if the user(me) has been ready for combininh some sub
+// skills to this skill
+int get_ready(object me)
+{
+  return 1;
+}
+
+// Check if the user(me) has finished to combine some sub skills
+// to this skill
+int get_finish(object me)
+{
+  return 1;
+}
+
+// All the sub skills for combine. Default is null indicating
+// that the skill needn't combine from other skills.
+mapping query_sub_skills()
+{
+  return ([]);
+}
+
+//
+// valid_learn()
+//
+// This function is to check if a character should be able to
+// learn/study/practice the skill. The default function just
+// returns 1 to allow any characters improve the skill. However,
+// a good skill should has its own feature and restriction. Redefine
+// this function in your skill object and make it reasonable
+// according to the power of the skill.
+int valid_learn(object me) { return 1; }
+
+//
+// valid_research()
+//
+// This function is to check if a character should be able to
+// research the skill.
+int valid_research(object me) { return 1; }
+
+// do effect when parry
+int valid_effect(object me, object weapon, string action_name, int skill)
+{
+  return 1;
+}
+
+//
+// type()
+//
+// This function should return the type of the skill. The skill type now
+// affects if the skill requires combat exp in order to be learned (see
+// /cmds/std/learn.c ) and the ranking of a skill level (see
+// /cmds/usr/skills.c )。
+// Currently we have only 2 types of skill: "martial" and "knowledge".
+string type() { return "martial"; }
+
+// When I learn from others, The max level I can learn.
+int valid_learn_level(object me)
+{
+  return 0;
+}
+
+//
+// skill_improved()
+//
+// This function is called when a character's skill has gained a new level.
+// You can make some modify to a character according to the skill.
+void skill_improved(object me) {}
+
+int query_skill_lvl(object me,string skill,mapping *action)
+{
+  int i,level;
+
+  level =(int)me->query_skill(skill,1);
+  i = sizeof(action) -1;
+  while(i--)
+    if (level > action[i]["lvl"])
+      break;
+  return i;
+}
+
+//
+// exert_function()
+//
+//     This function is used by the "exert" command as specific skill's
+// command parser. This function parses the arguments in the standard form
+// (that is, exert <function> [<target>]). When <target> is not present,
+// use the character himself as default.
+//     In order to use this default exert command parser, you must define
+// a function called exert_function_file(string func) in the skill object
+// that takes the function name as argument and return the file name that
+// defines the specified function.
+int exert_function(object me, string arg)
+{
+  string func, target, file;
+  object target_ob;
+  int busy_time;
+  string busy_type,myfam;
+
+  if (sscanf(arg, "%s %s", func, target) == 2)
+  {
+    target_ob = present(target, environment(me));
+    if (!objectp(target_ob))
+      return notify_fail(sprintf("这里没有 %s。\n",target));
+  }
+
+  else
+  {
+    func = arg;
+    target_ob = me;
+  }
+
+  if (! stringp(file = (string)this_object()->exert_function_file(func))
+    || file_size(file + ".lpc") <= 0)
+    return 0;
+  if (!call_other(file, "valid_exert", me, target_ob))
+    return 0;
+  if (!playerp(me) || wizardp(me))
+  {
+    if (call_other(file, "exert_attack", me, target_ob))
+      return 1;
+    return (int)call_other(file, "exert", me, target_ob);
+  }
+
+  myfam = me->query("family/family_name");
+  if (stringp(myfam))
+  {
+    if (!me->query("family/can_exert/"+func))
+      if (!me->query("common/can_exert/"+func))
+        return notify_fail(sprintf("你还不会〖exert %s〗。\n",func));
+  }
+
+  else
+  {
+    if (!me->query("common/can_exert/"+func))
+      return notify_fail(sprintf("你还不会〖exert %s〗。\n",func));
+  }
+
+  if (objectp(target_ob) && target_ob->do_exert(func) > 0)
+    return 1;
+
+  if (call_other(file, "exert", me, target_ob))
+    return 1;
+
+  busy_type = (string)me->query_temp("pfm/type");
+  busy_time = 0;
+  if (stringp(busy_type))
+  {
+    switch(busy_type)
+    {
+      case "exert" :
+        busy_time = 3;
+        break;
+      case "perform" :
+      case "cast" :
+        busy_time = 2;
+    }
+
+  }
+
+  if (stringp(me->query_temp("pfm/name"))
+     && (time()- (int)me->query_temp("pfm/time")) < busy_time)
+  {
+    tell_object(me,sprintf("你刚刚使用了 %s %s ，现在内息不纯！无法再次聚集内力伤敌\n",
+                me->query_temp("pfm/type"), me->query_temp("pfm/name") ));
+    return 1;
+  }
+
+  me->set_temp("pfm/type","exert");
+  me->set_temp("pfm/name",func);
+  if (call_other(file, "exert_attack", me, target_ob))
+  {
+    me->set_temp("pfm/time",time());
+    return 1;
+  }
+
+  return 1;
+}
+
+int perform_action(object me, string perf, object target)
+{
+  string file;
+  int busy_time;
+  string busy_type,myfam;
+  string tid;
+  int dist;
+  if (! stringp(file = (string)this_object()->perform_action_file(perf))
+    || file_size(file + ".lpc") <= 0)
+    return 0;
+  if (!call_other(file, "valid_pfm", me, target))
+    return 0;
+  if (playerp(me) && !wizardp(me))
+  {
+    myfam = (string)me->query("family/family_name");
+    if (stringp(myfam))
+    {
+      if (!me->query("family/can_pfm/"+perf))
+        if (!me->query("common/can_pfm/"+perf))
+          return notify_fail(sprintf("你还不会〖perform %s〗。\n",perf));
+    }
+
+    else
+    {
+      if (!me->query("common/can_pfm/"+perf))
+        return notify_fail(sprintf("你还不会〖perform %s〗。\n",perf));
+    }
+
+  }
+
+  if (call_other(file,"is_not_attack",me)) //对于一些辅助性质的pfm，不用考虑对手的情况
+  {
+    return (int)call_other(file, "perform", me, target);
+  }
+
+  if (! target)
+    target = offensive_target(me);
+  if( !target
+    || !target->is_character()
+    || target->is_corpse()
+    || target==me)
+    return notify_fail(sprintf("你要对谁施展〖perform %s〗？\n",perf));
+
+  if (! me->is_fighting(target))
+    return notify_fail(sprintf("〖perform %s〗只能在战斗中对对手使用。\n",perf));
+  if (! living(target))
+    return notify_fail("对方都已经这样了，用不着这么费力吧？\n");
+  if (target->do_perform(perf) > 0)
+    return 1;
+  tid = target->query("id");
+  tid = replace_string(tid, " ", "_");
+  dist = (int)me->query_temp("from_dis/"+tid);
+  if (!dist)
+  {
+    dist = me->distance_from(target);
+    if (dist > 0)
+      me->set_temp("from_dis/"+tid,dist);
+  }
+
+  if (dist > (int)me->attack_total_distance(target))
+    return notify_fail("你现在距离敌人太远了，使用这招没有什么威力！\n");
+  if (!playerp(me) || wizardp(me))
+    return (int)call_other(file, "perform", me, target);
+
+  busy_type = (string)me->query_temp("pfm/type");
+  busy_time = 0;
+
+  if (stringp(busy_type))
+  {
+    switch(busy_type)
+    {
+      case "exert" :
+        busy_time = 3;
+        break;
+      case "perform" :
+      case "cast" :
+        busy_time = 2;
+    }
+
+  }
+
+  if (stringp(me->query_temp("pfm/name"))
+     && (time()- (int)me->query_temp("pfm/time")) < busy_time)
+  {
+    tell_object(me,sprintf("你刚刚使用了 %s %s ，现在内息不纯！无法再次聚集内力伤敌\n",
+                me->query_temp("pfm/type"), me->query_temp("pfm/name") ));
+    return 1;
+  }
+
+  if ((int)call_other(file, "perform", me, target))
+  {
+    me->set_temp("pfm/type","perform");
+    me->set_temp("pfm/name",perf);
+    me->set_temp("pfm/time",time());
+    return 1;
+  }
+
+  return 0;
+}
+
+int cast_spell(object me, string spell, object target)
+{
+  string file;
+  int busy_time;
+  string busy_type,myfam;
+  if( !stringp(file = (string)this_object()->cast_spell_file(spell))
+    || file_size(file + ".lpc") <= 0 )
+    return 0;
+  if (!call_other(file, "valid_cast", me, target))
+    return 0;
+  if (playerp(me) && !wizardp(me))
+  {
+    myfam = me->query("family/family_name");
+    if (stringp(myfam))
+    {
+      if (!me->query("family/can_cast/"+spell))
+        if (!me->query("common/can_cast/"+spell))
+          return notify_fail(sprintf("你还不会【cast %s】。\n",spell));
+    }
+
+    else
+    {
+      if (!me->query("common/can_cast/"+spell))
+        return notify_fail(sprintf("你还不会【cast %s】。\n",spell));
+    }
+
+  }
+
+  if (call_other(file,"is_not_attack",me))
+  {
+    return (int)call_other(file, "cast", me, target);
+  }
+
+  if (! target)
+    target = offensive_target(me);
+  if( !target
+    || !target->is_character()
+    || target->is_corpse()
+    || target==me)
+    return notify_fail(sprintf("你要对谁施展〖cast %s〗？\n",spell));
+
+  if (! me->is_fighting(target))
+    return notify_fail(sprintf("〖cast %s〗只能在战斗中对对手使用。\n",spell));
+  if (! living(target))
+    return notify_fail("对方都已经这样了，用不着这么费力吧？\n");
+  if (target->do_cast(spell) > 0)
+    return 1;
+  if (!playerp(me) || wizardp(me))
+    return (int)call_other( file, "cast_attack", me, target);
+
+  busy_type = (string)me->query_temp("pfm/type");
+  busy_time = 0;
+  if (stringp(busy_type))
+  {
+    switch(busy_type)
+    {
+      case "exert" :
+        busy_time = 3;
+        break;
+      case "perform" :
+      case "cast" :
+        busy_time = 2;
+    }
+
+  }
+
+  if (stringp(me->query_temp("pfm/name"))
+     && (time()- (int)me->query_temp("pfm/time")) < busy_time)
+  {
+    tell_object(me,sprintf("你刚刚使用了 %s %s ，现在内息不纯！无法再次聚集内力伤敌\n",
+                me->query_temp("pfm/type"), me->query_temp("pfm/name") ));
+    return 1;
+  }
+
+  if ((int)call_other( file, "cast_attack", me, target))
+  {
+    me->set_temp("pfm/type","cast");
+    me->set_temp("pfm/name",spell);
+    me->set_temp("pfm/time",time());
+    return 1;
+  }
+
+  return 0;
+}
+
+int scribe_spell(object me, object ob, string spell)
+{
+  string file;
+  if( !stringp(file = (string)this_object()->scribe_spell_file(spell))
+      ||  file_size(file + ".lpc") <= 0 )
+    return 0;
+  me->set_temp("kill_msg","scribe"+spell);
+  return (int)call_other( file, "scribe", me, ob );
+}
+
+string level_description(int level)
+{
+  int grade;
+  string *skill_level_desc = ({
+   BLU "不堪一击" NOR,BLU "毫不足虑" NOR,BLU "不足挂齿" NOR,BLU "初学乍练" NOR,BLU "勉勉强强" NOR,
+   HIB "初窥门径" NOR,HIB "初出茅庐" NOR,HIB "略知一二" NOR,HIB "普普通通" NOR,HIB "平平淡淡" NOR,
+   CYN "平淡无奇" NOR,CYN "粗通皮毛" NOR,CYN "半生不熟" NOR,CYN "马马虎虎" NOR,CYN "略有小成" NOR,
+   HIC "已有小成" NOR,HIC "鹤立鸡群" NOR,HIC "驾轻就熟" NOR,HIC "青出于蓝" NOR,HIC "融会贯通" NOR,
+   GRN "心领神会" NOR,GRN "炉火纯青" NOR,GRN "了然于胸" NOR,GRN "略有大成" NOR,GRN "已有大成" NOR,
+   YEL "豁然贯通" NOR,YEL "出类拔萃" NOR,YEL "无可匹敌" NOR,YEL "技冠群雄" NOR,YEL "神乎其技" NOR,
+   HIY "出神入化" NOR,HIY "非同凡响" NOR,HIY "傲视群雄" NOR,HIY "登峰造极" NOR,HIY "无与伦比" NOR,
+   HIM "所向披靡" NOR,HIM "一代宗师" NOR,HIM "精深奥妙" NOR,HIM "神功盖世" NOR,HIM "举世无双" NOR,
+   HIR "惊世骇俗" NOR,HIR "撼天动地" NOR,HIR "震古铄今" NOR,HIR "超凡入圣" NOR,HIR "威镇寰宇" NOR,
+   RED "空前绝后" NOR,RED "天人合一" NOR,MAG "深藏不露" NOR,WHT "返璞归真" NOR,HIW "深不可测" NOR
+  });
+  string *knowledge_level_desc = ({
+    BLU "新学乍用" NOR,BLU "初窥门径" NOR,HIB "略知一二" NOR,HIB "半生不熟" NOR,
+    CYN "马马虎虎" NOR,CYN "已有小成" NOR,HIC "融会贯通" NOR,HIC "心领神会" NOR,
+    GRN "了然於胸" NOR,GRN "已有大成" NOR,YEL "非同凡响" NOR,YEL "举世无双" NOR,
+    HIY "震古铄今" NOR,RED "无与伦比" NOR,WHT "超凡入圣" NOR,HIW "空前绝后" NOR,
+  });
+  grade = level / 15;
+  switch(type())
+  {
+    case "knowledge":
+      if( grade >= sizeof(knowledge_level_desc) )
+        grade = sizeof(knowledge_level_desc)-1;
+      return knowledge_level_desc[grade];
+    default:
+      if( grade >= sizeof(skill_level_desc) )
+        grade = sizeof(skill_level_desc)-1;
+      return skill_level_desc[grade];
+  }
+
+}
+
+int sum(int n,int base,int d)
+{
+  return ( n * ( 2 * base + ( n - 1 ) * d ) / 2 );
+}
+
+int NewRandom(int n,int base,int d)
+{
+  int i = 1;
+  int randnum = random(sum(n, base, d));
+  if( sum(6, base, d) < randnum )
+  {
+     i = 7;
+     while (sum(i,base,d) < randnum)
+       i ++;
+  }
+
+  else
+  {
+    while (sum(i,base,d) < randnum)
+      i ++;
+  }
+
+  return ( i - 1 );
+}
+

@@ -1,0 +1,124 @@
+// league command: add
+#include <ansi.h>
+void create() { seteuid(getuid()); }
+
+int main(object me, string arg)
+{
+  string league_id,cname;
+  int mylvl;
+  object who;
+  mapping myleague;
+
+  if (!playerp(me))
+    return 0;
+  if (arg == "cancel")
+  {
+    if (!mapp(me->query_temp("pending/league")))
+      return notify_fail("你要做什么？\n");
+    me->delete_temp("pending/league");
+    write("你取消了邀请别人加盟的念头。\n");
+    return 1;
+  }
+
+  who = present(arg,environment(me));
+  if (!playerp(who))
+    return notify_fail("这里有这个人吗？\n");
+  league_id = LEAGUE_D->query_player_league_id(me);
+  if (!stringp(league_id))
+    return notify_fail("你先自己加入一个联盟再说吧！\n");
+
+  cname = LEAGUE_D->query_league_cname(league_id);
+  mylvl = LEAGUE_D->query_member_level(me);
+  if (!mylvl || mylvl > 4)
+    return notify_fail(me->query("name") + "没有权利接收新成员！\n");
+  myleague = who->query("league");
+  if (mapp(myleague) && sizeof(myleague) > 1)
+    return notify_fail(sprintf("可惜%s已经是%s的成员了！\n",
+                               who->query("name"),
+                               myleague["league_name"]));
+
+  if (stringp(LEAGUE_D->query_player_league_id(who)))
+    return notify_fail(sprintf("%s已经是其他联盟的成员了！\n",
+                       who->query("name")));
+  me->set_temp("pending/league/pid", who->query("id"));
+  me->set_temp("pending/league/pname", who->query("name"));
+
+  message_vision("$N对$n说道，我们" +
+                 cname + "联盟威名震动江湖，各位兄弟义气相投，"
+                 "亲如一家。不知道" + RANK_D->query_respect(who) +
+                 "是否愿意加盟，风雨同舟，快意江湖？\n",me,who);
+  tell_object(who, HIG + me->name(1) + "(" +
+                         me->query("id") + ")想邀请你加入"
+                         "『" + cname + "』，你是否同意"
+                         "(right/refuse)？\n" + NOR);
+  who->set_temp("pending/answer/" + me->query("id") + "/right",
+                bind((: call_other, __FILE__, "do_right", who, me :), who));
+  who->set_temp("pending/answer/" + me->query("id") + "/refuse",
+     	        bind((: call_other, __FILE__, "do_refuse", who, me :), who));
+  return 1;
+}
+
+int do_right(object me, object ob)
+{
+  mapping league;
+  string msg;
+  if (! ob || environment(ob) != environment(me))
+    return notify_fail("可惜啊，人家已经不在这儿了。\n");
+  if (! living(ob))
+    return notify_fail("人家现在听不到你说的话，还是算了吧。\n");
+  league = ob->query_temp("pending/league");
+  if (!mapp(league) || sizeof(league) < 1)
+    return notify_fail("他现在有邀请别人的打算吗？。\n");
+  if (league["pid"] != me->query("id") ||
+      league["pname"] != me->query("name"))
+    return notify_fail("他有打算邀请你加盟？。\n");
+  if (!LEAGUE_D->add_member_into_league(me,ob))
+    return notify_fail("虽然你愿意加入对方的联盟，但这次失败了。\n");
+
+  switch (random(6))
+  {
+    case 0:
+      msg = "$N点点头，看了看大家，郑重道：“我没有意见，我同意！”\n";
+      break;
+    case 1:
+      msg = "$N大喜，拍掌大笑道：“正合我意！来！来来！”\n";
+      break;
+    case 2:
+      msg = "$N哈哈大笑，大声道：“很好！很好！真是不错！”\n";
+      break;
+    case 3:
+      msg = "$N只是热泪盈眶，道：“甚好！他日行走江湖，那是何等的威风？”\n";
+      break;
+    case 4:
+      msg = "$N点头颔首，豪情万丈，道：“天下豪杰，尽归联盟，可喜啊！”\n";
+      break;
+    default:
+      msg = "$N一声长叹，道：“$l此言极是，道出我心中多年之愿！”\n";
+      break;
+  }
+
+  msg = replace_string(msg, "$l", ob->name(1));
+  message_vision(msg, me, ob);
+  ob->delete_temp("pending/league");
+  return 1;
+}
+
+int do_refuse(object me, object ob)
+{
+  mapping league;
+  if (! ob || environment(ob) != environment(me))
+    return notify_fail("可惜啊，人家已经不在这儿了。\n");
+  if (! living(ob))
+    return notify_fail("人家现在听不到你说的话，还是算了吧。\n");
+  league = ob->query_temp("pending/league");
+  if (! mapp(league) || sizeof(league) < 1)
+    return notify_fail("人家现在已经不打算邀请你了。\n");
+  if (league["pid"] != me->query("id") ||
+      league["pname"] != me->query("name"))
+    return notify_fail("他有打算邀请你加盟？。\n");
+  ob->delete_temp("pending/league");
+  message_vision("$N摇了摇头，对$n道：“我没有兴趣加入什么联盟。”\n", me, ob);
+  message_vision("$N拒绝了$n的邀请。\n",me,ob);
+  return 1;
+}
+

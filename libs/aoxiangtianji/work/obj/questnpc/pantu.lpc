@@ -1,0 +1,351 @@
+#include <ansi.h>
+inherit "/obj/questnpc/tasknpc";
+void create()
+{
+  ::create();
+  set_name("妖怪","pantu yaoguai");
+  setup();
+  if (clonep())
+    keep_heart_beat();
+}
+
+void init()
+{
+  object ob, me, where;
+  int mylvl;
+  string msg;
+  ob = this_player();
+  me = this_object();
+  where = environment(ob);
+  mylvl = ob->query("level");
+
+  ::init();
+
+  if (playerp(ob)
+    && me->query("quester") == ob->query("id")
+    && !where->is_safty()
+    && !environment(ob)->query("no_fight")
+    && !environment(ob)->query("no_magic")
+    && present("wenshu", ob)
+    && ob->query("quest_xyj/pantu/npc_id") == me->query("id"))
+  {
+    if (!ob->query_temp("pantu/next_lv") && !me->query("see1_player"))
+    {
+      msg = RED"\n$n" RED"看到$N" RED"目光冷冷注视着自己一动不动，不由停下了脚步。\n"NOR;
+      switch(random(4))
+      {
+        case 0:
+           msg += YEL"$n" YEL"嘿嘿奸笑几声，连忙赔笑道，这位"NOR + RANK_D->query_respect(ob) +
+                  YEL"是官府的捕头吗？\n"NOR;
+           msg += YEL"$n" YEL"接着道:大家都是性情中人，今天能否高抬贵手？我必有重谢！你是否愿意？\n"NOR;
+           message_vision(msg,ob,me);
+           break;
+        case 1:
+           msg += HIW"$n" HIW"阴笑一声说道，这麽多不怕死的？再来十个大爷我也不怕！\n"NOR;
+           msg += HIR"$n" HIR"随即眼睛一瞪，向着$N" HIR"就冲了过去！\n"NOR;
+           message_vision(msg,ob,me);
+           me->set_leader(ob);
+           kill_ob(ob);
+           break;
+        case 2:
+           msg += HIW"$n" HIW"待$N" HIW"走到近前，冷冷一笑，说道，你千里追到这里，我看你又能奈我何！\n"NOR;
+           message_vision(msg,ob,me);
+           tell_object(ob,WHT"你感到一股无形的杀气，心中不由一颤。\n"NOR);
+           break;
+        default:
+           msg += HIG"$n" HIG"忽然泪流满面，可怜地对$N" HIG"说道，小人上有老下有小，完全是官府陷害才落此地步。\n"NOR;
+           msg += CYN"$n" CYN"接着道:望你老明察秋毫，网开一面，我今生一定感激不禁。\n"NOR;
+           message_vision(msg,ob,me);
+      }
+
+      me->set("see1_player",1);
+    }
+
+    if ((int)ob->query_temp("pantu/next_lv") == 1 && !me->query("see2_player"))
+    {
+      switch(random(2))
+      {
+        case 0:
+          message_vision(HIR"\n$n" HIR"额头青筋跳动，冷哼了一声，瞪着通红的眼睛向着$N"
+                         HIR"就冲了过去。\n"NOR,ob,me);
+          me->set_leader(ob);
+          kill_ob(ob);
+          break;
+        case 1:
+          message_vision(HIW"$N" HIW"一见$n" HIW"的身影，二话不说，扭头就走，"
+                         "转瞬就消失在了人海之中！\n"NOR,);
+          ob->add_temp("pantu/next_lv",1);
+          me->remove_all_enemy(1);
+          if (mylvl <= 30)
+             NPC_D->place_npc(me,1);
+          else if (mylvl <= 40)
+             NPC_D->place_npc(me,2);
+          else
+             NPC_D->place_npc(me,3);
+          NPC_D->set_from_me(me, ob, 120);
+          msg = WHT"你根据多年的经验判断，好象是往「" NOR + BLINK + HIR
+              + me->query("place") + NOR + WHT"」的方向逃去。\n"NOR;
+          tell_object(ob,msg);
+          break;
+      }
+
+      me->set("see2_player",1);
+      return;
+    }
+
+    else
+    {
+      if (!me->query("see3_player"))
+      {
+        message_vision(HIR"\n$n" HIR"气急败坏的对$N嚷道，杀人不过头点地，你一再苦苦向逼，"
+                          "大爷今天就和你拼个鱼死亡破。\n"NOR,ob,me);
+        me->set("see3_player",1);
+      }
+
+      me->set_leader(ob);
+      kill_ob(ob);
+    }
+
+  }
+
+}
+
+void full_me(object me)
+{
+  me->set("kee",me->query("max_kee"));
+  me->set("eff_kee",me->query("max_kee"));
+  me->set("sen",me->query("max_sen"));
+  me->set("eff_sen",me->query("max_sen"));
+  me->set("force",me->query("max_force"))*2;
+  me->set("mana",me->query("max_mana"))*2;
+  me->clear_condition();
+  return;
+}
+
+void die(object killer)
+{
+  object wenshu, dob, weapon;
+  object me, book;
+  string quester, msg, n_name;
+  int next_lv;
+  int exp,qn,weiwang,score, mylvl;
+  int count, ratio;
+  string *book_list = ({
+    "/d/obj/scroll/anti_magic",
+    "/d/obj/scroll/bless",
+    "/d/obj/scroll/curse",
+    "/d/obj/scroll/free_hit",
+    "/d/obj/scroll/giant",
+    "/d/obj/scroll/heaven_armor",
+    "/d/obj/scroll/mirror",
+    "/d/obj/scroll/shixue",
+    "/d/obj/scroll/weakness",
+    "/d/obj/scroll/summon",
+  });
+
+  me = this_object();
+  quester = me->query("quester");
+  if (stringp(quester) && objectp(dob = find_player(quester)))
+    dob->set("quest_xyj/pantu/npc_die",1);
+
+  if (!me->query_temp("my_killer"))
+  {
+    message_vision("$N一看不是对手，急急忙忙的溜了。\n", me);
+    SYSQ_D->delete_quest("pantu",dob);
+    destruct(me);
+    return;
+  }
+
+  if (! objectp(dob = killer))
+    dob = me->query_last_damage_from();
+  if (objectp(dob) && dob->query_temp("owner"))
+    dob = dob->query_temp("owner");
+  if (dob && dob->query("quest_xyj/pantu/npc_id") != query("id"))
+  {
+    CHANNEL_D->do_channel(this_object(), "rumor",
+                          sprintf("听说%s被人杀死了。", name()));
+    log_file("static/killed_die", sprintf("%s %s(%s) died at %s because %s.\n",
+           ctime(time()),
+           name(),
+           query("id"),
+           environment()->short(),
+           dob ? sprintf("%s(%s)", dob->name(1), dob->query("id")) : "none"));
+    destruct(this_object());
+    SYSQ_D->delete_quest("pantu",quester);
+    return;
+  }
+
+  if (quester != dob->query("id"))
+  {
+    message_vision("$N一看不是对手，急急忙忙的溜了。\n", me);
+    SYSQ_D->delete_quest("pantu",quester);
+    destruct(me);
+    return;
+  }
+
+  wenshu = present("wenshu",dob);
+  if (!objectp(wenshu) || wenshu->query("owner") != dob->query("id"))
+  {
+    message_vision("$N一看不是对手，急急忙忙的溜了。\n", me);
+    SYSQ_D->delete_quest("pantu",quester);
+    destruct(me);
+    return;
+  }
+
+  mylvl = (int)dob->query("level");
+  next_lv = (int)dob->query_temp("pantu/next_lv");
+  if (next_lv >= 2)
+  {
+    dob->delete_temp("pantu/next_lv");
+    msg = HIW"$N" HIW"惨叫一声，死了！\n"NOR;
+    msg += HIW"$n" HIW"点了点头，从怀中掏出文书确定了一下，合十向上天祈祷。\n"NOR;
+    msg += HIW"但见文书幻化做片片雪片，慢慢地将$N" HIW"覆盖。\n"NOR;
+    destruct(wenshu);
+    message_vision(msg,me,dob);
+    count = dob->query("quest_info/pantu/count");
+    count++;
+    dob->add("quest_info/pantu/total_num",1);
+    exp = count + mylvl*6 + 350;
+    exp = exp*6/5;
+    if (count > 500)
+      count = 0;
+    dob->set("quest_info/pantu/count",count);
+    qn = exp/3 + random(exp/3);
+    weiwang = 3+random(5);
+    score = 4 + random(5);
+    dob->add("office_number",1+random(2));
+    dob->add("balance",8000 + random(10000));
+    tell_object(dob,"你为朝廷出力，唐皇给了你一些金钱奖励。你银行的存款有所增加！\n");
+    GIFT_D->delay_bonus(dob, ([ "exp"     : exp ,
+                                "daoxing" : random(1 + exp/3),
+                                "pot"     : qn ,
+                                "mar"     : random(1 + qn/3*2),
+                                "weiwang" : weiwang,
+                                "score"   : score,
+                                "prompt"  : "击毙" + name() + "之后" ]), "pantu");
+    if (random(30) == 0)
+    {
+      book = new(element_of(book_list));
+      book->set("owner",dob->query("id"));
+      book->move(dob,1);
+      tell_object(dob,"你突然发现了一本卷轴，赶紧拣了起来。\n");
+    }
+
+    if (weapon = dob->query_temp("weapon") ||
+        weapon = dob->query_temp("armor/hands"))
+      weapon->killer_reward(dob, this_object());
+    dob->delete("quest_xyj/pantu");
+    SYSQ_D->delete_quest("pantu",dob);
+    destruct(this_object());
+    return;
+  }
+
+  else
+  {
+    msg = HIR"$N" HIR"深吸口气，冷笑道，好身手！说完强忍伤痛纵身逃走了。\n"NOR;
+    message_vision(msg,me);
+    me->remove_all_enemy(1);
+    me->revive(1);
+    me->reincarnate(1);
+    next_lv = dob->query_temp("pantu/next_lv");
+    if (mylvl <= 30)
+    {
+      NPC_D->place_npc(me,1);
+      ratio = 95 + random(10);
+    }
+
+    else if (mylvl <= 45)
+    {
+      NPC_D->place_npc(me,2);
+      ratio = 100 + (next_lv+1)*5;
+    }
+
+    else
+    {
+      NPC_D->place_npc(me,3);
+      ratio = 100 + (next_lv+1)*10;
+    }
+
+    next_lv++;
+    dob->set_temp("pantu/next_lv",next_lv);
+    NPC_D->set_from_me(me, dob, ratio);
+    full_me(me);
+    me->add_temp("apply/attack", 20*next_lv);
+    me->add_temp("apply/dodge", 20*next_lv);
+    me->add_temp("apply/damage", 20*next_lv);
+    me->add_temp("apply/unarmed_damage", 20*next_lv);
+    me->add_temp("apply/armor", 20*next_lv);
+    n_name = HIW"由" + dob->name() + HIW"第" + HIY + chinese_number(next_lv + 1) +
+             HIW"次缉拿的 "NOR;
+    me->set("title",n_name);
+    switch (random(3))
+    {
+      case 0 :
+        msg = HIY"你根据多年的经验，判断出他似乎逃往了 " + HIW + me->query("place")
+            + HIY" ！\n"NOR;
+        break;
+      case 1 :
+        msg = HIY"根据飞鸽传书，他逃往了 " + HIW + me->query("place") +
+              HIY" ！\n"NOR;
+        break;
+      default :
+        msg = HIY"你嘿嘿冷笑了数声，心中早已算定他要逃往 " + HIW + me->query("place")
+            + HIY" ！\n"NOR;
+        break;
+    }
+
+    tell_object(dob,msg);
+  }
+
+  return;
+}
+
+void unconcious()
+{
+  die(this_object()->query_last_damage_from());
+}
+
+int accept_fight(object ob)
+{
+  command("say 我正赶路！");
+  return 0;
+}
+
+int accept_kill(object ob)
+{
+  command("say 哼！找死！");
+  if (ob->query("quest_xyj/pantu/npc_id") != query("id"))
+  {
+    delete_temp("my_killer");
+    ::kill_ob(ob);
+    return 1;
+  }
+
+  if (!query_temp("my_killer"))
+    full_me(this_object());
+  set_temp("my_killer",ob);
+  kill_ob(ob);
+  return 1;
+}
+
+void scan()
+{
+  object ob = this_object();
+  ::scan();
+  if ((time() - (int)query("born_time")) > query("stay_time") &&
+      ! is_fighting() && living(ob))
+  {
+    message_vision("$N急急忙忙的走了。\n", ob);
+    CHANNEL_D->do_channel(ob, "rumor",
+             sprintf("听说%s隐居到了深山老泽，从此不再出没在世间。", name()));
+    log_file("static/killed_die", sprintf("%s %s(%s) vanished because timeout(%d:%d).\n",
+             log_time(), name(), query("id"), time() - query("born_time"),
+             query("stay_time")));
+    SYSQ_D->delete_quest(ob->query("quest_type"),ob->query("quester"));
+    destruct(this_object());
+    return;
+  }
+
+  return;
+}
+

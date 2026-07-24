@@ -1,0 +1,174 @@
+#include <command.h>
+inherit F_DBASE;
+int main(object me, string arg)
+{
+  int i,qi,shen;
+  object where = environment(me);
+  mapping cnd;
+  string *kc;
+  object ridee;
+
+  seteuid(getuid());
+  if( !wizardp(me))
+    if( !where->query("sleep_room") && !me->query_temp("force_sleep") )
+      return notify_fail(WHT"这里不是睡觉的地方。\n"NOR);
+  if( where->query("owner") && !me->query("owner") )
+    return notify_fail(WHT"你不是这里的主人，不能在这里休息。\n"NOR);
+  if (me->is_busy())
+    return notify_fail(WHT"你正忙着呢！\n"NOR);
+  ridee = me->query_temp("is_riding");
+
+  if( objectp(ridee) )
+    return notify_fail(WHT"你还是先从坐骑上下来吧。\n"NOR);
+  ridee = me->query_temp("is_rided_by");
+  if( objectp(ridee) )
+    return 0;
+
+  if( me->is_fighting() )
+    return notify_fail(WHT"战斗中想睡觉？你想找死呀！\n"NOR);
+
+  qi = (int) me->query("kee");
+  shen   = (int) me->query("sen");
+  if (qi <= 0 || shen <= 0)
+    return notify_fail(HIR"你现在接近昏迷，当心睡下去就起不来了，清醒清醒吧？\n"NOR);
+  cnd = me->query_condition();
+
+  if (cnd && sizeof(cnd))
+  {
+    kc   = keys(cnd);
+    for (i = 0; i < sizeof(kc); i++)
+    {
+      if (CONDITION_D(kc[i])->min_qi_needed(me) > qi ||
+          CONDITION_D(kc[i])->min_shen_needed(me) > shen)
+      {
+        message("vision", WHT+me->name() + "看样子是想睡觉，可是辗转反侧，就是睡不着。\n"NOR,
+                 environment(me), me);
+        tell_object(me, WHT"你想合上眼睛好好睡上一觉，可是"HIB + to_chinese(kc[i]) +NOR WHT "不断折磨着你，"
+                 "让你辗转难眠。\n"NOR);
+        return 1;
+      }
+
+    }
+
+  }
+
+
+  if (where->do_sleep(arg) > 0)
+    return 1;
+  if (where->query("if_bed"))
+  {
+    if( userp(me) && (me->query("env/invisibility") != 0) )
+    {
+      write(WHT"你往被中一钻，开始睡觉。不一会儿，你就进入了梦乡。\n"NOR);
+      me->set_temp("block_msg/all",1);
+    }
+    else
+    {
+      write(WHT"你往被中一钻，开始睡觉。不一会儿，你就进入了梦乡。\n"NOR);
+      me->set_temp("block_msg/all",1);
+      message_vision(HIY "$N往被中一钻，不一会便鼾声大作，进入了梦乡。\n" NOR,me);
+    }
+
+  }
+  else
+  {
+    if( userp(me) && (me->query("env/invisibility") != 0) )
+    {
+      write(WHT"你就地一躺，开始睡觉。不一会儿，你就进入了梦乡。\n"NOR);
+      me->set_temp("block_msg/all",1);
+    }
+    else
+    {
+      write(WHT"你就地一躺，开始睡觉。不一会儿，你就进入了梦乡。\n"NOR);
+      me->set_temp("block_msg/all",1);
+      message_vision(HIY "$N就地一躺，不一会便鼾声大作，进入了梦乡。\n" NOR,me);
+    }
+
+  }
+
+  me->set("no_get", 1);
+  me->set("no_get_from", 1);
+  me->set_temp("sleeped", 1);
+  if (where->query("hotel"))
+    me->delete_temp("rent_paid");
+  me->disable_player(" <睡梦中>");
+  i = random(45 - me->query("con")) + 10 ;
+  if( playerp(me) )
+    me->start_call_out(bind((: call_other, __FILE__, "wakeup", me :), me), i);
+  else
+    call_out("wakeup",i, me);
+  return 1;
+}
+
+
+void wakeup(object me)
+{
+  if (! me || ! me->query_temp("sleeped"))
+    return;
+  if (living(me))
+  {
+    me->delete_temp("sleeped");
+    return;
+  }
+
+  me->enable_player();
+
+  while( environment(me)->is_character() )
+    me->move(environment(environment(me)));
+  if(interactive(me))
+  {
+    object pillow=present("huangliang zhen",me);
+    if((pillow && pillow->goto_dream(me)) || random(1000)==1)
+    {
+      if(pillow)
+        pillow->pillow_destruct();
+      me->set_temp("dream_place",base_name(environment(me)));
+      me->delete("no_get");
+      me->delete("no_get_from");
+      me->set_temp("block_msg/all", 0);
+      me->delete_temp("sleeped");
+      write("\n\n");
+      me->move("/d/honglou/kat");
+      return;
+    }
+
+  }
+
+
+  me->set_temp("block_msg/all", 0);
+  me->delete("no_get");
+  me->delete("no_get_from");
+  me->delete_temp("sleeped");
+  if (time() - me->query("last_sleep") >= 120)
+  {
+    me->set("kee", me->query("eff_kee"));
+    me->set("sen",  me->query("eff_sen"));
+    if ((int)me->query("mana") < (int)me->query("max_mana"))
+      me->set("mana", (int)me->query("max_mana"));
+    message("vision", me->name() + "一觉醒来，精力充沛"
+				  "地活动了一下筋骨。\n",
+				  environment(me), ({ me }));
+    write("你一觉醒来，只觉精力充沛。该活动一下了。\n");
+    me->set("last_sleep", time());
+  }
+  else
+  {
+    message("vision", me->name() + "迷迷糊糊的睁开眼睛，"
+                     "懒散无神的爬了起来。\n",
+                     environment(me), ({ me }));
+    write("你迷迷糊糊的睁开双眼，爬了起来。\n");
+  }
+
+  me->write_prompt();
+}
+
+int help(object me)
+{
+        write(@HELP
+指令格式 : sleep
+
+顾名思义，这个指令是用来睡觉的。
+HELP );
+        return 1;
+}
+

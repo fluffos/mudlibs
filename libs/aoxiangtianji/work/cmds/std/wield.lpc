@@ -1,0 +1,159 @@
+// 所有限制属性基本上在F_EQUIP里面设定
+inherit F_CLEAN_UP;
+#include <ansi.h>
+int do_wield(object me, object ob);
+int main(object me, string arg)
+{
+  object ob, *inv, lob, rob;
+  int i, count;
+  string msg;
+  if( !arg )
+  {
+    lob = me->query_temp("left_hand_occupy");
+    rob = me->query_temp("right_hand_occupy");
+    if (!objectp(lob) && !objectp(rob))
+    {
+      write("你手上没有拿任何东西！\n");
+      return 1;
+    }
+
+    if (lob == rob)
+    {
+      msg = sprintf("你双手拿着%s",lob->query("name"));
+      msg += (int)lob->query("weapon_prop/damage") ?
+            sprintf(" 兵器：%d\n",(int)lob->query("weapon_prop/damage")) : "\n";
+      write(msg);
+      return 1;
+    }
+
+    if (objectp(lob))
+    {
+      msg = sprintf("你左手拿着%s",lob->query("name"));
+      msg += (int)lob->query("weapon_prop/damage") ?
+          sprintf(" 兵器：%d\n",(int)lob->query("weapon_prop/damage")) : "\n";
+    }
+    else
+      msg = "你左手没有拿任何东西！\n";
+    if (objectp(rob))
+    {
+      msg += sprintf("你右手拿着%s",rob->query("name"));
+      msg += (int)rob->query("weapon_prop/damage") ?
+          sprintf(" 兵器：%d\n",(int)rob->query("weapon_prop/damage")) : "\n";
+    }
+    else
+      msg += "你右手没有拿任何东西！\n";
+    if ((int)me->query_temp("apply/damage") > 0)
+      msg += sprintf("你当前的附加兵器伤害是：%d\n",(int)me->query_temp("apply/damage"));
+    if ((int)me->query_temp("apply/unarmed_damage") > 0)
+      msg += sprintf("你当前的徒手伤害是：%d\n",(int)me->query_temp("apply/unarmed_damage"));
+    write(msg);
+    return 1;
+  }
+
+  if (me->is_busy())
+    return notify_fail("你正忙着呢？\n");
+
+  if(arg=="all")
+  {
+    inv = all_inventory(me);
+    for(count=0, i=0; i<sizeof(inv); i++)
+    {
+      if( inv[i]->query("equipped") )
+        continue;
+      if( inv[i]->query("combine") )
+        continue;
+      if( inv[i]->query("family_only") )
+        continue;
+      if( inv[i]->query("no_weapon") )
+        continue;
+      if(do_wield(me, inv[i]) )
+        count ++;
+    }
+
+    write("Ok.\n");
+    return 1;
+  }
+
+  if( !objectp(ob = present(arg, me)) )
+    return notify_fail("你身上没有这样东西。\n");
+  if( ob->query("equipped") )
+    return notify_fail("你已经装备着了。\n");
+  return do_wield(me, ob);
+}
+
+int do_wield(object me, object ob)
+{
+  string str;
+  string family;
+  object lob, rob;
+  if (!ob->is_weapon())
+    return 0;
+
+  family=(string)me->query("family/family_name");
+  if( !wizardp(me) && userp(me) )
+  {
+    if( ob->query("owner_id") && ob->query("owner_id") != getuid(me) )
+    {
+      write("下次别乱偷别人的东西.\n");
+      write(ob->name()+"冲天而去，消失不见了.\n");
+      destruct(ob);
+      return 1;
+    }
+
+    if( ob->query("combine") && ob->query("owner_id") != getuid(me) )
+    {
+      write("下次别乱偷别人的东西.\n");
+      write(ob->name()+"冲天而去，消失不见了.\n");
+      destruct(ob);
+      return 1;
+    }
+
+    if( ob->query("family_only") &&
+        me->query("family/family_name") != ob->query("family_only") )
+    {
+      write(ob->query("family_only")+"门派专用武器你不能装备.\n");
+      write(ob->name()+"冲天而去，消失不见了.\n");
+      destruct(ob);
+      return 1;
+    }
+
+  }
+
+  if( me->query_temp("no_wield") )
+    return notify_fail("你原形已现，不可再持兵器！\n");
+  if( ob->query("no_weapon") )
+    return notify_fail("这件武器已经完全损毁，不能装备！\n");
+  if( !wizardp(me) && userp(me) && ob->query("wiz_only") )
+    return notify_fail(HIC"你无权装备这件东西！\n"NOR);
+  if( ob->wield() )
+  {
+    if( !stringp(str = ob->query("wield_msg")) )
+      str = "$N装备$n作武器。\n";
+    lob = me->query_temp("left_hand_occupy");
+    rob = me->query_temp("right_hand_occupy");
+    if (lob == ob && rob == ob)
+      str += "$N双手拿起了$n。\n";
+    else if (lob == ob)
+      str += "$N左手拿起了$n。\n";
+    else if (rob == ob)
+      str += "$N右手拿起了$n。\n";
+    message_vision(str, me, ob);
+    if(me->is_fighting())
+      me->start_busy(1);
+    return 1;
+  }
+  else
+    return 0;
+}
+
+int help(object me)
+{
+        write(@HELP
+指令格式：wield|zhuangbei <装备名称>
+
+这个指令让你装备某件物品作武器, 你必需要拥有这样物品。
+HELP
+    );
+    return 1;
+}
+

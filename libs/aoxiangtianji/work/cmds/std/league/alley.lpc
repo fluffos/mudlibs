@@ -1,0 +1,129 @@
+// league command: alley
+#include <ansi.h>
+void create() { seteuid(getuid()); }
+
+int main(object me, string arg)
+{
+  string msg,type;
+  string league_id, lid;
+  string *alley;
+  int i;
+  object leader;
+  object who;
+
+  if (!playerp(me))
+    return 0;
+  league_id = LEAGUE_D->query_player_league_id(me);
+  if (!stringp(league_id))
+    return notify_fail("你还不是任何联盟的成员。\n");
+  if (!arg)
+  {
+    alley = LEAGUE_D->query_league_alley(league_id);
+    if (!arrayp(alley) || sizeof(alley) < 1)
+      return notify_fail("你的联盟当前没有任何盟友。\n");
+    msg = "你所在的联盟当前的盟友如下：\n";
+    for (i=0;i<sizeof(alley);i++)
+      msg += sprintf("%s(%s)\n",
+                     (string)LEAGUE_D->query_league_cname(alley[i]),
+                     alley[i]);
+    msg += "\n";
+    me->start_more(msg);
+    return 1;
+  }
+
+  if (LEAGUE_D->query_league_leader(league_id) != me->query("id"))
+    return notify_fail("只有盟主才能操作盟友关系。\n");
+  if (arg == "cancel")
+  {
+    if (!mapp(me->query_temp("pending/league")))
+      return notify_fail("你要做什么？\n");
+    me->delete_temp("pending/league");
+    write("你取消了和其他联盟结盟的念头。\n");
+    return 1;
+  }
+
+  if (sscanf(arg,"-%s %s",type,lid) != 2)
+  {
+    type = 0;
+    lid = arg;
+  }
+
+  else if (type != "abolish")
+    return notify_fail("请注意，要解除盟约关系，league alley -abolish [对象联盟]。\n");
+
+  if (type == "abolish")
+  {
+    msg = LEAGUE_D->remove_a_alley(league_id, lid);
+    if (!stringp(msg))
+      return 0;
+    write(msg);
+    return 1;
+  }
+
+  if (!LEAGUE_D->is_league_id(lid))
+    return notify_fail("没有这个联盟。\n");
+  if (LEAGUE_D->is_alley(league_id,lid))
+    return notify_fail("双方已经是盟友了！\n");
+  if (LEAGUE_D->is_enemy(league_id,lid))
+    return notify_fail("双方目前是敌对关系，无法结盟！\n");
+  if (LEAGUE_D->query_league_relation_league2(league_id, lid) < 80 ||
+      LEAGUE_D->query_league_relation_league2(lid,league_id) < 80)
+    return notify_fail("双方友好度不够，无法结盟！\n");
+
+  leader = LEAGUE_D->query_league_leader(lid);
+  if (!stringp(leader))
+    return notify_fail("江湖中有这个联盟吗？\n");
+  who = find_player(leader);
+  if (!who || !playerp(who))
+    return notify_fail("可惜对方的盟主不在线。\n");
+  me->set_temp("pending/league/pid", who->query("id"));
+  me->set_temp("pending/league/pleague", lid);
+  tell_object(who, HIG + me->name(1) + "(" +
+                         me->query("id") + ")想和你所在"
+                         "的联盟结成盟友关系，你是否同意"
+                         "(right/refuse)？\n" + NOR);
+  who->set_temp("pending/answer/" + me->query("id") + "/right",
+                bind((: call_other, __FILE__, "do_right", who, me :), who));
+  who->set_temp("pending/answer/" + me->query("id") + "/refuse",
+     	        bind((: call_other, __FILE__, "do_refuse", who, me :), who));
+  return 1;
+}
+
+int do_right(object me, object ob)
+{
+  mapping league;
+  if (!playerp(ob))
+    return notify_fail("可惜啊，人家已经不在线了。\n");
+  if (! living(ob))
+    return notify_fail("人家现在听不到你说的话，还是算了吧。\n");
+  league = ob->query_temp("pending/league");
+  if (!mapp(league) || sizeof(league) < 1)
+    return notify_fail("他现在有和你结盟的打算吗？。\n");
+  if (league["pid"] != me->query("id") ||
+      league["pleague"] != LEAGUE_D->query_player_league_id(me->query("id")))
+    return notify_fail("他有打算和你结盟？。\n");
+  if (!LEAGUE_D->add_new_alley(ob->query("league/league_id"),league["pleague"]))
+    return notify_fail("虽然你愿意和对方联盟，但这次失败了。\n");
+
+  tell_object(ob,me->query("name") + "同意了你的结盟请求。\n");
+  ob->delete_temp("pending/league");
+  return 1;
+}
+
+int do_refuse(object me, object ob)
+{
+  mapping league;
+  if (!playerp(ob))
+    return notify_fail("可惜啊，人家已经不在线了。\n");
+  if (! living(ob))
+    return notify_fail("人家现在听不到你说的话，还是算了吧。\n");
+  league = ob->query_temp("pending/league");
+  if (! mapp(league) || sizeof(league) < 1)
+    return notify_fail("人家现在已经不打算和你结盟了。\n");
+  if (league["pid"] != me->query("id") ||
+      league["pleague"] != LEAGUE_D->query_player_league_id(me->query("id")))
+    return notify_fail("他有打算和你结盟？。\n");
+  ob->delete_temp("pending/league");
+  tell_object(ob,me->query("name") + "拒绝了你的结盟请求。\n");
+  return 1;
+}

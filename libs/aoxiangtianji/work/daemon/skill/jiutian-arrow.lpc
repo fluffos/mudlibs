@@ -1,0 +1,213 @@
+#include <ansi.h>
+#include <combat.h>
+inherit SKILL;
+
+int valid_enable(string usage) { return usage == "archery"; }
+
+int valid_learn(object me)
+{
+  if(userp(me) && !wizardp(me) && me->query("family/family_name") != "月宫")
+    return notify_fail("“九天玄女箭法”是月宫不传之密！\n");
+  if ((int)me->query("max_force") < 500)
+    return notify_fail("你的内力不够，没有办法练九天玄女箭法。\n");
+  if ((int)me->query_skill("force") < 80)
+    return notify_fail("你的内功火候不够，没有办法练九天玄女箭法。\n");
+  if (!me->query("family/can_learn/houyi"))
+    return notify_fail("后弈不愿意教你！\n");
+
+  if ((int)me->query_skill("archery", 1) < (int)me->query_skill("jiutian-arrow", 1))
+    return notify_fail("你的基本弓箭水平有限，无法领会更高深的九天玄女箭法。\n");
+  return 1;
+}
+
+int practice_skill(object me)
+{
+  if ((int)me->query("kee") < 40)
+    return notify_fail("你的气不够，没有办法练习九天玄女箭法。\n");
+  if ((int)me->query("force") < 50)
+    return notify_fail("你的内力不够，没有办法练习九天玄女箭法。\n");
+  me->receive_damage("kee", 30);
+  me->add("force", -40);
+  return 1;
+}
+
+int expell_delete()
+{
+  return 1;
+}
+
+int learn_bonus()
+{
+  return 5;
+}
+
+int practice_bonus()
+{
+  return 6;
+}
+
+mapping black_white_ness()
+{
+  return (["skill_level" : 150 ,
+           "effect"      : 20  ,
+         ]);
+}
+
+void shot_victim(object me, object victim, object bow, object ob, int num)
+{
+  int ap,dp,percep;
+  int jiali,dam,wound;
+  string msg;
+
+  if (!objectp(me) || !objectp(victim) || !objectp(ob))
+    return;
+  if (environment(me) != environment(victim))
+    return;
+
+  ap = COMBACC_D->math_ap(me,"archery");
+  if (me->query("special_skill/accuracy"))
+    ap += ap/5 ;
+  percep = (int)me->query_skill("count",1);
+  if (percep > 80)
+  {
+    percep = percep/8;
+    if (percep > 80)
+      percep = 80 + random(percep- 80) ;
+    ap += ap*(random(percep))/100;
+  }
+
+  ap += ap*(num*20)/100;
+
+  if (userp(victim))
+    ap /= 3;
+
+  dp = COMBACC_D->math_dp(me,victim,-10,0);
+  dp = (dp/100)*80 ;
+  percep = (int)victim->query_skill("perception",1);
+  if (percep > 80)
+  {
+    percep = percep /8;
+    if (percep > 80)
+      percep = 80 ;
+    dp += dp*(random(percep))/100;
+  }
+
+  percep = (int)victim->query_skill("count",1);
+  if (percep > 50)
+  {
+    percep = percep/5;
+    if (percep > 80)
+      percep = 80 + random(percep- 80) ;
+    dp += dp*(random(percep))/100;
+  }
+
+  if (ap*100/(ap+dp) < random(100))
+  {
+    switch (random(3))
+    {
+      case 0:
+        msg = CYN "却见$n" CYN "轻轻一闪，已将$N" CYN "射出"
+                  "的箭避了开去。\n" NOR;
+        break;
+      case 1:
+        msg = CYN "只见$n" CYN "不慌不忙，身子向一旁横移数"
+                  "尺，躲开了$N" CYN "这一招。\n" NOR;
+        break;
+      default:
+        msg = CYN "可是$n" CYN "身子往后一仰，顿时让$N" CYN
+                  "射出的箭落空。\n";
+        break;
+    }
+
+  }
+
+  else
+  {
+    dam = ob->query("weapon_prop/damage");
+    dam = dam*((int)bow->query("power"))/30 ;
+    dam += random((int)bow->query("power") + 1);
+
+    jiali = (int)me->query("force_factor")/3;
+    dam += (int)me->query_skill("archery",1);
+
+    if (jiali > 1)
+      dam += random(jiali/2 + 1);
+
+    dam = (dam + random(2*dam))/3;
+
+    wound = (int)ob->query("wound_percent");
+    wound = wound*((int)bow->query("power"))/30 ;
+    wound += random((int)bow->query("power")/2 + 1);
+
+    msg = COMBAT_D->do_damage(me, victim, REMOTE_ATTACK, dam, wound,
+                               HIR "只见$p" HIR "一个闪避不及，正中$P"
+                               HIR "这一" + ob->name() + HIR "，登时"
+                                   "鲜血飞溅！\n" NOR);
+  }
+
+  message_combatd(msg, me, victim);
+  COMBAT_D->hit_poison(me, victim, ob);
+  ob->add_amount(-1);
+  if (ob->query_amount() < 1)
+    destruct(ob);
+  return;
+}
+
+int perform(object me, object target)
+{
+  int sk, num, t_num, i;
+  object bow, *obs;
+
+  bow = me->query_temp("handing");
+
+  if (!objectp(bow) || (!bow->is_bow() && !bow->is_crossbow()))
+    return notify_fail("你手中没有弓弩，怎么射击？\n");
+  sk = me->query_skill("jiutian-arrow",1);
+
+  if (sk < 120)
+    return notify_fail("你的九天玄女箭法还不够熟练！\n");
+
+  sk = me->query_skill("archery");
+  num = sk/120;
+  if (num > 4)
+    num = 4;
+
+  obs = all_inventory(me);
+  obs = filter_array(obs,(: $1->is_arrow() :));
+
+  if (sizeof(obs) < 1)
+    return notify_fail("你身上没有可以发射的弓箭！\n");
+
+  t_num = 0;
+  for (i = 0; i < sizeof(obs); i++)
+    t_num += obs[i]->query_amount();
+  if (num > t_num)
+    num = t_num;
+  message_vision(HIM"$N" HIM"冷冷的看着$n，" HIM"伸手取出了" + chinese_number(num) +
+                 HIM"只弓箭，转瞬间弓响霹雳，箭似流星，连珠射向了$n" HIM"！\n"NOR,me,target);
+
+  for (i = 0;i<num;i++)
+  {
+    if (!living(target))
+      break;
+    obs = all_inventory(me);
+    obs = filter_array(obs,(: $1->is_throwing() :));
+
+    if (sizeof(obs) < 1)
+      break;
+    shot_victim(me,target,bow, obs[0],i);
+    me->receive_damage("sen", 10);
+  }
+
+  me->start_busy(2 + random(i + 1));
+  if (userp(me) && userp(target) && ! target->is_want_kill(me->query("id")))
+    me->want_kill(target);
+  me->kill_ob(target);
+
+  if (living(target) && ! userp(target))
+    target->kill_ob(me);
+  else
+    target->fight_ob(me);
+  return 1;
+}
+

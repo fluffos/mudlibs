@@ -1,0 +1,29 @@
+// halt.c
+
+inherit F_CLEAN_UP;
+
+int main(object me, string arg)
+{
+  object ob;
+
+  if (!arg) ob = me;
+  else if (!ob=find_player(arg)) ob = me;
+
+  if( !ob->is_fighting() )
+    return notify_fail(ob->short()+"現在並沒有在戰鬥。\n");
+
+  ob->remove_all_killer();
+  message_vision("$N用巫師的神力停止了$n的打鬥。\n", me, ob);
+  return 1;
+}
+
+int help(object me)
+{
+   write(@HELP
+指令格式: halt [誰]
+
+可以停止某人的戰鬥，如果沒有對象，就是停止自己的戰鬥。
+HELP
+   );
+   return 1;
+}

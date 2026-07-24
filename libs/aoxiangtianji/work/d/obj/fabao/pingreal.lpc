@@ -1,0 +1,162 @@
+#include <ansi.h>
+#include <weapon.h>
+#define PING "/d/obj/fabao/pingreal"
+#define CAUSED "no_move"
+
+inherit F_UNIQUE;
+inherit ITEM;
+
+void create()
+{
+  set_name(HIW"羊脂玉净瓶"NOR,({"jing ping", "jing", "ping", "fabao"}));
+  set_weight(5000);
+  set_max_encumbrance(100000000000);
+  if(clonep())
+    set_default_object(__FILE__);
+  else {
+    set("unit","只");
+    set("value", 100000);
+    set("material","cloth");
+    set("long","一只几乎透明的羊脂玉净瓶。\n");
+  }
+
+  set("no_fight", 1);
+  set("no_magic", 1);
+  set("unique", 1);
+  set("no_sell", "羊脂玉净瓶乃法宝没人敢买也。\n");
+  set("no_drop", "羊脂玉净瓶乃法宝不可扔弃也。\n");
+  set("no_put",1);
+  set("no_give", "羊脂玉净瓶乃法宝不可赠人也。\n");
+  set("replace_file", "/d/obj/fabao/pingfake.lpc");
+  set("is_monitored",1);
+  setup();
+}
+
+void init ()
+{
+  ::init();
+  add_action ("do_out", "out");
+}
+
+int do_out ()
+{
+  object me = this_object ();
+  object who = this_player();
+  object where = environment (who);
+  object room = environment (me);
+  if (where != me)
+    return 0;
+  if (who->query_temp("no_move") ||
+      who->is_busy())
+  {
+    tell_object (who, "你竭力挣扎着想爬出去，却挪动不了身子。\n");
+    return 1;
+  }
+
+  tell_object (who, "你用尽全身的力气抠住羊脂玉净瓶壁，向外爬去。\n");
+  if (room->is_character())
+    room = environment (room);
+  who->move(room);
+  message_vision ("$N从羊脂玉净瓶里探出脑袋，晕乎乎地爬了出来。\n",who);
+  return 1;
+}
+
+int ji(string target)
+{
+  object fabao,me,victim;
+  string msg, objname;
+  int spi,damage, result;
+  fabao = this_object();
+  me = this_player();
+  objname=this_object()->name();
+  if (sizeof(all_inventory(fabao))>0)
+  {
+    tell_object (me, objname+"里有杂物，你无法再祭"+objname+"。\n");
+    return notify_fail("你祭"+objname+"失败。\n");
+  }
+
+  if (!target)
+    return notify_fail("你想用对谁用"+objname+"？\n");
+  if (!objectp(victim=present(target, environment(me))))
+    return notify_fail("这里没有 "+target+"。\n");
+  if(!living(victim))
+    return notify_fail("你的目标不是活物！\n");
+  if(!me->is_fighting(victim))
+    return notify_fail("只有战斗中才能祭" + objname + "。\n");
+  if(victim->query_temp("no_move"))
+    return notify_fail("对方已经无暇自顾了，有必要用" + objname + "么？\n");
+  if( (int)me->query("mana") < 1200)
+    return notify_fail("你的法力不够了！\n");
+  if( (int)me->query("sen") < 500)
+    return notify_fail("你的精神无法集中！\n");
+  message_vision (HIC"\n$N" HIC"口中念着咒语，掏出" + objname +
+                  HIC"底儿朝上，冷不丁地对$n" HIC"一喊：“" +
+                  victim->query("name") + HIC"！”\n",me,victim);
+  if (userp(me) && userp(victim) && !victim->is_want_kill(me->query("id")))
+     me->want_kill(victim);
+  me->kill_ob(victim);
+
+  if (living(victim) && ! userp(victim))
+    victim->kill_ob(me);
+  else
+    victim->fight_ob(me);
+  me->add("mana", -500);
+  me->receive_damage("sen", 100);
+  me->start_busy(2+random(3));
+  if(userp(me) && (int)fabao->query("time_available") <= 0 )
+  {
+    tell_room(environment(me),"\n突然间"+objname+"瘪了下去，化为了碎片。\n");
+    destruct(fabao);
+    return 1;
+  }
+
+  spi = fabao->query("time_available")*8;
+  fabao->add("time_available", -1);
+  if (!userp(me))
+    if (fabao->query("time_available") < 0)
+      fabao->set("time_available", 0);
+  result = SPELL_D->attacking_cast_success(me,victim,100 + random(spi));
+  msg = "";
+  switch(result)
+  {
+    case 1:
+      msg += HIR"\n$n" HIR"顺口答道：“在！”\n";
+      msg += HIR"倾刻之间$n" HIR"被" + objname +
+             HIR"叭地一声活活吸了进去！\n";
+      victim->move(fabao);
+      damage = random((int)me->query("mana_factor")*3/5 + 1)+1;
+      if (damage < 10)
+        damage = 10;
+      if (damage > 60)
+        damage = 60;
+      victim->set_curse_changed(PING,CAUSED,"dexerity",damage,1);
+      victim->unconcious();
+      if (objectp(victim))
+      {
+        victim->receive_wound("kee",(int)victim->query("max_kee")/5, me);
+        victim->receive_wound("sen",(int)victim->query("max_sen")/5, me);
+      }
+
+      break;
+    case 0:
+      msg += HIB"\n$n" HIB"知道有诈，闭口不语，结果什么都没发生。\n";
+      break;
+    case -1:
+      msg += HIB"$n" HIB"伸手一指，只听“咝”地一声" + objname +
+             HIB"突然爆开了，裂作碎片散落在地。\n"NOR;
+      destruct (fabao);
+      break;
+  }
+
+  message_vision(msg,me,victim);
+  me->add("mana", -250);
+  me->add("sen", -50);
+  return 1;
+}
+
+void remove_effect(object me)
+{
+  if (objectp(me) && me->query_temp(CAUSED))
+    tell_object(me,"你终于可以摆脱羊脂玉净瓶的困扰了。\n");
+}
+

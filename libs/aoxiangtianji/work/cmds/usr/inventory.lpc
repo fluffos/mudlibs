@@ -1,0 +1,208 @@
+// CMDS /cmds/usr/inventory.c
+#include <ansi.h>
+inherit F_CLEAN_UP;
+string weight(int w)
+{
+  int j, l, q;
+  string str = "";
+  if (w < 2)
+    return "0";
+  w >>= 1;
+  q = w & 15;
+  w >>= 4;
+  l = w & 15;
+  j = w >> 4;
+  if (j) str += j+"斤";
+  if (l) str += l+"两";
+  if (q) str += q+"钱";
+  return str;
+}
+
+int main(object me, string arg)
+{
+  object *inv, *inv_w, ob, obj;
+  int i, x;
+  string wiz_status, w;
+  wiz_status = SECURITY_D->get_status(me);
+  if( wiz_status == "(admin)" && arg )
+  {
+    ob = present(arg, environment(me));
+    if( !ob ) ob = find_living(arg);
+    if( !ob ) ob = find_player(arg);
+    if (!ob) return notify_fail("你要察看谁的状态？\n");
+  }
+
+  else if( wiz_status != "(admin)" && arg )
+    ob=me;
+  if( !ob )
+    ob = me;
+  if( wizardp(me) && wiz_level(me) < wiz_level(ob) )
+    ob = me;
+  i = (int)ob->query_encumbrance() * 100 / (int)ob->query_max_encumbrance();
+  x= ob->query_encumbrance();
+  w = weight(x);
+  inv_w = all_inventory(ob);
+  if (objectp(obj = present("obj qingdan", ob)) )
+    inv_w -= ({ obj });
+  inv = all_inventory(ob);
+  if( !sizeof(inv) )
+  {
+    write((ob==me)? "目前你身上没有任何东西。(负重：" + w + ")\n"
+                  : ob->name() + "身上没有携带任何东西。(负重：" + w + ")\n");
+    if( sizeof(inv_w)<=0 && x>0 )
+    {
+      write( sprintf(HIG"\n%s的负重异常状态被cmds/usr/inventory系统自动修正%s->0。\n\n"NOR,
+                     (ob==me)? "你": ob->name(), w ));
+      ob->add_encumbrance(-x);
+      ob->command("inventory");
+    }
+
+    return 1;
+  }
+
+  if(i>=99)
+    write(sprintf("%s身上带着下列[%d/" + ob->query_max_items() + "]样东西(负重%s 负重比"HIR"%d%%"NOR")\n"
+                  "──────────────────────────────\n%s\n",
+                  (ob==me) ? "你" : ob->name(),
+                  sizeof(inv),
+                  w,
+                  ( i < 0 ) ? 0 : i ,
+                  implode(map_array(inv, "inventory_desc", this_object()),"\n")));
+  else
+  {
+    if( me->query("env/wiz_look")
+       && wiz_level(me) > wiz_level("(arch)") )
+      write(sprintf("%s身上带着下列[%d/"+ob->query_max_items()+"]样东西(负重%s 负重比%d%%)：[系统文件路径]\n"
+                    "───────────────────────────────────────────\n%s\n",
+                    (ob==me)? "你": ob->name(),
+                    sizeof(inv),
+                    w ,
+                    ( i < 0 ) ? 0 : i ,
+                    implode(map_array(inv, "inventory_desc", this_object()), "\n")));
+    else
+      write(sprintf("%s身上带着下列[%d/"+ob->query_max_items()+"]样东西(负重%s 负重比%d%%)\n"
+                    "──────────────────────────────\n%s\n",
+                    (ob==me)? "你": ob->name(),
+                    sizeof(inv),
+                    w ,
+                    ( i < 0 ) ? 0 : i ,
+                    implode(map_array(inv, "inventory_desc", this_object()), "\n") ));
+  }
+
+  if( me->query("env/wiz_look")
+      && wiz_level(me) > wiz_level("(arch)") )
+    write("─────────────────────────────────── "HIR"翱翔天际"NOR" ───\n");
+  else
+    write("────────────────────── "HIR"翱翔天际"NOR" ───\n");
+  write(""HIW"Ψ"NOR" 已持有的武器，"HIG"√"NOR" 已穿着的盔甲，"HIY"≯"NOR" 拿在手中的物品。\n");
+  return 1;
+}
+
+string inventory_desc(object ob)
+{
+  string desc, myself;
+  string unit, fn;
+  int x;
+  string equip_symbol;
+  object who = this_player(1);
+
+  x = ob->query_amount();
+  if( x < 1 )
+    x =1;
+  unit = ob->query("base_unit");
+  if (!stringp(unit))
+  {
+    unit = ob->query("unit");
+    x = 1;
+  }
+
+  myself = "  ";
+  if (ob->query("owner") == who->query("id") ||
+      ob->query_temp("owner") == who->query("id"))
+    myself = HIB"＠"NOR;
+
+  equip_symbol = "  ";
+  if (ob->query("equipped") && ob->is_weapon())
+  {
+    if (ob->is_item_make())
+    {
+      if (ob->query("magic/enchase_ok"))
+        equip_symbol = BLINK HIR"Ψ"NOR;
+      if (ob->query("magic/imbue"))
+        equip_symbol = BLINK HIM"Ψ"NOR;
+      else if (ob->query("magic/do_san"))
+        equip_symbol = BLINK HIY"Ψ"NOR;
+      else
+        equip_symbol = BLINK HIW"Ψ"NOR;
+    }
+
+    else
+      equip_symbol = HIW"Ψ"NOR;
+  }
+
+  else if (ob->query("equipped") && ob->is_armor())
+  {
+    if (ob->is_item_make())
+    {
+      if (ob->query("magic/enchase_ok"))
+        equip_symbol = BLINK HIR"√"NOR;
+      if (ob->query("magic/imbue"))
+        equip_symbol = BLINK HIM"√"NOR;
+      else if (ob->query("magic/do_san"))
+        equip_symbol = BLINK HIY"√"NOR;
+      else
+        equip_symbol = BLINK HIW"√"NOR;
+    }
+
+    else
+      equip_symbol = HIW"√"NOR;
+  }
+
+  else if( !ob->query("equipped") && ob == who->query_temp("handing") )
+  {
+    if (ob->is_item_make())
+    {
+      if (ob->query("magic/enchase_ok"))
+        equip_symbol = BLINK HIR"≯"NOR;
+      if (ob->query("magic/imbue"))
+        equip_symbol = BLINK HIM"≯"NOR;
+      else if (ob->query("magic/do_san"))
+        equip_symbol = BLINK HIY"≯"NOR;
+      else
+        equip_symbol = BLINK HIW"≯"NOR;
+    }
+
+    else
+      equip_symbol = HIW"≯"NOR;
+  }
+
+  fn = "";
+  if( who->query("env/wiz_look")
+      && wiz_level(who) > wiz_level("(arch)") )
+    fn = sprintf("["YEL"%s.lpc"NOR"]",file_name(ob));
+  desc = sprintf("%-3d%-2s %s%-"+(39+color_len(ob->short()))+"s"HIR"%2s"NOR"%s",
+                         x,
+                         unit,
+                         equip_symbol,
+                         ob->short(),
+                         myself,
+                         fn);
+
+  return desc;
+}
+
+int help (object me)
+{
+    write(@HELP
+指令格式：inventory
+      inventory [人物]     （巫师专用）
+列出目前身上所携带的所有物品的详细信息。
+你身上带着下列[7/18]样东西(负重26斤4两5钱 负重比5%)
+其中7是目前拥有的，18是你最大可带的物品数量
+注 : 此指令可以 "i" 代替。
+HELP
+    );
+
+  return 1;
+}
+

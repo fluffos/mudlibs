@@ -1,0 +1,747 @@
+#include <ansi.h>
+#pragma optimize
+
+inherit F_SAVE;
+inherit F_DBASE;
+#define BIAOJU_ROOM(x) "/d/" + x + "/b_biaoju"
+#define ONE_DAY 720
+#define MAX_WEIWANG 10000
+//biaoju info
+//mapping biaoju = ([
+//   "city镖局所在的城市" : ([
+//      "weiwang" : 镖局的威望
+//      "path镖局通往其他城市的信息" : ([
+//          "other city1" :
+//          ([
+//            "time" : 路上所花的时间,
+//            "difficult" : 路上面临的困难程度
+//         ]),
+//      ]),
+//      id : ([
+//             city#货物#等级 : ([
+//               "dest" :
+//               "value" :
+//               "time" :
+//               "arrive_time" :
+//             ]),
+//           ]),
+//    ]),
+//]);
+mapping biaoju;
+//针对镖局安排的随机事件
+mapping event;
+public void business_message(string msg);
+public int is_biaoju_shop(string city);
+public int is_biaoju_city(string city);
+private mapping init_path_info(string city);
+private void init_biaoju_info();
+public int query_biaoju_weiwang(string city);
+public int query_zone_biaoju_weiwang(string zone);
+public mapping query_biaoju_path(string city);
+public mapping query_biaoju_city_to_city(string city1,string city2);
+public string *query_all_customer(string city);
+public int is_my_customer(string city,mixed ob);
+public mapping query_biaoju_customer_info(string city,mixed ob);
+public int query_effect_biaoju_weiwang(string city,string dest,int value);
+public string query_biaoju_info(string arg);
+public int add_player_goods(string city,mixed ob,string goods,int g_class,string dest);
+private void remove_biaoju_player(string city,mixed ob);
+private void remove_player_goods(string city,mixed ob,string goods,int g_class);
+public string accept_task(string city,object ob,string arg);
+public int is_success_transfer(string city,string dest,int value);
+int pay_back(string id, int amount);
+void goods_trans_finish(string city,string id,string dest,string goods,int g_class,int value);
+
+void create()
+{
+  seteuid(getuid());
+  restore();
+  set_heart_beat(ONE_DAY);
+  if (!mapp(biaoju) || sizeof(biaoju) < 1)
+  {
+    biaoju = ([]);
+    init_biaoju_info();
+  }
+
+  if (!mapp(event))
+    event = ([]);
+}
+
+void remove()
+{
+  save();
+}
+
+public void mud_shutdown()
+{
+  save();
+}
+
+public string query_save_file()
+{
+  return DATA_DIR "biaojud";
+}
+
+public void business_message(string msg)
+{
+  message("system",HIM"〖" + HIR + "镖局公告" + HIM + "〗："
+             + CYN + msg + NOR,users());
+}
+
+public int is_biaoju_shop(string city)
+{
+  object shop;
+  shop = find_object(BIAOJU_ROOM(city));
+  if (!objectp(shop))
+    shop = load_object(BIAOJU_ROOM(city));
+  return objectp(shop);
+}
+
+public int is_biaoju_city(string city)
+{
+  string *all_city;
+  if (!is_biaoju_shop(city))
+    return 0;
+  all_city = keys(biaoju);
+  return (member_array(city,all_city) != -1);
+}
+
+private mapping init_path_info(string city)
+{
+  int diff,jam;
+  string zone,mycity;
+  string *citys,*zone_city;
+  mapping result = ([]);
+
+  citys = BUSINESS_D->get_all_city();
+  if (!arrayp(citys) || sizeof(citys) < 1)
+    return result;
+  citys -= ({city});
+  zone = GOODS_D->query_city_zone(city);
+  zone_city = GOODS_D->query_zone_citys(zone);
+  foreach (mycity in citys)
+  {
+    if (mycity == city)
+      continue;
+    if (member_array(mycity,zone_city) != -1)
+    {
+      result += ([mycity : (["time" : 3,
+                             "difficult" : 10+random(10),
+                           ]),
+                ]);
+    }
+
+    else
+    {
+      diff = GOODS_D->query_zone_diff(zone,GOODS_D->query_city_zone(mycity));
+      jam = 20 + random(20);
+      result += ([mycity : (["time" : 3 + 3*diff/100,
+                             "difficult" : jam + jam*diff/100,
+                           ]),
+                ]);
+    }
+
+  }
+
+  return result;
+}
+
+private void init_biaoju_info()
+{
+  string city, *citys = BUSINESS_D->get_all_city();
+
+  if (!arrayp(citys) || sizeof(citys) < 1)
+    return;
+
+  foreach (city in citys)
+  {
+    reset_eval_cost();
+    if (!undefinedp(biaoju[city]))
+      continue;
+    if (!is_biaoju_shop(city))
+      continue;
+    biaoju += ([
+                city : ([
+                  "weiwang" : 500,
+                  "path" : init_path_info(city),
+                ]),
+              ]);
+    save();
+  }
+
+}
+
+public int query_biaoju_weiwang(string city)
+{
+  if (!is_biaoju_city(city))
+    return 0;
+  return (int)biaoju[city]["weiwang"];
+}
+
+public int query_zone_biaoju_weiwang(string zone)
+{
+  string city,*zone_citys;
+  int total = 0;
+
+  zone_citys = GOODS_D->query_zone_citys(zone);
+  if (!arrayp(zone_citys) || sizeof(zone_citys) < 1)
+    return 0;
+  foreach (city in zone_citys)
+    total += query_biaoju_weiwang(city);
+  return total;
+}
+
+public mapping query_biaoju_path(string city)
+{
+  if (!is_biaoju_city(city))
+    return ([]);
+  return mapp(biaoju[city]["path"]) ? biaoju[city]["path"] : ([]);
+}
+
+public mapping query_biaoju_city_to_city(string city1,string city2)
+{
+  if (!is_biaoju_city(city1) || !is_biaoju_city(city2))
+    return ([]);
+  return mapp(biaoju[city1]["path"][city2]) ? biaoju[city1]["path"][city2] : ([]);
+}
+
+public string *query_all_customer(string city)
+{
+  string *kc = keys(biaoju[city]) - ({0});
+  kc -= ({"weiwang"});
+  kc -= ({"path"});
+  return kc;
+}
+
+public int is_my_customer(string city,mixed ob)
+{
+  string id,*kc;
+  if (!is_biaoju_city(city))
+    return 0;
+  if (stringp(ob))
+    id = ob;
+  else if (objectp(ob))
+    id = ob->query("id");
+  else
+    return 0;
+  kc = query_all_customer(city);
+  if (!arrayp(kc) || sizeof(kc) < 1)
+    return 0;
+  return (member_array(id,kc) != -1);
+}
+
+public mapping query_biaoju_customer_info(string city,mixed ob)
+{
+  string id;
+  if (!is_biaoju_city(city))
+    return 0;
+  if (stringp(ob))
+    id = ob;
+  else if (objectp(ob))
+    id = ob->query("id");
+  else
+    return 0;
+  if (!is_my_customer(city,id))
+    return 0;
+  return mapp(biaoju[city][id]) ? biaoju[city][id] : 0;
+}
+
+public int query_effect_biaoju_weiwang(string city,string dest,int value)
+{
+  int weiwang, diff;
+  mapping c2c;
+
+  if (value < 1)
+    return 0;
+  weiwang = query_biaoju_weiwang(city);
+  c2c = query_biaoju_city_to_city(city,dest);
+  if (!mapp(c2c) || sizeof(c2c) < 1)
+    return 0;
+  diff = c2c["difficult"];
+  if (diff < 1)
+    return 0;
+  weiwang = weiwang*10/diff;
+  weiwang += weiwang*800/value;
+  return weiwang;
+}
+
+public string query_biaoju_info(string arg)
+{
+  string city,city2,zone,zone2;
+  string msg;
+  string *zone_city,*all_zone;
+  mapping path,c2c;
+  string *kp;
+
+  all_zone = GOODS_D->query_all_zone();
+  if (!arg)
+  {
+    msg = "天下各地镖局信息汇总：\n";
+    msg += "┏━━━━━┓━━━━━┓━━━━┓━━━━━┓━━━━━┓\n";
+    msg += "┃镖局名    ┃镖局名代号┃所在地区┃地区代号  ┃威望      ┃\n";
+    msg += "┗━━━━━┛━━━━━┛━━━━┛━━━━━┛━━━━━┛\n";
+    foreach (zone in all_zone)
+    {
+      zone_city = GOODS_D->query_zone_citys(zone);
+      foreach (city in zone_city)
+      {
+        msg += sprintf("┃%-10s┃%-10s┃%-8s┃%-10s┃%-10d┃\n",
+                       to_chinese(city),
+                       city,
+                       GOODS_D->query_zone_cname(zone),
+                       zone,
+                       (int)query_biaoju_weiwang(city));
+      }
+
+      msg += "┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛\n";
+      msg += sprintf(HBBLU"┃%-6s地区总威望                            ┃%-10d┃\n"NOR,
+                     GOODS_D->query_zone_cname(zone),
+                     (int)query_zone_biaoju_weiwang(zone));
+      msg += "┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛\n";
+    }
+
+    msg += "\n请注意：\n";
+    msg += "用chaxun | info [地区代号]  查询各个地区的镖局详细情报。\n";
+    msg += "用chaxun | info [镖局名代号]查询各个镖局的详细情报。\n";
+    return msg;
+  }
+
+  if (member_array(arg,all_zone) != -1)
+  {
+    zone_city = GOODS_D->query_zone_citys(arg);
+    msg = sprintf("%s地区镖局信息汇总：\n",GOODS_D->query_zone_cname(arg));
+    msg += "┏━━━━━┓━━━━━┓━━━━━┓\n";
+    msg += "┃镖局名    ┃镖局名代号┃威望      ┃\n";
+    msg += "┗━━━━━┛━━━━━┛━━━━━┛\n";
+    foreach (city in zone_city)
+      msg += sprintf("┃%-10s┃%-10s┃%-10d┃\n",
+                     to_chinese(city),
+                       city,
+                       (int)query_biaoju_weiwang(city));
+    msg += "┗━━━━━━━━━━━━━━━━━┛\n";
+    msg += sprintf(HBBLU"┃%-4s地区总威望        ┃%-10d┃\n"NOR,
+                   GOODS_D->query_zone_cname(arg),
+                   (int)query_zone_biaoju_weiwang(arg));
+    msg += "┗━━━━━━━━━━━━━━━━━┛\n";
+    msg += "\n请注意：\n";
+    msg += "用chaxun | info [镖局名代号]查询各个镖局的详细情报。\n";
+    return msg;
+  }
+
+  if (sscanf(arg,"%s to %s",city,city2) != 2)
+  {
+    city = arg;
+    city2 = 0;
+  }
+
+  if (!is_biaoju_city(city))
+    return "没有你要查询的镖局。\n";
+  if (stringp(city2) && !is_biaoju_city(city2))
+    return "指定的第二个城市，没有镖局。\n";
+  if (!stringp(city2))
+  {
+    msg = sprintf("%s镖局信息汇总：\n",to_chinese(city));
+    msg += "┏━━━━━┓━━━━━┓━━━━┓━━━━━┓━━━━━┓\n";
+    msg += "┃镖局名    ┃镖局名代号┃所在地区┃地区代号  ┃威望      ┃\n";
+    msg += "┗━━━━━┛━━━━━┛━━━━┛━━━━━┛━━━━━┛\n";
+    zone = GOODS_D->query_city_zone(city);
+    msg += sprintf("┃%-10s┃%-10s┃%-8s┃%-10s┃%-10d┃\n",
+                   to_chinese(city),
+                   city,
+                   GOODS_D->query_zone_cname(zone),
+                   zone,
+                   (int)query_biaoju_weiwang(city));
+    msg += "┗━━━━━┛━━━━━┛━━━━┛━━━━━┛━━━━━┛\n";
+    msg += sprintf("%s镖局通往各地的信息：\n",to_chinese(city));
+    msg += "┏━━━━━┓━━━━━┓━━━━┓━━━━━┓━━━━┓━━┓\n";
+    msg += "┃城市名    ┃城市名代号┃所在地区┃地区代号  ┃路途时间┃难度┃\n";
+    msg += "┗━━━━━┛━━━━━┛━━━━┛━━━━━┛━━━━┛━━┛\n";
+    path = query_biaoju_path(city);
+    kp = keys(path);
+    if (!arrayp(kp) || sizeof(kp) < 1)
+      return "这里好象没有和其他地区相连接。\n";
+    foreach (city2 in kp)
+    {
+      zone = GOODS_D->query_city_zone(city2);
+      c2c = query_biaoju_city_to_city(city,city2);
+      msg += sprintf("┃%-10s┃%-10s┃%-8s┃%-10s┃%-8d┃%-4d┃\n",
+                     to_chinese(city2),
+                     city2,
+                     GOODS_D->query_zone_cname(zone),
+                     zone,
+                     (int)c2c["time"],
+                     (int)c2c["difficult"]);
+    }
+
+    msg += "┗━━━━━┛━━━━━┛━━━━┛━━━━━┛━━━━┛━━┛\n";
+    msg += "\n请注意：\n";
+    msg += "用chaxun | info [城市名代号] to [城市名代号]查询两个城市之间货物运送的情报。\n";
+    return msg;
+  }
+
+  msg = sprintf("%s运送货物到%s情况查询：\n",to_chinese(city),to_chinese(city2));
+  msg += "┏━━━━━┓━━━━━┓━━━━┓━━━━━┓━━━━━┓━━━━━┓━━━━┓━━━━━┓━━━━┓━━┓\n";
+  msg += "┃起点城市名┃城市名代号┃所在地区┃地区代号  ┃终点城市名┃城市名代号┃所在地区┃地区代号  ┃路途时间┃难度┃\n";
+  msg += "┗━━━━━┛━━━━━┛━━━━┛━━━━━┛━━━━━┛━━━━━┛━━━━┛━━━━━┛━━━━┛━━┛\n";
+  zone = GOODS_D->query_city_zone(city);
+  zone2 = GOODS_D->query_city_zone(city2);
+  c2c = query_biaoju_city_to_city(city,city2);
+  msg += sprintf("┃%-10s┃%-10s┃%-8s┃%-10s┃%-10s┃%-10s┃%-8s┃%-10s┃%-8d┃%-4d┃\n",
+                 to_chinese(city),
+                 city,
+                 GOODS_D->query_zone_cname(zone),
+                 zone,
+                 to_chinese(city2),
+                 city2,
+                 GOODS_D->query_zone_cname(zone2),
+                 zone2,
+                 (int)c2c["time"],
+                 (int)c2c["difficult"]);
+  msg += "┗━━━━━┛━━━━━┛━━━━┛━━━━━┛━━━━━┛━━━━━┛━━━━┛━━━━━┛━━━━┛━━┛\n";
+  return msg;
+}
+
+public int add_biaoju_weiwang(string city, int val)
+{
+  int old = query_biaoju_weiwang(city);
+  old += val;
+  if (old > MAX_WEIWANG)
+    old = MAX_WEIWANG;
+  if (old < 200)
+    old = 200;
+  biaoju[city]["weiwang"] = old;
+  save();
+  return 1;
+}
+
+public int add_player_goods(string city,mixed ob,string goods,int g_class,string dest)
+{
+  mapping my_goods, c2c,result;
+  string id;
+
+  if (stringp(ob))
+    id = ob;
+  else if (objectp(ob) && playerp(ob))
+    id = ob->query("id");
+  else
+    return 0;
+  my_goods = BUSINESS_D->query_player_goods_and_class(id,city,goods,g_class);
+  if (!mapp(my_goods) || sizeof(my_goods) < 1)
+    return 0;
+
+  c2c = query_biaoju_city_to_city(city,dest);
+  result = ([sprintf("%s#%s#%d",city,goods,g_class) : ([
+                "dest"  : dest,
+                "value" : my_goods["value"],
+                "time" : time()/ONE_DAY,
+                "arrive_time" : c2c["time"] + time()/ONE_DAY])
+           ]);
+  if (!mapp(query_biaoju_customer_info(city,id)))
+    biaoju[city] += ([id : result]);
+  else
+  {
+    if (mapp(biaoju[city][id][sprintf("%s#%s#%d",city,goods,g_class)]))
+      return -1;
+    biaoju[city][id] += result;
+  }
+
+  save();
+  return 1;
+}
+
+private void remove_biaoju_player(string city,mixed ob)
+{
+  string id;
+
+  if (stringp(ob))
+    id = ob;
+  else if (objectp(ob) && playerp(ob))
+    id = ob->query("id");
+  else
+    return;
+  if (!is_my_customer(city,id))
+    return;
+  if (mapp(query_biaoju_customer_info(city,id)))
+  {
+    map_delete(biaoju[city],id);
+    save();
+  }
+
+}
+
+private void remove_player_goods(string city,mixed ob,string goods,int g_class)
+{
+  string id;
+  mapping my_goods;
+
+  if (stringp(ob))
+    id = ob;
+  else if (objectp(ob) && playerp(ob))
+    id = ob->query("id");
+  else
+    return;
+  if (!is_my_customer(city,id))
+    return;
+  my_goods = query_biaoju_customer_info(city,id);
+  if (!mapp(my_goods))
+    return;
+  if (mapp(my_goods[sprintf("%s#%s#%d",city,goods,g_class)]))
+  {
+    map_delete(biaoju[city][id],sprintf("%s#%s#%d",city,goods,g_class));
+    save();
+  }
+
+}
+
+public string accept_task(string city,object ob,string arg)
+{
+  string id,place,goods,dest;
+  int i,g_class,fee,suc;
+  mapping mygoods;
+  string *kmg;
+  string class_str,msg;
+  string zone1,zone2;
+
+  if (!objectp(ob) || !playerp(ob))
+    return 0;
+
+  id = ob->query("id");
+  if (!arg || sscanf(arg,"%s %d to %s",goods,g_class,dest) != 3)
+  {
+    mygoods = BUSINESS_D->query_player_workshop(id);
+    if (!mapp(mygoods) || sizeof(mygoods) < 1)
+      return "对不起，你的货物仓库是空的，没有需要托运的货物！\n";
+    kmg = keys(mygoods);
+    msg = "你可以托运的全部货物情况如下：\n";
+    msg += "┏━━━━━┓━━━━┓━━━━━┓━━━━━┓━━┓\n";
+    msg += "┃地点      ┃货物    ┃等级      ┃价值      ┃数量┃\n";
+    msg += "┗━━━━━┛━━━━┛━━━━━┛━━━━━┛━━┛\n";
+    for (i=0;i<sizeof(kmg);i++)
+    {
+      if (sscanf(kmg[i],"%s#%s#%d",place,goods,g_class) != 3)
+        continue;
+      class_str = BUSINESS_D->goods_name_pfx(g_class);
+      if (place == city)
+      	place = HIW + place + NOR;
+      msg += sprintf("┃%-"+(10+color_len(place))+"s┃%-8s┃%-"+(10+color_len(class_str))+"s┃%-10d┃%-4d┃\n",
+                    place,
+                    goods,
+                    class_str,
+                    mygoods[kmg[i]]["value"],
+                    mygoods[kmg[i]]["amount"]);
+    }
+
+    msg += "┗━━━━━┛━━━━┛━━━━━┛━━━━━┛━━┛\n";
+    msg += "托运货物，请用如下命令格式：\n";
+    msg += "tuoyun [货物] [等级] to [目的地]\n";
+    msg += "注意，你只能托运你所在地点的货物。\n";
+    return msg;
+  }
+
+  if (!BUSINESS_D->is_player_have_workshop(id,city))
+    return "对不起，这里没有你的任何货物！\n";
+  mygoods = BUSINESS_D->query_player_goods_and_class(id,city,goods,g_class);
+  if (!mapp(mygoods) || sizeof(mygoods) < 1)
+    return "没有你要托运的货物。\n";
+  if (!BUSINESS_D->is_trade_city(dest))
+    return "目的地不是个可以交易的城市。\n";
+  zone1 = GOODS_D->query_city_zone(city);
+  zone2 = GOODS_D->query_city_zone(dest);
+  if (!stringp(zone1) || !stringp(zone2))
+    return "没有发现这个地区有可以交易的该城市。\n";
+  fee = mygoods["value"]/80;
+  if (fee < 1)
+    fee = 1;
+  fee += fee*(GOODS_D->query_zone_diff(zone1, zone2))/200;
+  if ((int)ob->query("balance") < fee*10000)
+    return "可惜你银行的存钱不够付托运费用了。\n";
+  if (mapp(BUSINESS_D->query_player_goods_and_class(id,dest,goods,g_class)))
+    return "在目的地的仓库中，你已经有了这种货物，请你先把那边的存货处理掉。\n";
+  suc = query_effect_biaoju_weiwang(city,dest,(int)mygoods["value"]);
+  if (suc < 250)
+    return "本镖局声望还有所不够，承担这大一笔生意，恐怕不妥当。\n";
+  if (add_player_goods(city,id,goods,g_class,dest) < 1)
+    return "你已经托运过了同样的货物，请先处理了当前的货物。\n";
+
+  i = BUSINESS_D->add_player_workshop(id,dest,"biaoju",(["name" : goods,
+                                                         "value" : mygoods["value"],
+                                                         "amount" : mygoods["amount"],
+                                                         "class" : g_class,
+                                                       ]));
+  if (i == -2)
+  {
+    remove_player_goods(city,id,goods,g_class);
+    return "你在目的城市的货物仓库已经满了，请先处理掉一些货物。\n";
+  }
+
+  if (i == -1)
+  {
+    remove_player_goods(city,id,goods,g_class);
+    return "你在目的城市有了这种货物，或者预定了这种货物，请先处理了在来托运。\n";
+  }
+
+  if (!i)
+  {
+    remove_player_goods(city,id,goods,g_class);
+    return "货物信息出现了问题，本次操作被紧急取消了。\n";
+  }
+
+  if (!BUSINESS_D->remove_a_player_workshop_goods(id,city,goods,g_class))
+  {
+    remove_player_goods(city,id,goods,g_class);
+    BUSINESS_D->remove_a_player_workshop_goods(id,dest,goods,g_class);
+    return "镖局在协调两地货物仓库过程中出现了错误，本次操作失败了。\n";
+  }
+
+  return sprintf("%s委托%s镖局运送一批货物：\n"
+                 "货物名：%s\n"
+                 "货物价值：%s\n"
+                 "货物数量：%d\n"
+                 "目的地：%s\n"
+                 "收取费用：%d\n",
+                 ob->query("name"),
+                 to_chinese(city),
+                 goods,
+                 (int)mygoods["value"],
+                 (int)mygoods["amount"],
+                 to_chinese(dest),
+                 fee);
+}
+
+public int is_success_transfer(string city,string dest,int value)
+{
+  return random((int)query_effect_biaoju_weiwang(city,dest,value) + 1) > 20;
+}
+
+int pay_back(string id, int amount)
+{
+  object who;
+
+  who=find_player(id);
+  if(objectp(who))
+  {
+    who->add("balance",amount);
+    if(!who->save())
+    {
+      log_file("biaoju_log","Failed to return "+amount+" coin to "+id+"(online)\n");
+      return 0;
+    }
+
+    log_file("biaoju_log","pay "+amount+" to "+id+"\n");
+    return 1;
+  }
+
+  else
+  {
+    who = UPDATE_D->global_find_player(id);
+    if (!who)
+    {
+      log_file("biaoju_log","Failed to return "+amount+" coin to "+id+"(offline)\n");
+      return 0;
+    }
+
+    who->add("balance",amount);
+    log_file("biaoju_log","pay "+amount+" to "+id+"(offline)\n");
+    UPDATE_D->global_destruct_player(who, 1);
+    return 1;
+  }
+
+}
+
+void goods_trans_finish(string city,string id,string dest,string goods,int g_class,int value)
+{
+  remove_player_goods(city,id,goods,g_class);
+  if (is_success_transfer(city,dest,value))
+  {
+    BUSINESS_D->change_player_goods_status(id,city,goods,g_class);
+    business_message(sprintf("%s的镖局成功的运送了一批%s到达%s。\n",
+                              to_chinese(city),
+                              goods,
+                              to_chinese(dest)));
+    add_biaoju_weiwang(city,value/100);
+  }
+
+  else
+  {
+    BUSINESS_D->remove_a_player_workshop_goods(id,dest,goods,g_class);
+    business_message(sprintf("听说%s的镖局丢失了一批运往%s的%s，正在等待失主前往理赔呢。\n",
+                              to_chinese(city),
+                              to_chinese(dest),
+                              goods));
+    add_biaoju_weiwang(city,-value/60);
+    pay_back(id, value*110/100*10000);
+    business_message(sprintf("%s镖局这次可亏大了，赔了一大笔，威望也下降低了。\n",
+                              to_chinese(city)));
+  }
+
+}
+
+private void heart_beat()
+{
+  string *kc,*kid,*kg;
+  string city,id,goods;
+  string place,name, dest;
+  int g_class,value;
+  int start_t,arrive_t,nowt = time()/ONE_DAY;
+
+  kc = keys(biaoju);
+  if (!arrayp(kc) || sizeof(kc) < 1)
+    return;
+  foreach (city in kc)
+  {
+    reset_eval_cost();
+    if (!mapp(biaoju[city]))
+    {
+      biaoju[city] = ([
+                       "weiwang" : 500,
+                       "path" : init_path_info(city),
+                     ]);
+      save();
+      continue;
+    }
+
+    kid = query_all_customer(city);
+    if (!arrayp(kid) || sizeof(kid) < 1)
+      continue;
+    foreach (id in kid)
+    {
+      kg = keys(biaoju[city][id]);
+      if (!arrayp(kg) || sizeof(kg) < 1)
+      {
+        map_delete(biaoju[city],id);
+        save();
+        continue;
+      }
+
+      foreach (goods in kg)
+      {
+        if (sscanf(goods,"%s#%s#%d",place,name,g_class) != 3 || place != city)
+        {
+          map_delete(biaoju[city][id],goods);
+          save();
+          continue;
+        }
+
+        dest = biaoju[city][id][goods]["dest"];
+        start_t = biaoju[city][id][goods]["time"];
+        arrive_t = biaoju[city][id][goods]["arrive_time"];
+        value = biaoju[city][id][goods]["value"];
+        if (!stringp(dest) ||
+            !BUSINESS_D->is_trade_city(dest) ||
+            !start_t ||
+            !arrive_t)
+        {
+          map_delete(biaoju[city][id],goods);
+          save();
+          continue;
+        }
+
+        if (arrive_t>=nowt)
+          goods_trans_finish(city,id,dest,name,g_class,value);
+      }
+
+    }
+
+  }
+
+}

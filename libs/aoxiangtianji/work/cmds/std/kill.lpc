@@ -1,0 +1,115 @@
+#include <ansi.h>
+inherit F_CLEAN_UP;
+#include "/cmds/std/valid_kill.h"
+int main(object me, string arg)
+{
+  object obj;
+  string callname, kname, tname;
+  if (!objectp(me))
+    return 0;
+/*
+  if ( userp(me) && !wizardp(me) )
+  {
+    if( uptime()-me->query_temp("last_kill_time")<2)
+      return notify_fail(GRN"为了系统负担请勿进行刷屏kill,你的kill指令时间必须大于2秒钟。\n"NOR);
+  }
+
+*/
+  if( !arg )
+    return notify_fail("你想杀谁？\n");
+  if(!objectp(obj = present(arg, environment(me))) || !me->visible(obj))
+    return notify_fail("这里没有这个人。\n");
+  if( environment(me)->is_safty()
+   || environment(me)->query("no_kill")
+   || environment(me)->query("no_fight")
+   || environment(me)->query("no_magic"))
+    return notify_fail(GRN"这里不准杀人\n"NOR);
+  if ( userp(me) && userp(obj) && !wizardp(me) )
+  {
+    if (wizardp(obj))
+      return notify_fail(obj->query("name")+"瞪了你一眼，你突然吓得两腿发抖，几乎跪了下来。\n");
+  }
+
+  if(!valid_kill(me,obj,0))
+    return 0;
+
+  if( me->is_ghost() )
+    return notify_fail("做了鬼了，就老实点吧！\n");
+  if( obj->query("doing") )
+    return notify_fail("对正在离线练功的玩家下手，似乎不是什么英雄好汉吧？\n");
+
+  if( !obj->is_character() || obj->is_corpse() || obj->is_ghost() )
+    return notify_fail("看清楚一点，那并不是活物。\n");
+  if(obj==me)
+    return notify_fail(GRN"用 "HIR"suicide -f"GRN" 指令会比较快些。\n"NOR);
+  if(me->is_busy())
+    return notify_fail("你现在正忙，没法杀人。\n");
+  if (arrayp(me->query_team()) &&
+      member_array(obj, me->query_team()) != -1)
+    return notify_fail("连你自己队伍中的人也要杀吗？太不人道了吧！\n");
+  if (me->is_fighting(obj) && me->is_killing(obj->query("id")))
+    return notify_fail("你正在和人家生死相扑呢。\n");
+  if (! me->is_fighting(obj) &&
+        me->query("kee") < me->query("max_kee") * 3 / 10)
+    return notify_fail("你现在没有力气战斗了。\n");
+  if( userp(obj) && obj->is_brother(me))
+    return notify_fail(HIR"你要杀你的结义金兰？！\n"NOR);
+  if (!playerp(obj) && obj->do_kill())
+    return 1;
+  if (environment(me)->do_kill(arg) > 0)
+    return 1;
+
+  me->set_temp("last_kill_time",uptime());
+  callname = RANK_D->query_rude(obj);
+  kname=me->query("id");
+  tname=obj->query("id");
+  if (obj->query("can_speak"))
+  {
+    if (! living(obj))
+      message_vision(HIR "\n$N" HIR "看了看晕倒在地的$n" HIR "，冷笑"
+                         "一声，喝道：" + callname + HIR  "，给我见阎王去"
+                         "吧！\n\n" NOR, me, obj);
+    else if (random(3) > 1)
+      message_vision(HIR "\n$N" HIR "对著$n" HIR "喝道：" + callname +
+                     HIR  "，今日不是你死就是我活！\n\n" NOR, me, obj);
+    else
+      message_vision(HIR "\n$N" HIR "对著$n" HIR "喝道：" + callname +
+                     HIR "，明年今日就是你的忌日！\n\n" NOR, me, obj);
+  }
+
+  switch(obj->accept_kill(me))
+  {
+    case 0:
+      return (! objectp(obj));
+    case -1:
+      return 1;
+    default:
+  }
+
+  if (userp(me) && userp(obj) && ! obj->is_want_kill(me->query("id")))
+     me->want_kill(obj);
+  me->kill_ob(obj);
+
+  if (living(obj) && ! userp(obj))
+    obj->kill_ob(me);
+  else
+    obj->fight_ob(me);
+  return 1;
+}
+
+int help(object me)
+{
+  write(@HELP
+指令格式 : kill <人物>
+
+这个指令让你主动开始攻击一个人物，并且试图杀死对方，kill 和 fight 最大的
+不同在於双方将会真刀实枪地打斗，也就是说，会真的受伤。由於 kill 只需单方
+面一厢情愿就可以成立，因此你对任何人使用 kill 指令都会开始战斗，通常如果
+对方是 NPC 的话，他们也会同样对你使用 kill。
+其他相关指令: fight
+有关 fight 跟 kill 的区分请看 'help combat'.
+HELP
+    );
+    return 1;
+}
+

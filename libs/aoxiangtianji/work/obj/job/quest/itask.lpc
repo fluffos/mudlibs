@@ -1,0 +1,515 @@
+#include <ansi.h>
+inherit F_CLEAN_UP;
+void create()
+{
+  seteuid(getuid());
+}
+
+void set_itask_letter(object me, object ob)
+{
+  object quest_npc, letter;
+
+  me->set("quest_xyj/itask/type", "letter");
+  quest_npc = NPC_D->create_quest_npc(me,ob,"itask",1);
+  letter = new("/job/quest/obj/letter");
+  if (objectp(quest_npc) && objectp(letter))
+  {
+    if (!SYSQ_D->quest_reg(me,ob,quest_npc, "itask"))
+    {
+      if (objectp(quest_npc))
+        destruct(quest_npc);
+      if (objectp(letter))
+        destruct(letter);
+      return;
+    }
+
+    message_vision(CYN "$N" CYN "仔细的听道：这封信你帮我交到" NOR +
+                   HIC + quest_npc->name() + NOR + CYN "手中，他现在应该在" +
+                   me->query("quest_xyj/itask/npc_place") +
+                   "，然后把回执带回来给我！\n" NOR, me);
+
+    me->set_temp("quest_xyj/last_itask_time",time());
+
+    if (letter && letter->move(me))
+    {
+      letter->set("long", "这是一封" + ob->name() + "写给" + quest_npc->name() +
+                  "的亲笔信函。\n");
+      letter->set("send_from", ob->query("id"));
+      letter->set("send_to", quest_npc->query("id"));
+      letter->set("send_from_name", ob->name());
+      message("vision", WHT + me->name() + WHT "在你耳边悄声说道：你务必要在"
+              NOR + HIY + "十分钟" + NOR + WHT
+              "之内完成！\n" NOR, ob);
+    }
+
+    else
+    {
+      if (letter)
+      {
+        write("你身上的东西似乎实在是太多了！\n");
+        write("信掉到了地上，不见了！\n");
+        destruct(letter);
+      }
+
+      else
+        write("似乎是信件的文件出了问题，请和wiz联系！\n");
+    }
+
+    me->start_busy(1);
+  }
+
+  else
+  {
+    tell_object(me,"你没有成功的获得这次申请的任务！系统已经做好的了纪录，也可以就此向wiz反应！");
+    log_file("quest_xyj/itask",sprintf("%s(%s)在%s没有成功的获得任务！\n",
+              me->name(1),
+              me->query("id"),
+              ctime(time())));
+  }
+
+  return;
+}
+
+void set_itask_search(object me, object ob)
+{
+  object q_s;
+  mapping quest_sth = ([ ]);
+
+  q_s = find_object("/job/quest/itask_search.lpc");
+  if (!objectp(q_s))
+    q_s = load_object("/job/quest/itask_search.lpc");
+  if (!objectp(q_s))
+  {
+    message_vision("$N" HIW"想吩咐$n" HIW"做些事情，可是一时想不到需要什么东西？\n"NOR,ob,me);
+    me->start_busy(1);
+    return;
+  }
+
+  quest_sth = q_s->query_quest(me);
+  if (!mapp(quest_sth) || sizeof(quest_sth) == 0)
+  {
+    message_vision("$N" HIW"想吩咐$n" HIW"做些事情，可是似乎不知道该吩咐些什么？\n"NOR,ob,me);
+    me->start_busy(1);
+    return;
+  }
+
+  me->set("quest_xyj/itask/type", "search");
+  message_vision("$N" HIW"想了想，说到：我这里" + quest_sth["msg"] + "：\n" +
+                 quest_sth["cname"] + "（" +quest_sth["ename"] + "）" +
+                 HIW"。\n不知道$n" HIW"是否愿意帮我找来？\n"NOR,ob,me);
+  me->set("quest_xyj/itask/type","search");
+  me->set("quest_xyj/itask/cname",quest_sth["cname"]);
+  me->set("quest_xyj/itask/ename",quest_sth["ename"]);
+  me->set("quest_xyj/itask/family_name", (string)ob->query("family/family_name"));
+  me->set("quest_xyj/itask/master_name", ob->name());
+  me->set("quest_xyj/itask/master_id", ob->query("id"));
+  message("vision", WHT + ob->name() + WHT "在你耳边悄声说道：你务必要在"
+           NOR + HIY + "一个小时" + NOR + WHT
+           "之内完成！\n" NOR, me);
+  me->set_temp("quest_xyj/last_itask_time",time());
+  me->start_busy(1);
+  return;
+}
+
+public int ask_RW(object me, object ob)
+{
+  mapping quest_itask ;
+  string msg;
+  object quest_npc;
+  int lv, next_lv;
+  int t = time();
+  if (!playerp(me))
+    return 0;
+
+  if ((t - (int)me->query_temp("quest_xyj/last_itask_time")) < 80)
+  {
+    tell_object(me,"你刚刚领过任务！\n");
+    return 1;
+  }
+
+  if (playerp(ob) || !living(ob) || ob->is_fighting())
+  {
+    tell_object(me,"你现在不能从" + ob->name() + "领任务！\n");
+    return 1;
+  }
+
+  if(me->query("family/family_name")!= ob->query("family/family_name"))
+  {
+     message_vision(CYN "$N" CYN "瞪大眼睛看着$n" CYN "，道：你又不是我们"
+                  + (string)ob->query("family/family_name") +
+                    "的，来捣什么乱？\n" NOR, ob, me);
+     return 1;
+  }
+
+  if( !me->is_apprentice_of(ob) )
+    return notify_fail(ob->name() + "不是你的师傅！你只能找自己的师傅领取任务！\n");
+  if (me->query_temp("quest_gift/obj"))
+  {
+    message_vision(CYN "$N" CYN "对$n" CYN "皱眉道：我问你"
+                       "话呢，那东西你到底要(" HIY "answer Y|N"
+                       NOR + CYN ")还是不要？\n" NOR, ob, me);
+    return 1;
+  }
+
+  if ((int)me->query("quest_xyj/freequest_need") > 0)
+  {
+    message_vision(CYN "$N" CYN "对$n" CYN "说道：我这里暂"
+                       "时也没什么事情，你还是自己锻炼一段时间"
+                       "吧。\n" NOR, ob, me);
+    tell_object(me, HIY "你突然想到：现在江湖正值动乱，何"
+                        "不四处走访，也许可提高自己的经验阅历"
+                        "。\n" NOR);
+    return 1;
+  }
+
+  quest_itask = me->query("quest_xyj/itask");
+  if (mapp(quest_itask) && sizeof(quest_itask) > 0)
+  {
+    if (quest_itask["master_id"] && quest_itask["master_id"] != ob->query("id"))
+    {
+      message_vision(CYN "$N" CYN "看了看$n" CYN "，"
+                         "哼了一声，没有理会$n" CYN "。\n"
+                         NOR, ob, me);
+      return 1;
+    }
+
+    switch (quest_itask["type"])
+    {
+      case "letter" :
+        switch (random(3))
+        {
+          case 0 :
+            message_vision(CYN "$N" CYN "一脸怒容对$n" CYN "道：\n我不是让"
+                               "你把信送到" NOR + HIC + quest_itask["npc_name"]
+                               + NOR + CYN"那里的吗？他的回执呢？\n" NOR, ob, me);
+            break;
+          case 1 :
+            message_vision(CYN "$N" CYN "对$n" CYN "道：\n"HIC
+                         + quest_itask["npc_name"] + NOR + CYN
+                           "的回执呢？\n" NOR, ob, me);
+            break;
+          default :
+            message_vision(CYN "$N" CYN "对$n" CYN "道：\n"
+                           HIC + quest_itask["npc_name"] + NOR + CYN
+                           "没有给你回执吗？"
+                           "还是你根本没有看到他？\n" NOR, ob, me);
+        }
+
+        break;
+      case "search" :
+        switch (random(3))
+        {
+          case 0 :
+            message_vision(CYN "$N" CYN "一脸怒容对$n" CYN "道：\n我不是让"
+                           "你帮我去寻找" NOR + HIC + quest_itask["cname"]
+                           + NOR + CYN"吗？\n" NOR, ob, me);
+            break;
+          case 1 :
+            message_vision(CYN "$N" CYN "对$n" CYN "道：\n"
+                           HIC + quest_itask["cname"]  + NOR + CYN
+                           "找到了吗？\n" NOR, ob, me);
+            break;
+          default :
+            message_vision(CYN "$N" CYN "对$n" CYN "道：\n你找到"
+                           HIC + quest_itask["cname"] + NOR + CYN
+                           "了吗？还是你根本没有去找？\n" NOR, ob, me);
+        }
+
+        break;
+      case "kill" :
+        switch (random(3))
+        {
+          case 0 :
+            message_vision(CYN "$N" CYN "一脸怒容对$n" CYN "道：\n我不是让"
+                               "你杀了" NOR + HIR + quest_itask["npc_name"] + NOR
+                               + CYN"吗？他的人头呢？\n" NOR, ob, me);
+            break;
+          case 1 :
+            message_vision(CYN "$N" CYN "满脸不高兴，对$n" CYN "道：\n"
+                                HIR + quest_itask["npc_name"] + NOR + CYN
+                               "人头呢？\n" NOR, ob, me);
+            break;
+          default :
+            message_vision(CYN "$N" CYN "奇怪的看着$n" CYN "道：\n"
+                                HIR + quest_itask["npc_name"] + NOR + CYN
+                               "被你杀了吗？人头呢？\n" NOR, ob, me);
+        }
+
+        break;
+    }
+
+    tell_object(me,"你必须先放弃了你已经领取的任务，才可以领取新的任务！\n");
+    return 1;
+  }
+
+  lv = (int)me->query("level");
+  if (lv <= 10) // 无法领取itask任务
+  {
+    message_vision(CYN "$N" CYN "叹了一口气，对$n" CYN "道：就你那点水平，"
+                       "我实在没法给你派任务。\n" NOR, ob, me);
+    return 1;
+  }
+
+  if (lv <= 18) // 只有送信的任务
+  {
+    set_itask_letter(me,ob);
+    return 1;
+  }
+
+  switch (random(3))
+  {
+    case 0 :
+      set_itask_letter(me,ob);
+      break;
+    case 1 :
+      set_itask_search(me,ob);
+      break;
+    default :
+      me->set("quest_xyj/itask/type", "kill");
+      me->delete("introduce");
+      if (lv <= 25)
+        quest_npc = NPC_D->create_quest_npc(me,ob,"itask",1);
+      else if (lv <= 40)
+        quest_npc = NPC_D->create_quest_npc(me,ob,"itask",2);
+      else
+        quest_npc = NPC_D->create_quest_npc(me,ob,"itask",3);
+      if (objectp(quest_npc))
+      {
+      	if (!SYSQ_D->quest_reg(me,ob,quest_npc, "itask"))
+      	{
+      	  if (objectp(quest_npc))
+      	    destruct(quest_npc);
+      	  return 0;
+      	}
+
+      	me->set_temp("quest_xyj/last_itask_time",t);
+        ob->command("good "+me->query("id"));
+        switch (random(8))
+        {
+          case 0 :
+            msg = sprintf(HIW"有个%s" HIW"在%s" HIW"屡次挑衅本门，你去灭了他！\n"NOR,
+               me->query("quest_xyj/itask/npc_name"),
+               me->query("quest_xyj/itask/npc_place"));
+            break;
+          case 1:
+            msg = sprintf("%s" HIY"仔细想了想，说道：“%s" HIY"在%s" HIY"屡次为难本门弟子！”\n"NOR,
+                 ob->name(),
+                 me->query("quest_xyj/itask/npc_name"),
+                 me->query("quest_xyj/itask/npc_place"));
+            break;
+          case 2:
+            msg = sprintf("%s" HIG"长叹了一声，说道：“近来，%s" HIG"在%s" HIG"口出狂言，辱没本门名声！”\n"NOR,
+                 ob->name(),
+                 me->query("quest_xyj/itask/npc_name"),
+                 me->query("quest_xyj/itask/npc_place"));
+            break;
+          case 3 :
+            msg = sprintf(HIR"你去对付%s" HIR"，据说最近在%s" HIR"可以查到些蛛丝马迹！\n",
+                 me->query("quest_xyj/itask/npc_name"),
+                 me->query("quest_xyj/itask/npc_place"));
+            break;
+          case 4 :
+            msg = sprintf(HIB"你提%s" HIB"的头来见我，在%s" HIB"可以查找他的踪迹！\n"NOR,
+                 me->query("quest_xyj/itask/npc_name"),
+                 me->query("quest_xyj/itask/npc_place"));
+            break;
+          case 5 :
+            msg = sprintf(HIC"那个%s" HIC"，在%s" HIC"口吐狂言，你去办了他，让天下英雄知道，本门不是好欺负的！\n"NOR,
+                 me->query("quest_xyj/itask/npc_name"),
+                 me->query("quest_xyj/itask/npc_place"));
+            break;
+          case 6 :
+            msg = sprintf(HIG"最近在%s" HIG"出了烦人事，一个叫%s" HIG"的猖狂无比！不用我罗嗦了吧？快去！\n"NOR,
+                 me->query("quest_xyj/itask/npc_place"),
+                 me->query("quest_xyj/itask/npc_name"));
+            break;
+          default :
+            msg = sprintf(HIM"最近在%s" HIM"，%s" HIM"屡次对我门派无礼侮辱。你代我去，嘿嘿！\n"NOR,
+                 me->query("quest_xyj/itask/npc_place"),
+                 me->query("quest_xyj/itask/npc_name"));
+            break;
+        }
+
+        msg += HIW"注意：你务必要在15分钟内完成本次任务！\n"NOR;
+        tell_object(me,msg);
+        message_vision("$N" HIC"在$n" HIC"耳朵边说了些话！\n",ob,me);
+        next_lv = me->query_temp("itask/next_lv");
+        switch (next_lv)
+        {
+          case 0:
+            message_vision(CYN "$N" CYN "顿了顿，又对$n" CYN "道：这个"
+                               "事情容易办得很，你要是还办不成那可不象话。"
+                               "\n" NOR, ob, me);
+            break;
+          case 1:
+            break;
+          case 2:
+            message_vision(CYN "$N" CYN "看了看$n" CYN "又道：这个事情"
+                               "很是有些难办，你要是不行我就另找人吧。\n"
+                               NOR, ob, me);
+            break;
+          case 3:
+            message_vision(CYN "$N" CYN "叹了口气，郑重的对$n" CYN "道"
+                               "：这次任务凶险得紧，你不要勉强自己，不行就"
+                               "算了。\n" NOR, ob, me);
+            break;
+        }
+
+        if (next_lv > 0 && random(10) == 1)
+        {
+          string flee_msg;
+          msg = HIC "\n$N" HIC "话音刚落，突然一人匆忙赶了过"
+                    "来，喊道：不好了，不好了。听说那个叫" HIW +
+                     quest_npc->name() + HIC "的家伙在" + quest_npc->query("place")
+                     + HIC "失踪了，现在也不知道去了哪里。\n\n" NOR;
+          msg += CYN "$N" CYN "呆了半晌，这才对$n" CYN "叹道：这事麻烦了，"
+                 "看来只有靠你自己努力了。\n"NOR;
+          message_sort(msg, ob,me);
+          switch (random(3))
+          {
+            case 0:
+              flee_msg = "听说$N听到了江湖上追杀他的风声，已经躲到PLACE去了。";
+              break;
+            case 1:
+              flee_msg = "有人说$N就在咱们这地界呢，但是也有人说他在PLACE，不知道是真是假。";
+              break;
+            default:
+              flee_msg = "不知道……哦？好像听人说过是在PLACE。";
+              break;
+          }
+
+          quest_npc->random_place(flee_msg);
+        }
+
+        return 1;
+      }
+
+      else
+      {
+        tell_object(me,"你没有成功的获得这次申请的任务！系统已经做好的了纪录，也可以就此向wiz反应！");
+        log_file("quest_xyj/itask",sprintf("%s(%s)在%s没有成功的获得任务！\n",
+                                  me->name(1),
+                                  me->query("id"),
+                                  ctime(t)));
+      }
+  }
+
+  return 1;
+}
+
+public int ask_JC(object me, object ob)
+{
+  mapping quest_itask ;
+  object quest_npc;
+  string msg;
+  int jc_count;
+
+  if (!playerp(me))
+    return 0;
+
+  if (playerp(ob) || !living(ob) || ob->is_fighting())
+  {
+    tell_object(me,"你现在无法和" + ob->name() + "说话！\n");
+    return 1;
+  }
+
+  quest_itask = me->query("quest_xyj/itask");
+  if (!mapp(quest_itask) || sizeof(quest_itask) < 1)
+  {
+    tell_object(me,"你现在没有任务，取消什么？\n");
+    return 1;
+  }
+
+  if (quest_itask["master_id"] != ob->query("id"))
+  {
+    write("我没给你什么任务啊？\n");
+    write("嗯。。。你的任务是" + quest_itask["master_id"] + "交给你的。\n");
+    return 1;
+  }
+
+  if (quest_itask["npc_die"] >= 1 )
+  {
+    msg = "$N" HIW"说道，那家伙已经被干掉了。你不用再管了！\n"NOR;
+    message_vision(msg,ob);
+    me->delete("quest_xyj/itask");
+    if (SYSQ_D->quest_exist(me,"itask"))
+      SYSQ_D->delete_quest("itask",me);
+    return 1;
+  }
+
+  message_vision("$N" HIY"对$n"
+    HIY"说道，“师傅，看来这任务我完成不了，请师傅重重责罚！”\n"NOR,me,ob);
+  quest_npc = 0;
+  if (quest_itask["type"] != "search"
+    && stringp(quest_itask["npc_id"]) )
+    quest_npc = find_living(quest_itask["npc_id"]);
+  if (objectp(quest_npc) && !userp(quest_npc) && !quest_npc->is_fighting() && living(quest_npc))
+  {
+    if (environment(quest_npc))
+      message_vision(HIC "$N" HIC "看了看四周，急急忙忙的走掉了。\n" NOR, quest_npc);
+    destruct(quest_npc);
+    if (SYSQ_D->quest_exist(me,"itask"))
+      SYSQ_D->delete_quest("itask",me);
+  }
+
+  switch (random(6))
+  {
+    case 0 :
+      msg = "$N" HIC"不高兴的对着$n" HIC"嘟哝了几句，叹了口气！\n"NOR;
+      break;
+    case 1 :
+      msg = "$N" HIY"无可奈何的朝$n" HIY"点点了头！\n"NOR;
+      break;
+    case 2 :
+      msg = "$N" HIW"的一张脸瞬间变了颜色，张口结舌的看着$n" HIW"，别提有多难看了！\n"NOR;
+      break;
+    case 3 :
+      msg = "$N" CYN"狠狠的在自己脑门上拍了几下，看来是对$n" CYN"很不高兴了！\n"NOR;
+      break;
+    case 4 :
+      msg = "$N" HIM"狠狠的踹了$n" HIM"几脚，“竖子，坏我大事！”\n"NOR;
+      break;
+    case 5 :
+      msg = "$N" HIR"大吃一惊，看着$n" HIR"好半天说不出话来！良久，一声轻叹！\n"NOR;
+      break;
+    default :
+      msg = "$N" HIC"微微叹息了一声，对$n" HIC"说道，“世事难料，过于自责也没有用了！”\n"NOR;
+      break;
+  }
+
+  message_vision(msg,ob,me);
+  me->delete("introduce");
+  jc_count = (int)me->query("quest_info/itask/jc_count");
+  if (jc_count < 5)
+  {
+    jc_count++;
+    tell_object(me,sprintf("你已经有%d次没有完成师们任务了！\n",jc_count));
+    message_vision("$N说道：下次可不能这样了！\n",ob);
+  }
+
+  else
+  {
+    jc_count = 0;
+    me->delete("quest_info/itask/count");
+    me->delete_temp("itask/next_lv");
+  }
+
+  me->set("quest_info/itask/jc_count",jc_count);
+  me->add("daoxing",-300);
+  me->add("combat_exp",-300);
+  me->add("family/family_faith",-1);
+  if ((int)me->query("family/family_faith") < 0)
+    me->set("family/family_faith",0);
+  me->add("weiwang", -5);
+  if ((int)me->query("weiwang") < 0)
+    me->set("weiwang",0);
+  me->add("score", -5);
+  if ((int)me->query("score") < 0)
+    me->set("score",0);
+  me->delete("quest_xyj/itask");
+  if (SYSQ_D->quest_exist(me,"itask"))
+    SYSQ_D->delete_quest("itask",me);
+  me->save();
+  return 1;
+}
+

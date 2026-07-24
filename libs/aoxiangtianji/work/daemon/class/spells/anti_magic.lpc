@@ -1,0 +1,97 @@
+#include <ansi.h>
+#include <combat.h>
+#define FU "「" HIR "抗魔" NOR "」"
+#define Y_FILE "/daemon/class/spells/anti_magic"
+#define CAUSED "anti_magic"
+inherit SSERVER;
+int is_not_attack()
+{
+  return 1;
+}
+
+int valid_cast(object me, object target)
+{
+  int t = time();
+  if (me->is_busy())
+    return notify_fail("你正忙着呢！\n");
+  if (!me->is_fighting())
+    return notify_fail(sprintf("%s只能在战斗中使用！\n",FU));
+  if (me->query_skill("spells", 1) < 150)
+    return notify_fail(sprintf("你的法术修为不够，难以施展%s。\n",FU));
+
+  if( (int)me->query("max_mana") < 1500 )
+    return notify_fail(sprintf("你的法力修为不够，难以施展%s。\n",FU));
+
+  if( (int)me->query("force") < 300 )
+    return notify_fail("你的真气不够。\n");
+  if((int)me->query("mana") < 300+2*(int)me->query("mana_factor") )
+    return notify_fail("你的法力不够！\n");
+  if((int)me->query("sen") < 100 )
+    return notify_fail("你无法集中精力！\n");
+  if (me->query_temp("tick/"+CAUSED))
+    return notify_fail(sprintf("你已经处于使用%s的状态了！\n",FU));
+
+  if ((t- me->query_temp("last_anti-magic")) < 30)
+    return notify_fail(sprintf("你刚刚使用过%s，需要等会才能继续使用！\n",FU));
+
+  if (me->query_condition("killer"))
+    return notify_fail("你身上杀气正浓，无法使用法术！\n");
+  return 1;
+}
+
+int cast(object me, object target)
+{
+  int skill;
+  string s_sk;
+  if( objectp(target) && target != me )
+    return notify_fail(sprintf("你只能对自己施展%s。\n",FU));
+  s_sk = me->query_skill_mapped("spells");
+  if (!stringp(s_sk))
+    return notify_fail("你必须先选择你的特殊法术，才可以施展！\n");
+  skill = me->query_skill("spells",1);
+  if( random(me->query("max_mana")) < 200 )
+  {
+    me->add("mana",-skill);
+    me->receive_damage("sen",10);
+    message_vision(HIY"$N" HIY"张口念动咒语！可惜这次没有什么作用！\n"NOR, me);
+    me->set_temp("last_anti-magic", time());
+    return 1;
+  }
+
+  me->add("mana", -skill);
+
+  if (skill > 400)
+    skill = 400;
+  skill = 15 + random((skill - 100)/2);
+  message_vision(HIY"$N" HIY"念动咒语，一股异彩慢慢汇集在$N" HIY"的周身。\n\n"NOR, me);
+  me->set_pfm_tick(Y_FILE, CAUSED,skill, target);
+  me->set_temp("last_anti-magic", time());
+  me->start_busy(1);
+  return 1;
+}
+
+int check(object me, object target)
+{
+  if (!living(me))
+    return 0;
+  if (!me->is_fighting())
+  {
+    tell_object(me,sprintf("你不处于战斗状态了，没有必要保持%s的状态了！\n",FU));
+    return 0;
+  }
+
+  if ( (int)me->query("mana") < 400  )
+  {
+    tell_object(me, sprintf("你的法力后继不足，无法继续保持%s状态了。\n",FU));
+    return 0;
+  }
+
+  return 1;
+}
+
+void remove_effect(object me, object target)
+{
+  message_vision(HIW"$N" HIW"周围的异彩慢慢的消散了。\n\n"NOR, me);
+  me->set_temp("last_anti-magic",time());
+  return;
+}

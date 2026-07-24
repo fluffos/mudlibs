@@ -1,0 +1,103 @@
+#include <ansi.h>
+#include <combat.h>
+#define FU "「" HIG "迷魂" NOR "」"
+#define MIHUN CLASS_D("moon") + "/moonshentong/mihun"
+#define CAUSED "no_move"
+inherit F_SSERVER;
+int valid_cast(object me, object target)
+{
+  int t = time();
+
+  if(userp(me) && (string)me->query("family/family_name") != "月宫")
+    return notify_fail(sprintf("%s是月宫不传之密！\n",FU));
+  if (me->is_busy())
+    return notify_fail("你正忙着呢！\n");
+
+  if (me->query_skill("moonshentong", 1) < 150)
+    return notify_fail(sprintf("你的晚月神通修为不够，难以施展%s。\n",FU));
+
+  if( (int)me->query("max_mana") < 1800 )
+    return notify_fail(sprintf("你的法力修为不够，难以施展%s。\n",FU));
+
+  if( (int)me->query("force") < 200 )
+    return notify_fail("你的真气不够。\n");
+  if((int)me->query("mana") < 150+2*(int)me->query("mana_factor") )
+    return notify_fail("你的法力不够！\n");
+  if((int)me->query("sen") < 300 )
+    return notify_fail("你无法集中精力！\n");
+
+  if ((t - (int)me->query_temp("last_mihun")) < 5)
+    return notify_fail("你刚刚施展过了，等会才可以继续用！\n");
+  return 1;
+}
+
+int cast_attack(object me, object target)
+{
+  int success_adj, result, time, extra;
+  int my_per, your_per, your_cps;
+  string msg;
+
+  success_adj = SKILL_D("moonshentong")->query_power_effect(me);
+  if( !target )
+    target = offensive_target(me);
+  if( !target
+   || !target->is_character()
+   || target->is_corpse()
+   || target==me)
+    return notify_fail(sprintf("你要对谁施%s？\n",FU));
+  if(target->query_temp(CAUSED))
+    return notify_fail(sprintf("%s已经呆若木鸡，无法迈步了！\n",target->name()));
+  if(target->query_temp("in_qingwang"))
+    return notify_fail(sprintf("%s已经无法自拔了！\n",target->name()));
+  me->add("mana", -50-2*(int)me->query("mana_factor"));
+  me->receive_damage("sen", 50);
+  if( random(me->query("max_mana")) < 100 )
+  {
+    write("你法力忽然不济了，只怕迷的是自己的魂！\n");
+    return 1;
+  }
+
+  msg = HIC"$N" HIC"低头轻声念了句咒文，又抬起头来朝" HIC"$n" HIC"妩媚地一笑！\n"NOR;
+  message_vision(msg,me,target);
+
+  my_per = me->query_per();
+  your_per = target->query_per();
+  your_cps = target->query_cps();
+  if (your_cps > 80)
+    your_cps = 80 + random(your_cps - 80);
+
+  result = my_per + random(your_per) - random(your_cps/3);
+  success_adj += result;
+  if (success_adj < 80)
+    success_adj = 80;
+
+  result = SPELL_D->attacking_cast_success(me,target,success_adj);
+  if (result <=0)
+  {
+    msg = HIW "$n" HIW"鄙夷地看了$N一眼，毫不为所动！\n" NOR;
+    message_vision(msg,me,target);
+    me->start_busy(1+random(3));
+    return 1;
+  }
+
+  msg = HIM"$n" HIM"神不守舍地看着" HIM"$N" HIM"，怜香惜玉之心由然而起，"
+        "竟然忘了自己在战斗之中。\n" NOR;
+  message_vision(msg,me,target);
+  time = me->query_skill("moonshentong",1);
+  time = time/5 ;
+  extra = random(time/2);
+  if (extra > 20)
+    extra = 20;
+  if (time > 60)
+    time = 60;
+  target->set_curse_changed(MIHUN,CAUSED,"dexerity",time,extra);
+  me->set_temp("last_mihun",time());
+  return 1;
+}
+
+void remove_effect(object me)
+{
+  if (objectp(me) && me->query_temp(CAUSED))
+    tell_object(me,sprintf("你终于摆脱了%s的困扰了。\n",FU));
+}
+

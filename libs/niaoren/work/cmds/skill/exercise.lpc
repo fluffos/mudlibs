@@ -1,0 +1,125 @@
+// exercise.c
+
+#include <skill.h>
+
+inherit F_CLEAN_UP;
+
+int exercising(object me);
+//int halt_exercise(object me, object who, string why);
+int halt_exercise(object me);
+
+int main(object me, string arg)
+{
+        int exercise_cost;
+        object where;
+
+        seteuid(getuid());
+        where = environment(me);
+        
+        if (where->query("pigging"))
+                return notify_fail("你還是專心拱豬吧！\n");
+
+        if (me->is_busy() || me->query_temp("pending/exercising"))
+                return notify_fail("你現在正忙著呢。\n");
+
+        if( me->is_fighting() )
+                return notify_fail("戰斗中不能練內功，會走火入魔。\n");
+
+        if( !stringp(me->query_skill_mapped("force")) )
+                return notify_fail("你必須先用 enable 選擇你要用的內功心法。\n");
+
+        if( !arg || !sscanf(arg, "%d", exercise_cost))
+                return notify_fail("你要花多少氣練功？\n");
+        if (exercise_cost < 10)
+                return notify_fail("你的內功還沒有達到那個境界！\n");
+
+        if( (int)me->query("qi") < exercise_cost )
+                return notify_fail("你現在的氣太少了，無法產生內息運行全身經脈。\n");
+
+        if( (int)me->query("jing") * 100 / (int)me->query("max_jing") < 70 )
+                return notify_fail("你現在精不夠，無法控制內息的流動！\n");
+
+        write("你坐下來循著先天伏羲八卦內息運氣用功，一股內息開始在體內流動。
+                 [32m ▁▁▁     [35m ▁▁▁    [33m  ▁  ▁[m
+                 [32m ▁▁▁     [35m ▁  ▁    [33m  ▁  ▁[m
+                 [32m ▁  ▁     [35m ▁▁▁    [33m  ▁  ▁[m
+  
+                        [37;1m┌───────┐
+                        [37;1m│  ,o888b,`?.  │
+                  [32;1m▁  ▁[37m│,8888 888   ? │[37;1m▁  ▁[0m
+                  [32;1m▁  ▁[37m│8888888P'    b│[37;1m▁▁▁[0m
+                  [32;1m▁▁▁[37m│888P'        *│[37;1m▁▁▁[0m
+                        [37;1m│`88   O     P │
+                        [37;1m│  `?._  _.o'  │
+                        [37;1m└───────┘
+                  [33;1m▁▁▁      [36;1m▁  ▁      [37m▁▁▁[m
+                  [33;1m▁  ▁      [36;1m▁▁▁      [37m▁▁▁[m
+                  [33;1m▁  ▁      [36;1m▁  ▁      [37m▁▁▁[m
+[37;40m[0m
+        \n");
+
+        me->set_temp("pending/exercise", 1);
+        me->set_temp("exercise_cost", exercise_cost);
+        message_vision("$N盤膝坐下，開始修煉內力。\n", me);
+        me->start_busy((: exercising :), (:halt_exercise:));
+        return 1;
+}
+
+int exercising(object me)
+{
+        int exercise_cost = (int)me->query_temp("exercise_cost");
+        int neili_gain = 1 + (int)me->query_skill("force") / 5;
+        object where=environment(me);
+        if (exercise_cost < neili_gain) neili_gain = exercise_cost;
+        if (exercise_cost < 1)
+                return 0;
+        me->add("neili", neili_gain);
+        me->set_temp("exercise_cost", exercise_cost -= neili_gain);
+        if(where->query("xuanbing"))
+          me->add("qi", (int)neili_gain/3);
+         if(where->query("hanyuchuang"))
+          me->add("qi", (int)neili_gain/2); 
+        me->add("qi", -neili_gain);
+
+        if (exercise_cost > 0)
+                return 1;
+
+        me->set_temp("pending/exercise", 0);
+        message_vision("$N運功完畢，深深吸了口氣，站了起來。\n", me);
+        if ((int)me->query("neili") < (int)me->query("max_neili") * 2)
+                return 0;
+        else {
+                if ((int)me->query("max_neili") > (int)me->query_skill("force") * 10) {
+                        write("你的內力修為似乎已經達到了瓶頸。\n");
+                        me->set("neili", (int)me->query("max_neili"));
+                        return 0;
+                }
+                else {
+                        me->add("max_neili", 1);
+                        me->set("neili", (int)me->query("max_neili"));
+                        write("你的內力增加了！！\n");
+                        return 0;
+                }
+        }
+}
+
+int halt_exercise(object me)
+{
+        if ((int)me->query("neili") > (int)me->query("max_neili") * 2)
+                me->set("neili", (int)me->query("max_neili") * 2);
+        me->set_temp("pending/exercise", 0);
+        return 1;
+}
+
+int help(object me)
+{
+        write(@HELP
+指令格式 : exercise|dazuo [<耗費「氣」的量> 必須多于 10]
+
+運氣練功，控制體內的氣在各經脈間流動，藉以訓練人體肌肉骨骼的耐
+力、爆發力，并且用內力的形式將能量儲備下來。
+
+HELP
+        );
+        return 1;
+}

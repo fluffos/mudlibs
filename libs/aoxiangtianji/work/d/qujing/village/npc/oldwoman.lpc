@@ -1,0 +1,139 @@
+#include <ansi.h>
+inherit NPC;
+void create()
+{
+  set_name(HIG"妇人"NOR, ({ "woman", "fu ren"}));
+  set("gender", "女性" );
+  set("age", 45);
+  set("per",40);
+  set("long","一位不施脂粉犹美，风流还似少年才的美妇。\n");
+  set("combat_exp", 600+random(400));
+  set("daoxing", 600+random(400));
+  set("attitude", "friendly");
+  set_skill("dodge", 10);
+  set_skill("unarmed", 10);
+  setup();
+  carry_object("/obj/cloth/pink_cloth")->wear();
+}
+
+void init()
+{
+  object ob = this_player();
+  add_action("do_yes","yes");
+  remove_call_out("checking");
+  call_out("checking",1,ob);
+}
+
+void checking(object ob)
+{
+  object me = this_object();
+  if( (int)ob->query("obstacle/number") != 6)
+    return;
+  if( ob->query("obstacle/village") == "done" )
+    return;
+  if( ob->query_temp("yao_killed") <3
+    && ob->query_temp("seen") )
+  {
+    message_vision("$N" CYN"对$n" CYN"苦苦的哀求道：去帮我杀了那些妖怪吧。好吗？\n"NOR,me,ob);
+    return;
+  }
+
+  if( ob->query_temp("yao_killed") >= 3
+    && !ob->query_temp("cao_given") )
+  {
+    message_vision("$N" CYN"对$n" CYN"说道：" CYN"“能否再帮我去寻找" +
+                   RED"七叶琼芝草"NOR + CYN"”？\n"NOR,me,ob);
+    return;
+  }
+
+  message_vision("$N" CYN"对着$n" CYN"说道：听说这位是去西天取真经的，能否(yes)帮个忙呢？\n"NOR,me,ob);
+  ob->set_temp("womenask","yes");
+  return;
+}
+
+int do_yes()
+{
+  object ob=this_object();
+  object me=this_player();
+  if( me->query_temp("womenask")=="yes")
+  {
+    message_vision("$N" CYN"对着$n" CYN"点点头道：愿为效劳。\n"NOR,me,ob);
+    call_out("give_task",1+random(2),me,ob);
+    return 1;
+  }
+
+  return 0;
+}
+
+int give_task(object me,object ob)
+{
+  if (!me || !ob || environment(ob) != environment(me))
+    return 0;
+
+  tell_object(me,CYN"妇人对你说道：我们家北面有些妖怪在作乱，不知你能否帮我杀了他们啊？\n"NOR);
+  me->delete_temp("womenask");
+  me->set_temp("seen",1);
+  return 1;
+}
+
+int accept_object(object who,object ob)
+{
+  if( ob->name() != RED"七叶琼芝草"NOR ||
+      ob->query("id") != "qiong cao" ||
+      ob->is_character())
+    return 0;
+  if (ob->query("owner") != who->query("id"))
+    return notify_fail("这不时你挖出来的吧？\n");
+
+  if( !who->query_temp("yao_killed") )
+  {
+    command("say 你还是先去帮我杀了那些妖怪吧。好吗？");
+    return 0;
+  }
+
+  command("smile");
+  command("nod");
+  who->set_temp("cao_given",1);
+  this_object()->set_name("骊山老母",({"lishan laomu","lao mu"}));
+  call_out("pass",1,this_player(1));
+  return 1;
+}
+
+void pass(object ob)
+{
+  int dx, qn;
+
+  if( ! ob->query_temp("yao_killed") )
+    return;
+
+  if((int)ob->query("obstacle/number") != 6)
+    return;
+
+  if (ob->query("obstacle/village") == "done")
+    return;
+  if (!ob->query_temp("cao_given") ||
+      !ob->query_temp("seen"))
+    return;
+
+  dx = random(1600);
+  dx += 16000;
+  qn = dx/3;
+  ob->set("obstacle/number",7);
+  ob->set("obstacle/village","done");
+  ob->add("daoxing",dx);
+  ob->add("potential",qn);
+  ob->add("obstacle/dx",dx);
+  ob->add("obstacle/qn",qn);
+  command("chat "+ ob->query("name")+"经住耐心与勇气的考验！");
+  command("chat "+ ob->query("name")+"顺利闯过西行又一关！");
+  tell_object(ob,sprintf("你赢得了%s道行，%s点潜能！\n",
+                   COMBAT_D->chinese_daoxing(dx),
+                   chinese_number(qn)));
+  log_file("obstacle",sprintf("%s(%s) passed village on %s\n",
+             ob->name(1), geteuid(ob), ctime(time()) ) );
+  ob->delete_temp("seen");
+  ob->delete_temp("cao_given");
+  ob->save();
+  destruct(this_object());
+  return;
+}

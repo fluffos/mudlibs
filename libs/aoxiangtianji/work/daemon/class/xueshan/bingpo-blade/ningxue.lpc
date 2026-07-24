@@ -1,0 +1,67 @@
+#include <ansi.h>
+#include <combat.h>
+#define XUE "「" HIW "凝血一击" NOR "」"
+inherit F_SSERVER;
+string final(object me, object target, int damage);
+int valid_pfm(object me, object target)
+{
+  if(userp(me) && me->query("family/family_name") != "大雪山")
+    return notify_fail(XUE "是大雪山不传之密！\n");
+  if (me->is_busy())
+    return notify_fail("你正忙着呢！\n");
+
+  if (me->query_skill("bingpo-blade", 1) < 180)
+    return notify_fail("你的冰魄刀法修为不够，难以施展" XUE "。\n");
+  if (me->query_skill("ningxue-force", 1) < 180)
+    return notify_fail("你的冰谷凝血功修为不够，难以施展" XUE "。\n");
+  if (me->query_skill_mapped("blade") != "bingpo-blade")
+    return notify_fail("你没有激发冰魄刀法，难以施展" XUE "。\n");
+  if (me->query_skill_mapped("force") != "ningxue-force")
+    return notify_fail("你没有激发冰谷凝血功，难以施展" XUE "。\n");
+  if ((int)me->query("force") < 500)
+    return notify_fail("你的真气不够，难以施展" XUE "。\n");
+  return 1;
+}
+
+int perform(object me, object target)
+{
+  object weapon;
+  string msg;
+  int damage;
+  if (! objectp(weapon = me->query_temp("weapon")) ||
+      (string)weapon->query("skill_type") != "blade")
+    return notify_fail("你所使用的武器不对，难以施展" XUE "。\n");
+  msg = HIW "$N" HIW "仰天一声长啸，飞身跃起，掌中"NOR + weapon->name() +
+        HIW"震颤间散发道道寒气，凝结成道道白烟，随着刀光流动，转瞬淹没了$n。\n"NOR;
+  if (COMBAT_D->perform_success(me, target,
+                                ({"sword","force"}),
+                                ({"parry","dodge"})))
+  {
+    damage = me->query_skill("blade") + me->query_skill("force")/2;
+    damage = damage/3 + random(damage);
+    msg += COMBAT_D->do_damage(me, target, WEAPON_ATTACK, damage, 35,
+                                 (: final, me, target, damage :));
+    me->add("force", -200);
+  }
+
+  else
+  {
+    msg += CYN "可是$n" CYN "内力深厚，使得$P"
+           CYN "这一招没有起到任何作用。\n" NOR;
+    me->add("force", -100);
+  }
+
+  message_combatd(msg, me, target);
+  me->start_busy(1+random(3));
+  return 1;
+}
+
+string final(object me, object target, int damage)
+{
+  int lvl = me->query_skill("bingpo-blade", 1) + me->query_skill("poison");
+  target->affect_by("ningxue_force",
+          ([ "level"    : lvl/3 + random(lvl/2),
+             "id"       : me->query("id"),
+             "duration" : lvl / 80 + random(lvl / 30 + 1) ]));
+  return  HIR "霎时$n" HIR "只觉得一道寒流穿体而过，哆哆嗦嗦的打了个寒颤。\n"NOR;
+}

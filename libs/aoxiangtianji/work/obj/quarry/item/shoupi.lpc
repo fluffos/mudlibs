@@ -1,0 +1,214 @@
+#include <ansi.h>
+inherit COMBINED_ITEM;
+void create()
+{
+  set_name(HIY"兽皮" NOR, ({ "shou pi", "leather" }));
+  if (clonep())
+     set_default_object(__FILE__);
+  else
+  {
+    set("long", HIY "成年雄豹的皮，革质坚韧，皮毛"
+                    "柔软光滑之极。\n" NOR);
+    set("base_unit", "张");
+    set("base_value", 1000);
+    set("base_weight", 450);
+    set("power",50);
+  }
+
+  setup();
+  set_amount(1);
+}
+
+void init()
+{
+  add_action("do_makecloth",({"make","fengzhi","jiagong"}));
+}
+
+int makecloth(object me, object who,string type)
+{
+  int pay, power, sk, value, extra_power;
+  object cloth;
+  string n,e_n;
+  object ob = this_object();
+
+  if (me->is_busy() || me->is_fighting())
+    return notify_fail("你正忙着呢！\n");
+  if (who->is_busy() || who->is_fighting())
+    return notify_fail("别人正忙着呢！等等吧！\n");
+  if (!living(who))
+    return notify_fail("她现在能帮你做衣服吗？\n");
+
+  sk = who->query_skill("sew",1);
+  if (sk < 50)
+  {
+    write(sprintf("%s还不会做衣服呢！\n",who->name()));
+    return 1;
+  }
+
+  if (!type)
+    return notify_fail("你想用这张皮做什么？\n");
+
+  if (type != "cloth" &&
+      type != "hat" &&
+      type != "pifeng" &&
+      type != "boots")
+    return notify_fail("用兽皮只能做衣服，帽子，披风或者鞋子！\n");
+
+  if (type == "cloth" || type == "pifeng")
+  {
+    if (!ob->query("sew_type/" + type))
+      return notify_fail("这张皮做不了" + type + "！\n");
+  }
+
+  value = query("base_value");
+  power = query("power");
+  pay = power*100;
+  if (type == "cloth")
+    pay = pay*2;
+  else if (type == "pifeng")
+    pay = pay*3/2;
+
+  if (me == who)
+    pay = 0;
+
+  if (pay > 0 && me->query_skill("higgling", 1) >= 30)
+  {
+    pay = pay * 100 / (me->query_skill("higgling", 1) + 100);
+    switch (random(5))
+    {
+      case 0:
+        write("你道：我常年照顾你生意，还不给点折扣吧？\n");
+        break;
+      case 1:
+        write("你道：我们可是熟人了啊。\n");
+        break;
+      case 2:
+        write("你道：这位大姐，最近生意好吧，给点折扣如何？\n");
+        break;
+      case 3:
+        write("你道：太贵了，便宜点我就做了。\n");
+        break;
+      case 4:
+        write("你道：最近手头实在是紧，您就行个好，便宜点吧。\n");
+        break;
+    }
+
+    pay /= 10;
+    pay *= 10;
+    if (pay < 10)
+      pay = 10;
+    write(sprintf("%s无奈道：“好吧，好吧，那就%s算了。”\n",
+        who->name(),MONEY_D->price_str(pay)));
+  }
+
+  if (pay > 0 && (me != who))
+  {
+    if (MONEY_D->player_pay(me, pay) != 1)
+      return 0;
+    message_vision("$N付了帐，对$n说了两句什么。\n", me,who);
+  }
+
+  message_vision(HIC"$N" HIC"开始缝制装备！\n"NOR,who);
+  extra_power = 0;
+  if (sk > 100)
+  {
+    extra_power = sk/8;
+    extra_power += random(extra_power/2 + 1);
+  }
+
+  cloth = new("/obj/quarry/item/" + type);
+  n = COLOR_D->clean_color(name());
+  if (type == "cloth")
+  {
+    n = HIY + n + "战袍" + NOR;
+    e_n = query("id") + " cloth";
+    cloth->set("armor_prop/armor",power + extra_power/3);
+    cloth->set("armor/max_armor",power + extra_power/3);
+    cloth->set("armor_prop/armor_vs_force",extra_power);
+  }
+
+  else if (type == "pifeng")
+  {
+    n = HIY + n + "披风" + NOR;
+    e_n = query("id") + " pifeng";
+    cloth->set("armor_prop/armor",power/3 + extra_power/2);
+    cloth->set("armor/max_armor",power/3 + extra_power/2);
+    cloth->set("armor_prop/armor_vs_spells",extra_power/2);
+  }
+
+  else if (type == "hat")
+  {
+    n = HIY + n + "帽" + NOR;
+    e_n = query("id") + " mao";
+    cloth->set("armor_prop/armor",power/5  + extra_power);
+    cloth->set("armor/max_armor",power/5 + extra_power);
+    cloth->set("armor_prop/armor_vs_force",extra_power/3);
+    cloth->set("armor_prop/armor_vs_spells",extra_power/3);
+    cloth->set("armor_prop/spells",extra_power/3);
+  }
+
+  else if (type == "boots")
+  {
+    n = HIY + n + "鞋" + NOR;
+    e_n = query("id") + " shoes";
+    cloth->set("armor_prop/armor",power/8  + extra_power);
+    cloth->set("armor/max_armor",power/8 + extra_power);
+    cloth->set("armor_prop/dodge",extra_power/3);
+  }
+
+  cloth->set_name(n, ({e_n,type}));
+  if (who == me)
+    value += power*100;
+  else
+    value += power*150;
+  value *= 2;
+  cloth->set("value",value);
+  cloth->move(me, 1);
+  me->start_busy(2);
+  who->start_busy(2);
+  message_vision(HIR"$N" HIR"一会就把东西做好了！\n",who);
+  if (me != who)
+    message_vision("$N把做好的东西交给了$n！\n",who,me);
+  add_amount(-1);
+  if (query_amount() < 1)
+    destruct(this_object());
+  return 1;
+}
+
+int do_makecloth(string arg)
+{
+  object me,who;
+  string str_id,cloth;
+
+  string shuoming = "你可以：make <某人id> <衣服类型> \n" +
+                    "       fengzhi <某人id> <衣服类型>\n" +
+                    "       jiagong <某人id> <衣服类型>\n" +
+                    "来制作你想要的装备！\n" +
+                    "如果不指定<某人id>，则是自己亲自加工装备！\n" +
+                    "能够制作的装备是：衣服，披风，帽子和鞋子！\n";
+
+  me = this_player();
+  if (!arg)
+    return notify_fail(shuoming);
+  if(sscanf(arg, "%s %s", str_id, cloth) ==2 )
+  {
+    who = present(str_id,environment(me));
+    if (!objectp(who))
+      return notify_fail("这里没有 " + str_id + " 这个人！\n");
+  }
+
+  else
+  {
+    who = me;
+    cloth = arg;
+  }
+
+  if (!present(this_object(),me))
+    return notify_fail("这东西并不在你身上啊！\n");
+
+  if (cloth != "cloth" && cloth != "pifeng" && cloth != "hat")
+    return notify_fail("你只可以制作cloth/pifeng/hat！\n");
+  notify_fail("你身上的钱够吗？\n");
+  return makecloth(me,who,cloth);
+}
+

@@ -1,0 +1,199 @@
+#include <ansi.h>
+#include <weapon.h>
+inherit BLADE;
+#include "/cmds/std/valid_kill.h"
+void create()
+{
+  set_name(RED "双" NOR + HIB "色" NOR + HIW "冰刀" NOR, ({"ice blade", "blade", "dao"}));
+  set_weight(5000);
+  set("unit", "把");
+  set("long", "一把晶莹透明的弯刀，以大雪山中千年不化的寒冰制成。颜色变幻不停，象红又象蓝。\n");
+  set("value", 8000);
+  set("material", "ice");
+  set("wield_msg",
+"$N「唰」地一声抽出一把$n握在手中，眼中射出一道寒意！\n");
+  set("unwield_msg",
+"$N将手中的$n插入腰间，嘴里轻轻地舒了口气。\n");
+  init_blade(20);
+  if( clonep(this_object()) )
+  {
+    set_default_object(__FILE__);
+  }
+
+  setup();
+}
+
+void init()
+{
+  add_action("do_duandao", "duandao");
+  remove_call_out("do_melt");
+  call_out("do_melt", 1);
+}
+
+void do_melt()
+{
+  if(this_object())
+    call_out("melt", 40+random(40));
+}
+
+void melt()
+{
+  int lv;
+  object env, owner;
+  if(!this_object())
+    return;
+  env=environment(this_object());
+  owner = this_object()->query("ice_owner");
+
+  if( env->is_character() )
+  {
+    if( (int)env->query_skill("ningxue-force", 1) < 50 )
+    {
+      message_vision("$N觉得身上凉凉的，湿湿的，原来是冰刀化了。\n", env);
+      if (objectp(owner))
+      {
+      	lv = owner->query_skill("ningxue-force",1)/2;
+        if (lv)
+        {
+          env->affect_by("ningxue_force",
+              ([ "level"    : lv + random(lv),
+                 "id"       : owner->query("id"),
+                 "duration" : lv / 30 + random(lv/15) ]));
+        }
+
+      }
+
+      destruct(this_object());
+      return;
+    }
+
+  }
+
+  else if( (int)env->query_max_encumbrance() > 0 && !environment(env) )
+  {//a room.
+    if( (string)env->query_terrain() != "snow" )
+    {
+      tell_object(env,"冰刀终于化成了一滩水，流得到处都是。\n");
+      destruct(this_object());
+      return;
+    }
+
+  }
+
+}
+
+mixed hit_ob(object me, object victim, int damage_bonus)
+{
+  int diff, lvl;
+  if( damage_bonus < 0 )
+    return 0;
+  diff = random((int)me->query("force_factor")+1)
+       - random((int)victim->query("force_factor")/2+1);
+//here we let force_factor determine who hurts who:)
+//the attacker has more chance of course.
+  if(diff > 0)
+  {
+    if (diff > 150)
+      diff = 150;
+    lvl = me->query_skill("ningxue-force",1);
+    if (random(2))
+    {
+      victim->affect_by("ningxue_force",
+           ([ "level"    : lvl + random(lvl),
+              "id"       : me->query("id"),
+              "duration" : diff/2 + random(diff+1) ]));
+
+      message_vision("$N身子一颤，中了刀上的寒毒！\n", victim);
+      return 0;
+    }
+
+  }
+
+  else
+    message_vision("$N觉得一阵寒意袭来，差点中了刀上的寒毒！\n", victim);
+  return 0;
+}
+
+int do_duandao(string arg)
+{
+  string msg;
+  int ap, dp, percep, lv;
+  object me, target;
+  me = this_player();
+
+  if( this_player()->is_busy() )
+    return notify_fail("你正忙着呢，哪有空运力断刀。\n");
+  if( me->query("force") < 300 )
+    return notify_fail("这要靠内力而不是蛮劲。\n");
+  if( ! arg )
+  {
+    message_vision(HIW "$N运力一震，只见冰花四溅！一把冰刀顿时化为无数碎片。\n" NOR, me);
+    me->start_busy(3);
+    me->add("force", -100);
+    destruct(this_object());
+    return 1;
+  }
+
+//now find the target...
+  if( !objectp( target = present(arg, environment(me)) ) )
+    return notify_fail("你想用冰刀射谁？\n");
+  if( !target->is_character() )
+    return notify_fail("看清楚一点，那并不是活物。\n");
+  if( !living(target) )
+    return notify_fail(target->name() + "已无还手之力，一刀砍下去即可，何必炫耀功夫。\n");
+  if(target==me)
+    return notify_fail("想自杀？\n");
+  if( !wizardp(me) && (environment(me)->is_safty() || environment(me)->query("no_fight")))
+    return notify_fail("你不能在这里偷袭别人。\n");
+  if (!me->is_fighting(target))
+    return notify_fail("你并没有和他战斗！\n");
+  if(!valid_kill(me,target,0))
+    return 0;
+
+  msg = HIW"$N" HIW"运力一震，只见冰花四溅！一把冰刀顿时化为无数碎片向$n"
+        HIW"激射而去！\n" NOR;
+  ap = COMBAT_D->math_ap(me,"throwing");
+  if (me->query("special_skill/accuracy"))
+    ap += ap/5 ;
+  dp = COMBAT_D->math_dp(me,target,0,0);
+  percep = (int)target->query_skill("perception",1);
+  if (percep > 80)
+  {
+    percep = percep /5;
+    if (percep > 100)
+      percep = 100 ;
+    dp += dp*(random(percep))/100;
+  }
+
+  if( random(ap + dp) > dp )
+  {
+    lv = me->query_skill("ningxue-force",1);
+    if (lv > 150)
+    {
+      target->affect_by("ningxue_force",
+           ([ "level"    : lv*3/2 + random(lv),
+              "id"       : me->query("id"),
+              "duration" : lv/30 + random(lv/15) ]));
+    }
+
+    msg +=  HIW "结果千万片冰块没体而入，$n顿时发出一声惨叫！\n" NOR;
+    message_vision(msg, me, target);
+    target->receive_wound("kee", random(3*me->query("force_factor"))+50, me);
+    COMBAT_D->report_status(target);
+  }
+
+  else
+  {
+    msg +=  HIW "结果$n轻轻一跳，躲了开去。\n" NOR;
+    message_vision(msg, me, target);
+  }
+
+  if (userp(me) && userp(target) && !target->is_want_kill(me->query("id")))
+    me->want_kill(target);
+
+  me->kill_ob(target);
+  me->start_busy(3);
+  me->add("force", -200);
+  destruct(this_object());
+  return 1;
+}

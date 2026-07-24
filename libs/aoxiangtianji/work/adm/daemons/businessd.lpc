@@ -1,0 +1,2191 @@
+#include <ansi.h>
+#pragma optimize
+
+inherit F_SAVE;
+inherit F_DBASE;
+#define MAX_DEV 9999
+#define MIN_DEV 50
+#define MAX_STORGE 400
+#define MAX_INVOTE_CITY 5
+#define BUSINESS_SHOP(x) "/d/" + x + "/business_shop"
+#define CITY_EVENT "/adm/etc/city_event"
+#define EVENT_GOODS "/adm/etc/event_goods"
+#define BUY_TAX 3
+#define SELL_TAX 2
+#define MAX_WORKSHOP 10
+#define REALLY_ONE_DAY 43200
+mapping all_city_info;
+mapping city_sell;
+mapping invote;
+mapping event;
+mapping workshop;
+public void business_message(string msg);
+public string *get_all_city();
+public int is_business_shop(string city);
+public int is_trade_city(string city);
+private void init_all_city_info();
+private void init_city_sell();
+public string query_cname_type(string type);
+//query info of all_city_info
+public int query_city_last_info(string city, string type);
+public int query_city_info(string city, string type);
+public mapping query_city_goods(string city);
+public int query_city_goods_class(string city, string goods);
+public int query_city_goods_storge(string city, string goods);
+public int query_city_price(string city, string type);
+public int query_goods_buy_price(string goods,int g_class, string city);
+public int query_city_sell_rate(string city,string goods);
+public int query_goods_sell_price(string goods,int g_class,string city);
+public mapping query_city_goods_info(string city,string league_id);
+private int set_city_last_info(string city, string type, int val);
+public int add_city_last_info(string city, string type, int val);
+private int set_city_info(string city, string type, int val);
+public int add_city_info(string city, string type, int val);
+public int add_city_goods_storge(string city, string goods,int value);
+private int set_city_price(string city, string type, int val);
+public int add_city_price(string city, string type, int val);
+public int can_trade_goods(string league_id,string city,string goods);
+public string goods_name_pfx(int g_class);
+//query info of all invote
+public int is_invote_city(string city);
+public string query_city_invote_type(string city);
+public int query_city_invote_add_num(string city);
+public string query_city_invote_league(string city);
+public string query_city_invote_status(string city);
+public int city_want_invote_numer(string city, string type);
+public int query_city_invote_gold(string city,int add_num);
+public string query_invote_info(string arg);
+public string set_city_invote_status(string city,string status);
+public string accept_invote(mixed ob,string arg);
+private void remove_a_invote(string city);
+private void invote_effect(string city);
+//query info of player workshop
+public int is_player_have_workshop(mixed ob,string city);
+public mapping query_player_workshop(mixed ob);
+public int query_player_workshop_num(mixed ob);
+public mapping query_player_goods_and_class(mixed ob,string city,string goods,int g_class);
+private int add_player_workshop(mixed ob,string city,string from,mapping goods);
+private int remove_player_workshop(mixed ob);
+private int remove_a_player_workshop_goods(mixed ob,string city,string goods,int g_class);
+public string accept_buy(mixed ob, string city,string arg);
+public string accept_sell(object ob,string arg);
+//query info of event
+public int is_valid_string_line(string line);
+public int is_event_city(string city);
+public string query_city_event_name(string city);
+public string query_city_event_type(string city);
+public int is_city_bad_event(string city);
+public int query_city_event_effect(string city,string type);
+public int query_city_event_start_time(string city);
+public int query_city_event_finish_time(string city);
+private mapping get_a_event();
+private void add_a_city_event(string city);
+private void remove_a_city_event(string city);
+public int adjust_val(int val, int to_val, int from_val, int c_val);
+private void refresh_goods_list(string city);
+private void random_event(string *citys);
+private void check_workshop();
+private void check_invote();
+private void check_city_event();
+private void annual_event(string *all_city);
+private void add_a_new_invote();
+private void heart_beat();
+void create()
+{
+  seteuid(getuid());
+  restore();
+  set_heart_beat(1440);
+  if (!mapp(all_city_info) || sizeof(all_city_info) < 1)
+  {
+    all_city_info = ([]);
+    init_all_city_info();
+  }
+
+  if (!mapp(city_sell) || sizeof(city_sell) < 1)
+  {
+    city_sell = ([]);
+    init_city_sell();
+  }
+
+  if (!mapp(invote) || sizeof(invote) < 1)
+  {
+    invote = ([]);
+    add_a_new_invote();
+  }
+
+  if (!mapp(event))
+    event = ([]);
+  if (!mapp(workshop))
+    workshop = ([]);
+}
+
+void remove()
+{
+  save();
+}
+
+public void mud_shutdown()
+{
+  save();
+}
+
+public string query_save_file()
+{
+  return DATA_DIR "businessd";
+}
+
+public void business_message(string msg)
+{
+  message("system",HIM"〖" + HIR + "商业信息" + HIM + "〗："
+             + CYN + msg + NOR,users());
+}
+
+public string *get_all_city()
+{
+  string *citys = ({});
+  string *zone = GOODS_D->query_all_zone();
+
+  for (int i=0;i<sizeof(zone);i++)
+  {
+    reset_eval_cost();
+    citys += GOODS_D->query_zone_citys(zone[i]);
+  }
+
+  return citys - ({0});
+}
+
+public int is_business_shop(string city)
+{
+  object shop;
+  shop = find_object(BUSINESS_SHOP(city));
+  if (!objectp(shop))
+    shop = load_object(BUSINESS_SHOP(city));
+  return objectp(shop);
+}
+
+public int is_trade_city(string city)
+{
+  string *all_city = get_all_city();
+  if (!is_business_shop(city))
+    return 0;
+  return (member_array(city,all_city) != -1);
+}
+
+private void init_all_city_info()
+{
+  string city, *citys = get_all_city();
+
+  if (!arrayp(citys) || sizeof(citys) < 1)
+    return;
+
+  foreach (city in citys)
+  {
+    reset_eval_cost();
+    if (!undefinedp(all_city_info[city]))
+      continue;
+    if (!is_business_shop(city))
+      continue;
+    all_city_info += ([city : ([
+                           "last_develop" : 200,
+                           "last_culture" : 100,
+                           "last_science" : 100,
+                           "last_buy" : 0,
+                           "last_sell" : 0,
+                           "last_invote" : 0,
+                           "develop" : 200,
+                           "culture" : 100,
+                           "science" : 100,
+                           "buy" : 0,
+                           "sell" : 0,
+                           "invote" : 0,
+                           "goods" : ([]),
+                           "price" : ([
+                             "daily" : 80+random(40),
+                             "food" : 80+random(40),
+                             "tonic" : 80+random(40),
+                             "technologist" : 80+random(40),
+                             "mine" : 80+random(40),
+                           ]),
+                             ])
+                    ]);
+  }
+
+  save();
+}
+
+private void init_city_sell()
+{
+  int i;
+  string city, zone, *citys;
+  string *all_goods,*my_goods,*zone_goods;
+
+  citys = get_all_city();
+  if (!arrayp(citys) || sizeof(citys) < 1)
+    return;
+
+  foreach (city in citys)
+  {
+    reset_eval_cost();
+    if (!is_business_shop(city))
+      continue;
+    zone = GOODS_D->query_city_zone(city);
+    all_goods = GOODS_D->query_all_goods();
+    my_goods = GOODS_D->query_city_goods(city);
+    zone_goods = GOODS_D->query_zone_goods(zone);
+    for (i=0;i<sizeof(all_goods);i++)
+    {
+      if (member_array(all_goods[i],my_goods) != -1) //本地产品
+      {
+        if (!mapp(city_sell[city]))
+          city_sell[city] = ([]);
+        city_sell[city] += ([
+                             all_goods[i] : 0,
+                           ]);
+      }
+
+      else if (member_array(all_goods[i],zone_goods) != -1) //本地区产品
+      {
+        if (!mapp(city_sell[city]))
+          city_sell[city] = ([]);
+        city_sell[city] += ([
+                             all_goods[i] : 15+random(20),
+                           ]);
+      }
+
+      else
+      {
+        if (!mapp(city_sell[city]))
+          city_sell[city] = ([]);
+        city_sell[city] += ([
+                             all_goods[i] : 30+random(30),
+                           ]);
+      }
+
+    }
+
+  }
+
+  save();
+}
+
+public string query_cname_type(string type)
+{
+  if (type == "develop")
+    return "商业";
+  if (type == "culture")
+    return "文化";
+  if (type == "science")
+    return "科技";
+  return type;
+}
+
+public int query_city_last_info(string city, string type)
+{
+  if (!mapp(all_city_info) || sizeof(all_city_info) < 1)
+    return 0;
+  if (!stringp(city) || !stringp(type) || !is_trade_city(city))
+    return 0;
+  if (type != "develop" &&
+      type != "culture" &&
+      type != "science" &&
+      type != "buy" &&
+      type != "sell" &&
+      type != "invote")
+    return 0;
+  if (!mapp(all_city_info[city]))
+    return 0;
+  return (int)all_city_info[city][sprintf("last_%s",type)];
+}
+
+public int query_city_info(string city, string type)
+{
+  if (!mapp(all_city_info) || sizeof(all_city_info) < 1)
+    return 0;
+  if (!stringp(city) || !stringp(type) || !is_trade_city(city))
+    return 0;
+  if (type != "develop" &&
+      type != "culture" &&
+      type != "science" &&
+      type != "buy" &&
+      type != "sell" &&
+      type != "invote")
+    return 0;
+  if (!mapp(all_city_info[city]))
+    return 0;
+  return (int)all_city_info[city][type];
+}
+
+public mapping query_city_goods(string city)
+{
+  mapping goods;
+
+  if (!is_trade_city(city))
+    return 0;
+  goods = all_city_info[city]["goods"];
+  return mapp(goods) ? goods : ([]);
+}
+
+//查询城市中某个交易品的等级
+public int query_city_goods_class(string city, string goods)
+{
+  mapping g = query_city_goods(city);
+
+  if (!mapp(g) || sizeof(g) < 1)
+    return 0;
+  if (undefinedp(g[goods]) || !arrayp(g[goods]))
+    return 0;
+  return g[goods][0];
+}
+
+//查询城市中某个交易品的积累数目
+public int query_city_goods_storge(string city, string goods)
+{
+  mapping g = query_city_goods(city);
+
+  if (!mapp(g) || sizeof(g) < 1)
+    return 0;
+  if (undefinedp(g[goods]) || !arrayp(g[goods]))
+    return 0;
+  return g[goods][1];
+}
+
+public int query_city_price(string city, string type)
+{
+  if (!mapp(all_city_info) || sizeof(all_city_info) < 1)
+    return 0;
+  if (!stringp(city) || !stringp(type) || !is_trade_city(city))
+    return 0;
+  if (type != "daily" &&
+      type != "food" &&
+      type != "tonic" &&
+      type != "technologist" &&
+      type != "mine")
+    return 0;
+  if (!mapp(all_city_info[city]))
+    return 0;
+  return (int)all_city_info[city]["price"][type];
+}
+
+public string query_city_business_info(string arg)
+{
+  string city,zone,goods,msg,tmp,infotype;
+  string *all_zone, *zone_city, *all_city;
+  string *zone_goods, *city_all_goods;
+  int i,goods_class,num,my_num,dev,cul,sci,val;
+  string goods_type;
+  string *goods_city;
+  string origin1,origin2,origin3;
+  string class_str, *kcg;
+
+  all_zone = GOODS_D->query_all_zone();
+  all_city = get_all_city();
+  if (!arg || arg == "all")
+  {
+    msg = "天下各地交易市场信息汇总：\n";
+    msg += "┏━━━━━┓━━━━━┓━━━━┓━━━━━┓━━━━━┓━━━━━┓━━━━━┓\n";
+    msg += "┃交易城市  ┃城市代号  ┃所在地区┃地区代号  ┃商业发展度┃文化发展度┃科技发展度┃\n";
+    msg += "┗━━━━━┛━━━━━┛━━━━┛━━━━━┛━━━━━┛━━━━━┛━━━━━┛\n";
+    foreach (zone in all_zone)
+    {
+      zone_city = GOODS_D->query_zone_citys(zone);
+      foreach (city in zone_city)
+      {
+        msg += sprintf("┃%-10s┃%-10s┃%-8s┃%-10s┃%-4d(%-4d)┃%-4d(%-4d)┃%-4d(%-4d)┃\n",
+                       to_chinese(city),
+                       city,
+                       GOODS_D->query_zone_cname(zone),
+                       zone,
+                       query_city_info(city, "develop"),
+                       query_city_last_info(city, "develop"),
+                       query_city_info(city, "culture"),
+                       query_city_last_info(city, "culture"),
+                       query_city_info(city, "science"),
+                       query_city_last_info(city, "science"));
+      }
+
+      msg += "┗━━━━━┛━━━━━┛━━━━┛━━━━━┛━━━━━┛━━━━━┛━━━━━┛\n";
+    }
+
+    msg += "\n";
+    msg += "用[地区代码]查询地区所有交易城市信息。\n";
+    msg += "用[城市代码]查询具体交易城市信息。\n";
+    return msg;
+  }
+
+  if (member_array(arg,all_zone) != -1)
+  {
+    zone = arg;
+    msg = sprintf("%s地区交易城市情况总汇：\n",GOODS_D->query_zone_cname(arg));
+    zone_city = GOODS_D->query_zone_citys(arg);
+    msg += "┏━━━━━┓━━━━━┓━━━━━┓━━━━━┓━━━━━┓\n";
+    msg += "┃交易城市  ┃城市代号  ┃商业发展度┃文化发展度┃科技发展度┃\n";
+    msg += "┗━━━━━┛━━━━━┛━━━━━┛━━━━━┛━━━━━┛\n";
+    foreach (city in zone_city)
+    {
+      msg += sprintf("┃%-10s┃%-10s┃%-4d(%-4d)┃%-4d(%-4d)┃%-4d(%-4d)┃\n",
+                     to_chinese(city),
+                     city,
+                     query_city_info(city, "develop"),
+                     query_city_last_info(city, "develop"),
+                     query_city_info(city, "culture"),
+                     query_city_last_info(city, "culture"),
+                     query_city_info(city, "science"),
+                     query_city_last_info(city, "science"));
+    }
+
+    msg += "┗━━━━━┛━━━━━┛━━━━━┛━━━━━┛━━━━━┛\n";
+    msg += "\n";
+    zone_goods = GOODS_D->query_zone_goods(arg);
+    msg += sprintf("%s地区可以交易的货物总汇：\n",GOODS_D->query_zone_cname(arg));
+    msg += "┏━━━━┓━━━┓━━━━━┓━━━━━┓━━━━━┓━━━━━┓━━━━━┓━━━━━┓\n";
+    msg += "┃交易品  ┃种类  ┃起源地一  ┃所在地区  ┃起源地二  ┃所在地区  ┃起源地三  ┃所在地区  ┃\n";
+    msg += "┗━━━━┛━━━┛━━━━━┛━━━━━┛━━━━━┛━━━━━┛━━━━━┛━━━━━┛\n";
+    foreach (goods in zone_goods)
+    {
+      goods_type = GOODS_D->query_goods_type_c(goods);
+      goods_city = GOODS_D->query_goods_city(goods);
+      origin1 = 0;
+      origin2 = 0;
+      origin3 = 0;
+      if (sizeof(goods_city) > 0)
+        origin1 = goods_city[0];
+      if (sizeof(goods_city) > 1)
+        origin2 = goods_city[1];
+      if (sizeof(goods_city) > 2)
+        origin3 = goods_city[2];
+      msg += sprintf("┃%-8s┃%-6s┃%-10s┃%-10s┃%-10s┃%-10s┃%-10s┃%-10s┃\n",
+                     goods,
+                     goods_type,
+                     stringp(origin1) ? to_chinese(origin1) : "没有",
+                     stringp(origin1) ? GOODS_D->query_city_zone_c(origin1) : "没有",
+                     stringp(origin2) ? to_chinese(origin2) : "没有",
+                     stringp(origin2) ? GOODS_D->query_city_zone_c(origin2) : "没有",
+                     stringp(origin3) ? to_chinese(origin3) : "没有",
+                     stringp(origin3) ? GOODS_D->query_city_zone_c(origin3) : "没有");
+    }
+
+    msg += "┗━━━━┛━━━┛━━━━━┛━━━━━┛━━━━━┛━━━━━┛━━━━━┛━━━━━┛\n";
+    msg += "\n";
+    msg += sprintf("%s地区各个城市物品种类价格指数：\n",GOODS_D->query_zone_cname(arg));
+    msg += "┏━━━━━┓━━━━━┓━━━┓━━━┓━━━┓━━━┓━━━┓\n";
+    msg += "┃交易城市  ┃城市代号  ┃日用品┃食品  ┃补品  ┃工艺品┃矿品  ┃\n";
+    msg += "┗━━━━━┛━━━━━┛━━━┛━━━┛━━━┛━━━┛━━━┛\n";
+    foreach (city in zone_city)
+    {
+      msg += sprintf("┃%-10s┃%-10s┃%-6d┃%-6d┃%-6d┃%-6d┃%-6d┃\n",
+                        to_chinese(city),
+                        city,
+                        (int)query_city_price(city, "daily"),
+                        (int)query_city_price(city, "food"),
+                        (int)query_city_price(city, "tonic"),
+                        (int)query_city_price(city, "technologist"),
+                        (int)query_city_price(city, "mine"));
+    }
+
+    msg += "┗━━━━━┛━━━━━┛━━━┛━━━┛━━━┛━━━┛━━━┛\n";
+    msg += "\n";
+    msg += "用[城市代码]查询具体交易城市信息。\n";
+    return msg;
+  }
+
+  if (sscanf(arg,"%s -%s",arg,infotype) != 2)
+  {
+    if (!is_trade_city(arg))
+    {
+      if (sscanf(arg,"%s %s",city,goods) != 2)
+        return "命令：chaxun|info business                查询天下各地交易市场信息。\n" +
+               "命令：chaxun|info business all            查询天下各地交易市场信息。\n" +
+               "命令：chaxun|info business [zone]         查询指定地区的交易城市情况。\n" +
+               "命令：chaxun|info business [city]         查询指定城市的各类商品买价。\n" +
+               "命令：chaxun|info business [city] -rate   查询指定城市的各类商品价格比。\n" +
+               "命令：chaxun|info business [city] -buy    查询指定城市的各类商品买价。\n" +
+               "命令：chaxun|info business [city] -sell   查询指定城市的各类商品卖价。\n" +
+               "命令：chaxun|info business [city] [goods] 查询指定城市某个商品的卖价。\n";
+      if (!is_trade_city(city) || !GOODS_D->is_goods(goods))
+        return "命令：chaxun|info business                查询天下各地交易市场信息。\n" +
+               "命令：chaxun|info business all            查询天下各地交易市场信息。\n" +
+               "命令：chaxun|info business [zone]         查询指定地区的交易城市情况。\n" +
+               "命令：chaxun|info business [city]         查询指定城市的各类商品买价。\n" +
+               "命令：chaxun|info business [city] -rate   查询指定城市的各类商品价格比。\n" +
+               "命令：chaxun|info business [city] -buy    查询指定城市的各类商品买价。\n" +
+               "命令：chaxun|info business [city] -sell   查询指定城市的各类商品卖价。\n" +
+               "命令：chaxun|info business [city] [goods] 查询指定城市某个商品的卖价。\n";
+      msg = HIW"┏━━━━┓━━━┓━━━┓━━━┓━━━┓━━━┓━━━┓━━━┓\n"NOR;
+      msg += BBLU"┃交易品  ┃种类  ┃价格比┃卖价一┃卖价二┃卖价三┃卖价四┃卖价五┃\n"NOR;
+      msg += HIW"┗━━━━┛━━━┛━━━┛━━━┛━━━┛━━━┛━━━┛━━━┛\n"NOR;
+      msg += sprintf(HIW"┃%-8s┃%-6s┃%-6d┃%-6d┃%-6d┃%-6d┃%-6d┃%-6d┃\n"NOR,
+                     goods,
+                     (string)GOODS_D->query_goods_type_c(goods),
+                     (int)query_city_sell_rate(city,goods),
+                     query_goods_sell_price(goods,1,city),
+                     query_goods_sell_price(goods,2,city),
+                     query_goods_sell_price(goods,3,city),
+                     query_goods_sell_price(goods,4,city),
+                     query_goods_sell_price(goods,5,city));
+      msg += BBLU"┗━━━━┛━━━┛━━━┛━━━┛━━━┛━━━┛━━━┛━━━┛\n"NOR;
+      return msg;
+    }
+
+    infotype = "buy";
+  }
+
+  city = arg;
+  if (!is_trade_city(city) ||
+     (infotype != "rate" && infotype != "buy" && infotype != "sell"))
+    return "命令：chaxun|info business                查询天下各地交易市场信息。\n" +
+           "命令：chaxun|info business all            查询天下各地交易市场信息。\n" +
+           "命令：chaxun|info business [zone]         查询指定地区的交易城市情况。\n" +
+           "命令：chaxun|info business [city]         查询指定城市的各类商品买价。\n" +
+           "命令：chaxun|info business [city] -rate   查询指定城市的各类商品价格比。\n" +
+           "命令：chaxun|info business [city] -buy    查询指定城市的各类商品买价。\n" +
+           "命令：chaxun|info business [city] -sell   查询指定城市的各类商品卖价。\n" +
+           "命令：chaxun|info business [city] [goods] 查询指定城市某个商品的卖价。\n";
+
+  if (infotype == "rate")
+  {
+    msg = sprintf("交易城市[%s]情报信息：\n",to_chinese(city));
+    msg += sprintf("[%s]物品种类价格指数：\n",to_chinese(city));
+    msg += "┏━━━━━┓━━━┓━━━┓━━━┓━━━┓━━━┓\n";
+    msg += "┃城市代号  ┃日用品┃食品  ┃补品  ┃工艺品┃矿品  ┃\n";
+    msg += "┗━━━━━┛━━━┛━━━┛━━━┛━━━┛━━━┛\n";
+    msg += sprintf("┃%-10s┃%-6d┃%-6d┃%-6d┃%-6d┃%-6d┃\n",
+                  city,
+                  (int)query_city_price(city, "daily"),
+                  (int)query_city_price(city, "food"),
+                  (int)query_city_price(city, "tonic"),
+                  (int)query_city_price(city, "technologist"),
+                  (int)query_city_price(city, "mine"));
+    msg += "┗━━━━━┛━━━┛━━━┛━━━┛━━━┛━━━┛\n";
+    return msg;
+  }
+
+  if (infotype == "buy")
+  {
+    msg = sprintf("[%s]当前交易品：\n",to_chinese(city));
+    city_all_goods = GOODS_D->query_city_goods(city);
+    if (!arrayp(city_all_goods) || sizeof(city_all_goods) < 1)
+      msg += sprintf("[%s]没有交易物品。\n",to_chinese(city));
+    else
+    {
+    msg += "┏━━━━┓━━━┓━━━━━┓━━┓━━━━━┓━━┓━━┓━━┓\n";
+    msg += "┃交易品  ┃种类  ┃等级      ┃买价┃总数/ 数目┃商业┃文化┃科技┃\n";
+    msg += "┗━━━━┛━━━┛━━━━━┛━━┛━━━━━┛━━┛━━┛━━┛\n";
+    foreach (goods in city_all_goods)
+    {
+      goods_class = query_city_goods_class(city,goods);
+      class_str = goods_name_pfx(goods_class);
+      num = query_city_goods_storge(city, goods);
+      if (!playerp(this_player()))
+        my_num = 0;
+      else
+        my_num = can_trade_goods(LEAGUE_D->query_player_league_id(this_player()),city,goods);
+      dev = GOODS_D->query_goods_next_class_dev(goods,goods_class);
+      cul = GOODS_D->query_goods_next_class_cul(goods,goods_class);
+      sci = GOODS_D->query_goods_next_class_sci(goods,goods_class);
+      if (goods_class > 0)
+      {
+        val = query_goods_buy_price(goods,goods_class,city);
+        tmp = HIG + goods + NOR;
+      }
+
+      else
+      {
+        tmp = HIW + goods + NOR;
+        val = 0;
+      }
+
+      msg += sprintf("┃%-"+(8+color_len(tmp))+"s┃%-6s┃%-"+(10+color_len(class_str))+"s┃%-4s┃%-4s/ %-4s┃%-4s┃%-4s┃%-4s┃\n",
+                     tmp,
+                     (string)GOODS_D->query_goods_type_c(goods),
+                     class_str,
+                     val ? sprintf("%d",val) : "-",
+                     num ? sprintf("%d",num) : "-",
+                     my_num ? sprintf("%d",my_num) : "-",
+                     dev ? sprintf("%d",dev) : "-",
+                     cul ? sprintf("%d",cul) : "-",
+                     sci ? sprintf("%d",sci) : "-");
+    }
+
+    msg += "┗━━━━┛━━━┛━━━━━┛━━┛━━━━━┛━━┛━━┛━━┛\n";
+    msg += HIW"◆注◆："NOR "商业，文化，科技数值，是指下个等级商品出现所需要的发展度。\n";
+    }
+
+    return msg;
+  }
+
+  msg = sprintf("[%s]各类交易品收购价格：\n",to_chinese(city));
+  if (!city_sell[city])
+  {
+    msg += "没有发现这个城市的商品信息.\n";
+    return msg;
+  }
+
+  kcg = keys(city_sell[city]);
+  if (!arrayp(kcg) || sizeof(kcg) < 1)
+    msg += sprintf("[%s]当前没有交易品信息。\n",to_chinese(city));
+  else
+  {
+    msg += HIW"┏━━━━┓━━━┓━━━┓━━━┓━━━┓━━━┓━━━┓━━━┓\n"NOR;
+    msg += BBLU"┃交易品  ┃种类  ┃价格比┃卖价一┃卖价二┃卖价三┃卖价四┃卖价五┃\n"NOR;
+    msg += HIW"┗━━━━┛━━━┛━━━┛━━━┛━━━┛━━━┛━━━┛━━━┛\n"NOR;
+    for (i=0;i<sizeof(kcg);i++)
+    {
+      msg += sprintf(HIW"┃%-8s┃%-6s┃%-6d┃%-6d┃%-6d┃%-6d┃%-6d┃%-6d┃\n"NOR,
+                     kcg[i],
+                     (string)GOODS_D->query_goods_type_c(kcg[i]),
+                     (int)query_city_sell_rate(city,kcg[i]),
+                     query_goods_sell_price(kcg[i],1,city),
+                     query_goods_sell_price(kcg[i],2,city),
+                     query_goods_sell_price(kcg[i],3,city),
+                     query_goods_sell_price(kcg[i],4,city),
+                     query_goods_sell_price(kcg[i],5,city));
+    }
+
+    msg += BBLU"┗━━━━┛━━━┛━━━┛━━━┛━━━┛━━━┛━━━┛━━━┛\n"NOR;
+  }
+
+  return msg;
+}
+
+private int set_city_last_info(string city, string type, int val)
+{
+  if (!is_trade_city(city))
+    return 0;
+
+  if (type != "develop" &&
+      type != "culture" &&
+      type != "science" &&
+      type != "buy" &&
+      type != "sell" &&
+      type != "invote")
+    return 0;
+
+  if (val < 0)
+    val = 0;
+  if ((type == "develop" || type == "culture" || type == "science") &&
+      val > MAX_DEV)
+    val = MAX_DEV;
+  if ((type == "develop" || type == "culture" || type == "science") &&
+      val < MIN_DEV)
+    val = MIN_DEV;
+  all_city_info[city][sprintf("last_%s",type)] = val;
+  save();
+  return val;
+}
+
+public int add_city_last_info(string city, string type, int val)
+{
+  return set_city_last_info(city, type, query_city_last_info(city,type) + val);
+}
+
+private int set_city_info(string city, string type, int val)
+{
+  if (!is_trade_city(city))
+    return 0;
+  if (type != "develop" &&
+      type != "culture" &&
+      type != "science" &&
+      type != "buy" &&
+      type != "sell" &&
+      type != "invote")
+    return 0;
+
+  if (val < 0)
+    val = 0;
+  if ((type == "develop" || type == "culture" || type == "science") &&
+      val > MAX_DEV)
+    val = MAX_DEV;
+  if ((type == "develop" || type == "culture" || type == "science") &&
+      val < MIN_DEV)
+    val = MIN_DEV;
+  all_city_info[city][type] = val;
+  save();
+  return val;
+}
+
+public int add_city_info(string city, string type, int val)
+{
+  return set_city_info(city, type, (int)query_city_info(city,type) + val);
+}
+
+public int add_city_goods_storge(string city, string goods,int value)
+{
+  mapping g = query_city_goods(city);
+
+  if (!mapp(g) || sizeof(g) < 1)
+    return 0;
+  if (undefinedp(g[goods]) || !arrayp(g[goods]))
+    return 0;
+  (int)g[goods][1] += value;
+  if ((int)g[goods][1] > MAX_STORGE)
+    (int)g[goods][1] = MAX_STORGE;
+  save();
+  return 1;
+}
+
+private int set_city_price(string city, string type, int val)
+{
+  if (!is_trade_city(city))
+    return 0;
+  if (type != "daily" &&
+      type != "food" &&
+      type != "tonic" &&
+      type != "technologist" &&
+      type != "mine")
+    return 0;
+  if (val < 10)
+    val = 10;
+  if (val > 500)
+    val = 500;
+  all_city_info[city]["price"][type] = val;
+  save();
+  return val;
+}
+
+public int add_city_price(string city, string type, int val)
+{
+  return set_city_price(city, type, (int)query_city_price(city,type) + val);
+}
+
+private void refresh_goods_list(string city)
+{
+  mapping goods = ([]);
+  string *city_goods;
+  string g_name;
+  int i,g_class, storge;
+  if (!is_trade_city(city))
+    return;
+
+  city_goods = GOODS_D->query_city_trade(city);
+  if (!arrayp(city_goods) || sizeof(city_goods) < 1)
+    return;
+  for (i=0;i<sizeof(city_goods);i++)
+  {
+    reset_eval_cost();
+    if (sscanf(city_goods[i],"%s#%d",g_name,g_class) != 2)
+      continue;
+    storge = query_city_goods_storge(city, g_name);
+    storge += GOODS_D->query_goods_class_month_add(g_name,g_class);
+    if (storge > MAX_STORGE)
+      storge = MAX_STORGE;
+    goods += ([g_name : ({g_class,storge})]);
+  }
+
+  all_city_info[city]["goods"] = goods;
+  save();
+}
+
+public int can_trade_goods(string league_id,string city,string goods)
+{
+  int ocy,acy,a_num,tmp,num,ave;
+  string a_league, *alley;
+
+  num = query_city_goods_storge(city,goods);
+  if (num < 1)
+    return 0;
+  ave = 0;
+  ocy = LEAGUE_D->query_league_occupy_city(league_id,city);
+  alley = LEAGUE_D->query_league_alley(league_id);
+  if (arrayp(alley) && sizeof(alley) > 1)
+  {
+    acy = 0;
+    foreach (a_league in alley)
+    {
+      tmp = LEAGUE_D->query_league_occupy_city(a_league,city);
+      if (tmp > 0)
+        a_num++;
+      acy += tmp;
+    }
+
+    if (a_num < 1)
+      return 0;
+    acy /= a_num;
+  }
+
+  if (ocy > 0)
+    ave += num*ocy/100;
+  if (acy > 0)
+    ave += num*acy/200;
+  return ave;
+}
+
+public string goods_name_pfx(int g_class)
+{
+  int i;
+  string str, color;
+
+  if (g_class < 1)
+    return HIW"未出现"NOR;
+  if (g_class > 4)
+    color = BLINK;
+  else if (g_class > 2)
+    color = HIM;
+  else
+    color = HIW;
+  str = "";
+  for (i=0;i<g_class;i++)
+    str += "★";
+  return color + str + NOR;
+}
+
+public int query_goods_buy_price(string goods,int g_class, string city)
+{
+  int base_price, price_adjust;
+  string type = GOODS_D->query_goods_type(goods);
+  if (!stringp(type))
+    return 0;
+  price_adjust = query_city_price(city,type);
+  if (price_adjust < 1)
+    return 0;
+  base_price = GOODS_D->query_goods_class_base_price(goods,g_class);
+  if (base_price < 1)
+    return 0;
+  return base_price*price_adjust/100;
+}
+
+public int query_city_sell_rate(string city,string goods)
+{
+  if (!city_sell[city])
+    return 0;
+  return (int)city_sell[city][goods];
+}
+
+public int query_goods_sell_price(string goods,int g_class,string city)
+{
+  int base_price, price_adjust,price_rate;
+  string *city_goods, *zone_goods;
+  string city_zone;
+  string type = GOODS_D->query_goods_type(goods);
+  if (!stringp(type))
+    return 0;
+  price_adjust = query_city_price(city,type);
+  price_rate = query_city_sell_rate(city,goods);
+  if (price_adjust < 1)
+    return 0;
+  if (price_rate < 10)
+    price_rate = 10;
+  base_price = GOODS_D->query_goods_class_base_price(goods,g_class);
+  if (base_price < 1)
+    return 0;
+
+  city_goods = GOODS_D->query_city_goods(city);
+  if (!arrayp(city_goods) || sizeof(city_goods) < 1)
+    return 0;
+  city_zone = GOODS_D->query_city_zone(city);
+  if (!stringp(city_zone))
+    return 0;
+  zone_goods = GOODS_D->query_zone_goods(city_zone);
+  if (!arrayp(zone_goods) || sizeof(zone_goods) < 1)
+    return 0;
+  if (member_array(goods,city_goods) != -1)
+    base_price /= 2;
+  else if (member_array(goods,zone_goods) != -1)
+    base_price = base_price*95/100;
+  base_price += base_price*price_rate/100;
+  return base_price*price_adjust/100;
+}
+
+public mapping query_city_goods_info(string city,string league_id)
+{
+  int i, g_class, storge, gain_num, price;
+  mapping goods, result = ([]);
+  string *kg;
+
+  if (!is_business_shop(city) ||
+      !LEAGUE_D->is_league_id(league_id))
+    return result;
+  goods = query_city_goods(city);
+  if (sizeof(goods) < 1)
+    return result;
+  kg = keys(goods);
+  for (i=0;i<sizeof(kg);i++)
+  {
+    g_class = query_city_goods_class(city, kg[i]);
+    if (g_class < 1)
+      continue;
+    storge = query_city_goods_storge(city,kg[i]);
+    if (storge < 1)
+      continue;
+    gain_num = can_trade_goods(league_id,city,kg[i]);
+    if (gain_num < 1)
+      continue;
+    price = query_goods_buy_price(kg[i],g_class,city);
+    if (price < 1)
+      continue;
+    result += ([sprintf("%d",sizeof(result)+1) : ([
+                  "goods" : kg[i],
+                  "class" : g_class,
+                  "price" : price,
+                  "number" : gain_num,
+                  "total" : storge])
+              ]);
+  }
+
+  return result;
+}
+
+public int is_invote_city(string city)
+{
+  string *ki = keys(invote);
+  if (!is_trade_city(city))
+    return 0;
+  return (member_array(city,ki) != -1);
+}
+
+public string query_city_invote_type(string city)
+{
+  if (!is_invote_city(city))
+    return 0;
+  return invote[city]["type"];
+}
+
+public int query_city_invote_add_num(string city)
+{
+  if (!is_invote_city(city))
+    return 0;
+  return (int)invote[city]["add_num"];
+}
+
+public string query_city_invote_league(string city)
+{
+  if (!is_invote_city(city))
+    return 0;
+  return invote[city]["league"];
+}
+
+public string query_city_invote_status(string city)
+{
+  if (!is_invote_city(city))
+    return 0;
+  return (string)invote[city]["status"];
+}
+
+public int city_want_invote_numer(string city, string type)
+{
+  int dev = query_city_info(city,type);
+  if (dev >= 9000)
+    dev = dev*130/100;
+  else if (dev >= 8000)
+    dev = dev*120/100;
+  else if (dev >= 7000)
+    dev = dev*110/100;
+  else if (dev >= 3000)
+    dev = dev*100/100;
+  else if (dev >= 2000)
+    dev = dev*90/100;
+  else if (dev >= 1000)
+    dev = dev*80/100;
+  else
+    dev = dev*70/100;
+  return dev;
+}
+
+public int query_city_invote_gold(string city,int add_num)
+{
+  string type = query_city_invote_type(city);
+  string league_id = query_city_invote_league(city);
+
+  if (!stringp(type) || add_num < 1)
+    return 0;
+
+  if (!stringp(league_id))
+    return city_want_invote_numer(city,type)*add_num;
+
+  return (int)invote[city]["gold"];
+}
+
+public string query_invote_info(string arg)
+{
+  int i, add_num, gold;
+  string ecity, type, league_id, status;
+  string msg, *ki = keys(invote);
+
+  if (!arrayp(ki) || sizeof(ki) < 1)
+    return "当前没有投资项目招标！\n";
+
+  if (!arg)
+    return "需要所有的信息(all)还是指定城市的信息？\n";
+
+  if (arg == "all")
+  {
+    msg = "当前招标情况会总如下：\n";
+    msg += "┏━━━━━┓━━━━━┓━━┓━━┓━━━━┓━━┓━━━━━┓━━━━┓━━━┓\n";
+    msg += "┃城市      ┃城市代号  ┃种类┃期望┃最低额度┃状态┃联盟      ┃联盟代号┃占有率┃\n";
+    msg += "┗━━━━━┛━━━━━┛━━┛━━┛━━━━┛━━┛━━━━━┛━━━━┛━━━┛\n";
+    for (i=0;i<sizeof(ki);i++)
+    {
+      ecity = ki[i];
+      type = query_city_invote_type(ecity);
+      add_num = query_city_invote_add_num(ecity);
+      league_id = query_city_invote_league(ecity);
+      gold = query_city_invote_gold(ecity,add_num);
+      status = query_city_invote_status(ecity);
+      if (status == "ongoing")
+        status = "进行";
+      else
+        status = "结束";
+      msg += sprintf("┃%-10s┃%-10s┃%-4s┃%-4d┃%-8d┃%-4s┃%-10s┃%-8s┃%-6d┃\n",
+                     to_chinese(ecity),
+                     ecity,
+                     query_cname_type(type),
+                     add_num,
+                     gold,
+                     status,
+                     stringp(league_id) ? LEAGUE_D->query_league_cname(league_id) : "没有",
+                     stringp(league_id) ? league_id : "没有",
+                     stringp(league_id) ? (int)LEAGUE_D->query_league_occupy_city(league_id,ecity) : 0);
+    }
+
+    msg += "┗━━━━━┛━━━━━┛━━┛━━┛━━━━┛━━┛━━━━━┛━━━━┛━━━┛\n";
+  }
+
+  else
+  {
+    if (!is_invote_city(arg))
+      return "没有这个城市的投资招标情报！\n";
+    msg = sprintf("当前%s(%s)招标情况会总如下：\n",to_chinese(arg),arg);
+    ecity = arg;
+    type = query_city_invote_type(ecity);
+    add_num = query_city_invote_add_num(ecity);
+    league_id = query_city_invote_league(ecity);
+    gold = query_city_invote_gold(ecity,add_num);
+    status = query_city_invote_status(ecity);
+    if (status == "ongoing")
+      status = "进行";
+    else
+      status = "结束";
+    msg += "┏━━━━━┓━━━━━┓━━┓━━┓━━━━┓━━┓━━━━━┓━━━━┓━━━┓\n";
+    msg += "┃城市      ┃城市代号  ┃种类┃期望┃最低额度┃状态┃联盟      ┃联盟代号┃占有率┃\n";
+    msg += "┗━━━━━┛━━━━━┛━━┛━━┛━━━━┛━━┛━━━━━┛━━━━┛━━━┛\n";
+    msg += sprintf("┃%-10s┃%-10s┃%-4s┃%-4d┃%-8d┃%-4s┃%-10s┃%-8s┃%-6d┃\n",
+                   to_chinese(ecity),
+                   ecity,
+                   query_cname_type(type),
+                   add_num,
+                   gold,
+                   status,
+                   stringp(league_id) ? LEAGUE_D->query_league_cname(league_id) : "没有",
+                   stringp(league_id) ? league_id : "没有",
+                   stringp(league_id) ? (int)LEAGUE_D->query_league_occupy_city(league_id,ecity) : 0);
+    msg += "┗━━━━━┛━━━━━┛━━┛━━┛━━━━┛━━┛━━━━━┛━━━━┛━━━┛\n";
+  }
+
+  return msg;
+}
+
+public string set_city_invote_status(string city,string status)
+{
+  if (!is_invote_city(city))
+    return 0;
+  if (status != "ongoing" && status != "finish")
+    return 0;
+  invote[city]["status"] = status;
+  save();
+}
+
+private void add_a_new_invote()
+{
+  int total_dev, total_cul, total_sci, i;
+  string *c_dev, *c_cul, *c_sci;
+  string city, *citys = get_all_city();
+  int max_num;
+
+  if (!arrayp(citys) || sizeof(citys) < 1)
+    return;
+  citys = filter_array(citys,(: is_trade_city($1) &&
+                                !is_invote_city($1) :));
+  total_dev = 0;
+  total_cul = 0;
+  total_sci = 0;
+  for (i=0;i<sizeof(citys);i++)
+  {
+    total_dev += query_city_info(citys[i],"develop");
+    total_cul += query_city_info(citys[i],"culture");
+    total_sci += query_city_info(citys[i],"science");
+  }
+
+  c_dev = ({});
+  c_cul = ({});
+  c_sci = ({});
+  for (i=0;i<sizeof(citys);i++)
+  {
+    if (random(total_dev+1) > query_city_info(citys[i],"develop"))
+      c_dev += ({citys[i]});
+    if (random(total_cul+1) > query_city_info(citys[i],"culture"))
+      c_cul += ({citys[i]});
+    if (random(total_sci+1) > query_city_info(citys[i],"science"))
+      c_sci += ({citys[i]});
+  }
+
+  if (sizeof(c_dev) > 0)
+  {
+    if (sizeof(c_dev) > MAX_INVOTE_CITY)
+      max_num = MAX_INVOTE_CITY;
+    else
+      max_num = sizeof(c_dev);
+    for (i=0;i<max_num;i++)
+    {
+      c_dev = filter_array(c_dev,(: !is_invote_city($1) :));
+      if (!arrayp(c_dev) || sizeof(c_dev) < 1)
+        break;
+      city = element_of(c_dev);
+      invote[city] = ([
+                        "type" : "develop",
+                        "add_num" : random(30) + 5,
+                        "league"  : 0,
+                        "gold"    : 0,
+                        "status"  : "ongoing",
+                        "time"    : time()/REALLY_ONE_DAY,
+                        "life_time" : 1,
+                      ]);
+      save();
+      c_dev -= ({city}) - ({0});
+      business_message(sprintf("%s%s(%s)%s诚意招商，本次招商用于发展%s%s%s，"
+                               "请有意前来发展的联盟前来竞标。\n",
+                               HIR,
+                               to_chinese(city),city,
+                               NOR,
+                               HIW,
+                               query_cname_type("develop"),
+                               NOR));
+      if (sizeof(c_dev) < 1)
+        break;
+    }
+
+  }
+
+  if (sizeof(c_cul) > 0)
+  {
+    if (sizeof(c_cul) > MAX_INVOTE_CITY)
+      max_num = MAX_INVOTE_CITY;
+    else
+      max_num = sizeof(c_cul);
+    for (i=0;i<max_num;i++)
+    {
+      c_cul = filter_array(c_cul,(: !is_invote_city($1) :));
+      if (!arrayp(c_cul) || sizeof(c_cul) < 1)
+        break;
+      city = element_of(c_cul);
+      invote[city] = ([
+                       "type" : "culture",
+                       "add_num" : random(25) + 5,
+                       "league"  : 0,
+                       "gold"    : 0,
+                       "status"  : "ongoing",
+                       "time"    : time()/REALLY_ONE_DAY,
+                       "life_time" : 1 + random(2),
+                     ]);
+      save();
+      c_cul -= ({city}) - ({0});
+      business_message(sprintf("%s%s(%s)%s诚意招商，本次招商用于发展%s%s%s，"
+                               "请有意前来发展的联盟前来竞标。\n",
+                               HIR,
+                               to_chinese(city),city,
+                               NOR,
+                               HIB,
+                               query_cname_type("culture"),
+                               NOR));
+      if (sizeof(c_cul) < 1)
+        break;
+    }
+
+  }
+
+  if (sizeof(c_sci) > 0)
+  {
+    if (sizeof(c_sci) > MAX_INVOTE_CITY)
+      max_num = MAX_INVOTE_CITY;
+    else
+      max_num = sizeof(c_sci);
+    for (i=0;i<max_num;i++)
+    {
+      c_sci = filter_array(c_sci,(: !is_invote_city($1) :));
+      if (!arrayp(c_sci) || sizeof(c_sci) < 1)
+        break;
+      city = element_of(c_sci);
+      invote[city] = ([
+                       "type" : "science",
+                       "add_num" : random(25) + 5,
+                       "league"  : 0,
+                       "gold"    : 0,
+                       "status"  : "ongoing",
+                       "time"    : time()/REALLY_ONE_DAY,
+                       "life_time" : 1+random(2),
+                     ]);
+      save();
+      c_sci -= ({city}) - ({0});
+      business_message(sprintf("%s%s(%s)%s诚意招商，本次招商用于发展%s%s%s，"
+                               "请有意前来发展的联盟前来竞标。\n",
+                               HIR,
+                               to_chinese(city),city,
+                               NOR,
+                               HIY,
+                               query_cname_type("science"),
+                               NOR));
+      if (sizeof(c_sci) < 1)
+        break;
+    }
+
+  }
+
+}
+
+public string accept_invote(mixed ob,string arg)
+{
+  int lvl, add_num, gold;
+  object who;
+  string old_league,league_id, type;
+  string city;
+  int num;
+
+  if (stringp(ob))
+    who = find_player(ob);
+  else if (objectp(ob))
+    who = ob;
+  else
+    return 0;
+  if (!objectp(who) || !playerp(who))
+    return 0;
+  league_id = LEAGUE_D->query_player_league_id(who);
+  if (!stringp(league_id))
+    return "只有代表联盟才能投资。\n";
+  lvl = LEAGUE_D->query_member_level(who);
+  if (lvl == 0 || lvl > 2)
+    if (!who->query_temp("league/auth_league"))
+      return "只有获得联盟授权或者联盟高层领导才能代表联盟投资招标。\n";
+
+  if (!arg || sscanf(arg,"%s %d",city,num) != 2)
+    return "请先查询当前的招标状况。然后用invote [投资城市] [投资金额]来参与投标。\n";
+  if (num < 1 || num > 100000)
+    return "不要开玩笑，注意投资上限10万金子。\n";
+  if ((int)LEAGUE_D->query_league_gold(league_id) < num)
+    return sprintf("你的联盟没有%d两资金。\n",num);
+  if (!is_invote_city(city))
+    return "这个城市没有招标项目。\n";
+
+  type = query_city_invote_type(city);
+  add_num = query_city_invote_add_num(city);
+  old_league = query_city_invote_league(city);
+  gold = query_city_invote_gold(city,add_num);
+
+  if ((int)LEAGUE_D->query_league_gold(league_id) < gold)
+    return sprintf("这项投资当前需要%d两金子，你的联盟没有那么多资金。\n",gold);
+  if (query_city_invote_status(city) != "ongoing")
+    return "这个项目的招标已经结束了。\n";
+
+  if (num < gold+50)
+  {
+    if (stringp(old_league))
+      return sprintf("这个城市招标，%s联盟已经投标了%d两，当前最少需要%d两才能竞标。\n",
+                      old_league,
+                      gold,
+                      gold+50);
+    return sprintf("这个城市招标最少需要%d两才能竞标。\n",
+                   gold);
+  }
+
+  if (stringp(old_league))
+  {
+    business_message(sprintf("%s(%s)竞标%s的发展%s项目，成功的替代了%s(%s)，成为当前中标联盟。\n",
+                             LEAGUE_D->query_league_cname(league_id),
+                             league_id,
+                             to_chinese(city),
+                             query_cname_type(type),
+                             LEAGUE_D->query_league_cname(old_league),
+                             old_league));
+    LEAGUE_D->message_league(old_league,sprintf("本次竞标%s的发展%s项目失败了，投标金额返还。"
+                                                "在本次招标结束前，还可以继续参与竞标。\n",
+                             to_chinese(city),
+                             query_cname_type(type)));
+    LEAGUE_D->add_gold(old_league,gold);
+    log_file("business",sprintf("return %d to %s for invote %s failure at %s\n",
+                               num,
+                               old_league,
+                               city,
+                               ctime(time())));
+  }
+
+  LEAGUE_D->message_league(league_id,sprintf("本次竞标%s的发展%s项目暂时成功。"
+                                              "在本次招标结束前，还有可能被其他联盟替代。\n",
+                           to_chinese(city),
+                           query_cname_type(type)));
+  LEAGUE_D->add_gold(league_id,-num);
+  invote[city]["league"] = league_id;
+  invote[city]["gold"] = num;
+  save();
+  log_file("business",sprintf("%s invote %d for %s at %s\n",
+                               league_id,
+                               num,
+                               city,
+                               ctime(time())));
+  return "谢谢参与投标。\n";
+}
+
+private void remove_a_invote(string city)
+{
+  if (!is_invote_city(city))
+    return;
+  map_delete(invote,city);
+  save();
+}
+
+private void invote_effect(string city)
+{
+  string type,ctype,league_id, status;
+  int add_num,fame;
+  string msg;
+  if (!is_invote_city(city))
+    return;
+  type = query_city_invote_type(city);
+  ctype = query_cname_type(type);
+  add_num = query_city_invote_add_num(city);
+  league_id = query_city_invote_league(city);
+  status = query_city_invote_status(city);
+  if (!stringp(ctype) ||
+      !stringp(league_id) ||
+      add_num < 1 ||
+      !LEAGUE_D->is_league_id(league_id) ||
+      status != "finish")
+  {
+    log_file("business",sprintf("出错：城市%s 项目%s 联盟%s 增加点数%d 状态%s\n",
+                                (string)city,
+                                (string)ctype,
+                                (string)league_id,
+                                add_num,
+                                (string)status));
+    remove_a_invote(city);
+    return;
+  }
+
+  if (random(100) < 1)
+  {
+    add_num = add_num*2;
+    msg = "项目进展异常顺利，效果加倍。";
+  }
+
+  if (random(100) > 98)
+  {
+    add_num = (add_num+1)/2;
+    msg = "项目结果令人遗憾，并不顺利，效果减半了。";
+  }
+
+  else
+    msg = "项目进展顺利。";
+  add_city_info(city, type, add_num);
+  add_city_info(city, "invote", city_want_invote_numer(city,type)*add_num);
+  remove_a_invote(city);
+  LEAGUE_D->add_a_city_rate(league_id, city,1);
+  fame = add_num + random(add_num+1);
+  LEAGUE_D->add_fame(league_id,fame);
+  log_file("business_city",sprintf("%s增加%s的占有率1点，威望增加%d\n",
+                                    league_id,city,fame));
+  LEAGUE_D->message_league(league_id,sprintf("%s(%s)的发展%s项目结束了。"
+                           "%s占有率增加了1点。联盟威望增加了%d点。\n",
+                                     to_chinese(city),city,
+                                     ctype,
+                                     msg,
+                                     fame));
+}
+
+private void check_invote()
+{
+  int t = time()/REALLY_ONE_DAY;
+  string city,type,league_id;
+  string *ki = keys(invote) - ({0});
+
+  if (sizeof(ki) < 1)
+    return;
+
+  foreach (city in ki)
+  {
+    type = query_city_invote_type(city);
+    league_id = query_city_invote_league(city);
+    if (t < (int)invote[city]["time"] + (int)invote[city]["life_time"])
+      continue;
+    if ((string)query_city_invote_status(city) != "finish")
+      set_city_invote_status(city,"finish");
+    if (!stringp(league_id))
+    {
+      business_message(sprintf("%s(%s)招标发展%s项目失败结束，无人前来竞标。\n",
+                                to_chinese(city),
+                                city,
+                                query_cname_type(type)));
+      remove_a_invote(city);
+    }
+
+    else
+    {
+      if ((string)query_city_invote_status(city) != "finish")
+      {
+        set_city_invote_status(city,"finish");
+        business_message(sprintf("%s(%s)招标发展%s项目成功结束，%s(%s)最终竞标成功。\n",
+                                  to_chinese(city),
+                                  city,
+                                  query_cname_type(type),
+                                  LEAGUE_D->query_league_cname(league_id),
+                                  league_id));
+      }
+
+      if (t > (int)invote[city]["time"] + (int)invote[city]["life_time"] + 1)
+        invote_effect(city);
+    }
+
+  }
+
+}
+
+public mapping query_player_workshop(mixed ob)
+{
+  string id;
+  if (stringp(ob))
+    id = ob;
+  else if (objectp(ob) && playerp(ob))
+    id = ob->query("id");
+  else
+    return ([]);
+  return workshop[id];
+}
+
+public int is_player_have_workshop(mixed ob,string city)
+{
+  int i,g_class;
+  string wcity,goods_name;
+  string *kw;
+  mapping my_goods;
+
+  my_goods = query_player_workshop(ob);
+  if (!mapp(my_goods) || sizeof(my_goods) < 1)
+    return 0;
+  kw = keys(my_goods);
+  for (i=0;i<sizeof(kw);i++)
+  {
+    if (sscanf(kw[i],"%s#%s#%d",wcity,goods_name,g_class) != 3)
+      continue;
+    if (wcity == city)
+      break;
+  }
+
+  return i<sizeof(kw);
+}
+
+public int query_player_workshop_num(mixed ob)
+{
+  mapping my_goods = query_player_workshop(ob);
+  if (!mapp(my_goods))
+    return 0;
+  return sizeof(my_goods);
+}
+
+public mapping query_player_goods_and_class(mixed ob,string city,string goods,int g_class)
+{
+  mapping goods_info = query_player_workshop(ob);
+  if (!mapp(goods_info) || sizeof(goods_info) < 1)
+    return 0;
+  return goods_info[sprintf("%s#%s#%d",city,goods,g_class)];
+}
+
+public int add_player_workshop(mixed ob,string city,string from,mapping goods)
+{
+  int value, num, g_class;
+  string id,goods_name;
+  string status;
+  if (from != "biaoju" && from != "market")
+    return 0;
+
+  if (stringp(ob))
+    id = ob;
+  else if (objectp(ob) && playerp(ob))
+    id = ob->query("id");
+  else
+    return 0;
+
+  goods_name = goods["name"];
+  if (!stringp(goods_name))
+    return 0;
+  value = goods["value"];
+  num = goods["amount"];
+  g_class = goods["class"];
+  if (value < 1 ||
+      num < 1 ||
+      g_class < 1)
+    return 0;
+  if (mapp(query_player_goods_and_class(id,city,goods_name,g_class)))
+    return -1;
+  if (!mapp(workshop[id]))
+    workshop += ([id : ([])
+                ]);
+  else if (query_player_workshop_num(id) >= MAX_WORKSHOP)
+    return -2;
+  if (from == "market")
+    status = "arrive";
+  else if (from == "biaoju")
+    status = "transfer";
+  workshop[id][sprintf("%s#%s#%d",city,goods_name,g_class)] = ([
+                                                        "status" : status,
+                                                        "value" : value,
+                                                        "amount" : num,
+                                                        "time" : time(),
+                                                      ]);
+  save();
+  return 1;
+}
+
+public int remove_player_workshop(mixed ob)
+{
+  string id;
+
+  if (stringp(ob))
+    id = ob;
+  else if (objectp(ob) && playerp(ob))
+    id = ob->query("id");
+  else
+    return 0;
+
+  if (!mapp(workshop[id]))
+    return 0;
+  map_delete(workshop,id);
+  save();
+  return 1;
+}
+
+public int change_player_goods_status(mixed ob,string city,string goods,int g_class)
+{
+  string id;
+
+  if (stringp(ob))
+    id = ob;
+  else if (objectp(ob) && playerp(ob))
+    id = ob->query("id");
+  else
+    return 0;
+
+  if (!mapp(query_player_goods_and_class(id,city,goods,g_class)))
+    return 0;
+  if (workshop[id][sprintf("%s#%s#%d",city,goods,g_class)]["status"] != "transfer")
+    return 0;
+  workshop[id][sprintf("%s#%s#%d",city,goods,g_class)]["status"] = "arrive";
+  workshop[id][sprintf("%s#%s#%d",city,goods,g_class)]["time"] = time();
+  save();
+  return 1;
+}
+
+public int remove_a_player_workshop_goods(mixed ob,string city,string goods,int g_class)
+{
+  string id;
+
+  if (stringp(ob))
+    id = ob;
+  else if (objectp(ob) && playerp(ob))
+    id = ob->query("id");
+  else
+    return 0;
+  if (!mapp(query_player_goods_and_class(id,city,goods,g_class)))
+    return 0;
+  map_delete(workshop[id],sprintf("%s#%s#%d",city,goods,g_class));
+  save();
+  return 1;
+}
+
+public string query_my_goods_info(object ob)
+{
+  string id;
+  mapping city,goods,my_goods;
+  string *kmg;
+  int i,g_class;
+  string msg;
+  string status, class_str;
+
+  if (!playerp(ob))
+    return "";
+  id = ob->query("id");
+  my_goods = query_player_workshop(id);
+  if (!mapp(my_goods) || sizeof(my_goods) < 1)
+    return "你没有任何货物保存在仓库中。\n";
+  kmg = keys(my_goods);
+  msg = "你在仓库中保存的物品信息如下：\n";
+  msg += "┏━━━━━┓━━━━━┓━━━━┓━━━━━┓━━━┓━━┓━━━┓\n";
+  msg += "┃城市      ┃城市代号  ┃货物    ┃等级      ┃价值  ┃数量┃状态  ┃\n";
+  msg += "┗━━━━━┛━━━━━┛━━━━┛━━━━━┛━━━┛━━┛━━━┛\n";
+  for (i=0;i<sizeof(kmg);i++)
+  {
+    if (sscanf(kmg[i],"%s#%s#%d",city,goods,g_class) != 3)
+      continue;
+    class_str = goods_name_pfx(g_class);
+    if ((string)my_goods["status"] == "arrive")
+      status = "抵达";
+    else if ((string)my_goods[kmg[i]]["status"] == "transfer")
+      status = "运送中";
+    else
+      status = "不明";
+    msg += sprintf("┃%-10s┃%-10s┃%-8s┃%-"+(10+color_len(class_str))+"s┃%-6d┃%-4d┃%-6s┃\n",
+                   to_chinese(city),
+                   city,
+                   goods,
+                   class_str,
+                   (int)my_goods[kmg[i]]["value"],
+                   (int)my_goods[kmg[i]]["amount"],
+                   status);
+  }
+
+  msg += "┗━━━━━┛━━━━━┛━━━━┛━━━━━┛━━━┛━━┛━━━┛\n";
+  return msg;
+}
+
+public string accept_buy(object ob, string city,string arg)
+{
+  mapping all_goods_info,goods_info;
+  string *kg;
+  string league_id,goods_name,goods_type;
+  int goods_class,goods_total,goods_num,goods_price;
+  int i,num,amount,value,tax;
+
+  if (!arg)
+    return "你要买什么？\n";
+
+  if (!playerp(ob))
+    return "";
+  league_id = LEAGUE_D->query_player_league_id(ob);
+  if (!stringp(league_id))
+    return "大宗交易只对联盟成员开放。\n";
+  all_goods_info = query_city_goods_info(city,league_id);
+  if (!mapp(goods_info))
+    return "这里没有你能够交易的商品。\n";
+
+  if (sscanf(arg,"%d for %d",num,amount) != 2)
+    return "交易格式：buy [序列号] for [数量]\n";
+
+  if (num < 1 || num > 10)
+    return "请指定正确的序列号。\n";
+  if (amount < 1 || amount > 100)
+    return "每次交易的数量不要超过100。\n";
+
+  kg = keys(all_goods_info);
+  if (num < 1 || num > sizeof(goods_info))
+    return "请指定正确的序列号。\n";
+  goods_info = all_goods_info[sprintf("%d",num-1)];
+  if (!mapp(goods_info) || sizeof(goods_info) < 1)
+    return "没有指定的商品。\n";
+  goods_name = goods_info["goods"];
+  if (!stringp(goods_name))
+    return "这里没有商品适合你交易。\n";
+  goods_type = GOODS_D->query_goods_type(goods_name);
+  if (!stringp(goods_type))
+    return "这里没有合适的商品类型与你交易。\n";
+  goods_class = (int)goods_info["class"];
+  goods_total = (int)goods_info["total"];
+  goods_num = (int)goods_info["number"];
+  goods_price = (int)goods_info["price"];
+  if (goods_class < 1 || goods_total < 1 || goods_num < 1 || goods_price < 1)
+    return "这里没有能够和你交易的商品";
+  if (amount > (int)goods_total)
+    return "这种商品现在这里没有这么多。\n";
+  if (amount > (int)goods_num)
+    return "根据你所在联盟在这里的占有率，你无法购买这么多的这种商品。\n";
+  value = goods_price*amount;
+  tax = value*BUY_TAX/100;
+  if ((int)ob->query("balance") < (value + tax)*10000)
+    return "很抱歉，你银行账号的存款不够。\n";
+  i = add_player_workshop(ob,city,"market",(["name" : goods_name,
+                                             "value" : value,
+                                             "amount" : amount,
+                                             "class" : goods_class,
+                                           ]));
+  if (i == -1)
+    return "你在仓库中还存放着这样的货物呢。请先处理了！！\n";
+  if (i == -2)
+    return "你在本地的仓库都装满了货物！！\n";
+  if (i == 0)
+    return "商品信息错误！\n";
+  add_city_goods_storge(city, goods_name,-amount);
+  add_city_price(city, GOODS_D->query_goods_type(goods_name), value/300);
+  add_city_info(city,"buy",value);
+  ob->add("balance",-(value + tax)*10000);
+  ob->save();
+  return sprintf("本次交易完成。\n"
+                 "\t货物名称：%s\n"
+                 "\t货物等级：%d\n"
+                 "\t货物数量：%d\n"
+                 "\t货物价值：%d\n"
+                 "\t缴纳税费：%d\n"
+                 "货物存放在本交易场仓库中，请注意保存期限为二天。\n"
+                 "随时可以到仓库内提走货物，并且押运往其他城市进行交易。\n",
+                 goods_info["goods"],
+                 goods_info["class"],
+                 amount,
+                 value,
+                 tax);
+}
+
+public string accept_sell(object ob,string arg)
+{
+  int base_price,total_price,tax;
+  mapping my_goods;
+  string city,goods,msg;
+  int g_class;
+
+  if (!arg || sscanf(arg,"%s %s %d",city,goods,g_class) != 3)
+  {
+    msg = (string)query_my_goods_info(ob);
+    msg += "\n";
+    msg += "卖货物的格式如下：sell [货物] [等级]。你只能卖掉本城的货物。\n";
+    return msg;
+  }
+
+  if (!is_player_have_workshop(ob,city))
+    return "本地仓库没有你的任何货物。\n";
+  base_price = (int)query_goods_sell_price(goods,g_class,city);
+  if (base_price < 0)
+  {
+    remove_a_player_workshop_goods(ob,city,goods,g_class);
+    return "这个货物在这里不值钱，businessd系统自动删除。\n";
+  }
+
+  my_goods = query_player_goods_and_class(ob,city,goods,g_class);
+  if (!mapp(my_goods) || sizeof(my_goods) < 1)
+  {
+    remove_a_player_workshop_goods(ob,city,goods,g_class);
+    return "你在本地仓库没有要卖的货物。\n";
+  }
+
+  if (my_goods["status"] != "arrive")
+    return "这个货物还在运输途中，现在可卖不了。\n";
+
+  total_price = base_price*my_goods["amount"];
+  if (total_price < 1)
+  {
+    remove_a_player_workshop_goods(ob,city,goods,g_class);
+    return "这个货物好象卖不出什么价钱。\n";
+  }
+
+  tax = total_price*SELL_TAX/100;
+  if (!remove_a_player_workshop_goods(ob,city,goods,g_class))
+    return "本次操作没有成功。\n";
+  add_city_price(city, GOODS_D->query_goods_type(goods), -total_price/300);
+  add_city_info(city,"sell",total_price);
+  ob->add("balance",(total_price - tax)*10000);
+  save();
+  return sprintf("本次交易完成：\n"
+                 "\t货物名称：%s\n"
+                 "\t货物等级：%d\n"
+                 "\t货物数量：%d\n"
+                 "\t货物单价：%d\n"
+                 "\t货物总值：%d\n"
+                 "\t缴纳税费：%d\n",
+                 goods,
+                 g_class,
+                 my_goods["amount"],
+                 base_price,
+                 total_price,
+                 tax);
+}
+
+private void check_workshop()
+{
+  string player,city,goods,*kw, *kp;
+  int i,g_class,pt,now_t = time();
+
+  kw = keys(workshop) - ({0});
+  if (!arrayp(kw) || sizeof(kw) < 1)
+    return;
+  foreach (player in kw)
+  {
+    reset_eval_cost();
+    kp = keys(workshop[player]) - ({0});
+    if (!arrayp(kp) || sizeof(kp) < 1)
+      continue;
+    for (i=0;i<sizeof(kp);i++)
+    {
+      if (sscanf(kp[i],"%s#%s#%d",city,goods,g_class) != 3)
+      {
+        map_delete(workshop[player],kp[i]);
+        save();
+        continue;
+      }
+
+      pt = workshop[player][kp[i]]["time"];
+      if (pt/REALLY_ONE_DAY+2 > now_t/REALLY_ONE_DAY)
+        continue;
+      business_message(sprintf("%s存放在%s的%s(等级为%d)因为过期，businessd系统自动清除了。\n",
+                                player,to_chinese(city),goods,g_class));
+      remove_a_player_workshop_goods(player,city,goods,g_class);
+    }
+
+  }
+
+}
+
+public int is_valid_string_line(string line)
+{
+  string name,type;
+  int dev,cul,sci;
+
+  if (line == "" || line[0]=='#')
+    return 0;
+  return (sscanf(line,"%s %s develop %d culture %d science %d",name,type,dev,cul,sci) == 5);
+}
+
+public int is_event_city(string city)
+{
+  string *ke;
+  if (!is_trade_city(city))
+    return 0;
+  ke = keys(event);
+  if (sizeof(ke) < 1)
+    return 0;
+  return (member_array(city,ke) != -1);
+}
+
+public string query_city_event_name(string city)
+{
+  if (!is_event_city(city))
+    return 0;
+  return event[city]["name"];
+}
+
+public string query_city_event_type(string city)
+{
+  if (!is_event_city(city))
+    return 0;
+  return event[city]["type"];
+}
+
+public int is_city_bad_event(string city)
+{
+  if (!is_event_city(city))
+    return 0;
+
+  return event[city]["type"] == "灾难";
+}
+
+public int query_city_event_effect(string city,string type)
+{
+  if (!is_event_city(city))
+    return 0;
+  if (type != "develop" &&
+      type != "culture" &&
+      type != "science")
+    return 0;
+  if (!is_city_bad_event(city))
+    return event[city][type];
+  return -event[city][type];
+}
+
+public int reset_city_event_effect(string city,string type,int value)
+{
+  int old_val = query_city_event_effect(city,type);
+  if (!old_val)
+    return 0;
+  if (old_val > value)
+    event[city][type] = old_val - value;
+  else
+    event[city][type] = value-old_val;
+  save();
+  return 1;
+}
+
+public int query_city_event_start_time(string city)
+{
+  if (!is_event_city(city))
+    return 0;
+  return event[city]["start_time"];
+}
+
+public int query_city_event_finish_time(string city)
+{
+  if (!is_event_city(city))
+    return 0;
+  return event[city]["finish_time"];
+}
+
+public string query_city_event_goods_name(string city)
+{
+  if (!is_event_city(city))
+    return 0;
+  if (!mapp(event[city]["event_goods"]))
+    return 0;
+  return event[city]["event_goods"]["name"];
+}
+
+public int query_city_event_goods_number(string city)
+{
+  if (!is_event_city(city))
+    return 0;
+  if (!mapp(event[city]["event_goods"]))
+    return 0;
+  return (int)event[city]["event_goods"]["number"];
+}
+
+private mapping get_a_event()
+{
+  string eachline,*line;
+  string name,type;
+  int i,dev,cul,sci;
+  string e_name,e_goods;
+  string *goods;
+  mapping tmp_event_goods=([]);
+
+  line = explode(read_file(CITY_EVENT), "\n");
+  line = line - ({0});
+  line = filter_array(line,(: is_valid_string_line($1) :));
+  if (!arrayp(line) || sizeof(line) < 1)
+    return ([]);
+  eachline = element_of(line);
+  if (sscanf(eachline,"%s %s develop %d culture %d science %d",name,type,dev,cul,sci)!=5)
+    return ([]);
+  line = explode(read_file(EVENT_GOODS), "\n");
+  line = line - ({0});
+  if (arrayp(line) && sizeof(line) > 0)
+  {
+    for (i=0;i<sizeof(line);i++)
+    {
+      eachline = line[i];
+      if (eachline == "" || eachline[0]=='#')
+        continue;
+      if (sscanf(eachline,"%s %s",e_name,e_goods) != 2)
+        continue;
+      if (e_name == name)
+        break;
+    }
+
+    goods = explode(e_goods, "|");
+    goods = goods - ({0});
+    if (arrayp(goods) && sizeof(goods) > 0)
+    {
+      tmp_event_goods = ([ "name" : element_of(goods),
+                           "number" : 1+random(5),
+                         ]);
+    }
+
+  }
+
+  return (["name" : name,
+           "type" : type,
+           "develop" : dev,
+           "culture" : cul,
+           "science" : sci,
+           "start_time" : time(),
+           "finish_time" : time() + 7200,
+           "event_goods" : tmp_event_goods,
+         ]);
+}
+
+private void add_a_city_event(string city)
+{
+  mapping random_e;
+  if (!is_trade_city(city) || is_event_city(city))
+    return;
+  random_e = get_a_event();
+  if (sizeof(random_e) < 1)
+    return;
+  event += ([city : random_e]);
+  save();
+  log_file("business_event",sprintf("%s add %s, dev=%d,cul=%d,sci=%d,at %s\n",
+                                     city,
+                                     (string)random_e["name"],
+                                     (int)random_e["develop"],
+                                     (int)random_e["culture"],
+                                     (int)random_e["science"],
+                                     ctime(time())));
+}
+
+private void remove_a_city_event(string city)
+{
+  if (!is_trade_city(city) || !is_event_city(city))
+    return;
+  map_delete(event,city);
+  save();
+}
+
+private void random_event(string *all_city)
+{
+  int i;
+  string city,*citys;
+
+  citys = filter_array(all_city,(: !is_event_city($1) :));
+  if (!arrayp(citys) || sizeof(citys) < 1)
+    return;
+  i = 1;
+  foreach (city in citys)
+  {
+    reset_eval_cost();
+    if (i>3)
+      break;
+    i++;
+    add_a_city_event(city);
+  }
+
+}
+
+public int adjust_val(int val, int to_val, int from_val, int c_val)
+{
+  if (c_val >= to_val)
+    return val;
+  return val*(c_val-from_val)/(to_val-from_val);
+}
+
+private void check_city_event()
+{
+  string name,type;
+  int from_t,to_t,c_t,dev,cul,sci;
+  string city, *ke;
+  string event_goods_name;
+  int event_goods_number;
+
+  ke = keys(event);
+  if (sizeof(ke) < 1)
+    return;
+  foreach (city in ke)
+  {
+    name = query_city_event_name(city);
+    type = query_city_event_type(city);
+    dev = query_city_event_effect(city,"develop");
+    cul = query_city_event_effect(city,"culture");
+    sci = query_city_event_effect(city,"science");
+    from_t = query_city_event_start_time(city);
+    to_t = query_city_event_finish_time(city);
+    event_goods_name = query_city_event_goods_name(city);
+    event_goods_number = query_city_event_goods_number(city);
+    c_t = time();
+    if (c_t <= from_t)
+    {
+      business_message(sprintf("%s传闻，据说%s正%s！当前急需大约%s数量的%s。\n",
+                               type,
+                               to_chinese(city),
+                               name,
+                               chinese_number(event_goods_number),
+                               event_goods_name));
+      continue;
+    }
+
+    if (c_t >= to_t)
+    {
+      remove_a_city_event(city);
+      business_message(sprintf("%s的%s终于结束了！\n",
+                               to_chinese(city),
+                               type));
+      continue;
+    }
+
+      add_city_info(city, "develop", dev/5);
+      add_city_info(city, "culture", cul/5);
+      add_city_info(city, "science", sci/5);
+    log_file("business_event",sprintf("%s via event get dev=%d,cul=%d,sci=%d at %s\n",
+                                       city,
+                                       dev,
+                                       cul,
+                                       sci,
+                                       ctime(time())));
+  }
+
+}
+
+private void annual_event(string *all_city)
+{
+  int dev,cul,sci,buy,sell,invote;
+  string city;
+
+  foreach (city in all_city)
+  {
+    reset_eval_cost();
+    dev = query_city_info(city, "develop");
+    cul = query_city_info(city, "culture");
+    sci = query_city_info(city, "science");
+    buy = query_city_info(city, "buy");
+    sell = query_city_info(city, "sell");
+    invote = query_city_info(city, "invote");
+    set_city_last_info(city, "develop", dev);
+    set_city_last_info(city, "culture", cul);
+    set_city_last_info(city, "science", sci);
+    set_city_last_info(city, "buy", buy);
+    set_city_last_info(city, "sell", sell);
+    set_city_last_info(city, "invote", invote);
+    set_city_info(city, "buy", 0);
+    set_city_info(city, "sell", 0);
+    set_city_info(city, "invote", 0);
+  }
+
+}
+
+private void heart_beat()
+{
+  string month,day;
+  string city, *all_city;
+
+  month = NATURE_D->query_month();
+  day = NATURE_D->query_day();
+
+  all_city = get_all_city();
+  foreach (city in all_city)
+  {
+    reset_eval_cost();
+    refresh_goods_list(city);
+  }
+
+  if (random(3) == 0 || sizeof(event)<1)
+    random_event(all_city);
+
+  check_workshop();
+  check_invote();
+  check_city_event();
+
+  if (month == "一" &&
+      day == "一")
+  {
+    if (!query("annual"))
+    {
+      set("annual",1);
+      annual_event(all_city);
+    }
+
+  }
+
+  else
+    delete("annual");
+  if (day == "一")
+  {
+    if (!query("monthly"))
+    {
+      set("monthly",1);
+      add_a_new_invote();
+    }
+
+  }
+
+  else
+    delete("monthly");
+}
+
+void clear_city_sell()
+{
+  city_sell = ([]);
+  save();
+}
+
+void clear_all_city_info()
+{
+  all_city_info = ([]);
+  save();
+}
+
+void clear_event()
+{
+  event = ([]);
+  save();
+}
+
+void clear_invote()
+{
+  invote = ([]);
+  save();
+}
+
+mapping query_event_for_debug()
+{
+  return event;
+}
+
+mapping query_invote_for_debug()
+{
+  return invote;
+}
+

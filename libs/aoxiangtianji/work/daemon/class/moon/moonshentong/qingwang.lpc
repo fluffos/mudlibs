@@ -1,0 +1,119 @@
+#include <ansi.h>
+#include <combat.h>
+#define FU "「" HIG "情网" NOR "」"
+#define MIHUN CLASS_D("moon") + "/moonshentong/qingwang"
+#define CAUSED "in_qingwang"
+inherit F_SSERVER;
+int valid_cast(object me, object target)
+{
+  int t = time();
+
+  if(userp(me) && (string)me->query("family/family_name") != "月宫")
+    return notify_fail(sprintf("%s是月宫不传之密！\n",FU));
+  if (me->is_busy())
+    return notify_fail("你正忙着呢！\n");
+
+  if (me->query_skill("moonshentong", 1) < 150)
+    return notify_fail(sprintf("你的晚月神通修为不够，难以施展%s。\n",FU));
+
+  if (me->query_skill("jueqing-whip", 1) < 150)
+    return notify_fail(sprintf("你的绝情鞭修为不够，难以施展%s。\n",FU));
+  if (me->query_skill_mapped("spells") != "moonshentong")
+    return notify_fail("你没有激发晚月神通，难以施展" FU "。\n");
+  if (me->query_skill_mapped("whip") != "jueqing-whip")
+    return notify_fail("你没有激发绝情鞭法，难以施展" FU "。\n");
+  if( (int)me->query("max_mana") < 1800 )
+    return notify_fail(sprintf("你的法力修为不够，难以施展%s。\n",FU));
+
+  if( (int)me->query("force") < 300 )
+    return notify_fail("你的真气不够。\n");
+  if((int)me->query("mana") < 150+2*(int)me->query("mana_factor") )
+    return notify_fail("你的法力不够！\n");
+  if((int)me->query("sen") < 300 )
+    return notify_fail("你无法集中精力！\n");
+
+  if ((t - (int)me->query_temp("last_qingwang")) < 5)
+    return notify_fail("你刚刚施展过了，等会才可以继续用！\n");
+  return 1;
+}
+
+int cast_attack(object me, object target)
+{
+  int success_adj, result, time, extra;
+  int whip_skill, s_skill;
+  string msg;
+  object weapon;
+
+  success_adj = SKILL_D("moonshentong")->query_power_effect(me);
+  if( !target )
+    target = offensive_target(me);
+  if( !target
+   || !target->is_character()
+   || target->is_corpse()
+   || target==me)
+    return notify_fail(sprintf("你要对谁施%s？\n",FU));
+  if (! objectp(weapon = me->query_temp("weapon")) ||
+      (string)weapon->query("skill_type") != "whip")
+    return notify_fail("你没有鞭子，难以施展" FU "。\n");
+  if(target->query_temp(CAUSED))
+    return notify_fail(sprintf("%s已经无法自拔了！\n",target->name()));
+  if (target->query_temp("no_move"))
+    return notify_fail(sprintf("%s已经迈不动步子了！\n",target->name()));
+
+  me->add("mana", -100-2*(int)me->query("mana_factor"));
+  me->add("force", -200);
+  me->receive_damage("sen", 50);
+  if( random(me->query("max_mana")) < 100 )
+  {
+    write("你法力忽然不济了，只怕要网住自己了！\n");
+    return 1;
+  }
+
+  msg = HIB"$N" HIB"催动法力，将手中"NOR + weapon->name() +
+        HIB"舞成一团，化做一张大网，向" HIB"$n" HIB"当头罩来。\n" NOR;
+  message_vision(msg,me,target);
+  whip_skill = me->query_skill("jueqing-whip",1);
+  s_skill = me->query_skill("moonshentong",1);
+  if (whip_skill > s_skill)
+    result = s_skill*100/(whip_skill + random(30) + 1);
+  else
+    result = whip_skill*100/(s_skill + random(30) + 1);
+
+  success_adj = success_adj*result/100 + random(success_adj*(100-result)/100 + 1);
+
+  if (success_adj < 70)
+    success_adj = 70;
+
+  if (success_adj > 90)
+    success_adj = 90 + random(success_adj - 90);
+
+  result = SPELL_D->attacking_cast_success(me,target,success_adj);
+
+  if (result <=0)
+  {
+    msg = HIG "$n" HIG"神智清醒，不为情所困，轻轻向旁一跃，躲过了情网的袭击。\n" NOR;
+    message_vision(msg,me,target);
+    me->start_busy(2+random(3));
+    return 1;
+  }
+
+  msg = HIB"$n" HIB"脑子里一片混乱，鬼使神差般突然发呆，甚至忘记了躲闪，"
+        "被情网当头罩住。\n" NOR;
+  message_vision(msg,me,target);
+  time = me->query_skill("moonshentong",1) + me->query_skill("jueqing-whip",1);
+  time = time/10 ;
+  extra = random(time/2);
+  if (extra > 30)
+    extra = 30;
+  if (time > 60)
+    time = 60;
+  target->set_curse_changed(MIHUN,CAUSED,"dexerity",time,extra);
+  me->set_temp("last_qingwang",time());
+  return 1;
+}
+
+void remove_effect(object me)
+{
+  if (objectp(me) && me->query_temp(CAUSED))
+    tell_object(me,sprintf("你终于摆脱了%s的困扰了。\n",FU));
+}

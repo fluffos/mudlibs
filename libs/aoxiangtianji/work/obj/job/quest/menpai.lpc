@@ -1,0 +1,249 @@
+#include <ansi.h>
+inherit F_CLEAN_UP;
+void create()
+{
+  seteuid(getuid());
+}
+
+public int ask_RW(object me, object ob)
+{
+  mapping quest_menpai ;
+  string msg;
+  object quest_npc;
+  int dx;
+  int t = time();
+  if (!playerp(me))
+    return 0;
+
+  if (me->query("level") < 20)
+  {
+    tell_object(me,"你现在的能力还不足以领取这个任务！\n");
+    return 1;
+  }
+
+  if ((t - (int)me->query_temp("quest_xyj/last_menpai_time")) < 80)
+  {
+    tell_object(me,"你刚刚领过任务！\n");
+    return 1;
+  }
+
+  if (playerp(ob) || !living(ob) || ob->is_fighting())
+  {
+    tell_object(me,"你现在不能从" + ob->name() + "领任务！\n");
+    return 1;
+  }
+
+  if(me->query("family/family_name")!= ob->query("family/family_name"))
+  {
+    tell_object(me,"你不是本门中人，为何向我要任务？");
+    return 1;
+  }
+
+/*
+  if((int)me->query("family/family_faith")<100)
+  {
+    tell_object(me,"你门派忠诚度不足100，不能领取任务。");
+    return 0;
+  }
+
+*/
+  if( !me->is_apprentice_of(ob) )
+  {
+    write(ob->name() + "不是你的师傅！你只能找自己的师傅领取任务吧！\n");
+    return 1;
+  }
+
+  quest_menpai = me->query("quest_xyj/menpai");
+  if (mapp(quest_menpai) && sizeof(quest_menpai) > 1)
+  {
+    if (quest_menpai["master_id"] && quest_menpai["master_id"] != ob->query("id"))
+    {
+      message_vision(CYN "$N" CYN "看了看$n" CYN "，"
+                         "哼了一声，没有理会$n" CYN "。\n"
+                         NOR, ob, me);
+      return 1;
+    }
+
+    message_vision(HIR"$N" HIR"不满的说道，你上次领取的任务还没有完成呢！\n",ob);
+    return 1;
+  }
+
+  dx = (int)me->query("level");
+  if (dx <= 25)
+    quest_npc = NPC_D->create_quest_npc(me,ob,"menpai",1);
+  else if (dx <= 40)
+    quest_npc = NPC_D->create_quest_npc(me,ob,"menpai",2);
+  else
+    quest_npc = NPC_D->create_quest_npc(me,ob,"menpai",3);
+
+  if (objectp(quest_npc))
+  {
+    notify_fail("你没有成功的领取这次任务！\n");
+    if (!SYSQ_D->quest_reg(me,ob,quest_npc, "menpai"))
+    {
+      if (objectp(quest_npc))
+        destruct(quest_npc);
+      return 1;
+    }
+
+    me->set_temp("quest_xyj/last_menpai_time",t);
+    ob->command("pat "+me->query("id"));
+    switch (random(8))
+    {
+      case 0 :
+        msg = sprintf(HIW"现有%s" HIW"在%s" HIW"屡次挑衅本门，你去灭了他！\n"NOR,
+               (string)me->query("quest_xyj/menpai/npc_name"),
+              (string)me->query("quest_xyj/menpai/npc_place"));
+
+        break;
+      case 1:
+        msg = sprintf("%s" HIY"仔细想了想，说道：“在%s" HIY"有个%s" HIY"屡次为难本门弟子，你去解决了他！”\n"NOR,
+               ob->name(),
+               me->query("quest_xyj/menpai/npc_place"),
+               me->query("quest_xyj/menpai/npc_name"));
+        break;
+      case 2:
+        msg = sprintf("%s" HIG"长叹了一声，说道：“近来有个%s" HIG"在%s" HIG"口出狂言，辱没本门名声，你去处理了吧！”\n"NOR,
+               ob->name(),
+               me->query("quest_xyj/menpai/npc_name"),
+               me->query("quest_xyj/menpai/npc_place"));
+        break;
+      case 3 :
+        msg = sprintf(HIR"你去做了%s" HIR"，据说最近在%s" HIR"可以查到些蛛丝马迹！\n",
+               me->query("quest_xyj/menpai/npc_name"),
+               me->query("quest_xyj/menpai/npc_place"));
+        break;
+      case 4 :
+        msg = sprintf(HIB"你提%s" HIB"的头来见我，在%s" HIB"可以查找他的踪迹！\n"NOR,
+               me->query("quest_xyj/menpai/npc_name"),
+               me->query("quest_xyj/menpai/npc_place"));
+        break;
+      case 5 :
+        msg = sprintf(HIC"那个叫%s" HIC"的，在%s" HIC"口吐狂言，你去办了他，让天下英豪明白，本门不是好欺负的！\n"NOR,
+               me->query("quest_xyj/menpai/npc_name"),
+               me->query("quest_xyj/menpai/npc_place"));
+        break;
+      case 6 :
+        msg = sprintf(HIG"最近在%s" HIG"出了新鲜事，一个叫%s" HIG"的猖狂无比！不用我罗嗦了吧？快去！\n"NOR,
+               me->query("quest_xyj/menpai/npc_place"),
+               me->query("quest_xyj/menpai/npc_name"));
+        break;
+      default :
+        msg = sprintf(HIM"最近在%s" HIM"，有个%s" HIM"屡次让我郁闷无比，可惜无法分身去教训教训他。你代我去吧，嘿嘿，提头来见！\n"NOR,
+               me->query("quest_xyj/menpai/npc_place"),
+               me->query("quest_xyj/menpai/npc_name"));
+        break;
+    }
+
+    tell_object(me,msg);
+    message_vision("$N" HIC"在$n" HIC"耳朵边说了些话！\n",ob,me);
+    return 1;
+  }
+
+  else
+  {
+    tell_object(me,"你没有成功的获得这次申请的任务！系统已经做好的了纪录，也可以就此向wiz反应！");
+    log_file("quest_xyj/menpai",sprintf("%s(%s)在%s没有成功的获得任务！\n",
+                                  me->name(1),
+                                  me->query("id"),
+                                  ctime(t)));
+  }
+
+  return 1;
+}
+
+public int ask_JC(object me, object ob)
+{
+  mapping quest_menpai ;
+  object quest_npc;
+  string msg;
+
+  if (!playerp(me))
+    return 0;
+
+  if (playerp(ob) || !living(ob) || ob->is_fighting())
+  {
+    tell_object(me,"你现在无法和" + ob->name() + "说话！\n");
+    return 1;
+  }
+
+  quest_menpai = me->query("quest_xyj/menpai");
+  if (!mapp(quest_menpai) || sizeof(quest_menpai) < 1)
+  {
+    tell_object(me,"你现在没有任务，取消什么？\n");
+    return 1;
+  }
+
+  if (quest_menpai["master_id"] != ob->query("id"))
+  {
+    write("我没给你什么任务啊？\n");
+    write("嗯。。。你的任务是" + quest_menpai["master_id"] + "交给你的。\n");
+    return 1;
+  }
+
+  if (quest_menpai["npc_die"] >= 1 )
+  {
+    msg = "$N" HIW"说道，那家伙已经被干掉了。你不用再管了！\n"NOR;
+    message_vision(msg,ob);
+    me->delete("quest_xyj/menpai");
+    if (SYSQ_D->quest_exist(me,"menpai"))
+      SYSQ_D->delete_quest("menpai",me);
+    me->start_busy(2);
+    return 1;
+  }
+
+  message_vision("$N" HIY"满面羞惭的对$n"
+     HIY"说道，“师傅，看来这次任务我是没有办法完成的了。还请师傅重重责罚！”\n"NOR,me,ob);
+  if (stringp(quest_menpai["npc_id"]))
+    quest_npc = find_living(quest_menpai["npc_id"]);
+  if (quest_npc && objectp(quest_npc) && !quest_npc->is_fighting() && living(quest_npc))
+  {
+    if (environment(quest_npc))
+      message_vision(HIC "$N" HIC "看了看四周，急急忙忙的走掉了。\n" NOR, quest_npc);
+    destruct(quest_npc);
+    if (SYSQ_D->quest_exist(me,"menpai"))
+      SYSQ_D->delete_quest("menpai",me);
+  }
+
+  switch (random(6))
+  {
+    case 0 :
+      msg = "$N" HIC"不高兴的对着$n" HIC"嘟哝了几句，叹了口气！\n"NOR;
+      break;
+    case 1 :
+      msg = "$N" HIY"无可奈何的朝$n" HIY"点点了头！\n"NOR;
+      break;
+    case 2 :
+      msg = "$N" HIW"的一张脸瞬间变了颜色，张口结舌的看着$n" HIW"，别提有多难看了！\n"NOR;
+      break;
+    case 3 :
+      msg = "$N" CYN"狠狠的在自己脑门上拍了几下，看来是对$n" CYN"很不高兴了！\n"NOR;
+      break;
+    case 4 :
+      msg = "$N" HIM"狠狠的踹了$n" HIM"几脚，“竖子，坏我大事！”\n"NOR;
+      break;
+    case 5 :
+      msg = "$N" HIR"大吃一惊，看着$n" HIR"好半天说不出话来！良久，一声轻叹！\n"NOR;
+      break;
+    default :
+      msg = "$N" HIC"微微叹息了一声，对$n" HIC"说道，“世事难料，过于自责也没有用了！”\n"NOR;
+      break;
+  }
+
+  message_vision(msg,ob,me);
+  me->add("daoxing",-500);
+  me->add("family/family_faith",-1);
+  if ((int)me->query("family/family_faith") < 0)
+    me->set("family/family_faith",0);
+  me->add("score",-3);
+  if ((int)me->query("score") < 0)
+    me->set("score",0);
+  me->add("weiwang",-3);
+  if ((int)me->query("weiwang") < 0)
+    me->set("weiwang",0);
+  me->delete("quest_xyj/menpai");
+  if (SYSQ_D->quest_exist(me,"menpai"))
+    SYSQ_D->delete_quest("menpai",me);
+  return 1;
+}
+

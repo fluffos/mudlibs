@@ -1,0 +1,235 @@
+#include <ansi.h>
+#include <medical.h>
+inherit NPC;
+inherit F_VENDOR;
+#define MAX_EXP 80000
+string ask_job();
+int do_peiyao(string arg);
+int working(object me);
+int halt_working(object me);
+void create()
+{
+  set_name("华坨二世", ({ "huatuo ershi", "hua tuo", "hua", "doctor" }));
+  set("title", "神医");
+  set("gender", "男性");
+  set("age", 65);
+  set("int", 38);
+  set("kee", 1000);
+  set("max_kee", 1000);
+  set("sen", 1000);
+  set("max_sen", 1000);
+  set("shen_type", 1);
+  set("combat_exp", 500000);
+  set("attitude", "heroism");
+  set_skill("unarmed", 80);
+  set_skill("dodge", 80);
+  set_skill("parry", 60);
+  set_temp("apply/attack", 70);
+  set_temp("apply/defense", 70);
+  set_temp("apply/damage", 50);
+  set("inquiry", ([
+    "配药"   : (: ask_job :),
+    "工作"   : (: ask_job :),
+    "job"    : (: ask_job :),
+  ]));
+  set("vendor_goods", ([
+     "1"  : HERB("chaihu"),         // 柴胡
+     "2"  : HERB("chenpi"),         // 陈皮
+     "3"  : HERB("chongcao"),       // 虫草
+     "4"  : HERB("chuanwu"),        // 川乌
+     "5"  : HERB("dahuang"),        // 大黄
+     "6"  : HERB("danggui"),         // 当归
+     "7"  : HERB("duhuo"),          // 独活
+     "8"  : HERB("fangfeng"),       // 防风
+     "9"  : HERB("fuzi"),           // 附子
+     "10" : HERB("gsliu"),          // 干石榴
+     "11" : HERB("guiwei"),         // 归尾
+     "12" : HERB("hafen"),          // 蛤粉
+     "13" : HERB("heshouwu"),       // 何首乌
+     "14" : HERB("honghua"),        // 红花
+     "15" : HERB("huangqi"),        // 黄芪
+     "16" : HERB("juhua"),          // 菊花
+     "17" : HERB("lanhua"),         // 兰花
+     "18" : HERB("lingxian"),       // 灵仙
+     "19" : HERB("lingzhi"),        // 灵芝
+     "20" : HERB("mahuang"),        // 麻黄
+     "21" : HERB("moyao"),          // 没药
+     "22" : HERB("niuhuang"),       // 牛黄
+     "23" : HERB("niuxi"),          // 牛膝
+     "24" : HERB("qianjinzi"),      // 千金子
+     "25" : HERB("renshen"),        // 人参
+     "26" : HERB("ruxiang"),        // 乳香
+     "27" : HERB("shadan"),         // 鲨胆
+     "28" : HERB("shancha"),        // 山茶花
+     "29" : HERB("shanjia"),        // 山甲
+     "30" : HERB("shengdi"),        // 生地
+     "31" : HERB("shenglg"),        // 生龙骨
+     "32" : HERB("sumu"),           // 苏木
+     "33" : HERB("taoxian"),        // 桃仙
+     "34" : HERB("tenghuang"),      // 藤黄
+     "35" : HERB("tianqi"),         // 田七
+     "36" : HERB("tugou"),          // 土狗
+     "37" : HERB("wulingzhi"),      // 五灵脂
+     "38" : HERB("xiefen"),         // 蝎粉
+     "39" : HERB("xijiao"),         // 犀角
+     "40" : HERB("xionghuang"),     // 雄黄
+     "41" : HERB("xuejie"),         // 血竭
+     "42" : HERB("xuelian"),        // 雪莲
+     "43" : HERB("yanwo"),          // 燕窝
+     "44" : HERB("yjhua"),          // 洋金花
+     "45" : HERB("yuanzhi"),        // 远志
+     "46" : HERB("zihua"),          // 紫花
+     "47" : HERB("zzfen"),          // 珍珠粉
+     "48" :  "/d/obj/misc/yanbo",    // 研钵
+  ]));
+  setup();
+  add_money("silver", 1);
+  carry_object("/obj/cloth/cloth")->wear();
+}
+
+void init()
+{
+  add_action("do_peiyao", "peiyao");
+  add_action("do_vendor_list", "list");
+}
+
+string ask_job()
+{
+  object me;
+  object *obs;
+  me = this_player();
+  if (me->query_temp("job/peiyao"))
+    return "让你干的活你干完了么？";
+  if (me->query("combat_exp") > 120000)
+    return sprintf("让%s干这活，也太屈就你了吧。",me->name());
+  if (me->query("combat_exp") < 10000)
+    return sprintf("就凭%s就这点能力，我看你来药臼都端不起来！",me->name());
+  if (me->query("kee") < 50)
+    return sprintf("%s还是先歇歇吧，万一累出人命来我可负担不起。",me->name());
+  if (! interactive(me))
+    return "……";
+  obs = filter_array(all_inventory(environment()),
+                     (: interactive($1) &&
+                        $1 != $(me) &&
+                        $1->query_temp("job/peiyao") &&
+                        query_ip_number($1) == query_ip_number($(me)) :));
+  if (sizeof(obs) > 0)
+    return "我这已经有" + obs[0]->name() + "在干活了，你等等吧。";
+  me->set_temp("job/peiyao", 1);
+  return sprintf("好，%s就帮我配药(peiyao)吧！喏，就这几味。",me->name());
+}
+
+int do_peiyao(string arg)
+{
+  object me;
+  me = this_player();
+  if (me->is_busy())
+    return notify_fail("你正忙着呢，别着急。\n");
+  if (! me->query_temp("job/peiyao"))
+  {
+    message_vision(CYN "$N" CYN "刚想抓几味药配制，就听见$n"
+                   CYN "怒喝道：给我放下，别乱动。\n" NOR, me, this_object());
+    return 1;
+  }
+
+  me->set_temp("job/step", 1);
+  me->start_busy((: working :),(: halt_working :));
+/*
+  me->start_busy(bind((: call_other, __FILE__, "working" :), me),
+                 bind((: call_other, __FILE__, "halt_working" :), me));
+*/
+  tell_object(me, HIY "你开始工作。\n" NOR);
+  return 1;
+}
+
+int working(object me)
+{
+  object ob;
+  string msg;
+  int finish;
+  int exp,qn;
+  if (! me->query_temp("job/step"))
+    me->set_temp("job/step", 1);
+  if (! living(me))
+  {
+    me->delete_temp("job/peiyao");
+    me->delete_temp("job/step");
+    return 0;
+  }
+
+  finish = 0;
+  me->receive_damage("kee", 1);
+  switch (me->query_temp("job/step"))
+  {
+    case 1:
+      msg = "$N东挑西拣，选好了一些药材。";
+      break;
+    case 2:
+      msg = "$N把药材放进药臼，使劲捣了起来。";
+      break;
+    case 3:
+      msg = "药材渐渐化作粉屑，混在一起。";
+      break;
+    case 4:
+      msg = "粉屑在$N的捣弄下越来越细，逐渐变成了粉末。";
+      break;
+    default:
+      msg = "$N把药材包好，递给$n。";
+      finish = 1;
+    break;
+  }
+
+  msg += "\n";
+  message_vision(msg,me,this_object());
+  if (finish)
+  {
+    msg = CYN "$n" CYN "看了$N" CYN "配的药，点头道：不错，不错！"
+              "这是给你的报酬！\n" NOR;
+    message_vision(msg,me,this_object());
+    me->delete_temp("job/peiyao");
+    me->delete_temp("job/step");
+
+    if (me->query("combat_exp") >= 50000 &&
+        me->query("combat_exp") <= 120000)
+    {
+      exp = 20 + random(20);
+      if ((int)me->query("work/newbie_yao/exp") > MAX_EXP)
+        exp = 0;
+      qn = exp/2;
+      GIFT_D->delay_work_bonus(me,([ "exp" : exp,
+                                      "pot" : qn,
+                                      "prompt" : "通过这次配药经历",
+                                   ]),"newbie_yao");
+      if (random(1000) == 1)
+      {
+        msg = HIW "\n$n" HIW "对$N" HIW "嘿嘿一笑，道：干得不"
+                  "赖，有点意思，这个丹玉磨就算是我送给你的礼物吧"
+                  "。\n" NOR;
+        message_vision(msg, me, this_object());
+        ob = new("/d/obj/misc/dymo");
+        ob->move(me, 1);
+        tell_object(me, HIC "\n你获得了一个" + ob->name() + HIC "。\n" NOR);
+      }
+
+      if (random(4)==0)
+        me->add("score",1);
+    }
+
+    ob = new("/obj/money/coin");
+    ob->set_amount(10 + random(30));
+    ob->move(me, 1);
+    return 0;
+  }
+
+  me->add_temp("job/step", 1);
+  return 1;
+}
+
+int halt_working(object me)
+{
+  message_vision(HIY "$N" HIY "把手中的活一甩，嚷嚷道：不干了，不干了！\n"NOR, me);
+  me->delete_temp("job/peiyao");
+  me->delete_temp("job/step");
+  return 1;
+}
+

@@ -1,0 +1,200 @@
+#include <ansi.h>
+#include "bonze.h"
+inherit NPC;
+inherit F_MASTER;
+string ask_for_join();
+string ask_for_huansu();
+void create()
+{
+  set_name("剃度僧", ({ "tidu seng", "seng" }) );
+  set("gender", "男性");
+  set("age", 50);
+  set("attitude", "peaceful");
+  set("class", "bonze");
+  set("str", 17);
+  set("int", 30);
+  set("spi", 30);
+  set("con", 30);
+  set("cps", 30);
+  set("cor", 20);
+  set("dex", 20);
+
+  set("force", 1800);
+  set("max_force", 1000);
+  set("force_factor", 50);
+  set("mana", 2000);
+  set("max_mana", 1200);
+  set("force_factor", 60);
+  set("combat_exp", 500000);
+  set("daoxing", 500000);
+  set("inquiry", ([
+    "剃度" : (: ask_for_join :),
+    "出家" : (: ask_for_join :),
+    "还俗" : (: ask_for_huansu :),
+  ]) );
+  set_skill("literate", 150);
+  set_skill("force", 150);
+  set_skill("spells", 150);
+  set_skill("dodge", 150);
+  set_skill("unarmed", 150);
+  set_skill("parry", 150);
+  set_skill("lotusforce", 150);
+  set_skill("buddhism", 150);
+  set_skill("lotusmove", 150);
+  set_skill("jienan-zhi", 150);
+  set_skill("staff", 150);
+  set_skill("pudu-staff", 150);
+  set_skill("blade", 150);
+  set_skill("cibei-blade", 150);
+  map_skill("force","lotusforce");
+  map_skill("spells", "buddhism");
+  map_skill("dodge", "lotusmove");
+  map_skill("unarmed","jienan-zhi");
+  map_skill("staff","pudu-staff");
+  map_skill("parry","cibei-blade");
+  map_skill("blade","cibei-blade");
+  create_family("南海普陀山", 3, "弟子");
+  setup();
+  carry_object("/obj/cloth/seng-cloth")->wear();
+  carry_object("/d/obj/weapon/blade/jiedao")->wield();
+}
+
+void init()
+{
+  add_action("do_kneel", "kneel");
+  add_action("do_huansu", "huansu");
+}
+
+string ask_for_huansu()
+{
+  object me;
+  me = this_player(1);
+  if( (string)me->query("class") != "bonze" )
+    return "阿弥陀佛！你既已身系尘世，何必凑这个热闹？\n";
+  me->set_temp("pending/leave_bonze", 1);
+  command(sprintf("say 阿弥陀佛！一入俗世，万劫不复，%s一身大乘佛法也将随之付诸东流。"
+                  "还望三思。\n",RANK_D->query_respect(me)));
+  return sprintf("%s若已决定，便请脱袍还俗(huansu)。\n",RANK_D->query_respect(me));
+}
+
+int do_huansu()
+{
+  object me = this_player(1);
+
+  if( !me->query_temp("pending/leave_bonze") )
+    return 0;
+  me->start_busy(3);
+  message_vision(HIC"$N脱下身上的袈裟，恭恭敬敬地跪下来磕了几个响头，从此恢复了自由身。\n\n"NOR,
+                 me);
+  me->set("class","nanhai");
+  me->delete_skill("buddhism");
+  command(sprintf("say 从今以後你恢复出家前的俗名%s。\n",me->query("bonze/old_name")));
+  me->set("name", me->query("bonze/old_name") );
+  command("sigh");
+  me->delete_temp("pending/leave_bonze");
+  log_file("mp-nanhai",sprintf("%s还俗在%s！",me->query("id"), ctime(time())));
+  me->save();
+  return 1;
+}
+
+string ask_for_join()
+{
+  object me;
+  me = this_player(1);
+  if (me->query("married"))
+    return "阿弥陀佛！施主有了家庭拖累，想必难以潜心向佛。\n";
+  if( (string)me->query("class")=="bonze" )
+    return "阿弥陀佛！你我同是出家人，何故跟老衲开这等玩笑？\n";
+  if( me->query("bonze/justonetime"))
+    return "施主既已还俗，又何苦再次出家？\n";
+  me->set_temp("pending/join_bonze", 1);
+  return "阿弥陀佛！善哉！善哉！施主若真心皈依我佛，请跪下(kneel)受戒。\n";
+}
+
+int do_kneel()
+{
+  object me;
+  string *prename = ({ "广", "大", "智", "慧",
+                       "真", "如", "性", "海",
+                       "颖", "悟", "圆", "觉",
+                       "空", "明", "虚", "法",
+                       "文", "净", "方", "道"});
+  string name, new_name;
+  me = this_player(1);
+  if( !me->query_temp("pending/join_bonze") )
+    return 0;
+
+  message_vision(HIC "$N双手合十，恭恭敬敬地跪了下来。\n\n" +
+                 "$n伸出手掌，在$N头顶轻轻地摩挲了几下，将$N的头发尽数剃去。\n\n" NOR,
+		 me, this_object() );
+  name = this_player()->query("name");
+
+  new_name = element_of(prename) + name[0..0];
+  command("say 从今以後你的法名叫做" + new_name + "。");
+  command("smile");
+  this_player()->delete_temp("pending/join_bonze");
+  this_player()->set("name", new_name);
+  this_player()->set("bonze/justonetime", 1);
+  this_player()->set("bonze/old_name", name);
+  this_player()->set("class", "bonze");
+  this_player()->save();
+  return 1;
+}
+
+int attempt_apprentice(object ob)
+{
+  if (ob != this_player(1))
+    return 0;
+
+  if (! permit_recruit(ob))
+    return 0;
+  if ((string)ob->query("family/family_name") != "南海普陀山")
+  {
+    command(sprintf("emote 皱了皱眉头，说道：%s非我南海普陀山弟子，"
+                    "老衲所教恐怕难以理解。\n",RANK_D->query_respect(ob)));
+    return 1;
+  }
+
+  if ((string)ob->query("class") !="bonze")
+  {
+    command("say 施主还是先去剃度了吧！\n");
+    return 0;
+  }
+
+  if( ob->query("level") <= 15)
+  {
+    command("say 施主还需要进一步的修炼，现在的级别我无法给你帮助！\n");
+    return 0;
+  }
+
+  command("haha");
+  command("recruit " + ob->query("id"));
+  return 1;
+}
+
+int prevent_learn(object me, string skill)
+{
+  string myname = RANK_D->query_respect(me);
+  if ((string)me->query("family/family_name") != "南海普陀山")
+  {
+    command(sprintf("emote 皱了皱眉头，说道：%s非我南海普陀山弟子，"
+                    "老衲所教恐怕难以理解。\n",myname));
+    return 1;
+  }
+
+  if ((string)me->query("class") != "bonze")
+  {
+    command(sprintf("emote 皱了皱眉头，说道：%s并非出家之人，"
+                    "老衲所教恐怕难以理解。\n",myname));
+    return 1;
+  }
+
+  if (me->query("level") <= 15)
+  {
+    command(sprintf("emote 皱了皱眉头，说道：%s还欠修练，"
+                    "老衲所教恐怕难以理解。\n",myname));
+    return 1;
+  }
+
+  return 0;
+}

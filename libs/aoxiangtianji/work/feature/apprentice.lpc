@@ -1,0 +1,113 @@
+#include <ansi.h>
+#include <dbase.h>
+int is_apprentice_of(object ob)
+{
+  mapping family;
+
+  if( !mapp(family = query("family")) )
+    return 0;
+  if( family["master_id"] == (string)ob->query("id")
+   && family["master_name"] == (string)ob->query("name")
+   && family["family_name"] == (string)ob->query("family/family_name") )
+    return 1;
+  return 0;
+}
+
+void assign_apprentice(string title, int privs)
+{
+  mapping family;
+  if( !mapp(family = query("family")) )
+    return;
+  family["title"] = title;
+  family["privs"] = privs;
+  if( userp(this_object()) || !query("title") )
+  {
+    if( family["generation"]==1 )
+      set("title", family["family_name"] + "开山祖师");
+    else
+      set("title", sprintf("%s第%s代%s", family["family_name"],
+           chinese_number(family["generation"]), family["title"]));
+  }
+
+}
+
+// This is used for NPC, or start a new family for a player.
+void create_family(string family_name, int generation, string title)
+{
+  mapping family;
+  family = allocate_mapping(6);
+  family["family_name"] = family_name;
+  family["generation"] = generation;
+  set("family", family);
+// priv = -1 for ALL privileges.
+  assign_apprentice( title, -1 );
+}
+
+/*
+mapping family :
+  master_id   :  master id
+  master_name :  master name
+  family_name :  family name
+  generation  :  generateion in family
+  enter_time  :  enter family time
+  family_faith : faith of this family
+  first_enter  : the first
+*/
+int recruit_apprentice(object ob)
+{
+  mapping my_family, ob_family, family;
+  if( ob->is_apprentice_of(this_object() ) )
+    return 0;
+  if( !mapp(my_family = query("family")) )
+    return 0;
+  if( ob->query("Purgefamily") )
+    return 0;
+  family = allocate_mapping(sizeof(my_family));
+  family["master_id"] = query("id");
+  family["master_name"] = query("name");
+  family["family_name"] = my_family["family_name"];
+  family["generation"] = my_family["generation"] + 1;
+  family["enter_time"] = time();
+
+  ob_family = ob->query("family");
+  if (!mapp(ob_family) ||
+      !stringp(ob_family["family_name"]) ||
+      !stringp(ob_family["master_id"]))
+  {
+    ob->delete("family");
+    family["family_faith"] = 0;
+    family["first_enter"] = time();
+    message("channel:rumor",  WHT"〖门派消息〗"HIG+log_id(ob)+NOR+WHT"今日拜得["
+        + family["master_name"] + NOR+WHT"]为师入门"
+        + my_family["family_name"]+"一派,"
+        + my_family["family_name"]+"的势力加强了。\n"NOR,users());
+  }
+
+  else if (ob_family["family_name"] != my_family["family_name"])
+    return 0;
+  else
+  {
+    family["family_faith"] = ob_family["family_faith"];
+    if (mapp(ob_family["can_cast"]))
+      family["can_cast"] = ob_family["can_cast"];
+    if (mapp(ob_family["can_pfm"]))
+      family["can_pfm"] = ob_family["can_pfm"];
+    if (mapp(ob_family["can_bai"]))
+      family["can_bai"] = ob_family["can_bai"];
+    if (mapp(ob_family["can_learn"]))
+      family["can_learn"] = ob_family["can_learn"];
+    if (mapp(ob_family["can_exert"]))
+      family["can_exert"] = ob_family["can_exert"];
+  }
+
+  ob->set("family", family);
+
+  if ( stringp(query("class"))
+      && (ob->query("class") != "bonze")
+      && (query("class") != "bonze") )
+    ob->set("class", query("class"));
+
+  ob->assign_apprentice("弟子", 0);
+  return 1;
+}
+

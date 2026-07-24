@@ -1,0 +1,100 @@
+//CMDS STD buy.c
+#include <ansi.h>
+inherit F_CLEAN_UP;
+int main(object me, string arg)
+{
+  string banghui ;
+  string item, targ;
+  object ob, owner;
+  int price, afford, amount;
+
+  seteuid(getuid());
+
+  if (!objectp(me) || !playerp(me))
+    return 0;
+
+  if( me->is_busy() )
+    return notify_fail("你现在正忙着呢。\n");
+  if(!arg || sscanf(arg, "%s from %s", item, targ)!=2 )
+    return notify_fail("指令格式：buy <某物序号> from <某人>\n");
+  if (sscanf(targ, "%s for %d", targ, amount)!=2)
+    amount = 1;
+
+  owner = present(targ, environment(me));
+  if( !objectp(owner) )
+  {
+    string *owner_id;
+    object *inv = all_inventory(environment(me));
+
+    foreach (ob in inv)
+    {
+      if (ob == me)
+        continue;
+      owner_id = ob->query_temp("apply/id");
+      if (!arrayp(owner_id) || sizeof(owner_id) < 1)
+        continue;
+      if (member_array(targ,owner_id) == -1)
+        continue;
+      owner = ob;
+      break;
+    }
+
+    if (!objectp(owner))
+      return notify_fail("你要跟谁买东西？\n");
+  }
+
+  if( userp(owner) )
+  {
+     message_vision("$N想向$n购买「" + item + "」。\n", me, owner);
+     return notify_fail("对方好像不愿意跟你交易。\n");;
+  }
+
+  if( (price = owner->buy_object(me, item)) < 1 )
+    return notify_fail("你要买什么？\n");
+
+  if (amount < 1)
+    amount = 1;
+  if (amount > 100)
+    amount = 100;
+
+  price = price*amount;
+
+  if( !wizardp(me) && userp(me) )
+  {
+    if( uptime()-me->query_temp("last_buy_time") < 2)
+      return notify_fail(WHT"你别着急，慢慢来，钱货需当面点清！\n"NOR);
+    me->set_temp("last_buy_time",uptime());
+  }
+
+  if(stringp(banghui = me->query("banghui"))
+     && banghui == (string)owner->query("banghui"))
+    price = (price/3)*2;
+
+  if(price <= 0)
+    price=1;
+  if( afford = me->can_afford(price) )
+  {
+    if( afford==2 )
+      return notify_fail("你没有足够的零钱，而银票又没人找得开。\n");
+
+    notify_fail("你要买什么东西？\n");
+    if(!owner->complete_trade(me, item, amount))
+      return 0;
+    me->pay_money(price);
+    return 1;
+  }
+
+  else
+    return notify_fail("你的钱不够。\n");
+}
+
+int help(object me)
+{
+   write( @HELP
+指令格式: buy <某物> from <某人> for <数量>
+这一指令让你可以从某些人身上买到物品。
+HELP
+);
+   return 1;
+}
+

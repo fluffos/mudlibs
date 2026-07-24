@@ -1,0 +1,2289 @@
+// luban.c 魯班
+// Written by Doing Lu 1998/11/17
+// 魯班是負責建造房間的NPC， 首先，玩家去魯班那里索要圖紙，然后到想建房的地點描繪圖紙，
+// 必須要有30級以上的繪畫技巧才可以，如果不到30級，可以和魯班學習。
+// 然后玩家要把圖紙給魯班，魯班詢問房屋的名稱，不能和那里已有的房屋重名，然后再詢問房屋
+// 的類型（房屋的類型都定義在roomtype.h）中，并且詢問每個房間的描述，每個描述不能超過三
+// 百二十個字符（即最多四行），其中所有的房間的short 都由房屋名稱生成，不需要玩家輸入，
+// 然后魯班記錄所有的信息，并提示玩家等待巫師（權限在arch以上）的批准。
+// 巫師上線后到魯班處，魯班提示巫師處理玩家的信息，如果巫師批准了，就更新信息，等玩家再
+// 上線后到魯班處，魯班提示玩家可以建房（如果沒有被批准，就顯示原因，清除信息），玩家交
+// 一定的費用，就可以生成房屋文件，并修改玩家的檔案，記錄玩家已經建過房，并贈送一把鑰匙。
+// 然后清除記錄的信息。
+//
+// 如果玩家丟了鑰匙，可以到魯班處重新配一把鑰匙，如果玩家需要復制鑰匙，也可以向魯班要求。
+//
+// 如果玩家需要拆除房屋，可以向魯班提出，經過確認后，刪除房屋檔案。
+
+// 生成房屋的說明
+// 在選擇好房屋類型時，魯班將紀錄需要建設的房屋原型的所有文件，這些文件一定要在/d/room/
+// XXXX/內，比如玩家選用了獨樂居，則房屋文件都在/d/room/dulu/內。在生成房屋文件時，魯班
+// 將把這些文件拷貝到/data/room/playerid/，同時原型房屋必須由一個出口：/d/room/xiaoyuan
+// 魯班將將這個出口替換成玩家建房的地點，原型房還應該有一個以xiaoyuan命名的小院。
+// 對于原型方還有一些其他要求，比如原型房繼承的是ROOM類型，而建造的房將繼承PRIVATE_ROOM
+// 類型，因此在原型房的文件中，inherit ROOM之前要求有/**/的字樣,而在inhert PRIVATE_ROOM
+// 之前需要有//**的字樣，因為魯班會自動的將包含/**/的行去掉，并去掉//**的字樣。
+// 另外，所有有門的原型房，都必須有以下語句，set ("key", "ROOM_KEY");這是為了給建好的房
+// 子添加鑰匙。同時原型房中最好有主人set ("owner", "ROOM_OWNER")和類型的設置。
+
+// 關于鑰匙的一點說明
+// 每個玩家房屋鑰匙要生成一個文件，其實這完全可以用一個通用的鑰匙文件在每次AUTOLOAD的時
+// 候自動的更新，之所以不這么做是因為為了使玩家的房屋數據能夠保持一個獨立性，不至于過于
+// 分散，而且在一個人身上帶多把鑰匙的時候不至于過于繁瑣。
+
+// 一些變量的說明
+// 玩家在商談時紀錄的數據
+// contract/luban : 紀錄商談數據的mapping，這記錄在玩家的臨時變量
+// contract/luban/room     : 紀錄房屋描述信息的mapping，這是room_example的一個元素
+// contract/luban/descs    : 紀錄房屋描述的mapping
+// contract/luban/questing : 玩家商談狀態 quest_name/quest_id/quest_desc
+// contract/luban/value    : 建設房屋所需要的價格(以coin為單位)
+// contract/luban/position : 建造房屋的地點
+
+// 魯班記錄玩家申請的數據
+// form : 記錄玩家申請的表單
+// form/player/player   : 申請者的名稱
+// form/player/position : 申請建房的地點
+// form/player/room     : 申請建房的類型名稱
+// form/player/type     : 申請建房的類型代號
+// form/player/name     : 房屋的名稱
+// form/player/id       : 房屋的代號
+// form/player/status   : 表單的狀態 - 申請/允許/拒絕
+// form/player/time     : 申請的時間
+// form/player/wizard   : 處理表單的巫師
+// form/player/memo     : 巫師填寫的備注
+// form/player/descs    : 玩家填寫的描述
+
+// 玩家自身數據的修改
+// private_room/build   : 已經建過房屋
+// private_room/position: 房屋所在的位置，即入口處所在場景的文件路徑	:: 必須已經有build設置
+// private_room/entry   : 房屋入口處的文件路徑				:: 必須已經有build設置
+// private_room/name    : 房屋名稱					:: 必須已經有build設置
+// private_room/id      : 房屋ID					:: 必須已經有build設置
+// private_room/type    : 房屋類型名稱					:: 必須已經有build設置
+
+// 實現方法
+// 商談過程是一個簡單的自動機，其狀態儲存在用戶的數據結構中的contract/luban字段，接收消
+// 息的函數是do_answer， 這個函數根據狀態處理接收的消息即字符串，最要是調用不同的判斷函
+// 數，如果返回1則已記錄輸入的信息，如果返回0則表示不與處理或是終止商談。如果用戶在商談
+// 過程輸入了stop，則清除自動機的狀態和用戶數據庫中記錄的商談信息。
+
+// 數據存放
+// 階段1 - 商談
+// 數據存放在player->contract/luban/這個mapping中
+
+// 階段2 - 申請
+// 數據存放在luban->form/player/這個mapping中
+
+// 階段3 - 建設完畢
+// 數據存放在player->private_room/這個mapping中
+// 生成的文件存放在/data/room/player/這個目錄中
+// 玩家房屋的存盤文件存放在/data/room/player/這個目錄中
+// 建房處的存盤文件存放在/data/room/d/...這個目錄中，/d/...即這個房屋文件的路徑
+// 房屋存盤文件名是ROOM_D認可的，如果需要修改，可以修改/adm/daemons/roomd
+
+// 相關文件
+// inherit::PRIVATE_ROOM(/inherit/room/private_rom.c)
+// 這是用戶建造的房屋所具有的屬性，主要是用鑰匙開門和存放物品
+// inherit::RECODABLE_ROOM(/inherit/room/recordable_rom.c)
+// 這是建房處的環境所具有的屬性，主要是可以記錄增加的出口，并修改LONG描述
+
+#include <ansi.h>
+
+inherit	NPC;
+inherit	F_SAVE;
+
+// 這里記錄了各種樣式房屋
+// 這里是一個mapping數組，其中每一個mapping指明了一種型號的房屋。 每一個mapping中有三個
+// 元素，一是名字、二是類型、三是房屋字符串數組：字符串數組指明了這種房屋所擁有的文件。
+// files中的必須有一個是入口文件(既有到/d/room/xiaoyuan的出口)，否則建房時將產生錯誤。
+
+// 另外：type 和 name 都可以作為房屋類型的標志，只不過一個是中文，另一個是英文的而已，
+// 在最終保存在玩家數據庫中的是中文的類型名即name字段。
+
+// 注意：由于魯班是一個需要保存數據的NPC，在改動魯班的文件后可能會發生一些問題，這時可以
+// 將他的存盤文件刪除。
+mapping *room_example = ({
+([	"name"	   : "獨樂居",
+	"type"	   : "dule",
+	"value"	   : 20000000,
+	"files"	   : ([	"xiaoyuan" : "/d/room/dule/xiaoyuan.lpc",
+			"xiaowu"   : "/d/room/dule/room1.lpc" ,
+		     ]),
+]),
+
+([	"name"	   : "彩虹居",
+	"type"	   : "caihong",
+	"value"	   : 70000000,
+	"files"	   : ([ "xiaoyuan" : "/d/room/caihong/xiaoyuan.lpc",
+			"room2"    : "/d/room/caihong/room1.lpc",
+			"room3"    : "/d/room/caihong/room2.lpc",
+			"room4"    : "/d/room/caihong/room3.lpc",
+		     ]),
+]),
+
+});
+
+#define	WIZLEVEL	4	// 能夠處理表單的巫師等級
+
+// 通常函數
+int	save();
+int	ask_me();
+int	ask_paper();
+int	ask_drawing();
+int	ask_demolish();
+int	ask_rebuild();
+int	ask_modify();
+int	ask_key();
+int	ask_desc();
+int	recognize_apprentice(object me);
+int	accept_object(object me, object ob);
+void	luban_say(string msg);
+void	user_say();
+int	do_answer(string arg);
+int	do_stop();
+int	do_desc(string arg);
+int	do_show(string arg);
+int	do_changename(string arg);
+int	do_changeid(string arg);
+int	do_changetype(string arg);
+int	do_changedesc(string arg);
+int	do_finish();
+int	do_withdraw();
+int	decide_withdraw();
+int	do_destory();
+void	show_desc(string player_id, string arg);
+int	quest_user(object me);
+int	quest_info(object me);
+int	check_name(object me, string arg);
+int	check_id(object me, string arg);
+int	check_type(object me, string arg);
+int	check_legal_name(string name, string position);
+int	check_legal_id(string name);
+mixed	check_legal_type(string type);
+string	obey_description(string desc);
+object	get_object(string file_name);
+int	record_desc(object me, string room_name, string desc);
+void	record_contract(object me);
+int	modify_desc_in_form(string player_id, string room_name, string desc);
+string	sort_desc(string desc);
+
+// 巫師使用的管理命令相關的函數
+void	show_brief(string player_id);
+int	exist_form();
+int	do_list(string arg);
+int	do_type(string arg);
+int	do_agree(string arg);
+int	do_reject(string arg);
+int	do_delete(string arg);
+void	show_apply();
+void	show_agree();
+void	show_reject();
+void	show_old();
+void	show_brief_title();
+void	show_brief_list(string info, string msg);
+
+// 生成房屋的函數
+void	create_room(object me);
+string	to_player(string player_id, string file_name);
+
+mapping* forms;
+mapping my_form;	// 一個表單，用來存放用戶提交的建房信息
+
+// 這是提供的函數，之所以用宏定義，僅僅是為了減小運行時的開銷
+// 查詢form
+#define	query_form(pid, item)		query("form/" + pid + "/" + item)
+// 設置form內的值
+#define set_form(pid, item, content)	set("form/" + pid + "/" + item, content)
+// 判斷該玩家是否有提交申請
+#define submit_form(pid)		mapp(query("form/" + pid))
+
+void create()
+{
+	restore();
+
+	set_name("魯班", ({ "lu ban", "lu", "luban" }));
+	set("title", "第二巧匠");
+	set("nickname", HIC "鬼斧神工匠" NOR);
+	set("shen_type", 0);
+
+	set("str", 10000);		// 防止接收的東西過多而導致丟失
+	set("int", 100);
+
+	set("gender", "男性");
+	set("age", 1450);
+	set("long",@LONG
+這就是號稱天下第二巧匠的建筑大師公輸班，不論是造什么樣子房屋，在他手下
+都不是問題。
+LONG
+);
+	set("attitude", "friendly");
+	set("inquiry", ([
+		"造房"	: (: ask_me :),
+		"賣房"	: (: ask_me :),
+		"建房"	: (: ask_me :),
+		"房子"	: (: ask_me :),
+		"room"	: (: ask_me :),
+		"house"	: (: ask_me :),
+		"圖紙"	: (: ask_paper :),
+		"紙張"	: (: ask_paper :),
+		"紙"	: (: ask_paper :),
+		"paper"	: (: ask_paper :),
+		"拆屋"  : (: ask_demolish :),
+		"拆房"  : (: ask_demolish :),
+		"拆毀"  : (: ask_demolish :),
+		"重建"  : (: ask_rebuild :),
+		"再建"  : (: ask_rebuild :),
+		"鑰匙"	: (: ask_key :),
+		"鎖匙"	: (: ask_key :),
+		"鎖鑰"	: (: ask_key :),
+		"key"	: (: ask_key :),
+		"描述"	: (: ask_desc :),
+		"描寫"	: (: ask_desc :),
+		"desc"	: (: ask_desc :),
+		"規則"	: (: ask_desc :),
+		"修改"  : (: ask_modify :),
+		"修改信息": (: ask_modify :),
+		"繪畫"    : (: ask_drawing :),
+		"畫"      : (: ask_drawing :),
+		"繪畫技巧": (: ask_drawing :),
+		"drawing" : (: ask_drawing :),
+	]));
+	
+	set_skill("literate", 500);		// 讀書寫字
+	set_skill("drawing",  500);		// 繪畫技巧
+
+	setup();
+	carry_object("/clone/misc/cloth")->wear();
+}
+
+// 存盤函數
+int save()
+{
+	object *inv;
+	int i;
+
+	// 每次存盤前釋放所有物品
+	inv = all_inventory(this_object());
+	for(i=0; i<sizeof(inv); i++) destruct(inv[i]);
+
+	::save();
+}
+
+void init()
+{
+	object me;
+	
+	::init();
+
+	if (interactive(me = this_player()))
+	{
+		remove_call_out("greeting");
+		call_out("greeting", 1, me);
+	}
+
+	me->delete_temp("decide_withdraw");
+	me->delete_temp("demolish_room");
+
+	add_action("do_stop", "stop");
+	add_action("do_answer", "answer");
+	add_action("do_desc", "desc");
+	add_action("do_show", "show");
+	add_action("do_changename", "changename");
+	add_action("do_changeid",   "changeid");
+	add_action("do_changetype", "changetype");
+	add_action("do_changedesc", "changedesc");
+	add_action("do_finish", "finish");
+	add_action("do_finish", "ok");
+	add_action("do_withdraw", "withdraw");
+	add_action("do_withdraw", "chexiao");
+	add_action("decide_withdraw", "decide");
+	add_action("do_demolish", "demolish");
+
+	// 如果來的是有資格處理表單的巫師糾正加處理表單的命令
+	if (wizardp(me) && wiz_level(me) > WIZLEVEL)
+	{
+		add_action("do_list", "list");
+		add_action("do_type", "type");
+		add_action("do_agree", "agree");
+		add_action("do_reject", "reject");
+		add_action("do_delete", "delete");
+	}
+}
+
+// 存盤文檔
+string query_save_file()
+{
+	return "/data/npc/luban";
+}
+
+void greeting(object me)
+{
+	if (!objectp(me) || environment(me) != environment())
+	{
+		return;
+	}
+
+	// 對巫師提示的信息
+	if (wizardp(me) && wiz_level(me) > WIZLEVEL)
+	{
+		if (query("form") && sizeof(query("form")) >= 1)
+		{
+			message_vision("魯班對$N道，來的正好，我這里有些單子正要處理呢。\n", me);
+			tell_object(me, HIG "魯班告訴你：請用" HIW "list" HIG "察看，" +
+				        HIW "type" HIG "顯示詳細信息，" HIW "agree" HIG +
+					"注冊，" HIW "reject" HIG "拒絕，" HIW "delete" HIG "刪除表單。\n" NOR);
+		} else
+		{
+			message_vision("魯班對$N點點頭，道：公輸班正在授課，不及遠迎，失禮了！\n", me);
+		}
+		return ;
+	} else
+	if (query("form/" + me->query("id")))
+	{
+		// 該玩家提交了表單，根據表單的狀態返回提示信息
+		switch (query("form/" + me->query("id") + "/status")) {
+		case "申請" :
+			luban_say("巫師還沒有查閱你的申請，要向查看你提交的表單可以用show，如果想修改可以問我。\n");
+			break;
+
+		case "拒絕" :
+			luban_say("你的申請被拒絕了，你可以用show查看詳情，如果想修改可以問我。\n");
+			break;
+
+		case "同意" :
+			luban_say("你的申請已經被批准了，繳納現金即可建房，查看詳情請用show，如果想修改可以問我。\n");
+			break;
+		}
+	} else
+	// 對玩家提示的信息
+	if (me->query_temp("contract/luban"))
+	{
+		message_vision("魯班對$N笑道：這位" + RANK_D->query_respect(me) +
+			"，剛才怎么談著談著就走了？如是有意，咱們繼續談嘛。\n", me);
+	} else
+	switch(random(3)) {
+	case 0 :
+		message_vision("魯班對$N說道：這位" + RANK_D->query_respect(me) +
+			"，可是想建個房子？\n", me);
+		break;
+	case 1 :
+		message_vision("魯班對$N笑道：這位" + RANK_D->query_respect(me) +
+			"，行走江湖，若是沒有個落腳之處怎么行啊！\n", me);
+		break;
+	case 2 :
+		message_vision("魯班對$N一拱手，說道：這位" + RANK_D->query_respect(me) +
+			"，很久沒見啊，別來無恙？\n", me);
+		break;
+	}
+}
+
+// 認証學習
+int recognize_apprentice(object me)
+{
+	if (me->query_temp("mark/魯班"))
+	{
+		message_vision("魯班對$N說：好，你既然有心學，我就教你一點吧。\n", me);
+	}
+	me->set_temp("mark/魯班", 1);
+	return 1;
+}
+
+// 接受物品：圖紙
+int accept_object(object me, object ob)
+{
+	object build;		// 建房的地點
+
+	if (ob->query("id") == "key" && ob->query("item_make"))
+	{
+		// 如果接收的是鑰匙，就收下
+		message_vision("魯班點點頭，收下了" + ob->query("name") + "。\n", me);
+		return 1;
+	}
+
+	if (ob->query("圖紙"))
+	{
+		if (mapp(me->query("private_room")))
+		{
+			message_vision("魯班呵呵笑道：莫非你有一處住房還是不夠？\n", me);
+			return 0;
+		}
+		// 這是為了防止出現不正確的build_room的標記
+		me->delete("private_room");
+
+		if (query("form/" + me->query("id")))
+		{
+			message_vision("魯班笑道：慌甚！你不是已經提交了申請么？可以用show察看申請。\n", me);
+			return 0;
+		}
+		if (me->query_temp("contract/luban"))
+		{
+			message_vision("魯班疑惑的對$N說道：干什么？剛才不是給過我了么？若是有什么想法，可以改日再談(stop)。\n", me);
+			return 0;
+		}
+
+		if (! ob->query("draw"))
+		{
+			message_vision("魯班看了一下，對$N說道：你給我一張白紙干什么？你要是不會就和我學學繪畫技巧(drawing)吧。\n", me);
+			return 0;
+		}
+		if ( ob->query("draw") < 30)
+		{
+			message_vision("魯班接過圖紙，看了半天，問$N道：你這畫的是什么東西？你要是不會跟我學學繪畫技巧(drawing)。\n", me);
+			return 0;
+		}
+		if ( ob->query("draw") < 80)
+		{
+			message_vision("魯班接過圖紙看了看，對$N笑道：畫的還行，馬馬虎虎吧。\n", me);			
+		} else
+		{
+			message_vision("魯班看了看$N給的圖紙圖紙，喝彩道：神了，真是有天賦啊！\n", me);
+		}
+
+		build = get_object(ob->query("position"));
+		if (! objectp(build))
+		{
+			message_vision("魯班仔細看了看，嘆了口氣說道：那個地方現在好像已經不存在了...\n", me);
+			return 0;
+		}
+
+		if (! build->query("recordable_room"))
+		{
+			message_vision("魯班仔細看了看，不禁皺了皺眉，對$N說道：那個地方好像不能建房吧...\n", me);
+			return 0;
+		}
+
+		me->set_temp("contract/luban/position", ob->query("position"));
+		quest_user(me);
+		return 1;
+	}
+
+	// 看看是否填寫了表單
+	if (ob->query("money_id") && mapp(query("form/" + me->query("id"))))
+	{
+		if (query("form/" + me->query("id") + "/status") != "同意")
+		{
+			message_vision("魯班搖搖頭，對$N道：巫師還沒有批准你的申請，你先請回吧。\n", me);
+			return 0;
+		}
+		if (ob->value() < query("form/" +me->query("id") + "/value"))
+		{
+			message_vision("魯班接過錢掂了掂，對$N呵呵笑道：這錢似乎不夠吧？\n", me);
+			return 0;
+		}
+		create_room(me);
+		return 1;
+	}
+
+	// 看看是否夠定金
+	if (ob->query("money_id"))
+	{		
+		if (me->query_temp("contract/luban/questing") != "quest_desc")
+		{
+			message_vision("魯班微微一笑，對$N道：干什么這么客氣？我不收無功之祿。\n", me);
+			return 0;
+		}
+		if (ob->value() < 50000)
+		{
+			message_vision("魯班嘿然冷笑，對$N道：五兩黃金你都吝惜？哼哼，就算是天神親臨，我也不打折扣。\n", me);
+			return 0;
+		}
+		message_vision("魯班滿意的對$N說道：很好，我就給你記錄在案，若是有了消息，一定通知你。\n", me);
+		record_contract(me);
+		me->delete_temp("contract");
+		return 1;
+	}
+	message_vision("魯班擺擺手，對$N道：你還是自己留著吧，我可用不著。\n", me);
+	return 0;
+}
+
+// 回答有關建房的信息
+int ask_me()
+{
+	object me;
+	me = this_player();
+
+	if (mapp(me->query("private_room")))
+	{
+		message_vision("魯班點點頭，對$N說道：怎么樣，住得可滿意？若是不滿意，可以找我重建哦。\n", me);
+		return 1;
+	}
+	message_vision("魯班微一嘆氣，說道：想江湖兒女，一劍縱橫，快意恩仇，馳騁天下，若是沒有個落腳之處，\n" +
+		       "怎生得了？或隱身于鬧市，或遁跡于險川，你若有意，何不畫張圖紙給我，若是地點合適，你\n" +
+		       "且挑個滿意的樣式，我給你建個住房。今生今世，不再懼那風雨。\n", me);
+	return 1;
+}
+
+// 回答有關圖紙的信息
+int ask_paper()
+{
+	object	me;
+	object	ob;
+
+	me = this_player();
+
+	if (is_busy())
+	{
+		write("魯班正忙著呢，沒功夫理你...\n");
+		return 1;
+	}
+
+	message_vision("魯班點點頭，對$N說道：很好，你拿這份圖紙，到了想要建房的地點，畫下來拿回給我看看。\n", me);
+	ob = new("/d/room/obj/paper");
+	if (objectp(ob))
+	{
+		message_vision("魯班翻了翻，找到一張圖紙，遞給了$N。\n", me);
+		ob->move(me);
+	} else
+	{
+		message_vision("魯班翻了半天也沒找到，不禁一呆，說道：怎么回事，沒有了？你去找巫師問問吧！\n", me);
+	}
+
+	start_busy(4);
+	return 1;
+}
+
+// 回答有關繪畫技巧的信息
+int ask_drawing()
+{
+	int	skl;
+	object	me;
+
+	me =this_player();
+	skl = me->query_skill("drawing", 1);
+
+	message_vision("魯班對$N說道：要想畫張好點的圖紙，不會點繪畫技巧是不行的，沒有人天生就會" +
+		       "作畫，都得學習，你若有意，不妨和我學學。", me);
+	if (skl < 30)
+	{
+		message_vision("你現在的繪畫技巧可太差了。\n", me);
+	} else
+	if (skl < 80)
+	{
+		message_vision("你現在的繪畫技巧也算是馬馬虎虎了。\n", me);
+	} else
+	{
+		message_vision("當然了，你現在的水平是相當不錯了。\n", me);
+	}
+	return 1;
+}
+
+// 打聽拆屋的消息
+int ask_demolish()
+{
+	object me;
+
+	me = this_player();
+	if (me->query_temp("contract/luban"))
+	{
+		message_vision("魯班對$N說：你不是要建房么，怎么還沒建好就要拆房了？真是未雨綢繆啊！\n", me);
+		return 1;
+	}
+	if (query("form/" + me->query("id")))
+	{
+		message_vision("魯班哼了一聲，對$N道：你的房子還沒見到渣呢！你要是不想建了，就撤消(withdraw)申請算了。\n", me);
+		return 1;
+	}
+	if (! mapp(me->query("private_room")))
+	{
+		message_vision("魯班哈哈大笑，對$N道：拆屋？你還沒有呢，拆什么拆！亂拆別人的屋子可是犯法的！\n", me);
+		return 1;
+	}	
+	if (me->query_temp("demolish_room"))
+	{
+		message_vision("魯班對$N說：你要是真的想拆屋，就請下決心(demolish)！\n", me);
+		return 1;
+	}
+	message_vision("魯班睜大了眼睛，奇怪的看著$N，過了良久才說：你若是真到要拆屋，就下決心吧(demolish)！\n", me);
+	me->set_temp("demolish_room", 1);
+	return 1;
+}
+
+// 打聽重建的消息
+int ask_rebuild()
+{
+	object me;
+
+	me = this_player();
+	if (! mapp(me->query("private_room")))
+	{
+		message_vision("魯班搖搖頭，對$N說：你還沒有房子呢，談什么重建！\n", me);
+		return 1;
+	}	
+	message_vision("魯班嘆了口氣，對$N說：你若是要重建，得先拆房！\n", me);
+	return 1;
+}
+
+// 重新配置鑰匙
+int ask_key()
+{
+	object me;
+
+	me = this_player();
+
+	if (is_busy())
+	{
+		write("魯班正忙著呢，沒空理你...\n");
+		return 1;
+	}
+
+	if (! mapp(me->query("private_room")))
+	{
+		message_vision("魯班看了半天，才對$N說：沒有房子你要鑰匙干什么？\n", me);
+		return 1;
+	}
+
+	clone_object("/data/room/" + me->query("id") + "/key")->move(me);
+	message_vision("魯班拿出一把鑰匙，對$N說：諾，這是鑰匙，收好了！\n", me);
+	start_busy(4);
+	return 1;
+}
+
+// 打聽描述規則信息
+int ask_desc()
+{
+	luban_say(@INFORMATION
+描述信息可以使用顏色，并且可以分行，但是最多不能超過160個漢字：
+
+顏色的規則：
+$BLK$ - 黑色		$NOR$ - 恢復正常顏色
+$RED$ - 紅色		$HIR$ - 亮紅色
+$GRN$ - 綠色		$HIG$ - 亮綠色
+$YEL$ - 土黃色		$HIY$ - 黃色
+$BLU$ - 深藍色		$HIB$ - 藍色
+$MAG$ - 淺紫色		$HIM$ - 粉紅色
+$CYN$ - 藍綠色		$HIC$ - 天青色
+$WHT$ - 淺灰色		$HIW$ - 白色
+
+換行：
+只要在描述信息中添加一個\n就可以。比如：“這是一間小院。\n院子邊上的牆很矮。”
+實際看到的描述使這個樣子的：
+這是一間小院。
+院子邊上的牆很矮。
+
+說明：
+系統自動會在描述字符串的尾端加一個 $NOR$ 和 \n。因此描述最好不要以\n結束，以免
+空行太多。另外，系統會自動的規范你輸入的描述信息，因此你不需要在描述信息前面添
+加段落起始的空格，同時也不需要在一個段落內部插入\n以實現換行，對于過長的段落系
+統會自動的添加換行符。
+
+
+INFORMATION );
+	return 1;
+}
+
+// 打聽修改的消息
+int ask_modify()
+{
+	object me;
+
+	me = this_player();
+	if (! submit_form(me->query("id")) && me->query_temp("contract/luban/questing") != "quest_desc")
+	{
+		message_vision("魯班搖搖頭，對$N說：你只有描述時或是提交了申請以后才用得著修改。\n", me);
+		return 1;
+	}
+
+	message_vision("魯班點點頭，對$N說：你可以修改你提交的申請中的各種信息：\n" +
+		"\n你可以通過以下指令修改房屋的各種信息：\n" +
+		HIW "changename " NOR "name : 修改房屋的中文名字。\n" +
+		HIW "changeid   " NOR "id   : 修改房屋的英文代號。\n" +
+		HIW "changetype " NOR "type : 修改房屋的類型。\n" +
+		HIW "changedesc " NOR "room desc : 修改某間房屋的描述。\n", me);
+	return 1;
+}
+
+// 輸出魯班說話時的表情
+void luban_say(string msg)
+{
+	object me;
+	me = this_player();
+	message("vision", "魯班對" + me->query("name") + "嘀嘀咕咕說了些話。\n", environment(me), ({ me }));
+	write("魯班說道：" + msg);
+}
+
+// 輸出用戶說話時的表情
+void user_say()
+{
+	object me;
+	message("vision", me->query("name") + "對魯班嘀嘀咕咕說了些話。\n", environment(me), ({ me }));
+}
+
+// 用戶中止商談
+int do_stop()
+{
+	object me;
+	me = this_player();
+	if (! me->query_temp("contract/luban"))
+	{
+		message_vision("魯班一臉傻樣......\n", me);
+		return 1;
+	}
+	me->delete_temp("contract/luban");
+	message_vision("魯班對$N點點頭，說道：既然如此，改日再談也不妨。\n", me);
+	return 1;
+}
+
+// 用戶回答問題
+// 根據當前狀態做出相應的反應
+int do_answer(string arg)
+{
+	object me;
+	string questing;
+
+	me = this_player();
+	questing = me->query_temp("contract/luban/questing");
+
+	// 判斷現在是否正在商談
+	if (! questing)
+		return 0;
+
+	switch (questing) {
+	// 商談房屋名字
+	case "quest_name" :
+	check_name(me, arg);
+	break;
+
+	case "quest_id" :
+	check_id(me, arg);
+	break;
+
+        case "quest_type" :
+	check_type(me, arg);
+	break;
+
+	default:
+	write("沒人問你問題，你想回答什么？\n");
+	}
+	return 1;
+}
+
+// 記錄用戶輸入的描述信息
+int do_desc(string arg)
+{
+	object me;
+	string room_name;
+	string desc;
+
+	me = this_player();
+
+	if (me->query_temp("contract/luban/questing") != "quest_desc")
+		return 0;
+
+	if (arg)
+	{
+		if (sscanf(arg, "%s %s", room_name, desc) != 2)
+		{
+			room_name = arg;
+			desc = 0;
+		}
+	}
+	else
+	{
+		show_desc(me->query("id"), 0);
+		return 1;
+	}
+
+	record_desc(me, room_name, desc);
+	return 1;
+}
+
+// 顯示用戶自己輸入的描述信息
+int do_show(string arg)
+{
+	show_desc(this_player()->query("id"), arg);
+	return 1;
+}
+
+// 改變房屋名字
+// 分兩種狀態處理：商談中或是申請中
+int do_changename(string arg)
+{
+	object me;
+	string player_id;
+	string position;
+
+	me = this_player();
+	player_id = me->query("id");
+
+	if (submit_form(player_id))
+	{
+		// 正在申請
+		position = query_form(player_id, "position");
+		if (! check_legal_name(arg, position)) return 1;
+
+		luban_say("好吧，就改成" + arg + "這個名字吧！\n");
+		set_form(player_id, "name", arg);
+		set_form(player_id, "status", "申請");
+		save();
+		return 1;
+	} else
+	if (me->query_temp("contract/luban/questing") != "quest_desc")
+		return 0;
+
+	// 正在商談
+	if (check_legal_name(arg, me->query_temp("contract/luban/position")))
+	{
+		me->set_temp("contract/luban/name", arg);
+		luban_say("好吧，就改成" + arg + "這個名字吧！\n");
+	}
+	return 1;
+}
+
+// 改變房屋代號
+// 分兩種狀態處理：商談中或是申請中
+int do_changeid(string arg)
+{
+	object me;
+	string player_id;
+	string position;
+
+	me = this_player();
+	player_id = me->query("id");
+
+	if (submit_form(player_id))
+	{
+		// 正在申請
+		if (! check_legal_id(arg)) return 1;
+		luban_say("行啊，就改成" + arg + "這個房屋代號吧！\n");
+		set_form(player_id, "id", arg);
+		set_form(player_id, "status", "申請");
+		save();
+		return 1;
+	} else
+	if (me->query_temp("contract/luban/questing") != "quest_desc")
+		return 0;
+
+	// 正在商談
+	if (check_legal_id(arg))
+	{
+		me->set_temp("contract/luban/id", arg);
+		luban_say("行啊，就改成" + arg + "這個房屋代號吧！\n");
+	}
+	return 1;
+}
+
+// 改變房屋類型
+// 分兩種狀態處理：商談中或是申請中
+int do_changetype(string arg)
+{
+	object me;
+	int value;
+	string player_id;
+	string position;
+	mapping example;
+
+	me = this_player();
+	player_id = me->query("id");
+
+	if (submit_form(player_id))
+	{
+		// 正在申請
+		if (! (example = check_legal_type(arg)))
+		{
+			write("找不到這種類型的房屋，所以沒有改變房屋的類型。\n");
+			return 1;
+		}
+		set_form(player_id, "room", example["name"]);
+		value = example["value"];
+		if (wizardp(me)) value = 0;
+		set_form(player_id, "value", value);
+		set_form(player_id, "descs", ([ ]));
+		set_form(player_id, "status", "申請");
+		save();
+		luban_say("換一種房型也行，不過請你填寫新的描述(changedesc)。\n");
+		return 1;
+	} else
+	if (me->query_temp("contract/luban/questing") != "quest_desc")
+		return 0;
+
+	// 正在商談
+	if (! check_type(me, arg))
+	{
+		write("沒有改變房屋類型。\n");
+	}
+	return 1;
+}
+
+// 改變房屋名字
+// 分兩種狀態處理：商談中或是申請中
+int do_changedesc(string arg)
+{
+	object me;
+	string player_id;
+	mapping example;
+	string room_name;
+	string room_desc;
+
+	me = this_player();
+	player_id = me->query("id");
+
+	if (submit_form(player_id))
+	{
+		// 正在申請
+		if (! arg || arg == "")
+			return notify_fail("請按照正確格式輸入：changedesc room_name description\n");
+
+		if (sscanf(arg, "%s %s", room_name, room_desc) != 2)
+		{
+			room_name = arg;
+			room_desc = 0;
+		}
+
+		// 修改描述信息
+		modify_desc_in_form(player_id, room_name, room_desc);
+		set_form(player_id, "status", "申請");
+		save();
+		return 1;
+	} else
+	if (me->query_temp("contract/luban/questing") != "quest_desc")
+		return 0;
+
+	// 正在商談
+	do_desc(arg);
+	return 1;
+}
+
+// 結束輸入
+int do_finish()
+{
+	object me;
+	int value;
+	string msg;
+
+	me = this_player();
+	if (me->query_temp("contract/luban/questing") != "quest_desc")
+		return 0;
+
+	show_desc(me->query("id"), 0);
+
+	msg = "金臨撥拉撥拉算盤，慢條斯理的對$N說道：要造這樣的房子，少說也得" + chinese_number(value/10000) + "兩黃金，不二價！\n";
+	if (wizardp(me))
+	{
+		msg += "魯班對金臨喝道：不得無理！此乃上屆仙人...嘿嘿，到時意思意思就算了吧。\n";
+	}
+	msg += "魯班略一沉吟，然后說道：你看看有沒有什么問題么？若是沒有，請先交五兩黃金的定金。\n";
+	message_vision(msg, me);
+
+	return 1;
+}
+
+// 撤消表單
+int do_withdraw()
+{
+	object me;
+
+	me = this_player();
+	if ( me->query_temp("contract/luban"))
+	{
+		do_stop();
+		return 1;
+	}
+	if (! query("form/" + me->query("id")))
+	{
+		message_vision("魯班一臉茫然......對$N說道：現在你好像沒有提交的申請吧！\n", me);
+		return 1;
+	}
+
+	if (me->query_temp("decide_withdraw"))
+	{
+		message_vision("魯班對$N說道：你若是要撤消申請，就請下決定(decide)！\n", me);
+		return 1;
+	}
+
+	switch (query("form/" + me->query("id") + "/status")) {
+	case "申請":
+	luban_say("可惜，你怎么這就反悔了？\n");
+	break;
+
+	case "同意":
+	luban_say("哎呀！真是可惜，巫師都同意了，你怎么打退堂鼓了？\n");
+	break;
+
+	case "拒絕":
+	luban_say("唉！沒能被批准也別就打退堂鼓么，看看怎么回事再說么。\n");
+	break;
+	}
+	message_vision("魯班嘆了口氣，對$N說道：既然如此，此事也不必勉強，如果你想好了，就下決定(decide)吧！\n", me);
+	me->set_temp("decide_withdraw", 1);
+	return 1;
+}
+
+// 刪除表單
+int decide_withdraw()
+{
+	object me;
+
+	me = this_player();
+	if (! me->query_temp("decide_withdraw")) return 0;
+	
+	me->delete_temp("decide_withdraw");
+	delete("form/" + me->query("id"));
+	save();
+	message_vision("魯班搖搖頭，掏出一個賬本，翻了翻，不知道划掉了什么東西。\n", me);
+	return 1;
+}
+
+// 拆毀房屋
+// 必須先詢問魯班有關拆房的信息
+int do_demolish()
+{
+	mapping example;
+	string *names;
+
+	object me;
+	object ob;
+
+	int i;
+
+	me = this_player();
+
+	if (! me->query_temp("demolish_room"))
+		return 0;
+
+	me->delete_temp("demolish_room");
+	if (! me->query("private_room")) return 0;
+	if (! mapp(me->query("private_room")))
+	{
+		write("錯誤的數據已經被刪除！\n");
+		me->delete("private_room");
+		return 1;
+	}
+
+	// 刪除用戶創建的所有文件
+	// 保留鑰匙文件，因為鑰匙有可能留在某些玩家手里
+	example = check_legal_type(me->query("private_room/type"));
+	if (mapp(example))
+	{
+		seteuid(getuid());
+		names = keys(example["files"]);
+		// 刪除文件
+		for (i = 0; i < sizeof(names); i++)
+			rm(to_player(me->query("id"), example["files"][names[i]]));
+	}
+
+	ob = get_object(me->query("private_room/position"));
+	if (! objectp(ob))
+	{
+		write("建房的地點已經找不到了！刪除了有關房屋的信息。\n");
+		me->delete("private_room");
+		return 1;
+	}
+	ob->demolish_room(me->query("private_room/name"));
+	ob->save();
+	me->delete("private_room");
+	message_vision("魯班點點頭，對$N說：好了，剩下的事情我會辦妥的！把鑰匙給我，然后你就可以走了。\n", me);
+	return 1;
+}
+
+// 顯示用戶輸入的描述信息
+// 如果用戶正在商談，就顯示用戶剛輸入的描述信息，如果用戶在等待審批，則顯示用戶
+// 以前輸入的描述信息
+// 獲得一個player對房屋的描述
+// room_name是用戶指定的房屋中的某一間的short描述
+void show_desc(string player_id, string room_name)
+{
+	mapping filesp;		// 原型房屋描述的文件mapping
+	mapping descsp;		// 玩家的描述mapping
+
+	int i;
+	int value;		// 房屋造價
+	int count;		// 顯示的描述信息的數目
+	object me;		// 調用該函數的對象
+	object player;		// 被顯示的player的object
+	object ob;		// 被描述的房屋的object或是建房場景的object
+
+	string desc;		// 房屋描述的mapping
+	string *names;		// 房屋mapping的關鍵字的字符串表
+	string room_nameid;	// 房屋名字及ID
+	string room_type;	// 房屋類型
+	string position;	// 建房的位置
+
+	string ids;		// 查詢時使用
+
+	string info;		// 最后給出的提示信息
+	string msg;		// 臨時變量，用于顯示信息
+
+	me = this_player();
+	info = "";
+
+	if (mapp(query("form/" + player_id)))
+	{
+		// 在表單中有該玩家提交的表單
+		ids = "form/" + player_id + "/";
+		room_type = query(ids + "type");
+		for (i = 0; i < sizeof(room_example); i++)
+		{
+			if (room_example[i]["type"] == room_type)
+			{
+				filesp = room_example[i]["files"];
+				break;
+			}
+		}
+		if (! mapp(filesp))
+		{
+			write("你申請的房屋類型(" + room_type + ")已經不存在了，請和巫師聯系。\n");
+			return;
+		}
+		descsp = query(ids + "descs");
+		room_type = query(ids + "room") + "(" + room_type + ")";
+		room_nameid = query(ids + "name") + "(" + query(ids + "id") + ")";
+		value = query(ids + "value");
+		position = query(ids + "position");
+		// 提示信息中給出該房屋的申請結果
+		msg = query(ids + "wizard");
+		switch (query(ids + "status")) {
+		case "申請" :
+			info = "巫師還沒有查閱這份申請。";
+			break;
+
+		case "拒絕" :
+			info = msg + "已經拒絕了這份申請！";
+			if (query(ids + "memo") != "無")
+				info += "\n原因是：" + query(ids + "memo");
+			break;
+
+		case "同意" :
+			info = msg + "已經同意了這份申請！";
+			break;
+		}
+
+		if (this_player()->query("id") == player_id)
+		{
+			if (query(ids + "status") == "同意")
+			{
+				info += HIW "\n你現在可以建造房屋了。如果這時修改了房屋的信息，就要得到巫師的再次批准。" NOR;
+			} else
+			if (query(ids + "status") == "拒絕")
+			{
+				info += HIR "\n你現在最好修改房屋的信息以獲得巫師的批准，否則請撤消申請。" NOR;
+			}
+			info += "\n你可以撤消(withdraw)你提交的申請。";
+		}
+	} else
+	if (objectp(player = present(player_id, environment(this_object()))) &&
+	    player->query_temp("contract/luban/questing") == "quest_desc")
+	{
+		filesp = player->query_temp("contract/luban/room/files");
+		descsp = player->query_temp("contract/luban/descs");
+		room_type = player->query_temp("contract/luban/room/name");
+		room_type += "(" + player->query_temp("contract/luban/room/type") + ")";
+		room_nameid = player->query_temp("contract/luban/name") + "(" +
+			      player->query_temp("contract/luban/id") + ")";
+		value = player->query_temp("contract/luban/value");
+		position = player->query_temp("contract/luban/position");
+	} else
+	{
+		// 沒有商談
+		luban_say("呵呵，這位好像還沒有打算建房子吧。\n");
+		return;
+	}
+
+	ob = get_object(position);
+	if (! objectp(ob))
+	{
+		write("你申請的建造房屋的地方(" + position + ")已經不存在了，請和巫師聯系!\n");
+		return;
+	}
+	
+	msg = "好，你看看吧：\n" + "這里選用的是" + room_type + "這種類型的房屋。\n" +
+		  "它的名字是" + room_nameid + "，將建筑在" + ob->query("short");
+	if (wizardp(me) && wiz_level(me) > WIZLEVEL)
+		msg += "(" + position + ")";
+	msg += "。\n";
+	luban_say(msg);
+
+	names = keys(filesp);
+	count = 0;
+	for (i = 0; i < sizeof(filesp); i++)
+	{
+		// 查找該房屋的object
+		ob = get_object(filesp[names[i]]);
+		if (! objectp(ob))
+		{
+			write("找不到示例的房屋" + names[i] + "，請和巫師聯系。\n");
+			continue;
+		}
+		if (! room_name || room_name == "" ||
+		    ob->query("short") == room_name || names[i] == room_name)
+		{
+			// 查找用戶輸入的描述信息
+			desc = sort_desc(descsp[names[i]]);
+			write(YEL "-------------------------------------------------------------------------------\n" NOR);
+			write(HIW + "關于" + ob->query("short") + "(" + names[i] + ")" + HIW + "的描述：\n" + NOR);
+			if (! desc)
+			{
+				// 用戶沒有輸入描述信息，顯示缺省信息
+				desc = "現在還沒有輸入描述信息，使用系統缺省的描述信息。如下：\n";
+				desc += sort_desc(ob->query("default_long"));
+			}
+			write(desc);
+			count++;
+		}
+	}
+
+	if (! count)
+	{
+		write("但是這里沒有" + room_name + "這個房間，請用show查看所有的房間！\n");
+		return ;
+	}
+
+	write(YEL "-------------------------------------------------------------------------------\n" NOR);
+	write("描述就是上面列出的這些內容。\n");
+
+	if (! value)
+		info += "\n建造這些房間不需要花費任何銀兩。";
+	else
+		info += "\n建造這些房間需要花費" HIY + chinese_number(value/10000) + "兩黃金。" NOR;
+
+	write(info + "\n");
+
+	return ;
+}
+
+// 詢問玩家必要的建房信息，然后記錄，留給巫師審批
+int quest_user(object me)
+{
+	message_vision("魯班對$N說道：好，來，咱們仔細談談！\n", me);
+	// 詢問房屋名稱
+	luban_say("先告訴我你想建的房子叫什么名字(answer name)。\n你若是不想談了(stop)，告訴我也無妨。\n");
+	me->set_temp("contract/luban/questing","quest_name");
+	return 1;
+}
+
+// 詢問描述信息
+int quest_info(object me)
+{
+	message_vision("魯班對$N說道：好，看來你喜歡" + me->query_temp("contract/luban/room/name") +
+                        "這種樣式的。\n", me);
+	// 顯示房屋樣式信息
+	
+	luban_say(@INFORMATION
+你可以為你的房間添加你喜歡的描述，格式是：desc 房間名稱 描述。當
+然你也可以使用原有的描述，如果你想看看你輸入的情況，可以用show來察看。若一
+切都輸入好了以后鍵入finish或是ok就可以了。如果想修改輸入的房屋名字，代號，
+類型的信息可以向我詢問<修改>的方法。
+
+舉個描述的例子：“desc 小院 這里是一間別致的小院。”這樣就給小院添加了一行
+描述。如果想取消小院的描述可以鍵入：“desc 小院”就可以了。
+
+描述還可以使用顏色，可以多行，具體細節可以問我 <規則>。這里要需要注意的是：
+系統自動會在描述字符串的尾端加一個 $NOR$ 和 \n。因此描述不要以\n結束，以免
+空行太多。另外，系統會自動的規范你輸入的描述信息，因此你不需要在描述信息前
+面添加段落起始的空格，同時也不需要在一個段落內部插入\n以實現換行，對于過長
+的段落系統會自動的添加換行符。
+
+另外，在描述的字符串內部不要輸入空格，跳格，這些輸入都會被抹掉。
+INFORMATION );
+
+	me->set_temp("contract/luban/questing","quest_desc");
+
+	// 清除描述信息
+	me->delete_temp("contract/luban/descs");
+	me->set_temp("contract/luban/descs", ([ ]));
+	return 1;
+}
+
+// 判斷用戶輸入的房屋名字
+int check_name(object me, string arg)
+{
+	if (! arg || arg == "")
+	{
+		luban_say("你怎么不說話？要是不想談了(stop)，明說就是！\n");
+		return 0;
+	}
+	if (arg == "stop")
+	{
+		do_stop();
+		return 0;
+	}
+	if (! check_legal_name(arg, me->query_temp("contract/luban/position"))) return 0;
+
+	// 記錄商談好的房屋名字
+	me->set_temp("contract/luban/name", arg);
+
+	luban_say("請確定你的房屋的代號(3到10個英文字母)，考慮好了就回答我(answer id)。\n");
+	me->set_temp("contract/luban/questing", "quest_id");
+	return 1;
+}
+
+// 判斷用戶輸入的房屋代號
+int check_id(object me, string arg)
+{
+	if (! arg || arg == "")
+	{
+		luban_say("你怎么不說話？要是不想談了(stop)，明說就是！\n");
+		return 0;
+	}
+	if (arg == "stop")
+	{
+		do_stop();
+		return 0;
+	}
+	if (! check_legal_id(arg)) return 0;
+
+	// 記錄商談好的房屋代號
+	me->set_temp("contract/luban/id", arg);
+
+	luban_say("你想要哪種樣式的住房(answer type)? 若是不太清楚，你可以到附近的小院一觀。\n");
+	me->set_temp("contract/luban/questing","quest_type");	
+	return 1;
+}
+
+// 判斷用戶輸入的房屋類型
+int check_type(object me, string arg)
+{
+	mapping *example;
+	int value;
+
+	if (! arg || arg == "")
+	{
+		luban_say("你想要哪種樣式的住房(answer type)？若是不太清楚，你可以到附近的小院一觀。\n");
+		return 0;
+	}
+	if (arg == "stop")
+	{
+		do_stop();
+		return 0;
+	}
+	if (! (example = check_legal_type(arg)))
+	{
+		luban_say("你要的樣式真稀奇，我這現在還沒有。看清楚了再告訴我。\n");
+		return 0;
+	}
+	// 記錄用戶選定的房屋類型
+	me->set_temp("contract/luban/room", example);
+
+	// 計算房屋的價值 - 房屋數 * 2000 gold
+	value = me->query_temp("contract/luban/room/value");
+	if (wizardp(me)) value = 0;
+	me->set_temp("contract/luban/value", value);
+
+	quest_info(me);
+	return 1;
+}
+
+// 判斷用戶輸入的房屋名是否合法
+// 同時判斷該處是否已經有住房
+// Copy & modify from /adm/daemons/logind.c
+int check_legal_name(string name, string position)
+{
+	object ob;
+	int i;
+
+	i = strlen(name);
+	
+	if( (strlen(name) < 2) || (strlen(name) > 8 ) ) {  /* chars, was GBK bytes */
+		write("對不起，你房屋的名字必須是 2 到 8 個中文字。\n");
+		return 0;
+	}
+	while(i--)
+	{
+		if( name[i] <= ' ' )
+		{
+			write("對不起，你的房屋名字不能用控制字元。\n");
+			return 0;
+		}
+		if( ! is_chinese(name[i..<0]) )  /* every char; was GBK lead-byte stride */
+		{
+			write("對不起，請您用「中文」取名字。\n");
+			return 0;
+		}
+	}
+
+	ob = get_object(position);
+	if (! objectp(ob)) return 1;
+
+	if (ob->exist_room(name))
+	{
+		luban_say("對不起，據我所知，那里已經有一個住房叫這個名字了！請另外起一個名字。\n");
+		return 0;
+	}
+
+	return 1;
+}
+
+// 判斷用戶輸入的房屋代號是否合法
+int check_legal_id(string roomid)
+{
+	int i;
+
+	i = strlen(roomid);
+	
+	if( (strlen(roomid) < 3) || (strlen(roomid) > 10 ) ) {
+		write("對不起，你房屋的代號必須是 3 到 10 個英文字母。\n");
+		return 0;
+	}
+	while(i--)
+	{
+		if(((roomid[i] < 'A') || (roomid[i] > 'Z')) &&
+		   ((roomid[i] < 'a') || (roomid[i] > 'z')))
+		{
+			write("對不起，你房屋的代號必須用英文字母。\n");
+			return 0;
+		}
+	}
+	return 1;
+}
+
+// 判斷用戶輸入的房屋類型是否存在
+// 如果存在則返回那個房屋類型對應的mapping的指針
+mixed check_legal_type(string type)
+{
+	int i;
+	for (i = 0; i < sizeof(room_example); i++)
+	{
+		if (room_example[i]["type"] == type ||
+		    room_example[i]["name"] == type )
+		return room_example[i];
+	}
+	return;
+}
+
+// 獲得一個房屋對象
+object get_object(string file_name)
+{
+	object ob;
+
+	if (! file_name || file_name == "")
+		return 0;
+
+	if (! (ob = find_object(file_name)))
+		ob = load_object(file_name);
+
+	return ob;
+}
+
+// 記錄用戶描述某一間房間的信息
+int record_desc(object me, string room_name, string desc)
+{
+	mapping filesp;
+	mapping descsp;
+
+	int i;
+	object ob;
+	string *names;
+
+	if (! (desc = obey_description(desc))) return 0;
+
+	filesp = me->query_temp("contract/luban/room/files");
+	descsp = me->query_temp("contract/luban/descs");
+
+	names = keys(filesp);
+	for (i = 0; i < sizeof(names); i++)
+	{
+		// 查找該房屋的object
+		ob = get_object(filesp[names[i]]);
+		if (ob->query("short") == room_name || names[i] == room_name)
+		{
+			// 查找用戶輸入的描述信息
+			if (! desc || desc =="")
+			{
+				write("你沒有輸入描述" + room_name + "的信息，將使用系統缺省的描述信息。\n");
+				write("缺省的描述信息如下：\n" + sort_desc(ob->query("default_long")));
+				map_delete(descsp, names[i]);
+			} else
+			{
+				descsp[names[i]] = desc;
+				write("你描述了" + ob->query("short") + "。\n");
+			}
+			return 1;
+		}
+	}
+	write("沒有找到" + room_name + "，請查証再輸入描述信息。\n");
+	return 0;
+}
+
+// 保存用戶輸入的建房信息
+void record_contract(object me)
+{
+	string id;
+	mapping descp;
+
+	id = me->query("id");
+	if (! mapp(query("form"))) delete("form");
+
+	set_form(id, "player", me->query("name"));
+	set_form(id, "name", me->query_temp("contract/luban/name"));
+	set_form(id, "id", me->query_temp("contract/luban/id"));
+	set_form(id, "room", me->query_temp("contract/luban/room/name"));
+	set_form(id, "type", me->query_temp("contract/luban/room/type"));
+	set_form(id, "position", me->query_temp("contract/luban/position"));
+	set_form(id, "value", me->query_temp("contract/luban/value"));
+	set_form(id, "time", time());
+	set_form(id, "status", "申請");
+	set_form(id, "wizard", "無");
+	set_form(id, "memo", "無");
+
+	descp = me->query_temp("contract/luban/descs");
+
+	set_form(id, "descs", descp);
+	save();
+}
+
+// 改變玩家描述某一間房間的信息
+// 修改的數據是存放在form中的
+int modify_desc_in_form(string player_id, string room_name, string desc)
+{
+	mapping example;
+	mapping filesp;
+	mapping descsp;
+
+	int i;
+	object ob;
+	string *names;
+
+	if (! (desc = obey_description(desc))) return 0;
+
+	if (! (example = check_legal_type(query_form(player_id, "type"))))
+	{
+		write("這種房屋的類型已經不存在了，所以沒有改變房屋的描述，請和巫師聯系。\n");
+		return 1;
+	}
+
+	filesp = example["files"];
+	descsp = query_form(player_id, "descs");
+	names = keys(filesp);
+
+	for (i = 0; i < sizeof(names); i++)
+	{
+		// 查找該房屋的object
+		ob = get_object(filesp[names[i]]);
+		if (ob->query("short") == room_name || names[i] == room_name)
+		{
+			// 查找用戶輸入的描述信息
+			if (! desc || desc =="")
+			{
+				write("你沒有輸入描述" + room_name + "的信息，將使用系統缺省的描述信息。\n");
+				write("缺省的描述信息如下：\n" + sort_desc(ob->query("default_long")));
+				map_delete(descsp, names[i]);
+			} else
+			{
+				descsp[names[i]] = desc;
+				write("你重新描述了" + ob->query("short") + "。\n");
+			}
+			return 1;
+		}		
+	}
+	write("沒有找到" + room_name + "，所以沒有修改描述信息。請查証再修改描述信息。\n");
+	return 0;
+}
+
+// 講一個描述的字符串正規化
+string obey_description(string desc)
+{
+	if (strlen(desc) > 330)
+	{
+		luban_say("你的描述也太長了吧...\n");
+		return 0;
+	}
+
+	if (! desc || desc == "") return "";
+
+	desc = replace_string(desc, "\"", "'");
+	desc = replace_string(desc, "\\n", "\n");
+	desc = replace_string(desc, "\t", "");
+	desc = replace_string(desc, " ", "");
+
+	desc = replace_string(desc, "$BLK$", BLK);
+	desc = replace_string(desc, "$RED$", RED);
+	desc = replace_string(desc, "$GRN$", GRN);
+	desc = replace_string(desc, "$YEL$", YEL);
+	desc = replace_string(desc, "$BLU$", BLU);
+	desc = replace_string(desc, "$MAG$", MAG);
+	desc = replace_string(desc, "$CYN$", CYN);
+	desc = replace_string(desc, "$WHT$", WHT);
+	desc = replace_string(desc, "$HIR$", HIR);
+	desc = replace_string(desc, "$HIG$", HIG);
+	desc = replace_string(desc, "$HIY$", HIY);
+	desc = replace_string(desc, "$HIB$", HIB);
+	desc = replace_string(desc, "$HIM$", HIM);
+	desc = replace_string(desc, "$HIC$", HIC);
+	desc = replace_string(desc, "$HIW$", HIW);
+	desc = replace_string(desc, "$NOR$", NOR);
+
+	desc = desc + NOR;
+
+	return desc;
+}
+
+// 列出表單
+// 巫師使用
+int do_list(string arg)
+{
+	if (! exist_form()) return 1;
+
+	if (! arg || arg == "" || arg == "all" || arg == "全部" || arg == "所有")
+	{
+		show_apply();
+		show_agree();
+		show_reject();
+		show_old();
+		return 1;
+	}
+
+	switch (arg) {
+	case "apply":
+	case "申請":
+	case "new":
+		show_apply();
+		return 1;
+
+	case "agree":
+	case "同意":
+	case "批准":
+		show_agree();
+		return 1;
+
+	case "reject":
+	case "否決":
+	case "不批准":
+	case "沒批准":
+		show_reject();
+		return 1;
+
+	case "old":
+	case "舊":
+		show_old();
+		return 1;
+	}
+
+	write("list的使用說明：\nlist all   : 顯示所有的表單。\nlist apply : 顯示申請的表單。\n" +
+              "list agree : 顯示巫師已經批准的表單。\nlist reject : 顯示巫師已經否決的表單。\n" +
+	      "list old   : 顯示過期很久的表單。\n\n");
+	return 1;
+}
+
+// 顯示表單的詳細信息
+// 格式：type player_id room_name 顯示該player描述的某間房屋
+//   或：type player_id           顯示該player的所有描述
+// 此時如果由其他玩家正在輸入，也可以察看
+int do_type(string arg)
+{
+	string player_id;
+	string room_name;
+	int a;
+
+	if (! wizardp(this_player()) || wiz_level(this_player()) < WIZLEVEL)
+	{
+		write("你無權察看表單中的描述信息！\n");
+		return 1;
+	}
+	if (!arg||arg=="")
+		return notify_fail("type player_id room_name\n");
+	if (sscanf(arg, "%s %s", player_id, room_name) != 2)
+	{
+		player_id = arg;
+		room_name = "";
+	}
+
+	show_desc(player_id, room_name);
+	return 1;
+}
+
+// 顯示一個申請的簡要說明
+void show_brief(string player_id)
+{
+	mapping form;
+	string msg;
+	string wizard;
+	string memo;
+	int i;
+
+	form = query("form/" + player_id);
+	if (! form || ! mapp(form)) return;
+
+	// 申請者ID    申請者姓名  申請時間    房  型  狀態  注冊的巫師  備   注
+        // 10         .10        . 10        . 6      .4    .10         .16
+	msg = sprintf("%10s  %10s  %10s  %6s", player_id, form["player"], ctime(form["time"])[0..9], form["type"]);
+
+	// 現實表單的狀態
+	switch (form["status"]) {
+	case "申請" :
+		msg += HIW;
+		break;
+
+	case "同意" :
+		msg += HIY;
+		break;
+
+	case "拒絕" :
+		msg += HIR;
+		break;
+	}
+	msg += "  " + form["status"] + NOR + "  ";
+
+	wizard = form["wizard"];
+	memo = form["memo"];
+
+	if (! stringp(wizard) || wizard == "無" || wizard == "")
+		wizard = "----------";
+
+	if (! stringp(memo) || memo == "無" || memo == "")
+		memo = "------";
+
+	msg += sprintf("%10s  %s\n", wizard, memo);
+	write(msg);
+	return;
+}
+
+// 判斷表單是否存在，調用者是否有資格處理該表單
+int exist_form()
+{
+	if (! mapp(query("form")) || sizeof(query("form")) < 1)
+	{
+		write("現在并沒有任何表單。\n");
+		return 0;
+	}
+	if (! wizardp(this_player()) || wiz_level(this_player()) < WIZLEVEL)
+	{
+		write("你無權處理表單。\n");
+		return 0;
+	}
+	return 1;
+}
+
+// 批准表單
+// 巫師使用
+int do_agree(string arg)
+{
+	if (! exist_form()) return 1;
+
+	if (! arg || arg == "" || ! query("form/" + arg))
+		return notify_fail("你要操作誰的表單？\n");
+
+	
+	if (query("form/" + arg + "/status") == "同意")
+	{
+		write("已經有其他巫師批准此表單了。\n");
+		return 1;
+	}
+	set("form/" + arg + "/status", "同意");
+	set("form/" + arg + "/wizard", this_player()->query("name"));
+	set("form/" + arg + "/memo", "無");
+	write("你批准了" + query("form/" + arg + "/player") + "(" + arg + ")的申請。\n");
+	save();
+
+	return 1;
+}
+
+// 拒絕表單
+// 巫師使用
+int do_reject(string arg)
+{
+	string player;
+	string memo;
+
+	if (! exist_form()) return 1;
+
+	if (! arg || arg == "")
+		return notify_fail("你要操作誰的表單？\n");
+
+	if (sscanf(arg, "%s %s", player, memo) != 2)
+	{
+		player = arg;
+		memo = "無";
+	}
+
+	if (! query("form/" + player))
+		return notify_fail("你要操作誰的表單？\n");
+
+	if (memo == "無")
+	{
+		write("你可以添加備注信息(reject player 備注信息)，說明拒絕的理由。\n");
+	}
+
+	set("form/" + player + "/status", "拒絕");
+	set("form/" + player + "/wizard", this_player()->query("name"));
+	set("form/" + player + "/memo", memo);
+
+	write("你已經拒絕了" + query("form/" + player + "/player") + "(" + player + ")的申請。\n");
+	save();
+
+	return 1;
+}
+
+// 刪除表單
+// 巫師使用
+int do_delete(string arg)
+{
+	if (! exist_form()) return 1;
+
+	if (! arg || arg == "" || (! query("form/" + arg) && arg != "old"))
+		return notify_fail("你要操作誰的表單？\n");
+
+	if (query("form/" + arg + "/status") == "申請")
+	{
+		return notify_fail("你不能刪除一個申請后還沒有處理的表單。\n");
+	}
+
+	write("" + query("form/" + arg + "/player") + "(" + arg + ")提交的表單被刪除了。\n");
+	delete("form/" + arg);
+	save();
+
+	return 1;
+}
+
+// 顯示剛剛申請的表單
+void show_apply()
+{
+	show_brief_list("申請", HIW + "以下是玩家提交的申請的表單" + NOR);
+}
+
+// 顯示被批准的表單
+void show_agree()
+{
+	show_brief_list("同意", HIY + "以下是巫師已經批准申請的表單" + NOR);
+}
+
+// 顯示被拒絕的表單
+void show_reject()
+{
+	show_brief_list("拒絕", HIR + "以下是被巫師拒絕申請的表單" + NOR);
+}
+
+// 顯示比較陳舊的表單 - 過了15天的表單
+void show_old()
+{
+	int i;
+	int count;
+
+	string *ids;
+
+	if (! exist_form()) return;
+
+	count = 0;
+	ids = keys(query("form"));
+	for (i = 0; i < sizeof(ids); i++)
+	{
+		if (query("form/" + ids[i] + "/time") - time() > 86400 * 15)
+		{
+			// 超過15天的表單
+			if (! count)
+			{
+				write(YEL "-------------------------------------------------------------------------------\n" NOR);
+				write(HIC "以下是玩家提交了很久的表單：\n" + NOR);
+				show_brief_title();
+			}
+			count++;
+			show_brief(ids[i]);
+		}
+	}
+	if (count)
+	{
+		write("共有" + ((string) count) + "張比較陳舊的表單。\n");
+	}
+}
+
+// 顯示列表
+// info是顯示的表單的類型 - info為空表示顯示所有表單
+// msg是顯示的列表的名稱 - 如“這是巫師批准的表單”
+void show_brief_list(string info, string msg)
+{
+	int i;
+	int count;
+
+	string *ids;
+
+	if (! exist_form()) return;
+
+	count = 0;
+	ids = keys(query("form"));
+	for (i = 0; i < sizeof(ids); i++)
+	{
+		if (info == "" || query("form/" + ids[i] + "/status") == info)
+		{
+			if (! count)
+			{
+				write(YEL "-------------------------------------------------------------------------------\n" NOR);
+				write(msg + "\n");
+				show_brief_title();
+			}
+			count++;
+			show_brief(ids[i]);
+		}
+	}
+	if (count)
+	{
+		write("共有" + ((string) count) + "張表單。\n");
+	}
+}
+
+// 顯示列表題頭
+void show_brief_title()
+{
+	write("申請者代號  申請者姓名  申請的時間  房  型  狀態  注冊的巫師  備   注\n");
+}
+
+// 根據一個表單建造房屋
+void create_room(object me)
+{
+	mapping filesp;		// 建造的原型房的文件mapping
+	mapping descsp;		// 玩家填寫的描述mapping
+
+	string player_id;	// 建找房間的玩家的ID
+	string room_type;	// 房屋類型
+	string room_name;	// 房屋名字
+	string room_id;		// 房屋ID
+	string room_owner;	// 房屋的主人
+	string room_key;	// 房屋的鑰匙
+	string position;	// 建造房屋的地點(路徑名)
+	string position_short;	// 建造房屋的地點的中文名字
+	string entry;		// 房屋的入口
+
+	string *content;	// 源文件的內容
+	string *names;		// filesp的關鍵字集合
+	string filename;	// 生成的文件名稱
+	string dstfile;		// 生成的文件內容
+
+	string desc;		// 某間房屋的描述::鑰匙的描述
+	object ob;		// 房屋的object
+
+	int i;
+	int k;
+	string ids;		// 快捷查詢字符串
+
+	me = this_player();
+	if (! objectp(me)) return;
+
+	player_id = me->query("id");
+	entry = "";
+
+	if (! mapp(query("form/" + player_id)))
+	{
+		// 沒有找到玩家提交的表單
+		return;
+	}
+
+	// 在表單中有該玩家提交的表單
+	ids = "form/" + player_id + "/";
+	room_type = query(ids + "type");
+	for (i = 0; i < sizeof(room_example); i++)
+	{
+		if (room_example[i]["type"] == room_type)
+		{
+			filesp = room_example[i]["files"];
+			break;
+		}
+	}
+
+	if (! mapp(filesp))
+	{
+		write("你申請的房屋類型(" + room_type + ")已經不存在了，請和巫師聯系。\n");
+		return;
+	}
+
+	descsp = query(ids + "descs");
+	room_type = query(ids + "room");
+	room_name = query(ids + "name");
+	room_id = query(ids + "id");
+	position = query(ids + "position");
+	names = keys(filesp);
+
+	room_owner = query(ids + "player");
+	room_key = "key of " + player_id;
+
+	ob = get_object(position);
+	if (! objectp(ob))
+	{
+		write ("你建房的地點已經不存在了，請和巫師聯系！\n");
+		return ;
+	}
+	position_short = ob->query("short");
+	message("vision", HIY "魯班拍拍手，說道：弟子們，生意來了！賺金子銀子的時候到了！！！\n" NOR +
+		       YEL "霎時天昏地暗，你只覺得眼前模模糊糊，什么也看不清楚，渾然不知道發生了什么事情。\n" NOR, environment(this_object()));
+
+	// 讀入并處理所有的文件
+	for (i = 0; i < sizeof(names); i++)
+	{
+		// long_flag 是為了將原型房文件中出現在@LONG和LONG之間的字符串去掉而使用的標志。
+		int long_flag;
+		// enter_receive 是為了消除過多的空行使用的
+		int enter_receive;
+
+		if (file_size(filesp[names[i]]) <= 0)
+		{
+			write("缺少文件:" + filesp[names[i]] + "，不能生成房屋，請和巫師聯系。\n");
+			// 刪除已經產生的文件
+			for (k = i - 1; k >= 0; k--)
+				rm(to_player(player_id, filesp[names[k]]));
+			return;
+		}
+		content = explode(read_file(filesp[names[i]]), "\n");
+		long_flag = 0;
+		enter_receive = 0;
+		filename = to_player(player_id, filesp[names[i]]);
+		dstfile = "// File(" + to_player(player_id, filesp[names[i]]) + ")" + 
+			  " of " + player_id + "'s room\n// Create by LUBAN which written by Doing Lu\n";
+		for (k = 0; k < sizeof(content); k++)
+		{
+			if (strsrch(content[k], "LONG") != -1)	// 查到了一個LONG標志
+			{
+				long_flag = ! long_flag;
+				if (! long_flag)
+				{
+					// 填充新的long描述
+					desc = descsp[names[i]];
+					if (! desc || desc == "")
+					{
+						// 采用了缺省描述
+						ob=get_object(filesp[names[i]]);
+						desc = ob->query("default_long");
+					}
+					desc = replace_string(desc, "ROOM_POSITION", position_short);
+					desc = sort_desc(desc);
+					dstfile += "\tset (\"long\\", @LONG\n" + desc + "LONG\n";
+				}
+				continue;
+			}
+			// 如果是LONG描述則忽略
+			if (long_flag) continue;
+
+			// 如果該句包含有/**/則忽略
+			if (strsrch(content[k], "/**/") != -1) continue;
+
+			// 去除語句中的//**
+			content[k] = replace_string(content[k], "//**", "");
+
+			// 如果該句以//開頭，表示注釋，則忽略
+			if (content[k][0..1] == "//") continue;			
+
+			// 判斷該文件是否是入口文件，即該文件是否有到建房處(position)的出口
+			if (strsrch(content[k], "/d/room/xiaoyuan") != -1)
+				entry = filename;
+
+			// 替換語句中的ROOM_KEY, OWNER, position
+			content[k] = replace_string(content[k], "ROOM_KEY", room_key);
+			content[k] = replace_string(content[k], "ROOM_OWNER", room_owner);
+			content[k] = replace_string(content[k], "ROOM_NAME", room_name);
+			content[k] = replace_string(content[k], "ROOM_ID", room_id);
+			content[k] = replace_string(content[k], "ROOM_POSITION", position_short);
+			content[k] = replace_string(content[k], "/d/room/xiaoyuan", position);
+
+			// 添加該語句
+			if (content[k] == "")
+				enter_receive ++;
+			else 
+				enter_receive = 0;
+			if (enter_receive > 1) continue;
+		
+			dstfile += content[k] + "\n";
+		}
+		if (long_flag)
+		{
+			write("文件:" + filesp[names[i]] + "格式錯誤，LONG不匹配，不能生成房屋，請和巫師聯系。\n");
+			// 刪除已經產生的文件
+			for (k = i - 1; k >= 0; k--)
+				rm(to_player(player_id, filesp[names[k]]));
+			return;
+		}
+
+		// 寫入磁盤
+		seteuid(getuid());
+		rm(filename);
+		assure_file(filename);
+		write_file(filename, dstfile);
+		dstfile = "";
+	}
+
+	// 在建房處添加入口到玩家的房屋
+	if (! entry || entry == "")
+	{
+		message("vision", "\n過了一會，魯班和眾弟子踉踉蹌蹌的趕了回來。\n魯班苦著臉說：這是怪事，居然找不到入口！你去問問巫師究竟是怎么搞的！\n", environment(this_object()));
+		// 刪除已經產生的文件
+		for (k = i - 1; k >= 0; k--)
+			rm(to_player(player_id, filesp[names[k]]));
+		return;
+	}
+
+	ob = get_object(position);
+	if (! ob->create_room(room_name, entry))
+	{
+		message("vision", "\n過了一會，魯班和眾弟子踉踉蹌蹌的趕了回來。\n魯班一臉霉樣，苦著臉說：真邪門了，那里居然還有個名字一樣的房子，結果我們被人扁了回來！\n奶奶的頭，我公輸班活了一千多年還是頭次聽聞這種事！\n", environment(this_object()));
+		// 刪除已經產生的文件
+		for (k = i - 1; k >= 0; k--)
+			rm(to_player(player_id, filesp[names[k]]));
+		return;
+	}
+	message("vision", "\n須臾，魯班和眾弟子已然歸來。\n魯班喜道：呵呵，房屋建好了，一切順利，恭喜恭喜！\n", environment(this_object()));
+	ob->save();
+
+	// 創建玩家房屋的鑰匙文件
+	filename = "/data/room/" + player_id + "/key.lpc";
+	dstfile = "// File(" + filename + ")" + 
+		  " of " + player_id + "'s key\n// Create by LUBAN which written by Doing Lu\n";
+	dstfile += @KEY
+
+inherit ITEM;
+#include <ansi.h>
+
+string query_autoload() { return "1"; }
+
+void autoload(string param)
+{
+}
+
+
+void create()
+{
+	set_name(YEL "KEY_NAME" NOR, ({"key", "KEY_ID"}));
+	set_weight(10);
+	if (clonep())
+		set_default_object(__FILE__);
+	else {
+		set("long", "KEY_DESCRIPTION。\n");
+		set("unit", "把");
+		set("no_pawn", 1);
+		set("item_make", 1);
+		set("value", 1);
+	}
+}
+KEY;
+	// 替換鑰匙名稱，ID，描述
+	desc = "一把用來開啟" + room_name + "(" + room_id + ")的鑰匙。\n";
+	dstfile = replace_string(dstfile, "KEY_DESCRIPTION", desc);
+	dstfile = replace_string(dstfile, "KEY_NAME", me->query("name") + "家的鑰匙");
+	dstfile = replace_string(dstfile, "KEY_ID", room_key);
+
+	seteuid(getuid());
+	rm(filename);
+	assure_file(filename);
+	write_file(filename, dstfile);
+
+	// 生成鑰匙
+	ob = clone_object(filename);
+	message_vision("魯班拿出一把鑰匙，對$N說：諾，這是鑰匙，收好了！若是丟了可以到我這里再配一把。\n", me);
+	ob->move(me);
+
+	// 刪除魯班處紀錄的表單
+	delete("form/" + player_id);
+	save();
+
+	// 設置玩家的數據庫
+	me->set("private_room/build", 1);		// 已經建過房屋
+	me->set("private_room/position", position);	// 房屋所在的位置
+	me->set("private_room/entry", entry);		// 房屋入口處的文件路徑				:: 必須已經有build設置
+	me->set("private_room/name", room_name);	// 房屋的名字
+	me->set("private_room/id", room_id);		// 房屋的ID
+	me->set("private_room/type", room_type);	// 房屋的類型
+	me->save();
+	return;
+}
+
+// 將原型房的文件名轉化成為用戶房屋的文件名
+string to_player(string player_id, string file_name)
+{
+	string typestr;
+	string retstr;
+
+	sscanf(file_name, "/d/room/%s/%s", typestr, retstr);
+	return "/data/room/" + player_id + "/" + retstr;
+}
+
+// 這是為了加快運行速度使用的宏函數
+// 判斷首部的字符串是否相同(字符串1必須比字符串2長)
+#define	IS_HEAD(s1,s2)	  (s1[0..strlen(s2) - 1] == s2)
+// 判斷字符串首部是否為英文標點符號
+#define	IS_HEAD_ESIGH(s1) (s1[0] == '.' || s1[0] == '!' || s1[0] == ';' || s1[0] == ',' || s1[0] == ':')
+// 判斷字符串首部是否為中文標點符號
+#define	IS_HEAD_CSIGH(s1) (s1[0..1] == "。" || s1[0..1] == "！" || s1[0..1] == "﹔" || s1[0..1] == "，" || s1[0..1] == "：")
+// 判斷字符串首部是否是中文字符
+#define	IS_HEAD_CHN(s1)	  (s1[0] >= 128)
+
+// 規范描述信息
+// 這個函數主要為講用戶輸入的描述信息添加回車和跳格
+string sort_desc(string desc)
+{
+	string res;
+	int len;		// desc的剩余長度
+	int curlen;		// res的當前行長
+	int perline = 70;	// 最大行長(如果有標點符號，可能會超出)
+	int crlen;		// 換行符的長度
+	int escflag;		// 轉義序列的長度
+
+	res = "\t";
+	curlen = 8;		// 新段落前的跳格長度
+
+	crlen = strlen("\n");
+	escflag =0;
+
+	if (! desc || desc =="")
+		return 0;
+
+	for (len = strlen(desc);(len + curlen > perline) && len > 0;)
+	{
+		// 添加字符
+		// 判斷是否為漢字
+		while (curlen < perline)
+		{
+			if (IS_HEAD_CHN(desc))
+			{
+				res += desc[0..1];
+				desc = desc[2..len - 1];
+				len -=2;
+				curlen += 2;
+			} else
+			if (desc[0] >= 32)
+			{
+				res += desc[0..0];
+				desc = desc[1..len - 1];
+				len --;
+				curlen ++;
+			} else
+			  break;			
+		}
+
+		// 判斷下一個字符是否為標點，標點不能出現在行首
+		if (IS_HEAD_CSIGH(desc) && curlen < perline + 2)
+		{
+			res += desc[0..1];
+			desc = desc[2..len - 1];
+			len -= 2;
+			curlen += 2;
+		}
+
+		if (IS_HEAD_ESIGH(desc) && curlen < perline + 2)
+		{
+			res += desc[0..0];
+			desc = desc[1..len - 1];
+			len --;
+			curlen ++;
+		}
+
+		// 如果計滿一行，就添加換行符
+		if (curlen >= perline)
+		{
+			res += "\n";
+			curlen = 0;
+		}
+
+		// 判斷是否為換行
+		if (IS_HEAD(desc, "\n"))
+		{
+			if (curlen) res += "\n";	// 避免剛剛有換行
+			res += "\t";
+			desc = desc[crlen..len - 1];
+			len -= crlen;
+			curlen = 8;
+		}
+
+		// 掃描desc，查找轉義字符
+		if (desc[0] == 27)
+			while (desc[escflag] != 'm') escflag++;
+
+		if (escflag > 0)
+		{
+			// 顏色不計長度
+			res += desc[0.. escflag];
+			desc = desc[escflag + 1..len - 1];
+			len -= escflag + 1;
+			continue;
+		}
+	}
+
+	// 消除行尾的換行符
+	if (len >= crlen && desc[len - crlen..len - 1] != "\n" ) desc += "\n";
+
+	res += desc;
+	return res;
+}

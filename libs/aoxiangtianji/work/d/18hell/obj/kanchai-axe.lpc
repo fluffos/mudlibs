@@ -1,0 +1,131 @@
+// kanchai-axe.c 砍柴斧
+#include <ansi.h>
+inherit ITEM;
+int do_kan(string arg);
+int do_kun(string arg);
+void init()
+{
+  if (interactive(this_player()) &&
+      environment() == this_player())
+  {
+    add_action("do_kan", "kanchai");
+    add_action("do_kun", "kunchai");
+  }
+
+}
+
+void create()
+{
+  set_name(HIG "砍柴斧" NOR, ({ "kanchai axe", "axe" }));
+  if (clonep())
+    set_default_object(__FILE__);
+  else
+  {
+    set("unit", "把");
+    set("long", "这是一把砍柴用的斧头，常用它砍柴(kanchai)。\n");
+  }
+
+  setup();
+}
+
+int do_kan(string arg)
+{
+  string chai, kunchai;
+  int num, t = time();
+  object ob = this_object();
+  object me = this_player();
+  object env = environment(me);
+
+  chai = env->query("resource/chai");
+  if (!chai || !stringp(chai))
+    return notify_fail("这里看不到可以砍的柴。\n");
+
+  if (ob->query("owner") != me->query("id"))
+    return notify_fail("这把斧头不属于你的，看来怎么砍也是白费力气！\n");
+
+  if (me->is_busy())
+    return notify_fail("你正忙着呢！\n");
+
+  if (t == me->query_temp("last_kanchai_time"))
+    return notify_fail("你刚刚砍过了，无法挥动斧头！\n");
+
+  kunchai = me->query_temp("18hell/kunchai");
+  if (stringp(kunchai))
+  {
+    if (chai != kunchai || me->query_temp("18hell/kanchai_p") != env)
+    {
+      me->delete_temp("18hell/kunchai");
+      me->delete_temp("18hell/kanchai_num");
+      me->delete_temp("18hell/kanchai_p");
+    }
+
+    else
+    {
+      write(sprintf("你砍的%s还散落在地上呢！你需要把它们捆(kunchai)起来！\n", chai));
+      return 1;
+    }
+
+  }
+
+  if (present("18hell chai",me))
+    return notify_fail("你背上正背着一捆柴呢！\n");
+  me->set_temp("last_kanchai_time",t);
+  num = me->query_temp("18hell/kanchai_num");
+  if (!num)
+  {
+    message_vision("$N看了看四周，选定了一棵大树，开始砍柴！\n",me);
+    me->set_temp("18hell/kanchai_p",env);
+    num=1;
+  }
+
+  else if (random(num+1) > 5)
+  {
+    num = 0;
+    message_vision("$N轻轻的吁了口气，看来这" +
+                   environment(me)->query("resource/chai") +
+                   "总算是砍完了！\n");
+    tell_object(me,"你现在可以把散在地上的柴捆(kunchai)起来了！\n");
+    me->set_temp("18hell/kunchai",environment(me)->query("resource/chai"));
+  }
+
+  else
+  {
+    num++;
+    message_vision("$N嗨呦嗨呦的砍柴，木屑纷纷落下！\n",me);
+  }
+
+  me->set_temp("18hell/kanchai_num",num);
+  me->receive_damage("kee",50+random(50));
+  if (!me->is_busy())
+    me->start_busy(2+random(2));
+  return 1;
+}
+
+int do_kun(string arg)
+{
+  string kunchai;
+  object me = this_player();
+  object env = environment(me);
+  object chai;
+
+  if (present("18hell chai",me))
+    return notify_fail("你背上正背着一捆柴呢！\n");
+
+  if (me->is_busy())
+    return notify_fail("你正忙着呢！\n");
+  kunchai = me->query_temp("18hell/kunchai");
+  if (!stringp(kunchai) || me->query_temp("18hell/kanchai_p") != env)
+    return notify_fail("这里有柴让你捆吗？\n");
+  message_vision("$N随手找了些草藤，开始把" + kunchai + "捆起来！\n",me);
+  chai = new("/d/18hell/obj/chai");
+  chai->set_name(kunchai,({"18hell chai","chai"}));
+  chai->set("owner",me->query("id"));
+  chai->setup();
+  chai->move(me,1);
+  message_vision("$N把捆好的柴背在了背上！\n",me);
+  me->delete_temp("18hell/kunchai");
+  me->delete_temp("18hell/kanchai_num");
+  me->delete_temp("18hell/kanchai_p");
+  return 1;
+}
+

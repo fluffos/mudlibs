@@ -193,7 +193,7 @@ does not boot under WASM yet.
 | 041-1 | `nitan_san` | 泥潭三 / 《終極魔界》 (nitan_san) | `泥潭三.rar` | 40055 | WASM limited |
 | 042 | `yuxuechongsheng` | 浴血重生 | `浴血重生MUD.rar` | 40056 | WASM limited |
 | 043 | `haiyang2` | 海洋II | `海洋II 2010 正式无错完整版下载.rar` | 40057 | WASM limited |
-| 044 | `huoying` | 火影 | `火影.rar` | 40059 | WASM limited |
+| 044 | `huoying` | 火影 | `火影.rar` | 40059 | WASM playable |
 | 045 | `yanhuangwuhun` | 「武林群侠传」之炎黄武魂Ⅱ | `炎黄武魂_64bit.rar` | 40060 | WASM limited |
 | 045-1 | `yanhuangyingxiongshi` | 炎黄英雄史（游戏内也称"皇朝再现"） | `炎黄英雄史.rar` | 40061 | WASM limited |
 | 046 | `xuanjianlu` | 玄剑录 | `玄剑录.rar` | 40064 | WASM playable |
@@ -213,6 +213,8 @@ does not boot under WASM yet.
 | 059 | `sanjiechuanshuo` | 三界传说 | `三界传说.rar` | 40097 | WASM playable |
 | 060 | `sanjieshenhua` | 三界神话「嘉峪关」 | `三界神话-春节.rar` | 40098 | WASM playable |
 | 061 | `zuizhonghuanjing` | 最终幻境 | `最终幻境.zip` | 40099 | WASM playable |
+| 062 | `niaoren` | 鳥人世界 (The Bird-Man World) | `最新鳥人世界.zip` | 40100 | WASM playable |
+| 063 | `aoxiangtianji` | 翱翔天际 | `翱翔天际utf8.7z` | 40101 | WASM playable |
 | 901 | `dw_fluffos_v1` | Discworld MUD lib (v1) | `dw_fluffos_v1.tar.gz` | — | deprioritized |
 | 901-1 | `dw_fluffos_v2` | Discworld MUD lib (v2) | `dw_fluffos_v2.zip` | — | deprioritized |
 | 901-2 | `dw_fluffos_v3` | Discworld MUD lib (v3) | `dw_fluffos_v3.zip` | — | deprioritized |

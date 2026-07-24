@@ -1,0 +1,195 @@
+#include <ansi.h>
+inherit ITEM;
+int lighting = 0;
+int query_lighting()
+{
+  return lighting;
+}
+
+void create()
+{
+  set_name("大红蜡烛", ({"read candle","candle"}));
+  set_weight(80);
+  if (clonep())
+    set_default_object(__FILE__);
+  else
+  {
+    set("long", "这是一支红颜色的蜡烛。\n");
+    set("unit", "支");
+    set("remain",10);
+    set("value", 1000);
+  }
+
+}
+
+void init()
+{
+  add_action("do_blow",({"blow","cui","chui"}));
+}
+
+string short()
+{
+  object ob = this_object();
+  int remain;
+
+  if (!objectp(ob))
+    return 0;
+  remain = ob->query("remain");
+  if (remain < 4)
+    return "小半截" + ::short();
+  else if (remain < 6)
+    return "半截" + ::short();
+  else if (remain < 9)
+    return "大半截" + ::short();
+  return ::short();
+}
+
+int fire(object me, object ob)
+{
+  string weather;
+  object env = environment();
+  if (!objectp(me) || !objectp(env))
+    return 0;
+
+  if (env == me && (me->query_temp("handing") != this_object()))
+    return notify_fail("蜡烛拿(hand)在手上才能点。否则担心烧着了你！\n");
+
+  if ((env->is_room() && env->query("outdoors")) ||
+      (env == me && environment(me)->query("outdoors")))
+  {
+    weather = NATURE_D->query_weather();
+    if (stringp(weather) && (weather == "rain" || weather == "wind"))
+      return notify_fail("这个天气在户外点蜡烛可不容易！\n");
+  }
+
+  if (env == me)
+    message_vision("$N用" + ob->name() + "点燃了手中的" + name() + "，四周顿时亮多了。\n", me);
+  else
+    message_vision("$N用" + ob->name() + "点燃了" + name() + "，四周顿时亮了起来。\n", me);
+
+  lighting = 1;
+  remove_call_out("light");
+  remove_call_out("destroy");
+  call_out("light",60);
+  return 1;
+}
+
+void light()
+{
+  object ob, env;
+  int remain;
+  string *msg = ({
+     "火苗微微跳了几下。",
+     "突然爆出了一朵烛花，四周瞬间更亮了！",
+     "火苗儿微微的偏向了一边，蜡烛油从烧开的缺口慢慢的流了出来！",
+     "烛苗静静的，一丝丝蜡烛味儿慢慢的透了出来，显得更加宁静了。"
+  });
+  ob = this_object();
+  if (!ob || !objectp(ob))
+    return;
+
+  env = environment();
+  if (!objectp(env))
+    return;
+  if (env->is_character())
+  {
+    if (ob != env->query_temp("handing"))
+    {
+      if (objectp(environment(env)))
+        message_vision("$N手中的" + ob->name() + "熄灭了。\n", env);
+      lighting = 0;
+      return;
+    }
+
+    if (!objectp(environment(env)))
+    {
+      lighting = 0;
+      return;
+    }
+
+    message_vision("$N手中的" + ob->name() + element_of(msg) + "\n", env);
+  }
+
+  else
+  {
+    message("vision", ob->name() + element_of(msg) + "\n", env);
+  }
+
+  remain = ob->query("remain");
+  if (remain <= 1)
+  {
+    call_out("destroy", 20);
+    return;
+  }
+
+  remain = remain - 1;
+  ob->set("remain",remain);
+  remove_call_out("light");
+  call_out("light",remain*6);
+  return;
+}
+
+void destroy()
+{
+  object env;
+  string msg;
+  object ob = this_object();
+
+  if (!objectp(ob))
+    return;
+  lighting = 0;
+  env = environment();
+  msg = RED "火苗挣扎着跳动了几下，终于流尽了最后一滴泪水，熄灭了。\n" NOR;
+  if (objectp(env) && env->is_character())
+    message_vision("$N手中" + ob->name() + "的" + msg,env);
+  else if (objectp(env))
+    message("visoin", ob->name() + "的" + msg,environment());
+  destruct(ob);
+}
+
+void remove_hand(object me)
+{
+  object ob = this_object();
+
+  if (!objectp(me) || !objectp(ob))
+    return;
+
+  if (lighting)
+    message_vision("$N吹灭了手中的" + ob->name() + "。\n",me);
+  lighting = 0;
+}
+
+int do_blow(string arg)
+{
+  object env;
+  object me = this_player();
+  object ob = this_object();
+
+  if (!me || !ob )
+    return 0;
+  env = environment();
+
+  if (env != me && env != environment(me))
+    return 0;
+
+  if (!arg || !ob->id(arg))
+    return 0;
+
+  if (!lighting)
+    return notify_fail(sprintf("%s本来就没有点着！\n",ob->name()));
+  lighting = 0;
+  remove_call_out("light");
+  remove_call_out("destroy");
+  if (env == me)
+    message_vision("$N吹灭了手中的" + ob->name() + "。\n",me);
+  else
+    message_vision("$N吹灭了" + ob->name() + "。\n",me);
+  return 1;
+}
+
+void remove(string euid)
+{
+  lighting = 0;
+  ::remove(euid);
+}
+

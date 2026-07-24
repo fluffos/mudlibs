@@ -1,0 +1,242 @@
+#include <ansi.h>
+inherit F_CLEAN_UP;
+int do_wear(object me, object ob);
+int help(object me);
+int main(object me, string arg)
+{
+  object ob,*inv;
+  mapping part_m;
+  int i, j,count;
+  string msg;
+  string *cpart = ({"头部","颈部","躯体","手臂","双手","双腿","双脚"});
+  string *epart = ({"head","neck","body","arm","hand","leg","foot"});
+  if( !arg )
+  {
+    string equip_name,equip_id,equip_armor,equip_total;
+    inv = all_inventory(me);
+    inv = filter_array(inv,(: $1->query("equipped") && $1->is_armor() :));
+    if (sizeof(inv) < 1)
+    {
+      write("你目前没有任何防御装备！\n");
+      help(me);
+      return 1;
+    }
+
+    msg = "                        ┏━━━━┓\n";
+    msg += "                        ┃"HBBLU"装备状况"NOR"┃\n";
+    msg += "┏━━┓━━━━━━━━┓━━━━━━━━┓━━━┓━━━┓\n";
+    msg += "┃部位┃装  备  名  称  ┃装  备  Ｉ  Ｄ  ┃防御数┃总  和┃\n";
+    msg += "┗━━┛━━━━━━━━┛━━━━━━━━┛━━━┛━━━┛\n";
+    for (i=0;i<sizeof(cpart);i++)
+    {
+      msg += sprintf("┃"HIW"%-4s"NOR"┃",cpart[i]);
+      part_m = me->query_temp("armor_parts/" + epart[i]);
+      if (!mapp(part_m) ||
+          sizeof(part_m) < 1 ||
+          !arrayp(part_m["item"]) ||
+          sizeof(part_m["item"]) < 1 ||
+          part_m["armor"] < 1)
+      {
+      	me->delete_temp("armor_parts/" + epart[i]);
+      	equip_name = HIB"没有装备"NOR;
+      	equip_id = "";
+      	equip_armor = "";
+      	equip_total = "";
+      	msg += sprintf("%-"+(16+color_len(equip_name))+"s┃%-"+
+      	                    (16+color_len(equip_id))+"s┃%-6s┃%-6s┃\n",
+      	                    equip_name,equip_id,equip_armor,equip_total);
+        msg += "┗━━┛━━━━━━━━┛━━━━━━━━┛━━━┛━━━┛\n";
+      }
+      else
+      {
+        for(j=0;j<sizeof(part_m["item"]);j++)
+        {
+          ob = part_m["item"][j];
+          equip_name = ob->query("name");
+          equip_id = ob->query("id");
+          equip_armor = sprintf(HIY"%d"NOR,ob->query("armor_prop/armor"));
+          if (j == sizeof(part_m["item"])-1)
+            equip_total = sprintf(HIW"%d"NOR,part_m["armor"]);
+          else
+            equip_total = " ";
+          if (j == 0)
+            msg += sprintf("%-"+(16+color_len(equip_name))+"s┃%-16s┃%-"+
+                                (6+color_len(equip_armor))+"s┃%-"+
+                                (6+color_len(equip_total))+"s┃\n",
+      	                      equip_name,equip_id,equip_armor,equip_total);
+      	  else
+            msg += sprintf("┃    ┃%-"+(16+color_len(equip_name))+"s┃%-16s┃%-"+
+                                (6+color_len(equip_armor))+"s┃%-"+
+                                (6+color_len(equip_total))+"s┃\n",
+      	                      equip_name,equip_id,equip_armor,equip_total);
+      	  if (j == sizeof(part_m["item"])-1)
+      	    msg += "┗━━┛━━━━━━━━┛━━━━━━━━┛━━━┛━━━┛\n";
+      	  else
+      	    msg += "┃    ┃━━━━━━━━┛━━━━━━━━┛━━━┛      ┃\n";
+
+        }
+      }
+    }
+
+    if (me->query_temp("apply/armor"))
+    {
+      msg += "┏━━━━┓━━┓\n";
+      msg += sprintf(HBBLU"┃附加防御┃%-4d┃\n"NOR,(int)me->query_temp("apply/armor"));
+      msg += "┗━━━━┛━━┛\n";
+    }
+    if (me->query_temp("apply/armor_vs_force"))
+    {
+      msg += "┏━━━━┓━━┓\n";
+      msg += sprintf(HBBLU"┃内力抵抗┃%-4d┃\n"NOR,(int)me->query_temp("apply/armor_vs_force"));
+      msg += "┗━━━━┛━━┛\n";
+    }
+    if (me->query_temp("apply/armor_vs_spells"))
+    {
+      msg += "┏━━━━┓━━┓\n";
+      msg += sprintf(HBBLU"┃法力抵抗┃%-4d┃\n"NOR,(int)me->query_temp("apply/armor_vs_spells"));
+      msg += "┗━━━━┛━━┛\n";
+    }
+    write(msg);
+    return 1;
+  }
+  if(arg=="all")
+  {
+    inv = all_inventory(me);
+    for(count=0, i=0; i<sizeof(inv); i++)
+    {
+      if( inv[i]->query("equipped") )
+        continue;
+      if( inv[i]->query("combine") )
+        continue;
+      if( inv[i]->query("need_family") )
+        continue;
+      if( inv[i]->query("family_only") )
+        continue;
+      if(do_wear(me, inv[i]) )
+        count ++;
+    }
+
+    write("Ok.\n");
+    return 1;
+  }
+
+  if( !objectp(ob = present(arg, me)) )
+    return notify_fail("你身上没有这样东西。\n");
+  if( ob->query("equipped") )
+    return notify_fail("你已经装备着了。\n");
+  return do_wear(me, ob);
+}
+
+int do_wear(object me, object ob)
+{
+  string str;
+  if (!ob->is_armor())
+    return 0;
+  if( !wizardp(me) )
+  {
+    if( ob->query("owner") && ob->query("owner") != getuid(me) )
+    {
+      write(ob->query("name")+"破空而去，消失不见了……\n");
+      destruct(ob);
+      return 1;
+    }
+
+    if( ob->query("combine") && ob->query("owner_id") != getuid(me) )
+    {
+      destruct(ob);
+      return notify_fail("下次别乱偷别人的东西。\n");
+    }
+
+    if( ob->query("family_only") &&
+        me->query("family/family_name") != ob->query("family_only") )
+    {
+      write(ob->query("family_only")+"门派专用装备你不能使用.\n");
+      write(ob->name()+"冲天而去，消失不见了.\n");
+      destruct(ob);
+      return 1;
+    }
+
+    if( ob->query("no_wear") )
+      return notify_fail("这件衣服不能再穿了！\n");
+  }
+
+  if( !wizardp(me) && userp(me) && ob->query("wiz_only") )
+    return notify_fail(HIC"你无权装备这件东西！\n"NOR);
+  if( ob->wear() )
+  {
+    if( !stringp(str = ob->query("wear_msg")) )
+      switch( ob->query("armor_type") )
+      {
+        case "cloth":
+        case "skirts":
+        case "pants":
+          str = HIY "$N穿上一" + ob->query("unit") + "$n \n" NOR;
+          break;
+        case "armor":
+          str = HIY "$N穿上一" + ob->query("unit") + "$n \n" NOR;
+          break;
+        case "boots":
+          str = HIY "$N蹬上一" + ob->query("unit") + "$n \n" NOR;
+          break;
+        case "surcoat":
+          str = HIY "$N披上一" + ob->query("unit") + "$n \n" NOR;
+          break;
+        case "head":
+          str = HIY "$N戴上一" + ob->query("unit") + "$n \n" NOR;
+          break;
+        case "neck":
+          str = HIY "$N戴上一" + ob->query("unit") + "$n \n" NOR;
+          break;
+        case "wrists":
+          str = HIY "$N扣上一" + ob->query("unit") + "$n \n" NOR;
+          break;
+        case "finger":
+          str = HIY "$N戴上一" + ob->query("unit") + "$n \n" NOR;
+          break;
+        case "flower":
+          str = HIY "$N别上一" + ob->query("unit") + "$n \n" NOR;
+          break;
+        case "hands":
+          str = HIY "$N戴上一" + ob->query("unit") + "$n \n" NOR;
+          break;
+        case "waist":
+          str = HIY "$N佩上一" + ob->query("unit") + ob->query("name") + " \n" NOR;
+          break;
+        case "leggings":
+          str = HIY "$N绑上一" + ob->query("unit") + "$n \n" NOR;
+          break;
+        case "cape":
+          str = HIY "$N别上一" + ob->query("unit") + "$n \n" NOR;
+          break;
+        case "shoulder":
+          str = HIY "$N缠上一" + ob->query("unit") + "$n \n" NOR;
+          break;
+        case "armbands":
+          str = HIY "$N缠上一" + ob->query("unit") + "$n \n" NOR;
+          break;
+	case "othors":
+          str = HIY "$N佩上一" + ob->query("unit") + "$n \n" NOR;
+          break;
+        default:
+          str = HIY "$N装备$n \n" NOR;
+      }
+
+    message_vision(str, me, ob);
+    return 1;
+  }
+  else
+    return 0;
+}
+
+int help(object me)
+{
+	write(@HELP
+指令格式：wear|chuan <装备名称>
+
+这个指令让你装备某件防具。
+
+HELP
+    );
+    return 1;
+}
+

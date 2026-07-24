@@ -1,0 +1,186 @@
+#include <ansi.h>
+inherit F_CLEAN_UP;
+string query_inquiry(object ob);
+string *msg_dunno = ({
+        CYN "$n" CYN "摇摇头，说道：“没听说过，没听说过。”\n" NOR,
+        CYN "$n" CYN "疑惑地看着$N" CYN "，摇了摇头。\n" NOR,
+        CYN "$n" CYN "睁大眼睛望着$N" CYN "，显然不知道$P" CYN "在说什么。\n" NOR,
+        CYN "$n" CYN "耸了耸肩，很抱歉地说：“对不起，无可奉告。”\n" NOR,
+        CYN "$n" CYN "说道：“嗯……这我可不清楚，你最好问问别人吧。”\n" NOR,
+        CYN "$n" CYN "想了一会儿，说道：“对不起，你问的事我实在没有印象。”\n" NOR,
+        CYN "$n" CYN "看着$N" CYN "，皱了皱眉头，说道：“我从没听说过这事，你去问别人吧。”\n" NOR,
+});
+int main(object me, string arg)
+{
+  string dest, topic, msg, format;
+  object ob;
+  object env;
+  mixed info;
+
+  format = CYN"指令格式："NOR + HIY"ask"NOR + HIW" <某人>"NOR + HIR" about"NOR
+         + HIW" <某事>  "NOR + BLINK+HIY"或者"NOR+HIY" ask"NOR
+         + HIW" <某人> <某事>"NOR + BLINK
+         + HIR"\n注：可以用ask <某人> about all 来尽可能的了解某个NPC所了解的信息！\n"NOR;
+
+  seteuid(getuid());
+  if (! arg)
+    return notify_fail(format);
+  if (sscanf(arg, "%s about %s", dest, topic) != 2 &&
+      sscanf(arg, "%s %s", dest, topic) != 2)
+    return notify_fail(format);
+  env = environment(me);
+  if( !objectp(ob = present(dest, env)) )
+    return notify_fail("这里没有这个人。\n");
+  if (me->is_busy()
+   || me->is_fighting()
+   || me->query_temp("doing_xiudao")
+   || me->query_temp("pending/exercising")
+   || me->query_temp("pending/meditating"))
+    return notify_fail("你先忙完了再说吧！\n");
+  if( !ob->is_character() )
+  {
+    message_vision("$N对着$n自言自语．．．真是痴呆了！！\n", me, ob);
+    return 1;
+  }
+
+  if (ob == me)
+  {
+    message_vision("$N自己自言自语。\n", me);
+    return 1;
+  }
+
+  if (info = env->query("no_say"))
+  {
+    if (stringp(info))
+    {
+      write(info);
+      return 1;
+    }
+
+    write("这个地方不能讲话。\n");
+    return 1;
+  }
+
+  if( !wizardp(me) && userp(me) )
+  {
+    if( uptime()-me->query_temp("last_ask_time")<1)
+      return notify_fail(WHT"你急急忙忙的，连话也说不清楚了！\n"NOR);
+    me->set_temp("last_ask_time",uptime());
+  }
+
+  if( !ob->query("can_speak") )
+  {
+    message_vision("$N向$n打听有关『" + topic + "』的消息，但是$p显然听不懂人话。\n", me, ob);
+    return 1;
+  }
+
+  if( !INQUIRY_D->parse_inquiry(me, ob, topic) )
+    message_vision("$N向$n打听有关『" + topic + "』的消息。\n", me, ob);
+  if( !living(ob) )
+  {
+    message_vision("但是很显然的，$n现在的状况没有办法给$N任何答覆。\n",me, ob);
+    return 1;
+  }
+
+  if( !userp(ob))
+  {
+    if ( msg = QUEST->quest_ask(me, ob, topic) )
+    {
+      if( stringp(msg) )
+      {
+        message_vision( CYN "$N说道：" + msg + "\n" NOR, ob);
+        return 1;
+      }
+
+    }
+
+/*
+    if (msg = ob->query("inquiry/" + topic)
+     || (topic != "all" && msg = ob->accept_ask(me, topic)))
+*/
+    if (msg = ob->query("inquiry/" + topic))
+    {
+      if( stringp(msg) )
+      {
+        message_vision( CYN "$N说道：" + msg + "\n" NOR, ob);
+        return 1;
+      }
+
+    }
+
+    else if(topic=="name")
+    {
+      message_vision( CYN "$N说道：我的名字就是$N,"
+                    + RANK_D->query_respect(me)+ "有什么事吗？\n" NOR, ob);
+      return 1;
+    }
+
+    else if(topic=="all")
+    {
+      message_vision( CYN "$N四周望了望，小声对$n说道:"
+                + query_inquiry(ob)+"\n" NOR, ob,me);
+      return 1;
+    }
+
+    else if(topic=="here")
+    {
+      message_vision( CYN "$N对$n说道:这里就是"HIW
+             +MISC_D->find_place(environment(me))+NOR CYN",$n没听说过吗？\n" NOR, ob, me);
+      return 1;
+    }
+
+    else if (msg = ob->accept_ask(me, topic))
+    {
+      if( stringp(msg) )
+      {
+        message_vision( CYN "$N说道：" + msg + "\n" NOR, ob);
+        return 1;
+      }
+
+    }
+
+    else
+      message_vision(element_of(msg_dunno), me, ob);
+  }
+
+  return 1;
+}
+
+string query_inquiry(object ob)
+{
+  int i=0;
+  mapping inq;
+  string str="", *indexs;
+
+  if(mapp(inq=ob->query("inquiry")))
+  {
+    indexs=keys(inq);
+    for(i=0;i<sizeof(indexs);i++)
+    {
+      str=indexs[i]+" "+str;
+    }
+
+    str="我所知道的事情不多，大约是这些吧：\n\n"+HIB+str+" name here news\n"NOR;
+    return str;
+  }
+
+  return "很抱歉，我只知道关于 news，name，here 的事！！！";
+}
+
+int help(object me)
+{
+  write( @HELP
+指令格式: ask <某人> about <某事>  或者  ask <某人> <某事>
+这个指令在解谜时很重要, 通常必须藉由此一指令才能
+获得进一步的资讯。如果你不知道一个NPC都知道和能
+给予你回答些什么，可以ask XXX about all
+当然，并不是所有的情况下，ask XXX about all都
+可以得到完整的信息，某些特殊的解迷情况，ask XXX
+about all也无法得到完全的信息，仍然需要根据前后
+提示多次尝试。
+
+HELP
+);
+  return 1;
+}
+

@@ -1,0 +1,192 @@
+ 
+// objmaker.c created by Hunter(秋風) 
+// for ESLib 
+ 
+#define RMK_VERSION "(v1.0)" 
+ 
+inherit ITEM; 
+inherit F_AUTOLOAD; 
+ 
+string *special_props = ({ 
+        "name", "long" }); 
+ 
+int save_room_file(string file,string str); 
+ 
+void create() 
+{ 
+        set_name("物件編輯器" + RMK_VERSION, ({ "objmaker", "maker" }) ); 
+        set_weight(100); 
+        set("unit", "個" ); 
+        set("long", @LONG 
+這是一個用來「快速」制造房間的工具，幫助時間不多或有嚴重  lag 的巫師 
+利用線上輸入制造簡單的房間，不過如果你想提高自己區域房間的品質，最好 
+不要太依賴這個東西，你可以使用以下几個指令： 
+ 
+mkobj <物件檔名> 
+ 
+    造出一個「廢物」放在身上，之後你可以 rrset 設定物件的    敘述或 
+屬性。 
+ 
+rset1 <物件屬性> <屬性內容> 
+ 
+    設定你身上的臨時物件屬性，如 name(not short!)，long,id 等 set 內 
+有引號的set 。 
+ 
+ 
+saveobj 
+ 
+    將你身上的臨時物件存檔為正式物件。 
+ 
+rset2 <物件屬性> <屬性內容> 
+        設定那些 set 內沒有引號的屬性，如 no_drop,no_get,value等。 
+LONG 
+        ); 
+} 
+ 
+int query_autoload() { return 1; } 
+ 
+void init() 
+{ 
+        if( wizardp(environment()) ) { 
+                seteuid(getuid(environment())); 
+                add_action("do_mkobj", "mkobj"); 
+                add_action("do_rset", "rset1"); 
+                add_action("do_saveobj", "saveobj"); 
+                add_action("do_rrset","rset2"); 
+        } 
+} 
+ 
+int do_mkobj(string arg) 
+{ 
+        string file,code; 
+        object file1; 
+ 
+        if( sscanf(arg, "%s", file)!=1 ) 
+return notify_fail("指令格式：mkobj <物件檔名>\n"); 
+        seteuid(geteuid(this_player())); 
+        file = resolve_path(this_player()->query("cwd"), file) + ".lpc"; 
+        if( file_size(file)!=-1 ) 
+                return notify_fail("檔案 " + file + " 已經存在了。\n"); 
+        if( !write_file(file ,@OBJ_CODE 
+// This is a obj made by objmaker. 
+ 
+inherit ITEM; 
+ 
+void create() 
+{ 
+       set_name("無用物", ({ "obj" }) ); 
+        set("long", "這是一個不值錢的廢物。\n"); 
+        setup(); 
+} 
+ 
+OBJ_CODE 
+        ) ) return notify_fail("你沒有寫入檔案(" + file +")的權利。\n"); 
+        file1=new(file); 
+        file1->move(this_player()); 
+        message_vision("只聽到$N的物件編輯器「嗶」的一聲，你覺得身上多了一件東西。\n", this_player()); 
+        return 1; 
+} 
+ 
+int do_rset(string arg) 
+{ 
+        string prop, str; 
+        object ob; 
+        mixed data; 
+ 
+        if( !arg || sscanf(arg, "%s %s", prop, str)!=2 ) 
+                return notify_fail("指令格式：rset1 <物件屬性> <屬性內容>\n"); 
+ 
+        if( sscanf(str, "%d", data)!=1 ) 
+                data = str; 
+        ob=present("obj",this_player()); 
+        ob->set(prop,str); 
+//      environment(this_player())->set(prop, str); 
+        write("Ok.\n"); 
+        return 1; 
+} 
+ 
+int do_rrset(string arg) 
+{ 
+        string prop; 
+        object ob; 
+        mixed str; 
+ 
+        if( !arg || sscanf(arg, "%s %d", prop, str)!=2 ) 
+                return notify_fail("指令格式：rset2 <物件屬性> <屬性內容>\n"); 
+ 
+/*      if( sscanf(str, "%d", data)!=1 ) 
+                data = str;*/ 
+        ob=present("obj",this_player()); 
+        ob->set(prop,str); 
+//      environment(this_player())->set(prop, str); 
+        write("Ok.\n"); 
+        return 1; 
+} 
+ 
+int do_saveobj(string arg) 
+{ 
+        object env; 
+        string str, *name1, file1,file; 
+        mapping prop; 
+        int i,age1; 
+        env = present("obj",this_player()); 
+        file1 = file_name(env) + ".lpc"; 
+        if( !arg || sscanf(arg, "%d",age1)!=1 ) 
+                return notify_fail("指令格式：saveobj <重量>\n"); 
+        str = "// Obj: "+file1 +  @OBJ_CODE 
+ 
+ 
+inherit ITEM; 
+ 
+void create() 
+{ 
+OBJ_CODE 
+        ; 
+        str += sprintf("\tset_name(\"%s\", ({\"%s\"}));\n", env->query("name"),env->query("id")); 
+        str += sprintf("\tset(\"long\", @LONG\n%s\nLONG\n\t);\n", env->query("long") ); 
+        prop = env->query_entire_dbase(); 
+        name1 = keys(prop); 
+        for(i=0; i<sizeof(name1); i++) { 
+                if( member_array(name1[i], special_props)!=-1 ) continue; 
+                str += sprintf("\tset(\"%s\", %O);\n", name1[i], prop[name1[i]] ); 
+        } 
+        str += sprintf("\tset_weight(%O);\n",age1); 
+        str += "\n\tsetup();\n}\n"; 
+ 
+        // Replace current directory with __DIR__ macro to make relocatable code. 
+/*      if( file_size(file)!=-1 ) { 
+                write("檔案 " + file + " 已存在，要刪除舊檔嗎？[y/n]"); 
+                input_to("save_room_file",file,str); 
+                return 1; 
+        }*/ 
+ 
+//      return save_room_file("y",file,str); 
+        write("請輸入新檔名: "); 
+        input_to("save_room_file",str); 
+        return 1; 
+} 
+ 
+int save_room_file(string file,string str) 
+{ 
+        object ob; 
+        file = resolve_path(this_player()->query("cwd"), file) + ".lpc"; 
+ 
+//      if( wizardp(environment()) ) { 
+        ob=present("obj",this_player()); 
+//              seteuid(getuid(environment())); 
+                seteuid(getuid(ob)); 
+ 
+//      if( strlen(yn)<1 || yn[0]!='y' ) return 1; 
+        rm(file); 
+        printf(str); 
+        write("存檔 " + file + "...."); 
+        if( write_file(file, str) ) { 
+                write("Ok.\n"); 
+                return 1; 
+        } else 
+                return notify_fail("你沒有寫入這個檔案(" + file + ")的權利。\n"); 
+} 
+ 
+void owner_is_killed() { destruct(this_object()); } 
+ 
+ 

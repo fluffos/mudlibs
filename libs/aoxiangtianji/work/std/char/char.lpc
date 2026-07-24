@@ -1,0 +1,521 @@
+// char.c
+#include <action.h>
+#include <command.h>
+#include <condition.h>
+#include <dbase.h>
+#include <move.h>
+#include <name.h>
+#include <skill.h>
+#include <team.h>
+#include <user.h>
+inherit F_ACTION;
+inherit F_ALIAS;
+inherit F_APPRENTICE;
+inherit F_ATTACK;
+inherit F_ATTRIBUTE;
+inherit F_CHANGED;
+inherit F_COMMAND;
+inherit F_CONDITION;
+inherit F_DAMAGE;
+inherit F_DBASE;
+inherit F_EDIT;
+inherit F_FINANCE;
+inherit F_MESSAGE;
+inherit F_MORE;
+inherit F_MOVE;
+inherit F_NAME;
+inherit F_SKILL;
+inherit F_SHELL;
+inherit F_TEAM;
+#define SCHEME_CMD      "/cmds/usr/scheme"
+// Use a tick with longer period than heart beat to save cpu's work
+nosave int next_beat;
+nosave int keep_beat_flag = 0;
+nosave string short_desc = 0;
+void create()
+{
+  seteuid(0); // so LOGIN_D can export uid to us
+}
+
+// Use this function to identify if an object is a character.
+int is_character() { return 1; }
+
+int is_good()
+{
+  string fam = this_object()->query("family/family_name");
+
+  if ((fam == "南海普坨山" ||
+      fam == "五庄观"     ||
+      fam == "方寸山三星洞" ||
+      fam == "将军府")     &&
+      !this_object()->query_condition("killer"))
+  return 1;
+}
+
+int is_bad()
+{
+  string fam = this_object()->query("family/family_name");
+  if (this_object()->query_condition("killer"))
+    return 1;
+
+  if (fam == "大雪山" ||
+      fam == "陷空山无底洞" ||
+      fam == "火云洞")
+  return 1;
+}
+
+void setup()
+{
+  seteuid(getuid(this_object()));
+  set_heart_beat(1);
+  next_beat = time() + 5 + random(10);
+  enable_player();
+  CHAR_D->setup_char(this_object());
+}
+
+void keep_heart_beat()
+{
+  set_heart_beat(1);
+  keep_beat_flag = 1;
+}
+
+void not_keep_heat_beat()
+{
+  keep_beat_flag = 0;
+}
+
+void heart_beat()
+{
+  int t, logon_power,s_day;
+  int period;
+  int wimpy_ratio, cnd_flag;
+  mapping my;
+  object ob;
+  object me;
+  string prompt;
+  int is_player;
+  me = this_object();
+  my = query_entire_dbase();
+  if (userp(me) && living(me) && mapp(my["env"]))
+  {  // update prompt
+    prompt = my["env"]["prompt"];
+    if ((prompt == "time" || prompt == "mud" || prompt == "hp") &&
+         is_waiting_command() && ! me->is_attach_system())
+    {
+      write_prompt();
+    }
+
+  }
+
+// If we're dying or falling unconcious?
+  if (my["kee"] < 0 || my["sen"] < 0)
+  {
+//    QUEST->quest_kill(this_object());
+//    remove_all_enemy(0);
+    if (!living(me))
+      die();
+    else
+      unconcious();
+// Why does the living test? Because
+// The wizard may set immortal but his
+// qi was -1, so I don't want return,
+// or the continue_action will never be
+// called in such case.
+    if (! me || ! living(me))
+      return;
+  }
+
+// Do attack if we are fighting.
+  if (objectp(me))
+  {
+    UPEXP_D->query_level(me);
+    reset_changed();
+    if (userp(me) && logon_power = query("logon_power"))
+    {
+      s_day = NATURE_D->is_special_day();
+      if (s_day == 1)
+      {
+        if (time()%2 == 0)
+          logon_power--;
+      }
+
+      else if (s_day == 2)
+      {
+        if (time()% 3 == 0)
+          logon_power--;
+      }
+
+      else
+        logon_power--;
+      set("logon_power",logon_power);
+      if (logon_power == 32400)
+        tell_object(me,"你的连线状态转变为了 “正常” ！\n");
+      else if (logon_power == 21600)
+        tell_object(me,"你的连线状态转变为了 “虚弱” ！\n");
+      else if (logon_power == 10800)
+        tell_object(me,"你的连线状态转变为了 “极度虚弱” ！\n");
+    }
+
+  }
+
+  if (is_busy())
+  {
+    continue_action();
+  }
+
+  else if (is_delay())
+  {
+    continue_delay();
+  }
+
+  else if (living(me))
+  {
+    string apply;
+    object apply_ob;
+// Is it time to flee?
+    if (is_fighting()
+      && intp(wimpy_ratio = (int)query("env/wimpy"))
+      && wimpy_ratio > 0
+      && (my["kee"] * 100 / my["max_kee"] <= wimpy_ratio
+          || my["sen"] * 100 / my["max_sen"] <= wimpy_ratio))
+    {
+      if (stringp(apply = query("env/wimpy_apply")) &&
+                  objectp(apply_ob = present(apply, me)) &&
+                  apply_ob->query("can_apply_for_wimpy"))
+      {
+        apply_ob->apply_for_wimpy(this_object());
+      }
+
+      else
+        GO_CMD->do_flee(this_object());
+    }
+
+// Do attack or clean up enemy if we have fleed.
+    attack();
+  }
+
+  if (my["doing"] == "scheme")   // executing schedule now
+    SCHEME_CMD->execute_schedule(me);
+  if (!objectp(me)) return;
+  if (! (is_player = playerp(me)))
+  {
+    me->scan();  // scan() may do anything -- include destruct(this_object())
+    if (!objectp(me)) return;
+  }
+
+  if ((t = time()) < next_beat)
+    return;
+  else
+    next_beat = t + 5 + random(10);
+  if (! my["not_living"])
+    cnd_flag = update_condition();
+  if (!objectp(me)) return;
+  if (! (cnd_flag & CND_NO_HEAL_UP))
+    cnd_flag = heal_up();
+  if (! cnd_flag &&
+      ! is_player &&
+      ! keep_beat_flag &&
+      ! is_fighting() &&
+      ! is_busy() &&
+      ! interactive(this_object()))
+  {
+    if (objectp(environment()) && query("chat_msg"))
+    {
+      ob = first_inventory(environment());
+      while (ob && ! interactive(ob))
+        ob = next_inventory(ob);
+    }
+
+    else
+      ob = 0;
+    if (!objectp(ob))
+      set_heart_beat(0);
+  }
+
+  if (! objectp(me) || ! is_player) return;
+  me->update_age();
+  if (living(me))
+  {
+    period = t - ((int) my["last_save"]);
+    if (period < 0 || period > 15 * 60)
+    {
+      string msg;
+      msg = HIR "【翱翔天际】" NOR + WHT "您目前的资料已被载入史册。\n" NOR;;
+      if (! me->save())
+        msg = HIR "【数据保护】由于数据异常，您的档案本次存盘失败。\n" NOR;
+      set("last_save", t);
+      tell_object(me, msg);
+    }
+
+  }
+
+  if (! interactive(me))
+    return;
+  if (my["food"] <= 0 || my["water"] <= 0)
+  {
+    if (objectp(environment()) &&
+       ! environment()->is_chat_room() &&
+       ! query_condition("hunger"))
+    { // born & enter the world
+       apply_condition("hunger", 1);
+    }
+
+  }
+
+  if (query_idle(me) > IDLE_TIMEOUT && ! wizardp(me) &&
+            (! mapp(my["env"]) || ! my["env"]["keep_idle"]))
+    me->user_dump(DUMP_IDLE);
+}
+
+// check the poison attack
+mixed hit_ob(object me, object victim, int damage_bonus)
+{
+  object unarmed_weapon;
+  if (unarmed_weapon = query_temp("armor/hands"))
+    return unarmed_weapon->hit_ob(me, victim, damage_bonus);
+  if (! mapp(query_temp("daub")))
+    return;
+  return COMBAT_D->hit_with_poison(me, victim, this_object());
+}
+
+// added by snowcat 6/27/1997
+int command_function (string arg)
+{
+  command (arg);
+  return 1;
+}
+
+int visible(object ob)
+{
+  int lvl,invis;
+  int my_fali, your_fali;
+
+  if (wizhood(this_player(1)) == "(admin)")
+    return 1;
+
+  if (ob->is_character() &&
+      userp(this_object()) &&
+      wizardp(this_object()) &&
+      wiz_level(this_object()) >= wiz_level(ob))
+    return 1;
+
+  invis = ob->query("env/invisibility");
+  if( !intp(invis) )
+    invis = ob->query_temp("invisiblity");
+  if (invis > 1 && playerp(this_object()) && !ob->is_character())
+    return 0;
+
+  if( intp(invis) && invis > 0)
+  {
+    lvl = this_object()->query("env/invisibility");
+    if (!lvl)
+      lvl = this_object()->query_temp("invisiblity");
+    if(!intp(lvl) || lvl < 1)
+    {
+      if (playerp(this_object()) && playerp(ob))
+      {
+        my_fali = this_object()->query("max_mana");
+        your_fali = ob->query("max_mana");
+        my_fali = my_fali*(this_object()->query_spi());
+        your_fali = your_fali*(ob->query_spi());
+        if (my_fali > (your_fali/100)*130)
+          return 1;
+        return 0;
+      }
+
+      return 0;
+    }
+
+    if (invis > lvl)
+      return 0;
+    return 1;
+  }
+
+  if( ob->is_ghost() )
+  {
+    if( is_ghost() )
+      return 1;
+    if( query_temp("apply/astral_vision") )
+      return 1;
+    return 0;
+  }
+
+  return 1;
+}
+
+// mon 5/19/98
+// for characters reset_eval_cost, so that total eval_cost
+// won't be too high.
+int command( string str )
+{
+  reset_eval_cost();
+  if (!stringp(str))
+    return 0;
+  return efun::command(str);
+}
+
+string set_short_desc(string desc)
+{
+  short_desc = desc;
+}
+
+varargs string short(int raw)
+{
+  string color, title, nick, str, *mask;
+  object me;
+  me = this_object();
+  if (! raw && sizeof(mask = query_temp("apply/short")))
+    str = (string)mask[sizeof(mask) - 1];
+  else
+  {
+    color = query("color");
+    if (stringp(color))
+    {
+      str = COLOR_D->replace_color(color + query("name"),1);
+      str += "(" + query("id") + ")";
+    }
+
+    else
+      str = query("name") + "(" + query("id") + ")";
+    if (! stringp(title = query_temp("title")))
+      title = query("title");
+/*
+// 显示同盟
+    if (me->query("league/league_name"))
+    {
+      title = HIG + "『" + me->query("league/league_name") + "』" + NOR + " ";
+      if (! stringp(title += query_temp("title")))
+        title += query("title");
+    }
+
+*/
+    if (nick = query("nickname"))
+    {
+      str = "「" + nick + "」" + str;
+      if (title) str = title + str;
+    }
+
+    else if (title)
+      str = title + " " + str;
+  }
+
+  if (! raw)
+  {
+   if (short_desc)
+     str = name() + short_desc;
+  }
+
+  else
+    return str;
+  if (me->is_ghost())
+    str = HIB "(鬼气) " NOR + str;
+  if (me->query_condition("killer"))
+    str += HIR" <杀人犯>"NOR;
+  if (me->is_net_dead())
+  {
+    switch (me->query("doing"))
+    {
+      case "breakup":
+        str += HIY " <闭关中>" NOR;
+        break;
+      case "closed":
+        str += HIY " <修炼中>" NOR;
+        break;
+      case "scheme":
+        str += HIW " <计划中>" NOR;
+        break;
+      default:
+        str += HIG " <断线中>" NOR;
+    }
+
+  }
+
+  if (in_input())
+    str += HIC " <输入文字中>" NOR;
+  if (! living(me) && query("disable_type"))
+    str += HIR + query("disable_type") + NOR;
+  if (in_edit())
+    str += HIY " <编辑档案中>" NOR;
+  if (is_fighting())
+    str += HIR " <战斗中>" NOR;
+  if (interactive(this_object())
+    && query_idle(this_object()) > 120
+    && ! this_object()->query_temp("on_baitan"))
+     str += HIM " <发呆中>" NOR;
+  if (query("env/invisibility") || query_temp("invisiblity"))
+    str += HIM " <隐身中>" NOR;
+  return str;
+}
+
+int can_move_distance()
+{
+  object me;
+
+  me = this_object();
+  if (!objectp(me))
+    return 0;
+
+  if (!living(me) || me->is_busy() || me->query_temp("no_move"))
+    return 0;
+
+  return query_dex();
+}
+
+int attack_total_distance(object who)
+{
+  object me;
+  object weapon;
+  int distance;
+
+  me = this_object();
+  if (!objectp(me))
+    return 0;
+
+  if (!living(me))
+    return 0;
+
+  if (!who->is_character())
+    return 0;
+
+  weapon = this_object()->query_temp("weapon");
+  if (objectp(weapon))
+    distance = weapon->query_attack_distance();
+  else
+    distance = 0;
+
+  if (playerp(me))
+    distance += (int)me->query("force")/50 ;
+  else
+    distance += (int)me->query("force")/30 ;
+  if (distance < 1)
+    distance = 1;
+  return distance;
+}
+
+int distance_from(object ob)
+{
+  object me,where, where1;
+  int dis1,dis2;
+
+  me = this_object();
+  if (!objectp(me))
+    return 0;
+
+  if (!objectp(ob))
+    return 0;
+
+  if (!ob->is_character())
+    return 0;
+
+  where = environment(me);
+  where1 = environment(ob);
+
+  if (!objectp(where) || !objectp(where1))
+    return 0;
+
+  if (where != where1)
+    return 0;
+  dis1 = me->attack_total_distance(ob);
+  dis2 = ob->attack_total_distance(me);
+  return (dis1 > dis2) ? dis1 : dis2 ;
+}	

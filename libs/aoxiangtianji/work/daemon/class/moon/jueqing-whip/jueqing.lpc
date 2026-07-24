@@ -1,0 +1,171 @@
+#include <ansi.h>
+#include <combat.h>
+#define SHA "「" HIR "绝情断义" NOR "」"
+#define JUEQING CLASS_D("moon") + "/jueqing-whip/jueqing"
+#define CAUSED "jueqing"
+inherit F_SSERVER;
+int valid_pfm(object me, object target)
+{
+  int t = time();
+  if(userp(me) && (string)me->query("family/family_name") != "月宫")
+    return notify_fail(SHA"是月宫不传之密！\n");
+  if (me->is_busy())
+    return notify_fail("你正忙着呢！\n");
+
+  if (me->query_skill("jueqing-whip", 1) < 180)
+    return notify_fail("你的绝情鞭法修为不够，难以施展" SHA "。\n");
+  if (me->query_skill("moonforce", 1) < 180)
+    return notify_fail("你的圆月心法修为不够，难以施展" SHA "。\n");
+  if (me->query_skill_mapped("whip") != "jueqing-whip")
+    return notify_fail("你没有激发绝情鞭法，难以施展" SHA "。\n");
+  if((int)me->query("sen")  < 200 )
+    return notify_fail("你的精神不足，没法子施用外功！\n");
+  if (me->query("force") < 1200)
+    return notify_fail("你的真气不够，难以施展" SHA "。\n");
+  if (me->query_temp("tick/"+CAUSED))
+    return notify_fail(sprintf("你已经在使用%s。\n",SHA));
+
+  if ((t- me->query_temp("last_jueqing")) < 5)
+    return notify_fail(sprintf("你刚刚用完%s，无法再次使用！\n",SHA));
+
+  return 1;
+}
+
+int perform(object me, object target)
+{
+  object weapon;
+  int i;
+  string msg;
+
+  if (! objectp(weapon = me->query_temp("weapon")) ||
+      (string)weapon->query("skill_type") != "whip")
+    return notify_fail("你使用的武器不对，难以施展" SHA "。\n");
+
+  msg = HIC"问世间情为何物？直叫人生死相许！$N心中一阵酸楚,鞭法忽然变得灵动异常!\n" NOR;
+  msg += HIB "$N" HIB"挥动"NOR + weapon->name() + HIB"，一鞭一鞭，仿佛要诉尽心中"
+         "的酸痛，这层层叠叠的鞭影，把$n笼罩其中！\n"NOR;
+
+  message_vision(msg, me, target);
+  me->set_temp("JQW_perform",1+random(11));
+  COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+  me->set_temp("JQW_perform",1+random(11));
+  COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+  if (living(target))
+  {
+    i = me->query_skill("whip");
+    i = i/10 + random(1/10);
+    if (i > 60)
+      i = 60;
+
+    me->set_pfm_tick(JUEQING, CAUSED,i, target);
+    me->set_temp("busy_for_pfm",SHA);
+  }
+
+  me->add("force", -200);
+  return 1;
+}
+
+int check(object me, object target)
+{
+  object weapon;
+
+  if (!living(me))
+  {
+    me->delete_temp("JQW_perform");
+    me->delete_temp("busy_for_pfm");
+    return 0;
+  }
+
+  weapon = me->query_temp("weapon");
+  if (!objectp(weapon) || (string)weapon->query("skill_type") != "whip")
+  {
+    tell_object(me, sprintf("你手中没有持鞭，%s的攻势便即瓦解！\n" NOR,SHA));
+    me->delete_temp("JQW_perform");
+    me->delete_temp("busy_for_pfm");
+    me->set_temp("last_jueqing",time());
+    return 0;
+  }
+
+  if ( weapon->query("weapon_prop") == 0 )
+  {
+    tell_object(me, sprintf("你的%s已毁，无法持续%s的攻势！\n"NOR,
+                             weapon->name(),SHA));
+    me->delete_temp("JQW_perform");
+    me->delete_temp("busy_for_pfm");
+    me->set_temp("last_jueqing",time());
+    return 0;
+  }
+
+  if (!objectp(target) || (environment(me) != environment(target)))
+  {
+    tell_object(me, sprintf("你没有了对手，%s的攻势便即瓦解！\n",SHA));
+    me->delete_temp("JQW_perform");
+    me->delete_temp("busy_for_pfm");
+    me->set_temp("last_jueqing",time());
+    return 0;
+  }
+
+  if (!living(target))
+  {
+    tell_object(me, sprintf("你的对手已经无法反击了，%s的攻势便即瓦解！\n",SHA));
+    me->delete_temp("JQW_perform");
+    me->delete_temp("busy_for_pfm");
+    me->set_temp("last_jueqing",time());
+    return 0;
+  }
+
+  if (!me->is_fighting(target))
+  {
+    tell_object(me,sprintf("\n你现在没有和%s过招，当下收回了%s的攻势。\n\n"NOR,target->name(),SHA));
+    me->delete_temp("JQW_perform");
+    me->delete_temp("busy_for_pfm");
+    me->set_temp("last_jueqing",time());
+    return 0;
+  }
+
+  if ( (string)me->query_skill_mapped("whip") != "jueqing-whip" )
+  {
+    tell_object(me, sprintf("你转而施展其他鞭法，无法再以%s攻敌！\n"NOR,SHA));
+    me->delete_temp("JQW_perform");
+    me->delete_temp("busy_for_pfm");
+    me->set_temp("last_jueqing",time());
+    if (!me->is_busy())
+      me->start_busy(1+random(2));
+    return 0;
+  }
+
+  if ( (int)me->query("force") < 400  )
+  {
+    tell_object(me, sprintf("你的内力后继不足，难以持续%s的威力，只好收缓攻势。\n"NOR,SHA));
+    me->delete_temp("JQW_perform");
+    me->delete_temp("busy_for_pfm");
+    me->set_temp("last_jueqing",time());
+    if (!me->is_busy())
+      me->start_busy(1+random(2));
+    return 0;
+  }
+
+  me->set_temp("JQW_perform",1+random(11));
+  if (random(3) == 1)
+  {
+    message_vision(HIG"$N" HIG"舞动的鞭影透出无边的伤感，带出阵阵低泣，让$n"
+                   HIG"心出伤感，无法自持了！\n\n"NOR,me,target);
+    if (!target->is_busy())
+      target->start_busy(2+random(2));
+  }
+
+  if (!me->query_temp("busy_for_pfm"))
+    me->set_temp("busy_for_pfm",SHA);
+
+  return 1;
+}
+
+void remove_effect(object me, object target)
+{
+  message_vision(HIW"\n$N攻势渐缓，已将一套"+SHA+HIW"使完！\n" NOR, me);
+  me->delete_temp("JQW_perform");
+  me->delete_temp("busy_for_pfm");
+  me->set_temp("last_jueqing",time());
+  return;
+}
+

@@ -1,0 +1,297 @@
+// Created by waiwai@2001/07/20 根据xb3的superbag.
+// 这个东西变向的实现了类似UO里面的玩家银行
+// 的作用.至于有没有系统问题还需要在实践中进
+// 一步认证.注意suicide.c等要做相应改动.
+#include <ansi.h>
+inherit ITEM;
+inherit F_SAVE;
+inherit F_AUTOLOAD;
+void delete_waste();
+void restore_waste();
+int do_save(string);
+int do_load(string);
+int save();
+void create()
+{
+  restore_waste();
+  if( clonep() )
+  {
+    set("master_id",this_player()->query("id"));
+    set_default_object(__FILE__);
+  }
+
+  set("no_put",1);
+  set("no_drop",1);
+  set("no_get",1);
+  set("no_putto",1);
+  set("no_give",1);
+  set("no_break",1);
+  set("no_droproom",1);
+  seteuid(getuid());
+}
+
+void init()
+{
+  if( !environment()->is_character())
+  {
+    destruct(this_object());
+    return;
+  }
+
+  if (environment()->query("id")!=query("master_id"))
+  {
+    destruct(this_object());
+    return;
+  }
+
+  else
+  {
+    add_action("do_save", "putin");
+    add_action("do_load", "getin");
+    add_action("do_info", "chakan");
+  }
+
+}
+
+string query_save_file()
+{
+  return DATA_DIR+"qingdan/"+query("master_id")[0..0]+"/"+query("master_id");
+}
+
+string query_autoload()
+{
+  return query("master_id");
+}
+
+void autoload(string name)
+{
+  set("master_id",name);
+  restore();
+}
+
+int do_save(string arg)
+{
+  object me,*ob;
+  int s;
+  int flag;
+  mapping *notes;
+  mapping note;
+  string str;
+  int amount,rich,sub;
+  if (!arg)
+    return 0;
+  me=this_player();
+  if(strsrch(environment(me)->query("short"),"钱庄")<0 ||
+     strsrch(environment(me)->query("short"),"相记钱庄")<0 )
+    return notify_fail("你只能在长安相记钱庄存取物品。\n");
+  ob=all_inventory(me);
+  flag=0;
+  s=sizeof(ob);
+  while(s--)
+  {
+    if (!stringp(ob[s]->query("id")))
+      continue;
+    if (ob[s]->query("id")==arg)
+    {
+      flag=1;
+      break;
+    }
+
+  }
+
+  if(!flag)
+    return notify_fail("你身上没有这种物品。\n");
+//no_putin的设置是为了禁止类似bag.c box.c kuang.c的物品重复多次被putin.
+//同样的设置新的容器物品时要注意这一点.对于带时间函数的object最好设置不能putin.
+  if(!ob[s]->query("can_auction")
+  && !ob[s]->query("can_be_enchased")
+  && !ob[s]->query("can_putin") )
+  {
+    if(ob[s]->query("no_get")
+      || ob[s]->query("no_drop")
+      || ob[s]->query("no_break")
+      || ob[s]->query("no_putin")
+      || ob[s]->query("npc_only")
+      || ob[s]->query("deadfly")
+      || ob[s]->query_max_encumbrance()
+      || ob[s]->query("no_put"))
+      return notify_fail(WHT"你不能把这样物品放入保险库中。\n"NOR);
+    amount=ob[s]->query("value");
+    if(amount>100000)
+      return notify_fail("你不能把贵重物品放入保险库中。\n");
+    if(amount<1)
+      return notify_fail("这样东西不值钱不能存！\n");
+  }
+
+  if (ob[s]->query("max_liquid") &&
+      ob[s]->query("liquid/remaining")<ob[s]->query("max_liquid"))
+    return notify_fail(WHT"拿个喝过的也想来放入保险库中？\n"NOR);
+  if (ob[s]->query("armor_prop/armor")!=ob[s]->query("armor/max_armor"))
+    return notify_fail(WHT"这个物品已破损不能放入保险库中！\n"NOR);
+  if (ob[s]->query("weapon_prop/damage")!=ob[s]->query("max_weapon"))
+    return notify_fail(WHT"这个物品已破损不能放入保险库中！\n"NOR);
+  if(ob[s]->query("money_id"))
+    return notify_fail("你不能把钱放入保险库中。\n");
+  if(ob[s]->query("equipped"))
+    return notify_fail("你必须先卸掉装备才能把物品放入保险库中。\n");
+  if(ob[s]->query("keep_this"))
+    return notify_fail("你必须先去掉物品记号才能放入保险库中。\n");
+  if (ob[s]->is_no_clone())
+    return notify_fail(WHT"这个宝贝不能拿来放入保险库中！\n"NOR);
+  if (ob[s]->is_item_make())
+    return notify_fail(WHT"玩家自己制造的物品不能放入保险库中！\n"NOR);
+  if (ob[s]->is_character())
+    return notify_fail(WHT"你不能把活人放入保险库中！\n"NOR);
+  notes = query("notes");
+  if( me->query("vip") )
+  {
+    if( sizeof(notes) >=90)
+      return notify_fail("你的保险库额度已经满了。\n");
+  }
+
+  else
+  {
+    if( sizeof(notes) >=30)
+      return notify_fail("你的保险库额度已经满了。\n");
+  }
+
+  rich=(int)me->query("balance");
+  sub=(int)(amount/4);
+  if(rich<sub)
+    return notify_fail("钱庄老板说道：你帐号上的钱不够交税了。\n");
+  sub=-1*sub;
+  me->add("balance",sub);
+  printf("钱庄老板说道：\n");
+  printf("在保险库中存东西需先收税费四分之一！\n");
+  printf("客官用不着您费心, 我自己从您钱庄转帐就成了。\n");
+  str=sprintf("%d",ob[s]->query_amount());
+  note = allocate_mapping(4);
+  note["title"] = ob[s]->query("name");
+  note["msg"] = base_name(ob[s]);
+  note["amount"]=str;
+  destruct(ob[s]);
+  if( !pointerp(notes) || !sizeof(notes) )
+    notes = ({ note });
+  else
+    notes += ({ note });
+  set("notes", notes);
+  save();
+  write("操作成功！\n");
+  return 1;
+}
+
+int do_load(string arg)
+{
+  mapping *notes;
+  int num,amount;
+  object me,obj;
+  if (!arg)
+    return 0;
+  me=this_player();
+  if(strsrch(environment(me)->query("short"),"相记钱庄")<0)
+    return notify_fail("你只能在长安相记钱庄存取物品。\n");
+  notes = query("notes");
+  if( !pointerp(notes) || !sizeof(notes) )
+  {
+    write("你目前没有任何物品存放在保险库中!\n");
+    return 1;
+  }
+
+  if( !sscanf(arg, "%d", num) )
+    return notify_fail("你要取出第几样物品？\n");
+  if( num < 1 || num > sizeof(notes) )
+    return notify_fail("物品序号不对。\n");
+  if (file_size(notes[num-1]["msg"]+".lpc")<0)
+  {
+    notes = notes[0..num-2] + notes[num..sizeof(notes)-1];
+    set("notes", notes);
+    save();
+    return notify_fail("没有这种东西!\n");
+  }
+
+  sscanf(notes[num-1]["amount"],"%d",amount);
+  obj=new(notes[num-1]["msg"]+".lpc");
+  if(amount)
+    obj->set_amount(amount);
+  if(!obj->move(me))
+  {
+    tell_object(me,"由于这样东西太重了,你只好丢在地上。");
+    obj->move(environment(me));
+  }
+
+  notes = notes[0..num-2] + notes[num..sizeof(notes)-1];
+  set("notes", notes);
+  save();
+  write("OK.\n");
+  return 1;
+}
+
+int do_info(string arg)
+{
+  mapping *notes;
+  int i,count;
+  notes = query("notes");
+  if( !pointerp(notes) || !sizeof(notes) )
+  {
+    write("你目前没有任何东西存放在保险库中！\n");
+    return 1;
+  }
+
+  count=sizeof(notes) ;
+  printf("你的保险库中目前存放着(%d)样东西：\n",count);
+  for(i=0;i<count;i++)
+  {
+    printf("[ %d ]         %s\n",i+1,notes[i]["title"]);
+  }
+
+  return 1;
+}
+
+void delete_waste()
+{
+  delete("name");
+  delete("unit");
+  delete("id");
+  delete("long");
+}
+
+//下面可以做为特殊禁止之用,但在logind里面已经相应设置.暂时没有什么作用.
+//对于某些存在"guest"用户设置的mudlib是需要的.
+int save()
+{
+  int i;
+  delete_waste();
+  if(this_object()->query("master_id") &&
+     this_object()->query("master_id")=="guest")
+    this_object()->set("notes",({ }));
+  i=::save();
+  restore_waste();
+  return i;
+}
+
+void restore_waste()
+{
+  set_name( WHT"钱庄保险库清单"NOR, ({ "baoxianku qingdan","qingdan" }) );
+  set("unit", "张");
+  set("no_put",1);
+  set("no_drop",1);
+  set("no_get",1);
+  set("no_putto",1);
+  set("no_give",1);
+  set("no_break",1);
+  set("no_droproom",1);
+  set("long",
+HIB"\n─────────────────────────────────────\n"NOR WHT+
+"这是一份你在西游记中钱庄保险库存放的物品清单。望妥善保管，遗失后果自负。\n\n"+
+"\tputin       物品id                    把物品存入保险库中\n"+
+"\tgetin       在保险库中物品的序号      把物品从保险库中取出\n"+
+"\tchakan                                查看保险库中的物品\n"+
+HIB"─────────────────────────────────────\n\n"NOR
+);
+}
+
+void owner_is_killed()
+{
+  destruct(this_object());
+}
+

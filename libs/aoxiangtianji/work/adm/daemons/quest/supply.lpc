@@ -1,0 +1,158 @@
+// 玩家任务守护进程：supply.c
+#include <ansi.h>
+// 供应的物品：由于接受的时候NPC只负责核对中文名字（这是由于
+// MUD中的代码一致性不好的缘故），所以每件提供的物品务必要考
+// 虑清楚，不要和MUD中的其他物品重名。
+string *supply_objs = ({
+   "/d/obj/weapon/sword/changjian",
+   "/d/obj/weapon/throwing/jili",
+   "/d/obj/weapon/stick/tiegun",
+   "/d/obj/weapon/stick/zhubang",
+   "/d/obj/weapon/sword/zhujian",
+   "/d/obj/weapon/whip/changbian",
+   "/d/obj/weapon/dagger/dagger",
+   "/d/obj/weapon/sword/duanjian",
+   "/d/obj/weapon/blade/dadao",
+   "/d/obj/weapon/staff/gangzhang",
+   "/d/obj/armor/armor/tiejia",
+   "/d/obj/weapon/hammer/hammer",
+   "/d/obj/weapon/blade/gangdao",
+   "/d/obj/weapon/sword/gangjian",
+   "/d/obj/weapon/blade/jiedao",
+   "/d/obj/weapon/stick/qimeigun",
+   "/d/obj/weapon/blade/mudao",
+   "/d/obj/weapon/whip/tielian",
+   "/d/obj/weapon/throwing/feihuangshi",
+   "/d/obj/armor/armor/tengjia",
+});
+// 接受供应的NPC：要求这些人必须在指定的场景，所以这里指明的
+// 是场景和NPC的ID。
+mapping rcv_npcs = ([
+   "/d/beiping/dangpu"            : "zhang degui",
+   "/d/changan-e/ehouse2"         : "dibao",
+   "/d/changan-e/shop"            : "li si",
+   "/d/changan-s/eside2"          : "fisher",
+   "/d/changan-s/wside3"          : "lu sheng",
+   "/d/chengdu/chufang"           : "chu niang",
+   "/d/chengdu/wuguan"            : "ma wude",
+   "/d/chengdu/jiudian"           : "tang hua",
+   "/d/chengdu/bingqidian"        : "tang huai",
+   "/d/city/shoushi-dian"         : "chen laoban",
+   "/d/city/qingxuguan"           : "wuyuan daozhang",
+   "/d/city/wuguanzhong"          : "fan qingping",
+   "/d/city/zhubaohang"           : "jin fuhuan",
+   "/d/city/by-zahuopu"           : "wei luqi",
+   "/d/city/qx-yaopu"             : "shi jiugong",
+   "/d/city/biaoju-dating"        : "wan",
+   "/d/guanwai/road5"             : "er hu",
+   "/d/guanwai/jishi"             : "ha dani",
+   "/d/guanwai/tuwu"              : "he ersu",
+   "/d/hangzhou/dxbaodian2"       : "dabei zunzhe",
+   "/d/henshan/baihuzhai"         : "du fenge",
+   "/d/henshan/zahuopu"           : "huang laoban",
+   "/d/jingzhou/chaliao"          : "afang",
+   "/d/jingzhou/qianzhuang"       : "qian defa",
+   "/d/jingzhou/shuyuan"          : "xiao xiangzi",
+   "/d/jjf/gate"                  : "qin an",
+   "/d/kaifeng/chufang"           : "kong guanren",
+   "/d/kaifeng/ciqi"              : "liu zhanggui",
+   "/d/kaifeng/cangjing"          : "zhifa zhanglao",
+   "/d/kunming/dangpu"            : "liu tong",
+   "/d/lanzhou/qianzhuang"        : "qian mixin",
+   "/d/lanzhou/shandong"          : "lao ren",
+   "/d/lingzhou/daodian"          : "xiao huoji",
+   "/d/luoyang/xinluofang"        : "gaoli shang",
+   "/d/luoyang/ciqi"              : "han yun",
+   "/d/luoyang/huqing"            : "hu xueyuan",
+   "/d/luoyang/xiaoshe"           : "lvzhu weng",
+   "/d/luoyang/dangpu"            : "qi laoer",
+   "/d/luoyang/tangsancai"        : "qin zhanggui",
+   "/d/luoyang/shoushi"           : "zhou yifeng",
+   "/d/luoyang/armor"             : "zhu zheng",
+   "/d/luoyang/weapon"            : "zhu yin",
+   "/d/suzhou/chitang"            : "xiao yu",
+   "/d/suzhou/yanyutang"          : "xiao yatou",
+   "/d/suzhou/tangyuan"           : "ling tangyuan",
+   "/d/suzhou/jubaozhai"          : "sun baopi",
+   "/d/suzhou/dangpu"             : "wang heji",
+   "/d/yangzhou/chaguan"          : "aqing sao",
+   "/d/yangzhou/wuguan"           : "chen youde",
+   "/d/yangzhou/shan"             : "liu susu",
+   "/d/yangzhou/qianzhuang"       : "qian yankai",
+   "/d/yangzhou/dangpu"           : "tang nan",
+   "/d/yangzhou/zuixianlou2"      : "xian laoban",
+   "/d/yangzhou/zahuopu"          : "yang yongfu",
+   "/d/yangzhou/lichunyuan"       : "wei chunfang",
+]);
+void startup();
+// 任务对象创建
+void create()
+{
+  seteuid(getuid());
+  if (! clonep() && find_object(QUEST_D))
+    startup();
+}
+
+void start_quest()
+{
+  object env;             // 接收物品的NPC所在的环境
+  object npc;             // 接收物品的NPC对象
+  object *obs;            // 目前所有的SUPPLY任务
+  string *env_room;       // 新任务能够在的地点
+  string room;            // NPC所在的环境文件名字
+  string sob_file;        // 接收的物品对应的文件
+  object qob;             // 任务对象
+// 选择一个新的地点(目前没有SUPPLY任务的)
+  env_room = keys(rcv_npcs);
+  obs = children("/obj/quest/supply");
+  if (arrayp(obs) && sizeof(obs) > 0)
+    env_room -= obs->query("quest_position");
+  if (sizeof(env_room) < 1)  // 无法找到这样的地点
+    return;
+  room = element_of(env_room);
+  env = get_object(room);
+// 选择改地点中的人
+  if (! objectp(npc = present(rcv_npcs[room], env)) ||
+        npc->query("startroom") != base_name(env))
+// 无法找到该地点中合适的NPC来接收
+    return;
+// 选择一种兵器
+  sob_file = element_of(supply_objs);
+// 初始化任务的一些信息（启动地点）
+  qob = new("/obj/quest/supply");
+  qob->set("quest_position", room);
+  CHANNEL_D->do_channel(find_object(QUEST_D),
+                        "sys", "进程(SUPPLY)在" + env->short(1) +
+                        HIR "地点利用" + npc->name() +
+                        HIR "创建了一个任务。");
+// 交由任务自己进行初始化
+  qob->init_quest(npc, sob_file);
+}
+
+private void heart_beat()
+{
+  if (! find_object(QUEST_D))
+    return;
+// 如果可以，每次心跳产生一个QUEST
+  start_quest();
+}
+
+// 任务守护进程唤醒这个进程
+void startup()
+{
+// 启动
+  if (! find_object(QUEST_D))
+    return;
+  if (! query_heart_beat())
+    CHANNEL_D->do_channel(find_object(QUEST_D),
+                          "sys", "进程(SUPPLY)启动了。");
+// 平均每四分钟产生一个任务
+  set_heart_beat(200 + random(20));
+}
+
+// 停止这个任务进程
+void stop()
+{
+  set_heart_beat(0);
+}
+

@@ -1,0 +1,126 @@
+#include <ansi.h>
+#include <combat.h>
+#define XIAO "「" HIR "碧海龙吟" NOR "」"
+#define ROAR CLASS_D("dragon") + "/dragonforce/roar"
+#define CAUSED "roar"
+inherit F_SSERVER;
+int valid_exert(object me, object target)
+{
+  int t = time();
+
+  if(userp(me) && (string)me->query("family/family_name") != "东海龙宫")
+    return notify_fail(sprintf("%s是东海龙宫不传之密！\n",XIAO));
+  if (me->is_busy())
+    return notify_fail("你正忙着呢！\n");
+
+  if ((int)me->query_skill("dragonforce", 1) < 150)
+    return notify_fail(sprintf("你的龙神心法修为不够，难以施展%s。\n",XIAO));
+
+  if( (int)me->query("max_force") < 2000 )
+    return notify_fail(sprintf("你的内力修为不够，难以施展%s。\n",XIAO));
+
+  if( (int)me->query("force") < 1500 )
+    return notify_fail("你的真气不够。\n");
+  if((int)me->query("sen") < 100 )
+    return notify_fail("你无法集中精力！\n");
+  if (me->query_temp("tick/"+CAUSED))
+    return notify_fail(sprintf("你已经在使用%s。\n",XIAO));
+
+  if ((t- me->query_temp("last_roar")) < 10)
+    return notify_fail(sprintf("你刚刚用完%s，无法马上使用！\n",XIAO));
+
+  return 1;
+}
+
+int exert_attack(object me, object target)
+{
+  int i;
+  if( !objectp(target) )
+    target = offensive_target(me);
+  if( !objectp(target)
+   || !target->is_character()
+   || target->is_corpse()
+   || target==me)
+  {
+    write("你要攻击谁？\n");
+    return 0;
+  }
+
+  if (!me->is_fighting(target))
+    return notify_fail(sprintf("你并没有和%s在战斗！\n",target->name()));
+  message_vision(HIM"$N" HIM"退后两步，深深地吸一口气，猛然发出股如山崩海啸般"
+                 "的龙吟！\n\n"NOR, me);
+  message_vision(HIM"那啸声渐渐由高转低，有强转弱，却始终在$N" HIM"耳边萦绕！\n"NOR,target);
+  i = me->query_skill("force");
+  i = i/10 + random(i/10);
+  if (i > 60)
+    i = 60;
+
+  me->set_pfm_tick(ROAR, CAUSED,i, target);
+  me->add("force", -200);
+  return 1;
+}
+
+int check(object me, object target)
+{
+  int i, dam;
+
+  if (!living(me))
+    return 0;
+
+  if (!objectp(target) || (environment(me) != environment(target)))
+  {
+    return 0;
+  }
+
+  if (!living(target))
+  {
+    me->set_temp("last_roar",time());
+    return 0;
+  }
+
+  if (!me->is_fighting(target))
+  {
+    me->set_temp("last_roar",time());
+    return 0;
+  }
+
+  if ( (string)me->query_skill_mapped("force") != "dragonforce" )
+  {
+    me->set_temp("last_roar",time());
+    return 0;
+  }
+
+  if ( (int)me->query("force") < 400  )
+  {
+    me->set_temp("last_roar",time());
+    return 0;
+  }
+
+  i = me->query_tick_use(CAUSED);
+  if (!me->is_busy() && (i%4 == 0))
+  {
+    message_vision(HIR"那啸声若有若无，渐渐的钻入了$N"
+                   HIR"的耳中，如针扎般让人头痛欲裂！\n"NOR,target);
+    dam = me->query_skill("force");
+    dam = dam/2 + random(dam);
+    if (dam > 0)
+    {
+      target->receive_damage("sen",dam,me);
+      target->receive_wound("sen",random(dam)+1,me);
+      if (!target->is_busy())
+        target->start_busy(2+random(2));
+    }
+
+  }
+
+  return 1;
+}
+
+void remove_effect(object me, object target)
+{
+  message_vision(HIW"\n$N" HIW"慢慢平息了啸声！\n" NOR, me);
+  me->set_temp("last_roar",time());
+  return;
+}
+

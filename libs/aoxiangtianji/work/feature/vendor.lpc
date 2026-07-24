@@ -1,0 +1,121 @@
+// FEATURE vendor.c
+// Last modified by waiwai@2001/07/20
+#include <ansi.h>
+#include <room.h>
+#include <dbase.h>
+#include <name.h>
+#include <config.h>
+int is_vendor() {return 1;}
+
+int buy_object(object me, string what)
+{
+  string ob;
+  if( stringp(ob = query("vendor_goods/" + what)) )
+    return ob->query("value");
+  else
+    return 0;
+}
+
+int complete_trade(object me, string what, int amount)
+{
+  string ob_file, msg;
+  object ob;
+  int num;
+  if( !wizardp(me) )
+  {
+    if( me->query_condition("killer") )
+      return notify_fail(CYN"你正在被通缉中,店铺不做你的生意！\n"NOR);
+  }
+
+  if (!amount)
+    amount = 1;
+
+  if( stringp(ob_file = query("vendor_goods/" + what)) )
+  {
+    ob = new(ob_file);
+    num = ob->query_amount();
+    if(num > 0)
+      ob->set_amount(amount*num);
+    else if (amount > 1)
+      return notify_fail("这样东西无法一次买很多！请用buy <某物序号> from <某人>\n");
+    else
+      amount = 1;
+    if(!ob->move(me))
+    {
+      printf(CYN"由于你身上已经装不下过多的东西了,所以"
+            +ob->name()+NOR CYN"只能放在地上。\n"NOR);
+      ob->move(environment(me));
+    }
+
+    msg = "$N" HIW"向$n" HIW"买下"NOR + chinese_number(amount);
+    if (ob->query("unit"))
+      msg += ob->query("unit");
+    else
+      msg += ob->query("base_unit");
+    msg += ob->query("name") + HIW"。\n"NOR;
+
+    message_vision(msg, me, this_object() );
+    return 1;
+  }
+
+  return notify_fail(WHT"这里没有你要买的这样东西。\n"NOR);
+}
+
+int do_vendor_list(string arg)
+{
+  mapping goods;
+  string list, *name;
+  string tlist, num_str, o_name;
+  int i, amount;
+  object me;
+  me =this_player();
+  if( !wizardp(me) )
+  {
+    if( me->query_condition("killer") )
+      return notify_fail(CYN"你正在被通缉中,店铺不做你的生意！\n"NOR);
+  }
+
+  if( !mapp(goods = query("vendor_goods")) )
+    return 0;
+  if( arg && !this_object()->id(arg) )
+    return 0;
+  name = keys(goods);
+  if(!sizeof(name))
+    return notify_fail(WHT"这儿的东西全卖光了。\n"NOR);
+  list = "本店现货销售下列商品，概不赊帐:  \n"NOR;
+  list += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
+  list += "[序号]    [名      称]                     [单 位][单位数量]   [单 价]\n";
+  list += "──────────────────────────────────────\n";
+  for(i=0; i<sizeof(name); i++)
+  {
+    num_str = sprintf("%d",i+1);
+    o_name = goods[num_str]->query("name");
+    tlist = sprintf("[%-2s]    %-"+(34+color_len(o_name))+"s",
+            num_str,
+            goods[num_str]->query("name") +
+                "(" + goods[num_str]->query("id") + ")");
+
+    amount = goods[num_str]->query_amount();
+    if (amount < 1)
+      amount = 1;
+
+    if( goods[num_str]->query("base_unit") )
+      list += sprintf("%s → 每%4s %3d    %s \n",
+              tlist,
+              goods[num_str]->query("base_unit"),
+              amount,
+              MONEY_D->price_num(goods[num_str]->query("base_value")) );
+    else
+      list += sprintf("%s → 每%4s %3d    %s \n",
+              tlist,
+              goods[num_str]->query("unit"),
+              amount,
+              MONEY_D->price_num(goods[num_str]->query("value")) );
+  }
+
+  list += "━━━━━━━━━━━━━━━━━━━━━━━━ 仙剑奇侠传商业行会 ━━━━\n";
+  list += "注:你可以用 buy 序号 from ID 来购买物品.\n\n";
+  write(list);
+  return 1;
+}
+

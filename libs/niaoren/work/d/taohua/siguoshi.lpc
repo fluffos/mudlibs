@@ -1,0 +1,182 @@
+inherit ROOM;
+
+void create()
+{
+    set("short", "思過室");
+    set("long", @LONG
+這是桃花島上供本門弟子閉門思過的地方。屋里僅僅放著一張
+床，顯得空蕩蕩的。四面則是光禿禿的牆壁，看上去黑黝黝的，原
+來卻是鐵筑的。靠門的地方有一小洞，洞邊放著一只碗。往東是一
+間不起眼的小屋，門上挂了個牌子「桃花軒」。
+LONG );
+	set("exits", ([
+		"west"  : __DIR__"houyuan",
+	]));
+	set("objects", ([
+		__DIR__"npc/mei" : 1,
+	]) );    
+//	set("no_clean_up", 0);
+	setup();
+}
+
+void init()
+{
+    add_action("do_knock", "knock");
+    add_action("do_push", "push");
+}
+
+int close_men()
+{
+    object room;
+
+    if(!( room = find_object(__DIR__"xiuxishi")) )
+        room = load_object(__DIR__"xiuxishi");
+    if(objectp(room))
+    {
+        delete("exits/east");
+        message("vision", "門吱吱呀呀地自己合上了。\n", this_object());
+        room->delete("exits/west");
+        message("vision", "門吱吱呀呀地自己合上了。\n", room);
+    }
+    else message("vision", "ERROR: men not found(close).\n", room);
+}
+
+int do_knock(string arg)
+{
+    object room;
+
+    if (query("exits/east"))
+        return notify_fail("大門已經是開著了。\n");
+
+    if (!arg || (arg != "door" && arg != "men"))
+        return notify_fail("你要敲什么？\n");
+
+    if(!( room = find_object(__DIR__"xiuxishi")) )
+        room = load_object(__DIR__"xiuxishi");
+        
+    if(objectp(room))
+	{
+		if ((int)room->query_temp("sleeping_person") > 0)
+		{
+        	message_vision(
+"$N剛輕輕地敲了一下門，就聽見里面傳出一陣雷鳴般的  聲，\n"
+"顯然里面的人睡得跟死豬似的，怎么敲都沒用了\n",
+			this_player());
+		}
+		else if ((int)room->query_temp("person_inside") > 0)
+		{
+			switch( random(2) )
+			{
+				case 0:
+        			message_vision(
+"$N輕輕地敲了敲門，只聽見里面有人很不耐煩地吼到：\n"
+"剛躺下就來敲門！我睡著了，聽不見！！！\n",	this_player());
+					break;
+				case 1: 
+					message_vision(
+"$N輕輕地敲了敲門，只聽見里面有些響動，\n"
+"好象有人在踱來踱去，拿不定主意是否開門。\n", this_player());
+					break;
+			}       	
+		}
+		else
+		{
+			room->delete_temp("sleeping_person");
+			message_vision("$N輕輕地敲了敲門：咚、咚、咚．．．咚、咚、咚．．．\n",
+            this_player());
+		}
+	}
+
+    if(objectp(room))
+    	message("vision",
+    	"外面傳來一陣敲門聲，你從門縫往外一瞧，是"+this_player()->query("name")+"一臉焦急地站在門外，\n"
+    	"看樣子也想進來休息。\n", room);
+        
+    return 1;
+}
+
+int do_push(string arg)
+{
+    object room;
+
+    if (query("exits/east"))
+        return notify_fail("門已經是開著了。\n");
+
+    if (!arg || (arg != "door" && arg != "men"))
+        return notify_fail("你要推什么？\n");
+
+    if(!(room = find_object(__DIR__"xiuxishi")))
+        room = load_object(__DIR__"xiuxishi");
+        
+    if(objectp(room))
+    {
+		if((int)room->query_temp("person_inside")<=0)
+		{
+			room->delete_temp("person_inside");
+			set("exits/east", __DIR__"xiuxishi");
+			message_vision("$N輕輕地把門推開。\n", this_player());
+			room->set("exits/west", __FILE__);
+			remove_call_out("close_men");
+			call_out("close_men", 10);
+		}
+		else 
+		{
+			message_vision("$N想把門推開，卻發覺門被人從里面閂上了。\n",this_player());
+		}
+	}
+
+    return 1;
+}
+
+string look_men()
+{
+    object room;
+
+    if (query("exits/east"))
+		return ("門上挂了個牌子：桃花軒\n");
+
+    if(!( room = find_object(__DIR__"xiuxishi")) )
+        room = load_object(__DIR__"xiuxishi");
+
+    if( objectp(room) )
+    if( (int)room->query_temp("person_inside") > 0 )
+    {
+		return ("門上挂了個牌子：打擾一次、罰跪三天!\n");
+    } 
+    
+    return ("門上挂了個牌子：桃花島弟子休息室\n");
+}
+
+int valid_leave(object me, string dir)
+{
+	object room;
+    	
+	if(!( room = find_object(__DIR__"xiuxishi")) )
+		room = load_object(__DIR__"xiuxishi");
+
+	if(objectp(room) && dir == "east")
+	{
+		room->add_temp("person_inside", 1);
+		// will open the door if ppl inside stay too long 
+		remove_call_out("force_open");
+		call_out("force_open", 299, room);
+	}		
+
+	return ::valid_leave(me, dir);
+}
+
+int force_open(object room)
+{
+	if(!objectp(room))
+		return 0;
+    if((int)room->query_temp("person_inside") <= 0)
+		return 0;
+    
+	room->delete_temp("person_inside");
+    set("exits/east", __DIR__"xiuxishi");
+    room->set("exits/west", __FILE__);
+    message("vision", "外面突然響起粗重的腳步聲，由遠而近，到門前停了下來．．．\n"
+    	"梅超風啪地把門打開，伸個頭進來，一臉狐疑：呆大半天了還不出去，搞什么鬼？\n", room);
+    remove_call_out("close_men");
+    call_out("close_men", 10);
+}

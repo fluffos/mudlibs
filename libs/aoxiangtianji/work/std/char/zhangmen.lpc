@@ -1,0 +1,562 @@
+inherit NPC;
+inherit F_SAVE;
+#include <ansi.h>
+void reset_me (object me);
+int fully_recover (object me);
+string zm_apply();
+void setup()
+{
+  restore();
+  set("inquiry", ([
+    "掌门大弟子" : (: zm_apply :),
+    "掌门弟子" : (: zm_apply :),
+    "大弟子" : (: zm_apply :),
+    "掌门" : (: zm_apply :),
+  ]) );
+  if (clonep())
+    keep_heart_beat();
+  if (query("current_player")=="none of us")
+  {
+    reset_me(this_object());
+    ::setup();
+    return;
+  }
+
+  fully_recover(this_object());
+  ::setup();
+  return;
+}
+
+void create()
+{
+  set_name("大弟子", ({ "zhang men", "zhangmen" }) );
+  set("gender", "男性" );
+  set("age", 30);
+  set("long", "掌门大弟子。" );
+  set("attitude", "heroism");
+  set("current_player","none of us");
+  setup();
+  carry_object("/obj/cloth/linen")->wear();
+}
+
+void reset_me (object me)
+{
+  int i;
+  object *inv;
+  mapping skill_status, map_status;
+  string *skillnames, *mapnames;
+
+  reset_eval_cost();
+  if ( mapp(map_status = me->query_skill_map()) )
+  {
+    mapnames = keys(map_status);
+    for(i=0; i<sizeof(mapnames); i++)
+    {
+      me->map_skill(mapnames[i]);
+    }
+
+  }
+
+  if ( mapp(skill_status = me->query_skills()) )
+  {
+    skillnames = keys(skill_status);
+    for(i=0; i<sizeof(skillnames); i++)
+    {
+      me->delete_skill(skillnames[i]);
+    }
+
+  }
+
+  inv = all_inventory(me);
+  for(i=0; i<sizeof(inv); i++)
+  {
+    destruct (inv[i]);
+  }
+
+  me->set_name("大弟子", ({ "zhang men", "zhangmen" }) );
+  me->set("gender", "男性" );
+  me->set("title",me->query("family/family_name")+"掌门");
+  me->set("short",me->query("name")+"("+capitalize(me->query("id"))+")");
+  me->set("attitude", "heroism");
+  me->set("current_player","none of us");
+  me->set("str", 30);
+  me->set("per", 30);
+  me->set("int", 30);
+  me->set("age", 30);
+  me->set("dex", 30);
+  me->set("weapon", 0);
+  me->set("armor", 0);
+  me->set_skill("force",  60);
+  me->set_skill("spells", 60);
+  me->set_skill("unarmed",60);
+  me->set_skill("dodge",  60);
+  me->set_skill("parry",  60);
+  me->set("max_gin", 600);
+  me->set("eff_gin", 600);
+  me->set("gin", 600);
+  me->set("max_kee", 600);
+  me->set("eff_kee", 600);
+  me->set("kee", 600);
+  me->set("max_sen", 600);
+  me->set("eff_sen", 600);
+  me->set("sen", 600);
+  me->set("force", 600);
+  me->set("max_force", 600);
+  me->set("mana", 600);
+  me->set("max_mana", 600);
+  me->set("force_factor", 60);
+  me->set("combat_exp", 100000);
+  me->set("daoxing", 100000);
+  me->clean_condition(0);
+  reset_eval_cost();
+  return;
+}
+
+int save_record(object me, object ob)
+{
+  object *inv;
+  mapping hp_status, skill_status, map_status;
+  string *skillnames, *mapnames;
+  int i, weapon_cnt, armor_cnt;
+  reset_eval_cost();
+  hp_status = ob->query_entire_dbase();
+
+  NPC_D->set_from_me(me,ob,105);
+
+  me->set("age", hp_status["age"]);
+  me->set("max_gin", hp_status["max_gin"]);
+  me->set("eff_gin", hp_status["eff_gin"]);
+  me->set("gin", hp_status["gin"]);
+  skill_status = me->query_skills();
+  if ( mapp(skill_status) )
+  {
+    skillnames  = keys(skill_status);
+    for(i=0; i<sizeof(skillnames); i++)
+    {
+      me->delete_skill(skillnames[i]);
+    }
+
+  }
+
+  skill_status = ob->query_skills();
+  if ( mapp(skill_status) )
+  {
+    skillnames  = keys(skill_status);
+    for(i=0; i<sizeof(skillnames); i++)
+    {
+      me->set_skill(skillnames[i], skill_status[skillnames[i]]);
+    }
+
+  }
+
+  me->set("force_factor",me->query_skill("force")*3/4);
+  reset_eval_cost();
+  if (! me->query("new_player"))
+  {
+    me->save();
+    reset_eval_cost();
+    return 1;
+  }
+
+  me->set("new_player",0);
+  if ( mapp(map_status = me->query_skill_map()) )
+  {
+    mapnames = keys(map_status);
+    for(i=0; i<sizeof(mapnames); i++)
+    {
+      me->map_skill(mapnames[i]);
+    }
+
+  }
+
+  map_status = ob->query_skill_map();
+  if ( mapp(map_status) )
+  {
+    mapnames  = keys(map_status);
+    for(i=0; i<sizeof(mapnames); i++)
+    {
+      me->map_skill(mapnames[i], map_status[mapnames[i]]);
+    }
+
+  }
+
+  inv = all_inventory(me);
+  for(i=0; i<sizeof(inv); i++)
+  {
+    destruct(inv[i]);
+  }
+
+// save once here, an external bug might stop the following
+//  me->setup();
+  me->save();
+  weapon_cnt = 0;
+  armor_cnt = 0;
+  inv = all_inventory(ob);
+  for(i=0; i<sizeof(inv); i++)
+  {
+    if ( !inv[i]->query_unique() &&
+         inv[i]->query("skill_type") &&
+         inv[i]->query("equipped") && !weapon_cnt )
+    {
+      object obj = new(base_name(inv[i]));
+      if (obj)
+      {
+        if(obj->move(me))
+          obj->wield();
+        obj->set("no_sell", "掌柜的瞟了一眼道：这东西一看就是劣等品，不要！不要！\n");
+        obj->set("drop_des",1);
+        obj->set("no_put",1);
+        obj->set("no_give",1);
+      }
+
+      me->set("weapon", base_name(inv[i]));
+      weapon_cnt = 1;
+    }
+
+    else if ( !inv[i]->query_unique() &&
+              !inv[i]->query("skill_type") &&
+              inv[i]->query("equipped") && !armor_cnt )
+    {
+      object obj = new(base_name(inv[i]));
+      if (obj)
+      {
+        if(obj->move(me))
+          obj->wear();
+        obj->set("drop_des",1);
+        obj->set("no_put",1);
+        obj->set("no_give",1);
+        obj->set("no_sell", "掌柜的瞟了一眼道：这东西一看就是劣等品，不要！不要！\n");
+      }
+
+      me->set("armor", base_name(inv[i]));
+      armor_cnt = 1;
+    }
+
+    else if( weapon_cnt && armor_cnt )
+      break;
+  }
+
+//  me->setup();
+  me->save();
+  reset_eval_cost();
+  return 1;
+}
+
+int convert_identity (object me, object ob)
+{
+  object who;
+  string old_p;
+  int p_not_found;
+  reset_eval_cost();
+  p_not_found = 0;
+  old_p = me->query("current_player");
+  if (stringp(old_p))
+  {
+    who = find_player(old_p);
+    if (!objectp(who))
+      who = LOGIN_D->find_body(old_p);
+    if (!objectp(who))
+    {
+      p_not_found = 1;
+      seteuid(old_p);
+      who = new(USER_OB);
+      who->set("id", old_p);
+      if (!who->restore())
+      {
+        if (objectp(who))
+          destruct(who);
+        who = 0;
+      }
+
+      else
+      {
+        export_uid(who);
+        seteuid(getuid());
+        who->setup();
+      }
+
+    }
+
+  }
+
+  else
+    who = 0;
+  if (objectp(who))
+  {
+    who->delete("zhangmen/title");
+    if (who->query("zhangmen/title_old"))
+    {
+      who->set("title",who->query("zhangmen/title_old"));
+    }
+
+    else if (who->query("family/family_name"))
+    {
+      who->set("title",
+             sprintf("%s第%s代%s",
+                   who->query("family/family_name"),
+                   chinese_number(who->query("family/generation")),
+                   who->query("family/title")));
+    }
+
+    who->save();
+    if (p_not_found)
+      destruct(who);
+  }
+
+  ob->set("zhangmen/base_name",base_name(me));
+  ob->set("zhangmen/data_name",me->query_save_file());
+  ob->set("zhangmen/title_old",ob->query("title"));
+  ob->set("zhangmen/title",ob->query("family/family_name") + "掌门");
+  ob->set("title",ob->query("family/family_name")+ "掌门");
+  ob->save();
+  me->reset_me(me);
+  me->set("name", ob->query("name") );
+  me->set("gender", ob->query("gender") );
+  me->set("current_player",ob->query("id"));
+  me->set("title",ob->query("family/family_name")+"掌门");
+  me->set("short",me->query("name")+"("+capitalize(me->query("id"))+")");
+  save_record(me, ob);
+  return 1;
+}
+
+object find_and_restore (string name)
+{
+  object me = find_object(name);
+  if (! me || ! me->restore())
+    me = new (name);
+  me->setup();
+  return me;
+}
+
+int fully_recover (object me)
+{
+  object *inv;
+  object ob;
+  string player_name;
+  object current_player;
+  reset_eval_cost();
+  me->set("eff_gin", me->query("max_gin"));
+  me->set("gin",     me->query("max_gin"));
+  me->set("eff_kee", me->query("max_kee"));
+  me->set("kee",     me->query("max_kee"));
+  me->set("eff_sen", me->query("max_sen"));
+  me->set("sen",     me->query("max_sen"));
+  me->set("force",   me->query("max_force")*2);
+  me->set("mana",    me->query("max_mana")*2);
+  me->clean_condition(0);
+  player_name = me->query("current_player");
+  if (!stringp(player_name) || player_name == "none of us")
+    return 1;
+
+  current_player = find_player(player_name);
+  if (objectp(current_player))
+  {
+    if (current_player->query("level")>me->query("level"))
+      save_record (me, current_player);
+  }
+
+  else if (current_player = LOGIN_D->find_body(player_name))
+  {
+    if (current_player->query("level")>me->query("level"))
+      save_record (me, current_player);
+  }
+
+  else
+  {
+    seteuid(player_name);
+    current_player = new(USER_OB);
+    current_player->set("id", player_name);
+    if (!current_player->restore())
+    {
+      destruct(current_player);
+      return 1;
+    }
+
+    export_uid(current_player);
+    seteuid(getuid());
+    current_player->setup();
+    if (current_player->query("level")>me->query("level"))
+      save_record (me, current_player);
+    destruct (current_player);
+  }
+
+  inv = all_inventory(me);
+  while (inv && sizeof(inv))
+  {
+    destruct (inv[0]);
+    inv = all_inventory(me);
+  }
+
+  if (me->query("weapon"))
+  {
+    ob = new(me->query("weapon"));
+    if(ob->move(me))
+      ob->wield();
+    ob->set("no_sell", "掌柜的瞟了一眼道：这东西一看就是劣等品，不要！不要！\n");
+    ob->set("drop_des",1);
+    ob->set("no_put",1);
+    ob->set("no_give",1);
+  }
+
+  if (me->query("armor"))
+  {
+    ob = new(me->query("armor"));
+    if(ob->move(me))
+      ob->wear();
+    ob->set("no_sell", "掌柜的瞟了一眼道：这东西一看就是劣等品，不要！不要！\n");
+    ob->set("drop_des",1);
+    ob->set("no_put",1);
+    ob->set("no_give",1);
+  }
+
+  reset_eval_cost();
+  return 1;
+}
+
+int accept_fight(object ob)
+{
+  int i;
+  object* inv;
+  object me = this_object();
+  if (me->query("current_player") == ob->query("id"))
+  {
+    return notify_fail("你又糊涂了！\n");
+  }
+
+  if (me->is_fighting())
+  {
+    command ("say 失陪了！\n");
+    return notify_fail("这位大弟子尚在比武之中，请稍候。\n");
+  }
+
+  if (ob->query_temp("menpai_zm_applied"))
+  {
+    command("say 好！尚请未来的掌门手下留情。\n");
+  }
+
+  else
+  {
+    command("say 好！我们就切磋一下。\n");
+  }
+
+  remove_call_out("check_result");
+  call_out("check_result", 1, me, ob);
+
+  fully_recover (me);
+  inv = all_inventory(ob);
+  for(i=0; i<sizeof(inv); i++)
+  {
+    if( inv[i]->query_unique() )
+    {
+      message_vision("突然间，$n化一道白光飞去，无影无踪！\n",me,inv[i]);
+      destruct(inv[i]);
+    }
+
+  }
+
+  return 1;
+}
+
+int check_result(object me, object ob)
+{
+  int my_max_kee, his_max_kee;
+  string master_id, master_file;
+  object who;
+  my_max_kee  = me->query("max_kee");
+  his_max_kee = ob->query("max_kee");
+  if (me->is_fighting())
+  {
+    call_out("check_result",1, me, ob);
+    return 1;
+  }
+
+  if ( !living(me)
+      || (int)me->query("kee") < 1
+      || (int)me->query("sen") < 1 )
+    return 1;
+  if (((int)me->query("kee")*100/(1+my_max_kee)) <= 50 )
+  {
+    if ( !living(me)
+      || (int)me->query("kee") < 1
+      || (int)me->query("sen") < 1 )
+      return 1;
+    message_vision ("$N翻身下拜，连声佩服！\n",me);
+    if( ob->query_temp("menpai_zm_applied") != 1 )
+      return 1;
+    master_id = me->query("current_master");
+    who = present(master_id,environment(me));
+    if (!stringp(master_id))
+      return 1;
+    who = present(master_id,environment(me));
+    if (!objectp(who))
+    {
+      master_file = me->query("master_file");
+      if (!stringp(master_file))
+        return 1;
+      who = new(master_file);
+      if (!objectp(who))
+        return 1;
+      who->move(environment(me));
+      message_vision("一阵大笑传来，原来是$N走了过来！\n",who);
+    }
+
+    message_vision ("$N见了师父赶紧下拜，又抬起头朝$n使了个眼色。\n\n",me,ob);
+    message_vision ("$N微微地点了点头。\n\n",who);
+    message_vision ("$N退下。\n\n",me);
+    CHANNEL_D->do_channel(who,"chat","本派掌门弟子"+ob->query("name")+"今日走马上任。恭请各位仙长多加捧场！");
+    ob->delete_temp("menpai_zm_applied");
+    me->set("new_player",1);
+    convert_identity (me, ob);
+    message_vision("$N轻轻的拍了拍$n的头，一转身，慢慢的走了！\n",who,ob);
+    destruct(who);
+    return 1;
+  }
+
+  if (( (int)ob->query("kee")*100/his_max_kee)<=50)
+  {
+    message_vision ("$N将$n扶起。\n",me,ob);
+  }
+
+  return 1;
+}
+
+string query_save_file()
+{
+  string str = query("save_file");
+  int i;
+  if (stringp(str))
+    return str;
+  str = DATA_DIR+"zhangmen/zhangmen_"+query("current_master");
+  for (i = 0; i < sizeof(str); i++)
+    if (str[i]==' ') str[i] = '_';
+  return str;
+}
+
+void set_save_file(string str)
+{
+  set("save_file",str);
+}
+
+string zm_apply()
+{
+  object me = this_object();
+  object ob = this_player();
+  if (me->query("family/family_name") != ob->query("family/family_name"))
+  {
+    return "我便是本派掌门弟子！\n";
+  }
+
+  if (ob->query("betrayer") || ob->query("betray/count"))
+  {
+     return "你曾叛师欺祖，言无信行不轨，岂能出任掌门弟子一职！\n";
+  }
+
+  if (me->query("current_player") == ob->query("id"))
+  {
+    return "你又糊涂了！\n";
+  }
+
+  ob->set_temp("menpai_zm_applied", 1);
+  return "好！你有意出任掌门弟子一职？我们就切磋一下吧！\n";
+}
+

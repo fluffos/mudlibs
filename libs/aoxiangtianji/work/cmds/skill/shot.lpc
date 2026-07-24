@@ -1,0 +1,314 @@
+#include <ansi.h>
+#include <combat.h>
+#include "/cmds/std/valid_kill.h"
+inherit F_CLEAN_UP;
+void create()
+{
+  seteuid(getuid());
+}
+
+int can_use(object me,object victim, object bow, object ob)
+{
+  int distance, my_str, amount;
+  string vid,kid;
+  if (!objectp(me) || !objectp(victim) || !objectp(bow) || !objectp(ob))
+    return 0;
+
+  if (environment(me) != environment(victim))
+    return 0;
+
+  if (me->is_busy())
+    return notify_fail("你现在忙着呢。\n");
+  if (bow != me->query_temp("handing"))
+    return notify_fail("你手中没有了弓弩！\n");
+
+  if (! victim->is_character() || !living(victim))
+    return notify_fail("什么你都想杀？\n");
+
+  if( victim->query("no_fight") || victim->query("no_shot") )
+    return 0;
+  if(!valid_kill(me,victim,0))
+    return 0;
+  if ((int)me->query("sen") < 80)
+    return notify_fail(sprintf("你现在精神不够好，无法使用%s攻击对手。\n",ob->name()));
+
+  if (bow->query("broken"))
+    return notify_fail("这张弓已经断了，不能继续使用了！\n");
+
+  vid = victim->query("id");
+  vid = replace_string( vid, " ", "_");
+  kid = me->query("id");
+  kid = replace_string( kid, " ", "_");
+  distance = (int)me->query_temp("from_dis/"+vid);
+  if (distance && (distance <= me->attack_total_distance(victim)))
+    return notify_fail("你已经在进行近距离搏斗，没有办法使用弓箭了！\n");
+  distance = (int)victim->query_temp("from_dis/"+kid);
+  if (distance && (distance <= victim->attack_total_distance(me)))
+    return notify_fail("你已经在进行近距离搏斗，没有办法使用弓箭了！\n");
+  if ((int)me->query("combat_exp") < 20000)
+    return notify_fail("你实战经验太浅，难以运用弓箭射击对手。\n");
+  my_str = me->query_str();
+  if (my_str < bow->query("min_str"))
+    return notify_fail("这张弓太硬了，你实在是无法拉开。\n");
+  if (my_str > bow->query("max_str"))
+  {
+    tell_object(me,"这张弓似乎并不是特别合手，你觉得它太软了！\n");
+    if (random(4) == 0)
+    {
+      message_vision("只听见“啪”的一声，$N手中的" + bow->name() + "断成了两节！\n",me);
+      me->delete_temp("handing");
+      bow->set("broken",1);
+      bow->set("name", "断掉的"+bow->name());
+      bow->set("value",0);
+      bow->set("power", 0);
+      bow->set("accuracy", 0);
+      return 0;
+    }
+
+  }
+
+  if (! ob->is_arrow())
+    return notify_fail("这不是箭，你无法发射。\n");
+  if ((amount = ob->query_amount()) < 1)
+    return notify_fail("你身上的" + ob->name() + "不够用了。\n");
+
+  return 1;
+}
+
+void hit_victim(object me, object victim, object bow, object ob)
+{
+  object env;
+  int ap,dp,percep;
+  int jiali,dam,wound;
+  string msg;
+
+  if (!objectp(me) || !objectp(victim) || !objectp(bow) || !objectp(ob))
+    return;
+  env = environment(me);
+  if (env != environment(victim))
+    return;
+
+  switch (random(3))
+  {
+    case 0:
+      msg = HIY "$N" HIY "左手猛地抬起" + bow->name() + HIY "，随手抽出一"
+            + ob->query("base_unit") + ob->name() + HIY "，「嗖」的一"
+            "声直射$n" HIY "而去！\n" NOR;
+      break;
+    case 1:
+      msg = HIY "电光火石间$N" HIY "举起" + bow->name() + HIY "陡然射出一"
+            + ob->query("base_unit") + ob->name() + HIY "，带着箭啸直"
+            "奔$n" HIY "而去！\n" NOR;
+            break;
+    default:
+      msg = HIY "霎时只听「嗖」的一声破空声响，那" + ob->query("base_unit")
+            + ob->name() + HIY "已从$N" HIY "的" + ob->name() + HIY "弦上"
+            "射出，飞贯向$n" HIY "！\n" NOR;
+      break;
+  }
+
+  ap = COMBACC_D->math_ap(me,"archery");
+  if (me->query("special_skill/accuracy"))
+    ap += ap/5 ;
+
+  if (ap < 100000)
+    ap = (ap*bow->query("accuracy"))/100;
+  else
+    ap = (ap/100)*bow->query("accuracy");
+  percep = (int)me->query_skill("count",1);
+  if (percep > 80)
+  {
+    percep = percep/8;
+    if (percep > 80)
+      percep = 80 + random(percep- 80) ;
+    ap += ap*(random(percep))/100;
+  }
+
+  if (userp(victim))
+    ap /= 3;
+
+  if ((int)me->query_str() > bow->query("max_str"))
+    ap -= ap/4 ;
+  if ((string)env->query("room_size") == "big")
+    ap -= ap/4;
+  else if ( (string)env->query("room_size") == "small" )
+    ap += ap/4;
+
+  dp = COMBACC_D->math_dp(me,victim,0,0);
+  dp = (dp/100)*80 ;
+  percep = (int)victim->query_skill("perception",1);
+  if (percep > 80)
+  {
+    percep = percep /8;
+    if (percep > 80)
+      percep = 80 ;
+    dp += dp*(random(percep))/100;
+  }
+
+  percep = (int)victim->query_skill("count",1);
+  if (percep > 50)
+  {
+    percep = percep/5;
+    if (percep > 80)
+      percep = 80 + random(percep- 80) ;
+    dp += dp*(random(percep))/100;
+  }
+
+  if (ap*100/(ap+dp) < random(100))
+  {
+    switch (random(3))
+    {
+      case 0:
+        msg += CYN "却见$n" CYN "轻轻一闪，已将$N" CYN "射出"
+                   "的箭避了开去。\n" NOR;
+        break;
+      case 1:
+        msg += CYN "只见$n" CYN "不慌不忙，身子向一旁横移数"
+                   "尺，躲开了$N" CYN "这一招。\n" NOR;
+        break;
+      default:
+        msg += CYN "可是$n" CYN "身子往后一仰，顿时让$N" CYN
+                   "射出的箭落空。\n";
+        break;
+    }
+
+  }
+
+  else
+  {
+    dam = ob->query("weapon_prop/damage");
+    dam = dam*((int)bow->query("power"))/30 ;
+    dam += random((int)bow->query("power") + 1);
+
+    jiali = (int)me->query("force_factor")/3;
+    dam += (int)me->query_skill("archery",1);
+
+    if (jiali > 1)
+      dam += random(jiali/2 + 1);
+
+    dam = (dam + random(2*dam))/3;
+
+    wound = (int)ob->query("wound_percent");
+    wound = wound*((int)bow->query("power"))/30 ;
+    wound += random((int)bow->query("power")/2 + 1);
+
+    msg += COMBAT_D->do_damage(me, victim, REMOTE_ATTACK, dam, wound,
+                               HIR "只见$p" HIR "一个闪避不及，正中$P"
+                               HIR "这一" + ob->name() + HIR "，登时"
+                                   "鲜血飞溅！\n" NOR);
+  }
+
+  message_combatd(msg, me, victim);
+  COMBAT_D->hit_poison(me, victim, ob);
+  if (ob->query_amount()>1)
+    ob->add_amount(-1);
+  else
+    destruct(ob);
+  return;
+}
+
+int main(object me, string arg)
+{
+  string target, pfm;
+  object victim, env;
+  object bow, arrow;
+  string kid,vid;
+  int distance, arrow_found;
+  env = environment(me);
+  if (env->is_safty() ||
+      env->query("no_fight"))
+    return notify_fail("这里不能战斗。\n");
+  bow = me->query_temp("handing");
+
+  if (!objectp(bow) || (!bow->is_bow() && !bow->is_crossbow()))
+    return notify_fail("你手中没有弓弩，怎么射击？\n");
+
+  arrow_found = 0;
+  foreach (arrow in all_inventory(me))
+  {
+    if (!arrow->is_arrow() || arrow->query_amount() < 1)
+      continue;
+    arrow_found = 1;
+    break;
+  }
+
+  if (!arrow_found)
+    return notify_fail("你身上没有可以发射出去的东西！\n");
+
+  if (! arg)
+    return notify_fail("你想攻击谁？\n");
+  if (sscanf(arg, "%s with %s", target, pfm) != 2)
+  {
+    target = arg;
+    pfm = 0;
+  }
+
+  if (! objectp(victim = present(target, env)))
+    return notify_fail("这里没有这个人。\n");
+  notify_fail("你现在不能使用弓箭！\n");
+  if (!can_use(me,victim,bow,arrow))
+    return 0;
+  if (userp(me) && userp(victim) && ! victim->is_want_kill(me->query("id")))
+    me->want_kill(victim);
+
+  me->kill_ob(victim);
+
+  if (living(victim) && ! userp(victim))
+    victim->kill_ob(me);
+  else
+    victim->fight_ob(me);
+  if (!stringp(pfm))
+  {
+    message_vision(HIR"$N突的对$n一声喝叫！\n"NOR,me,victim);
+
+    hit_victim(me,victim,bow,arrow);
+    me->receive_damage("sen", 10);
+    if (bow->is_crossbow())
+        me->start_busy(4 + random(2));
+    else
+      me->start_busy(2+random(2));
+  }
+
+  else
+  {
+    if( !find_object(SKILL_D(pfm))
+        && !objectp(load_object(SKILL_D(pfm)))
+        && file_size(SKILL_D(pfm)+".lpc") < 0 )
+      return notify_fail("没有这种弓弩使用方法！\n");
+    SKILL_D(pfm)->perform(me,victim);
+  }
+
+  kid = me->query("id");
+  kid = replace_string( kid, " ", "_");
+  vid = victim->query("id");
+  vid = replace_string( vid, " ", "_");
+  if ((string)env->query("room_size") == "big")
+    distance = 400;
+  else if ((string)env->query("room_size") == "small")
+    distance = 120;
+  else
+    distance = 250;
+  if (!victim->query_temp("from_dis/"+kid))
+    victim->set_temp("from_dis/"+kid,distance);
+  if (!me->query_temp("from_dis/"+vid))
+    me->set_temp("from_dis/"+vid,distance);
+  if (me->query_skill("archery",1) < 300)
+    me->improve_skill("archery", random(10));
+  else
+    me->improve_skill("archery", random(10),1);
+  return 1;
+}
+
+int help(object me)
+{
+        write( @HELP
+指令格式: shot <攻击对象> [with <特殊技能>]
+这个命令用来使用弓箭攻击敌人。要使用弓箭攻击敌人，首先必须
+在手上拿把弓或弩，身上带有可以射击的弓箭。你只能在距离敌人
+比较远的时候对敌人使用弓箭，一旦双方距离接近到肉搏的程度，弓
+箭就失去作用了。
+see also : hand throwing
+HELP );
+        return 1;
+}
+

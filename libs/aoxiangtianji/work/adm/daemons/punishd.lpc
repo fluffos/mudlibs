@@ -1,0 +1,89 @@
+// punish the berays user
+#include <ansi.h>
+#pragma optimize
+
+inherit F_DBASE;
+void create()
+{
+  seteuid(ROOT_UID);
+  set("channel_id", "执法精灵");
+  CHANNEL_D->do_channel( this_object(), "sys", "执法精灵已经启动。");
+  set_heart_beat(900);
+}
+
+int clean_up() { return 1; }
+
+string *punishers = ({
+   "/d/wiz/npc/baqiang",
+   "/d/wiz/npc/tiedao",
+   "/d/wiz/npc/wuqing",
+   "/d/wiz/npc/lengxue",
+});
+string *catchers = ({
+   "/d/wiz/npc/butou",
+});
+private void heart_beat()
+{
+  int i;
+  object *obs;
+  string *aviable;
+  string punisher;
+  string msg;
+//  if (VERSION_D->is_boot_synchronizing())  // 正在启动中同步版本？那么不启动惩罚系统
+//    return;
+// when the pking was going, I won't let the punisher out,
+// because the competitor may in PKD.
+  if (PK_D->is_pking())
+    return;
+  CHANNEL_D->do_channel(this_object(), "sys", "各大门派扫描所有在线玩家。");
+// search all the player for punishing
+  obs = filter_array(users(),
+       (: playerp($1) &&
+       	  $1->query("level") >= 20 &&
+          $1->query("combat/need_punish") &&
+          !$1->is_in_prison() &&
+          !$1->is_ghost() &&
+          !wizardp($1) &&
+          environment($1) :));
+  if (sizeof(obs))
+  {
+    obs = sort_array(obs, (: $2->query("combat_exp") - $1->query("combat_exp") :));
+    aviable = filter_array(punishers, (: ! find_object($1) :));
+    i = 0;
+    while (sizeof(aviable) && i < sizeof(obs))
+    {
+      reset_eval_cost();
+      msg = obs[i]->query("combat/need_punish");
+      punisher = element_of(aviable);
+      punisher->start_punish(obs[i], msg);
+      aviable -= ({ punisher });
+      i++;
+    }
+
+  }
+
+// search all the player for catching
+  obs = filter_array(users(),
+        (: $1->query("combat_exp") < 300000 &&
+           $1->query_condition("killer") &&
+           ! $1->is_ghost() &&
+           ! $1->is_in_prison() &&
+           ! wizardp($1) &&
+           environment($1) :));
+  if (sizeof(obs))
+  {
+    obs = sort_array(obs, (: $2->query("combat_exp") - $1->query("combat_exp") :));
+    aviable = filter_array(catchers, (: ! find_object($1) :));
+    i = 0;
+    while (sizeof(aviable) && i < sizeof(obs))
+    {
+      punisher = element_of(aviable);
+      punisher->start_catch(obs[i]);
+      aviable -= ({ punisher });
+      i++;
+    }
+
+  }
+
+}
+

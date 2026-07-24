@@ -1,0 +1,118 @@
+#include <ansi.h>
+#include <combat.h>
+#define FU "「" HIR "隐身术" NOR "」"
+#define Y_FILE "/daemon/class/bonze/buddhism/yinshen"
+#define CAUSED "yinshen"
+inherit SSERVER;
+int is_not_attack()
+{
+	return 1;
+}
+
+int valid_cast(object me, object target)
+{
+	int t = time();
+	if(userp(me) && (string)me->query("family/family_name") != "南海普陀山")
+		return notify_fail(sprintf("%s是南海普陀山不传之密！\n",FU));
+	if (me->is_busy())
+		return notify_fail("你正忙着呢！\n");
+
+	if (me->query_skill("buddhism", 1) < 120)
+		return notify_fail(sprintf("你的大乘佛法修为不够，难以施展%s。\n",FU));
+
+	if( (int)me->query("max_mana") < 1100 )
+		return notify_fail(sprintf("你的法力修为不够，难以施展%s。\n",FU));
+
+	if( (int)me->query("force") < 300 )
+		return notify_fail("你的真气不够。\n");
+	if((int)me->query("mana") < 500+2*(int)me->query("mana_factor") )
+		return notify_fail("你的法力不够！\n");
+	if((int)me->query("sen") < 100 )
+		return notify_fail("你无法集中精力！\n");
+	if ((t- me->query_temp("last_yinshen")) < 90)
+		return notify_fail("你刚刚显身，需要等会才能继续使用！\n");
+
+	if (me->query_condition("killer"))
+		return notify_fail("你身上杀气正浓，无法使用佛法！\n");
+	return 1;
+}
+
+int cast(object me, object target)
+{
+	int skill;
+	if( objectp(target) && target != me )
+		return notify_fail(sprintf("你只能用%s保护自己。\n",FU));
+	if (me->query_temp("tick/"+CAUSED))
+	{
+		if (me->query("env/invisibility"))
+		{
+			message_vision(HIW"白光闪过之后，$N又现出了身形。\n\n"NOR, me);
+			me->delete("env/invisibility");
+		}
+
+		me->delete_temp("no_heal_up/yinshen");
+		me->set_temp("last_yinshen",time());
+		me->delete_pfm_tick(CAUSED);
+		return 1;
+	}
+	skill = me->query_skill("buddhism",1);
+	message_vision("$N喃喃地念了几句咒语。\n", me);
+	if( random(me->query("max_mana")) < 200 )
+	{
+		me->add("mana",-skill);
+		me->receive_damage("sen",10);
+		message("vision", "但是什么也没有发生。\n", environment(me));
+		me->set_temp("last_yinshen", time());
+		return 1;
+	}
+
+	me->add("mana", -2*skill);
+
+	if (skill > 400)
+		skill = 400;
+	skill = 15 + random((skill - 100)/2);
+	me->set("env/invisibility", 1);
+	me->set_temp("no_heal_up/yinshen",1);
+	message_vision(HIW"\n只见一道白光闪过，$N踪迹皆无。\n\n"NOR, me);
+	me->set_pfm_tick(Y_FILE, CAUSED,skill, target);
+	return 1;
+}
+
+int check(object me, object target)
+{
+	if (!living(me))
+	{
+		me->delete("env/invisibility");
+		me->delete_temp("no_heal_up/yinshen");
+		return 0;
+	}
+
+	if ( (int)me->query("mana") < 400  )
+	{
+		tell_object(me, "你的法力后继不足，无法继续隐身了。\n");
+		me->delete("env/invisibility");
+		me->delete_temp("no_heal_up/yinshen");
+		return 0;
+	}
+
+	if (me->query_condition("killer"))
+	{
+		tell_object(me, "你身上杀气太浓，大乘佛法的运用出现了问题，无法继续隐身了。\n");
+		me->delete("env/invisibility");
+		me->delete_temp("no_heal_up/yinshen");
+		return 0;
+	}
+
+	me->add("mana",-30);
+	return 1;
+}
+
+void remove_effect(object me, object target)
+{
+	if (me->query("env/invisibility"))
+		message_vision(HIW"白光闪过之后，$N又现出了身形。\n\n"NOR, me);
+	me->delete("env/invisibility");
+	me->delete_temp("no_heal_up/yinshen");
+	me->set_temp("last_yinshen",time());
+	return;
+}

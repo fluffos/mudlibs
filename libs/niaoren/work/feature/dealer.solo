@@ -1,0 +1,200 @@
+// dealer.c 商人
+// This is a inheritable object.
+// Each dealer should support buy, sell, list, value 4 commands
+
+#include <dbase.h>
+#include <ansi.h>
+
+string is_vendor_good(string arg)
+{
+	string *goods;
+	object ob;
+	int i;
+
+	if (arrayp(goods = query("vendor_goods"))) 
+		for (i = 0; i < sizeof(goods); i++) 
+			if (goods[i]->id(arg))
+				return goods[i];
+	return "";
+}
+
+int do_value(string arg)
+{
+	object ob;
+	int value;
+
+	if (!arg || !(ob = present(arg, this_player())))
+		return notify_fail("你要估什么\的價？\n");
+	
+	if (ob->query("money_id"))
+		return notify_fail("你沒用過錢啊？\n");
+
+	if (userp(ob))
+		ob->set("value", ob->query("per") * 500);
+
+	value = ob->query("value");
+	if (value < 1)
+		write(ob->query("name") + "一文不值！\n");
+	else 
+		write(ob->query("name") + "值" + 
+		MONEY_D->price_str(value * 70 / 100) + "。\n");
+	return 1;
+}
+
+int do_sell(string arg)
+{
+	object ob;
+	int value;
+	
+	if (!arg || !(ob = present(arg, this_player())))
+		return notify_fail("你要賣什么\？\n");
+
+	if (ob->query("money_id"))
+		return notify_fail("你想賣「錢」？？\n");
+
+	if (stringp(ob->query("no_drop")))
+		return notify_fail("這樣東西不能賣。\n");
+
+	if (is_vendor_good(arg) != "") 
+		return notify_fail("賣給你好不好？\n");
+
+	if (ob->query("food_supply"))
+		return notify_fail("剩菜剩飯留給您自己用吧。\n");
+	
+        if (ob->query("shaolin"))
+                return notify_fail("小的只有一個腦袋，可不敢買少林廟產。\n");
+
+	if (userp(ob))
+	{
+		ob->set("value", ob->query("per") * 500);
+		CHANNEL_D->do_channel(ob, "rumor",
+			sprintf("%s被某人拐賣給唐楠了。", ob->name(1)));
+	}
+
+	value = ob->query("value");
+	if (value < 30)
+		write(ob->query("name") + "一文不值！\n");
+	else {
+		message_vision("$N賣掉了一" + ob->query("unit") + 
+		ob->query("name") + "給$n。\n", this_player(), this_object());
+		MONEY_D->pay_player(this_player(), value * 70 / 100);
+		if ( userp(ob))
+		{
+			ob->move("/d/city/cangku");
+			ob->set_temp("selled");
+		}
+		else if (value < 50)
+			destruct(ob);
+		else
+			ob->move(this_object());
+	}
+	return 1;
+}
+
+int do_list()
+{
+	string *goods;
+	object *inv;
+        object *inv1;
+        int *count;
+	int i;
+	int j;
+
+	inv = all_inventory(this_object());
+
+	if (!sizeof(inv) && !arrayp(goods = query("vendor_goods")))
+		return notify_fail("目前沒有可以賣的東西。\n");
+	for (i = 0; i < sizeof(inv); i++) 
+	{
+		if (!inv[i]->query("equipped") && !inv[i]->query("money_id"))
+		{
+			if (!arrayp(inv1))
+			{
+				inv1=({inv[i]});
+				count=({1});
+			}
+			else
+			{
+				for (j = 0; j < sizeof(inv1); j++)
+					if (inv[i]->short()==inv1[j]->short())
+						break;
+				if (j == sizeof(inv1))
+				{
+					inv1+=({inv[i]});
+					count+=({1});
+				}
+				else
+					count[j]+=1;
+			}
+		}
+	}
+	
+	printf("你可以向%s購買下列物品：\n", query("name"));
+/*
+	for (i = 0; i < sizeof(inv); i++) 
+		if (!inv[i]->query("equipped") && !inv[i]->query("money_id"))
+		printf("%30-s：%s\n", inv[i]->short(),
+		MONEY_D->price_str(inv[i]->query("value") * 6 / 5));
+*/
+	for (i = 0; i < sizeof(inv1); i++) 
+		printf("%30-s：%s  數量：%i\n", inv1[i]->short(),
+		MONEY_D->price_str(inv1[i]->query("value") * 6 / 5),
+		count[i]);
+	if (arrayp(goods = query("vendor_goods")))
+		for (i = 0; i < sizeof(goods); i++)
+			printf("%30-s：%s\n", goods[i]->short(),
+			MONEY_D->price_str(goods[i]->query("value")));
+	return 1;
+}	
+
+int do_buy(string arg)
+{
+	int value, val_factor;
+	string ob_file;
+	object ob;
+	mapping fam;
+
+	if ( (fam = this_player()->query("family")) && fam["family_name"] == "丐幫" ) 
+		return notify_fail("你是個窮叫化，買什麼東西！\n");
+	
+	if (!arg)
+		return notify_fail("你想買什么\？ 1\n");
+	else if (!(ob = present(arg, this_object())))
+		if ((ob_file = is_vendor_good(arg)) == "")
+			return notify_fail("你想買什么\？ 2\n");
+
+	if (!ob) {
+		ob = new(ob_file);
+		val_factor = 10;
+	}
+	else {
+		if (ob->query("equipped"))
+			return notify_fail("你想買什么\？ 3\n");
+		val_factor = 12;
+	}
+
+        if (query_temp("busy"))
+                return notify_fail("喲，抱歉啊，我這兒正忙著呢……您請稍候。\n");
+
+	
+	switch (MONEY_D->player_pay(this_player(), ob->query("value") *  val_factor / 10)) {
+	case 0:
+		return notify_fail("窮光蛋，一邊呆著去！\n");
+	case 2:
+		return notify_fail("您的零錢不夠了，銀票又沒人找得開。\n");
+	default:
+        	set_temp("busy", 1);
+		message_vision("$N從$n那里買下了一" + ob->query("unit") + 
+		ob->query("name") + "。\n", this_player(), this_object());
+		ob->move(this_player());
+	}
+        remove_call_out("enough_rest");
+        call_out("enough_rest", 1);
+
+	return 1;
+}
+
+void enough_rest()
+{
+        delete_temp("busy");
+}

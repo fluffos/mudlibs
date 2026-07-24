@@ -1,0 +1,486 @@
+// equip.c
+#include <ansi.h>
+#include <dbase.h>
+#include <weapon.h>
+int wear()
+{
+  object owner, ob;
+  mapping armor_prop, applied_prop, part_m;
+  string *apply, type;
+  int i, level;
+  int consistence,max_consist;
+  mixed armor_parts;
+  if( !objectp(owner = environment()))
+    return 0;
+  if( !owner->is_character() )
+    return 0;
+// If already worn, just recognize it.
+  if( query("equipped") )
+    return 1;
+// Does the consistence valid ?
+  consistence = (int)this_object()->query("consistence");
+  if (consistence < 1)
+    return notify_fail(this_object()->name() + "现在损坏太严重了，不能继续穿戴了。\n");
+  max_consist = (int)this_object()->query("max_consistence");
+  if (consistence && max_consist)
+  {
+    if (consistence < max_consist/3)
+      return notify_fail(this_object()->name() + "现在损坏太严重了，不能继续穿戴了。\n");
+  }
+
+// If handing it now, stop handing
+  if (owner->query_temp("handing") == this_object())
+  {
+    owner->delete_temp("handing");
+    if (owner->query_temp("left_hand_occupy") == this_object())
+      owner->delete_temp("left_hand_occupy");
+    if (owner->query_temp("right_hand_occupy") == this_object())
+      owner->delete_temp("right_hand_occupy");
+  }
+
+  armor_parts = query("armor_parts");
+  if (! mapp(armor_prop = query("armor_prop")) ||
+      ! stringp(type = query("armor_type")) ||
+      (!arrayp(armor_parts) && !stringp(armor_parts)))
+    return notify_fail("你只能穿戴可当作护具的东西。\n");
+  type = query("armor_type");
+  ob = owner->query_temp("armor/" + type);
+  if( objectp(ob) )
+  {
+    return notify_fail(WHT"你已经穿戴了同类型的护具了。\n"NOR);
+  }
+
+  if( query("npc_only") && userp (owner) && !wizardp(owner) )
+    return notify_fail(HIC"玩家不能穿戴这样东西。 \n"NOR);
+  if(userp (owner) && !wizardp(owner) )
+  {
+    if( query("female_only") && (string)owner->query("gender") != "女性" )
+      return notify_fail(HIG"这是女人的东西，你一个大男人也想用?羞也不羞？\n"NOR);
+    level= (int)query("need_level");
+    if( (int)owner->query("level") < level)
+      return notify_fail("你的经验等级不足以装备此防具。\n");
+  }
+
+  if (query("need_class") && userp (owner) && !wizardp(owner) )
+  {
+    if (owner->query("occupation") != query("need_class"))
+      return notify_fail("你的职业无法穿戴此防具。\n");
+  }
+
+  if (query("thunder") && userp (owner) && !wizardp(owner) )
+    if (!owner->query_temp("thunder"))
+      owner->set_temp("thunder",query("thunder"));
+    else
+      return notify_fail ("你只能穿戴一件散雷器。\n");
+  if (owner->query_temp("left_hand_occupy") &&
+      owner->query_temp("right_hand_occupy") &&
+      this_object()->is_armor_shield())
+    return notify_fail ("你没有空余的手来拿盾牌。\n");
+
+  owner->set_temp("armor/" + type, this_object());
+  apply = keys(armor_prop);
+  applied_prop = owner->query_temp("apply");
+  if( !mapp(applied_prop) )
+    applied_prop = ([]);
+  for(i = 0; i<sizeof(apply); i++)
+  {
+    if (apply[i] == "armor")
+      continue;
+    if( undefinedp(applied_prop[apply[i]]) )
+      applied_prop[apply[i]] = armor_prop[apply[i]];
+    else
+      applied_prop[apply[i]] += armor_prop[apply[i]];
+  }
+
+  owner->set_temp("apply", applied_prop);
+  set("equipped", "worn");
+
+  if (stringp(armor_parts))
+  {
+    part_m = owner->query_temp("armor_parts/" + armor_parts);
+    if (!part_m)
+    {
+      part_m = (["armor" : 0,
+                 "item" : ({})
+               ]);
+    }
+
+    part_m["armor"] += armor_prop["armor"];
+    part_m["item"] += ({this_object()});
+    part_m["item"] -= ({0});
+    owner->set_temp("armor_parts/" + armor_parts,part_m);
+  }
+
+  else if (arrayp(armor_parts))
+  {
+    for (i=0;i<sizeof(armor_parts);i++)
+    {
+      part_m = owner->query_temp("armor_parts/" + armor_parts[i]);
+      if (!part_m)
+      {
+        part_m = (["armor" : 0,
+                   "item" : ({})
+                 ]);
+      }
+
+      part_m["armor"] += armor_prop["armor"];
+      part_m["item"] += ({this_object()});
+      part_m["item"] -= ({0});
+      owner->set_temp("armor_parts/" + armor_parts[i],part_m);
+    }
+
+  }
+
+  if (this_object()->is_armor_shield())
+  {
+    if (owner->query_temp("left_hand_occupy"))
+      owner->set_temp("right_hand_occupy",this_object());
+    else if (owner->query_temp("right_hand_occupy"))
+      owner->set_temp("left_hand_occupy",this_object());
+    else
+    {
+      if (owner->query("env/default_hand") == "left")
+        owner->set_temp("left_hand_occupy",this_object());
+      else
+        owner->set_temp("right_hand_occupy",this_object());
+    }
+
+  }
+
+  return 1;
+}
+
+int wield()
+{
+  object owner, old_weapon;
+  mapping weapon_prop;
+  string *apply;
+  int flag,level;
+  int consistence,max_consist;
+  mixed no_wield;
+// Only character object can wear armors.
+  if( !(owner = environment()) || !owner->is_character() )
+    return 0;
+// Does the consistence valid ?
+  consistence = (int)this_object()->query("consistence");
+  if (consistence < 1)
+    return notify_fail(this_object()->name() + "现在损坏太严重了，不能继续装备了。\n");
+  max_consist = (int)this_object()->query("max_consistence");
+  if (consistence && max_consist)
+  {
+    if (consistence < max_consist/3)
+      return notify_fail(this_object()->name() + "现在损坏太严重了，不能继续穿戴了。\n");
+  }
+
+// If already wielded, just recognize it.
+  if( query("equipped") )
+    return 1;
+// If the item can not wield, I will return the fail message
+  if (no_wield = query("no_wield"))
+  {   // can not wield
+    if (stringp(no_wield))
+      return notify_fail(no_wield);
+    else
+      return notify_fail("这样东西无法装备。");
+  }
+
+// If handing it now, stop handing
+  if (owner->query_temp("handing") == this_object())
+  {
+    owner->delete_temp("handing");
+    if (owner->query_temp("left_hand_occupy") == this_object())
+      owner->delete_temp("left_hand_occupy");
+    if (owner->query_temp("right_hand_occupy") == this_object())
+      owner->delete_temp("right_hand_occupy");
+  }
+
+// Check if we have "weapon_prop" defined.
+  if (! mapp(weapon_prop = query("weapon_prop")) ||
+      ! stringp(query("skill_type")))
+    return notify_fail("你只能装备可当作武器的东西。\n");
+  if( query("npc_only") && userp (owner) && !wizardp(owner) )
+    return notify_fail("玩家不能装备这件武器。 \n");
+  if(userp (owner) && !wizardp(owner))
+  {
+    level= (int)query("need_level");
+    if( (int)owner->query("level") < level )
+      return notify_fail("你的经验等级不足以装备此武器。\n");
+    if(query("family_only"))
+    {
+      if( query("family_only") != owner->query("family/family_name") )
+        return notify_fail(HIG+query("family_only")
+                           +"专用武器，你不能使用。\n"NOR);
+    }
+
+  }
+
+  if(query("need_force") && userp (owner) && !wizardp(owner) )
+  {
+    if( (int)owner->query("max_force") < query("need_force") )
+      return notify_fail("你感觉全身气息翻腾，原来你内力不够无法装备这样武器。\n");
+  }
+
+  if( query("need_mana") && userp (owner) && !wizardp(owner) )
+  {
+    if( (int)owner->query("max_mana") < query("need_mana") )
+      return notify_fail("你感觉全身气息翻腾，原来你法力不够无法装备这样武器。\n");
+  }
+
+  if(query("need_str") && userp (owner) && !wizardp(owner) )
+  {
+    if( (int)owner->query_str() < query("need_str") )
+	    return notify_fail("你想举起这件武器，怎奈力量不够，只好作罢武器。\n");
+  }
+
+  if (query("need_class") && userp (owner) && !wizardp(owner) )
+  {
+    if (owner->query("occupation")!=query("need_class"))
+      return notify_fail("你的职业无法装备此武器。\n");
+  }
+
+  if (owner->query_temp("left_hand_occupy") &&
+      owner->query_temp("right_hand_occupy"))
+    return notify_fail ("你没有空余的手来拿武器。\n");
+  flag = (int)query("flag");
+  old_weapon = owner->query_temp("weapon");
+
+  if( flag & TWO_HANDED )
+  {
+  if (owner->query_temp("left_hand_occupy") ||
+      owner->query_temp("right_hand_occupy"))
+      return notify_fail(HIC"你必须空出双手才"
+                          + "能装备双手武器。\n"NOR);
+    owner->set_temp("weapon", this_object());
+  }
+
+  else
+  {
+    if( !objectp(old_weapon) )
+      owner->set_temp("weapon", this_object());
+    else if(flag & SECONDARY)
+    {
+      owner->set_temp("secondary_weapon", this_object());
+/*
+      if(old_weapon->query("apply/skill_type") &&
+         old_weapon->query("apply/skill_type") ==
+         this_object()->query("apply/skill_type") &&
+         old_weapon->query("skill_type") !=
+         this_object()->query("skill_type") )
+      {
+        owner->set_temp("use_apply_action", 1);
+        old_weapon->set_temp("use_apply_skill", 1);
+      }
+
+*/
+    }
+
+    else
+    {
+      if( (int)old_weapon->query("flag") & SECONDARY )
+        return notify_fail(sprintf(HIC"你手中已经装备的武器可以作为附加兵器使用！\n"
+                              "如果你要装备%s，请先放下附加兵器！\n"
+                              "附加兵器只能在主要兵器装备后装备！\n"NOR,query("name")));
+      return notify_fail(HIC"你必须先放下你目前装备的武器。\n"NOR);
+    }
+
+  }
+
+  apply = keys(weapon_prop);
+  for(int i = 0; i<sizeof(apply); i++)
+  {
+    if (apply[i] == "damage")
+      continue;
+    owner->add_temp("apply/" + apply[i], weapon_prop[apply[i]]);
+  }
+
+/*
+  if(owner->query_temp("use_apply_action") == 1)
+    owner->reset_apply_action();
+  else
+*/
+  owner->reset_action();
+  set("equipped", "wielded");
+
+  if( flag & TWO_HANDED )
+  {
+    owner->set_temp("left_hand_occupy",this_object());
+    owner->set_temp("right_hand_occupy",this_object());
+  }
+
+  else
+  {
+    if (owner->query_temp("left_hand_occupy"))
+      owner->set_temp("right_hand_occupy",this_object());
+    else if (owner->query_temp("right_hand_occupy"))
+      owner->set_temp("left_hand_occupy",this_object());
+    else
+    {
+      if (owner->query("env/default_hand") == "left")
+        owner->set_temp("left_hand_occupy",this_object());
+      else
+        owner->set_temp("right_hand_occupy",this_object());
+    }
+
+  }
+
+  return 1;
+}
+
+int unequip()
+{
+  object owner, weapon;
+  mapping prop, applied_prop, part_m;
+  string *apply, equipped;
+  int i,flag;
+  mixed armor_parts;
+
+  owner = environment();
+  if (!objectp(owner))
+    return 0;
+  if (!owner->is_character())
+    return 0;
+  if( !stringp(equipped = query("equipped")) )
+    return notify_fail(HIC"你目前并没有装备这样东西。\n"NOR);
+  flag = (int)query("flag");
+  if( equipped=="wielded" )
+  {
+    if( (weapon=(object)owner->query_temp("weapon")) == this_object())
+      owner->delete_temp("weapon");
+    else if( (object)owner->query_temp("secondary_weapon") == this_object() )
+      owner->delete_temp("secondary_weapon");
+    owner->delete_temp("use_apply_action");
+    if (objectp(weapon))
+      weapon->delete_temp("use_apply_skill");
+    prop = query("weapon_prop");
+    owner->delete_temp("perf_quick");
+    owner->reset_action();
+  }
+
+  else if( equipped=="worn" )
+  {
+    owner->delete_temp("armor/" + query("armor_type") );
+    prop = query("armor_prop");
+    armor_parts = query("armor_parts");
+    if (stringp(armor_parts))
+    {
+      part_m = owner->query_temp("armor_parts/" + armor_parts);
+      if (mapp(part_m))
+      {
+        if (mapp(prop))
+          part_m["armor"] -= prop["armor"];
+        if (part_m["armor"] <= 0)
+          owner->delete_temp("armor_parts/" + armor_parts);
+        else
+        {
+          part_m["item"] -= ({this_object()});
+          part_m["item"] -= ({0});
+          if (!arrayp(part_m["item"]) || sizeof(part_m["item"]) < 1)
+            owner->delete_temp("armor_parts/" + armor_parts);
+          else
+            owner->set_temp("armor_parts/" + armor_parts,part_m);
+        }
+
+      }
+
+    }
+
+    else if (arrayp(armor_parts))
+    {
+      for (i=0;i<sizeof(armor_parts);i++)
+      {
+        part_m = owner->query_temp("armor_parts/" + armor_parts[i]);
+        if (!mapp(part_m))
+          continue;
+        if (mapp(prop))
+          part_m["armor"] -= prop["armor"];
+        if (part_m["armor"] <= 0)
+          owner->delete_temp("armor_parts/" + armor_parts[i]);
+        else
+        {
+          part_m["item"] -= ({this_object()});
+          part_m["item"] -= ({0});
+          if (!arrayp(part_m["item"]) || sizeof(part_m["item"]) < 1)
+            owner->delete_temp("armor_parts/" + armor_parts[i]);
+          else
+            owner->set_temp("armor_parts/" + armor_parts[i],part_m);
+        }
+
+      }
+
+    }
+
+  }
+
+  if (mapp(prop) && sizeof(prop) > 0)
+  {
+    apply = keys(prop) - ({0});
+    applied_prop = owner->query_temp("apply");
+    for(i = 0; i<sizeof(apply); i++)  // To support array apply, we cannot add_temp() here.
+    {
+      if (apply[i] == "armor" || apply[i] == "weapon")
+        continue;
+      if (mapp(applied_prop))
+        applied_prop[apply[i]] -= prop[apply[i]];
+    }
+
+  }
+
+  delete("equipped");
+  if(this_object()->is_weapon() && (flag & TWO_HANDED))
+  {
+    owner->delete_temp("left_hand_occupy",this_object());
+    owner->delete_temp("right_hand_occupy",this_object());
+  }
+
+  else
+  {
+    if (owner->query_temp("left_hand_occupy") == this_object())
+      owner->delete_temp("left_hand_occupy");
+    if (owner->query_temp("right_hand_occupy") == this_object())
+      owner->delete_temp("right_hand_occupy");
+  }
+
+  if (this_object()->is_weapon())
+  {
+    weapon=(object)owner->query_temp("secondary_weapon");
+    if(objectp(weapon))
+    {
+      weapon->unequip();
+      weapon->wield();
+    }
+
+  }
+
+  return 1;
+}
+
+// hit the object as a weapon
+mixed hit_ob(object me, object victim, int damage_bonus)
+{
+  mixed foo;
+  foo = this_object()->weapon_hit_ob(me, victim, damage_bonus);
+  ITEM_D->reduce_consistence(this_object());
+  if (! mapp(query_temp("daub")))
+    return foo;
+  COMBAT_D->hit_with_poison(me, victim, this_object());
+  return foo;
+}
+
+// other one hit me as an armor
+mixed valid_damage(object me, object victim, int damage_bonus, object weapon)
+{
+  ITEM_D->reduce_consistence(this_object());
+  if (! mapp(query_temp("daub")))
+   return;
+  if (me->query_temp("weapon") ||
+      me->query_temp("remote_attack") ||
+      me->query("not_living"))
+  {  // the attacker has weapon, or remote attack, or not living,
+     // he won't be poisoned by my cloth or armor
+    return;
+  }
+
+  COMBAT_D->hit_poison(me, victim, this_object());
+  return;
+}
+

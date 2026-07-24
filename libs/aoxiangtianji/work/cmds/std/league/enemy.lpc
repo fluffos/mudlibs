@@ -1,0 +1,131 @@
+// league command: enemy
+#include <ansi.h>
+void create() { seteuid(getuid()); }
+
+int main(object me, string arg)
+{
+  string msg,type;
+  string league_id, lid;
+  string *enemy;
+  int i;
+  string *old1,*old2;
+  object who;
+  string leader;
+
+  if (!playerp(me))
+    return 0;
+  league_id = LEAGUE_D->query_player_league_id(me);
+  if (!stringp(league_id))
+    return notify_fail("你还不是任何联盟的成员。\n");
+  if (!arg)
+  {
+    enemy = LEAGUE_D->query_league_enemy(league_id);
+    if (!arrayp(enemy) || sizeof(enemy) < 1)
+      return notify_fail("你的联盟当前没有任何敌对。\n");
+    msg = "你所在的联盟当前的敌对联盟如下：\n";
+    for (i=0;i<sizeof(enemy);i++)
+      msg += sprintf("%s(%s)\n",
+                     (string)LEAGUE_D->query_league_cname(enemy[i]),
+                     enemy[i]);
+    msg += "\n";
+    me->start_more(msg);
+    return 1;
+  }
+
+  if (LEAGUE_D->query_league_leader(league_id) != me->query("id"))
+    return notify_fail("只有盟主才能操作和其他的联盟关系。\n");
+  if (arg == "cancel")
+  {
+    if (!mapp(me->query_temp("pending/league")))
+      return notify_fail("你要做什么？\n");
+    me->delete_temp("pending/league");
+    write("你取消了和其他联盟结束敌对的念头。\n");
+    return 1;
+  }
+
+  if (sscanf(arg,"-%s %s",type,lid) != 2)
+  {
+    type = 0;
+    lid = arg;
+  }
+
+  else if (type != "end")
+    return notify_fail("请注意，要结束敌对关系，league enemy -end [对象联盟]。\n");
+  if (!LEAGUE_D->is_league_id(lid))
+    return notify_fail("没有这个联盟。\n");
+  if (!type)
+  {
+    msg = LEAGUE_D->add_new_enemy(league_id,lid);
+    if (!stringp(msg))
+      return 0;
+    write(msg);
+    return 1;
+  }
+
+  if (!LEAGUE_D->is_enemy(league_id,lid))
+    return notify_fail("双方并不是敌对关系！\n");
+  old1 = LEAGUE_D->query_league_enemy(league_id);
+  old2 = LEAGUE_D->query_league_enemy(lid);
+  if (!arrayp(old1) || sizeof(old1) < 1 ||
+      !arrayp(old2) || sizeof(old2) < 1)
+    return notify_fail("双方目前不是敌对关系。\n");
+  if (member_array(lid,old1) == -1 ||
+     member_array(league_id,old2) == -1)
+    return notify_fail("双方目前还不是敌对关系。\n");
+  leader = LEAGUE_D->query_league_leader(lid);
+  if (!stringp(leader))
+    return notify_fail("江湖中有这个联盟吗？\n");
+  who = find_player(leader);
+  if (!who || !playerp(who))
+    return notify_fail("可惜对方的盟主不在线。\n");
+  me->set_temp("pending/league/pid", who->query("id"));
+  me->set_temp("pending/league/pleague", lid);
+  tell_object(who, HIG + me->name(1) + "(" +
+                         me->query("id") + ")想和你所在"
+                         "的联盟结束敌对关系，你是否同意"
+                         "(right/refuse)？\n" + NOR);
+  who->set_temp("pending/answer/" + me->query("id") + "/right",
+                bind((: call_other, __FILE__, "do_right", who, me :), who));
+  who->set_temp("pending/answer/" + me->query("id") + "/refuse",
+     	        bind((: call_other, __FILE__, "do_refuse", who, me :), who));
+  return 1;
+}
+
+int do_right(object me, object ob)
+{
+  mapping league;
+  if (!playerp(ob))
+    return notify_fail("可惜啊，人家已经不在线了。\n");
+  if (! living(ob))
+    return notify_fail("人家现在听不到你说的话，还是算了吧。\n");
+  league = ob->query_temp("pending/league");
+  if (!mapp(league) || sizeof(league) < 1)
+    return notify_fail("他现在有和你结束敌对的打算吗？。\n");
+  if (league["pid"] != me->query("id") ||
+      league["pleague"] != LEAGUE_D->query_player_league_id(me->query("id")))
+    return notify_fail("他有打算和你结束敌对关系？。\n");
+  if (!LEAGUE_D->remove_a_enemy(ob->query("league/league_id"),league["pleague"]))
+    return notify_fail("虽然你愿意和对方和解，但这次失败了。\n");
+
+  tell_object(ob,me->query("name") + "同意了你的结束双方敌对的请求。\n");
+  ob->delete_temp("pending/league");
+  return 1;
+}
+
+int do_refuse(object me, object ob)
+{
+  mapping league;
+  if (!playerp(ob))
+    return notify_fail("可惜啊，人家已经不在线了。\n");
+  if (! living(ob))
+    return notify_fail("人家现在听不到你说的话，还是算了吧。\n");
+  league = ob->query_temp("pending/league");
+  if (! mapp(league) || sizeof(league) < 1)
+    return notify_fail("人家现在已经不打算和你结束敌对关系了。\n");
+  if (league["pid"] != me->query("id") ||
+      league["pleague"] != LEAGUE_D->query_player_league_id(me->query("id")))
+    return notify_fail("他有打算和你结束敌对关系？。\n");
+  ob->delete_temp("pending/league");
+  tell_object(ob,me->query("name") + "拒绝了你的和解请求。\n");
+  return 1;
+}

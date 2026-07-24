@@ -1,0 +1,372 @@
+#include <ansi.h>
+inherit "/obj/questnpc/tasknpc";
+void create()
+{
+  ::create();
+  set_name("妖怪","itask yaoguai");
+  setup();
+  if (clonep())
+    keep_heart_beat();
+}
+
+void full_me(object me)
+{
+  me->set("kee",me->query("max_kee"));
+  me->set("eff_kee",me->query("max_kee"));
+  me->set("sen",me->query("max_sen"));
+  me->set("eff_sen",me->query("max_sen"));
+  me->set("force",me->query("max_force"))*2;
+  me->set("mana",me->query("max_mana"))*2;
+  me->clear_condition(0);
+  return;
+}
+
+void random_place(string msg)
+{
+  object qob;
+  string new_place;
+  int npc_lv;
+  string quester;
+  qob = query_temp("quest_ob");
+  if (!objectp(qob))
+  {
+    quester = query("quester");
+    if (stringp(quester))
+    {
+      qob = find_player(quester);
+      if (!objectp(qob))
+        qob = new("/obj/quest/avoid");
+    }
+
+    else
+      qob = new("/obj/quest/avoid");
+  }
+
+  UPEXP_D->query_upexp(this_object());
+// 随即选择另外一个地方放置NPC
+  npc_lv = this_object()->query("level");
+  if (npc_lv <= 25)
+    NPC_D->place_npc(this_object(), 1);
+  else if (npc_lv <= 40)
+    NPC_D->place_npc(this_object(), 2);
+  else
+    NPC_D->place_npc(this_object(), 3);
+// 根据格式化消息生成结果
+  msg = replace_string(msg, "$N", name(1));
+  new_place = query("place");
+  set_temp("stay_time", 600);
+  set_temp("born_time", time());
+  msg = replace_string(msg, "PLACE",  new_place);
+// 初始化并记录这个任务
+  qob->set("introduce", msg);
+//  qob->init_quest(name(1), old_env);
+  set_temp("quest_ob", qob);
+  return;
+}
+
+void die(object killer)
+{
+  object dob;
+  object me;
+  string quester;
+
+  me = this_object();
+  quester = me->query("quester");
+  if (stringp(quester) && objectp(dob = find_player(quester)))
+    dob->set("quest_xyj/itask/npc_die",1);
+
+  if (!me->query_temp("my_killer"))
+  {
+    message_vision("$N一看不是对手，急急忙忙的溜了。\n", me);
+    destruct(me);
+    return;
+  }
+
+  if (! objectp(dob = killer))
+    dob = me->query_last_damage_from();
+  if (objectp(dob) && dob->query_temp("owner"))
+    dob = dob->query_temp("owner");
+  if (dob && dob->query("quest_xyj/itask/npc_id") != query("id"))
+  {
+    CHANNEL_D->do_channel(this_object(), "rumor",
+                          sprintf("听说%s被人杀死了。", name()));
+    log_file("static/killed_die", sprintf("%s %s(%s) died at %s because %s.\n",
+           ctime(time()),
+           name(),
+           query("id"),
+           environment()->short(),
+           dob ? sprintf("%s(%s)", dob->name(1), dob->query("id")) : "none"));
+    destruct(this_object());
+    return;
+  }
+
+  quester = me->query("quester");
+
+  if (!stringp(quester))
+  {
+    message_vision("$N一看不是对手，急急忙忙的溜了。\n", me);
+    destruct(me);
+    return;
+  }
+
+  else if (quester != dob->query("id"))
+  {
+    message_vision("$N一看不是对手，急急忙忙的溜了。\n", me);
+    destruct(me);
+    return;
+  }
+
+  if (dob && userp(dob))
+  {
+    dob->set_temp("quest_xyj/itask/finished",1);
+    SYSQ_D->delete_quest("itask",dob);
+  }
+
+  ::die();
+  return;
+}
+
+void unconcious()
+{
+  object *obs;
+  object dob, ob, me;
+  string msg;
+  string quester;
+  me = this_object();
+  dob = me->query_last_damage_from();
+  if (!me->query_temp("my_killer"))
+  {
+    if (objectp(dob))
+    {
+      message_vision("$N一看不是对手，急急忙忙的溜了。\n", me);
+      destruct(me);
+      return;
+    }
+
+    else
+    {
+      ::unconcious();
+      return;
+    }
+
+  }
+
+  if (!objectp(dob))
+    dob = me->query_defeated_by();
+  if (objectp(dob) && dob->query_temp("owner"))
+    dob = dob->query_temp("owner");
+  quester = query("quester");
+
+  if (dob && (quester != dob->query("id")))
+  {
+    message_vision("$N一看不是对手，急急忙忙的溜了。\n", me);
+    destruct(me);
+    return;
+  }
+
+  if (random(100) < 15)
+  {   // 15%几率逃走
+    switch (random(8))
+    {
+      case 0:
+        msg = HIC "$N" HIC "狂叫一声，狂吐几"
+                  "口鲜血，眼看就已不支，忽然一"
+                  "道黑影窜出，接连攻出数招，逼"
+                  "退$n" HIC "，只在这么一瞬间，"
+                  "此人已经扶起$N" HIC "，遁逃而"
+                  "走，竟然未留半点痕迹。\n" NOR;
+        break;
+      case 1:
+        msg = HIC "$N" HIC "摇摇欲坠，眼看就"
+                  "要跌倒，忽然口中喷出一口鲜血"
+                  "，$n" HIC "连忙侧身一避，就在"
+                  "此时，$N" HIC "奋然振作精神，"
+                  "提气一纵，竟然飘出十数丈之远"
+                  "，令人目瞪口呆！只见$N" HIC
+                  "刹间变做一个黑影，渐渐消失。"
+                  "\n" NOR;
+        break;
+      case 2:
+        msg = HIC "在$n" HIC "一阵狂攻之下，"
+                  "$N" HIC "只有招架之功，哪里还"
+                  "有还手之力？眼看就要命丧$n" HIC
+                  "之手，$N" HIC "忽然招式一变，"
+                  "精妙无方，竟是世上罕见！$n" HIC
+                  "略一疏神，已被$N" HIC "连环数"
+                  "招逼退，只见$N" HIC "迈开大步"
+                  "，逃遁而走。\n" NOR;
+        break;
+      case 3:
+        msg = HIC "只见$N" HIC "深吸一口气"
+                  "，神色略微好了一些，陡然迸发"
+                  "出惊天动地的一声大吼，直震得"
+                  "$n" HIC "发耳欲聩！仅这一霎"
+                  "，$N" HIC "身形一转，飘然退"
+                  "去，竟让$n" HIC "措手不及，"
+                  "追赶不上！\n" NOR;
+        break;
+      case 4:
+        msg = HIC "$n" HIC "连连进击，眼看"
+                  "便要得手，接连数招，让$N" HIC
+                  "已是避无可避，退无可退！$N"
+              HIC "神色神色仓皇，急切间猛地"
+                  "咬中舌尖，“噗”的吐出！$n"
+              HIC "只见眼前一阵红雾，待得雾"
+                  "散去，哪里还有$N" HIC "的影"
+                  "子？\n" NOR;
+        break;
+      case 5:
+        msg = HIC "$N" HIC "再退一步，却慢"
+                  "了小许，腿上早中招！一声惨"
+                  "呼，人已跌倒。$n" HIC "见状"
+                  "赶上前去，忽然眼前星光闪闪"
+                  "，仓皇下急退，只听有人哈哈"
+                  "大笑道：“$N" HIC "莫慌，我"
+                  "来也！”说罢又是一撒手，数"
+                  "十根银针飞出，待得$n" HIC
+                  "抵挡两下，那人早扶起$N" HIC
+                  "遁去了。\n" NOR;
+        break;
+      case 6:
+        msg = HIC "$N" HIC "晃了两下，忽然"
+                  "跌倒。$n" HIC "收住招式，笑道"
+                  "：“$N" HIC "，你……”话音未"
+                  "落，忽见$N" HIC "蓦的窜起，一"
+                  "招直奔$n" HIC "的要害，$n" HIC
+                  "大吃一惊！慌忙招架，只觉得内"
+                  "息紊乱，几欲呕吐！$N" HIC "也"
+                  "不追击，只是急奔而走，$n" HIC
+                  "连运几口气，去了胸前烦闷，却"
+                  "已不见$N" HIC "的踪影。\n" NOR;
+        break;
+      default:
+        msg = HIC "$N身负重伤，已然不敌，悲"
+                  "愤间只放声疾呼，一时震得$n"
+              HIC "耳鼓欲破，攻势少缓。$N"
+              HIC "猛然见到有机可乘，哪里肯"
+                  "放过，连出数招，杀出一条血路"
+                  "，就此不见。\n" NOR;
+        break;
+    }
+
+    clean_up_enemy();
+    obs = query_enemy();
+    if (sizeof(obs) > 0)
+      ob = obs[0];
+    else
+      ob = 0;
+    if (! objectp(ob))
+       msg = replace_string(msg, "$n", "众人");
+    message_sort("\n" + msg, this_object(), ob);
+    full_me(this_object());
+
+    if (! intp(query_temp("escape_times")))
+       set_temp("escape_times", 1);
+    else
+       add_temp("escape_times", 1);
+// 登记一个任务，以便玩家可以追踪他的行迹
+    switch (random(9))
+    {
+      case 0:
+        msg = "听说$N被人打伤逃走，据说是躲到PLACE去了。";
+        break;
+      case 1:
+        msg = "听说$N和人动手，差点被打死，不过最"
+              "后还是侥幸逃走了，好像去了PLACE。";
+        break;
+      case 2:
+        msg = "听说那$N和人一场血战，最后还是全身"
+              "而退，好像是去了PLACE吧。";
+        break;
+      case 3:
+        msg = "$N听说是在PLACE啊，不过前一阵好像来过这里的。";
+        break;
+      case 4:
+        msg = "听说$N被人打死了吧？咦？不过听人说"
+              "在PLACE也见过他呀！";
+        break;
+      case 5:
+        msg = "这事我也不太清楚，不过听说他好像在PLACE。";
+        break;
+      case 6:
+        msg = "你找他干啥？他不是在PLACE么？";
+        break;
+      case 7:
+        msg = "前两天他还来过我们这儿呢，现在应该"
+              "是去了PLACE吧。";
+        break;
+      default:
+        msg = "$N呀，有人说在PLACE看到过他，好像还受伤了。";
+        break;
+    }
+
+    random_place(msg);
+    remove_all_enemy(1);
+    return;
+  }
+
+  if (stringp(quester = query("quester")))
+  {  // 如果找到领取该quest的人
+    if (objectp(ob = find_player(quester)))
+      ob->set_temp("itask/escape_times", query_temp("escape_times"));
+  }
+
+  ::unconcious();
+}
+
+int accept_fight(object ob)
+{
+  command("say 我正忙着呢！");
+  return 0;
+}
+
+int accept_kill(object ob)
+{
+  command("say 哼！找死！");
+  if (ob->query("quest_xyj/itask/npc_id") != query("id"))
+  {
+    delete_temp("my_killer");
+    ::kill_ob(ob);
+    return 1;
+  }
+
+  if (!query_temp("my_killer"))
+    full_me(this_object());
+  set_temp("my_killer",ob);
+  kill_ob(ob);
+  return 1;
+}
+
+void scan()
+{
+  object ob = this_object();
+  object where;
+  if (!objectp(ob))
+    return;
+
+  ::scan();
+  where = environment(ob);
+  if (!objectp(where))
+  {
+    SYSQ_D->delete_quest(ob->query("quest_type"),ob->query("quester"));
+    destruct(this_object());
+    return;
+  }
+
+  if ((time() - (int)query("born_time")) > query("stay_time") &&
+      ! is_fighting() && living(ob))
+  {
+    message_vision("$N急急忙忙的走了。\n", ob);
+    CHANNEL_D->do_channel(ob, "rumor",
+             sprintf("听说%s隐居到了深山老泽，从此不再出没在世间。", name()));
+    log_file("static/killed_die", sprintf("%s %s(%s) vanished because \ntimeout(%d:%d) at %s.\n",
+             log_time(), name(), query("id"), time() - query("born_time"),
+             query("stay_time"),base_name(where)));
+    SYSQ_D->delete_quest(ob->query("quest_type"),ob->query("quester"));
+    destruct(this_object());
+    return;
+  }
+
+  return;
+}
+

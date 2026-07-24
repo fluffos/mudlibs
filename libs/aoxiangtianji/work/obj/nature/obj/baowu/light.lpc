@@ -1,0 +1,147 @@
+#include <ansi.h>
+#include <combat.h>
+inherit __DIR__"baozhu";
+inherit F_SSERVER;
+#define BAO "/obj/nature/obj/baowu/light"
+#define CAUSED "light_attack"
+void gift_attack(object me, object ob);
+void stop_attack(object me);
+int do_wear(string arg);
+int do_remove(string arg);
+void create()
+{
+  set_name(HIY "雷电之珠" NOR, ({"light zhu", "zhu"}) );
+  set("init_msg",HIW"$N" HIW"胸前的宝珠突放光华，光华闪过，一道闪电混着雷声，直袭$n" HIW"。\n"NOR);
+  set("suc_msg",HIR"结果$n" HIR"躲避不及，被闪电劈个正着。\n"NOR);
+  set("attack_type","both");
+  set("damage_adjust",90);
+  set("armor_type","neck");
+  set("armor_prop/armor",10);
+  setup();
+}
+
+int do_wear (string arg)
+{
+  object me = this_player();
+  object zhu = this_object();
+  if (!zhu->id(arg))
+    return notify_fail("你要佩带什么？\n");
+  if ((string)zhu->query("owner") != me->query("id"))
+  {
+    write("你无法佩带这个宝珠，你不是他的主人！\n");
+    return 1;
+  }
+
+  gift_attack(me,zhu);
+  return 0;
+}
+
+int do_remove (string arg)
+{
+  object me = this_player();
+  object zhu = this_object();
+  if (!zhu->id(arg))
+    return notify_fail("你要摘掉什么？\n");
+  stop_attack(me);
+  return 0;
+}
+
+void gift_attack(object me, object ob)
+{
+  object target;
+  if(!me->is_fighting())
+    return;
+
+  target = offensive_target(me);
+  if( !target
+    || !target->is_character()
+    || target->is_corpse()
+    || target==me)
+    return;
+  if( random(me->query("max_mana")) < 100 )
+    return;
+  message_vision("$N伸手轻轻的握手了一下胸前的宝珠！\n",me);
+  me->set_pfm_tick(BAO, CAUSED,300, target);
+  return;
+}
+
+void stop_attack(object me)
+{
+  me->delete_pfm_tick(CAUSED);
+}
+
+int check(object me, object target)
+{
+  int damage,result,i, d_adjust;
+  string msg;
+  string a_type;
+  object ob = this_object();
+
+/*
+  type = ob->query("armor_type");
+  if( me->query_temp("armor/" + type) && ob->query("equipped")!="worn")
+  {
+    tell_object(me,sprintf("你没有佩带宝珠！type = %s\n",type));
+    return 0;
+  }
+
+*/
+  if (!living(me) || !environment(me))
+    return 0;
+
+  if( !objectp(target)
+    || !environment(target)
+    || !living(target)
+    || environment(me) != environment(target))
+    return 0;
+
+  if (!me->is_fighting(target))
+    return 0;
+
+  i = me->query_tick_use(CAUSED);
+
+  if (i%6 == 0)
+  {
+    msg = this_object()->query("init_msg");
+    if (!stringp(msg))
+      msg = HIW"$N" HIW"胸前的宝珠突放光华，光华闪过，一股自然力道直袭$n" HIW"。\n"NOR;
+    message_vision(msg,me,target);
+    result = SPELL_D->attacking_cast_success(me,target,100);
+    damage = 0;
+    if( result > 0 )
+    {
+      msg = ob->query("suc_msg");
+      if (!stringp(msg))
+        msg = HIR"结果$n" HIR"躲避不及，被$N" HIR"借助宝珠的法力击个正着。\n"NOR;
+      a_type = ob->query("attack_type");
+      if (!stringp(a_type))
+        a_type = "kee";
+      d_adjust = ob->query("damage_adjust");
+      if (!d_adjust)
+        d_adjust = 50;
+      damage = SPELL_D->apply_damage(
+                me,
+                target,
+                "both",
+                msg,
+                90,
+                NO_BACKFIRE);
+    }
+
+    else
+    {
+      msg = HIW"但是被$N" HIW"躲开了。\n"NOR;
+      message_vision(msg,target);
+    }
+
+  }
+
+  return 1;
+}
+
+void remove_effect(object me, object target)
+{
+  message_vision(HIW"$N胸前的宝珠，光华慢慢的暗淡了下来！\n" NOR, me);
+  return;
+}
+

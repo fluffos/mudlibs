@@ -1,0 +1,178 @@
+#include <ansi.h>
+#include <combat.h>
+#define JIANQI "「" HIR "三清剑气" NOR "」"
+#define FUCHEN CLASS_D("zhenyuan") + "/sanqing-fuchen/jianqi"
+#define CAUSED "jianqi"
+inherit F_SSERVER;
+int valid_pfm(object me, object target)
+{
+  int t = time();
+  if(userp(me) && me->query("family/family_name") != "五庄观")
+    return notify_fail(JIANQI "是五庄观不传之密！\n");
+  if (me->is_busy())
+    return notify_fail("你正忙着呢！\n");
+
+  if (me->query_skill("sanqing-fuchen", 1) < 220)
+    return notify_fail("你的七星剑法修为不够，难以施展" JIANQI "。\n");
+  if (me->query_skill("zhenyuan-force", 1) < 220)
+    return notify_fail("你的镇元神功修为不够，难以施展" JIANQI "。\n");
+  if (me->query_skill_mapped("whip") != "sanqing-fuchen")
+    return notify_fail("你没有激发三清拂尘，难以施展" JIANQI "。\n");
+  if (me->query_skill_mapped("force") != "zhenyuan-force")
+    return notify_fail("你没有激发镇元神功，难以施展" JIANQI "。\n");
+  if ((int)me->query("force") < 1200)
+    return notify_fail("你的真气不够，难以施展" JIANQI "。\n");
+  if (me->query_temp("tick/"+CAUSED))
+    return notify_fail(sprintf("你已经在使用%s。\n",JIANQI));
+  if ((t- me->query_temp("last_jianqi")) < 8)
+    return notify_fail(sprintf("你刚刚用完%s，无法立刻再次使用！\n",JIANQI));
+  return 1;
+}
+
+int perform(object me, object target)
+{
+  object weapon;
+  string msg;
+  int i;
+
+  if (! objectp(weapon = me->query_temp("weapon")) ||
+      (string)weapon->query("skill_type") != "whip")
+    return notify_fail("你使用的武器不对，难以施展" JIANQI "。\n");
+  msg = HIY "$N" HIY "一声长啸，手中" + weapon->name() + HIY "一振，抖得笔直！"
+        "如同长剑一般，斜指向$n" HIY"。\n转瞬间，在鞭稍吐出一团尺余的银芒,似有灵性"
+        "般吞缩不定。\n" NOR;
+  me->set_temp("SQW_perform",1);
+  me->add_temp("apply/attack",100);
+  COMBAT_D->do_attack(me, target, weapon);
+  if (!target->is_busy())
+    target->start_busy(2);
+  COMBAT_D->do_attack(me, target, weapon);
+  me->add_temp("apply/attack",-100);
+
+  if (living(target))
+  {
+    message_vision(HIC"\n只见剑气纵横，$N" HIC"手中" + weapon->name() +
+                   HIC"带动那团银芒，“哧哧”作响，招招紧逼$n，正是化三清拂尘"
+                   "为剑法的绝技" + JIANQI + HIC"！\n" NOR, me, target);
+
+    i = me->query_skill("whip");
+    i = random(i/10) + 1;
+    if (i < 10)
+      i = 10;
+    if (i > 60)
+      i = 60;
+
+    me->set_temp("SQW_perform",1 + random(4));
+    me->set_pfm_tick(FUCHEN, CAUSED,i, target);
+    me->set_temp("busy_for_pfm",JIANQI);
+  }
+
+  me->add("force", -220);
+  return 1;
+}
+
+int check(object me, object target)
+{
+  object weapon;
+
+  if (!living(me))
+  {
+    me->delete_temp("SQW_perform");
+    me->delete_temp("busy_for_pfm");
+    return 0;
+  }
+
+  weapon = me->query_temp("weapon");
+  if (!objectp(weapon) || (string)weapon->query("skill_type") != "whip")
+  {
+    tell_object(me, sprintf("你手中没有持鞭，%s的攻势便即瓦解！\n" NOR,JIANQI));
+    me->delete_temp("SQW_perform");
+    me->delete_temp("busy_for_pfm");
+    me->set_temp("last_jianqi",time());
+    return 0;
+  }
+
+  if ( weapon->query("weapon_prop") == 0 )
+  {
+    tell_object(me, sprintf("你的%s已毁，无法持续%s的攻势！\n"NOR,
+                             weapon->name(),JIANQI));
+    me->delete_temp("SQW_perform");
+    me->delete_temp("busy_for_pfm");
+    me->set_temp("last_jianqi",time());
+    return 0;
+  }
+
+  if (!objectp(target) || (environment(me) != environment(target)))
+  {
+    tell_object(me, sprintf("你没有了对手，%s的攻势便即瓦解！\n",JIANQI));
+    me->delete_temp("SQW_perform");
+    me->delete_temp("busy_for_pfm");
+    me->set_temp("last_jianqi",time());
+    return 0;
+  }
+
+  if (!living(target))
+  {
+    tell_object(me, sprintf("你的对手已经无法反击了，%s的攻势便即瓦解！\n",JIANQI));
+    me->delete_temp("SQW_perform");
+    me->delete_temp("busy_for_pfm");
+    me->set_temp("last_jianqi",time());
+    return 0;
+  }
+
+  if (!me->is_fighting(target))
+  {
+    tell_object(me,sprintf("\n你现在没有和%s过招，当下收回了%s的攻势。\n\n"NOR,target->name(),JIANQI));
+    me->delete_temp("SQW_perform");
+    me->delete_temp("busy_for_pfm");
+    me->set_temp("last_jianqi",time());
+    return 0;
+  }
+
+  if ( (string)me->query_skill_mapped("whip") != "sanqing-fuchen" )
+  {
+    tell_object(me, sprintf("你转而施展其他鞭法，无法再以%s攻敌！\n"NOR,JIANQI));
+    me->delete_temp("SQW_perform");
+    me->delete_temp("busy_for_pfm");
+    if (!me->is_busy())
+      me->start_busy(1+random(2));
+    me->set_temp("last_jianqi",time());
+    return 0;
+  }
+
+  if ( (int)me->query("force") < 400  )
+  {
+    tell_object(me, sprintf("你的内力后继不足，难以持续%s的威力，只好收缓剑招。\n"NOR,JIANQI));
+    me->delete_temp("SQW_perform");
+    me->delete_temp("busy_for_pfm");
+    me->set_temp("last_jianqi",time());
+    if (!me->is_busy())
+      me->start_busy(1+random(2));
+    return 0;
+  }
+
+  me->set_temp("SQW_perform",1 + random(4));
+  if (!me->query_temp("busy_for_pfm"))
+    me->set_temp("busy_for_pfm",JIANQI);
+
+  if (random(3) == 1)
+  {
+    message_vision(HIY"$N" HIY"手中的" + weapon->name() +
+                   HIY"织出漫天的鞭影，带动剑气纵横，层层紧锁$n"
+                   HIY"！\n\n"NOR,me,target);
+    if (!target->is_busy())
+      target->start_busy(1+random(3));
+  }
+
+  return 1;
+}
+
+void remove_effect(object me, object target)
+{
+  message_vision(HIW"\n$N渐渐收拢了剑芒！\n" NOR, me);
+  me->delete_temp("SQW_perform");
+  me->delete_temp("busy_for_pfm");
+  me->set_temp("last_jianqi",time());
+  return;
+}
+

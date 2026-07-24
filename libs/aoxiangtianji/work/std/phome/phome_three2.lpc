@@ -1,0 +1,503 @@
+// 玩家房屋物件。level three.
+// 等级 3，宅院,共两间，这是这是第二间-正房.
+#include <room.h>
+#define HOME_DIR	"/data/phome/"
+#define CAN_SAVE_OBJECT	9	// 此房屋可以保存的物品数量。
+#define MAX_FUR		3
+#define WORN_TIME	525600	/* MUD 中一年，超过此时间房屋变旧 */
+#define BREAKDOWN_TIME	1051200 /* MUD 中两年，超过此时间房屋倒塌 */
+inherit BIGROOM;
+inherit LANDROOM;
+inherit SAFTYROOM;
+inherit F_SAVE;
+void get_long(string str, string text);
+int home_level() { return 3; }	//房屋等级。
+int is_player_home() { return 1; }
+string home_master() { return query("master_name"); }
+void create()
+{
+  seteuid( getuid() );
+  set("short", "$N家的正房");
+  if(!restore())
+  {
+    set("long", @LONG
+这里是一间的大瓦房。
+·你可以用 changelong 命令改变你的家的描述。
+·<<郑重提醒：出入房屋请把门锁好，否则任何人均可随意
+  出入你的房屋拿走你的保存物品，您的钥匙请不要轻易交
+  给别人>>。
+·要配钥匙可以去铁匠铺 (pei key) 。
+·此房屋里可以收藏 9 件物品。
+  请用 baocun 命令保存
+  list 命令可列出你房间内已保存的物品
+  quzou 命令可以拿走保存的物品。
+·check 房主检查房屋状态命令
+·您的房屋要定期进行修缮，长时间不修缮房屋会倒塌。
+·房屋修缮归户部的工程队管理。如您一段时间无法来修缮
+  可以去户部预交(pay)修缮费，工程队会按时给您来维护房
+  屋。
+·如您一时周转不灵，可以把您的房屋向银行、钱庄抵押，
+  在抵押期间您一样可以使用维护，但过期不赎将被没收。
+·添置家具可以去家具商店看看。买好了家具可以放置
+  (fangzhi)在你的家里。家具以后如果你不想要了也可以
+  把它搬走(banzou)。
+祝您生活愉快！！
+LONG
+);
+  }
+  set("master_id","$ID");   // 房主的 ID。
+  set("master_name","$N");  // 房主的中文名。
+  set("valid_startroom", 1);
+  set("exits",([
+     "$DIR" : __DIR__"$ID_home",
+  ]));
+  set("valid_startroom", 1);
+  call_out("check_room",1);
+  setup();
+}
+string query_save_file()
+{
+  return HOME_DIR+"$TWOSAVEFILE";
+}
+void check_room()
+{
+  if(!query("built_time"))
+  {
+    set("built_time", time());
+    return;
+  }
+  PLAYERHOME_D->check_player_room(this_object());
+}
+void init()
+{
+  add_action("do_changelong","changelong");
+  add_action("do_baocun","baocun");
+  add_action("do_list","list");
+  add_action("do_quzou","quzou");
+  add_action("do_fangzhi","fangzhi");
+  add_action("do_banzou","banzou");
+  add_action("do_check", "check");
+}
+int do_check(string arg)
+{
+  object me = this_player();
+  int time, btime,des, tmp;
+  string out;
+  mapping bank;
+  if (!objectp(me) || !playerp(me))
+    return 0;
+  if( (me->query("id") != query("master_id"))
+      && !wizardp(me) )
+    return 0;
+  time = time();
+  out = "房屋状态：\n";
+  if(!(btime = query("built_time")) || (btime < 0))
+  {
+    set("built_time", time);
+    btime = time;
+  }
+  des = time - btime;
+  if(des >= 0)
+  {
+    out += "◆你需要去缴纳房屋修缮费了\n";
+    if(des <= WORN_TIME)
+    {
+      tmp = (WORN_TIME - des)/1440;
+      if(!tmp)
+        out += "◆你需要去缴纳房屋修缮费了\n  否则这里很快会变得破败不堪\n";
+      else
+        out += sprintf("  否则大约再有 %d 天这里就会变得破败不堪\n", tmp);
+    }
+    else if(time <= BREAKDOWN_TIME)
+    {
+      tmp = (BREAKDOWN_TIME - des)/1440;
+      if(!tmp)
+        out += "◆你需要去赶快缴纳房屋修缮费了\n  否则这里马上会倒塌的\n";
+      else
+        out += sprintf("  否则大约再有 %d 天这里可能会倒塌的\n", tmp);
+    }
+    else
+      out += "◆你要立刻去缴纳房屋修缮费！！\n  能不能来得及只有神仙知道了\n";
+  }
+  else
+  {
+    tmp = -(des/1440);
+    if(!tmp)
+      out += "◆你的房屋修缮费马上就要到期了\n";
+    else
+      out += sprintf("◆你的房屋修缮费还能支持 %d 天\n", tmp);
+  }
+  if(mapp(bank = query("bank")))
+  {
+    des = bank["time"] - time;
+    if(des >= 0)
+    {
+      tmp = des/1440;
+      if(!tmp)
+        out += "◆你的房屋在银行进行了抵押\n  赶紧去还款吧，能不能来得及都不好说了\n";
+      else
+        out += sprintf("◆你的房屋在银行进行了抵押\n  大约再有 %d 天就要到期了\n", tmp);
+    }
+    else
+      out += "◆你的房屋在银行进行了抵押\n  等着银行来收房子吧\n";
+  }
+  write(out);
+  return 1;
+}
+int do_changelong(string arg)
+{
+  string str;
+  object me = this_player();
+  if (!objectp(me) || !playerp(me))
+    return 0;
+  if(me->query("id") != query("master_id"))
+    return notify_fail("这个命令是房主专用命令。\n");
+  write("为了您房间的美观，每一行请不要超过二十五个中文字。\n");
+  write("第一行的内容长度比其它行的长度少两个中文字宽才能对齐。\n");
+  this_player()->edit( (: get_long , str :) );
+  return 1;
+}
+void get_long(string str, string text)
+{
+  if (strlen(text) > 320)
+  {
+    write("您的家庭描述太长了。\n");
+    return ;
+  }
+  if( sizeof( explode(text, "\n") ) > 8 )
+  {
+    write("请将您的家庭描述控制在不超过八行。\n");
+    return ;
+  }
+  set("long",text);
+  save();
+  write("ok.\n");
+  return;
+}
+void refresh_save_list()
+{
+  mapping tmp_list, num_list, wp_list;
+  string *k_l;
+  int i;
+
+  num_list = query("num_list");
+  if(!mapp(num_list) || sizeof(num_list) < 1)
+    return;
+
+  k_l = keys(num_list);
+  tmp_list = ([ ]);
+  for (i=0;i<sizeof(k_l);i++)
+  {
+    wp_list = num_list[k_l[i]];
+    if (!mapp(wp_list) || sizeof(wp_list) < 1)
+    {
+      map_delete(num_list,k_l[i]);
+      continue;
+    }
+    tmp_list += ([ sprintf("%d",i+1) : wp_list ]);
+  }
+  set("num_list",tmp_list);
+  save();
+  return;
+}
+int do_list(string arg)
+{
+  mapping num_list, wp_list;
+  string out;
+  int i;
+  num_list = query("num_list");
+  if(!mapp(num_list) || sizeof(num_list) < 1)
+    return notify_fail("这里没有保存任何物品。\n");
+  out = "这里保存的物品有：\n";
+  for (i=0;i<sizeof(num_list);i++)
+  {
+    wp_list = num_list[sprintf("%d",i+1)];
+    if (!mapp(wp_list) || sizeof(wp_list) < 1)
+      continue;
+    out += sprintf("%-2d  %-20s %-20s %-3d\n",
+                   i+1,
+                   (string)num_list[sprintf("%d",i+1)]["name"],
+                   (string)num_list[sprintf("%d",i+1)]["id"],
+                   (int)num_list[sprintf("%d",i+1)]["num"]);
+  }
+
+  write(out);
+  return 1;
+}
+int do_baocun(string arg)
+{
+  object obj,me = this_player();
+  mapping num_list;
+  string *k_num;
+  string owner, sid;
+  int num;
+  if (!objectp(me) || !playerp(me))
+    return 0;
+  if (me->is_busy())
+  {
+    write("你正忙着呢！\n");
+    return 1;
+  }
+  if(!arg || arg == "")
+    return notify_fail("你要保存什么？\n");
+  if(!obj = present(arg,me))
+    obj = present(arg,this_object());
+  if(!obj)
+    return notify_fail("你要保存什么？\n");
+  if(obj->is_character())
+    return notify_fail("你要保存什么？\n");
+  if (obj->is_item_make())
+  {
+    write("这东西不用存！\n");
+    return 1;
+  }
+  owner = obj->query("owner");
+  if (stringp(owner) && owner != me->query("id"))
+  {
+    write("这东西不是你的，你怎么拿来寄存呢？\n");
+    return 1;
+  }
+#ifdef WIZARD_FLAG
+  if(obj->query_wiz_flag() || obj->query("wiz_only"))
+  {
+    sys_log("wiz_ob",sprintf("%s企图在%s的家宅私藏巫师物品 %s 被没收.%s\n",
+            geteuid(me),query("master_id"),base_name(obj),ctime(time())));
+    write(obj->name()+"是巫师物品被没收了，请立刻向天神发信做出解释,否则后果自负.\n");
+    destruct(obj);
+    return 1;
+  }
+#endif
+  if(obj->is_food() || obj->is_liquid())
+    return notify_fail("吃喝的东西还是别放在家里的好。\n");
+  if (obj->query("auto_dest") || obj->query_temp("auto_dest"))
+    return notify_fail("这东西没有办法长期保存！\n");
+
+  if (obj->query("is_monitored"))
+    return notify_fail("这东西可不好私藏家里！\n");
+  if(obj->query("money_id"))
+    return notify_fail("钱还是存在银行里比较妥当。\n");
+  if(obj->query_credit_point_flag() || obj->no_save_in_home())
+    return notify_fail("这件东西不能保存。\n");
+  if (obj->query("weapon_prop/damage") != obj->query("max_weapon"))
+    return notify_fail("这件兵器已经坏了，先去修好了在保存吧。\n");
+  if (obj->query("armor_prop/armor") != obj->query("armor/max_armor"))
+    return notify_fail("这件护具已经坏了，先去修好了在保存吧。\n");
+/*
+  if(obj->query_amount() && (obj->query_amount() > 1))
+    return notify_fail("你一次只能保存一件物品。\n");
+*/
+  if(obj->query_max_encumbrance() && sizeof(all_inventory(obj)))
+    return notify_fail(sprintf("你一次只能保存一件物品，请先将%s里的物品取出。\n",obj->name()));
+  if (obj->query_jicun_allow())
+    return notify_fail("这东西可以到长安南城客栈的地下室去保存，保存在家中并不好！\n");
+  if(obj->is_ctl_ob())
+  {
+    write("这东西控制比较严，私藏家中恐怕不大好吧！\n");
+    return 1;
+//    CTLOB_D->save_to_mud(base_name(obj));
+  }
+  num = obj->query_amount();
+  if (num > 10)
+    return notify_fail("这物品的数量太多了，没有必要保存在自己家里！\n");
+  if (num < 1)
+    num = 1;
+
+  if (obj->query("equipped"))
+    obj->unequip();
+
+  sid = base_name(obj);
+  num_list = query("num_list");
+  if (!mapp(num_list) || sizeof(num_list) < 1)
+  {
+    num_list = ([ "1" : ([
+                          "objfile" : sid,
+                          "name" : obj->query("name"),
+                          "id"   : obj->query("id"),
+                          "num"  : num,
+                          "owner" : obj->query("owner"),
+                        ]),
+                ]);
+  }
+  else
+  {
+    k_num = keys(num_list);
+    if(sizeof(k_num) > CAN_SAVE_OBJECT)
+      return notify_fail("这间房子里再也保存不下更多的物品了。\n");
+
+    num_list += ([ sprintf("%d",sizeof(k_num)+1) : ([
+                                                  "objfile" : sid,
+                                                  "name" : obj->query("name"),
+                                                  "id"   : obj->query("id"),
+                                                  "num"  : num,
+                                                  "owner" : obj->query("owner"),
+                                                ]),
+               ]);
+  }
+  set("num_list",num_list);
+  obj->move(VOID_OB);
+  destruct(obj);
+  save();
+  write("ok.\n");
+  me->start_busy(1);
+  return 1;
+}
+int do_quzou(string arg)
+{
+  object ob = 0, me = this_player();
+  mapping num_list, wp_list;
+  string *obj_id;
+  string o_u, o_name, o_id, owner, obj_file;
+  int catlog, num;
+  if (!objectp(me) || !playerp(me))
+    return 0;
+  if (me->is_busy())
+    return notify_fail("你正忙呢！\n");
+
+  num_list = query("num_list");
+  if(!mapp(num_list) || sizeof(num_list) < 1)
+    return notify_fail("这里没有保存任何物品。\n");
+  if(!arg)
+    return notify_fail("你要取走什么物品？\n");
+  catlog = to_int(arg);
+  if (!catlog || catlog < 0 || catlog > sizeof(num_list))
+    return notify_fail("你要取走什么物品？\n");
+
+  wp_list = num_list[sprintf("%d",catlog)];
+  if (!mapp(wp_list) || sizeof(wp_list) < 1)
+    return notify_fail("你要取走什么物品？\n");
+
+  obj_file = wp_list["objfile"];
+  o_name = wp_list["name"];
+  o_id = wp_list["id"];
+  num = wp_list["num"];
+  owner = wp_list["owner"];
+  map_delete(num_list,sprintf("%d",catlog));
+  set("num_list",num_list);
+  refresh_save_list();
+  save();
+
+  if (!stringp(obj_file))
+    return notify_fail("存储的数据有了问题！！\n");
+  ob = new(obj_file);
+  if (!objectp(ob))
+    return notify_fail("这个物品不存在了！\n");
+  if(ob->is_ctl_ob())
+    CTLOB_D->delete_from_mud(base_name(ob));
+
+  ob->set_amount(num);
+  if (o_name != ob->query("name") || o_id != ob->query("id"))
+  {
+    obj_id = ob->query_my_id();
+    obj_id[0] = o_id;
+    ob->set_name(o_name,obj_id);
+    ob->setup();
+  }
+  if(!ob->move(this_player()))
+    ob->move(this_object());
+  ob->set("owner",owner);
+  if (ob->query("unit"))
+    o_u = ob->query("unit");
+  else
+    o_u = ob->query("base_unit");
+
+  write(sprintf("你取出了一%s%s。\n",
+          o_u,
+          ob->name()));
+  me->start_busy(1);
+  return 1;
+}
+int do_fangzhi(string arg)
+{
+  object me = this_player();
+  string f;
+  mapping obs,t_obs;
+  int *sum,n;
+  if (!objectp(me) || !playerp(me))
+    return 0;
+
+  if(me->query("id") != query("master_id"))
+    return 0;
+  f = me->query_temp("furniture");
+  if(!stringp(f))
+    return notify_fail("你好像没有新添置家具呀。\n");
+  me->delete_temp("furniture");
+  obs = query("objects");
+  if(!mapp(obs) || sizeof(obs) < 1)
+    set("objects",([f:1]));
+  else
+  {
+    sum = values(obs);
+    for(int i=0;i<sizeof(sum);i++)
+      n += sum[i];
+    if(n >= MAX_FUR)
+      return notify_fail("这间屋子里再也放置不下更多的家具了。\n");
+    else if(!undefinedp(obs[f]))
+      obs[f]++;
+    else
+      obs += ([f:1]);
+    set("objects",obs);
+  }
+  if(mapp(t_obs = query_temp("objects")))
+  {
+    foreach(string file,mixed ob in t_obs)
+    {
+      if(objectp(ob))
+        destruct(ob);
+      if(arrayp(ob))
+      {
+        for(int i=0;i<sizeof(ob);i++)
+          if(objectp(ob[i]))
+            destruct(ob[i]);
+      }
+    }
+  }
+  delete_temp("objects");
+
+  save();
+  setup();
+  write(sprintf("小伙计把%s送到这里摆放好，一转眼又不见了。\n",f->name()));
+  return 1;
+}
+int do_banzou(string arg)
+{
+  object ob,me=this_player();
+  string f;
+  mapping obs,t_obs;
+  if (!objectp(me) || !playerp(me))
+    return 0;
+  if(me->query("id") != query("master_id"))
+    return 0;
+  if(!stringp(arg))
+    return notify_fail("你要搬走什么家具？\n");
+  ob = present(arg,this_object());
+  if(!ob)
+    return notify_fail("你要搬走什么家具？\n");
+  f = base_name(ob);
+  obs = query("objects");
+  if(undefinedp(obs[f]) || !obs[f])
+    return notify_fail("你要搬走什么家具？\n");
+  obs[f]--;
+  if(!obs[f])
+    map_delete(obs,f);
+  message_vision("$N把$n从屋子里扔了出去。\n",me,ob);
+  destruct(ob);
+  set("objects",obs);
+  if(mapp(t_obs = query_temp("objects")))
+  {
+    foreach(string file,mixed obj in t_obs)
+    {
+      if(objectp(obj))
+        destruct(obj);
+      if(arrayp(obj))
+      {
+        for(int i=0;i<sizeof(ob);i++)
+          if(objectp(obj[i]))
+            destruct(obj[i]);
+      }
+    }
+  }
+  delete_temp("objects");
+  save();
+  setup();
+  return 1;
+}

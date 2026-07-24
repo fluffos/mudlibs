@@ -1,0 +1,106 @@
+#include <ansi.h>
+inherit ITEM;
+void init()
+{
+  object env=environment();
+  if(!clonep())
+    return;
+  if(!objectp(env))
+  {
+    call_out("self_destroy",1);
+    return;
+  }
+
+  if (userp(env))
+  {
+    if (!query("owner"))
+      set("owner",env->query("id"));
+    else if (query("owner") != env->query("id"))
+    {
+      call_out("self_destroy",1);
+      return;
+    }
+
+    add_action("do_apply",({"apply","yingyong"}));
+  }
+
+}
+
+void self_destroy()
+{
+  object env=environment();
+  if(env)
+  {
+    if(env->is_character())
+    { // npc or player
+      tell_object(env,"只见"+this_object()->query("name")
+        +"慢慢淡化，渐渐的不见了踪影。\n");
+    }
+
+  }
+
+  destruct(this_object());
+}
+
+int do_apply(string arg)
+{
+  string scroll, target_id, spell, myspell;
+  object me, target, ob;
+  int t = time();
+
+  if (!arg)
+    return notify_fail("你要使用什么？\n");
+
+  me = this_player();
+  ob = this_object();
+  if (me->is_busy())
+    return notify_fail("你正忙着呢！\n");
+  if (ob->query("owner") != me->query("id"))
+  {
+    message_vision("突然看见$N冲天而去，转眼不见了踪迹！\n",ob);
+    destruct(ob);
+    return 1;
+  }
+
+  if (sscanf(arg,"%s on %s",scroll,target_id) == 2)
+  {
+    target = present(target_id,environment(me));
+    if (!objectp(target))
+      return notify_fail("你想对谁应用？\n");
+  }
+
+  else
+  {
+    scroll = arg;
+    target = 0;
+  }
+
+  if (!ob->id(scroll))
+    return notify_fail("你身上没有 " + scroll + " 这样东西！\n");
+
+  if ((t - (int)me->query_temp("last_apply_scroll")) < 600 )
+    return notify_fail("你刚刚使用过了！\n");
+
+  me->set_temp("last_apply_scroll",t);
+  spell = CLASS_D("spells") + "/" + ob->query("scroll");
+  notify_fail("你使用卷轴失败了！\n");
+  if (!spell->cast(me,target))
+    if (!spell->cast_attack(me,target))
+      return 0;
+
+  myspell = me->query_skill_mapped("spells");
+  if (SKILL_D(myspell)->query_shuxing() == ob->query("shuxing") )
+  {
+    if (random(10) == 0)
+      if (!me->query("common/can_cast/" + ob->query("scroll")))
+      {
+        tell_object(me,"你学会了这种法术的使用办法！\n");
+        me->set("common/can_cast/" + ob->query("scroll"),1);
+      }
+
+  }
+
+  destruct(ob);
+  return 1;
+}
+

@@ -1,0 +1,145 @@
+#include <ansi.h>
+#include <combat.h>
+#define FIRE "「" HIR "地狱火" NOR "」"
+#define HELLFIRE CLASS_D("ghost") + "/gouhunshu/inferno"
+#define CAUSED "inferno"
+inherit F_SSERVER;
+int valid_cast(object me, object target)
+{
+  int t = time();
+  if(userp(me) && (string)me->query("family/family_name") != "阎罗地府")
+    return notify_fail(sprintf("%s是阎罗地府不传之密！\n",FIRE));
+  if (me->is_busy())
+    return notify_fail("你正忙着呢！\n");
+
+  if (me->query_skill("gouhunshu", 1) < 150)
+    return notify_fail(sprintf("你的勾魂术修为不够，难以施展%s。\n",FIRE));
+
+  if( (int)me->query("max_mana") < 2000 )
+    return notify_fail(sprintf("你的法力修为不够，难以施展%s。\n",FIRE));
+
+  if( (int)me->query("force") < 300 )
+    return notify_fail("你的真气不够。\n");
+  if((int)me->query("mana") < 500+2*(int)me->query("mana_factor") )
+    return notify_fail("你的法力不够！\n");
+  if((int)me->query("sen") < 100 )
+    return notify_fail("你无法集中精力！\n");
+  if (me->query_temp("tick/"+CAUSED))
+    return notify_fail(sprintf("你已经在使用%s。\n",FIRE));
+  if ((t - me->query_temp("last_inferno")) < 5 )
+    return notify_fail(sprintf("你不是刚刚用过了%s吗？\n",FIRE));
+  return 1;
+}
+
+int cast_attack(object me, object target)
+{
+  int time;
+  if( !target ) target = offensive_target(me);
+  if( !target
+  ||      !target->is_character()
+  ||      target->is_corpse()
+  ||      target==me)
+    return notify_fail("你要引地狱火去烧谁？\n");
+  if (!me->is_fighting(target))
+    return notify_fail(sprintf("你并没有和%s在战斗！\n",target->name()));
+
+  if( random(me->query("max_mana")) < 100 )
+  {
+     write("这次好象不大灵。\n");
+     return 1;
+  }
+
+  time = (int)me->query_skill("gouhunshu",1) / 10;
+  if ( time > 60 ) time = 60 ;
+  message_vision(HIB"$N双掌一搓，登时燃起一团蓝色的火焰，点点磷光飘向了$n！\n"NOR, me,target);
+  me->set_pfm_tick(HELLFIRE, CAUSED,time, target);
+  me->set_temp("busy_for_cast",FIRE);
+  return 1;
+}
+
+int check(object me, object target)
+{
+  int i, success_adj;
+  string msg_init, msg_success, msg_fail;
+  string *msgs=({
+    HIB"\n「啪」地一道蓝色火焰闪过。\n"NOR,
+    HIC"\n点点磷火在空气中飘荡着………\n"NOR,
+    HIB"\n一股蓝色火焰从地下冒了出来。\n"NOR,
+    HIR"\n火球「啪，啪」地爆燃着………\n"NOR,
+  });
+
+  if (!living(me) || !environment(me))
+  {
+    me->delete_temp("busy_for_cast");
+    return 0;
+  }
+
+  if( !objectp(target)
+    || !environment(target)
+    || !living(target)
+    || environment(me) != environment(target))
+  {
+    me->delete_temp("busy_for_cast");
+    me->set_temp("last_inferno",time());
+    return 0;
+  }
+
+  if (!me->is_fighting(target))
+  {
+    me->delete_temp("busy_for_cast");
+    me->set_temp("last_inferno",time());
+    return 0;
+  }
+
+  if ( (string)me->query_skill_mapped("spells") != "gouhunshu" )
+  {
+    me->delete_temp("busy_for_cast");
+    me->set_temp("last_inferno",time());
+    return 0;
+  }
+
+  if (me->query("mana") < 500)
+  {
+    me->delete_temp("busy_for_cast");
+    me->set_temp("last_inferno",time());
+    return 0;
+  }
+
+  i = me->query_tick_use(CAUSED);
+  if (!me->query_temp("busy_for_cast"))
+    me->set_temp("busy_for_cast",FIRE);
+
+  if (i%4 == 0)
+  {
+    success_adj = SKILL_D("gouhunshu")->query_power_effect(me);
+    if (success_adj > 100)
+      success_adj = 100 + random((success_adj - 100)/2 + 1);
+    msg_init = HIB"$N" HIB"凝神念动咒语，用法力催动四周点点磷光！\n"NOR;
+    msg_init += element_of(msgs);
+    msg_success = HIB"\n「啪」地一团蓝色火焰在$n脚下燃起，如鬼魅缠身，将$n拢在中央。\n"NOR;
+    msg_fail = HIC"$n" HIB"完全没有把这些" HIB"$N" HIB"的鬼火放在眼里！\n"NOR;
+    SPELL_D->attacking_cast(
+        me,
+        target,
+        success_adj,
+        NO_BACKFIRE,
+        "sen",
+        msg_init,
+        msg_success,
+        msg_fail,
+        msg_init,
+        msg_init);
+    me->add("mana", -100);
+  }
+
+  return 1;
+}
+
+void remove_effect(object me, object target)
+{
+  message_vision(HIW"$N收回法力，慢慢熄灭了周围跳动的磷火！\n" NOR, me);
+  me->set_temp("last_inferno",time());
+  me->delete_temp("busy_for_cast");
+  return;
+}
+

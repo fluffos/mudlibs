@@ -1,0 +1,333 @@
+//apply_change
+#define CHANGE_FILE   0
+#define CHANGE_CAUSED 1
+#define START_TIME    2
+#define KEEP_TIME     3
+#define CHANG_VALUE   4
+#define TICK_FILE     0
+#define NOW_VALUE     1
+#define END_VALUE     2
+nosave mapping apply_bless_list;
+nosave mapping apply_curse_list;
+nosave mapping pfm_ticktime;
+nosave object apply_tick_target = 0;
+nosave string tick_target_name = 0;
+object query_apply_tick_from() { return apply_tick_target; }
+
+string query_tick_target_name() { return tick_target_name; }
+//悟性(intelligence)
+//魅力(personality)
+nomask int is_valid_attr(string attr)
+{
+  string *valid_attr = ({"attack",
+                         "armor",
+                         "dodge",
+                         "defense",
+                         "damage",
+                         "strength",//力量
+                         "dexerity",//敏捷
+                         "courage",//勇气
+                         "spirituality",//灵性
+                         "composure",//定力
+                         "constitution",//根骨
+                         "karma",//福缘
+                         "force_apply",
+                         "spell_apply",
+                       });
+
+  return member_array(attr,valid_attr) != -1;
+}
+
+nomask int query_bless_changed(string attr)
+{
+  string *ks;
+  if (!is_valid_attr(attr))
+    return 0;
+  if (!apply_bless_list)
+    apply_bless_list = ([ ]);
+  if (sizeof(apply_bless_list) == 0)
+    return 0;
+  ks = keys(apply_bless_list);
+
+  return member_array(attr,ks) != -1;
+}
+
+nomask int query_curse_changed(string attr)
+{
+  string *ks;
+  if (!is_valid_attr(attr))
+    return 0;
+  if (!apply_curse_list)
+    apply_curse_list = ([ ]);
+  if (sizeof(apply_curse_list) == 0)
+    return 0;
+  ks = keys(apply_curse_list);
+
+  return member_array(attr,ks) != -1;
+}
+
+nomask int query_tick_use(string tick_name)
+{
+  string *ks;
+
+  if (!pfm_ticktime)
+    pfm_ticktime = ([ ]);
+  if (sizeof(pfm_ticktime) == 0)
+    return 0;
+  ks = keys(pfm_ticktime);
+  if (member_array(tick_name,ks) == -1)
+    return 0;
+  return pfm_ticktime[tick_name][NOW_VALUE];
+}
+
+nomask void set_bless_changed(string file,string caused,string attr,int keep_time,int c_value)
+{
+  object cng;
+
+  cng = find_object(file);
+
+  if (!cng)
+    cng = load_object(file);
+
+  if (!cng)
+  {
+    log_file("change_apply",sprintf("file %s not found, %s want to change, but refused!\n",file,attr));
+    return;
+  }
+
+  if (!is_valid_attr(attr))
+  {
+    tell_object(this_object(),sprintf("你不可以改变%s这个属性！\n",attr));
+    log_file("change_apply",sprintf("%s cause %s changed,but refused!\n",caused,attr));
+    return;
+  }
+
+  if (query_bless_changed(attr))
+  {
+    tell_object(this_object(),sprintf("%s已经处于被祝福状态了，不可以再次被改变！\n",attr));
+    return;
+  }
+
+//  if (this_object()->query_temp(caused))
+//    return;
+
+  apply_bless_list += ([
+                         attr : ({file, caused, time(), keep_time, c_value})
+                      ]);
+  this_object()->add_temp("apply/"+attr,c_value);
+  this_object()->set_temp(caused,1);
+  return;
+}
+
+nomask void delete_bless_changed(string attr)
+{
+  object cng;
+
+  if (!is_valid_attr(attr))
+    return;
+  if (!query_bless_changed(attr))
+    return;
+  cng = find_object(apply_bless_list[attr][CHANGE_FILE]);
+  if (!cng)
+    cng = load_object(apply_bless_list[attr][CHANGE_FILE]);
+  if (!cng)
+    log_file("change_apply",sprintf("file %s not found, but refused!\n",
+                     apply_bless_list[attr][CHANGE_FILE],attr));
+  else
+    call_other(cng, "remove_effect", this_object());
+  this_object()->add_temp("apply/"+attr,-apply_bless_list[attr][CHANG_VALUE]);
+  this_object()->delete_temp(apply_bless_list[attr][CHANGE_CAUSED]);
+  map_delete(apply_bless_list,attr);
+  if (!apply_bless_list)
+    apply_bless_list = ([ ]);
+}
+
+nomask void set_curse_changed(string file, string caused,string attr,int keep_time,int c_value)
+{
+  object cng;
+
+  cng = find_object(file);
+
+  if (!cng)
+    cng = load_object(file);
+
+  if (!cng)
+  {
+    log_file("change_apply",sprintf("file %s not found, %s want to change, but refused!\n",file,attr));
+    return;
+  }
+
+  if (!is_valid_attr(attr))
+  {
+    tell_object(this_object(),sprintf("你不可以改变%s这个属性！\n",attr));
+    log_file("change_apply",sprintf("%s cause %s changed,but refused!\n",caused,attr));
+    return;
+  }
+
+  if (query_curse_changed(attr))
+  {
+    tell_object(this_object(),sprintf("%s已经处于被诅咒状态了，不可以再次被改变！\n",attr));
+    return;
+  }
+
+//  if (this_object()->query_temp(caused))
+//    return;
+
+  apply_curse_list += ([
+                         attr : ({file, caused, time(), keep_time, c_value})
+                      ]);
+  this_object()->add_temp("apply/"+attr,-c_value);
+  this_object()->set_temp(caused,1);
+  return;
+}
+
+nomask void delete_curse_changed(string attr)
+{
+  object cng;
+
+  if (!is_valid_attr(attr))
+    return;
+  if (!query_curse_changed(attr))
+    return;
+  cng = find_object(apply_curse_list[attr][CHANGE_FILE]);
+  if (!cng)
+    cng = load_object(apply_curse_list[attr][CHANGE_FILE]);
+  if (!cng)
+    log_file("change_apply",sprintf("file %s not found, but refused!\n",
+                          apply_curse_list[attr][CHANGE_FILE],attr));
+  else
+    call_other(cng, "remove_effect", this_object());
+  this_object()->add_temp("apply/"+attr,apply_curse_list[attr][CHANG_VALUE]);
+  this_object()->delete_temp(apply_curse_list[attr][CHANGE_CAUSED]);
+  map_delete(apply_curse_list,attr);
+  if (!apply_curse_list)
+    apply_curse_list = ([ ]);
+}
+
+nomask void set_pfm_tick(string file, string caused,int end_value, object target)
+{
+  object cng;
+
+  cng = find_object(file);
+
+  if (!cng)
+    cng = load_object(file);
+
+  if (!cng)
+  {
+    log_file("change_apply",sprintf("file %s not found, %s want to set, but refused!\n",file,caused));
+    return;
+  }
+
+  if (query_tick_use(caused))
+  {
+    tell_object(this_object(),sprintf("%s已经处于被使用状态了！\n",caused));
+    return;
+  }
+
+  if (this_object()->query_temp("tick/" + caused))
+    return;
+  this_object()->set_temp("tick/" + caused,1);
+
+  pfm_ticktime += ([
+                    caused : ({file,1,end_value})
+                  ]);
+  apply_tick_target = target;
+  if (objectp(target))
+    tick_target_name = target->name();
+  return;
+}
+
+nomask void delete_pfm_tick(string caused)
+{
+  object cng;
+
+  if (!query_tick_use(caused))
+    return;
+
+  cng = find_object(pfm_ticktime[caused][TICK_FILE]);
+  if (!cng)
+    cng = load_object(pfm_ticktime[caused][TICK_FILE]);
+  if (!cng)
+    log_file("change_apply",sprintf("%s not found!\n",pfm_ticktime[caused][TICK_FILE]));
+  else
+    call_other(cng, "remove_effect", this_object(),apply_tick_target);
+  this_object()->delete_temp("tick/" + caused);
+  map_delete(pfm_ticktime,caused);
+  if (!pfm_ticktime)
+    pfm_ticktime = ([ ]);
+  apply_tick_target = 0;
+  tick_target_name = 0;
+  return;
+}
+
+nomask void update_pfm_tick(string caused)
+{
+  object cng;
+
+  cng = find_object(pfm_ticktime[caused][TICK_FILE]);
+  if (!cng)
+    cng = load_object(pfm_ticktime[caused][TICK_FILE]);
+  if (!cng)
+  {
+    log_file("change_apply",sprintf("%s not found, unable to update!\n",pfm_ticktime[caused][TICK_FILE]));
+    return;
+  }
+
+  if (call_other(cng, "check", this_object(),apply_tick_target))
+  {
+    pfm_ticktime[caused][NOW_VALUE]++;
+    this_object()->set_temp("tick/"+caused,pfm_ticktime[caused][NOW_VALUE]);
+  }
+
+  else
+    delete_pfm_tick(caused);
+  return;
+}
+
+nomask void reset_changed()
+{
+  string *ks;
+  string attr;
+  int i;
+  int t;
+
+  t = time();
+  if (mapp(apply_bless_list) && sizeof(apply_bless_list) > 0)
+  {
+    ks = keys(apply_bless_list);
+    for (i = 0; i < sizeof(ks); i++)
+    {
+      attr = ks[i];
+      if ((t - apply_bless_list[attr][START_TIME]) >= apply_bless_list[attr][KEEP_TIME])
+      	delete_bless_changed(attr);
+    }
+
+  }
+
+  if (mapp(apply_curse_list) && sizeof(apply_curse_list) > 0)
+  {
+    ks = keys(apply_curse_list);
+    for (i = 0; i < sizeof(ks); i++)
+    {
+      attr = ks[i];
+      if ((t - apply_curse_list[attr][START_TIME]) >= apply_curse_list[attr][KEEP_TIME])
+      	delete_curse_changed(attr);
+    }
+
+  }
+
+  if (mapp(pfm_ticktime) && sizeof(pfm_ticktime) > 0)
+  {
+    ks = keys(pfm_ticktime);
+    for (i = 0; i <sizeof(ks); i++)
+    {
+      attr = ks[i];
+      if (pfm_ticktime[attr][NOW_VALUE] < pfm_ticktime[attr][END_VALUE])
+      	update_pfm_tick(attr);
+      else
+      	delete_pfm_tick(attr);
+    }
+
+  }
+}

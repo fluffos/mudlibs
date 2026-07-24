@@ -1,0 +1,178 @@
+inherit ROOM;
+int *seq = ({1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21});
+string *dirs = ({"east","west","south","north",
+              "northeast","northwest","southeast","southwest"});
+int do_cast(string arg);
+int is_warfield() {return 1;}
+
+void setup()
+{
+  object where = this_object();
+  mapping exits = ([]);
+  string dir,p;
+  int i,j,*num = ({});
+
+  num = seq;
+  sscanf(base_name(where),"%*s/warplace%d",i);
+  num -= ({i});
+  for (j=0;j<4;j++)
+  {
+    i = element_of(num);
+    p = sprintf(__DIR__"warplace%d",i);
+    if (random(2))
+      dir = dirs[j];
+    else
+      dir = dirs[j+4];
+    num -= ({i});
+    num -= ({0});
+    exits += ([dir : p]);
+  }
+
+  set("exits",exits);
+  set("no_clean_up",1);
+  ::setup();
+}
+
+void init()
+{
+  string camp_str;
+  object leader;
+  object ob = this_object();
+  object who = this_player();
+  object where, member, *p_team, *inv;
+
+  if (playerp(who) &&
+      who->query_temp("teamwar/in_warfield") &&
+      ob->is_warfield())
+    add_action("do_cast","cast");
+  else if (who->is_war_npc())
+  {
+    where = 0;
+    camp_str = (string)who->query("master_place");
+    if (stringp(camp_str))
+    {
+      where = find_object(camp_str);
+      if (!objectp(where))
+        where = load_object(camp_str);
+    }
+
+    inv = all_inventory(this_object());
+    inv = filter_array(inv, (: playerp($1) &&
+                               living($1) :));
+    leader = who->query("master_player");
+    if (camp_str != base_name(ob))
+    {
+      if (objectp(leader) &&
+          !leader->query_temp("teamwar/failure") &&
+          environment(leader)->is_warfield())
+        message_vision("$N大叫到，进攻！攻入中军营地，活捉 " +
+                        leader->name() + " ！\n",who);
+      else
+        message_vision("$N兴奋的大叫，敌人的主帅没有了，杀啊！\n",who);
+      if (sizeof(inv) > 0)
+      {
+        if( member_array(leader, inv) == -1 )
+        {
+          foreach (member in inv)
+          {
+            who->kill_ob(member);
+            member->kill_ob(who);
+          }
+
+        }
+
+        else
+          who->kill_ob(leader);
+      }
+
+      else
+      {
+        message_vision("$N哈哈大笑，攻占敌人一个据点了，全力进攻敌人营地，击溃敌人！！\n",who);
+        who->full_me();
+        if (objectp(where))
+          who->move(where);
+        else if (objectp(leader))
+          who->move(environment(leader));
+      }
+
+    }
+
+    else
+    {
+      message_vision("$N哈哈大笑，攻进敌人营地了！击溃敌人就在眼前！\n",who);
+      if (sizeof(inv) > 0)
+      {
+        foreach (member in inv)
+        {
+          who->kill_ob(member);
+          member->kill_ob(who);
+        }
+
+      }
+
+      else
+      {
+        message_vision("$N大喜，攻占敌人营地，敌人任务全面失败了！\n",who);
+        p_team = who->query("pteam");
+        if (!arrayp(p_team) || sizeof(p_team) < 1)
+          return;
+        foreach (member in p_team)
+        {
+          if (!playerp(member) || member->query_temp("teamwar/failure"))
+            continue;
+          tell_object(member,"敌人已经攻占了营地，本次任务失败了！请速撤离(retreat)战场！\n");
+          member->set_temp("teamwar/can_retreat",1);
+          member->set_temp("teamwar/failure",1);
+        }
+
+      }
+
+    }
+
+  }
+
+}
+
+int do_cast(string arg)
+{
+  if (!arg || (arg != "tuoqiao" && arg != "chuqiao"))
+    return 0;
+  write("你无法用这种方式离开战场！请retreat ！\n");
+  return 1;
+}
+
+int valid_leave(object me, string dir)
+{
+  mapping exits;
+  string f_dir;
+
+  if (playerp(me) &&
+      me->query_temp("teamwar/in_warfield") &&
+      present("junling pai",me) &&
+      (string)me->query_temp("teamwar/place") == base_name(this_object()))
+  {
+    if (me->query_temp("teamwar/stage") == "finish")
+      return ::valid_leave(me, dir);
+
+    f_dir = DIR_D->abbrdir(dir);
+    exits = query("exits");
+    if (!mapp(exits) || sizeof(exits) < 1 || undefinedp(exits[f_dir]))
+      return ::valid_leave(me, dir);
+    if (exits[f_dir] != (string)me->query_temp("teamwar/camp_p"))
+    {
+      write("你不可以离开自己的防卫地点！\n");
+      return 0;
+    }
+
+    if (!me->query_temp("teamwar/leader_sos"))
+    {
+      write("中军营地并没有传来求救的信号，请不要随便离开自己的防卫地点！\n");
+      return 0;
+    }
+
+    message_vision("$N心急火燎的往营地方向驰援而去！\n",me);
+  }
+
+  return ::valid_leave(me, dir);
+}
+

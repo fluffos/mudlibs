@@ -1,0 +1,226 @@
+<HTML>
+<HEAD>
+   <META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=big5">
+   <META NAME="Author" CONTENT="Spock">
+   <META NAME="GENERATOR" CONTENT="Mozilla/4.05 [en] (Win95; I) [Netscape]">
+   <TITLE>MudOS v21c2 參考文件 - 中階 LPC</TITLE>
+</HEAD>
+<BODY TEXT="#CCFFFF" BGCOLOR="#000000" LINK="#33FF33" VLINK="#FF0000" ALINK="#33CCFF" BACKGROUND="../../image/ff/fftitleback.jpg" NOSAVE>
+
+<CENTER><B><FONT COLOR="#FF99FF"><FONT SIZE=+3>中階 LPC</FONT></FONT></B></CENTER>
+
+<CENTER>
+<HR WIDTH="100%"></CENTER>
+
+<CENTER>&nbsp;Descartes of Borg</CENTER>
+
+<CENTER>&nbsp;November 1993</CENTER>
+
+<CENTER>
+<HR WIDTH="100%"></CENTER>
+
+<CENTER><FONT COLOR="#FFCCCC"><FONT SIZE=+2>第二章: LPMud driver</FONT></FONT></CENTER>
+
+<HR WIDTH="100%">
+<CENTER><FONT COLOR="#FFFFCC">2.1 回顧基本的 driver/mudlib 間的互動</FONT></CENTER>
+
+<HR WIDTH="100%">
+<BLOCKQUOTE>在基礎 LPC&nbsp; 課本裡, 你學到很多 mudlib 工作的方式, 尤其是關於你為了建造區域所撰寫的物件.
+而 mudlib 和 driver 間的互動討論得並不多. 不過, 你應該知道 driver 做了以下的事:
+<BR>&nbsp;
+<DL>
+<DL>
+<LI>
+1)&nbsp; 當一個物件第一次被載入記憶體, 原始模式 mud&nbsp; 的 driver 會呼叫
+create(), 而精簡模式 mud&nbsp; 會呼叫 reset(). 創作的人使 create() 或 reset()
+給予物件初始值.</LI>
+
+<LI>
+2)&nbsp; 每到遊戲管理者設定的週期, driver&nbsp; 呼叫 reset()&nbsp; 函式.
+這樣讓物件能重新產生怪物之類的東西. 請注意, 在精簡模式的 mud&nbsp; 中,
+同一個函式不但用於重新設定房間, 也用於設定初始值.</LI>
+
+<LI>
+3)&nbsp; 任何時候, 一個活物件 (living object)&nbsp; 遇到另一個物件時, driver&nbsp;
+呼叫新遇到物件的 init() 函式. 這樣可以讓新遇到的物件透過 add_action() 外部函式
+(efun) 給予活物件可以執行的命令, 同樣也可以執行其他的動作, 而這些動作是一個活物件碰到此一物件時所該發生的事.</LI>
+
+<LI>
+4)&nbsp; driver&nbsp; 定義了一套稱為外部函式的函式, 在遊戲中所有的物件都可以使用它們.
+舉例來說, 常用的外部函式有: this_player(), this_object(), write(), say(),
+以此類推.</LI>
+</DL>
+</DL>
+</BLOCKQUOTE>
+
+<HR WIDTH="100%">
+<CENTER><FONT COLOR="#FFFFCC">2.2 driver 週期 (cycle)</FONT></CENTER>
+
+<HR WIDTH="100%">
+<BLOCKQUOTE>driver&nbsp; 是執行遊戲的 C&nbsp; 程式. 它的基本功能是接受外界的連線,
+讓人能登錄 (login) 、解譯定義 LPC&nbsp; 物件和它們在遊戲中作用的 LPC&nbsp;
+程式碼、接受使用者的輸入並呼叫適當的 LPC&nbsp; 函式以配合事件發生. 它最簡單的要素就是,
+它是一個永不終止迴圈 (loop).
+
+<P>一旦遊戲啟動, 並且正確地執行功能 (以後會在高階 LPC&nbsp; 課本中討論啟動程序),
+driver&nbsp; 就進入一個迴圈. 除非合法呼叫 shutdown() 外部函式, 或碰上臭蟲讓
+driver 崩壞 (crash), 此迴圈不會終止. 一開始, driver&nbsp; 控制任何新進的連線,
+並把連線交給登錄物件 (login). 之後, driver&nbsp; 把所有使用者輸入的命令放入一個命令表
+(table of commands), 此時已是 driver 的最後一個週期. 在組合命令表之後,
+所有從 driver 最後一個週期排定要送給連線的訊息, 就送給使用者. 此時, driver&nbsp;
+依序執行命令表中的命令, 並執行每個物件放在命令表中的各套命令. driver&nbsp;
+在週期結束時, 呼叫每一個有 heart_beat() 函式的物件, 執行其中的 heart_beat()
+函式. 最後, 執行所有等待的延遲呼叫 (call out). 本章不討論連線控制, 本章焦點放在
+driver 如何控制使用者命令、心跳 (heartbeat)、延遲呼叫.</BLOCKQUOTE>
+
+<HR WIDTH="100%">
+<CENTER><FONT COLOR="#FFFFCC">2.3 使用者命令</FONT></CENTER>
+
+<HR WIDTH="100%">
+<BLOCKQUOTE>如同 1.2&nbsp; 中所提, driver&nbsp; 在每個週期中, 把每一個使用者要執行的命令儲存在命令表裡.
+命令表裡頭有執行此命令的活物件名稱、給予活物件此一命令的物件、要執行此命令時所執行的函式.
+driver&nbsp; 把輸入命令的物件當作是給予命令者. 大多數的時候, 這就是 this_player()&nbsp;
+所傳回的給予命令者.
+
+<P>driver&nbsp; 由有延遲命令的活物件表的頭端開始, 接著執行命令, 呼叫這些活物件輸入的命令相關的函式,
+並傳入給予命令者給函式的任何參數. 當 driver 由新的活物件所給的命令開始時,
+給予命令者變數就改為新的活物件, 這樣在命令開始依序執行函式時, this_player()
+外部函式才能傳回給予命令的物件.
+
+<P>來看看一個玩家的命令暫存區範例. 在一個叫做 Bozo 的玩家執行最後一個命令時,
+他輸入 "north"&nbsp; 和 "tell descartes&nbsp; 下次重新開機是什麼時候 ?".&nbsp;
+"north" 命令與 Bozo 所在房間裡的 "Do_Move()"&nbsp; 函式相關 ("north" 命令由此房間的
+set_exits()&nbsp; 外部函式自動設定). "tell" 命令並沒有特別列在玩家所可以使用的命令中,
+而在玩家物件中有一個叫做 "cmd_hook()" 的函式, 比對玩家可能輸入的命令.
+
+<P>當 driver 處理到 Bozo,&nbsp; 給予命令者的變數就設定為 Bozo 這個物件.
+然後, 看到 Bozo 輸入 "north", 也看到與 "north"&nbsp; 相關的函式, 則 driver
+呼叫 Bozo's_room->Do_Move(0)&nbsp; (Bozo&nbsp; 所在房間的 Do_Move() 函式).
+因為 Bozo 只輸入 "north"&nbsp; 命令, 沒有加上參數, 所以用參數 0&nbsp; 傳入此函式.
+此房間平常會呼叫一些它需要的函式, 此時 this_player()&nbsp; 外部函式所傳回的物件就是
+Bozo. 最後, 此房間物件會呼叫 Bozo 中的 move_player(), 之後呼叫 move_object()
+外部函式. 這個外部函式負責改變一個物件的環境.
+
+<P>當一個物件的環境改變時, 會刪除前一個環境中其他物件和前一個環境中對它加上的可用命令.
+刪除之後, driver&nbsp; 呼叫新環境和新環境中每一個物件的 init() 外部函式.
+每一次呼叫 init() 時, Bozo&nbsp; 物件仍然是給予命令者. 所以此次移動所有的
+add_action() 外部函式會加在 Bozo 身上. 完成所有的呼叫後, 控制權從 move_object()&nbsp;
+交給 Bozo 的 move_player()&nbsp; 區域函式. move_player() 將控制權交回給舊房間的
+Do_Move(), Do_Move() 傳回 1&nbsp; 給 driver,&nbsp; 以表示此命令的動作完成.
+如果 Do_move()&nbsp; 因為某些原因傳回 0, 則 driver 會對 Bozo 顯示 "什麼?"
+(或是你的 driver 所預設的錯誤命令訊息).
+
+<P>一旦第一個命令傳回 1, driver&nbsp; 就繼續處理 Bozo 的第二個命令, 過程就跟第一個一樣.
+請注意, driver&nbsp; 把&nbsp; "tell descartes 什麼時候重新開機 ?" 的 "descartes&nbsp;
+什麼時候重新開機 ?" 當作參數傳給跟 tell 相關的函式. 這個函式決定要如何處理這個參數.
+這個命令之後傳回 1&nbsp; 或 0, driver&nbsp; 再繼續處理下一個有延遲命令的活物件,
+然後以同樣的步驟處理全部有延遲命令的活物件, 執行它們的命令.</BLOCKQUOTE>
+
+<HR WIDTH="100%">
+<CENTER><FONT COLOR="#FFFFCC">2.4 set_heart_beat() 和 call_out() 外部函式</FONT></CENTER>
+
+<HR WIDTH="100%">
+<BLOCKQUOTE>一旦有延遲命令的物件其全部的命令執行完成後, driver&nbsp; 就繼續呼叫所有
+driver&nbsp; 列為有心跳之物件中的 heart_beat() 函式. 只要一個物件以非零參數呼叫
+set_heart_beat() 外部函式 (視你的 driver 而定, 非零的數字也許很重要, 但是在大多的情況下為整數
+1 ), set_heart_beat()&nbsp; 外部函式把呼叫 set_heart_beat()&nbsp; 的物件加在有心跳物件的列表上.
+如果你以 0&nbsp; 為參數呼叫它, 它就把此物件從有心跳物件的表上刪除.
+
+<P>心跳在 mudlib 裡最常見的用途是治療玩家和怪物、執行戰鬥. 一旦 driver
+處理完命令列表, 它就開始看心跳列表, 呼叫表上每一個物件的 heart_beat().
+所以舉例來說, 對玩家而言, driver&nbsp; 會呼叫玩家裡面的 heart_beat() 以執行以下功能:
+<UL>
+<LI>
+1)&nbsp; 讓玩家變老</LI>
+
+<LI>
+2)&nbsp; 依照治療速率治療玩家.</LI>
+
+<LI>
+3)&nbsp; 檢查四周是否有任何被人獵殺、正在獵殺人、或正在攻擊人的物件</LI>
+
+<LI>
+4)&nbsp; 如果第三點成立, 開始攻擊.</LI>
+
+<LI>
+5)&nbsp; 其他需要每秒鐘自動發生的事.</LI>
+</UL>
+請注意, 有心跳的物件越多, mud 每個週期需要處理的時間也就越久. 有心跳的物件已知是
+mud&nbsp; 貪求 CPU&nbsp; 時間最主要的因素.
+
+<P>call_out()&nbsp; 外部函式用於執行不需要像心跳一樣常常發生、或只發生一次的計時函式呼叫.
+延遲呼叫 (call out) 讓你指定呼叫一個物件中的某個函式. 一般延遲呼叫的公式為:
+<BLOCKQUOTE><FONT COLOR="#FFCC99">call_out( func, time, args );</FONT></BLOCKQUOTE>
+第三個指定參數的參數並非必要. 第一個參數是一個字串, 代表被呼叫的函式名稱.
+第二個參數是經過幾秒之後才呼叫函式.
+
+<P>實際上來說, 當一個物件呼叫 call_out() 時, 它就被加到一個延遲呼叫的物件表中,
+此表中記有延遲呼叫的總延遲時間, 和欲呼叫的函式名稱. driver&nbsp; 的每一個週期,
+就會進行倒數, 直到呼叫函式的時間. 時間一到, driver&nbsp; 把此物件從延遲呼叫表上刪除,
+並執行呼叫延遲呼叫函式, 傳入原本延遲呼叫函式所指定的參數.
+
+<P>如果你想在一個延遲呼叫執行前將其刪除, 你需要用 remove_call_out()&nbsp;
+外部函式, 傳入延遲呼叫的函式名稱. driver&nbsp; 會刪除下一次延遲呼叫的這個函式.
+這表示如果同一個函式有一個以上的延遲呼叫, 就會出現模擬兩可的情況.
+
+<P>要讓一個延遲呼叫循環執行, 你必須在你延遲呼叫的函式中再使用 call_out()
+外部函式, 因為 driver 執行完延遲呼叫後, 會自動把函式從延遲呼叫表中刪除.
+<BR>舉例:
+<BLOCKQUOTE><FONT COLOR="#99FF99">void foo() { call_out("hello", 10); }</FONT>
+
+<P><FONT COLOR="#99FF99">void hello() { call_out("hello", 10); }</FONT></BLOCKQUOTE>
+在 foo()&nbsp; 第一次被呼叫後, 每 10 秒呼叫 hello()&nbsp; 一次. 在此有幾件事要注意.
+第一, 你必須要小心, 確定你的延遲呼叫不會造成任何不正確的遞迴方式. 第二,
+比較 set_heart_beat() 和 call_out() 所做的事有何不同.
+
+<P><FONT COLOR="#FFFFCC">set_heart_beat():</FONT>
+<UL>
+<LI>
+a)&nbsp; 將 this_object()&nbsp; 加在心跳物件列表中</LI>
+
+<LI>
+b)&nbsp; 每一次 driver 週期呼叫 this_object() 中的 heart_beat() 函式</LI>
+</UL>
+<FONT COLOR="#FFFFCC">call_out():</FONT>
+<BR>&nbsp;
+<UL>
+<LI>
+a)&nbsp; 將 this_object() 、this_object() 中的函式名稱、延遲時間、一組參數,
+加在延遲呼叫函式的列表上</LI>
+
+<LI>
+b)&nbsp; 指定名稱的函式只呼叫一次, 在延遲一段指定的時間後, 執行此次呼叫</LI>
+</UL>
+你可以看到, 延遲呼叫的 (a)&nbsp; 部分有很龐大的記憶總量 (memory overhead),
+而心跳的 (b)&nbsp; 部分則有更龐大的 CPU&nbsp; 總量, 假設延遲呼叫的延遲時間要比一次
+driver 週期來得長.
+
+<P>很明顯, 你不會執行延遲一秒的延遲呼叫, 否則你會拖垮兩者. 同樣, 你也不希望應該使用比一秒鐘長的延遲呼叫週期來達成的功能出現在心跳中.
+我個人聽過一種論點, 認為你應該多使用延遲呼叫. 我最常聽到的是, 單一呼叫或比十秒長的週期最好使用延遲呼叫.
+十秒以內的週期性呼叫, 你最好使用心跳. 我並不知道這種說法是否正確, 但是我也不認為遵照這種作法會造成任何損害.</BLOCKQUOTE>
+
+<HR WIDTH="100%">
+<CENTER><FONT COLOR="#FFFFCC">2.5 總結</FONT></CENTER>
+
+<HR WIDTH="100%">
+<BLOCKQUOTE>基於更深入了解 LPC, 和了解 driver 和 mudlib 間的互動. 你現在應該知道
+driver&nbsp; 執行函式的順序, 並了解有關 this_player()、add_action()、move_object()
+外部函式和 init() 區域函式更多的細節. 另外, 根據以往你從基礎 LPC&nbsp;
+課本學得的知識, 本章以 driver 如何控制延遲呼叫和心跳來介紹它們. 你現在應該對延遲呼叫和心跳有基本的認識,
+並可以在你的程式碼中實驗一下.
+
+<P><FONT COLOR="#FFCCCC">Copyright (c) George Reese 1993</FONT></BLOCKQUOTE>
+
+<HR WIDTH="100%">
+<CENTER><FONT COLOR="#FFFFCC">譯者: Spock of the Final Frontier 98.Jul.22.</FONT></CENTER>
+
+<CENTER>
+<HR WIDTH="100%"></CENTER>
+
+<CENTER><A HREF="contents.html">回到上一頁</A></CENTER>
+
+<CENTER>
+<HR WIDTH="100%"></CENTER>
+
+</BODY>
+</HTML>

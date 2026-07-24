@@ -1,0 +1,72 @@
+#include <ansi.h>
+#include <combat.h>
+#define FU "「" HIG "召唤" NOR "」"
+inherit F_SSERVER;
+int valid_cast(object me, object target)
+{
+  int t = time();
+  if (me->is_busy())
+    return notify_fail("你正忙着呢！\n");
+  if (me->query_skill("spells", 1) < 150)
+    return notify_fail(sprintf("你的法术修为不够，难以施展%s。\n",FU));
+
+  if( (int)me->query("max_mana") < 1500 )
+    return notify_fail(sprintf("你的法力修为不够，难以施展%s。\n",FU));
+
+  if( (int)me->query("force") < 300 )
+    return notify_fail("你的真气不够。\n");
+  if((int)me->query("mana") < 300+2*(int)me->query("mana_factor") )
+    return notify_fail("你的法力不够！\n");
+  if((int)me->query("sen") < 100 )
+    return notify_fail("你无法集中精力！\n");
+  if ((t- me->query_temp("last_summon")) < 180)
+    return notify_fail("你刚刚使用过，需要等会才能继续使用！\n");
+
+  if (me->query_condition("killer"))
+    return notify_fail("你身上杀气正浓，无法使用法术！\n");
+  return 1;
+}
+
+int cast_attack(object me, object target)
+{
+  string s_sk;
+  object soldier;
+
+  s_sk = me->query_skill_mapped("spells");
+  if (!stringp(s_sk))
+    return notify_fail("你必须先选择你的特殊法术，才可以施展！\n");
+
+  if( !target )
+    target = offensive_target(me);
+  if( !target
+   || !target->is_character()
+   || target->is_corpse()
+   || target==me)
+    return notify_fail(sprintf("你要对谁施%s？\n",FU));
+  me->add("mana", -50-2*(int)me->query("mana_factor"));
+  me->receive_damage("sen", 50);
+  message_vision("$N喃喃地念了几句咒语。\n", me);
+  if( random(me->query("max_mana")) < 200 )
+  {
+    write("你法力忽然不济了，看来这次施法失败了！\n");
+    me->set_temp("last_summon",time());
+    return 1;
+  }
+
+  soldier = present("tianshen jingang",environment(me));
+  if (objectp(soldier))
+  {
+    write("这里已经有了金刚护法了！\n");
+    return 1;
+  }
+
+  seteuid(getuid());
+  soldier = new("/obj/npc/jingang");
+  soldier->move(environment(me));
+  soldier->invocation(me);
+  soldier->set_temp("invoker",me);
+  me->set("last_summon",time());
+  me->start_busy(2+random(2));
+  return 8+random(5);
+}
+

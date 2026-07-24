@@ -1,0 +1,164 @@
+// Recordable_room.c 可記錄房間
+// Written by Doing Lu 1998/11/16
+//    可記錄房間具有能夠保存對象數據的能力，這主要是提供給場景需要做永久性變化的地
+//    方，如玩家自選的建房地點。對MUDLIB中關于這個ROOM的操作要嚴格控制，因為這將修
+//    改MUDLIB的場景，嚴禁不雅觀的描述和會引起系統不正常運作的描述出現，因此，凡是
+//    具有這個屬性的場景當玩家需要修改時，應該上報巫師，經arch以上的巫師批准后方可
+//    做出修改操作。
+//
+//    在繼承Recordable_room 時，如果有init函數，必須繼承使用這里提供的init函數，即
+//    init函數中應該有::init的調用，而且不能使用replace_room函數。
+inherit ROOM;
+inherit F_SAVE;
+
+mapping	user_room;
+
+// 存放玩家自造房間的數據，mapping 存放的是 房間名 : 入口的文件路徑
+// 例如：聽濤居 : /d/room/doing/????.c
+
+// 返回object存檔的名字
+string query_save_file()
+{
+	string file;
+	string basen;
+
+	return "/data/room" + base_name(this_object()) + ".sav";
+}
+
+// 修正long描述并生成xiaoyuan的描述
+void create_desc()
+{
+	string	desc, ext_long;
+	string* uroom;
+	int	count;
+	int	i;
+
+	delete("item_desc/xiaoyuan");
+	ext_long = "";
+	if (mapp(user_room))
+	{
+		// 如果這里建有房間，修改long的提示信息
+		count = 0;
+		desc = "那里好像有";
+		uroom = keys(user_room);
+		for (i = 0; i < sizeof(uroom); i++)
+		{
+			if (!stringp(uroom[i]) || uroom[i] == "") continue;
+			count++;
+			if (count > 1)
+			{
+				if ((count-1) % 4 == 0) desc += "\n          "; else desc += "\t";
+			}
+			desc += uroom[i];
+		}
+		desc += "。";
+		if (count > 0)
+		{
+			if (count > 1)
+			{
+				ext_long = "    這里隱隱約約座落著几個小院(xiaoyuan)。\n";
+			} else
+			{
+				ext_long = "    這里隱隱約約的座落著一個小院(xiaoyuan)。\n";
+			}
+			set("item_desc/xiaoyuan", desc + "\n");
+		}
+	} else
+	{
+		// 如果沒有定義user_room, 置為空
+		user_room = ([ ]);
+	}
+	set("long", query("old_long") + ext_long);
+}
+
+// 讀取記錄的數據，并且根據玩家自建的房屋添加提示信息
+int setup()
+{
+	string old_long;
+
+	old_long = query("long");
+	if (file_size(query_save_file() + __SAVE_EXTENSION__) != -1)
+	{
+		// 如果有存檔則取存檔數據
+		restore();
+	}
+	set("old_long", old_long);
+	set("recordable_room", 1);
+	create_desc();
+
+	::setup();
+}
+
+// 初始化進入時的狀態
+void init()
+{
+	// 增加進入房間的函數
+	add_action("do_enter", "enter");
+	add_action("do_enter", "進入");
+}
+
+// 增加一套房間
+int create_room(string room_name, string path)
+{
+	if (! mapp(user_room)) user_room = ([ ]);
+	if (! stringp(room_name) || room_name == "") return 0;
+	if (! undefinedp(user_room[room_name])) return 0;
+	user_room[room_name] = path;
+	create_desc();
+	return 1;
+}
+
+// 判斷是否存在一套房間
+int exist_room(string room_name)
+{
+	if (! mapp(user_room)) return 0;
+	if (! stringp(room_name) || room_name == "") return 0;
+	if (undefinedp(user_room[room_name])) return 0;
+	return 1;
+}
+
+// 去除一套房間
+int demolish_room(string room_name)
+{
+	if (! mapp(user_room)) return 1;
+	if (! stringp(room_name) || room_name == "") return 0;
+	if (undefinedp(user_room[room_name])) return 0;
+	map_delete(user_room, room_name);
+	create_desc();
+	return 1;
+}
+
+// 進入一套房間的入口處
+int do_enter(string room_name)
+{
+	object me;
+	object ob;
+	
+	me = this_player();
+	if (! stringp(room_name) || room_name == "" || 	! mapp(user_room))
+	{
+		return notify_fail("你想去哪里？\n");
+	}
+	if (undefinedp(user_room[room_name]))
+	{
+		tell_object(me, "你左瞅瞅，右看看，也沒找到那地方。\n");
+		message("vision", me->query("name") +
+			"左瞅瞅，右看看，鬼鬼祟祟的不知道在干些什么。\n", environment(me), ({me}));
+		return 1;
+	}
+	if (! (ob = find_object(user_room[room_name])))
+	{
+		ob = load_object(user_room[room_name]);
+		if (! objectp(ob))
+		{
+			write (user_room[room_name] + "\n");
+			message_vision("$N快步向" + room_name + "走去，結果一頭撞到鐵板...快請巫師看看！\n", me);
+			return 1;
+		}
+	}
+	tell_object(me, "你快步向" + room_name + "走去。\n");
+	message("vision", me->query("name") +
+			"向" + room_name + "飄然而去。\n", environment(me), ({me}));
+	me->move(ob);
+	return 1;
+}

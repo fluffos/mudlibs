@@ -1,0 +1,394 @@
+// moye.c  莫邪
+// Written by Doing Lu  1998/11/2
+
+// 莫邪可以回答 player 一些問題，并在接受定金后交給 player 一封信件 /d/item/obj/letter
+// 每次見面需要清除詢問過的標志，如果player沒有詢問過價格，不能交付定金，以免用戶打造完粗坯
+// 后沒有能力支付，浪費了原料
+
+// 如果 player 交給莫邪道具粗坯，莫邪提示你交錢，如果沒有足夠的錢，就把道具粗坯退給你
+// 這個期間 player 設置臨時變量 item/交付粗坯 = 1, item/value = 道具價格
+// 莫邪設置臨時變量 item/接受了粗坯 = 1，item/交付人ID = 交付人ID，item/粗坯 = 粗坯名稱
+
+// 如果 player 交付了足夠的錢，清除舊的 item, 并且設置 item/准備接受 = 1
+// 莫邪清除臨時變量 item，并將粗坯交給干將，由干將設置莫邪的變量 item/正在煉制 = 1
+
+// 干將煉制完道具后，等待用戶輸入一些信息，在此期間，清除用戶的臨時變量 item
+// 改為設置臨時變量 item/輸入信息 = 1
+// 同時清除莫邪的臨時變量 item/正在煉制，改為設置莫邪的臨時變量 item/正在等候 = 1
+// 直到用戶輸入完畢或是因故中止，清除莫邪的臨時變量 item
+
+// 在莫邪設置了臨時變量 item/正在煉制 和 item/正在等候 時，不接受 player 的物品
+
+// 道具價格：power_point * scale / 2 * 5
+// 道具有效點數：power_point * scale / 2，相當于道具價格 / 5
+// 傷害力 = 有效點數 * (70 - 120)%，和煉道具者的耗費的內力有關
+
+inherit NPC;
+
+#include <ansi.h>
+
+int	ask_me();
+int	no_money();
+
+void create()
+{
+	set_name("莫邪", ({ "moye", "mo" }));
+	set("long", "她長得清美秀麗，一副不食人間煙火的模樣。她就是鑄劍大師干將的妻子。\n" );
+
+	set("nickname", HIY "劍仙" NOR);
+	set("gender", "女性");
+	set("attitude", "friendly");
+
+	set("age", 1525);
+	set("shen_type", 0);
+	
+	set("str", 1000);			// 保証不會因為負荷過大而接受不了東西
+
+	set("inquiry", ([
+		"煉制" : (: ask_me :),
+		"鑄劍" : (: ask_me :),
+		"煉劍" : (: ask_me :),
+		"煉刀" : (: ask_me :),
+		"煉杖" : (: ask_me :),
+		"煉鞭" : (: ask_me :),
+		"煉錘" : (: ask_me :),
+		"煉棍" : (: ask_me :),
+		"煉甲" : (: ask_me :),
+		"打造" : (: ask_me :),
+		"鑄造" : (: ask_me :),
+		"制造" : (: ask_me :),
+		"打制" : (: ask_me :),
+		"定制" : (: ask_me :),
+		"定做" : (: ask_me :),
+		"定造" : (: ask_me :),
+		"兵器" : (: ask_me :),
+		"道具" : (: ask_me :),
+		"裝備" : (: ask_me :),
+		"武器" : (: ask_me :),
+		"刀劍" : (: ask_me :),
+		"裝甲" : (: ask_me :),
+		
+		"沒錢" : (: no_money :),
+		"錢不夠":(: no_money :),
+		"等會" : (: no_money :),
+
+		"原料" : "煉制道具可不能沒有原料啊，要想煉制武器就得有玄鐵石一類的東西。\n          要想煉制防具就得有天蠶絲那些東西。這些原料很難找，可遇不可求啊！\n",
+		"配料" : "光有原料還打造不出最好的道具，如果有象麒麟之血那樣配料就可以大大激發原料的潛力，\n          當然了，這根本就是神話里的東西，根本找不到的。其實象雞血草一類的東西也是可以的哦。\n",
+		"定金" : "定金很少，只需要五兩黃金啦，不過交定金前先讓我看看(show)材料，也好定價哦。\n",
+		"價格" : "你把原料和配料給我看看(show)，我就能估摸出一個價錢。",
+	]));
+
+        setup();
+	carry_object("/clone/misc/cloth")->wear();
+}
+
+void init()
+{
+	// 清除詢問標志
+	this_player()->delete_temp("query_moye");
+
+	add_action("do_show", "show");
+	if (! this_player()->query_temp("item/交付粗坯"))
+	{
+		remove_call_out("greeting");
+		call_out("greeting", 1, this_player());
+	} else
+	{
+		remove_call_out("greeting2");
+		call_out("greeting2", 1, this_player());
+	}
+}
+
+void greeting(object me)
+{
+	if (objectp(present(me, environment())))
+	{
+		message_vision("莫邪笑著對$N說：你好，你是想打造道具嗎？要是煉好了粗坯請交給我。\n", me);
+	}
+}
+
+void greeting2(object me)
+{
+	if (objectp(present(me, environment())))
+	{
+		message_vision("莫邪對$N說：快點交錢啊，要是沒有就明說沒錢嘛。\n", me);
+	}
+}
+
+int do_show(string arg)
+{
+	object	me;
+	object	ob1, ob2;
+	string	mat1, mat2;
+	string	msg;
+	int	power_point, scale;
+	int	value;
+	int	n;
+
+	me = this_player();
+	if (!arg) return notify_fail("你想干什么，是要跳個舞么？\n");
+
+	// 取原料，配料
+	n = sscanf(arg, "%s %s", mat1, mat2);
+	if (!n)
+	{
+		mat1 = arg;
+		n = 1;
+	}
+	power_point = 0;
+	scale = 0;
+
+	// 取object1
+	if (!objectp(ob1 = present(mat1, me)))
+		return notify_fail("算了吧，你身上沒有 " + mat1 + " 這種東西。\n");
+	if (! ob1->query("material_attrib"))
+	{
+		message_vision("莫邪一愣，對$N說道：這種東西也能用來煉制，我沒聽說過。\n", me);
+	}
+	if (ob1->query("material_attrib") != "z")
+	{
+		// 不是配料
+		power_point = ob1->query("power_point");
+	} else
+	{
+		// 是配料
+		scale = ob1->query("scale");
+	}
+
+	if (n == 2)
+	{
+		// 取object2
+		if (!objectp(ob2 = present(mat2, me)))
+			return notify_fail("算了吧，你身上沒有 " + mat2 + " 這種東西。\n");
+		if (! ob2->query("material_attrib"))
+		{
+			message_vision("莫邪一愣，對$N說道：這種東西也能用來煉制，我沒聽說過。\n", me);
+			return 1;
+		}
+		if (ob2->query("material_attrib") != "z")
+		{
+			// 不是配料
+			if (power_point !=0)
+			{
+				message_vision("莫邪搖頭對$N道：對不起，我們沒法將這兩種原料混練，你應該拿種配料來。\n", me);
+				return 1;
+			}
+			power_point = ob2->query("power_point");
+		} else
+		{
+			// 是配料
+			if (scale !=0)
+			{
+				message_vision("莫邪搖頭對$N道：對不起，我們沒法將這兩種配料混練，你得拿種原料來。\n", me);
+				return 1;
+			}
+			scale = ob2->query("scale");
+		}
+	} else
+	{
+		// 如果沒有配料，scale設置成1 (相當于比例是0.5)
+		scale = 1;
+	}
+
+	if (power_point == 0)
+	{
+		message_vision("莫邪仔細的看了看$N拿出的配料，說道：只用配料是打造不了道具的。\n", me);
+		return 1;
+	}
+	value = scale * power_point * 5 / 2;
+	if (n == 2)
+		msg = sprintf("莫邪仔細的看了看$N拿出的原料和配料，說道：如果要用這種原料和配料打造兵器，\n" +
+			"只需要%s兩黃金，怎么樣，我們價格很合理吧。要是沒問題，請付五兩黃金做定金。\n",
+			chinese_number(value));
+	else
+		msg = sprintf("莫邪仔細看了看$N拿出的原料，說道：如果沒有配料，只用這種原料打造道具，\n" +
+			"只需要%s兩黃金，怎么樣，我們價格很合理吧。要是沒問題，請付五兩黃金做定金。\n",
+			chinese_number(value));
+	message_vision(msg, me);
+	me->set_temp("query_moye", 1);
+
+	return 1;
+}
+
+// 發出提示信息
+int ask_me()
+{
+	message_vision("莫邪對$N說道：" 
+		"你是要打造自己的道具嗎？\n"
+		"我們這里可以為你打造各種武器包括刀、劍、錘、鞭、杖和護甲，都是第一流的。\n"
+		"你先把原料配料給我看看(show)，我先估算一下價錢，然后你交定金給我，我就讓\n"
+		"你去我們弟子那里先打造粗坯，然后回來付錢，再由我們精制，一定會讓你滿意的。\n"
+		"當然了，我們可不負責給你找原料哦，只有你自己辛苦辛苦了。\n", this_player());
+	return 1;
+}
+
+int no_money()
+{
+	object ob;
+	object me;
+	
+	me = this_player();
+	if (! this_object()->query_temp("item/接受了粗坯") ||
+	      this_object()->query_temp("item/交付人ID") != me->query("id"))
+	{
+		message_vision("莫邪眼睛一瞪，對$N說道：沒錢，你沒錢關我啥事，我又不是財神爺。\n", me);
+		return 1;
+	}
+	me->delete_temp("item");
+	if (! objectp(ob = present(this_object()->query_temp("item/粗坯"), this_object())))
+	{
+		// 如果道具粗坯不存在，可能是系統故障
+		message_vision("莫邪對$N說道：對不起，你的道具粗坯給我弄丟了...抱歉的啦...\n", me);
+		this_object()->delete_temp("item");
+		return 1;
+	}
+	this_object()->delete_temp("item");
+	// 交還道具粗坯
+	message_vision("莫邪對$N說道：你沒有錢，那就算了，東西先還給你吧，不過它不精制是用不了的...\n"
+		       "莫邪把粗坯還給了$N。\n", me);
+	ob->move(me);
+	return 1;
+}
+
+// 接受定金
+int accept_object(object me, object ob)
+{
+	object letter;
+	object ganjiang;
+	object item_temp;
+	string msg;
+	int    val;
+	if (this_object()->query_temp("item/正在煉制"))
+	{
+		message_vision("莫邪緊張的對$N說：別吵，干將正在干活呢。\n", me);
+		return 0;
+	}
+	if (this_object()->query_temp("item/正在等候"))
+	{
+		message_vision("莫邪對$N說：別吵，干將正在和顧客談話呢。\n", me);
+		return 0;
+	}
+	
+	if (ob->query("item_origin"))
+	{
+		// 接受粗坯
+		if (this_object()->query_temp("item/接受了粗坯"))
+		{
+			// 如果已經接受了一個人道具粗坯，則拒絕接受
+			message_vision("莫邪對$N說道：對不起，我先處理完這位客人的事再說。\n", me);
+			return 0;
+		}
+		// 計算價值
+		val = ob->query("mat_attr1") * ob->query("mat_attr2") * 5 / 2;
+		msg = sprintf("莫邪對$N說道：很好，打造的不錯，請您交錢吧，需要%s兩黃金，交錢吧。\n",
+				chinese_number(val));
+		message_vision(msg, me);
+		ob->set("point", val / 5);
+		ob->set("value", val * 10000);
+		if (wizardp(me))
+		{
+			message_vision("莫邪仔細看了看$N，笑著說道：原來是巫師，那么你隨便給點好了。\n", me);
+			val = 0;
+		}
+		me->set_temp("item/value", val * 10000);
+		me->set_temp("item/交付粗坯", 1);
+		this_object()->set_temp("item/接受了粗坯", 1);
+		this_object()->set_temp("item/交付人ID", me->query("id"));
+		this_object()->set_temp("item/粗坯", ob->query("id"));
+		// 如果過一段時間沒有交款，還道具粗坯
+		remove_call_out("time_out");
+		call_out("time_out", 30, me, ob);
+		return 1;
+	}
+	if (ob->query("money_id"))
+	{
+ 		if (me->query_temp("item/交付粗坯"))
+ 		{
+ 			// 如果是交付了粗坯就交款
+ 			if (this_object()->query_temp("item/交付人ID") != me->query("id"))
+ 			{
+ 				// 交付人和付款人對不上號
+ 				message_vision("莫邪一臉迷惑的對$N說道：你以前好象給過我道具粗坯啊，怎么我一點印象都沒有了？\n", me);
+ 				me->delete_temp("item");
+ 				return 0;
+ 			}
+ 			if (ob->value() < me->query_temp("item/value"))
+ 			{
+	 			message_vision("莫邪對$N說：對不起，本店開張一千年來，還沒有打過折扣。\n", me);
+				return 0;
+			}
+			message_vision("莫邪對$N說道：好，這就給你煉！\n", me);
+			this_object()->delete_temp("item/接受了粗坯");
+			me->delete_temp("item");
+			remove_call_out("time_out");
+			// 如果干將不在
+			if (! objectp(ganjiang = present("ganjiang", environment())))
+			{
+				message_vision("莫邪看了看四周，不禁一呆，說道：干將呢？他不在，沒辦法做了...你改天再來吧。\n", me);
+				command("give " + me->query("id") + this_object()->query_temp("item/粗坯"));
+				this_object()->delete_temp("item");
+				me->delete_temp("item");
+				return 0;
+			}
+			if (! objectp(item_temp = present(this_object()->query_temp("item/粗坯"), this_object())))
+			{
+				message_vision("莫邪一呆，你的東西呢？我怎么招不著了！見鬼了。", me);
+				this_object()->delete_temp("item");
+				me->delete_temp("item");
+				return 0;
+			}
+			// 交付道具給干將，用戶准備接受
+			me->set_temp("item/准備接受", 1);
+			message_vision("莫邪把" + item_temp->query("name") + "交給了干將。\n", me);
+			item_temp->move(ganjiang);
+			ganjiang->start_work(me, item_temp);
+			return 1;
+ 		}
+ 		// 交定金
+		if (! me->query_temp("query_moye"))
+		{
+			message_vision("莫邪對$N笑道：這么急就交定金啊，先讓我看看(show)原料配料，不然你沒錢付可就浪費了。\n", me);
+			return 0;
+		}
+ 		if (ob->value() < 50000)
+		{
+			message_vision("莫邪對$N說：對不起，定金要五兩黃金，本店開張一千年來，還沒有打過折扣。\n", me);
+			return 0;
+		}
+		message_vision("莫邪看了看$N給的定金，滿意的說道：好，你拿這封信去找我們的弟子打造粗坯吧。\n"
+			       "莫邪給了$N一封信。\n", me);
+		letter = new("/d/item/obj/letter");
+		letter->move(me);
+		return 1;
+	} else
+	{
+		message_vision("莫邪眼睛一瞪，對$N說道：你給我這些東西干什么？我不要！\n", me);
+		return 0;
+	}
+}
+
+int time_out(object me, object ob)
+{
+	// 過了一段時間 player 沒有交款，退回粗坯
+	if (! this_object()->query_temp("item/交付人ID")) return 1;
+	me->delete_temp("item");
+	this_object()->delete_temp("item");
+	if (! objectp(me) || ! objectp(present(me, environment())))
+	{
+		// 沒有這個 player, 或者這個 player 不在這里
+		command("say 奇怪，剛才那位客人呢？怎么這就走了？\n");
+		if (objectp(ob)) destruct(ob);
+		return 1;
+	}
+	if (! objectp(ob) || ! objectp(present(ob, this_object())))
+	{
+		// 如果道具粗坯不存在，可能是系統故障
+		message_vision("莫邪對$N說道：對不起，你的道具粗坯給我弄丟了...抱歉的啦...\n", me);
+		return 1;
+	}
+	// 交還道具粗坯
+	message_vision("莫邪對$N說道：看來你是沒有錢了，東西先還給你吧，真是的，不精制是用不了的...\n"
+		       "莫邪把粗坯還給了$N。\n", me);
+	ob->move(me);
+	return 1;
+}

@@ -1,0 +1,64 @@
+#pragma optimize
+inherit F_DBASE;
+#include <ansi.h>
+public int qdel();
+int clean_up() { return 1; }
+
+void protect();
+void create()
+{
+        seteuid(ROOT_UID);
+        set("channel_id", "守护精灵");
+        CHANNEL_D->do_channel( this_object(), "sys", "守护精灵已经启动。");
+        set_heart_beat(180);
+}
+
+protected void heart_beat()
+{
+        object *obs;
+        mapping total;
+
+		CHANNEL_D->do_channel( this_object(), "sys",sprintf("守护精灵protectd系统自动清除 %d 个变量。", reclaim_objects()));
+        total = QUEST_D->query("information");
+        if (! mapp(total)) return;
+
+        obs = keys(total);
+        obs = filter_array(obs, (: objectp($1) :));
+        if (! sizeof(obs) || sizeof(obs) < 20)
+        {
+            qdel();
+                return;
+        }
+
+}
+
+public int qdel()
+{
+  mapping total;
+  object *obs;
+  object qob;
+  int t, i;
+  seteuid(getuid());
+  total = QUEST_D->query("information");
+  if (! mapp(total))
+    return 1;
+  obs = keys(total);
+  obs = filter_array(obs, (: objectp($1) :));
+  if (! sizeof(obs))
+    return 1;
+  foreach(qob  in obs)
+  {
+    reset_eval_cost();
+
+    t = time() - qob->query("start_time");
+    if (t >= 1800)
+    {
+      qob->cancel_quest();
+      i ++;
+    }
+
+  }
+
+  CHANNEL_D->do_channel(this_object(), "sys", "守护精灵protectd系统自动清除 " + i + " 个超过30分钟的任务。");
+  return 1;
+}

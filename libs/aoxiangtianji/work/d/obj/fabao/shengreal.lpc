@@ -1,0 +1,114 @@
+#include <ansi.h>
+#include <weapon.h>
+
+inherit F_UNIQUE;
+inherit ITEM;
+#define SHENG "/d/obj/fabao/shengreal"
+#define CAUSED "no_move"
+
+void create()
+{
+  set_name(HIM"幌金绳"NOR,({"huangjin sheng", "sheng", "fabao"}));
+  set_weight(5000);
+  if(clonep())
+    set_default_object(__FILE__);
+  else {
+    set("unit","根");
+    set("value", 100000);
+    set("material","cloth");
+    set("long","一根可长可短的幌金绳。\n");
+    set("unique", 1);
+    set("no_sell", "幌金绳乃法宝没人敢买也。\n");
+    set("no_drop", "幌金绳乃法宝不可扔弃也。\n");
+    set("no_give", "幌金绳乃法宝不可赠人也。\n");
+    set("time_available", 3);
+    set("no_busy", 0);
+    set("replace_file", "/d/obj/fabao/shengfake.lpc");
+    set("is_monitored",1);
+  }
+
+  setup();
+}
+
+int ji(string target)
+{
+  object fabao,me,victim;
+  string msg, objname;
+  int spi,damage, result;
+  fabao = this_object();
+  me = this_player();
+  objname=this_object()->name();
+  victim = fabao->query("in_use");
+  if (objectp(victim) && victim->query_temp("no_move"))
+    return notify_fail("现在的"+objname+"只是一条普通的绳索。\n");
+  if (!target)
+    return notify_fail("你想用对谁用"+objname+"？\n");
+  if (!objectp(victim=present(target, environment(me))))
+    return notify_fail("这里没有 "+target+"。\n");
+  if(!living(victim))
+    return notify_fail("你的目标不是活物！\n");
+  if(!me->is_fighting(victim))
+    return notify_fail("只有战斗中才能祭"+objname+"。\n");
+  if(victim->query_temp("no_move"))
+    return notify_fail("对方已经无暇自顾了，有必要用"+objname+"么？\n");
+  if( (int)me->query("mana") < 1200)
+    return notify_fail("你的法力不够了！\n");
+  if( (int)me->query("sen") < 500)
+    return notify_fail("你的精神无法集中！\n");
+  msg = HIC"\n$N" HIC"口中念着咒语，掏出" + objname + HIC"对$n"
+        HIC"抛将过去！\n"NOR;
+  if (userp(me) && userp(victim) && !victim->is_want_kill(me->query("id")))
+     me->want_kill(victim);
+  me->kill_ob(victim);
+
+  if (living(victim) && ! userp(victim))
+    victim->kill_ob(me);
+  else
+    victim->fight_ob(me);
+  me->add("mana", -500);
+  me->receive_damage("sen", 100);
+  me->start_busy(2+random(3));
+  spi = fabao->query("time_available")*5;
+  fabao->add("time_available", -1);
+  result = SPELL_D->attacking_cast_success(me,victim,100 + random(spi));
+  switch(result)
+  {
+    case 1:
+      msg += HIR "结果把$n" HIR"从头到脚裹了个结结实实。\n" NOR;
+      damage = random((int)me->query("mana_factor")*3/5 + 1)+1;
+      if (damage < 8)
+        damage = 8;
+      if (damage > 60)
+        damage = 60;
+      victim->set_curse_changed(SHENG,CAUSED,"dexerity",damage,1);
+      fabao->set("in_use", victim);
+      break;
+    case 0:
+      msg += HIB"$n" HIB"伸手一指，大喝一声“落！”幌金绳无力的抖了抖，落回$N" HIB"手中。\n"NOR;
+      break;
+    case -1:
+      msg += HIB"$n" HIB"伸手一指，大喝一声“收！”只见幌金绳破空而去，落入$n"
+             HIB"手中。\n"NOR;
+      fabao->delete("equipped");
+      fabao->move(victim);
+      break;
+  }
+
+  message_vision(msg,me,victim);
+  if( (int)fabao->query("time_available") < 1 )
+  {
+    message_vision("\n突然间$N一阵抖动，化为一条神龙，冲天而去。\n", fabao);
+    destruct(fabao);
+  }
+
+  me->add("mana", -250);
+  me->add("sen", -50);
+  return 1;
+}
+
+void remove_effect(object me)
+{
+  if (objectp(me) && me->query_temp(CAUSED))
+    tell_object(me,"你终于摆脱了幌金绳的困扰。\n");
+}
+

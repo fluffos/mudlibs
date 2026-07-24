@@ -1,0 +1,246 @@
+#include <ansi.h>
+#include <combat.h>
+#define XIAOFENG "「" HIR "绝剑" NOR "」"
+#define FUCHEN CLASS_D("zhenyuan") + "/xiaofeng-sword/juejian"
+#define CAUSED "juejian"
+inherit F_SSERVER;
+int valid_pfm(object me, object target)
+{
+  int t = time();
+  if(userp(me) && me->query("family/family_name") != "五庄观")
+    return notify_fail(XIAOFENG "是五庄观不传之密！\n");
+  if (me->is_busy())
+    return notify_fail("你正忙着呢！\n");
+
+  if (me->query_skill("xiaofeng-sword", 1) < 220)
+    return notify_fail("你的晓风残月剑法修为不够，难以施展" XIAOFENG "。\n");
+  if (me->query_skill("zhenyuan-force", 1) < 220)
+    return notify_fail("你的镇元神功修为不够，难以施展" XIAOFENG "。\n");
+  if (me->query_skill_mapped("sword") != "xiaofeng-sword")
+    return notify_fail("你没有激发晓风残月剑法，难以施展" XIAOFENG "。\n");
+  if (me->query_skill_mapped("force") != "zhenyuan-force")
+    return notify_fail("你没有激发镇元神功，难以施展" XIAOFENG "。\n");
+  if ((int)me->query("force") < 1200)
+    return notify_fail("你的真气不够，难以施展" XIAOFENG "。\n");
+  if (me->query_temp("tick/"+CAUSED))
+    return notify_fail(sprintf("你已经在使用%s。\n",XIAOFENG));
+  if ((t- me->query_temp("last_juejian")) < 8)
+    return notify_fail(sprintf("你刚刚用完%s，无法立刻再次使用！\n",XIAOFENG));
+  return 1;
+}
+
+int perform(object me, object target)
+{
+  object weapon;
+  string msg;
+  int i;
+
+  if (! objectp(weapon = me->query_temp("weapon")) ||
+      (string)weapon->query("skill_type") != "sword")
+    return notify_fail("你使用的武器不对，难以施展" XIAOFENG "。\n");
+  msg = HIC"$N" HIC"深深吸了一口真气，突然之间，剑法吞吐开合、阴阳动静，"
+        "剑势绵绵不绝、轻翔灵动！\n"NOR;
+  msg += CYN"$N" CYN"使出的正是晓风残月剑法的精髓"NOR + XIAOFENG + CYN"！\n\n"NOR;
+
+  message_vision(msg,me);
+  me->set_temp("XFS_perform",9);
+  i = me->query_skill("sword");
+  i = i/5 + random(i/5);
+  me->add_temp("apply/attack", i);
+  me->add_temp("apply/damage", i);
+  COMBAT_D->do_attack(me, target, weapon);
+  me->delete_temp("XFS_perform");
+  me->add_temp("apply/attack", -i);
+  me->add_temp("apply/damage", -i);
+
+  if (living(target) && target->is_fighting(me))
+  {
+    i = me->query_skill("sword");
+
+    i = random(i/10) + 1;
+    if (i < 10)
+      i = 10;
+    if (i > 60)
+      i = 60;
+    me->set_pfm_tick(FUCHEN, CAUSED,i, target);
+    me->set_temp("busy_for_pfm",XIAOFENG);
+  }
+
+  me->add("force", -280);
+  return 1;
+}
+
+int check(object me, object target)
+{
+  object weapon;
+  int i,skill;
+
+  if (!living(me))
+  {
+    me->delete_temp("XFS_perform");
+    me->delete_temp("busy_for_pfm");
+    me->delete_temp("XFS_juejian");
+    me->delete_temp("XFS_juejian1");
+    me->delete_temp("XFS_juejian2");
+    return 0;
+  }
+
+  weapon = me->query_temp("weapon");
+  if (!objectp(weapon) || (string)weapon->query("skill_type") != "sword")
+  {
+    tell_object(me, sprintf("你手中没有持剑，%s的攻势便即瓦解！\n" NOR,XIAOFENG));
+    me->delete_temp("XFS_perform");
+    me->delete_temp("XFS_juejian");
+    me->delete_temp("XFS_juejian1");
+    me->delete_temp("XFS_juejian2");
+    me->delete_temp("busy_for_pfm");
+    me->set_temp("last_juejian",time());
+    return 0;
+  }
+
+  if ( weapon->query("weapon_prop") == 0 )
+  {
+    tell_object(me, sprintf("你的%s已毁，无法持续%s的攻势！\n"NOR,
+                             weapon->name(),XIAOFENG));
+    me->delete_temp("XFS_perform");
+    me->delete_temp("XFS_juejian");
+    me->delete_temp("XFS_juejian1");
+    me->delete_temp("XFS_juejian2");
+    me->delete_temp("busy_for_pfm");
+    me->set_temp("last_juejian",time());
+    return 0;
+  }
+
+  if (!objectp(target) || (environment(me) != environment(target)))
+  {
+    tell_object(me, sprintf("你没有了对手，%s的攻势便即瓦解！\n",XIAOFENG));
+    me->delete_temp("XFS_perform");
+    me->delete_temp("XFS_juejian");
+    me->delete_temp("XFS_juejian1");
+    me->delete_temp("XFS_juejian2");
+    me->delete_temp("busy_for_pfm");
+    me->set_temp("last_juejian",time());
+    return 0;
+  }
+
+  if (!living(target))
+  {
+    tell_object(me, sprintf("你的对手已经无法反击了，%s的攻势便即瓦解！\n",XIAOFENG));
+    me->delete_temp("XFS_perform");
+    me->delete_temp("XFS_juejian");
+    me->delete_temp("XFS_juejian1");
+    me->delete_temp("XFS_juejian2");
+    me->delete_temp("busy_for_pfm");
+    me->set_temp("last_juejian",time());
+    return 0;
+  }
+
+  if (!me->is_fighting(target))
+  {
+    tell_object(me,sprintf("\n你现在没有和%s过招，当下收回了%s的攻势。\n\n"NOR,
+                           target->name(),XIAOFENG));
+    me->delete_temp("XFS_perform");
+    me->delete_temp("XFS_juejian");
+    me->delete_temp("XFS_juejian1");
+    me->delete_temp("XFS_juejian2");
+    me->delete_temp("busy_for_pfm");
+    me->set_temp("last_juejian",time());
+    return 0;
+  }
+
+  if ( (string)me->query_skill_mapped("sword") != "xiaofeng-sword" )
+  {
+    tell_object(me, sprintf("你转而施展其他剑法，无法再以%s攻敌！\n"NOR,XIAOFENG));
+    me->delete_temp("XFS_perform");
+    me->delete_temp("XFS_juejian");
+    me->delete_temp("XFS_juejian1");
+    me->delete_temp("XFS_juejian2");
+    me->delete_temp("busy_for_pfm");
+    if (!me->is_busy())
+      me->start_busy(1+random(2));
+    me->set_temp("last_juejian",time());
+    return 0;
+  }
+
+  if ( (int)me->query("force") < 400  )
+  {
+    tell_object(me, sprintf("你的内力后继不足，难以持续%s的威力，只好收缓剑招。\n"NOR,XIAOFENG));
+    me->delete_temp("XFS_perform");
+    me->delete_temp("XFS_juejian");
+    me->delete_temp("XFS_juejian1");
+    me->delete_temp("XFS_juejian2");
+    me->delete_temp("busy_for_pfm");
+    me->set_temp("last_juejian",time());
+    if (!me->is_busy())
+      me->start_busy(1+random(2));
+    return 0;
+  }
+
+  i = me->query_tick_use(CAUSED);
+  skill = me->query_skill("sword");
+  skill = skill/5 + random(skill/4);
+  if (i > 12)
+  {
+    me->delete_temp("XFS_juejian1");
+    me->set_temp("XFS_juejian2",1);
+    message_vision(HIR"$N" HIR"见战况一直未果，突然长啸一声剑法突变，"
+                   "正是晓风残月剑"NOR + XIAOFENG + HIC"最凌厉杀招！\n"
+                   "剑意直指$n" HIC"破绽之处！\n\n"NOR, me,target);
+    me->add_temp("apply/attack",skill*3/2);
+    me->add_temp("apply/damage",skill*3/2);
+    COMBAT_D->do_attack(me, target, me->query_temp("weapon"), TYPE_QUICK);
+    me->add_temp("apply/attack",-skill*3/2);
+    me->add_temp("apply/damage",-skill*3/2);
+  }
+
+  else if (i > 8)
+  {
+    me->delete_temp("XFS_juejian");
+    me->set_temp("XFS_juejian1",1);
+    message_vision(HIR"$N" HIR"手中长剑越来越快，内力催逼之下，"
+                   "剑身蒙着一层淡淡的红光！\n\n"NOR,me);
+    if (random(2))
+    {
+      me->add_temp("apply/attack",skill*2/3);
+      me->add_temp("apply/damage",skill*2/3);
+      COMBAT_D->do_attack(me, target, me->query_temp("weapon"), TYPE_QUICK);
+      me->add_temp("apply/attack",-skill*2/3);
+      me->add_temp("apply/damage",-skill*2/3);
+    }
+
+  }
+
+  else if (i > 4)
+  {
+    me->set_temp("XFS_juejian",1);
+    message_vision(HIR"$N" HIR"手中长剑纵横飞旋，显见的"NOR + XIAOFENG +
+                   "已经渐入佳境！\n\n"NOR,me);
+    if (random(2))
+    {
+      me->add_temp("apply/attack",skill/3);
+      me->add_temp("apply/damage",skill/3);
+      COMBAT_D->do_attack(me, target, me->query_temp("weapon"), TYPE_QUICK);
+      me->add_temp("apply/attack",-skill/3);
+      me->add_temp("apply/damage",-skill/3);
+    }
+
+  }
+
+  if (!me->query_temp("busy_for_pfm"))
+    me->set_temp("busy_for_pfm",XIAOFENG);
+  return 1;
+}
+
+void remove_effect(object me, object target)
+{
+  message_vision(HIC"只听见$N" HIC"一声清啸"NOR + XIAOFENG +
+                 HIC"劲力已尽，四周杀气顿减。\n"NOR, me);
+  me->delete_temp("XFS_perform");
+  me->delete_temp("busy_for_pfm");
+  me->delete_temp("XFS_juejian");
+  me->delete_temp("XFS_juejian1");
+  me->delete_temp("XFS_juejian2");
+  me->set_temp("last_juejian",time());
+  return;
+}
+

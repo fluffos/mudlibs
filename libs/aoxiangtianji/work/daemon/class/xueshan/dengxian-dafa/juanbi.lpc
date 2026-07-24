@@ -1,0 +1,93 @@
+#include <ansi.h>
+#include <combat.h>
+#define XUESHAN "「" HIR "扭转乾坤" NOR "」"
+inherit F_SSERVER;
+int valid_cast(object me, object target)
+{
+  if(userp(me) && (string)me->query("family/family_name") != "大雪山")
+    return notify_fail(sprintf("%s是大雪山不传之密！\n",XUESHAN));
+  if (me->is_busy())
+    return notify_fail("你正忙着呢！\n");
+
+  if (me->query_skill("dengxian-dafa", 1) < 120)
+    return notify_fail(sprintf("你的登仙大法修为不够，难以施展%s。\n",XUESHAN));
+
+  if( (int)me->query("max_mana") < 500 )
+    return notify_fail(sprintf("你的法力修为不够，难以施展%s。\n",XUESHAN));
+
+  if( (int)me->query("force") < 300 )
+    return notify_fail("你的真气不够。\n");
+  if((int)me->query("mana") < 150+2*(int)me->query("mana_factor") )
+    return notify_fail("你的法力不够！\n");
+  if((int)me->query("sen") < 100 )
+    return notify_fail("你无法集中精力！\n");
+
+  return 1;
+}
+
+int cast_attack(object me, object target)
+{
+  int success_adj;
+  int result, damage;
+  string msg;
+  if( !target ) target = offensive_target(me);
+  if( !target
+    ||   !target->is_character()
+    ||   target->is_corpse()
+    ||   target==me)
+    return notify_fail("你要对谁用扭转乾坤？\n");
+
+  if (!target->is_fighting(me))
+    return notify_fail("只有在战斗中才能使用扭转乾坤！\n");
+   if( random(me->query("max_mana")) < 120 )
+   {
+     write("这一次好象不灵。\n");
+     return 1;
+   }
+
+  msg = HIW"$N" HIW"趁$n" HIW"不备，怒吼一声，转瞬间化作一只黄牙老象，"
+      + "伸出蛟龙般的鼻子向$n" HIW"卷去！\n" NOR;
+  me->add("mana", -150);
+  me->add("force", -100);
+  success_adj = SKILL_D("dengxian-dafa")->query_power_effect(me);
+  message_vision(msg, me, target);
+  result = SPELL_D->attacking_cast_success(me,target,success_adj);
+
+  if (result < 0)
+  {
+    msg = HIW "不料$n" HIW"早有准备，扭转身形轻舒猿臂一把抓住了$N" HIW"的鼻子！\n"
+         + "$N" HIW"疼得一声闷哼，身不由己的被$n" HIW"拖了过去！\n"NOR;
+    message_vision(msg, me, target);
+    me->start_busy(2+random(4));
+    return 1;
+  }
+
+  else if (result = 0)
+  {
+    msg = HIW "$n" HIW"连忙扭转身形运转神功将$N" HIW"的长鼻荡开。\n"NOR;
+    message_vision(msg, me, target);
+    me->start_busy(1+random(3));
+    return 1;
+  }
+
+  else
+  {
+    success_adj -= random(20);
+    msg = HIW "$n" HIW"猝不及防，被$N" HIW"的长鼻高高卷起，$N" HIW"用力一甩，"
+              +"$n" HIW"如断了线的风筝般飞了出去！\n"NOR;
+    damage = SPELL_D->apply_damage(
+            me,
+            target,
+            "kee",
+            msg,
+            success_adj,
+            NO_BACKFIRE);
+    if (!target->is_busy())
+      target->start_busy(1+random(2));
+    me->start_busy(1+random(3));
+    return 1;
+  }
+
+  return 1;
+}
+

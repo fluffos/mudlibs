@@ -1,0 +1,165 @@
+#include <ansi.h>
+inherit SMALLROOM;
+inherit SNOWROOM;
+void create()
+{
+  set("short", "冰洞");
+  set("long", @LONG
+
+一个山洞，洞内寒气袭人，让人忍不住的哆嗦起来。在洞的
+边脚上，一堆厚厚的冰层显得格外的奇特，看来如果仔细的
+挖掘(wajue)一番，会有所发现的。
+LONG );
+  set("objects", ([
+     "/obj/beast/xuanmang" : 1,
+  ]));
+  set("no_clean_up", 0);
+  set("baowu",1);
+  setup();
+}
+
+void init()
+{
+  object me;
+  int con, damage;
+  string msg;
+  me = this_player();
+  if (!playerp(me))
+    return;
+  if (me->query_skill("force",1) < 100)
+    damage = 350;
+  else if (me->query_skill("force",1) < 150)
+    damage = 300;
+  else if (me->query_skill("force",1) < 200)
+    damage = 200;
+  else
+    damage = 120;
+  con = me->query_con();
+  con = con / 2 + random(con/2);
+  damage -= con + me->query_temp("apply/warm") + query_temp("warm");
+  if (damage < 0)
+    damage = 0;
+  if (damage)
+  {
+    me->receive_damage("kee",damage);
+    me->receive_wound("kee",damage);
+    if (damage > 80)
+      msg = HIB "一股刺骨的寒风吹过，你只觉得浑身的血液都快被冻住了！\n" NOR;
+    else if (damage > 60)
+      msg = HIB "一股刺骨的寒风吹过，你只觉得浑身非常僵硬！\n" NOR;
+    else if (damage > 40)
+      msg = HIB "一股刺骨的寒风吹过，你只觉得冷气透过衣衫钻了进来，浑身没有半点热气！\n" NOR;
+    else if (damage > 20)
+      msg = HIB "一股刺骨的寒风吹过，你只觉得人都要麻木了！\n" NOR;
+    else if (damage > 10)
+      msg = HIB "一股刺骨的寒风吹过，你只觉得天气非常的冷！\n" NOR;
+    else if (damage > 0)
+      msg = HIB "一股刺骨的寒风吹过，你感觉到有点冷！\n" NOR;
+    else
+      msg = HIC "一股刺骨的寒风吹过，可是你身上还是挺暖和的。\n" NOR;
+    if (me->query("kee") < 50 && damage > 10)
+      me->apply_condition("ill_dongshang",
+         me->query_condition("ill_dongshang") + 5 + damage / 3);
+    tell_object(me, msg);
+  }
+
+  add_action("do_dig",({"dig","wajue"}));
+}
+
+int do_dig(string arg)
+{
+  int dig_num;
+  object mang, snake, baowu, weapon, *inv;
+  object me = this_player(1);
+
+  if (me->is_busy() || me->is_fighting())
+  {
+    write("你正忙着呢！\n");
+    return 1;
+  }
+
+  weapon = me->query_temp("weapon");
+  if (!objectp(weapon))
+  {
+    write("你手中没有兵器，这坚硬的冻土可无法挖掘！\n");
+    return 1;
+  }
+
+  if(me->query_skill("force",1) < 200
+     && (string)weapon->query("skill_type")!="sword"
+     && (string)weapon->query("skill_type")!="blade")
+  {
+    write("你的内力不够深厚，应该找把剑，或是刀什么的。\n");
+    return 1;
+  }
+
+  inv = all_inventory(this_object());
+  inv = filter_array(inv, (: $1->is_character() &&
+                             playerp($1) :));
+  if (sizeof(inv) > 1)
+  {
+    write("这里似乎还有个玩家虎视眈眈的看着，贸然挖掘似乎不大好吧？\n");
+    return 1;
+  }
+
+  message_vision("$N埋头开始挖掘！\n",me);
+  mang = present("xuanbing chimang",this_object());
+  if (objectp(mang))
+  {
+    mang->kill_ob(me);
+    return 1;
+  }
+
+  if (!me->query_temp("kill_xuanmang"))
+  {
+    seteuid(getuid());
+    snake = new("/obj/beast/xuanmang");
+    snake->move(this_object());
+    message_vision("$N正埋头挖掘的时候，突然窜出了一条浑身雪白的怪蛇来！\n",me);
+    snake->kill_ob(me);
+    return 1;
+  }
+
+  dig_num = me->query_temp("dig_tiancs_number");
+  if (!me->query_temp("kill_bingshe") || (dig_num%3 == 0))
+  {
+    seteuid(getuid());
+    snake = new("/obj/beast/bingshe");
+    snake->move(this_object());
+    message_vision("$N正埋头挖掘的时候，突然窜出了一条浑身雪白的怪蛇来！\n",me);
+    snake->kill_ob(me);
+  }
+
+  dig_num++;
+  if (random(dig_num + 1) > 10)
+  {
+    if (query("baowu"))
+    {
+      seteuid(getuid());
+      baowu = new("/d/item/obj/tiancs");
+      baowu->move(me,1);
+      baowu->set("owner",me->query("id"));
+      set("baowu",0);
+      remove_call_out("regen");
+      call_out("regen",3600);
+      message_vision("$N突然大叫了起来，原来一束晶莹的柔丝埋在了冰雪之下！\n",me);
+    }
+
+    else
+      message_vision("$N擦了擦汗，叹了口气，看来今天是要一无所获了！\n",me);
+    me->delete_temp("dig_tiancs_number");
+    me->start_busy(2);
+    return 1;
+  }
+
+  me->set_temp("dig_tiancs_number",dig_num);
+  me->start_busy(1+random(2));
+  message_vision("$N什么都没有得到，只好擦了擦额头，准备继续挖下去！\n");
+  return 1;
+}
+
+void reget()
+{
+  set("baowu",1);
+}
+

@@ -1,0 +1,131 @@
+// private_room.c
+// Written by Doing Lu 1998/11/16
+//    私有房間是提供給玩家的房間需要繼承的屬性，它主要具有以下的屬性:
+//    首先，如果需要清除時(clean_up被調用)，它要保存這個對象及這個房間內的所有可以
+//    保存的物品(具有AUTOLOAD屬性的)。
+//    其次，這個房間會在load的時候自動的調入保存在磁盤上的對象數據，當然首先要檢查
+//    是否有存盤數據。
+
+// 這個文件繼承了原有的ROOM，并修訂了一些函數。
+
+#include <room.h>
+
+inherit ROOM;
+inherit F_SAVE;
+inherit F_AUTOLOAD;
+
+// 返回object存檔的名字
+string query_save_file()
+{
+	string file;
+	file = base_name(this_object()) + ".sav";
+	if (file[0..10] != "/data/room/") file = "/data/room" + file;
+
+	return file;
+}
+
+// save過程可以保存這個房間內的所有autoload的物品。
+int save()
+{
+	// 如果是室外，不予存儲
+	if (query("outdoors")) return 1;
+
+	save_autoload();
+	return ::save();
+}
+
+// 回復房屋內的物品
+int restore()
+{
+	// 如果是室外，不予讀取
+	if (query("outdoors")) return 0;
+
+	::restore();
+	return restore_autoload();
+}
+
+// 這是一個非常重要的函數，系統每隔一定時間(通常是15分鐘)就會調用這個函數，
+// 如果返回0，系統將不再調用這個函數，如果返回的是1，就在下一個間隔調用這個
+// 函數。
+int clean_up()
+{
+	object *inv;
+	int i;
+
+	// 如果這個房屋內有玩家就不清除
+	inv = all_inventory();
+	for(i=sizeof(inv)-1; i>=0; i--)
+		if(interactive(inv[i])) return 1;
+
+	// 保存并清除這個房間
+	save();
+	destruct(this_object());
+	return 0;
+}
+
+// 建立房屋
+int setup()
+{
+	// 設置私有房間標志
+	set("private_room", 1);
+
+	::setup();
+
+	if (! query("outdoors") && file_size(query_save_file() + __SAVE_EXTENSION__) != -1)
+	{
+		// 如果有存檔并且是室內，則取存檔數據
+		restore();
+	}
+	return 1;
+}
+
+// 修正繼承的ROOM
+string look_door(string dir)
+{
+	if( !mapp(doors) || undefinedp(doors[dir]) )
+		return "你要看什么？\n";
+	if( doors[dir]["status"] & DOOR_CLOSED )
+		return "這個" + doors[dir]["name"] + "是關著的，上面有一個鑰匙孔。\n";
+	else
+		return "這個" + doors[dir]["name"] + "是開著的。\n";
+}
+
+// 修正繼承的ROOM
+varargs int open_door(string dir, int from_other_side)
+{
+	mapping exits;
+	object ob;
+	object me;
+
+	if( !mapp(doors) || undefinedp(doors[dir]) )
+		return notify_fail("這個方向沒有門。\n");
+
+	if( !(doors[dir]["status"] & DOOR_CLOSED) )
+		return notify_fail( doors[dir]["name"] + "已經是開著的了。\n");
+
+	exits = query("exits");
+	if( !mapp(exits) || undefinedp(exits[dir]) )
+		error("Room: open_door: attempt to open a door with out an exit.\n");
+
+	if( from_other_side )
+	{
+		message("vision", "有人從另一邊將" + doors[dir]["name"] + "打開了。\n", this_object());
+	}
+	else
+	{
+		me = this_player();
+		if (! stringp(query("key")) || ! objectp(ob = present(query("key"), me)))
+		{
+			message_vision("$N上前推了推，但是門紋絲不動。\n", me);
+			return notify_fail("看來你得找到鑰匙才行。\n");
+		}
+		if (! objectp(ob = find_object(exits[dir])));
+			ob = load_object(exits[dir]);
+		if (! objectp(ob)) return 0;
+
+		if (! ob->open_door(doors[dir]["other_side_dir"], 1) ) return 0;
+		message_vision("$N掏出鑰匙，插入鑰匙孔扭了几下。\n", me);
+	}
+	doors[dir]["status"] &= (!DOOR_CLOSED);
+	return 1;
+}

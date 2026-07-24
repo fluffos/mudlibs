@@ -1,0 +1,97 @@
+#include <ansi.h>
+#include <combat.h>
+#define FU "「" HIR "蚀月咒" NOR "」"
+inherit F_SSERVER;
+int valid_cast(object me, object target)
+{
+  if(userp(me) && (string)me->query("family/family_name") != "月宫")
+    return notify_fail(sprintf("%s是月宫不传之密！\n",FU));
+  if (me->is_busy())
+    return notify_fail("你正忙着呢！\n");
+
+  if (me->query_skill("moonshentong", 1) < 100)
+    return notify_fail(sprintf("你的晚月神通修为不够，难以施展%s。\n",FU));
+
+  if( (int)me->query("max_mana") < 500 )
+    return notify_fail(sprintf("你的法力修为不够，难以施展%s。\n",FU));
+
+  if( (int)me->query("force") < 500 )
+    return notify_fail("你的真气不够。\n");
+  if((int)me->query("mana") < 150+2*(int)me->query("mana_factor") )
+    return notify_fail("你的法力不够！\n");
+  if((int)me->query("sen") < 100 )
+    return notify_fail("你无法集中精力！\n");
+
+  return 1;
+}
+
+int cast_attack(object me, object target)
+{
+  string msg;
+  int success_adj, result, your_cps;
+  int day_phase, lvl;
+
+  if( !target )
+    target = offensive_target(me);
+  if( !target
+   || !target->is_character()
+   || target->is_corpse()
+   || target==me)
+    return notify_fail(sprintf("你要对谁施%s？\n",FU));
+  if( !target )
+    return notify_fail(sprintf("你要对谁施%s？\n",FU));
+  if (!living(target))
+    return notify_fail("有这个必要吗？\n");
+  day_phase = NATURE_D->query_current_day_phase();
+  if ((day_phase > 0) && (day_phase < 5))
+    return notify_fail(sprintf("%s只有夜晚才能施展！\n", FU));
+
+  me->add("mana" , -150);
+  me->add("force", -200);
+  me->receive_damage("sen", 20);
+  success_adj = SKILL_D("moonshentong")->query_power_effect(me);
+  msg = HIC"$N" HIC"低头默默念起咒文，手中渐渐聚起一团光球，雪白的脸庞似乎发射出柔和的光芒。\n"NOR;
+  your_cps = target->query_cps();
+
+  success_adj -= random(your_cps/3);
+  success_adj += random(10);
+
+  result = SPELL_D->attacking_cast_success(me,target,success_adj);
+
+  lvl = me->query_skill("moonshentong",1);
+
+  if (result > 0)
+  {
+    msg += HIR"$n" HIR"见到" HIR"$N" HIR"祥宁之态，娇美不可方物，心中一荡，"
+           "却不防那光球一闪，突然射向" HIR"$n" HIR"。\n" NOR;
+    message_vision(msg, me, target);
+    target->affect_by("moon_poison",
+            ([ "level"    : lvl + random(lvl),
+               "id"       : me->query("id"),
+               "duration" : lvl / 50 + random(lvl / 20) ]));
+    me->start_busy(2+random(2));
+  }
+  else if (result == 0)
+  {
+    msg += HIY"$n" HIY"心中暗自戒备，待" HIY"$N"
+           HIY"突然将那光球射向自己时，一跃躲了过去！\n"NOR;
+    message_vision(msg, me, target);
+    me->start_busy(2+random(3));
+  }
+
+  else
+  {
+    msg +=  HIW "$N" HIW"脸色苍白，似乎体力不支，光球在手中渐渐褪去。！\n" NOR;
+    me->affect_by("moon_poison",
+            ([ "level"    : lvl/2 + random(lvl),
+               "id"       : me->query("id"),
+               "duration" : lvl / 50 + random(lvl / 50) ]));
+    me->start_busy(1 + random(3));
+  }
+  if (userp(me) && userp(target) && ! target->is_want_kill(me->query("id")))
+     me->want_kill(target);
+  me->kill_ob(target);
+  target->kill_ob(me);
+  return 1;
+}
+

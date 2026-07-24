@@ -1,0 +1,193 @@
+//chblk.c
+#include <ansi.h>
+inherit F_CLEAN_UP;
+inherit F_DBASE;
+void create()
+{
+  seteuid(getuid());
+  set("channel_id", HIG"公用频道管理精灵(CHBLK)");
+}
+
+int main(object me, string arg)
+{
+  object ob;
+  string who, ch_name;
+  string *channel_list;
+  int i,j,t ;
+  if( me!=this_player(1) )
+    return 0;
+  if (! SECURITY_D->valid_grant(me, "(wizard)"))
+    return 0;
+
+  if (!arg)
+    return notify_fail("指令格式: chblk <用户ID> <频道名称>\n");
+
+  channel_list = CHANNEL_D->query_all_channel();
+
+  if (sscanf(arg, "%s %s", who, ch_name) != 2)
+  {
+    if (arg == "forever")
+    {
+      if (! SECURITY_D->valid_grant(me, "(admin)"))
+        return 0;
+      CHANNEL_D->set_block(ch_name, 1);
+      CHANNEL_D->do_channel(this_object(), "sys", "整个系统的公用频道被"
+                + log_id(me)+"关闭了！！！");
+      log_file("wizcmds/channeld",
+               sprintf("%s关闭了整个系统的公用频道 时间在：[%s]\n",
+               log_id(me), log_time() ));
+      return 1;
+    }
+
+    if (member_array(arg, channel_list) == -1)
+      return notify_fail("指令格式: unchblk <用户ID> <频道名称>\n");
+
+    CHANNEL_D->set_block(arg, 1);
+    CHANNEL_D->do_channel(this_object(), "sys",
+               sprintf("整个系统的%s频道被%s关闭了！\n",arg,log_id(me)));
+    log_file("wizcmds/channeld",
+               sprintf("%s关闭了整个系统的%s频道 时间在：[%s]\n",
+               log_id(me), arg, log_time() ));
+    return 1;
+  }
+
+  ob = LOGIN_D->find_body(who);
+  if(!ob )
+    return notify_fail("没有这个人。。。\n");
+  if(wizardp(ob) && wiz_level(me)<wiz_level(ob) )
+    return notify_fail("你无权关闭"+log_id(ob)+"的频道。。。\n");
+  if( ob == me)
+    return notify_fail("关闭自己的频道？\n");
+  if (ch_name == "" || ch_name == " ")
+  {
+    if ( ob->query("chblk/forever") )
+    {
+      tell_object(me, HIG+log_id(ob)+"的公用频道已经被设定为永久性关闭(forever)状态。。。\n"NOR);
+        return 1;
+    }
+
+    else
+    {
+      t = (int)ob->query("chblk/all");
+      if (t && (t - time() > 0))
+      {
+      	t = t - time();
+        tell_object(me,sprintf(WHT"%s所有频道被关闭：%d分钟\n"NOR,ob->name(),t));
+      }
+
+      else
+      {
+      	for (i = 0, j = 0; i < sizeof(channel_list); i++)
+      	{
+      	  t = (int)ob->query("chblk/"+channel_list[i]);
+      	  if (t && (t - time() > 0))
+      	  {
+      	    j++ ;
+      	    t = t-time();
+      	    tell_object(me,sprintf(WHT"%s的%s频道被关闭：%d分钟！\n"NOR,
+      	                ob->name(),channel_list[i],t));
+      	  }
+
+      	}
+
+      }
+
+      if (!j)
+        tell_object(me,sprintf("%s没有频道被关闭！\n",ob->name()));
+      return 1;
+    }
+
+  }
+
+  if (ch_name == "forever")
+  {
+    if ( ob->query("chblk/forever") )
+      tell_object(me, log_id(ob)+"的所有公用频道已经是永久性关闭的了。\n");
+    else
+    {
+      ob->set("chblk/forever", 1);
+      tell_object(me, log_id(ob)+"的所有公用频道被设定为永久性关闭。\n");
+      log_file("wizcmds/chblk_player", sprintf("%s将%s公用频道设定为永久性关闭(forever)状态 时间在：[%s]\n",
+          log_id(me), log_id(ob), log_time() ));
+    }
+
+  }
+
+  else if (ch_name == "all")
+  {
+    t = (int)ob->query("chblk/all");
+    if (t && (t - time() > 0) )
+    {
+      t = t + 600 - time();
+      tell_object(me,sprintf("%s的所有频道曾经已经是关闭的了，还有%d秒钟才能正常使用！\n",ob->name(),t));
+      ob->add("chblk/all", 600);
+      return 1;
+    }
+
+    else
+      ob->set("chblk/all", time()+3600);
+    tell_object(me, sprintf("%s的所有频道被设定关闭60分钟。\n",ob->name()));
+  }
+
+  else
+  {
+    if (member_array(ch_name, channel_list) == -1)
+      return notify_fail("指令格式: unchblk <用户ID> <频道名称>\n");
+
+    t = (int)ob->query("chblk/all");
+    if (t && (t - time() > 0) )
+    {
+      t = t - time();
+      tell_object(me,sprintf("%s的所有频道目前已经是关闭的了，还有%d秒钟才能正常使用！\n",
+           ob->name(),t));
+      return 1;
+    }
+
+    else
+    {
+      t = (int)ob->query("chblk/"+ ch_name);
+      if (t && (t - time() > 0))
+      {
+        ob->add("chblk/"+ch_name,600);
+        tell_object(me, sprintf("%s的%s频道已经是关闭的。增加10分钟的关闭时间！\n",
+                    ob->name(),ch_name));
+      }
+
+      else
+      {
+        ob->set("chblk/"+ch_name, time()+600); // 首次关闭
+        tell_object(me, sprintf("%s的%s频道被设定关闭10分钟。\n",
+                    ob->name(),ch_name));
+      }
+    }
+
+  }
+  return 1;
+}
+
+int help(object me)
+{
+write(@HELP
+指令格式 : chblk <用户ID> <频道名称>
+	   chblk <频道名称>
+此命令将关闭某人的公用频道(包括私有频道)或关闭整个系统的某个频道。
+<频道名称>：(10个常规类别)
+rumor、chat、party、sale、xyj、music、sldh、new、bh或all。
+如果不提供频道名，则显示某人当前的频道状态。
+chblk all 将关闭一个人的所有公用频道。
+注意：forever是比较严厉的惩罚，将关闭用户的所有公用和私聊频道
+请谨慎使用。
+chblk xyj 	将关闭整个系统的潭际频道。
+chblk chat 	将关闭整个系统的聊天频道。
+chblk music 	将关闭整个系统的天籁频道。
+chblk party 	将关闭整个系统的门派频道。
+chblk rumor 	将关闭整个系统的谣言频道。
+chblk sldh 	将关闭整个系统的水陆大会频道。
+chblk sale 	将关闭整个系统的摊贩叫卖频道。
+chblk forever	将关闭整个系统的所有公用频道。
+相关指令：unchblk，block
+HELP
+    );
+    return 1;
+}
+

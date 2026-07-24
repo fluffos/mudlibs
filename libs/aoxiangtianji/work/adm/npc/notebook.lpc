@@ -1,0 +1,325 @@
+#include <command.h>
+inherit ITEM;
+inherit F_SAVE;
+void init()
+{
+  add_action("do_check", ({"check","chakan","list"}));
+  add_action("do_jicun", "jicun");
+  add_action("do_withdraw",({"withdraw","qu"}));
+}
+
+string query_save_file()
+{
+  return DATA_DIR + "jicun_list";
+}
+
+void create()
+{
+  seteuid( getuid() );
+  set_name( HIC "物品寄存薄" NOR, ({ "jicun list", "list" }) );
+  set("no_get", 1);
+  set("no_put", 1);
+  set("no_clean_up", 1 );
+  set("unit", "本");
+  set("env/invisibility",10);
+  restore();
+}
+
+string short()
+{
+  return HIY"物品寄存薄"NOR;
+}
+
+/*
+保存格式：玩家1id :
+           物品1id ：数量
+           物品2id ：数量
+           物品3id ：数量
+         玩家2id :
+           物品1id ：数量
+           物品2id ：数量
+*/
+int do_jicun(string arg)
+{
+  object notebook = this_object();
+  object who = this_player(1);
+  mapping id_list, wp_list;
+  string *kpid, *kwid, ob_file, owner;
+  object ob;
+  int num;
+
+  if (!arg)
+  {
+    write("你要寄存什么？\n");
+    return 1;
+  }
+
+  if (!playerp(who))
+  {
+    write("，，，\n");
+    return 1;
+  }
+
+  if (who->is_busy())
+  {
+    write("你正忙着呢！\n");
+    return 1;
+  }
+
+  ob = present(arg,who);
+  if (!objectp(ob))
+  {
+    write(sprintf("你身上没有 %s ！\n",arg));
+    return 1;
+  }
+
+  if (!ob->query_autoload() &&
+      !ob->query_jicun_allow())
+  {
+    write("只可以寄存系统自动装载给玩家的物品！\n");
+    return 1;
+  }
+
+  if (ob->is_item_make())
+  {
+    write("这东西不用寄存！\n");
+    return 1;
+  }
+
+  if (ob->query("money_id"))
+  {
+    write("你要寄存“钱”？这东西到钱庄去存吧！\n");
+    return 1;
+  }
+
+  owner = ob->query("owner");
+  if (stringp(owner) && owner != who->query("id"))
+  {
+    write("这东西不是你的，你怎么拿来寄存呢？\n");
+    return 1;
+  }
+
+  num = ob->query_amount();
+  if (num < 1)
+    num = 1;
+  ob_file = base_name(ob);
+  id_list = notebook->query("id_list");
+  if (!mapp(id_list) || sizeof(id_list) < 1)
+    id_list = ([ who->query("id") : ([ ob_file : num]) ]);
+  else
+  {
+    kpid = keys(id_list);
+    if(member_array(who->query("id"),kpid)==-1)
+      id_list += ([ who->query("id") : ([ ob_file : num]) ]);
+    else
+    {
+      wp_list = id_list[who->query("id")];
+      if (!mapp(wp_list) || sizeof(wp_list) < 1)
+        wp_list = ([ ob_file : num]);
+      else
+      {
+        kwid = keys(wp_list);
+        if(member_array(ob_file,kwid)==-1)
+          wp_list += ([ ob_file : num]);
+        else
+          wp_list[ob_file] += num;
+      }
+
+      id_list[who->query("id")] = wp_list;
+    }
+
+  }
+
+  notebook->set("id_list",id_list);
+  notebook->save();
+  log_file("jicun_autoload",sprintf("%s(%s) jicun %s(%d) on time %s \n",
+                                who->query("name"),
+                                who->query("id"),
+                                ob_file,
+                                num,
+                                ctime(time())));
+  write("OK！\n");
+  if (ob->query("equipped"))
+    ob->unequip();
+  ob->move(VOID_OB);
+  destruct(ob);
+  who->start_busy(2);
+  return 1;
+}
+
+int do_check(string arg)
+{
+  object notebook = this_object();
+  object who = this_player(1);
+  mapping id_list, wp_list;
+  string *kpid, *kwid, ob_file, msg;
+  object ob;
+  int i,j;
+
+  if (!playerp(who))
+  {
+    write("，，，\n");
+    return 1;
+  }
+
+/*
+  if (who->query("level") < 25)
+  {
+    write("你的等级不够，无法来这里寄存物品！\n");
+    return 1;
+  }
+
+*/
+  if (who->is_busy())
+  {
+    write("你正忙着呢！\n");
+    return 1;
+  }
+
+  id_list = notebook->query("id_list");
+  if (!mapp(id_list) || sizeof(id_list) < 1)
+  {
+    write("你没有寄存任何物品！\n");
+    return 1;
+  }
+
+  kpid = keys(id_list);
+  if(member_array(who->query("id"),kpid)==-1)
+  {
+    write("你没有寄存任何物品！\n");
+    return 1;
+  }
+
+  wp_list = id_list[who->query("id")];
+  if (!mapp(wp_list) || sizeof(wp_list) < 1)
+  {
+    write("你没有寄存任何物品！\n");
+    return 1;
+  }
+
+  kwid = keys(wp_list);
+  msg =  "你寄存有如下物品：\n\n";
+  for (i = 0,j = 0; i < sizeof(kwid); i++)
+  {
+    ob_file = kwid[i];
+    ob = find_object(ob_file);
+    if (!objectp(ob))
+      ob = load_object(ob_file);
+    if (!objectp(ob))
+      continue;
+    j++;
+    msg += sprintf("%s[%3d] %s%20s %s(%20s) %s%d%s\n",
+                   HIW,
+                   i,
+                   HIY,
+                   ob->name(),
+                   HIB,
+                   ob->query("id"),
+                   HIW,
+                   wp_list[ob_file],
+                   NOR);
+  }
+
+  msg += "\n－－－－－－－－－－－－－－－－\n";
+  msg += sprintf(HIM"总计寄存物品 %d 件！\n"NOR,j);
+  write(msg);
+  return 1;
+}
+
+int do_withdraw(string arg)
+{
+  object notebook = this_object();
+  object who = this_player(1);
+  mapping id_list, wp_list;
+  string *kpid, *kwid, ob_file;
+  object ob;
+  int i,phome;
+  string o_u;
+  if (!arg)
+  {
+    write("你要取什么？\n");
+    return 1;
+  }
+
+  if (!playerp(who))
+  {
+    write("，，，\n");
+    return 1;
+  }
+
+  if (who->is_busy())
+  {
+    write("你正忙着呢！\n");
+    return 1;
+  }
+
+  id_list = notebook->query("id_list");
+  if (!mapp(id_list) || sizeof(id_list) < 1)
+  {
+    write("你没有寄存过任何东西！\n");
+    return 1;
+  }
+
+  kpid = keys(id_list);
+  if(member_array(who->query("id"),kpid)==-1)
+  {
+    write("你没有寄存过任何东西！\n");
+    return 1;
+  }
+
+  wp_list = id_list[who->query("id")];
+  if (!mapp(wp_list) || sizeof(wp_list) < 1)
+  {
+    write("你没有寄存过任何东西！\n");
+    return 1;
+  }
+
+  kwid = keys(wp_list);
+  ob = 0;
+  phome = 0;
+  for (i = 0;i < sizeof(kwid);i++)
+  {
+    ob_file = kwid[i];
+    if (sscanf(ob_file,"/data%s",ob_file))
+      phome = 1;
+    ob = find_object(ob_file);
+    if (!objectp(ob))
+      ob = load_object(ob_file);
+    if (!objectp(ob))
+      continue;
+    if (ob->query("id") == arg)
+      break;
+  }
+
+  if (i >= sizeof(kwid))
+  {
+    write("你没有寄存这样东西！\n");
+    return 1;
+  }
+
+  ob = new(ob_file);
+  if (ob->query("unit"))
+    o_u = ob->query("unit");
+  else
+    o_u = ob->query("base_unit");
+  message_vision(sprintf("$N取出了一%s%s！\n",o_u,ob->name()),who);
+  if (phome > 0)
+    ob_file = "/data" + ob_file;
+  wp_list[ob_file] -= 1;
+  if (wp_list[ob_file] < 1)
+    map_delete(wp_list,ob_file);
+  ob->move(who,1);
+  if (sizeof(id_list[who->query("id")]) < 1)
+    map_delete(id_list,who->query("id"));
+  else
+    id_list[who->query("id")] = wp_list;
+  notebook->set("id_list",id_list);
+  notebook->save();
+  log_file("jicun_autoload",sprintf("%s(%s) withdraw %s on time %s \n",
+                                who->query("name"),
+                                who->query("id"),
+                                ob_file,
+                                ctime(time())));
+  return 1;
+}
+

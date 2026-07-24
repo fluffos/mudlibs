@@ -1,0 +1,149 @@
+#include <ansi.h>
+#include <combat.h>
+#define FIRE "「" HIR "六道轮回" NOR "」"
+#define LDLH CLASS_D("ghost") + "/gouhunshu/ldlh"
+#define CAUSED "ldlh"
+inherit F_SSERVER;
+int valid_cast(object me, object target)
+{
+  int t = time();
+  if(userp(me) && (string)me->query("family/family_name") != "阎罗地府")
+    return notify_fail(sprintf("%s是阎罗地府不传之密！\n",FIRE));
+  if (me->is_busy())
+    return notify_fail("你正忙着呢！\n");
+
+  if (me->query_skill("gouhunshu", 1) < 200)
+    return notify_fail(sprintf("你的勾魂术修为不够，难以施展%s。\n",FIRE));
+
+  if (me->query_skill("hellfire-whip", 1) < 200)
+    return notify_fail(sprintf("你的烈火鞭修为不够，难以施展%s。\n",FIRE));
+  if (me->query_skill_mapped("whip") != "hellfire-whip")
+    return notify_fail("你没有激发烈火鞭，使不了" FIRE "。\n");
+  if( (int)me->query("max_mana") < 2000 )
+    return notify_fail(sprintf("你的法力修为不够，难以施展%s。\n",FIRE));
+
+  if( (int)me->query("force") < 300 )
+    return notify_fail("你的真气不够。\n");
+  if((int)me->query("mana") < 500+2*(int)me->query("mana_factor") )
+    return notify_fail("你的法力不够！\n");
+  if((int)me->query("sen") < 100 )
+    return notify_fail("你无法集中精力！\n");
+  if (me->query_temp("tick/"+CAUSED))
+    return notify_fail(sprintf("你正在使用%s。\n",FIRE));
+  if ((t - me->query_temp("last_ldlh")) < 5 )
+    return notify_fail(sprintf("你不是刚刚用过了%s吗？\n",FIRE));
+  return 1;
+}
+
+int cast_attack(object me, object target)
+{
+  object weapon;
+  int time;
+  if( !target ) target = offensive_target(me);
+  if( !target
+  ||      !target->is_character()
+  ||      target->is_corpse()
+  ||      target==me)
+    return notify_fail(sprintf("你要对谁施展%s？\n",FIRE));
+  if (!me->is_fighting(target))
+    return notify_fail(sprintf("你并没有和%s在战斗！\n",target->name()));
+  if (! objectp(weapon = me->query_temp("weapon")) ||
+      weapon->query("skill_type") != "whip")
+    return notify_fail(sprintf("%s必须配合烈火鞭使用，你手中的武器不对。\n",FIRE));
+  if( random(me->query("max_mana")) < 200 )
+  {
+     write("这次好象不大灵。\n");
+     return 1;
+  }
+
+  time = (int)me->query_skill("gouhunshu",1)/10;
+  if ( time > 60 ) time = 60 ;
+  message_vision(HIW"$N口中念念有词：般若波罗密，般若波罗密，苦难众生与我共堕六道，再渡轮回。\n"NOR,me);
+
+  me->set_pfm_tick(LDLH, CAUSED,time, target);
+  me->set_temp("busy_for_cast",FIRE);
+  me->set_temp("HELL_lunhui",1);
+  return 1;
+}
+
+int check(object me, object target)
+{
+  object weapon;
+  int i;
+  if (!living(me) || !environment(me))
+  {
+    me->delete_temp("busy_for_cast");
+    me->delete_temp("HELL_lunhui");
+    return 0;
+  }
+
+  if( !objectp(target)
+    || !environment(target)
+    || !living(target)
+    || environment(me) != environment(target))
+  {
+    me->delete_temp("busy_for_cast");
+    me->delete_temp("HELL_lunhui");
+    me->set_temp("last_ldlh", time() );
+    return 0;
+  }
+
+  if (!me->is_fighting(target))
+  {
+    me->delete_temp("busy_for_cast");
+    me->delete_temp("HELL_lunhui");
+    me->set_temp("last_ldlh", time() );
+    return 0;
+  }
+
+  if ( (string)me->query_skill_mapped("spells") != "gouhunshu" )
+  {
+    me->delete_temp("busy_for_cast");
+    me->delete_temp("HELL_lunhui");
+    me->set_temp("last_ldlh", time() );
+    return 0;
+  }
+
+  if (me->query_skill_mapped("whip") != "hellfire-whip")
+  {
+    me->delete_temp("busy_for_cast");
+    me->delete_temp("HELL_lunhui");
+    me->set_temp("last_ldlh", time() );
+    return 0;
+  }
+
+  if (! objectp(weapon = me->query_temp("weapon")) ||
+      weapon->query("skill_type") != "whip")
+  {
+    me->delete_temp("busy_for_cast");
+    me->delete_temp("HELL_lunhui");
+    me->set_temp("last_ldlh", time() );
+    return 0;
+  }
+
+  if (me->query("mana") < 500)
+  {
+    me->delete_temp("busy_for_cast");
+    me->delete_temp("HELL_lunhui");
+    me->set_temp("last_ldlh", time() );
+    return 0;
+  }
+
+  i = me->query_tick_use(CAUSED);
+  me->set_temp("HELL_lunhui", 1+i%6);
+  if ((i%3) == 0)
+    COMBAT_D->do_attack(me,target, weapon);
+
+  if (!me->query_temp("busy_for_cast"))
+    me->set_temp("busy_for_cast",FIRE);
+
+  return 1;
+}
+
+void remove_effect(object me, object target)
+{
+  me->delete_temp("busy_for_cast");
+  me->delete_temp("HELL_lunhui");
+  message_vision(HIW"$N从「六道轮回」走了出来。\n"NOR, me);
+  me->set_temp("last_ldlh", time() );
+}

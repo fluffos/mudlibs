@@ -1,0 +1,69 @@
+// luoying.c
+
+inherit SKILL;
+
+mapping *action = ({
+    ([  "action":       "$N使一招「落英繽紛」，雙手飄移不定擊向$n$l",
+        "dodge": 30,
+        "parry": 20,
+        "force": 120,
+        "damage_type": "瘀傷"
+	]),
+    ([  "action":       "$N倏忽欺至$n身前，一招「人面桃花」直拍$n的$l",
+        "dodge": -20,
+        "parry": -20,
+        "force": 160,
+        "damage_type": "瘀傷"
+    ]),
+    ([  "action":       "$N身形繞$n一轉，一招「急風驟雨」向$n$l接連出掌",
+        "dodge":  25,
+        "parry":  20,
+        "force": 200,
+        "damage_type": "瘀傷"
+	]),
+    ([  "action":       "$N身形拔起，在半空一招「江城飛花」右掌猛擊$n的$l",
+        "dodge": -30,
+        "parry": -30,
+        "force": 240,
+        "damage_type": "瘀傷"
+	]),
+    ([  "action":       "$N使一招「萬花齊落」，縱起丈余直擊$n的$l",
+        "dodge": -20,
+        "parry":  40,
+        "force": 280,
+        "damage_type": "瘀傷"
+    ]),
+    ([  "action":       "$N一聲大喝使出「漫天花雨」，幻出滿天掌影，掌掌不離$n的$l",
+        "dodge":  40,
+        "force": 340,
+        "damage_type": "瘀傷"
+    ]),
+});
+
+int valid_enable(string usage) { return usage=="unarmed" ||  usage=="parry"; }
+
+int valid_learn(object me)
+{
+	if (me->query_temp("weapon") || me->query_temp("secondary_weapon"))
+        return notify_fail("練落英神劍掌必須空手。\n");
+	if ((int)me->query("max_neili") < 100)
+        return notify_fail("你的內力太弱，無法練落英神劍掌。\n");
+	return 1;
+}
+
+mapping query_action(object me, object weapon)
+{
+	return action[random(sizeof(action))];
+}
+
+int practice_skill(object me)
+{
+	if ((int)me->query("qi") < 40)
+		return notify_fail("你的體力太低了。\n");
+	if ((int)me->query("neili") < 10)
+        return notify_fail("你的內力不夠了！休息一下再練吧。\n");
+	me->receive_damage("qi", 30);
+	me->add("neili", -5);
+	return 1;
+}
+

@@ -1,0 +1,73 @@
+#include <ansi.h>
+#include <combat.h>
+#define YAN "「" HIR "天寰神炎" NOR "」"
+inherit F_SSERVER;
+int valid_pfm(object me, object target)
+{
+  if(userp(me) && (string)me->query("family/family_name") != "火云洞")
+    return notify_fail(YAN"是火云洞不传之密！\n");
+  if (me->is_busy())
+    return notify_fail("你正忙着呢！\n");
+
+  if (me->query_skill("huoyan-blade", 1) < 200)
+    return notify_fail("你的火焰刀法修为不够，难以施展" YAN "。\n");
+  if (me->query_skill("huomoforce", 1) < 200)
+    return notify_fail("你的火魔心法修为不够，难以施展" YAN "。\n");
+  if (me->query_skill_mapped("blade") != "huoyan-blade")
+    return notify_fail("你没有激发火焰刀法，难以施展" YAN "。\n");
+  if (me->query("force") < 500)
+    return notify_fail("你的真气不够，难以施展" YAN "。\n");
+  if ((int)me->query("max_force") < 2500)
+    return notify_fail("你的内力修为不够，难以施展" YAN "。\n");
+  return 1;
+}
+
+int perform(object me, object target)
+{
+  object weapon;
+  string msg;
+  int i,j,lvl,damage;
+
+  if (! objectp(weapon = me->query_temp("weapon")) ||
+      (string)weapon->query("skill_type") != "blade")
+    return notify_fail(sprintf("你使用的武器不对，难以施展%s。\n",YAN));
+
+  msg = HIR "$N" HIR "一声怒嚎，狂催真气注入"NOR + weapon->name() +
+        HIR"，刀缘顿时腾起一道烈炎，接二连三朝$n" HIR "劈去。\n" NOR;
+
+  message_combatd(msg, me, target);
+
+  j = me->query_temp("apply/attack");
+  damage = 0;
+  for (i=2;i<=5;i++)
+  {
+    if (!me->is_fighting(target))
+      break;
+    me->add_temp("apply/attack", i*20);
+    me->set_temp("HYB_perform",i);
+    if (random(2) && !target->is_busy())
+      target->start_busy(2);
+    if (damage < 1)
+      damage = COMBAT_D->do_attack(me, target, weapon);
+    else
+      COMBAT_D->do_attack(me, target, weapon,3);
+  }
+
+  me->set_temp("apply/attack", j);
+  me->delete_temp("HYB_perform");
+  me->start_busy(1 + random(3));
+
+  if (damage > 300)
+  {
+    lvl = me->query_skill("huomoforce", 1);
+    target->affect_by("fire_poison",
+            ([ "level"    : lvl/3 + random(lvl),
+               "id"       : me->query("id"),
+               "duration" : lvl/100 + random(lvl/50 + 1) ]));
+    msg = HIR "$N" HIR "刀锋带血，火魔内力闪出一道血焰，顿时$n" HIR"觉得伤口处火辣辣的阵阵灼痛。\n" NOR;
+    message_combatd(msg, me, target);
+  }
+
+  return 1;
+}
+

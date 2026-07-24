@@ -1,0 +1,377 @@
+#pragma optimize
+#include <localtime.h>
+#include <ansi.h>
+#ifndef DATA_DIR
+#define DATA_DIR 	"/data/"
+#endif
+#define DICTIONARY DATA_DIR + "chinese"
+inherit F_SAVE;
+nosave string *c_digit = ({ "零","十","百","千","万","亿","兆" });
+nosave string *c_num = ({"零","一","二","三","四","五","六","七","八","九","十"});
+nosave string *sym_tian = ({ "甲","乙","丙","丁","戊","己","庚","辛","壬","癸" });
+nosave string *sym_di = ({ "子","丑","寅","卯","辰","巳","午","未","申","酉","戌","亥" });
+mapping dict = ([]);
+void create();
+void remove();
+string ansi_color( string str );
+int ansi_count( string str );
+string ansi_display( string str, int length );
+void create()
+{
+  seteuid(getuid());
+  restore();
+}
+
+void remove()
+{
+  save();
+}
+
+string chinese_number(int i)
+{
+  if (i < 0)
+    return "负" + chinese_number(-i);
+  if (i < 11)
+    return c_num[i];
+  if (i < 20)
+    return c_digit[1] + c_num[i - 10];
+  if (i < 100)
+  {
+    if (i % 10)
+      return c_num[i / 10] + c_digit[1] + c_num[i % 10];
+    else
+      return c_num[i / 10] + c_digit[1];
+  }
+
+  if (i < 1000)
+  {
+    if (i % 100 == 0)
+      return c_num[i / 100] + c_digit[2];
+    else if (i % 100 < 10)
+      return c_num[i / 100] + c_digit[2] + c_num[0] + chinese_number(i % 100);
+    else if (i % 100 < 10)
+      return c_num[i / 100] + c_digit[2] + c_num[1] + chinese_number(i % 100);
+    else
+      return c_num[i / 100] + c_digit[2] + chinese_number(i % 100);
+  }
+
+  if (i < 10000)
+  {
+    if (i % 1000 == 0)
+      return c_num[i / 1000] + c_digit[3];
+    else if (i % 1000 < 100)
+      return c_num[i / 1000] + c_digit[3] + c_num[0] + chinese_number(i % 1000);
+    else
+      return c_num[i / 1000] + c_digit[3] + chinese_number(i % 1000);
+  }
+
+  if (i < 100000000)
+  {
+    if (i % 10000 == 0)
+      return chinese_number(i / 10000) + c_digit[4];
+    else if (i % 10000 < 1000)
+      return chinese_number(i / 10000) + c_digit[4] + c_num[0] + chinese_number(i % 10000);
+    else
+      return chinese_number(i / 10000) + c_digit[4] + chinese_number(i % 10000);
+  }
+
+  if (i < 1000000000000)
+  {
+    if (i % 100000000 == 0)
+      return chinese_number(i / 100000000) + c_digit[5];
+    else if (i % 100000000 < 1000000)
+      return chinese_number(i / 100000000) + c_digit[5] + c_num[0]
+           + chinese_number(i % 100000000);
+    else
+      return chinese_number(i / 100000000) + c_digit[5] + chinese_number(i % 100000000);
+  }
+
+  if (i % 1000000000000 == 0)
+    return chinese_number(i / 1000000000000) + c_digit[6];
+  else if (i % 1000000000000 < 100000000)
+    return chinese_number(i / 1000000000000) + c_digit[6] + c_num[0] + chinese_number(i % 1000000000000);
+  else
+    return chinese_number(i / 1000000000000) + c_digit[6] + chinese_number(i % 1000000000000);
+}
+
+string query_save_file()
+{
+  return DICTIONARY;
+}
+
+string chinese(string str)
+{
+  if (!undefinedp(dict[str]))
+    return dict[str];
+  else
+   return str;
+}
+
+void remove_translate(string key)
+{
+  map_delete(dict, key);
+  save();
+}
+
+void add_translate(string key, string chn)
+{
+  dict[key] = chn;
+  save();
+}
+
+void dump_translate()
+{
+  string *k, str;
+  int i;
+
+  str = "";
+  k = keys(dict);
+  for (i = 0; i < sizeof(k); i++)
+    str += sprintf("%-30s %s\n", k[i], dict[k[i]]);
+  write_file("/CHINESE_DUMP", str);
+}
+
+string chinese_date(int date)
+{
+  mixed *local;
+  if (date <=0)
+    date=1;
+  local = localtime(date);
+
+  return sprintf("西游记%s%s年%s月%s日%s时%s刻",
+      sym_tian[local[LT_YEAR] % 10], sym_di[local[LT_YEAR] % 12],
+      chinese_number(local[LT_MON])=="零"?"十二":chinese_number(local[LT_MON]),
+      chinese_number(local[LT_MDAY] + (local[LT_HOUR] > 23 ? 1 : 0)),
+      sym_di[((local[LT_HOUR] + 1) % 24) / 2],
+      chinese_number((local[LT_MIN]+1) % 2 * 2 +
+      local[LT_MIN] / 30 + 1) );
+}
+
+string chinese_sx(int date)
+{
+  mixed *local;
+  if (date <=0)
+    date=1;
+  local = localtime(date);
+
+  return sprintf("%s",sym_di[local[LT_YEAR] % 12] );
+}
+
+string check_sc(int date)
+{
+  mixed *local;
+  if (date <=0)
+    date=1;
+  local = localtime(date);
+
+  return sprintf("%s时%s刻", sym_di[((local[LT_HOUR] + 1) % 24) / 2],
+        chinese_number((local[LT_MIN]+1) % 2 * 2 + local[LT_MIN] / 30 + 1) );
+}
+
+//Added by waiwai@2002/12/05
+//这种方式虽然准确，但是考虑到游戏中时辰每年
+//均较长，容易造成玩家大多生肖一致的情况，所
+//以暂时在logind.c里面注册时用random随机设定
+//生肖设置所关联到的文件有：
+//chinesed.c  score.c  wkztimed.c  logind.c
+//生效设置所关联的系统设置为：
+//玩家连线所用装备，玩家生肖look时的显示图等
+//其他应用以后扩展
+string check_sx(object ob)
+{
+  string sx, msg;
+  sx = CHINESE_D->chinese_sx( ob->query("birthday") );
+  if ( sx == "子" ) msg = "子鼠";
+  if ( sx == "丑" ) msg = "丑牛";
+  if ( sx == "寅" ) msg = "寅虎";
+  if ( sx == "卯" ) msg = "卯兔";
+  if ( sx == "辰" ) msg = "辰龙";
+  if ( sx == "巳" ) msg = "巳蛇";
+  if ( sx == "午" ) msg = "午马";
+  if ( sx == "未" ) msg = "未羊";
+  if ( sx == "申" ) msg = "申猴";
+  if ( sx == "酉" ) msg = "酉鸡";
+  if ( sx == "戌" ) msg = "戌狗";
+  if ( sx == "亥" ) msg = "亥猪";
+  return msg;
+}
+
+string chinese_month(int date)
+{
+  mixed *local;
+  local = localtime(date);
+  return sprintf("%s",chinese_number(local[LT_MON] + 1));
+}
+
+string chinese_monthday(int date)
+{
+  mixed *local;
+  local = NATURE_D->query_localtime(date);
+  return sprintf("%s月%s日",
+          chinese_number(local[LT_MON] + 1),
+          chinese_number(local[LT_MDAY]));
+}
+
+string chinese_period(int t)
+{
+  int y, n, d, h, m, s;
+  string time;
+  s = t % 60;
+  t /= 60;
+  m = t % 60;
+  t /= 60;
+  h = t % 24;
+  t /= 24;
+  d = t % 30;
+  t /= 30;
+  n = t % 12;
+  t /= 12;
+  y = t;
+  time = "";
+  if(y) time = chinese_number(y) + "年又";
+  if(n) time += chinese_number(n) + "个月"        + (strlen(time)?"":"又");
+  if(d) time += chinese_number(d) + "天"          + (strlen(time)?"":"又");
+  if(h) time += chinese_number(h) + "小时"        + (strlen(time)?"":"又");
+  if(m) time += chinese_number(m) + "分"          + (strlen(time)?"":"又");
+  time += chinese_number(s) + "秒";
+  return time;
+}
+
+/*
+//Added By waiwai@2001/07/13
+int is_chinese(string str)
+{
+  if( strlen(str) < 2 || strlen(str) % 2 != 0 )
+    return 0;
+  for( int i = 0; i < strlen(str); i ++ )
+    if( !( str[0] > 170 && str[0] < 255 ) )
+      return 0;
+  return 1;
+}
+
+*/
+string ansi_color( string str )
+{
+  str = replace_string(str, "$BLK$", BLK);
+  str = replace_string(str, "$RED$", RED);
+  str = replace_string(str, "$GRN$", GRN);
+  str = replace_string(str, "$YEL$", YEL);
+  str = replace_string(str, "$BLU$", BLU);
+  str = replace_string(str, "$MAG$", MAG);
+  str = replace_string(str, "$CYN$", CYN);
+  str = replace_string(str, "$WHT$", WHT);
+  str = replace_string(str, "$HIR$", HIR);
+  str = replace_string(str, "$HIG$", HIG);
+  str = replace_string(str, "$HIY$", HIY);
+  str = replace_string(str, "$HIB$", HIB);
+  str = replace_string(str, "$HIM$", HIM);
+  str = replace_string(str, "$HIC$", HIC);
+  str = replace_string(str, "$HIW$", HIW);
+  str = replace_string(str, "$NOR$", NOR);
+  return str;
+}
+
+int ansi_count( string str )
+{
+  string *sections, ansi;
+  int i, count = 0;
+  sections = explode( str, "" );
+  i = sizeof( sections );
+  while( i-- )
+  {
+    if( sscanf( sections[i], "[%sm%*s", ansi ) )
+      count += strlen( ansi ) + 3;
+  }
+
+  return count;
+}
+
+string ansi_display( string str, int length )
+{
+  string space = "                                                                                                   ";
+  int i;
+  if( strsrch( str, "" ) == -1 )
+    return str;
+  if( !length )
+    return str;
+  if( ( i = length - strwidth( str ) + ansi_count( str ) - 1 ) > 0 )
+    return str + space[0..i];
+  else
+    return str;
+}
+
+string ob_value(object ob)
+{
+  int value, gold, silver, coin;
+  if(ob->query("money_id") )
+    return sprintf("");
+  value = ob->query("value");
+  if( !value )
+    return sprintf("%s一文不值。\n",ob->short());
+  else
+  {
+    gold = value/10000;
+    silver = (value%10000)/100;
+    coin = value%10000%100;
+    if (coin)
+      return sprintf("%s值%s%s又%s文钱。\n", ob->short(),
+                            gold?chinese_number(gold)+"金":"",
+                            silver?chinese_number(silver)+"银":"",
+                            chinese_number(coin));
+    else if (silver)
+      return sprintf("%s值%s又%s两银子。\n", ob->short(),
+                     gold?chinese_number(gold)+"金":"",
+                     chinese_number(silver));
+    else
+      return sprintf("%s值%s两金子。\n", ob->short(),
+                     chinese_number(gold));
+  }
+
+}
+
+// 拍卖会用到
+string cvalue(int value)
+{
+  int gold, silver, coin;
+  if( !value )
+    return "没半毛钱。";
+  else
+  {
+    gold = value/10000;
+    silver = (value%10000)/100;
+    coin = value%10000%100;
+    if (coin)
+      return sprintf("%s%s%s文钱",
+            gold?chinese_number(gold)+"金":"",
+            silver?chinese_number(silver)+"银":"",
+            chinese_number(coin));
+    else if (silver)
+      return sprintf("%s%s两银子",
+            gold?chinese_number(gold)+"金":"",
+            chinese_number(silver));
+    else
+      return sprintf("%s两金子",
+            chinese_number(gold));
+  }
+
+}
+
+// for list in shop
+string value_list(object ob)
+{
+  return sprintf ("%-55s%s", ob->short(), ob_value(ob));
+}
+
+string chinese_descp(string arg)
+{
+  arg = replace_string(arg, ",", "，");
+  arg = replace_string(arg, "!", "！");
+  arg = replace_string(arg, ":", "：");
+  arg = replace_string(arg, ".", "。");
+  arg = replace_string(arg, "?", "？");
+  arg = replace_string(arg, "(", "（");
+  arg = replace_string(arg, ")", "）");
+  arg = replace_string(arg, "\t", "        ");
+  return arg;
+}
+

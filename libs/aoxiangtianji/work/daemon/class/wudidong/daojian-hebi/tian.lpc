@@ -1,0 +1,124 @@
+#include <ansi.h>
+#include <combat.h>
+#define TIAN "「" HIR "刀剑重重天" NOR "」"
+inherit F_SSERVER;
+int valid_pfm(object me, object target)
+{
+  if(userp(me) && (string)me->query("family/family_name") != "陷空山无底洞")
+    return notify_fail(TIAN"是陷空山无底洞不传之密！\n");
+  if (me->is_busy())
+    return notify_fail("你正忙着呢！\n");
+
+  if (me->query_skill("daojian-hebi", 1) < 260)
+    return notify_fail("你的刀剑合壁修为不够，难以施展" TIAN "。\n");
+  if (me->query_skill("huntian-qigong", 1) < 260)
+    return notify_fail("你的混天气功修为不够，难以施展" TIAN "。\n");
+  if (me->query("force") < 500)
+    return notify_fail("你的真气不够，难以施展" TIAN "。\n");
+  return 1;
+}
+
+int perform(object me, object target)
+{
+  string type1, type2, msg;
+  object weapon1, weapon2;
+  int fs, damage;
+  weapon1 = me->query_temp("weapon");
+  weapon2 = me->query_temp("handing");
+  if (! objectp(weapon1) || ! objectp(weapon2))
+    return notify_fail("你没有同时装备刀剑，难以施展" TIAN "。\n");
+  if (weapon2->query("weapon_prop/damage") <= 0)
+    return notify_fail("你的" + weapon2->name() + "已经严重"
+                       "损坏，无法继续使用了。\n");
+  type1 = weapon1->query("skill_type");
+  type2 = weapon2->query("skill_type");
+  if ((type1 != "sword" && type1 != "blade")
+      || (type2 != "sword" && type2 != "blade"))
+    return notify_fail("你所使用的武器不对，难以施展" TIAN "。\n");
+  if ((type1 == "sword" && type2 != "blade")
+     || (type1 == "blade" && type2 != "sword"))
+    return notify_fail("你没有同时装备刀剑，难以施展" TIAN "。\n");
+  if (me->query_skill_mapped("sword") != "daojian-hebi"
+   || me->query_skill_mapped("blade") != "daojian-hebi")
+    return notify_fail("你没有激发刀剑合壁，难以施展" TIAN "。\n");
+  damage = (me->query_skill("sword") + me->query_skill("blade"))/2 +
+            me->query_skill("daojian-hebi", 1) +
+            me->query_skill("force")/2;
+  damage = damage/3 + random(damage);
+  msg = HIY "$N" HIY "将" + weapon1->name() + HIY "与" +
+        weapon2->name() + HIY "横置于胸前，运转出「"
+        HIR "刀剑七重天" HIY "」功力，内劲如海啸般爆发。\n" NOR;
+  fs = 100;
+  if (COMBAT_D->perform_success(me, target,
+                                ({"sword","blade","force"}),
+                                ({"force","dodge","parry"})))
+  {
+    msg += HIR "$n" HIR "见$N" HIR "杀气大涨，不禁心"
+               "生惧意，招架顿时散乱，全然不成章理。\n" NOR;
+    damage += damage / 3;
+    fs = 130;
+  }
+
+  else
+  {
+    msg += HIG "$n" HIG "见$N" HIG "杀气大涨，丝毫不"
+          "敢大意，急忙收敛心神，努力不受干扰。\n" NOR;
+  }
+
+  msg += HIW "\n突然间$N" HIW "身形一展，右手" + weapon1->name() +
+         HIW "忽地一振，凌空卷出一道半弧，直劈$n" HIW "而去。\n" NOR;
+  if (COMBAT_D->perform_success(me, target,
+                                ({"sword","blade","force"}),
+                                ({"force","dodge","parry"}),
+                                fs))
+  {
+    msg += COMBAT_D->do_damage(me, target, WEAPON_ATTACK, damage, 80,
+                            HIR "$n" HIR "奋力抵挡，却哪里招架得住"
+                            "，被$N" HIR "一招划中要脉，鲜血四处飞"
+                            "溅。\n" NOR);
+  }
+
+  else
+  {
+    msg += CYN "$n" CYN "心知这一招的凌厉，急忙凝神"
+          "聚气，小心拆招，丝毫无损。\n" NOR;
+  }
+
+  msg += HIW "\n接着$N" HIW "又将左手" + weapon2->name() +
+         HIW "朝$n" HIW "平平递出，招式看似简单，却蕴藏着"
+             "极大的杀着。\n" NOR;
+  if (COMBAT_D->perform_success(me, target,
+                                ({"sword","blade","force"}),
+                                ({"force","dodge","parry"}),
+                                fs))
+  {
+     msg += COMBAT_D->do_damage(me, target, WEAPON_ATTACK, damage, 80,
+                             HIR "$n" HIR "只觉眼花缭乱，全然无法洞"
+                                 "察先机，$N" HIR "一招命中，射出一柱鲜"
+                                 "血。\n" NOR);
+  }
+
+  else
+  {
+    msg += CYN "$n" CYN "心知这一招的凌厉，急忙凝神"
+               "聚气，小心拆招，丝毫无损。\n" NOR;
+  }
+
+  message_combatd(msg, me, target);
+  if (!living(target) || (environment(me) != environment(target)))
+  {
+    message_vision("$N见$n已经无力回击，缓缓收回了攻势！\n",me,target);
+    me->start_busy(2+random(2));
+    me->add("force", -300);
+    return 0;
+  }
+
+  COMBAT_D->do_attack(me, target, me->query_temp("weapon"),3);
+  if (!target->is_busy())
+    target->start_busy(1);
+  COMBAT_D->do_attack(me, target, me->query_temp("handing"));
+  me->start_busy(2 + random(3));
+  me->add("force", -300);
+  return 1;
+}
+

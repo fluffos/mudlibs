@@ -1,0 +1,414 @@
+#include <ansi.h>
+#pragma optimize
+
+inherit F_DBASE;
+#define MAX_TOTAL_QUEST 150
+mapping QUEST_LIMIT = ([
+   "yuan"   : 30,
+   "lijing" : 50,
+   "menpai" : 50,
+   "itask"  : 30,
+   "pantu"  : 50,
+   "rulai"  : 30,
+   "xue"    : 50,
+]);
+public void scan_all_quest();
+void create()
+{
+  seteuid(ROOT_UID);
+  set("name", HIR "系统任务守护精灵" NOR);
+  set("channel_id", "系统任务守护精灵");
+  set_heart_beat(900);
+}
+
+int valid_quest(string type)
+{
+  string *quest_list;
+  quest_list = keys(QUEST_LIMIT) - ({ 0 });
+  if (member_array(type,quest_list) == -1)
+    return 0;
+  return 1;
+}
+
+public void reset_sys_quest()
+{
+  delete("total_quest");
+  delete("quest_info");
+}
+
+public mapping query_all_quest_limit()
+{
+  return QUEST_LIMIT;
+}
+
+public int query_quest_num(string type)
+{
+  mapping total, quest_type, quest_player;
+  string *id_list, who_id;
+  int i, num;
+
+  total = query("quest_info");
+  if (!mapp(total) || sizeof(total) == 0)
+    return 0;
+  quest_type = total[type];
+  if (!mapp(quest_type) || sizeof(quest_type) == 0)
+    return 0;
+
+  id_list = keys(quest_type);
+  for (i = 0, num = 0; i< sizeof(id_list);i++)
+  {
+    reset_eval_cost();
+    who_id = id_list[i];
+    quest_player = quest_type[who_id];
+    if (!mapp(quest_player) || sizeof(quest_player) == 0)
+    {
+      map_delete(quest_type,who_id);
+      continue;
+    }
+
+    if (!stringp(quest_player["npc_id"]) ||
+        quest_player["npc_born_time"] < 1 ||
+        quest_player["npc_stay_time"] < 1)
+    {
+      map_delete(quest_type,who_id);
+      continue;
+    }
+
+    num ++;
+  }
+
+  return num;
+}
+
+public int query_total_num()
+{
+  mapping total;
+  string *ks;
+  int i,num;
+
+  total = query("quest_info");
+  if (!mapp(total) || sizeof(total) == 0)
+    return 0;
+  ks = keys(total);
+  num = 0;
+  for (i = 0; i < sizeof(ks);i++)
+    num += query_quest_num(ks[i]);
+  return num;
+}
+
+public void query_quest_info(object me)
+{
+  mapping total, quest_map;
+  string *quest_list, *id_list;
+  int i, j, total_num, quest_num;
+  string msg;
+
+  total = query("quest_info");
+  total_num = query_total_num();
+
+  if (!total_num)
+  {
+    tell_object(me,"系统没有任何注册的任务！\n");
+    return;
+  }
+
+  quest_list = keys(QUEST_LIMIT) - ({ 0 });
+  msg = "";
+  for (i=0;i<sizeof(quest_list);i++)
+  {
+    reset_eval_cost();
+    msg += "\t" HIY + quest_list[i] + NOR + " : \n";
+    quest_map = total[quest_list[i]];
+    quest_num = query_quest_num(quest_list[i]);
+    if (!mapp(quest_map) || sizeof(quest_map) <= 0 || quest_num < 1)
+      msg += "\t\t没有人申请这个任务！\n";
+    else
+    {
+      msg += "有" + chinese_number(quest_num) + "个玩家申请了这个任务：\n";
+      id_list = keys(quest_map);
+      for (j=0;j<sizeof(id_list);j++)
+      {
+        msg += sprintf("%s[%3d] %s%10s %s%30s %11d %d%s\n",
+                        HIM,
+                        j + 1,
+                        HIY,
+                        id_list[j],
+                        HIW,
+                        quest_map[id_list[j]]["npc_id"],
+                        quest_map[id_list[j]]["npc_born_time"],
+                        quest_map[id_list[j]]["npc_stay_time"],
+                        NOR);
+      }
+
+    }
+
+  }
+
+  if (msg != "")
+    tell_object(me,msg);
+  return 0;
+}
+
+int quest_reg(object who, object ob, object quest_npc, string type)
+{
+  mapping total;
+  string *all_quest,*quest_list;
+  int total_num;
+  if (!objectp(who) || !objectp(ob) || !objectp(quest_npc))
+    return 0;
+
+  if (!playerp(who) || !living(ob))
+    return 0;
+
+  total = query("quest_info");
+  total_num = query_total_num();
+  if (total_num > MAX_TOTAL_QUEST)
+  {
+    message_vision(HIC"$N仔细查看了一翻，无可奈何的说道：目前没有任务可以提供！\n",ob);
+    tell_object(who, "系统登记的任务数目达到了极限值，请稍后再申请任务！\n");
+    return 0;
+  }
+
+  quest_list = keys(QUEST_LIMIT) - ({ 0 });
+  if (member_array(type,quest_list) == -1)
+  {
+    tell_object(who,"你要申请什么任务？\n");
+    return 0;
+  }
+
+  if (!mapp(total) || !sizeof(total))  //系统还没有任何任务
+  {
+    total = ([type :
+              ([ who->query("id") :
+                 ([
+                   "npc_id" : quest_npc->query("id"),
+                   "npc_born_time" : quest_npc->query("born_time"),
+                   "npc_stay_time" : quest_npc->query("stay_time"),
+                 ])
+              ])
+            ]);
+    set("quest_info",total);
+    return 1;
+  }
+
+  all_quest = keys(total) - ({ 0 });
+  if (member_array(type,all_quest) == -1)  //系统还没有要申请的任务
+  {
+    total += ([type :
+               ([ who->query("id") :
+                  ([
+                    "npc_id" : quest_npc->query("id"),
+                    "npc_born_time" : quest_npc->query("born_time"),
+                    "npc_stay_time" : quest_npc->query("stay_time"),
+                  ])
+               ])
+             ]);
+
+    set("quest_info",total);
+    return 1;
+  }
+
+  if (query_quest_num(type) > QUEST_LIMIT[type])
+  {
+    message_vision(HIC"$N仔细查看了一翻，无可奈何的说道：目前没有任务可以提供！\n",ob);
+    tell_object(who, "系统登记的这个任务的数目达到了极限值，请稍后在申请任务！\n");
+    return 0;
+  }
+
+  if (total[type][who->query("id")])
+  {
+    tell_object(who,"你已经有了这种任务。如果想要新的任务，请先取消上次的任务！\n");
+    return 0;
+  }
+
+  total[type] += ([
+                   who->query("id"):
+                   ([
+                     "npc_id" : quest_npc->query("id"),
+                     "npc_born_time" : quest_npc->query("born_time"),
+                     "npc_stay_time" : quest_npc->query("stay_time"),
+                   ])
+                 ]);
+  set("quest_info",total);
+  return 1;
+}
+
+public int quest_exist(object who, string type)
+{
+  mapping total, quest_type;
+
+  total = query("quest_info");
+  if (!mapp(total) || sizeof(total) < 1)
+    return 0;
+
+  quest_type = total[type];
+  if (!mapp(quest_type) || sizeof(quest_type) < 1)
+    return 0;
+  if (total[type][who->query("id")])
+    return 1;
+  return 0;
+}
+
+public int delete_quest(string type, mixed ob)
+{
+  mapping total;
+  object who;
+  if (stringp(ob))
+    who = find_player(ob);
+  else if (objectp(ob))
+    who = ob;
+  total = query("quest_info");
+  if (!mapp(total) || sizeof(total) == 0)
+    return 0;
+  if (!valid_quest(type))
+  {
+    return 0;
+  }
+
+  if (!who || !playerp(who))
+    return 0;
+
+  if (!mapp(total[type]) || sizeof(total[type]) < 1)
+    return 0;
+  map_delete(total[type],who->query("id"));
+  set("quest_info",total);
+  return 1;
+}
+
+protected void heart_beat()
+{
+  int i,j;
+  mapping total,quest_type, quest_player ;
+  string *kt,*kid, str_npc;
+  object ob, quest_npc, baixiao;
+  int total_num;
+  int t;
+ string *sroom_list = ({
+     "/d/city/wcenter",
+     "/d/city/scenter",
+     "/d/city/ecenter",
+     "/d/city/ncenter",
+  });
+  CHANNEL_D->do_channel(this_object(), "sys", "系统扫描所有的任务情况。");
+  CHANNEL_D->do_channel(this_object(), "sys",
+      sprintf("系统目前共有 %d 个任务。",query_total_num()));
+  baixiao = find_object("/d/wiz/npc/baixiao");
+  if (!objectp(baixiao))
+    baixiao = load_object("/d/wiz/npc/baixiao");
+  if (!objectp(baixiao))
+    baixiao = new("/d/wiz/npc/baixiao");
+  if (objectp(baixiao))
+    baixiao->move(element_of(sroom_list));
+  total = query("quest_info");
+  if (!mapp(total) || !sizeof(total))
+    return;
+  if (!query_total_num())
+  {
+    reset_sys_quest();
+    return;
+  }
+
+  total_num = 0;
+  kt = keys(total);
+  for (i=0;i<sizeof(kt);i++)
+  {
+    reset_eval_cost();
+    quest_type = total[kt[i]];
+    if (!mapp(quest_type) || !sizeof(quest_type))
+    {
+      map_delete(total,kt[i]);
+      continue;
+    }
+
+    kid = keys(quest_type) - ({0});
+    for (j=0;j < sizeof(kid); j++)
+    {
+      reset_eval_cost();
+      quest_player = quest_type[kid[j]];
+      if (!mapp(quest_player) || !sizeof(quest_player))
+      {
+        map_delete(quest_type,kid[j]);
+        continue;
+      }
+
+      str_npc = quest_player["npc_id"];
+      if (!stringp(str_npc))
+      {
+        map_delete(quest_type,kid[j]);
+        continue;
+      }
+
+      ob = find_player(kid[j]);
+      if (!objectp(ob))   //不在线的玩家的任务，系统取消
+      {
+        quest_npc = find_living(str_npc);
+        if (quest_npc && objectp(quest_npc))
+        {
+          if (environment(quest_npc))
+            message_vision(HIC "$N" HIC "看了看四周，急急忙忙的走掉了。\n" NOR, quest_npc);
+          destruct(quest_npc);
+        }
+
+        map_delete(quest_type,kid[j]);
+        total_num++;
+      }
+
+      else  //玩家在线
+      {
+        quest_npc = find_living(str_npc);
+        if (!objectp(quest_npc))
+        {
+          map_delete(quest_type,kid[j]);
+          continue;
+        }
+
+        if (quest_player["npc_born_time"] < 1 ||
+            quest_player["npc_stay_time"] < 1 )
+        {
+          tell_object(ob,"你的任务被系统取消了！系统对此将做纪录！\n");
+          if (quest_npc && objectp(quest_npc))
+          {
+            if (environment(quest_npc))
+              message_vision(HIC "$N" HIC "看了看四周，急急忙忙的走掉了。\n" NOR, quest_npc);
+            destruct(quest_npc);
+          }
+
+          map_delete(quest_type,kid[j]);
+          add("total_quest", -1);
+          log_file("quest_xyj/"+kt[i],sprintf("NPC数据不正确(没有born time或者stay time)被取消：%s(%s)－－》时间在%s",
+                           ob->name(),
+                           ob->query("id"),
+                           ctime(time())));
+          continue;
+        }
+
+        t = time() - quest_player["npc_born_time"];
+        if (t > quest_player["npc_stay_time"])
+        {
+          if (quest_npc && objectp(quest_npc) )
+          {
+            if (!quest_npc->is_fighting() && living(quest_npc))
+            {
+              if (environment(quest_npc))
+                message_vision(HIC "$N" HIC "看了看四周，急急忙忙的走掉了。\n" NOR, quest_npc);
+              destruct(quest_npc);
+              tell_object(ob,"你领取的 " + kt[i] + " 任务因为到期没有被完成，sys_qregd系统自动清除了！\n");
+              map_delete(quest_type,kid[j]);
+              total_num++;
+            }
+
+          }
+
+        }
+
+      }
+
+    }
+
+  }
+
+  if (total_num)
+    CHANNEL_D->do_channel(this_object(), "sys",
+         sprintf("sys_qregd系统自动清除 %d 个超时没有完成的任务。",total_num));
+}
+

@@ -1,0 +1,214 @@
+#include <command.h>
+#include <net/daemons.h>
+#include <net/macros.h>
+#include <obstacle.h>
+#define FILE "/quest/systask/npc/pker.lpc"
+string *dirs = ({
+  "/d/city",
+  "/d/beiping",
+  "/d/luoyang",
+  "/d/kaifeng",
+  "/d/chengdu",
+  "/d/jingzhou",
+  "/d/suzhou",
+  "/d/lanzhou",
+  "/d/lingzhou",
+  "/d/yangzhou",
+  "/d/hangzhou",
+  "/d/kunming",
+  "/d/xueshan",
+  "/d/lingtai",
+  "/d/nanhai",
+  "/d/hell",
+  "/d/jjf",
+  "/d/eastsea",
+  "/d/qujing/wuzhuang",
+  "/d/qujing/wudidong",
+  "/d/qujing/kusong",
+  "/d/moon",
+});
+string *dir_name = ({
+   "大唐长安",
+   "大唐北平",
+   "大唐洛阳",
+   "大唐开封",
+   "大唐成都",
+   "大唐荆州",
+   "大唐苏州",
+   "大唐兰州",
+   "大唐灵州",
+   "大唐扬州",
+   "大唐杭州",
+   "大唐昆明",
+   "大雪山",
+   "灵台方寸山",
+   "南海普坨山",
+   "阴曹地府",
+   "大唐将军府",
+   "东海龙宫",
+   "五庄观",
+   "无底洞",
+   "火云洞",
+   "月宫",
+});
+int LAST_HARD_DIS= 0;
+int inc = 0;
+void init_cron();
+void autosave();
+void sys_tell();
+void create()
+{
+  seteuid(ROOT_UID );
+  set_heart_beat(600);
+}
+
+int query_last_hard_dis()
+{
+  return LAST_HARD_DIS;
+}
+
+int set_last_hard_dis()
+{
+  LAST_HARD_DIS = time();
+  return time();
+}
+
+protected void heart_beat()
+{
+  if (inc >= 3)
+  {
+    inc=0;
+    autosave();
+  }
+
+  else
+    inc++;
+  sys_tell();
+}
+
+int random_place(object me, int i)
+{
+  int  j, k;
+  object  newob;
+  string dir;
+  mixed* file, exit;
+  if (!objectp(me))
+    return 0;
+
+  dir = dirs[i];
+  file = get_dir( dir + "/*.lpc", -1 );
+  if( sizeof(file) < 1)
+  {
+    log_file("wutian-yg",sprintf("%s is empty!\n",dir));
+    return 0;
+  }
+
+  for(k=0;k<10;k++)
+  { // try 30 times
+    reset_eval_cost();
+    j = random(sizeof(file));
+    if( file[j][1] > 0 )
+    {
+      newob=find_object(dir+"/"+file[j][0]);
+      if (!objectp(newob))
+        newob = load_object(dir +"/" + file[j][0]);
+      if (objectp(newob))
+      {
+        log_file("wutian-yg",sprintf("yaoguai move to %s\n",dir+"/"+file[j][0]));
+        if(newob->is_safty() ||
+           newob->query("no_fight") ||
+           newob->query("no_magic") ||
+           !(exit=newob->query("exits")) ||
+           sizeof(exit)<1)
+            continue;
+        if(me->move(newob))
+        {
+          message_vision("$N杀将过来。\n",me);
+          return 1;
+        }
+
+      }
+
+      else
+        log_file("wutian-yg",sprintf("%s don't found\n",dir+"/"+file[j][0]));
+    }
+
+  }
+
+  return 0;
+}
+
+void autosave()
+{
+  object *user, ob, guai, guai1;
+  int i,num, r_d;
+  reset_eval_cost();
+  if (random(4) == 1)
+    TASK_D->init_dynamic_quest(1);
+  else
+    TASK_D->init_dynamic_quest(0);
+  message("system",HIW "\t\t    西游记下次重新分布所有使命将在 30 分钟后\n\n"NOR, users());
+
+  if (random(3) == 1)
+  {
+    user = filter_array(users(),
+       (: $1->query("level") >= 15 &&
+          $1->query("level") <= 35 &&
+          ! $1->is_in_prison() &&
+          ! $1->is_ghost() &&
+          ! wizardp($1) &&
+          environment($1) :));
+    if (sizeof(user) < 3)
+      return;
+    ob = element_of(user);
+    seteuid(getuid());
+    guai = new("/obj/questnpc/wutian_yaoguai");
+    guai->set_npc_family(ob, 0, 0, 0);
+    NPC_D->set_from_me(guai,ob,90+random(20));
+    guai->set_name("攻打" + dir_name[r_d] + "的妖怪",({"yao guai","guai"}));
+    guai->setup();
+    r_d = random(sizeof(dirs));
+    if (!random_place(guai,r_d))
+      return;
+
+    message("system",HIW"〖" + HIR"无佛无天" HIW"〗" CYN"：全力进攻 " +
+                     HIM + dir_name[r_d] +
+                     CYN" ！杀他个鸡飞狗跳！\n"NOR,users());
+
+    num = 5+ random(4);
+    for (i = 1; i < num; i++)
+    {
+      reset_eval_cost();
+      seteuid(getuid());
+      guai1 = new("/obj/questnpc/wutian_yaoguai");
+      guai1->set_npc_family(ob, 0, 0, 0);
+      NPC_D->set_from_me(guai1,ob,80+random(15));
+      guai1->delete("chat_chance_combat");
+      guai1->set_name("攻打" + dir_name[r_d] + "的妖怪",({"yao guai","guai"}));
+      guai1->setup();
+      guai1->move(environment(guai),1);
+      guai1->set_leader(guai);
+      guai1->delete("chat_chance");
+    }
+
+  }
+
+}
+
+void sys_tell()
+{
+  string *sysmsg = ({
+      "新玩家请用help newbie-faq了解常见问题！help hits了解一些常见的操作！\n",
+      "在news 1和news 2给出了一些路径！\n",
+      "如果碰到了问题，请post在南城客栈或者南城客栈u的BBS版上！\n",
+      "对门派的建议或者意见，请post在南城客栈或者南城客栈d的BBS版上！\n",
+      "欢迎加入我们的qq群，群号：6771202 ！\n",
+      "最新推出了axtj2的玩家手册V1.0，欢迎下载。如能提供好的建议和意见，十分感谢。\n",
+  });
+
+  if (!this_object())
+    return;
+  message("system",HIW"〖" + HIY"系统提示" HIW"〗：" + COLOR_D->random_color(3) +
+                   element_of(sysmsg) + NOR,users());
+}
+

@@ -1,0 +1,80 @@
+#include <ansi.h>
+#include <combat.h>
+#define XUE "「" HIW "天下有" HIR "血" NOR "」"
+inherit F_SSERVER;
+int valid_pfm(object me, object target)
+{
+  if(userp(me) && (string)me->query("family/family_name") != "陷空山无底洞")
+    return notify_fail(XUE"是陷空山无底洞不传之密！\n");
+  if (me->is_busy())
+    return notify_fail("你正忙着呢！\n");
+
+  if (me->query_skill("daojian-hebi", 1) < 300)
+    return notify_fail("你的刀剑合壁修为不够，难以施展" XUE "。\n");
+  if (me->query_skill("huntian-qigong", 1) < 300)
+    return notify_fail("你的混天气功修为不够，难以施展" XUE "。\n");
+  if (me->query("force") < 1000)
+    return notify_fail("你的真气不够，难以施展" XUE "。\n");
+  return 1;
+}
+
+int perform(object me, object target)
+{
+  string type, msg;
+  object weapon;
+  int i, j, count,damage;
+  if (! objectp(weapon = me->query_temp("weapon"))
+     || (string)weapon->query("skill_type") != "sword"
+     && (string)weapon->query("skill_type") != "blade" )
+    return notify_fail("你所使用的武器不对，难以施展" XUE "。\n");
+  type = weapon->query("skill_type");
+  if (me->query_skill(type, 1) < 300)
+    return notify_fail(sprintf("你的%s太差，难以施展%s。\n",to_chinese(type),XUE));
+  if (me->query_skill_mapped(type) != "daojian-hebi")
+    return notify_fail("你没有激发刀剑归真，难以施展" XUE "。\n");
+  msg = HIW "$N" HIW "手中" + weapon->name() + HIW "蓦地一抖"
+            "，将「" NOR + WHT "枯骨刀法" HIW "」并「" NOR + WHT
+              "七修剑法" HIW "」连环施出。霎时寒\n光点点，犹如夜陨"
+              "划空，铺天盖地罩向$n" HIW "，正是一招「" HIW "天下"
+              "有" HIR "血" HIW "」。\n" NOR;
+  if (COMBAT_D->perform_success(me, target,
+                                ({"sword","blade","force"}),
+                                ({"force","dodge","parry"}),
+                                110))
+  {
+    msg += HIW "$n" HIW "只见无数刀光剑影向自己逼"
+               "来，顿感眼花缭乱，心底寒意油然而生。\n" NOR;
+    count = me->query_skill("daojian-hebi", 1);
+    me->set_temp("daojian-perform", 1);
+  }
+
+  else
+  {
+    msg += HIG "$n" HIG "突然发现自己四周皆被刀光"
+          "剑影所包围，心知不妙，急忙小心招架。\n" NOR;
+    count = me->query_skill("daojian-hebi", 1)/2;
+  }
+
+  message_combatd(msg, me, target);
+  me->add("force", -300);
+  me->add_temp("apply/attack", count);
+  j = me->query_temp("apply/damage");
+  damage = 0;
+  for (i = 1; i <= 4; i++)
+  {
+    if (!me->is_fighting(target))
+      break;
+    if (random(2) && !target->is_busy())
+      target->start_busy(2);
+    damage = COMBAT_D->do_attack(me, target, weapon, 3);
+    if (damage < 1)
+      me->add_temp("apply/damage", count);
+  }
+
+  me->add_temp("apply/attack", -count);
+  me->set_temp("apply/damage",j);
+  me->delete_temp("daojian-perform");
+  me->start_busy(2 + random(3));
+  return 1;
+}
+

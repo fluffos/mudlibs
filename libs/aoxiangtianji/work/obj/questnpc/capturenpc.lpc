@@ -1,0 +1,134 @@
+#include <ansi.h>
+inherit "/obj/questnpc/tasknpc";
+void create()
+{
+  ::create();
+  set_name("追杀任务","capture");
+  set("scale", 100);
+  setup();
+  if (clonep())
+    keep_heart_beat();
+}
+
+void full_me(object me)
+{
+  me->set("kee",me->query("max_kee"));
+  me->set("eff_kee",me->query("max_kee"));
+  me->set("sen",me->query("max_sen"));
+  me->set("eff_sen",me->query("max_sen"));
+  me->set("force",me->query("max_force"))*2;
+  me->set("mana",me->query("max_mana"))*2;
+  me->clear_condition(0);
+  return;
+}
+
+int accept_fight(object ob)
+{
+  command("say 我可没兴趣陪你玩，快给我滚开。");
+  return 0;
+}
+
+void kill_ob(object ob)
+{
+  command("exert powerup");
+  if (!ob->query_temp("capture/" + this_object()->query("id")))
+  {
+    delete_temp("my_killer");
+    ::kill_ob(ob);
+    return;
+  }
+
+  if (!query_temp("my_killer"))
+    full_me(this_object());
+  set_temp("my_killer",ob);
+  ::kill_ob(ob);
+  return;
+}
+
+void remove(string euid)
+{
+  if (!environment() || query_temp("die"))
+  {
+    ::remove(euid);
+    return;
+  }
+
+  if (!living(this_object()))
+  {
+     message_vision(WHT "只见一道黑影闪过，将昏迷不醒的$N"
+                    WHT "架起，一个飞纵，消失得无影无踪。"
+                        "\n" NOR, this_object());
+     return;
+  }
+
+  message_vision(WHT "$N" WHT "谨慎地看了看四周，急急忙忙的走"
+                     "了。\n" NOR, this_object());
+  ::remove(euid);
+}
+
+void die()
+{
+  int capture_lvl, exp, dx, pot, score, weiwang;
+  object ob;
+  object me = this_object();
+
+  if (objectp(ob = me->query_temp("my_killer")) &&
+      ob == me->query_last_damage_from())
+  {
+    if (ob->query_temp("capture/" + this_object()->query("id")))
+    {
+      capture_lvl = me->query("cap_lvl");
+      if (capture_lvl < 1)
+        capture_lvl = 1;
+      if (capture_lvl > 3)
+        capture_lvl = 3;
+      exp = random(120) + 120;
+      if ((int)me->query("level")+ 5 < (int)ob->query("level"))
+        exp = exp/3;
+      else if ((int)me->query("level")+ 2 < (int)ob->query("level"))
+        exp = exp*2/3;
+      if ((int)me->query("level") > (int)ob->query("level") + 5)
+        exp += exp/2;
+      else if ((int)me->query("level") > (int)ob->query("level") + 2)
+        exp += exp/3;
+      dx = exp/2 + random(exp);
+      pot = exp/4 + random(exp/3);
+      score = 6 + random(6);
+      weiwang = 3 + random(3);
+      GIFT_D->delay_bonus(ob, ([ "prompt"  : "你游历江湖，历练自己",
+                                 "exp"     : exp*capture_lvl,
+                                 "daoxing" : dx*capture_lvl,
+                                 "pot"     : pot*capture_lvl,
+                                 "mar"     : random(1 + pot/3*2),
+                                 "score"   : score*capture_lvl,
+                                 "weiwang" : weiwang*capture_lvl,]),"freequest");
+
+      CHANNEL_D->do_channel(this_object(), "rumor", "听说"
+                          + ob->name(1) + "(" + ob->query("id") +
+                            ")在" + environment()->short() + HIM
+                            "击毙了" + name() + "。");
+// 被列为门派中断的自由任务
+      if (ob->query("quest_xyj/freequest_need") > 0)
+         GIFT_D->delay_freequest_bonus(ob);
+    }
+
+  }
+
+  ::die();
+}
+
+void scan()
+{
+  object ob = this_object();
+  ::scan();
+  if ((time() - (int)query("born_time")) > query("stay_time") &&
+      ! is_fighting() && living(ob))
+  {
+    message_vision("$N急急忙忙的走了。\n", ob);
+    destruct(this_object());
+    return;
+  }
+
+  return;
+}
+

@@ -1,0 +1,396 @@
+// CMDS /cmds/std/score.c
+#include <login.h>
+#include <combat.h>
+#include <mudlib.h>
+#include <command.h>
+inherit F_CLEAN_UP;
+
+string display_attr(int gift, int value);
+string status_color(int current, int max);
+string tribar_graph(int val, int eff, int max, string bcolor, string fcolor, string dcolor);
+string display_faith(int faith);
+string display_attr(int gift, int value);
+
+void create()
+{
+  seteuid(ROOT_UID);
+}
+
+int main(object me, string arg)
+{
+  object ob;
+  mapping my;
+  string line, temp, str, str1;
+  string league, mastername;
+  int i,deaddao_last;
+
+  seteuid(getuid(me));
+
+  if(!arg )
+    ob = me;
+  else if (wizardp(me) )
+  {
+    ob = present(arg, environment(me));
+    if (!ob)
+      ob = find_player(arg);
+    if (!ob)
+      ob = find_living(arg);
+    if (!ob)
+      return notify_fail("你要察看谁的个人档案情况？\n");
+  }
+  else if( stringp(league=me->query("league/league_name")))
+  {
+    ob =present(arg,environment(me));
+    if(!ob || !ob->is_character())
+      return notify_fail("你要察看谁的个人档案情况？\n");
+    if((string)ob->query("league/league_name")!=league)
+      return notify_fail("你只能查看本联盟成员的个人档案情况。\n");
+  }
+  else
+    return notify_fail("只有巫师或同联盟的人才能察看别人的个人档案情况。\n");
+
+  if( wiz_level(me) < wiz_level(ob) )
+    return notify_fail("你要察看谁的个人档案情况？\n");
+
+  my = ob->query_entire_dbase();
+//1st line
+  write("\n"NOR YEL"≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡"HIG"个"NOR YEL"≡≡≡"HIG"人"NOR YEL"≡≡≡"HIG
+               "档"NOR YEL"≡≡≡"HIG"案"NOR YEL"≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡\n"NOR);
+//2nd line
+  write(sprintf(YEL"≡"NOR" 现在头衔:%-25s    现在职称: %-28s"YEL"≡"NOR"\n",RANK_D->query_rank(ob),ob->short(1)));
+//4th line
+
+  line = sprintf(YEL"≡ "NOR"战斗等级: %s     经验点数: %-11d升级还需: %-10d当前职业：%-8s"YEL"≡"NOR"\n",
+                  UPEXP_D->query_upexp(ob),
+                  UPEXP_D->query_total_exp(ob),
+                  UPEXP_D->query_next_exp(ob),
+				  UPEXP_D->query_occupation(ob)
+				  );
+
+//5th line 个人情况，婚姻状况
+  if( userp(ob) )
+  {
+    if( !ob->query("life/live_forever_announced") && !ob->query("life/live_forever") )
+    {
+      if(wizardp(me)
+        || RANK_D->grade_dx(RANK_D->describe_dx(ob->query("daoxing"))) >=
+           RANK_D->grade_dx(CYN"脱胎换骨"NOR))
+      {
+        i = (int)ob->query("life/life_time");
+        i -= (int)ob->query_age() / 86400;
+        temp = sprintf("%-8s", chinese_number(i)+"年");
+      }
+      else
+        temp = "暂时隐藏"NOR;
+    }
+    else
+      temp = "不生不灭";
+  }
+  else
+    temp = "不生不灭";
+  if ( !stringp(ob->query("sex/first")) )
+  {
+    if (ob->query("gender")=="女性")
+      str = "处    女";
+    else
+      str = "童    男";
+  }
+  else
+  {
+    str = sprintf("%-8s",ob->query("sex/first") );
+  }
+
+  line += "┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓\n";
+  line += sprintf("┃年龄：%-8d    阳寿：%-10s    ┃性别：%-8s      状态：%-8s    ┃\n",
+                     ob->query("age"),
+                     temp,
+                     ob->query("gender"),
+                     str);
+  if (ob->query("married"))
+  {
+    if (ob->query("gender")=="女性")
+      temp = "丈夫：";
+    else
+      temp = "妻子：";
+  }
+
+  else
+    temp = "婚姻: ";
+  str = ob->query("couple/name");
+  if (!stringp(str))
+    str = "单身";
+  line += sprintf("┃天性：%-8s    体重：%-12s  ┃%-6s%-8s      做爱：%-8s    ┃\n",
+                     stringp(ob->query("character")) ? ob->query("character"):"不    明",
+                     chinese_number((int)ob->query_weight()/1000)+"公斤",
+                     temp,
+                     str,
+                     (int)ob->query("sex/times") > 0 ? chinese_number((int)ob->query("sex/times")) : "未曾云雨");
+
+  line += sprintf("┃威望：%-10d  阅历：%-14d┃潜能：%-13d 存储：%-12d┃\n",
+                  (int)ob->query("weiwang"),
+                  (int)ob->query("score"),
+				  my["potential"] - my["learned_points"],
+                  (int)my["qn_balance"]
+				  );
+
+  line += sprintf("┃官职：%-22s (%7d)┃钱庄：%-32s┃\n",
+                  (!stringp(str=ob->query("degree")))?"未入仕途":str,
+				  (int)ob->query("office_number"),
+                  (int)ob->query("balance")>0?MONEY_D->money_num((int)ob->query("balance")): "目前是个穷鬼");
+
+  line += "┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫\n";
+  temp = ob->query("family/family_name");
+  if (!stringp(temp))
+    temp = "无门无派";
+  str = ob->query("league/league_name");
+  if (!stringp(str))
+    str = "尚未联盟";
+  else
+  {
+    str = sprintf("%s(%s)",
+        str,
+        stringp(ob->query("league/league_id")) ? ob->query("league/league_id") : "");
+  }
+  line += sprintf("┃师门    ： %-26s ┃联盟    ： %-26s ┃\n",
+                     temp,
+                     str);
+  mastername = ob->query("family/master_name");
+  if (!stringp(ob->query("family/family_name")) ||
+      !stringp(mastername))
+    temp = "无门无派";
+  else
+  {
+    temp = sprintf("%s(%s)",
+               mastername,
+               stringp(ob->query("family/master_id")) ? ob->query("family/master_id") : "");
+  }
+  if( stringp(ob->query("league/league_name")) )
+  {
+    mastername = ob->query("league/leader_name");
+    if (!stringp(mastername))
+      mastername = "(空缺)";
+    str = sprintf("%-8s  盟主：%-"+(10+color_len(mastername))+"s",
+         (int)ob->query("league/grant") ? chinese_number((int)ob->query("league/grant")) : "普通成员",
+         mastername);
+  }
+  else
+    str = "尚未联盟";
+
+  line += sprintf("┃师承    ： %-26s ┃等级    ： %-26s ┃\n",
+                     temp,
+                     str);
+  str = display_faith((int)ob->query("family/family_faith"));
+  temp = sprintf("%-"+(8+color_len(str))+"s(%6d)            ",
+         str,
+         (int)ob->query("family/family_faith"));
+  line += sprintf("┃门派贡献：%-26s┃联盟贡献： %-26d ┃\n",
+                     temp,
+                     (int)ob->query("league/league_faith"));
+ // line += "┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛\n";
+
+  line += "┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 天赋潜力━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫\n";
+  temp = display_attr(my["str"], ob->query_str());
+  str = display_attr(my["con"], ob->query_con());
+  str1 = display_attr(my["int"], ob->query_int());
+  line += sprintf("┃力量：%-6d /%-"+(6+color_len(temp))+"s    ┃根骨：%-6d /%-"
+                +(6+color_len(str))+"s    ┃悟性：%-6d /%-"+(6+color_len(str1))+"s       ┃\n",
+                 my["str"],temp,
+                 my["con"],str,
+                 my["int"],str1 );
+  temp = display_attr(my["spi"], ob->query_spi());
+  str = display_attr(my["dex"], ob->query_dex());
+  line += sprintf("┃灵性：%-6d /%-"+(6+color_len(temp))+"s    ┃敏捷：%-6d /%-"
+                +(6+color_len(str))+"s    ┃魅力：",
+                 my["spi"],temp,
+                 my["dex"],str);
+  if(wizardp(me)
+    || RANK_D->grade_dx(RANK_D->describe_dx(ob->query("daoxing")))>=RANK_D->grade_dx(CYN"脱胎换骨"NOR))
+  {
+    str1 = display_attr(my["per"], ob->query_per());
+    line += sprintf("%-6d /%-"+(6+color_len(str1))+"s       ┃\n",
+                my["per"],str1);
+  }
+
+  else
+    line += sprintf("%-14s       ┃\n",
+                "隐藏");
+  if(wizardp(me)
+    || RANK_D->grade_dx(RANK_D->describe_dx(ob->query("daoxing")))>=RANK_D->grade_dx(CYN"脱胎换骨"NOR))
+  {
+    temp = display_attr(my["cor"], ob->query_cor());
+    str = display_attr(my["cps"], ob->query_cps());
+    str1 = display_attr(my["kar"], ob->query_kar());
+    line += sprintf("┃勇气：%-6d /%-"+(6+color_len(temp))+"s    ┃定力：%-6d /%-"
+                +(6+color_len(str))+"s    ┃福缘：%-6d /%-"+(6+color_len(str1))+"s       ┃\n",
+                 my["cor"],temp,
+                 my["cps"],str,
+                 my["kar"],str1 );
+  }
+
+  else
+  {
+    line += sprintf("┃勇气：%-18s┃定力：%-18s┃福缘：%-18s    ┃\n",
+                 "隐藏","隐藏","隐藏");
+  }
+
+ // line += "┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛\n";
+
+
+  line += "┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 战斗信息━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫\n";
+  line += sprintf("┃PK阵亡      ：%-4d次                   杀敌阵亡：%-4d次                      ┃\n",
+                    (int)ob->query("killed/dietimes"),
+                    (int)ob->query("combat/dietimes"));
+  if( ob->query("killed/last_killer") && ob->query("killed/last_killername") )
+  {
+    str = sprintf("[%s]前 被%s(%s)杀死！",
+          XYJTIME_D->query_timec(ob->query("killed/killtime")),
+          ob->query("killed/last_killername"),
+          ob->query("killed/last_killer"));
+  }
+  else
+    str = "没有PK死亡纪录！";
+  line += sprintf("┃上次PK死因  ：%-"+63+"s┃\n",str);
+  if(stringp(ob->query("combat/last_die")))
+    str = (string)ob->query("combat/last_die");
+  else
+    str = "没有NK死亡纪录！";
+  line += sprintf("┃上次NK死因  ：%-"+63+"s┃\n",str);
+  deaddao_last = (int)ob->query("death/last_dx_loss");
+  if (ob->query("death/skill_loss"))
+    str1 = HIR"Y"NOR;
+  else
+    str1 = "N";
+  str = sprintf("武学：%d / 道行：%s / 潜能：%d /技能损失：%s",
+     (int)ob->query("death/last_exp_loss"),
+     (deaddao_last>0) ? XYJTIME_D->check_daoxing(deaddao_last):"没有道行损失",
+     (int)ob->query("death/last_qn_loss"),
+     str1);
+  line += sprintf("┃上次死亡损失：%-"+63+"s┃\n",str);
+  deaddao_last = (int)ob->query("death/dx_loss");
+  str = sprintf("武学：%d / 道行：%s",
+        (int)ob->query("death/exp_loss"),
+        (deaddao_last>0) ? XYJTIME_D->check_daoxing(deaddao_last):"没有道行损失");
+  str1 = sprintf("潜能：%d / 威望：%d / 阅历：%d",
+        (int)ob->query("death/qn_loss"),
+        (int)ob->query("death/weiwang"),
+        (int)ob->query("death/score"));
+  line += sprintf("┃死亡总共损失：%-"+63+"s┃\n",str);
+  line += sprintf("┃            ：%-"+(63+color_len(str1))+"s┃\n",str1);
+  str = sprintf("主动杀死→%s次/被动杀死→%s次/主动打晕→%s次",
+                chinese_number((int)ob->query("combat/PKS")),
+                chinese_number((int)ob->query("combat/WPK")),
+                chinese_number((int)ob->query("combat/DPS")));
+  line += sprintf("┃杀害玩家    ：%-"+63+"s┃\n",str);
+  if( stringp(ob->query("combat/kill_id")) && stringp(ob->query("combat/kill_name")) )
+  {
+    str = sprintf("[%s]前 将"YEL"%s(%s)"NOR"杀死！",
+      XYJTIME_D->query_timec((int)ob->query("combat/killtime")),
+      (string)ob->query("combat/kill_name"),
+      (string)ob->query("combat/kill_id"));
+    line += sprintf("┃上次杀戮    ：%-"+63+"s┃\n",str);
+  }
+
+  if ((int)ob->query("combat/pkgain")>0)
+    str = XYJTIME_D->check_daoxing(ob->query("combat/pkgain"));
+  else
+    str = "没有PK道行纪录";
+  line += sprintf("┃PK道行      ：%-"+63+"s┃\n",str);
+  line += sprintf("┃杀死敌人    ：%-63s┃\n",chinese_number((int)ob->query("combat/MKS")));
+  if ((int)ob->query("combat/nkgain")>0)
+    str = XYJTIME_D->check_daoxing(ob->query("combat/nkgain"));
+  else
+    str = "没有NK道行纪录";
+  line += sprintf("┃NK道行      ：%-"+63+"s┃\n",str);
+ // line += "┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛\n";
+  line += "┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 关卡信息━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫\n";
+  if (!ob->query("dntg/number"))
+    str = " 你尚未开始！";
+  else if (ob->query("dntg/number") < 10)
+    str = " 你已经过了 "+chinese_number(ob->query("dntg/number")) + " 道关卡！";
+  else
+    str = "你已经大闹天宫完毕！";
+  line += sprintf(YEL"≡"NOR" 大闹天宫   ：%-23s",str);
+  if (!ob->query("obstacle/number"))
+    str = " 你尚未西行！";
+  else if (ob->query("obstacle/number") < 34)
+    str = " 你经历了 " + chinese_number(ob->query("obstacle/number")) + " 道劫难！";
+  else
+    str = "你已经历经了所有劫难！";
+  line += sprintf("  西行取经    ：%-24s"YEL"≡"NOR"\n",str);
+line += sprintf(YEL"≡"NOR" 道行境界：%s 武学境界：%s 法力修为：%s  内力修为：%s"YEL"≡"NOR"\n",
+    RANK_D->describe_dx(ob->query("daoxing")),
+    RANK_D->describe_exp(ob->query("combat_exp")),
+    RANK_D->describe_fali(ob->query("max_mana")),
+    RANK_D->describe_neili(ob->query("max_force")));
+  line += YEL"≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡ "HIR"翱翔天际"NOR YEL" ≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡\n"NOR;
+  if( userp(me) && userp(ob) )
+  {
+    line += sprintf("在仙剑%s已经历 "YEL"%s"NOR" 的岁月 "NOR,
+      ob==me?"你":ob->name(1),FINGER_D->age_string( (int)ob->query("mud_age")) );
+    line += sprintf("本次上线%s停留时间为 "YEL"%s \n"NOR,
+      ob==me?"你":ob->name(1),XYJTIME_D->query_time(time() - ob->query_temp("temp_time")) );
+  }
+  write(line);
+  return 1;
+}
+
+
+string display_attr(int gift, int value)
+{
+   if( value > gift )
+     return sprintf( HIY "%4d" NOR, value );
+   else if( value < gift )
+     return sprintf( HIC "%4d" NOR, value );
+   else
+     return sprintf("%3d", value);
+}
+string display_faith(int faith)
+{
+  string msg;
+  int *lists, i;
+  mapping desc=([
+   -1000   :       HIR"大逆不道"NOR,
+   -600    :       RED"倒行逆施"NOR,
+   -300    :       HIB"胡做非为"NOR,
+   -50     :       BLU"带罪之身"NOR,
+    0      :       "碌碌无为",
+   200     :       "无功无过",
+   500     :       YEL"略有功劳"NOR,
+   1000    :       HIY"功绩初显"NOR,
+   2000    :       HIC"任劳任怨"NOR,
+   5000    :       WHT"忠心不二"NOR,
+   10000   :       HIW"门派柱石"NOR,
+   20000   :       HIW"赤胆忠心"NOR,
+  ]);
+
+  lists=keys(desc);
+//  lists=sort_array(lists, "sort_keys", this_object());
+  lists=sort_array(lists, 0);
+  for(i=0;i<sizeof(lists);i++)
+  {
+    msg=desc[lists[i]];
+    if(faith<=lists[i])
+      break;
+  }
+  return msg;
+}
+int help(object me)
+{
+        write(@HELP
+
+指令格式：score/sc
+          score <对象名称>  （巫师专用）
+
+显示自己或者指定对象（含怪物）的基本资料。
+此指令可以“sc”代替。
+
+对于隐藏参数只有当你道行达到脱胎换骨时才
+可以看到。。。
+
+相关讯息：hp
+
+HELP
+        );
+
+        return 1;
+}

@@ -1,0 +1,33 @@
+//setquests.c
+
+inherit F_SAVE;
+
+mapping quests_list = ([ ]);
+mapping quest_long = ([ ]);
+
+int main(object me, string arg)
+{
+	string quest_name,finish_quest,longstr;
+
+	seteuid(getuid());
+	if( !arg ||
+	    sscanf(arg,"%s %s %s",quest_name, finish_quest,longstr) != 3 )
+	return notify_fail("使用格式：\n
+	setquests 中文任務名 英文任務名 長敘述\n\n
+	英文任務名 是完成任務時，在玩家身上設定的參數，如: quests/read_snow\n
+	長敘述	   是對此任務的簡單敘述\n");
+
+	restore();
+	quests_list[quest_name] = finish_quest;
+	quest_long[quest_name] = longstr;
+	save();
+
+	log_file ("quests", sprintf("%s設定任務 %s(%s) 於%s\n",
+	  me->short(),quest_name,finish_quest,CHINESE_D->chinese_time(time()))
+	);
+
+	return 1;
+}
+
+string query_save_file()
+{ return "/data/questlist" ; }

@@ -1,0 +1,429 @@
+// giftd.c
+// Written by Vin for Heros.cn 2002/07/14.
+#include <ansi.h>
+#include <quest.h>
+inherit F_DBASE;
+inherit F_CLEAN_UP;
+// 定义提供给外部调用的接口函数
+varargs public void bonus(object who, mapping b, string type);
+varargs public void freequest_bonus(object who);
+varargs public void gift_bonus(object who, mapping b);
+varargs public void work_bonus(object who, mapping b,string type);
+public void delay_bonus(object who, mapping b, string type);
+public void delay_freequest_bonus(object who);
+public void delay_gift_bonus(object who, mapping b);
+public void delay_work_bonus(object who, mapping b, string type);
+void create()
+{
+  seteuid(getuid());
+  set("channel_id", "奖励精灵");
+  set_heart_beat(900);
+}
+
+// 延迟奖励：因为有时给出奖励的时候应该是在某些事件发生以后，
+// 但是在该事件发生时给与奖励更易于书写程序，所以奖励生成的
+// 地方在事件正在发生的时候，但是要让玩家看起来是在事件发生
+// 以后。比如杀人，人死亡的时候给与奖励是容易做的，但是我希
+// 望玩家在看到NPC 的死亡信息以后才看到奖励的信息，这时候就
+// 用delay_bonus了。
+public void delay_bonus(object who, mapping b, string type)
+{
+  who->start_call_out((: call_other, __FILE__, "bonus", who, b, type :), 1);
+}
+
+public void delay_work_bonus(object who, mapping b, string type)
+{
+//  work_bonus(who,b,type);
+  who->start_call_out((: call_other, __FILE__, "work_bonus", who, b, type :), 1);
+}
+
+public void delay_freequest_bonus(object who)
+{
+  who->start_call_out((: call_other, __FILE__, "freequest_bonus", who :), 3);
+}
+
+public void delay_gift_bonus(object who, mapping b)
+{
+  who->start_call_out((: call_other, __FILE__, "gift_bonus", who, b :), 1);
+}
+
+// 自由任务的奖励
+varargs public void bonus(object who, mapping b, string type)
+{
+  int exp;                // 奖励的经验
+  int pot;                // 奖励的潜能
+  int daoxing;            // 奖励的道行
+  int mar;                // 奖励的实战体会
+  int gongxian;           // 奖励的门派贡献
+  int weiwang;
+  int score;
+  int percent;            // 奖励的有效百分比
+  int logon_power;
+  string msg;             // 奖励的描述信息
+  string league_name;
+  int weiwang2, league_weiwang;
+
+  int lv;
+
+  league_weiwang = who->query("league/set/weiwang");
+// 获得奖励的百分比
+  percent = b["percent"];
+  if (percent < 1 || percent > 200)
+    percent = 100;
+  logon_power = who->query("logon_power");
+/*
+  if (logon_power > 32400)
+    percent *= 2;
+  else if (logon_power > 21600);
+  else if (logon_power > 10800)
+    percent /= 2 ;
+  else
+    percent /= 4;
+*/
+  exp = b["exp"] * percent / 100;
+  pot = b["pot"] * percent / 100;
+  daoxing = b["daoxing"] * percent / 100;
+  mar = b["mar"] * percent / 100;
+  gongxian = b["gongxian"] * percent / 100;
+  score = b["score"] * percent / 100;
+  weiwang = b["weiwang"] * percent / 100;
+
+  lv = (int)who->query("level");
+  if (lv > 50 && lv <= 55)
+  {
+    exp = exp/3*2;
+    pot = pot/3*2;
+    mar = mar/3*2;
+    daoxing = daoxing/3*2;
+  }
+
+  else if (lv > 55 && lv <= 60)
+  {
+    exp /= 2;
+    pot /= 2;
+    mar /= 2;
+    daoxing /= 2;
+  }
+
+  else if (lv > 60 && lv <= 65)
+  {
+    exp /= 4;
+    pot /= 4;
+    mar /= 4;
+    daoxing /= 4;
+  }
+
+  else if (lv > 65)
+  {
+    exp /= 8;
+    pot /= 8;
+    mar /= 8;
+    daoxing /= 8;
+  }
+
+// 生成提示信息
+  if (stringp(msg = b["prompt"]))
+    msg = HIG + msg + HIG "，你获得了";
+  else
+    msg = HIG "通过这次锻炼，你获得了";
+  if (exp > 0)
+    msg += chinese_number(exp) + "点经验、";
+  if (pot > 0)
+    msg += chinese_number(pot) + "点潜能、";
+  if (mar > 0)
+    msg += chinese_number(mar) + "点实战体会、";
+  if (daoxing > 0)
+    msg += XYJTIME_D->check_daoxing(daoxing) + "道行、";
+  if (score > 0)
+    msg += chinese_number(score) + "点江湖阅历、";
+  if (stringp(league_name = who->query("league/league_name")) && league_weiwang)
+  {
+    if (weiwang > 0)
+    {
+      weiwang2 = weiwang * league_weiwang / 100;
+      weiwang = weiwang - weiwang2;
+      if (weiwang <= 0 )
+        weiwang = 0;
+      if (weiwang > 0)
+        msg += chinese_number(weiwang) + "点江湖威望、";
+      msg += "你所在同盟的威望提升了" + chinese_number(weiwang2) + "点、";
+    }
+
+  }
+
+  else if (weiwang > 0)
+    msg += chinese_number(weiwang) + "点江湖威望、";
+  msg += "能力得到了提升。\n" NOR;
+  tell_object(who, sort_msg(msg));
+// bonus
+  who->add("combat_exp", exp);
+  who->improve_potential(pot);
+//  who->add("potential", pot);
+  who->add("daoxing", daoxing);
+  who->add("experience", mar);
+  who->add("family/family_faith", gongxian);
+  who->add("score", score);
+  who->add("weiwang", weiwang);
+  if (stringp(type))
+  {
+    who->add("quest_info/"+ type + "/exp", exp);
+    who->add("quest_info/"+ type + "/pot", pot);
+    who->add("quest_info/"+ type + "/dx", daoxing);
+    who->add("quest_info/"+ type + "/experience", mar);
+    who->add("quest_info/"+ type + "/faith", gongxian);
+    who->add("quest_info/"+ type + "/score", score);
+    who->add("quest_info/"+ type + "/weiwang", weiwang);
+    who->add("quest_info/"+ type + "/weiwang_l", weiwang2);
+  }
+
+  if (weiwang2 > 0)
+    LEAGUE_D->add_league_fame(league_name, weiwang2);
+}
+
+// 普通工作任务的奖励
+varargs public void work_bonus(object who, mapping b,string type)
+{
+  int exp;                // 奖励的经验
+  int pot;                // 奖励的潜能
+  int daoxing;            // 奖励的道行
+  int mar;                // 奖励的实战体会
+  int gongxian;           // 奖励的门派贡献
+  int percent;            // 奖励的有效百分比
+  string msg;             // 奖励的描述信息
+  int score;              // 奖励的江湖阅历
+  int weiwang;            // 奖励的江湖威望
+  int logon_power;
+  string league_name;
+  int weiwang2, league_weiwang;
+  league_weiwang = who->query("league/set/weiwang");
+// 获得奖励的百分比
+  percent = b["percent"];
+  if (percent < 1 || percent > 200)
+    percent = 100;
+  logon_power = who->query("logon_power");
+/*
+  if (logon_power > 32400)
+    percent *= 2;
+  else if (logon_power > 21600);
+  else if (logon_power > 10800)
+    percent /= 2 ;
+  else
+    percent /= 4;
+*/
+  exp = b["exp"] * percent / 100;
+  pot = b["pot"] * percent / 100;
+  daoxing = b["daoxing"] * percent / 100;
+  mar = b["mar"]* percent / 100;
+  gongxian = b["gongxian"] * percent / 100;
+  score = b["score"] * percent / 100;
+  weiwang = b["weiwang"] * percent / 100;
+
+// 生成提示信息
+  if (stringp(msg = b["prompt"]))
+    msg = HIC "\n" + msg + HIC "，你获得了";
+  else
+    msg = HIC "\n通过这次锻炼，你获得了";
+  if (exp > 0)
+    msg += chinese_number(exp) + "点经验、";
+  if (pot > 0)
+    msg += chinese_number(pot) + "点潜能、";
+  if (mar > 0)
+    msg += chinese_number(mar) + "点实战体会、";
+  if (daoxing > 0)
+    msg += XYJTIME_D->check_daoxing(daoxing) + "道行、";
+  if (score > 0)
+    msg += chinese_number(score) + "点江湖阅历、";
+  if (stringp(league_name = who->query("league/league_name")) && league_weiwang)
+  {
+    if (weiwang > 0)
+    {
+      weiwang2 = weiwang * league_weiwang / 100;
+      weiwang = weiwang - weiwang2;
+      if (weiwang <= 0 )weiwang = 0;
+      if (weiwang > 0)msg += chinese_number(weiwang) + "点江湖威望、";
+      msg += "你所在同盟的威望提升了" + chinese_number(weiwang2) + "点、";
+    }
+
+  }
+
+  else  if (weiwang > 0) msg += chinese_number(weiwang) + "点江湖威望、";
+  msg += "能力得到了提升。\n\n" NOR;
+  tell_object(who, sort_msg(msg));
+  who->add("combat_exp", exp);
+  who->improve_potential(pot);
+//  who->add("potential", pot);
+  who->add("daoxing", daoxing);
+  who->add("experience", mar);
+  who->add("family/family_faith", gongxian);
+  who->add("score", score);
+  who->add("weiwang", weiwang);
+  if (stringp(type))
+  {
+    who->add("work/"+ type + "/exp", exp);
+    who->add("work/"+ type + "/pot", pot);
+    who->add("work/"+ type + "/dx", daoxing);
+    who->add("work/"+ type + "/experience", mar);
+    who->add("work/"+ type + "/faith", gongxian);
+    who->add("work/"+ type + "/score", score);
+    who->add("work/"+ type + "/weiwang", weiwang);
+    who->add("work/"+ type + "/weiwang_l", weiwang2);
+  }
+
+  if (weiwang2 > 0)
+    LEAGUE_D->add_league_fame(league_name, weiwang2);
+}
+
+// 中断性质自由任务的奖励
+varargs public void freequest_bonus(object who)
+{
+  object gift;
+  int quest;              // 当前任务数量
+  int exp;                // 奖励的经验
+  int pot;                // 奖励的潜能
+  int mar;                // 奖励的实战体会
+  int daoxing;            // 奖励的实战体会
+  string msg;             // 奖励的描述信息
+  quest = (int)who->query("quest_count");
+  exp = quest + random(quest) + 300;
+  pot = random(exp);
+  mar = pot;
+  daoxing = exp/2 + random(exp);
+  msg = HIC "\n你在这次的历练过程中，对武学似乎又有了新的突破。你获得了" +
+            chinese_number(exp) + "点经验、" +
+            chinese_number(pot) + "点潜能和实战体会及" +
+            XYJTIME_D->check_daoxing(daoxing) + "道行。\n" NOR;
+  tell_object(who, sort_msg(msg));
+// bonus
+  who->add("combat_exp", exp);
+  who->improve_potential(pot);
+//  who->add("potential", pot);
+  who->add("experience", mar);
+  who->add("daoxing", daoxing);
+  who->add("quest_xyj/freequest_need", -1);
+  if (who->query("quest_xyj/freequest_need") < 1)
+  {
+     who->delete("quest_xyj/freequest");
+     message_sort(HIW "\n正在这时，只见一位" +
+                       who->query("family/family_name") +
+                       "弟子急急忙忙赶到$N" HIW "身边，说"
+                       "道：“原来你在这里啊，师傅正到处派"
+                       "人找你呢。听说有要紧事交给你办，你"
+                       "赶快回去吧！这个包裹是师傅让我转交"
+                       "给你的。”\n" NOR, who);
+     message_sort("\n" + who->query("family/family_name") +
+                             "弟子拿出一个包裹递给$N。\n\n" +
+                             who->query("family/family_name") +
+                             "弟子急急忙忙地离开了。\n" NOR, who);
+    gift = new("/obj/questnpc/obj/bag");
+    gift->set("owner",who->query("id"));
+    gift->move(who, 1);
+  }
+
+}
+
+// 特殊事件的奖励
+varargs public void gift_bonus(object who, mapping b)
+{
+  int exp;                // 奖励的经验
+  int pot;                // 奖励的潜能
+  int mar;                // 奖励的实战体会
+  int daoxing;            // 奖励的道行
+  int gongxian;           // 奖励的门派贡献
+  int score;              // 奖励的江湖阅历
+  int weiwang;            // 奖励的江湖威望
+  int percent;            // 奖励的有效百分比
+  string msg;             // 奖励的描述信息
+  string temp;            // 进程记录信息
+  int league_weiwang;     // 分给同盟的威望百分比
+  int weiwang2;           // 同盟因该得的威望点
+  int logon_power;
+  string league_name;
+  league_weiwang = who->query("league/set/weiwang");
+// 获得奖励的百分比
+  percent = b["percent"];
+  if (percent < 1 || percent > 200)
+    percent = 100;
+  logon_power = who->query("logon_power");
+/*
+  if (logon_power > 32400)
+    percent *= 2;
+  else if (logon_power > 21600);
+  else if (logon_power > 10800)
+    percent /= 2 ;
+  else
+    percent /= 4;
+*/
+// 进程记录，针对第一次完成有奖励的情节
+  temp = b["temp"];
+  exp = b["exp"] * percent / 100;
+  pot = b["pot"] * percent / 100;
+  mar = b["mar"] * percent / 100;
+  daoxing = b["daoxing"] * percent / 100;
+  gongxian = b["gongxian"] * percent / 100;
+  score = b["score"] * percent / 100;
+  weiwang = b["weiwang"] * percent / 100;
+// 生成谣言信息
+  if (stringp(msg = b["rumor"]))
+  {
+     shout(HIR "【传闻】" NOR + WHT "听说" +
+               who->name() + WHT "[" + who->query("id") +
+               WHT "]" + msg + WHT "。\n" NOR);
+  }
+
+  if (! stringp(temp) || ! who->query(temp))
+  {
+// 生成提示信息
+    if (stringp(msg = b["prompt"]))
+       msg = HIW "\n" + msg + HIW "，你获得了";
+    else
+       msg = HIW "\n通过此次经历，你获得了";
+// 记录下进程
+    if (stringp(temp))
+      who->add(temp, 1);
+    if (exp > 0)
+      msg += chinese_number(exp) + "点经验、";
+    if (pot > 0)
+      msg += chinese_number(pot) + "点潜能、";
+    if (mar > 0)
+      msg += chinese_number(mar) + "点实战体会、";
+    if (daoxing > 0)
+      msg += XYJTIME_D->check_daoxing(daoxing) + "道行、";
+    if (gongxian > 0)
+      msg += chinese_number(gongxian) + "点门派贡献、";
+    if (score > 0)
+      msg += chinese_number(score) + "点江湖阅历、";
+    if (stringp(league_name = who->query("league/league_name")) && league_weiwang)
+    {
+      if (weiwang > 0)
+      {
+        weiwang2 = weiwang * league_weiwang / 100;
+        weiwang = weiwang - weiwang2;
+        if (weiwang <= 0 )weiwang = 0;
+        if (weiwang > 0)
+          msg += chinese_number(weiwang) + "点江湖威望、";
+        msg += "你所在同盟的威望提升了" + chinese_number(weiwang2) + "点、";
+      }
+
+    }
+
+    else  if (weiwang > 0)
+      msg += chinese_number(weiwang) + "点江湖威望、";
+
+    msg += "能力得到了提升。\n" NOR;
+    tell_object(who, sort_msg(msg));
+
+// bonus
+    who->add("combat_exp", exp);
+  who->improve_potential(pot);
+//  who->add("potential", pot);
+    who->add("experience", mar);
+    who->add("daoxing", daoxing);
+    who->add("family/family_faith", gongxian);
+    who->add("score", score);
+    who->add("weiwang", weiwang);
+    if (weiwang2 > 0)
+      LEAGUE_D->add_league_fame(league_name, weiwang2);
+  }
+
+}
+

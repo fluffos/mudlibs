@@ -1,0 +1,373 @@
+// chaxun.c
+// Modified by snowman@SJ 16/03/2000
+#include <ansi.h>
+inherit F_CLEAN_UP;
+mapping valid_type = ([
+  "axe"     : "斧法",
+  "blade"   : "刀法",
+  "dagger"  : "短兵刃",
+  "dodge"   : "轻功",
+  "force"   : "内功",
+  "hammer"  : "锤法",
+  "mace"    : "锏法",
+  "parry"   : "招架",
+  "spear"   : "枪法",
+  "spells"  : "法术",
+  "staff"   : "杖法",
+  "stick"   : "棒法",
+  "sword"   : "剑法",
+  "throwing": "暗器",
+  "unarmed" : "拳脚",
+  "whip"    : "鞭法",
+]);
+string skill_enables(object sk);
+int sort_skill(string file)
+{
+  int i;
+  if ( !sscanf(file, "%*s.lpc") )
+    return 0;
+  if (sscanf(file, "%*s.c.bak") )
+    return 0;
+
+  i = strlen(file);
+  while(i--)
+  {
+   if( file[i] == '.' )
+     continue;
+   if( file[i] < 'a' || file[i] > 'z' )
+     return 0;
+  }
+
+  return 1;
+}
+
+int main(object me, string arg)
+{
+  mapping lrn;
+  string exert, str, *file;
+  object sk;
+  int sk_level,i, j = 0;
+  string sk_name;
+  seteuid(getuid());
+  if(!arg)
+    return notify_fail("指令格式 : chaxun [武功名称].[?|特殊技能]\n");
+
+  sscanf(arg, "%s.%s", arg, str);
+  sk_level = me->query_skill(arg,1);
+  if(!sk_level)
+    return notify_fail("你要查对什么技能？\n");
+
+  if(file_size(SKILL_D(arg)+".lpc") < 1)
+    return notify_fail("错误！你要查对技能文件已经消失，请通知巫师。\n");
+
+  if( stringp(str) )
+  {
+    if( str == "?" )
+    {
+      return SKILL_D(arg)->help(me);
+    }
+
+    else if(stringp(exert = SKILL_D(arg)->exert_function_file(""))
+         && !find_object(exert + str +".lpc")
+         && !load_object(exert + str +".lpc")
+         && file_size(exert + str +".lpc") > 0)
+    {
+      notify_fail("对不起，"+to_chinese(arg)+"内功方面的「"+str+"」功能没有详细的说明。\n");
+      return (exert + str)->help(me);
+    }
+
+    else if( stringp(exert = SKILL_D(arg)->perform_action_file(""))
+         && !find_object(exert + str +".lpc")
+         && !load_object(exert + str +".lpc")
+         && file_size(exert + str +".lpc") > 0)
+    {
+      notify_fail("对不起，"+to_chinese(arg)+"外功方面的「"+str+"」功能没有详细的说明。\n");
+      return (exert + str)->help(me);
+    }
+
+    else if( stringp(exert = SKILL_D(arg)->cast_spell_file(""))
+         && !find_object(exert + str +".lpc")
+         && !load_object(exert + str +".lpc")
+         && file_size(exert + str +".lpc") > 0)
+    {
+      notify_fail("对不起，"+to_chinese(arg)+"外功方面的「"+str+"」功能没有详细的说明。\n");
+      return (exert + str)->help(me);
+    }
+
+    return notify_fail("对不起，"+to_chinese(arg)+"没有「"+str+"」这项功能。\n");
+  }
+
+  lrn = me->query_learned();
+  if( !mapp(lrn) || sizeof(lrn) == 0 )
+    lrn = ([]);
+
+  str = sprintf("\n┌%-40s─────────────────────┐\n",
+                HIW"【"+to_chinese(arg)+"功能表】"NOR);
+  str = replace_string(str, "  ", "─");
+  str += sprintf("│"HIY"等级"NOR"：  %s %3d/%6d\t      "HIY"类别"NOR"：  %-15s%9s  \n",
+                 SKILL_D(arg)->level_description(sk_level),
+                 sk_level,
+                 (int)lrn[arg],
+                 SKILL_D(arg)->type(),
+                 "│");
+
+  if((SKILL_D(arg)->type() != "martial" && SKILL_D(arg)->type() != "magic")
+     || member_array(arg, keys(valid_type))!=-1)
+    return notify_fail(str+"└─────────────────────────────────┘\n");
+
+  str += "│\t\t\t\t\t\t\t\t    │\n";
+  sk = load_object(SKILL_D(arg));
+
+  exert = skill_enables(sk);
+  if(exert != "")
+  {
+    str += exert;
+    i++;
+  }
+
+  if( stringp(exert = SKILL_D(arg)->exert_function_file("")) )
+  {
+    file = get_dir(exert);
+    if( sizeof(file) > 0)
+    {
+      file  = filter_array(file, (: sort_skill :) );
+      j = sizeof(file);
+    }
+
+  }
+
+  if(j && j > 0)
+  {
+    str = str + "├─────────────────────────────────┤\n";
+    str += "│"HIY"内功方面(exert + )"NOR"：\t\t\t\t\t\t    ";
+    for(i=0; i < j; i++)
+    {
+      if (i % 4 == 0)
+      {
+      	if (i > 3)
+      	  str += "\t\t\t\t    │\n│\t";
+      	else
+          str += "│\n│\t";
+      }
+
+      sk_name = replace_string(file[i], ".lpc", "");
+      if (me->query("family/can_exert/" + sk_name) ||
+          me->query("common/can_exert/" + sk_name))
+        str += sprintf("%-14s ",HIW+sk_name+NOR);
+      else
+        str += sprintf("%-14s ",YEL+sk_name+NOR);
+      if ( i > j-2 )
+      {
+        switch(i%4)
+        {
+          case 0 :
+            str +="\t\t\t\t\t            ";
+            break;
+          case 1 :
+            str +="\t\t\t            ";
+            break;
+          case 2 :
+            str +="\t\t    ";
+            break;
+          default :
+            break;
+        }
+
+      }
+
+    }
+
+    str += "\t    │\n";
+    j = 0;
+  }
+
+  if( stringp(exert = SKILL_D(arg)->perform_action_file("")))
+  {
+    file = get_dir(exert);
+    if( sizeof(file) > 0)
+    {
+      file  = filter_array(file, (: sort_skill :) );
+      j = sizeof(file);
+    }
+
+  }
+
+  if(j && j > 0)
+  {
+    if( i )
+      str = str + "├─────────────────────────────────┤\n";
+    str += "│"HIY"外功方面(perform+)"NOR"：\t\t\t\t\t\t    ";
+    for(i=0; i < j; i++)
+    {
+      if (i % 4 == 0)
+      {
+      	if (i > 3)
+      	  str += "\t\t\t\t    │\n│\t";
+      	else
+          str += "│\n│\t";
+      }
+
+      sk_name = replace_string(file[i], ".lpc", "");
+      if (me->query("family/can_pfm/" + sk_name) ||
+          me->query("common/can_pfm/" + sk_name))
+        str += sprintf("%-14s ",HIW+sk_name+NOR);
+      else
+        str += sprintf("%-14s ",YEL+sk_name+NOR);
+      if ( i > j-2 )
+      {
+        switch(i%4)
+        {
+          case 0 :
+            str +="\t\t\t\t\t            ";
+            break;
+          case 1 :
+            str +="\t\t\t            ";
+            break;
+          case 2 :
+            str +="\t\t    ";
+            break;
+          default :
+            break;
+        }
+
+      }
+
+    }
+
+    str += "\t    │\n";
+    j = 0;
+  }
+
+  if( stringp(exert = SKILL_D(arg)->cast_spell_file("")))
+  {
+    file = get_dir(exert);
+    if( sizeof(file) > 0)
+    {
+      file  = filter_array(file, (: sort_skill :) );
+      j = sizeof(file);
+    }
+
+  }
+
+  if(j && j > 0)
+  {
+    if( i )
+      str = str + "├─────────────────────────────────┤\n";
+    str += "│"HIY"法术方面(cast + ) "NOR"：\t\t\t\t\t\t    ";
+    for(i=0; i < j; i++)
+    {
+      if (i % 4 == 0)
+      {
+      	if (i > 3)
+      	  str += "\t\t\t\t    │\n│\t";
+      	else
+          str += "│\n│\t";
+      }
+
+      sk_name = replace_string(file[i], ".lpc", "");
+      if (me->query("family/can_cast/" + sk_name) ||
+          me->query("common/can_cast/" + sk_name))
+        str += sprintf("%-14s ",HIW+sk_name+NOR);
+      else
+        str += sprintf("%-14s ",YEL+sk_name+NOR);
+      if ( i > j-2 )
+      {
+        switch(i%4)
+        {
+          case 0 :
+            str +="\t\t\t\t\t            ";
+            break;
+          case 1 :
+            str +="\t\t\t            ";
+            break;
+          case 2 :
+            str +="\t\t    ";
+            break;
+          default :
+            break;
+        }
+
+      }
+
+    }
+
+    str += "\t    │\n";
+  }
+
+  str += "└─────────────────────────────────┘\n";
+  write(str);
+  return 1;
+}
+
+string skill_enables(object sk)
+{
+  int i, j;
+  string str, *skills;
+  skills = keys(valid_type);
+
+  for(i=0; i < sizeof(skills); i++)
+  {
+    if (sk->valid_enable(skills[i]))
+      continue;
+    skills[i] = 0;
+  }
+
+  skills -= ({ 0 });
+  j = sizeof(skills);
+  if( !j || j < 1)
+    return "";
+  str = "│"HIY"特殊技能"NOR"：\t\t\t\t\t\t\t    ";
+
+  for(i=0; i < j; i++)
+  {
+    if (i % 4 == 0)
+      str += "│\n│\t";
+    str += sprintf("%-14s ", HIC+valid_type[skills[i]]+"("+skills[i]+")"NOR);
+    if ( i > j-2 )
+    {
+      switch(i%4)
+      {
+        case 0 :
+          str +="\t\t\t\t\t            ";
+          break;
+        case 1 :
+          str +="\t\t\t            ";
+          break;
+        case 2 :
+          str +="\t\t\t    ";
+          break;
+        default :
+          break;
+      }
+
+    }
+
+  }
+
+  str += "│\n";
+  return str;
+}
+
+int help(object me)
+{
+  write("\n指令格式 : chaxun [武功名称].[绝招名称 | ?]\n");
+  write(@HELP
+这个指令可以让你查询此项技能的功能和数据。
+特殊技能表示可以 enable 的技能，如：
+        (轻功、招架、棍法、杖法) 表示：此武功可以用作轻功，招架，棍法，杖法等。
+内功方面显示可运用(exert)的内功。
+外功方面显示可使用(perform)的外功，绝招等。
+如果内功或外功的绝招有帮助介绍，可用 chaxun skill.pfm 的形式来查看。
+如：    chaxun taiji-quan.dongjing  查看动静决
+        chaxun yinyun-ziqi.yinyun   查看氤氲内聚
+        chaxun taiji-quan.?         查看太极拳
+Snowman@SJ 06/04/1999
+Copyright 1997-2000 ShuJian MUD Wizard Group.
+All rights reserved.
+
+Visit our Homepage at - www.mymud.com
+
+HELP);
+  return 1;
+}
+

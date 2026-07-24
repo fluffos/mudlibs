@@ -1,0 +1,73 @@
+#include <ansi.h>
+#include <combat.h>
+#define HUO "「" HIY "赤焰暴长" NOR "」"
+inherit F_SSERVER;
+string final(object me, object target, int damage);
+int valid_pfm(object me, object target)
+{
+  if(userp(me) && (string)me->query("family/family_name") != "火云洞")
+    return notify_fail(HUO"是火云洞不传之密！\n");
+  if (me->is_busy())
+    return notify_fail("你正忙着呢！\n");
+
+  if (me->query_skill("lieyan-spear", 1) < 100)
+    return notify_fail("你的烈焰枪修为不够，难以施展" HUO "。\n");
+  if (me->query_skill("huomoforce", 1) < 100)
+    return notify_fail("你的火魔心法修为不够，难以施展" HUO "。\n");
+  if (me->query_skill_mapped("spear") != "lieyan-spear")
+    return notify_fail("你没有激发烈焰枪，难以施展" HUO "。\n");
+  if (me->query_skill_mapped("force")!="huomoforce")
+    return notify_fail(HUO"必须配合火魔心法才能使用。\n");
+  if (me->query("force") < 200)
+    return notify_fail("你的真气不够，难以施展" HUO "。\n");
+  if ((int)me->query("max_force") < 1000)
+    return notify_fail("你的内力修为不够，难以施展" HUO "。\n");
+  return 1;
+}
+
+int perform(object me, object target)
+{
+  object weapon;
+  string msg;
+  int damage;
+  if (! objectp(weapon = me->query_temp("weapon"))
+     || (string)weapon->query("skill_type") != "spear")
+                return notify_fail("你使用的武器不对，无法施展" HUO "。\n");
+  msg = HIY "$N" HIY "凝神聚气，将全身之力注入" + weapon->name() +
+        HIY "枪身顺势直刺，顿时一股凌厉的寒芒直贯$n" HIY "而去。\n"
+        NOR;
+  if (COMBAT_D->perform_success(me, target,
+                                "spear",
+                                "parry",
+                                110))
+  {
+    damage = me->query_skill("spear");
+    damage = damage*2/3 + random(damage);
+    me->add("force",-100);
+    msg += COMBAT_D->do_damage(me, target, WEAPON_ATTACK, damage, 40,
+                             (: final, me, target, damage :));
+  }
+
+  else
+  {
+    me->add("force",-50);
+    msg += HIC "可$n" HIC "却是镇定逾恒，一丝不乱，"
+               "全神将此招化解开来。\n" NOR;
+  }
+
+  message_combatd(msg, me, target);
+  me->start_busy(1 + random(3));
+  return 1;
+}
+
+string final(object me, object target, int damage)
+{
+  int lvl = me->query_skill("huomoforce", 1);
+  target->affect_by("fire_poison",
+          ([ "level"    : lvl/3 + random(lvl),
+             "id"       : me->query("id"),
+             "duration" : lvl/100 + random(lvl/50 + 1) ]));
+  return  HIR "只听$n" HIR "一声惨叫，被这一枪扎个正着，伤口"
+              "深可见骨，鲜血四处飞溅，一股火辣辣的灼痛直钻心底！\n" NOR;
+}
+

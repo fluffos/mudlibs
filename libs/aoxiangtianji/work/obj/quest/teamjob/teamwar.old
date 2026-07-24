@@ -1,0 +1,705 @@
+// 团体战争任务：teamwar.c
+#include <ansi.h>
+#include <teamjob.h>
+inherit TEAMJOB_OB;
+#define QIN "/job/teamjob/teamwar/npc/yuanshuai"
+#define LEADER_FLAG "/job/teamjob/teamwar/obj/junqi"
+#define WARFIELD "/job/teamjob/teamwar/"
+#define MEM_NUM 5
+object marshal = 0;
+int tick_count;
+string *retreat_p = ({
+  "/d/guanwai/laolongtou",
+  "/d/hangzhou/eroad2",
+  "/d/lanzhou/west1",
+  "/d/lingzhou/hetao",
+});
+object query_marshal();
+void start_teamjob();
+private void check_teamjob();
+void choose_leader();
+void give_leader_flag();
+string join_job(object who);
+ongoing_teamwar();
+void finish_teamwar();
+void end_teamwar();
+// 任务对象创建
+void create()
+{
+  seteuid(getuid());
+  set_id("teamwar");
+  set("channel_id", "团队战争");
+  setup();
+}
+void init_quest(string qob_name)
+{
+  set_name("团队战争");
+  set("live_time",1500);
+  tick_count = 0;
+  set_heart_beat(1);
+}
+void stop()
+{
+  set_heart_beat(0);
+}
+void end_teamjob()
+{
+  stop();
+  ::end_teamjob();
+}
+private void heart_beat()
+{
+  if (! find_object(TEAMJOB_D))
+    return;
+  switch (query_status())
+  {
+    case TEAMJOB_CREATE :
+      tick_count++;
+      start_teamjob();
+      break;
+
+    case TEAMJOB_READY :
+      break;
+
+    case TEAMJOB_ONGOING :
+      ongoing_teamwar();
+      break;
+
+    case TEAMJOB_FINISH :
+      break;
+
+    case TEAMJOB_ERROR :
+      end_teamwar();
+      end_teamjob();
+  }
+  check_teamjob();
+  return;
+}
+object get_marshal()
+{
+  object where;
+
+  where = find_object("/d/huanggong/jjc");
+  if (!objectp(where))
+    where = load_object("/d/huanggong/jjc");
+  if (!objectp(where))
+  {
+    end_teamjob();
+    return 0;
+  }
+  marshal = present("da yuanshuai",where);
+  return marshal;
+}
+void start_teamjob()
+{
+  string msg;
+  object ob,*obs;
+  get_marshal();
+  if (!objectp(marshal))
+    marshal = find_object(QIN);
+  if (!objectp(marshal))
+    marshal = load_object(QIN);
+  if (!objectp(marshal))
+  {
+    end_teamjob();
+    return;
+  }
+  if (!objectp(environment(marshal)))
+    marshal->move("/d/huanggong/jjc");
+  if (query_status() != TEAMJOB_CREATE)
+    return;
+
+  obs = filter_array(users(),
+        (: $1->query("office_number") >= 500 &&
+           $1->query("level") > 30 &&
+           ! $1->is_ghost() &&
+           ! $1->is_in_prison() &&
+           ! wizardp($1) &&
+           environment($1) :));
+
+  if (time() - (int)query("start_time") > TEAMJOB_CREATE_PERIOD*60 ||
+      !arrayp(obs) ||
+      sizeof(obs) < 5)
+  {
+    msg = HIG"国家有难，竟然无人可用，实在是危险啊！\n"NOR;
+    message("system",HIY"〖" + HIW"大唐元帅" HIY"〗" NOR + msg,users());
+    end_teamjob();
+    if (this_object())
+      destruct(this_object());
+    return;
+  }
+  if (tick_count < 90)
+    return;
+  if (TEAMJOB_D->query_member_number(this_object()) >= MEM_NUM)
+    return;
+
+  tick_count = 0;
+  msg = HIR "国家边防有敌来犯！有意投军报效国家，请到 "HIY"校军场" HIR" 投军！\n"NOR;
+  message("system",HIY"〖" + HIW"大唐元帅" HIY"〗" NOR + msg,users());
+  obs = filter_array(obs, (: !TEAMJOB_D->is_teamjob_member($1, this_object()) :));
+  foreach (ob in obs)
+    tell_object(ob,"大元帅告诉你：有意从军，请速到长安校军场报名从军！\n");
+}
+string join_job(object who)
+{
+  string msg;
+  string team_flag;
+  mapping teamwar;
+  int add;
+  get_marshal();
+  if (!objectp(marshal))
+  {
+    end_teamjob();
+    return "";
+  }
+  if (!objectp(environment(marshal)))
+    marshal->move("/d/huanggong/jjc");
+  if (TEAMJOB_D->is_teamjob_member(who, this_object()))
+    return "你已经加入了！\n";
+
+  if (who->query("office_number") < 500)
+   return "你的官职不够！\n";
+  if (who->query("level") < 30)
+   return "你的战斗等级还不够！\n";
+
+  if (TEAMJOB_D->query_member_number(this_object()) >= MEM_NUM)
+    return "本次任务人手已经够了！\n";
+
+  team_flag = TEAMJOB_D->query_teamjob_flag(this_object());
+  if (stringp(team_flag) && who->query_temp(team_flag))
+    return "你上次的任务完成了吗？\n";
+
+  teamwar = who->query_temp("teamwar");
+  if (mapp(teamwar) && sizeof(teamwar) > 0)
+    return "你上次团队战争的任务还没有给个交待了！\n";
+  add = TEAMJOB_D->add_teamjob_member(who, this_object());
+  if (add < 0)
+    return "你已经加入了啊！\n";
+  else if (add == 0)
+    return "嗯，本次任务好象莫名中断了！\n";
+
+  msg = sprintf(HIW"%s" HIW"在国家危难之时，奋然投军报效国家！"
+                "真不愧为英雄儿女！\n"NOR,who->name());
+  marshal->command("chat " + msg);
+  tell_object(who,"你加入了团队，将和队友们共同面对未来的危险和挑战！\n");
+  message_vision("$N自愿加入了团队！\n",who);
+  if (TEAMJOB_D->query_member_number(this_object()) == MEM_NUM)
+    choose_leader();
+  return "真是太好了！\n";
+}
+void choose_leader()
+{
+  object ob, leader, *obs;
+  int score, max_score;
+  string msg;
+  get_marshal();
+  if (!objectp(marshal))
+  {
+    end_teamjob();
+    return;
+  }
+  if (!objectp(environment(marshal)))
+    marshal->move("/d/huanggong/jjc");
+
+  obs = TEAMJOB_D->query_member(this_object());
+  score = 0;
+  max_score = 0;
+  foreach (ob in obs)
+  {
+    score = ob->query("level") * (ob->query("office_number")/50 + 1);
+    if (max_score < score)
+    {
+      max_score = score;
+      leader = ob;
+    }
+  }
+  if (TEAMJOB_D->set_leader(leader,this_object()) > 0)
+  {
+    msg = HIM + leader->name() + HIM"被任命为本次任务的元帅！希望大家听从指挥，同心协力为国立功！\n"NOR;
+    TEAMJOB_D->message_team(this_object(),msg);
+    give_leader_flag();
+  }
+  else
+  {
+    msg = HIM"指定元帅失败了，本次任务取消！请各位把过程log下来，发给yekai！\n"NOR;
+    TEAMJOB_D->message_team(this_object(),msg);
+    log_file("teamwar",sprintf("[%s] : 无法指定元帅。\n",ctime(time())));
+  }
+}
+void give_leader_flag()
+{
+  string msg,r_p;
+  object junqi;
+  object leader, ob, tmp, wp;
+  object *obs, *flags;
+
+  get_marshal();
+  if (!objectp(marshal))
+  {
+    end_teamjob();
+    return;
+  }
+  if (!objectp(environment(marshal)))
+    marshal->move("/d/huanggong/jjc");
+
+  leader = TEAMJOB_D->query_teamjob_leader(this_object());
+  obs = TEAMJOB_D->query_member(this_object());
+  if (!objectp(leader))
+  {
+    msg = HIM"指定的元帅失踪？怎么找不到了？\n"NOR;
+    TEAMJOB_D->message_team(this_object(),msg);
+    if (TEAMJOB_D->query_member_number(this_object()) == MEM_NUM)
+    {
+      msg = HIC"本次任务取消了！\n"NOR;
+      TEAMJOB_D->message_team(this_object(),msg);
+      end_teamjob();
+      return;
+    }
+    else
+    {
+      msg = HIC"队伍成员不够了，只得取消！\n"NOR;
+      TEAMJOB_D->message_team(this_object(),msg);
+      end_teamjob();
+      return;
+    }
+  }
+
+  if (!arrayp(obs) || sizeof(obs) < MEM_NUM)
+  {
+    msg = HIC"有成员退出了，本次任务取消！\n"NOR;
+    TEAMJOB_D->message_team(this_object(),msg);
+    end_teamjob();
+    return;
+  }
+  if (TEAMJOB_D->start_teamjob(this_object()) < 1)
+  {
+    msg = HIC"系统无法启动任务，本次任务只能取消！\n"NOR;
+    TEAMJOB_D->message_team(this_object(),msg);
+    change_status(TEAMJOB_ERROR);
+    end_teamjob();
+    return;
+  }
+
+  flags = children(LEADER_FLAG);
+  if (arrayp(flags) && sizeof(flags) > 0)
+    foreach (junqi in flags)
+      destruct(junqi);
+  message_vision(marshal->name() + "授予$N一面军旗！\n",leader);
+  tell_object(leader,"你获得了一面军旗。请help junqi查看使用方法！\n");
+  r_p = retreat_p[random(sizeof(retreat_p))];
+  tmp = find_object(r_p);
+  if (!objectp(tmp))
+    tmp = load_object(r_p);
+  message_vision(marshal->name() + "一拱手，希望大家在$N的指挥下，圆满完成本次任务！\n",leader);
+  foreach (ob in obs)
+  {
+    if (!objectp(ob))
+      continue;
+    ob->set_temp("teamwar/in_warfield",1);
+    ob->set_temp("teamwar/leader",leader);
+    ob->set_temp("teamwar/retreat_p",r_p);
+    tell_object(ob,"一旦战事不利，将撤退前往 " + tmp->query("short") + " ！\n");
+  }
+  junqi = new(LEADER_FLAG);
+  junqi->set("leader",leader);
+  junqi->set("owner",leader->query("id"));
+  junqi->move(leader,1);
+  message_vision(marshal->name() + "授予$N一面军旗！\n",leader);
+  tell_object(leader,"你获得了一面军旗。请help junqi查看使用方法！\n");
+  msg = sprintf(HIW"%s" HIW"领兵出征了！祝愿他们旗开得胜！\n"NOR,leader->name());
+  marshal->command("chat " + msg);
+  r_p = sprintf(WARFIELD + "warplace%d",1+random(21));
+  wp = find_object(r_p);
+  if (!objectp(wp))
+    wp = load_object(r_p);
+  if (!objectp(wp))
+  {
+    log_file("teamwar", sprintf("cannot found warplace : %s\n",r_p));
+    end_teamjob();
+    return;
+  }
+  foreach (ob in obs)
+  {
+    ob->move(wp,1);
+    tell_object(ob,"你被送到了战场！如果你不是本次行动领军人，请听从领军的安排！\n");
+  }
+  tick_count = 0;
+  change_status(TEAMJOB_READY);
+  return;
+}
+void end_teamwar()
+{
+  object qob, ob, *obs;
+  object leader,leader_flag;
+
+  qob = this_object();
+  if (!objectp(qob))
+    return;
+  leader = TEAMJOB_D->query_teamjob_leader(this_object());
+  obs = TEAMJOB_D->query_member(qob);
+  obs = filter_array(obs, (: $1->query_temp("teamwar/in_warfield") &&
+                             environment($1) &&
+                             environment($1)->is_warfield() &&
+                             !$1->query_temp("teamwar/can_retreat") &&
+                             !$1->query_temp("teamwar/failure") :));
+
+  if (!arrayp(obs) || sizeof(obs) < 1)
+    return;
+
+  foreach (ob in obs)
+  {
+    ob->set_temp("teamwar/failure",1);
+    ob->set_temp("teamwar/can_retreat",1);
+  }
+}
+object create_tasknpc(object ob)
+{
+  object tasknpc, leader;
+
+  leader = TEAMJOB_D->query_teamjob_leader(this_object());
+
+  if (!objectp(ob) ||
+      !environment(ob) ||
+      !environment(ob)->is_warfield() ||
+      !ob->query_temp("teamwar/in_warfield") ||
+      ob->query_temp("teamwar/failure") ||
+      objectp(leader) ||
+      !environment(leader) ||
+      !environment(leader)->is_warfield() ||
+      !leader->query_temp("teamwar/in_warfield") ||
+      leader->query_temp("teamwar/failure"))
+    return 0;
+
+  tasknpc = new("/clone/questnpc/teamwar");
+  tasknpc->set("master_player",leader);
+  tasknpc->set("master_place",leader->query_temp("teamwar/camp_p"));
+  tasknpc->set("pteam",TEAMJOB_D->query_member(this_object()));
+  tasknpc->set_npc_family(0, 0, 0, 0);
+  if (random(5))
+  {
+   tasknpc->set_name("小兵",({"xiao bing","bing"}));
+   NPC_D->set_from_me(tasknpc, ob, 80 + random(20));
+  }
+  else
+  {
+    tasknpc->set_name("将领",({"jiang ling","jiang", "leader"}));
+    NPC_D->set_from_me(tasknpc, ob, 95 + random(15));
+  }
+  tasknpc->setup();
+  return tasknpc;
+}
+object choose_member()
+{
+  object qob,ob,member,leader, *obs;
+
+  qob = this_object();
+  obs = TEAMJOB_D->query_member(qob);
+  leader = TEAMJOB_D->query_teamjob_leader(qob);
+
+  if (!qob)
+    return 0;
+
+  if (!objectp(leader))
+  {
+    change_status(TEAMJOB_ERROR);
+    return 0;
+  }
+
+  if (!arrayp(obs) || sizeof(obs) < 1)
+    ob = leader;
+  else
+  {
+    ob = 0;
+    foreach (member in obs)
+    {
+      if (random(10) == 0)
+      {
+        ob = leader;
+        break;
+      }
+      if (member->is_fighting() && sizeof(member->query_enemy()) > 1)
+        continue;
+      if (!member->is_fighting())
+      {
+        ob = member;
+        break;
+      }
+    }
+    if (!objectp(ob))
+      ob = obs[random(sizeof(obs))];
+  }
+  return ob;
+}
+void ongoing_teamwar()
+{
+  object qob, ob,leader, tasknpc, *obs;
+  int cap_num;
+
+  qob = this_object();
+  obs = TEAMJOB_D->query_member(qob);
+  leader = TEAMJOB_D->query_teamjob_leader(qob);
+
+  if (!qob || qob->name() != "团队战争")
+    return;
+
+  if (!playerp(leader))
+  {
+    change_status(TEAMJOB_ERROR);
+    return;
+  }
+  if (tick_count == 0)
+  {
+    tick_count++;
+    foreach (ob in obs)
+    {
+      ob->set_temp("teamwar/stage","combat");
+      if (ob == leader)
+        continue;
+      if (ob->is_fighting())
+        continue;
+      tasknpc = create_tasknpc(ob);
+      if (objectp(tasknpc))
+        tasknpc->move(environment(ob));
+    }
+    return;
+  }
+  tick_count++;
+  if (tick_count > 30)
+    tick_count = 30;
+  if (tick_count + random(30) < 40)
+    return;
+  cap_num = 4 + random(3);
+  while(cap_num > 0)
+  {
+    cap_num--;
+    ob = choose_member();
+    if (!playerp(ob))
+      break;
+
+    tasknpc = create_tasknpc(ob);
+    if (!objectp(tasknpc))
+      continue;
+    if (ob == leader)
+    {
+      tell_object(leader,tasknpc->name() + "杀气腾腾的冲了过来！\n");
+      tasknpc->move(leader->query_temp("teamwar/camp_p"));
+    }
+    else
+    {
+      switch (random(5))
+      {
+        case 0 :
+          tell_object(ob,tasknpc->name() + "瞪着双眼就冲了上来！\n");
+          break;
+        case 1 :
+          tell_object(ob,tasknpc->name() + "冲上来就是一顿乱砍！\n");
+          break;
+        case 2 :
+          tell_object(ob,tasknpc->name() + "双眼通红，口中不停的喊着“杀”！\n");
+          break;
+        case 3 :
+          tell_object(ob,tasknpc->name() + "一眼发现了你，奋不顾身的就扑了过来！\n");
+          break;
+        default :
+          tell_object(ob,tasknpc->name() + "哈哈大笑，“原来倒霉鬼是你啊，明年就是你的周年了！”\n");
+      }
+      tasknpc->move(environment(ob));
+    }
+  }
+}
+void finish_teamwar()
+{
+  object qob,ob,leader,leader_flag, *obs;
+  int cap_num;
+  qob = this_object();
+  if (!qob || qob->name() != "团队战争")
+    return;
+
+  get_marshal();
+  if (!objectp(marshal))
+  {
+    change_status(TEAMJOB_ERROR);
+    return ;
+  }
+  if (!objectp(environment(marshal)))
+    marshal->move("/d/huanggong/jjc");
+  obs = TEAMJOB_D->query_member(qob);
+  leader = TEAMJOB_D->query_teamjob_leader(qob);
+
+  if (!leader || !arrayp(obs) || sizeof(obs) < 1)
+  {
+    change_status(TEAMJOB_ERROR);
+    return;
+  }
+  leader_flag = present("leader flag",leader);
+  if (!objectp(leader_flag))
+  {
+    change_status(TEAMJOB_ERROR);
+    return;
+  }
+
+  TEAMJOB_D->message_team(qob,"本次任务时间到了！请速去领军那里教令(finish)！\n");
+  cap_num = 0;
+  foreach (ob in obs)
+  {
+    cap_num += (int)ob->query_temp("teamwar/capture_num");
+    if (ob->is_fighting())
+    {
+      object opp, *enemy;
+      enemy = filter_array(ob->query_enemy(), (: $1->is_war_npc() :));
+      if (arrayp(enemy) && sizeof(enemy) > 0)
+      {
+        ob->remove_all_enemy(1);
+        foreach (opp in enemy)
+        {
+          opp->remove_all_enemy(1);
+          destruct(opp);
+        }
+      }
+    }
+  }
+  if (cap_num < 20)
+  {
+    TEAMJOB_D->message_team(qob,"简直是被浪费了时间。。。领导不力啊！\n");
+    marshal->command("chat 本次战斗，" + leader->name() + "贻误战机，实在是可恼，可恨！\n");
+  }
+  else if (cap_num < 50)
+  {
+    TEAMJOB_D->message_team(qob,"这次任务略有收获，不尽如人意！\n");
+    marshal->command("chat " + leader->name() + "领导的这次行动，略有收获！\n");
+  }
+  else if (cap_num < 90)
+  {
+    TEAMJOB_D->message_team(qob,"这次任务艰难取胜！算有收获！\n");
+    marshal->command("chat " + leader->name() + "领导的这次行动，胜利而回！\n");
+  }
+  else
+  {
+    TEAMJOB_D->message_team(qob,"这次任务大获全胜，收获颇丰！\n");
+    marshal->command("chat " + leader->name() + "领导的这次行动，大获全胜而回！\n");
+  }
+  set("finish_time",time());
+  foreach (ob in obs)
+  {
+    if (ob == leader)
+      continue;
+    ob->set_temp("teamwar/stage","finish");
+  }
+  return;
+}
+void check_teamjob()
+{
+  object qob;
+  object leader, ob,*obs;
+  object leader_flag;
+  string stage;
+  int t;
+
+  qob = this_object();
+
+  if (!objectp(qob) || qob->name() != "团队战争")
+    return;
+
+  if (! find_object(TEAMJOB_D))
+  {
+    CHANNEL_D->do_channel(qob, "sys", "不能发现/adm/daemons/teamjobd。\n");
+    return;
+  }
+
+  if (query_status() == TEAMJOB_CREATE)
+  {
+    return;
+  }
+  if (query_status() == TEAMJOB_ERROR)
+  {
+    CHANNEL_D->do_channel(qob, "sys", "当前状态是 ERROR，任务终止。\n");
+    end_teamwar();
+    end_teamjob();
+    return;
+  }
+//结束状态的检查
+  if (query_status() == TEAMJOB_FINISH &&
+      (time()- (int)query("finish_time")) > TEAMJOB_FINISH_PERIOD*60)
+  {
+    TEAMJOB_D->message_team(qob,"任务过期，本次任务被系统结束了！\n");
+    change_status(TEAMJOB_ERROR);
+    return;
+  }
+//成员和领军的检查
+  obs = TEAMJOB_D->query_member(qob);
+  leader = TEAMJOB_D->query_teamjob_leader(qob);
+
+  if (!arrayp(obs) ||
+      sizeof(obs) < 1 ||
+      !objectp(leader) ||
+      !environment(leader) ||
+      !environment(leader)->is_warfield() ||
+      !leader->query_temp("teamwar/in_warfield") ||
+      leader->query_temp("teamwar/failure"))
+  {
+    TEAMJOB_D->message_team(qob,"成员或者领军出错，本次任务被系统结束了！\n");
+    change_status(TEAMJOB_ERROR);
+    return;
+  }
+  foreach (ob in obs)
+  {
+    if (ob->query_temp("teamwar/in_warfield") &&
+        environment(ob) &&
+        environment(ob)->is_warfield() &&
+        !ob->query_temp("teamwar/failure"))
+      continue;
+
+    TEAMJOB_D->remove_teamjob_member(ob, qob);
+    ob->set_temp("teamwar/failure",1);
+    if (ob == leader)
+    {
+      TEAMJOB_D->message_team(qob, ob->name() + CYN"从战场撤退了，宣告本次任务失败了！\n"NOR);
+      change_status(TEAMJOB_FINISH);
+      return;
+    }
+  }
+//军旗的检查
+  leader_flag = present("leader flag",leader);
+  if (!objectp(leader_flag))
+  {
+    TEAMJOB_D->message_team(qob,leader->name() + "把军旗丢失了，本次任务结束了！！\n");
+    change_status(TEAMJOB_ERROR);
+    return;
+  }
+//时间是否到了?
+  t = TEAMJOB_D->query_teamjob_time(qob);
+  if (t < 1)
+  {
+    TEAMJOB_D->message_team(qob,"任务时间设定有错，本次任务被系统结束了！\n");
+    change_status(TEAMJOB_ERROR);
+    return;
+  }
+  if (t >= 900)
+  {
+    finish_teamwar();
+    return;
+  }
+//当前进展的状态
+  stage = (string)leader->query_temp("teamwar/stage");
+  switch (stage)
+  {
+    case "mass" :
+    case "combat" :
+      break;
+    case "ready" :
+      change_status(TEAMJOB_ONGOING);
+      TEAMJOB_D->message_team(qob,leader->name() + "下令开始战斗。战斗开始了！！\n");
+      break;
+    case "finish" :
+      TEAMJOB_D->message_team(qob,leader->name() + "下令准备班师！！\n");
+      tell_object(leader,"请使用success/kaixuan  来下令凯旋！\n");
+      break;
+    case "jobend" :
+      end_teamjob();
+      break;
+    default :
+      break;
+  }
+  set_heart_beat(1);
+  return;
+}

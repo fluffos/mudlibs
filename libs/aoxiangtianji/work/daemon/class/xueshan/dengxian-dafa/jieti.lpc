@@ -1,0 +1,97 @@
+#include <ansi.h>
+#include <combat.h>
+#define XUESHAN "「" HIR "天魔解体" NOR "」"
+inherit F_SSERVER;
+int valid_cast(object me, object target)
+{
+  if(userp(me) && (string)me->query("family/family_name") != "大雪山")
+    return notify_fail(sprintf("%s是大雪山不传之密！\n",XUESHAN));
+  if (me->is_busy())
+    return notify_fail("你正忙着呢！\n");
+
+  if (me->query_skill("dengxian-dafa", 1) < 180)
+    return notify_fail(sprintf("你的登仙大法修为不够，难以施展%s。\n",XUESHAN));
+
+  if( (int)me->query("max_mana") < 2200 )
+    return notify_fail(sprintf("你的法力修为不够，难以施展%s。\n",XUESHAN));
+
+  if( (int)me->query("force") < 100 )
+    return notify_fail("你的真气不够了。\n");
+  if((int)me->query("mana") < 50)
+    return notify_fail("你的法力不够！\n");
+  if((int)me->query("sen") < 100 )
+    return notify_fail("你无法集中精力！\n");
+
+  return 1;
+}
+
+int cast_attack(object me, object target)
+{
+  int success_adj;
+  int result;
+  int eff_kee, eff_sen, max_kee, max_sen, pcg;
+  string msg;
+  object ob;
+  if( !target ) target = offensive_target(me);
+  if( !target
+    ||   !target->is_character()
+    ||   target->is_corpse()
+    ||   target==me)
+    return notify_fail("你要和谁拼命？\n");
+
+  if (!target->is_fighting(me))
+    return notify_fail(sprintf("你没有和%s发生战斗，拼命干什么！\n",target->name()));
+  if (! target->is_want_kill(me->query("id")))
+    return notify_fail(sprintf("并不是%s想杀你，你怎么和他拼命？\n",target->name()));
+   ob = me->query_last_damage_from();
+   if (objectp(ob) && ob != target)
+     return notify_fail(sprintf("%s并没有把你怎么样，你为什么要和他拼命呢？\n",target->name()));
+
+   eff_kee = me->query("eff_kee");
+   max_kee = me->query("max_kee");
+   eff_sen = me->query("eff_sen");
+   max_sen = me->query("max_sen");
+
+   pcg = eff_kee*100/max_kee;
+   if (pcg >= 50)
+     return notify_fail("你还没有到山穷水尽时，拼命干什么？\n");
+   if (pcg < 1)
+     pcg = 1;
+   if( random(me->query("max_mana")) < 120 )
+   {
+     write("这一次好象不灵。\n");
+     return 1;
+   }
+
+   msg = HIC"$N" HIC"口中念了几句咒文，双手捧住脑袋，仰天发出一声悲嘶！\n\n"
+         "忽然间$N将自己舌头狠命一咬，一道血雾向$n" HIC"喷了过去！\n" NOR;
+  message_vision(msg, me, target);
+  success_adj = SKILL_D("dengxian-dafa")->query_power_effect(me);
+  success_adj += random(100) + success_adj*100/pcg;
+  result = SPELL_D->attacking_cast_success(me,target,success_adj);
+
+  me->die(target);
+  me->save();
+  target->start_busy(3);
+
+  if (result <= 0)
+  {
+    msg = HIR"结果血雾被$n" HIR"法力反激，反而罩住了$N" HIR"！\n$N"
+          HIR"长叹一声，身子一瘫，倒在地上。\n" NOR;
+    message_vision(msg, me, target);
+    me->start_busy(2+random(4));
+    return 1;
+  }
+
+  else
+  {
+    msg = HIR"结果血雾罩住了$N。" HIR"$N惨叫一声，身子一瘫，倒在地上。\n"NOR;
+    target->die(me);
+    target->save();
+    me->start_busy(4+random(5));
+    return 1;
+  }
+
+  return 1;
+}
+

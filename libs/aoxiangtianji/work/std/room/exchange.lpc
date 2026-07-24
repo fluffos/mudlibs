@@ -1,0 +1,206 @@
+#include <ansi.h>
+inherit BIGROOM;
+inherit LANDROOM;
+inherit SAFTYROOM;
+int is_business_room() {return 1;}
+
+int do_chaxun(string arg);
+int do_list();
+int do_buy(string arg);
+int do_sell(string arg);
+int do_invote(string arg);
+void create ()
+{
+  string city = domain_file(file_name(this_object()));
+
+  set ("short", to_chinese(city) + "交易所");
+  set ("long", @LONG
+这里是城中的交易所，联盟成员可以在这里进行大笔的交易。τ
+ｃｈａｘｕｎ  :  查询各类信息．τ
+ｌｉｓｔ      :  查看可以买卖的商品．τ
+ｂｕｙ        :  购买交易的商品．τ
+ｓｅｌｌ      :  卖掉你有的商品．τ
+ｉｎｖｏｔｅ  :  投标当前的招标项目．
+LONG);
+  setup();
+}
+
+void init()
+{
+  object who = this_player();
+
+  if (!playerp(who))
+    return;
+  add_action("do_chaxun", ({"chaxun","info"}));
+  add_action("do_list",({"list"}));
+  add_action("do_buy",({"buy"}));
+  add_action("do_sell",({"sell"}));
+  add_action("do_invote",({"invote","touzi"}));
+}
+
+int do_chaxun(string arg)
+{
+  string msg, type,str;
+  object who = this_player();
+
+  if (!playerp(who))
+    return 0;
+  if (environment(who) != this_object())
+    return 0;
+  if (who->is_busy())
+    return notify_fail("你正忙着呢。\n");
+  if (!arg)
+  {
+    write("可以查询如下种类的信息：\n");
+    write("\tchaxun | info [business]   查询商业信息。\n");
+    write("\tchaxun | info [invote]     查询投资招标信息。\n");
+    write("\tchaxun | info [storehouse] 查询仓库保管的货物信息。\n");
+    return 1;
+  }
+
+  if (sscanf(arg,"%s %s",type,str) != 2)
+  {
+    type = arg;
+    str = 0;
+  }
+
+  if (type != "business" &&
+      type != "invote" &&
+      type != "storehouse")
+  {
+    write("这里只能查询：business(商业)，invote(投资招标)，storehouse(仓库)的信息。\n");
+    return 1;
+  }
+
+  switch (type)
+  {
+    case "business" :
+      msg = BUSINESS_D->query_city_business_info(str);
+      break;
+    case "invote" :
+      msg = BUSINESS_D->query_invote_info(str);
+      break;
+    case "storehouse" :
+      msg = BUSINESS_D->query_my_goods_info(who);
+      break;
+  }
+
+  if (!stringp(msg))
+    return 0;
+  who->start_more(msg);
+  who->start_busy(2);
+  return 1;
+}
+
+int do_list()
+{
+  string league_id,city;
+  mapping goods;
+  int i;
+  string msg,class_str,*kg;
+  object who = this_player();
+  if (!playerp(who))
+    return 0;
+  if (environment(who) != this_object())
+    return 0;
+  if (who->is_busy())
+    return notify_fail("你正忙着呢。\n");
+  city = domain_file(file_name(this_object()));
+  league_id = LEAGUE_D->query_player_league_id(who);
+  if (!stringp(league_id))
+    return notify_fail("对不起，大宗交易只能对联盟成员开放。\n");
+  goods = BUSINESS_D->query_city_goods_info(city,league_id);
+  if (!mapp(goods) || sizeof(goods) < 1)
+    return notify_fail("这里还没有物品可以出售。\n");
+  msg = sprintf("%s交易所当前出售物品：\n",to_chinese(city));
+  msg += "┏━━┓━━━━┓━━━┓━━━━━┓━━━━━┓━━┓━━┓\n";
+  msg += "┃编号┃货物    ┃种类  ┃等级      ┃价格      ┃数量┃总数┃\n";
+  msg += "┗━━┛━━━━┛━━━┛━━━━━┛━━━━━┛━━┛━━┛\n";
+  kg = keys(goods);
+  for (i=0;i<sizeof(kg);i++)
+  {
+    class_str = BUSINESS_D->goods_name_pfx(goods["class"]);
+    msg += sprintf("┃%-4d┃%-8s┃%-"+(10+color_len(class_str))+"s┃%-10d┃%-4d┃%-4d┃\n",
+                    i+1,
+                    goods["goods"],
+                    GOODS_D->query_goods_type_c(goods["goods"]),
+                    class_str,
+                    goods["price"],
+                    goods["number"],
+                    goods["total"]);
+  }
+
+  msg += "┗━━┛━━━━┛━━━┛━━━━━┛━━━━━┛━━┛━━┛\n";
+  who->start_more(msg);
+  who->start_busy(2);
+  return 1;
+}
+
+int do_buy(string arg)
+{
+  string city,msg;
+  object who = this_player();
+
+  if (!playerp(who))
+    return 0;
+  if (environment(who) != this_object())
+    return 0;
+  if (who->is_busy())
+    return notify_fail("你正忙着呢。\n");
+  city = domain_file(file_name(this_object()));
+  msg = BUSINESS_D->accept_buy(who,city,arg);
+  if (!stringp(msg))
+    return 0;
+  who->start_more(msg);
+  who->start_busy(2);
+  return 1;
+}
+
+int do_sell(string arg)
+{
+  string city,msg;
+  object who = this_player();
+
+  if (!playerp(who))
+    return 0;
+  if (environment(who) != this_object())
+    return 0;
+  if (who->is_busy())
+    return notify_fail("你正忙着呢。\n");
+  city = domain_file(file_name(this_object()));
+  if (stringp(arg) && arg != "")
+    arg = sprintf("%s %s",city,arg);
+  msg = BUSINESS_D->accept_sell(who,arg);
+  if (!stringp(msg))
+    return 0;
+  who->start_more(msg);
+  who->start_busy(2);
+  return 1;
+}
+
+int do_invote(string arg)
+{
+  string city,msg;
+  int amount;
+  object who = this_player();
+
+  if (!playerp(who))
+    return 0;
+  if (environment(who) != this_object())
+    return 0;
+  if (who->is_busy())
+    return notify_fail("你正忙着呢。\n");
+  amount = to_int(arg);
+  if (amount < 1 || amount > 100000)
+    return notify_fail("投资命令：touzi [金额]。注意金额上限不能超过10万。\n");
+  city = domain_file(file_name(this_object()));
+  if (stringp(arg) && arg != "")
+    arg = sprintf("%s %s",city,arg);
+  msg = BUSINESS_D->accept_invote(who,arg);
+  if (!stringp(msg))
+    return 0;
+  who->start_more(msg);
+  who->start_busy(2);
+  return 1;
+}
+
