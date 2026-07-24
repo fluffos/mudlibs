@@ -67,3 +67,58 @@ registration test (Chinese surname + given name reaching the next prompt).
   `score`/`quit` all produced correct output. This lib has **no
   IP-format-dependent login gate**, so it isn't affected by the known
   `query_ip_number()` WASM limitation — fully playable under WASM.
+
+## WASM-enablement pass (loopback-allow / admin seeding)
+
+This lib's `adm/daemons/band.lpc`/`logind.lpc` are byte-identical (per
+§2.1 lineage check) to the `xiakexing3`/`jinyongqunxiazhuan2008` engine
+files, whose WASM pass was already done and verified with the correct
+fail-closed convention — ported that fix here and re-verified
+independently rather than assuming it.
+
+- `adm/daemons/band.lpc` `is_banned()`: added a loopback short-circuit
+  `if (stringp(site) && (site == "127.0.0.1" || site == "::1" ||
+  (strlen(site) >= 4 && site[0..3] == "127."))) return 0;` before the
+  regexp ban-list scan. Written fail-closed from the start: only a real
+  loopback-shaped string counts as local; a malformed/empty/non-string
+  site is NOT treated as local and still goes through the regexp ban
+  check. `logind.lpc:66`'s `BAN_D->is_banned(query_ip_name(ob))` gate in
+  `logon()` is thereby loopback-proof.
+- No `uptime()` startup-grace gate and no per-IP anti-flood/registration
+  throttle exist in this lineage (only the in-memory `mad_lock` admin
+  lockdown flag, default off — game/admin design, left alone).
+
+Admin account: `fluffos` / `Mud@2026` / 浮浮, registered through the
+real flow (id → y → 浮浮 → password ×2 → talent accept `y` → email →
+`m`). Granted `(admin)` by appending `fluffos (admin)` to
+`adm/etc/wizlist` (shipped with `rwz (admin)` already present, no
+trailing newline — added one; `securityd.lpc` reads this file at
+`create()`, so a driver restart was needed to pick up the new line).
+Verified after restart: `目前权限：(admin)`, title `【天神】`, `update
+/adm/daemons/band` → `重新编译 /adm/daemons/band.lpc：成功！`.
+
+Save files for the orchestrator to force-add (untracked, not
+gitignored):
+- `libs/xiakexing2017/work/data/user/f/fluffos.o`
+- `libs/xiakexing2017/work/data/login/f/fluffos.o`
+
+Two pre-existing caught (non-fatal) `restore_object(): Illegal file
+format` errors were observed in `debug.log` during this pass —
+`/adm/daemons/chinesed`'s save data at boot preload, and
+`/clone/board/kedian_b`'s board save data at `enter_world()` (matches
+the raw-path `/clone/board/kedian_b` display already visible in the
+game, instead of a proper board name — its corrupted save data is why).
+Both are wrapped in `catch()` by `master.lpc`'s `preload()`/
+`logind.lpc`'s own catch respectively, non-fatal, and confirmed via
+`git log`/`git status` to be genuinely corrupted data already committed
+as part of the original archive conversion (archive #20, "booted clean
+with zero fixes") — not introduced by this session. Left as-is per the
+project's established `emoted.o`/similar precedent; not a new
+regression.
+
+Retest: fresh boot, fresh registration (id `qretest`, real Chinese name
+秦风十一) through `look`/`score`/`quit` — landed in 客店, correct
+output, clean quit. `fluffos`/`Mud@2026` admin login verified via
+`score` (confirms `(admin)`/天神) and `update`. `debug.log` had exactly
+the two pre-existing corrupted-save errors above and zero NEW runtime
+errors. Test character `qretest` removed afterward; fluffos kept.

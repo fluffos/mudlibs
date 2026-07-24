@@ -58,3 +58,19 @@ python3 scripts/mudclient.py 127.0.0.1 40035
 - 已在 WASM（浏览器/无网络端口）构建下测试：启动、注册（含开头容易被
   忽略的 BIG5 字体询问提示）、登录、`look`/`score`/`quit` 均正常，可
   完整游玩，无 WASM 特有限制。
+- 本库的定时事件系统（`adm/daemons/eventd.lpc`）因一处 `.c`→`.lpc` 改名
+  遗留的字符串截取错误，启动时会静默失败（被上层 catch 住，不影响正
+  常启动和游玩），详见 NOTES.md，暂未修复。
+
+## 管理员账号 / Admin account
+
+- **ID**: `fluffos`
+- **密码 / Password**: `Mud@2026`
+- **中文名 / Display name**: 浮浮
+- **权限 / Level**: `(admin)` —— 本 lib 的最高等级（通过
+  `adm/etc/wizlist` 授予，`securityd.lpc` 据此判定权限），已验证
+  `update` 等巫师指令可用。该账号尚未完成本库单独的"注册邮箱
+  (register/decide)"投胎流程，`score` 会和任何未投胎角色一样提示
+  "还没有出生呐"——这与巫师权限无关，不影响管理使用。
+- ⚠️ 这是一个公开的默认密码，仅供本地/浏览器试玩。**正式对外开服前
+  请务必修改此密码。**

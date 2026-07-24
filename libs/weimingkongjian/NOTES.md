@@ -418,3 +418,84 @@ from the same template used for the last several libs in this batch
   "Post-conversion tooling" section. Marking this lib as "boots under
   wasm, login gated by IP-check limitation" rather than "fails under
   wasm."
+
+## WASM-enablement pass (loopback-allow / throttle exemption / admin seeding)
+
+Gates found and patched (AGENTS.md §1.3b/§1.3e/§1.5):
+
+- `adm/daemons/band.lpc` `is_banned()` — used to return 1 (BANNED) for
+  any empty or non-dotted-quad ip, i.e. it rejected every WASM
+  connection by design. Now short-circuits return 0 for loopback /
+  "127."-prefix / empty / malformed ips before the old logic.
+- `adm/daemons/band.lpc` `vaild_allow_address()` — per-user allowed-IP
+  ACL now always passes for loopback/malformed ips.
+- `adm/daemons/logind.lpc` `logon()` — the `ban_cnt > 16`
+  connecting-from-same-IP throttle is now loopback-exempt.
+- `adm/daemons/logind.lpc` `get_id()` — the `ip_cnt > 8` per-IP login
+  cap is now skipped for loopback/malformed ips (band.lpc's `Netclubs`
+  already whitelisted exact "127.0.0.1"; the guard now also covers the
+  WASM malformed-ip shapes).
+
+**Retrofitted fail-open → fail-closed (2026-07-24)**: the three
+`band.lpc` spots (`is_banned()`, `vaild_allow_address()`) and the
+`logind.lpc get_id()` per-IP login cap were all originally written so
+that ANY malformed/non-string ip bypassed the gate, not just genuine
+loopback — defensive against the old WASM driver bug where
+`query_ip_number()` returned garbage for every WASM connection. That
+driver bug is now fixed (WASM reports a clean `"127.0.0.1"` same as
+native), so there is no remaining justification for "can't parse it" ⇒
+"must be loopback". Changed:
+  - `band.lpc is_banned()`: `!stringp(site) || site=="127.0.0.1" ||
+    strsrch(site,"127.")==0 || sscanf(site,"%*d.%*d.%*d.%*d")!=4` (any
+    unparseable site returns "not banned") → `stringp(site) &&
+    (site=="127.0.0.1" || strsrch(site,"127.")==0)` for the bypass —
+    a non-string site now falls through to the pre-existing `if
+    (!site) return 1;`/sscanf-based logic below, same as the
+    original pre-WASM code.
+  - `band.lpc vaild_allow_address()`: same shape fix, plus an added
+    `if (!stringp(vip)) return 0;` right after the loopback check (deny
+    rather than crash on a non-string ip reaching the allow-list
+    `regexp()` call below).
+  - `logind.lpc get_id()`: the per-IP login-cap condition required
+    `stringp(query_ip_number(ob))` to be true before the cap would even
+    apply (`ip != "127.0.0.1" && stringp(ip) && strsrch(ip,"127.")!=0 &&
+    wiz_level<2`) — so a non-string ip made the whole condition false
+    and skipped the cap entirely. Introduced a `cur_ip`/`is_local_conn`
+    pair computed once (`stringp(cur_ip) && (cur_ip=="127.0.0.1" ||
+    strsrch(cur_ip,"127.")==0)`) and gated the cap on `!is_local_conn`
+    instead — a non-string ip is no longer local, so the cap still
+    applies to it.
+- No `uptime()` startup gate exists in this lib (`mad_lock` is a manual
+  wizlock, left alone). The 50-second quit-retention re-login delay and
+  10-minute kickout penalty are game design — kept.
+
+Pre-existing re-login bug found and fixed during this pass:
+- `adm/daemons/logind.lpc` `enter_world()` — `ctime(login_ob->query("last_on"))`
+  threw on every RE-login because the quit path saves `last_on` as an
+  already-formatted STRING; the throw aborted enter_world before the
+  room move, stranding the body in the void with every command dead
+  (update/quit then crashed on `environment(me)`). Now formats via
+  `intp() ? ctime(...) : ...`. (First-time registration was unaffected,
+  which is why earlier passes never saw it.)
+
+Admin account: id `fluffos`, password `Mud@2026`, name 浮浮, granted
+`(boss)` (same rank as the shipped `hfzz` admin; BOS_PATH command dirs)
+via `adm/etc/wizlist`. Verified post-restart: re-login lands in 客店,
+`update /adm/daemons/logind` → 成功, clean quit.
+
+Save files for the orchestrator to force-add (untracked, not gitignored):
+- `libs/weimingkongjian/work/data/user/f/fluffos.o`
+- `libs/weimingkongjian/work/data/login/f/fluffos.o`
+
+Retest: fresh registration (qinshiyi / 秦十一) end-to-end with
+look/score/quit all correct; zero 执行时段错误 in both sessions;
+test char removed (fluffos kept).
+
+**Re-retest after the fail-closed retrofit (2026-07-24)**: fresh boot,
+fresh registration (id `qretest`, real Chinese name 秦风九, talent `0`
+then `y`) through `look`/`score`/`quit` — landed in a random starting
+scene, `score` output correct, clean quit farewell. `fluffos`/`Mud@2026`
+admin (`boss`) login re-verified: `look` then `update
+/adm/daemons/logind` → `重新编译 /adm/daemons/logind.lpc：成功！`, then
+clean `quit`. Zero `执行时段错误` lines in `debug.log` for the whole
+session. Test char `qretest` removed afterward; fluffos kept.

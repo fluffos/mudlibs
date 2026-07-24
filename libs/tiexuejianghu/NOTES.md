@@ -352,6 +352,70 @@ looser old-driver targets).
     path exercised by this pass's testing. Not investigated further per
     the project's stated "breadth over exhaustive depth" priority.
 
+## WASM-enablement pass (loopback-allow / admin seeding)
+
+Applied the four standard WASM-first changes (AGENTS.md §1.3b/§1.3e/§1.5):
+
+### 1. Loopback always allowed — ban gate (`adm/daemons/logind.lpc:48-64`)
+`logon()` unconditionally ran `BAN_D->is_banned(query_ip_name(ob))` /
+`BAN_D->is_banned(query_ip_number(ob))` and `destruct`ed on a hit. Wrapped
+the ban block so it only runs for a non-loopback remote address.
+
+**Retrofitted fail-open → fail-closed (2026-07-24)**: the gate as
+originally patched here ran the ban check only when
+`stringp(ip) && ip != "127.0.0.1" && strsrch(ip, "127.") != 0 &&
+sscanf(ip, "%*d.%*d.%*d.%*d") == 4` — i.e. it required the ip to
+successfully parse as a well-formed dotted-quad before the ban check
+would even run, so ANY malformed/unparseable ip silently skipped the
+ban gate entirely (fail-open), not just genuine loopback. This was
+written defensively against the old WASM driver bug where
+`query_ip_number()` returned garbage for every WASM connection; that
+driver bug is now fixed (WASM reports a clean `"127.0.0.1"` same as
+native), so there is no remaining justification for treating "can't
+parse it" as "must be loopback". Changed to fail-closed: `if
+(!(stringp(ip) && (ip == "127.0.0.1" || strsrch(ip, "127.") == 0)))`
+— only a real loopback-shaped string skips the ban check; anything
+else, including an unparseable/non-string ip, now goes through the
+normal ban logic same as any other remote connection.
+
+### 2. Uptime startup gates — none present
+No `uptime() < N` connection-rejection gate exists in this lib. The
+`uptime()` hits are all in-game gambling rooms (`d/*/duchang*.lpc`,
+`npc/douji`, `npc/saigui`) and the cosmetic `cmds/usr/uptime.lpc` /
+`adm/daemons/network/cmwhod.lpc` uptime display — game content, left alone.
+
+### 3. Anti-flood throttles — none present
+No per-IP connection-rate / multi-login-per-IP / registration throttle in
+`logind.lpc` (only a `MAX_USERS` cap and a `wiz_lock_level` gate, neither
+IP-based). Nothing to exempt.
+
+### 4. Admin account seeded — `fluffos` / `Mud@2026` / 浮浮
+Registered through the real flow (id `fluffos` → `y` → 浮浮 → `Mud@2026`
+×2 → email → `m`), landed in 英豪酒楼. Granted `(admin)` by appending
+`fluffos (admin)` to `adm/etc/wizlist` (the file `securityd.lpc:82`
+reads into `wiz_status`; `get_status`/`wizhood` return `(admin)`, which
+`feature/command.lpc:90` maps to `ADM_PATH` + `enable_wizard()`).
+Verified after reboot: login as fluffos, `update /adm/daemons/logind`
+→ `重新编译 ... 成功`, `who4` wizard listing works.
+
+**Save files for the orchestrator to force-add** (currently untracked,
+NOT gitignored — a plain add works, listed for completeness):
+- `libs/tiexuejianghu/work/data/user/f/fluffos.o`
+- `libs/tiexuejianghu/work/data/login/f/fluffos.o`
+
+Retest: fresh normal registration (秦十/qinshi) still reaches 英豪酒楼;
+debug.log had 0 runtime errors across the session; test char qinshi
+removed afterward (fluffos kept).
+
+**Re-retest after the fail-closed retrofit (2026-07-24)**: fresh boot,
+fresh normal registration (id `qinretes`, real Chinese name 秦风七) all
+the way through `look`/`score`/`quit` — landed in 英豪酒楼, correct
+output throughout, normal 30-second delayed-quit message. `fluffos`/
+`Mud@2026` admin login verified again: `look` then `update
+/adm/daemons/logind` → `重新编译 /adm/daemons/logind.lpc：成功！`. Zero
+`执行时段错误` lines in `debug.log` for the whole session. Test char
+`qinretes` removed afterward (fluffos kept).
+
 ## Registration-flow + post-login-command transcripts
 
 Three full end-to-end runs, each in ONE continuous `mudclient.py`

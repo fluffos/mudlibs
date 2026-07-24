@@ -107,6 +107,15 @@ int is_banned(string site) {
   string *line = ({ site });
   string tmp1, tmp2, tmp3, tmp4;
   int i;
+  // WASM/local: only genuine loopback is allowed through -- this gate
+  // used to REJECT every real, well-formed remote ip that WASM's driver
+  // bug mangled into garbage, so the original patch let ANY malformed
+  // ip bypass the ban check entirely (fail-open). That driver bug is
+  // now fixed (WASM reports a clean "127.0.0.1" for loopback same as
+  // native), so fail-CLOSED here: an unparseable/non-string site is
+  // untrusted, not local, and falls through to the normal ban logic.
+  if (stringp(site) && (site == "127.0.0.1" || strsrch(site, "127.") == 0))
+    return 0;
   if (!site) return 1;
 
   if (sscanf(site, "%s.%s.%s.%s", tmp1, tmp2, tmp3, tmp4) != 4)
@@ -354,8 +363,17 @@ int vaild_allow_address(object ob) {
   string *address;
   string *line;
   int i;
+  string vip;
 
   if (!ob) return 0;
+  // WASM/local: only genuine loopback passes the per-user allowed-address
+  // check for free. Fail-CLOSED: an unparseable/non-string ip is
+  // untrusted, not local, and falls through to the real allow-list check
+  // below (the driver bug that made WASM report a garbage ip is fixed).
+  vip = query_ip_number(ob);
+  if (stringp(vip) && (vip == "127.0.0.1" || strsrch(vip, "127.") == 0))
+    return 1;
+  if (!stringp(vip)) return 0;
   address = ob->query("allow_ip");
   if (!sizeof(address)) {
     ob->set_temp("no_allow_ip", 1);

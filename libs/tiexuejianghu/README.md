@@ -50,3 +50,15 @@ python3 scripts/mudclient.py 127.0.0.1 40087
   编译警告显示给了玩家，并非真正的错误，可以放心忽略。
 - 已在 WASM（浏览器/无网络端口）构建下测试：启动、注册、登录、`look`/
   `score`/`quit` 均正常，可完整游玩，无 WASM 特有限制。
+
+## 管理员账号 / Admin account
+
+- **ID**: `fluffos`
+- **密码 / Password**: `Mud@2026`
+- **中文名 / Display name**: 浮浮
+- **权限 / Level**: 天神 `(admin)` —— 本 lib 的最高等级（通过
+  `adm/etc/wizlist` 授予，`securityd.lpc` 据此判定 `wizhood`），拥有
+  完整巫师权限（`update`、`who4` 等已验证可用，命令搜索路径
+  `ADM_PATH` 覆盖所有 `/cmds/*` 目录）。
+- ⚠️ 这是一个公开的默认密码，仅供本地/浏览器试玩。**正式对外开服前
+  请务必修改此密码。**

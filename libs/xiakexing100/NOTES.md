@@ -99,3 +99,96 @@ requiring an early kill).
   actual starting room, `look`/`score`/`quit` all producing correct
   output). This lib has no IP-format-dependent login gate, so once this
   fix was in place it was fully playable under WASM too.
+
+## WASM-enablement pass (loopback-allow / admin seeding)
+
+Applied the four standard WASM-first changes (AGENTS.md §1.3b/§1.3e/§1.5).
+
+### 1. Loopback always allowed — ban list + per-IP throttles (`adm/daemons/logind.lpc:73-124`)
+`logon()` ran `BAN_D->is_banned()`, an `in_login > 10` per-IP
+in-progress-login throttle, and `BAN_D->is_multi()` (per-IP character
+cap) unconditionally. Added an `is_local` local computed once and
+gated all three on `!is_local`.
+
+**Written fail-closed from the start (2026-07-24)**: `is_local =
+(stringp(lip) && (lip == "127.0.0.1" || strsrch(lip, "127.") == 0))` —
+only a genuine loopback-shaped string is treated as local; an
+unparseable/non-string ip is NOT local and still goes through the ban
+list and both throttles. (An earlier partial pass on this file had used
+the fail-open shape seen on this batch's other four libs — `!stringp(lip)
+|| lip == "127.0.0.1" || strsrch(lip, "127.") == 0 || sscanf(lip,
+"%*d.%*d.%*d.%*d") != 4`, which let ANY malformed ip bypass every gate —
+but that was corrected to the fail-closed form above before this pass
+was considered complete; see the sibling libs' NOTES.md entries for the
+full rationale: the old WASM driver bug that produced garbage
+`query_ip_number()` output is now fixed, so there is no reason left to
+treat "can't parse it" as "must be loopback".)
+
+### 2. Uptime startup gates — none present
+No `uptime() < N` connection-rejection gate exists in this lib. All
+`uptime()` hits are in-game content: gambling rooms (`d/*/duchang*.lpc`,
+`npc/douji`, `npc/saigui`), NPC/room respawn timers, cooldowns, and
+`adm/daemons/autosaved.lpc`'s once-per-boot data-file initialization
+(`if (uptime() < 400) { ...write_file... }` — first-boot bootstrap of
+some `/data/*` flags, not a connection gate). Nothing to bypass.
+
+### 3. Anti-flood throttles — covered by item 1
+No separate registration-throttle daemon exists; the per-IP protection
+in this lib IS the `in_login`/`BAN_D->is_multi()` checks patched above,
+already loopback-exempt.
+
+### 4. Admin account seeded — `fluffos` / `Mud@2026` / 浮浮
+Registered through the real flow (id `fluffos` → `y` → 浮浮 →
+`test1234`/confirm → talent `1`/`20`/`20`/`20`/`y` → personality `0` →
+email → `m`), landed in a random starting room. Granted `(admin)` by
+appending `fluffos (admin)` to `adm/etc/wizlist` (`securityd.lpc`'s
+`get_status()` reads this file into `wiz_status`). Verified: login as
+fluffos shows `目前权限：(admin)`, `update /adm/daemons/logind` →
+`重新编译 /adm/daemons/logind.lpc：成功！`.
+
+**Save files for the orchestrator to force-add** (untracked, not
+gitignored):
+- `libs/xiakexing100/work/data/user/f/fluffos.o`
+- `libs/xiakexing100/work/data/login/f/fluffos.o`
+
+### Bonus fix: `quit`/`exit` was silently broken for EVERY player (pre-existing, not WASM-related)
+
+While verifying the admin account's `quit`, discovered `cmds/usr/exit.lpc`'s
+`savequit()` never actually let anyone quit: `int a = 1;` is reassigned
+inside the `if (link_ob) {...}` branch to `a = (link_ob->save())`, and
+`link_ob` (`me->query_temp("link_ob")`) is the `/clone/user/login`
+connection object set by `enter_world()`/`reconnect()` on **every**
+login, not just a rare possession/reconnect edge case. FluffOS's
+`save_object()` efun returns the byte-size of the text written on
+success (confirmed by reading `~/src/fluffos/src/vm/internal/base/object.cc`'s
+`save_object_recurse()`, which accumulates and returns `textsize`), not
+a 0/1 boolean — so `a` ends up as some multi-hundred-byte count, and the
+final check `if (a == 1 && me->save())` was false for virtually every
+quit, for every character, admin or not. The player saw all the normal
+quit text ("你共停留了...欢迎下次再来！") followed immediately by a scary
+"警告：档案保存失败，无法退出游戏，请马上联系巫师解决。" and was never
+actually disconnected (`destruct(me)` never reached). Confirmed present
+verbatim in the original raw archive (`raw/xkx100/cmds/usr/exit.c`), so
+this is a decades-old author typo/driver-assumption mismatch, not
+something introduced by this project's conversion or by the WASM pass.
+**Fixed**: `if (a == 1 && me->save())` → `if (a && me->save())` (test
+truthiness, matching the efun's actual 0=fail/nonzero=success
+contract). Verified with a fresh registration and with the fluffos
+admin account: `quit` now completes cleanly with no warning and no
+lingering interactive body.
+
+### Retest (2026-07-24)
+Fresh boot, fresh registration (id `qinlanx`/`qintestb`, real Chinese
+names 秦岚新/秦测三) through `look`/`score`/`quit` — landed in a
+starting room, correct `score` output, clean quit with no warning.
+`fluffos`/`Mud@2026` admin login verified: `look` then `update
+/adm/daemons/logind` → `重新编译 ... 成功！`, then clean `quit` (the
+bonus fix above). Zero `执行时段错误` lines in `debug.log` across the
+whole session (the one hit from an unrelated missing-`log/nosave/`
+directory surfaced only while probing the quit bug with the `call`
+wizard command directly on a userp target — `log/` is fully
+gitignored/regenerated at boot, not a real defect worth chasing
+further here). Test characters removed afterward; fluffos kept.
+Reverted an incidental `data/topten.o` leaderboard diff caused by the
+test registrations (pre-existing tracked file, not meant to churn from
+QA runs).

@@ -364,3 +364,78 @@ time during this session.
   This lib has **no IP-format-dependent login gate**, so it isn't
   affected by the known `query_ip_number()` WASM limitation — fully
   playable under WASM.
+
+## WASM-enablement pass (loopback-allow / admin seeding)
+
+Gates found and patched (AGENTS.md §1.3b/§1.3e/§1.5):
+
+- `adm/daemons/logind.lpc` `encoding()` (~line 107 onward) — the whole
+  address-gate block (create_char_banned/is_banned destruct, strict-ban
+  destruct, `!ip_name` destruct, and the non-numeric-ip-character
+  destruct loop) is now wrapped in an else-branch that only runs for a
+  well-formed, non-loopback dotted-quad; loopback / "127."-prefix /
+  empty / malformed ips (the WASM shapes) skip it entirely and are
+  normalized to "127.0.0.1"/"localhost".
+- `adm/daemons/band.lpc` — added a shared `is_local_addr()` helper;
+  `is_banned()`, `create_char_banned()`, `is_strict_banned()` all
+  short-circuit return 0 for local/malformed addresses.
+
+**Retrofitted fail-open → fail-closed (2026-07-24)**: `is_local_addr()`
+and the `logind.lpc encoding()` address-gate condition were both
+originally written so that ANY malformed/non-string ip was treated as
+local — defensive against the old WASM driver bug where
+`query_ip_number()` returned garbage for every WASM connection. That
+driver bug is now fixed (WASM reports a clean `"127.0.0.1"` same as
+native), so there is no remaining justification for "can't parse it" ⇒
+"must be loopback". Changed:
+  - `band.lpc is_local_addr()`: `!stringp(site) || site=="127.0.0.1" ||
+    strsrch(site,"127.")==0 || sscanf(site,"%*d.%*d.%*d.%*d")!=4` →
+    `stringp(site) && (site=="127.0.0.1" || strsrch(site,"127.")==0)`.
+    Its three callers (`is_banned`/`create_char_banned`/
+    `is_strict_banned`) each got an added `if (!stringp(site)) return
+    1;` right after the `is_local_addr()` check, so a non-string site
+    is now treated as banned (deny) instead of falling into the
+    `regexp()` match on a non-string array element.
+  - `logind.lpc encoding()`: the condition deciding whether the whole
+    non-loopback address-gate block runs was `!stringp(ip_number) ||
+    ip_number=="127.0.0.1" || strsrch(ip_number,"127.")==0 ||
+    sscanf(ip_number,"%*d.%*d.%*d.%*d")!=4` (true ⇒ skip every gate
+    below AND coerce `ip_number` to `"127.0.0.1"`). Replaced with a new
+    `is_local` local computed as `stringp(ip_number) &&
+    (ip_number=="127.0.0.1" || strsrch(ip_number,"127.")==0)`; only
+    that now skips the gate block. An unparseable/non-string
+    `ip_number` falls into the else-branch and goes through the real
+    ban/strict-ban/name checks and the digit-validation loop, same as
+    the pre-WASM original code (which would legitimately `destruct()`
+    a connection whose reported ip isn't a clean dotted-quad — no
+    longer expected to trigger for WASM now that the driver bug is
+    fixed).
+- No `uptime()` startup gate and no per-IP multi-login/registration
+  throttle exist in this lib (the id_count flood counter is per-
+  connection, not per-IP; MAX_USERS is a global cap) — nothing else to
+  exempt. The 10-minute kickout penalty is game design — kept.
+
+Admin account: id `fluffos`, login password `Mud@2026`, recovery PIN
+(身份识别码) `Pin@2026a`, name 浮浮, granted `(admin)` (top rank) via
+`adm/etc/wizlist`. Verified: login shows 权限：(admin), `update
+/adm/daemons/band` → 成功.
+
+Save files for the orchestrator to force-add (untracked, not gitignored):
+- `libs/wuhanzhan/work/data/user/f/fluffos.o`
+- `libs/wuhanzhan/work/data/login/f/fluffos.o`
+
+Retest: fresh normal registration (qinshier / 秦十二) lands in 南城客栈,
+look/score/quit correct, zero 执行时段错误 in transcript and debug.log.
+Test char removed (fluffos kept).
+
+**Re-retest after the fail-closed retrofit (2026-07-24)**: fresh boot,
+fresh registration (id `qretest`, real Chinese name 秦十三, PIN
+`Pin@2026a`) through `look`/`score`/`quit` — landed in 南城客栈,
+`score` output correct, clean quit. `fluffos`/`Mud@2026` admin login
+re-verified: `look` then `update /adm/daemons/band` → `成功！` (cosmetic
+compile-warning spam shown to the player as usual, no actual error),
+then clean `quit`. `debug.log` had exactly the one pre-existing,
+already-documented boot-time `emoted.o` restore error (caught by
+`master.lpc`'s `preload()`, harmless — see the §15m entry above) and
+zero NEW runtime errors. Test char `qretest` removed afterward;
+fluffos kept.

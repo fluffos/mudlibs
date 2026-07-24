@@ -110,3 +110,46 @@ still-unfixed §15w bug, cosmetic and unrelated to command dispatch).
   WASM). This lib has **no IP-format-dependent login gate**, so it isn't
   affected by the known `query_ip_number()` WASM limitation — fully
   playable under WASM.
+
+## WASM-enablement pass (loopback-allow / admin seeding)
+
+This lib is byte-identical (per §2.1 lineage check) to the
+`jinyongqunxiazhuan2008` engine/daemon files, whose WASM pass was
+already done and verified with the correct fail-closed convention —
+ported that fix here and re-verified independently rather than
+assuming it (§2.1's "ported fixes still need per-lib verification").
+
+- `adm/daemons/band.lpc` `is_banned()`: added a loopback short-circuit
+  `if (stringp(site) && (site == "127.0.0.1" || site == "::1" ||
+  (strlen(site) >= 4 && site[0..3] == "127."))) return 0;` before the
+  regexp ban-list scan. Written fail-closed from the start: only a real
+  loopback-shaped string counts as local; a malformed/empty/non-string
+  site is NOT treated as local and still goes through the regexp ban
+  check. `logind.lpc`'s `BAN_D->is_banned(query_ip_name(ob))` gate in
+  `logon()` is thereby loopback-proof.
+- No `uptime()` startup-grace gate and no per-IP anti-flood/registration
+  throttle exist in this lineage (checked the full `logind.lpc`
+  input_to chain; the only other connection-adjacent gate is the
+  in-memory `mad_lock` admin lockdown flag, default off — game/admin
+  design, left alone).
+
+Admin account: `fluffos` / `Mud@2026` / 浮浮, registered through the
+real flow (id → y → 浮浮 → password ×2 → talent accept `y` → email →
+`m`). Granted `(admin)` by appending `fluffos (admin)` to
+`adm/etc/wizlist` (shipped with `sbaa (admin)` already present;
+`securityd.lpc` reads this file at `create()`, so a driver restart was
+needed to pick up the new line). Verified after restart: `目前权限：
+(admin)`, title `【天神】`, `update /adm/daemons/band` →
+`重新编译 /adm/daemons/band.lpc：成功！`.
+
+Save files for the orchestrator to force-add (untracked, not
+gitignored):
+- `libs/xiakexing3/work/data/user/f/fluffos.o`
+- `libs/xiakexing3/work/data/login/f/fluffos.o`
+
+Retest: fresh boot, fresh registration (id `qretest`, real Chinese name
+秦风十) through `look`/`score`/`quit` — landed in 客店, correct output,
+clean quit. `fluffos`/`Mud@2026` admin login verified twice (once via
+`update`, once via `score` to confirm `(admin)`/天神 status directly).
+Zero `执行时段错误` lines in `debug.log` across the whole session. Test
+character `qretest` removed afterward; fluffos kept.

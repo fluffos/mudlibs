@@ -158,7 +158,9 @@ void logon(object ob) {
     user_num = sprintf("%d", ppl_cnt);
     write_file(__DIR__ "maxonline", user_num, 1);
   }
-  if (ban_cnt > 16) {
+  // WASM/local: loopback is exempt from the per-IP connecting throttle
+  // (every browser-tab connection shares 127.0.0.1).
+  if (str != "127.0.0.1" && ban_cnt > 16) {
     write("这个IP上同时正在连线的玩家太多了，请稍候再尝试！！ \n");
     destruct(ob);
     return;
@@ -171,6 +173,8 @@ protected void get_id(string arg, object ob, int ip_cnt) {
   object ppl;
   object *usr;
   int i, wiz_cnt, usr_cnt;
+  string cur_ip;
+  int is_local_conn;
   arg = lower_case(arg);
   if (!check_legal_id(arg)) {
     write(YEL "请输入您的英文名字：" NOR);
@@ -217,7 +221,15 @@ protected void get_id(string arg, object ob, int ip_cnt) {
     input_to("get_id", ob, ip_cnt);
     return;
   }
-  if (wiz_level(arg) < 2) {
+  // WASM/local: loopback exempt from the per-IP login cap (is_netclub
+  // already whitelists exact "127.0.0.1"; this also covers "127."
+  // prefixed addresses). Fail-CLOSED: an unparseable/non-string ip is
+  // untrusted, NOT local, and the cap still applies to it (the driver
+  // bug that used to make WASM report a garbage ip is fixed).
+  cur_ip = query_ip_number(ob);
+  is_local_conn = stringp(cur_ip)
+    && (cur_ip == "127.0.0.1" || strsrch(cur_ip, "127.") == 0);
+  if (!is_local_conn && wiz_level(arg) < 2) {
     if (!BAN_D->is_welcome(arg)) {
       if (!BAN_D->is_netclub(query_ip_number(ob)))
         if (ip_cnt > 8) {
@@ -669,7 +681,13 @@ varargs void enter_world(object ob, object user, int silent) {
     login_ob->restore();
     write("★ 您目前权限：" + wizhood(user) + "\n");
     write("★ 您上次光临江湖风云是从：" + login_ob->query("last_from") + "\n");
-    write("★ 您上次连线的时间是：" + ctime(login_ob->query("last_on")) + "\n\n");
+    // last_on is written as an already-formatted STRING by the quit path
+    // (see user.lpc); ctime() on a string throws mid-enter_world, aborting
+    // the room move and stranding the body in the void on every re-login.
+    write("★ 您上次连线的时间是：" +
+      (intp(login_ob->query("last_on"))
+        ? ctime(login_ob->query("last_on"))
+        : login_ob->query("last_on")) + "\n\n");
 
     id = user->query("id");
     str = DATA_DIR + "mail/" + id[0..0] + "/" + id + ".o";

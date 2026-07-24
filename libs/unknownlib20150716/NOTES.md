@@ -115,3 +115,84 @@ registration test (Chinese surname + given name reaching the next prompt).
   real wall-clock time has passed, which is how this lib was already
   fully verified above. Not investigated further per the pass's "honest
   assessment, no forced full playthrough" guidance.
+
+## WASM-enablement pass (loopback-allow / uptime bypass / throttle exemption / admin seeding)
+
+Gates found and patched (AGENTS.md §1.3b/§1.3e/§1.5):
+
+- `obj/login.lpc:24-27` — the malformed-IP fallback in `logon()` used to
+  set `last_from` to `"0.0.0.0"`; now sets `"127.0.0.1"` so a WASM
+  driver's garbage `query_ip_number()` is treated as loopback by every
+  downstream gate (all of logind's checks read `last_from`).
+- `adm/daemons/logind.lpc:109-124` (`logon()`) — the `uptime() < 30`
+  startup-grace destruct and the >15-connections-per-IP reconnect-flood
+  destruct now apply only when `last_from != "127.0.0.1"`.
+- `adm/daemons/logind.lpc` `get_id()` (`#ifdef MAX_LOGIN` block) — the
+  per-IP multi-login cap (`allow_multi_login` + same-/24 counting) is
+  skipped for loopback.
+- `adm/daemons/band.lpc` — `is_strict_banned()` and
+  `create_char_banned()` short-circuit return 0 for loopback /
+  "127."-prefix / empty / malformed (non-dotted-quad) addresses before
+  any regexp matching. (`allow_multi_login` needed no patch — its caller
+  is already loopback-exempted above.)
+
+**Retrofitted fail-open → fail-closed (2026-07-24)**: all four spots
+above were originally written so that ANY malformed/non-string ip
+bypassed its gate, not just genuine loopback — defensive against the
+old WASM driver bug where `query_ip_number()` returned garbage for
+every WASM connection. That driver bug is now fixed (WASM reports a
+clean `"127.0.0.1"` same as native), so there is no remaining
+justification for "can't parse it" ⇒ "must be loopback". Changed:
+  - `obj/login.lpc`'s `logon()`: no longer coerces an unparseable ip
+    into `"127.0.0.1"`. It now stores whatever `query_ip_number()`
+    actually returns, falling back only to `""` (untrusted/non-local)
+    when it isn't even a string — the `sscanf(...)!=4` well-formedness
+    check that used to gate the coercion is gone entirely.
+  - `adm/daemons/band.lpc`'s `create_char_banned()`/`is_strict_banned()`:
+    changed from `!stringp(site) || site=="127.0.0.1" ||
+    strsrch(site,"127.")==0 || sscanf(site,"%*d.%*d.%*d.%*d")!=4` (any
+    unparseable site returns "not banned") to `stringp(site) &&
+    (site=="127.0.0.1" || strsrch(site,"127.")==0)` for the bypass, with
+    an added `if (!stringp(site)) return 1;` immediately after so a
+    non-string site is treated as banned (deny) rather than falling
+    into the regexp match on a non-string value.
+  Since `last_from`/`band.lpc`'s callers all key off the corrected
+  `obj/login.lpc` value now, `logind.lpc`'s own `lb_ip != "127.0.0.1"`
+  comparisons needed no further change — they were already exact-match
+  fail-closed; they just used to receive an already-laundered value.
+
+Admin account: id `fluffos`, login password `Mud@2026`, super (admin)
+password `Adm@2026` (the lib's two-password registration requires a
+mixed-case ≥7-char super password distinct from the login password),
+Chinese name 浮浮. Granted `(admin)` by adding `fluffos (admin)` to
+`adm/etc/notices` — this lib's `WIZLIST` macro (include/login.h:14)
+points at `/adm/etc/notices`, NOT the adjacent `adm/etc/wizlist` file.
+Verified post-restart: fluffos login + talent-selection (9/y), lands in
+翠香楼, `update /adm/daemons/logind` → 成功.
+
+Save files the orchestrator must add (untracked; data/user + data/login
+trees are not in git for this lib, and none of these are gitignored):
+- `libs/unknownlib20150716/work/data/user/f/fluffos.o`
+- `libs/unknownlib20150716/work/data/login/f/fluffos.o`
+- `libs/unknownlib20150716/work/data/zhaohuan/f/fluffos` (summon-pet
+  state created at registration; harmless either way, listed for
+  completeness)
+
+Retest: fresh normal registration (id qintest / 秦风) end-to-end —
+NOTE the flow has a first-entry talent-selection step after gender:
+send `9` (accept) then `y` (confirm); look/`score`/`quit` all correct
+in 翠香楼. debug.log clean (warnings only, zero runtime errors).
+qintest saves removed after the test; fluffos kept.
+
+**Re-retest after the fail-closed retrofit (2026-07-24)**: fresh boot,
+fresh normal registration (`gb` → `1` → `new` → id `qretest` → real
+Chinese name 秦风八 → super-password `Test123!`×2 → login password
+`test1234`×2 → email → `m` → talent `9`/`y`) all the way through
+`look`/`score`/`quit` — landed in 翠香楼, rich `score` output correct,
+clean farewell message on quit. No 30-second startup-grace delay
+needed connecting immediately after boot (loopback bypass still
+working). `fluffos`/`Mud@2026` admin login re-verified: `look` then
+`update /adm/daemons/logind` → `重新编译 /adm/daemons/logind.lpc
+...成功！`. Zero `执行时段错误` lines in `debug.log` for the whole
+session. Test char `qretest` (including its `data/zhaohuan/q/qretest`
+summon-state dir) removed afterward; fluffos kept.

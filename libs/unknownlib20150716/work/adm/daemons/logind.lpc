@@ -106,19 +106,24 @@ void logon(object ob) {
   object *online_user;
   int logon_cnt;
   int i;
-  if (uptime() < 30) {
+  string lb_ip = ob->query_temp("last_from");
+  // WASM/local: loopback (every browser-tab connection) bypasses the
+  // startup-grace gate and the per-IP reconnect-flood counter below.
+  if (lb_ip != "127.0.0.1" && uptime() < 30) {
     write(HIY "\n\t\t驱动程序正在启动过程中，请稍候再来。\n\n" NOR,);
     destruct(ob);
     return;
   }
-  online_user = filter_array(children(LOGIN_OB), (: interactive :));
-  i = sizeof(online_user);
-  logon_cnt = 0;
-  while (i--) {
-    if (online_user[i]->query_temp("last_from") == ob->query_temp("last_from"))
-      logon_cnt = logon_cnt + 1;
+  if (lb_ip != "127.0.0.1") {
+    online_user = filter_array(children(LOGIN_OB), (: interactive :));
+    i = sizeof(online_user);
+    logon_cnt = 0;
+    while (i--) {
+      if (online_user[i]->query_temp("last_from") == ob->query_temp("last_from"))
+        logon_cnt = logon_cnt + 1;
+    }
   }
-  if (logon_cnt > 15) {
+  if (lb_ip != "127.0.0.1" && logon_cnt > 15) {
     log_file("login", sprintf("%s:恶意reconnet:%s\n", ctime(time()), ob->query_temp("last_from")));
     write(HIW "请你稍候再进入本MUD...... \n" NOR);
     destruct(ob);
@@ -301,7 +306,9 @@ private void get_id(string arg, object ob) {
   }
 
 #ifdef MAX_LOGIN
-  if (!ppl) {
+  // WASM/local: loopback is exempt from the per-IP multi-login cap
+  // (every browser-tab connection shares the loopback address).
+  if (!ppl && ob->query_temp("last_from") != "127.0.0.1") {
     my_ip = ob->query_temp("last_from");
     MaxLimit = "/adm/daemons/band"->allow_multi_login(my_ip);
     if (!MaxLimit) MaxLimit = MAX_LOGIN;

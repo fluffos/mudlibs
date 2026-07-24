@@ -103,3 +103,72 @@ throughout (~13GB free).
   `look`/`score`/`quit` all produced correct output. This lib has **no
   IP-format-dependent login gate**, so it isn't affected by the known
   `query_ip_number()` WASM limitation — fully playable under WASM.
+
+## WASM-enablement pass (loopback-allow / admin seeding)
+
+This lib's `adm/daemons/band.lpc` is byte-identical (per §2.1 lineage
+check) to the `xiakexing3`/`xiakexing2017`/`jinyongqunxiazhuan2008`
+family's, whose WASM pass was already done and verified with the
+correct fail-closed convention — ported that fix here and re-verified
+independently.
+
+- `adm/daemons/band.lpc` `is_banned()`: added a loopback short-circuit
+  `if (stringp(site) && (site == "127.0.0.1" || site == "::1" ||
+  (strlen(site) >= 4 && site[0..3] == "127."))) return 0;` before the
+  regexp ban-list scan. Written fail-closed from the start: only a real
+  loopback-shaped string counts as local; a malformed/empty/non-string
+  site is NOT treated as local and still goes through the regexp ban
+  check. `logind.lpc:106`'s `BAN_D->is_banned(query_ip_number(ob))`
+  gate in `gb_big5()` is thereby loopback-proof.
+- No `uptime()` startup-grace gate and no per-IP anti-flood/registration
+  throttle exist in this lib (checked the full `logind.lpc` input_to
+  chain). Nothing else to exempt.
+
+Admin account: `fluffos` / `Mud@2026` / 浮浮, registered through the
+real flow (BIG5 prompt `n` → id → `y` → password ×2 (mixed-case) →
+Chinese name → archetype `5`/均衡型 → gender `m`). Granted `(admin)` by
+appending `fluffos (admin)` to `adm/etc/wizlist` (shipped with `hxsd
+(admin)`/`jjgod (admin)` already present; `securityd.lpc` reads this
+file at `create()`, so a driver restart was needed to pick up the new
+line). Verified after restart: `您目前的权限是：(admin)`, `update
+/adm/daemons/band` → `重新编译 /adm/daemons/band.lpc ...成功！`.
+The account was NOT taken through this lib's separate `register
+<email>` → `decide` mini-flow (the one that unlocks stat-rolling/
+"being born"), since that's character-creation content orthogonal to
+wizard status — `score` on this account still replies "还没有出生呐"
+same as any other unregistered character, which is expected and
+harmless; wizard permission is independent of it and was verified
+working regardless.
+
+Save files for the orchestrator to force-add (untracked, not
+gitignored):
+- `libs/xiakexinzhuan2/work/data/user/f/fluffos.o`
+- `libs/xiakexinzhuan2/work/data/login/f/fluffos.o`
+
+Pre-existing bug found (NOT fixed, out of scope for this pass — a
+content/daemon bug, not a login gate): `adm/daemons/eventd.lpc`'s
+`create()` builds each scheduled-event's object name from its filename
+via `map_array(event_name, (: $1[0..<3] :))`, a `.c`→`.lpc` rename
+leftover (§4.2-class bug) — the slice strips only 3 trailing characters
+where 4 are now needed to remove the longer `.lpc` extension, so
+`"emei.lpc"` becomes `"emei.l"` instead of `"emei"`. The resulting
+`call_other(EVENT_DIR + "emei.l", "create_event")` throws `couldn't
+find object`, caught non-fatally by `master.lpc`'s `preload()`, but
+since the throw is uncaught INSIDE `collect_all_event()`'s own
+`foreach` loop, it aborts that loop after the first entry — so this
+lib's whole scheduled-event system (3 files: `emei`/`huanggs`/
+`qiantang`) silently never initializes any of its timed world events.
+Boot itself is unaffected (caught at the master level) and this has no
+effect on login/registration/admin, which is why it's left for a future
+content pass rather than fixed here; the one-line fix would be
+`$1[0..<3]` → `$1[0..<4]`.
+
+Retest: fresh boot, fresh registration (BIG5 `n` → id `qretest`, real
+Chinese name 秦风十二, archetype 均衡型) through `look`/`score`/`quit` —
+landed in 世外桃源, `look` correct, `score` correctly replied "还没有
+出生呐" (pre-birth, matches documented game design), clean quit.
+`fluffos`/`Mud@2026` admin login verified: `look` then `update
+/adm/daemons/band` → `重新编译 ...成功！`, then clean `quit`.
+`debug.log` had exactly the one pre-existing `eventd`/`emei.l` boot-time
+error above (caught, non-fatal) and zero NEW runtime errors. Test
+character `qretest` removed afterward; fluffos kept.

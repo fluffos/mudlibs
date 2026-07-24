@@ -70,8 +70,21 @@ void logon(object ob) {
   int iplimit;
   int in_login;
   int user_num;
+  int is_local;
+  string lip;
 
-  if (BAN_D->is_banned(query_ip_name(ob)) == 1) {
+  // WASM/local: only genuine loopback bypasses the ban list and both
+  // per-IP connection throttles below. Fail-CLOSED: an
+  // unparseable/non-string ip is untrusted, NOT local -- the upstream
+  // driver bug that used to make WASM connections report a garbage ip
+  // is fixed (WASM now reports a clean "127.0.0.1" for loopback same as
+  // native), so there is no remaining reason to treat "can't parse it"
+  // as "must be loopback".
+  lip = query_ip_number(ob);
+  is_local = (stringp(lip)
+    && (lip == "127.0.0.1" || strsrch(lip, "127.") == 0));
+
+  if (!is_local && BAN_D->is_banned(query_ip_name(ob)) == 1) {
     write("对不起，您的地址不受欢迎。\n");
     destruct(ob);
     return;
@@ -102,13 +115,13 @@ void logon(object ob) {
     else ppl_cnt++;
   }
 
-  if (in_login > 10 && !member_array(query_ip_name(ob), wiz_ip)) {
+  if (!is_local && in_login > 10 && !member_array(query_ip_name(ob), wiz_ip)) {
     write("对不起，侠客行一百现在正忙着呢，请稍后再试。\n");
     destruct(ob);
     return;
   }
 
-  if (BAN_D->is_multi(query_ip_name(ob), iplimit - 1)) {
+  if (!is_local && BAN_D->is_multi(query_ip_name(ob), iplimit - 1)) {
     write("对不起，您所在的地址无法登录更多的角色。\n");
     destruct(ob);
     return;
