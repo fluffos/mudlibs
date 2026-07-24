@@ -12,7 +12,12 @@
 #                 NOT copied per lib (one shared copy lives at the site root, see
 #                 the dedupe note below)
 #   <shell_dir>   dir containing the web terminal index.html (in the release zip
-#                 this is the same dir as the driver)
+#                 this is the same dir as the driver).  When
+#                 scripts/web_shell_override/index.html exists it is used as
+#                 the page template INSTEAD of <shell_dir>/index.html -- a
+#                 newer upstream page (src/www/wasm/index.html, e.g. the
+#                 Game/Logs tab shell) deployed ahead of the next fluffos
+#                 release.  The override must keep the patch anchors below.
 #   <out_dir>     output dir for this lib's bundle (created)
 #
 # Output bundle (per lib):
@@ -57,6 +62,15 @@ LIB="$REPO_ROOT/libs/$SLUG"
 [ -f "$DRIVER_DIR/fluffos.js" ] && [ -f "$DRIVER_DIR/fluffos.wasm" ] || {
   echo "error: driver not found in $DRIVER_DIR (need fluffos.js + fluffos.wasm)" >&2; exit 1; }
 [ -f "$SHELL_DIR/index.html" ] || { echo "error: $SHELL_DIR/index.html not found" >&2; exit 1; }
+
+# Page template: prefer the local override (an upstream src/www/wasm page
+# newer than the release zip's) when it exists; the path patching below
+# requires the same anchors either way and fails loudly if they are gone.
+SHELL_PAGE="$SHELL_DIR/index.html"
+if [ -f "$SELF_DIR/web_shell_override/index.html" ]; then
+  SHELL_PAGE="$SELF_DIR/web_shell_override/index.html"
+  echo "using web shell override: $SHELL_PAGE"
+fi
 
 # --- locate emscripten's file_packager (same logic as pack-mudlib.sh) --------
 FILE_PACKAGER=""
@@ -199,7 +213,7 @@ EOF
 GAME_NAME=$(sed -n 's/^# *//p' "$LIB/README.md" 2>/dev/null | head -1)
 [ -n "$GAME_NAME" ] || GAME_NAME=$SLUG
 export SLUG GAME_NAME
-python3 - "$SHELL_DIR/index.html" "$OUT/index.html" <<'PYEOF'
+python3 - "$SHELL_PAGE" "$OUT/index.html" <<'PYEOF'
 import os, sys
 src, dst = sys.argv[1], sys.argv[2]
 html = open(src, encoding='utf-8').read()

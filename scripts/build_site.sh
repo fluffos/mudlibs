@@ -63,8 +63,14 @@ print('\n'.join(sorted(s for s, i in d['libs'].items()
                        if i['status'] != 'noboot')))")
 
 # blob sha of the WORKING copy (equals the committed blob sha when clean,
-# and correctly invalidates the cache on local/CI edits before commit)
+# and correctly invalidates the cache on local/CI edits before commit).
+# The optional web-shell override page is an input of the packed bundles
+# too (pack_lib_for_web.sh uses it as the page template when present), so
+# it is part of the fingerprint: adding/editing/removing it repacks all.
 PACKER_FP=$(git -C "$REPO" hash-object scripts/pack_lib_for_web.sh)
+if [ -f "$SELF_DIR/web_shell_override/index.html" ]; then
+  PACKER_FP="$PACKER_FP+$(git -C "$REPO" hash-object scripts/web_shell_override/index.html)"
+fi
 
 # --- 2. load the previous manifest ------------------------------------------
 declare -A OLDTREE
