@@ -6,11 +6,16 @@ continues the work. Read the section relevant to your task before touching
 a lib; almost every problem you will hit has been hit before and is
 cataloged here with its fix.
 
-**Current state**: all 103 archives triaged; 91 Chinese LPC mudlibs fully
-converted, playable, and committed (plus `ds386`/Dead Souls, English,
-deliberately left partial). Every lib has a number (see `README.md`'s
-table and `lib_numbering.json`): `NNN` per unique game, `NNN-M` for
-confirmed derivatives of the same codebase, `9xx` for non-LPC archives.
+**Current state**: 98 Chinese LPC mudlibs converted and committed, 97 of
+them fully WASM-playable end to end (plus `ds386`/Dead Souls, English,
+deliberately left native-only/partial per §10.6) — every converted lib
+has now also been through the long-sit boot-log sweep (§10.0), not just
+a quick login check. The corpus keeps growing as new archives get
+dropped in; `README.md`'s table and `lib_numbering.json` are the current
+source of truth for the exact count, not the number above. Every lib has
+a number: `NNN` per unique game, `NNN-M` for confirmed derivatives of the
+same codebase, `9xx` for non-LPC archives (one, `033-3`, is a cataloged
+binary-only release that was never convertible and has no `libs/` dir).
 This file refers to libs by **slug** (`libs/<slug>/`) and number, never by
 "archive #N" (a retired convention) or by any machine-local path.
 
@@ -28,7 +33,9 @@ Conventions used throughout:
   `work/` is the playable tree (UTF-8, `.lpc`); `raw/` is the pristine
   extraction (gitignored, regenerable via `scripts/extract.sh`).
 - Ports: one unique port per lib, recorded in its `config.fluffos` and the
-  README table. 40001–40094 are assigned; **next free port: 40095**.
+  README table. Check `lib_numbering.json` for the current highest
+  assigned port before picking one for a new archive — it keeps climbing
+  as new archives arrive (past 40100 as of this writing).
 - Update this file whenever you learn something that saves time on the
   *next* lib. Keep entries in the catalog style: symptom → root cause →
   fix (with code) → how to detect → which lineages it affects.
@@ -1704,3 +1711,53 @@ present after any fresh checkout (`git log` in the fluffos repo):
 
 The formatter (`tools/lpc-syntax/`) and all three of its bug fixes
 (§9) also live in the fluffos repo, and are likewise MERGED upstream.
+
+### 12.1 The WASM web terminal (`src/www/wasm/index.html`)
+
+The actual browser page players use, also in the fluffos repo. As of
+this writing it has multi-connection Game tabs + a separate Logs tab
+(driver stdout/stderr routed away from the game terminal), and a
+mobile-UX pass (branch `feat/wasm-mobile-ux`, PR pending) covering:
+
+- **Keyboard-safe input bar**: iOS Safari and some Android browsers only
+  shrink `window.visualViewport` when the on-screen keyboard opens, never
+  the layout viewport — `body` is `position:fixed;inset:0` kept synced to
+  the visual viewport's height/offset, so the input bar can't end up
+  hidden behind the keyboard.
+- **Boot loading progress bar**: a blank terminal during a large lib's
+  download (tens of MB for the biggest libs) looked exactly like a hung
+  page. `Module.setStatus`'s `"Downloading data... (loaded/total)"`
+  string (from file_packager's `fetchRemotePackage()`) is the only real
+  determinate signal in the whole boot — verify empirically what your
+  build's generated glue actually calls before assuming a generic
+  emscripten progress API exists; `fluffos.js`'s own `setStatus` never
+  reports a percentage.
+- **Compact chrome**: below ~620px of *visible* height (a landscape
+  phone, or the keyboard eating a portrait screen — same underlying
+  problem, hence one `visualViewport`-driven check rather than an
+  `orientation` media query), the header merges into the tab row and
+  padding tightens to the ~36px tap-target floor.
+- **Fullscreen toggle**: the Fullscreen API, hidden entirely when
+  unsupported (checked via feature detection, not user-agent sniffing),
+  state driven by the `fullscreenchange` event rather than a toggle flag
+  so it can't desync from an OS/browser-driven exit (Esc, back-swipe).
+
+Mirrored byte-for-byte at `scripts/web_shell_override/index.html` in
+this repo, which `pack_lib_for_web.sh` prefers over the release zip's
+page — this is how the site gets a page improvement immediately without
+waiting for a new fluffos release. **Keep both copies identical after
+any change**; a manual sync race (the orchestrator copying an old
+committed version over a subagent's in-progress edit, or vice versa)
+has actually happened in this project — re-diff the two files
+immediately before committing the mudlib-side copy, not just once.
+
+Playwright + Chromium (`pip install --user playwright &&
+python3 -m playwright install chromium`, no `--with-deps`/sudo needed
+in this environment) is available for real visual verification against
+a packed bundle — boot the actual driver, drive it as a touch user, and
+screenshot; this caught real bugs (a touch-target CSS rule un-hiding a
+button that should stay hidden, a fat-finger tap landing on the wrong
+icon and dropping the connection) that reasoning from CSS alone missed
+in an earlier pass. Headless Chromium here does support real
+`requestFullscreen()`, so fullscreen behavior can be visually confirmed
+too, not just structurally checked.
