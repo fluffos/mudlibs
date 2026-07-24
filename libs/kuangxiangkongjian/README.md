@@ -51,3 +51,14 @@ BIG5/GB 编码选择关卡，也没有邮箱注册步骤（这点与"新狂想�
   启用，不影响本地游玩。
 - 已在 WASM（浏览器/Node 沙盒）构建下测试：可完整注册、登录并进行
   `look`/`quit` 等基本操作，游玩体验与原生版本一致。
+
+## 管理员账号 / Admin account
+
+- **id**: `fluffos`
+- **密码 / password**: `Mud@2026`
+- **中文名 / display name**: 浮浮
+- **权限 / level**: `(admin)` — 最高权限（`securityd.lpc` `wiz_levels` 表顶端），
+  已验证 `update` 巫师指令可用（重新编译成功）。
+- 授权方式：`work/adm/etc/wizlist` 加入 `fluffos (admin)`（该文件行尾已规范为
+  LF；原 CRLF 行尾会使解析出的权限等级带 `\r` 而失效）。
+- ⚠️ **正式对外开放前请务必修改此密码**（这是本地游玩用的公开默认密码）。

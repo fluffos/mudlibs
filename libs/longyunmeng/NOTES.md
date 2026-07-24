@@ -593,3 +593,49 @@ the very last archive in this ~100-archive project.
   retest above) — no mudlib fix attempted. Classified as: boots under
   WASM; login blocked by the driver's known `query_ip_number()`
   limitation.
+
+## WASM-enablement pass (loopback-allow / uptime / throttle / admin seed)
+
+Standard pass per AGENTS.md §1.3(b)/(e), §1.5.
+
+**Gates patched:**
+- `adm/daemons/band.lpc` `is_banned()` (~line 106): originally returned 1
+  (BANNED) for any non-dotted-quad IP — exactly the shape that rejects
+  every WASM connection (AGENTS.md §1.3a). Now strict loopback
+  (`127.0.0.1`/`localhost`/`::1`/`127.*`) short-circuits `return 0` before
+  the original `sscanf` format check, which is otherwise left intact
+  (non-loopback malformed IP is still banned, as originally).
+- `adm/daemons/logind.lpc` `logon()` (~line 231): per-IP anti-flood cap
+  (`ban_cnt > 9` same-IP connecting users → destruct) now applies to
+  everything except strict loopback.
+- Uptime startup gate: none (natured.lpc's `172800 - uptime()` is the
+  in-game auto-reboot timer, kept).
+- **Fail-closed correction (retrofit):** both gates above were initially
+  written with a "treat malformed/empty IP as loopback" fallback per the
+  original pre-driver-fix instructions. Since `query_ip_number()` is now
+  fixed upstream, tightened to strict-loopback-only matching — a
+  malformed IP now falls through to the ORIGINAL gate logic (band.lpc:
+  banned; logind.lpc: subject to the anti-flood cap) instead of being
+  waved through.
+- `get_version()` client handshake: already confirmed inert on the
+  standard telnet port in the earlier pass (only the Tomud-specific ports
+  enforce the "2060" token) — unchanged.
+
+**Admin account:** id `fluffos`, pw `Mud@2026`, name 浮浮, level
+`(boss)` via `adm/etc/wizlist` — `(boss)` is the highest rank with a
+command path (BOS_PATH); `(ceo)` exists in wiz_levels but
+feature/command.lpc has no case for it. Registered via the real flow
+(id → y → 浮浮 → password ×2 → 身份标识 abc123456 ×2 → gift 0 → y →
+magic element 0 → email → gender m). Relogin quirk: wizards get an extra
+「巫师登陆效验码」 prompt before the password — the check is disabled
+upstream (`if (1 ...)` in get_wizpas), any input passes. Verified:
+relogin as (boss), `update /adm/daemons/band` → 成功.
+Save files (untracked, NOT gitignored — orchestrator must add all FOUR):
+`work/data/user/f/fluffos.o`, `work/data/login/f/fluffos.o`,
+`work/data/key/data/user/f/fluffos.key`,
+`work/data/key/data/login/f/fluffos.key` (this lineage writes a parallel
+.key shadow of every save).
+
+**Retest:** fresh normal registration (ceshisi / 秦岭甲) end-to-end OK
+(look/score/quit correct; all four test-char save/key files removed);
+no new errors in debug.log.

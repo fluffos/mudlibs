@@ -49,3 +49,13 @@ python3 scripts/mudclient.py 127.0.0.1 40015
 - 已在 WASM（浏览器/Node 沙盒）构建下测试：可完整注册、登录并进行
   `look`/`quit` 等基本操作；由于 WASM 版驱动本身的已知限制，连线横幅里
   显示的来源 IP 会是空白（仅影响这一行文字显示，不影响注册登录本身）。
+
+## 管理员账号 / Admin account
+
+- **id**: `fluffos`
+- **密码 / password**: `Mud@2026`
+- **中文名 / display name**: 浮浮
+- **权限 / level**: `(admin)` — 最高权限（`securityd.lpc` `wiz_levels` 表顶端，
+  游戏内头衔显示为【天帝】），已验证 `update` 巫师指令可用（重新编译成功）。
+- 授权方式：`work/adm/etc/wizlist` 加入 `fluffos (admin)`。
+- ⚠️ **正式对外开放前请务必修改此密码**（这是本地游玩用的公开默认密码）。

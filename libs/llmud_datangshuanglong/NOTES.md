@@ -150,3 +150,36 @@ in the final run.
   documented WASM IP-formatting limitation surfaces here only as a
   cosmetic blank in the "您正在从...这个IP连线进入" banner line, not as
   a login blocker; the lib is otherwise fully playable under WASM.
+
+## WASM-enablement pass (loopback-allow / uptime / throttle / admin seed)
+
+Standard pass per AGENTS.md §1.3(b)/(e), §1.5.
+
+**Gates patched:**
+- `adm/daemons/logind.lpc` `logon()` (~line 62): per-IP anti-flood cap
+  (`logon_cnt > 8` same-IP login objects → destruct) skipped for strict
+  loopback only.
+- `adm/daemons/band.lpc` `is_banned()` (~line 40): strict-loopback
+  short-circuit `return 0` (called from `logind.lpc` `encoding()` with
+  `query_ip_name()`).
+- Uptime startup gate: none (no `uptime() < N` connection gate).
+- The antirobot NPC quiz files (`clone/npc/antirobot*.lpc`) are in-game
+  content, not connection gates — untouched.
+- **Fail-closed correction (retrofit):** both gates above initially
+  treated a malformed/non-string IP as loopback (per the original
+  pre-driver-fix instructions). Since `query_ip_number()` is now fixed
+  upstream, tightened to strict `127.0.0.1`/`localhost`/`::1`/`127.*`
+  matching only — a malformed IP now falls through to the original gate
+  logic instead of being waved through.
+
+**Admin account:** id `fluffos`, pw `Mud@2026`, name 浮浮, `(admin)` via
+`adm/etc/wizlist`. Registered via the real flow (id → y → 浮浮 →
+password ×2 → email → gender → "20 20 20 20" → yes). Verified: relogin
+shows `目前权限：(admin)`, `update /adm/daemons/band` → 成功, wizard
+fast-quit path ("作为巫师，你可以迅速离线"). Save files (untracked,
+NOT gitignored — orchestrator must add):
+`work/data/user/f/fluffos.o`, `work/data/login/f/fluffos.o`.
+
+**Retest:** fresh normal registration (ceshisan / 秦岭辛) end-to-end OK
+(look/score/quit correct; test saves removed); no new errors in
+debug.log.

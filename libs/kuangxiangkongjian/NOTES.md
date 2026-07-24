@@ -548,3 +548,39 @@ before finishing (no broad `pkill` used).
   native run — this lib has no IP/site-gating daemon on its login
   path, so it is **not** affected by the documented `query_ip_number()`
   WASM limitation and is fully playable under WASM.
+
+## WASM-enablement pass (loopback-allow / uptime / throttle / admin seed)
+
+Standard pass per AGENTS.md §1.3(b)/(e), §1.5.
+
+**Gates patched:**
+- `adm/daemons/logind.lpc` `get_id()` (~line 164): the `banned_ip`
+  prefix-match gate (strsrch on query_ip_number) is now skipped for
+  strict loopback only. (The big multi-login block below it was already
+  commented out upstream.)
+- `adm/daemons/securityd.lpc` `match_wiz_site()` (~line 95): strict
+  loopback always matches (wizard per-site login restriction).
+- Uptime startup gate: none (natured.lpc's `uptime() > 72000` is an
+  in-game auto-reboot content timer, kept).
+- Anti-flood throttle: none live (multi-login check commented out
+  upstream).
+- **Fail-closed correction (retrofit):** both gates above initially
+  treated a malformed/non-string IP as loopback (per the original
+  pre-driver-fix instructions). Since `query_ip_number()` is now fixed
+  upstream, tightened to strict `127.0.0.1`/`localhost`/`::1`/`127.*`
+  matching only — a malformed IP now falls through to the original gate
+  logic instead of being waved through.
+
+**Admin account:** id `fluffos`, pw `Mud@2026`, name 浮浮, `(admin)` via
+`adm/etc/wizlist` (rewrote LF-only — original CRLF made parsed levels
+carry `\r`). Registered through the real flow (id → y → 浮浮 →
+password ×2 → m → 20×7 attribute points → enter). Verified: relogin
+shows `目前权限：(admin)`; `update /adm/daemons/logind` → 成功. NOTE:
+relogin flow quirk — after the password an extra empty send is needed
+before commands dispatch (press-enter step).
+Save files (untracked, NOT gitignored — orchestrator must add):
+`work/data/user/f/fluffos.o`, `work/data/login/f/fluffos.o`.
+
+**Retest:** fresh normal registration (ceshier / 秦风癸) end-to-end OK
+(look/score/quit correct, test saves removed); no new errors in
+debug.log.

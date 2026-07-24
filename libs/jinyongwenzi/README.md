@@ -46,3 +46,15 @@ python3 scripts/mudclient.py 127.0.0.1 40083
   管理员专用内容，普通玩家不会接触到。
 - 已在 WASM（浏览器/Node 沙盒）构建下测试：可完整注册、登录并进行
   `look`/`quit` 等基本操作，游玩体验与原生版本一致。
+
+## 管理员账号 / Admin account
+
+- **id**: `fluffos`
+- **密码 / password**: `Mud@2026`（注意：本快照的登录代码被原作者"林川程"改过，
+  已注册角色登录时**不校验密码**，任意输入即可进入——原始存档就是如此）
+- **中文名 / display name**: 浮浮
+- **权限 / level**: `(admin)` — 最高权限（`securityd.lpc` `wiz_levels` 表顶端），
+  已验证 `update` 巫师指令可用。
+- 授权方式：`work/adm/etc/wizlist` 加入 `fluffos (admin)`（同时把该文件的
+  CRLF 行尾规范为 LF，否则解析出的等级带 `\r` 不生效）。
+- ⚠️ **正式对外开放前请务必修改此密码并恢复密码校验**。

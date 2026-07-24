@@ -473,3 +473,52 @@ python3 ../../scripts/mudclient.py 127.0.0.1 40083 --timeout 30 --idle 0.5 \
   --send "someid" --send "y" --send "真实中文名" --send "" --send "y" --send "1" \
   --send "look" --send "score" --send "quit"
 ```
+
+## WASM-enablement pass (loopback-allow / uptime / throttle / admin seed)
+
+Standard pass per AGENTS.md §1.3(b)/(e), §1.5.
+
+**Gates patched:**
+- `adm/daemons/logind.lpc` `logon()` (~line 92): per-IP anti-flood cap
+  (`login_cnt > 3` same-IP login objects → silent destruct) now skipped
+  for strict loopback (`127.0.0.1`/`localhost`/`::1`/`127.*`) only.
+- `adm/daemons/band.lpc` `is_banned()` (~line 39): strict-loopback
+  short-circuit `return 0` (defensive; called on login path in sibling
+  builds).
+- `adm/daemons/sited.lpc` `is_valid()` (~line 126): strict-loopback
+  short-circuit `return 1` (replaces the original commented-out loopback
+  block which DENIED non-wiz loopback).
+- **Fail-closed correction (retrofit):** all three gates above were
+  initially written with a `!stringp(ip)`/`ip == ""` "treat malformed IP
+  as loopback" fallback per the original (pre-driver-fix) instructions.
+  Since `query_ip_number()`/`resolve()` are now fixed upstream and always
+  return a clean `127.0.0.1` for loopback, that fallback was tightened to
+  strict equality/prefix checks only — a malformed/non-string IP now
+  falls through to the original gate logic (fail closed) instead of being
+  waved through.
+- Uptime startup gates: none in this lib (rankd uptime uses are content
+  timers, kept).
+
+**Cold-relogin fix (real pre-existing bug exposed while seeding admin):**
+`adm/daemons/securityd.lpc` `valid_read()` — added an own-save-file
+exception for `func == "restore_object"` mirroring `valid_write()`'s
+`save_object` exception. Without it, the cold-relogin path
+(`logind.lpc` get_passwd → make_body → `user->restore()`, body has uid
+but no euid until `enter_world()`'s exec/setup) got
+"restore_object: read permission denied: /data/user/...o", and the
+returning player landed in a body whose command path was never set
+(every command answered "什么?"). Hot/netdead reconnect was unaffected,
+which is why earlier passes (which only tested reconnect) never saw it.
+
+**Admin account:** id `fluffos`, pw `Mud@2026` (this snapshot does not
+verify passwords on login — original upstream edit), name 浮浮, granted
+`(admin)` via `adm/etc/wizlist` (rewrote file LF-only; the old CRLF
+endings made every parsed level end in `\r` and match nothing).
+Verified: relogin as fluffos, `update /adm/daemons/band` → 成功,
+admin-channel tag 【仙人】 shown. Save files (untracked but NOT
+gitignored — orchestrator must add): `work/data/user/f/fluffos.o`,
+`work/data/login/f/fluffos.o`.
+
+**Retest:** fresh registration (id ceshiyi, name 秦风壬) end-to-end OK —
+look/score/quit all correct; test char saves removed afterwards. Only
+pre-existing caught questd preload error in debug.log; no new errors.

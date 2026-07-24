@@ -439,3 +439,30 @@ time).
   this lib has no IP/site-gating daemon on its login path, so it is
   **not** affected by the documented `query_ip_number()` WASM
   limitation and reaches a full playable state under WASM.
+
+## WASM-enablement pass (loopback-allow / uptime / throttle / admin seed)
+
+Standard WASM/local-play pass per AGENTS.md §1.3(b)/(e) and §1.5.
+
+**Gates patched (loopback always allowed):**
+- `adm/daemons/band.lpc` `is_banned()` (~line 39): short-circuit `return 0`
+  for loopback / `localhost` / `127.*` (strict match on a well-formed
+  string only — a malformed/non-string host is NOT treated as loopback,
+  per the fail-closed correction: the driver-side `query_ip_number()`/
+  `resolve()` bugs are now fixed upstream, so this fallback is no longer
+  needed and would otherwise be a fail-open bypass). This is the
+  only address gate on the login path — `logind.lpc` `logon()` calls
+  `BAN_D->is_banned(query_ip_name(ob))`.
+
+**Uptime startup gate:** none. No `uptime() < N` connection-rejection gate
+exists (only cosmetic UPTIME_CMD display + in-game rumor/content timers).
+
+**Anti-flood throttle:** none. `logind.lpc` has a reconnect/replace flow
+(有人从别处…) which is normal game behavior, not a per-IP rate limit.
+
+**Admin account:** id `fluffos`, pw `Mud@2026`, name 浮浮, granted `(admin)`
+via `adm/etc/wizlist`. Registered through the real flow; login verified as
+`目前权限：(admin)`, `update /adm/daemons/band` recompiled successfully.
+Save files (must be committed — NOT gitignored, orchestrator: force-add if
+git status hides them): `work/data/user/f/fluffos.o`,
+`work/data/login/f/fluffos.o`.

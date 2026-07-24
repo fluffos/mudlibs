@@ -448,3 +448,73 @@ pre-existing, none on the registration/gameplay path).
   under WASM; login blocked by the driver's known `query_ip_number()`
   limitation (this lib's manifestation: an uncaught array-bounds error
   in its IP-geolocation daemon, rather than an explicit ban check).
+
+## WASM-enablement pass (loopback-allow / uptime / throttle / admin seed)
+
+Standard pass per AGENTS.md §1.3(b)/(e), §1.5.
+
+**Gates patched (all tightened to strict loopback -- see fail-closed
+correction below):**
+- `adm/daemons/band.lpc` `_is_loopback()` helper (~line 148), shared by
+  `is_banned()` (~155), `create_char_banned()` (~170), and
+  `is_strict_banned()` (~185): strict loopback short-circuits `return 0`
+  before the regexp site-list scan.
+- `adm/daemons/logind.lpc` `encoding()` (~line 156, `is_loopback` local):
+  gates the "no IP name" kick (~175), the non-numeric-IP kick (~181), and
+  the 40-characters-per-host cap (~215) — all three now apply to
+  everything except strict loopback.
+- `adm/daemons/logind.lpc` `get_id()` (~line 413): the per-IP
+  multi-login cap (`NowLogin >= MaxLimit`) now applies to everything
+  except strict loopback.
+- `adm/daemons/securityd.lpc` `match_wiz_site()` (~line 117): strict
+  loopback always matches (wizard per-site login restriction).
+- `adm/daemons/ipd.lpc` `seek_ip_address()` (~line 13): NOT a security
+  gate — this is the crash-prevention guard already documented above
+  (§ "Re-verification pass") against the `explode()`/array-index crash
+  on a malformed IP; kept as-is (returns `"本地"` cosmetic placeholder),
+  no fail-closed retrofit needed since it grants no access.
+- Uptime startup gate: none found.
+- Anti-flood throttle: covered by the `is_loopback`/`NowLogin` gates
+  above (this lineage's throttles are per-IP character-count caps, not a
+  separate connect-time gate).
+
+**Fail-closed correction (retrofit):** every gate above (except
+`ipd.lpc`, which is not a security gate) was initially written with a
+`!stringp(ip)`/`ip == ""` "treat malformed IP as loopback" fallback per
+the original pre-driver-fix instructions. Since `query_ip_number()` is
+now fixed upstream and always returns a clean `127.0.0.1` for loopback,
+that fallback was tightened to strict `127.0.0.1`/`localhost`/`::1`/
+`127.*` matching only — a malformed/non-string IP now falls through to
+the ORIGINAL gate logic (fail closed) instead of being waved through.
+Retested after tightening: `fluffos` loopback login + `update` still
+works (native and WASM).
+
+**Admin account:** id `fluffos`, pw `Mud@2026`, name 浮浮, `(admin)` via
+`adm/etc/wizlist` (already registered by save-file evidence on disk when
+this pass started; wizlist entry present). Verified: relogin as
+`fluffos` shows 仙衔 `【天神】`; `update /adm/daemons/band` → 重新编译
+：成功. Note: as a wizard, `fluffos` transits `/d/wiz/init` (the gift/
+attribute-allocation room) on EVERY login, not just first registration —
+this is `init.lpc`'s own `init()` logic (the "skip if already has
+combat_exp/daoxing/no_gift" early-return only applies to non-wizards),
+not a bug; just press `9` then `y` each time.
+Save files (untracked, NOT gitignored — orchestrator must add):
+`work/data/user/f/fluffos.o`, `work/data/login/f/fluffos.o`.
+
+**Retest:** fresh normal registration (id `ceshiliu`, name 秦风寅)
+end-to-end OK (look/score/quit correct); test character saves removed
+afterward — `ceshiliu` (this pass) and `ceshiwu` (an untracked leftover
+from an earlier interrupted pass, confirmed via `git ls-files` to NOT be
+committed, safe to delete). **Caution for future passes:** `qinfeng`
+(`data/{user,login}/q/qinfeng.o`) LOOKS like a similar test-registration
+leftover (it's documented above at "Registration flow — actual
+transcript outcome" as this project's own earlier test character) but IS
+committed to git (`git log -- ...qinfeng.o` → part of the original
+`Add menghuanxiyou2002` commit) — it was deleted once during this pass by
+mistake and had to be restored via `git show HEAD:path > path`; do NOT
+delete it as "test-character cleanup" without first checking
+`git ls-files`/`git log` on the exact path. No new errors in debug.log.
+WASM retest (`wasm_client.js`): `fluffos`
+login + `score` + `quit` also verified working post-`ipd.lpc`-guard —
+this lib's WASM-login-blocked verdict in the "Re-verification pass"
+section above is now superseded; WASM is fully playable.

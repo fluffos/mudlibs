@@ -129,7 +129,7 @@ private void encoding(string arg, object ob) {
   int ip_cnt, wiz_cnt2;
   string ip_name, nowtime, ip_number, online_num;
   string ip_from;
-  int ii;
+  int ii, is_loopback;
   mixed info;
   int encode;
 
@@ -153,7 +153,13 @@ private void encoding(string arg, object ob) {
   ip_name = query_ip_name(ob);
   ip_number = query_ip_number(ob);
 
-
+  // WASM/local-play: strict loopback bypasses the address-format checks
+  // below. A malformed/non-string IP is NOT loopback -- fail closed, it
+  // still goes through the normal checks (and gets rejected, as before).
+  is_loopback = (stringp(ip_number) && (ip_number == "127.0.0.1"
+    || ip_number == "::1"
+    || (strlen(ip_number) >= 4 && ip_number[0..3] == "127.")))
+    || (stringp(ip_name) && ip_name == "localhost");
 
   // snowcat dec 10 1997
   // try strict ban here...weiqi.
@@ -168,12 +174,13 @@ private void encoding(string arg, object ob) {
 
   // try not accept "name" as IP
 
-  if (!ip_name) {
+  if (!is_loopback && !ip_name) {
     destruct(ob);
     log_file("ALLCONT", sprintf("kicked out, No IP\n"));
     return;
   }
 
+  if (!is_loopback)
   for (ii = 0; ii < sizeof(ip_number); ii++) {
     if ((ip_number[ii] != '.') && (ip_number[ii] > '9')) {
       destruct(ob);
@@ -207,7 +214,7 @@ private void encoding(string arg, object ob) {
         || (intp(wiz_cnt2) && (wiz_cnt2 <= 0)))
         && !usr[i]->is_ghost()) {
         if (query_ip_name(ob) == query_ip_name(usr[i])) ip_cnt++;
-        if (ip_cnt >= 40) {
+        if (ip_cnt >= 40 && !is_loopback) {
           write("从您的主机创造的人物太多了，您的主机将被拒绝往来一段时间。\n");
           destruct(ob);
           return;
@@ -403,7 +410,14 @@ private void get_id(string arg, object ob) {
 
       }
 
-    if (NowLogin >= MaxLimit) {
+    // WASM/local-play: strict loopback is exempt from the per-IP multi-login
+    // cap. A malformed/non-string IP is NOT loopback -- fail closed, it
+    // still hits the cap.
+    if (NowLogin >= MaxLimit
+      && !(stringp(query_ip_number(ob)) && (query_ip_number(ob) == "127.0.0.1"
+        || query_ip_number(ob) == "::1"
+        || (strlen(query_ip_number(ob)) >= 4
+          && query_ip_number(ob)[0..3] == "127.")))) {
       write(sprintf("对不起，从你的IP地址不能同时登录%s位人物。\n",
         chinese_number(MaxLimit + 1)));
       destruct(ob);

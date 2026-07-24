@@ -47,3 +47,14 @@ python3 scripts/mudclient.py 127.0.0.1 40086
 - 少数早期的武当桃源支线房间是废弃草稿，不会被实际用到。
 - 已在 WASM（浏览器/Node 沙盒）构建下测试：可完整注册、登录并进行
   `look`/`quit` 等基本操作，游玩体验与原生版本一致。
+
+## 管理员账号 / Admin account
+
+- **id**: `fluffos`
+- **密码 / password**: `Mud@2026`
+- **中文名 / display name**: 浮浮
+- **权限 / level**: `(admin)` — 本 lineage 的最高权限等级（`securityd.lpc` 的
+  `wiz_levels` 表顶端），可使用全部巫师指令（已用 `update` 验证重新编译权限）。
+- 授权方式：在 `work/adm/etc/wizlist` 中加入 `fluffos (admin)` 一行，
+  `securityd` 于启动时读入。
+- ⚠️ **正式对外开放前请务必修改此密码**（这是本地游玩用的公开默认密码）。
