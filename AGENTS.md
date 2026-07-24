@@ -1158,6 +1158,53 @@ already present), `rzrmud`/`suiyuanxijianlu`/`xiaoaojianghu2`/
 `yuxuechongsheng` have real per-object storage. Check whether the
 simul_efun actually defines global set/query before assuming.
 
+### 7.16 Stale shipped real-timestamps feeding an unbounded catch-up loop
+
+A saved data file that ships as part of the archive (leaderboards,
+rankings, anything with a per-entry `"time"`/epoch field) can carry
+**real Unix timestamps from the original live server's era** (seen:
+`bxsj`'s `/log/rank`, real ~2008 player-ranking data,
+`"time":1219369347`). Harmless on its own — until a LOOP (not a
+one-shot comparison) uses `time() - saved_time` to decide how many times
+to iterate, e.g. an hourly score-decay pattern:
+
+```lpc
+// pattern to grep for: while(...["time"]...< t) / while(...time()...)
+while (rank["time"] + 3600 < t) {
+    rank["time"] += 3600;
+    rank["score"] = rank["score"] * 97 / 100;   // ~3%/hour decay
+}
+```
+
+This is safe under the ORIGINAL always-on server, where `t` only ever
+drifts forward by however long the driver has been up between calls
+(minutes to hours). It becomes pathological the moment a lib boots this
+project's frozen ~2008 (or whenever) save data against **today's real
+wall clock** — an 18-real-year gap means ~157,000 required iterations
+for a single stale entry, times however many entries the table holds —
+trivially exceeding the eval-cost limit ("Too long evaluation. Execution
+aborted.") every time the function runs. Dangerous specifically when the
+function is called unconditionally on a hot path (`bxsj`'s
+`cmds/usr/top.lpc add_rank()` family runs on literally **every quit**,
+via `cmds/usr/quit.lpc`'s unconditional `TOP_CMD->add_rank(me)`) — every
+single quit crashed (caught by the driver's error handler, so the
+player-visible "正在退出游戏……" looked completely normal; only
+debug.log showed it). **This is exactly the kind of bug a "did `quit`
+look right to the player" check will never catch — grep debug.log after
+`quit`, not just after login, on any deep pass.**
+
+Fix: cap the loop's iteration count (e.g. 240 hourly steps ≈ 10 days,
+already enough to decay any realistic score to near-zero), then
+unconditionally jump the stored timestamp forward to `t` regardless of
+whether the cap was hit — preserves the original per-hour compounding
+for any realistic gap, only changes behavior for the pathological
+long-stale case (whose score was headed to noise anyway). Grep for the
+pattern (`while.*\["time"\].*< *t\b`, `while\s*(.*time()`) across the
+WHOLE lib, not just the one function that happened to crash first —
+`bxsj` had five live copies of the identical loop (one per rank
+category: score/beauty/pk/rich/worker) plus a sixth already-dead copy
+inside a commented-out duplicate function (leave dead code alone).
+
 ---
 
 ## 8. Login and registration flow bugs
@@ -1610,6 +1657,69 @@ same interface via `scripts/wasm_client.js` (§1.2).
 Standing policy: deprioritized. Confirm what an English lib is, note
 it, don't sink conversion time (`ds386` Dead Souls partial;
 Discworld bundles untouched). Revisit only on request.
+
+### 10.7 Deep functional testing methodology (round two)
+
+Every prior verification layer for this corpus — `lpcc --batch`
+compile sweep, boot-log watch, registration-through-login smoke test —
+proves the driver *starts*. None of them proves the game *works*.
+Case in point: `bxsj`'s `cmds/usr/quit.lpc` unconditionally called
+`TOP_CMD->add_rank(me)`, which crashed on every single `quit` for
+anyone whose stale shipped leaderboard data hit the runaway-loop bug
+in §7.16 — invisible to boot watch (happens at quit, not boot),
+invisible to registration testing (happens after, not during, login),
+and invisible even to a `quit`-and-look-at-the-screen check, because
+the driver's error handler swallows the crash and the player-visible
+"正在退出游戏……" message prints exactly as if nothing went wrong. The
+only way this surfaced was a full, continuous playthrough session
+plus a `debug.log` grep after every `quit`. That is the bar for round
+two: pick a lib, actually play it, fix what breaks, write it down.
+
+Distilled checklist, generalized from the first full pass (`bxsj`,
+see `libs/bxsj/NOTES.md` "深度功能测试" for the worked example):
+
+1. **Read the lib's own newbie help first** (`help newbie`, `help
+   intro`, or equivalent — grep `cmds/` or `doc/` if the command name
+   isn't obvious). It's usually the fastest way to learn the intended
+   test path — starting zone, first skill, how sects/factions work —
+   without guessing from source alone.
+2. **One continuous session, not disjoint probes.** Register with a
+   real Chinese name (per the existing verified-registration rule),
+   then `look`/`score`/`i` (or the lib's equivalents) at every major
+   state change: after register, after first move, after learning a
+   skill, after joining a sect, after combat, after quit/relogin.
+   Read room/NPC `.lpc` source when navigation isn't obvious rather
+   than guessing directions blind.
+3. **Find the lib's own safe-sparring mechanism before hunting a
+   "weak enough" wild NPC.** Many libs ship a training dummy or
+   equivalent whose `accept_fight()` mirrors the attacker's own stats
+   (grep `accept_fight` plus a stat-copy loop as the pattern to look
+   for) — use it for the first combat test instead of risking a real
+   fight going wrong for unrelated reasons.
+4. **Test skill/sect acquisition through two separate paths**: the
+   organic teacher-NPC route AND any direct sect-join shortcut (newbie
+   gift, admin command, etc.), since they can be gated behind each
+   other in ways that only show up when both are actually exercised.
+5. **`quit`, grep `debug.log`, THEN reconnect after a real wall-clock
+   gap and confirm state.** Do not skip the debug.log grep just
+   because the visible quit message looked normal — that's exactly
+   what hid the `bxsj` bug. Note the quit-retention lockout window and
+   silent-reconnect behavior (a fresh connection within the lockout
+   window can skip the full login code path if the prior session
+   didn't end in a real `quit`) before assuming a relogin exercised
+   what you think it exercised.
+6. **Budget real time for shop/economy and death/respawn, or say so.**
+   These two systems are the most likely to require genuine travel,
+   gold, or being deliberately outmatched to reach — code review is an
+   acceptable fallback ONLY if stated explicitly as unverified-live in
+   NOTES.md, never silently presented as tested.
+7. **Fix what you find, in-place, and write it up immediately**: the
+   bug, the file:line, the fix pattern, and the test character/state
+   left as evidence — in the lib's own NOTES.md — plus a new AGENTS.md
+   bug-class entry (like §7.16) if the underlying pattern is likely to
+   recur in sibling or unrelated libs. Check documented siblings
+   (§11) for the same pattern before moving on — a bug found this way
+   in one lib has repeatedly turned out to be copy-pasted into others.
 
 ---
 

@@ -170,3 +170,25 @@ upstream, so this was tightened to fail-closed: only an exact
 malformed or non-string address now falls through to the original gate
 logic (treated as untrusted/remote) instead of being auto-allowed.
 Re-verified fluffos login still works after tightening.
+
+## Proactive fix (2026-07-24): rank-decay loop crashed every `quit` (AGENTS.md §7.16/§10.7)
+
+Found while pattern-matching a bug discovered on sibling `bxsj` during that
+lib's first deep functional playthrough (AGENTS.md §10.7 methodology),
+before ever booting this lib for the check. `cmds/usr/top.lpc`'s 5
+`add_rank*()` functions each decay a stale rank entry's score via
+`while (ranks[i]["time"] + 3600 < t) { ... }` with no iteration cap. The
+shipped `work/log/rank.o` carries real timestamps from 2008
+(`"time":1219369347`), so on any boot against today's wall clock the loop
+runs ~150,000+ iterations per stale entry and blows the eval-cost limit.
+`cmds/usr/quit.lpc:218` calls `TOP_CMD->add_rank(me)` unconditionally on
+every `quit` — so every `quit` was silently crashing (driver's error
+handler swallows it; the player-visible "正在退出游戏……" message looks
+normal). Fixed all 5 copies (`add_rank_beauty`, `add_rank_pk`,
+`add_rank_rich`, `add_rank_worker`, `add_rank`) the same way as `bxsj`:
+cap the loop at 240 iterations (~10 days of decay, enough to crush any
+stale score near zero) and unconditionally advance the stored timestamp
+to `t` afterward regardless of whether the cap was hit. Compile-checked
+clean via `lpcc --batch`; not re-verified live in this lib specifically
+(verified live on `bxsj`, the source of the pattern) — flagging per
+§10.7 point 6 rather than silently claiming a live retest.

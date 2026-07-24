@@ -543,3 +543,24 @@ gitignored — orchestrator must add): `work/data/user/f/fluffos.o`,
 **Retest:** fresh registration (id ceshiyi, name 秦风壬) end-to-end OK —
 look/score/quit all correct; test char saves removed afterwards. Only
 pre-existing caught questd preload error in debug.log; no new errors.
+
+## Proactive fix (2026-07-24): rank-decay loop crashed every `quit` (AGENTS.md §7.16/§10.7)
+
+Found while pattern-matching a bug discovered on lineage sibling `bxsj`
+during that lib's first deep functional playthrough (AGENTS.md §10.7
+methodology), before ever booting this lib for the check.
+`cmds/usr/top.lpc`'s `add_rank()` decays a stale rank entry's score via
+`while (ranks[i]["time"] + 3600 < t) { ... }` with no iteration cap. The
+shipped `work/log/rank.o` carries a real timestamp from 2007
+(`"time":1181487290`), so any boot against today's wall clock runs the
+loop ~170,000+ times and blows the eval-cost limit.
+`cmds/usr/quit.lpc:139` calls `TOP_CMD->add_rank(me)` unconditionally on
+every `quit` — so every `quit` was silently crashing (driver's error
+handler swallows it; the player-visible "正在退出游戏……" message looks
+normal). Fixed the same way as `bxsj`: cap the loop at 240 iterations
+(~10 days of decay, enough to crush any stale score near zero) and
+unconditionally advance the stored timestamp to `t` afterward regardless
+of whether the cap was hit. Compile-checked clean via `lpcc --batch`; not
+re-verified live in this lib specifically (verified live on `bxsj`, the
+source of the pattern) — flagging per §10.7 point 6 rather than silently
+claiming a live retest.
