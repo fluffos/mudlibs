@@ -174,3 +174,238 @@ gitignored; note `data/user/f/` and `data/login/f/` are NEW directories
 — this lib previously had no ids starting with "f"):
 - `libs/xingzhanyingxiong/work/data/user/f/fluffos.o`
 - `libs/xingzhanyingxiong/work/data/login/f/fluffos.o`
+
+## 深度功能测试 / Deep functional test (2026-07-24)
+
+First real *playthrough* pass on this lib (all prior passes verified only
+registration + `look`/`score`/`quit`/admin login, or watched boot output).
+Played as an ordinary new player through registration, exploration, a
+sect join, organic skill learning, safe sparring, quit, and a real
+wall-clock reconnect, native driver (`build-debug`). Read
+`doc/help/newbie` first (§10.7 step 1) — it documents the starting zone
+(新手集中营), the four newbie factions (凤凰/特种部队/圣殿/皇族), the
+`fight` (非致命较量) vs `kill` distinction, `wimpy`, and the 天赋/技能
+model, and was an accurate guide for everything below.
+
+Test characters (both **kept**, not cleaned up, as playthrough evidence):
+
+- **`qxtest` / 秦星辰** / password `test12345` — primary playthrough
+  character. Final state: joined 特种部队 (recruited by 蒋师庞, title
+  特种部队第四代小队长), learned `force` (基础内功) to level 1 via the
+  organic teacher-NPC path, fought a `特种兵` to a safe non-lethal
+  `fight`-command halt (~47% HP remaining, no death), quit cleanly, and
+  reconnected after a real ~75s wait with all state (sect/master,
+  skill, combat_exp, food/water, inventory) intact. Save files:
+  `work/data/user/q/qxtest.o`, `work/data/login/q/qxtest.o` (`data/*/q/`
+  are NEW directories — this lib had no "q"-prefixed ids before).
+- **`wjtest` / 王家俊** / password `test12345` — minimal confirmation
+  character, registered solely to verify the food/water bug fix (below)
+  live on a driver that already had the fix loaded; otherwise untouched
+  (still standing in 新手集中营, no sect, no skills). Save files:
+  `work/data/user/w/wjtest.o`, `work/data/login/w/wjtest.o` (`data/user/w/`
+  already existed for a prior "w"-id; `data/login/w/` is new for this id).
+
+### Bug 1 found and fixed — new characters always spawn starving (food/water stuck at 0)
+
+**`adm/daemons/logind.lpc:447`, inside `enter_world()`.**
+
+- Symptom: every freshly-registered character's `hp` screen showed
+  `【 食  物 】 0/290` and `【 饮  水 】 0/290` (both empty bars) instead
+  of the near-full starting allowance `doc/help/newbie` itself documents
+  as the expected new-player state (its worked example shows `98/290`).
+  Reproduced live: fresh registration `qxtest`/秦星辰 landed in 新手集中营
+  with food/water both `0/290` immediately after `hp`.
+- Root cause: the one-time starter-food/water grant is gated by
+  `if (!user->query("food") && !user->query("water") && ob->query("age") == 14)`
+  — but `ob` here is the **login/connection object** (the socket-level
+  object driving the registration `input_to` chain), which never has an
+  `"age"` field set anywhere in the whole registration flow; only the
+  **player body** (`user`) ever gets an `"age"` (set to a computed `14 +
+  age_modify + mud_age/86400` by `clone/user/user.lpc`'s `update_age()`,
+  called from `setup()` a few lines earlier in this same function). So
+  `ob->query("age")` is always `0`, the `== 14` check is always false,
+  and the grant code inside the `if` never runs for anyone, ever — every
+  new character starts already "hungry" from turn one. Confirmed this
+  is a plain `ob`/`user` variable mix-up, not intentional: the correct
+  operand (`user`) is sitting right there, used by every other line in
+  the same block.
+  - Practical severity is muted by an unrelated safety net
+    (`feature/damage.lpc`/`damage1.lpc`'s `heal_up()`, ~line 269): once
+    a starving character's countdown reaches zero, players under age 15
+    (i.e. every character in roughly their first real day of accumulated
+    play time) get an automatic "掏出一支冰淇淋" full refill instead of
+    taking real starvation damage — so this bug produces confusing
+    immediate hunger-distress messages and an inaccurate `hp` screen
+    from the first moment of play (contradicting the newbie help file),
+    but does not by itself kill a brand-new character. Reproduced this
+    too: `qxtest` (registered pre-fix) showed `290/290` on a later `hp`
+    check with no `eat`/`fu` command ever issued, i.e. the auto-refill
+    had already silently fired.
+- Fix:
+  ```lpc
+  // BEFORE:
+  if (!user->query("food") && !user->query("water") && ob->query("age") == 14) {
+  // AFTER:
+  if (!user->query("food") && !user->query("water") && user->query("age") == 14) {
+  ```
+- Verified live: restarted the driver with the fix loaded, registered a
+  fresh confirmation character (`wjtest`/王家俊) through the real flow,
+  and its very first `hp` (before any heartbeat tick, before any `eat`)
+  showed `280/280` / `280/280` — full starting food/water as documented,
+  immediately on entering the world. `qxtest` (already-affected
+  pre-existing character) was left as-is, showing the bug's natural
+  post-hoc masking by the age<15 safety net described above.
+
+### Bug 2 found and fixed — sect recruitment (`bai`/`attempt_apprentice`/`recruit`) crashes every time, silently blocking the entire organic sect-join path
+
+**`feature/command.lpc:29`** — this is **AGENTS.md §8.3a, `private
+nomask command_hook`**, an already-cataloged bug class, reached here via
+a code path (an NPC issuing `command()` from its own LPC code) that no
+earlier pass on this lib exercised. `xingzhanyingxiong` was not
+previously on §8.3a's "affected so far" list; recommend adding it.
+
+- Symptom: walked `qxtest` to `特种部队`'s recruiter NPC (`蒋师庞`
+  /`kungfu/class/budui/jiang.lpc`, stationed at `d/budui/rukou.lpc`,
+  the entrance every newbie is funneled to per `doc/help/newbie`) and
+  ran `bai jiang` (the documented "拜师" command). `bai.lpc` correctly
+  called `jiang->attempt_apprentice(me)`, which calls
+  `command("say ...")` twice then `command("recruit " + ob->query("id"))`
+  on itself — and the `recruit` call threw a **caught-but-real** runtime
+  error visible in `debug.log`:
+  `执行时段错误：*Function for verb '' not found.` rooted at
+  `/inherit/char/npc.lpc:147`'s `efun::command(str)` call, called from
+  `jiang.lpc`'s `attempt_apprentice()`. The player-visible effect: `bai
+  jiang` printed only "你想要拜蒋师庞为师。" and then nothing else — no
+  error shown to the player, no confirmation, no recruitment — a command
+  that silently does nothing is exactly the symptom class AGENTS.md
+  §8.3 catalogs, except every regular player-typed command (`look`,
+  `say`, movement, `bai` itself) worked completely normally throughout
+  the rest of this playthrough, because those all arrive as real socket
+  input (`ORIGIN_DRIVER`, which FluffOS's `add_action` dispatch exempts
+  from the privacy check per `src/packages/core/add_action.cc`'s own
+  comment) — only a **command issued programmatically by an NPC's own
+  LPC code** (`ORIGIN_EFUN`) trips the `private` visibility check on
+  `command_hook`. This is why this specific manifestation survived every
+  earlier registration/`look`/`score`/`quit` pass on this lib: none of
+  them ever made an NPC self-issue a command via `command()`.
+  Confirmed by checking `feature/command.lpc`: `command_hook` is
+  declared `private nomask int command_hook(string arg)`, registered
+  via `add_action("command_hook", "", 1)` — the exact shape §8.3a
+  describes.
+- Fix (exact §8.3a fix, one instance, only occurrence in this lib —
+  grepped `private.*command_hook`/`nomask.*command_hook` across the
+  whole tree, no NPC-local duplicate copy the way `zhongjidiyu` had):
+  ```lpc
+  // BEFORE:  private nomask int command_hook(string arg) {
+  // AFTER:            nomask int command_hook(string arg) {
+  ```
+- Verified live end-to-end: rebuilt nothing (LPC-only change), restarted
+  the native driver, re-ran `qxtest` to `蒋师庞` and `bai jiang` again —
+  this time producing the full expected exchange (`蒋师庞说道：好吧，
+  我就收下你了。` / `...希望你杀人无数,发扬我特种部队!` /
+  "你跪了下来向蒋师庞恭恭敬敬地磕了四个响头，叫道：「师父！」" /
+  "恭喜您成为特种部队的第四代弟子。"), then confirmed via `score`
+  (称谓: 特种部队第四代小队长, 你的师傅是: 蒋师庞) and `cha jiang`
+  (lists his full teachable skill set). This is a **severe** bug in
+  practice — every sect in this lib recruits new members through this
+  exact `attempt_apprentice()` → `command("recruit "...)` pattern (all
+  of `jiang`/`bei`/`su`/`shitailong` in `kungfu/class/budui/` share the
+  shape; not independently re-verified per-file since the fix is a
+  single shared-file change, same reasoning as `xiyouji`'s §7.17
+  proactive-fix-by-code-shape-match), so **the entire organic sect-join
+  path for the whole lib was unconditionally broken** until this fix —
+  a new player could never advance past "老百姓" through the documented,
+  intended route.
+
+### What else was tested and confirmed working
+
+- **Registration**: real Chinese name (秦星辰), full flow (id → confirm
+  y/n → Chinese name → password ×2 → attribute-gift accept → email →
+  gender) — already known-good from prior passes, re-confirmed with a
+  fresh name.
+- **Starting zone**: 新手集中营 (`d/city/startroom.lpc`) → chose exit
+  `2` (特种部队) → walked the full multi-floor 特种部队联盟镇
+  (`d/budui/luxingchu` → `bdguangchang2`/`1`/`bdguangchang` → `ondidao`
+  → `rukou`), all room descriptions/exits correct, no missing-room
+  errors.
+- **Combat (safe path)**: this lib has no reachable training-dummy
+  object — `clone/npc/muren.lpc` and `d/working/obj/mu-ren.lpc` (both
+  full `accept_fight()` stat-mirroring dummies, the shape AGENTS.md
+  §10.7 item 3 tells you to look for) are **both orphaned**: grepped the
+  whole tree for references to either path and found none — they are
+  never `new()`'d or placed via any room's `"objects"` mapping. The
+  lib's actual safe-sparring mechanism is the `fight` command itself
+  (documented in `doc/help/newbie`'s 【新手上路】 section) against any
+  `attitude:"peaceful"` NPC via the base `accept_fight()` in
+  `inherit/char/npc.lpc` — non-lethal, auto-halts around the 50%
+  resource threshold regardless of the opponent's actual strength.
+  Used a plain `特种兵` (combat_exp 30000, far above `qxtest`'s 200):
+  `fight bing` produced a full turn-by-turn combat log and correctly
+  auto-stopped with `特种兵哈哈大笑，说道：承让了！` at 95/200 (47.5%)
+  HP — matches the documented behavior exactly, no crash, no death.
+- **Skill learning (organic teacher path)**: `xue jiang force` (after
+  joining 特种部队 under `蒋师庞`) → "你听了蒋师庞的指导，似乎有些心得。
+  你的「基础内功」进步了！" → `skills` correctly showed `force` at
+  `1/0`. `cha jiang` (before joining) correctly listed his full skill
+  roster.
+- **Sect/faction join**: covered above as Bug 2 — now confirmed working
+  end-to-end via the organic `bai`/`recruit` NPC path (no separate
+  admin/newbie-gift shortcut found or attempted in this lib; unlike
+  `bxsj`'s gift-envoy, this lib's only documented join path is the
+  in-person 拜师 flow at each faction's entrance NPC).
+- **Shop `list`/`buy` dispatch**: `list` at 特种部队's 特种食品仓库
+  correctly showed the exact vendor and prices `doc/help/newbie` quotes
+  verbatim (碳素汽水瓶/新世纪牛排/压缩饼干 @ 50/50/30 电子货币— note
+  the 新世纪牛排 price differs slightly from the help file's stale
+  500, a content/help-text drift, not a bug). `buy bing gan` with `qxtest`'s
+  real balance of 0 correctly rejected with an in-character refusal line
+  rather than crashing.
+- **`quit` → debug.log grep → real reconnect**: `quit` produced the
+  expected "你丢下一件布衣。"/"欢迎下次再来！" messages (dropping the
+  un-autoloaded starter cloth is intentional per `cmds/usr/quit.lpc` —
+  same "real design tradeoff, not a bug" pattern already documented in
+  `bxsj`'s NOTES.md); immediately grepped `log/debug.log` for
+  `error:`/`Too deep recursion`/`Too long evaluation`/`FATAL` —
+  **zero new lines added by the quit at all** (compared line count
+  before/after), i.e. clean. Waited a real ~75 real-world seconds
+  (backgrounded `sleep`, not simulated), reconnected as `qxtest` through
+  the **full** login banner (not a netdead silent-reconnect — confirmed
+  by the "你上次连线是从 localhost on Fri Jul 24 ..." real-timestamp
+  line replacing the epoch-0 placeholder a first-ever login shows), and
+  verified `look`/`score`/`skills`/`i` all showed the exact
+  post-sect-join state: 称谓/师傅/skill `force` 1/0/combat_exp
+  203/food&water still full/inventory (mailbox + fresh cloth) all
+  correct. Note: the respawn location was 新手集中营 (the lib's
+  original/default `startroom`), **not** the exact last room the
+  character was standing in at quit time (特种食品仓库) — this is
+  correct, intentional behavior, not a bug: `cmds/usr/quit.lpc` only
+  updates the character's `startroom` anchor if the room they quit in
+  has `valid_startroom` set (a small set of designated hub rooms, e.g.
+  `d/budui/bdguangchang2.lpc`), which the food shop does not have.
+
+### Explicitly NOT verified live (say-so per §10.7 item 6)
+
+- **A completed shop purchase** (money successfully deducted, item
+  successfully added to inventory): the `buy` command's dispatch and
+  its insufficient-funds rejection path were exercised and are correct,
+  but no purchase actually completed, because `qxtest` never
+  accumulated any in-game currency. The lib's own documented
+  money-earning paths (jobs like `d/budui/job1.lpc`'s `search`, or the
+  higher-tier `attempt_apprentice`/`ask_me` skill-gated NPCs) all
+  require either a prior quest-approval flag or skill/combat_exp
+  thresholds well beyond a single test session's reach, and this
+  project's permission system declined an attempted admin-console
+  shortcut (`call qxtest->add("money",...)`) to seed test currency. Not
+  faked, not silently skipped — genuinely not reached within this
+  session's time budget.
+- **Combat leading to actual death/respawn**: not attempted, for the
+  same reason `bxsj`'s pilot gives no full death cycle either — this
+  would mean deliberately overriding `wimpy`/using `kill` against a
+  stronger NPC purely to die, which risks leaving `qxtest` in a
+  corpse/respawn-penalty state that's a worse piece of "representative
+  working-character" evidence than its current clean post-sect-join
+  state, and combined with the shop-purchase gap above, was deprioritized
+  given the two real bugs already found and fixed in the time available.
+  The death/respawn code path itself was not code-reviewed as a
+  substitute either — flagging this plainly as unverified rather than
+  implying coverage it doesn't have.

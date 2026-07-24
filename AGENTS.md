@@ -1375,7 +1375,14 @@ refuses to call it. Fix: drop `private` (keep `nomask`).
 Affected so far: `xuanjianlu`, `beimeixiakexing2001`, `bxsj`, `bxsj1`,
 `jinyongwenzi`, `xiakexing3`, the `jinyongqunxiazhuan2008` group,
 `zhongjidiyu` (twice — main hook plus an 18-handler NPC file),
-`zhongjidiyu_airuoyoulan`, `tiexuejianghu`. **Empirical caveat: a
+`zhongjidiyu_airuoyoulan`, `tiexuejianghu`, `xingzhanyingxiong` (found
+via a deep functional test, §10.7 — reached only through an NPC's own
+`command()` call in its sect-recruit path, not by any player-typed
+command, since ordinary typed commands arrive via `ORIGIN_DRIVER` and
+bypass the privacy check that only bites `ORIGIN_EFUN` calls; every
+earlier smoke test on this lib only ever typed commands directly, so
+the whole sect-join system silently never worked until this pass).
+**Empirical caveat: a
 `private` command_hook does NOT always break dispatch on current
 drivers** — `shiji`, `tianxia`, and `zhonghua2` work despite it (exact
 conditions unestablished; possibly declaration-shape or driver-version
