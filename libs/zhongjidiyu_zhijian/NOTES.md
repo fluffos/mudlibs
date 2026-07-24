@@ -579,3 +579,55 @@ exercised by the required test, not touched).
   mudlib bugs (native completes the full crypt-handshake + registration
   + gameplay flow cleanly, verified above) — not patched, per the
   standing instruction for WASM-mode limitations.
+  (The VERSION_D gate is now patched — see the 2026-07 pass below.)
+
+## WASM-enablement pass (2026-07): loopback gates + admin seeding
+
+Standard pass per AGENTS.md §1.3b/§1.3c/§1.3e/§1.5:
+
+- `adm/daemons/band.lpc`: new `is_local_site(site)` helper; `is_banned()`
+  returns 0 for loopback/empty/malformed input. (Note: `logon()` passes
+  `query_ip_name()`, not the number — a resolved hostname also passes
+  the local check; acceptable for the WASM-first use case.)
+- `adm/daemons/logind.lpc`:
+  - `get_id()` (~line 262): `VERSION_D->is_version_ok()` gate guarded
+    with `find_object(VERSION_D)` (absent ⇒ version ok — the WASM
+    sockets-less case). Note this legacy `get_id` path isn't part of the
+    zjmud `get_user` flow, but the guard is kept for completeness.
+  - `check_ok()` (~line 414): `MESSAGE_D->find_chatter()` wrapped in
+    `catch()` — same first-login-killer shape as the sibling hell libs
+    (messaged's `create()` can throw; under WASM it fails to compile
+    entirely and the call itself throws).
+- `adm/daemons/network/messaged.lpc` `create()`: `catch(startup_udp())`
+  — the §15aj get_config port bug makes `socket_bind()` throw a string-
+  type error if this daemon is ever loaded (it IS lazily loaded by
+  `check_ok()` despite the broken preload path); now degrades
+  gracefully instead of aborting the login that triggered the load.
+- `adm/daemons/closed.lpc` `heart_beat()` / `adm/daemons/questd.lpc`
+  `start_all_quest()`: `find_object(VERSION_D)` guards (both preloaded).
+- No uptime()/anti-flood/per-IP gates exist in this lib's zjmud login
+  flow — nothing else to bypass. The crypt version-handshake itself is
+  already deterministic since the earlier `crypt(ZJKEY, "zj")` fix and
+  is left in place (it is the edition's defining feature; scripted
+  clients can compute the reply — see `/tmp`-style client recipe in the
+  transcript sections above, ZJKEY `123456789abcd`, reply
+  `crypt(ZJKEY, challenge[2..3])`).
+- Admin seeded: `fluffos` / `Mud@2026` / 浮云, rank `(admin)` via
+  `adm/etc/wizlist`. Registered via the REAL zjmud flow (handshake →
+  `fluffos║Mud@2026║crypt(ZJKEY,"fluffos")+crypt(ZJKEY,"Mud@2026")║
+  fluffos@test.com` → `男性║1║浮云`). Verified after wizlist+restart:
+  first login shows 目前权限：(admin) and
+  `update /d/register/entry.lpc` → 成功.
+- **Security note (pre-existing design, documented not changed)**: this
+  edition performs NO server-side password verification on existing
+  accounts — `get_user()` restores the login save and then OVERWRITES
+  the stored password with whatever the client sent (verified
+  empirically: a wrong-password login attempt succeeds). Account
+  authentication was evidently delegated to the 指间MUD platform
+  upstream. Anyone who can speak the ZJKEY handshake can log into any
+  account, including `fluffos` — flagged in the README's hosting
+  warning.
+- Retest: fresh registration (`regtest`/秦风) end-to-end into 世外桃源,
+  look/score(pre-投胎 message)/quit correct; test saves removed. Final
+  debug.log: only the two known socket_bind lines (versiond uncaught ×1,
+  messaged now-caught ×1).

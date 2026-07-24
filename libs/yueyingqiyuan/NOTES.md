@@ -344,3 +344,36 @@ process remains with cwd under `libs/yueyingqiyuan/` before finishing.
   prints an empty IP substring (known WASM-mode `query_ip_number()`
   limitation, driver-side, not a mudlib bug) instead of `127.0.0.1`.
   Does not affect login/registration/gameplay in this lib.
+
+## WASM-enablement pass (2026-07): loopback gates + admin seeding
+
+Standard four-change pass per AGENTS.md §1.3b/§1.3e/§1.5:
+
+- `adm/daemons/band.lpc`: new `is_local_site(site)` helper (loopback /
+  empty / malformed-IP ⇒ local) short-circuits `is_banned()`,
+  `create_char_banned()`, `is_strict_banned()` — all return 0 for local.
+- `adm/daemons/logind.lpc`:
+  - `logon()` (~line 100): per-IP concurrent-login-attempt cap
+    (`login_cnt > 3` destruct) now skipped for loopback.
+  - `encoding()` (~line 185): the no-`query_ip_name` destruct and the
+    IP-must-be-numeric character-scan destruct are skipped for
+    loopback/malformed IPs (the WASM garbage-IP case).
+  - `get_id()`'s `MAX_LOGIN` per-IP multi-login cap (~line 375):
+    loopback exempt.
+  - `get_passwd()`'s 20-second relogin load throttle (~line 585):
+    loopback exempt (kept for remote connections).
+- `adm/daemons/securityd.lpc` `match_wiz_site()`: loopback/malformed IP
+  always matches (wizard site locks can't block local logins).
+- No `uptime()` startup-grace gate exists in this lineage's login path
+  (only cosmetic uptime uses in cmwhod/httpd) — nothing to bypass.
+- Admin seeded per §1.5: `fluffos` / `Mud@2026` / 浮浮, registered via the
+  real flow (gb → no → new → id → 中文名 → 密码×2 → email 必含 "ccb"
+  (`fluffos@ccb.com`) → gender m → talent 9 → y), then `fluffos (admin)`
+  appended to `adm/etc/wizlist`. Verified on re-login: banner shows
+  目前权限：(admin), lands in /d/wiz/wizroom, and
+  `update /d/city/kezhan.lpc` recompiles successfully.
+- Retest: fresh normal registration (`wasmtest`/秦风测) end-to-end into
+  南城客栈 with `look`/`score`/`quit` correct; debug.log clean (warnings
+  only). Test char saves removed; note the lib runtime-appends every new
+  player name to `adm/etc/banned_name` (name-reservation) — test-churn
+  lines were reverted, the single 浮浮 line is kept intentionally.

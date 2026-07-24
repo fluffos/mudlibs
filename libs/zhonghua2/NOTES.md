@@ -192,4 +192,42 @@ retest (see below) — none were touched or reverted.
   papered over; a future pass wanting WASM playability for this specific
   lib would need to either wrap that one call in `catch()` (a real,
   minimal, low-risk mudlib fix) or accept it as out of scope for a
-  sockets-dependent daemon.
+  sockets-dependent daemon. (Done in the 2026-07 WASM-enablement pass
+  below, via `find_object()` guards.)
+
+## WASM-enablement pass (2026-07): loopback gates + admin seeding
+
+Standard pass per AGENTS.md §1.3b/§1.3c/§1.3e/§1.5:
+
+- `adm/daemons/band.lpc`: new `is_local_site(site)` helper (loopback /
+  empty / malformed IP ⇒ local); `is_banned()` returns 0 for local
+  sites before any parsing.
+- `adm/daemons/logind.lpc`:
+  - `logon()` (~line 75) and `get_id()` (~line 158): both
+    `VERSION_D->is_version_ok()` gates now guarded with
+    `find_object(VERSION_D)` — absent versiond (WASM, no sockets
+    package ⇒ program-less object ⇒ uncaught "No program" throw that
+    killed every WASM login) now means "version ok". This was the
+    documented WASM login blocker for this lib.
+  - `logon()`: `iplimit > 15` per-IP multi-login cap — loopback exempt.
+- `adm/daemons/closed.lpc` `heart_beat()`: same `find_object(VERSION_D)`
+  guard (preloaded daemon, would throw every heartbeat under WASM).
+- No `uptime()` startup-grace gate or registration throttle exists in
+  this lib's login chain — nothing else to bypass.
+- Admin seeded: `fluffos` / 浮云, rank `(admin)` via `adm/etc/wizlist`.
+  This lineage requires TWO different passwords: 管理密码 (recovery)
+  `Admin@2026`, 普通密码 (daily login) `Mud@2026` — the lib rejects
+  identical values, so the admin/recovery password deviates from the
+  standard convention (documented in README). Same `feature/dbase.lpc`
+  anti-steal quirk as yuxuechongsheng (here keyed on "(admin)" and
+  covering "password"/"ad_password"/"wizpwd" AND blocking
+  `set("id", <admin id>)` on login obs): register first as a plain
+  player, then add to wizlist and restart. Verified: login shows
+  目前权限：(admin), lands in 巫师休息室,
+  `update /d/wizard/wizard_room.lpc` → 成功.
+- Retest: fresh normal registration (`regtest`/秦风) end-to-end into
+  世外桃源 with look/score/quit correct; test saves removed. debug.log
+  shows only the pre-existing §15ad `socket_bind()` versiond error plus
+  a few pre-existing log-ACL denials (`/u/task/log`, `/log/nosave/quest`
+  append permission, debug-log rotation lstat) — none new to this pass,
+  none login-affecting.

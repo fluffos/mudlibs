@@ -89,3 +89,35 @@ throughout the sweep (~17-18GB free the whole time, no pressure).
   (known WASM `query_ip_number()` limitation, driver-side, not a mudlib
   bug) instead of a real hostname/IP — does not affect login or
   gameplay.
+
+## WASM-enablement pass (2026-07): loopback gates + admin seeding
+
+Standard pass per AGENTS.md §1.3b/§1.3e/§1.5:
+
+- `adm/daemons/band.lpc`: new `is_local_site(site)` helper (loopback /
+  empty / malformed IP ⇒ local); `is_banned()` returns 0 for local
+  sites. (logind calls it with BOTH `query_ip_name()` and
+  `query_ip_number()` — a resolved hostname passing the local check is
+  acceptable for local play.)
+- `adm/daemons/logind.lpc`:
+  - `logon()`: `iplimit > 15` per-IP multi-login cap — loopback exempt.
+  - `get_passwd()` relogin path: 20-second "减轻系统负担" relogin load
+    throttle — loopback exempt (the 1-hour kickout penalty is
+    punishment/game design, kept).
+- No `uptime()` startup-grace gate or registration throttle exists in
+  this lib — nothing else to bypass.
+- Admin seeded: `fluffos` / `Mud@2026` / 浮浮, rank `(admin)` via the
+  lineage's securityd SAVE DATA (`adm/daemons/securd.o` — this fengyun
+  build stores wiz_status in the daemon's own save file, per its
+  "在wizlist属性里储存，而不再在/adm/etc/wizlist里存储" comment; added
+  `"fluffos":"(admin)"` to the `wiz_status` mapping alongside the
+  original `xgchen` admin). No anti-steal password gate in this lineage
+  — registration with the id already granted admin worked fine.
+  Verified: relogin + `update /d/fy/fqkhotel.lpc` → 成功 (wizard-style
+  room path display also confirms wizhood).
+- Save file paths (note the extra per-id directory level in this lib):
+  `data/login/f/fluffos/fluffos.o` + `data/user/f/fluffos/fluffos.o`.
+- Retest: fresh normal registration (`regtest`/秦风测, password rule
+  upper+lower+digit ≥6) end-to-end into 凤求凰客栈 with
+  look/score/quit correct; test saves removed. debug.log clean (no
+  error lines).

@@ -64,7 +64,9 @@ void logon(object ob) {
   catch(MUDLIST_CMD->main());
   UPTIME_CMD->main();
 
-  if (!VERSION_D->is_version_ok() && !VERSION_D->query_temp("operator"))
+  // WASM (AGENTS.md §1.3c): versiond can fail to load without the sockets
+  // package -- treat an absent VERSION_D as "version ok".
+  if (find_object(VERSION_D) && !VERSION_D->is_version_ok() && !VERSION_D->query_temp("operator"))
     write(HIY "现在本站正在同步版本，如果你不是巫师，请稍候再登录。\n\n" NOR);
   else if (REBOOT_CMD->is_rebooting())
     write(HIY "现在本站正在准备重新启动，如果你不是巫师，请稍候再登录。\n\n" NOR);
@@ -127,7 +129,9 @@ private void get_id(string arg, object ob) {
   }
 
   if (wiz_level(arg) < 1) {
-    if (!VERSION_D->is_version_ok() && !VERSION_D->query_temp("operator")) {
+    // WASM (AGENTS.md §1.3c): absent VERSION_D (no sockets package)
+    // means "version ok" -- do not gate logins on it.
+    if (find_object(VERSION_D) && !VERSION_D->is_version_ok() && !VERSION_D->query_temp("operator")) {
       write("现在本站正在同步版本中，暂时不能登录，请稍候再尝试。\n");
       destruct(ob);
       return;
@@ -262,7 +266,10 @@ private void check_ok(object ob) {
     return;
   }
 
-  user = MESSAGE_D->find_chatter(ob->query("id"));
+  // WASM (AGENTS.md §1.3c): messaged uses sockets and can fail to load;
+  // an uncaught throw here kills the whole login -- guard it.
+  if (catch(user = MESSAGE_D->find_chatter(ob->query("id"))))
+    user = 0;
   if (objectp(user)) {
     write("你把正在聊天的ID踢了出去。\n");
     MESSAGE_D->user_logout(user, user->name(1) + "从" +

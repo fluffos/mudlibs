@@ -54,3 +54,15 @@ python3 scripts/mudclient.py 127.0.0.1 40025
   游玩**，注册、look/score/quit 全部正常；唯一的小瑕疵是显示在线人数时
   的站点名称那一行在 WASM 下会显示为空（WASM 驱动的已知限制），不影响
   实际登录和游戏功能。
+- 2026-07 WASM 适配补丁：本机/回环连接不再受 IP 封禁、同 IP 连接数限制
+  和 20 秒重连间隔的影响。
+
+## 管理员账号 / Admin account
+
+- **ID**: `fluffos`　**密码**: `Mud@2026`　**中文名**: 浮浮
+- **权限**: `(admin)`（最高级；通过 `adm/daemons/securd.o` 里 securityd
+  的 `wiz_status` 数据授予——本引擎不用 `/adm/etc/wizlist` 文件，巫师表
+  存在安全精灵自己的存档里；`update /d/fy/fqkhotel.lpc` 实测编译成功）。
+- 存档：`data/login/f/fluffos/fluffos.o` + `data/user/f/fluffos/fluffos.o`
+  （注意本 lib 的存档比其它 lib 多一层以 ID 命名的子目录）。
+- **警告**：如要对公网开放本服务器，请务必先修改该账号密码。

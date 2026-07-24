@@ -422,3 +422,64 @@ util.lpc`, `inherit/misc/quest.lpc`, plus the ~30-file `"nosave/` →
   `query_ip_number()` gotcha (this lib's `logon()` doesn't even reach an
   IP-format gate before hitting this one) — noted separately for whoever
   next triages WASM playability across the "hell"/ES-II family.
+  (Superseded by the 2026-07 WASM-enablement pass below — now patched.)
+
+## WASM-enablement pass (2026-07): loopback gates + admin seeding
+
+Standard pass per AGENTS.md §1.3b/§1.3c/§1.3e/§1.5:
+
+- `adm/daemons/band.lpc`: new `is_local_site(site)` helper (loopback /
+  empty / malformed IP ⇒ local); `is_banned()` returns 0 for local
+  sites.
+- `adm/daemons/logind.lpc` `logon()` (~line 67) and `get_id()`
+  (~line 130): both `VERSION_D->is_version_ok()` gates guarded with
+  `find_object(VERSION_D)` — absent versiond (WASM: sockets package
+  missing ⇒ program-less object ⇒ uncaught throw killed every login
+  before the id prompt) now means "version ok". This was the documented
+  WASM login blocker.
+- `adm/daemons/closed.lpc` `heart_beat()` and `adm/daemons/questd.lpc`
+  `start_all_quest()`: same `find_object(VERSION_D)` guard (both
+  preloaded).
+- The `iplimit > 3` per-IP cap in `logon()` is already inside `#if 0`
+  (disabled upstream); no uptime()/anti-flood gates exist otherwise —
+  nothing else to bypass.
+- **NEW pre-existing bug found & fixed — re-login was broken for ALL
+  accounts**: `clone/user/user.lpc`'s `restore()` override validates a
+  "sec_id" integrity checksum with `crypt(calc_sec_id(1), sec_id) !=
+  sec_id`, but its own `save()` stores `set("sec_id", calc_sec_id())` —
+  the PLAINTEXT stub value `"none"`, never a crypt() of it. The
+  invariant can never hold, so every re-login printed
+  无法读取你的数据档案 and destructed (registration itself worked, which
+  is why earlier passes — which only tested registration+look/score/quit
+  in one session — never hit it). Fix (user.lpc ~line 153): also accept
+  the plaintext form save() actually writes
+  (`&& sec_id != calc_sec_id(1)`). Verified: plain player and fluffos
+  both re-login fine now.
+- Admin seeded: `fluffos` / 浮云, rank `(admin)` (top of wiz_levels) via
+  `adm/etc/wizlist`. Two-password lineage: 管理密码 `Admin@2026`,
+  普通密码 `Mud@2026` (must differ, same deviation as zhonghua2,
+  documented in README). Registered as plain player first, wizlist entry
+  added afterwards + restart (consistent with the lineage's anti-steal
+  conventions). Verified: 目前权限：(admin) banner, wizard-style room
+  display, `update /d/register/entry.lpc` → 成功.
+- Retest: fresh registration (`regtest`/秦风) end-to-end into 世外桃源 +
+  re-login as regtest (exercising the fixed restore path) + look/score/
+  quit all correct; test saves removed. Final boot's debug.log clean
+  except the known §15ad versiond `socket_bind()` cosmetic error.
+  (Longer-running boots also surface pre-existing quest-daemon
+  heart_beat errors — `Bad argument 1 to call_other` / `Bad argument 2
+  to present()` in `/clone/quest/*` / `/adm/daemons/quest/*` — caused by
+  the skeleton archive's missing zones, present before this pass,
+  unrelated to the VERSION_D guards.)
+- **Second pre-existing bug found & fixed (backported from sibling
+  zhongjidiyu_airuoyoulan, same symptom confirmed here): first login
+  after every boot had ALL commands dead** (even `quit` → 什么？),
+  working from the second login on. `logind.lpc check_ok()` lazily loads
+  `MESSAGE_D` (`adm/daemons/network/messaged.lpc`) whose `create()` →
+  `startup_udp()` → `socket_bind(fd, "<string>")` throws uncaught (§15ad
+  get_config port-ID mismatch), aborting the first login's remaining
+  setup. Fixed: `messaged.lpc create()` wraps `startup_udp()` in
+  `catch()`, and `check_ok()` wraps `MESSAGE_D->find_chatter()` in
+  `catch()` (also required under WASM where messaged fails to compile
+  entirely). Verified: first login after a fresh boot now runs `update`
+  successfully.

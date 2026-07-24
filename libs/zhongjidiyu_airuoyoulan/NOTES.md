@@ -418,3 +418,52 @@ the main session once all three are complete.
   would likely still hit that second, WASM-driver-level (`sockets`
   package unavailable) limitation — not chased further since the first
   blocker (harness-level) already fully explains the observed failure.
+  (The VERSION_D gate is now patched — see the 2026-07 WASM-enablement
+  pass below.)
+
+## WASM-enablement pass (2026-07): loopback gates + admin seeding
+
+Standard pass per AGENTS.md §1.3b/§1.3c/§1.3e/§1.5:
+
+- `adm/daemons/band.lpc`: new `is_local_site(site)` helper; `is_banned()`
+  returns 0 for loopback/empty/malformed IPs.
+- `adm/daemons/logind.lpc` `logon()` (~line 76) and `get_id()`
+  (~line 139): `VERSION_D->is_version_ok()` gates guarded with
+  `find_object(VERSION_D)` (absent ⇒ version ok) — removes the
+  WASM-blocking uncaught throw documented above.
+- `adm/daemons/closed.lpc` `heart_beat()` and `adm/daemons/questd.lpc`
+  `start_all_quest()`: same guard (both preloaded).
+- The `iplimit > 3` per-IP cap in `logon()` is already `#if 0`-disabled
+  upstream; no uptime()/anti-flood gates otherwise.
+- **NEW pre-existing bug found & fixed — first login after every boot had
+  ALL commands dead** (`update`, even `quit` → 什么？), working only from
+  the second login on: `logind.lpc check_ok()` lazily loads `MESSAGE_D`
+  (`/adm/daemons/network/messaged`), whose `create()` →
+  `startup_udp()` → `socket_bind(fd, "10")` throws (the §15ad
+  get_config-returns-string port bug), uncaught, aborting the rest of
+  that first login's setup after enter_world (command path never set).
+  Fixed twice over: `messaged.lpc create()` now `catch()`es
+  `startup_udp()` (the UDP intermud messaging is non-essential and also
+  can't work under WASM), and `check_ok()` wraps the
+  `MESSAGE_D->find_chatter()` call in `catch()` (under WASM messaged
+  fails to compile entirely, so the call itself would throw). Verified:
+  first login after a fresh boot now has working commands.
+- **§15aa second instance fixed** (`adm/simul_efun/message.lpc`): the
+  local `message()` override lacked a forward declaration, so
+  textually-earlier callers (`tell_room` et al) bound to the raw efun —
+  surfaced as `Bad argument 4 to EFUN message()` when `update` moved the
+  player (tell_room with exclude=0) despite the earlier §15s
+  normalization inside the override. Added the top-of-file
+  `varargs void message(...)` forward declaration (same fix as sibling
+  zhongjidiyu) and made the definition `varargs`.
+- Admin seeded: `fluffos` / 浮云, rank `(admin)` via `adm/etc/wizlist`.
+  Two-password lineage: 管理密码 `Admin@2026`, 普通密码 `Mud@2026`
+  (must differ — deviation documented in README). Registered as plain
+  player first, wizlist entry + restart after. Verified: 目前权限：
+  (admin), `update /d/register/entry.lpc` → 成功, clean quit, no errors.
+- Retest: fresh registration (`regtest`/秦风) into 世外桃源 + relogin as
+  regtest (restore path OK — this lib's sec_id checksum is the real
+  implementation, unlike sibling zhongjidiyu's broken stub) + look/
+  score/quit correct; test saves removed. debug.log: only the known
+  versiond socket_bind line plus the now-`catch()`ed messaged
+  socket_bind (logged as intercepted) — no new error classes.

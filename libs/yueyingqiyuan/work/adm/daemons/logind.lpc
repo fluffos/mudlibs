@@ -97,13 +97,17 @@ void logon(object ob) {
   int i, login_cnt;
 
   // 防止有恶意的玩家用 KMUD 等工具捣乱
-  usr = filter_array(children(LOGIN_OB), (: interactive :));
-  i = sizeof(usr);
-  login_cnt = 0;
-  while (i--) if (query_ip_number(usr[i]) == query_ip_number(ob)) login_cnt++;
-  if (login_cnt > 3) {
-    destruct(ob);
-    return;
+  // WASM/local play (AGENTS.md §1.3e): loopback is exempt from the
+  // per-IP concurrent-login-attempt cap.
+  if (!"/adm/daemons/band"->is_local_site(query_ip_number(ob))) {
+    usr = filter_array(children(LOGIN_OB), (: interactive :));
+    i = sizeof(usr);
+    login_cnt = 0;
+    while (i--) if (query_ip_number(usr[i]) == query_ip_number(ob)) login_cnt++;
+    if (login_cnt > 3) {
+      destruct(ob);
+      return;
+    }
   }
 
 #ifdef GB_AND_BIG5
@@ -178,18 +182,21 @@ private void encoding(string arg, object ob) {
 
 
   // try not accept "name" as IP
-
-  if (!ip_name) {
-    destruct(ob);
-    log_file("ALLCONT", sprintf("kicked out, No IP\n"));
-    return;
-  }
-
-  for (ii = 0; ii < sizeof(ip_number); ii++) {
-    if ((ip_number[ii] != '.') && (ip_number[ii] > '9')) {
+  // WASM/local play (AGENTS.md §1.3b): loopback (or the empty/garbage IP
+  // older WASM drivers report) skips the no-IP and IP-format gates.
+  if (!"/adm/daemons/band"->is_local_site(ip_number)) {
+    if (!ip_name) {
       destruct(ob);
-      log_file("ALLCONT", sprintf("kicked out, Non_number\n"));
+      log_file("ALLCONT", sprintf("kicked out, No IP\n"));
       return;
+    }
+
+    for (ii = 0; ii < sizeof(ip_number); ii++) {
+      if ((ip_number[ii] != '.') && (ip_number[ii] > '9')) {
+        destruct(ob);
+        log_file("ALLCONT", sprintf("kicked out, Non_number\n"));
+        return;
+      }
     }
   }
 
@@ -367,8 +374,11 @@ private void get_id(string arg, object ob) {
   // MAX_LOGIN and LOGIN_SITE should be defined in login.h
 #ifdef MAX_LOGIN
 
-  if (!ppl) {  // only check this for new login.
+  if (!ppl &&  // only check this for new login.
     // allow existing players to reconnect.
+    // WASM/local play (AGENTS.md §1.3e): loopback exempt from the
+    // per-IP multi-login cap.
+    !"/adm/daemons/band"->is_local_site(query_ip_number(ob))) {
     my_ip = query_ip_number(ob);
 
     MaxLimit = "/adm/daemons/band"->allow_multi_login(my_ip);
@@ -578,7 +588,10 @@ private void get_passwd(string pass, object ob) {
   }
   time_rl = time() - ob->query("last_on");
   // Check if logout recently
-  if (time_rl >= 0 && time_rl <= 20) {
+  // WASM/local play (AGENTS.md §1.3e): loopback exempt from the 20s
+  // relogin load throttle.
+  if (!"/adm/daemons/band"->is_local_site(query_ip_number(ob)) &&
+    time_rl >= 0 && time_rl <= 20) {
     temps = sprintf("你距上次退出仅 %d 秒?\n", time_rl);
     write(temps);
     if ((string)SECURITY_D->get_status(ob->query("id")) == "(player)") {

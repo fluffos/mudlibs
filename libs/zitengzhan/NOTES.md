@@ -401,3 +401,35 @@ created first); killed by exact PID after testing, never a pattern-based
   brief anticipated (a site-restriction daemon `sscanf`/`explode`-parsing
   the IP format) — confirmed NOT a mudlib bug (native works perfectly,
   see above) and NOT patched, per standing instruction.
+  (Superseded — now patched in the 2026-07 WASM-enablement pass below.)
+
+## WASM-enablement pass (2026-07): loopback gates + admin seeding
+
+Standard pass per AGENTS.md §1.3b/§1.3e/§1.5:
+
+- `adm/daemons/band.lpc`: new `is_local_site(site)` helper (loopback /
+  empty / malformed IP ⇒ local) short-circuits `is_banned()`,
+  `create_char_banned()`, and `is_strict_banned()` — the last one was
+  THE WASM login blocker (its `explode(site, ".")[j]` range parsing
+  throws `Array index out of bounds` on the empty/garbage WASM IP).
+- `adm/daemons/logind.lpc` `logon()`:
+  - `logon_cnt > 50` per-IP concurrent-connection cap — loopback exempt.
+  - the no-`query_ip_name` destruct and the IP-must-be-digits-and-dots
+    scan — skipped for loopback/malformed IPs.
+  - the `#ifdef MAX_LOGIN` per-IP multi-login cap in `get_id()` —
+    loopback exempt.
+- The 30s relogin throttle is already commented out upstream; no
+  `uptime()` startup gate exists — nothing else to bypass.
+- `securityd.lpc`'s `match_wiz_site()` has NO callers in this lib (dead
+  code) — left unpatched.
+- Admin seeded: `fluffos` / 浮浮, rank `(admin)` ("总管巫师") via
+  `adm/etc/wizlist`. THREE passwords in this lineage for a wizard
+  account, all must differ pairwise where noted:
+  管理密码 (super/recovery) `Admin@2026`, 登陆密码 (daily login)
+  `Mud@2026`, and a 巫师专用密码 (wizard-only password, prompted and
+  set on first wizard login, must differ from the login password)
+  `Wiz@2026`. Verified: 您的系统权限目前是：总管巫师(admin),
+  `update /d/city/kezhan.lpc` → 成功.
+- Retest: fresh normal registration (`regtest`/秦风测) end-to-end into
+  南城客栈 with look/score (full character sheet)/quit correct; test
+  saves removed. debug.log clean (no new errors).

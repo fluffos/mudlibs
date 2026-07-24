@@ -60,3 +60,11 @@ python3 scripts/mudclient.py 127.0.0.1 40048
   纯 JS）模式下同样可以完整注册并游玩**，登录、看房间、查看角色状态都正常；
   唯一的小瑕疵是进站提示的 IP 地址那一行在 WASM 下显示为空白（WASM 驱动的
   已知限制，不影响实际登录和游戏功能）。
+
+## 管理员账号 / Admin account
+
+- **ID**: `fluffos`　**密码**: `Mud@2026`　**中文名**: 浮浮
+- **权限**: `(admin)`（最高级；通过 `adm/etc/wizlist` 授予，登录后自动进入
+  巫师会议厅，`update` 等巫师指令已实测可用）。
+- 存档：`data/login/f/fluffos.o` + `data/user/f/fluffos.o`。
+- **警告**：如要对公网开放本服务器，请务必先修改该账号密码。

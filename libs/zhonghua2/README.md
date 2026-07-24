@@ -54,3 +54,23 @@ python3 scripts/mudclient.py 127.0.0.1 40028
   会导致每个新连接在看完开场画面后立刻被断开，连输入英文名字的提示都
   看不到；这是 WASM 环境本身的限制，并非游戏内容或本次移植的问题，原生
   （telnet）模式完全不受影响。
+- 2026-07 WASM 适配补丁之后：上述版本同步（versiond）拦断已在 mudlib 侧
+  修复——versiond 因缺少 socket 功能而加载失败时，登录流程现在视同
+  "版本正常"直接放行；同时本机/回环连接也不再受 IP 封禁和同 IP 连接数
+  限制的影响。
+
+## 管理员账号 / Admin account
+
+- **ID**: `fluffos`　**中文名**: 浮云
+- **普通密码（日常登录用）**: `Mud@2026`
+- **管理密码（找回/改密用）**: `Admin@2026`（本 lib 强制两个密码不能相同，
+  因此管理密码与标准约定不同，特此说明）
+- **权限**: `(admin)`（本 lib 巫师等级表最高级；通过 `adm/etc/wizlist`
+  授予，登录后进入巫师休息室，`update /d/wizard/wizard_room.lpc` 实测
+  编译成功）。
+- 存档：`data/login/f/fluffos.o` + `data/user/f/fluffos.o`。
+- 注意：`feature/dbase.lpc` 有防盗号保护，已在 wizlist 中登记为
+  `(admin)` 的 ID 无法在注册流程中设置密码（也无法把登录对象的 id 设成
+  该名字）。如需重建账号：先从 wizlist 删除 `fluffos`，注册完成后再加
+  回并重启。
+- **警告**：如要对公网开放本服务器，请务必先修改这两个密码。

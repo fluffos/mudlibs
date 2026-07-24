@@ -54,3 +54,18 @@ python3 scripts/mudclient.py 127.0.0.1 40056
   断开（提示"本站正在进行内部调整"），这是 WASM 驱动本身的已知限制，
   并非本 mudlib 的问题；原生（telnet）模式下完全不受影响，可以正常注册
   和游玩。
+- 2026-07 WASM 适配补丁之后：上述"被误判为封禁"的问题已在 mudlib 侧
+  修复（本机/回环连接现在无条件放行封禁、IP 数量限制等检查），WASM 与
+  本机游玩不再受影响。
+
+## 管理员账号 / Admin account
+
+- **ID**: `fluffos`　**密码**: `Mud@2026`　**中文名**: 浮浮
+- **权限**: `(boss)`（本 lib 巫师等级表的最高级"巫师协会懂事"；通过
+  `adm/etc/wizlist` 授予，`update` 等巫师指令已实测可用）。
+- 存档：`data/login/f/fluffos.o` + `data/user/f/fluffos.o`。
+- 注意：本 lib 的 `feature/dbase.lpc` 有一个防盗号保护——已在 wizlist 中
+  登记为 `(boss)` 的 ID 无法在注册流程中设置密码。因此如需重建该账号，
+  先把 `fluffos` 从 wizlist 中删掉、注册完成后再加回去（本次就是按这个
+  顺序做的）。
+- **警告**：如要对公网开放本服务器，请务必先修改该账号密码。

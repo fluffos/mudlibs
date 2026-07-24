@@ -473,3 +473,45 @@ the same time.
   Confirmed this is the documented driver-side WASM limitation (not a
   mudlib bug) — the exact same lib boots and completes full registration
   cleanly natively (see above). Not patched, per standing instruction.
+  (Superseded by the 2026-07 WASM-enablement pass below — now patched.)
+
+## WASM-enablement pass (2026-07): loopback gates + admin seeding
+
+Standard pass per AGENTS.md §1.3b/§1.3e/§1.5:
+
+- `adm/daemons/band.lpc`: new `is_local_site(site)` helper (loopback /
+  empty / malformed IP ⇒ local). `is_banned()` short-circuits to 0 for
+  local sites (this was THE WASM login blocker documented in the earlier
+  re-verification pass: malformed WASM IP ⇒ "banned" ⇒ instant destruct).
+  `vaild_allow_address()` (per-account allow-ip lock) returns 1 for
+  loopback.
+- `adm/daemons/logind.lpc`:
+  - `logon()`: `ban_cnt > 12` per-IP pending-connection cap — loopback
+    exempt.
+  - `get_id()`: the netclub/public-ip per-IP multi-login caps
+    (`ip_cnt > 12` / `> 4`) — loopback exempt.
+  - `get_passwd()`: 30-second "你刚退出游戏" relogin load throttle —
+    loopback exempt (the 600s kickout penalty is punishment/game design,
+    kept). Also removed a leftover debug `printf("%O\n", ob)` in
+    `get_name()` that printed `/clone/user/login#N` at every new player.
+- No `uptime()` startup-grace gate exists in this lib (only cosmetic
+  uptime uses in check_cpu/uptime display) — nothing to bypass.
+- Admin seeded: `fluffos` / `Mud@2026` / 浮浮, rank `(boss)` via
+  `adm/etc/wizlist`. **Lineage quirk discovered**: `feature/dbase.lpc`'s
+  `set()` has an anti-steal-power gate ("Add by Lonely") that silently
+  refuses `set("password", ...)` on any object whose id has `(boss)`
+  wizhood unless this_player()'s euid IS that id — so registering an id
+  that is ALREADY in the wizlist as (boss) dead-loops at the password
+  step (confirm always mismatches against old=0). Correct order:
+  register as a plain player first, then add `fluffos (boss)` to the
+  wizlist and restart. Verified after restart: login banner shows
+  权限〖巫师协会懂事〗(boss), `update /d/register/entry.lpc` succeeds.
+- Retest: fresh normal registration (`regtest`/秦风测) end-to-end into
+  世外桃源, look/score/quit fine; test saves removed. debug.log clean
+  except one pre-existing content bug surfaced by updating
+  /d/city/wumiao.lpc: `/d/city2/npc/wizer.lpc:22` calls
+  `exert_function(10)` (string-typed param, hard compile error) — a
+  genuine pre-existing content bug unrelated to this pass, room loads
+  fine at boot (NPC clone fails only when wumiao is recompiled), left
+  documented. Runtime churn (`u/lonely/log` compile-warning append)
+  reverted via `git show HEAD:`.
