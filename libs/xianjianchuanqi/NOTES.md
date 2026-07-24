@@ -207,3 +207,37 @@ fluffos login + `update /adm/daemons/logind` still succeeds
 `debug.log` shows only the same two pre-existing content bugs noted
 above plus the benign preload `log_error()`/`news_b` traces already
 documented in the "Re-verification pass" section. Test char removed.
+
+## WASM long-sit boot-watch (2026-07-24)
+
+A 200s passive WASM connection (AGENTS.md §10.0) surfaced ~84
+`Error in mudlib error handler: *Object cannot be loaded during
+compilation` cascades during preload — many more than the ~21 traces
+the earlier interactive pass caught and dismissed as "purely cosmetic".
+Root cause, per AGENTS.md §7.10's third bullet (the `bxsj`/`bxsj1`
+shape): `adm/single/master.lpc`'s `log_error()` (line 121, called for
+every compile *warning*, not just errors) and `standard_trace()` (line
+214) both call `CHANNEL_D->do_channel(...)` **unguarded**. `securityd`
+preloads first (before `channeld`, far down `adm/etc/preload`), so the
+very first `#pragma`/nosave-function warning during `securityd`'s
+compile tries to `call_other` a not-yet-loaded `CHANNEL_D` mid-compile
+— forbidden — which throws, re-enters `log_error()`/`standard_trace()`
+for the new error, and cascades again since `CHANNEL_D` still isn't
+loaded. Every one of the 9 daemons preloaded before `channeld` (and any
+`#include`d warning inside them) re-triggers it.
+
+Fixed by guarding both call sites with `find_object(CHANNEL_D)`
+(mechanical §7.10 fix, no behavior change once `CHANNEL_D` exists):
+
+```lpc
+if (find_object(CHANNEL_D))
+  CHANNEL_D->do_channel(this_object(), "err", message);
+```
+
+Re-ran the 200s boot-watch: zero cascades, only the expected non-fatal
+`ftpd` preload failure (missing `sockets` package under WASM, §1.3c,
+caught by `master.lpc`'s own `preload()` catch — same shape as
+`xiakeyingxiong3`). Native sanity retest (id `xjcqrz`/`xjcqrs`, real
+Chinese name, full attribute-roll → gift → email → gender flow):
+reaches 中央广场, `score` renders correctly, `quit` saves cleanly with
+zero errors in the driver log. Test char saves removed.
