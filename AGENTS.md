@@ -1573,6 +1573,19 @@ same interface via `scripts/wasm_client.js` (§1.2).
   diff, unstages, no commit/push). This formalizes — and should fully
   replace — manually re-deriving "what belongs to this batch" from
   `git status` output.
+  **Caveat**: the script's per-slug staging is `git add libs/<slug>/`
+  — a real directory add, which happily sweeps up any deferred/
+  excluded runtime-save content sitting untracked under that lib
+  (large economy-save shards, deliberately-skipped huge data files —
+  `nitan170911`'s `data/bbased.o` is 157MB, over GitHub's 100MB push
+  limit with no LFS configured in this repo, and got past the script's
+  "stayed within the owned prefix" check since it's genuinely under
+  that lib's own path). A push can fail *after* the commit already
+  landed locally — recoverable with `git reset --soft HEAD^` (safe
+  pre-push, nothing shared yet) followed by re-staging file-by-file
+  instead of the whole slug. For any lib with a known deferred-content
+  history (check its NOTES.md / earlier commit messages), stage exact
+  paths by hand rather than trusting the blanket per-slug add.
 - **Publishing: normal `git push origin main`.** This worktree tracks
   `origin/main` (`github.com/fluffos/mudlibs`) directly. `archives/`
   is gitignored — the original archive files live there locally for
