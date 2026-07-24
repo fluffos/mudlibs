@@ -135,7 +135,15 @@ void log_error(string file, string message) {
 
   if (logging_error) return;
   logging_error = 1;
-  catch(CHANNEL_D->do_channel(this_object(), "err", message));
+  // Skip the broadcast while CHANNEL_D isn't loaded yet: attempting the
+  // call mid-compile (early preload warnings, before channeld's own slot
+  // in the preload list) throws "Object cannot be loaded during
+  // compilation", and even caught here, the caught error re-enters
+  // error_handler()/standard_trace() whose own CHANNEL_D call errors
+  // again ("Error in error handler" boot noise). CHANNEL_D is preloaded,
+  // so post-boot the broadcast works exactly as before.
+  if (find_object(CHANNEL_D))
+    catch(CHANNEL_D->do_channel(this_object(), "err", message));
   logging_error = 0;
 }
 
@@ -230,7 +238,8 @@ string standard_trace(mapping error, int caught) {
       error["trace"][i]["line"],
       error["trace"][i]["object"]);
   }
-  CHANNEL_D->do_channel(this_object(), "err", res);
+  if (find_object(CHANNEL_D))
+    CHANNEL_D->do_channel(this_object(), "err", res);
   return res;
 }
 
