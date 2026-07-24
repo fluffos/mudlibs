@@ -1,0 +1,221 @@
+// space_ship.c
+// standard space ship object.
+// Author: Spock @ FF
+// Last modified by Spock @ FF	98.Aug.30.
+
+#include <dbase.h>
+#include <move.h>
+#include <name.h>
+
+// inherit F_CLEAN_UP;
+inherit F_DBASE;
+inherit F_S_MOVE;
+inherit F_NAME;
+
+object docking_ob;
+object *ship_rooms = ({ });
+object *bridge_rooms = ({ });
+object *boarding_tubes = ({ });
+
+int is_shuttle() { return 1; }
+object query_docking_ob() { return docking_ob; }
+mixed query_ship_rooms() { return ship_rooms; }
+mixed query_bridge_rooms() { return bridge_rooms; }
+mixed query_boarding_tubes() { return boarding_tubes; }
+void init();
+void setup();
+object make_inventory( string file );
+int identify( object me, object ob );
+void tell_ship( string str );
+void tell_bridge( string str );
+void tell_outside( string str );
+
+int identify( object me, object ob )
+{
+	if( me->query_skill("identify") >= ob->query("identify"))
+		return 1;
+	else return 0;
+}
+
+void init()
+{
+	string space_file, station_file;
+	object station;
+
+	station_file = (string)environment()->query("space_station");
+	space_file = (string)environment()->query("space_station_location");
+	call_other( space_file, "???" );
+	station = find_object( station_file );
+	docking_ob = station;
+	set("landing_site", (string)environment()->query("landing_site") );
+
+	seteuid( getuid() );
+}
+
+void setup()
+{
+	string *obs;
+	int i;
+
+	if( !clonep() )
+		return;
+	seteuid(getuid());
+
+	set("no_clean_up", 1 );
+
+	if( arrayp( obs = query("objects") ) ) {
+		i = sizeof(obs);
+		while( i-- )
+			make_inventory( obs[i] );
+	}
+	return;
+}
+
+object make_inventory( string file )
+{
+	object ob;
+
+	seteuid( getuid() );
+	ob = new( file );
+	ob->move( this_object() );
+	ob->set("owner", this_object() );
+	ship_rooms += ({ ob });
+	if( ob->query("bridge") )
+		bridge_rooms += ({ ob });
+	if( ob->query("boarding_tube") )
+		boarding_tubes += ({ ob });
+	return ob;
+}
+
+string docking( string dock_name )
+{
+	string bay, type, dest; 
+	object ob, dock;
+
+	if( dock_name == "surface" )
+		type = "surface_landing";
+	else
+		type = "station_docking";
+
+	switch( type ) {
+		case "station_docking" :
+
+			if( !objectp( dock = present( dock_name, environment() ) ) || !(string)dock->query("space_station") )
+				return "附近的宙域沒有此港口.\n";
+
+			docking_ob = dock;
+
+			if( !( bay = (string)dock->query("shuttle_bay") ) )
+				return (string)dock->name() + "沒有可停泊的太空梭停泊港.\n";
+
+			call_other( bay, "???");
+			ob = find_object( bay );
+			if(!ob) 
+				return "pilot: docking tube available.\n";
+
+			tell_ship(" [廣播] 進行太空站停泊程序.\n");
+			tell_outside( name() + " 停靠在 " + (string)dock->name() + " 的 " + (string)ob->query("short") + ".\n");
+			dock->tell_rooms( " [廣播] " + name() + " 停泊在本太空站的 " + (string)ob->query("short") + ".\n" );
+			move( ob );
+			break;
+
+		case "surface_landing" :
+
+			tell_ship(" [廣播] 進入行星降落航道程序.\n");
+			tell_outside( name() + " 進入 " + (string)environment()->query("short") + " 的行星地表降落航線.\n");
+			dest = (string)query("landing_site");
+			call_other( dest, "???");
+			ob = find_object( dest );
+			if(!ob) 
+				return "pilot: docking tube available.\n";
+			
+			move( dest );
+			tell_ship("你感覺到身體受到重力的影響變得沉重了.\n");
+			tell_outside( name() + " 降落在此.\n");
+			tell_room( ({ ob }), name() + " 降落在此.\n" );
+			docking_ob = ob;
+	}
+	return "";
+}
+
+void launching()
+{
+	string type, dest_name;
+	object dest;
+
+	if( (int)environment()->query("shuttle_bay") ) {
+		type = "surface_landing";
+	}
+	else if( (int)environment()->query("space_port") )
+		type = "station_docking";
+
+	dest_name = environment()->query("space_station_location");
+	call_other( dest_name, "???" );
+	dest = find_object( dest_name );
+
+	switch( type ) {
+		case "surface_landing" :
+			docking_ob->tell_rooms( name() + " 離開本太空站的 " + (string)environment()->query("short") + ".\n" );
+			set("landing_site", (string)environment()->query("landing_site") );
+			move( dest );
+			tell_outside( name() + " 離開了 " + docking_ob->name() + ".\n");
+			docking_ob = 0;
+			break;
+		case "station_docking" :
+			tell_room( ({ environment() }), name() + "從跑道起飛了.\n" );			
+			move( dest );
+			tell_outside( name() + " 離開了 " + (string)environment()->query("short") + ".\n");
+			tell_ship("你感覺到令人不舒服的無重力狀態.\n");
+	}
+	return;
+}
+
+int enter_stargate( object stargate )
+{
+	if( move( stargate->query("destination") ) ) {
+		tell_ship("因為通過星際跳躍門, 你感覺到身體似乎經過一陣扭曲.\n");
+		tell_outside( name() + " 進入 " + stargate->name() + ".\n");
+		return 1;
+	}
+	else return 0;
+}
+
+int visible( object ob )
+{
+	int invis, detect;
+
+	detect = this_object()->query_temp("apply/detect_invis");
+	invis = ob->query_temp("apply/invis");
+
+	if( intp( invis ) && ( invis > detect )) return 0;
+
+	return 1;
+}
+
+void tell_ship( string str )
+{
+	tell_room( ship_rooms, str );
+	return;
+}
+
+void tell_bridge( string str )
+{
+	tell_room( bridge_rooms, str );
+	return;
+}
+
+void tell_outside( string str )
+{
+	object *obs;
+	int i;
+
+	obs = all_inventory( environment() );
+	i = sizeof( obs );
+	while( i-- ) {
+		if( obs[i] == this_object() )
+			continue;
+		if( obs[i]->visible( this_object() ) )
+			obs[i]->tell_bridge( str );
+	}
+	return;
+}

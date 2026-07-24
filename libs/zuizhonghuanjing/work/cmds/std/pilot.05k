@@ -1,0 +1,189 @@
+// pilot.c
+// pilot a space ship.
+// Author: Spock @ FF
+// Last modified by Spock @ FF   97.May.14.
+
+#include <ansi.h>
+ 
+inherit F_CLEAN_UP;
+inherit F_CMD;
+ 
+int help();
+ 
+int main( object me, string arg )
+{
+	object *inside, bridge, ship;
+	int i, x, y, z, planet;
+	int cmding;
+	string option;
+	float velocity;	
+	string *planets;
+	string msg;
+
+	if( me != this_player(1) ) return 0;
+
+	if( me->query("position") == "sleep")
+		return notify_fail("你仍在睡夢中.\n");
+
+        if( me->query_time_unit() <= 0 )
+                return notify_fail("你的動作不夠快 !\n");
+ 
+	if( !environment( me)->is_space_ship_room() )
+		return notify_fail("你不在任何宇宙船艦中.\n");
+	if( !( bridge = environment( me)->query("bridge") ) )
+		return notify_fail("你不在艦橋中.\n");
+
+	ship = environment( environment( me ) );
+	cmding = me->query_temp("ss_command");
+	bridge = environment( me );
+
+	if( !arg ) {		
+		if( !wizardp(me)){
+			for( i = 0; i < sizeof( inside = all_inventory( bridge )); i++) {
+				if( inside[i] == me ) continue;
+				if( inside[i]->query_temp("ss_command"))
+					return notify_fail(sprintf("%s(%s)正在駕駛這%s%s.\n",
+					inside[i]->query("name"),capitalize(geteuid(inside[i])),
+					ship->query("unit"),
+					ship->query("name")));		
+			}
+		}
+		if( me->query_temp("ss_command") == 1 ){ 
+			return notify_fail(sprintf("您已經在駕駛這%s%s"NOR"了.\n",
+				ship->query("unit"),
+				ship->query("name")));
+		}		
+		me->set_temp("ss_command", 1);
+		message_vision
+		(sprintf(CYN" %s"CYN"開始駕駛這%s%s"CYN"。\n"NOR,
+		me->query("name"), ship->query("unit"), 
+		ship->query("name")), me);
+		me->time_unit_loss( 5 );
+		return 1;
+	} 
+	if( arg == "list" || cmding ) {
+		if( sscanf( arg, "%s %f", option, velocity) == 2 && option == "w") {
+			if( velocity > ship->query("max_velocity") )
+				return notify_fail("超過本艦的最高速度.\n");
+			if( velocity < 0 )
+				return notify_fail("本艦速度不能設定為負值.\n");
+			ship->set_velocity( to_float( velocity ) );
+			if( velocity == 0 )
+				message_vision("本艦停止曲速飛行.\n", me );
+			else message_vision( sprintf("本艦將進入 %f 級曲速飛行.\n", velocity ), me );
+			return 1;
+		} else if( sscanf( arg, "%s %d,%d,%d", option, x, y, z ) == 4 && option == "c") {
+			if( x > 999 || x < -999 || y > 999 || y < -999 || z > 999 || z < -999 )
+				return notify_fail("目的地座標值不正確.\n"); 
+			ship->set_destination( x, y, z );
+			message_vision( sprintf("本艦航向設定為 %d-%d-%d.\n", x, y, z), me);
+			return 1;
+		} else if( arg == "p" ) {
+			planets = environment( ship )->query("planets/name");
+			if( !planets )
+				planets = environment( environment( ship ) )->query("planets/name");
+			if( !planets )
+				return notify_fail("附近的宙域沒有恆星系.\n");
+			msg = "";
+			for( i = 0; i < sizeof( planets ); i ++ ) {
+				msg += sprintf( "(%d) ", i ) + planets[i] + "\n";
+			}
+			write( msg );
+			return 1;
+		} else if( sscanf( arg, "%s %d", option, planet ) == 2 && option == "p" ) {
+			planets = environment( ship )->query("planets/name");
+			if( !planets )
+				planets = environment( environment( ship ) )->query("planets/name");
+			if( !planets )
+				return notify_fail("附近的宙域沒有恆星系.\n");
+			if( planet > sizeof( planets ) || planet < 0 )
+				return notify_fail("不正確的星球編號.\n");
+			ship->set_planet_coord( planet );
+			message_vision( sprintf("本艦設定進入環繞 (%d) %s 的軌道.\n", planet, planets[planet] ), me);
+			return 1;
+		} else if( arg == "orbit" ) {
+			if( ship->query_arrive() == 0 )
+				return notify_fail("本艦不在任何星系中.\n");
+			if( ship->query_planet_coord() == -1 )
+				return notify_fail("還未設定進入第幾星球的軌道.\n");
+			message_vision("$N 下令道: 進入軌道 !\n", me );
+			ship->move_into_orbit();
+			return 1;
+		} else if( arg == "exit" ) {
+			if( ship->query_arrive() == 0 )
+				return notify_fail("本艦不在任何星系中.\n");
+			if( ship->query_planet_coord() == -1 )
+				return notify_fail("本艦不在任何星球的軌道上.\n");
+			message_vision("$N 下令道: 離開軌道 !\n", me );
+			ship->exit_orbit();
+			return 1;
+		} else if( arg == "engage" ) {
+			if( ( (float)ship->query_destination("x")
+				== (float)ship->query_current_coord("x") )
+				&& ( (float)ship->query_destination("y")
+				== (float)ship->query_current_coord("y") )
+				&& ( (float)ship->query_destination("z")
+				== (float)ship->query_current_coord("z") ) )
+				return notify_fail("本艦已經在設定的目的地座標上.\n");
+			ship->engage( 1 );
+			ship->give_heart_beat(1);
+			message_vision("$N 下令道: 啟動 !\n", me );
+			return 1;
+		} else if( arg == "halt" ) {
+			ship->engage( 0 );
+			ship->give_heart_beat(0);
+			message_vision("$N 下令道: 停船 !\n", me );
+			return 1;
+		} else if( arg == "list" ) {
+			write( sprintf("engage: %d	" +
+					"velocity: %f\n" +
+					"current coordination: %f - %f - %f\n" +
+					"destination: %f - %f - %f\n" +
+					"distance: %f\n" +
+					"planet coordination: %d\n" +
+					"arrive: %d	space number: %d	previous number:%d\n" +
+					"heart beat: %d\n",
+					ship->query_engage(),
+					ship->query_velocity(),
+					(float)ship->query_current_coord("x"),
+					(float)ship->query_current_coord("y"), 
+					(float)ship->query_current_coord("z"),
+					(float)ship->query_destination("x"),
+					(float)ship->query_destination("y"),
+					(float)ship->query_destination("z"),
+					(float)ship->query_distance(),
+					ship->query_planet_coord(),
+					ship->query_arrive(),
+					ship->query_space_number(),
+					ship->query_previous_space_number(),
+					query_heart_beat( ship ) ));
+			return 1;
+		}
+	} else return notify_fail("您現在並沒有駕駛本艦.\n");
+	return 0;
+}
+ 
+int help()
+{
+	write(@HELP
+指令格式: pilot			(開始駕駛船艦)
+	  pilot w <速度>	(設定船艦預設速度)
+	  pilot c x,y,z		(x, y, z 是目的地的座標值)
+	  pilot engage		(啟動 !  開始航行)
+	  pilot halt		(在曲速飛行中停船)
+	  pilot p		(附近宙域的行星列表)
+	  pilot p <行星編號>	(設定進入第幾行星軌道)
+	  pilot orbit		(進入設定的環繞行星軌道)
+	  pilot exit		(離開目前的行星軌道)
+	  pilot list		(測試專用, 顯示目前船艦內部的變數值)
+
+時間消耗: 坐上駕駛座耗費 5 單位.
+	  其他動作 1 單位.
+ 
+這個指令可以讓你開始駕駛宇宙船艦, 或是對船艦下達命令。 
+
+參考: leave, board, disembark, sl
+HELP
+	);
+	return 1;
+}

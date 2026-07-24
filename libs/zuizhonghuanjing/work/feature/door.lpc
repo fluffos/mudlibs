@@ -1,0 +1,218 @@
+// room.c
+
+#include <dbase.h>
+#include <room.h>
+
+nosave mapping doors;
+
+varargs void create_door(string dir, string data, string other_side_dir, int status, string key_id);
+
+// Setup doors.
+int setup_doors( mapping room_doors )
+{
+	string *dir;
+	int *status, i;
+	mapping door_data;
+
+	dir = keys( room_doors );
+	i = sizeof( dir );
+	while( i-- ) {
+		door_data = room_doors[dir[i]];
+		if( stringp( door_data["key_id"] ) )
+			create_door( dir[i], door_data["data"], door_data["other_side_dir"], door_data["status"], door_data["key_id"] );
+		else
+			create_door( dir[i], door_data["data"], door_data["other_side_dir"], door_data["status"]);
+	}
+	return 1;
+}
+
+// Redirect item_desc of the door to this function in default.
+string look_door(string dir)
+{
+	if( !mapp(doors) || undefinedp(doors[dir]) )
+		return "你要看什麼 ?\n";
+	if( doors[dir]["status"] >= DOOR_CLOSED )
+		return "這個" + doors[dir]["name"] + "是關著的.\n";
+	else
+		return "這個" + doors[dir]["name"] + "是開著的.\n";
+}
+
+varargs int open_door(string dir, int from_other_side)
+{
+	mapping exits;
+	object ob;
+
+	if( !mapp(doors) || undefinedp(doors[dir]) )
+		return notify_fail("這個方向沒有門.\n");
+
+	if( (doors[dir]["status"] == DOOR_LOCKED) )
+		return notify_fail( doors[dir]["name"] + "是鎖著的.\n");
+
+	if( doors[dir]["status"] == 0 )
+		return notify_fail( doors[dir]["name"] + "已經是開著的了.\n");
+
+	exits = query("exits");
+	if( !mapp(exits) || undefinedp(exits[dir]) )
+		error("Room: open_door: attempt to open a door with out an exit.\n");
+
+	if( from_other_side )
+		message("vision", "有人從另一邊將" + doors[dir]["name"] + "打開了.\n", this_object());
+	else if( objectp(ob = find_object(exits[dir])) ) {
+		if( !ob->open_door(doors[dir]["other_side_dir"], 1) ) return 0;
+	}
+
+	doors[dir]["status"] = 0;
+	return 1;
+}
+
+varargs int close_door(string dir, int from_other_side)
+{
+	mapping exits;
+	object ob;
+
+	if( !mapp(doors) || undefinedp(doors[dir]) )
+		return notify_fail("這個方向沒有門.\n");
+
+	if( (doors[dir]["status"] >= DOOR_CLOSED) )
+		return notify_fail( doors[dir]["name"] + "已經是關著的了.\n");
+
+	exits = query("exits");
+	if( !mapp(exits) || undefinedp(exits[dir]) )
+		error("Room: close_door: attempt to open a door with out an exit.\n");
+
+	if( from_other_side )
+		message("vision", "有人從另一邊將" + doors[dir]["name"] + "關上了.\n", this_object());
+	else if( objectp(ob = find_object(exits[dir])) ) {
+		if( !ob->close_door(doors[dir]["other_side_dir"], 1) ) return 0;
+	}
+
+	doors[dir]["status"] = DOOR_CLOSED;
+	return 1;
+}
+
+varargs int unlock_door( string dir, string key_id, int from_other_side)
+{
+	mapping exits;
+	object ob;
+
+	if( !mapp(doors) || undefinedp(doors[dir]) )
+		return notify_fail("這個方向沒有門.\n");
+
+	if( doors[dir]["status"] == DOOR_CLOSED)
+		return notify_fail( doors[dir]["name"] + "並沒有上鎖.\n");
+
+	if( doors[dir]["status"] == 0 )
+		return notify_fail( doors[dir]["name"] + "已經是開著的了.\n");
+
+	exits = query("exits");
+	if( !mapp(exits) || undefinedp(exits[dir]) )
+		error("Room: unlock_door: attempt to unclock a door with out an exit.\n");
+
+	if( !stringp( doors[dir]["key"]))
+		return notify_fail( doors[dir]["name"] + "上面沒有裝鎖.\n");
+
+	if( doors[dir]["key"] != key_id)
+		return notify_fail( "無法打開" + doors[dir]["name"] + ".\n");
+
+	if( from_other_side )
+		message("vision", "有人從另一邊將" + doors[dir]["name"] + "的鎖打開了.\n", this_object());
+	else if( objectp(ob = find_object(exits[dir])) ) {
+		if( !ob->unlock_door(doors[dir]["other_side_dir"], key_id, 1) ) return 0;
+	}
+
+	doors[dir]["status"] = DOOR_CLOSED;
+	return 1;
+}
+
+varargs int lock_door( string dir, string key_id, int from_other_side)
+{
+	mapping exits;
+	object ob;
+
+	if( !mapp(doors) || undefinedp(doors[dir]) )
+		return notify_fail("這個方向沒有門.\n");
+
+	if( (doors[dir]["status"] == DOOR_LOCKED) )
+		return notify_fail( doors[dir]["name"] + "已經鎖住了.\n");
+
+	if( (doors[dir]["status"] == 0 ))
+		return notify_fail( doors[dir]["name"] + "要先關起來才能上鎖.\n");
+
+	exits = query("exits");
+	if( !mapp(exits) || undefinedp(exits[dir]) )
+		error("Room: lock_door: attempt to lock a door with out an exit.\n");
+
+	if( !stringp( doors[dir]["key"]))
+		return notify_fail( doors[dir]["name"] + "上面沒有裝鎖.\n");
+
+	if( doors[dir]["key"] != key_id)
+		return notify_fail( "無法鎖上" + doors[dir]["name"] + ".\n");
+
+	if( from_other_side )
+		message("vision", "有人從另一邊將" + doors[dir]["name"] + "鎖上了.\n", this_object());
+	else if( objectp(ob = find_object(exits[dir])) ) {
+		if( !ob->lock_door(doors[dir]["other_side_dir"], key_id, 1) ) return 0;
+	}
+
+	doors[dir]["status"] = DOOR_LOCKED;
+	return 1;
+}
+
+int check_door(string dir, mapping door)
+{
+	// If we have no responding door, assume it is correct.
+	if( !mapp(doors) || undefinedp(doors[dir]) ) return 1;
+
+	door["status"] = doors[dir]["status"];
+	return 1;
+}
+
+varargs void create_door(string dir, string data, string other_side_dir, int status, string key_id)
+{
+	mapping d, exits, item_desc;
+	object ob;
+
+	exits = query("exits");
+	if( !mapp(exits) || undefinedp(exits[dir]) )
+		error("Room: create_door: attempt to create a door without exit.\n");
+
+// Compact mode.
+	if( stringp(data) ) {
+		d = allocate_mapping(5);
+		d["name"] = data;
+		d["id"] = ({ dir, data, "door" });
+		d["other_side_dir"] = other_side_dir;
+		d["status"] = status;
+// Add key here.
+		d["key"] = key_id;
+	} else
+		error("Create_door: Invalid door data, string expected.\n");
+
+	set("detail/" + dir, (: look_door, dir :) );
+
+	if( objectp(ob = find_object(exits[dir])) ) {
+		if( !ob->check_door(other_side_dir, d) )
+			return;
+	}
+
+	if( !mapp(doors) ) doors = ([ dir: d ]);
+	else doors[dir] = d;
+}
+
+mapping query_doors() { return doors; }
+
+mixed query_door(string dir, string prop)
+{
+	if( !mapp(doors) || undefinedp(doors[dir]) ) return 0;
+	else return doors[dir][prop];
+}
+
+int valid_leave(object me, string dir)
+{
+	if( mapp(doors) && !undefinedp(doors[dir]) ) {
+		if( doors[dir]["status"] >= DOOR_CLOSED )
+			return notify_fail("你必須先把" + doors[dir]["name"] + "打開 !\n");
+		// if ( door[dir]["status"] & DOOR_HAS_TRAP ) ....
+	}
+	return 1;
+}

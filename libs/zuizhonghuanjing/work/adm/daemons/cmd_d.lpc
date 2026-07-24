@@ -1,0 +1,69 @@
+// cmd_d.c
+//
+// This is the command daemon that stores paths to all the hooked commands
+// (commands maintained by F_COMMAND). Storeded path accelerates command
+// search by reducing file access and thus management of storeded paths 
+// is nessessary.
+// By Annihilator (11/07/94)
+
+#pragma save_binary
+
+#include <origin.h>
+
+inherit F_CLEAN_UP;
+
+mapping search = ([]);
+
+void create()
+{
+	seteuid(getuid());
+}
+
+// rehash()
+//
+// This function updates the storeded list of paths of a specific directory.
+// When you add or remove any command(s) from /cmds (the directories where
+// hooked commands are located), you need call this to update the stored
+// list.
+
+void rehash(string dir)
+{
+	int i;
+	string *cmds;
+
+	// Security check, don't allow just anybody to fool us by updating
+	// random directories.
+	if( origin()==ORIGIN_CALL_OTHER
+	&&	(geteuid(previous_object())!=ROOT_UID) )
+		return;
+
+	if( dir[<1]!='/' ) dir += "/";
+
+	cmds = get_dir(dir);
+	i = sizeof(cmds);
+	while(i--)
+		// Strip the '.c' off filenames and remove non-command files.
+		if( !sscanf(cmds[i], "%s.lpc", cmds[i]) ) {
+			if( i==0 ) cmds = cmds[1..sizeof(cmds)];
+			else if( i==sizeof(cmds) ) cmds = cmds[0..<2];
+			else cmds = cmds[0..i-1] + cmds[i+1..<1];
+		}
+	if( sizeof(cmds) )
+		search[dir] = cmds;
+}
+
+string find_command(string verb, string *path)
+{
+	string dir;
+	int i;
+
+	if( !pointerp(path) ) return 0;
+
+	foreach(dir in path) {
+		if( undefinedp(search[dir]) ) rehash(dir);
+		if( undefinedp(search[dir]) ) continue;
+		if( member_array(verb, search[dir])!=-1 )
+			return dir + verb;
+	}
+	return 0;
+}

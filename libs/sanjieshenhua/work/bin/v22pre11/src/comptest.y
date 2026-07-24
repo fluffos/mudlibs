@@ -1,0 +1,3 @@
+%token FOO
+%%
+all: FOO

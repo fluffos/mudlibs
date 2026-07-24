@@ -1,0 +1,404 @@
+// look.c
+// Look something.
+// Original ES II command.
+// Last modified by Spock @ FF   97.Sep.4.
+
+#include <room.h>
+#include <ansi.h>
+#include <localtime.h>
+
+inherit F_CLEAN_UP;
+
+varargs int look_room( object me, object env, string flag );
+varargs int look_item( object me, object obj, string flag );
+varargs int look_living( object me, object obj, string flag );
+varargs int look_room_item( object me, string arg, string flag );
+string cdir( string dir );
+string cterrain( string terrain );
+
+void create() { seteuid(getuid()); }
+
+int main(object me, string arg)
+{
+	object obj;
+	int result;
+	string str, message;
+
+	if( me->query("position") == "sleep" )
+		return notify_fail("你仍在睡夢中.\n");
+
+	if( !arg ) result = look_room(me, environment(me));
+	else if( (obj = present(arg, me)) || (obj = present(arg, environment(me)))) {
+		if( obj->is_character() ) result = look_living(me, obj);
+		else result = look_item(me, obj);
+	} else 
+		result = look_room_item(me, arg);
+
+	return result;
+}
+
+varargs int look_room( object me, object env, string flag )
+{
+	int i, end, distance;
+	object vehicle, ship_room, *inv;
+	mapping exits;
+	string desc, short, str, *dirs;
+	mixed *local;
+
+	local = localtime( time() * 60 );
+
+	if( !env ) {
+		write("空虛之中, 只見一片黑暗.\n");
+		return 1;
+	}
+
+	if( local[LT_MON] > 1 && local[LT_MON] < 5 ) {
+		if( local[LT_HOUR] < 7 || local[LT_HOUR] > 17 ) {
+			desc = (string)env->query("spring_night_long");
+		}
+		else desc = (string)env->query("spring_long");
+	}
+	if( local[LT_MON] > 4 && local[LT_MON] < 8 ) {
+		if( local[LT_HOUR] < 7 || local[LT_HOUR] > 17 ) {
+			desc = (string)env->query("summer_night_long");
+		}
+		else desc = (string)env->query("summer_long");
+	}
+	if( local[LT_MON] > 7 && local[LT_MON] < 11 ) {
+		if( local[LT_HOUR] < 7 || local[LT_HOUR] > 17 ) {
+			desc = (string)env->query("autumn_night_long");
+		}
+		else desc = (string)env->query("autumn_long");
+	}
+	if( local[LT_MON] > 10 && local[LT_MON] < 2 ) {
+		if( local[LT_HOUR] < 7 || local[LT_HOUR] > 17 ) {
+			desc = (string)env->query("winter_night_long");
+		}
+		else desc = (string)env->query("winter_long");
+	}
+	if( !stringp( desc)) {
+		if( local[LT_HOUR] < 7 || local[LT_HOUR] > 17 ) {
+			desc = (string)env->query("night_long");
+		}
+		else desc = (string)env->query("long");
+	}
+	if( !stringp( desc))
+		desc = (string)env->query("long");
+
+	if( env->is_vehicle()) short = (string)env->query("name");
+		else short = (string)env->query("short");
+
+	str = sprintf( "%s [%s/%d] - %s\n%s%s",
+		short, ( (int)env->query("outdoors") ? cterrain( (string)env->query("terrain") ) : "室內" ), (int)env->query("mov_cost"),
+		wizardp(me)? file_name(env): "",
+		desc,
+		(int)env->query("outdoors") ? (string)NATURE_D->outdoor_room_description() : "" );
+
+	if( !(int)env->is_space_ship_room() && (int)env->query("boarding_tube") )
+		str += ( (object)env->query("docking_ship") 
+			? "[停泊船艦] " + env->query("docking_ship")->short() + "\n"
+			: "[停泊船艦] 目前沒有任何船艦停泊在此.\n" );
+
+	if( mapp(exits = (mapping)env->query("exits")) ) {
+		dirs = keys(exits);
+		i = sizeof(dirs);
+		while( i-- )
+			if( (int)env->query_door(dirs[i], "status") >= DOOR_CLOSED )
+				dirs[i] = 0;
+		dirs -= ({ 0 });
+		if( sizeof(dirs) == 0 )
+			str += "    這裡看來沒有出口.\n";
+		else if( sizeof(dirs) == 1 )
+			str += "    這裡唯一的出口是 " + HIW + cdir( dirs[0] ) + NOR + ".\n";
+		else {
+			str += "    這裡明顯的出口是 ";
+			for( i = 0; i < ( sizeof( dirs ) - 1 ); i++ ) {
+				str += BOLD + cdir( dirs[i] ) + NOR "、";
+			}
+			str += HIW + cdir( dirs[sizeof(dirs)-1] ) + NOR + ".\n";
+		}
+	}
+
+	inv = all_inventory(env);
+	end = sizeof(inv);
+	for( i = 0; i < end; i++ ) {
+		if( inv[i] == me ) continue;
+		if( (int)env->is_vihicle()) {
+			distance = (int)inv[i]->query_temp("location") - (int)env->query_temp("location");
+		} else if( (int)inv[i]->is_character() || (int)inv[i]->is_vehicle() || 
+			(int)inv[i]->is_shuttle() ) {
+			distance = (int)inv[i]->query_temp("location") - (int)me->query_temp("location");
+		}
+		if( distance < 0 ) distance = - distance;
+		if( !(int)me->visible(inv[i]) ) continue;
+		if( (int)inv[i]->query_temp("apply/invis") )
+			str += HIW "  (隱形)" NOR;
+		if( (int)inv[i]->is_fighting() && objectp( (object)inv[i]->query_temp("last_opponent") ) ) {
+			str += "  " + (string)inv[i]->short() + "正在攻擊 " 
+				+ ( (object)inv[i]->query_temp("last_opponent") != me 
+					? ( inv[i]->query_temp("last_opponent") )->short()
+					: "你 !!" )
+				+ " ( 距離: " + distance + " )\n";
+		} else if( (string)inv[i]->query("position") == "rest" ) {
+			str += "  " + (string)inv[i]->short() + "在此坐著休息. ( 距離: " + distance + " )\n";
+		} else if( (string)inv[i]->query("position") == "sleep" ) {
+			str += "  " + (string)inv[i]->short() + "在此睡覺. ( 距離: " + distance + " )\n";
+		} else if( (int)inv[i]->is_corpse()) {
+			str += "  " + (string)inv[i]->short() + " 躺在這裡.\n";
+		} else if( (int)inv[i]->is_character()) {
+			if( (int)inv[i]->query_temp("command"))
+				str += "  " + (string)inv[i]->short() + " 正在駕駛. ( 距離: " + distance + " )\n";
+			else if( (int)env->is_vehicle())
+				str += "  " + (string)inv[i]->short() + " 在這裡. ( 距離: " + distance + " )\n";
+			else
+				str += "  " + (string)inv[i]->short() + " 站在這裡. ( 距離: " + distance + " )\n";
+		} else if( (int)inv[i]->is_vehicle()) {
+			if( flag == "vl" && inv[i] == environment( me ) )
+				continue;
+			if( !(int)inv[i]->identify( me, inv[i]))
+				str += "  不知名的 " + (string)inv[i]->query("unknown_type") + " 停在這裡. ( 距離: " + distance + " )\n";
+			else
+				str += "  " + (string)inv[i]->short() + " 停在這裡. ( 距離: " + distance + " )\n";
+		} else if( (int)inv[i]->is_space_ship() || (int)inv[i]->is_shuttle() ) {
+			if( flag == "sl" && inv[i] == environment( environment( me ) ) )
+				continue;
+			if( !(int)inv[i]->identify( me, inv[i]))
+				str += "  不知名的 " + (string)inv[i]->query("unknown_type") + " 停在這裡. ( 距離: " + distance + " )\n";
+			else
+				str += "  " + (string)inv[i]->short() + " 停在這裡. ( 距離: " + distance + " )\n";
+		} else if( (int)inv[i]->is_planet() ) {
+			if( wizardp( me ) )
+				str += "  (天體) " + (string)inv[i]->query("short") + " - " + file_name( inv[i] ) +"\n";
+		} else {
+			if( !(int)inv[i]->identify( me, inv[i]))
+				str += "  不知名的 " + (string)inv[i]->query("unknown_type") + " 在地上.\n";
+			else
+				str += "  " + (string)inv[i]->short() + "\n";
+		}
+	}
+
+	if( random( 25) < random( (int)me->query("not")) && (string)env->query("note"))
+		str += MAG "\n" + (string)env->query("note") + "\n" NOR;
+	write(str);
+	return 1;
+}
+
+varargs int look_item( object me, object obj, string flag )
+{
+	mixed *inv;
+	int distance;
+
+	if( flag == "vl")
+		distance = obj->query_temp("location") - environment(me)->query_temp("location");
+
+	if ( distance < 0 ) distance = - distance;
+
+	if( obj->is_vehicle() ) {
+		if( !obj->identify( me, obj ) )
+			write("不知名的 " + obj->query("unknown_type") + " [ 距離: " + distance +" ]\n");
+		else
+			write( obj->short() + " [ 距離: " + distance +" ]\n");
+	}
+	if( obj->is_loadable()) {
+		if( obj->identify( me, obj) )
+			write( "[ 彈藥: " + obj->query("ammo") + " ]  [ " 
+				+ ( obj->query("loaded") ? "已裝填彈匣" : "無彈匣" ) + " ]\n");
+	}
+	if( obj->is_electronics()) {
+		if( obj->identify( me, obj) )
+			write( "[ 能源: " + obj->query("energy") + " ]\n" );
+	}
+
+	if( obj->identify( me, obj) ) {
+		if( sizeof( obj->long() ) > 8000 )
+			me->start_more( obj->long() );
+		else
+			write(obj->long());
+		if( obj->is_vehicle() && !obj->is_trash()) 
+			write( obj->query("name") + COMBAT_D->v_report_status( obj ) + "\n");
+	} else
+		write("你仔細地觀詳許久, 就是無法看出這個物品到底是什麼.\n");
+	inv = all_inventory(obj);
+	if( sizeof(inv) ) {
+		inv = map_array(inv, "inventory_look", this_object() );
+		message("vision", sprintf("裡面有﹕\n  %s\n",
+			implode(inv, "\n  ") ), me);
+	}
+	return 1;
+}
+
+varargs int look_living( object me, object obj, string flag )
+{
+	string str, limb_status, pro, my_pro;
+	mixed *inv;
+	mapping my_fam, fam;
+	object vehicle;
+	int distance;
+
+	pro = (obj==me) ? gender_self(obj->query("gender")) : gender_pronoun(obj->query("gender"));
+	my_pro = gender_self(me->query("gender"));
+
+	distance = obj->query_temp("location") - me->query_temp("location");
+	if ( distance < 0 ) distance = - distance;
+
+	if( me!=obj )
+		message("vision", me->name() + "正盯著" + gender_self(obj->query("gender")) + "看, 不知道打些什麼主意.\n", obj);
+
+	str = obj->long();
+	if( !obj->is_corpse())
+		str += " ( 距離: " + distance + " )\n";
+
+	if( obj->query("race") == "人類"
+	&&	intp(obj->query("age")) )
+		str += sprintf("%s看起來約%s多歲.\n", pro, chinese_number(obj->query("age") / 10 * 10));
+
+	if( !obj->is_corpse()) str += pro + COMBAT_D->report_status(obj, 1) + "\n";
+
+	inv = all_inventory(obj);
+
+	if( obj->query("race") == "人類" ) {
+		if( !obj->query_temp("armor/cloak") ) {
+			if( obj->query_temp("armor/coat") && !obj->query_temp("armor/pants") )
+				str += sprintf("%s全身上下只穿了一件上衣, 下半身光溜溜的....\n", pro );
+			if( obj->query_temp("armor/pants") && !obj->query_temp("armor/coat") )
+				str += sprintf("%s全身上下只穿了一件褲子, 上半身坦蕩蕩的....\n", pro );
+			if( !obj->query_temp("armor/coat") && !obj->query_temp("armor/pants") )
+				str += sprintf("%s全身上下一絲不掛, 難道想裸奔.... ?\n", pro );
+		}
+	}
+
+	if( sizeof(inv) ) {
+		inv = map_array(inv, "inventory_look", this_object(), obj->is_corpse()? 0 : 1 );
+		inv -= ({ 0 });
+		if( sizeof(inv) )
+			str += sprintf( obj->is_corpse() ? "%s的遺物有: \n%s\n" : "%s身上帶著﹕\n%s\n",
+				pro, implode(inv, "\n") );
+	}
+
+	message("vision", str, me);
+
+	return 1;
+}
+
+varargs string inventory_look( object obj, int flag, string flag_a )
+{
+	string str;
+
+	if( obj->is_corpse() ) {
+		return "    " + obj->short() + " 躺在裡面.";
+	} else if( obj->is_character() ) {
+		if( obj->query("position") == "sleep" )
+			return "    " + obj->short() + " 正在睡覺.";
+		else if( obj->query("position") == "rest" )
+			return "    " + obj->short() + " 正在休息.";
+		else if( obj->query_temp("command") )
+			return "    " + obj->short() + " 正在駕駛.";
+		else return "    " + obj->short() + " 在裡面.";
+	} else if( !obj->identify( this_player(), obj))
+		str = "不知名的" + ( obj->query("unknown_type") ? obj->query("unknown_type") : "物品" );
+	else
+		str = obj->short() + " [" + 
+			( obj->query("unknown_type") ? obj->query("unknown_type") : "物品" )+ "]";
+
+	if( obj->query("equipped") && obj->query("active"))
+		str = HIG "●" HIC "ˇ" NOR + str;
+	else if( obj->query("equipped"))
+		str = HIC "  ˇ" NOR + str;
+	else if( obj->query("active"))
+		str = HIG "●  " NOR + str;
+	else if( !flag )
+		str = "    " + str;
+	else
+		return 0;
+
+	return str;
+}
+
+varargs int look_room_item( object me, string arg, string flag )
+{
+	object env;
+	mapping item, exits;
+	string str;
+
+	switch( flag ) {
+		case "sl":
+				env = environment( environment( environment( me ) ) );
+			break;
+		case "vl":
+			env = environment( environment( me ) );
+			break;
+		default:
+			env = environment( me );
+	}
+	if( str = env->query("detail/" + arg)) {
+		message_vision( CYN "$N " CYN "仔細地看了看 " + arg + ".\n" NOR, me);
+		write( str);
+		return 1;
+	}
+	if( mapp(exits = env->query("exits")) && !undefinedp(exits[arg]) ) {
+		if( objectp(env = find_object(exits[arg])) )
+			look_room(me, env);
+		else {
+			call_other(exits[arg], "???");
+			look_room(me, find_object(exits[arg]));
+		}
+		return 1;
+	}
+	return notify_fail("你要看什麼 ?\n");
+}
+
+string cdir( string dir )
+{
+	switch( dir ) {
+		case "east":
+			return "東";
+		case "west":
+			return "西";
+		case "south":
+			return "南";
+		case "north":
+			return "北";
+		case "up":
+			return "上";
+		case "down":
+			return "下";
+		default:
+			return dir;
+	}
+}
+
+string cterrain( string terrain )
+{
+	switch( terrain ) {
+		case "plain":
+			return "平地";
+		case "hill":
+			return "丘陵";
+		case "mountain":
+			return "山嶽";
+		case "river":
+			return "河川";
+		case "ocean":
+			return "海洋";
+		case "atmosphere":
+			return "大氣圈";
+		case "space":
+			return "宇宙空間";
+		default:
+			return "平地";
+//			return terrain;
+	}
+}
+
+int help (object me)
+{
+	write(@HELP
+指令格式: look [<物品>|<生物>|<方向>]
+ 
+這個指令讓你查看你所在的環境、某件物品、生物、或是方向。
+ 
+參考: vl, sl
+HELP
+);
+	return 1;
+}

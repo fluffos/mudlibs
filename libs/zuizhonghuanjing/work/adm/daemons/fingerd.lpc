@@ -1,0 +1,139 @@
+// fingerd.c
+
+#pragma save_binary
+
+#include <net/dns.h>
+#include <origin.h>
+
+inherit F_CLEAN_UP;
+
+private object acquire_login_ob(string id);
+
+void create() { seteuid( getuid() ); }
+
+string age_string(int time)
+{
+	int month, day, hour;
+
+	time /= 3600;
+	hour = time % 24;
+	time /= 24;
+	day = time % 30;
+	month = time / 30;
+	return (month?month + "m":"") + (day?day + "d":"") + hour + "h";
+}
+
+string finger_all()
+{
+	object *ob;
+	string msg;
+	int i;
+
+	ob = sort_array( users(), (: strcmp(query_ip_name($1), query_ip_name($2)) :) );
+	msg = "";
+	for(i=0; i<sizeof(ob); i++) {
+		if( this_player() && !ob[i]->visible(this_player()) ) continue;
+		msg = sprintf("%s%-18s%-20s%-24s %4d  %-10s\n",
+			msg,
+			query_ip_number(ob[i]),
+			ob[i]->query("id"),
+			CHINESE_D->ansi_display( ob[i]->query("name"), 24 ),
+			ob[i]->query_temp("command_count"),
+			ob[i]->link() ? age_string( ob[i]->link()->query("time_aged")) : "n/a",
+			query_ip_number(ob[i]) );
+	}
+	return msg;
+}
+
+string finger_user(string name)
+{
+	object ob, body;
+	string msg, mud;
+
+	if( sscanf(name, "%s@%s", name, mud)==2 ) {
+		GFINGER_Q->send_gfinger_q(mud, name, this_player(1));
+		return "網路指令傳送過程可能需要一些時間﹐請稍候。\n";
+	}
+
+	ob = acquire_login_ob(name);
+	if( !ob ) return "沒有這個玩家。\n";
+	msg =  sprintf("\n英文代號﹕\t%s\n姓    名﹕\t%s\n權限等級﹕\t%s\n"
+		"電子郵件地址﹕\t%s\n上次連線地址﹕\t%s( %s )\n上線時間總和﹕\t%s\n\n%s\n",
+		ob->query("id"),
+		ob->query("name"),
+		SECURITY_D->get_status(name),
+		ob->query("email"),
+		ob->query("last_from"),
+		ctime(ob->query("last_on")),
+		CHINESE_D->chinese_period(ob->query("time_aged")),
+		( ob->query("profile") ? ob->query("profile") : "無名片" )
+	);
+
+	if( objectp(body = find_player(name))
+	&&	geteuid(body)==name
+	&&	this_player()
+	&&	body->visible(this_player()) ) {
+		msg += sprintf("\n%s目前正在從 %s 連線中。\n此次上線時間到目前為止共%s。\n",
+			body->name(1),
+			query_ip_name(body),
+			CHINESE_D->chinese_period( time() - (int)ob->query_temp("login_time")));
+	}
+	if( !ob->body() )	destruct(ob);
+	return msg;
+}
+
+varargs string remote_finger_user(string name, int chinese_flag)
+{
+	object ob, body;
+	string msg;
+
+	ob = acquire_login_ob(name);
+	if( !ob ) return chinese_flag ? "沒有這個玩家。\n" : "No such user.\n";
+	if( chinese_flag ) msg =  sprintf(
+		"\n英文代號﹕\t%s\n姓    名﹕\t%s\n權限等級﹕\t%s\n"
+		"電子郵件地址﹕\t%s\n上次連線地址﹕\t%s( %s )\n\n%s\n",
+		ob->query("id"),
+		ob->query("name"),
+		SECURITY_D->get_status(name),
+		ob->query("email"),
+		ob->query("last_from"),
+		ctime(ob->query("last_on")),
+		( ob->query("profile") ? ob->query("profile") : "無名片" )
+	);
+	else msg =  sprintf(
+		"\nName\t: %s\nStatus\t: %s\nEmail\t: %s\nLastOn\t: %s( %s )\n\n",
+		capitalize(ob->query("id")),
+		SECURITY_D->get_status(name),
+		ob->query("email"),
+		ob->query("last_from"),
+		ctime(ob->query("last_on"))
+	);
+	if( body = find_player(name) ) {
+		if( !this_player() || this_player()->visible(body) )
+			msg += chinese_flag ?
+				("\n" + ob->query("name") + "目前正在線上。\n"):
+				("\n" + capitalize(name) + " is currently connected.\n");
+	}
+
+	if( !ob->body() ) destruct(ob);
+	return msg;
+}
+
+object acquire_login_ob(string id)
+{
+	object ob;
+
+	if( origin()==ORIGIN_CALL_OTHER ) {
+		if( geteuid(previous_object())!=ROOT_UID
+		&&	base_name(previous_object())!=MAILBOX_OB ) return 0;
+	}
+
+	if( ob = find_player(id) ) {
+		// Check if the player is linkdead
+		if( ob->link() )
+			return ob->link();
+	}
+	ob = new(LOGIN_OB);
+	ob->set("id", id);
+	return ob->restore() ? ob : 0;
+}

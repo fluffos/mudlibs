@@ -1,0 +1,198 @@
+// equip.c
+
+#include <dbase.h>
+#include <weapon.h>
+
+int wear()
+{
+	object owner;
+	mapping armor_prop, applied_prop;
+	string *apply, type;
+	int *protect_limb, strength;
+	object *limb_armors;
+	int i;
+
+// Only character object can wear armors.
+	if( !(owner = environment())->is_character() ) return 0;
+
+// If already worn, just recognize it.
+	if( query("equipped") ) return 1;
+
+// Is this armor broken ?
+	if( query("broken", 1 ) || query("durability") < 1 )
+		return notify_fail("此護具已經損壞了, 無法使用.\n");
+
+// Check if this is an armor.
+	if( !this_object()->is_armor() )
+		return notify_fail("你只能穿戴可當作護具的東西.\n");
+
+	type = query("armor_type");
+	if( owner->query_temp("armor/" + type) )
+		return notify_fail("你已經穿戴了同類型的護具了.\n");
+
+	if( owner->query_temp("weapon") &&
+	( ( owner->query_temp("weapon")->query("flag") & TWO_HANDED )
+	||	owner->query_temp("armor/shield") ) )
+		return notify_fail("你必須空出左手才能裝備盾牌.\n");
+
+	if( owner->query_temp("apply/invis") )
+		return notify_fail("你必須把隱形裝備脫下, 解除隱形後才能穿戴.\n");
+
+	if( query("armor_prop/invis") ) {
+		if( sizeof( owner->query_temp("armor") ) != 0 )
+			return notify_fail("你必須脫下其他的衣物才能隱形.\n");
+	}
+
+	if( type == "u_armor" && !owner->query("armor/coat") )
+		return notify_fail("您必須先著上衣才能穿上 " + this_object()->name() + ".\n"); 
+
+	if( type == "l_armor" && !owner->query("armor/pants") )
+		return notify_fail("您必須先著褲子才能穿上 " + this_object()->name() + ".\n"); 
+
+	owner->set_temp("armor/" + type, this_object());
+	if( mapp( armor_prop = query("armor_prop") ) ) {
+		apply = keys(armor_prop);
+		applied_prop = owner->query_temp("apply");
+
+		if( !mapp(applied_prop) ) applied_prop = ([]);
+		for(i = 0; i<sizeof(apply); i++) {
+			if( undefinedp(applied_prop[apply[i]]) )
+				applied_prop[apply[i]] = armor_prop[apply[i]];
+			else
+				applied_prop[apply[i]] += armor_prop[apply[i]];
+		}
+
+		owner->set_temp("apply", applied_prop);
+	}
+
+	if( arrayp( protect_limb = query("protect_limb") ) ) {
+		for( i = 0; i < sizeof( protect_limb ); i++ ) {
+			if( !arrayp( limb_armors = owner->query_temp( sprintf("limb_armors/%d", protect_limb[i] ) ) ) )
+				limb_armors = ({ });
+
+			if( strength = query("armor_prop/traditional_armor") )
+				owner->add_temp( sprintf("protect/traditional/%d", protect_limb[i] ), strength );
+			if( strength = query("armor_prop/projectile_armor") )
+				owner->add_temp( sprintf("protect/projectile/%d", protect_limb[i] ), strength );
+			if( strength = query("armor_prop/explosive_armor") )
+				owner->add_temp( sprintf("protect/explosive/%d", protect_limb[i] ), strength );
+			if( strength = query("armor_prop/high_energy_armor") )
+				owner->add_temp( sprintf("protect/high_energy/%d", protect_limb[i] ), strength );
+			if( strength = query("armor_prop/optical_armor") )
+				owner->add_temp( sprintf("protect/optical/%d", protect_limb[i] ), strength );
+
+			limb_armors += ({ this_object() });
+			owner->set_temp( sprintf("limb_armors/%d", protect_limb[i] ), limb_armors );
+		}
+	}
+
+	set("equipped", "worn");
+
+	return 1;
+}
+
+int wield()
+{
+	object owner;
+	mapping weapon_prop;
+	string *apply, type;
+	int flag;
+	int i;
+
+// Only character object can wear armors.
+	if( !(owner = environment())->is_character() ) return 0;
+
+// If already wielded, just recognize it.
+	if( query("equipped") ) return 1;
+
+// Is this weapon broken ?
+	if( query("damage_type") == "traditional")
+		if( query("broken", 1 ) || query("durability") < 1 )
+			return notify_fail("此武器已經損壞了, 無法使用.\n");
+
+// Check if we have "weapon_prop" defined.
+	if( !mapp(weapon_prop = query("weapon_prop")) )
+		return notify_fail("你只能裝備可當作武器的東西.\n");
+
+	flag = query("flag");
+
+	if( flag & TWO_HANDED ) {
+		if( owner->query_temp("weapon")
+		||	owner->query_temp("armor/shield") )
+			return notify_fail("你必須空出雙手才能裝備雙手武器.\n");
+		owner->set_temp("weapon", this_object());
+	} else {
+
+// If we are are using any weapon?
+		if( !owner->query_temp("weapon") )
+			owner->set_temp("weapon", this_object());
+		else
+			return notify_fail("你必須先放下你目前裝備的武器.\n");
+	}
+
+	apply = keys(weapon_prop);
+	for( i = 0; i<sizeof(apply); i++)
+		owner->add_temp("apply/" + apply[i], weapon_prop[apply[i]]);
+
+	owner->reset_action();
+	set("equipped", "wielded");
+
+	return 1;
+}
+
+int unequip()
+{
+	object owner;
+	mapping prop, applied_prop;
+	string *apply, equipped;
+	int *protect_limb, strength;
+	object *limb_armors;
+	int i;
+
+	if( !(owner = environment())->is_character() ) return 0;
+
+	if( !stringp(equipped = query("equipped")) )
+		return notify_fail("你目前並沒有裝備這樣東西.\n");
+
+	if( equipped=="wielded" ) {
+		if( (object)owner->query_temp("weapon") == this_object() )
+			owner->delete_temp("weapon");
+		else if( (object)owner->query_temp("secondary_weapon") == this_object() )
+			owner->delete_temp("secondary_weapon");
+		prop = query("weapon_prop");
+		owner->reset_action();
+	} else if( equipped=="worn" ) {
+		owner->delete_temp("armor/" + query("armor_type") );
+		prop = query("armor_prop");
+	}
+
+	apply = keys(prop);
+	applied_prop = owner->query_temp("apply");
+	for( i = 0; i<sizeof(apply); i++)
+		// To support array apply, we cannot add_temp() here.
+		applied_prop[apply[i]] -= prop[apply[i]];
+
+	if( arrayp( protect_limb = query("protect_limb") ) ) {
+		for( i = 0; i < sizeof( protect_limb ); i++ ) {
+			if( !arrayp( limb_armors = owner->query_temp( sprintf("limb_armors/%d", protect_limb[i] ) ) ) )
+				limb_armors = ({ });
+
+			if( strength = query("armor_prop/traditional_armor") )
+				owner->add_temp( sprintf("protect/traditional/%d", protect_limb[i] ), -strength );
+			if( strength = query("armor_prop/projectile_armor") )
+				owner->add_temp( sprintf("protect/projectile/%d", protect_limb[i] ), -strength );
+			if( strength = query("armor_prop/explosive_armor") )
+				owner->add_temp( sprintf("protect/explosive/%d", protect_limb[i] ), -strength );
+			if( strength = query("armor_prop/high_energy_armor") )
+				owner->add_temp( sprintf("protect/high_energy/%d", protect_limb[i] ), -strength );
+			if( strength = query("armor_prop/optical_armor") )
+				owner->add_temp( sprintf("protect/optical/%d", protect_limb[i] ), -strength );
+
+			limb_armors -= ({ this_object() });
+			owner->set_temp( sprintf("limb_armors/%d", protect_limb[i] ), limb_armors );
+		}
+	}
+
+	delete("equipped");
+	return 1;
+}

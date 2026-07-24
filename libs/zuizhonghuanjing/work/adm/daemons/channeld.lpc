@@ -1,0 +1,173 @@
+// channeld.c
+ 
+#include <ansi.h>
+#include <net/dns.h>
+
+#pragma save_binary
+
+inherit F_CLEAN_UP;
+ 
+mapping channels = ([
+	"sys":	([	"msg_speak": HIB "【系統】" NOR "%s﹕%s\n" NOR, "wiz_only": 1 ]),
+	"wiz":	([	"msg_speak": YEL "【巫師】" NOR "%s﹕%s\n" NOR,
+				"msg_emote": YEL "【巫師】" NOR "%s" NOR,
+				"wiz_only": 1
+			]),
+	"gwiz":	([	"msg_speak": GRN "【網際巫師】" NOR "%s﹕%s\n" NOR,
+				"msg_emote": GRN "【網際巫師】" NOR "%s\n" NOR,
+				"wiz_only": 1, "intermud": GWIZ, "channel": "CREATOR",
+				"filter": 1,
+				"intermud_emote": 1 ]),
+	"es":	([	"msg_speak": HIR "【東方故事】" NOR "%s﹕%s\n" NOR,
+				"msg_emote": HIR "【東方故事】" NOR "%s" NOR,
+				"intermud": GCHANNEL, "channel": "es",
+				"filter": (: $1["MUDLIB"]=="Eastern Stories" :) ]),
+	"twiz":	([	"msg_speak": HIW "【台灣巫師】" NOR "%s﹕%s\n" NOR,
+				"msg_emote": HIW "【台灣巫師】" NOR "%s" NOR,
+				"wiz_only":1, "intermud": GCHANNEL, "channel": "twiz",
+				"filter": (: $1["HOSTADDRESS"][0..2]=="140" :) ]),
+	"chat":	([	"msg_speak": HIC "【閒聊】" NOR "%s﹕%s\n" NOR,
+				"msg_emote": HIC "【閒聊】" NOR "%s" NOR,
+			 ]),
+	"rumor":([	"msg_speak": MAG "【謠言】" NOR "%s﹕%s\n" NOR,
+				"msg_emote": HIM "【謠言】" NOR "%s" NOR,
+//				"anonymous": "某人"
+			]),
+	"music":([	"msg_speak": GRN "【音樂】" NOR "%s唱著﹕%s\n" NOR,
+				"msg_emote": WHT "【音樂】" NOR "%s" NOR
+			 ]),
+]);
+ 
+void create()
+{
+	seteuid(getuid());	// This is required to pass intermud access check.
+}
+ 
+varargs int do_channel(object me, string verb, string arg, int emote)
+{
+	object *ob;
+	string *tuned_ch, who;
+ 
+ 	if( verb== "" ) return 0;
+ 
+	// Check if this is a channel emote.
+	if( verb[<1] == '*' ) {
+		emote = 1;
+		verb = verb[0..<2];
+	}
+ 
+	if( !mapp(channels) || undefinedp(channels[verb]) )
+		return 0;
+ 
+	if( userp(me) && me->link() ) {
+		if(channels[verb]["wiz_only"] && !wizardp(me) )
+			return 0;
+ 
+// If we speaks something in this channel, then must tune it in.
+		tuned_ch = me->query("channels");
+		if( !pointerp(tuned_ch) )
+			me->set("channels", ({ verb }) );
+		else if( member_array(verb, tuned_ch)==-1 )
+			me->set("channels", tuned_ch + ({ verb }) );
+ 
+// Support of channel emote
+		if( emote && !channels[verb]["intermud_emote"]) {
+			string vb, emote_arg;
+ 
+			if (!arg) 
+				arg = (string)me->name()+"看起來表情豐富。\n";
+			else {
+				if( sscanf(arg, "%s %s", vb, emote_arg)!= 2 ) {
+					vb = arg;
+					emote_arg = "";
+				}
+				arg = EMOTE_D->do_emote(me, vb, emote_arg, 1);
+				if(!arg)
+					if(is_chinese(vb))
+						arg=(string)me->name()+vb+" "+emote_arg+"\n";
+					else
+						return 0;
+				if( channels[verb]["anonymous"] )
+					arg = replace_string(arg, me->name(), channels[verb]["anonymous"]);
+			}
+		}
+        if( arg==(string)me->query_temp("last_channel_msg") )
+            return notify_fail("用交談頻道說話請不要重複相同的訊息。\n");
+ 
+    }
+ 
+	// Make the identity of speaker.
+ 
+	if( channels[verb]["anonymous"] )
+		who = channels[verb]["anonymous"];
+	else if( userp(me) || !stringp(who = me->query("channel_id")) )
+		who = me->query("name") + "(" + capitalize(me->query("id")) + ")";
+ 
+	// Ok, now send the message to those people listening us.
+ 
+	ob = filter_array( users(), "filter_listener", this_object(), channels[verb] );
+	if( !arg ) arg = "...";
+ 
+	if( emote ) {
+		string msg;
+
+		if( !channels[verb]["msg_emote"] )
+			return notify_fail("這個頻道不能 emote。\n");
+// Support of old behavier of intermud emote.
+		if( channels[verb]["intermud_emote"] ) arg = who + " " + arg;
+
+// Check if emote not defined.
+		if( !stringp( arg ) )
+			return notify_fail("此 emote 的動作方式或對象沒有定義.\n");
+		msg = sprintf( channels[verb]["msg_emote"], arg );
+//		if( msg[<1] != '\n' ) msg += "\n";
+		message( "channel:" + verb, msg, ob );
+	} else
+		message( "channel:" + verb,
+			sprintf( channels[verb]["msg_speak"], who, arg ), ob );
+ 
+	if( arrayp(channels[verb]["extra_listener"]) ) {
+		channels[verb]["extra_listener"] -= ({ 0 });
+		if( sizeof(channels[verb]["extra_listener"]) )
+			channels[verb]["extra_listener"]->relay_channel(me, verb, arg);
+	}
+	
+	if( !undefinedp(channels[verb]["intermud"])
+	&&	base_name(me) != channels[verb]["intermud"] )
+		channels[verb]["intermud"]->send_msg(
+			channels[verb]["channel"], me->query("id"), NOR + me->name(1), NOR + arg, emote,
+			channels[verb]["filter"] );
+ 
+	if( userp(me) ) 
+		me->set_temp("last_channel_msg", arg);
+ 
+	return 1;
+}
+ 
+int filter_listener(object ppl, mapping ch)
+{
+	// Don't bother those in the login limbo.
+	if( !environment(ppl) ) return 0;
+	
+	if( ch["wiz_only"] ) return wizardp(ppl);
+	return 1;
+}
+
+// register_relay_channel()
+//
+// This function allows non-user objects like npcs, daemons, etc to sign-up
+// a channel for listenin. The way non-user objects listening channels is
+// via a mudlib apply function relay_channel().
+ 
+void register_relay_channel(string channel)
+{
+	object ob;
+ 
+	ob = previous_object();
+	if( undefinedp(channels[channel]) || !ob) return;
+	if( arrayp(channels[channel]["extra_listener"]) ) {
+		if( member_array(ob, channels[channel]["extra_listener"]) >=0 ) return;
+		channels[channel]["extra_listener"] += ({ ob });
+	} else
+		channels[channel]["extra_listener"] = ({ ob });
+}

@@ -1,0 +1,121 @@
+// message.c
+ 
+#include <ansi.h>
+#include <dbase.h>
+ 
+#define MAX_MSG_BUFFER 500
+ 
+nosave string *msg_buffer = ({});
+ 
+void receive_message(string msgclass, string msg)
+{
+	string subclass, sub_msgclass, *ch;
+ 
+	if( !interactive(this_object()) ) {
+		this_object()->relay_message(msgclass, msg);
+		return;
+	}
+ 
+	if( sscanf(msgclass, "%s:%s", subclass, sub_msgclass)==2 ) {
+		switch(subclass) {
+			case "channel":
+				if( !pointerp(ch = query("channels"))
+				||	member_array(sub_msgclass, ch)==-1 )
+					return;
+				break;
+			case "outdoor":
+				if( !environment() || !environment()->query("outdoors") )
+					return;
+				break;
+			default:
+				error("Message: Invalid Subclass " + subclass + ".\n");
+		}
+	} else {
+		switch( msgclass ) {
+			case "tell_room":
+			case "vision":
+			case "outside":
+			case "emote":
+				if( query("position") == "sleep" )
+					return;
+				break;
+		}
+	}
+ 
+	if( query_temp("block_msg/all") || query_temp("block_msg/" + msgclass) 
+		|| query_temp("block_msg/" + sub_msgclass ) )
+		return;
+ 
+	if( in_input(this_object()) || in_edit(this_object()) ) {
+		if( sizeof(msg_buffer) < MAX_MSG_BUFFER )
+			msg_buffer += ({ msg });
+	} else
+		receive( msg );
+}
+ 
+void write_prompt()
+{
+	string prompt;
+	int spi, mov;
+	int *limbs_eff_hit, *limbs_max_hit;
+	int i, limb_flag = 0;
+	string *limbs;
+ 
+	if( sizeof(msg_buffer) ) {
+		receive(BOLD "[輸入時暫存訊息]\n" NOR);
+		for(i=0; i<sizeof(msg_buffer); i++)
+			receive(msg_buffer[i]);
+		msg_buffer = ({});
+	}
+
+
+	if ( query("env/prompt") != "none" ) {
+		prompt = NOR "[ ";
+ 
+		prompt += sprintf( GRN "時間" NOR " %d ", this_object()->query_time_unit() );
+ 		spi = query("spi") * 100 / query("max_spi");
+		prompt += sprintf(YEL "精神 " NOR "%d%% ", spi );
+ 
+	   mov = query("mov") * 100 / query("max_mov");
+		   prompt += sprintf(HIB "移動 " NOR "%d%% ", mov );
+ 
+	   if( query("water") < 1 )
+		   prompt += CYN "口渴 ";
+ 
+	   if( query("food") < 1 )
+		   prompt += MAG "飢餓 ";
+ 
+	   limbs_eff_hit = query("limbs_eff_hit");
+	   limbs_max_hit = query("limbs_max_hit");
+	   limbs = query("limbs");
+ 
+	   for( i = 0; i < sizeof( limbs_max_hit ); i++ ) {
+		   if( limbs_eff_hit[i] * 100 / limbs_max_hit[i] < 30 ) {
+			   prompt += HIR + limbs[i] + " ";
+			   limb_flag = 1;
+		   }
+	   }
+ 
+	   if( limb_flag == 1 ) prompt += "重傷";
+ 
+	   prompt += NOR "] ";
+
+		if ( wizardp( this_object() ) && query("cwd") ) {
+			if( query("env/prompt") == "cwd" )
+				prompt = query("cwd")[0..<1] + "> ";
+			else if( query("env/prompt") == "all" )
+				prompt += query("cwd")[0..<1] + "> ";
+		}
+        } 
+        else 
+		prompt = "> ";
+
+	
+	write( prompt );
+	return;
+}
+ 
+void receive_snoop(string msg)
+{
+	receive("%" + msg);
+}

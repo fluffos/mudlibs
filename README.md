@@ -210,6 +210,9 @@ does not boot under WASM yet.
 | 056 | `tiexuejianghu` | 铁血江湖 (Tie Xue Jiang Hu) | `铁血江湖.rar` | 40087 | WASM playable |
 | 057 | `suiyuanxijianlu` | 随缘洗剑录 | `随缘洗剑录.rar` | 40088 | WASM limited |
 | 058 | `mohuanshiji` | 魔幻世纪 (mohuanshiji) | `魔幻世纪.rar` | 40092 | WASM playable |
+| 059 | `sanjiechuanshuo` | 三界传说 | `三界传说.rar` | 40097 | WASM playable |
+| 060 | `sanjieshenhua` | 三界神话「嘉峪关」 | `三界神话-春节.rar` | 40098 | WASM playable |
+| 061 | `zuizhonghuanjing` | 最终幻境 | `最终幻境.zip` | 40099 | WASM playable |
 | 901 | `dw_fluffos_v1` | Discworld MUD lib (v1) | `dw_fluffos_v1.tar.gz` | — | deprioritized |
 | 901-1 | `dw_fluffos_v2` | Discworld MUD lib (v2) | `dw_fluffos_v2.zip` | — | deprioritized |
 | 901-2 | `dw_fluffos_v3` | Discworld MUD lib (v3) | `dw_fluffos_v3.zip` | — | deprioritized |

@@ -1,0 +1,304 @@
+// bboard.c
+// Original ES 2 object.
+// Last modified by Spock @ FF	98.Feb.24.
+
+#include <ansi.h>
+
+#define BOARD_CAPACITY query("capacity")
+
+inherit ITEM;
+
+void setup();
+void init();
+string query_save_file();
+string short();
+string long();
+void done_post(object me, mapping note, string text);
+int do_post(string arg);
+int do_read(string arg);
+int do_discard(string arg);
+int xdo_save_board(string arg);
+int do_list( string arg );
+int read_data();
+
+string data = "";
+string *field = ({});
+
+mapping *notes = ({});
+
+void setup()
+{
+	if( clonep(this_object()) ) return;
+
+	set("no_get", 1);
+	seteuid( getuid() );
+	read_data();
+	return;
+}
+
+void init()
+{
+	add_action("do_list", "list");
+	add_action("do_post", "post");
+	add_action("do_read", "read");
+	add_action("do_discard", "discard");
+	add_action("xdo_save_board", "bsave");
+}
+
+string query_save_file()
+{
+	string id;
+
+	if( !stringp(id = query("board_id")) ) return 0;
+	return DATA_DIR + "board/" + id;
+}
+
+string short()
+{
+	int i, unread, last_read_time;
+
+	read_data();
+
+	if( !pointerp(notes) || !sizeof(notes) )
+		return ::short() + " [ 沒有任何留言 ]";
+
+	if( this_player() ) {
+		last_read_time = (int)this_player()->query("board_last_read/" + (string)query("board_id"));
+		for(unread = 0, i=sizeof(notes)-1; i>=0; i--, unread ++) {
+			if( notes[i]["time"] <= last_read_time ) break;
+		}
+	}
+	if( unread )
+		return sprintf("%s [ %d 張留言﹐%d 張未讀 ]", ::short(), sizeof(notes), unread);
+	else
+		return sprintf("%s [ %d 張留言 ]", ::short(), sizeof(notes));
+}
+
+string long()
+{
+	return query("long") + "留言版的使用方法請見 help bboard.\n";
+}
+
+// This is the callback function to process the string returned from the
+// editor defined in F_EDIT of player object.
+void done_post(object me, mapping note, string text)
+{
+	string data;
+
+	note["time"] = time();
+	note["msg"] = text;
+
+	read_data();
+
+	if( !pointerp( notes ) || !( sizeof( notes ) ) )
+		notes = ({ note });
+	else
+		notes += ({ note });
+
+// Truncate the notes if maximum capacity exceeded.
+	if( sizeof( notes ) > BOARD_CAPACITY )
+		notes = notes[BOARD_CAPACITY / 2 .. BOARD_CAPACITY];
+
+	tell_object(me, "留言完畢.\n");
+
+	data = note["title"] + "#eof#" + note["name"] + "#eof#"
+		+ note["author"] + "#eof#" + note["time"] + "#eof#"
+		+ note["msg"] + "#eof#" + note["profile"] + "#eof#";
+
+	write_file( query_save_file() + __SAVE_EXTENSION__ , data );
+
+	return;
+}
+
+int do_post(string arg)
+{
+	mapping note;
+	if(!arg) return notify_fail("留言請指定一個標題。\n");
+
+	note = allocate_mapping(6);
+	note["title"] = arg;
+	note["name"] = this_player()->query("name");
+	note["author"] = this_player()->query("id");
+	if ( !( note["profile"] = this_player()->query("profile") ) )
+		note["profile"] = "無名片";
+	this_player()->edit( (: done_post, this_player(), note :) );
+	return 1;
+}
+
+int do_read(string arg)
+{
+	int num;
+	mapping last_read_time;
+	string myid;
+
+	read_data();
+
+	last_read_time = this_player()->query("board_last_read");
+	myid = query("board_id");
+
+	if( !pointerp(notes) || !sizeof(notes) )
+		return notify_fail("留言板上目前沒有任何留言。\n");
+
+	if( !arg ) return notify_fail("指令格式﹕read <留言編號>|new|next\n");
+	if( arg=="new" || arg=="next" ) {
+		if( !mapp(last_read_time) || undefinedp(last_read_time[myid]) )
+			num = 1;
+		else
+			for(num = 1; num<=sizeof(notes); num++)
+				if( notes[num-1]["time"] > last_read_time[myid] ) break;
+			
+	} else if( !sscanf(arg, "%d", num) )
+		return notify_fail("你要讀第幾張留言﹖\n");
+
+	if( num < 1 || num > sizeof(notes) )
+		return notify_fail("沒有這張留言。\n");
+	num--;
+	this_player()->start_more( sprintf(
+"[%d] %-30s %s(%s)(%s)\n----------------------------------------------------------------------\n",
+		num + 1, notes[num]["title"], notes[num]["name"], notes[num]["author"], ctime(notes[num]["time"])[0..9])
+		+ notes[num]["msg"] + "\n--\n" + notes[num]["profile"] );
+
+	// Keep track which post we were reading last time.
+	if( !mapp(last_read_time) )
+		this_player()->set("board_last_read", ([ myid: notes[num]["time"] ]) );
+	else 
+		if( undefinedp(last_read_time[myid]) || notes[num]["time"] > last_read_time[myid] )
+			last_read_time[myid] = notes[num]["time"];
+
+	return 1;
+}
+
+int do_discard(string arg)
+{
+	int num, i;
+	string data = "";
+
+	read_data();
+
+	if( !arg || sscanf(arg, "%d", num)!=1 )
+		return notify_fail("指令格式﹕discard <留言編號>\n");
+	if( !arrayp(notes) || num < 1 || num > sizeof(notes) )
+		return notify_fail("沒有這張留言。\n");
+	num--;
+	if( notes[num]["author"] != (string) this_player(1)->query("id")
+	&&	(string)SECURITY_D->get_status(this_player(1)) != "(admin)" )
+		return notify_fail("這個留言不是你寫的。\n");
+
+	notes = notes[0..num-1] + notes[num+1..sizeof(notes)-1];
+	write("刪除第 " + (num+1) + " 號留言....Ok。\n");
+
+	for( i = 0; i < sizeof( notes ); i++ ) {
+		data += notes[i]["title"] + "#eof#" + notes[i]["name"] + "#eof#"
+			+ notes[i]["author"] + "#eof#" + notes[i]["time"] + "#eof#"
+			+ notes[i]["msg"] + "#eof#" + notes[i]["profile"] + "#eof#";
+	}
+
+	write_file( query_save_file() + __SAVE_EXTENSION__ , data, 1 );
+
+	return 1;
+}
+
+
+int xdo_save_board(string arg)
+{
+	string myid, filename, msg;
+	int num;
+	
+	read_data();
+
+	seteuid(geteuid(this_player()));
+	
+	myid = query("board_id");
+	if(!wizardp(this_player())) notify_fail("嗯..你不是巫師喔..\n");
+	
+	if( !pointerp(notes) || !sizeof(notes) ) 
+		return notify_fail("留言板上目前沒有任何留言。\n");
+	
+	
+	if( !arg ) return notify_fail("指令格式﹕bsave <留言編號> on <檔案名稱>\n");
+	
+	if( sscanf(arg, "%d on %s", num,filename) != 2)
+		return notify_fail("指令格式﹕bsave <留言編號> on <檔案名稱>\n");
+		
+	
+	if( !arrayp(notes) || num < 1 || num > sizeof(notes) )
+		return notify_fail("沒有這張留言。\n");
+
+	read_data();
+	
+	filename = resolve_path(this_player()->query("cwd"), filename);
+	assure_file(filename);
+	num--;
+	
+	msg = sprintf(
+	"[%d] %-40s %s(%s)\n----------------------------------------------------------------------\n",
+	num + 1, notes[num]["title"], notes[num]["author"],ctime(notes[num]["time"])[0..9]);
+	msg += sprintf("%s\n--\n%s", notes[num]["msg"], notes[num]["profile"] );
+	
+	printf("把第%d篇留言存入檔案%s ... ",num+1,filename);
+	if (write_file(filename, msg))
+		write("成功..:-) \n");
+	else
+		write("失敗..:-( \n");
+	return 1;
+
+
+}
+
+int do_list( string arg )
+{
+	int i, last_time_read;
+	string msg = "";
+
+	read_data();
+
+	if( !pointerp(notes) || !sizeof(notes) ) 
+		return notify_fail("目前" + query("name") + "沒有留言.\n");
+
+	last_time_read = this_player()->query("board_last_read/" + (string)query("board_id"));
+
+	switch( arg ) {
+		case "new":
+			for(i = sizeof(notes) - 1; i > 0; i--) {
+				msg = sprintf("[%2d]" NOR "  %-40s %12s (%s)\n",
+					i+1, notes[i]["title"], notes[i]["author"], ctime(notes[i]["time"])[0..15] )
+					+ msg;
+			}
+			break;
+		default:
+			for(i=0; i<sizeof(notes); i++)
+				msg += sprintf("%s[%2d]" NOR "  %-40s %12s (%s)\n",
+					( notes[i]["time"] > last_time_read ? HIY: ""),
+					i+1, notes[i]["title"], notes[i]["author"], ctime(notes[i]["time"])[0..15] );
+	}
+	this_player()->start_more( msg );
+	return 1;
+}
+
+int read_data()
+{
+	int i, num, end;
+
+	data = read_file( query_save_file() + __SAVE_EXTENSION__ );
+	if( !data ) return 0;
+	field = explode( data, "#eof#" );
+	if( !arrayp( field ) ) return 0;
+
+	end = sizeof( field ) - 1;
+	notes = allocate( ( end + 1 ) / 6 );
+	i = 0;
+
+	while( i <= end ) {
+		num = i / 6;
+		notes[num] = allocate_mapping(6);
+		notes[num]["title"] = field[i];	
+		notes[num]["name"] = field[i+1];	
+		notes[num]["author"] = field[i+2];
+		sscanf( field[i+3], "%d", notes[num]["time"]);
+		notes[num]["msg"] = field[i+4];
+		notes[num]["profile"] = field[i+5];	
+		i += 6;
+	}
+
+	return 1;
+}

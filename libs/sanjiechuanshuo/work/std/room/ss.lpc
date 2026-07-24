@@ -1,0 +1,681 @@
+#include <ansi.h>
+#include <localtime.h>
+inherit ROOM;
+
+string *stocks=({"/stock/stock01","/stock/stock02","/stock/stock03","/stock/stock04","/stock/stock05","/stock/stock06","/stock/stock07","/stock/stock08","/stock/stock09","/stock/stock10"});
+
+int price_ratio=0;
+int price_old=0;
+int ii=0,jj=0;
+int apps_count=0;
+int apps_max=100;
+string apps_name;
+int apps_status=0;
+int notify_stock=0;
+int notify_point=0;
+object stock_box;
+int query_max_items() {return 100;}
+string get_name(string str);
+
+void init()
+{
+   call_out("update_ratio", 1);
+   add_action("do_sell", "out");
+   add_action("do_buy", "in");
+   add_action("do_list", "list");
+   add_action("do_apps", "apply");
+   add_action("do_dui", "dui");
+   add_action("do_start", "start");
+   add_action("do_value", "value");
+   add_action("do_check", "stock");
+   add_action("do_fix","fix");
+   set("no_clean_up", 1);
+}
+
+int do_time()
+{
+	mixed *local;
+	local = localtime(time()*60);
+	return local[LT_HOUR];
+}
+
+int up_gupiao(string arg)
+{
+	int i=10;
+	while (i>0)
+	{
+		if (stocks[i-1]->query("id")==arg)
+		{
+			if (stocks[i-1]->query("stock")<10000)
+			stocks[i-1]->add("stock",1);
+			i=0;
+		}
+		i=i-1;	
+	}
+	return 1;
+}
+
+int get_per(string arg)
+{
+	int i=10,j1;
+	while (i>0)
+	{
+		if (stocks[i-1]->query("id")==arg)
+		{
+			j1=stocks[i-1]->query("stock") - stocks[i-1]->query("base_stock");
+			i=0;
+		}
+		i=i-1;	
+	}
+	return j1;
+}
+
+int down_gupiao(string arg)
+{
+	int i=10;
+	while (i>0)
+	{
+		if (stocks[i-1]->query("id")==arg)
+		{
+			if (stocks[i-1]->query("stock") > 100)
+			stocks[i-1]->add("stock",-1);
+			i=0;
+		}
+		i=i-1;	
+	}
+	return 1;
+}
+
+int get_ratio()
+{
+	int i=10,j=0,k=0;
+	while(i>0)
+	{
+		j = j + stocks[i-1]->query("stock");
+		i=i-1;
+	}
+	k=j/10;
+	return k+1;
+}
+
+int update_ratio()
+{
+	int ss=0,ww=0,kk1,kk2,kk3,kk4;
+	if (do_time()==6 && ii==0)
+	{
+		price_ratio=get_ratio();
+		if (price_ratio>price_old)
+		message("channel:chat",HIB"【股市开盘】：" + HIB"今天的股市开盘了，大盘高开 "BLINK HIR + price_ratio + NOR HIB" 点\n"NOR,users());
+		if (price_ratio==price_old)
+		message("channel:chat",HIB"【股市开盘】：" + HIB"今天的股市开盘了，大盘平开 "BLINK HIW + price_ratio + NOR HIB" 点\n"NOR,users());
+		if (price_ratio<price_old)
+		message("channel:chat",HIB"【股市开盘】：" + HIB"今天的股市开盘了，大盘低开 "BLINK HIG + price_ratio + NOR HIB" 点\n"NOR,users());
+		price_old=price_ratio;
+		ii=1;
+		while (ss<10)
+		{
+			ww=stocks[ss]->query("stock");
+			stocks[ss]->set("base_stock",ww);
+			ss=ss+1;	
+		}
+		
+	}
+	if (do_time()==22 && ii==1)
+	{
+		price_ratio=get_ratio();
+		if (price_ratio>price_old)
+		message("channel:chat",HIY"【股市收盘】：" + HIY"今天的股市收盘了，大盘高收 "BLINK HIR + price_ratio + NOR HIY" 点\n"NOR,users());
+		if (price_ratio==price_old)
+		message("channel:chat",HIY"【股市收盘】：" + HIY"今天的股市收盘了，大盘平收 "BLINK HIW + price_ratio + NOR HIY" 点\n"NOR,users());
+		if (price_ratio<price_old)
+		message("channel:chat",HIY"【股市收盘】：" + HIY"今天的股市收盘了，大盘低收 "BLINK HIG + price_ratio + NOR HIY" 点\n"NOR,users());
+		price_old=price_ratio;
+		ii=0;
+	}
+	if (apps_status==1)
+	{
+		if (notify_stock>1000)
+		{
+			if (random(2))
+			message("channel:chat",HIY"【新股发行】：" + HIR"股票交易室有新股票开始申购了，还剩 " + (apps_max-apps_count) + "个号码没有售出，请大家快去啊！！！\n"NOR,users());
+			notify_stock=0;
+		}
+		else
+			notify_stock = notify_stock+1;
+	}
+
+	kk1=random(10);
+	kk2=stocks[kk1]->query("stock");
+        kk3=stocks[kk1]->query("base_stock");
+        kk4=random(11);
+        if (random(2) && kk4>0)
+        {
+		if (kk2>(100 + kk4) && kk2>=(kk3 - 100 + kk4))
+			stocks[kk1]->add("stock",-random(11));
+	}
+	else
+	{
+		if (kk2<(10000 - kk4) && kk2<=(kk3 + 100 - kk4))
+			stocks[kk1]->add("stock",random(11));
+	}
+
+	call_out ("do_refresh",1);
+	if (apps_count>=apps_max)
+		apps_status = 2;
+	if (do_time()>=6 && do_time()<22)
+	{
+		if (notify_point>1000)
+		{
+			price_ratio=get_ratio();
+			if (random(2))
+			message("channel:chat",HIR"【股市行情】：" + HIW"当前股票指数 "BLINK HIY + price_ratio + NOR HIW" 点\n"NOR,users());
+			notify_point=0;
+		}
+		else
+			notify_point = notify_point +1;
+	}
+	call_out ("update_ratio", 30);//1 mins	
+	return 1;
+}
+
+int do_check()
+{
+	if (do_time()< 6 || do_time()>=22)
+	{
+		if (!wizardp(this_player()))
+		return notify_fail("********  大盘休市  ********\n");
+	}		
+	price_ratio=get_ratio();
+	if (price_ratio >=4000 && price_ratio <= 6000)
+	message("channel:chat",HIR"【大户室】：" + HIW"当前股票指数 " + price_ratio + HIW" 点\n"NOR,this_player());
+	if (price_ratio >6000 && price_ratio <= 8000)
+	message("channel:chat",HIR"【大户室】：" + HIW"好消息，当前股票指数涨到了 "HIR + price_ratio + HIW" 点\n"NOR,this_player());
+	if (price_ratio >8000 && price_ratio <= 10000)
+	message("channel:chat",HIR"【大户室】：" + HIW"利好消息，当前股票指数暴涨到了 "HIR + price_ratio + HIW" 点\n"NOR,this_player());
+	if (price_ratio >10000)
+	message("channel:chat",HIR"【大户室】：" + HIW"极大喜讯，当前股票指数狂涨到了 "BLINK HIR + price_ratio + HIW" 点\n"NOR,this_player());
+	if (price_ratio <4000 && price_ratio >= 3000)
+	message("channel:chat",HIG"【大户室】：" + HIW"不幸的消息，当前股票指数跌到了 "BLINK HIG + price_ratio + HIW" 点\n"NOR,this_player());
+	if (price_ratio <3000 && price_ratio >= 1000)
+	message("channel:chat",HIG"【大户室】：" + HIW"悲惨消息，当前股票指数暴跌到了 "BLINK HIG + price_ratio + HIW" 点\n"NOR,this_player());
+	if (price_ratio <1000)
+	message("channel:chat",HIG"【大户室】：" + HIW"跳楼消息，当前股票指数狂跌到了 "BLINK HIG + price_ratio + HIW" 点\n"NOR,this_player());
+	return 1;
+}
+
+object findbox()
+{
+	if(stock_box && environment(stock_box)==this_object()) 
+      		return stock_box;
+    	stock_box=new(__DIR__"stockbox");
+    	stock_box->move(this_object());
+    	return stock_box;
+}
+
+string value_string(int value)
+{
+	return " " + (string)value + " ";
+/*
+   if( value < 1 ) value = 1;
+   else if( value < 100 )
+     return chinese_number(value) + "文钱";
+   else 
+     return chinese_number(value/100) + "两白银"
+        + (value%100? "又" + chinese_number(value%100) + "文钱": "");
+*/
+}
+
+int do_value(string arg)
+{
+   object ob;
+   int value;
+
+   if( !arg || !(ob = present(arg, this_player())) )
+     return notify_fail("你要查询什么股票的当前价格？\n");
+
+   if( ob->query("unit") != "股" )
+     return notify_fail("证券交易所：我们这里只进行股票交易，其他请去当铺。\n");
+
+   value = ob->query("stock");
+//   value = value * price_ratio/1000;
+   if( !value) printf("%s破产的股票，一文不值！！！\n", ob->query("name"));
+ 
+   else 
+     printf("%s当前价格%s。\n如果你要卖出(out)，可以得到%s。\n",
+        ob->query("name"), value_string(value),
+        value_string(value * 997 /1000));
+   return 1;
+}
+
+int do_sell(string arg)
+{
+   object ob;
+   int value;
+   string obj_file;
+   int i, oldnum;
+   string index;
+
+   if( this_player()->is_busy() )
+     return notify_fail("你现在正忙着呢。\n");
+
+   if( !arg )  {
+      write("指令格式：out <股票>\n");
+      return 1;
+	}
+   if( !arg || !(ob = present(arg, this_player())) )
+     return notify_fail("你要卖出什么股票？\n");
+   if (wizardp(this_player()) && this_player()->query("id")!="sen")
+     {
+     	return notify_fail("巫师不要在这里扰乱股市！！！\n");	
+     }
+   if (this_player()->query("stock/account")!="begin")
+     	return notify_fail("你还没有股市资金账号呢，请先去小不懂那里开账号吧！！！\n");	   
+/*
+   if (this_player()->query_temp("stockbuy")> time() - 10)	
+     	return notify_fail("对不起，请过一会儿再来交易！！！\n");	   
+*/
+   if (this_player()->query("stock/" + ob->query("id"))<1)
+     {
+     if (!wizardp(this_player()))
+     return notify_fail("你那里来的股票，交易所好像没有你这支股票的交易记录，快丢了吧！！！\n");
+     }
+   if (do_time()< 6 || do_time()>=22)
+     {
+     if (!wizardp(this_player()))
+     return notify_fail("现在不是交易时间(卯时 - 戌时才能交易)！！！\n");
+     }
+   value = ob->query("stock");
+   if (value<=(ob->query("base_stock") - 100))
+     return notify_fail("对不起，这支股票已经跌停！！！\n");
+   if( ob->query("unit") != "股" )
+     return notify_fail("交易大厅：我们这里只进行股票交易，其他请去当铺。\n");
+//   value=value * price_ratio/100;
+   if (value>=100)
+   	value=value - 1;
+   else
+     	return notify_fail("这是一支破产的股票，你还是丢掉吧！！！\n");	   
+   this_player()->add("stock/" + ob->query("id"),-1);
+   message_vision("$N把身上的" + ob->query("name") + "卖掉。\n",this_player());
+        index=ob->query("name")+"("+ob->query("id")+")";
+   if (!wizardp(this_player()))
+     down_gupiao(ob->query("id"));
+   	  if(!findbox()->query_temp("goods/"+index) ){
+          findbox()->set_temp("goods/"+index, ob);
+      findbox()->set_temp("numbers/"+index, 1);
+      ob->move(findbox());
+   }
+   else {
+      oldnum = findbox()->query_temp("numbers/"+index);
+           findbox()->set_temp("numbers/"+index, oldnum+1);
+      destruct(ob);
+   }
+   if (!wizardp(this_player()))
+       this_player()->start_busy(2);
+   this_player()->add("stock/total",value * 997/1000);
+   this_player()->add("stock/out",value * 997/1000);
+   this_player()->add("stock/count",-1);
+
+   this_player()->add("combat_exp",1 + random(2));
+   this_player()->add("potential",0 + random(2));
+   this_player()->add("daoxing",2 + random(2));
+//   if (price_ratio>1)
+//   price_ratio=price_ratio -1;
+//   this_player()->set_temp("stockbuy",time());
+   this_player()->save();
+   return 1;
+}
+
+int do_list(string arg)
+{
+   mapping goods;
+   string list, *name;
+   int i,j,turn=0;
+   string tlist;
+   object me=this_player();
+   if (do_time()< 6 || do_time()>=22)
+		{
+		if (!wizardp(this_player()))
+   		return notify_fail("********  大盘休市  ********\n");
+   		}
+   if( !mapp(goods = findbox()->query_temp("goods")) )
+     return notify_fail("交易室目前没有股票可以买卖。\n");
+   name = keys(goods);
+   if(!sizeof(goods)) 
+     return notify_fail("交易室目前没有股票可以买卖。\n");
+   if( !arg )
+   {
+      	price_ratio=get_ratio();
+      	list = "********   大盘行情 （综合指数：" + price_ratio + " 点）  ********  当前时间：" + do_time() + " 点\n";
+      	i=sizeof(goods);
+      	while(i--) 
+      	{
+             	if(!goods[name[i]])
+             	{
+          		findbox()->delete_temp("numbers/"+name[i]);
+          		findbox()->delete_temp("goods/"+name[i]);
+          		continue;
+             	}
+        	tlist = get_name(name[i]);
+        	++turn;
+        	j=get_per(goods[name[i]]->query("id"));
+        	if (j>0)
+        	{
+	        	list += sprintf("%-3d %-32s：%-20s：抛盘%-4s%2s："+HIR"↑%d\n"NOR,turn, tlist,
+	        	value_string(goods[name[i]]->query("stock")),
+	        	value_string(findbox()->query_temp("numbers/"+name[i])),
+	        	goods[name[i]]->query("unit"),j);
+        	}
+        	else
+	        {
+	        	if (j==0)
+	        	{
+		        	list += sprintf("%-3d %-32s：%-20s：抛盘%-4s%2s："+HIW"--%d\n"NOR,turn, tlist,
+		        	value_string(goods[name[i]]->query("stock")),
+		        	value_string(findbox()->query_temp("numbers/"+name[i])),
+		        	goods[name[i]]->query("unit"),j);
+	        	}
+	        	else
+	        	{
+		        	list += sprintf("%-3d %-32s：%-20s：抛盘%-4s%2s："+HIG"↓%d\n"NOR,turn, tlist,
+		        	value_string(goods[name[i]]->query("stock")),
+		        	value_string(findbox()->query_temp("numbers/"+name[i])),
+		        	goods[name[i]]->query("unit"),-j);
+	        	}
+        	}
+      	}
+       	me->start_more(list);
+//       	me->start_more(price_ratio);
+   }
+   return 1;
+}
+
+int do_buy(string arg)
+{
+   mapping goods;
+   string *name;
+   string fname;
+   object obj_file, ob;
+   int value, oldnum, order;
+   int i, j;
+   object* inv;
+   string arg1, arg2;
+
+   if( this_player()->is_busy() )
+     return notify_fail("你现在正忙着呢。\n");
+
+   if( !arg )  {
+      write("指令格式：in <股票>\n");
+      return 1;
+   }
+   // players are used to the "buy sth from sb" format.
+   if( sscanf(arg, "%s from %s", arg1, arg2) == 2 )   {
+     arg = arg1;
+   }
+
+   if( sscanf(arg, "%s %d", fname, order) != 2 )   {
+     fname = arg;
+     order = 1;
+   }
+   if (wizardp(this_player()) && this_player()->query("id")!="sen")
+     {
+     	return notify_fail("巫师不要在这里扰乱股市！！！\n");	
+     }
+   if (this_player()->query("stock/account")!="begin")
+     	return notify_fail("你还没有股市资金账号呢，请先去小不懂那里开账号吧！！！\n");	 
+   if (do_time()< 6 || do_time()>=22)
+     {
+     if (!wizardp(this_player()))
+     return notify_fail("现在不是交易时间(卯时 - 戌时才能交易)！！！\n");
+     }
+/*
+   if (this_player()->query("stock/count")>9)
+     {
+     if (!wizardp(this_player()))
+     return notify_fail("股市规则规定每人最多持股10股！！！\n");
+     }
+*/
+//   if (this_player()->query_temp("stockbuy")> time() - 10)	
+//     	return notify_fail("对不起，请过一会儿再来交易！！！\n");	
+
+   if( !mapp(goods = findbox()->query_temp("goods")) )
+     return notify_fail("交易室目前没有股票可以买卖。\n");
+   name = keys(goods);
+   if(!sizeof(goods)) 
+     return notify_fail("交易室目前没有股票可以买卖。\n");
+   j = 0;
+   i=sizeof(name);
+   while(i--) {
+          if(!goods[name[i]]) continue;
+     if( member_array(fname, 
+         goods[name[i]]->parse_command_id_list()) != -1 )  {
+        j++;    
+     }
+     if( j == order )   {
+       obj_file = goods[name[i]];
+          value = obj_file->query("stock");
+   if (value>=(obj_file->query("base_stock") + 100))
+     return notify_fail("对不起，这支股票已经涨停！！！\n");
+//   	  value = value * price_ratio/100;
+          value = value + 1;
+          if( !((int)this_player()->query("stock/total")> value * 1003 /1000) )  {
+             write("你没有足够的股市资金。\n");
+             return 1; 
+          }
+       ob = new( base_name( obj_file ) ); 
+       ob->set_name(obj_file->query("name"),
+         obj_file->parse_command_id_list());
+         arg = obj_file->query("name")+
+         "("+obj_file->query("id")+")";
+          oldnum = findbox()->query_temp("numbers/"+arg);
+          if(oldnum == 1)
+          {
+          destruct(obj_file);
+          findbox()->delete_temp("numbers/"+arg);
+          findbox()->delete_temp("goods/"+arg);
+          }
+          else    
+          {
+          	findbox()->set_temp("numbers/"+arg, oldnum-1); 
+       	  }
+     if (!wizardp(this_player()))
+       up_gupiao(ob->query("id"));
+   	  this_player()->add("stock/" + ob->query("id"),1);
+         if(!ob->move(this_player()))
+         return 0;
+	if (!wizardp(this_player()))
+           this_player()->start_busy(2);
+          this_player()->add("stock/total",- value * 1003/1000);
+   	  this_player()->add("stock/in", value * 1003/1000);
+	  this_player()->add("stock/count",1);
+//          price_ratio =  price_ratio +1;
+          message_vision("$N向交易所买下一" +
+          ob->query("unit") + ob->query("name") + "。\n", this_player() );
+//          this_player()->set_temp("stockbuy",time());
+          this_player()->save();
+          return 1;
+     }
+   }
+   write("交易所目前没有这种股票可以买卖。\n");
+   return 1;
+}
+
+int do_apps()
+{
+	object me=this_player();
+	int score1=0,score2=0;
+   	if (me->query("stock/account")!="begin")
+     		return notify_fail("你还没有股市资金账号呢，请先去小不懂那里开账号吧！！！\n");	 
+	if (apps_status==1)
+	{	
+		if (apps_count>apps_max)
+			return notify_fail("新股申购已经结束了，下次发行新股请早！！！\n");
+		score2=me->query("stock/apps_money");
+		score1=me->query("stock/total");
+		if (score1 >= 10030)
+		{
+			if (score2>0)
+				me->add("stock/total",score2);
+			if (me->query("stock/apps_name") == apps_name)
+				return notify_fail("你已经申购了新股，请等待摇号开奖吧！！！\n");
+			me->set("stock/apps_money",10000);	
+			me->add("stock/total",-10030);
+			me->set("stock/apps_name",apps_name);
+			apps_count =apps_count + 1;
+			me->set("stock/apps_id",apps_count);
+			message_vision("$N向交易所申购新股，获得了一个抽签号码: " + apps_count + " ,10000的申购资金已经冻结了！\n",me);
+//			message_vision("channel:chat",HIW"【新股申购】：" + me->query("name") + "向交易所申购新股，正等待着中签赚大钱呢！！！\n",users());
+		}
+		else
+			return notify_fail("你有那么多钱吗，你也要打新股！！！\n");
+	}
+	if (apps_status==2)
+		return notify_fail("新股申购已经结束了，下次发行新股请早！！！\n");
+
+	if (apps_status==0)
+		return notify_fail("现在没有新股发售啊！！！\n");
+   	return 1;
+}
+
+int do_dui()
+{
+	object me=this_player();
+	if (apps_status==2)
+	{	
+		int score1,score2,i=10;
+		object gupiao;
+		score1=me->query("stock/apps_id");
+		score2=score1 + random(3);
+		if (score1==0)
+			return notify_fail("你并没有申购新股啊！！！\n");			
+		if (score2==score1 && apps_count>0 && me->query("stock/apps_name") == apps_name)
+		{
+			message_vision("恭喜你中签了，10股新股已经自动购入！",me);
+			apps_count = (apps_count - 4 - random(2));
+			while (i--)
+			{
+				gupiao=new("/stock/" + apps_name);
+				gupiao->move(me);
+   				me->add("stock/" + gupiao->query("id"),1);
+   			}
+			me->delete("stock/apps_money");
+			me->delete("stock/apps_id");
+			me->delete("stock/apps_name");
+		}
+		else
+		{
+			if (apps_count<=0)
+				apps_status=0;
+			me->add("stock/total",10000);
+			me->delete("stock/apps_money");
+			me->delete("stock/apps_id");
+			me->delete("stock/apps_name");
+			message_vision("谢谢你参与股市，你没有中签，冻结资金返还了！\n",me);
+		}
+	}
+	if (apps_status==1)
+		if (me->query("stock/apps_money"))
+			return notify_fail("新股申购还没有结束呢，当前申购到：" + apps_count + "号，请耐心等待！！！\n");
+		else
+			return notify_fail("新股申购还没有结束呢，请先去申购！！！\n");
+	if (apps_status==0)
+		return notify_fail("现在没有新股发售啊！！！\n");
+   	return 1;
+}
+
+int do_start(string arg)
+{
+	string sname;
+	int smax;
+	if( !arg || sscanf(arg, "%s for %d", sname,smax)!=2 )
+      		return notify_fail("指令格式：start <股票> for <申购数量>\n");
+	if (this_player()->query("id")!="sen")
+		return notify_fail("不是股市创办人没有权利发行新股！！！\n");
+	apps_count=0;
+	apps_name=sname;
+	apps_status=1;
+	apps_max=smax;
+	if (smax>=50)
+	message("channel:chat",HIY"【新股发行】：" + HIR"有新股票开始申购了，本次申购总数:" + smax + "个号码，请大家快去啊！！！\n"NOR,users());
+	return 1;
+}
+
+int do_fix(string arg)
+{
+	string sname;
+	int smax,scount;
+	if( !arg || sscanf(arg, "%s for %d of %d", sname,scount,smax)!=3 )
+      		return notify_fail("指令格式：fix <股票> for <已经申购数量> of <申购总数>\n");
+	if (this_player()->query("id")!="sen")
+		return notify_fail("不是股市创办人没有权利修复发行新股！！！\n");
+	apps_count=scount;
+	apps_name=sname;
+	apps_status=1;
+	apps_max=smax;
+//	message_vision("股市修复完成了！！！\n",this_player());
+	return 1;
+}
+
+int clean_up()  
+{
+      return 0;
+}
+
+string get_name(string str)
+{
+    string str1, str2;
+
+    while(sscanf(str,"%s%*sm%s",str1,str2)==3)
+   str=str1+str2;
+    return str;
+}
+
+int do_refresh(string arg)
+{
+   	object ob;
+   	int oldnum;
+   	string index,sid;
+   	ob=new(stocks[random(10)]);
+   	sid=ob->query("id");
+   	index=ob->query("name")+"("+ob->query("id")+")";
+   	if(!findbox()->query_temp("goods/"+index))
+   	{
+		if (random(2))
+		{
+	      		findbox()->set_temp("goods/"+index, ob);
+	      		findbox()->set_temp("numbers/"+index, 1);
+	   		down_gupiao(sid);
+	      		ob->move(findbox());
+	      	}
+	      	else
+	      	{
+	      		up_gupiao(sid);
+      		}
+   	}
+   	else
+   	{
+      		oldnum = findbox()->query_temp("numbers/"+index);
+      		if (random(2))    //出去
+      		{
+	      		up_gupiao(sid);
+	      		if (oldnum==1)
+	             	{
+	          		findbox()->delete_temp("numbers/"+index);
+	           		findbox()->delete_temp("goods/"+index);	      			
+	      		}
+			else
+				findbox()->set_temp("numbers/"+index, oldnum-1); 
+			destruct(ob);
+      		}
+		else    //进入
+		{
+   			if (oldnum<20)
+   			{
+   				down_gupiao(sid);
+	      			findbox()->set_temp("numbers/"+index, oldnum+1);	
+	      			destruct(ob);
+	      		}
+      		}
+   	}
+
+   	return 1;
+}

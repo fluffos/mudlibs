@@ -1,0 +1,195 @@
+// quit.c
+// modified by mudring@sjsh...
+
+
+#include <command.h>
+#include <ansi.h>
+#include <config.h>
+#include <mudlib.h>
+
+inherit F_DBASE;
+inherit F_CLEAN_UP;
+
+int do_drop(object me, object obj);
+string query_time(int time);
+
+void create() 
+{
+        seteuid(getuid());
+        set("channel_id", "离线指令");
+}
+
+int main(object me, string arg, int force_quit)
+{
+        int i,tt;
+        object *inv, link_ob;
+
+        link_ob = me->query_temp("link_ob");
+
+        if(!force_quit) {
+        if ( me->query_temp("no_move") )
+                return notify_fail("你被定住了，哪里退得出游戏！\n");
+
+        if (me->is_busy() && ! me->query("doing"))
+                return notify_fail("你现在正忙着做其他事，不能退出游戏！\n");
+
+        if (me->is_fighting())
+                return notify_fail("你现在正在打架，怎么能说走就走？\n");
+
+        if(me->query("kee")<=0)
+                return notify_fail("你现在的身体状况不适合离开游戏！\n");
+            if((tt=me->query_temp("killed_time")) && tt +20 >time())
+                         return notify_fail("你现在刚杀要杀人不适合离开游戏！\n");
+        if (me->is_pker())
+                return notify_fail("你刚杀完人就想离开？做事情还是要负责任的！\n");
+
+        if( !wizardp(me) && environment(me) && 
+            environment(me)->query("no_quit") && link_ob )
+                return notify_fail("这里不准退出游戏。\n");
+        }
+
+        if (me->run_override("quit"))
+                return 1;
+
+        if( !wizardp(me) && (!link_ob || (
+            link_ob && !link_ob->is_character()) ) ) {
+                inv = all_inventory(me);
+                for(i=0; i<sizeof(inv); i++)
+                        if( !inv[i]->query_autoload() )
+                                do_drop(me, inv[i]);
+        }
+
+        if( link_ob ) {
+                if( link_ob->is_character() ) {
+                        write("你的魂魄回到" + link_ob->name(1) + "的身上。\n");
+                        exec(link_ob, me);
+                        link_ob->setup();
+                        link_ob->write_prompt();
+                        return 1;
+                }
+
+                link_ob->set("last_on", time());
+                link_ob->set("last_from", query_ip_number(me));
+                link_ob->set("last_port", query_ip_port(me));//By waiwai@2001/03/06 added.
+              if (environment(me)->qurey("short")!="迎客厅")
+                link_ob->save();
+                destruct(link_ob);
+        }
+
+        if (me->query("doing"))
+        {
+                if (! interactive(me))
+                        return 1;
+
+                write("你暂时离线，人物不退出...\n");
+                message("vision", me->name() + "离线了。\n",
+                                  environment(me), ({ me }));
+                me->save();
+                link_ob = new(LOGIN_OB);
+                exec(link_ob, me);
+                destruct(link_ob);
+                return 1;
+        }
+
+#if INSTALL_EXAMINE
+        EXAMINE_D->examine_player(me);
+#endif
+        me->log_command("quit");
+
+        message("system", me->name() + "离开游戏。\n", environment(me), ({me}));
+        write("\n你经历了太多的江湖风风雨雨终于有些累了。江湖人，总是在人老之前心也就老了，
+曾经叱咤过的大江南北，现在看过去竟是一片沧茫。你不禁长笑三声：兄弟们我
+还会回来的，然后便怅然若失,黯然离去 ......\n\n");
+     if(!wizardp(me)) me->set("quit_time",time());
+
+     if(wizardp(me)) {
+     CHANNEL_D->do_channel(this_object(), "wiz",
+    me->name() + "("+me->query("id")+")离开游戏了。停留时间为："+query_time(me->query_temp("temp_time"))+""NOR );
+        } else
+     CHANNEL_D->do_channel(this_object(), "sys",
+      me->name() + "("+me->query("id")+")离开游戏了。停留时间为："+query_time(me->query_temp("temp_time"))+""NOR);
+
+              if (environment(me)->qurey("short")!="迎客厅")
+        me->save();
+        me->end_log();
+        destruct(me);
+
+        return 1;
+}
+
+int do_drop(object me, object obj)
+{
+        //if obj is a self-made fabao, save first...
+        //if( obj->query("series_no") && obj->query("fabao") ) obj->save();
+           
+        if( obj->query("no_drop") ){
+                destruct(obj);
+                return 0;
+        }
+        if (obj->move(environment(me))) {
+                if( obj->is_character() )
+                        message_vision("$N将$n从背上放了下来，躺在地上。\n", me, obj);
+                else {
+                        message_vision( sprintf("$N丢下一%s$n。\n",     obj->query("unit")), me, obj );
+                        if( !obj->query("value") && !obj->value() ) {
+                                tell_object(me,"因为这样东西并不值钱，所以人们并不会注意到它的存在。\n");
+                                destruct(obj);
+                        }
+                }
+                return 1;
+        }
+        return 0;
+}
+
+string query_time(int time)
+{
+        string msg;
+        int day, hour, min;
+        
+        time=time()-time;
+        
+        msg="";
+        day=time/86400;
+        hour=time%86400/3600;
+        min=time/60%60;
+
+        if(min<1)
+                min=1;
+        if(day)
+                msg+=sprintf("%s天", chinese_number(day));
+        if(day<10 && hour)
+                msg+=sprintf("%s小时", chinese_number(hour));
+        if(!day && hour<20 && min )
+                msg+=sprintf("%s分", chinese_number(min));
+
+        return msg;
+}
+
+int force_quit(object me)
+{
+        if (previous_object() != me ||
+            ! playerp(me))
+                return notify_fail("你不能摧毁这个对象。\n");
+
+        seteuid(getuid());
+     CHANNEL_D->do_channel(this_object(), "sys",
+        me->name() + "("+me->query("id")+")被系统强制离开了游戏。共清除 "+reclaim_objects()+" 个变数。");
+//178                if (environment(me)->qurey("short")!="迎客厅")
+        me->save();
+        if (environment(me) != find_object(VOID_OB))
+                me->move(VOID_OB, 1);
+        destruct(me);
+        return 1;
+}
+
+int help(object me)
+{
+        write(@HELP
+指令格式 : quit
+
+当你想暂时离开时, 可利用此一指令。
+HELP
+    );
+    return 1;
+}
+
