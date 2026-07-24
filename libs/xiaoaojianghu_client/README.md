@@ -44,6 +44,29 @@ python3 scripts/mudclient.py 127.0.0.1 40070
 5. 天赋选择：输入 `0` 让系统随机分配六项属性，再确认(y/n)。
 6. 填写邮箱、选择性别(m/f)，随后正式进入游戏。
 
+## 管理员账号 / Admin account
+
+- **ID**: `fluffos`
+- **密码 / Password**: `Mud@2026`
+- **管理密码 / Management PIN**: `FluffMgmt1` —— 本 lib 特有的第二套密码
+  （"wizpwd"），与巫师权限**无关**，只是一个自助改密 PIN（在普通密码
+  提示处输入它会触发"您输入的是管理密码，请重新设定您的普通密码"）。
+  与巫师状态无关，但重置账号时需要一并知道。
+- **显示名 / Display name**: 浮浮
+- **权限 / Level**: `(admin)` —— 本 lib `securityd` wiz_levels 中的最高级，
+  通过 `adm/etc/wizlist` 授予（`fluffos (admin)`，启动时被
+  `securityd->create()` 读入）。
+- **重要连带修复**：本 lib 的 `include/command.h` 原始存档中就把
+  `ADM_PATH`/`WIZ_PATH`/`IMM_PATH` 定义为空数组 `({})`，导致任何被提升
+  为巫师权限的账号会被 `feature/command.lpc` 的 `enable_player()` 设成
+  一个**空的指令搜索路径**——不只是巫师指令，连 `look`/`quit` 等最基本
+  的指令都会失效。已将这些宏指向与普通玩家相同的指令目录
+  （`/cmds/std/`、`/cmds/usr/`、`/cmds/skill/`），巫师账号才能正常使用
+  指令（该 lib 本身也没有任何专属巫师指令文件）。
+- 已验证：以 fluffos 登录显示「您目前权限：(admin)」，`look` 能正常
+  重新渲染当前房间，`quit` 正常退出。
+- ⚠️ 若要公开对外架设服务器，请**先修改此默认密码（以及管理密码 PIN）**。
+
 ## 已知问题
 
 - lpcc 编译扫描约97.6%通过，个别老旧的商店/交易脚本（如某处店铺的

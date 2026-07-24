@@ -77,8 +77,19 @@ void logon(object ob) {
   int i, wiz_cnt, ppl_cnt, login_cnt, i_user;
   int IPCount, WIZIP;                     // 用于使用户（除巫师外）不能双重登录
   string user_num;
+  string _ip;
+  int _local;
 
-  if (BAN_D->is_passed(query_ip_name(ob)) == 0) {
+  // WASM/loopback: connections from 127.0.0.1/::1 (or a leading "127."
+  // prefix) always bypass ban lists and the per-IP multi-login cap below.
+  // (Fail-closed: an unparseable/empty IP is treated as remote/untrusted,
+  // NOT loopback -- the earlier fail-open "malformed = local" fallback was
+  // a stopgap for a driver bug that is now fixed upstream.)
+  _ip = query_ip_number(ob);
+  _local = stringp(_ip) && (_ip == "127.0.0.1" || _ip == "::1"
+    || (strlen(_ip) >= 4 && _ip[0..3] == "127."));
+
+  if (!_local && BAN_D->is_passed(query_ip_name(ob)) == 0) {
     if (BAN_D->is_banned(query_ip_name(ob)) == 1) {
       // write("对不起，你的地址在" + MUD_NAME + "不受欢迎。\n");
       destruct(ob);
@@ -101,7 +112,7 @@ void logon(object ob) {
     if (wizardp(usr[i]) && query_ip_name(usr[i]) == query_ip_name(ob)) WIZIP = 1;
   }
 
-  if (IPCount > 10) {
+  if (!_local && IPCount > 10) {
     // write("这个地址已经太多帐号在登录了！\n\n");
     destruct(ob);
     return;

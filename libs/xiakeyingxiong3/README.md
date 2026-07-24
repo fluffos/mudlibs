@@ -56,3 +56,13 @@ python3 scripts/mudclient.py 127.0.0.1 40036
   （不拷贝 `log/` 目录下的子目录内容）而非本 lib 的代码问题，连线会在
   显示英文名字提示之前就中断，属于测试环境的已知限制。原生（native）
   驱动下完全正常，不受影响。
+
+## 管理员账号 / Admin account
+
+- **ID**: `fluffos`
+- **密码 / Password**: `Mud@2026`
+- **显示名 / Display name**: 浮浮
+- **权限 / Level**: `(admin)` —— 本 lib `securityd` wiz_levels 中的最高级，
+  通过 `adm/etc/wizlist` 授予（该文件在启动时被 `securityd->create()` 读入）。
+- 已验证：以 fluffos 登录后 `update /adm/daemons/logind` 重新编译成功。
+- ⚠️ 若要公开对外架设服务器，请**先修改此默认密码**。

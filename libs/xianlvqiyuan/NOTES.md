@@ -146,3 +146,67 @@ single deterministic cause and pointed to host-load/timing sensitivity.
 - **WASM test**: boots clean, reaches the Chinese-name prompt without
   crashing. No IP-gating or other blocking issue observed in the portion
   exercised; did not push to a full playthrough (not required).
+
+## WASM-enablement pass (2026-07-24)
+
+Standard four-change pass (AGENTS.md §1.3b/§1.3e/§1.5). Gates patched
+(same family shape as `xianlvqingyuanzheda`, patched analogously):
+
+1. **Loopback always allowed** — `adm/daemons/band.lpc`: added
+   `is_local_site(site)` helper (127.0.0.1 / leading `127.` /
+   empty/non-string / malformed non-dotted-quad = WASM garbage) and
+   short-circuited `is_banned()`, `is_strict_banned()`,
+   `create_char_banned()` with it. Covers the `is_strict_banned` gate in
+   `logind.lpc` `encoding()` (~line 136) and the
+   `create_char_banned`/`is_banned` guest-jail check at world entry.
+2. **IP-format checks bypassed for loopback** — `adm/daemons/logind.lpc`
+   `encoding()` (~line 145): the `!ip_name` destruct and the
+   digit-or-dot-only loop over `query_ip_number()` now only run when
+   `band->is_local_site()` is false.
+3. **Anti-flood** — the `MAX_LOGIN` (=500, effectively inert but patched
+   for consistency) per-IP multi-login cap in `get_id()` (~line 314) now
+   skips local connections. This older snapshot has NO reconnect throttle
+   or per-IP logon_cnt cap in `logon()` (unlike the zheda fork).
+4. **Uptime startup gate** — none exists; nothing to bypass.
+5. **Admin account seeded** — id `fluffos`, pw `Mud@2026`, name 浮浮,
+   via the real flow (`gb` → `no` → `new` → id → Chinese name → password
+   x2 → email → gender `m` → gift screen `9`/`y`). Granted `(admin)` via
+   `adm/etc/wizlist`. Verified `update /adm/daemons/band` recompiles
+   successfully; character finalized in 南城客栈.
+
+Save files (untracked, NOT gitignored — orchestrator must `git add`):
+- `work/data/login/f/fluffos.o` (login save: password)
+- `work/data/user/f/fluffos.o`  (player body save)
+
+Retest: fresh normal registration (id `qinfxy`, 秦风) works end-to-end,
+`score` renders, `quit` clean; fluffos login + wizard `update` works.
+debug.log: only the pre-existing, CAUGHT preload error
+`restore_object(): Illegal mapping format while restoring emote`
+(corrupt archive seed `/data/emoted`, §7.7 class, intercepted by the
+master's own catch — present before this pass). Test char saves removed.
+
+## Fail-closed loopback retrofit (2026-07-24)
+
+**Security correction, applied retroactively.** Same fix as
+`xianlvqingyuanzheda`'s (shared `band.lpc` lineage): `is_local_site()`
+originally treated an empty/non-string/malformed IP as "local"
+(fail-open) — a stopgap for a since-fixed WASM driver bug. Tightened to
+fail-closed:
+
+```lpc
+int is_local_site(string site) {
+  if (!stringp(site)) return 0;
+  if (site == "127.0.0.1" || site == "::1") return 1;
+  if (strlen(site) >= 4 && site[0..3] == "127.") return 1;
+  return 0;
+}
+```
+
+Every gate that consults this helper (`is_banned()`,
+`is_strict_banned()`, `create_char_banned()`, and `logind.lpc`'s
+IP-format/anti-flood checks that call it) now treats an unparseable IP
+as remote/untrusted. Retested: fresh registration (id `xlqygate`, name
+秦岭峰) still completes end-to-end via loopback (`look`/`score`/`quit`
+all correct); fluffos login + `update /adm/daemons/band` still succeeds
+(`重新编译 /adm/daemons/band.lpc：成功！`). Zero new runtime errors. Test
+char save removed after verification.

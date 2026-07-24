@@ -110,3 +110,54 @@ class as AGENTS.md §15ah:
   test tool). Playability under WASM for this lib should be considered
   "boots, but blocked at the very first prompt by a harness FS gap,"
   distinct from the true IP-gating limitation seen on other libs.
+
+## WASM-enablement pass (2026-07-23)
+
+Standard four-change pass (AGENTS.md §1.3b/§1.3e/§1.5). Gates patched:
+
+1. **Loopback always allowed** — `adm/daemons/logind.lpc` `logon()`
+   (around line 78-95): added an `_local` predicate computed from
+   `query_ip_number(ob)` (true for `127.0.0.1`, a leading `127.` prefix,
+   an empty/non-string IP, or any IP that fails a 4-part `sscanf` — i.e.
+   WASM garbage). Guarded both connection-rejection gates with it:
+   - the `BAN_D->is_banned(query_ip_name(ob))` destruct gate (line ~89),
+   - the per-IP multi-login cap `if (IPCount > 10) destruct(ob)` (line ~113).
+   `adm/daemons/band.lpc`'s `is_banned()` takes a *site name* string (not
+   a raw connection) and is only reached via the guarded logind gate, so
+   no separate patch there.
+2. **Uptime startup gate** — none in the login path (no `uptime()<N`
+   connection gate exists in logind); nothing to bypass.
+3. **Anti-flood throttle** — the only per-IP throttle is the `IPCount>10`
+   multi-login cap, now loopback-exempt via the same `_local` guard.
+4. **Admin account seeded** — id `fluffos`, pw `Mud@2026`, name 浮浮,
+   registered through the normal flow; granted `(admin)` by adding
+   `fluffos (admin)` to `adm/etc/wizlist`. Verified `update` works.
+   Save file: `work/data/user/f/fluffos/{user.o,login.o}` (NOT gitignored;
+   shows as untracked — orchestrator must `git add` it).
+
+Retest: fresh registration (秦风, race human, male) reaches world, `score`
+renders; fluffos login + `update` works; zero new runtime errors in
+debug.log. Test char `freshtest` removed; fluffos kept.
+
+## Fail-closed loopback retrofit (2026-07-24)
+
+**Security correction, applied retroactively.** The original loopback
+predicate above (item 1) treated an empty/non-string/malformed IP as
+"local" (fail-open) — a defensive stopgap for a since-fixed WASM driver
+bug (`query_ip_number()` used to return garbage like `"("` on WASM
+connections). That bug is now fixed upstream, so this lib's `_local`
+check was tightened to **fail-closed**: `adm/daemons/logind.lpc`'s
+`logon()`, `_local` is now `stringp(_ip) && (_ip == "127.0.0.1" ||
+_ip == "::1" || (strlen(_ip) >= 4 && _ip[0..3] == "127."))` — an
+unparseable/empty IP is now treated as remote/untrusted (subject to the
+normal ban/multi-login gates), not as loopback. Retested: fresh
+registration (id `gatetesterone`→`gatetestone`, name 秦岭客, race human,
+male) still reaches the world via loopback with `look`/`score`/`quit`
+all correct; fluffos login + `update /adm/daemons/logind` still
+succeeds. Zero new runtime errors from this change (the pre-existing
+`apply() with insufficient permission ... command_hook ... needs:
+private, has: hidden` lines seen in `debug.log` are the known §8.3a
+`private nomask command_hook` class in `feature/command.lpc` — NOT
+introduced by this pass, and did not block `look`/`score`/`update`/`quit`
+in any observed session here; flagging for a future pass rather than
+fixing now since it's outside this pass's four-item scope).

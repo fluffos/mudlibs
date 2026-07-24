@@ -91,15 +91,25 @@ void logon(object ob) {
   object *usr;
   int i, login_cnt;
   string welcome_msg;
+  string ip;
 
   // 防止有恶意的玩家用 KMUD 等工具捣乱
-  usr = filter_array(children(LOGIN_OB), (: interactive :));
-  i = sizeof(usr);
-  login_cnt = 0;
-  while (i--) if (query_ip_number(usr[i]) == query_ip_number(ob)) login_cnt++;
-  if (login_cnt > 3) {
-    destruct(ob);
-    return;
+  // Loopback/WASM exempt: every browser-tab connection is 127.0.0.1, so
+  // skip the per-IP concurrent-connection cap for local connections only.
+  // (Fail-closed: an unparseable/empty IP is treated as remote/untrusted,
+  // NOT loopback -- the earlier fail-open "malformed = local" fallback was
+  // a stopgap for a driver bug that is now fixed upstream.)
+  ip = query_ip_number(ob);
+  if (!(stringp(ip) && (ip == "127.0.0.1" || ip == "::1"
+    || (strlen(ip) >= 4 && ip[0..3] == "127.")))) {
+    usr = filter_array(children(LOGIN_OB), (: interactive :));
+    i = sizeof(usr);
+    login_cnt = 0;
+    while (i--) if (query_ip_number(usr[i]) == query_ip_number(ob)) login_cnt++;
+    if (login_cnt > 3) {
+      destruct(ob);
+      return;
+    }
   }
   // Add by Yu Jue 1997.8.6
   welcome_msg = "/adm/etc/welcome5";

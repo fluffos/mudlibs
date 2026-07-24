@@ -121,9 +121,22 @@ void LoadData() {
 }
 
 
+// Loopback/WASM always allowed: local connections (127.0.0.1/::1, or a
+// leading "127." prefix) bypass the ban list and the per-IP throttles below.
+// (Fail-closed: an unparseable/empty IP is treated as remote/untrusted, NOT
+// loopback -- the earlier fail-open "malformed = local" fallback was a
+// stopgap for a driver bug that is now fixed upstream.)
+int IsLocalSite(string site) {
+  if (!stringp(site)) return 0;
+  if (site == "127.0.0.1" || site == "::1") return 1;
+  if (strlen(site) >= 4 && site[0..3] == "127.") return 1;
+  return 0;
+}
+
 //是否是Ban的地址
 //在/etc/banned_sites中定义
 int IsBannedSite(string site) {
+  if (IsLocalSite(site)) return 0;
   foreach (string l in Sites) {
     if (regexp(site, l)) {
       last_error = sprintf("你的 IP(%s)在 %s 不受欢迎。\n如有疑问，请向 %s 查询。", site, mud_name(), ADMIN_EMAIL);
@@ -217,6 +230,8 @@ int IsMultiLogin(string arg, object ob) {
   string my_ip;
   int ret1, ret;
   my_ip = query_ip_number(ob);
+  // Loopback/WASM exempt from the per-IP multi-login cap.
+  if (IsLocalSite(my_ip)) return 0;
   // ret 是目前和我一个ip的人数.
   //    if (my_ip=="211.151.90.54"||my_ip=="211.101.236.24"||my_ip=="211.99.212.14")
   //	    return 0;
@@ -245,6 +260,8 @@ int IsMultiLogin(string arg, object ob) {
 //判断等新人的时间间隔是否大于5分钟
 int IsTimeAllowed(object ob) {
   string ip = query_ip_number(ob);
+  // Loopback/WASM exempt from the per-IP registration throttle.
+  if (IsLocalSite(ip)) return 1;
   if (sizeof(NewIps)) {
     if (undefinedp(NewIps[ip])) {
       NewIps[ip] = time();

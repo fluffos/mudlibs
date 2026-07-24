@@ -159,3 +159,83 @@ something that actually blocks a flow — this pass didn't observe that.
   siblings — shows a real, non-zero registered-player count rather than
   crashing). No IP-gating or other blocking issue observed in the
   portion exercised; did not push to a full playthrough (not required).
+
+## WASM-enablement pass (2026-07-24)
+
+Standard four-change pass (AGENTS.md §1.3b/§1.3e/§1.5). Gates patched:
+
+1. **Loopback always allowed** — `adm/daemons/band.lpc`: added a shared
+   `is_local_site(site)` helper (true for `127.0.0.1`, leading `127.`,
+   empty/non-string, or malformed non-dotted-quad IPs = WASM garbage) and
+   short-circuited `is_banned()`, `is_strict_banned()`, and
+   `create_char_banned()` with it (all three take an IP string; covers the
+   two `is_strict_banned` login gates in `logind.lpc` `logon()`/
+   `encoding()` and the `create_char_banned`/`is_banned` guest-jail check
+   in `enter_world()`).
+2. **IP-format checks bypassed for loopback** — `adm/daemons/logind.lpc`
+   `encoding()` (~line 190): the `!ip_name` destruct and the
+   every-char-must-be-digit-or-dot loop over `query_ip_number()` (both
+   would kill any WASM connection with a garbage IP) now only run when
+   `band->is_local_site()` is false.
+3. **Anti-flood throttles exempt loopback** — `logind.lpc` `logon()`:
+   (a) the 5-second same-IP reconnect throttle (`last_ip` + `time()+5`)
+   and (b) the `logon_cnt > 10` per-IP concurrent-connection cap now skip
+   local connections (new `is_local` flag); (c) the `MAX_LOGIN` (=5)
+   per-IP multi-login cap in `get_id()` (~line 360) skips local
+   connections too.
+4. **Uptime startup gate** — none exists (the `uptime()` use in
+   `encoding()` only ages out the `newid` registration-in-progress temp
+   map every 300s); nothing to bypass. The per-id `newid` in-memory
+   throttle ("已经有人在注册这个id了", cleared every 5 min / on restart)
+   was left as-is — it is per-id not per-IP and only affects re-registering
+   the same id twice within 5 minutes.
+5. **Admin account seeded** — id `fluffos`, pw `Mud@2026`, name 浮浮,
+   registered via the real flow (`gb` → `no` → `new` → id → Chinese name →
+   password x2 → email → gender `m`, then the 西游记-style gift screen at
+   first world entry: `9` accept → `y` confirm). Granted `(admin)` via
+   `adm/etc/wizlist`. Verified: banner shows `(admin)`, wizard `update
+   /adm/daemons/band` recompiles successfully, character finalized
+   (no_gift flag cleared, lands in 南城客栈).
+
+Save files (untracked, NOT gitignored — orchestrator must `git add`):
+- `work/data/login/f/fluffos.o` (login save: password)
+- `work/data/user/f/fluffos.o`  (player body save)
+
+Retest: fresh normal registration (id `qinfzd`, 秦风) works end-to-end
+(gift screen → world → `score` renders → `quit` clean); fluffos login +
+wizard command works; debug.log has no new errors. One pre-existing,
+unrelated error surfaced once in a transcript: lazy-loading
+`adm/daemons/emoted` hits `restore_object(): Illegal mapping format`
+on the archive's own corrupt `/data/emoted` seed save (§7.7 class;
+emoted is excluded from the trimmed preload) — cosmetic, command still
+dispatched, not introduced by this pass. Test char saves removed.
+Note: id length limit is 3-8 chars (`fluffos` = 7 fits).
+
+## Fail-closed loopback retrofit (2026-07-24)
+
+**Security correction, applied retroactively.** `adm/daemons/band.lpc`'s
+shared `is_local_site()` helper (item 1 above) originally treated an
+empty/non-string/malformed IP as "local" (fail-open) — a stopgap for a
+since-fixed WASM driver bug. Tightened to **fail-closed**:
+
+```lpc
+int is_local_site(string site) {
+  if (!stringp(site)) return 0;
+  if (site == "127.0.0.1" || site == "::1") return 1;
+  if (strlen(site) >= 4 && site[0..3] == "127.") return 1;
+  return 0;
+}
+```
+
+An unparseable/empty IP now falls through to the normal (non-exempt)
+path everywhere this helper is consulted — `is_banned()`,
+`is_strict_banned()`, `create_char_banned()` in `band.lpc`, and every
+`logind.lpc` call site that gates on it (the IP-format check in
+`encoding()`, the anti-flood throttles in `logon()`/`get_id()`). No
+other call site needed a separate edit since they all delegate to this
+one helper. Retested: fresh registration (id `xlqztwo`, name 秦岭峰) still
+completes end-to-end via loopback (gift accept → world → `look`/`score`
+render correctly → `quit`); fluffos login + `update /adm/daemons/band`
+still succeeds (`重新编译 /adm/daemons/band.lpc：成功！`). Zero new
+runtime errors. Test char saves (`xlqzgat`/`xlqzone`/`xlqztwo`) removed
+after verification.

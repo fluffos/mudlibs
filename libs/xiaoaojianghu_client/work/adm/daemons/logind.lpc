@@ -85,12 +85,17 @@ void logon(object ob) {
   object *usr;
   int i, wiz_cnt, ppl_cnt, ip_cnt, ban_cnt, login_cnt, i_user, online_num;
   string str, user_num;
-  if (uptime() < 10) {
+  int is_local;
+  str = query_ip_number(ob);
+  // Loopback/WASM connections bypass the startup grace period and the
+  // per-IP connection caps below (WASM harness connects instantly after
+  // boot; every browser-tab connection is loopback).
+  is_local = BAN_D->is_local_site(str);
+  if (!is_local && uptime() < 10) {
     write(RED "游戏服务器正在启动过程中，请稍等10秒后再连线。\n" NOR);
     destruct(ob);
     return;
   }
-  str = query_ip_number(ob);
   if (BAN_D->is_banned(str) == 1) {
     write(HIR "你的地址禁止登陆游戏，请联系QQ：20923352。\n" NOR);
     destruct(ob);
@@ -146,7 +151,7 @@ void logon(object ob) {
     user_num = sprintf("%d", ppl_cnt);
     write_file(__DIR__ "maxonline", user_num, 1);
   }
-  if (ban_cnt > 8) {
+  if (!is_local && ban_cnt > 8) {
     write("这个IP上同时正在连线的玩家太多了，请稍候再尝试！！ \n");
     destruct(ob);
     return;
@@ -235,7 +240,8 @@ protected void get_id(string arg, object ob, int ip_cnt) {
     input_to("GetNewId", ob, ip_cnt);
     return;
   }
-  if (wiz_level(arg) < 2) {
+  if (wiz_level(arg) < 2 && !BAN_D->is_local_site(query_ip_number(ob))) {
+    // Loopback/WASM exempt from the per-IP concurrent-player cap.
     if (!BAN_D->is_welcome(arg)) {
       if (!BAN_D->is_netclub(query_ip_number(ob)))
         if (ip_cnt > 8) {

@@ -431,3 +431,75 @@ touched). No driver process left running at the end of this pass.
   own stdout, then reached the same "10-point save gate" quit prompt.
   No IP-gating or other WASM-specific blocking issue observed — this lib
   plays essentially identically under WASM and native.
+
+## WASM-enablement pass (2026-07-24)
+
+Standard four-change pass (AGENTS.md §1.3b/§1.3e/§1.5). Gates patched:
+
+1. **Loopback always allowed** — `system/daemon/band.lpc`: added
+   `IsLocalSite(site)` helper (127.0.0.1 / leading `127.` /
+   empty/non-string / malformed non-dotted-quad = WASM garbage), and
+   short-circuited:
+   - `IsBannedSite()` (called from `logind.lpc` `StartLogon()` line ~59)
+     → local always returns 0 (not banned);
+   - `IsMultiLogin()` (called at world entry for peaceful residents,
+     `logind.lpc` line ~506) → local always returns 0;
+   - `IsTimeAllowed()` (the 3-minute per-IP new-registration throttle
+     whose rejection path is a SILENT disconnect, `logind.lpc` line ~142)
+     → local always returns 1 (allowed). Verified live: two fresh
+     registrations from 127.0.0.1 within 3 minutes both succeeded.
+2. **Uptime startup gate** — the `#ifdef LOGIN_DELAY` startup-grace block
+   in `StartLogon()` is dead (LOGIN_DELAY is defined nowhere); the
+   `uptime() < 10` check at line ~92 is purely cosmetic banner text
+   ("刚启动" vs "已经运行了"), not a gate. Nothing to bypass.
+3. **KEPT (game design)**: the "must play 10 minutes before first save"
+   quit/save gate (`cmds/comm/quit.lpc` / `save.lpc`, CAN_SAVE_LIMIT_TIME)
+   — wizardp is exempt, so fluffos saves normally.
+4. **Admin account seeded** — id `fluffos`, pw `Mud@2026`, name 浮浮,
+   registered via the real flow (`new` → id → `y` → Chinese name →
+   password x2 → email → gender `m`). Granted `(admin)` via
+   `secure/etc/wizlist`. Verified `update /system/daemon/band`
+   recompiles successfully.
+
+Save files (untracked, NOT gitignored — orchestrator must `git add`):
+- `work/data/login/f/fluffos.o` (login save: password)
+- `work/data/user/f/fluffos.o`  (player body save)
+(`work/data/log/f/fluffos` is a runtime per-char log, matched by the
+repo's `**/log` gitignore pattern — leave ignored.)
+
+Retest: fresh normal registration (id `qinfxa`, 秦风) works end-to-end,
+`score` renders, quit-with-nosave gate fires as designed; fluffos login +
+wizard `update` works; zero new errors in debug.log. Test char artifacts
+removed. Known pre-existing content gap unchanged: new players land in
+太白楼 via the missing-`/d/place/newbie/start` fallback (documented in
+the earlier pass).
+
+## Fail-closed loopback retrofit (2026-07-24)
+
+**Security correction, applied retroactively.** `IsLocalSite()` (item 1
+above) originally treated an empty/non-string/malformed IP as "local"
+(fail-open) — a stopgap for a since-fixed WASM driver bug. Tightened to
+fail-closed:
+
+```lpc
+int IsLocalSite(string site) {
+  if (!stringp(site)) return 0;
+  if (site == "127.0.0.1" || site == "::1") return 1;
+  if (strlen(site) >= 4 && site[0..3] == "127.") return 1;
+  return 0;
+}
+```
+
+`IsBannedSite()`, `IsMultiLogin()`, and `IsTimeAllowed()` all delegate to
+this one helper, so no other call site needed a separate edit; an
+unparseable/empty IP now falls through to the normal (non-exempt) path
+in all three. Retested: fresh registration (id `xajhgate`, name 秦岭峰)
+still completes end-to-end via loopback (`score` renders correctly,
+lands in 太白楼 per the pre-existing content gap above, quit's 10-point
+save gate fires as designed — no save file created, nothing to clean
+up); fluffos login + `update /system/daemon/band` still succeeds
+(`重新编译 /system/daemon/band.lpc：成功！`). Zero new runtime errors from
+this change (the pre-existing `hui_quest.lpc` syntax-error lines seen in
+`debug.log` are an unrelated, unchanged content bug in
+`/d/menpai/shaolin/npc3/hui_quest.lpc`, not touched by this pass and not
+on the login/registration path).

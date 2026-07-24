@@ -149,3 +149,61 @@ Found and fixed one new regression, same class as fix #3 above:
   step cleanly. Did not push a full playthrough to completion (not
   required), but no IP-gating or other blocking issue was observed in
   the portion exercised.
+
+## WASM-enablement pass (2026-07-23)
+
+Standard four-change pass (AGENTS.md §1.3b/§1.3e/§1.5). Gates patched:
+
+1. **Loopback always allowed** — `adm/daemons/band.lpc` `is_banned()`
+   (top of function): short-circuit `return 0` for `127.0.0.1`, a leading
+   `127.` prefix, and empty/malformed IP strings (WASM garbage). All
+   `BAN_D->is_banned()` callers pass `query_ip_number(ob)`, so this covers
+   the login ban gate in `adm/daemons/logind.lpc` `gb_big5()` (line ~119).
+2. **Anti-flood / per-IP cap** — `adm/daemons/logind.lpc` `logon()`
+   (line ~96): the `login_cnt > 3` per-IP concurrent-connection cap is now
+   wrapped so it only runs for real remote IPs; loopback/malformed IPs
+   skip it entirely (declared a new `string ip;` local).
+3. **Uptime startup gate** — none in the login path (`UPTIME_CMD->main()`
+   only prints uptime, is not a gate); nothing to bypass.
+4. **sited.lpc** — `is_valid()`'s login call site and the entire
+   `is_multi()` function are already commented out in this lib, so neither
+   is an active gate; left as-is (documented, not patched).
+5. **Admin account seeded** — id `fluffos`, pw `Mud@2026`, name 浮浮,
+   registered through the normal flow (BIG5 `n` → id → confirm → password
+   x2 → Chinese name → gift `0`/agree → email → gender). Granted `(admin)`
+   via `adm/etc/wizlist` (`fluffos (admin)`). Verified `(admin)` status +
+   `update` works.
+
+Save files (both NOT gitignored — untracked; orchestrator must `git add`):
+- `work/data/login/f/fluffos.o` (login object save: holds password)
+- `work/data/user/f/fluffos.o`  (player body save)
+
+Retest: fresh registration (秦风) reaches 中央广场, `score` renders;
+fluffos `(admin)` + `update` works. The only runtime errors in debug.log
+are the two pre-existing content bugs (an NPC 托钵僧 `heart_beat` bad
+call_other, and `/quest/poem/yard` `do_test` bad `message()` arg) —
+unrelated to the login path, fire on any boot. Test chars removed.
+Note: id max length is 8 chars, so `fluffos` (7) fits.
+
+## Fail-closed loopback retrofit (2026-07-24)
+
+**Security correction, applied retroactively.** Items 1 and 2 above
+originally treated an empty/non-string/malformed IP as "local"
+(fail-open) — a stopgap for a since-fixed WASM driver bug. Tightened to
+**fail-closed** in both spots:
+- `adm/daemons/band.lpc`'s `is_banned()`: the short-circuit is now
+  `if (stringp(site) && (site == "127.0.0.1" || site == "::1" ||
+  (strlen(site) >= 4 && site[0..3] == "127."))) return 0;` — an
+  unparseable/empty site string no longer bypasses the ban list.
+- `adm/daemons/logind.lpc`'s `logon()`: the per-IP concurrent-connection
+  cap is now skipped only when `ip` is a real loopback string (same
+  condition as above); a malformed/empty IP now falls through to the
+  normal (non-exempt) path.
+
+Retested: fresh registration (id `xjcqgate`, name 秦岭峰) still reaches
+中央广场 via loopback with `look`/`score`/`quit` all rendering correctly;
+fluffos login + `update /adm/daemons/logind` still succeeds
+(`重新编译 /adm/daemons/logind.lpc ...成功！`). No new runtime errors —
+`debug.log` shows only the same two pre-existing content bugs noted
+above plus the benign preload `log_error()`/`news_b` traces already
+documented in the "Re-verification pass" section. Test char removed.

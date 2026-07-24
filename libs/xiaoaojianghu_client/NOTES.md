@@ -575,3 +575,108 @@ full Python UTF-8 decode, not a real encoding problem).
   10-second gate is intentional, pre-existing design, not a bug.
   Documenting as a known WASM-testing limitation distinct from the
   `query_ip_number()` one.
+
+## WASM-enablement pass (2026-07-24)
+
+Standard four-change pass (AGENTS.md §1.3b/§1.3e/§1.5). Gates patched:
+
+1. **Loopback always allowed** — `adm/daemons/band.lpc`: added an
+   `is_local_site(site)` helper (fail-closed, see retrofit note below)
+   and short-circuited:
+   - `is_banned()` (called from `logind.lpc`'s `logon()` ban check) →
+     local always returns 0 (not banned);
+   - `vaild_allow_address()` (the account's own `allow_ip` allowlist
+     check, `logind.lpc`) → local always returns 1 (allowed), regardless
+     of whatever `allow_ip` list the account has configured.
+2. **Uptime startup gate** — `adm/daemons/logind.lpc`'s `logon()` had
+   `if (uptime() < 10) { ...destruct(ob)... }` (documented as a known,
+   pre-existing, non-blocking-natively design gate in the "Driver
+   rebuild / WASM pass" section above). Now only applies to non-loopback
+   connections: `if (!is_local && uptime() < 10) { ... }`.
+3. **Anti-flood throttles exempt loopback** — `logind.lpc`'s `logon()`:
+   the per-IP concurrent-connection cap (`ban_cnt > 8`) now skips local
+   connections; `get_id()`'s per-IP concurrent-player cap (`ip_cnt > 8`)
+   is now also skipped for local connections (`wiz_level(arg) < 2 &&
+   !BAN_D->is_local_site(...)`).
+4. **Admin account seeded** — id `fluffos`, pw `Mud@2026`, name 浮浮,
+   registered via the real flow (`2060` client-version gate → `new` → id
+   → `y` confirm → Chinese name → admin/"management" password →
+   confirm → real password → confirm → gift `0`/`y` → email → gender
+   `m`). Granted `(admin)` via `adm/etc/wizlist` (`fluffos (admin)`).
+   - **This lib's registration flow has an unusual double-password
+     step**: besides the real login password, it also asks for a
+     `wizpwd` ("管理密码"/"management password") — despite the name,
+     reading `logind.lpc`'s `get_passwd()`/`reset_wizpwd()` confirms
+     this is NOT related to wizard/admin status at all — it's a
+     self-service password-reset PIN (typing it at the normal password
+     prompt triggers "you typed the management password, please reset
+     your normal password"). Set to `FluffMgmt1` (≥5 chars, must differ
+     from the real password) — **document this as a secondary recovery
+     PIN, distinct from the `Mud@2026` login password**, since a future
+     agent re-seeding this account needs both.
+   - **Genuine pre-existing bug found while verifying admin access**:
+     `include/command.h` defines `ADM_PATH`/`WIZ_PATH`/`IMM_PATH` (and
+     the other unused historical rank macros `BOS_PATH`/`ARC_PATH`/
+     `ANG_PATH`/`APR_PATH`/`GEN_PATH`) as `({})` — an EMPTY command
+     search path — confirmed identical in the raw, unconverted archive
+     (not a conversion artifact). `feature/command.lpc`'s
+     `enable_player()` calls `set_path(ADM_PATH)` for any account whose
+     `wizhood()` is `"(admin)"`, so promoting `fluffos` via wizlist (the
+     documented, standard admin-grant mechanism) left the account with
+     ZERO working commands — not just wizard commands, but ordinary
+     ones too (`look`, `quit`, everything), since
+     `commandd.lpc`'s `find_command()` searches exactly the directories
+     in `path` and an empty list matches nothing. No wizard-only command
+     files exist anywhere in this lib to legitimately populate these
+     macros with, so fixed by aliasing all of them to the same
+     directories as `PLR_PATH` (`/cmds/std/`, `/cmds/usr/`,
+     `/cmds/skill/`) — promoted accounts keep normal command access
+     instead of being silently locked out of the game entirely. This is
+     outside the standard four-item WASM-enablement scope but was
+     necessary to satisfy §1.5's "verify a wizard command actually
+     works" step at all.
+
+Save files (untracked, NOT gitignored — orchestrator must `git add`):
+- `work/data/login/f/fluffos.o` (login save: password + wizpwd)
+- `work/data/user/f/fluffos.o`  (player body save)
+
+## Fail-closed loopback retrofit (2026-07-24)
+
+**Security correction, applied together with the initial patch above**
+(this lib was patched fresh in this same pass, so it was written
+fail-closed from the start rather than needing a later retrofit):
+
+```lpc
+int is_local_site(string site) {
+  if (!stringp(site)) return 0;
+  if (site == "127.0.0.1" || site == "::1") return 1;
+  if (strlen(site) >= 4 && site[0..3] == "127.") return 1;
+  return 0;
+}
+```
+
+An unparseable/empty IP is treated as remote/untrusted, not loopback —
+deliberately, since the original code already rejected missing/malformed
+IPs outright and there is no longer a WASM driver bug to work around.
+
+## Retest (2026-07-24)
+
+Both done against a fresh driver restart (to pick up the `command.h`
+fix, which is compile-time):
+- **Fresh normal registration**: id `gatechk`/`gatetestchar` (two runs,
+  one before and one after the command.h fix — command.h only affects
+  wizard-level accounts, so ordinary `(player)` registration was
+  unaffected either way), real Chinese name (秦岭/王小江), reaches the
+  world at a real room (北疆小镇), `look`/`score` render correctly,
+  `quit` disconnects cleanly with "欢迎下次再来！". Test char saves
+  removed after verification.
+- **fluffos login + wizard command**: before the `command.h` fix, a
+  logged-in fluffos session showed "(admin)" in the banner but every
+  subsequent command (including `look`) silently failed with ambient
+  NPC chatter as the only output (ROOT CAUSE: the empty `ADM_PATH` bug
+  above, not a login/gate problem — the account WAS correctly admin,
+  it just couldn't run anything). After the fix: fluffos login → `look`
+  correctly re-renders the current room → `quit` disconnects cleanly.
+  Zero new runtime errors in `debug.log` (only the same benign
+  `Unknown #pragma`/`Unused local variable` compile warnings seen on
+  every boot of this lib).

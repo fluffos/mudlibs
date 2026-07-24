@@ -50,3 +50,14 @@ python3 scripts/mudclient.py 127.0.0.1 40034
   游玩基本不会碰到。
 - WASM 版本表现良好：开场画面、账号注册的英文名字确认等步骤均可正常
   进行，未发现阻塞性问题；原生（native）驱动下完整体验不受影响。
+
+## 管理员账号 / Admin account
+
+- **ID**: `fluffos`
+- **密码 / Password**: `Mud@2026`
+- **显示名 / Display name**: 浮浮
+- **权限 / Level**: `(admin)` —— securityd `wiz_levels` 中的最高级，
+  通过 `adm/etc/wizlist` 授予（启动时被 `securityd->create()` 读入）。
+- 已验证：以 fluffos 登录显示「您目前的权限是：(admin)」，
+  `update /adm/daemons/logind` 重新编译成功。
+- ⚠️ 若要公开对外架设服务器，请**先修改此默认密码**。

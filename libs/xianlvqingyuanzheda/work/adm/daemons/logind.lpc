@@ -92,8 +92,15 @@ void logon(object ob) {
   object hacker;
   int logon_cnt;
   int i;
+  int is_local;
 
-  if (query("last_ip") == query_ip_number(ob) && query("time") + 5 > time()) {
+  // Loopback/WASM exempt from the reconnect throttle and the per-IP
+  // connection cap below (every browser-tab connection is loopback);
+  // empty/malformed IPs (WASM garbage) are treated as loopback too.
+  is_local = "/adm/daemons/band"->is_local_site(query_ip_number(ob));
+
+  if (!is_local
+    && query("last_ip") == query_ip_number(ob) && query("time") + 5 > time()) {
     write(HIW "请你稍候再进入本MUD...... \n");
     destruct(ob);
     return;
@@ -110,7 +117,7 @@ void logon(object ob) {
       logon_cnt = logon_cnt + 1;
   }
 
-  if (logon_cnt > 10) {
+  if (!is_local && logon_cnt > 10) {
 
     write(HIW "请你稍候再进入本MUD...... \n");
     destruct(ob);
@@ -185,18 +192,22 @@ private void encoding(string arg, object ob) {
 
 
   // try not accept "name" as IP
-
-  if (!ip_name) {
-    destruct(ob);
-    log_file("ALLCONT", sprintf("kicked out, No IP\n"));
-    return;
-  }
-
-  for (ii = 0; ii < sizeof(ip_number); ii++) {
-    if ((ip_number[ii] != '.') && (ip_number[ii] > '9')) {
+  // Loopback/WASM exempt: a local connection (or a WASM one whose
+  // query_ip_number()/query_ip_name() return garbage) always passes the
+  // IP-format checks below.
+  if (!"/adm/daemons/band"->is_local_site(ip_number)) {
+    if (!ip_name) {
       destruct(ob);
-      log_file("ALLCONT", sprintf("kicked out, Non_number\n"));
+      log_file("ALLCONT", sprintf("kicked out, No IP\n"));
       return;
+    }
+
+    for (ii = 0; ii < sizeof(ip_number); ii++) {
+      if ((ip_number[ii] != '.') && (ip_number[ii] > '9')) {
+        destruct(ob);
+        log_file("ALLCONT", sprintf("kicked out, Non_number\n"));
+        return;
+      }
     }
   }
 
@@ -356,8 +367,10 @@ private void get_id(string arg, object ob) {
   // MAX_LOGIN and LOGIN_SITE should be defined in login.h
 #ifdef MAX_LOGIN
 
-  if (!ppl) {  // only check this for new login.
-    // allow existing players to reconnect.
+  if (!ppl
+    && !"/adm/daemons/band"->is_local_site(query_ip_number(ob))) {
+    // only check this for new login; allow existing players to reconnect.
+    // Loopback/WASM connections are exempt from the multi-login cap.
     my_ip = query_ip_number(ob);
 
     MaxLimit = "/adm/daemons/band"->allow_multi_login(my_ip);

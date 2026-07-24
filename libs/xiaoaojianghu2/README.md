@@ -54,3 +54,14 @@ python3 scripts/mudclient.py 127.0.0.1 40068
   下表现一致，包括上面提到的新手房间缺失问题（同样优雅降级），未发现
   WASM 专属的阻塞性问题。注意：本站有单 IP 防灌水限制，短时间内多次
   连线会导致后续连线无声无息地被拒绝，建议在一次连线中完成注册全过程。
+
+## 管理员账号 / Admin account
+
+- **ID**: `fluffos`
+- **密码 / Password**: `Mud@2026`
+- **显示名 / Display name**: 浮浮
+- **权限 / Level**: `(admin)` —— securityd `wiz_levels` 中的最高级，通过
+  `secure/etc/wizlist` 授予（`fluffos (admin)`，启动时读入）。
+- 已验证：以 fluffos 登录后 `update /system/daemon/band` 重新编译成功；
+  巫师身份还使其免除"初次需玩满10分钟才能存档"的新手退出限制。
+- ⚠️ 若要公开对外架设服务器，请**先修改此默认密码**。
