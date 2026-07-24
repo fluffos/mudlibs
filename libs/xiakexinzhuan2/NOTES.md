@@ -172,3 +172,63 @@ landed in 世外桃源, `look` correct, `score` correctly replied "还没有
 `debug.log` had exactly the one pre-existing `eventd`/`emei.l` boot-time
 error above (caught, non-fatal) and zero NEW runtime errors. Test
 character `qretest` removed afterward; fluffos kept.
+
+## Long-sit boot-watch pass (2026-07-24) — fixed two pre-existing
+   boot-time compile bugs surfaced by a real 200s sit
+
+`scripts/wasm_boot_watch.sh xiakexinzhuan2 200` (>3 minutes, not the
+usual 20-30s smoke test) surfaced two REAL compile-time bugs during
+preload that a quick smoke test never exercises (both were already
+partially known from the lpcc sweep/prior NOTES, but neither had
+actually been fixed):
+
+1. **`inherit/misc/quest.lpc`'s `set_information(string key, string
+   info)` wrapper had the wrong parameter type** — every quest NPC's
+   `register_information()` (`clone/quest/{shen,deliver,search,judge,
+   supply}.lpc`, 5 files) calls it as
+   `set_information(NPC_NAME, (: ask_npc :))`, passing a CLOSURE as
+   `info`, but the wrapper declared it `string`. `QUEST_D->set_information()`
+   itself (the function this wrapper forwards to,
+   `adm/daemons/questd.lpc:16/918`) already declares this same argument
+   `mixed` — the wrapper's `string` was simply a mistyped declaration,
+   not an intentional restriction. This was previously bucketed as part
+   of the lpcc sweep's generic "`set_information` type-mismatch cluster"
+   and never individually fixed; the long-sit boot-watch showed it's
+   not just a static lpcc artifact — it genuinely kills all 5 quest
+   objects' compiles at boot (`*No program in object '/clone/quest/
+   {shen,deliver,search,judge,supply}'!`, caught non-fatally by
+   `master.lpc`'s `preload()`, but leaving the whole quest-NPC set
+   broken). **Fixed**: widened the wrapper's `info` parameter to
+   `mixed` to match `QUEST_D`'s own declaration and actual call-site
+   usage.
+2. **`adm/daemons/eventd.lpc`'s `.c`→`.lpc`-rename slice bug — actually
+   fixed this time** (previously found and explicitly left unfixed as
+   "out of scope" in an earlier pass, see above): `map_array(event_name,
+   (: $1[0..<3] :))` turns `"emei.lpc"` into `"emei.l"` instead of
+   `"emei"`. The earlier NOTES entry suggested `[0..<3]` → `[0..<4]` as
+   the one-line fix, but that's actually still wrong — **verified
+   empirically via two live retests**: `<3` produces `"emei.l"`, `<4`
+   produces `"emei."` (with the trailing dot!), and only `<5` produces
+   the correct `"emei"`. FluffOS's `str[a..<N]` strips the last `(N-1)`
+   characters, so removing the 4-character `".lpc"` extension needs
+   `N=5`, not `N=4` — the previously-suggested fix would have been a
+   NEW bug (`"emei."`) had it been applied without retesting.
+   **Fixed**: `$1[0..<3]` → `$1[0..<5]`. This restored the whole
+   scheduled-event system (`emei`/`huanggs`/`qiantang`, all 3 now
+   compile and load during `eventd`'s `create()`, confirmed via
+   transcript).
+
+**Retest**: re-ran `wasm_boot_watch.sh xiakexinzhuan2 200` (full
+200s) after each fix — the `set_information`/`No program in object
+'/clone/quest/...'` errors and the `emei.l`/`couldn't find object`
+error are both GONE from the transcript; `event/huanggs.lpc` and
+`event/qiantang.lpc` now show up compiling cleanly during `eventd`'s
+preload. Remaining transcript content is only the already-documented
+`ftpd`/no-sockets-under-WASM class (§1.3c, caught, non-fatal) and
+ordinary compile warnings. Native sanity check: fresh driver boot
+(clean, zero errors beyond the standard `nosave crash()` cosmetic
+warning), full registration flow (BIG5 `n` → id `wasmck` → password ×2
+→ Chinese name `秦风测` → archetype `5`/均衡型 → gender `m`) landed in
+世外桃源, `look`/`score`(`还没有出生呐`, correct pre-birth reply)/`quit`
+all correct, `debug.log` clean. Test save files removed afterward (not
+committed).

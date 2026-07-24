@@ -505,3 +505,74 @@ bug this defensive fallback existed for is now fixed upstream).
    password) + `update` wizard command verified in a separate session.
    debug.log: no new `denied`/`undefined function`/`error in error
    handler`/`bad argument` lines from either session.
+
+## Long-sit boot-watch pass (2026-07-24) — found and fixed a real
+   WASM-only login blocker in the SQL-backed user database
+
+`scripts/wasm_boot_watch.sh tianxia 200` (a real >3-minute sit, not the
+usual 20-30s smoke test) caught a bug the quick registration test never
+exercised: **every single connection under WASM was destroyed at
+`logon()`**, before the id prompt even appeared. Root cause: this lib's
+entire registered-user store is backed by a MySQL-ish daemon,
+`adm/daemons/databased.lpc` (`db_connect`/`db_exec`/`db_close`/...), not
+save files. Under WASM, the `db` package doesn't exist at all (AGENTS.md
+§1.3c), so `databased.lpc` fails to *compile* (not just "fails to
+connect") — every `DATABASE_D->...` call_other then throws `*No program
+in object '/adm/daemons/databased'!`. `master.lpc`'s own `preload()`
+already catches this for the initial preload attempt (cosmetic, harmless
+— matches the already-documented "sockets/db absent, daemon just
+absent" class), but `adm/simul_efun/user.lpc`'s `count_reg_user()` —
+called UNGUARDED from `logind.lpc`'s `begain_enter()` (line 143, right
+after the banner, on literally every connection) — re-triggers the same
+compile failure with NO catch anywhere in the chain, and the resulting
+error escapes all the way up through `logon()`, causing
+`new_conn_handler: logon() ... has failed, the user is disconnected.`
+Zero player-visible output (same silent-kill shape as AGENTS.md's
+`query_bandwide()` fix, item 9 above, and the general §7.10/§1.3c
+pattern) — this is exactly the class of bug the long-sit methodology
+(§10.0) exists to catch and the quick smoke test structurally cannot.
+
+**Fix** (`adm/simul_efun/user.lpc`, all 10 functions in the file —
+`permit_add_cname`, `permit_reg_email`, `query_exceed_reg_time`,
+`del_user_data`, `change_cname`, `count_reg_user`, `newbie_buildup`,
+`newbie_reg`, `newbie_success_reg`, `query_register_station`): wrapped
+every `DATABASE_D->...` call in `catch()`, degrading to a safe default
+(0 / permit / no-op) when the database daemon is broken or absent,
+per the standard §1.3c convention ("guard on `find_object()`/`catch()`
+truthiness, absent ⇒ skip the gate") rather than inventing anything new.
+Natively this is a no-op (the native driver's `db` package is present so
+`databased.lpc` compiles fine and these calls succeed normally, verified
+below) — the guard only changes behavior when the daemon is genuinely
+broken, which under WASM it always is.
+
+**Not fixed / flagged, not observed failing in this pass**: three OTHER
+files also call `DATABASE_D->` directly (bypassing `user.lpc`'s
+simul_efuns) and share the identical latent risk if reached:
+`adm/daemons/paiming_d.lpc` (`db_query_bang_top_ten()` inside
+`make_renyi_bang()`, only reachable via the `PAIMING_D->main()` cron job
+that fires once daily at in-game 3am per `adm/etc/crontab` — didn't fire
+during this test's ~7:50-8:03am window), `adm/daemons/pawn_d.lpc`
+(`query_user_all_pob`/`query_count_user_pob`/`pawn_one_object`/
+`retrieve_one_object`/`query_all_exceed_pob`, reached from
+`logind.lpc`'s `restore_players_pawnstamp()` call gated on
+`combat_exp >= 20000` — never true for a fresh character, so also didn't
+fire), and `adm/daemons/renyi_d.lpc` (the bounty-quest system, a whole
+family of `DATABASE_D->` calls, gameplay-only, not on the boot/login
+path at all). None of these surfaced an actual error during this sit —
+noted here for whoever next touches the pawn-shop/bounty/ranking
+features so the same `catch()` treatment isn't rediscovered from
+scratch, not fixed preemptively since nothing observed actually broke.
+
+**Retest**: re-ran `wasm_boot_watch.sh tianxia 200` (full 200s) —
+transcript now shows the SAME `databased.lpc` compile-error spew (that
+part is unavoidable/cosmetic, matches the already-documented "sockets/db
+absent" class) but this time followed by `错误讯息被拦截:` (caught) and
+a `CATCH()` frame in `simul_efun.lpc`'s `count_reg_user()`, then the
+full login banner completes normally and the connection sits cleanly at
+the English-id prompt (`您的英文名字：`) for the rest of the 200s — no
+disconnect, no further errors. Native sanity check (fresh registration,
+real driver): id `wasmck`, Chinese name `测试客`, through attribute
+allocation, into 松竹小院, `look` + `score` + `quit` all produced
+correct output exactly as before; `debug.log` stayed clean (no
+`denied`/`undefined function`/`bad argument`/error-in-error-handler
+lines). Test save files removed afterward (not committed).
