@@ -557,3 +557,18 @@ clean; fluffos login + wizard update clean; debug.log shows only the
 known pre-existing corrupted-save restore errors (chinesed e2c dict /
 kedian board) documented above — zero new errors; test character saves
 removed.
+
+## Dual-mode verification pass (2026-07-24)
+
+- **Native** (port 40085): fresh registration `ceshier`/秦风 end-to-end
+  into 客店 + look/score/quit all correct; `fluffos`/`Mud@2026` login
+  shows `(admin)`, `update /cmds/usr/score` prints 成功. debug.log:
+  only the two documented pre-existing corrupted-save restore errors
+  (caught by the lib's handler) — zero new errors. Driver killed by
+  exact PID.
+- **WASM** (build-wasm with query_ip_number/resolve fixes): fresh
+  registration `wasmceshi`/秦风 end-to-end + look/score/quit all
+  correct; second invocation: `fluffos` admin login `(admin)` +
+  `update` 成功. **Verdict: native OK + wasm OK.** No fixes needed this
+  pass. Test character saves removed; fluffos.o timestamp churn
+  reverted.

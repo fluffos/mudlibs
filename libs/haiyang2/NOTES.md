@@ -494,3 +494,22 @@ successfully. Save files (must be committed):
 Retest: fresh registration (秦风/ceshizhe) end-to-end + look/score/quit
 clean; fluffos login + update clean; debug.log free of new errors; test
 character saves removed; `data/topten.o` runtime churn reverted.
+
+## Dual-mode verification pass (2026-07-24)
+
+- **Native** (driver rebuilt from master, port 40057): fresh registration
+  `ceshier`/秦风 end-to-end (encoding g → id → y → name → password ×2 →
+  gift 0/y → email → gender m) into the starting room; look/score/quit
+  all correct. `fluffos`/`Mud@2026` admin login shows `目前权限：(admin)`
+  and `update /cmds/wiz/update` recompiles successfully. debug.log:
+  compile warnings only, zero runtime errors. Driver killed by exact PID.
+  (The login-time notice "有新文件update错误，立即查看 /log/log" is the
+  lib's own wizard file-size-change monitor firing because /log/log is
+  absent — cosmetic, pre-existing, not an error.)
+- **WASM** (build-wasm with query_ip_number/resolve fixes + recursive
+  log/ dir harness fix): the previously-documented harness gap is GONE.
+  Fresh registration `wasmceshi`/秦风 end-to-end + look/score/quit all
+  correct; second invocation: `fluffos` admin login `(admin)` + `update`
+  succeeds. **Verdict: native OK + wasm OK.** No mudlib changes needed
+  this pass. Test character saves removed; runtime churn
+  (topten.o/fluffos.o timestamps) reverted.

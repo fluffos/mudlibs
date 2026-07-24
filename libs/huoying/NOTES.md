@@ -498,3 +498,30 @@ eval-cost overrun was observed once in `world/area/wizard` NPC-inventory
 creation during a first-touch lazy-compile burst (content-side, did not
 recur on subsequent sessions, unrelated to this pass's patches);
 `data/chinese.o` runtime churn reverted.
+
+## Dual-mode verification pass (2026-07-24)
+
+- **Fix applied** (AGENTS.md §1.3c, in scope for this pass):
+  `adm/daemons/logind.lpc:663` (enter_world) and `:713` (reconnect) —
+  the two lazy `IDENT_D->query_userid(...)` calls are now wrapped in
+  `catch()`. Under WASM `userid.lpc` fails to compile (socket_address/
+  socket_create/socket_connect absent — no sockets package), and the
+  uncaught throw aborted `enter_world()`, leaving the fresh character
+  outside any room (the previously-documented WASM blocker). With the
+  catch, the ident lookup silently no-ops under WASM and is unchanged
+  natively. Wizards see the caught compile error echoed once at login
+  ("编译时段错误..."), cosmetic and wizard-only.
+- **Native** (temp port 41059 — this lib's assigned 40059 was held as a
+  secondary listener by another session's xuanjianlu driver, which was
+  left alone per §10.5; `include/globals.h` MUD_PORT was temporarily
+  pointed at 41059 for the test and reverted, byte-identical, after):
+  fresh registration `ceshier`/秦风 end-to-end into 巫师神殿; re-login
+  (restore path) + look/score/quit all correct; `fluffos`/`Mud@2026`
+  login shows `(admin)` and `update /world/area/wizard/guildhall`
+  succeeds. debug.log: compile warnings only, zero runtime errors.
+  Driver killed by exact PID.
+- **WASM** (build-wasm with query_ip_number/resolve fixes): fresh
+  registration `wasmceshi`/秦风 lands in 巫师神殿, look/score/quit all
+  correct; second invocation: `fluffos` admin login `(admin)` + `update`
+  成功. **Verdict: native OK + wasm OK.** Test character saves removed;
+  runtime churn (daemon.o, fluffos.o timestamps) reverted.

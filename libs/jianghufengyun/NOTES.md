@@ -526,3 +526,21 @@ committed): `work/data/user/f/fluffos.o`, `work/data/login/f/fluffos.o`.
 Retest: fresh registration (秦风/ceshizhe) end-to-end + look/score/quit
 clean; fluffos login + update clean; debug.log free of errors; test
 character saves removed.
+
+## Dual-mode verification pass (2026-07-24)
+
+- **Native** (port 40053): fresh registration `ceshier`/秦风 end-to-end
+  (id → y → name → password ×2 → gift 0/y → email → gender m) into 客店;
+  look/score/quit all correct. `fluffos`/`Mud@2026` login shows
+  `您目前权限：(boss)` and `update /cmds/usr/score` prints 成功.
+  debug.log: zero errors. Driver killed by exact PID.
+- **WASM** (build-wasm with query_ip_number/resolve fixes): the previous
+  blocker — BAN_D rejecting every connection on the malformed-IP sscanf
+  — is GONE, exactly as predicted: the enablement pass's band.lpc:106
+  loopback/malformed short-circuit plus the driver-side
+  query_ip_number() fix both cover it. Fresh registration
+  `wasmceshi`/秦风 end-to-end into the game world (北疆小镇 starting
+  branch), look/score/quit all correct; second invocation: `fluffos`
+  admin login `(boss)` + `update` 成功. **Verdict: native OK + wasm
+  OK.** No new fixes needed this pass. Test character saves removed;
+  fluffos.o timestamp churn reverted.
