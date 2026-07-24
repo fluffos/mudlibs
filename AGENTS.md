@@ -1288,9 +1288,14 @@ formatting ANY lib, run all three checks, then re-boot and re-test:**
    formatted file whose diff introduces space-separated CJK sequences
    or a backslash-space-letter escape:
    `git diff -U0 -- '*.lpc' | grep -nE '^\+.*(\\ [nrt]|[一-鿿] [一-鿿] [一-鿿])'`.
-   Fix by reverting the FILE (then optionally fix the original
-   unbalanced quote by hand — the underlying typo is usually a real
-   §6.6 bug worth fixing separately).
+   Also works at rest (no diff needed):
+   `grep -rl '\\ n' libs/<slug>/work --include='*.lpc'` — on this corpus
+   that signature found 214 damaged files with exactly one false
+   positive (verify any hit against the file's pre-format git blob
+   before reverting: if the `\ n` predates formatting it's original
+   archive content, leave it). Fix by reverting the FILE (then
+   optionally fix the original unbalanced quote by hand — the
+   underlying typo is usually a real §6.6 bug worth fixing separately).
 
 The formatter is cosmetic; losing formatting on a handful of files is
 always the right trade for correctness.
