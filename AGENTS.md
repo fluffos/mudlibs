@@ -1355,6 +1355,29 @@ never drives any real transcoding regardless of what's selected;
 verified live before concluding this, not assumed from the file being
 short.
 
+**Whether the local-override shape is a LIVE bug depends entirely on
+the converter's byte-range test — always boot and select the legacy
+option live, never conclude from code shape alone.** Seen across a
+second family (`fluffos_xiyou2000`, `menghuanxiyou2002`, `mhxy`,
+`mohuanshiji` — same `feature/encoding.lpc` int-flag +
+`CONVERT_D`/`LANGUAGE_D` byte-table pattern as above): some of these
+libs' `SC_ISFIRSTBYTE(c)`-style test is UNBOUNDED (`c >= 0xA1`, no
+upper limit) — that fires on every real Unicode CJK codepoint (all
+≥0x4E00, well past 0xA1) and misreads each character as the start of a
+legacy 2-byte pair, corrupting the whole output the moment BIG5 is
+selected (confirmed live). Others in the very same family use a
+correctly BOUNDED range (`0xA1`–`0xFE`/`0xF7`, e.g. `is_GB1`/`is_B51`
+in `haiyang2`/`hymud`) that never matches real UTF-8 CJK bytes — those
+are NOT bugs, selecting the legacy option already renders clean, and
+patching them would be needless churn. Same fix when it IS live: map
+the legacy branch to whatever value that lib's own converter treats as
+a no-op (usually `encode=0`/"GB"). Also check for dead code before
+fixing anything: `datangshuanglong`'s menu is unreachable behind an
+`#ifdef GB_AND_BIG5x` typo (trailing "x" never matches the real
+`#define`) that always hardcodes the safe branch — a real but harmless
+bug, out of scope, don't "fix" the typo as part of this pass unless
+asked.
+
 ---
 
 ## 9. LPC formatter (`~/src/fluffos/tools/lpc-syntax/`) — required checks
