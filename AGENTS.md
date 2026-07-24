@@ -1397,19 +1397,17 @@ same interface via `scripts/wasm_client.js` (§1.2).
   SHIPPED static `banned_name` content file (`yueyingqiyuan`),
   breaking name registration in fresh clones — prefer lib-scoped
   ignore patterns over repo-wide ones.
-- **Publishing: never `git push` this repo directly.** The GitHub copy
-  (`github.com/fluffos/mudlibs`) was created from a `git-filter-repo`
-  pass that stripped `archives/` (copyrighted third-party content) and
-  all >20MB blobs from history — the two histories are permanently
-  unrelated, and a direct push would attempt to upload the full
-  unfiltered multi-GB history, archives included. `origin` is
-  configured fetch-only here (its push URL is an intentionally-invalid
-  guard string). To publish: replicate file-level changes into a
-  normal clone of the GitHub repo, commit there with the same message,
-  and push that. Pattern: diff the local commit
-  (`git diff-tree --name-status -r -z OLD NEW`), copy A/M files into
-  the clone (never anything under `archives/`), `git rm` the D files,
-  commit, push.
+- **Publishing: normal `git push origin main`.** This worktree tracks
+  `origin/main` (`github.com/fluffos/mudlibs`) directly. `archives/`
+  is gitignored — the original archive files live there locally for
+  provenance (never published: copyrighted third-party content;
+  `scripts/lib_numbering.json` maps number↔slug↔archive filename).
+  Never commit anything under `archives/` or force-push over `main`.
+  (Historical note: an earlier era used a filtered side-clone because
+  the local history predated the filter-repo pass; that history is
+  preserved on the local `backup-unfiltered-history` branch and can be
+  deleted, plus `git gc`, if the ~20GB of old objects are ever needed
+  back as disk space.)
 
 ### 10.6 English-language archives
 
