@@ -133,14 +133,34 @@ BADGE = {
     "limited": ("⚠️", "受限", "可启动,但登录受限或未完整验证"),
     "noboot": ("❌", "不可启动", "无法在 WASM 驱动下启动"),
 }
-ORDER = {"playable": 0, "limited": 1, "noboot": 2}
+
+
+def load_numbers():
+    """slug -> sort key from scripts/lib_numbering.json's "NNN" / "NNN-M"
+    number scheme, e.g. "043-1" -> (43, 1). Duplicate-archive entries
+    (duplicate_of set) never own a libs/ dir and are skipped; the first
+    real entry per slug wins. Unnumbered slugs sort after all numbered
+    ones, alphabetically, rather than disappearing or crashing."""
+    path = REPO / "scripts" / "lib_numbering.json"
+    numbers = {}
+    if path.is_file():
+        data = json.loads(path.read_text(encoding="utf-8"))
+        for e in data["libs"]:
+            if e.get("duplicate_of") or e["slug"] in numbers:
+                continue
+            m = re.match(r"^(\d+)(?:-(\d+))?$", e["number"])
+            if m:
+                numbers[e["slug"]] = (int(m.group(1)), int(m.group(2) or 0))
+    return numbers
 
 
 def render_index(status):
     libs = status["libs"]
     counts = status["counts"]
+    numbers = load_numbers()
     entries = sorted(
-        libs.items(), key=lambda kv: (ORDER[kv[1]["status"]], kv[0]))
+        libs.items(),
+        key=lambda kv: (numbers.get(kv[0], (9999, 0)), kv[0]))
 
     cards = []
     for slug, info in entries:
