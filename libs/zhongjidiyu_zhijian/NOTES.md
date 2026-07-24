@@ -631,3 +631,26 @@ Standard pass per AGENTS.md §1.3b/§1.3c/§1.3e/§1.5:
   look/score(pre-投胎 message)/quit correct; test saves removed. Final
   debug.log: only the two known socket_bind lines (versiond uncaught ×1,
   messaged now-caught ×1).
+
+## WASM long-sit boot-watch pass (2026-07)
+
+200s `scripts/wasm_boot_watch.sh` sit surfaced one genuinely new,
+previously-undocumented finding beyond the already-known
+`ftpd.lpc`/`dns_master.lpc`/`versiond.lpc` sockets-absent preload class
+(§1.3c, caught/cosmetic): `inherit/item/combined.lpc`'s `private void
+destruct_me()`, self-invoked via `call_out("destruct_me", 0)` when a
+money stack's `amount` hits 0 — denied with "apply() with insufficient
+permission ... function: destruct_me, origin: internal, needs: private,
+has: hidden" on `clone/money/silver#581`. Same root cause as this lib's
+own already-fixed `command_hook` class (AGENTS.md §8.3a: `private`
+demotes to DECL_HIDDEN once inherited; a self-invocation via
+`call_out`/`command()` needs DECL_PRIVATE and gets silently denied) —
+spent-down money stacks were never actually self-destructing (harmless
+but permanent per-object leak). Fixed: dropped `private`, kept the
+function otherwise unchanged. Same fix ported to siblings `zhonghua2`
+(where the identical bug also fired live), `zhongjidiyu`,
+`zhongjidiyu_airuoyoulan` (latent there, didn't fire in their sits).
+Retest via a small one-off Python client (`crypt`-module challenge/
+response, same shape as the original verification pass) confirmed
+registration → look → score → quit still clean; a fresh 200s WASM
+re-sit confirmed the "insufficient permission" line no longer appears.

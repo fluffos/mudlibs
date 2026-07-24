@@ -515,3 +515,14 @@ Standard pass per AGENTS.md §1.3b/§1.3e/§1.5:
   fine at boot (NPC clone fails only when wumiao is recompiled), left
   documented. Runtime churn (`u/lonely/log` compile-warning append)
   reverted via `git show HEAD:`.
+
+## WASM long-sit boot-watch pass (2026-07)
+
+200s `scripts/wasm_boot_watch.sh` sit: completely clean, zero grep hits
+beyond the known-benign early `Unable to open log file:
+"log/debug.log"` line — no new findings, no fix needed. (This lib's own
+`adm/simul_efun/object.lpc` `file_owner()` uses a different, already-
+correct 2-arg `sscanf(file, "/u/%s/%s", name, rest)` shape that doesn't
+have the 3-arg misattribution bug found live on sibling `zhonghua2` and
+ported to 7 other libs in this batch — checked and confirmed fine,
+nothing to port here.)

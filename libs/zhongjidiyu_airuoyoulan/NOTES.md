@@ -467,3 +467,20 @@ Standard pass per AGENTS.md §1.3b/§1.3c/§1.3e/§1.5:
   score/quit correct; test saves removed. debug.log: only the known
   versiond socket_bind line plus the now-`catch()`ed messaged
   socket_bind (logged as intercepted) — no new error classes.
+
+## WASM long-sit boot-watch pass (2026-07)
+
+200s `scripts/wasm_boot_watch.sh` sit: `ftpd.lpc`/`versiond.lpc`
+sockets-absent preload errors match the already-documented §1.3c class
+(caught by `master.lpc`'s preload `catch()`, cosmetic); `versiond`
+compile-and-fail recurs twice in one boot (two separate unguarded
+callers reach `load_object`), same known class, harmless. Proactively
+ported two fixes found live on sibling `zhonghua2` (shares the
+identical `inherit/item/combined.lpc` and `adm/simul_efun/object.lpc`
+byte-for-byte): dropped `private` on `combined.lpc`'s `destruct_me()`
+(call_out-self-invocation denied under `private`→DECL_HIDDEN
+inheritance, so spent-down money stacks never self-destruct), and
+fixed `object.lpc`'s `file_owner()` (`return name` → `return dir`,
+misattributes 3-level-deep `/u/<wiz>/<subdir>/<file>` log_error writes).
+Neither fired visibly in this lib's own sit. Retest: fresh registration
+(id `arysanb`) into 世外桃源, look/quit clean, no regressions.

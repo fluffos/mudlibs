@@ -483,3 +483,24 @@ Standard pass per AGENTS.md §1.3b/§1.3c/§1.3e/§1.5:
   `catch()` (also required under WASM where messaged fails to compile
   entirely). Verified: first login after a fresh boot now runs `update`
   successfully.
+
+## WASM long-sit boot-watch pass (2026-07)
+
+200s `scripts/wasm_boot_watch.sh` sit: the quest-daemon `heart_beat()`
+"Bad argument 1 to call_other"/"Bad argument 2 to present()" errors
+(`clone/quest/judge.lpc`, `.../search.lpc`, `.../supply.lpc`,
+`.../shen.lpc`) reappeared, matching the already-documented
+pre-existing "skeleton archive's missing zones" class (recorded above,
+unrelated to the VERSION_D guards) — confirmed still the same
+already-known class, no new fix needed. `ftpd.lpc`/`versiond.lpc`
+sockets-absent preload errors also match the already-documented §1.3c
+class (caught, cosmetic). One genuinely new proactive fix: this lib
+shares `inherit/item/combined.lpc` (`private void destruct_me()`,
+`call_out`-self-invoked when a money stack hits amount 0) and
+`adm/simul_efun/object.lpc` (`file_owner()` `return name` bug) with
+sibling `zhonghua2`, where both fired live during that lib's sit —
+ported both fixes here proactively (dropped `private` on
+`destruct_me`; `file_owner()` now `return dir`) even though neither
+triggered visibly in this lib's own 200s window. Retest: fresh
+registration (id `zjdsanb`) into 世外桃源, look/score(pre-投胎
+message)/quit clean, no regressions.

@@ -121,3 +121,16 @@ Standard pass per AGENTS.md §1.3b/§1.3e/§1.5:
   upper+lower+digit ≥6) end-to-end into 凤求凰客栈 with
   look/score/quit correct; test saves removed. debug.log clean (no
   error lines).
+
+## WASM long-sit boot-watch pass (2026-07)
+
+200s `scripts/wasm_boot_watch.sh` sit: no new findings beyond the
+already-documented sockets-absent preload compile errors (`ftpd.lpc`,
+`adm/daemons/network/dns_master.lpc` — caught by `master.lpc`'s
+preload `catch()`, cosmetic). Proactively fixed
+`adm/simul_efun/object.lpc`'s `file_owner()` (`return name` → `return
+dir`) as part of a repo-wide port of a bug found live on sibling
+`zhonghua2` (misattributes 3-level-deep `/u/<wiz>/<subdir>/<file>`
+log_error writes to a bogus path); didn't fire in this lib's own sit,
+fixed proactively since it's the identical shared file. Retest: fresh
+registration (id `zzfsanty`) through look/score/quit, clean.

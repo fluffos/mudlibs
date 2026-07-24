@@ -105,3 +105,16 @@ python3 ../../scripts/mudclient.py 127.0.0.1 40099 --timeout 20 --idle 1.0 \
   --send "10 10 10 10 10 10" --send "m" \
   --send "look" --send "score" --send "quit"
 ```
+
+## WASM long-sit boot-watch pass (2026-07)
+
+200s `scripts/wasm_boot_watch.sh` sit: completely clean, zero grep
+hits beyond the known-benign early `Unable to open log file:
+"log/debug.log"` line and the harmless `nosave crash(string error,
+...)` false-positive — no new findings. Proactively fixed
+`adm/simul_efun/object.lpc`'s `file_owner()` (`return name` → `return
+dir`) as part of a repo-wide port of a bug found live on sibling
+`zhonghua2` (misattributes 3-level-deep `/u/<wiz>/<subdir>/<file>`
+log_error writes to a bogus path); didn't fire in this lib's own sit,
+fixed proactively since it's the identical shared file. Retest: fresh
+registration (id `haiyunb`) through look/quit, clean.

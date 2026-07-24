@@ -377,3 +377,18 @@ Standard four-change pass per AGENTS.md §1.3b/§1.3e/§1.5:
   only). Test char saves removed; note the lib runtime-appends every new
   player name to `adm/etc/banned_name` (name-reservation) — test-churn
   lines were reverted, the single 浮浮 line is kept intentionally.
+
+## WASM long-sit boot-watch pass (2026-07)
+
+200s `scripts/wasm_boot_watch.sh` sit: no new failures beyond the
+already-documented `ftpd.lpc`/socket-efun sockets-absent preload error
+(caught by `master.lpc`'s preload `catch()`, cosmetic — FTP feature
+unavailable under WASM, not on any login/gameplay path) and the
+already-documented `emoted.o` restore warning. Proactively fixed
+`adm/simul_efun/object.lpc`'s `file_owner()` (`return name` → `return
+dir` — misattributes 3-level-deep `/u/<wiz>/<subdir>/<file>` log_error
+writes to a bogus path) as part of a repo-wide port of the fix found
+live on sibling `zhonghua2`; did not fire in this lib's own sit, fixed
+proactively since it's the identical shared file. Retest: fresh
+registration (`yysanit`/秦风检) end-to-end through look/score/quit,
+clean, no regressions.

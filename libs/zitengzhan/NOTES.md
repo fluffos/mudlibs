@@ -433,3 +433,15 @@ Standard pass per AGENTS.md §1.3b/§1.3e/§1.5:
 - Retest: fresh normal registration (`regtest`/秦风测) end-to-end into
   南城客栈 with look/score (full character sheet)/quit correct; test
   saves removed. debug.log clean (no new errors).
+
+## WASM long-sit boot-watch pass (2026-07)
+
+200s `scripts/wasm_boot_watch.sh` sit: completely clean, zero grep
+hits beyond the known-benign early `Unable to open log file:
+"log/debug.log"` line — no new findings. Proactively fixed
+`adm/simul_efun/object.lpc`'s `file_owner()` (`return name` → `return
+dir`) as part of a repo-wide port of a bug found live on sibling
+`zhonghua2` (misattributes 3-level-deep `/u/<wiz>/<subdir>/<file>`
+log_error writes to a bogus path); didn't fire in this lib's own sit,
+fixed proactively since it's the identical shared file. Retest: fresh
+registration (id `sanbztz`/秦峰) through look/score/quit, clean.

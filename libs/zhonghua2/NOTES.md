@@ -231,3 +231,88 @@ Standard pass per AGENTS.md §1.3b/§1.3c/§1.3e/§1.5:
   a few pre-existing log-ACL denials (`/u/task/log`, `/log/nosave/quest`
   append permission, debug-log rotation lstat) — none new to this pass,
   none login-affecting.
+
+## WASM long-sit boot-watch pass (2026-07): 4 real bugs root-caused and fixed
+
+A 200s+ `scripts/wasm_boot_watch.sh` sit (AGENTS.md §10.0) surfaced
+several lazily-triggered failures that a quick smoke test never
+exercises. All four below were previously visible only as unexplained
+noise in a prior pass's debug.log ("a few pre-existing log-ACL denials
+... none login-affecting", above) — this pass actually root-caused and
+fixed them:
+
+1. **`adm/simul_efun/object.lpc`'s `file_owner()` misattributes every
+   3-level-deep `/u/<wiz>/<subdir>/<file>` path to `<subdir>` instead of
+   `<wiz>`**: `sscanf(file, "/u/%s/%s/%s", dir, name, rest)` correctly
+   captures the wizard name in `dir` (first match) and the subdirectory
+   in `name` (second match), but the function `return`ed `name`. Any
+   compile warning/error for a file under a wizard's own subdirectory
+   (e.g. `/u/sanben/task/set_task.lpc`) got logged via
+   `master.lpc log_error()` to a bogus `/u/task/log` instead of
+   `/u/sanben/log` — silently swallowed since `/u/task/` doesn't exist
+   ("Wrong permissions for opening file /u/task/log for append"/"No
+   such file or directory"). Fixed: `return dir;`. **Same bug ported to
+   7 sibling libs** that share this identical file byte-for-byte:
+   `yueyingqiyuan`, `zhongjidiyu`, `zhongjidiyu_airuoyoulan`,
+   `zhongjidiyu_zhijian`, `zitengzhan`, `zuizhonghuanjing`, `zzfy` (only
+   `zhonghua2` happened to trip it live during this pass's sit; the
+   others have the identical latent bug, fixed proactively).
+2. **`adm/daemons/questd.lpc`'s `collect_all_quest_information()`
+   `log_file("nosave/quest", ...)` had no `/log/nosave/` directory to
+   write into** (§7.11 class — gitignored runtime dir, absent on a
+   fresh checkout). Created `work/log/nosave/` and added
+   `zhonghua2  log/nosave` to `scripts/wasm_keep_dirs.txt` so the
+   packaged WASM/browser artifact recreates it too.
+3. **`adm/daemons/cleard.lpc`'s `auto_clear()` heartbeat** (fires 30s
+   after boot, then every 30 min) called `cp("/log/debug.log", ...)`
+   unconditionally right after a 1-in-3-chance `rm("/log/debug.log")` of
+   its own — an uncaught `cp()` on a missing source ("lstat failed")
+   aborted the function BEFORE its own `call_out("auto_clear", 1800)`
+   reschedule, permanently killing the debug-log-backup heartbeat after
+   its first unlucky (or WASM-harness-log-gap) run. Guarded both `cp()`
+   calls with `file_size(...) >= 0`.
+4. **`kungfu/class/generate/chinese.lpc`'s `from_wudang()`/
+   `from_shaolin()` NPC-skill setup** called
+   `set_skill("parry", "taiji-jian")` / `set_skill("parry",
+   "damo-jian")` — `set_skill(string skill, int val)` needs an int
+   second argument, not a weapon-name string (author typo, part of the
+   lib's own previously-documented "~83 files" `set_skill`/
+   `set_information` type-mismatch lpcc-sweep tail, never triaged
+   individually until this daemon actually got lazily loaded 180s into
+   the sit via `/u/sanben/task/set_task.lpc`'s `set_task()` call_out).
+   Fixed both to `set_skill("parry", 1)`, matching every other
+   `set_skill(..., 1)` baseline call in the same functions.
+5. **`feature/command.lpc`'s `command_hook()` is `private nomask`**
+   (AGENTS.md §8.3a's documented class — a previous pass's "empirical
+   caveat" noted `zhonghua2`'s PLAYER dispatch works fine despite
+   `private`, so it was left alone). This sit proved the caveat doesn't
+   extend to NPCs: every `u/sanben/task/npc/task_carrier#N` and
+   `clone/npc/walker#N` NPC hit "apply() with insufficient permission
+   ... function: command_hook, origin: efun, needs: private, has:
+   hidden" repeatedly (their autonomous action-scheduling calls
+   `command_hook` via the `command()` efun on themselves, an
+   ORIGIN_EFUN self-call that needs DECL_PRIVATE, which the
+   inherited-and-thus-DECL_HIDDEN `private` function falls short of —
+   normal player input dispatch is ORIGIN_DRIVER and tolerates it, which
+   is why the earlier pass's player-only test missed this). Dropped
+   `private`, kept `nomask`, per the standard §8.3a fix.
+6. **Same root cause as #5, different symptom**:
+   `inherit/item/combined.lpc`'s `private void destruct_me()`,
+   self-invoked via `call_out("destruct_me", 0)` (ORIGIN_INTERNAL, also
+   needs DECL_PRIVATE) when a money stack's amount hits 0 — denied the
+   same way, so spent-down money stacks never actually self-destruct
+   (a harmless but permanent resource leak). Dropped `private`. **Same
+   fix ported to `zhongjidiyu`, `zhongjidiyu_airuoyoulan`,
+   `zhongjidiyu_zhijian`**, which share this identical file; only
+   `zhongjidiyu_zhijian`'s sit happened to trigger it live.
+
+Retest after all six fixes: native registration (`zhtestqg`/李白) +
+look/score/quit clean, no regressions (an NPC — 水笙 — audibly
+whispered a chat-heartbeat line mid-session, confirming NPC command
+dispatch generally still works). WASM 200s re-sit: `/u/task/log`,
+`/log/nosave/quest`, the `chinese.lpc` compile errors, and the
+`command_hook`/`destruct_me` "insufficient permission" lines are all
+gone; only the already-documented sockets-absent
+(`dns_master`/`versiond`) and pre-existing `set_information` type-
+mismatch quest-daemon compile errors remain (both out of scope, per
+this lib's own already-documented lpcc-sweep tail).
