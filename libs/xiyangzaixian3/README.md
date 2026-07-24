@@ -64,3 +64,18 @@ python3 scripts/mudclient.py 127.0.0.1 40042 --timeout 30 --idle 1 \
 ——这是 WASM 测试环境本身在显示连线 IP 地址格式上的已知限制（并非真的
 被封禁），原生环境下完全正常。属于测试环境限制，不是这份 mudlib 的
 问题。
+
+## 管理员账号 / Admin account
+
+- **id**: `fluffos`
+- **密码 / password**: `Mud@2026`
+- **显示名 / display name**: 浮浮（Fluffos）
+- **权限 / level**: `(admin)` —— 通过 `/adm/etc/wizlist` 名单授予
+  （`fluffos (admin)`）。已实测巫师指令 `update /adm/daemons/logind`
+  编译成功。登录时记得先输入客户端暗号 `2060`。
+- ⚠️ **公开架站前请务必修改此默认密码**（`Mud@2026` 是本地游玩用的公开
+  默认口令）。
+
+另：此前"WASM 下会被 IP 黑名单误判拒绝"的问题已修复——本地/回环连接
+（含 WASM 浏览器连线）现在无条件放行，不再受封禁名单和 IP 数量限制的
+影响。

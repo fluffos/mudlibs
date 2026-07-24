@@ -421,3 +421,39 @@ shell backgrounding tricks**, in this harness.
   not the query_ip_number issue — noted here rather than worked around,
   since patching either the mudlib's startup gate or the shared test
   harness is out of scope for this pass.
+
+## WASM-enablement pass (2026-07, loopback/uptime/throttle + admin seed)
+
+Standard WASM-first pass per AGENTS.md §1.3(b)/(e) and §1.5. Gates patched
+(loopback = `127.0.0.1`, a `127.` prefix, or an empty/non-string/malformed
+IP — the last covering older WASM `query_ip_number()` garbage):
+
+- `adm/daemons/band.lpc`: added `IS_LOOPBACK_IP()` macro (after line 147)
+  and a loopback short-circuit `return 0;` at the top of `is_banned()`
+  (~line 154), `create_char_banned()` (~line 167), and `is_strict_banned()`
+  (~line 180). Loopback is never treated as banned.
+- `adm/daemons/logind.lpc::logon()` (~line 107-125): computed an
+  `is_loopback` flag from `query_ip_number(ob)`; the `uptime() < 30`
+  startup-grace destruct now only fires for non-loopback, and the per-IP
+  anti-flood `logon_cnt > 15` throttle is loopback-exempt. (KEEP note: this
+  removes the "wait 30s after boot" requirement for local/WASM play.)
+- `adm/daemons/logind.lpc::encoding()` (~line 155-185): wrapped the
+  inline ban + IP-format gate (`is_strict_banned`, the `!ip_name` "No IP"
+  destruct, and the non-numeric-char destruct loop) so it is skipped
+  entirely for loopback/malformed IPs.
+- `adm/daemons/logind.lpc::get_id()` (~line 326): the multi-login-per-IP
+  cap (`NowLogin >= 50`) is now loopback-exempt.
+
+Admin seed: registered `fluffos` / display 浮浮 through the real flow
+(super/recovery pw `Recover@9`, login pw `Mud@2026`), then added
+`fluffos (admin)` to `/adm/etc/notices` (this is the `WIZLIST` file,
+`#define WIZLIST "/adm/etc/notices"` in `include/login.h`, read by
+`securityd.lpc::create()`). Verified after reboot: login as `fluffos`
+then `update /adm/daemons/logind` → "重新编译 ...成功"; room display shows
+the wizard-only object path. No new errors in `log/debug.log`.
+
+Save files for the orchestrator to add (neither is gitignored — both
+`data/user/` and `data/login/` are already tracked, so a normal add
+picks them up):
+- `libs/xiaoyuxiyou/work/data/user/f/fluffos.o` (character save)
+- `libs/xiaoyuxiyou/work/data/login/f/fluffos.o` (login/credential record)

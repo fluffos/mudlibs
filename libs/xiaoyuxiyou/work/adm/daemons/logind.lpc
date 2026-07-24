@@ -105,7 +105,12 @@ void logon(object ob) {
   object *online_user;
   int logon_cnt;
   int i;
-  if (uptime() < 30) {
+  string lip = query_ip_number(ob);
+  // WASM/loopback: local (browser-tab) connections bypass the startup-grace
+  // gate and the per-IP anti-flood throttle. Empty/non-string/malformed IP
+  // (older WASM query_ip_number() garbage) is treated as loopback too.
+  int is_loopback = (!stringp(lip) || lip == "" || lip == "127.0.0.1" || lip[0..3] == "127." || sscanf(lip, "%*d.%*d.%*d.%*d") != 4);
+  if (!is_loopback && uptime() < 30) {
     write(HIY "\n\t\t驱动程序正在启动过程中，请稍候再来。\n\n" NOR,);
     destruct(ob);
     return;
@@ -117,7 +122,7 @@ void logon(object ob) {
     if (query_ip_number(online_user[i]) == query_ip_number(ob))
       logon_cnt = logon_cnt + 1;
   }
-  if (logon_cnt > 15) {
+  if (!is_loopback && logon_cnt > 15) {
     log_file("login", sprintf("%s:恶意reconnet:%s\n", ctime(time()), query_ip_number(ob)));
     write(HIW "请你稍候再进入本MUD...... \n" NOR);
     destruct(ob);
@@ -156,25 +161,31 @@ private void encoding(string arg, object ob) {
   ip_name = query_ip_number(ob);
   ip_number = query_ip_number(ob);
 
-  // snowcat dec 10 1997
-  // try strict ban here...weiqi.
-  if ("/adm/daemons/band"->is_strict_banned(query_ip_number(ob)) == 1) {
-    write(HIR "您的地址在本 MUD 之信誉被人破坏了。\n请E-MAIL:torrow0812@21cn.com申述。\n" NOR);
-    destruct(ob);
-    log_file("allcont", sprintf("kicked out, strict_banned\n"));
-    return;
-  }
-  // try not accept "name" as IP
-  if (!ip_name) {
-    destruct(ob);
-    log_file("allcont", sprintf("kicked out, No IP\n"));
-    return;
-  }
-  for (ii = 0; ii < sizeof(ip_number); ii++) {
-    if ((ip_number[ii] != '.') && (ip_number[ii] > '9')) {
+  // WASM/loopback: local connections bypass the ban gate and the IP-format
+  // (no-IP / non-numeric) destructs below. Empty/non-string/malformed IP
+  // (older WASM query_ip_number() garbage) counts as loopback.
+  if (stringp(ip_number) && ip_number != "" && ip_number != "127.0.0.1"
+    && ip_number[0..3] != "127." && sscanf(ip_number, "%*d.%*d.%*d.%*d") == 4) {
+    // snowcat dec 10 1997
+    // try strict ban here...weiqi.
+    if ("/adm/daemons/band"->is_strict_banned(query_ip_number(ob)) == 1) {
+      write(HIR "您的地址在本 MUD 之信誉被人破坏了。\n请E-MAIL:torrow0812@21cn.com申述。\n" NOR);
       destruct(ob);
-      log_file("allcont", sprintf("kicked out, Non_number\n"));
+      log_file("allcont", sprintf("kicked out, strict_banned\n"));
       return;
+    }
+    // try not accept "name" as IP
+    if (!ip_name) {
+      destruct(ob);
+      log_file("allcont", sprintf("kicked out, No IP\n"));
+      return;
+    }
+    for (ii = 0; ii < sizeof(ip_number); ii++) {
+      if ((ip_number[ii] != '.') && (ip_number[ii] > '9')) {
+        destruct(ob);
+        log_file("allcont", sprintf("kicked out, Non_number\n"));
+        return;
+      }
     }
   }
   write(CLR);
@@ -323,7 +334,9 @@ private void get_id(string arg, object ob) {
         if (my_ip == new_ip)
           NowLogin++;
       }
-    if (NowLogin >= 50) {
+    // WASM/loopback: local connections are exempt from the multi-login cap.
+    if (!(!stringp(my_ip) || my_ip == "" || my_ip == "127.0.0.1" || my_ip[0..3] == "127.")
+      && NowLogin >= 50) {
       write(sprintf("对不起，从你的IP地址不能同时登录%s位人物。\n", chinese_number(MaxLimit + 1)));
       destruct(ob);
       return;

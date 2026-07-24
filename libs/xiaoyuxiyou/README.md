@@ -68,3 +68,15 @@ Unused local variable"之类的提示随聊天记录一起弹出——这是这�
 WASM 测试工具目前是启动后立即建立连线，还没等到 30 秒就先被这个保护
 机制挡下了。这是测试工具本身的时序限制，不是这份 mudlib 的问题（原生
 环境下只要等 30 秒以上再连线就完全正常）。
+
+## 管理员账号 / Admin account
+
+- **id**: `fluffos`
+- **密码 / password**: `Mud@2026`（本账号另设有一组独立的"管理/找回密码"
+  `Recover@9`，登录时用上面的日常密码即可）
+- **显示名 / display name**: 浮浮（Fluffos）
+- **权限 / level**: `(admin)` —— 本 lib `securityd.lpc` 权限表里的最高一级
+  （通过 `/adm/etc/notices` 巫师名单授予，`fluffos (admin)`）。已实测
+  `update` 等巫师指令可用。
+- ⚠️ **公开架站前请务必修改此默认密码**（`Mud@2026` 是本地游玩用的公开
+  默认口令）。

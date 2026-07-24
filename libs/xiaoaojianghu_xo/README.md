@@ -59,3 +59,14 @@ python3 scripts/mudclient.py 127.0.0.1 40069 --timeout 30 --idle 1 \
 角色创建收尾步骤在 WASM 下不稳定（多次测试有时卡住无输出，有时又
 重复了前面的提示），原生环境下同样的代码完全正常——判断是 WASM 测试
 环境本身的时序问题，不是本 mudlib 的 bug，故未作修改。
+
+## 管理员账号 / Admin account
+
+- **id**: `fluffos`
+- **密码 / password**: `Mud@2026`
+- **显示名 / display name**: 浮浮（Fluffos）
+- **权限 / level**: `(admin)` —— 本 lib `securityd.lpc` 权限表的最高一级，
+  通过 `/secure/etc/wizlist` 名单授予（`fluffos (admin)`）。已实测巫师
+  指令 `update /system/daemon/band` 编译成功。
+- ⚠️ **公开架站前请务必修改此默认密码**（`Mud@2026` 是本地游玩用的公开
+  默认口令）。

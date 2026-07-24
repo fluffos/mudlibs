@@ -89,9 +89,15 @@ void logon(object ob) {
   i = sizeof(usr);
   login_cnt = 0;
   while (i--) if (query_ip_number(usr[i]) == query_ip_number(ob)) login_cnt++;
-  if (login_cnt > 19) {
-    destruct(ob);
-    return;
+  // WASM/loopback: local (browser-tab) connections are exempt from the
+  // per-IP anti-flood throttle. Empty/non-string/malformed IP counts as loopback.
+  {
+    string lip = query_ip_number(ob);
+    int is_loopback = (!stringp(lip) || lip == "" || lip == "127.0.0.1" || lip[0..3] == "127." || sscanf(lip, "%*d.%*d.%*d.%*d") != 4);
+    if (!is_loopback && login_cnt > 19) {
+      destruct(ob);
+      return;
+    }
   }
   write(read_file("/adm/etc/banner"));
   write("         [[1;31m提示：[0;37;0m如果按" HIY "ENTER" NOR "键后系统没有响应，请试 Ctrl-ENTER]\n\n");
@@ -142,7 +148,7 @@ void encoding_to_mudlist(string arg, object ob) {
 }
 
 void login(string arg, object ob) {
-  string *lognum, *dir, *ppls;
+  string *lognum, *dir, *ppls, cip;
   object *usr;
   int i, wiz_cnt, wiz_cnt2, ppl_cnt, ppl1_cnt, login_cnt, ip_cnt, login_num, login_num2;
 
@@ -171,7 +177,11 @@ void login(string arg, object ob) {
         || (intp(wiz_cnt2) && (wiz_cnt2 <= 0)))
         && !usr[i]->is_ghost()) {
         if (query_ip_name(ob) == query_ip_name(usr[i])) ip_cnt++;
-        if (ip_cnt >= 30) {
+        // WASM/loopback: local connections are exempt from the per-host cap.
+        cip = query_ip_number(ob);
+        if (stringp(cip) && cip != "" && cip != "127.0.0.1"
+          && cip[0..3] != "127." && sscanf(cip, "%*d.%*d.%*d.%*d") == 4
+          && ip_cnt >= 30) {
           write("从您的主机创造的人物太多了，您的主机将被拒绝往来一段时间。\n");
           destruct(ob);
           return;

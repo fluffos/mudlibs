@@ -109,10 +109,16 @@ int is_banned(string site) {
   string *line = ({ site });
   string tmp1, tmp2, tmp3, tmp4;
   int i;
+  // WASM/loopback: local connections are always allowed; an empty/
+  // non-string/malformed IP (older WASM query_ip_number() garbage) is
+  // treated as loopback too — the original code *banned* any IP that
+  // failed to parse, which rejected every WASM browser-tab connection.
+  if (!stringp(site) || site == "" || site == "127.0.0.1" || site[0..3] == "127.")
+    return 0;
   if (!site) return 1;
 
   if (sscanf(site, "%s.%s.%s.%s", tmp1, tmp2, tmp3, tmp4) != 4)
-    return 1;
+    return 0;  // was: return 1 — malformed IP now treated as local, not banned
   // 禁止使用虚拟ip 或 route
   if (tmp4 == "0" || tmp4 == "255")
     return 1;
@@ -355,9 +361,16 @@ string list_sites() {
 int vaild_allow_address(object ob) {
   string *address;
   string *line;
+  string vip;
   int i;
 
   if (!ob) return 0;
+  // WASM/loopback: local connections always pass the per-account
+  // allowed-address check (empty/malformed IP counts as loopback).
+  vip = query_ip_number(ob);
+  if (!stringp(vip) || vip == "" || vip == "127.0.0.1" || vip[0..3] == "127."
+    || sscanf(vip, "%*d.%*d.%*d.%*d") != 4)
+    return 1;
   address = ob->query("allow_ip");
   if (!sizeof(address)) {
     ob->set_temp("no_allow_ip", 1);

@@ -133,3 +133,44 @@ registration test (Chinese surname + given name reaching the next prompt).
   output. This lib does **not** gate its login/registration path on
   `query_ip_number()` format, so it isn't affected by the documented
   WASM IP-formatting limitation — a clean, fully-playable WASM result.
+
+## WASM-enablement pass (2026-07, loopback/uptime/throttle + admin seed)
+
+Standard WASM-first pass per AGENTS.md §1.3(b)/(e) and §1.5. Loopback =
+`127.0.0.1`, any `127.` prefix, or an empty/non-string/malformed IP
+(covers older WASM `query_ip_number()` garbage). Gates patched:
+
+- `adm/daemons/band.lpc::is_banned()` (~line 39): loopback/malformed-IP
+  short-circuit `return 0` at the top. (Note: no live login-path caller
+  of `is_banned()` was found in this lib — the ban daemon appears vestigial
+  — patched anyway for safety/uniformity.)
+- `adm/daemons/logind.lpc::logon()` (~line 90-110): the per-host
+  multi-login cap (`log_num >= 10` destruct) is now loopback-exempt.
+  (Also disentangled the original single-statement `log_num++; if(...)`
+  layout into an explicit post-loop check — semantics preserved: the
+  check always ran after the counting loop.)
+- `adm/daemons/logind.lpc::get_passwd()` (~line 188): the 16-second
+  relogin-rate throttle ("为了降低系统负荷，请稍后再login" destruct) is
+  now loopback-exempt.
+- No `uptime()` startup-grace gate in this lib (only a cosmetic
+  cmwhod.lpc comment). The `mad_lock` gate is an explicit admin lock
+  (game admin feature), kept. The `banned_name` Chinese-name blocklist
+  is content, kept.
+
+Admin seed: registered `fluffos` / display 浮浮 / password `Mud@2026`
+through the real flow (id → `y` → Chinese name → password x2 → gift `y`
+→ email → gender m; one stray "What?" echo mid-flow is pre-existing
+prompt noise, not a failure). Granted `(admin)` by appending
+`fluffos (admin)` to `/adm/etc/wizlist`. Verified after reboot: login as
+fluffos → wizard-channel login broadcast + `update /adm/daemons/logind`
+→ "重新编译 ...成功！".
+
+Retest: fresh normal registration (`qfxzyx` / 秦风) re-verified
+end-to-end into 新手集中营 with `look`/`score`/`quit` correct; test
+saves removed. No new errors in `log/debug.log`.
+
+Save files for the orchestrator to add (both paths tracked, not
+gitignored; note `data/user/f/` and `data/login/f/` are NEW directories
+— this lib previously had no ids starting with "f"):
+- `libs/xingzhanyingxiong/work/data/user/f/fluffos.o`
+- `libs/xingzhanyingxiong/work/data/login/f/fluffos.o`

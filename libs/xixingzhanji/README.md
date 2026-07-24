@@ -57,3 +57,14 @@ python3 scripts/mudclient.py 127.0.0.1 40080 --timeout 30 --idle 1 \
 南城客栈、`look`、`quit` 全部正常，中文姓名正常显示。欢迎词里显示连线
 地址的那一行在 WASM 下是空白的（WASM 环境已知的 IP 格式限制，纯显示
 问题），游戏本身不依赖这个地址做登录判断，不影响实际游玩。
+
+## 管理员账号 / Admin account
+
+- **id**: `fluffos`
+- **密码 / password**: `Mud@2026`
+- **显示名 / display name**: 浮浮（Fluffos）
+- **权限 / level**: `(admin)` —— 本 lib `securityd.lpc` 权限表的最高一级，
+  通过 `/adm/etc/wizlist` 名单授予（`fluffos (admin)`）。已实测巫师指令
+  `update /adm/daemons/logind` 编译成功。
+- ⚠️ **公开架站前请务必修改此默认密码**（`Mud@2026` 是本地游玩用的公开
+  默认口令）。

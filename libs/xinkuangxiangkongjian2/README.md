@@ -61,3 +61,19 @@ python3 scripts/mudclient.py 127.0.0.1 40047 --timeout 45 --idle 1 \
 词里显示连线 IP 地址的那一行在 WASM 下是空白的（WASM 环境已知的 IP
 格式限制），但游戏本身不依赖这个地址做任何登录判断，纯属显示上的小
 问题，不影响实际游玩。
+
+## 管理员账号 / Admin account
+
+- **id**: `fluffos`
+- **密码 / password**: `Mud@2026`
+- **显示名 / display name**: 浮浮（Fluffos）
+- **权限 / level**: `(manager)` —— 本 lib `securityd.lpc` 权限表
+  （`wiz_levels`）的最高一级（高于 `(admin)`），通过 `/adm/etc/wizlist`
+  名单授予（`fluffos (manager)`）。已实测巫师指令
+  `update /adm/daemons/banmultid` 编译成功。
+- ⚠️ **公开架站前请务必修改此默认密码**（`Mud@2026` 是本地游玩用的公开
+  默认口令）。
+
+另：此前"短时间反复重连会触发防灌水限制"的注意事项对本机/回环连接已
+不再适用——本地连线（含 WASM 浏览器连线）现已豁免所有 IP 封禁、重连
+限制与同 IP 人数上限。

@@ -411,3 +411,38 @@ bugs on the tested path):
   `127.0.0.1`), but this lib doesn't gate login on IP format anywhere
   reached by this flow, so it's display-only — a clean, fully-playable
   WASM result.
+
+## WASM-enablement pass (2026-07, loopback/uptime/throttle + admin seed)
+
+Standard WASM-first pass per AGENTS.md §1.3(b)/(e) and §1.5. Loopback =
+`127.0.0.1`, any `127.` prefix, or an empty/non-string/malformed IP
+(covers older WASM `query_ip_number()` garbage). Gates patched:
+
+- `adm/daemons/band.lpc`: added `IS_LOOPBACK_IP()` macro (before
+  `is_banned()`, ~line 149) and loopback short-circuits at the top of
+  `is_banned()`, `create_char_banned()`, and `is_strict_banned()`.
+- `adm/daemons/logind.lpc::logon()` (~line 92): the per-IP anti-flood
+  throttle (`login_cnt > 19` destruct) is now loopback-exempt.
+- `adm/daemons/logind.lpc::login()` (~line 174): the per-host character
+  cap (`ip_cnt >= 30` destruct) is now loopback-exempt (added local
+  `cip` to the declaration list).
+- No `uptime()` startup-grace gate exists in this lib (checked; the only
+  `uptime()` uses are cosmetic/cmwhod).
+
+Admin seed: registered `fluffos` / display 浮浮 / password `Mud@2026`
+through the real flow (gb → "no" student gate → new → id → Chinese name
+→ password x2 → email → gender m → gift room "9" then "y"; no
+super-password step in this lineage, unlike sibling xiaoyuxiyou). Granted
+`(admin)` by appending `fluffos (admin)` to `/adm/etc/wizlist` (the
+`WIZLIST` file read by `securityd.lpc::create()`). Verified after
+reboot: login as fluffos → `update /adm/daemons/logind` →
+"重新编译 ...成功！".
+
+Retest: fresh normal registration (`qfxxzj` / 秦风) re-verified
+end-to-end into 南城客栈 with `look`/`score`/`quit` correct; test saves
+removed afterwards. No new errors in `log/debug.log`.
+
+Save files for the orchestrator to add (both paths are tracked, not
+gitignored):
+- `libs/xixingzhanji/work/data/user/f/fluffos.o`
+- `libs/xixingzhanji/work/data/login/f/fluffos.o`

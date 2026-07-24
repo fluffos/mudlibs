@@ -201,7 +201,13 @@ void logon(object ob) {
 
 
   // by ACKY
-  if (blocks[query_ip_number(ob)] > time()) {
+  // WASM/loopback: local connections are exempt from the 10-second
+  // reconnect block (empty/non-string/malformed IP counts as loopback).
+  if (stringp(query_ip_number(ob)) && query_ip_number(ob) != ""
+    && query_ip_number(ob) != "127.0.0.1"
+    && query_ip_number(ob)[0..3] != "127."
+    && sscanf(query_ip_number(ob), "%*d.%*d.%*d.%*d") == 4
+    && blocks[query_ip_number(ob)] > time()) {
     write("请勿连续尝试，请您稍后再连线。\n");
     new_destruct(ob);
     return;
@@ -1174,7 +1180,16 @@ object find_body(string name) {
 }
 
 void new_destruct(object ob) {
+  string nip;
   if (!ob) return;
+  // WASM/loopback: never record local connections in the reconnect-block/
+  // auto-ban counters (empty/non-string/malformed IP counts as loopback).
+  nip = query_ip_number(ob);
+  if (!stringp(nip) || nip == "" || nip == "127.0.0.1"
+    || nip[0..3] == "127." || sscanf(nip, "%*d.%*d.%*d.%*d") != 4) {
+    destruct(ob);
+    return;
+  }
   // by ACKY
   blocks[query_ip_number(ob)] = time() + 10;
   //add by bss, 将不断重连的ip auto ban, wizlock时不会动作

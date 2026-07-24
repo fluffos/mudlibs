@@ -56,3 +56,14 @@ python3 scripts/mudclient.py 127.0.0.1 40002 --send "" --send "look" --send "qui
 确认→中文姓名→密码→天赋加点→邮箱→性别）、进入新手集中营、`look`、
 `quit` 全部正常，中文显示无误，这份存档不依赖 IP 地址格式做登录限制，
 因此不受 WASM 环境已知的 IP 显示限制影响。
+
+## 管理员账号 / Admin account
+
+- **id**: `fluffos`
+- **密码 / password**: `Mud@2026`
+- **显示名 / display name**: 浮浮（Fluffos）
+- **权限 / level**: `(admin)` —— 通过 `/adm/etc/wizlist` 名单授予
+  （`fluffos (admin)`）。已实测巫师指令 `update /adm/daemons/logind`
+  编译成功，且登录会广播到【巫师】频道。
+- ⚠️ **公开架站前请务必修改此默认密码**（`Mud@2026` 是本地游玩用的公开
+  默认口令）。

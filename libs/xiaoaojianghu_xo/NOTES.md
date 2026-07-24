@@ -477,3 +477,45 @@ most resemble.
   (gender → entering the game world) is unreliable under this WASM build**;
   no further attempt made to force it through, per the pass's own
   "honest assessment, not a full playthrough" guidance.
+
+## WASM-enablement pass (2026-07, loopback/uptime/throttle + admin seed)
+
+Standard WASM-first pass per AGENTS.md §1.3(b)/(e) and §1.5. Loopback =
+`127.0.0.1`, any `127.` prefix, `"localhost"`, or an empty/non-string
+value (covers older WASM `query_ip_number()`/`query_ip_name()` garbage).
+Gates patched:
+
+- `system/daemon/band.lpc::is_banned()` (~line 38): loopback
+  short-circuit `return 0` at the top. The caller passes
+  `query_ip_name(ob)` (a hostname, natively "localhost" for loopback),
+  so the guard also treats any string containing characters outside
+  `[A-Za-z0-9.-]` as loopback — both defensive for WASM garbage values
+  and protecting the `regexp()` ban-pattern loop from invalid input.
+- `system/daemon/logind.lpc::logon()` (~line 97): the startup-grace gate
+  (`time() - startup_time < NO_LOGIN_LIMIT_TIME` destruct) now only
+  applies to non-loopback connections. Note `NO_LOGIN_LIMIT_TIME` is 0
+  in this snapshot's `include/options.h`, so the gate was already
+  dormant — restricted anyway per standing policy so a future config
+  change can't re-break WASM.
+- The `ALLOW_MULTI_LOGIN` per-IP gate in `get_id()` is compiled out
+  (`#define ALLOW_MULTI_LOGIN` commented in options.h) — no patch
+  needed. `MAX_USERS` is a total-capacity gate, not per-IP — kept. The
+  "must play 30 min before quit saves" gate is game design — kept
+  (AGENTS.md §1.3e KEEP list).
+
+Admin seed: registered `fluffos` / display 浮浮 / password `Mud@2026`
+through the real flow (id → `y` → Chinese name → password x2 → email →
+gender m → random start room; `enter_world()` saves both the user and
+login objects immediately, so no quit-gate interaction). Granted
+`(admin)` by appending `fluffos (admin)` to `/secure/etc/wizlist` (the
+`WIZLIST` file, `include/login.h`). Verified after reboot: login as
+fluffos → `update /system/daemon/band` → "重新编译 ...成功！".
+
+Retest: fresh normal registration (`qfxoab` / 秦风) re-verified
+end-to-end into 小秦淮客寓 with `look`/`score`/`quit` correct; test
+saves removed. No new errors in `log/debug.log`.
+
+Save files for the orchestrator to add (both paths tracked, not
+gitignored; `data/user/f/` and `data/login/f/` are NEW directories):
+- `libs/xiaoaojianghu_xo/work/data/user/f/fluffos.o`
+- `libs/xiaoaojianghu_xo/work/data/login/f/fluffos.o`

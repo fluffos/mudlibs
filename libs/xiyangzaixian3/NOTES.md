@@ -258,3 +258,42 @@ path.
   instructions. Verdict: boots under WASM, registration reaches the
   English-name step, but login is gated by the known IP-format
   limitation before a Chinese name can even be entered.
+
+## WASM-enablement pass (2026-07, loopback/uptime/throttle + admin seed)
+
+Standard WASM-first pass per AGENTS.md §1.3(b)/(e) and §1.5. Loopback =
+`127.0.0.1`, any `127.` prefix, or an empty/non-string/malformed IP
+(covers older WASM `query_ip_number()` garbage). Gates patched:
+
+- `adm/daemons/band.lpc::is_banned()` (~line 108): loopback short-circuit
+  `return 0` at the top; ALSO changed the malformed-IP branch
+  (`sscanf(site, "%s.%s.%s.%s") != 4`) from `return 1` (banned!) to
+  `return 0` — this was the exact gate that spuriously rejected every
+  WASM connection ("你的地址在本 MUD 不受欢迎", see the earlier WASM
+  verdict above, now obsolete).
+- `adm/daemons/band.lpc::vaild_allow_address()` (~line 361): loopback
+  connections now always pass the per-account allowed-address check.
+- `adm/daemons/logind.lpc::get_id1()` (~line 219): the per-IP connection
+  cap (`ip_cnt > 18` destruct) is now loopback-exempt.
+- No `uptime()` startup-grace gate in this lib (the only non-cosmetic
+  `uptime()` use is `natured.lpc:368`, a 2-day in-game world-event timer
+  — game content, kept per policy).
+- The `"2060"` client-version gate is NOT an IP/hosting gate (it is a
+  documented flow quirk) — left as is.
+
+Admin seed: registered `fluffos` / display 浮浮 / password `Mud@2026`
+through the real flow (`2060` → id → `y` → Chinese name → password x2 →
+gift `0` → `y` → email → gender m). Granted `(admin)` by appending
+`fluffos (admin)` to `/adm/etc/wizlist` (read by
+`securityd.lpc::create()`). Verified after reboot: login as fluffos →
+`update /adm/daemons/logind` → "重新编译 ...成功！" (and the account now
+re-logs into the wizard start room 北疆小镇).
+
+Retest: fresh normal registration (`qfxyzx` / 秦风) re-verified
+end-to-end into 客店 with `look`/`score`/`quit` correct; test saves
+removed. No new errors in `log/debug.log`.
+
+Save files for the orchestrator to add (both paths tracked, not
+gitignored):
+- `libs/xiyangzaixian3/work/data/user/f/fluffos.o`
+- `libs/xiyangzaixian3/work/data/login/f/fluffos.o`

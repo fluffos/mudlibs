@@ -406,3 +406,56 @@ essentially the whole run, spot-checked repeatedly via `free -h`).
   prints a blank IP instead of `127.0.0.1` under WASM, but this lib
   doesn't gate login on the IP's format anywhere, so it has no
   functional effect — a clean, fully-playable WASM result.
+
+## WASM-enablement pass (2026-07, loopback/uptime/throttle + admin seed)
+
+Standard WASM-first pass per AGENTS.md §1.3(b)/(e) and §1.5. Loopback =
+`127.0.0.1`, any `127.` prefix, or an empty/non-string/malformed IP
+(covers older WASM `query_ip_number()` garbage). Gates patched:
+
+- `adm/daemons/cbipd.lpc::check_ip()` (~line 7): loopback short-circuit
+  `return 0` — the banned-IP list ("此 IP 目前已被停用") can never hit
+  local connections.
+- `adm/daemons/relog_ip.lpc::check_ip()` (~line 38): loopback
+  short-circuit `return 0` — the auto-ban ("重连太多次被ban 3天") can
+  never hit local connections.
+- `adm/daemons/banmultid.lpc::ban_multi()` (~line 17): loopback
+  short-circuit `return 1` (allowed) — the per-IP concurrent-login cap
+  no longer applies to local connections.
+- `adm/daemons/logind.lpc::logon()` (~line 204): the 10-second per-IP
+  reconnect block (`blocks[ip] > time()`, "请勿连续尝试") is now
+  loopback-exempt. This removes the README's old "wait ~15s between
+  test connections" caveat for local play.
+- `adm/daemons/logind.lpc::new_destruct()` (~line 1176): loopback
+  connections are no longer recorded into the `blocks[]` mapping or the
+  auto-ban counters (they just destruct cleanly) — repeated local
+  testing can no longer poison `/adm/etc/relog_ip`.
+- No `uptime()` startup-grace gate in this lib.
+
+Admin seed: registered `fluffos` / display 浮浮 / password `Mud@2026`
+through the real flow (id → `y` → Chinese name → password x2 → email →
+gender m → seven "20" talent allocations → empty send → world). Granted
+`(manager)` — the TOP rank of this lib's `wiz_levels` (above `(admin)`)
+— by appending `fluffos (manager)` to `/adm/etc/wizlist`. Verified:
+relogin as fluffos → `update /adm/daemons/banmultid` →
+"重新编译 ...成功！".
+
+**Lineage quirk worth knowing**: the relogin path checks the LOGIN
+object's save (`/data/login/<c>/<id>.o`), but registration/`quit` never
+writes it (`ob->save()` is commented out in `enter_world`, and
+`cmds/std/quit.lpc` destructs the body without saving the link object).
+The login save is only written by the NET-DEAD path
+(`obj/user.lpc::net_dead()` → `link_ob->save()`). So to make a fresh
+account relogin-able, end its first session by dropping the connection
+(client timeout), NOT by `quit` — that is how
+`data/login/f/fluffos.o` was produced here. (Pre-existing behavior,
+documented rather than changed.)
+
+Retest: fresh normal registration (`qfkxkj` / 秦风) re-verified
+end-to-end into the newbie welcome area with `look`/`score`/`quit`
+correct; test saves removed. No new errors in `log/debug.log`.
+
+Save files for the orchestrator to add (both paths tracked, not
+gitignored; `data/user/f/` and `data/login/f/` are NEW directories):
+- `libs/xinkuangxiangkongjian2/work/data/user/f/fluffos.o`
+- `libs/xinkuangxiangkongjian2/work/data/login/f/fluffos.o`
