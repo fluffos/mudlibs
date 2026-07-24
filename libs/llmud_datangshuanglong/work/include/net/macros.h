@@ -14,7 +14,11 @@
 #define nntoh(x) capitalize(replace_string((x)?(x):"","."," "))
 
 // macros for getting resources
-#define Mud_name() (string)DNS_MASTER->query_mud_name()
+// dns_master can't load under WASM (no `sockets` package -- AGENTS.md
+// §1.3c/§7.6); guard the call_other and fall back to the local mud-name
+// constant so callers outside the network subsystem (channeld, emoted,
+// mudlist) don't throw "No program in object" on every invocation.
+#define Mud_name() (find_object(DNS_MASTER) ? (string)DNS_MASTER->query_mud_name() : INTERMUD_MUD_NAME)
 #define mud_nname() htonn( Mud_name() )
 #define mud_port() __PORT__
 #define udp_port() (int)DNS_MASTER->query_udp_port()

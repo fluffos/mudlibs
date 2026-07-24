@@ -109,8 +109,20 @@ protected void init_crontab() {
       out(sprintf("以下任务触发物件档案不存在：\n%s\n\n", items[i]));
       continue;
     }
-    if (!ob = find_object(table[1]))
-      ob = load_object(table[1]);
+    if (!ob = find_object(table[1])) {
+      // A crontab entry's target can throw on its first
+      // load (e.g. mudlistd.lpc, which needs `sockets` --
+      // absent under WASM, AGENTS.md §1.3c) with nothing here
+      // to catch it; that crashes whatever caller happens to
+      // be the first to trigger this whole chain (a connecting
+      // player, via logind.lpc -> TIME_D->replace_ctime()),
+      // aborting THIS object's own create() and silently
+      // disconnecting the first connection. Same fix already
+      // applied to sibling nitan6.
+      mixed cerr = catch(ob = load_object(table[1]));
+      if (cerr)
+        log_file("nosave/crontab", sprintf("载入 %s 时发生错误: %s\n", table[1], cerr));
+    }
     if (!ob) {
       out(sprintf("以下任务触发物件无法载入：\n%s\n\n", items[i]));
       continue;
