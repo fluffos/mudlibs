@@ -51,3 +51,13 @@ python3 scripts/mudclient.py 127.0.0.1 40085
 
 核心的注册、登录、探索（look）、查看状态（score）、退出存档等流程均已
 反复验证可正常使用。
+
+## 管理员账号 / Admin account
+
+- 账号 id：`fluffos`　密码：`Mud@2026`　中文名：浮浮
+- 权限：`(admin)`（本 mudlib 的最高巫师等级），通过 `adm/etc/wizlist`
+  数据文件授予（内容为 `fluffos (admin)`）。存档文件：
+  `work/data/user/f/fluffos.o` 与 `work/data/login/f/fluffos.o`。
+- 已验证登录后权限显示 `(admin)`，`update` 巫师指令可正常重新编译文件。
+- **警告**：这是为本地/浏览器单机游玩预置的公开默认密码，如要对外公网
+  开服，请务必先修改此账号密码（或从 wizlist 中删除该账号）。

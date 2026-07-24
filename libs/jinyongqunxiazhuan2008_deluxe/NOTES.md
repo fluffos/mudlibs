@@ -526,3 +526,34 @@ available before/after each run, well clear of pressure; no other
   Same harmless cosmetic artifact as the other two variants: a fresh
   registration's "上次连线" timestamp shows the Unix epoch ("Wed Dec 31
   16:00:00 1969") under WASM's synthetic clock — not a functional issue.
+
+## WASM-enablement pass (2026-07: loopback-allow + admin seeding)
+
+Standard pass per AGENTS.md §1.3b/e + §1.5 (applied identically across
+the three jinyongqunxiazhuan2008 builds — engine files are byte-identical
+in this group):
+
+- `adm/daemons/band.lpc:39` `is_banned()`: short-circuit `return 0` for
+  loopback (`127.0.0.1`/`127.*`), empty, or non-string site values
+  before the regexp ban-list scan. `logind.lpc:67`'s
+  `BAN_D->is_banned(query_ip_name(ob))` gate in `logon()` is thereby
+  loopback-proof (and robust against the WASM `query_ip_number()`/
+  `query_ip_name()` garbage-return bug).
+- No `uptime()` startup-grace gate and no per-IP anti-flood/registration
+  throttle exist in this lineage (checked `logind.lpc`'s full input_to
+  chain; the only other connection gate is the in-memory `mad_lock`
+  admin lockdown flag, default off — left alone).
+
+Admin account: `fluffos` / `Mud@2026` / 浮浮, registered through the
+real native flow (id → y → Chinese name → password ×2 → gift y → email
+→ gender m). Granted `(admin)` via `adm/etc/wizlist` (file was shipped
+empty; now contains `fluffos (admin)`), which `securityd.lpc` reads at
+create(). Verified after restart: login shows `目前权限：(admin)`,
+`update /cmds/usr/score` prints 重新编译成功. Save files (must be
+committed): `work/data/user/f/fluffos.o`, `work/data/login/f/fluffos.o`.
+
+Retest: fresh registration (秦风/ceshizhe) end-to-end + look/score/quit
+clean; fluffos login + wizard update clean; debug.log shows only the
+known pre-existing corrupted-save restore errors (chinesed e2c dict /
+kedian board) documented above — zero new errors; test character saves
+removed.
