@@ -106,17 +106,20 @@ harness):
 **Policy change (important)**: earlier in the project, WASM login blockers
 were documented-not-patched to preserve original behavior. Now that WASM
 playability outranks preserving original behavior, **mudlib-side guards
-are encouraged** for everything in this section except the
-`query_ip_number()` bug itself (which has a proper driver fix in
-progress).
+are encouraged** for everything in this section, including the
+`query_ip_number()` bug itself — though as of this writing that bug is
+already FIXED at the driver level (see below), so a future agent
+building from a current `fluffos` checkout should not need to work
+around it at all; the class is documented here for historical context
+and in case anyone is running an older driver build.
 
-#### (a) `query_ip_number()` returns garbage — driver bug, fix in progress
+#### (a) `query_ip_number()` returned garbage — driver bug, FIXED upstream (merged)
 
-On the current WASM build, `query_ip_number()` on an in-process
-connection does not return a real dotted-quad (observed returning `"("`),
-despite the driver setting `INADDR_LOOPBACK` internally. Any login path
-that parses/validates the IP breaks. Three recurring shapes, all one root
-cause:
+On earlier WASM builds, `query_ip_number()` on an in-process connection
+did not return a real dotted-quad (observed returning `"("`), despite
+the driver setting `INADDR_LOOPBACK` internally. Any login path that
+parsed/validated the IP could break. Three recurring shapes, all one
+root cause:
 
 - `sscanf(ip, "%d.%d.%*d.%*d", ...)`-style site/ban daemons reject every
   login (e.g. `bxsj`'s `sited.lpc`, many `band.lpc`/`BAN_D` variants) —
@@ -127,28 +130,36 @@ cause:
   `ipd.lpc`, `zitengzhan`'s `band.lpc`).
 - Cosmetic-only uses (displaying the IP in a banner) — harmless, ignore.
 
-**Two driver-side fixes are in progress**, and this is the contract a
-future agent can rely on once they land:
+**Both driver-side fixes below are MERGED upstream in `fluffos/fluffos`
+(verifiable via `git log origin/master` in the fluffos checkout — look
+for the `query_ip_number()`/`resolve()` WASM commits) and both the
+native and WASM drivers used by this project have been rebuilt from
+that merged master.** This is the now-active contract:
 
 1. `query_ip_number()` on a WASM connection returns a real
    `"127.0.0.1"` dotted-quad (and `query_ip_name()` something sane like
-   `"localhost"`).
+   `"localhost"`) — confirmed live in multiple libs' retest transcripts,
+   which show real `127.0.0.1` banners/messages post-fix.
 2. `resolve()` under WASM no longer raises "DNS resolver is not
    available" — it mirrors the native contract exactly but with
    synthetic success: the callback is scheduled on the next tick, any
    hostname resolves to `"127.0.0.1"`, reverse lookups to
    `"localhost"`.
 
-**Implication: once these land, do NOT patch mudlibs around IP-format or
-`resolve()` crashes under WASM — rebuild the WASM driver and RE-TEST the
-~30 libs whose status is "limited" with an IP-related reason (grep
-`scripts/wasm_status.json` for
-`query_ip_number\|IP\|band.lpc\|BAN_D\|sited\|ipd`).** Mudlib-side
-patches already made for these two classes are legacy and can be
-simplified away over time. The mudlib-side policies that DO remain
-regardless: the loopback-allow-through-ban-gates patch (b), the
-uptime-gate/throttle bypass (e), and the `fluffos`/`Mud@2026` admin
-seeding (§1.5).
+**Implication, now in effect: do NOT patch mudlibs around IP-format or
+`resolve()` crashes under WASM as if the driver bug were still present
+— that class is closed.** If you see a "limited" WASM status in
+`scripts/wasm_status.json` whose reason cites `query_ip_number`, `IP`,
+`band.lpc`, `BAN_D`, `sited`, or `ipd`, rebuild the WASM driver and
+RE-TEST that lib — it will very likely now pass. Any mudlib-side
+patches made for these two classes back when the driver bug was live
+are legacy and can be simplified away over time (they're harmless to
+leave, since they're now dead code paths — a genuine `resolve()` call
+under WASM just succeeds instead of throwing into the `catch()`). The
+mudlib-side policies that DO remain regardless of driver state: the
+loopback-allow-through-ban-gates patch (b) — **fail-closed, see below**
+— the uptime-gate/throttle bypass (e), and the `fluffos`/`Mud@2026`
+admin seeding (§1.5).
 
 #### (b) The loopback-allow patch (standard, per user direction) — FAIL-CLOSED
 
@@ -220,10 +231,10 @@ recurring shapes DO break login and now get mudlib-side guards on sight:
   Fix: reorder state init before the `resolve()` call AND wrap it in
   `catch()`. (Seen: `fengyun3dianzang`, `moniHuafu`, `fengyun434`/
   `fy2005` proactively — the 风云 family's `securityd.lpc` idiom.)
-  NOTE: the in-progress `resolve()` driver fix (§1.3a) makes the
-  `catch()` unnecessary going forward — but the reordering is correct
-  defensive style anyway, and the state-init-before-network-call lesson
-  generalizes.
+  NOTE: the `resolve()` driver fix (§1.3a) is now merged, which makes
+  the `catch()` unnecessary going forward — but the reordering is
+  correct defensive style anyway, and the state-init-before-network-call
+  lesson generalizes.
 - **ident/auth lookups on connect** (`userid.lpc` doing
   `socket_create()`/`socket_connect()` to port 113) — wrap in `catch()`
   or gate on a `find_object()`/feature check; the lookup is cosmetic.
@@ -334,6 +345,24 @@ without per-lineage archaeology. Procedure per lib:
 
 The password is a deliberate published default for local play; the
 top-level README carries the change-it-if-hosting warning.
+
+**Bug class: rank granted but write ACL empty by design.** Some
+lineages (seen in the Century/`adm/single`-style `master.lpc` family,
+e.g. `sanjieshenhua`) separate "is this account a wizard" (what
+`wizlist`/`(admin)` status controls) from "what may this account
+actually write/compile" (a SEPARATE `default_trusted_write`/
+`extend_trusted_write` table in `securityd.lpc`'s own save data, often
+shipped EMPTY except for a commented-out example, with the lineage's
+own escape hatch — e.g. an `auth` command — hardcoded to a couple of
+the original author's uids instead). Symptom: `fluffos` logs in and
+shows `(admin)` correctly, but `update`/any write-requiring wizard
+command fails ACL as if not a wizard at all. Fix: don't just seed the
+rank — also seed (or create, if the save file doesn't exist yet) the
+trusted-write entry granting `fluffos` root write, the same way you'd
+seed the rank itself. Always verify step 3 (`update <path>` actually
+succeeds) rather than trusting a `(admin)` banner as proof of working
+admin access — the two are enforced by genuinely different code paths
+in libs with this shape.
 
 ---
 
@@ -1288,8 +1317,10 @@ formatting ANY lib, run all three checks, then re-boot and re-test:**
    Detect: `grep -rnE ':\s:\s*[a-zA-Z_]+\(' libs/<slug>/work` — any hit
    is this bug. Fix by reverting just that file (`git checkout --
    <path>` — but see §10.5), not by hand-repairing the mangled output
-   or rewriting the mudlib's call. A driver-repo fix was dispatched
-   upstream; until confirmed merged, keep running this check.
+   or rewriting the mudlib's call. The driver-repo fix for this is
+   MERGED upstream; a freshly cloned/updated `fluffos` won't reproduce
+   it on new formatter runs. The grep remains useful for auditing files
+   formatted before the merge.
 2. **`case` label + trailing `//` comment merge** — the comment swallows
    the start of the next line's statement, silently deleting it
    (`chongshengdeshijie`'s gender-selection crash). No clean grep;
@@ -1565,8 +1596,9 @@ present after any fresh checkout (`git log` in the fluffos repo):
    32/64 limits.
 3. **`lpcc --batch` mode** (`src/main_lpcc.cc`) with per-file
    `set_eval()` re-arm (§10.4).
-4. In progress: the **WASM `query_ip_number()`/`resolve()` fixes**
-   (§1.3a) — the trigger to retest, not patch, the IP-gated libs.
+4. **MERGED**: the WASM **`query_ip_number()`/`resolve()` fixes**
+   (§1.3a) — already landed; the "limited"-status IP-gated libs are a
+   retest target, not a patch target, going forward.
 
-The formatter (`tools/lpc-syntax/`) and its pending `::` fix also live
-in the fluffos repo (§9).
+The formatter (`tools/lpc-syntax/`) and all three of its bug fixes
+(§9) also live in the fluffos repo, and are likewise MERGED upstream.
