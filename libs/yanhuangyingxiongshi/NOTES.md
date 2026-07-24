@@ -602,3 +602,16 @@ sessions):
   reasoning as `yanhuangwuhun`'s entry — a real gap but rooted in the
   WASM build's documented lack of the `sockets` package, not a mudlib
   defect or something in scope to fix here.
+
+## 2026-07-23 (integrity review): the previous pass's combined.lpc hand-fix was incomplete — stray brace fixed
+
+The previous pass's hand-fix of the formatter's `::move` line-wrap
+corruption in `inherit/item/combined.lpc` restored the `if (::move(dest,
+silent))` call but left the corruption's stray extra `}` behind (line 64),
+so the file did NOT compile (`syntax error, unexpected '}'`) — despite
+that pass's NOTES claiming it was lpcc-verified. Every money/stackable
+item inheriting /inherit/item/combined would have failed to load at
+runtime. Removed the stray brace; structure now matches the pre-format
+git blob exactly (verified against commit 3501d9782f) and the sibling
+`yanhuangwuhun`'s correct copy; `lpcc` compile now passes. Full
+registration + look/score/quit retested clean afterwards.
