@@ -500,3 +500,35 @@ the end of this pass; `work/data` (player save state from testing) and
   playable under WASM** (matching the native command set actually
   re-verified this pass), with the same cosmetic IP-display glitch
   common to this driver's WASM build.
+
+## 2026-07-23 (integrity review): the "score produces no output" observation is INTENTIONAL design, not a bug
+
+Investigated the previous pass's open observation that `score` silently
+produced no output for a fresh character. Root cause: **this lib's own
+onboarding/registration gate**, the same design family as
+`beimeixiakexing2001`'s `block_cmd` gate:
+
+- `adm/daemons/logind.lpc` (enter_world): any player with
+  `query("registered") != "yes"` (and `(player)` wizhood) is moved to
+  `/d/xiakedao/shatan1` instead of their normal start room.
+- `/d/xiakedao/shatan1.lpc`'s `init()` does `add_action("block_cmd", "", 1)`
+  for non-wizards; its `block_cmd()` returns 1 (silently swallowing the
+  command, zero output by design) for every verb EXCEPT
+  `quit/goto/suicide/follow/tell/say/reply/look`. So `score`, `hp`, `help`,
+  `i` etc. are all deliberately dead-air in the arrival room — `look` and
+  `quit` (the commands the earlier passes tested) are on the allowlist,
+  which is why only `score` looked broken.
+- The intended flow: `follow zhang san` (or li si) → escort teleports you
+  to `/d/xiakedao/register` (its own block_cmd allowlist adds `register`)
+  → `register you@example.com` → REGI_D issues a NEW random password and
+  disconnects you → re-login with that password → `registered == "yes"`,
+  you land in the real `/d/xiakedao/shatan` (exits, fisherman NPC), and
+  `score` works fully.
+
+Verified end-to-end interactively: completed the whole
+follow/register/re-login flow with a test character; `score` then printed
+the complete character sheet (【玄剑录个人档案】). No fix needed — do not
+"fix" the silence in shatan1/register, it is the original game's
+anti-unregistered-play gate working as designed. (Side note for future
+testers: the register step's issued-password disconnect is easy to
+mistake for a crash; it prints 您的新密码是XXXXX then closes the link.)
