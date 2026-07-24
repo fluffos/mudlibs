@@ -1515,6 +1515,18 @@ same interface via `scripts/wasm_client.js` (§1.2).
 
 ### 10.5 Process hygiene (multi-session/multi-agent)
 
+- **Don't arm a background Monitor/wait around a boot-watch loop and
+  then go quiet expecting it to resume you.** This has repeatedly left
+  agents stuck for hours with zero progress (no live process, no file
+  activity) — the orchestrator has had to notice the staleness and
+  force a resume more than once. Run `scripts/wasm_boot_watch.sh` (or
+  any other blocking command) directly and wait for it to return in
+  the same turn; don't delegate "notify me when this finishes" to a
+  Monitor for a loop you're about to sit through anyway. If you
+  legitimately need to wait on something (a slow conversion script,
+  say), the orchestrator's own equivalent lesson applies: verify the
+  watched PID is still alive before trusting a "waiting" status is
+  real, not stale.
 - **Kill drivers by exact recorded PID, NEVER `pkill -f` a pattern** —
   every lib's driver shares an identical command line; broad pkills
   have twice killed other sessions' drivers mid-test. After any kill,
