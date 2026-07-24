@@ -192,7 +192,8 @@ does not boot under WASM yet.
 | 041 | `nitan_ceshi` | 泥潭III测试版 / 《終極魔界》 (nitan_ceshi) | `泥潭III测试版.rar` | 40054 | WASM limited |
 | 041-1 | `nitan_san` | 泥潭三 / 《終極魔界》 (nitan_san) | `泥潭三.rar` | 40055 | WASM limited |
 | 042 | `yuxuechongsheng` | 浴血重生 | `浴血重生MUD.rar` | 40056 | WASM limited |
-| 043 | `haiyang2` | 海洋II | `海洋II 2010 正式无错完整版下载.rar` | 40057 | WASM limited |
+| 043 | `haiyang2` | 海洋II | `海洋II 2010 正式无错完整版下载.rar` | 40057 | WASM playable |
+| 043-1 | `hymud` | 海洋V·星月传奇 | `hymud-main.zip` | 40103 | WASM playable |
 | 044 | `huoying` | 火影 | `火影.rar` | 40059 | WASM playable |
 | 045 | `yanhuangwuhun` | 「武林群侠传」之炎黄武魂Ⅱ | `炎黄武魂_64bit.rar` | 40060 | WASM limited |
 | 045-1 | `yanhuangyingxiongshi` | 炎黄英雄史（游戏内也称"皇朝再现"） | `炎黄英雄史.rar` | 40061 | WASM limited |

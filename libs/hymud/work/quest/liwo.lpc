@@ -1,0 +1,22 @@
+#include <ansi.h>
+inherit ITEM;
+
+void create()
+{
+    int i; 
+    string *names = ({
+        WHT"珍珠"NOR,RED"翡翠"NOR,MAG"玛瑙"NOR,HIG"碧玉"NOR,HIW"珊瑚"NOR,HIR"猫儿眼"NOR,GRN"祖母绿"NOR
+    });
+    i = random(7);
+    set_name( names[i], ({ "treasure stone" }));
+        set_weight(10);
+        if( clonep() )
+                set_default_object(__FILE__);
+        else {
+                set("unit", "个");
+set("long", "奇珍异宝，价值连城，真令人眼红啊。\n");
+                set("value", 50000);
+                set("material", "paper");
+		 
+         }
+}

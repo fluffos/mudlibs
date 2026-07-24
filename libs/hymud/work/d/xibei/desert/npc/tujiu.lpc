@@ -1,0 +1,34 @@
+/* tujiu.c
+ * from XO Lib
+ * a npc of desert
+ * created by hydra 19980325
+ * version: @(#) 1.0@(#)
+ * last modified by hydra 19980326
+ */
+
+inherit NPC;
+
+void create()
+{
+    set_name( "秃鹫",({ "tu jiu","vulture","tujiu" }) );
+    set( "long","一只巨大的秃鹫，正在空中盘旋着寻找猎物。\n" );
+    set( "race","野兽" );
+    set( "age",1 );
+
+    set( "str",100 );
+    set( "dex",200 );
+    set( "int",25 );
+    set( "con",20 );
+
+    set( "max_qi",500 );
+    set( "max_jing",500 );
+
+    set( "limbs",({ "头部","身体","翅膀","脚爪" }) );
+    set( "verbs",({ "claw","poke" }) );
+
+    setup();
+}
+
+
+
+

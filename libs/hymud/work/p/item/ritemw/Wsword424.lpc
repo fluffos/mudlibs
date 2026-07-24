@@ -1,0 +1,123 @@
+// gangjian.c
+
+#include <ansi.h>
+#include <weapon.h>
+
+//inherit M_WEAPON;
+//inherit F_GEMS;
+inherit SWORD;
+
+string *du=({
+"ice_poison",
+"ill_dongshang",
+"ill_fashao",
+"ill_kesou",
+"ill_shanghan",
+"ill_zhongshu",
+"xx_poison",
+"cold_poison",
+"flower_poison",
+"rose_poison",
+"x2_poison",
+"sanpoison",
+"scorpion_poison",
+"anqi_poison",
+"nx_poison",
+"chilian_poison",
+"yufeng_poison",
+"insect_poison",
+"xscold_poison",
+});
+
+void create()
+{
+	set_name("[1;36m昆仑之剑[2;37;0m", ({ "kunlun sword", "sword" }));
+	set_weight(2371);
+	if (clonep())
+		set_default_object(__FILE__);
+	else {
+		set("unit", "把");
+		set("long", @LONG
+[1;36m	笑江湖浪迹十年游，空负少年头。
+	对铜陀巷泊，吟情渺渺，心事悠悠！ 
+	酒令诗残梦断，南国正清愁。 
+	把剑凄然望，无处招归舟。 
+ 
+	明月天涯路远，问谁留楚佩，弄影中洲？
+	数英雄儿女，俯仰古今愁。
+	难消受灯昏罗帐，伥昙花一现恨难休！
+	飘零惯，金戈铁马，拼葬荒丘！ 
+[2;37;0m这是一把由极为坚硬的[31m流花石[2;37;0m制成，重四斤七两四钱的[1;36m昆仑之剑[2;37;0m。
+综合评价[1;36m无双无对[2;37;0m 看起来极为锋利，具有[1;35m绝世罕见[2;37;0m的威力！
+上面刻了几个古符号：
+[33m土[2;37;0m:[1;33m天圣[2;37;0m [1;37m雷[2;37;0m:[1;31m开元[2;37;0m 
+上面还刻了一些符字：
+锋利:[1;33m灭世[2;37;0m 天玄:[34m细碎[2;37;0m 体灵:[32m粗糙[2;37;0m 不老:[33m很高[2;37;0m 威力:[35m标准[2;37;0m 
+
+LONG
+);
+    set("no_get",1);
+	  set("no_put",1);
+	  set("no_pawn",1);
+	  set("no_drop",1);
+	  set("no_beg",1);
+	  set("no_steal",1);
+	  set("systemmake",1);
+		set("value", 25000);
+		set("weapon_prop/intelligence",0);
+		set("weapon_prop/strength",0);
+		set("weapon_prop/karey",0);
+		set("weapon_prop/percao",0);
+		set("weapon_prop/dexerity",0);
+		set("weapon_prop/constitution",27);
+    set("weapon_prop/dodge", 0);
+    set("weapon_prop/parry", 0);
+    set("weapon_prop/attack", 0);
+    set("weapon_prop/armor", 0);
+    set("weapon_prop/defense", 36);
+    
+    set("weapon_prop/neili", 0);
+    set("weapon_prop/qi", 0);
+    set("weapon_prop/jing", 41);
+    set("weapon_prop/jingli", 41);
+    set("weapon_prop/damage", 51);
+
+    set("wtypeA",0);
+    set("wtypeB",0);
+    set("wtypeC",0);
+    set("wtypeD",0);
+    set("wtypeE",10);
+    set("wtypeF",0);
+    set("wtypeG",13);
+    set("wtypeH",0);
+    set("wtypeI",0);
+    set("wtypeJ",0);
+    set("wtypeK",0);
+    set("wtypeL",0);
+    
+
+                set("skill", ([
+                        "name": "hammer",
+                        "exp_required": 80000,
+                        "difficulty": 85,
+                        "min_skill":  1,
+                        "max_skill": 300,              
+                ]) );		
+		set("base_unit", "发");
+		
+
+		set("hxweapon", 1);
+		set("material", "default");
+    set("sharpness", 16);
+
+		set("wield_msg", "$N将$n握在手中。\n");
+		set("unwield_msg", "$N将手中的$n放下。\n");
+	}
+	
+	init_sword(985);
+	setup();
+}
+
+
+
+#include "/obj/ritem/weaponzy.h";

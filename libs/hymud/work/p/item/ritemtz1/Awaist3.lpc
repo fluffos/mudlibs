@@ -1,0 +1,108 @@
+#include <ansi.h> 
+#include <armor.h>
+
+inherit WAIST;
+
+string *du=({
+"ice_poison",
+"ill_dongshang",
+"ill_fashao",
+"ill_kesou",
+"ill_shanghan",
+"ill_zhongshu",
+"xx_poison",
+"cold_poison",
+"flower_poison",
+"rose_poison",
+"x2_poison",
+"sanpoison",
+"scorpion_poison",
+"anqi_poison",
+"nx_poison",
+"chilian_poison",
+"yufeng_poison",
+"insect_poison",
+"xscold_poison",
+});
+
+string *order = ({""HIY"", ""HIG"", ""RED"", ""MAG"", ""YEL"", ""HIC"", ""HIW"", ""HIR"",""HIB"", ""CYN"",""WHT"",""HIM"",""BLU""});  
+void create()
+{
+	      set_name("[31m太阿之腰带[2;37;0m★", ({ "taie waist", "waist" }));
+        set_weight(1000);
+        if( clonep() )
+                set_default_object(__FILE__);
+        else {
+                set("unit", "条");
+		set("long", @LONG
+[31m太阿帝王之兵，持之能号令天下，莫有不从！
+[2;37;0m这是一条由无比坚硬的精钢加上[1;33m木棉花[2;37;0m制成，重零斤八两五钱的[31m太阿之腰带[2;37;0m。
+综合评价[35m毁天灭地[2;37;0m 看起来无比坚固，具有[34m不错[2;37;0m的防护力！
+上面刻了几个古符号：
+[36m木[2;37;0m:[1;31m毁天[2;37;0m [32m水[2;37;0m:[1;34m举世[2;37;0m 
+上面还刻了一些符字：
+坚硬:[1;33m灭世[2;37;0m 天宇:[32m粗糙[2;37;0m 巧制:[33m很高[2;37;0m 
+体灵:[1;34m举世[2;37;0m 周天:[1;34m举世[2;37;0m 长生:[1;34m举世[2;37;0m 
+
+LONG
+);
+    set("no_get",1);
+	  set("no_put",1);
+	  set("no_pawn",1);
+	  set("no_drop",1);
+	  set("no_beg",1);
+	  set("no_steal",1);
+	  set("systemmake",1);
+		set("value", 36000);
+		set("armor_prop/intelligence",0);
+		set("armor_prop/strength",37);
+		set("armor_prop/karey",0);
+		set("armor_prop/percao",0);
+		set("armor_prop/dexerity",0);
+		set("armor_prop/constitution",0);
+    set("armor_prop/dodge", 0);
+    set("armor_prop/parry", 0);
+    set("armor_prop/attack", 0);
+
+
+    set("armor_prop/armor", 147);
+    set("armor_prop/defense", 82);
+    
+    set("armor_prop/neili", 85);
+    set("armor_prop/qi", 83);
+    set("armor_prop/jing", 0);
+    set("armor_prop/jingli", 0);
+    set("armor_prop/damage", 0);
+
+    set("wtypeA",0);
+    set("wtypeB",15);
+    set("wtypeC",8);
+    set("wtypeD",0);
+    set("wtypeE",0);
+    set("wtypeF",0);
+    set("wtypeG",0);
+    set("wtypeH",0);
+    set("wtypeI",0);
+    set("wtypeJ",0);
+    set("wtypeK",0);
+    set("wtypeL",0);
+    
+    
+                set("skill", ([
+                        "name": "parry",
+                        "exp_required": 80000,
+                        "difficulty": 85,
+                        "min_skill":  1,
+                        "max_skill": 480,              
+                ]) );		
+
+
+		set("material", "default");
+    set("sharpness", 25);
+        }
+        setup();
+}
+
+
+
+#include "/obj/ritem/armorzy.h";
