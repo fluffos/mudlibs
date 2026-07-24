@@ -11,7 +11,18 @@
 
 #define START_ROOM 			"/d/zhongzhou/yinghao"
 #define DEATH_ROOM			"/d/death/gate"
-#define REVIVE_ROOM			"/d/yangzhou/temple"
+// NOTE: the archive's original value here was "/d/yangzhou/temple" (隋
+// 炀帝陵), which belonged to an OLDER, entirely different "yangzhou" zone
+// now archived under d/yz_bak/yangzhou/ -- the live d/yangzhou/ is an
+// unrelated, incompatible zone rewrite that never got a "temple" room, so
+// every call_other() to the old path fails with "couldn't find object"
+// (confirmed live: crashes d/death/npc/{wgargoyle,bgargoyle}.lpc's
+// death_stage() -> reincarnate flow on EVERY player death, right after
+// the death-realm dialogue finishes). Repointed at START_ROOM, the same
+// always-loadable fallback enter_world() already uses for a broken/
+// missing custom startroom, rather than resurrecting the disconnected
+// old zone.
+#define REVIVE_ROOM			START_ROOM
 
 // This is how much users can 'enter' the mud actually. Maintained
 // by LOGIN_D. The max number of connections can be built between

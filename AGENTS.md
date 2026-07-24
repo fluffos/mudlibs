@@ -1278,6 +1278,44 @@ self-initialize the same way — `xiyouji` had the same vulnerable
 sect-entrance NPCs; only one was live-reproduced, the rest fixed
 proactively by code-shape match (§2.1) and flagged as unverified live.
 
+### 7.18 A hardcoded room path left stale after the ORIGINAL game replaced its own zone
+
+Found on `tiexuejianghu`'s deep functional test (§10.7). Distinct from
+every previously-cataloged path bug — those are all conversion-era
+typos/renames introduced by THIS project's pipeline. This one predates
+conversion entirely: a `#define`d room constant
+(`include/login.h`'s `REVIVE_ROOM`, `"/d/yangzhou/temple"`) pointed at a
+path that no longer resolves because the ORIGINAL mud's own developers
+replaced the entire `d/yangzhou/` zone with an unrelated rewrite at some
+point during the game's live history, reusing the same directory name
+for incompatible content. The old zone survived intact in the archive,
+just relocated to a backup directory (`d/yz_bak/yangzhou/`) that isn't
+part of the live map — easy to misdiagnose as ordinary missing content
+rather than a stale reference, since the backup directory LOOKS like
+leftover cruft rather than the thing the constant actually needs.
+
+Every `call_other()`/`move()` to the stale path throws a caught-but-real
+`*call_other() couldn't find object` error. Blast radius depends entirely
+on how central the call site is — here it was the reincarnation flow's
+`death_stage()`, hit on **every single player death**, right after the
+death-realm dialogue finished, silently stranding the player forever
+(crash caught, nothing shown on screen).
+
+Detection: grep hardcoded room-path `#define`s in `include/login.h` (or
+wherever a lib keeps its start/death/revive-room constants) and spot
+check each one resolves to a real, LIVE-map file — not just any file
+with a plausible name. A `*_bak`/backup directory sitting next to a
+same-named live directory with genuinely different content (compare file
+listings, not just directory names) is the tell that the live directory
+was a full replacement, not an addition.
+
+Fix: repoint the stale constant at an always-loadable fallback already
+used elsewhere in the same flow for the same purpose (here, `START_ROOM`
+— the same fallback `enter_world()` already falls back to for a broken/
+missing custom startroom) rather than resurrecting the disconnected old
+zone, which would reconnect deliberately-superseded content back into
+the live map.
+
 ---
 
 ## 8. Login and registration flow bugs

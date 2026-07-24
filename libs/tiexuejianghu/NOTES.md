@@ -506,3 +506,362 @@ registration/gameplay path this pass tested.
   `英豪酒楼`, `look`/`score`/`quit` all produced correct output. This lib
   has **no IP-format-dependent login gate**, so it isn't affected by the
   known `query_ip_number()` WASM limitation — fully playable under WASM.
+
+## 深度功能测试 / Deep functional test (2026-07-24)
+
+Round-two deep playthrough pass (AGENTS.md §10.7), following the
+`bxsj`/`xiyouji` worked examples. Played as an ordinary new player
+through registration, exploration, organic skill-learning, sect-joining,
+safe and lethal combat, a real `quit`, a real-wall-clock-gap reconnect,
+and (unusually for this project's round-two passes so far) a full
+death/reincarnation cycle, native driver (`build-debug`). Read
+`doc/help/newbie` in full first — it named the intended test path
+(中州城's 英豪酒楼 start, `hp`/`cha`/`score`/`look`, the menpai/帮会
+sect list, `xue <skill> from <teacher>` syntax) but, notably, said
+nothing about a safe-sparring mechanism — that had to be found by
+grepping `accept_fight`/room source, and turned out to be gated behind
+an in-game cost a fresh character can't pay (see below).
+
+**Test characters** (both kept, not cleaned up, as representative
+playthrough evidence):
+- id `qinlangf`, Chinese name 秦朗风, password `Test1234`, male — the
+  main playthrough character. State: apprenticed to 谷虚道长
+  (Wudang/武当派, 4th-generation disciple, `武当派第四代弟子`), learned
+  `literate` (读书写字) to level 1 via the organic teacher-NPC path,
+  survived a full `quit` + real-wall-clock-gap reconnect with sect
+  membership and skill intact. Saves: `work/data/user/q/qinlangf.o`,
+  `work/data/login/q/qinlangf.o`.
+- id `linzhu`, Chinese name 林铸, password `Test1234`, male — a second,
+  disposable character used for combat testing (safe `fight`, then a
+  deliberately lethal `kill`, real death, and a full reincarnation
+  round-trip). Saves: `work/data/user/l/linzhu.o`,
+  `work/data/login/l/linzhu.o`.
+
+### Bug found and fixed #1: already-cataloged §7.12 class, live-reproduced here for the first time
+
+`adm/simul_efun/message.lpc:61-62`'s `tell_room(mixed ob, string str,
+object *exclude)` wrapper passes the (omitted-when-not-given) `exclude`
+varargs parameter straight through to the `message()` efun, which on
+this driver resolves an unsupplied array-typed varargs argument to raw
+int `0`, not `({})`. `message()` requires its exclude argument to be an
+object or array — this is **exactly** AGENTS.md §7.12 ("Shared
+message/wrapper argument bugs"), already documented as affecting "most
+of the ES II family," which `tiexuejianghu` is (per this file's own
+lineage section) — but this lib's original conversion pass never
+checked for it, and it shipped live.
+
+- **Symptom, live-reproduced twice in this session**: any 2-argument
+  call to `tell_room(room, msg)` (158 of 348 call sites in this lib use
+  the 2-arg form) crashes with `Bad argument 4 to EFUN message()
+  Expected: object, array, Got: int(0)` the moment it actually runs.
+  Confirmed live via `/obj/user.lpc:69`'s `user_dump(DUMP_NET_DEAD)` —
+  the routine that announces "so-and-so 断线超过 N 分钟，自动退出这个
+  世界" once a dropped connection's `NET_DEAD_TIMEOUT` (300s) elapses —
+  which crashed for **both** test characters (`林铸` and `秦朗风`)
+  independently after their sessions net-dead'd, i.e. this fires for
+  **any player whose connection drops without a clean `quit`** (browser
+  close, network blip, client crash) — about as common an event as
+  exists in an online mud. The crash is caught by the driver (the
+  disconnect itself still completes), so it's invisible on-screen by
+  construction — exactly the class of bug this methodology exists to
+  catch.
+- **Fix** (the exact documented §7.12 fix): `exclude || ({})`.
+  ```lpc
+  // before
+  varargs void tell_room(mixed ob, string str, object *exclude) {
+    if (ob) message("tell_room", str, ob, exclude);
+  }
+  // after
+  varargs void tell_room(mixed ob, string str, object *exclude) {
+    if (ob) message("tell_room", str, ob, exclude || ({}));
+  }
+  ```
+- **Verified**: reproduced live pre-fix (`debug.log` captured the exact
+  trace twice, once per test character, blaming `user.lpc`'s
+  `user_dump()` → `simul_efun.lpc`'s `tell_room()`). Fix applied,
+  `update /adm/simul_efun/message` recompiled clean as admin
+  (`fluffos`/`Mud@2026`). **Not re-verified against a live repeat of the
+  same 300-second net-dead timeout** given the time budget — a genuine
+  wait that long wasn't repeated post-fix. Confidence is still high:
+  this is a one-line change identical to the already-proven fix
+  deployed on multiple sibling ES II libs in this corpus, the file
+  compiles clean, and the bug's mechanism (an omitted varargs array
+  resolving to `int 0` on this driver) is independent of which caller
+  triggers it — any other 2-arg `tell_room()` call site exercised during
+  the rest of this session (there are 158) would have hit the identical
+  crash and did not, because none of the other 157 happened to run
+  during this particular playthrough, not because this one is special.
+
+### Bug found and fixed #2: NEW bug class — a hardcoded respawn-room path stale from an old, since-replaced zone rewrite
+
+`include/login.h:14`'s `REVIVE_ROOM` constant (`"/d/yangzhou/temple"`)
+does not point at a loadable object. `d/death/npc/{wgargoyle,
+bgargoyle}.lpc` (白无常/黑无常, the two death-realm psychopomp NPCs) both
+run a 5-stage, 5-second-interval dialogue (`death_stage()`) after a
+player dies, then call `ob->reincarnate(); ob->move(REVIVE_ROOM);` to
+send the player back to the living world.
+
+- **Symptom, live-reproduced twice**: `kill liumang` (a genuinely lethal
+  fight, as opposed to the non-lethal `fight` command — see combat
+  section below) killed `林铸`; the death sequence correctly created a
+  corpse, moved the player to `DEATH_ROOM` (`/d/death/gate`, 鬼门关), and
+  ran all 5 stages of 白无常's dialogue over ~25 real seconds — then
+  crashed: `*call_other() couldn't find object '/d/yangzhou/temple'.`,
+  raised from `feature/move.lpc:54`'s `move()`, called from
+  `wgargoyle.lpc:56`'s `death_stage()`. The crash is caught (the
+  driver's error handler swallows it, same as every other bug in this
+  catalog), so the player-visible effect is silent: the dialogue simply
+  stops advancing and the player is left standing in 鬼门关 forever,
+  never actually returned to the living world, with **no error message
+  and no indication anything went wrong** — indistinguishable from the
+  game just being slow, unless `debug.log` is checked. Every player
+  death in this game runs through this exact code path, making this
+  among the highest-blast-radius bugs found in this project's
+  round-two pass so far (every death, not just some).
+- **Root cause**: `d/yangzhou/temple.lpc` doesn't exist in the live
+  `d/yangzhou/` zone — but it DOES exist, verbatim, under
+  `d/yz_bak/yangzhou/temple.lpc`. Comparing the two directories'
+  file listings shows `d/yangzhou/` and `d/yz_bak/yangzhou/` are **two
+  entirely different, incompatible room sets** that happen to share a
+  directory name (77 files each, near-zero filename overlap) — not a
+  newer/older revision of the same zone, but two unrelated
+  wizard-authored "Yangzhou" builds, one of which (now under `yz_bak/`)
+  was fully superseded and disconnected from the live map, the other
+  becoming the current `d/yangzhou/`. `REVIVE_ROOM`'s path was written
+  for the old, now-archived zone and never updated when the zone was
+  replaced — a genuinely new bug class for this project's catalog: a
+  **hardcoded room-path constant left stale after a zone got wholesale
+  replaced during the original game's own development**, as opposed to
+  every previously-cataloged path bug in this project (which are all
+  conversion-era typos/renames). This is NOT the same shape as
+  AGENTS.md's existing "content gap, documented not fabricated" pattern
+  either — the target content still exists, just under a disconnected,
+  deliberately-superseded backup directory, so resurrecting it by
+  pointing back at the old path would reconnect stale, replaced content
+  into the live map rather than fix the actual bug.
+- **Fix**: repointed `REVIVE_ROOM` at `START_ROOM` (`/d/zhongzhou/
+  yinghao`, always-loadable, and already the exact fallback
+  `enter_world()` itself uses for a broken/missing custom startroom —
+  see the "Confirmed NOT needed" §15aj entry above) rather than at the
+  disconnected old zone:
+  ```lpc
+  // before
+  #define REVIVE_ROOM			"/d/yangzhou/temple"
+  // after (see the file for the full comment explaining why)
+  #define REVIVE_ROOM			START_ROOM
+  ```
+- **Verified**: reproduced live pre-fix twice (once accidentally
+  mid-testing before the fix was written, once deliberately, both times
+  identical crash + identical debug.log trace). Post-fix: killed
+  `林铸` a second time via `kill liumang` from a **freshly restarted
+  driver** (clean boot, zero errors), let the full 5-stage/~25-second
+  白无常 dialogue play out for real (`--idle 4`, several blank sends —
+  the earlier pre-fix attempts under-waited and only proved the crash
+  was still reachable, not yet that the fix worked), and confirmed the
+  character landed cleanly in `英豪酒楼` afterward with **zero new
+  debug.log lines** for the entire death→dialogue→reincarnation
+  sequence. `bgargoyle.lpc` (the parallel 黑无常/"evil path" version of
+  the same flow, presumably for players who die dishonorably) shares
+  the identical `REVIVE_ROOM` call and is fixed by the same `login.h`
+  change, but was not itself live-reproduced — flagged as fixed by
+  code-shape match, not independently verified.
+
+### Minor logic bug found and fixed (not crash-class, but confirmed via live incorrect behavior): 徐霞客's answer-window timer had its subtraction backwards
+
+`d/zhongzhou/npc/xuxiake.lpc:99`'s `do_answer()` — part of this NPC's
+"answer my trivia question before I'll teach you 读书写字" apprenticeship
+gate (the organic-skill-learning path this session used) — computed
+`now_time = (int)ob->query_temp("徐/time") - time();` (stored-question-
+time minus now), which is always negative or zero and can never exceed
+the intended 10-second answer window (`if (now_time > 10)`), rather than
+`time() - stored_time` (elapsed, positive, correctly comparable to the
+window). Discovered live: an unanswered question never expired even
+across brute-force wrong guesses tried well outside any reasonable
+10-second window, and (worse for a tester relying on the intended
+"say the question again if you got it wrong" UX) the question is only
+generated once per `xue` attempt (guarded by `if
+(ob->query_temp("徐/answer")) return notify_fail(...)` at the top of
+`recognize_apprentice()`), so a player who doesn't see the question text
+in time (this project's own `mudclient.py` `--idle` pacing raced the
+question's own 1-second `call_out` delay on the first attempt) is stuck
+re-guessing the SAME never-re-rolled question indefinitely rather than
+getting a fresh one after 10 seconds as designed. Not a crash — the
+broken timer makes the puzzle strictly easier (never expires) rather
+than broken/unplayable, so it's a genuine but low-severity bug. Fixed
+the subtraction order:
+```lpc
+// before
+now_time = (int)ob->query_temp("徐/time") - time();
+// after
+now_time = time() - (int)ob->query_temp("徐/time");
+```
+Verified: `update /d/zhongzhou/npc/xuxiake` recompiled clean as admin;
+re-tested the full organic-learning flow end-to-end post-fix (`xue
+literate from xu xiake` → question → `answer 22` → learned) — unaffected
+for the correct-answer-in-time case, which is all that was re-verified
+live; the now-correctly-enforced 10-second expiry itself wasn't
+separately re-timed live (low value given the trivial, mechanical
+nature of the fix).
+
+### What was tested and confirmed working
+
+- **Registration**: real Chinese name (秦朗风), full flow (id → confirm
+  new character → Chinese name → password ×2 → email → gender), landing
+  in `英豪酒楼` (South-City-Inn-equivalent, `d/zhongzhou/yinghao.lpc`).
+  A second independent registration (林铸/linzhu) confirmed the same
+  flow twice.
+- **Movement/exploration**: walked from `英豪酒楼` through `文定北街` →
+  `市中心` → `延陵东路` (流氓/丫鬟 wild NPCs, a small `自助餐厅`
+  restaurant/shop) → south to `书院` (`d/zhongzhou/shuyuan.lpc`, 徐霞客's
+  academy) and separately the long overland route to 武当山 (南城门 →
+  `叉路口` → a randomized "can't tell which way" maze room, `草丛`,
+  which took several retries of the same direction to escape by design
+  — not a bug, an intentional random-navigation obstacle — → up the
+  mountain through `太子坡`/`小吃店`/`紫霄宫`/`十八盘`/`武当广场` to
+  `三清殿`). Room descriptions, exits, and NPC presence all rendered
+  correctly throughout on a first-ever visit to every room walked,
+  including `三清殿` itself (see "first-visit reentrancy check" below).
+- **First-visit §7.17-class reentrancy check**: `三清殿` (which
+  populates 2 NPCs, 谷虚道长 and 宋远桥, via `std/room.lpc`'s
+  `setup()`→`reset()`→`make_inventory()` chain — the exact same
+  structural shape documented in AGENTS.md §7.17 as `xiyouji`'s root
+  cause #1) was this character's first-ever visit to that room on a
+  freshly booted driver. No crash, no duplicate NPCs, no corrupted
+  `"0"` in either NPC's title — `debug.log` only gained benign compile
+  warnings (`Illegal to declare nosave function`, an unrelated
+  pre-existing `dbase.h` warning seen throughout this lib) from that
+  visit. This lib does NOT have this lineage's `create_identity()`/
+  forced-`call_other`-self-locate idiom anywhere (grepped, zero hits),
+  which per §7.17's own analysis is the second, lib-specific half
+  needed to close the reentrancy cycle into an actual crash — so
+  `std/room.lpc`'s shared double-`reset()` shape alone is (as §7.17
+  itself found for `xiyouji`) not sufficient by itself to reproduce the
+  crash here. Not treated as a bug requiring a fix; recorded because
+  checking it was part of the methodology.
+- **Character info**: `score`, `hp`, `i`, and `cha` (own skill list) all
+  correct at every stage (fresh, post-skill-learn, post-sect-join,
+  post-death/reincarnation, post-relogin).
+- **Skills — organic teacher-NPC path**: `d/zhongzhou/shuyuan.lpc`'s
+  徐霞客 (`xuxiake.lpc`) gates `recognize_apprentice()` behind a
+  trivia-question/`answer` mini-game (see bug above) rather than an
+  unconditional grant like some sibling libs' `jiaotou`-style NPCs —
+  `xue literate from xu xiake` → question → `answer 22` (his age when he
+  left home) → "你听了徐霞客的指导，似乎有些心得。你的「读书写字」进步
+  了！" → `cha` correctly showed `读书写字 (literate) - 新学乍用 1/0`.
+  Confirms `xue`/`learn` (identical files) work end-to-end.
+- **Sect-joining — organic path**: `help newbie` documents 14 门派
+  (sects, direct-apprentice via `bai`) and 4 NPC-led 帮会 (guilds); no
+  newbie-gift shortcut exists in this lib (grepped, none found — unlike
+  `bxsj`'s `shizhe.lpc`). Walked to 武当山's `三清殿`, found 谷虚道长
+  (`d/wudang/npc/guxu.lpc`), whose `attempt_apprentice()` gate is
+  `mingwang < 0` — trivially satisfied by a fresh character's
+  `mingwang == 0` — vs. 宋远桥/`z.lpc`/`zhang.lpc`/`yu.lpc` in the same
+  room/zone, which require `mingwang` from 2,000 up to 100,000 (a fresh
+  character has 0). `bai guxu` → "谷虚道长决定收你为弟子。...恭喜您成为
+  武当派的第四代弟子。" — `score` afterward correctly showed
+  `武当派第四代弟子 秦朗风` and "你的师父是谷虚道长". This lib gates its
+  various sect-master NPCs at genuinely different newbie-accessibility
+  tiers by design (matching `help newbie`'s "在门派中可以直接拜师傅学
+  艺" claim for at least the most junior teacher per sect) — not a bug,
+  but worth noting for future testers: don't assume the FIRST
+  sect-master NPC found accepts newbies; check `attempt_apprentice()`'s
+  gate or just try `bai` on more than one.
+- **Combat — safe path attempted, found genuinely gated, substituted**:
+  this lib's own designated "safe" combat venue is `d/zhongzhou/
+  biwuchang.lpc`'s referee-supervised PvP arena (`biwu <player>`
+  invite/accept handshake, auto-halts a `kee`≤50%-max loser via
+  `d/zhongzhou/npc/caipan.lpc`'s `do_bihua()`) — **but its entrance
+  courtyard (`biwuchangyuan.lpc`) is gated behind a `门卫` (guard) NPC
+  requiring a ≥20000-money bribe** (`accept_object()` in
+  `d/zhongzhou/npc/guard.lpc:53`) before `valid_leave()` allows `up`
+  into the arena proper. A genuinely fresh character has **0** starting
+  money (confirmed: `enter_world()`/`logind.lpc` grants no starting
+  cash; a `list` at the nearby 自助餐厅 shop confirmed real, cheap
+  prices — 10-20 文铜板 — that are still unaffordable at 0 money).
+  **This specific mechanism was NOT reached live** — an honest,
+  explicitly-flagged gap, not a silent skip, per the task's own
+  instructions: a genuinely fresh newbie cannot reach this lib's
+  designated safe-sparring venue without first earning money through
+  some other, unexplored system (quests, selling loot, etc.), which was
+  outside this session's time budget. Substituted with the general
+  "fight vs kill" safety mechanism this lib documents in `help combat`/
+  `cmds/std/fight.lpc`'s own help text instead: `fight <npc>` is
+  explicitly non-lethal ("只会消耗体力，不会真的受伤") vs `kill <npc>`
+  which is genuinely lethal. Tested `fight liumang` (a weak, `attitude:
+  peaceful` street-NPC, `d/zhongzhou/npc/liumang.lpc`) — full
+  turn-by-turn combat log, correctly auto-conceded ("这场比试算我输
+  了，佩服，佩服！") once resources dropped low, no injury, `实战经验`
+  (combat exp) correctly incremented 0→3. `wimpy <N>` (the general
+  flee-threshold command) was also set and confirmed to have **no**
+  effect on `fight`'s own separate, hardcoded auto-concede threshold
+  (tested `wimpy 0`, the auto-concede still fired) — these are two
+  independent safety mechanisms, not a bug (`std/char.lpc:94-101`'s
+  `wimpy`-driven auto-flee only applies to a live `is_fighting()` heart-
+  beat check with `wimpy_ratio > 0`; `fight`'s own concede narration in
+  `adm/daemons/combatd.lpc`'s `winner_msg` array is a separate,
+  independent, always-on mechanism for the non-lethal command).
+- **Combat — lethal path and death/reincarnation, reached live**:
+  `kill liumang` (same weak NPC, but via the genuinely lethal command)
+  produced real injury narration and, after several exchanges,
+  `你死了。` — a real player death. Confirmed the death→corpse→
+  `DEATH_ROOM`(`鬼门关`)→白无常-dialogue→reincarnation→`START_ROOM`
+  round-trip end-to-end post-fix (see Bug #2 above); `score` in the
+  interim death-realm state correctly showed the `孤魂野鬼` (lost-soul)
+  title and a `ghost`-flagged reduced stat display. This satisfies the
+  checklist's "get as far as reasonably possible toward combat/death"
+  item in full — death was not just attempted but completed, in both
+  the broken (pre-fix) and working (post-fix) forms.
+- **Shop purchase — NOT completed live, explicit reason**: reached a
+  real shop (`李老板`'s 自助餐厅, `list` correctly showed real items —
+  辣椒/盐巴/酱油/香油 at 10-20 文铜板 each) but could not `buy`
+  anything: **a genuinely fresh character has 0 starting money** in
+  this lib (confirmed by inventory inspection — only default clothing,
+  no currency object, and no starting-cash grant found anywhere in
+  `logind.lpc`/`enter_world()`). This is the same root gate that blocks
+  `biwuchang` above. Earning starting capital (quests, selling loot,
+  begging, etc.) was not pursued given the time budget already spent on
+  navigation and the two crash-class bugs found — flagged here
+  explicitly rather than silently presented as tested.
+- **Persistence**: confirmed across a real `quit` + a genuine ~80-second
+  wall-clock gap (background `sleep 80`, not merely a fast reconnect) +
+  fresh full re-login for `qinlangf`: sect membership
+  (`武当派第四代弟子`, "你的师父是谷虚道长") and skill (`读书写字 1/0`)
+  both round-tripped correctly. Room position does **not** persist
+  across a real `quit` (`enter_world()` always lands a full login at
+  `START_ROOM` regardless of where the character quit) — confirmed
+  intentional design matching this session's own earlier admin-seeding
+  notes, not a bug. Inventory: `quit` correctly dropped the (non-
+  autoload, non-`unique`) starting clothes ("你丢下一双皮靴。...因为这
+  样东西并不值钱，所以人们并不会注意到它的存在。") and a fresh full
+  login re-granted a (randomly re-rolled, this time 蓝马褂 instead of
+  the original 紫蟒袍) default outfit — the same deliberate ES-II-family
+  anti-hoarding-on-quit design already documented in `bxsj`'s deep-test
+  section, not a bug specific to this lib. Also separately confirmed
+  the **silent-reconnect** path (a fresh connection within the same
+  session, before any real `quit`, via `id`+password) re-attaches the
+  same live body with zero state loss — used throughout this session
+  between `mudclient.py` invocations.
+- **Debug.log hygiene**: grepped after every `quit` in this session, not
+  just after login, per the methodology's central lesson — clean every
+  time except for the two live-reproduced bugs above (both now fixed
+  and re-verified clean).
+
+### Process/testing note for future agents on this lib
+
+Room navigation via a static regex-based BFS over `set("exits", ([...
+]))` literals (as used successfully on other libs in this project) is
+**not fully reliable here** for two lib-specific reasons hit live during
+this pass: (1) some rooms (e.g. `d/yeyangzai/caocong`, "草丛") implement
+a randomized "you can't tell which direction" maze where the SAME
+direction command must be retried a variable number of times before it
+actually succeeds — a static shortest-path graph can't capture this;
+(2) `mudclient.py` sessions are not persistent connections across
+separate invocations in this project's usual workflow, so a character's
+*actual* position when a new session logs in is wherever the PREVIOUS
+session left it (via silent reconnect), not the game's own `START_ROOM`
+— sending a route computed from `START_ROOM` after actually reconnecting
+mid-route produces a string of `什么？` ("what?") rejections that are
+easy to misdiagnose as a game bug rather than a test-script coordinate
+error. Verify current position with `look` before sending a long
+movement queue, especially after any prior session that didn't end in a
+full room-resetting `quit`.
