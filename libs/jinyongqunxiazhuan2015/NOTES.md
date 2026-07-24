@@ -272,12 +272,17 @@ re-verified against this archive's actual `work/` content)
   same pre-existing corrupted-seed-data class as #91's board/chinesed
   findings; each board's `setup()` wraps the failure in `catch()`
   (visible in `debug.log` as "错误讯息被拦截"), fully non-fatal —
-  **directly confirmed live** during both registration tests: the
-  `/clone/board/kedian_b` board at the starting room restores fine
-  (not one of the 11 corrupted ones) and displays correctly under
-  `look`; a SECOND corrupted-restore hit (`/clone/board/kedian_b`... no,
-  see below) also fires harmlessly during `enter_world()` without
-  blocking login.
+  **directly confirmed live** during both registration tests AND a
+  subsequent WASM long-sit boot-watch (2026-07-24): `/clone/board/
+  kedian_b`, the starting-room board, IS one of the 11 corrupted
+  files — its own `restore()` throws "Illegal file format" every time
+  a fresh character's `enter_world()` creates it, caught harmlessly by
+  `logind.lpc`'s `CATCH()`, and it then displays correctly under
+  `look` as an empty board (no persisted notes). (An earlier pass of
+  this note wrongly suggested `kedian_b` restores cleanly and a
+  separate board was the one throwing — direct inspection of
+  `data/board/kedian_b.o`'s raw bytes confirms it's random binary
+  garbage like the other 10.)
 - `adm/daemons/chinesed.lpc`'s `data/e2c_dict.o` (English→Chinese
   translation dictionary save file) fails to `restore()` — same
   pre-existing corrupted-seed-data issue as #91, caught by `master.lpc`'s

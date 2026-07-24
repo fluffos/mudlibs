@@ -414,8 +414,18 @@ affect registration, `look`, or `score`.
   of pre-existing corrupted seed data as `chinesed`'s `e2c_dict.o`
   above; each board's `setup()` already wraps the failure gracefully
   (boards just start with no persisted notes), confirmed non-fatal via
-  the live `look` test at `kedian_b` (which restores fine as an EMPTY
-  board, not one of the 11 corrupted ones).
+  the live `look` test at `kedian_b`. **Correction (2026-07-24 WASM
+  long-sit boot-watch)**: `kedian_b.o` IS actually one of the 11
+  corrupted files (`data/board/kedian_b.o` is the same class of raw
+  binary garbage, confirmed via `xxd`) — the registration flow's own
+  `enter_world()` → `kedian.lpc create()` → `kedian_b.lpc create()` →
+  `bboard.lpc setup()` → `restore()` chain throws the same "Illegal
+  file format" error every time a fresh character registers there,
+  caught by `logind.lpc`'s own `CATCH()` around `enter_world()`. Still
+  fully non-fatal (board ends up empty, exactly as documented above)
+  — the earlier claim that `kedian_b` restores cleanly was simply
+  wrong (probably from a test transcript that only showed player-facing
+  `write()` output, not the console-only intercepted-error banner).
 - `d/npc/m_weapon/weapon/{m_club,m_blade,m_whip,m_sword,m_staff}.lpc`:
   `create()` calls `this_player()` unconditionally — always null in an
   isolated `lpcc` compile (no player context), causing a

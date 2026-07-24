@@ -350,16 +350,37 @@ tree.
 Clean boot, zero fatal errors. `debug.log` shows only expected compile
 *warnings* (unused locals, "Illegal to declare nosave function" on
 functions that are legitimately `nosave`-annotated per this codebase's
-own convention — cosmetic, harmless) plus one pre-existing, non-fatal,
-caught runtime error during preload:
-`/adm/daemons/questd.lpc` `read_table()` calls `explode()` on a `0`
-(likely expects a MySQL-backed table this sandboxed environment doesn't
-have — `__USE_MYSQL__` is predefined but there's no real MySQL server;
-questd's own `create()` already wraps its `read_table()` call in a
-`catch()`, so this is a pre-existing content/environment gap, not a
-driver-compat bug, and doesn't block anything else). Not fixed, logged
-as a known issue (quest-tracking daemon likely non-functional without a
-real MySQL backend).
+own convention — cosmetic, harmless).
+
+**Update (2026-07-24, WASM long-sit boot-watch, AGENTS.md §7.9 class,
+FIXED)**: a previous pass of this note logged `questd.lpc`'s
+`read_table()` `explode()`-on-`0` preload error as a MySQL-environment
+gap and left it unfixed — that diagnosis was a guess, not verified
+against the source (`questd.lpc` has no `MYSQL`/`__USE_MYSQL__`
+reference anywhere, and its `create()` has no `catch()` of its own; the
+error was only ever caught by `master.lpc`'s generic `preload()`
+wrapper). The real root cause: `read_table("/quest/dynamic_quest")`
+and a second unguarded call two lines later
+(`roomlines = explode(read_file("/quest/dynamic_location"), "\n")`) both
+feed `read_file()`'s result straight into `explode()` with no
+`stringp()` guard — classic AGENTS.md §7.9 shape. `/quest/` doesn't
+exist ANYWHERE in this archive (not a fresh-checkout gitignore gap,
+a genuine missing directory), so both calls always error, on every
+single boot, every time. Fixed both sites in
+`adm/daemons/questd.lpc` (`read_table()`'s `line = ...` assignment and
+`create()`'s `roomlines = ...` assignment) to guard with `stringp()`
+and fall back to `({})` — matches `read_table()`'s own natural
+"no data" return shape, and `init_dynamic_quest()`'s
+`for (i = 0; i < sizeof(quests); i++)` loop already no-ops cleanly on
+an empty `quests` array (never reaches the `roomlines[random(...)]`
+indexing that would otherwise need `roomlines` to be non-empty).
+**Verified**: fresh WASM long-sit boot-watch (200s) shows zero runtime
+errors of any kind (previously the one caught questd hit); native
+registration + `look` + `score` + `quit` (id `qinfengw`, Chinese name
+秦风) still works end-to-end with no new regressions. Quest-spreading
+itself (`spread_quest()`) simply never fires without the missing
+`/quest/dynamic_quest` seed data — same as before, but now via a clean
+early return instead of a caught runtime error on every boot.
 
 ## Full registration + post-login test transcript (ONE continuous connection)
 
