@@ -116,3 +116,28 @@ registration test (Chinese surname + given name reaching the next prompt).
   code path, not patched** — native play is completely unaffected, and
   chasing it further didn't seem proportionate to the smoke-test scope
   of this pass. Worth a closer look in a future WASM-focused pass.
+
+## 2026-07-23 (integrity review): WASM world-entry hang RESOLVED — was the harness, not the mudlib
+
+Re-ran the full WASM registration flow (new → id → confirm → Chinese name
+→ password ×2 → email → gender) against the same `build-wasm` binary but
+with the FIXED `scripts/wasm_client.js` (the copyDir() log-directory
+recursion fix landed in the final commit of the previous pass, AFTER this
+lib's WASM test had been run). Result: **`enter_world()` now completes
+normally under WASM** — MOTD banner, 小秦淮客寓 start room, `look`, and
+the `quit` save-gate prompt all appear exactly as in the native run. No
+mudlib race exists in xo's enter_world path; the earlier "reproducible
+world-entry hang" was the old harness failing to recreate the lib's
+nested `log/` subdirectory shape in the WASM in-memory FS (this lib's
+`log/` has 6 nested subdirs — acct/catch/log/room_log/runtime/static),
+so an early uncaught `write_file()`/`log_file()` during enter_world threw
+ENOENT and silently aborted the flow — precisely the harness gap class
+described in that commit's message. Verdict: **fully playable under
+WASM**; the previous NOTES entry's "possible WASM-specific gap isolated
+to this lib" flag is closed.
+
+Also noted (pre-existing, original-author code, left as-is): `system/
+daemon/logind.lpc`'s `enter_world()` contains two leftover debug
+`printf("beforee exec...")` / `printf("before setup...after exec..")`
+lines that print to every player at world entry — present since the raw
+archive (verified in the initial conversion commit), cosmetic only.
