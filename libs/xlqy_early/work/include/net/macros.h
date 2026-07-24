@@ -14,7 +14,12 @@
 #define nntoh(x) capitalize(replace_string((x)?(x):"","."," "))
 
 // macros for getting resources
-#define Mud_name() (string)DNS_MASTER->query_mud_name()
+// WASM builds ship without the `sockets` package, so dns_master never
+// loads (Undefined function socket_create/socket_bind at compile time).
+// Fall back to the local intermud-name constant instead of retrying
+// (and re-logging) a load that can never succeed -- same idiom as
+// bxsj/dtsl/mohuanshiji etc.
+#define Mud_name() (find_object(DNS_MASTER) ? (string)DNS_MASTER->query_mud_name() : INTERMUD_MUD_NAME)
 #define mud_nname() htonn( Mud_name() )
 #define mud_port() __PORT__
 #define udp_port() (int)DNS_MASTER->query_udp_port()
