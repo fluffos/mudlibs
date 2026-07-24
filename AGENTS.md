@@ -1301,6 +1301,36 @@ mappings before debugging the flow; restarting the driver clears
 in-memory throttles instantly. Run full registration in ONE continuous
 client session, not several reconnects.
 
+### 8.7 Stale GBK/BIG5 encoding-choice menu produces mojibake (check every lib with `set_encoding()`)
+
+Many login flows ask the connecting player to pick their client's
+charset (`"使用国标码的玩家请键入：GBK" / "使用unicode码的玩家请键入：utf-8"`
+or similar) and call `ob->set_encoding(choice)`, which transcodes the
+driver's internal strings to whichever charset the player named. This
+project's conversion pipeline transcodes every lib's actual source to
+UTF-8 (§4) — so on a converted lib, the "GBK" (or "BIG5") branch is
+transcoding genuinely-UTF-8 internal strings INTO real GBK/BIG5 bytes,
+then sending those bytes to a client that only understands UTF-8 (the
+WASM web terminal's xterm, `mudclient.py`, any modern telnet client we
+support) — corrupting every line of output from that point on, for
+every player who follows the on-screen prompt's own wording. This is
+not a driver bug; the code does exactly what it's designed to do — the
+choice itself is simply never correct anymore for any client this
+project supports.
+
+**Fix**: find the branch that sets a non-UTF-8 encoding (grep
+`set_encoding` in the lib's `logind.lpc`/equivalent) and map it to
+`"utf-8"` too, so the choice can no longer break anything. Prefer this
+over removing the prompt outright — READMEs/NOTES sometimes already
+document the menu's wording. First found+fixed in `aoxiangtianji`
+(reproduced live: banner and the whole subsequent session rendered as
+mojibake with "GBK" selected, clean with "utf-8"; retested the full
+admin-login+look+quit flow after the fix). **Scope check**: `grep -rl
+set_encoding libs/*/work --include='*.lpc'` found 34 libs using this
+pattern as of this writing — treat each as a candidate for the same
+bug until verified otherwise (some may already only offer utf-8, or
+may be a lib that was never GBK/BIG5-sourced to begin with).
+
 ---
 
 ## 9. LPC formatter (`~/src/fluffos/tools/lpc-syntax/`) — required checks
