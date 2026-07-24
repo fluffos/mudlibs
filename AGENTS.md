@@ -1318,6 +1318,30 @@ always the right trade for correctness.
 
 ## 10. Testing methodology and multi-session hygiene
 
+### 10.0 Long-sit boot watch (catches lazily-loaded daemon failures)
+
+A registration+look+score+quit smoke test only runs for ~20-30 seconds
+and only touches whatever the login flow itself loads. Daemons that are
+lazily loaded by a periodic heartbeat, a scheduled `call_out`, or an
+on-demand `call_other` from some OTHER subsystem never get exercised by
+that test and can be silently broken (compile error, missing efun under
+WASM, `Undefined function`) without anyone noticing until a player
+happens to trigger them days later. `scripts/wasm_boot_watch.sh <slug>
+[duration_sec]` (default 200s, i.e. >3 minutes) boots a lib under WASM,
+opens one connection, and just sits there — `--idle` is set higher than
+`--timeout` so it never exits early on silence — capturing the full
+`print()`/`printErr()` transcript to `/tmp/wasm_boot_watch_<slug>_*.log`
+and grepping it for common failure signatures as a first pass (`error`,
+`Fatal`, `错误`, `Undefined function`, `cannot be loaded`, etc., with
+known-noisy lines like the mudlib error-handler's own boilerplate
+already filtered out). Treat the grep as a STARTING POINT, not a
+verdict — read the actual transcript before concluding a lib has a
+real problem; a `nosave void crash(string error, ...)` parameter named
+"error" matches the same grep and means nothing. Known pre-existing
+harmless line: `Unable to open log file: "log/debug.log", error: "No
+such file or directory"` fires once very early in WASM boot (before
+`work/log/` is mounted) and is cosmetic — the driver continues fine.
+
 ### 10.1 The verification bar
 
 For every lib, native and WASM: fresh registration with a real Chinese
