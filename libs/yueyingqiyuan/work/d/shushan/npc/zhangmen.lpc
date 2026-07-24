@@ -30,7 +30,18 @@ void create() {
   carry_object("/d/obj/cloth/linen")->wear();
 }
 
+// AGENTS.md §7.17: guards against reentrant init() on the same live
+// object -- init() can otherwise be re-entered (via create_identity()'s
+// forced call_other/find_object self-locate, called from inside the
+// room's own first-ever reset()) before the outer call returns, cloning
+// a second full set of room NPCs and recursing until "Too deep
+// recursion." aborts it. init() is one-time setup with no legitimate
+// reason to be reentrant on the same object.
+nosave int in_init_now;
+
 void init() {
+  if (in_init_now) return;
+  in_init_now = 1;
   object me = this_object();
 
   me->create_identity("/d/shushan/npc/jiansheng", "/d/shushan/tianshi");
@@ -52,6 +63,8 @@ void init() {
   ]));
 
   me->setup();
+
+  in_init_now = 0;
 }
 
 void reset_me(object me) {
@@ -642,8 +655,17 @@ void create_identity(mixed master, mixed where) {
   if (objectp(where))
     where_ob = where;
   else {
-    call_other(where, "???");
-    where_ob = find_object(where);
+    // AGENTS.md §7.17 belt-and-suspenders: at every real call site in
+    // this lineage, "where" is always the room this NPC was just cloned
+    // into, so it's already our own environment by construction -- only
+    // fall back to the forced call_other/find_object path-load (which can
+    // itself re-trigger the room's own compile if called from inside that
+    // room's first-ever reset()) if that's somehow not already true.
+    where_ob = environment(this_object());
+    if (!where_ob || base_name(where_ob) != where) {
+      call_other(where, "???");
+      where_ob = find_object(where);
+    }
   }
   init_identity(this_object(), master_ob, where_ob);
 }
