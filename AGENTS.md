@@ -1205,6 +1205,79 @@ WHOLE lib, not just the one function that happened to crash first —
 category: score/beauty/pk/rich/worker) plus a sixth already-dead copy
 inside a commented-out duplicate function (leave dead code alone).
 
+### 7.17 Unbounded `init()`/`reset()` reentrancy crashes a room's FIRST-EVER visit only
+
+Found on `xiyouji`'s deep functional test (AGENTS.md §10.7), a
+completely different lineage from the §7.16 bug. `std/room.lpc`'s
+`setup()` calls `this_object()->reset()` synchronously as the last step
+of every room's `create()` — but the driver's own standard behavior can
+also fire a `reset()` pass on the same freshly-loaded object around the
+same trigger (a player's first `move()` into it), so `reset()` can run
+**twice**, genuinely reentrant (the second call starting before the
+first returns), on a room's very first compile. `reset()` populates the
+room's NPCs via `make_inventory()` → `new(file)` → `move(...)` and only
+marks that done on its LAST line (`set_temp("objects", ob)`) — a
+reentrant second call sees the population-tracking mapping still empty
+and clones a **second full set of NPCs**. Cloning + moving an NPC
+synchronously fires that NPC's own `init()`, and if that NPC's `init()`
+self-locates its home room by forcing a path lookup (e.g.
+`call_other(room_path, "???"); find_object(room_path)` instead of
+`environment(this_object())`), that force-load can itself re-trigger the
+room's own compile — closing a cycle that repeats until the driver's
+call-depth limit aborts with `Too deep recursion.`
+
+Player-visible symptom is deceptive: the crash is caught, so the room is
+usually still entered, but with corrupted NPC state (a property read
+that resolved mid-crash renders as a stray `0` in the NPC's title/name)
+— easy to mistake for a content typo rather than a crash, and the
+blamed file:line in `debug.log` varies run to run depending on exactly
+what was executing when the stack tipped over. **Only reproduces on a
+room's first-ever visit after a fresh boot** — once its objects are in
+memory, every later visit is clean, so this is invisible to boot-log
+watching, registration smoke tests, and even a full playthrough that
+happens to visit the affected room a second time before checking. Grep
+`debug.log` for `Too deep recursion` specifically, not just `error:`,
+after walking a brand-new character through content beyond the start
+room.
+
+Fix (two independent reentrancy guards — both closed the cycle in
+practice, kept both since each is separately structural, not just a
+theory):
+1. `std/room.lpc`: a `nosave int resetting_now;` flag, checked and set
+   at the top of `reset()`, cleared on every return path. Reentrant
+   calls become a safe no-op; the original call still runs once.
+   Lib-wide (every room inherits it) but provably inert for the normal
+   non-reentrant case.
+2. The NPC's own `init()`: a `nosave int in_init_now;` flag guarding the
+   entire function body the same way. `init()` is one-time setup with no
+   legitimate reason to be reentrant on the same live object.
+3. Belt-and-suspenders: if an `init()`-time self-locate function takes
+   its own room as a path argument, prefer `environment(this_object())`
+   over a forced `call_other(path, "???")`/`find_object(path)` — the
+   room is, by construction, always already the NPC's environment at
+   that point; only fall back to the force-load if that's somehow not
+   true.
+
+**A false lead worth recording**: raising `maximum call depth` in
+`config.fluffos` had zero effect on at least one driver build — checked
+the actual driver source (`src/vm/internal/base/interpret.cc`) and
+confirmed the enforced limit is a compile-time constant
+(`CFG_MAX_CALL_DEPTH`), with the config key registered but never read.
+Don't assume this key is live without checking the specific driver
+build; if the recursion is genuinely cyclic (not just legitimately
+deep), a config bump won't help regardless — the fix has to be a code
+change. Also: disabling any ONE contributing call site sometimes still
+crashed with the blame shifted to whatever ran next — a strong signal
+you're looking at a reentrant cycle, not one bad line, when the blamed
+file:line moves around between otherwise-identical repro runs.
+
+Check for this shape wherever a lib has multiple structurally-identical
+copies of a "sect entrance" / "zone gate" style NPC that all
+self-initialize the same way — `xiyouji` had the same vulnerable
+`init()`/`create_identity()` pattern copy-pasted into all 9 of its
+sect-entrance NPCs; only one was live-reproduced, the rest fixed
+proactively by code-shape match (§2.1) and flagged as unverified live.
+
 ---
 
 ## 8. Login and registration flow bugs

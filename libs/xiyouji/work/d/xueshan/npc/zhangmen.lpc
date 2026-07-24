@@ -12,6 +12,10 @@ string zname(object);
 
 #define MYFILE "/d/xueshan/npc/zhangmen.lpc"
 
+// Reentrancy guard for init() -- see the comment inside init() for why
+// this is needed. Nosave: only meaningful within one live call chain.
+nosave int in_init_now;
+
 void create() {
   set_name("大弟子", ({ "zhang men", "zhangmen" }));
   set("gender", "男性");
@@ -30,6 +34,20 @@ void create() {
 }
 
 void init() {
+  // Reentrancy guard: this NPC's own setup chain (create_identity() ->
+  // new()/restore() -> ... -> setup() -> CHAR_D->setup_char() -> ...)
+  // can, under timing this project's testing actually hit live (see
+  // NOTES.md's deep functional test), end up re-triggering this exact
+  // object's init() again before the first call has returned -- e.g. via
+  // a move()/reset() side effect somewhere downstream. Each reentry
+  // redoes the same setup work and can itself reenter again, unboundedly,
+  // until the driver's call-depth limit aborts with "Too deep recursion"
+  // -- crashing the room's first-ever visit. init() is pure setup with
+  // no dependency on being reentrant, so a nested call is always safe to
+  // skip; the outer (real) call still runs the full body exactly once.
+  if (in_init_now) return;
+  in_init_now = 1;
+
   object me = this_object();
 
   me->create_identity("/d/xueshan/npc/dapeng", "/d/xueshan/binggu");
@@ -51,6 +69,7 @@ void init() {
   ]));
 
   me->setup();
+  in_init_now = 0;
 }
 
 void reset_me(object me) {
@@ -634,8 +653,23 @@ void create_identity(mixed master, mixed where) {
   if (objectp(where))
     where_ob = where;
   else {
-    call_other(where, "???");
-    where_ob = find_object(where);
+    // `where` here is always the room this NPC itself was just cloned
+    // into (see every call site in this lineage's init()) -- resolve it
+    // via environment() first. The old code unconditionally did
+    // call_other(where, "???") to force-load the room by path, but when
+    // this runs (as it always does) from inside that very room's own
+    // reset()-driven clone of this NPC, the room is still mid-load and
+    // not yet resolvable by find_object(); the forced call_other() then
+    // re-enters the room's own compile, which resets/clones this NPC
+    // again, calling straight back into create_identity() -- unbounded
+    // recursion ("Too deep recursion", crashes the room's first-ever
+    // visit). Only fall back to the old force-load dance if environment()
+    // genuinely doesn't already give us the right object.
+    where_ob = environment(this_object());
+    if (!where_ob || base_name(where_ob) != where) {
+      call_other(where, "???");
+      where_ob = find_object(where);
+    }
   }
   init_identity(this_object(), master_ob, where_ob);
 }

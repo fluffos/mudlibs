@@ -10,6 +10,10 @@ inherit F_CLEAN_UP;
 
 nosave mapping doors;
 
+// AGENTS.md: reentrancy guard for reset() -- see the comment inside
+// reset() for why this exists.
+nosave int resetting_now;
+
 int query_max_encumbrance() { return 100000000000; }
 int query_max_items() { return 30; }
 
@@ -29,14 +33,33 @@ void reset() {
 
   //
   // Check loaded objects to match the objects specified in "objects"
-  // while query("objects") is 
+  // while query("objects") is
   // ([ <object filename>: <amount>, ..... ])
   // and query_temp("objects") is
   // ([ <object filename>: ({ob1, ob2, ...}), .... ])
   //
+  // Reentrancy guard: make_inventory() below clones each listed NPC and
+  // move()s it in, which synchronously fires that NPC's init() (and, for
+  // a room being compiled for the very first time, that can itself touch
+  // this very room again before this call has returned -- e.g. via a
+  // call_other that forces the room to load, or simply because the
+  // driver's own post-compile reset can overlap with an interactive
+  // reset triggered by the same "enter room" event). Without this guard,
+  // a reentrant call sees query_temp("objects") still empty (it's only
+  // populated by set_temp() at the very end) and clones a SECOND full
+  // set of NPCs, whose init() can reenter again -- an unbounded
+  // clone-and-reenter loop that blows the driver's call-depth limit
+  // ("Too deep recursion") on the room's first-ever visit. Confirmed
+  // live on /d/jjf/front_yard2 (see NOTES.md's deep functional test).
+  if (resetting_now) return;
+  resetting_now = 1;
+
   set("no_clean_up", 0);
   ob_list = query("objects");
-  if (!mapp(ob_list)) return;
+  if (!mapp(ob_list)) {
+    resetting_now = 0;
+    return;
+  }
 
   if (!mapp(ob = query_temp("objects")))
     ob = allocate_mapping(sizeof(ob_list));
@@ -74,6 +97,7 @@ void reset() {
     }
   }
   set_temp("objects", ob);
+  resetting_now = 0;
 }
 
 // Redirect item_desc of the door to this function in default.
