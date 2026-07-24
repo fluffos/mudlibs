@@ -118,3 +118,39 @@ registration test (Chinese surname + given name reaching the next prompt).
   cleanly under WASM (log_error fix confirmed present in this build
   copy too, via the in-memory `work/` snapshot); registration cannot
   complete due to the driver's IP-check limitation.
+
+## WASM-enablement pass (2026-07 standard: loopback-allow, throttle exempt, admin seed)
+
+Gates patched:
+
+- `adm/daemons/band.lpc` `is_banned()` (~line 106): loopback / `127.`
+  prefix / empty / non-string / non-dotted-quad IP → return 0. This was
+  the documented WASM login blocker (logind's `logon()` calls it with
+  `query_ip_number()`); now bypassed per §1.3b.
+- `adm/daemons/logind.lpc` `logon()` (~line 138): `ip_cnt > 40` per-IP
+  connection cap now applies only to non-loopback addresses.
+- No `uptime()` startup-grace gate in this lib's logon.
+
+Admin account: id `fluffos`, password `Mud@2026`, wizpwd `Wiz@2026`
+(chidi shares the 碧血残阳-style dual-password registration), name 浮浮,
+granted `(boss)` (this lineage's top rank) via `adm/etc/wizlist`.
+Verified `update /d/register/entry` → 成功 on re-login; wizard room-path
+view active. **Save files for the orchestrator to force-add:
+`libs/chidi/work/data/user/f/fluffos.o` and
+`libs/chidi/work/data/login/f/fluffos.o`** (untracked dirs).
+
+Retest: fresh normal registration (id `ceshisi`, name 秦风, female)
+end-to-end into 世外桃源, look/score/quit correct, 0 new errors in
+debug.log; test char saves removed.
+
+
+## Retrofit (2026-07-24): fail-closed loopback check (security correction)
+
+The loopback-allow gate patched above originally also treated a
+non-string/empty/malformed `query_ip_number()` result as loopback (a
+defensive stand-in for the WASM driver bug). That driver bug is now fixed
+upstream, so this was tightened to fail-closed: only an exact
+`"127.0.0.1"` / `"127."`-prefix / `"::1"` match bypasses the gate; a
+malformed or non-string address now falls through to the original gate
+logic (treated as untrusted/remote) instead of being auto-allowed.
+Re-verified fluffos login still works after tightening.

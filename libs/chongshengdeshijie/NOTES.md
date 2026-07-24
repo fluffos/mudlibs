@@ -672,3 +672,69 @@ verified via the real interactive driver tests above.
   (distinct from every other lib in this batch, all of which booted
   cleanly) — a legitimate, honest incompatibility, not a regression to
   chase.
+
+## WASM-enablement pass (2026-07 standard: loopback-allow, throttle exempt, admin seed)
+
+Note: this lib does not boot under WASM at all (pcre-dependent color
+handling, see above) -- the changes below still apply for local/loopback
+native play, which benefits identically from the loopback-allow and
+throttle-exempt conventions.
+
+Gates patched (fail-closed: only an exact `127.0.0.1`/`127.`-prefix
+match bypasses; a malformed/non-string address falls through to the
+original gate logic unchanged):
+
+- `system/daemons/login_d.lpc` `check_login_attacker()` (~line 99):
+  loopback exempt from the login-flood check.
+- `system/daemons/ppl_login_d.lpc` `logon_handle()` `INITIALIZE` case
+  (~line 79): loopback (`is_local`) skips the IP ban-list scan and the
+  60s per-IP re-login throttle.
+- `system/daemons/ppl_login_d.lpc` `logon_handle()` id-accepted branch
+  (~line 213): a wizard-level account connecting from loopback is
+  routed straight into the wizard login sub-flow instead of being told
+  to reconnect on the (unreachable, single-port) `WIZ_PORT` -- this is
+  what lets `fluffos` get wizard powers on the normal port.
+- `system/daemons/ppl_login_d.lpc` `ENTER_GAME` case (~line 587): the
+  30-command/day per-IP throttle was *already* written fail-closed
+  (exact-match loopback check, no `!stringp` fallback) -- no retrofit
+  needed here, unlike the other three.
+- No `uptime()` startup-grace gate found in this lineage's login path.
+
+Real bug found and fixed while verifying the seeded admin account (not
+IP/loopback related): `std/inherit/feature/object/_action.lpc`
+`query_actions()` called `fetch_variable("actions")` unconditionally,
+which throws on any object inheriting this feature but not declaring an
+`actions` global (e.g. the wizard-hall bulletin board) -- this broke
+every command evaluated in a room containing such an object, first
+surfaced when the admin account logged into the wizard hall. Fixed by
+checking `variables(this_object())` first and wrapping the fetch in
+`catch()`, treating "no such variable" as "no actions" (§7.14-class).
+
+Admin account: id `fluffos` / `Mud@2026` / 浮浮, already registered
+through the normal flow and granted `(admin)` via
+`system/kernel/data/secure.o`'s `wizards` mapping (this was already
+seeded when this pass picked the lib back up; re-verified rather than
+redone). Verified: re-login routes into the wizard login sub-flow
+(banner: "本機連線：巫師帳號自動轉入巫師登入流程"), lands in 巫師大廳,
+runs `update /wiz/wizhall/room_wizhall_7` -> "編譯與載入 ... 完成" /
+"[更新]這裡的房間環境已更新至最新的版本". No separate save file to
+force-add: this lineage keeps all account data in the tracked
+`system/kernel/data/{password,secure}.o` (+ `_backup`/`_bak` mirrors),
+already reflected in this diff.
+
+Cleanup: found and removed TWO stray test accounts left from earlier
+verification passes that were never cleaned up -- `ceshiwu` (password.o
++ money.o entries + `data/user/c/ceshiwu/`) and `qinyun` (password.o
+entry only, no user dir found; likely from the general native
+registration-testing pass, already absent from the working tree when
+this pass picked it up). Created and then removed one more
+(`ceshiliu`/秦岳) as part of this pass's own fresh-registration retest.
+
+Retest: fresh registration (id `ceshiliu`, name 秦岳, male) reached
+巫師神殿 (shared new-player spawn), look/quit correct. Admin login +
+`update` verified above. debug.log clean (only boot-time config dump,
+`__MUDLIB_ERROR_HANDLER__` pragma name, and the expected SIGTERM line on
+kill -- no runtime errors). Two driver instances killed by exact PID
+during this pass; one was an orphaned process from the previously-
+interrupted agent run on this same lib (killed first so the port could
+be reused).

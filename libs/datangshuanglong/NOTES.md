@@ -278,3 +278,50 @@ further given time constraints.
   `look` produced correct room output, and `quit` correctly surfaced
   this lib's own new-account save-confirmation prompt. **This lib is
   confirmed fully playable under WASM**, not just "boots."
+
+## WASM-enablement pass (2026-07 standard: loopback-allow, admin seed)
+
+Gates patched (fail-closed: only an exact `127.0.0.1`/`localhost`/
+`127.`-prefix match bypasses; a malformed/non-string address falls
+through to the original regexp-scan logic unchanged):
+
+- `adm/daemons/band.lpc` `is_banned()` (~line 39): loopback bypasses the
+  ban-site regexp scan. Called from `adm/daemons/logind.lpc`'s
+  `encoding()` (~line 100) with `query_ip_name(ob)` (this lineage checks
+  the resolved name, not the raw dotted-quad, so the guard matches
+  `"localhost"` as well as `"127.0.0.1"`/`"127."`).
+- No live `uptime()` startup-grace gate found in this lineage's login
+  path.
+- No live per-IP anti-flood/multi-login throttle: `get_id()`'s
+  `ip_cnt>8` "8 IDs per IP" cap (~line 237) is already entirely commented
+  out (dead code) in the raw archive -- nothing to patch.
+- `adm/daemons/sited.lpc`'s `is_valid(id, ip)` has a real dangling-
+  else bug (a bare `if (ip==loopback) if (wiz_level) return 1; else
+  return 0;` followed by an unconditional `return 1;`, so non-loopback
+  IPs always pass and the `valid_login` whitelist mapping is
+  unreachable) -- **but this function is dead code**, never called
+  except from an unrelated voting command (`cmds/std/toupiao.lpc`), so
+  it does not gate logins at all. Left unpatched/undocumented-further
+  since it isn't on any login path; noted here so a future pass doesn't
+  waste time chasing a "gate" that never fires.
+
+Admin account: id `fluffos` / `Mud@2026` / 浮浮, registered through the
+normal flow (id -> confirm y -> Chinese name 浮浮 -> password -> confirm
+-> email skipped -> gender m -> stat allocation `20 20 20 20` -> confirm
+yes), then granted `(admin)` via `adm/etc/wizlist` (`fluffos (admin)`
+line added, `hpdxxd`'s existing entry kept) and driver restarted.
+Verified: re-login shows "目前权限：(admin)", `update /d/newbie/door`
+succeeded ("重新编译 /d/newbie/door.lpc：成功！"). Save files
+(`data/user/f/fluffos.o`, `data/login/f/fluffos.o`) are plain untracked
+paths, NOT covered by any `.gitignore` pattern (checked repo-wide and
+per-lib) -- a normal `git add libs/datangshuanglong/` picks them up, no
+force-add needed.
+
+Retest: fresh normal registration (id `ceshiqi`, name 秦岭, female)
+reached 大唐学院, look correct, quit-retention prompt handled (kept the
+account then disconnected). fluffos admin login + `update` verified
+above. debug.log clean across all three driver runs this pass (only the
+expected boot-time config dump and SIGTERM-on-kill lines). Three driver
+instances started and killed by exact PID during this pass; test
+character `ceshiqi`'s save files removed afterward (`data/user/c/
+ceshiqi.o`, `data/login/c/ceshiqi.o`), fluffos's kept.

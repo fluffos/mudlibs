@@ -166,3 +166,89 @@ actual room) is the verification gate.
   game world (小客栈), innkeeper NPC greeted correctly, `look` produced
   correct room output, `quit` exited cleanly. **This lib is confirmed
   fully playable under WASM**, not just "boots."
+
+## WASM-enablement pass (2026-07 standard: loopback-allow, throttle exempt, admin seed)
+
+Gates patched (fail-closed: only an exact `127.0.0.1`/`127.`-prefix
+match is exempt; a malformed/non-string address is treated as remote):
+
+- `adm/daemons/logind.lpc` `logon()` (~line 56): the `ANTI_BUZZER`
+  per-IP character-creation throttle (`buzzer_ip[ip] >= 10` ->
+  `destruct(ob)`) now exempts loopback. `ANTI_BUZZER` IS defined
+  (`include/login.h`), so this gate is live, unlike some other
+  `#ifdef`-gated checks in this file.
+- No live ban-site/site-restriction daemon (no `band.lpc`/`sited.lpc`
+  shipped or preloaded in this lib). `get_id()`'s `ENABLE_BAN_SITE`
+  block (~line 117) IS defined and live, but only applies to
+  `wizhood(arg) == "(player)"` accounts against a 2-entry static IP
+  list (`202.96.134.135`, `202.102.111.2`) that can never match
+  loopback -- left unpatched as genuinely out of scope (not a
+  loopback-relevant gate).
+- No `uptime()` startup-grace gate found (the `UPTIME_CMD->main()` call
+  in `logon()` is a cosmetic "uptime so far" banner, not a grace-period
+  check).
+
+**Real bug found and fixed while verifying re-login (distinct from
+registration) as required by AGENTS.md §10.1** -- this is the more
+significant fix from this pass, not loopback-related:
+`adm/daemons/securityd.lpc`'s `valid_read()` had a `restore_object`
+special case intended to let the login object read back its own save
+file:
+```
+if (func == "restore_object")
+  if (sscanf(base_name(user), "/obj/%*s") && sscanf(file, "/data/%*s")
+      && file == (string)user->query_save_file())
+    return 1;
+```
+but the driver's `restore_object()` (`vm/internal/base/object.cc`)
+always appends the save extension (`.o`) to the `file` argument passed
+to `valid_read`, while `obj/login.lpc`'s `query_save_file()` returns the
+bare path with no extension -- so `file == query_save_file()` was
+**always false**. The euid-based fallback below it also always denied,
+because `obj/login.lpc`'s own `logon()` deliberately clears the login
+object's OWN euid to null (`seteuid(0); // Let LOGIN_D export proper uid
+to us.`) so that `LOGIN_D`'s later `export_uid(ob)` call (which only
+succeeds when `ob->euid` is falsy, per the driver's `f_export_uid`) can
+set `ob`'s UID -- `export_uid()` only ever sets `uid`, never `euid`
+(confirmed by reading `packages/uids/uids.cc`), so the login object's
+euid stays null for its entire life by design. Net effect: **every
+returning player's `restore_object()` call was permission-denied,
+100% of the time** -- confirmed via `catch()`+`efun::write()`
+instrumentation showing `euid=0 uid=fluffos ... err=*restore_object:
+read permission denied`. This silently dropped straight into "对不起，
+您的人物储存挡出了一些问题" and destructed the connection on EVERY
+re-login attempt for EVERY account, not just the newly-seeded admin --
+a pre-existing bug, invisible until now because every prior
+verification pass in this lib's history tested registration through to
+`quit` but never a SECOND connection logging back into the same id
+(exactly the gap AGENTS.md §10.1 warns about). Fixed by accepting the
+save-extension-qualified path too (`file == save_file || file ==
+save_file + ".o"`), which is the minimal correct fix (the intended
+"user may read back their own save file" grant, just written against
+the wrong path shape). Verified: both `fluffos` and a fresh throwaway
+player (`ceshiba`) can now fully disconnect and reconnect into their
+existing character. This was NOT present in the original registration-
+only NOTES above and NOT something this pass introduced -- it dates to
+however this lineage's `securityd.lpc` was originally authored/forked.
+
+Admin account: id `fluffos` / `Mud@2026` / 浮浮, registered through the
+normal long flow (id -> confirm y -> password x2 -> email -> race
+`human` -> gender -> Chinese name 浮浮), pre-granted `(admin)` via
+`adm/etc/wizlist` (`fluffos (admin)` line, `test`'s existing entry kept)
+before registration so the account came out already showing "目前权限：
+(admin)". Verified on a SEPARATE re-login (exercising the restore-path
+fix above): password accepted, `update /d/snow/inn_hall` succeeded
+("重新编译 /d/snow/inn_hall.lpc ...Ok."). Save files
+(`data/user/f/fluffos.o`, `data/login/f/fluffos.o`) are plain untracked
+paths, not covered by any `.gitignore` pattern -- a normal
+`git add libs/dongfanggushi2/` picks them up, no force-add needed.
+
+Retest: fresh normal registration (id `ceshiba`, name 秦月, female)
+reached 小客栈, innkeeper greeted correctly, look/quit correct; a
+SECOND connection re-logging into `ceshiba` (the restore path) also
+succeeded post-fix. debug.log clean across all four driver runs this
+pass (only expected boot-time config dump and SIGTERM-on-kill lines).
+Four driver instances started/killed by exact PID during this pass
+(one extra cycle for the diagnostic instrumentation added and then
+removed while root-causing the restore bug). Test character `ceshiba`'s
+saves removed afterward; `fluffos`'s kept.

@@ -45,3 +45,15 @@ python3 scripts/mudclient.py 127.0.0.1 40006
 archive 遗留的内容缺口,属边角内容,不影响主线注册与基础游玩。
 本游戏在 WASM/浏览器模式下可以启动,但由于底层驱动的 IP 检测限制,
 注册流程无法完成(游戏自带的黑名单检查依赖真实 IP 格式)。
+
+## 管理员账号 / Admin account
+
+- **ID**：`fluffos`
+- **密码 / Password**：`Mud@2026`（普通登录密码）；管理密码(wizpwd)：`Wiz@2026`
+- **中文名 / Display name**：浮浮
+- **权限 / Level**：`(boss)`（本系最高等级，与原有 seabird 等条目一致）——
+  已验证 `update` 巫师指令可用。
+- 授权方式：`adm/etc/wizlist` 加入 `fluffos (boss)` 一行。
+
+> 警告：`Mud@2026` / `Wiz@2026` 是本地游玩用的公开默认密码。若要正式对
+> 外开放主机，请先修改。

@@ -148,3 +148,43 @@ class of bug. `look` was used as this lib's verified post-login command.
   actual starting room (沙滩), escort NPC greeted by name, `look`
   produced correct room output, `quit` exited cleanly. **This lib is
   confirmed fully playable under WASM**, not just "boots."
+
+## WASM-enablement pass (2026-07 standard: loopback-allow, throttle exempt, admin seed)
+
+Gates patched (loopback/empty/malformed address short-circuits first, original logic intact):
+
+- `adm/daemons/band.lpc` `is_banned()` (~line 42): loopback/localhost/empty/
+  non-string → return 0. (Called from `logind.lpc logon()` line ~113 with
+  `query_ip_name()`.)
+- `adm/daemons/regband.lpc` `is_banned()` (~line 44): same guard (this is the
+  new-character registration ban, `logind.lpc` line ~218).
+- `adm/daemons/securityd.lpc` `valid_wiz_login()` (~line 100): loopback →
+  return 1 (the per-wizard site-restriction gate at `logind.lpc` line ~161
+  would otherwise reject any wizard id not present in `wiz_sites`).
+- No uptime() startup gate; no per-IP connection-count throttle in this
+  lineage's logind. `REGI_D->is_banned_email` is email-based, untouched.
+
+Admin account: id `fluffos` / `Mud@2026` / 浮浮, granted `(admin)` by editing
+`data/securityd.o` (SECURITY_D restore data): `wiz_status["fluffos"]="(admin)"`,
+`wiz_sites["fluffos"]=".*"`. Verified `update /d/xiakedao/shatan1` (成功) and
+`goto` work after restart. Save files for the orchestrator to force-add:
+**`libs/beimeixiakexing2001/work/data/user/f/fluffos.o` and
+`libs/beimeixiakexing2001/work/data/login/f/fluffos.o`** (untracked dirs;
+`data/securityd.o` is already tracked and modified).
+
+Retest: fresh normal registration (id `ceshier`, name 秦风) reached 沙滩,
+look correct, quit clean, 0 new errors in debug.log; test char saves removed.
+(`score` is deliberately blocked pre-island-registration -- documented
+onboarding gate, unchanged.)
+
+
+## Retrofit (2026-07-24): fail-closed loopback check (security correction)
+
+The loopback-allow gate patched above originally also treated a
+non-string/empty/malformed `query_ip_number()` result as loopback (a
+defensive stand-in for the WASM driver bug). That driver bug is now fixed
+upstream, so this was tightened to fail-closed: only an exact
+`"127.0.0.1"` / `"127."`-prefix / `"::1"` match bypasses the gate; a
+malformed or non-string address now falls through to the original gate
+logic (treated as untrusted/remote) instead of being auto-allowed.
+Re-verified fluffos login still works after tightening.

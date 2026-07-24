@@ -178,3 +178,51 @@ general writeup.
   driver-side gap, not something to patch. Verdict: boots cleanly under
   WASM; registration cannot complete due to the driver's IP-check
   limitation.
+
+## WASM-enablement pass (2026-07 standard: loopback-allow, throttle exempt, admin seed)
+
+Gates patched (all short-circuit loopback / malformed-empty IP first, original logic intact below):
+
+- `adm/daemons/band.lpc` `is_banned()` (~line 40): loopback/`127.`-prefix/
+  non-string/malformed-IP → `return 0` (never banned).
+- `adm/daemons/sited.lpc` `is_valid()` (~line 37): loopback → `return 1`
+  (site always valid). `is_multi()` (~line 65): loopback → `return 0`
+  (multi-login throttle exempt; moved `IP_D->ip2name` below the guard so a
+  garbage IP never reaches it).
+- `adm/daemons/logind.lpc` `logon()` (~line 95): per-IP concurrent-connection
+  cap (`login_cnt > 3`) now only destructs a real remote dotted-quad; loopback
+  and malformed/empty IPs exempt.
+
+Notes:
+- The ACTIVE login daemon is `adm/daemons/logind.lpc` (LOGIN_D, called by
+  `clone/user/login.lpc`), NOT the root `/logind.lpc` (dead copy — left
+  untouched). `gb_big5()` already wraps `BAN_D->is_banned` in `catch()`
+  (fail-open), and the band.lpc guard now also returns 0 for loopback.
+- No `uptime()` startup-grace gate rejects connections in this lineage
+  (the `uptime()` calls in logind are content timers — robottest, set_temp
+  "time" — kept).
+- `get_id()`'s `wiz_level(arg) < wiz_lock_level` gate: `WIZ_LOCK_LEVEL` is 0
+  here, so normal players pass; left as-is.
+
+Admin account: id `fluffos` / `Mud@2026` / 浮浮, granted `(admin)` via
+`adm/etc/wizlist`. Verified `update` + `goto` work. **Save files for the
+orchestrator to force-add: `libs/bxsj/work/data/user/f/fluffos.o` and
+`libs/bxsj/work/data/login/f/fluffos.o`** (untracked new dirs; not
+gitignored).
+
+Retest: fresh registration (id `fluffos`, name 浮浮) reached 武馆前院,
+`look`/`score` correct. Pre-existing content errors unrelated to this pass
+remain in debug.log (`message()` bad-arg in `user.lpc` `user_dump()`;
+`call_other()` bad-arg from NPC 桃花 `carry_object`).
+
+
+## Retrofit (2026-07-24): fail-closed loopback check (security correction)
+
+The loopback-allow gate patched above originally also treated a
+non-string/empty/malformed `query_ip_number()` result as loopback (a
+defensive stand-in for the WASM driver bug). That driver bug is now fixed
+upstream, so this was tightened to fail-closed: only an exact
+`"127.0.0.1"` / `"127."`-prefix / `"::1"` match bypasses the gate; a
+malformed or non-string address now falls through to the original gate
+logic (treated as untrusted/remote) instead of being auto-allowed.
+Re-verified fluffos login still works after tightening.

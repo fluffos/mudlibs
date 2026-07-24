@@ -50,3 +50,20 @@ python3 scripts/mudclient.py 127.0.0.1 40081
 - 本游戏暂不支持 WASM/浏览器模式:核心颜色处理模块依赖 WASM 版驱动未
   提供的正则表达式(pcre)功能,导致游戏本身无法启动,这是驱动层面的
   限制而非本游戏的缺陷。
+
+## 管理员账号 / Admin account
+
+- **ID**：`fluffos`
+- **密码 / Password**：`Mud@2026`
+- **中文名 / Display name**：浮浮
+- **权限 / Level**：`(admin)`（`SECURE_D` 的最高等级）——已验证以巫师
+  身份登录（本机连线自动转入巫师登入流程），并在巫师大厅执行 `update
+  /wiz/wizhall/room_wizhall_7` 成功重新编译。
+- 授权方式：`system/kernel/data/secure.o`（SECURE_D 的存档）
+  `wizards` 映射中加入 `"fluffos":"admin"`；密码经由正常注册流程写入
+  `system/kernel/data/password.o`。若这两个存档被重置，需按上述格式
+  重新加入后重启（`password.o_backup`/`secure.o_bak` 是本系统自身的
+  备份文件，应保持与主文件同步）。
+
+> 警告：`Mud@2026` 是本地游玩用的公开默认密码。若要正式对外开放主机，
+> 请先修改此密码。

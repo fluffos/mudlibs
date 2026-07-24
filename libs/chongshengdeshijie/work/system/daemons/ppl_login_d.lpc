@@ -77,7 +77,13 @@ private nomask varargs void logon_handle(int state, object ob, string arg) {
     case INITIALIZE:
       {
         string ip = query_ip_number(ob), ban;
+        // WASM/local play: loopback skips the ban list and the 60s per-IP
+        // re-login throttle. Fail-closed: a malformed/unparseable address
+        // is treated as remote, not exempt.
+        int is_local = stringp(ip) && (ip == "127.0.0.1" || ip[0..3] == "127."
+                        || ip == "::1");
 
+        if (!is_local)
         foreach (string limitedip, mapping data in IP_D->query_ipdata())
           if (regexp(ip, limitedip) && data["status"] == BAN) {
             ob->directly_receive(HIR "\n警告，您所使用的 IP(" + limitedip + ") 位置目前被系統列為禁止登入。\n" NOR);
@@ -103,7 +109,7 @@ private nomask varargs void logon_handle(int state, object ob, string arg) {
         }
 
 
-        if (time() - ip_time[ip] < 60) {
+        if (!is_local && time() - ip_time[ip] < 60) {
           tell(
             ob,
             sprintf(
@@ -205,11 +211,30 @@ private nomask varargs void logon_handle(int state, object ob, string arg) {
         } else
           set("id", arg, ob);
 
-        if (level_num > PLAYER)
+        if (level_num > PLAYER) {
+          string wip = query_ip_number(ob);
+          // WASM/local play: this project runs single-port (see
+          // include/login.h) -- a wizard account connecting from
+          // loopback is handed to the wizard login flow directly
+          // instead of being told to use the unreachable WIZ_PORT.
+          // Fail-closed: only an exact loopback match qualifies; a
+          // malformed/unparseable address falls through to the original
+          // "use WIZ_PORT" message below.
+          if (stringp(wip) && (wip == "127.0.0.1" || wip[0..3] == "127."
+              || wip == "::1")) {
+            tell(ob, HIC "本機連線：巫師帳號自動轉入巫師登入流程。\n" NOR);
+            // clear the id set above so the wizard flow's own
+            // is_repeat_login() doesn't see this very object as a
+            // duplicate of itself
+            delete("id", ob);
+            WIZ_LOGIN_D->logon(ob);
+            return;
+          }
           tell(
             ob,
             "您的使用者權限為 " + SECURE_D->level_num_to_level_name(level_num) + "，提醒您必須由連接埠 " + WIZ_PORT + " 上線才能擁有巫師權限。\n"
           );
+        }
 
         tell(ob, "請輸入密碼：");
 
@@ -560,8 +585,11 @@ private nomask varargs void logon_handle(int state, object ob, string arg) {
         string ip = query_ip_number(ob);
         ip_time[ip] = time();
 
-        // 記錄該 ip 上線次數
-        if (!login_ip_num[ip])
+        // 記錄該 ip 上線次數 (WASM/local play: loopback exempt from the
+        // 30-login command-rate limit)
+        if (stringp(ip) && (ip == "127.0.0.1" || ip[0..3] == "127."))
+          ;
+        else if (!login_ip_num[ip])
           login_ip_num[ip] = 1;
         else if (login_ip_num[ip] >= 30) {
           login_ip_num[ip] = 30;

@@ -128,3 +128,56 @@ registration test (Chinese surname + given name reaching the next prompt).
   the actual game world (大唐学院), `look` produced correct room
   output, `quit` exited cleanly. **This lib is confirmed fully playable
   under WASM**, not just "boots."
+
+## WASM-enablement pass (2026-07 standard: loopback-allow, admin seed)
+
+Same "大唐双龙" simple-lineage shape as sibling `datangshuanglong`
+(byte-identical `adm/daemons/band.lpc`/`sited.lpc`) -- checked directly
+rather than assumed:
+
+- `adm/daemons/band.lpc` `is_banned()` (~line 39): loopback bypasses the
+  ban-site regexp scan. Fail-closed: only an exact `127.0.0.1`/
+  `localhost`/`127.`-prefix match bypasses; a malformed address falls
+  through to the original scan. Called from `adm/daemons/logind.lpc`'s
+  `logon()` (~line 97) with `query_ip_name(ob)`.
+- No live `uptime()` startup-grace gate.
+- No live per-IP throttle: `get_id()`'s `ip_cnt>8` cap (~line 222) is
+  entirely commented-out dead code in the raw archive, same as
+  `datangshuanglong` -- nothing to patch.
+- `adm/daemons/sited.lpc`'s `is_valid(id, ip)` has the same dangling-
+  else bug as `datangshuanglong` (loopback+non-wizard is rejected,
+  every non-loopback IP unconditionally passes, the `valid_login`
+  whitelist is unreachable) -- but it's dead code here too, only called
+  from the unrelated `cmds/std/toupiao.lpc` voting command, so it does
+  not gate logins. Left unpatched/undocumented-further for the same
+  reason as `datangshuanglong`.
+
+Admin account: id `fluffos` / `Mud@2026` / 浮浮, registered through the
+normal flow (id -> confirm y -> Chinese name 浮浮 -> password x2 ->
+email skipped -> gender m -> stat allocation `20 20 20 20` -> confirm
+yes), granted `(admin)` via `adm/etc/wizlist` (`fluffos (admin)` line
+added, existing `fengfei`/`kouzhong`/`ttj`/`zhujiepo` entries kept)
+before registration, so wizard status was active immediately
+("作为巫师，你可以迅速离线" shown on the very first `quit`). Verified
+on a SEPARATE re-login: password accepted, `update /d/newbie/door`
+succeeded ("重新编译 /d/newbie/door.lpc：成功！") -- unlike sibling
+`dongfanggushi2`, this lineage's restore path has no permission bug,
+re-login just works. Save files (`data/user/f/fluffos.o`,
+`data/login/f/fluffos.o`) are plain untracked paths, not covered by any
+`.gitignore` pattern -- a normal `git add libs/dtsl/` picks them up, no
+force-add needed.
+
+Retest: fresh normal registration (id `ceshijiu`, name 秦鹏, female)
+reached 大唐学院, look correct, clean quit. debug.log clean across both
+driver runs this pass (only expected boot-time config dump and
+SIGTERM-on-kill lines -- the visible "编译时段错误" warning spam during
+fluffos's OWN session is expected/correct: this lib's `log_error()` fix
+(see above, 2026-07-23 pass) shows full diagnostics to wizards and only
+gates the generic scary message for non-wizards, and fluffos is a
+wizard). Two driver instances started/killed by exact PID; test
+character `ceshijiu`'s saves removed afterward (`data/user/c/
+ceshijiu.o`, `data/login/c/ceshijiu.o`), `fluffos`'s kept. Note: this
+lib's `data/user/`+`data/login/` trees already contained other untracked
+leftover test saves (e.g. `q/` shard, from this lib's own earlier
+`qinnuo`/`qinao` verification passes documented above) predating this
+session -- left untouched as out of this pass's scope.

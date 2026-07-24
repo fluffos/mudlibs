@@ -49,3 +49,19 @@ python3 scripts/mudclient.py 127.0.0.1 40008
   附的头文件,该道具暂不可用,不影响主线游玩。
 - 本游戏已确认可在 WASM/浏览器模式下完整游玩(注册、登陆、基础指令均
   正常),不受底层驱动 IP 检测限制影响。
+
+## 管理员账号 / Admin account
+
+- **ID**：`fluffos`
+- **密码 / Password**：`Mud@2026`
+- **中文名 / Display name**：浮浮
+- **权限 / Level**：`(admin)`（`adm/etc/wizlist` 最高等级）——已验证
+  `update` 巫师指令可用（重新连线后显示"作为巫师，你可以迅速离线"）。
+- 授权方式：`adm/etc/wizlist` 加入 `fluffos (admin)` 一行（保留原有
+  `fengfei`/`kouzhong`/`ttj`/`zhujiepo` 条目），重启后
+  `securityd.lpc` 的 `create()` 读入生效。
+- 存档文件：`work/data/user/f/fluffos.o`、`work/data/login/f/fluffos.o`
+  （未被 gitignore，普通 `git add libs/dtsl/` 即可纳入）。
+
+> 警告：`Mud@2026` 是本地游玩用的公开默认密码。若要正式对外开放主机，
+> 请先修改此密码。

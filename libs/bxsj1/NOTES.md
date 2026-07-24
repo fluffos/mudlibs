@@ -119,3 +119,54 @@ marked "done."
   documented driver-side gap, not something to patch. Verdict: boots
   cleanly under WASM; registration cannot complete due to the driver's
   IP-check limitation.
+
+## WASM-enablement pass (2026-07 standard: loopback-allow, throttle exempt, admin seed)
+
+Gates patched (ported from sibling bxsj; loopback/malformed-empty IP short-circuits first, original logic intact):
+
+- `adm/daemons/band.lpc` `is_banned()` (~line 40): loopback/`127.` prefix/
+  non-string/malformed IP → return 0.
+- `adm/daemons/sited.lpc` `is_valid()` (~line 37): loopback → return 1.
+  `is_multi()` (~line 68): loopback → return 0 (multi-login throttle exempt;
+  `IP_D->ip2name` moved below the guard).
+- `adm/daemons/logind.lpc` `logon()` (~line 95): per-IP concurrent-connection
+  cap (`login_cnt > 3`) applies only to real remote dotted-quads now.
+- No uptime() startup gate in this lineage (uptime() uses are content timers).
+- `get_id()`'s quit-retention 30s re-login block (`last_on < 30`) KEPT (game
+  design, and wizards are exempt in original code).
+
+New real bug found & fixed during admin verification (bxsj1-only drift):
+`feature/dbase.lpc` declared `tmp_dbase`/`default_ob` as `protected`
+(sibling bxsj has `nosave`, original MudOS had `static`). `protected` is a
+visibility modifier, NOT save-exempt, so `default_ob` (set to
+"/adm/daemons/race/human.lpc" during play) was PERSISTED into player saves
+and restored at next login BEFORE the body had an euid -- the first dbase
+query for any missing key then did `default_ob->query(...)` which tried to
+load the race file with no effective user: `*Can't load objects when no
+effective user`, breaking every command for that character (symptom hit
+the admin account first because its save was created/restored across a
+restart). Fixed both to `nosave` (dbase.lpc lines 10/16) and stripped the
+stale `default_ob` line from the existing fluffos save. §4.3-class bug.
+
+Admin account: id `fluffos` / `Mud@2026` / 浮浮, granted `(admin)` via
+`adm/etc/wizlist` (winker entry preserved). Verified `update
+/d/wizard/wizard_room` recompiles successfully and wizard start room works.
+**Save files for the orchestrator to force-add:
+`libs/bxsj1/work/data/user/f/fluffos.o` and
+`libs/bxsj1/work/data/login/f/fluffos.o`** (untracked dirs).
+
+Retest: fresh normal registration (id `ceshiyi`, name 秦风) end-to-end into
+武馆前院, look/score/quit all correct, 0 new errors in debug.log; test char
+saves removed. fluffos login + update + goto verified, 0 new errors.
+
+
+## Retrofit (2026-07-24): fail-closed loopback check (security correction)
+
+The loopback-allow gate patched above originally also treated a
+non-string/empty/malformed `query_ip_number()` result as loopback (a
+defensive stand-in for the WASM driver bug). That driver bug is now fixed
+upstream, so this was tightened to fail-closed: only an exact
+`"127.0.0.1"` / `"127."`-prefix / `"::1"` match bypasses the gate; a
+malformed or non-string address now falls through to the original gate
+logic (treated as untrusted/remote) instead of being auto-allowed.
+Re-verified fluffos login still works after tightening.

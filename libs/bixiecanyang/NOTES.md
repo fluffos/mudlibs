@@ -557,3 +557,48 @@ correct, clean output with zero compiler-warning spam and zero real
     the driver's documented `query_ip_number()` limitation (once the
     unrelated 30s harness-timing artifact is worked around). Not a
     regression, not a mudlib bug.
+
+## WASM-enablement pass (2026-07 standard: loopback-allow, uptime bypass, admin seed)
+
+Gates patched:
+
+- `adm/daemons/logind.lpc` `logon()` (~line 80): the `uptime() < 30`
+  startup-grace destruct now applies only to real remote dotted-quad
+  addresses; loopback and malformed/empty IPs (current WASM driver
+  behavior) are exempt. (Previously documented as a WASM blocker; now
+  bypassed per the standing §1.3e policy.)
+- `adm/daemons/band.lpc` `is_banned()` (~line 108): loopback / `127.`
+  prefix / empty / non-string / non-dotted-quad → return 0. This also
+  supersedes the original "malformed IP => banned" behavior that was the
+  second documented WASM blocker for this lib.
+- The per-IP cap in `get_id()` (`ip_cnt > 8`) counts users sharing the
+  connecting IP; under loopback-only local play this could in theory
+  trigger with 9+ tabs, but `ip_cnt` is computed in `logon()` before the
+  gate and the limit is generous; left unpatched (wiz_level>=2 and
+  welcome-listed users are already exempt; fluffos is admin). Note if
+  9-tab local testing is ever needed, add a loopback exemption here.
+
+Admin account: id `fluffos`, login password `Mud@2026`, wizpwd `Wiz@2026`
+(this lineage's separate "管理密码" asked during registration), display
+name 浮浮, `(admin)` via `adm/etc/wizlist`. Because wizlist was seeded
+before registration, the account came out of registration already with
+wizard view; verified `update /d/quanzhou/tieqiang` → 成功 on re-login.
+**Save files for the orchestrator to force-add:
+`libs/bixiecanyang/work/data/user/f/fluffos.o` and
+`libs/bixiecanyang/work/data/login/f/fluffos.o`** (untracked dirs).
+
+Retest: fresh normal registration (id `ceshisan`, name 秦风, female)
+end-to-end into the world, look/score/quit correct, 0 new errors in
+debug.log; test char saves removed.
+
+
+## Retrofit (2026-07-24): fail-closed loopback check (security correction)
+
+The loopback-allow gate patched above originally also treated a
+non-string/empty/malformed `query_ip_number()` result as loopback (a
+defensive stand-in for the WASM driver bug). That driver bug is now fixed
+upstream, so this was tightened to fail-closed: only an exact
+`"127.0.0.1"` / `"127."`-prefix / `"::1"` match bypasses the gate; a
+malformed or non-string address now falls through to the original gate
+logic (treated as untrusted/remote) instead of being auto-allowed.
+Re-verified fluffos login still works after tightening.

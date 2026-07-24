@@ -52,3 +52,17 @@ python3 scripts/mudclient.py 127.0.0.1 40039
   响新手体验。
 - 本游戏已确认可在 WASM/浏览器模式下完整游玩(注册、登陆、基础指令均
   正常),不受底层驱动 IP 检测限制影响。
+
+## 管理员账号 / Admin account
+
+- **ID**：`fluffos`
+- **密码 / Password**：`Mud@2026`
+- **中文名 / Display name**：浮浮
+- **权限 / Level**：`(admin)`（本系最高等级）——已验证 `update`、`goto`
+  巫师指令可用。
+- 授权方式：`data/securityd.o`（SECURITY_D 的存档）中 `wiz_status`
+  加入 `"fluffos":"(admin)"`、`wiz_sites` 加入 `"fluffos":".*"`。
+  若该存档被重置，可按上述格式重新加入后重启。
+
+> 警告：`Mud@2026` 是本地游玩用的公开默认密码。若要正式对外开放主机，
+> 请先修改此密码。
