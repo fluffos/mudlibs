@@ -48,3 +48,16 @@ python3 scripts/mudclient.py 127.0.0.1 40090 --timeout 25 --idle 0.5 \
   均可正常完成（曾发现并修复一处仅在 WASM 下才会触发的问题：安全
   管理进程启动时的一次域名解析在 WASM 环境下失败且未被捕获，导致
   权限表未初始化、每次登录都报错，现已修复）。
+
+## 管理员账号 / Admin account
+
+- **id**: `fluffos`
+- **密码 / password**: 无 —— **本版本注册/登录流程根本没有密码环节**
+  （这是此存档快照的原始设计），重新登录只需对 `fluffos` 输入 y 确认。
+- **中文名 / display name**: 浮浮
+- **权限 / level**: `(admin)` —— 最高级别，通过 `/adm/etc/wizlist` 中的
+  `fluffos (admin)` 行授权。已验证 `update /adm/daemons/combatd`
+  重新编译成功。
+- ⚠️ **本版本无密码保护，任何人输入 id 即可登录任意账号（包括管理员）。
+  公开架站前必须先给登录流程加上密码验证。** No password exists in this
+  lib's login flow — add one before hosting publicly.

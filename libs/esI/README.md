@@ -52,3 +52,16 @@ python3 scripts/mudclient.py 127.0.0.1 40010 --timeout 25 --idle 0.5 \
 - **WASM 兼容性**：已在新的 WASM 构建下测试，注册、`look`、`quit`
   均可正常完成（本版本 IP 检查不阻挡登录，未受已知的
   `query_ip_number()` WASM 限制影响）。
+
+## 管理员账号 / Admin account
+
+- **id**: `fluffos`
+- **密码 / password**: `Mud@2026`
+- **中文名 / display name**: 浮浮
+- **权限 / level**: 完整管理员（FULL ADMIN）。`/adm/etc/groups` 将
+  `fluffos` 加入 `(root)` 与 `(admin)` 组，连线档
+  `data/std/connection/f/fluffos.o` 设置 `wizard 1` 与 `domains`
+  (primary=wiz, level=archwizard)。已验证 `update /adm/daemons/statsd`
+  更新并重载成功。
+- ⚠️ **公开架站前请务必修改此默认密码。** Change this published default
+  password before hosting publicly.

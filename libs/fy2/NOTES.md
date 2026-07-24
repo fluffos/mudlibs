@@ -67,3 +67,31 @@ registration test (Chinese surname + given name reaching the next prompt).
   registration with a real Chinese name (段誉), `look`, and `quit` all
   completed cleanly. Not affected by the documented `query_ip_number()`
   WASM limitation.
+
+## WASM-enablement pass (loopback / admin seeding)
+
+- **Loopback ban bypass** (§1.3b): `adm/daemons/band.lpc` `is_banned()`
+  (~line 47) — short-circuit at top: non-string / empty / `127.0.0.1` /
+  `localhost` / `127.`-prefix sites return 0. Called from
+  `adm/daemons/logind.lpc:72-73` with both `query_ip_name()` and
+  `query_ip_number()`; original regexp ban logic unchanged below.
+- **Uptime gate**: none (no `uptime()` connection gate in logind).
+- **Anti-flood throttle**: none found.
+- **Admin account** (§1.5): `fluffos` / `Mud@2026`, display 浮浮, status
+  `(admin)` via a `fluffos (admin)` line appended to `/adm/etc/wizlist`
+  (read by `adm/daemons/securityd.lpc` create()). Registered through the
+  real flow; verified re-login + `update /adm/daemons/combatd` →
+  "重新编译 ... 成功". Retest: fresh normal registration (秦风) into the
+  world with working `look`/`score` (test char saves removed).
+- **Fail-closed retrofit** (2026-07-24 security correction): the loopback
+  check(s) above originally also treated an empty/non-string IP as
+  loopback (defensive fallback for the then-broken `query_ip_number()`).
+  Since the driver's IP-reporting bug is now fixed upstream (WASM
+  reports a clean `127.0.0.1` like native), that fallback was removed —
+  loopback is now strictly `stringp(ip) && (ip=="127.0.0.1" ||
+  ip=="::1" || ip[0..3]=="127.")`; anything unparseable/empty is
+  untrusted/remote and goes through the original gate logic. Retested:
+  fluffos login + `look`/`quit` still clean over loopback.
+- **Save files to force-add** (untracked, NOT gitignored):
+  `libs/fy2/work/data/user/f/fluffos/fluffos.o`,
+  `libs/fy2/work/data/login/f/fluffos/fluffos.o`.

@@ -177,18 +177,25 @@ private void encoding(string arg, object ob) {
 
 
   // try not accept "name" as IP
-
-  if (!ip_name) {
-    destruct(ob);
-    log_file("ALLCONT", sprintf("kicked out, No IP\n"));
-    return;
-  }
-
-  for (ii = 0; ii < sizeof(ip_number); ii++) {
-    if ((ip_number[ii] != '.') && (ip_number[ii] > '9')) {
+  // Local play: only enforce the no-IP / IP-format kicks on genuinely
+  // remote connections — loopback is always trusted. Fail-CLOSED: an
+  // empty/non-string ip_number is NOT loopback, so it still goes through
+  // this check (and fails it, same as before local play was exempted).
+  // See AGENTS.md 1.3b.
+  if (!(stringp(ip_number) && (ip_number == "127.0.0.1" || ip_number == "::1" ||
+    (strlen(ip_number) >= 4 && ip_number[0..3] == "127.")))) {
+    if (!ip_name) {
       destruct(ob);
-      log_file("ALLCONT", sprintf("kicked out, Non_number\n"));
+      log_file("ALLCONT", sprintf("kicked out, No IP\n"));
       return;
+    }
+
+    for (ii = 0; ii < sizeof(ip_number); ii++) {
+      if ((ip_number[ii] != '.') && (ip_number[ii] > '9')) {
+        destruct(ob);
+        log_file("ALLCONT", sprintf("kicked out, Non_number\n"));
+        return;
+      }
     }
   }
 
@@ -339,8 +346,15 @@ private void get_id(string arg, object ob) {
   // MAX_LOGIN and LOGIN_SITE should be defined in login.h
 #ifdef MAX_LOGIN
 
-  if (!ppl) {  // only check this for new login.
+  if (!ppl  // only check this for new login.
     // allow existing players to reconnect.
+    // Local play: loopback is exempt from the per-IP multi-login cap —
+    // every browser tab is loopback. Fail-CLOSED: an empty/non-string
+    // IP is NOT loopback, so it still goes through the cap below.
+    // See AGENTS.md 1.3e.
+    && !(stringp(query_ip_number(ob)) && (query_ip_number(ob) == "127.0.0.1" ||
+    query_ip_number(ob) == "::1" ||
+    (strlen(query_ip_number(ob)) >= 4 && query_ip_number(ob)[0..3] == "127.")))) {
     my_ip = query_ip_number(ob);
 
     MaxLimit = "/adm/daemons/band"->allow_multi_login(my_ip);

@@ -232,3 +232,30 @@ starting room; the English id must be pure letters, 3-12 chars, or
   errors of any kind (not even the usual non-fatal sockets-package
   warnings — this lib doesn't preload a network daemon). Not affected by
   the documented `query_ip_number()` WASM limitation.
+
+## WASM-enablement pass (loopback / admin seeding)
+
+Identical to sibling `fy2` (风云再起Ⅱ, 011).
+
+- **Loopback ban bypass** (§1.3b): `adm/daemons/band.lpc` `is_banned()`
+  (~line 47) — short-circuit for non-string / empty / `127.0.0.1` /
+  `localhost` / `127.`-prefix. Called from `adm/daemons/logind.lpc:72-73`
+  with both `query_ip_name()` and `query_ip_number()`.
+- **Uptime gate / anti-flood throttle**: none found.
+- **Admin account** (§1.5): `fluffos` / `Mud@2026`, display 浮浮, status
+  `(admin)` via `fluffos (admin)` appended to `/adm/etc/wizlist`.
+  Registered through the real flow; verified re-login +
+  `update /adm/daemons/combatd` → 成功. Retest: fresh normal registration
+  (秦风) with working `look`/`score` (test char saves removed).
+- **Fail-closed retrofit** (2026-07-24 security correction): the loopback
+  check(s) above originally also treated an empty/non-string IP as
+  loopback (defensive fallback for the then-broken `query_ip_number()`).
+  Since the driver's IP-reporting bug is now fixed upstream (WASM
+  reports a clean `127.0.0.1` like native), that fallback was removed —
+  loopback is now strictly `stringp(ip) && (ip=="127.0.0.1" ||
+  ip=="::1" || ip[0..3]=="127.")`; anything unparseable/empty is
+  untrusted/remote and goes through the original gate logic. Retested:
+  fluffos login + `look`/`quit` still clean over loopback.
+- **Save files to force-add** (untracked, NOT gitignored):
+  `libs/fengyun2qinghua/work/data/user/f/fluffos/fluffos.o`,
+  `libs/fengyun2qinghua/work/data/login/f/fluffos/fluffos.o`.

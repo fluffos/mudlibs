@@ -52,3 +52,15 @@ python3 scripts/mudclient.py 127.0.0.1 40091 --timeout 25 --idle 0.5 \
   `quit` 指令报错且无法真正断线，本轮已修复。
 - **WASM 兼容性**：已在新的 WASM 构建下完整测试，注册、`look`、`quit`
   均可正常完成，无任何报错。
+
+## 管理员账号 / Admin account
+
+- **id**: `fluffos`
+- **密码 / password**: `Mud@2026`
+- **中文名 / display name**: 浮浮
+- **权限 / level**: `(admin)` —— 最高级别。通过 `/adm/etc/wizlist` 中的
+  `fluffos (admin)` 行授权（securityd 启动时读取），登录时自动
+  `enable_wizard()` 并获得 ADM_PATH 指令集与全局写权限。已验证
+  `update /adm/daemons/combatd` 重新编译成功。
+- ⚠️ **公开架站前请务必修改此默认密码。** Change this published default
+  password before hosting publicly.

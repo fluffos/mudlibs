@@ -330,3 +330,34 @@ functions -- §3's own footnote that this warning is harmless -- and
   Re-verified clean both natively (no regression) and under WASM: full
   registration with a real Chinese name (令狐冲), `look`, and `quit` all
   completed with zero errors, boots+plays fully under WASM now.
+
+## WASM-enablement pass (loopback / admin seeding)
+
+- **Loopback ban bypass** (§1.3b): `adm/daemons/band.lpc` `is_banned()`
+  (~line 52) — short-circuit for non-string / empty / `127.0.0.1` /
+  `localhost` / `127.`-prefix. NOTE: in this snapshot `is_banned()` has
+  NO live caller in the login chain (unlike sibling `fengyun3xiuding`,
+  whose logind calls it) — patched for consistency in case it gets
+  re-wired.
+- **Uptime gate / anti-flood throttle**: none found.
+- **Admin account** (§1.5): `fluffos`, display 浮浮, status `(admin)` via
+  `fluffos (admin)` appended to `/adm/etc/wizlist`. **Deviation: this
+  lineage snapshot has NO password step at all** (registration asks only
+  id/中文名/gender/ethnicity; re-login asks only a y/n confirm) — so the
+  standard `Mud@2026` password does not apply. Verified re-login +
+  `update /adm/daemons/combatd` → 成功.
+- **Retest**: fresh normal registration (秦风) works, `look`/`score` OK,
+  test char saves removed. Pre-existing content error (unrelated to this
+  pass): `/u/guanwai/shop` create() errors when an NPC wanders into it.
+- **Fail-closed retrofit** (2026-07-24 security correction): the loopback
+  check(s) above originally also treated an empty/non-string IP as
+  loopback (defensive fallback for the then-broken `query_ip_number()`).
+  Since the driver's IP-reporting bug is now fixed upstream (WASM
+  reports a clean `127.0.0.1` like native), that fallback was removed —
+  loopback is now strictly `stringp(ip) && (ip=="127.0.0.1" ||
+  ip=="::1" || ip[0..3]=="127.")`; anything unparseable/empty is
+  untrusted/remote and goes through the original gate logic. Retested:
+  fluffos login + `look`/`quit` still clean over loopback.
+- **Save files to force-add** (untracked, NOT gitignored):
+  `libs/fengyun3dianzang/work/data/user/f/fluffos/fluffos.o`,
+  `libs/fengyun3dianzang/work/data/login/f/fluffos/fluffos.o`.

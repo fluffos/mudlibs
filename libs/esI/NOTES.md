@@ -95,3 +95,31 @@ python3 ../../scripts/mudclient.py 127.0.0.1 40010 --timeout 10 --send "" --send
   a real Chinese name (慕容), `look`, and `quit` all worked end-to-end —
   this lib's IP-check is non-blocking, so it is unaffected by the
   documented `query_ip_number()` WASM limitation.
+
+## WASM-enablement pass (loopback / admin seeding)
+
+Identical to sibling `es1_win` (ES II family, 008).
+
+- **Loopback ban bypass** (§1.3b): `adm/daemons/banish.lpc`
+  `check_banned_site()` (~line 75) — short-circuit at top for loopback /
+  empty / non-string / `localhost` / `127.` names (returns 0). Gate is
+  fed `query_ip_name()`, called from `logind.lpc:242` and `:577`.
+- **Uptime gate**: none rejecting. `logind.lpc:87` `uptime()<43200` only
+  grants extra user slots (content, kept).
+- **Anti-flood throttle**: none (per-session password retry cap only).
+- **Admin account** (§1.5): `fluffos` / `Mud@2026`, display 浮浮. Added to
+  `(root)`+`(admin)` in `/adm/etc/groups`; `wizard 1` + `domains`
+  (archwizard) in `data/std/connection/f/fluffos.o`. Verified
+  `update /adm/daemons/statsd` loads OK.
+- **Fail-closed retrofit** (2026-07-24 security correction): the loopback
+  check(s) above originally also treated an empty/non-string IP as
+  loopback (defensive fallback for the then-broken `query_ip_number()`).
+  Since the driver's IP-reporting bug is now fixed upstream (WASM
+  reports a clean `127.0.0.1` like native), that fallback was removed —
+  loopback is now strictly `stringp(ip) && (ip=="127.0.0.1" ||
+  ip=="::1" || ip[0..3]=="127.")`; anything unparseable/empty is
+  untrusted/remote and goes through the original gate logic. Retested:
+  fluffos login + `look`/`quit` still clean over loopback.
+- **Save files to force-add** (untracked, NOT gitignored):
+  `libs/esI/work/data/std/connection/f/fluffos.o`,
+  `libs/esI/work/data/std/user_ob/human/f/fluffos.o`.

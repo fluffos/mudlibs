@@ -50,3 +50,15 @@ python3 scripts/mudclient.py 127.0.0.1 40011 --timeout 25 --idle 0.5 \
 - **WASM 兼容性**：已在新的 WASM 构建下完整测试，注册、`look`、`quit`
   均可正常完成（本轮已提前应用了同引擎家族的安全管理进程域名解析
   修复，未触发相应的登录报错）。
+
+## 管理员账号 / Admin account
+
+- **id**: `fluffos`
+- **密码 / password**: `Mud@2026`
+- **中文名 / display name**: 浮浮
+- **权限 / level**: `(admin)` —— 最高级别，通过 `/adm/etc/wizlist` 中的
+  `fluffos (admin)` 行授权。本版本还有一个巫师登录 IP 白名单机制
+  （`/adm/etc/wizip/<id>`，无文件则不限制；本地/回环地址已一律放行）。
+  已验证 `update /adm/daemons/combatd` 重新编译成功。
+- ⚠️ **公开架站前请务必修改此默认密码。** Change this published default
+  password before hosting publicly.

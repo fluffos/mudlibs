@@ -378,3 +378,28 @@ different ports (40089 here, the sibling's own assigned port there) with
 no interference. Per standing policy, this lib's driver was only ever
 killed by its own exact tracked PID, never via a broad `pkill -f` pattern
 that could have hit the sibling's identically-named process.
+
+## WASM-enablement pass (loopback / admin seeding)
+
+- **Loopback ban bypass** (§1.3b): `adm/daemons/band.lpc` `is_banned()`
+  (~line 50) — short-circuit for non-string / empty / `127.0.0.1` /
+  `localhost` / `127.`-prefix. Live call sites:
+  `adm/daemons/logind.lpc:84-85` (query_ip_name + query_ip_number).
+- **Uptime gate / anti-flood throttle**: none found.
+- **Admin account** (§1.5): `fluffos` / `Mud@2026`, display 浮浮, status
+  `(admin)` via `fluffos (admin)` appended to `/adm/etc/wizlist`.
+  Verified re-login + `update /adm/daemons/combatd` → 成功.
+- **Retest**: fresh normal registration (秦风) works, `look`/`score` OK,
+  test char saves removed; no new debug.log errors.
+- **Fail-closed retrofit** (2026-07-24 security correction): the loopback
+  check(s) above originally also treated an empty/non-string IP as
+  loopback (defensive fallback for the then-broken `query_ip_number()`).
+  Since the driver's IP-reporting bug is now fixed upstream (WASM
+  reports a clean `127.0.0.1` like native), that fallback was removed —
+  loopback is now strictly `stringp(ip) && (ip=="127.0.0.1" ||
+  ip=="::1" || ip[0..3]=="127.")`; anything unparseable/empty is
+  untrusted/remote and goes through the original gate logic. Retested:
+  fluffos login + `look`/`quit` still clean over loopback.
+- **Save files to force-add** (untracked, NOT gitignored):
+  `libs/fengyun3xiuding/work/data/user/f/fluffos/fluffos.o`,
+  `libs/fengyun3xiuding/work/data/login/f/fluffos/fluffos.o`.

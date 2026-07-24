@@ -60,3 +60,17 @@ python3 scripts/mudclient.py 127.0.0.1 40009 --timeout 25 --idle 0.5 \
 - **WASM 兼容性**：已在新的 WASM 构建下测试，可以正常启动、登录、
   `look` 等指令均正常（本版本的 IP 检查只是提示性警告，不会阻挡登录，
   未受已知的 `query_ip_number()` WASM 限制影响）。
+
+## 管理员账号 / Admin account
+
+- **id**: `fluffos`
+- **密码 / password**: `Mud@2026`
+- **中文名 / display name**: 浮浮
+- **权限 / level**: 完整管理员（FULL ADMIN）。通过 `/adm/etc/groups` 将
+  `fluffos` 加入 `(root)` 与 `(admin)` 组（`/adm/etc/access` 授予 `(admin)`
+  对 `/` 的全局读写），并在连线档 `data/std/connection/f/fluffos.o` 中设置
+  `wizard 1` 与 `domains`（primary=wiz，level=archwizard），登录即拥有巫师
+  身份与全局写权限。已验证 `update /adm/daemons/statsd`（更新并重载 /adm
+  守护进程）成功。
+- ⚠️ **公开架站前请务必修改此默认密码。** This is a published default
+  password for local play — change it before hosting publicly.

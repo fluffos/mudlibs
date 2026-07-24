@@ -51,3 +51,14 @@ python3 scripts/mudclient.py 127.0.0.1 40089 --timeout 25 --idle 0.8 \
 - **WASM 兼容性**：已在新的 WASM 构建下完整测试，注册、`look`、`quit`
   均可正常完成（本轮已提前修复了同引擎家族在 `fengyun3dianzang` 中
   发现的安全管理进程域名解析问题，因此这里从未触发过对应的登录报错）。
+
+## 管理员账号 / Admin account
+
+- **id**: `fluffos`
+- **密码 / password**: `Mud@2026`
+- **中文名 / display name**: 浮浮
+- **权限 / level**: `(admin)` —— 最高级别，通过 `/adm/etc/wizlist` 中的
+  `fluffos (admin)` 行授权（securityd 启动时读取）。已验证
+  `update /adm/daemons/combatd` 重新编译成功。
+- ⚠️ **公开架站前请务必修改此默认密码。** Change this published default
+  password before hosting publicly.

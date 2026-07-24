@@ -75,3 +75,33 @@ registration test (Chinese surname + given name reaching the next prompt).
   at preload — caught, non-cascading). Full registration with a real
   Chinese name (郭靖), `look`, and `quit` all completed cleanly. Not
   affected by the documented `query_ip_number()` WASM limitation.
+
+## WASM-enablement pass (loopback / admin seeding)
+
+- **Loopback ban bypass** (§1.3b): two gates patched.
+  1. `adm/daemons/band.lpc` `is_banned()` (~line 46) — short-circuit for
+     non-string / empty / `127.0.0.1` / `localhost` / `127.`-prefix.
+     Called from `adm/daemons/logind.lpc:80-81`.
+  2. `adm/daemons/logind.lpc` `valid_wiz_login()` (~line 528) — the
+     wizard-IP whitelist gate (`/adm/etc/wizip/<id>`) destructs wizard
+     logins from unlisted IPs; loopback/empty/non-string IPs now always
+     pass (this gate feeds on `query_ip_number()`, garbage under WASM).
+- **Uptime gate / anti-flood throttle**: none found.
+- **Admin account** (§1.5): `fluffos` / `Mud@2026`, display 浮浮, status
+  `(admin)` via `fluffos (admin)` appended to `/adm/etc/wizlist`. No
+  `/adm/etc/wizip/fluffos` file exists (= unrestricted). Verified
+  re-login + `update /adm/daemons/combatd` → 成功.
+- **Retest**: fresh normal registration (秦风) works, `look`/`score` OK,
+  test char saves removed; no new debug.log errors.
+- **Fail-closed retrofit** (2026-07-24 security correction): the loopback
+  check(s) above originally also treated an empty/non-string IP as
+  loopback (defensive fallback for the then-broken `query_ip_number()`).
+  Since the driver's IP-reporting bug is now fixed upstream (WASM
+  reports a clean `127.0.0.1` like native), that fallback was removed —
+  loopback is now strictly `stringp(ip) && (ip=="127.0.0.1" ||
+  ip=="::1" || ip[0..3]=="127.")`; anything unparseable/empty is
+  untrusted/remote and goes through the original gate logic. Retested:
+  fluffos login + `look`/`quit` still clean over loopback.
+- **Save files to force-add** (untracked, NOT gitignored):
+  `libs/fengyun434/work/data/user/f/fluffos/fluffos.o`,
+  `libs/fengyun434/work/data/login/f/fluffos/fluffos.o`.

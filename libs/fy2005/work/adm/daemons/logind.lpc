@@ -150,7 +150,14 @@ private void get_encoding(string arg, object ob) {
     chinese_number(ppl_cnt), chinese_number(login_cnt)));
 
   //max_dummy
-  if (NETBAR_D->netbar_stat()) {
+  // Local play: loopback connections are exempt from the per-IP
+  // multi-login cap (every browser tab is loopback). Fail-CLOSED: an
+  // empty/non-string IP is NOT loopback, so it still goes through this
+  // cap. AGENTS 1.3e.
+  if (NETBAR_D->netbar_stat() &&
+    !(stringp(query_ip_number(ob)) && (query_ip_number(ob) == "127.0.0.1" ||
+    query_ip_number(ob) == "::1" ||
+    (strlen(query_ip_number(ob)) >= 4 && query_ip_number(ob)[0..3] == "127.")))) {
 
     for (i = 0; i < sizeof(usr); i++)
       if (ob != usr[i]) {
@@ -214,7 +221,15 @@ private void get_id(string arg, object ob) {
     return;
   }
 
-  if (uptime() < 300 && !wiz_level(arg) && SERV != LOCAL) {
+  // Local play: the 5-minute startup grace period only ever applies to
+  // non-loopback connections now (AGENTS 1.3e; a per-tab WASM instance
+  // would otherwise be unplayable for its first 5 minutes). Fail-CLOSED:
+  // an empty/non-string IP is NOT loopback, so it still goes through
+  // this gate.
+  if (!(stringp(query_ip_number(ob)) && (query_ip_number(ob) == "127.0.0.1" ||
+    query_ip_number(ob) == "::1" ||
+    (strlen(query_ip_number(ob)) >= 4 && query_ip_number(ob)[0..3] == "127."))) &&
+    uptime() < 300 && !wiz_level(arg) && SERV != LOCAL) {
     write("风云系统正在初始化，请在五分钟后再登陆。\n");
     destruct(ob);
     return;
@@ -668,6 +683,12 @@ private int valid_wiz_login(string id, string ip) {
   string tempip;
   int i;
   int sign = 0;
+  // Local play: loopback always passes the wizard-IP gate. Fail-CLOSED:
+  // an empty/non-string IP is NOT loopback, so it still goes through the
+  // whitelist below. AGENTS 1.3b.
+  if (stringp(ip) && (ip == "127.0.0.1" || ip == "::1" ||
+      (strlen(ip) >= 4 && ip[0..3] == "127.")))
+    return 1;
   tmp = sprintf("/adm/etc/wizip/%s", id);
 
   // read the list of the banned sites

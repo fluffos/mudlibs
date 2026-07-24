@@ -79,3 +79,18 @@ telnet 客户端连接时这一步和真人验证码网站的做法完全一样�
   本轮同时提前修复/排查了两处安全相关的历史遗留问题：安全管理进程
   域名解析导致的 WASM 登录报错，以及一处已确认在可预见的未来都不会
   触发的"到期自毁"机制（已作为保险性措施禁用）。
+- **本地/回环连线不再受限**：开服后 5 分钟的"系统正在初始化"等待期、
+  按 IP 的多开人数限制、封禁站点检查、巫师登录 IP 白名单，现在都只
+  对非本机（非 127.0.0.1）连线生效——浏览器 WASM 版和本机测试连线
+  随时可以直接登录。
+
+## 管理员账号 / Admin account
+
+- **id**: `fluffos`
+- **密码 / password**: `Mud@2026`
+- **中文名 / display name**: 浮浮
+- **权限 / level**: `(admin)` —— 最高级别，通过 `/adm/etc/wizlist` 中的
+  `fluffos (admin)` 行授权。该账号出生即在巫师休息室（/d/wiz/hall）。
+  已验证 `update /adm/daemons/combatd` 重新编译成功。
+- ⚠️ **公开架站前请务必修改此默认密码。** Change this published default
+  password before hosting publicly.

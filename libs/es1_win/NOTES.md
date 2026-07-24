@@ -112,3 +112,33 @@ python3 ../../scripts/mudclient.py 127.0.0.1 40009 --timeout 10 --send "" --send
   step (`[OKIP]`) merely warns ("你没有设定任何 IP Address 检查") rather
   than gating login, so it is **not** affected by the documented
   `query_ip_number()` WASM limitation — full WASM login + play works.
+
+## WASM-enablement pass (loopback / admin seeding)
+
+- **Loopback ban bypass** (§1.3b): `adm/daemons/banish.lpc`
+  `check_banned_site()` (~line 75) — short-circuit at top: loopback /
+  empty / non-string / `localhost` / `127.` names return 0 (not banned).
+  Gate is fed `query_ip_name()` (hostname), called from `logind.lpc:242`
+  and `:573`. Original ban logic unchanged below.
+- **Uptime gate**: none that reject/destruct. Only `uptime()` in login
+  daemons (`logind.lpc:87`) grants extra user slots first 12h — content,
+  kept.
+- **Anti-flood throttle**: none. "试太多次" is a per-session password
+  retry cap, not a per-IP throttle.
+- **Admin account** (§1.5): `fluffos` / `Mud@2026`, display 浮浮. Granted
+  via `/adm/etc/groups` (added `fluffos` to `(root)` and `(admin)`) plus
+  connection save `data/std/connection/f/fluffos.o` (`wizard 1` triggers
+  `enable_wizard()` in `std/body.lpc:199`; `domains` level `archwizard`).
+  Verified `update /adm/daemons/statsd` loads OK as fluffos.
+- **Fail-closed retrofit** (2026-07-24 security correction): the loopback
+  check(s) above originally also treated an empty/non-string IP as
+  loopback (defensive fallback for the then-broken `query_ip_number()`).
+  Since the driver's IP-reporting bug is now fixed upstream (WASM
+  reports a clean `127.0.0.1` like native), that fallback was removed —
+  loopback is now strictly `stringp(ip) && (ip=="127.0.0.1" ||
+  ip=="::1" || ip[0..3]=="127.")`; anything unparseable/empty is
+  untrusted/remote and goes through the original gate logic. Retested:
+  fluffos login + `look`/`quit` still clean over loopback.
+- **Save files to force-add** (untracked, NOT gitignored):
+  `libs/es1_win/work/data/std/connection/f/fluffos.o`,
+  `libs/es1_win/work/data/std/user_ob/human/f/fluffos.o`.

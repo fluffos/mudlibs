@@ -67,3 +67,17 @@ python3 scripts/mudclient.py 127.0.0.1 40012 --timeout 30 --idle 1.5 \
   （曾发现并修复一处仅在 WASM 环境下触发的问题：站点镜像验证逻辑在
   DNS 相关模块因沙盒无网络而未能加载时会报错卡死连线，现已修复为
   "该验证模块不存在时直接跳过检查"，不影响原生环境下的行为。）
+- **本地/回环连线不再受限**：封禁站点检查（含严格封禁）、无 IP/IP
+  格式检查、按 IP 的多开人数上限、巫师登录站点白名单，现在都只对
+  非本机（非 127.0.0.1）连线生效。
+
+## 管理员账号 / Admin account
+
+- **id**: `fluffos`
+- **密码 / password**: `Mud@2026`
+- **中文名 / display name**: 浮浮
+- **权限 / level**: `(admin)` —— 最高级别，通过 `/adm/etc/wizlist` 中的
+  `fluffos (admin)` 行授权（securityd 启动时读取；score 中会显示
+  【巫师】称号）。已验证 `update /adm/daemons/band` 重新编译成功。
+- ⚠️ **公开架站前请务必修改此默认密码。** Change this published default
+  password before hosting publicly.

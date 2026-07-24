@@ -104,3 +104,44 @@ registration test (Chinese surname + given name reaching the next prompt).
   playthrough, not just boot. Not affected by the documented
   `query_ip_number()` WASM limitation (this lib's gate is
   `find_object`-based, not IP-format-based).
+
+## WASM-enablement pass (loopback / admin seeding)
+
+- **Loopback ban bypass** (§1.3b): `adm/daemons/band.lpc` — new private
+  helper `is_loopback_site()` (~line 153), short-circuits
+  `is_banned()` (~line 161), `create_char_banned()` (~line 179), and
+  `is_strict_banned()` (~line 194) to return 0 (not banned) for
+  `127.0.0.1`/`::1`/`localhost`/`127.`-prefix sites.
+- **IP-format kick** (§1.3a, folded into the loopback patch):
+  `adm/daemons/logind.lpc` `encoding()` (~line 180) — the "No IP" /
+  "Non_number" destruct-on-connect checks now only run for genuinely
+  remote `ip_number` values; loopback skips straight through.
+- **Anti-flood / multi-login cap** (§1.3e): `adm/daemons/logind.lpc`
+  `get_id()` (~line 348) — the `MAX_LOGIN` per-IP multi-login-cap block
+  is now skipped entirely when `query_ip_number(ob)` is loopback.
+- **Wizard site whitelist** (§1.3b): `adm/daemons/securityd.lpc`
+  `match_wiz_site1()` (~line 116) — loopback sites always pass (return
+  1) before the original whitelist-line logic runs.
+- **Uptime gate**: none found (`logind.lpc` has no `uptime()` connection
+  gate).
+- **Fail-closed retrofit** (2026-07-24 security correction): all four
+  gates above originally also treated an empty/non-string IP as
+  loopback (defensive fallback for the then-broken
+  `query_ip_number()`). Since the driver's IP-reporting bug is now fixed
+  upstream (WASM reports a clean `127.0.0.1` like native), that fallback
+  was removed — loopback is now strictly `stringp(ip) &&
+  (ip=="127.0.0.1" || ip=="::1" || ip[0..3]=="127.")`; anything
+  unparseable/empty is treated as untrusted/remote and goes through the
+  original gate logic, same as before this pass. Retested: fluffos
+  login + `look`/`quit` still clean over loopback.
+- **Admin account** (§1.5): `fluffos` / `Mud@2026`, display 浮浮, status
+  `(admin)` via `fluffos (admin)` appended to `/adm/etc/wizlist` (read by
+  `securityd.lpc`). Registered through the real flow. Verified re-login +
+  `update /adm/daemons/band` → recompiled successfully as fluffos, score
+  shows 【巫师】title.
+- **Retest**: fresh normal registration (孙悟空-style real Chinese name)
+  reaches 南城客栈 with working `look`/`score`/`quit`; test char saves
+  removed; no new debug.log errors.
+- **Save files to force-add** (untracked, NOT gitignored):
+  `libs/fluffos_xiyou2000/work/data/login/f/fluffos.o`,
+  `libs/fluffos_xiyou2000/work/data/user/f/fluffos.o`.
