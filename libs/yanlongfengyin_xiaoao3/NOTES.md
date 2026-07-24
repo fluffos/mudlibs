@@ -505,3 +505,81 @@ positives (no real player), and 1 dead/unreachable DNS daemon file.
   reading the exact code path, not just inferred. **Not patched**, per
   the standing instruction not to "fix" this driver-level gap in the
   mudlib. Native play is completely unaffected (verified above).
+  **UPDATE (WASM-enablement pass): now patched** — see next section;
+  the exact gate identified above (`BAN_D->is_banned()`'s dotted-quad
+  sscanf() falling through to "return 1"=banned on a malformed IP) now
+  short-circuits to "allowed" for loopback first, so this should
+  unblock WASM registration (needs a WASM re-test to confirm — not
+  re-run this pass since the local `build-wasm` binary wasn't
+  rebuilt during this session; native retest below is complete).
+
+## WASM-enablement pass (loopback-allow / gate bypass / admin seed)
+
+Standard WASM-first pass per AGENTS.md §1.3b/e and §1.5. This lib had
+not been touched by any previous pass (fresh `git status`, no existing
+「管理员账号」section) — full pass done from scratch.
+
+Gates found + patched:
+
+- `adm/daemons/band.lpc` `is_banned()` (~line 106) — **this was the
+  documented WASM-fatal gate** identified in the note above: the
+  function opened with `if (!site) return 1;` then
+  `if (sscanf(site, "%s.%s.%s.%s", ...) != 4) return 1;` — i.e. any
+  string that isn't a clean dotted-quad (what a malformed
+  `query_ip_number()` under WASM produces) fell straight into
+  "banned". Added a loopback short-circuit `return 0;` at the very top
+  (before the `!site`/sscanf checks), fail-closed per the 2026-07-24
+  driver-fix correction: only `site == "127.0.0.1"`, `"::1"`, or a
+  `"127."` prefix qualify — a genuinely malformed/empty string still
+  falls through to the original `return 1` (banned), unchanged.
+- `adm/daemons/logind.lpc` — added `is_loopback_conn(object)` helper
+  and exempted loopback from two per-IP throttles that are NOT routed
+  through `band.lpc`:
+  - `logon()`'s `ban_cnt > 1` "too many connections from this IP right
+    now" cap (~line 238).
+  - `get_id()`'s `ip_cnt > 9` "too many players from this IP" cap
+    (~line 317, only reachable for non-`is_welcome()` ids — matches
+    the family's usual whitelist-then-cap shape).
+  - No live `uptime()` startup-grace gate — the only `uptime()` check
+    in `logon()` (~line 129) is already commented out in the original
+    archive; left as-is, noted only.
+  - `BAN_D->is_banned(query_ip_number(ob))` at `logon()`'s top
+    (~line 141) needed no separate guard: `band.lpc`'s own
+    `is_banned()` fix above already covers it.
+  - Did NOT touch `BAN_D->vaild_allow_address()` (called from
+    `get_passwd()`) — that gate enforces a PLAYER's own opt-in
+    `allowip` address whitelist (a content feature, not hosting
+    protection), and already defaults to "allowed" (`return 1`) when
+    the player hasn't set one, so it needs no loopback carve-out.
+
+Admin account seeded: id `fluffos`, password `Mud@2026`, identity
+string (身份标识, used only for password recovery, cannot be changed)
+`fluffosid2026identity`, Chinese display name 浮浮 — this lineage takes
+the Chinese name as a single field (no surname/given-name split), so
+no name-collision workaround was needed. Granted `(boss)` — the top
+rank in this lineage's `wiz_levels` table, same as the existing
+`afei (boss)` entry — via `fluffos (boss)` appended to
+`adm/etc/wizlist`; restarted the driver to pick up the new entry (read
+at `securityd.lpc`'s `create()`). Verified: real registration flow
+(fluffos/y/浮浮/[pw]×2 — note: an off-by-one `y`/name-confirm send in
+my first test transcript was harmlessly absorbed by the password
+length check and self-corrected, see raw transcript if replaying this
+exactly)/[identity]×2/0/y/[email]/m → entered 客栈; relogin as fluffos
+→ `update /adm/daemons/band` → "重新编译 /adm/daemons/band.lpc：成功！",
+`quit` → "欢迎下次再来！".
+
+Retest: fresh normal registration (id `qintestchar`, name 秦风, gender
+m) end-to-end — `look` showed correct room, `score` produced a full,
+correctly-rendered character sheet (膂力/悟性/根骨/身法/福缘/容貌 etc.),
+confirming the player-body class and data model both work; hit the
+documented "new account, quit within 30 min deletes it" content prompt
+on `quit` (expected, kept per policy — this is game design, not a
+hosting gate). Test character save removed afterward
+(`data/user/q/qintestchar.o`, `data/login/q/qintestchar.o`). Zero new
+`debug.log` errors across the whole session (boot + two registrations +
+two admin logins + retests).
+
+**Save files for the orchestrator to add** (none gitignored, normal
+add):
+- `libs/yanlongfengyin_xiaoao3/work/data/user/f/fluffos.o`
+- `libs/yanlongfengyin_xiaoao3/work/data/login/f/fluffos.o`

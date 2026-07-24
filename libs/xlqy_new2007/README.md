@@ -41,3 +41,16 @@ python3 scripts/mudclient.py 127.0.0.1 40022
 - 本存档也可在新的 WASM（浏览器/Node 沙盒）模式下完整游玩，注册、登录、
   look/quit 等指令均正常；唯一已知小瑕疵是"上次连线的地址"这一行在 WASM
   模式下会显示乱码而非真实 IP（WASM 驱动本身的已知限制，不影响功能）。
+
+## 管理员账号 / Admin account
+
+- **id**: `fluffos`
+- **密码 / password**: `Mud@2026`
+- **中文名 / display name**: 浮浮（Fluffos）
+- **权限 / level**: `(admin)` —— 本 lib 的最高巫师权限（通过
+  `/adm/etc/wizlist` 授予，`SECURITY_D->get_status()` 据此判定）。已验证
+  登录后系统提示"您的系统权限目前是：(admin)"，且 `update` 指令可用。
+- 如需重新授权（存档被重置时）：在 `work/adm/etc/wizlist` 中加入一行
+  `fluffos (admin)` 并重启即可。
+- ⚠️ **对外正式开服前请务必修改此密码**（这是本项目为本地/测试统一预置的
+  默认口令）。

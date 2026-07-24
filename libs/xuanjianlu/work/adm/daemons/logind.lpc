@@ -155,11 +155,23 @@ private void confirm_big5(string arg, object ob) {
   input_to((: get_id :), ob);
 }
 
+// WASM/local-play policy (AGENTS.md §1.3a/b/e): a connection whose
+// query_ip_number() is a genuine loopback address bypasses
+// ban/registration-ban gates.
+int is_loopback_conn(object ob) {
+  // Fail-closed (retrofit 2026-07-24): the query_ip_number()/resolve()
+  // driver fixes landed 2026-07-23, so a malformed/empty IP is no
+  // longer assumed to be loopback -- it is treated as untrusted/remote.
+  string ip = query_ip_number(ob);
+  return (ip == "127.0.0.1" || ip == "::1"
+          || (stringp(ip) && strlen(ip) >= 4 && ip[0..3] == "127."));
+}
+
 void logon(object ob) {
   object *usr;
   int i, wiz_cnt, ppl_cnt, login_cnt;
 
-  if (BAN_D->is_banned(query_ip_name(ob)) == 1) {
+  if (!is_loopback_conn(ob) && BAN_D->is_banned(query_ip_name(ob)) == 1) {
     write_ob(ob, "你的地址在本 MUD 不受欢迎。Your IP not welcome in this MUD.\n");
     destruct(ob);
     return;
@@ -271,7 +283,8 @@ private void get_id(string arg, object ob) {
   }
 
   // dts: check reg-ban setting
-  if (REGBAN_D->is_banned(query_ip_name(ob)) == 1) {
+  // WASM/local-play policy: loopback exempt (AGENTS.md §1.3b).
+  if (!is_loopback_conn(ob) && REGBAN_D->is_banned(query_ip_name(ob)) == 1) {
     write_ob(ob, "本 MUD 不欢迎你创造新的人物。");
     destruct(ob);
     return;

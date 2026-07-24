@@ -547,3 +547,64 @@ gameplay reachable from the tested paths).
   guard, or a driver-level sockets stub, both out of scope for this
   smoke-test pass) — documented here and in the README as "does not
   boot into registration under WASM" rather than "playable."
+  **UPDATE (WASM-enablement pass): now patched** — see next section;
+  both VERSION_D call sites are `find_object()`-guarded per the new
+  §1.3c policy, which should unblock WASM registration (needs a WASM
+  re-test to confirm).
+
+## WASM-enablement pass (loopback-allow / gate bypass / admin seed)
+
+Standard WASM-first pass per AGENTS.md §1.3b/c/e and §1.5. Gates
+patched:
+
+- `adm/daemons/band.lpc` `is_banned()` (~line 38) — loopback / empty /
+  malformed-IP short-circuit `return 0;` at the top.
+- `adm/daemons/logind.lpc` — added `is_loopback_conn(object)` helper,
+  and:
+  - `logon()` `BAN_D->is_banned()` gate (~line 75) — loopback exempt.
+  - `logon()` same-IP multi-login cap (`iplimit > 9`, ~line 106) —
+    loopback exempt.
+  - **the WASM registration blocker**: both unguarded
+    `VERSION_D->is_version_ok()` call sites (banner ~line 87, get_id
+    hard gate ~line 161) now guarded with `find_object(VERSION_D)` —
+    daemon absent (as under WASM, where versiond's sockets usage keeps
+    it from compiling) ⇒ notice/gate skipped. This was the documented
+    "no id prompt under WASM" hard blocker.
+  - No `uptime()` startup-grace gate or registration-rate throttle in
+    this lineage's logind (MAX_USERS capacity cap left intact).
+
+Admin account seeded: id `fluffos`, 普通密码(login pw) `Mud@2026`,
+管理密码(recovery pw) `Admin2026`, display name 浮浮 (surname prompt
+skipped with bare ENTER — the lineage's surname+given-name split flow
+rejects 姓=名, so "浮"+"浮" does NOT work; skip the surname instead).
+Granted `(admin)` via `fluffos (admin)` appended to `adm/etc/wizlist`.
+Verified: real registration flow end-to-end into 世外桃源, relogin →
+`update /adm/daemons/band` → 成功 (`score` correctly says 还没有出生
+until the newbie quality-selection is done — game design). Retest:
+fresh normal registration (姓 秦 名 风, f) end-to-end, look/quit
+correct; test char saves removed; zero new debug.log errors.
+
+**Save files for the orchestrator to add** (none gitignored, normal
+add):
+- `libs/yanhuangwuhun/work/data/user/f/fluffos.o`
+- `libs/yanhuangwuhun/work/data/login/f/fluffos.o`
+
+
+## Fail-closed retrofit for the loopback-allow gate (2026-07-24)
+
+The loopback helper above was originally written matching the
+project-wide convention at patch time (AGENTS.md §1.3b), which also
+treated an empty/non-string/malformed `query_ip_number()` result as
+loopback, defensively, because the WASM driver used to return garbage
+there. That underlying driver bug is now fixed (fluffos commits
+`e33bb5da` "fix: query_ip_number() returned uninitialized garbage under
+WASM" and `007bb863` "feat: synthetic resolve() on WASM instead of
+raising an LPC error", both 2026-07-23; the locally-built
+`build-debug`/`build-wasm` binaries already postdate both commits), so
+treating unparseable IPs as trusted is a fail-open gap with no remaining
+justification. Retrofitted to fail-closed: loopback is now strictly
+`ip == "127.0.0.1" || ip == "::1" || ip[0..3] == "127."` (with a
+`stringp()` guard before the slice) — a malformed/empty IP now falls
+through to the NORMAL gate instead of being treated as local. Retested
+after tightening: fresh driver boot clean, `fluffos` loopback login and
+its wizard `update` command both still work; zero new debug.log errors.

@@ -45,3 +45,16 @@ python3 scripts/mudclient.py 127.0.0.1 40023
   xo_final 存档上用同样的 WASM 测试也没有出现，目前判断是 WASM 环境下
   这个存档自身代码路径的特殊问题，还未查明根因，不影响原生模式下的正常
   游玩。
+
+## 管理员账号 / Admin account
+
+- **id**: `fluffos`
+- **密码 / password**: `Mud@2026`
+- **中文名 / display name**: 浮浮（Fluffos）
+- **权限 / level**: `(admin)` —— 本 lib 的最高巫师权限（通过
+  `/secure/etc/wizlist` 授予，`SECURITY_D->get_status()` 据此判定）。已
+  验证登录后 `update` 巫师指令可用（重新编译成功）。
+- 如需重新授权（存档被重置时）：在 `work/secure/etc/wizlist` 中加入一行
+  `fluffos (admin)` 并重启即可。
+- ⚠️ **对外正式开服前请务必修改此密码**（这是本项目为本地/测试统一预置的
+  默认口令）。

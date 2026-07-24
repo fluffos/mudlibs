@@ -615,3 +615,78 @@ runtime. Removed the stray brace; structure now matches the pre-format
 git blob exactly (verified against commit 3501d9782f) and the sibling
 `yanhuangwuhun`'s correct copy; `lpcc` compile now passes. Full
 registration + look/score/quit retested clean afterwards.
+
+## WASM-enablement pass (loopback-allow / gate bypass / admin seed)
+
+Standard WASM-first pass per AGENTS.md §1.3b/c/e and §1.5. Ported the
+sibling `yanhuangwuhun`'s fix shapes (near-identical `band.lpc`/
+`logind.lpc`, confirmed by diff before patching). Gates patched:
+
+- `adm/daemons/band.lpc` `is_banned()` (~line 38) — loopback
+  short-circuit `return 0;` at the top.
+- `adm/daemons/logind.lpc` — added `is_loopback_conn(object)` helper,
+  and:
+  - `logon()`'s `BAN_D->is_banned()` gate (~line 68) — loopback exempt.
+  - the WASM registration blocker: both `VERSION_D->is_version_ok()`
+    call sites (banner ~line 84, `get_id()` hard gate ~line 160) —
+    guarded with `find_object(VERSION_D)`; daemon absent (as under
+    WASM, where versiond's `socket_bind()`/`socket_create()` usage
+    keeps it from compiling) ⇒ notice/gate skipped. This was the
+    documented "no id prompt under WASM" hard blocker described above
+    — same root cause as `yanhuangwuhun`'s.
+  - No `uptime()` startup-grace gate exists here. The `iplimit > 3`
+    same-IP multi-login cap (~line 106) is already dead code (wrapped
+    in `#if 0` in the original archive) — nothing to bypass; noted
+    only, no change made.
+
+**Correction applied mid-pass (fail-closed retrofit, 2026-07-24):** the
+loopback helpers above were initially written matching the
+project-wide convention at the time (AGENTS.md §1.3b), which also
+treated an empty/non-string/malformed-IP `query_ip_number()` result as
+loopback, defensively, because the WASM driver used to return garbage
+there. That underlying driver bug is now fixed (fluffos commits
+`e33bb5da` "fix: query_ip_number() returned uninitialized garbage under
+WASM" and `007bb863` "feat: synthetic resolve() on WASM instead of
+raising an LPC error", both 2026-07-23; confirmed the locally-built
+`build-debug`/`build-wasm` binaries already postdate both commits), so
+treating unparseable IPs as trusted is no longer justified and is a
+fail-open gap. Retrofitted both helpers to the fail-closed form: loopback
+is now strictly `ip == "127.0.0.1" || ip == "::1" || ip[0..3] == "127."`
+(with a `stringp()` guard before the slice) — a malformed/empty IP now
+falls through to the NORMAL gate instead of being treated as local.
+Retested after tightening: fresh driver boot clean, `fluffos` login from
+127.0.0.1 still shows "由127.0.0.1连线进入" (loopback path still taken)
+and `update /adm/daemons/band` still succeeds — the tightening did not
+regress local/native play.
+
+Admin account seeded: id `fluffos`, pw `Mud@2026`, name 浮浮 (surname
+prompt skipped with bare ENTER — this lineage's surname+given-name split
+flow rejects 姓=名, same as `yanhuangwuhun`; "浮"+"浮" does not work, so
+skip the surname and enter the two-character given name "浮浮" directly).
+Granted `(admin)` via `fluffos (admin)` appended to `adm/etc/wizlist`.
+Verified: real registration flow (fluffos/y/[enter]/浮浮/admin-pw×2/
+pw×2/5/m → entered 世外桃源, save written to `data/user/f/fluffos.o` +
+`data/login/f/fluffos.o`); restarted driver to pick up the new wizlist
+entry; relogin as fluffos → banner shows "目前权限：(admin)",
+`update /adm/daemons/band` → "重新编译 /adm/daemons/band.lpc：成功！",
+`quit` → clean farewell. One pre-existing non-fatal runtime error noted
+during the first `get_passwd()`/`check_ok()` of each boot (lazy-loading
+`adm/daemons/network/messaged.lpc`'s `startup_udp()`): `*Bad argument 2
+to socket_bind()` — same class as the already-documented `versiond`
+`socket_bind()` config-mismatch noise, harmless, does not block login;
+not patched (pre-existing, out of scope for this pass).
+
+Retest: fresh normal registration (id `qintest`, surname skipped, given
+name 秦风, type 猛士型, gender m) end-to-end — look/quit correct, landed
+in 世外桃源; test character saves removed after
+(`data/user/q/qintest.o`, `data/login/q/qintest.o`). Zero new
+`debug.log` errors beyond the one pre-existing `messaged.lpc` warning
+above. Note: this lib's login prompt has a per-second live clock once
+in-world (AGENTS.md §8.3 item 1) — `mudclient.py --idle 0.4` was
+occasionally too tight and dropped queued sends into "什么?" (unknown
+command); `--idle 0.6` was reliable. Not a mudlib bug.
+
+**Save files for the orchestrator to add** (none gitignored, normal
+add):
+- `libs/yanhuangyingxiongshi/work/data/user/f/fluffos.o`
+- `libs/yanhuangyingxiongshi/work/data/login/f/fluffos.o`

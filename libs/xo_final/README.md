@@ -40,3 +40,19 @@ python3 scripts/mudclient.py 127.0.0.1 40024
 - 个别较冷门的武功招式描述文字存在历史遗留的小瑕疵，不影响正常修炼和战斗。
 - 本存档在新的 WASM（浏览器/Node 沙盒）模式下也可以完整游玩，注册、登录、
   look/score/quit 等指令全部正常，未发现问题。
+- 上述"同一 IP 三分钟内只能注册一次"的防灌水限制现已对本机（127.0.0.1，
+  含浏览器 WASM 方式）连接豁免，本地测试/游玩不再受影响；对外部 IP 依旧
+  生效。
+
+## 管理员账号 / Admin account
+
+- **id**: `fluffos`
+- **密码 / password**: `Mud@2026`
+- **中文名 / display name**: 浮浮（Fluffos）
+- **权限 / level**: `(admin)` —— 本 lib 的最高巫师权限（通过
+  `/secure/etc/wizlist` 授予，`SECURITY_D->get_status()` 据此判定）。已
+  验证登录后 `update` 巫师指令可用（重新编译成功）。
+- 如需重新授权（存档被重置时）：在 `work/secure/etc/wizlist` 中加入一行
+  `fluffos (admin)` 并重启即可。
+- ⚠️ **对外正式开服前请务必修改此密码**（这是本项目为本地/测试统一预置的
+  默认口令）。

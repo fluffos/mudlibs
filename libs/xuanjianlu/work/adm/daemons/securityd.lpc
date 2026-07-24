@@ -14,7 +14,10 @@ inherit F_SAVE;
 mapping wiz_status;
 private mapping wiz_sites;
 
-private string *wiz_levels = ({
+// nosave: static rank table -- restore() from /data/securityd.o would
+// otherwise ZERO it (restore_object nulls globals absent from the save,
+// AGENTS.md §7.7), crashing get_wiz_level() on the first login.
+private nosave string *wiz_levels = ({
   "(player)",
   "(immortal)",
   "(apprentice)",
@@ -92,6 +95,25 @@ void create() {
   if (!trusted_write["/"]) trusted_write["/"] = ({});
   if (!trusted_read["/"]) trusted_read["/"] = ({});
   if (!authorized_cmds["cmds"]) authorized_cmds["cmds"] = ({});
+
+  // WASM-enablement pass: with authorized_cmds now always non-null, the
+  // legacy lazy-init inside valid_cmd() (which would have seeded the
+  // wizard command dirs) can never fire -- so without these entries NO
+  // rank, not even (admin), could run anything under /cmds/wiz|arch|adm
+  // (valid_cmd returned 0 and every wizard command was an unknown
+  // command). Seed the per-directory ACL the way valid_cmd() expects
+  // (arrays of status strings; keys without leading slash, matching its
+  // explode()-based dir walk).
+  if (!authorized_cmds["cmds/adm"])
+    authorized_cmds["cmds/adm"] = ({ "(admin)" });
+  if (!authorized_cmds["cmds/arch"])
+    authorized_cmds["cmds/arch"] = ({ "(admin)", "(arch)" });
+  if (!authorized_cmds["cmds/wiz"])
+    authorized_cmds["cmds/wiz"] = ({ "(admin)", "(arch)", "(wizard)" });
+  if (!authorized_cmds["cmds/imm"])
+    authorized_cmds["cmds/imm"] = ({ "(admin)", "(arch)", "(wizard)",
+      "(apprentice)", "(caretaker)", "(creator)", "(designer)",
+      "(virtuoso)", "(immortal)" });
 
 }
 

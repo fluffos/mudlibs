@@ -48,13 +48,26 @@ void create() {
     wiz_lock_level = 0;
 }
 
+// WASM/local-play policy (AGENTS.md §1.3a/b/e): a connection whose
+// query_ip_number() is a genuine loopback address bypasses ban/
+// multi-login gates. Fail-closed: the query_ip_number()/resolve()
+// driver fixes landed 2026-07-23 (WASM now reports a clean
+// "127.0.0.1" like native), so an empty/malformed IP is no longer
+// assumed to be loopback -- it is treated as untrusted/remote and
+// subject to the normal gate.
+int is_loopback_conn(object ob) {
+  string ip = query_ip_number(ob);
+  return (ip == "127.0.0.1" || ip == "::1"
+          || (stringp(ip) && strlen(ip) >= 4 && ip[0..3] == "127."));
+}
+
 void logon(object ob) {
   object *usr;
   int i, wiz_cnt, ppl_cnt, login_cnt;
   int iplimit;
   int user_num;
 
-  if (BAN_D->is_banned(query_ip_number(ob)) == 1) {
+  if (!is_loopback_conn(ob) && BAN_D->is_banned(query_ip_number(ob)) == 1) {
     write("你的地址在本 MUD 不受欢迎。\n");
     destruct(ob);
     return;
@@ -66,7 +79,12 @@ void logon(object ob) {
   catch(MUDLIST_CMD->main());
   UPTIME_CMD->main();
 
-  if (!VERSION_D->is_version_ok() && !VERSION_D->query_temp("operator"))
+  // WASM guard (AGENTS.md §1.3c): versiond uses the sockets package and
+  // never compiles under WASM -- an unguarded call here throws "*No
+  // program in object" and would abort logon() before the id prompt.
+  // Daemon absent => skip the version-sync notice entirely.
+  if (find_object(VERSION_D)
+    && !VERSION_D->is_version_ok() && !VERSION_D->query_temp("operator"))
     write(HIY "现在本站正在同步版本，如果你不是巫师，请稍候再登录。\n\n" NOR);
   else if (REBOOT_CMD->is_rebooting())
     write(HIY "现在本站正在准备重新启动，如果你不是巫师，请稍候再登录。\n\n" NOR);
@@ -140,7 +158,9 @@ private void get_id(string arg, object ob) {
   }
 
   if (wiz_level(arg) < 1) {
-    if (!VERSION_D->is_version_ok() && !VERSION_D->query_temp("operator")) {
+    // WASM guard (AGENTS.md §1.3c): daemon absent => skip the gate.
+    if (find_object(VERSION_D)
+      && !VERSION_D->is_version_ok() && !VERSION_D->query_temp("operator")) {
       write("现在本站正在同步版本中，暂时不能登录，请稍候再尝试。\n");
       destruct(ob);
       return;

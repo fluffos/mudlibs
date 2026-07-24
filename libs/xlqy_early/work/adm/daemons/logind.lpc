@@ -42,6 +42,7 @@ object find_body(string name);
 int check_legal_id(string arg);
 int check_legal_name(string arg);
 private void confirm_gift(string yn, object ob, object user);
+int is_loopback_conn(object ob);
 
 int howmany_user() {
   int i, count, reg_cnt;
@@ -76,7 +77,10 @@ void logon(object ob) {
   int i;
 
   //防止重连flooding
-  if (query("last_ip") == query_ip_number(ob) && query("time") + 5 > time()) {
+  // WASM/local-play policy (AGENTS.md §1.3e): loopback exempt from
+  // anti-flood throttles (every browser-tab connection is loopback).
+  if (!is_loopback_conn(ob)
+    && query("last_ip") == query_ip_number(ob) && query("time") + 5 > time()) {
     write(HIW "连线过于频繁，请稍候再进入本MUD...... \n" NOR);
     destruct(ob);
     return;
@@ -95,7 +99,7 @@ void logon(object ob) {
     }
   }
 
-  if (logon_cnt > 10) {
+  if (!is_loopback_conn(ob) && logon_cnt > 10) {
     write(HIW "此IP连线用户过多，请稍候再进入本MUD...... \n" NOR);
     destruct(ob);
     return;
@@ -160,15 +164,20 @@ private void encoding(string arg, object ob) {
     return;
   }
 
-  if (!ip_name) {
-    destruct(ob);
-    return;
-  }
-
-  for (ii = 0; ii < sizeof(ip_number); ii++) {
-    if ((ip_number[ii] != '.') && (ip_number[ii] > '9')) {
+  // WASM/local-play policy (AGENTS.md §1.3a/b): loopback and malformed-IP
+  // connections (WASM query_ip_name/number return garbage) bypass the
+  // ip-name presence check and the dotted-quad format validator below.
+  if (!is_loopback_conn(ob)) {
+    if (!ip_name) {
       destruct(ob);
       return;
+    }
+
+    for (ii = 0; ii < sizeof(ip_number); ii++) {
+      if ((ip_number[ii] != '.') && (ip_number[ii] > '9')) {
+        destruct(ob);
+        return;
+      }
     }
   }
 
@@ -976,4 +985,16 @@ int set_wizlock(int level) {
     return 0;
   wiz_lock_level = level;
   return 1;
+}
+
+// WASM/local-play policy (AGENTS.md §1.3a/b/e): a connection whose
+// query_ip_number() is loopback, empty/non-string, or a malformed
+// (non-dotted-quad) string -- what the current WASM driver returns -- is
+// treated as local and bypasses ban/site/IP-format/anti-flood gates.
+int is_loopback_conn(object ob) {
+  // Fail-closed (retrofit 2026-07-24): see is_loopback_site() in
+  // band.lpc for why the malformed/empty-IP fallback was removed.
+  string ip = query_ip_number(ob);
+  return (ip == "127.0.0.1" || ip == "::1"
+          || (stringp(ip) && strlen(ip) >= 4 && ip[0..3] == "127."));
 }

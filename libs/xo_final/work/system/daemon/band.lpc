@@ -20,6 +20,7 @@ int IsBannedSite(string);
 int IsMultiLogin(string, object);
 int IsTimeAllowed(object);
 int IsLegalID(string);
+int IsLoopbackSite(string);
 
 void Dump();
 
@@ -121,9 +122,23 @@ void LoadData() {
 }
 
 
+// WASM/local-play policy (AGENTS.md §1.3b): loopback connections are
+// always treated as local and pass every ban/throttle gate. Fail-closed
+// (retrofit 2026-07-24): the query_ip_number()/resolve() driver fixes
+// landed 2026-07-23 (WASM now reports a clean "127.0.0.1" like
+// native), so a malformed/empty IP is no longer trusted as local -- it
+// falls through to the normal gate like any other unparseable remote
+// address.
+int IsLoopbackSite(string site) {
+  return (site == "127.0.0.1" || site == "::1"
+          || (stringp(site) && strlen(site) >= 4 && site[0..3] == "127."));
+}
+
 //是否是Ban的地址
 //在/etc/banned_sites中定义
 int IsBannedSite(string site) {
+  if (IsLoopbackSite(site)) return 0;
+
   foreach (string l in Sites) {
     if (regexp(site, l)) {
       last_error = sprintf("你的 IP(%s)在 %s 不受欢迎。\n如有疑问，请向 %s 查询。", site, mud_name(), ADMIN_EMAIL);
@@ -215,6 +230,9 @@ int IsMultiLogin(string arg, object ob) {
   string my_ip;
   int ret1, ret;
   my_ip = query_ip_number(ob);
+  // WASM/local-play policy (AGENTS.md §1.3e): loopback exempt from the
+  // multi-login restriction (every browser-tab connection is loopback).
+  if (IsLoopbackSite(my_ip)) return 0;
   // ret 是目前和我一个ip的人数.
   //    if (my_ip=="211.151.90.54"||my_ip=="211.101.236.24"||my_ip=="211.99.212.14")
   //	    return 0;
@@ -243,6 +261,9 @@ int IsMultiLogin(string arg, object ob) {
 //判断等新人的时间间隔是否大于5分钟
 int IsTimeAllowed(object ob) {
   string ip = query_ip_number(ob);
+  // WASM/local-play policy (AGENTS.md §1.3e): loopback exempt from the
+  // per-IP new-registration throttle.
+  if (IsLoopbackSite(ip)) return 1;
   if (sizeof(NewIps)) {
     if (undefinedp(NewIps[ip])) {
       NewIps[ip] = time();

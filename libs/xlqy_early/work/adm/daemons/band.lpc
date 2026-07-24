@@ -24,6 +24,7 @@ void remove(string pattern);
 int is_banned(string site);
 int create_char_banned(string site);
 int is_strict_banned(string site);
+int is_loopback_site(string site);
 int intermud_banned(string site);
 int intermud_allowed(string site);
 int allow_multi_login(string site);
@@ -169,9 +170,24 @@ void load_sites5() {
   }
 }
 
+// WASM/local-play policy (AGENTS.md §1.3b): loopback and malformed-IP
+// connections (what the WASM driver currently returns) always pass ban
+// gates unconditionally.
+int is_loopback_site(string site) {
+  // Fail-closed (retrofit 2026-07-24): the query_ip_number()/resolve()
+  // driver fixes landed 2026-07-23, so WASM now reports a clean
+  // "127.0.0.1" like native -- an empty/malformed IP is no longer
+  // assumed to be loopback/trusted, it falls through to the normal
+  // ban check like any other unparseable remote address.
+  return (site == "127.0.0.1" || site == "::1"
+          || (stringp(site) && strlen(site) >= 4 && site[0..3] == "127."));
+}
+
 int is_banned(string site) {
   string *line;
   int i;
+
+  if (is_loopback_site(site)) return 0;
 
   line = ({});
   line += ({ site });
@@ -189,6 +205,8 @@ int create_char_banned(string site) {
   string *line;
   int i;
 
+  if (is_loopback_site(site)) return 0;
+
   line = ({});
   line += ({ site });
 
@@ -204,6 +222,8 @@ int create_char_banned(string site) {
 int is_strict_banned(string site) {
   string *line;
   int i;
+
+  if (is_loopback_site(site)) return 0;
 
   line = ({});
   line += ({ site });

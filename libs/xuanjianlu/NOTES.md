@@ -532,3 +532,74 @@ the complete character sheet (【玄剑录个人档案】). No fix needed — do
 anti-unregistered-play gate working as designed. (Side note for future
 testers: the register step's issued-password disconnect is easy to
 mistake for a crash; it prints 您的新密码是XXXXX then closes the link.)
+
+## WASM-enablement pass (loopback-allow / gate bypass / admin seed)
+
+Standard WASM-first pass per AGENTS.md §1.3b/e and §1.5. Gates patched:
+
+- `adm/daemons/logind.lpc` — added `is_loopback_conn(object)` helper
+  (loopback / empty / malformed `query_ip_number()` → local), and:
+  - `logon()`'s `BAN_D->is_banned(query_ip_name(ob))` gate (~line 173) —
+    now skipped for loopback connections.
+  - `get_id()`'s `REGBAN_D->is_banned(query_ip_name(ob))` registration
+    ban (~line 285) — skipped for loopback.
+  - No `uptime()` startup gate and no per-IP flood throttle exist in
+    this logind (MAX_USERS capacity cap left intact — hosting capacity,
+    not per-IP).
+- `adm/daemons/band.lpc` `is_banned()` (~line 40) — defensive
+  short-circuit for non-string/empty/localhost/127.0.0.1 site strings
+  (these gates receive query_ip_name(), i.e. hostnames — the
+  dotted-quad-malformed test deliberately NOT used here so genuine
+  remote hostnames still hit the ban list).
+- `adm/daemons/regband.lpc` `is_banned()` (~line 43) — same defensive
+  short-circuit (also fixes a latent crash: `lower_case(site)` on a
+  non-string under WASM).
+- `adm/daemons/securityd.lpc` — two fixes required by admin seeding:
+  - `wiz_levels` rank table made `nosave` (restore() from the new
+    `/data/securityd.o` was ZEROING it per §7.7, crashing
+    `get_wiz_level()` → every `wiz_level()` call → login desync).
+  - `create()` ACL seeding extended: `authorized_cmds` now seeds
+    `cmds/adm`/`cmds/arch`/`cmds/wiz`/`cmds/imm` status arrays. Without
+    this, valid_cmd() denied every wizard command for every rank
+    including `(admin)` (the legacy lazy-init inside valid_cmd() can
+    never fire once create() makes the mapping non-null — pre-existing
+    latent bug, exposed by the first real wizard this lib ever had).
+
+Admin account seeded: id `fluffos`, pw `Mud@2026`, name 浮浮, granted
+`(admin)` via a hand-seeded `/data/securityd.o`
+(`wiz_status["fluffos"]="(admin)"`, `wiz_sites["fluffos"]=".*"`; "npc"
+entries kept from the daemon's own defaults). This lineage's wizard
+login additionally requires a `wizard_password` field on the login save
+— seeded into `data/login/f/fluffos.o` as the same crypt hash as the
+password, so the 巫师验证码 is also `Mud@2026`. Verified: real
+registration flow (n/fluffos/y/浮浮/pw×2/0/y/email/m → landed on 沙滩),
+relogin as fluffos (password + 验证码) →
+`update /adm/daemons/band.lpc` → 成功, `score` correct. Retest: fresh
+normal registration (秦风 m) end-to-end, look/quit correct; test char
+saves removed; zero new debug.log errors.
+
+**Save files for the orchestrator to add** (none gitignored, normal add):
+- `libs/xuanjianlu/work/data/user/f/fluffos.o` (player body)
+- `libs/xuanjianlu/work/data/login/f/fluffos.o` (login/link object —
+  holds password + wizard_password)
+- `libs/xuanjianlu/work/data/securityd.o` (admin grant)
+
+
+## Fail-closed retrofit for the loopback-allow gate (2026-07-24)
+
+The loopback helper above was originally written matching the
+project-wide convention at patch time (AGENTS.md §1.3b), which also
+treated an empty/non-string/malformed `query_ip_number()` result as
+loopback, defensively, because the WASM driver used to return garbage
+there. That underlying driver bug is now fixed (fluffos commits
+`e33bb5da` "fix: query_ip_number() returned uninitialized garbage under
+WASM" and `007bb863` "feat: synthetic resolve() on WASM instead of
+raising an LPC error", both 2026-07-23; the locally-built
+`build-debug`/`build-wasm` binaries already postdate both commits), so
+treating unparseable IPs as trusted is a fail-open gap with no remaining
+justification. Retrofitted to fail-closed: loopback is now strictly
+`ip == "127.0.0.1" || ip == "::1" || ip[0..3] == "127."` (with a
+`stringp()` guard before the slice) — a malformed/empty IP now falls
+through to the NORMAL gate instead of being treated as local. Retested
+after tightening: fresh driver boot clean, `fluffos` loopback login and
+its wizard `update` command both still work; zero new debug.log errors.

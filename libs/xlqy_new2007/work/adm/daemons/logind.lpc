@@ -45,6 +45,7 @@ varargs void reconnect(object ob, object user, int silent);
 object find_body(string name);
 int check_legal_id(string arg);
 int check_legal_name(string arg);
+int is_loopback_conn(object ob);
 string dis_attr(int value);
 private void confirm_gift(string yn, object ob, object user);
 int howmany_user() {
@@ -93,7 +94,10 @@ void logon(object ob) {
   int logon_cnt;
   int i;
 
-  if (query("last_ip") == query_ip_number(ob) && query("time") + 10 > time()) {
+  // WASM/local-play policy (AGENTS.md §1.3e): loopback exempt from
+  // anti-flood throttles.
+  if (!is_loopback_conn(ob)
+    && query("last_ip") == query_ip_number(ob) && query("time") + 10 > time()) {
     write(HIW "请你稍候再进入本MUD...... \n" NOR);
     destruct(ob);
     return;
@@ -110,7 +114,7 @@ void logon(object ob) {
       logon_cnt = logon_cnt + 1;
   }
 
-  if (logon_cnt > 10) {
+  if (!is_loopback_conn(ob) && logon_cnt > 10) {
 
     write(HIW "请你稍候再进入本MUD...... \n" NOR);
     destruct(ob);
@@ -188,17 +192,22 @@ private void encoding(string arg, object ob) {
 
   // try not accept "name" as IP
 
-  if (!ip_name) {
-    destruct(ob);
-    //	log_file( "ALLCONT", sprintf("kicked out, No IP\n"));
-    return;
-  }
-
-  for (ii = 0; ii < sizeof(ip_number); ii++) {
-    if ((ip_number[ii] != '.') && (ip_number[ii] > '9')) {
+  // WASM/local-play policy (AGENTS.md §1.3a/b): loopback and garbage-IP
+  // connections (WASM query_ip_name/number return garbage) bypass the
+  // ip-name presence check and the dotted-quad format validator.
+  if (!is_loopback_conn(ob)) {
+    if (!ip_name) {
       destruct(ob);
-      //			log_file( "ALLCONT", sprintf("kicked out, Non_number\n"));
+      //	log_file( "ALLCONT", sprintf("kicked out, No IP\n"));
       return;
+    }
+
+    for (ii = 0; ii < sizeof(ip_number); ii++) {
+      if ((ip_number[ii] != '.') && (ip_number[ii] > '9')) {
+        destruct(ob);
+        //			log_file( "ALLCONT", sprintf("kicked out, Non_number\n"));
+        return;
+      }
     }
   }
 
@@ -1053,4 +1062,15 @@ int mud_list() {
   // this_player()->start_more( output );
   write(output);
   return 1;
+}
+
+// WASM/local-play policy (AGENTS.md §1.3a/b/e): loopback / empty /
+// malformed-IP connection (what the WASM driver returns) is treated as
+// local and bypasses ban/site/IP-format/anti-flood gates.
+int is_loopback_conn(object ob) {
+  // Fail-closed (retrofit 2026-07-24): see is_loopback_site() in
+  // band.lpc for why the malformed/empty-IP fallback was removed.
+  string ip = query_ip_number(ob);
+  return (ip == "127.0.0.1" || ip == "::1"
+          || (stringp(ip) && strlen(ip) >= 4 && ip[0..3] == "127."));
 }

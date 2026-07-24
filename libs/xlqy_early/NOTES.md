@@ -468,3 +468,55 @@ all 107 blind, per AGENTS.md §6b:
   blocker, registration/login/commands all still work. **Verdict: fully
   playable under WASM**, one cosmetic IP-display glitch noted, not fixed
   (driver-side, out of scope).
+
+## WASM-enablement pass (loopback-allow / gate bypass / admin seed)
+
+Standard WASM-first pass per AGENTS.md §1.3b/e and §1.5. Gates patched:
+
+- `adm/daemons/band.lpc` — added `is_loopback_site(string)` helper
+  (loopback / empty / malformed-IP → treated as local) and short-circuit
+  `return 0;` at the top of `is_banned()`, `create_char_banned()`,
+  `is_strict_banned()` (the three IP ban gates the login flow calls).
+- `adm/daemons/logind.lpc` — added `is_loopback_conn(object)` helper
+  (same test on `query_ip_number(ob)`), and:
+  - `logon()` reconnect-flood throttle (`last_ip==ip && time+5>time`,
+    ~line 79) — now `!is_loopback_conn(ob) && ...`, loopback exempt.
+  - `logon()` "too many from this IP" cap (`logon_cnt > 10`, ~line 98) —
+    loopback exempt.
+  - `encoding()` `!ip_name` destruct + the dotted-quad char-loop format
+    validator (~lines 163-173) — whole block now guarded by
+    `if (!is_loopback_conn(ob)) { ... }`, so loopback/garbage-IP
+    connections skip both. This was the WASM-fatal gate
+    (query_ip_name/number return garbage under WASM).
+  - No `uptime() < N` startup-grace *destruct* gate exists in this lib;
+    the `uptime()` use at ~line 132 is the newid registration-throttle
+    window (game content) — left intact.
+
+Admin account seeded: id `fluffos`, pw `Mud@2026`, name 浮浮, granted
+`(admin)` by adding `fluffos (admin)` to `adm/etc/wizlist`. Verified via
+real registration flow (gb/no/new/fluffos/浮浮/Mud@2026/.../m → entered
+world) then relogin + `update /adm/daemons/logind` → "成功" and status
+line shows `(admin)`. Retest: fresh normal registration still works,
+zero new debug.log errors. Save file:
+`work/data/user/f/fluffos.o` (tracked, NOT gitignored — no force-add
+needed).
+
+
+## Fail-closed retrofit for the loopback-allow gate (2026-07-24)
+
+The loopback helper above was originally written matching the
+project-wide convention at patch time (AGENTS.md §1.3b), which also
+treated an empty/non-string/malformed `query_ip_number()` result as
+loopback, defensively, because the WASM driver used to return garbage
+there. That underlying driver bug is now fixed (fluffos commits
+`e33bb5da` "fix: query_ip_number() returned uninitialized garbage under
+WASM" and `007bb863` "feat: synthetic resolve() on WASM instead of
+raising an LPC error", both 2026-07-23; the locally-built
+`build-debug`/`build-wasm` binaries already postdate both commits), so
+treating unparseable IPs as trusted is a fail-open gap with no remaining
+justification. Retrofitted to fail-closed: loopback is now strictly
+`ip == "127.0.0.1" || ip == "::1" || ip[0..3] == "127."` (with a
+`stringp()` guard before the slice) — a malformed/empty IP now falls
+through to the NORMAL gate instead of being treated as local. Retested
+after tightening: fresh driver boot clean, `fluffos` loopback login and
+its wizard `update` command both still work; zero new debug.log errors.

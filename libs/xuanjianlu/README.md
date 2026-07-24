@@ -44,3 +44,22 @@ python3 scripts/mudclient.py 127.0.0.1 40064
   奇怪的 1969 年日期而非真实 IP，这是 WASM 驱动本身的已知限制，不影响
   功能。另外 score 指令在个别测试中没有产生任何输出，怀疑是一个较小的、
   与本次改造无关的既有小问题，仍在观察中。
+
+## 管理员账号 / Admin account
+
+- **id**: `fluffos`
+- **密码 / password**: `Mud@2026`
+- **巫师验证码 / wizard passcode**: `Mud@2026`（本 lib 的巫师登录在普通
+  密码之后还会额外要求一个"巫师验证码"，两者已设为相同）
+- **中文名 / display name**: 浮浮（Fluffos）
+- **权限 / level**: `(admin)` —— 最高权限。授权数据存放在
+  `/data/securityd.o`（`SECURITY_D` 的存档，`wiz_status`/`wiz_sites`
+  两个映射），巫师登录地址限制为 `.*`（任意地址）。已验证登录后
+  `update` 巫师指令可用（重新编译成功）。
+- 如需重新授权（存档被重置时）：重建 `work/data/securityd.o`，内容为
+  `wiz_status (["npc":"(admin)","fluffos":"(admin)",])` 与
+  `wiz_sites (["npc":".*","fluffos":".*",])` 两行（保留文件首行的
+  `#/adm/daemons/securityd.lpc` 注释亦可），并确保
+  `work/data/login/f/fluffos.o` 中含有 `wizard_password` 字段，然后重启。
+- ⚠️ **对外正式开服前请务必修改此密码**（这是本项目为本地/测试统一预置的
+  默认口令）。
