@@ -1331,6 +1331,30 @@ pattern as of this writing — treat each as a candidate for the same
 bug until verified otherwise (some may already only offer utf-8, or
 may be a lib that was never GBK/BIG5-sourced to begin with).
 
+**Second mechanism shape, seen across the whole "西游记" family**
+(`xianlvqiyuan`, `xixingzhanji`, `xiyouji`/`2003`/`2006`/`450`,
+`xlqy_early`, `xlqy_new2007`, `yueyingqiyuan`, `zitengzhan`): the lib's
+own `feature/encoding.lpc` locally OVERRIDES `set_encoding()` as a
+plain int flag (`0=GB, 1=BIG5`) — the call never reaches the driver's
+real efun at all. A separate `adm/daemons/convertd.lpc` daemon reads
+that flag in its `output()`/`input()` and runs a giant (~7000-line)
+byte-pair GB↔BIG5 lookup table on every line whenever the flag says
+BIG5. That table assumes the driver's internal strings are raw GB2312
+byte pairs — true pre-conversion, false now, so picking BIG5 ran
+`GB2BIG()` over genuinely-UTF-8 bytes and corrupted everything.
+`encode=0` ("gb") is what `convertd.lpc` already treats as a no-op
+passthrough in this family, so the fix is to map BOTH menu choices to
+`encode=0`, not `"utf-8"` — same intent, different literal value,
+because the local override's contract is int-flag-driven rather than
+charset-name-driven. **Lesson: don't assume `set_encoding()` reaches
+the driver efun — grep for a local LPC override of the same name
+(`void set_encoding(...)` in a `feature/`/`adm/` file) before deciding
+which value neutralizes it.** `xiaoyuxiyou` (same family) needed NO fix
+— its `convertd.lpc` was already gutted to no-op stubs, so the flag
+never drives any real transcoding regardless of what's selected;
+verified live before concluding this, not assumed from the file being
+short.
+
 ---
 
 ## 9. LPC formatter (`~/src/fluffos/tools/lpc-syntax/`) — required checks
