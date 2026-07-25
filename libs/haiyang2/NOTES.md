@@ -513,3 +513,225 @@ character saves removed; `data/topten.o` runtime churn reverted.
   succeeds. **Verdict: native OK + wasm OK.** No mudlib changes needed
   this pass. Test character saves removed; runtime churn
   (topten.o/fluffos.o timestamps) reverted.
+
+## 深度功能测试 / Deep functional test (2026-07-24, AGENTS.md §10.7)
+
+Full hands-on playthrough per the round-two methodology (this lib had
+already been boot/registration-verified many times over per the sections
+above, but never actually *played* through zones/training/reconnect
+edge cases). One real character, `qixiazi` / 祁侠子 (3-character real
+Chinese name, gift `0`/random, password `Test123`), taken through
+registration → exploration → a safe-training mechanic → sect-recruiter
+interaction → clean quit → unclean (net-dead) disconnect/reconnect ×2
+→ clean quit + real wall-clock wait + reconnect. Also cross-checked
+against the sibling lineage note: `hymud`'s own investigation (documented
+in the orchestrating session, not in this repo) looked for a
+command-dispatch bug reachable via `command_hook`/`add_action` and did
+NOT find a reproducible one on that lib. This pass DID find one on
+`haiyang2` — see the bug below. Both share the ES II
+`feature/command.lpc`-style dispatcher; worth checking `hymud`'s own
+`enable_player()` for the identical shape (see "Lineage" note at the
+end).
+
+**1. Newbie help**: read `doc/help/newbie` in full before touching the
+client. Confirms: start room is 扬州客店 (or 武庙 after death), the
+`fight`/较量 command is the intended safe-PvP-avoiding spar (stops at
+50% qi/jing or on `halt`), and several sects (少林/武当/峨嵋/华山/桃花岛)
+have their own 木人 (wooden dummy) for safe combat practice — the
+general 武馆 (dojo, reachable directly from the welcome room's `wg`
+exit, no sect commitment required) has the same mechanic via its own
+木人桩 (`da muren zhuang`).
+
+**2/3. Registration + continuous session**: native driver, port 40057,
+`scripts/mudclient.py`, one `--send` verified at a time through the
+wizard (encoding `gb` → English id → `y` confirm → real Chinese name
+祁侠子 → password ×2 → gift `0`→accept → email → gender `m`) — matches
+the documented flow above exactly, no desync. Landed in `/d/welcome/
+welcome` (the actual `START_ROOM`); `look`/`score`/`i` all correct
+immediately after registration and again after re-login. **Mid-pass
+interruption, not a mudlib bug**: the driver process died to a bare
+`SIGTERM` from the shared test environment ~2 minutes into the first
+session (`FATAL ERROR: SIGTERM: Process terminated` in the driver's own
+stdout, zero mudlib-side cause — consistent with AGENTS.md §10.5's
+documented "stray SIGTERM" environment hazard, not §10.8's
+driver-internal-corruption class). Restarted by exact PID/cwd
+verification and continued on the same saved character without any data
+loss (confirms the save-on-quit/relogin path is itself sound).
+
+**4. Exploring the starting zone**: `wg` (welcome room's direct exit to
+the general dojo) → `武馆大门` → `north` (大院) → `west` (长廊) →
+`west` (西练武场). All room descriptions, exits, and NPC listings
+rendered correctly at each step; read `d/wuguan/*.lpc` source to confirm
+the path rather than guessing blind.
+
+**5. Safe-sparring mechanism**: `西练武场` (`d/wuguan/wuchang1.lpc`) has
+a 木人桩 (training dummy stake); `da muren zhuang` worked correctly —
+"你站好马步，运气于拳，开始和木人桩对打起来。", consumed a small,
+bounded amount of jing/qi (visible via before/after `score`), no risk of
+death or PK. Used this instead of hunting a "weak enough" live NPC, per
+the checklist.
+
+**6. Skill/sect path**: a 星宿弟子 (Xingxiu-sect recruiter) NPC present
+in the same training room responded correctly to both an informational
+approach (`加入星宿...看 help xingxiu`) and a direct `bai xingxiu dizi`
+attempt (correctly rejected: "既不属於任何门派，也没有开山立派，不能拜师"
+— this recruiter is a flavor/pointer NPC, not itself a real sect master,
+matching the code in `cmds/skill/bai.lpc`'s `mapp(ob->query("family"))`
+gate). This is working as designed, not a bug — real sect masters live
+in each sect's own remote zone, out of scope to reach given the time
+budget for a single pass; **not verified live**: actually completing a
+`bai` onto a real family-holding master and a full `xue` skill-learn
+cycle. Documented here as an explicit gap rather than silently assumed
+tested.
+
+**7. Clean quit + debug.log**: `quit` printed the expected "正在退出游戏
+,档案保存中......"; `debug.log` grepped immediately after (both the
+raw tail and the standard `bad argument|denied|recursion|segmentation|
+undefined function|cannot #include|couldn't find object|too deep|abort|
+fatal` pattern) — zero matches beyond the expected first-compile
+warnings for lazily-loaded files. Repeated after every subsequent
+quit/reconnect cycle in this pass — always clean.
+
+**8. Unclean (net-dead) disconnect, twice, two different code paths**:
+- **First attempt** (fresh newbie, `combat_exp` == 0): abrupt socket
+  close (no `quit` sent) while sitting in `西练武场`, reconnected ~3s
+  later. Landed back in the welcome room, **not** the room where the
+  disconnect happened. Root-caused via source read (`clone/user/
+  user.lpc`'s `net_dead()`): for any player with `combat_exp < 100` the
+  lib deliberately schedules `user_dump(DUMP_NET_DEAD)` after just
+  **1 second** (`call_out("user_dump", 1, DUMP_NET_DEAD)`), instead of
+  the normal `NET_DEAD_TIMEOUT` (900s) grace period used for everyone
+  else — i.e. a genuine, immediate force-quit-and-save, not a stall or a
+  void-park. Since `西练武场` never sets `valid_startroom`, the
+  force-quit correctly left `startroom` unchanged (still the welcome
+  room) rather than saving a bogus location — so this is **not** the
+  §7.20 void-stranding shape (no void room, no permanently-corrupted
+  save field, exits all present) — it's a real, working quit-and-save,
+  just triggered unusually fast for brand-new characters. Flagged as an
+  **observation, not fixed**: this looks like a deliberate design choice
+  (an aggressive newbie-idle-connection reaper, maybe to keep player
+  slots/objects from lingering for barely-started characters) rather
+  than a missing-guard/typo shape; genuinely ambiguous whether it's
+  intentional, so left untouched per the scope note.
+- **Second attempt** (same character, `combat_exp` bumped to 5000 via
+  the admin `call` command specifically to exercise the *normal*
+  900-second-grace-period branch instead): killed the connection process
+  abruptly again while in `长廊`, reconnected ~a few seconds later.
+  `logind.lpc` correctly detected the still-live, still-`netdead`-flagged
+  body via `find_body()`, called `user->reconnect()` (confirmed reachable
+  — `grep -n "\->reconnect(" adm/daemons/logind.lpc` finds a real call
+  site, unlike the §7.20 "zero hits" tell), printed "重新连线完毕。",
+  and **the very next `look` showed `长廊` again** — the exact
+  pre-disconnect room, not the welcome room and not a void. This is the
+  correctly-implemented case and confirms the lib's `net_dead()`/
+  `reconnect()` pair works as intended for any player past the first few
+  minutes of play (the overwhelming majority of real sessions). No
+  §7.20/§7.21-shaped bug present here.
+
+**9. Clean quit + real wall-clock wait + reconnect**: quit cleanly with
+`combat_exp` at 5000, waited a genuine ~90 real seconds, reconnected.
+Landed in the welcome room (the correct, saved `startroom`); `score`
+showed `实战经验：5000`, confirming persistence across a real gap, not
+just an in-process resume. (Also incidentally resolved a red herring
+from earlier in the pass: the very first post-registration re-login
+showed "你上次光临海洋II是 Wed Dec 31 16:00:00 1969" — epoch 0 — for
+the `last_on`/`last_from` fields; this was an artifact of that first
+session's driver having died to the stray SIGTERM described above
+*before* a real quit ever ran, not a mudlib bug — every subsequent
+clean-quit-then-reconnect in this pass showed the correct real
+timestamp.)
+
+**10. Shop/combat/death**: **not verified live**, stated explicitly per
+the checklist's own fallback clause. Reaching a real shop purchase or
+death/respawn would have required either a lengthy walk to a priced shop
++ earning/being granted spendable coin, or deliberately losing a real
+fight — both reasonable but out of this pass's time budget given the
+NEW bug found and root-caused below. Left as an honest gap, not silently
+presented as tested.
+
+### Bug found and fixed: unguarded `add_action("command_hook", ...)` in `enable_player()` — matches AGENTS.md §7.28
+
+`feature/command.lpc`'s `enable_player()` (the shared function that
+registers the central command dispatcher, called once from
+`inherit/char/char.lpc`'s `create()` on every login/registration) had no
+idempotency guard around its `add_action("command_hook", "", 1)` call.
+`grep -rn "enable_player()" --include='*.lpc' .` (excluding the
+definition itself) finds **17 other call sites** across the tree that
+legitimately re-invoke it mid-session on the SAME already-`living()`
+player object — the two most universally reachable, ordinary-gameplay
+ones being:
+- `feature/damage.lpc:194` (`revive()`, called after a player is knocked
+  unconscious in a real fight — i.e. any newbie losing a real, non-spar
+  fight against an NPC, an extremely common event per the newbie guide's
+  own "低水平玩家稍有不甚就会送命" warning), and
+- `cmds/std/sleep.lpc:169`/`:196` (`wakeup()`/`wakeup2()`, called after
+  ordinary `sleep` — available to ANY player in a `sleep_room`-flagged
+  inn bedroom, not sect-gated; sleeping to regen is routine, repeatable
+  play, not an edge case).
+
+Each such re-invocation calls the bare, non-idempotent `add_action()`
+again, stacking one more duplicate wildcard sentence for the identical
+`command_hook` dispatcher on the same object — exactly the §7.28 shape
+("Redundant `enable_player()`/`enable_commands()` calls stack duplicate
+`add_action` sentences, silently re-running FAILED commands' side
+effects"), previously found on `dtsl`. Confirmed **live**, not just by
+code inspection, via the `commands()` efun (exposed by this lib's own
+`query_commands()` wrapper) inspected through the admin `call` command
+(`cmds/arch/call.lpc`):
+
+- Baseline on a freshly-logged-in character: `query_commands()` shows
+  exactly **one** `command_hook` sentence.
+- `call qixiazi->enable_player()` invoked twice more (simulating what
+  `revive()`/`wakeup()` do) → `query_commands()` now shows **three**
+  `command_hook` sentences on the same object — direct, unambiguous
+  proof of the stacking, independent of chasing a specific double-charge
+  reproduction through the full apprentice/skill-purchase chain (the
+  `cmds/skill/xue.lpc` learn-from-teacher command has the exact same
+  "unconditional `printf()`-before-a-later-`notify_fail()`" shape as
+  `dtsl`'s originally-reproduced case — see its `"你向%s请教了...疑问"`
+  message printed before three later possible failure returns — but
+  actually reproducing it live needs a real sect master relationship,
+  out of this pass's time budget; the direct `commands()` proof above
+  stands on its own).
+
+**Fix** (the same pattern §7.28 already documents — a `mhxy`-style
+`living()`-gated guard was deliberately NOT used, since this lib's own
+`disable_player()` legitimately calls bare `enable_commands()` again
+while already `living()`, which a `living()` guard would wrongly no-op):
+
+```lpc
+// feature/command.lpc, enable_player():
+  delete_temp("disabled");
+  enable_commands();
+  remove_action("command_hook", "");   // added — guarantees exactly one
+  add_action("command_hook", "", 1);   // sentence regardless of call count
+```
+
+**Verified live, post-fix, driver restarted from disk**: baseline
+`query_commands()` → 1 `command_hook` entry; `enable_player()` invoked
+**three** additional times via admin `call` → still exactly **1** entry.
+Ordinary `look`/`score`/`i` dispatch confirmed still correct (single,
+non-duplicated output) on a fresh login afterward. `git diff` confirms
+`feature/command.lpc` is the only file touched by this pass.
+
+**Lineage note**: `haiyang2`'s documented sibling `hymud` (per
+AGENTS.md's ES II family list) very likely shares this exact
+`feature/command.lpc`-shaped `enable_player()` — the orchestrating
+session's own targeted `hymud` investigation (looking for a
+command-dispatch bug from a different angle, a player-reported
+"can't do commands after registering") did not find or fix this specific
+shape. Worth a proactive grep (`enable_player()` call count +
+`add_action("command_hook"` guard) on `hymud` and other ES II-lineage
+siblings sharing this dispatcher file, out of scope for this pass.
+
+**Files modified**: `libs/haiyang2/work/feature/command.lpc` (one-line
+fix, see above).
+
+**Process hygiene**: driver run natively on port 40057 throughout
+(PID confirmed via `readlink -f /proc/<pid>/cwd` before every kill,
+never a broad pkill); killed by exact PID at the end of the pass. Test
+character `qixiazi` save files (`data/user/q/qixiazi.o`,
+`data/login/q/qixiazi.o`) removed after testing; `data/topten.o` and
+`data/user/f/fluffos.o` runtime-churn timestamps reverted via `git
+checkout`. No instrumentation was left in place — the only diff against
+HEAD is the one-line `remove_action()` fix above.
