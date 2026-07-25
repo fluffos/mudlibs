@@ -125,3 +125,69 @@ python3 ../../scripts/mudclient.py 127.0.0.1 40097 --timeout 15 \
   --send "you@example.com" --send "m" --send "9" --send "y" \
   --send "look" --send "score" --send "quit"
 ```
+
+## 深度功能测试 / Deep functional test (round two, AGENTS.md §10.7)
+
+Native driver, port 40097, tested via raw socket (finer control over
+timing than `mudclient.py` for this lib's charset→age-check→id/New→
+Chinese-name→password×2→email→gender→gift-selection wizard). Test
+characters: `qfthree`/秦风三 (password `TestPassA`) is a clean, fully-
+completed registration used for the main playthrough; `qftester` and
+`qftwo` are two earlier registrations deliberately left stuck mid-gift-
+wizard (see bug below) and kept as before/after evidence.
+
+**Bug found and fixed, live-reproduced and re-verified**: `d/wiz/init.lpc`'s
+`init()` schedules `call_out("get_start0", 0, me)` on every reconnect
+while the account's gift-selection wizard is still incomplete
+(`no_gift` still set), meant to automatically re-show the gift menu so
+the player isn't left wondering what happened. `get_start0()` tried to
+do this via `me->command("start")` — but the real `command()` efun
+(`core.spec`: `int command(string)`) takes no object argument, so this
+is a call_other to a method named `command` that is not defined
+anywhere on the player object (confirmed via a lib-wide grep). FluffOS
+silently no-ops an undefined call_other with no error raised anywhere
+(not even in debug.log), so this reconnect path produced **zero visible
+output**: a player reconnecting mid-wizard saw nothing at all after
+"重新连线完毕。" — no menu, no error, no hint — and the only way out
+was to already know to type the undocumented `start` command
+themselves (confirmed live: typing `start` manually DID correctly
+redisplay the menu, since that add_action registration itself works
+fine). Root-caused by directly inspecting `data/user/q/*.o` for
+`no_gift`, then confirming live with a raw-socket test that showed
+identical silence even after a genuine 10-second wait.
+
+Fixed by rewriting `get_start0()` to replicate `get_start1()`'s body
+directly (using `tell_object(me, ...)` instead of `write()`, since
+`write()` implicitly targets `this_player()`, which is unset inside a
+call_out) and calling `get_start(me)` directly instead of round-
+tripping through the broken `command()` call. Also fixed `show_gift()`
+the same way (`write()` → `tell_object(me, ...)`), since it's reached
+via the same call_out path. Verified live: after the fix, reconnecting
+to a mid-wizard account (`qftwo`) auto-displays the full gift menu
+within seconds with no manual `start` needed, matching the intended
+"重新连线完毕" → immediate resume UX. A fresh, uninterrupted
+registration (id → New → Chinese name → password ×2 → email → gender →
+gift accept `9`+`y`) was independently confirmed to already work
+correctly end-to-end (lands cleanly in 南城客栈/South City Inn per the
+newbie doc), so this bug specifically affects the reconnect-while-
+mid-wizard path, not first-time registration.
+
+**Verified working**: full registration flow, `look`/`score`/`hp` all
+render correctly with rich, properly-escaped ANSI formatting (no
+orphaned escape sequences), clean `quit`. debug.log/driver stdout show
+only pre-existing harmless compile warnings (unused locals, unknown
+`#pragma`) throughout — no new runtime errors from any of this session's
+testing.
+
+**Not verified live this pass** (time budget went to the reconnect-
+wizard investigation above): net-dead disconnect/reconnect after actual
+gameplay has begun, skill learning, sect/faction join, shop purchase,
+combat. Given the newbie doc's own detailed skill/combat/shop
+instructions, this lib very likely has full playable content beyond
+the registration wizard — a future pass should pick up from a
+`qfthree`-style completed character and continue the rest of the §10.7
+checklist.
+
+**Files modified**: `libs/sanjiechuanshuo/work/d/wiz/init.lpc` (the fix
+above). Test character saves kept as before/after evidence rather than
+removed.

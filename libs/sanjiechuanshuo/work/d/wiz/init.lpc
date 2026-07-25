@@ -65,8 +65,34 @@ void init()
 void get_start0(object me)
 {
     if(!me) return;
-    
-    me->command("start");
+
+    // BUG FIX (deep functional test, AGENTS.md §10.7): this call_out fires
+    // on every reconnect while no_gift is still set, meant to automatically
+    // re-show the gift-selection menu. me->command("start") is a call_other
+    // to a "command" method that is NOT defined anywhere on the player
+    // object -- the real command() is a bare driver efun (int command
+    // (string), see core.spec), not something callable via ->. FluffOS
+    // silently no-ops an undefined call_other with no error, so this
+    // reconnect path produced no output at all: the player saw nothing
+    // and had no clue that typing "start" themselves (the only other
+    // add_action bound to this verb) would actually work. Confirmed live:
+    // a raw socket test showed zero output even after a 10s wait, while
+    // manually sending "start" correctly redisplayed the full gift menu.
+    // Fixed by replicating get_start1()'s body directly here with
+    // tell_object(me, ...) instead of write() (write() implicitly targets
+    // this_player(), which is not set inside a call_out) and calling
+    // get_start(me) directly instead of round-tripping through the
+    // broken command() call -- get_start() is already player-explicit.
+    tell_object(me, "\n\n欢迎你来到三界传说!!\n");
+    tell_object(me, @LONG
+
+在开始你的MUD历程之前，首先要为自己所创造的人物选择一个合适
+的天赋，因为这将对你今后的发展有重大的影响。本站中的人物天
+赋共有四项（详见 help gifts ），每项由一个十到三十之间的整数
+来表示，一般数值越大越好，但各项的总和是固定不变的。
+LONG
+	);
+    get_start(me);
 }
 
 int get_start1(string arg)
@@ -136,7 +162,13 @@ void get_finish(string arg, object me)
 
 void show_gift(object me)
 {
-    write(_show_gift(me));
+    // BUG FIX (deep functional test, AGENTS.md §10.7): write() implicitly
+    // targets this_player(), which is unset when show_gift() is reached
+    // from get_start0()'s call_out context (see that function's own
+    // comment) -- tell_object(me, ...) targets the explicit parameter
+    // instead, correct in both the call_out path and the normal
+    // player-typed "start" path.
+    tell_object(me, _show_gift(me));
 }
 
 string _show_gift(object me)

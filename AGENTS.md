@@ -2160,6 +2160,56 @@ save/quit that same handler exists to guarantee.
 
 ---
 
+### 7.37 Calling `ob->efun_name(...)` where `efun_name` matches a real driver efun, but no method of that name is actually defined on `ob`, silently no-ops
+
+Found on `sanjiechuanshuo`'s deep functional test (§10.7): a room's
+reconnect-triggered `call_out` tried to automatically resume a stalled
+gift-selection wizard via `me->command("start")` — but the real
+`command()` efun (`core.spec`: `int command(string)`) takes NO object
+argument; it always operates on the current command-giver context.
+`ob->command(str)` is call_other syntax, which requires `ob` to define
+its OWN function literally named `command`, which nothing in this lib
+did anywhere (confirmed via a lib-wide grep). This driver raises NO
+error for a call_other to an undefined function — not to the caller,
+not to debug.log, nowhere — it just silently returns 0. The result was
+a completely silent dead end: a player reconnecting mid-wizard saw
+"重新连线完毕。" and then nothing else, forever, with zero indication
+anything was wrong, while the SAME verb typed directly by the player
+(going through the driver's own normal command dispatch, which doesn't
+depend on this broken call) worked perfectly fine — a discrepancy that
+made this easy to initially misdiagnose as "the add_action registration
+must be broken" when in fact it was fine.
+
+This is a distinct trap from §8.3a (`private`→`DECL_HIDDEN` demotion
+breaking a real, DEFINED function's dispatch) — here there was never
+any function to dispatch to in the first place; the bug is confusing
+"an efun that happens to share this name" with "a method call," a
+mistake the compiler cannot catch because call_other targets are
+resolved dynamically at runtime, not statically.
+
+Detection: whenever you see `ob-><efun_name>(...)` for any of this
+project's common efuns (`command`, `write`, `tell_object`, `message`,
+etc. — check the real signature in `core.spec` or the relevant
+package's `.spec` file), verify the target object actually defines a
+same-named method (grep the whole lib, not just the obvious base
+classes) before assuming the call does what its name suggests.
+Reproduce live by exercising the actual caller path (here: reconnect
+while mid-wizard, not just fresh registration) and watching for
+complete silence with no debug.log trace — that combination (call
+succeeds with no error, but visibly does nothing) is the tell.
+
+Fix: replace the broken round-trip with a direct call to the underlying
+logic using the already-available explicit target object, being
+careful that anything relying on implicit `this_player()` context
+(`write()`, and similarly `tell_object`-adjacent, ambient-target efuns)
+gets rewritten to take the explicit target instead — `write()` and
+friends silently target `this_player()`, which is typically unset
+inside a `call_out`, so simply removing the broken `ob->command(...)`
+call without ALSO auditing what it was trying to reach just moves the
+silent-failure point one level deeper.
+
+---
+
 ## 8. Login and registration flow bugs
 
 Registration is where restoration succeeds or fails: it exercises the
