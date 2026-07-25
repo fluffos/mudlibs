@@ -210,3 +210,228 @@ as remote/untrusted. Retested: fresh registration (id `xlqygate`, name
 all correct); fluffos login + `update /adm/daemons/band` still succeeds
 (`重新编译 /adm/daemons/band.lpc：成功！`). Zero new runtime errors. Test
 char save removed after verification.
+
+## 深度功能测试 / Deep functional test (2026-07-24, AGENTS.md §10.7)
+
+Full checklist pass: read `doc/help/newbie` first (confirms start room
+南城客栈, sect-join via `apprentice`/`recruit`, `learn <skill> from
+<teacher>`, `wimpy` for safe retreat, and the game's own advice to spar
+low-level NPCs rather than a dedicated dummy). Native driver, port
+40032, one continuous `scripts/mudclient.py` session per phase,
+`debug.log` grepped after every `quit`/reconnect. Registered several
+real-Chinese-name characters over the session (`吴垚`/wuyao,
+`林清羽`/linqing, `林清月`/linqingm, `王承志`/wangchz, `姚心薇`/yaoxinw,
+etc.) — final debug.log byte count is **identical** to the pre-session
+baseline (`work/log/debug.log`, 31531 bytes, last real content from a
+prior pass) through the entire test: registration ×many, sect join,
+organic skill learning, a real fight, a shop purchase attempt, three
+`quit`s, two unclean (net-dead) disconnects with both prompt and
+delayed reconnect, and one clean-quit-then-wait-then-relogin — **zero
+new lines**, i.e. zero runtime errors surfaced anywhere in this pass.
+
+### Bug found and fixed: leftover debug `printf("%O", ob)` leaks the login object's internal path to every registering player
+
+`adm/daemons/logind.lpc`'s `get_name()` (the Chinese-name step of new
+registration) had `printf("%O\n", ob);` immediately after the
+name-validation block and before `ob->set("name", arg)` — no comment,
+serves no functional purpose, clearly a leftover debug statement from
+development. `%O` on FluffOS renders an object's identity as its file
+path plus clone index (`/obj/login#2`), so **every single new
+registration** showed a raw internal object reference between the
+Chinese-name prompt and the password prompt:
+
+```
+您的中文名字：/obj/login#2
+请设定您的密码：
+```
+
+Confirmed live pre-fix (multiple registrations, e.g. id `shendep`/`沈德鹏`,
+id `wuyao`/`吴垚`) and confirmed gone post-fix (id `yaoxinw`/`姚心薇`: the
+Chinese-name prompt now falls straight through to the password prompt
+with no stray line). This is a real, if minor, programming defect —
+unintentional internal-state disclosure to every new player, not a
+design choice (there is no explanatory comment, and every sibling
+`get_*` step in the same file is otherwise clean of debug output).
+
+Fix (`adm/daemons/logind.lpc:614`, in `get_name()`): deleted the line.
+
+```lpc
+// BEFORE
+	printf("%O\n", ob);
+	ob->set("name", arg);
+// AFTER
+	ob->set("name", arg);
+```
+
+Two structurally-identical dead copies of the same daemon —
+`adm/daemons/login.lpc:606` and `adm/daemons/loggind.lpc:564` (note the
+double-g typo'd filename) — carry the exact same leftover `printf`, but
+neither file is ever loaded (`LOGIN_D` in `include/globals.h` points
+only at `/adm/daemons/logind`, and `grep -rn` confirms no code anywhere
+references `/adm/daemons/login` or `/adm/daemons/loggind`). Left
+untouched per AGENTS.md's dead-code convention — not on any live path.
+
+**This doesn't match any existing AGENTS.md §7 bug class** (closest is
+§7.10/§7.26, but those are about `log_error()`'s own ACL/attribution,
+not a stray developer `write`/`printf` shipped into a live prompt
+sequence). Draft class for AGENTS.md, offered in the session report
+rather than committed here per task instructions.
+
+### Root-caused, not fixed: the "default error message" noise is a real (but practically harmless) race between a 0-delay `call_out` and fast/scripted client input
+
+This lib's NOTES.md (and sibling `xianlvqingyuanzheda`'s) already
+documented an unexplained, non-deterministic appearance of the driver's
+own `default error message` (`adm/etc/config.xiyou:126`, "你发现事情不
+大对了，但是又说不上来。") during registration, with no fix attempted
+because no deterministic trigger had been found. This pass pins the
+exact mechanism:
+
+`enter_world()` (`adm/daemons/logind.lpc`) moves a brand-new character
+into `/d/wiz/init` (the gift-allocation room) synchronously. That
+room's `init()` (`d/wiz/init.lpc`) does **not** register its
+`input_to("get_input", ...)` synchronously — it schedules
+`call_out("get_start0", 0, me)`, and only `get_start0()` (running on
+the *next* server tick, not the same call stack) actually calls
+`me->command("start")`, which is what ultimately shows the gift menu
+and registers the real `input_to`. Between the room-entry text
+finishing ("...局面进入请先help whatsnew。") and that call_out actually
+firing, the player is briefly a normal command-dispatch target with
+**no** matching `add_action` and **no** pending `input_to` — any input
+arriving in that window is treated as an unrecognized ordinary command,
+producing the driver's generic `default error message` fallback
+instead of anything the room intended, and — if a script (not a human)
+keeps firing more scripted input immediately afterward — misaligns
+every subsequent scripted answer by one, cascading into a real
+false-negative test failure (confirmed: a batch of `9`/`y`/`look`/etc.
+sent at `--idle 0.4`–`0.6` reliably desyncs the whole gift-selection
+exchange, while the identical batch at `--idle 3.0` never reproduces
+it, 1-for-1 across repeated trials).
+
+**Not fixed, and not proposed as a new AGENTS.md class**: this requires
+input arriving inside a sub-second window immediately after the room's
+banner text — no real human types that fast, and a human who *did* see
+the stray "default error message" would simply see the real gift menu
+appear a moment later and answer it normally (the call_out reliably
+fires within well under a second even under this host's heavy
+concurrent-agent load in every trial observed). The mechanism is now
+understood and written down here so the next tester of this lib or its
+XLQY-family siblings doesn't have to re-derive it, but per §10.7's
+scope note this reads as a test-harness-timing artifact with no
+demonstrated real-player impact, not a programming defect to change
+code for.
+
+### Sect join and organic skill learning — both verified live, no bugs
+
+Followed the newbie doc's own path: `kezhan` (南城客栈, start) → `west`
+→ `north` reaches 十字街头 (`d/city/center.lpc`), where 张果老
+(`d/qujing/wuzhuang/npc/zhangguolao.lpc`, a 五庄观 sect teacher) stands
+reachable in exactly 2 moves from spawn. `apprentice zhang` correctly
+completed the kowtow flow and joined 五庄观 as its 4th generation
+disciple (`score` afterward showed `门派：五庄观` / `师承：五庄观张果老`
+correctly). `skills zhang` listed his teachable skills; `learn force
+from zhang` correctly charged spirit, printed "你的「内功心法」进步
+了！", and `skills` afterward showed `内功心法 (force)` newly at level
+1 — the full organic teacher-NPC path works end to end. The NPC's own
+`attempt_apprentice()` uses `command("recruit " + ob->query("id"))` to
+self-accept — this lib's `command_hook` is correctly **not** `private`
+(`feature/command.lpc:35`, with a stale `// private nomask...` comment
+above it showing this was already fixed in an earlier pass, just never
+written up) — so this NPC-issued `command()` call dispatches correctly
+(the §8.3a addendum shape that broke `xuanjianlu`/`shiji` does **not**
+recur here; already fixed, confirmed live).
+
+### Safe-sparring mechanism exists in source but is unreachable content (not a bug — documented, not touched)
+
+Two byte-identical files, `d/city/obj/muren.lpc` and
+`d/obj/misc/muren.lpc` ("木人"/wooden training dummy), implement exactly
+the §10.7-checklist "mirror the attacker's own stats in `accept_fight()`"
+safe-sparring pattern this project looks for first. Neither file is
+referenced from any room's `set("objects", ...)` anywhere in the
+tree (`grep -rln "muren"` outside the two files themselves returns
+nothing) — genuinely orphaned dev content, not wired into the live map
+in this archive snapshot. Several other NPCs that look like they
+*should* be teachers reachable near town (`d/city/npc/shubao.lpc`
+秦琼, `d/changan/npc/huang.lpc` 黄飞虎, both with full
+`recruit_apprentice`/`attempt_apprentice` bodies) are similarly
+orphaned — likely-live-elsewhere duplicates of NPCs that DO appear in
+reachable rooms under different paths (e.g. `d/jjf/npc/qinqiong.lpc`).
+This is a content gap (§13-shaped), not a programming defect — the
+newbie doc itself already documents the actual intended safe-practice
+method as fighting low-level, similarly-matched NPCs and using
+`wimpy`, not a dedicated dummy, so nothing was changed. Followed that
+documented path instead (below).
+
+### Combat, wimpy, and a shop purchase — verified live
+
+`wimpy 70` set, then walked to 鞋帽店 (`d/city/zhuque-s3.lpc` →
+`xiemao.lpc`, `west, south, south, east` from spawn) and `kill yitai`
+(二姨太, `d/city/npc/eryi.lpc`, `combat_exp` 1000 — the lowest-`combat_exp`
+reachable-and-attackable NPC found within a 4-room BFS of spawn).
+Combat played out with real damage messages on both sides; the
+character's 气血 dropped into the "受伤"/"似乎非常疲惫" bands and the
+`wimpy` auto-flee correctly triggered ("看来该找机会逃跑了．．．"),
+succeeding on the second attempt and returning the character to 朱雀大街
+unharmed further — the self-preservation mechanism the newbie doc
+promises works as documented. Did not reach death/respawn this pass
+(fled before that point, by design) — **death/reincarnation is
+therefore unverified live**, noted explicitly rather than assumed
+tested. `list` at 南城客栈 and 鞋帽店 both rendered real shop
+inventories; `buy huasheng from xiao er` (a fresh character with 0
+cash) correctly failed with "你的钱不够。" — the purchase-rejection path
+works; a successful purchase was not exercised since no test character
+in this pass had any money and grinding for some was out of scope for
+this pass's time budget.
+
+### Disconnect/reconnect — no §7.20/§7.21-class bug; this lineage doesn't use void-parking at all
+
+`obj/user.lpc`'s `net_dead()`/`do_net_dead()`/`user_dump()` chain
+**never moves the player into a VOID_OB or any holding room** — the
+body simply stays in its current room with `set_heart_beat(0)` and a
+`netdead` temp flag while disconnected; `NET_DEAD_TIMEOUT` is 600s
+before an unrecovered net-dead session force-quits via the same
+`QUIT_CMD` a real quit uses (so no separate stale-location save path to
+get wrong). `reconnect()` is a plain "resume heartbeat, clear the
+netdead flag" function, and `adm/daemons/logind.lpc`'s login flow
+genuinely calls `user->reconnect()` (line 872) on the SAME function —
+so, unlike the two flavors cataloged in AGENTS.md §7.20, there is
+structurally no location-loss path here to hit. Verified live: (1)
+disconnected without `quit` mid-session (character in 朱雀大街),
+reconnected within ~2s — "重新连线完毕。", `look` showed the same room,
+no data loss; (2) disconnected again, waited 25 real seconds (past the
+15s `do_net_dead` confirmation mark, so the driver-level `netdead` flag
+was genuinely set this time), reconnected — same clean "重新连线完毕。"
+and same room; (3) sent a clean `quit` (real flavor-text quit message),
+waited 20 real seconds, logged back in via the normal (non-reconnect)
+path — landed correctly at the persisted `startroom` (南城客栈, not
+wherever the character last stood before quitting, confirming
+`valid_startroom` gating works), `score` showed all prior state
+(gender, name, sect membership from a different, earlier test
+character) intact. `debug.log` stayed byte-identical to the
+pre-session baseline through all three cases.
+
+### Not verified live (explicitly)
+
+- **Death/reincarnation**: not reached — the `wimpy`-triggered flee
+  worked before the test character's HP ran out. Code was not
+  separately reviewed for correctness beyond what the §7.24-style grep
+  (`set("startroom"` in death/reincarnation code) below covers.
+- **A completed shop purchase**: only the correctly-rejected
+  insufficient-funds path was exercised (see above).
+- Grepped `set("startroom"` lib-wide for the §7.24 shape (death/limbo
+  code silently overwriting the persistent login-location field). One
+  hit under `d/death/`: `d/death/block.lpc` ("鸿蒙之外", the "your spirit
+  has dissolved, use suicide/reborn" limbo room) unconditionally does
+  `this_player()->set("startroom", "/d/death/block")` in `init()` for
+  every non-wizard who enters. Read (not live-reproduced, since death
+  was never reached this pass): unlike §7.24's `zzfy` shape, this room
+  itself carries `set("valid_startroom", 1)` in its own `create()` —
+  the same "may this room be a permanent home" flag `d/city/kezhan.lpc`
+  uses for the real start room — so this reads as an intentional
+  "you're now stuck here as your only reachable location until you
+  `suicide`/`reborn`" limbo design, not an accidental hijack of a
+  living player's real chosen home. Neither `cmds/std/suicide.lpc` nor
+  `cmds/usr/suicide.lpc` touch `startroom` at all, consistent with
+  "reincarnating starts you over," not "silently changes where your
+  ORIGINAL character logs in." Flagged as a content/design read, not
+  fixed, per §10.7's scope note — genuinely unverified live and stated
+  as such.
