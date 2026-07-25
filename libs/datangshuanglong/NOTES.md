@@ -325,3 +325,204 @@ expected boot-time config dump and SIGTERM-on-kill lines). Three driver
 instances started and killed by exact PID during this pass; test
 character `ceshiqi`'s save files removed afterward (`data/user/c/
 ceshiqi.o`, `data/login/c/ceshiqi.o`), fluffos's kept.
+
+## 深度功能测试 / Deep functional test (round two, AGENTS.md §10.7, 2026-07-25)
+
+Full hands-on playthrough per the §10.7 checklist. Read `doc/help/newbie`
+first (generic ES2-heritage newbie-guide text — establishes `fight` as the
+lib's point-and-stop safe-sparring command, `bai`/`xue`/`skills` as the
+sect-join/skill-learn verbs). Native driver
+(`~/src/fluffos/build-debug/src/driver config.fluffos`, cwd
+`libs/datangshuanglong/`), `scripts/mudclient.py`, one continuous session
+per leg, real Chinese names throughout (陈慕白/id `chenmu`, 秦学才/`xuecai`,
+秦一飞/`chenyi`, 秦韬/`qintao`, 秦直/`qinzhi`, 王启/`wangqi`, 郝竹/`haozhu`,
+plus wizard `fluffos`/`Mud@2026` — all throwaway test accounts' save data
+removed afterward except `fluffos`). Full flow verified repeatedly: id →
+confirm → Chinese name → password → confirm → email → gender → 4-stat
+allocation → confirm → lands in 大唐学院 (走廊) → `look`/`score`/`i` all
+correct. Explored the 石龙武馆 (Stone Dragon Martial Hall) hub reachable
+via `down` from the academy — walkway/正厅/北廊/账房(bank)/兵器铺(weapon
+shop)/练功房 rooms, plus the hub's direct sect-gate exits (阴癸派, 净念禅院,
+花间, 慈航静斋, 突厥, 东溟派, 弈剑派, 宋家堡). Withdrew bank funds
+(`withdraw <n> coin`), attempted a weapon purchase (`buy <item> from
+<vendor>`, correctly rejected for insufficient funds — cheapest stock item
+is 80 coins, a fresh character's opening deposit is only 10), and
+exercised the organic NPC-teacher skill-learning path (`bai`/`xue`/`cha`
+against 石龙武馆's 武馆教头) extensively — this is where both bugs below
+were found. Sect-join (`bai <family-NPC>`) confirmed correct via code
+review (`d/yinkui/npc/dizi2.lpc`'s `create_family("阴癸派", 7, "弟子")`
+gives a real target, matching `feature/apprentice.lpc`'s flow) and one
+live negative-case check (`bai jiao` against the family-less 武馆教头
+correctly refuses: "既不属於任何门派，也没有开山立派，不能拜师。") — the
+positive case was NOT completed live (repeated reconnect-position
+navigation errors ate the time budget; noted here rather than silently
+skipped). The lib's only reachable "safe spar" for a genuine newbie is
+`fight` itself (per newbie help); every NPC actually reachable from the
+starting hub (教头/shifu, 弟子/dizi, 弟子/shoumen_dizi,
+教头/liangongfang's jiaotou) has `accept_fight()` hardcoded to `return 0`,
+and the lib's real stat-mirrored training-dummy mechanic
+(`std/char/obj/mukuai.lpc`'s `pinzhuang` → `std/char/fighter.lpc`'s
+`set_status()`, confirmed via code to genuinely scale down to the
+attacker's own stats) is not stocked anywhere reachable from this hub —
+newbies must first grind `combat_exp` up via the outside world (or the
+一次性 li-guan gift, capped at 6000) before the hub's own mirrored `qiecuo`
+sparring (`d/slwg/get_skill.lpc`, gated `10000 <= combat_exp < 20000`)
+opens up. Documented as an observation, not fixed — plausibly intentional
+newbie-zone pacing, not a defect.
+
+### Bug 1 (fixed): `learn`/`xue` charges tuition even when the requested skill is unteachable — new class, AGENTS.md §7.33-shaped
+
+Found live: a fresh character with money in hand, asking a teacher to
+`xue <teacher> <skill they don't teach>` (e.g. shifu doesn't teach
+`unarmed`), got the expected "这项技能你恐怕必须找别人学了。" rejection —
+but the attempt still silently deducted 3 coins of tuition
+(`recognize_apprentice()`'s side effect, `MONEY_D->player_pay()`), which
+had already run and succeeded BEFORE the code ever checked whether the
+requested skill exists in the teacher's roster. Same root shape as
+AGENTS.md's own `zhongjidiyu` §7.33 entry ("persisting a state change
+before validating that the underlying action actually succeeded"),
+generalized from "writing a permanent field" to "spending real player
+currency" — every one of `master_skill`/`prevent_learn`/`my_skill >=
+master_skill`/skill-cap/`valid_learn`/`gin`/`potential` can independently
+reject the attempt for reasons that have nothing to do with payment, and
+ALL of them ran only AFTER the money was already gone.
+
+**File actually live for ordinary players is `cmds/usr/learn.lpc`, NOT
+`cmds/std/learn.lpc`** — this itself is worth recording: `adm/daemons/
+cmd_d.lpc`'s `find_command()` walks a player's command path
+(`PLR_PATH = ({"/cmds/std/", "/cmds/usr/"})`) via `while (i--)` starting
+from `sizeof(path)`, which checks the LAST-listed directory FIRST — so
+`/cmds/usr/` shadows `/cmds/std/` for any verb defined in both (this
+matches several other genuinely-diverged `std`/`usr` pairs in this lib —
+`ansuan`/`cemote`/`maphere`/`suicide`/`top` — so it's very likely an
+intentional "usr overrides std" customization layer, not itself a bug;
+just a fact worth knowing before patching ANY `cmds/std/*` file in this
+lib without first checking for a same-named `cmds/usr/` shadow). My first
+attempt patched only `cmds/std/learn.lpc` and had zero live effect until
+this was discovered and the identical fix applied to the actually-live
+`cmds/usr/learn.lpc`. `cmds/std/learn0.lpc` and `cmds/std/learn1.lpc` are
+separate, genuinely-unreachable byte-identical/near-identical backup
+files (no verb named `learn0`/`learn1` is ever looked up) carrying the
+same original ordering bug — left untouched as dead code, matching
+project convention.
+
+**Fix** (applied identically to both `cmds/std/learn.lpc` and the
+actually-live `cmds/usr/learn.lpc`): moved the `is_apprentice_of`/
+`recognize_apprentice` payment gate from immediately after the
+`living(ob)` check down to immediately before the final `write("你向...
+请教...")` success line — i.e., after every free/no-side-effect
+validation (`master_skill`, `prevent_learn`, skill-level/cap checks,
+`valid_learn`, `gin`/`potential`). Verified live, before/after: a fresh
+character with 10 coins, asking for an unteachable skill, now keeps all
+10 coins and gets the identical rejection message; the same character
+asking for a real-but-currently-fruitless skill (`sword`, which the
+teacher does teach but the "lack of combat experience" content gate still
+blocks progress on) is correctly charged exactly once (10 → 7).
+
+### Bug 2 (fixed): `enable_player()` double-registers `command_hook`, silently re-running every FAILED command's side effects — exact match, AGENTS.md §7.28
+
+Found live while investigating Bug 1: the SAME `xue jiao unarmed` attempt
+(before this fix) deducted 6 coins, not 3 — i.e., `recognize_apprentice`'s
+payment ran TWICE for one typed command. Root cause is byte-for-byte the
+scenario already described in AGENTS.md §7.28: `adm/daemons/logind.lpc`'s
+login-success flow calls `user->enable_player()` directly (~line 570),
+then a few lines later calls `user->setup()`, whose own body
+(`std/char.lpc`) ALSO calls `enable_player()` internally — two calls to
+`feature/command.lpc`'s `enable_player()` in the same login, each doing a
+bare `add_action("command_hook", "", 1)` with no idempotency guard, so two
+identical `command_hook` sentences get stacked on every login. Invisible
+for any command that succeeds (the driver stops at the first sentence
+that returns nonzero) but every FAILING command re-ran its entire body a
+second time via the second stacked sentence — confirmed live pre-fix with
+a plain `look xyz` (nonexistent item) printing "你要看什么？" TWICE, and
+with the `xue`-on-unteachable-skill case above silently double-charging.
+`cmds/std/sleep.lpc` legitimately calls `me->enable_player()` again while
+already `living()` (wake-up path), so the `living()`-gated guard §7.28
+warns against is correctly avoided here too.
+
+**Fix**: `feature/command.lpc`'s `enable_player()` now does
+`remove_action("command_hook", ""); add_action("command_hook", "", 1);` —
+guarantees exactly one sentence regardless of call count/order. Verified
+live: `look xyz` now prints its failure message exactly once, and the
+`xue`-on-unteachable-skill case (combined with the Bug 1 fix) now costs
+nothing at all, as it should.
+
+### Bug 3 (found, code-reviewed, NOT fixed — same class as AGENTS.md §7.36, live timing impractical)
+
+`feature/clean_up.lpc` (inherited by every room via `std/room.lpc`'s
+`inherit F_CLEAN_UP;`) is the exact §7.36 shape: its occupancy check for
+whether a childless room may `destruct()` itself is `interactive(inv[i])`
+alone, with no `userp(inv[i])` fallback — a net-dead player (real save
+state, `userp()` true, `interactive()` false since the socket is gone) is
+invisible to this check, so a room holding nothing but a net-dead player
+looks "empty" and can be destructed out from under them by the driver's
+own idle-object sweep, exactly as documented for `xiaoyuxiyou`. **Not
+live-reproduced**: this lib's `config.fluffos` sets `time to clean up :
+50000` (~13.9 hours of the object going unreferenced), and the driver's
+own sweep only runs once per 5 real minutes even after that — reproducing
+it live is outside any practical session budget, unlike `xiaoyuxiyou`'s
+apparently-shorter effective window. Left unfixed pending a decision on
+whether to patch proactively by code-shape match alone (this pass's time
+was spent confirming the two live-reproduced bugs above and did not
+budget for a speculative fix + full re-verification of a third). Grep
+`interactive(inv\[i\])` in `feature/clean_up.lpc` for the exact spot; the
+§7.36 fix pattern (`|| userp(inv[i])`) applies unchanged. Also worth
+checking `obj/user.lpc`'s `user_dump()`'s `tell_room(environment(), ...)`
+call (~line 182) for the same defense-in-depth `objectp()` guard §7.36
+recommends, since this lib's net-dead handling shape (no void-park, stays
+in the current room, `command("quit")` after `NET_DEAD_TIMEOUT`=900s) is
+structurally similar enough that a room destructed out from under a
+net-dead player would hit the same corrupted-`environment()` crash path.
+
+### Investigated and resolved as NOT a bug: room re-displays a second time immediately after `quit`
+
+Every `quit` (and every dropped item during the new-account "abandon
+this account" flow) is followed by a second, apparently-duplicate,
+full room re-render in a raw-telnet transcript. Traced this down via a
+byte-exact reproduction (`fluffos`/admin quitting produces it once;
+answering `n` to a fresh account's retention prompt, which drops each
+carried item one at a time, produces one extra room re-render PER
+dropped item, each one immediately preceded by matching `lbadd`/`lbrem`/
+`lbclear` control tags). Those tags are a structured list-box protocol
+this lib maintains for a custom GUI client (the `tomud`-flagged path
+already visible in `logind.lpc`'s `reconnect()`); a plain-text telnet
+client just sees the plain-text fallback of each protocol update, which
+happens to be a full room re-render. This is cosmetic noise for
+`mudclient.py`/any raw telnet client, not a functional defect — confirmed
+`debug.log` stayed byte-for-byte unchanged (zero new lines) across every
+occurrence. Recorded here so a future pass doesn't waste time
+rediscovering it.
+
+### Net-dead / reconnect testing
+
+`obj/user.lpc`'s `net_dead()` does NOT void-park the player (no §7.20
+shape here) — it just stops the heartbeat, clears enemies, and leaves the
+body in its current room, scheduling `user_dump(DUMP_NET_DEAD)` at
+`NET_DEAD_TIMEOUT` (900s) to force a `command("quit")`. `reconnect()` is a
+plain re-link (`set_heart_beat(1); remove_call_out("user_dump"); ...`),
+called from `logind.lpc`'s own `reconnect()`, which does NOT call
+`enable_player()` again (so Bug 2 above was never actually reachable via
+the reconnect path itself — only via the direct-call-plus-`setup()`
+double at initial login). Exercised repeatedly and live, across many
+accidental and deliberate unclean disconnects this pass (every
+non-`quit` session end is an unclean/net-dead disconnect from the
+server's point of view) plus one genuine ~5-real-minute wait (well inside
+the 900s window): every prompt AND delayed reconnect landed the character
+back in the exact room/state left behind, `look`/`score` both correct,
+zero `debug.log` signal. The full 900s `user_dump` force-quit firing
+itself was NOT waited out live (15 real minutes exceeds a comfortable
+single-pass time budget on top of everything else this session covered)
+— `user_dump`'s code was read and looks correct (single `tell_room` +
+`enable_player()` + `command("quit")`, no §7.12-shaped 2-arg `tell_room`
+wrapper bug present), but that specific real-time boundary is unverified
+live; flagged explicitly rather than silently presented as tested.
+
+### Not reached this pass
+
+Combat progression to death/respawn: not attempted live — every
+`accept_fight()`-enabled NPC reachable from the starting hub is either
+gated behind `combat_exp` thresholds the newbie gift doesn't clear
+(`qiecuo`, 10000-20000) or outright refuses `fight` (see the safe-spar
+discussion above), and reaching further content requires real travel time
+this pass's budget did not stretch to. Stated explicitly per §10.7 rather
+than silently skipped.

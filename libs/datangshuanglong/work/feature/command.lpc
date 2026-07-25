@@ -122,6 +122,19 @@ nomask void enable_player() {
 
   delete_temp("disabled");
   enable_commands();
+  // AGENTS.md §7.28: enable_player() is legitimately called more than once
+  // per session (adm/daemons/logind.lpc's login flow calls it directly,
+  // then again a few lines later via user->setup() -> std/char.lpc's
+  // setup(); cmds/std/sleep.lpc's wake path re-enables while already
+  // living()). A bare add_action() has no idempotency guard, so each extra
+  // call stacked another duplicate "command_hook" sentence -- invisible for
+  // any command that SUCCEEDS (driver stops at the first sentence that
+  // returns nonzero), but every FAILING command got its whole command_hook
+  // body, and therefore any side effect (e.g. cmds/std/learn.lpc's tuition
+  // payment) that ran before the failure, silently RE-RUN once per extra
+  // stacked sentence. remove_action() first guarantees exactly one
+  // sentence is ever registered, independent of call count/order.
+  remove_action("command_hook", "");
   add_action("command_hook", "", 1);
 
   if (!userp(this_object()))
