@@ -2384,17 +2384,16 @@ Recurs constantly: `nitan_ceshi`, `nitan_san`, `tianxia`
 `kuangxiangkongjian`. Grep `is_killing(` for object-passing call sites
 during the standard pass.
 
-### 8.6 Anti-flood registration throttles (now bypassed)
+### 8.6 Anti-flood registration throttles (now bypassed, §1.3e)
 
-Per-IP "one new registration per N minutes" throttles made repeat tests
-look like silent crashes (the rejection path's write() is often
-commented out — connection just drops). These are now bypassed for
-loopback per §1.3e; the diagnostic lesson stands for any remaining
-non-loopback shape: a `new → id` sequence that worked minutes ago and
-now produces nothing ⇒ check for `IsTimeAllowed`/`NewIps`-shaped
-mappings before debugging the flow; restarting the driver clears
-in-memory throttles instantly. Run full registration in ONE continuous
-client session, not several reconnects.
+Per-IP "one new registration per N minutes" throttles (bypass policy:
+§1.3e) made repeat tests look like silent crashes before that policy
+existed — the rejection path's write() is often commented out,
+connection just drops. Diagnostic residue worth keeping in mind for any
+remaining non-loopback shape: check for `IsTimeAllowed`/`NewIps`-shaped
+mappings before debugging the flow (restarting the driver clears
+in-memory throttles instantly), and run full registration in ONE
+continuous client session, not several reconnects.
 
 ### 8.7 Stale GBK/BIG5 encoding-choice menu produces mojibake (check every lib with `set_encoding()`)
 
