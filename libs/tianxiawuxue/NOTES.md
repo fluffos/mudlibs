@@ -364,3 +364,405 @@ for is fixed upstream now).
    EFUN message()` cosmetic bug still fires on its own 30-minute
    schedule (not on the registration/login path) — not fixed, out of
    scope for this pass.
+
+## 深度功能测试 / Deep functional test (2026-07-24, round two)
+
+First real *playthrough* pass on this lib per AGENTS.md §10.7. Read
+`doc/help/newbie{,1,2,3,4}` and `doc/help/combat` in full first — note
+that this content is recycled from a DIFFERENT, unrelated upstream game
+(it repeatedly names itself "晚霞"/"红尘", uses "hc" as its own
+abbreviation, and describes a Yangzhou-centric map with a `gc` central
+square and sects/mechanics that don't match this installation at all)
+and does not reflect this lib's actual starting rooms or geography —
+harmless (nothing crashes because of it) but a documentation-quality
+observation, not fixed, out of scope. `README.md`'s own description
+(four random start rooms, sect/拜师/江湖历练) is accurate and was used
+instead. Native driver (`build-debug`), one continuous character
+(`shenmubai`/沈慕白) across many `scripts/mudclient.py` sessions, each
+session's own close (no `quit`) itself exercising an unclean/net-dead
+disconnect.
+
+**Task directive: check for the `tianxia`-sibling `changed_match_path`
+bug first.** This lib does **NOT** share it. `tianxia`'s bug was a
+never-defined `changed_match_path(mapping, string)` simul_efun restored
+as a bare passthrough to the real `match_path()` efun. `tianxiawuxue`
+has no such function anywhere (confirmed via `grep -rn
+changed_match_path` — zero hits) and uses a completely different,
+architecturally-correct storage mechanism: `feature/dbase.lpc` (`inherit
+F_TREEMAP;`, not a simul_efun-based property store) delegates
+multi-segment `"a/b"`-style property paths to `feature/treemap.lpc`'s
+own `_query()`/`_set()`/`_delete()` — genuine hand-written recursive
+nested-mapping descent (`explode(prop, "/")`, walk one segment per
+level), never touching the real `match_path()` efun at all (confirmed
+`grep -rn '\bmatch_path\b'` outside `doc/` has zero hits in `work/`).
+Traced `feature/command.lpc`'s bare-directional-movement fast path
+(`environment()->query("exits/" + verb)`) by hand against
+`treemap.lpc`'s `_query()` and confirmed it correctly returns the
+nested `exits["west"]` value. **Live-verified this explicitly, per the
+task's own instruction to test BOTH forms**: registered 沈慕白, and
+both bare `west`/`east`/`north`/`south`/`northwest`/`out` etc. AND `go
+<direction>` correctly moved the character through 20+ distinct rooms
+across several zones (长安/北京城2/华山派练武场/丐帮地下暗道) with no
+asymmetry between the two forms. No fix needed here — noted for the
+record since the task specifically asked.
+
+**Test character** (kept, not cleaned up, as playthrough evidence): id
+`shenmubai`, Chinese name **沈慕白** (male), password `TxTest2026#`.
+Random gift roll: 膂力23/悟性20/根骨22/身法15. Final state: at a
+`valid_startroom` (location re-randomizes on every fresh login — see
+bug/observation below, so "current" location is not meaningful state);
+no sect/skill acquired (see below); inventory `Cloth`/`Trans site`
+(魔法传送帖); credits/deaths reset to 0 after an unavoidable mid-session
+driver restart (§10.5-consistent — only `save`/`quit` persist state, an
+in-memory-only death from before a restart does not survive it, which
+is expected, not a bug). Saves: `work/data/user/s/shenmubai.o`,
+`work/data/login/s/shenmubai.o`.
+
+### Bug found and fixed (NEW class): safe-sparring training dummies (`mu-ren`/`muren`, 9 files) never set `can_speak`, so `fight`/`hit` route every spar attempt through the REAL lethal `kill_ob()` path instead of the dummy's own carefully-written safe `accept_fight()` — live-reproduced player death on the very first hit
+
+**Files: `d/city/npc/mu-ren.lpc`, `d/shaolin/npc/mu-ren.lpc`,
+`d/shaolin/obj/mu-ren.lpc`, `d/shaolin/npc/obj/mu-ren.lpc`,
+`d/quanzhen/npc/muren.lpc`, `d/mingjiao/obj/mu-ren.lpc`,
+`d/mingjiao/npc/obj/mu-ren.lpc`, `d/shushan/obj/muren.lpc`,
+`d/working/obj/mu-ren.lpc`.**
+
+- **How this was found**: per AGENTS.md §10.7 item 3 and this task's
+  explicit instruction, went looking for the lib's own safe-sparring
+  mechanism before risking a real fight. Found `d/shaolin/npc/mu-ren`
+  (a training-dummy NPC placed in `d/city2/wuchang.lpc`'s 练武场,
+  reached via `trans tam` + 6 hops) with an elaborate, obviously
+  intentional `accept_fight(object ob)` override: it copies the
+  attacker's own skills/skill-maps/stats onto itself
+  (`ob->query_entire_dbase()` → `me->set(...)` for str/int/con/dex/
+  qi/jing/neili/jiali), sets `"no_die": 1` on itself, and tracks
+  `fight_times`/`last_fighter` so it "breaks" after repeated use rather
+  than ever dying — unambiguously a purpose-built, always-safe practice
+  partner, matching `help combat`'s own promise that `fight`/`hit`
+  never cause real death ("不会真的受伤"). Used `fight mu ren` against a
+  **fresh, unequipped, level-0 character** expecting a guaranteed-safe
+  bout — and the training dummy killed the character outright on its
+  second real exchange (`你口中喷出几口鲜血，倒在地上,死了！`, death
+  counter went from 0 to 2 across two separate spar attempts before a
+  later driver restart reset the unsaved counter back to 0).
+- **Root cause**: `cmds/std/fight.lpc`'s `main()` only calls
+  `obj->accept_fight(me)` inside an `if (obj->query("can_speak")) {
+  ... }` branch; the `else` branch (taken whenever `can_speak` is
+  unset/falsy) skips `accept_fight()` entirely and instead runs
+  `me->fight_ob(obj); obj->kill_ob(me);` — REAL, lethal combat, the
+  exact same call `kill.lpc` would make. `cmds/std/hit.lpc` has the
+  identical shape. None of the 9 `mu-ren`/`muren` dummy files ever
+  `set("can_speak", 1)` (confirmed: `can_speak` appears nowhere in any
+  of them before this fix), so `query("can_speak")` returns
+  `0`/undefined for all of them, and EVERY `fight`/`hit` against a
+  training dummy — lib-wide, in every zone that has one — silently took
+  the lethal branch instead of the safety-net branch its own code was
+  clearly written for. Confirmed `accept_fight()` is called from
+  NOWHERE else in the entire codebase (`grep -rn 'accept_fight('
+  work/cmds work/feature work/inherit`, only hit: `fight.lpc`'s one
+  call site plus the base definition in `inherit/char/npc.lpc`) — so
+  `fight` really is the sole intended entry point, and this
+  `no_die`-flagged, stat-mirroring dummy's `accept_fight()` was
+  provably 100% dead code before this fix, for every single instance
+  in the archive.
+- **Why this isn't the "a safe spar that isn't perfectly safe" design
+  choice AGENTS.md §10.7's scope note warns against fixing**: that
+  caution is about `help combat`'s own documented risk when the skill
+  gap between two REAL opponents is too large (an intentional balance
+  mechanic). This is categorically different — a single-purpose,
+  `no_die`-flagged practice-dummy NPC whose entire elaborate
+  stat-mirroring safety mechanism is architecturally unreachable via
+  the only command that could ever invoke it, contradicting both its
+  own code's obvious purpose and the command's own player-facing help
+  text. Confirmed byte-identical in the pristine raw archive
+  (`raw/mud/world/kungfu/…` n/a — dummy files are under `d/`, checked
+  `raw/mud/world/d/city/npc/mu-ren.c` etc.; the `can_speak`-less shape
+  matches `work/` exactly) — an original-game bug, not introduced by
+  conversion, but squarely "making its own already-intended logic
+  actually work" per the scope note's own test, not a balance judgment
+  call.
+- **Fix**: added `set("can_speak", 1);` right after `set_name(...)` in
+  all 9 files (the dummy's own `long` description already says "如同
+  真人一般" — "as lifelike as a real person" — so this is consistent
+  with its own flavor text, not an invented property). This is a
+  narrow, local, zero-blast-radius fix: it does NOT touch the shared
+  `fight.lpc`/`hit.lpc` command files (which route hundreds of other,
+  genuinely-hostile silent NPCs system-wide and were deliberately left
+  alone, since auditing whether ALL of those should also gain a
+  safe-negotiation path is a design question outside this task's
+  scope), and does not affect any other NPC in the lib.
+- **Verified live, before/after**: before the fix, `fight mu ren`
+  (matchable id is the two-word `"mu ren"`, not `"muren"`) against the
+  `d/city2/wuchang` dummy killed the fresh test character on the second
+  exchange. After the fix (recompiled via the `fluffos` admin's `update
+  /d/shaolin/npc/mu-ren` etc., all 9 files individually confirmed
+  "重新编译 ... ：成功！", then a full driver restart to be certain), the
+  identical `fight mu ren` sequence against the same dummy correctly
+  ran several rounds of real-looking combat log text, then the dummy
+  **conceded** (`木人胜了这招，向后跃开三尺，笑道：承让！`) — matching
+  the sibling `tianxia` lib's own documented safe-spar-concedes shape
+  — the character survived with `<气>` (stamina) depleted but no
+  injury, gained `+1 实战经验`/`+1 潜能`, and `你共死亡` stayed at `0`.
+  `debug.log` showed zero new lines from either the pre-fix death or
+  the post-fix safe spar.
+- **This is a NEW bug class for AGENTS.md's catalog** — see draft
+  below (not added to AGENTS.md directly per this task's instructions).
+
+### Bug found and fixed: `kungfu/class/gaibang/hong.lpc`'s `attempt_apprentice()` wraps two rejection conditions in `mapp()`, which is always false for a boolean/int comparison result, permanently bypassing both intended sect-entry gates
+
+**File:line: `kungfu/class/gaibang/hong.lpc:75` and `:79`.**
+
+- **How this was found**: while looking for an accessible sect to
+  exercise the organic `apprentice` path with `shenmubai`'s randomly
+  rolled (and comparatively weak) stats, read every `attempt_apprentice()`
+  override in `kungfu/class/*/*.lpc` looking for one without a
+  hard-to-satisfy stat gate. 洪七公 (`hong.lpc`, 丐帮/Beggars' Sect's
+  17th leader) has:
+  ```lpc
+  if (mapp(ob->query("shen") < 100000)) {
+    command("say " + RANK_D->query_respect(ob) + "的侠义不够啊，怎么能成为我老叫花的徒弟呢");
+    return;
+  }
+  if (mapp(ob->query_skill("huntian-qigong") < 600)) {
+    command("say " + RANK_D->query_respect(ob) + "的本派内功不够啊，怎么能成为我老叫花的徒弟呢");
+    return;
+  }
+  ```
+  `ob->query("shen") < 100000` and `ob->query_skill(...) < 600` are
+  both relational-comparison expressions that evaluate to plain `int`
+  `0`/`1` — `mapp()` is the driver's mapping-type predicate and returns
+  `0` (false) for ANY non-mapping argument, including these ints. So
+  `mapp(<anything> < <anything>)` is unconditionally `0`, the `if`
+  body (the rejection) can NEVER execute, and both gates are dead code:
+  every character, regardless of actual `shen`/skill level, sails past
+  these two checks. This sits directly between a correctly-formed
+  guard two lines above it (`if ((int)ob->query_str() < 30 || (int)
+  ob->query_con() < 25) { ...; return; }`, no `mapp()`) and another
+  correctly-formed guard four lines below it (`if (mapp(ob->query
+  ("family")) && ...)`, where `mapp()` is used CORRECTLY because
+  `ob->query("family")` really is expected to be a mapping) — the
+  `mapp()` wrapper on the two broken lines is an obvious copy/paste
+  artifact from the third guard's *correct* usage of `mapp()`, applied
+  to the wrong kind of expression on the two lines above it.
+- **Confirmed present byte-identical in the pristine raw archive**
+  (`raw/mud/world/kungfu/class/gaibang/hong.c` lines 78/82) — an
+  original-game bug, not introduced by conversion.
+- **Fix**: removed the erroneous `mapp()` wrapper, restoring plain
+  boolean guards matching the surrounding code's own established
+  pattern:
+  ```lpc
+  // BEFORE:
+  if (mapp(ob->query("shen") < 100000)) { ...; return; }
+  if (mapp(ob->query_skill("huntian-qigong") < 600)) { ...; return; }
+  // AFTER:
+  if (ob->query("shen") < 100000) { ...; return; }
+  if (ob->query_skill("huntian-qigong") < 600) { ...; return; }
+  ```
+- **NOT fully live-verified end-to-end** — recompiled cleanly via the
+  `fluffos` admin's `update /kungfu/class/gaibang/hong` (confirmed
+  "重新编译 ... ：成功！", no compile errors), but reaching 洪七公 himself
+  (`d/city/gbxiaowu.lpc`, "林间小屋") turned out to be gated behind a
+  SEPARATE, legitimate design mechanism: the only mapped entrance
+  (`d/city/gbandao.lpc`, "暗道") has its own `valid_leave()` override
+  that blocks any non-丐帮 character from proceeding further via an NPC
+  (简长老) that physically attacks and repels outsiders — i.e., you
+  must already be in the sect to reach the sect leader who recruits
+  you, an unrelated chicken-and-egg gate this task's time budget didn't
+  allow fully tracing (possibly a different, unmapped entrance exists;
+  not investigated further). The `mapp()` logic error itself is
+  unambiguous from static reading and the clean recompile confirms no
+  syntax regression, but the actual in-game consequence (does a
+  low-`shen` character now get recruited, live) is explicitly
+  **unverified**, flagged honestly rather than claimed.
+
+### Observation (NOT fixed — genuinely ambiguous, documented per the task's own instruction rather than guessed): fresh characters' spawn location is re-randomized on literally EVERY future login, not just the first, because `enter_world()`'s success branch never persists `"startroom"`
+
+**File: `adm/daemons/logind.lpc`, `enter_world()`, contrast the success
+branch (~line 690) against the fallback branch (~line 693-695).**
+
+```lpc
+if (file_size(startroom + ".lpc") > 0 && !catch(load_object(startroom)))
+  user->move(startroom);          // <-- no user->set("startroom", ...) here
+else {
+  user->move(start_room[i]);
+  startroom = start_room[i];
+  user->set("startroom", start_room[i]);   // <-- only the fallback persists it
+}
+```
+
+- **How this was found**: registered `shenmubai`, landed at 客店
+  (`/d/city2/kedian`). Later, after an unavoidable driver restart mid-
+  session (destroying the live in-memory object, forcing a real
+  `restore()` + `enter_world()` fresh-login path rather than a
+  `reconnect()`), the SAME character landed at a completely different
+  room (北疆小镇, one of the other 3 `start_room[]` entries) despite
+  never having died or explicitly relocated. Traced this to
+  `enter_world()`: `startroom = user->query("startroom")` is read on
+  every login, but the only two places that ever WRITE it are (a) this
+  function's own fallback branch (only reached if the previous
+  `startroom` failed to load — not the normal case), and (b)
+  `cmds/usr/save.lpc`'s `save` command, and ONLY when the player is
+  standing in a room with `set("valid_startroom", 1)` at the moment
+  they type `save`. Confirmed no other write site exists
+  (`grep -rn 'set("startroom"' work/` → exactly these two). The
+  periodic `adm/daemons/autosaved.lpc` daemon (runs every ~600s on
+  every connected player) calls the bare `->save()` method, NOT the
+  `save` command's logic, so it does not set `startroom` either. Net
+  effect: unless a player deliberately types `save` while standing in
+  one of the four starter rooms, EVERY subsequent full login (not just
+  the first) re-rolls a fresh random start room from
+  `start_room[random(4)]`.
+- **Why this is genuinely ambiguous, not a clear-cut bug**: (1)
+  Confirmed byte-identical in the pristine raw archive
+  (`raw/mud/world/adm/daemons/logind.c` lines 704-717) — an original,
+  never-since-fixed shape, not introduced by this project's conversion.
+  (2) The `save` command's own player-facing text —
+  "当你下次连线进来时，会从这里开始" ("next time you connect, you'll
+  start from here") — explicitly frames binding a spawn point as an
+  opt-in player action, which reads as consistent with "random until
+  you bind" being the intended default, not an oversight. (3) However,
+  the sibling lib `tianxia`'s equivalent `enter_world()` (`libs/tianxia
+  /work/adm/daemons/logind.lpc` ~line 1049) DOES call `user->set
+  ("startroom", startroom)` in BOTH branches, making a first-time-random
+  spawn point sticky from then on automatically — a meaningfully
+  different (and arguably more standard) design for the same lineage
+  family, which raises real doubt about whether the missing call here
+  was actually intentional or itself an unnoticed upstream bug that
+  `tianxia` simply doesn't share.
+- Per AGENTS.md §10.7's explicit scope note (which uses almost this
+  exact shape — "a 'safe' spar that isn't perfectly safe" — as a
+  worked example of a design choice NOT to fix) and the task's own
+  "when genuinely unsure, document, don't guess" instruction: left
+  UNTOUCHED. Documented here for a human maintainer's judgment call,
+  not silently ignored.
+
+### Sixth independent occurrence of the known driver-fatal crash class (AGENTS.md §10.8) — corroborating, not a new mudlib bug
+
+During this pass's net-dead soak window (character disconnected
+uncleanly, driver left running idle ~12 minutes with no player
+commands), the driver process itself aborted:
+```
+md: debugmalloc: attempted to free non-malloc'd pointer <addr>
+Aborted (Signal sent by tkill() <pid> 1000)
+```
+with a full C++ backtrace through `reclaim_objects()` →
+`gc_mapping()` → `check_svalue()` → `free_svalue()` →
+`dealloc_object()` → `debugfree()` → `MDfree()`'s own internal
+consistency check aborting — i.e., triggered by the driver's own
+periodic ~5-minute `remove_destructed_objects()`/`reclaim_objects()`
+GC sweep, the exact same trigger path §10.8 already documents for
+`shenzhou`. This is corroborating evidence for the existing §10.8
+entry (now six independent occurrences across six unrelated
+libs/lineages), not a new finding — flagged here per §10.8's own
+"treat 'the process was still alive at the end' as worth checking"
+guidance, not silently omitted. One small refinement to the existing
+note: unlike every prior occurrence (which left `debug.log`
+completely untouched), THIS occurrence's `debugmalloc` warning line
+**was** captured in `debug.log` (one line, no further detail) —
+apparently that specific abort path routes through `debug_message()`
+before `abort()`, unlike the plain ref-count-consistency-check crashes
+in the other five occurrences. Not mudlib-fixable; not root-caused
+further here, consistent with the existing entry's own conclusion.
+
+### What was tested and confirmed working
+
+- **Registration**: real Chinese name (沈慕白) through the full gift-
+  selection/email/gender flow into a real random `valid_startroom`
+  (varied across sessions: 客店, 武庙, 北疆小镇 all observed — see the
+  `startroom` observation above for why).
+- **Movement/exploration**: both bare directional commands AND `go
+  <direction>` (see the `changed_match_path`-check section above),
+  20+ rooms across 长安/北京城2 (王府井/地安门/天安门/太庙-adjacent
+  streets)/华山派/丐帮暗道/一片"青竹林" random-move maze zone (a
+  legitimate lost-in-the-woods mechanic, not a bug — eventually exits
+  via any repeated direction).
+- **Long-distance travel**: `trans <code>` (`Trans site`/魔法传送帖,
+  a starting-inventory item) correctly teleported the character to
+  `hs`/华山, `gc`/扬州广场, `tam`/天安门 instantly, each with the
+  correct "身影突然出现在一阵烟雾之中" flavor text and a real 10-`jing`
+  cost — confirmed reaching the intended LIVE zone each time (not a
+  stale/backup path, no §7.18-shaped bug here).
+- **Safe sparring**: `fight mu ren` against the `d/city2/wuchang`
+  training dummy — see the bug writeup above (confirmed genuinely
+  unsafe before the fix, confirmed genuinely safe, auto-concede,
+  reward-granting after it).
+- **Sect join (organic NPC path), mechanism confirmed working even
+  though not completed**: `apprentice yue`/`apprentice buqun`
+  against 岳不群 (华山派 sect head, reached via `trans hs`) correctly
+  triggered his `attempt_apprentice()` dialogue and correctly rejected
+  the character on legitimate content grounds (`shen<10000`,
+  `dex<25` — both real, intentional stat gates, confirmed via source
+  reading, not a bug); same against 令狐冲's lower-but-still-unmet
+  `int<25` gate (read only, not reached live — see travel notes in the
+  earlier "Interactive test result" section of this lib's own history
+  for why 舍身崖 wasn't attempted this pass, prioritizing the more
+  reachable target instead). The `apprentice`/`command()`-self-call
+  chain itself (message_vision, `set_temp("pending/apprentice", ...)`)
+  ran correctly with no crash or error in every attempt — the
+  MECHANISM works; this character's own randomly-rolled stats simply
+  never qualified for either master tried, which is content, not a
+  bug, per AGENTS.md §10.7's scope note.
+- **`learn`**: read `cmds/skill/learn.lpc` in full (requires
+  `is_apprentice_of()` or `recognize_apprentice()`, neither ever true
+  for `shenmubai` given the above) — mechanism understood but NOT
+  exercised live, since no sect join ever succeeded this pass.
+  Honestly unverified, not claimed as tested.
+- **Clean `quit`**: correct ASCII-art farewell banner
+  (`/adm/etc/welcome1`) + `me->save(); destruct(me);`, zero new
+  `debug.log` lines immediately after, confirmed multiple times across
+  the session.
+- **Unclean (net-dead) disconnect + PROMPT reconnect** (within the
+  600s `NET_DEAD_TIMEOUT`, `include/user.h`): every `mudclient.py`
+  session in this pass that didn't end in `quit` (i.e., almost all of
+  them) was itself a real unclean disconnect; reconnecting shortly
+  after consistently printed `重新连线完毕。` and resumed the exact
+  same live object/room, confirmed repeatedly (e.g. mid-navigation
+  rooms with no other way to be standing in them).
+- **Admin account** (`fluffos`/`Mud@2026`): confirmed working,
+  `(admin)` status, `update <path>` successfully hot-recompiled all 10
+  edited files with "成功！" and no errors — used deliberately as a
+  `find_body()`+`move()` teleport shortcut via `eval` (per AGENTS.md
+  §10.3's instrumentation guidance) after this lib's dynamically-
+  changing/maze-like room graph made hand-navigated pathing to a
+  specific distant NPC unreliable; `work/tmp/` had to be created first
+  (missing directory, `eval`'s scratch-file write otherwise fails —
+  a minor pre-existing admin-tooling gap, not fixed, out of scope,
+  removed again before finishing).
+
+### What was NOT verified live, and why
+
+- **Full 600-second `NET_DEAD_TIMEOUT` force-quit reconnect path**:
+  attempted via a real wall-clock wait, but the driver process itself
+  crashed during that same idle window from the independent, known
+  §10.8 driver-fatal class documented above (a sixth corroborating
+  occurrence, itself a legitimate finding), before the timeout could
+  fire and be observed. Given the time already spent this pass, this
+  check was not re-attempted after restarting the driver. Explicitly
+  unverified — not claimed as tested. (The PROMPT-reconnect path,
+  the mechanically-adjacent code, was verified repeatedly, above.)
+- **State persistence across a clean `quit` + real wait + reconnect**:
+  a clean `quit` was run and confirmed error-free, but the driver
+  crashed (same §10.8 event) before a deliberate post-quit wait +
+  reconnect could be re-run in this final pass. Money/inventory/skill
+  state WAS repeatedly confirmed correctly round-tripping across the
+  many earlier prompt-reconnects earlier in the session (strong
+  circumstantial evidence the same save/restore path is sound), but
+  this specific checklist item was not independently re-verified after
+  the crash. Explicitly flagged, not silently assumed.
+- **`hong.lpc`'s fix, live end-to-end** (recruitment actually
+  succeeding with a low-`shen` character) — blocked by a separate,
+  legitimate access-gate mechanism reaching 洪七公 himself; see the bug
+  writeup above.
+- **A real shop purchase (`buy`/`list`)**: identified a reachable
+  vendor (`d/city2/npc/xiaofan.lpc`, `list`/`buy` via `inherit
+  F_VENDOR`, `feature/dealer.lpc`) very close to the starting `客店`
+  zone and read its full `do_list()`/`do_buy()` implementation, but
+  ran out of session time (driver crash, then the coordinator's
+  explicit time-box) before actually executing a live purchase.
+  Explicitly unverified, not claimed as tested.
+- **Real combat to death / respawn**: not attempted (per the task's
+  own guidance to use the safe-sparring mechanism first, which
+  consumed most of this pass's combat-testing time investigating and
+  then fixing the mu-ren bug above). Death/reincarnation code was not
+  read this pass.
+- **WASM interactive playthrough**: this pass was native-driver only,
+  per the task's own instructions.
