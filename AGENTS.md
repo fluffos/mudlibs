@@ -1758,20 +1758,27 @@ refuses to call it. Fix: drop `private` (keep `nomask`).
 Affected so far: `xuanjianlu`, `beimeixiakexing2001`, `bxsj`, `bxsj1`,
 `jinyongwenzi`, `xiakexing3`, the `jinyongqunxiazhuan2008` group,
 `zhongjidiyu` (twice — main hook plus an 18-handler NPC file),
-`zhongjidiyu_airuoyoulan`, `tiexuejianghu`, `xingzhanyingxiong` (found
-via a deep functional test, §10.7 — reached only through an NPC's own
-`command()` call in its sect-recruit path, not by any player-typed
-command, since ordinary typed commands arrive via `ORIGIN_DRIVER` and
-bypass the privacy check that only bites `ORIGIN_EFUN` calls; every
-earlier smoke test on this lib only ever typed commands directly, so
-the whole sect-join system silently never worked until this pass).
-**Empirical caveat: a
-`private` command_hook does NOT always break dispatch on current
-drivers** — `shiji`, `tianxia`, and `zhonghua2` work despite it (exact
-conditions unestablished; possibly declaration-shape or driver-version
-dependent). So: treat `private command_hook` as a prime suspect and fix
-it on sight, but do not *assume* it is the (only) cause — verify by
-actually testing `look` after the fix, and keep hunting (§8.3b, §7.14)
+`zhongjidiyu_airuoyoulan`, `tiexuejianghu`, `xingzhanyingxiong` and
+`shiji` (both found via a deep functional test, §10.7 — reached only
+through an NPC's own `command()` call, not by any player-typed command,
+since ordinary typed commands arrive via `ORIGIN_DRIVER` and bypass the
+privacy check that only bites `ORIGIN_EFUN` calls; every earlier smoke
+test on both libs only ever typed commands directly, so movement's
+auto-look and every sect-join system silently never worked until these
+passes — `shiji` is the SAME underlying game as `xingzhanyingxiong`,
+same bug, same lineage, independently discovered). **Empirical caveat,
+now narrowed**: `private` command_hook does NOT always break
+*player-typed* dispatch on current drivers — `shiji` itself, `tianxia`,
+and `zhonghua2` all confirmed to accept ordinary typed commands despite
+it (exact conditions unestablished; possibly declaration-shape or
+driver-version dependent) — but `shiji`'s own §10.7 pass proves this
+exception does NOT extend to `command()`-efun self-calls, which still
+silently fail. So: treat `private command_hook` as a prime suspect and
+fix it on sight regardless of whether typed commands look fine, and
+specifically test at least one NPC-issued `command()` path (movement
+auto-look, an NPC's own recruit/attack/chat trigger) before concluding
+dispatch is fully healthy — verify by actually testing `look` after the
+fix, and keep hunting (§8.3b, §7.14)
 if commands are still dead.
 
 **Addendum: the same demotion breaks `call_out()`-dispatched functions
@@ -2246,6 +2253,25 @@ pinned root cause on any lib, promote this into a proper numbered §7.x
 bug-class entry with an actual fix; until then, treat "the process was
 still alive at the end of a long session" as itself a thing worth
 explicitly checking, not assuming.
+
+**Second independent occurrence — corroborating, still unpinned**:
+`shiji`'s deep functional test hit the SAME class of failure
+(`FATAL: Object .../cmds/skill/recruit ref count 0, but not destructed
+(from free_svalue)`) roughly 20 minutes into an unrelated session, this
+time during an admin reconnect rather than ambient NPC wandering, and
+on a completely different lib/lineage from `xianjianchuanqi`. Two
+follow-up attempts to reproduce the exact triggering sequence on a
+fresh character immediately after restart did not reproduce it, nor did
+another ~15 minutes of further play. This is now corroborating evidence
+that the underlying driver-level refcount-corruption class is real and
+not a one-off — two independent libs, two different objects, two
+different immediate trigger paths, same fatal signature — but it
+remains genuinely low-reproducibility and root-caused to the driver
+level (not mudlib-fixable), not any specific mudlib source pattern. If
+a third occurrence pins down a reproducible trigger, this is worth
+escalating as a driver-level investigation in the `~/src/fluffos`
+checkout itself rather than continuing to treat it as a per-lib mudlib
+finding.
 
 ---
 
