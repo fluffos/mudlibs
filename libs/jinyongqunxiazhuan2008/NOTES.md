@@ -729,89 +729,27 @@ past it to the nearest existing catch, in `master.lpc`'s `preload()`).
 sequence — full skill list printed, zero runtime error, zero new
 `debug.log` lines.
 
-**2. `d/death/gate.lpc` and `d/city/wumiao.lpc` — unconditional,
-unconsented, unannounced permanent-login-location hijack on mere room
-entry (AGENTS.md §7.24, exact match)**
-
-Both rooms had an `init()` that ran on EVERY player who ever stepped
-into the room (not gated behind any quest state, any player command,
-or even an interactive check in wumiao's case) and unconditionally
-overwrote the SAME `startroom` field `adm/daemons/logind.lpc`'s
-`enter_world()` reads on every future full login:
-```lpc
-// d/death/gate.lpc — BEFORE:
-void init() {
-  object ob;
-  ob = this_player();
-  ob->set("startroom", "/d/death/gate");
-}
-// d/city/wumiao.lpc — BEFORE:
-void init() {
-  object me;
-  me = this_player();
-  me->set("startroom", base_name(environment(me)));
-  return;
-}
-```
-Contrast with the lib's own LEGITIMATE, sanctioned mechanism
-(`cmds/usr/{save,quit}.lpc`), which only ever writes this field when
-the PLAYER explicitly types `save`/`quit` while standing in a room
-flagged `valid_startroom`, and always tells them: "当你下次连线进来
-时，会从这里开始。" Both buggy rooms print no such notice — the
-location silently becomes permanent.
-
-`d/death/gate.lpc` is the game's own `DEATH_ROOM`
-(`include/login.h:18`) — every single player death routes through it
-(`feature/damage.lpc`'s `die()` → `move(DEATH_ROOM)`), and NOTHING in
-the entire reincarnation chain (`d/death/{gateway,road1,inn1}.lpc`,
-ending in `inn1.lpc`'s `do_stuff()` → `ob->reincarnate();
-ob->move("/d/city/wumiao")`) ever resets `startroom` back — so a
-player's FIRST DEATH would have permanently and silently relocated
-every future login to 鬼门关 (literally "the gate of the underworld"),
-forever, exactly matching the `zzfy` precedent that established §7.24.
-`d/city/wumiao.lpc` (岳王庙, a temple) is even more severely reachable
-— it's an ordinary, unrestricted city room on the main street grid
-(`d/city/beidajie2.lpc`'s `west` exit), so ANY player who ever walked
-in to look around (not just reincarnating ghosts) got silently
-rehomed there too.
-
-**Confirmed NOT the same bug** (checked before touching anything, per
-§7.24's own detection heuristic — "does the room's code carry a
-restore path elsewhere"): `d/city/cangku.lpc` / `d/shaolin/cangku.lpc`
-(仓库, exit-less "you've been sold here" rooms reachable ONLY via
-`feature/dealer.lpc`'s `do_sell()`) have a genuine matching release
-path in `d/city/npc/tang.lpc`'s `do_redeem()`, which explicitly resets
-`startroom` back to `/d/city/kedian` on release. `d/shaolin/{jlyuan,
-jianyu,shulin9,shulin11,shulin13}.lpc` + `kungfu/condition/
-bonze_jail.lpc` + `d/shaolin/andao2.lpc` are one coherent "caught
-trespassing → tried → jailed → released or escaped" mechanic whose
-`startroom` writes on capture are matched by explicit
-`ob->set("startroom", START_ROOM)` resets on both the "found innocent"
-and "escaped through the tunnel" endings. Both are internally
-consistent, deliberate content designs (per the task's scope
-correction, not touched) — the death gate and the temple have no such
-matching reset anywhere.
-
-Fix — removed the automatic write entirely (the room's own `move()`
-into it already handles the immediate placement; no future-login
-side effect is needed):
-```lpc
-// d/death/gate.lpc AFTER: (init() deleted entirely — nothing else in
-// it, and ROOM's own base class has no init() to call via ::init())
-// d/city/wumiao.lpc AFTER: (same — init() deleted entirely)
-```
-**Verified live, both**: (a) admin `fluffos` explicitly `goto
-/d/death/gate`'d then `quit`AT the gate (this IS the legitimate,
-sanctioned path since the room still carries `valid_startroom`, and
-DOES correctly show "当你下次连线进来时，会从这里开始。") — separately
-confirmed the actual bug fix by having `fluffos` die for real, fully
-reincarnate via the ritual, walk to a non-`valid_startroom` room, and
-`quit` there — the next login correctly returned to `/d/city/kedian`
-(the character's real, original chosen home), NOT the death gate. (b)
-`shenshaofeng` walked into 武庙, looked around, walked back out to 北
-大街 (not `valid_startroom`), and `quit` there — next login correctly
-returned to `客店` (the original chosen home), NOT 武庙. Before the fix
-this exact sequence would have landed back in 武庙 every time.
+**2. (RETRACTED — content/design judgment call, not a programming bug;
+reverted on user review) `d/death/gate.lpc` and `d/city/wumiao.lpc`'s
+`init()` unconditionally wrote the player's permanent `startroom` on
+mere room entry.** Originally flagged as an AGENTS.md §7.24 match and
+fixed by deleting both `init()` bodies — since reverted. The key fact
+that distinguishes this from the earlier `zzfy` §7.24 case: **both
+rooms already flag themselves `valid_startroom` via their own
+`create()`** — unlike `zzfy`'s revive-limbo rooms, which did NOT carry
+that flag and so directly contradicted the lib's own gating convention.
+Here, writing `startroom` on entry doesn't violate this lib's own
+architecture at all; it's plausibly a deliberate "these are checkpoint
+locations, entering one silently updates your home" design (the death
+gate and a city temple both read as thematically plausible checkpoint
+spots), even though it bypasses the normal player-initiated
+`save`/`quit`-while-standing-here convention and gives no on-screen
+confirmation. That's surprising UX, not a proven programming defect.
+Left as originally shipped (both `init()`s restored), documented here
+rather than silently re-fixed. `d/city/cangku.lpc`/`d/shaolin/cangku.lpc`
+and the `d/shaolin/` jail-cluster rooms (also touch `startroom` on
+capture/release) were separately confirmed to have genuine, matched
+restore paths and were correctly never touched.
 
 **3. Missing `/log/nosave/` runtime directory crashes `combatd.lpc`'s
 `killer_reward()` on EVERY death, `kill.lpc`'s PK-attempt logger on
