@@ -431,6 +431,30 @@ female adventurer), covering the whole §10.7 checklist:
   exact last room (distinct from, and not to be confused with, the
   net-dead reconnect path's exact-room restore).
 
+### Addendum (2026-07-24): §7.12 `tell_room()` fix ported from sibling `esI`
+
+`esI`'s own §10.7 pass found that `adm/simul_efun/tell_room.lpc`'s 2-arg
+call shape (`exclude` defaulting to `int 0`, rejected by `message()`)
+crashes `adm/daemons/weather_d.lpc`'s self-rescheduling `change_phase()`
+`call_out` — no enclosing `catch()`, so the uncaught throw aborts the
+function before it reaches its own tail-end reschedule, **permanently
+killing the day/night phase daemon for the rest of that boot** the first
+time any outdoor room is visited (`set_outside()` registers it, some
+phases in `adm/etc/daytime.data` are as short as 1 second). Confirmed
+via `diff` that this lib's `tell_room.lpc` is byte-identical to `esI`'s
+pre-fix copy, so it carries the same bug (not independently reproduced
+live on THIS lib during either pass — plausibly a session-timing/
+room-visited difference). Ported the same one-line fix:
+```lpc
+message("tell_room", msg, room, exclude || ({}));
+```
+Sanity-checked only (fresh boot + existing test character
+`shenqingxue` login/`look`/`quit`, clean, zero new debug.log errors) —
+not a full independent §10.7 replay, since this lib was already marked
+done. See `libs/esI/NOTES.md`'s own "深度功能测试" section (bug #5) for
+the full live-reproduction detail (including a direct `eval`-command
+proof of the crash and the fix).
+
 ### Not verified live (explicitly)
 
 - **A completed shop purchase**: `Shenqingxue` starts with zero money
