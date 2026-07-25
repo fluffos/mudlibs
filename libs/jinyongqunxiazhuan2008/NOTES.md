@@ -556,3 +556,381 @@ removed.
   `update` 成功 — admin flow now verified under WASM too. **Verdict:
   native OK + wasm OK.** No fixes needed this pass. Test character
   saves removed; fluffos.o timestamp churn reverted.
+
+## 2026-07-24 深度功能测试 / Deep functional test (AGENTS.md §10.7)
+
+One continuous native `mudclient.py` session (plus a second `fluffos`
+admin session used specifically to reach death/combat, since the main
+character never accumulated the money or combat skill to risk real
+`kill` safely in the time budget). §8.3a's `private nomask
+command_hook` fix was **already applied** in this lib (`feature/
+command.lpc:29` reads `nomask int command_hook(string arg)`, no
+`private` — confirmed by direct read before touching anything else) —
+not re-diagnosed.
+
+**Test character**: id `shenshaofeng`, password `xia2026wu`, Chinese
+name 沈少峰 (male). Left in a clean, alive, fully-saved state at
+`/d/city/zuixianlou` (醉仙楼), title 叫化子/丐帮第二十代弟子 (member of
+the Beggars' Sect, 20th generation, master 左全/Zuo Quan), `begging`
+skill improved once via the organic teacher path, 潜能 98/99. Save
+files left in place per the task instructions (`work/data/user/s/
+shenshaofeng.o`, `work/data/login/s/shenshaofeng.o`) as evidence.
+Admin account `fluffos`/`Mud@2026` (pre-existing, from the WASM-
+enablement pass) reused for the death/reincarnation leg; left alive,
+saved, at `/d/city/wumiao` (its own now-legitimate chosen home, set via
+an explicit `quit` there — see bug #2 below for why that's legitimate
+and the room's own automatic version isn't).
+
+### What was verified working, live
+
+- Full registration wizard with a real Chinese name (沈少峰), landing
+  in the actual starting room (客店, the tea house) — `look`/`score`/`i`
+  all correct at every step.
+- Starting-zone navigation read from room source
+  (`d/city/{kedian,beidajie1,guangchang}.lpc`) rather than guessed.
+- Safe sparring: `help newbie`/`help intro` (`work/doc/help/{newbie,
+  intro}`) both explicitly document `fight` (较量/切磋) as the
+  non-lethal form (stops automatically at ~50% health, message: "这场
+  比试算我输了，下回看我怎么收拾你！") vs `kill` (real, lethal). Used
+  `fight` against 流氓头 (Liumang tou) at 中央广场 — auto-stopped
+  correctly, zero real damage risk, exactly as documented.
+- Sect join via the organic path: entered the 丐帮 (Beggars' Sect)
+  hideout via the tree-hole passphrase at 中央广场
+  (`d/city/guangchang.lpc`'s `shudong` → `d/gaibang/inhole.lpc`'s
+  passphrase gate → `down` → 左全/Zuo Quan), then `bai zuo` — worked
+  first try, correct flavor text, `score` afterward shows the new
+  title/master.
+  Also traced (not exercised, to keep the character safe/simple) the
+  White Camel Mount (白驼山) sect's alternate teacher-recruit gate at
+  `kungfu/class/btshan/ouyangke.lpc`'s `attempt_apprentice()` —
+  correctly gates on `combat_exp` and confirms a second, independent
+  join mechanism exists.
+- Organic skill learning from a teacher NPC: `xue zuo begging` after
+  `bai`-ing him — consumed 精 and 潜能 correctly, printed the expected
+  "你的「begging」进步了！" message, confirmed via `score`.
+- `cha zuo` (查功夫 — list a teacher's skills), once the crash below
+  was fixed: full skill list rendered correctly.
+- Clean `quit` (multiple times) followed immediately by a `debug.log`
+  line-count check each time — **zero new `error:`/fatal lines** any
+  time (confirmed at 349 lines before and after every quit across the
+  whole session, on the FIXED driver).
+- State persistence across a real driver restart + fresh restore-login
+  (not just an in-memory reconnect): location, sect membership, master,
+  skill level, 潜能 spend, and inventory (mailbox + a fresh cloth —
+  clothes are deliberately non-`autoload` and get re-issued by
+  `enter_world()` every login, see "confirmed not a bug" below) all
+  came back correctly.
+- Unclean (net-dead, not `quit`) disconnect + reconnect: exercised
+  repeatedly (every `mudclient.py` invocation that didn't end in
+  `quit` closes the socket without running the `quit` command, which
+  `clone/user/user.lpc`'s `net_dead()` handles by stopping the
+  heartbeat, clearing enemies, and scheduling `user_dump` after
+  `NET_DEAD_TIMEOUT` — 600s/10min, `include/user.h:10` — the player
+  object is never moved or void-parked, matching AGENTS.md §7.20's
+  "good" shape, not its bug shape). Reconnecting always showed "重新连
+  线完毕" and landed exactly where the character had been standing.
+  Also did one deliberate net-dead disconnect followed by a real
+  **~150-second wall-clock wait** (backgrounded `sleep`, polled, not a
+  short synthetic gap) before reconnecting — same clean result. **Did
+  NOT attempt the full 600s `NET_DEAD_TIMEOUT` wait** — explicitly
+  skipped for time budget, not silently. Read `user_dump()`
+  (`clone/user/user.lpc:66`) instead: on timeout it just runs
+  `command("quit")`, i.e. the same already-verified-clean quit path,
+  so the full-duration wait is very unlikely to surface anything the
+  shorter wait + code read didn't already cover — lower priority here
+  than actually chasing the two live crashes below.
+- Real combat + death + corpse + ghost + reincarnation, end to end,
+  live (not code-reviewed): the `fluffos` admin character fought a
+  黑无常 (Black gargoyle) NPC at `/d/death/gateway` (reached via `goto`)
+  and **actually died** for real. Confirmed the full chain once the
+  crash below was fixed: `你死了` → ghost title (【鬼魂】) → corpse
+  object left in the room → `score` shows reduced stats/0 jing-qi → the
+  documented "ask yourself about 回家" ritual at `/d/death/inn1.lpc`
+  (`d/death/gate` → `gateway` → `road1` → `inn1`, `ask fluffos about
+  回家`) → `reincarnate()` fires and moves the (now living again)
+  character to `/d/city/wumiao`. This is a genuinely deep, non-trivial
+  path (matches checklist item 10's "get as far as reasonably possible
+  toward combat/death") and it now works cleanly end-to-end.
+- Shop (`buy`/`list`, F_DEALER pattern, `feature/dealer.lpc`): `list`
+  at 醉仙楼 (a food stall, reached by mistake while navigating — turned
+  out to be a useful second F_DEALER instance to check) rendered
+  correctly with no crash. `buy` was exercised twice and both times
+  produced the CORRECT rejection message with no crash: once as a
+  丐帮 member ("你是个穷叫化，买什麽东西！" — beggars are deliberately
+  forbidden from buying, `feature/dealer.lpc:116-117`, a real,
+  internally-consistent design choice, not a bug) and once for
+  insufficient funds.
+
+### Not verified live (honest gaps)
+
+- **A completed, successful purchase.** New characters start with
+  zero money (`init_new_player()` in `logind.lpc` has the starting-
+  balance line explicitly commented out) and the test character then
+  joined 丐帮, which the shop code deliberately forbids from buying at
+  all — reaching a real purchase would need either a different
+  (non-beggar) character built from scratch or a source of starting
+  gold, beyond this pass's time budget. `buy`'s code path (money
+  check, `move()`, `call_out("enough_rest", 1)`) was read and looks
+  sound, but that's a code-review conclusion, not a live one.
+- **The full 600-second `NET_DEAD_TIMEOUT` wait.** See above — done a
+  ~150s real wait instead, plus a source read of the timeout handler,
+  and prioritized chasing the two live crashes found instead.
+
+### Bugs found and fixed
+
+**1. `adm/daemons/chinesed.lpc` — corrupted save data leaves a global
+`mapping` as raw `0`, crashing the FIRST real use of `cha`/`chinese()`
+(AGENTS.md §7.7, third bullet: "`restore_object()` ... ZEROES ... a
+crash surfaces far away")**
+
+This lib's own NOTES.md already documented `chinesed`'s
+`data/e2c_dict.o` as pre-existing corrupted seed data whose `restore()`
+fails at boot, and called it "fully non-fatal" because the failure is
+caught by `master.lpc`'s `preload()` wrapper. That part is true for
+*boot* — but nothing downstream was actually safe: `create()` was
+```lpc
+void create() {
+  seteuid(getuid());
+  restore();
+}
+```
+`restore()` → `restore_object()` throws a real runtime error on the
+malformed file; since that error is never caught INSIDE `chinesed.lpc`
+itself, it aborts `create()` immediately at the `restore()` line — the
+global `mapping dict = ([]);` initializer had already run at object
+creation, but `restore_object()`'s failure zeroes it back out per
+§7.7's exact mechanism, and because `create()` never reaches any
+statement after the throwing call, no local recovery code could run
+either. The very first real player use of any command that calls
+`chinese()` (confirmed live via `cha zuo`, but `to_chinese()` used
+throughout combat/skill messages could hit the same path) crashed with
+`*Value being indexed is zero.` at `chinesed.lpc:94`.
+
+Fix — wrap the throwing call in `catch()` (so `create()` can actually
+continue past it) AND add the standard §7.7 post-restore guard:
+```lpc
+// BEFORE:
+void create() {
+  seteuid(getuid());
+  restore();
+}
+// AFTER:
+void create() {
+  seteuid(getuid());
+  catch(restore());
+  if (!mapp(dict)) dict = ([]);
+}
+```
+A `mapp()` guard alone (tried first) was NOT sufficient — confirmed
+live that it still crashed identically, because the guard line is
+never reached without the `catch()` (the runtime error unwinds straight
+past it to the nearest existing catch, in `master.lpc`'s `preload()`).
+**Verified**: rebooted, repeated the exact `bai zuo` → `cha zuo`
+sequence — full skill list printed, zero runtime error, zero new
+`debug.log` lines.
+
+**2. `d/death/gate.lpc` and `d/city/wumiao.lpc` — unconditional,
+unconsented, unannounced permanent-login-location hijack on mere room
+entry (AGENTS.md §7.24, exact match)**
+
+Both rooms had an `init()` that ran on EVERY player who ever stepped
+into the room (not gated behind any quest state, any player command,
+or even an interactive check in wumiao's case) and unconditionally
+overwrote the SAME `startroom` field `adm/daemons/logind.lpc`'s
+`enter_world()` reads on every future full login:
+```lpc
+// d/death/gate.lpc — BEFORE:
+void init() {
+  object ob;
+  ob = this_player();
+  ob->set("startroom", "/d/death/gate");
+}
+// d/city/wumiao.lpc — BEFORE:
+void init() {
+  object me;
+  me = this_player();
+  me->set("startroom", base_name(environment(me)));
+  return;
+}
+```
+Contrast with the lib's own LEGITIMATE, sanctioned mechanism
+(`cmds/usr/{save,quit}.lpc`), which only ever writes this field when
+the PLAYER explicitly types `save`/`quit` while standing in a room
+flagged `valid_startroom`, and always tells them: "当你下次连线进来
+时，会从这里开始。" Both buggy rooms print no such notice — the
+location silently becomes permanent.
+
+`d/death/gate.lpc` is the game's own `DEATH_ROOM`
+(`include/login.h:18`) — every single player death routes through it
+(`feature/damage.lpc`'s `die()` → `move(DEATH_ROOM)`), and NOTHING in
+the entire reincarnation chain (`d/death/{gateway,road1,inn1}.lpc`,
+ending in `inn1.lpc`'s `do_stuff()` → `ob->reincarnate();
+ob->move("/d/city/wumiao")`) ever resets `startroom` back — so a
+player's FIRST DEATH would have permanently and silently relocated
+every future login to 鬼门关 (literally "the gate of the underworld"),
+forever, exactly matching the `zzfy` precedent that established §7.24.
+`d/city/wumiao.lpc` (岳王庙, a temple) is even more severely reachable
+— it's an ordinary, unrestricted city room on the main street grid
+(`d/city/beidajie2.lpc`'s `west` exit), so ANY player who ever walked
+in to look around (not just reincarnating ghosts) got silently
+rehomed there too.
+
+**Confirmed NOT the same bug** (checked before touching anything, per
+§7.24's own detection heuristic — "does the room's code carry a
+restore path elsewhere"): `d/city/cangku.lpc` / `d/shaolin/cangku.lpc`
+(仓库, exit-less "you've been sold here" rooms reachable ONLY via
+`feature/dealer.lpc`'s `do_sell()`) have a genuine matching release
+path in `d/city/npc/tang.lpc`'s `do_redeem()`, which explicitly resets
+`startroom` back to `/d/city/kedian` on release. `d/shaolin/{jlyuan,
+jianyu,shulin9,shulin11,shulin13}.lpc` + `kungfu/condition/
+bonze_jail.lpc` + `d/shaolin/andao2.lpc` are one coherent "caught
+trespassing → tried → jailed → released or escaped" mechanic whose
+`startroom` writes on capture are matched by explicit
+`ob->set("startroom", START_ROOM)` resets on both the "found innocent"
+and "escaped through the tunnel" endings. Both are internally
+consistent, deliberate content designs (per the task's scope
+correction, not touched) — the death gate and the temple have no such
+matching reset anywhere.
+
+Fix — removed the automatic write entirely (the room's own `move()`
+into it already handles the immediate placement; no future-login
+side effect is needed):
+```lpc
+// d/death/gate.lpc AFTER: (init() deleted entirely — nothing else in
+// it, and ROOM's own base class has no init() to call via ::init())
+// d/city/wumiao.lpc AFTER: (same — init() deleted entirely)
+```
+**Verified live, both**: (a) admin `fluffos` explicitly `goto
+/d/death/gate`'d then `quit`AT the gate (this IS the legitimate,
+sanctioned path since the room still carries `valid_startroom`, and
+DOES correctly show "当你下次连线进来时，会从这里开始。") — separately
+confirmed the actual bug fix by having `fluffos` die for real, fully
+reincarnate via the ritual, walk to a non-`valid_startroom` room, and
+`quit` there — the next login correctly returned to `/d/city/kedian`
+(the character's real, original chosen home), NOT the death gate. (b)
+`shenshaofeng` walked into 武庙, looked around, walked back out to 北
+大街 (not `valid_startroom`), and `quit` there — next login correctly
+returned to `客店` (the original chosen home), NOT 武庙. Before the fix
+this exact sequence would have landed back in 武庙 every time.
+
+**3. Missing `/log/nosave/` runtime directory crashes `combatd.lpc`'s
+`killer_reward()` on EVERY death, `kill.lpc`'s PK-attempt logger on
+every player-vs-player `kill`, and `bai.lpc`/`apprentice.lpc`'s
+Feng-Qingyang student counter (AGENTS.md §7.11, exact match — same
+example directory the catalog entry already names)**
+
+`work/log/nosave/` does not exist in this archive. Four call sites
+write into it with a bare `write_file()`/no `assure_file()`/no
+`catch()`:
+- `adm/daemons/combatd.lpc:721` (`killer_reward()`, `KILLRECORD` —
+  runs on literally every death, any killer/victim)
+- `cmds/std/kill.lpc:37` (`ATTEMP_KILL` — runs on every `kill` where
+  the target is a player)
+- `cmds/skill/bai.lpc:57/65` and the identical duplicate
+  `cmds/skill/apprentice.lpc:57/65` (`FENG` — a rarely-reached special-
+  case counter, gated behind a separate bug, see #4)
+
+**This is not a one-time cosmetic error — it's a live, reproduced,
+severe softlock.** Confirmed by actually killing the `fluffos` admin
+character in real combat (a 黑无常 NPC): `killer_reward()`'s
+`write_file()` threw `*Wrong permissions for opening file
+/log/nosave/KILLRECORD for append. "No such file or directory"`,
+UNCAUGHT, which aborts `die()` at exactly that call — every statement
+AFTER it (corpse creation, `remove_all_killer()`, moving the player to
+`DEATH_ROOM`, setting the ghost flag) never ran. The character was
+left standing in the combat room with 0 qi/jing, still "alive" by the
+engine's bookkeeping, and the SAME crash then re-fired on every single
+subsequent `heart_beat()` tick — an infinite crash loop, confirmed live
+by watching it repeat identically 3+ times across one `score` check
+before the fix.
+
+Fix — the mudlib already has its own idiom for exactly this
+(`assure_file()`, `adm/simul_efun/file.lpc:11`, already used by
+`feature/save.lpc`) — used it at all four write sites instead of
+introducing an out-of-band `mkdir`:
+```lpc
+// combatd.lpc, kill.lpc, bai.lpc, apprentice.lpc — pattern applied at
+// each write_file("/log/nosave/...", ...) call:
+assure_file("/log/nosave/KILLRECORD");   // (or ATTEMP_KILL / FENG)
+write_file("/log/nosave/KILLRECORD", ...);
+```
+Also added a `stringp()` guard on the `FENG` counter's `read_file()`
+result in both `bai.lpc`/`apprentice.lpc` (same file, same class of
+risk as AGENTS.md §7.9 — `read_file()` on a not-yet-created file
+returns `0`, which would otherwise flow into `atoi(0)`).
+**Verified live**: rebooted, repeated the exact same admin-vs-gargoyle
+fight to death — this time `die()` ran to completion cleanly (single
+`你死了`, ghost title, corpse present, no repeated crash spam), and
+`work/log/debug.log` stayed at its pre-fight line count throughout.
+
+**4. `cmds/skill/bai.lpc` / `cmds/skill/apprentice.lpc` (identical
+duplicate files) — misplaced parenthesis passes the WRONG ARGUMENT
+TYPE to `query()`, so the Feng-Qingyang defection-counter check never
+actually ran**
+
+```lpc
+// BEFORE (both files, same line):
+if (((string)me->query("family/master_id" == "feng qingyang")) || ((string)me->query("family/master_name" == "风清扬"))) {
+```
+The `==` comparison is INSIDE the `query(...)` call's argument list,
+so `query()` is actually invoked with a boolean/int (`0`, always false
+for any real property name) instead of the intended string key —
+`query("family/master_id" == "feng qingyang")` evaluates the
+comparison first and passes its result, not the string, meaning the
+branch could never fire regardless of the player's actual master.
+Fixed to compare the RETURN VALUE of `query()` against the string, as
+every other call site in the file already does correctly:
+```lpc
+// AFTER:
+if (((string)me->query("family/master_id") == "feng qingyang") || ((string)me->query("family/master_name") == "风清扬")) {
+```
+Low real-world impact (only reachable for a player defecting FROM the
+specific named master 风清扬/Feng Qingyang, a rare special case) but a
+genuine, unambiguous programming bug — not a design question — since
+the code's own structure makes its intent (compare a queried value to
+a literal) unambiguous. Not separately live-exercised (would need a
+character to actually be Feng Qingyang's disciple first, out of scope
+for this pass) but confirmed by direct read that it now matches every
+other correctly-written call site in the same file.
+
+### Bug-class mapping (all four matched EXISTING AGENTS.md entries — no new class)
+
+- Bug 1 → **§7.7** ("Unguarded `restore()` / corrupted save data",
+  specifically its `restore_object()` zeroes-globals-on-failure
+  bullet).
+- Bugs 2 → **§7.24** ("Death/reincarnation code silently overwrites the
+  permanent login-location field") — this pass found a SECOND, more
+  severely-reachable instance of the exact same pattern in the same
+  lib (an ordinary city room, not just the death limbo itself), and
+  did the extra due diligence of checking every OTHER `startroom`
+  write site in the lib against the same detection heuristic before
+  concluding which were real bugs vs. legitimate matched capture/
+  release mechanics (§7.24's own suggested check).
+- Bug 3 → **§7.11** ("Missing runtime directories and the silent
+  `write_file` abort") — this pass adds a concrete, live-reproduced,
+  data point for the catalog's own example directory (`/log/nosave/`)
+  and demonstrates the worst-case severity class explicitly: an
+  UNCAUGHT crash mid-way through a multi-step cleanup function
+  (`die()`) doesn't just fail once, it can leave the object in a
+  broken state that re-triggers the same crash every `heart_beat()`
+  forever.
+- Bug 4: a plain misplaced-parenthesis wrong-argument bug, the same
+  general shape as several "obviously-wrong call-site" fixes already
+  cataloged elsewhere in this lib's own NOTES.md (§10.7 checklist item
+  7's "obviously-wrong variable references" bucket) — not a numbered
+  AGENTS.md class of its own.
+
+### Process notes
+
+Driver run from `libs/jinyongqunxiazhuan2008/` via `nohup ... &
+disown`, restarted 4 times across the fix-iteration cycle (chinesed
+fix alone → +bai.lpc paren fix → +gate.lpc/wumiao.lpc/§7.11 fixes →
+final confirmation), each old PID killed only after confirming
+`readlink -f /proc/<pid>/cwd` matched this lib's `work/` directory
+(other agents' driver processes for `xiakexing2017`, `xlqy_new2007`,
+`xo`, `shujian2008`, `xiakexinzhuan2`, `zhonghua2` were running
+concurrently throughout and were never touched). RSS stayed at
+30-44MB across the whole ~10-minute final session, no unbounded growth
+(§10.8 checked, nothing concerning). Final driver (PID 1718534) killed
+by exact PID after all testing completed, confirmed via `ps`/`ss` no
+longer showing port 40082.
