@@ -10,14 +10,27 @@ Inputs (all inside this repo):
                                    (reason kept alongside)
                        noboot   -- does not boot under WASM at all
   libs/<slug>/README.md  first heading = the game's Chinese name; first
-                     paragraph of the 简介 section = 1-line description.
+                     paragraph of the 简介 section = 1-line description;
+                     the 「## 管理员账号 / Admin account」 section = the
+                     pre-seeded admin credentials (AGENTS.md §1.5: the
+                     convention is fluffos / Mud@2026, but each lib's
+                     README is authoritative -- a few document a variant
+                     id, a passwordless login flow, or no seeded account
+                     at all), shown on the card so visitors can log in
+                     with wizard powers immediately.
+  --commits FILE     optional lib-commits.json (slug -> {sha, date} of the
+                     last commit that changed libs/<slug>, maintained by
+                     scripts/update_lib_commits.py) -- rendered on each
+                     card as a GitHub commit link plus a link to the
+                     lib's source dir.  Omitted/missing entries just drop
+                     that line from the card.
 
 Outputs:
   scripts/wasm_status.json  the derived slug -> status mapping (build
                             artifact, so the parse is inspectable)
   <out>/index.html          the site index (default: site/index.html)
 
-Usage: python3 scripts/gen_site_index.py [--out DIR]
+Usage: python3 scripts/gen_site_index.py [--out DIR] [--commits FILE]
 """
 
 import argparse
@@ -28,6 +41,7 @@ import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
+REPO_URL = "https://github.com/fluffos/mudlibs"
 
 PASS_MARKER = "rebuild+format+WASM pass:"
 
@@ -107,6 +121,46 @@ def parse_readme(slug):
     return name, desc
 
 
+def parse_admin(slug):
+    """Return (admin_id, password) from the README's
+    「## 管理员账号 / Admin account」 section (the authoritative per-lib
+    record -- see module docstring).  Parsed at render time straight from
+    the README (like nothing is hardcoded for name/description either).
+    password is "" when the section documents a passwordless login flow
+    (rendered as 无密码), None when an id parsed but no password line did
+    (rendered as 密码见 README); (None, None) when no seeded account is
+    recorded (e.g. nitan170911, whose MySQL-backed registration blocked
+    seeding) -- the card then shows no admin line at all.
+
+    Formats in the wild (all matched):
+      - **ID**：`fluffos`                    /  - **id**: `fluffos`
+      - 账号 id：`fluffos`　密码：`Mud@2026`
+      - **密码 / Password**：`Mud@2026`（...）；**管理密码(wizpwd)**：`Wiz@2026`
+        (first 密码 match wins: the login password is always listed first)
+      - **密码 / password**: 无 ——           (no password step at all)
+    """
+    path = REPO / "libs" / slug / "README.md"
+    if not path.is_file():
+        return None, None
+    text = path.read_text(encoding="utf-8")
+    m = re.search(r"^##\s*管理员账号\s*/\s*Admin account\s*$(.*?)(?=^##|\Z)",
+                  text, re.M | re.S)
+    if not m:
+        return None, None
+    sec = m.group(1)
+    mid = re.search(r"(?:\bid\b|ID|账号 id)[^`\n]*[:：][^`\n]*`([^`]+)`",
+                    sec, re.I)
+    if not mid:
+        return None, None
+    mpw = re.search(r"(?:密码|password)[^`\n]*[:：][^`\n]*`([^`]+)`",
+                    sec, re.I)
+    if mpw:
+        return mid.group(1), mpw.group(1)
+    if re.search(r"(?:密码|password)[^\n`]*[:：]\s*无", sec):
+        return mid.group(1), ""  # documented "no password step"
+    return mid.group(1), None
+
+
 def build_status(rows):
     libs = {}
     for row in rows:
@@ -154,7 +208,7 @@ def load_numbers():
     return numbers
 
 
-def render_index(status):
+def render_index(status, commits):
     libs = status["libs"]
     counts = status["counts"]
     numbers = load_numbers()
@@ -162,6 +216,11 @@ def render_index(status):
         libs.items(),
         key=lambda kv: (numbers.get(kv[0], (9999, 0)), kv[0]))
 
+    # Cards contain inner links (commit / source / play), so they cannot be
+    # <a> elements themselves (nested anchors are invalid HTML and browsers
+    # split them apart).  Instead every card is a <div>; on linked cards the
+    # title <a class="play"> is stretched over the whole card via ::after,
+    # and the meta links sit above it with a higher z-index.
     cards = []
     for slug, info in entries:
         st = info["status"]
@@ -170,21 +229,47 @@ def render_index(status):
         desc = html.escape(info["description"])
         reason = html.escape(info["reason"])
         linked = st != "noboot"
-        open_tag = (f'<a class="card {st}" href="{slug}/">' if linked
-                    else f'<div class="card {st}">')
-        close_tag = "</a>" if linked else "</div>"
+        title_html = (f'<a class="play" href="{slug}/">{name}</a>' if linked
+                      else name)
         reason_html = ""
         if st != "playable":
             reason_html = f'<p class="reason" title="{reason}">{reason}</p>'
-        cards.append(f"""{open_tag}
+
+        meta_bits = []
+        admin_id, admin_pw = parse_admin(slug)
+        if admin_id:
+            if admin_pw:
+                cred = f"{admin_id} / {admin_pw}"
+            elif admin_pw == "":
+                cred = f"{admin_id}(无密码)"
+            else:
+                cred = f"{admin_id}(密码见 README)"
+            meta_bits.append(
+                '<span class="admin" title="内置管理员账号——用它登录即有'
+                f'巫师权限">🔑 {html.escape(cred)}</span>')
+        entry = commits.get(slug)
+        if entry:
+            short = html.escape(entry["sha"][:7])
+            day = html.escape(entry.get("date", "")[:10])
+            meta_bits.append(
+                f'<span>更新 <a href="{REPO_URL}/commit/'
+                f'{html.escape(entry["sha"])}" title="该游戏库最近一次改动的'
+                f'提交">{short}</a> {day}</span>')
+        meta_bits.append(
+            f'<a href="{REPO_URL}/tree/main/libs/{html.escape(slug)}" '
+            'title="该游戏库的源代码目录">源码</a>')
+        meta_html = ('<p class="meta">' + "\n    ".join(meta_bits) + '</p>')
+
+        cards.append(f"""<div class="card {st}{' linked' if linked else ''}">
   <div class="card-head">
-    <h2>{name}</h2>
+    <h2>{title_html}</h2>
     <span class="badge {st}" title="{reason}">{icon} {label}</span>
   </div>
   <p class="slug">{html.escape(slug)}</p>
   <p class="desc">{desc}</p>
   {reason_html}
-{close_tag}""")
+  {meta_html}
+</div>""")
 
     n_total = len(libs)
     n_play = counts.get("playable", 0)
@@ -237,11 +322,14 @@ def render_index(status):
     grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   }}
   .card {{
-    display: block; background: var(--panel); border: 1px solid var(--border);
-    border-radius: 10px; padding: 14px 16px; color: inherit;
-    text-decoration: none; transition: border-color .15s;
+    position: relative; display: block; background: var(--panel);
+    border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px;
+    color: inherit; transition: border-color .15s;
   }}
-  a.card:hover {{ border-color: var(--accent); }}
+  .card.linked:hover {{ border-color: var(--accent); }}
+  .card .play {{ color: inherit; text-decoration: none; }}
+  /* stretch the title link over the whole card (see render_index) */
+  .card.linked .play::after {{ content: ""; position: absolute; inset: 0; }}
   .card.noboot {{ opacity: .55; }}
   .card-head {{ display: flex; align-items: baseline; gap: 8px;
                justify-content: space-between; }}
@@ -263,6 +351,17 @@ def render_index(status):
     overflow: hidden;
   }}
   .card.noboot .reason {{ color: var(--bad); }}
+  .meta {{
+    margin: 8px 0 0; font-size: 12px; color: var(--dim);
+    display: flex; flex-wrap: wrap; gap: 2px 12px;
+  }}
+  .meta .admin {{ font-family: Consolas, Menlo, monospace; }}
+  /* meta links must stay clickable above the stretched .play overlay */
+  .meta a {{
+    color: var(--accent); text-decoration: none;
+    position: relative; z-index: 1;
+  }}
+  .meta a:hover {{ text-decoration: underline; }}
   footer {{ margin-top: 32px; color: var(--dim); font-size: 12px; }}
   footer a {{ color: var(--accent); }}
 </style>
@@ -275,7 +374,8 @@ def render_index(status):
     均已修复并运行在 <a href="https://github.com/fluffos/fluffos"
     style="color:var(--accent)">FluffOS</a> 驱动上。整个驱动通过 WebAssembly
     在你的浏览器里运行 —— 点击任意一款游戏,即可像当年 telnet 泥潭一样注册、
-    登录、行走江湖。无需安装,无需服务器。
+    登录、行走江湖。无需安装,无需服务器。每张卡片还标注了预置的管理员账号
+    (🔑)——用它登录即可获得巫师权限,自由探索游戏世界与代码。
   </p>
   <p class="stats">
     <b>{n_play}</b> 款可完整游玩(✅) ·
@@ -334,7 +434,16 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=str(REPO / "site"),
                     help="output dir for index.html (default: site/)")
+    ap.add_argument("--commits", default=None,
+                    help="lib-commits.json from update_lib_commits.py "
+                         "(slug -> last commit that changed the lib); "
+                         "omit / missing file = render without that info")
     args = ap.parse_args()
+
+    commits = {}
+    if args.commits and Path(args.commits).is_file():
+        commits = json.loads(
+            Path(args.commits).read_text(encoding="utf-8")).get("libs", {})
 
     # TODO.md was retired (its content consolidated into README.md and
     # AGENTS.md); the checked-in scripts/wasm_status.json is now the
@@ -355,7 +464,8 @@ def main():
 
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / "index.html").write_text(render_index(status), encoding="utf-8")
+    (out_dir / "index.html").write_text(render_index(status, commits),
+                                        encoding="utf-8")
 
     total = len(status["libs"])
     print(f"wasm_status.json: {total} libs -> {status['counts']}")

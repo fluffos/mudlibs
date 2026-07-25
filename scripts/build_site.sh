@@ -51,9 +51,21 @@
 #   repacked.  Bundles for slugs that no longer exist (or turned noboot)
 #   are pruned.
 #
-# Outputs (for CI): appends "repacked=<n>" and "changed=<n>" to
-# $GITHUB_OUTPUT when set (changed = repacked + pruned, i.e. whether the
-# cache is worth re-saving).
+# The cache dir also carries lib-commits.json -- slug -> the last commit
+# that actually changed libs/<slug> (shown on the index cards), maintained
+# by scripts/update_lib_commits.py via the GitHub commits API because the
+# shallow CI clone has no usable history.  Same durable-anchor/disposable-
+# cache split as above: entries self-validate against the slug's current
+# tree hash, so a lost or evicted cache only costs API re-queries, never
+# wrong data (see that script's header for the full model).
+#
+# Outputs (for CI): appends "repacked=<n>", "changed=<n>" and
+# "repacked_slugs=<space-separated slugs>" to $GITHUB_OUTPUT when set
+# (changed = repacked + pruned, i.e. whether the cache is worth re-saving;
+# a lib-commits.json refresh alone deliberately does NOT count -- re-saving
+# the ~2GB cache to persist a ~10KB mapping costs more than the API
+# re-queries it would save.  repacked_slugs drives the boot smoke test:
+# CI boot-checks what was actually repacked this run, not a fixed lib).
 
 set -euo pipefail
 
@@ -78,6 +90,9 @@ mkdir -p "$CACHE_DIR/packed"
 MANIFEST="$CACHE_DIR/manifest.json"
 
 # --- 1. derive per-lib WASM status (also writes scripts/wasm_status.json) ---
+# (this early run exists for the status JSON, which the slug list below
+# needs; the index it renders is provisional -- step 7 re-renders it with
+# the freshly updated per-lib last-changed mapping)
 python3 "$SELF_DIR/gen_site_index.py" --out "$CACHE_DIR/index-staging"
 
 # Packable slugs: everything except noboot (a noboot lib gets no link on the
@@ -150,6 +165,7 @@ fi
 
 # --- 4. repack libs changed since last publish (or lacking a valid bundle) --
 REPACKED=0
+REPACKED_SLUGS=""
 REUSED=0
 NEW_MANIFEST_LIBS=$(mktemp)
 trap 'rm -f "$NEW_MANIFEST_LIBS"' EXIT
@@ -179,6 +195,7 @@ for slug in $SLUGS; do
   "$SELF_DIR/pack_lib_for_web.sh" "$slug" "$RELEASE_DIR" "$RELEASE_DIR" \
       "$CACHE_DIR/packed/$slug"
   REPACKED=$((REPACKED + 1))
+  REPACKED_SLUGS="$REPACKED_SLUGS$slug "
 done
 
 # --- 5. prune bundles whose slug is gone / no longer packable ---------------
@@ -206,7 +223,20 @@ out = {'driver_tag': sys.argv[2], 'packer': sys.argv[3], 'libs': libs}
 json.dump(out, open(sys.argv[1], 'w'), indent=1, sort_keys=True)
 PYEOF
 
-# --- 7. assemble the site ----------------------------------------------------
+# --- 7. per-lib "last changed" mapping + final index render -----------------
+# Refresh lib-commits.json (slug -> last commit that changed libs/<slug>,
+# via the GitHub commits API pinned to HEAD -- see update_lib_commits.py's
+# header for why the shallow clone forces this and why a lost cache is
+# harmless), then re-render the index with that info on the cards.  The
+# update never fails the build: last-changed info is cosmetic, and a card
+# without it beats a blocked deploy.
+python3 "$SELF_DIR/update_lib_commits.py" \
+    --mapping "$CACHE_DIR/lib-commits.json" \
+    --head "$(git -C "$REPO" rev-parse HEAD)"
+python3 "$SELF_DIR/gen_site_index.py" --out "$CACHE_DIR/index-staging" \
+    --commits "$CACHE_DIR/lib-commits.json"
+
+# --- 8. assemble the site ----------------------------------------------------
 rm -rf "$SITE_DIR"
 mkdir -p "$SITE_DIR/_driver"
 cp "$RELEASE_DIR/fluffos.js" "$RELEASE_DIR/fluffos.wasm" \
@@ -220,7 +250,7 @@ done
 cp "$CACHE_DIR/index-staging/index.html" "$SITE_DIR/index.html"
 touch "$SITE_DIR/.nojekyll"
 
-# --- 8. summary --------------------------------------------------------------
+# --- 9. summary --------------------------------------------------------------
 echo
 echo "== per-lib packed sizes =="
 du -sm "$SITE_DIR"/*/ | sort -n
@@ -231,5 +261,6 @@ if [ -n "${GITHUB_OUTPUT:-}" ]; then
   {
     echo "repacked=$REPACKED"
     echo "changed=$((REPACKED + PRUNED))"
+    echo "repacked_slugs=${REPACKED_SLUGS% }"
   } >> "$GITHUB_OUTPUT"
 fi

@@ -9,10 +9,15 @@
 #      via emscripten's file_packager, config rewritten to the in-memory
 #      mount, per-lib page patched to load the driver from ONE shared copy
 #      at site/_driver/ instead of duplicating ~3.5MB x 90 libs).
-#   3. scripts/gen_site_index.py renders the index (game names from each
-#      lib's README.md, playable/limited/noboot status derived from
-#      the checked-in scripts/wasm_status.json status mapping).
-#   4. Upload site/ as the Pages artifact and deploy.
+#   3. scripts/gen_site_index.py renders the index (game names, admin
+#      credentials from each lib's README.md, playable/limited/noboot
+#      status derived from the checked-in scripts/wasm_status.json status
+#      mapping, per-lib last-changed commit links from lib-commits.json --
+#      maintained by scripts/update_lib_commits.py via the GitHub commits
+#      API, because this shallow clone has no history to derive it from).
+#   4. Boot-check the bundles this run actually repacked (see that step's
+#      comment for the sampling policy), upload site/ as the Pages
+#      artifact, and deploy.
 #
 # INCREMENTAL packing -- two mechanisms with distinct roles:
 #
@@ -147,18 +152,60 @@ jobs:
         id: build
         env:
           LAST_PUBLISHED_SHA: ${{ steps.marker.outputs.sha }}
+          # for update_lib_commits.py's GitHub commits API queries
+          # (per-lib last-changed info on the index cards)
+          GH_TOKEN: ${{ github.token }}
         run: |
           scripts/build_site.sh "$RUNNER_TEMP/wasm-release/rel" \
               "${{ steps.driver.outputs.tag }}" \
               "$RUNNER_TEMP/packed-cache" site
 
-      # Boot one packed bundle inside the WASM driver under node -- proves
-      # the trimmed, packed image + release driver actually start a game
+      # Boot packed bundles inside the WASM driver under node -- proves the
+      # trimmed, packed images + release driver actually start a game
       # (catches over-trimming and packer/driver drift before deploying).
-      - name: Boot smoke test (packed image under node)
+      # Tested set = the libs THIS run actually repacked (a hardcoded lib
+      # proves nothing on the typical run where it was reused from cache):
+      #   - 1..10 repacked: boot-check every one of them.
+      #   - >10 (e.g. full rebuild after a driver/packer bump): boot-check
+      #     an even sample of 10 across the sorted list (first and last
+      #     always included) -- the regressions a full rebuild risks are
+      #     global (driver/packer drift), so any sample catches them, and
+      #     97 serial boots would cost up to ~1.5h of CI.  The skipped
+      #     slugs are logged explicitly (no silent caps).
+      #   - 0 repacked (pure cache reuse): nothing NEW to verify, but boot
+      #     one known-good lib anyway as a cheap sanity check that the
+      #     restored cached bundles still run under the freshly downloaded
+      #     driver (the driver is re-fetched every run even when no lib
+      #     changed).
+      - name: Boot smoke test (repacked images under node)
+        env:
+          REPACKED_SLUGS: ${{ steps.build.outputs.repacked_slugs }}
         run: |
-          node scripts/wasm_boot_check.js site/dongfanggushi2 site/_driver \
-              --timeout 60
+          set -euo pipefail
+          read -r -a all <<< "$REPACKED_SLUGS"
+          if [ "${#all[@]}" -eq 0 ]; then
+            fallback=dongfanggushi2
+            if [ ! -d "site/$fallback" ]; then
+              fallback=$(basename "$(ls -d site/*/ | grep -v /_driver/ | head -1)")
+            fi
+            echo "nothing repacked this run; sanity-booting known-good $fallback"
+            pick=("$fallback")
+          elif [ "${#all[@]}" -le 10 ]; then
+            echo "boot-checking all ${#all[@]} repacked libs: ${all[*]}"
+            pick=("${all[@]}")
+          else
+            mapfile -t pick < <(printf '%s\n' "${all[@]}" | python3 -c 'import sys; s = [l.strip() for l in sys.stdin if l.strip()]; n = len(s); k = 10; idx = sorted({round(i * (n - 1) / (k - 1)) for i in range(k)}); print("\n".join(s[i] for i in idx))')
+            skipped=$(comm -13 <(printf '%s\n' "${pick[@]}" | sort) \
+                               <(printf '%s\n' "${all[@]}" | sort) | tr '\n' ' ')
+            echo "boot-checking an even sample of ${#pick[@]} of the" \
+                 "${#all[@]} repacked libs: ${pick[*]}"
+            echo "NOT boot-checked this run: $skipped"
+          fi
+          for s in "${pick[@]}"; do
+            echo "== boot check: $s"
+            node scripts/wasm_boot_check.js "site/$s" site/_driver \
+                --timeout 60
+          done
 
       - name: Save packed-lib cache
         if: steps.build.outputs.changed != '0'
