@@ -1939,6 +1939,73 @@ variable. At an inline `query(...)["key"]` chain, capture the query
 result into a local first and guard with `mapp()` before indexing —
 don't index the `query()` call's return value directly.
 
+### 7.31 `enter_world()` overwrites the just-restored persistent player object's flag with the fresh per-connection object's stale/default value
+
+Found on `xiakexinzhuan2`'s deep functional test (§10.7). On login, two
+distinct objects exist briefly: the persistent player body (`user`,
+restored from the player's save file, carrying their real accumulated
+state) and a brand-new per-connection login/network object (`ob`,
+created fresh for this one connection attempt, whose own properties are
+either never set or explicitly zeroed during the new-character-creation
+path). `enter_world()` did `user->set("registered",
+ob->query("registered"))` — copying `ob`'s always-stale-or-zero value
+onto `user`, unconditionally overwriting whatever the player's own save
+data had correctly restored. Net effect: a boolean flag that's supposed
+to persist forever once set true (`registered`, set permanently by a
+one-time registration NPC interaction, `this_player()->set("registered",
+1)`) got silently reset to false on EVERY subsequent full login,
+re-triggering the entire registration flow and rerouting an established
+player back to the newbie register room instead of their real
+`startroom`.
+
+Detection: any `enter_world()`/login-flow code doing
+`user->set(<flag>, ob->query(<flag>))` (or the reverse) — for a
+supposedly-persistent flag, this is backwards unless `ob` is genuinely
+the current source of truth for that specific property. Check where the
+flag is actually SET elsewhere in the lib (grep for
+`set("<flag_name>"` broadly) — if it's set on the persistent player body
+by unrelated gameplay code (an NPC interaction, a quest completion), not
+freshly derived from the connection object every login, blindly copying
+from `ob` will stomp it.
+
+Fix: treat the flag as monotonic where that's the correct semantics —
+true on either object wins (`if (ob->query(f) || user->query(f)) {
+ob->set(f, 1); user->set(f, 1); } else user->set(f, 0);`) — or, more
+simply, just stop writing to `user` from `ob` for any property that's
+supposed to already be correctly restored on `user` from its own save
+data.
+
+### 7.32 A dangling/missing `else` in a sequential `if`-chain silently rejects every case but the last
+
+Found on `xiakexinzhuan2`'s deep functional test (§10.7). A classic
+control-flow defect, not lib-architecture-specific, but worth cataloging
+since it produced a severe, silent, near-total feature failure: a
+multi-destination dispatcher (a paid travel-guide NPC's `do_go()`)
+checked each valid destination with an INDEPENDENT `if (target ==
+"X") me->set_temp("go_x", 1);` — no `else` chaining between them — and
+ended with a single `if (target == "<last option>") ...; else return
+notify_fail(...)`. Because C-family `else` binds only to its immediately
+preceding `if`, that trailing `else` fires for EVERY target that isn't
+the LAST option checked — even after an EARLIER `if` in the same chain
+already matched and correctly set that destination's flag. Result: only
+the last-checked destination ever actually worked; every other valid,
+correctly-recognized destination string got its flag set and then was
+immediately rejected with a generic "never been there" failure message,
+because the function still fell through to the final unconditional
+`if/else` before ever reaching the success path (`call_out("do_goto",
+0, me); return 1;`) at the bottom.
+
+Detection: read the FULL body of any multi-branch dispatcher built from
+sequential `if`s ending in a single trailing `else` — don't assume the
+`else` covers "none of the above" for the whole chain just because
+that's the common intent; check whether it's actually only attached to
+the last `if`. Reproduce live by trying every documented option, not
+just the first or last one a smoke test happens to pick.
+
+Fix: convert the sequential `if`s into a proper `if`/`else if`/…/`else`
+chain so the trailing `else` genuinely covers "none of the preceding
+conditions matched," not just "didn't match the last one."
+
 ---
 
 ## 8. Login and registration flow bugs
