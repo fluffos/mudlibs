@@ -2440,6 +2440,28 @@ same interface via `scripts/wasm_client.js` (§1.2).
   immediately `git restore --staged` what you didn't mean to stage.
   Never `git add -A`/commit broadly while other sessions may have
   work in flight; commit exact paths.
+- **NEVER `git stash` in this shared working tree, for ANY reason,
+  even briefly for debugging.** `git stash` operates on the ENTIRE
+  working tree unconditionally — unlike `git checkout -- <path>`,
+  there's no way to scope it to files you own. If any concurrent batch
+  agent is mid-write to a file at the moment you stash, your stash
+  captures whatever partial/complete state that file was in, resets it
+  to HEAD, and if the other agent's tool (Edit/Write) touches that file
+  again before your `stash pop`, the pop can silently clobber or lose
+  their newer edit with no conflict warning — `git stash pop` reporting
+  success is not proof nothing was lost. Hit directly: debugging a
+  suspected regression by stashing/popping around a `git diff`
+  comparison coincided with another concurrent agent's `NOTES.md`
+  write for an unrelated lib, and that agent's documented "深度功能测试"
+  section was missing from the file afterward even though its actual
+  code fixes (committed separately, timestamped after the stash
+  window) survived intact — plausible but not conclusively proven as
+  the stash's fault, and that ambiguity is itself the lesson: this
+  class of interference is very hard to detect after the fact. If you
+  need to compare against a prior committed version while other work
+  may be in flight, use `git show <rev>:<path> > /tmp/scratch` (reads
+  without touching the working tree) instead of stash/checkout/reset
+  on the real path.
 - Runtime state must not be committed: player saves, visitor counters,
   ban lists generated during testing (the repo `.gitignore` has a
   per-lib section — extend it when a new lib's testing dirties a new
