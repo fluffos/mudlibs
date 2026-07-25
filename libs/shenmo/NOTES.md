@@ -508,3 +508,270 @@ treated as untrusted/remote and subject to the gate normally, not
 silently allowed through. Retested: fluffos login (127.0.0.1, real
 value under the current driver) still passes every gate; debug.log
 stayed clean of `denied`/`undefined function`/`error in error handler`.
+
+## 深度功能测试 / Deep functional test (2026-07-25, AGENTS.md §10.7)
+
+One continuous native-driver session (plus deliberate reconnect/soak
+sessions afterward), following §10.7's checklist. Read
+`doc/help/newbie` first (「南城客栈」start room, food/water/气/内力/法力
+basics, 拜师/学艺 flow, `wimpy` safety note, weak starter-NPC list, "if
+you can't win, `quit`" advice — note the help text's own body text
+repeatedly says "仙侣情缘" instead of "神魔传说", a leftover from
+whichever earlier game this help file was copied from; cosmetic/content,
+not touched).
+
+### Test characters
+
+- `shenmuce`/沈墨策 — first registration attempt, used to confirm the
+  §7.34 fix (below) before any other testing.
+- `qfshenmo`/秦风八, `qftestc`/秦风测测, `qftwaaa`/秦测五五,
+  `qftwbbb`/秦测六六 — throwaway characters used while chasing the
+  "dizzy" message (see Observations below).
+- **`qfengda`/秦风大 — the main test character.** Registered → accepted
+  gift → entered 南城客栈 → walked 南城客栈→朱雀大街→十字街头→青龙大街
+  (×2)→将军府→练武场 (`west`,`north`,`east`,`east`,`south`,`south`) →
+  `answer 拜师` past 秦安's gate guard → `apprentice qin` (joined
+  将军府, 秦富 as master, unconditional recruit — no gating at all in
+  `d/jjf/npc/qinfu.lpc`'s `attempt_apprentice`) → `learn force from qin`
+  (succeeded, 潜能 99→98, "你的「内功心法」进步了") → `da sandbags`
+  (correctly rejected: "你的道行不够高，不能从打沙袋中学到新知", since
+  `combat_exp` was still 0) → `wimpy 50` → `kill xiao tong` (real combat
+  against the newbie-doc-recommended weak NPC, `d/jjf/npc/xiaotong.lpc`,
+  combat_exp 4000) → clean `quit`. Net-dead/reconnect and soak testing
+  (below) also used this character.
+
+### Safe-sparring mechanism (found, not live-reachable within budget)
+
+`d/city/obj/muren.lpc` ("木人", a training dummy) has exactly the
+documented shape (`accept_fight()` copies the attacker's own
+skills/stats onto itself before the fight, so a spar against it can
+never be a mismatch) — but grepping the whole live tree found **no
+room's `"objects"` mapping references this specific file**; it is dead
+content (see also `d/obj/misc/muren.lpc`, also unreferenced). Sibling
+copies exist and ARE placed (`d/pingan/new/npc/muren.lpc`,
+`d/shaolin/muren-xiang.lpc`, `d/mingjiao`, `d/shushan`, `d/laoshaolin`),
+but all are multiple zones away from the start area and out of this
+pass's time budget to path to and verify live. Used 将军府's own
+in-game-documented alternative instead: `练武场`'s `sandbags` object
+(`d/jjf/front_yard.lpc`'s `do_da()`) is a genuinely safe (no death risk,
+only `kee` cost) skill-training mechanic gated on sect membership and a
+`combat_exp` threshold — exercised live above, correctly rejected for a
+too-fresh character. **Not claiming the muren mechanism itself was
+verified live** — flagging this honestly per §10.7 item 6 rather than
+presenting it as tested.
+
+### Bugs found and fixed
+
+**1. §7.34 (leftover developer debug output) — `adm/daemons/logind.lpc`
+`get_name()`.** Live-reproduced on the very first registration attempt:
+between the Chinese-name prompt and the admin-password prompt, the raw
+transcript showed `您的中文名字：/obj/login#150` — the login object's
+driver-assigned path printed instead of moving straight to the next
+prompt, byte-identical in shape to the `xianlvqiyuan`/`esI` instances
+already cataloged in §7.34. Root cause: a bare `printf("%O\n", ob);` at
+line 775, right before `ob->set("name", arg);`, with no explanatory
+comment — a debug checkpoint the original author never removed.
+**Fix**: deleted the line. Re-verified: re-ran the exact same
+registration flow (id `qfshenmo` and others below) — the raw byte
+sequence now goes straight from the Chinese-name prompt to the
+admin-password block with nothing in between.
+
+**2. NEW class — `file_owner()`'s fixed-depth `sscanf` misattributes
+any `/u/<wizard>/<subdir>/...` file, crashing `log_error()`'s log write
+on any compile warning under a nested wizard directory (matches
+AGENTS.md §7.26 exactly, independently found here).**
+`adm/simul_efun/object.lpc`'s `file_owner()` did
+`sscanf(file, "/u/%s/%s/%s", dir, name, rest) == 3; return name;` —
+returning the SECOND segment (a subdirectory name) instead of the
+wizard's own uid for any file nested more than one level under `/u/`.
+Live-reproduced: walking a fresh character `north` from 朱雀大街 into
+`十字街头` (`/d/city/center.lpc`) for the first time this boot lazily
+compiled `/u/xdao/ljs/npc/ljstudi.lpc` (the 两界山土地 NPC placed
+there), which has an ordinary "Unused local variable" warning;
+`log_error()` then tried `file_owner()` → got back `"ljs"` (the
+subdirectory, not `xdao`) → `user_path("ljs")` → a directory that
+doesn't exist → `[执行时段错误]: *Wrong permissions for opening file
+/u/ljs/log for append. "No such file or directory"`, caught by the
+driver but landing squarely inside `center.lpc`'s own
+`create()`→`setup()`→`reset()`→`make_inventory()` chain (the same
+first-visit-only shape as §7.17/§7.25). Confirmed a SECOND, byte-
+identical, dead (unreferenced-by-`adm/obj/simul_efun.lpc`) copy exists
+at `adm/simul_efun/oo.lpc` — left untouched per the project's
+leave-dead-code-alone convention, since it is not part of the compiled
+simul_efun and fixing it would be pure churn.
+**Fix**: capture only the first segment after `/u/`
+(`sscanf(file, "/u/%s/%s", name, rest) == 2`), matching `domain_file()`'s
+own first-segment-only discipline immediately below it in the same file.
+**Re-verified live**: restarted the driver, walked the same
+`west`,`north` route into `center.lpc` on a fresh boot (forcing the same
+first-ever lazy compile of `ljstudi.lpc`) — zero `Wrong permissions`/
+`执行时段错误` lines in `debug.log` this time, room populated normally.
+
+**3. §7.12 (2-arg `tell_room()` wrapper bug), severity-escalation shape
+— confirmed live, including the follow-on driver segfault.**
+`adm/simul_efun/message.lpc`'s `tell_room(mixed ob, string str, object
+*exclude)` called `message("tell_room", str, ob, exclude)` — with
+`exclude` an unset (`int 0`) local for any of this lib's 2000+ 2-arg
+call sites. **Contrary to this same lib's own earlier NOTES entry
+("§15s"), which checked ONLY the C++ `f_message()` *body*'s `switch` on
+the 4th argument (whose `default:` branch does silently tolerate a bare
+`0` with no `bad_argument()` call) — the ACTUAL live crash comes from a
+layer that check missed entirely: this driver's efun **prototype**
+(`src/packages/core/core.spec`: `void message(mixed, mixed, string |
+string* | object | object*, void | object | object*);`) declares the
+4th parameter as `void | object | object*` — NOT `int`/`mixed` — and the
+driver's own prototype-based argument type-checker rejects a literal
+`int 0` at the call boundary, before the C++ body's tolerant `switch` is
+ever reached.** (Correcting that earlier conclusion here rather than
+silently overwriting it, since it's a genuinely instructive miss — the
+efun's declared *prototype* and its C++ *implementation* can disagree,
+and checking only the implementation body isn't sufficient.)
+
+Live-reproduced via `obj/user.lpc`'s `user_dump()` — the
+`NET_DEAD_TIMEOUT`-driven (600s / 10 real minutes) force-quit handler,
+same function class as `dtsl`'s original find:
+1. Deliberately net-deaded `qfengda` (disconnected without `quit`), then
+   did ONE blocking `sleep 660` (past the 600s timeout) before
+   reconnecting.
+2. `debug.log` showed exactly the predicted crash:
+   `[执行时段错误]: *Bad argument 4 to EFUN message() Expected: object,
+   array,  Got: int(0).` with a backtrace rooted at
+   `user_dump() /obj/user.lpc 181行` → `tell_room()` — i.e. the very
+   `tell_room(environment(), name + "断线超过...分钟，自动退出这个世界。\n")`
+   call in `user_dump()`'s `DUMP_NET_DEAD` case. Per §7.12's own
+   documented mechanism, this uncaught crash (no enclosing `catch()`,
+   fired from a bare `call_out`) aborted the REST of that `switch` case
+   — the very next line, `QUIT_CMD->main(this_object(), "", 1);`, never
+   ran, so the net-dead force-quit safety net was silently disabled,
+   exactly as on `dtsl`.
+3. **The follow-on driver crash also reproduced**: the very next
+   reconnect attempt against that half-handled net-dead object hit
+   `CONNECT_FAILED: [Errno 111] Connection refused` — the driver process
+   itself had died. Captured stdout showed a genuine C-level
+   `Segmentation fault (Address not mapped to object [0x65])` inside
+   `apply_low()`, dereferencing a corrupted `ob->shadowed` pointer, with
+   `command_hook()`→`f__call_other()` on the stack — the exact
+   double-free/dangling-object shape §7.12's `dtsl` writeup and §10.8's
+   catalog already describe.
+
+**Fix**: `exclude || ({})` at the `message()` call site inside the
+`tell_room()` wrapper — the same one-line, project-standard fix used on
+every other lib carrying this bug class. **Re-verified live end-to-end,
+twice**:
+- A normal register→move→`quit` session afterward showed zero `Bad
+  argument`/`执行时段错误` lines.
+- **Repeated the exact net-dead + 660s-wait scenario against the fixed
+  driver.** This time `debug.log` stayed completely clean through the
+  whole wait (no `Bad argument 4` line at all — confirms the LPC-level
+  crash is genuinely fixed) and the driver process was still alive and
+  listening immediately after the timeout fired. **However, roughly 20–
+  30 real seconds later — with no player command in flight, no
+  reconnect attempted yet — the driver process died again**, this time
+  from a *different* segfault: captured stdout shows the crash
+  originating from a bare `call_out` firing (not a player command),
+  descending through TWO nested `f__call_other()` frames before the same
+  `apply_low()` → `ob->shadowed` dereference. This is the AGENTS.md
+  §10.8 driver-level memory-corruption class (five prior independent
+  occurrences already cataloged there, across five unrelated libs/
+  lineages) — **not mudlib-fixable**, and explicitly out of scope for an
+  LPC-level fix per that section's own conclusion. Recorded here as a
+  **sixth independent occurrence**, and the first one observed
+  triggering from the *successful* (post-fix) net-dead force-quit path
+  itself rather than from an aborted/crashing one — i.e. fixing the
+  LPC-level §7.12 bug above removed one trigger for the segfault class
+  but did not eliminate the class itself. Flagging per §10.8's own
+  standing recommendation: this warrants a dedicated driver-level
+  investigation (ASan/valgrind against a long net-dead soak) in the
+  `~/src/fluffos` checkout itself, not further per-lib mudlib changes.
+
+### Net-dead / reconnect / soak testing (§10.7 items 8–9)
+
+- **Prompt reconnect** (net-dead without `quit`, reconnect ~35s later,
+  well inside the 600s window): worked correctly — `qfengda` was
+  restored in the exact room it had been in (朱雀大街), full `score`
+  state intact, no `reconnect()`-vs-`net_dead()`-mismatch shape from
+  §7.20 observed (this lib's `obj/user.lpc reconnect()` directly clears
+  the net-dead call_outs and re-links in place — it never parks the
+  player in a separate void room to begin with, so the §7.20 failure
+  mode doesn't apply to this lib's architecture).
+- **Long-wait unclean-disconnect reconnect** (past the full 600s
+  `NET_DEAD_TIMEOUT`): see bug #3 above — this path is exactly what
+  surfaced both the §7.12 crash and its §10.8 driver-segfault follow-on.
+  After the fix, the force-quit itself completes correctly (confirmed:
+  the character's `startroom`/location was NOT corrupted to a void or
+  otherwise stale — a fresh login afterward landed back in 南城客栈,
+  the correctly-saved last position).
+- **Clean quit, real wait (~90s), reconnect**: worked correctly — state
+  (南城客栈, full `score` sheet) restored exactly as left.
+
+### Shop purchase / combat (§10.7 item 6/10)
+
+- `buy jiudai from xiao er` at 南城客栈 (per `doc/help/newbie`'s own
+  example) correctly rejected with "你的钱不够" — new characters start
+  with zero money, matching the newbie doc's own "没有钱怎么办？...向
+  老玩家讨" advice. The rejection path itself works correctly; a real
+  purchase was not reachable within this pass's time budget (would
+  require earning money first) — stated explicitly, not silently
+  presented as tested.
+- `kill xiao tong` (real, un-mirrored combat against the newbie-doc-
+  recommended weak NPC) initiated correctly (aggro messages, opponent
+  engaged) with `wimpy 50` set beforehand as the newbie doc recommends.
+  Did not observe the fight through to a kill/death, since the
+  connection ended (deliberately, to set up the net-dead test) while
+  the fight was still in its opening exchanges — **death/respawn was
+  NOT reached or verified this pass**, stated explicitly per §10.7 item 6.
+
+### Observations (documented, not fixed — genuinely unresolved)
+
+- **An unexplained, low-frequency "dizzy" flavor message** —
+  `你一陣頭昏，似乎發生了什麼事，但是又無跡可循...` (note: this exact
+  string is in TRADITIONAL characters, inconsistent with the rest of
+  this Simplified-Chinese lib) — appeared a handful of times across this
+  pass's sessions, always immediately after a directional movement
+  command (`west` twice, `north` once). Investigated extensively:
+  the literal string does not exist anywhere in `work/` (checked every
+  extension, including the dead `sjsh/` tree, via both direct grep and a
+  byte-level Python scan of the raw transcript to rule out an ANSI/
+  decoding artifact — the bytes are genuine, well-formed UTF-8). It does
+  NOT reliably block movement: one occurrence (kezhan→center) was
+  immediately followed by successful arrival in the new room; two other
+  occurrences (both attempts to leave 南城客栈 via `west`) were followed
+  by the character remaining in the original room. Re-ran the exact same
+  registration + `west` sequence on 5 additional fresh characters
+  (`qftestc`, `qftwaaa`, `qftwbbb`, and two more) with generous
+  `--idle`; it did not reproduce on any of them — movement was clean
+  every time. No corresponding line appears in `debug.log` for any
+  occurrence. Checked and ruled out: `valid_move()`'s own busy/
+  encumbrance/`no_move` gates (none of their fixed message text matches
+  and `busy` is `nosave`, so it can't survive a driver restart the way
+  one occurrence did); `EMOTE_D->do_emote()` and `CHANNEL_D->do_channel()`
+  (both return 0 for an unrecognized verb, no such fallback text in
+  either file); `adm/daemons/natured.lpc`'s weather/day-phase broadcast
+  (broadcasts the actual phase text to every user, not this message).
+  Per AGENTS.md's own scope note ("when genuinely unsure... document
+  honestly... leave the code untouched — don't guess"), this is recorded
+  as unresolved rather than guessed at. If it recurs on a future pass,
+  worth grepping specifically for dynamically-CONCATENATED string pieces
+  (not a single literal), since an exhaustive literal-text search across
+  the whole tree came up empty.
+- `doc/help/newbie` repeatedly refers to the game as "仙侣情缘" instead
+  of its actual name ("西游记-神魔传说") — cosmetic help-text content
+  left over from wherever this file was originally copied from; not
+  touched (content, not a programming bug).
+- Pre-existing, unrelated to this pass: `d/obj/books-nonskill/
+  book-qujing.lpc` fails to compile (`Cannot #include
+  /d/qujing/obstacle.h`, `Undefined variable 'obstacles'`) every time
+  it's lazily reached — a genuine missing-header archive gap (the header
+  file simply isn't present anywhere in the archive), not a conversion
+  or driver-compat bug. Left alone per the mega-lib partial-sweep policy
+  already documented earlier in this file.
+
+### Files modified this pass
+
+- `work/adm/daemons/logind.lpc` — deleted the stray `printf("%O\n",
+  ob)` debug leftover in `get_name()` (§7.34).
+- `work/adm/simul_efun/object.lpc` — fixed `file_owner()`'s fixed-depth
+  `sscanf` to capture only the first `/u/` segment (matches §7.26).
+- `work/adm/simul_efun/message.lpc` — `tell_room()`'s `message()` call
+  now passes `exclude || ({})` instead of a bare possibly-`0` value
+  (matches §7.12).
