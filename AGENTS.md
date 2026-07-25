@@ -2071,6 +2071,45 @@ see `libs/bxsj/NOTES.md` "深度功能测试" for the worked example):
    (§11) for the same pattern before moving on — a bug found this way
    in one lib has repeatedly turned out to be copy-pasted into others.
 
+### 10.8 Long-sit soak testing can surface driver-fatal crashes invisible to `debug.log` entirely
+
+Found on `xianjianchuanqi`'s deep functional test (§10.7): roughly 25
+minutes into an otherwise-ordinary session, the whole driver process
+died outright — `FATAL ERROR: FATAL: Object .../d/xingxiu/silk6 ref
+count 0, but not destructed (from free_svalue).`, a driver-level
+internal consistency check, not a catchable LPC error. **`debug.log`
+showed nothing whatsoever** — it stayed at its exact pre-crash line
+count through the crash. The only reason this was caught at all was
+that the agent happened to have the driver's own stdout redirected to a
+file; without that, this class of failure leaves **zero evidence** and
+would simply look like "the connection dropped" to anyone testing live.
+
+Established mechanism (not a fix — this is a testing-methodology
+lesson, not a resolved bug): this lib's ambient world simulation is not
+idle even with no player commands — roaming NPCs' `heart_beat()` →
+`random_move()` chains walk them through real exits continuously, and
+given enough real wall-clock time this forces lazy compilation of
+essentially the entire map, including zones no test character ever
+visited. Sustained compiling/cloning/destructing across that much of
+the lib eventually corrupted some object's reference count to 0 without
+it actually being destructed — silent until the next unrelated
+`free_svalue()` call touches it, which is what aborted the whole
+process. The exact LPC-level trigger of the corruption was **not**
+pinned to a specific file:line — flagged honestly as unresolved, not
+silently presented as fixed. Several genuinely broken pre-existing
+files surfaced by the same mass-compile (an inherit pointing at a
+nonexistent sibling file, illegal-format board-post save data) are
+plausible contributing factors but not proven causes.
+
+**Actionable takeaway for any future long-sit / soak-testing pass**:
+capture the driver's own stdout to a file (not just `debug.log`) for
+the full duration of any extended idle-connected session — this class
+of crash is otherwise completely invisible. If reproduced with a
+pinned root cause on any lib, promote this into a proper numbered §7.x
+bug-class entry with an actual fix; until then, treat "the process was
+still alive at the end of a long session" as itself a thing worth
+explicitly checking, not assuming.
+
 ---
 
 ## 11. Lineage map — who shares code with whom
