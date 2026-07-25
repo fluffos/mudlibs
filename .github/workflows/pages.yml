@@ -14,15 +14,33 @@
 #      the checked-in scripts/wasm_status.json status mapping).
 #   4. Upload site/ as the Pages artifact and deploy.
 #
-# INCREMENTAL packing: the packed bundles persist in ONE actions/cache entry
-# (see build_site.sh's manifest: driver tag + packer blob sha + per-lib
-# `git rev-parse HEAD:libs/<slug>` tree hashes).  A run only repacks libs
-# whose tree hash changed (or everything when the driver release / packer
-# script changed) and prunes bundles for removed libs.  The cache key embeds
-# the commit sha so every run with changes saves a fresh snapshot;
-# restore-keys fall back to the newest previous entry.  GitHub's cache is
-# 10GB/repo with LRU eviction -- the ~2GB packed site fits; a cache miss
-# (eviction/expiry) just means one slow full repack, not a failure.
+# INCREMENTAL packing -- two mechanisms with distinct roles:
+#
+# CORRECTNESS: the `pages-state` orphan branch holds one file,
+# last-published-sha -- the commit the LIVE site was last successfully
+# deployed from.  It is read at the start of every build (empty on
+# bootstrap -> full repack) and advanced ONLY after the deploy job actually
+# succeeds, so it always reflects reality.  build_site.sh repacks exactly
+# the libs whose tree differs between that sha and HEAD.  This matters
+# because cancel-in-progress (below) means that during a burst of pushes
+# most runs die mid-build leaving no trace; whichever run finally survives
+# still computes the full cumulative diff against the live site's true
+# state, because that state lives in durable git history -- not in an
+# evictable cache blob.  (It also answers "what commit is the live site
+# built from?": `git show origin/pages-state:last-published-sha`.)
+# The pages-state branch is not in this workflow's push branch filter, so
+# advancing the marker never re-triggers the pipeline.
+#
+# SPEED: the packed bundles persist in ONE actions/cache entry (see
+# build_site.sh's manifest: driver tag + packer blob sha + per-lib tree
+# hashes recording what each cached bundle was packed FROM).  A lib
+# unchanged since last publish whose cached bundle provenance matches
+# HEAD's tree + the current driver/packer is reused instead of repacked.
+# The cache key embeds the commit sha so every run with changes saves a
+# fresh snapshot; restore-keys fall back to the newest previous entry.
+# GitHub's cache is 10GB/repo with LRU eviction -- the ~2GB packed site
+# fits; a cache miss (eviction/expiry) just means one slow full repack,
+# never a wrong site: the marker alone decides what MUST be repacked.
 # The deploy itself is always full-site: actions/deploy-pages replaces the
 # site atomically, so only the packing step can be (and is) incremental.
 #
@@ -57,10 +75,39 @@ jobs:
     steps:
       # The repo carries ~4GB of history (original archives); a shallow
       # clone is mandatory.  HEAD's tree objects are enough for the
-      # per-lib `git rev-parse HEAD:libs/<slug>` cache keys.
+      # per-lib `git rev-parse HEAD:libs/<slug>` tree hashes; the
+      # last-published base commit is fetched separately below.
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
+
+      # Read the durable "what is live right now" marker (see header).
+      # The base commit is fetched with --filter=blob:none: tree-hash
+      # comparison needs its commit + tree objects only, so the shallow
+      # clone stays small (no second ~2.4GB blob download).  Any failure
+      # (no branch yet / marker sha unreachable, e.g. after a history
+      # rewrite) degrades to sha="" -> build_site.sh does a full repack.
+      - name: Read last-published marker (pages-state branch)
+        id: marker
+        run: |
+          set -euo pipefail
+          base=""
+          if git fetch --quiet --depth=1 origin pages-state 2>/dev/null; then
+            base=$(git show FETCH_HEAD:last-published-sha 2>/dev/null || true)
+          fi
+          if ! [[ "$base" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "no usable pages-state marker; full repack (bootstrap)"
+            base=""
+          elif git fetch --quiet --depth=1 --filter=blob:none origin "$base" \
+                 2>/dev/null \
+               && git cat-file -e "$base^{commit}" 2>/dev/null; then
+            echo "live site was last published from $base"
+          else
+            echo "::warning::last-published sha $base is not fetchable;" \
+                 "falling back to a full repack"
+            base=""
+          fi
+          echo "sha=$base" >> "$GITHUB_OUTPUT"
 
       - name: Fetch latest prebuilt WASM driver release
         id: driver
@@ -98,6 +145,8 @@ jobs:
 
       - name: Build site (incremental repack + index)
         id: build
+        env:
+          LAST_PUBLISHED_SHA: ${{ steps.marker.outputs.sha }}
         run: |
           scripts/build_site.sh "$RUNNER_TEMP/wasm-release/rel" \
               "${{ steps.driver.outputs.tag }}" \
@@ -131,9 +180,53 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    # contents: write is for advancing the pages-state marker branch after
+    # a successful deploy (job-level block overrides the top-level one).
+    permissions:
+      pages: write
+      id-token: write
+      contents: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+
+      # The site is now actually live: durably record which commit it was
+      # built from.  Runs ONLY when deploy-pages succeeded (default step
+      # `if: success()`), so the marker can never claim something shipped
+      # that didn't.  Done in a scratch repo (no checkout: main's tree is
+      # ~2.4GB; the pages-state branch is one tiny file).  Pushing
+      # pages-state cannot re-trigger this workflow: the push trigger only
+      # watches main/master.  Runs of this workflow are serialized by the
+      # concurrency group, so competing marker pushes cannot race.
+      - name: Advance last-published marker (pages-state branch)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/pages-state"
+          git init --quiet "$dir"
+          cd "$dir"
+          git config user.name "github-actions[bot]"
+          git config user.email \
+              "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add origin \
+              "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if git fetch --quiet --depth=1 origin pages-state 2>/dev/null; then
+            git checkout --quiet -b pages-state FETCH_HEAD
+          else
+            # first publish ever: bootstrap the orphan branch
+            git checkout --quiet --orphan pages-state
+          fi
+          echo "$GITHUB_SHA" > last-published-sha
+          git add last-published-sha
+          if git diff --quiet --cached HEAD -- 2>/dev/null; then
+            echo "marker already at $GITHUB_SHA (re-run); nothing to push"
+            exit 0
+          fi
+          git commit --quiet \
+              -m "publish $GITHUB_SHA (run $GITHUB_RUN_ID, $GITHUB_WORKFLOW)"
+          git push --quiet origin pages-state
+          echo "pages-state advanced to $GITHUB_SHA"
