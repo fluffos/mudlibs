@@ -361,3 +361,182 @@ functions -- §3's own footnote that this warning is harmless -- and
 - **Save files to force-add** (untracked, NOT gitignored):
   `libs/fengyun3dianzang/work/data/user/f/fluffos/fluffos.o`,
   `libs/fengyun3dianzang/work/data/login/f/fluffos/fluffos.o`.
+
+## 深度功能测试 / Deep functional test (AGENTS.md §10.7, round two)
+
+One continuous native session (native driver, `scripts/mudclient.py`),
+following the lib's own `doc/help/newbie.txt` as the intended test path
+(拜师 via `apprentice`, `learn <skill> from <master> with <potential>`,
+`fight` for safe sparring, `list`/`buy` for shop purchases). Several real
+Chinese-name test characters registered across the session (沈风/曲阳/
+林风/北斗), landing correctly in nationality-specific start zones (汉族
+→ 凤求凰客栈; 苗族 → 沉香镇/沉香南宫). `look`/`score`/`i`/`hp` all
+correct at every state change.
+
+### Bugs found and fixed
+
+1. **`file_owner()` path-depth off-by-one — confirmed live instance of
+   AGENTS.md §7.26**, `adm/simul_efun/object.lpc`. The original
+   `sscanf(file, "/u/%s/%s/%s", dir, name, rest) == 3; return name;`
+   returned the SECOND segment after `/u/` (e.g. `"npc"` for
+   `/u/guanwai/npc/petowner.lpc`) instead of the wizard's own directory
+   name — correct only for the rare exactly-2-levels-deep case. Every
+   compile diagnostic (even a harmless "Unused local variable" warning)
+   on nested `/u/` content (the normal case — `npc/`, `obj/` subdirs)
+   made `master.lpc`'s `log_error()` write to a bogus path
+   (`/u/n/npc/log`), throwing `*Wrong permissions for opening file ...
+   for append. "No such file or directory"` — caught by the driver so
+   nothing crashed visibly, but spammed `debug.log` with a real error on
+   ordinary lazy compiles (reproduced live: any command that triggers a
+   fresh compile of `/u/guanwai/npc/*` or `/u/guanwai/obj/*` content,
+   e.g. an NPC wandering there, or an admin `update`). Fixed per §7.26's
+   own established pattern: capture only the first segment after `/u/`
+   (`sscanf(file, "/u/%s/%s", name, rest) == 2; return name;`).
+
+2. **NEW bug class: `user_path()`/`user_cwd()` assume a letter-sharded
+   wizard-directory layout that this archive's `/u/` tree never had**,
+   `adm/simul_efun/path.lpc`. `user_cwd(name)` returned `"/u/" +
+   name[0..0] + "/" + name` (e.g. `/u/g/guanwai/`, the ES II-family
+   letter-sharding convention seen elsewhere in this project), but this
+   archive's actual `/u/` tree is flat (`/u/guanwai/`, `/u/palace/`,
+   etc.) — confirmed present in the RAW, pre-conversion archive too
+   (`raw/fy3dcb/风云典藏版/u/` has the same flat layout), so this is a
+   pre-existing mismatch in the original code, not something the
+   conversion pipeline introduced. Only 3 call sites lib-wide
+   (`cmds/adm/cd.lpc`, `adm/obj/master.lpc`'s `log_error()`,
+   `path.lpc` itself), both wizard/admin-facing: bare `cd` (no
+   argument) resolved to a directory that never exists for EVERY
+   wizard (`没有这个目录。`), and — chained with bug #1 above — even
+   after fixing `file_owner()`, `log_error()` still failed one level
+   further down (`/u/g/guanwai/log` instead of `/u/guanwai/log`) until
+   this was also fixed. Fixed by dropping the letter-shard segment:
+   `return ("/u/" + name);`. Verified live after a fresh driver
+   restart: `update /u/guanwai/npc/petowner` now recompiles cleanly
+   with zero `debug.log` errors, and `cd ~guanwai` correctly resolves
+   to `/u/guanwai/` (bare `cd` for `fluffos` itself still reports "没
+   有这个目录" — expected, since the seeded admin account has no real
+   `/u/fluffos/` wizard-content directory of its own, not a bug).
+   **Likely affects other ES II-lineage siblings with a flat `/u/`
+   archive layout** — worth a quick `ls u/` + grep `user_cwd\(` check
+   on `fengyun3xiuding` (confirmed byte-identical `master.c`/
+   `simul_efun.c`/`securityd.c`/`chinese.c` to this lib per the lineage
+   table above) and the other 风云3 siblings.
+
+3. **`cmds/usr/save.lpc`'s unguarded `environment(me)->query(...)` —
+   same class as the already-fixed AGENTS.md §7.14 instance in
+   `cmds/usr/quit.lpc` (same lib, explicit code comment there credits
+   "Same fix as fengyun2qinghua/fy2")**. The `save` command's
+   `valid_startroom` check dereferenced `environment(me)` without a
+   null guard; `quit.lpc`'s sibling call site already carries the
+   defensive `if (environment(me))` guard for the identical
+   post-registration-race class, but `save.lpc` was missed. Added the
+   same guard (`if (environment(me) && environment(me)->query(...))`).
+   Not independently reproduced live (the race window is narrow and
+   this lib's `enter_world()` has no intervening `input_to` pause that
+   would make it easy to hit), but the fix is cheap, safe, and directly
+   mirrors an already-established, already-fixed pattern in the exact
+   same file tree — applied proactively per AGENTS.md's own "port to
+   every sibling immediately" guidance, scoped here to a sibling call
+   site within the SAME lib rather than a different lib.
+
+### Confirmed working (no bug)
+
+- **Safe-sparring mechanism**: the `fight` command (documented in its
+  own `help fight`: "这种形式的战斗纯粹是点到为止，因此只会消耗体力，
+  不会真的受伤" — pulls punches, costs stamina only, no real injury).
+  Traced into `adm/daemons/combatd.lpc`: `receive_wound()` (real injury)
+  only fires when `me->is_killing(victim) || weapon` is true; a bare
+  `fight` never sets `is_killing`, so damage only depletes `kee`
+  (stamina) and the match auto-stops at 50% kee on either side. Verified
+  live against 寒梅先生 (a "peaceful"-attitude NPC near the start zone,
+  reachable from `fqkhotel` via one `west`) — full HP/kee/gin/sen intact
+  after a full exchange, "结果没有造成任何伤害" (no damage resulted) on
+  the received hits. Note: `accept_fight()` (`std/char/npc.lpc`) always
+  refuses for `"friendly"`-attitude NPCs (confirmed against `npc/waiter`
+  and the 黄衣卫 guards — "在下怎麽可能是小兄弟的对手？") — pick a
+  `"peaceful"`- or unlabeled-attitude NPC for the safe-spar test, not a
+  friendly shopkeeper.
+- **Organic sect-join + skill-learning path**: `apprentice master jin`
+  (荆无命, 金钱帮/Money Gang, reachable from `fqkhotel` via
+  west/south/west/west/south/south) worked exactly per `attempt_apprentice()`
+  → `recruit` → `recruit_apprentice()`; `score` correctly updated title
+  to "金钱帮第三代弟子" with "你的师父是荆无命". `learn move from master
+  with 10` (exact syntax required — bare `learn move` just prints the
+  format string) correctly deducted 10 潜能/consumed 精力, and `skills`
+  showed the new skill at level 1. No sect-join shortcut/admin command
+  found elsewhere to cross-check against (per §10.7 item 4) — the
+  organic NPC path is confirmed to be the only route in this lib.
+- **Net-dead handling, prompt reconnect**: `obj/user.lpc`'s `net_dead()`
+  does NOT void-park the player (no `VOID_OB` move at all — structurally
+  immune to the AGENTS.md §7.20 bug class) — it just flags `netdead`,
+  schedules a `user_dump` force-quit `call_out` at `NET_DEAD_TIMEOUT`
+  (900s), and leaves the player body in place. A prompt reconnect
+  (disconnect without `quit`, immediately reconnect with the same id)
+  correctly hit `reconnect()`, which cancels the pending `user_dump` and
+  restores the SAME room/state with zero loss — verified live (character
+  `北斗` disconnected then promptly reconnected at `沉香南宫`, `score`
+  unchanged).
+- **`tell_room()` 2-arg wrapper bug (§7.12)**: `user_dump()`'s
+  `DUMP_NET_DEAD` branch calls the 2-arg form
+  (`tell_room(environment(), "...")`); confirmed the lib-wide fix
+  documented above (fix #6 in the original pass, `exclude || ({})`) is
+  in effect, so this specific call site is NOT vulnerable to §7.12's
+  crash shape.
+- **Quit-time `environment(me)` guard (§7.14)**: `cmds/usr/quit.lpc`
+  already carries the defensive guard (see bug #3 above for the sibling
+  gap this pass found and fixed in `save.lpc`).
+- **Admin account**: re-verified `fluffos`/`(admin)` login and
+  `update /adm/daemons/combatd`-equivalent access still work against the
+  rebuilt driver (`update /u/guanwai/npc/petowner` used as this pass's
+  ACL-exercising check, succeeding cleanly after the fixes above).
+
+### Not independently verified this pass (honest gaps)
+
+- **Long-duration net-dead force-quit (past the 900s `NET_DEAD_TIMEOUT`)
+  and a real-wall-clock-gap reconnect-after-clean-quit check** — per
+  §10.7 item 8/9. A test character (`北斗`) was deliberately left
+  net-dead specifically to run this check, but the only available
+  multi-minute wait mechanism in this environment (a genuinely blocking
+  `sleep 900+`) is blocked by this session's own tool policy (which
+  requires either `Monitor`/`run_in_background`, both of which this
+  task's own instructions separately prohibit using passively), and a
+  background sleep was armed and then explicitly stopped short per a
+  live course-correction mid-task rather than left to complete. The
+  short/prompt net-dead reconnect path IS verified live (see above); the
+  driver's own `user_dump()`/`DUMP_NET_DEAD` code path past the full
+  900s timeout, and whatever a real ≥45-minute gap would do to the
+  `cron.lpc` autosave-adjacent state, were reviewed by reading the code
+  (see "Confirmed working" above and the `tell_room()`/`environment()`
+  guard checks) but not independently exercised live end-to-end this
+  pass. `北斗` was left connected-then-disconnected (net-dead) at
+  `沉香南宫`/南宫钱庄 mid-pass; its actual disk save reflects only the
+  pre-net-dead state (no family/skills — this character never
+  apprenticed or learned anything, only walked and looked).
+- **Shop purchase / economy**: attempted (`list`/`buy dumpling from
+  waiter` at the start-zone waiter vendor) but every fresh character
+  starts with 0 money ("你的钱不够" — insufficient funds) and no
+  in-session way to earn any was exercised, so a successful purchase was
+  never completed live. Code-reviewed only (F_VENDOR's `vendor_goods`
+  mapping, `std/room/shop.lpc`'s save-on-purchase) — not exercised.
+- **Combat progression to death/respawn**: not reached — time budget
+  went to the sect-join/skill-learn/safe-spar/net-dead checks instead,
+  per §10.7 item 6's explicit permission to state this honestly rather
+  than presenting it as tested.
+- **Ambient NPC violence observation (not a bug, noting for context)**:
+  partway through this pass, `npc/waiter` (the start-zone shopkeeper)
+  was found dead (`店小二的尸体`/Waiter's corpse) with no live
+  replacement, most plausibly killed by one of the newbie-doc's own
+  documented "see you, kill you" wandering hostiles (强盗/土匪/疯狗) —
+  ambient world simulation the newbie doc itself warns new players
+  about, not something this pass's testing triggered. `std/room.lpc`'s
+  `reset()`/`make_inventory()` correctly re-clones a dead NPC (`die()`
+  destructs the original object, so `objectp()` on the tracked reference
+  goes false and a fresh clone is made on the room's next `reset()`) —
+  confirmed by reading the code, not confirmed live within this pass's
+  time budget (the room's `time to reset` is 900s and the corpse was
+  still present when last checked, but that observation window was
+  itself well under 900s of continuous room-idle time, so it isn't
+  conclusive either way). If a future pass finds the shop permanently
+  vendor-less across a real reset interval, that would be worth
+  revisiting as a genuine reset/repopulation bug — not confirmed as one
+  here.
