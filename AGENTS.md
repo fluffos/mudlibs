@@ -740,6 +740,25 @@ cause, fix, detection, known-affected lineages.
   pattern was case-sensitive and only matched uppercase absolute paths
   (`<ABS/...>`); this one was lowercase (`<d/qujing/...>`). When
   re-sweeping for this class, grep case-insensitively.)
+  **Alternative fix when quoting individual `#include` lines is
+  impractical (many scattered occurrences, or the exact same shape
+  keeps recurring across new content)**: found on `unknownlib20150716`'s
+  §10.7 pass. `get_include_path()` (this section's own opening fix)
+  CANNOT resolve an already-absolute header name — the driver always
+  builds `search_dir + "/" + header_name` for a `<...>` include, so no
+  list of search directories helps once `header_name` itself starts with
+  `/`. The driver offers a separate, purpose-built hook:
+  `master::include_file(compiled, from, path)` may return a STRING that
+  DIFFERS from the original `path` to force the include through the same
+  `merge()`-based resolution a `"quoted"` include gets — and `merge()`
+  explicitly treats a leading `/` as mudlib-root-absolute. Returning the
+  unchanged `path` is a no-op; prepend one extra `/` instead
+  (`"/" + path`) — `merge()` collapses any run of leading slashes to one
+  absolute-root marker, so the double-slash is harmless and the returned
+  string differs from the input, which is what actually flips the driver
+  into the working resolution path. Add this apply once in `master.lpc`
+  and every future absolute-inside-`<>` include on that lib resolves
+  without touching individual files.
 - **`..` in include paths is disallowed entirely** (security rule).
   Point at the real absolute quoted path. (Same libs.)
 - **Case-sensitivity**: `#include <Action.h>` vs on-disk `action.h` —
@@ -1729,6 +1748,36 @@ other root directories.
 Lineages likely affected: `menghuanxiyou2002`, `fluffos_xiyou2000`,
 `xiyouji2003`, `xiyouji2006` (confirmed via grep to carry identical
 code, not yet fixed there — out of scope for the pass that found this).
+
+### 7.27 A time-gated one-way transit room deletes its exit entirely on window-close, softlocking a live session
+
+Found on `unknownlib20150716`'s deep functional test (§10.7). A
+real-time-gated ferry/raft/portal mechanic — move a player through, give
+them a short window (here: ~20 real seconds) to act, then clean up — can
+clean up by unconditionally DELETING the transit room's exit
+(`room->delete("exits/out")`) rather than restoring some fallback. If no
+other code path ever re-adds an exit to that room (the next boarding
+cycle only re-triggers from the OPPOSITE shore, which nobody is standing
+on once already mid-transit), a player who acts a few seconds too late
+is left in a genuine zero-exit room — `look` shows "这里没有任何明显的出路"
+and every movement command fails — for the rest of that live session,
+with no in-game recovery. Not a permanent account-level stranding IF the
+room never sets `valid_startroom` (a later clean `quit`/relogin escapes
+it), but a real, silent softlock of the CURRENT session — recoverable
+only by disconnecting, which an ordinary player has no reason to
+suspect is necessary.
+
+Detection: grep any timed-transit/ferry/portal room for
+`delete("exits/...")` (or equivalent removal, not reassignment) inside a
+`call_out`-scheduled cleanup function. Reproduce live by deliberately
+missing the action window and confirming `look`/movement are genuinely
+dead-ended, not just re-prompting.
+
+Fix: restore the room's own default/fallback exit instead of deleting it
+— typically whatever `create()` originally set that exit to before the
+boarding trigger overrode it. This lets a player who missed the window
+walk back to where they started and try again, rather than being
+stranded with no exits at all.
 
 ---
 

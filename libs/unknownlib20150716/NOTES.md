@@ -53,14 +53,18 @@ boot before testing a connection.
 
 ## Known remaining issues (documented, not fixed)
 
-- 64 remaining lpcc-sweep failures, not individually triaged past a
-  category scan — dominated by scattered `Undefined function/variable`
-  errors (`greeting1`/`greeting2`/`reporting`/`order_list`/
-  `quest_accurate_index`/`can_enter`/`you_leave`/etc, `RED`/`NOR`/`GRN`/
-  `BLK`/`DEBUG`/`flowers`/`obstacles`/`banned_cast`/`banned_action`) that
-  look like content-completeness gaps (quest/greeting content referencing
-  things not present in this particular archive), same shape as other
-  libs' missing-zone-content findings (AGENTS.md §13). None of the
+- ~62 remaining lpcc-sweep failures (was 64; 2 fixed 2026-07-24's deep
+  functional test — see "深度功能测试" below, `book-qujing.lpc` and
+  `tongmingdian.lpc` were both actually a fixable mudlib-root-absolute
+  `#include <...>` driver-API bug, not missing content), not
+  individually triaged past a category scan — dominated by scattered
+  `Undefined function/variable` errors (`greeting1`/`greeting2`/
+  `reporting`/`order_list`/`quest_accurate_index`/`can_enter`/
+  `you_leave`/etc, `RED`/`NOR`/`GRN`/`BLK`/`DEBUG`/`flowers`/
+  `obstacles`/`banned_cast`/`banned_action`) that look like
+  content-completeness gaps (quest/greeting content referencing things
+  not present in this particular archive), same shape as other libs'
+  missing-zone-content findings (AGENTS.md §13). None of the
   affected files are on the boot/login critical path.
 
 ## How to run
@@ -196,3 +200,252 @@ working). `fluffos`/`Mud@2026` admin login re-verified: `look` then
 ...成功！`. Zero `执行时段错误` lines in `debug.log` for the whole
 session. Test char `qretest` (including its `data/zhaohuan/q/qretest`
 summon-state dir) removed afterward; fluffos kept.
+
+## 深度功能测试 / Deep functional test (2026-07-24, round two, AGENTS.md §10.7)
+
+First genuine hands-on *playthrough* pass on this lib (every prior pass
+above verified registration + `look`/`score`/`quit` + admin login, never
+a real multi-system playthrough). Native driver (`build-debug`), one
+continuous session per test phase, driven via `scripts/mudclient.py`.
+Read `work/doc/help/newbie/newbie` first — it lays out the exact intended
+early-game path (傲来武馆 safe sparring → raft to Changan → pick a sect
+→ learn skills → 10级突破 dungeon) and was followed closely below.
+
+**Test character**: id `linfeng`, Chinese name 林风, login password
+`test1234`, super password `Test123!` — **kept** as a representative
+playthrough character. State left behind: level 5, joined 百花谷
+(Baihuagu) as 第四代外门弟子 under 百草仙, skills `unarmed` 1/`dodge`
+6/`parry` 1 (dodge/parry trained organically by the real dog fight
+below, unarmed taught explicitly by 东方聪), inventory `炸鸡腿`
+(chicken leg, bought from the shop) + 9两20文 remaining coin, located in
+翠香楼 (start room). Save files: `work/data/user/l/linfeng.o`,
+`work/data/login/l/linfeng.o`, `work/data/zhaohuan/l/linfeng`.
+
+### Bugs found and fixed
+
+**1. `d/changan/aolaiws.lpc` `close_passage()` — missing the raft's
+"out" boarding window strands a player in a zero-exit room for the rest
+of the LIVE session (recoverable only by disconnecting).**
+
+- The newbie-path-mandated 傲来国西海岸→长安 ferry (`zuo mufa` → wait →
+  `enter` → wait ~35s → `out`) is a real-time-gated one-way transit: the
+  raft object (`d/changan/mufa.lpc`) ships with a default `"out"` exit
+  back to the west shore, but while underway `aolaiws.lpc`'s `arrive()`
+  retargets that exit to the east shore (`eastseashore`) for a ~20-second
+  window, and the following `close_passage()` (before the fix) did
+  `room->delete("exits/out")` — leaving the raft with **zero exits at
+  all** (`"这里没有任何明显的出路。"`) for anyone who typed `out` even a
+  few seconds late. Nothing else ever restores an exit here: a fresh
+  boarding cycle only re-triggers from someone standing on the WEST
+  shore typing `zuo mufa` again, which nobody is doing while the
+  original passenger is still stuck mid-ocean. Reproduced live: missed
+  the window on purpose, ended up in `海中孤筏` with `"没有任何明显的出
+  路"` and every movement command replying `什么？`. `quit` still works
+  from there (no `no_quit` flag) and cleanly returns to normal — this
+  room never sets `valid_startroom`, so the stall doesn't survive a
+  relogin — but the LIVE session is genuinely stuck until the player
+  gives up and reconnects, exactly the shape of a real bug a "does
+  `quit`/relogin recover you" check alone would miss.
+- Fix (`d/changan/aolaiws.lpc:93-108`, `close_passage()`): restore the
+  raft's own default exit (`__DIR__ "aolaiws"`, matching
+  `d/changan/mufa.lpc`'s own `create()`) instead of deleting it, so a
+  player who missed the window can walk back onto the west shore and
+  try `zuo mufa` again rather than being stranded with no exits.
+  ```lpc
+  // BEFORE:
+  void close_passage() {
+    object room;
+    if (room = find_object(__DIR__ "mufa")) {
+      room->delete("exits/out");
+      message("vision", "一个浪头打来，木筏向海上漂去。\n", room);
+      room->set("zuo_trigger", 0);
+    }
+  }
+  // AFTER:
+  void close_passage() {
+    object room;
+    if (room = find_object(__DIR__ "mufa")) {
+      room->set("exits/out", __DIR__ "aolaiws");
+      message("vision", "一个浪头打来，木筏向海上漂去。\n", room);
+      room->set("zuo_trigger", 0);
+    }
+  }
+  ```
+- Verified live, both directions, post-fix: (a) deliberately missed the
+  window again — `look` now shows `"这里唯一的出口是 out。"` and `out`
+  correctly lands back on 傲来国西海岸; (b) rode the raft again and
+  typed `out` promptly inside the window — correctly arrives at 东海之
+  滨 (Changan side) exactly as before, no regression to the intended
+  timed-crossing behavior.
+- **This is a new bug class, not yet in AGENTS.md** — see draft writeup
+  in the agent's final report for §7.23 (or next free slot).
+
+**2. `adm/obj/master.lpc` — mudlib-root-absolute `#include </path>`
+inside `<...>` never resolves, `get_include_path()` can't fix it.**
+
+- Found while walking the map: moving through `d/city/zhuque-s1.lpc`
+  (a room never visited by any prior smoke test) threw a caught
+  `执行时段错误：*No program in object '/d/obj/books-nonskill/
+  book-qujing'!` from an NPC's `create()` → `carry_object()` chain
+  (same first-visit-only shape as AGENTS.md §7.17/§7.19, different root
+  cause). Root cause: `d/obj/books-nonskill/book-qujing.lpc` and
+  `d/dntg/sky/tongmingdian.lpc` both `#include` a path that is already
+  mudlib-root-absolute inside `<...>` (e.g. `#include
+  </d/qujing/obstacle.h>`) — the driver always resolves a `<...>`
+  include as `search_dir + "/" + header_name` for each directory
+  `master::get_include_path()` returns, so no list of search
+  *directories* can ever make an already-absolute header name resolve
+  (confirmed empirically: adding `""` to the returned list produces
+  `"//d/qujing/obstacle.h"`, which this driver's `<...>` path validator
+  rejects outright rather than collapsing, unlike a plain filesystem
+  `open()`). These were 2 of the lib's previously-uninvestigated 64
+  lpcc-sweep failures (`lpcc_fail.log`), bucketed as generic
+  "content-completeness gaps" — they are not; they're a fixable
+  driver-API-usage bug.
+- Fix: implemented `master::include_file(compiled, from, path)`
+  (`adm/obj/master.lpc`), a separate driver hook
+  (`src/compiler/internal/lexer_utils.cc`,
+  `lpc_lex_handle_include`/`APPLY_INCLUDE_FILE`) that lets the master
+  force an include to resolve like a **quoted** (`"..."`) include
+  instead — which correctly treats a leading `/` as mudlib-root-absolute
+  via the driver's own `merge()`. Returning the include path unchanged
+  is a no-op (falls through to the same broken `<...>` search), so the
+  fix returns `"/" + path` when `path` already starts with `/` — a
+  different string (which is what actually flips the driver into the
+  quoted-style resolution) that still merges back down to the original
+  intended path, since `merge()` treats any run of leading slashes as
+  one absolute-root marker:
+  ```lpc
+  // ADDED:
+  mixed include_file(string compiled, string from, string path) {
+    if (path && strlen(path) && path[0] == '/')
+      return "/" + path;
+    return path;
+  }
+  ```
+- Verified live via `update` as the `fluffos` admin: both
+  `/d/obj/books-nonskill/book-qujing.lpc` and
+  `/d/dntg/sky/tongmingdian.lpc` now compile cleanly (previously
+  `Cannot #include /d/qujing/obstacle.h` / `.../laojunluhelp.h`, each
+  with a cascading `Undefined variable`/`Undefined function` error from
+  the header's missing content). `tongmingdian.lpc` still has one
+  unrelated pre-existing `Undefined function you_leave` error left
+  (genuine missing content, not an include problem — left as one of the
+  remaining lpcc-sweep failures per the existing "known remaining
+  issues" note above).
+- **This is a new bug class, not yet in AGENTS.md** — see draft writeup
+  in the agent's final report for §7.24 (or next free slot).
+
+**3. `work/log/nosave/` — another missing runtime directory (same class
+as this lib's pre-existing `adm/etc/log/` fix above, AGENTS.md §7.11).**
+
+- `cmds/wiz/call.lpc`'s player-call audit trail (`log_file("nosave/
+  call_player", ...)`) — and about a dozen other call sites across the
+  lib (`crash`, `dump`, `purge`, `jiangli`, `TANGGIFT`, `jinchai`,
+  `NEWBIEGIFTopen`, `COOKIEGIFT`, `CLONE`, `full`, ...) — all write into
+  a single `/log/nosave/` directory that the archive never shipped and
+  that (like `work/log` itself) is gitignored, so it needs recreating on
+  any fresh checkout. Symptom: `*Wrong permissions for opening file
+  /log/nosave/call_player for append` (same misleading-permissions
+  framing as the original `adm/etc/log/` bug — it's a missing directory,
+  not an ACL issue). Fix: `mkdir work/log/nosave`.
+
+### What was tested and confirmed working
+
+- **Registration → real gameplay, one continuous session**: real
+  Chinese name (林风), landed in 翠香楼, `look`/`score`/`i` all correct
+  at every state change (post-register, post-move, post-levelup,
+  post-sect-join, post-shop, post-combat).
+- **Starting-zone navigation**: walked the whole 傲来国 (Aolai) city
+  map by reading room `.lpc` `exits` mappings (BFS over the actual
+  source, not guesswork) — 翠香楼→北菀街→傲云广场→东苑街→东方武馆
+  (school) and 傲云广场→西芫街→仓库, day/night flavor text and room
+  descriptions all correct.
+- **Safe-sparring mechanic** (`help newbie`'s documented "fight dizi"):
+  `d/aolai/npc/dizi.lpc`'s `do_fight()`/`end_fight()` is a scripted,
+  harmless mock bout (fixed 3-8s `call_out`, always "wins" for the
+  player, no real damage) that grants `combat_exp`/`potential` — used
+  repeatedly to level 1→5, confirmed correct exp/potential math and
+  level-up messages every time.
+- **Organic NPC-teacher skill learning** (two-step, both parts
+  confirmed): asked 武馆馆主 东方博玉 `ask dongfang boyu about 学艺`
+  (sets a `aolai_dongfang` temp flag via his `teach_me()`), then `learn
+  unarmed from dongfang cong` — `skills dongfang cong` correctly listed
+  his teachable skills first, the `learn` command correctly deducted
+  potential and reported `你的「unarmed」升至 1 级`, confirmed via
+  `skills`.
+- **Sect join** (separate from the teacher path, per checklist item 6):
+  followed the newbie guide's raft route (傲来国北城门 → level-5 gate
+  `d/aolai/northgate.lpc`'s `valid_leave()` correctly blocked passage
+  below level 5, then correctly allowed it once leveled) → `zuo mufa` →
+  `enter` → `out` timed crossing (this is the exact flow that exposed
+  bug #1 above) → walked Changan's map (`大官道`→`朱雀大街`→`长安乐坊`)
+  to 百花谷's recruiter NPC `百草仙` → `bai xian` (the `apprentice`
+  command's `bai` alias) → correctly joined as `百花谷第四代外门弟子`,
+  confirmed via `score`'s 门派/师承 fields.
+- **Shop purchase**: `list`/`buy <item> from <vendor>` at 翠香楼's
+  in-room vendor (`d/aolai/npc/xiaoer.lpc`, `F_VENDOR_SALE`) — first
+  tried broke (`你的钱不够`, correct insufficient-funds path, confirmed
+  with `list` pricing shown correctly), then admin-granted coin
+  (`money_add`, the real currency mutator — `add_money()` is
+  NPC-only and silently no-ops on a player body, a minor API-naming
+  trap worth knowing but not a bug since nothing in the shipped content
+  calls it on a player) and completed a real purchase of `炸鸡腿`,
+  price and remaining balance both correct in `i`/`score` afterward.
+- **Real (non-scripted) combat**: `kill dog` on the wandering 黑狗
+  (`d/city/npc/dog.lpc`, level 2, wanders into 西芫街) — full turn-by-
+  turn hit/miss/dodge/parry narration, correct "有点累了"/"觉得头有一
+  点发晕" fatigue-state messages, and organic `dodge`/`parry`
+  skill-up-on-use notifications (went 0→6 dodge, 0→1 parry purely from
+  this one fight) all correct. Bare-fisted `unarmed` 1 could not land a
+  single point of damage on even this weak an NPC in ~10 minutes of
+  real combat (near-permanent "结果没有造成任何伤害"), which reads as
+  intended low-level balance (this game expects a weapon — the newbie
+  guide explicitly says to buy one before the 10级突破 dungeon), not a
+  bug; ended the fight via admin `dest` on the dog rather than letting
+  it run indefinitely, since neither side was making real progress and
+  our own health stayed comfortably above 75% (`kee` 824/1072) the
+  whole time — see "Not verified live" below re: death/respawn.
+- **Unclean disconnect (net-dead) + reconnect, both promptly and after
+  a real wait**: closed the TCP connection without `quit` several times
+  through this whole pass (mudclient.py's normal end-of-script
+  behavior already does this every time it isn't told to `quit`) and
+  once deliberately with an explicit 90-second real-wall-clock gap
+  before reconnecting — every single time, `重新连线完毕` + exact same
+  room/inventory/gold, no void-parking, no stranding. Confirms this
+  lib does **not** have the AGENTS.md §7.20/§7.21 net-dead classes
+  (checked explicitly per the task brief) — the only real-time-gated
+  stranding found here is bug #1 above, a completely different
+  mechanism (an active LIVE session losing all room exits, not a
+  disconnect/reconnect path losing the saved location).
+- **Clean `quit` → debug.log grep → reconnect after a real wait**: `quit`
+  produced the correct farewell message; immediately grepped
+  `libs/unknownlib20150716/log/debug.log` (the actual live log path —
+  **not** `work/log/debug.log`, which is a stale leftover from an
+  earlier/unrelated boot despite the `mudlib directory`/`log directory`
+  config values suggesting otherwise; always check which file is
+  actually growing before trusting a debug.log grep) for
+  `error:`/`Too deep recursion`/`执行时段错误`/`Fatal` — zero matches,
+  clean. Reconnected afterward (several minutes of real elapsed time via
+  the rest of this pass's own work) — correctly landed back in 翠香楼
+  (this lib's only `valid_startroom`-flagged room the character had
+  actually saved from; 西芫街/长安乐坊/etc. never set that flag, so
+  visiting them doesn't change the save-relogin point — expected, not a
+  bug), with inventory (`炸鸡腿` + gold) and all three learned skills
+  (including the two trained purely by the real dog fight) intact.
+
+### Explicitly NOT verified live (say so, don't silently skip)
+
+- **Death/respawn**: not reached. Real (non-scripted) combat against
+  even a weak level-2 wild NPC with a level-1 unarmed skill and no
+  weapon converged to a near-permanent stalemate (see above) rather
+  than a clean win or loss within a reasonable real-time budget for
+  this pass; ended the fight via admin intervention instead of forcing
+  it to a death outcome. The newbie guide's own advice (buy a weapon
+  before fighting anything real) suggests this is expected difficulty
+  tuning, not a bug, but the actual death → revive flow itself was not
+  exercised this pass.
+- **20级突破 puzzle dungeon and the 10-25级 loot dungeon**: both
+  documented at length in `work/doc/help/newbie/newbie` but gated
+  behind substantially more level/time investment than this pass's
+  budget allowed; not attempted.

@@ -43,6 +43,36 @@ string *get_include_path(string file) {
     return ({ "/", ":DEFAULT:" });
   return ({ "/" + implode(parts[0..<2], "/"), ":DEFAULT:" });
 }
+
+// Two files (found via a §10.7 deep functional test:
+// d/obj/books-nonskill/book-qujing.lpc, d/dntg/sky/tongmingdian.lpc)
+// #include a MUDLIB-ROOT-ABSOLUTE path inside <...>, e.g.
+// `#include </d/qujing/obstacle.h>` -- the header name itself already
+// starts with "/". get_include_path() above can't fix this: the driver
+// always resolves a <...> include as `search_dir + "/" + header_name`,
+// so no list of search DIRECTORIES can make an already-absolute header
+// name resolve (tried adding "" to the list above first -- produces
+// "//d/qujing/obstacle.h", which this driver's path validator rejects
+// outright rather than collapsing, unlike a plain filesystem open()).
+//
+// The driver source (src/compiler/internal/lexer_utils.cc,
+// lpc_lex_handle_include) offers a separate, better-suited hook for
+// exactly this: master::include_file(compiled, from, path) may return a
+// STRING that DIFFERS from the original `path` to force the include to
+// resolve the same way a `"..."` (quoted) include would -- i.e. via
+// merge(), which explicitly treats a leading "/" as mudlib-root-absolute
+// (see merge()'s own `if (name[0] == '/') dest = "";`). Returning the
+// unchanged path is a no-op (falls through to the same broken <...>
+// search), so prepend one extra "/" -- merge() treats any run of leading
+// slashes as one absolute-root marker, so "//d/qujing/obstacle.h" merges
+// down to the correct "/d/qujing/obstacle.h" while still being a
+// different string from the original, which is what actually flips the
+// driver into the working (quoted-style) resolution path.
+mixed include_file(string compiled, string from, string path) {
+  if (path && strlen(path) && path[0] == '/')
+    return "/" + path;
+  return path;
+}
 nosave void crash(string error, object command_giver, object current_object) {
 #if INSTALL_CRASH_SAVE
   object ob;
