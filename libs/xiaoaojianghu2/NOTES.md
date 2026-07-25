@@ -503,3 +503,286 @@ this change (the pre-existing `hui_quest.lpc` syntax-error lines seen in
 `debug.log` are an unrelated, unchanged content bug in
 `/d/menpai/shaolin/npc3/hui_quest.lpc`, not touched by this pass and not
 on the login/registration path).
+
+## 深度功能测试 / Deep functional test (round two, 2026-07-25)
+
+Full hands-on playthrough per AGENTS.md §10.7, one continuous
+`mudclient.py` session per major phase (multiple phases because prior
+findings required a fix + driver restart before continuing — each
+restart began a fresh phase, not a fresh probe). Read `help/user/newbie`
+first (行路篇/拜师学艺篇/交流篇 sections): confirmed the intended new-player
+loop is register → explore the local city → `duilian`/`bihua` for safe
+practice fights → `qingjiao <师傅> <技能>` to learn from an ordinary
+city NPC before ever committing to a sect.
+
+**Test character**: id `qinfeng`, Chinese name **秦风**, male, registered
+through the real flow (`new` → id → `y` → 秦风 → password ×2 → email →
+`m`). Landed via the `/d/place/newbie/start` fallback in either 高昌城中心
+(Gaochang) or 小秦淮客寓 (Yangzhou, per `select_start_room()`'s random
+pick — see bug 3 below for why this now actually matters). Test character
+and its save files (`data/user/q/qinfeng.o`, `data/login/q/qinfeng.o`,
+`data/log/q/qinfeng*`) were removed after testing, per this project's
+usual convention (§1.5-seeded `fluffos` admin excepted). Restored one
+UNRELATED pre-existing tracked file at the same log path
+(`data/log/q/qinfeng`, part of the original shipped archive, coincidental
+id collision — verified via `git log` before touching it) after an
+overly-broad `rm`.
+
+### New bugs found and fixed
+
+**1. `d/menpai/shaolin/npc3/hui_quest.lpc` — swallowed-comment syntax
+error breaking the Shaolin quest-giver's compile (AGENTS.md §6.6).**
+Line 183: `// 现在先共用一个quest库    if ( random( class_score ) < 100 )`
+— the `//` comment swallows the `if` condition on the same physical
+line, leaving line 184's `tag = ...` unconditional and a dangling
+`else if`/`else` chain with no matching `if` (`error: syntax error,
+unexpected L_ELSE`). This file is `inherit`ed by
+`d/menpai/shaolin/npc3/huijue.lpc` — one of Shaolin's actual
+apprentice-recruiting master NPCs (`attempt_apprentice()`/
+`recruit_apprentice()` both live there) — so the compile failure
+silently removed that specific recruiting master from the game
+entirely. Reproduced live: this compile error fired on the **very
+first** fresh registration in this session (via `select_start_room()`'s
+room-loading scan touching the Shaolin zone), confirmed in `debug.log`.
+Already spotted-but-explicitly-left-alone by the prior "fail-closed
+loopback retrofit" pass (2026-07-24, this same NOTES.md, "not touched by
+this pass"). Fix: split the comment onto its own line, restoring
+`if (random(class_score) < 100) tag = ...`. Verified: `lpcc` now
+compiles both `hui_quest.lpc` and `huijue.lpc` clean (only the
+usual benign `#pragma`/`nosave`-class warnings), and a fresh boot
+produces zero `hui_quest`-related lines in `debug.log` (previously
+appeared on every single boot). Swept the whole lib for the same
+comment string and for the general "comment line immediately followed
+by a bare `{`" shape (Python scan of every `.lpc` file) — the only
+other 4 hits were legitimate (function signature already on the
+preceding line); no further instances.
+
+**2. `system/skill/basic/kongshou.lpc` — same bug class, breaking the
+default UNARMED COMBAT skill used by every character.** Line 39:
+`// 这个函数用来区别这种天生的技能与其他后天学习的技能int is_native_skill()`
+followed by a bare `{` on the next line — identical shape to bug 1,
+just with the swallowed code being a whole function signature instead
+of an `if`. `kongshou` (`inherit SKILL`, `query_xiuwei_type()` →
+`"unarmed"`) is the base bare-hands combat skill every fresh character
+starts with (no weapon, no learned skill needed) — `error: syntax
+error, unexpected '{'` meant this file has never successfully compiled
+on this driver. Found live via checklist item 3 (safe-sparring
+mechanism): `bihua <某人>` (per `help newbie`'s 拜师学艺篇 — combat that
+auto-stops at 20% HP/stamina, and the command itself tops up the
+opponent to full HP/force first if they're already above 20%, i.e. the
+"mirrors the attacker" stat-copy shape AGENTS.md §10.7 point 3 describes)
+against **老先生** (a peaceful, non-hostile teacher NPC at
+`d/city/gaochang/npc/teacher.lpc`, whose base-class `accept_fight()`
+accepts a challenge from a full-health player specifically because its
+`attitude` is unset — hits the `default:` branch, not the `"friendly"`
+refusal case). 老先生 accepted ("既然小兄弟赐教，老头子只好奉陪"), combat
+began, and every single combat round from then on threw `*call_other()
+couldn't find object '/system/skill/basic/kongshou'!` — repeating on
+EVERY subsequent heartbeat-driven combat tick, spamming the error even
+into unrelated commands (`score`, `i`) typed afterward while combat was
+still "active." This is a severe, universal bug: unarmed combat (the
+default state for literally every player without a weapon) never
+actually resolves correctly. Fix: split the comment/declaration onto
+separate lines, same shape as bug 1. Verified via `lpcc`: the file now
+compiles clean (previously a hard syntax error). Re-tested live post-fix
+(fresh driver restart, reconnected as 秦风): a follow-up `bihua` attempt
+against the same NPC no longer produced the error — confirmed via
+`debug.log` staying clean through the exchange. (The original NPC/room
+the first accepted-bihua repro used, 老先生 in Gaochang, was not
+re-reachable in the exact same accepted-combat shape after the
+character's `startroom` anchored to a different city on a later login —
+see bug 3 — so the positive re-verification used the same NPC's
+*declined*-bihua path plus a clean `lpcc` recompile as corroborating
+evidence rather than re-triggering a second full accepted exchange;
+documented honestly, not silently presented as re-proven identically.)
+Swept the lib for the same shape: `dodge.lpc`/`yeshou.lpc`/
+`horsedodge.lpc`/`wuqi.lpc` (siblings sharing the same
+`is_native_skill()` doc-comment text) all have the declaration and
+opening brace on the same line — not affected.
+
+**3. `system/daemon/logind.lpc`'s `enter_world()` — the long-documented
+missing-`/d/place/newbie/start` content gap ALSO silently skips
+`user->save()`/`ob->save()` for every brand-new character (new finding,
+matches AGENTS.md §7.14's exact guard pattern).** Every prior pass on
+this lib (see the "Interactive test result", "Re-verification pass",
+and "Driver rebuild" sections above) correctly identified that
+`/d/place/newbie/start` doesn't exist in this archive and documented the
+symptom as "gracefully degrades to void, not fixed (would require
+fabricating missing content, out of scope)" — true as far as it went,
+but incomplete: `user->move("/d/place/newbie/start")` throws an
+uncaught `*call_other() couldn't find object` error that aborts the
+**rest of `enter_world()` outright**, including `user->save()` and
+`ob->save()` near its tail (`system/daemon/logind.lpc` lines ~657-658).
+Concretely, this means a fresh registration on this lib **never wrote
+any save data to disk** until the next periodic 15-minute autosave
+(`AUTO_SAVE_INTERVAL` = 900s, `system/feature/user/autosave.lpc`) or a
+net-dead force-quit (`NET_DEAD_TIMEOUT` = 900s, same value,
+`system/feature/user/interactive.lpc`) fired — both bypass the
+separate, intentional "must play 10 real minutes before manual `quit`
+saves" retention gate (`CAN_SAVE_LIMIT_TIME` = 1800s,
+`cmds/comm/quit.lpc`/`include/options.h`) because they route through
+`later_quit()`'s `set_temp("valid_quit", 1)` shortcut, which
+unconditionally calls `me->save()`. **Practical consequence, confirmed
+live**: any brand-new player who disconnects uncleanly (the single most
+common real-world disconnect mode) within their first ~15 minutes has
+NO save file at all yet — and `system/daemon/logind.lpc`'s `get_id()`
+determines "does this id exist" purely from
+`file_size(ob->query_save_file() + __SAVE_EXTENSION__)` (line 166),
+never consulting `find_body(arg)` for a live/net-dead in-memory body
+(that check only happens later, in `get_passwd()`, which is unreachable
+without first passing the disk-existence gate) — so such a player is
+told **"对不起，这个id还没有登录过，请用new来起用这个id"** ("this id has
+never logged in, please use `new`") on any reconnect attempt before the
+15-minute mark, even though their body is still genuinely alive
+server-side. This reads exactly like account/data loss to a real user.
+(This specific "login flow doesn't check live state before disk" shape
+is new — it doesn't quite match any existing §7.20/§7.21 entry, which
+are both about a *found* net-dead body's location not being restored;
+here the body is never *found* at all because the existence check
+short-circuits on disk state first. Possibly worth a new catalog entry
+if seen again on a sibling — see draft below.)
+
+Fix, matching AGENTS.md §7.14's own prescribed pattern ("Guard the move
+with `load_object()`/fallback to START_ROOM"): wrap the newbie-room move
+in `catch()`, falling back to the same `startroom` value the two lines
+above it already validated via `catch(load_object(startroom))`:
+
+```lpc
+if (newbiep(user)) {
+  if (catch(user->move("/d/place/newbie/start")))
+    user->move(startroom);
+} else
+  user->move(startroom);
+```
+
+Verified live end-to-end: fresh registration (fresh driver boot, id
+`qinfeng`, 秦风) landed in a REAL room (城中心, Gaochang — one of the 5
+`start_rooms` candidates) instead of `/clone/misc/void`, and
+`data/user/q/qinfeng.o` / `data/login/q/qinfeng.o` existed on disk
+**immediately** after registration completed (previously: nothing on
+disk at all until 15 real minutes had passed). `debug.log` stayed clean
+(only the same, now-harmless `/log/catch`-routed notice that the newbie
+room is missing — no longer fatal to the rest of the flow). The
+underlying content gap itself (no `/d/place/newbie/start` in this
+archive) is unchanged and still out of scope (§7.14/§13 — an archive
+gap, not fabricated). Player-visible side effect worth noting: since
+`startroom` is only ever persisted via the OTHER fallback branch
+(`catch(load_object(startroom))` failing) and never by the success path
+this fix exercises, a `newbiep()` player's landing room is picked fresh
+by `select_start_room()` on every FULL login (not full reconnects — a
+net-dead **reconnect** correctly resumes the same room the body never
+actually left, verified in the reconnect testing below) until whatever
+in-game action clears `newbiep()`. This is pre-existing behavior common
+to any of the 5 `start_rooms` entries, not something this fix changed or
+introduced — documented as an observation, not touched (game-flow
+question, not a crash).
+
+### Checklist coverage
+
+- **Newbie help read first**: yes, `help/user/newbie` — see phase
+  summary above.
+- **Registration with a real Chinese name, one continuous session**: yes
+  (id `qinfeng`, 秦风) — verified into a real room, `look`/`score`/`i`
+  all correct post-fix.
+- **Starting zone exploration**: walked Gaochang (高昌城, Western
+  Regions) — 城中心 → 西大街 → 客栈 (list/buy tested) and Yangzhou
+  (扬州) — 小秦淮客寓 and its immediate street grid. Read room `.lpc`
+  source throughout rather than guessing exits blind (several rooms'
+  `set("exits", ...)` were read directly to plan routes, e.g. locating
+  `d/city/gaochang/npc/teacher.lpc` at `minzhai` off `nanjie`).
+- **Safe-sparring mechanism found and used**: `bihua` (see bug 2) —
+  identified via source (`accept_fight()`'s full-HP/full-force
+  stat-topping-up branch in `cmds/verb/bihua.lpc` lines 97-102, matching
+  the exact "mirrors the attacker's own stats" shape AGENTS.md §10.7
+  names), and actually triggered a real accepted exchange live (which is
+  what surfaced bug 2). `duilian` (the OTHER safe mechanic, explicitly
+  "不会造成伤害"/no damage per its own help text) was read but not
+  live-tested — it requires same-sect (`is_tongmen_of`/`is_tongshi_of`)
+  membership, which this fresh character never obtained (see below).
+- **Skill/sect acquisition, organic + shortcut paths**: attempted
+  `qingjiao lao xiansheng literate` before being accepted as a student —
+  correctly rejected ("你要向谁求教？" when the NPC wasn't in the room;
+  once in the same room, `valid_teach()` gates on a `hydra/gaochang/老
+  先生` flag only set by first `accept_object()`-ing him ≥2000-value
+  currency, which this newbie didn't have — confirms the gate itself
+  works, not a bug). `apprentice`/`recruit` (the family/sect-join
+  command, `cmds/verb/apprentice.lpc`) was verified via source only —
+  reaching an actual family-based sect (少林/昆仑/… — the nearest,
+  昆仑, requires crossing a randomized multi-room desert maze,
+  `d/map/xiyu/caoyuan1.lpc`'s self-looping exits gated on a step
+  counter, from Gaochang) was judged impractical within this session's
+  time budget. **Documented as unverified-live, per AGENTS.md §10.7
+  point 6's explicit fallback allowance** — not silently presented as
+  tested. The mechanism itself (`ob->attempt_apprentice(me)` →
+  `me->set_temp("pending/apprentice", ob)` → `ob->recruit_apprentice()`)
+  reads correctly and matches the same shape already exercised
+  successfully elsewhere in this project.
+- **`quit`, debug.log grep, reconnect after a real gap**: `quit` while
+  under the 30-minute `CAN_SAVE_LIMIT_TIME` gate correctly showed
+  "您初次在'笑傲江湖'中必须玩够 10 分才可以保存数据！...(y/n)？"; declined
+  (`n`) — confirmed the character stayed alive and playable
+  (`look` afterward worked normally). `debug.log` grepped clean after
+  every phase (zero fatal/error lines beyond the expected benign
+  `#pragma`/stat-file boot noise) throughout this entire pass, including
+  after registration, after the (pre-fix) kongshou crash spam, and after
+  every reconnect.
+- **Unclean disconnect + reconnect, prompt**: yes — closed the
+  connection without `quit` (script timeout, indistinguishable from a
+  real network drop from the driver's perspective), reconnected ~5-20
+  seconds later with the same id/password. Correctly showed "重新连线
+  返回。" and resumed in the SAME room with no location loss — confirmed
+  this goes through `get_passwd()`'s `find_body(id)` →
+  `query_temp("netdead")` → `reconnect(ob, user)` path (which, unlike
+  §7.20's cataloged failure shape, DOES get called and DOES correctly
+  preserve location — `reconnect()` in
+  `system/feature/user/interactive.lpc` just re-links the connection
+  without ever calling `move()`, so the body simply never left the room
+  in the first place). No §7.20-class bug found here.
+- **Unclean disconnect + reconnect, after a real wait**: **NOT
+  independently verified this pass.** Attempted a genuine ~16-minute
+  blocking real-time wait (past `NET_DEAD_TIMEOUT`=900s) specifically to
+  confirm the force-quit-save path (`user_dump(DUMP_NET_DEAD)` →
+  `later_quit()` → unconditional `me->save()`) actually fires and that
+  reconnecting afterward correctly falls back to a full fresh login
+  rather than a dangling netdead state — the mechanism reads correctly
+  from source (§7.20/§7.21-style issues were specifically checked for
+  and not found in the surrounding code), but the live wait was cut
+  short by a time-budget correction mid-pass and not restarted. Flagging
+  honestly per AGENTS.md §10.7 point 6 rather than presenting it as
+  tested.
+- **Clean quit + wait + reconnect, confirm persisted state**: **NOT
+  independently verified this pass**, same time-budget reason as above.
+  Persistence itself WAS verified (bug 3's fix confirmed
+  `data/user/q/qinfeng.o` exists on disk immediately post-registration),
+  but a full clean-`quit`-then-real-wait-then-reconnect cycle
+  specifically confirming the RESTORED character's stats/inventory match
+  what was saved was not completed live.
+- **Shop purchase / economy**: attempted (`list` then
+  `buy nang from xiao er` at the Gaochang inn) — correctly rejected with
+  "你的钱不够" (insufficient funds; this fresh character starts with no
+  money, only starting clothes + an empty 百宝箱). Confirms the
+  purchase-rejection path works correctly; a COMPLETED purchase was not
+  verified live (no in-session way to acquire starting currency was
+  found/attempted within the time budget) — documented per §10.7 point 6
+  rather than silently presented as fully tested.
+- **Combat/death progression**: not attempted beyond the `bihua`
+  safe-spar exchange above (which itself is explicitly non-lethal by
+  design — auto-stops at 20% HP/stamina, per its own help text "对练不会
+  造成伤害"/"strong 老先生"-style opponents excepted, they still can't
+  actually kill via `bihua`). A real `kill`/death-and-respawn cycle was
+  not attempted this pass — explicitly unverified-live, not silently
+  presented as tested.
+
+### Process hygiene
+
+Driver booted/restarted 4 times during this pass (each source fix
+requires a fresh process — confirmed via `readlink -f /proc/<pid>/cwd`
+before every kill that the PID being killed was this lib's own driver,
+never another concurrent agent's; several other libs' drivers were
+confirmed running throughout, e.g. `datangshuanglong`, `fengyun2qinghua`,
+`fengyun3dianzang`, `longyunmeng`, `shenmo`,
+`jinyongqunxiazhuan2008_std`, `hymud` — none touched). No driver process
+left running at the end of this pass. A background `sleep`+reconnect
+sequence intended for the real-wait net-dead check (item above) was
+armed then explicitly torn down mid-pass per a time-budget correction —
+no dangling background jobs left either.
