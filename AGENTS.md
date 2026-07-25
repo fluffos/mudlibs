@@ -2557,16 +2557,40 @@ time during an admin reconnect rather than ambient NPC wandering, and
 on a completely different lib/lineage from `xianjianchuanqi`. Two
 follow-up attempts to reproduce the exact triggering sequence on a
 fresh character immediately after restart did not reproduce it, nor did
-another ~15 minutes of further play. This is now corroborating evidence
-that the underlying driver-level refcount-corruption class is real and
-not a one-off — two independent libs, two different objects, two
-different immediate trigger paths, same fatal signature — but it
-remains genuinely low-reproducibility and root-caused to the driver
-level (not mudlib-fixable), not any specific mudlib source pattern. If
-a third occurrence pins down a reproducible trigger, this is worth
-escalating as a driver-level investigation in the `~/src/fluffos`
-checkout itself rather than continuing to treat it as a per-lib mudlib
-finding.
+another ~15 minutes of further play.
+
+**Third and fourth independent occurrences**: `shenzhou`'s deep
+functional test hit the same class (`debugmalloc: attempted to free
+non-malloc'd pointer` → `abort()`) at ~10-11 minutes into a session,
+this time triggered by the driver's own ordinary periodic 5-minute
+`remove_destructed_objects()` GC sweep — unrelated to that player's own
+net-dead timer (hadn't fired yet) and unrelated to §7.12's `tell_room()`
+bug (already fixed on that lib, confirmed). A full C++ backtrace was
+captured for the first time for this class (described in prose in
+`shenzhou`'s NOTES.md, not committed as a file, per `dtsl`'s
+established precedent). Separately and independently, `xlqy_new2007`'s
+deep functional test also hit the same class
+(`FATAL: Object .../std/skill ref count 0, but not destructed`) during
+naturally-occurring idle time between test steps (not a deliberate
+wait), moments after triggering that lib's own §7.12 `tell_room()` bug
+— plausibly the same mechanism §7.12's escalation note already
+predicts, though not proven as the sole cause.
+
+Four independent occurrences now, across four unrelated libs/lineages,
+different objects, different immediate trigger paths (ambient NPC
+wandering, admin reconnect, periodic GC sweep, natural idle time),
+same fatal signature (`ref count 0, but not destructed`/double-free).
+This is corroborating evidence the underlying driver-level
+refcount-corruption class is real and not a one-off, but it remains
+genuinely low-reproducibility and root-caused to the driver level (not
+mudlib-fixable), not any specific mudlib source pattern — no single
+occurrence has yet pinned down a REPRODUCIBLE trigger (one that fires
+reliably on demand, not just "eventually during a long-enough
+session"). Given the occurrence count, this is worth flagging to the
+human maintainer for a possible dedicated driver-level investigation
+(ASan/valgrind against a long-sit soak) in the `~/src/fluffos` checkout
+itself, rather than continuing to treat each new occurrence as a
+per-lib mudlib finding.
 
 ---
 

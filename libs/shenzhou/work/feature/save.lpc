@@ -13,8 +13,20 @@ int save() {
 
 int restore() {
   string file;
+  int ret;
 
-  if (stringp(file = this_object()->query_save_file()))
-    return restore_object(file);
+  if (stringp(file = this_object()->query_save_file())) {
+    // A corrupt/non-UTF8 save file makes restore_object() throw instead of
+    // just returning 0 for "no file" -- an uncaught throw here unwinds
+    // through whatever create()/setup() chain called restore() (often a
+    // room's own create(), via an unguarded companion-object force-load,
+    // AGENTS.md 7.25), which can permanently corrupt the calling object's
+    // own already-set properties and crash every future access to it for
+    // the rest of the boot. catch() so a bad save degrades the same way a
+    // missing one already does (return 0), matching the "if (!restore())
+    // save();" fallback pattern several callers already rely on.
+    catch(ret = restore_object(file));
+    return ret;
+  }
   return 0;
 }

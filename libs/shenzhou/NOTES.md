@@ -657,3 +657,309 @@ treated as untrusted/remote and subject to the gate normally, not
 silently allowed through. Retested: fluffos login (127.0.0.1, real
 value under the current driver) still passes every gate; debug.log
 stayed clean of `denied`/`undefined function`/`error in error handler`.
+
+## 深度功能测试 / Deep functional test (2026-07-24, round two)
+
+First real *playthrough* pass on this lib (every prior pass verified only
+registration + `look`/`score`/`quit` + admin login, never real exploration/
+combat/sect/net-dead). Read `doc/help/newbie` in full first — it names the
+`down`/`enter` choice out of 新手的殿堂, the chat channels, `fight` (safe
+sparring — "双方都不会打死对方") vs `kill`, `bai`/`xue`/`cha` for
+sect-join and skill learning, and the wimpy/death mechanics, matching
+§10.7's prediction that it's the fastest way to learn the intended path.
+Confirmed the two bugs AGENTS.md §7.10 already documents for this exact
+lib (log_error()'s broken-case `"Warning:"` gate and its unconditional
+`wizardp(this_player(1))` lazy-securityd-load crash, both in
+`adm/single/master.lpc`'s `log_error()`) are **still correctly fixed**
+from the earlier pass — read the current code directly (see excerpt
+below), did not re-diagnose as new.
+
+**Test character** (kept, representative playthrough evidence): id
+`qinfengw`, Chinese name 秦风武 (male), password `Wuxia2026`, security/
+recovery password `Recovery2026zz`. State: rolled gift attributes (膂力
+21/悟性20/根骨21/身法22), explored from 新手的殿堂 → 客店 (down) →
+北集市 → 东大街 → 中央广场, sparred `流氓头` via `fight` (safe — the
+match self-terminated once qi dropped below the documented ~50%
+threshold, no death, +1 exp), attempted `bai`/`xue` against 流氓头
+(correctly rejected — he belongs to no sect), attempted a shop purchase
+at the 鲜花店 flower shop (correctly rejected — new character starts
+with 0 cash), survived a clean `quit` → real ~2-minute wait → relogin
+with location/stats/exp intact, and survived a genuine unclean
+(net-dead) disconnect → prompt relogin with location/stats intact.
+Saves: `work/data/user/q/qinfengw.o`, `work/data/login/q/qinfengw.o`.
+Two throwaway characters used to reproduce/diagnose Bug 1 below were
+also left in place as evidence rather than risk clobbering the repro:
+`hemuzhi`/何目之 (the very first character that hit the crash, still
+sitting in a stale pre-fix netdead state from that session — harmless,
+a future login just re-authenticates normally) and `cezhice`/策之测
+(used to confirm the SECOND symptom — a permanently-broken board object
+crashing every subsequent `look` for the rest of that boot, before the
+fix). All three passwords `Wuxia2026`.
+
+### Bug 1 (matches AGENTS.md §7.25's "closely related shape", not a new class): an unguarded companion-board force-load in `d/city/kedian.lpc`'s `create()` let one raw-GBK save file crash the city's central hub room's first-ever visit each boot — and PERMANENTLY corrupted the board object for the rest of that boot, breaking `look` for every player in that room, not just the first visitor
+
+**Files: `work/feature/save.lpc`'s `restore()` (the fix); root-caused
+data at `work/data/board/kedian_b.o`; triggering unguarded call site at
+`d/city/kedian.lpc:71` (`"/clone/board/kedian_b"->foo();`), one of 71
+structurally-identical `"/clone/board/<id>"->foo()`/`->"???"()`
+force-load call sites across the lib's rooms.**
+
+- **How this was found**: `down` from the newbie hall (新手的殿堂) is
+  the FIRST real move any new player makes per `doc/help/newbie`'s own
+  instructions ("如果你...很熟...请键入down"), landing in `/d/city/kedian`
+  (客店), the game's central hub. On a cold boot, the very first `down`
+  a fresh registration completed with hard-failed: the player saw the
+  driver's default "error" message (`你发现事情不大对了，可是又说不上
+  来。`) instead of moving, and — far worse — every subsequent typed
+  command (`look`, movement, etc.) in that SAME room then failed with
+  the driver's default "unrecognized command" message (`什么？`) for the
+  rest of that session, looking exactly like the command dispatcher
+  itself had silently broken (the §8.3 symptom shape), even though
+  `command_hook` itself was completely healthy.
+- **Root cause (data)**: `data/board/kedian_b.o` — the shipped save file
+  for 客店's message board — was never converted from GB18030 to UTF-8
+  by the original conversion pass (an AGENTS.md §4.1-class gap: "plain-
+  text `.o` save data are all GBK" — this is the one file in the whole
+  lib that slipped through; confirmed via a full-tree scan that all
+  other 128 `.o` files under `work/` decode as valid UTF-8, only this
+  one didn't). `restore_object()` on this driver throws
+  `*restore_object(): Invalid utf8 string while restoring dbase.` on
+  invalid UTF-8 instead of silently degrading.
+- **Root cause (code, the part that turns one bad data file into a
+  crash)**: `d/city/kedian.lpc`'s `create()` ends with an UNGUARDED
+  `"/clone/board/kedian_b"->foo();` — a force-load idiom (`foo` isn't a
+  real method; the call's only purpose is to trigger the object's
+  compile/`create()` as a side effect of `call_other()` resolving the
+  reference) with no `catch()`. `kedian_b.lpc`'s own `create()` does
+  `set_name(...); set("location",...); set("board_id",...);
+  set("long",...); setup();` — and `setup()` (`inherit/misc/bboard.lpc`)
+  calls `restore()`, which throws on this file. The throw is uncaught
+  all the way up: `bboard.lpc setup()` → `kedian_b.lpc create()` →
+  `kedian.lpc create()` (aborting the room's own `create()` before its
+  trailing statements) → the `move()`/`go.lpc main()`/`command_hook()`
+  call chain that triggered the whole compile in the first place — this
+  is EXACTLY the "closely related shape" AGENTS.md §7.25 already
+  describes ("rooms that force-load a companion object (commonly a
+  message board) via `call_other(\"<path>\", \"???\")` in their own
+  `create()`... same fix (`catch()` around the call)") — the only
+  difference from §7.25's literal wording is the failure mode (corrupt
+  save data throwing inside `restore()`, vs. a missing/uncompilable
+  file), the shape and the fix are identical, so this is filed as §7.25,
+  not drafted as a new class.
+- **Second-order effect, worse than the initial crash and specific to
+  this data-corruption flavor of the bug**: `restore_object()` doesn't
+  just fail cleanly on the bad file — per AGENTS.md §7.7's documented
+  general mechanic ("`restore_object(file)` without flag 1 ZEROES every
+  global variable absent from the save file"), the failed restore
+  attempt wipes the `dbase` mapping backing ALL of `kedian_b`'s
+  properties, INCLUDING the ones `create()` had already legitimately
+  set via `set_name()`/`set()` a few lines earlier in the SAME
+  `create()` call (`name`, `id`, `location`, `board_id`, `long`) — so
+  `query("id")` on the object permanently returns `0` for the rest of
+  the boot. Confirmed live with a second throwaway character
+  (`cezhice`): the room's own `look` (which renders the board's
+  one-line summary via `bboard.lpc short()` → `feature/name.lpc short()`
+  → `capitalize(query("id"))`) then crashed on EVERY subsequent visit
+  to 客店 by ANY player for the rest of that boot with `*Bad argument 1
+  to capitalize() Expected: string Got: 0`, not just the first — this
+  is a strictly worse blast radius than AGENTS.md §7.17/§7.19/§7.22/
+  §7.25's usual "first-visit-only" framing, because the crashed object
+  stays resident in memory in its broken state rather than getting a
+  clean retry on the next load.
+- **Fix, two parts**:
+  1. **Root data fix**: converted `data/board/kedian_b.o` from GB18030
+     to UTF-8 with `iconv` (confirmed the whole file decodes cleanly as
+     GB18030 with zero loss — this is exactly a missed conversion, not
+     genuinely-corrupted bytes) — this restores the REAL board post
+     history (14 posts, real author names/messages) instead of losing
+     it, and is what actually makes `down` succeed cleanly on a fresh
+     boot again. Also normalized the save file's header comment
+     (`#/inherit/misc/bboard.c` → `.lpc`) to match every other data
+     file's already-renamed convention (cosmetic, harmless either way,
+     just consistency).
+  2. **Structural insurance, `feature/save.lpc`'s `restore()`**
+     (matches §7.25's own stated fix pattern — `catch()` around the
+     risky call — applied at the single shared choke point instead of
+     the 71 individual call sites, since `restore()` is what actually
+     throws):
+     ```lpc
+     // BEFORE:
+     int restore() {
+       string file;
+       if (stringp(file = this_object()->query_save_file()))
+         return restore_object(file);
+       return 0;
+     }
+     // AFTER:
+     int restore() {
+       string file;
+       int ret;
+       if (stringp(file = this_object()->query_save_file())) {
+         catch(ret = restore_object(file));
+         return ret;
+       }
+       return 0;
+     }
+     ```
+     This makes ANY future corrupted save file (board, or anything else
+     that inherits this same `feature/save.lpc` helper) degrade to
+     "restore failed, return 0" — the same as a genuinely-missing file
+     already does, and the same fallback several callers (e.g. the
+     already-documented `clone/obj/genmap.lpc` `if (!restore())
+     save();` pattern) already rely on — instead of crashing the whole
+     calling chain and potentially corrupting the object's own
+     already-set state. It does NOT recover data from a bad file (that
+     needs the data-level fix above); it only stops a bad file from
+     taking the room/board down with it.
+- **Verified**: killed and restarted the driver (fresh boot, so the
+  fix's code AND the fixed data file are both picked up — LPC objects
+  don't recompile from disk edits without a restart). Fresh character
+  `qinfengw`/秦风武: `down` now succeeds cleanly on the very first visit,
+  `look` shows the board with its real recovered content
+  (`客店留言板(Board) [ 14 张留言，14 张未读，1 篇回复未读 ]`), and
+  `look`/`score`/`i` all work normally afterward. `debug.log` for that
+  whole session: zero `error`/`denied`/`Bad argument`/`Undefined`/
+  `cannot`/`Fatal` hits. Also spot-checked the other 70 force-load call
+  sites are the same idiom (not individually re-tested live — the fix
+  is at the shared `restore()` choke point, so it protects all of them
+  uniformly; only `kedian_b` had corrupted data to actually exercise the
+  path).
+- **Lineage scope**: `feature/save.lpc` and the `"/clone/board/<id>"->
+  foo()` force-load idiom are ES II-family conventions (AGENTS.md §11's
+  ES II mega-family, which `shenzhou` belongs to) — worth a proactive
+  grep (`"/clone/board/[a-zA-Z0-9_]*"->foo\(\)` or `->"???"\(\)`) on any
+  sibling lib doing a deep pass, though the SPECIFIC trigger here (one
+  missed-conversion save file) is lib-specific, not necessarily present
+  elsewhere.
+
+### Confirmed working, no fix needed
+
+- **§7.10's two documented fixes, re-verified present and correct**:
+  `adm/single/master.lpc`'s `log_error()` guards `wizardp(this_player(1))`
+  behind `this_player(1) &&` (no crash from a preload-time compile
+  warning with no player context) and checks
+  `strsrch(lower_case(message), "warning:")` (lowercase-normalized, so
+  the intended warning-suppression actually fires). Read the live file
+  directly rather than trusting NOTES.md's earlier claim.
+- **Safe sparring (`fight`)**: `doc/help/newbie`'s own description
+  ("较量（fight）...双方都不会打死对方...当任何一方的气或精跌到50%或
+  以下...便会停下来") matches live behavior exactly — `fight liu`
+  against 流氓头 (a generic NPC using the unmodified base
+  `inherit/char/npc.lpc accept_fight()`, confirmed via grep that this
+  NPC has no local override) ran several exchanges, self-terminated once
+  qi dropped to ~17%, no death, character gained 1 exp. This is a
+  content/design mechanic, not a programming bug, and works as intended
+  — noted per the task's scope filter, not touched.
+- **`bai`/`xue` sect/teacher mechanism**: both commands' rejection
+  branches exercised live against a real, stationary, non-sect NPC
+  (流氓头): `bai liu` → "流氓头既不属於任何门派，也没有开山立派，不能拜
+  师。" (the `!mapp(ob->query("family"))` branch in `cmds/skill/bai.lpc`);
+  `xue liu hand` → a random `reject_msg` (the "not your apprentice"
+  branch in `cmds/skill/xue.lpc`). Both are correct, intentional
+  rejections, not bugs.
+- **Shop purchase (`list`/`buy`)**: exercised live at the 鲜花店 flower
+  shop — `list` correctly showed the real price sheet (14 flower types,
+  25–100 copper/silver each); `buy 1 qingren cao` was correctly rejected
+  ("穷光蛋，一边呆着去！") since a brand-new character starts with zero
+  cash. This is expected game economy, not a bug.
+- **Unclean (net-dead) disconnect + prompt reconnect**: closed the
+  socket without `quit` mid-session, confirmed the driver's own
+  `net_dead()` (`clone/user/user.lpc`) does NOT park the player in a
+  void room (unlike AGENTS.md §7.20's pattern — this lib just leaves the
+  body in its current room with `set_heart_beat(0)` and a scheduled
+  `call_out("user_dump", NET_DEAD_TIMEOUT, DUMP_NET_DEAD)`), reconnected
+  promptly — `adm/daemons/logind.lpc:1073` genuinely calls
+  `user->reconnect()` (confirmed via grep, ruling out AGENTS.md §7.20's
+  "flavor 2" — a `reconnect()` apply that exists but nothing calls),
+  which restored the live session cleanly ("重新连线完毕"), location/
+  stats/exp all intact. **§7.20 does not apply to this lib.**
+- **§7.12's `tell_room()` 2-arg type-crash class**: already fixed here
+  (see fix #7 earlier in this file, `exclude || ({})`), confirmed by
+  reading the live `adm/simul_efun/message.lpc` directly — this matters
+  because `clone/user/user.lpc`'s `user_dump()` DUMP_NET_DEAD branch
+  calls `tell_room(environment(), ...)` in exactly the vulnerable 2-arg
+  form that crashed `dtsl` fatally (§7.12's escalation) — here it's
+  already safe. **Confirmed this specific class is closed on this lib.**
+
+### Corroborating evidence for AGENTS.md §10.8 (driver-level, NOT mudlib-fixable) — a THIRD occurrence of the fatal refcount/double-free crash class, this time with a full C++ backtrace captured
+
+Per the task's explicit instruction to attempt a **real, full-duration**
+net-dead wait: net-deaded `qinfengw` for real (closed the socket, no
+`quit`) and blocked in the foreground for the genuine 900-second
+(`NET_DEAD_TIMEOUT`, `include/user.h:11`) window, checking the driver's
+own PID/RSS every ~50s (stayed stable, 109→116MB, no runaway growth —
+ruled out AGENTS.md §10.8's own "unbounded RSS growth" concern
+separately). **At roughly the 10–11 minute mark (before the 15-minute
+net-dead timer itself ever fired — confirmed via save-file mtimes that
+this player's own `user_dump()` never ran), the driver process aborted
+outright** — `ss`/`ps` confirmed the PID and the port both gone. This is
+NOT the mudlib bug above; it is the SAME driver-level class already
+documented in AGENTS.md §10.8 (`xianjianchuanqi`, `shiji`) — this is
+the **third independent lib** to hit it, and the first time (of these
+three) the exact C-level signature was captured with a full backtrace
+(driver launched with stdout redirected to a file, per §10.8's own
+"actionable takeaway"):
+
+```
+md: debugmalloc: attempted to free non-malloc'd pointer 562a0822e780
+...
+#13  vm.cc:156  remove_destructed_objects()
+#14  backend.cc:123  call_remove_destructed_objects()  [the periodic 5-minute GC tick]
+...
+#6   svalue.cc:187  int_free_svalue() -> dealloc_object()
+#5   object.cc:2044  dealloc_object() -> FREE()
+#4   debugmalloc.cc:83 debugfree()
+#3   md.cc:183  MDfree() -> "attempted to free non-malloc'd pointer" -> abort()
+```
+
+Unlike `dtsl`'s occurrence (which correlated with the §7.12 `tell_room()`
+type-crash inside `user_dump()` itself, already ruled out as present on
+this lib above), this crash fired from the ordinary **periodic 5-minute
+`remove_destructed_objects()` GC sweep** — nothing to do with this
+specific player's own net-dead timer, which hadn't even fired yet. This
+strengthens §10.8's own conclusion that the underlying corruption is a
+general driver-level object-lifecycle bug triggerable by ordinary
+long-running gameplay (NPC wandering/dying, temp-object cleanup, etc.),
+not specific to any one lib's mudlib code — no LPC-level fix is
+possible or attempted here, matching §10.8's existing verdict. One
+difference from the prior two occurrences worth noting: **this time
+`log/debug.log` DID capture the `md: debugmalloc:...` line** (unlike
+`xianjianchuanqi`'s "debug.log showed nothing whatsoever") — though the
+full C++ backtrace was still only in the driver's own redirected
+stdout, so capturing driver stdout during any long-sit session remains
+the only way to get the actionable detail. Per the task's cleanup
+instructions and `dtsl`'s own precedent, the raw backtrace file was
+NOT left in the repo (described here in prose instead); restarted the
+driver cleanly afterward and confirmed `qinfengw`'s last-saved state
+(from the earlier clean `quit`, before this net-dead attempt) reloaded
+correctly with no corruption or stuck state — the crash cost real
+uptime but not player data, since nothing autosaves mid-netdead.
+**Recommend escalating to a driver-level investigation per §10.8's own
+suggested next step**, now that a third occurrence with a full
+backtrace exists.
+
+### Explicitly not verified live (say-so per task instructions)
+
+- **纪晓芙 (峨嵋派 4th-generation disciple) sect-join success**: found
+  a real, reachable, family-having sect NPC placed directly in the town
+  square (`d/city/guangchang.lpc`'s `CLASS_D("emei") + "/ji"`), but she
+  roams (confirmed: gone from the room within the time a scripted
+  client takes to arrive, and still absent after ~40s of repeated
+  `look` polling) — a scripted session could not reliably catch her in
+  place to complete a full `bai`→`recruit` round trip within this pass's
+  time budget. The `bai`/`xue` CODE PATHS themselves were genuinely
+  exercised live (against a stationary non-sect NPC, see above), just
+  not a full SUCCESSFUL sect recruitment. Not treated as a bug — pure
+  scripted-testing-vs-roaming-NPC timing limitation.
+- **A successful (non-rejected) shop purchase**: `qinfengw` never
+  earned any money during this pass (no combat kills that drop coin,
+  no jobs attempted) — reaching a real purchase would need either
+  grinding currency or admin-granting some, out of this pass's time
+  budget. The purchase FLOW (`list` + `buy`) was genuinely exercised and
+  correctly rejected for insufficient funds, which is as far as this
+  pass got, stated explicitly rather than silently skipped.
+- **Death/respawn**: not reached — the only real combat this pass did
+  was the intentionally-safe `fight` sparring match, which by design
+  never risks death. Reaching a real death would need deliberately
+  seeking out a hostile/lethal NPC (`kill`, not `fight`), out of this
+  pass's time budget alongside the extended net-dead wait above.
