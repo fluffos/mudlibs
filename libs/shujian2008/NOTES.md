@@ -264,3 +264,61 @@ treated as untrusted/remote and subject to the gate normally, not
 silently allowed through. Retested: fluffos login (127.0.0.1, real
 value under the current driver) still passes every gate; debug.log
 stayed clean of `denied`/`undefined function`/`error in error handler`.
+
+## 深度功能测试 / Deep functional test (2026-07-24)
+
+Round-two deep functional test per AGENTS.md §10.7. Read `doc/help/
+newbie` and `doc/help/help_wuguan`/`map_wuguan` first, then played one
+continuous native-driver session as a fresh Chinese-named character
+through registration → exploration → safe sparring → organic skill
+learning → sect join → clean quit → prompt net-dead reconnect → a real
+~16-minute full `NET_DEAD_TIMEOUT` wait (done twice) → post-quit
+state-persistence verification. This lib's "adm-single" family is
+confirmed distinct from the "书剑"/`bxsj` lineage already deep-tested
+earlier this round, despite the similar title (AGENTS.md §11).
+
+**Bugs found and fixed** (both already-cataloged AGENTS.md classes,
+first occurrence on this specific lib — no new class needed):
+
+1. **AGENTS.md §7.16** — `cmds/usr/top.lpc`: five `add_rank_*()`
+   functions (`add_rank_beauty`, `add_rank_pk`, `add_rank_rich`,
+   `add_rank_worker`, `add_rank`) ran an unbounded per-hour decay loop
+   against the shipped `/log/rank.o`'s genuine ~2008 timestamps. Since
+   `cmds/usr/quit.lpc:218` calls `TOP_CMD->add_rank(me)` unconditionally
+   on every `quit`, this crashed the very first `quit` attempted
+   (`Too long evaluation. Execution aborted.`), silently dropping an
+   in-flight `startroom` update since the crash landed before
+   `do_quit()`'s own `save()`. Fixed with the established §7.16
+   pattern: cap each loop at 240 iterations, then unconditionally
+   resync the timestamp to `t` afterward.
+2. **AGENTS.md §7.12** — `adm/simul_efun/message.lpc`'s `tell_room()`
+   wrapper forwarded a bare `int 0` as `message()`'s 4th argument when
+   called with only 2 args. Reached from `clone/user/user.lpc`'s
+   `user_dump()` on the `NET_DEAD_TIMEOUT` (900s) force-quit path —
+   reproduced live via a real 16-minute net-dead wait: the crash
+   aborted `user_dump()` before it ever reached `"/cmds/usr/quit"->
+   main(me)`, silently disabling the entire net-dead force-quit safety
+   net (confirmed live: a reconnect >20 minutes later found the old
+   character object still alive/un-destructed and just relinked to it
+   via "重新连线完毕。" instead of a fresh login). Fixed with the
+   standard `exclude || ({})` pattern from §7.12, then re-verified with
+   a second full 16-minute wait producing a clean force-quit and
+   fresh-login banner on reconnect.
+
+**Test character left behind:** id `qinshiyu`, Chinese name 秦时雨,
+password `Sj2026Test` — 武当派 (Wudang) disciple, 17 skills, standing
+at 西练武场. Saves: `work/data/{login,user}/q/qinshiyu.o`.
+
+**Verified working:** registration with a real Chinese name; multi-room
+exploration; safe sparring vs. the training dummy; organic sect join;
+organic skill learning (17 skills total); clean `quit` + immediate
+`debug.log` grep; prompt net-dead reconnect; two full real 16-minute
+`NET_DEAD_TIMEOUT` waits (the second post-fix, confirming the fix);
+state persistence (location/sect/skills) across all of the above.
+
+**Explicitly not verified live** (documented, not silently skipped):
+a shop purchase (no shop in the starting zone; real commerce is in a
+distant Yangzhou city zone not mapped this pass) and a full
+combat-to-death cycle (core combat mechanics already exercised via the
+safe-sparring dummy fight; the two real 16-minute net-dead waits
+consumed most of the remaining time budget).
