@@ -64,8 +64,11 @@
 # (changed = repacked + pruned, i.e. whether the cache is worth re-saving;
 # a lib-commits.json refresh alone deliberately does NOT count -- re-saving
 # the ~2GB cache to persist a ~10KB mapping costs more than the API
-# re-queries it would save.  repacked_slugs drives the boot smoke test:
-# CI boot-checks what was actually repacked this run, not a fixed lib).
+# re-queries it would save.  repacked_slugs is currently unconsumed by the
+# workflow -- there used to be a boot smoke test keyed off it, removed
+# because it kept failing CI on slow-under-node-timeout boots that don't
+# reflect the real browser deploy; left here in case a future, less timing-
+# sensitive check wants it).
 
 set -euo pipefail
 
