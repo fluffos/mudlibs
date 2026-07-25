@@ -1849,6 +1849,57 @@ immediately before the `add_action()` call, inside `enable_player()`
 itself — guarantees exactly one sentence is ever registered no matter
 how many times or in what order the function is called.
 
+### 7.29 Restoring a missing simul_efun as a passthrough to a same-named real efun can be semantically wrong even though it compiles and boots clean
+
+Found on `tianxia`'s deep functional test (§10.7) — a correction to an
+EARLIER pass's own fix, not a fresh conversion bug. A generic per-object
+"slash-path" property-storage convention (`query("a/b")` meaning
+"descend into nested submapping `a`, read key `b`") called a bare,
+never-defined `changed_match_path(mapping, string)`. An earlier pass
+restored it as a thin passthrough to FluffOS's real `match_path()` efun,
+reasoning from name+signature match alone (`changed_match_path` vs.
+`match_path`, same argument shape) — a defensible-looking guess that
+turned out wrong: the real efun implements ACL-style
+longest-matching-**prefix** lookup over a **flat** mapping (keys are
+literal strings, some ending in `/` as a wildcard), not recursive
+descent into nested submappings one `/`-segment at a time. Every caller
+in this lib's `feature/dbase.lpc` (`set()`/`query()`/`query_temp()`)
+clearly assumed the latter — `set()`'s own code sits right next to each
+call, doing `cont = changed_match_path(dbase, prop[0..r-1]); if
+(mapp(cont)) return cont[prop[r+1..]] = data;`, i.e. expecting the
+function to return the actual nested submapping so it can be indexed by
+the trailing segment.
+
+This passed every prior verification layer — compiles, boots, single-key
+`query()` calls and `score` all work — because the real efun's ACL
+algorithm degenerates to a correct plain-key lookup whenever the path
+string contains no `/`, which is the common case for simple properties.
+Only 2+-level property paths are affected, and they fail **silently**
+(return `0`/unset, no error, nothing in `debug.log`) — invisible to any
+boot-log sweep or registration smoke test. On `tianxia` this broke every
+bare directional movement command lib-wide (`feature/command.lpc`'s
+exits-detection uses `query("exits/"+verb)`), while `go <dir>` kept
+working (a different code path that never touches this function) — plus
+every 2+-level `query()` for quest flags, chat-flood gates, and the
+auto-look brief-mode toggle.
+
+Detection: before restoring ANY never-defined function purely by
+name/signature match to a real efun (a pattern this project uses
+deliberately elsewhere — see §5/§6's function-restoration guidance), check
+every call site's actual USAGE pattern against that efun's real,
+documented algorithm, not just its argument types. A caller's own
+neighboring code (here, `set()`'s explicit path-splitting logic sitting
+right next to the call) can directly reveal the intended semantics don't
+match. If a lib has this shape (a same-named/same-signatured missing
+simul_efun that got "fixed" by passthrough purely on name grounds),
+re-derive the semantics from the callers instead of trusting the
+name match.
+
+Fix: implement the semantics the callers actually need (here: recursive
+descent through nested submappings, one `/`-segment per level, returning
+the final leaf value or `0`/unset if any level isn't a mapping) rather
+than delegating to the closest-matching real efun.
+
 ---
 
 ## 8. Login and registration flow bugs

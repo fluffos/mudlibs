@@ -30,19 +30,57 @@ string clr_ansi(string str) {
   return str;
 }
 
-// AGENTS.md §15b-style gap: feature/dbase.lpc (this lib's generic
-// per-object property storage, inherited nearly everywhere) calls a bare
-// `changed_match_path(mapping, string)` that was never defined anywhere in
-// this archive either -- but the signature is IDENTICAL to FluffOS's real
-// `match_path()` efun (mixed match_path(mapping m, string str), confirmed
-// in this driver's own core.spec and docs, and this lib's own
-// doc/driver/done-mudos changelog notes match_path() as an efun the
-// original MudOS driver added). "changed_" strongly suggests this was
-// meant to be a thin local wrapper (possibly for a since-lost local tweak)
-// around the real efun, not a from-scratch reimplementation -- restored as
-// a passthrough.
+// CORRECTION (found on this lib's §10.7 deep functional test): the
+// earlier fix below -- a bare passthrough to FluffOS's real `match_path()`
+// efun -- matches changed_match_path()'s NAME and SIGNATURE but not its
+// SEMANTICS, and is silently wrong. The real `match_path(m, str)` efun
+// implements ACL-style longest-matching-PREFIX lookup over a FLAT mapping
+// whose keys are literal strings, some ending in "/" as a wildcard
+// (see docs/efun/data_manipulation/match_path.md / core/efuns_main.cc
+// f_match_path -- "searches a mapping for a path... finds the largest
+// matching path... keys ended in '/' match paths below this directory").
+// It does NOT descend into NESTED submappings one "/"-segment at a time.
+// But every call site in feature/dbase.lpc clearly assumes exactly that
+// recursive-descent behavior: set()'s own code a few lines from each call
+// does `cont = changed_match_path(dbase, prop[0..r-1]); if (mapp(cont))
+// return cont[prop[r+1..]] = data;` -- i.e. it expects
+// changed_match_path(dbase, "exits") to return dbase["exits"] itself (the
+// real nested submapping, so it can be indexed by the trailing segment),
+// not an ACL prefix match. query()/query_temp() rely on the same function
+// to walk an arbitrary number of "/"-segments in one call and return the
+// final leaf value. Under the real match_path() efun, `dbase["exits"]`
+// (stored under the plain key "exits", no trailing slash) is never found
+// by a lookup for "exits/" or "exits/east" -- so every 2+-level
+// query("a/b"[/c...]) silently returned 0, live-reproduced as EVERY bare
+// directional movement command (feature/command.lpc's command_hook does
+// `environment()->query("exits/" + verb)` to detect typed movement)
+// failing with the driver's generic "你想做什么?" default-fail message
+// lib-wide, for every room, while the explicit `go <dir>` form still
+// worked (go.lpc resolves via `env->query("exits")` -- a plain no-slash
+// key -- then indexes the returned mapping directly in LPC, never
+// touching this function). Also silently broke every other 2-/3-level
+// query() in the lib (per-quest state flags under "quest/<name>/<key>",
+// the "channel/chat_block" chat-flood gate, the "env/brief" auto-look
+// toggle, etc.) -- all always read back 0/unset. Fixed by implementing
+// the actual recursive nested-mapping descent every caller needs, one
+// "/"-segment per level, instead of delegating to the semantically
+// different real efun.
 mixed changed_match_path(mapping m, string str) {
-  return match_path(m, str);
+  string *parts;
+  mixed cur;
+  int i;
+
+  if (!mapp(m) || !stringp(str) || str == "")
+    return 0;
+
+  parts = explode(str, "/") - ({ "" });
+  cur = m;
+  for (i = 0; i < sizeof(parts); i++) {
+    if (!mapp(cur))
+      return 0;
+    cur = cur[parts[i]];
+  }
+  return cur;
 }
 
 // AGENTS.md §15b: db_affected(db) -- affected-row count after db_exec().

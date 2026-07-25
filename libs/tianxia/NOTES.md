@@ -576,3 +576,285 @@ allocation, into 松竹小院, `look` + `score` + `quit` all produced
 correct output exactly as before; `debug.log` stayed clean (no
 `denied`/`undefined function`/`bad argument`/error-in-error-handler
 lines). Test save files removed afterward (not committed).
+
+## 深度功能测试 / Deep functional test (2026-07-24, round two)
+
+First real *playthrough* pass on this lib per AGENTS.md §10.7 (every
+prior pass verified only registration + `look`/`score`/`i`/`quit`,
+never real movement beyond the auto-entered start room, never combat,
+never a sect/skill flow). Read `work/doc/help/newbie/{guide,new}` in
+full first — `new` names the exact intended early path (start at 长安
+谪仙楼, `east` to 后厨 to work for money, `mai`/`eat`/`drink` at the
+inn, `bai`/`upgrade` to join a sect and learn) and `cmds` lists the
+full command set. Native driver (`build-debug`), one character across
+many continuous `scripts/mudclient.py` sessions (each session's own
+close — no `quit` sent — is itself an unclean/net-dead disconnect;
+NET_DEAD_TIMEOUT is only 60s here, `include/user.h`, so nearly every
+reconnect below is a REAL exercise of either the prompt-reconnect path
+or the full-timeout force-quit path, not a simulated one).
+
+**Test character** (kept, not cleaned up, as playthrough evidence): id
+`linhaoran`, Chinese name **林浩然** (male), password `TxTest2026#`.
+Final state: at 谪仙楼 (长安, the `valid_startroom`-flagged start room),
+member of 华山派 (5th generation, teacher 令狐冲), skill `dodge`
+(纵跃闪躲之术) at level 1, inventory `Shoes`/`Cloth`/`Mailbox`, 298两20文
+of the starting 信用点 credit balance (90-credit `qu hsp` coach fare to
+Huashan). Saves: `work/data/user/l/linhaoran.o`,
+`work/data/login/l/linhaoran.o`.
+
+### Bug found and fixed (NEW class): `changed_match_path()`'s earlier "restore" used the WRONG efun semantics, silently breaking every 2+-level `query()`/`query_temp()` call lib-wide — including every bare directional movement command
+
+**File:line of the fix: `adm/simul_efun/ansi_util.lpc`'s
+`changed_match_path(mapping m, string str)` (originally added by a
+prior pass, see item 7 of "Fixes applied" above).**
+
+- **How this was found**: registered 林浩然, completed the mandatory
+  `/d/wiz/welcome*` intro tutorial, landed at 谪仙楼, and simply typed
+  `east` to walk into the kitchen per `doc/help/newbie/new`'s own
+  instructions. It silently did nothing — no error, no message, just
+  the driver's bare `config.fluffos` "default fail message" (`你想做
+  什么?`). `go east` (the explicit form) worked perfectly. That
+  asymmetry — bare direction fails, `go <direction>` succeeds — is the
+  signature of this bug: `feature/command.lpc`'s `command_hook` has a
+  fast-path specifically for bare directional typing,
+  `environment()->query("exits/" + verb)`, that only bare typing goes
+  through; `go` resolves its own destination independently in LPC
+  after `env->query("exits")` (no slash), never touching this path.
+- **Root cause**: a PRIOR pass on this lib (see item 7 in "Fixes
+  applied" above) hit `feature/dbase.lpc` calling a bare
+  `changed_match_path(mapping, string)` that was never defined
+  anywhere in the archive, noticed its signature is IDENTICAL to this
+  driver's real `match_path(mapping, string)` efun, and — reasonably,
+  given the name and matching signature — restored it as a straight
+  passthrough. That passthrough compiles fine, boots fine, and every
+  *single-key* `query()`/`set()` call (the overwhelming majority) works
+  fine through it, which is exactly why this survived several rounds of
+  registration/`look`/`score` testing undetected. But the REAL
+  `match_path()` efun implements ACL-style **longest-matching-prefix
+  lookup over a FLAT mapping** (see `docs/efun/…/match_path.md` /
+  `core/efuns_main.cc`'s `f_match_path` comment: "keys ended in '/' are
+  assumed to match paths with characters that follow" — designed for
+  TMI-style access-control mappings, not general-purpose data), while
+  every call site in `feature/dbase.lpc` (`set()`/`query()`/`set_temp()`/
+  `query_temp()`/`delete()`/`delete_temp()`, this lib's generic
+  per-object property store, inherited nearly everywhere) obviously
+  expects RECURSIVE DESCENT INTO A NESTED SUBMAPPING one `/`-segment at
+  a time — visible directly in `set()`'s own code a few lines from each
+  call site: `cont = changed_match_path(dbase, prop[0..r-1]); if
+  (mapp(cont)) return cont[prop[r+1..]] = data;` only makes sense if
+  `changed_match_path(dbase, "exits")` returns `dbase["exits"]` itself
+  (the actual nested mapping), not an ACL prefix match. Under the real
+  `match_path()` efun, a mapping storing `dbase["exits"] = (["east":
+  path])` (the ordinary, ubiquitous room-`exits` convention — every
+  room in this lib sets `"exits"` exactly this way) is NEVER matched by
+  a lookup for `"exits/"` or `"exits/east"`, because match_path() never
+  descends into `dbase["exits"]`'s VALUE — it only ever looks for a
+  literal top-level KEY spelled `"exits/"` or `"exits/east"`, which
+  doesn't exist. Traced by hand against the driver's actual C++
+  algorithm (`~/src/fluffos/src/packages/core/efuns_main.cc`,
+  `f_match_path`) to confirm this, not guessed.
+- **Blast radius, all silently broken before this fix, all confirmed
+  either by direct code reading or live reproduction**: every bare
+  directional movement typed by a player, lib-wide, for every room
+  (`feature/command.lpc`'s `"exits/"+verb` check) — the single most
+  disruptive consequence, since it means no player could ever walk
+  around by typing plain compass directions, only `go <direction>`,
+  with zero error or explanation, in a Chinese-language MUD whose own
+  `doc/help/newbie/new` literally instructs new players to type `east`
+  bare. Also, by the same mechanism: `cmds/std/apprentice.lpc`'s
+  `family/family_name`/`family/generation` sect-membership comparisons
+  and the `score` display's whole "你投身师门…" sect-membership block
+  (both live-reproduced below, now correct); the `"channel/chat_block"`
+  chat-flood gate (`feature/command.lpc`); the `"env/brief"` auto-look
+  toggle (`feature/move.lpc`); every per-quest state flag stored as
+  `"quest/<name>/<key>"` (dozens of files under `d/*/npc/`,
+  `d/*/*_quest.lpc`). None of these crash — they all just silently
+  read back `0`/unset, which is why nothing in any earlier boot-log
+  sweep or registration smoke test ever caught it.
+- **Fix**: replaced the passthrough with a real recursive
+  nested-mapping walk (`explode(str, "/")`, descend one segment per
+  level, return the leaf — matching exactly what every caller already
+  assumes):
+  ```lpc
+  // BEFORE:
+  mixed changed_match_path(mapping m, string str) {
+    return match_path(m, str);
+  }
+  // AFTER:
+  mixed changed_match_path(mapping m, string str) {
+    string *parts;
+    mixed cur;
+    int i;
+
+    if (!mapp(m) || !stringp(str) || str == "")
+      return 0;
+
+    parts = explode(str, "/") - ({ "" });
+    cur = m;
+    for (i = 0; i < sizeof(parts); i++) {
+      if (!mapp(cur))
+        return 0;
+      cur = cur[parts[i]];
+    }
+    return cur;
+  }
+  ```
+  Confirmed `match_path()` (the real efun) has no OTHER call site in
+  this archive (`grep -rn '\bmatch_path\b'` outside this one function),
+  so this change cannot regress any genuine ACL-style use elsewhere —
+  there isn't one.
+- **Verified live, before/after, on a fresh boot each time**: before
+  the fix, `east` from 松竹小院/谪仙楼/every room tried produced only
+  the bare driver default-fail message, `go east` worked; `apprentice
+  master` at 华山派's 有所不为轩 (see below) failed to even attempt the
+  family comparison correctly (though this particular branch happens to
+  short-circuit harmlessly for a player with no prior family). After
+  the fix, restarted the driver and re-registered fresh: bare `east`,
+  `west`, `north`, `south`, `northwest`, `out` etc. all correctly moved
+  the character through 20+ distinct rooms across two zones (长安城
+  and 华山派), the sect-join flow's family-name comparison and `score`'s
+  "你投身师门华山派，从师令狐冲学艺" display both rendered correctly, and
+  `debug.log` — checked after the ENTIRE session (registration through
+  movement, sect join, skill learning, combat, quit, several
+  reconnects) — gained **zero** new lines beyond the clean boot banner
+  (stayed at 228 lines throughout).
+- **This is a NEW bug class for AGENTS.md's catalog** — see draft below
+  (not added to AGENTS.md directly per this task's instructions; the
+  orchestrating session owns that file).
+
+### Command-hook `private` / `command()`-self-call path: re-confirmed healthy, extends further than §8.3a's baseline note suggested
+
+AGENTS.md §8.3a already lists `tianxia` as an empirical exception where
+`private nomask command_hook` (`feature/command.lpc:40`, still `private`
+in the current source) does not break ordinary *typed* dispatch, and its
+addendum warns that exception does not necessarily extend to
+`command()`-efun self-calls. This pass specifically hunted for and
+exercised several such self-calls, live:
+
+- `d/wiz/npc/tongzi1.lpc`'s `greeting()` — `command("tell "+id+" ...")`
+  ×2 and `command("give book to "+id)`, fired via `call_out` from
+  `init()` on the player's very first move into the tutorial room.
+  **Worked**: 小书童's two greeting lines and the book hand-off all
+  arrived correctly on a fresh registration.
+- `d/wiz/npc/xianshi.lpc`'s `greeting()`/`tell_player()` — same shape,
+  gating the tutorial's `enter` step. **Worked**.
+- `d/changan/npc/chefu.lpc`'s `greeting()` — `command("hi "+id)` +
+  `command("say ...")`, the 驿馆 sect-coach NPC's own greeting.
+  **Worked**.
+- `d/huashan_zx/master/master-lh.lpc`'s `attempt_apprentice()` — THREE
+  chained self-calls (`command("smile")`, `command("say ...")`,
+  `command("recruit "+id)`) triggered by the player's `apprentice
+  master` command. **Worked end-to-end**: 令狐冲 smiled, spoke, and the
+  `recruit` self-call completed the sect join (`score` afterward showed
+  "你投身师门华山派，从师令狐冲学艺" — confirmed both the command()
+  self-call chain AND the `changed_match_path` fix above, since that
+  same `score` line reads `family/family_name` through the very
+  function this pass fixed).
+
+No new instance of the `private command_hook`/`command()`-self-call
+failure (the shape documented for `shiji`/`xingzhanyingxiong`) was
+found on this lib — every self-call path exercised here worked
+correctly, consistent with `tianxia` already being listed as an
+exception, now demonstrated on the `command()`-self-call axis
+specifically (not just typed dispatch) rather than merely asserted.
+
+### What was tested and confirmed working
+
+- **Registration**: real Chinese name (林浩然) through the full
+  mandatory `/d/wiz/welcome*` intro-tutorial gauntlet (小书童's gift,
+  reading the book, the `大元仙师`/mirror `enter` sequence) into the
+  real `START_ROOM` (谪仙楼) — matches `doc/help/newbie/new`'s own
+  description exactly.
+- **Movement/exploration**: walked (bare directional commands, post-fix)
+  through 20+ rooms across 长安城 (谪仙楼→永泰路→驿馆→…→长安武馆→练功场,
+  and separately →麒祥街→北安大道→…) and 华山派 (枫树林→…→紫霞宫门→
+  前厅走廊→紫云影壁→曲径回廊→殿前石阶→草地→有所不为轩), reading room
+  `.lpc` `exits` mappings directly to plan routes when the on-screen
+  exit list alone wasn't enough context.
+- **Safe sparring**: `doc/help/newbie/guide`'s documented distinction
+  (`fight` = stops automatically when one side tires, no real death;
+  `kill` = real, to the death) confirmed live against 长安武馆's
+  练功场's 木人 (training dummy, `d/changan/npc/muren.lpc` — a training
+  dummy is the canonical "spar first" target per AGENTS.md §10.7's own
+  `accept_fight` guidance): `fight mu ren` (note: the NPC's real
+  matchable id is the two-word `"mu ren"`, not `"muren"`) ran several
+  rounds of real damage (bruises, stamina down to ~4/16 bars) and then
+  correctly auto-conceded ("这场比试算我输了…") rather than killing the
+  fresh, unequipped character.
+- **Long-distance travel/economy**: 驿馆's 车夫 NPC `qu hsp` coach fare
+  to 华山派 correctly deducted from the credit balance, ran a real
+  multi-room scripted `call_out` sequence (车厢内→…→枫树林), and
+  delivered the character to the correct LIVE zone
+  (`/d/huashan_zx/guange3` — checked `d/changan/npc/che2.lpc`'s routing
+  table by hand; confirmed it points at the live `huashan_zx` tree, not
+  the `huashan_bak1` backup directory also present in this archive, so
+  no §7.18-shaped stale-path bug here).
+- **Skill learning (organic teacher path)**: `skills master` listed
+  令狐冲's full teachable skill set; `upgrade dodge from master`
+  correctly taught `dodge` (纵跃闪躲之术) at level 1, confirmed via
+  `skills` afterward.
+- **Sect join (organic NPC path)**: `apprentice master` (id `"master
+  ling"`/`"master"`, NOT `"ling"` alone) against 令狐冲 at 有所不为轩
+  succeeded via the `command()`-self-call chain documented above,
+  confirmed via `score`.
+- **Clean `quit`**: printed the correct "你决定离开《天下》Beta，档案
+  保存中......" message, correctly went through the 3-second
+  `start_busy`+delayed-`do_quit` path (a same-second follow-up command
+  correctly got "你现在忙得很，无法做任何事情。" rather than double-firing
+  quit); `debug.log` re-checked immediately after — zero new lines.
+- **Unclean (net-dead) disconnect + reconnect, BOTH windows for real**:
+  since this lib's `NET_DEAD_TIMEOUT` is only 60s (`include/user.h`),
+  nearly every one of the many `mudclient.py` sessions in this pass
+  that didn't end in `quit` (the tool always closes the raw socket, an
+  unclean disconnect) naturally exercised one of the two paths:
+  - **Prompt reconnect** (reconnecting inside the 60s window): several
+    times, always printed `重新连线完毕。` (`obj/user/user.lpc`'s
+    `reconnect()`) and resumed on the SAME live object at the exact
+    room/state where the previous session left off (confirmed by
+    `look` immediately after reconnecting showing mid-navigation rooms
+    the character had no other way to be standing in).
+  - **Full-timeout force-quit** (reconnecting after 60+ real seconds):
+    happened repeatedly, simply as a byproduct of the real thinking/
+    investigation time between test commands in this pass — confirmed
+    via `work/log/USAGE`'s timestamps (a fresh `loggined` entry, not a
+    silent reconnect, appears whenever the gap exceeded ~60s) that
+    `user_dump(DUMP_NET_DEAD)`'s `command("quit 68#@")` path (itself
+    ANOTHER `command()`-self-call, also confirmed working) correctly
+    ran the real save-and-destruct flow and that the next login
+    correctly restored the character at their last `valid_startroom`
+    location with no state loss and no `debug.log` errors. This
+    satisfies AGENTS.md §10.7 checklist item 8's "real full-duration
+    net-dead timeout wait" cheaply, since 60s is trivially reachable
+    within a normal investigation pass — no dedicated 15+-minute sleep
+    was needed on this particular lib.
+- **State persistence across a real clean quit + wait + reconnect**:
+  waited ~13 real seconds after a clean `quit`'s save, then logged back
+  in fresh — location (谪仙楼), sect membership (华山派/令狐冲), skill
+  (`dodge` level 1), inventory (Shoes/Cloth/Mailbox), and credit balance
+  all read back correctly identical to the pre-quit state.
+
+### What was NOT verified live, and why
+
+- **A real shop `list`/`mai` purchase** was attempted (后厨's 厨头 NPC)
+  but that particular NPC isn't a shop; 谪仙楼's own 跑堂 shop is
+  in-game-time-gated and was "打烊了" (closed for the night) for the
+  whole of this pass — never found an open shop within the remaining
+  time budget. Partially covered by a DIFFERENT real money transaction
+  that exercises the same currency/payment code path: 驿馆's `qu hsp`
+  coach fare (a real `player_pay()` call) correctly deducted funds —
+  documented above — but this is not the same code as an actual
+  `list`/`mai` shop interaction, so the shop system itself is
+  explicitly unverified.
+- **Real combat to death / respawn** was not attempted — only the safe
+  `fight`-vs-`muren` sparring path (which cannot kill the player) was
+  exercised live, per this task's guidance to use the lib's own
+  safe-sparring mechanism before risking a real fight. Reaching a real
+  `kill`-to-death cycle would have required either a deliberately
+  unfair fight or significant additional leveling time neither of which
+  fit this pass's remaining budget; death/reincarnation code
+  (`AGENTS.md §7.24`'s bug class) was read but not exercised live on
+  this lib.
+- **WASM interactive playthrough**: this pass was native-driver only
+  (per the task's own instructions); the existing WASM boot-watch
+  coverage from the prior pass (above) was not re-run, since nothing in
+  this pass's fix touches preload/boot behavior.
