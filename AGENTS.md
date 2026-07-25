@@ -1584,6 +1584,83 @@ new player through scripted rooms" NPC pattern —
 byte-identical, unfixed copy of the vulnerable file; check any other lib
 sharing this ES2 island-onboarding lineage for the same shape.
 
+### 7.24 Death/reincarnation code silently overwrites the permanent login-location field
+
+Found on `zzfy`'s deep functional test (§10.7). A lib's death-handling
+NPC (temporarily relocating a dying/reincarnating player through a
+limbo/antechamber room before they resume play) can, via a copy-pasted
+or careless `ob->set("startroom", base_name(environment(ob)))`,
+permanently hijack the SAME field the login daemon's `enter_world()`
+reads on every FUTURE full login — turning a transient flavor placement
+into a permanent, unannounced relocation. On `zzfy` this meant a
+player's FIRST death silently and permanently moved every future login
+away from wherever they'd actually chosen to live, 50% of the time to
+an isolated, hard-to-escape zone with no easy way back — with zero
+player-facing explanation, since the crash-free "you have died and been
+reincarnated" flow gives no hint that anything about future logins just
+changed.
+
+Detection: grep death/reincarnation NPC files for `set("startroom"` or
+`set("start_room"`, and check whether the room(s) it moves the player
+through carry whatever "may this room be a permanent home" flag the
+lib's own `save`-equivalent command already gates the SAME field on
+(commonly `valid_startroom`) — if the death code writes to that field
+without checking that flag, it's this bug.
+
+Fix: don't touch the login-location field from death/limbo code at all
+— leave the player's real, previously-chosen (properly-flagged) login
+location intact; the `move()` that's already placing them in the
+death/limbo room handles the immediate post-death placement without
+needing to also rewrite where future logins land.
+
+### 7.25 A room-population helper's unguarded `new()`/`move()` chain crashes a room's first-ever visit when a listed NPC/object is missing or fails to compile
+
+Found on `zzfy`'s deep functional test (§10.7). Distinct from §7.17
+(reentrancy) and from a plain missing-content gap (§13) — this is about
+the SHARED helper function every room's `reset()` calls to populate its
+`"objects"` mapping (typically `std/room.lpc`'s `make_inventory()`)
+having no guard at all around the `new(file)` → `ob->move(...)` chain.
+`new()` legitimately returns `0` for a file that doesn't exist (a stale
+wizard-workspace reference, a renamed/deleted content file — an ordinary
+archive gap), but for a file that EXISTS and fails to COMPILE (e.g. an
+`inherit`ed feature macro that's referenced by several NPC files but has
+no matching `#define`/feature file anywhere in the archive — itself a
+different, also-legitimate content gap) `new()` instead **throws**
+(`*No program in object ...!`) — a bare post-hoc `objectp()` check on
+the result can't catch that, since the throw happens inside `new()`
+itself, before any assignment. Either failure mode crashes the
+UNCONDITIONAL `ob->move()`/`ob->set()` calls that follow, which — same
+timing shape as §7.17/§7.19/§7.22 — only ever bites a room's first-ever
+population this boot; once whatever DID load is in memory, later resets
+just skip the bad entry silently (if a later guard exists) or keep
+re-throwing quietly forever (if it doesn't), so this is easy to miss in
+short smoke testing.
+
+A closely related shape hits the same "first-ever visit only" crash via
+a completely different call: rooms that force-load a companion object
+(commonly a message board) via `call_other("<path>", "???")` in their
+own `create()`, when that companion object doesn't exist in this
+archive — same fix (`catch()` around the call), same detection method.
+
+Detection: read the shared room base class's `make_inventory()` (or
+equivalent) and check whether the `new()`/`move()`/`set()` sequence is
+guarded; separately grep individual room files for unguarded
+`call_other("<path>", "???")` force-loads of a fixed companion-object
+path. Reproduce live by walking a fresh character into a room whose
+`"objects"` mapping (or force-loaded companion) references broken/
+missing content — the crash is caught by the driver, so nothing looks
+wrong on screen unless you check `debug.log`.
+
+Fix: wrap the base class's population helper in `catch()` and return
+`0`/skip on either failure mode (missing file OR compile failure), and
+add an `objectp()` check at every call site that assumes the helper
+always returns a real object before calling further methods on the
+result. For a force-loaded companion object, just `catch()` the
+`call_other()` itself. Do NOT fabricate the missing content (a
+referenced-but-undefined feature macro, a deleted board object) to make
+the compile succeed — that's a real archive gap (§13), not a conversion
+bug; only make the crash degrade gracefully.
+
 ---
 
 ## 8. Login and registration flow bugs

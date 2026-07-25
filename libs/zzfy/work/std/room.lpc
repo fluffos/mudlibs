@@ -15,7 +15,22 @@ int query_max_encumbrance() { return 100000000000; }
 object make_inventory(string file) {
   object ob;
 
-  ob = new(file);
+  // new() legitimately returns 0 when `file` doesn't exist (missing
+  // archive content, e.g. stale wizard-workspace references -- see
+  // AGENTS.md §7.14's "factory calls chained without a check" class),
+  // but when `file` EXISTS and fails to COMPILE (e.g. an inherited
+  // feature macro that's never #define'd, seen live on
+  // d/city/npc/xiaoer.lpc's "inherit F_VENDOR_SALE;" -- that macro is
+  // referenced by 15 d/city/npc/*.lpc vendor NPCs but no matching
+  // feature file/#define exists anywhere in this archive) new() instead
+  // THROWS ("*No program in object ...!"), which a plain post-hoc
+  // objectp() check can't catch since the throw happens inside new()
+  // itself, before assignment. Either way the old unconditional
+  // ob->move()/ob->set() crashed the FIRST-EVER population of any room
+  // referencing such content this boot (reproduced live via
+  // d/city/kezhan.lpc's "objects" mapping). catch() the whole
+  // construction and skip gracefully on either failure mode.
+  if (catch(ob = new(file)) || !objectp(ob)) return 0;
   ob->move(this_object());
   ob->set("startroom", base_name(this_object()));
   return ob;
@@ -61,7 +76,8 @@ void reset() {
     switch (ob_list[list[i]]) {
       case 1:
         if (!ob[list[i]]) ob[list[i]] = make_inventory(list[i]);
-        if (environment(ob[list[i]]) != this_object()
+        if (objectp(ob[list[i]])
+          && environment(ob[list[i]]) != this_object()
           && ob[list[i]]->is_character()) {
           if (!ob[list[i]]->return_home(this_object()))
             add("no_clean_up", 1);
@@ -75,7 +91,8 @@ void reset() {
             continue;
           }
           // Try to call the wandering npc come back here.
-          if (environment(ob[list[i]][j]) != this_object()
+          if (objectp(ob[list[i]][j])
+            && environment(ob[list[i]][j]) != this_object()
             && ob[list[i]][j]->is_character()) {
             if (!ob[list[i]][j]->return_home(this_object()))
               add("no_clean_up", 1);

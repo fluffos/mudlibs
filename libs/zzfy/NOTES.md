@@ -134,3 +134,410 @@ dir`) as part of a repo-wide port of a bug found live on sibling
 log_error writes to a bogus path); didn't fire in this lib's own sit,
 fixed proactively since it's the identical shared file. Retest: fresh
 registration (id `zzfsanty`) through look/score/quit, clean.
+
+## 深度功能测试 / Deep functional test (2026-07-24)
+
+First real *playthrough* pass on this lib (all prior passes verified only
+registration + `look`/`score`/`quit` + admin login, or watched boot
+output). Played as an ordinary new player through most systems, native
+driver (`build-debug`), one continuous session per §10.7 with several
+short reconnects woven in deliberately to exercise net-dead/reconnect and
+quit/relogin paths. Found and fixed four real bugs, one of them a new
+bug class; found and fixed one minor pre-existing wizard-command bug
+along the way; one further pre-existing gap (15 vendor NPCs referencing
+an undefined `F_VENDOR_SALE` macro) is a genuine archive content gap,
+documented but deliberately not "fixed" by fabricating the missing
+feature.
+
+### Test characters (kept, not cleaned up)
+
+- **`suwan`** / password `Suwan2026` / Chinese name **苏晚照**, female,
+  汉族. Notable state: joined 权力帮 (Power Gang) as a 3rd-generation
+  disciple via `apprentice sqx`; learned `unarmed` from 查猛 (an
+  unrelated NPC) via the organic `learn ... from ... with ...` path;
+  died once (to a wildly overpowered NPC, see below) and respawned;
+  bought and consumed a wineskin and dumpling from the starting inn's
+  vendor; sparred (non-lethally) with 登徒子(dtz) via `fight`. Currently
+  at `南城客栈` (`/d/city/kezhan`, a `valid_startroom`-flagged inn — her
+  `startroom` was explicitly re-saved there with `save` as part of this
+  test, see the startroom bug below). Save files:
+  `work/data/user/s/suwan/suwan.o`, `work/data/login/s/suwan/suwan.o`.
+- **`linruoxi`** / password `Linrx2026` / Chinese name **林若溪**, female,
+  汉族. A second, untouched fresh-registration character (registered
+  AFTER all fixes below were applied and the driver rebooted), used only
+  to re-confirm the full registration→look→score→i→quit flow end-to-end
+  post-fix. At `凤求凰客栈` (start room), unmodified otherwise. Save
+  files: `work/data/user/l/linruoxi/linruoxi.o`,
+  `work/data/login/l/linruoxi/linruoxi.o`.
+- Admin `fluffos`/`Mud@2026` (pre-existing, §1.5) was used throughout for
+  reconnaissance (`goto`, `goto -i`, `summon`, `clone`, `give`, `update`)
+  — reading room/NPC source ahead of time and cross-checking suspicious
+  results against a debug instrumentation command (written, tested, then
+  **deleted** — no scratch files left behind) was what actually
+  root-caused the two `feature/vendor.lpc`/`std/room.lpc` bugs below.
+
+### What was tested and confirmed working
+
+- **Registration**: real Chinese names (苏晚照, 林若溪) through the full
+  id→confirm→name→password(2x)→email→gender→ethnicity flow, landing in
+  `凤求凰客栈` correctly both times.
+- **Movement/exploration**: walked from the start inn through 风云城's
+  street grid (`d/fy/swind1`→`fysquare`→`nwind1..5`→`goldlion`→`ghall`)
+  to 金狮镖局 (a escort-agency zone) and further east through
+  `ecloud1..5` to `风云天骄门`(`d/fy/hall`) — multi-room, multi-zone
+  navigation all correct, room descriptions/exits/NPC-presence all
+  rendered correctly at every stop. Read room `.lpc` source directly
+  (`set("exits", ...)`) to plan routes rather than guessing, per §10.7.
+- **`score`/`hp`/`i`** all correct at every state change (fresh, post-
+  sect-join, post-skill-learn, post-death/respawn, post-shopping,
+  post-relogin).
+- **Skill learning (organic teacher path)**: `d/fy/npc/gmaster.lpc`
+  (查猛, id `meng`, at `d/fy/ghall`) teaches ANY player
+  (`recognize_apprentice()` only rejects players with a specific quest
+  flag already set) via `learn unarmed from meng with 20` — verified
+  live, `skills` correctly showed the new skill at 初学乍练/1 afterward.
+  Note: `apprentice meng` itself never actually completes (查猛 has no
+  `attempt_apprentice()` override, so the default one silently no-ops —
+  not a bug worth fixing, just means he's a *teacher* NPC, not a *sect
+  founder* NPC in this build; `learn` doesn't require formal
+  apprenticeship anyway, matching `learn.lpc`'s own `recognize_apprentice`
+  gate).
+- **Sect/faction join**: `d/fy/npc/sqx.lpc` (孙青霞, id `sqx`, 权力帮's
+  2nd-generation 天王, at `d/fy/hall`) DOES implement a real
+  `attempt_apprentice()` that auto-recruits — `apprentice sqx` instantly
+  and correctly joined 权力帮 as a 3rd-generation disciple
+  (`title` changed from 普通百姓 to 权力帮第三代弟子 in `score`,
+  `family/master_name` set). Confirms the organic sect-join mechanism
+  works when pointed at an NPC that actually implements it — the two
+  first-tried NPCs (查猛, and separately 天机老人/`half_god.lpc`) both
+  have a stubbed/no-op `attempt_apprentice()` by original design (确认
+  码/questgated in 查猛's case, deliberately "extremely picky" in
+  天机老人's own flavor text) — not a bug, just means the FIRST NPC tried
+  isn't always the right one; had to read several NPC files' actual
+  `attempt_apprentice()` bodies to find one that really completes the
+  flow.
+- **Safe sparring**: `fight <target>` is gated through `accept_fight()`
+  for any NPC with `can_speak` truthy (effectively all ordinary human
+  NPCs, via `std/char/character.lpc`'s `default_ob` fallback to
+  `adm/daemons/race/human.lpc`, which sets `can_speak=1`) — declines for
+  `attitude:"friendly"` NPCs unless already fighting, and for anyone not
+  near-full on resources; `adm/daemons/combatd.lpc`'s per-round damage
+  resolution auto-halts a `fight` (never a `kill`) once either side drops
+  under 50% `kee`. Verified live and working correctly against
+  `d/fy/npc/dtz.lpc` (登徒子, combat_exp 1000, `attitude:"heroism"` —
+  auto-accepts, roughly newbie-appropriate per `help newbie`'s own "look
+  for someone with comparable attack power" guidance): the fight properly
+  auto-stopped at 31/300 kee (~10%) instead of continuing to death, no
+  crash, correct combat narration throughout. **This lib's own
+  `d/city/obj/muren.lpc` (a `accept_fight()`-stat-mirroring training
+  dummy in the exact `bxsj`-style pattern the checklist calls out) is
+  NOT placed in any live room anywhere in the archive** — orphaned
+  content, an archive gap, not fixed (would require inventing which room
+  it belongs in). `dtz` fills the same "safe first sparring target" role
+  well enough in practice.
+- **Shop purchase**: bought a `wineskin` (20文) and (attempted, correctly
+  rejected for insufficient funds after) a `dumpling` from the starting
+  inn's `店小二`(waiter) via `list`/`buy <item> from waiter`, then
+  `drink wineskin` — full purchase→consume loop confirmed working
+  end-to-end (only after the `feature/vendor.lpc` fix below; broken
+  before it).
+- **Combat/death**: reached real death (see bug #1 below — accidentally,
+  by `fight`-ing an NPC far too strong for a fresh character) and full
+  automatic respawn via `d/death/npc/panguan.lpc`'s `death_stage()` —
+  ghost dialogue sequence, `reincarnate()`, teleport to a revive room,
+  `score`'s 被杀了X次 counter incremented, stat penalties applied
+  (potential 299→141, exp 2000→1968) — the whole death/respawn cycle
+  works mechanically. (Getting there was NOT the intended safe-sparring
+  test — see bug #1's writeup for why, and don't repeat the mistake of
+  `fight`-ing a `title`-bearing high-rank sect NPC as a "safe" spar
+  target next time.)
+- **Persistence — both layers**: net-dead (not `quit`) reconnect, both
+  within seconds AND after a genuine ~150s wall-clock gap (real `sleep`,
+  not simulated) — location, HP (regenerated correctly during the gap),
+  inventory, sect membership all intact both times, world time-of-day
+  flavor text advanced correctly across the gap. Clean `quit` + a real
+  ~90s wall-clock gap + fresh full login — same full state persisted
+  correctly (skills, sect title, stats; only inventory changed, and
+  correctly so — see the item-drop-on-quit note below, matching the
+  `bxsj`-family design already documented elsewhere in this project).
+  **No `§7.20`/`§7.21`-style void-stranding or wizard-blocking bug found**
+  — `obj/user.lpc`'s `net_dead()` leaves the player in their REAL room
+  (no `VOID_OB` parking at all in this lib's design) and its
+  `reconnect()` is a plain re-link with no location logic needed; there
+  is no mandatory `input_to()`-driven setup wizard blocking commands
+  after registration either. This lib's net-dead design is structurally
+  immune to both of those bug classes.
+- **Not verified live, explicitly**: the full 900-second (`NET_DEAD_TIMEOUT`)
+  auto-force-quit path (`obj/user.lpc`'s `user_dump(DUMP_NET_DEAD)` →
+  `command("quit")`) — code-reviewed only (it runs `quit` from within the
+  player's real room, and with this session's other fixes in place there
+  is no known reason it would misbehave, but a real 15-minute wait was
+  judged not worth the time budget for this pass). Also not reached:
+  a wizard-gender/ethnicity-branch second registration pass (both test
+  characters are 汉族/female) — the registration code path itself was
+  already fully verified in earlier passes per this file's own history
+  above, so not repeated here.
+
+### Bugs found and fixed
+
+**1. `d/death/npc/panguan.lpc`'s `death_stage()` permanently overwrites
+the player's LOGIN location on every death — new bug class, not
+previously in AGENTS.md.**
+
+- Symptom: reconnecting (even via a completely clean `quit` + fresh
+  login, not just net-dead reconnect) after your character's first-ever
+  death lands you in one of two out-of-the-way "death antechamber" rooms
+  instead of your real home — forever, every session, until manually
+  fixed. Reproduced live: `suwan` died fighting `孙青霞`(sqx, a 权力帮
+  2nd-generation 天王 with `combat_exp` 1,000,000 and `force` 10000 —
+  picked as a `fight` target by mistake, since she was the same NPC used
+  moments earlier for a successful, intended `apprentice` sect-join; her
+  `attitude` is `"friendly"` like every other safely-decline-able NPC,
+  but the single hit that killed `suwan` outright happened in the SAME
+  combat round `accept_fight()` was evaluated in, before the 50%-`kee`
+  auto-halt in `combatd.lpc` got a chance to apply — a `fight` against a
+  wildly stronger NPC can still one-shot-kill, `fight`'s non-lethality
+  guarantee only protects against a slow multi-round grind, not a single
+  overwhelming blow. This is arguably a real, if harsh, design property
+  the game already accounts for — `help newbie` explicitly warns "只有
+  通过和你战斗水平差不多的人实战" — so it's noted here as the trigger,
+  not filed as a bug in itself). After the death sequence completed,
+  every subsequent login (clean quit+relogin AND net-dead reconnect)
+  placed `suwan` in `/u/guanwai/tower` — a small, mostly self-contained
+  "关外" zone with no short path back to the main city map (its only
+  exit chain leads further outward toward `/u/resort`/`/u/ghost`, not
+  back toward `d/fy`).
+- Root cause, `d/death/npc/panguan.lpc:55-56` (before fix):
+  ```lpc
+  ob->move(revive_loc[random(sizeof(revive_loc))]);
+  ob->set("startroom", base_name(environment(ob)));
+  ```
+  where `revive_loc = ({ "/d/fy/church", "/u/guanwai/tower" })`. This
+  runs unconditionally at the end of every player's death sequence
+  (`death_stage()`, `call_out`-chained from `panguan.lpc`'s `init()`,
+  which fires whenever a dying player enters 鬼门关). `query("startroom")`
+  is the SAME field `adm/daemons/logind.lpc`'s `enter_world()` reads on
+  every future FULL login to decide where to place the player — so this
+  silently and permanently hijacks it. Neither `/d/fy/church` nor
+  `/u/guanwai/tower` carries the `valid_startroom` flag that
+  `cmds/usr/save.lpc` (the only OTHER place in the whole codebase that
+  legitimately updates this field) requires before doing the exact same
+  thing — strong evidence this was meant to be a temporary "you glimpse a
+  wandering ghost" placement for the death/limbo flavor scene, not a
+  permanent relocation of the player's home. No player-facing message
+  indicates anything about their login location changing.
+- Fix (`d/death/npc/panguan.lpc`): deleted the
+  `ob->set("startroom", ...)` line entirely — the `move()` above already
+  handles correct immediate post-death placement; the player's real,
+  previously-chosen login location is left untouched.
+- Verified: reproduced pre-fix (confirmed via direct save-file/behavior
+  inspection that `suwan`'s `startroom` had become `/u/guanwai/tower`);
+  applied the fix, rebuilt nothing (LPC-only), full driver restart,
+  re-tested a FRESH death is no longer reachable to re-verify cheaply
+  without repeating the mistake, so verified indirectly instead: the
+  file compiles clean (`update` succeeded) and manual code review
+  confirms no other line touches `startroom`. `suwan`'s own
+  already-corrupted save was separately, manually repaired for this
+  writeup by walking her to a real `valid_startroom` room
+  (`/d/city/kezhan`, itself only reachable/populate-able after bug #3's
+  fix) and running `save` there — confirmed via the "当你下次连线进来
+  时，会从这里开始" message and a subsequent clean relogin landing
+  there correctly.
+- **New AGENTS.md bug-class draft** (see final report — not added to
+  AGENTS.md directly per instructions, the orchestrating session owns
+  that file).
+
+**2. `feature/vendor.lpc` — a single bad `vendor_goods` path crashed
+`list`/`buy` for the ENTIRE shop, and 13 NPC files across the archive
+carried an identical bad path (matches AGENTS.md §7.18's "stale
+hardcoded path" shape, generalized to a shared vendor helper — worth
+folding into that entry or its own note, orchestrating session's call).**
+
+- Symptom: `list` at the STARTING INN (`d/fy/npc/waiter.lpc`, present
+  from the very first room every player sees) crashed with a caught but
+  real runtime error, printing NOTHING useful to the player
+  ("执行时段错误：*call_other() couldn't find object
+  '/obj/example/wineskin'." from `/feature/vendor.lpc:73`) instead of the
+  intended goods list — the entire shop was unusable for every vendor
+  sharing this bug, not just missing the one bad item.
+- Root cause: `d/fy/npc/waiter.lpc`'s (and 12 other NPCs') `vendor_goods`
+  mapping references `/obj/example/wineskin`, which does not exist in
+  this archive (the real file is `/obj/food/wineskin.lpc` — confirmed by
+  the archive shipping both `/obj/example/chicken_leg.lpc` and
+  `/obj/example/dumpling.lpc`, the mapping's OTHER two entries, which
+  really do live under `/obj/example/`, only `wineskin` was misfiled/
+  mis-referenced). `feature/vendor.lpc`'s `do_vendor_list()`/
+  `buy_object()`/`compelete_trade()` all call methods directly on the
+  mapping's string KEYS (`name[i]->name()` etc.), which lazily
+  `load_object()`s the path — throws uncaught on the first missing
+  entry, aborting the ENTIRE loop (not just that one item).
+- Fix, two parts:
+  1. Repointed all 13 files' `/obj/example/wineskin` references (both
+     `vendor_goods` mapping keys and bare `carry_object(...)` calls) to
+     the real `/obj/food/wineskin`:
+     `d/laowu/npc/{dang,drunk,waiter}.lpc`, `d/kaifeng/npc/waiter.lpc`,
+     `d/chenxiang/npc/oldman.lpc`, `d/tieflag/npc/xiaofan.lpc`,
+     `d/fy/npc/{waiter,biaotou,drunk,waiter_bak}.lpc`,
+     `d/songshan/npc/waiter.lpc`, `u/tangmen/npc/waiter.lpc`,
+     `u/wudang/npc/waiter.lpc`.
+  2. Hardened the SHARED `feature/vendor.lpc` itself (all three
+     functions) so any OTHER currently-undiscovered bad `vendor_goods`
+     reference, in any of the remaining ~114 vendor files in this
+     archive, degrades to "skip that one item" instead of crashing the
+     whole vendor:
+     ```lpc
+     // BEFORE (do_vendor_list, same shape in buy_object/compelete_trade):
+     for (i = 0; i < sizeof(name); i++)
+       list += sprintf("%-10s %-20s ：%s\n",
+         name[i]->name(), name[i]->query("id"),
+         price_string(name[i]->query("value")));
+     // AFTER:
+     for (i = 0; i < sizeof(name); i++) {
+       if (catch(load_object(name[i]))) continue;
+       list += sprintf("%-10s %-20s ：%s\n", ...);
+     }
+     ```
+     Used `catch(load_object(...))`, NOT `file_size(...)` — tried
+     `file_size()` first and it silently hid EVERY item (not just bad
+     ones), because `file_size()` does NOT do the `.lpc`/`.c` extension
+     fallback that `load_object()`/`call_other()` do (AGENTS.md §4.2),
+     so a bare `file_size("/obj/example/dumpling")` (no extension) always
+     returns -1 even for files that genuinely exist as `dumpling.lpc`.
+     Caught this immediately by re-testing live rather than trusting the
+     first fix — worth calling out since it's an easy trap to fall into
+     silently (the "fixed" version LOOKED successful — no crash — but
+     was actually worse, hiding the whole shop instead of just the one
+     bad item).
+- Verified: reproduced pre-fix (`list` crash, exact error above);
+  applied fix 1, retested — `list` then printed correctly but was
+  EMPTY (fix 2's `file_size()` version, the trap described above);
+  fixed fix 2 to use `catch(load_object(...))`, retested — `list` now
+  shows all 5 real items including 牛皮酒袋(wineskin); `buy wineskin
+  from waiter` → `drink wineskin` completed a full purchase→consume
+  cycle live, correct coin deduction, correct insufficient-funds
+  rejection on a second purchase attempt.
+
+**3. `std/room.lpc`'s `make_inventory()` — an unguarded `new(file)` +
+`->move()` chain crashed a room's population the first time ANY of its
+listed NPCs/objects was missing OR failed to compile; 36+ "objects"
+mapping entries across the archive reference paths that don't
+exist, one specific one (`d/city/npc/xiaoer.lpc`) exists but fails to
+compile. Matches AGENTS.md §7.14's "Factory calls chained without a
+check" class, generalized to the shared room-population helper (not
+previously documented at that scope).**
+
+- Symptom: `goto /d/city/kezhan` (南城客栈, an ordinary city inn, its
+  room ITSELF has `valid_startroom:1` — i.e. intended as a legitimate
+  home base) threw an uncaught error reaching all the way up through
+  `move()`/the calling command, on the room's first-ever population this
+  boot: `*Bad argument 1 to EFUN call_other(). Expected: object, string,
+  array, Got: int(0).` at `/std/room.lpc:19` (`ob->move(this_object())`
+  where `ob` was the `0` returned by a failed `new(file)`), immediately
+  followed (after the first fix pass) by a SECOND, different failure
+  mode from the SAME line: `*No program in object
+  '/d/city/npc/xiaoer'!` — `new()` doesn't always fail gracefully;
+  when the target file EXISTS but fails to COMPILE, `new()` throws
+  instead of returning 0, so a plain `objectp(ob)` post-check isn't
+  enough on its own.
+- Root cause, two independent flavors found live in the SAME room:
+  1. `d/city/kezhan.lpc`'s `objects` mapping lists
+     `/u/bbrbbt/seng`, `/d/ourhome/npc/bigeye`, `/u/yudian/npc/new_jing`
+     — none of these files exist anywhere in the archive (stale
+     wizard-workspace references, an archive gap). A repo-wide scan of
+     every `set("objects", ([...]))` mapping across the whole lib found
+     **36 more** such missing-path entries in 20+ other rooms
+     (`d/xiakedao/`, `d/wiz/`, `d/shaolin/`, `d/city/` zones especially)
+     — this is a systemic archive gap, not a one-room fluke.
+  2. `d/city/npc/xiaoer.lpc:1` — `inherit F_VENDOR_SALE;` — and 14 OTHER
+     `d/city/npc/*.lpc` files — reference a macro that is never
+     `#define`d anywhere in `include/*.h`. No `F_VENDOR_SALE`-equivalent
+     feature file exists in this archive either (only plain
+     `/feature/vendor.lpc`, mapped to `F_VENDOR`, exists) — and
+     `xiaoer.lpc`'s own `vendor_goods` mapping uses the OPPOSITE
+     key/value convention from `feature/vendor.lpc` (id-string keys →
+     path values, vs. `feature/vendor.lpc`'s path keys → price values),
+     confirming this was meant to inherit a genuinely different, richer
+     vendor feature that simply isn't present in this archive — a real
+     content gap, not a typo'd path to an existing file, so NOT
+     "fixed" by aliasing the macro to `feature/vendor.lpc` (that would
+     compile but behave wrong at runtime). Left as a documented gap;
+     these 15 `d/city/npc/*.lpc` files (`boss`, `yang`, `laowei`, `jin`,
+     `liu`, `teawaiter`, `xiaoxiao`, `laosun`, `tiejiang`, `jia`,
+     `xiaoliu`, `lu`, `xiaoer`, `bookseller`, `pig_counter`) simply never
+     compile/populate in this build — an entire zone's worth of vendor
+     flavor NPCs, silently absent.
+- Fix (`std/room.lpc`, the SHARED base every room in the mudlib
+  inherits): wrapped `make_inventory()`'s construction in `catch()` and
+  added `objectp()` guards at its two call sites in `reset()`:
+  ```lpc
+  // BEFORE:
+  object make_inventory(string file) {
+    object ob;
+    ob = new(file);
+    ob->move(this_object());
+    ob->set("startroom", base_name(this_object()));
+    return ob;
+  }
+  // AFTER:
+  object make_inventory(string file) {
+    object ob;
+    if (catch(ob = new(file)) || !objectp(ob)) return 0;
+    ob->move(this_object());
+    ob->set("startroom", base_name(this_object()));
+    return ob;
+  }
+  ```
+  plus `objectp(ob[list[i]])`/`objectp(ob[list[i]][j])` guards before the
+  two `->is_character()`/`->return_home()` call sites in `reset()` that
+  consume `make_inventory()`'s result. Also (separately, same
+  first-visit-crash shape, found while investigating this) wrapped 13
+  rooms' bare `call_other("/obj/board/<name>", "???")` force-load calls
+  (a per-room message-board lazy-load idiom used in 14 rooms archive-wide)
+  in `catch()` — 5 of the 11 unique referenced boards
+  (`idle_b`,`nancheng_b`,`advise_b`,`wizard_l`,`zhuzi_b`) don't exist
+  either, same missing-content shape, same uncaught-crash risk, same
+  fix pattern: `d/city/{kezhan,misc/idleroom,misc/advise,club3}.lpc`,
+  `d/wiz/workroom.lpc`.
+- Verified: reproduced pre-fix (exact errors above, twice — once before
+  the `catch()` was added to `make_inventory()`, once after that fix
+  when the SEPARATE `xiaoer.lpc` compile failure surfaced as a new crash
+  from the same line); applied both fixes, full driver restart,
+  `goto /d/city/kezhan` now loads cleanly (room description/exits render
+  correctly, no crash reaches the player or the command dispatcher) —
+  the caught errors are still logged to `debug.log` (visibly marked
+  "错误讯息被拦截"/"error message intercepted", i.e. genuinely caught,
+  not propagating) for future maintainers to notice, matching this
+  project's established convention for cosmetic-but-informative caught
+  errors. Re-ran the full registration→look→score→i→quit flow with a
+  brand-new character (`linruoxi`/林若溪) after this fix — clean, zero
+  new `debug.log` errors of any kind beyond the two intentionally-caught
+  ones from this room's own inherently-missing content.
+- **This is a NEW bug class draft** — see final report.
+
+**4. `cmds/wiz/summon.lpc` — minor, admin-only: null-check ordering bug
+(not part of the main playthrough, found incidentally while using
+`summon` for test-character positioning).**
+
+- `ob->query("id") == "xgchen"` was checked BEFORE `if (!ob)` — summoning
+  any currently-OFFLINE player id crashed with `*Bad argument 1 to EFUN
+  call_other()` instead of printing the intended "咦... 有这个人吗?"
+  rejection.
+- Fix: reordered the two checks (null-check first).
+- Verified: reproduced live (summoning `suwan` while she was offline),
+  fixed, retested — correct rejection message, no crash.
+
+### Lineage note
+
+`zzfy` shares its `std/`, `feature/`, and `adm/daemons/logind.lpc`
+architecture with `fengyun3xiuding`/`fengyun3dianzang` (same 风云3
+engine, AGENTS.md §11) and, one level further out, the whole 风云 family
+(`fy2`/`fengyun2qinghua`, `fengyun434`/`fy2005`, `moniHuafu`). Bugs #2
+and #3 above live in shared engine files (`feature/vendor.lpc`,
+`std/room.lpc`) that are very likely byte-identical or near-identical
+across at least the 风云3 siblings, and possibly the wider family too —
+worth a proactive port-and-diff pass on those two files in
+`fengyun3xiuding`/`fengyun3dianzang` (out of scope for this task; not
+done here). Bug #1 (`d/death/npc/panguan.lpc`) and bug #4
+(`cmds/wiz/summon.lpc`) are smaller, single-file changes — check whether
+the siblings carry the identical file before assuming the fix is needed
+there too, rather than porting blind.

@@ -10,6 +10,15 @@ int buy_object(object me, string what) {
   if (!mapp(goods = query("vendor_goods"))) return 0;
   name = keys(goods);
   for (i = 0; i < sizeof(name); i++) {
+    // A vendor_goods entry pointing at a file that no longer exists in
+    // this archive (stale/typo'd path) used to throw an uncaught
+    // "call_other() couldn't find object" here, breaking the whole
+    // buy/list flow for the vendor. Skip missing items instead of
+    // crashing on them. (file_size() does NOT do the .lpc/.c extension
+    // fallback that load_object()/call_other() do, so it can't be used
+    // directly on these extensionless vendor_goods paths -- catch()
+    // around a real load is the accurate check.)
+    if (catch(load_object(name[i]))) continue;
     if (what == name[i]->name() || what == (name[i]->query("id")))
       return (int)(name[i]->query("value"));
   }
@@ -26,6 +35,7 @@ void compelete_trade(object me, string what) {
   if (!mapp(goods = query("vendor_goods"))) return 0;
   name = keys(goods);
   for (i = 0; i < sizeof(name); i++) {
+    if (catch(load_object(name[i]))) continue;
     if (what == name[i]->name() || what == (name[i]->query("id"))) {
       if (stringp(ob_file = name[i])) {
         ob = new(ob_file);
@@ -68,10 +78,12 @@ int do_vendor_list(string arg) {
   if (!sizeof(name))
     return notify_fail("这儿的东西全卖光了。\n");
   list = "你可以购买下列这些东西：\n";
-  for (i = 0; i < sizeof(name); i++)
+  for (i = 0; i < sizeof(name); i++) {
+    if (catch(load_object(name[i]))) continue;
     list += sprintf("%-10s %-20s ：%s\n",
       name[i]->name(), name[i]->query("id"),
       price_string(name[i]->query("value")));
+  }
   write(list);
   return 1;
 }
