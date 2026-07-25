@@ -81,6 +81,25 @@ nomask void enable_player() {
   else set_living_name(query("name"));
 
   enable_commands();
+  // BUG FIX (deep functional test, AGENTS.md §7.28): enable_player() is
+  // legitimately called more than once per session by design --
+  // std/char.lpc's setup() calls it once at creation, and
+  // feature/damage.lpc's revive() (scheduled via a plain call_out every
+  // time a character is knocked unconscious in combat, an ORDINARY,
+  // frequent occurrence, not just death) calls it again while already
+  // living(). A bare add_action() is NOT idempotent like
+  // enable_commands() is -- each redundant call used to stack another
+  // duplicate wildcard sentence for the same command_hook dispatcher,
+  // and since the driver only stops at the FIRST sentence in a stack
+  // that returns nonzero, every FAILING command (wrong target,
+  // insufficient funds/skill, a typo) would silently re-run once per
+  // extra stacked sentence, including any side effects already fired
+  // before the failure return. remove_action() first so exactly one
+  // sentence is ever registered, independent of call count/order (a
+  // living()-gated guard would be wrong here -- see AGENTS.md §7.28's
+  // own cautionary note -- since revive() is a legitimate re-enable
+  // while already living()).
+  remove_action("command_hook", "");
   add_action("command_hook", "", 1);
 
   if (!userp(this_object()))

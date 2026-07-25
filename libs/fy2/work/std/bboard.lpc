@@ -10,10 +10,27 @@ inherit F_SAVE;
 void setup() {
   string loc;
 
+  // BUG FIX (deep functional test, AGENTS.md §7.18/§7.25): a board
+  // whose "location" points at missing/renamed content (confirmed
+  // live: wizard_b.lpc's stale "/d/wiz/hall1", since fixed) threw
+  // "call_other() couldn't find object" straight out of move() here,
+  // same collateral-damage shape as the restore() bug below -- guard
+  // it too so one bad/stale board location can't take out its caller.
   if (stringp(loc = query("location")))
-    move(loc);
+    catch(move(loc));
   set("no_get", 1);
-  restore();
+  // BUG FIX (deep functional test, AGENTS.md §7.7): restore() on
+  // corrupted save data (confirmed live: data/board/fysquare_b.o had
+  // raw un-transcoded GBK bytes -- a conversion-pipeline gap, since
+  // fixed) used to throw uncaught here, aborting the REST of the
+  // calling create() (obj/board/*.lpc's own create() calls setup()
+  // BEFORE set_name()/set("long", ...)/etc.) -- leaving the board
+  // object permanently half-initialized (no "id"/"name") for the rest
+  // of this boot, so every later short()/capitalize(query("id")) call
+  // on it (feature/name.lpc:63, reached from ordinary room look())
+  // crashed too, not just the first visit. catch() so one corrupt
+  // board's data can never take out the room it lives in.
+  catch(restore());
 }
 
 void init() {
