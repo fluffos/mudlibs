@@ -2363,6 +2363,23 @@ only way this surfaced was a full, continuous playthrough session
 plus a `debug.log` grep after every `quit`. That is the bar for round
 two: pick a lib, actually play it, fix what breaks, write it down.
 
+**Scope: PROGRAMMING bugs only, never game-content/design judgment
+calls.** This applies to every deep-test pass — fix compile errors,
+clearly-wrong efun/simul_efun usage (bad argument types, a call the
+driver's own type check explicitly rejects), driver-API misuse causing
+crashes (reentrancy, missing `return`s, missing `objectp()`/`stringp()`
+guards, calling a create()-only primitive from `init()`), and obviously
+wrong variable references (a typo'd `-` for `->`, `this_player()` used
+where `this_object()` was clearly intended). Do NOT fix game balance
+(an NPC seems too strong, a reward amount, a shop price), internally
+consistent design choices even if surprising (death dropping items, a
+"safe" spar that isn't perfectly safe, a level-gated sect), or any
+content/quest question where the fix would require deciding what the
+game SHOULD do rather than making its own already-intended logic
+actually work. When genuinely unsure which bucket a finding falls in,
+document it honestly in the lib's NOTES.md as an observation and leave
+the code untouched — don't guess.
+
 Distilled checklist, generalized from the first full pass (`bxsj`,
 see `libs/bxsj/NOTES.md` "深度功能测试" for the worked example):
 
