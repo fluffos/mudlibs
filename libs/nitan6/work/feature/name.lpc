@@ -10,26 +10,38 @@ inherit F_NATURE;
 nosave string *my_id;
 string *my_id() { return my_id; }
 
+// feature/name.lpc is inherited (as F_NAME) as a SIBLING of F_DBASE by
+// char.lpc, not the other way around -- it never inherits F_DBASE itself.
+// Every bare set()/query() call in this file (no trailing `ob` redirect)
+// therefore hits the F_DBASE bare-call bootstrapping trap (AGENTS.md
+// §7.15; confirmed byte-identical pre-fix to nitan170911's own
+// feature/name.lpc, see that lib's NOTES.md for the full writeup):
+// unqualified calls from a file that doesn't itself inherit F_DBASE
+// resolve against the SIMUL_EFUN OBJECT's own shared `dbase`, not this
+// object's, silently reading/writing the wrong (shared) mapping instead
+// of erroring. query_idname() below already worked around this correctly
+// with an explicit `this_object()` redirect; every other function in
+// this file is fixed the same way here.
 void set_name(string name, string *id) {
   string fullname;
 
   if (!stringp(name)) {
-    if (!stringp(fullname = query("surname")))
+    if (!stringp(fullname = query("surname", this_object())))
       fullname = "";
 
-    if (stringp(query("purename")))
-      fullname += query("purename");
+    if (stringp(query("purename", this_object())))
+      fullname += query("purename", this_object());
 
     if (fullname == "")
       fullname = "无名氏";
 
-    set("name", fullname);
+    set("name", fullname, this_object());
   } else {
-    set("name", name);
+    set("name", name, this_object());
   }
 
   if (pointerp(id)) {
-    set("id", id[0]);
+    set("id", id[0], this_object());
     my_id = id;
   }
 }
@@ -38,18 +50,18 @@ void set_color(string color) {
   string colorname;
 
   //colorname = color + query("name");
-  colorname = color + filter_color(query("name"), 1);
+  colorname = color + filter_color(query("name", this_object()), 1);
   colorname = trans_color(colorname, 3);
 
-  set("color", color);
-  set("colorname", colorname + NOR);
+  set("color", color, this_object());
+  set("colorname", colorname + NOR, this_object());
 }
 
 int id(string str) {
   string *applied_id;
 
   if (pointerp(my_id) && member_array(str, my_id) != -1) {
-    if (pointerp(applied_id = query_temp("apply/id"))
+    if (pointerp(applied_id = query_temp("apply/id", this_object()))
       && sizeof(applied_id)) {
       if (this_player() && !wizardp(this_player()))
         return 0;
@@ -74,10 +86,10 @@ string *parse_command_id_list() {
 varargs string name(int raw) {
   string str, *mask;
 
-  if (!raw && sizeof(mask = query_temp("apply/name")))
+  if (!raw && sizeof(mask = query_temp("apply/name", this_object())))
     return mask[sizeof(mask) - 1];
   else {
-    if (stringp(str = query("name")))
+    if (stringp(str = query("name", this_object())))
       return str;
     else
       return file_name(this_object());
@@ -88,11 +100,11 @@ varargs string short(int raw) {
   string str;
   string colorname;
 
-  if (!stringp(colorname = query("colorname")))
+  if (!stringp(colorname = query("colorname", this_object())))
     colorname = name(raw);
 
-  if (raw || !stringp(str = query("short")))
-    str = colorname + "(" + capitalize(query("id")) + ")";
+  if (raw || !stringp(str = query("short", this_object())))
+    str = colorname + "(" + capitalize(query("id", this_object())) + ")";
 
   return str;
 }
@@ -100,10 +112,10 @@ varargs string short(int raw) {
 varargs string long(int raw) {
   string str, extra, *mask;
 
-  if (!raw && sizeof(mask = query_temp("apply/long")))
+  if (!raw && sizeof(mask = query_temp("apply/long", this_object())))
     str = mask[sizeof(mask) - 1];
 
-  else if (!stringp(str = query("long")))
+  else if (!stringp(str = query("long", this_object())))
     str = short(raw) + "。\n";
 
   if (stringp(extra = this_object()->extra_long()))

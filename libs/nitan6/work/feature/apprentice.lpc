@@ -1,17 +1,30 @@
 // apprentice.c
 // Written by Lonely@nitan.org
 
+// feature/apprentice.lpc is inherited (as F_APPRENTICE) as a SIBLING of
+// F_DBASE by char.lpc, not through it -- same F_DBASE bare-call
+// bootstrapping trap as feature/name.lpc/feature/command.lpc (AGENTS.md
+// §7.15): every bare set()/query() call below that omits the `ob`
+// redirect silently reads/writes the SIMUL_EFUN OBJECT's own shared
+// dbase instead of this_object()'s, so sect/family data (query_family()
+// et al) was being read from and written to ONE property bag shared by
+// every player and NPC in the game. Confirmed live: score's 门派 field
+// changed on its own between two sessions of the same idle character
+// with no `bai` ever succeeding, because another object's bare call
+// elsewhere was clobbering the same shared "family" key. Fixed with
+// explicit this_object() redirects on every self-referring call (calls
+// that already redirect to a different `ob` parameter are untouched).
 int is_apprentice_of(object ob) {
   mapping family;
   string *fams;
 
-  if (!mapp(family = query("family"))) return 0;
+  if (!mapp(family = query("family", this_object()))) return 0;
 
   if (family["master_id"] == (string)query("id", ob) &&
     family["master_name"] == (string)query("name", ob))
     return 1;
 
-  if (!arrayp(fams = query("reborn/fams")) ||
+  if (!arrayp(fams = query("reborn/fams", this_object())) ||
     !query("family/family_name", ob))
     return 0;
 
@@ -24,20 +37,20 @@ int is_apprentice_of(object ob) {
 void assign_apprentice(string title, int privs) {
   mapping family;
 
-  if (!mapp(family = query("family"))) return;
+  if (!mapp(family = query("family", this_object()))) return;
   family["title"] = title;
   family["privs"] = privs;
-  if (userp(this_object()) || !query("title")) {
+  if (userp(this_object()) || !query("title", this_object())) {
     switch (family["generation"]) {
       case 0:
-        set("title", family["family_name"] + family["title"]);
+        set("title", family["family_name"] + family["title"], this_object());
         break;
       case 1:
-        set("title", family["family_name"] + "开山祖师");
+        set("title", family["family_name"] + "开山祖师", this_object());
         break;
       default:
         set("title", sprintf("%s第%s代%s", family["family_name"],
-          chinese_number(family["generation"]), family["title"]));
+          chinese_number(family["generation"]), family["title"]), this_object());
         break;
     }
   }
@@ -49,7 +62,7 @@ void create_family(string family_name, int generation, string title) {
   family = allocate_mapping(6);
   family["family_name"] = family_name;
   family["generation"] = generation;
-  set("family", family);
+  set("family", family, this_object());
   // priv = -1 for ALL privileges.
   assign_apprentice(title, -1);
 }
@@ -62,7 +75,7 @@ int recruit_apprentice(object ob) {
   if (ob->is_apprentice_of(this_object()))
     return 0;
 
-  if (!mapp(my_family = query("family")))
+  if (!mapp(my_family = query("family", this_object())))
     return 0;
 
   // 这里处理判师的bug
@@ -77,7 +90,7 @@ int recruit_apprentice(object ob) {
     }
   }
 
-  class1 = query("class");
+  class1 = query("class", this_object());
   class2 = query("class", ob);
   if (stringp(class1) &&
     class2 != "bonze" && class2 != "eunach" &&
@@ -85,8 +98,8 @@ int recruit_apprentice(object ob) {
     set("class", class1, ob);
 
   family = allocate_mapping(sizeof(my_family));
-  family["master_id"] = query("id");
-  family["master_name"] = query("name");
+  family["master_id"] = query("id", this_object());
+  family["master_name"] = query("name", this_object());
   family["family_name"] = my_family["family_name"];
   family["generation"] = my_family["generation"] + 1;
   family["enter_time"] = time();
@@ -135,11 +148,11 @@ int recruit_apprentice(object ob) {
   if (query("family/first", ob) && family_name == family["family_name"])
     family["first"] = 1;
 
-  if (query("inherit_title")) {
+  if (query("inherit_title", this_object())) {
     set("title", query("inherit_title", this_object()), ob);
     set("family", family, ob);
     return 1;
-  } else if (query("born_family") != "没有")
+  } else if (query("born_family", this_object()) != "没有")
     family["title"] = "传人";
   else
     family["title"] = "弟子";
@@ -150,17 +163,17 @@ int recruit_apprentice(object ob) {
 }
 
 string query_bunch() {
-  return query("bunch/bunch_name");
+  return query("bunch/bunch_name", this_object());
 }
 
 string query_family() {
-  return query("family/family_name");
+  return query("family/family_name", this_object());
 }
 
 string query_master() {
-  return query("family/master_name");
+  return query("family/master_name", this_object());
 }
 
 string query_generation() {
-  return query("family/generation");
+  return query("family/generation", this_object());
 }

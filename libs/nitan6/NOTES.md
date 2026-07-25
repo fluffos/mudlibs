@@ -229,3 +229,344 @@ loopback logins outright. Introduced a separate `local_conn` flag; `str`
 now stays the real IP throughout. Re-verified in one continuous session:
 fluffos login, `look`, `update /adm/daemons/band.lpc` (succeeded), clean
 reconnect — no regression from the tightening.
+
+## 深度功能测试 / Deep functional test (2026-07-24, round two)
+
+Real playthrough pass per AGENTS.md §10.7. Per the task brief, first
+checked `nitan6` for the same F_DBASE bare-call architecture shapes that
+`nitan170911`'s deep-test pass found and fixed (AGENTS.md §7.15,
+`nitan170911/NOTES.md`'s "深度功能测试" section) — confirmed byte-
+identical pre-fix content in the equivalent files (`diff` against
+`nitan170911`'s post-fix versions showed only the same mechanical
+`this_object()`-redirect delta), then ported the same fixes proactively
+and verified live, before doing an independent full playthrough.
+
+### DB backend check: not needed for this lib
+
+`include/unixconf.h` (`#define DB_SAVE 1`) is only reached when
+`__PACKAGE_LONELY__` is defined; `include/globals.h` includes
+`winconf.h` otherwise (`#undef DB_SAVE`), and neither `config.fluffos`
+nor any `.lpc` in this tree defines `__PACKAGE_LONELY__`. So `DB_SAVE`
+is undefined here, `clone/user/user.lpc`'s `save()`/`restore()` take the
+`::save()`/`::restore()` (plain file-based) branch, and the whole
+`DATABASE_D->db_*` chain is dead code for actual gameplay in this
+sandboxed environment — no MySQL/MariaDB was needed or stood up for this
+pass, confirming this NOTES file's own earlier finding ("this lib's
+registration flow does NOT require a live MySQL connection"). The
+`databased.lpc` fix below was still applied (same rationale as
+`nitan170911`'s `feature/alias.lpc` fix: proactive, for lineage
+consistency and in case a future pass enables `__PACKAGE_LONELY__`), but
+is **not exercised live** in this pass.
+
+### Ported fixes: same F_DBASE bare-call bug, confirmed present, fixed and verified
+
+**1. `feature/name.lpc`** — confirmed byte-identical pre-fix content to
+`nitan170911`'s (before its own fix). Every bare `set()`/`query()` call
+(no `this_object()` redirect) in `set_name()`/`set_color()`/`id()`/
+`name()`/`short()`/`long()` silently operated on the SIMUL_EFUN object's
+shared dbase instead of the caller's own — `query_idname()` was already
+the one function with the correct workaround. Fixed identically to
+`nitan170911`: added explicit `this_object()` redirects throughout.
+Live-verified: fresh registration (`xiakebug`/秦风) produced a real,
+correctly-set player name end-to-end (`score`/`look`/room population all
+show "秦风" correctly), and zero `debug.log` errors across the whole
+registration→born→explore→quit-decline flow.
+
+**2. `feature/command.lpc`** — same bug, `enable_player()`'s
+`query("id")`/`query("name")` (feeding `set_living_name()`). Fixed with
+`this_object()` redirects, matching `nitan170911`'s identical fix.
+Live-verified indirectly: no `set_living_name()` argument-type errors
+appeared in `debug.log` across the whole session (player and every NPC
+encountered set up cleanly).
+
+**3. `adm/daemons/databased.lpc`** — `db_restore_all()`'s ten
+unguarded `restore_variable()` calls on legitimately-`NULL` DB columns
+(same shape as `nitan170911`'s bug #2). Guarded each with `stringp()`,
+falling back to each setter's expected empty type. **Not live-exercised**
+in this pass (see DB-backend note above) — ported for lineage
+consistency/future-proofing only, verified only via `lpcc` (compiles
+clean, no `Fail to load object`).
+
+**4. `adm/kernel/simul_efun/message.lpc`** — `tell_object()`/
+`tell_room()`/`shout()`/`write()`/`say()` etc. all called bare
+`message()` above its own definition later in the file with no forward
+prototype, binding to the raw driver EFUN instead of the local
+exclude-argument-normalizing wrapper (same shape as `nitan170911`'s bug
+#3; this file's local `message()` wrapper already had the `exclude ||
+({})` normalization, but that alone was insufficient since callers above
+it never reached it). Added the missing forward prototype + `varargs`.
+Live-verified: no "Bad argument 4 to EFUN message()" in `debug.log`
+across logins, room `tell_room()` calls (combat, `ask` NPC dialogue,
+room population), and the registration countdown banner's own direct
+`message()` call.
+
+### New (fifth) instance of the same bug found independently in this lib: `feature/apprentice.lpc`
+
+**Not one of `nitan170911`'s four documented fixes** — found by
+noticing `score`'s `【门派】` (sect) field showed a NON-DEFAULT value
+(`丐帮`, i.e. "Beggar Sect") on a character whose every live `bai`
+(apprenticeship) attempt had been explicitly rejected
+("既不属於任何门派，也没有开山立派，不能拜师"). Investigated instead of
+shrugged off, per §10.7's "actually play it" bar. Root cause:
+`inherit/char/char.lpc` does `inherit F_APPRENTICE` (=
+`feature/apprentice.lpc`) as a SIBLING of `inherit F_DBASE`, exactly
+like `feature/name.lpc`/`feature/command.lpc` — but this file was never
+touched by `nitan170911`'s pass (its own equivalent `bai` attempts were
+also all rejected early, so the bug never surfaced there either; not
+independently confirmed present-but-unfixed on `nitan170911`, flagged
+here for a follow-up check). Every bare `query()`/`set()` call in
+`is_apprentice_of()`, `assign_apprentice()`, `create_family()`,
+`recruit_apprentice()`, `query_bunch()`, `query_family()`,
+`query_master()`, `query_generation()` that operates on `this_object()`
+(as opposed to the small number of calls that already correctly
+redirect to a distinct `ob` parameter) hit the identical bootstrapping
+trap — meaning sect/family membership data (`family/family_name`,
+`family/master_name`, `family/generation`, `title`, `class`,
+`can_not_change`, etc.) for every character in the game was being
+read from and written to the ONE shared SIMUL_EFUN OBJECT dbase instead
+of each character's own. Fixed with the same explicit `this_object()`
+redirect pattern as the other four files (calls already redirecting to
+`ob` left untouched). Verified via `lpcc` against the composed
+`/inherit/char/char.lpc`: compiles clean, no `Fail to load object`.
+
+**Not fully root-caused live, documented honestly**: after this fix,
+`score` on the SAME long-lived test character (`xiakebug`) still shows
+`【门派】丐帮` even though `xiakebug`'s own last-saved dbase (`data/user/
+x/xiakebug.o`) has no `"family"` key at all — meaning the in-memory
+value was set live, correctly, on `this_object()`'s own dbase, by
+*something* during this session (plausibly a real, non-buggy piece of
+content logic tied to physically being in `/d/gaibang/inhole` — the
+Beggar Sect hideout `xiakebug` is standing in for the rest of this
+session — rather than a residual bug; no `set("family"...)` call was
+found in that room's or its NPCs' visible `create()`/`init()` in the
+time available). Given the character's own `bai` attempts were all
+explicitly rejected, this is left as an **honest open question** rather
+than asserted as fixed or as a bug — a follow-up pass should `unset`/
+inspect `family/family_name` on a freshly-registered, never-`bai`'d
+character standing OUTSIDE any sect territory to isolate whether this is
+content (a location-flavor display) or a genuinely separate issue.
+
+### New bug found and fixed, unrelated to the F_DBASE class: `is_killing(object)` vs `is_killing(string)` type mismatch — hard compile failure, two NPC files
+
+`feature/attack.lpc:58` declares `varargs int is_killing(string id)`
+(the target's `query("id", ob)` string, matched against a `string
+*killer` array of ids) — the sole definition of `is_killing()` in this
+codebase, and the convention at 100+ other call sites throughout the lib
+is `is_killing(query("id", ob))`. `/d/city/npc/gongzi.lpc:55` and
+`/d/city/npc/guidao.lpc:55` (two near-identical "disguised bandit boss"
+NPCs — 落魄公子/鬼刀王五) instead called `is_killing(who)`, passing the
+raw `object who` parameter directly. Since both call sites are BARE
+(inherited, not `->`) calls, the driver's static type checker rejects
+this at compile time: confirmed via direct `lpcc` invocation, `error:
+Bad type for argument 1 of is_killing ( string vs object )` followed by
+`Fail to load object /d/city/npc/gongzi.lpc.` — a hard compile failure,
+not a warning. Confirmed this is the SAME shape live during actual
+preload/lazy-compile of `guidao.lpc` (triggered indirectly by an
+`lpcc` verification run against the file it's inherited into): the
+identical error line appears in `log/debug.log`.
+
+**Impact confirmed non-crashing but silently broken**: both NPCs are
+listed in real, reachable rooms' `set("objects", …)` population maps
+(`guidao` in `/d/city/zuixianlou2.lpc`, the 醉仙楼 second floor —
+directly reachable from the inn mentioned in this lib's own newbie doc;
+`gongzi` referenced from several quest kill-target files). `inherit/
+room/room.lpc`'s `make_inventory()` calls `new(file)` with no `catch()`
+and immediately calls `ob->is_ctl_ob()` etc. on the result — but this
+driver's `call other type check` is disabled (config), so a failed
+`new()` (returning `0`) makes every following `0->method()` call
+silently return `0` instead of erroring, so the ROOM itself does not
+crash (this differs from AGENTS.md §7.25's crash shape) — the NPC just
+silently never spawns, forever, with only a compile-time diagnostic line
+as any trace of why. This is a genuinely new, narrower variant of that
+existing pattern; see draft classification in the final report (not
+added to AGENTS.md directly, per this task's instructions).
+
+Fixed both call sites to `is_killing(query("id", who))`, matching every
+other call site's convention. Verified via `lpcc`: both files now
+compile clean (no `Fail to load object`), and a broader grep confirmed
+these were the only two bare (non-`->`) `is_killing()` call sites in the
+whole lib passing anything other than a string.
+
+### Observation, NOT fixed (out of scope / too broad to mass-fix safely): `target->is_killing(me)` passing an object via `call_other`
+
+Found while investigating the above: ~60 call sites across many
+independently-authored `kungfu/skill/*.lpc` files (mostly life-force-
+draining skills — 化功大法/吸星大法/北冥神功 and similar — plus a
+handful of NPC files) call `target->is_killing(me)`, passing an
+**object** (`me`) through a `call_other`. Unlike the two bare-call sites
+above, `call_other` isn't statically type-checked on this driver (`call
+other type check: 0`), so this does NOT fail to compile — but at
+runtime, `is_killing(object)`'s `member_array(id, killer)` compares an
+object against a `string *` array and can never match, so these checks
+always evaluate `false` regardless of actual combat state. Traced
+`kill_ob()` (feature/attack.lpc) and confirmed it's internally idempotent
+via its own `member_array(query("id", ob), killer) == -1` guard, so the
+practical effect is a redundant `kill_ob()` re-invocation (with its
+"looks like X wants to kill you" message correctly suppressed on repeat)
+rather than a crash or obviously-broken player-visible symptom — this
+looks like a genuine latent logic bug (the intended "skip re-triggering
+if already fighting" optimization never fires), but is spread across
+~60 pre-existing files from many different original authors, each
+needing individual verification, well beyond this pass's time budget and
+squarely in "long-tail, fix only where it surfaces live" territory per
+AGENTS.md §6b's mega-lib guidance (same treatment as this lib's own
+already-documented `array usercount` typo class, §15f). Left unfixed;
+documented here with concrete file:line examples
+(`kungfu/skill/huagong-dafa/hua.lpc:58` etc.) for a future pass.
+
+### Observation, NOT fixed (likely content, not a bug): misleading exit hint text
+
+`d/newbie/npc/laocunzhang.lpc:1452` (the `closeeye` gift's success
+message) tells the player "老村长说道：你现在到村口找花伯（指令 [1;31mask
+lao about 出村[0m）吧" — but the NPC at the village gate is 花伯 (id
+`hua`), not 老村长 (id `lao`); the correct command (confirmed live, and
+matching this same file's OWN correct phrasing elsewhere at line 465,
+and `d/newbie/npc/huabo.lpc`'s room/NPC text) is `ask hua about 出村`.
+Not a functional blocker — `ask lao about 出村` at the village center
+still works (老村长 has his own, differently-worded "出村" handler that
+gives a smaller flavor response without moving the player), room
+descriptions and 花伯's own prompt at the village gate correctly say
+`ask hua`, and a player exploring normally reaches the real exit menu
+regardless. This reads as a copy-paste text typo (content), not a
+programming bug — left untouched per this task's scope note, documented
+here as an honest observation.
+
+### Playthrough: registration → born → explore → combat → sect-hall visit, all live
+
+Full continuous session, one test character throughout:
+
+- **Newbie doc read first**: `doc/help/newbie` is an index;
+  `doc/help/newbie-basic` (titled for a differently-named sibling
+  project, "侠客行" — shared boilerplate across this lineage, not a
+  bug) documents the safe `fight` sparring verb, `set wimpy`, the
+  `bai`/`xue` teacher pipeline, shops/bank at 醉仙楼/钱庄, and the
+  扬州武庙 default spawn — all confirmed matching live behavior below.
+- **Registration**: username → confirm-new-character → Chinese surname/
+  given-name (`秦`/`风`) → admin password → normal password → gender →
+  countdown → `register <email>` (this lib layers this extra step
+  before "born", per the existing NOTES above) → `choose 1` (性格) →
+  `washto 20 20 20 20` → `born 扬州人氏` → landed in `古村` tutorial
+  village (`世界之树`). **Zero `debug.log` errors** across this entire
+  chain (this is the exact chain the four ported fixes above make work
+  — before the fixes this whole chain was confirmed byte-identical to
+  `nitan170911`'s pre-fix breakage).
+- **Tutorial village**: `ask lao about here` (topic menu) → `west`/
+  `east` navigation (room `.lpc` source read to confirm exits) →
+  `closeeye` (organic skill-grant path): six basic skills
+  (force/dodge/unarmed/sword/blade/parry) all jumped to level 164/59%,
+  +53207 combat exp, +102753 potential — matches the newbie doc's
+  description of the tutorial gift exactly. `ask hua about 出村` at the
+  village gate → menu → `1` (直接出村) → landed at `武庙`/`扬州城`
+  (钱庄/客店/醉仙楼 all present, matching the newbie doc's description)
+  with a further +50000 exp/+100000 potential exit bonus.
+- **`score`/`look`/`i` at every major state change**: confirmed correct,
+  fully-populated output at registration, post-`born`, post-`closeeye`,
+  post-exit-to-city, and after every reconnect (see below) — attributes
+  (20/20/20/20 washed), skills, inventory (starter book/shoes/cloth),
+  exp/potential all consistent and persisted correctly.
+- **Safe sparring**: `set wimpy 60` then `fight meipo` (the matchmaker
+  NPC on 北大街, same representative NPC `nitan170911`'s pass used) —
+  multi-round non-lethal exchange exactly matching the newbie doc's
+  description of `fight` as the safe verb; `halt` correctly disengaged
+  ("你身行向后一跃，跳出战圈不打了").
+  `fight`/`halt` both confirmed live, working.
+- **Skill/sect acquisition, two paths**: organic path (`closeeye`, see
+  above) fully exercised and successful. Direct `bai` path attempted
+  against four different low-rank Beggar Sect NPCs
+  (`qin shang`/`tian da`/`zuo quan`/`ding bang`) in the tree-hollow
+  hideout (`中央广场` → `enter dong` → `/d/gaibang/inhole`, same "hidden
+  tree-hollow passage" zone shape as `nitan170911`'s pass) — all
+  consistently rejected ("既不属於任何门派，也没有开山立派，不能拜师"),
+  matching the same "recruitment gated behind a real sect hall, not the
+  newbie-adjacent representative NPCs" content shape already documented
+  for `nitan170911`/`xuanjianlu` — not a bug, not chased further.
+- **Shop purchase attempted, correctly rejected (no money)**:
+  `list`/`buy cloth` at 醉仙楼 correctly rejected ("店小二冷笑道：
+  穷光蛋，一边呆着去！") since the fresh character has no money — matches
+  `nitan170911`'s own identical finding, not a bug. `check` (bank
+  command) at the wrong room correctly fell through to a different
+  command overload, same shape already documented for `nitan170911`.
+- **`quit`**: correctly gated behind this lib's own documented 30-minute
+  new-account quit-retention rule (`cmds/usr/quit.lpc`, real wall-clock
+  `time() - query("birthday")` check) — confirmed the confirmation
+  prompt fires correctly and declining (`n`) correctly aborts the quit
+  and resumes play, with zero `debug.log` errors. The full aged-past-30-
+  minutes clean-quit-then-relogin persistence path was **not completed
+  live** in this pass — see "not verified live" below.
+- **Net-dead disconnect + reconnect, prompt AND after a real wait**:
+  every session in this pass ended by simply letting the mudclient
+  connection close without `quit` (net-dead), and every subsequent
+  reconnect showed "重新连线完毕" (silent resume) and landed back in the
+  exact same room with fully-intact state — exercised both with short
+  gaps between commands and, near the end of this pass, after a real
+  multi-minute idle gap (session uptime counter moved from "十三分三十
+  秒" to "二十二分二十九秒" between two reconnects with no player
+  action in between) — state (location, attributes, exp/potential,
+  inventory) all confirmed intact across that gap. Zero `debug.log`
+  errors and the driver process remained alive and responsive
+  throughout (no recurrence of AGENTS.md §10.8's driver-fatal crash
+  class was observed in this pass, though the net-dead window achieved
+  was well short of the 900s `NET_DEAD_TIMEOUT`).
+
+### Explicitly NOT verified live (time budget / harness constraints)
+
+- **A genuine clean `quit` past the 30-minute new-account retention
+  window, then a cold relogin, confirming persisted state survives a
+  real save/restore round trip.** The retention window was reached in
+  real wall-clock terms during this pass, but the harness this pass ran
+  under does not support an uninterrupted long blocking wait
+  immediately followed by the next scripted command in the same
+  operation, and by the time that was resolved, wrapping up the pass
+  took priority over re-deriving a fresh multi-minute wait. Everything
+  UP TO this point (registration, persistence of washed attributes/
+  skills/inventory/exp across many net-dead reconnects, including after
+  a real multi-minute gap) was independently verified live via the
+  file-based `::save()`/`::restore()` path (confirmed the active path
+  in this lib, since `DB_SAVE` is undefined — see above), so a clean
+  `quit`+relogin round trip through the SAME save path is very likely
+  to behave identically, but this specific round trip was not directly
+  observed and is not claimed as verified.
+- **Progressing to real combat/death against a hostile NPC or a real
+  duel.** Time budget went to the F_DBASE bug chain and the
+  `is_killing()` compile-error bug above instead, both far more
+  consequential findings than a routine combat/death check would have
+  been.
+- **A full `bai`→`xue` cycle against an actual sect-recruiting master**
+  — every readily-reachable Beggar Sect NPC declined to recruit (see
+  above); reaching one that does was not attempted within the time
+  available.
+
+### Test character
+
+`xiakebug` / 秦风 (surname 秦, given name 风), password `TestPass123`,
+admin password `AdminAAAA1`. Kept (matches project precedent of leaving
+representative test characters as evidence). Final live state: personality
+光明磊落, attributes washed to 20/20/20/20, six basic skills at level
+164 each, ~53207 combat exp / ~102853 potential, standing in
+`/d/gaibang/inhole` (丐帮树洞内部, Yangzhou), inventory has the starter
+book/shoes/cloth. Save files: `work/data/user/x/xiakebug.o`,
+`work/data/login/x/xiakebug.o` — **note**: these on-disk files predate
+the final live session (character was never re-`save`d after the last
+`apprentice.lpc`-fix-era `score` check), so the on-disk `family` key is
+absent even though the live in-memory `score` showed `丐帮` — see the
+"not fully root-caused" note above.
+
+### Process/resource hygiene
+
+Native driver run from `libs/nitan6/work/` (port 40019), driver's own
+stdout captured to a scratch file per AGENTS.md §10.8 (no crash of the
+`ref count 0`/`free_string` class observed in this pass; scratch file
+removed before finishing). No Docker/MariaDB was needed (see DB-backend
+note above). Driver killed by confirmed PID/cwd before finishing.
+Tracked runtime churn (`data/daemon/mrtg.o`, `data/daemon/mrtg/
+mrtg.conf`) reverted via `git show HEAD:`, matching this lib's own
+established precedent from the WASM-enablement pass. Ad-hoc `lpcc`
+single-file verification runs against this lib's own `config.fluffos`
+were used throughout to confirm each fix compiles clean (`Fail to load
+object` absent) — note for future passes: these runs share the same
+`log/debug.log` path as the live driver and appear to **truncate/
+replace** rather than append to it, so `debug.log` line-count deltas
+during a pass that also runs ad-hoc `lpcc` checks are not a reliable
+signal by themselves; the driver's own captured stdout (§10.8's
+existing recommendation) remained the authoritative source of real
+runtime errors throughout this pass.
