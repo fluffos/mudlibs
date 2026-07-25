@@ -1507,6 +1507,23 @@ audit downstream code (like `quit.lpc` above) for the null-environment
 assumption independently — the recovery pass narrows the window but
 doesn't make every other function environment-null-safe by itself.
 
+**Same symptom, different trigger — a compile ERROR instead of an
+eval-cost abort**: found on `chidi`'s deep functional test. A hard
+compile error anywhere in `START_ROOM`'s (or any zone room's) own
+first-ever compile this boot — e.g. an NPC in that room calling
+`exert_function(<int>)` when the real signature is
+`exert_function(string func)`, a plain copy-paste type mismatch —
+aborts the room's compile entirely, which aborts whatever caller
+triggered it (a `move()`/`load_object()` during login) the same way the
+eval-cost abort does, landing the player with no environment and the
+same "灰蒙蒙一片"/can't-move symptom. Same detection/fix shape applies:
+grep `debug.log`'s compile-error output for anything in the
+zone-room-and-its-NPCs dependency chain of any room a fresh login can
+reach, not just runtime errors. Not worth a separate numbered class —
+the uncatchable-crash-during-cold-first-compile shape is the same
+regardless of whether the crash is an eval-cost abort or a compile
+error; treat both as instances of this section.
+
 ---
 
 ## 8. Login and registration flow bugs

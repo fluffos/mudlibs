@@ -154,3 +154,315 @@ upstream, so this was tightened to fail-closed: only an exact
 malformed or non-string address now falls through to the original gate
 logic (treated as untrusted/remote) instead of being auto-allowed.
 Re-verified fluffos login still works after tightening.
+
+## 深度功能测试 / Deep functional test (2026-07-24)
+
+First real *playthrough* pass on this lib (all prior passes verified only
+registration + `look`/`score`/`quit` + admin login). Played as an ordinary
+new player through registration, the personality/`born` flow, the newbie
+gift, a formal sect apprenticeship, safe sparring, and a shop purchase —
+one continuous native-driver (`build-debug`) session per phase, restarting
+the driver only to pick up in-place fixes (per `AGENTS.md` §10.3).
+
+**Test characters (kept as evidence, both reachable with the credentials
+below)**:
+- id `linshuang`, password `Passwd456`, real name 林霜, female,
+  personality 光明磊落, registered via the normal (non-admin) two-tier
+  password scheme. Final state: newbie-gift skills (`blade`/`dodge`/
+  `force`/`parry`/`sword`/`unarmed` all 300, `literate` 1000), two
+  `jue1` weapon items + starting cloth in inventory, `startroom`
+  `d/city/wumiao` (武庙, forced there by `quit.lpc`'s indoor-quit rule),
+  cleanly logged out. Save files: `work/data/user/l/linshuang.o`,
+  `work/data/login/l/linshuang.o`.
+- id `chenmu`, password `Passwd789`, real name 陈牧, male, personality
+  光明磊落. Used specifically to reach a male-only sect entrance for the
+  organic-teacher test (§ below). Final state: 少林派第四十一代弟子
+  (Shaolin 41st-generation lay disciple), master 清无比丘, `force` skill
+  learned to level 1 via `xue`/`learn`. Save files:
+  `work/data/user/c/chenmu.o`, `work/data/login/c/chenmu.o`.
+
+### Bugs found and fixed
+
+**1. `adm/daemons/logind.lpc` — raw `printf("%O", ob)` object-dump leaked
+to every new registrant, on literally every registration, file:line
+`logind.lpc:595` (random-name-accepted branch of `get_resp()`) and
+`logind.lpc:630` (typed-name branch of `get_name()`).**
+- Symptom, reproduced live pre-fix: right after a brand-new player typed
+  their Chinese name (or accepted a random one), the raw LPC object
+  reference (`/clone/user/login#0`-shaped text) printed directly to the
+  connecting client, inline with the surrounding prompts — a leftover
+  author debug statement (`printf("%O\n", ob);`), not gated on
+  `wizardp()` or anything else, firing for every single registration.
+  Cosmetic (didn't block the flow), but genuinely reproducible on every
+  new account and clearly not intended for players.
+- Fix: deleted both `printf("%O\n", ob);` lines outright — dead debug
+  output with no other role in the function (the surrounding logic
+  doesn't depend on it).
+- Verified: re-ran a full fresh registration (id `linshuang`) after the
+  fix — no stray object-dump anywhere in the transcript, name/password/
+  talent/email/gender flow otherwise identical to the pre-fix run.
+
+**2. `d/city/huadian.lpc` (鲜花店/flower shop) — its own vendor NPC was
+never actually spawned, file:line `huadian.lpc:26` (`objects` mapping),
+plus `d/city/npc/hua_girl.lpc:157` (`do_buy()`) didn't understand the
+mudlib's own documented `buy <item> from <target>` syntax. Two
+independent, stacked bugs in the same feature.**
+- Symptom 1, reproduced live pre-fix: the room's own description and its
+  `gaoshi` help-board text both narrate 英莲 (Ying Lian, the flower girl)
+  as physically present ("卖花姑娘英莲手里提着浇水的花洒...", "请向买花女
+  查询(ask ying lian about songhua)") — but `list`/`buy`/`ask ying...`
+  all failed with "请查阅相关CMDS？" / no-such-person, because the room's
+  `objects` mapping had her spawn line commented out
+  (`// __DIR__"npc/hua_girl" : 1,`). The NPC file itself
+  (`hua_girl.lpc`) was fully implemented (goods, pricing, scarcity-based
+  price escalation, a periodic restock `call_out`, a flower-delivery
+  `song`/`songhua` feature) — this reads as an abandoned WIP toggle-off
+  from the original archive's own development, not deliberate content
+  removal (every other room-NPC pairing in this lib has its spawn line
+  live; the flavor text and help board were never updated to match the
+  disabled state).
+- Fix 1: uncommented the `objects` entry
+  (`__DIR__ "npc/hua_girl": 1,`). Left her own commented-out
+  `//inherit F_VENDOR;` alone — her hand-rolled `do_buy`/`do_check`
+  already implement the stock-tracking/scarcity-pricing feature that a
+  bare `F_VENDOR` inherit doesn't have, and her `vendor_goods` is a
+  *mapping* with per-item counts (not the plain array `F_VENDOR`/
+  `F_DEALER` expects), so switching her onto the shared feature would
+  have silently discarded that (clearly intentional) mechanic rather
+  than fixing anything.
+- Symptom 2, reproduced live pre-fix (after fix 1 alone): `list` worked
+  (goods displayed correctly), but *no purchase syntax completed a
+  purchase*. `doc/help/intro`'s own base-command list documents
+  `buy: buy 〈物名〉 from 〈人名〉` as the one true syntax (matching
+  `cmds/std/buy.lpc`'s hard requirement for a `from <target>` clause) —
+  the flower shop's own signage ("可直接向店主购买（buy)") was simply
+  wrong/outdated, telling players a bare-item form that the generic `buy`
+  command has never accepted. Using the *correct*, documented
+  `buy <花名> from ying` syntax reached `hua_girl.lpc`'s own `do_buy()`
+  (via the generic `buy.lpc`'s built-in fallback for any NPC whose
+  `buy_object()` is undefined — confirmed as a genuine, working fallback
+  path by cross-testing against `d/city/npc/aqingsao.lpc`, an unrelated,
+  intact `F_DEALER`-based shop, which reaches its own `do_buy()` the
+  same way) — but `do_buy(string what)` matched the *entire* raw
+  argument (`"红玫瑰 from ying"`) against its goods list as one string,
+  which never matches, always failing with "您想买什么？" regardless of
+  how the flower was named.
+- Fix 2 (`hua_girl.lpc:159-166`): strip a trailing `" from <target>"`
+  suffix from `what` before matching, mirroring what the generic
+  `buy.lpc` already does for target resolution:
+  ```lpc
+  // BEFORE:
+  if (!what) return notify_fail("你想买什么？\n");
+
+  if (sscanf(what, "%d %s", amount, what) != 2) {
+  // AFTER:
+  if (!what) return notify_fail("你想买什么？\n");
+
+  if (sscanf(what, "%s from %s", base_item, strip_targ) == 2)
+    what = base_item;
+
+  if (sscanf(what, "%d %s", amount, what) != 2) {
+  ```
+  Also corrected the shop sign's own instructions (`huadian.lpc`'s
+  `gaoshi` item_desc) from the never-working "buy)" to
+  "buy <花名> from ying)", so the in-game text stops teaching players a
+  syntax the mudlib doesn't support.
+- Verified: reproduced both symptoms live pre-fix (missing NPC; then,
+  after fix 1 alone, "您想买什么？" on every `buy <花名> from ying`
+  attempt regardless of the flower name); post-fix, `list` shows all 14
+  flowers with live scarcity/pricing, and `buy hong meigui from ying`
+  correctly matches 红玫瑰 and proceeds to a real `MONEY_D->player_pay()`
+  attempt — it stopped at "穷光蛋，一边呆着去！" (insufficient *cash on
+  hand*) for `linshuang`, whose starting funds are entirely in her bank
+  deposit (`钱庄存款`), not loose cash — a legitimate, expected new-player
+  economy state, not a bug; **a fully successful purchase (cash actually
+  changing hands) was not completed live** — noted explicitly, not
+  silently skipped, per the task's honesty requirement.
+
+**3. `d/city/npc/wizer.lpc:22` and `d/jh/shengji.lpc:17` — a hard
+compile-blocking type error (`exert_function(<int>)` where the function
+requires a `string`) on two NPCs spawned by `d/city/wumiao.lpc`
+(武庙/Wu Miao, one of this lib's `START_ROOM` fallback destinations and
+`quit.lpc`'s own forced respawn point for any indoor quit) took down the
+room's ENTIRE first-ever compile this boot — new login landed with
+literally no environment at all.**
+- Symptom, reproduced live pre-fix: relogging in after a clean `quit`
+  from an indoor room landed the character with `look` showing "你的四
+  周灰蒙蒙地一片，什么也没有。" (driver's own `!environment(me)` fallback
+  text, `cmds/std/look.lpc:143`) and every movement command failing with
+  "你哪里也去不了。" (`cmds/std/go.lpc:57`'s `!environment` check) — the
+  player was never actually placed in ANY room, matching the shape of
+  AGENTS.md §7.22 (a first-visit-only environment-less login) even
+  though the specific mechanism here is a compile error, not an
+  eval-cost abort.
+- Root cause: `inherit/char/npc.lpc:155`'s `exert_function(string func)`
+  ("Let the npc exert his/her enabled force" during idle chat) was
+  called as `exert_function(1000)` in `wizer.lpc` and
+  `exert_function(10)` in `shengji.lpc` — an integer where the direct
+  (non-`->`) call requires a string, a hard compile error on this driver
+  (AGENTS.md §8.5's exact class). Both are copy-pasted from the same
+  template (identical `chat_chance`/`title`/`exert_function(N)`/
+  `chat_msg`/`gender`/`combat_exp`/`max_neili`/`force` shape) — a
+  genuine archive-native typo (this NPC never compiled correctly even on
+  the original live server; not something this project's conversion
+  introduced). `debug.log` showed the compile error rooted exactly here:
+  `/d/city/npc/wizer.lpc:22:22: error: Bad type for argument 1 of
+  exert_function ( string vs int )`. `wumiao.lpc`'s `reset()` spawns
+  `wizer` as one of five `objects` entries; the failed compile appears
+  to have aborted the room's own first-ever load rather than merely
+  skipping the one broken NPC (exits, otherwise set via plain `set()`
+  calls before `setup()` even runs, were also missing on the broken
+  visit — consistent with `load_object(startroom)` itself throwing and
+  being caught by `enter_world()`'s own `catch()`, which then fell
+  through to a *second*, independently-buggy path, see bug 4 below).
+- Fix: removed the erroneous `exert_function(N);` call from both files.
+  It's purely a cosmetic ambient-chat behavior (per its own doc comment)
+  with no other effect on the NPC — deleting it is strictly safer than
+  guessing which string the author actually meant.
+- Verified: post-fix, `debug.log` shows only pre-existing unused-variable
+  warnings for both files, no `error:` line; a fresh visit to `武庙`
+  (first-ever this boot) rendered its real description, all 4 exits, and
+  all 5 NPCs (including 大魔道士--雅薇丝/Wizer) correctly; a fresh visit
+  to `/d/jh/shengjiroom` (南, off 武庙) likewise rendered 升级师
+  correctly with no error.
+
+**4. `adm/daemons/logind.lpc:892` — `int i = random(4);` indexes
+`start_room` (a 1-element array) out of bounds 3 times out of 4,
+whenever the array is actually touched (a broken/missing custom
+`startroom`, or the ghost/`DEATH_ROOM` respawn branch).**
+- Not independently reproduced live (bug 3's fix removed the one path
+  that was actually exercising it this pass), but confirmed by direct
+  code inspection: `start_room = ({ "/d/city/wumiao" })` (single entry,
+  presumably trimmed down from a larger pool at some point in the
+  archive's own history — same "stale content left over from an earlier
+  version of the game" shape as AGENTS.md §7.18, here affecting an array
+  size rather than a path) while every one of its 4 use sites in
+  `enter_world()` indexes it with `i = random(4)`. This driver's default
+  range-checking (`old range behavior : 0` per `debug.log`'s boot
+  banner) throws a real error on an out-of-bounds array read rather than
+  silently returning 0 — so any future login that legitimately falls
+  into this branch (e.g. a corrupted custom `startroom`, or a ghost
+  respawn) would hit the same "aborts partway through `enter_world()`,
+  player ends up with no environment" failure as bug 3, from an
+  unrelated trigger. Fixed proactively alongside bug 3 since it's the
+  same failure *shape* (and literally the fallback path bug 3's login
+  failure would have fallen through to, had `wizer.lpc`'s compile error
+  actually thrown past `wumiao.lpc`'s own `setup()` rather than being
+  contained there — the two bugs are adjacent, not confirmed to be the
+  same event).
+- Fix: `int i = random(4);` → `int i = random(sizeof(start_room));` —
+  sizes the random draw to the array's real length instead of a stale
+  hardcoded `4`; behavior-preserving for the current 1-element array
+  (`random(1)` always yields the only valid index `0`) and automatically
+  correct if `start_room` ever grows back.
+- Verified: code-review only (safe, minimal, behavior-preserving change;
+  the specific crash shape it guards against is bug 3's, already
+  reproduced and re-verified fixed above).
+
+### What was tested and confirmed working
+
+- **Registration**: real Chinese name (林霜/`linshuang`), full flow (id
+  → confirm-new → Chinese name → admin password ×2 → normal password ×2
+  → talent roll (`0`=random, accepted) → email → gender) — reached the
+  actual game world (世外桃源 entry room) correctly; re-verified with a
+  second character (陈牧/`chenmu`) after the printf-leak fix, confirming
+  the leaked-object-dump bug is gone on both the random-name and
+  typed-name branches.
+- **Personality/`born` flow**: all 4 entry-room exits correctly grant
+  their respective personality (`east` → 陆天抒 → 光明磊落, confirmed
+  live for both test characters); `out` → 阎罗殿 (Yanluodian) →
+  `born 扬州人氏` correctly relocates into `/d/city/kedian` (有间客栈,
+  matching the `fly yz` alias target) and grants the starting outfit.
+- **Newbie gift shortcut** (the *direct* skill-acquisition path,
+  `doc/help/intro`'s documented `ask shizhe about 江湖`): grants
+  `literate` 1000 plus `blade`/`dodge`/`force`/`parry`/`sword`/`unarmed`
+  at 300 each, plus stat/potential/exp/money boosts and two weapon
+  clones — reproduced live, correct output, `skills` confirms all 7
+  entries at the right levels.
+- **Organic teacher-NPC path** (the *indirect* skill-acquisition path):
+  `d/kungfu/class/shaolin/qing-wu.lpc` (清无比丘, 少林派第四十代弟子,
+  reachable via `fly sl` → `east`) auto-recruits any male player with no
+  stat gating (`attempt_apprentice()` only checks gender) — `bai qingwu`
+  correctly ran the full `apprentice.lpc` flow (pending → NPC's own
+  `attempt_apprentice()` → `recruit`), `score` showed the new 师傅/称谓
+  immediately, and `xue qingwu force 5` (the real `learn` command)
+  correctly deducted potential and raised `force` to level 1 — the
+  organic teacher path works end-to-end. (Every *sect-master*-tier
+  teacher checked for the same test — 岳不群/Huashan requires `int>=20`,
+  张三丰/Wudang requires `shen>=5,000,000` + `int>=150` +
+  `taiji-shengong>=100`, several others require `weiwang>=50` — all
+  correctly gated far beyond a fresh newbie's reach, matching
+  `doc/help/newbie`'s own advice not to bother with formal apprenticeship
+  before reincarnating; 清无比丘 is the one genuinely-newbie-accessible
+  teacher found.)
+- **Combat / safe sparring**: no dedicated accept_fight-mirroring
+  training dummy exists in this lib (checked; none of the
+  `accept_fight()` implementations found via grep match that shape —
+  unlike `bxsj`/`xiyouji`'s 木人). The lib's actual safety mechanism is
+  structural: `fight`/`hit` (as opposed to `kill`) halt automatically
+  once either side drops to ~50% resources and never escalate to death
+  (`doc/help/combat`, confirmed live) — `fight qingwu` (against
+  `chenmu`'s own newly-sworn low-tier master, `combat_exp` 5000)
+  produced a normal turn-by-turn combat log, several real hits, exp/
+  potential gains, and `force` improving mid-fight, then halted cleanly
+  with `hp` afterward showing full, undamaged qi/jing — no crash, no
+  danger.
+- **Shop / economy**: see bug 2 above — `list` and item-matching now
+  work correctly; a full successful purchase (real cash changing hands)
+  was **not completed live** because `linshuang`'s starting funds are
+  entirely bank-deposited, not cash-on-hand — noted explicitly rather
+  than silently skipped.
+- **`quit`**: reproduced clean on every attempt across this pass (from
+  both indoor and outdoor rooms, both before and after all 4 fixes) —
+  `debug.log` grepped after every single `quit` in this session, zero
+  `error:`/`Too deep recursion`/eval-cost lines at any point.
+- **Unclean disconnect (net-dead) + reconnect**: this lib's `net_dead()`
+  (`obj/user.lpc:88`) does **not** park the player in any void/holding
+  room — it just stops the heartbeat and leaves the object exactly where
+  it was, remembered via ordinary `environment()`, with a real
+  `reconnect()` (`obj/user.lpc:100`) that `adm/daemons/logind.lpc`'s own
+  `reconnect()` genuinely calls (`grep -rn "->reconnect("` confirms one
+  real call site, unlike the AGENTS.md §7.20 "nothing ever calls it"
+  shape). Verified correct both **promptly** (every mudclient.py session
+  after the first in this whole pass was itself an implicit net-dead
+  reconnect, since the tool closes its socket without sending `quit` —
+  location/stats/inventory correct every single time) and after a
+  **real ~100-second wall-clock wait** (explicit test: logged in, let
+  the connection lapse, blocking-waited 100 real seconds, reconnected —
+  same room, same stats, same inventory, "重新连线完毕" reconnect
+  message, no void-stranding). This lib does **not** exhibit the
+  §7.20 bug class.
+- **Clean-quit persistence across a real wait**: `quit` → real ~30-35
+  second wall-clock wait → reconnect went through the full fresh-login/
+  `restore()` path (not net-dead reconnect, since `quit` genuinely
+  `destruct()`s the player object) — location (`startroom`, correctly
+  either the actual outdoor room or `d/city/wumiao` for an indoor quit,
+  per `quit.lpc`'s own rule), skills, stats, and inventory all restored
+  correctly.
+
+### Not verified live (explicit, not silently skipped)
+
+- **A fully successful shop purchase** (cash actually changing hands) —
+  blocked by `linshuang` having no loose cash, only bank deposit; the
+  purchase-matching bug itself (bug 2) IS confirmed fixed and live-
+  reproduced up to the affordability check.
+- **Combat leading to a real fight loss / unconsciousness / death and
+  the respawn/`DEATH_ROOM` flow** — `doc/help/newbie` and `doc/help`'s
+  own economy notes make clear that reaching a genuine, deliberately-
+  outmatched fight (or the `kill` command specifically) requires
+  substantial grinding/travel investment beyond this pass's time
+  budget; not attempted. `DEATH_ROOM`/ghost-respawn code was read (see
+  bug 4's writeup) but not exercised live.
+- **`start_room[i]` out-of-bounds (bug 4)** — fixed proactively by code
+  shape-match to bug 3, not independently reproduced live (see bug 4's
+  own note for why).
+
+### Process hygiene
+
+Native driver (`build-debug/src/driver config.fluffos`), restarted 5
+times total to pick up each in-place fix; every restart verified against
+`ps aux | grep "driver config"` + `readlink -f /proc/<pid>/cwd` before
+touching any PID, and RSS spot-checked between restarts (peaked around
+~590MB after a longer no-restart stretch, never ran away) per the
+process-hygiene requirement. Final driver process killed cleanly at the
+end of this pass; confirmed dead via `ps -p`.
