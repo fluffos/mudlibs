@@ -2907,19 +2907,27 @@ base-first):
   mudlib; expect §6.1 include fixes, §8.1, §7.12 message wrappers,
   §4.3 collisions): `es1_win`/`esI` (008); and ES II-derived but
   distinct games: `xkx2001`/`beimeixiakexing2001` (017), `xuanjianlu`
-  (046), `rzrmud` (016), `wuhanzhan` (040), `haiyang2` (043),
-  `huoying` (044, Neolith), `shenzhou` (048), `shenmo` (049, Neolith),
-  `zitengzhan` (051), `zhongjidiyu` (052), `xixingzhanji` (054),
-  `tiexuejianghu` (056), `suiyuanxijianlu` (057), `mohuanshiji` (058),
-  `yueyingqiyuan` (037), `xinkuangxiangkongjian2`/`kuangxiangkongjian`
-  (036), `yuxuechongsheng` (042, hybrid ES/nitan),
-  `xiakexinzhuan2` (028), `dongfanggushi2` (022).
+  (046), `rzrmud` (016), `wuhanzhan` (040), `haiyang2` (043)
+  with confirmed derivative `hymud` (043-1, byte-diff confirmed same
+  codebase), `huoying` (044, Neolith), `shenzhou` (048),
+  `shenmo` (049, Neolith), `zitengzhan` (051), `zhongjidiyu` (052),
+  `xixingzhanji` (054), `tiexuejianghu` (056), `suiyuanxijianlu` (057),
+  `mohuanshiji` (058), `yueyingqiyuan` (037),
+  `xinkuangxiangkongjian2`/`kuangxiangkongjian` (036),
+  `yuxuechongsheng` (042, hybrid ES/nitan), `xiakexinzhuan2` (028),
+  `dongfanggushi2` (022), `zuizhonghuanjing` (061, explicit in-game
+  credit: "FF 的 MUD 函數庫改寫自東方故事 II" — a small, distinctly-
+  shaped ES2 extension by a different author ("Spock"), not a
+  derivative of any other single member here).
 - **西游记 / xiyouji.org branch of ES II** (§6.6's convertd Greek table,
   §7.6 mirror-site gates): `xiyouji` (010, the ancestor snapshot) with
   `fluffos_xiyou2000`, `xiyouji2003`, `xiyouji450`, `xiyouji2006`;
   `mhxy`/`menghuanxiyou2002` (012, 梦幻西游 branding);
   `shenmo` (049) is a far-evolved fork; `wuhanzhan` (040) a 大话西游
-  sibling.
+  sibling; `aoxiangtianji` (063) is another far fork — rebranded from
+  an old 西游记 base (login banner/system strings still literally say
+  "西游记"/"Xi You Ji" in places despite the game itself being
+  翱翔天际-branded throughout).
 - **yh2003**: `yanhuangwuhun`/`yanhuangyingxiongshi` (045).
 - **金庸群侠传 engine**: `jinyongqunxiazhuan2008` + `_std` + `_deluxe`
   + `2015` + `xiakexing3` (031) — engine layer frozen across 7 years,
@@ -2957,12 +2965,22 @@ base-first):
   `xingzhanyingxiong` (002), `chidi` (005), `xiakexing2017` (013),
   `tianxia` (034), `tianxiawuxue` (035), `xiakeyingxiong3` (029),
   `chongshengdeshijie` (055, GPLv2 BIG5 life-sim, custom dispatcher —
-  nothing ports in or out).
+  nothing ports in or out), `sanjiechuanshuo` (059) and
+  `sanjieshenhua` (060, "三界神话") — share only their "三界" branding,
+  NOT a lineage pair (diff-confirmed: `master.lpc`/`securityd.lpc`/
+  `logind.lpc` all differ substantially in size and shape between the
+  two), `niaoren` (062, an ES-family/xkx-shaped codebase per its own
+  config layout, but NOT diff-confirmed as the same lineage as either
+  the ES2/Annihilator family above or the XKX family — different
+  `master.lpc`/daemon shapes and no shared copyright header against
+  `huoying`; treat as unclassified until someone actually diffs it
+  against `xkx2001`/`xuanjianlu`).
 
-Ten archive files are byte-identical duplicates of another archive
-(browser "(1)" copies) — they share their sibling's number in
-`lib_numbering.json` (`duplicate_of` field) and were never processed
-separately.
+14 archive files are byte-identical duplicates of another archive
+(mostly browser "(1)" copies, plus a couple of differently-named same-
+content repacks like `Naruto.rar`/`huoying`) — they share their
+sibling's number in `lib_numbering.json` (`duplicate_of` field) and
+were never processed separately.
 
 ---
 
