@@ -142,3 +142,336 @@ python3 ../../scripts/mudclient.py 127.0.0.1 40009 --timeout 10 --send "" --send
 - **Save files to force-add** (untracked, NOT gitignored):
   `libs/es1_win/work/data/std/connection/f/fluffos.o`,
   `libs/es1_win/work/data/std/user_ob/human/f/fluffos.o`.
+
+## 深度功能测试 / Deep functional test (2026-07-24)
+
+First real *playthrough* pass (AGENTS.md §10.7) — every prior pass on
+this lib had only verified registration + `look`/`score`/`quit` + admin
+login, never a continuous real playthrough. Native driver
+(`build-debug`), one continuous session per checklist item, with
+several deliberate net-dead disconnect/reconnect probes. Test
+characters (both **kept**, not cleaned up, as evidence):
+- `Shenqingxue` / 沈清雪 (id `shenqingxue`), password `TestPass123`,
+  human female, adventurer class. Primary playthrough character: fought
+  and killed a `野狗`(dog) at 远风镇西门, ended with 695 exp, 14/30 HP,
+  currently sitting in `/d/adventurer/hall/adv_guild` after a clean
+  `quit`. Save files: `work/data/std/connection/s/shenqingxue.o`,
+  `work/data/std/user_ob/human/s/shenqingxue.o`.
+- `Muyunlan` / 沐云岚 (id `muyunlan`), password `TestPassX9`, human
+  male. Created specifically to reproduce the net-dead-during-
+  registration bug below (see "Bugs found and fixed" #1); currently
+  parked normally in `/d/adventurer/hall/adv_guild`. Save files:
+  `work/data/std/connection/m/muyunlan.o`,
+  `work/data/std/user_ob/human/m/muyunlan.o`.
+
+**Correction to this file's own earlier "How to run" section**: `log
+directory : /log` in `config.fluffos` resolves against the driver's
+LAUNCH cwd, not the mudlib root (AGENTS.md §5.2) — with the documented
+`cd libs/es1_win && driver config.fluffos` invocation, debug.log lands
+at `libs/es1_win/log/debug.log`, **not**
+`libs/es1_win/work/log/debug.log` (a long-stale file left over from an
+earlier era/invocation convention that this pass initially — and
+wrongly — kept checking for several rounds before noticing it never
+changes). Use the top-level `log/` path when grepping for errors on
+this lib.
+
+### Bugs found and fixed
+
+**1. Net-dead disconnect during the registration Q&A permanently
+strands the account in the net-dead holding room on every future
+login — `std/user.lpc:902` `restart_heart()`.**
+
+- Symptom: a player who disconnects (network drop, not `quit`) at ANY
+  point between `newuserd.lpc`'s `get_real_name()` (which calls
+  `body->setup()`, printing the MOTD news and the "[请按 RETURN 键继续]"
+  prompt) and that prompt's own `complete_setup()` callback actually
+  placing them in the world — i.e. anywhere in the ordinary gap between
+  finishing the registration questions and pressing RETURN to continue
+  — reconnects, on every future login, directly into
+  `/d/std/rooms/netdead` ("时间的缝隙", the lib's net-dead holding
+  room/portal hub), permanently. Nothing else in the login flow ever
+  routes them anywhere else again — `get_password()`'s "existing body
+  found, not interactive" branch (`adm/daemons/logind.lpc:323-328`)
+  just calls `body->restart_heart()` unconditionally. Reproduced live
+  end-to-end with a fresh character (`Muyunlan`): registered through
+  the "[请按 RETURN 键继续]" prompt, let the connection close without
+  answering it (a realistic disconnect point — the exact same "one more
+  screen before real gameplay" moment any client crash or network drop
+  could hit), reconnected with the correct password, and landed
+  straight in "时间的缝隙" — confirmed via the room's own
+  `d/std/rooms/netdead.lpc` `set_short()` string, and via the player's
+  own `.o` save file having no `"linkdead_room"` key at all (only ever
+  written when `net_dead()`'s `env` is non-null). The room does have an
+  undocumented escape (`enter door`), but it's a random teleport to one
+  of six hardcoded coordinate rooms that ALSO immediately deducts 10%
+  of the player's current HP on "landing" — actively harmful for a
+  fresh, zero-inventory, zero-experience character, and undiscoverable
+  without reading source.
+- Root cause: `std/user.lpc`'s `net_dead()` (~line 843) always calls
+  `move_player(LINKDEAD_ROOM, "SLIENCE")` as a fallback holding pen, but
+  only records `set("linkdead_room", env)` `if (env)` — i.e. only if the
+  player already had a real environment when they went net-dead. A
+  player who disconnects during the registration Q&A/MOTD gap has
+  never been placed in ANY room yet (`complete_setup()`, the function
+  that actually does `move(start_room)`, hasn't run), so `env` is null,
+  `linkdead_room` never gets set, and `restart_heart()`
+  (`std/user.lpc:902`) — the function that's supposed to restore a
+  net-dead player's pre-disconnect location — has nothing to restore
+  to and just leaves them sitting in `LINKDEAD_ROOM` with no further
+  recovery path. Same general shape as AGENTS.md §7.21 ("reconnecting
+  mid a mandatory pre-gameplay wizard permanently strands a player" —
+  `input_to()` chains don't survive `net_dead()`/reconnect, and nothing
+  else re-triggers the interrupted flow), but a different lineage and a
+  meaningfully different concrete manifestation: §7.21's instance
+  blocks EVERY command behind a catch-all after reconnect; this one
+  doesn't block anything — the player can move, talk, fight — they're
+  just permanently misplaced in a hazardous portal room instead of
+  their intended start room, with no error or warning ever shown.
+- Fix (`std/user.lpc:921-932`, inside `restart_heart()`): when
+  `linkroom` is unset, check whether the player is currently sitting in
+  `LINKDEAD_ROOM` anyway (the only way that combination can happen is
+  the never-placed-yet case above) and, if so, call
+  `this_object()->complete_setup("")` — the exact same function the
+  original "press RETURN" prompt would have called — to finish the
+  interrupted placement. Before/after:
+  ```lpc
+  // BEFORE
+    linkroom = (object)this_object()->query("linkdead_room");
+    if (linkroom) {
+      this_object()->move_player(linkroom, "SNEAK");
+      tell_room(linkroom, ...);
+    }
+
+  // AFTER
+    linkroom = (object)this_object()->query("linkdead_room");
+    if (linkroom) {
+      this_object()->move_player(linkroom, "SNEAK");
+      tell_room(linkroom, ...);
+    } else if (base_name(environment(this_object())) == LINKDEAD_ROOM) {
+      this_object()->complete_setup("");
+    }
+  ```
+- Verified: reproduced pre-fix exactly as described above (character
+  `Muyunlan`, first reconnect landed in "时间的缝隙" with the debug.log
+  showing no error at all — this is a genuinely silent stranding, zero
+  log signal, matching the AGENTS.md §7.20 detection warning). Restarted
+  the driver with the fix, re-registered `Muyunlan` fresh, stopped again
+  at the same "[请按 RETURN 键继续]" prompt without answering, waited
+  for the driver to notice the disconnect, reconnected with the correct
+  password: now lands correctly in `/d/adventurer/hall/adv_guild` (the
+  real `START` room), `目前权限：player` prints as on a normal fresh
+  login, `look`/`score` both correct. Also re-verified the NORMAL
+  net-dead path (disconnect/reconnect while ALREADY placed in a real
+  room, both promptly and after a real 75-second wall-clock wait) is
+  unaffected and continues to restore the exact pre-disconnect room —
+  see "Net-dead and reconnect testing" below.
+- Lineage note: `esI` (this lib's documented sibling, AGENTS.md §11)
+  shares the identical `net_dead()`/`restart_heart()`/`LINKDEAD_ROOM`
+  shape (same TMI/ES ancestry) and was not checked/fixed here — flagged
+  for the orchestrating session to port if it does the same lineage
+  sweep it's done for other bugs found this round.
+
+**2. `#include <compress_obj.h>`'s `set_default_ob(__FILE__)` points
+every affected clone at the wrong file, crashing on any property
+lookup that falls through to it — already-cataloged AGENTS.md class
+§7.14 ("`__FILE__` in an `#include`d fragment expands to the
+FRAGMENT's path, not the includer"), previously seen on `xlqy_early`/
+`longyunmeng`; this is a new (fixed) instance of the same class.**
+
+- Symptom, reproduced live: a fresh character standing in the one shop
+  in the game (`/d/noden/farwind/shop`, reachable straight from the
+  start room) typing the ordinary `list` command to see what's for
+  sale crashed with a real, on-screen, **uncaught-looking** runtime
+  error (driver's default handler did catch it, but the trace printed
+  straight to the player, not silently swallowed):
+  ```
+  执行时段错误：*call_other() couldn't find object '/include/compress_obj.h'.
+  程式：/std/object/ob.lpc 第 127 行
+  物件: /obj/bandage#40
+  ```
+  Every item in this lib that inherits only the lightweight
+  `/std/object/ob` base (checked: `obj/bandage.lpc`, `obj/bowl.lpc`,
+  `obj/torch.lpc`, `obj/map.lpc`, `obj/bag.lpc`, `obj/light_ball.lpc`,
+  and ~35 more across `d/`/`u/`, one `grep -rl compress_obj` away) is
+  affected, since `set_default_ob()`'s stored value is consulted
+  (`std/object/prop.lpc:126-127`, `value = default_ob->query(label)`)
+  on ANY property read that isn't already set directly on the specific
+  clone — trivially reachable any time such an item's price/weight/etc.
+  needs to be displayed, which is exactly what a shop's `list` does for
+  every item it sells.
+- Root cause: `include/compress_obj.h` is a bare code FRAGMENT (no
+  function wrapper) meant to be pasted, via `#include`, into the very
+  first line of ~40 different objects' `create()` bodies, to make each
+  one register itself as its own memory-saving "default value" fallback
+  target. Its `set_default_ob(__FILE__)` line assumes `__FILE__`
+  resolves to whichever OUTER file it was pasted into (e.g.
+  `/obj/bandage`) — but on this driver `__FILE__` tracks the PHYSICAL
+  file currently being lexed, which while processing this fragment's
+  own text is the fragment itself, `/include/compress_obj.h`, regardless
+  of where it was `#include`d from. Every one of the ~40 affected
+  objects' blueprints therefore silently self-registers as
+  "`/include/compress_obj.h`" (a header, never a loadable/compilable
+  LPC object) instead of their own real path — inert until the first
+  property lookup that actually needs the fallback, at which point
+  `call_other("/include/compress_obj.h", "query", label)` throws.
+- Fix (`include/compress_obj.h:6-15`), matching AGENTS.md §7.14's
+  documented remedy (there: swap in `file_name(this_object())`; here:
+  `base_name(this_object())`, since `set_default_ob` wants the
+  BLUEPRINT's bare path for `call_other()`, not `file_name()`'s
+  clone-numbered variant):
+  ```lpc
+  // BEFORE
+  if ( clonep(this_object()) ) {
+      set_default_ob(__FILE__);
+      return;
+  }
+
+  // AFTER
+  if ( clonep(this_object()) ) {
+      set_default_ob(base_name(this_object()));
+      return;
+  }
+  ```
+  `base_name(this_object())` is evaluated at RUNTIME inside the actual
+  compiling object's own `create()`, so it always correctly resolves to
+  whichever real file (e.g. `/obj/bandage`) the fragment was pasted
+  into, regardless of the header's own physical path.
+- Verified: reproduced the crash live pre-fix exactly as above (shop
+  `list` with a `bandage` in stock). Applied the one-line header fix,
+  killed and rebooted the native driver, re-ran the exact same
+  `Shenqingxue` → walk to shop → `list` sequence: full item list now
+  renders cleanly (油灯/绷带/魔法地图/火把 with prices), no error, no
+  new debug.log line. Also exercised `buy torch`/`value torch` (correct
+  "you don't have money"/"you don't have that" responses, no crash) —
+  a genuine purchase wasn't completed since the character has no
+  starting money and none was farmed for this pass; see "Not verified
+  live" below.
+- Lineage note: `esI`'s `include/compress_obj.h` is byte-identical and
+  unfixed (checked, not touched) — same flag as bug #1 above, for the
+  orchestrating session's lineage sweep.
+
+### What was tested and confirmed working
+
+Full continuous playthrough as `Shenqingxue` (real Chinese name, human
+female adventurer), covering the whole §10.7 checklist:
+
+- **`help start`** (`doc/help/c_start`) read first — this lib's own
+  newbie guide, matches the classic TMI/Discworld-family help-file
+  house style (`c_about`, `c_rules`, `c_help_screen`, etc., all real,
+  substantial Chinese content, not filler). Correctly documents the
+  guild-room `cost`/`advance`/`train`/`list`/`join` command set as the
+  organic skill/attribute path (no NPC-dialogue teacher in this lineage
+  — the "teacher" IS the guild room itself) and gives the real
+  starting-zone layout (远风镇/冒险者公会).
+- **Registration**: full flow (English login id → confirm new name →
+  Chinese display name → password/confirm → gender → race → email →
+  real name → MOTD/RETURN) reached the real start room,
+  `/d/adventurer/hall/adv_guild`, correctly.
+- **`look`/`score`/`i`**: all correct at every state change (fresh
+  registration, post-training, post-combat, post-reconnect).
+- **Guild skill/attribute training** (this lineage's organic path —
+  no NPC teacher, the guild room's own `cost`/`advance`/`train`/`list`
+  commands, per `std/guild.lpc`): `list` showed the adventurer guild's
+  7 trainable skills with real costs; `cost` showed the real
+  attribute/skill upgrade table; `advance str` correctly rejected for
+  insufficient "usable" exp (678 total vs 389 needed from a smaller
+  advance-pool) while `train unarmed` succeeded, correctly deducting
+  exp and printing "你的空手搏斗技能现在提升到 1 了。" — the two-tier
+  exp economy (total exp vs. per-level advance-pool) behaves as
+  documented.
+- **`join`**: tested at the already-joined adventurer guild — correctly
+  replied "你已经是本公会的成员了！" rather than silently no-opping;
+  no separate sect/faction system exists beyond the four documented
+  guilds (adventurer/mage/healer/knight/monk per `help start`), each
+  gated behind the same `join`-in-guild-room mechanic.
+- **Exploration**: walked 远风镇冒险者公会 → 大街 → 商店/广场/微风路/
+  西门, reading room `.lpc` source to resolve exits/navigation puzzles
+  (notably the smithy's boxes→ladder→climb sequence, which needs a
+  light source the character can't afford — see "Not verified live").
+  This lib's virtual-object convention (`_smain.lpc`/`_nmain.lpc` style
+  underscore-prefixed real files served under their unprefixed name via
+  each zone's own `virtual/server.lpc`, a genuine TMI feature, not a
+  bug) confirmed working correctly throughout.
+- **Combat**: no dedicated safe-sparring dummy exists in this lib
+  (`grep -r accept_fight` returns zero hits anywhere in the tree, and
+  `doc/wizhelp/c_combat` is pure mechanics documentation, not a
+  practice-target pointer) — used a real level-1 `野狗`(dog,
+  `d/noden/farwind/monster/dog.lpc`, `set_level(1)`, low stats) at
+  远风镇西门 instead, per the checklist's fallback of picking a
+  deliberately weak wild target. `consider`/`kill` both worked; full
+  turn-by-turn combat resolved correctly (accuracy/miss/damage/gore
+  messages, `hp` mid-fight status line), character took real damage
+  (26→14 of 30 HP) and the dog died correctly ("狗死了。"), leaving a
+  corpse and awarding exp (605→695). No crash, no over-death, no eval
+  errors.
+- **Net-dead and reconnect testing** (AGENTS.md §7.20/§7.21 checklist
+  item): beyond the bug #1 repro above, separately confirmed the
+  NORMAL case is healthy — disconnected `Shenqingxue` uncleanly
+  (socket close, no `quit`) while she was properly placed in
+  `/d/adventurer/hall/adv_guild` with real HP/exp state, reconnected
+  PROMPTLY: `重新连线完毕`, landed back in the exact same room with the
+  exact same HP (14/30) and exp (695). Repeated with a real 75-second
+  wall-clock wait before reconnecting (via a foreground timed wait, not
+  a backgrounded one): identical correct result, zero new debug.log
+  lines either time.
+- **Quit + debug.log**: every `quit` in this pass (multiple, across
+  different session states) was followed immediately by a grep of the
+  CORRECT `libs/es1_win/log/debug.log` (see the correction note above)
+  — all clean, no new `error:`/`Too deep recursion`/fatal lines, in
+  clear contrast to the compress_obj.h crash, which WAS visibly loud on
+  screen (a good reminder that "on-screen crash" and "logged crash" are
+  two independent signals, not synonyms — neither implies the other on
+  this lib).
+- **Clean-quit relogin**: quit cleanly, reconnected fresh (full
+  registration-shaped relogin path, not the net-dead reconnect path) —
+  correctly restored to the guild room with all state (HP/exp/skills)
+  intact, confirming `complete_setup()`'s `start_room =
+  getenv("START")`-then-guild-room design intentionally always
+  restarts a fresh session at the player's guild rather than their
+  exact last room (distinct from, and not to be confused with, the
+  net-dead reconnect path's exact-room restore).
+
+### Not verified live (explicitly)
+
+- **A completed shop purchase**: `Shenqingxue` starts with zero money
+  (身无分文) and no in-session way to earn any was pursued within this
+  pass's time budget; `buy`/`value` were exercised and behave correctly
+  (proper rejection messages, no crash) but no item was actually
+  bought. Code review of `std/seller.lpc`/`shop.lpc` suggests the buy
+  path is otherwise ordinary and low-risk, but this is not the same as
+  a live-verified purchase.
+- **Death and respawn**: the one real fight run to completion was
+  survivable (14/30 HP remaining at the end); deliberately losing a
+  fight to reach the death/ghost/respawn flow was not attempted this
+  pass — reason: time budget, not because it looked risky or was
+  avoided for any code-quality concern.
+- **An UNRESOLVED, likely-real but NOT root-caused timing anomaly**:
+  on a handful of repro attempts, the FIRST movement command issued
+  immediately (within 1.5-3 real seconds) after moving into a room
+  being compiled for the very first time this boot (e.g. `east` from
+  `/d/adventurer/hall/adv_guild` into `/d/noden/farwind/_smain.lpc`
+  right after a fresh driver boot) sometimes failed silently (the
+  command never appears to reach `std/user/tsh.lpc`'s `push_cmd()` at
+  all — confirmed once via temporary instrumentation, then reverted)
+  or produced the driver's generic default-fail message instead of
+  actually moving. The SAME sequence against an already-warm room (one
+  any player has visited since boot) was reliable across every attempt
+  (7+), and a longer 3-second gap between commands did NOT reliably
+  fix it, which argues against this being purely a `mudclient.py`
+  send-pacing artifact. This has the same general "first-ever compile
+  this boot only" timing-sensitivity shape as AGENTS.md §7.17/§7.19/
+  §7.22, but a different concrete symptom (an apparently-dropped queued
+  player command, not a crash or corrupted state) that doesn't cleanly
+  match any of those three, and repeated attempts to get a clean
+  instrumented trace of an actual FAILING run were unsuccessful (adding
+  `write()` instrumentation itself changes the timing enough that the
+  instrumented runs happened not to reproduce it). Given the real-world
+  impact is narrow — only the very first player to explore a given room
+  after each server restart, and only if they move unusually fast for
+  the first couple of commands after arriving — this was left
+  UNFIXED and is reported here rather than silently dropped, for
+  whoever next has time to pin it down with a cleaner reproduction
+  setup (a raw packet-capture of the two client sends plus driver-side
+  socket-read logging would likely settle whether this is input
+  coalescing during a slow synchronous first-compile, which was this
+  pass's leading but unconfirmed hypothesis).
