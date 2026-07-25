@@ -504,3 +504,289 @@ ported both fixes here proactively (dropped `private` on
 triggered visibly in this lib's own 200s window. Retest: fresh
 registration (id `zjdsanb`) into 世外桃源, look/score(pre-投胎
 message)/quit clean, no regressions.
+
+## 深度功能测试 / Deep functional test (round two, per AGENTS.md §10.7)
+
+Native driver only (`~/src/fluffos/build-debug/src/driver config.fluffos`
+from `libs/zhongjidiyu/`), `scripts/mudclient.py --idle 0.5-0.6` throughout
+(this lib's live per-second clock prompt requires it, §15an/AGENTS.md §8.3
+item 1 — reconfirmed still necessary). Read `help/newbie` and `help/intro`
+first, in full, before touching the client — they document the actual
+intended flow precisely: 水笙 `register <email>` → `decide` → walk to one
+of 世外桃源's 4 exits and `out` to pick a 性格/character trait → `out`
+again into 阎罗殿 (Hall of Yama) → `wash` (roll 4 innate stats) → `born
+<地名>` (choose birthplace, triggers reincarnation and moves the player to
+their starting zone). Safe sparring is the ordinary `fight` command
+("较量" — per `help/intro`, stops before either side dies); skill learning
+is `bai` (apprentice) then `xue` (learn) from an NPC teacher; sect/faction
+join happens the same way, via `bai`-ing a sect NPC.
+
+**One continuous session, two test characters** (both left in place as
+evidence): `hufengbo`/秦风 (male, 猛士型, admin password `Admin@2026`,
+regular password `Mud@2026`) and `muyunqing`/林枫 (female, 耐力型, same
+password scheme). Both completed real registration through
+`register`+`decide`+personality-room+`wash` end-to-end, confirmed via
+`look`/`score`/`i` at every step. Admin account `fluffos`/浮云 (seeded by
+an earlier pass) also used, with `goto`, to reach content a fresh player
+account cannot (see below).
+
+**Confirmed still correctly applied, not re-diagnosed as new:**
+- §7.14's `file_size()`-boolean-context fix in `adm/daemons/virtuald.lpc`
+  (`file_size(name + ".lpc") >= 0`, not a bare truthy check) — read the
+  live file, matches the documented fix exactly.
+- §8.3a's `private nomask command_hook` fix in `feature/command.lpc` —
+  confirmed working LIVE via an NPC's own `command()` self-call, not just
+  player-typed commands: 陆天抒 (the 光明磊落 personality-room NPC)
+  correctly greets and speaks via `init()` → `command("hi ...")` /
+  `command("say ...")` the instant a fresh character walks in, and
+  地藏王's own `command("kick ...")`/`command("say ...")` self-calls in
+  阎罗殿 fired correctly too. The 18-handler `adm/npc/luban.lpc` fix
+  wasn't independently re-verified live (费 the feature is gated behind
+  the missing `/d/city` zone, see below) but the file itself still shows
+  all 18 handlers correctly `private`-free.
+
+**Bug found #1 (NEW) — a failed `born` corrupts a real account into a
+permanently no-environment login, and `enter_world()`'s own fallback chain
+doesn't actually catch it.** This is the highest-impact finding of this
+pass. Root cause, two parts, both fixed:
+
+1. `d/register/yanluodian.lpc`'s `do_born()` persisted
+   `startroom`/`born`/`born_family` to the player's SAVE data
+   unconditionally, BEFORE checking whether the destination object
+   actually resolved (`obj = load_object(dest)`/`find_object(dest)`).
+   Since every `born` destination in this skeleton archive points into a
+   missing zone (`/d/city`, `/d/beijing`, etc. — none exist, see gap #2
+   above), literally every `born` attempt "fails" (prints "牛头一呆，
+   搔搔头说：怎么好像有问题...") — but the state was ALREADY written by
+   then. This flips `enter_world()`'s own `!stringp(user->query("born"))`
+   safety net (which would otherwise keep an unborn player parked safely
+   in `BORN_ROOM`/阎罗殿 on every future login) to false, so it stops
+   applying.
+2. `adm/daemons/logind.lpc`'s `enter_world()` then tries to resolve the
+   now-persisted (broken) `startroom`. Its own fallback logic only
+   wrapped `catch(load_object(startroom))`, not the subsequent
+   `user->move(startroom)` — and `load_object()` on a path that simply
+   doesn't exist (with no virtual-object fallback) returns `0` **without
+   throwing**, so the `catch()` sees "no error" and falls into the
+   UNGUARDED `user->move(startroom)`. `feature/move.lpc`'s `move()` does
+   `call_other(dest, "???")` as its very first destination-resolution
+   step, which genuinely throws (`*call_other() couldn't find object
+   '/d/city/kedian'.`) for a nonexistent path — uncaught here, aborting
+   `enter_world()` mid-function. Confirmed live: reconnecting as the
+   already-"born" `hufengbo` printed "你无法进入这个世界，可能你的档案
+   出了一些问题" and then `look` returned "你的四周灰蒙蒙地一片，什么
+   也没有" — the exact §7.22 "no environment at all" symptom, but via a
+   distinct mechanism (neither an eval-cost abort nor a compile error —
+   a plain unguarded `call_other()` inside an un-`catch()`-wrapped
+   `move()`). `score` still worked (doesn't need an environment), which
+   is what made this state look survivable at a glance — `look`/movement
+   were the ones silently dead. This lib's own hardcoded `START_ROOM`
+   fallback (`/d/city/kedian`) is ALSO one of the missing paths, so even
+   the "else" branch's intended recovery was reaching for a target that
+   doesn't exist either.
+
+   **Fix, two parts** (both live-verified — see below):
+   - `d/register/yanluodian.lpc`: moved the `!objectp(obj)` failure
+     check to immediately after `obj` is computed, in BOTH the
+     plain-string and the family/世家 branches, before any `me->set(...)`
+     call. A failed `born` now leaves the account's `startroom`/`born`
+     fields untouched, exactly as if `born` had never been attempted.
+   - `adm/daemons/logind.lpc`'s `enter_world()`: wrapped the actual
+     `user->move(startroom)` in `catch()` too (not just
+     `load_object()`), and added a THIRD fallback level — if even
+     `START_ROOM` fails to load/move into (true on this specific
+     archive), fall back to `BORN_ROOM` (阎罗殿, always present) instead
+     of leaving the player with no environment at all.
+
+   **Live verification**: before the fix, reconnecting as `hufengbo`
+   (who had already `born`ed to a missing destination in a prior session)
+   reproduced the crash exactly as described, with `*call_other()
+   couldn't find object '/d/city/kedian'.` in `debug.log`. After the fix
+   (driver restarted to pick it up), the SAME already-corrupted
+   `hufengbo` account now lands in 阎罗殿 via the `BORN_ROOM` fallback
+   (kicked onward to `虚空`/void by 地藏王's own already-correct "you're
+   already born, get out" NPC logic — a real, pre-existing, working game
+   mechanic, not a bug), and `look`/`score`/movement/`quit` all work
+   normally from there — no more no-environment state. Separately, a
+   FRESH character (`muyunqing`) that ran `wash`+`born <missing dest>`
+   AFTER the fix correctly stayed in the "not yet born" state
+   (`score` → "还没有出生呐，察看什么？", still standing in 阎罗殿 with
+   地藏王 still willing to hand over the newbie book) on both the
+   immediate next command and a later real reconnect — confirming the
+   root-cause fix (part 1) prevents the corruption from happening at all
+   for any new account, while the defense-in-depth fix (part 2) also
+   protects any account that manages to reach a broken `startroom` by
+   some other path. No new `debug.log` errors from any of this.
+
+   Doesn't match any existing catalog entry exactly — closest are §7.14
+   ("missing post-registration destination room... guard the move with
+   load_object()/fallback to START_ROOM") and §7.22 (the "no environment
+   at all" symptom shape) but the specific mechanism (a `catch()` that
+   only wraps the probe call, not the actual unguarded `move()` right
+   after it, PLUS a state-mutation-before-validation ordering bug in the
+   caller) is new. Worth a full write-up as a candidate new §7.x entry —
+   see final report.
+
+**Bug found #2 (matches AGENTS.md §8.3a's addendum exactly, not new) —
+`feature/action.lpc`'s `eval_function()` was still `private`.** Found live:
+`apply() with insufficient permission: ... function: eval_function,
+origin: internal, needs: private, has: hidden` fired in `debug.log` during
+ordinary play (a delayed-effect `call_out` against our own test
+character's body). This is the SAME file and SAME function name as the
+`xuanjianlu`-derived precedent already in §8.3a's addendum ("the shared
+'delayed status effect' primitive used by 130+ kungfu-skill/drug files").
+The lib's own "WASM long-sit boot-watch pass" note (above) proactively
+ported §8.3a's addendum fix for `inherit/item/combined.lpc`'s
+`destruct_me()` and `adm/simul_efun/object.lpc`'s `file_owner()` from
+sibling `zhonghua2`, but missed this THIRD instance — `feature/action.lpc`
+itself apparently wasn't part of that proactive sweep. Fixed identically:
+dropped `private`, kept the function otherwise unchanged. Proactively
+grepped the whole lib (every `call_out("name", ...)` site cross-referenced
+against a same-file `private` declaration of `name`) for any other
+instance — found none: every other flagged hit is a call_out target
+defined in a standalone daemon/NPC/command file that is never `inherit`ed
+elsewhere (confirmed via `grep -rl 'inherit.*"<path>"'`), so the
+DECL_PRIVATE→DECL_HIDDEN-once-inherited mechanism doesn't apply to them.
+
+**Bug found #3 (matches AGENTS.md §7.25 exactly, not new, but a genuinely
+new instance/location) — `inherit/room/room.lpc`'s shared
+`make_inventory()` had no guard, crashing the ENTIRE afterlife zone's
+first-ever visit.** `d/death/npc/wgargoyle.lpc` ("白无常") and
+`d/death/npc/bgargoyle.lpc` ("黑无常") both call `set_skill("dodge", ...)`
+in their own `create()` — and this archive's `/kungfu/skill/` directory is
+**entirely absent** (not just the `/d/city`-style zone rooms already
+documented in gap #2 — the base skill-file tree itself is missing, a
+broader gap than previously written up). `feature/skill.lpc`'s
+`set_skill()` correctly `error()`s on a missing skill file, but that
+`error()` fires DURING the NPC's `create()`, which `new()` propagates as
+an uncaught throw — and `inherit/room/room.lpc`'s `make_inventory()`
+(`ob = new(file); ob->set(...); ob->move(...); return ob;`, called from
+every room's `reset()`, lib-wide) had zero `catch()` around any of it.
+Live-reproduced via admin `goto /d/death/gate` (`DEATH_ROOM`, where every
+player death sends them via `feature/damage.lpc`'s `die()`): the room's
+FIRST-EVER `reset()` this boot aborted entirely, so `goto` silently failed
+to move the admin there at all (landed back at start with only a
+`debug.log` trace: `*F_SKILL: No such skill (dodge)`, blamed at
+`wgargoyle.lpc`'s `create()` via `room.lpc`'s `make_inventory()`). Same
+shape independently confirmed for `bgargoyle.lpc` in `/d/death/gateway`.
+
+Fix: wrapped `make_inventory()`'s `new()`/`set()`/`move()` chain in
+`catch()`, returning `0` on any failure (destructing a
+partially-constructed object first if `new()` itself did return one); and
+guarded the ONE call site in `reset()`'s `case 1:` branch that
+dereferenced the result without an `objectp()` check
+(`ob[list[i]]->is_character()`) — the `default:` (multi-object) branch
+already `continue`d past the equivalent dereference for a freshly-`(re)`-
+made entry, so it didn't need the same guard. **Live-verified this
+unblocked the ENTIRE death/afterlife zone**, not just the one room: after
+the fix, admin `goto` successfully reached and `look`ed at all 8 death-zone
+rooms (`gate`/鬼门关, `road1`/`road2`/`road3`/鬼门大道, `inn1`/小店,
+`inn2`/黑店, `god1`/天堂, `god2`/圣殿, `block`/空房间, `gateway`/酆都城门)
+with zero further errors beyond the two now-gracefully-caught
+missing-skill NPCs — this whole zone is otherwise 100% present and intact
+in the archive, just unreachable-on-first-visit before this fix. Matches
+§7.25's established pattern and fix precisely; the missing `/kungfu/skill/`
+tree itself is left alone as a genuine archive content gap (not
+fabricated) — 白无常/黑无常 simply never spawn, same graceful-degradation
+outcome §7.25 already prescribes for this shape.
+
+**Confirmed content gap, broader than previously documented**: the
+`/kungfu/skill/` directory (referenced by `include/globals.h`'s
+`SKILL_D(x)` macro, `"/kungfu/skill/" + x`) does not exist AT ALL in this
+archive — not one basic skill file (`dodge`, `force`, `unarmed`, etc.,
+all named in `help/newbie`'s own example `cha` output) is present, beyond
+the previously-documented missing `/d/city`-style zone rooms. This means
+even IF a player could reach a populated zone, `xue`/`learn`-style skill
+acquisition would have nothing to actually load. Documented here, not
+fabricated — matches the archive's own "study source, skeleton release"
+disclaimer.
+
+**Safe-sparring / skill-teacher / sect-join — confirmed NOT reachable live,
+by design of this skeleton archive, not a bug.** Every currently-existing
+room in the archive (`d/register/*`, `d/pk/*`, `d/death/*`) explicitly sets
+`no_fight: 1` — the `fight` command (§ help/intro's "较量") is real,
+present, and correctly wired (`cmds/std/fight.lpc` exists and is a normal
+add_action command), but there is no reachable room anywhere in this
+archive where combat is actually enabled. The `bai`(apprentice)/`xue`
+(learn) skill-teacher path and every sect-join NPC live under the missing
+`/d/<sect>` zones (§13/gap #2) and, per the finding above, even the
+underlying skill FILES they'd teach don't exist either. `d/pk/` ("屠人场"
+— a PK tournament arena, `乌老大`'s `sign`/`join` commands) is a distinct,
+unrelated feature (scheduled PvP, not the newbie-doc's safe `fight` spar)
+and is itself a dead end too (`west` exit → `/d/changan/...`, missing).
+Consistent with, and extends, this lib's own already-documented "skeleton
+archive" gap — not attempted to fabricate.
+
+**Shop purchase / combat / death — explicitly NOT tested live, and
+cannot be, given the above.** No shop, no fightable NPC, and no death
+trigger is reachable by an ordinary player account in this archive's
+current content. Code review only: `feature/damage.lpc`'s `die()` calls
+`me->move(DEATH_ROOM)` (`/d/death/gate`, confirmed to exist and — after
+Bug #3's fix — load cleanly) and `DEATH_ROOM->start_death(me)`; this path
+was not exercised by an actual player death since no live combat path
+exists to trigger it.
+
+**`quit` + `debug.log` grep, both unclean (net-dead) and clean-quit
+reconnect, both prompt and after a real wall-clock gap**: all tested, all
+clean.
+- Clean `quit` (both test characters, multiple times): correct "欢迎
+  下次再来！" message, unequipped-item drop logic runs without error
+  (both characters' items were all `equipped`, so the drop loop's
+  `message("vision", ..., environment(me), ...)` call — which is NOT
+  itself guarded by an `environment(me)` check, only by whether any items
+  were actually dropped — was never exercised with a null environment;
+  noted as a theoretical residual risk but not reproduced, see final
+  report).
+- Every `quit` immediately followed by a same-second reconnect attempt
+  correctly hit the documented 30-second quit-retention lockout ("你距
+  上一次退出时间只有N秒钟，请稍候再登录。") — confirms this project's own
+  established §10.7 caveat about the lockout window in practice.
+- Prompt reconnect after an UNCLEAN disconnect (letting `mudclient.py`'s
+  connection simply close without sending `quit`, simulating a network
+  drop): correctly printed "重新连线完毕" and resumed in the exact same
+  room with no state loss — this lib's `net_dead()` (`clone/user/
+  user.lpc`) does NOT use a `VOID_OB`-parking pattern at all (confirmed by
+  reading the code: the player object is simply left in its current
+  environment, heart_beat disabled, and a 900s `user_dump` call_out
+  scheduled) — so the §7.20 "void-parking without a location-restore
+  path" bug class structurally cannot occur here; `reconnect()` just
+  clears the `net_dead` flag and re-enables commands in place. No
+  location-restore step is even needed.
+- Reconnect after a clean `quit` AND a genuine ~50s+ real wall-clock
+  wait (past the lockout): went through the FULL fresh-login code path
+  (login banner + "你上次光临终极地狱是 ... 连接的" last-visit message,
+  not the short-circuit "重新连线完毕"), landed back in the exact same
+  room/state (`muyunqing`: still 阎罗殿, still un-born, 地藏王 handed the
+  newbie book again since it wasn't in inventory) — full persistence
+  confirmed correct.
+- The full `NET_DEAD_TIMEOUT` (900s / 15 minutes) `user_dump`
+  force-quit-after-abandonment escalation path was NOT exercised live
+  (would require a 15-minute uninterrupted wait) — reviewed via code
+  instead (`clone/user/user.lpc`'s `user_dump()`/`DUMP_NET_DEAD` case:
+  announces the timeout to the room, then `command("quit")` with a
+  `force_quit()` fallback if that fails) and looks correct/unremarkable,
+  but this specific path is unverified live, per §10.7 item 6's
+  explicit-fallback allowance.
+
+## Files touched, this pass
+
+- `libs/zhongjidiyu/work/d/register/yanluodian.lpc` — `do_born()`: check
+  `objectp(obj)` before persisting `startroom`/`born`/`born_family`
+  state, in both branches (Bug #1, part 1).
+- `libs/zhongjidiyu/work/adm/daemons/logind.lpc` — `enter_world()`: wrap
+  `user->move(startroom)` in `catch()` too (not just `load_object()`),
+  add a `BORN_ROOM` last-resort fallback beyond `START_ROOM` (Bug #1,
+  part 2).
+- `libs/zhongjidiyu/work/feature/action.lpc` — `eval_function()`: dropped
+  `private` (Bug #2, matches §8.3a's addendum).
+- `libs/zhongjidiyu/work/inherit/room/room.lpc` — `make_inventory()`:
+  wrapped in `catch()`, returns `0` on failure instead of propagating;
+  `reset()`'s `case 1:` call site guarded with `objectp()` before
+  dereferencing (Bug #3, matches §7.25).
+- Test character saves left in place as evidence:
+  `data/login/h/hufengbo.o` + `data/user/h/hufengbo.o` (秦风, the account
+  that reproduced Bug #1 pre-fix and was re-verified recovering post-fix),
+  `data/login/m/muyunqing.o` + `data/user/m/muyunqing.o` (林枫, registered
+  entirely after the fix, confirms no regression for a clean account).
+  `data/user/f/fluffos.o` (admin) timestamp-touched by ordinary login, no
+  content change beyond `last_on`.

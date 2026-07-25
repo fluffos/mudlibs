@@ -818,12 +818,24 @@ varargs void enter_world(object ob, object user, int silent) {
       file_size(startroom + ".lpc") < 0)
       startroom = START_ROOM;
 
-    if (!catch(load_object(startroom)))
-      user->move(startroom);
-    else {
-      user->move(START_ROOM);
-      startroom = START_ROOM;
-      user->set("startroom", START_ROOM);
+    // The original code only wrapped load_object() in catch() -- but
+    // load_object() returns 0 silently (no throw) for a path that simply
+    // doesn't exist and has no virtual-object fallback (the common case
+    // on this archive's missing zones), so the "success" branch ran
+    // straight into an UNGUARDED user->move(startroom), whose internal
+    // call_other() throws uncaught and aborts enter_world() with the
+    // player left with no environment at all ("你的四周灰蒙蒙地一片").
+    // Wrap the move() itself too, and since even this archive's own
+    // START_ROOM fallback ("/d/city/kedian") doesn't exist, add one more
+    // fallback level to BORN_ROOM (阎罗殿), which is always present.
+    if (catch(load_object(startroom)) || catch(user->move(startroom))) {
+      if (startroom == START_ROOM || catch(load_object(START_ROOM)) ||
+        catch(user->move(START_ROOM))) {
+        catch(user->move(BORN_ROOM));
+        startroom = BORN_ROOM;
+      } else
+        startroom = START_ROOM;
+      user->set("startroom", startroom);
     }
     tell_room(startroom, user->query("name") +
       "连线进入这个世界。\n", ({ user }));

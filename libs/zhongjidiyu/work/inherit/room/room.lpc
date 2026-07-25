@@ -27,9 +27,22 @@ int query_max_encumbrance() { return 100000000000; }
 object make_inventory(string file) {
   object ob;
 
-  ob = new(file);
-  ob->set("startroom", base_name(this_object()));
-  ob->move(this_object());
+  // new() legitimately returns 0 for a file that doesn't exist, but
+  // THROWS for a file that exists yet fails at compile time OR whose
+  // own create() throws a runtime error (e.g. d/death/npc/wgargoyle.lpc
+  // calling set_skill() for a kungfu skill this archive's own
+  // /kungfu/skill/ tree doesn't ship) -- catch() both classes so a
+  // single broken/missing roster entry can't abort this room's entire
+  // reset()/first-ever population. See AGENTS.md §7.25.
+  if (catch(ob = new(file)) || !objectp(ob))
+    return 0;
+
+  if (catch(ob->set("startroom", base_name(this_object()))) ||
+    catch(ob->move(this_object()))) {
+    if (objectp(ob)) destruct(ob);
+    return 0;
+  }
+
   return ob;
 }
 
@@ -91,7 +104,8 @@ void reset() {
     switch (ob_list[list[i]]) {
       case 1:
         if (!ob[list[i]]) ob[list[i]] = make_inventory(list[i]);
-        if (environment(ob[list[i]]) != this_object() &&
+        if (objectp(ob[list[i]]) &&
+          environment(ob[list[i]]) != this_object() &&
           ob[list[i]]->is_character()) {
           if (!ob[list[i]]->return_home(this_object()))
             add("no_clean_up", 1);
