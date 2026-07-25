@@ -374,3 +374,375 @@ removed.
   `update` 成功. **Verdict: native OK + wasm OK.** No fixes needed this
   pass. Test character saves removed; fluffos.o timestamp churn
   reverted.
+
+## 2026-07-25 深度功能测试 / Deep functional test (AGENTS.md §10.7)
+
+One continuous native `mudclient.py` session against a freshly-built
+native driver (port 40084), plus a second `fluffos` admin session used
+specifically to reach real combat/death/reincarnation (same reasoning as
+`jinyongqunxiazhuan2008`'s own §10.7 pass: the main test character never
+accumulated enough money/combat standing to safely risk real `kill`
+within the time budget). This lib is the confirmed-identical-engine
+lightweight-content sibling of `jinyongqunxiazhuan2008` (see "Lineage
+confirmation" above) — this pass independently re-derived the starting
+zone's room graph and NPC ids from THIS lib's own source (not assumed
+from the sibling) and live-reproduced every bug it fixed, since none of
+`jinyongqunxiazhuan2008`'s own §10.7-round fixes (chinesed restore guard,
+`/log/nosave` `assure_file()`, the `bai`/`apprentice` paren bug) had been
+ported to this archive yet — they are engine-level files outside the
+22-file diff between the two archives, so they carried the exact same
+pre-fix bugs untouched.
+
+**Test character**: id `shenrongfeng`, password `xia2026wu`, Chinese name
+沈容风 (male). Left in a clean, alive, fully-saved state at `/d/city/kedian`
+(客店, the starting inn), title 叫化子/丐帮第二十代弟子 (Beggars' Sect,
+20th generation, master 左全/Zuo Quan), `begging` skill improved once via
+the organic teacher path, 潜能 98/99%. Save files left in place per the
+task instructions (`work/data/user/s/shenrongfeng.o`,
+`work/data/login/s/shenrongfeng.o`) as evidence. Admin account
+`fluffos`/`Mud@2026` (pre-existing) reused for the death/reincarnation
+leg; left alive, at `/d/city/wumiao` (its own now-legitimate chosen home
+per the reincarnation flow's own explicit `ob->move("/d/city/wumiao")` —
+see the startroom-discriminator finding below), title 天神, stats reduced
+from the death (this is expected/correct post-death state, not a bug).
+
+### What was verified working, live
+
+- Full registration wizard with a real Chinese name (沈容风), landing in
+  客店 — `look`/`score`/`i` all correct at every step.
+- Starting-zone navigation read from this lib's own room source
+  (`d/city/{kedian,beidajie1,guangchang}.lpc`), not guessed/assumed from
+  the sibling.
+- Safe sparring: `help newbie` (`work/doc/help/newbie`) documents `fight`
+  (较量) as the non-lethal form (stops automatically at ~50% health) vs
+  `kill` (real, lethal) — identical wording to the sibling. Used
+  `fight liu` against 流氓头 at 中央广场 (learned live that the NPC's real
+  id is the 2-word `"liumang tou"`/alias `"liu"`, NOT the no-space
+  `"liumangtou"` a first guess produced — a `fight liumangtou` typed
+  command correctly no-ops with "你想攻击谁？", not a bug, just the wrong
+  id) — auto-stopped correctly at reduced health, zero real damage risk.
+- Sect join via the organic path: `guangchang`'s tree-hole
+  (`enter shudong` — the room's actual verb/arg shape, not a bare
+  direction) → `d/gaibang/inhole.lpc`'s passphrase gate
+  (`say 天堂有路你不走`, which only opens a DOWN exit to a deeper jail-guarded
+  room; 左全/Zuo Quan the teacher NPC is itself already standing in the
+  passphrase-gated inhole room, so `down` is a wrong turn into the
+  九袋长老-guarded `undertre` room and gets you kicked back out — confirmed
+  live, not a bug, just extra map topology) → `bai zuo` — worked, correct
+  flavor text, `score` afterward shows the new title/master.
+  Also traced (not exercised, to keep the character simple) the White
+  Camel Mount (白驼山) sect's alternate teacher-recruit gate at
+  `kungfu/class/btshan/ouyangke.lpc`'s `attempt_apprentice()`-style flow —
+  confirms a second, independent join mechanism exists, same as the
+  sibling's finding.
+- Organic skill learning from a teacher NPC: `xue zuo begging` (after the
+  chinesed fix below) — consumed 潜能 correctly, printed the expected
+  "你的「begging」进步了！" message, confirmed via `score`.
+- `cha zuo` (list a teacher's skills), once the crash below was fixed:
+  full skill list rendered correctly.
+- Clean `quit` (multiple times) followed immediately by a `debug.log`
+  line-count check each time — **zero new `error:`/fatal lines** any
+  time, on the fully-fixed driver.
+- State persistence across BOTH a clean `quit` + a real **~90-second**
+  wall-clock wait + fresh restore-login, AND a driver-level test: killing
+  the driver process outright (SIGTERM, no graceful shutdown/autosave —
+  confirmed the hard way, see "Testing-methodology note" below) loses any
+  state that was never explicitly saved, exactly as expected — not a bug,
+  a property of an abrupt process kill with no autosave, and a useful
+  reminder to `quit`/`save` before any driver restart during a test pass.
+  After the real fix cycle (driver restarted with the fixes in place),
+  location, sect membership, master, skill level, 潜能 spend all
+  correctly round-tripped through a clean `quit` → **real ~90s wait** →
+  restore-login.
+- Unclean (net-dead, not `quit`) disconnect + reconnect: exercised both
+  promptly (reconnect within seconds, "重新连线完毕", landed exactly where
+  standing) and after a real **~150-second** wall-clock wait (backgrounded
+  `sleep`, not a short synthetic gap) — same clean result both times, all
+  state intact. Did **not** attempt the full 600s `NET_DEAD_TIMEOUT`
+  wait (`include/user.h:10`) for time-budget reasons — but see the bug
+  found below, which makes this exact code path's correctness far more
+  than a formality this time.
+- Real combat + death + corpse + ghost + reincarnation, end to end, live
+  (not code-reviewed): the `fluffos` admin character (`goto
+  /d/death/gateway`) fought a 黑无常 (Black gargoyle) NPC and **actually
+  died**. Confirmed the full chain once the `/log/nosave` bug below was
+  fixed: `你死了` → ghost title (【鬼魂】) → corpse object left in the
+  room → `score` shows reduced stats/empty jing-qi bars → the documented
+  "ask yourself about 回家" ritual at `/d/death/inn1.lpc` (`gate` →
+  `gateway` → `road1` → `inn1`, `ask fluffos about 回家`) →
+  `reincarnate()` fires and `ob->move("/d/city/wumiao")` moves the
+  (now living again) character there, title back to 天神. Zero new
+  `debug.log` lines across the whole fight+death+reincarnation sequence
+  on the fixed driver.
+- Shop (`buy`/`list`, F_DEALER pattern via `feature/dealer.lpc`): reached
+  醉仙楼 (a food stall) by the same room-graph route as the sibling
+  (`beidajie2` → east). `list` rendered correctly (烤鸡腿/牛皮酒袋/包子 with
+  prices). `buy` exercised three times, all three produced the CORRECT
+  rejection with no crash: `buy` bare ("你想买什么？ 1"), `buy 长剑` for an
+  item this shop doesn't sell ("你想买什么？ 2"), and `buy jitui` for an
+  item the shop DOES sell but the admin character has no money for
+  ("穷光蛋，一边呆着去！" — genuine insufficient-funds rejection via
+  `MONEY_D->player_pay()`).
+
+### Not verified live (honest gap)
+
+- **A completed, successful purchase.** Same root cause as the sibling:
+  no starting-balance grant for new characters (nothing else in this
+  archive's 22-file diff from the sibling touches money init either), and
+  the beggar-sect membership the test character organically joined is
+  explicitly forbidden from buying at all
+  (`feature/dealer.lpc:116-117`). Reaching a real purchase would need a
+  separate non-beggar character with a source of starting gold, beyond
+  this pass's time budget. The rejection paths (bare/missing-item/
+  insufficient-funds) were all verified live and crash-free, which is the
+  strongest evidence available that the success path (an ordinary
+  `ob->move(this_player())` after `MONEY_D->player_pay()` returns
+  nonzero) is very likely fine too, but that's a code-review conclusion
+  for the success branch specifically, not a live one.
+- **The full 600-second `NET_DEAD_TIMEOUT` wait**, i.e. letting a REAL
+  net-dead player sit disconnected long enough for `user_dump()` to fire
+  on its own `call_out`, rather than invoking it directly via `call`.
+  Forced it directly instead (see bug #4) — the shortcut is justified
+  here specifically because the whole point of that live test was to
+  reproduce the crash INSIDE `user_dump()`, which is fully deterministic
+  regardless of whether the `call_out` fires naturally at 600s or is
+  invoked directly; the direct-call route reproduced the crash, confirmed
+  the fix, and additionally proved `command("quit")` (the actual
+  force-quit save) now runs afterward — the real-world consequence the
+  full-duration wait exists to check.
+
+### Bugs found and fixed
+
+**1. `adm/daemons/chinesed.lpc` — corrupted save data leaves a global
+`mapping` as raw `0`, crashing the FIRST real use of `cha`/`chinese()`
+(AGENTS.md §7.7, third bullet — identical bug, identical file, to
+`jinyongqunxiazhuan2008`'s own §7.7 finding; this archive carried the
+exact same pre-fix `create()`, confirmed byte-identical before the fix)**
+
+```lpc
+// BEFORE:
+void create() {
+  seteuid(getuid());
+  restore();
+}
+// AFTER:
+void create() {
+  seteuid(getuid());
+  catch(restore());
+  if (!mapp(dict)) dict = ([]);
+}
+```
+`restore()` throws on this archive's malformed `data/e2c_dict.o` (same
+known-corrupted seed data documented since the very first pass on this
+lib); uncaught, it aborts `create()` before local recovery can run, and
+`§7.7`'s exact mechanism zeroes `dict` back to raw `0`. Live-reproduced:
+`cha zuo` and `xue zuo begging` both crashed with `*Value being indexed
+is zero.` at `chinesed.lpc:94` before the fix. **Verified**: rebooted,
+repeated `bai zuo` → `xue zuo begging` → `cha zuo` — all three now work
+cleanly, zero new `debug.log` lines.
+
+**2. Missing `/log/nosave/` runtime directory crashes `combatd.lpc`'s
+`killer_reward()` on EVERY death and `kill.lpc`'s PK-attempt logger on
+every player-vs-player `kill` (AGENTS.md §7.11, exact match — same
+example directory the catalog entry already names; identical bug/files to
+`jinyongqunxiazhuan2008`'s own §7.11 finding, confirmed byte-identical
+pre-fix)**
+
+`work/log/nosave/` did not exist in this archive either. Fixed the same
+two live write sites plus the `bai`/`apprentice` `FENG` counter (bug #3
+below shares the same missing-directory root cause) using the lib's own
+`assure_file()` idiom (`adm/simul_efun/file.lpc:11`):
+```lpc
+// combatd.lpc killer_reward(), kill.lpc do_kill():
+assure_file("/log/nosave/KILLRECORD");   // or ATTEMP_KILL
+write_file("/log/nosave/KILLRECORD", ...);
+```
+**Live-reproduced and verified the severe shape this catalog entry
+warns about**: before the fix, killing the `fluffos` admin character in
+real combat threw `*Wrong permissions for opening file
+/log/nosave/KILLRECORD for append. "No such file or directory"`
+UNCAUGHT inside `die()`, aborting every statement after it (corpse
+creation, moving the player to the death room, setting the ghost flag) —
+the character was left standing in the combat room, still "alive" by the
+engine's bookkeeping. After the fix: full death → corpse → ghost →
+`/d/death/gate` chain completes cleanly in one shot, confirmed live,
+`log/nosave/KILLRECORD` created on disk.
+
+**3. `cmds/skill/bai.lpc` / `cmds/skill/apprentice.lpc` (identical
+duplicate files) — misplaced parenthesis passes the WRONG ARGUMENT TYPE
+to `query()`, so the Feng-Qingyang defection-counter check never actually
+ran (same class as `jinyongqunxiazhuan2008`'s own bug #4 finding,
+identical files, confirmed byte-identical pre-fix)**
+
+```lpc
+// BEFORE (both files, same line):
+if (((string)me->query("family/master_id" == "feng qingyang")) || ((string)me->query("family/master_name" == "风清扬"))) {
+// AFTER:
+if (((string)me->query("family/master_id") == "feng qingyang") || ((string)me->query("family/master_name") == "风清扬")) {
+```
+The `==` comparison sat INSIDE `query()`'s argument list, so `query()`
+was actually invoked with a boolean (always producing `0`/false for any
+real property name) instead of the intended string key — the branch
+could never fire regardless of the player's actual master. Also added the
+matching `stringp()` guard on the `FENG` counter's `read_file()` result
+(§7.9-shaped: `read_file()` on a not-yet-created file returns `0`, which
+would otherwise flow into `atoi(0)`) and `assure_file()` before its
+`write_file()`, same as bug #2's fix. Not separately live-exercised (would
+need a character to actually be Feng Qingyang's disciple first, out of
+scope for this pass) but confirmed by direct read that it now matches
+every other correctly-written call site in the same file.
+
+**4. Shared `tell_room()` simul_efun passes a raw `int 0` as
+`message()`'s 4th (exclude) argument when called with only 2 args — an
+UNCAUGHT crash inside the net-dead force-quit handler `user_dump()`
+silently disables the ENTIRE net-dead safety net (AGENTS.md §7.12, exact
+match to its "Severity escalation" paragraph — this pass independently
+found and live-reproduced the SAME shape in the SAME function
+(`user_dump()`'s `DUMP_NET_DEAD` case) that the catalog entry's own
+severity-escalation example describes on `dtsl`, in a completely
+unrelated lineage — strong evidence this shape is worth actively
+hunting for on every future §10.7 pass, not just noting when stumbled
+upon)**
+
+```lpc
+// adm/simul_efun/message.lpc — BEFORE:
+varargs void tell_room(mixed ob, string str, object *exclude) {
+  if (ob) message("tell_room", str, ob, exclude);
+}
+// AFTER:
+varargs void tell_room(mixed ob, string str, object *exclude) {
+  if (ob) message("tell_room", str, ob, exclude || ({}));
+}
+```
+`clone/user/user.lpc`'s `user_dump(DUMP_NET_DEAD)` — the function that
+runs when a net-dead player's `NET_DEAD_TIMEOUT` (600s) `call_out`
+finally fires — opens with a bare 2-arg `tell_room(environment(), ...)`
+call (no exclude list), leaving `exclude` at its varargs default of `0`
+(a plain int, not an array). **Live-reproduced directly** (via the
+`fluffos` admin's own `call me->user_dump(1)` wizard command, matching
+`DUMP_NET_DEAD`'s constant value — chosen specifically so the crash could
+be confirmed deterministically without a real 600-second wait, see the
+"not verified live" section above for why this substitution is sound
+here): before the fix, this threw `*Bad argument 4 to EFUN message()
+Expected: object, array, Got: int(0).` **uncaught inside `user_dump()`
+itself**, which aborts the function at that exact line — the very next
+statement, `command("quit")` (the actual force-quit save), **never ran**.
+Net real-world consequence, exactly as §7.12 warns: any player who
+genuinely net-deads and never manually reconnects would stay alive in
+server memory forever (until a driver restart), never actually saved via
+this path — the safety net the whole mechanism exists for silently does
+nothing. This is a SHARED simul_efun wrapper (29 call sites across 16
+files use the vulnerable 2-arg form lib-wide, per a `grep -c` sweep), so
+the single fix above covers all of them, not just this one call site.
+**Verified**: rebooted, re-ran `call me->user_dump(1)` on the admin
+account — the "断线超过 10 分钟，自动退出这个世界" message now prints
+correctly AND the admin is actually logged out via a real, clean `quit`
+(save confirmed via the "当你下次连线进来时，会从这里开始" prompt),
+zero new `debug.log` lines.
+
+### Startroom-discriminator check (per this task's explicit instructions)
+
+`d/city/wumiao.lpc`'s `init()` and `d/death/gate.lpc`'s `init()` both
+unconditionally write the entering player's permanent `startroom` field
+on mere room entry — structurally the exact shape AGENTS.md §7.24
+describes, and the exact same two files `jinyongqunxiazhuan2008`'s own
+§10.7 pass flagged, briefly "fixed," and then retracted on user review.
+Applying that pass's own discriminator explicitly, on THIS archive's own
+source (not assumed from the sibling, though the files are confirmed
+byte-identical): **both rooms carry `set("valid_startroom", 1)` /
+`set("valid_startroom", "1")` in their own `create()`** — grepped and
+confirmed directly:
+```
+d/city/wumiao.lpc:20:  set("valid_startroom", "1");
+d/city/wumiao.lpc:38:  me->set("startroom", base_name(environment(me)));
+d/death/gate.lpc:18:  set("valid_startroom", 1);
+d/death/gate.lpc:31:  ob->set("startroom", "/d/death/gate");
+```
+Per the discriminator ("more likely a genuine bug if the target room
+does NOT carry `valid_startroom`... more likely intentional design if
+the target DOES carry that flag"), this is **not treated as a bug** —
+left exactly as shipped, consistent with the sibling's own retraction.
+Reinforcing evidence found live this pass: `d/death/inn1.lpc`'s
+reincarnation ritual (`do_stuff()`) EXPLICITLY does
+`ob->move("/d/city/wumiao")` right after `ob->reincarnate()` — i.e. the
+game's own death-recovery flow deliberately routes every reincarnated
+player through wumiao regardless of where they died, which only makes
+narrative/mechanical sense if standing there is SUPPOSED to (re-)anchor
+your home, matching the "deliberate checkpoint" reading from the
+sibling's retraction writeup.
+
+As an extra due-diligence step (verifying the OTHER `set("startroom"`
+call sites in this lib don't hide a same-shaped bug the sibling's pass
+didn't have occasion to check, since it's a different, if
+byte-identical, archive), grepped every `set("startroom"` site
+lib-wide (28 hits): the large majority (`kongkong.lpc`,
+`killer-{n,s,e,w}.lpc` ×2 (both `clone/npc/` and `d/npc/` copies),
+`mao18.lpc`, `shisong.lpc`, `ouyangke.lpc`) are NPC files calling bare
+`set(...)` on their OWN object in their own `create()` — cosmetic
+NPC-flavor data, never touches a player object, not this bug shape at
+all. Of the remainder that DO write to a player object
+(`ob->set`/`me->set`/`dest->set`): `cmds/usr/save.lpc`,
+`cmds/usr/quit.lpc`, `adm/daemons/logind.lpc` are the lib's own
+legitimate save/quit/login mechanism (the thing the bug pattern is
+defined relative to, not an instance of it); `d/city/cangku.lpc`,
+`d/shaolin/cangku.lpc`, and the `d/shaolin/` jail-cluster files
+(`jianyu.lpc`, `jlyuan.lpc`, `shulin9/11/13.lpc`, `andao2.lpc`) are a
+matched capture/release mechanic already separately confirmed genuine by
+the sibling's own pass (identical files); `kungfu/condition/bonze_jail.lpc`
+resets a released prisoner's startroom to the `START_ROOM` macro itself
+(`/d/city/kedian`, which — checked directly — carries `valid_startroom`
+as the archive's own default landing room, so this is the SAFEST possible
+target, not a bug); `d/city/npc/tang.lpc`'s ransom-redemption flow moves
+a freed captive to `/d/city/kedian` and sets that same already-`valid_startroom`
+room. **No additional instances of the bug pattern found.**
+
+### Testing-methodology note (not a mudlib bug — a note for future passes)
+
+Killing the driver process via plain `kill <PID>` (SIGTERM) does **not**
+autosave connected players — `debug.log` logs `FATAL ERROR: SIGTERM:
+Process terminated` with no save/cleanup step visible before it. A
+character's in-memory-only changes since their last `quit`/`save` are
+lost if the driver is restarted this way. This bit this pass directly:
+the test character's freshly-joined sect membership (from `bai zuo`,
+never followed by `quit`) was lost across a driver restart done to load
+the chinesed fix, and had to be redone. Not a mudlib defect — restarting
+a live driver to pick up simul_efun/daemon-file changes without asking
+connected players to `quit`/`save` first is inherently lossy on any
+lib, and worth remembering on any future fix-then-reboot iteration cycle:
+either `quit` test characters before a restart, or expect to redo
+whatever wasn't saved.
+
+### Bug-class mapping
+
+- Bug 1 → **§7.7**. Bug 2 → **§7.11**. Bug 3: same
+  misplaced-parenthesis/wrong-argument-type shape as several other
+  "obviously-wrong call-site" fixes already cataloged in this file and
+  the sibling's own NOTES.md — not a numbered AGENTS.md class of its own.
+- **Bug 4 → §7.12**, specifically its "Severity escalation" paragraph
+  (added after `dtsl`'s pass) — this pass is a SECOND independent
+  live confirmation of that exact escalation shape (crash inside
+  `user_dump()`'s net-dead branch silently disabling the force-quit
+  safety net) in an unrelated lineage, strengthening the catalog's own
+  suggestion to treat any lib carrying this `tell_room()` shape as a
+  live crash risk rather than cosmetic. No new AGENTS.md entry needed —
+  cited directly.
+- Startroom check → **§7.24**'s own discriminator, applied explicitly
+  per this task's instructions; confirmed NOT a bug on this lib, matching
+  the sibling's retraction, with additional due diligence across every
+  other `startroom`-writing file in this archive (not just the two
+  flagged ones).
+
+### Process notes
+
+Driver run from `libs/jinyongqunxiazhuan2008_std/` via `setsid nohup ...
+driver config.fluffos > driver_stdout.log 2>&1 & disown`, restarted twice
+across the fix-iteration cycle (once after the chinesed/`log/nosave`/
+bai-paren fixes, once — unnecessary in hindsight but done for a clean
+before/after comparison — after the `tell_room()` fix). Each old PID
+killed only after confirming `readlink -f /proc/<pid>/cwd` matched this
+lib's own `work/` directory; several other agents' driver processes for
+other libs (`fengyun2qinghua`, `hymud`, `xiaoaojianghu2`, and others)
+were running concurrently throughout and were never touched. Final
+driver killed by exact PID after all testing completed, confirmed gone
+via `ps -p`/`ss -tlnp` no longer showing port 40084. Scratch file
+`driver_stdout.log` removed before finishing, per task instructions.
