@@ -525,3 +525,47 @@ recur on subsequent sessions, unrelated to this pass's patches);
   correct; second invocation: `fluffos` admin login `(admin)` + `update`
   成功. **Verdict: native OK + wasm OK.** Test character saves removed;
   runtime churn (daemon.o, fluffos.o timestamps) reverted.
+
+## 深度功能测试 / Deep functional test (round two, AGENTS.md §10.7)
+
+One continuous native-driver session via `scripts/mudclient.py` (port
+40059), test character `qftester`/秦风 (password `Test1234`,
+`qftester@test.local`, male).
+
+**Verified working, zero runtime errors in debug.log/driver stdout across
+the whole session** (only harmless pre-existing compile warnings —
+unused locals, unknown `#pragma`): full registration wizard (id →
+confirm → password ×2 → email → gender → Chinese name), MOTD pagination,
+`look`/`score`/`i` all render correctly with no ANSI/formatting
+corruption, clean `quit`, prompt reconnect after both a clean quit and a
+simulated net-dead (raw socket abrupt-close) disconnect — both resumed
+in the exact correct room with no state loss and no §7.20/§7.36-class
+stranding.
+
+**Scope-limiting discovery, not a bug**: `include/login.h`'s
+`START_ROOM` is hardcoded to `/world/area/wizard/guildhall.lpc` (the
+wizard-staff guildhall — bug-report board, academy, propose room,
+meeting room, "black magic" bug-squashing room), and `world/area/`
+contains **only** the `wizard/` subtree — there is no other room/zone
+anywhere in this archive. Confirmed this is a property of the archive
+itself, not a conversion gap: substantial NPC/weapon/food/item template
+content exists under `world/npc`, `world/eq`, `world/item`, etc. (466
+`.lpc` files total), but with no non-wizard rooms to place any of it in,
+none of it is reachable through normal navigation. This means the
+lib is playable end-to-end for what geography exists, but the round-two
+checklist's combat/skill-learning/sect-join/shop steps could not be
+exercised — not because of a bug, but because there is genuinely no
+ordinary-player game world to test them in. Documenting honestly rather
+than fabricating a test of content that isn't there.
+
+**Not verified live** (only reachable via a genuinely unfinished part of
+the archive, or requiring a full 900s wait not attempted this pass given
+the above): a full-duration net-dead force-quit; skill learning; sect/
+faction join; shop purchase; combat/death. The training-dummy object
+`world/npc/stake.lpc` (`accept_fight()` unconditionally returns 1, a
+real safe-sparring NPC) exists in the archive but isn't placed in any
+reachable room either.
+
+No bugs found or fixed this pass — the lib is clean for everything
+actually reachable. No code changes; test character save data removed
+after testing.
