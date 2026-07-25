@@ -82,6 +82,30 @@ nomask void enable_player() {
 
   delete_temp("disabled");
   enable_commands();
+  // enable_player() is (redundantly) called more than once per session by
+  // design elsewhere in this lib -- e.g. /adm/daemons/logind.lpc's
+  // enter_world() calls it directly AND THEN calls setup(), which calls it
+  // again via std/char.lpc (the first of those two calls happens before
+  // exec() has linked the new body to the connection, so it can't
+  // register a working sentence anyway -- only the second call, from
+  // setup(), actually can); cmds/std/sleep.lpc's wakeup() calls it up to
+  // three times in a row. Each call to enable_commands() is harmless to
+  // repeat (idempotent at the C level), but a bare add_action() call
+  // would stack ANOTHER duplicate wildcard "command_hook" sentence on
+  // every redundant call -- harmless for any command whose handler
+  // succeeds (the driver stops at the first sentence that returns
+  // nonzero), but every FAILING command (the common case: wrong target,
+  // insufficient funds/skill/mana, etc.) would then be silently re-run
+  // once per extra stacked sentence, including any side effects that
+  // already fired before the failure return (e.g. cmds/std/learn.lpc's
+  // tuition charge attempt, printed/logged and attempted twice).
+  // remove_action() first keeps exactly one "command_hook" sentence
+  // registered no matter how many times this function is (redundantly)
+  // called -- unlike gating on living(), this doesn't depend on which of
+  // the several call sites happens to run while a working command_giver
+  // context is present, so it can't end up skipping the one call that
+  // would have actually registered a working sentence.
+  remove_action("command_hook", "");
   add_action("command_hook", "", 1);
 
   if (!userp(this_object()))

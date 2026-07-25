@@ -1114,6 +1114,35 @@ the room. (`yueyingqiyuan` and most of the ES II family; combine with
 Missing `message_combatd`/`message_sort` simul_efuns: alias to
 `message_vision` (defined AFTER it in the file, per §6.5).
 
+**Severity escalation, found on `dtsl`'s deep functional test (§10.7) —
+raise this bug's priority, it is not merely cosmetic**: this same wrapper
+bug, hit from a `call_out`-driven function with no enclosing `catch()`
+(as opposed to a player-typed command, where the driver's own top-level
+handler catches it and the only visible damage is an ugly `debug.log`
+line), aborts the REST of that function at the exact statement — on
+`dtsl`, that function was `obj/user.lpc`'s `user_dump()`, the
+`NET_DEAD_TIMEOUT`-driven (900s / 15 real minutes) force-quit handler,
+and the two lines after the crashed `tell_room()` call
+(`enable_player()`; `command("quit")`) never ran — **silently disabling
+the entire net-dead force-quit safety net**: any player who net-deads
+and never manually reconnects stays alive in server memory forever
+(until restart), never properly saved via this path. Worse: reproducing
+this live, TWO characters hitting the aborted `user_dump()` at nearly the
+same real moment, followed by a reconnect attempt, was immediately
+followed by an actual **native driver process crash** — a C-level
+double-free abort (`debugmalloc: attempted to free non-malloc'd
+pointer`) inside `dealloc_object()`/`free_svalue()`, taking down the
+whole MUD for every connected player. The exact C-level mechanism wasn't
+rigorously proven (would need ASan/valgrind, out of scope for an
+LPC-focused pass), but the correlation is strong and the crash did not
+recur after the standard fix. **This is exactly the kind of consequence
+that only a real, full-duration net-dead wait (§10.7's checklist item 8)
+will ever surface** — 40+ minutes of otherwise-thorough live gameplay on
+this same pass never hit any OTHER instance of this bug among the 80+
+2-argument `tell_room()` call sites in the lib. Any lib carrying this
+`tell_room()` shape should be treated as carrying a live crash risk, not
+just an annoyance, until the wrapper is fixed.
+
 ### 7.13 Booby traps: phone-home license checks and self-destructs
 
 Functions in `securityd.lpc`-like files whose body mass-deletes the
@@ -1778,6 +1807,53 @@ Fix: restore the room's own default/fallback exit instead of deleting it
 boarding trigger overrode it. This lets a player who missed the window
 walk back to where they started and try again, rather than being
 stranded with no exits at all.
+
+### 7.28 Redundant `enable_player()`/`enable_commands()` calls stack duplicate `add_action` sentences, silently re-running FAILED commands' side effects
+
+Found on `dtsl`'s deep functional test (§10.7). Related in root cause to
+§7.19 (uncritical repeated `enable_commands()`/`enable_player()` calls)
+but a completely different, non-crashing symptom — worth checking for
+independently even on a lib that's already been fixed for §7.19's
+reentrancy shape, since the two failure modes are orthogonal.
+
+Root cause: `enable_player()` (or equivalent) registers the central
+command dispatcher via `add_action("command_hook", "", 1)` with no
+idempotency guard, and ordinary, unremarkable code paths call it more
+than once per session by design — a login daemon's `enter_world()`
+calling it directly and then again via `setup()`, or a `sleep`/wakeup
+cycle calling it multiple times per cycle. `enable_commands()` itself is
+idempotent at the driver level (harmless to call repeatedly), but a bare
+`add_action()` is NOT — each redundant call stacks another duplicate
+wildcard sentence for the same verb dispatcher. This is invisible for
+any command whose handler SUCCEEDS (the driver stops at the first
+sentence in a stack that returns nonzero), but every FAILING command
+(the common case — wrong target, insufficient funds/skill/mana, a typo)
+gets silently RE-RUN once per extra stacked sentence, including any side
+effects that already fired before the failure return (observed: a
+failed skill-purchase attempt double-charged and double-printed its
+tuition message).
+
+Detection: count how many distinct code paths in a session can call the
+central `enable_player()`/`enable_commands()` wrapper (grep its own name
+across the lib — login flow, `setup()`, sleep/wake, revive, disguise
+items are the common repeat offenders), and check whether a command that
+deliberately fails (wrong syntax, insufficient resources) produces its
+failure-path side effects/output more than once after any of those
+repeat-triggering events has occurred in the same session.
+
+Fix, and a caution about a tempting-but-wrong alternative: the temptation
+is a `living(this_object())`-gated guard (mirroring §7.19's pattern) —
+but `living()` can already be true across a LEGITIMATE re-enable (a
+`disable_player()`-style function that calls `disable_commands()`
+immediately followed by a bare `enable_commands()`, specifically to keep
+the object marked living while "disabled"), which would make a
+`living()`-gated guard skip the one call that was actually supposed to
+register a working sentence — a straight regression (breaks every
+command after any disable/re-enable cycle). The correct, call-order/
+call-count-independent fix is `remove_action("command_hook", "")`
+immediately before the `add_action()` call, inside `enable_player()`
+itself — guarantees exactly one sentence is ever registered no matter
+how many times or in what order the function is called.
 
 ---
 
