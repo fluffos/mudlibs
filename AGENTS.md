@@ -1377,6 +1377,28 @@ already run for this object, so the guard is inert for every legitimate
 call site (the real `create()` call, or a call after a genuine
 `disable_commands()`) and only blocks the pathological repeat-call.
 
+**Correction found on `mhxy`'s deep functional test: the
+`living(this_object())` guard above is NOT always safe — verify before
+applying it verbatim.** Some libs deliberately call `enable_commands()`
+again from their OWN `disable_player()`-style function specifically to
+keep the object `living()` while "disabled" (their own comment on
+`mhxy`: "so this object would be marked living again") — sleep/wakeup,
+unconscious/revive, and disguise-item flows all legitimately re-enter
+`enable_player()` while `living()` is already true. A `living()`-gated
+guard silently no-ops every one of those real re-enables too (skipping
+whatever cleanup the real call was supposed to do — on `mhxy` this would
+have left a woken/revived player permanently unable to act), while still
+blocking the one pathological case it was meant to catch. Before using
+`living()` as the guard condition, grep the lib's own
+`disable_*`/`sleep`/`wake`/revive code for a legitimate re-`enable_`
+call while already `living()`; if one exists, use a true reentrancy flag
+instead (`nosave int in_enable_player_now;`, set at entry, cleared at
+every return) — it only blocks same-call-stack reentrancy and has none
+of the collateral damage. `xiyouji`, the lib this section was originally
+written from, happens not to have that legitimate-reenable shape, which
+is why the simpler `living()` form worked there — don't assume it
+transfers.
+
 ### 7.20 Net-dead void-parking without a location-restore path strands players silently on disconnect
 
 Found on `shanhaizhanshen`'s deep functional test (§10.7). **Zero signal
@@ -1660,6 +1682,53 @@ result. For a force-loaded companion object, just `catch()` the
 referenced-but-undefined feature macro, a deleted board object) to make
 the compile succeed — that's a real archive gap (§13), not a conversion
 bug; only make the crash degrade gracefully.
+
+### 7.26 A `file_owner()` path-depth off-by-one misattributes nested wizard content, crashing `log_error()`'s write on any compile diagnostic
+
+Found on `mhxy`'s deep functional test (§10.7). Related to §7.10 (both
+are `log_error()`-adjacent traps) but a distinct mechanism — §7.10 is
+about the ACL/broadcast side of `log_error()`; this is about a helper
+`file_owner()` (used by `log_error()` to pick which wizard's log
+directory to write compile diagnostics into) misidentifying the wizard
+entirely for the overwhelmingly common case of nested content.
+
+Root cause: `file_owner(string file)` did
+`sscanf(file, "/u/%s/%s/%s", dir, name, rest) == 3` and returned `name`
+— the SECOND captured segment, despite the misleadingly-ordered
+`dir`/`name`/`rest` variable names. This only returns the correct wizard
+uid when the file is exactly 2 levels under `/u/<wizard>/<file>`; for
+the far more common 3-level-or-deeper shape
+(`/u/<wizard>/<subdir>/<file>` — `npc/`, `obj/`, `room/` subdirectories,
+which is how virtually all real wizard-built content is organized) it
+returns the SUBDIRECTORY name instead of the wizard. `log_error()` then
+writes to `user_path()` of that bogus "owner" (e.g. `/u/npc/`), a
+directory that never exists, aborting with `*Wrong permissions for
+opening file .../<subdir>/log for append. "No such file or directory"`.
+Because this fires from ANY compile diagnostic (warning or error) on
+ANY file under `/u/`, and the whole point of `log_error()` is to run
+whenever the driver has something to report, this can crash the
+compile chain of literally any room containing a not-yet-compiled `/u/`
+file with so much as a compiler warning — including, on `mhxy`, the
+START ROOM's own NPC roster, so it hit every single fresh login.
+
+Detection: grep for a `file_owner`/`creator_file`-shaped function in
+the lib's simul_efun sources feeding `log_error()`, and check whether it
+captures a FIXED-DEPTH segment (breaks for any other nesting depth) or
+the FIRST segment after `/u/` unconditionally (correct regardless of
+depth). Compare against how the same file typically handles `/d/`,
+`/open/`, `/ftp/` ownership — if those already use a "first segment
+only" pattern (commonly `path[1]` after `explode(file, "/")`) and the
+`/u/` branch doesn't match that discipline, that inconsistency is the
+tell.
+
+Fix: capture only the first segment after `/u/`
+(`sscanf(file, "/u/%s/%s", name, rest) == 2`), matching whatever
+first-segment discipline the rest of the function already uses for
+other root directories.
+
+Lineages likely affected: `menghuanxiyou2002`, `fluffos_xiyou2000`,
+`xiyouji2003`, `xiyouji2006` (confirmed via grep to carry identical
+code, not yet fixed there — out of scope for the pass that found this).
 
 ---
 

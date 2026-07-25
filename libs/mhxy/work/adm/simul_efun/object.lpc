@@ -9,13 +9,26 @@ varargs int getoid(object ob) {
 }
 
 // Get the owner of a file.  Used by log_error() in master.c.
+// BEFORE: matched "/u/%s/%s/%s" and returned the SECOND captured segment
+// ("name", despite the misleading variable order dir/name/rest), i.e. the
+// wizard's own subdirectory name (npc/obj/zjmaster/...) rather than the
+// wizard's uid, for any file nested two or more levels under /u/<name>/
+// -- which is the overwhelmingly common case for wizard-built content
+// (npc/, obj/, room/ subdirs). log_error() then wrote to user_path() of
+// that bogus "owner" (e.g. "/u/npc/"), a directory that never exists,
+// aborting with "Wrong permissions ... No such file or directory" --
+// reproduced live, crashing the FIRST-EVER compile of the start room's
+// own NPCs on every fresh boot (see NOTES.md's deep functional test).
+// AFTER: capture just the immediate name after /u/, regardless of depth,
+// same as the already-correct fallback path used everywhere else in this
+// file for /d/, /open/, /ftp/ (path[1]-style ownership).
 string file_owner(string file) {
-  string name, rest, dir;
+  string name, rest;
 
   if (file[0] != '/') {
     file = "/" + file;
   }
-  if (sscanf(file, "/u/%s/%s/%s", dir, name, rest) == 3) {
+  if (sscanf(file, "/u/%s/%s", name, rest) == 2) {
     return name;
   }
   return 0;

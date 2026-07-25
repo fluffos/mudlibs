@@ -7,6 +7,19 @@ inherit F_DBASE;
 inherit F_CLEAN_UP;
 
 nosave mapping doors;
+// AGENTS.md sec.7.17: setup() below calls reset() synchronously as the
+// last step of every room's create(), but the driver's own standard
+// "give a freshly-loaded object a reset pass" behavior can also fire a
+// reset() on the same object around the same trigger (a player's first
+// move() into it) -- genuinely reentrant, the second call starting
+// before the first returns. reset() only marks its NPC population done
+// on its LAST line (set_temp("objects", ob)), so a reentrant call sees
+// that mapping still empty and clones a second full set of NPCs, whose
+// own init()/enable_player() chain can then re-touch the room and close
+// a cycle. Guard belt-and-suspenders style even though this lib's
+// reproduced crash (feature/command.lpc's enable_player()) is closed
+// independently -- this structural double-fire is shared by every room.
+nosave int resetting_now;
 
 int query_max_encumbrance() { return 100000000000; }
 int query_max_items() { return 30; }
@@ -25,6 +38,13 @@ void reset() {
   string *list;
   int i, j;
   object *inv;
+
+  // AGENTS.md sec.7.17: reentrant reset() guard -- see the resetting_now
+  // declaration above for why this can fire genuinely reentrantly on a
+  // room's first-ever compile.
+  if (resetting_now) return;
+  resetting_now = 1;
+
   // I put this one here to get rid the function of trash collecting...Tie
   // since the quest feature, rooms hardly get swarpped out.
   inv = all_inventory();
@@ -44,7 +64,10 @@ void reset() {
   //
   set("no_clean_up", 0);
   ob_list = query("objects");
-  if (!mapp(ob_list)) return;
+  if (!mapp(ob_list)) {
+    resetting_now = 0;
+    return;
+  }
 
   if (!mapp(ob = query_temp("objects")))
     ob = allocate_mapping(sizeof(ob_list));
@@ -82,6 +105,7 @@ void reset() {
     }
   }
   set_temp("objects", ob);
+  resetting_now = 0;
 }
 
 // Redirect item_desc of the door to this function in default.
