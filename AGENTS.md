@@ -1544,6 +1544,30 @@ it on sight, but do not *assume* it is the (only) cause — verify by
 actually testing `look` after the fix, and keep hunting (§8.3b, §7.14)
 if commands are still dead.
 
+**Addendum: the same demotion breaks `call_out()`-dispatched functions
+too, not just `add_action`.** Found on `xuanjianlu`'s §10.7 deep
+functional test. Any `private` function invoked by name from a
+driver-origin `call_out()`, inside a file meant to be `inherit`ed
+(commonly `.../inherit/*.lpc` or `feature/*.lpc`), suffers the identical
+`DECL_PRIVATE`→`DECL_HIDDEN`-once-inherited failure as `command_hook`,
+logged as `apply() with insufficient permission: ... origin: internal,
+needs: private, has: hidden`. Easy to miss: the triggering action (a
+stackable item spent to zero, a timed drug/buff applied) looks
+completely normal on screen, and the `call_out` has to actually *fire*
+(which can lag its nominal delay under a busy driver) before the log
+line appears — a quick "did it error immediately" check shows nothing.
+Two confirmed instances on `xuanjianlu`: `inherit/item/combined.lpc`'s
+`destruct_me()` (a stackable item — money, most impactfully — spent to
+exactly 0 gets moved to `VOID_OB` and never actually destructs, a
+permanently-orphaned clone) and `feature/action.lpc`'s `eval_function()`
+(inherited into the player-body base class, silently no-ops the shared
+"delayed status effect" primitive used by 130+ kungfu-skill/drug files
+across nearly every sect — buffs, damage-over-time, poison, timed
+powerups, ALL of them). Fix identically: drop `private`. Worth a
+proactive grep (`private (void|int|...) NAME` + `call_out("NAME"` in the
+same file) on any lib with a custom delayed-callback or
+combined/stackable-item helper.
+
 #### 8.3b Dead command-indexer sscanf
 
 `commandd.lpc`-style daemons rebuild their command table filtering

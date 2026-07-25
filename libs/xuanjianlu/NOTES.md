@@ -603,3 +603,292 @@ justification. Retrofitted to fail-closed: loopback is now strictly
 through to the NORMAL gate instead of being treated as local. Retested
 after tightening: fresh driver boot clean, `fluffos` loopback login and
 its wizard `update` command both still work; zero new debug.log errors.
+
+## 深度功能测试 / Deep functional test (2026-07-24, round two)
+
+First real *playthrough* pass on this lib per AGENTS.md §10.7 (all prior
+passes verified registration + `look`/`score`/`quit`/admin-login, or
+watched boot output, but never played the actual game systems). Native
+driver (`build-debug`), one continuous `mudclient.py` session per phase,
+real Chinese names throughout, real wall-clock waits for the two
+timer-gated systems this lib turned out to have (see below).
+
+**Read first**: `doc/help/intro` (the closest thing to a newbie primer
+this lib ships — no plain `doc/help/newbie` file, only
+`newbie_wudang`/`newbie_gumu`/`newbie_lingjiu`/`newbie_baituo`/
+`newbie_job` per-sect/topic variants) — explains the 14-sect roster,
+attributes, `fight`/`kill`/`hit` combat-verb distinction, and the
+`xue`/`du`/`lian` three ways to learn skills, matching what was tested
+below almost exactly.
+
+**Test character**: id `wentian`, real Chinese name 闻天笑, password
+`Test12345` → after completing this lib's own two-stage registration
+(see below) a NEW password `doeal` was issued and is now the live login
+password. **Kept** (not cleaned up) as the representative playthrough
+character — final state: registered, `strike` skill learned (1 point),
+standing in 沙滩 (the real post-registration start room). Save files:
+`work/data/user/w/wentian.o`, `work/data/login/w/wentian.o`. Two other
+characters created while probing the registration-loop edge cases
+(`shiying`/上官虹, `shangfei`/上官飞, both abandoned mid-tutorial,
+`registered:"no"`) were deleted before finishing — pure test debris, not
+representative state worth keeping.
+
+### This lib's registration is TWO-STAGE, and the second stage is the real "tutorial"
+
+Already documented above (the `shatan1`/`block_cmd` section) that a
+freshly-registered character is unregistered (`query("registered") ==
+"no"`) and dropped in `/d/xiakedao/shatan1` with almost every command
+silently swallowed. What that earlier pass didn't walk end-to-end: the
+escort NPC (`d/xiakedao/npc/li4.lpc`/`zhangli.h`'s shared
+`greeting()`/`check_follow()` call_out chain) auto-teleports the
+character to `/d/xiakedao/register` **5-15 real seconds** after a
+`follow li4`, where a second NPC (`mux.lpc`) explains `register
+<email>`; running that command calls `adm/daemons/regid.lpc`'s
+`register_char()`, which **issues a brand-new random 5-letter password**
+or wall NOR — ("您的新密码是XXXXX请用新的密码连线") and
+**immediately disconnects the link** — easy to mistake for a crash if
+you don't already know this is by design (same category of trap
+`bxsj`/`xiyouji`'s NOTES already warn about: a "disconnect" that is
+actually correct game behavior). Reconnecting with the new password
+lands the character in the REAL start room `/d/xiakedao/沙滩` (a
+different room object from the `shatan1` gate, same short name
+"沙滩" — confusingly) with a fisherman NPC, full `score`/`i` access, and
+the actual 侠客岛 (Ke Xia island) content available. Verified end-to-end
+live, twice (once organically stepping through each `input_to` prompt,
+once after a same-character reconnect mid-flow — the escort/register
+state genuinely survives a real disconnect+reconnect, confirming this
+part of the flow is robust).
+
+### Exploring the starting zone — 侠客岛 is a self-contained tutorial island
+
+Read room `.lpc` source throughout rather than guessing blind — exits
+are not always neighbors-of-neighbors intuitive here (a hidden `enter`
+exit that only exists for a 15-second real-time window after a
+`call_out`, a `climb tree`/`wear coat`/`jump fall` puzzle gating one
+internal passage). Confirmed working, all via `wentian`:
+
+- **Safe skill-teacher NPC, reachable without leaving the island**:
+  `/d/xiakedao/pubu` (瀑布, reached `shatan`→n→n→n→n→northup`) hosts
+  `npc/master2.lpc` (蓝衣弟子), whose `recognize_apprentice()` is
+  hardcoded `return 1` — teaches `strike`/`force`/`parry`/`dodge` to
+  anyone. `xue dizi strike` (his short alias) produced "你向蓝衣弟子
+  请教有关「strike」的疑问...你的「strike」进步了！", and `skills`
+  immediately showed `strike (strike) - 初学乍练 1/0`. This is the
+  organic first-skill path the task asked for; done live, not by code
+  review.
+- **Sect join is deliberately NOT available at the island's sect-rep
+  NPCs** — and this is correct design, not a bug worth "fixing". A
+  guided-tour escort (`龙五`) drags a fresh character through a cave
+  complex lined with one low-generation representative NPC per sect
+  (`d/xiakedao/npc/{baituo,xingxiu,xueshan,wudang,emei,...}.lpc`, each
+  calling `create_family(name, generation, "弟子")` — so they DO have a
+  real `family`, unlike the purely-informational island NPCs read in an
+  earlier pass). Tried `bai xueshan dizi` on one (金轮, generation 13)
+  live: "金轮说道：要拜师，你得去拜我师父" (to become a disciple you
+  must go worship MY master) — traced to the shared
+  `d/xiakedao/npc/xkdnpc.h`'s `attempt_apprentice()`, which is
+  **hardcoded to always refuse** for every one of these NPCs. Real
+  recruitment requires reaching an actual sect hall on the mainland
+  (`d/wudang`, `d/shaolin`, etc.), gated behind the same boat/cart
+  transit as everything else off-island (below). Confirmed by reading
+  `feature/apprentice.lpc`'s `recruit_apprentice()` (a real, un-gated
+  implementation) plus every island rep NPC's shared header — not a
+  guess.
+- **Shop / economy**: `牛掌柜`'s 聚金阁 (`d/city/jujinge`, mainland —
+  reached via admin `goto`, see below) correctly listed prices (`list`)
+  and correctly rejected a purchase with insufficient funds ("穷光蛋，
+  一边呆着去！"); after admin-cloning 5 silver (spending the WHOLE
+  stack, i.e. exactly the shape that triggers the bug documented below)
+  `buy tong jing` succeeded ("你从牛掌柜那里买下了一面铜镜。"),
+  inventory correctly showed the mirror and zero silver left. A real
+  player reaches this shop with the 20 silver `init_new_player()`
+  grants at registration (`adm/daemons/logind.lpc`); this was
+  admin-currency-assisted (see "not verified live" below for why).
+
+### Off-island travel is real-time-gated and genuinely slow to test solo
+
+`/d/xiakedao/shatan`'s fisherman auto-offers a boat `enter` exit exactly
+once, ~1 real second after the room is entered, via a `call_out` chain
+(`check_trigger`→`on_board`(+15s)→`arrive`(+20s)→`close_passage`(+20s));
+missing the initial 15-second boarding window leaves the underlying
+`chuan` (boat) room's `yell_trigger` flag SET until `shatan`'s own next
+driver-scheduled `reset()` (this lib's `config.fluffos` sets `time to
+reset : 1800`, i.e. up to 30 real minutes) — `shatan.lpc:111`'s
+`reset()` is the ONLY code that clears it. Missed the window on the
+first live attempt (normal exploratory-testing pace, not a bug); a
+driver restart (unrelated, see "an unrelated process died" below)
+incidentally reset all in-memory room state and gave a second live
+window, which was also missed testing navigation. Reaching the mainland
+past this point (to independently verify a real sect join, a
+skill-teacher NPC outside the island, or a player-currency shop
+purchase) was **NOT completed within this session's time budget** — see
+explicit list below. Scouted the mainland via wizard `goto` instead
+(shop test above; sect-hall NPCs not individually walked to).
+
+### Bugs found and fixed
+
+**1. `inherit/item/combined.lpc:19` (originally) — stackable items spent to exactly zero silently never self-destruct (money in particular). NEW manifestation of the AGENTS.md §8.3a bug class (`private` function bound to a driver-origin dispatch, demoted to `DECL_HIDDEN` once inherited), via `call_out` instead of `add_action`.**
+
+- Found organically: cloned 5 silver as admin, bought a 5-silver item
+  (spending the WHOLE stack to exactly 0) at `d/city/jujinge`. The
+  purchase itself succeeded and looked completely normal on screen —
+  but `debug.log` immediately logged:
+  ```
+  apply() with insufficient permission:
+  cob: null, ob: clone/money/silver#295, function: destruct_me,
+  origin: internal, needs: private, has: hidden
+  ```
+- Root cause: `set_amount(0)` (line ~23) does
+  `::move(VOID_OB); call_out("destruct_me", 1);` to clean up an
+  emptied stack — but `destruct_me()` was declared `private void`.
+  `inherit/item/combined.lpc` is inherited (via `inherit/item/money.lpc`)
+  by every stackable item — silver, gold, coin, and any other combined
+  item — so `private` demotes to `DECL_HIDDEN` on the compiled
+  money/item class, and the driver refuses the `call_out` apply exactly
+  the same way it used to refuse `command_hook`'s `add_action` apply in
+  §8.3a's original instance. The zeroed clone is moved to `VOID_OB`
+  correctly (that part isn't gated) but then just sits there forever,
+  never actually destructing — a permanently-orphaned zero-amount
+  object per occurrence, one denied-apply log line each time.
+- Fix: dropped `private` (no `nomask` was present to preserve):
+  ```lpc
+  // BEFORE: private void destruct_me() { destruct(this_object()); }
+  // AFTER:  void destruct_me() { destruct(this_object()); }
+  ```
+- Found and fixed the **identical** pre-existing copy in
+  `d/xueshan/inherit/liquid_content.lpc:26` (inherited by
+  `d/xueshan/obj/suyou.lpc`, a bottled-liquid item) by code-shape match
+  — not independently live-reproduced, but byte-for-byte the same
+  `private void destruct_me() {...}` / `call_out("destruct_me", 1)`
+  pair inside a file whose own directory name (`.../inherit/...`) says
+  it's meant to be inherited.
+- Verified: fresh driver restart with the fix in place, repeated the
+  exact clone-5-silver/spend-to-zero repro — zero `insufficient
+  permission` lines in `debug.log`, purchase behaves identically from
+  the player's perspective (the bug was always invisible on-screen;
+  only the orphaned-object leak and the log spam are new-fixed).
+
+**2. `feature/action.lpc:70` (originally) — same bug class, much higher blast radius: EVERY timed kungfu-skill/drug status effect in the game silently never fires for players.**
+
+- `feature/action.lpc` (aliased `F_ACTION`) is `inherit`ed directly by
+  `inherit/char/char.lpc` — the player-body base class itself. Its
+  `start_call_out(function fun, int delay)` is the lib's single shared
+  primitve for "run this closure after a delay, robust to the object
+  that scheduled it being destroyed first" (used for poison/drug timers,
+  kungfu buff/debuff expiry, multi-hit combo follow-ups, etc.) — grep
+  found call sites in **over 130** `kungfu/skill/*`, `kungfu/class/*`,
+  and `clone/drug/*` files, i.e. the large majority of this lib's
+  special-move and medicine content. It works by scheduling
+  `call_out("eval_function", delay, fun)`, and `eval_function` was
+  declared `private void`.
+- This one took real effort to pin down live — the natural trigger
+  (`fu hu gu`, taking a 虎骨/tiger-bone drug that schedules a
+  `remove_effect` callback after `query("con")` real seconds) produced
+  no visible symptom and, on a first check, no error either; the
+  `call_out` genuinely needs to actually FIRE before the denied-apply
+  line appears, and on a driver busy with background NPC activity that
+  took closer to a minute of real wall-clock than the drug's own
+  ~17-second nominal delay. Confirmed definitively with the wizard
+  `call` command (`call me->start_call_out(1,3)`, a direct, unambiguous
+  repro) plus a genuinely patient wait:
+  ```
+  apply() with insufficient permission:
+  cob: null, ob: clone/user/user#1, function: eval_function,
+  origin: internal, needs: private, has: hidden
+  ```
+- Fix: dropped `private` (no `nomask` present):
+  ```lpc
+  // BEFORE: private void eval_function(function fun) { evaluate(fun); }
+  // AFTER:  void eval_function(function fun) { evaluate(fun); }
+  ```
+- Verified clean post-fix with the same direct `call me->start_call_out(...)`
+  repro, waiting a full 75+ real seconds afterward: zero `insufficient
+  permission`/`eval_function` lines. Also re-ran the organic `fu hu gu`
+  drug-consumption path post-fix — clean.
+- **This is worth its own generalization of AGENTS.md §8.3a**: the
+  existing entry is scoped to `add_action`-bound dispatchers
+  (`command_hook`); this project now has two more instances (one in
+  this lib, both via `call_out` instead) proving the SAME
+  `DECL_PRIVATE`→`DECL_HIDDEN`-once-inherited mechanism applies to
+  *any* driver-origin apply that dispatches by function-name string —
+  `call_out()` and (per the existing entry) `add_action()` at minimum,
+  quite possibly `set_heart_beat()`'s implicit `heart_beat()` call too
+  (not tested here). See draft catalog text in the final report for a
+  §8.3a addendum.
+
+**3. `clone/npc/shan.lpc:181` — pre-existing missing closing quote crashes this NPC's entire program, taking down any room/NPC interaction chain that happens to reference it.**
+
+- Found via the `call`-command trace investigation above (an unrelated
+  wandering NPC's `random_move()`/`chat()` heartbeat routed through a
+  room containing `shan.lpc`, at which point `debug.log` showed a
+  cascade of `Illegal character 0x.. ` errors and finally `执行时段
+  错误：*No program in object '/clone/npc/shan'!`).
+- Root cause (AGENTS.md §6.6 "missing closing quote" class, textbook
+  instance): `command("say 这种私人恩怨太多了，你还是自强不息啊);` —
+  the string literal is missing its closing `"` before the `)`,
+  swallowing the rest of the file's text into one giant unterminated
+  string until the compiler's tokenizer desyncs and finally trips on
+  raw non-ASCII bytes several lines later (line 186's Chinese text,
+  now sitting OUTSIDE any string literal) — this is why the reported
+  "illegal character" line is nowhere near the real defect.
+- Fix: added the missing quote and full-width period (matching every
+  sibling `command("say ...")` line's style in the same function):
+  ```lpc
+  // BEFORE: command("say 这种私人恩怨太多了，你还是自强不息啊);
+  // AFTER:  command("say 这种私人恩怨太多了，你还是自强不息啊。");
+  ```
+- Verified: `update /clone/npc/shan.lpc` → "重新编译
+  /clone/npc/shan.lpc：成功！" (previously this same command would have
+  failed the same way the original crash did).
+- Not independently chased further (e.g. whether `shan.lpc` is reachable
+  from a fresh character's normal playthrough) — flagged here because
+  it was a genuine, currently-live crash surfaced by this pass, fixed
+  on sight per the standard proactive-fix policy, not because it was
+  part of the planned test route.
+
+### An unrelated process died mid-session (environment note, not a mudlib bug)
+
+The native driver process (a plain `setsid nohup .../driver
+config.fluffos &`, PID recorded and monitored per AGENTS.md §10.5) was
+found dead partway through this session with **no crash trace at all**
+in `debug.log` (no `FATAL ERROR`, no `SIGTERM` line, nothing — the log
+just stops mid-preload-warning-spam). Given this is a shared multi-agent
+environment (other libs' driver processes were visibly running
+throughout, per `ss -tlnp`/`ps aux`), this reads as an external
+kill/OOM rather than anything the mudlib did — restarted cleanly
+(`Accepting telnet connections`/`Initializations complete`), all prior
+save-file state intact, no fix needed or applicable. Noted here in case
+a future session sees the same "driver just isn't there anymore, zero
+debug.log explanation" symptom.
+
+### Explicitly NOT verified live, and why
+
+- **A player reaching the mainland organically** (via the `chuan` boat
+  → `da che` carriage chain) — the boat's one-shot 15-second boarding
+  window was missed twice (normal testing pace the first time; a
+  same-second navigation slip the second, right after the unrelated
+  driver restart reset the trigger state) and the underlying
+  `yell_trigger` flag then blocks a retry until `shatan`'s own
+  driver-scheduled `reset()`, up to 30 real minutes per
+  `config.fluffos`'s `time to reset : 1800` — outside this session's
+  budget. **This also means**: a real sect join (`bai`/`apprentice` on
+  an actual mainland sect-hall master with a low `family/generation`),
+  a mainland skill teacher, and a player-currency (not admin-cloned)
+  shop purchase were none of them completed by the ORGANIC player
+  character. The shop mechanic itself (list/insufficient-funds/
+  successful-purchase-to-exactly-zero) WAS verified live, just with
+  admin-cloned currency rather than `wentian`'s own starting 20 silver.
+- **Real combat** (`fight`/`kill`/`hit`) was not exercised at all — no
+  stat-mirroring "training dummy" NPC was found anywhere on 侠客岛
+  itself (the real `mu-ren.lpc`/`xiangpi-ren.lpc`-style dummies live at
+  `d/shaolin`, `d/taihu`, `d/xueshan`, `d/chengdu` — all mainland,
+  behind the same travel gate above); the closest in-budget candidate,
+  `d/xiakedao/liangong`'s `npc/shaonian.lpc` (练功室, "peaceful"
+  attitude, default `accept_fight()` from `inherit/char/npc.lpc` would
+  accept a `fight` challenge per its own logic), was read but never
+  actually challenged live — reaching it also requires the
+  `climb tree`/`wear coat`/`jump fall` puzzle at `pubu`, and time ran
+  out before combining that with a genuine `fight` attempt.
+- **Death/respawn** — not attempted at all; would need either the
+  above-blocked real combat or an admin-forced kill, and was
+  deprioritized in favor of the two confirmed high-impact bugs above.
