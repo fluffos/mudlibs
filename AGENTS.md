@@ -1900,6 +1900,45 @@ descent through nested submappings, one `/`-segment per level, returning
 the final leaf value or `0`/unset if any level isn't a mapping) rather
 than delegating to the closest-matching real efun.
 
+### 7.30 A mapping-typed accessor returns its raw never-initialized variable (`int 0`) instead of an empty mapping, crashing any unguarded indexing/`keys()` call
+
+Found on `xiakexing2017`'s deep functional test (§10.7), in two
+independent shapes. An accessor declared to return `mapping` (`mapping
+query_skills() { return skills; }`) is fine as long as `skills` was
+assigned somewhere first — but a `mapping` instance variable that was
+never `set()`/assigned defaults to LPC's generic zero value, `int 0`,
+not `([])`. For any player/object that never triggered whatever code
+path populates the mapping (the most common case: a brand-new
+character with no skills learned yet), the accessor faithfully returns
+that raw `0`. Any caller that does `keys(query_skills())` or
+`query("nested")["key"]` without an `objectp()`/`mapp()` guard first
+crashes with `Bad argument 1 to keys()` or `Value being indexed is
+zero` — reproduced live via an NPC greeting hook reachable by ordinary
+non-faction players and a brand-new character trying to use a shared
+skill-list accessor.
+
+The second shape is the same underlying trap one level removed: code
+that stores structured data as a nested submapping under a generic
+per-object property store (`ob->query("party")["party_name"]`,
+`ob->query("family")["family_name"]`) crashes identically for any
+object that never had that top-level key set at all — `query("party")`
+legitimately returns `0` for a player who never joined a faction, and
+indexing `0` with a string key is exactly the same crash.
+
+Detection: grep declared-`mapping`-returning accessors for a bare
+`return <instance var>;` with no `mapp()`/ternary guard, and grep for
+`->query("<key>")[` / `->query("<key>")["..."]`-shaped indexing chains
+with no `mapp()`/`objectp()` check immediately before them. Reproduce
+live by exercising the affected code path with a player who genuinely
+lacks the expected state (a brand-new character with no skills, a
+character in no faction) — this is exactly the class of state a smoke
+test using an established/admin character never exercises.
+
+Fix: at the accessor, return `mapp(x) ? x : ([])` instead of the raw
+variable. At an inline `query(...)["key"]` chain, capture the query
+result into a local first and guard with `mapp()` before indexing —
+don't index the `query()` call's return value directly.
+
 ---
 
 ## 8. Login and registration flow bugs
