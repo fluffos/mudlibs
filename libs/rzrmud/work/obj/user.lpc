@@ -250,12 +250,32 @@ private void do_net_dead() {
 
 // reconnect: called by the LOGIN_D when a netdead player reconnects.
 void reconnect() {
+  object env;
+
   set_heart_beat(1);
   set_temp("netdead", 0);
   remove_netdead_enemy();
   remove_call_out("user_dump");
   remove_call_out("do_net_dead");
   tell_object(this_object(), "重新连线完毕。\n");
+
+  // A brand-new player who net_dead'd mid gift-allocation (/d/wiz/init.lpc,
+  // the very first interactive step after registration) loses that room's
+  // pending input_to() on disconnect. Nothing else re-triggers it: the
+  // no_gift->move("/d/wiz/init") routing only runs from a genuinely fresh
+  // login (adm/daemons/logind.lpc's enter_world()), which a plain
+  // reconnect never calls, and the room's own init() (which schedules the
+  // auto "start") only fires on the original move() into the room, not on
+  // reconnect. Left as-is, every command the player types is silently
+  // swallowed by that room's do_block() catch-all except look/help/story/
+  // say, with no visible prompt telling them what happened -- the account
+  // is permanently stuck unless they happen to already know the
+  // undocumented "start" command. Resume the wizard exactly like typing
+  // "start" manually (confirmed working) would.
+  if (query("no_gift") && objectp(env = environment(this_object()))
+    && base_name(env) == "/d/wiz/init") {
+    env->get_start0(this_object());
+  }
 }
 varargs int receive_wound(string type, int damage, object who) {
   int damage1 = damage;

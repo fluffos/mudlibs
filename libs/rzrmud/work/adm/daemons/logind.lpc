@@ -904,6 +904,23 @@ varargs void enter_world(object ob, object user, int silent) {
         startroom = START_ROOM;
         user->set("startroom", startroom);
       }
+
+      // AGENTS.md new bug class (rzrmud deep-functional-test pass): the
+      // driver's eval-cost abort ("*Can't catch eval cost too big
+      // error") is NOT catchable and can fire deep inside the
+      // load_object(startroom)/move(startroom) calls below -- observed
+      // live when /d/city/kezhan (START_ROOM)'s FIRST-EVER compile of
+      // this boot cascaded into /d/city/npc/xiaoer's cold restore()
+      // and blew the eval-cost limit. When that happens, this whole
+      // enter_world() call aborts immediately at the point of failure,
+      // so even the existing "!environment(user)" safety net a few
+      // lines down never runs, leaving the player permanently stuck
+      // with no environment (broken look/quit/every command). Schedule
+      // an independent recovery pass BEFORE the risky calls below, in
+      // its own fresh top-level call_out context (its own eval-cost
+      // budget) -- this is the one part of the recovery guaranteed to
+      // still run even if the rest of this function aborts partway.
+      call_out("verify_environment", 0, user, START_ROOM);
       //added by mon 10/27/97
 
       // the following 7 lines are aded by snowcat dec 10 1997
@@ -991,6 +1008,26 @@ varargs void enter_world(object ob, object user, int silent) {
   "/cmds/std/news"->check_news(user);
   if ("/cmds/usr/pkgame"->query_pk())
     "/cmds/usr/pkgame"->main(user);
+}
+
+// Recovery pass for the uncatchable-eval-cost-abort class documented
+// above enter_world()'s room-entry block: runs in its own fresh
+// call_out context (own eval-cost budget), independent of whether the
+// enter_world() call that scheduled it aborted partway through. By the
+// time this fires, the room file that blew the budget the first time
+// is normally already compiled (the abort hit expensive create()-time
+// NPC restore logic, not compilation itself), so the retry is cheap.
+void verify_environment(object user, string fallback_room) {
+  if (!objectp(user) || !interactive(user)) return;
+  if (!environment(user)) {
+    catch(user->move(fallback_room));
+    if (environment(user)) {
+      user->set("startroom", fallback_room);
+      tell_object(user, "由于系统繁忙，你被重新传送回起始地点。\n");
+      tell_room(fallback_room, user->query("name") + "连线进入这个世界。\n",
+        ({ user }));
+    }
+  }
 }
 
 varargs void reconnect(object ob, object user, int silent) {

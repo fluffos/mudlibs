@@ -1431,6 +1431,82 @@ exits.
 the quit/logout command on sibling libs in the same lineage family for
 the same shape.
 
+### 7.21 Reconnecting mid a mandatory pre-gameplay wizard permanently strands a player
+
+Found on `rzrmud`'s deep functional test (§10.7). General shape: any lib
+with a mandatory first-time `input_to()`-driven setup wizard (character
+creation, starting-gift allocation, etc.) run from a room whose `init()`
+gates every other command behind a catch-all blocker is vulnerable if a
+player net-deads mid-wizard and `reconnect()` doesn't specifically detect
+and resume that state.
+
+Root cause: `input_to()` doesn't survive `net_dead()`/reconnect on this
+driver — the pending prompt is simply gone. Nothing else re-triggers the
+wizard: the routing that sends a brand-new player into the wizard room
+only runs from a genuinely fresh login (`enter_world()`), which a plain
+`reconnect()` path never calls, and the room's own `init()` (which
+normally auto-starts the wizard) only fires on the original `move()`
+into the room, not on reconnect. But the room's `add_action` catch-all
+blocker (rejecting every command except a documented few) DOES survive
+reconnect, since it's bound to the still-alive player object, not the
+lost `input_to()`. Net effect: every command the player types is
+silently swallowed with no indication of what happened, and the account
+is permanently stuck unless they already happen to know whatever
+undocumented resume command exists.
+
+Detection: net-dead (don't `quit`) mid a first-time setup wizard,
+reconnect, and try ordinary commands — if they're all silently rejected,
+this bug is present. Check the wizard room's `init()` for what it calls
+to originally start the flow (grep for its own name from a
+`call_out`/direct call) — that's what `reconnect()` needs to detect and
+re-invoke.
+
+Fix: in the player object's `reconnect()`, check whether the player is
+still sitting in the wizard room with the wizard's own "not yet
+complete" flag still set (e.g. a `no_gift`-style marker), and if so,
+call the room's resume entry point directly — the same one its `init()`
+would have called on a fresh `move()` in.
+
+### 7.22 An uncatchable eval-cost abort during a room's cold first compile can leave a fresh login with no environment at all
+
+Found on `rzrmud`'s deep functional test (§10.7). A login-path variant
+of the §7.17 "first-visit-only" theme, but hitting `START_ROOM`
+specifically — every single fresh connection is exposed, not just
+players who wander into one particular zone.
+
+Root cause: the driver's eval-cost abort (`*Can't catch eval cost too
+big error`) is genuinely **uncatchable** — a `catch()` wrapped around the
+call does not stop it. If a room's cold FIRST-EVER compile this boot
+cascades into expensive `create()`-time work (here: an NPC's own
+`restore()`) that blows the eval-cost limit, the abort unwinds past any
+`catch()` and aborts the ENTIRE enclosing function immediately at the
+point of failure — including `enter_world()`'s own pre-existing
+`!environment(user)` safety net a few lines further down, which never
+gets a chance to run. Result: a player finishes login with no
+environment at all — `look` degrades (gracefully, if written
+defensively) but any code assuming `environment(me)` is always an object
+(e.g. `quit.lpc` passing it straight to `message()`'s 3rd argument) can
+itself crash on top of the original problem.
+
+Detection: hard to catch outside a genuinely cold boot (the crash is a
+one-shot "first compile only" event, same timing sensitivity as §7.17)
+— watch for `*Can't catch eval cost too big error` in `debug.log` during
+`enter_world()`'s call chain specifically, and check every later
+function in the login path for an assumption that `environment(user)` is
+always non-null.
+
+Fix: since the crash aborts the CURRENT function/call stack but not the
+whole process, schedule an independent recovery pass via
+`call_out(..., 0, ...)` **before** the risky room-entry calls — a
+`call_out`-triggered invocation gets its own fresh eval-cost budget,
+independent of whether the function that scheduled it later aborts
+partway through. The recovery function checks `!environment(user)` and,
+if true, moves the player to a safe fallback room (this driver's own
+`START_ROOM`-if-custom-startroom-broken fallback is a fine reuse). Also
+audit downstream code (like `quit.lpc` above) for the null-environment
+assumption independently — the recovery pass narrows the window but
+doesn't make every other function environment-null-safe by itself.
+
 ---
 
 ## 8. Login and registration flow bugs

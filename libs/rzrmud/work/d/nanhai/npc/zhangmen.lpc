@@ -5,6 +5,7 @@
 #include <ansi.h>
 inherit NPC;
 inherit F_SAVE;
+nosave int in_init_now;  // AGENTS.md §7.17 reentrancy guard
 int rank_me();
 string zm_apply();
 string zname(object);
@@ -34,6 +35,8 @@ void create() {
 }
 
 void init() {
+  if (in_init_now) return;
+  in_init_now = 1;
   object me = this_object();
 
   me->create_identity("/d/nanhai/npc/guanyin", "/d/nanhai/guangchang");
@@ -56,6 +59,7 @@ void init() {
   ]));
 
   //me->setup();
+  in_init_now = 0;
 }
 
 void reset_me(object me) {
@@ -658,6 +662,14 @@ void create_identity(mixed master, mixed where) {
 
   if (objectp(where))
     where_ob = where;
+  else if (environment(this_object())
+    && base_name(environment(this_object())) == where)
+    // AGENTS.md §7.17: the NPC's own room is, by construction,
+    // already its environment at this point -- prefer that over
+    // force-loading by path, which can re-trigger the room's own
+    // compile/reset() if called from inside that room's first-ever
+    // reset() (reentrancy cycle -> "Too deep recursion.").
+    where_ob = environment(this_object());
   else {
     call_other(where, "???");
     where_ob = find_object(where);
