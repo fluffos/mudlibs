@@ -61,24 +61,58 @@ void jingyan_open() {
   int i;
   int num = random(sizeof(place));
   string city = place[num];
+  int tries;
 
   string *plist = get_dir(city);
 
-  do {
+  // BUG (pre-existing in the original archive, confirmed byte-identical in
+  // raw/中华2/adm/daemons/rebornd.c): the ".lpc" extension check used to be
+  // `s_place[(i - 2)..i] != ".lpc"` -- a leftover 2-char-wide slice from
+  // when this compared against the original ".c" extension (i-2..i is only
+  // 3 characters, one short of ".lpc"'s 4, and index i is one past the end
+  // of a 0-indexed string of length i besides), so the comparison could
+  // NEVER be true and every candidate file was rejected. Combined with
+  // `get_dir()` legitimately returning 0 (not an array) for a directory
+  // that doesn't resolve, the do-while below could spin forever retrying
+  // random picks that always fail, or crash outright indexing into 0 --
+  // either way call_out("jingyan_close"/reschedule) a few lines down never
+  // ran, permanently killing this daemon's self-rescheduling chain for the
+  // rest of the boot after the first bad city pick. Reproduced live via a
+  // §10.7 deep functional test: debug.log showed both failure modes
+  // ("*Value being indexed is zero." and "*Too long evaluation. Execution
+  // aborted.") from this exact function during ordinary ambient play.
+  // Fixed: correct 4-char slice (bounds-guarded), a bounded retry count
+  // instead of an unbounded do-while, and an explicit reschedule on
+  // failure so the mystery-entrance feature always tries again later
+  // instead of silently dying.
+  if (!pointerp(plist) || !sizeof(plist)) {
+    remove_call_out("jingyan_open");
+    call_out("jingyan_open", 1800);
+    return;
+  }
+
+  n_place = 0;
+  for (tries = 0; tries < 200 && !n_place; tries++) {
     s_place = plist[random(sizeof(plist))];
     //文件名中含有bak的文件不要，继续找下一个
     if (strsrch(s_place, "bak") > -1) continue;
-    //不是c文件的也滤过
+    //不是lpc文件的也滤过
     i = sizeof(s_place);
-    if (s_place[(i - 2)..i] != ".lpc") continue;
+    if (i < 4 || s_place[(i - 4)..(i - 1)] != ".lpc") continue;
     //如果该房间已经调出在内存里的直接find
-    //find不到说明没调出在内存里，那就load出来 
-    //load也load不出来大概就有问题了，那就找下一个了   
+    //find不到说明没调出在内存里，那就load出来
+    //load也load不出来大概就有问题了，那就找下一个了
     if (!objectp(n_place = find_object(city + s_place)))
-
       if (!objectp(n_place = load_object(city + s_place)))
         continue;
-  } while (!n_place || !n_place->query("outdoors"));
+    if (!n_place->query("outdoors")) n_place = 0;
+  }
+
+  if (!n_place) {
+    remove_call_out("jingyan_open");
+    call_out("jingyan_open", 1800);
+    return;
+  }
 
   n_place->set("exits/jingyangong", JINGYAN);
 
@@ -114,24 +148,39 @@ void wudie_open() {
   int i;
   int num = random(sizeof(place));
   string city = place[num];
+  int tries;
 
   string *plist = get_dir(city);
 
-  do {
+  // Same bug/fix as jingyan_open() above -- see the comment there.
+  if (!pointerp(plist) || !sizeof(plist)) {
+    remove_call_out("wudie_open");
+    call_out("wudie_open", 1800);
+    return;
+  }
+
+  n_place = 0;
+  for (tries = 0; tries < 200 && !n_place; tries++) {
     s_place = plist[random(sizeof(plist))];
     //文件名中含有bak的文件不要，继续找下一个
     if (strsrch(s_place, "bak") > -1) continue;
-    //不是c文件的也滤过
+    //不是lpc文件的也滤过
     i = sizeof(s_place);
-    if (s_place[(i - 2)..i] != ".lpc") continue;
+    if (i < 4 || s_place[(i - 4)..(i - 1)] != ".lpc") continue;
     //如果该房间已经调出在内存里的直接find
-    //find不到说明没调出在内存里，那就load出来 
-    //load也load不出来大概就有问题了，那就找下一个了   
+    //find不到说明没调出在内存里，那就load出来
+    //load也load不出来大概就有问题了，那就找下一个了
     if (!objectp(n_place = find_object(city + s_place)))
-
       if (!objectp(n_place = load_object(city + s_place)))
         continue;
-  } while (!n_place || !n_place->query("outdoors"));
+    if (!n_place->query("outdoors")) n_place = 0;
+  }
+
+  if (!n_place) {
+    remove_call_out("wudie_open");
+    call_out("wudie_open", 1800);
+    return;
+  }
 
   n_place->set("exits/wudie", WUDIE);
 
@@ -167,6 +216,24 @@ void qilin_open() {
   if (!room)
     room = load_object("/d/city3/shudao8");
 
+  // /d/city3/shudao8.lpc genuinely does not exist in this archive (an
+  // ordinary content gap, not a conversion bug -- confirmed missing from
+  // raw/ too). load_object() legitimately returns 0 for that, and the
+  // unguarded room->set(...) below used to crash with an uncaught "Bad
+  // argument 1 to EFUN call_other() ... Got: int(0)" (reproduced live via
+  // a §10.7 deep functional test), which aborted this function before it
+  // ever reached call_out("qilin_close", ...) a few lines down --
+  // qilin_close() is what reschedules qilin_open() again, so this single
+  // crash permanently killed the 麒麟窟 mystery-entrance feature's
+  // self-rescheduling chain for the rest of the boot, same shape as the
+  // jingyan_open()/wudie_open() bug fixed above. Guard and reschedule
+  // instead of crashing; don't fabricate the missing room.
+  if (!room) {
+    remove_call_out("qilin_open");
+    call_out("qilin_open", 1800);
+    return;
+  }
+
   room->set("exits/qilinku", QILIN);
 
   message("vision", HIG "【" HIR "江湖传言" HIG "】" HIW
@@ -177,8 +244,15 @@ void qilin_open() {
 }
 
 void qilin_close(object room) {
-  if (room && room->query("exits/qilinku"));
-  room->delete("exits/qilinku");
+  // Stray semicolon (pre-existing in the original archive, confirmed
+  // byte-identical in raw/中华2/adm/daemons/rebornd.c) turned this into an
+  // empty-body if -- the intended guard never actually gated the
+  // unconditional room->delete() below. Currently inert in practice since
+  // qilin_open() (above) now only ever calls this with a real room object,
+  // but fix the dead conditional anyway rather than leave a trap for any
+  // future call site.
+  if (room && room->query("exits/qilinku"))
+    room->delete("exits/qilinku");
 
   message("vision", HIG "【" HIR "江湖传言" HIG "】" HIW
     "：成都城外洪水汹涌，麒麟窟再次消失在人世间。\n" NOR, users());

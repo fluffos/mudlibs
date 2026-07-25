@@ -33,12 +33,28 @@ object make_inventory(string file) {
   return ob;
 }
 
+// AGENTS.md §7.17: setup() (below) calls reset() synchronously as the
+// last step of create(), but the driver's own standard behavior can also
+// fire a reset() pass on the same freshly-loaded room around the same
+// trigger (a player's first move() into it) -- genuinely reentrant, the
+// second call starting before the first returns. reset() only marks its
+// NPC population done on its LAST line (set_temp("objects", ob)), so a
+// reentrant second call sees that tracking mapping still unset and clones
+// a second full set of every NPC/object listed in "objects", each with
+// its own independently-scheduled init()/call_out side effects (observed
+// live: /d/register/npc/shuisheng's greeting() whisper firing twice).
+// Only reproduces on a room's first-ever visit after a fresh boot.
+nosave int resetting_now;
+
 void reset() {
   mapping ob_list, ob;
   string *list;
   int i, j;
   mapping guards;
   object *obs;
+
+  if (resetting_now) return;
+  resetting_now = 1;
 
   // remove the action done in this room
   delete_temp("been");
@@ -77,7 +93,10 @@ void reset() {
   //
   set("no_clean_up", 0);
   ob_list = query("objects");
-  if (!mapp(ob_list)) return;
+  if (!mapp(ob_list)) {
+    resetting_now = 0;
+    return;
+  }
 
   if (!mapp(ob = query_temp("objects")))
     ob = allocate_mapping(sizeof(ob_list));
@@ -115,6 +134,7 @@ void reset() {
     }
   }
   set_temp("objects", ob);
+  resetting_now = 0;
 }
 
 // Redirect item_desc of the door to this function in default.

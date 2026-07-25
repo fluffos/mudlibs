@@ -305,7 +305,24 @@ private void check_ok(object ob) {
     return;
   }
 
-  user = MESSAGE_D->find_chatter(ob->query("id"));
+  // MESSAGE_D (/adm/daemons/network/messaged.lpc) is never preloaded (the
+  // stale /adm/etc/preload entry points at a nonexistent /adm/daemons/
+  // messaged.lpc, not the real /adm/daemons/network/messaged.lpc), so this
+  // is normally the FIRST lazy load of it each boot. Its create() calls
+  // socket_bind() with a port value built from get_config(__MUD_PORT__),
+  // which resolves to an empty string instead of the real int mud port on
+  // this driver (a stale include/runtime_config.h config-ID vs. the actual
+  // driver's numbering, same root cause already documented for
+  // versiond.lpc/dns_master.lpc) -- socket_bind() then throws "Bad argument
+  // 2 to socket_bind()" uncaught. Every OTHER call site that can trigger
+  // this same crash is already isolated (master.lpc's preload() wraps
+  // dns_master's load in catch(), versiond's is inside a call_out so it
+  // can't propagate here) -- this was the one unguarded lazy-load call site
+  // left, and it sat directly in the login path, so it broke login for the
+  // very first player to reconnect/relogin after any fresh boot. catch()
+  // it the same way, degrading to "not currently chatting" on failure.
+  if (catch(user = MESSAGE_D->find_chatter(ob->query("id"))))
+    user = 0;
   if (objectp(user)) {
     write("你把正在聊天的ID踢了出去。\n");
     MESSAGE_D->user_logout(user, user->name(1) + "从" +
