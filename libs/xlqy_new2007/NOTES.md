@@ -168,3 +168,258 @@ justification. Retrofitted to fail-closed: loopback is now strictly
 through to the NORMAL gate instead of being treated as local. Retested
 after tightening: fresh driver boot clean, `fluffos` loopback login and
 its wizard `update` command both still work; zero new debug.log errors.
+
+## 深度功能测试 / Deep functional test (2026-07-24)
+
+First real *playthrough* pass on this lib (all prior passes stopped at
+registration + `look`/`score`/`quit`; see AGENTS.md §10.7). Native driver
+(`build-debug`), one continuous `scripts/mudclient.py` session per test
+step (state persists across steps via the lib's own save/relogin path).
+
+**Test character**: id `shenlim`, Chinese name 沐阳 (Muyang), password
+`MudPass123`, email `shenlim@example.com`, gender male, gift allocation
+accepted as rolled (体格20/根骨20/悟性25/灵性25). Final state left behind:
+joined 东方武馆 (Dongfang Martial Hall, via 东方博玉's `ask boyu about
+join`), learned 扑击格斗之技 (unarmed, level 1) from teacher NPC 东方聪
+via the organic `learn unarmed from dongfang cong` path, `combat_exp` 6
+(from one real fight, see below), one `粗布衣` (linen robe) in inventory,
+died once and was successfully reincarnated (气/血 currently 重伤/受伤
+from that), sitting at `聚见亭` (START_ROOM) after a final clean `quit`.
+Save files: `work/data/user/s/shenlim.o`, `work/data/login/s/shenlim.o`
+— kept intentionally as evidence of a working end-to-end playthrough.
+
+### What was tested and confirmed working
+
+- **Read `help newbie` first** (`work/doc/help/newbie`) — correctly
+  described the actual starting flow (南城客栈 is flavor-text/legacy;
+  the real, current onboarding path is 聚见亭 → `out` → 仙石 in 花果山)
+  and named the real command set (`learn X from Y`, `wimpy`, `skills`,
+  `fight`/`kill`).
+- **Registration**: real Chinese name (沐阳), full flow (gb/big5 →
+  age-gate → `new` → English id → Chinese name → password×2 → email →
+  gender → talent roll `9`+confirm `y`) — reached 聚见亭, `look`/`score`
+  both correct.
+- **Exploration / navigation**: read room `.lpc` source
+  (`d/ourhome/xiaoting.lpc`, `d/dntg/hgs/*.lpc`) to route from 聚见亭
+  through `out` (→ 仙石/花果山, the actual "leave home, start the
+  journey" transition — confirmed intentional, not a bug, via
+  `work/doc/help/start`'s narrative text) through 后山小路 → 林间小路 →
+  花果山 → 傲来国 → 北城门 → 北菀街 → 傲来台 → 东苑街 → 东方武馆, ~15
+  rooms total. Compound diagonal exit names (`eastup`, `southdown`, …)
+  initially looked like a rendering bug (`这里明显的出口是 eastup、down
+  和 southdown`) but are a confirmed, lib-wide intentional convention
+  (hundreds of legitimate uses across `work/d/`), not a bug.
+- **Combat**: no dedicated safe-sparring dummy is actually reachable —
+  `d/city/obj/muren.lpc` and `d/obj/misc/muren.lpc` (the stat-mirroring
+  `accept_fight()` training-dummy pattern AGENTS.md §10.7 recommends
+  looking for) exist but are never placed in any room's `"objects"` map
+  (grepped the whole `work/d/` tree for both paths — zero references);
+  orphaned/dead content, not chased further (content gap, not a
+  programming bug). Used `help newbie`'s own recommended fallback
+  instead — the weakest listed mob shape (`小猴子`/monkey,
+  `combat_exp` 50, `daoxing` 0) at 后山小路 — `kill xiao houzi` produced
+  a full real fight with correct turn-by-turn narration, skill-up
+  message, and (since the character had no armor/skill yet) an actual
+  **death**, which flowed into a full live test of the death/
+  reincarnation system (see below) rather than a wimpy-flee.
+- **Death/reincarnation**: `feature/damage.lpc`'s `check_gameover()` →
+  `DEATH_ROOM` (`/d/death/gate`) → `d/death/npc/pang.lpc`'s
+  `init()`-triggered `death_stage()` `call_out` chain (5 staged
+  messages, 5s apart) → `reincarnate()` → move to `REVIVE_ROOM`
+  (`/d/ourhome/kedian`, 荒郊小店) all fired correctly and automatically
+  (no player input needed, matching the design). Confirmed the
+  player's saved `startroom` field was **not** touched by any of this
+  (`grep -o '"startroom"' work/data/user/s/shenlim.o` → no match, both
+  before and after) — no instance of the AGENTS.md §7.24 death-code-
+  overwrites-startroom bug class here.
+- **Sect/faction join**: `ask dongfang boyu about join` (东方博玉,
+  馆主/hall master, in 前厅) — age/combat_exp gate checked and passed,
+  `wuguan/join` flag set, confirmed via the teacher NPC's `skills`
+  command then unlocking (`只有巫师或有师徒关系的人能察看他人的技能`
+  before joining → full skill list after).
+- **Skill learning, organic teacher path**: `learn unarmed from
+  dongfang cong` in 武馆教练场 — real skill-up message, `skills`
+  confirms the new skill persisted.
+- **Shop purchase**: `buy jitui from xiao er` in 荒郊小店 (`list`
+  showed prices in 文钱/两银子, purchase correctly deducted mixed
+  coin+silver currency) then `eat jitui` correctly raised the 食物 stat
+  (confirmed via `hp`) and correctly refused once full
+  (`你已经吃太饱了，再也塞不下任何东西了`).
+- **Quit / relogin / state persistence**: clean `quit` → immediate
+  `debug.log` grep (zero new `错误`/`error`/`Fatal`/`recursion` lines)
+  → relogin confirms skill + inventory persisted (location resets to
+  `START_ROOM` on a clean quit+relogin, since `startroom` was never
+  explicitly saved by this character — confirmed this is the lib's
+  actual intended behavior, not a bug: `cmds/usr/quit.lpc` never writes
+  `"startroom"`, and no `valid_startroom`-flagged room's "make this
+  home" command was ever invoked in this playthrough).
+- **Net-dead (unclean disconnect) + reconnect**: tested both a prompt
+  reconnect (well inside the 15s `do_net_dead` grace) and a reconnect
+  after a real ~150s wall-clock wait (well past the grace, short of the
+  600s `NET_DEAD_TIMEOUT`) — both correctly restored the exact prior
+  room/state via `obj/user.lpc`'s `reconnect()` (`remove_call_out`s the
+  pending dumps, prints `重新连线完毕`). No instance of the AGENTS.md
+  §7.20/§7.21 void-parking or stuck-wizard-flow classes.
+- **Full-duration net-dead timeout**: happened for real (if
+  accidentally, from research time between test steps rather than a
+  deliberate sleep) partway through this pass and **found the two real
+  bugs below** — see write-up. Re-verified the fix afterward with a
+  *deliberate*, short-duration repro (`NET_DEAD_TIMEOUT` temporarily
+  patched from 600 to 20 in `include/user.h`, reverted immediately
+  after — confirmed clean via `git diff` showing no residual change).
+
+### Bugs found
+
+**1. Fixed — `adm/simul_efun/message.lpc`'s `tell_room()` wrapper passes
+a raw `int 0` as `message()`'s exclude argument on every 2-arg call.
+This is AGENTS.md §7.12 ("Shared message/wrapper argument bugs"),
+recurring on a new lineage — not a new bug class.**
+
+- Symptom, found live: `debug.log`/stdout showed
+  `执行时段错误：*Bad argument 4 to EFUN message() Expected: object,
+  array, Got: int(0).`, thrown from `obj/user.lpc:236`'s
+  `tell_room(environment(), ...)` inside `user_dump(DUMP_NET_DEAD)` —
+  the exact same file/function AGENTS.md §7.12 already documents from
+  `dtsl`'s deep functional test. Per that section, this abort happens
+  in a `call_out`-driven context with no enclosing `catch()`, so it
+  doesn't just log an ugly line — it **aborts the rest of
+  `user_dump()`**, at minimum `case DUMP_NET_DEAD`'s follow-up
+  `QUIT_CMD->main(...)` call right after it (the actual force-quit).
+  Moments later in the same driver session, the whole native process
+  **crashed** (see bug 2) — matching §7.12's already-documented
+  escalation almost exactly (that section's own dtsl finding: "two
+  characters hitting the aborted `user_dump()` at nearly the same real
+  moment ... immediately followed by an actual native driver process
+  crash — a C-level double-free abort ... inside
+  `dealloc_object()`/`free_svalue()`"). This session had several
+  overlapping net-dead/abandoned-registration connections in quick
+  succession right before the crash (multiple registration attempts —
+  `linqing`, `muyang`, `shenlin` — each left an interactive object
+  net-dead when `mudclient.py`'s connection timed out), so the
+  "multiple simultaneous aborted `user_dump()`s" precondition plausibly
+  applies here too.
+- Root cause: `varargs void tell_room(mixed ob, string str, object
+  *exclude)` (`adm/simul_efun/message.lpc:48`) forwards `exclude`
+  straight into `message("tell_room", str, ob, exclude)` — an omitted
+  `varargs` array parameter is the LPC value `0`, not `({})`, and
+  `message()` accepts an *omitted* 4th argument but rejects one
+  explicitly passed as the wrong type. Every 2-arg `tell_room()` call
+  site in the whole lib (717 total call sites of `tell_room(`, an
+  unknown but nonzero fraction of them 2-arg) was a live, if
+  intermittent, crash risk — not just the two in `user_dump()`.
+- Fix (`adm/simul_efun/message.lpc:48-56`):
+  ```lpc
+  // BEFORE:
+  varargs void tell_room(mixed ob, string str, object *exclude) {
+    if (ob) {
+      message("tell_room", str, ob, exclude);
+  // AFTER:
+  varargs void tell_room(mixed ob, string str, object *exclude) {
+    if (ob) {
+      if (!exclude) exclude = ({});
+      message("tell_room", str, ob, exclude);
+  ```
+  Fixing the single shared wrapper (per AGENTS.md §7.12's own
+  prescribed remedy) covers all 717 call sites at once, rather than
+  patching individual call sites piecemeal (an earlier draft of this
+  fix instead null-guarded the three `tell_room(environment(), ...)`
+  call sites in `obj/user.lpc` directly — reverted once the actual
+  root cause was traced to the shared wrapper, since a per-call-site
+  guard would have left every *other* 2-arg `tell_room()` call in the
+  lib equally exposed).
+- Verified: reproduced-then-fixed via a deliberate, short repro —
+  temporarily changed `include/user.h`'s `NET_DEAD_TIMEOUT` from `600`
+  to `20`, rebooted, net-deaded `shenlim`, waited ~45s (past the 15s
+  `do_net_dead` grace + 20s timeout). Pre-fix this reliably reproduced
+  the exact `Bad argument 4` trace; post-fix (this wrapper patched),
+  the same repro produced **zero** `错误`/`Bad argument` output, the
+  character was cleanly force-quit (confirmed via a normal fresh
+  relogin working immediately after), and the driver process stayed
+  alive. Reverted `NET_DEAD_TIMEOUT` back to `600` immediately after
+  (confirmed via `git diff` — no residual change) and did one final
+  clean reboot + full relogin (`look`/`score`/`skills`/`i`/`quit`) to
+  confirm the fix in isolation, zero new `debug.log` errors.
+
+**2. Observed, not independently fixable at the LPC level — a genuine
+native driver crash, matching AGENTS.md §10.8's already-cataloged
+"driver-fatal ref-count-0 `free_svalue()` abort" class (third
+corroborating occurrence, and — per bug 1 above — plausibly the exact
+mechanism §7.12's own severity-escalation paragraph already predicts,
+not a fresh mystery).**
+
+- What happened: partway through this session (naturally, from an
+  extended real-wall-clock gap between test steps rather than a
+  deliberate wait — see AGENTS.md §10.7 checklist item 8's honesty
+  requirement: this was NOT a scripted repro, it just happened), the
+  driver's own stdout (captured to `/tmp/xlqy_new2007_stdout.log`,
+  outside the repo) showed:
+  ```
+  执行时段错误：*Bad argument 4 to EFUN message()
+  ...
+  呼叫来自：/obj/user.lpc 的 user_dump() 第 236 行 ...
+  ******** FATAL ERROR: FATAL: Object 0x55c032a76368 /std/skill ref
+  count 0, but not destructed (from free_svalue).
+  (current object was /d/ourhome/kedian2)
+  ...
+  crash() in master called successfully.  Aborting.
+  ```
+  The process exited outright — every connection dropped, `ss -tlnp`
+  showed nothing on port 40022, the driver PID was simply gone.
+  `debug.log` showed **zero** trace of any of this (same total
+  silence AGENTS.md §10.8 already documents) — the only reason this
+  was caught at all was having the driver's own stdout redirected to a
+  file, per that section's own "actionable takeaway."
+- Secondary, compounding finding matching AGENTS.md §7.11 (missing
+  runtime directory): the driver's own crash handler
+  (`adm/obj/master.lpc`'s `crash()` → `log_file("nosave/CRASHES", ...)`)
+  itself failed with `*Wrong permissions for opening file
+  /log/nosave/CRASHES for append. "No such file or directory"` because
+  `work/log/nosave/` doesn't exist in this checkout — meaning even the
+  driver's own attempt to leave a permanent crash record for next time
+  silently failed too. **Not fixed as a committable change**: the
+  entire `libs/*/work/log/` tree is gitignored project-wide
+  (`.gitignore:12-14`), so creating this one directory locally doesn't
+  persist past this session and isn't a real fix at the lib level —
+  flagging for the orchestrator in case a project-wide fix (e.g.
+  `scripts/pack_lib_for_web.sh` or a boot-prep step always `mkdir -p`
+  `log/nosave/`) is worth doing centrally.
+- Not fixed / not independently root-caused at the LPC level, same as
+  the two prior §10.8 occurrences (`xianjianchuanqi`, `shiji`) — this
+  is a driver-level internal-consistency failure, not a mudlib source
+  pattern. Bug 1's fix removes ONE plausible contributing trigger (the
+  aborted `user_dump()` mid-execution) but is not proven to be the
+  sole cause; re-verifying bug 1's fix in isolation (see above) did
+  *not* reproduce the FATAL crash in a short (~45s) repro window, which
+  is weakly consistent with bug 1 being at least a contributing factor,
+  but 45s of post-fix uptime is nowhere near a rigorous disproof.
+
+### Observed, deliberately not touched (out of scope: not a crash, not wrong behavior)
+
+- `feature/damage.lpc:535` (and two identical copies,
+  `feature/damagedie.lpc:217`, `u/dianel/damagedie.lpc:199`):
+  `DEATH_ROOM->start_death(this_object())` calls a function that
+  doesn't exist anywhere in this archive (`/d/death/gate.lpc` has no
+  `start_death()`, grepped the whole lib). Confirmed harmless: a
+  `call_other()` to an undefined function is a silent no-op on this
+  driver (confirmed — zero `debug.log`/stdout trace during an actual
+  live death), and the real reincarnation trigger already happens via
+  a completely different path (`d/death/npc/pang.lpc`'s
+  `init()`-triggered `call_out` chain, fired automatically when the
+  ghost is moved into the room). Dead/vestigial code from an earlier
+  version of the death room, not a functional bug — left alone per
+  this pass's scope (programming bugs that actually crash or misbehave
+  only, not speculative cleanup).
+- One unrelated caught error surfaced ambiently during the same
+  session, from a completely different, unvisited zone: `*Illegal to
+  move or destruct an object (/d/moon/obj/luoyi#346) defining actions
+  from a verb function(give teapot to fei zei) in
+  object(/d/qujing/wuzhuang/npc/mingyue#144) which returns zero.` —
+  this fired from ambient NPC/quest simulation in 五庄观
+  (`d/qujing/wuzhuang/`), a late-game zone this playthrough never
+  visited. Not chased — out of the tested path, and root-causing it
+  properly would need a separate deep pass through that zone's own
+  quest scripts.
+- `d/ourhome/kedian.lpc:20` — the `"exits"` mapping's `sizeof() == 2`
+  comment doesn't match its actual single `"south"` key. Stale comment
+  from a prior edit, not a functional bug (the room's actual exits
+  work correctly as coded) — left alone.
