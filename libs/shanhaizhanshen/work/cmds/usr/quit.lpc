@@ -44,11 +44,26 @@ int main(object me, string arg) {
     link_ob->set("last_on", time());
     link_ob->set("last_from", query_ip_name(me));
 
-    if (!environment(me)->is_vehicle())
-      me->set("startroom", base_name(environment(me)));
-    else me->set("startroom", base_name(environment(environment(me))));
-
-    if (!environment(me) || environment(me)->is_space_ship_room()
+    // AGENTS.md bug catalog: net_dead() (obj/user.lpc) parks a player
+    // who drops connection uncleanly in VOID_OB as a temporary holding
+    // room while awaiting reconnect, remembering the real room in the
+    // nosave "last_location" temp var. If NET_DEAD_TIMEOUT elapses
+    // before they reconnect, user_dump() force-runs command("quit")
+    // on them *while still sitting in VOID_OB* -- the two duplicate
+    // startroom-setting blocks below used to just persist
+    // base_name(environment(me)) unconditionally, i.e. "/obj/void"
+    // itself, which has no exits, permanently stranding the player in
+    // the void on every future login. Recover the real pre-disconnect
+    // room from that temp var instead; only fall back to leaving the
+    // existing startroom untouched if that's unavailable too.
+    if (!environment(me)) {
+      // No environment at all: leave any existing startroom untouched.
+    } else if (base_name(environment(me)) == VOID_OB) {
+      if (stringp(me->query_temp("last_location")))
+        me->set("startroom", me->query_temp("last_location"));
+    } else if (environment(me)->is_vehicle()) {
+      me->set("startroom", base_name(environment(environment(me))));
+    } else if (environment(me)->is_space_ship_room()
       || environment(me)->is_space()) {
 
       if (me->is_ghost())

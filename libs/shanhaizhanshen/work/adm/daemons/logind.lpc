@@ -565,9 +565,26 @@ varargs void enter_world(object ob, object user, int silent) {
 }
 
 varargs void reconnect(object ob, object user, int silent) {
+  string last_loc;
+
   user->set_link(ob);
   ob->set_body(user);
   exec(user, ob);
+
+  // AGENTS.md bug catalog: net_dead() (obj/user.lpc) parks a player
+  // who drops connection uncleanly in VOID_OB (a room with no exits)
+  // as a temporary holding spot while awaiting reconnect, remembering
+  // their real room in the nosave "last_location" temp var so it can
+  // be restored on reconnect. obj/user.lpc separately defines a
+  // reconnect() apply that does exactly that restore -- but nothing
+  // ever calls it (LOGIN_D re-links through *this* same-named
+  // function instead, which never did the move), so it was dead code
+  // and a player reconnecting inside the net-dead window stayed
+  // stuck in the void. Do the restore here, in the code path that is
+  // actually invoked.
+  if (base_name(environment(user)) == VOID_OB
+    && stringp(last_loc = user->query_temp("last_location")))
+    user->move(last_loc);
 
   if (!silent) {
     tell_room(environment(user), user->query("name") + "重新连线回到这个世界。\n",

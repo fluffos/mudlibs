@@ -556,8 +556,27 @@ if `raw/` ends up empty. Known traps:
 - **Mixed encodings within ONE file**: BIG5 lines inside an otherwise-GBK
   file decode via GB18030 *without error* into valid-but-wrong mojibake —
   undetectable by the lossy-conversion log. Only a human skim of
-  user-facing strings catches it (`huoying`'s `config.cfg`). Re-decode
-  just the affected lines with BIG5.
+  user-facing strings catches it (`huoying`'s `config.cfg`; also found
+  live during a §10.7 deep functional test on `shanhaizhanshen` — 9
+  `指令格式：` command-help headers mixing this lib's BIG5-heritage ES2
+  base text with GBK text a later Chinese-reskin author appended without
+  re-encoding; a broader automated scan of the same lib found the
+  corruption is likely more widespread than any single pass caught,
+  since the scanner has a real false-negative gap when BIG5-as-GBK lands
+  on other valid-looking CJK — flag for a dedicated cleanup pass rather
+  than assuming one spot-check found everything). Re-decode just the
+  affected lines with BIG5.
+- **Whole help/motd/broadcast files skipped entirely by an earlier
+  conversion pass**: `shanhaizhanshen`'s `doc/help/{topics,cmds,story}`,
+  `adm/etc/motd`, and `adm/etc/nature/day_phase` (a preloaded daemon that
+  broadcasts this text to every outdoor player on every day/night
+  transition, for as long as the driver is up) were still raw GBK,
+  undetected until a §10.7 deep functional test actually ran `help` and
+  waited through a phase transition. A conversion pass's file-extension
+  sweep can still miss extensionless or non-`.lpc` text files if they
+  weren't in whatever glob the sweep used — re-run the "convert EVERY
+  text file" check above specifically against `doc/` and `adm/etc/` on
+  any lib being deep-tested, not just the source tree.
 - **Stray DOS Ctrl-Z bytes** (`0x1a`, old MS-DOS EOF markers) lurk in
   Windows-era files; strip them (seen with the uppercase-`.C` cluster on
   `mohuanshiji`).
@@ -1357,6 +1376,60 @@ the top. `living()` reliably reflects whether `enable_commands()` has
 already run for this object, so the guard is inert for every legitimate
 call site (the real `create()` call, or a call after a genuine
 `disable_commands()`) and only blocks the pathological repeat-call.
+
+### 7.20 Net-dead void-parking without a location-restore path strands players silently on disconnect
+
+Found on `shanhaizhanshen`'s deep functional test (§10.7). **Zero signal
+in `debug.log`** — no crash, no error, no warning — the single hardest
+bug class in this catalog to detect, since every other bug here at least
+leaves SOME trace. Only reproducible by deliberately disconnecting
+uncleanly (not sending `quit`) mid-session and reconnecting, both
+promptly (inside the net-dead timeout) and after letting the timeout
+elapse, then checking the actual room/`startroom` save field — a step no
+prior verification layer in this project has ever performed, since every
+earlier pass either sent a clean `quit` or didn't reconnect at all.
+
+**Symptom**: a player who disconnects without a clean `quit` (a network
+drop or client crash — the single most common real-world disconnect
+mode, far more common than a deliberate `quit`) can end up permanently
+starting every future session in a bare "void" holding room with no
+exits.
+
+**Root cause, two independent flavors — check for both**:
+1. The driver's `net_dead()` handler (typically in `obj/user.lpc`) parks
+   a disconnected player in a temporary "void" room (`VOID_OB` or
+   equivalent) while awaiting reconnect, remembering the real room in a
+   `temp`/`nosave` variable. If the player never reconnects before the
+   net-dead timeout, a force-quit runs (via `user_dump()`) **while the
+   object is still sitting in the void** — if the quit command's
+   save-current-location-as-`startroom` logic doesn't special-case the
+   void room, it persists the void itself as the permanent respawn
+   point.
+2. Separately, some libs define a proper `reconnect()` apply on the
+   player object whose whole job is restoring the pre-disconnect room
+   from that remembered temp variable — but nothing ever calls it; the
+   login daemon re-links the connection through a *different*,
+   same-named function that only handles network-level reattachment and
+   never restores location. `grep -rn "->reconnect(" <mudlib>/`
+   returning zero hits is the tell. This means even a PROMPT reconnect,
+   well inside the net-dead window, still leaves the player stuck in the
+   void.
+
+**Fix pattern**:
+1. In the quit/force-quit command, special-case the void room
+   specifically — recover the real location from the net-dead handler's
+   own remembered temp variable instead of blindly persisting
+   `base_name(environment(me))`.
+2. In whichever reconnect function is actually invoked by the login
+   flow (not necessarily the one named `reconnect()` — verify which
+   function the login daemon actually calls), restore that same
+   temp-remembered location if the player is currently sitting in the
+   void, before or immediately after re-linking the connection.
+
+**Lineages likely affected**: any FF/ES2-derived codebase sharing this
+`net_dead()`/`VOID_OB`/`user_dump()` pattern — check `obj/user.lpc` and
+the quit/logout command on sibling libs in the same lineage family for
+the same shape.
 
 ---
 
