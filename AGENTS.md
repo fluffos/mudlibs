@@ -2008,6 +2008,158 @@ conditions matched," not just "didn't match the last one."
 
 ---
 
+### 7.33 Persisting a state change BEFORE validating that the underlying action actually succeeded
+
+Found on `zhongjidiyu`'s deep functional test (§10.7), in a `born`
+(character-origin-selection) handler: the code resolved a destination
+room via `load_object(dest)`, then IMMEDIATELY did `me->set("startroom",
+dest); me->set("born", arg); ...` — persisting the choice as fact —
+and only checked `if (!objectp(obj)) { ... return 1; }` AFTER all of
+that, at the very end of the function. On this particular archive every
+`born` destination's target zone was missing from the conversion, so
+every `born` attempt failed the objectp() check — but by then the
+broken path had already been written to the player's permanent
+`startroom` field. The visible failure message ("牛头一呆...") looked
+like a no-op, but the account was actually left silently, permanently
+stranded: the next login's `enter_world()` would try to load that
+broken path and (absent the §7.14/§7.22-class fallback logic covering
+THIS specific failure mode) throw with the player left with no
+environment at all.
+
+This is a distinct mechanism from §7.24 (which is about code that
+overwrites `startroom` unconditionally, with no failure path at all) —
+here the code DOES check for failure, just in the wrong order relative
+to the writes. The general shape — "commit a multi-field state change
+optimistically, validate afterward, and only skip a FINAL step on
+failure" — is a plausible pattern anywhere a handler builds up several
+`set()` calls before its own validation gate.
+
+Detection: for any handler that both (a) calls `set()` on a
+persistent/permanent field and (b) has ANY failure/rejection path,
+check whether every `set()` happens strictly after the corresponding
+validation, not before it. Grep the surrounding function for `set(` and
+compare its line number against the nearest `if (!objectp(...))`-style
+guard.
+
+Fix: move the validation check to before the first `set()` call that
+depends on it, so a failed action can never leave a persisted field
+half-written to a broken value.
+
+---
+
+### 7.34 Leftover developer debug output shipped into a live login/registration prompt sequence
+
+Found repeatedly across this round's deep functional tests: `esI` (five
+`tell_object(player, "ttt\n")`/`"ttt1\n"`/etc. checkpoints strung through
+`enter_world()`), `xianlvqiyuan` (a bare `printf("%O\n", ob)` printing
+the login object's raw internal path, e.g. `/obj/login#2`, between the
+name and password prompts), and noted-but-left-alone on `fy2` (a
+similar stray `printf` in `logind.lpc`, existing precedent from `zzfy`
+treats it as harmless). A leftover diagnostic write/printf with no
+explanatory comment, sitting in an otherwise-clean sequence of
+player-facing `write()`/prompt calls in a login or registration daemon,
+prints raw internal state (an object's driver-assigned path, a
+sequence-number checkpoint, etc.) directly into the visible prompt
+flow. Confirmed byte-identical in each raw archive — original-author
+debug scaffolding never cleaned up before the archive was shipped/
+seeded, not a conversion-pipeline artifact.
+
+Detection: grep login/registration daemons (`logind.lpc` and similar)
+for `printf("%O` / `write(sprintf("%O"` / bare numbered
+`tell_object(...)` checkpoints with no surrounding diagnostic comment,
+especially ones sitting between otherwise-legitimate player-facing
+prompts.
+
+Fix: delete the line. It never serves a player-facing purpose (if it
+did, it would already be phrased as normal game text, not a `%O` dump
+or a bare marker string like `"ttt"`). Verify by re-running registration
+and confirming the prompt sequence reads cleanly with no stray output.
+This is cosmetic/UX-hygiene, not gameplay logic — safe to fix on sight
+even under the §10.7 programming-bugs-only scope rule, since it's
+leaked implementation detail, not a content or balance choice.
+
+---
+
+### 7.35 An object-vs-string argument type mismatch fails LOUD via a bare call, but SILENT via `->`
+
+Found on `nitan6`'s deep functional test (§10.7): two NPC files called
+`is_killing(who)` — passing an `object` — where `feature/attack.lpc`'s
+own `is_killing(string id)` declares a `string` parameter. Called as a
+BARE (non-`call_other`) function call, this driver's static type
+checker rejects the mismatch outright at compile time (`Fail to load
+object`) — so the whole NPC file simply never loads, silently absent
+from wherever it's supposed to spawn, with a clear (if easy to miss
+among other archive-gap noise) compile diagnostic.
+
+The catch: the exact same author mistake reached via `->` (a
+call-other) does NOT get this protection — `call other type check` is
+commonly disabled on these drivers/configs, so `target->is_killing(me)`
+with the same object-for-string mismatch compiles and runs fine,
+silently. `nitan6` itself had ~60 such call-other sites across many
+independent skill files, all defeating an "already fighting" guard
+check (always evaluates false) with no crash at all — traced and
+confirmed harmless in that specific case only because the downstream
+function happened to be idempotent, not because the pattern is safe in
+general.
+
+Detection: when you find one instance of this mismatch via a hard
+compile failure (bare call), grep the whole lib for OTHER calls to the
+same function via `->` — those are the same bug, just silently
+degraded to a logic error instead of a load failure, and won't show up
+in an `lpcc` sweep at all.
+
+Fix: pass the argument type the function actually declares (commonly
+`query("id", who)` to get the string form of an object, matching
+whatever convention the rest of the lib already uses at its other,
+correct call sites for the same function). For a wide "silent" spread
+across many call-other sites, evaluate case by case whether the
+downstream effect is genuinely harmless before mass-fixing — don't
+assume; confirm each site's blast radius, or document it as an
+observation and leave it for a dedicated follow-up pass if the count is
+large (§6b's mega-lib "long-tail" precedent).
+
+---
+
+### 7.36 An idle-room cleanup daemon that checks only `interactive()` can destroy a room a net-dead player is still standing in
+
+Found on `xiaoyuxiyou`'s deep functional test (§10.7): a room-idle
+cleanup check (`feature/clean_up.lpc`) used `interactive(inv[i])` alone
+to decide "is anyone genuinely here," and `destruct()`ed itself when
+that came back false for everyone in its inventory. `interactive()` is
+false for a NET-DEAD player — the socket is gone, but the player's body
+and save state are still logically present and reconnectable — so a
+room holding nothing but a net-dead player looked "empty" to this check
+and got destructed out from under them by the driver's own idle sweep,
+corrupting `environment()` to 0 for that player. This cascaded: the
+corrupted environment then made an UNGUARDED `tell_room(environment(),
+...)` inside the net-dead force-quit handler (`user_dump()`) throw,
+which — since that throw happened before the actual `QUIT_CMD->main()`
+save/quit call in the same function — silently skipped the net-dead
+safety net's own save entirely. Found only via a real ~10-minute
+net-dead soak wait (the class of test §10.7/§10.8 explicitly encourage
+attempting, not simulating).
+
+Detection: grep any idle-room/zone cleanup daemon for occupancy checks
+that call `interactive()` without also checking `userp()`. `userp()`
+reflects the driver's persistent "this is a player body" flag, which
+stays true across a net-dead disconnect (it's what the net-dead
+handling code elsewhere in the same lib already relies on) — a
+same-lib inconsistency between what the cleanup check tests and what
+the net-dead handler assumes is a strong tell. Reproduce live with a
+real net-dead wait past whatever the room's own idle-sweep interval is
+(often much shorter than `NET_DEAD_TIMEOUT` itself), then check whether
+the disconnected character's `environment()` is still sane on
+reconnect.
+
+Fix: add `|| userp(inv[i])` (or equivalent) to the occupancy check so a
+net-dead-but-still-real player keeps their room alive. As defense in
+depth, also guard any `tell_room(environment(), ...)`-style call inside
+net-dead/idle force-quit handlers with `objectp()` so a corrupted
+environment from some OTHER bug can never itself block the actual
+save/quit that same handler exists to guarantee.
+
+---
+
 ## 8. Login and registration flow bugs
 
 Registration is where restoration succeeds or fails: it exercises the
