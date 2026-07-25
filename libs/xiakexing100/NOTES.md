@@ -192,3 +192,171 @@ further here). Test characters removed afterward; fluffos kept.
 Reverted an incidental `data/topten.o` leaderboard diff caused by the
 test registrations (pre-existing tracked file, not meant to churn from
 QA runs).
+
+## 深度功能测试 / Deep functional test (AGENTS.md §10.7, 2026-07-24)
+
+One continuous native session (`~/src/fluffos/build-debug/src/driver`,
+port 40037), following the §10.7 checklist end to end: read `help
+intro`/`help newbie`/`help newbie-basic`/`help newbie-shaolin1` first,
+registered a real Chinese name (`qftester` / 秦风, password `test1234`,
+born 嘉兴/group `3`, talents 20/20/20/20, personality `0`), landed at
+`/d/jiaxing/yanyu` ("烟雨楼"), `look`/`score`/`i`/`hp` all correct.
+Explored on foot toward 牛家村 reading room `.lpc` source
+(`d/jiaxing/*.lpc`) to navigate since exit lists intermittently hide
+under the lib's night-time darkness gate. Used the wizard `spgo`/
+`summon` commands (via the seeded `fluffos` admin) purely to fast-travel
+the SAME test character to distant content (少林寺 练武场/广场) rather
+than trekking the whole map by foot — the actual sect-join, skill-learn,
+combat, and shop interactions below were all performed by the ordinary
+player character, not the admin.
+
+**Safe sparring**: the newbie guide's suggested targets (a village
+`小孩`/`女孩`) both declined `fight` — traced this to their `attitude`
+being genuinely `"friendly"` in their own `create()` (`/d/village/npc/
+kid.lpc`, `/d/village/npc/girl.lpc`), which `inherit/char/npc.lpc`'s
+`accept_fight()` is coded to always decline (`case "friendly": ...
+return 0;`) — working as designed, not a bug (a different, unrelated
+`/d/jiaxing/npc/boy.lpc`/`/d/village/npc/boy.lpc` with `attitude:
+"peaceful"` momentarily looked like a mismatch until the actual live
+object path was confirmed via `call obj->query(...)` — red herring, not
+reused). Used the lib's own documented, code-confirmed-safe wooden-dummy
+mechanic instead (`d/shaolin/obj/mu-ren.lpc`, `accept_fight()` checks
+`me->query("damaged")`/a `random(fight_times)>=10` break-chance, exactly
+the §10.7-item-3 shape): `fight mu` at `/d/shaolin/wuchang1` exchanged
+several rounds of blows with correct combat text, `halt` ended it
+cleanly, `hp`/`i` afterward correct, zero `debug.log` errors.
+
+**Skill/sect join**: followed `help newbie-shaolin1`'s documented path —
+`apprentice biqiu` (清为比丘 at `/d/shaolin/guangchang1w`) immediately
+accepted as a 俗家弟子/少林派第四十一代弟子 (no manual `ask ... about
+出家`/`kneel` needed for this particular monk); `score` showed 师父/称谓
+updated correctly; `skills biqiu` listed the master's own skill roster;
+`xue biqiu dodge 1` (organic NPC-teacher path) advanced 基本躲闪 from
+unlearned to `1/0`, `cha` confirmed it. Both the sect-join and
+skill-learn steps worked correctly, no separate admin-command shortcut
+was tested (none is needed/expected in this lib — `apprentice` IS the
+join mechanism).
+
+**`quit` → debug.log → reconnect (§10.7 items 5, 8, 9)**: clean `quit`
+produced no warning (confirms the pre-existing `savequit()` fix from the
+"Bonus fix" section above still holds) and left zero new `debug.log`
+lines. Net-dead (dropped the connection without `quit`) and reconnected
+PROMPTLY (a few seconds later): worked correctly, position/state intact.
+**Net-dead and NOT reconnecting until the real timeout elapsed found a
+new, live-reproduced bug — see below.** Separately, clean `quit`
+followed by a genuine ~75-real-second wall-clock gap, then a FULL fresh
+login (not a net-dead reconnect) via `qftester`/`test1234`: correctly
+restored sect membership, skill, and all `score` fields from the
+on-disk save file (`data/user/q/qftester.o` — `family` mapping,
+`skills`/`learned` mappings, `dbase.qi`/`jing` etc. all intact).
+
+**Shop purchase (§10.7 item 6)**: character had no starting funds
+("你没有存款"), so used the admin account to `clone /clone/money/coin`,
+`call coin->set_amount(500)`, `spgive qftester coin` (funding only —
+the purchase itself was performed by the ordinary player character).
+`list` at 烟雨楼's 店小二 showed the menu correctly; `buy jitui` (30
+文) succeeded, correctly made change into higher denominations (500
+铜钱 → 1 烤鸡腿 + 4 两白银 + 70 文铜钱); `eat jitui` consumed it. No
+errors.
+
+**Not verified live**: progression to a real death/respawn cycle — the
+session budget went to the net-dead bug investigation below instead;
+code review only (`d/city/ghost*.lpc`/鬼门关 revival flow referenced by
+`help newbie-basic`'s〖死亡〗section was read but not exercised). A
+sect promotion (拜达摩/升辈) is a multi-hour undertaking per the
+newbie guide's own admission and was not attempted.
+
+### Bug found and fixed: `tell_room()` 2-arg wrapper crashes the net-dead force-quit handler — matches AGENTS.md §7.12 exactly (severity-escalated instance)
+
+`adm/simul_efun/message.lpc`'s `tell_room()` wrapper:
+
+```lpc
+varargs void tell_room(mixed ob, string str, object *exclude) {
+  if (ob) message("tell_room", str, ob, exclude);   // BEFORE
+}
+```
+
+Every 2-argument call site leaves `exclude` as LPC's default `int 0`
+(not an empty array), and the real `message()` efun's 4th argument
+rejects a bare `0`. `clone/user/user.lpc`'s `user_dump()` — the
+`NET_DEAD_TIMEOUT`-driven (900s / 15 real minutes, `include/user.h`)
+force-quit handler that runs when a net-dead player never reconnects —
+calls `tell_room(environment(), ..., "\n")` with only 2 args at its very
+first line (the DUMP_NET_DEAD case). This is byte-for-byte the same
+lib/function/case/timeout shape AGENTS.md §7.12 documents as
+"severity-escalated" from `dtsl`'s deep functional test: the crash
+aborts `user_dump()` at that exact statement, so the two lines after it
+(`"/cmds/usr/exit"->savequit(this_object())`) never run — **silently
+disabling the entire net-dead force-quit safety net**: a player who
+net-deads and never manually reconnects would stay alive in server
+memory forever (never actually saved-and-removed via this path) until a
+driver restart.
+
+**Live-reproduced** (not just pattern-matched): temporarily lowered
+`NET_DEAD_TIMEOUT` from 900 to 12 (`include/user.h`), ran the wizard
+`update /clone/user/user` command to recompile it, connected as
+`qftester`, dropped the connection without `quit`, waited past the
+shortened timeout:
+
+```
+执行时段错误：*Bad argument 4 to EFUN message()
+Expected: object, array,  Got: int(0).
+程式：/adm/single/simul_efun.lpc 第 77 行
+呼叫来自：/clone/user/user.lpc 的 user_dump() 第 75 行，物件： /clone/user/user#105 ("秦风")
+呼叫来自：/adm/single/simul_efun.lpc 的 tell_room() 第 77 行
+```
+
+**Fixed** (the standard AGENTS.md §7.12 wrapper fix, protects every
+2-arg call site in the lib at once, not just this one):
+
+```lpc
+varargs void tell_room(mixed ob, string str, object *exclude) {
+  if (ob) message("tell_room", str, ob, exclude || ({}));   // AFTER
+}
+```
+
+Re-verified with the same shortened-timeout methodology: no crash,
+`debug.log` clean, and `who` afterward showed only the admin online —
+`qftester` was correctly force-quit-and-saved this time (confirms the
+two previously-dead lines, including `savequit()`, now execute).
+Restored `NET_DEAD_TIMEOUT` to 900 and did a full clean driver restart
+before finishing (the test-only timeout value was never left in place).
+
+**Note for the project**: two other confirmed "Century/`adm-single`"
+lineage siblings (AGENTS.md §11) — `shiji` and `xianjianchuanqi` — still
+carry the exact same unfixed 2-arg `tell_room()` wrapper in their own
+`adm/simul_efun/message.lpc` (checked via grep during this pass, not
+fixed — out of scope for this task, which is `xiakexing100`-only).
+`shujian2008`, `xiakexinzhuan2`, and `zhonghua2` (same family) already
+carry the fix from earlier passes. Worth a follow-up pass on `shiji`/
+`xianjianchuanqi` specifically for this bug given `xianjianchuanqi` is
+also the lib AGENTS.md §10.8 documents hitting an unrelated driver-fatal
+crash ~25 minutes into its own net-dead soak — the two are different
+bugs but both live in the same net-dead code path family.
+
+### Observation, not fixed (design ambiguity, see §10.7's scope note): two independent day/night clocks can visibly contradict each other
+
+`cmds/std/look.lpc`'s exit-listing darkness gate
+(`天色太黑了，你看不清明显的出路`) keys off `NATURE_D->game_time()`,
+which derives an in-game shichen (時辰) hour from a heavily-compressed
+calendar clock (`adm/daemons/natured.lpc`: `#define TIME_TICK
+((time()%(60*24*3600))*365)` — 60 mud-years pass every 60 real days,
+i.e. roughly 6 mud-hours per real minute, confirmed live: the session's
+in-game date advanced across several 时辰 within a couple of real
+minutes). The SEPARATE sun-position flavor line
+(`NATURE_D->outdoor_room_description()`) keys off `current_day_phase`,
+a `nosave` variable advanced by its own independent real-time
+`call_out("update_day_phase", ...)` cycle. These two clocks are not
+synchronized and were observed live disagreeing outright in the same
+room printout — "一轮火红的夕阳正徘徊在西方的地平线上"（sunset flavor
+text) immediately followed by "天色太黑了，你看不清明显的出路"
+(darkness gate, only fires for 亥/子/丑/寅时) moments apart, and at one
+point "太阳正高挂在西方的天空中"（afternoon flavor text) paired with the
+SAME darkness message. Purely cosmetic/exit-listing (movement in a
+known direction still works even when the list is hidden — confirmed by
+navigating through several "dark" rooms via directions read from
+source), and both clocks' formulas are pure LPC business logic with no
+encoding/efun/grammar involvement, so this is very plausibly authentic
+original-game behavior rather than anything this project's conversion
+introduced. Documented per §10.7's scope note rather than "fixed" by
+guessing which clock should govern the gate.
