@@ -1,67 +1,39 @@
 # 大唐双龙传 (Twin Dragons of the Tang Dynasty)
 
-属于"大唐双龙"世界观的一支,与 datangshuanglong、
-llmud_datangshuanglong 共享部分基础引擎代码,但各自剧情内容独立开发。
+属于"大唐双龙"世界观的一支，与 datangshuanglong、
+llmud_datangshuanglong 共享部分基础引擎代码，但各自剧情内容独立开发。
+取材自黄易同名武侠小说，以大唐初年江湖为背景。
 
-## 简介
+## 内容亮点
 
-「大唐双龙传」取材自黄易同名武侠小说,以大唐初年江湖为背景。新角色从
-"大唐学院"起步,通过学院课程了解基本操作后,即可下山(down)开始真正
-的江湖历练,也可以先 enter 进入"新人篇"深入学习。整体节奏对新手比较
-友好。
+- 新角色从"大唐学院"起步，通过学院课程了解基本操作后即可下山
+  （`down`）开始真正的江湖历练，也可以先 `enter` 进入"新人篇"深入
+  学习——整体节奏对新手比较友好。
+- 密码规则与"书剑"系列不同：只限制长度（5-8 位），不强制要求大小写
+  或数字混合。
+- 天赋分配同样是四项属性总和固定制（须凑够 80 点，每项 10-30）。
 
-## 如何运行
+## 在线试玩
 
-```
-cd libs/dtsl
-~/src/fluffos/build-debug/src/driver config.fluffos
-```
-
-游戏端口:**40008**。
-
-## 如何连接游玩
-
-```
-python3 scripts/mudclient.py 127.0.0.1 40008
-```
-
-注册流程(无隐藏前置问题,直接从英文 ID 开始):
-1. 英文 ID(3-8 个英文字母)
-2. 确认创建新角色(y/n)
-3. 中文姓名
-4. 密码(**5-8 个字元**,与常见"必须含大写字母/数字"的书剑系列不同,
-   这里只限制长度)
-5. 确认密码
-6. 电子邮件地址
-7. 选择性别(m/f)
-8. 分配四项天赋点数(格式如 `20 20 20 20`,四项之和须为 80,每项 10-30
-   之间)
-9. 确认分配(Yes/No)
-
-完成后进入"大唐学院",`look`/`score` 等指令均正常。
-
-## 已知问题
-
-- 少数任务类房间(`d/job/timejob/job2` 下的若干"room*.lpc"文件)缺少一
-  个共用的房间模板文件,属于原始 archive 就存在的内容缺口,只影响个别
-  支线任务房间。
-- 个别武器道具(如 `sm_ding` 相关的传奇兵器)引用了一个本 archive 未随
-  附的头文件,该道具暂不可用,不影响主线游玩。
-- 本游戏已确认可在 WASM/浏览器模式下完整游玩(注册、登陆、基础指令均
-  正常),不受底层驱动 IP 检测限制影响。
+https://mudlibs.fluffos.info/dtsl/
 
 ## 管理员账号 / Admin account
 
 - **ID**：`fluffos`
 - **密码 / Password**：`Mud@2026`
 - **中文名 / Display name**：浮浮
-- **权限 / Level**：`(admin)`（`adm/etc/wizlist` 最高等级）——已验证
-  `update` 巫师指令可用（重新连线后显示"作为巫师，你可以迅速离线"）。
+- **权限 / Level**：`(admin)`（`adm/etc/wizlist` 最高等级）
 - 授权方式：`adm/etc/wizlist` 加入 `fluffos (admin)` 一行（保留原有
-  `fengfei`/`kouzhong`/`ttj`/`zhujiepo` 条目），重启后
-  `securityd.lpc` 的 `create()` 读入生效。
-- 存档文件：`work/data/user/f/fluffos.o`、`work/data/login/f/fluffos.o`
-  （未被 gitignore，普通 `git add libs/dtsl/` 即可纳入）。
+  `fengfei`/`kouzhong`/`ttj`/`zhujiepo` 条目）。
 
 > 警告：`Mud@2026` 是本地游玩用的公开默认密码。若要正式对外开放主机，
 > 请先修改此密码。
+
+## 本地运行
+
+```
+cd libs/dtsl
+~/src/fluffos/build-debug/src/driver config.fluffos
+```
+
+游戏端口：**40008**。

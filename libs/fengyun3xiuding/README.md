@@ -1,56 +1,20 @@
 # 风云三（星星修订版）— fengyun3xiuding
 
-## 游戏名称
+压缩包内附带的说明文档称之为"星星修订的风云3"（社区爱好者"星星"整理
+修订的一个内容较丰富的版本）。属于本批次的**"风云3"（Fengyun III）
+引擎分支**，与 `fengyun3dianzang`（风云典藏版）核心代码高度一致，属于
+同一引擎的不同内容打包。
 
-**风云三（本地）**，压缩包内附带的说明文档称之为"星星修订的风云3"
-（社区爱好者"星星"整理修订的一个内容较丰富的版本）。属于本批次的
-**"风云3"（Fengyun III）引擎分支**，与 `fengyun3dianzang`（风云典藏版）
-核心代码高度一致，属于同一引擎的不同内容打包。
+## 内容亮点
 
-## 简介
+- 以古龙武侠为背景的江湖世界，新角色从凤求凰客栈起步，选择民族（汉族
+  /苗族/满族/蒙古族）与性别后即可闯荡江湖。
+- 这个"修订版"任务内容比同引擎的早期版本更加丰富，并附带较详细的
+  游戏内帮助文档，适合刚接触这套引擎的新玩家。
 
-以古龙武侠小说为背景的江湖世界。新角色从凤求凰客栈起步，选择民族
-（汉族/苗族/满族/蒙古族）与性别后即可闯荡江湖。这个"修订版"任务
-内容比同引擎的早期版本更加丰富，并附带较详细的游戏内帮助文档，
-适合刚接触这套引擎的新玩家。
+## 在线试玩
 
-## 如何运行
-
-```
-cd libs/fengyun3xiuding
-mkdir -p log   # 如尚未创建
-~/src/fluffos/build-debug/src/driver config.fluffos
-```
-
-服务器监听端口：**40089**。
-
-## 如何连接游玩
-
-```
-python3 scripts/mudclient.py 127.0.0.1 40089 --timeout 25 --idle 0.8 \
-  --send "" --send "英文名字(3-10位纯小写字母)" --send "y" \
-  --send "你的中文名字" --send "密码" --send "确认密码" \
-  --send "邮箱" --send "m" --send "0-3选择民族" \
-  --send "look" --send "score"
-```
-
-连接后直接是普通的英文名提示，没有隐藏的编码/客户端版本关卡。依次
-输入：英文登录名（3-10 位纯小写字母）→ 确认新建角色 (y/n) → 中文
-名字 → 设置密码（至少 6 位）→ 确认密码 → 邮箱 → 性别(m/f) → 民族
-（0=汉族/1=苗族/2=满族/3=蒙古族）。完成后正式进入游戏。
-
-也可使用普通 telnet：`telnet 127.0.0.1 40089`。
-
-## 已知问题
-
-- 少数早年遗留的网络/邮件类后台服务（如站间通讯、内部邮件服务）
-  因缺少配套文件而无法使用，但这些都是幕后系统组件，不影响正常玩家
-  的登录、创角与日常指令。
-- 极个别布告板对象指向的房间在原始存档中本就缺失，只在系统内部扫描
-  时才会体现，不影响主线游玩。
-- **WASM 兼容性**：已在新的 WASM 构建下完整测试，注册、`look`、`quit`
-  均可正常完成（本轮已提前修复了同引擎家族在 `fengyun3dianzang` 中
-  发现的安全管理进程域名解析问题，因此这里从未触发过对应的登录报错）。
+https://mudlibs.fluffos.info/fengyun3xiuding/
 
 ## 管理员账号 / Admin account
 
@@ -58,7 +22,16 @@ python3 scripts/mudclient.py 127.0.0.1 40089 --timeout 25 --idle 0.8 \
 - **密码 / password**: `Mud@2026`
 - **中文名 / display name**: 浮浮
 - **权限 / level**: `(admin)` —— 最高级别，通过 `/adm/etc/wizlist` 中的
-  `fluffos (admin)` 行授权（securityd 启动时读取）。已验证
-  `update /adm/daemons/combatd` 重新编译成功。
-- ⚠️ **公开架站前请务必修改此默认密码。** Change this published default
-  password before hosting publicly.
+  `fluffos (admin)` 行授权（securityd 启动时读取）。
+
+> 警告：公开架站前请务必修改此默认密码。
+
+## 本地运行
+
+```
+cd libs/fengyun3xiuding
+mkdir -p log   # 如尚未创建
+~/src/fluffos/build-debug/src/driver config.fluffos
+```
+
+游戏端口：**40089**。
