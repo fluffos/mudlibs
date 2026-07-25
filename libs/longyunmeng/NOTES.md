@@ -639,3 +639,235 @@ Save files (untracked, NOT gitignored — orchestrator must add all FOUR):
 **Retest:** fresh normal registration (ceshisi / 秦岭甲) end-to-end OK
 (look/score/quit correct; all four test-char save/key files removed);
 no new errors in debug.log.
+
+## 深度功能测试 / Deep functional test (AGENTS.md §10.7, round two)
+
+One continuous native-driver session (plus a few short admin-assisted side
+sessions for reachability, disclosed below), `~/src/fluffos/build-debug/src/driver
+config.fluffos` from `libs/longyunmeng/`, driven via `scripts/mudclient.py`.
+Read `doc/help/intro` and `doc/help/newbie.txt` first — both already fully
+UTF-8 and readable, no re-conversion needed. Key facts learned from them and
+used to plan the test: `fight` is the lib's own explicit safe-sparring verb
+("点到为止... 只会消耗体力，不会真的受伤" — stamina-only, no real injury);
+newbie.txt itself warns **quitting within the first 30 real minutes of a
+new account deletes it** ("进入游戏后半小时之内不可以退出游戏否则ID将会被
+系统删除") — confirmed in `cmds/usr/quit.lpc` and treated throughout as an
+intentional, already-cataloged content timer (AGENTS.md §1.3e's "KEEP
+in-game content timers" bullet — same shape as `xiyouji2003`), not touched.
+
+**Registration**: real Chinese name `沈惊鸿` (id `shenym`), male, landed in
+悦来客栈 (Inn) on 南阳城/Nanyang — `look`/`score`/`i` all correct immediately
+after registration and after every later relogin. A second full registration
+(`林测试`/lintest) and a third (`测试贰号`/cesitwo) were also run clean, both
+also self-deleted correctly via the in-game quit-before-30-min flow at the
+end of the session (see below) — three independent registrations, zero
+failures, corroborating the existing NOTES.md registration verification.
+
+**Safe-sparring mechanism**: found and used the documented training-dummy
+NPC, 木人 (`d/shaolin/npc/mu-ren.lpc`, placed in the Shaolin 练武场/
+`d/shaolin/wuchang.lpc`) — matches the checklist's own "`accept_fight()` +
+stat-copy loop" pattern exactly (copies the attacker's own skills/stats
+into the dummy on `accept_fight()`, `set("no_die", 1)`, a
+`last_fighter`/`fight_times` cooldown so the same player can't grind it
+back-to-back). `fight mu ren` produced a full, real combat exchange ending
+in an automatic concede ("这场比试算我输了，佩服，佩服！") with no
+character death and no server error; retrying immediately correctly
+rejected with "你刚跟这个木人练过功！" (cooldown working). Reached via
+`goto` as the seeded admin account (`fluffos`/`Mud@2026`) rather than
+on-foot navigation — the Shaolin room graph from the `fly sl` entrance
+(`guangchang1`) into the interior practice-ground cluster is large and not
+straightforwardly traceable by grep alone; using `goto` tests the *mechanism*
+identically to a player physically walking there (same `fight` command, same
+`accept_fight()` code path), just skips the maze-solving. Disclosed here,
+not hidden.
+
+**Sect-join + organic learn-from-teacher**: both tested together against
+华山派 (Huashan sect) master 岳不群 (`kungfu/class/huashan/yue-buqun.lpc`),
+again reached via admin `goto` for the same navigation-cost reason (see the
+"orphan room" finding below — this NPC's room turned out to have NO
+in-bound exit from anywhere in the map, so on-foot navigation was never
+actually possible to begin with, not just impractical). `apprentice yue`
+correctly ran the full `attempt_apprentice()` → `do_recruit()` (`call_out`,
+2s) → `command("recruit ...")` chain and produced "恭喜您成为华山派的第
+十四代弟子" plus a `score` showing the new 师傅/称谓 fields set correctly.
+`learn huashan-sword at 3 from yue` correctly gated on insufficient 内力
+("你的内力不够，没有办法练华山剑法") — a resource/design gate, not a crash;
+`learn unarmed at 1 from yue` (a free/no-cost skill) succeeded end-to-end
+("你听了岳不群的指导，似乎有些心得。你的「基本拳脚」进步了！"). Both
+mechanisms work correctly; no `debug.log` errors from either.
+
+**`quit`, debug.log grep, real-time reconnect (checklist items 7–9)**: `沈惊鸿`
+was quit-and-reconnected many times over the session, both cleanly (`quit`)
+and uncleanly (closing the socket without `quit`, which reliably triggers
+`net_dead()` — this lib does NOT void-park a net-dead player, §7.20 does not
+apply here, they stay exactly where they were, `set_temp("netdead",1)` only):
+- **Prompt net-dead reconnect**: works correctly — a reconnect within the
+  10-second post-disconnect cooldown (`quit_time`-gated, `logind.lpc:~403`,
+  an intentional anti-thrash gate, not a bug) is rejected with "系统繁忙，
+  请等待 10秒 再行尝试连线", and a reconnect just after that window correctly
+  routes through `user->reconnect()` (verified: position, gender, inventory
+  all intact after several such cycles).
+- **Clean `quit` after the 30-minute account-age threshold**: no deletion
+  prompt (age-gated, correctly bypassed once `birthday` age > 1800s),
+  "欢迎下次再来！", save file `mtime` updated, `debug.log` unchanged.
+- **Real wall-clock reconnect after a clean quit**: waited ~130 real seconds
+  (`until`-loop blocking wait, not a background Monitor) after the clean
+  quit above, then reconnected — room, Chinese name, gender, gift item
+  (布衣/Cloth) all persisted correctly, zero new `debug.log` lines.
+- **Full 900-second net-dead timeout** (`NET_DEAD_TIMEOUT` in
+  `include/user.h`, `user_dump(DUMP_NET_DEAD)` → `command("quit")`): let a
+  throwaway character (王大腿/wangdatui) sit net-dead across the entire
+  real-time window (~18 minutes total wall-clock waited, combining this with
+  pushing `沈惊鸿`'s own account age past 1800s in the same wait, per
+  AGENTS.md's "one blocking wait, not stacked sleeps" guidance) — see the
+  next finding for what this surfaced.
+
+**FINDING (driver-fatal crash, corroborates AGENTS.md §10.8) — FIXED,
+mudlib-side mitigation applied**: partway through the same real-time soak
+window above, the native driver process **aborted outright**
+(`md: debugmalloc: attempted to free non-malloc'd pointer ...` →
+`abort()` inside `dealloc_object`/`debugfree`/`MDfree` — the exact same
+crash signature already catalogued for `shenzhou`/`nitan170911` in §10.8),
+killing the whole server. This is the **sixth** independent occurrence of
+this driver-level memory-corruption class across this project's round-two
+testing, still not root-caused to the driver's C++ internals (out of scope
+for an LPC-level pass; flagged to the human maintainer per §10.8's own
+standing request for a dedicated ASan/valgrind driver-level investigation).
+
+**Unlike every prior occurrence, this one left a concrete, actionable clue
+in `debug.log` immediately before the abort** — worth a partial revision to
+§10.8's "debug.log shows nothing whatsoever" framing (still true for the
+*abort itself*, which logs nothing, but a *contributing* uncaught runtime
+error can be visible just before it): a `adm/daemons/questd.lpc`
+cron-driven quest-spreading routine (`spread_quest()`/`init_dynamic_quest()`,
+called from `adm/daemons/cron.lpc`'s `start_task()`) repeatedly picked
+random not-yet-loaded rooms from `d/baituo/` (caoping, fende, dongkou,
+menlang, xiaolu3, ...) and called `reset()` on them; each one logged an
+UNCAUGHT `执行时段错误：*cannot bind a functional to an object with a
+pending replace_program()` from `inherit/room/room.lpc:96`, immediately
+followed (same debug.log tail) by the fatal abort.
+
+Root cause, confirmed by reading `inherit/room/room.lpc`: every room file in
+this lib ends its own `create()` with `replace_program(ROOM)` (the standard
+"generic clone becomes a real room" MudOS idiom, used lib-wide, not just in
+`d/baituo/`). `inherit/room/room.lpc`'s own `reset()` (and its sibling
+`xyzx_system_clean_up()`) does
+`inv = filter_array(inv, (: clonep($1) && !$1->is_character() :));` —
+creating a closure bound to `this_object()`. If `reset()` runs (whether via
+the driver's own post-`create()` reset pass, matching the exact mechanism
+already catalogued in AGENTS.md §7.17, or via an explicit caller like
+`spread_quest()`) **before** that room's own `replace_program()` has
+actually committed, binding the closure throws — uncaught, since neither
+`room.lpc`'s `reset()` nor `questd.lpc`'s call site wrap it in `catch()`.
+Reproduced live and deterministically: on a fresh boot, `goto`-ing (as
+admin) to any of the five rooms named in the crash log reliably reproduced
+the identical uncaught error on cold first load, every time.
+
+**This is very likely a material contributor to the crash** (strong
+temporal correlation — the exact same shape §7.12's escalation note and
+§10.8 already document: a `call_out`/cron-driven function with no enclosing
+`catch()`, hit repeatedly right before an abort) but, consistent with every
+other §10.8 entry, **not proven as the sole cause** — the driver-level
+memory corruption itself remains unexplained. Fixed the mudlib-side part
+regardless, since it's a real, reproducible, uncaught runtime error in its
+own right (matches AGENTS.md's "missing guard around a driver-documented
+throw" fixable class, same shape as §7.17/§7.19/§7.25): wrapped both
+`filter_array(...)` calls in `inherit/room/room.lpc` (`xyzx_system_clean_up()`
+and `reset()`) in `catch()`, skipping just that one cleanup/population pass
+on failure rather than aborting the whole calling chain. **Verified fixed
+live**: after the fix, `goto`-ing to all five previously-affected rooms
+produced zero occurrences of the error string in `debug.log` (previously
+100% reproducible for exactly these rooms). Did not have time/opportunity
+to re-run the full 900s+ soak a second time to confirm the *crash itself*
+doesn't recur — the fix targets a confirmed, reproducible contributing
+error, not a confirmed-eliminated crash; note this honestly rather than
+claim more than was verified.
+
+**Draft new AGENTS.md bug-class candidate** (since this shape doesn't
+exactly match any existing §7.x entry — closest are §7.17 and §7.25, but
+both are scoped to NPC/room *population* helpers, not a generic *periodic
+daemon reset() call*): "A universal `replace_program(ROOM)`-in-`create()`
+room idiom, combined with an unguarded `filter_array()`-closure in the
+shared room base class's `reset()`, throws an uncaught runtime error
+whenever ANY caller (the driver's own post-create reset, or a periodic
+daemon like a quest-spreader) reaches a room's `reset()` before its
+`replace_program()` commits — reproduces reliably on that room's cold
+first load specifically (not on later resets), and is easy to miss because
+ordinary login/registration testing rarely cold-loads obscure zone rooms
+that a login-daemon walkthrough never visits." Left as a draft here per
+the task instructions rather than editing AGENTS.md directly.
+
+**FINDING (observation only, NOT fixed — insufficient reproducibility to
+be confident in a root cause or a fix)**: during the same net-dead soak,
+the throwaway character 王大腿 (id `wangdatui`)'s **login-object companion
+save file** (`data/login/w/wangdatui.o`, written by `clone/user/login.lpc`'s
+own `->save()`, separate from the player body's `data/user/w/wangdatui.o`)
+was observed **missing** for an extended period after a normal, successful
+registration + uncontrolled (socket-close) disconnect — confirmed via
+`stat`: the `data/login/w/` directory itself didn't exist until a later,
+unrelated manual reconnect attempt created it. Because `logind.lpc`'s
+"does this id already exist" check (`get_id()`, ~line 322) tests
+`file_size(ob->query_save_file() + ext) >= 0` against the LOGIN object's
+own file, not the player body's, this made the game **incorrectly treat a
+real, already-registered account as available for a brand-new
+registration** on the very next connection attempt ("使用 wangdatui 这个
+名字将会创造一个新的人物，您确定吗？") — a genuinely concerning shape,
+since confirming that prompt could plausibly have orphaned or overwritten
+the real `data/user/w/wangdatui.o` (not tested — did not want to risk
+actually destroying evidence of the bug before writing it up).
+
+**Why this is documented, not fixed**: a second, deliberately clean and
+isolated repro attempt immediately afterward (a fresh character, `cesitwo`,
+same registration flow, same subsequent uncontrolled disconnect) did **NOT**
+reproduce the missing-login-file symptom — its `data/login/c/cesitwo.o`
+was written correctly and immediately, during registration itself, exactly
+as `enter_world()`'s `user->save(); ob->save();` (both unconditional, no
+guard) is supposed to do. So this is not a deterministic, on-demand
+reproducible bug — closer in spirit to the low-reproducibility class
+AGENTS.md §10.8 already normalizes for the driver-crash findings, just at
+the mudlib level this time. `wangdatui`'s own data (both copies) had fully
+disappeared by the time this was investigated further, consistent with the
+account eventually being swept up by the same age-based cleanup this lib
+already runs elsewhere for abandoned sub-1-hour registrations (plausible,
+not confirmed — the exact deletion trigger and timing were not pinned down
+either). Per AGENTS.md §10.7's own scope note ("when genuinely unsure...
+document it honestly... and leave the code untouched — don't guess"), no
+code change was made for this one. **Suggested direction for a future
+pass, not applied**: the `get_id()` existence check could be made more
+robust by also/instead consulting `data/user/<shard>/<id>.o` (the player
+body's own save, which this session's evidence suggests is the more
+reliably-written of the two), rather than trusting the login object's
+companion file alone as the sole signal that an id is taken.
+
+**Shop / economy**: reached a 当铺 (pawnshop, `南大街` off `扬州`/Yangzhou,
+per the newbie doc's own documented path `fly yz;w;s;s;e`) with `沈惊鸿`.
+`list` returned "目前没有可以卖的东西" (nothing currently sellable) — this
+particular shop's `list` command is geared toward the player *selling* to
+the pawnshop rather than browsing a buy-menu, and the fresh newbie
+character had nothing pawnable equipped beyond the starter cloth. Command
+dispatch itself worked correctly (no crash, sensible response) but an
+actual gold-for-item purchase transaction was **not completed** — noting
+this honestly as unverified-live rather than claiming it was tested, per
+the checklist's own instruction. Did not reach combat/death against a real
+(non-training-dummy) opponent either, given the time already spent on the
+net-dead soak and the crash investigation above — also explicitly flagged
+as unverified-live.
+
+**Process note**: the native driver process was involuntarily SIGTERM'd
+once early in this session (visible in `/tmp/longyunmeng_driver_stdout*.log`
+as a clean `attempt_shutdown`/backtrace-then-exit, not a crash) between two
+otherwise-unrelated tool calls, consistent with this environment's known
+"stray SIGTERM between tool calls" issue already documented in AGENTS.md
+§10.5 despite using the recommended `setsid nohup ... & disown` launch
+pattern — restarted and continued; not a mudlib issue.
+
+**Files modified**: `libs/longyunmeng/work/inherit/room/room.lpc` (the
+`catch()` fix above). `libs/longyunmeng/work/data/user/f/fluffos.o` also
+shows as modified in `git status` — normal drift from the admin account
+being logged into several times during this pass (`last_on`-style fields),
+not a content change. All throwaway test-character save/key files
+(`shenym`/沈惊鸿, `lintest`/林测试, `cesitwo`/测试贰号) were removed at the
+end of the session — two via the game's own quit-before-30-min deletion
+flow (exercising that code path as a side effect), one (`shenym`, past the
+30-minute mark) via direct file removal. `wangdatui`/王大腿's own data was
+already gone by the end of the session (see the finding above).

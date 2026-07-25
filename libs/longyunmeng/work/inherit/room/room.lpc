@@ -49,6 +49,7 @@ void new_clean_up(mapping obj_list) {
 void xyzx_system_clean_up() {
   object *inv, *room_obs;
   int i;
+  mixed err;
 
   inv = all_inventory(this_object());
 
@@ -60,7 +61,17 @@ void xyzx_system_clean_up() {
     if (arrayp(room_obs)) inv -= room_obs;
   }
 
-  inv = filter_array(inv, (: clonep($1) && !$1->is_character() :));
+  // A freshly-loaded room's own create() ends with replace_program(ROOM);
+  // if this function runs (e.g. via the driver's own post-create reset(),
+  // or a daemon calling reset()/this function) before that replace_program()
+  // has actually committed, binding a closure to this_object() throws
+  // "cannot bind a functional to an object with a pending replace_program()"
+  // -- observed live via adm/daemons/questd.lpc's cron-driven spread_quest()
+  // cold-loading rooms across the map. catch() and skip this cleanup pass
+  // rather than let the error escape uncaught into the caller (a periodic
+  // system daemon with no catch() of its own).
+  err = catch(inv = filter_array(inv, (: clonep($1) && !$1->is_character() :)));
+  if (err) return;
 
   for (i = 0; i < sizeof(inv); i++) {
     destruct(inv[i]);
@@ -93,7 +104,13 @@ void reset() {
     if (arrayp(room_obs)) inv -= room_obs;
   }
 
-  inv = filter_array(inv, (: clonep($1) && !$1->is_character() :));
+  // See the identical guard + comment in xyzx_system_clean_up() above --
+  // this function is also reachable before a freshly-loaded room's own
+  // replace_program(ROOM) (called at the end of its create()) has
+  // committed, e.g. via the driver's own post-create reset() or via
+  // adm/daemons/questd.lpc's spread_quest() cold-loading a room.
+  if (catch(inv = filter_array(inv, (: clonep($1) && !$1->is_character() :))))
+    inv = ({});
   items = random(MAX_ITEM_IN_ROOM);
 
   if (sizeof(inv) > items) {
