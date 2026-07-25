@@ -401,3 +401,312 @@ restart (4089675 → 4140910 → 4145621 → 4149812, the last one stopped
 cleanly at the end of this session); `ss -tlnp` used throughout to
 disambiguate this lib's driver from other concurrent sessions' drivers
 sharing the identical command line, per AGENTS.md §10.5.
+
+## 深度功能测试 / Deep functional test (round two, AGENTS.md §10.7)
+
+Full hands-on playthrough per the §10.7 checklist, native driver
+(`build-debug`), `scripts/mudclient.py`. This pass was specifically
+triggered by a real player report of "after register can't do command"
+(see subsection below) — that investigation turned up the headline
+finding of this pass; the rest of the checklist is reported after it.
+
+### "Can't do command after register" — REPRODUCED AND FIXED
+
+**Outcome: reproduced, root-caused, and fixed.** A prior session
+(orchestrator) had already investigated this report by instrumenting
+`command_hook()` directly and found every traced dispatch attempt
+correct — reasonably concluding the `?.` the user saw was probably a
+test-script pacing artifact. Going through registration and the
+immediate post-registration state slowly and deliberately this round
+reproduced the exact symptom on the very first attempt, with no
+unusual pacing: right after the gender prompt (still mid-registration)
+and again immediately after landing in 世界之树, the connection
+received a burst of bare `?.` lines interleaved with the room
+description and the "热烈欢迎新玩家" broadcast — e.g. 33 `?.` lines
+sandwiched around a single registration completion. It reproduced
+identically, with a smaller burst, on a plain **re-login** with no
+registration involved at all (id `hymtestone`, password only) — proof
+this has nothing to do with the registration wizard's own state
+machine or with `command_hook()`/dispatch (both already independently
+confirmed clean by the earlier session — that conclusion was correct,
+just aimed at the wrong subsystem).
+
+**Root cause**: `config.fluffos` sets `default error message : ?.` —
+the driver's `APPLY_LOG_ERROR` ("log_error" in `adm/single/master.lpc`)
+fires for every *compile* diagnostic (both real errors and mere
+warnings) via `smart_log()`, and prints this configured string to
+whichever player happens to be online (`this_player(1)`) whenever a
+non-wizard is present, instead of the raw message. `log_error()`'s own
+gate for "is this just a warning, don't bother the player" was:
+
+```c
+if (strsrch(message, "Warning") < 0)   // capital W — never matches
+```
+
+but this driver's own diagnostic renderer
+(`compiler.cc`: `d.is_warning ? "warning: " : "error: "`) always emits
+a **lowercase** `warning: ` prefix — an old MudOS-era convention this
+mudlib was written against, broken by the modern driver's message
+format. The case mismatch meant the "is a warning" check silently
+NEVER matched, so this branch treated every single compile warning
+(overwhelmingly "unused local variable", extremely common and
+harmless throughout this lib — see the multi-page warning dump in
+`log/log_error`) exactly like a hard compile error: broadcasting the
+raw `?.` to any non-wizard player online at that moment. Registration
+and the first `look` in 世界之树 lazily compile a whole burst of
+newbie-zone files for the very first time in a fresh boot
+(`d/welcome/jing.lpc`, `hua.lpc`, `qian.lpc`, `tang.lpc`,
+`cmds/std/look.lpc`, `drop.lpc`, `go.lpc`, `cmds/usr/quitgame.lpc`,
+`inherit/misc/bboard.lpc`, ...) — each with its own unused-variable
+warnings — which is exactly why the symptom clusters so heavily around
+registration/first-login: that's simply the point where the largest
+number of files get compiled for the first time while a real player is
+connected. This is **already a catalogued class**: AGENTS.md §7.10's
+first bullet describes this exact case-sensitivity shape, previously
+found on `shenzhou` and `beimeixiakexing2001` — both, per §11's lineage
+map, **siblings of this lib in the same ES II/东方故事 family**. The
+fix was simply never ported to `hymud` during its original conversion
+pass; this deep-test pass is what caught the gap.
+
+**Fix** (`adm/single/master.lpc`, `log_error()`): added a second,
+lowercase check —
+`if (strsrch(message, "Warning") < 0 && strsrch(message, "warning") < 0)`.
+Real errors (confirmed present in `log/log_error`, e.g. a genuine
+syntax error in `/quest/menpaijob/mingjiao/zhangwuji.lpc` and a real
+`is_killing()` type-mismatch compile error, see below) use a lowercase
+`error:` prefix and are unaffected by either substring check, so they
+still surface correctly — only warnings are now suppressed from the
+player-visible path (they're still written to the per-wizard/`log/`
+log files either way, unchanged).
+
+**Verified live**: after the fix and a driver restart, both a full
+fresh registration (id `hymtestone`, real Chinese name **沈月**) and a
+plain re-login produced **zero** `?.` output — clean prompts, clean
+room entry, clean welcome broadcast, every time, across half a dozen
+repeated connect/reconnect cycles used for the rest of this test pass.
+
+### Fallout: `is_killing()` object/string mismatch (AGENTS.md §7.35), 6 files
+
+While confirming the `log_error()` fix didn't hide anything else, the
+now-visible `log/log_error` real-error entries surfaced a compile
+error in `d/city/npc/guidao.lpc` — `Bad type for argument 1 of
+is_killing (string vs object)` — the exact §7.35 shape (`is_killing`
+is declared `varargs int is_killing(string id)` in
+`feature/attack.lpc`; a **bare**, non-`call_other` call passing an
+`object` fails the static type check at compile time, so the whole NPC
+file silently never loads). Grepping the rest of the tree for the same
+literal shape (`is_killing(who)`/`is_killing(this_player())` with no
+`->query("id")`) found 5 more genuine hits, all confirmed via a live
+`update` as `(admin)`:
+
+- `d/city/npc/guidao.lpc` (王五) — fixed, now compiles ("重新编译...成功！").
+- `d/xueting/npc/liuanlu.lpc` (血手刘三) — same template, same bug, fixed.
+- `d/ny/npc/guard.lpc` — same template, same bug, fixed.
+- `d/xiangyang/npc/xiaosong.lpc` — same template, same bug, fixed.
+- `clone/demogorgon.lpc` and `clone/npc/demogorgon.lpc` (byte-identical
+  duplicate boss NPC files, `is_killing(this_player())` at two call
+  sites each) — fixed identically. **Both copies are dead/orphaned
+  content** — `grep` for `"/clone/demogorgon"` and
+  `"/clone/npc/demogorgon"` across the whole tree returns zero hits
+  from anywhere else, so neither is ever actually spawned in this
+  build. Fixed anyway for internal consistency (cheap, harmless,
+  matches the rest of the codebase's convention) but not chased
+  further. `clone/demogorgon.lpc` also has an unrelated, pre-existing,
+  genuinely dead-code bug worth noting but NOT fixed (unreachable, so
+  not worth the risk under the breadth-over-depth policy): its
+  `create()` does `carry_object(__DIR__"obj/demon_staff")->wield()`
+  where `__DIR__` resolves to `/clone/obj/demon_staff` — that file
+  doesn't exist (only `/clone/npc/obj/demon_staff.lpc` does, matching
+  the sibling copy's correct `__DIR__`) — a `call_other` on the
+  resulting `0`, "*Bad argument 1 to EFUN call_other() ... Got:
+  int(0)". Confirmed via live `update` (only reachable this way, since
+  nothing else references this file).
+
+Fix pattern in each case: `is_killing(who)` → `is_killing(who->query
+("id"))` (or `this_player()->query("id")`), matching the convention
+already used correctly at every OTHER `is_killing()` call site in this
+codebase.
+
+**Not fixed, documented only (breadth over depth, matching §7.35's own
+"wide silent spread" guidance)**: the exact same `object`-for-`string`
+mistake reached via `->` (call-other, not a bare call) does NOT get
+compile-time protection on this driver and appears roughly 150+ more
+times across `kungfu/skill/*/roar.lpc` and many individual skill files
+(`target->is_killing(me)` / `me->is_killing(ob[i])` patterns). These
+degrade silently (the "already fighting" guard just always evaluates
+false) rather than failing to load, and — per §7.35's own precedent on
+`nitan6` — the actual blast radius needs case-by-case confirmation
+before any mass fix. Left untouched.
+
+### AGENTS.md §7.36 (net-dead-only occupancy check) — same pattern, different lib
+
+`feature/clean_up.lpc` (comment-signed "by Annihilator@ES2" — the same
+shared-lineage base file signature seen across this ES II family) has
+the exact §7.36 shape: its room-occupancy check before self-destructing
+an idle room used `interactive(inv[i])` alone, which is false for a
+net-dead player even though they're still a real, reconnectable body.
+Fixed with `|| userp(inv[i])`, matching the catalogued fix exactly.
+Also applied the catalogued defense-in-depth half of the same fix:
+`clone/user/user.lpc`'s `user_dump()` (both `DUMP_NET_DEAD` and
+`DUMP_IDLE` cases) and `net_dead()` each had an unguarded
+`tell_room(environment(), ...)` — guarded all three with
+`objectp(environment())` so a corrupted/destructed environment from
+some other bug can never itself block the actual save/quit these
+handlers exist to guarantee. Not independently reproduced live in this
+pass (the welcome-zone start room is high-traffic and not a realistic
+candidate for the room-side of this bug to fire during a short test
+session), but the pattern match to an already-corroborated multi-lib
+class (three prior independent hits) plus the defense-in-depth half
+being cheap and clearly correct made this worth porting proactively
+rather than waiting for a live reproduction.
+
+### AGENTS.md §7.11 (missing runtime directory), one more instance
+
+`cmds/arch/call.lpc`'s `log_file("cmds/call", ...)` (fired on every
+admin `call` against another player object) aborted with `*Wrong
+permissions for opening file /log/cmds/call for append. "No such file
+or directory"` — `log/cmds/` was never created, same class as this
+lib's own item 21 above (`data/user/`, `data/login/`, `data/mail/`
+shards) and AGENTS.md §7.11 generally. Notable because the error,
+being uncaught, aborted the REST of `call.lpc`'s `main()` too — the
+admin `set()` call the `call` command was meant to perform silently
+never ran, discovered only because the following `score` didn't show
+the expected value. Created `log/cmds/` (gitignored runtime dir, not
+committed content, matching this lib's existing item 21 precedent).
+
+### Registration, walkthrough, and general command testing
+
+Went through registration slowly, one send verified at a time, in
+addition to full end-to-end runs, both before and after the fix above:
+charset → English id (rejected a digit-containing id with a clear
+message, as designed) → confirm y/n → Chinese name (real name **沈月**
+accepted immediately) → password ×2 → stat-roll accept/reject loop (`0`
+random-roll, `y` accept) → email → gender (`f`) → 世界之树. Every
+prompt matched NOTES.md's already-documented flow exactly; no new
+surprises in the wizard itself.
+
+Post-landing: `look`, `score`, `i` all render correctly and matched the
+just-rolled stats/gender/name with zero anomalies once the `?.` fix was
+in. Explored the newbie village (古村): 世界之树 (hub) → e → 青石小路
+→ e → 练武场 (training ground). `ask lao about here` and `ask lao
+about job` (the newbie tutorial quest chain, `d/welcome/jing.lpc`) both
+worked cleanly. `武伯` (Wu Bo) in 练武场 is the organic skill-teacher
+NPC the newbie doc points to ("在新手村可以拜武伯为师学到他的所有武功");
+`bai wu bo` then `xue wu bo force 30` **worked correctly end to end** —
+skill points spent, "基本内功" gained 5 levels, confirmed via `cha`.
+Sect/faction join uses the exact same `bai <师傅id>` mechanism at
+actual named sects (per `help newbie_all`'s "新手拜师" lines for all 39
+门派) — confirmed structurally identical to the working `bai wu bo`
+call above, but **not travelled to and exercised live**: every real
+sect is a genuine multi-room journey from 古村, well outside this
+session's time budget. Documented as explicitly unverified live rather
+than assumed working.
+
+Safe-sparring mechanism: this lib does **not** use a mu-ren
+(木人)-mirror-your-stats training dummy reachable from the newbie zone
+— `p/npc/mu-ren.lpc` exists (and does implement exactly that
+stat-mirroring pattern) but is only ever placed via the unused
+`obj/FIGHTROOM.o` wizard-house-building template, never by any real
+room. The newbie zone's actual safe-practice path is the `duilian`
+command (`cmds/std/duilian.lpc`) — reviewed the source: it never calls
+`kill_ob()`/`fight_ob()` at all, just exchanges small amounts of
+jing/qi and grants skill/exp ticks, gated behind an active
+`obj/liangong` practice-job token and (mostly) same-sect membership
+with the target. `练武场`'s own `job` command correctly points at this
+("你去找一个武馆教练互相对练(duilian jiao tou)一下吧") rather than at
+a nearby mu-ren, confirming this is the intended path for this
+specific lib, not a missing feature.
+
+Shop purchase: attempted `buy changjian` (cheapest item, 42 copper) at
+杂货铺 (south of 青石小路's 东 branch) with the fresh newbie character
+(zero savings) — correctly rejected with "穷光蛋，一边呆着去！" (broke,
+get lost), no crash, no `?.`, confirming the `buy` command itself
+dispatches and validates correctly. Did not have a funded character
+available to complete an actual successful purchase in this session's
+time budget — noted as attempted-but-not-completed, not silently
+assumed working.
+
+Combat/death: **not attempted live** — reaching a fundable/leveled
+state or a deliberately-losable fight was out of this session's time
+budget given how much of it went into the `?.` investigation above;
+explicitly flagging this as unverified rather than assuming it works.
+
+### Quit / net-dead / reconnect
+
+- Clean `quit` (both test characters): correct "正在退出游戏...档案保存
+  中......" message; `debug.log` grepped immediately after each quit
+  for `bad argument|denied|recursion|segmentation|undefined
+  function|cannot #include|couldn't find object|too deep|abort|fatal`
+  — zero hits every time, and in most cases literally zero new lines
+  written to `debug.log` at all.
+- **Net-dead, prompt reconnect**: for a fresh newbie character
+  (`combat_exp` near 0), `clone/user/user.lpc`'s `net_dead()` schedules
+  `user_dump()` after just **1 second**, not the full 900s
+  `NET_DEAD_TIMEOUT` — a deliberate anti-squatting design choice for
+  brand-new characters (untouched, in-scope design decision, not a
+  bug), which meant a reconnect even a few seconds later landed as a
+  normal fresh login (the net-dead body had already been auto-quit and
+  saved) rather than exercising the true mid-window resume path.
+- **Net-dead, prompt reconnect, exercising the real 900s window**:
+  bumped the seeded `fluffos` admin character's `combat_exp` to 1000
+  (`call me->set("combat_exp",1000)`, which is what surfaced the
+  §7.11 missing-`log/cmds/`-directory bug above) so `net_dead()` takes
+  the real `NET_DEAD_TIMEOUT` branch. Disconnected without `quit`,
+  reconnected ~6 seconds later: correctly hit `logind.lpc`'s
+  `find_body()`/`reconnect()` path (not a fresh login) — "重新连线完
+  毕。" printed, room/state resumed with no re-entry text or duplicate
+  welcome broadcast (admins are exempted from the room-broadcast per
+  existing `wiz_status` logic), no `debug.log` errors.
+- **Net-dead, reconnect after a real wait**: disconnected the same way
+  again, waited a genuine blocking ~5.5 minutes (well short of the full
+  900s but a real, non-simulated wait, per §10.7/§10.8's own
+  precedent), reconnected: same clean "重新连线完毕" resume, `score`
+  showed the exact state left before disconnecting (经验 1000, matching
+  the `combat_exp` bump), zero `debug.log` errors across the whole
+  wait+reconnect window.
+- **Clean quit, reconnect after a real wait**: `quit` normally, waited
+  a genuine blocking ~90 seconds, reconnected: full normal login,
+  `score` showed the same persisted state (经验 1000), zero `debug.log`
+  errors.
+
+### Files modified (all in `libs/hymud/work/`)
+
+- `adm/single/master.lpc` — `log_error()`: added the lowercase
+  `"warning"` check (AGENTS.md §7.10) that fixes the `?.` bug above.
+- `d/city/npc/guidao.lpc`, `d/xueting/npc/liuanlu.lpc`,
+  `d/ny/npc/guard.lpc`, `d/xiangyang/npc/xiaosong.lpc`,
+  `clone/demogorgon.lpc`, `clone/npc/demogorgon.lpc` — `is_killing()`
+  object→string argument fix (AGENTS.md §7.35), 6 call sites across 6
+  files.
+- `feature/clean_up.lpc` — room-occupancy check now also checks
+  `userp()`, not just `interactive()` (AGENTS.md §7.36).
+- `clone/user/user.lpc` — three `tell_room(environment(), ...)` call
+  sites (in `user_dump()` ×2 and `net_dead()`) guarded with
+  `objectp(environment())` (AGENTS.md §7.36 defense in depth).
+- `log/cmds/` — created (empty, gitignored runtime directory; fixes the
+  silent `call.lpc` logging abort, AGENTS.md §7.11).
+
+No new/draft AGENTS.md bug classes from this pass — every finding
+matched an existing catalogued class (§7.10, §7.11, §7.35, §7.36); the
+value here was in finding that this specific lib had NOT gotten one of
+those already-known fixes applied despite being in the same lineage as
+where each class was originally found, not in a new mechanism.
+
+### Test character / state left behind
+
+- `hymtestone` / `Test123`, real Chinese name **沈月** (female), the
+  round-two evidence character. Left registered, at 世界之树, having
+  learned `force` to level 5 via `武伯`, attempted (and correctly
+  failed, for insufficient funds) one shop purchase. Left via a clean
+  `quit`. Save files: `data/user/h/hymtestone.o`,
+  `data/login/h/hymtestone.o`.
+- `fluffos` / `Mud@2026` (wizpwd same), the pre-existing seeded
+  `(admin)` account (see "Admin account seeding" above) — its
+  `combat_exp` was bumped to 1000 during this session's net-dead
+  testing (see above) and saved; otherwise unchanged.
+- Driver PIDs this session: 1993993 (died mid-session to an external
+  `SIGTERM` unrelated to any mudlib bug — this is a shared multi-agent
+  sandbox per AGENTS.md §10.5/§10.7, and no other session's driver was
+  touched; confirmed via `readlink -f /proc/<pid>/cwd` before every
+  kill throughout) → 2003090 → 2012389 → 2025702 → 2040420 (stopped
+  cleanly, by exact recorded PID, at the end of this session).
