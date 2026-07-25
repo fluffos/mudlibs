@@ -1524,6 +1524,66 @@ the uncatchable-crash-during-cold-first-compile shape is the same
 regardless of whether the crash is an eval-cost abort or a compile
 error; treat both as instances of this section.
 
+### 7.23 A missing `return` after a retry-reschedule lets a self-rescheduling `call_out` chain double-schedule itself, eventually segfaulting the driver
+
+Found on `xkx2001`'s deep functional test (§10.7). **The most severe bug
+class found by this project's round-two testing pass so far.** Distinct
+from every other §7.16–§7.22 entry: those are all caught LPC runtime
+errors (aborted functions, "Too deep recursion", eval-cost aborts) that
+the driver's own error handler swallows harmlessly. This one is a
+genuine **process segfault** — it kills the driver outright, disconnects
+every player, and requires a restart.
+
+Root cause: an NPC "patrol"/"escort"-style function that reschedules its
+own `call_out` on every invocation (`call_out("move_next", N, self,
+...)`) had a conditional early-exit branch (here: "the guest wandered
+off, retry in 10s") that scheduled a RETRY `call_out` but forgot a
+`return` afterward — so execution fell through into the function's own
+unconditional tail, which scheduled a SECOND, different `call_out` on
+the same object in the same invocation. Each time the conditional branch
+fires, one more untracked duplicate accumulates (the paired
+`remove_call_out()` calls only clear one pending registration, not all
+of them). If the object is later `destruct()`ed — e.g. an ordinary
+"gave up, NPC leaves" cleanup path, which every such NPC has — while a
+duplicate `call_out` is still pending, the driver's C++ call_out
+bookkeeping ends up holding a scheduled callback against a freed
+`object_t*`. Dereferencing it (observed at
+`src/packages/core/call_out.cc:209`, `while (ob->shadowing) ...`)
+segfaults the whole process the next time that duplicate fires — not
+just the one LPC call.
+
+Detection: grep any file with a self-rescheduling `call_out` chain (a
+function that both handles `call_out`-triggered dispatch AND calls
+`call_out()` on itself again) for more than one `call_out(<same name>,
+...)` call site reachable from a single invocation — especially inside
+an `if`-branch lacking a `return` immediately after its own
+reschedule. Easy to miss by inspection: each individual reschedule call
+looks completely reasonable in isolation; the bug is the *combination*
+being reachable in one invocation. Confirming it live requires
+deliberately keeping the branch's trigger condition true across multiple
+real `call_out` cycles (here: a player becoming separated from an
+escorting NPC, repeatedly, over several real minutes) and watching
+whether the **process itself** is still alive, not just `debug.log` — a
+short scripted test session never lingers long enough to accumulate
+enough duplicates to hit this.
+
+Fix: add the missing `return` (or otherwise restructure so only one
+`call_out(<name>, ...)` registration is ever reachable per invocation).
+Worth pairing with a `catch()` around any single risky step inside the
+same function (a scripted movement `command()`, a `call_other`, etc.) —
+found alongside this bug: an unrelated uncaught error earlier in the
+same function could abort it before the (now-fixed) single reschedule
+ever ran, silently orphaning the object with zero pending `call_out`s at
+all. Milder than the segfault but the same underlying lesson — a
+self-rescheduling `call_out` chain needs EXACTLY one registration
+guaranteed per invocation, on every exit path, including error paths.
+
+Lineages likely affected: any lib with a copy-pasted "guide escorts a
+new player through scripted rooms" NPC pattern —
+`beimeixiakexing2001` (documented sibling of `xkx2001`) carries a
+byte-identical, unfixed copy of the vulnerable file; check any other lib
+sharing this ES2 island-onboarding lineage for the same shape.
+
 ---
 
 ## 8. Login and registration flow bugs

@@ -175,7 +175,16 @@ void move_next(object me, int count) {
     destruct(long);
     return;
   }
-  command(commands[count]);
+  // UTF8/crash fix: this scripted movement step can hit the driver's own
+  // "Illegal to move or destruct an object ... defining actions from a
+  // verb function" safety check (seen live, reproducibly, at the
+  // yongdao3 leg of this exact route) -- an uncaught error here used to
+  // abort move_next() entirely partway through, silently orphaning this
+  // guide NPC (no pending call_out left to resume or clean it up) even
+  // after the double-schedule crash above was fixed. catch() it so a
+  // failed step degrades to the same "guest got left behind" recovery
+  // path below instead of leaving a stuck, un-rescheduled NPC.
+  catch(command(commands[count]));
   if (!(present(me, environment(long)))) {
     message(
       "vision",
@@ -188,6 +197,13 @@ void move_next(object me, int count) {
     me->move(places[count]);
     remove_call_out("move_next");
     call_out("move_next", 10, me, count);
+    // UTF8/crash fix: this branch used to fall through into the
+    // unconditional reschedule below, registering a SECOND "move_next"
+    // call_out (with count+1) on top of this retry one (with count) --
+    // see AGENTS.md for the full writeup of the resulting driver
+    // segfault a few iterations later. Must return here so only one
+    // "move_next" call_out is ever pending per step.
+    return;
   }
   count = count + 1;
   remove_call_out("move_next");

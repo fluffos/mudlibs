@@ -229,3 +229,306 @@ Retest: fresh registration (fluffos itself) through beach → 挂名处 →
 `register` → random password → re-login all worked natively; fluffos
 re-login with `Mud@2026` + `update` verified; debug.log free of runtime
 errors.
+
+## 深度功能测试 / Deep functional test (round two)
+
+First genuinely hands-on *playthrough* pass (all prior passes above
+verified registration/admin-login/WASM boot, never actual post-登记
+gameplay: skill learning, sparring, sect contact, or a real
+disconnect/reconnect). Read `doc/help/newbie.dec99` and `doc/help/intro`
+in full first — both correctly describe this lib's mechanics (`fight`
+is the safe, non-lethal sparring form; `kill`/`hit` are real; `bai`/`xue`
+for apprenticing/learning; `wimpy` for auto-flee) even though the
+specific starting geography they describe (扬州客店 as the general hub)
+turned out to belong to the shared "ES2 newbie doc" template, not this
+lib's actual map — this archive's real starting zone is entirely the
+self-contained "侠客岛" (Xiake Island) tutorial/quest zone
+(`d/xiakedao/`, ~100 rooms), reached via the beach → escort → 挂名处 →
+`register` flow already described above. Native driver
+(`~/src/fluffos/build-debug/src/driver config.fluffos`), `scripts/
+mudclient.py` throughout. Found and fixed **one serious bug** (a real
+driver segfault, not just a caught LPC error — the first of that
+severity found in this project's round-two pass) plus hardened the same
+function against a second, non-fatal failure mode found while
+re-verifying the first fix.
+
+**Test characters left behind** (small save files, kept as playthrough
+evidence, matching this project's standing convention):
+- id `qinxia`, 秦霞 (female), password `gzctc` (system-issued by
+  `register`, original self-chosen password was `Xia@2026` but the
+  in-game `register` step always overwrites it with a random one — see
+  the onboarding flow documented earlier in this file). Main
+  playthrough character: completed the full 沙滩 → escort → 挂名处 →
+  `register` → new-password reconnect flow; learned 基本内功 (`force`)
+  to level 1 via the organic teacher-NPC path (蓝衣弟子/`dizi` at 瀑布,
+  a non-sect basic-skills trainer reached via `northup` from 望海亭);
+  fought a real, safe `fight dizi` sparring match to conclusion (气
+  dropped visibly, match ended cleanly with "承让", no death risk,
+  confirming this lib's own safe-sparring mechanism — `inherit/char/
+  npc.lpc`'s `accept_fight()` — works exactly as `doc/help/newbie.dec99`
+  describes); received a free 短剑 from 黄衣大汉 (`han`) via `ask han
+  about 武器`; attempted `bai lingxiao` (凌逍, a real 华山 sect member
+  reachable directly on the island, `create_family` confirmed) and was
+  correctly declined with "要拜师，你得去拜我师父" (game design: a
+  generation-14 disciple can't take his own apprentices, redirects to
+  his own master) — confirms the sect-join code path is live and
+  reachable from the island itself, not just via off-island travel.
+  Note: the `force` skill progress above did not survive the driver
+  crash described below (unsaved at the time) — re-verified the
+  teacher-NPC learning mechanism works but did not re-grind it back to
+  level 1 after the restart, not worth the tool-time.
+- id `cetest`, 测试 (female), password `kbzeh` — a disposable second
+  character used specifically to rule out a suspected registration-
+  reconnect race (see Bug 2 below): repeated register → reconnect
+  cycles with careful, non-overlapping connections all completed
+  cleanly with no duplicate-login prompt.
+- id `linxue`, 林雪 (female), password `nybhj` — used specifically to
+  reproduce and re-verify Bug 1 (the crash) end to end with a real
+  player, deliberately left un-followed through the full escort route
+  (`d/xiakedao/npc/longx.lpc`'s `move_next()`, all 9 scripted steps:
+  沙滩 zone → 小路 → 迎宾厅 → 瀑布 area → 甬道 → 大山洞) long enough
+  for the guide NPC to force-drag her (`check_follow`'s count>2 branch)
+  and for the fixed retry path to run repeatedly for several real
+  minutes with zero crashes (see Bug 1's verification below).
+
+### Bug 1 (NEW bug class): a mudlib logic bug (duplicate `call_out` scheduling from a missing `return`) segfaults the entire driver process, not just an LPC-level caught error
+
+**File:line: `d/xiakedao/npc/longx.lpc`, `move_next()`, ~line 188-194.**
+
+- **Symptom**: the driver process itself died — `Connection refused` on
+  a subsequent connect attempt, no LPC-level error visible to any
+  player, the crash only discoverable via `debug.log`'s C++ backtrace
+  and the process actually being gone from `ps`. This happened
+  spontaneously during an idle real-time wait (~2.5 minutes) while two
+  test characters (an admin account and a fresh player) were sitting,
+  one of them still mid-escort by this lib's own island-guide NPC
+  (`d/xiakedao/npc/longx.lpc`, randomly named "龙一".."龙九" per
+  instance — the exact same NPC that escorts literally every brand-new
+  character from 迎宾厅 toward the island's interior after registration
+  — see this file's own onboarding-flow section above). `debug.log`'s
+  crash backtrace bottoms out inside the driver's own C++ `call_out()`
+  implementation (`src/packages/core/call_out.cc:209`,
+  `while (ob->shadowing) { ob = ob->shadowing; }`) — a null/dangling
+  `object_t*` dereference consistent with `call_out()` being invoked
+  for an already-freed object.
+- **Root cause**: `move_next()` walks the guide NPC through a fixed
+  script of movement commands (`commands[]`/`places[]`, 9 steps) via a
+  self-rescheduling `call_out("move_next", 10, me, count)`. When the
+  escorted player becomes separated from the guide mid-step
+  (`!present(me, environment(long))` — happens routinely: some steps in
+  the script are non-directional verbs like `climb tree`/`jump fall`
+  that this driver's automatic leader/follow co-movement doesn't
+  propagate to followers, so the two can legitimately end up in
+  different rooms even with both still fully connected), the recovery
+  branch explicitly re-teleports the player and reschedules
+  `call_out("move_next", 10, me, count)` **with the current, unchanged
+  `count`** (a retry of the same step) — but the code had **no
+  `return`** after that reschedule, so execution fell straight through
+  into the function's own unconditional tail, which reschedules
+  `call_out("move_next", 10, me, count+1)` **a second time** on the
+  same object in the same invocation. Every time this branch fires, one
+  MORE duplicate/orphaned "move_next" `call_out` entry accumulates
+  against the same NPC object; if the object is later `destruct()`ed
+  (e.g. the ordinary "guest gave up and wandered off" cleanup path,
+  lines 163-169) while one of these un-cancelled duplicates is still
+  pending, the driver's own C++ call_out bookkeeping is left holding a
+  scheduled callback against a now-freed object — which segfaults the
+  whole process, not just the one LPC call, the next time that
+  duplicate fires.
+- **Why every earlier verification layer missed this**: it requires (1)
+  a real player actually being escorted by this NPC (only happens
+  post-registration, past every smoke test's usual stopping point), (2)
+  the player becoming separated from the guide at least once (routine
+  during real play, essentially never during a scripted `--send`
+  sequence that never idles mid-route), and (3) enough real wall-clock
+  time (multiple 10s `call_out` cycles) for the duplicate-pileup +
+  destruct race to actually collide — a boot-log watch or a `look`/
+  `score`/`quit` smoke test never lingers anywhere near this NPC long
+  enough to hit it. Found purely by accident during this pass's
+  required real-time wait for the net-dead/reconnect check below (two
+  characters were left idle mid-escort while waiting) — exactly the
+  kind of thing §10.7's "wait a real amount of time" step exists to
+  catch.
+- **Fix**: add the missing `return` so the retry-reschedule path can
+  never fall through into the unconditional one:
+  ```lpc
+  // BEFORE:
+      me->move(places[count]);
+      remove_call_out("move_next");
+      call_out("move_next", 10, me, count);
+    }
+    count = count + 1;
+    remove_call_out("move_next");
+    call_out("move_next", 10, me, count);
+    return;
+  }
+  // AFTER:
+      me->move(places[count]);
+      remove_call_out("move_next");
+      call_out("move_next", 10, me, count);
+      return;   // <-- was missing; this is what let the branch fall
+                //     through into the unconditional reschedule below,
+                //     double-scheduling "move_next" on the same object.
+    }
+    count = count + 1;
+    remove_call_out("move_next");
+    call_out("move_next", 10, me, count);
+    return;
+  }
+  ```
+- **Verified live, twice**: (1) restarted the driver clean, waited a
+  real ~2.5-3 minute idle window with two characters mid-escort by this
+  exact NPC (reproducing the same conditions as the original crash) —
+  the process stayed up the whole time, `ps`/`ss` confirmed it was
+  still listening, `debug.log` stayed free of new fatal/segfault lines.
+  (2) A second, harder stress test: deliberately walked a fresh
+  character (`linxue`) into 迎宾厅 and left the connection open,
+  un-followed, for the guide's full 9-step scripted route (several real
+  minutes) — the `!present` recovery branch fired repeatedly (visible
+  as "龙七不知从哪变了出来，拉起你的手边走边埋怨道" printing many times
+  in a row near the route's end), i.e. the exact vulnerable branch ran
+  dozens of times back-to-back under the fix, and the driver never
+  crashed. `update /d/xiakedao/npc/longx` (as the seeded admin account)
+  recompiled the fixed file with zero errors afterward.
+- **Residual, lower-severity issue found while stress-testing the fix
+  (not a crash, not separately fixed as a distinct bug, folded into the
+  same edit below)**: at the route's very last step (`places[8]` =
+  `/d/xiakedao/dadong`, a room whose only exit is `south`), the retry
+  branch can loop indefinitely (every 10s, "拉起你的手边走边埋怨道..."
+  repeating forever) instead of ever reaching the intended "请在这里稍候，
+  岛主一会便到" completion line — the guide NPC just never finishes
+  greeting that specific player, though it also never hurts anything
+  (no error, no leak beyond the one harmless retry `call_out`). Not
+  root-caused further given time budget; noted here rather than
+  silently dropped.
+- **A second, related failure mode found and fixed while
+  investigating**: `move_next()`'s `command(commands[count])` call
+  (the line right before the buggy branch above) can itself throw an
+  uncaught driver-level error — reproduced live, twice, with the exact
+  same lib-shipped message both times: `*Illegal to move or destruct an
+  object (/d/xiakedao/yongdao3) defining actions from a verb
+  function(north) ... which returns zero` (this driver's own safety net
+  against destructing/moving an object still on a verb-function call
+  stack — a pre-existing quirk of this specific room transition, not
+  introduced by anything in this pass; not further root-caused). Before
+  Bug 1's fix, this was moot (masked by the crash). After Bug 1's fix,
+  this alone would still silently abort `move_next()` **before** it
+  ever reaches the reschedule logic — leaving that guide NPC instance
+  permanently stuck with no pending `call_out` at all (harmless, but a
+  content regression: that NPC just stops working for that player).
+  Wrapped the call in `catch()` so a failed scripted step degrades to
+  the same "guest got left behind, drag them back" recovery path
+  instead of derailing the whole function:
+  ```lpc
+  // BEFORE:  command(commands[count]);
+  // AFTER:   catch(command(commands[count]));
+  ```
+  Re-verified: the identical "Illegal to move" line recurred a second
+  time during the stress test above (same room, same step) and this
+  time did **not** abort the guide's schedule — it simply fell into the
+  ordinary "拉起你的手" recovery branch like any other separation,
+  which is the intended degraded behavior.
+- **Lineage check**: `libs/beimeixiakexing2001/work/d/xiakedao/npc/
+  longx.lpc` is a **byte-for-byte identical copy** of the pre-fix file
+  (confirmed via `diff`) — same missing `return`, same vulnerable
+  shape, almost certainly equally capable of segfaulting that lib's
+  driver under the same real-time-wait-mid-escort conditions. Not fixed
+  there (out of scope for this pass per the task instructions — flagged
+  for the orchestrator/a future pass on that lib). This bug is a
+  mudlib-source logic bug (missing `return`), not a driver-generic
+  pattern by itself, but the *consequence* (an LPC-reachable path to a
+  driver segfault via `call_out` scheduled against a soon-to-be-freed
+  object) is a driver-generic risk worth watching for anywhere a
+  self-rescheduling `call_out` chain has more than one reschedule call
+  reachable from the same function body — see the draft AGENTS.md
+  class in this task's final report.
+
+### Bug 2 candidate investigated, NOT confirmed as a real bug (documented so the next pass doesn't re-chase it)
+
+While repeatedly registering/re-registering the same test id in quick,
+overlapping succession early in this pass (deliberately messy,
+back-to-back connections, several left to time out mid character-
+creation), one `register` → immediate-reconnect sequence surfaced the
+"您要将另一个连线中的相同人物赶出去，取而代之吗？" (duplicate-login)
+prompt where a clean netdead-reconnect was expected — looked exactly
+like `regid.lpc`'s `register_char()`'s `destruct(body)` (on the very
+object that is itself the current interactive session) not actually
+freeing the id in time for a fast subsequent reconnect. Investigated at
+length (traced `enter_world()`/`reconnect()`/`find_body()` in
+`logind.lpc`, `net_dead()`/`reconnect()` in `clone/user/user.lpc` and
+`clone/user/login.lpc`). **Could not reproduce it under a controlled,
+single-character, non-overlapping test** (`cetest`: register → new
+password → immediate reconnect, repeated cleanly multiple times, always
+a clean netdead-reconnect, never the duplicate-login prompt). Current
+conclusion: the one observed instance was almost certainly an artifact
+of the deliberately chaotic overlapping-connections test pattern used
+earlier in this pass (multiple abandoned in-flight `LOGIN_OB`
+registrations for the same id) rather than a reproducible bug in the
+real register/reconnect path — recorded here, not filed as a bug, so a
+future pass doesn't need to re-investigate from scratch.
+
+### Also verified working, no bugs found
+
+- **Net-dead (unclean) disconnect + reconnect, both prompt and after a
+  real wait**: reproduced constantly and incidentally throughout this
+  pass (every `mudclient.py` invocation in this session that didn't end
+  in an explicit `quit` is itself an unclean disconnect) — every single
+  reconnect, including several after multi-minute real waits and one
+  across an actual driver crash/restart (which, expectedly, reverted to
+  each character's last explicitly-*saved* location rather than their
+  live in-memory one — normal for any crash, not a bug), correctly
+  restored the player to their real in-game location with `look`/
+  `score` both correct. `clone/user/user.lpc`'s `net_dead()`/
+  `reconnect()` pair (destructs only the old *login* link object,
+  remembers `link_ob`/room via `nosave`/`temp` vars, `reconnect()` is
+  actually wired up and called by `logind.lpc`) is a sound, already-
+  defensive implementation — this lib does **not** exhibit the AGENTS.md
+  §7.20 void-parking class or the §7.21 stranded-mid-wizard class:
+  the pre-registration character-creation wizard runs entirely on the
+  `LOGIN_OB` connection object itself (not a separate persistent player
+  body), and that object's own `net_dead()` just destructs it after a
+  1-second grace timer (`clone/user/login.lpc`) — an unclean disconnect
+  mid-creation simply abandons that attempt cleanly, with no permanent
+  stranding, confirmed by reconnecting after several such abandoned
+  attempts and always landing at a fresh `您的英文名字：` prompt.
+- **Clean `quit` + real wall-clock-gap reconnect**: state (location,
+  stats, inventory) persisted correctly across a genuine `quit` and a
+  later fresh login, for both `qinxia` and `linxue`. `debug.log` stayed
+  free of `error:`/`Too deep recursion`/fatal lines after every `quit`
+  performed in this pass.
+- **Safe sparring (`fight`)**: confirmed working exactly as documented
+  (see `qinxia`'s playthrough above).
+- **Organic skill learning**: confirmed working (`xue dizi force`,
+  `cha` showed the new skill).
+- **Sect-join code path**: confirmed reachable and functioning as
+  designed (`bai lingxiao`, correctly declined per generation rules).
+- **Admin account** (`fluffos`/`Mud@2026`, seeded in an earlier pass):
+  re-verified end to end this pass — login, `look`, `update
+  /d/xiakedao/npc/longx` (recompiled the fix live), clean `quit`, all
+  correct; `(admin)` privilege intact.
+
+### Explicitly NOT verified live (honest gaps, not silently skipped)
+
+- **Shop `list`/`buy` at an actual merchant**: not completed. This
+  lib's real starting zone (`d/xiakedao/`, the island) is a large,
+  fully self-contained ~100-room tutorial/quest area with **no shop
+  anywhere inside it** (confirmed by grep — no `inherit ... SHOP` in
+  any `d/xiakedao/*.lpc`); reaching a real shop requires leaving the
+  island for the mainland, which (per this lib's own design) generally
+  happens via a sect's own recruitment escort (e.g. following 凌逍 to
+  actual 华山) rather than a direct exit — not completed within this
+  pass's time budget. Did verify a related, simpler item-economy
+  mechanic instead: `ask han about 武器` (黄衣大汉, an island NPC)
+  hands out a free weapon, confirmed working.
+- **Real (lethal) combat and death/respawn**: not attempted. Only the
+  safe `fight` sparring form was exercised live; `kill`/`hit` and the
+  death → 鬼门关 → 武庙 revival flow described in `doc/help/newbie.dec99`
+  were not tested, given the time already spent on the crash
+  investigation/fix/re-verification above.
+- **Full sect enrollment** (an actual `bai` acceptance, not just the
+  correctly-declined attempt at 凌逍): would require reaching one of
+  the actual sect masters (岳不群/宁中则 for 华山, per `doc/help/intro`)
+  off-island — not attempted within this pass's budget. The mechanism
+  itself (`feature/apprentice.lpc`'s `create_family`/
+  `recognize_apprentice`/`bai.lpc`) was verified structurally and via
+  the one live, correctly-declined attempt.
