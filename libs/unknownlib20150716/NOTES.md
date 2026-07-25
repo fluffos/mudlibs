@@ -223,62 +223,22 @@ below, unarmed taught explicitly by 东方聪), inventory `炸鸡腿`
 
 ### Bugs found and fixed
 
-**1. `d/changan/aolaiws.lpc` `close_passage()` — missing the raft's
-"out" boarding window strands a player in a zero-exit room for the rest
-of the LIVE session (recoverable only by disconnecting).**
-
-- The newbie-path-mandated 傲来国西海岸→长安 ferry (`zuo mufa` → wait →
-  `enter` → wait ~35s → `out`) is a real-time-gated one-way transit: the
-  raft object (`d/changan/mufa.lpc`) ships with a default `"out"` exit
-  back to the west shore, but while underway `aolaiws.lpc`'s `arrive()`
-  retargets that exit to the east shore (`eastseashore`) for a ~20-second
-  window, and the following `close_passage()` (before the fix) did
-  `room->delete("exits/out")` — leaving the raft with **zero exits at
-  all** (`"这里没有任何明显的出路。"`) for anyone who typed `out` even a
-  few seconds late. Nothing else ever restores an exit here: a fresh
-  boarding cycle only re-triggers from someone standing on the WEST
-  shore typing `zuo mufa` again, which nobody is doing while the
-  original passenger is still stuck mid-ocean. Reproduced live: missed
-  the window on purpose, ended up in `海中孤筏` with `"没有任何明显的出
-  路"` and every movement command replying `什么？`. `quit` still works
-  from there (no `no_quit` flag) and cleanly returns to normal — this
-  room never sets `valid_startroom`, so the stall doesn't survive a
-  relogin — but the LIVE session is genuinely stuck until the player
-  gives up and reconnects, exactly the shape of a real bug a "does
-  `quit`/relogin recover you" check alone would miss.
-- Fix (`d/changan/aolaiws.lpc:93-108`, `close_passage()`): restore the
-  raft's own default exit (`__DIR__ "aolaiws"`, matching
-  `d/changan/mufa.lpc`'s own `create()`) instead of deleting it, so a
-  player who missed the window can walk back onto the west shore and
-  try `zuo mufa` again rather than being stranded with no exits.
-  ```lpc
-  // BEFORE:
-  void close_passage() {
-    object room;
-    if (room = find_object(__DIR__ "mufa")) {
-      room->delete("exits/out");
-      message("vision", "一个浪头打来，木筏向海上漂去。\n", room);
-      room->set("zuo_trigger", 0);
-    }
-  }
-  // AFTER:
-  void close_passage() {
-    object room;
-    if (room = find_object(__DIR__ "mufa")) {
-      room->set("exits/out", __DIR__ "aolaiws");
-      message("vision", "一个浪头打来，木筏向海上漂去。\n", room);
-      room->set("zuo_trigger", 0);
-    }
-  }
-  ```
-- Verified live, both directions, post-fix: (a) deliberately missed the
-  window again — `look` now shows `"这里唯一的出口是 out。"` and `out`
-  correctly lands back on 傲来国西海岸; (b) rode the raft again and
-  typed `out` promptly inside the window — correctly arrives at 东海之
-  滨 (Changan side) exactly as before, no regression to the intended
-  timed-crossing behavior.
-- **This is a new bug class, not yet in AGENTS.md** — see draft writeup
-  in the agent's final report for §7.23 (or next free slot).
+**1. (RETRACTED — content/design judgment call, not a programming bug;
+reverted on user review) `d/changan/aolaiws.lpc`'s `close_passage()`
+deletes the raft's exit entirely if a player misses the ~20s boarding
+window, leaving them in a genuine zero-exit room for the rest of the
+live session (recoverable only by disconnecting).** Originally "fixed"
+by restoring the exit instead of deleting it — since reverted. The
+accompanying flavor message ("一个浪头打来，木筏向海上漂去。" — a wave
+hits, the raft drifts out to sea) plausibly describes an INTENTIONAL
+"you missed the boat and are now stranded" consequence for a
+time-gated mechanic, not an oversight — deleting an exit as a
+deliberate timing-punishment is a design choice, not a proven
+programming defect (no crash, no wrong efun usage, nothing the code
+itself contradicts). Left as originally shipped, documented here rather
+than silently re-fixed. See AGENTS.md §7.27 for the retraction writeup
+and the general lesson (this exact shape is now a documented cautionary
+case study, not a bug class to fix on sight).
 
 **2. `adm/obj/master.lpc` — mudlib-root-absolute `#include </path>`
 inside `<...>` never resolves, `get_include_path()` can't fix it.**

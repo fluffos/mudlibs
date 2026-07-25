@@ -1778,35 +1778,29 @@ Lineages likely affected: `menghuanxiyou2002`, `fluffos_xiyou2000`,
 `xiyouji2003`, `xiyouji2006` (confirmed via grep to carry identical
 code, not yet fixed there — out of scope for the pass that found this).
 
-### 7.27 A time-gated one-way transit room deletes its exit entirely on window-close, softlocking a live session
+### 7.27 (RETRACTED — false positive, see §10.7's scope note) A time-gated transit room deleting its exit on window-close
 
-Found on `unknownlib20150716`'s deep functional test (§10.7). A
-real-time-gated ferry/raft/portal mechanic — move a player through, give
-them a short window (here: ~20 real seconds) to act, then clean up — can
-clean up by unconditionally DELETING the transit room's exit
-(`room->delete("exits/out")`) rather than restoring some fallback. If no
-other code path ever re-adds an exit to that room (the next boarding
-cycle only re-triggers from the OPPOSITE shore, which nobody is standing
-on once already mid-transit), a player who acts a few seconds too late
-is left in a genuine zero-exit room — `look` shows "这里没有任何明显的出路"
-and every movement command fails — for the rest of that live session,
-with no in-game recovery. Not a permanent account-level stranding IF the
-room never sets `valid_startroom` (a later clean `quit`/relogin escapes
-it), but a real, silent softlock of the CURRENT session — recoverable
-only by disconnecting, which an ordinary player has no reason to
-suspect is necessary.
+Originally found on `unknownlib20150716`'s deep functional test (§10.7)
+and initially "fixed" by restoring the deleted exit — **reconsidered and
+reverted on user review**: this is a real-time-gated raft mechanic
+(`room->delete("exits/out")` when a ~20s boarding window closes) whose
+flavor text ("一个浪头打来，木筏向海上漂去" — a wave hits, the raft
+drifts out to sea) plausibly describes an INTENTIONAL "you missed the
+boat and are now stranded" consequence, not an oversight. Recoverable by
+disconnecting (the room never sets `valid_startroom`, so no permanent
+account-level harm), which is a real but plausibly-deliberate design
+choice for this kind of timing mechanic.
 
-Detection: grep any timed-transit/ferry/portal room for
-`delete("exits/...")` (or equivalent removal, not reassignment) inside a
-`call_out`-scheduled cleanup function. Reproduce live by deliberately
-missing the action window and confirming `look`/movement are genuinely
-dead-ended, not just re-prompting.
-
-Fix: restore the room's own default/fallback exit instead of deleting it
-— typically whatever `create()` originally set that exit to before the
-boarding trigger overrode it. This lets a player who missed the window
-walk back to where they started and try again, rather than being
-stranded with no exits at all.
+**Kept as a cautionary case study, not a bug-class to fix on sight**:
+this is exactly the shape of finding §10.7's scope note warns about — a
+mechanic that looks like a bug (a session-long soft-lock with no in-game
+recovery) but is at least as plausibly an intentional, if harsh, design
+choice. Deleting a room's exit as a timed-consequence mechanic is not
+inherently a programming defect the way a missing `objectp()` check or
+a wrong efun argument type is. If you find this shape again: document it
+in the lib's NOTES.md as an observation, do NOT restore the exit
+yourself — this is a content/design judgment call, not a program to
+debug.
 
 ### 7.28 Redundant `enable_player()`/`enable_commands()` calls stack duplicate `add_action` sentences, silently re-running FAILED commands' side effects
 

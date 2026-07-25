@@ -202,82 +202,21 @@ to every new registrant, on literally every registration, file:line
   fix — no stray object-dump anywhere in the transcript, name/password/
   talent/email/gender flow otherwise identical to the pre-fix run.
 
-**2. `d/city/huadian.lpc` (鲜花店/flower shop) — its own vendor NPC was
-never actually spawned, file:line `huadian.lpc:26` (`objects` mapping),
-plus `d/city/npc/hua_girl.lpc:157` (`do_buy()`) didn't understand the
-mudlib's own documented `buy <item> from <target>` syntax. Two
-independent, stacked bugs in the same feature.**
-- Symptom 1, reproduced live pre-fix: the room's own description and its
-  `gaoshi` help-board text both narrate 英莲 (Ying Lian, the flower girl)
-  as physically present ("卖花姑娘英莲手里提着浇水的花洒...", "请向买花女
-  查询(ask ying lian about songhua)") — but `list`/`buy`/`ask ying...`
-  all failed with "请查阅相关CMDS？" / no-such-person, because the room's
-  `objects` mapping had her spawn line commented out
-  (`// __DIR__"npc/hua_girl" : 1,`). The NPC file itself
-  (`hua_girl.lpc`) was fully implemented (goods, pricing, scarcity-based
-  price escalation, a periodic restock `call_out`, a flower-delivery
-  `song`/`songhua` feature) — this reads as an abandoned WIP toggle-off
-  from the original archive's own development, not deliberate content
-  removal (every other room-NPC pairing in this lib has its spawn line
-  live; the flavor text and help board were never updated to match the
-  disabled state).
-- Fix 1: uncommented the `objects` entry
-  (`__DIR__ "npc/hua_girl": 1,`). Left her own commented-out
-  `//inherit F_VENDOR;` alone — her hand-rolled `do_buy`/`do_check`
-  already implement the stock-tracking/scarcity-pricing feature that a
-  bare `F_VENDOR` inherit doesn't have, and her `vendor_goods` is a
-  *mapping* with per-item counts (not the plain array `F_VENDOR`/
-  `F_DEALER` expects), so switching her onto the shared feature would
-  have silently discarded that (clearly intentional) mechanic rather
-  than fixing anything.
-- Symptom 2, reproduced live pre-fix (after fix 1 alone): `list` worked
-  (goods displayed correctly), but *no purchase syntax completed a
-  purchase*. `doc/help/intro`'s own base-command list documents
-  `buy: buy 〈物名〉 from 〈人名〉` as the one true syntax (matching
-  `cmds/std/buy.lpc`'s hard requirement for a `from <target>` clause) —
-  the flower shop's own signage ("可直接向店主购买（buy)") was simply
-  wrong/outdated, telling players a bare-item form that the generic `buy`
-  command has never accepted. Using the *correct*, documented
-  `buy <花名> from ying` syntax reached `hua_girl.lpc`'s own `do_buy()`
-  (via the generic `buy.lpc`'s built-in fallback for any NPC whose
-  `buy_object()` is undefined — confirmed as a genuine, working fallback
-  path by cross-testing against `d/city/npc/aqingsao.lpc`, an unrelated,
-  intact `F_DEALER`-based shop, which reaches its own `do_buy()` the
-  same way) — but `do_buy(string what)` matched the *entire* raw
-  argument (`"红玫瑰 from ying"`) against its goods list as one string,
-  which never matches, always failing with "您想买什么？" regardless of
-  how the flower was named.
-- Fix 2 (`hua_girl.lpc:159-166`): strip a trailing `" from <target>"`
-  suffix from `what` before matching, mirroring what the generic
-  `buy.lpc` already does for target resolution:
-  ```lpc
-  // BEFORE:
-  if (!what) return notify_fail("你想买什么？\n");
-
-  if (sscanf(what, "%d %s", amount, what) != 2) {
-  // AFTER:
-  if (!what) return notify_fail("你想买什么？\n");
-
-  if (sscanf(what, "%s from %s", base_item, strip_targ) == 2)
-    what = base_item;
-
-  if (sscanf(what, "%d %s", amount, what) != 2) {
-  ```
-  Also corrected the shop sign's own instructions (`huadian.lpc`'s
-  `gaoshi` item_desc) from the never-working "buy)" to
-  "buy <花名> from ying)", so the in-game text stops teaching players a
-  syntax the mudlib doesn't support.
-- Verified: reproduced both symptoms live pre-fix (missing NPC; then,
-  after fix 1 alone, "您想买什么？" on every `buy <花名> from ying`
-  attempt regardless of the flower name); post-fix, `list` shows all 14
-  flowers with live scarcity/pricing, and `buy hong meigui from ying`
-  correctly matches 红玫瑰 and proceeds to a real `MONEY_D->player_pay()`
-  attempt — it stopped at "穷光蛋，一边呆着去！" (insufficient *cash on
-  hand*) for `linshuang`, whose starting funds are entirely in her bank
-  deposit (`钱庄存款`), not loose cash — a legitimate, expected new-player
-  economy state, not a bug; **a fully successful purchase (cash actually
-  changing hands) was not completed live** — noted explicitly, not
-  silently skipped, per the task's honesty requirement.
+**2. (RETRACTED — content/design judgment call, not a programming bug;
+reverted on user review) `d/city/huadian.lpc`'s vendor NPC was never
+spawned (its `objects` entry was commented out:
+`// __DIR__"npc/hua_girl" : 1,`).** Originally uncommented and paired
+with a `do_buy()` syntax patch, both since reverted: restoring
+deliberately-disabled content isn't a compile error or wrong efun
+usage — it's a decision about what the game should contain, which this
+project's round-two testing scope explicitly excludes (see AGENTS.md
+§10.7's scope note). The room's own flavor text and help board still
+describe 英莲 as present, so the disabled state does look like it could
+be an abandoned WIP toggle from the original archive's own development
+— but "looks like an oversight" isn't the same as a proven programming
+defect, and we don't have grounds to be certain either way. Left as-is
+(shop remains non-functional, matching the shipped archive), documented
+here rather than silently re-fixed.
 
 **3. `d/city/npc/wizer.lpc:22` and `d/jh/shengji.lpc:17` — a hard
 compile-blocking type error (`exert_function(<int>)` where the function
