@@ -152,23 +152,37 @@ void setup() {
 }
 
 private void user_dump(int type) {
+  object env;
 
   switch (type) {
     case DUMP_NET_DEAD:
-      tell_room(
-        environment(),
-        query("name") + "断线超过" + chinese_number(NET_DEAD_TIMEOUT / 60) + "分钟，自动退出这个世界。\n"
-      );
+      // Defense in depth alongside the feature/clean_up.lpc fix (a
+      // room-cleanup mechanism destructing a room out from under a
+      // net-dead player, corrupting environment() to 0): guard so a
+      // null/dangling environment here can never abort this function
+      // BEFORE the actual force-quit/save below runs. Pre-fix, an
+      // unguarded tell_room(0, ...) threw a caught-but-uncaught-HERE
+      // runtime error ("Bad argument 4 to EFUN message()") that
+      // silently skipped QUIT_CMD->main() entirely, leaving the
+      // net-dead player never force-quit/saved.
+      env = environment(this_object());
+      if (objectp(env))
+        tell_room(
+          env,
+          query("name") + "断线超过" + chinese_number(NET_DEAD_TIMEOUT / 60) + "分钟，自动退出这个世界。\n"
+        );
       QUIT_CMD->main(this_object(), "", 1);
       break;
     case DUMP_IDLE:
-      if (!wizardp(this_object()) && environment(this_object())->query("short") != "发呆室") {
+      env = environment(this_object());
+      if (!wizardp(this_object()) && (!objectp(env) || env->query("short") != "发呆室")) {
         tell_object(this_object(), "对不起，您已经发呆超过 " + IDLE_TIMEOUT / 60 + " 分钟了，请下次再来。\n");
-        tell_room(
-          environment(),
-          "一阵风吹来，将发呆中的" + query("name") + "化为一堆飞灰，消失了。\n",
-          ({ this_object() })
-        );
+        if (objectp(env))
+          tell_room(
+            env,
+            "一阵风吹来，将发呆中的" + query("name") + "化为一堆飞灰，消失了。\n",
+            ({ this_object() })
+          );
         QUIT_CMD->main(this_object(), "", 1);
         return;
       }
@@ -218,12 +232,25 @@ private void do_net_dead() {
 
 // reconnect: called by the LOGIN_D when a netdead player reconnects.
 void reconnect() {
+  object env;
+
   set_heart_beat(1);
   set_temp("netdead", 0);
   remove_netdead_enemy();
   remove_call_out("user_dump");
   remove_call_out("do_net_dead");
   tell_object(this_object(), "重新连线完毕。\n");
+
+  // AGENTS.md #7.21 shape: a net-dead disconnect mid the mandatory
+  // gift-selection wizard (/d/wiz/init) loses the pending input_to()
+  // prompt; the room's own add_action catch-all (do_block) then
+  // silently swallows every command except look/help/story/say/quit,
+  // stranding the player with no visible feedback. Detect that state
+  // here and resume the wizard directly, the same way the room's own
+  // init() would have on a fresh move() in.
+  env = environment(this_object());
+  if (env && query("no_gift") && base_name(env) == "/d/wiz/init")
+    env->get_start1(this_object());
 }
 
 void gift_lose() {

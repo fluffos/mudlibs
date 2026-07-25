@@ -457,3 +457,535 @@ Save files for the orchestrator to add (neither is gitignored — both
 picks them up):
 - `libs/xiaoyuxiyou/work/data/user/f/fluffos.o` (character save)
 - `libs/xiaoyuxiyou/work/data/login/f/fluffos.o` (login/credential record)
+
+## 深度功能测试 / Deep functional test (2026-07-24, round two)
+
+First real hands-on *playthrough* pass on this lib (all prior passes
+verified registration + `look`/`score`/`quit` + admin login, or watched
+boot output — see the WASM-enablement pass above). Read
+`doc/help/newbie/newbie` in full first — it named the starting inn
+(翠香楼), the `hp`/`score`/`i` commands, `learn <skill> from <teacher>`,
+`help menpai`/`help apprentice` for sect info, and `help hints`/`wimpy`
+for combat safety. `doc/help/statue/combat` separately documents this
+lib's own safe-sparring convention: `fight` (non-lethal, ends at
+unconsciousness/surrender/fleeing the room, no lasting grudge) versus
+`kill` (fights to the death). Native driver
+(`~/src/fluffos/build-debug/src/driver config.fluffos`), one continuous
+session per test character via `scripts/mudclient.py`, per AGENTS.md
+§10.7. Found and fixed **two** bugs: one an already-cataloged class
+(AGENTS.md §7.21) with a notable additional twist not previously
+recorded for that entry, the other a genuinely **new** class surfaced
+only by the extended net-dead soak wait §10.7/§10.8 explicitly encourage
+attempting when time allows (see below for both).
+
+**Test characters** (state left behind as playthrough evidence, saves
+under `work/data/user/` and `work/data/login/`, all with login password
+`abcde123` and admin/recovery password `Passw0rd` unless noted):
+
+- id `linqian`, Chinese name 林前 (男/male) — the main playthrough
+  character. State: reached `/d/aolai/cuixiang` (翠香楼) normally through
+  the gift wizard, explored the 傲来国 (Aolai) starting zone on foot
+  (北菀街 → 傲云广场 → 东苑街 → 东方武馆 → 武馆教练场 → 武馆大厅 →
+  储藏室), asked 武馆馆主 东方博玉 (`ask dongfang about 学艺`) which set
+  the `aolai_dongfang` temp flag, then learned `扑击格斗之技 (unarmed)`
+  to level 1 via the organic teacher-NPC path from his son 武馆教头
+  东方聪 (`learn unarmed from dongfang cong`), then won a non-lethal
+  `fight` against a `武馆弟子` (Wuguan dizi) for 5627 combat_exp/562
+  potential, quit cleanly, and relogged in after a real multi-minute
+  wall-clock gap with the learned skill still intact (`skills` correctly
+  showed `扑击格斗之技 (unarmed) 初学乍练 1/0`). Also exercised (but did
+  not complete) the shop path: `list`/`buy jiudai from xiao er` at
+  翠香楼 both function correctly and `buy` correctly rejects with "你的
+  钱不够" (no crash) for the character's starting 0 gold.
+- id `wangshu`, Chinese name 王舒 (女/female) — created specifically to
+  reproduce and then re-verify the reconnect-mid-wizard bug below, both
+  before and after the fix, across several real disconnect/reconnect
+  cycles (including one prompt reconnect after roughly 9.5 real minutes
+  net-dead — see the "Second bug found and fixed" section below for the
+  full-timeout edge this didn't quite reach, and why). Finished
+  registration, reached 翠香楼, and was quit cleanly at the end of this
+  pass.
+- id `zhaoyun`, Chinese name 赵芸 (女/female) — a throwaway character
+  used for the extended net-dead soak-timing attempt described below
+  (registered, reached 翠香楼, deliberately net-dead disconnected for the
+  full ~615s `NET_DEAD_TIMEOUT` window). **Left deliberately un-repaired
+  in `/obj/void`** as direct evidence of the second bug found this pass
+  (see below) — do not "fix" her location without also re-reading that
+  section.
+- id `hema`, Chinese name 何嫚 (女/female) — a throwaway character whose
+  first registration attempt's connection closed (client-side timeout)
+  before the gift wizard finished, so an unplanned net-dead-mid-wizard
+  reconnect happened instead of reaching 翠香楼 as intended — ended up as
+  an incidental *third* re-confirmation of the §7.21-class fix above (the
+  gift table correctly auto-redisplayed on reconnect) rather than the
+  `clean_up()` re-verification it was meant for. Finished registration
+  and quit cleanly afterward; not otherwise used.
+- id `yelan`, Chinese name 叶岚 (女/female) — the character that actually
+  re-verified the `feature/clean_up.lpc` fix (registered with a longer
+  client timeout this time to guarantee the wizard fully completed
+  before disconnecting — confirmed via a full `score` reaching 翠香楼
+  before disconnect). Net-dead disconnected alone in that room; see the
+  "Second bug found and fixed" section for the wait duration and outcome.
+- ids `qinye`, `qftest`, `qinfeng` and a handful of other `q*` ids are
+  leftover from earlier registration-flow verification passes (already
+  documented above in this file) and from this pass's own initial
+  English-id-validation trial and error (`linfeng`/`linfeng26` were
+  rejected — this driver's English id check is letters-only, **no
+  digits**, which is stricter than what several `q*`-family ids in this
+  file's earlier section imply; worth remembering for future passes on
+  this lib).
+
+### Confirmed working end-to-end
+
+- Registration (GBK/BIG5 prompt → id → Chinese name → dual passwords →
+  email → gender → gift-point wizard → world) with a real Chinese name,
+  reaching the actual starting room `/d/aolai/cuixiang` (翠香楼).
+- `look`/`score`/`i`/`skills` all correct, including after a clean
+  `quit` + real wall-clock gap + relogin (skill data persisted).
+- Exploration and room navigation (`std/room.lpc`-based `exits`/`objects`
+  all resolve correctly across 8+ rooms visited; no first-visit "Too
+  deep recursion" or eval-cost aborts hit in any of them — §7.17/§7.19/
+  §7.22/§7.25's shapes did not reproduce here).
+- The organic NPC-teacher skill-learning path
+  (`东方博玉` → sets `aolai_dongfang` temp flag → `东方聪`'s
+  `recognize_apprentice()` accepts it → `learn unarmed from dongfang
+  cong` succeeds, deducts potential, saves).
+- Non-lethal `fight` combat against a live NPC (`武馆弟子`), ending in a
+  scripted surrender with a combat_exp/potential reward, no death risk —
+  this lib's own documented safe-sparring convention (`help
+  statue/combat`), used here in place of chasing down a dedicated
+  training dummy (see "Observations" below).
+- Shop `list`/`buy` command plumbing (insufficient-funds path rejects
+  gracefully, no crash).
+- Net-dead disconnect + **prompt** reconnect, repeated many times across
+  both test characters in both a normal room (translation: never lost
+  location — see "Confirmed NOT needed" below) and, once fixed, inside
+  the mandatory gift wizard too.
+- Clean `quit` + relogin (the full login/`restore()` path, not
+  `reconnect()`) with all state intact.
+- `debug.log` stayed completely free of `error:`/`Too deep recursion`/
+  `eval cost`/`FATAL` lines through the entire session (many logins,
+  quits, net-dead cycles, a combat, a skill-learn, two shop attempts) —
+  confirmed by grep immediately after every `quit`, per §10.7's own
+  `bxsj` lesson, not just at the end.
+
+### Bug found and fixed: reconnecting mid the gift-allocation wizard strands the player — AGENTS.md §7.21's class, with an additional independent twist
+
+**Files:line: `obj/user.lpc`'s `reconnect()` (~line 219, primary fix);
+`d/wiz/init.lpc`'s `do_block()` (~line 365) and a new `do_start()`
+wrapper (~line 391, secondary/defense-in-depth fix).**
+
+This lib has the exact same structural shape AGENTS.md §7.21 already
+catalogs (found on `rzrmud`): every brand-new character is moved into a
+mandatory `/d/wiz/init` "limbo" room for gift-point allocation, driven
+entirely by `input_to()` prompts, with the room's `init()` (fired once,
+on the character's original `move()` in) registering a catch-all
+`add_action("do_block", "", 1)` that blocks every verb except
+`look`/`help`/`story`/`say`/`restart`/`quit`. `input_to()` registrations
+do not survive a net-dead/reconnect cycle on this driver, and
+`reconnect()` is a much simpler path than a fresh login — it never calls
+`enter_world()`'s `no_gift` routing again, so nothing re-triggers the
+lost prompt. **Reproduced live**: registered `wangshu`, deliberately let
+the connection drop mid gift-selection (before answering `9`/`y`), then
+reconnected — every command produced **zero output** except `look`
+(which just re-showed the bare room short-description) and `quit`.
+
+```
+> «(pre-fix) reconnect mid /d/wiz/init»
+您使用了登陆密码成功登陆！
+重新连线完毕。
+> 「」
+    这里就是傲来国最有名的饭馆，...      ← "look" allowed through by do_block
+> «score»                                ← ZERO output
+> «start»                                ← ZERO output — see the twist below
+```
+
+**The twist, not previously recorded on §7.21's entry**: on `rzrmud`,
+the room's own intended manual escape hatch (typing `start` to resume
+the wizard) already worked correctly once discovered, and became part of
+how that bug was diagnosed. On this lib, that same manual escape hatch
+is **independently broken by two separate bugs**, so even a player who
+somehow already knew to type `start` would get nothing:
+1. `do_block()`'s own verb allow-list did not include `"start"` — the
+   very command `init()` wires up via `add_action("do_start", "start")`
+   (previously `add_action("get_start1", "start")`, see below) was
+   itself caught and blocked by the catch-all sentence registered a
+   line earlier in the same function.
+2. Even if (1) were fixed, the original binding
+   `add_action("get_start1", "start")` was wired directly to
+   `int get_start1(object me)` — a function whose real, intentional
+   calling convention is "pass the player object" (used correctly from
+   `init()`'s own direct call `get_start1(me)`). `add_action`-bound
+   handlers are always invoked as `fn(string arg)` by the driver
+   (confirmed against `~/src/fluffos/src/packages/core/core.spec`), so
+   typing bare `start` called `get_start1("")` — an empty string landed
+   in the `object me` parameter, and `if (!me) return 1;` is true for an
+   empty string in LPC, so the handler silently no-opped every time,
+   with no compile-time warning (LPC's calling convention for
+   `add_action` handlers isn't type-checked against the bound function's
+   real signature).
+
+Net effect pre-fix: a player who net-deads mid this wizard and
+reconnects is not *permanently* stranded (an admin could always force a
+fresh login, and `quit` still works so a full logout+relogin — which
+correctly re-triggers `enter_world()`'s `no_gift` → fresh `move()` → a
+real `init()` firing — recovers cleanly) but is left in a session that
+looks completely dead for every ordinary command, with **zero
+in-session recovery** available even to a player who guesses the
+documented-sounding `start` command.
+
+**Fix** (primary, matches §7.21's established pattern — detect the stuck
+state in `reconnect()` and resume directly, no player action required):
+
+```lpc
+// obj/user.lpc, BEFORE:
+void reconnect() {
+  set_heart_beat(1);
+  set_temp("netdead", 0);
+  remove_netdead_enemy();
+  remove_call_out("user_dump");
+  remove_call_out("do_net_dead");
+  tell_object(this_object(), "重新连线完毕。\n");
+}
+
+// AFTER:
+void reconnect() {
+  object env;
+  set_heart_beat(1);
+  set_temp("netdead", 0);
+  remove_netdead_enemy();
+  remove_call_out("user_dump");
+  remove_call_out("do_net_dead");
+  tell_object(this_object(), "重新连线完毕。\n");
+
+  env = environment(this_object());
+  if (env && query("no_gift") && base_name(env) == "/d/wiz/init")
+    env->get_start1(this_object());
+}
+```
+
+Plus the independent secondary fix (worth keeping even with the
+`reconnect()` fix above, since it also fixes the manual command for any
+future code path that reaches this room without going through
+`reconnect()`, and is a genuine bug in its own right regardless of the
+wizard-reconnect scenario):
+
+```lpc
+// d/wiz/init.lpc, do_block(): added "start" to the allow-list
+  if (verb == "look" || verb == "help" || verb == "story"
+    || verb == "say" || verb == "restart" || verb == "start")
+    return 0;
+
+// d/wiz/init.lpc, init(): rebound "start" to a new wrapper instead of
+// get_start1 directly
+  add_action("do_start", "start");   // was: add_action("get_start1", "start")
+
+// d/wiz/init.lpc, new function:
+int do_start(string arg) {
+  object me = this_player();
+  if (!userp(me) || wizardp(me)) return 0;
+  if (!me->query("no_gift")) return 0;
+  get_start1(me);
+  return 1;
+}
+```
+
+**Verified live, end-to-end, twice**:
+1. Reproduced the exact broken-reconnect symptom pre-fix with `wangshu`
+   (registered through the gift-point display, disconnected without
+   answering, reconnected — `score`/`start` both produced zero output,
+   only `look`/`quit` worked).
+2. Restarted the driver with the fix applied, registered a **fresh**
+   character (also `wangshu` — same id, since the first attempt never
+   completed registration and had no saved body), disconnected again at
+   the identical point, reconnected — this time the full gift-point
+   table was **automatically redisplayed** immediately after "重新连线
+   完毕。", exactly as if `init()` had just fired; completed the wizard
+   (`9`, `y`) and reached 翠香楼 normally, with `look`/`score` both
+   correct. No `debug.log` errors from either run.
+
+AGENTS.md is not edited by this pass (draft-only per the task's own
+instructions), but the finding is exactly an instance of the existing
+§7.21 class — worth folding the "the room's own manual resume command
+can be independently broken by an add_action signature mismatch, not
+just absent" observation into that entry's text for future passes on
+other libs in this family (`unknownlib20150716` shares this same
+`小雨西游Ⅱ` engine lineage per this file's own lineage note above and is
+worth a targeted grep for the identical `add_action("get_start1",
+"start")`-shaped pattern, though not checked live in this pass — out of
+scope).
+
+### Confirmed NOT needed (checked by reading source, not just by not hitting a crash)
+
+- **§7.20** (net-dead void-parking without a location-restore path):
+  this lib's `net_dead()`/`do_net_dead()` (`obj/user.lpc`) never moves
+  the disconnected player at all — no `VOID_OB`, no temp-room parking;
+  the object just sits in its real room with `set_heart_beat(0)` until
+  reconnect or the `NET_DEAD_TIMEOUT` (600s) force-quit. Confirmed live,
+  repeatedly: every prompt reconnect during this pass (both characters,
+  many cycles, one after ~9.5 real minutes net-dead) landed back in the
+  exact same room with `look` correct, no relocation. `reconnect()`
+  really is called by the login flow too (`grep -rn "->reconnect("`
+  finds `adm/daemons/logind.lpc`'s real call site) — not the "nothing
+  ever calls it" flavor of §7.20 either.
+- **§7.19/§7.28** (reentrant or duplicate `enable_commands()`/
+  `add_action` registration): `feature/command.lpc`'s `enable_player()`
+  already guards its own `add_action("command_hook", "", 1)` call behind
+  a `nosave int enabled` flag (`if (!enabled) { enabled = 1;
+  enable_commands(); add_action(...); }`), so this lib's own
+  architecture is already immune to both the reentrancy and the
+  duplicate-sentence shape — nothing to fix.
+- **§8.3a** (`private nomask command_hook`): `feature/command.lpc:35`
+  already reads `nomask int command_hook(string arg)` with the `private`
+  keyword commented out one line above it — already fixed by an earlier
+  pass, confirmed by reading the live source.
+- **§7.29** (a restored-by-name-match simul_efun with wrong semantics):
+  `feature/dbase.lpc`'s `query()`/`set()`/`delete()` implement their own
+  genuine recursive `_query`/`_set`/`_delete` helpers for slash-path
+  nested properties — not a passthrough to any real efun by name-match —
+  confirmed this is the same "architecturally correct" dbase this file's
+  earlier section already documented, not the nitan-family bug.
+- **§7.30** (mapping accessor returning raw uninitialized `int 0`):
+  `feature/skill.lpc`'s `mapping query_skills() { return skills; }` is
+  exactly this shape (`skills` is genuinely unset, i.e. raw `0`, for a
+  brand-new character), but every one of the 154 real call sites found
+  via `grep -rn "query_skills()"` guards with `!skills || !mapp(skills)`
+  before using the result — reproduced this live as a brand-new
+  character with no skills learned yet hitting several of these call
+  sites (`muren.lpc`'s `accept_fight`, `learn.lpc`, `wg_fighter.lpc`)
+  with no crash. The one unguarded call site found
+  (`u/snowtu/learn.lpc:93`) is an orphaned wizard-personal-sandbox
+  duplicate of the real `cmds/std/learn.lpc`, not reachable from the
+  live command table (same "u/\* dev-in-progress duplicate" pattern this
+  file's lpcc-sweep section already documented for this lib) — left
+  alone.
+
+### Observations (not bugs — documented honestly, not fixed, per §10.7's scope note)
+
+- **`d/aolai/npc/jiaotou.lpc`'s `do_answer()`**: the drill-instructor NPC
+  presents four conversation options (`比武`/`看热闹`/`捣乱`/`从军` —
+  "spar"/"watch"/"cause trouble"/"join the army") but only actually
+  implements `看热闹`; every other choice, including the flavorful "join
+  the army" option, falls through to a generic "你胡说什么？别来捣乱！"
+  rejection. This reads like unfinished/stub content (a menu listing
+  options whose questlines were never built) rather than a programming
+  defect — there's no missing `return`, dangling `else`, or wrong
+  variable reference, just three of four branches never written. Left
+  untouched.
+- **Shop purchase and sect/menpai joining not completed live** — stated
+  explicitly per the task's own allowance for this, not silently
+  presented as tested:
+  - A completed purchase requires gold, and a brand-new character starts
+    at literally 0 (`feature/dbase.lpc`'s `init_money()`). The lib's own
+    documented newbie-funding NPC (`小雨`/`vikee.lpc`, "yao gold") lives
+    in `/d/city/zhunbei.lpc` ("新手准备室"), reachable only from the
+    `长安` (Chang'an) map, which is a **different zone from the starting
+    傲来国 (Aolai) zone** — and `d/aolai/northgate.lpc`'s own
+    `valid_leave()` explicitly gates the only exit toward the wider
+    world/mainland behind `query_level() >= 5` ("武士将手中长剑一横，
+    喝道：看你瘦骨伶仃的样子，出城也是送死！"). A brand-new level-1
+    character genuinely cannot reach the shop-purchase content within
+    the Aolai starting zone — confirmed this structurally by reading
+    `d/aolai/aolai.lpc`'s `exits` (`west` → `/d/changan/aolaiws`) sitting
+    behind that same gate, not merely assumed. `list`/`buy`'s own code
+    path was still exercised and behaves correctly (see above).
+  - The formal 门派 (sect) system (`help menpai`'s thirteen listed
+    sects: 百花谷/蜀山派/大雪山/东海龙宫/南海普陀山/无底洞/月宫/火云洞/
+    方寸山三星洞/阎罗地府/将军府/盘丝洞/五庄观, plus 将军府) all live in
+    zones outside Aolai per the same map/level-gate reasoning above.
+    `feature/apprentice.lpc`'s `recruit_apprentice()` is the real
+    underlying primitive any such sect-entrance NPC would call to
+    formally set a `family` mapping (family name/master/generation) —
+    read and confirmed sound by inspection, but no live sect-entrance
+    NPC was reached to exercise it end-to-end.
+- **`d/obj/misc/muren.lpc`** (a "练功木人" training dummy with a
+  stat-mirroring `accept_fight()`, the exact "safe sparring" shape
+  §10.7's checklist describes) **is never placed in any room** — `grep
+  -rl "muren"` across the whole `work/` tree finds only the file itself.
+  Orphaned content, not reachable in play; the organic `fight`-vs-`武馆
+  弟子` combat above was used instead, per this lib's own documented
+  (`help statue/combat`) safe-sparring convention. Left alone per the
+  established "don't fabricate/wire up missing content" precedent.
+- **`d/wiz/obj/newbie_gift.lpc`** (a fully-implemented, multi-stage
+  "新手锦囊" starter pouch — `doc/help/newbie/liwu` explicitly tells
+  every new player "进入游戏后，每个人物都会被给予一个「新手锦囊」" —
+  tracks food/water/combat milestones via `check_gift1`/`check_gift3`
+  `call_out` chains and hands out combat_exp/potential/gold rewards with
+  in-character hints at each stage) **is never instantiated anywhere** —
+  `grep -rln "newbie_gift"` across the whole tree finds only the file
+  itself, sitting in the wizard-workspace `d/wiz/obj/` directory rather
+  than a live content path. Confirmed live: a brand-new character's
+  inventory is genuinely empty (`目前你身上没有任何东西。`), contradicting
+  the help text. Reads as unfinished/never-deployed content (the same
+  `d/wiz/` "sandbox, not live" shape this file's lpcc-sweep section
+  already documents for `u/snowtu/`) rather than a programming defect —
+  no crash, no wrong efun call, just a whole feature that was written but
+  never wired into `enter_world()`/`confirm_gift()`. Left undeployed;
+  wiring it in would be a content/product decision (when, and under what
+  conditions, should it be granted) that this pass shouldn't make
+  unilaterally.
+
+### Second bug found and fixed (NEW class): a room's idle `clean_up()` only checks `interactive()`, so it can destruct a room out from under a net-dead player, corrupting their `environment()` and silently skipping the auto-force-quit's own save
+
+Found via exactly the §10.8-style extended net-dead soak wait the task
+asks to attempt "if time budget allows" — this is the payoff for doing
+it. **Not the driver-fatal crash class §10.8 catalogs** (the process
+stayed alive throughout, RSS flat ~45→71MB across the whole ~35-minute
+session from ordinary lazy compilation, nothing runaway) — a distinct,
+mudlib-level, fully reproducible bug.
+
+**Files:line: `feature/clean_up.lpc`'s `clean_up()` (~line 17-19,
+primary fix); `obj/user.lpc`'s `user_dump()` (~line 154, defense-in-depth
+fix).**
+
+**Reproduced live**: registered a throwaway character (`zhaoyun`/赵芸),
+completed the gift wizard, reached 翠香楼 (alone — no other player was
+in that room at the time), then disconnected without `quit`. Waited
+**~616 real seconds** (`NET_DEAD_TIMEOUT`=600s from `include/user.h`,
+plus the driver's own 15s `net_dead()`→`do_net_dead()` stagger — the
+exact deadline the automatic force-quit is supposed to fire at),
+monitoring the driver's own stdout throughout (PID confirmed via
+`readlink -f /proc/1857465/cwd`, never killed/restarted mid-wait).
+`debug.log` then showed a caught runtime error that occurred right at
+that boundary:
+
+```
+[执行时段错误]: *Bad argument 4 to EFUN message()
+Expected: object, array,  Got: int(0).
+[程式] /adm/simul_efun/message.lpc(/adm/obj/simul_efun.lpc):178
+[物件]: /adm/obj/simul_efun
+[回溯]:
+user_dump()               /obj/user.lpc  160 行，物件： /obj/user#14 ("赵芸")
+tell_room()               /adm/simul_efun/message.lpc(/adm/obj/simul_efun.lpc)  178 行
+```
+
+Reconnecting as `zhaoyun` immediately afterward confirmed the full
+extent of the damage: **still a reconnect** ("重新连线完毕", not a fresh
+login — meaning the force-quit's `QUIT_CMD->main()` call never actually
+ran), and `look` showed **`「十八层地狱」`** ("The Eighteen Levels of
+Hell" — this is `obj/void.lpc`'s `short`, i.e. `VOID_OB`) instead of
+翠香楼, with only an `up` exit leading to `/d/city/center` — a
+*different, higher-level-gated zone* than her real starting zone
+(Aolai), reachable with zero level check via this path. Score/skills
+were otherwise intact — only the location was corrupted, silently, with
+nothing ever shown to the player explaining what happened.
+
+**Root cause, two-part**:
+1. `feature/clean_up.lpc`'s `clean_up()` — inherited by every room in
+   the lib, driven by the driver's own idle-object sweep
+   (`time to clean up : 300` in `config.fluffos`) — decides whether a
+   room is safe to unload by checking whether any of its `all_inventory()`
+   contents are `interactive()`:
+   ```lpc
+   inv = all_inventory();
+   for (i = sizeof(inv) - 1; i >= 0; i--)
+     if (interactive(inv[i])) return 1;
+   destruct(this_object());
+   ```
+   `interactive()` is specifically **false for a net-dead player** — the
+   defining characteristic of net-dead is that the connection (and thus
+   interactivity) is gone, while the player's body object is still alive
+   and logically "in" that room, reconnectable. A room containing *only*
+   a net-dead player (no other currently-connected player, no living NPC)
+   is therefore misjudged as empty and genuinely `destruct()`ed by the
+   driver's own idle sweep after `time to clean up` (300s) of no other
+   player touching it — a thoroughly ordinary, realistic timing window
+   for 翠香楼 specifically during low-traffic hours, and for almost any
+   less-trafficked room at any time. (Exactly how the driver's C++-level
+   object destruction then relocated the still-referencing net-dead
+   player into `/obj/void` rather than leaving a dangling reference
+   wasn't traced to a specific line — plausibly a driver-level container-
+   destruct safety net — but the mudlib-level defect, and the fix, don't
+   depend on pinning that exact mechanism down.)
+2. `obj/user.lpc`'s `user_dump()` (the function the net-dead
+   `NET_DEAD_TIMEOUT` `call_out` actually invokes) does an **unguarded**
+   `tell_room(environment(), ...)` as the FIRST statement of the
+   `DUMP_NET_DEAD` case, with no check that `environment()` is a real
+   object. Once (1) has corrupted the player's environment, this throws
+   — and since nothing in `user_dump()` wraps it in a `catch()`, the
+   error aborts the rest of the SAME function, meaning the line right
+   after it — `QUIT_CMD->main(this_object(), "", 1)`, the actual
+   force-quit/save that is the entire point of the net-dead timeout
+   safety net — **never runs**. `DUMP_IDLE` (the analogous idle-timeout
+   case a few lines below) has the identical unguarded-environment shape,
+   one statement earlier and even more fragile (`environment(this_object())
+   ->query("short")` — a method call directly on a value that could be
+   `0`, which throws immediately rather than merely passing a bad
+   argument).
+
+Net effect: a net-dead player whose room happens to get idle-cleaned-up
+before they reconnect is silently teleported into the void with zero
+explanation, AND the very safety net that's supposed to force-quit
+(and, critically, **save**) truly-abandoned net-dead sessions silently
+fails to run for them — they remain unsaved and permanently reconnectable
+in `debug.log`-invisible limbo (found alongside, not caused by, §7.20's
+different mechanism — this lib's `net_dead()` never deliberately void-
+parks anyone, unlike §7.20's affected libs; here the void-parking is an
+unintended side effect of an unrelated idle-cleanup timing bug).
+
+**Fix**:
+```lpc
+// feature/clean_up.lpc, BEFORE:
+  inv = all_inventory();
+  for (i = sizeof(inv) - 1; i >= 0; i--)
+    if (interactive(inv[i])) return 1;
+
+// AFTER: userp() reflects the driver's O_ONCE_INTERACTIVE flag, which
+// (confirmed against ~/src/fluffos/src/packages/core/efuns_main.cc's
+// f_userp()) stays true for a player body across a net-dead disconnect,
+// unlike interactive() -- correctly keeps the room loaded either way.
+  inv = all_inventory();
+  for (i = sizeof(inv) - 1; i >= 0; i--)
+    if (interactive(inv[i]) || userp(inv[i])) return 1;
+```
+```lpc
+// obj/user.lpc, user_dump(): guard both cases so a null/dangling
+// environment can never skip the actual QUIT_CMD->main() force-quit
+// (full diff in obj/user.lpc; DUMP_NET_DEAD shape shown):
+  env = environment(this_object());
+  if (objectp(env))
+    tell_room(env, query("name") + "断线超过..." + "分钟，自动退出这个世界。\n");
+  QUIT_CMD->main(this_object(), "", 1);
+```
+
+**Verified live, end-to-end**: driver restarted with both fixes, booted
+clean, no new compile warnings/errors on either file (`grep`-confirmed
+against `debug.log`); a normal login/`look`/`quit` cycle (`linqian`)
+still works identically post-fix. Re-ran the reproduction with a fresh
+throwaway character (`yelan`/叶岚) — registered with extra client-side
+timeout headroom to guarantee the gift wizard fully completed
+(confirmed via a full `score` reaching 翠香楼 before disconnecting),
+then net-dead alone in 翠香楼 for **~330 real seconds**, past the 300s
+`time to clean up` threshold that triggered the original corruption
+(short of the full 615s `NET_DEAD_TIMEOUT`, since the point of this
+specific re-run was isolating the `clean_up()` fix). Reconnecting
+afterward showed `look` correctly still displaying 翠香楼 and `score`
+fully correct — the room was no longer destructed out from under a lone
+net-dead player. (An earlier attempt at this same re-verification,
+character `hema`/何嫚, accidentally tested the §7.21-class wizard fix a
+third time instead, due to her original registration's connection
+timing out mid-wizard rather than reaching 翠香楼 as intended — corrected
+by registering `yelan` with more headroom and confirming her location
+with `score` before disconnecting.) **Not independently re-verified for
+the full 615s `user_dump()`/`QUIT_CMD` timing** a second time (would
+need another ~10-minute wait beyond what this pass's time budget could
+repeat a third time) — the `user_dump()` guard fix is a direct, narrow
+`objectp()` check whose correctness is clear by inspection, so this is a
+reasonable place to stop, but flagged honestly rather than claimed as
+re-observed live.
+
+`zhaoyun` (id `zhaoyun`, Chinese name 赵芸) is deliberately **left
+in `/obj/void`** as direct evidence of the pre-fix bug — her save file
+(`work/data/user/z/zhaoyun.o`) still reflects the corrupted location.
+Not moved/repaired, per this project's "leave representative state as
+evidence" convention.
+
+**Lineages likely affected**: `feature/clean_up.lpc` is credited
+`// by Annihilator@ES2` in its own header comment — worth checking any
+other ES2-lineage-descended lib (AGENTS.md §11's ES II / 东方故事 family)
+for the identical `interactive()`-only presence check in its own
+`clean_up()`/equivalent, though not checked live on any sibling in this
+pass (out of scope). More generally: any lib whose room/container
+`clean_up()` uses `interactive()` as its sole "is anyone here" test
+rather than `userp()` (or equivalent) is a candidate for this exact
+shape, independent of lineage.
