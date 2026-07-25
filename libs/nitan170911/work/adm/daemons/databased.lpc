@@ -446,18 +446,36 @@ int db_restore_all(object user) {
     f_alias = res[n + 9];
     f_user = res[n + 10];
     char_idname = res[n + 11];
-    user->set_dbase(restore_variable(f_dbase));
-    user->set_autoload_info(restore_variable(f_autoload));
-    user->set_CONDITION(restore_variable(f_condition));
-    user->set_business(restore_variable(f_business));
-    user->set_mail(restore_variable(f_mail));
-    user->set_ALIAS(restore_variable(f_alias));
-    user->set_ATTACK(restore_variable(f_attack));
-    user->set_ghost(restore_variable(f_damage));
-    user->set_SKILL(restore_variable(f_skill));
-    user->set_USER(restore_variable(f_user));
-    user->set_IDNAME(restore_variable(char_idname));
-    if (objectp(myob)) myob->set_dbase(restore_variable(login_dbase));
+    // Every f_*/char_idname/login_dbase column here is NULL (comes back
+    // from db_fetch() as int 0, not "") for any account whose row was
+    // written by db_new_player() -- that INSERT only ever populates
+    // id/name/surname/purename/password/ad_password/birthday/online/
+    // on_time/fee_time/login_dbase/f_dbase, leaving every other column
+    // NULL until the player's first real save. restore_variable() rejects
+    // a non-string argument outright ("Bad argument 1 to restore_variable()
+    // Expected: string Got: 0"), and since none of these calls were
+    // wrapped in catch(), the FIRST such error aborted db_restore_all()
+    // entirely -- every restore call after the failing one (including
+    // f_dbase/login_dbase further down) silently never ran, leaving the
+    // just-logged-in character half-initialized (this is what broke
+    // command dispatch immediately after a brand-new account's first
+    // login: found live via a real playthrough, not by inspection).
+    // Guard each with stringp() and fall back to the same empty value
+    // set/query() and F_DBASE calling code already treat these props as
+    // taking implicitly (0/([])/({})) before anything has ever been saved.
+    user->set_dbase(stringp(f_dbase) ? restore_variable(f_dbase) : ([]));
+    user->set_autoload_info(stringp(f_autoload) ? restore_variable(f_autoload) : ({}));
+    user->set_CONDITION(stringp(f_condition) ? restore_variable(f_condition) : ([]));
+    user->set_business(stringp(f_business) ? restore_variable(f_business) : ([]));
+    user->set_mail(stringp(f_mail) ? restore_variable(f_mail) : ({}));
+    user->set_ALIAS(stringp(f_alias) ? restore_variable(f_alias) : ([]));
+    user->set_ATTACK(stringp(f_attack) ? restore_variable(f_attack) : ([]));
+    user->set_ghost(stringp(f_damage) ? restore_variable(f_damage) : 0);
+    user->set_SKILL(stringp(f_skill) ? restore_variable(f_skill) : ([]));
+    user->set_USER(stringp(f_user) ? restore_variable(f_user) : ([]));
+    user->set_IDNAME(stringp(char_idname) ? restore_variable(char_idname) : 0);
+    if (objectp(myob))
+      myob->set_dbase(stringp(login_dbase) ? restore_variable(login_dbase) : ([]));
     n = 1;
   }
 #ifndef STATIC_LINK

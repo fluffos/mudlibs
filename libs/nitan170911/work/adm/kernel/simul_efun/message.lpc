@@ -2,6 +2,15 @@
 // Update by Doing
 // Update by Lonely
 
+// Forward prototype: tell_object()/tell_room()/shout()/write()/say()/etc.
+// below all call bare message() before its own definition later in this
+// file. Without a prototype, FluffOS's single-pass compiler resolves
+// those earlier bare calls directly to the driver EFUN `message()`
+// instead of the local wrapper defined below -- silently bypassing the
+// exclude-argument normalization that wrapper exists to provide (see its
+// own comment) for every caller ABOVE its definition. This prototype
+// makes every call site in this file bind to the local function.
+varargs void message(mixed arg, string message, mixed target, mixed exclude);
 
 string sort_msg(string input) {
 #ifdef BINARY_SUPPORT
@@ -328,13 +337,22 @@ varargs void say(string str, mixed exclude) {
     message("say", str, environment(this_player()), this_player());
 }
 
-void message(mixed arg, string message, mixed target, mixed exclude) {
+// `exclude` is passed as bare mixed (not `varargs object|object *`) because
+// every call site in this mudlib (60+ across message_system()/tell_room()/
+// direct calls, e.g. adm/daemons/logind.lpc's enter_world()) either omits
+// it or passes literal `0`, relying on LPC's "missing trailing arg becomes
+// int 0" behavior. efun::message()'s real signature only accepts
+// `void | object | object *` for this argument and throws "Bad argument 4
+// to EFUN message()" at runtime on int(0) -- normalize here instead of
+// touching every call site.
+varargs void message(mixed arg, string message, mixed target, mixed exclude) {
+  if (!arrayp(exclude) && !objectp(exclude)) exclude = ({});
   efun::message(arg, message, target, exclude);
 }
 
 void message_system(string message) {
   message("system", HIW "\n【系统】" + message + "\n" NOR,
-    all_interactive(), 0);
+    all_interactive(), ({}));
 }
 
 int notify_fail(string msg) {

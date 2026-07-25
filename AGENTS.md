@@ -2665,12 +2665,23 @@ wait), moments after triggering that lib's own §7.12 `tell_room()` bug
 — plausibly the same mechanism §7.12's escalation note already
 predicts, though not proven as the sole cause.
 
-Four independent occurrences now, across four unrelated libs/lineages,
-different objects, different immediate trigger paths (ambient NPC
-wandering, admin reconnect, periodic GC sweep, natural idle time),
-same fatal signature (`ref count 0, but not destructed`/double-free).
-This is corroborating evidence the underlying driver-level
-refcount-corruption class is real and not a one-off, but it remains
+**Fifth independent occurrence**: `nitan170911`'s deep functional test
+hit a related-but-distinct signature (`stralloc.c: free_string called on
+non-shared string`) mid a net-dead soak — the corrupted structure this
+time was a STRING, not an object, the first occurrence not matching the
+`ref count 0, but not destructed` wording exactly, but the same
+underlying shape (a driver-internal consistency check aborting the whole
+process during ordinary extended play, no mudlib-catchable error, no
+`debug.log` trace). Triggered by the player's own net-dead body, not
+ambient activity.
+
+Five independent occurrences now, across five unrelated libs/lineages,
+different corrupted structures (objects AND a string), different
+immediate trigger paths (ambient NPC wandering, admin reconnect,
+periodic GC sweep, natural idle time, a player's own net-dead body),
+same fatal shape (a driver-internal consistency check aborting the whole
+process). This is corroborating evidence the underlying driver-level
+memory-corruption class is real and not a one-off, but it remains
 genuinely low-reproducibility and root-caused to the driver level (not
 mudlib-fixable), not any specific mudlib source pattern — no single
 occurrence has yet pinned down a REPRODUCIBLE trigger (one that fires
