@@ -157,7 +157,12 @@ fi
 
 # Cache bundles are only reusable at all when they were packed with the
 # current driver release and packer script (a bump to either changes every
-# bundle's content/page glue).
+# bundle's content/page glue). This is what makes a driver-only regression
+# (e.g. fluffos v2026.0724.0 shipping a query_ip_number() bug that broke
+# every WASM connection's loopback-bypass gate for the handful of libs
+# that check it -- fixed in v2026.0729.0) self-heal on the next deploy
+# with no mudlib-side change at all: the driver tag alone busts every
+# cached bundle below, forcing a full repack against the new driver.
 CACHE_OK=1
 if [ "$OLD_TAG" != "$DRIVER_TAG" ] || [ "$OLD_PACKER" != "$PACKER_FP" ]; then
   CACHE_OK=0
