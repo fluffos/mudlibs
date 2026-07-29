@@ -1,5 +1,9 @@
 # mudlibs — 98 restored classic Chinese LPC mudlibs, runnable natively and in the browser
 
+**▶ Play now, no install: https://mudlibs.fluffos.info/**
+
+![Screenshot of the mudlibs.fluffos.info game gallery](docs/site-preview.png)
+
 This repository preserves and restores the golden age of the Chinese MUD
 scene (mid-1990s to ~2015): **98 complete LPC mudlibs** (97 fully playable
 in the browser, 1 native-only by policy — see below) — 侠客行, 笑傲江湖,
@@ -25,12 +29,12 @@ one archive is BIG5 Traditional Chinese.
 
 ## Quick start — play in the browser
 
-The GitHub Pages site (built by `.github/workflows/pages.yml`) hosts every
-converted lib as a click-to-play page: it packs each `libs/<slug>/` tree
-into an in-memory filesystem image, pairs it with the prebuilt WASM
-FluffOS driver from the latest fluffos release, and generates an index
-page from the per-lib READMEs (`scripts/gen_site_index.py`,
-`scripts/wasm_status.json`).
+**https://mudlibs.fluffos.info/** — the GitHub Pages site (built by
+`.github/workflows/pages.yml`) hosts every converted lib as a click-to-play
+page: it packs each `libs/<slug>/` tree into an in-memory filesystem image,
+pairs it with the prebuilt WASM FluffOS driver from the latest fluffos
+release, and generates an index page from the per-lib READMEs
+(`scripts/gen_site_index.py`, `scripts/wasm_status.json`).
 
 To smoke-test a lib under WASM locally without a browser:
 
