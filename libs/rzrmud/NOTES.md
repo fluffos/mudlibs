@@ -599,3 +599,40 @@ only across `band.lpc` (×4), `securityd.lpc`'s `match_wiz_site`,
 `ipd.lpc` (falls back to "未知地区" for unparseable input instead of
 "本地连接"), and `logind.lpc`'s `local_conn` flag. Re-verified loopback
 login, `look`, `update`, and quit all still work after tightening.
+
+### `logind.lpc`'s `do_counter()`: the AGENTS.md §7.9 fresh-checkout bomb, live on the published site (2026-07-29)
+
+Reported live: the WASM page at mudlibs.fluffos.info/rzrmud/ was
+permanently stuck at "connecting…" — `fluffos_connect()` genuinely
+returning -1, traced via the Logs tab to
+`new_conn_handler: logon() on object obj/login#0 has failed` with the
+underlying error `*Bad argument 1 to sscanf, Expected: string Got: 0`
+inside `do_counter()` (`adm/daemons/logind.lpc:1152`, called from
+`logon()` via `encoding()`):
+
+```lpc
+int do_counter() {
+  int number;
+  string file;
+  file = read_file(FileName);   // FileName = "/adm/daemons/UserNumber"
+  sscanf(file, "%d", number);   // crashes when read_file() returns 0
+  ...
+```
+
+`UserNumber` (the visitor counter) is gitignored runtime data
+(`libs/*/work/adm/daemons/UserNumber` in the repo `.gitignore`), so it
+never exists in a fresh checkout — including the CI runner that packs
+the WASM site. It happened to exist on this session's own local disk
+(leftover from earlier local testing), which is exactly why every prior
+local verification pass here missed it: `read_file()` only returns 0
+(triggering the crash) when the file is genuinely absent, and locally it
+never was. Textbook instance of the exact class AGENTS.md §7.9 already
+catalogs, just not one that had been found in this lib specifically
+before. Fixed with the standard `stringp()` guard; re-verified against a
+freshly packed local site with the file deliberately moved aside
+(reproducing the real fresh-checkout condition) — connects and reaches
+the registration prompt cleanly. Three more copies of the identical
+`do_counter()` exist (`u/canoe/logind.lpc`, `u/canoe/lbak.lpc`,
+`adm/daemons/log_bak.lpc`) but none are inherited/loaded by anything —
+wizard-workspace backups, left alone per the standing "don't fix dead
+code" policy.

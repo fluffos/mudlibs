@@ -1053,11 +1053,14 @@ checkout — so a lib that tested fine can ship broken-on-first-boot for
 everyone else ("works on my tree" fresh-checkout bomb). Every
 `read_file()` whose result feeds `sscanf`/string ops on a
 connection-setup path needs a `stringp()` guard. Known fixed:
-`xiakexing100`, `xiyouji2006`, `zitengzhan`, `zzfy`, `yueyingqiyuan`;
-also the `uptime.lpc` `write(read_file(LASTCRASH))` variant
-(`xianjianchuanqi`, `moniHuafu`, `suiyuanxijianlu` — see also §7.11 for
-the receiving side). Grep:
-`grep -rn "sscanf(read_file\|write(read_file" work/`.
+`xiakexing100`, `xiyouji2006`, `zitengzhan`, `zzfy`, `yueyingqiyuan`,
+`rzrmud` (found live on the published WASM site, not in any prior local
+pass — the gitignored counter file happened to already exist on that
+session's own disk from earlier testing, masking the crash locally;
+only a genuinely fresh checkout/CI pack reproduces it); also the
+`uptime.lpc` `write(read_file(LASTCRASH))` variant (`xianjianchuanqi`,
+`moniHuafu`, `suiyuanxijianlu` — see also §7.11 for the receiving side).
+Grep: `grep -rn "sscanf(read_file\|write(read_file" work/`.
 
 ### 7.10 `log_error()` receives WARNINGS too — and must not touch the ACL
 
