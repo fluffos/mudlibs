@@ -1,0 +1,158 @@
+#include <ansi.h>
+#include <weapon.h>
+
+#ifdef AS_FEATURE
+#include <dbase.h>
+#else
+inherit EQUIP;
+#endif
+
+varargs void init_gun(int damage, int max_ammo, string type, int flag)
+{
+	if( clonep(this_object()) ) return;
+
+	set("max_ammo",max_ammo);
+	set("ammo",max_ammo);
+	set("type",type);
+	set("weapon_prop/gun_damage", damage);
+	set("weapon_prop/damage", 1);
+	set("flag", (int)flag | LONG );
+	set("skill_type", "staff");
+	if( !query("actions") )
+	{
+		set("actions", (: call_other, WEAPON_D, "query_action" :) );
+		set("verbs", ({ "bash", "crush", "slam" }) );
+	}
+}
+
+string extra_long()
+{
+	string result;
+
+	if( !query("max_ammo") ) return "看上去并不能装填任何弹药。\n";
+	else result = sprintf("里面可以装填%s弹药，装弹量%s发，",
+		stringp(query("type")) ? query("type") : "普通",
+		chinese_number(query("max_ammo")) );
+
+	if( !query("ammo") ) return result += "现在里面已经没有弹药了。\n";
+	else return result += "现在里面有弹药" + chinese_number(query("ammo")) + "发。\n";
+}
+
+void init()
+{
+	add_action("do_shoot", "shoot");
+	add_action("do_reload", "reload");
+}
+
+int do_shoot(string str)
+{
+	object victim, env, me, gun;
+	int gun_skill, dodge_skill, damage;
+	string *limbs, limb;
+
+	me = this_player();
+	if( ( env = environment(me) )->is_space_room()
+		|| env->is_planet() )
+		return notify_fail("你打算在你的旗舰里开枪？不太好吧？\n");
+
+	gun = this_object();
+	if( environment(gun) != me )
+		return 0;
+	if( !gun->query("equipped") )
+		return notify_fail("你得先装备上" + gun->name() + "才行。\n");
+	if( !env->query("allow_fight") )
+		return notify_fail("这里不允许随便开枪。\n");
+	if( !objectp( victim = present(str, env) ) )
+		return notify_fail("你要射击谁？\n");
+	if( !victim->is_character() || victim->is_corpse() )
+		return notify_fail("看清楚一点，那并不是活物。\n");
+	if( victim == me )
+		return notify_fail("用 suicide 指令会比较快:P。\n");
+
+	if( ( gun_skill = me->query_skill("gun") ) < 25 )
+		return notify_fail("你的小型枪械技能实在太低，所以不知道如何使用"
+			+ gun->name() + "。\n");
+
+	if( !gun->query("ammo") )
+		return notify_fail("你的" + gun->name() + "已经没有弹药了。\n");
+
+	message_vision("$N端起手中的" + gun->name() + "向$n开了一枪。\n",me,victim);
+	dodge_skill = victim->query_skill("dodge");
+	if( random(gun_skill + dodge_skill + me->query_kar() ) > ( dodge_skill + victim->query_kar() ) )
+	{
+		damage = gun->query("weapon_prop/gun_damage")/2;
+		victim->receive_wound("kee",damage/2+random(damage/2),me);
+		limbs = victim->query("limbs");
+		message_vision("击中了$N的" + limbs[random(sizeof(limbs))] + "。\n",victim);
+		message_vision(COMBAT_D->damage_msg(victim->receive_damage("kee",damage+random(damage),me),"枪伤"),me);
+	}
+	else
+	{
+		message_vision("结果并没有打中$N。\n",victim);
+	}
+
+	me->kill_ob(victim);
+	gun->add("ammo",-1);
+	if( !userp(victim) )
+	{
+		victim->accept_kill(me);
+		victim->kill_ob(me);
+	}
+	else
+	{
+		victim->fight_ob(me);
+		tell_object(victim, HIR + me->name()
+			+ "正向你射击，如果你要不惜性命的与其搏斗，对其下一次 kill 指令。\n" NOR);
+	}
+	return 1;
+}
+
+int do_reload()
+{
+	object env, me, gun, *inv;
+	int i, check, gun_left_ammo, gun_max_ammo;
+
+	me = this_player();
+	if( ( env = environment(me) )->is_space_room()
+		|| env->is_planet() )
+		return notify_fail("还是先看好你的舰队吧。\n");
+
+	gun = this_object();
+	if( environment(gun) != me )
+		return 0;
+	if( !gun->query("equipped") )
+		return notify_fail("你得先装备上" + gun->name() + "才行。\n");
+
+	gun_left_ammo = query("ammo");
+	gun_max_ammo = query("max_ammo");
+	if( gun_left_ammo == gun_max_ammo )
+		return notify_fail(gun->name() + "的弹夹现在是满着的。\n");
+
+	inv = all_inventory(me);
+	for(i=0;i<sizeof(inv);i++)
+	{
+		if( inv[i]->is_s_equip() ) continue;
+		if( inv[i] == gun ) continue;
+		if( inv[i]->query("type") == query("type") )
+		{
+			if( !inv[i]->query("ammo") ) continue;
+			if( inv[i]->query("ammo") + gun_left_ammo > gun_max_ammo )
+			{
+				set("ammo",gun_max_ammo);
+				inv[i]->add("ammo", gun_left_ammo - gun_max_ammo);
+				write("弹药装填完毕。\n");
+				return 1;
+			}
+			else
+			{
+				add("ammo",inv[i]->query("ammo"));
+				inv[i]->set("ammo",0);
+				if( inv[i]->is_ammo() )	destruct(inv[i]);
+				write("弹药装填完毕。\n");
+				return 1;
+			}
+		}
+	}
+	write("你并没有多余的弹药可以用来装填" + gun->name() + "。\n");
+	return 1;
+}

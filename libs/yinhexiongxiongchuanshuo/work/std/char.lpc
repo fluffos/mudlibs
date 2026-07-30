@@ -1,0 +1,226 @@
+// char.c
+//New Writen by Alarms 3/31/99
+//Update by Alarms 4/4/99
+//Update by Alarms 4/10/99
+//Update by Alarms 4/24/99
+//Update by Alarms 4/25/99
+//Update by Alarms 5/9/99
+
+//#include <action.h>
+#include <ansi.h>
+#include <command.h>
+#include <condition.h>
+//New
+#include <current.h>
+//
+#include <dbase.h>
+#include <move.h>
+#include <name.h>
+#include <skill.h>
+#include <team.h>
+#include <user.h>
+
+//inherit F_ACTION;
+inherit F_ALIAS;
+inherit F_ATTACK;
+inherit F_ATTRIBUTE;
+//New
+inherit F_APPRENTICE;
+inherit F_SPACE_MOVE;
+inherit F_CURRENT;
+//
+inherit F_COMMAND;
+inherit F_CONDITION;
+inherit F_DAMAGE;
+inherit F_DBASE;
+inherit F_EDIT;
+//inherit F_FAMILY;
+inherit F_FINANCE;
+inherit F_MESSAGE;
+inherit F_MORE;
+inherit F_MOVE;
+inherit F_NAME;
+inherit F_SKILL;
+inherit F_TEAM;
+
+// Use a tick with longer period than heart beat to save cpu's work
+nosave int tick;
+
+void create()
+{
+	seteuid(0); // so LOGIN_D can export uid to us
+}
+
+// Use this function to identify if an object is a character.
+int is_character() { return 1; }
+
+// setup: used to configure attributes that aren't known by this_object()
+// at create() time such as living_name (and so can't be done in create()).
+void setup()
+{
+	seteuid(getuid(this_object()));
+
+	if( clonep(this_object()) ) {
+		set_heart_beat(1);
+		tick = 5 + random(10);
+		enable_player();
+
+		CHAR_D->setup_char( this_object() );
+	} else
+		// Since most npc are only cloned once and only cloned again after
+		// the previous one was killed and the room resets, keeping the
+		// master copy of characters is just wasting memory. So ... :P
+		// By Annihilator(11/11/95)
+		call_out( "clean_up", 5 );
+}
+
+void heart_beat()
+{
+	int wimpy_ratio,i,cnd_flag;
+	int combat_flag,s_heal_flag,fleet_die_flag,move_flag;
+	mapping my;
+	object ob,me,env;
+
+	me = this_object();
+	my = query_entire_dbase();
+	env = environment(me);
+
+	delete_temp("command_count");
+
+	// If we are dying because of mortal wounds?
+	if( my["eff_kee"] < 0 || my["eff_sen"] < 0 || my["eff_gin"] < 0) {
+		remove_all_enemy();
+		die();
+		return;
+	}
+
+	// If we're dying or falling unconcious?
+	if( my["kee"] < 0 || my["sen"] < 0 || my["gin"] < 0) {
+		remove_all_enemy();
+		if( !living(me) ) die();
+		else unconcious();
+		return;
+	}
+
+	//if we're dying in space
+	if( env->is_space_room() || env->is_planet() )
+	{
+//this的全部舰队是否已经覆没
+		if( !each_fleet_living() && env->is_space_room() )
+			{
+			space_die();
+			return;
+			}
+//有没有分舰队被歼灭
+		for(i=0;i<sizeof(me->query_space("sub_fleet"));i++)
+		{
+			if( sub_fleet_living(i+1) == 0 )
+			{
+//被歼灭的是不是旗舰部队
+				if( (i+1) == me->query_space("flagfleet") )
+					me->set_space("flagfleet",1);
+				fleet_die(i);
+			}
+		}
+	}
+
+
+	// Do attack if we are fighting.
+/*	if( is_busy() ) {
+		continue_action();
+		// We don't want heart beat be halt eventually, so return here.
+		// busy has the highest priority that healing will be susspended.
+		return;
+	} else {*/
+		// Is it time to flee?
+		if( is_fighting()
+		&&	intp(wimpy_ratio = (int)query("env/wimpy"))
+		&&	wimpy_ratio > 0
+		&&	(	my["kee"] * 100 / my["max_kee"] <= wimpy_ratio
+			||	my["sen"] * 100 / my["max_sen"] <= wimpy_ratio
+			||	my["gin"] * 100 / my["max_gin"] <= wimpy_ratio) )
+			GO_CMD->do_flee(me);
+		// Do attack or clean up enemy if we have fleed.
+
+//New Writen
+		if( query_space_temp("times") == 0 )
+		{
+			s_heal_flag = space_heal_up();
+			move_flag = 0;
+		}
+		else
+		{
+			s_heal_flag = 0;
+			move_flag = 1;
+		}
+
+		combat_flag = is_combating();
+
+		if( !env->is_space_room() && !env->is_planet() )
+		{
+			cnd_flag = update_condition();
+			attack();
+		}
+		else if( !process_current(me) )
+			{
+			process_move(me);
+			attack_space();
+			}
+//New Writen end
+//	}
+
+	if( !userp(me) ) {
+		me->chat();
+		// chat() may do anything -- include destruct(me)
+		if( !me ) return;	
+	}
+
+	if( tick--  ) return;
+	else tick = 5 + random(10);
+
+	// If we are compeletely in peace, turn off heart beat.
+	// heal_up() must be called prior to other two to make sure it is called
+	// because the && operator is lazy :P
+	if( ( (cnd_flag & CND_NO_HEAL_UP) || !heal_up() )
+	&&	!is_fighting() 
+	&&	!interactive(me)
+//HERE IS CHANGED!!!!!!!
+	&&	!move_flag
+	&&	!s_heal_flag
+	&&	!combat_flag ) {
+		if( env ) {
+			ob = first_inventory(env);
+			while(ob && !interactive(ob))
+				ob = next_inventory(ob);
+		}
+		if( !ob ) set_heart_beat(0);
+	}
+
+	if( !interactive(me) ) return;
+
+	// Make us a bit older. Only player's update_age is defined.
+	// Note: update_age() is no need to be called every heart_beat, it
+	//       remember how much time has passed since last call.
+	me->update_age();
+
+	if(query_idle(me) > IDLE_TIMEOUT)
+		me->user_dump(DUMP_IDLE);
+}
+
+int visible(object ob)
+{
+	int lvl, invis;
+
+	lvl = wiz_level(this_object());
+    
+	if( lvl > wiz_level(ob) ) return 1;
+	invis = ob->query("env/invisibility");
+	if( intp(invis) && (invis > lvl) ) return 0;
+
+	if( ob->is_ghost() ) {
+		if( is_ghost() ) return 1;
+		if( query_temp("apply/astral_vision") ) return 1;
+		return 0;
+	}
+	return 1;
+}

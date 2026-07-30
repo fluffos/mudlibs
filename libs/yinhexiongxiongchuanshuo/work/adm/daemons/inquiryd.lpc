@@ -1,0 +1,44 @@
+// inquiryd.c
+// Created by Annihilator@ES2 (01-19-95)
+
+// This function handles the default inquiry between ppls and npcs to
+// make npc more talktive. This is the '<me> ask <ob> about <topic>'
+// case.
+
+#include <ansi.h>
+
+int parse_inquiry(object me, object ob, string topic)
+{
+	switch( topic ) {
+		case "name":
+			message_vision( CYN "$N向$n问道：敢问" + RANK_D->query_respect(ob)
+				+ "尊姓大名？\n" NOR, me, ob);
+			return 1;
+		case "home":
+			message_vision( CYN "$N向$n问道：敢问" + RANK_D->query_respect(ob)
+				+ "家住何处？\n" NOR, me, ob);
+			return 1;
+		case "here":
+			message_vision(CYN "$N向$n问道：这位" + RANK_D->query_respect(ob)
+				+ "，" + RANK_D->query_self(me) + "初到贵宝地，不知这里有些什麽风土人情？\n" NOR,
+				me, ob);
+			return 1;
+		case "news":
+		case "rumor":
+		case "rumors":
+			message_vision(CYN "$N向$n问道：这位" + RANK_D->query_respect(ob)
+				+ "，不知最近有没有听说什麽消息？\n" NOR, me, ob);
+			return 1;
+		case "employment":
+			message_vision( CYN "$N向$n问道：" + RANK_D->query_self(me)
+				+ "想雇用" + RANK_D->query_respect(ob) + "做几件事，不知"
+				+ RANK_D->query_respect(ob) + "意下如何？\n" NOR, me, ob);
+			return 1;
+		case "trouble":
+			message_vision(CYN "$N向$n问道：不知这位" + RANK_D->query_respect(ob)
+				+ "为何事烦忧？\n" NOR, me, ob);
+			return 1;
+		default:
+			return 0;
+	}
+}

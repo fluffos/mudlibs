@@ -1,0 +1,174 @@
+// shp.c Writen by Alarms 7/8/99
+ 
+#include <ansi.h>
+#include <combat.h>
+ 
+inherit F_CLEAN_UP;
+inherit F_S_ATTRIBUTE;
+inherit F_DISTANCE;
+ 
+string status_color(int current, int max);
+string inventory_desc(object ob);
+ 
+int main(object me, string arg)
+{
+	object ob, *inv;
+	mapping my, fleet, formation;
+	mapping *fleets;
+        string list, shiptype;
+        int i, j;
+ 
+	seteuid(getuid());
+
+	if( !arg ) ob = me;
+	else
+	{
+		ob = present(arg, environment(me));
+		if( !ob ) ob = find_player(arg);
+		if( !ob ) ob = find_living(arg);
+		if( !ob ) return notify_fail("要察看哪个舰队的状态？\n");
+		if( !wizardp(me) && !calculate_distance(me,ob,me->query_space("scouting")) )
+			return notify_fail("要察看哪个舰队的状态？\n");
+		if( !wizardp(me) )
+			return notify_fail("只有巫师能察看其它舰队的状态。\n");
+	}
+
+	fleets = ob->query_space("sub_fleet");
+
+	if( !pointerp(fleets) || ( fleets == ({ }) ) ) return notify_fail("很遗憾，您目前尚未配备舰队。\n");
+
+	list = sprintf("【%s】\n",ob->space_short());
+	list += sprintf("  侦察范围：%9d  舰队速度：%9d\n",
+			ob->query_space("scouting"),query_eff_spd(ob));
+
+
+	list += sprintf("  舰队总数：%9d", query_eff_amount(ob) );
+
+	if( formation = ob->query_s_skill_mapped("formation") )
+		list += sprintf("  舰队阵型：%9s\n", to_chinese(formation) );
+	else list += sprintf("  舰队阵型：%9s\n", "三角阵" );
+
+	if( ob->query_space("garrison") )
+		list += sprintf("  驻留基地：%9s", to_chinese(ob->query_space("garrison")) );
+	else list += sprintf("  驻留基地："BLK"%9s"NOR, "----" );
+
+	if( !ob->query_space("landin") || environment(ob)->is_planet() || environment(ob)->is_space_room() )
+		list += sprintf("  停靠位置："BLK"%9s\n\n"NOR, "----");
+	else list += sprintf("  停靠位置：%9s\n\n", to_chinese(ob->query_space("landin")) );
+
+	if( ob->query_space("flagfleet") > sizeof(fleets) )
+		ob->set_space("flagfleet",1);
+	for( i=0;i<sizeof(fleets);i++ )
+	{
+		fleet = fleets[i];
+		shiptype = fleet["shiptype"];
+		if( fleet["eff_amt"] < 0 ) continue;
+
+		list += sprintf(HIC"【第%s部队】"NOR,chinese_number(i+1));
+		if( (i+1) == ob->query_space("flagfleet") )
+		{
+			if( !stringp(ob->query_space("flagship")) )
+				ob->set_space("flagship", "标准" + shiptype );
+			list += HIC"【旗舰部队】\n"NOR;
+		}
+		else list += "\n";
+
+		list += sprintf("  舰 只：%s%7d/%5d"NOR +"  士 兵：%s%6d名/%6d名"NOR +"  能 源：%s%4d%%\n"NOR,
+			status_color(fleet["eff_amt"], fleet["max_amt"]),
+			fleet["eff_amt"],fleet["max_amt"],
+			status_color(fleet["eff_amt"], fleet["max_amt"]),
+			query_base_max_sld(shiptype)*fleet["eff_amt"]*3,
+			query_base_max_sld(shiptype)*fleet["max_amt"]*3,
+			status_color( fleet["energy"], query_base_max_energy(shiptype) ),
+			fleet["energy"]*100/query_base_max_energy(shiptype) );
+
+		if( query_base_max_missile(shiptype) )
+		list += sprintf("  类 型：%13s"NOR +"  飞 弹：%s%6d枚/%6d枚"NOR +"  士 气：%s%4d%%\n"NOR,
+			shiptype,
+			status_color( fleet["missile"], query_base_max_missile(shiptype) ),
+			fleet["missile"]*fleet["eff_amt"],
+			query_base_max_missile(shiptype)*fleet["eff_amt"],
+			status_color( fleet["morale"], 100 ),
+			fleet["morale"] );
+		else
+		list += sprintf("  类 型：%13s"NOR +"  飞 弹："BLK"%6s枚/%6s枚"NOR +"  士 气：%s%4d%%\n"NOR,
+			shiptype,
+			"----","----",
+			status_color( fleet["morale"], 100 ),
+			fleet["morale"] );
+		if ( !query_base_beam(shiptype)
+			&& !query_base_missile(shiptype)
+			&& !query_base_air_force(shiptype) )
+		list += sprintf("  武 装："BLK"%13s"NOR,"----");
+		else
+		list += sprintf("  武 装：%13s", capitalize(fleet["attacktype"]) );
+
+		if( query_base_max_craft(shiptype) )
+		list += sprintf("  载 机：%s%6d架/%6d架"NOR +"\n",
+			status_color( fleet["craft"], query_base_max_craft(shiptype) ),
+			fleet["craft"]*fleet["eff_amt"],
+			query_base_max_craft(shiptype)*fleet["eff_amt"] );
+		else
+		list += sprintf("  载 机："BLK"%6s艘/%6s艘"NOR +"\n",
+			"----","----",
+			fleet["craft"]*fleet["eff_amt"],
+			query_base_max_craft(shiptype)*fleet["eff_amt"] );
+	}
+
+	j=0;
+	inv = all_inventory(ob);
+	for(i=0; i<sizeof(inv); i++)
+	{
+		if(!inv[i]->is_s_equip()) j++;
+        }
+
+	if( sizeof(inv) && ( j != i ) )
+	{
+
+		list += sprintf(YEL"【旗舰：%s】"NOR"装载了下列装备：\n",ob->query_space("flagship"));
+		for(i=0; i<sizeof(inv); i++)
+		{
+			if(inv[i]->is_s_equip()) 
+			list += sprintf("%s\n",inventory_desc(inv[i]));
+		}
+        }
+	else list += sprintf(YEL"【旗舰：%s】"NOR"没有装载任何装备\n",ob->query_space("flagship"));
+
+	write(list);
+	return 1;
+}
+
+string inventory_desc(object ob)
+{
+	return sprintf("%s%s",
+		ob->query("equipped")? HIC "☆" NOR:"  ",
+		ob->short()
+	);
+}
+
+string status_color(int current, int max)
+{
+	int percent;
+ 
+	if( max>0 ) percent = current * 100 / max;
+	else percent = 100;
+	if( percent > 100 ) return HIC;
+	if( percent >= 90 ) return HIG;
+	if( percent >= 60 ) return HIY;
+	if( percent >= 30 ) return YEL;
+	if( percent >= 10 ) return HIR;
+	return RED;
+}
+
+
+int help(object me)
+{
+	write(@HELP
+指令格式 : status
+           status <对象名称>                   (巫师专用)
+ 
+这个指令可以显示我军或指定对象的舰队情况。
+HELP
+    );
+    return 1;
+}

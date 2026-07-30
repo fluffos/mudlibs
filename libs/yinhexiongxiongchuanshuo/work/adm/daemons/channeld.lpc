@@ -1,0 +1,183 @@
+// channeld.c
+ 
+#include <ansi.h>
+#include <net/dns.h>
+ 
+mapping channels = ([
+	"sys":	([	"msg_speak": HIB "【系统】%s：%s\n" NOR,
+				"wiz_only": 1 ]),
+	"wiz":	([	"msg_speak": HIY "【巫师】%s：%s\n" NOR,
+				"msg_emote": HIY "【巫师】%s" NOR,
+				"wiz_only": 1 ]),
+	"chat":	([	"msg_speak": HIC "【公共咨讯】%s：%s\n" NOR,
+				"msg_emote": HIC "【公共咨讯】%s" NOR,
+			 ]),
+	"rumor":([	"msg_speak": HIM "【街头谣言】%s：%s\n" NOR,
+				"msg_emote": HIM "【街头谣言】%s" NOR,
+				"anonymous": "某人"
+			]),
+	"report":([	"msg_speak": HIW "【最新战况】%s：%s\n" NOR,
+				"listen_only": 1,
+				"anonymous": "前线战报"
+			]),
+]);
+
+void create()
+{
+	// This is required to pass intermud access check.
+	seteuid(getuid());
+}
+
+varargs int do_channel(object me, string verb, string arg, int emote)
+{
+	object *ob;
+	object env;
+	string *tuned_ch, who;
+ 
+ 	if( verb== "" ) return 0;
+ 
+	// Check if this is a channel emote.
+	if( verb[<1] == '*' ) {
+		emote = 1;
+		verb = verb[0..<2];
+	}
+
+	if( !mapp(channels) || undefinedp(channels[verb]) )
+		return 0;
+
+	if( userp(me) )
+	{
+		if(channels[verb]["wiz_only"] && !wizardp(me) )
+			return 0;
+
+// If we speaks something in this channel, then check if system should tune it in.
+		tuned_ch = me->query("channels");
+
+		if( !pointerp(tuned_ch) )
+		{
+			me->set("channels", ({ verb }) );
+			write("打开 " + verb + " 频道。\n");
+		}
+		else if( member_array(verb, tuned_ch)==-1 )
+		{
+			write("打开 " + verb + " 频道。\n");
+			me->set("channels", tuned_ch + ({ verb }) );
+		}
+
+		if( channels[verb]["listen_only"] && !wizardp(me) )
+			return notify_fail("此频道只可以接收信息。\n");
+
+		// Support of channel emote
+		if( emote && !channels[verb]["intermud_emote"]) {
+			string vb, emote_arg;
+ 
+			if (!arg) {
+				arg = (string)me->name()+"看起来表情丰富。\n";
+			} else {
+			if( sscanf(arg, "%s %s", vb, emote_arg)!= 2 ) {
+				vb = arg;
+				emote_arg = "";
+			}
+			arg = EMOTE_D->do_emote(me, vb, emote_arg, 1);
+			if ( (!arg) && (!is_chinese(vb))) return 0;
+			if( (!arg) && (is_chinese(vb)) ) 
+			arg=(string)me->name()+vb+" "+emote_arg+"\n";
+			}
+		}
+        if( arg==(string)me->query_temp("last_channel_msg") )
+            return notify_fail("用交谈频道说话请不要重复相同的讯息。\n");
+ 
+	}
+ 
+	// Make the identity of speaker.
+ 
+	if( channels[verb]["anonymous"] )
+		who = channels[verb]["anonymous"];
+	else if( !stringp(who = me->query("channel_id")) )
+		who = me->query("name") + "(" + capitalize(me->query("id")) + ")";
+ 
+	// Ok, now send the message to those people listening us.
+
+	if( verb == "chat" )
+	{
+		env = environment(me);
+		if( env->is_space_room() )
+			ob = filter_array( users(), "filter_chat_space", this_object() );
+		else
+		ob = filter_array( users(), "filter_chat", this_object(), env->query("globe") );
+	}
+	else
+	ob = filter_array( users(), "filter_listener", this_object(), channels[verb] );
+
+	if( !arg ) arg = "...";
+ 
+	if( emote ) {
+		// Support of old behavier of intermud emote.
+		if( channels[verb]["intermud_emote"] ) arg = who + " " + arg;
+ 
+		message( "channel:" + verb,
+			sprintf( channels[verb]["msg_emote"], arg ), ob );
+	} else
+		message( "channel:" + verb,
+			sprintf( channels[verb]["msg_speak"], who, arg ), ob );
+ 
+	if( arrayp(channels[verb]["extra_listener"]) ) {
+		channels[verb]["extra_listener"] -= ({ 0 });
+		if( sizeof(channels[verb]["extra_listener"]) )
+			channels[verb]["extra_listener"]->relay_channel(me, verb, arg);
+	}
+	
+	if( !undefinedp(channels[verb]["intermud"])
+	&&	base_name(me) != channels[verb]["intermud"] )
+		channels[verb]["intermud"]->send_msg(
+			channels[verb]["channel"], me->query("id"), me->name(1), arg, emote,
+			channels[verb]["filter"] );
+ 
+	if( userp(me) ) 
+		me->set_temp("last_channel_msg", arg);
+ 
+	return 1;
+}
+ 
+int filter_listener(object ppl, mapping ch)
+{
+	// Don't bother those in the login limbo.
+	if( !environment(ppl) ) return 0;
+	
+	if( ch["wiz_only"] ) return wizardp(ppl);
+	return 1;
+}
+
+int filter_chat_space(object ob)
+{
+	object env;
+	// Don't bother those in the login limbo.
+	if( !(env = environment(ob)) ) return 0;
+
+	return env->is_space_room();
+}
+
+int filter_chat(object ob, string globe)
+{
+	object env;
+	// Don't bother those in the login limbo.
+	if( !(env = environment(ob)) ) return 0;
+
+	if( env->is_space_room() ) return 0;
+
+	if( env->query("globe") == globe ) return 1;
+	return 0;
+}
+
+void register_relay_channel(string channel)
+{
+	object ob;
+ 
+	ob = previous_object();
+	if( undefinedp(channels[channel]) || !ob) return;
+	if( arrayp(channels[channel]["extra_listener"]) ) {
+		if( member_array(ob, channels[channel]["extra_listener"]) >=0 ) return;
+		channels[channel]["extra_listener"] += ({ ob });
+	} else
+		channels[channel]["extra_listener"] = ({ ob });
+}

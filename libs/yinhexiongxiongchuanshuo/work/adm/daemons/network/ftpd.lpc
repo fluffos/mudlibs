@@ -1,0 +1,954 @@
+#pragma save_binary
+
+ 
+/* ftpd.c:
+ 
+   This is an implementation of an ftpd daemon written in LPC using the
+   MudOS socket efunctions.  This version of ftpd will communicate with
+   standard ftp clients such as the 'ftp' program found on most all UNIX
+   systems.  This version supports _both_ ASCII _and_ BINARY transfers.
+ 
+   Edit /include/net/ftpdconf.h to configure ftpd for a particular mudlib.
+ 
+   Note: this object runs with ROOT_UID and depends on the correctness
+   of the valid_read() and valid_write() functions in the master mudlib object.
+   If these two functions aren't accurate, then this object (ftpd.c) will
+   allow anyone to harm your mudlib.
+ 
+   valid_read is called as follows:
+ 
+      MASTER_OB->valid_read(filename, user, "read_file" )
+ 
+   It should return '1' only if user 'user' has permission to
+   read the file 'filename'.
+ 
+   valid_write is called as follows:
+ 
+      MASTER_OB->valid_write(filename, user, "write_file")
+ 
+   It should return 1 only if user 'user' has permission to write
+   (or remove) the file 'filename'.
+   
+*/
+ 
+/*
+ * Originaly written by Pinkfish@Discworld
+ *
+ * 93-08-22  Bannor@newmoon
+ *           - Added DEBUG and LOGGING flags and #ifdef's
+ *           - Fixed a problem with sending files larger then 1k.
+ *           - Added support for events.
+ *           - Added support for finger ftp.
+ *           - Fixed security problems that allowed anyone to read/write
+ *             to any directory.
+ *           - Improved readability (well, I think so anyway)
+ *           - Removed all those silly "bing", "bits" and "blue"
+ *             variables.
+ *
+ * 93-11-21 Truilkan@Gestalt
+ *  - modified to work on tmi-2 (interface with tmi-2 security etc)
+ *    the motivation behind this port was to hopefully lessen the
+ *    number of people asking me how to make the ftpd.c written in C
+ *    work (seemingly only C/UNIX gurus and otherwise persistent
+ *    people could make it work).  This LPC version of ftpd is also
+ *    easier for LPC coders to customize to fix a particular mudlib's
+ *    security code (directory access permissions etc).  For use with
+ *    MudOS version 0.9.18.20 or later.
+ *
+ *  TODO: the return code from each socket_write() should be checked and
+ *        appropriately handled.  Presently only the data xfer socket_write()
+ *        calls are checking the return type.  This is probably enough
+ *        to ensure that ftpd.c works correctly most of the time but in
+ *        order to be robust, the additional checking should be done.
+ *        In addition, the socket_write() return code should be checked
+ *        for EECALLBACK as well as EEWOULDBLOCK.  See the socket_write
+ *        function in the MudOS driver file socket_efuns.c for more
+ *        information on the possible return codes of the socket_write() efun.
+ *
+ * 93-11-22 Truilkan@Gestalt
+ * o Bumped version number to 2.0
+ * o Fixed check_connections() so that it actually does timeout idle ftp users.
+ * o Added code to restrict number of users.  See FTPD_MAX_USERS in ftpdconf.h.
+ *
+ * 93-11-28 Inspiral@Tabor
+ * o Bumped version number to 3.0
+ * o Added another field to the mapping, which will hold the ftp user's
+ *   connection object.  This allows master.c to work properly even if
+ *   the wizard is not currently logged into the mud.  
+ * o Above change meant altering check_password() in ftpd.h
+ * o Above change also meant adding disable_status_check() in connection.c
+ *   This needs to be added: void disable_status_check() {
+ *                                remove_call_out( "check_status" );
+ *                           }
+ * o Added code for support of multi-worded passwords (Thanks, Domini@Ultimate)
+ * o Removed fix in Version 2 which used reload_object() in check_password()
+ * o Cleaned up some redundant code.
+ * o Added socket_address() calls in login/logout logs
+ * o Altered LOG_FILE define to specify log destination.
+ * o Appended output of "ls" and "dir" commands with a "/" on directories.
+ * o Added LOG_TIME define for those who like to see what time things occur.
+ *
+ * 93-12-15 Inspiral@Tabor
+ * o Generalized and macro'd the socket_address() calls,
+ *     and added ip site resolve()
+ *
+ * 93-12-17 Inspiral@Tabor
+ * o Added support for anonymous ftp logins ... Read the file 
+ *     "/include/net/anon_ftp.doc" for instructions on installing it.
+ * o Found/fixed a bug with "cd", which allowed you to cd into a file.
+ *
+ * 94-01-11 Inspiral@Tabor
+ * o Bumped version number to 4.0
+ * o Incorporated fixes for valid_read/write when user not also
+ *     logged into the mud (Beek@DistortionII)
+ * o Above fix allowed removal of LINK field from connection mapping, 
+ *     as well as the disable_status_check() function in connection.c
+ * o Added support for BINARY mode file transfers (0.9.18.20+)
+ * o Re-installed reload_object() support in check_password()
+ * o Added LOGIN_MSG support at login time.
+ *
+ *
+ */
+ 
+ 
+#include <config.h> /* from tmi-2 */
+/* edit ftpdconf.h to configure ftpd for your mudlib */
+#include <net/ftpdconf.h>
+#include <net/ftpd.h>
+ 
+#define FTPD_VERSION "4.0"
+ 
+/*
+-----------------------------------------------
+    Variables
+-----------------------------------------------
+*/
+ 
+mapping socket_info;
+int our_socket;
+mapping temp_map;
+int number_of_users;
+ 
+/*
+-----------------------------------------------
+    Prototypes
+-----------------------------------------------
+*/
+void setup_ftp( int port );
+void finish_lookup( string host, string number );
+void resolve_callback( string address, string resolved, int key );
+string get_path( int fd, string str );
+ 
+int
+query_prevent_shadow() {
+  return 1;
+}
+ 
+void
+lose_user( int fd ) {
+  map_delete( socket_info, fd );
+  socket_close( fd );
+  number_of_users--;
+}
+ 
+int check_valid_read( string fname, int fd ) {
+  int res;
+  
+  seteuid( socket_info[ fd ][ USER_NAME ] );
+  res = (int) MASTER_OB -> valid_read(fname, this_object(), "read_file");
+  seteuid( getuid() );
+ 
+  return res;
+}
+ 
+int check_valid_write( string fname, int fd ) {
+  int res;
+  
+  seteuid( socket_info[ fd ][ USER_NAME ] );
+  res = (int) MASTER_OB -> valid_write(fname, this_object(), "write_file");
+  seteuid( getuid() );
+ 
+  return res;
+}
+ 
+/* query_connections returns an array of users connected to ftpd */
+mixed *
+query_connections() {
+  mixed *vals;
+  string *list;
+  int count;
+  
+  vals = values( socket_info );
+  list = allocate( sizeof( vals ) );
+  count = sizeof( vals );
+ 
+  while( count-- ) 
+    list[count] = capitalize( ( string )( ( vals[count] )[USER_NAME] ) );
+ 
+  return list;
+}
+ 
+void
+create() {
+  if( !socket_info ) {
+    socket_info = ([  ]);
+    temp_map = ([ ]);
+    number_of_users = 0;
+    seteuid( ROOT_UID );
+    call_out( "setup_ftp", 2, FTPD_PORT );
+    call_out( "check_connections", 3 * 60 );
+  }
+}
+ 
+nosave void
+setup_ftp( int port ) {
+  our_socket = socket_create( STREAM, "in_read_callback", "in_close_callback" );
+  if( our_socket < 0 ) {
+    TP( "Failed to create socket.\n" );
+    return;
+  }
+  if( socket_bind( our_socket, port ) <  0 ) {
+    TP( "Failed to bind socket.\n" );
+    socket_close( our_socket );
+    return;
+  }
+  if( socket_listen( our_socket, "in_listen_callback" ) <  0 ) {
+    TP( "Failed to listen to socket.\n" );
+    return;
+  }
+} /* setup_ftp() */
+ 
+void
+in_write_callback( int fd ) {
+  string address;
+ 
+  if( undefinedp( socket_info[fd][CONNECTED] ) ) {
+    if( number_of_users> FTPD_MAX_USERS ) {
+      if( EESUCCESS == socket_write( fd,
+          "530 Too many ftp connections active.  Try again later.\n" ) ) {
+          lose_user( fd );
+      }
+      return;
+    }
+    if( EESUCCESS == socket_write( fd,
+               sprintf( "220 %s FTP server (Version %s (MudOS/LPC))" +
+                        " ready.  Please login as yourself.\n",
+                        THE_MUD_NAME, FTPD_VERSION ) ) )               {
+        socket_info[fd][CONNECTED] = 1;
+        sscanf( socket_address( fd ), "%s %*s", address );
+        socket_info[fd][USER_SITE] = address;
+        temp_map += ([ resolve( address, "resolve_callback" ) : fd ]);
+    }
+  }
+}
+ 
+void
+in_listen_callback( int fd ) {
+  int new_fd;
+  
+  if( ( new_fd =
+    socket_accept( fd, "in_read_callback", "in_write_callback" ) ) < 0 )
+    return;
+ 
+  number_of_users++;
+  socket_info[new_fd] = ([  ]);
+  in_write_callback( new_fd );
+}
+ 
+nosave string
+ls( string path, int column ) {
+  string *files;
+  int i;
+  
+  if( directory_exists( path ) )
+    if( path[ strlen( path ) - 1 ] == '/' )
+      files = get_dir( path + "*" );
+    else
+      files = get_dir( path + "/*" );
+  else
+    files = get_dir( path );
+  files -= ({ ".", ".." });
+  
+  if( !i = sizeof( files ) )
+    return "";
+  
+  while( i-- ) {
+    if( path[ strlen( path ) - 1 ] != '/' )
+      path += "/";
+    if( directory_exists( path + files[i] ) )
+      files[i] += "/";
+  }
+  
+  if( column )
+    return implode( files, "\n" ) + "\n";
+  return sprintf( "%-#70s\n", implode( files, "\n" ) );
+}
+ 
+void
+data_write_callback( int fd ) {
+  int pos, length, ret_val;
+  buffer tmp;
+  
+  if( socket_info[fd][TYPE] == DOWNLOAD )  return;
+ 
+  tmp = allocate_buffer( 0 );
+  pos = socket_info[ fd ][ POS ];
+  length = ( (pos+BLOCK_SIZE) >= socket_info[ fd ][ LEN ] ) ?
+               ( socket_info[ fd ][ LEN ] - pos ) : BLOCK_SIZE;
+ 
+#ifdef DEBUG_SEND
+  TP( "Entering dwc(), pos: " + pos + " length should be: " + length + ".\n" );
+#endif
+  socket_info[ socket_info[ fd ][ PARENT_FD ] ][ LAST_DATA ] = time();
+ 
+  if( socket_info[ fd ][ TYPE ] == STRING ) {
+#ifdef DEBUG_SEND
+      TP( "type == STRING\n" );
+#endif
+      while( socket_write( fd, 
+                    socket_info[fd][DATA][pos..(pos+BLOCK_SIZE-1)] ) >= 0 ) { 
+             pos += BLOCK_SIZE;                                             
+ 
+            if( pos > socket_info[ fd ][ LEN ] ) {
+                socket_write( socket_info[ fd ][ PARENT_FD ],
+                        "226 Data transfer complete.\n" );
+                map_delete( socket_info[ socket_info[ fd ][ PARENT_FD ] ], DATA_FD );
+                lose_user( fd ); /*  map_delete( socket_info, fd ); */
+#ifdef DEBUG_SEND
+                TP( "dwc() complete, exiting.\n" );
+#endif
+                return;
+            }
+    }
+  } else {
+#ifdef DEBUG_SEND
+    TP( "type is other then STRING\n" );
+#endif
+    tmp = read_buffer( socket_info[ fd ][ DATA ], pos, length );
+    while( ( ret_val = socket_write( fd, tmp ) ) >= 0 ) {
+      if( ret_val == 0 ) {
+#ifdef DEBUG_SEND
+        TP( "Ret_val == 0, continuing\n" );
+#endif
+        continue;
+      }
+#ifdef DEBUG_SEND
+      TP( "sent from " + pos + " to " + ( pos + length ) + ".\n" );
+      TP( "ret_val was: " + ret_val + ".\n" );
+#endif
+      
+      pos += length;
+      if( pos >= socket_info[ fd ][ LEN ] ) {
+        socket_write( socket_info[ fd ][ PARENT_FD ],
+          "226 Data transfer complete.\n" );
+        map_delete( socket_info[ socket_info[ fd ][ PARENT_FD ] ], DATA_FD );
+        lose_user( fd ); /* map_delete( socket_info, fd ); */
+#ifdef DEBUG_SEND
+        TP( "dwc() complete, exiting.\n" );
+#endif
+        return;
+      }
+      length = ( (pos+BLOCK_SIZE) >= socket_info[ fd ][ LEN ] ) ?
+              ( socket_info[ fd ][ LEN ] - pos ) : BLOCK_SIZE;
+      tmp = allocate_buffer( 0 );
+      tmp = read_buffer( socket_info[ fd ][ DATA ], pos, length );
+    }
+  }
+# ifdef DEBUG_SEND
+  TP( "ret_val was: " + ret_val + ".\n" );
+  TP( "leaving dwc(), pos: " + pos + ".\n" );
+# endif DEBUG_SEND
+ 
+  socket_info[ fd ][ POS ] = pos;
+  if( ret_val == EEWOULDBLOCK ) {
+    /* it would block, so it's up to us to try again */
+#   ifdef DEBUG_SEND
+    TP( "Adding call_out\n" );
+#   endif DEBUG_SEND
+    call_out( "data_write_callback", 2, fd );
+  } else
+    while( remove_call_out( "data_write_callback" ) != -1 ) {
+#     ifdef DEBUG_SEND
+      TP( "Killing callout.\n" );
+#     endif DEBUG_SEND                                   
+    }
+} /* data_write_callback() */
+ 
+ 
+nosave void
+data_conn( int fd, string mess, string name, int type ) {
+  int new_fd, ret, data_mode;
+  string data_mode_name;
+  mixed tmp;
+  
+  if( type == STRING || 
+      ( type == FILE && UTYPE == STRING ) ) {
+     data_mode_name = "ASCII";
+     data_mode = STREAM;
+     tmp = "";
+  } else {
+     data_mode_name = "BINARY";
+     data_mode = STREAM_BINARY;
+     tmp = allocate_buffer( 0 );
+  }
+ 
+  if( socket_info[ fd ][ DATA_FD ] ) {
+    socket_write( fd, "425 Cannot build data connection.\n" );
+    return;
+  }
+  new_fd = socket_create( data_mode, "data_read_callback",
+    "data_close_callback" );                           
+ 
+  if( new_fd < 0 ) {
+    socket_write( fd, "425 Cannot build data connection.\n" );
+    return;
+  }
+ 
+  if( ( ret = socket_connect( new_fd, socket_info[ fd ][ DATA_ADDR ] + " " +
+                       socket_info[ fd ][ DATA_PORT ],
+              "data_read_callback", "data_write_callback" ) ) < 0 ) {
+      TP( "Error: " + socket_info[ fd ][ DATA_ADDR ] + " " +
+                 socket_info[ fd ][ DATA_PORT ] + "\n" );
+      TP( socket_error( ret ) + "\n" );
+      socket_write( fd, "425 Cannot build data connection.\n" );
+      socket_close( new_fd );
+      return;
+  }
+ 
+  socket_info[ new_fd ] = ([  
+                              DATA      : (mess), POS  : 0,
+                              PARENT_FD : fd,         TYPE : type
+                           ]);
+ 
+  if( type == STRING )
+    socket_info[ new_fd ][ LEN ] = strlen( mess );
+  else
+    socket_info[ new_fd ][ LEN ] = file_size( mess );
+ 
+  socket_info[ fd ][ DATA_FD ] = new_fd;
+ 
+  socket_write( fd, 
+      "150 Opening " + data_mode_name + " mode data connection for " + name +
+      ", " + socket_info[ new_fd ][ LEN ] + " bytes.\n" );
+  data_write_callback( new_fd );
+}  /* data_conn() */
+ 
+nosave void
+read_connection( int fd, string path, int append ) {
+  int new_fd, ret, data_mode;
+  string data_mode_name;
+  mixed tmp;
+ 
+  if( UTYPE == BINARY ) {
+     data_mode_name = "BINARY";
+     data_mode = STREAM_BINARY;
+     tmp = allocate_buffer( 0 );
+  } else {
+     data_mode_name = "ASCII";
+     data_mode = STREAM;
+     tmp = "";
+  }
+ 
+  if( socket_info[ fd ][ DATA_FD ] ) {
+    socket_write( fd, "425 Cannot build data connection.\n" );
+    return;
+  }                                                
+ 
+  new_fd = socket_create( data_mode, "data_read_callback", "data_close_callback" );
+ 
+  if( new_fd < 0 ) {
+    socket_write( fd, "425 Cannot build data connection.\n" );
+    return;
+  }
+ 
+  if( ( ret = socket_connect( new_fd, socket_info[ fd ][ DATA_ADDR ] + " " +
+                  socket_info[ fd ][ DATA_PORT ], 
+                 "data_read_callback", "data_write_callback" ) ) < 0 ) {
+       TP( "Error: " + socket_info[ fd ][ DATA_ADDR ] + " " +
+       socket_info[ fd ][ DATA_PORT ] + "\n" );
+       TP( socket_error( ret ) + "\n" );
+       socket_write( fd, "425 Cannot build data connection.\n" );
+       socket_close( new_fd );
+       return;
+  }
+ 
+  socket_info[ new_fd ] = ([  
+                              PATH : path,     PARENT_FD : fd, DATA : tmp,
+                              TYPE : DOWNLOAD, APPEND    : append  ]);
+  
+  socket_write( fd, 
+        "150 Opening " + data_mode_name + " mode data connection for " + 
+         path + ".\n" );
+}  /* read_connection() */
+ 
+ 
+void
+data_read_callback( int fd, mixed mess ) {
+  if( socket_info[ fd ][ TYPE ] != DOWNLOAD )
+    return;
+ 
+  socket_info[ socket_info[ fd ][ PARENT_FD ]][ LAST_DATA ] = time();
+ 
+  if( stringp( mess ) )
+      mess = replace_string( mess, "\r", "" );
+ 
+  socket_info[ fd ][ DATA ] += mess;
+}  /* data_read_callback() */
+ 
+ 
+void
+data_close_callback( int fd ) {
+  int pos, size;
+ 
+  if( socket_info[ fd ][ TYPE ] == DOWNLOAD ) {
+    if( !socket_info[ fd ][ APPEND ] )
+        rm( socket_info[ fd ][ PATH ] );
+    else pos = file_size( socket_info[ fd ][ PATH ] );
+ 
+  while( write_buffer( UPATH, pos, UDATA[pos..(pos+(BLOCK_SIZE-1))] ) ) 
+         pos += BLOCK_SIZE;
+ 
+  if( stringp( UDATA ) ) 
+     size = strlen( UDATA );
+  else size = sizeof( UDATA );
+ 
+  socket_write( socket_info[ fd ][ PARENT_FD ],
+                "226 Data transfer successfuly completed.\n" );
+  }
+  lose_user( fd ); /* map_delete( socket_info, fd ); */
+}  /* data_close_callback() */
+ 
+nosave void
+logout( int fd ) {
+  if( UNAME ) {
+#if 0
+    event( users(), "inform", UNAME + " logged out of ftpd", "ftp" );
+#endif 0
+  
+#ifdef LOG_TIME
+    log_file( LOG_FILE, FTP_TIME );
+#endif
+ 
+#ifdef LOG_CONNECT
+    log_file( LOG_FILE, UNAME + " logged out from " + USITE + ".\n" );
+#endif
+  
+  }
+  lose_user( fd );
+}  /* logout() */
+ 
+nosave void
+parse_comm( int fd, string str ) {
+  string *command, tmp;
+  int port, i;
+  
+  TP( "Parsing " + str + ".\n" );
+  command = explode( str, " " );
+  socket_info[ fd ][ LAST_DATA ] = time();
+ 
+  switch( lower_case( command[ 0 ] ) )  {
+    case "port":
+          command = explode( implode( command[ 1..1000 ], " " ), "," );
+          if( sizeof( command ) < 6 )
+              socket_write( fd, "550 Failed command.\n" );
+          else {
+             socket_info[ fd ][ DATA_ADDR ] = implode( command[ 0..3 ], "." );
+             sscanf( command[ 4 ], "%d", i );
+             port = i << 8;
+             i = atoi( command[5] );
+             port += i;
+             socket_info[ fd ][ DATA_PORT ] = port;
+             socket_write( fd, "200 PORT command successful.\n" );
+          }
+          break;
+    case "user":
+          if( socket_info[ fd ][ LOGGED_IN ] )
+             logout( fd );
+          if( !check_access( command[ 1 ] ) )
+             socket_write( fd, "530 User " + command[ 1 ] + 
+                          " access denied.\n" );
+          else {
+#ifdef ANONYMOUS_FTP
+             if( command[ 1 ] == "anonymous" ) 
+                socket_write( fd, 
+   "331 Guest login ok, send your complete E-mail address as password.\n" );
+             else
+#endif ANONYMOUS_FTP
+                socket_write( fd, "331 Password required for " +
+                             command[ 1 ] + ".\n" );
+             UNAME = command[ 1 ];
+          }
+          break;
+    case "pass":
+          if( socket_info[fd][LOGGED_IN] || !socket_info[fd][USER_NAME] ) {
+             socket_write( fd, "503 Log in with user first.\n" );
+             break;
+          }
+          if( !check_password( socket_info[fd][ USER_NAME ],
+                 implode( command[ 1.. sizeof( command ) - 1 ], " " ) ) ) {
+             socket_write( fd, "530 Login incorrect.\n" );
+             map_delete( socket_info[ fd ], USER_NAME );
+          } else {
+             socket_info[ fd ][ LOGGED_IN ] = 1;
+#ifdef ANONYMOUS_FTP
+            if( UNAME == "anonymous" )
+                UCWD = "/pub";
+            else
+#endif ANONYMOUS_FTP
+                UCWD = HOME_DIR( UNAME );
+#if 0
+            event( users(), "inform", UNAME + " connected to ftpd", "ftp" );
+#endif 0
+      
+#ifdef LOG_TIME
+            log_file( LOG_FILE, FTP_TIME );
+#endif LOG_TIME
+ 
+#ifdef LOG_CONNECT
+            log_file( LOG_FILE, UNAME + " connected from " + USITE + ".\n" );
+#endif
+      
+            if( !directory_exists( UCWD ) ) {
+               socket_write( fd,
+                  "230 Cannot cd to home.  Logging in with dir=/ftp\n" );
+               socket_info[ fd ][ CWD ] = "/ftp";
+            } else {
+#ifdef LOGIN_MSG
+               tmp = read_file( LOGIN_MSG );
+               tmp = tmp[0..-2];         // strip off the final newline.
+               tmp = "230- " + replace_string( tmp, "\n", "\n230- " );
+               tmp += "\n";
+#endif LOGIN_MSG
+              socket_write( fd, tmp );
+              socket_write( fd, "230 User " + UNAME + 
+                            " logged in successfully.\n" );
+            }
+            socket_info[ fd ][ TYPE ] = STRING;
+          }
+          break;
+    case "allo":
+          socket_write( fd, "201 ALLO command ignored.\n" );
+          break;
+    case "noop":
+          socket_write( fd, "200 NOOP operation successful.\n" );
+          break;
+    case "retr":
+          CHECK_LOGIN();
+          tmp = get_path( fd, command[ 1 ] );
+          if( file_size( tmp ) < 0 || !check_valid_read( tmp, fd ) )  {
+              socket_write( fd, "550 Permison denied reading " +
+                            command[ 1 ] + ".\n" );
+          } else {
+#ifdef LOG_TIME
+              log_file( LOG_FILE, FTP_TIME );
+#endif
+ 
+#ifdef LOG_FILE
+              log_file( LOG_FILE, UNAME + " retr " + tmp + 
+		" (" + (UTYPE == BINARY ? "BINARY" : "ASCII") + ").\n" );
+#endif
+              data_conn( fd, tmp, command[ 1 ], FILE );
+          }
+          break;
+    case "stor":
+          CHECK_LOGIN();
+          tmp = get_path( fd, command[ 1 ] );
+          if( check_valid_write( tmp, fd ) ) {
+#ifdef LOG_TIME
+              log_file( LOG_FILE, FTP_TIME );
+#endif
+ 
+#ifdef LOG_FILE
+              log_file( LOG_FILE, UNAME + " stor " + tmp + 
+		" (" + (UTYPE == BINARY ? "BINARY" : "ASCII") + ").\n" );
+#endif
+              read_connection( fd, tmp, 0 );
+          } else {
+              socket_write( fd, "553 Permision denied to " + 
+                                command[1] + ".\n" );
+          }
+          break;
+    case "appe":
+         /* append... */
+         CHECK_LOGIN();
+         tmp = get_path( fd, command[ 1 ] );
+         if( check_valid_write( tmp, fd ) ) {
+#ifdef LOG_TIME
+             log_file( LOG_FILE, FTP_TIME );
+#endif
+ 
+#ifdef LOG_FILE
+             log_file( LOG_FILE, UNAME + " appe " + tmp + ".\n" );
+#endif
+             read_connection( fd, tmp, 1 );
+         } else {
+             socket_write( fd, "553 Permision denied to " + 
+                                command[ 1 ] + ".\n" );
+         }
+         break;
+#if 0
+    /* Supposed to return modified time in the format: YYYYMMDDHHMMSS */
+    case "mdtm":
+          CHECK_LOGIN();
+          tmp = get_path( fd, command[ 1 ] );
+          if( check_valid_read( tmp, fd ) ) {
+              if( directory_exists( tmp ) )
+                  socket_write( fd, "550 " + tmp + " not a plain file.\n" );
+              else
+                  if( !file_exists( tmp ) )
+                      socket_write( fd, "550 " + tmp + 
+                                    " does not exist.\n" );
+                  else 
+                      socket_write( fd, "215 " + file_size( tmp ) + "\n" );
+          } else 
+              socket_write( fd, "550 Permision denied to " + 
+                                command[1] + ".\n" );
+          break;
+#endif
+    case "size":
+          CHECK_LOGIN();
+          tmp = get_path( fd, command[ 1 ] );
+          if( check_valid_read( tmp, fd ) ) {
+              if( directory_exists( tmp ) )
+                  socket_write( fd, "550 " + tmp + " not a plain file.\n" );
+              else
+                  if( !file_exists( tmp ) )
+                      socket_write( fd, "550 " + tmp + " does not exist.\n" );
+                  else {
+#ifdef LOG_TIME
+                      log_file( LOG_FILE, FTP_TIME );
+#endif
+ 
+#ifdef LOG_CD_SIZE
+                      log_file( LOG_FILE, UNAME + " size " + tmp + ".\n" );
+#endif
+                      socket_write( fd, "215 " + file_size( tmp ) + "\n" );
+                  }
+          } else 
+              socket_write( fd, "550 Permision denied to " + 
+                            command[ 1 ] + ".\n" );
+          break;
+    case "nlst":
+          CHECK_LOGIN();
+          /* Send name list. */
+          if( sizeof( command ) > 1 )
+              tmp = get_path( fd, command[ 1 ] );
+          else
+              tmp = socket_info[ fd ][ CWD ];
+          if( check_valid_read( tmp, fd ) ) 
+              data_conn( fd, ls( tmp, 1 ), "ls", STRING );
+          else 
+              socket_write( fd, "550 Permision denied to " + tmp + ".\n" );
+          break;
+    case "list":
+          CHECK_LOGIN();
+          /* This does an ls... aka "dir" */
+          if( sizeof( command ) > 1 )
+              tmp = get_path( fd, command[ 1 ] );
+          else
+              tmp = socket_info[ fd ][ CWD ];
+          if( check_valid_read( tmp, fd ) ) 
+              data_conn( fd, ls( tmp, 0 ), "ls", STRING );
+          else 
+              socket_write( fd, "550 Permision denied to " + tmp + ".\n" );
+          break;
+    case "pwd":
+          CHECK_LOGIN();
+          socket_write( fd, "257 \"" + socket_info[ fd ][ CWD ] +
+                      "\" is the current directory.\n" );
+          break;
+    case "cdup":
+          command[ 1 ] = "..";
+    case "cwd":
+          CHECK_LOGIN();
+          if( sizeof( command ) > 1 )
+              tmp = get_path( fd, command[ 1 ] );
+          else
+              tmp = socket_info[ fd ][ CWD ];
+          if( check_valid_read( tmp, fd ) ) {
+              tmp = get_path( fd, tmp );
+  
+              if( !directory_exists( tmp ) ) {
+                 socket_write( fd, "550 " + tmp + ": Not a directory.\n" );
+                 break;
+              }
+#ifdef LOG_TIME
+              log_file( LOG_FILE, FTP_TIME );
+#endif
+ 
+#ifdef LOG_CD_SIZE
+              log_file( LOG_FILE, UNAME + " cd to " + tmp + ".\n" );
+#endif
+              socket_info[ fd ][ CWD ] = tmp;
+              socket_write( fd, "250 CWD command successful.\n" );
+              } else 
+                 socket_write( fd, "550 " + tmp + 
+                              ": No such file or directory.\n" );
+              break;
+    case "quit":
+          socket_write( fd, "221 Goodbye.\n" );
+          logout( fd );
+          break;
+    case "type":
+          if( command[ 1 ] == "I" ) {
+              socket_info[ fd ][ TYPE ] = BINARY;
+              socket_write( fd, "200 Type set to I.\n" );
+          } else
+              if( command[ 1 ] == "A" ) {
+                  socket_info[ fd ][ TYPE ] = STRING;
+                  socket_write( fd, "200 Type set to A.\n" );
+              } else 
+                  socket_write( fd, "504 Type " + command[ 1 ] +
+                                    " not implemented.\n" );
+         break;
+    case "stat":
+          socket_write( fd, "211 FTP server status: " +
+                   THE_MUD_NAME + " FTP Version " + FTPD_VERSION + "\n" );
+          socket_write( fd, "     Connected to " + USITE + "\r\n" );
+          if( socket_info[ fd ][ LOGGED_IN ] )
+              socket_write( fd, "    Logged in as " + UNAME + "\r\n" );
+          else
+              if( UNAME )
+                  socket_write( fd, "    Waiting for password.\r\n" );
+              else
+                  socket_write( fd, "    Waiting for user name.\r\n" );
+              socket_write( fd, "    TYPE: ASCII, FORM: Nonprint; STRUcture: " + 
+                                "File; transfer MODE: Stream.\r\n" );
+          if( socket_info[ fd ][ DATA_FD ] )
+              socket_write( fd, "    Data connection open.\r\n" );
+          else
+              if( socket_info[ fd ][ DATA_ADDR ] )
+                 socket_write( fd, "    " + socket_info[ fd ][ DATA_ADDR ] + " " +
+                                   socket_info[ fd ][ DATA_PORT ] + "\r\n" );
+              else
+                 socket_write( fd, "    No data connection.\r\n" );
+              socket_write( fd, "211 End of status.\n" );
+          break;
+    case "abor":
+         /* Stops recvs and stors. At least thats what it is supposed to do. */
+         socket_write( fd, "225 ABOR command successful.\n" );
+         if( socket_info[ fd ][ DATA_FD ] ) {
+             socket_close( socket_info[ fd ][ DATA_FD ] );
+             lose_user( fd ); /* map_delete( socket_info, fd ); */
+         }
+         break;
+    case "syst":
+          socket_write( fd, "215 MUD Type: " + THE_VERSION + "\n" );
+          break;
+    default:
+          socket_write( fd, "500 '" + command[ 0 ] + 
+                            "' command unrecognised.\n" );
+          break;
+  }
+} /* parse_com() */
+ 
+void
+in_read_callback( int fd, string str ) {
+  string *command;
+  int i;
+  
+  str = replace_string( str, "\r", "" );
+  command = explode( str, "\n" );
+ 
+  for( i = 0; i < sizeof( command ); i++ ) 
+      parse_comm( fd, command[i] );
+}
+ 
+void
+in_close_callback( int fd ) {
+  lose_user( fd ); /* map_delete(socket_info, fd); */
+}
+ 
+nosave string
+get_path( int fd, string str ) {
+  string *array, *array1, temp, temp1;
+  int i, j;
+  
+  if( !str || str == "" ) {
+     /* no change of dir */
+     return socket_info[ fd ][ CWD ];
+  } 
+ 
+  if( str == "~" ) {
+     /* change to home dir */
+     str = HOME_DIR( UNAME );
+  } else {
+     if( str[ 0 ] == '~' ) {
+         if( str[ 1 ] == '/' ) {
+             sscanf( str, "~%s", temp );
+             str = HOME_DIR( UNAME ) + temp;
+         } else {
+             string name;
+        
+             if( sscanf( str, "~%s/%s", name, str ) != 2 ) {
+                 name = extract( str, 1 );
+                 str = HOME_DIR( name );
+             } else
+          /* cheat at this point and just assume they are a wizard. */
+          str = HOME_DIR( name ) + "/" + str;
+        }
+    } else
+       if( str[ 0 ] != '/' )
+           str = socket_info[ fd ][ CWD ] + "/" + str + "/";
+       if( str == "/" )
+           return "/";
+       else {
+           array = explode( str, "/" ) - ({ "" });
+           for( i = 0; i < sizeof( array ); i++ )
+                if( array[ i ] == ".." ) {
+                    if( i < 1 )
+                        return "/";
+                    if( i == 1 )
+                        array1 = ({ "." });
+                    else
+                        array1 = array[ 0..i - 2 ];
+                    if( (i+1) <= (sizeof( array )-1) )
+                        array1 += array[ i + 1..sizeof( array ) - 1 ];
+                    array = array1;
+                    i -= 2;
+                } else
+                    if( array[ i ] == "." )
+                        array[ i ] = 0;
+                    if( array )
+                        str = implode( array, "/" );
+                    else
+                        str = "";
+       }
+    }
+    str = "/" + str;
+    return str;
+}
+ 
+nosave void
+check_connections() {
+  int *sockets, i, limit;
+  
+  limit = time() - FTPD_TIMEOUT;
+  sockets = keys( socket_info );
+  i = sizeof( sockets );
+ 
+  while( i-- ) {
+    if( socket_info[ sockets[i]][LAST_DATA] < limit ) {
+        socket_write( sockets[i], "421 Timeout: closing control session.\n" );
+        socket_close( sockets[i] );
+        lose_user( sockets[i] ); /* map_delete(socket_info, sockets[i]); */
+    }
+  }
+  call_out( "check_connections", 3 * 60 );
+}
+ 
+void resolve_callback( string address, string resolved, int key ) {
+  int id;
+ 
+  if( !( id = temp_map[ key ] ) )
+      log_file( LOG_FILE, "No such key in temp_map: " + key + "\n" );
+  else {
+      if( !address || address == "" ) 
+          address = resolved;
+      socket_info[ id ][USER_SITE] = address;
+  }
+} 
+ 
+// This is needed.
+
+/* EOF */

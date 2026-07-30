@@ -1,0 +1,146 @@
+#include <ansi.h>
+
+inherit S_SKILL;
+inherit F_CURRENT;
+
+int att_coefficient() { return 15; }
+int def_coefficient() { return 10; }
+int efficient_level() { return 10; }
+
+int valid_enable(string usage)
+{
+	return usage=="formation";
+}
+
+int valid_learn(object me)
+{
+	int skill,learned;
+
+	skill = me->query_s_skill("formation",1);
+	learned = me->query_s_skill("trapezia",1);
+
+	if( learned >= skill ) return 0;
+	else return 1;
+}
+
+int all_missile_launch(object me,int i,string arg)
+{
+	object env,victim,*targets;
+	string result;
+	mapping *my_fleets, *victim_fleets;
+	int which;
+
+	if( !me->is_combating() ) return 0;
+	if( !(env = environment(me)) ) return 0;
+	if( !env->is_space_room() && !env->is_planet() ) return 0;
+
+	if( stringp(arg) && ( arg != "" ) )
+	{
+		if( !(victim = present(arg,env)) )
+			return 0;
+		if( !F_DISTANCE->calculate_distance(me,victim,me->query_space("scouting")) )
+			return 0;
+	}
+	else if( sizeof(targets=me->query_againster()) == 1)
+		victim = targets[0];
+	else victim = targets[random(sizeof(targets))];
+
+	if( !objectp(victim) ) return 0;
+	if( !objectp(me) ) return 0;
+	if( !living(me) || !living(victim) ) return 0;
+
+	targets = S_COMBAT_D->combat_no_vision(me,victim);
+	my_fleets = me->query_space("sub_fleet");
+	if( i == 1 )
+	{
+		message("vision",HIY"\n" + me->space_short(1) + "慢慢对正舰队指向，打开所有飞弹发射架，对准"
+			+ victim->space_short(1) + "\n\n"NOR,env,targets);
+		tell_object(me,HIW"\n军事工作官报告，我军舰全舰队指向" + victim->space_short(1)
+			+ "，所有部队准备全弹发射！\n\n"NOR);
+		tell_object(victim,HIW"\n军事工作官报告，发现" + me->space_short(1)
+			+ "停止攻击并将舰队朝向全部指向我军，并打开所有飞弹发射架！\n\n"NOR);
+
+		for(i=0;i<sizeof(my_fleets);i++)
+		{
+			my_fleets[i]["attacktype"] = "missile";
+		}
+		return 1;
+	}
+	if( i == 2 )
+	{
+		victim_fleets = victim->query_space("sub_fleet");
+		tell_object(me,YEL"\n命令在在通讯回路中流动：所有部队发射飞弹，ＦＩＲＥ　ＡＴ　ＷＩＬＬ！\n\n"NOR);
+		tell_object(victim,HIR"\n" + me->space_short(1) + "所有部队均向我军疯狂的发射飞弹！\n\n"NOR);
+		message("vision",YEL"\n" + me->space_short(1) + "所有部队向" + victim->space_short(1)
+			+"疯狂的发射飞弹！\n\n"NOR,env,targets);
+
+		for(i=0;i<sizeof(my_fleets);i++)
+		{
+			if( my_fleets[i]["missile"] < 1 ) continue;
+
+			which = random(sizeof(victim_fleets));
+			if( victim_fleets[which]["eff_amt"] < my_fleets[i]["missile"]*5 )
+			{
+				me->add_space_temp("history/" + victim_fleets[which]["shiptype"],
+					victim_fleets[which]["eff_amt"]);
+				victim_fleets[which]["eff_amt"] = 0;
+			}
+			else
+			{
+				me->add_space_temp("history/" + victim_fleets[which]["shiptype"],
+					my_fleets[i]["missile"]*5 );
+				victim_fleets[which]["eff_amt"] -= my_fleets[i]["missile"]*5;
+			}
+			my_fleets[i]["missile"] = 0;
+			tell_object(me,YEL"\n我军第" + chinese_number(i+1) + "部队飞弹全部发射！！！\n"NOR);
+
+			result = S_SKILL_D("missile")->query_msg();
+			tell_object(me,YEL + result + NOR"\n");
+			tell_object(victim,HIR + result + NOR);
+			tell_object(victim,HIR"我军部队正在承受" + me->space_short(1) + "的飞弹攻击！！！\n\n"NOR);
+			message("vision",YEL + me->space_short(1) + "向" + victim->space_short(1)
+				+ "不停歇的发射着飞弹。\n"NOR,env,targets);
+			message("vision",YEL + result + NOR"\n",env,targets);
+		}
+		return 1;
+	}
+}
+
+varargs int specify(object me,string specify,string victim)
+{
+	mapping fleets;
+	int i, check1=0, check2=0;
+
+	if( specify == "all_missile_launch" )
+	{
+		fleets = me->query_space("sub_fleet");
+		for(i=0;i<sizeof(fleets);i++)
+		{
+			if( fleets[i]["missile"] > 1 ) check1++;
+			if( !F_S_ATTRIBUTE->query_base_missile(fleets[i]["shiptype"]) )
+				continue;
+			check2++;
+		}
+		if( check2*2 < sizeof(fleets) )
+		{
+			tell_object(me,"我军部队大部分都没有装备飞弹发射器，无法使出特殊攻击。\n");
+			return 1;
+		}
+		if( check1*2 < sizeof(fleets) )
+		{
+			tell_object(me,"我军部队大部分都已经没有飞弹了，无法使出特殊攻击。\n");
+			return 1;
+		}
+		if( me->query_s_skill("trapezia",1) < 50 )
+		{
+			tell_object(me,"你的梯形阵能力实在太低，无法使出特殊攻击。\n");
+			return 1;
+		}
+		if( !stringp(victim) ) victim = "";
+
+			add_command(me,({"trapezia","all_missile_launch",1,victim}));
+			add_command(me,({"trapezia","all_missile_launch",2,victim}));
+			return 1;
+	}
+	return 0;
+}

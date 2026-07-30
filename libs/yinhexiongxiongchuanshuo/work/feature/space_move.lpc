@@ -1,0 +1,120 @@
+// space_move.c  Writen by Alarms 4/24/99
+
+#include <distance.h>
+#include <ansi.h>
+
+inherit F_DISTANCE;
+
+//清空有关移动数据
+nomask void move_clear(object me)
+{
+	me->delete_space_temp("addx");
+	me->delete_space_temp("addy");
+	me->delete_space_temp("x-des");
+	me->delete_space_temp("y-des");
+	me->delete_space_temp("quiet_steps");
+	me->delete_space_temp("last_view");
+}
+
+//坐标修正
+nomask int modify_dirs(object me)
+{
+	me->set_space("x-dir",me->query_space_temp("x-des"));
+	me->set_space("y-dir",me->query_space_temp("y-des"));
+	return 1;
+}
+
+
+//舰队运动中的警戒
+nomask int guard_env(object me)
+{
+	string str;
+	string *quiet_msg;
+	object *inv;
+	int i,check=0,res,counter=0;
+
+	quiet_msg = ({
+	"茫茫的星海静如止水，没有一丝变化。。。\n\n",
+	"绚丽夺目的星云，闪烁着神秘的色彩。。。\n\n",
+	"突如其来的一阵太阳风，使旗舰产生了轻微的振动。。。\n\n",
+	"一队无名的陨石群从战舰的前方缓缓飘过。。。\n\n",
+	"一队无名的陨石群从战舰的左舷缓缓飘过。。。\n\n",
+	"一队无名的陨石群从战舰的右舷缓缓飘过。。。\n\n",
+	"星海茫茫。。。繁星点点。。。\n\n",
+	});
+	inv = all_inventory(environment(me));
+	if( !mapp(me->query_entire_space_temp_dbase()) ) me->set_space_temp("quiet_steps",0);
+	if( me->query_space_temp("quiet_steps") < STEPS_GUARD )
+		{
+		str = "";
+		for( i=0;i<sizeof(inv);i++)
+			{
+			if( userp(inv[i]) && inv[i] != me )
+				{
+				res = calculate_distance(inv[i],me,inv[i]->query_space("scouting"));
+				if( res )
+					{
+					tell_object(inv[i],HIY"索敌部队发现运动中的"
+						+ me->space_short() + "\n"NOR);
+					tell_object(inv[i],HIY"坐标Alpha "+ (string)me->query_space("x-dir")
+						+"，Beta " + (string)me->query_space("y-dir") + "\n"NOR);
+					}
+				}
+
+			check = calculate_distance(me,inv[i],me->query_space("scouting"));
+			if ( check == -1 ) continue;
+			if (( inv[i] == me )
+				|| ( !check )
+				|| ( !me->visible(inv[i]) ) )
+				continue;
+			else
+				{
+				str += "    " + inv[i]->space_short_inroom() + "\n";
+				counter++;
+				}
+			}
+		if( !counter ) me->add_space_temp("quiet_steps",1);
+		else if( counter != me->query_space_temp("last_view") )
+			{
+			me->set_space_temp("last_view",counter);
+			me->delete_space_temp("quiet_steps");
+			tell_object(me,"侦察舰艇回报，在侦察范围内可以见到：\n");
+			tell_object(me,str);
+			}
+		return 1;
+		}
+	else
+		{
+		str = quiet_msg[random(sizeof(quiet_msg))];
+		tell_object(me,CYN + str + NOR);
+		me->delete_space_temp("quiet_steps");
+		return 1;
+		}
+}
+
+//移动的进行
+nomask void process_move(object me)
+{
+	if( !me->query_space_temp("addx") && !me->query_space_temp("addy") )
+		return;
+	if( undefinedp(me->query_space_temp("times")) )
+		{
+		modify_dirs(me);
+		move_clear(me);
+		tell_object(me,sprintf("你已经到达坐标Alpha %d,Beta %d。\n\n",
+			me->query_space("x-dir"),me->query_space("y-dir")));
+		look_spaceroom(me,environment(me));
+		return;
+		}
+	if( me->query_space_temp("times") < 1 )
+		me->delete_space_temp("times");
+	else
+		{
+		me->add_space("x-dir",me->query_space_temp("addx"));
+		me->add_space("y-dir",me->query_space_temp("addy"));
+		me->add_space_temp("times",-1);
+		guard_env(me);
+		}
+}
+
+

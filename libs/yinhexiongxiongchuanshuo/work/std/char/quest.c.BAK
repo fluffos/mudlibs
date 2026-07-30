@@ -1,0 +1,173 @@
+#include <dbase.h>
+#include <ansi.h>
+
+string sysmsg;
+
+int time_period(int timep, object me);
+
+int give_quest(string arg)
+{
+	mapping quest;
+	object me;
+	int j, rank, timep, lvl=0;
+	mixed *local;
+	int t;
+
+	if( !arg || !sscanf(arg, "%d", lvl) )
+	lvl = 0;
+
+	if( lvl < 0 ) lvl=0;
+	me = this_player();
+
+        local = localtime(time()*60);
+        t = local[2] * 60 + local[1];      
+
+/*	if( t < 240 || t > 1380)
+	{
+		write("太晚了，无法接受任务，还是明天再说吧。\n");
+		return 1;
+	}
+*/
+// Let's see if this player is a ghost
+	if((int) me->is_ghost())
+	{
+		write("鬼魂不可要任务．\n");
+		return 1;
+	}
+
+// Let's see if this player still carries an un-expired task
+	if( (quest =  me->query_space("quest")) )
+	{
+		if( ((int) me->query_space("task_time")) >  time() )
+			return 0;
+		else me->add("score", - (quest["exp_bonus"]/20+1) );
+		tell_object(me,"由于你拒绝完成上次接受的任务，所以受到了惩罚。\n");
+		me->delete_space_temp("quest_number");
+	}
+
+	rank = me->query("rank");
+
+	rank += lvl;
+	if( rank > 12 ) rank = 12;
+	rank /= 3;
+
+	quest = QUEST_D(sprintf("qlist%d",rank))->query_quest();
+
+	timep = quest["time"];	
+
+	if( !timep )
+	{
+		timep = 300;
+		quest["time"] = timep;
+	}
+// A factor here to make time random
+	timep = random(timep/2)+timep/2;
+	time_period(timep, me);
+
+	if( quest["quest_type"] == "寻找" )
+		tell_object(me,"寻找『"+quest["quest"]+"』。\n" NOR);
+	if( quest["quest_type"] == "消灭" )
+		tell_object(me,"消灭『"+quest["quest"]+"』。\n" NOR);
+ 	if( quest["quest_type"] == "杀死" )
+		tell_object(me,"杀死『"+quest["quest"]+"』。\n" NOR);
+
+	me->set_space("quest", quest);
+	me->set_space("task_time", (int) time()+(int) timep);
+
+	if((int)me->query_space_temp("quest_number") < 5)
+		me->add_space_temp("quest_number",1);
+
+	return 1;
+}
+
+int time_period(int timep, object me)
+{
+        int t, d, h, m, s;
+        string time;
+        t = timep;
+        s = t % 60;             t /= 60;
+        m = t % 60;             t /= 60;
+        h = t % 24;             t /= 24;
+        d = t;
+
+        if(d) time = chinese_number(d) + "天";
+        else time = "";
+
+        if(h) time += chinese_number(h) + "小时";
+        if(m) time += chinese_number(m) + "分";
+        time += chinese_number(s) + "秒";
+
+        tell_object(me,HIW + sprintf("%s",this_object()->name()) +"说道：\n请在" + time + "内");
+	sysmsg = "在" + time + "内";
+        return 1;
+}
+
+int accept_object(object who, object ob)
+{
+        int  exp, score, check, rank;
+	mapping quest;
+
+	if( !mapp( quest =  who->query_space("quest") ) ) return 0;
+
+	if( quest["quest"] != ob->query("name") ) return 0;
+
+	if( ob->is_character()) return 0;
+	if ( who->query_space("task_time") < time() )
+	{
+		tell_object(who,CYN + this_object()->name()
+			+ "冷冷的说道：太晚了，已经有人替我找到了！\n"NOR);
+		who->delete_space("quest");
+		who->delete_space_temp("quest_number");
+		return 0;
+        }
+	else
+	{
+		tell_object(who,CYN + this_object()->name() + "微微点了一下头说道：还不错！\n"NOR);
+		exp = quest["exp_bonus"];
+		exp -= random(exp/2);
+		exp = exp * (int) who->query_space_temp("quest_number");
+		score = exp / 15 + 1;
+
+		if( random(3) )	who->add_space("combat_exp",exp);
+		else who->add("combat_exp",exp);
+		who->add("score",score);
+	        tell_object(who,HIW"通过这次完成任务：\n你的经验上升" +
+			chinese_number(exp) + "点\n你的功绩上升"+
+			chinese_number(score) + "点\n" NOR);
+
+		who->delete_space("quest");
+
+	check = who->query("score");
+	rank = who->query("rank");
+
+	if( ( check > 100) && !rank ) who->set("promoted",1);
+	else if( ( check > 400 ) && ( rank < 2 ) ) who->set("promoted",2);
+	else if( ( check > 700) && ( rank < 3 ) ) who->set("promoted",3);
+	else if( ( check > 1000 ) && ( rank < 4 ) ) who->set("promoted",4);
+	else if( ( check > 4000 ) && ( rank < 5 ) ) who->set("promoted",5);
+	else if( ( check > 7000 ) && ( rank < 6 ) ) who->set("promoted",6);
+	else if( ( check > 10000 ) && ( rank < 7 ) ) who->set("promoted",7);
+	else if( ( check > 40000 ) && ( rank < 8 ) ) who->set("promoted",8);
+	else if( ( check > 700000 ) && ( rank < 9 ) ) who->set("promoted",9);
+	else if( ( check > 1000000 ) && ( rank < 10 ) ) who->set("promoted",10);
+	else if( ( check > 4000000 ) && ( rank < 11 ) ) who->set("promoted",11);
+	else if( ( check > 7000000 ) && ( rank < 12 ) ) who->set("promoted",12);
+	else if( ( check > 10000000 ) && ( rank < 13 )
+		&& ( who->query_space("vassalage") == "帝国" ) )
+		who->set("promoted",13);
+		
+
+	else who->delete("promoted");
+
+	if( who->query("promoted") )
+	{
+		report = sprintf("鉴于在数次行动中的优异表现，现决定晋升%s\n            "
+		"%s之官阶。特此通告！请回首都接受任命！\n",
+		who->query("title") ? who->query("title"):"",
+		who->name(1) );
+		CHANNEL_D->do_channel(this_object(),"report",report);
+	}
+		return 1;
+        }
+	return 1;
+}

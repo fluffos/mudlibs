@@ -1,0 +1,113 @@
+// supply.c Writen by Alarms 1/28/2000
+
+#include <dbase.h>
+#include <ansi.h>
+
+int check_account()
+{
+	object *inv, me, ob;
+	string result;
+	int i;
+
+	ob = this_object();
+	me = this_player();
+	inv = all_inventory(me);
+	for(i=0;i<sizeof(inv);i++)
+	{
+		if( inv[i]->name() == "ＩＤ卡" )
+		{
+			if( !inv[i]->query("owner_name") && !inv[i]->query("owner_id") )
+			{
+				write(CYN + ob->name() + "说道：您的这张卡似乎有些问题，无法为您查帐。\n"NOR);
+				return 1;
+			}
+			if( inv[i]->query("owner_name") != me->name() )
+			{
+				write(CYN + ob->name() + "说道：这张卡不是您的吧？上面记录的信息和您不符。\n"NOR);
+				return 1;
+			}
+			if( inv[i]->query("owner_id") != me->query("id") )
+			{
+				me->set("next_trade_time", time()+ 3600 );
+				destruct(inv[i]);
+				write(CYN + ob->name() + "说道：对不起，您的ＩＤ卡是假的，我必须没收。\n"NOR);
+				write("由于你的假ＩＤ卡被发现了，所以银行冻结了你的帐户！\n");
+				return 1;
+			}
+			if( me->query("next_trade_time") > time() )
+			{
+				write(CYN + ob->name() + "说道：您的银行帐户正在冻结状态，无法为您查帐。\n"NOR);
+				return 1;
+			}
+			inv[i]->set("left_money",me->query("id_card"));
+			result = ob->name() + "说道：嗯，您的姓名是 " + me->query("name");
+			result += "，ＩＤ号 " + me->query("id") + "\n";
+			result += "卡上余额为 " + (string)inv[i]->query("left_money") + "费沙马克\n\n";
+			write(CYN + result + NOR);
+			return 1;
+		}
+	}
+	write(CYN + "说道：您的ＩＤ卡呢？\n");
+	return 1;
+}
+
+int apply_id_card()
+{
+	object card, me, ob;
+	string result;
+
+	ob = this_object();
+	me = this_player();
+	if( me->query("next_trade_time") > time() )
+	{
+		write(CYN + ob->name() + "说道：您的银行帐户正在冻结状态，无法为您申请办理新卡。\n"NOR);
+		return 1;
+	}
+	if( me->query("next_lost_time") > time() )
+	{
+		write(CYN + ob->name() + "说道：这么快又要申请新卡，恐怕本行无法为您办理。\n"NOR);
+		return 1;
+	}
+	if( me->query("id_card") > 100 )
+	{
+		write(CYN + ob->name() + "说道：您这次申请办理新卡，需要花费100费沙马克。\n"NOR);
+		me->add("id_card",-100);
+	}
+	else write(CYN + ob->name() + "说道：您的余额不足以申请办理新卡，但本行特别优惠，为您免费办理。\n"NOR);
+
+	card = new("/obj/id_card");
+	card->set("left_money",me->query("id_card"));
+	card->set("owner_name",me->query("name"));
+	card->set("owner_id",me->query("id"));
+	card->move(me);
+
+	me->set("next_lost_time", time() + 3600 );
+	result = ob->name() + "说道：请收好您的新卡，";
+	result += "卡上余额是 " + (string)card->query("left_money") + "费沙马克\n\n";
+	write(CYN + result + NOR);
+	return 1;
+}
+
+int restore_account()
+{
+	object ob, me;
+
+	ob = this_object();
+	me = this_player();
+	if( me->query("next_trade_time") < time() )
+	{
+		write(CYN + ob->name() + "说道：您的银行帐户并没有处在冻结状态，请您放心。\n"NOR);
+		return 1;
+	}
+	if( me->query("id_card") < 1000 )
+	{
+		write(CYN + ob->name() + "说道：真抱歉，您的信用额不足以解除您银行帐户的冻结状态。\n"NOR);
+		return 1;
+	}
+	write(CYN + ob->name() + "说道：您这次恢复您的银行帐户，需要花费1000费沙马克。\n"NOR);
+	me->add("id_card",-1000);
+
+	me->delete("next_trade_time");
+	write(CYN + ob->name() + "说道：嗯，好的，现在您的帐户已经恢复了，请以后注意自己的行为。\n"NOR);
+	return 1;
+}

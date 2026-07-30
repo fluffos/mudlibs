@@ -1,0 +1,162 @@
+// recruit.c Update by Alarms 1/29/2000
+
+inherit F_CLEAN_UP;
+
+int main(object me, string arg)
+{
+	object ob, old_rec, uniform;
+	mapping family;
+	string id, uniform_from, uniform_to, dir;
+	int i;
+
+	seteuid(getuid());
+
+	if( environment(me)->is_space_room() || environment(me)->is_planet() )
+		return notify_fail("在外太空搜罗手下实在不太方便。\n");
+
+	if( !arg ) return notify_fail("指令格式：recruit [cancel]|<对象>\n");
+
+	if( arg=="cancel" ) {
+		old_rec = me->query_temp("pending/recruit");
+		if( !objectp(old_rec) )
+			return notify_fail("你现在并不想将任何人收归麾下。\n");
+		write("你改变主意不想将" + old_rec->name() + "收归麾下了。\n");
+		tell_object(old_rec, me->name() + "改变主意不想将你收归麾下了。\n");
+		me->delete_temp("pending/recruit");
+		return 1;
+	}
+
+	if( !(ob = present(arg, environment(me))) )
+		return notify_fail("你想将谁收归麾下？\n");
+
+	if( ob==me ) return notify_fail("好主意....不过没有用。\n");
+
+	if( ob->is_apprentice_of(me) )
+	{
+		message_vision("$N微微颔首，向$n回敬了一个军礼。\n", me, ob);
+		return 1;
+	}
+
+	if( !me->query("family") )
+		return notify_fail("你并不为任何一方势力效劳，也没有自己创建组织。\n");
+
+	if( userp(me) && (int) me->query("family/privs") != -1 )
+		return notify_fail("你现在还不能驾驭别人，让其为你效力。\n");
+	if( (string)me->query("family/family_name") == (string)ob->query("family/family_name") )
+		if( (int)me->query("family/generation") >= (int)ob->query("family/generation") )
+			return notify_fail(ob->name()+"的职位并不比你低！\n");
+
+	if( me->query_space("vassalage") == ob->query_space("vassalage") )
+		if( me->query("rank") <= ob->query("rank") )
+			return notify_fail(ob->name()+"的官阶并不比你低！\n");
+
+	// If the target is willing to apprentice us already, we do it.
+	if( (object)ob->query_temp("pending/apprentice") == me )
+	{
+		if( !living(ob) )
+		{
+			message_vision(
+				"\n$N决定将$n收归麾下。\n"
+				"不过看样子$n显然没有办法履行相应的礼节。\n\n",
+				me, ob);
+			return 1;
+		}
+	// follow modified by elon 09-10-95 to fix a bug in 1st time recruit
+		if( (ob->query("family"))
+			&& ( (string)me->query("family/family_name") != (string)ob->query("family/family_name") ) )
+		{
+			message_vision("\n$N似乎改变了从前的志向，转而加入$n麾下！！\n"
+				"$N打点精神，踌躇满志的向$n行了一个标准的军礼。\n\n",
+				ob, me);
+			ob->set("score", ob->query("score")/2);
+			if( stringp(ob->query_space("vassalage"))
+				&& ( ob->query_space("vassalage") != "中立" )
+				&& ( ob->query_space("vassalage") != me->query_space("vassalage") ) )
+			{
+				ob->add("betrayer", 1);
+				ob->set("score",0);
+				if( ob->query("rank") <= 3 ) ob->set("rank",0);
+				else ob->add("rank",-3);
+			}
+		}
+		else
+		{
+			message_vision("\n$n决定将$N收归麾下。\n"
+				"$N打点精神，踌躇满志的向$n行了一个标准的军礼。\n\n",
+				ob, me);
+		}
+		me->recruit_apprentice(ob);
+		ob->delete_temp("pending/apprentice");
+		if( me->query_space("vassalage") )
+			ob->set_space("vassalage",me->query_space("vassalage"));
+		write("有一位愿意追随你的人加入了！\n");
+		family = ob->query("family");
+		tell_object( ob, sprintf( "您已经成为%s中的一员了。\n", me->query("family/family_name") ) );
+		ob->set("next_salary_time",me->query("mud_age")+7200);
+
+		id = ob->query("id");
+		seteuid(ROOT_UID);
+		switch( ob->query_space("vassalage") )
+		{
+		   case "帝国":
+			uniform_from = read_file("/obj/cloth/uniform_e.lpc");
+			break;
+		   case "同盟":
+			uniform_from = read_file("/obj/cloth/uniform_a.lpc");
+			break;
+		   case "费沙":
+			uniform_from = read_file("/obj/cloth/uniform_p.lpc");
+			break;
+		   default:
+			uniform_from = read_file("/obj/cloth/uniform.lpc");
+		}
+		uniform_to = DATA_DIR + "login/" + id[0..0] + "/" + id + "/uniform.lpc";
+		dir = DATA_DIR + "login/" + id[0..0] + "/" + id + "/";
+
+		if( !pointerp( get_dir(dir) ) )
+			if( !mkdir(dir) ) return notify_fail("目录创建失败.\n");
+		if( !write_file(uniform_to, uniform_from, 1) )
+			return notify_fail("军服文件读写失败。\n");
+		if( objectp( find_object(uniform_to) ) )
+			destruct(find_object(uniform_to));
+		if( !( uniform = new(uniform_to) ) )
+			return notify_fail("军服载入失败。\n");
+		uniform->move(ob);
+		message_vision("$N交给$n一套崭新的" + uniform->name() + "。\n",me,ob);
+		seteuid(getuid());
+
+		ob->save();
+
+		return 1;
+
+	}
+	else
+	{
+		old_rec = me->query_temp("pending/recruit");
+		if( ob == old_rec )
+			return notify_fail("你想将" + ob->name() + "收归麾下，但是对方还没有答应。\n");
+		else if( objectp(old_rec) )
+		{
+			write("你改变主意不想将" + old_rec->name() + "收归麾下了。\n");
+			tell_object(old_rec, me->name() + "改变主意不想将你收归麾下了。\n");
+		}
+
+		me->set_temp("pending/recruit", ob );
+		message_vision("\n$N想要将$n收归麾下。\n", me, ob);
+		tell_object(ob, "如果你愿意追随" + me->name() + "，并为其效力，用 apprentice 指令。\n" );
+		return 1;
+	}
+}
+
+
+int help(object me)
+{
+        write(@HELP
+指令格式 : recruit [cancel]|<对象>
+ 
+这个指令能让你将某人收归麾下，如果对方也同意的话。
+
+HELP
+        );
+        return 1;
+}
