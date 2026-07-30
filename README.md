@@ -231,6 +231,7 @@ the bug classes it's found.
 | 063 | `aoxiangtianji` | 翱翔天际 | `翱翔天际utf8.7z` | 40101 | WASM playable |
 | 064 | `yinhexiongxiongchuanshuo` | 银河英雄传说 | `银河英雄传说.zip` | 40104 | native-boot verified, WASM pending |
 | 065 | `ludingtianxia` | 鹿鼎天下 (in-game: 雄霸天下) | `鹿鼎天下.rar` | 40105 | native-boot verified, WASM pending |
+| 014-1 | `honghuangshijie` | 洪荒世界 | `洪荒世界.rar` | 40106 | native-boot verified, WASM pending |
 | 901 | `dw_fluffos_v1` | Discworld MUD lib (v1) | `dw_fluffos_v1.tar.gz` | — | deprioritized |
 | 901-1 | `dw_fluffos_v2` | Discworld MUD lib (v2) | `dw_fluffos_v2.zip` | — | deprioritized |
 | 901-2 | `dw_fluffos_v3` | Discworld MUD lib (v3) | `dw_fluffos_v3.zip` | — | deprioritized |
