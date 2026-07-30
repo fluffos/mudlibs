@@ -1,0 +1,269 @@
+#include <ansi.h>
+inherit F_DBASE;
+mapping *quests;
+mapping *read_table(string file);
+string *roomlines;
+string *rooms;
+string *dynamic_quest = ({
+      "dynamic_quest1",
+      "dynamic_quest2",
+      "dynamic_quest3",
+});
+varargs void clear_room();
+varargs void init_dynamic_quest(int hard);
+varargs int spread_quest(mapping one_quest, int hard);
+object find_env(object ob);
+varargs int already_spreaded(string str, int hard);
+int quest_reward( object me, object who,object quest_item);
+string time_period(int timep,object me);
+string dyn_quest_list();
+#define MAX_DIS 7
+#define MAX_ALT  2
+#define MAX_DIR  8
+int max_time = 0;
+void create()
+{
+        string file,file1;
+        int i = random(sizeof(dynamic_quest));
+        quests = read_table("/quest/"+dynamic_quest[i]);
+//        write("\n"+dynamic_quest[i]);
+        file = read_file("/quest/dynamic_location");
+        file1 = read_file("/quest/dynamic_room");
+        roomlines = explode(file,"\n"); 
+        rooms = explode(file1,"\n");
+        clear_room();
+        message("channel:chat", HIG"\n【任务精灵】任务系统重新开始分配。\n"NOR,users());
+       max_time = time()+7200;
+     call_out("create",7200);
+}
+string check_time(object me)
+{
+        int time;string ctime;
+        time = max_time - time();
+        if( time > 0 ) {
+        ctime = time_period(time,me);
+        return ctime; }
+        else
+        return "使命系统将在很快重新分配。\n"; 
+}
+string time_period(int timep, object me)
+{
+        int t, d, h, m, s;
+        string time;
+        t = timep;
+        s = t % 60;             t /= 60;
+        m = t % 60;             t /= 60;
+        h = t % 24;             t /= 24;
+        d = t;
+
+        if(d) time = chinese_number(d) + "天";
+        else time = "";
+
+        if(h) time += chinese_number(h) + "小时";
+        if(m) time += chinese_number(m) + "分";
+        time += chinese_number(s) + "秒";
+        return time;
+}
+int quest_reward(object me, object who,object quest_item)
+{
+        mapping quest;
+        int exp,pot,score;
+        quest = quest_item->query("dynamic_quest");
+        if(base_name(who) != quest["owner_name"]) return 0;
+        exp =500+random(200);
+//        exp = 50 + random(50);
+        pot = exp/7;
+        score = random(exp)+1;
+        me->add("combat_exp",exp);
+       if( me->query("potential") - me->query("learned_points") < 3000 )
+        me->add("potential",pot);
+        me->add("score",score);
+        tell_object(me,"你被奖励了：\n" +
+        chinese_number(exp) + "点实战经验\n"+
+        chinese_number(pot) + "点潜能\n" +
+        chinese_number(score)+"点综合评价\n");
+        me->add("TASK",1);
+        if( !undefinedp(quest["fin_func"]))
+        call_other(this_object(),quest["fin_func"],me,who,quest_item);
+        if(quest_item)
+        destruct(quest_item);
+        return 1;
+}
+void clear_room()
+{
+       object *inv,*unv,room;
+       string localroom; 
+       int i,j,k;
+       for(i=0; i<sizeof(rooms); i++) {
+        localroom = rooms[i];
+        room=load_object(localroom);
+        room->reset();
+        inv = all_inventory(room); 
+       for(k=0; k<sizeof(inv) ;k++) {
+         if(userp(inv[k]))
+        {
+        unv= all_inventory(inv[k]);
+        for(j=0; j<sizeof(unv); j++) {
+        if(unv[j]->query("dynamic_quest"))
+        destruct(unv[j]);
+         }
+        }
+     }
+    }
+     init_dynamic_quest(1);
+}
+varargs void init_dynamic_quest(int hard)
+{
+        int i;
+        for( i=0; i < sizeof(quests); i++)
+                spread_quest(quests[i],hard);
+}
+varargs int spread_quest(mapping quest, int hard)
+{
+        object obj0,obj1,obj2,obj3;
+        object cur_obj;
+        object next_obj;
+        object tar;
+        object *inv,*unv;
+        object *target=({});
+        int i,j;
+        string location;
+        if(already_spreaded(quest["file_name"],hard)) return 0;
+        reset_eval_cost();
+        location = roomlines[random(sizeof(roomlines))];
+        obj0=find_object(location);
+        if(obj0)
+        obj0->reset();
+        else
+        obj0=load_object(location);
+        cur_obj =obj0;
+        cur_obj->set("no_clean_up",1);
+        if(cur_obj)
+        {
+        inv = all_inventory(cur_obj);
+        for(i=0; i<sizeof(inv); i++) {
+        if(inv[i]->is_character() && !userp(inv[i]))
+        target += ({ inv[i] });
+        if(inv[i]->is_container()) target += ({ inv[i] });
+                }
+        }
+        if(sizeof(target)) cur_obj = target[random(sizeof(target))];
+        cur_obj->set("coor",1);
+        if(cur_obj)
+        {
+        tar = new(quest["file_name"]);
+        tar->set("value",0);
+        tar->set("dynamic_quest",quest);
+        tar->move(cur_obj);
+        }
+return 1;
+}
+string dyn_quest_list()
+{
+        string output="";
+        object owner,item;
+        int i,max_task = sizeof(quests);
+        for( i=0; i < sizeof(quests); i++)
+        {
+        reset_eval_cost();
+        if(!objectp(owner= find_object(quests[i]["owner_name"])))
+        owner = load_object(quests[i]["owner_name"]);
+        if(!objectp(item= find_object(quests[i]["file_name"])))
+        item = load_object(quests[i]["file_name"]);
+        if(already_spreaded(quests[i]["file_name"]))
+        {
+        if(random(2))
+        output += sprintf("%s的%s（%s）\n",owner->query("name"),item->query("name"),item->query("id"));
+        else
+        output = sprintf("%s的%s（%s）\n",owner->query("name"),item->query("name"),item->query("id")) + output;
+        }
+        else
+        {
+        if(max_task > 0)
+        max_task--;
+        if(random(2))
+        output += sprintf("%s的%s（%s）〔已完成〕\n",owner->query("name"),item->query("name"),item->query("id"));
+        else    
+        output = sprintf("%s的%s（%s）〔已完成〕\n",owner->query("name"),item->query("name"),item->query("id")) + output;
+        }
+        }
+        return output+"\n───────────────────────────\n目前共有"+chinese_number(max_task)+"件使命等待你的完成。\n";
+}
+varargs int already_spreaded(string str,int hard)
+{
+        object ob,*ob_list;
+        int i;
+        if(!str) return 0;
+        if(hard)
+        {
+        ob_list = children(str);
+        for(i=0; i<sizeof(ob_list); i++) {
+                ob=find_env(ob_list[i]);
+                if(ob)
+                { ob_list[i]->move(VOID_OB);
+                 destruct(ob_list[i]);
+                }
+        }
+        return 0;
+        }
+        else
+        {
+        if(!str) return 0;
+        ob_list = children(str);
+        for(i=0; i<sizeof(ob_list); i++) {
+                ob=find_env(ob_list[i]);
+                if(ob)
+                        return 1;
+        }
+        return 0;
+        }
+}
+object find_env(object ob)
+{
+        while(ob)
+        {
+        if(ob->query("coor") ) return ob;
+        else ob=environment(ob);
+        }
+        return ob;
+}
+mapping *read_table(string file)
+{
+        string *line, *field, *format;
+        mapping *data;
+        int i, rn, fn;
+
+        line = explode(read_file(file), "\n");
+        data = ({});
+        for(i=0; i<sizeof(line); i++) {
+                if( line[i]=="" || line[i][0]=='#' ) continue;
+                if( !pointerp(field) ) {
+                        field = explode( line[i], ":" );
+                        continue;
+                }
+                if( !pointerp(format) ) {
+                        format = explode( line[i], ":" );
+                        continue;
+                }
+                break;
+        }
+
+        for( rn = 0, fn = 0; i<sizeof(line); i++) {
+                if( line[i]=="" || line[i][0]=='#' ) continue;
+                if( !fn ) data += ({ allocate_mapping(sizeof(field)) });
+                sscanf( line[i], format[fn], data[rn][field[fn]] );
+                fn = (++fn) % sizeof(field);
+                if( !fn ) ++rn;
+        }
+        return data;
+}
+void big_reward(object me, object who, object item)
+{
+        tell_object(me,"你真行！！\n");
+}
+
+void execute_accept_object(object me, object who, object item)
+{
+        who->accept_object(me,item);
+}
+

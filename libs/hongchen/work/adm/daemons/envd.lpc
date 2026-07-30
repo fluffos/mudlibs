@@ -1,0 +1,105 @@
+ //envd.c
+
+inherit F_TREEMAP;
+
+#define ENV_DATA "/adm/obj/env"
+
+mapping environment;
+
+int save()
+{
+        string str;
+        
+        if ( mapp(environment) )
+                str = save_variable(environment);
+        
+        return write_file(ENV_DATA+__SAVE_EXTENSION__,str,1);
+}
+
+int load()
+{
+        string str;
+        
+        if ( file_size(ENV_DATA + __SAVE_EXTENSION__) < 0 )
+                return 0;
+                
+        str = read_file(ENV_DATA + __SAVE_EXTENSION__);
+        
+        environment = restore_variable(str);
+        
+        if ( !mapp(environment) )
+                return 0;
+        
+        return 1;
+}
+
+void create()
+{
+        seteuid(getuid());
+        
+        load();
+}
+
+mixed set(string prop, mixed data)
+{
+        if( !mapp(environment) ) environment = ([]);
+
+        if( strsrch(prop, '/')!=-1 )
+                return _set( environment, explode(prop, "/"), data );
+        environment[prop] = data;
+        save();
+        
+        return environment[prop];
+}
+
+varargs mixed query(string prop, int raw)
+{
+        mixed data;
+
+        if( !mapp(environment) ) return 0;
+
+        if( undefinedp(environment[prop]) && (strsrch(prop, '/')!=-1) )
+                data = _query(environment, explode(prop, "/"));
+        else
+                data = environment[prop];
+
+        if( raw ) return data;
+
+        return evaluate( data, this_object() );
+}
+
+int delete(string prop)
+{
+        int i;
+        
+        if( !mapp(environment) ) return 0;
+
+        if( strsrch(prop, '/')!=-1 ){
+                i = _delete(environment, explode(prop, "/"));
+                save();
+                return i;
+        }
+        else {
+                map_delete(environment, prop);
+                save();
+                return 1;
+        }
+}
+
+mixed add(string prop, mixed data)
+{
+        mixed old;
+
+        if( !mapp(environment) || !(old = query(prop, 1)) )
+                return set(prop, data);
+
+        if( functionp(old) )
+                error("environment: add() - called on a function type property.\n");
+
+        return set(prop, old + data);
+}
+
+mapping query_entire_environment()
+{
+        return environment;
+}

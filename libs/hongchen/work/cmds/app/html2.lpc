@@ -1,0 +1,183 @@
+// html.c - builds a /users.html file to show online users info.
+inherit F_CLEAN_UP;
+
+#include <ansi.h>
+int help(object me);
+
+void create(){  seteuid(getuid());}
+int build_html();
+string ansi2html(string arg);
+
+int main(object me,string arg)
+{
+    string status;
+
+    status = wizhood(me);
+    if( me!=this_player(1) ||wiz_level(me) <wiz_level(status) )
+	return notify_fail("你没有权力使用这个指令。\n");
+    if(arg)
+	return help(me);
+    return build_html();
+}
+
+//modified version of short(), ported from /feature/name.c
+string short(object me)
+{
+    mapping party;
+    string nick, title, party_title, str, degree;
+
+    str = sprintf("%s(%s)", me->query("name"), capitalize(me->query("id")));
+
+    if( stringp(nick = me->query("nickname")) )
+	str = sprintf("「%s」%s", nick, str );
+
+    if ( stringp(nick = me->query("nickname")) ) {
+	str = sprintf("「%s」", nick);
+    }
+    if( stringp(title = me->query("title")) )
+	str = sprintf("%s%s%s", title,(nick?"":" "), str);
+
+    if ( mapp(party = me->query("party")) ){
+	party_title = nullp(party["party_name"]) ? "": party["party_name"];
+	party_title += nullp(party["rank"]) ? "" : party["rank"];
+	str=sprintf("%s %s", party_title, str);
+    }
+
+    if ( stringp(degree = me->query("degree")) ) 
+	str = sprintf("%s%s%s%s%s",degree,(party_title?"":""),(title?"":""),(nick?"":" "), str);
+
+    if( me->is_ghost() ) str = HIB "(幽魂) " NOR + str;
+    if( me->query_temp("netdead") ) str += HIG " <断线中>" NOR;
+    if( query_idle( me ) > 120 ) {
+	str += HIM+" <发呆"+query_idle(me)/60+"分钟>"+NOR;
+    }
+    if( !living(me) ) str += HIR + me->query("disable_type") + NOR;
+
+    return str;
+}
+string finger_info(object me)
+{
+    string str, email, selfdesc, signature, profile;
+    object link_ob = me->query_temp("link_ob");
+
+    str = sprintf("年    龄：看起来大约%d岁~[br~]性    别：%s~[br~]相    貌：%s", 
+      me->query("age")/10*10, 
+      me->query("gender"), 
+      "/cmds/std/look"->query_look_level(me)
+    );
+
+    if (link_ob) {
+	if (email = link_ob->query("email")) 
+	    str = sprintf("%s~[br~]电子邮件：~[a~^href=\"mailto:%s\"~]%s~[/a~]",str, email, email);
+	if (signature = link_ob->query("signature"))
+	    str = sprintf("%s~[br~]个性签名：%s", str, signature);
+	if (profile = link_ob->query("profile"))
+	    str = sprintf("%s~[br~]个人信息：%s", str, profile);
+    }
+    return str;
+}
+
+int build_html()
+{
+    object *obs, *ppls;
+    string html, uinfo, uid;
+
+    ppls = users();
+    obs = filter_array( ppls, (: environment($1) && !(wizardp($1) && $1->query("env/invisibility")) :));
+
+    uinfo = "";
+    foreach(object pl in obs){
+	uid = pl->query("id");
+	uinfo += sprintf("~[br~]~[a~^onclick='sh(%s)'~]%s"NOR"%s~[/a~]~[blockquote~^id=%s~^style='display:none'~]%s~[/blockquote~]\n",
+	  uid,
+	  RANK_D->query_rank(pl), 
+	  short(pl), 
+	  uid,
+	  finger_info(pl)
+	);
+    }
+
+    html = @HTML
+<html>
+<head>
+<meta http-equiv="Content-Language" content="zh-cn">
+<meta http-equiv="Content-Type" content="text/html; charset=gb2312">
+<title>红尘(mud.hk.hi.cn:5555)在线玩家列表</title>
+
+<script language="VBScript">
+function sh(id)
+<!--
+   if (id.style.display="none") then
+   id.style.display=""
+   else
+   id.style.display="none"
+   end if
+end function
+//-->
+</script>
+
+</head>
+
+<body bgcolor=BLACK text=GREEN>
+<p align="center"><font color="red"><a href="http://mud.hk.hi.cn">☆红 尘☆</a> (<a href="telnet:mud.hk.hi.cn:5555">mud.hk.hi.cn:5555</a>) ☆</font></p>
+<center><hr width=85%></center>
+
+HTML;
+    html += sprintf ("<center>生产时间：%s，共有玩家 %d 个。</center><p>\n", ctime(time()), sizeof(obs));
+    html += ansi2html(uinfo);
+    html += "\n<center><hr width=85%></center></body></html>";
+
+    return write_file("/users.html", html, 1);
+}
+
+string ansi2html(string arg)
+{
+    //处理html tag
+    arg = replace_string(arg, " ", "&nbsp;");
+    arg = replace_string(arg, "<", "&lt;");
+    arg = replace_string(arg, ">", "&gt;");
+    //原始数据中用 ~[ 代替 <, ~] 代替 >，恢复
+    arg = replace_string(arg, "~[", "<");
+    arg = replace_string(arg, "~]", ">");
+    arg = replace_string(arg, "~^", " ");
+    //去掉难描述的颜色
+    arg = replace_string(arg, BOLD, "");
+    arg = replace_string(arg, BLINK, "");
+    arg = replace_string(arg, U, "");
+    arg = replace_string(arg, REV, "");
+    arg = replace_string(arg, HIREV, "");
+    arg = replace_string(arg, ESC+"[0m", NOR);
+    arg = replace_string(arg, ESC+"[0;1;37m", "");
+    //颜色替换
+    arg = replace_string(arg, RED, "</font><font color=\"#800000\">");
+    arg = replace_string(arg, HIR, "</font><font color=\"#FF0000\">");
+    arg = replace_string(arg, GRN, "</font><font color=\"#008000\">");
+    arg = replace_string(arg, HIG, "</font><font color=\"#00FF00\">");
+    arg = replace_string(arg, YEL, "</font><font color=\"#808000\">");
+    arg = replace_string(arg, HIY, "</font><font color=\"#FFFF00\">");
+    arg = replace_string(arg, BLU, "</font><font color=\"#000080\">");
+    arg = replace_string(arg, HIB, "</font><font color=\"#0000FF\">");
+    arg = replace_string(arg, MAG, "</font><font color=\"#800080\">");
+    arg = replace_string(arg, HIM, "</font><font color=\"#FF00FF\">");
+    arg = replace_string(arg, CYN, "</font><font color=\"#008080\">");
+    arg = replace_string(arg, HIC, "</font><font color=\"#00FFFF\">");
+    arg = replace_string(arg, HIW, "</font><font color=\"#FFFFFF\">");
+    arg = replace_string(arg, WHT, "</font><font color=\"#C0C0C0\">");
+    arg = replace_string(arg, BLK, "");
+    //整理最后结果
+    arg = replace_string(arg, NOR, "</font><font>");
+    arg = replace_string(arg, ESC+"[", "^[");
+    arg = "<font>" + arg + "</font>";
+
+    return arg;
+}
+
+int help(object me)
+{
+    write(@TEXT
+
+生成一个html文本
+
+TEXT);
+    return 1;
+}

@@ -1,0 +1,134 @@
+#include <ansi.h>
+#include <net/dns.h>
+inherit F_CLEAN_UP;
+
+//也许是这里的void造成下面的tell_obj()停止，导致对方无法看见msg. modified by ivan on 2002 10.25
+/*int snoop_tell(string x)
+{
+    if (!stringp(x))
+     return 1;
+    foreach(object ob in users()){
+	if(!wizardp(ob) || !interactive(ob))
+	    continue;
+	if(ob->query("env/snoop_tell"))
+	    tell_object(ob,x+"\n");
+    }
+    return 1;
+}
+*/
+/*
+object find_player(string target)
+{
+    int i;
+    object *str;
+    str=users();
+    for (i=0;i<sizeof(str);i++)
+	if (str[i]->query("id")==target){
+	    if (!environment(str[i])) return 0;
+	    else
+		return str[i];
+	}
+    return 0;
+}
+*/
+int help(object me);
+void create() {seteuid(getuid());}
+int main(object me, string arg)
+{
+    string target, msg, mud;
+    object obj;
+    string *black_list;
+    mixed no_tell;
+
+    if( !arg || sscanf(arg, "%s %s", target, msg)!=2 ) return help(me);
+    if( userp(me) && !wizardp(me)) {
+	if (me->query("chblk_tell")+300>time())
+	    return notify_fail("你现在喉咙嘶哑,半句话也说不出了。\n");
+	me->add_temp("tell_msg_cnt", 1);
+	if (me->query_temp("tell_msg_cnt")>5)
+	    if (time()-me->query_temp("tell_time")<2)
+		me->set("chblk_tell",time());
+	    else
+		me->delete_temp("tell_msg_cnt");
+    }
+
+    if( sscanf(target, "%s@%s", target, mud)==2 ) {
+	GTELL->send_gtell(mud, target, me, msg);
+	write(BOLD "网路讯息已送出，可能要稍候才能得到回应。\n" NOR);
+	return 1;
+    }
+    obj = find_player(target);
+
+    if (!obj || !environment(obj) || !interactive(obj)) 
+	return notify_fail("没有这个人....。\n");
+
+    if (obj && !userp(me)){
+	tell_object(obj, sprintf( BOLD "%s千里传音你：%s\n" NOR,
+	    me->name(1)+"("+me->query("id")+")", msg));
+	return  1;
+    }
+    if (!me->visible(obj)) return notify_fail("没有这个人....。\n");
+    if (!interactive(obj)) return notify_fail("没有这个人....。\n");
+    if (obj==me) return notify_fail("你在自言自语的不知道在说什么...\n");
+
+    if( userp(obj) && !obj->query("env/wizhp") && !me->query("env/wizhp") ) 
+	tell_object(
+         filter_array( users(), (: wizardp($1) && $1->query("env/snoop_tell"):) ),
+	  sprintf( WHT "『Tell Snoop』%s(%s)告诉%s(%s)：%s\n" NOR,me->name(1),me->query("id"),obj->name(1),obj->query("id"), msg)
+	);
+    if ( member_array("tell", me->query("channels"))==-1)
+	me->set("channels", me->query("channels") + ({ "tell" }) );
+    write(BOLD "你千里传音" + obj->name(1) + "：" + msg + "\n" NOR);
+    if ( (pointerp(obj->query("channels")) && member_array("tell", obj->query("channels"))==-1) && !wizardp(me))
+	return notify_fail("但"+obj->name(1)+"已经把tell频道关掉了....。\n");
+
+    if( !stringp(no_tell = obj->query("env/no_tell")) )
+	no_tell = "  ";
+    black_list = explode( no_tell , " ");
+    if ( member_array(me->query("id"), black_list) != -1 
+      || black_list[0] == "all"
+      || black_list[0] == "YES" )
+	return notify_fail("很显然，"+obj->name(1)+"在生你的闷气，不想和你说话....。\n");
+
+    tell_object(obj, sprintf( BOLD "%s千里传音你：%s\n" NOR,
+	me->name(1)+"("+me->query("id")+")", msg));
+
+    if (query_idle(obj)>120)
+	if(stringp(obj->query("env/tell_reply"))
+	  && strlen(obj->query("env/tell_reply")) > 5) 
+	    write(HIM+obj->name(1)+"自动回复道："+obj->query("env/tell_reply")+"\n"+NOR);
+	else
+	    write(YEL+"但是"+obj->name(1)+"已经发呆"+query_idle(obj)/60+"分钟，看来不会马上回答你哟！\n"+NOR);
+    if (in_edit(obj)) return notify_fail("但是，对方好像正在编辑档案！\n");
+    obj->set_temp("reply", me->query("id"));
+    return 1;
+}
+string remote_tell(string cname, string from, string mud, string to, string msg)
+{
+    object ob;
+    if( ob = find_player(to) ) {
+	if( cname )
+	    tell_object(ob, sprintf(BOLD "%s(%s@%s)千里传音你：%s\n" NOR,
+		cname, capitalize(from), mud, msg ));
+	else
+	    tell_object(ob, sprintf(BOLD "%s@%s 千里传音你：%s\n" NOR,
+		capitalize(from), mud, msg ));
+	ob->set_temp("reply", from + "@" + mud);
+	return ob->name(1);
+    } else
+	return 0;
+}
+int help(object me)
+{
+    write(@HELP
+指令格式：tell <某人> <讯息>
+你可以用这个指令和其他地方的使用者说话。
+
+set no_tell     设定拒绝对话的黑名单，id中间用“空格”隔开，例如"aaa bbb ccc"
+set tell_reply  设定发呆时自动回复信息，长度不得少于6个字符。
+
+其他相关指令：reply
+HELP
+    );
+    return 1;
+}

@@ -1,0 +1,153 @@
+//标准商人继承档(无存量的)	- by Luky -
+//
+//	只要NPC继承此档, 即可利用以下方式变成小贩
+//
+// void init() 
+// {
+//	::init();
+//   add_action("do_list","list");
+//   add_action("do_buy" ,"buy");
+// }
+// 
+//  1. 这里的 do_list,do_buy是固定的, 但是后面的指令字串可以自订.
+//  2. 人物需要设定物品清单, 清单为 mapping 型式, 格式为 "档名" : <消耗补给点数>
+//     档名不用加".lpc", 玩家的补给点数上限为 <人物等级*20> . 消耗后会自动慢慢增加至上限.
+//        set("sell_list",([	
+//            "/u/l/luky/npc/item/bag"    : 25, //表示每买一个袋子会扣15点补给点数
+//            "/u/l/luky/npc/item/dump"    : 15,
+//        ]) );
+//  5. 可用指令参数:
+//		"  看货品目录请用 <list>   "
+//		"  要买东西用 <buy 物品>  <buy 数量 物品> "
+//
+#include <dbase.h>
+#include <ansi.h>
+inherit F_VENDOR;
+string args;
+
+void create()
+{
+	seteuid(getuid());
+}
+
+string item_desc(object ob)
+{
+	if(ob->query("skill_type")) return HIG+"武器"+NOR;
+	else if(ob->query("armor_type")) return HIY+"防具"+NOR;
+	else if(ob->query("heal_hp") || ob->query("heal_mp") || ob->query("heal_ap")) return HIC+"回复"+NOR;
+	else if(ob->is_food()) return HIM"食物"NOR;	// by shengsan
+	else return "道具";
+}
+
+string item_list(object ob)
+{
+	   return sprintf("%8d .............. %4s  %-26s",
+	   ob->query("value"),item_desc(ob),ob->short()
+	   );
+}
+
+int do_list(string arg)
+{
+	object goods,me;
+	mapping item;
+	string list, *file;
+	int i,*supply_cost,debug;
+	
+	me=this_player();
+	
+	if(wizardp(me) && me->query("env/debug")) debug=1;
+		else debug=0;
+	
+	if(!mapp(item = query("sell_list")) )
+	{
+		write("这位小贩没有物品列表！\n");
+		return 0;
+	}
+	file =  keys(item);
+	supply_cost = values(item);
+	list = "\n\n┌───────────────────────────┐\n";
+	list +="│ 价 钱                种类  目前可以购买的货品清单    │\n";   
+	list +="└───────────────────────────┘\n";
+	for(i=0; i<sizeof(file); i++)
+	{
+	    goods = load_object(file[i]);
+	    if(goods) list+= item_list(goods);
+	    if(debug) list+= sprintf(GRN+" SP:(%3d)\n"+NOR,supply_cost[i]);
+	    	else list+="\n";
+	}
+	list +="\n";
+	if(i==0) return notify_fail(this_object()->query("name")+"对你说: 对不起唷..货都卖完了。\n");
+	else me->start_more(list);
+	return 1;	
+}
+
+int do_buy(string arg)
+{
+	int amount,valus,i,j,*supply_cost,world;
+	object goods,ob,me;
+	string item,*file;
+	mapping items;
+
+	me=this_player();
+	if(!arg) return notify_fail("你要买什么东西？\n");
+	if(!mapp(items = query("sell_list")) )
+	{
+		write("这位小贩没有物品列表！\n");
+		return 0;
+	}
+	if(sscanf(arg,"%d %s",amount,item)!=2)
+	{
+	  amount=1;
+	  item = arg;
+	} else
+	if(amount > 20)
+	{
+		write("为减少系统负担. 数量将自动调整为上限20个。\n");
+		amount=20;
+	}
+	file =  keys(items);
+	supply_cost = values(items);
+	for(i=0; i<sizeof(file); i++)
+	{
+	    goods = load_object(file[i]);
+	    if(goods)
+	    {
+	    	if(goods->id(item))
+	    	{
+	    	 if(!me->can_afford(goods->query("value")*amount))
+		 	return notify_fail("你身上的钱不够。\n");
+	    	 if( (goods->query_weight()*amount+me->query_encumbrance())>me->query_max_encumbrance() )
+ 			return notify_fail("你拿不动这么多东西。\n");
+ 		 if( (int)me->query_capacity() + (int)goods->query("volume")*amount > (int)me->query_max_capacity() )
+ 			return notify_fail("你身上放不下这么多东西。\n");
+		 if( me->query("supply_point") < supply_cost[i]*amount)
+		 	return notify_fail(this_object()->query("name")+"对你说: 你已经买了不少东西了..还是等过一会儿再来买吧.. 。\n");
+	    	 if( amount < 1 ) return notify_fail("至少要买一个吧。\n");
+	    	 valus=goods->query("value")*amount;
+	    	 me->receive_money(-valus);
+	    	 me->add("supply_point",-supply_cost[i]*amount);
+	    	 world = me->money_type();
+	  	if(world!=3) message_vision("$N花了"+price_string(valus,me->money_type())+"向$n买了"+
+	    	 	  		chinese_number(amount)+goods->query("unit")+goods->name()+"。\n",me,this_object());
+	  	else message_vision("$N花了"+valus+"个单位的电子币向$n买了"+
+	    	 	  		chinese_number(amount)+goods->query("unit")+goods->name()+"。\n",me,this_object());
+
+	    	 for(j=0;j<amount;j++)
+	    	 {
+	    	  ob = new(file[i]);
+	    	  if(ob->is_character()) ob->move(environment(me));
+	    	  else ob->move(me);
+	    	  me->save();
+	    	 }
+	    	 return 1;
+	    	}
+	    }
+	}
+	return notify_fail(this_object()->query("name")+"没有卖这种东西。\n");
+}
+
+
+int is_sellman()
+{
+	return 1;
+}

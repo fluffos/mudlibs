@@ -1,0 +1,123 @@
+mapping *holiday= ({
+  ([
+    "name":             HIR"元旦"NOR,
+    "year":             "either",
+    "month":            "Jan",
+    "day":              "1",
+  ]),
+  ([
+    "name":             HIW"清明节"NOR,
+    "year":             "either",
+    "month":            "Api",
+    "day":              "5",
+  ]),
+  ([
+    "name":             HIR"劳动节"NOR,
+    "year":             "either",
+    "month":            "May",
+    "day":              "1",
+  ]),
+  ([
+    "name":             HIW"青年节"NOR,
+    "year":             "either",
+    "month":            "May",
+    "day":              "4",
+  ]),
+  ([
+    "name":             HIR"儿童节"NOR,
+    "year":             "either",
+    "month":            "Jun",
+    "day":              "1",
+  ]),
+  ([
+    "name":             HIR"建党日"NOR,
+    "year":             "either",
+    "month":            "Jul",
+    "day":              "1",
+  ]),
+  ([
+    "name":             HIR"建军节"NOR,
+    "year":             "either",
+    "month":            "Aug",
+    "day":              "1",
+  ]),
+  ([
+    "name":             HIR"国庆节"NOR,
+    "year":             "either",
+    "month":            "Oct",
+    "day":              "1",
+  ]),
+  ([
+    "name":             HIR"情人节"NOR,
+    "year":             "eihter",
+    "month":            "Feb",
+    "day":              "14",                    
+  ]),
+  ([
+    "name":             HIC"愚人节"NOR,
+    "year":             "either",
+    "month":            "Api",
+    "day":              "1",
+  ]),
+  ([
+    "name":             HIW"圣诞节"NOR,
+    "year":             "either", 
+    "month":            "Dec",
+    "day":              "24",
+  ]),
+  ([
+    "name":             HIR"春"+HIC"节"NOR,
+    "year":             "2001",
+    "month":            "Jan",
+    "day":              "24",
+  ]),
+  ([
+    "name": HIW"除夕"NOR,
+    "year": "2001",
+    "month": "Jan",
+    "day": "23",
+  ]),
+  ([
+    "name": HIR"正月"HIW+"初一"NOR,
+    "year": "2001",
+    "month": "Jan",
+    "day": "25",
+  ]),
+  ([
+    "name":             HIR"元宵"NOR+"节",
+    "year":             "2001",
+    "month":            "Feb",
+    "day":              "7",
+  ]),
+  ([
+    "name":             HIR"端午"NOR+"节",
+    "year":             "1999",
+    "month":            "Jun",
+    "day":              "11",
+  ]),
+  ([
+    "name":             HIY"中秋"NOR+"节",
+    "year":             "2000",
+    "month":            "Sep",
+    "day":              "12",                    
+  ]),
+  ([
+    "name":             HIY"重阳"NOR+"节",
+    "year":             "1998",
+    "month":            "Oct",
+    "day":              "28",                    
+  ]),
+  ([
+    "name": HIY"澳门回归"NOR+"纪念日",
+    "year": "either",
+    "month": "Dec",
+    "day": "20",
+  ]),
+  ([
+    "name": HIY"Poi"NOR+"生日",
+    "year": "either",
+    "month": "Sep",
+    "day": "20",
+  ]),
+});
+

@@ -1,0 +1,154 @@
+// restartd.c
+// Restart (shutdown/reboot) daemon, 2k2.9.17 ahxia
+#include <net/daemons.h>
+#include <localtime.h>
+#include <restart.h>
+#include <ansi.h>
+
+inherit F_DBASE;
+
+#define _DEBUG_RESTART_D
+#define C(x) CHINESE_D->chinese_number(x)
+
+private nosave int fRemainTime;
+private nosave int fRSFlag = SHUTDOWN;
+
+private void AutoRestart();
+private void _wait_to_shutdown();
+private void _Save_And_Reboot();
+private void _Save_And_Shutdown();
+
+private void DEBUG(string ch, string msg)
+{
+#ifdef _DEBUG_RESTART_D
+    CHANNEL_D->do_channel(this_object(), ch, msg);
+#endif
+}
+
+int GetRSFlag(){ return fRSFlag; }
+
+void SetRSFlag(int fFlag)
+{
+    if(fFlag != SHUTDOWN || fFlag != REBOOT || fFlag != HALT)
+	DEBUG("debug", sprintf("SetRSFlag(%d) err.!",fFlag));
+    fRSFlag = fFlag;
+    //should revoke call_out loop
+    remove_call_out("_wait_to_shutdown");
+    AutoRestart();
+}
+
+int GetRemainTime(){ return fRemainTime; }
+
+string GetRemainTimeStr()
+{
+    mixed *local = localtime(time() + fRemainTime);
+
+    return sprintf("系统自动重新启动时间为%s日%s时%s分，现在还剩%s。", 
+      C(local[LT_MDAY]), C(local[LT_HOUR]), C(local[LT_MIN]+1),
+      CHINESE_D->chinese_period(RESTART_D->GetRemainTime(),1)
+    );
+}
+
+int SetRemainTime(int ATime)
+{
+    if(ATime < CALLOUT_INTERVAL || ATime > RESTART_INTERVAL){
+	DEBUG("debug", sprintf("Restartd.SetRemainTime(%d), fRemainTime changed!",ATime));
+    }
+    return fRemainTime = ATime;
+}
+
+int AddSecond(int ATime){ return SetRemainTime(fRemainTime + ATime); }
+int AddHour(int ATime){ return SetRemainTime(fRemainTime + ATime*60*60); }
+int AddDay(int ATime){ return SetRemainTime(fRemainTime + ATime*60*60*24); }
+
+//most part of this function is ported from shutdown.c
+private void _Save_And_Shutdown()
+{
+    int i;
+    object link_ob, *user = users();
+
+    message( "system",HIR "\n\n\n\n游戏自动重启动，请稍候一分钟再 login 。\n\n\n", users() );
+    write_file( "/log/nosave/LASTCRASH",
+      "『Restartd』shutdown "+ MUD_NAME +" at " + ctime(time()) + ".\n");
+
+    ////////////
+    remove_call_out("_wait_to_shutdown");
+    remove_call_out("AutoRestart");
+    CHANNEL_D->do_channel(this_object(), "sys", "Restartd._Save_And_Shutdown() evoked.\n\n");
+    //return;
+    ////////////
+
+    for(i=0; i<sizeof(user); i++) {
+	if( !environment(user[i]) ) continue;
+	user[i]->save();
+	link_ob = user[i]->query_temp("link_ob");
+	if( objectp(link_ob) ) link_ob->save();
+    }
+    if( find_object(DNS_MASTER) ) DNS_MASTER->send_shutdown();
+    // TODO: maybe use shutdown(0) is better.
+    NATURE_D->auto_shutdown(1);
+}
+
+private void _Save_And_Reboot()
+{
+    DEBUG("debug", "Restartd._Save_And_Reboot(), null function :b\n\n");
+}
+
+private void _wait_to_shutdown()
+{
+    remove_call_out("_wait_to_shutdown");
+
+    DEBUG("debug", MUD_NAME+"将于"+fRemainTime+"秒内自动重启动，请注意保存数据！\n");
+    message( "system","\n\n"+HIR+MUD_NAME+"将于"+fRemainTime+"秒内自动重启动，请注意保存数据！\n\n"+NOR, users() );
+    if( fRemainTime > COUNTDOWN_INTERVAL){
+	AddSecond( -COUNTDOWN_INTERVAL );
+    }
+    else{
+	if( fRSFlag == SHUTDOWN ){
+	    // SHUTDOWN
+	    _Save_And_Shutdown();
+	    return;
+	}
+	else if(fRSFlag == REBOOT ){
+	    //not supported now
+	    _Save_And_Reboot();
+	    return;
+	}
+	DEBUG("debug", "Restartd._wait_to_shutdown("+fRSFlag+") flag err.\n\n");
+    }
+    call_out("_wait_to_shutdown", COUNTDOWN_INTERVAL );
+}
+
+private void AutoRestart()
+{
+    // DEBUG("debug", "Restartd.AutoRestart callout running..., "+fRemainTime+" seconds left");
+
+    remove_call_out("AutoRestart");
+
+    if( fRSFlag != HALT ){
+	if( fRemainTime > CALLOUT_INTERVAL ){
+	    AddSecond( -CALLOUT_INTERVAL );
+	}
+	else{
+	    fRemainTime = 59;
+	    _wait_to_shutdown();
+	}
+    }else{
+	DEBUG("debug", "Restartd.AutoRestart HALT on.");
+    }
+    call_out("AutoRestart",CALLOUT_INTERVAL);
+}
+
+void create()
+{
+    seteuid(ROOT_UID);
+
+    set("channel_id","重启动精灵(Restart)");
+
+    fRemainTime = RESTART_INTERVAL - uptime();
+    CHANNEL_D->do_channel(this_object(), "sys", "重启动系统已经启动。距下次启动"+fRemainTime+"秒。\n\n");
+
+    remove_call_out("AutoRestart");
+    call_out("AutoRestart", 60);
+}
+
