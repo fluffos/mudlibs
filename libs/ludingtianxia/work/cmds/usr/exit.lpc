@@ -1,0 +1,111 @@
+// Quit.c
+// mouse
+#include <ansi.h>
+#include <command.h>
+#include <options.h>
+#include <mudlib.h>
+inherit F_DBASE;
+inherit F_CLEAN_UP;
+void do_quiting(object me);
+int later_quit(object);
+int do_drop(object me, object obj);
+int do_quit(object me);
+void create() 
+{
+	seteuid(getuid());
+	set("name", "离线指令");
+	set("id", "quit");
+	set("channel_id", "离线精灵");
+}
+int main(object me, string arg)
+{
+	int i,livetime;
+	object *inv, link_ob,ob,env;
+	if( LOGIN_D->get_madlock()) 
+		return notify_fail("时空已经封闭，没有人能够退出这个时空了。\n");
+	if( (me->is_busy()) && (!me->query_temp("suicide_countdown")) && (!me->query_temp("suicide_reset")))
+		return notify_fail("你现在正忙着做其他事，不能退出游戏！\n");
+	if (me->query_temp("sleeped")) me->set("marks/insleeping",1);
+	if( me->over_encumbranced() )
+		return notify_fail("身上带的东西太多了，离不开游戏了。\n");
+        if(!wizardp(me)&&environment(me)&&environment(me)->query("no_quit")&&link_ob)
+                return notify_fail(HIR"这里不准退出游戏。\n"NOR);
+        livetime = time() - me->query("birthday");
+        if(!wizardp(me) && livetime <= CAN_SAVE_LIMIT_TIME )
+        {
+        tell_object( me, "你初次进入，必须玩够 15 分才可以"
+            "保存数据，安全退出！\n所以请确定你是否真的要退出(y/n)？" );
+        input_to( "confirm_quit_with_nosave", me );
+        return 1;
+        }
+	if( !wizardp(me) ) {
+		inv = all_inventory(me);
+		for(i=0; i<sizeof(inv); i++)
+			if( !inv[i]->query_autoload() )
+				DROP_CMD->do_drop(me, inv[i]);
+	}
+	link_ob = me->query_temp("link_ob");
+	if( link_ob ) {
+		if( link_ob->is_character() ) {
+			write("你的魂魄回到" + link_ob->name(1) + "的身上。\n");
+			exec(link_ob, me);
+			link_ob->setup();
+			return 1;
+		}
+
+		link_ob->set("last_on", time());
+		link_ob->set("last_from", query_ip_name(me));
+		link_ob->save();
+		destruct(link_ob);
+	}
+	write(HIG"欢迎下次再光临"HIY+MUD_NAME+HIG"来！\n"NOR);
+	if (i < 0 ) i=0;
+	message("system", me->name() + "离开游戏。\n", environment(me), me);
+	i=me->query("combat_exp")-me->query_temp("temp_exp");
+	CHANNEL_D->do_channel(this_object(), "sys",
+		me->name() + "(" + me->query("id") + ")离开游戏了。\n\t    本次连线经验增长"+i+
+		"。\t共清除 " + reclaim_objects() + " 个变数。\n\t    本次连线时间"+CHINESE_D->chinese_period(FINGER_D->online_time(me))+
+                "。\n");
+	if(wizardp(me))	CHANNEL_D->do_channel(this_object(),"wiz",me->name(1)+
+			"离开了"+CHINESE_MUD_NAME+"。\n");
+	me->set("time_aged",me->query("time_aged")+time()-me->query_temp("temp_time"));
+	me->save();
+        if( userp(me) )
+                if( !wizardp(me) )
+                {
+                        ob=new("/clone/topten/magic-rice");
+                        ob->movein(me);
+                        ob->savetopten(me);
+                        destruct( ob );
+                }
+	destruct(me);
+	return 1;
+}
+int confirm_quit_with_nosave( string arg, object me )
+{
+    string login_file, body_file, mail_file,name;
+
+    if ( arg[ 0 ] == 'y' || arg[ 0 ] == 'Y' )
+    {
+        write( "好吧，欢迎下次再来。\n" );
+        name = me->query("id");
+        login_file = DATA_DIR + "login/" + name[0..0] + "/" + name + ".o";
+        body_file = DATA_DIR + "user/" + name[0..0] + "/" + name + ".o";
+        mail_file = DATA_DIR + "mail/" + name[0..0] + "/" + name + ".o";
+        rm( login_file );
+        rm( body_file );
+        rm( mail_file );
+        destruct( me );
+    }
+    return 1;
+}
+int help(object me)
+{
+	write(@HELP
+指令格式 : quit | exit
+
+当你(你)想暂时离开时, 可利用此一指令。
+HELP
+    );
+    return 1;
+}
