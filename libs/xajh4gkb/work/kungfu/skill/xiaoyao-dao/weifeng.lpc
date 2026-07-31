@@ -1,0 +1,90 @@
+// jinshe-jianfa perform
+#include <ansi.h>
+#include <skill.h>
+#include <weapon.h>
+#include <combat.h>
+
+inherit F_SSERVER;
+
+int perform(object me, object target)
+{
+        string msg;
+        int i, skill, max;
+        object weapon;
+
+	if (!target ) target = offensive_target(me);
+	if (!target || !target->is_character() || !me->is_fighting(target) )
+		return notify_fail("「微风」只能在战斗中对对手使用。\n");
+//	if ( me->query_skill_mapped("force") != "xiaoyao-xinfa" )
+//		return notify_fail("没有逍遥心法的催动无法使出「微风」！\n");
+    if (me->is_busy())
+        return notify_fail("你现在正忙着！\n");
+	if (!objectp(weapon = me->query_temp("weapon")) || (string)weapon->query("skill_type") != "blade")
+		return notify_fail("你必须在使用刀时才能使出「微风」！\n");		
+	if (target && target->query_temp("apply/shade_vision")) 
+		return notify_fail("对方隐身了，你看不到"+target->query("name")+"。\n"); 		
+//	if (me->query_skill_mapped("blade") != "xiaoyao-dao" )
+//		return notify_fail("你必须在使用逍遥刀法！\n");		
+	if ((int)me->query_skill("xiaoyao-dao", 1) < 300 )
+		return notify_fail("你的逍遥刀法法还不够娴熟，使不出「微风」。\n");
+	if( (int)me->query_skill("xiaoyao-xinfa",1) < 300 )
+		return notify_fail("你的逍遥心法等级不够，使不出「微风」。\n");
+	if( (int)me->query("max_neili") < 10000 )
+		return notify_fail("你现在内力修为太弱，使不出「微风」。\n");     
+	if( (int)me->query("max_jingli") < 10000 )
+		return notify_fail("你现在精力修为太弱，使不出「微风」。\n");  	
+	if( (int)me->query("neili") < (int)me->query_skill("xiaoyao-dao", 1)*4 )
+		return notify_fail("你现在真气太弱，使不出「微风」。\n"); 
+	if( (int)me->query("jingli") < (int)me->query_skill("xiaoyao-dao", 1) )
+		return notify_fail("你现在精力太弱，使不出「微风」。\n"); 
+	if (me->query_temp("autolian"))
+		return notify_fail("你正在发动自动连招！\n"); 	
+	if ( me->query_temp("cooldown") )	//CD写法	2017.9.7添加
+		return notify_fail("你处于技能冷却状态中，过会在使用吧。\n");		
+
+	skill = me->query_skill("xiaoyao-dao", 1)/3; 
+	if ( me->query_skill_mapped("force") != "xiaoyao-xinfa") skill += (int)me->query_skill("xiaoyao-dao", 1)/2;	//2018.9.5阿飞改，不使用本门特内则减益
+	if ((string)weapon->query("id") == "xiaoyao dao") skill -= me->query_skill("xiaoyao-dao", 1)/3; //2018.3.25阿飞改，拿特殊武器有加成	
+	max = me->query_skill("xiaoyao-dao", 1)/60;			
+		
+        msg = BLU"\n$N将手中的"+weapon->name()+"轻轻一抖，微风乍起，迎来层层涟漪，然后又恢复平静。\n\n"NOR;
+        message_vision(msg, me, target);
+		me->set_temp("cooldown", 1);	//CD写法	2017.9.7添加
+		call_out("del_cooldown", 3, me);	//CD写法1
+	if (max < 1) max = 1;
+	if (me->query("jm/xiaoyao"))
+	{
+		if(max > 100+(int)me->query_temp("lianzhao_max_add")*4) max = 100+(int)me->query_temp("lianzhao_max_add")*4;
+	} else 
+	{
+		if(max > 50+(int)me->query_temp("lianzhao_max_add")*2) max = 50+(int)me->query_temp("lianzhao_max_add")*2;
+	}		
+
+		me->add_temp("lianzhao", max);	 //2016.6.1阿飞改，增加连招标记，用于削弱连招伤害	
+        me->add_temp("apply/strength", -skill);
+        me->add_temp("apply/attack", -skill); 
+		me->add_temp("apply/damage", -skill); 
+		for ( i=0; i<max; i++ )
+		{
+	        COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+		}
+ 
+		me->add("neili",-max*100);  
+        me->add_temp("apply/strength", skill);
+        me->add_temp("apply/attack", skill);
+		me->add_temp("apply/damage", skill); 
+		me->delete_temp("lianzhao");  //2016.6.1阿飞改，连招结束取消连招标记
+
+	me->start_busy(1);
+	return 1;
+}
+
+void del_cooldown(object me)	//CD写法1
+{ 
+	if ( !objectp(me) ) return;
+	if ( me->query_temp("cooldown") )	
+	{
+		me->delete_temp("cooldown");
+		tell_object(me, HIM"你呼出一口气，缓缓的将内力收回丹田。\n"NOR);
+	}	
+}

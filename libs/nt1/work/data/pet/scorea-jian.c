@@ -1,0 +1,18 @@
+// SN:]6^P7MJ@f8<1^nkH
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m无敌兽[2;37;0m", ({"jian shou"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "他是剑家的宠物
+它是剑魄的坐骑。
+");
+        set_temp("owner_id", "scorea");
+        set_temp("owner_name", "剑魄");
+        ::setup();
+}
+

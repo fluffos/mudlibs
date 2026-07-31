@@ -1,0 +1,23 @@
+// skill.c
+// 玩家自创武功
+
+
+object query_maze_room(string str)
+{
+        object ob;
+
+        if(!stringp(str) || str == "")
+                return 0;
+
+        if( file_size(SKILL_D(str)+".c") >= 0 )
+                return 0;
+
+        ob = new("/clone/meskill/invent");
+
+        if( ob->create_skill(str) )
+                return ob;
+        else {
+                destruct(ob);
+                return 0;
+        }
+}

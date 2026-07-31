@@ -1,0 +1,18 @@
+// SN:<CQf^G@cd`cKDo]_
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("奔笨鹤[2;37;0m", ({"xiaoxiao he"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "我的坐骑
+它是小夏的坐骑。
+");
+        set_temp("owner_id", "xiaoxia");
+        set_temp("owner_name", "小夏");
+        ::setup();
+}
+

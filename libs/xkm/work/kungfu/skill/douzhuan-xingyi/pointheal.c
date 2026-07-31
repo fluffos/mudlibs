@@ -1,0 +1,131 @@
+/******************
+Cname:  解穴术
+Ename:  pointheal
+Create: Play
+Time:   3/10/2002
+********************/
+
+#include <ansi.h>
+inherit F_SSERVER;
+
+string *points=
+({
+"中府","风池","肩贞","合谷","肩井",
+"少商","大包","承泣","隐白","神藏",
+"阳谷","支正","小海","肩贞","天宗",
+"关冲","中渚","阳池","会宗","天井",
+"箕门","冲门","腹结","大横","天溪",
+"附分","神堂","魂门","胃仓","秩边",
+"气舍","缺盆","乳中","乳根","不容",
+"晴明","攒竹","眉冲","通天","玉枕",
+"承扶","殷门","委中","合阳","承山",
+"目窗","承灵","风池","肩井","渊液",
+});
+string *posts=
+({
+        "哇地吐出一口紫色的淤血",
+        "长长地嘘出了一口气",
+        "僵硬的躯体微微颤动了一下",
+        "身体一阵颤抖",
+        "头顶升起缕缕白色的雾气",
+});
+int exert(object me, object target)
+{
+        mapping M_dbase,T_dbase;
+        int cond;
+        string race;
+
+        if( !target )
+                return notify_fail("你要为谁解穴？\n");
+
+        M_dbase = me->query_entire_dbase();
+        T_dbase = target->query_entire_dbase();
+
+        race = target->query("race");
+        
+        if( !race || race !="人类" )
+                return notify_fail("对手数据错误，请告之管理人员。\n");
+
+          if (me->query("family/family_name") != "姑苏慕容") 
+                return notify_fail("什么?\n");
+
+        if( me->is_fighting() || target->is_fighting())
+                return notify_fail("在战斗中无法集中精力运功疗伤！\n");
+                
+        if( me->query_skill("douzhuan-xingyi",1) < 100 )
+                return notify_fail("你的斗转星移心法还不够纯熟。\n");
+
+        if( me->query_skill("canhe-zhi",1) < 80 )
+                return notify_fail("你的参合指法技巧还不够纯熟。\n");
+
+        if( M_dbase["max_neili"] < 600 )
+                return notify_fail("你的基本内力修为不够。\n");
+
+        if( M_dbase["neili"] < 600 )
+                return notify_fail("你的真气不足，无法疗伤。\n");
+
+        if (!living(target))
+                return notify_fail("你还是先把"+target->name()+"救醒过来再解穴吧。\n");
+
+        if( !(cond = target->query_condition("kuixing-shedou")))
+                return notify_fail("看清楚，目前对方身体康健。\n");
+
+
+        if( M_dbase["jiali"]/12 < cond  )
+                return notify_fail( "你需要使用更多的真气方能解开"+
+                                     target->name()+"的穴道。\n");
+
+        message_vision(HIC"$N默运斗转星移神功，使用参商指技法右手拇指、中指双扣分别点向$n的穴道。。。\n"NOR, me, target);
+
+        me->start_busy(4);
+        target->start_busy(4);
+        call_out("point",2,me,target,M_dbase,T_dbase,cond);
+
+        return 1;
+}
+int point(object me,object target,mapping M_dbase,mapping T_dbase,int cond)
+{
+        int i,skill;
+        
+        if( cond < 1 )
+        {
+                target->apply_condition("murong-xingbao", 0);
+                me->start_busy(0);
+                target->start_busy(0);
+                message_vision(HIM"$N十指连弹一缕缕劲风扫中$n被点穴道，$n被封的穴道解开了。\n"NOR, me, target);
+                return 1;
+        }
+        if(M_dbase["neili"]<1||M_dbase["jingli"]<1)
+        {
+                if(M_dbase["neili"]<1)
+                me->set("neili",0);
+                else
+                me->set("jingli",0);            
+                me->stop_busy(0);
+                target->stop_busy(0);
+                message_vision(HIM"$N真元耗尽，无耐的摇了摇头，停止为$n解穴。\n"NOR, me, target);
+                return 1;
+        }
+        if(me->is_fighting()||target->is_fighting()||target->is_character())
+        {
+                me->start_busy(0);
+                target->start_busy(0);
+                return 1;
+        }
+        i = M_dbase["jiali"]+T_dbase["jiali"]/2;
+        skill = me->query_skill("canshang-zhi",1);
+        i = 500 - i - skill;
+        i < 50 ?i=50:i;
+        me->add("neili", - i);
+        me->add("jingli",-15);
+        me->start_busy(3);
+        target->start_busy(3);
+        message_vision("$N"+(random(10)<3?"拇":"中")+"指"
+                       +(random(10)<3?"急速":"射出一缕劲风")
+                       +(random(10)<3?"点":"按")+"向$n的"HIW
+                       +points[random(sizeof(points))]+"穴"NOR"，$n"
+                       +posts[random(sizeof(posts))]+"。。。\n",me,target);
+        cond--;
+        call_out("point",2+random(3),me,target,M_dbase,T_dbase,cond);
+        return 1;
+}

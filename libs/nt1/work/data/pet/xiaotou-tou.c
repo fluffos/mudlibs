@@ -1,0 +1,18 @@
+// SN:UY7I5aB:;`m\o^Jd
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("偷狼[2;37;0m", ({"tou lang"}));        
+        set("gender", "男性");                
+        set("unit", "条");
+        set("long", "finish
+它是神偷的坐骑。
+");
+        set_temp("owner_id", "xiaotou");
+        set_temp("owner_name", "神偷");
+        ::setup();
+}
+

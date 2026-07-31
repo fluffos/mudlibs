@@ -1,0 +1,17 @@
+// /kungfu/class/super.npc/board.c
+
+#include <ansi.h>
+
+inherit BULLETIN_BOARD;
+
+void create()
+{
+	set_name("丐帮弟子留言版", ({ "report" }) );
+	set("board_id", "gaiboard");
+	set("long", "这是一个供丐帮弟子与天星大侠交流信息的留言板。\n" );
+	setup();
+	set("capacity", 100);
+	replace_program(BULLETIN_BOARD);
+}
+
+

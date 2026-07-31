@@ -1,0 +1,22 @@
+// Room: /u/cass/hg/wanchunting.c
+// This is a room made by roommaker. write by Fan. :)
+
+inherit ROOM;
+
+void create()
+{
+	set("short", "万春亭");
+	set("long", @LONG
+一座巍峨三重檐的黄瓦四角攒尖顶亭，亭内有一古井，亭栏画栋顶端
+雕有浮龙，晴天白日，龙影映入井底，随着井水晃动，如龙飞舞，故称“
+龙井”，与万春亭遥遥相对的就是千秋亭。
+LONG
+);
+	set("exits", ([ /* sizeof() == 2 */
+  "west" : __DIR__"qianqiuting",
+  "northwest" : __DIR__"qinandian",
+]));
+
+	setup();
+	replace_program(ROOM);
+}

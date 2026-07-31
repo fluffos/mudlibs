@@ -1,0 +1,36 @@
+// Copyright (C) 2003, by Lonely. All rights reserved.
+// This software can not be used, copied, or modified 
+// in any form without the written permission from authors.
+// guixi-gong.c
+
+inherit FORCE;
+
+int valid_enable(string usage) { return usage == "force"; }
+
+int valid_force(string force)
+{
+        return force == "huagong-dafa";
+}
+
+int query_neili_improve(object me)
+{
+        int lvl;
+
+        lvl = (int)me->query_skill("guixi-gong", 1);
+        return lvl * lvl * 15 * 19 / 100 / 200;
+}
+
+int valid_learn(object me)
+{
+        return 1;
+}
+
+int practice_skill(object me)
+{
+        return notify_fail("龟息功只能用学(learn)的来增加熟练度。\n");
+}
+
+string exert_function_file(string func)
+{
+        return __DIR__"guixi-gong/" + func;
+}

@@ -1,0 +1,32 @@
+// SN:TO\8X?2lJf?QJ8D^
+// ITEM Made by player(慕容伤:levatin) /data/item/l/levatin-tianxie.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Fri Aug 13 17:13:49 2004
+#include <ansi.h>
+#include <weapon.h>
+
+inherit SWORD;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;34m神剑天琊[2;37;0m", ({ "tianxie" }));
+	set_weight(9000);
+	set("item_make", 1);
+	set("unit", "柄");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一柄剑。
+传说这利器乃九天异铁落入凡间，僵尸王慕容伤在北极冰原偶得，修炼而成。[2;37;0m
+剑柄上刻着一行小字：慕容伤(levatin)
+");
+	set("value", 2100000);
+	set("point", 441);
+	set("material", "magic stone");
+	set("wield_msg", "[1;34m漫天杀气顿时涌起，压的你喘不过气来。[2;37;0m\n");
+	set("unwield_msg", "[1;34m杀气消失了，你舒了口气。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	init_sword(apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

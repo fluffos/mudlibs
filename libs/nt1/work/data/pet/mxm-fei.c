@@ -1,0 +1,18 @@
+// SN:D8_CFI=KF7_3R9Fm
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("飞熊[2;37;0m", ({"fei xiong"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "飞
+它是段水的坐骑。
+");
+        set_temp("owner_id", "mxm");
+        set_temp("owner_name", "段水");
+        ::setup();
+}
+

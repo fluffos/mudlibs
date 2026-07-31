@@ -1,0 +1,123 @@
+// panshi-shengong.c
+#include <ansi.h>
+#include <skill.h>
+#include <weapon.h>
+#include <combat.h>
+inherit FORCE;
+
+int valid_enable(string usage) { return usage == "force"; }
+//2019-1-1阿飞新规划，技能代码完善
+//string valid_combine() { return "juehu-shou"; }		//互备技能
+string skill_pinji() {return "下乘";}				//品级区分：上乘、中乘、下乘
+string skill_xingbie() {return "通用";}				//性别区分：男性、女性、无性、通用
+string skill_zhengxie() {return "中立";}			//正邪区分：正道、邪道、中立
+string skill_menpai() {return "泰山派";}				//门派区分：门派，江湖
+string skill_yinyang() {return "阳";}				//阴阳区分：阳、阴、中性
+string skill_zhenying() {return "正派";}			//阵营区分：正派、邪派、中立、通用
+//int damage_damage() {return 60;}	//外伤系数
+//int force_damage() {return 60;}		//内伤系数
+int qi_heal() {return 54;}		//内功疗气系数
+int jing_heal() {return 44;}		//内功疗精系数
+int practice_level() {return 100;}	//自练级别
+int practice_add() {return 100;}	//自练效率
+int perform_level() {return 300;}	//PFM最低使用级别
+
+int valid_learn(object me) 
+{
+    mapping skl;
+    string *sname;
+    int i;
+	int lvl = (int)me->query_skill("panshi-shengong", 1);
+//	if (!wizardp(me))
+//		return notify_fail("巫师突然从黑暗中冲了出来，对你大吼一声：该门派没开放。\n");				
+	if (me->query("family/family_name")!="泰山派")
+		return notify_fail("你不加入本门，无法传授本门技能的精髓。\n");			
+    if (me->query_skill("force",1)<100)
+        return notify_fail("你的基本内功基础不够，怎能学磐石神功。\n");
+    if (me->query_skill("force",1)<=lvl)
+        return notify_fail("你的基本内功基础不够，再学下去会走火入魔的。\n");
+	if (me->query("camp")!="正派")	
+		return notify_fail("你需要加入正派阵营，才能修练该武功。\n");
+	
+    skl = this_player()->query_skills();
+    sname  = keys(skl);
+    for (i=0;i<sizeof(skl);i++){
+        if (sname[i]=="yijing-force") continue;
+        if (sname[i]=="xixing-dafa") continue;
+        if (sname[i]=="panshi-shengong") continue;
+            if( SKILL_D(sname[i])->valid_enable("force") )
+            return notify_fail("你不先散了别派内功，怎能学磐石神功？！\n");
+    }
+    return 1;
+}
+
+int practice_skill(object me)
+{
+	return notify_fail("磐石神功只能用学(learn)的来增加熟练度。\n");
+}
+
+string exert_function_file(string func)
+{
+	return __DIR__"panshi-shengong/"+func;
+}
+mixed hit_ob(object me, object victim, int damage_bonus, int factor)
+{
+	int ap,dp, damage1,damage2,damage,liannum;
+
+    ap = me->query_skill("panshi-shengong",1)*(me->query("breakup")+me->query("breakup")*me->query("breakup")+100)/100;
+	dp = victim->query_skill("force",1)*(victim->query("breakup")+victim->query("breakup")*victim->query("breakup")+100)/100;
+    damage1= (int) me->query_skill("panshi-shengong",1);
+	damage2 = (int)me->query_skill("panshi-shengong",1)*(me->query("breakup")+me->query("breakup")*me->query("breakup")+100)/100;
+	if( me->query_temp("lianzhao")>=1) liannum=me->query_temp("lianzhao");
+	else liannum =1;
+	if( me->query("neili") < 100 || me->query("jingli") < 100 || damage_bonus < 100 ) return 0;
+	if (  me->query_skill("panshi-shengong",1)<100) return 0;
+	if ( me->query_skill_mapped("force") != "panshi-shengong") return 0;
+
+	if (random(7)==1 && random(ap) > dp/3 && me->query("jiali") > 0)
+	{
+		damage = (damage1+damage_bonus)*(liannum+20)/(20*liannum+1);
+		victim->receive_damage("qi", damage ,me);
+		victim->receive_wound("qi", damage/3 ,me);
+		me->add("neili", -100);
+		message_vision(HIB "$N发挥出"+HIR+"磐石神功"NOR HIB"的真髓，摧毁了$n的真元！！！！\n" NOR, me,victim,damage,HBWHT+HIR"特效伤气"NOR);
+        return ;
+	}
+	if( random(ap) > dp/3 && (int)me->query("jiajing")>0 && random(7)==2 && (int)me->query("breakup")>1 )
+	{
+		damage = (damage2+damage_bonus)*(liannum+20)/(20*liannum+1);
+		me->add("jingli",-100);
+		victim->receive_damage("jing", damage,me);
+		victim->receive_wound("jing", damage/3,me);
+		if (!victim->is_busy()) victim->start_busy(1);
+		message_vision(HIG "$N顿悟"+me->query("cognize")+HIG"，真气化为石锥，将$n掌力刺穿，$n掌心飚出一道血箭。\n" NOR, me,victim,damage,HBWHT+HIR"特效伤精"NOR);
+		return ;
+	}
+	if( random(ap) > dp/3 && (int)me->query("jiali")>0 && random(7)==3 && (int)me->query("jm/taishan") )
+	{
+		damage = ((damage1+damage2)/2+damage_bonus)*(liannum+20)/(20*liannum+1);
+		me->add("neili",-100);
+		victim->receive_damage("qi", damage,me);
+		victim->receive_wound("qi", damage/3,me);
+		message_vision(HIM"$N融汇泰山派内功精髓，内劲坚如磐石，与$n硬拼一掌，$n吐出一大口鲜血。\n" NOR, me,victim,damage,HBWHT+HIR"特效伤气"NOR);
+		return ;
+	}
+}
+
+/*
+mapping exercise_msg(object me)
+{
+  return ([
+        "status_msg" : "脸上红光隐现，气象庄严。\n" ,
+        "start_my_msg" : "盘膝坐下，右手食指指天，左手食指指地，口中“嘿”的一声，鼻孔中喷出了两条淡淡白气。\n",
+        "start_other_msg" :  me->name() + "盘膝坐下，右手食指指天，左手食指指地，口中“嘿”的一声，鼻孔中喷出了两条淡淡白气。\n",
+        "heal_my_msg" : "吐出来的白气缠住脑袋周围，缭绕不散，渐渐愈来愈浓，逐渐成为一团白雾，将你面目全都遮没了。\n",
+        "heal_other_msg" :  me->name() + "吐出来的白气缠住"+ me->name() + "脑袋周围，缭绕不散，渐渐愈来愈浓，逐渐成为一团白雾，将"+ me->name() + "面目全都遮没了。\n",
+        "halt_msg" :  "长出一口气，将内息急速退了回去，站了起来。\n",
+        "end_my_msg" : "鼻孔中不断吸入白雾，待得白雾吸尽，你睁开双眼，缓缓站起。\n",
+        "end_other_msg" : me->name()+"鼻孔中不断吸入白雾，待得白雾吸尽，"+me->name()+"睁开双眼，缓缓站起。\n",		
+        "hover_my_msg" : "全身骨节格格作响，犹如爆豆。过了良久，爆豆声渐轻渐稀，跟着那团白雾也渐渐淡了。\n",
+        "hover_other_msg" : "只听得"+me->name()+"全身骨节格格作响，犹如爆豆。过了良久，爆豆声渐轻渐稀，跟着那团白雾也渐渐淡了。\n",	
+    ]);
+}
+*/

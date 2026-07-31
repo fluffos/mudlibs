@@ -1,0 +1,18 @@
+// SN:X2O92ng;;bW`JZf>
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;33m金毛狮王狮[2;37;0m", ({"dilu shi"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "$HIM$这是一头狮子王，据说它有浪漫而传奇的过去，自从……
+它是伯月的坐骑。
+");
+        set_temp("owner_id", "boyue");
+        set_temp("owner_name", "伯月");
+        ::setup();
+}
+

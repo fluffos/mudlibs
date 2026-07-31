@@ -1,0 +1,22 @@
+// Room: /u/cass/hg/huangjidian.c
+// This is a room made by roommaker. write by Fan. :)
+
+inherit ROOM;
+
+void create()
+{
+	set("short", "皇极殿");
+	set("long", @LONG
+殿顶鎏金铜瓦是用黄金鎏成，脊上八条金龙，四上；四下，似腾云驾
+雾。殿内四壁的彩色壁画，内容丰富，色彩绚丽。
+LONG
+);
+	set("exits", ([ /* sizeof() == 3 */
+  "south" : __DIR__"jiulongbi",
+  "southwest" : __DIR__"fengxiandian",
+  "north" : __DIR__"ningshougong",
+]));
+
+	setup();
+	replace_program(ROOM);
+}

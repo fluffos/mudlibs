@@ -1,0 +1,18 @@
+// SN:NGm\d^EV2U1AL@:X
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;32m碧水金睛兽[2;37;0m", ({"bishui shou"}));        
+        set("gender", "女性");                
+        set("unit", "头");
+        set("long", "$HIG$碧水金睛兽
+它是东方溯的坐骑。
+");
+        set_temp("owner_id", "huboqkl");
+        set_temp("owner_name", "东方溯");
+        ::setup();
+}
+

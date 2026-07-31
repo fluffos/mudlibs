@@ -1,0 +1,117 @@
+// zhaixing.c 摘星子
+inherit NPC;
+inherit F_MASTER;
+string ask_me();
+void create()
+{
+    set_name("摘星子", ({ "zhaixing zi", "zhaixing" }));
+    set("nickname", "星宿派大师兄");
+    set("long", 
+        "他就是丁春秋的大弟子、星宿派大师兄摘星子。\n"
+        "他三十多岁，脸庞瘦削，眼光中透出一丝乖戾之气。\n");
+    set("gender", "男性");
+    set("age", 35);
+    set("attitude", "peaceful");
+    set("shen_type", -1);
+    set("str", 36);
+    set("int", 38);
+    set("con", 36);
+    set("dex", 76);
+    
+    set("max_qi", 1000);
+    set("max_jing", 800);
+    set("neili", 1800);
+    set("max_neili", 1800);
+    set("jiali", 60);
+        set("combat_exp", 800000);
+    set_skill("force", 200);
+    set_skill("huagong-dafa", 420);
+    set_skill("dodge", 200);
+    set_skill("zhaixinggong", 200);
+    set_skill("unarmed", 205);
+    set_skill("xingxiu-duzhang", 200);
+    set_skill("parry", 200);
+    set_skill("staff", 200);
+    set_skill("tianshan-zhang", 200);
+    set_skill("literate", 200);
+    map_skill("force", "huagong-dafa");
+    map_skill("dodge", "zhaixinggong");
+    map_skill("unarmed", "xingxiu-duzhang");
+    map_skill("parry", "tianshan-zhang");
+    map_skill("staff", "tianshan-zhang");
+    create_family("星宿派", 2, "弟子");
+    setup();
+//  carry_object("/clone/weapon/gangzhang")->wield();
+    carry_object("/clone/misc/cloth")->wear();
+}
+void attempt_apprentice(object ob)
+{
+    command("say 好吧，我就收下你了。");
+    command("recruit " + ob->query("id"));
+}
+void do_killing(object ob)
+{
+    if (!ob || environment(ob) != environment())
+                return;
+        this_object()->kill_ob(ob);
+}
+mixed hit_ob(object me,object victim,int damage)
+{
+   if (!living(this_object()) )  return;
+   switch( random(5)) { 
+   case 0:
+   command("exert maxsuck "+victim->query("id"));
+   break;
+   case 1:
+   command("exert qisuck "+victim->query("id"));
+   break;
+   case 2:
+   command("exert neilisuck "+victim->query("id"));
+   break;
+   case 3:
+   command("exert jingsuck "+victim->query("id"));
+   break;
+   case 4:
+   command("exert jinglisuck "+victim->query("id"));
+   break; 
+    }
+}
+
+void unconcious()
+{
+        object me, victim;
+
+        me=this_object()->query_temp("last_damage_from");
+        victim=this_object();
+        if ( victim ) {
+        victim->remove_enemy(me);
+        victim->remove_killer(me);
+        me->remove_enemy(victim);
+        me->remove_killer(victim);
+            if ( me->query("family/master_id")==(string)victim->query("id")) {
+                me->delete("family");
+                me->set("title","普通百姓");
+                me->delete("class");
+                victim->delete_temp("fighting");
+                CHANNEL_D->do_channel(victim, "chat",
+                sprintf("真不愧是青出于蓝而胜于蓝！%s，你可以出师了，从此另立门户吧！", me->name(1))); 
+     }
+}
+        reincarnate();
+        set("eff_qi", query("max_qi"));
+        set("qi", query("max_qi"));
+        set("eff_jing", query("max_jing"));
+        set("jing", query("max_jing"));
+        this_object()->clear_condition();
+        set("jingli", query("eff_jingli"));
+        say( "我是不死之身,想杀死我,没门!！\n");
+
+      }
+
+void die()
+{
+unconcious();
+
+}
+
+

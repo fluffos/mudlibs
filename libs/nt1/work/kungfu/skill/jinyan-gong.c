@@ -1,0 +1,49 @@
+// Copyright (C) 2003, by Lonely. All rights reserved.
+// This software can not be used, copied, or modified 
+// in any form without the written permission from authors.
+
+inherit SKILL;
+
+string *dodge_msg = ({
+        "$n将头一低，身形疾闪，正是一招“藏形匿迹”，$N所发招数尽数落空。\n",
+        "$n身形拔地而起，使出一招“飞灵八方”，但见四面八方都是$n的身影，$N顿时茫然失措，攻势全失。\n",
+        "$n身形一纵，跃在半空，一招“隐景舞天”，在空中连翻几个跟斗，稳稳地落在$N身后\n",
+        "$n眼见敌招攻来，忽然一招“解行遁变”，身子往回轻轻一侧，刚好避开$N的猛攻。\n",
+        "$n长啸一声，纵身一跃，一式“弃厄飞霄”，腾空飞起数丈，尽数避开$N的攻击\n",
+        "$n身形一闪，一式“回神转玄”，忽然转到$N身后，$N扑了一个空。\n",
+        "$n身形晃动，使出一招“出有入无”，似左实右，忽前忽后，若有若无的闪过$N攻击。\n",
+        "$n身形飘然而起，使出一招“乘虚御空”，姿态飘逸，闪过$N攻击。\n",
+});
+
+int valid_enable(string usage)
+{
+        return usage == "dodge" || usage == "move";
+}
+
+int valid_learn(object me) { return 1; }
+
+string query_dodge_msg(string limb)
+{
+        return dodge_msg[random(sizeof(dodge_msg))];
+}
+
+int practice_skill(object me)
+{
+        if ((int)me->query("qi") < 70)
+                return notify_fail("你的体力太差了，不能练金雁功。\n");
+                
+        if ((int)me->query("neili") < 70)
+                return notify_fail("你的内力太低了，不能练金雁功。\n");
+                
+        me->receive_damage("qi", 60);
+        me->add("neili", -60);
+        
+        return 1;
+}
+
+string perform_action_file(string action)
+{
+        return __DIR__"jinyan-gong/" + action;
+}
+
+

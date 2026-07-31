@@ -1,0 +1,28 @@
+#include "/d/tybang/tybang.h";
+
+inherit ROOM;
+
+void create()
+{
+        set("short", HIR"中央广场"NOR);
+        set("long", @LONG
+这里是天涯第一城的中央广场，铺着青石地面。往东面走有寒冰室，
+西面则通向参悟室，而南面则通向疯狂自练室，往北面走就是天涯第一楼
+了。
+LONG );
+        set("outdoors", "xiangyang");
+        set("item_desc", ([
+                "dong" : "\n",
+        ]));
+
+        set("exits", ([
+                "east"  : __DIR__"dongdajie1",
+                "west"  : __DIR__"westjie1",
+                "south" : __DIR__"southjie1",
+                "north" : __DIR__"northjie1",
+        ]));
+        set("objects", ([
+                __DIR__"npc/shi" : 1,
+                ]));
+        setup();
+}

@@ -1,0 +1,115 @@
+// gangjian.c
+
+#include <ansi.h>
+#include <weapon.h>
+
+//inherit M_WEAPON;
+//inherit F_GEMS;
+inherit AXE;
+
+string *du=({
+"ice_poison",
+"ill_dongshang",
+"ill_fashao",
+"ill_kesou",
+"ill_shanghan",
+"ill_zhongshu",
+"xx_poison",
+"cold_poison",
+"flower_poison",
+"rose_poison",
+"x2_poison",
+"sanpoison",
+"scorpion_poison",
+"anqi_poison",
+"nx_poison",
+"chilian_poison",
+"yufeng_poison",
+"insect_poison",
+"xscold_poison",
+});
+
+void create()
+{
+	set_name("[1;32m浩气之斧[2;37;0m", ({ "haoqi axe", "axe" }));
+	set_weight(1845);
+	if (clonep())
+		set_default_object(__FILE__);
+	else {
+		set("unit", "柄");
+		set("long", @LONG
+[1;32m天地浩气之神兵，扫魔除妖，为国为民，侠之大者！
+[2;37;0m这是一柄由无比坚硬的[31m流花石[2;37;0m制成，重三斤六两九钱的[1;32m浩气之斧[2;37;0m。
+综合评价[1;36m无双无对[2;37;0m 看起来无比锋利，具有[1;34m倚天屠龙[2;37;0m的威力！
+上面刻了几个古符号：
+[36m木[2;37;0m:[1;31m创世[2;37;0m [32m水[2;37;0m:[1;33m天圣[2;37;0m [1;37m雷[2;37;0m:[1;33m天圣[2;37;0m 
+上面还刻了一些符字：
+锋利:[1;33m灭世[2;37;0m 天灵:[34m细碎[2;37;0m 天宇:[32m粗糙[2;37;0m 紫石:[32m粗糙[2;37;0m 
+
+LONG
+);
+    set("no_get",1);
+	  set("no_put",1);
+	  set("no_pawn",1);
+	  set("no_drop",1);
+	  set("no_beg",1);
+	  set("no_steal",1);
+	  set("systemmake",1);
+		set("value", 25000);
+		set("weapon_prop/intelligence",27);
+		set("weapon_prop/strength",32);
+		set("weapon_prop/karey",0);
+		set("weapon_prop/percao",0);
+		set("weapon_prop/dexerity",0);
+		set("weapon_prop/constitution",0);
+    set("weapon_prop/dodge", 0);
+    set("weapon_prop/parry", 34);
+    set("weapon_prop/attack", 0);
+    set("weapon_prop/armor", 0);
+    set("weapon_prop/defense", 0);
+    
+    set("weapon_prop/neili", 0);
+    set("weapon_prop/qi", 0);
+    set("weapon_prop/jing", 0);
+    set("weapon_prop/jingli", 0);
+    set("weapon_prop/damage", 0);
+
+    set("wtypeA",0);
+    set("wtypeB",14);
+    set("wtypeC",10);
+    set("wtypeD",0);
+    set("wtypeE",0);
+    set("wtypeF",0);
+    set("wtypeG",10);
+    set("wtypeH",0);
+    set("wtypeI",0);
+    set("wtypeJ",0);
+    set("wtypeK",0);
+    set("wtypeL",0);
+    
+
+                set("skill", ([
+                        "name": "hand",
+                        "exp_required": 80000,
+                        "difficulty": 85,
+                        "min_skill":  1,
+                        "max_skill": 300,              
+                ]) );		
+		set("base_unit", "发");
+		
+
+		set("hxweapon", 1);
+		set("material", "default");
+    set("sharpness", 19);
+
+		set("wield_msg", "$N将$n握在手中。\n");
+		set("unwield_msg", "$N将手中的$n放下。\n");
+	}
+	
+	init_axe(720);
+	setup();
+}
+
+
+
+#include "/obj/ritem/weaponzy.h";

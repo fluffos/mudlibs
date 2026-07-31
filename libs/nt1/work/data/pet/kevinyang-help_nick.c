@@ -1,0 +1,18 @@
+// SN:iooG5TlLj?4X7_`5
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;31m金钱豹[2;37;0m", ({"help_nick bao"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "$HIR$ 金钱
+它是六小顽童的坐骑。
+");
+        set_temp("owner_id", "kevinyang");
+        set_temp("owner_name", "六小顽童");
+        ::setup();
+}
+

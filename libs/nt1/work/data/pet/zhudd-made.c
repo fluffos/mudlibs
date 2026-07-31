@@ -1,0 +1,18 @@
+// SN:XLjO<@>>c73ZnG?6
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("天马[2;37;0m", ({"made ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "马啊！这都不认识？
+它是猪魔智的坐骑。
+");
+        set_temp("owner_id", "zhudd");
+        set_temp("owner_name", "猪魔智");
+        ::setup();
+}
+

@@ -1,0 +1,347 @@
+// 储存玩家自建聊天室所用
+
+#include <ansi.h>
+#define OUT_ROOM                "/d/city/chatroom"
+
+inherit ROOM;
+
+string look_board();
+void create()
+{
+        set("short", "聊天室");
+        set("long", @LONG
+这里是无名为大家提供的聊天室，中间几个桌凳，上面零零散散的摆
+着茶水和烟灰缸，地上则是一地的瓜子皮和烟头，除此之外空空荡荡的什
+么也没有。在门口歪歪斜斜的放着一个黑板(chalkboard)，上面写着几行
+字。
+LONG );
+        set("no_save", 1);
+        set("no_fight", 1);
+             set("freeze",1); 
+        set("no_dazuo", 1);
+        set("chatroom", 1);
+        set("pigging", 1);
+        set("item_desc", ([
+                "chalkboard" : (: look_board :),
+        ]));
+        set("exits", ([
+                "out" : OUT_ROOM,
+        ]));
+        setup();
+}
+
+void init()
+{
+        add_action("do_help", "help");
+        add_action("do_topic", "topic");
+        add_action("do_leave", "leave");
+        add_action("do_ban", "banchat");
+        add_action("do_close", "closechat");
+        add_action("do_invite", "invite");
+        add_action("do_kickout", "kickout");
+        add_action("do_secret", "secret");
+add_action("discmds",({"sleep","respitate","exert","array","duanlian","ansuan","touxi","persuade","teach","exert","exercise","study","xi","learn","kill","steal","conjure","fight","hit","xi","perform","prcatice","scribe","tuna","surrender"})); 
+}
+
+int discmds() 
+{ 
+         tell_object(this_player(),"现在你还是专心聊天吧！\n"); 
+          return 1; 
+}
+string look_board()
+{
+        if (! query("topic") || query("topic") == "")
+                return "海阔凭鱼跃，天高任鸟飞——畅所欲言\n";
+        else return "今天的话题是：" + WHT + query("topic") + NOR "\n";
+}
+
+int do_help(string arg)
+{
+        if (! arg || arg != "here")
+                return 0;
+        else {
+                write(@LONG
+        这里可以使用的专门命令有：
+    banchat      禁止某些人访问聊天室
+    closechat    关闭这个聊天室(所有人都被踢出)
+    invite       邀请某个人进入聊天室
+    kickout      将某个人踢出聊天室*
+    leave        离开聊天室
+    topic        设置聊天室的话题
+    look         看看聊天室里面都有谁
+    secret /secret cancel      让你的聊天室成为或是解除秘密状态*
+LONG
+);
+                return 1;
+        }
+}
+
+int do_topic(string arg)
+{
+        object me = this_player();
+
+        if (! query("owner") && ! wizardp(me) 
+        || query("owner") != me->query("id") && ! wizardp(me))
+                return notify_fail("你不是这个聊天室的主人，不能设置主题。\n");
+
+        if (! arg || arg == "")
+                return notify_fail("你要设置什么主题？\n");
+
+        else {
+                message_vision(CYN "$N" CYN "歪着头想了想，道：不如我们今天聊聊关于『" 
+                                HIG + arg + CYN "』的话题。\n" NOR, me);
+                message_vision("$N" NOR "拿起粉笔在黑板上写下了“" + arg + "”几个字。\n", me);
+
+                set("topic", arg);
+                return 1;
+        }
+}
+
+int do_leave(string arg)
+{
+        object me = this_player();
+
+
+        me->command("sigh");
+        message_vision(CYN "$N" CYN "幽幽叹了一声：“真是无聊，各位，" 
+                + RANK_D->query_self_close(me) + "走了呀。”\n" NOR, me);
+        me->command("wave");
+        message_vision("$N" NOR "离开了" + query("short") + "。\n", me);
+
+        tell_room(OUT_ROOM, me->name()+ NOR "从" + query("short") + "走了过来。\n");
+        me->move(OUT_ROOM);
+
+        return 1;
+}
+
+int do_ban(string arg)
+{
+        object me = this_player();
+        string *banned;
+
+        if (! query("owner") && ! wizardp(me) 
+        || query("owner") != me->query("id") && ! wizardp(me))
+                return notify_fail("你不是这个聊天室的主人，不能禁止别人进来。\n");
+
+        if (! arg || arg == "")
+        {
+                if (! arrayp(banned = query("banned")) && query("banned") != "all")
+                        return notify_fail("指令格式：banchat [all | none | id]\n");
+                else {
+                        if (query("banned") == "all")
+                        {
+                                write("目前你禁止所有没有被邀请的人进入聊天室。\n");
+                                return 1;
+                        }
+
+                        write("目前你禁止进入本聊天室的有：\n" WHT +
+                        implode(banned, NOR "、\n" WHT) + NOR "。\n" NOR
+                        );
+                        return 1;
+                }
+        }
+
+        else {
+                if (arg == me->query("id"))
+                        return notify_fail("你要禁止自己进入？\n");
+
+                if (arg == "all")
+                {
+                        set("banned", "all");
+                        write("设置禁止所有人进入成功。\n");
+                        return 1;
+                }
+                if (arg == "none")
+                {
+                        delete("banned");
+                        write("取消禁止别人进入成功。\n");
+                        return 1;
+                }
+                if (! arrayp(banned = query("banned")) )
+                {
+                        banned = ({ arg });
+                        set("banned", banned);
+                        write("设置禁止 " WHT + arg + NOR " 进入成功。\n");
+                        return 1;
+                }
+                else {
+                        if (member_array(arg, banned) != -1)
+                                return notify_fail("你已经添加了这名用户了。\n");
+
+                        banned += ({ arg });
+                        set("banned", banned);
+                        write("设置禁止 " WHT + arg + NOR " 进入成功。\n");
+                        return 1;
+                }
+        }
+}
+
+int do_close(string arg)
+{
+
+        object me = this_player();
+        object *ob;
+        int i;
+
+        if (! query("owner") && ! wizardp(me) 
+        || query("owner") != me->query("id") && ! wizardp(me))
+                return notify_fail("你不是这个聊天室的主人，不能关掉它。\n");
+
+        me->command("sigh");
+        message_vision(CYN "$N" CYN "幽幽叹了一声：“真是无聊，各位，" 
+                + RANK_D->query_self_close(me) + "这个聊天室不开了，大家走人吧。”\n" NOR, me);
+
+        ob  = all_inventory(this_object());
+        for (i = 0; i < sizeof(ob); i++)
+        {
+                tell_room(OUT_ROOM, me->name()+ NOR "从" + query("short") + "走了过来。\n");
+                ob[i]->move(OUT_ROOM);
+        }
+
+        call_out("destorying", 1, this_object());
+        return 1;
+}
+
+void destorying(object ob)
+{
+        object board;
+
+        if (objectp(board = present("board", this_object())))
+        {
+                board->save();
+                destruct(board);
+        }
+        destruct(ob);
+}
+
+int can_into(object me)
+{
+        string id = me->query("id");
+
+        if (me->query("id") == query("owner"))
+                return 1;
+
+        if (query("banned") == "all" && arrayp(query("permitted"))
+        && member_array(id, query("permitted")) == -1)
+                return 0;
+
+        if (arrayp(query("permitted")) && arrayp(query("banned"))
+        && member_array(id, query("banned")) != -1
+        && member_array(id, query("permitted")) == -1)
+                return 0;
+
+        if (query("permitted") == "all" && arrayp(query("banned"))
+        && member_array(id, query("banned")) != -1)
+                return 0;
+
+        return 1;
+}
+
+int do_invite(string arg)
+{
+        object me = this_player();
+        object ob;
+
+        if (! query("owner") && ! wizardp(me) 
+        || query("owner") != me->query("id") && ! wizardp(me))
+                return notify_fail("你不是这个聊天室的主人，不能邀请别人进来。\n");
+
+        if (! arg) return notify_fail("你要邀请谁？\n");
+        
+        if (! objectp(ob = find_player(arg)))
+                return notify_fail("没有这个玩家。\n");
+
+        if (arg == me->query("id"))
+                return notify_fail("不用添加上你自己吧？\n");
+
+        if (arrayp(query("permitted")) && member_array(arg, query("permitted")) != -1)
+                return notify_fail("你已经添加了这个玩家。\n");
+
+        else {
+                tell_object(me, HIG "你告诉" + ob->name() + HIG "("+
+                        ob->query("id") + ")：来我的聊天室聊天吧。\n" NOR);
+                tell_object(ob, HIG + me->name() + HIG "("+
+                        me->query("id") + ")告诉你：来我的聊天室聊天吧。\n" NOR);
+
+                if (! arrayp(query("permitted")))
+                        set("permitted", ({ arg }));
+                else set("permitted", query("permitted") + ({ arg }));
+                return 1;
+        }
+}
+
+
+int do_kickout(string arg)
+{
+        object me = this_player();
+        object ob;
+
+
+        if (!arg) return notify_fail("你要踢谁？\n");
+        if (! query("owner") && ! wizardp(me) 
+        || query("owner") != me->query("id") && ! wizardp(me))
+                return notify_fail("你不是这个聊天室的主人，不能踢人。\n");
+        
+        if (! objectp(ob =present(arg, this_object())))
+                return notify_fail("没有这个玩家。\n");
+
+        if (arg == me->query("id"))
+                return notify_fail("不用添加上你自己吧？\n");
+          if (wizardp(ob))
+            return notify_fail("你不能踢他。\n");
+
+        else {
+                message_vision(HIR "$N" HIR "大吼一声：“" + ob->name()
+                                + "，你这个" + RANK_D->query_rude(ob) + "给我滚！”\n" NOR, me);
+                message_vision("$N一脚把$n踢出了聊天室。\n", me, ob);
+
+                tell_room(OUT_ROOM, ob->name() + "被从" + query("short") + "踢了出来。\n");
+                ob->move(OUT_ROOM);
+
+                if (arrayp(query("permitted")) &&
+                    member_array(ob->query("id"), query("permitted")) != -1)
+                        set("permitted", query("permitted") - ({ ob->query("id") }));
+                return 1;
+        }
+}
+
+int do_secret(string arg)
+{
+        object me = this_player();
+        object ob;
+
+        if (! query("owner") && ! wizardp(me) 
+        || query("owner") != me->query("id") && ! wizardp(me))
+                return notify_fail("你不是这个聊天室的主人，设置秘密属性。\n");
+        
+        if (arg == "cancel" && query("secret"))
+        {
+                delete("secret");
+                message_vision(HIW "$N" HIW "喃喃道：“大家打开天窗说亮话吧，好不好？”\n" NOR, me);
+                tell_object(me, "你取消了这里的秘密属性。\n");
+                return 1;
+        }
+
+        else {
+                set("secret", 1);
+                message_vision(HIW "$N" HIW "悄悄道：“嘘，大家说话小声一点，别给外面的人听见。”\n" NOR, me);
+                tell_object(me, "你开启了这里的秘密属性。\n");
+                return 1;
+        }
+}
+
+int clean_up()
+{
+        object *obs;
+
+        // 聊天室里面有玩家则不析构
+        obs = filter_array(all_inventory(), (: userp($1) || $1->is_chatter() ||
+                                               $1->is_item_make() && $1->is_stay_in_room() :));
+        if (! sizeof(obs) && ! query("forwizard"))
+        {
+                destruct(this_object());
+                return 0;
+        }
+
+        return 1;
+}

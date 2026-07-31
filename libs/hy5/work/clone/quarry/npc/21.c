@@ -1,0 +1,29 @@
+#include <ansi.h>
+#include "quarry.c"
+
+void create()
+{
+	set_name(NOR + YEL "梅花鹿" NOR, ({ "meihua lu", "meihua", "lu" }));
+	set("long", YEL "这是一只行动敏捷的梅花鹿。\n" NOR);
+        set("no_auto_kill", 1);
+
+	set("age", 3);
+	set("str", 20);
+	set("dex", 25);
+	set("max_qi", 900);
+	set("max_jing", 900);
+	set("combat_exp", 10000);
+set("race", "野兽");
+        set("power", 12);
+        set("item1", __DIR__"item/lurou");
+
+
+        set_temp("apply/parry", 80);
+        set_temp("apply/dodge", 100);
+        set_temp("apply/attack", 80);
+        set_temp("apply/defense", 100);
+        set_temp("apply/unarmed_damage", 80);
+        set_temp("apply/armor", 80);
+
+	setup();
+}

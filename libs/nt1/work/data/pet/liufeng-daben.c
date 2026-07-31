@@ -1,0 +1,18 @@
+// SN:`OSFbWg7XN06Q61Z
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[37m无敌[1;36m铁[2;37;0m[1;33m金[1;35m刚熊[2;37;0m", ({"daben xiong"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "熊
+它是流风的坐骑。
+");
+        set_temp("owner_id", "liufeng");
+        set_temp("owner_name", "流风");
+        ::setup();
+}
+

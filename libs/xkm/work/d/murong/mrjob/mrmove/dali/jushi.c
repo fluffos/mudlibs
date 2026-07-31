@@ -1,0 +1,33 @@
+/************************
+File:   Jushi.c
+Create: Play
+Time:   4/25/2002
+************************/
+
+inherit ROOM;
+
+void create()
+{
+	set("short", "敞厅");
+	set("long", @LONG
+一间宽敞明亮的大厅，厅四周开着落地的碧竹窗，阵阵轻风吹得
+窗扉轻轻的摆动。厅内布置得清雅简洁，座榻前的长桌上端正的摆放
+着一张古琴，琴旁一只香炉内香烟缈缈，淡淡的清香令人心旷神怡。
+LONG
+	);
+        set("exits", ([ 
+                "out" : __DIR__"xiaoyuan",
+                      ]));
+      
+	set("no_fight", 1);
+
+        set("objects", ([
+                __DIR__"Mrsnpc" : 1,
+                ]));
+
+        set("outdoors", "dali");
+	set("no_clean_up", 0);
+
+	setup();
+        replace_program(ROOM);
+}

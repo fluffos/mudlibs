@@ -1,0 +1,32 @@
+// SN:amU7DYJaAB:hWHf4
+// File(/data/room/deadyour/lianwu.c) of deadyour's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "练武场");
+	set ("long", @LONG
+此处便是凤巢的练武场，人在江湖，武功万万不可荒废。 
+LONG );
+
+	set("exits", ([
+                "west" : __DIR__"houyuan",
+	]));
+
+        set("objects", ([
+                "/clone/npc/mu-ren" : 4,
+        ]));
+
+        set("outdoors", "playertown");
+        set("no_sleep_room", 1);
+
+        setup();
+    
+        set("room_owner", "西红柿");
+        set("room_name", "凤巢");
+        set("room_id", "deadyour");
+        set("room_owner_id", "deadyour");
+        set("room_position", "碎石小道");
+}

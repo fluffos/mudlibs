@@ -1,0 +1,161 @@
+#include <ansi.h>
+
+#define MYSHOP_DIR	"/clone/vip2/"
+
+inherit F_CLEAN_UP;
+
+mapping mtypes = ([
+	"1.属性类":"attrib",
+	"2.装备类":"weapon",
+	"3.技能类":"skill",
+	"4.丹药类":"medicine",
+	"5.任务类":"job",
+	"6.特殊类":"special",
+	"7.其它类":"other",
+]);
+
+int main(object me, string arg)
+{
+	string str,*all_file,file,price,type,*types;
+	int i,gongji,value;
+	object ob;
+	int amount;
+
+	all_file = list_dirs(MYSHOP_DIR);
+
+	if(!sizeof(all_file))
+		return notify_fail("商城中暂无商品出售。\n");
+
+	if (! arg)
+	{
+		str = ZJOBLONG"你目前有"+me->query("gongji")+"点师门功绩，请选择您想购买的道具：\n"ZJOBACTS2+ZJMENUF(4,4,8,30);
+		for(i=0;i<sizeof(all_file);i++)
+		{
+			file = MYSHOP_DIR+all_file[i];
+			if(file_size(file)<0) continue;
+			if(file->query("no_shop")) continue;
+			gongji = file->query("gongji");
+			price = gongji?(gongji+"师门功绩"):(MONEY_D->money_str(file->query("value")));
+			str += sprintf("%s"ZJBR"%s:mccp2 look %s"ZJSEP,file->query("name"),price,file);
+		}
+		write(str+"\n");
+		return 1;
+	}
+	else if(arg=="type")
+	{
+		str = ZJOBLONG"你目前有"+me->query("gongji")+"师门功绩，请选择您想购买的道具类别：\n"ZJOBACTS2+ZJMENUF(4,4,8,30);
+		types = sort_array(keys(mtypes),(:strcmp:));
+		for(i=0;i<sizeof(types);i++)
+		{
+			str += sprintf("%s:mccp2 type %s"ZJSEP,types[i],types[i]);
+		}
+		write(str+"\n");
+		return 1;
+	}
+	else if (sscanf(arg,"type %s",type)==1)
+	{
+		if(!mtypes[type])
+			return notify_fail("商城中暂无"HIG+type+NOR"类商品出售。\n");
+		all_file = list_dirs(MYSHOP_DIR+mtypes[type]+"/");
+		if(!sizeof(all_file))
+			return notify_fail("商城中暂无"HIG+type+NOR"类商品出售。\n");
+		str = ZJOBLONG"你目前有"+me->query("gongji")+"师门功绩，请选择您想购买的"HIG+mtypes[type]+NOR"类道具：\n"ZJOBACTS2+ZJMENUF(4,4,8,30);
+		for(i=0;i<sizeof(all_file);i++)
+		{
+			file = MYSHOP_DIR+mtypes[type]+"/"+all_file[i];
+			if(file_size(file)<0) continue;
+			if(file->query("no_shop")) continue;
+			gongji= file->query("gongji");
+			price = gongji?(gongji+"师门功绩"):(MONEY_D->money_str(file->query("value")));
+			str += sprintf("%s"ZJBR"%s:mccp2 look %s"ZJSEP,file->query("name"),price,file);
+		}
+		write(str+"\n");
+		return 1;
+	}
+	else if (sscanf(arg,"look %s",file)==1)
+	{
+		gongji = file->query("gongji");
+		price = gongji?(gongji+"师门功绩"):(MONEY_D->money_str(file->query("value")));
+		str = ZJOBLONG+"【"+file->query("name")+"】　　价格："+price+NOR+ZJBR"一一一一一一一一一一一一一一一一一一一一一一一"ZJBR;
+		str += file->long();
+		str += ZJOBACTS2+ZJMENUF(4,4,10,28);
+		str += "购买1个:mccp2 buy 1 "+file+ZJSEP"批量购买:mccp2 buy "+file+"\n";
+		write(str+"\n");
+		return 1;
+	}
+	else if (sscanf(arg,"buy %s",file)==1)
+	{
+		if (sscanf(file, "%d %s", amount, file) != 2)
+		{
+			write(INPUTTXT("你想买多少个"+file->query("name")+"？"ZJBR"请确认你的背包空间足够。","mccp2 buy $txt# "+file)+"\n");
+			return 1;
+		}
+
+		if(file_size(file)<0||strsrch(file,MYSHOP_DIR)!=0)
+			return notify_fail(HIM"没有这个道具！！"NOR"\n");
+
+		if(file->query("no_shop"))
+			return notify_fail(HIM"已下架商品，无法购买！！"NOR"\n");
+		if(amount<1)
+			return notify_fail(HIM"你要买多少个？？"NOR"\n");
+		if(!file->query_amount()&&amount>100)
+			return notify_fail(HIM"不可叠加物品一次最多买10个！！"NOR"\n");
+		        else if(amount>999)
+			return notify_fail(HIM"一次最多买999个！！"NOR"\n");
+
+		gongji = file->query("gongji");
+		if(!value=file->query("base_value"))
+			value = file->query("value");
+		if(!gongji&&!value)
+			return notify_fail(HIM"购买失败！！"NOR"\n");
+
+		if(gongji)
+		{
+			if(!me->query("gongji")||me->query("gongji")<(gongji*amount))
+				return notify_fail(HIM"你的师门功绩不足，请多做师门任务！！"NOR"\n");
+			me->add("gongji",-gongji*amount);
+			log_file("pay/mccp2", sprintf("%s:%s(%s)消费%d师门功绩，从随身商城购买%d个%s(%s)。\n",
+				ctime(time()),me->query("name"),me->query("id"),gongji*amount,amount,file->query("name"),file->query("id")));
+			me->add("zjvip/gongji_used",gongji*amount);
+		}
+		else
+		{
+			if(!MONEY_D->player_pay(me, value * amount))
+				return notify_fail(HIM"你的钱没那么多了！！"NOR"\n");
+			log_file("pay/mccp2", sprintf("%s:%s(%s)消费%s，从随身商城购买%d个%s。\n",
+				ctime(time()),me->query("name"),me->query("id"),MONEY_D->money_str(value*amount),amount,file->query("name")));
+		}
+		if(file->query_amount())
+		{
+			ob = new(file);
+			ob->set_amount(amount);
+			write("你从商城中成功购买到"+ob->short()+"。"NOR"\n");
+			ob->move(me,1);
+		}
+		else
+		{
+			for(i=0;i<amount;i++)
+			{
+				ob = new(file);
+				ob->move(me,1);
+			}
+			write("你从商城中成功购买到"+amount+ob->query("unit")+ob->short()+"。"NOR"\n");
+		}
+		return 1;
+	}
+	else
+		return notify_fail(HIM"你想干什么？？"NOR"\n");
+
+	return 1;
+}
+
+int help(object me)
+{
+     write(@HELP
+
+随身商城。
+
+HELP
+    );
+    return 1;
+}

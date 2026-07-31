@@ -1,0 +1,18 @@
+// SN::K<TK9<Rji]Xf6Z]
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[36m紫[1;33m金[1;35m貂貂[2;37;0m", ({"zijingdiao diao"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "$CYN$紫$HIY$金$HIM$貂
+它是静静的坐骑。
+");
+        set_temp("owner_id", "xuejingfen");
+        set_temp("owner_name", "静静");
+        ::setup();
+}
+

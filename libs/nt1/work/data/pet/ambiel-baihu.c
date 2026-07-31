@@ -1,0 +1,18 @@
+// SN:[J=F<@:Lj>K6T@Kg
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m白虎兽[2;37;0m", ({"baihu shou"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "他是四大魔兽之二
+它是段停云的坐骑。
+");
+        set_temp("owner_id", "ambiel");
+        set_temp("owner_name", "段停云");
+        ::setup();
+}
+

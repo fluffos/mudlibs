@@ -1,0 +1,115 @@
+// Copyright (C) 1995, by Tie Yu and Daniel Yu. All rights reserved.
+// This software can not be used, copied, or modified in any form without
+// the written permission from authors.
+inherit SKILL;
+mapping *action = ({
+        ([      "action":               
+"$N左腿在前，右腿在后，双掌用力向$n的$l挥来",
+                "dodge":                30,
+                "parry":                10,
+                "damage":                150,
+                "damage_type":  "瘀伤"
+        ]),
+        ([      "action":               
+"$N左脚点地，身体向后旋转，右腿向疾风扫落叶般扫向$n的$l",
+                "dodge":                10,
+                "parry":                30,
+                "damage":                150,
+                "damage_type":  "瘀伤"
+        ]),
+        ([      "action":               
+"$N右手虚晃，左肘从我意想不到的角度撞向我$n的$l",
+                "dodge":                30,
+                "parry":                10,
+                "damage":                180,
+                "damage_type":  "瘀伤"
+        ]),
+        ([      "action":               
+"$N右脚凌空，晃出一片腿影，霎那间向$n的$l一连踢出三脚",
+                "dodge":                10,
+                "parry":                30,
+                "damage":                170,
+                "damage_type":  "瘀伤"
+        ]),
+        ([      "action":               
+"$N凌空跃起，身体向后急转，双脚从下往上一前一后地撩向$n的$l",
+                "dodge":                20,
+                "parry":                30,
+                "damage":                160,
+                "damage_type":  "瘀伤"
+        ]),
+});
+
+int valid_learn(object me)
+{
+        if( me->query_temp("weapon") || me->query_temp("secondary_weapon") )
+                return notify_fail("练空手道必须空手。\n");
+        return 1;
+}
+
+int valid_enable(string usage) { return usage=="unarmed"; }
+
+mapping query_action(object me, object weapon)
+{
+        return action[random(sizeof(action))];
+}
+
+int practice_skill(object me)
+{
+        if( (int)me->query("qi") < 30 )
+                return notify_fail("你的体力不够了，休息一下再练吧。\n");
+        if( (int)me->query("neili") < 5 )
+                return notify_fail("你的内力不够了，休息一下再练吧。\n");
+        me->receive_damage("qi", 30);
+        me->add("neili", -5);
+        return 1;
+}
+int effective_level() { return 10;}
+ 
+string *parry_msg = ({
+        "$n就势一滚，双手一撑地，全身弹出$N的$w的攻击范围。\n",
+});
+
+string *unarmed_parry_msg = ({
+        "$n就势一滚，双手一撑地，全身弹出$N的攻击范围。\n",
+});
+
+string query_parry_msg(object weapon)
+{
+        if( weapon )
+                return parry_msg[random(sizeof(parry_msg))];
+        else
+                return unarmed_parry_msg[random(sizeof(unarmed_parry_msg))];
+}
+
+int learn_bonus()
+{
+	return 10;
+}
+int practice_bonus()
+{
+	return 5;
+}
+int black_white_ness()
+{
+	return -10;
+}
+
+string perform_action_file(string action)
+{
+           return __DIR__"kongshoudao/" + action;
+}
+
+mixed hit_ob(object me, object victim,int damage_bonus)
+        
+{	
+        string name, weapon;
+        
+
+	if( damage_bonus < 20 ) return 0; 
+         if( damage_bonus > 20 && random(4)==0 ) 
+{
+        victim->receive_wound("qi", damage_bonus/2+10 );
+        return "只听一声惨嚎，一股鲜血从$n的伤口喷出！\n" ;	
+}
+}

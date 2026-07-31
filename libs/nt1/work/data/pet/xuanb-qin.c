@@ -1,0 +1,18 @@
+// SN:n0IMXHARbG`Pe1=a
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;31m禽马[2;37;0m", ({"qin ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "禽兽不如
+它是药皇的坐骑。
+");
+        set_temp("owner_id", "xuanb");
+        set_temp("owner_name", "药皇");
+        ::setup();
+}
+

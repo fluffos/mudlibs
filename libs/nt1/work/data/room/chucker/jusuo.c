@@ -1,0 +1,35 @@
+// SN:d2Y0<]`W;gden<Xb
+// File(/data/room/chucker/jusuo.c) of chucker's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "居所");
+	set ("long", @LONG
+这就是嘎嘎居主人段嘎嘎休息、读书的地方。楼上就是主人的卧
+室，西面则是书房。 
+LONG );
+
+	set("exits", ([
+		"up"   : __DIR__"woshi",
+                "west" : __DIR__"shufang",
+	]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("KEY_DOOR", ([
+                "exit" : "east",
+                "room" : __DIR__"huayuan",
+        ]));
+    
+        set("room_owner", "段嘎嘎");
+        set("room_name", "嘎嘎居");
+        set("room_id", "chucker");
+        set("room_owner_id", "chucker");
+        set("room_position", "树林");
+}

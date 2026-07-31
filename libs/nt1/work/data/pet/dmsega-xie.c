@@ -1,0 +1,18 @@
+// SN:kW28CEY;mQ2J>P6d
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;36m邪豹豹[2;37;0m", ({"xie bao"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "好可爱哦
+它是欧阳木头的坐骑。
+");
+        set_temp("owner_id", "dmsega");
+        set_temp("owner_name", "欧阳木头");
+        ::setup();
+}
+

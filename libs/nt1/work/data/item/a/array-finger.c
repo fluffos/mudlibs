@@ -1,0 +1,35 @@
+// SN:i>a1SWMG4N>8gD?f
+// ITEM Made by player(艾汀:array) /data/item/a/array-finger.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Thu Nov 25 16:02:09 2004
+#include <ansi.h>
+#include <armor.h>
+
+inherit HANDS;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;35m武林列传追杀令[2;37;0m", ({ "finger" }));
+	set_weight(3500);
+	set("item_make", 1);
+	set("unit", "套");
+	set("long", "这是由[1;37m寰宇天晶[2;37;0m炼制而成的一套指套。
+[1;31m武林列传追杀令一出，[30m你们[1;31m最好不要自寻死路[2;37;0m
+指套缘上刻着一行小字：艾汀(array)
+");
+	set("value", 4100000);
+	set("point", 2812);
+	set("material", "tian jing");
+	set("wear_msg", "[1;37m武林列传追杀令[2;37;0m\n");
+	set("remove_msg", "[1;36m武林列传追杀令[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/finger", 10);
+	set("armor_prop/claw", 10);
+	set("armor_prop/unarmed_damage", apply_damage());
+	set("armor_prop/armor", 10);
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

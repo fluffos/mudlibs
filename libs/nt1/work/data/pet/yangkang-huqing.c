@@ -1,0 +1,18 @@
+// SN:`_6A:_R=KBHA]1F7
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;36m胡[1;32m青[1;33m牛[2;37;0m", ({"huqing niu"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "他就是蝶谷医仙.
+它是杨康的坐骑。
+");
+        set_temp("owner_id", "yangkang");
+        set_temp("owner_name", "杨康");
+        ::setup();
+}
+

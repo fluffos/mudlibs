@@ -1,0 +1,18 @@
+// SN:T@do1J6HL?6a5HHL
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;33m勇勇鹤[2;37;0m", ({"wowo he"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "好美丽啊
+它是血影的坐骑。
+");
+        set_temp("owner_id", "wozuiqiang");
+        set_temp("owner_name", "血影");
+        ::setup();
+}
+

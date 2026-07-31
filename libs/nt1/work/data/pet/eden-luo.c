@@ -1,0 +1,18 @@
+// SN:A9An9^f4PCGX1kCa
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("骆驼[2;37;0m", ({"luo tuo"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "......
+它是李和的坐骑。
+");
+        set_temp("owner_id", "eden");
+        set_temp("owner_name", "李和");
+        ::setup();
+}
+

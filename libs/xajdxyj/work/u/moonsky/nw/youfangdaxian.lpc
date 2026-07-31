@@ -1,0 +1,116 @@
+// 神话世界·西游记·版本４．５０
+/* <SecCrypt CPL V3R05> */
+ 
+// youfangdaxian.c
+// FoF added for recover play's skills
+
+#include <ansi.h>
+
+inherit NPC;
+
+void create()
+{
+   set_name( "游方大仙", ({ "youfang daxian", "daxian" }) );
+   set("long", "一位云游四海，修为高深的游方大仙。\n");
+
+   set("age", 30);
+   set("pursuer", 1);
+
+   set("max_gin", 5000);
+   set("max_kee", 5000);
+   set("max_sen", 5000);
+
+   set("max_atman", 9999);
+   set("atman", 9999);
+   set("max_force", 5000);
+   set("force", 5000);
+   set("max_mana", 5000);
+   set("mana", 5000);
+
+   set("chat_chance", 15);
+   set("chat_msg", ({
+      (: random_move :),
+   }));
+
+   set("per", 25);
+   set("family", ([
+      "class" : "taoism",
+   ]));
+   
+   set("inquiry", ([
+	  "恢复技能" : "这位朋友是不是曾经因为失误放弃了自己的技能？没关系，\n"
+      "在我这里可以恢复回来，请使 recover check 查看自己有哪些技能可以恢复。",
+   ]));
+
+   set("combat_exp", 1000000);
+
+   set_skill("sword", 200);
+   set_skill("unarmed", 200);
+   set_skill("parry", 200);
+   set_skill("dodge", 200);
+
+   set_temp("apply/attack", 100);
+   set_temp("apply/defense", 1000);
+   set_temp("apply/armor", 1000);
+   set_temp("apply/damage", 200);
+
+   setup();
+
+   carry_object("/d/obj/cloth/daopao")->wear();
+   carry_object("/d/obj/weapon/sword/changjian")->wield();
+}
+
+void init()
+{
+	add_action("recover_skill", "recover");
+}
+
+int recover_skill(string arg)
+{
+	object who = this_player();
+	string *skl, *v_skl;
+	int i, level, points;
+	mapping ab_skl = who->query("abandon");
+	
+	if( !arg ) return notify_fail("你要恢复哪项技能？\n");
+	
+	if( who->is_busy() ) return notify_fail("你现在正忙着呢。\n");
+	who->start_busy(1);	
+	
+	if( arg == "check" ) {
+		if( !ab_skl ) return notify_fail("你没有可以恢复的技能。\n");
+		skl = keys(ab_skl);
+		v_skl = values(ab_skl);
+		write("你有如下可以恢复的技能：\n");
+		for( i = sizeof(skl) - 1; i >= 0; i -- )
+			write(sprintf("    %-15s%4d  级\n", skl[i], v_skl[i]));
+		write("请用 recover skillname 来恢复技能。\n");
+		return 1;
+	}
+	
+	if( undefinedp(ab_skl[arg]) ) return notify_fail("你不能恢复这项技能。\n");
+	
+	level = ab_skl[arg];
+	points = 0;
+	for( i = 0; i <= level; i ++ ) // 计算总共的技能点数
+		points += i * i;
+	write(arg + " 技能点数：" + points + "\n");
+	level = who->query_skill(arg, 1);
+
+	while ( points >= ( level + 1 ) * ( level + 1 ) ) {
+		points -= ( level + 1 ) * ( level + 1 );
+		level ++;
+	}
+	who->set_skill(arg, level);
+	who->improve_skill(arg, points);
+	skl = keys(ab_skl);
+	if( sizeof(skl) == 1 ) who->delete("abandon");
+	else map_delete(ab_skl, arg);
+	
+	write("恢复完毕。\n");
+	who->start_busy(2);
+	log_file("skill_recovered", sprintf("%s %s recovered %s %d\n",
+		ctime(time()), who->query("id"), arg, level));
+	return 1;
+}
+

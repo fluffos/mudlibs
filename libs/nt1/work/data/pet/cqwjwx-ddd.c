@@ -1,0 +1,18 @@
+// SN:l>95mXkE6b7YR9mT
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("流氓兽兽[2;37;0m", ({"ddd shou"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "hehe
+它是无心的坐骑。
+");
+        set_temp("owner_id", "cqwjwx");
+        set_temp("owner_name", "无心");
+        ::setup();
+}
+

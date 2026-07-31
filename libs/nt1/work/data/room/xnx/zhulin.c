@@ -1,0 +1,30 @@
+// SN:T4KI04;Dob\I88D>
+// File(/data/room/xnx/zhulin.c) of xnx's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "竹林");
+	set ("long", @LONG
+一条狭窄的弯弯曲曲地消失在浓密漆黑树林的小路通向森林的深
+处，一阵阵幽幽的冷风吹过。小路的前面就是一个分叉，两旁有长满
+青苔的树桩的路。再前面是看不见路的黑暗森林。[2;37;0m
+LONG );
+
+	set("exits", ([
+                "west" : __DIR__"huayuan",
+                "east" : __DIR__"tingtao",
+	]));
+
+        set("outdoors", "playertown");
+        set("sleep_room", 1);
+        setup();
+
+        set("room_owner", "绛珠草");
+        set("room_name", "霍格沃茨");
+        set("room_id", "hgwc");
+        set("room_owner_id", "xnx");
+        set("room_position", "碎石小道");
+}

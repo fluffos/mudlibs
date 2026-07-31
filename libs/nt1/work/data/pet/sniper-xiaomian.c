@@ -1,0 +1,18 @@
+// SN:E19l0<hJI9@K]laJ
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m小绵羊[2;37;0m", ({"xiaomian yang"}));        
+        set("gender", "女性");                
+        set("unit", "头");
+        set("long", "一只很温顺的小绵羊。
+它是狙击手的坐骑。
+");
+        set_temp("owner_id", "sniper");
+        set_temp("owner_name", "狙击手");
+        ::setup();
+}
+

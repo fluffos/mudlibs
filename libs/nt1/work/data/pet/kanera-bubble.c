@@ -1,0 +1,18 @@
+// SN:I`Y9Oo@KQTCDJDH]
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("泡泡狼[2;37;0m", ({"bubble lang"}));        
+        set("gender", "男性");                
+        set("unit", "条");
+        set("long", "你看不到我  你看不到我.....
+它是米虫的坐骑。
+");
+        set_temp("owner_id", "kanera");
+        set_temp("owner_name", "米虫");
+        ::setup();
+}
+

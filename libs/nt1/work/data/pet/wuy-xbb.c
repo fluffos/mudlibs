@@ -1,0 +1,18 @@
+// SN:I_@S;Da90Oh:]T<R
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;33m小[1;35m笨[1;33m象[2;37;0m", ({"xbb xiang"}));        
+        set("gender", "女性");                
+        set("unit", "头");
+        set("long", "一直憨厚可爱的小象。
+它是默默的坐骑。
+");
+        set_temp("owner_id", "wuy");
+        set_temp("owner_name", "默默");
+        ::setup();
+}
+

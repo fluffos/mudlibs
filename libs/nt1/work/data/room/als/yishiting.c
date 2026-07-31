@@ -1,0 +1,32 @@
+// SN:3]a0a9^2_JRG3;gF
+// File(/data/room/als/yishiting.c) of als's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "议事厅");
+	set ("long", @LONG
+这就是海德酒店主人灌汤包子和重要人物商量江湖大事之处，正
+中有不少桌椅，侧面是屏风，厅堂中挂着两个条幅，两旁通往演武厅。
+LONG );
+
+	set("exits", ([
+                "east"   : __DIR__"yanwu1",
+                "west"   : __DIR__"yanwu2",
+		"north"  : __DIR__"zhongting",
+                "south"  : __DIR__"yingke",
+	]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("room_owner", "灌汤包子");
+        set("room_name", "海德酒店");
+        set("room_id", "hotl");
+        set("room_owner_id", "als");
+        set("room_position", "名人堂");
+}

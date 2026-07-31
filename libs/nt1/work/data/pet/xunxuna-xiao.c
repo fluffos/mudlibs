@@ -1,0 +1,18 @@
+// SN:GZSb`<adV9cJ6PhF
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m愤怒的小马[2;37;0m", ({"xiao ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "一匹小马
+它是寻飞忘情的坐骑。
+");
+        set_temp("owner_id", "xunxuna");
+        set_temp("owner_name", "寻飞忘情");
+        ::setup();
+}
+

@@ -1,0 +1,35 @@
+// SN:cZFgNQFi:L_>19CP
+// ITEM Made by player(慕容容慕:rongmu) /data/item/r/rongmu-ronga.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Mon Apr 19 10:57:21 2004
+#include <ansi.h>
+#include <armor.h>
+
+inherit HANDS;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[2;37;0m[36m刃[1;36m寒[2;37;0m", ({ "ronga" }));
+	set_weight(2100);
+	set("item_make", 1);
+	set("unit", "套");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一套指套。
+[1;32m这把是世间少有的好指套，指套身青光闪闪。[2;37;0m
+指套缘上刻着一行小字：慕容容慕(rongmu)
+");
+	set("value", 2100000);
+	set("point", 142);
+	set("material", "magic stone");
+	set("wear_msg", "[1;36m$N手中突然清凉之极，原来$n[1;36m已在$N手中。[2;37;0m\n");
+	set("remove_msg", "[1;36m$N的掌心突然传出一股暖流，原来$n[1;36m已返回你的腰间。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/armor", 10);
+	set("armor_prop/unarmed_damage", apply_damage());
+	set("armor_prop/finger", 10);
+	set("armor_prop/claw", 10);
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

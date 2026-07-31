@@ -1,0 +1,18 @@
+// SN:<o5;eFBn0bj:WK7@
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;36m飞天雕[2;37;0m", ({"feitian diao"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "help nick
+它是超级艾迪的坐骑。
+");
+        set_temp("owner_id", "mainid");
+        set_temp("owner_name", "超级艾迪");
+        ::setup();
+}
+

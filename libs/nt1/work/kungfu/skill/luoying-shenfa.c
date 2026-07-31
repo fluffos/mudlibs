@@ -1,0 +1,89 @@
+// Copyright (C) 2003, by Lonely. All rights reserved.
+// This software can not be used, copied, or modified 
+// in any form without the written permission from authors.
+// luoying-shenfa 落英身法
+
+#include <combat.h>
+#include <ansi.h>
+
+inherit SKILL;
+
+string *dodge_msg = ({
+        "$n将头一低，双臂内弯，手肘向前，似箭般向$N怀中扑去，正是一招“灵鳌步”，\n$N大惊之下，所发招数统统打在$n身后，尽数落空。\n",
+        "$n身形疾闪，使出一招“海燕腾空”，身体如同为海风所激，向后飘开一丈有余，避过$N攻击。\n",
+        "$n将身一纵，跃在半空，收腹含胸，一招“长空落雁”，在空中轻轻巧巧一个翻身，悄无声息地落在$N身后。\n",
+        "$n眼见敌招攻来，委实避无可避，忽然一招“巫峡云断”，凌空一个铁板桥，全身自膝盖以上，平平折断，\n$N招数顿时失了准头，全部打在空处。\n",
+        "$n身形闪动，使出一招“青鸟振翼”，双臂展开，宛若翩翩起舞，姿态飘逸，闪过$N攻击。\n",
+        "$n身法一变，一式“湘灵空舞”，随着$N攻势，敌左则左，敌右则右，$N虽看似大占上风，却无一招能够击中。\n",
+        "$n一声清啸，身形拔地而起，正是一招“鹏搏九霄”，在空中一连几个转折，扶摇直上，迅若鲲鹏，举重若轻的闪过$N攻击。\n",
+        "$n气凝丹田，脚下疾踩后天八卦方位，一式“归去来兮”，当真是望之在前，忽焉在后，\n$N手忙脚乱，连抵挡都有所不能，更别提还手反击了。\n",
+});
+
+int valid_enable(string usage)
+{
+        return usage == "dodge";
+}
+
+int valid_learn(object me)
+{
+        return 1;
+}
+
+string query_dodge_msg(string limb)
+{
+        return dodge_msg[random(sizeof(dodge_msg))];
+}
+
+int practice_skill(object me)
+{
+        if( (int)me->query("qi") < 50 )
+                return notify_fail("你的体力太差了，不能练落英身法。\n");
+        if( (int)me->query("neili") < 50 )
+                return notify_fail("你的内力不够，无法练落英身法。\n");
+                
+        me->receive_damage("qi", 40);
+        me->add("neili", -40);
+        return 1;
+}
+
+/*
+mixed valid_damage(object ob, object me, int damage, object weapon)
+{
+        mixed result;
+        int ap, dp, mp;
+        
+        if ((int)me->query_skill("luoying-shenfa", 1) < 100 
+        ||  ! living(me))
+                return;
+                
+        if (! me->query_temp("wuzhuan")) return;
+        if (me->query_temp("exercise/playing")) return;
+        
+        mp = ob->query_skill("martial-cognize", 1);
+        ap = ob->query_skill("force") + mp;
+        dp = me->query_skill("dodge", 1) / 2 +
+             me->query_skill("luoying-shenfa", 1);
+
+        // 一个经典的算法
+        if (ap / 2 + random(ap) < dp)
+        {
+                result = ([ "damage": -damage ]);
+                // 去掉所有的伤害写法
+                result += (["msg" : HIC "$n" HIC "一声长啸，脚下踩着奇门步法，趋前抢后，尤如天神行法，"
+                        "鬼魅遁影，瞬间化解$N" + HIC"的攻势。\n" NOR]);
+                return result;
+        }
+}
+
+int query_effect_dodge(object attacker, object me) 
+{
+        int lvl;
+
+        lvl = me->query_skill("luoying-shenfa", 1);
+        if (lvl < 80)  return 0;
+        if (lvl < 200) return 50;
+        if (lvl < 280) return 80;
+        if (lvl < 350) return 100;
+        return 120;
+}
+*/

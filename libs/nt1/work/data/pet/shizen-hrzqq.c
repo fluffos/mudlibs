@@ -1,0 +1,18 @@
+// SN:DDGL:Im>;`6E9]IQ
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m第二浩然正气雕[2;37;0m", ({"hrzqq diao"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "浩然正气雕->量产型
+它是法自然的坐骑。
+");
+        set_temp("owner_id", "shizen");
+        set_temp("owner_name", "法自然");
+        ::setup();
+}
+

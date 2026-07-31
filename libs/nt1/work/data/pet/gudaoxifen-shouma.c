@@ -1,0 +1,18 @@
+// SN:HNhC_8d\[Gmnh_JY
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;33m瘦马[2;37;0m", ({"shouma ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "凄凉
+它是古道西风的坐骑。
+");
+        set_temp("owner_id", "gudaoxifen");
+        set_temp("owner_name", "古道西风");
+        ::setup();
+}
+

@@ -1,0 +1,1287 @@
+//天涯杀手任务NPC数据库 writed by daniel
+
+inherit NPC;
+#include <ansi.h>
+#include <room.h>    
+int get_level(int exp);
+int place_room(object me,object ob);
+
+mapping *menpai= ({
+([      "title1":               "神龙教恶徒",
+        "title2":               "神龙教尊使",
+        "gender":               "男性",
+        "dodge":                "yixingbu",
+        "parry":                "shedao-qigong",
+        "staff":                "shedao-qigong",
+        "force":                "shenlong-xinfa",
+        "unarmed":              "shenlong-bashi",
+        "prepare1":             "unarmed",
+        "exert1":               "powerup",
+        "perform1":             "staff.chang",
+        "perform2":             "staff.chang1",
+        "perform3":             "staff.chang2",
+        "perform4":             "staff.chang3",
+        "weapon":                __DIR__"obj/shezhang",
+]),                                
+([      "title1":                "移花宫妖女",
+        "title2":                "移花宫仙子",
+        "gender":                "女性",
+        "class":                 "sworder",
+        "dodge":                 "yihua-jiemu",
+        "sword":                 "yifeng-jian",
+        "parry":                 "yifeng-jian",
+        "force":                 "mingyu-shengong",
+        "unarmed":               "jueqing-zhang",
+        "prepare1":              "unarmed",
+        "perform1":              "sword.yifeng",
+        "perform2":              "unarmed.mihun",
+        "weapon":                __DIR__"obj/changjian",
+]),                                          
+([      "title1":                "云龙门弃徒",
+        "title2":                "云龙门侠士",
+        "class":                 "sworder",
+        "gender":                "男性",
+        "dodge":                 "yunlong-shenfa",
+        "parry":                 "houquan",
+        "unarmed":               "houquan",
+        "sword":                 "yunlong-jian",
+        "force":                 "yunlong-shengong",
+        "perform1":              "sword.xian",
+        "perform2":              "parry.zhen",
+        "exert1":                "powerup",
+        "weapon":                __DIR__"obj/changjian",
+]),
+([      "title1":                "昆仑派弃徒",
+        "title2":                "昆仑派大侠",
+        "class":                 "sworder",
+        "gender":                "男性",
+        "dodge":                 "yaoming-dodge",
+        "parry":                 "liangyi-jian",
+        "unarmed":                "sanyin-unarmed",
+        "sword":                 "xunlei-sword",
+        "force":                 "xuantian-wuji",
+        "prepare1":              "unarmed",
+        "exert1":                "powerup",
+        "perform1":              "sword.lei",
+        "perform2":              "sword.lei",
+        "perform3":              "strike.liuyun",
+        "perform4":              "strike.yixing",
+        "weapon":                __DIR__"obj/changjian",
+]),
+([      "title1":                "姑苏慕容弟子",
+        "title2":                "姑苏慕容弟子",
+        "gender":                "男性",
+        "class":                 "sworder",
+        "dodge":                 "yanling-shenfa",
+        "sword":                 "murong-jianfa",
+        "parry":                 "douzhuan-xingyi",
+        "force":                 "shenyuan-gong",
+        "unarmed":                "canhe-zhi",
+        "prepare1":              "unarmed",
+        "perform1":              "unarmed.xingyue",
+        "perform2":              "unarmed.tan",
+        "perform3":              "unarmed.ding",
+        "weapon":                __DIR__"obj/changjian",
+]), 
+([      "title1":                "姑苏慕容弟子",
+        "title2":                "姑苏慕容弟子",
+        "gender":                "男性",
+        "class":                 "sworder",
+        "dodge":                 "yanling-shenfa",
+        "blade":                 "murong-daofa",
+        "parry":                 "douzhuan-xingyi",
+        "force":                 "shenyuan-gong",
+        "unarmed":                "canhe-zhi",
+        "prepare1":              "unarmed",
+        "perform1":              "unarmed.xingyue",
+        "perform2":              "unarmed.tan",
+        "perform3":              "unarmed.ding",
+        "weapon":                __DIR__"obj/blade",
+]),                       
+([      "title1":                "姑苏慕容弟子",
+        "title2":                "姑苏慕容弟子",
+        "gender":                "男性",
+        "class":                 "sworder",
+        "dodge":                 "yanling-shenfa",
+        "sword":                 "murong-jianfa",
+        "blade":                 "murong-daofa",    
+        "parry":                 "douzhuan-xingyi",
+        "force":                 "shenyuan-gong",
+        "finger":                "canhe-zhi",
+        "prepare1":              "unarmed",
+        "prepare2":              "unarmed",
+        "perform1":              "unarmed.xingyue",
+        "perform2":              "unarmed.tan",
+        "perform3":              "unarmed.ding",
+//        "weapon":                __DIR__"obj/changjian",
+//        "weapon_s":              __DIR__"obj/blade",
+]),
+([      "title1":                "少林恶僧",
+        "title2":                "少林和尚",
+        "gender":                "男性",
+        "class":                 "bonze",
+        "dodge":                 "shaolin-shenfa",
+        "whip":                  "riyue-bian",
+        "parry":                 "riyue-bian",
+        "force":                 "hunyuan-yiqi",
+        "unarmed":                "jingang-quan",
+        "prepare1":              "unarmed",
+        "perform1":              "whip.chan",
+        "perform2":              "whip.kuanglong",
+        "perform3":              "whip.lun",
+        "exert1":                "jingang",
+        "weapon":                __DIR__"obj/changbian",
+]),
+([      "title1":               "逍遥派恶徒",
+        "title2":               "逍遥派弟子",
+        "clasee":               "taoist",
+        "gender":               "男性",
+        "dodge":                "lingboweibu",
+        "parry":                "zhemei-shou",
+        "force":                "beiming-shengong",
+        "hand":                 "zhemei-shou",
+        "unarmed":               "liuyang-zhang",
+        "sword":                "zuixin-sword",
+        "prepare1":             "unarmed",
+        "prepare2":             "unarmed",
+        "exert1":               "shield",
+        "perform1":             "sword.wenrou",
+        "perform2":             "sword.zui",
+        "perform3":             "sword.zui",
+        "perform4":             "hand.duo",
+        "weapon":                __DIR__"obj/changjian",
+]),
+([      "title1":               "镇南王府弃仆",
+        "title2":               "镇南王府侍将",
+        "gender":               "男性",
+        "dodge":                "tiannan-bufa",
+        "force":                "kurong-changong",
+        "unarmed":               "yiyang-zhi",
+        "prepare1":             "unarmed",
+        "exert1":               "powerup",
+        "perform1":             "sword.ding",
+        "perform2":             "sword.tun",
+        "perform3":             "unarmed.yizhi",
+        "weapon":                __DIR__"obj/changjian",
+]),
+([      "title1":               "天龙寺恶僧",
+        "title2":               "天龙寺长老",
+        "clasee":               "bonze",
+        "gender":               "男性",
+        "dodge":                "tiannan-bufa",
+        "parry":                "liumai-shenjian",
+        "force":                "kurong-changong",
+        "finger":               "liumai-shenjian",
+        "prepare1":             "unarmed",
+        "exert1":               "powerup",
+        "perform1":             "unarmed.feng",
+        "perform2":             "unarmed.tan",
+        "perform3":             "unarmed.ci",
+        "perform4":             "unarmed.liumai",
+]),
+([      "title1":               "日月神教阉贼",
+        "title2":               "日月神教长老",
+        "gender":               "无性",
+        "dodge":                "kuihua-feiying",
+        "parry":                "kuihua-dafa",
+        "sword":                "pixie-jian",
+        "force":                "kuihua-xinfa",
+        "unarmed":               "pixie-jian",
+        "unarmed":              "changquan",
+        "prepare1":             "unarmed",
+        "exert1":               "sneaky",
+        "perform1":             "sword.cimu",
+        "perform2":             "parry.tonggui",
+        "perform3":             "dodge.feiying", 
+        "weapon":                __DIR__"obj/xiuhua-zhen",
+]),
+([      "title1":               "明教恶徒",
+        "title2":               "光明圣使",
+        "gender":               "男性",
+        "dodge":                "qiankundanuoyi",
+        "parry":                "qiankundanuoyi",
+        "sword":                "shenghuo-lingfa",
+        "force":                "jiuyang-shengong",
+        "unarmed":              "jiuyang-shengong",
+        "cuff":                 "qishang-quan",
+        "prepare1":             "unarmed",
+        "exert1":               "powerup",
+        "perform1":             "sword.feng",
+        "perform2":             "sword.liaoyuan", 
+        "perform3":             "cuff.hunpofeiyang",
+        "perform4":             "cuff.yihuanghu",  
+        "weapon":                __DIR__"obj/shenghuoling",
+]),                           
+([      "title1":               "古墓妖女",
+        "title2":               "古墓女侠",
+        "gender":               "女性",
+        "dodge":                "yunu-shenfa",
+        "parry":                "yunu-jianfa",
+        "sword":                "yunu-jianfa",
+        "force":                "yunu-xinjing",
+        "unarmed":              "meinu-quanfa",
+        "prepare1":             "unarmed",
+        "exert1":               "powerup",
+        "perform1":             "sword.hebi",
+        "perform2":             "unarmed.duo",
+        "weapon":                __DIR__"obj/changjian",
+]),                          
+([      "title1":               "古墓妖女",
+        "title2":               "古墓女侠",
+        "gender":               "女性",
+        "dodge":                "yunu-shenfa",
+        "parry":                "yinsuo-jinling",
+        "whip":                 "yinsuo-jinling",
+        "force":                "yunu-xinjing",
+        "unarmed":              "meinu-quanfa",
+        "prepare1":             "unarmed",
+        "exert1":                "powerup",
+        "perform1":             "whip.dian",
+        "perform2":             "whip.feng",
+        "perform3":             "unarmed.duo",
+        "weapon":                __DIR__"obj/changbian",
+]),
+([      "title1":               "古墓妖女",
+        "title2":               "古墓女侠",
+        "gender":               "女性",
+        "dodge":                "yunu-shenfa",
+        "parry":                "yunu-jianfa",
+        "sword":                "yunu-jianfa",
+        "whip":                 "yinsuo-jinling",   
+        "force":                "yunu-xinjing",
+        "unarmed":              "meinu-quanfa",
+        "prepare1":             "sword",
+        "prepare2":             "whip",
+        "exert1":               "powerup",
+        "perform1":             "whip.dian",
+        "perform2":             "whip.feng",   
+        "perform3":             "unarmed.duo",
+        "weapon":                __DIR__"obj/changbian",    
+        "weapon_s":              __DIR__"obj/changjian",
+]), 
+([      "title1":               "星宿老魔",
+        "title2":               "星宿门徒",
+        "gender":               "男性",
+        "dodge":                "zhaixinggong",
+        "parry":                "tianshan-zhang",
+        "staff":                "tianshan-zhang",
+        "force":                "huagong-dafa",
+        "poison":               "huagong-dafa",
+        "strike":               "chousui-zhang",
+        "cuff":                 "wugong-zhao",
+        "prepare1":             "strike",
+        "prepare1":             "cuff",
+        "exert1":               "powerup",
+        "perform1":             "strike.sandu",
+        "perform2":             "poison.du",
+        "perform3":             "poison.hua",
+        "perform4":             "poison.judu",
+]),
+([      "title1":               "白驼淫贼",
+        "title2":               "白驼山弟子",
+        "gender":               "男性",
+        "dodge":                "chanchu-bufa",
+        "parry":                "lingshe-zhangfa",
+        "staff":                "lingshe-zhangfa",
+        "force":                "hamagong",
+        "unarmed":                 "shexing-diaoshou",
+        "prepare1":             "unarmed",
+        "exert1":               "nizhuan",
+        "perform1":             "staff.shoot",
+        "perform2":             "staff.lingshe",  
+        "perform3":             "force.hama",  
+        "weapon":                __DIR__"obj/shezhang",
+]),
+([      "title1":                "峨嵋贼尼",
+        "title2":                "峨嵋女尼",
+        "gender":                "女性",
+        "class":                 "bonze",
+        "dodge":                 "zhutian-bu",
+        "unarmed":                "jinding-zhang",
+        "parry":                 "jinding-zhang",
+        "sword":                 "huifeng-jian",
+        "force":                 "linji-zhuang",
+        "finger":                "tiangang-zhi",
+        "prepare1":              "unarmed",
+        "prepare2":              "unarmed",
+        "perform1":              "sword.mie",
+        "perform2":              "sword.feng",   
+        "exert1":                "youming",
+        "exert2":                "fengyun",
+        "weapon":                __DIR__"obj/changjian",
+]),
+([      "title1":                "峨嵋贼尼",
+        "title2":                "峨嵋女尼",
+        "gender":                "女性",
+        "class":                 "bonze",
+        "dodge":                 "zhutian-bu",
+        "unarmed":                "jinding-zhang",
+        "parry":                 "jinding-zhang",
+        "sword":                 "huifeng-jian",
+        "force":                 "linji-zhuang",
+        "finger":                "tiangang-zhi",
+        "prepare1":              "unarmed",
+        "prepare2":              "unarmed",
+        "perform1":              "sword.mie",
+        "perform2":              "sword.feng",   
+        "exert1":                "youming",
+        "exert2":                "fengyun",
+        "weapon":                __DIR__"obj/changjian",
+]),
+([      "title1":                "灵鹫妖姬",
+        "title2":                "灵鹫圣使",
+        "gender":                "女性",
+        "class":                 "fighter",
+        "dodge":                 "yueying-wubu",
+        "parry":                 "tianyu-qijian",
+        "sword":                 "tianyu-qijian",
+        "force":                 "bahuang-gong",
+        "hand":                  "zhemei-shou",
+        "unarmed":               "liuyang-zhang",
+        "prepare1":              "unarmed",
+        "prepare2":              "unarmed",
+        "perform1":              "sword.lian",
+        "perform2":              "sword.san",
+        "perform3":              "hand.duo",
+        "exert1":                "powerup",
+        "weapon":                __DIR__"obj/changjian",
+]),
+([      "title1":                "五毒魔女",
+        "title2":                "五毒护法",
+        "gender":                "女性",
+        "class":                 "fighter",
+        "dodge":                 "wudu-yanluobu",
+        "parry":                 "wudu-goufa",
+        "sword":                 "wudu-goufa",
+        "force":                 "wudu-shengong",
+        "unarmed":               "qianzhu-wandushou",
+        "prepare1":              "unarmed",
+        "perform1":              "sword.suo",
+        "perform2":              "sword.lianhuan",
+        "perform3":              "dodge.snake",  
+        "exert1":                "powerup",
+        "weapon":                __DIR__"obj/changjian",
+]),
+([      "title1":                "丐帮恶丐",
+        "title2":                "丐帮长老",
+        "gender":                "男性",
+        "class":                 "fighter",
+        "dodge":                 "xiaoyaoyou",
+        "parry":                 "dagou-bang",
+        "staff":                 "dagou-bang",
+        "force":                 "huntian-qigong",
+        "strike":                "xianglong-zhang",
+        "prepare1":              "strike",
+        "perform1":              "staff.chan",
+        "perform2":              "staff.wugou",
+        "perform3":              "staff.wugou",
+        "perform4":              "strike.xianglong",
+        "exert1":                "powerup",
+        "exert2":                "shengang",
+        "weapon":                __DIR__"obj/zhubang",
+]),
+([      "title1":                "丐帮恶丐",
+        "title2":                "丐帮长老",
+        "gender":                "男性",
+        "class":                 "fighter",
+        "dodge":                 "xiaoyaoyou",
+        "parry":                 "dagou-bang",
+        "staff":                 "dagou-bang",
+        "force":                 "huntian-qigong",
+        "strike":                "xianglong-zhang",
+        "prepare1":              "strike",
+        "perform1":              "staff.chan",
+        "perform2":              "staff.wugou",
+        "perform3":              "staff.wugou",
+        "exert1":                "powerup",
+        "exert2":                "shengang",
+        "weapon":                __DIR__"obj/zhubang",
+
+]),            
+([      "title1":                "神秘杀手",
+        "title2":                "神秘高手",
+        "gender":                "男性",
+        "class":                 "fighter",
+        "dodge":                 "huashan-shenfa",
+        "parry":                 "dugu-jiujian",
+        "sword":                 "dugu-jiujian",
+        "force":                 "zixia-shengong",
+        "strike":                "hunyuan-zhang",
+        "cuff":                  "poyu-quan",
+        "prepare1":              "strike",
+        "prepare2":              "cuff",
+        "perform1":              "sword.sanpo",
+        "perform2":              "sword.xilai",
+        "perform3":              "sword.xilai",
+        "perform4":              "strike.wuji",  
+        "exert1":                "powerup",
+        "weapon":                __DIR__"obj/changjian",
+]),
+([      "title1":                "华山派剑客",
+        "title2":                "华山派弃徒",
+        "gender":                "男性",
+        "class":                 "fighter",
+        "dodge":                 "huashan-shenfa",
+        "parry":                 "huashan-jianfa",
+        "sword":                 "huashan-jianfa",
+        "force":                 "zixia-shengong",
+        "strike":                "hunyuan-zhang",
+        "cuff":                  "poyu-quan",
+        "prepare1":              "strike",
+        "prepare2":              "cuff",
+        "perform1":              "sword.feilong",
+        "perform2":              "sword.jianzhang",
+        "perform3":              "cuff.leidong",
+        "perform4":              "strike.wuji",
+        "exert1":                "powerup",
+        "weapon":                __DIR__"obj/changjian",
+]),
+([      "title1":                "华山派女侠",
+        "title2":                "华山派弃徒",
+        "gender":                "女性",
+        "class":                 "fighter",
+        "dodge":                 "huashan-shenfa",
+        "parry":                 "yunu-sword",
+        "sword":                 "yunu-sword",
+        "force":                 "zixia-shengong",
+        "strike":                "hunyuan-zhang",
+        "cuff":                  "poyu-quan",
+        "prepare1":              "strike",
+        "prepare2":              "cuff",
+        "perform1":              "sword.wushuang",
+        "perform2":              "cuff.leidong",
+        "perform3":              "strike.wuji",
+        "exert1":                "powerup",
+        "weapon":                __DIR__"obj/changjian",
+]), 
+([      "title1":                "少林恶僧",
+        "title2":                "少林和尚",
+        "gender":                "男性",
+        "class":                 "bonze",
+        "dodge":                 "shaolin-shenfa",
+        "cuff":                  "jingang-quan",
+        "parry":                 "zui-gun",
+        "club":                  "zui-gun",
+        "force":                 "hunyuan-yiqi",
+        "finger":                "nianhua-zhi",
+        "strike":                "sanhua-zhang",
+        "prepare1":              "finger",
+        "prepare2":              "strike",
+        "perform1":              "club.zuida",
+        "perform2":              "cuff.jin",
+        "exert1":                "jingang",
+        "weapon":                __DIR__"obj/qimeigun",
+]),
+([      "title1":               "古墓逆徒",
+        "title2":               "古墓大侠",
+        "gender":               "男性",
+        "dodge":                "yunu-shenfa",
+        "parry":                "xuantie-jianfa",
+        "strike":               "anran-xiaohunzhang",
+        "sword":                "xuantie-jianfa",
+        "force":                "yunu-xinjing",
+        "exert1":               "powerup",
+        "prepare1":              "strike",
+        "perform1":             "sword.fen",
+        "perform2":             "strike.anranxiaohun",     
+        "perform3":             "sword.dang",
+        "perform4":             "sword.haichao", 
+        "weapon":                __DIR__"obj/changjian",
+]),
+([      "title1":                "全真败类",
+        "title2":                "全真道长",
+        "class":                 "taoist",
+        "gender":                "男性",
+        "dodge":                 "qixing-huanwei",
+        "parry":                 "quanzhen-jianfa",
+        "unarmed":               "kongming-quan",
+        "sword":                 "quanzhen-jianfa",
+        "force":                 "tiangang-zhengqi",
+        "finger":                "yiyang-zhi",
+        "prepare1":              "finger",    
+        "perform1":              "sword.sanqing",
+        "perform2":              "sword.qixing",
+        "perform3":              "sword.tonggui", 
+        "perform4":              "finger.yizhi",   
+        "weapon":                __DIR__"obj/changjian",
+]),   
+([      "title1":                "雪山寺贼秃",
+        "title2":                "雪山寺喇嘛",
+        "gender":                "男性",
+        "dodge":                 "shenkong-xing",
+        "parry":                 "mingwang-jian",
+        "strike":                "huoyan-dao",
+        "sword":                 "mingwang-jian",
+        "force":                 "xiaowuxiang",
+        "prepare1":              "strike",
+        "perform1":              "sword.ming",
+        "perform2":              "strike.fen",
+        "exert1":                "shield",
+        "weapon":                __DIR__"obj/changjian",
+]), 
+([      "title1":                "武当败类",
+        "title2":                "武当道长",
+        "class":                 "taoist",
+        "dodge":                 "tiyunzong",
+        "parry":                 "taiji-quan", 
+        "unarmed":               "taiji-quan",
+        "sword":                 "taiji-jian",
+        "force":                 "taiji-shengong",
+        "perform1":              "sword.lian",
+        "perform2":              "unarmed.zhen",
+        "weapon":                __DIR__"obj/changjian",
+]),
+([      "title1":                "武当败类",
+        "title2":                "武当道长",
+        "class":                 "taoist",
+        "dodge":                 "tiyunzong",
+        "parry":                 "taiji-quan",
+        "unarmed":               "taiji-quan",
+        "sword":                 "taiji-jian",
+        "blade":                 "taiji-dao",
+        "force":                 "taiji-shengong",
+        "prepare1":              "sword",
+        "prepare2":              "blade",   
+        "perform1":              "sword.lian",
+        "perform2":              "blade.cuo",
+        "perform3":              "unarmed.zhen",
+        "weapon":                __DIR__"obj/changjian",
+        "weapon_s":              __DIR__"obj/blade",
+]), 
+([      "title1":                "桃花岛逐徒",
+        "title2":                "桃花岛门下",
+        "dodge":                 "anying-fuxiang",
+        "finger":                "tanzhi-shentong",
+        "hand":                  "lanhua-shou",
+        "parry":                 "yuxiao-jianfa",
+        "sword":                 "yuxiao-jianfa",
+        "force":                 "bibo-shengong",
+        "exert1":                "powerup",
+        "perform1":              "sword.ging",
+        "perform2":              "sword.tianwai",     
+        "perform3":              "hand.fuxue",
+        "perform4":              "finger.jinglei",
+        "prepare1":              "finger",
+        "prepare2":              "hand",
+        "weapon":                __DIR__"obj/yuxiao",
+]),
+([      "title1":                "桃花岛逐徒",
+        "title2":                "桃花岛门下",
+        "dodge":                 "anying-fuxiang",
+        "unarmed":               "xuanfeng-tui",    
+        "strike":                "luoying-zhang",     
+        "parry":                 "luoying-shenjian",
+        "sword":                 "luoying-shenjian",
+        "force":                 "bibo-shengong",
+        "exert1":                "powerup",
+        "perform1":              "sword.lybf",    
+        "perform2":              "unarmed.kuangfeng",
+        "perform3":              "strike.xuan",
+        "prepare1":              "unarmed",
+        "prepare2":              "strike",
+        "weapon":                __DIR__"obj/changjian",
+]),
+});
+string *first_name = ({ "管云","王明","张孝","陈来","金得","姑苏","钱孙","孙元","李子","周天","吴国",
+        "刘师","林月","钱子","木龙","元铭","杀破","喜来" });
+string *name_words = ({ "志","天","良","志","忠","大","老","良","勇","元","华","宏",
+        "孝","雄","龙","明","文","武","斌","来","胜","进","铭","彬","东","伟" });
+
+void create()
+{
+        string name,id;
+         int i,skill,skill_lvl,basic_radio,basic_skill,index,index1,index2,nl,dengji;
+        object me=this_player(),weapon,weapon_s;
+        mapping        mp,skills;
+        string *basic=({"dodge","unarmed","force","parry","finger","hand",
+                        "strike","taoism","club","staff","fork","hammer",
+                        "blade","cuff","axe","sword","whip","dagger",
+                        "throwing","claw" ,"poison"});
+        int ratio=100;
+        string *chat_chance_combat_here=({});
+        name = first_name[random(sizeof(first_name))];
+
+            if( random(10) > 2 ) name += name_words[random(sizeof(name_words))];
+     id = this_player()->query("id");
+
+          set_name(name, ({ id+" qiangdao", "qiangdao" }) );
+
+        index=random(sizeof(menpai));
+        mp=menpai[index];
+        if (mp["gender"]) set("gender",mp["gender"]);
+        if (mp["class"]) set("class",mp["class"]);
+        if (me->query("shen")>0) set("title",mp["title1"]);
+        else if (me->query("shen")<0) set("title",mp["title2"]);
+        else 
+        {
+                if (random(2))
+                set("title",mp["title1"]);
+                else
+                set("title",mp["title2"]);
+        }
+
+
+        ratio=80+random(me->query_temp("kill_quest/count")*5+1);
+
+//here begin to set_skill of this_object()
+        skill=0;
+        skills=me->query_skills();        
+        if (sizeof(skills))
+        {
+        for (i=0;i<sizeof(keys(skills));i++)
+                if (skills[keys(skills)[i]]>=skill) 
+                        skill=skills[keys(skills)[i]];
+        }
+        if(skill>get_level(me->query("zjb_dj/dj")))
+        skill=get_level(me->query("zjb_dj/dj"));
+        skill_lvl = get_level((int)me->query("combat_exp")) - skill;
+        if(skill_lvl < 0)
+                skill_lvl = 0;
+        basic_skill=skill*ratio/100;
+        if(basic_skill-skill > 60)  
+                basic_skill=skill + 60;
+        skill=basic_skill + skill_lvl/2;
+        if(skill<50)    skill=50;
+        if(skill>5000)    skill=5000;
+        if(skill<10) skill=(50+skill)/3;
+
+        for (i=0;i<sizeof(keys(mp));i++)
+        {
+                if (member_array(keys(mp)[i],basic)!=-1)
+                        {
+                                set_skill(keys(mp)[i],skill);
+                                set_skill(mp[keys(mp)[i]],skill);
+                                map_skill(keys(mp)[i],mp[keys(mp)[i]]);
+                        }
+        }
+        if (mp["prepare1"])
+           prepare_skill(mp["prepare1"],query_skill_mapped(mp["prepare1"]));
+        if (mp["prepare2"])
+           prepare_skill(mp["prepare2"],query_skill_mapped(mp["prepare2"]));
+        set("chat_chance_combat",20);
+        if (mp["perform1"])
+        chat_chance_combat_here+=({(: perform_action, mp["perform1"] :)});
+        if (mp["perform2"]) 
+        chat_chance_combat_here+=({(: perform_action, mp["perform2"] :)}); 
+        if (mp["perform3"]) 
+        chat_chance_combat_here+=({(: perform_action, mp["perform3"] :)}); 
+        if (mp["perform4"]) 
+        chat_chance_combat_here+=({(: perform_action, mp["perform4"] :)}); 
+
+        if (mp["exert1"])
+        chat_chance_combat_here+=({(: exert_function, mp["exert1"] :)});
+        if (mp["exert2"]) 
+        chat_chance_combat_here+=({(: exert_function, mp["exert2"] :)});
+        if (mp["exert3"]) 
+        chat_chance_combat_here+=({(: exert_function, mp["exert3"] :)});
+        if (mp["exert4"]) 
+        chat_chance_combat_here+=({(: exert_function, mp["exert4"] :)});
+        chat_chance_combat_here+=({(: exert_function, "powerup" :)});
+
+        set("chat_msg_combat",chat_chance_combat_here);
+        set("str",me->query("str")/2);
+        set("con",me->query("con")/2);
+        set("dex",me->query("dex")/2);
+
+        set("chat_chance", 5);
+        set("chat_msg", ({
+             (: random_move :),
+        }) );
+        if(query("title")=="全真败类" || query("title")=="全真道长")
+          set_skill("xiantian-gong",skill);    
+        if(query("title")=="古墓妖女" || query("title")=="古墓女侠")
+        {
+          set("family/family_name","古墓派");
+          set_skill("quanzhen-jianfa",skill);
+          set_skill("hubo",skill);       
+          set_skill("tianluo-diwang",skill);
+        }
+        if(query("title")=="桃花岛逐徒" || query("title")=="桃花岛门下")
+        {
+          set("family/family_name","桃花岛");
+          set_skill("art",skill);
+          set_skill("count",skill);
+          set_skill("qimen-wuxing",skill);
+        }           
+        if( query("title")=="移花宫妖女" || query("title")=="移花宫仙子")
+        set("family/family_name","移花宫");
+        if(query("title")=="星宿老魔" || query("title")=="星宿门徒")
+          set_skill("beiming-zhenqi",skill);
+        if(query("class")=="taoist")
+          set_skill("taoism",skill);
+        if(query("title")=="峨嵋贼尼" || query("title")=="峨嵋女尼")
+        {
+          set("family/family_name","峨嵋派");
+          set_skill("mahayana",skill);
+        }
+        if(query("title")=="少林恶僧" || query("title")=="少林和尚")
+        {
+          set("family/family_name","少林派");
+          set_skill("buddhism",skill);
+        }
+        if(query("title")=="血刀淫僧" || query("title")=="血刀门喇嘛")
+          set_skill("lamaism",skill);
+        if(query("title")=="五毒魔女" || query("title")=="五毒护法")   
+        {
+          set("family/family_name","五毒教");
+          set_skill("duji",skill);
+         }
+        if(query("title")=="逍遥派恶徒" || query("title")=="逍遥派弟子")
+          set("family/family_name","逍遥派"); 
+        if(query("title")=="武当道长" || query("title")=="武当败类")
+          set("family/family_name","武当派");   
+        if(query("title")=="明教恶徒" || query("title")=="光明圣使")
+          set("family/family_name","明教");   
+        if(query("title")=="姑苏慕容弟子")
+        {
+          set("family/family_name","姑苏慕容");
+          set("nick",HIR"以彼之道 * * * 还施彼身"NOR); 
+        } 
+
+//以下开始添加任务NPC等级计算..
+   dengji = me->query("zjb_dj/dj")+1;
+     if(dengji<0)    dengji=1;
+     set("zjb_dj/dj",dengji);
+        basic_radio = me->query("max_qi") /1000 +1; 
+        set("max_qi",me->query("max_qi"));
+        set("qi",query("max_qi"));
+        set("eff_qi",query("max_qi"));
+          set("max_jing",me->query("max_jing"));
+        set("eff_jing",query("max_jing"));
+        set("jing",query("max_jing"));
+        set("fight_till_die",1);
+        set("eff_jing",query("max_jing"));
+        if(me->query("max_neili")<80)
+                nl=100;
+                else nl=me->query("max_neili");
+        set("max_neili",me->query("max_neili")/2);
+        set("neili",me->query("max_neili"));
+        set("max_jingli",nl*ratio/200);
+        set("jingli",query("max_jingli"));
+        basic_radio = me->query("max_neili") / 500 ;
+        set("jiali",me->query("max_neili")/(20+5*basic_radio));
+        set("owner",id);
+        set("notongmen",1);
+        set("food",500);
+        set("no_suck",1);
+        set("water",500);
+        set("combat_exp",me->query("combat_exp")/80*ratio);
+//        if( query("combat_exp") > 10000000 )
+        set("is_quest",1);
+        set("no_guard",1);
+        set("no_clean_up",1);
+        setup();
+
+        if (mp["weapon"])
+        {
+         weapon=carry_object(mp["weapon"]);
+         weapon->wield();
+         if( query("combat_exp") > 10000000 )
+         {
+           set("weapon",weapon->query("id"));
+           for(i=0;i<3;i++)
+           carry_object(mp["weapon"]);
+         }
+        }
+
+        if (mp["weapon_s"])
+        {
+         weapon_s=carry_object(mp["weapon_s"]);
+         weapon_s->wield();
+         if( query("combat_exp") > 10000000 )
+         {
+           set("weapon_s",weapon_s->query("id"));
+           for(i=0;i<3;i++)
+           carry_object(mp["weapon_s"]);
+         }
+        }
+
+        carry_object(__DIR__"obj/tiejia")->wear();
+}
+int get_level(int exp)
+{
+  object me;
+  int level;
+  me = this_player();
+  level= me->query("zjb_dj/dj")*150;
+  return level;    
+}               
+
+// Room: /d/city/npc.c
+
+#include <ansi.h> 
+ 
+mapping *dizhia=({
+
+	(["cdizhi":	"关外",
+	"weizhi2" :	"/d/guanwai/xuedi2",]),  
+	(["cdizhi":	"峨嵋山",
+	"weizhi2" :	"/d/emei/basipan2",]),  
+	(["cdizhi":	"白驼山",
+	"weizhi2" :	"/d/baituo/changlang",]),  
+	(["cdizhi":	"华山",
+	"weizhi2" :	"/d/huashan/canglong",]),  
+	(["cdizhi":	"灵鹫峰",
+	"weizhi2" :	"/d/lingjiu/dadao2",]),  
+	(["cdizhi":	"嵩山",
+	"weizhi2" :	"/d/songshan/chaotian",]),  
+	(["cdizhi":	"天龙寺",
+	"weizhi2" :	"/d/tianlongsi/damen",]),  
+	(["cdizhi":	"五毒教",
+	"weizhi2" :	"/d/wudujiao/damen",]),  
+	(["cdizhi":	"通吃帮",
+	"weizhi2" :	"/d/tongchi/huayuan",]),  
+	(["cdizhi":	"武当山",
+	"weizhi2" :	"/d/wudang/liantai",]),  
+	(["cdizhi":	"天地会",
+	"weizhi2" :	"/d/city2/ceting",]),  
+	(["cdizhi":	"泉州城",
+	"weizhi2" :	"/d/quanzhou/jiaxing",]),  
+	(["cdizhi":	"长安城",
+	"weizhi2" :	"/d/changan/ca",]),  
+	(["cdizhi":	"北京城",
+	"weizhi2" :	"/d/city2/wangfu2",]),  
+	(["cdizhi":	"扬州城",
+	"weizhi2" :	"/d/wizard/fightroom5",]), 
+	(["cdizhi":	"燕子坞",
+	"weizhi2" :	"/d/mr/c14",]), 
+});
+
+void init()
+{
+	object ob, me;
+	mapping dizhis,hp_status;
+	int exp, nei, nei1;
+
+	::init();
+     if (!query("inited"))
+      {  	
+         set("chat_chance", 10);
+    	   set("chat_msg", ({
+   		   (: random_move :)
+	                  }) );
+   		   remove_call_out("dest"); 
+         call_out("dest",2000);
+         set("inited",1);
+      }
+	ob = this_player();
+  me = this_object();
+  
+	if (interactive(ob)
+		&& !environment(ob)->query("no_fight")
+//		&& ob->query_condition("guanfu_task")
+		&& present("wenshu", ob)
+		&& (string)me->query("owner") == ob->query_temp("guanfu_target"))
+	{
+	nei = me->query("neili",1);
+	nei1 = ob->query("neili",1);
+	hp_status = ob->query_entire_dbase();
+
+	dizhis = dizhia[random(sizeof(dizhia))];
+	exp = ob->query("combat_exp");
+
+///第一次追杀
+	if (ob->query_temp("mark/gkill1") )
+	{ 
+	  message_vision( HIR"$n看到$N目光冷冷注视着自己一动不动，不由停下了脚步。\n"NOR, ob, me);
+	 if ((string)me->query("name") == ob->query_temp("guanf_huida1"))
+		{
+			message_vision( HIR"$n看到$N走到近前，狠狠的骂道，不识抬举的东西，我好言相劝没用，\n今天就让你尝尝大爷的厉害。\n"NOR,ob,me);
+			me->set_leader(ob);
+			remove_call_out("kill_ob");
+			call_out("kill_ob", 0, ob);
+			ob->delete_temp("guanf_huida1");
+			ob->delete_temp("mark/gkill1");
+
+			if ((int)exp<3000000) 
+			    me->set("combat_exp",exp*3/2);
+			else 
+			    me->set("combat_exp",exp*2);   
+     if ((hp_status["max_qi"]*3/2)<1500)
+     { 
+        me->set("max_qi", 1500);
+        me->set("eff_qi", 1500);
+        me->set("qi",     1500);
+     }  
+     else		
+	   {
+	      me->set("max_qi", hp_status["max_qi"]*3/2);
+	      me->set("eff_qi", hp_status["max_qi"]*3/2);
+	      me->set("qi",     hp_status["max_qi"]*3/2);
+	   }
+
+     if ((hp_status["max_neili"])<1500)
+        me->set("max_neili",1500);
+     else 
+        me->set("max_neili", hp_status["max_neili"]);
+
+     if((hp_status["neili"])<1500)
+        me->set("neili",1500);
+     else
+        me->set("neili", hp_status["neili"]);	
+	   me->set("jiali",nei1/20);
+	 }
+   else
+   {
+
+			switch(random(4))
+			{
+				case 0:
+					message_vision("$n嘿嘿奸笑几声，连忙赔笑道，这位"+RANK_D->query_respect(ob)+ "是官府的捕头吧？！大家都是武林中人，今天能否高抬贵手？我必有重谢！你好好斟酌一下，是否愿意？\n",ob,me);
+					write (HIY"你可以选择同意(yes)或者拒绝(no)。\n"NOR);
+					ob->set_temp("guanf_huida1", me->query("name"));
+					break;
+				case 1:
+					message_vision( HIR"$n阴笑一声说道，这麽多不怕死的？再来十个大爷我也不怕！\n随即眼睛一瞪，向着$N就冲了过去！\n"NOR,ob,me);
+					me->set_leader(ob);
+					remove_call_out("kill_ob");
+					call_out("kill_ob", 0, ob);
+					ob->delete_temp("mark/gkill1");
+					break;
+				case 2:
+					message_vision( WHT"$n待$N走到近前，冷冷一笑，说道，你千里追到这里，我看你又能奈我何！\n"NOR,ob,me);
+					write(WHT"你感到一股无形的杀气，心中不由一颤。\n"NOR);
+					ob->delete_temp("mark/gkill1");
+					break;
+				case 3:
+					message_vision("$n忽然泪流满面，一幅可怜的神情对$N说道，小人上有老下有小，而且完全是官府被\n陷害才落此地步，望你老明察秋毫，网开一面，我今生一定感激不尽。\n",ob,me);
+					ob->delete_temp("mark/gkill1");
+			}
+		}
+	}
+// end///  第二次追杀
+		if (ob->query_temp("mark/gkill2"))
+		{
+			switch(random(2))
+			{
+				case 0:
+					message_vision( HIR"$n额头青筋跳动，冷哼了一声，瞪着通红的眼睛向着$N就冲了过去。\n"NOR, ob,me);
+					me->set_leader(ob);
+					if ((int)exp<3000000) 
+			                   me->set("combat_exp",exp*3/2);
+			                else 
+			                   me->set("combat_exp",exp*2);   
+			                me->set("jiali",nei1/15);
+					remove_call_out("kill_ob");
+					call_out("kill_ob", 0, ob);
+					break;
+				case 1:
+					message_vision( HIY"$n一看到$N，嘿嘿一笑，头也不回挤进行人之中，脚下抹油溜了。\n"NOR,ob,me); 
+					ob->delete_temp("mark/gkill2");
+					ob->set_temp("mark/gkill3",1); 
+					write(WHT"「"+ob->query_temp("guanfu_targetnm")+"」好象往「"+dizhis["cdizhi"]+"」的方向逃去了。\n"NOR);
+//					me->move(dizhis["weizhi2"]);
+   place_room(me,ob);
+
+//			              me->heal_up(); 
+//精力
+        me->set("max_jingli",me->query("max_jingli"));
+        me->set("jingli",me->query("max_jingli")*2);
+//精神
+        me->set("max_jing",me->query("max_jing"));
+        me->set("eff_jing",me->query("max_jing"));
+        me->set("jing",me->query("max_jing")*2);
+//内力
+        me->set("max_neili",me->query("max_neili"));
+        me->set("neili",me->query("max_neili")*2);
+//气血
+        me->set("max_qi",me->query("max_qi")*2/3);
+        me->set("eff_qi",me->query("max_qi")*2/3);
+        me->set("qi",me->query("max_qi")*2/3);
+					return; 
+			}	 
+		}
+		//第三次
+		if (ob->query_temp("mark/gkill3"))
+		{
+			message_vision(HIR "$n气急败坏的对$N嚷道，杀人不过头点地，你一再苦苦相逼，大爷今天就和你拼个鱼死网破。\n"NOR,ob,me);
+			if(nei<nei1&& (!me->query_temp("gf_nlset")))
+			{
+				me->set("max_neili",ob->query("max_neili"));
+				me->set("neili",nei1);
+				me->set_temp("gf_nlset",1);
+			}
+			me->set_leader(ob);
+			remove_call_out("kill_ob");
+			call_out("kill_ob", 0, ob);
+			if ((int)exp<3000000) 
+			    me->set("combat_exp",exp*3/2);
+			else 
+			    me->set("combat_exp",exp*2);   
+			me->set("jiali",nei1/15);
+			me->heal_up(); 
+		}
+	}
+	add_action("do_yes","yes");
+  add_action("do_no","no");
+	
+//	call_out("dest", 2000); 
+       add_action("do_hit","hit");
+        add_action("do_hit","kill");    
+        add_action("do_hit","touxi");
+        add_action("do_hit","ansuan");
+        add_action("do_hit","steal"); 
+} 
+
+
+int do_hit(string arg)
+{
+        object ob = this_object();
+        object me = this_player();
+        if (!arg || arg != ob->query("id"))
+                return 0;
+        if( !living(ob) ) {
+                        tell_object(me,HIW"太没人性了吧?！\n"NOR);
+                        return 1;
+
+}
+       if( ob->query_temp("block_msg/all")) {
+                       tell_object(me,HIW"太没人性了吧?！\n"NOR);
+                       return 1;
+ }
+        if (!(me->query_temp("guanfu_target")==ob->query("owner")))
+        {
+                if (userp(me) )
+                {
+                        tell_object(me,HIW"不是你要抓的人，凑什么热闹！\n"NOR);
+                        return 1;
+                }
+                else return 0;
+        }
+}
+/*
+int accept_hit(string arg)
+{
+	   object me = this_player();
+     object ob = this_object();
+     if (!(me->query_temp("guanfu_target")==ob->query("owner")))
+        return notify_fail(HIW"不是你要抓的人，凑什么热闹！\n"NOR);
+     return 1;
+}
+int accept_kill(object who)		{return accept_hit(who);}
+int accept_ansuan(object who) {return accept_hit(who);}
+int accept_touxi(object who)	{return accept_hit(who);}
+
+*/
+void random_move()
+{
+/*        mapping exits;
+        string *dirs, dir, dest;
+
+        if( !mapp(exits = environment()->query("exits")) ) return 0;
+        dirs = keys(exits);
+        dir = dirs[random(sizeof(dirs))];
+        dest = exits[dir];
+        if (!find_object(dest)) load_object(dest);
+        if( find_object(dest)->query("no_fight")) return 0;
+        if( this_object()->is_fighting() ) return 0;
+        command("go " + dir);
+        return 1;
+*/
+//         NPC_D->random_move(this_object())
+}
+
+int do_yes()
+{
+	object r_shen, me, ob;
+	me = this_object();
+	ob = this_player();
+
+	if (!ob->query_temp("guanf_huida1")) return 0;
+	if (ob->query_temp("guanf_huida1") != (string)me->query("name"))
+		return 0;
+	if ((int)ob->query("shen") < 1 && ob->query("combat_exp",1) < 180000)
+	{
+		command("say 这位"+RANK_D->query_respect(ob)+"一定前途远大，嘿嘿，我是不会亏待你的。\n");
+		me->add_money("gold",20+random(20));
+		command("give "+ob->query("id")+" gold");
+		message_vision("$N嘿嘿一笑，转身离开，一眨眼就消失不见了。\n",me);
+		destruct(me);
+		return 1;
+	}
+	if ((int)ob->query("shen") < 1 &&
+		ob->query("combat_exp",1) > 180000 &&
+		ob->query("combat_exp",1) < 500000)
+	{
+		command("say 我早就看出这位"+RANK_D->query_respect(ob)+"是当世的俊杰，嘿嘿，这点小礼物请务必收下。\n");
+		message_vision("$N嘿嘿奸笑两声，悄悄塞给了$n一棵人参。\n",me,ob);
+		r_shen=new("/clone/medicine/vegetable/renshen");
+		r_shen->move(ob);
+		command("give "+ob->query("id")+" gold");
+		message_vision("$N嘿嘿一笑，转身离开，一眨眼就消失不见了。\n",me);
+		destruct(me);
+		return 1;
+	}
+	if ((int)ob->query("shen") < 1 && ob->query("combat_exp",1) > 500000)
+	{
+		command( "say 您老人家功夫如此出众，小的实在想不出拿什麽孝敬您老，回头我想起在说吧。\n");
+		message_vision("$N嘿嘿一笑，转身离开，一眨眼就消失不见了。\n",me);
+		destruct(me);
+		return 1;
+	}
+	if ((int)ob->query("shen") > 1 && ob->query("combat_exp",1) < 120000)
+	{
+		command("say 这位"+RANK_D->query_respect(ob)+"前途远大，一身正气，嘿嘿，佩服。\n");
+		me->add_money("gold",20+random(30));
+		command("give "+ob->query("id")+" gold");
+		ob->add("shen",-1000);
+		message_vision("$N嘿嘿一笑，转身离开，一眨眼就消失不见了。\n",me);
+		destruct(me);
+		return 1;
+	}
+	if ((int)ob->query("shen") > 1 &&
+		ob->query("combat_exp",1) > 120000 &&
+		ob->query("combat_exp",1) < 500000)
+	{
+		command("say 这位"+RANK_D->query_respect(ob)+"真是义薄云天，这个小礼物敬请务必收下。\n");
+		me->add_money("gold",30+random(30));
+		command("give "+ob->query("id")+" gold");
+		message_vision("$N嘿嘿奸笑两声，悄悄塞给了$n一棵人参。\n",me,ob);
+		r_shen=new("/clone/medicine/vegetable/renshen");
+		r_shen->move(ob);
+		ob->add("shen",-3000);
+		message_vision("$N嘿嘿一笑，转身离开，一眨眼就消失不见了。\n",me);
+		destruct(me);
+		return 1;
+	}
+	command("say 自古邪正势不两立，在下不过开个小小玩笑，千万不要当真啊。\n");
+	command("laugh " + ob->query("id"));
+	write("对方好象在拿你取笑，你不由怒火中烧。\n");
+	tell_room(environment(me), me->query("name")+"纵身跳入行人之中，转眼就不见了。\n", ({me}));	
+	destruct(me);
+	return 1;
+}
+   
+
+int do_no()
+{
+	object me, ob;
+	me = this_object();
+	ob = this_player();
+
+	if (!ob->query_temp("guanf_huida1")) return 0;
+	if (ob->query_temp("guanf_huida1") != (string)me->query("name"))
+		return 0;
+	if ((int)ob->query("shen") < 1)
+	{
+		command("say 这位"+RANK_D->query_respect(ob)+"一身瘴气，你我本是一路货色，却在这里装什么侠义英雄呢？！\n");
+		ob->delete_temp("guanf_huida1");
+		ob->delete_temp("mark/gkill1");
+		return 1;
+	}
+	command("say 这位"+RANK_D->query_respect(ob)+"一身正气，不愧名门正派弟子，不过不知道功夫怎麽样？！\n");
+	command("hehe " + ob->query("id"));
+	ob->delete_temp("guanf_huida1");
+	ob->delete_temp("mark/gkill1");
+	return 1;
+}
+
+void die()
+{
+	object ob, me,newob;
+	mapping dizhis;
+	
+	ob = this_object();
+	me = query_temp("last_damage_from");
+	dizhis = dizhia[random(sizeof(dizhia))];  
+	
+	if (!me->query_temp("mark/gkill3") &&
+		!me->query_temp("mark/gkill2") &&
+		(string)ob->query("owner") == me->query_temp("guanfu_target"))
+	{
+		message_vision(WHT "$N深吸口气，冷笑道：“好身手！”说完强忍伤痛纵身向「"+dizhis["cdizhi"]+"」处逃走。\n"NOR,ob,me);
+		me->set_temp("mark/gkill2",1);
+//		message_vision(WHT"「"+ob->query("name")+"」好象往「"+dizhis["cdizhi"]+"」的方向逃去了。\n"NOR);
+/*
+	       newob = new("/quest2/wenshu/task1/questnpc");  
+		newob->set("owner",me->query("id"));
+//		newob->move(dizhis["weizhi2"]);
+   place_room(me,newob);
+
+
+		destruct(ob);
+*/
+//			ob->heal_up(); 
+//精力
+        ob->set("max_jingli",ob->query("max_jingli"));
+        ob->set("jingli",ob->query("max_jingli")*2);
+//精神
+        ob->set("max_jing",ob->query("max_jing"));
+        ob->set("eff_jing",ob->query("max_jing"));
+        ob->set("jing",ob->query("max_jing")*2);
+//内力
+        ob->set("max_neili",ob->query("max_neili"));
+        ob->set("neili",ob->query("max_neili")*2);
+//气血
+        ob->set("max_qi",me->query("max_qi")*2/3);
+        ob->set("eff_qi",me->query("max_qi")*2/3);
+        ob->set("qi",me->query("max_qi")*2/3);
+//		ob->move(dizhis["weizhi2"]);
+   place_room(me,ob);
+
+
+		return;
+	}
+	if (me->query_temp("mark/gkill2") &&
+		(string)ob->query("owner") == me->query_temp("guanfu_target"))
+	{
+		message_vision(WHT "$N冷笑一声，说道：“好俊的功夫！”说完纵身向「"+dizhis["cdizhi"]+"」处逃走。\n"NOR,ob,me);
+		me->delete_temp("mark/gkill2");
+		me->set_temp("mark/gkill3",1);
+//		message_vision(WHT"「"+ob->query("name")+"」好象往「"+dizhis["cdizhi"]+"」的方向逃去了。\n"NOR);
+//		new(me->query_temp("path_rooms"))->move(dizhis["weizhi2"]);
+/*
+	       newob = new("/quest2/wenshu/task1/questnpc");  
+		newob->set("owner",me->query("id"));
+//		newob->move(dizhis["weizhi2"]);
+   place_room(me,newob);
+
+		destruct(ob);
+*/
+//			ob->heal_up(); 
+//精力
+        ob->set("max_jingli",ob->query("max_jingli"));
+        ob->set("jingli",ob->query("max_jingli")*2);
+//精神
+        ob->set("max_jing",ob->query("max_jing"));
+        ob->set("eff_jing",ob->query("max_jing"));
+        ob->set("jing",ob->query("max_jing")*2);
+//内力
+        ob->set("max_neili",ob->query("max_neili"));
+        ob->set("neili",ob->query("max_neili")*2);
+//气血
+        ob->set("max_qi",me->query("max_qi")*2/3);
+        ob->set("eff_qi",me->query("max_qi")*2/3);
+        ob->set("qi",me->query("max_qi")*2/3);
+//		ob->move(dizhis["weizhi2"]);
+   place_room(me,ob);
+		return;
+	}
+	if((string)ob->query("owner") != me->query_temp("guanfu_target"))
+	{
+		message_vision(WHT "突然$N一跃而起，道：“再见了各位！”就消失得无影无踪了。\n"NOR,ob,me);
+		destruct(ob);
+		return;
+	}
+	::die();
+}
+int accept_fight(object me)
+{
+	command("say 大爷我正要赶路，没心思和你动手。");
+	return 0;
+}
+void dest()
+{
+	object ob;
+	ob = this_object();
+	if (environment())
+	message_vision("只见$N忽然急转身行，纵身钻进行人中，转眼就踪迹皆无。\n", ob);  
+	destruct(this_object());
+}
+
+
+
+#include "quest_kill.h"  
+
+              
+

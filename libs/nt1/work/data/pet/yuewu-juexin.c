@@ -1,0 +1,18 @@
+// SN:=n6o<5a;;O<4fg]`
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;32m赤[1;31m焰马[2;37;0m", ({"juexin ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "$HIG$比我跑的快的不少，别我帅的没几个！
+它是红玄佛的坐骑。
+");
+        set_temp("owner_id", "yuewu");
+        set_temp("owner_name", "红玄佛");
+        ::setup();
+}
+

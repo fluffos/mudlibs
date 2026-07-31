@@ -1,0 +1,18 @@
+// SN:I98AV47n4@1cF`kY
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m天使三号兽[2;37;0m", ({"remiels shou"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "雷米尔的翅膀
+它是雷米尔的坐骑。
+");
+        set_temp("owner_id", "remiel");
+        set_temp("owner_name", "雷米尔");
+        ::setup();
+}
+

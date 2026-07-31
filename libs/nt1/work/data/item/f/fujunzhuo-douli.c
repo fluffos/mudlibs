@@ -1,0 +1,32 @@
+// SN:1VFKiGgdBZ643QH=
+// ITEM Made by player(傅君婥:fujunzhuo) /data/item/f/fujunzhuo-douli.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Wed Mar 10 18:34:30 2004
+#include <ansi.h>
+#include <armor.h>
+
+inherit HEAD;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[2;37;0m[31m斜阳斗笠[2;37;0m", ({ "douli" }));
+	set_weight(4500);
+	set("item_make", 1);
+	set("unit", "顶");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一顶头盔。
+[31m一顶血色的如诗如画般的斗笠，遮住了主人的半面娇颜。[2;37;0m
+头盔缘上刻着一行小字：傅君婥(fujunzhuo)
+");
+	set("value", 2100000);
+	set("point", 128);
+	set("material", "magic stone");
+	set("wear_msg", "[31m$N双掌捏出一种奇异的手势，只见一片血红色在$N的身边涌起，一顶如血的斗笠浮现在$N的头顶。[2;37;0m\n");
+	set("remove_msg", "[31m$N双手合十，口中念出一句奇怪的咒语，顶上的斗笠在刹那件便不见了。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/armor", apply_armor());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

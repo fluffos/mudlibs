@@ -1,0 +1,35 @@
+// Created by kuku@sjsh 2003.09.14
+
+#include <weapon.h>
+inherit BLADE;
+#include <ansi.h>
+inherit "/d/quest/newequip/calculate";
+
+void create()
+{        
+        string msg = "";   
+        set_name(HIM"恒日刀"NOR, ({"hengri dao", "blade"}));    
+        set_weight(4000);                 
+        if( clonep() )
+                set_default_object(__FILE__);
+        else {
+                set("unit", "把");
+                set("value", 5000);
+                set("material", "steel");
+                set("lvl",3);
+                set("Is_Diablo_Obj",1);  
+                set("need_class",1);
+                set("inset_hole",1);
+                set("wield_msg", "$N「唰」地一声抽出一把$n握在手中，顿时一股寒气扑面而来！\n");
+                set("unwield_msg", "$N将手中的$n插入刀鞘。\n");                
+        }
+        init_blade(60);  
+        msg += "一把寒光闪闪的圆头长刀，刀把上镶嵌有白玉。\n"+"基本攻击: "+query("weapon_prop/damage")+"\n"; 
+        set("old_long",msg);
+        if( query("lvl")>2){
+                if( !query("identification") ) 
+                        msg =query("old_long") + RED "这样东西还没有鉴定。\n"NOR;
+                        set("long",msg);
+        } 
+        setup();
+}

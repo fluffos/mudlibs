@@ -1,0 +1,18 @@
+// SN:am]9WPdfh]bGhPKS
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;34m寒狼[2;37;0m", ({"han lang"}));        
+        set("gender", "男性");                
+        set("unit", "条");
+        set("long", "寒哈
+它是慕容甜甜的坐骑。
+");
+        set_temp("owner_id", "ggtt");
+        set_temp("owner_name", "慕容甜甜");
+        ::setup();
+}
+

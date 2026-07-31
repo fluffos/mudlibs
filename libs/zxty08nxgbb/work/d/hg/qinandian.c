@@ -1,0 +1,25 @@
+// Room: /u/cass/hg/qinandian.c
+// This is a room made by roommaker. write by Fan. :)
+
+inherit ROOM;
+
+void create()
+{
+	set("short", "钦安殿");
+	set("long", @LONG
+殿宇梁枋全部用名贵的黄花梨木，直接沥粉彩画，殿内64根明柱皆为半
+立体浮雕鎏金盘龙，外墙磨砖到顶，内壁雕砖贴金，中间是五福捧寿等雕砖
+图案。斗拱、梁枋、藻井雕砖部位全部用赤金贴叶，被映照得金碧辉煌，光
+彩夺目。殿内正中坐着玄武大帝，殿侧还摆有青龙缸一口。殿前有连理树，
+是纯真爱情的象征。
+LONG
+);
+	set("exits", ([ /* sizeof() == 3 */
+  "southeast" : __DIR__"wanchunting",
+  "southwest" : __DIR__"qianqiuting",
+  "north" : __DIR__"shenwumen",
+]));
+
+	setup();
+	replace_program(ROOM);
+}

@@ -1,0 +1,18 @@
+// SN:]nFSYn`>aPK=:i3F
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m千羊之羊羊[2;37;0m", ({"qianyangzhi yang"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "干
+它是卡卡西的坐骑。
+");
+        set_temp("owner_id", "kkx");
+        set_temp("owner_name", "卡卡西");
+        ::setup();
+}
+

@@ -1,0 +1,155 @@
+
+// yijin-duangu 易筋锻骨
+
+#include <ansi.h>
+
+inherit SKILL;
+
+string *parry_msg = ({
+        "只听见「锵」一声，$n用兵刃轻轻一托，化解了$N这一击。\n",
+        "但是被$n用手中兵刃卸开。\n",
+        "但是$n身子一侧，随手转动手中的兵刃，让$N感觉到有力难施。\n",
+});
+
+string *unarmed_parry_msg = ({
+        "但是被$p双掌一推，$N的攻势顿时变了方向。\n",
+        "$n身形一转，$N只觉得的所有的力道全部都落到了空处。\n",
+        "但是$N感觉像打到棉花上一样，说不出的怪异。\n",
+});
+
+string query_parry_msg(object weapon)
+{
+        if( weapon )
+                return parry_msg[random(sizeof(parry_msg))];
+        else
+                return unarmed_parry_msg[random(sizeof(unarmed_parry_msg))];
+}
+
+int valid_enable(string usage) { return usage == "parry"; }
+
+int valid_learn(object me)
+{
+        int level;
+        int lv_martial;
+        
+        lv_martial = me->query_skill("martial-cognize", 1);
+        
+        if (lv_martial < 50)
+                return notify_fail("你觉得易筋锻骨过于深奥，以"
+                                   "自己现在的武学修养全然无法明白。\n");
+        
+        level = me->query_skill("yijin-duangu", 1);      
+        
+        if (level < 199)
+                if (me->query("gift/xisuidan")  > 0 || me->query("gift/shenliwan") > 0)
+                        return notify_fail("你刚想练习易筋锻骨，却发现总是有点不正常，看来是受药物的影响。\n");
+        if (me->query("gender") == "无性" && level > 199)
+                return notify_fail("你无根无性，阴阳不调，难以领会高深的易筋锻骨。\n");          
+        
+        if (lv_martial < 200 && lv_martial < level)
+                return notify_fail("你觉得自己的武学修养有限，难以领会更高深的易筋锻骨。\n");
+
+        return 1;
+}
+
+int practice_skill(object me)
+{
+        int cost;
+
+        cost = 10 + me->query_skill("yijin-duangu", 1) / 3;
+        if ((int)me->query("qi") < 60) 
+                return notify_fail("你的体力太差了，难以练习易筋锻骨。\n"); 
+     
+        if ((int)me->query("neili") < cost) 
+                return notify_fail("你的内力不够了，无法练习易筋锻骨。\n"); 
+      
+        me->receive_damage("qi", 30);
+        me->add("neili", -cost); 
+        return 1;         
+}
+
+mixed valid_damage(object ob, object me, int damage, object weapon) 
+{ 
+        mixed result; 
+        int ap, dp, mp; 
+        int base;
+       
+        if ((int)me->query_skill("yijin-duangu", 1) < 100 || 
+            ! living(me)) 
+                return; 
+        
+        mp = ob->query_skill("count", 1) / 2;
+        ap = ob->query_skill("parry", 1) + ob->query_skill("martial-cognize", 1) / 2 + mp;
+        dp = me->query_skill("yijin-duangu", 1) + me->query_skill("martial-cognize", 1) / 2; 
+        
+        // 若 dodge 使用配套的 shexing-lifan，效果较强。
+        base = (me->query_skill_mapped("dodge") == "shexing-lifan") ? 3 : 5;
+        
+        // 若 force 使用的是 jiuyin-shengong，效果增强。
+        if(me->query_skill_mapped("force") == "jiuyin-shengong")
+                base -= 1;
+                
+        // 若学了 sad-strike / never-defeated / bluesea-force / kuihua-mogong 效果减弱。
+        if(me->query_skill("sad-strike", 1) > 100 || me->query_skill("never-defeated", 1) > 300 || 
+           me->query_skill("bluesea-force", 1) > 300 || me->query_skill("kuihua-mogong", 1) > 300)
+                base += 3;        
+
+        // 由于不需要研究，基本效果一般
+        if ((ap / 2 + random(ap)) * base / 2 < dp) 
+        { 
+                result = ([ "damage": -damage ]); 
+       
+                switch (random(4)) 
+                { 
+                case 0: 
+                        result += (["msg" : HIM "只见$n" HIM "深深吸气后一声怒吼，$N" 
+                                            HIM "一招击在$n" HIM "身上却觉得象打在石头上。\n" NOR]); 
+                        break; 
+                case 1: 
+                        result += (["msg" : HIM "$N" HIM "一招平实得打在$n"
+                                            HIM "身上，然而$N" HIM "感觉像打到棉花上一样，"
+                                            HIM "说不出的怪异。\n" NOR]); 
+                        break; 
+                case 2: 
+                        result += (["msg" : HIM "眼看$N" HIM "这招已然逼得$n" 
+                                            HIM "无路可逃，却见$n" HIM "像没了骨头似的直直"
+                                            HIM "摊了下去，使$N" HIM "这招无功而返。\n" NOR]); 
+                        break; 
+                default: 
+                        result += (["msg" : HIM "$n" HIM "单手接下了$N" 
+                                            HIM "这一招，却发出「锵」一声，仿佛$n" 
+                                            HIM "这只手是铁铸般。\n" NOR]); 
+                        break;                  
+                } 
+                return result; 
+        } else
+        if (mp >= 100)
+        {
+                switch (random(3))
+                {
+                case 0:
+                        result = HIY "只见$n" HIY "深深吸气后一声怒吼，$N"
+                                 HIY "随即由刚转阴，软绵绵击出一招攻破$n"
+                                 HIY "这招「铁布衫」。\n" NOR;
+                        break;
+
+                case 1:
+                        result = HIY "$n" HIY "使出「棉花体」接招，哪知$N"
+                                 HIY "内劲幻变无常，破体内劲直侵骨髓。\n" NOR;
+                        break;
+
+                default:
+                        result = HIY "$n" HIY "使出单手想接下$N" 
+                                 HIY "这招，然而$N" HIY "蓦然警醒，"
+                                 HIY "登时变化招式攻向$n" HIY "面门。\n" NOR;
+                        break;
+                }
+                COMBAT_D->set_bhinfo(result);
+        }
+} 
+
+string perform_action_file(string action)
+{
+        return __DIR__"yijin-duangu/" + action;
+}
+

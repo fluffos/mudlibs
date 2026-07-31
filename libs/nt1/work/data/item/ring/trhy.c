@@ -1,0 +1,11 @@
+// SN:`k7ckJ`O]]>i1d>D
+// wedding-ring.c
+
+#include "/clone/misc/wedding-ring.h"
+
+void setup()
+{
+        set("long", "这是天人合一和天天的结婚戒指，是两人的定情之物。
+");
+        ::setup();
+}

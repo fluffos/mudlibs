@@ -1,0 +1,11 @@
+finition of #define ROOM
+
+
+Ö´ÐÐÊ±¶Î´íÎó£º*Object cannot be loaded during compilation.
+
+³ÌÊ½£ºadm/single/simul_efun.c µÚ 12 ÐÐ
+Îï¼þ: adm/single/simul_efun
+ºô½ÐÀ´×Ô£ºadm/single/master.c µÄ preload() µÚ 104 ÐÐ£¬Îï¼þ£º adm/single/master
+ºô½ÐÀ´×Ô£ºadm/single/master.c µÄ CATCH() µÚ 104 ÐÐ£¬Îï¼þ£º adm/single/master
+ºô½ÐÀ´×Ô£ºadm/single/master.c µÄ log_error() µÚ 124 ÐÐ£¬Îï¼þ£º adm/single/master
+ºô½ÐÀ´×

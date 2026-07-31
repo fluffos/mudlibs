@@ -1,0 +1,79 @@
+// Copyright (C) 2003, by Lonely. All rights reserved.
+// This software can not be used, copied, or modified 
+// in any form without the written permission from authors.
+// xuanfeng-saoye.c
+
+inherit SKILL;
+
+string *action_msg = ({
+        "$N双手虚晃，左脚猛地飞起，一式「风起云涌」，脚尖晃动，踢向$n的屁股",
+        "$N左脚顿地，别转身来抽身欲走，只一刹那间一回身，右脚一式「空谷足音」，猛踹$n的$l",
+        "$N左手一挣，反手扭搭住$n的右手，右脚同时踹出，既猛且准，一式「碧渊腾蛟」，踢中的$n的胸口",
+        "$N突然跃起，双足连环圈转，一式「秋风落叶」，足带风尘，攻向$n的全身",
+        "$N两手护胸，双脚交叉踢起，一式「风扫残云」，脚脚不离$n的面门左右",
+        "$N突然侧身，却步后退，一个前空翻，右脚自上而下一式「流星坠地」，照$n的面门直劈下来",
+        "$N使一式「朔风吹雪」，全身突然飞速旋转，双足忽前忽后，迅猛无极踹向$n的胸口",
+        "$N抽身跃起，开声吐气，大喝一声：嗨！一式「雷动九天」，双脚如旋风般踢向$n的$l",
+});
+
+int valid_enable(string usage) { return usage == "unarmed" || usage == "parry"; }
+
+int valid_combine(string combo) { return combo == "luoying-shenzhang"; }
+
+int valid_learn(object me)
+{
+        if (me->query_temp("weapon"))
+                return notify_fail("练旋风扫叶腿必须空手。\n");
+                
+        if ((int)me->query_skill("bibo-shengong", 1) < 20)
+                return notify_fail("你的碧波神功火候不够，无法学旋风扫叶腿。\n");
+           
+        if ((int)me->query_skill("unarmed", 1) < (int)me->query_skill("xuanfeng-tui", 1))
+	        return notify_fail("你的基本拳脚水平有限，无法领会更高深的旋风扫叶腿。\n");           
+           
+        return 1;
+}
+
+mapping query_action(object me, object weapon)
+{
+        return ([
+                "action": action_msg[random(sizeof(action_msg))],
+                "force" : 320 + random(30),
+                "attack": 60 - random(10),
+                "dodge" : 60 - random(10),
+                "parry" : 60 - random(10),
+                "damage_type" : random(2)?"瘀伤":"内伤",
+        ]);
+}
+
+int practice_skill(object me)
+{
+        if (me->query_temp("weapon") || me->query_temp("secondary_weapon"))
+                return notify_fail("练旋风扫叶腿时手里不能拿武器。\n");
+        if ((int)me->query("qi") < 60)
+                return notify_fail("你的体力太低了。\n");
+        if ((int)me->query("neili") < 60)
+                return notify_fail("你的内力不够练旋风扫叶腿。\n");
+        me->receive_damage("qi", 50);
+        me->add("neili", -50);
+        return 1;
+}
+
+string perform_action_file(string action)
+{
+       return __DIR__"xuanfeng-tui/" + action;
+}
+
+int query_effect_dodge(object attacker, object me) 
+{
+        int lvl;
+
+        lvl = me->query_skill("xuanfeng-tui", 1);
+        if (lvl < 80)  return 0;
+        if (lvl < 200) return 50;
+        if (lvl < 280) return 80;
+        if (lvl < 350) return 100;
+        return 120;
+}
+
+

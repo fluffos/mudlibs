@@ -1,0 +1,571 @@
+// qquest.c write by jackyboy
+
+#include <ansi.h>
+
+inherit ITEM;
+inherit F_SAVE;
+
+//请注意： PROP_NUM !
+#define PROP_NUM 10
+
+/*
+	prop=({ "sex","quest_type","quest_npc_id","quest_npc_name",
+	"quest_obj_id","quest_obj_name","quest_time","exp","pot","shen"});
+	propname=({"性别限制","任务类型","任务目标NPC的id","任务目标NPC的name",
+		"任务目标OBJ的id","任务目标OBJ的name","任务时限",
+		"奖励经验","奖励潜能","奖励神"});
+*/
+int do_select_list(string);
+int do_newquest(string);
+int do_post(string);
+int do_discard(string);
+int check_legal_name(string);
+void create()
+{
+	set_name("任务管理器", ({ "quest manager","manager","qm" }) );
+	set_weight(100);
+	set("unit","个");
+	set("base_unit","个");
+	set("no_get", 1);
+	set("no_get_from",1);
+	setup();
+}
+
+void init()
+{
+	object me;
+	string str;
+	me=this_player(1);
+	if(stringp(str=me->query("qm/questlist_id")))
+		do_select_list(str);
+	else 
+		tell_object(me,"还没有选取载入哪个文件，请用qfile命令载入任务文件或"+
+			"用qnew命令新建并载入任务文件！\n用qexp [+|-]<exp>增加或减少经验等级。\n");
+	add_action("do_post", "qadd");
+	add_action("do_read", "qview");
+	add_action("do_discard", "qremove");
+
+	add_action("do_qexp","qexp");
+	add_action("do_qfile","qfile");
+	add_action("do_qitem","qitem");
+
+	add_action("do_lockquest","qlock");
+}
+
+int do_qitem(string arg)//未完成
+{
+	string str;
+	int num;
+
+	if(arg&&sscanf(arg,"-add%*s"))
+	{
+		if(sscanf(arg,"-add %s",str)!=1)
+			return notify_fail("格式：qitem -add 任务描述\n");
+		return do_post(str);
+	}
+	else
+	if(arg&&sscanf(arg,"-del%*s"))
+	{
+		if(!sscanf(arg,"-del %*d"))
+			return notify_fail("格式：qitem -del 任务序号\n");
+		return do_discard(arg[5..sizeof(arg)]);
+	}
+	return 1;
+}
+
+int do_qexp(string arg)
+{
+	string str,*exps,*exps1;
+	int exp,i,j;
+	exps1=({});
+	if(arg&&sscanf(arg,"+%d",exp)==1)
+	{
+		str=read_file(EXPLIST);
+		if(strlen(str)>0)
+			exps=explode(str,"\n");
+		if(!pointerp(exps))
+			exps1=({arg[1..strlen(arg)]});
+		else
+		{
+			i=0;
+			while(i<sizeof(exps)
+				&&exp>atoi(exps[i]))
+				i++;
+			for(j=0;j<i;j++)
+				exps1=exps1+({exps[j]});
+			exps1+=({arg[1..strlen(arg)]});
+			for(j=i;j<sizeof(exps);j++)
+				exps1=exps1+({exps[j]});
+		}
+		str=implode(exps1,"\n");
+		write("更新任务经验级别为：\n"+str+"\n");
+		rm(EXPLIST);
+		//需要对/clone可写的权限才行。如果让qm的权限比较高可以不？
+		write_file(EXPLIST,str);
+	}
+	if(arg&&sscanf(arg,"-%d",exp)==1)
+	{
+		str=read_file(EXPLIST);
+		if(strlen(str)>0)
+			exps=explode(str,"\n");
+		else
+			return notify_fail("还什么经验级别都没设置的，无法删除经验级别！\n");
+		if(pointerp(exps))
+		{
+			for(i=0;i<sizeof(exps);i++)
+				if(exps[i]==arg[1..sizeof(arg)])
+					continue;
+				else
+					exps1+=({exps[i]});
+		}
+		str=implode(exps1,"\n");
+		write("更新任务经验级别为：\n"+str+"\n");
+		rm(EXPLIST);
+		//需要对/clone可写的权限才行。如果让qm的权限比较高可以不？
+		write_file(EXPLIST,str);
+
+	}
+	if(strlen(str=read_file(EXPLIST))>0)
+	{
+		write("请使用qexp +|-经验值来增加或减少允许的经验级别\n");
+		write("目前任务经验级别为：\n"+str+"\n");
+	}
+	return 1;
+}
+int do_qfile(string arg)
+{
+	string str;
+	if(!arg||arg=="")
+		return notify_fail("命令格式：qfile -set|new <exp require>\n");
+	if(sscanf(arg,"-new %s",str)==1)
+	{
+		if(sscanf(str,"%*d")!=1)
+			return notify_fail("命令格式：qfile -new <exp require>\n");
+		arg=str;
+		str=read_file(EXPLIST);//需要对/adm的可读权限
+		if(strlen(str)<1)
+			return notify_fail("你必须先编辑好Quest配置文件以说明有哪些经验等级。\n");
+		if(member_array(arg,explode(str,"\n"))==-1)
+			return notify_fail("还没有这个经验等级的任务文件。\n"+
+				"目前允许的经验等级：\n"+str+"\n");
+		return do_newquest(arg);
+	}
+	if(sscanf(arg,"-set %s",str)==1)
+	{
+		if(sscanf(str,"%*d")!=1)//此处应该是列出所有的任务文件！
+			return notify_fail("命令格式：qfile -set <exp require>\n");
+		return do_select_list(str);
+	}
+	return notify_fail("命令格式：qfile -set|new <exp require>\n");
+}
+int do_lockquest(string arg)
+{
+	int i;
+	object me;
+	mapping *notes;
+	me=this_player(1);
+	if(!arg||arg==""||sscanf(arg,"%d",i)!=1)
+		return notify_fail("命令格式：lock <quest序号>\n");
+		//以后应该可以根据title来锁定
+	notes=query("notes");
+	if( !pointerp(notes) || !sizeof(notes) )
+		return notify_fail("还没有任务呢！请用add命令增加任务。\n");
+	if(i>sizeof(notes)||i==0)
+		return notify_fail("不存在这条任务，无法锁定。\n");
+	me->set("qm/quest_locked",i);
+	//记住i比下标大1（只是类比的说法，因为mapping没有下标)
+	tell_object(me,"锁定第"+chinese_number(i)+"条任务。\n");
+	return 1;
+}
+
+int do_newquest(string arg)
+{
+	string str1,str2,str;
+	object me;
+	me=this_player(1);
+
+	str1="qlist"+arg;
+	set("questlist_id",str1);
+	me->set("qm/questlist_id",str1);
+	me->set("qm/quest_locked",0);//如果能自动锁定第一条比较好，多些判断而已！以后做！
+	//如果遇到已经存在应该问一下是否覆盖!未完成该功能。
+	tell_object(me,"建立并载入新任务文件:exp require->"+arg+"\n");
+	set("notes",0);//清除上一个文件所遗留的数据
+	save();
+	return 1;
+}//注意/data/quest的读写权限！
+
+
+int do_select_list(string arg)
+{
+	object me;
+	me=this_player(1);
+	arg="qlist"+arg;
+	if(file_size("/clone/quest/" +arg+".o")==-1)
+		return notify_fail("无法载入任务文件！该文件不存在！\n");
+	set("questlist_id",arg);
+	me->set("qm/questlist_id",arg);
+	me->set("qm/quest_locked",0);
+	tell_object(me,"载入的任务文件id为："+arg+"\n");
+	restore();
+	return 1;
+}
+
+string query_save_file()
+{
+	string id;
+	if( !stringp(id = query("questlist_id")) ) return 0;
+	//return DATA_DIR + "quest/" + id;
+	return "/clone/quest/"+id;
+}
+
+string short()
+{
+	mapping *notes;string str;
+	if(!stringp(query("questlist_id")))
+		return "任务管理器 ["HIY"未载入任务文件"NOR"](quest manager)";
+	notes = query("notes");
+	str=::short()+" ["HIC+"( "+query("questlist_id")+".o )";
+	if( !pointerp(notes) || !sizeof(notes) )
+		return str+HIR"没有任何任务"NOR"]";
+	return sprintf("%s "HIG"%d个任务"NOR"]",str,sizeof(notes));
+}
+
+string long()
+{
+	mapping *notes;
+	int i;
+	string msg, myid;
+
+	notes = query("notes");
+	msg ="任务管理器的使用方法请见 help quest。\n";
+	if(stringp(myid=query("questlist_id")))
+		msg+="正在管理任务文件："+query("questlist_name")+"("+DATA_DIR+
+			"quest/"+myid+".o)\n";
+	if( !pointerp(notes) || !sizeof(notes) ) return msg;
+	for(i=0; i<sizeof(notes); i++)
+		msg += sprintf("%s[%2d]" NOR "  %-40s %12s (%s)\n",
+			HIY,
+			i+1, notes[i]["title"], notes[i]["author"], 
+			ctime(notes[i]["time"])[0..15] );
+	return msg;
+}
+
+int do_read(string arg)
+{
+	int num,i;
+	mapping *notes;
+	string str;
+
+	notes = query("notes");
+	if( !pointerp(notes) || !sizeof(notes) )
+		return notify_fail("目前没有任何任务。\n");
+
+	if( !arg ) return notify_fail("指令格式：view <任务编号>\n");
+	if( !sscanf(arg, "%d", num) )
+		return notify_fail("你要查看第几个任务？\n");
+	if( num < 1 || num > sizeof(notes) )
+		return notify_fail("没有这个任务。\n");
+	num--;
+	str="性别限制："+notes[num]["sex"]+"\n";
+	str+="任务类型："+notes[num]["quest_type"]+"\n";
+	str+="目标npc的id："+notes[num]["quest_npc_id"]+"\n";
+	str+="目标npc的名字："+notes[num]["quest_npc_name"]+"\n";
+	str+="目标obj的id："+notes[num]["quest_obj_id"]+"\n";
+	str+="目标obj的名字："+notes[num]["quest_obj_name"]+"\n";
+	str+="任务时限："+notes[num]["quest_time"]+"\n";
+	str+="奖励经验："+notes[num]["exp"]+"\n";
+	str+="奖励潜能："+notes[num]["pot"]+"\n";
+	str+="奖励神："+notes[num]["shen"]+"\n";
+	this_player()->start_more( sprintf(
+"[%d] %-40s %s(%s)\n----------------------------------------------------------------------\n",
+		num + 1, notes[num]["title"], notes[num]["author"], ctime(notes[num]["time"])[0..9])
+		+ str);
+	return 1;
+}
+
+
+int do_discard(string arg)
+{
+	mapping *notes;
+	int num;
+
+	if( !arg || sscanf(arg, "%d", num)!=1 )
+		return notify_fail("指令格式：remove <任务编号>\n");
+	notes = query("notes");
+	if( !arrayp(notes) || num < 1 || num > sizeof(notes) )
+		return notify_fail("没有这个任务。\n");
+	num--;
+	if( notes[num]["author"] != (string) this_player(1)->query("name")
+	&&	(string)SECURITY_D->get_status(this_player(1)) != "(admin)" 
+	&&      (string)SECURITY_D->get_status(this_player(1)) != "(hufa)")
+		return notify_fail("这个任务不是你写的。\n");
+
+	if(num == 0)
+		notes = notes[num+1..sizeof(notes)-1];
+	else
+		notes = notes[0..num-1] + notes[num+1..sizeof(notes)-1];
+	set("notes", notes);
+	save();
+	write("删除第 " + (num+1) + " 个任务....Ok。\n");
+	return 1;
+}
+
+int check_legal_name(string name)
+{
+        int i;
+
+        i = strlen(name);
+	if(i<0) 
+		return 0;
+        while(i--) {
+                if( name[i]<=' ' ) {
+                        return 0;
+                }
+                if( i%2==0 && !is_chinese(name[i..<0]) ) {
+                        return 0;
+                }
+        }
+        return 1;
+}
+
+void done_post(mapping note)
+{
+	mapping *notes;
+	object me=this_player(1);
+
+	notes = query("notes");
+	if( !pointerp(notes) || !sizeof(notes) )
+		notes = ({ note });
+	else
+		notes += ({ note });
+	set("notes", notes);
+	tell_object(me, "任务增加完毕。\n");
+	save();
+	return;
+}
+
+int do_post(string arg)
+{
+	object me;
+	int i;
+	mapping note;
+
+	me=this_player(1);
+	note = allocate_mapping(3+PROP_NUM);
+	note["title"] = arg;
+	note["author"] = me->query("name")+"("+me->query("id")+")";
+	note["time"] = time();
+	write("	0无限制，1限制女性，2限制男性，3限制中性和无性
+	4只允许男性，5只允许女性，6只允许中性和无性");
+
+	write("\n请输入该任务的性别限制：");
+	input_to("get_sex",note,"sex");
+	return 1;
+}
+
+int get_sex(string arg,mapping note,string pattern)
+{
+	int i;
+
+	//0无限制，1限制女性，2限制男性，3限制中性和无性
+	//4只允许男性，5只允许女性，6只允许中性和无性
+	
+	if(sscanf(arg,"%d",i)!=1||i<0||i>6)
+	{
+		if(strlen(arg)>0&&arg==".")
+		{
+			write("\n输入取消。\n");
+			return 1;
+		}
+		write("你必须正确输入性别限制！请重新输入:\n");
+		input_to("get_sex",note,"sex");
+		return 1;
+	}
+	sscanf(arg,"%d",note[pattern]);
+	write("任务类型有“杀”，“寻”，“送”");
+	write("\n请输入该任务的类型：");
+	input_to("get_quest_type",note,"quest_type");
+	return 1;
+}
+
+int get_quest_type(string arg,mapping note,string pattern)
+{
+	if(sscanf(arg,"%s",arg)!=1||(arg!="杀"&&arg!="寻"&&arg!="送"))
+	{
+		if(strlen(arg)>0&&arg==".")
+		{
+			write("\n输入取消。\n");
+			return 1;
+		}
+		write("输入错误！请重新输入:\n");
+		input_to("get_quest_type",note,"quest_type");
+		return 1;
+	}
+	note[pattern]=arg;
+	write("如果没有涉及的NPC则请输入"HIY"“id”"NOR"，名字为"HIY"“没有”"NOR"代表空值\n");
+	write("OBJ的情况也是一样的，但是NPC和OBJ二者必选其一！\n");
+	write("请输入任务中涉及的NPC的ID：");
+	input_to("get_quest_npc_id",note,"quest_npc_id");
+	return 1;
+}
+
+int get_quest_npc_id(string arg,mapping note,string pattern)
+{
+	if(sscanf(arg,"%s",arg)!=1||check_legal_name(arg)!=0)
+	{
+		if(strlen(arg)>0&&arg==".")
+		{
+			write("\n输入取消。\n");
+			return 1;
+		}
+		write("输入错误！请重新输入:\n");
+		input_to("get_quest_npc_id",note,"quest_npc_id");
+		return 1;
+	}
+	note[pattern]=arg;
+	write("请输入任务中涉及的NPC的中文名字：");
+	input_to("get_quest_npc_name",note,"quest_npc_name");
+	return 1;
+}
+
+int get_quest_npc_name(string arg,mapping note,string pattern)
+{
+
+	if(sscanf(arg,"%s",arg)!=1||check_legal_name(arg)!=1)
+	{
+		if(strlen(arg)>0&&arg==".")
+		{
+			write("\n输入取消。\n");
+			return 1;
+		}
+		write("输入错误！请重新输入:\n");
+		input_to("get_quest_npc_name",note,"quest_npc_name");
+		return 1;
+	}
+	note[pattern]=arg;
+	write("请输入任务中涉及的OBJ的ID：");
+	input_to("get_quest_obj_id",note,"quest_obj_id");
+	return 1;
+}
+
+int get_quest_obj_id(string arg,mapping note,string pattern)
+{
+	if(sscanf(arg,"%s",arg)!=1||check_legal_name(arg)!=0)
+	{
+		if(strlen(arg)>0&&arg==".")
+		{
+			write("\n输入取消。\n");
+			return 1;
+		}
+		write("输入错误！请重新输入:\n");
+		input_to("get_quest_obj_id",note,"quest_obj_id");
+		return 1;
+	}
+	note[pattern]=arg;
+	write("请输入任务中涉及的OBJ的中文名字：");
+	input_to("get_quest_obj_name",note,"quest_obj_name");
+	return 1;
+}
+int get_quest_obj_name(string arg,mapping note,string pattern)
+{
+	if(sscanf(arg,"%s",arg)!=1||check_legal_name(arg)!=1)
+	{
+		if(strlen(arg)>0&&arg==".")
+		{
+			write("\n输入取消。\n");
+			return 1;
+		}
+		write("输入错误！请重新输入:\n");
+		input_to("get_quest_obj_name",note,"quest_obj_name");
+		return 1;
+	}
+	note[pattern]=arg;
+	write("请输入任务的时间限制：");
+	input_to("get_quest_time",note,"quest_time");
+	return 1;
+}
+
+int get_quest_time(string arg,mapping note,string pattern)
+{
+	string str;
+	str=arg;
+	if(sscanf(arg,"%d",arg)!=1)
+	{
+		if(strlen(str)>0&&str==".")
+		{
+			write("\n输入取消。\n");
+			return 1;
+		}
+		write("输入错误！请重新输入:\n");
+		input_to("get_quest_time",note,"quest_time");
+		return 1;
+	}
+	note[pattern]=arg;
+	write("请输入完成任务奖励经验点数：");
+	input_to("get_exp",note,"exp");
+	return 1;
+}
+
+int get_exp(string arg,mapping note,string pattern)
+{
+	string str;
+	str=arg;
+	if(sscanf(arg,"%d",arg)!=1)
+	{
+		if(strlen(str)>0&&str==".")
+		{
+			write("\n输入取消。\n");
+			return 1;
+		}
+		write("输入错误！请重新输入:\n");
+		input_to("get_exp",note,"exp");
+		return 1;
+	}
+	note[pattern]=arg;
+	write("请输入完成任务奖励潜能点数：");
+	input_to("get_pot",note,"pot");
+	return 1;
+}
+
+
+int get_pot(string arg,mapping note,string pattern)
+{
+	string str;
+	str=arg;
+	if(sscanf(arg,"%d",arg)!=1)
+	{
+		if(strlen(str)>0&&str==".")
+		{
+			write("\n输入取消。\n");
+			return 1;
+		}
+		write("输入错误！请重新输入:\n");
+		input_to("get_exp",note,"exp");
+		return 1;
+	}
+	note[pattern]=arg;
+	write("请输入完成任务奖励神点数：");
+	input_to("get_shen",note,"shen");
+	return 1;
+}
+
+int get_shen(string arg,mapping note,string pattern)
+{
+	string str;
+	str=arg;
+	if(sscanf(arg,"%d",arg)!=1)
+	{
+		if(strlen(str)>0&&str==".")
+		{
+			write("\n输入取消。\n");
+			return 1;
+		}
+		write("输入错误！请重新输入:\n");
+		input_to("get_shen",note,"shen");
+		return 1;
+	}
+	note[pattern]=arg;
+	done_post(note);
+	return 1;
+}

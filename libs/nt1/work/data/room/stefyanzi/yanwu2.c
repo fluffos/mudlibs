@@ -1,0 +1,33 @@
+// SN:5jRW>j8i2OFDg>k2
+// File(/data/room/stefyanzi/yanwu2.c) of stefyanzi's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        set("short", "听雨轩演武厅");
+	set ("long", @LONG
+这是听雨轩的演武厅，有时有些江湖朋友来会，想一试身手，就
+在这里比武较量。 
+LONG );
+
+	set("exits", ([
+                "east" : __DIR__"yishiting",
+	]));
+
+        set("objects", ([
+                "/clone/weapon/zhubang" : 1,
+                "/clone/weapon/zhujian" : 1,
+                "/clone/weapon/mudao"   : 1,
+        ]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("room_owner", "夜听雨");
+        set("room_name", "听雨轩");
+        set("room_id", "stefyanzi");
+        set("room_owner_id", "stefyanzi");
+        set("room_position", "碎石小道");
+}

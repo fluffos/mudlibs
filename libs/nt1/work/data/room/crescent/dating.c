@@ -1,0 +1,40 @@
+// SN:a^0?jlQmnQRES2eN
+// File(/data/room/crescent/dating.c) of crescent's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        set("short", "新月小筑大厅");
+	set ("long", @LONG
+这就是段枫儿的客人常常出入的地方,玄关处挂着一串风铃,一阵
+风吹过,和小院的小鸟相互应和.正中放着一组舒适的沙发,小几上放着
+一束怒放的天堂鸟,几杯香茗冒着缕缕清烟....几扇屏风将人送入远古
+的风花雪月...东首是主人的卧房,南边是大门,出增就是院子[2;37;0m
+LONG );
+
+	setup();
+
+	set("exits", ([
+                "east"   : __DIR__"woshi",
+		"north"  : __DIR__"houyuan",
+	]));
+
+        create_door("east", "木门", "west", DOOR_CLOSED);
+
+        set("no_sleep_room", 1);
+
+        set("KEY_DOOR", ([
+                "exit" : "south",
+                "room" : __DIR__"xiaoyuan",
+        ]));
+    
+        set("room_owner", "段枫儿");
+        set("room_name", "新月小筑");
+        set("room_id", "xinyue");
+        set("room_owner_id", "crescent");
+        set("room_position", "树林");
+}

@@ -1,0 +1,81 @@
+//Cracked by Roath
+// Room: /d/beijing/caishikou.c
+
+inherit ROOM;
+
+void fix_exits_for_night(int is_night);
+
+void create()
+{
+	set("short", "菜市口");
+	set("long", @LONG
+这里是朝廷处斩犯人示众的场所。路中央有一个断头台 (tai)，应该就是行
+刑用的。不远处天桥的热闹还能隐约听到，与这里肃杀的气氛构成了鲜明的对比。
+LONG
+	);
+	fix_exits_for_night(0);
+	set("no_clean_up", 0);
+
+	set("item_desc", ([
+	"tai" : "一个血迹斑斑的木台子。\n",
+]));
+	set("outdoors", "beijing");
+	set("cost", 2);
+	setup();
+}
+
+
+void fix_exits_for_night(int is_night)
+{
+    object me = this_object();
+    if (is_night) {
+	me->set("exits", ([ /* sizeof() == 3 */
+	  "east"  : __DIR__"tianqiao",
+	  "north" : __DIR__"xuanwudajie",
+          "south" : __DIR__"youandajie",
+	]));
+    }else{
+	me->set("exits", ([ /* sizeof() == 3 */
+	  "east"  : __DIR__"tianqiao",
+	  "north" : __DIR__"xuanwudajie",
+	  "west"  : __DIR__"guanganmen",
+	  "south" : __DIR__"youandajie",
+	]));
+    }
+}
+
+void init()
+{
+        add_action("do_push", "push");
+        add_action("do_push", "tui");
+}
+
+int do_push(string arg)
+{
+	object me;
+	mapping fam;
+
+	me = this_player();
+
+	if( !arg || arg=="" ) return 0;
+
+	if( arg=="tai" )
+	{
+		if(me->query("rided"))
+		return notify_fail("你骑着马，不能这麽干！\n");
+		if( (fam = me->query("family")) && fam["family_name"] == "丐帮" ) 
+		{
+			message_vision("$N推开血迹斑斑的断头台，只见后面上露出一个小洞。\n", me);
+			message("vision",
+				me->name() + "运起丐帮缩骨功，一弯腰往洞里钻了进去。\n",
+				environment(me), ({me}) );
+			me->move("/d/gaibang/underbj");
+                	message("vision",
+				me->name() + "从洞里走了进来。\n",
+                		environment(me), ({me}) );
+			return 1;
+		}
+		else 
+			return notify_fail("这么小的洞，你钻得进去吗？\n");
+	}
+}	

@@ -1,0 +1,153 @@
+// mudlist.c Yuj@SJ 1999-6-2
+
+#include <ansi.h>
+#include <net/daemons.h>
+#include <net/macros.h>
+
+// inherit F_CLEAN_UP;
+inherit F_DBASE;
+
+void create()
+{
+	seteuid(getuid());
+}
+
+int main(object me, string arg)
+{
+	mapping mud_list;
+	mixed *muds;
+	string output;
+	int loop, size, count=0, total, n=0, ok;
+
+	if( !find_object(DNS_MASTER) ){
+		write("网路精灵并没有被载入。\n");
+		return 1;
+	}
+
+	//      Obtain mapping containing mud data
+	mud_list = (mapping)DNS_MASTER->query_muds();
+
+	if(!mud_list){
+		write(MUD_NAME + "目前并没有跟网路上其他 Mud 取得联系。\n");
+		return 1;
+	}
+
+	//      Get list of all mud names within name server
+	muds = keys( mud_list ) - ({ "DEFAULT" });
+
+	//      Place mudlist into alphabetical format
+	muds = sort_array(muds, 1);
+
+	//      If mudname provided, search server's database for a match
+	//      and display its cooresponding address
+	if( arg ) arg = upper_case(arg);
+	if(arg && arg != "ALL") {
+		arg = htonn(arg);
+		if(!mapp( mud_list[arg] )) {
+			write(MUD_NAME + "并没有和这个 Mud 取得联系。\n");
+			return 1;
+		}
+		if( wizardp(me) && !me->query("env/debug") )
+			write(sprintf("有关 %s 的资讯：\n%O\n", arg, mud_list[arg]));
+		else
+			write(sprintf("\n有关 %s 的资讯：\n"
+				"──────────────────\n"
+				"中文名称：  %s\n"
+				"语言：      %s\n"
+				"版本：      %s\n"
+				"MudOS：     %s\n"
+				"Mudlib：    %s\n"
+				"主机：      %s\n"
+				"端口：      %s\n"
+				"状态：      %s\n"
+				"在线玩家：  %s\n"
+				"当地时间：  %s\n"
+				"──────────────────\n\n",
+				mud_list[arg]["NAME"],
+				undefinedp(mud_list[arg]["MUDNAME"])?
+				"不详":mud_list[arg]["MUDNAME"],
+				undefinedp(mud_list[arg]["ENCODING"])?
+				"不详":(mud_list[arg]["ENCODING"]=="GB"?"简体汉字":"繁体汉字"),
+				undefinedp(mud_list[arg]["VERSION"])?
+				"不详":mud_list[arg]["VERSION"],
+				undefinedp(mud_list[arg]["DRIVER"])?
+				"不详":mud_list[arg]["DRIVER"],
+				undefinedp(mud_list[arg]["MUDLIB"])?
+				"不详":mud_list[arg]["MUDLIB"],
+				mud_list[arg]["HOSTADDRESS"],
+				mud_list[arg]["PORT"],
+				mud_list[arg]["_dns_no_contact"]<1?
+				"连线":"断开",
+				undefinedp(mud_list[arg]["USERS"])?
+				"不详":mud_list[arg]["USERS"],
+				undefinedp(mud_list[arg]["TIME"])?
+				"不详":mud_list[arg]["TIME"],
+			));
+		return 1;
+	}
+
+	output = "\n      中  文  名  称         网 络 地 址   端口       运  行  时  间      人数\n";
+	output += repeat_string("─", 39) + "\n";
+	//      Loop through mud list and store one by one
+	for(loop = 0, size = sizeof(muds); loop<size; loop++) {
+//		if (!arg && mud_list[muds[loop]]["VERSION"] != MUDLIB_VERSION)
+//			continue;
+		if (arg) {
+			if( arg!="ALL" && mud_list[muds[loop]]["MUDLIB"] != MUDLIB_NAME )
+				continue;
+		}
+		if (mud_list[muds[loop]]["_dns_no_contact"] > 0) {
+			if( !me || !wizardp(me) || (wizardp(me) && me->query("env/debug")) )
+				continue;
+		}
+
+		if (mud_list[muds[loop]]["TIME"] != query(muds[loop])) {
+			set(muds[loop], mud_list[muds[loop]]["TIME"]);
+			set(muds[loop]+".Time", time());
+		}
+
+		ok = 1;
+		if (!arg && upper_case(muds[loop])[0..1] != "BX") ok = 0;
+		if (htonn(upper_case(muds[loop])) == htonn(upper_case(INTERMUD_MUD_NAME))) {
+			ok = 1;
+			output +=  BRED+HIY;
+		}
+
+		if (ok) output += sprintf("%-20s%6s %-15s %4s ",
+			(undefinedp(mud_list[muds[loop]]["MUDNAME"])?"":mud_list[muds[loop]]["MUDNAME"]),
+			"(" + upper_case(muds[loop]) +")",
+			mud_list[muds[loop]]["HOSTADDRESS"],
+			mud_list[muds[loop]]["PORT"]
+		);
+		if (time() > query(muds[loop]+".Time") + 130) {
+			if (ok) output += "<失去联系"+CHINESE_D->chinese_time((time()-query(muds[loop]+".Time"))/60*60)+">";
+		} else {
+			total = atoi(mud_list[muds[loop]]["TIME"]);
+			if (ok) output += sprintf("%-26s", CHINESE_D->chinese_time(total/60*60));
+			if(!undefinedp(mud_list[muds[loop]]["USERS"])) {
+				if (ok) output+=sprintf("%4s", mud_list[muds[loop]]["USERS"] );
+				count += atoi(mud_list[muds[loop]]["USERS"]);
+			} else if (ok) output+=" ----";
+		}
+		n++;
+		if (ok) output += NOR"\n";
+	}
+	//      Display dumped mudlist output through user's more pager
+	output += repeat_string("─", 39) + "\n";
+	output += "「书剑」共有" + chinese_number(count) + "位玩家在" + chinese_number(n) + "处站点连线中。\n";
+	write( output );
+
+	write_file("/log/html/mud_online", ""+count+"",1);
+	// this_mud 传回的是当前站点的玩家数量。由logind调用。
+	return 1;
+}
+
+int help()
+{
+	write("\n指令格式：mudlist	    列出连线中的"MUD_NAME"站点。\n"
+		"	  mudlist <MudName>  列出指定 Mud 的信息。\n"
+		"	  mudlist all	列出目前所有连线中的 Mud。\n\n"
+	);
+	return 1;
+}
+

@@ -1,0 +1,46 @@
+#include <ansi.h>
+void test_me(object me);
+inherit ROOM;
+
+void create()
+{
+        set("short", "监狱");
+        set("long",
+"能到这里来的人一定都是令人头痛的角色。但是一到这里，别人的头就不痛了，你的头应该\n"
+"开始痛了吧．．．\n"
+);
+
+        set("no_fight", 1);
+        set("no_arrest", 1);
+        set("no_magic", 1);
+        set("no_spells", 1);
+        setup();
+}
+void init()
+{
+ if((string)this_player()->query("id")!="pipip" )
+        {
+        "/cmds/std/look"->look_room(this_player(),this_object());
+        this_player()->set("startroom", "/d/pipip/jail");
+        add_action("do_nothing", "");
+        add_action("do_say","say");
+        }
+      this_player()->set("startroom", "/d/pipip/jail");
+}       
+
+int do_nothing()
+{
+write(HIR"监狱的生活真苦啊．．．．！\n"NOR);
+return 1;
+}
+
+int do_say(string arg)
+{
+"/cmds/std/say"->main(this_player(),arg);
+return 1;
+}
+int clean_up()
+{ return 0;
+}
+
+

@@ -1,0 +1,18 @@
+// SN:aIW<bG;4l;Vh94GG
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("老虎[2;37;0m", ({"lao hu"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "$HIR$ 你眼前一黑，什么都不知道了...
+它是无二的坐骑。
+");
+        set_temp("owner_id", "two");
+        set_temp("owner_name", "无二");
+        ::setup();
+}
+

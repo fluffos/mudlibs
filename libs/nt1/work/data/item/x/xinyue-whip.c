@@ -1,0 +1,32 @@
+// SN:GcHE1A;K0^]9LEeb
+// ITEM Made by player(慕容新月:xinyue) /data/item/x/xinyue-whip.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Fri Jul 23 23:22:29 2004
+#include <ansi.h>
+#include <weapon.h>
+
+inherit WHIP;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;34m东海曾经孝妇怨[2;37;0m", ({ "whip" }));
+	set_weight(9000);
+	set("item_make", 1);
+	set("unit", "根");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一根鞭。
+[1;34m这是一根湛蓝色的丝带，据说是东海枉死的孝妇临死前遗留下来对尘世的诅咒，诅咒这无良的世间。[2;37;0m
+鞭柄上刻着一行小字：慕容新月(xinyue)
+");
+	set("value", 2100000);
+	set("point", 786);
+	set("material", "magic stone");
+	set("wield_msg", "[1;34m$N纤手一挥，一条深蓝色的丝带自地底凝聚在她的手上，白如雪的柔荑轻握着极蓝的丝带，看来十分诡异。\n随着$n[1;34m的出现，天地间骤然冷却下来，霎时阴风阵阵，仿佛来自地狱的冤魂重现人间，纵横大地。[2;37;0m\n");
+	set("unwield_msg", "[1;34m$N凝眸深思，说了一句什么，神色有如大慈悲的观世音，那飘动着的$n[1;34m化作一阵清风，流淌在白云之上。\n而$N曾经凌厉的眼神也渐渐变的柔和了，四周的阴森之气也随之飘散了，大地一片祥和。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	init_whip(apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

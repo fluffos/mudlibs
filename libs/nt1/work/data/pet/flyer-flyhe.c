@@ -1,0 +1,18 @@
+// SN:Jb_[F9mW0aGHeh]<
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;32m碧[1;36m天清[1;37m风鹤[2;37;0m", ({"flyhe he"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "神鸟
+它是空中飞人的坐骑。
+");
+        set_temp("owner_id", "flyer");
+        set_temp("owner_name", "空中飞人");
+        ::setup();
+}
+

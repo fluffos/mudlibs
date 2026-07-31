@@ -1,0 +1,456 @@
+/*  char.c - standard character body
+
+    Copyright (C) 1994-2000 Annihilator <annihilator@muds.net>
+
+    This program is a part of ES2 mudlib. Permission is granted to use,
+    modify, copy or distribute this program provided this copyright notice
+    remains intact and subject to the restriction that this program MAY
+    NOT be used in any way for monetary gain.
+
+    Details of terms and conditions is available in the Copyright.ES2 file.
+    If you don't receive this file along with this program, write to the
+    primary author of ES2 mudlib: Annihilator <annihilator@muds.net>
+*/
+
+#pragma save_binary
+
+#include <login.h>
+#include <action.h>
+#include <ansi.h>
+#include <char.h>
+#include <command.h>
+#include <condition.h>
+#include <dbase.h>
+#include <move.h>
+#include <name.h>
+#include <skill.h>
+#include <user.h>
+
+inherit F_ACTION;
+inherit F_ATTACK;
+inherit F_ATTRIBUTE;
+inherit F_COMBAT;
+inherit F_COMMAND;
+inherit F_CONDITION;
+inherit F_DBASE;
+inherit F_FINANCE;
+inherit F_MESSAGE;
+inherit F_MASTER;
+inherit F_MOVE;
+inherit F_NAME;
+inherit F_SCORE;
+inherit F_SKILL;
+inherit F_STATISTIC;
+inherit F_TEAM;
+
+// variables
+
+nosave int tick;
+
+// implementations
+
+int is_character() { return 1; }
+
+/* setup()
+ *
+ * 硂ㄧΑノㄓЧΘ﹍て币笆┮Τン钡ㄆン珹
+ * み铬(heart beat)(command)单
+ * setup 临穦㊣ CHAR_D ㄓЧΘ game-specific ﹍て
+ */
+
+void
+setup()
+{
+    seteuid(getuid());
+
+    /* Τ狡籹ン惠璶ゴ秨 heart beat の砞﹚ノㄓ竊 CPU time */
+    if( !clonep(this_object()) ) return;
+
+    enable_player();
+    init_command();
+    CHAR_D->setup_char( this_object() );
+
+    set_heart_beat(1);
+    tick = 5 + random(10);
+}
+
+/* heart_beat()
+ *
+ * み铬ㄧΑ硂ㄧΑ–ㄢ牧穦砆 driver ㊣Ω琵眔秈︽
+ * 驹矮单笆ㄏノの NPC 疭Τだ﹚竡 NPC の USER ンい
+ * 
+ *
+ * パ硂ㄧΑ砆磅︽Ω计琌俱 mudlib い程蔼璝ぃ讽程ㄎ
+ * て甧旧璓碩狦癸 LPC 临⊿Τ剪叫ぃ璶繦種笆
+ * 硂ㄧΑず甧
+ */
+
+nosave void
+heart_beat()
+{
+    mapping f;
+    int f_altered = 0;
+
+    if( mapp(f=query_destroyed()) && sizeof(f) ) {
+	f_altered++;
+	RACE_D(query_race())->statistic_destroyed(this_object(), f);
+        if( !this_object() ) return;
+    }
+
+    if( mapp(f=query_exhausted()) && sizeof(f) ) {
+	f_altered++;
+	RACE_D(query_race())->statistic_exhausted(this_object(), f);
+        if( !this_object() ) return;
+    }
+
+    if( mapp(f=query_notified()) && sizeof(f) ) {
+	f_altered++;
+	this_object()->notify_stat(f);
+        if( !this_object() ) return;
+    }
+
+    if( f_altered ) clear_statistic_flags();
+
+    /* 驹矮北 */
+    if( living(this_object()) )
+    {
+	if( is_fighting() ) clean_up_enemy();
+
+	if( is_busy() ) continue_action();
+	else if( is_fighting() ) attack();
+    }
+
+    /* 琌 tick 丁穦磅︽场だ */
+    if( tick-- ) return;
+
+    /*  tick 丁丁筳睹计盢┮Τネ heart beat 岿秨硑
+     * Θ╰参璽踞筁栋い疭﹚ tick
+     */
+    tick = 5 + random(10);
+
+    update_condition();
+    regenerate();
+}
+
+void
+lose_fight(object opponent)
+{
+    if( opponent ) opponent->win_fight(this_object());
+}
+
+// notify_stat()
+//
+// This is an apply support by F_STATISTIC which is called by heart_beat()
+// when statistic_notification is detected.
+int notify_stat(mapping flag)
+{
+    mapping exits;
+    string *dirs, default_dir;
+
+    if( !living(this_object())
+    ||	!environment()
+    ||	!mapp(exits = environment()->query("exits"))
+    ||	!sizeof(dirs = keys(exits)) )
+        return 0;
+
+    /* 狦Τ砞﹚箇砞発禲よ玥沽刚┕硂よ発禲玥繦诀匡
+     * よ禲
+     */
+    default_dir=query("wimpy_dir");
+
+    if( stringp(default_dir) && member_array(default_dir, dirs) 
+    &&	command("go " + default_dir) )
+	return 1;
+
+    return command("go "+ dirs[random(sizeof(dirs))]);
+}
+
+varargs void
+revive(int quiet)
+{
+    object ob;
+    string arg, arg2;
+
+    remove_call_out("revive");
+
+    /* 狦硂砆ㄤ拟盿帝簿笆拟盿 */
+    while( environment()->is_character() )
+        this_object()->move(environment(environment()));
+
+    enable_player();
+    delete_temp("block_msg/all");
+
+    if( !quiet ) {
+        COMBAT_D->announce(this_object(), "revive");
+        message("system", HIY "\n篊篊沧Τ谋....\n\n" NOR,
+            this_object());
+    }
+}
+
+/*  
+ */
+void
+die()
+{
+    object corpse, ob;
+
+    /* 氨ゎち驹矮玂臔ю阑匡拒闽玒 */
+    remove_all_killer();
+    guard_ob(0);
+    charge_ob(0);
+    dismiss_team();
+
+    /* 氨ゎヴ︙タ秈︽笆 */
+    if( is_busy() ) interrupt(this_object(), INTR_DEATH);
+
+    /* 睲埃┮Τ condition */
+    clear_condition();
+
+    /* 硂 */
+    COMBAT_D->announce(this_object(), "dead");
+
+    /* 狦硂癵い琵繰眶筁ㄓ硂妓眔︑
+     * 癟
+     */
+    if( !living(this_object()) ) revive(1);
+
+    if ( query("life_form") == "ghost") {
+        tell_object(this_object(), HIR "\n竒活緕床\n\n" NOR);
+        message("vision", this_object()->name() + "てΘ皚废ア ...\n",
+            environment(this_object()), this_object());
+        return;
+    }
+
+    // 矗ボ痹瓃 -dragoon
+    tell_object(this_object(), HIR "\n\n\n" NOR);
+    if( objectp(corpse = CHAR_D->make_corpse(this_object())) )
+	corpse->move(environment());
+}
+
+varargs void
+unconcious(string reason)
+{
+    object ob, me=this_object();
+
+    /* 竒癵 ? */
+    if( !living(me) ) return;
+
+    /* 畍ぃ癵 */
+    if ( wizardp(this_object()) ) {
+        message("system", HIW "\n畍獀隆ō场端甡 ....\n\n" NOR,
+		me);
+        me->set_stat_current("gin", me->query_stat_maximum("gin"));
+        me->set_stat_current("kee", me->query_stat_maximum("kee"));
+        me->set_stat_current("sen", me->query_stat_maximum("sen"));
+        me->set_stat_current("HP", me->query_stat_maximum("HP"));
+        me->set_stat_current("water", me->query_stat_maximum("water"));
+        me->set_stat_current("food", me->query_stat_maximum("food"));
+        return;
+    }
+
+    /* 氨ゎ┮Τ fight い寄 */
+    remove_all_enemy();
+
+    /* い耞タ秈︽笆 */
+    if( is_busy() ) interrupt(me, INTR_UNCONCIOUS);
+
+    message("system", HIR "\n泊玡堵钡帝ぐ或ぃ笵....\n\n" NOR,
+        this_object());
+
+    disable_player(stringp(reason) ? reason : " <癵ぃ眶>");
+    set_temp("block_msg/all", 1);
+
+    COMBAT_D->announce(this_object(), "unconcious");
+
+    /* 砞﹚だ牧礵眶 */
+    remove_call_out("revive");
+    call_out("revive", 60);
+}
+
+// overrides
+
+int
+receive_object(object ob, int from_inventory)
+{
+    if( from_inventory ) return 1;
+
+    if( query_encumbrance() + ob->weight() > query_strength("carriage") )
+        return notify_fail(ob->name() + "瞷癸ㄓ弧び\n");
+
+    if( sizeof(all_inventory(this_object())) >= 20 )
+        return notify_fail("ō竒⊿Τ︗拟盿ㄤ狥﹁\n");
+
+    return 1;
+}
+
+varargs int
+move(mixed dest, int silent)
+{
+    if( interactive(this_object()) && is_busy() )
+	return notify_fail("瞷礚猭簿笆\n");
+
+    if( ::move(dest, silent) ) {
+	if( interactive(this_object()) && !silent )
+	    environment()->do_look(this_object());
+	return 1;
+    }
+
+    return 0;
+}
+
+string
+query_id()
+{
+    mixed* applied;
+
+    if( arrayp(applied = query_temp("apply/id"))
+    &&	sizeof(applied)
+    &&	arrayp(applied[<1])
+    &&	stringp(applied[<1][0]) )
+        return applied[<1][0];
+
+    return query("id");
+}
+
+int
+id(string str)
+{
+    mixed* applied;
+
+    if( arrayp(applied = query_temp("apply/id"))
+    &&	sizeof(applied)
+    &&	arrayp(applied[<1]) )
+	return member_array(str, applied[<1]) >= 0;
+    return ::id(str);
+}
+
+varargs string
+name(int raw)
+{
+    string *applied_name;
+
+    if( !raw
+    &&	arrayp(applied_name = query_temp("apply/name"))
+    &&	sizeof(applied_name)
+    &&	stringp(applied_name[<1]) )
+	return applied_name[<1];
+    return ::name(raw);
+}
+
+/*  short()
+ *
+ *  硂ㄧ计肚虏祏痹瓃ㄏノ look ┬丁い璝Τㄤ玥
+ *  陪ボ碞琌硂﹃
+ */
+varargs string
+short(int raw)
+{
+    string str, title, nick, *applied;
+
+    str = ((title = query("title")) ? title : "")
+        + ((nick = query("nickname")) ? (""+nick+"") : (title?" ":""))
+        + ::short(1);
+
+    if( raw ) return str;
+
+    /* 祏痹瓃 */        
+    if(	arrayp(applied = query_temp("apply/short"))
+    &&	sizeof(applied)
+    &&	stringp(applied[<1]) ) {
+	str = applied[<1];
+	if( ! this_player()->query("option/BRIEF_SHORT") )
+	    str += "(" + capitalize(query_id()) + ")";
+    }
+
+    if( !living(this_object()) ) str += HIR + query("disable_type") + NOR;
+
+    if( !userp(this_object()) ) return str;
+
+    // These user only case are defined here because the case that wizards
+    // exec into an NPC.
+
+    if( query("life_form")=="ghost" ) str = HIK + str + "碍活" NOR;
+    else if( query("life_form")=="undead" ) str = CYN + str + "圾" NOR;
+
+    if( query_temp("pending/hidden") )
+	str += "タ碍碍跟穞矪 ...";
+
+    if( !interactive(this_object()) ) str += HIG " <耞絬い>" NOR;
+    else if( query_idle( this_object() ) > 120 ) str += HIM " <祇い>" NOR;
+
+    if( in_input() ) str += HIC " <块ゅい>" NOR;
+    if( in_edit() ) str += HIY " <絪胯郎い>" NOR;
+
+    return str;
+}
+
+varargs string
+long(int raw)
+{
+    string str, *applied;
+
+    if( !raw
+    &&	arrayp(applied = query_temp("apply/long")) 
+    &&	sizeof(applied)
+    &&	stringp(applied[<1]) )
+	str = applied[<1];
+    else str = ::long(raw);
+
+    if( !raw
+    &&	arrayp(applied = query_temp("apply/description")) 
+    &&	sizeof(applied)
+    &&	stringp(applied[<1]) ) {
+	str += implode(applied, "\n");
+	str = replace_string(str, "$N", this_object()->name(raw));
+    }
+
+    return str;
+}
+
+varargs string
+rank(string politeness, int raw)
+{
+    string c, r;
+
+    if( c = this_object()->query_class() )
+        r = CLASS_D(c)->query_rank(this_object(), politeness);
+    else
+        r = ::rank(politeness, raw);
+
+    if( !politeness && !raw)
+        switch(wizhood(this_object())) {
+        case "(admin)": return "";
+        case "(arch)": return "畍";
+        case "(wizard)": return "畍";
+        case "(apprentice)": return "ǎ策畍";
+        case "(immortal)": return "畒畍";
+        }
+    return r;
+}
+
+nomask int
+visible(object ob)
+{
+    int a, b;
+
+    /* ヴ︙ッ环常︑ */
+    if( ob==this_object() ) return 1;
+
+    /* 畍ッ环畍单ゑ︑ン */
+    a = wiz_level(ob);
+    b = wiz_level(this_object());
+    if( wizardp(ob) && a>b ) return 1;
+    if( query("invis") && a<=b ) return 0;
+
+    if( !::visible(ob) ) return 0;
+
+    /* 留旅ン惠璶ì镑祇瞷 */
+    if( query_temp("pending/hidden") > ob->query_ability("awarness") )
+	return 0;
+
+    /* 碍活惠璶疭ǎ */
+    if( query("life_form")=="ghost"
+    &&	!ob->query_temp("apply/vision_of_ghost") ) return 0;
+
+    return 1;
+}

@@ -1,0 +1,229 @@
+// go.c
+
+#pragma save_binary
+#include <ansi.h>
+inherit F_CLEAN_UP;
+#include "/cmds/std/valid_move.h";
+#define TIME_CHECK NATURE_D->outdoor_room_description()
+inherit DIR_D;
+string day_event(){return NATURE_D->outdoor_room_event();}
+
+string check_position_exits(object me,object env,string arg);
+void create() { seteuid(getuid()); }
+
+// follow will have silent=2, so as to reduce the CPU load.
+int main(object me, string arg, int silent)
+{
+        mixed dest;
+        string ridemsg, mout, min, dir,check;
+        object env, obj, ridee;
+        mapping exit;
+        int valid;
+
+        if( !arg ) return notify_fail("你要往哪个方向走？\n");
+        
+      // Added by kuku@2004/02/24 Fix bian bug it.
+      if(me->query_temp("k_bian")) {
+	if( me->query_temp("leader")) me->set_leader(0);
+	return 0;
+	}
+
+	// lead跟随的自动清除
+	if( me->is_fighting() && me->query("leader") ) {
+	me->set_leader(0);
+	me->delete("leader");
+	me->delete("leaderid");
+	me->delete_temp("leader");
+	return 0;
+	}
+
+        if(!valid_move(me)) return 0;
+
+        env = environment(me);
+        if(!env) return notify_fail("你哪里也去不了。\n");
+
+        if( !mapp(exit = env->query("exits")) || !exit[arg] ||  undefinedp(exit[arg]) ) {
+                if( query_verb()=="go" || query_verb()=="gogo" )
+                        return notify_fail("这个方向没有出路。\n");
+                else
+                        return 0;
+        }
+
+        dest = exit[arg];
+
+        if (dest && objectp(dest))
+            obj = dest;
+        else if( !(obj = load_object(dest)) )
+                return notify_fail("你要去的区域还没有连通。\n");
+        else if( !(obj = find_object(dest)) )
+                return notify_fail("无法移动。\n");
+                
+        // 在这里定义,比在地层上写valid_leave要好些.
+	if( obj ->query("wiz_only") && !wizardp(me))
+	   return notify_fail(CYN"那里只有巫师才能进去！\n"NOR);
+                
+        // Added by kuku@2002/02/24 普遍用于店铺
+	if( userp(me) && !wizardp(me) ) {
+        if( obj->query("day_shop")
+        && ( day_event() == "event_night" || day_event() == "event_midnight"))
+        	return notify_fail(GRN+obj->query("short")+NOR GRN" 晚上关门了，你还是等天亮再来吧！\n"NOR);
+          } 
+
+        valid=(int)env->valid_leave(me, arg);
+        if( !valid ) return 0;
+        if(valid>1) return 1;
+
+        if( !undefinedp(default_dirs[arg]) )
+                dir = default_dirs[arg];
+        else
+                dir = arg;
+
+        // snowcat 12/20/97
+        if (ridee = me->ride())
+          ridemsg = ridee->query("ride/msg")+"着"+ridee->name();
+        else
+          ridemsg = "";
+
+         if( userp(me) && !ridee && me->query_temp("ride/dodge")>0 ) { 
+                me->add_temp("apply/dodge",-me->query_temp("ride/dodge")); 
+                me->set_temp("ride/dodge",0);
+                if( me->query_temp("ridee")) 
+                        me->delete_temp("ridee"); 
+        } 
+
+        if(ridee && !valid_move(ridee))
+           return notify_fail("你的座骑走动不了。\n");
+           
+        if( ridee && obj ->query("sleep_room") && !wizardp(me))
+	   return notify_fail(HIG"你不能骑着坐骑进入睡房。\n"NOR);
+
+if(me->is_ghost()&&domain_file(base_name(environment(me)))!="death")
+ {
+                write(BLU"突然间阴风阵阵，你耳边响起一阵空洞而又阴森的声音:‘回来哟，回来哟!’\n"NOR);
+                write(HIW"一阵白雾将你裹了起来，你又回到了鬼门关\n"NOR);
+                me->move("/d/death/gate");
+                return 1;
+ }
+        if( me->is_fighting() ) {
+                mout = ridemsg + "往" + dir + "落荒而逃了。\n";
+                min = ridemsg + "跌跌撞撞地跑了过来，模样有些狼狈。\n";
+        } else {
+                //Jiz. 02/11
+                if( ridee && ridee->query("bird") ) {
+                        mout = ridemsg+ "往" + dir + "飞去。\n";
+                        min = ridemsg+ "飞了过来。\n";
+                } else {
+                        mout = ridemsg+ "往" + dir + "离开。\n";
+                        min = ridemsg+ "走了过来。\n";
+                }
+        }
+
+        if( !wizardp(me) || !me->query("env/invisibility") )
+        {
+                if (environment(me) && environment(me)->query("no_look"))
+                        message( "vision", "一个模糊的影子" +  mout, environment(me), ({me}) );
+                else
+                        message( "vision", me->name() + mout, environment(me), ({me}) );
+        }
+        if( (! ridee || ridee->move(obj)) && me->move(obj, silent) ) {
+                me->remove_all_enemy();
+                if( !wizardp(me) || !me->query("env/invisibility") ) {
+                                if (environment(me) && environment(me)->query("no_look"))
+                                        message( "vision", "一个模糊的影子" +  min, environment(me), ({me}) );
+                                else
+                                        message( "vision", me->name() + min, environment(me), ({me}) );
+                }
+                me->set_temp("pending", 0);
+                // added by snowcat, to fix the bug of recursive move of mutual follow + move to same room
+                if (env != obj)
+                        all_inventory(env)->follow_me(me, arg);
+                if (ridee)
+                        tell_object (me,"你"+min);
+                return 1;
+        }
+
+        return 0;
+}
+
+void do_flee(object me)
+{
+        mapping exits;
+        string *directions;
+
+        if( !environment(me) || !living(me) ) return;
+        exits = environment(me)->query("exits");
+        
+        if( !mapp(exits) || !sizeof(exits) ) {
+        	write (WHT"你想逃跑，可是找不到出口。\n"NOR);
+        	return;
+        }else directions = keys(exits);
+        
+        if (environment(me) && environment(me)->query("no_flee")) {
+		write (WHT"你想逃跑，可惜这里不能逃。。。。\n"NOR);
+        	return;
+        }
+	tell_object(me, WHT"看来该找机会逃跑了．．．\n"NOR);
+        if( me->query_temp("no_move") ) {
+         tell_object (me, HIG"可你被定住，逃不掉了！\n"NOR);
+          return;
+        }
+
+        if( random(me->query_skill("dodge")/10 + me->query("kar")) < 10 ) {
+            tell_object(me, WHT"你逃跑失败。\n"NOR);
+           return;
+        }
+
+        main(me, directions[random(sizeof(directions))], 0);
+}
+
+/*
+nosave mapping r_dirs = ([
+        "north":        "south",
+        "south":        "north",
+        "east":         "west",
+        "west":         "east",
+        "northup":      "southdown",
+        "southup":      "northdown",
+        "eastup":       "westdown",
+        "westup":       "eastdown",
+        "northdown":    "southup",
+        "southdown":    "northup",
+        "eastdown":     "westup",
+        "westdown":     "eastup",
+        "northeast":    "southwest",
+        "northwest":    "southeast",
+        "southeast":    "northwest",
+        "southwest":    "northeast",
+        "up":           "down",
+        "down":         "up",
+        "enter":        "out",
+        "out":          "enter",
+]);
+
+string query_reverse(string dir)
+{
+        if (undefinedp(r_dirs[dir]))
+                return 0;
+
+        return r_dirs[dir];
+}
+
+string query_chinese_dir(string dir)
+{
+        return default_dirs[dir];
+}
+*/
+
+int help(object me)
+{
+        write(@HELP
+指令格式 : go <方向>
+
+让你往指定的方向移动。
+
+HELP
+    );
+    return 1;
+}
+
+

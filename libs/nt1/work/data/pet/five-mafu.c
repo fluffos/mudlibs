@@ -1,0 +1,18 @@
+// SN:>CF_j<H_O44Ak?Ak
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m马夫马[2;37;0m", ({"mafu ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "这是马厩驯马和小伙计，平时打理照料马匹。
+它是无锋的坐骑。
+");
+        set_temp("owner_id", "five");
+        set_temp("owner_name", "无锋");
+        ::setup();
+}
+

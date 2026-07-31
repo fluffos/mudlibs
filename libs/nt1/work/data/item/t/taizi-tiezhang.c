@@ -1,0 +1,35 @@
+// SN:TGa][[1j`^=8nVK4
+// ITEM Made by player(太子:taizi) /data/item/t/taizi-tiezhang.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Thu Dec 11 07:28:40 2003
+#include <ansi.h>
+#include <armor.h>
+
+inherit HANDS;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[2;37;0m[36m太子专用[37m铁掌[2;37;0m", ({ "tiezhang" }));
+	set_weight(2700);
+	set("item_make", 1);
+	set("unit", "双");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一双铁掌。
+[1;31m这就是太子的铁掌。[2;37;0m
+铁掌缘上刻着一行小字：太子(taizi)
+");
+	set("value", 2100000);
+	set("point", 224);
+	set("material", "magic stone");
+	set("wear_msg", "[36m$N「嘿嘿」地奸笑了几声。[2;37;0m\n");
+	set("remove_msg", "[36m$N霍霍的奸笑了几声。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/hand", 10);
+	set("armor_prop/armor", 10);
+	set("armor_prop/unarmed_damage", apply_damage());
+	set("armor_prop/strike", 10);
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

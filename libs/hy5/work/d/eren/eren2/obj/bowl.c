@@ -1,0 +1,22 @@
+ inherit ITEM;
+inherit F_LIQUID; 
+void create()
+{
+        set_name("碎瓷青花碗", ({ "bowl"}) );
+        set_weight(500);
+        if( clonep() )
+                set_default_object(__FILE__);
+        else {
+                set("long", "一个碎瓷青花碗。\n");
+                set("unit", "个");
+                set("value", 30);
+                set("max_liquid", 10);
+        } 
+        // The liquid contained in the container is independent, we set a copy
+        // in each cloned copy.
+        set("liquid", ([
+                "name": "冰镇酸梅汤",
+                "remaining": 10,
+        ]) );
+        
+}    

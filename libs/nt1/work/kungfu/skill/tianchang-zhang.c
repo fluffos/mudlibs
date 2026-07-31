@@ -1,0 +1,83 @@
+// Copyright (C) 2003, by Lonely. All rights reserved.
+// This software can not be used, copied, or modified 
+// in any form without the written permission from authors.
+// tianchang-zhang.c 天长掌法
+
+#include <ansi.h>
+inherit SKILL;
+
+string *action_msg = ({
+        "$N一式"+HIC"『潜移默化』"NOR+"，右掌先发，左掌后至，疾拍$n的$l",
+        "$N侧身冲上，一招"+HIB"『披星戴月』"NOR+"，双掌齐出，攻向$n的$l",
+        "$N提气跃起，使出"+BLU"『乌云密布』"NOR+"，荡起漫天掌影，击向$n的$l",
+        "$N抽身退开一步，接着一式"+HIW"『寒风四起』"NOR+"，“呼呼”劈出"
+        "两掌，激起两股阴柔的暗劲袭向$n的$l",
+        "$N双掌突然一拍又向外推开，一式"+HIW"『冰冻三尺』"NOR+"，逼出阵阵"
+        "寒气攻向$n的$l",
+        "$N斜里穿出，使出"+RED"『骄阳似火』"NOR+"，双掌默运内劲向$n的胸口"
+        "平推出一股令人窒息、灼热的劲气",
+        "$N施展出"+HIR"『三味真火』"NOR+"，右掌在胸前微微一摆，再向下一捞，"
+        "接着向外猛地一推，竟从手心里喷出一股热流逼向$n的胸口",
+        "$N使一式"+WHT"『月黑风高』"NOR+"，双掌荡起无数劲气，层层逼向$n的$l",
+        "$N使出"+HIW"『与天比高』"NOR+"，双掌缓缓推向天空，接着骤然翻掌收回，"
+        "向$n猛地推出",
+        "$N暗运潜力，施展出"+HIY"『日月同辉』"NOR+"，双掌斜出，左砸右砍，祭出"
+        "道道劲力劈向$n的$l",
+        "$N双掌交叉一翻，再向外一抱，使出"+HIY"『日月争辉』"NOR+"，接着右掌上，"
+        "左掌下，电光火石般地飞身扑向$n",
+});
+
+int valid_enable(string usage) { return usage == "strike" ||  usage == "parry"; }  
+
+int valid_combine(string combo) { return combo == "hujia-quan"; }
+
+int valid_learn(object me)
+{
+        if (me->query_temp("weapon") || me->query_temp("secondary_weapon"))
+                return notify_fail("练天长掌法必须空手。\n");
+
+        if ((int)me->query_skill("force") < 120)
+                return notify_fail("你的内功火候不够，无法练天长掌法。\n");
+        
+        if ((int)me->query("max_neili") < 750)
+                return notify_fail("你的内力太弱，无法练天长掌法。\n");
+
+        if ((int)me->query_skill("strike", 1) < 80)
+                return notify_fail("你的基本掌法火候不够，无法练习天长掌法。\n");
+
+        if ((int)me->query_skill("strike", 1) < (int)me->query_skill("tianchang-zhang", 1))
+                return notify_fail("你的基本掌法水平有限，无法领会更高深天长掌法。\n");
+
+        return 1;
+}
+
+mapping query_action(object me, object weapon)
+{
+        return ([
+                "action": action_msg[random(sizeof(action_msg))], 
+                "force": 320 + random(30), 
+                "attack": 60 + random(10), 
+                "dodge" : 60 + random(10), 
+                "parry" : 60 + random(10), 
+                "damage_type" : random(2)?"瘀伤":"内伤", 
+        ]); 
+}
+
+int practice_skill(object me)
+{
+        if ((int)me->query("qi") < 70)
+                return notify_fail("你的体力太低了。\n");
+
+        if ((int)me->query("neili") < 70)
+                return notify_fail("你的内力不够练天长掌法。\n");
+
+        me->receive_damage("qi", 60);
+        me->add("neili", -60);
+
+        return 1;
+}
+
+string perform_action_file(string action)
+{
+        return __DIR__"tianchang-zhang/" + action;
+}

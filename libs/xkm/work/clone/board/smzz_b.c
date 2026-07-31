@@ -1,0 +1,18 @@
+//pod's board
+
+#include <ansi.h>
+inherit BULLETIN_BOARD;
+
+void create()
+{
+set_name(HIW"生死记载"NOR, ({ "board" }) );
+set("location", "/u/smzz/workroom");
+set("board_id", "smzz_b");
+set("long",HIM"这本厚厚的记载簿上面落满了灰尘,
+你弹去厚厚的灰尘一看只见三个白字印入眼帘
+"BLINK+HIW"              生死簿"NOR"
+仔细一看原来是假的,只是一本普通的留言簿。\n"NOR );
+setup();
+set("capacity", 100);
+replace_program(BULLETIN_BOARD);
+}

@@ -1,0 +1,38 @@
+// SN:98lf^eAL=IJFMTEJ
+// File(/data/room/dond/yingke.c) of dond's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        set("short", "江湖居迎客厅");
+	set ("long", @LONG
+这里是江湖居的主人呆老四迎接八方来客的地方。大凡客人来拜
+见呆老四，少不得在这里寒暄叙话，了尽仰慕之情。东面通往一个茶
+室，是主人陪同客人品尝天下名茶之处。 
+LONG );
+
+	set("exits", ([
+		"north"  : __DIR__"yishiting",
+                "south"  : __DIR__"zoudao",
+                "east"   : __DIR__"chashi",
+	]));
+
+        create_door("east", "木门", "west", DOOR_CLOSED);
+
+        set("objects", ([
+                "/d/room/roomnpc/yahuan" : 2,
+        ]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("room_owner", "呆老四");
+        set("room_name", "江湖居");
+        set("room_id", "jianghu");
+        set("room_owner_id", "dond");
+        set("room_position", "碎石小道");
+}

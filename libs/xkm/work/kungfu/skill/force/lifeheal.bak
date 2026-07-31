@@ -1,0 +1,306 @@
+//Cracked by Roath
+
+#include <ansi.h>
+inherit F_DBASE;
+inherit F_SSERVER;
+
+int curing(object,object);
+int halt_curing(object,object);
+void remove_pending(object,object);
+
+mapping eff_heal = ([
+	"jiuyang-shengong"	: 9,	// 九阳神功在疗伤方面的效果无可置疑。
+	"hunyuan-yiqi"		: 8,	// 鉴於易筋经以及九阳神功在疗伤方面的效果。
+	"zixia-gong"		: 8,
+// 紫霞神功及混元功在自疗方面没有什么提及，但是有鉴於其疗人的效果，以及岳不群曾经想让令狐冲
+// 自习紫霞神功来治疗内伤，可见於自疗方面的效果，或许可以与易筋经相媲美。就算是有所不及，考
+// 虑到当今紫霞神功没有什么特别的exert，也应当让紫霞神功在治疗方面的效果相对於其他内功更好。
+	"taiji-shengong"	: 7,
+	"xiantian-gong"		: 7,	// 书中有相当篇幅提到武当九阳功与全真玄门内功的疗伤。
+	"yunu-xinjing"		: 7,	// 玉女心经应和玄门内功的疗伤效果左右。
+	"kurong-changong"	: 6,	// 大理内功在疗人方面的效果很好，可是在自疗方面却没
+					// 有什么特别之处。
+	"linji-zhuang"		: 6,	// 峨嵋内功在疗伤方面没有什么特别描述，不过因其是九
+					// 阳一系。
+	"taixuan-gong"		: 5,
+	"bitao-xuangong"	: 5,
+	"bahuang-gong"		: 5,
+	"yunu-xinjing"		: 5,
+	"xiaowuxiang"		: 5,
+	"huntian-qigong"	: 4,	// 混天功、蛤蟆功、龙象般若功走的都是刚猛一路的内功，
+	"hamagong"			: 4,	// 因此在疗伤方面会相对弱些。
+	"longxiang-banruo"	: 4,
+	"shenghuo-xuanming"	: 5,	// 明教内功也属刚猛内功。
+	"beiming-shengong"	: 3,	// 北冥神功吸人内力，体内真气相冲会影响疗伤时的效果。
+	"huagong-dafa"		: 2,	// 化功大法以毒练功，在疗伤方面效果应该最为不好。
+	"dulong-dafa"		: 2,
+	"wudu-xinfa"		: 2,	// 聚毒练气，疗伤效果差。
+	"hongming-xuangong"	: 1,
+	"ding-force"		: 1,	// 以上三种内功书中未有提及，被列为不可考。
+]);
+
+int exert(object me, object target)
+{
+	string force_skill;
+	mapping msg;
+
+	if( me->is_fighting() || target->is_fighting())
+		return notify_fail("战斗中无法运功疗伤！\n");
+
+	if( me->is_busy() || me->query_temp("exit_blocked") )
+		return notify_fail("你现在正忙着呢。\n");
+
+	if( !target || target == me )
+		return notify_fail("你要用真气为谁疗伤？\n");
+
+	if( me->query_temp("cursed") )
+		return notify_fail("什么？\n");
+
+	if( me->query("rided") )
+		return notify_fail("在坐骑上运功疗伤，会走火入魔。\n");
+
+	if( !(force_skill = me->query_skill_mapped("force")) )
+		return notify_fail("你必须先用 enable 选择你要用的内功心法。\n");
+
+	if( me->query_skill("force", 1) < 50 )
+		return notify_fail("你对内功的认识还不够，不知如何搬运内息疗伤。\n");
+
+	if( (int)me->query("max_neili") < 200 )
+		return notify_fail("你的内力修为太低，尚无法搬运内息疗伤。\n");
+
+	if( (int)me->query("neili") < 50 )
+		return notify_fail("你体内的真气不够。\n");
+
+	if( (int)me->query("jing") * 100 / (int)me->query("max_jing") < 70 )
+		return notify_fail("你现在精不够，无法控制内息的流动！\n");
+
+	if( (int)target->query("eff_qi") >= (int)target->query("max_qi") )
+		return notify_fail("对方并未受到内伤。\n");
+
+	if( (int)target->query("eff_qi") < (int)target->query("max_qi") / 5 )
+		return notify_fail("对方已经受伤过重，只怕承受不了你真气的震荡！\n");
+
+	msg = SKILL_D(force_skill)->curing_msg(me);
+
+	if( !msg || undefinedp(msg["start_self_lifeheal"]) )
+		tell_object(me, HIW"你坐了下来运起内功，将手掌贴在"+target->name()+"背心，缓缓地将真气输入"+target->name()+"体内....\n"NOR);
+	else	tell_object(me, msg["start_self_lifeheal"]);
+
+	if( !msg || undefinedp(msg["start_other"]) )
+		message("vision", ""+me->name()+"坐了下来运起内功，将手掌贴在"+target->name()+"背心，缓缓地将真气输入"+target->name()+"体内....\n"NOR,
+			environment(me));
+	else	message("vision", msg["start_other_lifeheal"], environment(me));
+
+	if( !msg || undefinedp(msg["apply_short"]) )
+		me->set_temp("apply/short", ({ me->name() +"正坐在地下为"+target->name()+"运功疗伤。"}));
+	else	me->set_temp("apply/short", ({ msg["apply_short"] }));
+
+	me->set_temp("pending/curing", 1);
+	me->start_busy((: curing :), (: halt_curing :));
+	me->set("jiali", 0);
+	target->set_temp("pending/curing", 1);
+//	target->start_busy((: curing :), (: halt_curing :));
+	target->set("jiali", 0);
+	return 1;
+}
+
+int curing(object me, object target)
+{
+	int effect, lvl, con, max, eff;
+	string force_skill;
+	mapping msg;
+	if( !target ) target = offensive_target(me);
+
+	if( !living(me) || me->is_ghost() || !(force_skill = me->query_skill_mapped("force")) )
+	{
+		remove_pending(me, target);
+		return 0;
+	}
+
+	msg = SKILL_D(force_skill)->curing_msg(me);
+
+	if( me->query("jing") < 1 || me->query("jingli") < 1 )
+	{
+		remove_pending(me, target);
+		me->unconcious();
+		return 0;
+	}
+	else if( (int)target->query("eff_qi") >= (int)target->query("max_qi") )
+	{
+		if( !msg || undefinedp(msg["finish_self"]) )
+			tell_object(me, HIY"你运功良久，自觉经脉顺畅，内伤尽去，神元气足地站了起来。\n"NOR);
+		else	tell_object(me, msg["finish_self"]);
+
+		if( !msg || undefinedp(msg["finish_other"]) )
+			message("vision", me->name() +"运功完毕，站起身来，看上去气色饱满，精神抖擞。\n"NOR,	environment(me), me);
+		else	message("vision", msg["finish_other"], environment(me), me);
+
+		remove_pending(me, target);
+        	return 0;
+	}
+	else if( (int)me->query("neili") < 50 )
+	{
+		if( !msg || undefinedp(msg["unfinish_self"]) )
+			tell_object(me, "你正在运功疗伤，忽觉内息後继乏力，祗得暂缓疗伤，站起身来。\n"NOR);
+		else	tell_object(me, msg["unfinish_self"]);
+
+		if( !msg || undefinedp(msg["unfinish_other"]) )
+			message("vision", me->name() +"运功完毕，缓缓站了起来，脸色看起来好了许多。\n"NOR,environment(me), me);
+		else	message("vision", msg["unfinish_other"], environment(me), me);
+
+		remove_pending(me, target);
+		return 0;
+	}
+
+	lvl = me->query_skill("force");	// my enable force level.
+	max = me->query("max_neili");	// my max neili.
+	con = me->query("con");		// my original constitution.
+	eff = eff_heal[force_skill];	// my force's effect on heal.
+	if( !eff ) eff = 1;
+
+	effect = lvl * max/10 * eff / (2*lvl + lvl*con*2/30) / 10;
+
+	con = me->query_con();		// use apply constitution instead of original here.
+	effect = (effect+random(effect))/2 + (con+random(con))/4;
+	effect = effect * ((int)me->query("eff_qi")*100 / (int)me->query("max_qi")) / 100;
+
+	if( wizardp(me) ) tell_object(me, "每次治愈"+chinese_number(effect)+"点内伤。\n");
+	me->receive_curing("qi", effect);
+        me->receive_heal("qi", effect/2);
+	me->add("neili", -50);
+	return 1; 
+}
+
+int halt_curing(object me, object target)
+{
+	string force_skill;
+	mapping msg;
+	if( !target ) target = offensive_target(me);
+
+	force_skill = me->query_skill_mapped("force");
+	if( force_skill ) msg = SKILL_D(force_skill)->curing_msg(me);
+
+	me->receive_damage("qi", 50, "内功走火入魔死了");
+	me->add("neili", -50);
+	if( me->query("neili") < 0 ) me->set("neili", 0);
+
+	if( !msg || undefinedp(msg["halt_self"]) )
+		tell_object(me, "你吐气纳息，硬生生地将内息压了下去，缓缓站了起来。\n");
+	else	tell_object(me, msg["halt_self"]);
+
+	if( !msg || undefinedp(msg["halt_other"]) )
+		message("vision", me->name() +"身子一震，吐出一口瘀血，缓缓站了起来。\n", environment(me), me);
+	else	message("vision", msg["halt_other"], environment(me), me);
+
+	remove_pending(me, target);
+	me->start_busy(1+random(3));
+	return 1;
+}
+
+void remove_pending(object me, object target)
+{
+	me->delete_temp("pending/curing");
+	me->delete_temp("apply/short");
+}
+/*
+int curing(object me, object target)
+{
+	int effect, lvl, con, max, eff;
+	string force_skill;
+	mapping msg;
+
+	if( !living(me) || me->is_ghost() || !(force_skill = me->query_skill_mapped("force")) )
+	{
+		remove_pending(me, target);
+		return 0;
+	}
+
+	msg = SKILL_D(force_skill)->curing_msg(me);
+
+	if( me->query("jing") < 1 || me->query("jingli") < 1 )
+	{
+		remove_pending(me, target);
+		me->unconcious();
+		return 0;
+	}
+	else if( (int)target->query("eff_qi") >= (int)target->query("max_qi") )
+	{
+		if( !msg || undefinedp(msg["finish_self_lifeheal"]) )
+			tell_object(me, HIY"你真气运行一个周天，将真气还合丹田，站起身来。\n"NOR);
+		else	tell_object(me, msg["finish_self_lifeheal"]);
+
+		if( !msg || undefinedp(msg["finish_other_lifeheal"]) )
+			message("vision", me->name() +"运功完毕，"+target->name()+"站起身来，看上去气色饱满，精神抖擞。\n"NOR,	environment(me), me);
+		else	message("vision", msg["finish_other_lifeheal"], environment(me), me);
+
+		remove_pending(me, target);
+        	return 0;
+	}
+	else if( (int)me->query("neili") < 50 )
+	{
+		if( !msg || undefinedp(msg["unfinish_self_lifeheal"]) )
+			tell_object(me, "你正在运功疗伤，忽觉内息後继乏力，祗得暂缓疗伤，站起身来。\n"NOR);
+		else	tell_object(me, msg["unfinish_self_lifeheal"]);
+
+		if( !msg || undefinedp(msg["unfinish_other_lifeheal"]) )
+			message("vision", me->name() +"运功完毕，"+target->name()+"缓缓站了起来，脸色看起来好了许多。\n"NOR,environment(me), me);
+		else	message("vision", msg["unfinish_other_lifeheal"], environment(me), me);
+
+		remove_pending(me, target);
+		return 0;
+	}
+
+	lvl = me->query_skill("force");	// my enable force level.
+	max = me->query("max_neili");	// my max neili.
+	con = target->query("con");		// my original constitution.
+	eff = eff_heal[force_skill];	// my force's effect on heal.
+	if( !eff ) eff = 1;
+
+	effect = lvl * max/10 * eff / (2*lvl + lvl*con*2/30) / 10;
+
+	con = target->query_con();		// use apply constitution instead of original here.
+	effect = (effect+random(effect))/2 + (con+random(con))/4;
+	effect = effect * ((int)target->query("eff_qi")*100 / (int)target->query("max_qi")) / 100;
+
+	if( wizardp(me) ) tell_object(me, "每次治愈"+chinese_number(effect)+"点内伤。\n");
+	target->receive_curing("qi", effect);
+	target->receive_heal("qi", effect/2);
+	me->add("neili", -50);
+
+	return 1; 
+}
+
+int halt_curing(object me, object target)
+{
+	string force_skill;
+	mapping msg;
+
+	force_skill = me->query_skill_mapped("force");
+	if( force_skill ) msg = SKILL_D(force_skill)->curing_msg(me);
+
+	me->receive_damage("qi", 50, "内功走火入魔死了");
+	me->add("neili", -50);
+	if( me->query("neili") < 0 ) me->set("neili", 0);
+
+	if( !msg || undefinedp(msg["halt_self_lifeheal"]) )
+		tell_object(me, "你吐气纳息，硬生生地将内息压了下去，缓缓站了起来。\n");
+	else	tell_object(me, msg["halt_self"]);
+
+	if( !msg || undefinedp(msg["halt_other_lifeheal"]) )
+		message("vision", me->name() +"身子一震，吐出一口瘀血，缓缓站了起来。\n", environment(me), me);
+	else	message("vision", msg["halt_other_lifeheal"], environment(me), me);
+
+	remove_pending(me, target);
+	me->start_busy(1+random(3));
+	target->start_busy(1+random(3));
+	return 1;
+}
+
+void remove_pending(object me, object target)
+{
+	me->delete_temp("pending/curing");
+	me->delete_temp("apply/short");
+//	target->delete_temp("pending/curing");
+//	target->delete_temp("apply/short");
+}
+*/

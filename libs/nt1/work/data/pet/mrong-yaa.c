@@ -1,0 +1,18 @@
+// SN:WHU3O]CD=E\W]8[V
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("雅虎[2;37;0m", ({"yaa hu"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "yahoo....
+它是慕容碧的坐骑。
+");
+        set_temp("owner_id", "mrong");
+        set_temp("owner_name", "慕容碧");
+        ::setup();
+}
+

@@ -1,0 +1,18 @@
+// Room: /u/cass/hg/chuxiugong.c
+// This is a room made by roommaker. write by Fan. :)
+
+inherit ROOM;
+
+void create()
+{
+	set("short", "储秀宫");
+	set("long", @LONG
+壮丽的庑殿顶式宫殿，红墙灰瓦，飞檐远伸，给人一种古朴的感觉。
+殿内正中摆了一块雕刻得活龙活现折丹墀龙凤石，上面刻有龙在下、凤
+在上，龙追凤、凤戏龙等图案。
+LONG
+);
+
+	setup();
+	replace_program(ROOM);
+}

@@ -1,0 +1,18 @@
+// SN:<?cakUEHVeNoL>L@
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("风云雕雕[2;37;0m", ({"fengyundiao diao"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "这是小风的坐骑,看上去非同一般
+它是小风的坐骑。
+");
+        set_temp("owner_id", "yangtong");
+        set_temp("owner_name", "小风");
+        ::setup();
+}
+

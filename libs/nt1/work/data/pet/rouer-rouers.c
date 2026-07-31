@@ -1,0 +1,18 @@
+// SN:<bH<B]`VCfCFC4Hd
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("梅花鹿[2;37;0m", ({"rouers lu"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "我的
+它是柔儿的坐骑。
+");
+        set_temp("owner_id", "rouer");
+        set_temp("owner_name", "柔儿");
+        ::setup();
+}
+

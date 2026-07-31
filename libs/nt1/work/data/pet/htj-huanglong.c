@@ -1,0 +1,18 @@
+// SN:SVhH]?WIJ0\YOlAY
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;33m皇龙兽[2;37;0m", ({"huanglong shou"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "满清时候的神兽，皇太极拥有。
+它是皇太极的坐骑。
+");
+        set_temp("owner_id", "htj");
+        set_temp("owner_name", "皇太极");
+        ::setup();
+}
+

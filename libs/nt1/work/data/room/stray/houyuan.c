@@ -1,0 +1,31 @@
+// SN:^EMiU:[G5f2=dB;Q
+// File(/data/room/stray/houyuan.c) of stray's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "后院");
+	set ("long", @LONG
+这是米米米米的后院，正中一个假山，傲然而立、非常雄伟。下
+有一水池，环山而走，悠然不息。东面乃是练武之处，西面是厨房。
+LONG );
+
+	set("exits", ([
+                "south" : __DIR__"zhongting",
+                "north" : __DIR__"huayuan",
+                "east"  : __DIR__"lianwu",
+                "west"  : __DIR__"chufang",
+	]));
+
+        set("outdoors", "playertown");
+        set("no_sleep_room", 1);
+        setup();
+
+        set("room_owner", "我是米");
+        set("room_name", "米米米米");
+        set("room_id", "rice");
+        set("room_owner_id", "stray");
+        set("room_position", "青砖路");
+}

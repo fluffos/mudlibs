@@ -1,0 +1,22 @@
+// Room: /u/cass/hg/zhonghedian.c
+// This is a room made by roommaker. write by Fan. :)
+
+inherit ROOM;
+
+void create()
+{
+	set("short", "中和殿");
+	set("long", @LONG
+大殿呈方形，单檐黄琉璃瓦四角攒尖，鎏金宝顶。内檐绘着金龙吉
+祥彩画和团龙图案。殿内也设有宝座，旁边还摆着金鼎、熏炉。
+LONG
+);
+	set("no_new_clean_up", 0);
+	set("exits", ([ /* sizeof() == 2 */
+  "south" : __DIR__"taihedian",
+  "north" : __DIR__"baohedian",
+]));
+
+	setup();
+	replace_program(ROOM);
+}

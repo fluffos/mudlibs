@@ -1,0 +1,18 @@
+// SN:oMV=Ye]V::\S8KWe
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[37m神雕[2;37;0m", ({"resets diao"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "别打我
+它是重启的坐骑。
+");
+        set_temp("owner_id", "reset");
+        set_temp("owner_name", "重启");
+        ::setup();
+}
+

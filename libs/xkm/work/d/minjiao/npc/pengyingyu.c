@@ -1,0 +1,50 @@
+//Cracked by Kafei
+
+#include "mingjiao_npc.c"
+//#include "mingjiao_job.h"
+#include <ansi.h>
+
+void create()
+{
+		mapping S_skills= ([ ]);
+		mapping I_inquiry=([ ]);
+		mixed Skill_name;
+        set_name("彭莹玉",({"peng yingyu","peng"}));
+        set("title", "明教五散人");
+        set("long", "
+此人身穿白色僧衣，是个四十来岁的高瘦和尚。他笑眯眯的，
+极富智慧。\n");
+        set("age", 35);
+        set("attitude", "peaceful");
+        set("shen", 1000000);
+        create_family("明教",36,"散人");
+
+		Skill_name=({"guangming-xinfa","wuxing-bu","bagua-dao",
+			     "dafeng-yunfei"});
+		I_inquiry["name"]="在下就是明教五散人彭莹玉，不知阁下有何指教。";
+
+		Set_Inquiry(I_inquiry,Skill_name);
+		Set_Npcattrib(25,5,2000,300,4000,400,4000,300,3000,1000,1000000,100000);
+
+        S_skills["force"]="shenghuo-xuanming";
+        S_skills["dodge"]="wuxing-bu";
+        S_skills["parry"]="bagua-dao";
+        S_skills["blade"]="bagua-dao";
+        S_skills["hand"]="dafeng-yunfei";
+        set_skill("guangming-xinfa",120+random(20));
+	set_skill("literate",120+random(20));
+	
+	Set_Npcskills(120,20,S_skills);
+
+        prepare_skill("hand","dafeng-yunfei");
+        
+	setup();
+	carry_object(OBJ_PATH"/changpao")->wear();
+	carry_object(OBJ_PATH"/blade")->wield();	
+}
+
+
+
+
+
+

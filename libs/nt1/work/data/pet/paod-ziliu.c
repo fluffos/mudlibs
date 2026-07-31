@@ -1,0 +1,18 @@
+// SN:a2HKj48W3R@M`nP;
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[35m紫遛马[2;37;0m", ({"ziliu ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "mmm.
+它是炮弹的坐骑。
+");
+        set_temp("owner_id", "paod");
+        set_temp("owner_name", "炮弹");
+        ::setup();
+}
+

@@ -1,0 +1,18 @@
+// SN:nUilYBR1j]VlISYA
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;31m五[1;32m彩[1;36m神[1;35m仙[1;33m鹤[2;37;0m", ({"wucai he"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "羽毛犹如五彩祥云般艳丽，与它的主人浑然天成!
+它是疯子女的坐骑。
+");
+        set_temp("owner_id", "xiaoxiao");
+        set_temp("owner_name", "疯子女");
+        ::setup();
+}
+

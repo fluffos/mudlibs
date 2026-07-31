@@ -1,0 +1,451 @@
+/******************************************/ 
+/* MUDLIB：Glory of Days Past 〓光辉岁月〓 */ 
+/* Updated Admin By Waiwai@2003/04/09     */ 
+/* Admin Email：wkzstory@21cn.com         */ 
+/******************************************/ 
+// Old code from Find 
+// Update by waiwai@2003/10/23 
+// 对于商人及系统中金钱问题，有几个必要的参数定义需要强调一下： 
+// 比如老的当铺，把金钱定义计算单独写了个value_string，把pay_player也多 
+// 余写一个，这样就会造成一些多余的废文件在系统里面，包括钱庄的文件里面也 
+// 是如此。应该明确一点，大量运用的被系统调用的东西，不要重复去调用定义或 
+// 者重复写相同的类似代码。而都定义在MONEY_D里面也不是个好的方法，不如直 
+// 接写个simul_efun文件，把金钱计算取值定义在其中的money_num和price_num 
+// 中，把pay_player和player_pay也定义在这个文件里面，将找零钱及负重问题 
+// 统一在其中处理好。 
+// 另外所有query_amount()物件，都必须严格规范地写有base_unit和base_value 
+// 用color_len处理颜色字符是个规范趋势，其他的方法都该被抛弃掉，如果系统 
+// 中要使用颜色过滤的地方，直接调用simul_efun的util.c中的filter_color， 
+// 不要使用COLOR_D方法转圈调用。 
+
+#include <ansi.h> 
+#include <mudlib.h> 
+
+inherit NPC; 
+
+class goods { 
+ string short; 
+ string name; 
+ string short_name; 
+ string file; 
+ string unit; 
+ int amount; 
+ int value; 
+ int armor; 
+ int weapon; 
+ int wing; 
+ int num; 
+} 
+
+protected class goods *all_goods = ({}); 
+protected int uptime; 
+
+protected void init_goods(); 
+protected int add_one_good(string file,int sum); 
+
+void setup() 
+{ 
+ init_goods(); 
+ ::setup(); 
+ if(!uptime) 
+  uptime = time(); 
+} 
+
+protected void init_goods() 
+{ 
+ mapping items = this_object()->query("vendor_goods"); 
+ string name; 
+ int sum; 
+
+ if(!items || !mapp(items) || !sizeof(items)) 
+  return; 
+
+ all_goods = ({}); 
+ foreach(name,sum in items) 
+  add_one_good(name,sum); 
+} 
+
+protected int add_one_good(string file,int sum) 
+{ 
+ object ob; 
+ class goods item; 
+ int n,num; 
+
+ if(!stringp(file) || !intp(sum)) 
+  return 0; 
+
+ ob = new(file); 
+ if(!ob) 
+  return 0; 
+
+ item = new(class goods); 
+ item->short = ob->short(); 
+ item->name = ob->query("name"); 
+ item->short_name = sprintf("%s(%s)", item->name,capitalize(ob->query("id"))); 
+ item->file = file; 
+ item->unit = ob->query_amount()?ob->query("base_unit"):ob->query("unit"); 
+ item->amount = sum; 
+ item->num = ob->query_amount(); 
+ item->armor = ob->query("armor_prop/armor"); 
+ item->weapon = ob->query("weapon_prop/damage"); 
+ item->wing = ob->query("wing_level"); 
+  
+ // price_ratio 为区别计算个区域买卖差价及当前某区域买卖价格比率 
+ if( num>0) 
+ item->value = to_int( ((n = ob->query("value_base"))? 
+   n: (n = ob->query("value_base")) )*1); 
+ else 
+ item->value = to_int( ((n = ob->query("value"))? 
+   n: (n = ob->value()) )*1); 
+
+ all_goods += ({ item }); 
+ destruct(ob); 
+ return 1; 
+} 
+
+void init() 
+{ 
+ add_action("do_buy", ({ "mai","buy" }) ); 
+ add_action("do_list", "list"); 
+ add_action("do_look", "guancha"); 
+} 
+
+varargs int do_list(string str) 
+{ 
+       string list, tlist; 
+       int flag; 
+ class goods item; 
+ object me; 
+
+ me =this_player(); 
+
+ if(me->is_busy()) 
+ { 
+  write("你现在正忙着呢。\n"); 
+  return 1; 
+ } 
+
+ /* 处理同房间有一个以上 dealer 的情况 */ 
+ if( stringp(str) && (str != "") && !id(str) ) 
+  return 0; 
+
+ if (!sizeof(all_goods)) 
+ { 
+  write(sprintf("目前%s没有可以卖的东西。\n",query("name"))); 
+  return 1; 
+ } 
+
+ // Added by waiwai@2003/10/23 
+ list = query("name")+"("+query("id")+")提供销售下列商品，概不赊帐:  \n"NOR; 
+ list += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"; 
+ list += "[序号]    [名      称]                      [单 位]       [销  售  单  价]  [现货量]\n"; 
+ list += "────────────────────────────────────────────\n"; 
+
+ foreach(item in all_goods) 
+ { 
+  if( item->amount < 0 ) 
+   tlist =HIG"  大量供应"NOR; 
+   else 
+  if( item->amount >=0 && item->amount <1 ) 
+   tlist =HIB"  暂时缺货"NOR; 
+   else 
+  if( item->amount >=1 && item->amount <10 ) 
+  tlist = sprintf(HIR"  仅剩：%3d%s"NOR, item->amount, item->unit ); 
+  else 
+  if( item->amount >=10 && item->amount <50 ) 
+  tlist = sprintf(HIM"  还剩：%3d%s"NOR, item->amount, item->unit ); 
+  else 
+  if( item->amount >=50 && item->amount <100 ) 
+  tlist = sprintf(HIC"  还剩：%3d%s"NOR, item->amount, item->unit ); 
+  else 
+  if( item->amount >=100 && item->amount <200 ) 
+   tlist =HIY"  限量供应"NOR; 
+  else 
+  if( item->amount >=200 ) 
+   tlist =HIW"  货源充足"NOR; 
+
+  ++flag; 
+  list += sprintf("[%4d] %-"+(34+color_len(item->short_name))+"s→ 每%-6s"YEL"%22s"NOR"%s\n", 
+  flag, item->short_name, item->unit, price_num(item->value), tlist); 
+ } 
+ list += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ "HIR+SITE_NAME+"商业行会"NOR" ━━━━━\n"; 
+
+ // 该商人定义有出生地参数，才有这个信息反馈 
+ if( query("changed") ) 
+ list += "共有"+sizeof(all_goods)+"个种类货物销售中。对"+ 
+  query("changed")+"人士实行减收货值1/3优惠。非"+query("changed")+"人士加收货值1/3销售。\n"; 
+
+ // from 后面只所以设有query("id")是为了动态显示不同的商人所跟名字是什么 
+ // 这样可以更贴切地给予用户反馈出准确的指导买卖目标 
+ list += "请用：buy <数量> <物品ID> from "+query("id")+" 或 mai <数量> <物品ID> 来购买物品。\n"; 
+ list += "或用：buy <物品ID> from "+query("id")+" 或 mai <物品ID> 来购买物品。\n"; 
+
+ if(!flag) 
+ { 
+  write(sprintf("目前%s没有可以卖的东西。\n",query("name"))); 
+  return 1; 
+ } 
+ else 
+  write(list); 
+
+        return 1; 
+} 
+
+// 以下buy定义屏蔽系统指令的buy为无效 
+varargs int do_buy(string arg) 
+{ 
+       string who; 
+       object ob,me,env; 
+ int sum,num, i,flag,n, rtn; 
+ int price, old_price, priceX, priceY; 
+
+ // 不在祖籍区域的非random_move的商人这里禁止 
+ // 买卖，以防止被打晕get到某地而独占此商人NPC 
+ // random_move的商人不要写有query("changed") 
+ if(this_object()->query("changed")) { 
+ if(!(env = environment()) 
+ || base_name(env) != query("startroom") ) 
+  return 0; 
+ } 
+
+ if( (me = this_player())->is_busy() ) 
+ { 
+  write("你现在正忙着呢。\n"); 
+  return 1; 
+ } 
+
+        if(!arg || arg == "") 
+ { 
+              write("你想买什么？\n"); 
+  return 1; 
+ } 
+
+ /* 处理同房间有一个以上 dealer 的情况 */ 
+ // 比如一个房间里面站有药铺老板和客栈小二，就要用到from了 
+ // 同理list也是，需要list er或list yang，以取得某个NPC的 
+ // 实际买卖状态情况。。。 
+ if(sscanf(arg,"%s from %s",arg,who) == 2) 
+ { 
+  if(!id(who)) 
+   return 0; 
+ } 
+
+ /* 一次买多个同一商品，最少默认为1个，最多500个 */ 
+ if(sscanf(arg,"%d %s",sum,arg) == 2) 
+ { 
+  if(sum < 1) 
+  { 
+   write("买东西每次数量不能少于一个单位。\n"); 
+   return 1; 
+  } 
+
+  if(sum > 500) 
+  { 
+   write("买东西每次数量最多五百个。\n"); 
+   return 1; 
+  } 
+
+ } 
+ else 
+  sum = 1; 
+
+ // 这里需要在name继承文件里面加个判断，如果该NPC是在买卖busy 
+ // 状态，就反馈为 <忙碌中...> 
+ if(query_temp("busy")) 
+ { 
+  write("您请等一下，我这儿马上就忙完了。。。。。。\n"); 
+  return 1; 
+ } 
+
+ n = sizeof(all_goods); 
+ if(!n) 
+ { 
+  write(sprintf("目前%s没有可以卖的东西。\n",query("name"))); 
+  return 1; 
+ } 
+
+ for(i=0;i<n;i++) 
+ { 
+  if( (all_goods[i]->file)->id(arg) ) 
+  { 
+   if(!(all_goods[i]->amount)) 
+   { 
+   tell_object(me, this_object()->name()+"说道：目前这"+ 
+    all_goods[i]->name+"缺货，您过一段时间再来吧！\n"); 
+    return 1; 
+   } 
+
+
+   if( (all_goods[i]->amount > 0) && (sum > all_goods[i]->amount) ) 
+    sum = all_goods[i]->amount; 
+   break; 
+  } 
+ } 
+
+ if(i >= n) 
+ { 
+  write("你想买什么？\n"); 
+  return 1; 
+ } 
+
+ // Added by waiwai@2003/10/23 
+ // 以下综合设定出生地 
+ price=all_goods[i]->value*sum; 
+ old_price=all_goods[i]->value*sum; 
+
+ if(this_object()->query("changed")) { 
+ if( me->query("changed")==(string)this_object()->query("changed") ) 
+   (int)price=(price*2/3); // 原值减1/3 
+ else 
+  (int)price=(price+price/3); // 原值加1/3 
+ } 
+
+ switch( rtn = player_pay(me, (price)) ) 
+ { 
+        case 0: 
+
+ if(this_object()->query("changed")) { 
+ if( me->query("changed")==(string)this_object()->query("changed") ) 
+  write(sprintf("买%d%s%s需要花费%s，你带的钱不够。\n", sum, 
+   all_goods[i]->unit, all_goods[i]->name, price_num(price) )); 
+   else 
+  write(sprintf("你不是%s人士，买%d%s%s需要花费%s，你带的钱不够。\n",  
+   this_object()->query("changed"), sum, all_goods[i]->unit,  
+   all_goods[i]->name, price_num(price) )); 
+  } else 
+  write(sprintf("买%d%s%s需要花费%s，你带的钱不够。\n", sum, 
+   all_goods[i]->unit, all_goods[i]->name, price_num(price) )); 
+
+                return 1; 
+        case 2: 
+  destruct(ob); 
+                write("您的零钱不够了，银票又没人找得开。\n"); 
+  return 1; 
+        default: 
+                set_temp("busy", 1); 
+
+  for(n=0;n<sum;n++) 
+  { 
+   ob = new(all_goods[i]->file); 
+   if(rtn == 3) 
+    ob->set_credit_point_flag(); 
+   if(!ob->move(me)) 
+   { 
+    if(ob->move(environment(me))) 
+     flag = 1; 
+    else 
+    { 
+     if((all_goods[i]->amount) > 0) 
+      all_goods[i]->amount -= n; 
+     destruct(ob); 
+     write("你身上再也拿不了更多的东西了，周围也没地方放。\n"); 
+     call_out("enough_rest", 1); 
+     return 1; 
+    } 
+   } 
+  } 
+
+  if(this_object()->query("changed")) { 
+
+  priceX = old_price-price; 
+  priceY = price-old_price; 
+
+  if( me->query("changed")==(string)this_object()->query("changed") ) { 
+  tell_object(me, this_object()->name()+"对您说道：嗨！都是"+this_object()->query("changed")+ 
+   "人，乡里乡亲的，就少收您"+price_num(priceX)+"吧！\n"); 
+              message_vision(sprintf("$N花费%s从$n那里买下了%d%s%s。\n",  
+  price_num(old_price-priceX), sum, 
+              all_goods[i]->unit,all_goods[i]->name), me, this_object()); 
+  } else { 
+  tell_object(me, this_object()->name()+"对你说道：外！外乡人，不是我们"+this_object()->query("changed")+ 
+   "人，就要加收你"+price_num(priceY)+"地！\n"); 
+              message_vision(sprintf("$N花费%s从$n那里买下了%d%s%s。\n",  
+  price_num(old_price+priceY), sum, 
+              all_goods[i]->unit,all_goods[i]->name), me, this_object()); 
+
+   } 
+
+  } else 
+              message_vision(sprintf("$N花费%s从$n那里买下了%d%s%s。\n", price_num(price), sum, 
+              all_goods[i]->unit,all_goods[i]->name), me, this_object()); 
+
+  if(flag) 
+   write(BLINK HIR"\n你身上再也拿不了更多的东西，其他的东西只能给您放地上了。\n"NOR); 
+        } 
+
+ all_goods[i]->amount -= sum; 
+
+ remove_call_out("enough_rest"); 
+ call_out("enough_rest", 1); 
+
+ return 1; 
+} 
+
+protected void enough_rest() 
+{ 
+        delete_temp("busy"); 
+} 
+
+// 多久恢复商品原始数量 
+void reset() 
+{ 
+ int t = time(); 
+
+ if(!uptime) 
+  uptime = t; 
+
+ if(t - uptime >= 18000) 
+ { 
+  uptime = t; 
+  init_goods(); 
+ } 
+} 
+
+// Added by waiwai@2003/10/23 
+int do_look(string arg) 
+{ 
+ object env; 
+ int i,n; 
+
+ if(!(env = environment()) 
+ || base_name(env) != query("startroom") ) 
+  return 0; 
+
+ if(!stringp(arg)) 
+  return notify_fail("你要仔细察看哪件商品？\n"); 
+
+ if( !(n=sizeof(all_goods)) ) 
+  return notify_fail("没有你要察看的这件商品。\n"); 
+
+ for(i=0;i<n;i++) 
+  if(all_goods[i]->file->id(arg)) 
+   break; 
+  
+ if(i>=n) 
+  return notify_fail("你要仔细察看哪件商品？\n"); 
+
+ // 个人认为用户在买卖之前“看货”是必须的买卖过程环节 
+ // 因此类似武器装备及比较重要的信息，都该在这里反馈出 
+ // 来使得可以在买之前相对了解清楚某样商品的独有特性。 
+ if( all_goods[i]->armor >0 ) { 
+ write(sprintf("%s\n%s\n",all_goods[i]->short, 
+  all_goods[i]->file->query("long")?all_goods[i]->file->query("long"):"" )); 
+ write(sprintf("%s的基本防御值为：%d\n", 
+  all_goods[i]->short,all_goods[i]->file->query("armor_prop/armor"))); 
+ if( all_goods[i]->wing >0 ) 
+ write(sprintf("%s的翅翼级别为：%d\n", 
+  all_goods[i]->short,all_goods[i]->file->query("wing_level"))); 
+ } 
+ else 
+ if( all_goods[i]->weapon >0 ) { 
+ write(sprintf("%s\n%s\n",all_goods[i]->short, 
+ all_goods[i]->file->query("long")?all_goods[i]->file->query("long"):"" )); 
+ write(sprintf("%s的基本攻击值为：%d\n", 
+  all_goods[i]->short,all_goods[i]->file->query("weapon_prop/damage"))); 
+ } 
+ else 
+ write(sprintf("%s\n%s\n",all_goods[i]->short, 
+ all_goods[i]->file->query("long")?all_goods[i]->file->query("long"):"" )); 
+
+ return 1; 
+} 

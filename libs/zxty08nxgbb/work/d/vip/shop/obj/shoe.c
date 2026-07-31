@@ -1,0 +1,51 @@
+#include <armor.h>
+#include <ansi.h>
+#include <mudlib.h>
+inherit BOOTS;
+ 
+void create()
+{
+         set_name(HIY"千里靴"NOR, ({ "qianli shoes", "shoes" }));
+        set_weight(800);
+        if( clonep() )
+                set_default_object(__FILE__);
+        else {
+                set("material", "leather");
+                set("unit", "双");
+                set("long", "这是一双可以增加轻功有效等级800的千里靴，下线不掉{kaiguang shoe}！。\n"NOR); 
+              set("tianya_money",3);
+		set("no_put",1);
+              set("no_sell",1);
+              set("ty_gift", 1);
+              set("no_get", 1);
+              set("no_give", 1);
+            set("no_vipcun",1);
+              set("no_drop",1); 
+                set("armor_prop/dodge", 800);
+        }
+        setup();
+}
+void init()
+{
+        add_action("do_kai", "kaiguang");
+}
+
+int do_kai(string arg)
+{
+        object me;
+
+        if (! id(arg))
+                return notify_fail("你要开光什么？\n");
+
+        me = this_player();
+         
+        if (!me->query("vip"))
+                return notify_fail("你不是VIP！\n");
+        if (me->query("vipshop/shoe")>1)
+                return notify_fail("这件装备你开光过了！\n");
+
+                tell_object(me, HIG "恭喜你！你为你的装备开光好了，现在除了死亡，你的装备下线将不掉落。\n");
+                me->set("vipshop/shoe", 2);
+
+        return 1;
+}

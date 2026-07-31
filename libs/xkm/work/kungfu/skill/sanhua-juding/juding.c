@@ -1,0 +1,154 @@
+// sanhua-juding perform juding
+// liu 2002
+
+/*
+群道一怔之间，忽地身后一人钻出，伸手在孙婆婆腕上一搭。孙婆婆尚未看清此人
+面容，只觉腕上酸麻，抓着的少年道人已被他夹手抢了过去，紧接着劲风扑面，那人一掌当
+面击来。孙婆婆暗想：“此人出掌好快。”急忙回掌挡格。双掌相交，拍的一响，孙婆婆退
+后一步。
+    此人也是微微一退，但只退了尺许，跟着第二掌毫不停留的拍出。孙婆婆还了一招，双
+掌撞击，她又退后一步。那人踏上半步，第三掌跟着击出。这三掌一掌快似一掌，逼得孙婆
+婆连退三步，竟无余暇去看敌人面目，到第四掌上，孙婆婆背靠墙壁，已是退无可退。那人
+右掌击出，与孙婆婆手心相抵，朗声说道：“婆婆，你把解药和孩子留下罢！”
+
+郝大通待得发觉，对方足尖已踢到小腹，纵然
+退后，也已不及，危急之下不及多想，掌上使足了劲力，“嘿”的一声，将孙婆婆推了出
+去。这一推中含着他修为数十年的全真派上乘玄功内力，但听喀喇一响，墙上一大片灰泥带
+着砖瓦落了下来。孙婆婆喷出一大口鲜血，缓缓坐倒，委顿在地。
+*/
+
+#include <ansi.h>
+
+inherit F_SSERVER;
+
+void hit(object me, object target);
+
+int perform(object me, object target)
+{
+	int skill;
+
+	if( !target ) target = offensive_target(me);
+
+	if( !target || !target->is_character() )
+		return notify_fail("你不在战斗中。\n");
+
+	if( me->query_skill_mapped("force") != "xiantian-gong" )
+		return notify_fail("你所用的并非玄门先天功。\n");
+
+        if (me->query_skill("strike") < 200 )
+        	return notify_fail("你的掌法修为不够。\n");
+        	
+        if (me->query_skill("force") < 180 )
+        	return notify_fail("你的内功修为不够。\n");
+
+	skill = me->query_skill("sanhua-juding",1);
+
+	if( me->query("neili", 1) < skill*6 )
+		return notify_fail("你的内力不够！\n");
+
+	if( me->query("jingli", 1) < skill*3 )
+		return notify_fail("你的精力不够！\n");
+
+//	if( me->query_temp("quanzhen/juding"))
+//		return notify_fail("你内息不畅，暂时不能聚顶三花。\n");
+
+	message_vision(HIM"\n$N运起玄门先天功，内力遍布全身，头顶冒出丝丝热气，竟然呈现三朵莲花。\n\n"NOR,me,target);
+	me->start_busy(1);
+	call_out("hit", random(1), me, target);
+
+	return 1;
+}
+
+void hit(object me, object target)
+{
+	int skill, jiali, exp1, exp2, damage, neili1, neili2, max_neili1, max_neili2, mm, tt, ap, dp, num;
+
+	skill = me->query_skill("sanhua-juding",1);
+	jiali = me->query("jiali",1);
+
+	exp1 = me->query("combat_exp",1)/1000;
+	exp2 = target->query("combat_exp",1)/1000;
+	neili1 = me->query("neili",1)/20;
+	neili2 = target->query("neili",1)/20;
+	max_neili1 = me->query("max_neili",1)/20;
+	max_neili2 = target->query("max_neili",1)/20;
+	mm = (me->query_skill("force")+me->query_skill("strike"))/2;
+	tt = (target->query_skill("force")+target->query_skill("parry"))/2;
+
+	ap = exp1+mm+max_neili1+neili1;
+	dp = exp2+tt+max_neili2+neili2;
+
+	damage = me->query_skill("force")+me->query_skill("strike")+random(jiali);
+	num = me->query_temp("quanzhen/juding",1);
+
+	if( !target 
+	|| !me->is_fighting() || !target->is_fighting()
+	|| !living(me) || !living(target)
+	|| me->is_ghost() || target->is_ghost()
+	|| environment(me) != environment(target) 
+	|| me->query_skill_mapped("force") != "xiantian-gong" || me->query_skill_mapped("strike") != "sanhua-juding"
+	|| me->query("neili",1) < skill*2 || me->query("jingli",1) < skill || me->query_temp("quanzhen/juding",1) > 4 )
+	{
+		me->delete_temp("quanzhen/juding");
+		return;
+	}
+
+	if(num>3)
+	{
+		message_vision(HIM"\n$N掌上使足了劲力，“嘿”的一声，向$n推了过去，这一掌中含着$N修为数十年的全真派上乘玄功内劲！\n"NOR,me,target);
+		damage = damage+random(damage);
+	}
+	else if(num>2)
+	{
+		message_vision(HIM"\n到第四掌上，$n已是退无可退，只见$N右掌击出，朗声说道：“$n，认输吧！”\n"NOR,me,target);
+	}
+	else if(num>1)
+	{
+		message_vision(HIM"\n$N越战越勇，竟踏上半步，第三掌紧跟着击出，这三掌一掌快似一掌，逼得$n连连退却！\n"NOR,me,target);
+	}
+	else if(num>0)
+	{
+		message_vision(HIM"\n$N也是微微一退，但只退了尺许，跟着第二掌毫不停留的拍出，直取$n胸口！\n"NOR,me,target);
+	}
+	else
+	{
+		message_vision(HIM"\n$N足底尘土泛起，全身真气冲关欲出，紧接着一掌当面击出，直取$n面门！\n"NOR,me,target);
+	}
+
+	message_vision(CYN"$n只觉劲风扑来，急忙提掌还击，与$N手心相抵，比拼内劲！\n"NOR,me,target);
+
+	if (ap>dp*5/4)
+	{
+		message_vision("双掌相交，只听轰的一响，$n喷出一大口鲜血，缓缓坐倒，委顿在地！\n"NOR,me,target);
+	}
+	else if (ap>dp)
+	{
+		message_vision("双掌相交，只听砰的一响，$n被震得内息翻涌，连退两步！\n"NOR,me,target);
+		damage = damage*2/3;
+	}
+	else
+	{
+		message_vision("双掌相交，只听拍的一响，$n退后一步，虽无大碍却也被震得手臂发麻！\n"NOR,me,target);
+		damage = 0;
+	}
+
+	target->add("neili",-skill-jiali);
+	if (target->query("neili") < 0)
+	target->set("neili",0);
+
+	me->start_busy(2+random(1));
+	me->add("neili",-skill-jiali);
+	me->add("jingli",-skill/2);
+	me->add_temp("quanzhen/juding",1);
+
+	call_out("hit", random(1), me, target);
+
+	target->receive_damage("qi", damage+random(damage), target);
+	target->receive_wound("qi", damage/2+random(damage/2), target);
+
+	COMBAT_D->report_status(target);
+
+	if( wizardp(me) ) tell_object(me,"damage "+damage+" ap:"+ap+" dp:"+dp+"\n");
+
+	return;
+}

@@ -1,0 +1,18 @@
+// SN:K8hB7b<3`BgZQT48
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[35m武[35m当[35m神[35m兽[2;37;0m", ({"san shou"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "张三丰的坐骑！！！
+它是张氵的坐骑。
+");
+        set_temp("owner_id", "zhangsf");
+        set_temp("owner_name", "张氵");
+        ::setup();
+}
+

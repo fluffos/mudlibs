@@ -1,0 +1,11 @@
+// SN:BQ<oV7[69QEMWC>1
+// wedding-ring.c
+
+#include "/clone/misc/wedding-ring.h"
+
+void setup()
+{
+        set("long", "这是无风和天下的结婚戒指，是两人的定情之物。
+");
+        ::setup();
+}

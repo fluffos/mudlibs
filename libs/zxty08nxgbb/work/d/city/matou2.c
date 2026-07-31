@@ -1,0 +1,33 @@
+// Room: /d/city/matou.c
+inherit ROOM;
+void create()
+{
+        set("short", "码头");
+        set("long", @LONG
+        这里是扬州城最大的码头，到处人来人往，好不热闹。
+老板金万里正坐在一旁，独自喝着茶，码头工人正汗流浃背的
+工作着。墙上贴着一张告示(gaoshi)。
+LONG
+        );
+        set("no_clean_up", 0);
+         set("no_fight", 1);
+        set ("no_get",1);
+         set("no_beg", 1);
+         set("no_sleep", 1);
+        set("outdoors", "city");
+        set("item_desc", ([ /* sizeof() == 1 */
+    "gaoshi" : "你可以向金老板要工作来做，会有工资的。具体清：ask jin about 工作；ask jin about 工资",
+
+]));
+
+        set("objects", ([ /* sizeof() == 3 */
+  __DIR__"npc/jin2" : 1,
+]));
+        set("exits", ([ /* sizeof() == 1 */
+"east" : "/d/nanyang/yidao",
+    "enter" : __DIR__"chuanc2",
+]));
+        setup();
+        replace_program(ROOM);
+}
+

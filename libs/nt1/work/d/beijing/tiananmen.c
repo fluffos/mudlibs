@@ -1,0 +1,32 @@
+#include <room.h>
+#include <ansi.h>
+inherit ROOM;
+
+void create()
+{
+        set("short", HIY "天安门广场"NOR);
+	set("long", @LONG
+这里就是天安门广场，灰色城墙给人以庄严肃穆之感，再往北通过
+金水桥就是皇宫紫禁城了。远远望去，紫禁城的轮廓越发显得雄伟高大
+一条护城河绕城而过。一条笔直的青石大道横贯东西，东边是东长安街
+广场，西边是西长安街广场。南边是宽阔繁华的长安街广场，往南经过
+凡陛桥一直延伸至天坛和永定门。
+LONG );
+	set("exits", ([
+		"south" : __DIR__"cagc_s",
+		"north" : __DIR__"qiao",
+	       "west" : __DIR__"cagc_w",
+              "east" : __DIR__"cagc_e",
+	]));
+	set("objects", ([
+		__DIR__"npc/maiyi2" : 1,
+		__DIR__"npc/bing1" : 2,
+		__DIR__"npc/old2" : 1,
+		__DIR__"npc/kid1" : 1,
+                "/clone/npc/walker"  : 1,
+	]));
+	set("outdoors", "beijing");
+	setup();
+	replace_program(ROOM);
+}
+

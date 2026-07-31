@@ -1,0 +1,18 @@
+// SN:bC4h<T_iDGHUO=7=
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m白龙马[2;37;0m", ({"xbailong ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "这是东海三太子所变，护送唐僧去西天求取真经的白马。
+它是南宫东的坐骑。
+");
+        set_temp("owner_id", "huboqk");
+        set_temp("owner_name", "南宫东");
+        ::setup();
+}
+

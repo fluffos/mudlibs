@@ -1,0 +1,21 @@
+//Cracked by Roath
+//fear 2002 1 31
+// /d/lingshedao/obj/yangrou.c
+#include <ansi.h>
+inherit ITEM;
+inherit F_FOOD;
+
+void create()
+{
+        set_name(YEL"烤羊腿"NOR, ({"kao yangtui", "yangtui","yang","tui"}));
+        set_weight(1500);
+        if (clonep())
+                set_default_object(__FILE__);
+        else {
+                set("long", "一只烤得香喷喷的羊腿。\n");
+                set("unit", "只");
+                set("value", 300);
+                set("food_remaining", 5);
+                set("food_supply", 76);
+        }
+}

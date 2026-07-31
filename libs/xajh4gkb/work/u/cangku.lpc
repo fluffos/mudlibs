@@ -1,0 +1,853 @@
+//物品存储
+//edit by luoyun
+//20011年1月05日
+#pragma optimize
+#pragma save_binary
+
+#define ITEM_ITEM_D "/adm/daemons/equip"
+#define MAX_CUN 20
+
+int set_password();
+void check_pwd(string key,object me,int rest);
+int open_cangku();
+int close_cangku();
+int do_look();
+int do_cun(string arg);
+int do_qu(string arg);
+varargs int do_cun_cangku(string arg, string h,object me, int itema, int index);
+int do_look_zl(string arg);
+
+string query_save(object me);
+
+
+//仓库开关密码
+int set_password()
+{
+	object me;
+	int me_key;
+
+	me = this_player();
+
+	me_key = me->query("cangku/password"); 
+
+	if(me_key)
+	{
+		tell_object(me,"已经有密码,是否重设?(yes|no)\n");
+		input_to("check_pwd", me, 1);
+		return 1;
+	}
+	else
+	{
+		tell_object(me,"请输入密码(必须为数字):\n");
+		input_to("check_pwd", me, 0);
+		return 1;
+	}
+	return 0;
+}
+
+void check_pwd(string key,object me,int rest)
+{
+	int password,flag;
+
+	switch(rest)
+	{
+		//重设密码
+		case 1 :
+			key = lower_case(key);
+			if(key == "YES" || key == "y" || key == "yes")
+			{
+				tell_object(me,"请输入旧密码:\n");
+				input_to("check_pwd",me,2);
+			}
+			else
+			{
+				tell_object(me,"已经取消。\n");
+				return;
+			}
+			return;
+		case 2 :
+			password = to_int(me->query("cangku/password"));
+			flag = to_int(key);
+		
+			if(password != flag)
+			{
+				tell_object(me,"密码不对,无法重设新密码。\n");
+				return;
+			} else {
+				tell_object(me,"输入正确，请输入新密码(必须为数字):\n");
+				input_to("check_pwd",me,0);
+				return;
+			}
+			break;
+		//打开仓库
+		case 3 :
+			password = to_int(me->query("cangku/password"));
+			flag = to_int(key);
+			if(password != flag)
+			{
+				tell_object(me,"密码错误，仓库打开失败。\n");
+				return;
+			}
+			tell_object(me,"你的仓库已经打开。\n");
+			me->delete("cangku/lock");
+			return;
+		//关闭仓库
+		case 4 :
+			tell_object(me,"你的仓库已经关闭。\n");
+			me->set("cangku/lock", 1);
+			return;
+	}
+	//设置密码
+	if (to_int(key) <=0) {
+		tell_object(me,"输入不正确,无法设置密码。\n");
+		return;
+	}
+	if (strlen(key) <3 || strlen(key) > 9) {
+		tell_object(me,"密码应是3－9位之间的数字组成。\n");
+		return;
+	}
+
+	
+	tell_object(me,"密码设置成功。\n");
+	me->set("cangku/password",to_int(key));
+	me->save();
+}
+
+//打开仓库
+int open_cangku()
+{
+	object me= this_player();
+	
+	if(!me->query("cangku/lock"))
+	{
+		tell_object(me, "仓库正处于打开状态。\n");
+		return 1;
+	}
+	if(me->query("cangku/lock"))
+	{
+		tell_object(me,"请输入仓库密码:");
+		input_to("check_pwd", me, 3);
+		return 1;
+	}
+	else
+	{
+		tell_object(me, "你的仓库没有上锁。\n");
+		return 1;
+	}
+	return 0;
+}
+
+
+//关闭仓库
+int close_cangku()
+{
+	object me = this_player();
+
+	if(me->query("cangku/lock"))
+	{
+		tell_object(me,"仓库正处于关闭状态。\n");
+		return 1;
+	}
+	if(!me->query("cangku/password"))
+	{
+		tell_object(me,"您的仓库没有设置密码，请先行设置。\n");
+		return 1;	
+	}
+	check_pwd("", me, 4);
+	return 1;
+}
+
+//查看仓库物品列表
+int do_look()
+{
+	int password;
+	object me = this_player();
+	password = to_int(me->query("cangku/password"));
+	
+	if(me->query("cangku/lock"))
+	{
+		tell_object(me,"你的仓库尚未打开，无法查看物品。\n");
+		return 1;
+	}
+	do_cun_cangku("", 0, me, 0, 3);
+	return 1;
+}
+
+//把物品放进去
+int do_cun(string arg)
+{
+	int password;
+	string id;
+	int item;
+	object ob;
+	
+	
+	object me = this_player();
+	password = to_int(me->query("cangku/password"));
+	
+	if (me->query("combat_exp") < 6000000 && !me->query("xy_huiyuan/2"))
+	{
+		tell_object(me,CYN"为减少不必要的资源浪费，仓库不对经验低于600万的玩家开放。\n"NOR);
+		return 1;
+	} 
+	
+	if (!arg)
+	{
+		tell_object(me,CYN"输入错误，正确应为：store <数量> <ID>或cundai <数量> <ID>\n"NOR);
+		return 1;
+	} 
+	
+	//仓库是否开着。
+	if(me->query("cangku/lock"))
+	{
+		tell_object(me,"你的仓库尚未打开，无法存放物品。\n");
+		return 1;
+	}
+	if (time() -me->query_temp("cun_cangku_times") <1)
+	{
+		tell_object(me,"慢慢来，不要着急！\n");
+		return 1;
+	}
+	if (sscanf(arg,"%d %s", item, id) == 2)
+	{
+		if (item < 1 || item >20) {
+			tell_object(me,"存放的数量每次必须在1－20之间！\n");
+			return 1;
+		}
+		ob =  present(id,me);
+		if (!ob)
+		{
+			tell_object(me,"你身上没有这件物品！\n");
+			return 1;
+		}
+		id = ob->query("id");
+		do_cun_cangku(id, 0, me, item, 1);
+		return 1;
+	} else if (sscanf(arg,"%s", id) == 1) {
+		
+		item = 1;
+		ob =  present(id,me);
+		if (!ob)
+		{
+			tell_object(me,"你身上没有这件物品！\n");
+			return 1;
+		}
+		id = ob->query("id");
+		do_cun_cangku(id, 0, me, item, 1);
+		return 1;
+	}
+	
+		tell_object(me,CYN"输入错误，正确应为：store <数量> <ID>或cundai <数量> <ID>\n"NOR);
+	
+	return 1;
+}
+//把物品取出来
+int do_qu(string arg)
+{
+	int password, item;
+	string name;
+	object me = this_player();
+	
+	password = to_int(me->query("cangku/password"));
+	//仓库是否开着。
+	if(me->query("cangku/lock"))
+	{
+		tell_object(me,"你的仓库尚未打开，无法存取物品。\n");
+		return 1;
+	}
+	if (me->query("combat_exp") < 6000000 && !me->query("xy_huiyuan/2"))
+	{
+		tell_object(me,CYN"为减少不必要的资源浪费，仓库不对经验低于600万的玩家开放。\n"NOR);
+		return 1;
+	} 
+	
+	if (time() -me->query_temp("qu_cangku_times") <1)
+	{
+		tell_object(me,"慢慢来，不要着急！\n");
+		return 1;
+	}
+	
+	if (!arg) {
+		tell_object(me,CYN"输入错误，正确应为：take <数量> <序列号>或take <数量> <ID>。\n"NOR);
+		return 1;
+	}
+	if (sscanf(arg,"%d %s", item, name) == 2)
+	{
+		if (sizeof(all_inventory(me)) >=50 || sizeof(all_inventory(me)) + item > 50)
+		{
+			tell_object(me, "你的身上似乎装不下东西了吧？\n");
+			return 1;
+		}
+			
+		do_cun_cangku("", name, me, item, 2);
+		return 1;
+	} else if (sscanf(arg,"%s", name) == 1) {
+		
+		item = 1;
+		if (sizeof(all_inventory(me)) >=50 || sizeof(all_inventory(me)) + item > 50)
+		{
+			tell_object(me, "你的身上似乎装不下东西了吧？\n");
+			return 1;
+		}
+			
+		do_cun_cangku("", name, me, item, 2);
+		return 1;
+	}
+	
+	tell_object(me,CYN"输入错误，正确应为：take <数量> <序列号>或take <数量> <ID>。\n"NOR);
+	return 1;
+}
+//查看仓库内物品详细资料
+int do_look_zl(string arg)
+{
+	int password;
+	object me = this_player();
+	
+	if (!arg || sscanf(arg,"%s", arg) != 1)
+	{
+		tell_object(me,CYN"输入错误，正确应为：look_ck <序列号>或look_ck <ID>。\n"NOR);
+		return 1;
+	}
+	password = to_int(me->query("cangku/password"));
+	//仓库是否开着。
+	if(me->query("cangku/lock"))
+	{
+		tell_object(me,"你的仓库尚未打开，无法查看物品详细资料。\n");
+		return 1;
+	}
+	
+	if (time() -me->query_temp("look_cangku_times") <2)
+	{
+		tell_object(me,"慢慢来，不要着急！\n");
+		return 1;
+	}
+
+	do_cun_cangku("", arg, me, 0, 4);
+	return 1;
+}
+//存取物品
+varargs int do_cun_cangku(string id, mixed h, object me, int itema, int index)
+{
+	object item;
+	string fileName, writeFile, meFile, *meFilePach, temp, temp2;
+	string item_name, item_id, item_file, prop, item_prop, item_max, line;
+	int i, size, ckSize, time_t, ok, time_ta;
+	string unit, name;
+	mapping shua;
+	string *shux;
+	int lvl;
+	int okok;
+	
+	if(!id || !me ) return 1;
+		
+	switch(index)
+	{
+		//存入物品
+		case 1 :
+			item = present(id,me);
+			if(!item)
+			{
+				tell_object(me,"你身上没有这件物品。\n");
+				return 1;
+			}
+			else
+			{
+				if(item->query("id") == "gold" ||
+				   item->query("id") == "silver" ||
+				   item->query("id") == "biao yin" ||
+				   item->query("id") == "coin" ||
+				   item->query("id") == "diamond"||
+				   item->query("id") == "thousand-gold" ||
+				   item->query("id") == "thousand-cash" ||
+				   item->query("id") == "budai" ||
+				   item->query("id") == "corpse" ||
+				   item->query("id") == "qiankun dai" ||
+				   item->is_player() ||  //玩家
+				   item->query("magic") == 2||
+				   item->query("no_save") ||
+				   item->query("age") ||
+				   item->query("bianren") ||   //自练武器
+				   item->query("task_quest") ||   //task物品不保存
+				
+				   userp(item))
+				{
+					tell_object(me, item->name()+"不能放进仓库里。\n");
+					return 1;
+				}
+				if(item->query("equipped") )
+				{
+					tell_object(me,"你必须解除对"+item->name()+"的装备才能存放。\n");
+					return 1;
+				}       		
+
+				if (item->query("xyzx_save_item") && itema > 1) {
+					tell_object(me,"动态物品只能一件一件存放。\n");
+					return 1;
+				}
+					
+				temp = file_name(item);
+				if(sscanf(temp,"%s#%s",fileName,temp2) != 2)
+				{
+					fileName = temp;
+				}
+				
+				if(!fileName)
+				{
+					tell_object(me,"Error: 找不到文件，请联系巫师。\n");
+					return 1;
+				}
+				//找到玩家的 仓库数据 然后改写 储存。
+		
+				writeFile = query_save(me);
+				if(!writeFile) return 1;
+		
+				meFile = read_file(writeFile);
+				//meFilea = read_file(writeFile);
+				if(meFile) meFilePach = explode(meFile,"\n");
+		
+				ckSize = MAX_CUN + me->query("cangku/ckSize_a");
+				
+				size = sizeof(meFilePach);
+				
+				if(size >= ckSize)
+				{
+					tell_object(me,"对不起，你目前只能存放" + (ckSize) + "格物品。\n");
+					return 1;
+				}
+				assure_file(writeFile);
+				
+				
+				prop = ITEM_ITEM_D->query_save_prop_string(item);
+				
+			//	tell_object(find_player("luoyun"), sprintf("prop == %O\n", prop));
+				
+				item_max =sprintf("name:%s$id:%s$pach:%s$prop:%s", item->query("name"), item->query("id"),fileName,prop);
+				unit = item->query("unit");
+				name =  item->query("name");
+				
+				for(i=0; i<size; i++)
+				{
+					sscanf(meFilePach[i], "name:%s$id:%s$pach:%s$prop:%s$time:%d",item_name,item_id,item_file,item_prop,time_t);
+
+					//相同文件内容，数量少于20个，则合并
+					if (	time_t + itema <= 20 && (fileName == item_file  
+						&& item->query("name") == item_name
+						&& item->query("id") == item_id && ! item->query("xyzx_save_item")) //非动态物品只检查文件名，名字，ID 
+						|| (item->query("xyzx_save_item") 
+						&& fileName == item_file
+						&& item->query("name") == item_name
+						&& item->query("id") == item_id  
+						&& prop == item_prop)) //动态装备增加检查属性内容相同 by luoyun 2013.9.9
+					{
+							ok =1;
+							meFilePach[i] = "";
+							break;
+					} else
+						time_t =0;
+				}
+				
+				//初始化文件
+				write_file(writeFile,"",1);
+				time_ta = 0;
+				//tell_object(find_player("luoyun"), sprintf("time_t == %O\n", time_t));
+				if (itema > 20)
+					itema = 20;
+				if (itema > 1) {
+					for (int j = 0;j < itema; j ++) {
+						item = present(id,me);
+						if (item) {
+							destruct(item);
+							time_ta += 1;
+						}
+						else
+							break;
+					}
+				} else {
+					time_ta = 1;
+					destruct(item);
+				}
+				
+				if (ok =1)
+				{
+					//重写文件
+					for(i=0;i<size;i++)
+					{
+						if(meFilePach[i] == "") continue;
+
+						write_file(writeFile,sprintf("%s\n",meFilePach[i]));
+					}
+				}
+				time_t += time_ta;
+			//	tell_object(find_player("luoyun"), sprintf("time_t == %O\n", time_t));
+				tell_object(me, sprintf("你将%s%s%s存入了仓库。\n", chinese_number(time_ta), unit, name));
+				write_file(writeFile, sprintf("%s$time:%d\n", item_max, time_t ));//写入文件
+							
+				me->set_temp("cun_cangku_times", time());
+				
+				me->save();
+			}
+			return 1;
+		//取出物品
+		case 2 :
+				writeFile = query_save(me);
+		
+				if(!writeFile) return 1;
+		
+				if (itema < 1 || itema > 20)
+				{
+					tell_object(me, "你想取的数量必须在1－20之间。\n");
+					return 1;
+				}
+				
+				meFile = read_file(writeFile);//读取整个文件
+				
+				if(!meFile) return 1;
+				
+				meFilePach = explode(meFile, "\n");
+				size = sizeof(meFilePach);
+		
+				for(i=0; i<size; i++)
+				{
+					sscanf(meFilePach[i], "name:%s$id:%s$pach:%s$prop:%s$time:%d",item_name,item_id,item_file,item_prop,time_t);
+
+					if( item_id == h ||  i + 1 == to_int(h)) {						
+						if (itema > time_t)
+						{
+							tell_object(me,"你的仓库该物品没有这么多数量。\n");
+							return 1;
+						}
+						if (time_t > itema) {
+							time_t -= itema;
+							meFilePach[i] = sprintf("name:%s$id:%s$pach:%s$prop:%s$time:%d",item_name,item_id,item_file,item_prop,time_t);
+						} else
+						if (time_t = itema){
+							meFilePach[i] = "";
+						} 
+						okok = 1;
+						break;
+					} 
+				}	
+				
+				if (okok != 1) {					
+					tell_object(me, "你仓库里没有这样东西。\n"NOR);
+					return 1;
+				}
+				
+				if (itema > 1) {
+					for(int j=0; j < itema; j++)
+					{
+						if (!item = new(item_file)) {
+							tell_object(me, HIR"你想取的物品有问题，系统找不到，请联系巫师！\n"NOR);
+							return 1;
+						}
+						if (me->query_encumbrance() + item->weight() > me->query_max_encumbrance())
+						{
+							tell_object(me,"你身上负重不够，无法取出"+item->name()+"。\n");
+							return 1;
+						}
+						/*
+						if (item->query("xyzx_save_item") ) { //动态装备
+							if (item->query("skill_type")=="sword")
+								item->set_name(item->query("name"), ({item_id,"jian","sword"})); 
+							else if (item->query("skill_type")=="axe")
+								item->set_name(item->query("name"), ({item_id,"fu","axe"}));
+							else if (item->query("skill_type")=="blade")
+								item->set_name(item->query("name"), ({item_id,"dao","blade"}));
+							else if (item->query("skill_type")=="club")
+								item->set_name(item->query("name"), ({item_id,"gun","club"}));
+							else if (item->query("skill_type")=="dagger")
+								item->set_name(item->query("name"), ({item_id,"mao","dagger"}));
+							else if (item->query("skill_type")=="fork")
+								item->set_name(item->query("name"), ({item_id,"cha","fork"}));
+							else if (item->query("skill_type")=="hammer")
+								item->set_name(item->query("name"), ({item_id,"chui","hammer"}));
+							else if (item->query("skill_type")=="unarmed")
+								item->set_name(item->query("name"), ({item_id,"quantao","rings"}));
+							else if (item->query("skill_type")=="spear")
+								item->set_name(item->query("name"), ({item_id,"qiang","spear"}));
+							else if (item->query("skill_type")=="staff")
+								item->set_name(item->query("name"), ({item_id,"zhang","staff"}));
+							else if (item->query("skill_type")=="whip")
+								item->set_name(item->query("name"), ({item_id,"bian","whip"}));
+							else if (item->query("xyzx_pawn_item"))//精刚石
+								item->set_name(item->query("name"), ({item_id,"jinggang shi","shi"}));
+							else if (item->query("armor_type")=="armor")
+								item->set_name(item->query("name"), ({item_id,"kaijia","armor"}));
+							else if (item->query("armor_type")=="boots")
+								item->set_name(item->query("name"), ({item_id,"xie","boots"}));
+							else if (item->query("armor_type")=="cloth")
+								item->set_name(item->query("name"), ({item_id,"yi","cloth"}));
+							else if (item->query("armor_type")=="hands")
+								item->set_name(item->query("name"), ({item_id,"hushou","hands"}));
+							else if (item->query("armor_type")=="head")
+								item->set_name(item->query("name"), ({item_id,"toukui","head"}));
+							else if (item->query("armor_type")=="neck")
+								item->set_name(item->query("name"), ({item_id,"xianglian","neck"}));
+							else if (item->query("armor_type")=="ring")
+								item->set_name(item->query("name"), ({item_id,"jie","ring"}));
+							else if (item->query("armor_type")=="shield")
+								item->set_name(item->query("name"), ({item_id,"dun","shield"}));
+							else if (item->query("armor_type")=="surcoat")
+								item->set_name(item->query("name"), ({item_id,"pifeng","surcoat"}));
+							else if (item->query("armor_type")=="waist")
+								item->set_name(item->query("name"), ({item_id,"yaodai","waist"}));
+							else if (item->query("armor_type")=="wrists")
+								item->set_name(item->query("name"), ({item_id,"huwan","wrists"}));
+							else if (item->query("zhubao_save"))
+								item->set_name(item->query("name"), ({item_id,"baoshi"}));
+							else if (item->query("xyzx_stone_item"))
+								item->set_name(item->query("name"), ({item_id,"shi","naijiu shi"}));
+							else if (item->query("liebiao_gem"))
+								item->set_name(item->query("name"), ({item_id,"gem"}));
+						}*/
+						
+						if (item->query("weapon_prop"))//因该属性在生成新道具时会产生之前可能没有的属性，故要清理干净生成的新属性
+						{
+							item->delete("weapon_prop");      
+						}
+						if (item->query("armor_prop"))
+						{
+							item->delete("armor_prop");      
+						}						
+						/*
+						if (item->query("dt_baoshi"))
+						{
+							item->delete("baoshi_b");   
+							item->delete("baoshi_a");   
+						}*/
+						
+						//把变量还给item
+						ITEM_ITEM_D->set_prop_baseon_string(item, item_prop);
+						item->move(me);
+					}
+				} else if ( itema == 1 ) {
+						if (!item = new(item_file)) {
+							tell_object(me, HIR"你想取的物品有问题，系统找不到，请联系巫师！\n"NOR);
+							return 1;
+						}
+						if (me->query_encumbrance() + item->weight() > me->query_max_encumbrance())
+						{
+							tell_object(me,"你身上负重不够，无法取出"+item->name()+"。\n");
+							return 1;
+						}
+						/*
+						if (item->query("xyzx_save_item") ) { //动态装备
+							if (item->query("skill_type")=="sword")
+								item->set_name(item->query("name"), ({item_id,"jian","sword"})); 
+							else if (item->query("skill_type")=="axe")
+								item->set_name(item->query("name"), ({item_id,"fu","axe"}));
+							else if (item->query("skill_type")=="blade")
+								item->set_name(item->query("name"), ({item_id,"dao","blade"}));
+							else if (item->query("skill_type")=="club")
+								item->set_name(item->query("name"), ({item_id,"gun","club"}));
+							else if (item->query("skill_type")=="dagger")
+								item->set_name(item->query("name"), ({item_id,"mao","dagger"}));
+							else if (item->query("skill_type")=="fork")
+								item->set_name(item->query("name"), ({item_id,"cha","fork"}));
+							else if (item->query("skill_type")=="hammer")
+								item->set_name(item->query("name"), ({item_id,"chui","hammer"}));
+							else if (item->query("skill_type")=="unarmed")
+								item->set_name(item->query("name"), ({item_id,"quantao","rings"}));
+							else if (item->query("skill_type")=="spear")
+								item->set_name(item->query("name"), ({item_id,"qiang","spear"}));
+							else if (item->query("skill_type")=="staff")
+								item->set_name(item->query("name"), ({item_id,"zhang","staff"}));
+							else if (item->query("skill_type")=="whip")
+								item->set_name(item->query("name"), ({item_id,"bian","whip"}));
+							else if (item->query("xyzx_pawn_item"))//精刚石
+								item->set_name(item->query("name"), ({item_id,"jinggang shi","shi"}));
+							else if (item->query("armor_type")=="armor")
+								item->set_name(item->query("name"), ({item_id,"kaijia","armor"}));
+							else if (item->query("armor_type")=="boots")
+								item->set_name(item->query("name"), ({item_id,"xie","boots"}));
+							else if (item->query("armor_type")=="cloth")
+								item->set_name(item->query("name"), ({item_id,"yi","cloth"}));
+							else if (item->query("armor_type")=="hands")
+								item->set_name(item->query("name"), ({item_id,"hushou","hands"}));
+							else if (item->query("armor_type")=="head")
+								item->set_name(item->query("name"), ({item_id,"toukui","head"}));
+							else if (item->query("armor_type")=="neck")
+								item->set_name(item->query("name"), ({item_id,"xianglian","neck"}));
+							else if (item->query("armor_type")=="ring")
+								item->set_name(item->query("name"), ({item_id,"jie","ring"}));
+							else if (item->query("armor_type")=="shield")
+								item->set_name(item->query("name"), ({item_id,"dun","shield"}));
+							else if (item->query("armor_type")=="surcoat")
+								item->set_name(item->query("name"), ({item_id,"pifeng","surcoat"}));
+							else if (item->query("armor_type")=="waist")
+								item->set_name(item->query("name"), ({item_id,"yaodai","waist"}));
+							else if (item->query("armor_type")=="wrists")
+								item->set_name(item->query("name"), ({item_id,"huwan","wrists"}));
+							else if (item->query("zhubao_save"))
+								item->set_name(item->query("name"), ({item_id,"baoshi"}));
+							else if (item->query("xyzx_stone_item"))
+								item->set_name(item->query("name"), ({item_id,"shi","naijiu shi"}));
+							else if (item->query("liebiao_gem"))
+								item->set_name(item->query("name"), ({item_id,"gem"}));
+						}
+						*/
+						if (item->query("weapon_prop"))//因该属性在生成新道具时会产生之前可能没有的属性，故要清理干净生成的新属性
+						{
+							item->delete("weapon_prop");      
+						}
+						if (item->query("armor_prop"))
+						{
+							item->delete("armor_prop");      
+						}						
+						/*		
+						if (item->query("dt_baoshi"))
+						{
+							item->delete("baoshi_b");   
+							item->delete("baoshi_a");   
+						}
+						*/
+						//把变量还给item
+						ITEM_ITEM_D->set_prop_baseon_string(item, item_prop);
+						item->move(me);
+				} else {
+					tell_object(me,sprintf("未知错误！数量不正确，请联系WIZ！\n"));
+					return 1;
+				}
+				
+				//初始化文件
+				write_file(writeFile,"",1);
+				
+				for(i=0;i<size;i++)
+				{
+					if(meFilePach[i] == "") continue;
+					write_file(writeFile, sprintf("%s\n",meFilePach[i]));
+				}
+														
+				me->set_temp("qu_cangku_times", time());
+				
+				me->save();
+				tell_object(me,sprintf("你从仓库拿出了%s%s%s。\n", chinese_number(itema),  item->query("unit"), item->query("name")));
+			return 1;
+			//察看仓库
+		case 3 :
+				writeFile = query_save(me);
+				if(!writeFile) return 1;
+		
+				meFile = read_file(writeFile);
+								
+				if(!meFile)
+				{
+					tell_object(me,"你的仓库里没有任何东西。\n");
+					return 0;
+				}
+				meFilePach = explode(meFile,"\n");
+				
+				size = sizeof(meFilePach);
+				if(!size)
+				{
+					tell_object(me,"你的仓库里没有任何东西。\n");
+					return 0;
+				}
+				
+				ckSize = MAX_CUN + me->query("cangku/ckSize_a");
+				
+				line ="";
+				tell_object(me,"\n 你的仓库里有:\n");
+				//tell_object(me,"--------------------------------------\n");
+				line +=sprintf("%-6s%-35s%s\n", " 序号", "物品名称（英文ID）", "数量");
+				line +=sprintf("------------------------------------------------\n");
+				for(i=0; i<size; i++)
+				{
+					if (sscanf(meFilePach[i], "name:%s$id:%s$pach:%s$prop:%s$time:%d",item_name,item_id,item_file,item_prop,time_t) !=5)
+					{
+						tell_object(me,"Error: 物品档案出错，请与巫师联系。\n");
+						continue;
+					}
+					
+					line +=sprintf("%3d)  %-35s %s \n",
+									(i +1),
+									item_name + "(" + item_id + ")",
+									time_t +"");
+				}
+				line +=sprintf("------------------------------------------------\n");
+				line +=sprintf(CYN" 总共[" + (ckSize) 
+												+ "格] \n 存放 store <数量> <ID> 取出 take <数量> <序列号>\n"NOR);
+				//write(line);
+				if (strlen(line) > 4096)
+					me->start_more(line);//分页
+				else
+					write(line);
+				
+				return 1;
+		//查看物品详细属性
+		case 4 :
+				writeFile = query_save(me);
+		
+				if(!writeFile) return 1;
+						
+				meFile = read_file(writeFile);//读取整个文件
+		
+				if (!meFile) {
+					tell_object(me,"你的仓库里没有任何东西。\n");
+					return 0;
+				}
+				
+				meFilePach = explode(meFile, "\n");
+				size = sizeof(meFilePach);
+				
+				for(i=0; i<size; i++)
+				{
+					sscanf(meFilePach[i], "name:%s$id:%s$pach:%s$prop:%s$time:%d",item_name,item_id,item_file,item_prop,time_t);
+
+					if( item_id == h ) {
+						item = new(item_file);
+						break;
+					} else if( i + 1 == to_int(h) ) {
+						item = new(item_file);
+						break;
+					} 
+				}
+						
+				if(!item)
+				{
+					tell_object(me,"Error: 物品档案出错，请与巫师联系。\n");
+					return 1;
+				}
+								
+				item->set_name(item->query("name"), ({item_id})); 
+
+				if (item->query("weapon_prop"))//因该属性在生成新道具时会产生之前可能没有的属性，故要清理干净生成的新属性
+				{
+					item->delete("weapon_prop");      
+				}
+				if (item->query("armor_prop"))
+				{
+					item->delete("armor_prop");      
+				}						
+				/*
+				if (item->query("dt_baoshi"))
+				{
+					item->delete("baoshi_b");   
+					item->delete("baoshi_a");   
+				}*/
+				//把变量还给item
+				ITEM_ITEM_D->set_prop_baseon_string(item, item_prop);
+						
+				me->set_temp("look_cangku_times", time());
+				
+				"/cmds/std/look"->look_item(me, item);
+					
+				destruct(item);
+			return 1;
+	}
+	return 0;
+}
+
+//查找存盘地址
+string query_save(object me)
+{
+	string id;
+
+	if(!me) return 0;
+
+	id = me->query("id",1);
+	if( !id ) id = geteuid();
+	if( !id ) id = getuid();
+	if( !stringp(id) ) return 0;
+	return sprintf(DATA_DIR "cangku/%c/%s.z", id[0], id);
+}

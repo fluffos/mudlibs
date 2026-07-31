@@ -1,0 +1,18 @@
+// SN:55Y]]CmbXVSbN5>[
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;34m九[1;35m尾[1;35m狐狐[2;37;0m", ({"jiuwei hu"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "漂亮的小狐狸
+它是武当药童的坐骑。
+");
+        set_temp("owner_id", "yaotong");
+        set_temp("owner_name", "武当药童");
+        ::setup();
+}
+

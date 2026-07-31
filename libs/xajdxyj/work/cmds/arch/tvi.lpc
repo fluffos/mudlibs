@@ -1,0 +1,1317 @@
+/* Program      : /cmds/wiz/tvi.c
+ * LPMud Full Screen Editor VI(v1.5)
+ * for MudOS under MS-Windows & Clients like MS-Windows Telnet
+ * Author       : Kenny@Eternal.Civilization (3/25/1998)
+ * Modified by  : FoF@Beyond (04/28/2000)
+ * port to chinese wizard group : /feature/vi.c by ken@chinesemud.net (99-3-15)
+ */
+
+#include <ansi.h>                               // 定义 ANSI/VT100 终端机的逸脱码
+
+#define ECHO 0                                  // 读取输入时要显示字元
+#define HIDE 1                                  // 读取输入时不显示字元
+#define REFRESH 1                               // 读取输入後要重绘画面
+#define LOGFILE "nosave/VI"                     // 档案异动记录档
+
+private void start_edit(string filename);       // 呼叫编辑器，开始编辑
+private void _append(object pl);                // 在光标後面加字
+private void _append_line(object pl);           // 在光标底下加一新行
+private void _backspace(object pl);             // 删除光标前的字
+private void _block_copy(object pl);            // 块拷贝
+private void _block_cut(object pl);             // 块剪切
+private void _block_mark(object pl);            // 块标记
+private void _block_move(object pl);            // 块移动
+private void _block_paste(object pl);           // 块粘贴
+protected void _confirm_save(string str, object pl); // 离开编辑器前确认存档
+private void _del_char(object pl, int bs);      // 删除光标上的字
+private void _del_line(object pl);              // 删除整行
+private int  _dispat_char(object pl);           // 分派指令到不同函式
+private void _down(object pl);                  // 光标往下移一行
+private void _end(object pl);                   // 将光标移到行尾
+private void _esc(object pl);                   // 从输入模式回到命令模式
+private void _file_end(object pl);              // 将光标移到档尾
+protected int file_exists(string file);
+private void _file_head(object pl);             // 将光标移到档头
+private void _goto_line(object pl);             // 跳到特定行去
+protected void _do_goto_line(string str, object pl, int rein); // 取得行号
+private void _help(object pl);                  // 辅助画面
+private void _home(object pl);                  // 将光标移到行首
+protected void _input(string str, object pl, int fresh);       // 读得输入字串
+private void _insert(object pl);                // 在光标前面插字
+private void _insert_line(object pl);           // 在光标上方加一新行
+private void _insert_exclam_mark(object pl);    // 在光标前面插入一个「!」字元
+private void _join(object pl);                  // 将下行文字移到此行後面
+private void _left(object pl);                  // 光标往左移一字符
+// 在状态列显示讯息
+private varargs void _message(object pl, string str, string callback, int hide, mixed arg);
+protected void _message_done(string str, object pl);           // 结束讯息的显示
+private void _next_match(object pl);            // 搜寻/替换下个符合字串
+private void _page_down(object pl);             // 往下卷一页（22 行）
+private void _page_up(object pl);               // 往上卷一页（22 行）
+private void _process(object pl);               // 处理输入模式的字串输入
+protected void _quit(mixed unused, mixed pl);   // 离开编辑器
+private void _refresh(object pl);               // 更新画面
+private void _refresh_cursor(object pl);        // 更新光标位置
+// 重绘画面
+private void _refresh_screen(object pl, int s_row, int e_row, int s_col);
+private void _refresh_status(object pl);        // 更新状态列
+private void _replace(object pl);               // 字串替换
+protected void _replace_done(string str, object pl);   // 取得替换字串
+private void _right(object pl, int col, int extra);    // 光标往右移一字
+private void _search(object pl);                       // 字串搜寻
+protected void _do_search(string str, object pl);      // 取得搜寻字串
+private void _tab(object pl);                          // 命令模式下 TAB 键的定位
+private void _undef_key(object pl);                    // 取消某功能键定义
+protected void _undef_key_done(string str, object pl); // 取得指定功能键
+private void _up(object pl);                           // 光标往上移一行
+private void _write(object pl);                        // 取得储存档案名称
+protected void _write_done(string str, object pl, int quit);   // 储存档案
+private mapping EditedFiles=([ ]);              // 编辑中的档案
+/*
+int iS_Row, iE_Row,                             // 可见视窗的始末行号
+    iS_Col, iE_Col,                             // 可见视窗的始未栏位
+    iRow,   iCol,                               // 光标位置
+    bS_Row, bS_Col                              // 块首位置
+    bE_Row, bE_Col                              // 块尾位置
+    is_Command_Mode, is_NewFile, is_Modify,     // 档案状况标志
+    is_Substituted;                             // 代换内码标志
+string *sText,                                  // 档案内容
+       sChar, sOldChar,                         // 输入字串（命令）
+       sCount,                                  // 命令计数
+       sFileName,                               // 编辑档名
+       sSearch, sReplace;                       // 搜寻/替换字串
+mapping keymap;                                 // 功能键定义对照表
+*/
+
+
+int main(object me, string arg)
+{
+    string file, oldfile;
+    object ob;
+
+    if( in_edit(me) ) return notify_fail("你已经在使用编辑器了。\n");
+    if( !arg ) return notify_fail("指令格式：tvi <文件名>|<物件名>\n");
+
+    seteuid(geteuid(me));
+    file = resolve_path(me->query("cwd"), arg); // 取得档名
+    if( !file_exists(file) ) {                  // check virtual object
+        string *path = explode(file, "/");
+        oldfile = file;
+        file = "/" + implode(path[0..<2], "/") + "/_" + path[<1];
+    }
+    if( !file_exists(file) ) {                  // 新档
+        ob = present(arg, me);                  // 检查身上的物件
+        if( !ob ) ob = present(arg, environment(me)); // 检查房间里的物件
+        if( ob && me->visible(ob) )
+            file = base_name(ob) + ".lpc";        // 取得物件的档名
+        else file = oldfile;
+    }
+
+    start_edit(file);                           // 呼叫编辑器，开始编辑
+    return 1;
+} // main()
+
+
+protected int file_exists(string file)
+{
+        if (!stringp(file) || file=="") return 0;
+        return file_size(file)>=0;
+} // file_exists()
+
+
+int  help(object me)
+{
+    write(@HELP
+指令格式：tvi <文件名>|<物件名>
+
+利用此一指令可直接在线上编辑档案，详细说明请看编辑器内的线上辅助说明。
+
+相关指令：edit、update。
+HELP
+    );
+    return 1;
+} // help()
+
+
+void start_edit(string file)                // 呼叫编辑器，开始编辑
+{
+    int i;
+    mapping me;
+
+    if( objectp(EditedFiles[file]) ) {
+        write(sprintf("%s 正在编辑这个档案，请稍候再编辑。\n",
+            capitalize(EditedFiles[file]->query("id"))));
+        return;
+    } // if
+
+    this_player()->set_temp("me", ([ ]));
+    me = this_player()->query_temp("me");
+    me["sFileName"] = file;
+    if( file_size(file) <= 0 ) {        // 档案长度小於 1
+        me["sText"] = ({ "" });
+        if( file_size(file) < 0 ) {     // 新档
+            me["is_Command_Mode"] = 0;
+            me["is_NewFile"] = 1;
+        } // if
+    } else {                            // 档案长度大於 0
+        string content = read_file(file), tabs = "        ";
+
+        me["is_Command_Mode"] = 1;
+        me["is_NewFile"] = 0;
+        if( stringp(content) ) {
+            me["sText"] = explode(read_file(file), "\n");
+            // 将 TAB，以 4 个空白代替，以方便光标位置的计算
+            for( i = sizeof(me["sText"]) - 1; i >= 0; i -- ) {
+                int len = sizeof(me["sText"][i]);
+                reset_eval_cost();
+                for( int j = 0; j < len; j ++ )
+                    if( me["sText"][i][j] == '\t' )
+                        me["sText"][i] = replace_string(me["sText"][i], "\t", tabs[0..3-j%4]);
+            }
+        } else me["sText"] = ({ "" });
+    } // else
+
+    me["sCount"] = "";
+    me["sSearch"] = me["sReplace"] = me["is_Modify"] = 0;
+    me["iE_Row"] = 23;
+    me["iS_Row"] = me["iS_Col"] = me["iRow"] = me["iCol"] = 1;
+    EditedFiles += ([ file: this_player()->link() ]);
+
+    // 取得/设定功能键定义对照表
+    if( !mapp(me["keymap"] = this_player()->query("me_keymap")) )
+        me["keymap"] = ([ ]);
+    if( this_player()->query("me_no_help") || this_player()->query_temp("no_me_help") )
+    {   // 非第一次使用编辑器，直接进入编辑器
+        _refresh_screen(this_player(), 1, 23, 1);
+        get_char("_input", HIDE, this_player());
+    } else {        // 第一次使用编辑器，先看功能说明
+        this_player()->set_temp("no_me_help", 1);
+        _help(this_player());
+    }
+} // start_edit()
+
+
+
+private void _refresh_cursor(object pl)        // 更新光标位置
+{
+    mapping me = pl->query_temp("me");
+
+    printf(ESC "[%d;%df", me["iRow"] + 1, me["iCol"]);
+} // _refresh_cursor()
+
+
+private void _refresh_status(object pl)        // 更新状态列
+{
+    mapping me = pl->query_temp("me");
+
+    // 移动光标到 (1,1)，用反相字元显示状态列
+    printf(HOME + NOR + REV + "%4d行%4d列 %-45s %10s [命令模式]" + NOR,
+        me["iS_Row"] + me["iRow"] - 1, me["iS_Col"] + me["iCol"] - 1,
+        sprintf("%s %s", me["sFileName"], (me["is_Modify"]? "[已修改]":
+        (me["is_NewFile"] ? "(新文件)" : "")))[0..42],
+        (me["is_Command_Mode"] ? "?:辅助画面": "[输入模式]"));
+    _refresh_cursor(pl);
+} // _refresh_status()
+
+
+// 重绘画面
+private void _refresh_screen(object pl, int s_row, int e_row, int s_col)
+{
+    int  i, temp;
+    mapping me = pl->query_temp("me");
+
+    // 检查始末行号的先後次序
+    if( e_row < s_row ) {
+        temp = e_row;
+        e_row = s_row;
+        s_row = temp;
+    }
+
+    if( s_row < 1 ) s_row = 1;
+    if( s_col < 1 ) s_col = 1;
+    if( e_row > sizeof(me["sText"]) ) // 不能超过档尾
+    e_row = sizeof(me["sText"]);
+    if( e_row - s_row > 22 ) e_row = s_row + 22;
+
+    me["iS_Row"] = s_row;        me["iE_Row"] = e_row;
+    me["iS_Col"] = s_col;        me["iE_Col"] = s_col + 79;
+
+    printf(REF + NOR);                // 清除画面，移动光标到 (1,1)
+    for( i = me["iS_Row"] - 1; i < me["iE_Row"]; i ++ ) // 打印各行的内容
+        printf("\r\n%s", me["sText"][i][me["iS_Col"]-1..me["iE_Col"]-1]);
+    for( i = me["iS_Row"] + 22 - me["iE_Row"]; i > 0; i -- )
+        printf("\r\n~");              // 不足行号用 ~ 表示
+    _refresh_status(pl);
+} // _refresh_screen()
+
+
+protected void _input(string str, object pl, int fresh) // 读得输入字符
+{
+    int i, size, bs = 0;
+    string *chars;
+    mapping me = pl->query_temp("me");
+
+    if( fresh ) {                       // 重绘画面
+        _refresh_screen(pl, me["iS_Row"], me["iE_Row"], me["iS_Col"]);
+        get_char("_input", HIDE, pl);
+        return;
+    }
+
+    me["is_Substituted"] = 1;           // 先设定代换内码标志
+    if( str == "" || str[0] == '8' )    // 代换掉 Backspace/Ctrl-Backspace
+    {
+        str = "BACKSPACE";
+        bs = 1;
+    }
+    if( str[0] == 27 ) {
+        chars = explode(str, ESC);      // 逸脱码的字串，以 ESC 断开
+        for( i = sizeof(chars) - 1; i >= 0; i -- )
+            chars[i] = ESC + chars[i];      // 加回 ESC
+        if( sizeof(chars) == 0 )            // 若只是单一字元 ESC
+            chars = ({ ESC });
+    } else chars = ({ str });
+
+    size = sizeof(chars);
+    for( i = 0; i < size; i ++ ) {      // 转换逸脱码为编辑器内码
+        switch (chars[i]) {
+            case "\t":       me["sChar"] = "TAB";   break;
+            case "\r":       me["sChar"] = "ENTER"; break;
+            case ESC:        me["sChar"] = "ESC";   break;
+            case ESC "OA":
+            case " OA":
+            case ESC "[A":   me["sChar"] = "UP";    break;
+            case ESC "OB":
+            case " OB":
+            case ESC "[B":   me["sChar"] = "DOWN";  break;
+            case ESC "OC":
+            case " OC":
+            case ESC "[C":   me["sChar"] = "RIGHT"; break;
+            case ESC "OD":
+            case " OD":
+            case ESC "[D":   me["sChar"] = "LEFT";  break;
+            case ESC "OH":
+            case ESC "[H":
+            case ESC "1~":
+            case ESC "[1~":  me["sChar"] = "HOME";     break;
+            case ESC "[2~":  me["sChar"] = "INSERT";   break;
+            case ESC "4~":   me["sChar"] = "END";      break;
+            case ESC "[4~":  me["sChar"] = "END";      break;
+            case ESC "[5~":  me["sChar"] = "PAGEUP";   break;
+            case ESC "[6~":  me["sChar"] = "PAGEDOWN"; break;
+            case "":
+            case ESC "[3~":  me["sChar"] = "DELETE";   break;
+            case " OP":
+            case ESC "OP":   me["sChar"] = "F1";    break;
+            case " OQ":
+            case ESC "OQ":   me["sChar"] = "F2";    break;
+            case " OR":
+            case ESC "OR":   me["sChar"] = "F3";    break;
+            case " OS":
+            case ESC "OS":   me["sChar"] = "F4";    break;
+            case ESC "m":    me["sChar"] = "F5";    break;
+            case ESC "[17~": me["sChar"] = "F6";    break;
+            case ESC "[18~": me["sChar"] = "F7";    break;
+            case ESC "[19~": me["sChar"] = "F8";    break;
+            case ESC "[20~": me["sChar"] = "F9";    break;
+            case ESC "[21~": me["sChar"] = "F10";   break;
+            case ESC "[23~": me["sChar"] = "F11";   break;
+            case ESC "[24~": me["sChar"] = "F12";   break;
+            default:
+                if( sizeof(chars[i]) == 1 && 0 < chars[i][0] && chars[i][0] < 27 ) {
+                    switch (chars[i][0]) { // 代换内码，使在输入模式也能使用指令
+                        case  1: me["sChar"] = "Ctrl-A"; break;
+                        case  2: me["sChar"] = "Ctrl-B"; break;
+                        case  3: me["sChar"] = "Ctrl-C"; break;
+                        case  4: me["sChar"] = "Ctrl-D"; break;
+                        case  5: me["sChar"] = "Ctrl-E"; break;
+                        case  6: me["sChar"] = "Ctrl-F"; break;
+                        case  7: me["sChar"] = "Ctrl-G"; break;
+                        case  8: me["sChar"] = "Ctrl-H"; break;
+                        case  9: me["sChar"] = "Ctrl-I"; break;
+                        case 10: me["sChar"] = "Ctrl-J"; break;
+                        case 11: me["sChar"] = "Ctrl-K"; break;
+                        case 12: me["sChar"] = "Ctrl-L"; break;
+//                        case 13: me["sChar"] = "Ctrl-M"; break; 13 10
+                        case 14: me["sChar"] = "Ctrl-N"; break;
+                        case 15: me["sChar"] = "Ctrl-O"; break;
+                        case 16: me["sChar"] = "Ctrl-P"; break;
+                        case 17: me["sChar"] = "Ctrl-Q"; break;
+                        case 18: me["sChar"] = "Ctrl-R"; break;
+                        case 19: me["sChar"] = "Ctrl-S"; break;
+                        case 20: me["sChar"] = "Ctrl-T"; break;
+                        case 21: me["sChar"] = "Ctrl-U"; break;
+                        case 22: me["sChar"] = "Ctrl-V"; break;
+                        case 23: me["sChar"] = "Ctrl-W"; break;
+                        case 24: me["sChar"] = "Ctrl-X"; break;
+                        case 25: me["sChar"] = "Ctrl-Y"; break;
+                        case 26: me["sChar"] = "Ctrl-Z"; break;
+                    } // switch
+                } else {
+                    me["sChar"] = chars[i];               // 此为普通字串
+                    if( !bs ) me["is_Substituted"] = 0;   // 清除代换内
+                } // else
+        } // switch
+        // 将转换後的字串送到分派指令函式处理，并等待读取下个输入
+        if( _dispat_char(pl) && i == size - 1 )
+            get_char("_input", HIDE, pl);
+    } // for
+} // _input()
+
+
+private int _dispat_char(object pl)                // 分派指令到不同函式
+{
+    int i, count = 1;
+    mapping me = pl->query_temp("me");
+
+    if( me["is_Command_Mode"] ||
+      (me["is_Substituted"] && // 让输入模式也能使用某些指令
+      // 这二个指令不在这处理
+      me["sChar"]!="ENTER" && me["sChar"]!="TAB") ) {        // 现在是命令模式
+        if( sizeof(me["sChar"]) != 1 && !me["is_Substituted"] )
+            return 1;
+/*
+
+        // 检查功能键定义对照表，重新定义命令
+        if( !undefinedp(me["keymap"][me["sChar"]]) )
+            me["sChar"] = me["keymap"][me["sChar"]];
+        if( !stringp(me["sChar"]) ) return 1; // Type checking...
+
+        // 检查是数字的话，就是附加到命令计数里
+        if( '0' <= me["sChar"][0] && me["sChar"][0] <= '9' )
+            me["sCount"] += me["sChar"];
+        else {
+            sscanf(me["sCount"], "%d", count);
+            me["sCount"] = ""; // 计数器归零
+            // 重覆上个指令
+            if( me["sChar"] == "." )
+                me["sChar"] = me["sOldChar"];
+            else        // 记录这次的指令
+                me["sOldChar"] = me["sChar"];
+        }
+*/
+//        for( i = 0; i < count; i ++ )
+            switch( me["sChar"] ) {              // 分派指令到不同函式
+                case "a":      _append(pl);      break;
+                case "dd":
+                case "Ctrl-D": _del_line(pl);    break;
+                case "s":
+                case "Ctrl-R": _refresh(pl);     break;
+                case "g":
+                case "Ctrl-G": _goto_line(pl);   break;
+                case "i":      _insert(pl);      break;
+                case "LEFT":
+                case "Ctrl-J": _left(pl);        break;
+                case "DOWN":
+                case "Ctrl-K": _down(pl);        break;
+                case "UP":
+                case "Ctrl-O": _up(pl);          break;
+                case "RIGHT":
+                case "Ctrl-L": _right(pl, 1, (me["is_Command_Mode"] ? 0 : 1)); break;
+                case "n":
+                case "Ctrl-N": _next_match(pl);  break;
+                case "o":      _append_line(pl); break;
+                case "O":      _insert_line(pl); break;
+                case "Ctrl-V": _block_mark(pl);  break;
+                case "Ctrl-X": _block_cut(pl);   break;
+                case "Ctrl-C": _block_copy(pl);  break;
+                case "Ctrl-P": _block_paste(pl); break;
+//                case "Ctrl-M": _block_move(pl);  break;
+                case "q":      // 表示不再读取新输入，结束编辑
+                case "F3":
+                case "Ctrl-Q": _quit(0, pl);     return 0;
+                case "r":      _replace(pl);     break;
+                case "f":      _search(pl);      break;
+                case "w":
+                case "Ctrl-S": _write(pl);       break;
+                case "x":
+                case "DELETE": _del_char(pl, 0); break;
+                case ",":
+                case "HOME":   _home(pl);        break;
+                case ".":
+                case "END":    _end(pl);         break;
+                case "PAGEUP":
+                case "Ctrl-B": _page_up(pl);     break;
+                case "PAGEDOWN":
+                case "Ctrl-F": _page_down(pl);   break;
+                case "j":      _join(pl);        break;
+                case "h":
+                case "Ctrl-H": _file_head(pl);   break;
+                case "e":
+                case "Ctrl-E": _file_end(pl);    break;
+                case "?":
+                case "F1":     _help(pl);        break;
+                case "~":
+                case "Ctrl-T": _insert_exclam_mark(pl); break;
+                case "Ctrl-Y":
+                case "BACKSPACE": _backspace(pl);       break;
+                case "ESC":
+                case "Ctrl-Z": _esc(pl);         break;
+                case "TAB":    _tab(pl);         break;
+            } // switch
+    } // if me["is_Command_Mode"]
+    else
+        _process(pl);                // 处理输入模式的字串输入
+
+    return 1;                        // 表示继续读取新输入，继续编辑
+} // dispatcher()
+
+
+private void _append(object pl)             // 在光标後面加字
+{
+    mapping me = pl->query_temp("me");
+
+    if( sizeof(me["sText"]) == 0 ) return;
+    me["is_Command_Mode"] = 0;
+    me["iCol"]++;
+    _refresh_status(pl);
+} // _append()
+
+
+private void _append_line(object pl)        // 在光标底下加一新行
+{
+    string *text;
+    mapping me = pl->query_temp("me");
+
+    me["is_Command_Mode"] = me["is_NewFile"] = 0;
+    me["is_Modify"] = 1;
+    text = me["sText"][0..me["iS_Row"] + me["iRow"]-2] + ({ "" }) +
+        me["sText"][me["iS_Row"] + me["iRow"]-1..<1];
+    me["sText"] = text;
+    me["iCol"] = 1;
+    me["iRow"] ++;
+    _refresh_screen(pl, me["iS_Row"], sizeof(me["sText"]), 1);
+//    _down(pl);
+} // _append_line()
+
+
+private void _backspace(object pl)             // 删除光标前的字
+{
+    mapping me = pl->query_temp("me");
+
+    if( me["iS_Col"] == 1 && me["iCol"] == 1 ) {
+        me["iRow"]--;
+        _join(pl);
+    } else {
+        _left(pl);
+        _del_char(pl, 1);
+    }
+} // _backspace()
+
+
+private void _block_copy(object pl)             // 块拷贝
+{
+    mapping me = pl->query_temp("me");
+    int i;
+
+    if( !me["bS_Row"] || !me["bE_Row"] || !me["bS_Col"] || !me["bE_Col"] ) return;
+
+    me["bBuffer"] = ({  });
+
+    if( me["bS_Row"] > me["bE_Row"] ) {         // 调整块标记首尾位置
+        me["bR_tmp"] = me["bS_Row"];
+        me["bS_Row"] = me["bE_Row"];
+        me["bE_Row"] = me["bR_tmp"];
+        me["bC_tmp"] = me["bS_Col"];
+        me["bS_Col"] = me["bE_Col"];
+        me["bE_Col"] = me["bC_tmp"];
+    } else if( me["bS_Row"] == me["bE_Row"] && me["bS_Col"] > me["bE_Col"] ) {
+        me["bC_tmp"] = me["bS_Col"];
+        me["bS_Col"] = me["bE_Col"];
+        me["bE_Col"] = me["bC_tmp"];
+    }
+
+    for( i = 0; i <= me["bE_Row"] - me["bS_Row"]; i ++ ) {
+        me["bBuffer"] += ({ "" });                // 清空剪贴板
+    }
+
+    // 复制到剪贴板
+    if( me["bS_Row"] < me["bE_Row"] ) {
+        me["bBuffer"][0] = me["sText"][me["bS_Row"]-1][me["bS_Col"]-1..<-1];
+        for( i = 1; i < me["bE_Row"] - me["bS_Row"]; i ++ )
+            me["bBuffer"][i] = me["sText"][i];
+        me["bBuffer"][i] = me["sText"][me["bE_Row"]-1][0..me["bE_Col"]-1];
+    } else {                                      // 块头在块尾之后
+        me["bBuffer"][0] = me["sText"][me["bS_Row"]-1][me["bS_Col"]-1..me["bE_Col"]-1];
+    }
+    if( !sizeof(me["bBuffer"]) ) return;
+
+    printf(HOME + NOR + REV + "%4d行%4d列 %-45s %10s [命令模式]" + NOR,
+        me["iS_Row"] + me["iRow"] - 1, me["iS_Col"] + me["iCol"] - 1,
+        sprintf("%s %s", me["sFileName"], "[复制到剪贴板]")[0..42],
+        (me["is_Command_Mode"] ? "?:辅助画面": "[输入模式]"));
+
+    return _refresh_cursor(pl);
+/*
+    me["temp"] = me["sText"][me["iS_Row"]+me["iRow"]-2];
+    me["tail"] = me["temp"][me["iS_Col"]+me["iCol"]-2..<-1];
+    me["sText"][me["iS_Row"]+me["iRow"]-2] = me["temp"][0..me["iS_Col"]+me["iCol"]-3];
+
+    for( i = 0; i < sizeof(me["bBuffer"]) - 1; i ++ ) {
+        _append(pl);
+        me["sChar"] = me["bBuffer"][i];
+        _process(pl);
+        _append_line(pl);
+    }
+    _append(pl);
+    me["sChar"] = me["bBuffer"][i] + me["tail"];
+    _process(pl);
+    _esc(pl);
+    return _refresh_screen(pl, me["iS_Row"], me["iE_Row"], me["iS_Col"]);
+*/
+}
+
+
+private void _block_mark(object pl)             // 块标记
+{
+    mapping me = pl->query_temp("me");
+
+    if( me["b_flag"] == 0 ) {                   // 标记块首
+        me["bS_Row"] = me["iS_Row"] + me["iRow"] - 1;
+        me["bS_Col"] = me["iS_Col"] + me["iCol"] - 1;
+        me["b_flag"] = 1;
+        me["bBuffer"] = ({  });
+        printf(HOME + NOR + REV + "%4d行%4d列 %-45s %10s [命令模式]" + NOR,
+            me["iS_Row"] + me["iRow"] - 1, me["iS_Col"] + me["iCol"] - 1,
+            sprintf("%s %s", me["sFileName"], "[标记块首]")[0..42],
+            (me["is_Command_Mode"] ? "?:辅助画面": "[输入模式]"));
+        _refresh_cursor(pl);
+tell_room("/d/city/kezhan", me["bS_Row"]+"S"+me["bS_Col"]+"\n");
+    } else {                                    // 标记块尾
+        me["bE_Row"] = me["iS_Row"] + me["iRow"] - 1;
+        me["bE_Col"] = me["iS_Col"] + me["iCol"] - 1;
+        me["b_flag"] = 0;
+        me["bBuffer"] = ({  });
+        printf(HOME + NOR + REV + "%4d行%4d列 %-45s %10s [命令模式]" + NOR,
+            me["iS_Row"] + me["iRow"] - 1, me["iS_Col"] + me["iCol"] - 1,
+            sprintf("%s %s", me["sFileName"], "[标记块尾]")[0..42],
+            (me["is_Command_Mode"] ? "?:辅助画面": "[输入模式]"));
+        _refresh_cursor(pl);
+tell_room("/d/city/kezhan", me["bE_Row"]+"E"+me["bE_Col"]+"\n");
+    }
+}
+
+
+private void _block_move(object pl)             // 块移动
+{
+    mapping me = pl->query_temp("me");
+    int i;
+
+    if( !me["bS_Row"] || !me["bE_Row"] || !me["bS_Col"] || !me["bE_Col"] ) return;
+
+    me["bBuffer"] = ({  });
+
+    if( me["bS_Row"] > me["bE_Row"] ) {         // 调整块标记首尾位置
+        me["bR_tmp"] = me["bS_Row"];
+        me["bS_Row"] = me["bE_Row"];
+        me["bE_Row"] = me["bR_tmp"];
+        me["bC_tmp"] = me["bS_Col"];
+        me["bS_Col"] = me["bE_Col"];
+        me["bE_Col"] = me["bC_tmp"];
+    } else if( me["bS_Row"] == me["bE_Row"] && me["bS_Col"] > me["bE_Col"] ) {
+        me["bC_tmp"] = me["bS_Col"];
+        me["bS_Col"] = me["bE_Col"];
+        me["bE_Col"] = me["bC_tmp"];
+    }
+
+    for( i = 0; i <= me["bE_Row"] - me["bS_Row"]; i ++ ) {
+        me["bBuffer"] += ({ "" });                // 清空剪贴板
+    }
+
+    me["iRow_tmp"] = me["iRow"];
+    // 移动到剪贴板
+    if( me["bS_Row"] < me["bE_Row"] ) {
+        me["bBuffer"][0] = me["sText"][me["bS_Row"]-1][me["bS_Col"]-1..<-1];
+        me["sText"][me["bS_Row"]-1] = me["sText"][me["bS_Row"]-1][0..me["bS_Col"]-2];
+        me["iRow"] = me["bS_Row"] - me["iS_Row"];
+        for( i = 1; i < me["bE_Row"] - me["bS_Row"]; i ++ ) {
+            me["bBuffer"][i] = me["sText"][i];
+            me["iRow"]++;
+            _del_line(pl);
+        }
+        me["bBuffer"][i] = me["sText"][me["bE_Row"]-1][0..me["bE_Col"]-1];
+        me["sText"][me["bE_Row"]-1] = me["sText"][me["bE_Row"]-1][me["bE_Col"]..<-1];
+    } else {                                      // 块头在块尾之后
+        me["bBuffer"][0] = me["sText"][me["bS_Row"]-1][me["bS_Col"]-1..me["bE_Col"]-1];
+        me["sText"][me["bS_Row"]-1] = me["sText"][me["bS_Row"]-1][0..me["bS_Col"]-2] +
+            me["sText"][me["bS_Row"]-1][me["bE_Col"]..<-1];
+    }
+    if( !sizeof(me["bBuffer"]) ) return;
+
+    me["temp"] = me["sText"][me["iS_Row"]+me["iRow"]-2];
+    me["tail"] = me["temp"][me["iS_Col"]+me["iCol"]-2..<-1];
+    me["sText"][me["iS_Row"]+me["iRow"]-2] = me["temp"][0..me["iS_Col"]+me["iCol"]-3];
+
+    for( i = 0; i < sizeof(me["bBuffer"]) - 1; i ++ ) {
+        _append(pl);
+        me["sChar"] = me["bBuffer"][i];
+        _process(pl);
+        _append_line(pl);
+    }
+    _append(pl);
+    me["sChar"] = me["bBuffer"][i] + me["tail"];
+    _process(pl);
+    _esc(pl);
+    return _refresh_screen(pl, me["iS_Row"], me["iE_Row"], me["iS_Col"]);
+}
+
+
+protected void _confirm_save(string str, object pl)      // 离开编辑器前确认存档
+{
+    mapping me = pl->query_temp("me");
+
+    if( str == "y" || str == "Y" ) return _write_done("", pl, 1);
+    me["is_Modify"] = 0;                                 // 设定「未修改」标志
+    _quit(0, pl);
+} // _confirm_save()
+
+
+private void _del_char(object pl, int bs)                // 删除光标上的字
+{
+    int go_left = 0;                                     // 是否在删除後要左移光标
+    string str;
+    mapping me = pl->query_temp("me");
+
+    if( sizeof(me["sText"]) == 0 || sizeof(me["sText"][me["iS_Row"]+me["iRow"]-2]) == 0 )
+        return;
+
+    if( me["is_NewFile"] || !me["is_Modify"] ) {
+        me["is_NewFile"] = 0;
+        me["is_Modify"] = 1;
+        _refresh_status(pl);
+    } // if
+
+    if( me["iS_Col"] + me["iCol"] - 2 >= sizeof(me["sText"][me["iS_Row"] + me["iRow"]-2]) )
+        return;
+    str = me["sText"][me["iS_Row"]+me["iRow"]-2][0..me["iS_Col"] + me["iCol"]-3];
+
+    // 检查是否需要附加剩下的内容
+    if( me["iS_Col"] + me["iCol"] - 1 < sizeof(me["sText"][me["iS_Row"]+me["iRow"]-2]) )
+        str += me["sText"][me["iS_Row"] + me["iRow"]-2][me["iS_Col"]+me["iCol"]-1..<1];
+    else go_left = 1;                // 因为是删除行尾的字，所以要左移光标
+
+    me["sText"][me["iS_Row"]+me["iRow"]-2] = str;
+    printf(ESC "[%d;1f%-80s", me["iRow"] + 1, me["sText"][me["iS_Row"] +
+        me["iRow"]-2][me["iS_Col"]-1..me["iE_Col"]-1]);
+
+    if( go_left && !bs ) _left(pl);
+    else _refresh_cursor(pl);
+} // _del_char()
+
+
+private void _del_line(object pl)        // 删除整行
+{
+    string *text = ({ });
+    mapping me = pl->query_temp("me");
+
+    me["is_NewFile"] = 0;
+    me["is_Modify"] = 1;
+    if( me["iS_Row"] + me["iRow"] - 2 > 0 )
+    text = me["sText"][0..me["iS_Row"]+me["iRow"]-3];
+    text += me["sText"][me["iS_Row"]+me["iRow"]-1..<1];
+    me["sText"] = text;
+    _refresh_screen(pl, me["iS_Row"], me["iE_Row"], me["iS_Col"]);
+
+    if( me["iS_Row"] + me["iRow"] - 1 > sizeof(me["sText"]) )
+        _up(pl);   // 若是删除最後一行，就要上移光标
+    else if( me["iS_Col"] + me["iCol"] - 1 > sizeof(me["sText"][me["iS_Row"]+me["iRow"]-2]) )
+        _end(pl);  // 若光标的新位置超过行尾，则移动光标到行尾
+} // _del_line()
+
+
+private void _down(object pl)                // 光标往下移一行
+{
+    int acc;
+    mapping me = pl->query_temp("me");
+
+    if( me["iS_Row"] + me["iRow"] - 1 >= sizeof(me["sText"]) ) { // 检查是否已在档尾
+        // 若已显示档尾下一行，则不做事
+        if( me["iRow"] < 23 ) return;
+        else {        // 多显视档尾下一行，以突显档尾的存在
+            me["iS_Row"]++;
+            printf(ESC "[24;1f\r\n~");
+            me["iRow"] = 22;
+            _refresh_screen(pl, me["iS_Row"], me["iE_Row"], me["iS_Col"] + acc - 1);
+        }
+    } else if( ++me["iRow"] > 23 ) {        // 画面上卷，显示下一行
+        me["iS_Row"]++;
+        me["iE_Row"]++;
+        _refresh_screen(pl, me["iS_Row"], me["iE_Row"], me["iS_Col"] + acc - 1);
+//        printf(ESC "[24;1f\r\n%s", me["sText"][me["iE_Row"]-1][me["iS_Col"]-1..me["iE_Col"]-1]);
+        me["iRow"] = 23;
+    }
+
+    // 若光标的新位置超过行尾，则移动光标到行尾
+    if( me["iS_Col"] + me["iCol"] - 1 > sizeof(me["sText"][me["iS_Row"]+me["iRow"]-2]) )
+        me["iCol"] = sizeof(me["sText"][me["iS_Row"]+me["iRow"]-2]) -
+            me["iS_Col"] + (me["is_Command_Mode"] ? 1 : 2);
+
+    // 若此行无字，则定位在第一栏
+    if( me["iCol"] == 0 && me["iS_Col"] == 1 ) me["iCol"] = 1;
+
+    if( me["iCol"] > 0 ) _refresh_status(pl);
+    else {        // 光标的新位置在原画面外，需要重绘画面
+        acc = me["iCol"];
+        me["iCol"] = 1;
+        _refresh_screen(pl, me["iS_Row"], me["iE_Row"], me["iS_Col"] + acc - 1);
+    }
+} // _down()
+
+
+private void _end(object pl)                // 将光标移到行尾
+{
+    mapping me = pl->query_temp("me");
+
+    if( sizeof(me["sText"]) == 0 ) return;
+
+    // 计算行尾的位置
+    me["iCol"] = sizeof(me["sText"][me["iS_Row"] + me["iRow"] - 2]) -
+        me["iS_Col"] + (me["is_Command_Mode"] ? 1 : 2);
+    if( me["iCol"] == 0 ) me["iCol"] = 1; // 若此行无字，则定位在第一栏
+    if( sizeof(me["sText"][me["iS_Row"] + me["iRow"] - 2]) < me["iE_Col"] )
+        _refresh_status(pl);
+    else {        // 光标的新位置在原画面外，需要重绘画面
+        me["iCol"] = 79;
+        _refresh_screen(pl, me["iS_Row"], me["iE_Row"], me["iS_Col"] +
+            (sizeof(me["sText"][me["iS_Row"] + me["iRow"] - 2]) - me["iE_Col"] + 1));
+    }
+} // _end()
+
+
+private void _esc(object pl)                // 从输入模式回到命令模式
+{
+    mapping me = pl->query_temp("me");
+
+    if( me["iCol"] > 1 && !me["is_Command_Mode"] ) _left(pl);
+    me["is_Command_Mode"] = 1;
+} // _esc()
+
+
+private void _file_end(object pl)        // 将光标移到档尾
+{
+    mapping me = pl->query_temp("me");
+
+    if( sizeof(me["sText"]) == 0 ) return;
+
+    _do_goto_line(sprintf("%d", sizeof(me["sText"])), pl, 0);
+} // _file_end()
+
+
+private void _file_head(object pl)        // 将光标移到档头
+{
+    mapping me = pl->query_temp("me");
+
+    if( sizeof(me["sText"]) == 0 ) return;
+
+    _do_goto_line("1", pl, 0);
+} // _file_head()
+
+
+private void _goto_line(object pl)        // 跳到特定行去
+{
+    mapping me = pl->query_temp("me");
+
+    _message(pl, sprintf("请输入行号[1~%d]（直接按 ENTER 取消)：",
+        sizeof(me["sText"])), "_do_goto_line", ECHO, 1);
+} // _goto_line()
+
+
+protected void _do_goto_line(string str, object pl, int rein) // 取得行号
+{
+    int no;
+    mapping me = pl->query_temp("me");
+
+    if( str == "" ) return _message_done("", pl);
+    if( sscanf(str, "%d", no) != 1 || no < 1 || no > sizeof(me["sText"]) )
+        return _message(pl, "行号无效！", "_message_done", HIDE);
+
+    me["iCol"] = 1;
+    if( me["iS_Row"] <= no && no <= me["iE_Row"] ) {        // 指定行号在原可视范围中
+        me["iRow"] = no - me["iS_Row"] + 1;
+        _refresh_status(pl);
+    } else {        // 指定行号不在原可视范围中，需要重绘画面
+        me["iS_Row"] = no - 11;
+        if( me["iS_Row"] < 1 ) me["iS_Row"] = 1;
+        if( me["iE_Row"] < no + 11 ) me["iE_Row"] = no + 11;
+        me["iRow"] = no - me["iS_Row"] + 1;
+        _refresh_screen(pl, me["iS_Row"], me["iE_Row"], 1);
+    }
+    if (rein) get_char("_input", HIDE, pl); // 检查是否需要读取下次输入
+} // _do_goto_line()
+
+
+private void _help(object pl)                // 辅助画面
+{
+    printf(REF +
+"【 LPMud 全屏编辑器 】v1.5(Beta 1) for MudOS and Client(Telnet) under Windows\r
+\r Powered by FoF  版权所有
+a    在光标後面添加内容           x            删除光标上的字符\r
+i    在光标前面插入内容           dd Ctrl-d    删除整行\r
+c    输入新内容覆盖原先内容       w  Ctrl-s    储存档案\r
+O    在光标上方加一新行           PAGEUP    Ctrl-b    上卷一页\r
+o    在光标下方加一新行           PAGEDOWN  Ctrl-f    下卷一页\r
+f    字串查找                     h  Ctrl-h    将光标移到文件头
+r    字串替换                     e  Ctrl-e    将光标移到文件尾
+n  Ctrl-n   查找/替换下个符合字串  ,            将光标移到行首
+g  Ctrl-g   跳到特定行去          .            将光标移到行尾
+s  Ctrl-r   更新画面
+?  F1       帮助信息（此画面）
+ESC Ctrl-z  结束添加/插入内容
+");
+printf("\r
+Ctrl-j Ctrl-k Ctrl-l Ctrl-o 移动光标
+q  Ctrl-q      退出编辑\r
+j      将下行文字接到此行後面\r
+~  Ctrl-t    在光标前面插入一个「!」字符\r
+
+此编辑器为试用版，欢迎参与测试，欢迎提出意见和建议。\r
+FoF@Beyond\r
+                                                              [按任意键返回]");
+    get_char("_input", HIDE, pl, REFRESH); // 读取按键以重绘画面
+} // _help()
+
+
+private void _home(object pl)                // 将光标移到行首
+{
+    mapping me = pl->query_temp("me");
+
+    me["iCol"] = 1;
+    if( me["iS_Col"] == 1 ) _refresh_status(pl);
+    else _refresh_screen(pl, me["iS_Row"], me["iE_Row"], 1);
+} // _home()
+
+
+private void _insert(object pl)                // 在光标前面插字
+{
+    mapping me = pl->query_temp("me");
+
+    if( sizeof(me["sText"]) == 0 ) return;
+    me["is_Command_Mode"] = 0;
+    _refresh_status(pl);
+} // _insert()
+
+
+private void _insert_line(object pl)        // 在光标上方加一新行
+{
+    string *text = ({ });
+    mapping me = pl->query_temp("me");
+
+    me["is_Command_Mode"] = me["is_NewFile"] = 0;
+    me["is_Modify"] = 1;
+    // 检查是否光标上方是否有内容
+    if( me["iS_Row"] + me["iRow"] - 3 >= 0 )
+        text = me["sText"][0..me["iS_Row"]+me["iRow"]-3];
+    text += ({ "" });
+    text += me["sText"][me["iS_Row"]+me["iRow"]-2..<1];
+    me["sText"] = text;
+    me["iCol"] = 1;
+    _refresh_screen(pl, me["iS_Row"], sizeof(me["sText"]), 1);
+} // _insert_line()
+
+
+private void _insert_exclam_mark(object pl) // 在光标前面插入一个「!」字元
+{
+    mapping me = pl->query_temp("me");
+
+    // 因为无法正常输入「!」，所以特地加此函式以输入「!」。
+    if( sizeof(me["sText"]) == 0 ) return;
+    me["sChar"] = "!";
+    _process(pl);
+} // _insert_!()
+
+
+private void _join(object pl)                // 将下行文字移到此行後面
+{
+    string *text=({ });
+    mapping me = pl->query_temp("me");
+
+    if( me["iS_Row"] + me["iRow"] - 1 >= sizeof(me["sText"]) ) return;
+
+    me["is_NewFile"] = 0;
+    me["is_Modify"] = 1;
+    _end(pl);                        // 先将光标移到行尾
+    text = me["sText"][0..me["iS_Row"] + me["iRow"] - 2];
+    if( sizeof(me["sText"][me["iS_Row"]+me["iRow"]-1]) ) {    // 若下行有内容附加上来
+        // 本行有内容光标右移
+        if( sizeof(me["sText"][me["iS_Row"]+me["iRow"]]) < 1 ) me["iCol"]++;
+        text[me["iS_Row"]+me["iRow"]-2] += (me["sText"][me["iS_Row"]+me["iRow"]-1]);
+    }
+    text += me["sText"][me["iS_Row"]+me["iRow"]..<1];
+    me["sText"] = text;
+    _refresh_screen(pl, me["iS_Row"], me["iE_Row"], me["iS_Col"]);
+} // _join()
+
+
+private void _left(object pl)                // 光标往左移一字
+{
+    mapping me = pl->query_temp("me");
+
+    if( me["iS_Col"] == 1 && me["iCol"] == 1 ) {
+        if( me["iRow"] > 1 ) {               // 光标若在行首，移到上一行行尾
+            me["iRow"]--;
+            _end(pl);
+        } else if( me["iS_Row"] > 1 ) {
+            me["iS_Row"]--;
+            me["iE_Row"] = me["iS_Row"] + 22;
+            _refresh_screen(pl, me["iS_Row"], me["iE_Row"], me["iS_Col"]);
+            return _end(pl);
+        }
+        return _refresh_status(pl);
+    }
+
+    if( --me["iCol"] < 1 ) {        // 光标的新位置在原画面外，需要重绘画面
+        // 若左移 8 栏太多的话，就只左移一栏
+        if( me["iS_Col"] - 8 < 1 )
+            me["iCol"] = me["iS_Col"] - 1;
+        else me["iCol"] = 8; // 不然就设定光标在第 8 栏位置
+        _refresh_screen(pl, me["iS_Row"], me["iE_Row"], me["iS_Col"]-me["iCol"]);
+        return;
+    }
+
+    _refresh_status(pl);
+} // _left()
+
+
+// 在状态列显示讯息
+private varargs void _message(object pl, string str, string callback, int hide, mixed arg)
+{
+    printf(HOME + NOR + REV);        // 移动光标到 (1,1)，设定反相字元显示，清除原状态列的讯息
+    printf("                                                                                ");
+    printf(HOME + str);                // 移动光标到 (1,1)，再显示讯息
+    input_to(callback, hide, pl, arg); // 读取输入资料
+} // _message()
+
+
+protected void _message_done(string str, object pl) // 结束讯息的显示
+{
+    _refresh_status(pl);
+    get_char("_input", HIDE, pl);        // 继续读取输入字串
+} // _message_done()
+
+
+private void _next_match(object pl)                // 搜寻/替换下个符合字串
+{
+    mapping me = pl->query_temp("me");
+
+    string str = "";
+    // 设定起始搜寻位置为光标现在位置
+    int i, ofs, j = me["iS_Col"] + me["iCol"] - 1;
+
+    if( !stringp(me["sSearch"]) ) return; // 若没先设定搜寻字串，不做事
+
+    for( i = me["iS_Row"] + me["iRow"] - 2; i < sizeof(me["sText"]); i ++ ) {
+        if( (ofs = strsrch(me["sText"][i][j-1..<1], me["sSearch"])) == -1 )
+            j = 1; // 这行没找到的话，设定下行从第一栏开始找
+        else {        // 找到指定字串了, 移动光标到目的行
+            _do_goto_line(sprintf("%d", i + 1), pl, 0);
+            me["iCol"] = j + ofs; // 计算指定字串的绝对位置
+
+            // 若指定字串落在原画面外，则重绘画面
+            if( me["iCol"] < me["iS_Col"] ||
+                me["iCol"] + strlen(me["sSearch"]) > me["iS_Col"] + 79 )
+                _refresh_screen(pl, me["iS_Row"], me["iE_Row"], me["iCol"]);
+
+            if( stringp(me["sReplace"]) ) {        // 需要替换字串
+                me["is_NewFile"] = 0;
+                me["is_Modify"] = 1;
+
+                // 附加光标前内容
+                str = me["sText"][i][0..me["iCol"]-2];
+                str += me["sReplace"];
+                str += (me["sText"][i][me["iCol"] +
+                strlen(me["sSearch"])-1..<1]);
+                me["sText"][i] = str;
+
+                // 若替换字串落在原画面外，则重绘画面
+                if( me["iCol"] < me["iS_Col"] ||
+                    me["iCol"]+strlen(me["sReplace"]) > me["iS_Col"] + 79 )
+                    _refresh_screen(pl, me["iS_Row"], me["iE_Row"], me["iCol"]);
+
+                // 将游漂移到替换字串後面
+                me["iCol"] = me["iCol"] + strlen(me["sReplace"]) - me["iS_Col"] + 1;
+                printf(ESC "[%d;1f%-80s", me["iRow"] + 1, me["sText"][me["iS_Row"] +
+                    me["iRow"]-2][me["iS_Col"]-1..me["iE_Col"]-1]);
+            } else   // 将游漂移到搜寻字串後面
+                me["iCol"] = me["iCol"] + strlen(me["sSearch"]) - me["iS_Col"] + 1;
+
+            _refresh_status(pl);
+            break;
+        } // if found
+    } // for each row
+
+    if( i >= sizeof(me["sText"]) )
+        _message(pl, "找不到指定字串！", "_message_done", HIDE);
+    else get_char("_input", HIDE, pl); // 读取下个输入字串
+} // _next_match()
+
+
+private void _page_down(object pl)        // 往下卷一页（22 行）
+{
+    mapping me = pl->query_temp("me");
+
+    if( me["iS_Row"] + 22 > sizeof(me["sText"]) ) return; // 检查是否不能再卷了
+
+    me["iS_Row"] += 22;
+    me["iE_Row"] += 22;
+
+    // 检查光标的新位置是否超过档尾
+    if( me["iS_Row"] + me["iRow"] - 1 > sizeof(me["sText"]) )
+        me["iRow"] = sizeof(me["sText"]) - me["iS_Row"] + 1;
+
+    _refresh_screen(pl, me["iS_Row"], me["iE_Row"], me["iS_Col"]);
+
+    // 若光标的新位置超过行尾，则移动光标到行尾
+    if( me["iS_Col"] + me["iCol"] - 1 > sizeof(me["sText"][me["iS_Row"] + me["iRow"]-2]) )
+        _end(pl);
+} // _page_down()
+
+
+private void _page_up(object pl)        // 往上卷一页（22 行）
+{
+    mapping me = pl->query_temp("me");
+
+    if( me["iS_Row"] <= 1 ) return; // 检查是否不能再卷了
+
+    me["iS_Row"] -= 22;
+
+    if( me["iS_Row"] < 1 ) me["iS_Row"] = 1; // 最多只能翻到第一列
+
+    _refresh_screen(pl, me["iS_Row"], me["iE_Row"], me["iS_Col"]);
+
+    // 若光标的新位置超过行尾，则移动光标到行尾
+    if( me["iS_Col"] + me["iCol"] - 1 > sizeof(me["sText"][me["iS_Row"]+me["iRow"]-2]) )
+        _end(pl);
+} // _page_up()
+
+
+private void _process(object pl)        // 处理输入模式的字串输入
+{
+    int i, size;
+    string str, rest, *input;
+    mapping me = pl->query_temp("me");
+
+    if( me["is_Modify"] == 0 || me["is_NewFile"] == 1 ) {
+        me["is_NewFile"] = 0;
+        me["is_Modify"] = 1;
+        _refresh_status(pl);
+    }
+
+    if( !me["is_Substituted"] && (strsrch(me["sChar"], "\r") != -1 ||
+        strsrch(me["sChar"], "\n") != -1) )
+        me["is_Substituted"] = 1; // 设定内码代换标志
+
+    me["sChar"] = replace_string(me["sChar"], "\t", "    ");
+    me["sChar"] = replace_string(me["sChar"], "\r", "\rENTER\r");
+    me["sChar"] = replace_string(me["sChar"], "\n", "\rENTER\r");
+    input = explode(me["sChar"], "\r");
+
+    size = sizeof(input);
+    for( i = 0; i < size; i ++ ) {                // 一次处理一行输入
+        if( me["is_Substituted"] && input[i] == "ENTER" )
+        {   // 当键入 ENTER 时，要将光标之後的内容移到下面的新行
+            rest = me["sText"][me["iS_Row"] + me["iRow"]-2][me["iS_Col"]+me["iCol"]-2..<1];
+            me["sText"][me["iS_Row"]+me["iRow"]-2] = me["sText"][me["iS_Row"] +
+                me["iRow"]-2][0..me["iS_Col"]+me["iCol"]-3];
+
+            _append_line(pl); // 在光标底下加一新行
+
+            // 新行的内容是原光标位置以後的内容
+            me["sText"][me["iS_Row"]+me["iRow"]-2] = rest;
+            continue;
+        }
+
+        // 输入字串不是 ENTER 时, 处理 TAB 的定位
+        if( me["is_Substituted"] && input[i] == "TAB" )
+            input[i] = "    "[0..3-(me["iCol"]-1)%4];
+
+        str = me["sText"][me["iS_Row"] + me["iRow"]-2][0..me["iS_Col"] +
+            me["iCol"]-3] + input[i] + me["sText"][me["iS_Row"] +
+            me["iRow"]-2][me["iS_Col"] + me["iCol"]-2..<1];
+        me["sText"][me["iS_Row"]+me["iRow"]-2] = str;
+
+        for( int j = 0; j < sizeof(input[i]); j ++ ) me["iCol"] ++; // 输入时光标右移
+    } // for
+
+    printf(ESC "[%d;1f%s", me["iRow"] + 1, me["sText"][me["iS_Row"] +
+        me["iRow"]-2][me["iS_Col"]-1..me["iE_Col"]-1]);
+
+    _refresh_cursor(pl);
+} // _process()
+
+
+protected void _quit(mixed unused, mixed pl) // 离开编辑器
+{
+    mapping me;
+
+    seteuid(geteuid(pl));
+    me = pl->query_temp("me");
+    if( me["is_Modify"] )
+        return _message(pl, "此档案已更改，需要存档吗（y/n)？[n]", "_confirm_save", ECHO);
+    me["iRow"] = 23;
+    _refresh_cursor(pl);                // 移动光标到最後一行
+    printf(NOR "\r\n");
+
+    map_delete(EditedFiles, pl->query_temp("me/sFileName"));
+    pl->delete_temp("me"); // 清除编辑器用到的暂时变数
+} // _quit()
+
+
+private void _refresh(object pl)        // 更新画面
+{
+    mapping me = pl->query_temp("me");
+
+    _refresh_screen(pl, me["iS_Row"], me["iE_Row"], me["iS_Col"]);
+} // _refresh()
+
+
+private void _replace(object pl)        // 字串替换
+{
+    _message(pl, "查找/替换字串(直接按ENTER取消，以空白隔开)：", "_replace_done", ECHO);
+} // _replace()
+
+
+protected void _replace_done(string str, object pl) // 取得替换字串
+{
+    mapping me = pl->query_temp("me");
+
+    _refresh_status(pl);
+    if( str != "" ) {                               // 有输入资料时
+        if( sscanf(str, "%s %s", me["sSearch"], me["sReplace"]) != 2 )
+        {    // 只有一个字串，就指定为搜寻字串，意即拿掉指定字串
+             me["sSearch"] = str;
+             me["sReplace"] = "";
+        }
+        _next_match(pl);
+    } else get_char("_input", HIDE, pl); // 继续读取下个输入字串
+} // _replace_done()
+
+
+private void _right(object pl, int col, int extra)        // 光标往右移一字
+{
+        int acc;
+        mapping me = pl->query_temp("me");
+
+        if( me["iS_Col"] + me["iCol"] > sizeof(me["sText"][me["iS_Row"] + me["iRow"] - 2]) ) {
+            if( me["iS_Row"] + me["iRow"] <= sizeof(me["sText"]) ) {
+                me["iRow"]++;                            // 如果光标已在行尾，移到下一行行首
+                _home(pl);
+                return;
+            }
+        }
+
+        if( sizeof(me["sText"]) == 0 || me["iS_Col"] + me["iCol"] - 1 >
+            sizeof(me["sText"][me["iS_Row"]+me["iRow"]-2]) - 1 + extra )
+            return;
+        me["iCol"] += col;
+        if( me["iS_Col"] + me["iCol"] - 1 > sizeof(me["sText"][me["iS_Row"]+
+            me["iRow"]-2]) + extra )
+            me["iCol"] = sizeof(me["sText"][me["iS_Row"]+me["iRow"]-2]) -
+                me["iS_Col"] + 1 + extra;
+
+        if( me["iCol"] > 80 ) {        // 光标的新位置不在可见视窗内，需要往右移动视窗
+            // 若右移 8 栏太多的话，就只右移到行尾
+            if( me["iE_Col"] + 8 > sizeof(me["sText"][me["iS_Row"] + me["iRow"]-2]) + 1 )
+                acc = sizeof(me["sText"][me["iS_Row"]+me["iRow"]-2]) - me["iE_Col"] + 1;
+            else acc = 8;
+
+            me["iCol"] = 80 - acc + 1;         // 计算光标的新位置
+            _refresh_screen(pl, me["iS_Row"], me["iE_Row"], me["iS_Col"] + acc);
+            return;
+        }
+        _refresh_status(pl);
+} // _right()
+
+
+private void _search(object pl)                // 字串搜寻
+{
+    _message(pl, "搜索字串（直接按 ENTER 取消)：", "_do_search", ECHO);
+} // _search()
+
+
+protected void _do_search(string str, object pl) // 取得搜寻字串
+{
+    mapping me = pl->query_temp("me");
+
+    _refresh_status(pl);
+    if( str != "" ) {        // 有输入资料时
+        me["sSearch"] = str;
+        me["sReplace"] = 0;
+        _next_match(pl);
+    } else get_char("_input", HIDE, pl); // 继续读取下个输入字串
+} // _do_search()
+
+
+private void _tab(object pl)                 // 命令模式下 TAB 键的定位
+{
+    mapping me = pl->query_temp("me");
+
+    _right(pl, 4-(me["iCol"]-1)%4, 0);
+} // _tab()
+
+
+protected void _undef_key_done(string str, object pl) // 取得指定功能键
+{
+    mapping me = pl->query_temp("me");
+
+    if( str != "" ) map_delete(me["keymap"], str);
+    _message_done("", pl);
+} // undef_key_done()
+
+
+private void _up(object pl)                // 光标往上移一行
+{
+    int  acc;
+    mapping me = pl->query_temp("me");
+
+    if( me["iRow"] == 1 && me["iS_Row"] == 1 ) return;
+
+    if( --me["iRow"] < 1 ) {        // 光标新位置不在可见视窗内，就上移视窗
+        me["iS_Row"]--;
+        me["iE_Row"] = me["iS_Row"] + 22;
+        _refresh_screen(pl, me["iS_Row"], me["iE_Row"], me["iS_Col"]);
+        me["iRow"] = 1;
+    }
+
+    // 若光标新位置超过行尾，则移到行尾
+    if( me["iS_Col"] + me["iCol"] - 1 > sizeof(me["sText"][me["iS_Row"] + me["iRow"]-2]) )
+        me["iCol"] = sizeof(me["sText"][me["iS_Row"]+me["iRow"]-2]) -
+            me["iS_Col"] + (me["is_Command_Mode"] ? 1 : 2);
+
+    // 若此行无字，则定位在第一栏
+    if( me["iCol"] == 0 && me["iS_Col"] == 1 ) me["iCol"] = 1;
+
+    if( me["iCol"] > 0 ) _refresh_status(pl);
+    else {        // 光标新位置不在可见视窗内，重绘画面
+        acc = me["iCol"];
+        me["iCol"] = 1;
+        _refresh_screen(pl, me["iS_Row"], me["iE_Row"], me["iS_Col"] + acc - 1);
+    }
+} // _up()
+
+
+private void _write(object pl)                // 取得储存档案名称
+{
+    mapping me = pl->query_temp("me");
+
+    _message(pl, "文件保存为[" + me["sFileName"] + "]：", "_write_done", ECHO, 0);
+} // _write()
+
+
+protected void _write_done(string str, object pl, int quit) // 储存档案
+{
+    string callback;
+    mapping me = pl->query_temp("me");
+
+    if( str == "" ) str = me["sFileName"];
+    else str = resolve_path(pl->query("cwd"), str);    // 取得档名
+    if( quit ) callback = "_quit";
+    else callback = "_message_done";
+    if( write_file(str, implode(me["sText"], "\n") + "\n", 1) ) {
+        if( me["is_Modify"] )
+            log_file(LOGFILE, sprintf("[%s] %s %s %s\n", ctime(time()), getuid(pl),
+            me["is_NewFile"] ? "+" : "*", str));
+            me["is_Modify"] = me["is_NewFile"] = 0;
+            me["sFileName"] = str;
+            _message(pl, "存档成功。", callback, HIDE);
+    } else _message(pl, "存档失败。", callback, HIDE);
+} // _write_done()
+

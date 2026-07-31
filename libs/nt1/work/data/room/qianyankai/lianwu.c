@@ -1,0 +1,32 @@
+// SN:SQL[P0gKlnhF;9ZH
+// File(/data/room/qianyankai/lianwu.c) of qianyankai's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "练武场");
+	set ("long", @LONG
+此处便是扬州钱庄的练武场，人在江湖，武功万万不可荒废。 
+LONG );
+
+	set("exits", ([
+                "west" : __DIR__"houyuan",
+	]));
+
+        set("objects", ([
+                "/clone/npc/mu-ren" : 4,
+        ]));
+
+        set("outdoors", "yangzhou");
+        set("no_sleep_room", 1);
+
+        setup();
+    
+        set("room_owner", "钱眼开");
+        set("room_name", "扬州钱庄");
+        set("room_id", "qianyankai");
+        set("room_owner_id", "qianyankai");
+        set("room_position", "树林");
+}

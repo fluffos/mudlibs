@@ -1,0 +1,34 @@
+// Copyright (C) 2003-2004, by Lonely. All rights reserved.
+// This software can not be used, copied, or modified 
+// in any form without the written permission from authors.
+// eval.c
+/*****************************************************************************
+ *eval this_player()->set("children", ({ "lonely", "olives", "whatever" }) ); *
+ *and it's easy to use ansi in the argument..                                *
+ *e.g. eval this_player()->set("name", BLU "pig" NOR );                      *
+ *****************************************************************************/
+
+int main( object me, string arg ) 
+{ 
+        mixed result;        
+        string file = sprintf("/tmp/a%d.c", time());
+        
+        if ( ! SECURITY_D->valid_grant(me, "(arch)") )
+                return 0;
+
+        if ( arg ) 
+        { 
+                write_file( file, "#include <ansi.h>\nmixed f()\n{\n return " + arg + ";\n}\n" ); 
+                
+                catch ( result = call_other( file, "f" ) ); 
+
+                printf( "%s = %O\n", arg, result ); 
+
+                rm ( file ); 
+        } else
+                return notify_fail("指令格式：eval <物件>-><函数>( <参数>, ... )\n");
+
+        return 1; 
+} 
+
+

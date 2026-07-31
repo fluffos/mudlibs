@@ -1,0 +1,25 @@
+// blade.c
+
+#include <weapon.h>
+#include <ansi.h>
+
+inherit BLADE;
+
+void create()
+{
+	set_name("腥风刀",({"xingfengdao","dao","blade"}));
+	set_weight(6000);
+	if( clonep() )
+		set_default_object(__FILE__);
+	else {
+		set("unit", "柄");
+		set("value",3000);
+		set("material", "iron");
+		set("long","一柄沉甸甸的钢刀，刀锋泛出淡淡的绿光。\n一股腥味直冲脑门，似乎有毒。\n");
+		set("wield_msg",GRN"$N从刀鞘中抽出$n，"+
+		RED"顿时弥漫出阵阵杀气！\n"NOR);
+		set("unequip_msg","$N舞了个刀花，将$n插入刀鞘中。\n");
+	}
+	init_blade(170);
+	setup();
+}

@@ -1,0 +1,18 @@
+// SN:F^?Wd>gJ9bWeAeQf
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("可爱的熊[2;37;0m", ({"lovely xiong"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "猪猪骑的熊熊，自然承载能力很强啦
+它是猪猪的坐骑。
+");
+        set_temp("owner_id", "zhuyun");
+        set_temp("owner_name", "猪猪");
+        ::setup();
+}
+

@@ -1,0 +1,219 @@
+// 神话世界·西游记·版本４．５０
+/* <SecCrypt CPL V3R05> */
+ 
+// teller.c
+//cglaem...12/16/96.
+// FoF changed 99-11-30 14:34
+
+#include <ansi.h>
+#define BANNED_ID "/adm/etc/banned_id"
+inherit NPC;
+
+int test_player();
+void copy_status(object me, object ob);
+int make_zuoqi(string arg);
+int check_legal_id(string id);
+int finish(object ob, string id);
+
+void create()
+{
+    set_name("袁守诚", ({"yuan shoucheng","yuan"}));
+    set("title","算命先生");
+    set("gender", "男性" );
+    set("age", 55);
+    set("class","taoist");
+    set("long", "能知天地理，善晓鬼神情．长安城里没有不认识他的。\n");
+    set("combat_exp", 8000);
+    set("attitude", "peaceful");
+    set_skill("unarmed", 10);
+    set_skill("dodge", 20);
+    set_skill("parry", 20);
+    set_skill("literate", 50);
+    set_skill("spells", 50);
+    set("per", 15);
+    set("max_kee", 350);
+    set("max_gin", 300);
+    set("max_sen", 300);
+    set("max_mana", 200);
+    set("mana", 200);
+    set("mana_factor", 5);
+    set("inquiry", ([
+       "宠物" : "格斗之迷说了，宠物还没做好，请再等一等吧！",
+       "坐骑" : (: test_player :),
+       "放弃坐骑" : "不想要坐骑啦？使 make_zuoqi delete 就行。",
+    ]));
+    setup();
+    carry_object("/d/obj/cloth/choupao")->wear();
+}
+
+void init()
+{
+    object ob;
+
+    ::init();
+    add_action("make_zuoqi", "make_zuoqi");
+    set("chat_chance", 10);
+    set("inquiry", ([
+       "name" : "小道姓袁名守诚．．．嘿嘿，在这长安一带还算小有薄名。\n",
+       "here" : "你没来过长安？这地方可是天下第一繁华所在。\n", 
+       "算命" : "你等会再来吧。我的酒瘾又犯了，得先去喝一杯。\n",
+       "算卦" : "你等会再来吧。我的酒瘾又犯了，得先去喝一杯。\n",
+       "宠物" : "格斗之迷说了，宠物还没做好，请再等一等吧！",
+       "坐骑" : (: test_player :),
+       "放弃坐骑" : "不想要坐骑啦？使 make_zuoqi delete 就行。",
+    ]) );
+
+    set("chat_msg", ({
+       "袁守诚晃了晃手上的桂花酒袋笑道：我这人没别的毛病，就是好点这个。\n",   
+       "袁守诚上上下下打量了你几眼。\n",
+       "袁守诚皱了皱眉，一副欲言又止的样子。\n",
+       "袁守诚神秘兮兮地四面张望了一下，在你耳边悄声道：\n客官最近没觉得哪儿不得劲？\n",
+       (: random_move :)
+    }) );
+}
+
+int accept_object(object me, object ob)
+{
+   object nowords;
+
+     if ((string)ob->query("name")!="桂花酒袋") {
+            command("say 不敢当不敢当．．．您太客气了。");
+       command("give " + ob->query("id") + "to " + me->query("id"));
+            return 1;
+        }
+        else {
+     command("u&me " + me->query("id"));
+            command("say 这位" + RANK_D->query_respect(me) + "就是跟我投缘！\n这里我也有一点小意思，请笑纳。\n");
+           carry_object("/d/obj/book/nowords");
+           command("give nowords to " + me->query("id"));
+            return 1;
+        }
+}
+
+int test_player()
+{
+    object who = this_player();
+    if( who->query("zuoqi/id") ) {
+        write("袁守诚说道：你不是已经有坐骑了吗？怎么，它生病了？\n");
+        return 1;
+    }
+    write("袁守诚说道：想要坐骑的话就自己弄一头野兽来，老夫来帮你打点。\n");
+    who->set_temp("mark/want_zuoqi", 1);
+    return 1;
+}
+
+int make_zuoqi(string arg)
+{
+    object ob, who = this_player();
+    string id;
+    if( is_busy() ) return notify_fail("对方正忙着呢。\n");
+    if( arg == "delete" ) {
+        who->delete("zuoqi");
+        id = who->query("id");
+        rm(sprintf("/data/toy/%s/%s_zuoqi.o", id[0..0], id));
+        return notify_fail("袁守诚说道：行啦！往后没有坐骑可得自己照顾好自己。\n");
+    }
+    if( !who->query_temp("mark/want_zuoqi") )  return 0;
+    if( who->query("zuoqi/id") )
+        return notify_fail("袁守诚说道：你不是已经有坐骑了吗？怎么，它生病了？\n");
+    if( !arg ) return notify_fail("你要拿什么来培养坐骑(make_zuoqi)？\n");
+    if( sscanf(arg, "%s %s", arg, id) != 2 )
+        return notify_fail("请用 make_zuoqi <动物id> <坐骑id> 来生成坐骑。\n");
+    if( !check_legal_id(id) ) return 1;
+    ob = present(arg, who);
+    if( !ob || !objectp(ob) ) return notify_fail("你没有这样 " + arg + "。\n");
+    if( !ob->is_character() )
+        return notify_fail(CYN"袁守诚摇了摇头，说道：这样东西可做不了坐骑。\n" NOR);
+    if( ob->query_temp("last_fainted_from") != who->query("id") )
+        return notify_fail(CYN"袁守诚叹了口气，说道：怕是"+RANK_D->query_respect(who)+"驯服不了它，还是算了吧！\n" NOR);
+    if( ob->query("race") != "野兽")
+        return notify_fail(CYN"袁守诚摇了摇头道：这样东西可不适合做坐骑。\n"NOR);
+    message_vision("袁守诚掏出一小瓶药酒，喂$N服下，又在$N脑袋上敲了几下，叽哩呱啦地\n说了一大通……\n", ob);
+    call_out("finish", random(5), ob, id);
+    return 1;
+}
+
+int finish(object ob, string id)
+{
+    object zuoqi, who = this_player();
+    zuoqi = new("/obj/npc/zuoqi");
+    copy_status(zuoqi, ob);
+    zuoqi->set("ride/msg", "骑");
+    zuoqi->set("name", ob->query("name"));
+    zuoqi->set("id", id);
+    zuoqi->set("owner_id", who->query("id"));
+    zuoqi->move(environment());
+    zuoqi->set_name_id();
+    zuoqi->save();
+    destruct(ob);
+    who->set("zuoqi/id", zuoqi->query("id"));
+    who->set("zuoqi/name", zuoqi->query("name"));
+    who->save();
+    message_vision("“好啦！”对$N一拱手：“恭喜恭喜，往后这小畜生就归"+RANK_D->query_respect(who)+"调遣了。”\n", who);
+    log_file("zuoqi", who->query("name") + "(" + who->query("id") + ") make zuoqi " + zuoqi->query("name") + "(" + zuoqi->query("id") + ") on " + ctime(time()) + "\n");
+    return 1;
+}
+
+void copy_status(object me, object ob)
+{
+   mapping hp_status, skill_status;
+   string *sname;
+   int i;
+
+   //copy new skills.
+   if( skill_status = ob->query_skills() ) {
+      sname  = keys(skill_status);
+      for( i = 0; i < sizeof(skill_status); i ++ ) {
+         me->set_skill(sname[i], skill_status[sname[i]] / 5);
+      }
+   }
+   
+   hp_status = ob->query_entire_dbase();
+   me->set("long", hp_status["long"]);
+   me->set("str", hp_status["str"]/2+random(hp_status["str"])/2);
+   me->set("int", hp_status["int"]/2+random(hp_status["int"])/2);
+   me->set("con", hp_status["con"]/2+random(hp_status["con"])/2);
+   me->set("cps", hp_status["cps"]/2+random(hp_status["cps"])/2);
+   me->set("cor", hp_status["cor"]/2+random(hp_status["cor"])/2);
+   me->set("spi", hp_status["spi"]/2+random(hp_status["spi"])/2);
+   me->set("per", hp_status["per"]);
+   me->set("kar", hp_status["kar"]);
+   me->set("max_kee", hp_status["max_kee"]/2);
+   me->set("max_sen", hp_status["max_sen"]/2);
+   me->set("max_force", hp_status["max_force"]/5);
+   me->set("max_mana", hp_status["max_mana"]/5);
+   me->set("combat_exp", hp_status["combat_exp"]/10);
+   me->set("limbs", hp_status["limbs"]);
+   me->set("verbs", hp_status["verbs"]);
+   me->set("attitude", hp_status["attitude"]);
+
+   return;
+}
+
+int check_legal_id(string id)
+{
+   int i;
+   string *legalid;
+
+   i = strlen(id);
+
+   if( (strlen(id) < 3) || (strlen(id) > 8 ) ) {
+     write("对不起，英文名字必须是 3 到 8 个英文字母。\n");
+     return 0;
+   }
+   while(i--)
+     if( id[i]<'a' || id[i]>'z' ) {
+        write("对不起，英文名字只能用英文字母。\n");
+        return 0;
+     }
+
+
+   legalid = explode(read_file(BANNED_ID), "\n");
+   for(i=0; i<sizeof(legalid); i++)   {
+      if( id == legalid[i] )   {
+       write("对不起，这种名字会造成其他人的困扰。\n");
+       return 0;
+       }
+   }
+   return 1;
+}

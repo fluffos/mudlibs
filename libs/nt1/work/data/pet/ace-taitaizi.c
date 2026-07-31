@@ -1,0 +1,18 @@
+// SN:M2QQbob::i5]iiFB
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;31m太子[2;37;0m是[1;31m禽兽[2;37;0m", ({"taitaizi shou"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "HOHO
+它是千王之王的坐骑。
+");
+        set_temp("owner_id", "ace");
+        set_temp("owner_name", "千王之王");
+        ::setup();
+}
+

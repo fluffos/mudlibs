@@ -1,0 +1,18 @@
+// SN:h>_cb2jfi9<D1kbb
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m瘦马[2;37;0m", ({"thin ma"}));        
+        set("gender", "女性");                
+        set("unit", "匹");
+        set("long", "古道西风瘦马，断肠人在天涯
+它是悄悄的坐骑。
+");
+        set_temp("owner_id", "crying");
+        set_temp("owner_name", "悄悄");
+        ::setup();
+}
+

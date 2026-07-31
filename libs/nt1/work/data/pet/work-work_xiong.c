@@ -1,0 +1,18 @@
+// SN:T8hATcm;YWUmJ8fb
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m小熊[2;37;0m", ({"work_xiong xiong"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "ok
+它是工人的坐骑。
+");
+        set_temp("owner_id", "work");
+        set_temp("owner_name", "工人");
+        ::setup();
+}
+

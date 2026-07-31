@@ -1,0 +1,18 @@
+// SN:Bd>VTlIG6MmFdZIO
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;31m辣妹[1;33m维多利亚狐[2;37;0m", ({"spice hu"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "$HIR$辣妹$HIY$维多利亚
+它是贝壳喊木的坐骑。
+");
+        set_temp("owner_id", "czaudit");
+        set_temp("owner_name", "贝壳喊木");
+        ::setup();
+}
+

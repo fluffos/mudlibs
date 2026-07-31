@@ -1,0 +1,18 @@
+// SN:Z14?Ro\HbB@fGiE3
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("你妈貂[2;37;0m", ({"asdasd diao"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "选错了
+它是卡卡西的坐骑。
+");
+        set_temp("owner_id", "kkx");
+        set_temp("owner_name", "卡卡西");
+        ::setup();
+}
+

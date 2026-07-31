@@ -1,0 +1,18 @@
+// SN:;i@j>A_04];9T<FG
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m冰猴[2;37;0m", ({"bing hou"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "$HIW$冰
+它是寒冰的坐骑。
+");
+        set_temp("owner_id", "heartsay");
+        set_temp("owner_name", "寒冰");
+        ::setup();
+}
+

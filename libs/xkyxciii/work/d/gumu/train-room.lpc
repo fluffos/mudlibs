@@ -1,0 +1,157 @@
+// /d/gumu/train-room.c
+#include <ansi.h>
+#include <skill.h>
+
+inherit ROOM;
+
+void create()
+{
+    set("short", "练功房");
+    set("long", @LONG
+    这是一间小小的石室，室中点著灯火，在石室的角落里好象放着什么东西。
+LONG
+    );
+
+    set("item_desc", ([
+        "角落" : "角落里放着一个布袋，袋口用绳索绑着。 \n",
+        "corner" : "角落里放着一个布袋，袋口用绳索绑着。 \n",
+    ]));
+    set("exits",([
+     "west"      :__DIR__"mi-room2",
+]));
+    set_temp("放麻雀",0);
+    set_temp("练功人数",0);
+
+    setup();
+}
+
+void init()
+{
+    object ob=this_player();
+    add_action("do_open", "open");
+    add_action("do_catch", "catch");
+   if((int)query_temp("练功人数")>=4)   //限制练功房人数为4人
+   {
+     tell_object(ob,HIR"练功房里的人太多了！\n"NOR);
+     call_out("leave",2,ob);
+     return;
+   }
+    add_temp("练功人数" ,1);
+    return;
+
+
+
+}
+
+
+int do_open ( string arg )
+{
+    object ob ;
+    ob = this_player () ;
+    if( !arg || ((arg !="布袋") && (arg!="bag")) ) 
+         return 0 ;
+    if(query_temp("放麻雀"))
+       return notify_fail("布袋已经被人打开了！\n");
+    message_vision(BLU "$N提起布袋，解开缚在袋口的绳索，倒转袋子一抖!\n" NOR, ob);
+    ob->start_busy(2);
+    write(HIY "一大群麻雀飞了出来！！\n" NOR);
+    set_temp("放麻雀",1);    
+    return 1;
+
+}
+
+int do_catch ( string arg )
+{
+    object ob ;
+    int cost,busytime;
+    ob = this_player () ;
+    if(!query_temp("放麻雀"))
+         return 0;
+    if( !arg || arg !="麻雀" ) 
+         return 0 ;
+    if( ob->is_busy() ) return notify_fail("你正忙着呢！\n");
+    if( ob->is_fighting() ) return notify_fail("你无法边战斗边练习！\n");
+    cost = 50-(int)(ob->query_int())/20;
+    if(cost<1)      cost=1;
+    if( ((int)ob->query("sen") < cost )||((int)ob->query("gin") < cost )||
+        ((int)ob->query("kee") < cost ) )  {
+       write(HIR"你现在精神状态不好，休息一下吧！\n"NOR);
+       return 1;
+    }
+    if(random(10)==8)
+        message_vision(BLU "$N大呼一声“为四化，灭四害！”，奋不顾身地朝雀群扑去！\n" NOR, ob);
+    else
+        message_vision(BLU "$N微微一提气，足尖点地，身子向上一纵扑向雀群！\n" NOR, ob);
+    busytime=2+random(3);
+    ob->start_busy(busytime+1);
+    call_out("catched",busytime,ob);
+    return 1;
+}
+void catched(object ob)
+{
+    int inc,ranmsg,my_skill,cost;
+    string skill_name;
+    cost = 50-(int)(ob->query_int())/20;
+    if(cost<1)      cost=1;
+    inc = 1;
+    skill_name="tianluo-shi";
+    my_skill = ob->query_skill(skill_name, 1);
+    ob->receive_damage("sen", cost);
+    ob->receive_damage("gin", cost);
+    ob->receive_damage("kee", cost);
+    if(ob->query_skill("move",1) < 20) {
+       ob->improve_skill(skill_name, 1);
+    tell_object(ob,HIR" 你的轻功太差了，练麻雀的羽毛都碰不到！\n"NOR);
+    return ; 
+    }
+    if(my_skill>=60) {          //最多可以学到60级
+       tell_object(ob,HIY "通过这种练习你已经学不到新东西了！\n" NOR);
+       return ;
+    }
+    inc = (int)ob->query("combat_exp") / 10000;
+    if( inc > 10 ) inc = 10;
+    inc = inc + (int)ob->query_int() + (int)( (ob->query_skill("unarmed", 1) + ob->query_skill("move", 1) ) / 20 );
+    inc = inc/ 5;      //cost is twice of study, so inc double;
+    if( inc < 1 ) inc = 1;
+
+
+
+    if(random(7)>3){
+       if(random(2)==1)
+           tell_object(ob,HIY "你在雀群中上窜下扑，但出招未够快捷，麻雀四散乱飞！\n" NOR);
+       else
+           tell_object(ob,HIY "你在雀群中左拍右挡，但时刻拿捏不准，只两三招，就给麻雀逃走了！\n" NOR);
+       if( !ob->query_skill(skill_name, 1) )
+           ob->set_skill(skill_name, 0);
+       ob->improve_skill(skill_name, inc);
+       return ;  
+    }
+    else {
+       ranmsg=random(2) ;
+       if(ranmsg==0){
+          tell_object(ob,HIY "你双臂飞舞，两只手掌宛似化成了千手千掌，任麻雀如何飞滚翻扑，始终飞不出你的手掌所围作的圈子。\n" NOR);
+       }
+       else
+          tell_object(ob,HIY "你双手挥出，东边一收，西边一拍，麻雀尽数聚在你胸前三尺之内。\n" NOR);
+       inc*=2;   //随机可能double;
+       if( !ob->query_skill(skill_name, 1) )
+           ob->set_skill(skill_name, 0);
+       ob->improve_skill(skill_name, inc);
+       return ;  
+    }
+}    
+
+int valid_leave(object who, string dir)
+{
+    add_temp("练功人数",-1);
+    return 1;
+}
+
+void leave(object ob)
+{ 
+    message_vision(BLU "$N退出了练功房！\n"NOR,ob);
+    ob->move(__DIR__"mi-room2");
+    return;
+}
+
+ 

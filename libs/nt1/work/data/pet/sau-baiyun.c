@@ -1,0 +1,18 @@
+// SN:Ig5oR2Dh4STb8YLO
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;35m彩云[1;33m兽[2;37;0m", ({"baiyun shou"}));        
+        set("gender", "女性");                
+        set("unit", "头");
+        set("long", "白云用云彩堆成的坐骑。
+它是白云的坐骑。
+");
+        set_temp("owner_id", "sau");
+        set_temp("owner_name", "白云");
+        ::setup();
+}
+

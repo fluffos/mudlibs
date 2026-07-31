@@ -1,0 +1,18 @@
+// SN:VF2>Bfh7<BHH`iN5
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m白龙马[2;37;0m", ({"baolong ma"}));        
+        set("gender", "女性");                
+        set("unit", "匹");
+        set("long", "西天取经的小龙.
+它是魔神的坐骑。
+");
+        set_temp("owner_id", "runx");
+        set_temp("owner_name", "魔神");
+        ::setup();
+}
+

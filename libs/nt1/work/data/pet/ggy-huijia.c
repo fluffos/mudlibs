@@ -1,0 +1,18 @@
+// SN:8k0HMN<Zg8oWKV;5
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[37m家马[2;37;0m", ({"huijia ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "骑着回家的马
+它是乖乖雅的坐骑。
+");
+        set_temp("owner_id", "ggy");
+        set_temp("owner_name", "乖乖雅");
+        ::setup();
+}
+

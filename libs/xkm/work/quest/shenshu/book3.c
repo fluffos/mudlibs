@@ -1,0 +1,35 @@
+#include <ansi.h>
+inherit ITEM;
+void create()
+{
+    set_name(HIY"神雕侠侣"NOR, ({ "sdxl" }) );
+    set_weight(1);
+    if( clonep() )
+            set_default_object(__FILE__);
+    else {
+	      
+            set("unit", "本");
+            set("material", "paper");
+            set("long", "神书之一,若是能找齐射雕英雄传和倚天屠龙记就能(combine)。\n");
+          }
+
+    setup();
+}
+void init()
+{
+    add_action("do_combine","combine");
+}
+int do_combine()
+{
+	object me,newbook,*inv;
+	me = this_player();
+	newbook =new(__DIR__"3book");
+ if (!present("yttlj", me)||!present("sdyxz",me))
+	tell_object(me,"书好象没齐.\n");
+  else{     message_vision("$N把从怀中翻出的射雕英雄传和倚天屠龙记两本神书，和手中的神雕侠侣合并成了一本。\n", me);
+	newbook->move(me);
+	destruct(present("yttlj",me));
+	destruct(present("sdyxz",me));
+	destruct(this_object());}
+return 1;
+}

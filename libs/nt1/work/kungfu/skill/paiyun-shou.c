@@ -1,0 +1,70 @@
+// Copyright (C) 2003, by Lonely. All rights reserved.
+// This software can not be used, copied, or modified 
+// in any form without the written permission from authors.
+// panyun-shou.c 排云手
+
+inherit SKILL;
+
+string *action_msg = ({
+        "$N跨开马步，右掌前出，十指伸缩，虚虚实实地袭向$n的全身要穴",
+        "$N退后一步，双掌一起排出，如钩如戢，插向$n的$l",
+        "$N忽的一转身，两手环扣，拢成圈状，猛击$n的下颌",
+        "$N双手平伸，十指微微上下抖动，戳向$n的$l",
+        "$N左手护胸，腋下含空，右手五指如钩，打向$n的要穴",
+        "$N右腿斜上，上手取目，下手反勾$n的裆部",
+        "$N一手虚指$n的剑诀，劈空抓向$n手中的兵刃",
+        "$N左手指向$n胸前的五道大穴，右手斜指太阳穴，两面夹击$n",
+        "$N一手撑天，一手指地，劲气笼罩$n的全身",
+        "$N拳掌招若隐若现，若有若无，缓缓地拍向$n的丹田",
+});
+
+int valid_enable(string usage) { return usage=="hand" ||  usage=="parry"; }
+
+int valid_combine(string combo)
+{
+        return combo == "taiji-quan" || combo == "wudang-zhang";
+}
+
+int valid_learn(object me)
+{
+	if (me->query_temp("weapon") || me->query_temp("secondary_weapon"))
+		return notify_fail("练排云手必须空手。\n");
+
+	if ((int)me->query_skill("force") < 40)
+		return notify_fail("你的内功火候不够，无法学排云手。\n");
+
+	if ((int)me->query("max_neili") < 250)
+		return notify_fail("你的内力太弱，无法练排云手。\n");
+
+	return 1;
+}
+
+mapping query_action(object me, object weapon)
+{
+        return ([
+                "action": action_msg[random(sizeof(action_msg))],
+                "damage_type": random(2)?"瘀伤":"内伤",
+                "dodge" : 40 + random(10),
+                "parry" : 40 + random(10),
+                "attack": 40 + random(10),
+                "force" : 210 + random(60),
+        ]);
+}
+
+int practice_skill(object me)
+{
+	if ((int)me->query("qi") < 50)
+		return notify_fail("你的体力太低了。\n");
+
+	if ((int)me->query("neili") < 50)
+		return notify_fail("你的内力不够练排云手。\n");
+
+	me->receive_damage("qi", 40);
+	me->add("neili", -40);
+	return 1;
+}
+
+string perform_action_file(string action)
+{
+	return __DIR__"paiyun-shou/" + action;
+}

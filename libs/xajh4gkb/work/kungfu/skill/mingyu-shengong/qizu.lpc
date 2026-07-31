@@ -1,0 +1,91 @@
+// zu.c  by sinb
+
+#include <ansi.h>
+#include <skill.h>
+#include <weapon.h>
+#include <combat.h>
+#include <condition.h>
+
+inherit F_SSERVER;
+int exert(object me, object target)
+{
+	int ap,dp,damage,skill,busy_time;
+    string msg;
+
+	if (target == me || ! target)
+	{
+		me->clean_up_enemy();
+		target = me->select_opponent();
+	}
+	if (! me->is_fighting(target))
+		return notify_fail("你只能用「气足」奇功攻击战斗中的对手。\n");
+	if ( !wizardp(me) && me->query_skill_mapped("force") != "mingyu-shengong")
+		return notify_fail(HIC"不使用本门内功，如何使用本门绝学!\n"NOR);
+	if (me->query_skill("mingyu-shengong", 1) < 500)
+		return notify_fail("你的冥雨神功火候不够，无法运用「气足」奇功。\n");
+//	if (target && target->query_temp("apply/shade_vision")) 
+//		return notify_fail("对方隐身了，你看不到"+target->query("name")+"。\n"); 		
+	if (me->is_busy()) 
+		return notify_fail("你现在正忙着呢！\n");
+	if( (int)me->query("max_neili") < 100000 )
+		return notify_fail("你的内力修为还不够高。\n");
+	if( (int)me->query("max_jingli") < 100000 )
+		return notify_fail("你的精力修为还不够高。\n");
+	if( (int)me->query("jingli") < 1000 )
+		return notify_fail("你的精力不够了。\n");	
+	if( (int)me->query("neili") < 1000 )
+		return notify_fail("你的内力不够了。\n");
+	if (me->query_temp("autolian"))
+		return notify_fail("你正在发动自动连招！\n"); 	
+	if ( me->query_temp("cooldown") )	//CD写法	2017.9.7添加
+		return notify_fail("你处于技能冷却状态中，过会在使用吧。\n");
+		
+        msg = HIW "$N" HIW "默运冥雨神功，一股诡异无比的内气，顺着$n的经脉" HIW "，侵入$n的丹田。\n" NOR;
+		message_vision(msg, me, target);
+	me->set_temp("cooldown", 1);	//CD写法	2017.9.7添加
+	call_out("del_cooldown", 3, me);	//CD写法1
+	skill = (int)me->query_skill("mingyu-shengong", 1);
+	ap = me->query("xyzx_sys/level") + me->query_skill("mingyu-shengong", 1) + me->query_skill("force");
+	dp = target->query("xyzx_sys/level") + target->query_skill("force") ;
+    ap = ap*((int)me->query("breakup")+(int)me->query("breakup")*(int)me->query("breakup")+100)/100;
+	dp = dp*((int)target->query("breakup")+(int)target->query("breakup")*(int)target->query("breakup")+100)/100;
+	busy_time = (30*skill)/(skill+2000);
+        if (random(ap) > dp/3)
+        {
+			damage = ap/2 + random(dp/2);
+			damage = damage*(100-target->query_meridian())/100;
+			target->receive_damage("qi", damage, me);
+			target->receive_wound("qi", damage/2, me);
+			target->add("neili", -damage);
+			me->add("neili",-500);
+			target->set_temp("snow/freeze", 1);
+			call_out("snow_end", 5+busy_time, me, target);
+			target->apply_condition("mingyu_qizu", (int)target->query_condition("mingyu_qizu") + 20 );
+			msg = HIG "$n" HIG "忽然觉得一阵透骨恶寒，霎时间浑身的血液几乎都要凝滞了。\n" NOR;
+			message_vision(msg, me, target, damage, HBWHT+HIM"气血伤害"NOR);	//2018.10.2阿飞改，优化化学伤害显示的写法
+//			if (userp(me) && me->query("env/no_combat_msg")<4) tell_object(me, HIW"该绝招对敌人气血的外伤为"+ damage +"，内伤为"+ damage/2 +"。\n" NOR);
+        } else
+		{
+			msg = HIY "$n" HIY "感到一阵恶寒自心底泛起，连忙运动抵抗，堪勘无事。\n" NOR;
+			message_vision(msg, me, target);
+		}
+               
+	me->start_busy(1);
+	return 1;
+}
+void snow_end(object me, object target)
+{
+	if ( !objectp(target) ) return;
+	target->delete_temp("snow/freeze");
+	tell_object(target, HIR"你打了个冷颤，浑身血液渐渐恢复热血。\n"NOR);
+	return;
+}
+void del_cooldown(object me)	//CD写法1
+{ 
+	if ( !objectp(me) ) return;
+	if ( me->query_temp("cooldown") )	
+	{
+		me->delete_temp("cooldown");
+		tell_object(me, HIM"你呼出一口气，缓缓的将内力收回丹田。\n"NOR);
+	}	
+}

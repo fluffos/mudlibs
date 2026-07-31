@@ -1,0 +1,20 @@
+// SN:<b4[f3mJ15bojVOW
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("闲云野[2;37;0m鹤[2;37;0m", ({"xianyunye he"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "这是陪同高处不胜寒上天下地的仙鹤。
+它是高处不胜寒的坐骑。
+");
+        set_temp("owner_id", "lonely");
+        set_temp("owner_name", "高处不胜寒");
+        set_temp("owner", "OWNER_IS");
+        ::setup();
+}
+
+

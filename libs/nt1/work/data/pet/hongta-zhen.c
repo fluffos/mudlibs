@@ -1,0 +1,18 @@
+// SN:?G`OVU_XoiZ\m3R\
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;36m山高人为峰[1;37m兽[2;37;0m", ({"zhen shou"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "ok
+它是红塔集团的坐骑。
+");
+        set_temp("owner_id", "hongta");
+        set_temp("owner_name", "红塔集团");
+        ::setup();
+}
+

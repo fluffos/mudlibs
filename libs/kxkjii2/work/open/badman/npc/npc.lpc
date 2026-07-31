@@ -1,0 +1,9 @@
+inherit NPC;
+void create()
+{
+  set_name("打我吧" ,({"test"}));
+  set_skill("parry",100);
+  set_skill("evilstriback",200);
+  map_skill("parry",evilstriback");
+setup();
+}

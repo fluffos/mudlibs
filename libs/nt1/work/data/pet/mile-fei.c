@@ -1,0 +1,18 @@
+// SN:73UOb]PUi^1?[BLj
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;32m飞驹[2;37;0m", ({"fei ju"}));        
+        set("gender", "女性");                
+        set("unit", "匹");
+        set("long", "......
+它是胡乐的坐骑。
+");
+        set_temp("owner_id", "mile");
+        set_temp("owner_name", "胡乐");
+        ::setup();
+}
+

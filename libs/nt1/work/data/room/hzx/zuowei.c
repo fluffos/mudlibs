@@ -1,0 +1,56 @@
+// SN:VKH0K6:QWa=Sk2\I
+// File(/data/room/hzx/zuowei.c) of hzx's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        object ob;
+
+        set("short", "兰色心情左卫舍");
+	set ("long", @LONG
+这里是左卫舍，是看护兰色心情大门的家丁放哨的地方。 
+LONG );
+
+	set("exits", ([
+                "west"   : __DIR__"qianting",
+	]));
+
+        set("objects", ([
+                "/d/room/roomnpc/shouwei" : 2,
+        ]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        ob = present("shou wei", this_object());
+        ob->set("coagents", ({
+                ([ "startroom" : __DIR__"zuowei",
+                   "id"        : "shou wei 1" ]),
+                ([ "startroom" : __DIR__"zuowei",
+                   "id"        : "shou wei 2" ]),
+                ([ "startroom" : __DIR__"youwei",
+                   "id"        : "shou wei 2" ]),
+                ([ "startroom" : __DIR__"youwei",
+                   "id"        : "shou wei 1" ]),
+        }));
+
+        ob = present("shou wei 2", this_object());
+        ob->set("coagents", ({
+                ([ "startroom" : __DIR__"zuowei",
+                   "id"        : "shou wei 1" ]),
+                ([ "startroom" : __DIR__"zuowei",
+                   "id"        : "shou wei 2" ]),
+                ([ "startroom" : __DIR__"youwei",
+                   "id"        : "shou wei 2" ]),
+                ([ "startroom" : __DIR__"youwei",
+                   "id"        : "shou wei 1" ]),
+        }));
+
+        set("room_owner", "海之心");
+        set("room_name", "兰色心情");
+        set("room_id", "blueheart");
+        set("room_owner_id", "hzx");
+        set("room_position", "树林");
+}

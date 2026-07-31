@@ -1,0 +1,18 @@
+// SN:=g^D`W5`dDYbjQ2X
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("火云雕[2;37;0m", ({"bai_ diao"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "全身袭白，唯有嘴尖一点红，
+它是慕容影的坐骑。
+");
+        set_temp("owner_id", "jili");
+        set_temp("owner_name", "慕容影");
+        ::setup();
+}
+

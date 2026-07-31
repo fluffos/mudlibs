@@ -1,0 +1,37 @@
+// SN:hPQ]=BbH6@:Q?loI
+// File(/data/room/viny/xiaoyuan.c) of viny's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        set("short", "月影楼小院");
+	set ("long", @LONG
+这里是一个雅致的房子，可以看出此屋的主人是个儒雅之士,角落
+里栽了几棵树，地上零零散散有一些碎落叶片。院门虚掩，穿过院子
+就是一个小屋，非常精致。description[2;37;0m
+LONG );
+
+        set("room_key", "1 of viny");
+	setup();
+
+	set("exits", ([
+                "out"    : "/d/room/playtown/road8",
+	]));
+
+        set("outdoors", "playertown");
+        set("no_sleep_room", 1);
+        set("valid_startroom", 1);
+
+        set("KEY_DOOR", ([
+                "exit" : "north",
+                "room" : __DIR__"dulewu",
+        ]));
+    
+        set("room_owner", "苍月");
+        set("room_name", "月影楼");
+        set("room_id", "vroom");
+        set("room_owner_id", "viny");
+        set("room_position", "三岔口");
+}

@@ -1,0 +1,18 @@
+// SN:V41KLWQ<;beRClIc
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[36m科多兽[2;37;0m", ({"kodo shou"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "高1丈余，重达6千多斤的巨兽
+它是战歌的坐骑。
+");
+        set_temp("owner_id", "orc");
+        set_temp("owner_name", "战歌");
+        ::setup();
+}
+

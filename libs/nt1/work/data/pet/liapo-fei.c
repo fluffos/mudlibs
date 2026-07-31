@@ -1,0 +1,18 @@
+// SN:^683Kjl`]<cWfMGM
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m肥羊[2;37;0m", ({"fei yang"}));        
+        set("gender", "女性");                
+        set("unit", "头");
+        set("long", "哈哈
+它是李阿婆的坐骑。
+");
+        set_temp("owner_id", "liapo");
+        set_temp("owner_name", "李阿婆");
+        ::setup();
+}
+

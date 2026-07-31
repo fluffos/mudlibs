@@ -1,0 +1,129 @@
+// Obj:/adm/daemons/network/obj/telnet.c
+// Telnet 连接工具
+
+#include <ansi.h>
+#include <net/dns.h>
+#include <net/telnet.h>
+#include <net/socket.h>
+#include <net/socket_errors.h>
+#include <socket_err.h>
+
+inherit ITEM;
+
+nosave int my_socket,socket1,socket2;
+nosave object me;
+
+int close_socket();
+void create()
+{
+	set_name("Telnet 客户端", ({ "telnet client", "telnet","client"}) );
+	set("long","这是阿飞创造的用来连接其他 mud 的精灵。\n");
+	set_weight(3000);
+	set_max_encumbrance(0);
+	if(clonep())
+		set_default_object(__FILE__);
+	else {
+		set("unit", "个");
+		set("material", "silver");
+	}
+	setup();
+}
+
+void init()
+{       
+	object ob;
+
+	if( interactive(ob = this_player())) {
+		add_action("close_socket","close");
+		add_action("write_message","/");
+		add_action("do_telnet","telnet");
+		me = ob;
+	}
+}
+
+void tell_me(string arg)
+{
+	tell_object(environment(this_object()),arg);
+}
+
+int do_telnet(string arg)
+{
+	int err;
+
+
+	if (!arg) return notify_fail("你要连接到哪里？\n");
+// 假如已经连上了，就关闭。
+	if (arg=="-c") {
+		write("正在关闭 Socket...\n");
+		close_socket();
+		return 1;
+	}
+
+	if(query("connected"))
+		socket_close(my_socket);
+
+	my_socket = socket_create( STREAM, "in_read_callback","in_close_callback" );
+
+	if ( my_socket < 0 ) {
+		tell_me( "创建 Socket 失败。\n" );
+	                return 1;
+	}
+
+	err = socket_connect( my_socket, arg , "read_callback","write_callback" );
+// 假如连接返回成功
+	if( err==EESUCCESS ) {
+		tell_me("已经连接到 "HIW + arg + "。\n"NOR);
+		set("connected",1);
+	}
+// 连不到
+	else
+		tell_me("无法连接到 "HIW + arg + "。\n"NOR);
+	return 1;
+}
+
+int close_socket()
+{
+	if( query("connected") )  {
+		if( socket_close(my_socket) ) {
+			tell_me("Telnet 连接已关闭。\n");
+			delete("connected");
+		}
+		else
+			tell_me("关闭 telnet 连接失败。\n");
+	}
+	else
+		tell_me("你还没有连接。\n");
+		return 1;
+}
+
+void read_callback(int s,mixed message)
+{
+	message+="\n";
+	tell_me((string)message);
+
+// 一个简单的判断，一般的 MUD quit 都是这样（但断线呢？）
+	if (strsrch(message,"欢迎下次再来")!=-1) {
+		close_socket();
+		return;
+	}
+}
+
+void write_callback(int fd)
+{
+	int res;
+
+	if(query("connect")) return;
+	res = socket_write( fd,"");
+	if (res == EESUCCESS || res == EECALLBACK)
+	{
+		set("connected",1);
+	}
+}
+
+int write_message(string arg)
+{
+	if(!arg ) arg="";
+
+	socket_write(my_socket,arg+"\n");
+	return 1;
+}

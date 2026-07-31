@@ -1,0 +1,32 @@
+// SN:jm[3X9gA<5l>4:Z`
+// ITEM Made by player(慕容新月:xinyue) /data/item/x/xinyue-blade.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Sat Jul 24 14:07:05 2004
+#include <ansi.h>
+#include <weapon.h>
+
+inherit BLADE;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;34m将登太行雪暗天[2;37;0m", ({ "blade" }));
+	set_weight(9000);
+	set("item_make", 1);
+	set("unit", "把");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一把刀。
+[1;34m传自远古蛮荒的一把刀，刀呈青蓝之色，它已经被太行山的雪花冻藏了几千个岁月，锋刃上隐隐透出阵阵寒意，你不禁打了个寒颤。[2;37;0m
+刀柄上刻着一行小字：慕容新月(xinyue)
+");
+	set("value", 2100000);
+	set("point", 786);
+	set("material", "magic stone");
+	set("wield_msg", "[1;34m$N大喝一声，自身后挚出一把$n[1;34m在手，一扫以前的文弱之态，娉婷的身躯映射出飒爽的英姿，令人不敢逼视。\n而头顶的上苍穹在这一刹那也变得灰蒙蒙一片，压的极低，仿佛可以伸手触摸的到，分明一场暴风雪就要来临。[2;37;0m\n");
+	set("unwield_msg", "[1;34m$N冷冷一笑，扫了在座的一眼，大家俱被她冷艳的神色所震慑，不敢吭声，甚至连头都不敢抬。\n$N见如此，左手一抚，握在右手的$n[1;34m便了无影踪，天顶的乌云亦散去大半，$N也复归了原先的娇弱之态。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	init_blade(apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

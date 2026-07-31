@@ -1,0 +1,18 @@
+// SN:\JT`Y<=XI:6@0PSE
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;33m王小虎[2;37;0m", ({"wangxiao hu"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "hp
+它是塔布的坐骑。
+");
+        set_temp("owner_id", "truek");
+        set_temp("owner_name", "塔布");
+        ::setup();
+}
+

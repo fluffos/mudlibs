@@ -1,0 +1,71 @@
+// wudang-jian.c 武当剑法
+
+inherit SKILL;
+
+string *action_msg = ({
+        "$N身体左转，左手剑指，两腿屈膝，右前臂内旋，剑尖前端一寸处短促抖腕发"
+                   "力，一招「飞燕入林」，手中$w轻轻颤动，一剑自上而下扎向$n的$l",
+        "$N身形不动，右前臂外旋，剑刃上崩，立马左腿左弓步，一招「青龙吐水」，手"
+                   "中$w向前下反刺，一剑指向$n的$l",
+        "$N左脚向前一步，蹬地跳起，身体腾空疾速左转，右手$w先向前刺，随转体变"
+                   "向，使出一式「凤凰挚窝」，剑光如匹练般泄向$n的$l",
+        "$N碎步急进，提剑沿剑身方向疾速上崩，一招「白蛇吐信」直取$n的$l",
+        "$N平剑斜洗，臂圆剑直，双脚交替弧形迈进，右手$w使出一式「玉女穿梭」，"
+                   "剑锋往来运转如梭，连绵不绝刺向$n的$l",
+        "$N屈腕抬臂，剑由前向后上方抽带，挺起中平剑奋勇向前，右手$w使出一式"
+                   "「仙人指路」刺向$n的$l",
+        "$N左撤步，抱剑当胸，挥剑做圆环形，正反搅动，右手$w一式「怀中抱月」，"
+                   "剑意圆润，刺向$n的$l",
+        "$N侧身退步，左手剑指划转，腰部一扭，上体后仰，右手$w一记「反身朝阳」"
+                   "自下上撩指向$n的$l",
+});
+
+
+int valid_enable(string usage) { return usage == "sword" || usage == "parry"; }
+
+int valid_learn(object me)
+{
+        if ((int)me->query("max_neili") < 100)
+                return notify_fail("你的内力不够。\n");
+
+        if ((int)me->query_skill("force") < 20)
+                return notify_fail("你的内功火候太浅。\n");
+
+        if ((int)me->query_skill("sword", 1) < (int)me->query_skill("wudang-jian", 1))
+                return notify_fail("你的基本剑法水平有限，无法领会更高深的武当剑法。\n");
+
+        return 1;
+}
+
+mapping query_action(object me, object weapon)
+{
+        return ([
+                "action": action_msg[random(sizeof(action_msg))],
+                "damage": 120 + random(30),
+                "attack": 40 + random(10),
+                "dodge" : 40 + random(10),
+                "parry" : 40 + random(10),
+                "damage_type" : random(2)?"刺伤":"割伤",
+        ]);
+}
+
+int practice_skill(object me)
+{
+        object weapon;
+
+        if (! objectp(weapon = me->query_temp("weapon")) ||
+            (string)weapon->query("skill_type") != "sword")
+                return notify_fail("你使用的武器不对。\n");
+
+        if ((int)me->query("qi") < 50)
+                return notify_fail("你的体力不够练武当剑法。\n");
+
+        if ((int)me->query("neili") < 50)
+                return notify_fail("你的内力不够练武当剑法。\n");
+
+        me->receive_damage("qi", 40);
+        me->add("neili", -40);
+
+        return 1;
+}
+

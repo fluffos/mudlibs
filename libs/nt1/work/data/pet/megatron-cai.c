@@ -1,0 +1,18 @@
+// SN:jYSbc]X>L@Th9Fdf
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m菜狼[2;37;0m", ({"cai lang"}));        
+        set("gender", "女性");                
+        set("unit", "条");
+        set("long", "菜鸟的狼
+它是威震天的坐骑。
+");
+        set_temp("owner_id", "megatron");
+        set_temp("owner_name", "威震天");
+        ::setup();
+}
+

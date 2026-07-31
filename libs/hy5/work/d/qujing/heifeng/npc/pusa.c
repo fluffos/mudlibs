@@ -1,0 +1,86 @@
+//Cracked by Roath
+// …Òª∞ ¿ΩÁ°§Œ˜”Œº«°§∞Ê±æ£¥£Æ£µ£∞
+/* <SecCrypt CPL V3R05> */
+ 
+// guanyin.c π€“Ù∆–»¯
+// By Dream Dec. 19, 1996
+#include <ansi.h>
+inherit NPC;
+
+void create()
+{
+   set_name("π€“Ù∆–»¯", ({ "guanyin pusa", "guanyin", "pusa" }));
+   set("title", "æ»ø‡æ»ƒ—¥Û¥»¥Û±Ø");
+   set("long", @LONG
+¿Ì‘≤Àƒµ¬£¨÷«¬˙Ω…Ì°£√º»Á–°‘¬£¨—€À∆À´–«°£¿º–ƒ–¿◊œ÷Ò£¨
+ﬁ•–‘∞Æµ√ÃŸ°£À˝æÕ «¬‰Ÿ§…Ω…œ¥»±Ø÷˜£¨≥±“Ù∂¥¿ÔªÓπ€“Ù°£
+LONG);
+   set("gender", "≈Æ–‘");
+   set("age", 35);
+   set("attitude", "peaceful");
+   set("rank_info/self", "∆∂…Æ");
+   set("rank_info/respect", "∆–»¯ƒÔƒÔ");
+   set("class", "bonze");
+           set("str",24);
+   set("per",100);//means no rong-mao description.
+   set("max_qi", 5000);
+   set("max_jing", 5000);
+   set("max_jing", 5000);
+   set("neili", 4000);
+   set("max_neili", 2000);
+   set("force_factor", 145);
+   set("max_neili", 3000);
+   set("neili", 6000);
+   set("mana_factor", 150);
+   set("combat_exp", 2000000);
+   set_skill("literate", 150);
+   set_skill("spells", 200);
+   set_skill("buddhism", 200);
+   set_skill("unarmed", 150);
+ 
+
+   //hehe, since guanyin was killed several times
+   //let's use cast bighammer to protect her...weiqi:)
+   create_family("ƒœ∫£∆’Õ”…Ω", 1, "∆–»¯");
+
+   setup();
+   carry_object("/d/qujing/nanhai/obj/jiasha")->wear();
+
+}
+void announce_success (object who)
+{
+  int i;
+  object me = this_object();
+
+  if (who->query("combat_exp") < 10000)
+    return;
+  if( ! who->query_temp("fired") )
+     return;
+   if(who->query("obstacle/hf")  == "done")
+    return; 
+  if (! who->query_temp("obstacle/heixiong_killed"))
+    return;
+  if (who->query("obstacle/yj") != "done")
+    return;  
+    
+  i = random(900);
+  who->add("obstacle/number",1);
+  who->set("obstacle/hf","done");
+   who->add("combat_exp",i+9000);
+   who->add("potential",i*8);
+   who->add("mpgx",10);who->add("expmax",2);
+  command("chat "+who->query("name")+"∫⁄∑Á…Ω ’Ωµ∫⁄–‹π÷£°");
+message("channel:chat",HIY"°æπ˝πÿ’∂Ω´°øπ€“Ù∆–»¯(guanyin pusa)£∫"+who->query("name")+"¥≥π˝Œ˜––»°æ≠[1;37mµ⁄Àƒπÿ£°\n"NOR,users());
+        tell_object (who,"ƒ„”Æµ√¡À"+chinese_number(i+9000)+"µ„æ≠—È"+
+               chinese_number(i*8)+"µ„«±ƒ‹"+
+               " Æµ„√≈≈…π±œ◊ ∂˛µ„≥…≥§…œœﬁ£°\n");
+
+	  command("wave");
+	  who->save();
+}
+
+void die(object me)
+{
+        destruct(me);
+}
+

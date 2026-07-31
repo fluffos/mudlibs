@@ -1,0 +1,136 @@
+#include <ansi.h>
+inherit SKILL;
+mapping *action = ({
+([  "action":       "$N端坐不动，一招「"+RED+"裂石式"+NOR+"」，手中$w抖得笔直，对准$n的胸腹要害连刺数鞭",
+   "force" : 80,
+   "lvl" : 30,
+    "skill_name" : RED "裂石式" NOR,
+    "damage_type":  "刺伤"
+]),
+([  "action":       "$N身形一转，一招「"+RED+"断川式"+NOR+"」，手中$w如矫龙般腾空一卷，猛地向$n劈头打下",
+    "force" : 120,
+    "lvl" : 36,
+    "skill_name" : RED "断川式" NOR,
+    "damage_type":  "刺伤"
+]),
+([  "action":       "$N力贯鞭梢，一招「"+HIW+"破云式"+NOR+"」，手中$w舞出满天鞭影，排山倒海般扫向$n全身",
+   "force" : 160,
+    "lvl" : 89,
+    "skill_name" : HIW "破云式" NOR,
+    "damage_type":  "刺伤"
+]),
+([  "action":       "$N力贯鞭梢，一招「"+HIW+"分海式"+NOR+"」，手中$w舞出满天鞭影，排山倒海般扫向$n全身",
+    "force" : 180,
+    "lvl" : 112,
+    "skill_name" : HIW "分海式" NOR,
+    "damage_type":  "刺伤"
+]),
+([  "action":       "$N力贯鞭梢，一招「"+BLU+"裂空式"+NOR+"」，手中$w舞出满天鞭影，排山倒海般扫向$n全身",
+    "force" : 200,
+    "lvl" : 135,
+    "skill_name" : BLU "裂空式" NOR,
+    "damage_type":  "刺伤"
+]),
+([  "action":       "$N力贯鞭梢，一招「"+BLU+"佛光普照"+NOR+"」，手中$w舞出满天鞭影，排山倒海般扫向$n全身",
+    "force" : 220,
+    "lvl" : 158,
+    "skill_name":  BLU "佛光普照" NOR,
+    "damage_type":  "刺伤"
+]),
+([  "action":       "$N力贯鞭梢，一招「"+YEL+"金刚伏魔"+NOR+"」，手中$w舞出满天鞭影，排山倒海般扫向$n全身",
+    "force" : 240,
+    "lvl" : 210,
+    "skill_name" : YEL "金刚伏魔" NOR,
+    "damage_type":  "刺伤"
+]),
+([  "action":       "$N力贯鞭梢，一招「"+HIR+"佛法无边"+NOR+"」，手中$w舞出满天鞭影，排山倒海般扫向$n全身",
+    "force" : 300,
+    "lvl" : 260,
+    "skill_name" : HIR "佛法无边" NOR,
+    "damage_type":  "刺伤"
+]),
+});
+int valid_enable(string usage) { return (usage == "whip") || (usage == "parry"); }
+
+int practice_skill(object me)
+{
+    return notify_fail("日月鞭法只能通过「"+RED+"轮字决"+NOR+"」来演练。\n");
+}
+mapping query_action(object me, object weapon)
+{
+    mapping a_action;
+    int i, level;
+    level   = (int) me->query_skill("riyue-bian", 1);
+        for(i = sizeof(action); i > 0; i--)
+                if(level > action[i-1]["lvl"]){
+                        a_action = action[NewRandom(i, 20, level/5)];
+                        break;
+                }
+    a_action["dodge"]  = 0-level;
+    a_action["parry"]  = 0-level;
+    a_action["attack"]  = level;
+    a_action["damage"] = level*3;
+    return a_action;
+
+}
+int valid_learn(object me)
+{ 
+ if ( (string)me->query("family/family_name") != "少林派") 
+return notify_fail("不是少林弟子也想学这个？\n");
+    if ((int)me->query("max_neili") < 1000)
+        return notify_fail("你的内力不够。\n");
+    if (me->query_skill("whip", 1) <=me->query_skill("riyue-bian", 1))
+        return notify_fail("你的基础不够，无法领会更高深的技巧。\n");
+    if ((int)me->query_skill("riyue-bian",1) > 150)
+        return notify_fail("这套鞭法只可以学到150级，以后要靠使用轮字决来提高了。\n"); 
+      if ((int)me->query_skill("hunyuan-yiqi", 1) < 50)
+    if ((int)me->query_skill("yijing-force", 1) < 50)
+    if ((int)me->query_skill("jiuyang-shengong", 1) < 50)
+    if ((int)me->query_skill("buddhism-force", 1) < 50)
+    if ((int)me->query_skill("taiji-shengong", 1) < 50)
+        return notify_fail("你的禅宗气功火候不够，无法学日月鞭法。\n");
+    return 1;
+} 
+mixed hit_ob(object me, object victim, int damage_bonus)
+{
+    if( damage_bonus < 100 ) return 0;
+  if( (random(10) > 5)&&me->query_skill("riyue-bian",1)>400) {
+                        victim->receive_wound("qi", (damage_bonus ));
+                        victim->add("neili", -(int)me->query("jiali"));
+return HIB "$N的日月鞭法已经达到了"BLINK  HIR"偷天换日"NOR HIB"的境界，自动摧毁了"BLINK HIW"$n"NOR HIB"的真元！！！！\n" NOR;
+         }
+}
+void do_interlink(object me, object victim)
+{
+    int skill,i,j;
+    object *enemy,weapon=me->query_temp("weapon");
+    string all_enemy;
+    
+    if (!weapon) return;
+    skill=me->query_skill("riyue-bian", 1);
+ if (random(skill)>350&&(string)me->query("family/family_name") == "少林派"&&userp(me)){
+        enemy=me->query_enemy();
+        if (!sizeof(enemy)) return;
+        if (sizeof(enemy)==1 && enemy[i]->query("eff_qi")<0 ) return;
+        all_enemy=enemy[0]->name();
+        for (i=1;i<sizeof(enemy);i++)
+            all_enemy+=("、"+enemy[i]->name());
+message_vision(HIW+"$N手中"BLINK HIB""+weapon->name()+NOR HIW"虚晃，舞出漫天鞭影，犹如一条"BLINK HIR"狂龙"NOR HIW"般卷向"BLINK HIR+all_enemy+NOR HIW"!!!!\n\n" NOR,me);
+         me->add("neili", -200);
+         for (i=0;i<sizeof(enemy);i++){
+            for (j=0;j<(skill/(60*sizeof(enemy)));j++)
+                if ((me->is_fighting(enemy[i]) || enemy[i]->is_fighting(me)) && enemy[i]->query("eff_qi")>0 ){
+                    if (environment(me) == environment(enemy[i]))
+                     {
+                        COMBAT_D->do_attack(me, enemy[i], me->query_temp("weapon"));
+                     }
+                }else break;
+        }
+      }
+}
+
+string perform_action_file(string action)
+{
+    return __DIR__"riyue-bian/" + action;
+}
+

@@ -1,0 +1,38 @@
+// SN:=[HHmZP@1JKA4nOX
+// File(/data/room/six/yingke.c) of six's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        set("short", "虎穴迎客厅");
+	set ("long", @LONG
+这里是虎穴的主人渡段迎接八方来客的地方。大凡客人来拜见渡
+段，少不得在这里寒暄叙话，了尽仰慕之情。东面通往一个茶室，是
+主人陪同客人品尝天下名茶之处。 
+LONG );
+
+	set("exits", ([
+		"north"  : __DIR__"yishiting",
+                "south"  : __DIR__"zoudao",
+                "east"   : __DIR__"chashi",
+	]));
+
+        create_door("east", "木门", "west", DOOR_CLOSED);
+
+        set("objects", ([
+                "/d/room/roomnpc/yahuan" : 2,
+        ]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("room_owner", "渡段");
+        set("room_name", "虎穴");
+        set("room_id", "huxue");
+        set("room_owner_id", "six");
+        set("room_position", "青砖路");
+}

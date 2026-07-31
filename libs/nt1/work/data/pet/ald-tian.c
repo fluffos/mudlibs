@@ -1,0 +1,18 @@
+// SN:3jSERG:U>=ko]O@N
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("田骡[2;37;0m", ({"tian luo"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "111
+它是青椒肉丝的坐骑。
+");
+        set_temp("owner_id", "ald");
+        set_temp("owner_name", "青椒肉丝");
+        ::setup();
+}
+

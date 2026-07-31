@@ -1,0 +1,137 @@
+// six.c 六脉剑气
+
+#include <ansi.h>
+#include <combat.h>
+
+inherit F_SSERVER;
+
+#define JIANQI "「" HIY "剑气纵横" NOR "」"
+
+int perform(object me, object target)
+{
+        mapping prepare;
+        string msg;
+        int skill;
+        int delta;
+        int ap, dp;
+        int i;
+        int count;
+        int jiali;
+        int add_weapon_perform_scale;
+        int add_damage;
+        int add_str;
+        int damage;
+        int counter_attack_scale;
+                
+        if (! target)
+        {
+                me->clean_up_enemy();
+                target = me->select_opponent();
+        }
+
+        if (! me->is_fighting(target))
+                return notify_fail(JIANQI "只能对战斗中的对手使用。\n");
+
+        if (me->query_skill_mapped("finger") != "six-finger")
+                return notify_fail("你没有激发六脉神剑，无法施展" JIANQI "。\n");
+
+        if (me->query_skill_prepared("finger") != "six-finger")
+                return notify_fail("你没有准备使用六脉神剑，无法施展" JIANQI "。\n");
+
+        skill = me->query_skill("six-finger", 1);
+
+        if (skill < 300)
+                return notify_fail("你的六脉神剑修为有限，无法使用" JIANQI "！\n");
+
+        if (me->query_skill("wuxing-qijian", 1) < skill * 8 / 10)
+                return notify_fail("你无形气剑不够娴熟，难以施展" JIANQI "。\n");
+                
+        if (me->query_skill("force") < 500)
+                return notify_fail("你的内功火候不够，难以施展" JIANQI "！\n");
+
+        if (me->query("max_neili") < 12000)
+                return notify_fail("你的内力修为没有达到那个境界，无法运转内力形成" JIANQI "！\n");
+
+        if (me->query("neili") < 3000)
+                return notify_fail("你的真气不够，现在无法施展" JIANQI "！\n");
+
+        if (me->query_temp("weapon"))
+                return notify_fail("你必须是空手才能施展" JIANQI "！\n");
+
+        if (! living(target))
+                return notify_fail("对方都已经这样了，用不着这么费力吧？\n");
+
+        if (random(2))
+                msg = HIY "$N" HIY "摊开双手，真气化作万千凌厉剑气，分自六脉"
+                      "激射而出，霎时间空气炙热，几欲沸腾，\n$n" HIY "只觉四"
+                      "周飕飕作响，数道炙热剑气擦身而过。\n" NOR;
+        else
+                msg = HIY "$N" HIY "摊开双手，真气化作万千凌厉剑气激射而出，"
+                      "霎时间漫天异芒，向着$n" HIY "罩去。\n" NOR;
+
+        ap = me->query("jiali") * 2;
+        dp = target->query_skill("force");
+        jiali = me->query("jiali");
+        if (ap / 2 + random(ap * 2) > dp)
+        {
+                msg += HIR "$n" HIR "见此万千剑气纵横，稍一愣神已然身陷剑网之中。\n" NOR;
+                delta = -skill / 6;
+                count = ap / 6;
+                add_weapon_perform_scale = 15;
+                add_damage = jiali / 8;
+                add_str = jiali / 12;
+                counter_attack_scale = 4;
+                me->add_temp("break/defend", me->query_skill("six-finger", 1) / 7);
+                me->set_temp("six-jianqi", 1);
+        } else
+        {
+                msg += HIC "$n" HIC "见四周剑气纵横，立即凝神抵挡。\n" NOR;
+                delta = 0;
+                count = 0;
+                add_weapon_perform_scale = 0;
+                add_damage = 0;
+                add_str = 0;
+                counter_attack_scale = 10;
+        }
+
+        message_combatd(msg, me, target);
+
+        me->add("neili", - jiali * 3);
+        target->add_temp("apply/parry", delta);
+        target->add_temp("apply/dodge", delta);
+        me->add_temp("apply/attack", count);
+        me->add_temp("weapon_perform_scale", add_weapon_perform_scale);
+        me->add_temp("apply/unarmed_damage", add_damage);
+        me->add_temp("str", add_str);
+        for (i = 0; i < 6 + random(3); i++)
+        {
+                if (! me->is_fighting(target))
+                        break;
+                if (random(2) && ! target->is_busy())
+                        target->start_busy(1);
+                me->set_temp("six-action", i);
+                if (! COMBAT_D->do_attack(me, target, 0, 0) && !random(counter_attack_scale))
+                {                       
+                        damage = jiali + random(jiali);
+                        msg = COMBAT_D->do_damage(me, target, UNARMED_ATTACK, 
+                                damage, 75, HIM "$p刚躲过数道指气，怎耐四周"
+                                "剑气纵横，几股" HIR "鲜血" HIM "顿时从身上"
+                                "飙出。\n" NOR);
+                        message_sort(msg, me, target);
+                }
+        }
+        target->add_temp("apply/parry", -delta);
+        target->add_temp("apply/dodge", -delta);
+        me->add_temp("apply/attack",  -count);
+        me->add_temp("weapon_perform_scale", -add_weapon_perform_scale);
+        me->add_temp("apply/unarmed_damage", -add_damage);
+        me->add_temp("str", -add_str);
+        me->delete_temp("break/defend");
+        me->delete_temp("six-action");
+        me->delete_temp("six-jianqi", 1);
+        me->start_busy(2 + random(5));
+        target->interrupt_me(target, 1);                
+
+        return 1;
+}
+

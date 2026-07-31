@@ -1,0 +1,36 @@
+//clone/work/dish.c     盘子          (洗盘子)
+
+inherit COMBINED_ITEM;
+
+void create()
+{
+        
+        seteuid(getuid());
+        set_name("脏盘子", ({ "dirty dish" }));
+
+        if( clonep() )
+                set_default_object(__FILE__);
+        else {
+                set("base_unit", "个");
+                set("base_value", 50);
+                set("base_wieght", 80);
+        }
+        setup();
+        set_amount(1);
+ 
+}
+
+void init()
+{
+        add_action("do_clean", "wash");
+}
+
+int do_clean()
+{
+        object ob;     
+         
+        ob = this_player();
+
+        WORK_D->start_work(ob, "kezhan");       
+        return 1;
+}

@@ -1,0 +1,31 @@
+// SN:K7hc@Igc]CPnB]^E
+// ITEM Made by player(小黑:hei) /data/item/h/hei-heic.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Sat Feb 14 15:33:52 2004
+#include <ansi.h>
+#include <armor.h>
+
+inherit HEAD;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[2;37;0m[36m跟著我一辈子[2;37;0m", ({ "heic" }));
+	set_weight(3375);
+	set("item_make", 1);
+	set("unit", "顶");
+	set("long", "这是由[37m精铁[2;37;0m炼制而成的一顶头盔。
+头盔缘上刻着一行小字：小黑(hei)
+");
+	set("value", 700000);
+	set("point", 15);
+	set("material", "iron");
+	set("wear_msg", "[33m$N[33m装备[2;37;0m[36m跟著我一辈子[2;37;0m[33m。[2;37;0m\n");
+	set("remove_msg", "[33m$N[33m脱下了[2;37;0m[36m跟著我一辈子[2;37;0m[33m。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/armor", apply_armor());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

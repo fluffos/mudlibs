@@ -1,0 +1,28 @@
+// SN:8e5\gA:I2MT_^9]M
+// File(/data/room/xunxun/key.c) of xunxun's key
+// Create by LUBAN written by Doing Lu
+
+#include <ansi.h>
+
+inherit ITEM;
+
+string query_autoload() { return "1"; }
+
+void create()
+{
+        set_name(YEL "枪下蛋家的钥匙" NOR, ({ "key", "8 of xunxun" }));
+        set_weight(10);
+        if (clonep())
+                set_default_object(__FILE__);
+        else {
+                set("long", @LONG
+一把用来开启寻寻(xunxun)的钥匙。
+这是枪下蛋第八次配的钥匙。
+LONG );
+                set("unit", "把");
+                set("no_pawn", 1);
+                set("no_sell", 1);
+                set("item_make", 1);
+                set("value", 1);
+        }
+}

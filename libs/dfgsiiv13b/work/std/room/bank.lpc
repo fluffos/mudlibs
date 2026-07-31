@@ -1,0 +1,188 @@
+// bank.c
+
+inherit ROOM;
+
+void init()
+{
+    add_action("do_convert", "convert");
+    add_action("do_deposit", "deposit");
+    add_action("do_withdraw", "withdraw");
+    add_action("do_new_account", "open");
+}
+
+int do_new_account(string arg)
+{
+    int bal;
+    object bankbond;
+
+    if( !arg || arg!="account" ) return 0;
+    if( present("bankbond", this_player()) )
+        return notify_fail("竒Τめ繷\n");
+    seteuid(geteuid(this_player()));
+    bankbond = new("/obj/bankbond");
+    if( !bankbond->move(this_player()) ) {
+        write("ō狥﹁び盿ぃ笆窥缠\n");
+        destruct(bankbond);
+        return 1;
+    }
+    bankbond->set("owner_id", geteuid(this_player()));
+    bal = this_player()->query("bank_account");
+    if( bal>0 ) {
+        write("窥缠琩癸眀茂Ι奔Θ玂靡穝祇倒眎穝\n");
+        bankbond->set_balance(bal*9/10);
+    } else if( bal==0 ) {
+        write("㎝窥缠礶┿窥┕ㄓ咎沮\n");
+        write("窥缠倒眎癘帝瞷め繷临緇ぶ窥\n");
+        bankbond->set_balance(0);
+    } else {
+        write("眀茂翴拜肈, 叫т畍は莱\n");
+        destruct(bankbond);
+    }
+    return 1;
+}
+
+int do_convert(string arg)
+{
+    string from, to;
+    int amount, bv1, bv2;
+    object from_ob, to_ob;
+
+    if( !arg || sscanf(arg, "%d %s to %s", amount, from, to)!=3 )
+        return notify_fail("Αconvert <计秖> <砯刽贺摸> to <砯刽贺摸>\n");
+
+    seteuid(getuid());
+    from_ob = present(from + "_money", this_player());
+    to_ob = present(to + "_money", this_player());
+    if( !to_ob && file_size("/obj/money/" + to + ".lpc") < 0 )
+        return notify_fail("稱传贺窥\n");
+
+    if( !from_ob )        return notify_fail("ō⊿Τ硂贺砯刽\n");
+    if( amount < 1 )    return notify_fail("传砯刽Ω︓ぶ璶传\n");
+        
+    if( (int)from_ob->query_amount() < amount )
+        return notify_fail("ō⊿Τê或" + from_ob->name() + "\n");
+
+    bv1 = from_ob->query("base_value");
+    if( !bv1 ) return notify_fail("硂贺狥﹁ぃ窥\n");
+
+    bv2 = to_ob ? to_ob->query("base_value") : call_other("/obj/money/" + to, "query", "base_value" );
+    if( !bv2 ) return notify_fail("璶传贺砯刽\n");
+
+    if( bv1 < bv2 ) amount -= amount % (bv2 / bv1);
+    if( amount==0 )    return notify_fail("硂ㄇ" + from_ob->name() + "基び传ぃ癬\n");
+
+    if( !to_ob ) {
+        to_ob = new("/obj/money/" + to);
+        to_ob->move(this_player());
+        to_ob->set_amount(amount * bv1 / bv2);
+    } else
+        to_ob->add_amount(amount * bv1 / bv2);
+
+    message_vision( sprintf("$N眖ō%s%s%s传Θ%s%s%s\n",
+        chinese_number(amount), from_ob->query("base_unit"), from_ob->name(),
+        chinese_number(amount * bv1 / bv2), to_ob->query("base_unit"), to_ob->name()),
+        this_player() );
+
+    from_ob->add_amount(-amount);
+
+    return 1;
+}
+
+int do_deposit(string arg)
+{
+    int amount;
+    string money;
+    object money_ob, bond;
+
+    seteuid(getuid());
+    if( !bond = present("bankbond", this_player()) )
+        return notify_fail("叫秨め繷\n");
+
+    if( geteuid(this_player()) != bond->query("owner_id") ) {
+        write("窥缠祇瞷┿ぃ癸⊿Μ\n");
+        destruct(bond);
+        return 1;
+    }
+
+    if( bond->query_balance() != this_player()->query("bank_account") ) {
+        write("窥缠祇瞷眀ヘぃ癸⊿Μ\n");
+        destruct(bond);
+        return 1;
+    }
+
+    if( !arg || sscanf(arg, "%d %s", amount, money)!=2 )
+        return notify_fail("Αdeposit <计秖> <砯刽贺摸>\n");
+
+    if( amount < 0 )
+        return notify_fail("ぃ箂窥刽\n");
+        
+    if( !money_ob = present(money + "_money", this_player()) )
+        return notify_fail("ō⊿Τ硂贺窥刽\n");
+
+    if( money_ob->query_amount() < amount )
+        return notify_fail("ō⊿Τ硂或" + money_ob->name() + "\n");
+
+    bond->transact(amount * money_ob->query("base_value"));
+    money_ob->add_amount( - amount );
+    write("盢" + chinese_number(amount) + money_ob->query("base_unit")
+        + money_ob->name() + "ユ澄倒窥缠窥缠穝祇倒眎穝\n");
+    this_player()->save_autoload();
+        this_player()->save();
+    return 1;
+}
+
+int do_withdraw(string arg)
+{
+    int amount;
+    string money;
+    object money_ob, bond;
+
+    seteuid(getuid());
+    if( !bond = present("bankbond", this_player()) )
+        return notify_fail("叫秨め繷\n");
+
+    if( geteuid(this_player()) != bond->query("owner_id") ) {
+        write("窥缠祇瞷┿ぃ癸⊿Μ\n");
+        destruct(bond);
+        return 1;
+    }
+
+    if( bond->query_balance() != this_player()->query("bank_account") ) {
+        write("窥缠祇瞷眀ヘぃ癸⊿Μ\n");
+        destruct(bond);
+        return 1;
+    }
+
+    if( !arg || sscanf(arg, "%d %s", amount, money)!=2 )
+        return notify_fail("Αwithdraw <计秖> <砯刽贺摸>\n");
+
+    if( amount < 0 )
+        return notify_fail("ぃ矗烩箂砯刽\n");
+
+    if( amount > 30000) 
+        return notify_fail("ぃΩ烩び\n");    
+
+    if( file_size("obj/money/" + money + ".lpc") < 0 )
+	return notify_fail("璶矗烩贺窥\n");
+
+    if( catch(money_ob = new("/obj/money/" + money)) ) return 0;
+
+    money_ob->set_amount(amount);
+    if( bond->query_balance() < money_ob->value() ) {
+        destruct(money_ob);
+        return notify_fail("め繷柑⊿Τ硂或窥\n");
+    }
+
+    bond->transact(- money_ob->value());
+    if( !money_ob->move(this_player()) ) {
+        bond->transact(money_ob->value());
+        destruct(money_ob);
+        return notify_fail("ō盿ぃ硂砛\窥矗ぶ翴\n");
+    }
+
+    write("窥缠盢" + chinese_number(amount) + money_ob->query("base_unit")
+        + money_ob->name() + "ユ澄倒穝祇倒眎穝\n");
+        this_player()->save_autoload();
+        this_player()->save();
+    return 1;
+}

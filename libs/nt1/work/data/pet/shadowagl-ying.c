@@ -1,0 +1,18 @@
+// SN:7OoF3o?CB]AHVZ^L
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("暗影神雕[2;37;0m", ({"ying diao"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "影一闪，便从空中飞过
+它是影魔的坐骑。
+");
+        set_temp("owner_id", "shadowagl");
+        set_temp("owner_name", "影魔");
+        ::setup();
+}
+

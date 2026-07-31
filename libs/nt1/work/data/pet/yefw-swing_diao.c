@@ -1,0 +1,18 @@
+// SN:M5U4o5mJQU;G4F^;
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("风云变色雕[2;37;0m", ({"swing_diao diao"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "一驾风云，天地变色
+它是夜惊魂的坐骑。
+");
+        set_temp("owner_id", "yefw");
+        set_temp("owner_name", "夜惊魂");
+        ::setup();
+}
+

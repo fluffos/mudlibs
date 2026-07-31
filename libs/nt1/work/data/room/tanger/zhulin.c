@@ -1,0 +1,29 @@
+// SN:loPRaIRHd[`7Se:e
+// File(/data/room/tanger/zhulin.c) of tanger's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "竹林");
+	set ("long", @LONG
+这里种着好大一片竹林，非常幽静。风一起就听竹叶沙沙的响，
+有时唐二就去听涛阁默听竹浪涛声，参悟武功。 
+LONG );
+
+	set("exits", ([
+                "west" : __DIR__"huayuan",
+                "east" : __DIR__"tingtao",
+	]));
+
+        set("outdoors", "playertown");
+        set("sleep_room", 1);
+        setup();
+
+        set("room_owner", "唐二");
+        set("room_name", "唐二居");
+        set("room_id", "tangr");
+        set("room_owner_id", "tanger");
+        set("room_position", "碎石小道");
+}

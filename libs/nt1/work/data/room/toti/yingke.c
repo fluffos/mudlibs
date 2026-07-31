@@ -1,0 +1,38 @@
+// SN:b]H^Zb_9fjLQR^[M
+// File(/data/room/toti/yingke.c) of toti's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        set("short", "盘龙居迎客厅");
+	set ("long", @LONG
+这里是盘龙居的主人一笑挥刀迎接八方来客的地方。大凡客人来
+拜见一笑挥刀，少不得在这里寒暄叙话，了尽仰慕之情。东面通往一
+个茶室，是主人陪同客人品尝天下名茶之处。 
+LONG );
+
+	set("exits", ([
+		"north"  : __DIR__"yishiting",
+                "south"  : __DIR__"zoudao",
+                "east"   : __DIR__"chashi",
+	]));
+
+        create_door("east", "木门", "west", DOOR_CLOSED);
+
+        set("objects", ([
+                "/d/room/roomnpc/yahuan" : 2,
+        ]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("room_owner", "一笑挥刀");
+        set("room_name", "盘龙居");
+        set("room_id", "panlongju");
+        set("room_owner_id", "toti");
+        set("room_position", "碎石小道");
+}

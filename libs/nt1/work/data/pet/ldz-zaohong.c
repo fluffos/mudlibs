@@ -1,0 +1,18 @@
+// SN:E3;TfV4SgOYEI6FG
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[31m枣红马[2;37;0m", ({"zaohong ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "就是枣红马，有什么不对？
+它是浪荡子的坐骑。
+");
+        set_temp("owner_id", "ldz");
+        set_temp("owner_name", "浪荡子");
+        ::setup();
+}
+

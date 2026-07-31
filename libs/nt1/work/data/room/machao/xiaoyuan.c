@@ -1,0 +1,38 @@
+// SN:AL1W0;=HW??nJ]o@
+// File(/data/room/machao/xiaoyuan.c) of machao's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        set("short", "寒冰洞小院");
+	set ("long", @LONG
+这里是寒冰山，寒冰山的十三峰，峰峰终年积雪不化，似一排玉
+柱立地擎天，不仅气势磅礴，而且秀丽挺拔，造型玲珑，皎洁如晶莹
+的玉石，灿烂如十三把利剑，在碧蓝天幕的映衬下，像一条银色的玉
+龙在作永恒的飞舞。[2;37;0m
+LONG );
+
+        set("room_key", "1 of machao");
+	setup();
+
+	set("exits", ([
+                "out"    : "/d/room/playtown/road8",
+	]));
+
+        set("outdoors", "playertown");
+        set("no_sleep_room", 1);
+        set("valid_startroom", 1);
+
+        set("KEY_DOOR", ([
+                "exit" : "north",
+                "room" : __DIR__"dulewu",
+        ]));
+    
+        set("room_owner", "段潇潇");
+        set("room_name", "寒冰洞");
+        set("room_id", "machao");
+        set("room_owner_id", "machao");
+        set("room_position", "三岔口");
+}

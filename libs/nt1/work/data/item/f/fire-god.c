@@ -1,0 +1,31 @@
+// SN:b09nGKP?F[BUFe3D
+// ITEM Made by player(麻仓叶:fire) /data/item/f/fire-god.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Wed Mar 31 20:09:54 2004
+#include <ansi.h>
+#include <weapon.h>
+
+inherit SWORD;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;37m御神体之剑[2;37;0m", ({ "god" }));
+	set_weight(9000);
+	set("item_make", 1);
+	set("unit", "柄");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一柄剑。
+剑柄上刻着一行小字：麻仓叶(fire)
+");
+	set("value", 2100000);
+	set("point", 542);
+	set("material", "magic stone");
+	set("wield_msg", "[1;31m超越灵魂★[1;35m阿弥陀丸——[1;37m春雨——[1;32m御神体之剑[1;34m★[2;37;0m\n");
+	set("unwield_msg", "$N随手一抹，收起了$n。\n");
+	if (! check_clone()) return;
+	restore();
+	init_sword(apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

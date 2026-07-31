@@ -1,0 +1,44 @@
+#include <ansi.h>
+#include <skill.h>
+#include <weapon.h>
+#include <combat.h>
+inherit F_SSERVER;
+ 
+int perform(object me, object target)
+{
+    object weapon, ob;
+    string msg;
+    int i;
+ 
+if ( (string)me->query("family/family_name") != "星宿派") 
+     return notify_fail("只有星宿门人才能使用该PFM。\n");
+
+
+    if( !me->is_fighting() )
+        return notify_fail("「天崩地裂」只能在战斗时使用。\n");
+     if (me->query_temp("perform")>time()) return notify_fail("你上一招未使完！\n");
+    if (!objectp(weapon = me->query_temp("secondary_weapon"))
+    || (string)weapon->query("skill_type") != "staff")
+        return notify_fail("你使用的武器不对。\n");
+    else me->set_temp("secondly_weapon",1);
+    if( (int)me->query("neili") < 200 )
+        return notify_fail("你的真气不够！\n");
+    if( (int)me->query_skill("staff") < 160 ||
+     me->query_skill_mapped("staff") != "tianshan-zhang")
+        return notify_fail("你的「天山杖法」还不够精纯，无法使用「天崩地裂」！\n");
+msg = HIC "$N将手中巨杖舞做一团，大开大阖的施展出「天崩地裂」向敌人没头没脸的狂击！！！\n" NOR;
+    message_vision(msg, me);
+    me->clean_up_enemy();
+    ob = me->select_opponent();
+    me->add("neili", -150);
+    me->set_temp("perform",time()+3);  
+     for(i = 0; i < 3; i++)
+        if (me->is_fighting(ob) && ob->is_fighting(me) && ob->query("eff_qi")>0){
+           me->set_temp("action_msg",HIW"霸气不减"NOR);
+                if (!weapon->query("equipped")) break;
+              COMBAT_D->do_attack(me, ob,weapon, 0);
+            }else break;
+    me->delete_temp("secondly_weapon");
+    return 1;
+}
+

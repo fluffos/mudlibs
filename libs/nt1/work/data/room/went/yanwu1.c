@@ -1,0 +1,33 @@
+// SN:`cl84gQ9YfZjO<bO
+// File(/data/room/went/yanwu1.c) of went's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        set("short", "段家堡演武厅");
+	set ("long", @LONG
+这是段家堡的演武厅，有时有些江湖朋友来会，想一试身手，就
+在这里比武较量。 
+LONG );
+
+	set("exits", ([
+                "west" : __DIR__"yishiting",
+	]));
+
+        set("objects", ([
+                "/clone/weapon/zhubang" : 1,
+                "/clone/weapon/zhujian" : 1,
+                "/clone/weapon/mudao"   : 1,
+        ]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("room_owner", "段轻风");
+        set("room_name", "段家堡");
+        set("room_id", "went");
+        set("room_owner_id", "went");
+        set("room_position", "碎石小道");
+}

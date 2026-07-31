@@ -1,0 +1,32 @@
+// SN:O34I;?Am2l;><1od
+// ITEM Made by player(慕容新月:xinyue) /data/item/x/xinyue-dagger.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Sat Jul 24 22:52:39 2004
+#include <ansi.h>
+#include <weapon.h>
+
+inherit DAGGER;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;34m蓝田日暖玉生烟[2;37;0m", ({ "dagger" }));
+	set_weight(1800);
+	set("item_make", 1);
+	set("unit", "支");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一支短兵。
+[1;34m一柄煞白煞白的匕首，你以为它会很冷，待到走近时却发现，原来炽热无比，竟不敢近身。[2;37;0m
+短兵柄上刻着一行小字：慕容新月(xinyue)
+");
+	set("value", 2100000);
+	set("point", 786);
+	set("material", "magic stone");
+	set("wield_msg", "[1;34m$N“唰”地一声，抽出一柄$n[1;34m，顿时炽热之气大盛，若不是$N学得玄阴之功，恐怕还真当不起这温度。\n周围的人就更别说了，一个个嗓子眼里冒烟，口渴的要命，然而四周围的水早就被蒸发走掉，哪里还有半滴水？[2;37;0m\n");
+	set("unwield_msg", "[1;34m$N放下了手中的匕首，天地间一片清凉，仿佛黄帝之女－－旱魃离开了人间，去了太阳落脚的最西边。\n周围的人顿时松了一口气，这时节才发现原来清凉的世界是如此可爱，亏得他们刚才还打的如火如荼。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	init_dagger(apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

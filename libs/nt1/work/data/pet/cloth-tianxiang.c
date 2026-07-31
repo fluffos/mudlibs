@@ -1,0 +1,18 @@
+// SN:ZKi_9X<FmcQSTnfU
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;33m酷头的宝贝鹿[2;37;0m", ({"tianxiang lu"}));        
+        set("gender", "女性");                
+        set("unit", "头");
+        set("long", "$HIY$酷头的宝贝小鹿
+它是布衣的坐骑。
+");
+        set_temp("owner_id", "cloth");
+        set_temp("owner_name", "布衣");
+        ::setup();
+}
+

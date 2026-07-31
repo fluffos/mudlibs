@@ -1,0 +1,14 @@
+void test()
+{
+    string path;
+        /*
+        object me = this_player();
+        tell_room(environment(me), "tet........\n", me);
+        tell_room(environment(me), "tet........\n");
+        tell_object(me, TMI("ptext cchat hihihi\n"));
+        tell_object(me, TMI("cchat hihihi\n"));
+        write(TMI("cchat hihihi\n"));
+        */
+        path = "abc/defghijklmnopqrstuvwxyz";
+        write(path[0..10] + "\n");
+}

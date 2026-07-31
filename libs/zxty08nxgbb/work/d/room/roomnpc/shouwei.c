@@ -1,0 +1,132 @@
+#include "/d/room/roomnpc/roomnpc.h"
+
+inherit NPC;
+inherit F_GUARDER;
+
+int  accept_object(object who, object ob);
+
+void create()
+{
+	set_name("守卫",  ({"shou wei", "wei"}) );
+	set("gender", "男性" );
+	set("age", 30 + random(30));
+	set("long", "这是看护庄园的守卫，看上去似乎身怀绝技。\n");
+	set("attitude", "friendly");
+   set("str", 2000);
+          set("zjb_dj/dj",30);
+        set("per", 30);
+        set("dex", 1000);
+    set("combat_exp", 100000000);
+        set_skill("unarmed", 320);
+       set_skill("force", 5020);
+       set_skill("hubo", 5020);
+        set_skill("unarmed", 320);
+        set_skill("sword", 320);
+       set_skill("pixie-jian", 3000);
+    set_skill("kuihua-xinfa", 1001);
+   set_skill("dodge", 2350);
+        set_skill("parry", 320);
+        set_skill("liumai-shenjian", 320);
+        set_skill("beiming-shengong", 320);
+    set_skill("tiyunzong", 3020);
+        set_temp("apply/attack", 60);
+        set_temp("apply/defense", 60);
+        set_temp("apply/armor", 60);
+        set_temp("apply/damage", 60);
+
+
+       map_skill("force", "kuihua-xinfa");
+    map_skill("sword", "pixie-jian");
+        map_skill("unarmed","liumai-shenjian");
+        map_skill("parry", "liumai-shenjian");
+   map_skill("dodge", "tiyunzong");
+        set("qi", 1500000);
+
+        set("max_qi", 1500000);
+        set("max_jing", 1500000);
+        set("jing", 1500000);
+        set("jing", 1500000);
+       set("max_neili", 1000000);
+set("neili", 8000000);
+ set("jiali", 1000);
+        set("shen", 0);
+
+
+        set("chat_chance_combat", 10000);
+        set("chat_msg_combat", ({
+          (: perform_action, "sword.cimu" :),
+(: command("hubo") :),
+  (: perform_action, "sword.qunxie" :),
+     (: perform_action, "sword.cimu" :),
+     (: perform_action, "sword.cimu" :),
+     (: perform_action, "sword.cimu" :),
+            }) ); 
+
+ //       }));
+        setup();
+
+        carry_object("/clone/weapon/gangjian")->wield();
+        carry_object("/d/city/obj/tiejia")->wear();
+}
+
+void init()
+{
+        ::init();
+        add_action("do_invite", "invite");
+        add_action("do_show", "show");
+        add_action("do_vip", "vip");
+        add_action("list_vip", "listvip");
+        add_action("buy_vip", "buyvip");       
+}
+
+int accept_object(object who, object ob)
+{
+	object obn;
+
+        if (! ob->query("money_id"))
+                return 0;
+
+        if (is_owner(who))
+        {
+                message_vision(name() + "对$N施了一礼。\n", who);
+                destruct(ob);
+                return 1;
+        }
+	return 0;
+}
+
+int accept_hit(object ob)
+{
+        if (is_owner(ob))
+        {
+                message_vision("$N连忙摆摆手，对$n道：“可不要和我开这"
+                               "种玩笑！”\n", this_object(), ob);
+                return 0;
+        }
+
+}
+
+int accept_fight(object ob)
+{
+        if (is_owner(ob))
+        {
+                message_vision("$N吓了一跳，慌忙对$n道：“小的不敢，小"
+                               "的不敢！”\n", this_object(), ob);
+                return 0;
+        }
+
+}
+
+int accept_kill(object ob)
+{
+        if (is_owner(ob))
+        {
+                message_vision("$N一声长叹，道：“既然主人不留我了，罢"
+                               "罢罢！合则留，不合则去！我走了。”\n"
+                               "说罢，$N一扬手，切下一角衣抉，飘然而去。\n",
+                               this_object(), ob);
+                destruct(this_object());
+                return 0;
+        }
+
+}

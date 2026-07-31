@@ -1,0 +1,32 @@
+// SN:h@\<G?SBHTccIhcP
+// File(/data/room/wubing/lianwu.c) of wubing's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "练武场");
+	set ("long", @LONG
+此处便是无病的练武场，人在江湖，武功万万不可荒废。 
+LONG );
+
+	set("exits", ([
+                "west" : __DIR__"houyuan",
+	]));
+
+        set("objects", ([
+                "/clone/npc/mu-ren" : 4,
+        ]));
+
+        set("outdoors", "yangzhou");
+        set("no_sleep_room", 1);
+
+        setup();
+    
+        set("room_owner", "张无病");
+        set("room_name", "无病");
+        set("room_id", "wubing");
+        set("room_owner_id", "wubing");
+        set("room_position", "树林");
+}

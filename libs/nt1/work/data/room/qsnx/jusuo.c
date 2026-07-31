@@ -1,0 +1,35 @@
+// SN:`3^GJ<5_SegYmJiO
+// File(/data/room/qsnx/jusuo.c) of qsnx's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "居所");
+	set ("long", @LONG
+这就是老年俱乐部主人胡老头休息、读书的地方。楼上就是主人
+的卧室，西面则是书房。 
+LONG );
+
+	set("exits", ([
+		"up"   : __DIR__"woshi",
+                "west" : __DIR__"shufang",
+	]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("KEY_DOOR", ([
+                "exit" : "east",
+                "room" : __DIR__"huayuan",
+        ]));
+    
+        set("room_owner", "胡老头");
+        set("room_name", "老年俱乐部");
+        set("room_id", "ltj");
+        set("room_owner_id", "qsnx");
+        set("room_position", "名人堂");
+}

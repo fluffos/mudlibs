@@ -1,0 +1,18 @@
+// SN:lUf^A^kJn`NV9m=C
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;36m神雕[2;37;0m", ({"shen diao"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "就是神雕侠侣里面那只雕拉.
+它是鬼听雨的坐骑。
+");
+        set_temp("owner_id", "stefyanzi");
+        set_temp("owner_name", "鬼听雨");
+        ::setup();
+}
+

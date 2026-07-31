@@ -1,0 +1,11 @@
+// SN:Fj9i<;Y<Ci_So7JL
+// wedding-ring.c
+
+#include "/clone/misc/wedding-ring.h"
+
+void setup()
+{
+        set("long", "这是狗狗狗和文捡的结婚戒指，是两人的定情之物。
+");
+        ::setup();
+}

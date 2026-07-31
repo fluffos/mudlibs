@@ -1,0 +1,35 @@
+// SN:Ve@m2J?3eQ]IKA6M
+// ITEM Made by player(唐三藏:gangbj) /data/item/g/gangbj-tiezhang.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Sat Oct 11 11:40:31 2003
+#include <ansi.h>
+#include <armor.h>
+
+inherit HANDS;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("铁掌[2;37;0m", ({ "tiezhang" }));
+	set_weight(2700);
+	set("item_make", 1);
+	set("unit", "双");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一双铁掌。
+一双普通的铁掌，仅此而已。[2;37;0m
+铁掌缘上刻着一行小字：唐三藏(gangbj)
+");
+	set("value", 2100000);
+	set("point", 217);
+	set("material", "magic stone");
+	set("wear_msg", "$N从怀里掏出一双$n，戴在手上。[2;37;0m\n");
+	set("remove_msg", "$N从手上除下$n，收回怀里。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/hand", 10);
+	set("armor_prop/unarmed_damage", apply_damage());
+	set("armor_prop/strike", 10);
+	set("armor_prop/armor", 10);
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

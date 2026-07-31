@@ -1,0 +1,18 @@
+// SN:8bnTY`R>Z]L0O3c^
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("小老虎虎[2;37;0m", ({"longlong hu"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "小老虎
+它是流光飞逝的坐骑。
+");
+        set_temp("owner_id", "qjwjwx");
+        set_temp("owner_name", "流光飞逝");
+        ::setup();
+}
+

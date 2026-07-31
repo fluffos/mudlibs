@@ -1,0 +1,18 @@
+// SN:YCeTiGlodf2R<X;C
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m北极熊[2;37;0m", ({"bji xiong"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "他会咬人唷! 不要换骑~他会咬人唷! 不要乱骑~
+它是慕容疯的坐骑。
+");
+        set_temp("owner_id", "kimura");
+        set_temp("owner_name", "慕容疯");
+        ::setup();
+}
+

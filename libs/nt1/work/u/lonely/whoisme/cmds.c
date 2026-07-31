@@ -1,0 +1,4 @@
+object query_maze_room(string arg)
+{
+return find_object("/u/whoisme/obj");
+}

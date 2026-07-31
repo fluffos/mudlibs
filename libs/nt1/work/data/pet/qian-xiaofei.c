@@ -1,0 +1,18 @@
+// SN:hdkk@ha?2PC;k4?5
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;35m肖飞马[2;37;0m", ({"xiaofei ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "肖飞
+它是任我行的坐骑。
+");
+        set_temp("owner_id", "qian");
+        set_temp("owner_name", "任我行");
+        ::setup();
+}
+

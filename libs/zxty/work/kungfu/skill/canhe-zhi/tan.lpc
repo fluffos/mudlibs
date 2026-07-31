@@ -1,0 +1,55 @@
+#include <ansi.h>
+
+inherit F_SSERVER;
+ 
+int perform(object me)
+{
+    string msg;
+    object weapon, weapon2, target;
+    int skill, ap, dp, damage;
+    me->clean_up_enemy();
+    target = me->select_opponent();
+    skill = me->query_skill("canhe-zhi",1);
+    if( !(me->is_fighting() ))
+        return notify_fail("「弹指江山破」只能对战斗中的对手使用。\n");
+
+ if ( (string)me->query("family/family_name") != "姑苏慕容") 
+       return notify_fail("「弹指江山破」只有姑苏慕容传人方可使用。\n");
+
+    if (!objectp(weapon2 = target->query_temp("weapon")))
+       return notify_fail("对方没有兵刃，你不用担心。\n");
+
+    if( skill < 400)
+        return notify_fail("你的参合指等级不够, 不能使用「弹指江山破」！\n"); 
+    if( me->query("neili") < 500 )
+        return notify_fail("你的内力不够，无法运用「弹指江山破」！\n"); 
+msg = HIW "$N手腕一伸，屈指施展一式「弹指江山破」，一股浑然指力弹向对手兵刃！\n";
+    message_vision(msg, me, target);
+ 
+    damage = 10 + random(skill / 2);
+ap = skill+me->query_skill("sword",1);
+    dp = target->query_skill("unarmed",1);
+    if( dp < 1 )
+        dp = 1;
+    if( random(ap) > dp )
+    {
+        if(userp(me))
+            me->add("neili",-50);
+        msg = "$n虎口巨震，大惊失色下，手中";
+        msg += weapon2->name();
+        msg += "应指飞向半空！\n" NOR;
+        target->receive_damage("qi", damage);
+        target->start_busy(2);
+        weapon2->move(environment(me));
+        }
+    else
+    {
+        if(userp(me))
+            me->add("neili",-30);
+        msg = "$n看破了$N的指头，手中" + weapon2->name() + "路走轻灵，$N顿时一指弹空。\n"NOR;
+   me->start_busy(3);
+    }
+      message_vision(msg, me, target);
+    return 1;
+}
+

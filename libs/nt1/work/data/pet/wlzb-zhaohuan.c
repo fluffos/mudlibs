@@ -1,0 +1,18 @@
+// SN:52hDdmQ_4n?oYC^k
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;31m招唤[1;37m兽[2;37;0m", ({"zhaohuan shou"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "招唤兽
+它是武林争霸的坐骑。
+");
+        set_temp("owner_id", "wlzb");
+        set_temp("owner_name", "武林争霸");
+        ::setup();
+}
+

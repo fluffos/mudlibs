@@ -1,0 +1,18 @@
+// SN:BkX[l0Q\[_::e<e9
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m飞天兽[2;37;0m", ({"feitian shou"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "有一天我要飞上天
+它是龙云的坐骑。
+");
+        set_temp("owner_id", "longyun");
+        set_temp("owner_name", "龙云");
+        ::setup();
+}
+

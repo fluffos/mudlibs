@@ -1,0 +1,46 @@
+//by pipip
+#include <ansi.h>
+inherit F_SSERVER;
+int perform(object me, object target)
+{
+    int time;
+    object weapon;
+    string msg;
+    int busy;
+    busy=(int)me->query("zjb_dj/dj")/2+1; 
+    if (busy > 20 ) busy=20;
+    if( !target ) target = offensive_target(me);
+    if( !target
+    ||  !target->is_character()
+    ||  !me->is_fighting(target) )
+        return notify_fail("「广陵剑」只能对战斗中的对手使用。\n");
+if ( (string)me->query("family/family_name") != "梅庄") 
+     return notify_fail("只有梅庄中人才能使用「广陵剑」。\n");
+    if (!objectp(weapon = me->query_temp("weapon"))
+        || (string)weapon->query("skill_type") != "sword")
+    if (!objectp(weapon = me->query_temp("secondary_weapon"))
+        || (string)weapon->query("skill_type") != "sword")
+            return notify_fail("你使用的武器不对。\n");
+      
+        if( target->is_busy() )
+                return notify_fail(target->name() + "已经忙不得了了哦！\n");
+                
+        if( (int)me->query_skill("wuxing-jianfa", 1) < 200 )
+                return notify_fail("你的无形剑法不够精纯，施展不出这一绝招。\n");
+
+    msg = HIB "$N心头灵光一现，忽然明白了广陵散的精髓所在，「"HIM"广陵剑"HIB"」旋即使出，将无形剑法发挥的淋漓尽致！\n";
+
+if( random( me->query_skill("wuxing-jianfa",1)+me->query_skill("sword",1) ) > (me->query_skill("parry",1)*2)/3 ) {
+   msg += HIB "$p欲退不能，很快的被卷入$P的剑光之中。\n" NOR;
+              target->start_busy( busy );
+   me->add("neili", -500);
+        } else {
+        me->start_busy(2);
+           me->add("neili",-300);        
+                msg += HIC "$p看穿了$N的剑尖照，右踩乾门，左蹋子位，轻轻松松避开了开去。\n" NOR;
+        }
+        message_vision(msg, me, target);
+
+        return 1;
+}
+

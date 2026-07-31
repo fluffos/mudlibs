@@ -1,0 +1,18 @@
+// SN:f[d_T>H1E;G0FcRZ
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[33m老虎[2;37;0m", ({"newerls hu"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "嘿嘿
+它是明明明明的坐骑。
+");
+        set_temp("owner_id", "newerl");
+        set_temp("owner_name", "明明明明");
+        ::setup();
+}
+

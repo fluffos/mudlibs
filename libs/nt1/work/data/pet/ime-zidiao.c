@@ -1,0 +1,18 @@
+// SN:OIO[R3j]PhlXE5S2
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;35m紫貂貂[2;37;0m", ({"zidiao diao"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "$HIM$紫貂
+它是闯越的坐骑。
+");
+        set_temp("owner_id", "ime");
+        set_temp("owner_name", "闯越");
+        ::setup();
+}
+

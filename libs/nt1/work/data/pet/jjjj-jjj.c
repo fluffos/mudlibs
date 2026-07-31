@@ -1,0 +1,18 @@
+// SN:41;k[@<VTQNfA^bF
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;32m拣拣兽[2;37;0m", ({"jjj shou"}));        
+        set("gender", "女性");                
+        set("unit", "头");
+        set("long", "我捡捡捡~~~~~
+它是捡捡的坐骑。
+");
+        set_temp("owner_id", "jjjj");
+        set_temp("owner_name", "捡捡");
+        ::setup();
+}
+

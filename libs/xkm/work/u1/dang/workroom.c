@@ -1,0 +1,49 @@
+#include <ansi.h>
+#include <room.h>
+ inherit ROOM;
+
+void create()
+
+{
+      set("short",HIY"海之韵"NOR);
+      set("long",HIG
+"这是一座位于大海边的别墅，装潢的十分典雅，大厅里放着一台钢琴，一个琴童
+正在弹揍着古老的梁祝，悠扬的琴声悦耳动听，东面有一扇落地窗,北面的墙上挂一幅
+著名的油画。\n"NOR
+);
+        set("sleep_room", 1);
+	set("exits",(["up" : "/u/jhy/kroom",
+		       "se" : "/u/seashore/workroom",
+		      "north" : "/d/wizard/meeting_room",	
+	]));
+	
+	  
+	  create_door("north", "木门", "south", DOOR_CLOSED);
+
+  	set("item_desc",([
+  	"window" : "你站在窗前举目远眺，几只海鸥在海面上迎着海浪在觅食。\n",
+	"hua" : HIR"
+	OOOOOOOOOO 
+	OOOOOOOOOOO
+	OOOOOOOOOOOO
+	( O ) ( O ) 
+       C     A     C 
+ 	)    Q	   (\n\n"NOR,  
+ 	   ]));
+  setup();
+"/clone/board/jhy_b"->foo();
+}
+
+void run(object ob)
+{
+        if (environment(ob) == this_object())
+        ob->move("/u/"+ob->query("id")+"/kroom");
+        
+}
+
+void init()
+{
+        object ob = this_player();
+
+    call_out("run", 2, ob);
+}

@@ -1,0 +1,132 @@
+// strike.c 玉女心经 「名称未定」
+// By Xuanyuan 4/21/2002
+
+/*
+小龙女那晚为此气得口喷鲜血，险些送命，这时听他狡言强辩，再也忍耐不住，
+伸手向他胸口轻轻按去，说道：“你还是别胡说的好。”此刻她玉女心经早已练成，
+这一掌按出无影无踪，而玉女心经又是全真派武功的克星，赵志敬伸手急格，不
+料小龙女的手掌早已绕过他手臂，按到了他胸口。
+
+赵志敬一格落空，大吃一惊，但对方手掌在自己胸口稍触即逝，竟无半点知觉，
+当下也不在意，冷笑道：“你摸我干么？我又不……”一言未毕，突然双目直瞪，砰
+的一声，翻身摔倒，竟已受了极重的暗伤。
+
+孙不二与郝大通见师侄受伤，急忙抢出扶起，只见他血气上涌，胀得满脸通红，
+宛似醉酒。孙不二冷笑道：“好哇，你古墓派当真是和我全真派干上了。”拔出长
+剑，就要与小龙女动手。
+
+*/
+
+#include <ansi.h>
+
+inherit F_DBASE;
+inherit F_SSERVER;
+
+int perform(object me, object target)
+{
+	string msg;
+	object weapon;
+	int skill;
+	skill = me->query_skill("tianluo-diwang",1);
+
+	if( !target ) target = offensive_target(me);
+	if( !target
+	||	!target->is_character()
+	||	!me->is_fighting(target) )
+                return notify_fail("「天罗地网」只能在战斗中使用。\n");
+
+	if((int)me->query_str() < 25)
+		return notify_fail("你臂力不够,不能使用这一绝技!\n");
+
+	if((int)me->query_skill("yunu-xinjing",1) < 100)
+		return notify_fail("你玉女心经的功力不够不能使用天罗地网!\n");
+
+	if((int)me->query_skill("strike") < 120)
+		return notify_fail("你的掌法修为不够,目前还不能使用天罗地网绝技!\n");
+
+	if((int)me->query("neili") < 300)
+		return notify_fail("你内力现在不够, 不能使用天罗地网! \n");
+
+	if( target->is_busy() )
+		return notify_fail(target->name() + "目前正自顾不暇，放胆攻击吧ⅵ\n");
+
+	if( target->query_temp("luowang") )
+		return notify_fail("对手已在你的天罗地网势之中！\n");
+
+	message_vision(HIM "\n但见$N双臂飞舞，出手挡击回臂反扑发掌奇快，但一招一式清清楚楚自成段落，两只手掌宛似化成了千手千掌！\n"NOR, me,target);
+
+	if( random(me->query("combat_exp")) > (int)target->query("combat_exp") / 2 )
+	{
+	message_vision( CYN "\n$N心下大骇，飞滚翻扑，始终逃不出$n只掌所围作的圈子! \n" NOR,target,me);
+
+		target->start_busy( (int)me->query_skill("tianluo-diwang",1) / (20+random(10)) );
+		target->add_temp("apply/parry", -skill/8);
+		target->add_temp("apply/dodge", -skill/8);
+		target->set_temp("luowang",1);
+		me->add("neili", -150);
+		call_out("checking", 1, me, target,skill);
+		if(userp(target)) call_out("remove_effect", skill/20, me, target, skill); 
+			else call_out("remove_effect", skill/30, me, target, skill);
+	}
+	else
+	{
+	message_vision( HIY "\n$N气定神弦，看破了$n的诱惑，纵身一跃，跳了开去。\n" NOR,target,me);
+		me->start_busy(1+random(3));
+		me->add("neili", -100);
+		return 1;
+	}
+
+	return 1;
+}
+
+void checking(object me, object target, int skill)
+{
+	if ( target->query_temp("luowang_finished"))
+		target->delete_temp("luowang_finished");
+	else {
+	if( !living(me) || me->is_ghost() )
+	{
+		target->delete_temp("luowang");
+		target->add_temp("apply/parry", skill/8);
+		target->add_temp("apply/dodge", skill/8);
+		remove_call_out("remove_effect");
+		message_vision(HIG"慢慢的，$n已不似初见时那么诧异万分。\n\n"NOR,me,target);
+		return ;
+	}
+	if( !me->is_fighting() )
+	{
+		target->delete_temp("luowang");
+		target->add_temp("apply/parry", skill/8);
+		target->add_temp("apply/dodge", skill/8);
+		remove_call_out("remove_effect");
+		message_vision(HIG"慢慢的，$n已不似初见时那么诧异万分。\n\n"NOR,me,target);
+		return ;
+	}
+
+	if( me->query_skill_mapped("force") != "yunu-xinjing"
+	 || me->query_skill_mapped("strike") != "tianluo-diwang"
+	 || me->query_skill_prepared("strike") != "tianluo-diwang" )
+	{
+		message_vision(HIM"\n$N骤然变换招数，不能再继续用天罗地网牵制对手的攻击！\n"NOR, me);
+		target->delete_temp("luowang");
+		target->add_temp("apply/parry", skill/8);
+		target->add_temp("apply/dodge", skill/8);
+		remove_call_out("remove_effect");
+		message_vision(HIG"慢慢的，$n已不似初见时那么诧异万分。\n\n"NOR,me,target);
+		return ;
+	}
+
+	else call_out("checking", 1, me, target,skill);
+		return;
+	}
+	return;
+}
+private int remove_effect(object me, object target, int skill)
+{
+	target->delete_temp("luowang");
+	target->add_temp("apply/parry", skill/8);
+	target->add_temp("apply/dodge", skill/8);
+	target->set_temp("luowang_finished",1);
+	message_vision(HIG"慢慢的，$n已不似初见时那么诧异万分。\n\n"NOR,me,target);
+	return 1;
+}

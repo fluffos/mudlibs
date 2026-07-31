@@ -1,0 +1,19 @@
+// SN:8\MnBc;OY?SHM6FG
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("千里马[2;37;0m", ({"qianli ma"}));        
+        set("gender", "女性");                
+        set("unit", "匹");
+        set("long", "一只纯种的千里马。
+它是无名的坐骑。
+");
+        set_temp("owner_id", "sdoy");
+        set_temp("owner_name", "无名");
+        ::setup();
+}
+
+

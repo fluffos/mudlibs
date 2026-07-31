@@ -1,0 +1,35 @@
+// SN:LId2b`60C017IXmE
+// File(/data/room/xuan/jusuo.c) of xuan's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "居所");
+	set ("long", @LONG
+这就是一间房子主人渡邪休息、读书的地方。楼上就是主人的卧
+室，西面则是书房。 
+LONG );
+
+	set("exits", ([
+		"up"   : __DIR__"woshi",
+                "west" : __DIR__"shufang",
+	]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("KEY_DOOR", ([
+                "exit" : "east",
+                "room" : __DIR__"huayuan",
+        ]));
+    
+        set("room_owner", "渡邪");
+        set("room_name", "一间房子");
+        set("room_id", "home");
+        set("room_owner_id", "xuan");
+        set("room_position", "名人堂");
+}

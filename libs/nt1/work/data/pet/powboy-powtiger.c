@@ -1,0 +1,18 @@
+// SN:1G2n_DER8>0M=>ZP
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;31m娃哈哈[1;31m虎[2;37;0m", ({"powtiger hu"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "猪一样的老虎
+它是唐三疯的坐骑。
+");
+        set_temp("owner_id", "powboy");
+        set_temp("owner_name", "唐三疯");
+        ::setup();
+}
+

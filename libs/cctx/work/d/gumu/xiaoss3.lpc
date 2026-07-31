@@ -1,0 +1,182 @@
+// Room:/d/gumu/xiaoss2.c
+// By Kayin @ CuteRabbit Studio 99-4-2 new
+#include <ansi.h>
+inherit ROOM;
+int do_climb(object me);
+int do_xia(object me);
+
+int respirate_cost;
+int respirating(object me);
+int halt_respirate(object me);
+void create()
+{
+    set("short", HIW"卧房"NOR);
+    set("long",
+"这是小龙女以前的卧房,屋里陈设简陋，墙边放着一张\n"
+""HIW"寒"HIG"玉"HIY"床"NOR"(chuang),一张石桌子，几个石椅子，别的什么都没了，\n"
+"石桌上点着一只蜡烛，微微烛光让你昏昏欲睡。\n"
+ );
+    set("exits", ([
+    "west"  : __DIR__"guodao8",
+    ]));
+    	set("item_desc", ([
+	    "chuang" : "这是一块采自天山之巅的千年寒玉,这是很多人想尽各种办法都得不到.\n你可以试着爬(pa)上去.\n",
+        ]));
+
+    set("sleep_room","1") ;
+    
+    setup();
+   
+}
+int valid_leave(object me, string dir)
+{
+	object where;
+	me=this_player();
+        where=environment(me);
+	if (dir == "west" && where->query("hanyuchuang"))
+	 return notify_fail("你还没下地(xia)呢，就想乱跑。\n");
+	return ::valid_leave(me, dir);
+}
+
+void init()
+{
+	add_action("do_climb", "climb");
+	add_action("do_climb","pa");
+	add_action("do_xia", "xia");
+	add_action("do_lianjing","lianjing");
+}
+
+int do_climb(object me)
+{      
+        me=this_player();
+	if(!me->query_skill("yunu-xinfa", 1)||(int)me->query_skill("yunu-xinfa", 1) < 10)
+	   {
+		write("你的玉女心法修为不够，抵御不了奇寒！\n");                   
+		message_vision("$N小心的爬上寒玉床,结果给冻得惨惨的，赶紧爬了下来。\n",me);
+		return 1; 
+ 	  }	
+	message_vision("$N小心翼翼的爬上寒玉床,现在打坐可以练功了。\n",me);
+	set("hanyuchuang",1);
+	return 1;	
+}
+
+int do_xia(object me)
+{
+	object where;
+	me=this_player();
+	where=environment(me);	
+	if (!where->query("hanyuchuang"))
+	 return notify_fail("你又没在寒玉床上，下到哪去呀？。\n");
+	 set("hanyuchuang",0);
+	message_vision("$N精神焕发地跳下地来。\n",me);	
+	return 1;
+}
+
+
+int do_lianjing(string arg)
+{
+	object me,where;
+	me=this_player();
+    where = environment(me);
+   
+    if ((int)me->query("age") < 30)
+            return notify_fail("你现在还年轻，以后再练吧！\n");
+
+	if ((int)me->query_skill("yihun-dafa")< 10)
+		return notify_fail("你不会移魂大法，不能练精。\n");
+		
+        if (where->query("pigging"))
+                return notify_fail("你还是专心拱猪吧！\n");
+
+        if (me->is_busy()) 
+                return notify_fail("你现在正忙着呢！\n");
+
+        if( me->is_fighting() )
+                return notify_fail("战斗中练精，好象只有神仙才能做到。\n");
+
+        if( !arg || !sscanf(arg, "%d", respirate_cost))
+                return notify_fail("你要花多少精修行？\n");
+
+        if (respirate_cost <= 0)
+                return notify_fail("你不是神仙！\n");
+
+        if( (int)me->query("jing") < respirate_cost )
+                return notify_fail("你现在精不足，无法修行精力！\n");
+
+        if( (int)me->query("qi") * 100 / (int)me->query("max_qi") < 70 )
+                return notify_fail("你现在身体状况太差了，无法集中精神！\n");
+
+        write("你闭上眼睛开始打坐。\n");
+        me->set_temp("pending/respirate", 1);
+        me->set_temp("respirate_cost", respirate_cost);
+        message_vision("$N盘膝坐下，开始吐纳炼精。\n", me);
+        me->start_busy((: respirating :), (: halt_respirate :));
+        return 1;
+}
+
+int respirating(object me)
+{
+        int temp,jingli_gain;
+        object where;
+
+        temp=(int)me->query_skill("yihun-dafa");
+        jingli_gain = 1 + temp / 5;
+        where=environment(me);
+
+        if (respirate_cost < jingli_gain)
+                jingli_gain = respirate_cost;
+
+        if(where->query("hanyuchuang"))
+        {
+        me->add("jingli", jingli_gain * 2);
+        respirate_cost -= jingli_gain;
+        me->add("jing", -jingli_gain);
+	}
+	else
+	{
+	me->add("jingli", jingli_gain);
+        respirate_cost -= jingli_gain;
+        me->add("jing", -jingli_gain);
+	}
+        if (respirate_cost > 0)
+                return 1;
+
+        me->set_temp("pending/respirate", 0);
+        respirate_cost = 0;
+        message_vision("$N练精完毕，睁开双眼，站了起来。\n", me);
+        if((int)me->query("jingli") < (int)me->query("max_jingli") * 2)
+                return 0;
+        else {
+                if ((int)me->query("max_jingli") > temp * 20)
+                {
+                        write("你的精力修为似乎已经达到了瓶颈。\n");
+                        me->set("jingli", (int)me->query("max_jingli"));
+                        return 0;
+                }
+                else
+                {
+                	if(where->query("hanyuchuang"))
+                	{
+                		me->add("max_jingli",2);
+                		me->set("jingli",(int)me->query("max_jingli"));
+                		write("你的精力修为精进了不少!!\n");
+                		return 0;
+                	}
+                	else
+                        me->add("max_jingli", 1);
+                        me->set("jingli", (int)me->query("max_jingli"));
+                        write("你的精力增加了！！\n");
+                        return 0;
+                }
+        }
+}
+
+int halt_respirate(object me)
+{
+        respirate_cost = 0;
+        if ((int)me->query("jingli") > (int)me->query("max_jingli") * 2)
+                me->set("jingli", (int)me->query("max_jingli") * 2);
+        me->set_temp("pending/respirate", 0);
+        return 1;
+}
+

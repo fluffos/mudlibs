@@ -1,0 +1,18 @@
+// SN:Ee=dR1TR06F6^1gi
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m白鹿[2;37;0m", ({"xiaobai lu"}));        
+        set("gender", "女性");                
+        set("unit", "头");
+        set("long", "上青天
+它是白小玉的坐骑。
+");
+        set_temp("owner_id", "baixiaoyu");
+        set_temp("owner_name", "白小玉");
+        ::setup();
+}
+

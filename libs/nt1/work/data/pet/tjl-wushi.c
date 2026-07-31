@@ -1,0 +1,18 @@
+// SN:4>[D0D4L8iYB1c?m
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;35m日本[1;32m武士[1;37m战[1;37m马[2;37;0m", ({"wushi ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "日本进口货
+它是羽柴秀吉的坐骑。
+");
+        set_temp("owner_id", "tjl");
+        set_temp("owner_name", "羽柴秀吉");
+        ::setup();
+}
+

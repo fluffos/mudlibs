@@ -1,0 +1,29 @@
+// SN:QaX\<W?U@l[c_ILD
+// File(/data/room/tjl/zhulin.c) of tjl's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "竹林");
+	set ("long", @LONG
+这里种着好大一片竹林，非常幽静。风一起就听竹叶沙沙的响，
+有时羽柴秀吉就去听涛阁默听竹浪涛声，参悟武功。 
+LONG );
+
+	set("exits", ([
+                "west" : __DIR__"huayuan",
+                "east" : __DIR__"tingtao",
+	]));
+
+        set("outdoors", "playertown");
+        set("sleep_room", 1);
+        setup();
+
+        set("room_owner", "羽柴秀吉");
+        set("room_name", "日本桑拿房");
+        set("room_id", "tjl");
+        set("room_owner_id", "tjl");
+        set("room_position", "碎石小道");
+}

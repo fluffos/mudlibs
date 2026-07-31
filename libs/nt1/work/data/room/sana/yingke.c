@@ -1,0 +1,38 @@
+// SN:=kYmBoU0HM6Bn2^L
+// File(/data/room/sana/yingke.c) of sana's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        set("short", "青蛙的小窝迎客厅");
+	set ("long", @LONG
+这里是青蛙的小窝的主人欧阳青蛙迎接八方来客的地方。大凡客
+人来拜见欧阳青蛙，少不得在这里寒暄叙话，了尽仰慕之情。东面通
+往一个茶室，是主人陪同客人品尝天下名茶之处。 
+LONG );
+
+	set("exits", ([
+		"north"  : __DIR__"yishiting",
+                "south"  : __DIR__"zoudao",
+                "east"   : __DIR__"chashi",
+	]));
+
+        create_door("east", "木门", "west", DOOR_CLOSED);
+
+        set("objects", ([
+                "/d/room/roomnpc/yahuan" : 2,
+        ]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("room_owner", "欧阳青蛙");
+        set("room_name", "青蛙的小窝");
+        set("room_id", "frog");
+        set("room_owner_id", "sana");
+        set("room_position", "碎石小道");
+}

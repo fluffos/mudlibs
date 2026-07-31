@@ -1,0 +1,18 @@
+// SN:enKe^]7fnCaVS7PO
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("小马[2;37;0m", ({"xxiao ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "一匹小马
+它是小白的坐骑。
+");
+        set_temp("owner_id", "white");
+        set_temp("owner_name", "小白");
+        ::setup();
+}
+

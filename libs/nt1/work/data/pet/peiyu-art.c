@@ -1,0 +1,18 @@
+// SN:T3iL24c7m=mNYA:a
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;31m蚂蚁绊倒的大象[2;37;0m", ({"art xiang"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "一头被蚂蚁绊倒的大象，正躺在地下呻吟。
+它是俞佩玉的坐骑。
+");
+        set_temp("owner_id", "peiyu");
+        set_temp("owner_name", "俞佩玉");
+        ::setup();
+}
+

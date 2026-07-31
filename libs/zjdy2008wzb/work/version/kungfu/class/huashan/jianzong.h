@@ -1,0 +1,40 @@
+// SN:[<8\X7A]Jdm>T5RV
+// qizong.h
+
+int permit_recruit(object ob)
+{
+        if( ob->query("family/family_name") == "华山派" )
+        {
+                command("say 哼，你还是跟着伪君子他们学习什么"
+                        "气宗的武功吧。");
+                return 0;
+        }
+
+        if( ob->query("detach/华山剑宗") ||
+            ob->query("betrayer/华山剑宗") )
+        {
+                command("say 华山派自今未成收过破门弟子！");
+                return 0;
+        }
+
+        if( ob->query("betrayer/times") && ob->query("weiwang") < 5000000 )
+        {
+                command("say 华山派讲究的就是信义，你这判师之人焉能理解？");
+                return 0;
+        }
+
+        if( ob->query("family/family_name") &&
+            ob->query("family/family_name") != "华山剑宗" )
+        {
+                if( ob->query("betrayer/times") && ob->query("weiwang") > 5000000 )
+                {
+                        command("say 既然德高往重的你有意加入华山派，我也勉为其难成全你吧！");
+                        return 1;
+                }
+
+                command("say 你既有了名师指点，还何必来我们华山派！");
+                return 0;
+        }
+
+        return 1;
+}

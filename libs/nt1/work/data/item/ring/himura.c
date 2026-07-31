@@ -1,0 +1,11 @@
+// SN:_62X<BJQb[k\4aM@
+// wedding-ring.c
+
+#include "/clone/misc/wedding-ring.h"
+
+void setup()
+{
+        set("long", "这是神谷薰和绯村剑心的结婚戒指，是两人的定情之物。
+");
+        ::setup();
+}

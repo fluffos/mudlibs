@@ -1,0 +1,18 @@
+// SN:MR2YP]9jD>ggID_o
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("宝宝鹤[2;37;0m", ({"feitian he"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "任性的我看着天空慢慢地亮起来
+它是钟情的坐骑。
+");
+        set_temp("owner_id", "cookie");
+        set_temp("owner_name", "钟情");
+        ::setup();
+}
+

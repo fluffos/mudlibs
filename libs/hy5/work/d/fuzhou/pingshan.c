@@ -1,0 +1,22 @@
+// Room: /d/fuzhou/pingshan.c
+// Date: May 12, 98  Java
+
+inherit ROOM;
+
+void create()
+{
+	set("short", "福州屏山");
+	set("long", @LONG
+屏山古称越王山，横亘福州城北，山下华林寺，构法考
+究。屏山上俯瞰榕城，历历如画。
+LONG );
+	set("exits", ([
+"northwest"    : "/d/ningbo/qsddao6",
+                "southdown" : __DIR__"beidajie",
+	]));
+	set("outdoors", "quanzhou");
+	set("no_clean_up", 0);
+	setup();
+	replace_program(ROOM);
+}
+

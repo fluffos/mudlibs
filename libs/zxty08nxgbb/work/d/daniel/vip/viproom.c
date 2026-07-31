@@ -1,0 +1,27 @@
+#include <ansi.h>
+
+inherit ROOM;
+
+void create()
+{
+        set("short", RED"VIP室"NOR);
+        set("long", @LONG
+   这里是VIP室，VIP玩家每月可到这里领取一份礼物！首次成为VIP玩
+家的,可在这里获得自己的10W星空币奖励。
+指令介绍：na all from cabinet
+          qu money from cabinet
+LONG
+        );
+        set("no_fight", 1);
+        
+         set("objects", ([
+          "/d/daniel/vip/cabinet" : 1,
+        ]));
+        set("exits", ([
+                "north" : "/d/city/chatroom",
+        ]));
+
+        setup();
+        replace_program(ROOM);
+}
+

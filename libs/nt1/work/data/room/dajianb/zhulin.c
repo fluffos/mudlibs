@@ -1,0 +1,29 @@
+// SN:egj<HU[[8eCAdcWT
+// File(/data/room/dajianb/zhulin.c) of dajianb's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "竹林");
+	set ("long", @LONG
+这里种着好大一片竹林，非常幽静。风一起就听竹叶沙沙的响，
+有时风二中就去听涛阁默听竹浪涛声，参悟武功。 
+LONG );
+
+	set("exits", ([
+                "west" : __DIR__"huayuan",
+                "east" : __DIR__"tingtao",
+	]));
+
+        set("outdoors", "hangzhou");
+        set("sleep_room", 1);
+        setup();
+
+        set("room_owner", "风二中");
+        set("room_name", "风之居");
+        set("room_id", "wind");
+        set("room_owner_id", "dajianb");
+        set("room_position", "山路");
+}

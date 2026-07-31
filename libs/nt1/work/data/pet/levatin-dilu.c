@@ -1,0 +1,18 @@
+// SN:YhjGF8B27:3B9?Pc
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m的卢马[2;37;0m", ({"dilu ma"}));        
+        set("gender", "女性");                
+        set("unit", "匹");
+        set("long", "这就是当年刘皇叔骑的骏马，听说它会防碍主人。
+它是渡苏的坐骑。
+");
+        set_temp("owner_id", "levatin");
+        set_temp("owner_name", "渡苏");
+        ::setup();
+}
+

@@ -1,0 +1,18 @@
+// SN:fJ1V4g:9Q\Z;b]5K
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("白光虎[2;37;0m", ({"queen hu"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "威猛凛凛，浑然深出放着白光，犹如天兽下凡
+它是段灵的坐骑。
+");
+        set_temp("owner_id", "fifi");
+        set_temp("owner_name", "段灵");
+        ::setup();
+}
+

@@ -1,0 +1,35 @@
+// story:yanmen3 雁门关外阻击3
+
+#include <ansi.h>
+
+void stop_story();
+
+mixed *story = ({
+        "雁门关外，杀声震天，血流成河，朔风无情的呼号.........",
+        "只听得当的一声，那辽人掷下短刀，俯身抱起他妻子的尸身和儿子。",
+        "辽人走到崖边，纵身便往深谷中跳了下去。",
+        ".........", 
+        "忽然间“哇哇”两声婴儿的啼哭，从乱石谷中传了上来。",
+        "跟着黑黝黝一件物事从谷中飞上，拍的一声轻音，正好跌在汪帮主身上。",
+        "婴儿啼哭之声一直不止，正是那个婴儿。",
+        ".........", 
+        (: stop_story :),
+});
+
+string prompt() { return HIY "【武林传奇】" NOR; }
+
+void create()
+{
+        seteuid(getuid());
+}
+
+mixed query_story_message(int step)
+{
+        return step < sizeof(story) ? story[step] : 0;
+}
+
+void stop_story()
+{
+        CHANNEL_D->do_channel(this_object(), "rumor", 
+                "雁门关外又恢复了往常的平静，然而带头大哥和众人的心却永远平静不下来。"); 
+}

@@ -1,0 +1,104 @@
+void init()
+{
+	object me = this_player();
+
+	if( !wizardp(me) && this_object()->is_proom() && me->query("id")!=this_object()->query("pname") && me->query("id")!="rock mirror" && me->query("id")!="mu ren"   )
+	{
+		me->move("/d/city/guangchang");
+		message_vision("\n"HIW"$N被赶了出来。NOR\n""\n",me);
+	}
+
+	if (me->query("env/combatd") ) me->delete("env/combatd");
+
+	if( me->query_condition("killer") )
+	{
+		me->move("/d/city/guangchang");
+		message_vision(HIW"因为$N杀了人所以被赶了出来。\n"NOR,me);
+	}
+	add_action("do_zyao", "zhong"); 
+	add_action("do_look", "look"); 
+	add_action("do_shou", "shou"); 
+}
+
+int do_look()
+{
+	object me = this_player();
+	"/cmds/std/look"->main(me,0);
+	tell_object(me,HIW"你不禁想到，这里正是种植药材的好地方啊。\n"NOR);
+	return 1;
+}
+
+int do_zyao(string arg)
+{
+	object me = this_player();
+	object item;
+	
+	if(!arg || !stringp(arg)) return notify_fail("你要种植什么？\n");
+
+	if(!item = present(arg,me)) return notify_fail("你身上没这个草药。\n");
+
+	if(!item->is_yao()) return notify_fail("这是药吗？或者它根本没法移植栽种。\n");
+
+	if(me->query_level() < 150)
+		return notify_fail("你等级太低，阅历太浅，根本不足以识别和种植草药。\n");
+	
+	if(me->query("zyao/time"))
+		return notify_fail(sprintf("你种的%s尚未采摘。\n",me->query("zyao/name")));
+	
+	me->set("zyao/time",time()+(1+item->query("level"))*10);
+	me->set("zyao/level",item->query("level"));
+	if(!item->query("_name")) item->set("_name",item->query("name"));
+	me->set("zyao/name",item->query("_name"));
+
+	destruct(item);
+	
+	return notify_fail(sprintf("你种下了一株%s。\n",me->query("zyao/name")));
+}
+
+int do_shou()
+{
+	object me = this_player(),item;
+	int level,rand,exp,pot;
+	string name;
+	
+	if(!me->query("zyao"))
+		return notify_fail("这里并没有你种下的药草\n");
+	
+	if(me->query("zyao/time") > time())
+		return notify_fail(sprintf("你种的%s还有%d秒成熟，连根拔起未免太可惜了。\n",me->query("zyao/name"),me->query("zyao/time")-time()));
+	
+	if(me->query("zyao/time")+30 < time())
+	{
+		me->delete("zyao");
+		return notify_fail("你种的草药无人照看，已经完全枯萎了。\n");
+	}
+	
+	rand = random(1000);
+	if(rand < 1)        { name = sprintf("万年%s",me->query("zyao/name")); level = 200+me->query("zyao/level"); }
+	else if(rand < 5)   { name = sprintf("千年%s",me->query("zyao/name")); level = 150+me->query("zyao/level"); }
+	else if(rand < 10)  { name = sprintf("百年%s",me->query("zyao/name")); level = 100+me->query("zyao/level"); }
+	else if(rand < 200)  { name = sprintf("十年%s",me->query("zyao/name")); level = 50+random(me->query("zyao/level")); }
+	else { name = sprintf("成熟%s",me->query("zyao/name")); level = 10+random(me->query("zyao/level")); }
+	
+	if(item = new("/u/rock/return_obj/yao"))
+	{
+		item->set("name",name);
+		item->set("_name",me->query("zyao/name"));
+		item->set("level",level);
+		item->move(me);
+		tell_object(me,sprintf(HIG"你采摘了自己种植的%s一株。\n"NOR,name));
+	}
+	exp = level*500000;  pot = 1+random(500000);
+	if(exp < 1 || exp > 2000000000) exp = 2000000000;
+	tell_object(me,sprintf(HIW"你获得了%d点经验，%d点潜能。\n"NOR,exp,pot));
+	if(this_object()->is_proom())
+	{
+		exp *=2;
+		if(exp < 1 || exp > 2000000000) exp = 2000000000;
+		tell_object(me,sprintf(HIW"在自己家种草药，无人打扰，领悟甚多。经验翻倍至%d点。\n"NOR,exp));
+	}
+	ADD_EXP(me,exp);
+	me->add("potential",pot);
+	me->delete("zyao");
+	return 1;
+}

@@ -1,0 +1,153 @@
+#include <ansi.h>
+
+inherit ROOM;
+
+void create()
+{
+  set("short","检验殿");
+  set("long",
+      "这里是圣岛的检验殿，圣岛一直以来都是极其神秘的地方，虽然圣岛\n"
+      "并不过问“联帮”的政权事务，但在地球在危险时，圣岛会义不容辞的\n" 
+      "派出圣岛武士，全力帮助联帮，所以圣岛在招收新武士方面，极其严格。\n"
+      "但是在检验殿，除了几位身着白色战衣的武士外，你既然看不到另外的人。\n"
+      "殿的当中放着一台足有一个人高的大型电脑(computer)，电脑旁边有个手形的\n"
+    "图案，看来似有玄机。(要想进门，请使用命令fang computer)\n"
+); 
+  set("exits",([
+//      "north" :__DIR__"qianyuan",
+      "south" : __DIR__"jieyindian",
+     ]));
+        set("objects", ([
+               "/d/shendian/npc/tongshongbe" : 1,
+               "/d/shendian/npc/junqie" : 1,
+     ]));
+ set("outdoors","shendian");
+ set("dooropen",0);
+ setup();
+}
+
+void init()
+{
+    add_action("do_fang", "fang");
+    add_action("do_answer", "answer");
+}
+
+int close_computer(object me)
+{
+    object room;
+
+    if(!( room = find_object(__DIR__"zhoulang")) )
+        room = load_object(__DIR__"zhoulang");
+    if(objectp(room))
+    {
+        delete("exits/north");
+        message("vision", "只听吱的一声轻响，电脑上的人形图案消失了。\n",
+            this_object());
+        room->delete("exits/south");
+        me->delete_temp("mask/baity");
+        message("vision", "电脑上的人形图案消失了。\n", room);
+    }
+    else message("vision", "ERROR: computer not found(close).\n", room);
+}
+
+int do_fang(string arg)
+{
+    object room;
+
+    if (query("exits/north"))
+        return notify_fail("检验电脑已经把门打开了。\n");
+
+    if (!arg || (arg != "computer" && arg != "north"))
+        return notify_fail("你要把手放在那里？\n");
+
+    if(!( room = find_object(__DIR__"zhoulang")) )
+        room = load_object(__DIR__"zhoulang");
+    if(objectp(room))
+    {
+        set("exits/north", __DIR__"zhoulang");
+        message_vision("$N轻轻的把手放在电脑上，只听吱地一声，"
+            "大型显示屏上马上出现一个人形头像，\n"
+            "突然电脑上方射下道粉红色的光茫，瞬着就把$N完全包围着。\n",this_player());
+        if(this_player()->query("family/family_name") != "圣殿")
+       {
+        message_vision("过了一会儿，电脑上显示出一行字：请这位"+RANK_D->query_respect(this_player())+"说出到圣岛来有何贵干？\n",
+            this_player());
+        tell_object(this_player(),"你可以用(answer xxx)命令来回答。
+\n");
+       this_player()->set_temp("mask/baity",1);
+       }
+        room->set("exits/south", __FILE__);
+        message("vision", "只听笛笛的两声轻响，检验电脑将门关上了。\n", room);
+        remove_call_out("close_computer");
+        call_out("close_computer", 10,this_player());
+    }
+    return 1;
+}
+
+int valid_leave(object me, string dir)
+{
+    if ( dir != "north" )
+    {
+        me->delete_temp("mask/baity");
+        me->delete_temp("mask/agree");
+        return ::valid_leave(me, dir);
+    }
+    if (!query("exits/north"))
+        return 0;
+    if (!::valid_leave(me, dir))
+        return 0;
+
+    if ( (me->query("family/family_name") == "圣殿"))
+    {  
+            write(HIY"低阶武士向你微微作了个揖。，说道：辛苦了，请进。\n");
+            return 1;
+     }
+    else if (me->query_temp("mask/agree"))
+     {
+        write("低阶武士满脸笑容的看着你，走过来拍了拍你的肩膀，说道：好样的，以后我们就一起努力吧。\n");
+    return 1;
+      }
+// else
+// {
+//  return notify_fail("低阶武士说道：对不起，圣岛暂不接待外客"+RANK_D->query_respect(me)+"还是请回吧。\n"
+// }
+     
+}
+
+int do_answer(string arg)
+{
+  object me=this_player();
+  if(!me->query_temp("mask/baity"))
+    return notify_fail("什么? \n");
+  if(arg!="拜师")
+    return notify_fail("电脑显示屏中显示出一系列的问号：???????圣岛乃神圣之地，怎能容你乱搞，这位"+RANK_D->query_respect(me)+"还是马上离开吧。\n");
+  if(me->query("shen") < 0)
+     {
+     message_vision(CYN"$N回答道：我要拜师。\n"NOR,me);
+     message_vision(CYN"只见粉红色的光芒突然加强，接着电脑显示屏中显示到：经检测，这位"+RANK_D->query_respect(me)+"的邪气太重，圣岛不能收你为徒，请立即离开本岛。\n"NOR,me);
+     return 1;
+    }
+   if(me->query("int") < 10)
+      {
+     message_vision(CYN"$N回答道：我要拜师。\n"NOR,me);
+     message_vision(CYN"只见粉红色的光芒突然加强，接着电脑显示屏中显示到：经检测，这位"+RANK_D->query_respect(me)+"的先天悟性不足，实乃可惜，请立即离开本岛。\n"NOR,me);
+     return 1;
+    }
+   if(me->query("con") < 15)
+  {
+    message_vision(CYN"$N回答道：我要拜师。\n"NOR,me);
+    message_vision(CYN"只见粉红色的光芒突然加强，接着电脑显示屏中显示到：经检测，这位"+RANK_D->query_respect(me)+"的先天根骨太低了，圣岛不能收你，请立即离开本岛。\n"NOR,me);
+     return 1;
+    }
+//  if(me->query_con() < 30)
+//  {
+//    message_vision(CYN"$N回答道：我要拜师。\n"NOR,me);
+//    message_vision(CYN"只见粉红色的光芒突然加强，接着电脑显示屏中显示到：经检测，这位"+RANK_D->query_respect(me)+"的后天根骨太低了，圣派不能收你，请立即离开本岛。\n"NOR,me);
+//    return 1;
+//}
+    message_vision(CYN"$N回答道：我要拜师。\n"NOR,me);
+    message_vision(CYN"只见粉红色的光芒突然加强，电脑显示屏中显示几行文字，并随即响一起一阵美妙的音乐：经检测，这位"+RANK_D->query_respect(me)+"完全符合圣岛条件，请由侧门入内拜师，恭喜你。\n"NOR,me);
+    me->set_temp("mask/agree",1);
+    me->delete_temp("mask/baity");
+     return 1;
+}

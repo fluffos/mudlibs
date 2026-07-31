@@ -1,0 +1,66 @@
+// Copyright (C) 2003, by Lonely. All rights reserved.
+// This software can not be used, copied, or modified 
+// in any form without the written permission from authors.
+// weituo-gun.c -韦陀棍
+
+inherit SHAOLIN_SKILL;
+
+string *action_msg = ({
+        "$N一招「黄石纳履」，手中$w如蜻蜓点水般，招招向$n的下盘要害点去",
+        "$N把$w平提胸口，一拧身，一招「勒马停锋」，$w猛地撩向$n的颈部",
+        "$N一招「平地龙飞」，全身滴溜溜地在地上打个大转，举棍向$n的胸腹间戳去",
+        "$N伏地一个滚翻，一招「伏虎听风」，$w挟呼呼风声迅猛扫向$n的足胫",
+        "$N一招「流星赶月」，身棍合一，棍端逼成一条直线，流星般向顶向$n的$l",
+        "$N双手持棍划了个天地大圈，一招「红霞贯日」，一棍从圆心正中击出，撞向$n的胸口",
+        "$N一招「投鞭断流」，$w高举，以雷霆万钧之势对准$n的天灵当头劈下",
+        "$N潜运真力，一招「苍龙归海」，$w顿时长了数丈，矫龙般直射$n的胸口",
+});
+
+int valid_enable(string usage) { return  (usage == "club") || (usage == "parry"); }
+
+int valid_learn(object me)
+{
+        if ((int)me->query("max_neili") < 250)
+                return notify_fail("你的内力不够。\n");
+
+        if ((int)me->query_skill("force") < 50)
+                return notify_fail("你的内功火候太浅。\n");
+
+        if ((int)me->query_skill("club", 1) < (int)me->query_skill("weituo-gun", 1))
+                return notify_fail("你的基本棍法水平有限，无法领会更高深的韦陀棍法。\n");
+
+        return 1;
+}
+
+mapping query_action(object me, object weapon)
+{
+        return ([ 
+                "action": action_msg[random(sizeof(action_msg))], 
+                "damage": 120 + random(30), 
+                "attack": 50 + random(10),
+                "dodge" : 50 + random(10),
+                "parry" : 50 + random(10),
+                "damage_type": "挫伤", 
+        ]);
+}
+
+int practice_skill(object me)
+{
+        object weapon;
+
+        if (!objectp(weapon = me->query_temp("weapon"))
+        || (string)weapon->query("skill_type") != "club")
+                return notify_fail("你使用的武器不对。\n");
+        if ((int)me->query("qi") < 60)
+                return notify_fail("你的体力不够练韦陀棍。\n");
+        if ((int)me->query("neili") < 60)
+                return notify_fail("你的内力不够。\n");
+
+        if( (int)me->query_skill("luohan-quan", 1) < 30 )
+                return notify_fail("你的罗汉拳修为还不够。\n");
+
+        me->receive_damage("qi", 50);
+        me->add("neili", -50);
+        return 1;
+}
+

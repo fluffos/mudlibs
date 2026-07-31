@@ -1,0 +1,31 @@
+// SN:DV\i16XARW1X^ECf
+// File(/data/room/xnx/houyuan.c) of xnx's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "后院");
+	set ("long", @LONG
+花园很大，杂草丛生.要修剪的草坪和墙的四周种着粗糙的树木，
+每个花床上都长着从没见过的植物，还有很多青蛙的绿色池糖。[2;37;0m
+LONG );
+
+	set("exits", ([
+                "south" : __DIR__"zhongting",
+                "north" : __DIR__"huayuan",
+                "east"  : __DIR__"lianwu",
+                "west"  : __DIR__"chufang",
+	]));
+
+        set("outdoors", "playertown");
+        set("no_sleep_room", 1);
+        setup();
+
+        set("room_owner", "绛珠草");
+        set("room_name", "霍格沃茨");
+        set("room_id", "hgwc");
+        set("room_owner_id", "xnx");
+        set("room_position", "碎石小道");
+}

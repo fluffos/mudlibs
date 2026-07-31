@@ -1,0 +1,62 @@
+//Cracked by Roath
+
+//wzfeng 2002 1 21
+
+inherit ROOM;
+
+void create()
+{
+        set("short", "山路");
+        set("long", @LONG
+这里是一条山路，四周群山耸立，两旁长满树木和花草。山路的
+尽头种着一大片的稻草(straw)。在不远处有一座山冈，远远似乎可以
+望见有炊烟。
+LONG
+        );
+        set("exits", ([
+                "northdown" : __DIR__"shangang",
+				 "west" : __DIR__"shanlu",
+        ]));
+
+        set("item_desc",([
+                "straw" : "一大片的稻草从，稻草可以搓(cuo)成稻草绳。\n"
+        ]));
+
+	set("outdoors", "lingshedao");
+    set("rope_count", 3);
+
+	set("cost", 1);
+        setup();
+//	replace_program(ROOM);
+}
+
+void init()
+{
+                add_action("do_cuo", "cuo");
+}
+
+int     do_cuo(string arg)
+{
+                object me =     this_player();
+                object ob =     new("d/lingshedao/obj/rope");
+
+                if ( !arg || arg ==     "")     return 0;
+
+                if ( arg ==     "稻草绳" ){
+                                if (query("rope_count") < 1) {
+                                                tell_object(me, "稻草都被采光了。\n", me);
+                                                return 1;
+                                }
+                                if (this_player()->is_busy())
+                                                return notify_fail("你正忙着呢！\n");
+                                else {
+                                                message_vision("$N折下一根稻草，搓成一条稻草绳。\n", me);
+                                                ob->move(me);
+                                                me->start_busy(1);
+                                                add("rope_count", -1);
+                                                return 1;
+                                }
+                }
+                return 0;
+}
+

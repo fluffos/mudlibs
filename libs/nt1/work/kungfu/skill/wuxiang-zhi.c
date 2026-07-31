@@ -1,0 +1,71 @@
+// Copyright (C) 2003, by Lonely. All rights reserved.
+// This software can not be used, copied, or modified 
+// in any form without the written permission from authors.
+// wuxiang-zhi.c - 少林无相指法
+       
+inherit SHAOLIN_SKILL;
+        
+string *action_msg = ({
+        "$N随手前踏上一步，右指中宫直进，一式「无声无息」击向$n的$l",
+        "$N一招「无欲无望」，轻唱一声佛号，左右看似随意一弹，一屡劲风已射向$n",
+        "$N身形飘忽不定，一式「无法无天」，右指击向$n的$l",
+        "$N脚踏七星步，突然一招「佛光普照」，左指从意想不到的角度攻向$n的各大要穴",
+        "$N一招「佛恩济世」，背朝$n，转身一指，令$n防不胜防",
+        "$N盘膝端坐，一招「佛法无边」，右手拇指弹出一道劲风，击向$n",
+        "$N双目紧闭，一招「无色无相」，聚集全身内力于一指射出一道无色劲气直逼$n",
+});
+
+int valid_enable(string usage) { return usage == "finger" || usage == "parry"; } 
+     
+int valid_combine(string combo) { return combo == "xuni-zhang"; } 
+      
+int valid_learn(object me) 
+{ 
+        if (me->query_temp("weapon") || me->query_temp("secondary_weapon")) 
+                return notify_fail("练无相指必须空手。\n"); 
+      
+        if ((int)me->query_skill("force") < 60) 
+                return notify_fail("你的内功火候不够，无法学无相指。\n"); 
+     
+        if ((int)me->query("max_neili") < 300) 
+                return notify_fail("你的内力太弱，无法练无相指。\n"); 
+      
+        if ((int)me->query_skill("finger", 1) < (int)me->query_skill("wuxiang-zhi", 1))
+                return notify_fail("你的基本指法水平有限，无法领会更高深的无相指。\n"); 
+      
+        return 1; 
+} 
+      
+mapping query_action(object me, object weapon)
+{
+        return ([
+                "action": action_msg[random(sizeof(action_msg))],
+                "force" : 260 + random(60),
+                "attack": 40 + random(10),
+                "dodge" : 40 + random(10),
+                "parry" : 40 + random(10),
+                "damage_type" : "刺伤",
+        ]);        
+}
+      
+int practice_skill(object me) 
+{ 
+        if (me->query_temp("weapon") || 
+            me->query_temp("secondary_weapon")) 
+                return notify_fail("你必须空手练习！\n"); 
+      
+        if ((int)me->query("qi") < 50) 
+                return notify_fail("你的体力太低了。\n"); 
+      
+        if ((int)me->query("neili") < 50) 
+                return notify_fail("你的内力不够练无相指。\n"); 
+      
+        me->receive_damage("qi", 40); 
+        me->add("neili", -40); 
+        return 1; 
+} 
+      
+string perform_action_file(string action) 
+{ 
+        return __DIR__"wuxiang-zhi/" + action; 
+} 

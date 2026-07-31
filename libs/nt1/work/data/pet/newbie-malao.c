@@ -1,0 +1,18 @@
+// SN:UM`P5o[QSI4B26h_
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;33m麻老虎[2;37;0m", ({"malao hu"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "一只麻老虎
+它是潇湘子的坐骑。
+");
+        set_temp("owner_id", "newbie");
+        set_temp("owner_name", "潇湘子");
+        ::setup();
+}
+

@@ -1,0 +1,18 @@
+// SN:]A1;0;Egl]X`acRb
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("杨云的乖乖兽[2;37;0m", ({"shou shou"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "杨云的乖乖
+它是杨云的坐骑。
+");
+        set_temp("owner_id", "soulking");
+        set_temp("owner_name", "杨云");
+        ::setup();
+}
+

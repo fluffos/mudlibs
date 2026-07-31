@@ -1,0 +1,187 @@
+//xiaoer.c
+// Modified by kuku@sjsh 2003.10.4 加入挖宝任务
+
+inherit F_DEALER;
+#include <ansi.h>
+
+void clear_room();
+
+int give_job();
+void create()
+{
+//          reload("city_xiaoer");
+       set_name("店小二", ({"xiao er","xiaoer","xiao","waiter","er"}));
+       set("shop_id",({"waiter","xiaoer","xiao","er"}));
+       set("shop_title","店小二");
+       set("gender", "男性");
+        set("combat_exp", 1000);
+       set("age", 26);
+       set("per", 14);
+       set("attitude", "friendly");
+       set("shen_type", 1);
+       set_skill("unarmed", 10);
+       set("max_price",20);
+        set("vendor_goods", ([   
+                "tu": "/d/city/obj/tu",
+//              "lei lingzhu": "/d/wizz/cigar/obj/leizhu",
+                "jiudai": "/d/moon/obj/jiudai",
+                "gourou": "/d/ourhome/obj/gourou",
+                "pillow": "/d/obj/misc/pillow",
+//              "cloth": "/d/wizz/junhyun/obj/gold-chanyi",
+                "fire": "/obj/fire",
+                "jitui": "/d/ourhome/obj/jitui",
+                "ball":"/d/obj/misc/crystalball",
+                "jinpai" : "/d/city/obj/jinpai" ,
+                "candle":"/d/city/npc/obj/candle",
+                "huasheng": "/d/ourhome/obj/huasheng",
+                "zhinan": "/d/obj/misc/xiaqi-zhinan",                     
+        ]) );
+
+        set("inquiry", ([ 
+                "消息" : (: give_job :),
+        ]) );
+  //      if( clonep() ) CHANNEL_D->register_relay_channel("rumor");
+       setup();
+
+       carry_object("/d/obj/cloth/linen")->wear();
+       add_money("silver", 1);
+        remove_call_out("clear_room");
+        call_out("clear_room",300);
+}
+
+void init()
+{
+        object me,ob;
+        me=this_object();
+        ob=this_player();
+       
+        ::init();
+       
+        if(ob->query_condition("no_pk_time") || ob->query("name") == "名字待定")
+          {
+                message_vision("“杀人在逃期间不要来影响我做生意!”，$N一把把$n推了出去。\n",me,ob);
+                ob->move("/d/city/zhuque-s1");
+                message_vision("$N被人一把推了过来，差点摔倒在地。\n",ob);
+                ob->start_busy(5);
+          }
+      
+                        
+       else if( interactive(ob) && !is_fighting() ) {
+                remove_call_out("greeting");
+                call_out("greeting", 1, ob);
+        }        
+}
+
+void greeting(object ob)
+{
+        if( !ob || !visible(ob) || environment(ob) != environment() ) return;
+        switch( random(3) ) {  // 1/3 chance to greet.
+                case 0:
+                        say( name()+"笑咪咪地说道：这位" +
+RANK_D->query_respect(ob)
+                                + "，进来歇歇脚，喝两盅吧。\n");
+                        break;
+        }
+}
+
+void clear_room()
+{
+        string *place1 = 
+        ({"/d/city/zhuque-s1","/d/city/center","/d/city/xuanwu-n1",
+        "/d/city/baihu-w1","/d/city/qinglong-e1",});
+        string room;
+        int race, obj,i;
+        object *inv;    
+        race = 0;
+        obj = 0;        
+        if(environment(this_object())){
+        inv = all_inventory(environment(this_object()));
+        say(name()+"抱歉地说道：“小店清扫，各位客官原谅则个。”\n");
+        for (i = 0;i <sizeof(inv);i++)
+        {
+                if(inv[i]->query("race")=="野兽") 
+                {
+                        room = place1[random(5)];
+                        say(inv[i]->query("name")+"被"+name()+"用扫帚赶了出去。\n");
+                        inv[i]->set_temp("no_return",0);
+                        inv[i]->set_temp("rider",0);
+                        inv[i]->move(room);
+                        tell_room(environment(inv[i]), inv[i]->query("name")+"被"+name()+"从客栈赶了出来。\n");
+                        race++;
+                }
+                else if(!inv[i]->is_character()&&!inv[i]->query("board_id"))
+                 {obj++; 
+                 destruct(inv[i]);}
+                else if(inv[i]->query_temp("ridee"))
+                {
+                        inv[i]->set_temp("ridee",0);
+                        inv[i]->add_temp("apply/dodge",-inv[i]->query_temp("ride/dodge"));
+                 }
+        }
+     }
+      remove_call_out("clear_room");
+      call_out("clear_room",600);
+}
+
+int accept_object(object who, object ob)
+{
+    	int value;
+
+	if (ob->query("money_id") && (value=ob->value()) >= 10000) { 
+                     tell_object(who, name()+ 
+                             "说道：客官想知道什么消息尽管问。\n"); 
+                     who->set("wabao/give_gold",1); 
+                     player_pay(this_object(), 10000); 
+                     return 1; 
+             } 
+
+        else if (ob->query("money_id") && (value=ob->value()) >= 300) {
+                tell_object(who, name()+
+                        "一哈腰，说道：多谢您老，客官请上房歇息。\n");
+                who->set_temp("rent_paid",1);
+                player_pay(this_object(), 300);
+                return 1;
+        }
+        return 0;
+}
+
+int give_job()
+{
+        object me,person;
+        int t,level;
+        string where;
+        me = this_player();
+        
+        if((int)me->query("level") < 40){
+            command("say 你的级别不够呀。 \n");
+            return 1;
+        }
+        if(!userp(me)){
+                write("想浑水摸鱼？没门！！\n");
+                return 1;
+        }
+        if(!me->query("wabao/give_gold")){
+                command("say 我这里的消息可都是很值钱的，先给我一两金子吧。 \n");
+                return 1;
+        }
+        if((int) me->is_ghost()){
+            write("鬼魂不可要任务．\n");
+            return 1;
+        }
+        if( t=(int)me->query("wabao/start") ) { 
+                  if(t<=time() && time()<t+360) { 
+                      message_vision("$N说道：这么快就找到了？先歇会再说吧。\n", this_object(), me); 
+                      return 1; 
+                  }                  
+        } 
+
+        person = new("/d/quest/digmoney/robber");
+        where=person->invocation(me,level);
+        person->set("owner",me);
+        
+        tell_object(me,where+"出没，你去把他杀了吧。\n"); 
+        me->set("wabao/start", (int)time()); 
+        me->delete("wabao/give_gold");
+        message("channel:chat",YEL"【小道消息】店小二：刚听说有"+where+"出没，客官("+me->query("id")+")有能耐可以去管管这事。\n"NOR,users());          
+        return 1;
+}

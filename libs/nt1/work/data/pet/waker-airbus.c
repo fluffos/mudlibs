@@ -1,0 +1,18 @@
+// SN:_1;i=F?GdPl<gHeN
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;32m空中客车雕[2;37;0m", ({"airbus diao"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "这是空车公司的产品，很不错哦！
+它是天贼的坐骑。
+");
+        set_temp("owner_id", "waker");
+        set_temp("owner_name", "天贼");
+        ::setup();
+}
+

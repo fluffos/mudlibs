@@ -1,0 +1,18 @@
+// SN:_oSSTRW8JlADF8E`
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[37m野狼[2;37;0m", ({"idye lang"}));        
+        set("gender", "男性");                
+        set("unit", "条");
+        set("long", "哈哈哈哈哈哈哈哈哈
+它是猎人的坐骑。
+");
+        set_temp("owner_id", "hunterx");
+        set_temp("owner_name", "猎人");
+        ::setup();
+}
+

@@ -1,0 +1,18 @@
+// SN:mg]n6P\W[5ZkS]C0
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;33m血泪鹤[2;37;0m", ({"xueda he"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "爱在何方
+它是血斩的坐骑。
+");
+        set_temp("owner_id", "xuedao");
+        set_temp("owner_name", "血斩");
+        ::setup();
+}
+

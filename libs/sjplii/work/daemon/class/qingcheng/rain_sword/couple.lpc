@@ -1,0 +1,121 @@
+// 双剑合璧
+
+#include <ansi.h>
+
+inherit F_DBASE;
+inherit SSERVER;
+
+void check_fight(object me, object target, object victim, int amount);
+int remove_effect(object me, object target, int amount);
+
+int perform(object me, object target)
+{
+	int skill, skill1, skill2;
+	object weapon, victim = offensive_target(me);
+
+	if (!victim) return notify_fail("你想与谁施展「双剑合璧」？\n");
+
+	if( !target )
+		return notify_fail("你想与谁进行「双剑合璧」？\n");
+	if( target->query("id") == me->query("id") )
+		return notify_fail("你想与自己进行「双剑合璧」？\n");
+	if( victim->query("id") == target->query("id") )
+		return notify_fail("不能与你的对手进行「双剑合璧」。\n");
+	if( target->query("class") != "emei" 
+	 && me->query("class") != "qingcheng" )
+		return notify_fail("你只能与同盟剑派的弟子进行「双剑合璧」。\n");
+
+	if( !victim->is_character() || !me->is_fighting(victim) )
+		return notify_fail("只能对你正在战斗中的对手使用「双剑合璧」。\n");
+	if( !target->is_fighting(victim) )
+		return notify_fail("你的搭档不在与对手战斗中。\n");
+	if( !objectp(weapon=target->query_temp("weapon")) ||
+		(weapon->query("apply/skill_type") != "sword" &&
+		weapon->query("skill_type") != "sword" ) || 
+		target->query_skill_mapped("sword") !="wind_sword" )
+		return notify_fail("你的搭档没有在使用乱披风剑法。\n");
+	if( (int)target->query_temp("qingcheng/couple") )
+		return notify_fail("你的搭档已经在使用「双剑合璧」了。\n");
+	if( (int)me->query_temp("qingcheng/couple") )
+		return notify_fail("你已经在使用「双剑合璧」了。\n");
+	if((int)me->query("force") < 25+(int)me->query("force_factor") )
+		return notify_fail("你的内力不够！\n");
+	if((int)me->query("kee") < 100 )
+		return notify_fail("你的气血不足，没法子施用外功！\n");
+	if((int)target->query("force") < 25+(int)me->query("force_factor") )
+		return notify_fail("你的搭档内力不够！\n");
+	if((int)target->query("kee") < 100 )
+		return notify_fail("你的搭档气血不足，没法子施用外功！\n");
+
+	if( !(int)target->query_temp("qingcheng/couple_request") ) {
+		me->set_temp("qingcheng/couple_request", 1);
+		tell_object(target, me->query("name")+"向你发出「双剑合璧」请求。\n");
+		return 1;
+	}
+	target->delete_temp("qingcheng/couple_request");
+
+	me->add("force", -25-(int)me->query("force_factor"));
+	target->add("force", -25-(int)me->query("force_factor"));
+	me->receive_damage("kee", 100);
+	target->receive_damage("kee", 100);
+
+	skill1 = target->query_skill("wind_sword", 1);
+	skill2 = me->query_skill("rain_sword", 1);
+	skill = (skill1 + skill2)/2;
+	message_vision(HIY
+		"$N与$n双剑合璧，顿时剑光暴长，交相呼应，犹如疾风骤雨一般！\n"
++ victim->query("name") + "一时被压得手忙脚乱，进攻防守全都失去了章法。\n"
+		NOR, me, target);
+	me->add_temp("apply/attack", skill);
+	me->add_temp("apply/dodge",  skill);
+	me->set_temp("qingcheng/couple", 1);
+	target->add_temp("apply/attack", skill);
+	target->add_temp("apply/dodge",  skill);
+	target->set_temp("qingcheng/couple", 1);
+
+//	me->start_call_out( (: call_other, __FILE__, "check_fight", me, target, victim, skill :), 1);
+	call_out("check_fight", 1, me, target, victim, skill);
+
+	return 1;
+}
+
+void check_fight(object me, object target, object victim, int amount)
+{
+	object weapon;
+
+	if( !living(victim) || !present(victim->query("id"), environment(me)) ) 
+		remove_effect(me, target, amount);
+
+	else if(   !present(victim->query("id"), environment(me)) 
+		|| !target->is_fighting(victim)
+		|| !present(target->query("id"), environment(me)) 
+		|| !me->is_fighting(victim) ) 
+		remove_effect(me, target, amount);
+
+	else if( !objectp(weapon=me->query_temp("weapon")) ||
+		(weapon->query("apply/skill_type") != "sword" &&
+		weapon->query("skill_type") != "sword" ) || 
+		me->query_skill_mapped("sword") != "rain_sword" )
+		remove_effect(me, target, amount);
+
+	else if( !objectp(weapon=target->query_temp("weapon")) ||
+		(weapon->query("apply/skill_type") != "sword" &&
+		weapon->query("skill_type") != "sword" ) || 
+		target->query_skill_mapped("sword") != "wind_sword" )
+		remove_effect(me, target, amount);
+
+	else call_out("check_fight", 1, me, target, victim, amount);
+}
+
+int remove_effect(object me, object target, int amount)
+{
+	me->add_temp("apply/attack", -amount);
+	me->add_temp("apply/dodge", -amount);
+	target->add_temp("apply/attack", -amount);
+	target->add_temp("apply/dodge", -amount);
+	me->delete_temp("qingcheng/couple");
+	target->delete_temp("qingcheng/couple");
+	message_vision(GRN"$N和$n的「双剑合璧」招式一收，那一片片的剑雨顿时消失了．．．\n"NOR, me, target);
+	return 0;
+}
+

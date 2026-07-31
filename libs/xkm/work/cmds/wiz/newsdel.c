@@ -1,0 +1,31 @@
+//newsdel.c
+//by Seashore 2002/5/12
+
+#include <ansi.h>
+inherit F_CLEAN_UP;
+
+int main(object me, string arg)
+{
+	int news_num;
+	string *option;
+	object news_ob;
+	
+	if (! arg) return notify_fail("指令格式：newsdel <新闻编号>\n");
+	seteuid(geteuid(me));
+	if(!wizardp(me))
+		return notify_fail ("你不是巫师，不能使用这个命令。\n");
+	write(NEWS_D->do_discard(arg));
+	return 1;
+	
+}
+int help(object me)
+{
+        write(@HELP
+指令格式 : newsdel <新闻编号>
+ 
+删除新闻。
+ 
+HELP
+    );
+    return 1;
+}

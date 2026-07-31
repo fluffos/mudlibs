@@ -1,0 +1,38 @@
+// SN:aY6<\b7]k<IZH]9Q
+// File(/data/room/myselfandi/yingke.c) of myselfandi's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        set("short", "猪猪乡村别墅迎客厅");
+	set ("long", @LONG
+这里是猪猪乡村别墅的主人宇文轩迎接八方来客的地方。大凡客
+人来拜见宇文轩，少不得在这里寒暄叙话，了尽仰慕之情。东面通往
+一个茶室，是主人陪同客人品尝天下名茶之处。 
+LONG );
+
+	set("exits", ([
+		"north"  : __DIR__"yishiting",
+                "south"  : __DIR__"zoudao",
+                "east"   : __DIR__"chashi",
+	]));
+
+        create_door("east", "木门", "west", DOOR_CLOSED);
+
+        set("objects", ([
+                "/d/room/roomnpc/yahuan" : 2,
+        ]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("room_owner", "宇文轩");
+        set("room_name", "猪猪乡村别墅");
+        set("room_id", "piggyf");
+        set("room_owner_id", "myselfandi");
+        set("room_position", "树林");
+}

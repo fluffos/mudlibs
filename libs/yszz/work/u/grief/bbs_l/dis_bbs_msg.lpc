@@ -1,0 +1,211 @@
+// bbs_msg_dis.c
+// created by ammy@yszz 12/08/2000
+// 用来控制显示留言
+
+#include <ansi.h>
+#include <command.h>
+#include <login.h>
+#include <mudlib.h>     
+
+inherit F_DBASE;
+
+int wiz_lock_level = WIZ_LOCK_LEVEL;
+
+string leave_msg_player(int file_index);
+string leave_msg_towiz(int file_index);
+string leave_title_player(int file_index);
+string leave_title_wizard(int file_index);
+void leave_more(string cmd, string *text, int line);
+void confirm_enter_key(object me);
+void msg_player();
+void msg_wizard();
+//this function can be set to the logind file
+//so player can get the msg..................
+int set_wizlock(int level)
+{
+        if( wiz_level(this_player(1)) <= level )
+                return 0;
+        if( geteuid(previous_object()) != ROOT_UID )
+                return 0;
+        wiz_lock_level = level;
+        return 1;
+}
+
+void msg_player()
+{
+	int last_leave_read,i,spe_filenum;
+	string leave_msg;
+	last_leave_read=(int)this_player()->query("last_leave_read/player");
+	spe_filenum=0;
+	leave_msg="";
+// display masseage to player
+	spe_filenum=BBSFILE_D->total_file_num(BBSLEAVE_DIR);
+	if((spe_filenum==0 || last_leave_read > spe_filenum) 
+         && !wizardp(this_player()))
+        {
+        this_player()->delete("last_leave_read/player");
+        }
+	for(i=last_leave_read;i<spe_filenum;i++) {
+		if(sizeof(leave_msg_player(i)) !=0)
+                leave_msg+=leave_title_player(i)+leave_msg_player(i)+"\n";
+        }
+	this_player()->set("last_leave_read/player",spe_filenum);
+// if it is too long you can use "b" "f" to pageup or pagedown
+// if you don't want to see the board you can use "q" to quit 
+	leave_more("", explode(leave_msg, "\n"), 0);
+	return;
+}
+
+void msg_wizard()
+{
+	int last_leave_read,i,spe_filenum;
+	string leave_msg;
+	last_leave_read=(int)this_player()->query("last_leave_read/player");
+	spe_filenum=0;
+	leave_msg="";
+	if(wizardp(this_player())) 
+	{
+	last_leave_read=(int)this_player()->query("last_leave_read/wizard");
+	spe_filenum=0;
+	spe_filenum=BBSFILE_D->total_file_num(BBSLEAVE_TOWIZ_DIR);
+	if(spe_filenum==0 || last_leave_read > spe_filenum) 
+              this_player()->delete("last_leave_read/wizard");
+	for(i=last_leave_read;i<spe_filenum;i++)  {
+  		if(sizeof(leave_msg_towiz(i)) !=0)
+                {
+           	leave_msg+=leave_title_wizard(i)+leave_msg_towiz(i)+"\n";
+                                     }
+                             }
+	this_player()->set("last_leave_read/wizard",spe_filenum);
+	}
+	leave_more("", explode(leave_msg, "\n"), 0);
+	return;
+}
+		
+//player's title who write the msg
+string leave_title_player(int file_index)
+{
+	string* header;
+	string title,nul,filename,file1="",file2="",file3="",file8="";
+	title="";
+	nul=" ";
+	filename=BBSLEAVE_DIR+(string)file_index;
+	file1=read_file(filename,1,1);
+	file2=read_file(filename,2,1);
+	file3=read_file(filename,3,1);
+	file8=read_file(filename,8,1);
+	sscanf(file1,"%s\n",file1);
+	sscanf(file2,"%s\n",file2);
+	sscanf(file3,"%s\n",file3);
+	sscanf(file8,"%s\n",file8);		
+	title=HBYEL
+"□┬————————————————————————————————————┬□\n"+NOR;
+
+title=title+HBBLU+sprintf(HIW"%-79s \n" HBCYN  HIC"%-20s[%-20s]%-38s\n"HBGRN HIW"在%20s临走之前说道：%40s"+NOR+"\n",
+        file3,
+        file2,
+        file1,
+        nul,
+        ctime(to_int(file8)),
+        nul);        
+	return title;
+}
+
+//get the title msg of writing to wizqrd
+string leave_title_wizard(int file_index)
+{
+	string* header;
+	string title,nul,filename,file1="",file2="",file3="",file8="";
+	title="";
+	nul=" ";
+	filename=BBSLEAVE_TOWIZ_DIR+(string)file_index;
+	file1=read_file(filename,1,1);
+	file2=read_file(filename,2,1);
+	file3=read_file(filename,3,1);
+	file8=read_file(filename,8,1);
+	sscanf(file1,"%s\n",file1);
+	sscanf(file2,"%s\n",file2);
+	sscanf(file3,"%s\n",file3);
+	sscanf(file8,"%s\n",file8);		
+	title=HBYEL
+"□┬————————————————————————————————————┬□\n"+NOR;
+title=title+HBBLU+sprintf(HIW"%-79s \n" HBCYN  HIC"%-20s[%-20s]%-38s\n" HBGRN HIW"在%20s给巫师留言道：%40s"+NOR+"\n",
+        file3,
+        file2,
+        file1,
+        nul,
+        ctime(to_int(file8)),
+        nul);
+        return title;
+}
+string leave_msg_towiz(int file_index)
+{
+	int i;
+	string list;
+	string* list2;
+	string msg;
+//here maybe important
+ 	msg="";
+	list=read_file(BBSLEAVE_TOWIZ_DIR+(string)file_index);
+	if(!list) return 0;
+	list2 = explode(list, "\n");
+//lenth too short so don't display it
+	if(sizeof(list2) <=  10 ) return 0;
+	else if( list[10] < 2 ) return 0;
+	for(i=10;i<sizeof(list2);i++) {
+	msg+=HBBLU+sprintf(HIR+
+  "│"HIW"%-76s"+HIR+"│\n"+NOR
+                          , list2[i]);
+         }
+	return msg;
+}
+//get the msg of the player
+string leave_msg_player(int file_index)
+{
+	int i;
+	string list;
+	string* list2;
+	string msg;
+ 	msg="";
+ 	list=read_file(BBSLEAVE_DIR+(string)file_index);
+	if(!list) return 0;
+	list2 = explode(list, "\n");
+  //lenth too short so don't display it
+	if(sizeof(list2) <=  10 ) return 0;
+	else if( list[10] < 2 ) return 0;
+	for(i=10;i<sizeof(list2);i++) {
+	msg+=list2[i]+"\n";
+        }
+	return msg;
+}
+//change the more file so can be fit to this 
+//use
+void leave_more(string cmd, string *text, int line)
+{
+ 	int i,j;
+	switch(cmd) {
+ 	case "":
+ 	for(i=line + 23; line<sizeof(text) && line<i; line++)
+ 	write(text[line] + "\n");
+ 	if( line>=sizeof(text) ) {
+ 	write(HIY"\n                    "BRED"请输入回车键后结束:"NOR"");
+	input_to( (: confirm_enter_key :), this_player() );
+  	return;
+ 	}
+ 	break;
+   	case "q":
+ 	write(HIY"\n                    "BRED"请输入回车键后结束:"NOR"");
+	input_to( (: confirm_enter_key :), this_player() );
+             return;
+
+ }
+	printf(""NOR""BRED""HIY"== 未完继续 "     "%d%%"     " == (ENTER 继续下一页，q 离开)"NOR"",
+                (line*100/sizeof(text)) );
+  	input_to("leave_more", text, line);
+	return;
+}
+
+void confirm_enter_key(object me)
+{
+	write("\n");
+}	

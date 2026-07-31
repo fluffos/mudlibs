@@ -1,0 +1,18 @@
+// SN:07o]l`ZWd4TAXb]2
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("大灰狼[2;37;0m", ({"da_ lang"}));        
+        set("gender", "男性");                
+        set("unit", "条");
+        set("long", "@@
+它是明少的坐骑。
+");
+        set_temp("owner_id", "shaolin");
+        set_temp("owner_name", "明少");
+        ::setup();
+}
+

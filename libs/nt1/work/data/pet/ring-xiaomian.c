@@ -1,0 +1,18 @@
+// SN:hG[nXI4AB`[O7MFn
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[36m小绵羊[2;37;0m", ({"xiaomian yang"}));        
+        set("gender", "女性");                
+        set("unit", "头");
+        set("long", "白莲的乖乖。
+它是白莲的坐骑。
+");
+        set_temp("owner_id", "ring");
+        set_temp("owner_name", "白莲");
+        ::setup();
+}
+

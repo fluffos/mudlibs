@@ -1,0 +1,11 @@
+// SN:[JH1D`M[ZlRHEmLn
+// wedding-ring.c
+
+#include "/clone/misc/wedding-ring.h"
+
+void setup()
+{
+        set("long", "这是蔡依林和前世今生的结婚戒指，是两人的定情之物。
+");
+        ::setup();
+}

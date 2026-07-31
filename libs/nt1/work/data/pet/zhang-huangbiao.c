@@ -1,0 +1,18 @@
+// SN:IlBF]:Wf\Tn<9@Aj
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;33m黄骠马[2;37;0m", ({"huangbiao ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "$HIY$黄骠马之一
+它是张三丰的坐骑。
+");
+        set_temp("owner_id", "zhang");
+        set_temp("owner_name", "张三丰");
+        ::setup();
+}
+

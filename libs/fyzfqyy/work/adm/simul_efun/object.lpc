@@ -1,0 +1,148 @@
+// object.c
+// modified by island@fyzx (01/08/2002)
+varargs int getoid(object ob)
+{
+	int id;
+
+	if (!ob) ob = previous_object();
+	sscanf(file_name(ob), "%*s#%d", id);
+	return id;
+}
+
+// Get the owner of a file.  Used by log_error() in master.c.
+string file_owner(string file)
+{
+        string name, rest, dir;
+
+        if (file[0] != '/')
+        {
+                file = "/" + file;
+        }
+        if (sscanf(file, "/u/%s/%s/%s", dir, name, rest) == 3)
+        {
+                return name;
+        }
+        return 0;
+}
+
+// domain_file should return the domain associated with a given file.
+string domain_file(string file)
+{
+	string domain;
+
+	if (sscanf(file, "/d/%s/%*s", domain))
+		return domain;
+
+	return ROOT_UID;
+}
+
+// creator_file should return the name of the creator of a specific file.
+string creator_file(string file)
+{
+        string *path;
+
+        path = explode(file, "/") - ({ 0 });
+        switch(path[0]) {
+                case "adm":
+                        if( file==SIMUL_EFUN_OB ) return "MudOS";
+                        else return ROOT_UID;
+                case "cmds":
+                        return ROOT_UID;
+                case "d":
+			return "Domain";
+		case "daemon":
+			return "Daemon";
+                case "feature":
+                        return "Feature";
+                case "u":
+			if( sizeof(path)>=3 ) return path[1];
+                case "obj":
+			return "Obj";
+                case "std":
+                        return "Std";
+                case "quest":
+                        return "Quest";
+                default:
+                        if( this_player(1) )
+                                return getuid(this_player(1));
+                        else
+
+			return "Unknow";
+        }
+}
+
+// author_file should return the name of the author of a specific file.
+string author_file(string file)
+{
+	string name;
+
+	if (sscanf(file, "/u/%*s/%s/%*s", name))
+		return name;
+	return ROOT_UID;
+}
+
+// check the object's euid wehter is root
+int is_root(mixed ob)
+{
+        if (stringp(ob))
+                return (SECURITY_D->get_status(ob) == "(admin)");
+
+        if (objectp(ob))
+        {
+                if (geteuid(ob) == ROOT_UID)
+                        // Root object want to execute
+                        return 1;
+
+                return (SECURITY_D->get_status(geteuid(ob)) == "(admin)");
+        }
+
+        return 1;
+}
+
+// check the object's euid wehter is admin
+int is_admin(mixed ob)
+{
+        if (stringp(ob))
+                return ( SECURITY_D->get_status(geteuid(ob)) == "(admin)" && ob->query("id") == "island");
+
+        if (objectp(ob))
+        {
+                if (geteuid(ob) == ROOT_UID)
+                        // Root object want to execute
+                        return 1;
+
+                return (SECURITY_D->get_status(geteuid(ob)) == "(admin)" && ob->query("id") == "island");
+        }
+
+        return 1;
+}
+
+// Add by island@fyzx
+object unew(string str)
+{
+  object ob = new(str);
+  int    i = ob->query("unique"), j, k;
+  object *clone;
+
+  if (!i) return ob;
+  clone = filter_array(children(base_name(ob)), (: clonep :));
+  j = sizeof(clone);
+  while (j--) if (!clone[j]->query("clone_by_wizard")) {
+    if (k = clone[j]->query_amount()) i -= k;
+	else i--;
+  }
+  if (i < 0) destruct(ob);
+  return ob;
+}
+
+// simul efun:destruct
+void destruct(object ob)
+{
+	if (ob)
+        {
+		if (previous_object()) ob->remove(geteuid(previous_object()));
+		else ob->remove(0);
+	}
+
+        efun::destruct(ob);
+}

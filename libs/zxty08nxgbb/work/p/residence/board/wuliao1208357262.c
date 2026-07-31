@@ -1,0 +1,12 @@
+inherit BULLETIN_BOARD;
+
+void create()
+{
+        set_name("[1;36m圣剑[1;31m魔宫[2;37;0m的留言板",({"board"}));
+        set("location","/p/residence/wuliao1208357262");
+        set("board_id", "wuliao1208357262_banghui");
+        set("long", "这个是星空为大家写的帮派留言版。\n");
+        setup();
+        set("capacity", 100);
+        replace_program(BULLETIN_BOARD);
+}

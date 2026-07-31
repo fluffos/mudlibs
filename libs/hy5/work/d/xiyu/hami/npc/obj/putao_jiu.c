@@ -1,0 +1,32 @@
+// putao_jiu.c  葡萄酒
+// Ffox 98-4-30 20:29
+
+#include <ansi.h>
+
+inherit ITEM;
+inherit F_LIQUID;
+
+void create()
+{
+    set_name(MAG"葡萄酒"NOR, ({ "putao jiu", "jiu" }));
+    set_weight(300);
+    if (clonep())
+        set_default_object(__FILE__);
+    else {
+        set("long", "一个小小的装着葡萄酒的小酒壶。\n");
+        set("unit", "瓶");
+        set("value", 250 );
+        set("max_liquid", 40);
+    }
+    set("liquid", ([
+        "type": "alcohol",
+        "name": MAG"葡萄酒"NOR,
+        "drunk_apply": 5,
+    ]));
+}
+
+void init()
+{
+    this_object()->delete("value");
+    add_action("do_drink","drink");
+}

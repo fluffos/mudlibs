@@ -1,0 +1,18 @@
+// SN:Z]jIT1JYXMRf\1FT
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("白驹驹[2;37;0m", ({"xiao ju"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "全身净白的初生小驹
+它是铁小枫的坐骑。
+");
+        set_temp("owner_id", "nevill");
+        set_temp("owner_name", "铁小枫");
+        ::setup();
+}
+

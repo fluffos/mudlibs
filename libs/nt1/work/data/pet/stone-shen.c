@@ -1,0 +1,18 @@
+// SN:Mn_Ha[U@B64D_akE
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;32m神驹[2;37;0m", ({"shen ju"}));        
+        set("gender", "女性");                
+        set("unit", "匹");
+        set("long", "desc $HIG$举世无双的神驹。
+它是欧阳东的坐骑。
+");
+        set_temp("owner_id", "stone");
+        set_temp("owner_name", "欧阳东");
+        ::setup();
+}
+

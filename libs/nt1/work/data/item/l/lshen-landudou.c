@@ -1,0 +1,33 @@
+// SN:>jHk60?MfedSWj]Z
+// ITEM Made by player(洛神:lshen) /data/item/l/lshen-landudou.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Mon Oct 27 05:51:17 2003
+#include <ansi.h>
+#include <armor.h>
+
+inherit ARMOR;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[2;37;0m[34m蓝布肚兜[2;37;0m", ({ "landudou" }));
+	set_weight(1050);
+	set("item_make", 1);
+	set("unit", "张");
+	set("long", "这是由[1;37m冰蚕丝[2;37;0m炼制而成的一张护甲。
+掩盖了洛神的秘密。[2;37;0m
+护甲缘上刻着一行小字：洛神(lshen)
+");
+	set("value", 2100000);
+	set("point", 139);
+	set("material", "silk");
+	set("wear_msg", "$N以闪电的速度穿上了一件肚兜。[2;37;0m\n");
+	set("remove_msg", "$N羞涩地揭开最后一道防线……\n吧刚看得入迷的你脸上挨了一巴掌。\n\n\n[1;31m您的眼前一黑，接著什么也不知道了……[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/parry", apply_armor() / 15 + 1);
+	set("armor_prop/armor", apply_armor());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

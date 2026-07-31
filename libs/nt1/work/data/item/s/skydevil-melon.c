@@ -1,0 +1,32 @@
+// SN:m>0@75U=Ymc3n@h0
+// ITEM Made by player(风魔:skydevil) /data/item/s/skydevil-melon.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Mon Sep 22 11:47:30 2003
+#include <ansi.h>
+#include <weapon.h>
+
+inherit BLADE;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;33m西瓜[1;31m妖[1;34m刀[2;37;0m", ({ "melon" }));
+	set_weight(9000);
+	set("item_make", 1);
+	set("unit", "把");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一把刀。
+[1;32m传说中一把[1;31m屠杀[1;32m上万颗西瓜的[1;31m妖刀[1;32m。。。[2;37;0m
+刀柄上刻着一行小字：风魔(skydevil)
+");
+	set("value", 2100000);
+	set("point", 217);
+	set("material", "magic stone");
+	set("wield_msg", "[1;32m西瓜妖僧不知从哪里拿出一把刀开始无聊的切著[1;31m西瓜。。。[2;37;0m\n");
+	set("unwield_msg", "[1;32m”[1;36m飕。。。[1;32m”西瓜妖刀忽然消失于空气中。。。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	init_blade(apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

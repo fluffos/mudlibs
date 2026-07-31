@@ -1,0 +1,18 @@
+// SN:]OTRci>cSLTIbnmX
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("杯子的雕[2;37;0m", ({"beizi diao"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "没经验
+它是杯子的坐骑。
+");
+        set_temp("owner_id", "disz");
+        set_temp("owner_name", "杯子");
+        ::setup();
+}
+

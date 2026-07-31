@@ -1,0 +1,18 @@
+// SN:E4N54:>3C2b\B6>T
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("白龙马[2;37;0m", ({"bailong ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "白龙
+它是中文姓氏的坐骑。
+");
+        set_temp("owner_id", "suixi");
+        set_temp("owner_name", "中文姓氏");
+        ::setup();
+}
+

@@ -1,0 +1,15 @@
+inherit ROOM;
+#include <ansi.h>;
+void create()
+{
+        set("short", HIR"虎啸堂练功房"NOR);
+        set("long", "这是虎啸堂香主专用练功的地方。
+"NOR);
+        set("exits", ([ 
+	"dating":__DIR__"dating2",
+	"yushi": __DIR__"room1",
+       ]));
+        set("no_clean_up", 0);
+        setup();
+        replace_program(ROOM);
+}

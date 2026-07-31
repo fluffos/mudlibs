@@ -1,0 +1,96 @@
+#include <ansi.h>
+#include <weapon.h>
+#ifdef AS_FEATURE
+#include <dbase.h>
+#else
+inherit EQUIP;
+#endif
+
+int do_hui(object weapon);
+int do_rename(string arg);
+void init()
+{
+   if (!mapp(this_player()->query("weapon"))){
+     this_object()->owner_is_killed();
+     return;
+   }
+
+     if (this_player()!=environment()) return;
+        add_action("do_duanlian","duanlian");
+    add_action("do_hui","hui");
+    add_action("do_rename","rename");
+}
+void create()
+{   
+    object me;
+    string w_name,w_id,w_lb;
+    int w_damage;
+    me = this_player();
+//读入数据
+    if (me){
+    w_name=me->query("hecheng/name");
+    w_id = me->query("hecheng/id");
+    w_damage = me->query("hecheng/damage");
+    w_lb = me->query("hecheng/lb");
+    set("skill_type", w_lb);
+    set("weapon_prop/damage", w_damage);
+    set_name(w_name, ({w_id,"club"}));
+    set("flag", 1 | EDGED);
+    set("unit", "柄");   
+    set("no_get",1);
+    set("no_drop",1);
+    if( !query("actions") ) {
+        set("actions", (: call_other,WEAPON_D, "query_action" :) );
+        set("verbs", ({ "slash", "slice", "thrust" }) );
+    }
+
+    set("wield_msg", "$N往腰中一摸，拿出了一把"+w_name+"，端在手中\n");
+    set("unwield_msg", "$N手中"+w_name+"抖出一个棍花，眨眼间已然不见影踪。\n");
+    }
+    setup();
+}   
+int do_hui(string weapon)
+{   
+    string w_name;
+    object me;
+    me=this_player();
+    w_name=me->query("hecheng/id");
+    if( !weapon || w_name!=weapon)
+        return notify_fail("你要摧毁什么?\n");
+    message_vision(HIR "你大喝一声，一掌擎棍，一掌猛力击下。结果轰隆一声巨响"
+            +this_object()->name()+HIR+"断为两截!\n" NOR,me);
+    me->delete("hecheng");
+    
+    me->save();
+    destruct( this_object() );
+    return 1;
+}
+int do_rename(string arg)
+{
+    object me;
+    me=this_player();
+    if( !arg )
+        return notify_fail("你改什么的名字?\n");
+    arg = replace_string(arg, "$BLK$", BLK);
+    arg = replace_string(arg, "$RED$", RED);
+    arg = replace_string(arg, "$GRN$", GRN);
+    arg = replace_string(arg, "$YEL$", YEL);
+    arg = replace_string(arg, "$BLU$", BLU);
+    arg = replace_string(arg, "$MAG$", MAG);
+    arg = replace_string(arg, "$CYN$", CYN);
+    arg = replace_string(arg, "$WHT$", WHT);
+    arg = replace_string(arg, "$HIR$", HIR);
+    arg = replace_string(arg, "$HIG$", HIG);
+    arg = replace_string(arg, "$HIY$", HIY);
+    arg = replace_string(arg, "$HIB$", HIB);
+    arg = replace_string(arg, "$HIM$", HIM);
+    arg = replace_string(arg, "$HIC$", HIC);
+    arg = replace_string(arg, "$HIW$", HIW);
+    arg = replace_string(arg, "$NOR$", NOR);
+    me->set("hecheng/name",arg+NOR);
+    set("name",arg+NOR);
+    write("ok!\n");
+    this_object()->create();
+    return 1;
+}
+

@@ -1,0 +1,32 @@
+// SN:J>[K^?C[Z6cgm[iH
+// ITEM Made by player(血魔狂龙:jkkke) /data/item/j/jkkke-xuema.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Sat Sep 18 12:09:12 2004
+#include <ansi.h>
+#include <armor.h>
+
+inherit HEAD;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;33m血盔[2;37;0m", ({ "xuema" }));
+	set_weight(3375);
+	set("item_make", 1);
+	set("unit", "顶");
+	set("long", "这是由[37m精铁[2;37;0m炼制而成的一顶头盔。
+血龙[2;37;0m
+头盔缘上刻着一行小字：血魔狂龙(jkkke)
+");
+	set("value", 700000);
+	set("point", 15);
+	set("material", "iron");
+	set("wear_msg", "好一个血龙[2;37;0m\n");
+	set("remove_msg", "好一个血龙啊[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/armor", apply_armor());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

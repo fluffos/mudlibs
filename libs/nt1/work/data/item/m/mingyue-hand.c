@@ -1,0 +1,35 @@
+// SN:Q6=6ZH\?o;5]mjI0
+// ITEM Made by player(天涯狂歌:mingyue) /data/item/m/mingyue-hand.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Wed Sep  1 21:05:59 2004
+#include <ansi.h>
+#include <armor.h>
+
+inherit HANDS;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;37m清风明月[2;37;0m", ({ "hand" }));
+	set_weight(2700);
+	set("item_make", 1);
+	set("unit", "双");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一双铁掌。
+[1;37m清风明月，[1;31m江湖上一把平凡的兵器，却有不凡的威力[2;37;0m
+铁掌缘上刻着一行小字：天涯狂歌(mingyue)
+");
+	set("value", 2100000);
+	set("point", 216);
+	set("material", "magic stone");
+	set("wear_msg", "[1;32m$N[1;37m轻轻地从怀中掏出了清风明月，[1;35m一时间天下为之变色，江湖从此不再平静[2;37;0m\n");
+	set("remove_msg", "[1;32m$N[1;31m慢慢得收回了[1;37m清风明月，[35m天下间宁静了很多[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/armor", 10);
+	set("armor_prop/strike", 10);
+	set("armor_prop/hand", 10);
+	set("armor_prop/unarmed_damage", apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

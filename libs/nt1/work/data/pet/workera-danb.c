@@ -1,0 +1,18 @@
+// SN:fiRA9;Na80]9HBOC
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m药驴驴[2;37;0m", ({"danb lv"}));        
+        set("gender", "女性");                
+        set("unit", "头");
+        set("long", "炼丹专用的驴子
+它是炼丹工人的坐骑。
+");
+        set_temp("owner_id", "workera");
+        set_temp("owner_name", "炼丹工人");
+        ::setup();
+}
+

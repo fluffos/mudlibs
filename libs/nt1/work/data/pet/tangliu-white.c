@@ -1,0 +1,18 @@
+// SN:g1jP[=eTHZhQKP8X
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m白鹤[2;37;0m", ({"white he"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "是峨眉上的通灵之兽，通体雪白晶莹。
+它是唐六藏的坐骑。
+");
+        set_temp("owner_id", "tangliu");
+        set_temp("owner_name", "唐六藏");
+        ::setup();
+}
+

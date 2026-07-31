@@ -1,0 +1,3 @@
+// kunlun-zhang.c -昆仑叠掌
+inherit SKILL;
+

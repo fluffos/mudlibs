@@ -1,0 +1,32 @@
+// SN:`[gLIP_b]B5_EKkl
+// File(/data/room/longer/lianwu.c) of longer's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "练武场");
+	set ("long", @LONG
+此处便是药王山庄的练武场，人在江湖，武功万万不可荒废。 
+LONG );
+
+	set("exits", ([
+                "west" : __DIR__"houyuan",
+	]));
+
+        set("objects", ([
+                "/clone/npc/mu-ren" : 4,
+        ]));
+
+        set("outdoors", "hangzhou");
+        set("no_sleep_room", 1);
+
+        setup();
+    
+        set("room_owner", "药王");
+        set("room_name", "药王山庄");
+        set("room_id", "longroom");
+        set("room_owner_id", "longer");
+        set("room_position", "山路");
+}

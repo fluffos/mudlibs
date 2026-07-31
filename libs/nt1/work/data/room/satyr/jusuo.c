@@ -1,0 +1,35 @@
+// SN:hHc@:d[Y[_G@8C\o
+// File(/data/room/satyr/jusuo.c) of satyr's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "居所");
+	set ("long", @LONG
+这就是蚂蚁之家主人蚂蚁休息、读书的地方。楼上就是主人的卧
+室，西面则是书房。 
+LONG );
+
+	set("exits", ([
+		"up"   : __DIR__"woshi",
+                "west" : __DIR__"shufang",
+	]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("KEY_DOOR", ([
+                "exit" : "east",
+                "room" : __DIR__"huayuan",
+        ]));
+    
+        set("room_owner", "蚂蚁");
+        set("room_name", "蚂蚁之家");
+        set("room_id", "ants");
+        set("room_owner_id", "satyr");
+        set("room_position", "山路");
+}

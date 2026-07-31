@@ -1,0 +1,28 @@
+// kuku@sjsh 2003.09.14
+
+#include <ansi.h>
+#include <armor.h>
+inherit FINGER;
+inherit "/d/quest/newequip/calculate";
+
+void create()
+{
+        string msg = "";  
+        set_name(HIB"骷髅戒指"NOR, ({"kulou jiezhi", "ring"}));
+        set_weight(3000);
+        if( clonep() )
+                set_default_object(__FILE__);
+        else{
+                set("material", "silver");
+                set("unit", "只");
+                set("need_class",-1);
+                set("lvl",1);                   
+                set("Is_Diablo_Obj",1);
+                set("value", 1000);
+                set("armor_prop/armor", 25);
+        }
+        msg += "一只银质的戒指。\n"+"基本防御: "+query("armor_prop/armor")+"\n"; 
+        msg += query_desc(); 
+        set("long",msg);
+        setup();
+}

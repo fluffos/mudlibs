@@ -1,0 +1,112 @@
+//Cracked by Roath
+// message.c
+
+#include <ansi.h>
+#include <dbase.h>
+
+#define MAX_MSG_BUFFER 500
+
+static string *msg_buffer = ({});
+
+void receive_message(string msgclass, string msg)
+{
+	string subclass, *ch;
+	string trigger_cmd;
+
+    if( !interactive(this_object()) && !this_object()->query( "scheming" ) ) {
+        this_object()->relay_message(msgclass, msg);
+        return;
+    }
+
+	if( sscanf(msgclass, "%s:%s", subclass, msgclass)==2 ) {
+		switch(subclass) {
+			case "channel":
+				if( !pointerp(ch = query("channels"))
+				||	member_array(msgclass, ch)==-1 )
+					return;
+				break;
+			case "outdoor":
+				if( !environment() || !environment()->query("outdoors") )
+					return;
+				break;
+		        case "weather":
+                		if( !environment() || !environment()->query("weather") )
+                        		return;
+                		break;
+            case "system":
+                break;
+
+			default:
+				error("Message: Invalid Subclass " + subclass + ".\n");
+		}
+	}
+
+	if( query_temp("block_msg/all") || query_temp("block_msg/" + msgclass) )
+		return;
+	if( objectp(this_object()) && userp(this_object()) && living(this_object()) )
+		if ( random(this_object()->query_condition("blind")*2) >0 )return;
+
+	if( objectp(this_object()) && this_object()->query("language") == "BIG5")
+	msg = "/adm/daemons/languaged"->toBig5(msg);
+/*
+    if( stringp(msg) && this_object()->query( "scheming" ))
+    {
+        trigger_cmd = this_object()->fire_trigger(msg);
+        if ( trigger_cmd && trigger_cmd == "$gag" )
+            return;
+    }
+*/
+
+    if( stringp(msg))
+    {
+		if( this_object()->query( "scheming" ))
+		{
+			trigger_cmd = this_object()->fire_trigger(msg);
+			if ( trigger_cmd && trigger_cmd == "$gag" )
+				return;
+		}
+        if( (this_object()->fire_trigger(msg)) == -999) return; 
+    }
+
+    if (in_input(this_object()) || in_edit(this_object()) ||
+        this_object()->is_attach_system() && msgclass != "system")
+		{
+		if( sizeof(msg_buffer) < MAX_MSG_BUFFER )
+			msg_buffer += ({ msg });
+	} else
+		receive( msg );
+	call_out( "execute_tcmd", 1, trigger_cmd );
+}
+
+void execute_tcmd( string trigger_cmd )
+{
+    string *cmds;
+    int i, len;
+    if ( trigger_cmd )
+    {
+        tell_object(this_object(),"触发指令："+trigger_cmd+"\n");
+        cmds = explode( trigger_cmd, ";" );
+        len = sizeof( cmds );
+        if ( len > 10 ) len = 10;
+        for ( i = 0; i < len; i ++ )
+        {
+            command( cmds[ i ] );
+        }
+    }
+}
+
+void write_prompt()
+{
+	if( sizeof(msg_buffer) ) {
+		receive(BOLD "[输入时暂存讯息]\n" NOR);
+		for(int i=0; i<sizeof(msg_buffer); i++)
+			receive(msg_buffer[i]);
+		msg_buffer = ({});
+	}
+	write("> ");
+}
+
+void receive_snoop(string msg)
+{
+	receive("%" + msg);
+}

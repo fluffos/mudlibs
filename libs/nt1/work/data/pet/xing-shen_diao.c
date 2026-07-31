@@ -1,0 +1,18 @@
+// SN:gAV6QNeN2M@mM0Dk
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m神雕雕[2;37;0m", ({"shen_diao diao"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "一只神雕
+它是慕容袖的坐骑。
+");
+        set_temp("owner_id", "xing");
+        set_temp("owner_name", "慕容袖");
+        ::setup();
+}
+

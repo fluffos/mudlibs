@@ -1,0 +1,20 @@
+// Room: /u/cass/hg/gulou.c
+// This is a room made by roommaker. write by Fan. :)
+
+inherit ROOM;
+
+void create()
+{
+	set("short", "鼓楼");
+	set("long", @LONG
+一座重檐的木构殿楼，红墙朱栏、雕梁画栋、兽脊飞檐，在阳光映照下
+显得雄伟壮丽。楼上有一个牛皮大鼓。
+LONG
+);
+	set("exits", ([ /* sizeof() == 1 */
+  "west" : __DIR__"wumen",
+]));
+
+	setup();
+	replace_program(ROOM);
+}

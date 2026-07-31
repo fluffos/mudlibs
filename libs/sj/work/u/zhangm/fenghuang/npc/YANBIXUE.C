@@ -1,0 +1,67 @@
+#include <ansi.h>
+inherit NPC;
+inherit F_MASTER;
+inherit F_UNIQUE;void create()
+{
+        set_name("严碧雪", ({ "yan bixue", "yan" }));
+        set("nickname", HIM "智勇双全" NOR);
+        set("age", 25);
+        set("title", HIR "疾风将军" NOR);
+        set("gender", "女性");
+        set("long", "她是宗主的亲传弟子，轻功了得，智勇双全故得名疾风将军。\n");
+        set("attitude", "peaceful");
+
+        set("qi", 3000);
+        set("max_qi", 3000);
+        set("jing", 2000);
+        set("neili", 4000);
+        set("max_neili", 4000);
+        set("max_jing", 2000);
+        set("str", 32);
+        set("dex", 40);
+        set("per", 40);
+        set("combat_exp", 800000);
+        set("shen_type", 1);
+
+        set_skill("unarmed", 100);
+        set_skill("literate", 140);
+        set_skill("dodge", 180);
+        set_skill("parry", 150);
+        set_skill("sword", 160);
+        set_skill("force", 140);
+        set_skill("wuzu-xinfa", 140);
+        set_skill("shaolin-shenfa", 180);
+        set_skill("jile-dao", 160);
+        set_temp("apply/attack", 40);
+        set_temp("apply/defense", 40);
+        set_temp("apply/damage", 20);
+        set_temp("apply/armor", 40);
+        map_skill("blade", "jile-dao");
+        map_skill("parry", "jile-dao");
+        map_skill("dodge", "shaolin-shenfa");
+        map_skill("force", "wuzu-xinfa");
+        create_family("凤凰星",10,"弟子");              set("chat_chance_combat", 10);
+        setup();
+        carry_object("/u/zhangm/fenghuang/obj/blade")->wield();
+        carry_object("/u/zhangm/fenghuang/obj/pixue")->wear();
+        carry_object("/u/zhangm/fenghuang/obj/junfu")->wear();
+}
+void greeting(object ob)
+{
+        if( !ob || environment(ob) != environment() ) return;
+        if ((string)ob->query("family/family_name") == "凤凰星")
+             {
+               message_vision("严碧雪冲着$N点点头，微微笑了笑。\n",ob);
+               return;
+              }
+ }
+
+void attempt_apprentice(object ob)
+{
+     if ((int)ob->query_temp("bmark/毕业生"))
+     command("say 好吧，我收下你。\n");
+     command("recruit "+ob->query("id"));
+         ob->delete_temp("bmark/毕业生");
+    return;
+   }
+

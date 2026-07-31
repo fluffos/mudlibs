@@ -1,0 +1,18 @@
+// SN:;QSMECkSZ?iDR_Ob
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("美人豹[2;37;0m", ({"meiren bao"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "这是一只动物
+它是化缘的坐骑。
+");
+        set_temp("owner_id", "youhao");
+        set_temp("owner_name", "化缘");
+        ::setup();
+}
+

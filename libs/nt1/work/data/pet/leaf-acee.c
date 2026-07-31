@@ -1,0 +1,18 @@
+// SN:Kd<>ldk0<2IdPEY?
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;33m千王之王是色狼[2;37;0m", ({"acee lang"}));        
+        set("gender", "男性");                
+        set("unit", "条");
+        set("long", "千王之王是色狼
+它是樱叶的坐骑。
+");
+        set_temp("owner_id", "leaf");
+        set_temp("owner_name", "樱叶");
+        ::setup();
+}
+

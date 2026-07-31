@@ -1,0 +1,39 @@
+// SN:9[X98QHPmo\`C5U<
+// File(/data/room/czaudit/dating.c) of czaudit's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        set("short", "玫瑰碗大厅");
+	set ("long", @LONG
+这就是玫瑰碗主人贝壳喊木迎送客人的地方。正中有些桌椅，侧
+面是两扇屏风。东首是主人贝壳喊木的房间，有一扇木门虚掩着。南
+边是大门，出去就是院子。 
+LONG );
+
+	setup();
+
+	set("exits", ([
+                "east"   : __DIR__"woshi",
+		"north"  : __DIR__"houyuan",
+	]));
+
+        create_door("east", "木门", "west", DOOR_CLOSED);
+
+        set("no_sleep_room", 1);
+
+        set("KEY_DOOR", ([
+                "exit" : "south",
+                "room" : __DIR__"xiaoyuan",
+        ]));
+    
+        set("room_owner", "贝壳喊木");
+        set("room_name", "玫瑰碗");
+        set("room_id", "mgw");
+        set("room_owner_id", "czaudit");
+        set("room_position", "三岔口");
+}

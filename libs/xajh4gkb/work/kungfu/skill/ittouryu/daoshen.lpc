@@ -1,0 +1,94 @@
+
+#include <ansi.h>
+#include <skill.h>
+#include <weapon.h>
+#include <combat.h>
+inherit F_SSERVER;
+int perform(object me, object target)
+{
+	mixed combat_msg;
+	string msg;
+	int i, attack_time,extra;
+	object weapon;
+		
+	if( !target ) target = offensive_target(me);
+	if( !target || !target->is_character() || !me->is_fighting(target) )
+		return notify_fail("［刀神］只能对战斗中的对手使用。\n");
+	if (!objectp(weapon = me->query_temp("weapon")) || (string)weapon->query("skill_type") != "blade")
+		return notify_fail("你使用的武器不对。\n");
+//	if (target && target->query_temp("apply/shade_vision")) 
+//		return notify_fail("对方隐身了，你看不到"+target->query("name")+"。\n"); 	
+	if (me->is_busy()) 
+		return notify_fail("你现在正忙着呢！\n");
+    if ( me->query_skill("ittouryu",1) < 500) 
+		return notify_fail("你的［一刀流剑术］还不够纯熟！\n");
+	if ((int)me->query_skill("shayi-xinfa", 1) < 500)
+        return notify_fail("你的杀意心法火候不够。\n");
+//	if ( me->query_skill_mapped("force") != "shayi-xinfa")
+//		return notify_fail("你必须激发杀意心法才能使用「刀神」！\n");  
+	if( (int)me->query("neili") < 1000 )
+		return notify_fail("你的真气不够！\n");
+	if( (int)me->query("jingli") < (int)me->query_skill("shayi-xinfa", 1)*4 )
+		return notify_fail("你的精力不够。\n");	
+	if( (int)me->query("max_jingli") < 200000 )
+		return notify_fail("你的精力修为不足！\n");
+//	if (me->query_skill_mapped("blade") != "ittouryu")
+//		return notify_fail("你没正确激发该技能 。\n");
+	if (me->query_temp("autolian"))
+		return notify_fail("你正在发动自动连招！\n"); 	
+	if ( me->query_temp("cooldown") )	//CD写法	2017.9.7添加
+		return notify_fail("你处于技能冷却状态中，过会在使用吧。\n");
+
+	combat_msg = me->query("env/no_combat_msg");
+	if ( !intp(combat_msg) ) combat_msg = 1;		
+	msg = HIR  "$N使出［圆月神刀斩］中的无上绝技－－刀神！"+ weapon->name() +"划着奇异的弧线，急斩$n！" NOR;
+	message_vision(msg, me, target);
+	extra = (int)me->query_skill("ittouryu",1)/3;
+	if ( me->query_skill_mapped("force")!="shayi-xinfa" ) extra += me->query_skill("huoxinliu-jianfa", 1)/2;	//2018.9.5阿飞改，不使用本门特内则减益
+	if ((string)weapon->query("id") == "ba dao") extra -= me->query_skill("ittouryu", 1)/3; //2018.3.25阿飞改，拿特殊武器有加成	
+	me->set_temp("cooldown", 1);	//CD写法	2017.9.7添加
+	call_out("del_cooldown", 3, me);	//CD写法1	
+	msg = RED "$N刀神临空，万刀归神！\n" NOR;	
+	COMBAT_D->do_attack(me,target, weapon, TYPE_REGULAR,msg);	
+	me->add_temp("apply/attack", -extra);	//2015.12.22日调整，削弱连招
+	me->add_temp("apply/damage", -extra);
+	me->add_temp("apply/strength", -extra);
+	attack_time = (int)me->query_skill("ittouryu",1)/60;
+	if(attack_time<1) attack_time=1;
+	if (me->query("jm/feitian")) 
+	{
+		if (attack_time > 150+(int)me->query_temp("lianzhao_max_add")*4) attack_time= 150+(int)me->query_temp("lianzhao_max_add")*4;
+	} else 
+	{
+		if (attack_time > 50+(int)me->query_temp("lianzhao_max_add")*2) attack_time= 50+(int)me->query_temp("lianzhao_max_add")*2;
+	}	
+
+	me->add_temp("lianzhao", attack_time);	 //2016.6.1阿飞改，增加连招标记，用于削弱连招伤害	
+	for(i=0;i<attack_time;i++)
+	{
+		if (combat_msg<4)
+		{
+			msg = CYN "$N御技如神，刀气纵横！\n" NOR;
+			COMBAT_D->do_attack(me,target, weapon, TYPE_REGULAR,msg);
+		}
+		else
+			COMBAT_D->do_attack(me,target, me->query_temp("weapon"),TYPE_REGULAR);
+	}
+	me->add("jingli",-(100*attack_time));
+	me->delete_temp("lianzhao");  //2016.6.1阿飞改，连招结束取消连招标记
+	me->add_temp("apply/attack", extra);
+	me->add_temp("apply/damage", extra);
+	me->add_temp("apply/strength", extra);
+	me->start_busy(1);
+	return 1;
+}
+
+void del_cooldown(object me)	//CD写法1
+{ 
+	if ( !objectp(me) ) return;
+	if ( me->query_temp("cooldown") )	
+	{
+		me->delete_temp("cooldown");
+		tell_object(me, HIM"你呼出一口气，缓缓的将内力收回丹田。\n"NOR);
+	}	
+}

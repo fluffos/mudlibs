@@ -1,0 +1,22 @@
+// cracked by vikee 2/09/2002   vikee@263.net
+// qload.c
+
+inherit F_CLEAN_UP;
+
+int main()
+{
+    write(query_load_average() + "\n");
+    return 1;
+}
+
+int help(object me)
+{
+write(@HELP
+指令格式 : qload 
+
+这个指令显示出目前 CPU 的负担, cmds/s 是每秒编译几个 cmds
+comp lines/s 是每秒几行。
+HELP
+    );
+    return 1;
+}

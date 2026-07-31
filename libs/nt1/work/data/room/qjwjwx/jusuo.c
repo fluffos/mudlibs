@@ -1,0 +1,35 @@
+// SN:e6d2[mNkRMHmS3gF
+// File(/data/room/qjwjwx/jusuo.c) of qjwjwx's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "居所");
+	set ("long", @LONG
+这就是不是哈批主人流光飞逝休息、读书的地方。楼上就是主人
+的卧室，西面则是书房。 
+LONG );
+
+	set("exits", ([
+		"up"   : __DIR__"woshi",
+                "west" : __DIR__"shufang",
+	]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("KEY_DOOR", ([
+                "exit" : "east",
+                "room" : __DIR__"huayuan",
+        ]));
+    
+        set("room_owner", "流光飞逝");
+        set("room_name", "不是哈批");
+        set("room_id", "qjwjwx");
+        set("room_owner_id", "qjwjwx");
+        set("room_position", "碎石小道");
+}

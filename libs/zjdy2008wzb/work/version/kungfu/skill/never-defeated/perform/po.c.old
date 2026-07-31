@@ -1,0 +1,189 @@
+// po.c 破字诀
+
+#include <ansi.h>
+#include <combat.h>
+
+inherit F_SSERVER;
+
+int perform(object me, object target)
+{
+        string msg;
+        object weapon, weapon2;
+        int n;
+        int skill, skill2, ap, dp, damage;
+        string type;
+        string parry_skill;
+        int no_exert;
+
+        if (! target)
+        {
+                me->clean_up_enemy();
+                target = me->select_opponent();
+        }
+
+        skill = me->query_skill("never-defeated", 1);
+
+        skill2 = me->query_skill("martial-cognize", 1);
+
+        if (! me->is_fighting(target))
+                return notify_fail("破字诀只能对战斗中的对手使用。\n");
+
+        if (! objectp(weapon = me->query_temp("weapon")))
+                return notify_fail("你必须手持兵刃才能施展破字诀！\n");
+
+        type = weapon->query("skill_type");
+        if (me->query_skill(type, 1) < 150)
+                return notify_fail("你的" + to_chinese(type) + "水平有限，无法施展破字诀！\n");
+
+        if (me->query_skill_mapped(type) != "never-defeated")
+                return notify_fail("你没有激发不败神功，无法施展破字诀！\n");
+
+        if (skill < 100)
+                return notify_fail("你的不败神功等级不够，无法施展破字诀！\n");
+
+        if (me->query("neili") < 150)
+                return notify_fail("你现在真气不够！\n");
+
+        if (! living(target))
+                return notify_fail("对方都已经这样了，用不着这么费力吧？\n");
+
+        me->add("neili", -100);
+
+        ap = ap = COMBAT_D->skill_power(me, "never-defeated", SKILL_USAGE_ATTACK) +
+             COMBAT_D->skill_power(me, "martial-cognize", SKILL_USAGE_DEFENSE);
+        ap /= 10;
+        ap += me->query("int") * 20;
+
+        parry_skill = target->query_skill_mapped("parry");
+
+        dp = COMBAT_D->skill_power(target, parry_skill, SKILL_USAGE_DEFENSE) +
+             COMBAT_D->skill_power(target, "martial-cognize", SKILL_USAGE_DEFENSE);
+        dp /= 10;
+        dp += target->query("int") * 20;
+
+        msg = HIC "$N" HIC "手中" + weapon->name() +
+              HIC "一抖，犹如夜雨流星，铺天盖地的攻向$n"
+              HIC "，没有半点规矩可循。\n" NOR;
+              
+        if (wizardp(me))
+                tell_object(me, HIC "【测试信息】" NOR + 
+                                HIW "：己方 AP：" HIC + ap +
+                                HIW "，对方 DP：" HIC + dp + HIW "。\n" NOR);
+
+        if (ap / 2 + random(ap * 2) > dp)
+        {
+                n = 4 + random(5);
+                if (target->is_busy() || ap / 2 + random(ap) > dp)
+                {
+                        msg += HIY "$n" HIY "见来招即巧又拙，不同于人间"
+                               "任何招式，不禁大为慌乱，一时破绽迭出，$N"
+                               HIY "见状连出" + chinese_number(n) + "招！\n" NOR;
+                        message_combatd(msg, me, target);
+                        me->start_busy(1 + random(n));
+
+                        msg = "";
+                        while (n-- && me->is_fighting(target))
+                        {
+                                if (random(2) && ! target->is_busy())
+                                        target->start_busy(1);
+
+                                if (ap > dp && ! COMBAT_D->do_attack(me, target, weapon, 0) && ! random(5))
+                                {
+                                        damage = (ap - dp) / 5;
+
+                                        if (damage > dp / 10)
+                                                damage = dp / 15 + random(dp / 20 + ap / 50);
+
+                                        if (damage > skill * 3 / 2)
+                                                damage = skill + random(skill / 2);
+
+                                        switch (random(2))
+                                        {
+                                        case 0:
+                                                msg += COMBAT_D->do_damage(me, target, 
+                                                                           WEAPON_ATTACK, damage, 45,
+                                                                           WHT "眼看$N这招不中，$p侥幸"
+                                                                           "逃过一劫，谁知$N手中" + 
+                                                                           weapon->name() + WHT "一探，"
+                                                                           "光影闪烁中$p已然血流如注。"
+                                                                           "\n" NOR);
+                                                break;
+                                        default:
+                                                msg += COMBAT_D->do_damage(me, target, 
+                                                                           WEAPON_ATTACK, damage, 45,
+                                                                           WHT "$p躲过这招，惊出一身"
+                                                                           "冷汗，这时却见$N" +
+                                                                           weapon->name() + WHT "一闪"
+                                                                           "即逝，$n身上已尽是伤口！"
+                                                                           "\n" NOR);
+                                                break;
+                                        }
+                                        message_sort(msg, me, target);
+                                        
+                                        if (wizardp(me))
+                                                tell_object(me, HIC "【测试信息】" NOR + 
+                                                                HIW "：收到普通攻击失败信息，本次伤害：" +
+                                                                HIC + damage + HIW "。\n" NOR);
+                                        msg = "";
+                                }
+                        }
+
+                        weapon2 = target->query_temp("weapon");
+                        if (! random(2) && weapon2 && random(ap) / 3 > dp && weapon2->query("type") != "pin")
+                        {
+                                msg += HIW "$n" HIW "觉得眼前眼花缭乱，手中的" + weapon2->name() +
+                                       HIW "一时竟然拿捏不住，脱手而出！\n" NOR;
+                                weapon2->move(environment(me));
+                        } else
+                        {
+                                if (! target->is_busy())
+                                {
+                                        if (! random(3) &&
+                                            target->query("no_exert/until") < time() + skill / 10)
+                                        {
+                                                msg += HIG "$n正抵挡间，突然只见$N面上清气大盛，一道浑厚"
+                                                       "阳刚的内劲袭来，\n$p胸口立时一阵郁闷，口边渗出几"
+                                                       "丝淤血。\n" NOR;
+                                                no_exert = skill / 25 + random(skill / 25);
+                                                if (target->query("no_exert/until") > 0)
+                                                        target->add("no_exert/until", 
+                                                                    no_exert);
+                                                else target->set("no_exert/until", time() +
+                                                                 no_exert);
+        
+                                                target->set("no_exert/msg", "你内功为不败神功所破，四肢"
+                                                                            "百骸的经脉直欲断开一般。\n");
+                                                if (wizardp(me))
+                                                        tell_object(me, HIC "【测试信息】" NOR + 
+                                                                        HIW "：禁止运气：" +
+                                                                        HIC + no_exert + HIW " 秒。\n" NOR);
+                                                if (wizardp(target))
+                                                        tell_object(target, HIC "【测试信息】" NOR + 
+                                                                            HIW "：禁止运气：" +
+                                                                            HIC + no_exert + HIW " 秒。\n" NOR);
+                                        }
+                                        else
+                                        {
+                                                msg += HIY "$n竭力抵挡，一时间再也无力反击。\n" NOR;
+                                                if (! target->is_busy())
+                                                        target->start_busy(1 + random(2));
+                                        }
+                                }
+                                else msg += HIY "$n竭力抵挡，一时间却也无力反击。\n" NOR;
+                        }
+                } else
+                {
+                        msg += HIY "$n" HIY "只办了个勉力遮挡，全然无法反击。\n" NOR;
+                        me->start_busy(1);
+                        target->start_busy(4 + random(skill / 30));
+                }
+        } else
+        {
+                msg += HIC "不过$n" HIC "一丝不苟，严守门户，没有露出半点破绽。\n" NOR;
+                me->start_busy(1 + random(2));
+        }
+
+        message_combatd(msg, me, target);
+        return 1;
+}
+

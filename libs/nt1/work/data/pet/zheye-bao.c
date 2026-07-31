@@ -1,0 +1,18 @@
+// SN:C=BiJ96je2GN2S@G
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;31m宝马[2;37;0m", ({"bao ma"}));        
+        set("gender", "女性");                
+        set("unit", "匹");
+        set("long", "^_^
+它是之乎者也的坐骑。
+");
+        set_temp("owner_id", "zheye");
+        set_temp("owner_name", "之乎者也");
+        ::setup();
+}
+

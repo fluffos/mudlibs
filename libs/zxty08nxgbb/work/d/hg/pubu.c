@@ -1,0 +1,23 @@
+// Room: /u/cass/hg/pubu.c
+// This is a room made by roommaker. write by Fan. :)
+
+inherit ROOM;
+
+void create()
+{
+	set("short", "瀑布");
+	set("long", @LONG
+瀑布从山峰壁上凌空而下，终年奔泻不息。初春细雨如丝，瀑布从半空
+悠悠忽忽下坠，时而如乳白纱绉，时而又化为青烟；盛夏湍流如奔，银龙狂
+舞，轰然而泻，随风漂洒；秋冬“珠帘”下垂，水雾粉雪，随风转悠，翻腾
+上下，美不胜收。
+LONG
+);
+	set("exits", ([ /* sizeof() == 2 */
+  "east" : __DIR__"longtan",
+  "northwest" : __DIR__"shidong",
+]));
+
+	setup();
+	replace_program(ROOM);
+}

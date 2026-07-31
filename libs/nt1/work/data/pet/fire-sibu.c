@@ -1,0 +1,18 @@
+// SN:]]9a?JB`^fD:E7KO
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m四[1;33m不[1;32m象[2;37;0m", ({"sibu xiang"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "什么都不像
+它是麻仓叶的坐骑。
+");
+        set_temp("owner_id", "fire");
+        set_temp("owner_name", "麻仓叶");
+        ::setup();
+}
+

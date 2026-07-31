@@ -1,0 +1,18 @@
+// SN:HYTaNm8J\cca@BRK
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("红烧狮子头狮[2;37;0m", ({"shao shi"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "111
+它是红烧丸子的坐骑。
+");
+        set_temp("owner_id", "alz");
+        set_temp("owner_name", "红烧丸子");
+        ::setup();
+}
+

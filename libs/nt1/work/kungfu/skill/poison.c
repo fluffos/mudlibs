@@ -1,0 +1,22 @@
+inherit SKILL;
+
+void create() { seteuid(getuid()); } 
+string type() { return "poison"; } 
+
+int valid_learn(object me)
+{
+        int lv;
+        lv = (int)me->query_skill("poison", 1);
+        
+        if (me->query("character") == "光明磊落") 
+                return notify_fail("你心中暗想：我行事光明磊落，学什么毒技！\n"); 
+        if (me->query("family/family_name") != "星宿派")
+                return 1;
+        if (lv < 101 && lv > 50 && me->query("body_poison") < lv / 10)
+                return notify_fail("你体内聚毒过多，难以继续提高。\n");
+        if (lv > 100 && me->query("body_poison") < lv)
+                return notify_fail("你体内聚毒过多，难以继续提高。\n");
+        return 1;
+}
+
+

@@ -1,0 +1,18 @@
+// SN:?I31UO]g1bbCN1MI
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m色狐[2;37;0m", ({"southeast hu"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "一只漂亮的小狐狸。人见人爱。
+它是唐狐的坐骑。
+");
+        set_temp("owner_id", "dylydzz");
+        set_temp("owner_name", "唐狐");
+        ::setup();
+}
+

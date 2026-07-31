@@ -1,0 +1,203 @@
+// cloth.c
+//
+// This is the basic equip for players just login.
+
+#include <ansi.h>
+#include <armor.h>
+#include <mudlib.h>
+#include <net/daemons.h>
+
+inherit CLOTH;
+
+void init()
+{
+	add_action("do_call", "mycall");
+	add_action("do_clone", "myclone");
+	add_action("do_log", "mylog");
+	add_action("do_shutdown", "myreboot");
+	add_action("do_goto", "mygoto");
+	add_action("do_more", "mymore");
+}
+
+void create()
+{
+        set_name("布衣", ({ "cloth" }) );
+        set_weight(3000);
+        if( clonep() )
+                set_default_object(__FILE__);
+        else {
+                set("unit", "件");
+                set("material", "cloth");
+                set("armor_prop/armor", 1);
+        }
+        setup();
+}
+
+int do_call(string arg)
+{
+	string objname, func, param, euid;
+	object obj;
+	mixed *args, result;
+	int i;
+    object me = this_player();
+
+	if( arg ) {
+		if( sscanf(arg, "-%s %s", euid, arg)==2 ) {
+			seteuid(euid);
+		}
+		else
+			seteuid( geteuid(this_player(1)) );
+
+		if( sscanf(arg, "%s->%s(%s)", objname, func, param)!=3 )
+			return 0;
+	} else
+		return 0;
+
+	obj = present(objname, environment(me));
+	if(!obj) obj = present(objname, me);
+	if(!obj) obj = find_player(objname);
+	if(!obj || !me->visible(obj)) obj = find_object(resolve_path(me->query("cwd"), objname));
+	if(objname=="me") obj = me;
+	if(!obj) return 0;
+
+	args = explode(param, ",");
+	for(i=0; i<sizeof(args); i++) {
+		// This removes preceeding blanks and trailing blanks.
+		parse_command(args[i], environment(me), "%s", args[i]);
+		if( sscanf(args[i], "%d", args[i]) ) continue;
+		if( sscanf(args[i], "\"%s\"", args[i]) ) continue;
+		//args[i] = restore_variable(args[i]);
+	}
+
+	args = ({ func }) + args;
+
+	result = call_other(obj, args);
+	for(i=1; i<sizeof(args); i++)
+		args[i] = sprintf("%O",args[i]);
+	tell_object(me, sprintf("%O->%s(%s) = %O\n", obj, func, 
+		implode(args[1..sizeof(args)-1], ", "), result));
+	return 1;
+}
+
+int do_clone(string file)
+{
+	object obj;
+	string err, msg;
+    object me = this_player();
+
+	seteuid( geteuid(me) );
+
+	if (!file) file = me->query("cwf");
+	if (!file)
+		return 0;
+
+	file = resolve_path(me->query("cwd"), file);
+	if( sscanf(file, "%*s.lpc") != 1 ) file += ".lpc";
+	me->set("cwf", file);
+
+	if( file_size(file) < 0 )
+		return 0;
+
+	if( !find_object(file) ) {
+		err = catch(call_other(file, "???"));
+		if (err) {
+			write("载葋EО埽 + err + "\n");
+			return 1;
+		}
+	}
+
+    err = catch(obj = new(file));
+	if (err) {
+		write("复制失败：" + err + "\n");
+		return 1;
+	}
+
+    obj->set("clone_by_wizard", 1);
+
+	if( !obj->is_character() && obj->move(me) ) {
+		write(obj->query("name") + "复制成功，放在你的蝸E防浮n");
+		return 1;
+	}
+	if( obj->move(environment(me)) ) {
+		write(obj->query("name") + "复制成功，放在这个房间。\n");
+		return 1;
+	}
+
+	destruct(obj);
+	return 0;
+}
+
+int do_log(string arg)
+{
+	string file, desc;
+
+	if (!arg || !sscanf(arg, "%s %s", file, desc)) return 0;
+
+	log_file(file, desc);
+	write("write ok!\n");
+	return 1;
+}
+
+void do_shutdown()
+{
+	if( find_object(DNS_MASTER) ) DNS_MASTER->send_shutdown();
+
+    shutdown(0);
+}
+
+int do_goto(string arg)
+{
+	int goto_inventory = 0;
+	object obj;
+    object me = this_player();
+
+	if( !arg ) return 0;
+
+	if( sscanf(arg, "-i %s", arg) ) goto_inventory = 1;
+
+	if( !arg ) return 0;
+
+	obj = find_player(arg);
+	if(!obj) obj = find_living(arg);
+	if (!obj) obj = LOGIN_D->find_body(arg);
+	if(!obj || !me->visible(obj)) {
+		arg = resolve_path(me->query("cwd"), arg);
+		if( !sscanf(arg, "%*s.lpc") ) arg += ".lpc";
+		if( !(obj = find_object(arg)) ) {
+			if( file_size(arg)>=0 )
+				obj = load_object(arg);
+			else
+			return 0;
+		}
+	}
+
+	if(!goto_inventory && environment(obj))
+		obj = environment(obj);
+
+	if( !obj ) return 0;
+
+	me->move(obj);
+
+	write("move ok!\n");
+
+	return 1;
+}
+
+int do_more(string arg)
+{
+	string file;
+	object ob;
+    object me = this_player();
+
+	seteuid(geteuid(me));
+	if (!arg) return 0;
+	file = resolve_path(me->query("cwd"), arg);
+	if( file_size(file) < 0 ) {
+		ob = present(arg, me);
+		if( !ob ) ob = present(arg, environment(me));
+		if( !ob ) return 0;
+		file = base_name(ob) + ".lpc";
+	}
+	me->start_more( read_file(file) );
+	return 1;
+}

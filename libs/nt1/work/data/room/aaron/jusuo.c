@@ -1,0 +1,35 @@
+// SN:`\:Zjj[EQ?M<`1nM
+// File(/data/room/aaron/jusuo.c) of aaron's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "居所");
+	set ("long", @LONG
+这就是金色时代主人一灯休息、读书的地方。楼上就是主人的卧
+室，西面则是书房。 
+LONG );
+
+	set("exits", ([
+		"up"   : __DIR__"woshi",
+                "west" : __DIR__"shufang",
+	]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("KEY_DOOR", ([
+                "exit" : "east",
+                "room" : __DIR__"huayuan",
+        ]));
+    
+        set("room_owner", "一灯");
+        set("room_name", "金色时代");
+        set("room_id", "goldentime");
+        set("room_owner_id", "aaron");
+        set("room_position", "碎石小道");
+}

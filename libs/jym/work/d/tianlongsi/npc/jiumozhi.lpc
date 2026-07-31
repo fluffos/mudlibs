@@ -1,0 +1,231 @@
+// Date: YeFeng 09/02/18
+
+inherit NPC;
+
+
+#include <ansi.h>
+#include "/d/REGIONS.h"
+
+#define TRAVERSER  "/clone/obj/traverser"
+#define MAPDB "/clone/obj/mapdb"
+
+int checkplayer(object ob);
+int escape(object ob);
+string find_target_room(object traverser, int dist) ;
+int greeting(object play);
+
+int auto_perform();
+void create()
+{
+	set_name("鸠摩智", ({ "jiumozhi", "jiu" }));
+	set("nickname", "大轮明王");
+	set("long", 
+"这是一个中年僧人，看起来一脸庄严宝象，面戴微笑，身披浅黄袈裟。\n"
+"他就是吐蕃国护国法王、大雪山大轮寺的主持。 \n");
+	set("gender", "男性");
+	set("age", 45);
+	set("attitude", "peaceful");
+	set("class","lama");
+	set("shen_type", -1);
+	set("str", 200);
+	set("int", 200);
+	set("con", 200);
+	set("dex", 200);
+	set_temp("apply/armor", 200);
+	
+	set("max_qi", 75000);
+	set("max_jing", 65000);
+	set("neili", 85000);
+	set("max_neili", 85000);
+	set("jiali", 200);
+	set("combat_exp", 200000000);
+	set("score", 5000);
+
+	set_skill("force", 800);
+	set_skill("dodge", 800);
+	set_skill("parry", 800);
+	set_skill("staff", 800);
+	set_skill("lamaism", 800);
+	set_skill("strike", 800);
+	set_skill("cuff", 800);
+	set_skill("jingang-chu", 800);
+	set_skill("longxiang-banruo", 800);
+	set_skill("huoyan-dao", 800);
+	set_skill("sword", 800);
+	set_skill("mingwang-jian", 800);
+	set_skill("necromancy", 800);
+	set_skill("shenkongxing", 800);
+	set_skill("xiaowuxiang", 800);
+	set_skill("yujiamu-quan", 800);
+
+	map_skill("force", "xiaowuxiang");
+	map_skill("parry", "huoyan-dao");
+	map_skill("sword", "mingwang-jian");
+	map_skill("staff", "jingang-chu");
+	map_skill("strike", "huoyan-dao");
+	map_skill("dodge", "shenkongxing");
+	map_skill("cuff", "yujiamu-quan");
+	
+	prepare_skill("strike", "huoyan-dao");
+
+	set("chat_chance_combat", 20);
+        set("chat_msg_combat", ({
+                (: auto_perform :),
+        }) );
+	create_family("雪山派", 6, "掌门人");
+
+	setup();
+	carry_object("/d/qilian/obj/lamajiasha")->wear();
+}
+void attempt_apprentice(object ob)
+{
+        command ("say 快滚老子没空别来烦我");
+        return;
+}
+
+void init()
+{
+	object me,player;
+	mapping skill_status;
+	me=this_object();
+	player=this_player();
+	if (player->query_temp("defense_jiumozhi") ) {
+		me->set_temp("defense_jiumozhi",player->query("id"));
+		remove_call_out("greeting");
+		call_out("greeting",1,player);
+	}
+}
+int greeting(object player)
+{
+	object kurong, yin, can, guan, xiang;
+	object me=this_object();
+	if ( me->query_temp("defense_jiumozhi") == player->query("id") && living(this_player())){
+		me->kill_ob(player);
+		player->kill_ob(me);
+
+	if ( kurong=present("kurong dashi", environment(me)) ) {
+		me->kill_ob(kurong);
+		kurong->kill_ob(me);
+	}
+	if ( yin=present("benyin dashi", environment(me)) ) {
+		me->kill_ob(yin);
+		yin->kill_ob(me);
+	}	
+	if ( can=present("bencan dashi", environment(me)) ) {
+		me->kill_ob(can);
+		can->kill_ob(me);
+	}
+	if ( guan=present("benguan dashi", environment(me)) ) {
+		me->kill_ob(guan);
+		guan->kill_ob(me);
+	}
+	if ( xiang=present("benxiang dashi", environment(me)) ) {
+		me->kill_ob(xiang);
+		xiang->kill_ob(me);
+	}
+		remove_call_out("checkplay");
+		call_out("checkplay",2,player);
+		return 1;
+	}
+	destruct(me);
+	return 1;
+}
+int checkplay(object play)
+{
+	object yin;
+	object me=this_object();
+	if (!present(query_temp("defense_jiumozhi"),environment(this_object() ) ) ) {
+		command ("say 也算告慰了慕容老先生在天之灵。");
+		destruct(me);
+		if ( yin=present("benyin dashi", environment(me)) ) {
+			message_vision("本因方丈叹了口气，走了出去\n\n", yin);
+			yin->move("/d/dali/tianls10");
+		}
+		return notify_fail("也太不中用了，竟被打死了！\n");
+	}
+	if (play->query("qi")<=play->query("max_qi")/10 && living(play)) {	
+		command("halt");
+		play->unconcious();
+		remove_call_out("checkplay");
+		remove_call_out("escape");
+		call_out("escape",1,play);
+	}else { 
+		if (!play->is_ghost()) {
+			remove_call_out("checkplay");
+			call_out("checkplay",1,play);
+		}
+	}
+	return 1;
+
+}
+int escape(object player) {
+    string target_room_path;
+    object traverser,room;
+    int ret, dist;
+
+    traverser = new (TRAVERSER);
+    if (!objectp(traverser)) {
+        printf("BUG: %s cannot be cloned\n", TRAVERSER);
+ 	return 0;
+    }
+    dist = 10+random(10);
+    target_room_path = find_target_room(traverser, dist);
+    ret=0;
+    while ( ret < 100 && ! target_room_path ) {
+   	ret++;
+	target_room_path = find_target_room(traverser, dist);
+    }
+    if (!target_room_path) {
+	printf("BUG: cannot find target room. Try ask again.\n");
+	return 0;
+    }
+    destruct(traverser);
+    room = find_object(target_room_path);
+    if (!room) room=load_object(target_room_path);
+    if (!room) {
+	  	printf("BUG: could not load room %s\n", target_room_path);
+		return 0;
+    }
+    message("vision",this_object()->query("name")+"倒退三步，说道：“这位大师心中记得六脉神剑的图谱。原来的图谱已被枯荣大师焚去，大师便是活图谱，在慕容先生墓前将他活活的烧了，也是一样。”\n",environment(this_object()),this_object());
+    message("vision",this_object()->query("name")+"把昏过去的"+this_player()->query("name")+
+    	"背了起来，身形一晃，夺路而去！\n",environment(this_object()),this_object());
+    player->move(this_object());
+    this_object()->move(room);
+    message("vision", this_object()->query("name")+"快步走了过来.\n", room, this_object());
+
+    message("vision",this_object()->query("name")+"放下背上的"+this_player()->query("name")+
+    	"转身离去！\n",room,this_object());
+	player->move(environment(this_object()));
+
+	destruct(this_object());
+	return ret;
+}
+string find_target_room(object traverser, int dist) {
+    object mapdb;
+    string room_path;
+    
+    mapdb = find_object(MAPDB);
+    if (! objectp(mapdb))         mapdb = new(MAPDB);
+    if (! objectp(mapdb))         return 0;
+
+    mapdb->restore();
+    room_path = mapdb->query_random_room_path();
+    if (strsrch(room_path,"/d/bwdh/")  ==0 ||
+	strsrch(room_path, "/d/city/")  ==0 || 
+    	strsrch(room_path,"/d/changan/") ==0 || 
+    	strsrch(room_path,"/d/death/") ==0 ||
+    	strsrch(room_path,"/d/dongtinghu/")  ==0 ||
+	strsrch(room_path, "/d/em/")  ==0 || 
+    	strsrch(room_path,"/d/hengshan/") ==0 || 
+	strsrch(room_path, "/d/hengshan2/")  ==0 || 
+   	strsrch(room_path,"/d/huangshan/") ==0 	||
+    	strsrch(room_path,"/d/murong/") ==0 ||
+    	strsrch(room_path,"/d/shenlong/") ==0 ||
+	strsrch(room_path, "/d/xiakedao/") ==0 || 
+    	strsrch(room_path,"/d/wizard/") ==0 || 
+    	strsrch(room_path,"/d/taohuacun/") ==0 || 
+    	strsrch(room_path,"/d/xiangyang/") ==0 	
+        ) return 0;
+    return room_path;
+}
+#include "/kungfu/class/xueshan/auto_perform.h"

@@ -1,0 +1,37 @@
+// concentrate.c
+
+#include <ansi.h>
+
+int exert(object me, object target)
+{
+        int jingli_gain;
+        int flag=0;
+        if( target && target!=me )
+                return notify_fail("「灵神诀」只能用来恢复自己的法力。\n");
+
+        if( (int)me->query("neili") < 50 )
+                return notify_fail("你的内力不够。\n");
+        if( me->is_busy() )
+                return notify_fail("你正忙着呢。\n");
+
+        
+        jingli_gain 
+=  50 + (int)me->query("neili")/10;
+        if( jingli_gain + (int)me->query("jingli") > (int)me->query("max_jingli")*2 ){
+                me->set("jingli", (int)me->query("max_jingli")*2);
+                flag=1;
+        } else
+                me->add("jingli", jingli_gain);
+        me->add("neili", -50);
+
+        message_vision(
+                HIY "$N闭目凝神，用谷衣心法的内力运转了一次「灵神诀」...\n"
+                "一股青气从$N身上散出，汇聚在$P的顶心，然後缓缓淡去。\n" NOR, 
+me);
+
+        if(flag) tell_object(me,HIC"你感到你的精力已经达到颠峰了。\n"NOR);
+        me->start_busy(1);
+
+        return 1;
+}
+

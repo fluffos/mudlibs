@@ -1,0 +1,18 @@
+// SN:foKK5nOonNGFT:o`
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m伴我行狮[2;37;0m", ({"xiaocomer shi"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "$HIW$伴我行
+它是天地良心的坐骑。
+");
+        set_temp("owner_id", "comer");
+        set_temp("owner_name", "天地良心");
+        ::setup();
+}
+

@@ -1,0 +1,18 @@
+// SN:nY`P4boeY1hceVQU
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("东北虎虎[2;37;0m", ({"dbhu hu"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "这是一只万兽之王。
+它是胡挖泥的坐骑。
+");
+        set_temp("owner_id", "yangs");
+        set_temp("owner_name", "胡挖泥");
+        ::setup();
+}
+

@@ -1,0 +1,32 @@
+// SN:V@ec^Qc`J<dM16n\
+// File(/data/room/vampire/lianwu.c) of vampire's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "练武场");
+	set ("long", @LONG
+此处便是古堡的练武场，人在江湖，武功万万不可荒废。 
+LONG );
+
+	set("exits", ([
+                "west" : __DIR__"houyuan",
+	]));
+
+        set("objects", ([
+                "/clone/npc/mu-ren" : 4,
+        ]));
+
+        set("outdoors", "playertown");
+        set("no_sleep_room", 1);
+
+        setup();
+    
+        set("room_owner", "将臣");
+        set("room_name", "古堡");
+        set("room_id", "castle");
+        set("room_owner_id", "vampire");
+        set("room_position", "三岔口");
+}

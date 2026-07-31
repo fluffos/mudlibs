@@ -1,0 +1,504 @@
+inherit NPC;
+#include <ansi.h>
+int get_level(int exp);
+mapping *menpai= ({
+([      "title":               "武当派劫匪", 
+        "class":                 "taoist",
+        "dodge":                 "tiyunzong",
+        "parry":                 "taiji-quan", 
+        "unarmed":               "taiji-quan",
+        "sword":                 "taiji-jian",
+        "force":                 "taiji-shengong",
+        "perform1":              "sword.lian",
+        "perform2":              "unarmed.zhen",
+        "weapon":                __DIR__"obj/changjian",
+]),
+
+});
+
+mapping *first_name=({
+([      "name":"孙",      "id":"sun"    ]),
+([      "name":"吴",      "id":"wu"     ]),
+([      "name":"独孤",    "id":"dugu"   ]),
+([      "name":"赖",      "id":"lai"    ]),
+([      "name":"林",      "id":"lin"    ]),
+([      "name":"赵",      "id":"zhao"   ]),
+([      "name":"任",      "id":"ren"    ]),
+([      "name":"钱",      "id":"qian"   ]),
+([      "name":"李",      "id":"li"     ]),
+([      "name":"张",      "id":"zhang"  ]),
+([      "name":"臧",      "id":"zang"   ]),
+([      "name":"徐",      "id":"xu"     ]),
+([      "name":"杨",      "id":"yang"   ]),
+([      "name":"邱",      "id":"qiu"    ]),
+([      "name":"舒",      "id":"shu"    ]),
+([      "name":"叶",      "id":"ye"     ]),
+([      "name":"刘",      "id":"liu"    ]),
+([      "name":"周",      "id":"zhou"   ]),
+([      "name":"杨",      "id":"yang"   ]),
+([      "name":"王",      "id":"wang"   ]),
+([      "name":"梁",      "id":"liang"  ]),
+([      "name":"于",      "id":"yu"     ]),
+([      "name":"黄",      "id":"huang"  ]),
+([      "name":"林",      "id":"lin"    ]),
+([      "name":"陈",      "id":"chen"   ]),
+([      "name":"谢",      "id":"xie"    ]),
+([      "name":"鲁",      "id":"lu"     ]),
+([      "name":"何",      "id":"he"     ]),
+([      "name":"曾",      "id":"zeng"   ]),
+([      "name":"郭",      "id":"guo"    ]),
+([      "name":"成",      "id":"cheng"  ]),
+([      "name":"南宫",    "id":"nangong"  ]),
+([      "name":"欧阳",    "id":"ouyang"   ]),
+([      "name":"长孙",    "id":"zhangsun" ]),
+([      "name":"慕容",    "id":"murong"   ]),
+([      "name":"轩辕",    "id":"xuanyuan"    ]),
+([      "name":"公孙",    "id":"gongsun"  ]),
+});
+
+mapping *second_name1=({
+([      "name":"",      "id":""      ]),
+([      "name":"风",    "id":"feng"  ]),
+([      "name":"德",    "id":"de"    ]),
+([      "name":"晓",    "id":"xiao"  ]),
+([      "name":"润",    "id":"run"   ]),
+([      "name":"富",    "id":"fu"    ]),
+([      "name":"达",    "id":"da"    ]),
+([      "name":"默",    "id":"mo"    ]),
+([      "name":"玄",    "id":"xuan"  ]),
+([      "name":"海",    "id":"hai"   ]),
+([      "name":"自",    "id":"zi"    ]),
+([      "name":"泰",    "id":"tai"   ]),
+([      "name":"昭",    "id":"zhao"  ]),
+([      "name":"",      "id":""      ]),
+([      "name":"通",    "id":"tong"  ]),
+([      "name":"耘",    "id":"yun"   ]),
+([      "name":"奋",    "id":"fen"   ]),
+([      "name":"宏",    "id":"hong"  ]),
+([      "name":"荣",    "id":"rong"  ]),
+([      "name":"鹏",    "id":"peng"  ]),
+([      "name":"冲",    "id":"chong" ]),
+([      "name":"灏",    "id":"hao"   ]),
+([      "name":"思",    "id":"si"    ]),
+([      "name":"理",    "id":"li"    ]),
+([      "name":"刚",    "id":"gang"  ]),
+([      "name":"武",    "id":"wu"    ]),
+([      "name":"逸",    "id":"yi"    ]),
+});
+
+mapping *second_name2=({
+([      "name":"凤",    "id":"feng"  ]),
+([      "name":"玉",    "id":"yu"    ]),
+([      "name":"",      "id":""      ]),
+([      "name":"子",    "id":"zi"    ]),
+([      "name":"金",    "id":"jin"   ]),
+([      "name":"忆",    "id":"yi"    ]),
+([      "name":"淑",    "id":"shu"   ]),
+([      "name":"碧",    "id":"bi"    ]),
+([      "name":"兰",    "id":"lan"   ]),
+([      "name":"英",    "id":"ying"  ]),
+([      "name":"语",    "id":"yu"    ]),
+([      "name":"嫣",    "id":"yan"   ]),
+([      "name":"珠",    "id":"zhu"   ]),
+([      "name":"紫",    "id":"zi"    ]),
+([      "name":"霞",    "id":"xia"   ]),
+([      "name":"彩",    "id":"cai"   ]),
+([      "name":"丽",    "id":"li"    ]),
+([      "name":"莉",    "id":"li"    ]),
+([      "name":"君",    "id":"jun"   ]),
+([      "name":"婉",    "id":"wan"   ]),
+});
+
+mapping *third_name1=({
+([      "name":"峰",    "id":"feng"  ]),
+([      "name":"华",    "id":"hua"   ]),
+([      "name":"奇",    "id":"qi"    ]),
+([      "name":"歌",    "id":"ge"    ]),
+([      "name":"旭",    "id":"xu"    ]),
+([      "name":"发",    "id":"fa"    ]),
+([      "name":"威",    "id":"wei"   ]),
+([      "name":"晖",    "id":"hui"   ]),
+([      "name":"城",    "id":"cheng" ]),
+([      "name":"轩",    "id":"xuan"  ]),
+([      "name":"勇",    "id":"yong"  ]),
+([      "name":"泰",    "id":"tai"   ]),
+([      "name":"在",    "id":"zai"   ]),
+([      "name":"君",    "id":"jun"   ]),
+([      "name":"军",    "id":"jun"   ]),
+([      "name":"凡",    "id":"fan"   ]),
+([      "name":"伟",    "id":"wei"   ]),
+([      "name":"帆",    "id":"fan"   ]),
+([      "name":"雄",    "id":"xiong" ]),
+([      "name":"涛",    "id":"tao"   ]),     
+([      "name":"波",    "id":"bo"    ]),
+([      "name":"杰",    "id":"jie"   ]),
+([      "name":"郎",    "id":"lang"  ]),     
+});
+
+mapping *third_name2=({
+([      "name":"兰",    "id":"lan"   ]),
+([      "name":"婷",    "id":"ting"  ]),
+([      "name":"霞",    "id":"xia"   ]),
+([      "name":"莲",    "id":"lian"  ]),
+([      "name":"卿",    "id":"qing"  ]),
+([      "name":"楣",    "id":"mei"   ]),
+([      "name":"妹",    "id":"mei"   ]),
+([      "name":"敏",    "id":"min"   ]),
+([      "name":"菲",    "id":"fei"   ]),
+([      "name":"贞",    "id":"zhen"  ]),
+([      "name":"君",    "id":"jun"   ]),
+([      "name":"嫣",    "id":"yan"   ]),
+([      "name":"凤",    "id":"feng"  ]),
+([      "name":"燕",    "id":"yan"   ]),
+([      "name":"珍",    "id":"zhen"  ]),
+([      "name":"真",    "id":"zhen"  ]),
+([      "name":"香",    "id":"xiang" ]),
+([      "name":"玉",    "id":"yu"    ]),
+([      "name":"娘",    "id":"niang" ]),
+});
+
+
+void create()
+{
+        string id1,idf1;
+        string name1;
+        int i,skill,skill_lvl,basic_radio,basic_skill,index,index1,nl,dengji;
+        object me=this_player();
+        mapping        mp,skills;
+        string *basic=({"dodge","unarmed","force","parry","finger","hand",
+                        "strike","taoism","club","staff","fork","hammer",
+                        "blade","cuff","axe","sword","whip","dagger",
+                        "throwing","claw" ,"poison"});
+        int ratio=100;
+        string *chat_chance_combat_here=({});
+
+        index1=random(sizeof(first_name));
+        name1=first_name[index1]["name"];
+        id1=first_name[index1]["id"];
+        idf1=id1;
+        if(query("title")==HIB"姑苏慕容劫匪"NOR)
+        {
+                id1="慕容";
+        }
+        index1=random(sizeof(second_name1));
+        name1+=second_name1[index1]["name"];
+        id1+=" "+second_name1[index1]["id"];
+
+
+        index1=random(sizeof(third_name1));
+        name1+=third_name1[index1]["name"];
+        id1+=third_name1[index1]["id"];
+
+        set_name(name1,({id1,idf1}) );
+        index=random(sizeof(menpai));
+        mp=menpai[index];
+        set("gender", "男性" );
+        set("class","taoist");
+        set("title",HIB+"武当派劫匪"+NOR);  
+
+        ratio=70+random(35);  
+/*
+//here begin to set_skill of this_object()
+        skill=0;
+        skills=me->query_skills();        
+        if (sizeof(skills))
+        {
+        for (i=0;i<sizeof(keys(skills));i++)
+                if (skills[keys(skills)[i]]>=skill) 
+                        skill=skills[keys(skills)[i]];
+        }
+        if(skill>get_level(me->query("combat_exp")))
+        skill=get_level(me->query("combat_exp"));
+        skill_lvl = get_level((int)me->query("combat_exp")) - skill;
+        if(skill_lvl < 0)
+                skill_lvl = 0;
+        basic_skill=skill*ratio/100;
+        if(basic_skill-skill > 60)  
+                basic_skill=skill + 60;
+        skill=basic_skill + skill_lvl/4;
+        if(skill<50)    skill=50;
+        if(skill<10) skill=(50+skill)/3;
+        for (i=0;i<sizeof(keys(mp));i++)
+        {
+                if (member_array(keys(mp)[i],basic)!=-1)
+                        {
+                                set_skill(keys(mp)[i],skill);
+                                set_skill(mp[keys(mp)[i]],skill);
+                                map_skill(keys(mp)[i],mp[keys(mp)[i]]);
+                        }
+        }
+
+*/
+//新的skill设置开始
+        skill=me->query_skill("dodge")/2+100;
+                if(skill<50)    skill=50;
+        set_skill("force", skill);
+        set_skill("taiji-shengong", skill);
+        set_skill("dodge", skill);
+        set_skill("tiyunzong", skill);
+        set_skill("unarmed", skill);
+        set_skill("taiji-quan", skill);
+        set_skill("parry", skill);
+        set_skill("sword", skill);
+        set_skill("taiji-jian", skill);
+        set_skill("blade", skill);
+        set_skill("taiji-dao", skill);
+        set_skill("taoism", skill);
+        set_skill("literate", skill);
+        map_skill("force", "taiji-shengong");
+        map_skill("dodge", "tiyunzong");
+        map_skill("unarmed", "taiji-quan");
+        map_skill("parry", "taiji-jian");
+        map_skill("sword", "taiji-jian");
+        map_skill("blade", "taiji-dao");
+
+        set("chat_chance_combat",20);
+        if (mp["perform1"])
+        chat_chance_combat_here+=({(: perform_action, mp["perform1"] :)});
+        if (mp["perform2"]) 
+        chat_chance_combat_here+=({(: perform_action, mp["perform2"] :)}); 
+
+        set("chat_msg_combat",chat_chance_combat_here);
+        set("str",(me->query("str")-5));
+        set("con",(me->query("con")-5));
+        set("dex",(me->query("dex")-5));
+/*
+        set("chat_chance", 5);
+        set("chat_msg", ({
+             (: random_move :)
+        }) );
+*/
+
+
+        set("family/family_name","武当派");   
+
+        basic_radio = me->query("max_qi") /500+1;
+         set("max_qi",me->query("max_qi")/2);
+        set("qi",query("max_qi"));
+        set("eff_qi",query("max_qi"));
+        set("max_jing",(me->query("max_jing")*ratio/100+200*basic_radio));
+        set("jing",query("max_jing"));
+        set("fight_till_die",1);
+        set("eff_jing",query("max_jing"));
+        if(me->query("max_neili")<80)
+                nl=100;
+                else nl=me->query("max_neili");
+        set("max_neili",me->query("max_neili"));
+        set("max_jingli",me->query("max_jinglili"));
+        set("no_suck",1);
+        set("neili",query("max_neili")/2);
+        set("jingli",query("max_jingli"));
+        basic_radio = me->query("max_neili") / 500 ;
+        set("jiali",me->query("max_neili")/(20+5*basic_radio));
+        set("killer","xingyun");
+        set("food",500);
+        set("water",500);
+    set("combat_exp",me->query("combat_exp"));
+//以下添加为配合zjb新写出来的战斗系统而添加..
+  dengji = me->query("zjb_dj/dj") / 3;
+        if(dengji<1)    dengji=1;
+    set("zjb_dj/dj",dengji);
+
+        set("is_quest",1);
+        setup();
+
+        if (mp["weapon"])        
+        carry_object(mp["weapon"])->wield();
+}
+
+void check_room()
+{
+    object me=this_object();
+    object env=environment(me);
+    
+    if(!living(me)) return;
+    if(env && (env->query("no_quest") ||
+                env->query("no_fight")  ||
+                function_exists( "valid_leave",env )))
+
+        "/cmds/std/go.c"->do_back(me);
+}
+
+void init()
+{
+        object ob,env;
+        object killer=this_object();        
+        string area;
+        if(!killer->query("area") && !killer->query("found") )
+        {
+                env=environment(killer);
+                if(objectp(env) && sscanf(file_name(env),"/d/%s/",area)==1)
+                        killer->set("area",area);
+        }
+        command("yun powerup");
+        ob=this_player();
+        if(!this_object()->query("killer"))
+                return;
+        if(ob->query("id")==query("killer"))
+        {
+                delete("area");
+                set("found",1);
+        }
+
+
+        if (ob->query("id")==query("killer") )
+        if(  !is_fighting()) 
+         {
+          remove_call_out("check_me");
+          call_out("check_me",0);
+         }
+
+        if(this_object()->query("jiali")==0)
+        set("jiali", (int)this_object()->query_skill("force")/6);
+
+        if(this_object()->query("killer")!=ob->query("id"))
+        {
+                add_action("do_kill","team kill");
+                add_action("do_kill","touxi");   
+                add_action("do_kill","kill");
+                add_action("do_kill","hit");
+                add_action("do_kill","fight");
+                add_action("do_kill","steal");
+                add_action("do_kill","beg");
+                add_action("do_kill","persuade");
+        }
+
+}
+
+int check_me()
+{
+       object ob,me=this_object();
+
+       if (objectp(ob=present(query("killer"),environment(me)))
+           && !environment(me)->query("no_fight")
+           && interactive(ob) && !ob->is_fighting(me))
+         call_out("do_fkill",0,ob);
+
+       if(!present(query("killer"),environment(me)))   
+       {
+          remove_call_out("escape_me");
+          destruct(me);
+       }
+          remove_call_out("check_me");
+          call_out("check_me",2);   
+
+     return 1;
+}
+
+int do_fkill(object ob)
+{
+   if ( ! ob ) return 1;
+        if (ob->query("id")==query("killer") )
+        {
+        command("yun powerup");
+       message_vision(HIR"$N大喝道：“此山是我开，此树是我栽！"+
+ob->query("name")+"识相的话，\n就把红货都交出来！\n"NOR,this_object());  
+
+       if ( ob)
+        this_object()->kill_ob(ob);
+if ( this_object() )
+        ob->kill_ob(this_object());         
+        }
+     return 1;
+}
+
+void start_escape(object ob,object me)
+{
+        call_out("escape_me",120,ob,me);
+}
+
+int do_kill(string arg)
+{
+        string what,who;
+        if(!arg) return 0;
+        if(this_object()->id(arg))
+        {
+                write("江湖人士，还是少惹为妙。\n");
+                return 1;
+        }
+        else
+        if(sscanf(arg,"%s from %s",what,who)==2 && this_object()->id(who))
+        {
+                write("还是到别处去施展你的本事吧。\n");
+                return 1;
+        }
+        return 0;
+}
+
+
+void escape_me(object ob,object me)
+{
+                message_vision(
+"$N狞笑了几声：“今天心情好，"+RANK_D->query_self_rude(ob)+
+"就放过你，不陪你玩了。”说罢，一个筋斗跳出战圈，不知去向。\n",ob);
+
+        destruct(ob);
+}
+
+void die()
+{
+        int reward_exp,reward_pot,dj,my_combat_exp;
+        object killer,killer1,me;
+        me=this_object();
+       dj = me->query("zjb_dj/dj");
+        killer=me->query_temp("last_damage_from");
+        if(killer) killer1=find_player(me->query("killer"));
+        message_vision(HIC"$N惨嚎一声，口喷鲜血，到在地上死了。\n"NOR,me);
+        
+        if(killer1)
+        {
+                if(killer->query("id")==me->query("killer"))
+                {
+/*
+if( dj > 1)
+{
+if ( dj == 2 ) my_combat_exp=((int)me->query("combat_exp")/10)+1000000; 
+if ( dj == 3 ) my_combat_exp=((int)me->query("combat_exp")/10)+3000000; 
+if ( dj == 4 ) my_combat_exp=((int)me->query("combat_exp")/10)+6000000; 
+if ( dj == 5 ) my_combat_exp=((int)me->query("combat_exp")/10)+10000000; 
+if ( dj == 6 ) my_combat_exp=((int)me->query("combat_exp")/10)+15000000; 
+if ( dj == 7 ) my_combat_exp=((int)me->query("combat_exp")/10)+21000000; 
+if ( dj == 8 ) my_combat_exp=((int)me->query("combat_exp")/10)+28000000;
+if ( dj == 9 ) my_combat_exp=((int)me->query("combat_exp")/10)+36000000;
+if ( dj ==10 ) my_combat_exp=((int)me->query("combat_exp")/10)+45000000;
+if ( dj > 10 ) 
+my_combat_exp=((int)me->query("combat_exp")/10)+(45000000+((dj-10)*10000000));
+}
+else {
+my_combat_exp = ((int)me->query("combat_exp")/10);
+}
+*/
+
+         reward_exp = 120 + random(1000);
+       reward_pot = random(500);
+
+         if(!userp(killer1))
+                {
+                   reward_exp = random(1000);
+                    reward_pot = random(200);
+                }
+         if (reward_pot<0) reward_pot=0;
+ if(reward_exp > 400) reward_exp=400;   
+  if (reward_pot>100) reward_pot=100;
+
+                   tell_object(killer1,
+HIY"恭喜你又成功解决一名劫匪！\n"NOR+HIW"在实战中，你获得了"+  
+CHINESE_D->chinese_number(reward_exp) +"点的『实战经验』"+
+CHINESE_D->chinese_number(reward_pot)+"点的『潜能』！\n"NOR); 
+                   killer1->add("combat_exp",reward_exp);
+                   killer1->add("potential",reward_pot);
+                   killer1->add("score",random(5));
+                }
+        }
+
+        remove_call_out("escape_me");
+    destruct(me);
+        return;
+}
+
+int get_level(int exp)
+{
+int level=this_player()->query("zjb_dj/dj")*100;
+
+  return level-10;  
+}            

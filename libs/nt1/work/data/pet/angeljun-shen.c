@@ -1,0 +1,18 @@
+// SN:fmZVjFMY?VX`\5AX
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;31m血[1;31m域神雕[2;37;0m", ({"shen diao"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "血域神雕！
+它是暗夜幽魂的坐骑。
+");
+        set_temp("owner_id", "angeljun");
+        set_temp("owner_name", "暗夜幽魂");
+        ::setup();
+}
+

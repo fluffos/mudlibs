@@ -1,0 +1,18 @@
+// SN:S5IG=dMZAC5a0L4n
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m苏狗熊[2;37;0m", ({"sugou xiong"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "很肥很肥的^
+它是黄妖尸的坐骑。
+");
+        set_temp("owner_id", "huang");
+        set_temp("owner_name", "黄妖尸");
+        ::setup();
+}
+

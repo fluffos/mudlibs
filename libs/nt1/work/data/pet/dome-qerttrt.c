@@ -1,0 +1,18 @@
+// SN:lBH<0BkJ\hLJXbaC
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("哈哈发达鹿[2;37;0m", ({"qerttrt lu"}));        
+        set("gender", "女性");                
+        set("unit", "头");
+        set("long", "爱度
+它是风铃的坐骑。
+");
+        set_temp("owner_id", "dome");
+        set_temp("owner_name", "风铃");
+        ::setup();
+}
+

@@ -1,0 +1,32 @@
+// SN:;0=Gd<gG:Xi:]D:I
+// File(/data/room/xzhan/lianwu.c) of xzhan's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "练武场");
+	set ("long", @LONG
+此处便是血池山庄的练武场，人在江湖，武功万万不可荒废。 
+LONG );
+
+	set("exits", ([
+                "west" : __DIR__"houyuan",
+	]));
+
+        set("objects", ([
+                "/clone/npc/mu-ren" : 4,
+        ]));
+
+        set("outdoors", "playertown");
+        set("no_sleep_room", 1);
+
+        setup();
+    
+        set("room_owner", "血战");
+        set("room_name", "血池山庄");
+        set("room_id", "xuechi");
+        set("room_owner_id", "xzhan");
+        set("room_position", "碎石小道");
+}

@@ -1,0 +1,29 @@
+// 独孤九剑宝石
+
+#include <ansi.h>
+inherit COMBINED_ITEM;
+
+void create()
+{
+	set_name(HIM "漫妙游离" NOR, ({ "manmiao gem" }) );
+	if( clonep() )
+		set_default_object(__FILE__);
+	else {
+		set("long", HIM "一片墨绿的色的水晶宝石，价值看起来很昂贵。"NOR"\n");
+		set("base_value", 20000);
+		set("base_weight", 1);
+		set("base_unit", "片");
+		set("no_sell",1);
+        set("no_give",1);
+        set("no_drop",1);
+        set("no_get",1);
+        set("no_teal", 1);
+		set("can_be_inlay",([
+		"name":"漫妙游离",
+		"skill":"huifeng-jian",
+		])
+		);
+	}
+	set_amount(1);
+	setup();
+}

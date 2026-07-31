@@ -1,0 +1,18 @@
+// SN:Feg_Z2h5<eOg=I>M
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[37m落虹兽[2;37;0m", ({"luohong shou"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "23435354643643
+它是段叶的坐骑。
+");
+        set_temp("owner_id", "lvye");
+        set_temp("owner_name", "段叶");
+        ::setup();
+}
+

@@ -1,0 +1,6 @@
+#define TOWER "/d/noden/daemon_tower/"
+#define TOWER_F1 "/d/noden/daemon_tower/floor1/"
+#define TOWER_F2 "/d/noden/daemon_tower/floor2/"
+#define TOWER_F3 "/d/noden/daemon_tower/floor3/"
+#define MOB "/d/noden/daemon_tower/mob/"
+#define OBJ "/d/noden/daemon_tower/obj/"

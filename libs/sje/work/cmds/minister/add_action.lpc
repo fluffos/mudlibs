@@ -1,0 +1,126 @@
+//edit by xiaoyao
+
+inherit F_CLEAN_UP;
+
+string *special_props = ({
+        "short", "long" });
+
+int saveroom(string file);
+
+int main(object me,string arg)
+{
+        string file,action,action_arg,flag1,flag2,room;
+        object env;
+
+        seteuid(getuid(me));
+
+        env = environment(me);
+
+        if( !arg ) return notify_fail("请使用help add_acton查看。\n");
+
+        if( sscanf(arg, "%s %s", action, action_arg)!=2 )
+                return notify_fail("please help add_action\n");
+
+        if( env->query("kingdom_id")!=me->query("kingdom") )
+                return notify_fail("这已经不是我帮派的领地了。\n");
+
+        if( env->query(action) )
+                return notify_fail("这里已经有这个动作了。\n");
+
+        if( action=="-d" )
+        {
+                if( !env->query(action_arg) )
+                        return notify_fail("这里没有这个动作。\n");
+                if(!(env->query(action_arg+"/exit")))
+                env->set("exits/"+env->query(action_arg+"/arg"),env->query(action_arg+"/room"));
+                else
+                env->set("exits/"+env->query(action_arg+"/exit"),env->query(action_arg+"/room"));
+
+                env->delete(action_arg);
+                saveroom(file_name(env));
+                write("ok\n");
+                return 1;
+        }
+
+        if( action=="move" )
+        {
+
+                if( sscanf(action_arg, "%s %s", flag1, flag2)!=2 )
+                        return notify_fail("please help add_action\n");
+
+                if( !env->query("exits/"+flag2) )
+                        return notify_fail("没有这个出口。\n");
+
+                room = env->query("exits/"+flag2);
+
+                env->set("/"+action+"/action",flag1 );
+                env->set("/"+action+"/arg",flag2 );
+                env->set("/"+action+"/exit",flag2 );
+                env->set("/"+action+"/room",room );
+                env->delete("exits/"+flag2);
+
+                saveroom(file=file_name(env));
+
+                me->move(VOID_OB, 1);
+                destruct(env);
+//              new(file);
+                me->move(find_object(file),1);
+                write("ok\n");
+
+                log_file("SET_ACTION",
+
+                sprintf("%s(%s) action %s(%s)->%s on %s\n",
+                        me->name(1), geteuid(me), me->query("title"), me->query("kingdom"), file,
+                        ctime(time()) ) );
+                return 1;
+        }
+
+        return notify_fail("目前不开放这个动作。\n");
+}
+
+int saveroom(string file)
+{
+        object env,me;
+        string str, *name;
+        mapping prop;
+        int i;
+        me = this_player();
+
+
+        env = find_object(file);
+        str = "// Room: " + me->query("title") + @ROOM_CODE
+
+#include <ansi.h>
+inherit ROOM;
+void create()
+{
+ROOM_CODE
+        ;
+        str += sprintf("\tset(\"short\", %O);\n", env->query("short") );
+        str += sprintf("\tset(\"long\", @LONG\n%sLONG\n\t);\n", env->query("long") );
+        prop = env->query_entire_dbase();
+        name = keys(prop);
+        for(i=0; i<sizeof(name); i++) {
+                if( member_array(name[i], special_props)!=-1 ) continue;
+                str += sprintf("\tset(\"%s\", %O);\n", name[i], prop[name[i]] );
+        }
+        str += "\n\tsetup();\n\treplace_program(ROOM);\n}\n";
+
+        rm(file+".lpc");
+        write_file(file+".lpc", str);
+                return 1;
+        return 0;
+
+}
+int help(object me)
+{
+  write(@HELP
+指令格式 : add_action <动作词> <动作> <参数>
+
+add_action move 之参数只能是方向, 如要其他参数请set_action修改
+
+详细move用法请help action_move
+HELP
+    );
+    return 1;
+}

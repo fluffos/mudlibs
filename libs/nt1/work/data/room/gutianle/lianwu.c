@@ -1,0 +1,32 @@
+// SN:?j7CLl<PX]W1PamZ
+// File(/data/room/gutianle/lianwu.c) of gutianle's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "练武场");
+	set ("long", @LONG
+此处便是乐天居的练武场，人在江湖，武功万万不可荒废。 
+LONG );
+
+	set("exits", ([
+                "west" : __DIR__"houyuan",
+	]));
+
+        set("objects", ([
+                "/clone/npc/mu-ren" : 4,
+        ]));
+
+        set("outdoors", "playertown");
+        set("no_sleep_room", 1);
+
+        setup();
+    
+        set("room_owner", "唐乐天");
+        set("room_name", "乐天居");
+        set("room_id", "penlong");
+        set("room_owner_id", "gutianle");
+        set("room_position", "碎石小道");
+}

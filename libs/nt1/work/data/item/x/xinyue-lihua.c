@@ -1,0 +1,32 @@
+// SN:HINI67;[CAn\jJhM
+// ITEM Made by player(慕容新月:xinyue) /data/item/x/xinyue-lihua.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Mon Apr 26 00:18:31 2004
+#include <ansi.h>
+#include <weapon.h>
+
+inherit SWORD;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;32m梨花院落溶溶月[2;37;0m", ({ "lihua" }));
+	set_weight(9000);
+	set("item_make", 1);
+	set("unit", "柄");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一柄剑。
+[1;32m这是一柄清淡的剑，剑刃上一片绿芒流动，如水的绿波中有几点如同[1;37m梨花[1;32m般的白斑在灼灼生辉。[2;37;0m
+剑柄上刻着一行小字：慕容新月(xinyue)
+");
+	set("value", 2100000);
+	set("point", 427);
+	set("material", "magic stone");
+	set("wield_msg", "[1;32m$N随手抽出一柄$n，[1;32m只见柔婉如水的月光洒落在众人身上，四下里一片清凉。\n[1;32m$N仿佛不食人间烟火的月中女神，脸上寒霜不化，淡雅无双。[2;37;0m\n");
+	set("unwield_msg", "[1;32m$N收回手中神秘的$n，[1;32m天地间那片如水泄地似的月光消失在$N的腕间，你再也感觉不到那阵侵入骨髓的寒意。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	init_sword(apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

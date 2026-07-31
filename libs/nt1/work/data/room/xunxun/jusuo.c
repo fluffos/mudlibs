@@ -1,0 +1,35 @@
+// SN:\kkCb<K^odf;:6dY
+// File(/data/room/xunxun/jusuo.c) of xunxun's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "居所");
+	set ("long", @LONG
+这就是寻寻主人枪下蛋休息、读书的地方。楼上就是主人的卧室，
+西面则是书房。 
+LONG );
+
+	set("exits", ([
+		"up"   : __DIR__"woshi",
+                "west" : __DIR__"shufang",
+	]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("KEY_DOOR", ([
+                "exit" : "east",
+                "room" : __DIR__"huayuan",
+        ]));
+    
+        set("room_owner", "枪下蛋");
+        set("room_name", "寻寻");
+        set("room_id", "xunxun");
+        set("room_owner_id", "xunxun");
+        set("room_position", "青石官道");
+}

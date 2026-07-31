@@ -1,0 +1,24 @@
+// edit by daniel@jhfy.nh 2002
+#include <room.h>
+inherit ROOM;
+
+void create()
+{
+        set("short", "长廊");
+        set("long", @LONG
+延伸到东方的长廊到这里就走到尽头，东方传来阵阵花香，
+那边似乎是一个花园。北方是一间兵器室。
+LONG
+        );
+        set("exits", ([ /* sizeof() == 1 */
+  "east"  : __DIR__"huayuan2",
+  "west"  : __DIR__"lang3",
+//  "north" : __DIR__"weapon_room",
+ ]));
+        set("no_clean_up", 0);
+        set("objects", ([
+   ]));
+        setup();
+        replace_program(ROOM);
+}
+

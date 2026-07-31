@@ -1,0 +1,18 @@
+// SN:9Q[OL3]F[KV5efWF
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;31m英雄[1;37m是[1;32m狗熊熊[2;37;0m", ({"heros xiong"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "英雄$HIW$是$HIG$狗熊
+它是樱叶的坐骑。
+");
+        set_temp("owner_id", "leaf");
+        set_temp("owner_name", "樱叶");
+        ::setup();
+}
+

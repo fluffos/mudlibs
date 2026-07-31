@@ -1,0 +1,32 @@
+// SN:E@;PJ?JC7BB4J6h1
+// ITEM Made by player(少龙:lhp) /data/item/l/lhp-cold.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Wed Jun  9 16:53:01 2004
+#include <ansi.h>
+#include <weapon.h>
+
+inherit SWORD;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;34m极度深寒[2;37;0m", ({ "cold" }));
+	set_weight(9000);
+	set("item_make", 1);
+	set("unit", "柄");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一柄剑。
+[1;34m一股来自地狱深处的寒流，足以冰封世间的一切！[2;37;0m
+剑柄上刻着一行小字：少龙(lhp)
+");
+	set("value", 2100000);
+	set("point", 682);
+	set("material", "magic stone");
+	set("wield_msg", "[1;34m一阵阵寒意袭来，冷却心头，不由的令你打了个寒战。想必是来自地狱深处的呼唤！你还能坚持多久？[2;37;0m\n");
+	set("unwield_msg", "[1;34m寒意渐渐隐去，张开双眼，置身的世界你已不再熟悉。你还能回去吗？[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	init_sword(apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

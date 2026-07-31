@@ -1,0 +1,73 @@
+// Copyright (C) 2003, by Lonely. All rights reserved.
+// This software can not be used, copied, or modified 
+// in any form without the written permission from authors.
+// jinwu-blade.c 金乌刀法
+
+#include <ansi.h>
+
+inherit SKILL;
+
+string *mjj = ({
+        ""HIY"", ""HIG"", ""RED"", ""MAG"", ""YEL"", ""HIC"", ""HIW"", ""HIR"",
+        ""HIB"", ""CYN"",""WHT"",""HIM"",""BLU""
+}); 
+
+string *action_msg = ({
+        "$N手中$w直劈，一招"+(mjj[random(13)])+"「开门揖盗」"NOR"，挟着劲风万丈之式，向$n当头而下",
+        "$N一招"+(mjj[random(13)])+"「梅雪逢夏」"NOR"，卷起一片光幕，只见刀光漫天，向$n疾卷而去",
+        "$N横刀直挥，一招"+(mjj[random(13)])+"「汉将当关」"NOR"，刀身疾下,拢起一阵劲飙，向$n$l劈去",
+        "$N一招"+(mjj[random(13)])+"「赤日金鼓」"NOR"，$w左右连劈六刀，一阵金芒自刀上疾射而出，映的$n\n双眼紧闭，$N乘机趋步上前,挥刀力斩$n$l",
+        "$N手中$w一沉，一招"+(mjj[random(13)])+"「千钧压驼」"NOR"，$w看似沉滞不堪,实则似缓实快，自下挽了一个刀花，\n直劈$n$l",
+        "$N将$w往后一带，使出一招"+(mjj[random(13)])+"「大海沉沙」"NOR"，$w顿时消失得无影无踪，$n正惊疑间，\n只见刀光一闪，$w已迅如闪电般斩往$l",
+        "$N一招"+(mjj[random(13)])+"「鲍鱼之肆」"NOR"，挥舞$w狂劈十八刀，看似混乱不堪，实则刀刀劈向$n要害",
+        "$N踏步上前，使出"+(mjj[random(13)])+"「赤日炎炎」"NOR"，手中$w倒提横挥，化成一簇簇烈焰，向$n劈头盖脸的斩去",
+});
+
+int valid_learn(object me)
+{
+        object ob;
+        if( (int)me->query("max_neili") < 500 )
+                return notify_fail("你的内力不够，没有办法练金乌刀法。\n"); 
+        if( (int)me->query_skill("xueshan-jian",1)<80)
+                return notify_fail("金乌刀法必须有雪山剑法为根底才能练习。\n");
+        if( !(ob = me->query_temp("weapon"))
+        ||      (string)ob->query("skill_type") != "blade" )
+                return notify_fail("你必须先找一把刀才能练刀法。\n");
+
+        return 1;
+}
+
+int valid_enable(string usage) { return usage == "blade" || usage == "parry"; }
+int valid_combine(string combo) { return combo == "xueshan-jian"; }  
+
+mapping query_action(object me, object weapon)
+{
+        return ([
+                "action": action_msg[random(sizeof(action_msg))],
+                "damage": 120 + random(20),
+                "attack": 60 + random(10),
+                "dodge" : 60 + random(10),
+                "parry" : 60 + random(10),
+                "damage_type" : random(2)?"刺伤":"割伤",
+        ]);
+}
+
+int practice_skill(object me)
+{
+        if( (int)me->query("qi") < 70
+        ||      (int)me->query("neili") < 70 )
+                return notify_fail("你的内力或气不够，没有办法练习金乌刀法。\n");
+                
+        me->receive_damage("qi", 60);
+        me->add("neili", -60);
+        
+        return 1;
+}
+
+string perform_action_file(string action)
+{
+        return __DIR__"jinwu-blade/" + action;
+}
+
+
+

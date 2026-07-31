@@ -1,0 +1,18 @@
+// SN:OR=K0g0oJ1mLV4Ed
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;34m踏云雕[2;37;0m", ({"baidiao diao"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "$MAG$这是紫衫龙王从小收养长大的灵雕，特通灵性。
+它是紫衫龙王的坐骑。
+");
+        set_temp("owner_id", "billy");
+        set_temp("owner_name", "紫衫龙王");
+        ::setup();
+}
+

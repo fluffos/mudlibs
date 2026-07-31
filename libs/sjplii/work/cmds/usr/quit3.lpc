@@ -1,0 +1,94 @@
+// quit.c
+
+#include <command.h>
+
+inherit F_DBASE;
+inherit F_CLEAN_UP;
+
+void create() 
+{
+        seteuid(getuid());
+        set("channel_id", "离线精灵");
+        set("name", "离线指令");
+        set("id", "quit");
+}
+
+int main(object me, string arg)
+{
+        int i, pprank, ppranked;
+        object *inv, link_ob, navy1;
+        int stage;
+        string name,file;
+
+        stage = me->query_temp("suicide_countdown");
+
+        if ( !wizardp(me) && (stage < 1) && (me->is_busy() && !me->query_temp("netdead")) )
+                return notify_fail("你上一个动作还没有完成,不能退出。\n");
+        
+        if( !wizardp(me) ) {
+                inv = all_inventory(me);
+                for(i=0; i<sizeof(inv); i++)
+                        if( (!inv[i]->query_autoload()
+                                && inv[i]->query("equipped")!="worn"
+                                && inv[i]->query("equipped")!="wielded")
+                            || inv[i]->query("value") < 5
+                        )
+                                DROP_CMD->do_drop(me, inv[i]);
+        }
+        
+        inv = all_inventory(environment(me));
+        
+        inv->remove_owner(me);
+        
+        link_ob = me->query_temp("link_ob");
+
+        // We might be called on a link_dead player, so check this.
+        if( link_ob ) {
+
+                // Are we possessing in others body ?
+                if( link_ob->is_character() ) {
+                        write("你的魂魄回到" + link_ob->name(1) + "的身上。\n");
+                        exec(link_ob, me);
+                        link_ob->setup();
+                        return 1;
+                }
+
+                link_ob->set("last_on", time());
+                link_ob->set("last_from", query_ip_name(me));
+                link_ob->save();
+                destruct(link_ob);
+        }
+        write("欢迎下次再来！\n");
+        if (environment(me) && me)
+                message("system", me->name() + "离开游戏。\n", environment(me), me);
+                
+        CHANNEL_D->do_channel(this_object(), "sys",me->name()  +" ( " + me->query("id") + " ) "+"离开游戏了。");
+        
+        if(!(int)me->query("kee") ) me->set("kee",1);
+        
+        me->save();
+        log_file( "QUIT", sprintf("%s | %10s |exp: %11d |pot: %11d |trust: %11d |money: %11d\n",
+                ctime(time()),me->query("id"), me->query("combat_exp"),me->query("potential"),
+                me->query("trust"),me->query("deposit"))
+        );
+        
+        name = geteuid(me);
+        file = "/backup/" + name[0..0] + "/"+ name + "/";
+        assure_file(file);
+        LOGIN_D->cphirdir(DATA_DIR + "user/" + name[0..0] + "/" + name, "/backup/" + name[0..0] + "/"+ name );
+        
+        destruct(me);
+        return 1;
+}
+
+int help(object me)
+{
+        write(@HELP
+指令格式 : quit
+
+当你(□)想暂时离开时, 可利用此一指令。
+HELP
+    );
+    return 1;
+}
+

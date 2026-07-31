@@ -1,0 +1,208 @@
+// cp.c
+
+#include <ansi.h> 
+inherit F_CLEAN_UP;
+ 
+void copydir(object me,string src, string dst);
+
+int main(object me, string arg)
+{
+        string src, dst, *dirs;
+ 
+        seteuid(geteuid(me));
+        if (!arg || sscanf(arg, "%s %s", src, dst)!=2 ) return
+                notify_fail("指令格式: cp <原档名> <目标档名> \n");
+
+        if (src=="*.*")
+        {
+                src = resolve_path(me->query("cwd"), src);
+                dst = resolve_path(me->query("cwd"), dst);
+
+                if (file_size(dst) != -2) 
+                {
+                        write (dst+"不是一个有效目录。\n");
+                        return 1;
+                }
+                write("您确认要拷贝"+me->query("cwd")+"下的所有文件和目录copy到目录"+dst+"下吗？(y/n)");
+                input_to("check_copyall", 0, me,dst);
+                return 1;
+        }
+
+        src = resolve_path(me->query("cwd"), src);
+        dst = resolve_path(me->query("cwd"), dst);
+
+
+        if( file_size(dst)==-2 ) {
+                dirs = explode(src, "/");
+                dst += "/" + dirs[sizeof(dirs)-1];
+        }
+        
+        if( file_size(src) < 0 )  return notify_fail(sprintf("没有%s这个档案。\n",src));
+
+        if( !read_file(src) )
+                return notify_fail(HIR"拒绝访问！\n"NOR);
+
+        if( cp(src, dst)==1 )
+        {
+                write("Ok.\n");
+                log_file("nosave/file.log",
+                        sprintf("%s(%s) copy (%s) to (%s) on %s at %s.\n", me->name(), 
+                                  }
+        else
+                write("你没有足够的读写权利。\n");
+        return 1;
+
+}
+ 
+void check_copyall (string arg, object me,string dst)
+{
+        string dir,dfile,tdest;
+        mixed* files;
+        int i;
+
+        if ( arg != "y" )       
+                return;
+
+        dir=me->query("cwd");
+        files=get_dir(dir);
+
+        if( !sizeof(files))
+        {
+                if (file_size(dir) == -2) 
+                {       
+                        write ("这个目录是空的。\n");
+                        return;
+                }
+                else
+                {
+                        write ("没有这个目录。\n");
+                        return ;
+                }
+        }
+
+        if(file_size(dst)!=-2)
+        {
+                write("目标目录不存在!\n");
+                return;
+        }
+        
+        for (i=0;i<sizeof(files);i++)
+        {
+                dfile=files[i];
+                if(file_size(resolve_path(dir, dfile)) ==-1)
+                {
+                        write (sprintf("你要拷贝的档案%s不存在！\n",resolve_path(dir, dfile)));
+                        continue;
+                }       
+                if(file_size(resolve_path(dir, dfile)) ==-2)
+                {
+                        copydir(me,resolve_path(dir, dfile),dst);
+                        continue;
+                }       
+
+                tdest=dst+"/"+ dfile;
+                if( cp(resolve_path(dir, dfile),tdest) ) 
+                {
+                        write(sprintf("%s copied .to %s \n",dfile,tdest));
+                        log_file("nosave/cpfile",
+                                sprintf("%s(%s) copy (%s) to (%s) on %s at %s.\n", me->name(), 
+                                        me->query("id"), dfile,tdest, query_ip_name(me), ctime(time()) ) );
+                }
+                else
+                {
+                        write("你没有足够的读写权利拷贝"+resolve_path(dir, dfile)+"。\n");
+                }
+        }
+        write ("ok!");
+        return;
+        
+}
+
+void copydir(object me,string src, string dst)
+{
+        
+        mixed* nfiles;
+        string dir,cdir,dfile,tdest;
+        string* tmp;
+        int i;
+
+        if(src[sizeof(src)-1]!='/')
+                src=src+"/";
+        nfiles=get_dir(src);
+        
+        if(file_size(dst)!=-2)
+        {
+                write("目标目录不存在!\n");
+                return;
+        }
+
+        if( !sizeof(nfiles))
+        {
+                if (file_size(src) == -2) 
+                {
+                        return;
+                }
+                else
+                {
+                        write ("没有这个目录。\n");
+                        return ;
+                }
+        }
+
+        tmp=explode(src,"/");
+        cdir=tmp[sizeof(tmp)-1];
+        
+        dir = resolve_path(dst,cdir);
+        if( mkdir(dir) )
+        {
+                write(sprintf("建立目录%s\n",dir));
+                write("Ok.\n");
+        }
+        else
+                write(sprintf("你没有在%s下建子目录%s的权利。\n",dst,cdir));
+
+        for (i=0;i<sizeof(nfiles);i++)
+        {
+                dfile=nfiles[i];
+                if(file_size(resolve_path(src, dfile)) ==-1)
+                {
+                        write (sprintf("你要拷贝的档案%s不存在！\n",src,dfile,resolve_path(src, dfile)));
+                        continue;
+                }       
+                if(file_size(resolve_path(src, dfile)) ==-2)
+                {
+                        copydir(me,resolve_path(src, dfile),dir);
+                        continue;
+                }       
+
+                tdest=dir+"/"+ dfile;
+                if( cp(resolve_path(src, dfile),tdest) ) 
+                {
+                        write(sprintf("%s copied .to %s \n",resolve_path(src, dfile),tdest));
+                        log_file("nosave/cpfile",
+                                sprintf("%s(%s) copy (%s) to (%s) on %s at %s.\n", me->name(), 
+                                        me->query("id"), resolve_path(src, dfile),tdest, query_ip_name(me), ctime(time()) ) );
+                }
+                else
+                {
+                        write("你没有足够的读写权利拷贝"+resolve_path(src, dfile)+"。\n");
+
+                }
+        }
+        return ;
+}
+
+
+        
+int help(object me)
+{
+  write(@HELP
+指令格式 : cp <原档名> <目标档名>
+特殊用法 : cp *.* <目标目录> 可以将当前目录下的文件和目录完全拷贝到目标目录。
+
+此指令可让你拷贝档案。
+HELP
+    );
+    return 1;
+}
+

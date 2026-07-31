@@ -1,0 +1,35 @@
+// SN:mQ[anXi=7JV_VeN5
+// File(/data/room/hdx/jusuo.c) of hdx's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "居所");
+	set ("long", @LONG
+这就是好兄弟主人段老二休息、读书的地方。楼上就是主人的卧
+室，西面则是书房。 
+LONG );
+
+	set("exits", ([
+		"up"   : __DIR__"woshi",
+                "west" : __DIR__"shufang",
+	]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("KEY_DOOR", ([
+                "exit" : "east",
+                "room" : __DIR__"huayuan",
+        ]));
+    
+        set("room_owner", "段老二");
+        set("room_name", "好兄弟");
+        set("room_id", "hdx");
+        set("room_owner_id", "hdx");
+        set("room_position", "碎石小道");
+}

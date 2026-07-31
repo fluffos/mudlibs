@@ -1,0 +1,25 @@
+ // serpent.c
+inherit NPC; 
+void create()
+{
+        set_name("黑冠巨蟒", ({ "serpent" }) );
+        set("long", "一只乌黑油亮的巨蟒，头上生著一个大肉瘤。\n"); 
+        set("race", "野兽");
+        set("age", 400);
+        set("attitude", "aggressive"); 
+        set("max_jing", 900);
+        set("max_qi", 1800);
+        set("max_jing", 500); 
+        set("str", 40);
+        set("cor", 70);
+        set("spi", 20);
+        set("int", 10); 
+        set("limbs", ({ "头部", "躯干", "尾巴" }) );
+        set("verbs", ({ "bite" }) ); 
+        set_temp("apply/attack", 60);
+        set_temp("apply/damage", 40);
+        set_temp("apply/armor", 30); 
+        set("combat_exp", 50000);
+        set("score", 1000);
+        setup();
+}  

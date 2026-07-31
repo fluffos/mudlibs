@@ -1,0 +1,29 @@
+//六脉神剑-六脉剑气pfm宝石
+
+#include <ansi.h>
+inherit COMBINED_ITEM;
+
+void create()
+{
+	set_name(HIM "青云" NOR, ({ "six_six gem" }) );
+	if( clonep() )
+		set_default_object(__FILE__);
+	else {
+		set("long", HIM "一块淡青色的宝石。"NOR"\n");
+		set("base_value", 20000);
+		set("base_weight", 1);
+		set("base_unit", "片");
+		set("no_sell",1);
+        set("no_give",1);
+        set("no_drop",1);
+        set("no_get",1);
+        set("no_teal", 1);
+		set("can_be_inlay",([
+		"name":"青云",
+		"skill":"six-finger-six",
+		])
+		);
+	}
+	set_amount(1);
+	setup();
+}

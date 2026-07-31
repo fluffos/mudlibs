@@ -1,0 +1,30 @@
+// toptenadd.c
+
+inherit F_CLEAN_UP;
+
+int main(object me, string arg)
+{
+	string str;
+
+	seteuid(geteuid(me));
+if (me->query_temp("zjb_topten")>time())
+  return notify_fail("请过几秒再使用本指令。\n");
+	if (!arg||arg=="")
+		str = "/adm/daemons/toptend"->query_type();
+	else 
+		str="/adm/daemons/toptend"->topten_query(arg);
+	write(str+"\n");
+me->set_temp("zjb_topten",time()+2);
+	return 1;
+}
+
+int help(object me)
+{
+write(@HELP
+指令格式 : topten <类型>
+      类型:rich(十大富豪)|per(十大美女)|pker(十大杀手)|age(十大老前辈)
+     |exp(十大武林高手)|force(十大内力高手)|dodge(十大轻功人物)...
+HELP
+    );
+    return 1;
+}

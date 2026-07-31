@@ -1,0 +1,46 @@
+// rexue.c 热血毒手
+// By king 2001.8.30
+#include <ansi.h>
+inherit F_SSERVER;
+int perform(object me, object target)
+{
+      object obj;
+    string msg;
+    if( !target ) target = offensive_target(me);
+    if( !target || !target->is_character() )
+        return notify_fail("热血毒手只能对对手使用。\n");
+    if( (int)me->query_skill("fengxiao-xinfa", 1) < 40 )
+        return notify_fail("你的风啸心法不够娴熟，不能使用热血毒手。\n");
+    if( (int)me->query_skill("fengxiao-zhang", 1) < 40 )
+        return notify_fail("你的风啸掌法不够娴熟，不能使用热血毒手。\n");
+    msg = HIG "$N将毒质运于掌上，突然向$n诡秘的一笑，一招[热血毒手]，劈向$n。\n";
+    me->start_busy(1);
+    if( random( (int)me->query_skill("fengxiao-zhang",1))
+          > random(target->query_skill("dodge") ) ) {
+        msg += HIW " 结果$p还没反应过来，$p就中了$P的毒手！翻身倒地！\n" NOR;
+            target->receive_damage("qi",(int)me->query_skill("fengxiao-zhang",1),me);
+            target->receive_wound("qi",15 + random(10),me);
+            target->receive_wound("jing", 10,me);
+            target->apply_condition("snake_poison",
+                    (int)target->query_condition("snake_poison") + 500 );
+            target->apply_condition("wugong_poison",
+                    (int)target->query_condition("wugong_poison") + 500 );
+             target->apply_condition("zhizhu_poison",
+                    (int)target->query_condition("zhizhu_poison") + 500 );
+             target->apply_condition("xiezi_poison",
+                    (int)target->query_condition("xiezi_poison") + 500 );
+             target->apply_condition("chanchu_poison",
+                    (int)target->query_condition("chanchu_poison") + 500 );
+
+            target->apply_condition("xx_poison", random(me->query_skill("fengxiao-zhangfa",1)/10) + 1 +
+            target->query_condition("xx_poison"));
+            target->start_busy(1 + random(2));
+    } else {
+        msg += "可是$p急忙闪在一旁，不过也吓了一跳。\n" NOR;
+        me->start_busy(2);
+    }
+    message_vision(msg, me, target);
+    if( !target->is_killing(me) ) target->kill_ob(me);
+      destruct(obj);
+    return 1;
+}

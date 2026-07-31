@@ -1,0 +1,3 @@
+// unarmed.c
+
+inherit SKILL;

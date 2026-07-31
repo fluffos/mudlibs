@@ -1,0 +1,33 @@
+// SN:4_^h6RO>hPMVDZ;V
+// ITEM Made by player(傅君婥:fujunzhuo) /data/item/f/fujunzhuo-fire.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Sun Feb 22 20:33:48 2004
+#include <ansi.h>
+#include <armor.h>
+
+inherit ARMOR;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;31m火焰铠甲[2;37;0m", ({ "fire" }));
+	set_weight(1050);
+	set("item_make", 1);
+	set("unit", "张");
+	set("long", "这是由[1;37m冰蚕丝[2;37;0m炼制而成的一张护甲。
+[1;31m一件火红色的铠甲，感觉不出有什么重量，铠甲上红光流动，像极了来自地狱的无名火焰。[2;37;0m
+护甲缘上刻着一行小字：傅君婥(fujunzhuo)
+");
+	set("value", 2100000);
+	set("point", 184);
+	set("material", "silk");
+	set("wear_msg", "[1;31m大地间一片红光冲天闪过，一件火红的铠甲落在$N的身上。[2;37;0m\n");
+	set("remove_msg", "[1;31m周围红光隐没在漠漠的黑暗之中，$N身上的火红铠甲已经不见了。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/parry", apply_armor() / 15 + 1);
+	set("armor_prop/armor", apply_armor());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

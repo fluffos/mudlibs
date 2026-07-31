@@ -1,0 +1,31 @@
+// SN:b1Y`6NN02Bha8HX]
+// ITEM Made by player(胡逸:meng) /data/item/m/meng-yer.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Tue Nov  9 23:54:21 2004
+#include <ansi.h>
+#include <armor.h>
+
+inherit CLOTH;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;37m雨点儿[2;37;0m", ({ "yer" }));
+	set_weight(1400);
+	set("item_make", 1);
+	set("unit", "件");
+	set("long", "这是由[1;37m冰蚕丝[2;37;0m炼制而成的一件战衣。
+战衣缘上刻着一行小字：胡逸(meng)
+");
+	set("value", 2100000);
+	set("point", 145);
+	set("material", "silk");
+	set("wear_msg", "[1;33m$N使出少林醉枪的绝技「八仙醉打」，臂力陡然增加，身法陡然加快！\n[2;37;0m\n");
+	set("remove_msg", "[1;35m$N一声长啸，脚下按北斗方位连踏七步，身形急转、飘洒之极！\n[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/armor", apply_armor());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

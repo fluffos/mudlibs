@@ -1,0 +1,38 @@
+// SN:ciN2^77c5foEWD2I
+// File(/data/room/terra/yingke.c) of terra's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        set("short", "天堂乌鸦的家迎客厅");
+	set ("long", @LONG
+这里是天堂乌鸦的家的主人天堂乌鸦迎接八方来客的地方。大凡
+客人来拜见天堂乌鸦，少不得在这里寒暄叙话，了尽仰慕之情。东面
+通往一个茶室，是主人陪同客人品尝天下名茶之处。 
+LONG );
+
+	set("exits", ([
+		"north"  : __DIR__"yishiting",
+                "south"  : __DIR__"zoudao",
+                "east"   : __DIR__"chashi",
+	]));
+
+        create_door("east", "木门", "west", DOOR_CLOSED);
+
+        set("objects", ([
+                "/d/room/roomnpc/yahuan" : 2,
+        ]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("room_owner", "天堂乌鸦");
+        set("room_name", "天堂乌鸦的家");
+        set("room_id", "terras");
+        set("room_owner_id", "terra");
+        set("room_position", "山路");
+}

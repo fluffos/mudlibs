@@ -1,0 +1,32 @@
+// SN:LE?>LI?YiBR1<l8;
+// ITEM Made by player(行香子:michael) /data/item/m/michael-cxnd.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Mon Nov 15 20:14:33 2004
+#include <ansi.h>
+#include <weapon.h>
+
+inherit DAGGER;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;32m清平乐[2;37;0m", ({ "cxnd" }));
+	set_weight(1800);
+	set("item_make", 1);
+	set("unit", "支");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一支短兵。
+[1;32m年年雪里，常插梅花醉，挪尽梅花无好意，赢得满衣清泪！今年海角天涯，萧萧两鬓生华。看取晚来风势，故应难看梅花。[2;37;0m
+短兵柄上刻着一行小字：行香子(michael)
+");
+	set("value", 2100000);
+	set("point", 388);
+	set("material", "magic stone");
+	set("wield_msg", "[1;32m年年雪里，常插梅花醉，挪尽梅花无好意，赢得满衣清泪！[2;37;0m\n");
+	set("unwield_msg", "[1;32m今年海角天涯，萧萧两鬓生华。看取晚来风势，故应难看梅花。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	init_dagger(apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

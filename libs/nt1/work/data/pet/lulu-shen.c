@@ -1,0 +1,18 @@
+// SN:g\X5l\aR[H_V]BYj
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;32m神鹤[2;37;0m", ({"shen he"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "一只小神鹤，看起来有二岁了。
+它是唐绣的坐骑。
+");
+        set_temp("owner_id", "lulu");
+        set_temp("owner_name", "唐绣");
+        ::setup();
+}
+

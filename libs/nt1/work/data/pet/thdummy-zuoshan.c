@@ -1,0 +1,18 @@
+// SN:hHR58RQWmb8XjNg;
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m座山雕[2;37;0m", ({"zuoshan diao"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "大土匪座山雕
+它是制药一厂的坐骑。
+");
+        set_temp("owner_id", "thdummy");
+        set_temp("owner_name", "制药一厂");
+        ::setup();
+}
+

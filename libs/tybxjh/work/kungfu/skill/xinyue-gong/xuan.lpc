@@ -1,0 +1,70 @@
+//玄天拳之天玄地冥 
+// tianson
+#include <ansi.h>
+
+inherit F_SSERVER;
+
+int perform(object me, object target)
+{
+        string msg;
+        int damage, ap, dp;
+
+        if( !target ) target = offensive_target(me);
+
+        if( !target
+        ||      !target->is_character()
+        ||      target->is_corpse()
+        ||      target==me)
+                return notify_fail("你要对谁施展「天玄地冥」？\n");
+
+        if((int)me->query("neili") < 2000+(int)me->query("force_factor") * 3 )
+                return notify_fail("你的内力不够！\n");
+
+        if((int)me->query_skill("xinyue-gong", 1) <200)
+                return notify_fail("你的星月功级别还不够！\n");
+
+        me->add("neili", -1000-(int)me->query("force_factor") * 3 );
+        me->receive_damage("qi", 1000);
+
+        msg = HIC
+"\n$N身子向后一挫，动作突然停住，脸上闪过一道玄色的光芒，双拳缓慢抬起，拳心相对，\n"
+"看似慢，实则快，一晃便欺到$n的面前，无声无息的使出玄天拳之绝学--「天玄地冥」！\n\n" 
+"$n只觉得一股劲气迎面而来，睁眼和呼吸都感到困难，更不用说如何招架了！\n" NOR;
+
+        ap = me->query_skill("xinyue-gong", 1)
+        + me->query_skill("parry");
+        ap = ( ap * ap * ap / (4 * 400) )
+        + (int)me->query("qi");
+        ap = ap*250 + (int)me->query("combat_exp");
+        dp = target->query_skill("parry");
+        dp = ( dp * dp * dp / (4 * 400) )
+        + (int)target->query("qi");
+        dp = dp*250 + target->query("combat_exp"); 
+        if( random((ap + dp)/1000+1) <  dp/1000 ) {
+                msg += HIC "谁知$n竟身居险中而不惧，身随气而急退，飘飘然落在三丈之外，毫发无损。\n\n"NOR;
+                message_vision(msg, me, target);
+        } else {
+                damage = (int)me->query_skill("xinyue-gong",1) / 5 +
+                  (int)me->query("neili") / 100 + (int)me->query("force_factor")/5 +
+                        (int)me->query("qi") / 400 + random((int)me->query("qi") / 200 ); 
+                msg += HIC "一股玄天阴凉之气直接穿透$n的身体，$n只觉得经脉凝结，血液倒流，看来内伤不轻！\n" NOR;
+                        target->receive_damage("qi", me->query("eff_qi")*damage/100, me);
+                        target->receive_wound("qi", me->query("eff_qi")*damage/100-
+                                                 (int)target->query("max_force")/100, me);
+                        me->improve_skill("xinyue-gong", 1, 1);
+                message_vision(msg, me, target);
+                COMBAT_D->report_status(target);
+         }
+        if( !target->is_fighting(me) ) {
+                if( living(target) ) {
+                        if( userp(target) ) target->fight_ob(me);
+                        else target->kill_ob(me);
+                }
+        }
+
+
+
+        me->start_busy(3);
+        return 1;
+}
+

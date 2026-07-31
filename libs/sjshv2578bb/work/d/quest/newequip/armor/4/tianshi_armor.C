@@ -1,0 +1,33 @@
+// kuku@sjsh 2003.09.14
+
+#include <ansi.h>
+#include <armor.h>
+inherit ARMOR;
+inherit "/d/quest/newequip/calculate";
+
+void create()
+{
+        string msg = "";  
+        set_name(HIM"天使甲"NOR, ({"tianshi jia", "armor"}));
+        set_weight(6000);
+        if( clonep() )
+                set_default_object(__FILE__);
+        else{
+                set("material", "gold");
+                set("unit", "件");
+                set("need_class",1);
+                set("lvl",4);                   
+                set("Is_Diablo_Obj",1);
+                set("inset_hole",2);
+                set("value", 1000);
+                set("armor_prop/armor", 80);
+        }
+        msg += "一件厚厚的盔甲，不时的闪现出明亮的光泽。\n"+"基本防御: "+query("armor_prop/armor")+"\n"; 
+        set("old_long",msg);
+        if( query("lvl")>2){
+                if( !query("identification") ) 
+                        msg =query("old_long") + RED "这样东西还没有鉴定。\n"NOR;
+                        set("long",msg);
+        } 
+        setup();
+}

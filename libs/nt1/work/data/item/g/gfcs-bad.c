@@ -1,0 +1,31 @@
+// SN:n9<\K:B4ZmF0^UiB
+// ITEM Made by player(段玉兰:gfcs) /data/item/g/gfcs-bad.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Mon Oct 11 00:55:24 2004
+#include <ansi.h>
+#include <weapon.h>
+
+inherit SWORD;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;33m坏男孩[2;37;0m", ({ "bad" }));
+	set_weight(9000);
+	set("item_make", 1);
+	set("unit", "柄");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一柄剑。
+剑柄上刻着一行小字：段玉兰(gfcs)
+");
+	set("value", 2100000);
+	set("point", 426);
+	set("material", "magic stone");
+	set("wield_msg", "$N拔剑出鞘。\n[1;31m$N怒喝一声：$n[1;31m，你小子跑哪里去了。$n[1;31m赶紧跑来说道：不好意思，刚回来，刚回来。[2;37;0m\n");
+	set("unwield_msg", "$N长叹一声。\n[1;32m$n[1;32m转身跑得无影无踪，直把$N气得怒发冲冠：$n[1;32m，你这个大骗子。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	init_sword(apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

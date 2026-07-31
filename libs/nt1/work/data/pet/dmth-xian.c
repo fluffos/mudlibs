@@ -1,0 +1,18 @@
+// SN:8[D4GLZ]XBk408eJ
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;33m仙鹤[2;37;0m", ({"xian he"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "$HIR$哇,快看$HIY$仙鹤.
+它是吃药长大的坐骑。
+");
+        set_temp("owner_id", "dmth");
+        set_temp("owner_name", "吃药长大");
+        ::setup();
+}
+

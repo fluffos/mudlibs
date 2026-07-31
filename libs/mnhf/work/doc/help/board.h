@@ -1,0 +1,11 @@
+模拟华附技能篇==@==/doc/help/hfskills.txt
+模拟华附背景篇==@==/doc/help/hfauthors.txt
+模拟华附指令篇==@==/doc/help/hfcmds.txt
+架设MUD==@==/doc/wiz/buildmud.txt
+巫师指令==@==/doc/wiz/wizcmds.txt
+模拟华附新增指令==@==/doc/help/newcmds.txt
+巫师设置==@==/doc/wiz/wizsettings.txt
+巫师升迁要求==@==/doc/wiz/wizduty.txt
+巫师招聘==@==/doc/wiz/wizapply.txt
+巫师升职考试题==@==/doc/wiz/wiztest.txt
+模拟华附感谢篇==@==/doc/help/hfthanks.txt

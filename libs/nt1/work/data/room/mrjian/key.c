@@ -1,0 +1,28 @@
+// SN:G0X0dS65dGBMTPej
+// File(/data/room/mrjian/key.c) of mrjian's key
+// Create by LUBAN written by Doing Lu
+
+#include <ansi.h>
+
+inherit ITEM;
+
+string query_autoload() { return "1"; }
+
+void create()
+{
+        set_name(YEL "慕容灵家的钥匙" NOR, ({ "key", "1 of mrjian" }));
+        set_weight(10);
+        if (clonep())
+                set_default_object(__FILE__);
+        else {
+                set("long", @LONG
+一把用来开启灵光居(lgju)的钥匙。
+这是原配钥匙。
+LONG );
+                set("unit", "把");
+                set("no_pawn", 1);
+                set("no_sell", 1);
+                set("item_make", 1);
+                set("value", 1);
+        }
+}

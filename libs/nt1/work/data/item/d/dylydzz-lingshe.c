@@ -1,0 +1,32 @@
+// SN:6DGodLBL^gIaFUG1
+// ITEM Made by player(唐狐:dylydzz) /data/item/d/dylydzz-lingshe.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Tue Oct 12 22:28:30 2004
+#include <ansi.h>
+#include <weapon.h>
+
+inherit SWORD;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;37m灵蛇杖[2;37;0m", ({ "lingshe" }));
+	set_weight(9000);
+	set("item_make", 1);
+	set("unit", "柄");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一柄剑。
+这是一柄令人毛骨悚然的宝杖。缠杖盘旋的两条毒蛇，吞吐伸缩，令人难防。[2;37;0m
+剑柄上刻着一行小字：唐狐(dylydzz)
+");
+	set("value", 2100000);
+	set("point", 133);
+	set("material", "magic stone");
+	set("wield_msg", "[1;36m$N大喝一声，一股气浪登时如波涛一般散布开来，直吹得四周飞沙走石！[2;37;0m\n");
+	set("unwield_msg", "[1;37m$N冷哼一声，默运玄功，运用罡气护住了全身。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	init_sword(apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

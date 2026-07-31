@@ -1,0 +1,35 @@
+// SN:ma6S`>b@?[TS>U]7
+// ITEM Made by player(悟空:www) /data/item/w/www-wzxrou.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Fri Nov 12 14:41:19 2004
+#include <ansi.h>
+#include <armor.h>
+
+inherit HANDS;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;35m雨萱[1;37m的[35m芭比娃娃[2;37;0m", ({ "wzxrou" }));
+	set_weight(2700);
+	set("item_make", 1);
+	set("unit", "双");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一双铁掌。
+这是一个可爱的芭比娃娃，是雨萱心爱的玩具之一。[2;37;0m
+铁掌缘上刻着一行小字：悟空(www)
+");
+	set("value", 2100000);
+	set("point", 1681);
+	set("material", "magic stone");
+	set("wear_msg", "[35m看偶的芭比娃娃漂亮吗？[2;37;0m\n");
+	set("remove_msg", "[35m偶的芭比娃娃要休息咯，不给你们看啦！[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/armor", 10);
+	set("armor_prop/strike", 10);
+	set("armor_prop/hand", 10);
+	set("armor_prop/unarmed_damage", apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

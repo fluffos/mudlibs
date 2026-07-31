@@ -1,0 +1,18 @@
+// SN:afTn_lkZe:?LN7C5
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("黑马[2;37;0m", ({"tangr ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "一匹黑马
+它是唐二的坐骑。
+");
+        set_temp("owner_id", "tanger");
+        set_temp("owner_name", "唐二");
+        ::setup();
+}
+

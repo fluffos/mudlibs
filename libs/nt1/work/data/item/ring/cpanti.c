@@ -1,0 +1,11 @@
+// SN:gc<;oFNA=Xc2h89X
+// wedding-ring.c
+
+#include "/clone/misc/wedding-ring.h"
+
+void setup()
+{
+        set("long", "这是小蓓和羽柴运吉的结婚戒指，是两人的定情之物。
+");
+        ::setup();
+}

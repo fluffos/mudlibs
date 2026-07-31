@@ -1,0 +1,18 @@
+// SN:N9OD51i2DbUXM`V;
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;34m逐云鹤[2;37;0m", ({"yunyue he"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "全真之鹤
+它是全真的坐骑。
+");
+        set_temp("owner_id", "quanzhen");
+        set_temp("owner_name", "全真");
+        ::setup();
+}
+

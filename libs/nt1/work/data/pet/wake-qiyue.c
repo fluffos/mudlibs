@@ -1,0 +1,18 @@
+// SN:<;N`lT8OKLXO1JXa
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m七[1;33m月[1;32m雕[2;37;0m", ({"qiyue diao"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "$HIW$七$HIY$月$HIG$天的坐骑。
+它是七月天的坐骑。
+");
+        set_temp("owner_id", "wake");
+        set_temp("owner_name", "七月天");
+        ::setup();
+}
+

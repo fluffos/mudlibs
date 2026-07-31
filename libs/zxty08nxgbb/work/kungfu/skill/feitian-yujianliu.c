@@ -1,0 +1,192 @@
+#include <ansi.h>
+inherit SKILL;
+string type() { return "zhongji"; }
+mapping *action = ({
+        ([      "action":
+"$N左手托住$w，向上疾斩使出一招[龍翔闪]$w犹如一道弯月，向$n的$l砍来",
+        "force" : 100,
+        "dodge" : 10,
+          "damage" : 40,
+        "skill_name" : "龍翔闪",
+        "damage_type":  "割伤"
+        ]),
+        ([      "action":
+"$N全力跳向高空，双手握住$w全力向下劈下使出一招「龍锤闪」$w带着一股劲风劈向$n，$n来不及反应以被狠狠的劈中了肩部",
+        "force" : 150,
+        "dodge" : -5,
+          "damage" : 80,
+        "skill_name" : "龍锤闪",
+        "damage_type":  "割伤"
+        ]),
+});
+
+mapping *action2 = ({
+        ([      "action":
+"$N使出一招"HIW"[土龍闪]"NOR"用左手$w架住$n的兵器，右手握住刀鞘顺势劈向$n的$l"NOR"",
+        "force" : 520,
+        "dodge" : 200,
+        "parry" : 240,
+        "damage" : 215,
+        "lvl" : 120,
+        "skill_name" : "土龍闪",
+        "damage_type":  "砸伤"
+        ]),
+        ([      "action":
+"$N使出一式的"HIB"「双龍闪」"NOR"以拔刀术收刀式闪电般收回$w紧接着劲力微吐，$w疾如流星离鞘刺向$n"NOR"",
+        "force" : 520,
+        "dodge" : 200,
+        "parry" : 240,
+        "damage" : 215,
+        "lvl" : 120,
+        "skill_name" : "双龍闪",
+        "damage_type":  "刺伤"
+        ]),
+});
+
+mapping *action3 = ({
+        ([      "action":
+""HIY"$N将手中的$w向前虚劈一刀，左手拿着刀鞘全力砸向地下激起一阵飞石砸向$n。
+$n愕然之际以被砸了个面目全飞。这招正是飞天御剑流奇招"HIW"「龍巢闪」"NOR"",
+     "force" : this_player()->query_skill("feitian-yujianliu",1),
+     "dodge" : this_player()->query_skill("dodge",1)/2,
+    "damage" : this_player()->query("zjb_dj/dj")*180,
+     "parry" : this_player()->query_skill("parry",1),
+      "lvl" : 1050,
+        "skill_name" : "龍巢闪",
+        "damage_type":  "割伤"
+        ]),
+        ([      "action":
+""HIY"$N跳向空中在半空中屈卷身体向$n使出了一招"HIM"「龍卷闪]"NOR""HIY"$N手中的$w和人卷成一团犹如一道刀轮劈向$n的$l"NOR"",
+     "force" : this_player()->query_skill("feitian-yujianliu",1),
+     "dodge" : this_player()->query_skill("dodge",1)/2,
+    "damage" : this_player()->query("zjb_dj/dj")*180,
+     "parry" : this_player()->query_skill("parry",1),
+      "lvl" : 1050,
+        "skill_name" : "龍卷闪",
+        "damage_type":  "割伤"
+        ]),
+        ([      "action":
+""HIY"$N使出飞天御剑流最后一式「飞翔龍闪」,手中$w带着一股杀气犹如蛟龍一般刺向$n"NOR,
+     "force" : this_player()->query_skill("feitian-yujianliu",1),
+     "dodge" : this_player()->query_skill("dodge",1)/2,
+    "damage" : this_player()->query("zjb_dj/dj")*180,
+     "parry" : this_player()->query_skill("parry",1),
+      "lvl" : 1050,
+        "skill_name" : "飞翔龍闪",
+        "damage_type":  "刺伤"
+        ]),
+});
+
+int valid_learn(object me)
+{
+        object ob;
+
+        if( (int)me->query("max_neili") < 150 )
+                return notify_fail("你的内力不够，没有办法练飞天御剑流。\n");
+
+        if( !(ob = me->query_temp("weapon"))
+        ||      (string)ob->query("skill_type") != "sword" )
+                return notify_fail("你必须先找一把兵器才能练飞天御剑流。\n");
+
+        return 1;
+}
+
+int valid_enable(string usage)
+{
+        return usage=="sword"|| usage == "parry" ;
+}
+
+string query_skill_name(int level)
+{
+        int i;
+        for(i = sizeof(action)-1; i >= 0; i--)
+                if(level >= action[i]["lvl"])
+                        return action[i]["skill_name"];
+}
+
+mapping query_action(object me, object weapon)
+{
+        int i, level;
+          mapping a_action;
+        level   = (int) me->query_skill("feitian-yujianliu",1);
+          me = this_player();
+        if (me->query_skill("feitian-yujianliu",1)<401)  
+    return action[random(sizeof(action))];
+   
+        if (me->query_skill("feitian-yujianliu",1)>400
+        && me->query_skill("feitian-yujianliu",1)<1001)
+    return action2[random(sizeof(action2))];
+ 
+        if (me->query_skill("feitian-yujianliu",1)>1000
+        && me->query("zjb_dj/dj")>=5)
+  return action3[random(sizeof(action3))];
+
+    if (me->query_skill("feitian-yujianliu",1)>1000
+        && me->query("zjb_dj/dj")<5)
+ return action2[random(sizeof(action2))];
+}
+
+int practice_skill(object me)
+{
+        if( (int)me->query("qi") < 30
+        ||      (int)me->query("neili") < 5 )
+                return  notify_fail("你的内力或气不够，没有办法练习飞天御剑流。\n"
+);
+        me->receive_damage("qi", 30);
+        me->add("neili", -10);
+        write(""HIB"你按著自己的领悟练了一遍飞天御剑流。"NOR"\n");
+        return 1;
+}
+
+
+string *parry_msg = ({
+        "$n以攻代守，$v直向$N砍去。$N吓的连退数步，撤回了攻势。\n",
+        "$n使出一招「九头龍闪」，将全身躲在了$v形成的剑幕中。\n",
+              "$n使出「龙巢闪」，扬起一片尘沙将$N的$w封于丈外。\n",
+        "$n使出一招「双龙闪」，用手中的$v架住了$N的$w。\n",
+});
+
+string *unarmed_parry_msg = ({
+        "$n将手中的$v以拔刀术收了回去，全身散发着无穷杀意令$N不敢进攻了。\n",
+              "$n将手中的$v舞得密不透风，封住了$N的攻势。\n",
+        "$n反手一招「九頭龍闪」，整个人消失在一团剑光之中。\n",
+        "$n使出一招「飞翔龙闪」，$v直刺$N的双手。\n",
+        "$n将手中的$v化做七条剑气，宛如瑟瑟秋风，迫得$N连连后退。\n",
+});
+
+string query_parry_msg(object weapon)
+{
+        if( weapon )
+                return parry_msg[random(sizeof(parry_msg))];
+        else
+                return unarmed_parry_msg[random(sizeof(unarmed_parry_msg))];
+}
+
+string perform_action_file(string action)
+{
+        return __DIR__"feitian-yujianliu/" + action;
+}
+mixed hit_ob(object me, object victim, int damage_bonus)
+{
+      if( damage_bonus < 110 ) return 0;
+
+ // 第二等级的伤气
+        if ( me->query_skill("feitian-yujianliu",1)>400
+         && me->query_skill("shayi",1)>300
+         && me->query_skill("feitian-yujianliu",1)<1001
+&& (me->query("neili")*3) > victim->query("max_neili") ) {
+             victim->receive_damage("qi", (damage_bonus - 100) / 8 , me);
+return HIW "空气中弥漫的杀气越来越重，忽然间$n一声闷哼嘴角一丝鲜血流下，已被$N杀气所伤！\n" NOR;
+}
+
+ //  第三等级的伤气
+        if( me->query_skill("feitian-yujianliu",1)>1000
+       && me->query("zjb_dj/dj")>=5
+    && me->query_skill("shayi",1)>500
+&& (me->query("neili")*3) > victim->query("max_neili") ) {
+                victim->receive_damage("qi", (damage_bonus - 100) / 3 , me);
+return HIR "空气中弥漫的杀气越来越重，忽然间$n一声闷哼嘴角一丝鲜血流下，已被$N杀气所伤！\n" NOR;
+  }      
+}
+
+

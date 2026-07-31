@@ -1,0 +1,119 @@
+#include <ansi.h>
+
+inherit ROOM;
+
+void create ()
+{
+  set ("short", "宏天的工作室");
+    set("long", "好地方。\n");
+
+  set("exits", ([ /* sizeof() == 1 */
+  "down" : "/u/hxsd/work",
+]));
+    set("objects",  ([
+    __DIR__"long/cao"  :  1,
+//    __DIR__"guo/guo"  :  1,
+    ]));
+set_temp("wayao2",20);
+set("pingan",1);
+set("sleep_room",1);
+  set("valid_startroom", 1);
+  set("outdoors", "/u/lywin");
+
+  setup();
+}
+void init()
+{
+        mixed *local;
+        int  t;
+        local = localtime(time()*60);
+        t = local[2] * 60 + local[1];       
+        add_action("do_look", "look");
+}
+
+/*
+30-260        午夜
+260-510       黎明
+510-630       早晨
+630-810       中午
+810-990       傍晚
+990-1170      下午
+1170-1360     傍晚
+1360-第二天30 夜晚
+*/
+
+int do_look()
+{
+        mixed *local;
+        int  t;
+        local = localtime(time()*60);
+        t = local[2] * 60 + local[1];
+      
+        if( t > 30 && t < 260)
+        {
+                set("long", BLU"那繁星流转，日月迁移，黎明前最后的一丝黑暗。天明就要到来！小
+人物沉睡于自已的床上，在美好的梦中找寻自己心中的天女。\n");
+        }
+        if( t > 260 && t < 510)
+        {
+                set("long", HIC"天光微明！花草带露！万物凄美！宏天的工作室里一片美好！那清晨
+里清亮的鸟鸣送给宏天无限的希望。\n"NOR);
+        }
+        if( t > 510 && t < 630)
+        {
+                set("long", HIY"亮丽的上半天是一天中每好的开始， 勤劳的宏天早早的起来了，因为
+他为了养活自己,马上要去上班了。上班去喽!!\n"NOR);
+        }
+        if( t < 810 && t > 630)
+        {
+                set("long", HIW"中午的到来让宏天不得不停下了手上的程序,肚子里咕咕乱叫,实在是
+顶不住了,走!吃饭去,吃完饭后宏天便和几个朋友打起了乒乓球。\n"NOR);
+        }
+        if( t < 990 && t > 810)
+        {
+                set("long", HIG"转眼就到了要吃晚饭的时候，一天累劳的工作终于结束了,终于回到家的
+宏天和家人围坐在一起边看动画片边吃晚饭,生活真是无限好。\n"NOR);
+        }
+        if( t < 1170 && t > 990)
+        {
+                set("long", HIR"由于宏天的文凭是在单位中最差的,所以宏天不得不坐一个多小时的
+汽车,去市区读书,可是,成果却.......现在的上海真像一个大的拳击台,不
+是你击倒我就是我击到你。唉!\n"NOR);
+        }
+        if( t < 1360 && t > 1170)
+        {
+                set("long", RED"天色已经很暗了，到这个时候，宏天终于到了交通大学,和朋友们做在
+了一起,谈天说地.无说不为.看来这次英语和高数又要玩完了。\n"NOR);
+        }
+        if( t < 30 || t > 1360)
+        {
+                set("long", BLU"夜深人静了，宏天拖着快要倒下的身子回到了家,到了家已经不行了,往
+床上一躺,在睡觉前躺在床上看武侠小说是宏天最好的休息。\n"NOR);
+        }
+}
+
+varargs int valid_leave(object me, string dir)
+{
+	object *inv,kicker;
+	int sizeinv,n,tt;
+
+        if ( !userp(me))
+        {
+        write("这是别人的门派,你不能乱走。\n");
+        write("你被几个弟子打了出去。\n");
+         me->unconcious();
+	return notify_fail("你不能进去!\n");
+        }
+        else {
+		inv=all_inventory(me);
+		sizeinv=sizeof(inv);
+	
+		while (sizeinv--)
+		{
+       			if (inv[sizeinv]->is_character())  
+     				return notify_fail("你想进去拐卖人口？\n");
+       		
+		}
+        return ::valid_leave(me, dir);
+        }
+}

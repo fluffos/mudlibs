@@ -1,0 +1,16 @@
+#include <ansi.h>
+inherit ITEM;
+
+void create()
+{
+    set_name(BLINK+HIM"七"HIW"彩"HIR"宝"HIY"石"HIB"链"+NOR, ({ "qicai lian","baoshi lian"}) );
+    set_weight(10);
+    if( clonep() )
+            set_default_object(__FILE__);
+    else {
+            set("unit", "条");
+            set("long", "一条闪闪发光的宝石链，它由多个稀有罕见的宝石穿成，价值连城。\n");
+    }
+
+    setup();
+}

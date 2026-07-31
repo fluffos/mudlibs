@@ -1,0 +1,27 @@
+//sgzl
+
+#include <room.h>
+inherit ROOM;
+
+void create()
+{
+set("short", "乾元宫");
+set("long", @LONG
+乾元宫 长梁雕龙，飞檐画凤。里面殿阁高大
+雄伟，层层叠叠，琉璃瓦白玉掾富丽堂皇。     
+LONG );
+
+
+set("magicroom",1);set("exits", ([
+  "south"   : __DIR__"shenpinggong",
+  "north"   : __DIR__"lingxiao",
+]));
+
+set("no_npc",1);
+set("objects", ([
+]));
+
+
+
+setup();
+}

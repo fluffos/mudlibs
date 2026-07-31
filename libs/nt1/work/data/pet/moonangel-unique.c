@@ -1,0 +1,18 @@
+// SN:E5[g;7UZWHRmb\MW
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m独角兽[2;37;0m", ({"unique shou"}));        
+        set("gender", "女性");                
+        set("unit", "头");
+        set("long", "小家伙
+它是月天使的坐骑。
+");
+        set_temp("owner_id", "moonangel");
+        set_temp("owner_name", "月天使");
+        ::setup();
+}
+

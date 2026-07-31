@@ -1,0 +1,18 @@
+// SN:o1J3:GnNIl1g:hCE
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("华华猴[2;37;0m", ({"huahua hou"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "这是一只顽皮的猴子.
+它是唐活活的坐骑。
+");
+        set_temp("owner_id", "down");
+        set_temp("owner_name", "唐活活");
+        ::setup();
+}
+

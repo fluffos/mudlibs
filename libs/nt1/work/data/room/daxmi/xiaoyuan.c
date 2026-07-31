@@ -1,0 +1,36 @@
+// SN:@]II]1WUf_7BhIR7
+// File(/data/room/daxmi/xiaoyuan.c) of daxmi's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        set("short", "米房小院");
+	set ("long", @LONG
+这里是[1;32m米房[1;32m的独居小院，但院子周围散放着几个碾磨,
+    敢情是碾米房.[2;37;0m
+LONG );
+
+        set("room_key", "1 of daxmi");
+	setup();
+
+	set("exits", ([
+                "out"    : "/d/room/playtown/road1",
+	]));
+
+        set("outdoors", "playertown");
+        set("no_sleep_room", 1);
+        set("valid_startroom", 1);
+
+        set("KEY_DOOR", ([
+                "exit" : "north",
+                "room" : __DIR__"dulewu",
+        ]));
+    
+        set("room_owner", "大下米");
+        set("room_name", "米房");
+        set("room_id", "mifang");
+        set("room_owner_id", "daxmi");
+        set("room_position", "碎石小道");
+}

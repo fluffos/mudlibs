@@ -1,0 +1,18 @@
+// SN:iV[7;^cb=G86>>m7
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;36m东[1;37m北虎[2;37;0m", ({"dongbei hu"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "ok
+它是白盒云烟的坐骑。
+");
+        set_temp("owner_id", "baiyun");
+        set_temp("owner_name", "白盒云烟");
+        ::setup();
+}
+

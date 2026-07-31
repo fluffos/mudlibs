@@ -1,0 +1,18 @@
+// SN:1QAUj>NcUAT3Bmeh
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;32m巧笑倩兮貂[2;37;0m", ({"xiaoxiao diao"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "$HIG$段家有女初长成，回眸一笑百媚生
+它是段一笑的坐骑。
+");
+        set_temp("owner_id", "carol");
+        set_temp("owner_name", "段一笑");
+        ::setup();
+}
+

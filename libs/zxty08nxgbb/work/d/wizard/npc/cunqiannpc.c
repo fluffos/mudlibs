@@ -1,0 +1,30 @@
+inherit NPC;
+
+
+void create()
+{
+        set_name(HIW"蝴蝶梦"NOR, ({"cunqian_npc", "cunqian"}));
+        set("title", HIG"[天 涯"HIR" ☆"NOR+WHT" 老"HIR" ☆"HIG" 玩 家]"NOR); 
+        set("long", HIW "天涯最会聊天的玩家之一，但是已经引退山林之中做了闲云\n
+                         野鹤，只是时不时过来监督zjb，免得他偷懒或者泡小mm
+\n"NOR);
+        set("gender", "男性");
+        set("combat_exp", 10000);
+        set("age", 28);
+        set("attitude", "peaceful");
+        set("shen_type", 1);
+        set("str", 17);
+        set("dex", 20);
+        set("con", 17);
+        set("int", 22);
+        set("per", 30);
+        set("no_die", 1);
+        set_skill("dodge",20);
+        set_skill("unarmed",20);
+
+       
+        setup();
+         carry_object("/d/wizard/npc/obj/colorcloth")->wear();
+        add_money("coin", 40+random(30));
+}
+

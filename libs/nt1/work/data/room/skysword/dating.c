@@ -1,0 +1,39 @@
+// SN:QQo9IP10G<`EJC@X
+// File(/data/room/skysword/dating.c) of skysword's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        set("short", "绝剑山庄大厅");
+	set ("long", @LONG
+这就是绝剑山庄主人无天绝剑迎送客人的地方。正中有些桌椅，
+侧面是两扇屏风。东首是主人无天绝剑的房间，有一扇木门虚掩着。
+南边是大门，出去就是院子。 
+LONG );
+
+	setup();
+
+	set("exits", ([
+                "east"   : __DIR__"woshi",
+		"north"  : __DIR__"houyuan",
+	]));
+
+        create_door("east", "木门", "west", DOOR_CLOSED);
+
+        set("no_sleep_room", 1);
+
+        set("KEY_DOOR", ([
+                "exit" : "south",
+                "room" : __DIR__"xiaoyuan",
+        ]));
+    
+        set("room_owner", "无天绝剑");
+        set("room_name", "绝剑山庄");
+        set("room_id", "skysword");
+        set("room_owner_id", "skysword");
+        set("room_position", "青砖路");
+}

@@ -1,0 +1,18 @@
+// SN:QBQg_g^X<VMgoG7R
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("小木马马[2;37;0m", ({"mama ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "一只木马
+它是烈风的坐骑。
+");
+        set_temp("owner_id", "dumpling");
+        set_temp("owner_name", "烈风");
+        ::setup();
+}
+

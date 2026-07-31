@@ -1,0 +1,25 @@
+inherit NPC;
+
+void create()
+{
+        set_name("盗贼", ({ "dao zei","zei","dao" }) );
+        set("gender", "男性");
+        set("age", 25+random(25));
+        set("long",
+                "这家伙黑巾蒙面，一身黑衣，杀气腾腾的样子。\n");
+        set("combat_exp", 5000);
+        set("shen_type", -1);
+        set("attitude", "heroism");
+        set("wimpy", 30);
+
+        set("chat_chance", 5);
+        set("chat_msg", ({
+        }) );
+
+        setup();
+
+        carry_object("/clone/misc/cloth")->wear();
+        add_money("silver", random(10));
+}
+
+#include "/u/bright/npc/daozei.h"

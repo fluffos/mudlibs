@@ -1,0 +1,218 @@
+// Copyright (C) 2003, by Lonely. All rights reserved.
+// This software can not be used, copied, or modified 
+// in any form without the written permission from authors.
+
+inherit NPC;
+inherit F_MASTER;
+inherit F_QUESTER;
+
+#include <ansi.h>
+#include "gumu.h"
+
+string ask_yunv();
+
+void create()
+{
+        set_name("林朝英", ({"lin chaoying", "lin", "chaoying" }));
+        set("gender", "女性");
+        set("age", 42);
+        set("long", @LONG
+她就是古墓派的开山祖师林朝英，虽然已经是
+四十许人，望之却还如同三十出头。当年她与
+全真教主王重阳本是一对痴心爱侣，只可惜有
+缘无份，只得独自在这古墓上幽居。
+LONG);
+
+        set("attitude", "friendly");
+
+        set("str", 30);
+        set("int", 38);
+        set("con", 34);
+        set("dex", 34);
+        set("shen_type", 1);
+
+        set("qi", 6500);
+        set("max_qi", 6500);
+        set("jing", 3400);
+        set("max_jing", 3400);
+        set("neili", 8000);
+        set("max_neili", 8000);
+        set("jiali", 120);
+        set("level", 50);
+        set("combat_exp", 4000000);
+        
+        set_skill("force", 420);
+        set_skill("yunv-xinfa", 420);
+        set_skill("yunv-xinjing", 420);   
+        set_skill("quanzhen-jian", 400);     
+        set_skill("sword", 420);
+        set_skill("yunv-jian", 420);
+        set_skill("dodge", 420);
+        set_skill("yunv-shenfa", 420);
+        set_skill("parry", 420);
+        set_skill("unarmed", 420);
+        set_skill("meinv-quan", 420);
+        set_skill("strike", 420);
+        set_skill("fireice-strike", 420);
+        set_skill("tianluo-diwang", 420);
+        set_skill("whip", 420);
+        set_skill("yinsuo-jinling", 420);
+        set_skill("literate", 400);
+        set_skill("medical", 470);
+        set_skill("taoism", 400);
+        set_skill("throwing", 420);
+        set_skill("yufeng-zhen", 420);
+
+        map_skill("force", "yunv-xinfa");
+        map_skill("sword", "yunv-jian");
+        map_skill("dodge", "yunv-shenfa");
+        map_skill("parry", "meinv-quan");
+        map_skill("unarmed", "meinv-quan");
+        map_skill("strike", "fireice-strike");
+
+        prepare_skill("unarmed", "meinv-quan");
+        prepare_skill("strike", "fireice-strike");
+
+        create_family("古墓派", 1, "开山祖师");
+
+        set("inquiry", ([
+                "王重阳"     :  "大胆后辈小子，也敢直呼重阳祖师之名？\n",
+                "重阳祖师"   :  "重阳是全真教的掌教，自号“活死人”。\n",
+                "古墓派"     :  "是啊，这里就是我一手创下的古墓派\n",
+                "玉蜂针"     :  "我这儿没有，别问我。\n", 
+                "玉女心经"   : (: ask_yunv :),
+        ]));
+
+        set_temp("apply/attack", 150);
+        set_temp("apply/defense", 150);
+        set_temp("apply/damage", 100);
+        set_temp("apply/unarmed_damage", 100);
+        set_temp("apply/armor", 200);
+        set("chat_chance_combat", 120);
+        set("chat_msg_combat", ({
+                (: exert_function, "recover" :),
+                (: perform_action, "sword.he" :),
+                (: perform_action, "sword.he" :),
+                (: perform_action, "sword.ding" :),
+                (: perform_action, "sword.ding" :),
+        }));
+        set("book_count", 1);
+
+        setup();
+
+        carry_object("/clone/weapon/changjian")->wield();
+        carry_object("/clone/cloth/qingyi")->wear();
+
+}
+void attempt_apprentice(object ob)
+{
+        object me = this_player();
+
+        if (! permit_recruit(ob) )
+                return;
+
+        if (me->query("family/master_name") == "李莫愁")
+        {
+                command("sneer");
+                command("say 我林朝英可不收那叛徒的徒弟。");
+                return;
+        }
+
+        if (ob->query_int() < 35) {
+                command("say 我古墓派的功夫最讲一个悟字，你的资质不够。");
+                return;
+        }
+
+        if ((int)ob->query_skill("yunv-xinfa", 1) < 120 ) {
+                command("say 玉女心法乃本门绝学，你因该在这方面多加练习。");
+                return;
+        }
+
+        command("say 好吧，看你也是性情中人，我就收下你这个徒弟了。");
+        command("recruit " + ob->query("id"));
+}
+int accept_ask(object me, string topic)
+{
+        switch (topic)
+        {
+        case "历练" :
+        case "历炼" :
+        case "锻炼" :
+                return QUEST_D->accept_ask(this_object(), me, topic);
+                break;
+
+        case "quest" :
+                return DEFEND_D->ask_quest(this_object(), me); 
+                break;
+        
+        case "finish" : 
+                return DEFEND_D->ask_reward(this_object(), me); 
+                break;
+
+        case "三无三不手" :
+                return MASTER_D->teach_pfm(me, this_object(),
+                        ([ "perform" : "can_perform/yinsuo-jinling/san",
+                           "name"    : "三无三不手",
+                           "sk1"     : "yinsuo-jinling",
+                           "lv1"     : 140,
+                           "sk2"     : "force",
+                           "lv2"     : 180,
+                           "gongxian": 700, ]));
+                break;
+
+        case "缠字诀" :
+                return MASTER_D->teach_pfm(me, this_object(),
+                        ([ "perform" : "can_perform/yinsuo-jinling/chan",
+                           "name"    : "缠字诀",
+                           "sk1"     : "yinsuo-jinling",
+                           "lv1"     : 130,
+                           "sk2"     : "force",
+                           "lv2"     : 180,
+                           "gongxian": 800, ]));
+                break;
+
+        case "定阳针" :
+                return MASTER_D->teach_pfm(me, this_object(),
+                        ([ "perform" : "can_perform/quanzhen-jian/ding",
+                           "name"    : "定阳针",
+                           "sk1"     : "quanzhen-jian",
+                           "lv1"     : 130,
+                           "sk2"     : "force",
+                           "lv2"     : 130,
+                           "gongxian": 400, ]));
+
+                break;
+                
+        default:
+                return 0;
+        }
+}
+
+string ask_yunv()
+{
+        mapping fam;
+        object ob;
+
+        if (!(fam = this_player()->query("family"))
+            || fam["family_name"] != "古墓派")
+                return RANK_D->query_respect(this_player()) +
+                "与本派毫无瓜葛，何以问起本派的心经？";
+
+        if (this_player()->query_skill("yunv-xinfa", 1) < 55)
+                return RANK_D->query_respect(this_player()) +
+                        "的玉女心法火候太浅，我不能将玉女心经交给你";
+
+        if (query("book_count") < 1)
+                return "你来晚了，本派的玉女心经已经被人取走了。";
+        add("book_count", -1);
+        ob = new("/clone/book/yunvjing2");
+        ob->move(this_player());
+        return "好吧，这本「玉女心经」你拿回去好好研读。";
+}
+
+void reset()
+{
+	set("book_count", 1);
+}
+
+

@@ -1,0 +1,13 @@
+inherit BULLETIN_BOARD;
+
+void create()
+{
+set_name(HIG"DKDK家的留言板"NOR,({"board"}));
+set("location","/u/dkdk/workroom");  // board 所放的房间
+set("board_id", "dkdk_b");
+set("long", "如果有事找DKDK，可以在这里留言。\n");
+        setup();
+        set("capacity", 100);
+        replace_program(BULLETIN_BOARD);
+}
+

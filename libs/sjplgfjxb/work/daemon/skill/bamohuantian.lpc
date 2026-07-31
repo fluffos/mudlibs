@@ -1,0 +1,166 @@
+//bamohuantian.c 八魔环天大法  written by john darks
+//务必严格控制此功的等级
+#include <ansi.h>
+inherit SKILL;
+
+object offensive_target(object me)
+{
+	int sz;
+	object *enemy;
+
+	enemy = me->query_enemy();
+	if( !enemy || !arrayp(enemy) ) return 0;
+
+	sz = sizeof(enemy);
+	if( sz > 4 ) sz = 4;
+
+	if( sz > 0 ) return enemy[random(sz)];
+	else return 0;
+}
+
+int valid_learn(object me)
+{
+	int my_skill = me->query_skill("bamohuantian",1);
+	if((my_skill * my_skill * my_skill)/2  >(int)me->query("combat_exp") ) 
+		return notify_fail("你的经验不足，无法领会更高层次的八魔环天大法。\n");
+	return 1;
+}
+
+int valid_enable(string usage)
+{
+	object me = this_player();
+	int level = me->query_skill("bamohuantian",1);
+	if (level < 11)
+		return usage=="literate";
+	else return usage=="literate" || usage=="unarmed" || usage=="parry" || usage=="sword" || usage=="blade" || usage=="staff" || usage=="throwing" || usage=="spear" || usage=="axe" || usage=="hammer" || usage=="whip" || usage=="fork" || usage=="dagger";
+}
+
+mapping query_action(object me, object weapon)
+{	
+	mapping action;
+	object weapon1;
+	object victim = me->query_temp("last_opponent");
+	if (!objectp(victim))
+		victim = offensive_target(me);
+	victim->reset_action();
+	action = victim->query("actions");
+	action+= (["weapon" : "一道气劲"]);
+        if( !mapp(action) ) {
+                victim->reset_action();
+                action = victim->query("action");
+                if( !mapp(action) )
+                        return 	(["action":	"$N向$n攻出一招",	]);
+        }
+	return action;
+}
+
+int practice_skill(object me)
+{
+	int my_skill = me->query_skill("bamohuantian",1);
+	if (my_skill < 20)
+		return 1;
+	else {
+		me->improve_skill("bamohuantian",1,1);
+		return notify_fail("你练习八魔环天大法，似有所悟，但却难以突破！\n");
+	}
+}
+int effective_level() { return 10;}
+
+string *unarmed_parry_msg = ({
+        "但是被$p格开了。\n",
+        "结果被$p挡开了。\n",
+});
+
+string *parry_msg = ({
+        "只听见「锵」一声，被$p格开了。\n",
+        "结果「当」地一声被$p挡开了。\n",
+        "但是被$n用手中兵刃架开。\n",
+        "但是$n身子一侧，用手中兵刃格开。\n",
+});
+
+string query_parry_msg(object weapon)
+{
+        if( weapon )
+                return parry_msg[random(sizeof(parry_msg))];
+        else
+                return unarmed_parry_msg[random(sizeof(unarmed_parry_msg))];
+}
+
+int learn_bonus()
+{
+	return -5000;
+}
+int practice_bonus()
+{
+	return -1000;
+}
+int black_white_ness()
+{
+	return 450;
+}
+
+int perform_action(object me, string arg)
+{
+	string action, target, file, type, skill, mytype;
+	object target_ob,ob,victim,weapon;
+	int i;
+	if( sscanf(arg, "%s %s", action, target)==2 ) {
+		target_ob = present(target, environment(me));
+		if( !target_ob ) return notify_fail("这里没有 " + target + "。\n");
+	} else 	action = arg;
+	victim = me->query_temp("last_opponent");
+	if (!objectp(victim) ||!living(victim))
+		victim = offensive_target(me);
+	if( !victim
+	||	!victim->is_character())
+		return notify_fail("现在不可以使用这个技能。\n");
+	if( ob = victim->query_temp("weapon") )
+		type = ob->query("skill_type");
+	else if ( ob = victim->query_temp("secondary_weapon"))
+		type = ob->query("skill_type");
+	else
+		type = "unarmed";
+	if( weapon = me->query_temp("weapon") )
+		mytype = weapon->query("skill_type");
+	else if ( weapon = me->query_temp("secondary_weapon"))
+		mytype = weapon->query("skill_type");
+	else
+		mytype = "unarmed";
+	if (stringp ( skill = victim->query_skill_mapped(type) ))
+        	file = (SKILL_D(skill))->perform_action_file(action);
+	if( !stringp(file) || file_size(file + ".lpc") < 0  || mytype!=type )
+		file = CLASS_D("mojiao") + "/bamohuantian/" + action;
+        if( !stringp(file) || file_size(file + ".lpc") < 0 )
+        	return 0;
+	return (int)call_other( file, "perform", me, target_ob);
+}
+
+void skill_improved(object me)
+{
+	int s;
+        s = me->query_skill("bamohuantian", 1);
+        if (s == 0) return ;
+        if (s == 1){
+        	tell_object(me, HIW"\n八魔环天大法乃龙大先生早年观天象聆风云所悟，变化万常！\n"NOR);
+        	tell_object(me, HIW"习练八魔环天大法需要有很高的天赋，并且要极有毅力！\n"NOR);
+        }
+        if (s == 11)
+        	tell_object(me, HIW"由于你苦练武功，领悟了八魔环天大法的万般变化，你可以将其应用于以下的基本技能！\n
+			axe:     	斧法
+        		blade:        	刀法
+        		dagger:       	短兵刃
+        		fork:         	叉法
+        		hammer:       	锤法
+			literate: 	读写
+        		parry:        	招架
+        		staff:        	杖法
+        		sword:        	剑法
+        		throwing:     	暗器
+        		unarmed:      	拳脚
+			whip:     	鞭法
+        		spear:        	枪法	\n"NOR);
+        if (s == 50)
+        	tell_object(me, HIW"由于你苦练武功，领悟了乾坤大挪移(Perform Nuoyi)！\n"NOR);
+        if (s == 180)
+        	tell_object(me, HIW"由于你苦练武功，领悟了惊天一剑(Perform Jingtianyijian)！\n"NOR);
+}

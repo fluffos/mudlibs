@@ -1,0 +1,18 @@
+// SN:kNd`o[2QnohEnF`^
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;31m血邪[1;34m兽兽[2;37;0m", ({"xuexie shou"}));        
+        set("gender", "女性");                
+        set("unit", "头");
+        set("long", "远古神兽，是于天地之中孕育而生，拥有强大的能力！
+它是冥焱枫的坐骑。
+");
+        set_temp("owner_id", "wuki");
+        set_temp("owner_name", "冥焱枫");
+        ::setup();
+}
+

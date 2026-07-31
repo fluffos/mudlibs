@@ -1,0 +1,25 @@
+// edit by daniel@jhfy.nh 2002
+#include <room.h>
+inherit ROOM;
+
+void create()
+{
+        set("short", "比武场");
+        set("long", @LONG
+这里是梅庄的比武场，广场的两边放着十八般兵器和练功木人，梅
+庄自令狐冲大闹之后，每年都会在庄内举行一次比武，以考察庄内弟子
+的功夫。
+LONG
+        );
+        set("exits", ([ /* sizeof() == 1 */
+  "west" : __DIR__"tianjing",
+ ]));
+        set("no_clean_up", 0);
+        set("outdoors", "meizhuang"); 
+        set("objects", ([
+                "/d/shaolin/npc/mu-ren" : 3, 
+   ]));
+        setup();
+        replace_program(ROOM);
+}
+

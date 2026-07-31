@@ -1,0 +1,18 @@
+// SN:7l;\`T7kn=h=Xi^1
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;31m小红雕[2;37;0m", ({"bird diao"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "$HIR$这是朱雀的小红雕，她可爱的看着你
+它是朱雀的坐骑。
+");
+        set_temp("owner_id", "redbird");
+        set_temp("owner_name", "朱雀");
+        ::setup();
+}
+

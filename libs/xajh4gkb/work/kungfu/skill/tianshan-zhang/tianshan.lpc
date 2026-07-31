@@ -1,0 +1,118 @@
+// tianshan.c  天山奇峰
+#include <ansi.h>
+#include <skill.h>
+#include <weapon.h>
+#include <combat.h>
+inherit F_SSERVER;
+int perform(object me, object target)
+{
+	mixed combat_msg;
+	object weapon;
+	string msg;
+	int ap,dp,i,count,extra;
+		
+	if (!target ) target = offensive_target(me);
+	if (!target || !target->is_character() || !me->is_fighting(target) )
+		return notify_fail("「天山奇峰」只能在战斗中使用。\n");
+	if(me->is_busy())
+		return notify_fail("你现在正忙着！\n");
+	if (!objectp(weapon = me->query_temp("weapon")) || (string)weapon->query("skill_type") != "staff")
+        return notify_fail("你使用的武器不对。\n");
+	if (target && target->query_temp("apply/shade_vision")) 
+		return notify_fail("对方隐身了，你看不到"+target->query("name")+"。\n"); 	
+    if( (int)me->query_skill("huagong-dafa",1) < 300 )
+        return notify_fail("你的化功大法功力不够！\n");
+	if ((int)me->query("max_neili")<100000)								
+		return notify_fail("你的内力修为不够。\n");
+	if ((int)me->query("max_jingli")<200000)								
+		return notify_fail("你的精力修为不够。\n");
+	if( (int)me->query("jingli") < (int)me->query_skill("tianshan-zhang",1)*4 )
+		return notify_fail("你的精力不够。\n");		
+    if( (int)me->query("neili") < (int)me->query_skill("tianshan-zhang",1) )
+        return notify_fail("你的真气不够。\n");
+	if( (int)me->query_skill("tianshan-zhang",1) < 300 )
+		return notify_fail("你的天山杖法还不到家，无法使用天山奇峰！\n");
+//	if ( !wizardp(me) && me->query_skill_mapped("force") != "huagong-dafa")
+//		return notify_fail("不使用本门内功，如何使用本门绝学!\n");	
+//	if( me->query_skill_mapped("staff") != "tianshan-zhang")
+//		return notify_fail("你没使用天山杖法吧！\n");
+	if (me->query_temp("autolian"))
+		return notify_fail("你正在发动自动连招！\n"); 	
+	if ( me->query_temp("cooldown") )	//CD写法	2017.9.7添加
+		return notify_fail("你处于技能冷却状态中，过会在使用吧。\n");
+
+	combat_msg = me->query("env/no_combat_msg");
+	if ( !intp(combat_msg) ) combat_msg = 1;		
+	msg = HIY "$N使出天山派绝技「天山奇峰」，身法陡然加快，万岳朝宗！" NOR;
+	message_vision(msg, me,target);
+	me->set_temp("cooldown", 1);	//CD写法	2017.9.7添加
+	call_out("del_cooldown", 3, me);	//CD写法1
+	count = me->query_skill("tianshan-zhang",1)/60;
+	ap = me->query("xyzx_sys/level") + me->query_skill("tianshan-zhang", 1) + me->query_skill("unarmed") + me->query_skill("force");
+	dp = target->query("xyzx_sys/level") + target->query_skill("dodge") + target->query_skill("parry");
+	ap = ap*((int)me->query("breakup")+(int)me->query("breakup")*(int)me->query("breakup")+100)/100;
+	dp = dp*((int)target->query("breakup")+(int)target->query("breakup")*(int)target->query("breakup")+100)/100;
+	extra = (int)me->query_skill("tianshan-zhang", 1)/15;
+	if ( me->query_skill_mapped("force") != "huagong-dafa") extra -= (int)me->query_skill("tianshan-zhang", 1)/18;	//2018.9.5阿飞改，不使用本门特内则减益
+	if ((string)weapon->query("id") == "tianshan zhang") extra += (int)me->query_skill("tianshan-zhang", 1)/15;	//2018.3.25阿飞改，拿特殊武器有加成
+	if(count < 1 ) count = 1;
+	if (me->query("jm/xingxiu"))
+	{
+		if (count > 100+(int)me->query_temp("lianzhao_max_add")*4) count = 100+(int)me->query_temp("lianzhao_max_add")*4;
+	} else 
+	{
+		if (count > 50+(int)me->query_temp("lianzhao_max_add")*2)	count = 50+(int)me->query_temp("lianzhao_max_add")*2;
+	}
+	
+	if (random(ap) >dp/4)
+	{	
+		me->add_temp("lianzhao", count);	 //2016.6.1阿飞改，增加连招标记，用于削弱连招伤害
+		me->add_temp("apply/strength", extra);
+		me->add_temp("apply/damage", extra);
+		me->add_temp("apply/attack", extra);	
+		for ( i=0; i<count; i++ )
+		{
+			if (combat_msg<4)
+			{
+				switch ( random(4) )
+				{
+					case 0: msg = HIB"^^^^^^^^^^^玉进天池！^^^^^^^^^^^\n" NOR;
+						break;
+					case 1: msg = HIR"^^^^^^^^^^^山风凛冽！^^^^^^^^^^^\n" NOR;
+						break;
+					case 2: msg = HIY"^^^^^^^^^^^开门见山！^^^^^^^^^^^\n" NOR;
+						break;
+					case 3: msg = HIC"^^^^^^^^^^^天山雪崩！^^^^^^^^^^^\n" NOR;
+						break;
+				}
+				COMBAT_D->do_attack(me, target, me->query_temp("weapon"),TYPE_REGULAR,msg);
+			}
+			else
+				COMBAT_D->do_attack(me, target, me->query_temp("weapon"),TYPE_REGULAR);
+		}
+		me->add_temp("apply/strength", -extra);
+		me->add_temp("apply/damage", -extra);
+		me->add_temp("apply/attack", -extra);	
+		me->add("jingli", -100*count);
+		me->add("neili", -10*count);	
+		me->delete_temp("lianzhao");  //2016.6.1阿飞改，连招结束取消连招标记
+	}
+	else
+	{
+		me->add("neili", -200);
+		msg = HIW "$n虚空踏步，辗转就跳出数丈之外，群山万壑挡不住！" NOR;
+		message_vision(msg, me,target);
+	}
+	me->start_busy(1);
+	return 1;
+}
+
+void del_cooldown(object me)	//CD写法1
+{ 
+	if ( !objectp(me) ) return;
+	if ( me->query_temp("cooldown") )	
+	{
+		me->delete_temp("cooldown");
+		tell_object(me, HIM"你呼出一口气，缓缓的将内力收回丹田。\n"NOR);
+	}	
+}

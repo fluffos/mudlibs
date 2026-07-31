@@ -1,0 +1,35 @@
+// SN::FA1e0@E\`C5hNBk
+// ITEM Made by player(黄金:gold) /data/item/g/gold-finger.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Thu Jul 31 10:14:05 2003
+#include <ansi.h>
+#include <armor.h>
+
+inherit HANDS;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;32m掌门指环[2;37;0m", ({ "finger" }));
+	set_weight(1575);
+	set("item_make", 1);
+	set("unit", "套");
+	set("long", "这是由[37m精铁[2;37;0m炼制而成的一套指套。
+[1;32m这是桃花岛的掌门玉指环！！[2;37;0m
+指套缘上刻着一行小字：黄金(gold)
+");
+	set("value", 700000);
+	set("point", 55);
+	set("material", "iron");
+	set("wear_msg", "[1;32m桃花的新掌门来啦！！！[2;37;0m\n");
+	set("remove_msg", "[1;32m桃花的新掌门走啦！！！[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/finger", 10);
+	set("armor_prop/armor", 10);
+	set("armor_prop/claw", 10);
+	set("armor_prop/unarmed_damage", apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

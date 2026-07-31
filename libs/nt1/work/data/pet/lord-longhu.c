@@ -1,0 +1,18 @@
+// SN:Qf=5IK_k8OR14aOK
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;33m龙[1;31m虎[1;36m豹[2;37;0m", ({"longhu bao"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "龙虎
+它是赢政的坐骑。
+");
+        set_temp("owner_id", "lord");
+        set_temp("owner_name", "赢政");
+        ::setup();
+}
+

@@ -1,0 +1,18 @@
+// SN:D;32=CVf0A\8N^HU
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m美女兽[2;37;0m", ({"bobobo shou"}));        
+        set("gender", "女性");                
+        set("unit", "头");
+        set("long", "有很好的线条
+它是段波的坐骑。
+");
+        set_temp("owner_id", "bobo");
+        set_temp("owner_name", "段波");
+        ::setup();
+}
+

@@ -1,0 +1,11 @@
+// SN:Rh@RYO>8R?1D1DJV
+// wedding-ring.c
+
+#include "/clone/misc/wedding-ring.h"
+
+void setup()
+{
+        set("long", "这是大江和段缺的结婚戒指，是两人的定情之物。
+");
+        ::setup();
+}

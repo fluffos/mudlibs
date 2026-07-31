@@ -1,0 +1,270 @@
+//xumi.c 须弥山掌
+//配合日月鞭攻击
+//write by lbc 2/9/2000
+//fixed power by lbc 7/31/2001
+/*空闻、空智等一齐“噫”了一声，声音中充满了惊讶佩服之情。原来渡难还他这一掌
+，乃是少林七十二绝艺中之一的“须弥山掌”。这门掌力极难练成，那是不必说了，纵然
+练成了，每次出掌，也须坐马运气，凝神良久，始能将内劲聚于丹田，哪知渡难要出掌便
+出掌，一动念间就将“须弥山掌”拍了出来，跟着黑索一抖，又向杨逍扑击而至。
+*/
+
+
+
+#include <ansi.h>
+
+inherit F_DBASE;
+inherit F_SSERVER;
+
+int perform(object me,object target)
+{	
+	object weapon, *all, *all1, room;
+	int lvl1,lvl2,lvl3,skill,xumicount, i;
+	int damage, damage2, attack;
+	int highhand;
+	string highname, highname1, name1;
+
+	if( !target ) target = offensive_target(me);
+
+	if( !target
+	||	!target->is_character()
+	||	!me->is_fighting(target) )
+		return notify_fail("须弥山掌只能对战斗中的对手使用。\n");
+	if( me->query_temp("sl_perform/xumi",1))
+		return notify_fail("你已经在使用须弥山掌对敌了！\n");
+	if( me->query_skill_prepared("strike") != "banruo-zhang" )
+        return notify_fail("你所使的并非般若掌，不能施展须弥山掌！\n");
+    if( me->query_skill_mapped("force") != "hunyuan-yiqi" ||me->query_skill("hunyuan-yiqi", 1) < 200) 
+		return notify_fail("须弥山掌必须以深厚的混元一气功作为根基！\n");
+    if( (lvl1=me->query_skill("buddhism",1)) < 200 )
+		return notify_fail("你的佛学修为不足，无法使出一心二用的上乘武功！\n");
+	if( (lvl2=me->query_skill("riyue-bian",1)) < 240 )
+		return notify_fail("你的日月鞭法修为不足，无法在使鞭的同时分心出掌！\n");
+	if( (lvl3=me->query_skill("banruo-zhang",1)) < 240 )
+		return notify_fail("你的般若掌修为不足，无法在使鞭的同时分心出掌！\n");
+	if( me->query("neili") < 2000 )
+		return notify_fail("你的内力不够使出须弥山掌！\n");
+	if( me->query("jingli") < 1000 )
+		return notify_fail("你的精力不够使出须弥山掌！\n");
+
+	if(random(3)==1)	
+		message_vision(HIW"\n$N左掌一立，猛地翻出，一股劲风向$n小腹击去！\n"NOR,me,target);
+	else if(random(3)==2)
+		message_vision(HIW"\n$N左手一起，五指虚抓，握成空拳，向$n劈出一掌！\n"NOR,me,target);
+	else message_vision(HIW"\n$N左手劈出一掌，掌力将$n四面八方都笼盖住了，手掌未到，掌风已是森然逼人！\n"NOR,me,target);
+
+
+	if (me->query("combat_exp",1)*3< random(target->query("combat_exp",1)*2))
+		{
+        	message_vision(HIB"\n$n早见$N左手微动，此时掌风袭来，立时闪身避开。\n"NOR, me,target);
+			me->start_busy(3);
+			message_vision(HIR"\n$N一掌虚耗，"+(me->query_temp("weapon"))->query("name")+HIR"上露出破绽，$n立时扑进"+(me->query_temp("weapon"))->query("name")+HIR"圈子！！\n"NOR, me,target);
+
+			return 1;
+		}
+	
+			if( me->query_skill_prepared("finger") == "yizhi-chan" ) 
+			{
+				me->set_temp("restore_yzc", 1);
+				me->prepare_skill("finger");
+			}
+	
+			skill=me->query_skill("banruo-zhang",1)+me->query_skill("force",1);
+			damage=me->query("con")*3/2+skill/6 + random(skill/6);
+			me->set_temp("xumi1st",1);
+			weapon=me->query_temp("weapon");
+			me->add_temp("apply/strength",damage);
+//			me->add_temp("apply/attack",attack);
+			weapon->unequip();
+            if (wizardp(me)) 
+				tell_object(me,"\ndamage: "+(me->query_temp("apply/damage"))+" attack: "+(me->query_temp("apply/attack"))+" strength: "+(me->query_temp("apply/strength"))+"\n");
+											
+			COMBAT_D->do_attack(me,target,me->query_temp("weapon"));
+			weapon->wield();
+			me->add_temp("apply/strength",-damage);
+			me->add_temp("apply/attack",-attack);
+			me->delete_temp("xumi1st");
+			me->add("neili",-(100+damage*7/4));
+			me->add("jingli",-(50+damage));
+			me->start_busy(1);
+
+			message_vision(HIC"\n$N左掌以「须弥山掌」与$n对敌，右手"+(me->query_temp("weapon"))->query("name")+"劲力稍减，$N当下以巧补弱，使得"+(me->query_temp("weapon"))->query("name")+HIC"滚动飞舞，宛若灵蛇乱颤。\n"NOR, me,target);
+			damage2=random(damage/5);
+			me->add_temp("apply/attack",lvl2/2);
+			me->add_temp("apply/speed",lvl2/200);
+			me->add_temp("apply/damage",-damage2);
+			if (wizardp(me)) 
+				tell_object(me,"\ndamage: "+(me->query_temp("apply/damage"))+" attack: "+(me->query_temp("apply/attack"))+" strength: "+(me->query_temp("apply/strength"))+"\n");
+			COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+			me->add_temp("apply/attack",-lvl2/2);
+			me->add_temp("apply/speed",-lvl2/200);
+			me->add_temp("apply/damage",damage2);
+	xumicount= (int) 3600/skill;
+	if (xumicount<4) xumicount=4;
+	me->set_temp("sl_perform/xumi",xumicount);
+	printf("回合数= %d\n",xumicount);
+	call_out("checking", 1, me, weapon,target);
+
+////////////////////////////////////少林僧人表情////////////////////////////////////////
+	room=environment(me);
+	all = all_inventory(room);
+	all1 = allocate(sizeof(all));	
+	
+	highhand=0;
+	highname="";
+	highname1="";
+	name1="";
+
+	for (i=0; i<sizeof(all); i++)
+	{
+		if (all[i]->query("family/family_name")=="少林派" 
+			&& (all[i]->query_skill("strike",1) >= 200) 
+			&& (all[i]->query("id") != me->query("id")) 
+			&& (living(all[i])))
+			
+		{
+			if (highhand == 0 )
+			{	
+				highhand=highhand+1;
+				highname=highname + all[i]->query("name");
+			}
+			else 
+			{
+				highhand=highhand+1;
+				highname=highname + "、" + all[i]->query("name");
+			}
+		}
+	}
+	for (i=0; i<sizeof(all); i++)
+	{
+		if (all[i]->query("family/family_name")=="少林派" 
+			&& (all[i]->query_skill("strike",1) >= 200) 
+			&& (all[i]->query("id") != me->query("id")))
+		{
+			highname1 = replace_string(highname, all[i]->query("name") + "、", "");
+			printf("name1= %s",name1);
+			highname1 = replace_string(highname1, "、" + all[i]->query("name"), "");
+			if (highhand>1) 
+				tell_object(all[i], HIY"\n你和" + highname1 + "等一齐“噫”了一声，声音中充满了惊讶佩服之情。\n"NOR);
+			else tell_object(all[i], HIY"\n你“噫”了一声，声音中充满了惊讶佩服之情。\n"NOR);
+		}
+		
+		if (all[i]->query("family/family_name")=="少林派" && all[i]->query_skill("strike",1) < 200)
+		{
+			if(highhand)
+			{
+				if(highhand > 1)
+				{	
+					tell_object(all[i],HIY"\n周围的" + highname + "等一齐“噫”了一声，声音中充满了惊讶佩服之情。\n"NOR);
+					tell_object(all[i],HIY"\n你见众长老齐声惊噫，心知"+ me->query("name") + "这一掌定是精妙绝伦，无奈自己修为尚浅，无法得知其中奥妙。\n"NOR);
+				}
+				else 
+				{
+					tell_object(all[i],HIY"\n" + highname + "“噫”了一声，声音中充满了惊讶佩服之情。\n"NOR);
+					tell_object(all[i],HIY"\n你见" + highname + "出声惊噫，心知"+ me->query("name") + "这一掌定是精妙绝伦，无奈自己修为尚浅，无法得知其中奥妙。\n"NOR);
+				}
+			}
+			else 
+				tell_object(all[i],HIY"\n你见" + me->query("name") + "这一掌掌风逼人，不由的暗自惊叹。\n"NOR);
+		}
+	
+		if (all[i]->query("family/family_name")!="少林派")
+			if(highhand)
+			{
+				if(highhand > 1)
+				{
+					tell_object(all[i],HIY"\n周围的" + highname + "等一齐“噫”了一声，声音中充满了惊讶佩服之情。\n"NOR);
+					tell_object(all[i],HIY"\n你见少林众长老齐声惊噫，心知"+ me->query("name") + "这一掌定是精妙绝伦，可惜自己的武功和少林并非一脉，无法得知其中奥妙。\n"NOR);
+				}
+				else 
+				{
+					tell_object(all[i],HIY"\n" + highname + "“噫”了一声，声音中充满了惊讶佩服之情。\n"NOR);
+					tell_object(all[i],HIY"\n你见" + highname + "出声惊噫，心知"+ me->query("name") + "这一掌定是精妙绝伦，可惜自己的武功和少林并非一脉，无法得知其中奥妙。\n"NOR);
+				}
+			}
+	}
+
+	if (highhand) 
+	{
+		if(highhand > 1)
+			tell_object(me, HIY"\n周围的" + highname + "等一齐“噫”了一声，声音中充满了惊讶佩服之情。\n"NOR);
+		else
+			tell_object(me, HIY"\n" + highname + "“噫”了一声，声音中充满了惊讶佩服之情。\n"NOR);
+	}
+/////////////////////////////////////////////////////////////////////////////////////////////
+	return 1;
+
+}
+			
+
+void checking(object me,object weapon,object target)
+{
+	object weapon1;
+	weapon1=me->query_temp("weapon");
+	if( !living(me) || me->is_ghost() )
+		{
+			me->delete_temp("sl_perform/xumi");
+			if(me->query_temp("restore_yzc"))
+				{
+					me->prepare_skill("finger","yizhi-chan");
+					me->delete_temp("restore_yzc");
+				}
+			return;
+		}
+	me->add_temp("sl_perform/xumi",-1);
+	if(!me->query_temp("sl_perform/xumi"))
+		{
+			me->delete_temp("sl_perform/xumi");
+			tell_object(me,HIR"你收回了运使在左掌上的内力。\n"NOR);
+			//printf("AAAAAAAAAAAAAA\n");
+			message_vision(HIY"\n只见$N左掌缓缓下垂，右手"+(weapon1->query("name"))+"上的劲力又回复从前。\n"NOR,me,target);
+			if(me->query_temp("restore_yzc"))
+				{
+					me->prepare_skill("finger","yizhi-chan");
+					me->delete_temp("restore_yzc");
+				}
+			return;
+		}
+	
+	if( !me->is_fighting() )
+		{	
+			me->delete_temp("sl_perform/xumi");
+			tell_object(me,HIR"你收回了运使在左掌上的内力。\n"NOR);
+			//printf("BBBBBBBBBBBBBB\n");
+			if(me->query_temp("restore_yzc"))
+				{
+					me->prepare_skill("finger","yizhi-chan");
+					me->delete_temp("restore_yzc");
+				}
+			return;
+		}
+	
+
+
+	if( environment(weapon) != me || me->query_temp("weapon") != weapon   )
+		{
+			me->delete_temp("sl_perform/xumi");
+			tell_object(me,HIR"你没有右手"+(weapon->query("name"))+HIR"配合，左掌无法再施展「须弥山掌」 的掌法。\n"NOR);
+			message_vision(HIY"\n只见$N左掌缓缓下垂，「须弥山掌」的攻势已不复存在。\n"NOR,me,target);
+			if(me->query_temp("restore_yzc"))
+				{
+					me->prepare_skill("finger","yizhi-chan");
+					me->delete_temp("restore_yzc");
+				}
+			return;
+		}
+	if(  (int)me->query("neili") < 300 ||(int)me->query("jingli") < 300 )
+		{
+			me->delete_temp("sl_perform/xumi");
+        		message_vision(HIR "\n$N左手掌法稍觉呆滞，一掌拍出竟然力道全无，原来体内真气已经难以为继了！\n" NOR,me,target);
+			me->start_busy(2);
+			if(me->query_temp("restore_yzc"))
+				{
+					me->prepare_skill("finger","yizhi-chan");
+					me->delete_temp("restore_yzc");
+				}
+			return;
+
+		}
+	call_out("checking", 1, me, weapon, target);
+	return;
+}

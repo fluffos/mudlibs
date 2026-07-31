@@ -1,0 +1,189 @@
+//Cracked by Roath
+// miejue.c 「灭绝神剑」
+// Xuanyuan 13/3/2002
+// modified by Xuanyuan
+
+#include <ansi.h>
+inherit F_SSERVER;
+
+void remove_effect(object me, object victim, int dodge, int parry, int attack, int sword, int damage_jue, int attack_jue, int level,int busytime);
+void check2(object me, int o_att, int o_dam, int o_spd);
+
+int perform(object me, object target)
+{
+        object weapon;
+        int dodge, parry, attack, sword, busy_time;
+        int busytime,larger;
+        int acc_damage = 0;
+        int acc_attack = 0;
+        int i, level, attack_jue, damage_jue, o_att, o_dam, o_spd;
+
+	weapon = me->query_temp("weapon");
+	if( !objectp(weapon) || weapon->query("skill_type") != "sword" )
+		weapon = me->query_temp("secondary_weapon");
+
+	if( !target && me->is_fighting() ) target = offensive_target(me);
+	if( (int)me->query_temp("miejue") )
+                return notify_fail("你已经施展「灭绝神剑」！\n");
+
+	if( me->query_skill("emei-jian", 1) < 350 )
+		return notify_fail("你峨嵋剑法修为还不够，还未领悟「灭绝神剑」！\n");
+
+	if( me->query_skill("linji-zhuang", 1) < 350 )
+		return notify_fail("你的内功修为火候未到，施展「灭绝神剑」只会伤及自身！\n");
+
+	if( !target || !target->is_character() || !me->is_fighting(target) )
+		return notify_fail("「灭绝神剑」只能对战斗中的对手使用。\n");
+
+	if( !objectp(weapon) || weapon->query("skill_type") != "sword" )
+		return notify_fail("你手中无剑，怎能运用「灭绝神剑」？！\n");
+
+	if( me->query_skill_mapped("force") != "linji-zhuang" )
+		return notify_fail("你所用的内功与「灭绝神剑」心法相悖！\n");
+
+	if( me->query_temp("perform/miejian") )
+		return notify_fail("你正在运用「灭剑」心法！\n");
+
+	if( me->query("max_neili") <= level*500 )
+		return notify_fail("你的内力修为不足，劲力不足以施展「灭绝神剑」！\n");
+
+	if( me->query("neili") <= level*80 )
+		return notify_fail("你的内力不够，劲力不足以施展「灭绝神剑」！\n");
+
+	if( me->query("jingli") <= level*60 )
+		return notify_fail("你的精力有限，不足以施展「灭绝神剑」！\n");
+
+	if( userp(me) )
+	{
+		me->add("neili", -200);
+		me->add("jingli", -80);
+	}
+
+	dodge = target->query_skill("dodge")/3;
+	parry = target->query_skill("parry")/3;
+	attack = sword = me->query_skill("sword")/5;
+
+	me->set_temp("perform/miejue", 1);
+
+	if( target->query_temp("perform_target/miejue") )
+	{
+	message_vision(HIY "\n$N一声清啸，身形腾空丈许，将峨嵋绝技「灭剑」心法"+
+		"融入剑招之中，手中"+weapon->name()+"挽起无数剑花，攻势刹那间变得凌厉无比！\n" NOR, me, target);
+	}
+	else
+	{
+	message_vision(HIY "\n$N一声清啸，身形腾空丈许，将峨嵋绝技「灭剑」心法"+
+		"融入剑招之中，手中"+weapon->name()+"挽起无数剑花，攻势刹那间变得凌厉无比！\n" NOR, me, target);
+	target->add_temp("apply/dodge", -dodge);
+	target->add_temp("apply/parry", -parry);
+	target->add_temp("apply/attack", -sword);
+	target->add_temp("apply/speed", -dodge/10);
+	me->add_temp("apply/sword", sword);
+	target->add_temp("perform_target/miejue", 1);  
+	}
+
+	level = me->query_skill("sword") / 80;
+	if (level > 8) level = 8;
+
+	busytime = 1+level/4+random(level/3);
+
+	o_att = me->query_temp("apply/attack");
+	o_dam = me->query_temp("apply/damage");
+	o_spd = me->query_temp("apply/speed");
+
+	damage_jue = ( me->query_skill("force") + me->query_skill("sword") + me->query("neili")/15 + me->query("max_neili")/5 )/15;
+	attack_jue = ( me->query_skill("dodge") + me->query("jingli")/15 + me->query("max_jingli")/5 )/15
+			+ me->query_dex()/5 + weapon->query("apply/damage")/2;
+	me->add_temp("apply/speed", level*5);
+	me->add_temp("apply/damage", damage_jue);
+	me->add_temp("apply/attack", attack_jue);
+        
+	if (busytime <= 4) {
+			larger = 4;
+		} else {larger = busytime;}
+	message_vision(HIC"$N啸声未止，手中" + weapon->query("name") + HIC"光芒暴涨，将峨嵋绝技「绝剑」心法融入灭剑之中，$n只觉剑气逼人，眼花缭乱，惊慌之下不知所措！\n"NOR,me,target);
+
+	message_vision(HIR"\n紧接着，$N御剑成风，剑招快闪绝伦，第一招便即抢攻，闪电般攻出了"+
+				chinese_number(level) +"绝剑！\n"NOR,me,target);
+
+	me->add_temp("perform/juejian", 1);     
+
+	for( i=0; i < level; i++ )
+	{
+                if( wizardp(me) ) tell_object( me,
+                sprintf("damage: %d, attack: %d, speed: %d\n",
+                me->query_temp("apply/damage"), me->query_temp("apply/attack"),
+                me->query_temp("apply/speed")));
+
+                COMBAT_D->do_attack(me, target, weapon);
+                me->add_temp("apply/damage", -damage_jue/level);
+                me->add_temp("apply/attack", -attack_jue/level);
+                if ((int)me->query_temp("apply/damage") < 0)
+                {
+                        me->set_temp("apply/damage",0);
+                }
+                if ((int)me->query_temp("apply/attack") < 0)
+                {
+                        me->set_temp("apply/attack",0);
+                }
+                acc_damage += damage_jue/level;
+                acc_attack += attack_jue/level;
+	}
+	me->add("neili", -level*70);
+	me->add("jingli", -level*50);
+	remove_effect(me, target, dodge, parry, attack, sword, (damage_jue-acc_damage),(attack_jue-acc_attack),level,busytime);
+	check2(me, o_att, o_dam, o_spd);
+	return 1;
+}
+
+void remove_effect(object me, object victim, int dodge, int parry, int attack, int sword, int damage_jue, int attack_jue, int level,int busytime)
+{
+	if( objectp(victim) )
+	{
+		victim->add_temp("perform_target/miejian", -1);
+		victim->add_temp("apply/dodge", dodge);
+		victim->add_temp("apply/parry", parry);
+		victim->add_temp("apply/attack", attack);
+		victim->add_temp("apply/speed", dodge/10);
+	}
+
+	if( objectp(me) )
+	{
+		me->set_temp("apply/sword", 0);
+		me->delete_temp("perform/miejue");
+	}
+
+	if( objectp(me) && objectp(victim) && victim->is_fighting(me) )
+		message_vision(HIY "\n\n$N渐渐适应了$n的剑路，攻守自如多了。\n" NOR, victim, me);
+
+        if (!me) return;
+                me->add_temp("apply/attack",-attack_jue);
+        me->add_temp("apply/damage",-damage_jue);
+        me->add_temp("apply/speed", -level*5);
+        /*if( wizardp(me) ) tell_object( me,
+                sprintf("after fight,damage: %d, attack: %d, speed: %d\n",damage,attack,level));*/
+        me->delete_temp("perform/juejian");
+                me->start_busy(busytime);
+}
+
+
+void check2(object me, int o_att, int o_dam, int o_spd)
+{
+        
+        /*if( wizardp(me) ) tell_object( me,
+                sprintf("begin to check apply stuff,now.\n"));*/
+        if((int)me->query_temp("apply/attack",1) != o_att)
+        {
+          me->set_temp("apply/attack",o_att);
+        }
+        if((int)me->query_temp("apply/damage",1) != o_dam)
+        {
+                me->set_temp("apply/damage",o_dam);
+        }
+        if((int)me->query_temp("apply/speed", 1) != o_spd)
+        {
+                me->set_temp("apply/speed", o_spd);
+        }
+
+
+}

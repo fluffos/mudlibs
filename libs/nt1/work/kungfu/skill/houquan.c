@@ -1,0 +1,55 @@
+// houquan.c 猴拳
+// by Lonely
+
+inherit SKILL;
+
+string *action_msg = ({
+        "\n$单腿微曲，忽的向前扑出，一式「仙猴摘桃」，二爪直出，抓向$n的双眼",
+        "$N左手虚晃，一式「灵猴攀枝」，右手直击，反扣$n的肩井大穴",
+        "$N一臂前伸，一臂后指，一式「猿臂轻舒」，攻向$n的两肋",
+        "\n$N忽然缩成一团，使一式「八方幻影」，双掌无形无定，一爪抓向$n的胸口",
+        "$N猛吸一口气，一弯腰，使一式「水中揽月」，双爪疾扣向$n的小腹",
+        "$N猛的向上高高跃起，一式「落地摘星」，居高临下，一爪罩向$n的头骨",
+});
+
+int valid_enable(string usage) { return usage == "unarmed" ||  usage == "parry"; }
+
+int valid_learn(object me)
+{
+        if (me->query_temp("weapon") || me->query_temp("secondary_weapon"))
+                return notify_fail("练猴拳必须空手。\n");
+        if ((int)me->query_skill("force", 1) < 30)
+                return notify_fail("你的基本内功火候不够，无法学猴拳。\n");
+        if ((int)me->query("max_neili") < 200)
+                return notify_fail("你的内力太弱，无法练猴拳。\n");
+        return 1;
+}
+
+mapping query_action(object me, object weapon)
+{
+        return ([
+                "action" : action_msg[random(sizeof(action_msg))],
+                "damage_type" : random(2) ? "抓伤" : "瘀伤",
+                "dodge"  : 50 - random(20),
+                "attack" : 50 - random(20),
+                "parry"  : 50 - random(20),
+                "force"  : 210 + random(50),
+        ]);
+}
+
+int practice_skill(object me)
+{
+        if ((int)me->query("qi") < 30)
+                return notify_fail("你的体力太低了。\n");
+        if ((int)me->query("neili") < 10)
+                return notify_fail("你的内力不够练猴拳。\n");
+        me->receive_damage("qi", 15);
+        me->add("neili", -5);
+        return 1;
+}
+
+string perform_action_file(string action)
+{
+        return __DIR__"houquan/" + action;
+}
+

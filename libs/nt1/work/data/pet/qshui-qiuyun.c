@@ -1,0 +1,18 @@
+// SN:FL[WUb?`Z]KM4:O7
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;32m秋云雕[2;37;0m", ({"qiuyun diao"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "一只神采飞扬的绿雕
+它是秋水的坐骑。
+");
+        set_temp("owner_id", "qshui");
+        set_temp("owner_name", "秋水");
+        ::setup();
+}
+

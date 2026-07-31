@@ -1,0 +1,20 @@
+ // cloth.c
+#include <ansi.h>
+#include <armor.h> 
+inherit CLOTH; 
+void create()
+{
+    set_name(HIR"ÇáºìÂÞÉ´"NOR, ({ "shajin"}) );
+    set_weight(1000);
+    if( clonep() )
+        set_default_object(__FILE__);
+    else {
+        set("unit", "¼þ");
+        set("material", "cloth");
+        set("for_lady",1);
+        set("armor_prop/armor", 1);
+        set("armor_prop/personality",2);
+         set("value",100);
+    }
+
+}   

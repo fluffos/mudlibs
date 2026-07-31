@@ -1,0 +1,18 @@
+// SN:]9[Sg1dMg@3\YnDi
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("狗豹[2;37;0m", ({"gou bao"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "小白
+它是胡工一的坐骑。
+");
+        set_temp("owner_id", "ppmoa");
+        set_temp("owner_name", "胡工一");
+        ::setup();
+}
+

@@ -1,0 +1,18 @@
+// SN:Q:ULbmSAEClb3OV2
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;32m豺狼[2;37;0m", ({"chai lang"}));        
+        set("gender", "女性");                
+        set("unit", "条");
+        set("long", "duanyu
+它是段誉的坐骑。
+");
+        set_temp("owner_id", "duanyu");
+        set_temp("owner_name", "段誉");
+        ::setup();
+}
+

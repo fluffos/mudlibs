@@ -1,0 +1,215 @@
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+
+#define PREFIX(ob)    (interactive(ob) ? (query_idle(ob) > 120 ? HIY "@" NOR : " ") : HIR "#" NOR)
+
+int help();
+int sort_user(object,object);
+
+void create() { seteuid(getuid()); }
+nosave int busy=0;
+
+mixed main(object me, string arg, int remote)
+{
+        string name, str, *option,qname,*frd_list;
+        object *list, *ob, ob1;
+        int i, ppl_cnt,player_cnt;
+        int opt_long, opt_wiz, opt_party;
+        int opt_male,opt_female,opt_normal;
+        int opt_dead,opt_id;
+    int opt_all;
+
+     if (!remote && !wizardp(me) &&  time()-busy < 5)  return notify_fail("系统忙，请稍候...\n");
+
+
+        if( arg )
+        {
+                option = explode(arg, " ");
+                i = sizeof(option);
+                while( i-- )
+                        switch(option[i])
+                        {
+                                case "-h": return help();
+                                case "-l": opt_long = 1;break;
+                                case "-w": opt_wiz = 1;break;
+                                case "-p": opt_party = 1;break;
+                                case "-f": opt_female = 1;break;
+                                case "-m": opt_male = 1;break;
+                                case "-n": opt_normal = 1;break;
+                                case "-d": opt_dead = 1;break;
+                           case "-a": opt_all = 1;break;
+                                default:
+                                        if (i > 0 && option[i - 1] == "is")
+                                        {
+
+                                                qname = option[i];
+                                              i--;
+                                                break;
+                                        }
+                                        ob1 = present(option[i], environment(me));
+                                        if (!ob1) ob1 = find_player(option[i]);
+                                        if (!ob1) ob1 = find_living(option[i]);
+                                        if ((!ob1) && (option[i] =="me")) ob1=me;
+                                        if (!ob1 || !me->visible(ob1)) {
+                                                write("没有这个玩家或参数错误。\n");
+                                                return help();
+                                        }
+                                        me = ob1; opt_party = 1;
+                        }
+        }
+
+       str = WHT"\n                                《号令天下》"RED" & "HIR"碧血江湖 "NOR + RED"\n                          ─────────────"NOR;
+        ob = users();
+
+        if(opt_male && opt_normal && opt_female ||( opt_female && opt_normal)
+        || ( opt_male && opt_normal) || ( opt_male && opt_female) )
+                return notify_fail("错误，-f -m -n 三个属性不能同时使用。\n");
+
+        else if(opt_party){
+                if(!(string)me->query("family/family_name"))
+                        return notify_fail("你目前还没有加入任何门派。\n");
+
+                str += (string)me->query("family/family_name")+ "的玩家有：";
+                ob = filter_array(ob, (: (string)$1->query("family/family_name") == (string)$2->query("family/family_name") :), me);
+        }
+
+        else if(opt_male){
+             str += HIW"\n                                  男性玩家有："NOR;
+                ob = filter_array(ob, (: $1->query("gender") == "男性" :));
+        }
+
+        else if(opt_female){
+             str += HIW"\n                                  女性玩家有："NOR;
+                ob = filter_array(ob, (: $1->query("gender") == "女性" :));
+        }
+
+        else if(opt_normal)
+        {
+             str += HIW"\n                                  无性玩家有："NOR;
+                ob = filter_array(ob, (: $1->query("gender") == "无性" :));
+        }
+
+        else if(opt_wiz)
+        {
+             str += HIW"\n                                  巫师有："NOR;
+                ob = filter_array(ob, (: wizardp($1) || wizhood($1) == "(immortal)" :));
+        }
+        else if(opt_dead)
+        {
+                str += HIW"\n                          断线人物有："NOR;
+                ob = filter_array(ob, (: $1->query_temp("netdead") :));
+        }
+
+        else if(qname){
+                str += "叫"+ qname +"的玩家有：";
+                ob = filter_array(ob, (: $1->name(1) == $(qname) :));
+        }
+     else if(opt_all)
+    {
+            str += chinese_number(sizeof(ob)) + "位玩家在线。\n"NOR;
+             write(str);
+             return 1;
+        }
+
+else 
+             str += HIW"\n                                  总人物有："NOR;
+
+          list = sort_array(ob,"sort_user");
+
+         str += HIY"\n◇"HIC"────────────────────────────────────────────────────"HIY"◇\n"NOR;
+
+        ppl_cnt = 0;
+        if(opt_long || opt_wiz)
+        {
+                i = sizeof(list);
+                while ( i-- )
+                {
+                        // Skip those users in login limbo.
+                        if(!environment(list[i])) continue;
+                        if( !wizardp(me) && !me->visible(list[i]) ) continue;
+                        if( interactive(list[i]) ) ppl_cnt++; player_cnt++;
+                                str = sprintf("%s%12s%s%s\n",
+                                        str,RANK_D->query_rank(list[i]),
+                                       PREFIX(list[i]),NOR + list[i]->short(1));
+
+                }
+        }
+        else {
+                ppl_cnt = 0;
+                i = sizeof(list);
+                while( i-- ){
+                        if(!environment(list[i])) continue;
+                        name = sprintf("%s%s%-24s"HIC"│",
+
+                                        PREFIX(list[i]),
+                                         wizardp(list[i]) ? HIG : NOR + WHT,
+                                     list[i]->name(2) + "("+capitalize(list[i]->query("id"))+")");
+
+                        str = sprintf("%s%s%s", str, name,
+                                    ppl_cnt%4==2?"\n": "");
+                    ppl_cnt++;
+                     player_cnt++;
+                }
+                if ( ppl_cnt%3 ) str += "\n";
+        }
+         str += HIY"◇"HIC"────────────────────────────────────────────────────"HIY"◇\n"NOR;
+
+        if(player_cnt)
+                str = sprintf("%s共有 %d 位使用者连线中，系统负担：%s\n "HIY"@"NOR" 表示发呆中，"HIR"#"NOR" 表示断线中。\n\n",
+                str, player_cnt,query_load_average());
+        else
+                str = sprintf("目前游戏中并没有符合该条件的玩家。\n");
+
+  if( remote ) return str;
+  busy=time();
+  if (sizeof(str) < __LARGEST_PRINTABLE_STRING__ )
+  write(str);
+  else me->start_more(str);
+  call_out("free",3);
+
+        return 1;
+}
+
+int sort_user(object ob1, object ob2)
+{
+        string name1, name2;
+/*
+      if( wiz_level(ob1) != wiz_level(ob2) )
+               return wiz_level(ob2) - wiz_level(ob1);
+*/
+        name1 = (string)ob1->query("family/family_name");
+        name2 = (string)ob2->query("family/family_name");
+        if (intp(name1)) name1 = "";
+      if (intp(name2)) name2 = "";
+        if (name1 < name2) return 1;
+//               return (int)ob2->query("family/generation") - (int)ob1->query("family/generation");
+
+}
+
+int help()
+{
+        write("
+指令格式 : who [-h] [-l] [-p] [-w] [-f] [-m] [-n] [-d] [is] [<ID>]
+
+这个指令可以列出所有在游戏中的玩家及其等级。
+
+-h　　列出帮助屏幕。
+
+-l　　选项列出较长的讯息。
+-p　　只列出同门派的玩家。
+-w　　只列出游戏中的巫师。
+-f　　只列出游戏中的女玩家。
+-m　　只列出游戏中的男玩家。
+-n　　只列出游戏中的无性玩家。
+-d　　只列出当前游戏中处于断线状态中的玩家。
+is　　如果使用了这个选项，后面要跟随玩家的中文名字。
+
+<ID>　列出<ID>代表玩家所属门派的玩家。
+
+"HIY"@"NOR" 表示"HIY"发呆"NOR"中，"HIR"#"NOR" 表示"HIR"断线"NOR"中。
+
+相关指令： finger \n\n");
+        return 1;
+}
+

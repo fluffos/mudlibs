@@ -1,0 +1,21 @@
+#include <weapon.h>
+#include <ansi.h>
+
+inherit EQUIP;
+
+void create()
+{
+        set_name( "魔紝裙" , ({ "daemon skirt" ,"skirt" }) );
+        set_weight(200);
+        if( clonep() )
+                set_default_object(__FILE__);
+        else {
+                set("unit", "件");
+                set("value", 4000);
+                set("material", "cloth");
+                set("armor_type", "pants");
+                set("armor_prop/armor", 5);
+        }
+        setup();
+}
+                        

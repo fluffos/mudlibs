@@ -1,0 +1,35 @@
+// SN:;`cdFC0QKanG`8X0
+// ITEM Made by player(雷斯魔:lsm) /data/item/l/lsm-skv.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Tue May 11 16:51:02 2004
+#include <ansi.h>
+#include <armor.h>
+
+inherit HANDS;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;34m九幽漩[2;37;0m", ({ "skv" }));
+	set_weight(2100);
+	set("item_make", 1);
+	set("unit", "套");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一套指套。
+[1;34m霍霍霍霍霍霍[2;37;0m
+指套缘上刻着一行小字：雷斯魔(lsm)
+");
+	set("value", 2100000);
+	set("point", 468);
+	set("material", "magic stone");
+	set("wear_msg", "[1;34m$n[1;34m化作一道白光，冲天而起，以无比磅礴的气势矗立在你面前。[2;37;0m\n");
+	set("remove_msg", "[1;34m一道幽蓝的光线划过广漠的夜空，只是一瞬间，等你想仔细看清楚时，它已消失的无影无踪。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/unarmed_damage", apply_damage());
+	set("armor_prop/finger", 10);
+	set("armor_prop/armor", 10);
+	set("armor_prop/claw", 10);
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

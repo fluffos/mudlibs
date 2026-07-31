@@ -1,0 +1,18 @@
+// SN:4QFf]Ff?1ck76EZI
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("神驹[2;37;0m", ({"shen ju"}));        
+        set("gender", "女性");                
+        set("unit", "匹");
+        set("long", "神
+它是舞风的坐骑。
+");
+        set_temp("owner_id", "fuhy");
+        set_temp("owner_name", "舞风");
+        ::setup();
+}
+

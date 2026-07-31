@@ -1,0 +1,33 @@
+// SN:62NoJ;\FA8g`LX=P
+// File(/data/room/windsmile/yanwu1.c) of windsmile's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        set("short", "天羽宫演武厅");
+	set ("long", @LONG
+这是天羽宫的演武厅，有时有些江湖朋友来会，想一试身手，就
+在这里比武较量。 
+LONG );
+
+	set("exits", ([
+                "west" : __DIR__"yishiting",
+	]));
+
+        set("objects", ([
+                "/clone/weapon/zhubang" : 1,
+                "/clone/weapon/zhujian" : 1,
+                "/clone/weapon/mudao"   : 1,
+        ]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("room_owner", "段子羽");
+        set("room_name", "天羽宫");
+        set("room_id", "tianyu");
+        set("room_owner_id", "windsmile");
+        set("room_position", "树林");
+}

@@ -1,0 +1,18 @@
+// SN:Wk5=B7>]^8AC0?XC
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[37m末日鬼狼[2;37;0m", ({"yguis lang"}));        
+        set("gender", "男性");                
+        set("unit", "条");
+        set("long", "你敢看我！？不怕被夜鬼砍死啊
+它是夜鬼的坐骑。
+");
+        set_temp("owner_id", "ygui");
+        set_temp("owner_name", "夜鬼");
+        ::setup();
+}
+

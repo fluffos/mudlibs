@@ -1,0 +1,29 @@
+#include <room.h>
+inherit ROOM;
+void create()
+{
+	set("short", "先贤祠－玩家部");
+	set("long", @LONG
+这里是纪念杰出玩家的地方。供奉在这里的无论是侠客还是魔头，
+都曾经叱诧一时。抬头一张横匾，上书七个闪闪发光的金字：
+天下谁人不识君
+注：排名不分先后。按字母顺序。
+LONG
+	);
+	set("exits", ([ /* sizeof() == 2 */
+  "up" : __DIR__"xxci2",
+      "out" : __DIR__"chatroom",
+  "south" : __DIR__"xxci3",
+]));
+	set("no_fight",1);
+	set("no_clean_up", 0);
+	set("objects", ([ /* sizeof() == 1 */
+      "/d/wizard/npc/sorrownpc": 1,
+      "/d/wizard/npc/pearnpc": 1,
+       "/d/wizard/npc/fadainpc": 1,
+       "/d/wizard/npc/godznpc": 1,
+	]));
+   create_door("south","木门","north",DOOR_CLOSED); 	
+	setup();
+	replace_program(ROOM);
+}

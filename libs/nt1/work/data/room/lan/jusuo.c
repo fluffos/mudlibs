@@ -1,0 +1,35 @@
+// SN:k=g_ffKJIJ[LRA2D
+// File(/data/room/lan/jusuo.c) of lan's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "居所");
+	set ("long", @LONG
+这就是岚之居主人岚之风情休息、读书的地方。楼上就是主人的
+卧室，西面则是书房。 
+LONG );
+
+	set("exits", ([
+		"up"   : __DIR__"woshi",
+                "west" : __DIR__"shufang",
+	]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("KEY_DOOR", ([
+                "exit" : "east",
+                "room" : __DIR__"huayuan",
+        ]));
+    
+        set("room_owner", "岚之风情");
+        set("room_name", "岚之居");
+        set("room_id", "lan");
+        set("room_owner_id", "lan");
+        set("room_position", "碎石小道");
+}

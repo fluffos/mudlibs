@@ -1,0 +1,18 @@
+// SN:CU;nXAdn\UI:8?aP
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m药驴[2;37;0m", ({"danfive lv"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "炼丹专用的驴子
+它是炼丹学徒的坐骑。
+");
+        set_temp("owner_id", "workerb");
+        set_temp("owner_name", "炼丹学徒");
+        ::setup();
+}
+

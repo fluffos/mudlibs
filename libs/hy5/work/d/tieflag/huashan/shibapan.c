@@ -1,0 +1,30 @@
+ inherit ROOM;
+void create()
+{
+        set("short", "十八盘");
+        set("long", @LONG
+此处山势陡峭，盘山土路陡峭艰辛，路随山势曲折盘环，十有八折盘山而上，
+路旁荆棘丛生，你不时的被荆棘牵挂衣冠。
+LONG
+        );
+    set("exits", ([ 
+                "northeast" : __DIR__"shaluo",
+                "southeast" : __DIR__"shibapan1",
+        ]));
+   
+    set("outdoors", "huashanfy"); 
+    set("coor/x",-580);
+    set("coor/y",-50);
+    set("coor/z",40);
+        setup();
+} 
+void init(){
+        object me, jingji, obj;
+        me = this_player();
+        if(me->query("宿命B/桃源_晨雾") && !present("jingji", this_object())) {
+                jingji = new(__DIR__"obj/jingji");
+                jingji->move(this_object());
+                obj = new(__DIR__"obj/book");
+                obj->move(jingji);
+        }
+}     

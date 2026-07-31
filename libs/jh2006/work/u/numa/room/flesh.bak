@@ -1,0 +1,435 @@
+// flesh.h
+// Created by Numa 19991021
+
+#define GAME_NAME "肉夹馍"
+	
+void init()
+{
+	add_action("do_play","play");
+	add_action("do_start","start");
+	add_action("do_nod","yes");
+	add_action("do_shake","no");
+	add_action("do_leave","leave");
+}
+
+// 接受要牌
+int do_nod()
+{
+	object me = this_player();
+	object ob = this_object();
+	
+	if (!me->query_temp("rjm/playing"))
+		return notify_fail("阖官飞起一脚，踢中了" + me->name() + "的屁股，说道：又没来玩，瞎点什么头！\n");
+	if (!me->query_temp("rjm/getout"))
+		return notify_fail("阖官说道：" + RANK_D->query_respect(me) + "，还没轮到你！\n");
+	if (me->query("balance") < ob->query_temp("money") * 10000 )
+	{
+		tell_room(ob,HIW"阖官说道：" + RANK_D->query_respect(me) + "，你的黄金不够赔锅里的钱！\n"NOR);
+		me->set_temp("rjm/nod",2);
+		return 1;
+	}
+	if (me->query_temp("rjm/nod") > 0)
+	{
+		if (me->query_temp("rjm/nod") > 1)
+			return notify_fail("你已经决定不要牌了，怎么能反悔呢？\n");
+		else return notify_fail("你已经决定要牌了，怎么能反悔呢？\n");
+	}
+
+	me->set_temp("rjm/nod",1);
+	tell_room(environment(me),me->name() + "点了点头，决定要牌！\n");
+	return 1;
+}
+
+// 不接受要牌
+int do_shake()
+{
+	object me = this_player();
+	
+	if (!me->query_temp("rjm/playing"))
+		return notify_fail("阖官飞起一脚，踢中了" + me->name() + "的屁股，说道：又没来玩，瞎点什么头！\n");
+	if (!me->query_temp("rjm/getout"))
+		return notify_fail("阖官说道：" + RANK_D->query_respect(me) + "，还没轮到你！\n");
+	if (me->query_temp("rjm/nod") > 0)
+	{
+		if (me->query_temp("rjm/nod") > 1)
+			return notify_fail("你已经决定不要牌了，怎么能反悔呢？\n");
+		else return notify_fail("你已经决定要牌了，怎么能反悔呢？\n");
+	}
+
+	me->set_temp("rjm/nod",2);
+	tell_room(environment(me),me->name() + "摇了摇头，放弃了本局！\n");
+	return 1;
+}
+
+// 牌局结束，清除参数
+int do_update_play(object ob,object usr)
+{
+	object obj;
+	int i,j;
+	
+	for (i=0;i<(int)ob->query_temp("player");i++)
+	{
+		j = i + 1;
+		obj = present(ob->query_temp("line" + j),ob);
+		if (objectp(obj))
+		{
+			obj->delete_temp("rjm");
+			continue;
+		}
+	}
+	for (i=0;i<(int)ob->query_temp("player");i++)
+	{
+		j = i + 1;
+		ob->delete_temp("line" + j);
+		continue;
+	}
+	ob->delete("playing");
+	ob->delete_temp("next");
+	ob->delete_temp("err");
+	ob->delete_temp("play");
+	ob->delete_temp("player");
+	ob->delete_temp("money");
+	tell_room(ob,HIW"阖官说道：好，现在开始新的一局，大家请键入"HIR"play"HIW"加入「" + HIY + GAME_NAME + HIW"」。\n"NOR);
+	return 1;
+}
+
+// 牌局的小局结束，清除参数
+int do_continue_play(object ob,object usr)
+{
+	object obj;
+	int i,j;
+	
+	for (i=0;i<(int)ob->query_temp("player");i++)
+	{
+		j = i + 1;
+		obj = present(ob->query_temp("line" + j),ob);
+		if (objectp(obj))
+		{
+			obj->delete_temp("rjm");
+			continue;
+		}
+	}
+	for (i=0;i<(int)ob->query_temp("player");i++)
+	{
+		j = i + 1;
+		ob->delete_temp("line" + j);
+		continue;
+	}
+	ob->delete("playing");
+	ob->delete_temp("err");
+	ob->set_temp("next",1);
+	tell_room(ob,HIW"阖官说道：锅里现在还有" + CHINESE_D->chinese_number(ob->query_temp("money")) + "两"HIY"黄金"HIW"，本小局结束，请键入"HIR"play"HIW"继续下注。\n"NOR);
+	return 1;
+}
+
+// 检查赢输
+int do_checking(object obj,object ob,object usr)
+{
+	int i,j,k,min,max;
+	
+	if (!obj->query_temp("rjm/nod"))
+	{
+		remove_call_out("do_checking");
+		call_out("do_checking",1,obj,ob,usr);
+		return 1;
+	}
+	if ((int)obj->query_temp("rjm/nod") == 1)
+	{
+		i = obj->query_temp("rjm/card1");
+		j = obj->query_temp("rjm/card2");
+		k = obj->query_temp("rjm/result");
+		max = i;
+		min = j;
+		if (i < j)
+		{
+			max = j;
+			min = i;
+		}
+		tell_room(ob,HIW"阖官发了一张" + k + "给" + obj->name() + "。\n"NOR);
+		if ( k < max && k > min )
+		{
+			tell_room(ob,HIW"阖官说道：锅里现在有" + CHINESE_D->chinese_number(ob->query_temp("money")) + "两"HIY"黄金"HIW"，"
+				+ obj->name() + "夹中，把锅底全部赢走。\n"NOR);
+			obj->add("balance",ob->query_temp("money") * 10000);
+			ob->delete_temp("money");
+			tell_room(ob,HIR"阖官大声宣布：本局结束！\n"NOR);
+			remove_call_out("do_update_play");
+			call_out("do_update_play",3,ob,usr);
+			return 1;
+		}
+		else
+		{
+			tell_room(ob,HIW"阖官说道：锅里现在有" + CHINESE_D->chinese_number(ob->query_temp("money")) + "两"HIY"黄金"HIW"，"
+				+ obj->name() + "没有夹中。\n"NOR);
+			message_vision("$N不情愿的从兜里掏出" + CHINESE_D->chinese_number(ob->query_temp("money")) + "两"HIY"黄金"NOR"放到了锅里。\n",obj);
+			obj->add("balance",- ob->query_temp("money") * 10000);
+			ob->set_temp("money",ob->query_temp("money") * 2);
+			obj->set_temp("rjm/err",1);
+			remove_call_out("do_giveout");
+			call_out("do_giveout",3,ob,usr);
+			return 1;
+		}
+	}
+	if ((int)obj->query_temp("rjm/nod") == 2)
+	{
+		tell_room(ob,HIW"阖官说道：" + obj->name() + "放弃！\n"NOR);
+		obj->set_temp("rjm/err",1);
+		remove_call_out("do_giveout");
+		call_out("do_giveout",3,ob,usr);
+		return 1;
+	}
+}
+
+// 开始游戏
+int do_start()
+{
+	object me = this_player();
+	object ob = this_object();
+	
+	if (me->query("id") != ob->query_temp("line1"))
+		return notify_fail(HIW"阖官说道：" + me->name() + "不是第一位玩家，无法开始！请第一位玩家键入"HIR"start"HIW"。\n"NOR);
+	if (ob->query_temp("player")<2)
+		return notify_fail("阖官对着你狠狠的一锤当头敲下，就你一个人，开始什么呀！\n");
+	me->set_temp("rjm/start",1);
+	message_vision(MAG"$N爽快的说道：开始吧！\n"NOR,me);
+	return 1;
+}
+
+// 检查是否开始
+int do_check_start(object obj,object ob,object *usr)
+{
+	if (obj->query_temp("rjm/start"))
+	{
+		ob->set("playing",1);
+		remove_call_out("do_begin");
+		call_out("do_begin",1,ob,usr);
+		return 1;
+	}
+	else
+	{
+		remove_call_out("do_check_start");
+		call_out("do_check_start",1,obj,ob,usr);
+		return 1;
+	}	
+}
+
+// 验证玩家
+int do_play(string arg)
+{
+	object me = this_player();
+	object ob = this_object();
+	object *usr,obj_1;
+	int i,j;
+
+	
+	if (ob->query("playing"))
+		return notify_fail("在本局结束之前停止下注。\n");
+	if (me->query_temp("rjm/playing"))
+		return notify_fail("在本局结束之前停止下注。\n");
+	if (me->query("balance")<10000)
+		return notify_fail("你好象没有那么多钱呦!\n");
+	if (ob->query_temp("next") > 0)
+	{
+		if (!ob->query_temp("play/" + me->query("id")))
+			return notify_fail("本局尚未结束，你不能参加！\n");
+	}
+	
+	usr = all_inventory(ob);
+	ob->delete_temp("player");
+	for (i=0;i<sizeof(usr);i++)
+	{
+		if (!userp(usr[i]))
+			continue;
+		if (usr[i]->query_temp("rjm/playing")
+		&&  ob->query_temp("play/" + usr[i]->query("id")))
+		{
+			if(!ob->query_temp("player"))
+			{
+				ob->set_temp("player",1);
+				continue;
+			}
+			ob->add_temp("player",1);
+			continue;
+		}
+	}
+	me->add("balance",-10000);
+	me->set_temp("rjm/playing",1);
+	if(!ob->query_temp("money"))
+		ob->set_temp("money",1);
+	else ob->add_temp("money",1);
+	ob->set_temp("play/" + me->query("id"),1);
+	ob->add_temp("player",1);
+	message_vision(GRN"$N掏出一两"HIY"黄金"GRN"，下注做了锅底。\n"NOR,me);
+	if (ob->query_temp("player") < 2)
+	{
+		tell_object(me,HIW"阖官说道：现在只有你一个人，再等等别人吧！\n"NOR);
+		ob->set_temp("line1",me->query("id"));
+		return 1;
+	}
+	for (i=0;i<(int)ob->query_temp("player");i++)
+	{
+		j = i + 1;
+		call_out("do_cal",1,j,me,ob);
+		continue;
+	}
+	tell_room(environment(me),HIW"阖官大声宣布：现在共有" + CHINESE_D->chinese_number(ob->query_temp("player")) + "人参加本局「" + HIY + GAME_NAME + HIW"」。\n"NOR);
+	obj_1 = present(ob->query_temp("line1"),ob);
+	tell_room(environment(me),HIW"阖官说道：如果现在要开始，请" + obj_1->name() + "键入"HIR"start"HIW"。\n"NOR);
+	remove_call_out("do_check_start");
+	call_out("do_check_start",1,obj_1,ob,usr);
+	return 1;
+}
+
+// 计算玩家并记录
+int do_cal(int i,object me,object ob)
+{
+	int k;
+	if (ob->query_temp("line" + i))
+	{
+		k = i + 1;
+		if (!ob->query_temp("line" + k))
+		{
+			ob->set_temp("line"+ k ,me->query("id"));
+			return 1;
+		}
+		else if (k >= ob->query_temp("player"))
+		{
+			return 1;
+		}
+		else {
+			call_out("do_cal",1,i+1,me,ob);
+			return 1;
+		}
+	}
+}
+
+// 开始发头两张牌
+int do_begin(object ob,object *usr)
+{
+	int i,j,k;
+	
+	tell_room(ob,HIW"阖官大声宣布：现在共有" + CHINESE_D->chinese_number(ob->query_temp("money")) + "两"HIY"黄金"HIW"为锅底。\n"NOR);
+	tell_room(ob,HIW"阖官说道：我现在开始发牌。\n"NOR);
+	for (i=0;i<sizeof(usr);i++)
+	{
+		if (!userp(usr[i]))
+			continue;
+		if (!usr[i]->query_temp("rjm/playing")
+		||  !ob->query_temp("play/" + usr[i]->query("id")))
+		{
+			message_vision("阖官一脚把$N踹了出去，生气的说道：不玩，跑这里发呆来啦？！\n",usr[i]);
+			usr[i]->move(__DIR__"flesh");
+			continue;
+		}
+		j = random(13) + 1;
+		k = random(13) + 1;
+		tell_room(ob,HIW"阖官把 " + j + " 和 "+ k + " 发给了" + usr[i]->name() + "。\n"NOR);
+		usr[i]->set_temp("rjm/card1",j);
+		usr[i]->set_temp("rjm/card2",k);
+	}
+	remove_call_out("do_giveout");
+	call_out("do_giveout",3,ob,usr);
+	return 1;
+}
+
+// 询问是否要牌
+int do_giveout(object ob, object *usr)
+{
+	object obj;
+	int i,j,k;
+
+	for (i=0;i<sizeof(usr);i++)
+	{
+		if (!userp(usr[i]))
+			continue;
+		if (ob->query_temp("play/" + usr[i]->query("id")))
+		{
+			if (usr[i]->query_temp("rjm/err"))
+			{
+				if (!ob->query_temp("err"))
+					ob->set_temp("err",1);
+				else ob->add_temp("err",1);
+				continue;
+			}
+		}
+	}
+	if (ob->query_temp("money")>1
+	&&  ob->query_temp("err") == ob->query_temp("player") + 1)
+	{
+		remove_call_out("do_continue_play");
+		call_out("do_continue_play",1,ob,usr);
+		return 1;
+	}
+	
+	for (i=0;i<(int)ob->query_temp("player");i++)
+	{
+		k = i + 1;
+		obj = present(ob->query_temp("line" + k),ob);
+		if (!obj->query_temp("rjm/kickout") && !obj->query_temp("rjm/nod"))
+		{
+			tell_room(ob,HIW"阖官说道：锅里现在有" + CHINESE_D->chinese_number(ob->query_temp("money")) + "两"HIY"黄金"HIW"，"
+				+ obj->name() + "要不要牌？("HIC"yes"HIW"或"HIR"no"HIW")\n"NOR);
+			obj->set_temp("rjm/getout",1);
+			j = random(13) + 1;
+			obj->set_temp("rjm/result",j);
+			remove_call_out("do_checking");
+			call_out("do_checking",1,obj,ob,usr);
+			break;
+		}
+		else if (ob->query_temp("money") <1)
+		{
+			break;
+		}
+	}
+}
+
+// 强行结束游戏并离开，暂时为简便直接消除所有参数，锅底不退还
+int do_leave()
+{
+	object me = this_player();
+	object ob = this_object();
+	object obj,*usr;
+	int i,j;
+	
+	usr = all_inventory(ob);
+	
+	if (!ob->query("playing") && !ob->query_temp("line1"))
+		return notify_fail("阖官奇怪的看着你，说道：没人要拦你出去呀！\n");
+	for (i=0;i<(int)ob->query_temp("player");i++)
+	{
+		j = i + 1;
+		obj = present(ob->query_temp("line" + j),ob);
+		if (objectp(obj))
+		{
+			if (obj->query_temp("rjm/getout",1))
+			{
+				tell_object(me,"阖官伸手把你拦住，说道：现在不能强行退出。\n");
+				return 1;
+			}
+		}
+	}
+	for (i=0;i<(int)ob->query_temp("player");i++)
+	{
+		j = i + 1;
+		obj = present(ob->query_temp("line" + j),ob);
+		if (objectp(obj))
+		{
+			obj->delete_temp("rjm");
+			continue;
+		}
+	}
+	for (i=0;i<(int)ob->query_temp("player");i++)
+	{
+		j = i + 1;
+		ob->delete_temp("line" + j);
+		continue;
+	}
+	ob->delete("playing");
+	ob->delete_temp("next");
+	ob->delete_temp("err");
+	ob->delete_temp("play");
+	ob->delete_temp("player");
+	ob->delete_temp("money");
+	tell_room(ob,HIW"阖官说道：由于" + me->name() + "的强行退出，本局「" + HIY + GAME_NAME + HIW"」被终止，所有参与者的赌注没收。\n"NOR);
+	return 1;
+}

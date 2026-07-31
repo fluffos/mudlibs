@@ -1,0 +1,309 @@
+// lianhuan.c for huashan-jianfa
+// by tiantian@SJ 11/05/2000.
+
+#include <ansi.h>
+
+inherit F_SSERVER;
+#include "/kungfu/skill/eff_msg.h";
+
+int perform(object me,object target)
+{
+    object weapon;
+    
+    if( !target ) target = offensive_target(me);
+     
+    if( !target || !me->is_fighting(target) || !living(target)
+        || environment(target)!=environment(me))
+                return notify_fail("夺命连环三仙剑只能对战斗中的对手使用。\n");
+
+    if(me->query_skill_mapped("force") != "zixia-gong")
+                return notify_fail("你的内功不是紫霞功，无法使用夺命连环三仙剑！\n");
+    if( (int)me->query_skill("zixia-gong", 1) < 160 )
+                return notify_fail("你的内功还未练成，不能使用夺命连环三仙剑！\n");
+    if( (int)me->query_skill("huashan-jianfa", 1) < 160 ) 
+                return notify_fail("你的剑法还未练成，不能使用夺命连环三仙剑！\n");
+    if((int)me->query_skill("sword", 1) < 160 )
+                return notify_fail("你的基本剑法不够娴熟，不能在剑招中使用夺命连环三仙剑。\n");
+    if (!objectp(weapon = me->query_temp("weapon")) || weapon->query("skill_type") != "sword"
+        || me->query_skill_mapped("sword") != "huashan-jianfa")
+                return notify_fail("你手里无剑，如何使用夺命连环三仙剑？\n");
+                
+    if((int)me->query("max_neili") < 2500 )
+                return notify_fail("你的内力修为不够，不能使用夺命连环三仙剑！\n");
+    if((int)me->query("neili") < 2000 )
+                return notify_fail("你现在真气不足，不能使用夺命连环三仙剑！\n");
+    if((int)me->query_temp("lianhuan"))
+                return notify_fail("你正在使用夺命连环三仙剑！\n");
+    if((int)me->query_temp("wudui"))
+                return notify_fail("你正在使用无双无对！\n");
+
+	message_vision(MAG"\n$N"MAG"长啸一声，使出平生绝技，连环三击，正是华山剑宗绝学“夺命连环三仙剑”"MAG"！\n"NOR, me,target);
+
+    me->set_temp("lianhuan",1);
+	me->start_perform(4,"「夺命连环三仙剑」");
+    me->start_busy(1);
+    target->start_busy(1);
+    call_out("perform1", 0, me);
+    return 1;
+}
+
+int perform1(object me, object target)        
+{
+      string msg;
+      object wep;
+      int t_neili,p_neili,i, cost, ap, dp, damage,p;
+      me = this_player();
+      wep = me->query_temp("weapon");
+
+      if( !wep 
+       || !objectp(wep)
+       || wep->query("skill_type") != "sword" ){ 
+           me->delete_temp("lianhuan");
+           return 1;
+      }
+      if( !target ) target = offensive_target(me);
+      if( !target ){ 
+          me->delete_temp("lianhuan");
+          return 1;
+      }
+
+      if( !present(target->query("id"), environment(me))
+       || !me->is_fighting()){
+           me->delete_temp("lianhuan");
+           return 1;
+      }
+
+      t_neili= target->query("neili");
+      p_neili= me->query("neili");
+     
+      p = (int)target->query("qi")*100/(int)target->query("max_qi");
+      wep = me->query_temp("weapon");
+      i = ((int)me->query_skill("sword")+me->query_skill("force"))/2
+		  +me->query("jiali"); 
+      cost = 100+me->query("jiali")/2;
+      msg = MAG"$N将紫霞神功都运到了剑上，呼的一剑，当头直劈。\n"NOR;
+      ap = me->query("combat_exp")/1000 + p_neili/10 + me->query_dex()*20+me->query("jiali");
+      dp = target->query("combat_exp")/1000 + t_neili/10;
+      if (ap < 1) ap = 1;
+      if (dp < 1) dp = 1;
+
+      if (random(ap) > dp/2){
+           damage =i*2/3 + random(i);
+		  if(p_neili>t_neili)damage=damage+(p_neili-t_neili)/20;
+           if (damage > 600 ) damage = 600+(damage-600)/10;
+if(wizardp(me))
+tell_object(me,sprintf("damage=%d\n",damage));
+           target->receive_damage("qi", damage);
+           target->receive_wound("qi", damage*2/3);
+           me->add("neili", -cost*2/3);
+           msg += HIR"结果只听见$n一声惨嚎，"+wep->name()+HIR"已在$n的肩头砍出了一个长长的口子！！\n"NOR;
+           msg += "( $n"+eff_status_msg(p)+" )\n\n";
+           if((int)me->query("neili") > 500
+            && present(target->query("id"), environment(me)) 
+            &&  me->is_fighting(target) 
+            &&  living(target)
+            &&  living(me)
+            &&  me->is_fighting()
+            &&  target->is_fighting() 
+            &&  !target->is_ghost()
+            &&  !me->is_ghost()
+            &&  me->query_skill_mapped("sword") == "huashan-jianfa"
+            &&  (string)wep->query("skill_type") == "sword" ){
+              me->start_busy(1);
+              target->start_busy(1);
+              call_out("perform2", 0, me);    
+           }
+           else{
+              me->start_busy(2);
+              me->delete_temp("lianhuan");
+           }
+      }
+      else {         
+           me->add("neili", -cost/3);
+           msg += HIY"\n$n大叫一声不好，全身用力一纵，顺势跳了开去。\n\n" NOR;
+           if( (int)me->query("neili") > 500
+            && present(target->query("id"), environment(me)) 
+            && me->is_fighting(target) 
+            && living(target)
+            && living(me) 
+            && me->is_fighting()
+            && target->is_fighting()
+            && !target->is_ghost()
+            && !me->is_ghost()
+            && me->query_skill_mapped("sword") == "huashan-jianfa"
+            && (string)wep->query("skill_type") == "sword"){
+              me->start_busy(2);
+              call_out("perform2", 0, me);    
+           }
+           else{
+              me->start_busy(2+random(2));
+              me->delete_temp("lianhuan");
+           }
+      }
+      message_vision(msg, me, target);
+      return 1;
+}
+int perform2(object me, object target)
+{
+      string msg;
+      int i, cost, ap, dp, damage,p,p_neili,t_neili; 
+      object wep;
+      me = this_player();
+      
+      if( !target ) target = offensive_target(me);
+      wep = me->query_temp("weapon");
+      if( !wep
+       || !objectp(wep)
+       || wep->query("skill_type") != "sword" ){
+         me->delete_temp("lianhuan");
+         return 1;
+      }
+      if( !target
+       || !present(target->query("id"), environment(me))
+       ||  !me->is_fighting()){
+         me->delete_temp("lianhuan"); 
+         return 1;
+      }
+      t_neili=target->query("neili");
+      p_neili=me->query("neili");
+
+      p = (int)target->query("qi")*100/(int)target->query("max_qi");
+      wep = me->query_temp("weapon");
+      i = ((int)me->query_skill("sword")+me->query_skill("force"))/2
+		  +me->query("jiali"); 
+      cost = 100+me->query("jiali")/2;
+      ap = me->query("combat_exp")/1000 + p_neili/10 + me->query_dex()*20+me->query("jiali");
+      dp = target->query("combat_exp")/1000 + t_neili/10;
+      if (ap < 1) ap = 1;
+      if (dp < 1) dp = 1;
+
+      msg =MAG"$N见$n斜身闪开，当即圈转"+wep->query("name")+MAG"，拦腰横削。\n"NOR;     
+
+      if (random(ap) > dp/3){         
+         damage = i  + random(i);
+		  if(p_neili>t_neili)damage=damage+(p_neili-t_neili)/20;
+         if ( damage > 800 ) damage = 800+(damage-800)/10;
+if(wizardp(me))
+tell_object(me,sprintf("damage=%d\n",damage));
+         target->receive_damage("qi", damage);
+         target->receive_wound("qi", damage/2);
+         me->add("neili", -cost);
+            msg += HIR"结果"+wep->name()+HIR"在$n的腰部划出一道深可见骨的可怕伤口，鲜血溅得满地！！\n"NOR;
+            msg += "( $n"+eff_status_msg(p)+" )\n\n"; 
+         if( (int)me->query("neili") > 500
+          &&  present(target->query("id"), environment(me)) 
+          &&  me->is_fighting(target) 
+          &&  living(target)
+          &&  living(me)
+          &&  me->is_fighting()
+          &&  target->is_fighting()
+          &&  !target->is_ghost()
+          &&  !me->is_ghost()
+          &&  me->query_skill_mapped("sword") == "huashan-jianfa"
+          &&  (string)wep->query("skill_type") == "sword"){
+            me->start_busy(1);
+            target->start_busy(1);
+            call_out("perform3", 0, me);    
+         }
+         else {
+            me->start_busy(2);                            
+            me->delete_temp("lianhuan");
+         }
+      }
+
+      else{         
+         me->add("neili", -cost/3);
+         msg += HIY"\n只见$n一个纵身，从$N剑上跳了开去。\n\n"NOR;
+         if( (int)me->query("neili") > 500
+          &&  present(target->query("id"), environment(me)) 
+          &&  me->is_fighting(target) 
+          &&  living(target)
+          &&  living(me)
+          &&  me->is_fighting()
+          &&  target->is_fighting()
+          &&  !target->is_ghost()
+          &&  !me->is_ghost()
+          &&  me->query_skill_mapped("sword") == "huashan-jianfa"
+          &&  (string)wep->query("skill_type") == "sword" ){
+            me->start_busy(1);
+            call_out("perform3", 0, me);    
+         }
+         else { 
+            me->start_busy(2+random(2));
+            me->delete_temp("lianhuan");
+         }
+      }                
+      message_vision(msg, me, target);
+      return 1;
+
+}
+
+int perform3(object me, object target)
+{
+      string msg;
+      int i, cost, ap, dp, damage,p,p_neili,t_neili;
+      object wep;
+      me = this_player();
+      wep = me->query_temp("weapon");
+       
+      if(!wep
+       || !objectp(wep)
+       || wep->query("skill_type") != "sword"){
+         me->delete_temp("lianhuan");
+         return 1;
+      }
+      if(!target ) target = offensive_target(me); 
+      if( !target
+       || !present(target->query("id"), environment(me))
+       ||  !me->is_fighting()){
+         me->delete_temp("lianhuan");
+         return 1;
+      }
+      t_neili=target->query("neili");
+      p_neili=me->query("neili");
+
+      p = (int)target->query("qi")*100/(int)target->query("max_qi");
+      i = ((int)me->query_skill("sword")+me->query_skill("force"))/2
+		  +me->query("jiali"); 
+      cost = 100+me->query("jiali")/2;
+      wep = me->query_temp("weapon");
+      ap = me->query("combat_exp")/1000 + p_neili/10 + me->query_dex()*20+me->query("jiali");
+      dp = target->query("combat_exp")/1000 + t_neili/10;
+
+      if (ap < 1) ap = 1;
+      if (dp < 1) dp = 1;
+
+      msg = MAG"$N不等$n从剑上跃过，"+wep->query("name")+MAG"反撩，疾刺$n后心，这一剑变招快极，势在难以躲避。\n"NOR;
+
+      if ( random(ap) > dp/4 ){
+          remove_call_out("check_fight");
+          call_out("check_fight", 1, me, target);                                 
+          me->start_busy(1);
+          target->start_busy(random(2)+1);
+          damage = i*3/2 + random(i);
+		  if(p_neili>t_neili)damage=damage+(p_neili-t_neili)/20;
+          if( damage > 1200 ) damage = 1200+(damage-1200)/10;
+if(wizardp(me))
+tell_object(me,sprintf("damage=%d\n",damage));
+          target->receive_damage("qi", damage);
+          target->receive_wound("qi", damage/3);
+          me->add("neili", -cost*3/2);
+            msg +=HIR"结果只听见$n一声惨嚎，"+wep->name()+HIR"已在$n的后心对穿而出，鲜血溅得满地！！\n"NOR;
+            msg += "( $n"+eff_status_msg(p)+" )\n\n";
+          me->delete_temp("lianhuan");
+      }
+      else{         
+          me->start_busy(random(1)+2);
+          me->add("neili", -cost/2); 
+          msg += HIY"却见$n伸手拍在身前的木柱之上，这一借力，便已跃到了木柱之后。\n"NOR; 
+          me->delete_temp("lianhuan");
+      }
+      message_vision(msg, me, target);
+    me->delete_temp("lianhuan");
+    message_vision(MAG"\n$N"MAG"「夺命连环三仙剑」绝技运行完毕，缓缓撤去了运在剑上的内力。\n"NOR, me);
+      return 1;
+} 
+
+
+
+

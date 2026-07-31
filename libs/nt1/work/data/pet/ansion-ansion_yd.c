@@ -1,0 +1,18 @@
+// SN:0R_:6h091Y`mVTlS
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[31m风豹[2;37;0m", ({"ansion_yd bao"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "红
+它是浪天涯的坐骑。
+");
+        set_temp("owner_id", "ansion");
+        set_temp("owner_name", "浪天涯");
+        ::setup();
+}
+

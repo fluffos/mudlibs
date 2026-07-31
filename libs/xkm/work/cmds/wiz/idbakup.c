@@ -1,0 +1,73 @@
+// restorebackup.c
+// restore player's data from backup
+// by sdong , 11/18/98
+
+#include <ansi.h>
+#include <combat.h>
+#ifndef QUEUEDIR
+#define QUEUEDIR "/queue/"
+#endif
+#define RESTOREDATA QUEUEDIR + "restore"
+#define LOCKDATA QUEUEDIR + "restore.lock"
+#define SOURCEDIR "/backup/"
+#define TARGETDIRU "/data/user/"
+#define TARGETDIRL "/data/login/"
+
+inherit F_DBASE;
+inherit F_CLEAN_UP;
+
+int main(object me, string arg)
+{
+	object obj,ob;
+	string name,date,initial,src1,dst1,src2,dst2;
+
+	if( wizhood(me) != "(caretaker)" 
+		&& wizhood(me) != "(wizard)" 
+		&& wizhood(me) != "(arch)" 
+		&& wizhood(me) != "(admin)" )
+		return notify_fail("什么？\n");
+
+	if (!arg)	return notify_fail("指令格式：rstbkup2 id 日期\n");
+	if(sscanf(arg, "%s %s", name, date) != 2)
+		return notify_fail("指令格式：rstbkup player #backup.\n");
+	
+	if (objectp(obj = find_player(name)) && geteuid(obj)==name)
+		return notify_fail("你只能在玩家离线时才能给他恢复数据。\n");
+
+	src1 = sprintf(SOURCEDIR "%s/user/%c/%s.o", date,name[0], name);
+	dst1 = sprintf(TARGETDIRU "%c/%s.o", name[0], name);
+	src2 = sprintf(SOURCEDIR "%s/login/%c/%s.o", date,name[0], name);
+	dst2 = sprintf(TARGETDIRL "%c/%s.o", name[0], name);
+	if( file_size(src1) < 0 ) {
+		ob = present(src1, me);
+		if( !ob ) ob = present(src1, environment(me));
+		if( !ob ) return notify_fail("没有这个档案。请检查id和日期是否正确！\n");
+	}
+	if( file_size(src2) < 0 ) {
+		ob = present(src2, me);
+		if( !ob ) ob = present(src2, environment(me));
+		if( !ob ) return notify_fail("没有这个档案。请检查id和日期是否正确！\n");
+	}
+	printf(HIY"备份文件：%s\n",src1);
+	printf(HIW"目标文件：%s\n",dst1);
+	printf(HIY"备份文件：%s\n",src2);
+	printf(HIW"目标文件：%s\n",dst2);
+	if( cp(src1, dst1)&&cp(src2, dst2) )
+		write(HIM"恢复完毕。\n"NOR);
+	else write(HIR"错误，请检查id和日期是否正确！"NOR);
+	write_file("/log/rstbkup.c",
+		sprintf("%s(%s)于%s为%s恢复了%s的档案。 \n",
+		me->name(), getuid(me),ctime(time()),name,date));
+	return 1;
+}
+int help(object me)
+{
+write(@HELP
+指令格式：rstbkup id 日期
+
+如：rstbkup hatcher 2001-1-22
+用来从备份中恢复玩家数据
+HELP);
+	 return 1;
+}
+

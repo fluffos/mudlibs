@@ -1,0 +1,31 @@
+// ITEM Made by player(渡乔:qiaojia30_1) /data/item/q/qiaojia30_1-xuesha.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Wed May  3 17:50:50 2023
+#include <ansi.h>
+#include <weapon.h>
+
+inherit SWORD;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("血杀剑[2;37;0m", ({ "xuesha" }));
+	set_weight(1);
+	set("item_make", 1);
+	set("unit", "柄");
+	set("long", "这是由[1;31m真龙[2;37;0m炼制而成的一柄剑。
+此剑一出周围顿时弥漫血色浓雾，当浓雾散尽是显现出无垠之剑组成无垠剑阵。[2;37;0m
+剑柄上刻着一行小字：渡乔(qiaojia30_1)
+");
+	set("value", 300100000);
+	set("point", 33000);
+	set("material", "silk");
+	set("wield_msg", "看上去怪异而不失力量的一把剑，给使用者带来无尽的力量。[2;37;0m\n");
+	set("unwield_msg", "$N随手一抹，收起了$n。\n");
+	if (! check_clone()) return;
+	restore();
+	init_sword(apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

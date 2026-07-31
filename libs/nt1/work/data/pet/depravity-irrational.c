@@ -1,0 +1,18 @@
+// SN:jQoZkL@VZOb<23lE
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[35m紫焰豹[2;37;0m", ({"irrational bao"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "一头由暗紫色火焰所缠绕的凶残野兽。
+它是堕落天使的坐骑。
+");
+        set_temp("owner_id", "depravity");
+        set_temp("owner_name", "堕落天使");
+        ::setup();
+}
+

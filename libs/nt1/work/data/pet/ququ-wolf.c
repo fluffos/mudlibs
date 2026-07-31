@@ -1,0 +1,18 @@
+// SN:Z@h7PfcAGYFQm]cf
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("三头犬狼[2;37;0m", ({"wolf lang"}));        
+        set("gender", "男性");                
+        set("unit", "条");
+        set("long", "$HIR$传说中来自地狱的恶浪。
+它是天蛆的坐骑。
+");
+        set_temp("owner_id", "ququ");
+        set_temp("owner_name", "天蛆");
+        ::setup();
+}
+

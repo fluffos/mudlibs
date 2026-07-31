@@ -1,0 +1,108 @@
+#include <ansi.h>
+#include <room.h>
+inherit ROOM;
+
+void create()
+{
+	set("short", "文庙");
+	set("long", @LONG
+这里是文庙正殿，内有孔夫子像。历代皇帝都懂得利用儒教思想来巩
+固自己的江山社稷，当朝皇帝自然也不例外。不论何人到此，都毕恭毕敬
+地上香礼拜。孔夫子讲究的是人的悟性，要成为一位扬名天下的大侠，光
+靠武力往往不能做到，还需要有足够的智慧。不少江湖中流名千古的神话
+人物，在初入江湖时，都曾经在这里发下誓言，虔诚的膜拜(mobai)。
+LONG );
+
+       set("no_fight",1);
+        set("valid_startroom","1");
+	set("exits", ([
+		"south" : __DIR__"dong_3",
+	]));
+
+	setup();
+}
+
+/*
+void init()
+{
+	add_action("do_mobai","mobai");
+	add_action("do_chouqian","chouqian");
+}
+
+int do_mobai(string arg){
+        int i;
+        int points;
+        int tmpstr, tmpint, tmpcon, tmpdex;
+        object me;
+        mapping my;
+        if (! objectp(me = this_player()) ||
+            ! userp(me))
+                return 1;
+        if (me->query("can_not_change"))
+                return notify_fail("你正对着孔子像双膝跪下，无比虔诚的膜拜这位华夏圣人，良久才起身。\n");
+        write(HIC "你对着孔子像毕恭毕敬的跪了下去，双手合十开始膜拜。\n" NOR, me);
+        tmpstr = tmpint = tmpcon = tmpdex = 13;
+        tmpint = 23;
+        points = 80 - (tmpstr + tmpint + tmpcon + tmpdex);
+        for (i = 0; i < points; i++) {
+                switch (random(4)) {
+                case 0: 
+                        if (tmpstr < 30) tmpstr++;
+                        else i--; 
+                        break;
+                case 1: 
+                        if (tmpint < 30) tmpint++;
+                        else i--;
+                        break;
+                case 2: 
+                        if (tmpcon < 30) tmpcon++;
+                        else i--;
+                        break;
+                case 3:
+                        if (tmpdex < 30) tmpdex++;
+                        else i--;
+                        break;
+                }
+        }
+        my = me->query_entire_dbase();
+        my["str"] = tmpstr;
+        my["int"] = tmpint;
+        my["con"] = tmpcon;
+        my["dex"] = tmpdex;
+        my["kar"] = 10 + random(21);
+        my["per"] = 10 + random(21);
+        write(HIC "突然一阵深沉的声音在你心头响起：“这是我给你的天资！”\n" NOR, me);
+        write(sprintf(HIY "\n你只感觉身体里一道圣气缓缓流转，你的秉性变化了：\n"
+                          "膂力：【 " HIG "%d" HIY " 】 "
+                          "悟性：【 " HIG "%d" HIY " 】 "
+                          "根骨：【 " HIG "%d" HIY " 】 "
+                          "身法：【 " HIG "%d" HIY " 】\n" NOR,
+                      tmpstr, tmpint, tmpcon, tmpdex));
+        return 1;
+}
+
+int do_chouqian(string arg)
+{
+        object me;
+        string *character = ({
+		"心狠手辣",
+		"光明磊落",
+		"狡黠多变",
+		"阴险奸诈",
+	 });
+        if (! objectp(me = this_player()) ||
+            ! userp(me))
+                return 1;
+
+        if (time() - me->query("last_chouqian_time") < 1800)
+                return notify_fail("这么频繁的抽签干嘛？心不诚则签不灵，过半个小时再来吧。\n");
+
+        write(HIC "你虔诚的抽了一根签，闭目祈祷了一阵，才睁开眼睛看签上所书文字。\n" NOR, me);
+        write(HIC "签上写着：" + CHOUQIAN->query_chouqian() + "。\n" NOR, me);
+        me->set("last_chouqian_time",time());
+        if (me->query("can_not_change")) return 1;
+        me->set("character", character[random(sizeof(character))]);
+        write(sprintf(HIY "\n你隐隐听到一阵深沉的声音：朝『%s』的方向发展吧。\n" NOR,me->query("character")));
+        return 1;
+}
+*/

@@ -1,0 +1,18 @@
+// SN:8En]ZCS7=?OV2of5
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m白鹤[2;37;0m", ({"sss he"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "神鹤
+它是魔影的坐骑。
+");
+        set_temp("owner_id", "steel");
+        set_temp("owner_name", "魔影");
+        ::setup();
+}
+

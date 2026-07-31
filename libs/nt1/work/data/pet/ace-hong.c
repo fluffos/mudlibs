@@ -1,0 +1,18 @@
+// SN:b\T5f6>3RdI_P2?[
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;33m困了累了[1;35m喝[1;31m红牛[2;37;0m", ({"hong niu"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "(@_@)
+它是千王之王的坐骑。
+");
+        set_temp("owner_id", "ace");
+        set_temp("owner_name", "千王之王");
+        ::setup();
+}
+

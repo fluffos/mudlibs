@@ -1,0 +1,171 @@
+// respirate.c
+#pragma save_binary
+#include <skill.h>
+#include <ansi.h>
+inherit F_CLEAN_UP;
+int respirating(object me);
+int halt_respirate(object me);
+
+int main(object me, string arg)
+{
+
+	int respirate_cost;
+	object where;
+	seteuid(getuid());
+	where = environment(me);
+	if ((int)me->query("age") < 15)
+		return notify_fail("你现在还年轻，以后再练吧！\n");
+
+	if (where->query("pigging"))
+		return notify_fail("你还是专心拱猪吧！\n");
+		if (me->is_busy() || me->query_temp("pending/respirating"))
+		return notify_fail("你现在正忙着呢。\n");
+//	if( environment(me)->query("no_fight") )
+//		return notify_fail("这里是是非之地，不可久留，别练功了，快走吧！\n");
+	if( me->is_fighting() )
+		return notify_fail("战斗中吐纳，好象只有神仙才能做到。\n");
+	if( !arg || !sscanf(arg, "%d", respirate_cost))
+	{
+		me->set_temp("pending/auto_tuna",1);
+		respirate_cost = me->query("max_jingli")/2;
+		if (respirate_cost > me->query("jing") / 2) respirate_cost = me->query("jing") / 2;
+		if (respirate_cost < 10 ) respirate_cost = 10;
+	}
+	if (respirate_cost <= 0)
+		return notify_fail("你不是神仙！\n");
+
+	if ((int)me->query("jing") < respirate_cost)
+		return notify_fail("你现在精不足，无法修行精力！\n");
+
+	if ((int)me->query("qi") * 100 / (int)me->query("max_qi") < 70)
+		return notify_fail("你现在身体状况太差了，无法集中精神！\n");
+
+	if( (int)me->query("jing") * 100 / (int)me->query("max_jing") < 60 )
+		return notify_fail("你现在精不够，无法控制内息的流动！\n");
+
+	write(HIR"你闭上眼睛开始吐纳..."+NOR+"\n");
+	me->set_temp("pending/respirate", 1);
+	me->set_temp("respirate_cost", respirate_cost);
+	message("vision",me->name()+"盘膝坐下，开始吐纳炼精。\n",environment(me),({me}));
+	tell_object(me,ZJEXIT"northwest:"RED"站起来"NOR":halt\n");
+	me->set_temp("tuna/step", 1);
+	me->start_busy(bind((: call_other, __FILE__, "respirating" :), me),
+		       bind((: call_other, __FILE__, "halt_respirate" :), me));
+	return 1;
+}
+
+void auto_tuna(object me, int respirate_cost)
+{
+	if(!me->query_temp("pending/auto_tuna"))
+		return;
+	if(me->is_busy())
+		call_out("auto_tuna",1,me,respirate_cost);
+	else if( (int)me->query("jing") < respirate_cost )
+	{
+		tell_object(me,"精力不足，休息中。。。\n");
+		tell_object(me,ZJFORCECMD("exert regenerate"));
+                call_out("auto_tuna",5,me,respirate_cost);
+	}
+	else
+	{
+		tell_object(me,"托管中，继续吐纳。。。。。。\n");
+              tell_object(me,ZJFORCECMD("exert regenerate"));
+		tell_object(me,ZJFORCECMD("tuna "+respirate_cost));
+	}
+}
+
+int respirating(object me)
+{
+	int finish;
+	int jingli_temp,skill_temp_point;
+	int respirate_cost = (int)me->query_temp("respirate_cost");
+	mapping map_temp;
+	object where=environment(me);
+	map_temp = me->query_skill_map();
+      if (!interactive(me)) return 0;
+	if (respirate_cost < 1)
+		return 0;
+	if (! me->query_temp("tuna/step"))
+		me->set_temp("tuna/step", 1);
+
+	if (! living(me))
+	{
+		me->set_temp("pending/respirate", 0);
+		me->delete_temp("tuna/step");
+		return 0;
+	}
+	finish = 0;
+
+	switch (me->query_temp("tuna/step"))
+      {
+      case 1:
+		write(HIC"炼精化气..."+NOR"\n");
+      	break;
+      case 2:
+		write(HIM"炼气化神..."+NOR"\n");
+      	break;
+      case 3:
+		write(HIW"炼神返虚..."+NOR"\n");
+      	break;
+      case 4:
+		write(HIG"炼虚合道。"+NOR"\n");
+      	break;
+ 	default:
+		finish = 1;
+		break;
+	}
+
+	if(!finish)
+	{
+		me->add_temp("tuna/step", 1);
+		return 1;
+	}
+	jingli_temp=respirate_cost * 2 - (random(respirate_cost) / 5);  //随即系数+用气=实际效果
+	me->add("jing", -respirate_cost);
+	me->set_temp("pending/respirate", 0);
+	tell_object(me,HIY"你吐纳完毕，睁开双眼，站了起来。\n"
+			+HIR"【精力】: "+HIG"+"+jingli_temp+NOR"\n");
+	me->add("jingli", jingli_temp);
+	if(me->query_temp("pending/auto_tuna"))
+		call_out("auto_tuna",1,me,respirate_cost);
+	if ((int)me->query("jingli") < (int)me->query("max_jingli") * 2)
+		return 0;
+	else
+	{
+		if ((int)me->query("max_jingli") > (int)me->query_current_jingli_limit())
+		{
+			write("你的精力修为似乎已经达到了瓶颈。\n");
+			me->set("jingli", (int)me->query("max_jingli"));
+			return 0;
+		}
+		else
+		{
+			me->add("max_jingli", 1);
+			me->set("jingli", (int)me->query("max_jingli"));
+			write("你的精力增加了！！\n");
+			return 0;
+		}
+	}
+}
+int halt_respirate(object me)
+{
+	tell_object(me, "你将真气压回丹田，站了起来。\n");
+	tell_room(environment(me), me->name() + "深吸一口气，站了起来。\n", me);
+	if ((int)me->query("jingli") > (int)me->query("max_jingli") * 2)
+		me->set("jingli", (int)me->query("max_jingli") * 2);
+			me->set_short_desc(0);
+      me->delete_temp("tuna/step");
+	me->set_temp("pending/respirate", 0);
+	me->set_short_desc(0);
+	return 1;
+}
+int help(object me)
+{
+	write(@HELP
+指令格式 : exercise [<耗费「气」的量> 必须多于 10]
+运气练功，控制体内的气在各经脉间流动，藉以训练人体肌肉骨骼的耐
+力、爆发力，并且用内力的形式将能量储备下来。
+HELP
+	);
+	return 1;
+}

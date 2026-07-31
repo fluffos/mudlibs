@@ -1,0 +1,28 @@
+// SN:472CG1L=mlhY]5ec
+// File(/data/room/murongxiu/key.c) of murongxiu's key
+// Create by LUBAN written by Doing Lu
+
+#include <ansi.h>
+
+inherit ITEM;
+
+string query_autoload() { return "1"; }
+
+void create()
+{
+        set_name(YEL "慕容修家的钥匙" NOR, ({ "key", "1 of murongxiu" }));
+        set_weight(10);
+        if (clonep())
+                set_default_object(__FILE__);
+        else {
+                set("long", @LONG
+一把用来开启参合居(murongxiu)的钥匙。
+这是原配钥匙。
+LONG );
+                set("unit", "把");
+                set("no_pawn", 1);
+                set("no_sell", 1);
+                set("item_make", 1);
+                set("value", 1);
+        }
+}

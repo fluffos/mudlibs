@@ -1,0 +1,18 @@
+// SN:<Wn^OAMA9hFP8_Cf
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m白云过隙兽[2;37;0m", ({"baiyun shou"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "$HIW$白云过隙
+它是神月的坐骑。
+");
+        set_temp("owner_id", "vingi");
+        set_temp("owner_name", "神月");
+        ::setup();
+}
+

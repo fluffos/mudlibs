@@ -1,0 +1,27 @@
+ // Copyright (C) 1995, by Tie Yu and Daniel Yu. All rights reserved.
+inherit ROOM;
+void create()
+{
+  set("short","对松亭");
+  set("long",@LONG
+此处南天门之下，双峰对峙，又名对松山或万松山，浓密的松树
+层层叠叠于绝壁之上，松涛随山风呼啸，声如巨浪拍岸，苍松衬浮云
+而隐现，势若蟠龙飞舞，令人身居松谷，心荡神驰，相传乾隆皇帝曾
+手书“岱宗最佳处，对松真奇绝”
+LONG
+  );
+  set("exits",([
+        "down" : __DIR__"chaoyang",
+        "up" : __DIR__"shiba",
+               ]));
+        set("objects", ([
+        __DIR__"npc/zhu" : 1,
+        __DIR__"npc/zyc" : 1,
+                        ]) );
+        set("outdoors", "taishanfy");
+        set("coor/x",320);
+        set("coor/y",2390);
+        set("coor/z",100);
+        setup();
+        replace_program(ROOM);
+}       

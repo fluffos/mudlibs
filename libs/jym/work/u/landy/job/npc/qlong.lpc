@@ -1,0 +1,421 @@
+
+
+//edit by landy
+//2007.5.20
+#include <ansi.h>
+inherit NPC;
+#include "shenshou_list.h"
+
+object leader,member1,member2;
+void die();
+void shenshou_end(object leader,object member1,object member2);
+void shenshou(object me,int skill);
+
+int auto_perform();
+int shenshou_dest();
+int do_busy();
+//create 里面设定基本设置,如果其后没有改变,就根据 create 里面的设定.
+void create() 
+{
+set_name(BLK"黑影"NOR,({""}));
+set("per",30);
+set("kar",30);
+set("age", 100); 
+set("max_jing", 200); 
+set("max_qi", 200);
+set("qi", 200); 
+set("jing", 200);
+set("jingli", 300);
+set("eff_jingli", 300);
+set("max_jingli", 300); 
+set("neili", 10000); 
+set("max_neili", 10000);
+create_family("桃花岛", 4, "弟子");
+set("limbs", ({ "头部", "身体", "尾巴" }) );
+/*set_temp("apply/attack", 80);
+set_temp("apply/defense", 80);
+set_temp("apply/damage", 20);*/
+set("combat_exp", 50000);
+set("no_quest",1);
+set("done",0);
+set("is_shenshou",1);
+set("chat_chance_combat", 30);
+set("chat_msg_combat", ({
+(: auto_perform :),
+(: do_busy :),
+(: perform_action, "claw.shenzhua" :),
+}) );
+setup();
+} 
+
+//die 设定当 npc 死的时候要执行的东西.
+void die()
+{
+object me,member1,member2,shenshouob;
+object *inv;
+me = this_object();//me 就是神兽
+
+//如果这只神兽是麒麟,那领队的身上就要做个记号下只出来的神兽是玄武
+if (me->query("id")=="qi lin")
+leader->set_temp("shenshou","xuanwu");
+
+if (me->query("revived") > 3)
+destruct(me);
+//如果这只神兽是青龙,而且没死过,那就执行以下.
+if (me->query("id")=="qing long" && (me->query("revived")==0))
+{
+
+//苏醒 (如果昏迷了,如果没昏迷执行这个也没什么问题)
+me->remove_call_out("revive");
+me->revive();
+
+//这些 busy 是配合下面的显示,效果好象龙飞了上去,黄光照耀着慢慢复原,player目瞪口呆.
+me->start_busy(5);
+if (objectp(leader)) leader->start_busy(5);
+if (objectp(member1)) member1->start_busy(5);
+if (objectp(member2)) member2->start_busy(5);
+
+me->reincarnate();//reincarnate() 是系统函数,就是 full 的意思.
+me->add("revived",1);//记录这只龙已经曾经死过一次了.
+me->set("neili", me->query("max_neili"));//因为 reincarnate() 不会复原内力所以要这个.
+
+message_vision(HIY"\n\n$N一个"+BLINK+HIG"龙腾四海"+NOR+HIY"跃上高空，一道黄光从天空射向$N\n"NOR,me);
+message_vision("你看得目瞪口呆，傻了眼！\n",me);
+}
+
+//如果这只不是青龙,或着死过一次了,执行以下.
+else
+{
+//死亡信息显示.
+message_vision(HIW"\n\n$N一声巨吼，化成一道紫光，激射上空，消失在你眼前了。\n\n\n"NOR,me);
+
+//如果领队不存在了,执行以下.
+if (!environment(leader))
+{
+
+//判断房间内所有物件哪个是生还者,给奖励然后终止任务.
+//如果有 leader 不必如此判断因为两个跟去的 player id 有记录在 leader 身上.
+inv = all_inventory(environment(me));
+for(int i=0;i<sizeof(inv);i++)  
+{
+if (!living(inv[i])) continue;
+else 
+{
+tell_object(inv[i],"你觉得越来越冷，无助，绝望，脑袋一片空白。\n");
+inv[i]->add("combat_exp",5000+random(1000));//给奖励.
+inv[i]->unconcious();//生还者昏迷.
+inv[i]->move("/d/city/wumiao");//送出去外面,就是终止了任务.
+}
+}
+}
+
+//如果领队还存在在现场(就是领队没死)执行以下.
+else
+{
+leader->add("combat_exp",5000+random(5000));//给领队奖励
+if (objectp(member1=present(leader->query_temp("shenshou_member1"))))//如果第一个跟队没死,给奖励.
+member1->add("combat_exp",5000+random(5000));
+if (objectp(member2=present(leader->query_temp("shenshou_member2"))))//如果第二个跟队没死,给奖励.
+member2->add("combat_exp",5000+random(5000));
+message_vision("你只觉得不虚此行，实战经验增加了不少！\n",me);
+shenshouob = new (wanted_list[random(sizeof(wanted_list))]);
+shenshouob->move("/u/landy/job/dong.lpc");
+CHANNEL_D->do_channel(this_object(), "rumor",sprintf( "听说从%s身上"+HIM+"掉落了%s!"NOR,this_object()->name(),shenshouob->name()));
+if (me->query("id")=="qing long")
+{
+me->add("revived",1);
+me->reincarnate();//reincarnate() 是系统函数,就是 full 的意思.
+me->remove_call_out("revive");
+me->start_busy(10);
+remove_call_out("shenshou_end");
+call_out("shenshou_end",10, leader, leader, member2);
+this_object()->remove_all_enemy();
+if (objectp(leader))
+{
+leader->remove_all_enemy();
+leader->start_busy(10);
+}
+if (objectp(member1))
+{
+member1->remove_all_enemy();
+member1->start_busy(10);
+}
+if (objectp(member2))
+{
+member2->remove_all_enemy();
+member2->start_busy(10);
+}
+me->reincarnate();//reincarnate() 是系统函数,就是 full 的意思.
+me->revive();
+command("sigh");
+command("say 我打不过你，你也杀不死我，还是我送你出去吧。");
+me->revive();
+this_object()->remove_all_enemy();
+return;
+}
+else
+{
+environment(me)->set("enable",1);//如果不设这个,领队不可以 cry cry cry dig.
+remove_call_out("sheshou_dest");
+destruct(me);
+}
+//environment(me)->set("enable",1);//如果不设这个,领队不可以 cry cry cry dig.
+}
+}
+}
+
+//初试化, create() 里面设定了基本的设置, init() 会根据情况来增加或者修改设置.
+void init() 
+{
+int i,skill;
+object *ob; 
+ob = all_inventory(environment());
+this_object()->add("done",1);//因为每看见一个人这 npc 就会执行 init 一次,这个是确定 init 只会被执行一次.
+//判断如果以前没执行过 init 就执行以下.因为 team job 有三个人,神兽一出现就会看见三人而导致 init 被执行三次,所以神兽身上这设置可以确定 init 只被执行一次而不是三次.
+if (this_object()->query("done")==1)
+{
+for(i=0;i<sizeof(ob);i++)
+{
+if (!living(ob[i]) || ob[i]==this_object()) continue;
+skill = ob[i]->query_temp("shenshou_skill");//skill 这变数就等于领队身上之前设定的记号.
+{
+skill = ob[i]->query_temp("shenshou_skill");//skill 这变数就等于领队身上之前设定的记号.
+leader = ob[i];//这就好象 me = this_player() 的意思, leader 就等于这个身上有 shenshou_skill 记号的人.
+this_object()->set("target",leader->query("id"));//设定神兽的目标就是这人.
+this_object()->add("combat_exp",leader->query("combat_exp"));//神兽的 exp 等于领队的 exp
+call_out("shenshou",1,leader,skill);//呼叫 shenshou 函数,也是在下面被定义的,内容看下面.
+break;//找到领队了就不必继续循环了.
+}
+}
+}
+}
+
+//shenshou 函数是延续 init 的,因为从 init 呼叫,其实可以把它写进去 init 但是为了容易辨别所以抽出来.
+//主要是设定这只神兽的种类和功夫.
+void shenshou(object me,int skill)
+{
+int i,apply,tianfu;
+
+//不同的神兽出现的时候将有不懂的显示,shenshoumsg 是一组变数.
+mapping shenshoumsg = ([
+"qilin":"$N吼了一声，疯狂般向你们扑来！\n",
+"xuanwu":"$N怪叫一声，飞快的爬向你们！\n",
+"zhuque":"$N鸣叫一声，闪电般飞向你们！\n",
+"baihu":"$N吼了一声，瞪着红通通向你们扑来！\n",
+"qinglong":"$N向天龙吟，龙尾一摆，一瞬间龙爪已出现在你眼前！\n"
+]);
+string msg;
+object ob = this_object();
+//me 就是 leader, 从 leader 身上的记号判断应该轮到哪只神兽.
+msg = HIY"\n"+ shenshoumsg[me->query_temp("shenshou")] +"\n" NOR;
+if (me->query("rebirth") > 4)
+{
+tianfu = 90;
+}
+else if (me->query("rebirth") > 3)
+{
+tianfu = 70;
+}
+else if (me->query("rebirth") > 2)
+{
+tianfu = 60;
+}
+else if (me->query("rebirth") > 1)
+{
+tianfu = 50;
+}
+else tianfu = 30;
+//以下就是判断哪只神兽,来设定不同的设置.
+switch (me->query_temp("shenshou"))
+{
+case "qilin":
+{
+set_name("麒麟",({"qi lin"}));  
+set("title", HIY"守护神兽"NOR);
+set("long", "它是传说中的守护瑞兽，头生双角，鹰爪鹿身，让人有种不怒而威的感觉！\n");
+set("max_qi",500000);
+set("qi",500000);
+set("max_jing",100000);
+set("jing",100000);
+apply = (int)(skill*0.6);
+skill = skill + random(10);//skill 之前在 init 已经读取了 leader 身上的记号了.
+tianfu = tianfu + random(5);//tianfu 之前被定义为 30.
+break;
+}
+
+case "xuanwu":
+{
+me->set_temp("shenshou","zhuque");//由于现在打 xuan wu 下只就打 zhu que 所以在 leader 身上做记号.
+set_name("玄武",({"xuan wu"}));
+set("title", HIY"四灵"NOR);
+set("long", "它龙兽龟身，据说是龙生九子之一，集北方玄寒之气而生。\n");
+//玄武本质是很耐打的所以给设置不同的精气.
+set("max_jing", 200000);
+set("max_qi", 200000);
+set("neili", 15000); 
+set("max_neili", 15000);
+apply = (int)skill*0.7;
+reincarnate();//设置了不同的 max jing max qi 就要复原,那就不必 set jing, set eff_jing 那样了.
+skill = skill + 10 + random(10);
+tianfu = tianfu + 5 + random(5);
+break;
+}
+
+case "zhuque":
+{
+me->set_temp("shenshou","baihu");//由于现在打 zhu que 下只就打 bai hu 所以在 leader 身上做记号.
+set_name("朱雀",({"zhu que"})); 
+set("title", HIY"四灵"NOR);
+set("long", "它犹如孔雀般的身形，凤凰琉璃状的羽毛，据说可以沐火重生，是灵兽凤凰的后裔！\n");
+set("max_jing", 100000 + random(100000));
+set("jing", 100000 + random(100000));
+set("max_qi", 100000 + random(200000));
+set("qi", 100000 + random(200000));
+set("neili", 15000); 
+apply = (int)(skill*0.8);
+skill = skill + 20 + random(10);
+tianfu = tianfu + 10 + random(5);
+break;
+}
+
+case "baihu":
+{
+me->set_temp("shenshou","qinglong");//由于现在打 bai hu 下只就打 qing long 所以在 leader 身上做记号.
+set_name("白虎",({"bai hu"}));  
+set("title", HIY"四灵"NOR);
+set("long", "它，上下一片雪白间隔着黑色的条纹，曾为大魔神蚩尤的座骑！\n");
+set("max_jing", 100000);
+set("jing", 100000);
+set("max_qi", 100000 + random(300000));
+set("qi", 100000 + random(300000));
+set("neili", 15000); 
+apply = (int)(skill*0.9);
+skill = skill + 30 + random(10);
+tianfu = tianfu + 15 + random(5);
+break;
+}
+
+case "qinglong":
+{
+me->set_temp("shenshou","done");//由于打完 qing long quest 就完毕所以在 leader 身上做记号.
+set_name("青龙",({"qing long"}));       
+set("title", HIY"四灵"NOR);
+set("revived",0);
+set("max_jing", 200000);
+set("max_qi", 300000);
+set("neili", 15000); 
+set("max_neili", 15000);
+apply = skill;
+reincarnate();
+set("long", "它就是女娲割臂，吸取东方玄甲之气而成的青龙，神威非常！\n");
+skill = skill + 40 + random(10);
+tianfu = tianfu + 20 + random(5);
+break;
+}
+
+default:
+}
+
+//上面根据不同的神兽分别对变数 skill tianfu 和 apply 作出了调整,以下就设置了.
+ob->set("con",tianfu);
+ob->set("int",tianfu);
+ob->set("str",tianfu);
+ob->set("dex",tianfu);
+ob->set_skill("force",skill);
+ob->set_skill("parry",skill);
+ob->set_skill("dodge",skill);
+ob->set_skill("unarmed",skill);
+ob->set_skill("claw",skill);
+ob->set_skill("literate",skill*4);
+ob->set_skill("tiyunzong",skill);
+ob->set_skill("jiuyin-baiguzhao",skill);
+ob->set_skill("taiji-shengong",skill);
+ob->set_skill("music",skill);
+ob->map_skill("force","taiji-shengong");
+ob->map_skill("claw","jiuyin-baiguzhao");
+ob->map_skill("parry","jiuyin-baiguzhao");
+ob->map_skill("dodge","tiyunzong");
+ob->prepare_skill("claw","jiuyin-baiguzhao");
+//ob->add_temp("apply/dodge",apply/10);
+//ob->add_temp("apply/speed",apply/10);
+//ob->add_temp("apply/parry",apply/10);
+//ob->add_temp("apply/defense",apply/10);
+
+message_vision(msg,this_object());//shenshou()函数一开始就根据不同的神兽分配了不同的 msg, 现在显示.
+this_object()->reincarnate();
+
+me->receive_wound("jing",me->query("max_jing")/10,ob);
+ob->kill_ob(me);
+me->kill_ob(ob);
+me->start_busy(1);
+
+//如果任务中途死了第一跟队就不存在了所以要判断.
+if (objectp(member1=present(me->query_temp("shenshou_member1"))))
+{
+member1->receive_wound("jing",member1->query("max_jing")/10,ob);
+ob->kill_ob(member1);
+member1->kill_ob(ob);
+member1->start_busy(1);
+}
+
+//如果任务中途死了第二跟队就不存在了所以要判断.
+if (objectp(member2=present(me->query_temp("shenshou_member2"))))
+{
+member2->receive_wound("jing",member2->query("max_jing")/10,ob);
+ob->kill_ob(member2);
+member2->kill_ob(ob);
+member2->start_busy(1);
+}
+
+
+remove_call_out("shenshou_dest");
+call_out("shenshou_dest",300);//这个是下面定义的函数,作用看下面解释, 300 秒后这函数会被执行.
+} 
+
+
+//这是预防神兽把全部 player 都杀了,一直停留在原地而不会消失(任务里面的房间都设了不会 15 分钟更新,全部房间都不会自动更新),就通过这函数来 destruct 它.
+int shenshou_dest() 
+{ 
+object me; 
+me = this_object();
+if (!me->is_fighting())
+destruct(me);
+return 1;
+}
+void shenshou_end(object leader,object member1,object member2)
+{
+leader->move("/d/city/wumiao");
+if (objectp(member1))
+member1->move("/d/city/wumiao");
+if (objectp(member2))
+member2->move("/d/city/wumiao");
+remove_call_out("sheshou_dest");
+destruct(this_object());
+return;
+}
+
+
+int accept_kill(object me)
+{
+        kill_ob(me);
+call_out("do_bosy",2);
+this_object()->reincarnate();
+        return 1;
+}
+
+int auto_perform()
+{
+this_object()->start_busy(0);
+//remove_call_out("od_busy");
+call_out("od_busy",1);
+return 1;
+}
+
+int do_busy()
+{
+object me = this_object();
+
+me->start_busy(0);
+call_out("auto_perform",1);
+return perform_action("claw.shenzhua");
+}

@@ -1,0 +1,38 @@
+// SN:^6?DgHDI=aTnnXRC
+// File(/data/room/xyy/yingke.c) of xyy's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        set("short", "歪歪居迎客厅");
+	set ("long", @LONG
+这里是歪歪居的主人段歪歪迎接八方来客的地方。大凡客人来拜
+见段歪歪，少不得在这里寒暄叙话，了尽仰慕之情。东面通往一个茶
+室，是主人陪同客人品尝天下名茶之处。 
+LONG );
+
+	set("exits", ([
+		"north"  : __DIR__"yishiting",
+                "south"  : __DIR__"zoudao",
+                "east"   : __DIR__"chashi",
+	]));
+
+        create_door("east", "木门", "west", DOOR_CLOSED);
+
+        set("objects", ([
+                "/d/room/roomnpc/yahuan" : 2,
+        ]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("room_owner", "段歪歪");
+        set("room_name", "歪歪居");
+        set("room_id", "xyy");
+        set("room_owner_id", "xyy");
+        set("room_position", "树林");
+}

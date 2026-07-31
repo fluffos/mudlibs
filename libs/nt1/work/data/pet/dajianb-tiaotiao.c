@@ -1,0 +1,18 @@
+// SN:@:H417bR=[V^DB^f
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;36m小跳马[2;37;0m", ({"tiaotiao ma"}));        
+        set("gender", "女性");                
+        set("unit", "匹");
+        set("long", "小跳马是蒙古汉血宝马改良后的优良品种,日行千里,踏雪无痕.
+它是风二中的坐骑。
+");
+        set_temp("owner_id", "dajianb");
+        set_temp("owner_name", "风二中");
+        ::setup();
+}
+

@@ -1,0 +1,18 @@
+// SN:>1fe[O?F?fa52Soi
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;31m汗血宝马[2;37;0m", ({"bao ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "^_^
+它是段了的坐骑。
+");
+        set_temp("owner_id", "newer");
+        set_temp("owner_name", "段了");
+        ::setup();
+}
+

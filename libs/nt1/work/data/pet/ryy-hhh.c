@@ -1,0 +1,18 @@
+// SN:OGl`@J5NcmBje[jO
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("盈盈鹤[2;37;0m", ({"hhh he"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "任盈盈的坐骑！
+它是任盈盈的坐骑。
+");
+        set_temp("owner_id", "ryy");
+        set_temp("owner_name", "任盈盈");
+        ::setup();
+}
+

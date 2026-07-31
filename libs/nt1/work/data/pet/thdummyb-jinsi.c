@@ -1,0 +1,18 @@
+// SN:CD?IKbBi:BNe`]gX
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;33m金丝[1;35m猴[2;37;0m", ({"jinsi hou"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "猴
+它是制药三厂的坐骑。
+");
+        set_temp("owner_id", "thdummyb");
+        set_temp("owner_name", "制药三厂");
+        ::setup();
+}
+

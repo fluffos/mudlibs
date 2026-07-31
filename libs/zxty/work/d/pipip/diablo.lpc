@@ -1,0 +1,34 @@
+inherit ROOM;
+
+void create()
+{
+   set("short",HIB"暗黑聊天室"NOR);
+   set("long",HIG @LONG 
+西门无剑开设的暗黑破坏神聊天世界，
+欢迎暗黑1，暗黑2，和暗黑2exp的玩家在
+这里共同研讨追杀diablo的作战方案！                  
+
+LONG 
+);
+        set("exits",([ /* sizeof() == 1 */
+                "north":"/d/city/chatroom", ]));
+        set("valid_startroom", 1);
+        set("no_clean_up", 0);
+        set("no_magic",1);
+        set("no_fight",1);
+
+        setup();
+      call_other("/clone/board/diablo_b", "???");
+}
+
+void init()
+ {
+add_action("discmds",({"sleep","respitate","exert","array","duanlian","ansuan","touxi","persuade","teach","exert","exercise","study","xi","learn","kill","steal","conjure","fight","hit","xi","perform","prcatice","scribe","surrender"}));
+    add_action("do_climb", "climb");
+}
+int discmds()
+{
+        tell_object(this_player(),HIB"野蛮人突然出现在$N面前，吼叫道：我xxxx你！想干嘛？！！！\n"NOR);
+        return 1;
+}
+

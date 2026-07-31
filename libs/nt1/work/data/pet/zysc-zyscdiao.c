@@ -1,0 +1,18 @@
+// SN:7gHM<7cMW=O?RATS
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("金雕雕[2;37;0m", ({"zyscdiao diao"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "传说中火云邪者的坐骑
+它是火云邪者的坐骑。
+");
+        set_temp("owner_id", "zysc");
+        set_temp("owner_name", "火云邪者");
+        ::setup();
+}
+

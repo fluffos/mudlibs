@@ -1,0 +1,18 @@
+// SN:=7EH_gKNl80UZ5[3
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m天清鹤[2;37;0m", ({"tianqing he"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "一只不会飞，只会跳的小小鹤。
+它是段枫的坐骑。
+");
+        set_temp("owner_id", "jump");
+        set_temp("owner_name", "段枫");
+        ::setup();
+}
+

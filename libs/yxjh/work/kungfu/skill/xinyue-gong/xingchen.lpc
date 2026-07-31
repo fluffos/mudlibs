@@ -1,0 +1,37 @@
+#include <ansi.h>
+#include <skill.h>
+#include <weapon.h>
+#include <combat.h>
+inherit F_SSERVER;
+int perform(object me, object target)
+{
+        object weapon, ob;
+    string msg;
+        if( !me->is_fighting() )
+            return notify_fail("「日毁星沉」只能在战斗中使用。\n");
+        if (!objectp(weapon = me->query_temp("weapon"))
+                || (string)weapon->query("skill_type") != "sword")
+                        return notify_fail("你使用的武器不对。\n");
+             if((int)me->query_skill("sword",1) < 200)
+                return notify_fail("你的基本剑法的火候还不到家, 不能使用这一绝技 !\n");
+        if((int)me->query_skill("xinyue-gong",1) < 200)
+                return notify_fail("你的星月功的火候还不到家, 不能使用这一绝技 !\n");
+        if( (int)me->query("neili") < 5000 )
+                return notify_fail("你的真气不够！\n");
+        if( (int)me->query("max_neili") < 5000 )
+                return notify_fail("你的内力修为不够！\n");
+    msg = 
+YEL "\n$N威威一皱眉头，潇洒从容的使出星月功中的最后杀招「日毁星沉」！\n" NOR;
+        message_vision(msg, me);
+        me->clean_up_enemy();
+        ob = me->select_opponent();
+        COMBAT_D->do_attack(me, ob, me->query_temp("weapon"), 1000);
+        COMBAT_D->do_attack(me, ob, me->query_temp("weapon"), 1);
+        COMBAT_D->do_attack(me, ob, me->query_temp("weapon"), 1);
+        COMBAT_D->do_attack(me, ob, me->query_temp("weapon"), 1);
+        COMBAT_D->do_attack(me, ob, me->query_temp("weapon"), 100);
+        me->add("neili",-550);
+ me->start_busy(1);
+    return 1;
+}
+

@@ -1,0 +1,18 @@
+// SN:17PESLC>nk;]I0_D
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("神秘的大雕[2;37;0m", ({"flytree diao"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "这是一只大雕,当年跟扬过出生入死的那只.
+它是小次郎的坐骑。
+");
+        set_temp("owner_id", "orange");
+        set_temp("owner_name", "小次郎");
+        ::setup();
+}
+

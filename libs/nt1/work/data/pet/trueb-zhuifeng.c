@@ -1,0 +1,18 @@
+// SN:S^2\X9_;PM\lji:N
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;34m追风驹[2;37;0m", ({"zhuifeng ju"}));        
+        set("gender", "女性");                
+        set("unit", "匹");
+        set("long", "正气长存
+它是正气的坐骑。
+");
+        set_temp("owner_id", "trueb");
+        set_temp("owner_name", "正气");
+        ::setup();
+}
+

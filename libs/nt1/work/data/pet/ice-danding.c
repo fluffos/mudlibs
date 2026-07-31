@@ -1,0 +1,18 @@
+// SN:KIib>:k[Of7KZN3D
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[35m丹[1;36m顶[1;36m鹤[2;37;0m", ({"danding he"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "快要绝种了，要保护哦。
+它是冰女的坐骑。
+");
+        set_temp("owner_id", "ice");
+        set_temp("owner_name", "冰女");
+        ::setup();
+}
+

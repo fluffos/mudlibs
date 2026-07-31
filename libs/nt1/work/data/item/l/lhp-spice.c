@@ -1,0 +1,33 @@
+// SN:g[J`XAUEQoLJ1l?o
+// ITEM Made by player(少龙:lhp) /data/item/l/lhp-spice.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Sat Aug  7 09:05:59 2004
+#include <ansi.h>
+#include <armor.h>
+
+inherit CLOTH;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;34m七[1;37m里[1;35m香[2;37;0m", ({ "spice" }));
+	set_weight(1400);
+	set("item_make", 1);
+	set("unit", "件");
+	set("long", "这是由[1;37m冰蚕丝[2;37;0m炼制而成的一件战衣。
+[1;32m♀那饱满的稻穗，幸福了这个季节，而你的脸颊像田里熟透的蕃茄。
+[1;36m♂你突然对我说，[1;34m七[1;37m里[1;35m香[1;36m的名字很美，我此刻却只想亲吻你倔强的嘴！[2;37;0m
+战衣缘上刻着一行小字：少龙(lhp)
+");
+	set("value", 2100000);
+	set("point", 737);
+	set("material", "silk");
+	set("wear_msg", "[1;33m雨下整夜，我的爱溢出就像雨水。院子落叶，跟我的思念厚厚一叠。\n几句是非，也无法将我的热情冷却。你出现在我诗的每一页。[2;37;0m\n");
+	set("remove_msg", "[1;33m秋刀鱼的滋味，猫跟你都想了解，初恋的香味就这样被我们寻回。\n那温暖的阳光像刚摘的新鲜草莓，你说你舍不得吃掉这一种感觉。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/armor", apply_armor());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

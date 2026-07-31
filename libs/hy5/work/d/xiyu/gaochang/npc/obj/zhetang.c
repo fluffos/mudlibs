@@ -1,0 +1,26 @@
+/* zhetang.c  蔗糖
+ * from XO Lib
+ * a obj of gaochang
+ * created by hydra 19980427
+ * version: @(#) 1.0@(#)
+ * last modified by hydra 19980427
+ */
+
+inherit ITEM;
+
+#include <ansi.h>
+
+void create()
+{
+    set_name( "蔗糖",({"zhe tang","tang","sugar" }) );
+    set_weight( 100 );
+    if( clonep() )
+        set_default_object( __FILE__ );
+    else 
+    {
+        set( "long","从甘蔗中提炼出来的糖，味甜。\n" );
+        set( "unit","包" );
+        set( "value",1000 );
+    }
+    setup();
+}

@@ -1,0 +1,120 @@
+// lianhuan.c for murong-jianfa
+// by snowman@SJ 01/05/1999.
+
+#include <ansi.h>
+
+inherit F_SSERVER;
+int perform(object me,object target)
+{
+    object weapon;
+    int i=me->query_skill("murong-jianfa",1);
+    int d=me->query_skill("shenyuan-gong",1);
+    
+    if( !target ) target = offensive_target(me);
+     
+    if( !target || !me->is_fighting(target) || !living(target)
+        || environment(target)!=environment(me))
+                return notify_fail("七剑连环指环只能对战斗中的对手使用。\n");
+
+    if(me->query_skill_mapped("force") != "shenyuan-gong")
+                return notify_fail("你的内功不是神元功，无法使用七剑连环指！\n");
+    if( (int)me->query_skill("shenyuan-gong", 1) < 140 )
+                return notify_fail("你的内功还未练成，不能使用七剑连环指！\n");
+    if( (int)me->query_skill("murong-jianfa", 1) < 140 )
+                return notify_fail("你的剑法还未练成，不能使用七剑连环指！\n");
+    if (!objectp(weapon = me->query_temp("weapon")) || weapon->query("skill_type") != "sword"
+        || me->query_skill_mapped("sword") != "murong-jianfa")
+                return notify_fail("你手里没有剑，无法使用七剑连环指！\n");
+                
+    if(me->query_skill_mapped("parry") != "murong-jianfa")
+  
+if(me->query_skill_mapped("parry") != "canhe-zhi")
+               return notify_fail("你的招架功夫不对，无法使用七剑连环指！\n");
+ if( me->query_temp("canshang") )
+                return notify_fail("你已经在使用参商指法！\n");
+
+if(me->query_skill_mapped("finger") != "canhe-zhi" ||
+           me->query_skill_prepared("finger") != "canhe-zhi")
+                return notify_fail("你没有用指，无法使用「七剑连环指」！\n");    if((int)me->query("max_neili") < 1000 )
+                return notify_fail("你的内力修为不够，不能使用七剑连环指！\n");
+    if((int)me->query("neili") < 800 )
+                return notify_fail("你现在真气不足，不能使用七剑连环指！\n");
+    if((int)me->query("jingli") < 500 )
+                return notify_fail("你现在精力不足，不能使用七剑连环指！\n");
+    if((int)me->query_temp("lianhuan"))
+                return notify_fail("你正在使用七剑连环指！\n");
+    if((int)me->query_skill("sword", 1) < 100 )
+                return notify_fail("你的基本剑法不够娴熟，不能在剑招中使用七剑连环指。\n");
+                
+    message_vision(MAG"\n$N"MAG"使出慕容剑法之精髓「七剑连环指」，但见$N右手食指在"+weapon->name()+MAG"上一弹，画出朵朵剑花，直袭$n"MAG"！\n"NOR, me,target);
+    me->set_temp("lianhuan", 3+i/30);
+    me->receive_damage("neili", 50);
+    me->receive_damage("jingli", 50);
+    me->add_temp("apply/attack", i/4);
+    me->add_temp("apply/damage", d/4);
+    COMBAT_D->do_attack(me, target, me->query_temp("weapon"), 1);
+    me->add_temp("apply/attack", -i/4);
+    me->add_temp("apply/damage", -d/4);  
+    me->start_perform(4,"「七剑连环指」");
+    call_out("check_fight", 1+random(3), me, 3+i/30);
+    return 1;
+}
+
+void remove_effect(object me)
+{
+    if(!me) return;
+    me->delete_temp("lianhuan");
+    if(!living(me)) return;
+    message_vision(HIY"\n$N"HIY"的「七剑连环指」绝技运行完毕，气回丹田，缓缓收功。\n"NOR, me);
+    me->start_perform(4,"「七剑连环指」");
+    if(!me->is_busy()) me->start_busy(1+random(2));
+}
+
+void check_fight(object me, int i)
+{
+    object weapon, target;
+
+    if (!me ) return;
+    
+    target = offensive_target(me);
+     
+    if( !living(me) 
+        || !target 
+        || !me->is_fighting(target) 
+        || !living(target)
+        || environment(target)!=environment(me)
+        || !me->query_temp("lianhuan"))
+                return remove_effect(me);
+
+    else if(me->query_skill_mapped("sword") != "murong-jianfa"){
+                tell_object(me, HIR"你临时改换剑法，决定不再使用「七剑连环指」绝技。\n");
+                remove_effect(me);
+                }
+    else if(me->query_skill_mapped("force") != "shenyuan-gong"){
+                tell_object(me, HIR"你临时改换内功，决定不再使用「七剑连环指」绝技。\n");
+                remove_effect(me);
+                }
+    else if(me->query_skill_mapped("parry") != "murong-jianfa"){
+                tell_object(me, HIR"你临时改换招架，决定不再使用「七剑连环指」绝技。\n");
+                remove_effect(me);
+                }
+    else if (!objectp(weapon = me->query_temp("weapon")) || weapon->query("skill_type") != "sword"){
+                tell_object(me, HIR"你临时改换武器，决定不再使用「七剑连环指」绝技。\n");
+                remove_effect(me);
+                }
+        
+    else if(me->is_busy()) 
+           call_out("check_fight", 1+random(3), me, i);
+    
+    else{
+           me->receive_damage("neili", 30);
+           me->receive_damage("jingli", 10);
+           me->add_temp("apply/attack", me->query_skill("murong-jianfa",1)/4);
+           me->add_temp("apply/damage", me->query_skill("shenyuan-gong",1)/4);
+           COMBAT_D->do_attack(me, target, me->query_temp("weapon"), 1);
+           me->add_temp("apply/attack", -me->query_skill("murong-jianfa",1)/4);
+           me->add_temp("apply/damage", -me->query_skill("shenyuan-gong",1)/4);  
+           i--;
+           call_out("check_fight", 1+random(3), me, i);
+           }
+}

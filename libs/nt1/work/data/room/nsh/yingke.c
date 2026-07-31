@@ -1,0 +1,38 @@
+// SN:^UmSF<cnN5>?iB87
+// File(/data/room/nsh/yingke.c) of nsh's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        set("short", "逆水寒潭迎客厅");
+	set ("long", @LONG
+这里是逆水寒潭的主人欧阳逆水迎接八方来客的地方。大凡客人
+来拜见欧阳逆水，少不得在这里寒暄叙话，了尽仰慕之情。东面通往
+一个茶室，是主人陪同客人品尝天下名茶之处。 
+LONG );
+
+	set("exits", ([
+		"north"  : __DIR__"yishiting",
+                "south"  : __DIR__"zoudao",
+                "east"   : __DIR__"chashi",
+	]));
+
+        create_door("east", "木门", "west", DOOR_CLOSED);
+
+        set("objects", ([
+                "/d/room/roomnpc/yahuan" : 2,
+        ]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("room_owner", "欧阳逆水");
+        set("room_name", "逆水寒潭");
+        set("room_id", "nsh");
+        set("room_owner_id", "nsh");
+        set("room_position", "碎石小道");
+}

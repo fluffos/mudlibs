@@ -1,0 +1,18 @@
+// SN:8FNW1RfAQm]W?045
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;36m娃[1;31m娃[1;36m狐[2;37;0m", ({"wawa hu"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "水兰色的双眸，火红的毛皮，额间有一月牙状银色的毛儿
+它是琉璃娃娃的坐骑。
+");
+        set_temp("owner_id", "moppet");
+        set_temp("owner_name", "琉璃娃娃");
+        ::setup();
+}
+

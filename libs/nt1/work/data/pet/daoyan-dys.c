@@ -1,0 +1,18 @@
+// SN:4TLTaN8DVN1Engb\
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m公狮[2;37;0m", ({"dys shi"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "是公的,你有母的给它做老婆吗?
+它是导演的坐骑。
+");
+        set_temp("owner_id", "daoyan");
+        set_temp("owner_name", "导演");
+        ::setup();
+}
+

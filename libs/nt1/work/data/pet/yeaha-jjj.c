@@ -1,0 +1,18 @@
+// SN:EY7gTB^b=a^Z9gh[
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("垃圾马[2;37;0m", ({"jjj ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "lll
+它是药罐子的坐骑。
+");
+        set_temp("owner_id", "yeaha");
+        set_temp("owner_name", "药罐子");
+        ::setup();
+}
+

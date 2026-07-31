@@ -1,0 +1,38 @@
+// SN:bJ2Di3?\`P@XTdUn
+// File(/data/room/thy/xiaoyuan.c) of thy's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        set("short", "平安坊小院");
+	set ("long", @LONG
+这是一个大山谷，迎面北方是一堵高不可攀的绝壁，上面如镜子
+一样光滑。借着刺眼的阳光的反射，你发现绝壁上有七八十个小孔，
+每个孔里都藏着一只黑洞洞的枪口，正默默地跟着你的步子移动。看
+来情况相当不妙，[31m你还是赶快闪人吧……[2;37;0m
+LONG );
+
+        set("room_key", "1 of thy");
+	setup();
+
+	set("exits", ([
+                "out"    : "/d/city/jiaowai3",
+	]));
+
+        set("outdoors", "yangzhou");
+        set("no_sleep_room", 1);
+        set("valid_startroom", 1);
+
+        set("KEY_DOOR", ([
+                "exit" : "north",
+                "room" : __DIR__"dating",
+        ]));
+    
+        set("room_owner", "好人");
+        set("room_name", "平安坊");
+        set("room_id", "thy");
+        set("room_owner_id", "thy");
+        set("room_position", "树林");
+}

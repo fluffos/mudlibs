@@ -1,0 +1,22 @@
+// Room: /u/cass/hg/jiaotaidian.c
+// This is a room made by roommaker. write by Fan. :)
+
+inherit ROOM;
+
+void create()
+{
+	set("short", "交泰殿");
+	set("long", @LONG
+大殿重檐歇山顶，四周推出单檐卷棚抱厦，黄瓦绿剪边，下檐翘角，造
+型优美。殿内井口柱，抹角梁，画栋雕梁。殿的东侧还摆有计时器洞壶滴漏
+和楼阁型自鸣钟。
+LONG
+);
+	set("exits", ([ /* sizeof() == 2 */
+  "south" : __DIR__"qianqinggong",
+  "north" : __DIR__"kunninggong",
+]));
+
+	setup();
+	replace_program(ROOM);
+}

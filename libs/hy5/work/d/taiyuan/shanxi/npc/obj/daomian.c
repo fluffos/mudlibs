@@ -1,0 +1,25 @@
+ inherit F_FOOD;
+inherit ITEM; 
+void create()
+{
+        set_name("刀削面", ({ "dao mian", "mian" }) );
+        set_weight(350);
+        if( clonep() )
+                set_default_object(__FILE__);
+        else {
+                set("long", "酱园巷饭馆的刀削面，面条根根粗细均匀，柳叶形，筋软爽口。\n");
+                set("unit", "碗");
+                set("value", 2000);
+                set("food_remaining", 5);
+                set("food_supply", 60);
+                set("material", "food");
+        }
+        
+}
+int finish_eat()
+{
+        set_name("景泰蓝瓷碗", ({"wan"}));
+        set("value",200);
+        set("long", "一只景泰蓝瓷碗。\n");
+        return 1;
+} 

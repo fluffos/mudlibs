@@ -1,0 +1,40 @@
+// givegiftd.c
+// 自动送礼物系统,每5个小时，也就是18000秒送一次
+// modifie by combrian Dec,17 2001
+
+#include <ansi.h>
+
+inherit F_DBASE;
+
+void create()
+{
+	
+	seteuid(getuid());
+	set("channel_id","信息通告");
+	CHANNEL_D->do_channel( this_object(), "sys", "自动送食品系统已经启动。\n");	
+	call_out("on_time",10);
+//	call_out("on_time",20);		//测试用
+}
+
+void on_time()
+{
+	int i,amount;
+	object food,drink,money;
+	object *players;
+	players = users();
+        {
+                for (i = 0; i < sizeof(players); i++)
+                {
+                	money = new("/clone/money/gold");
+			money->set_amount(1+random(5));
+			amount=money->value();
+			//food = new("/d/dali/obj/qiguoji");
+                        //food->move(players[i]);
+                        money->move(players[i]);
+                        (players[i])->add("meng/pts",1+random(1));
+                        //message("vision", sprintf(HIR+"你得到一%s%s"+HIR"和%s两"+HIY"黄金\n"+NOR, food->query("unit"), food->name(),chinese_number(amount/10000)), players[i]);
+                }
+        }
+	call_out("on_time",3600);
+//	call_out("on_time",20);		//测试用
+}

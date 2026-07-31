@@ -1,0 +1,33 @@
+// SN:fd\S3b77_9lT[aaR
+// ITEM Made by player(慕容伤:levatin) /data/item/l/levatin-drashoes.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Mon Jun 14 12:19:34 2004
+#include <ansi.h>
+#include <armor.h>
+
+inherit BOOTS;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[2;37;0m[35m九幽除仙靴[2;37;0m", ({ "drashoes" }));
+	set_weight(3600);
+	set("item_make", 1);
+	set("unit", "双");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一双靴子。
+九幽怨气所化，有吸取神仙元气的力量。[2;37;0m
+靴子缘上刻着一行小字：慕容伤(levatin)
+");
+	set("value", 2100000);
+	set("point", 125);
+	set("material", "magic stone");
+	set("wear_msg", "[1;32m忽然间一股强大的力量把你包围，你神志一下不清楚了。[2;37;0m\n");
+	set("remove_msg", "[1;32m力量一下消失了，你又可以活动了。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/armor", apply_armor());
+	set("armor_prop/dodge", apply_armor() / 10 + 1);
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

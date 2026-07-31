@@ -1,0 +1,168 @@
+// created 2002 by stey
+#include <ansi.h>
+#include <dbase.h>
+#include <armor.h>
+
+inherit COMBINED_ITEM;
+
+
+void create()
+{
+  set_name(HIW "寒冰魔法咒" NOR, ({ "ice scroll",""}));
+  set_weight(100);
+          if( clonep() ) 
+                 set_default_object(__FILE__); 
+         else { 
+                  set("long",HIY"这是一个具有水系特别魔法的魔法咒,召唤寒冰攻击的魔法咒。\n"NOR); 
+                 set("unit", "卷"); 
+                 set("base_unit", "张"); 
+                 set("base_weight", 5); 
+                 set("value", 3); 
+                 set("magic_type","water"); 
+         } 
+  
+  //魔法系
+  set_amount(1);
+  setup();
+  
+}
+init () 
+{ 
+  add_action("do_play", "scrollcast"); 
+
+} 
+ 
+
+ 
+int do_play(string arg) 
+{ 
+        string id,trg; 
+                object target; 
+         object ob=this_object(); 
+         object me=this_player(); 
+ 
+ 
+        if (!arg) 
+           return notify_fail("命令格式： scrollcast <id> at <target>\n"); 
+ 
+          if (sscanf(arg,"%s at %s",id,trg)==2) {
+           
+         if(id!=ob->query("id")) { 
+                tell_object(me,ob->query("long")); 
+                return 1;} 
+ 
+                target = present(trg, environment(me));
+         
+              if( !target )    return notify_fail("这里没有 " + trg + "。\n"); 
+ 
+        if( target=me && target->is_fight()) 
+ 
+              return notify_fail("你的攻击目标不对或则不在战斗中。\n"); 
+        if( me->is_busy() ) 
+                return notify_fail("你正忙着呢。\n"); 
+        if( environment(me)->query("no_magic") || environment(me)->query("no_fight") ) 
+                return notify_fail("这里不能使用魔法咒。\n"); 
+ 
+        if( (int)me->query("mana") < 500 ) 
+                return notify_fail("你的法力不够。\n"); 
+        if( (int)me->query("sen") < 200 ) 
+                return notify_fail("你现在神智不清。\n"); 
+ 
+ 
+ 
+                  call_out("cast",0,me,target); 
+                 call_out("destucting",1,ob); 
+           
+            }
+             return notify_fail("命令格式： scrollcast <id> at <target>\n"); 
+                 
+} 
+void destucting(object ob)
+{
+        int remain;
+ remain = ob->query_amount() -1;
+             ob->set_amount(remain); 
+                  if(remain <=0 ) destruct(ob);
+} 
+object offensive_target(object me)  
+{  
+        int sz;  
+        object *enemy;  
+        object victim;  
+  
+        // mon 4/28/99  
+        // clean_up my enemy before selecting a target.  
+        me->clean_up_enemy();  
+  
+        enemy = me->query_enemy();  
+        if( !enemy || !arrayp(enemy) ) return 0;  
+  
+        sz = sizeof(enemy);  
+        if( sz > 4 ) sz = 4;  
+  
+        if( sz > 0 ) victim=enemy[random(sz)];  
+        else return 0;  
+          
+        if(!victim) return 0;  
+        if( victim->query_temp("netdead") )   {  
+            if( member_array( me, victim->query_netdead_enemy() ) == -1 )  
+                return 0; // can't start fight if the   
+                        //victim is already netdead  
+        }  
+  
+        return victim;  
+}  
+                   
+void cast(object me, object target) //魔法咒主体lpc内容
+{
+     
+     int ap,dp,damage; 
+     string msg; 
+           
+string type; 
+
+
+  if( me->is_fighting()) 
+     { 
+        target = offensive_target(me); 
+  if( ! target ) return ;       
+ if( ! present( target,environment(me)) ) return ;     
+        msg = HIR"圣灵珠五彩毫光猛然四射，刹时风雨雷电齐至，山崩地裂！\n"NOR; 
+//divid by 10; 
+ 
+                ap = 5000000; 
+                dp = target->query("combat_exp"); 
+                         
+                         
+                if( random(ap + dp) > dp ) 
+                 { 
+                        damage = 500+random(300); 
+                        damage -= (int)target->query("max_mana") / 10 + random((int)target->query("eff_sen") / 5); 
+                        damage -= random((int)target->query("mana_factor")); 
+ 
+                        if( damage > 0 )  
+                        { 
+                                msg += HIC "结果$n躲避不及，被雷电劈个正着，又被地火烧得皮焦骨烂。\n 
+被山石砸得皮破血流，还被风迷了双眼，又被水浇个透心凉，肌肤尽裂。\n" NOR; 
+ 
+                                target->receive_damage("sen", damage*8/5); 
+                                target->receive_wound("sen", damage*2/3); 
+                                target->receive_damage("kee", damage*8/5); 
+                                target->receive_wound("kee", damage/2); 
+                                target->start_busy(5); 
+                        }  
+            else 
+//here, cast failed and the target's mana_factor will be added to the previous 
+//damage to hurt yourself:(...note damage<0. 
+                msg += HIC "\n谁知$n毫无反应。\n" NOR;    
+                } 
+                else 
+                        msg += "但是被$n躲开了。\n"; 
+ 
+                message_vision(msg, me, target);  
+        } 
+
+}
+
+
+

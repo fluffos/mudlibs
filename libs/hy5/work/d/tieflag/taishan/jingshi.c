@@ -1,0 +1,26 @@
+ // Copyright (C) 1995, by Tie Yu and Daniel Yu. All rights reserved.
+inherit ROOM;
+void create()
+{
+  set("short","招军岭");
+  set("long",@LONG
+招军岭西边有飞鸦峰，前有锣鼓湾，后为黑龙潭。夏暮秋朝，高峡深潭
+一涧飞泻，散珠溅玉，云雾升腾，古人誉为“龙洞甘霖”，列为泰安八景之一
+。明代李养正有《白龙池》诗：“传闻池上好，秋水白泠泠。纡曲穿山谷，纵
+横照日星。雨晴龟曝背，风软鹤梳翎。吾欲寻珠去，白龙醒未醒。” 　
+LONG
+  );
+  set("exits",([
+        "westdown" : __DIR__"doumu",
+        "southup" : __DIR__"luohan",
+               ]));
+        set("objects", ([
+        __DIR__"obj/jingwen" : 1,
+                        ]) );
+        set("outdoors", "taishanfy");
+        set("coor/x",320);
+        set("coor/y",2380);
+        set("coor/z",40);
+        setup();
+        replace_program(ROOM);
+}     

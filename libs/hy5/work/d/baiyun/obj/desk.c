@@ -1,0 +1,19 @@
+ inherit ITEM;
+void create()
+{
+        set_name("檀木香几", ({ "desk", "檀木香几" , "香几", "桌"}) );
+        set_weight(500);
+        set_max_encumbrance(80000);
+        set("no_get", 1);
+        set("no_shown", 1);
+        if( clonep() )
+                set_default_object(__FILE__);
+        else {
+                set("unit", "个");
+                set("prep", "on");
+                set("long", "一张檀木香几\n");
+                set("value", 1);
+        }
+    
+} 
+int is_container() { return 1; }     

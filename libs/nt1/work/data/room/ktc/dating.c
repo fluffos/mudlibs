@@ -1,0 +1,39 @@
+// SN:1B5_h4SW@e:Wk44C
+// File(/data/room/ktc/dating.c) of ktc's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        set("short", "药皇谷大厅");
+	set ("long", @LONG
+这就是药皇谷主人独孤狂迎送客人的地方。正中有些桌椅，侧面
+是两扇屏风。东首是主人独孤狂的房间，有一扇木门虚掩着。南边是
+大门，出去就是院子。 
+LONG );
+
+	setup();
+
+	set("exits", ([
+                "east"   : __DIR__"woshi",
+		"north"  : __DIR__"houyuan",
+	]));
+
+        create_door("east", "木门", "west", DOOR_CLOSED);
+
+        set("no_sleep_room", 1);
+
+        set("KEY_DOOR", ([
+                "exit" : "south",
+                "room" : __DIR__"xiaoyuan",
+        ]));
+    
+        set("room_owner", "独孤狂");
+        set("room_name", "药皇谷");
+        set("room_id", "yhg");
+        set("room_owner_id", "ktc");
+        set("room_position", "青砖路");
+}

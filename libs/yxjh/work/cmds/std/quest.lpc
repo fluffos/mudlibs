@@ -1,0 +1,233 @@
+//浴血活动察看
+//edit by rock
+
+#include <ansi.h>
+#define TIME_QUEST "/adm/daemons/time_quest"
+
+
+void give_npc(object me)
+{
+        int i;
+        mapping skill_status,map_status;
+        object env;
+        object *players,player;
+        string *sname,*mname;
+        object ob = new("/u/rock/npc/time_quest_npc");
+
+        players = users();
+        if (sizeof(players))
+        {
+                for (i = 0; i < 5; i++)
+                {
+                        player = players[random(sizeof(players))];
+                        if (wizardp(player)) continue;
+
+                        env = environment(player);
+                        if(env->query("no_fight") || env->is_mirror()) continue;
+                        while (env && env->is_character())
+                                env = environment(env);
+                        if (env) break;
+                }
+                if (i >= 5)
+                {
+                	destruct(ob);
+                	return;
+                }
+
+                if (objectp(env))
+                {
+
+					if ( mapp(skill_status = me->query_skills()) )
+					{
+						sname  = keys(skill_status);
+						for(i=0; i<sizeof(skill_status); i++)
+						{
+							ob->set_skill(sname[i], skill_status[sname[i]]);
+						}
+					}
+					if ( mapp(map_status = me->query_skill_map()) ) {
+					        mname  = keys(map_status);
+					        for(i=0; i<sizeof(map_status); i++) {
+							ob->map_skill(mname[i], map_status[mname[i]]);
+						}
+					}
+					ob->set("max_neili",me->query_max_neili());
+					ob->set("neili",me->query_max_neili());
+					ob->set("max_qi",me->query_max_hp());
+					ob->set("qi",me->query_max_hp());
+					ob->set("max_jing",me->query_max_jing());
+					ob->set("jing",me->query_max_jing());
+					ob->set("max_jingli",me->query_max_jingli());
+					ob->set("jingli",me->query_max_jingli());
+					ob->set("jym_level/level",me->query_level());
+					ob->set("jiali",me->query("jiali"));
+
+					ob->set("zhuren",me->query("id"));
+					ob->set_name( sprintf("%s的敌人",me->query("name")) , ({ sprintf("%s diren",me->query("id")) }) );
+					ob->move(env);
+					tell_room(env, sprintf("%s疾步走来。\n",ob->query("name")));
+					me->set_temp("timeQ/npc",ob);
+					me->set_temp("timeQ/start",1);
+					me->set_temp("timeQ/name","sharen");
+
+					tell_object(me,sprintf(sprintf("请前往 %s 解决掉 %s(%s) 。\n",env->query("short"),ob->query("name"),ob->query("id") )));
+					tell_object(me,"杀掉敌人以后，就可完成任务。\n");
+	        	}
+        }
+        else destruct(ob);
+}
+
+int quest_ok(object me,string type)
+{
+	mapping quest;
+
+	if(me->query("timeQ") > time())
+	{
+		tell_object(me,"不能连续接取活动任务。\n");
+		return 0;
+	}
+	if(me->query_temp("timeQ/start"))
+	{
+		tell_object(me,"你正在参加活动。\n");
+		return 0;
+	}
+	quest = TIME_QUEST->query_quest();
+	if(!quest[type])
+	{
+		tell_object(me,"任务未开启。\n");
+		return 0;
+	}
+	quest = TIME_QUEST->query_quest_level();
+	if(quest[type] > me->query_level())
+	{
+		tell_object(me,"你的等级没有达到这个任务的等级。\n");
+		return 0;
+	}
+
+	me->set("timeQ",time()+60);
+	return 1;
+}
+
+int main(object me, string arg)
+{
+	int i,size;
+	mapping quest;
+	string str,*key;
+
+	if(!arg) return 0;
+	switch(arg)
+	{
+		case "all" :
+			str = "浴血江湖活动列表：\n";
+			str += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
+			quest = TIME_QUEST->query_quest();
+			key = keys(quest);
+			size = sizeof(key);
+			for(i=0;i<size;i++)
+			{
+				if(quest[key[i]]) str += HIY;
+				str += sprintf("%-10s %-80s %s\n",TIME_QUEST->china_txt(key[i]),TIME_QUEST->quest_desc(key[i]),quest[key[i]]?HIG"已开启"NOR:HIR"未开启"NOR);
+			}
+			str += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
+			str += "领取任务请输入 quest (任务ID),部分任务的完成需要再次输入quest (任务ID)\n";
+			str += "任务说明请 help quest\n";
+			tell_object(me,str);
+			//TIME_QUEST->query_TIME_QUEST_info(arg);
+			break;
+		case "caxie"   :
+			if(!quest_ok(me,"caxie")) return 1;
+
+			tell_object(me,"你将鞋油补满，准备开始擦鞋。擦鞋指令：caxie <ID>\n");
+			me->set_temp("timeQ/start",1);
+			me->set_temp("timeQ/name","caxie");
+			me->set_temp("timeQ/con",5+random(5));
+			break;
+		case "xunwu"   :
+			if(!quest_ok(me,"xunwu")) return 1;
+			
+			"/cmds/std/xunwu"->do_quest(me);
+			break;
+		case "xunren"  :
+			if(!quest_ok(me,"xunren")) return 1;
+
+			"/cmds/std/xunren"->do_quest(me);
+			break;
+		case "gouwu"   :
+			if(!quest_ok(me,"gouwu")) return 1;
+
+			"/cmds/std/gouwu"->do_quest(me);
+			break;
+		case "sharen"  :
+			if(!quest_ok(me,"sharen")) return 1;
+
+			give_npc(me);
+			break;
+		case "zhiliao" :
+			if(!quest_ok(me,"zhiliao")) return 1;
+
+			tell_object(me,"你领取了治疗活动任务。治疗指令：zhiliao <ID>\n");
+			me->set_temp("timeQ/start",1);
+			me->set_temp("timeQ/name","zhiliao");
+			me->set_temp("timeQ/con",5+random(5));
+			break;
+		default : return 0;
+	}
+	
+	return 1;
+}
+
+void test()
+{
+	object me = find_player("rock");
+			tell_object(me,"你领取了治疗活动任务。治疗指令：zhiliao <ID>");
+			me->set_temp("timeQ/start",1);
+			me->set_temp("timeQ/name","zhiliao");
+			me->set_temp("timeQ/con",5+random(5));
+//	give_npc(find_player("rock"));
+}
+
+int help(object me)
+{
+	string msg = "
+活动任务是全天候各个阶段的定时开启任务。早晨8点开始至夜晚23点。
+
+一、	擦鞋任务 1级
+输入擦鞋(caxie)命令，为npc或玩家擦鞋。
+每天3小时。
+开放时间：8:00 – 11:00
+任务奖励：exp=4000000 pot=20000
+
+二、	寻物任务 100级
+输入寻物(xunwu)命令，发布任务。如果找到输入此命令完成任务。
+每天2小时。
+开放时间：11:00—13:00
+任务奖励：exp=8000000 pot=60000
+
+三、	寻人任务 200级
+输入寻人(xunren)命令，发布任务。如果找到输入此命令完成任务。
+每天2小时。
+开放时间：13:00—15:00
+任务奖励：exp=10000000 pot=80000
+
+四、	购物任务 250级
+输入购物(gouwu)命令，发布任务，玩家购买对应道具后，输入此命令完成任务。
+每天3小时。
+开放时间：15:00—18:00
+任务奖励：exp=20000000 pot=100000
+
+五、	杀人任务 300级
+输入杀人(sharen)命令，发布任务，并刷相应NPC到随即房间，杀死对方即可完成任务。
+每天2小时。
+开放时间：18:00—20:00
+任务奖励：exp=50000000 pot=200000
+
+六、	治疗任务 400级
+输入治疗(zhiliao)命令，发布任务，随机要求玩家到指定地点，治疗指定NPC。治疗完毕即结束任务。
+每天3小时。
+开放时间：20:00—23:00
+任务奖励：exp=80000000 pot=500000
+";
+
+	me->start_more(msg);
+	return 1;
+}

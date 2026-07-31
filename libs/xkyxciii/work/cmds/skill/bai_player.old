@@ -1,0 +1,137 @@
+// bai_player.c
+// 修改：大鱼（Chance）----cn_chance@163.net
+
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+
+int help(object me);
+
+void give_title(object me)
+{
+   int number;
+   number=me->query("faction/generation");
+   switch (number )
+    {
+      case 0: me->set("title",me->query("faction/name")+"教主");
+              break;
+      case 1: me->set("title",me->query("faction/name")+"左护法");
+              break;
+      case 2: me->set("title",me->query("faction/name")+"右护法");
+              break;
+      case 3:
+      case 4:
+      case 5:
+      case 6:
+            me->set("title",me->query("faction/name")+"长老");
+             break;
+      default: me->set("title",me->query("faction/name")+"帮众");
+    }
+  
+}
+
+int main(object me, string arg)
+{
+        object ob, old_app;
+        mapping family, skills;
+        int i;
+        string *skname;
+        mapping baozang;
+
+        if( me->query_temp("sleeping") ) return notify_fail("你现在正躺着呢。\n");
+
+        if (me->is_busy()) return notify_fail("你现在正忙着呢。\n");
+
+        if( !arg ) return help(me);
+
+        if( arg == "cancel" ) {
+                old_app = me->query_temp("pending/apprentice");
+                if( !objectp(old_app) ) return notify_fail("你现在并没有加入任何帮派的意思。\n");
+                write("你改变主意不想加入" + old_app->query("faction/name") + "了。\n");
+                tell_object(old_app, me->name() + "改变主意不想加入你的帮派了。\n");
+                me->delete_temp("pending/apprentice");
+                return 1;
+                             }
+
+        if( !(ob = present(arg, environment(me))) || !ob->is_character() )
+                return notify_fail("你想加入谁的帮派？\n");
+
+        if( !living(ob) ) return notify_fail("你必须先把" + ob->name() + "弄醒。\n");
+
+        if( ob == me ) return notify_fail("想自己成立帮派？找巫师说一下去。\n");
+
+        if( me->query("faction/name")==ob->query("faction/name") ) {
+                message_vision("$N恭恭敬敬地向$n磕头请安，叫道：“教主！”\n", me, ob);
+                give_title( me );        // 重新设定玩家的RANK
+                return 1;
+        }
+
+        if( !mapp( ob->query("faction") ) )
+                return notify_fail(ob->name() + "没有开山立派，不能加入。\n");
+
+        // If the target is willing to recruit us already, we do it.
+        if( (object)ob->query_temp("pending/recruit") == me ) {
+
+
+                if( (string)me->query("faction/name") != (string)ob->query("faction/name") ) {
+                        message_vision( "$N决定背叛原来的帮派，改投入$n门下！！！\n\n"
+                                "$N跪了下来向$n恭恭敬敬地磕了四个响头，叫道：「 教主！」\n\n", me, ob);
+                        me->set("score", 0);
+//                        me->add("faction/betrayer", 1); // 叛师标志
+                } else
+                        message_vision( "$N决定加入$n的帮派。\n\n"
+                                "$N跪了下来向$n恭恭敬敬地磕了四个响头，叫道：「教主！」\n\n", me, ob);
+
+                me->set("faction/name",ob->query("faction/name"));
+    
+                ob->add("faction/times",1);   
+                me->set("faction/generation",ob->query("faction/times"));
+                give_title(me);
+                ob->delete_temp("pending/recruit");
+
+                tell_object(ob, "恭喜你新收了一名弟子！\n");
+                printf("恭喜您成为%s。\n",  me->query("title"));
+
+                return 1;
+        
+        } else {
+
+                old_app = me->query_temp("pending/apprentice");
+                if( ob == old_app )
+                        return notify_fail("你想加入" + ob->name() + "帮派，但是对方还没有答应。\n");
+                else if( objectp(old_app) ) {
+                        write("你改变主意不想加入" + old_app->name() + "的帮派了。\n");
+                        tell_object(old_app, me->name() + "改变主意不想加入你的帮派了。\n");
+                }
+
+                message_vision("$N想要加入$n的帮派。\n", me, ob);
+                me->set_temp("pending/apprentice", ob );
+                if( userp(ob) ) {
+                        tell_object(ob, YEL "如果你愿意收" + me->name() + "为弟子，用 recruit_player 指令。\n" NOR);
+                } else 
+                        ob->attempt_apprentice(me);
+        
+                return 1;
+        }
+}
+
+
+int help(object me)
+{
+        write(@HELP
+指令格式：bai_player <对象>     加入某人的帮派
+          bai_player cancel     取消
+
+这个指令能让你加入某人的帮派，如果对方也答应要收你的话，就会立即
+行礼，否则要等到对方用recruit_player 指令收你为弟子才能正式行礼。
+
+
+如果对你的帮主使用这个指令，会变成向帮主请安。
+ 
+请参考相关指令：recruit_player,teach。
+
+HELP
+        );
+
+        return 1;
+}

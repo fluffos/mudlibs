@@ -1,0 +1,124 @@
+// make by daniel@jhfy.sd 2001
+#include <ansi.h>;
+inherit NPC;
+int ask_over();
+int ask_working();
+
+void create()
+{
+    set_name("金万里", ({ "jin wanli", "jin", "wanli" }));
+    set("title", "码头老板");
+    set("gender", "男性");
+    set("long", "他就是扬州城里控制着大小码头的金老板，为人非常势利。\n");
+    set("age", 45);
+    set("int", 25);
+    
+    set("qi", 2000);
+         set("no_drop",1);
+         set("no_get",1);
+    set("max_qi", 2000);
+
+    set("jing", 1050);
+    set("max_jing", 1050);
+    set("shen_type", 0);
+    set("combat_exp", 400000);
+    set("attitude", "heroism");
+    set_skill("unarmed", 50);
+    set_skill("dodge", 50);
+    set_skill("parry", 60);
+    set_temp("apply/attack", 70);
+    set_temp("apply/defense", 70);
+    set_temp("apply/damage", 50);
+        set("inquiry", ([
+      "工作" : (: ask_working :),
+     "工资" : (: ask_over :),   
+        ]) );
+    setup();
+    add_money("gold", 1);
+      carry_object("/clone/misc/cloth")->wear();
+}
+
+
+int ask_over()
+{
+ object me,mon;
+ int bonus,exp,pot,tempp,kar;
+ me = this_player();
+ kar = me->query("kar");
+  if (!me->query_temp("banyunover")) {
+      message_vision("金万里瞪着大大的眼睛对$N说道：“这是什么道理，没工作就想要工资？你还真厉害。嘿。小心我叫杀手杀你。”\n",me);
+    return 1;
+    }
+    me->delete_temp("banyunover");
+  if (me->query_temp("banyunw")) {
+  	if(random(kar)>=4)
+ {
+    tell_object(me,"金万里哼了一声，对你说：“你是怎么搞的，老偷懒，是想砸我的招牌吗？\n           看在你还努力的份上还是赏你点钱吧。”\n");
+
+
+     exp = 600 + random(500);
+     pot = 100 + random(100);
+    me->add("combat_exp", exp);
+    me->add("potential", pot);
+   tell_object(me,"你被奖励了："HIR + chinese_number(exp) + NOR"点经验，"HIR+ chinese_number(pot) + NOR"点潜能。 \n");
+   me->delete_temp("banyunw");
+    return 1;
+ }
+
+   tell_object(me," 金万里哼了一声，对你说：你是怎么搞的，老偷懒，是想砸我的招牌吗？\n");
+
+        return 1;
+
+    }
+
+
+           
+     message_vision("金万里笑了笑。”\n",me);
+
+     exp = 1200 + random(1000);
+     pot = 150 + random(150);
+     me->add("combat_exp", exp);
+   me->add("potential", pot);
+    me->add("money", 100);
+
+         me->set_temp("banyunw");
+      me->start_busy(1);
+   tell_object(me,"恭喜你！你被奖励了："HIY + chinese_number(exp) + NOR"点经验，"HIY+ chinese_number(pot) + NOR"点潜能和1两白银。 \n");
+    bonus=(int) me->query("potential");
+    return 1;
+}
+int ask_working()
+{
+   object me;
+   me = this_player();
+   if((int)(me->query("combat_exp")) > 80000000)
+      { message_vision("金万里对$N说道：“阁下一代高手，劳烦不起。呵。。。。。。”\n",me);
+        return 1;
+     }
+   if((int)(me->query("zjb_dj/dj")) > 5)
+      { message_vision("平一指对$N说道：“阁下等级这么高，小店劳烦不起。呵。。。呵。。。”\n",me);
+        return 1;
+     }
+   if (me->query_temp("banyunbegin"))
+       { message_vision("金万里不太高兴地对$N说道：“你找死啊。要了工作了，还不去干！”\n",me);
+        return 1;
+     }
+  if ((int)(me->query("qi")) < random(40))        
+         { message_vision("金万里对$N说道：“算了吧你，都这样了还想工作。”\n",me);
+
+        return 1;
+     }
+   if (me->query_temp("banyunover"))
+       { message_vision("金万里对$N说道：“哦？ 你连自己的工资也不要。”\n",me);
+         message_vision("金万里对$N说道：“那你就去帮我再搬运吧。”\n",me);
+         me->delete_temp("banyun");
+         me->delete_temp("banyunover");
+         me->set_temp("banyunbegin",1);
+         return 1;
+     }
+   
+     message_vision("金万里对$N说道：“好吧，那你就去里面帮我搬运吧。”\n",me);
+   me->set_temp("banyunbegin",1);
+   return 1;
+}
+

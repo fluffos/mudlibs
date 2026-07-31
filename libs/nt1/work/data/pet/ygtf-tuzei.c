@@ -1,0 +1,18 @@
+// SN:jX7KMEcZUP]MR\g<
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("秃贼驴[2;37;0m", ({"tuzei lv"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "和尚
+它是难无的坐骑。
+");
+        set_temp("owner_id", "ygtf");
+        set_temp("owner_name", "难无");
+        ::setup();
+}
+

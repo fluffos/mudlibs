@@ -1,0 +1,18 @@
+// SN:J7[JM<FbdOZo8<OS
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;31m八神的长毛象[2;37;0m", ({"basheni xiang"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "啊哈哈哈
+它是八神的坐骑。
+");
+        set_temp("owner_id", "bashen");
+        set_temp("owner_name", "八神");
+        ::setup();
+}
+

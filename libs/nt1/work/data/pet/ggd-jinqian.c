@@ -1,0 +1,18 @@
+// SN:iP6MG\nNR@O@iUkf
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;33m金钱雕[2;37;0m", ({"jinqian diao"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "$HIY$金色的雕
+它是乖乖豆的坐骑。
+");
+        set_temp("owner_id", "ggd");
+        set_temp("owner_name", "乖乖豆");
+        ::setup();
+}
+

@@ -1,0 +1,18 @@
+// SN:W;70UHVe5N^?l63<
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("二虎[2;37;0m", ({"erhu hu"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "这是一只二虎，吊精白额，屁股后边挂着暖瓶，显然有一定的水平！
+它是真天蓬的坐骑。
+");
+        set_temp("owner_id", "zhuz");
+        set_temp("owner_name", "真天蓬");
+        ::setup();
+}
+

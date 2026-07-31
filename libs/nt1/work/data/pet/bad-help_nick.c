@@ -1,0 +1,18 @@
+// SN:a5QUo7^F00VeKaQZ
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("我飞鹤[2;37;0m", ({"help_nick he"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "文
+它是渡男的坐骑。
+");
+        set_temp("owner_id", "bad");
+        set_temp("owner_name", "渡男");
+        ::setup();
+}
+

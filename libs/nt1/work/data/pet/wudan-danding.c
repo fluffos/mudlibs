@@ -1,0 +1,18 @@
+// SN:>e`_?67\hNPh^f5b
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("丹顶鹤[2;37;0m", ({"danding he"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "finish
+它是武灵的坐骑。
+");
+        set_temp("owner_id", "wudan");
+        set_temp("owner_name", "武灵");
+        ::setup();
+}
+

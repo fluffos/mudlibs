@@ -1,0 +1,163 @@
+//Written by snowman 
+//Modified by look
+//Modified by bbb 99/11/02
+// rewrite by snowman@SJ 25/12/1999
+// rewrite by snowman@SJ 04/02/2000 -- Adapted to updated.c
+
+#include <ansi.h>
+
+mapping types = ([]);
+string gift_temp = "";
+string gift_desc = "";
+mapping add_types = 
+([
+	"combat_exp":		"实战经验",
+	"max_neili":		"最大内力",
+	"max_jingli":		"最大精力",
+	"balance":		"存款",
+	"neili":		"内力",
+	"jingli":		"精力",
+	"food":			"食物",
+	"water":		"饮水",
+	"age_modify":		"年龄",
+]);
+
+int help(object me);
+
+mapping query_types()
+{
+        return types;
+}
+
+int main(object me, string arg)
+{
+	string *str, msg;
+	int j, i;
+	
+	if (!wizardp(me)) return notify_fail("【礼物】：这个......你最好还是请示一下吧。\n");
+	
+	if (!arg ) return help(me);
+	
+	if (arg == "set"){
+		types = ([ ]);
+		gift_temp = "";
+		gift_desc = "";
+		if (UPDATE_D->query_new_gift())
+			UPDATE_D->have_new_gift();
+		return notify_fail("【礼物】：setting 清除完毕。\n");
+	}
+	else if( arg == "?" ){
+		if (!types || sizeof(types) < 1)
+			return notify_fail("【礼物】：还没有设定任何礼品。\n");
+		msg = "";
+		for (j=0; j<sizeof(types); j++)
+			msg += keys(types)[j]+"("+types[keys(types)[j]] + ")，";
+		msg += "。\n";	
+		return notify_fail("\n【礼物】：记录为："+gift_temp+"，奖励为："+msg);
+	}
+	
+	else if (sscanf(arg,"send %s", msg) == 1){
+		if (sscanf(msg,"%s %s", gift_desc, gift_temp) == 2 ){
+			if (UPDATE_D->query_new_gift())
+				return notify_fail("【礼物】：请先清除前一次礼品的设定。\n");
+			if (!types || sizeof(types) < 1)
+				return notify_fail("【礼物】：请在送礼前先用 gift set < > to < > 设定奖励。\n");
+			if (!(string)gift_temp || gift_temp == "")
+				return notify_fail("【礼物】：请先设定 gift_temp 的记录。\n");
+			if (!(string)gift_desc || gift_desc == "")
+				return notify_fail("【礼物】：请先设定 gift_desc 的描述。\n");
+				
+			msg = "";
+			for (j=0; j<sizeof(types); j++)
+				msg += keys(types)[j]+"("+types[keys(types)[j]] + ")，";
+				
+			msg += "。\n";
+			if(gift_temp != "test"){
+				message("system","\n\n\t"+HIM"随着一声“"+gift_desc+"”，"+me->name()+HIM"扔下了一大堆礼物，如果退出(quit)以后重新登录就能得到！...\n\n"NOR,users() );
+				log_file( "GIFTS", sprintf("%s 于 %s 发布 %s 礼物，标志为 %s\n奖励是：%s",
+                		me->name()+"("+capitalize(""+me->query("id"))+")", ctime(time()), gift_desc, gift_temp, msg ));
+                	}
+                	
+			if(UPDATE_D->have_new_gift())
+				return notify_fail("\n【礼物】奖励为："+msg);
+			else return notify_fail("\n【礼物】：错误！UPDATE_D 设置失败！\n");
+		}
+		return notify_fail("【礼物】：请用 send <描述> <记录> 的格式。\n");
+	}
+		
+	else if (sscanf(arg,"set %s to %d", msg, j) == 2){
+			str = keys(add_types);
+			for (i = 0; i < sizeof(str); i++)
+				if( msg == str[i]){
+					types[msg] = j;
+                			msg = "";
+					for (j = 0;  j < sizeof(types); j++)
+						msg += keys(types)[j]+"("+types[keys(types)[j]] + ")  ";
+					return notify_fail("【礼物】：礼品为 "+ msg +"。\n");
+				}
+				
+			 return notify_fail("【礼物】：礼品必须是已经定义了的一种。\n");
+                	
+                	
+	}
+	
+	else return notify_fail("礼物：请先用 gift set < > to < > 来设定礼物，再用 gift send 来发送。\n");
+	
+}
+
+int launching(object me)
+{
+	int i;
+	string *str, msg;
+	
+	//if ( geteuid(previous_object())!= ROOT_UID ) return 0;
+	if (!(string)gift_temp || gift_temp == "") return 0;
+	
+	if (wizardp(me)){
+		tell_object(me, HIY"现在正在发送礼物，标志为 "HIR+gift_temp+HIY"，具体请用 gift ? 查看。\n"NOR);
+		return 0;
+	}
+	
+	if ( gift_temp == "test") return 0;
+	
+	if (me->query("gift/"+gift_temp)) return 0;
+
+        me->set("gift/"+gift_temp, 1);	
+        if (!types || sizeof(types) < 1){
+        	if(wizardp(me))
+          		tell_object(me, "礼物系统有问题，请检查 gift.c。\n");
+          	return 0;
+        }
+        
+        tell_object(me, HIW "\n随着一声“" BLINK HIR+gift_desc+ NOR HIW "”，从天上掉下一滴露水正好落在你的嘴唇上！\n" NOR);
+        msg = "你在恍忽中看见了 ";
+        str = keys(types);  
+        for (i=0; i<sizeof(str); i++){
+        	if(me->add(str[i], types[str[i]]))
+        		msg += types[str[i]]+" 点"+add_types[str[i]]+"，";
+        }
+        
+        me->set("gift/"+gift_temp+"", 1);
+        replace_string(msg, "，", "。", i-1, i);
+        tell_object(me, msg+"！\n");
+
+        return 1;
+}
+
+int help(object me)
+{
+        write(@HELP
+指令格式 : gift send <礼物描述> <记录描述> -> 送礼物
+	   gift set -> 清除礼物
+	   gift set <礼品> to <xxx> -> set 礼物
+	   
+       
+这个指令让巫师可以在节庆日送礼物给玩家。
+其中，礼品支持： combat_exp, max_neili, max_jingli, balance
+		 neili, jingli, food, water, age_modify
+
+HELP
+        );
+        return 1;
+}
+

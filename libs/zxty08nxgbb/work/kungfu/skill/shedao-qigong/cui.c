@@ -1,0 +1,63 @@
+
+
+#include <ansi.h>
+
+inherit F_SSERVER;
+int perform(object me, object target)
+{
+      int damage, damage2;
+        string msg;
+        object weapon;
+
+
+        if (!target ) target = offensive_target(me);
+        if (!objectp(weapon = me->query_temp("weapon"))
+        || (string)weapon->query("skill_type") != "sword")
+        return notify_fail(RED"开什么玩笑，没装备剑就想使「摧心断肠」？\n"NOR);
+      if (!target || !target->is_character() || !me->is_fighting(target) )
+        return notify_fail("「摧心断肠」只能对战斗中的对手使用。\n");
+      if ((int)me->query_skill("shedao-qigong", 1) < 800 )
+        return notify_fail(WHT"你的蛇岛奇功不够娴熟，还使不出「摧心断肠」。\n"NOR);
+      if ((int)me->query_skill("sword", 1) < 850 )
+        return notify_fail(WHT"你连剑都拿不来，还妄想使出「摧心断肠」？\n"NOR);
+      if ((int)me->query_skill("force", 1) < 1500 )
+        return notify_fail(RED"你的内功基础不够，耍不出「摧心断肠」。\n"NOR);
+      if ((int)me->query_skill("dodge", 1) < 1500 )
+        return notify_fail(RED"你的身法不够灵活不够，领悟不到「摧心断肠」。\n"NOR);
+      if ((int)me->query("max_neili")<50000)
+        return notify_fail(RED"你的内力修为不足，无法运足「摧心断肠」的内力。\n"NOR);
+      if ((int)me->query("neili")<2001)
+        {
+        return notify_fail(HIC"你现在内力不够，没能将「摧心断肠」使完！\n"NOR);
+        }
+     msg = HIY "$N深深地吸一囗气，忽然仰天长啸，高声狂叫：不死神龙，唯我不败！\n"NOR;
+     msg += HIR"手中" + weapon->name() +""HIR "直劈而下，只听呼啸声大作，地上的尘土受内力所激纷纷飞扬而起。\n" NOR;
+   if (random(me->query_skill("force"))>target->query_skill("force")/2)
+        {
+                me->start_busy(2);
+                target->start_busy(random(3));
+damage = (int)me->query_skill("shedao-qigong", 1)+(int)me->query_skill("force",1)/2;
+   damage = damage + random(damage);
+if (damage<target->query("max_qi",1)/8 && me->query("max_neili",1) > target->query("max_neili",1)/2) damage = random (target->query("max_qi",1)/6);
+if (damage>target->query("max_qi",1)/3) damage = random (target->query("max_qi",1)/4);
+
+
+damage2 = (int)me->query_skill("shedao-qigong", 1)+(int)me->query_skill("force",1);
+damage2 = damage2 + random(damage2);
+                target->receive_damage("qi", damage/2);
+                target->receive_wound("qi", damage);
+      msg += HIR"$n只觉脑中一阵剧痛，金星乱冒，犹如有万条金龙在眼前舞动！\n"NOR;
+      msg += HIR"只觉得$N的内力犹如排山倒海一般，怎能抵挡？“哇”的一下吐出一大口鲜血。\n"NOR;
+        me->add("neili", -2000);
+        } else
+        {
+            me->start_busy(random(3));
+        msg += HIY"可是$p内功深厚，奋力接下这一招，丝毫无损。\n"NOR;
+                me->add("neili", -1000);
+        }
+        message_vision(msg, me, target);
+        if(!target->is_fighting(me)) target->fight_ob(me);
+//      if(userp(target)) target->fight_ob(me);
+//      else if( !target->is_killing(me) ) target->kill_ob(me);
+        return 1;
+}

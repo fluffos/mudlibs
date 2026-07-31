@@ -1,0 +1,18 @@
+// SN:N9JB14A4H_k]3oo:
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("移花雕[2;37;0m", ({"hhh diao"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "移花宫主坐骑
+它是邀月的坐骑。
+");
+        set_temp("owner_id", "yaoyue");
+        set_temp("owner_name", "邀月");
+        ::setup();
+}
+

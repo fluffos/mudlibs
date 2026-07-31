@@ -1,0 +1,36 @@
+// SN:cRJU<<>=W3JUDZo\
+// ITEM Made by player(白衣人:baiyi) /data/item/b/baiyi-xin.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Wed Oct  1 04:20:20 2003
+#include <ansi.h>
+#include <armor.h>
+
+inherit HANDS;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;37m藏心[2;37;0m", ({ "xin" }));
+	set_weight(2100);
+	set("item_make", 1);
+	set("unit", "套");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一套指套。
+[1;36m混沌无我
+[1;32m太极归一[2;37;0m
+指套缘上刻着一行小字：白衣人(baiyi)
+");
+	set("value", 2100000);
+	set("point", 190);
+	set("material", "magic stone");
+	set("wear_msg", "[1;37m$N[1;36m双手一甩，十个分别刻着十方封向的指环出现在[1;37m$N[1;36m的十指上。[2;37;0m\n");
+	set("remove_msg", "[1;37m$N[1;33m双手一缩，[1;37m$N[1;33m手上的指环立刻消失得无影无踪。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/unarmed_damage", apply_damage());
+	set("armor_prop/claw", 10);
+	set("armor_prop/finger", 10);
+	set("armor_prop/armor", 10);
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

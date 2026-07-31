@@ -1,0 +1,18 @@
+// SN:3;S^6\o=;J6bQH?Z
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m八抬大轿象[2;37;0m", ({"jiaozi xiang"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "娶heart用的轿子
+它是重庆的坐骑。
+");
+        set_temp("owner_id", "tnt");
+        set_temp("owner_name", "重庆");
+        ::setup();
+}
+

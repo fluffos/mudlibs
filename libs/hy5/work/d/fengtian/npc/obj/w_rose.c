@@ -1,0 +1,17 @@
+// w_rose.c
+
+inherit ITEM;
+
+void create()
+{
+	set_name("°×Ãµ¹å", ({ "white rose" }) );
+	set_weight(100);
+	if( clonep() )
+		set_default_object(__FILE__);
+	else
+	{
+		set("long", "ÕâÊÇÒ»Ö¦ËØÑÅµÄ°×Ãµ¹å»¨¡£\n");
+		set("unit", "Ö¦");
+		set("value", 100);
+	}
+}

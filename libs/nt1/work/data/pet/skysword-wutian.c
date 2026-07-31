@@ -1,0 +1,18 @@
+// SN:mSR:HC2KU6N2=EbJ
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[37m无天马[2;37;0m", ({"wutian ma"}));        
+        set("gender", "女性");                
+        set("unit", "匹");
+        set("long", "$WHT$无天绝剑的坐骑
+它是无天绝剑的坐骑。
+");
+        set_temp("owner_id", "skysword");
+        set_temp("owner_name", "无天绝剑");
+        ::setup();
+}
+

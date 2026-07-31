@@ -1,0 +1,18 @@
+// SN:80XCjS;PNNZKA^jX
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[37m小狐貂貂[2;37;0m", ({"caobb diao"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "雪白的小狐貂
+它是小波的坐骑。
+");
+        set_temp("owner_id", "bbwo");
+        set_temp("owner_name", "小波");
+        ::setup();
+}
+

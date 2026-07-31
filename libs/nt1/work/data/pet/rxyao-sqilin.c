@@ -1,0 +1,18 @@
+// SN:\:E9G9`ISKjFB=e6
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;32m水麒麟兽[2;37;0m", ({"sqilin shou"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "麒麟
+它是慕容长空的坐骑。
+");
+        set_temp("owner_id", "rxyao");
+        set_temp("owner_name", "慕容长空");
+        ::setup();
+}
+

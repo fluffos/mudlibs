@@ -1,0 +1,149 @@
+//san.c
+//liu 2002
+// Modified by Xuanyuan 2002.4.26
+
+/*
+令狐大哥哼了一声，道：‘承你青眼，令狐冲脸上贴金。’嗤嗤嗤向他连攻三剑。
+师父，这三剑去势凌厉得很，剑光将田伯光的上盘尽数笼罩住了……”定逸点头道：“这
+是岳老儿的得意之作，叫甚么‘太岳三青峰’，据说是第二剑比第一剑的劲道狠，第三剑
+又胜过了第二剑。那田伯光如何拆解？
+笑傲江湖
+岳不群当即将紫霞神功都运到了剑上，呼的一剑，当头直劈。令狐冲斜身闪开。岳不群圈
+转长剑，拦腰横削。令狐冲纵身从剑上跃过。岳不群长剑反撩，疾刺他后心，这一剑变招
+快极，令狐冲背后不生眼睛，势在难以躲避。众人“啊”的一声，都叫了出来。令狐冲身
+在半空，既已无处借势再向前跃，回剑挡架也已不及，却见他长剑挺出，拍在身前数尺外
+的木柱之上，这一借力，身子便已跃到了木柱之后，噗的一声响，岳不群长剑刺入木柱。
+剑刃柔韧，但他内劲所注，长剑竟穿柱而过，剑尖和令狐冲身子相距不过数寸。
+众人又都“啊”的一声。这一声叫唤，声音中充满了喜悦、欣慰和赞叹之情，竟是人
+人都不禁为令狐冲欢喜，既佩服他这一下躲避巧妙之极，又庆幸岳不群终于没刺中他。岳
+不群施展平生绝技，连环三击，仍然奈何不了令狐冲，又听得众人的叫唤，竟是都在同情
+对方，心下大是懊怒。这“夺命连环三仙剑”是华山派剑宗的绝技，他气宗弟子原本不知
+。当年两宗自残，剑宗弟子曾以此剑法杀了好几名气宗好手。当气宗弟子将剑宗的弟子屠
+戮殆尽、夺得华山派掌门之后，气宗好手仔细参详这三式高招“夺命连环三仙剑”。诸人
+想起当日拚斗时这三式连环的威力，心下犹有余悸，参研之时，各人均说这三招剑法入了
+魔道，但求剑法精妙，却忘了本派“以气驭剑”的不易至理，大家嘴里说得漂亮，心中却
+无不佩服。
+*/
+
+#include <ansi.h>
+#include <combat.h>
+
+inherit F_DBASE;
+inherit F_SSERVER;
+
+int perform(object me, object target)
+{
+		mapping prepare_status;
+		string weapon, op_weapon, op_skill, *pname;
+		int skill, damage, my_power, op_power;
+
+        if( !target ) target = offensive_target(me);
+
+        if( !target
+        ||      !target->is_character()
+        ||      !me->is_fighting(target) )
+                return notify_fail("此绝技只能对战斗中的对手使用。\n");
+
+        if( me->query("family")["family_name"] != "华山派")
+                return notify_fail("你不是华山弟子不能用此绝招！\n");
+
+        if( me->query_skill_mapped("force") != "zixia-gong" )
+                return notify_fail("你所用的并非紫霞功，无法运劲施展！\n");
+
+        if( me->query_skill("force") < 180 )
+                return notify_fail("你的紫霞功火候未到\n");
+
+        if( me->query_skill("sword") < 180 )
+                return notify_fail("你华山剑法修为不足\n");
+
+        if( me->query("neili") <= 400 )
+                return notify_fail("你的内力不够！\n");
+        if( me->query("jingli") <= 200 )
+                return notify_fail("你的精力不够\n");
+
+        weapon = me->query_temp("weapon");
+		skill = (me->query_skill("sword")+me->query_skill("force"))/2;
+
+		if ( skill < 100 ) skill = 100;
+		if ( skill > 300 ) skill = 300;
+
+		if ( !objectp(op_weapon = target->query_temp("weapon")) ) {
+			if ( mapp(prepare_status = target->query_skill_prepare()) ) {
+				    	pname  = keys(prepare_status);
+				op_skill = pname[0];
+			}
+			else op_skill = "unarmed";
+		}
+		else {
+			op_skill = op_weapon->query("skill_type");
+		}
+
+		my_power = me->query_skill("sword") + me->query_skill("dodge") + me->query_skill("force")
+					+ me->query_skill("parry") + me->query("combat_exp") / 1000;
+
+		op_power = target->query_skill(op_skill) + target->query_skill("dodge") + target->query_skill("force")
+					+ target->query_skill("parry") + target->query("combat_exp") / 1000;
+
+		damage = my_power - op_power;
+		damage = random(damage);
+		if (damage < 100) damage = 100;
+
+		if (wizardp(me)) printf("damage = %d .\n",damage);	// check damage
+
+        if( me->query_skill("force") >= me->query_skill("sword") )
+        {
+                message_vision(HIM"\n$N哼了一声，当即将紫霞神功都运到了剑上，嗤嗤嗤向$n连攻三剑！这三剑去势凌厉得很，剑光将$n的上盘尽数笼罩住了……\n" NOR,me,target);
+        } else {
+                message_vision(HIG"\n$N当即将紫霞神功都运到了剑上，连环三击，正是华山派剑宗绝技“夺命连环三仙剑”！
+\n" NOR,me,target);
+        }
+        me->add_temp("apply/damage", skill/3);
+        me->add_temp("apply/attack", skill);
+        me->add_temp("apply/dodge", skill);
+
+        if( me->query_skill("force") < me->query_skill("sword") )
+        {
+                message_vision(HIG"\n$N呼的一剑，当头直劈！"NOR,me,target);
+        }
+
+        COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+
+        me->add_temp("apply/damage", skill/6);
+
+        if( me->query_skill("force") < me->query_skill("sword") )
+        {
+                message_vision(HIG"\n$N圈转"+weapon->name()+"，拦腰横削！" NOR,me,target);
+        }
+
+        COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+
+        me->add_temp("apply/damage", skill/6);
+
+        if( me->query_skill("force") < me->query_skill("sword") )
+        {
+                message_vision(HIG"\n$N"+weapon->name()+"反撩，疾刺$n后心，这一剑变招快极，$n背后不生眼睛，势在难以躲避！" NOR,me,target);
+				me->add_temp("san_target", 1);
+		}
+				if( me->query_temp("san_target") && damage > target->query("eff_qi"))
+                {
+                        message_vision(HIR"\n\n只听「啊」一声惨叫，$n的身体已被$N的"+weapon->name()+HIR"拦腰斩成两截！\n" NOR,me,target);
+
+						target->receive_damage("qi",target->query("max_qi") + 100, me);
+						target->receive_wound("qi", target->query("max_qi") + 100, me);
+                }else{
+				COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+				}
+
+        me->add_temp("apply/damage", -skill*2/3);
+        me->add_temp("apply/dodge", -skill);
+        me->add_temp("apply/attack", -skill);
+
+		if (me->query_temp("san_target")){
+			me->delete_temp("san_target");
+		}
+
+		me->add("neili",-skill);
+		me->add("jingli",-skill/2);
+        me->start_busy(random(2)+2);
+        return 1;
+}

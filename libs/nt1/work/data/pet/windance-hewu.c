@@ -1,0 +1,18 @@
+// SN:0dBP1M1hbSfU247Q
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("鹤舞鹤[2;37;0m", ({"hewu he"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "鹤舞
+它是不如跳舞的坐骑。
+");
+        set_temp("owner_id", "windance");
+        set_temp("owner_name", "不如跳舞");
+        ::setup();
+}
+

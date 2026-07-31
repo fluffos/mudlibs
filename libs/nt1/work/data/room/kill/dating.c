@@ -1,0 +1,39 @@
+// SN:n[dGk7b4L9i7IaSj
+// File(/data/room/kill/dating.c) of kill's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        set("short", "一个仓库大厅");
+	set ("long", @LONG
+这就是一个仓库主人欧阳杀迎送客人的地方。正中有些桌椅，侧
+面是两扇屏风。东首是主人欧阳杀的房间，有一扇木门虚掩着。南边
+是大门，出去就是院子。 
+LONG );
+
+	setup();
+
+	set("exits", ([
+                "east"   : __DIR__"woshi",
+		"north"  : __DIR__"houyuan",
+	]));
+
+        create_door("east", "木门", "west", DOOR_CLOSED);
+
+        set("no_sleep_room", 1);
+
+        set("KEY_DOOR", ([
+                "exit" : "south",
+                "room" : __DIR__"xiaoyuan",
+        ]));
+    
+        set("room_owner", "欧阳杀");
+        set("room_name", "一个仓库");
+        set("room_id", "tokill");
+        set("room_owner_id", "kill");
+        set("room_position", "三岔口");
+}

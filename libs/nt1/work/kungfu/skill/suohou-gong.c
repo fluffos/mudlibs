@@ -1,0 +1,76 @@
+// Copyright (C) 2003, by Lonely. All rights reserved.
+// This software can not be used, copied, or modified 
+// in any form without the written permission from authors.
+
+inherit SKILL;
+
+string *action_msg = ({
+        "$N一声暴喝，双手如钩如戢，插向$n的$l",
+        "$N身形一跃，直扑而上，右手直直抓向$n的$l",
+        "$N双手平伸，十指微微上下抖动，奋力抓向$n的$l",    
+        "$N悄无声息的游走至$n身前，猛的一爪奋力抓向$n的$l",
+        "$N双手平提胸前，左手护住面门，右手陡然抓向$n的$l",
+        "$N低喝一声，双手化掌为爪，一前一后抓向$n的$l",
+        "$N右腿斜插$n二腿之间，上手取目，下手直勾$n的喉部",
+        "$N狂喝一声，双爪如狂风骤雨般对准$n的$l连续抓出",
+});
+
+int valid_enable(string usage)
+{
+        return usage == "claw" ||  usage == "parry";
+}
+
+int valid_learn(object me)
+{
+        if (me->query_temp("weapon") || me->query_temp("secondary_weapon"))
+                return notify_fail("练锁喉功必须空手。\n");
+
+        if ((int)me->query_skill("force") < 150)
+                return notify_fail("你的内功火候不够，无法学锁喉功。\n");
+
+        if ((int)me->query("max_neili") < 1500)
+                return notify_fail("你的内力修为太弱，无法练锁喉功。\n");
+
+        if ((int)me->query_skill("claw", 1) < 80)
+                return notify_fail("你的基本抓法不够，无法学锁喉功。\n");
+
+        if ((int)me->query_skill("claw", 1) < (int)me->query_skill("suohou-gong", 1))
+                return notify_fail("你的基本抓法火候水平有限，无法领会更高深的锁喉功。\n");
+
+        return 1;
+}
+
+mapping query_action(object me, object weapon)
+{
+        return ([
+                "action": action_msg[random(sizeof(action_msg))],
+                "force" : 320 + random(30),
+                "attack": 70 - random(10),
+                "dodge" : 70 - random(10),
+                "parry" : 70 - random(10),
+                "damage_type" : random(2)?"抓伤":"内伤",
+        ]);
+}
+
+int practice_skill(object me)
+{
+        if (me->query_temp("weapon") ||
+            me->query_temp("secondary_weapon"))
+                return notify_fail("锁喉功必须空手练习！\n");
+
+        if ((int)me->query("qi") < 70)
+                return notify_fail("你的体力太低了。\n");
+
+        if ((int)me->query("neili") < 70)
+                return notify_fail("你的内力不够练锁喉功。\n");
+
+        me->receive_damage("qi", 60);
+        me->add("neili", -60);
+        return 1;
+}
+
+string perform_action_file(string action)
+{
+        return __DIR__"suohou-gong/" + action;
+}
+

@@ -1,0 +1,18 @@
+// SN:V70CLgOJY2YEOmk[
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;32m心云貂[2;37;0m", ({"yun diao"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "这是妃的宠物啊！很可爱的~
+它是唐妃的坐骑。
+");
+        set_temp("owner_id", "xiangfei");
+        set_temp("owner_name", "唐妃");
+        ::setup();
+}
+

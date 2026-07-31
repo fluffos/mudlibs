@@ -1,0 +1,176 @@
+#include <ansi.h>
+#include <skill.h>
+#include <weapon.h>
+#include <combat.h>
+#include <condition.h>
+
+inherit F_DBASE;
+inherit F_SSERVER;
+int perform(object me, object target)
+
+{
+	object weapon;
+	string msg;
+	int damage,extra,ap,dp;
+
+	if(!target) target = offensive_target(me);
+	if(!target || !target->is_character() || !me->is_fighting(target) || !living(target) )
+		return notify_fail("「八部剑阵」只能在战斗中使用。\n");
+	if (me->is_busy()) 
+		return notify_fail("你现在正忙着呢！\n");
+	if (!objectp(weapon = me->query_temp("weapon")) || (string)weapon->query("skill_type") != "sword")
+		return notify_fail("你使用的武器不对。\n");	
+//	if (target && target->query_temp("apply/shade_vision")) 
+//		return notify_fail("对方隐身了，你看不到"+target->query("name")+"。\n"); 	
+	if( (int)me->query("int",1) < 25 )
+		return notify_fail("以你的悟性，恐怕用不了这么精深奥妙的绝技.\n");
+	if( (int)me->query("con",1) < 25 )
+		return notify_fail("以你的体质，恐怕用不了这么精深奥妙的绝技.\n");
+	if ( me->query_skill_mapped("sword") != "babulongnv-jian" )
+        return notify_fail("你必须激发八部龙女剑为剑法！\n"); 
+	if ( me->query_skill_mapped("parry") != "babulongnv-jian" )
+        return notify_fail("你必须激发八部龙女剑为招架！\n"); 
+	if( (int)me->query_skill("babulongnv-jian", 1) < 1000 )
+		return notify_fail("你的八部龙女剑法不够娴熟，不会使用「八部剑阵」。\n");	
+	if ((int)me->query_skill("zixia-shengong",1) < 1000 && (int)me->query_skill("hanbing-zhenqi",1) < 1000 && (int)me->query_skill("baiyun-xinfa",1) < 1000 && (int)me->query_skill("zhenyue-jue",1) < 1000 && (int)me->query_skill("panshi-shengong",1) < 1000)		
+		return notify_fail("你的五岳派内功修为不够，不会使用「八部剑阵」。\n");	
+	if ( me->query_skill_mapped("force") != "zixia-shengong" && me->query_skill_mapped("force") != "hanbing-zhenqi" && me->query_skill_mapped("force") != "baiyun-xinfa" && me->query_skill_mapped("force") != "zhenyue-jue" && me->query_skill_mapped("force") != "panshi-shentong")
+		return notify_fail("你必须激发五岳派内功才能使用「八部剑阵」！\n"); 	
+	if( (int)me->query("max_neili") < 500000 )
+		return notify_fail("「八部剑阵」岂能是你这点儿内力修为就能用的！\n");
+	if( (int)me->query("max_jingli") < 500000 )
+		return notify_fail("「八部剑阵」岂能是你这点儿精力修为就能用的！\n");	
+	if( (int)me->query("neili") < 10000 )
+		return notify_fail("你的内力不够！\n");
+	if( (int)me->query("jingli") < 10000 )
+		return notify_fail("你的精力不够！\n");	
+	if (!(int)me->query("breakup"))
+		return notify_fail("你任督二脉未通,无法融汇贯通五岳派的武学精髓。\n"NOR);	
+	if (me->query_temp("autolian"))
+		return notify_fail("你正在发动自动连招！\n"); 	
+	if ( me->query_temp("cooldown") )	//CD写法	2017.9.7添加
+		return notify_fail("你处于技能冷却状态中，过会在使用吧。\n");
+		
+	msg = HBWHT "$N贯通五岳剑派武学，使出了五岳剑派的绝学之精髓！\n" NOR;	
+	message_vision(msg, me, target);
+	me->set_temp("cooldown", 1);	//CD写法	2017.9.7添加
+	call_out("del_cooldown", 5, me);	//CD写法1	
+//	if (!me->is_busy()) me->start_busy(5);	
+	ap = me->query("per",1)*me->query_per()+me->query_skill("babulongnv-jian",1)+(me->query_skill("huashan-jianfa",1)+me->query_skill("songshan-jian",1)+me->query_skill("hengshan-jian",1)+me->query_skill("luoyan-jian",1)+me->query_skill("taishan-jianfa",1))/3+10;
+	dp = target->query("per",1)*target->query_per()+10;
+	ap = ap*((int)me->query("breakup")+(int)me->query("breakup")*(int)me->query("breakup")+100)/100;
+	dp = dp*((int)target->query("breakup")+(int)target->query("breakup")*(int)target->query("breakup")+100)/100;
+	msg = HIC "\n$N清呤一声"HIY"“八部剑阵断人魂”"BLU"“龙女飞天惊神魔!”"HIC"腾身一跃，踪迹全无！。\n" NOR;
+	message_vision(msg, me, target);
+	if (random(ap) > dp/3)
+	{
+		if (!target->is_busy()) target->start_busy(1);
+		damage = me->query_skill("babulongnv-jian",1) + me->query_skill("sword",1) + me->query_skill("zixia-shengong",1) + me->query_skill("hanbing-zhenqi",1) + me->query_skill("force",1);
+		damage = damage/2 + random(damage/2);
+		damage = damage*(100-target->query_meridian())/100;
+		target->receive_damage("qi", damage,me);
+		target->receive_wound("qi", damage/2,me);
+		me->add("neili", -1000);	
+		if (me->query_skill_mapped("force") == "zixia-shengong") target->apply_condition("no_force", 10);
+		if (me->query_skill_mapped("force") == "hanbing-zhenqi") target->apply_condition("cold_poison", 10);			
+		msg = HIR "陡然间，$N飞身而下，千丝剑气绕向$n，姿势曼妙无比，直如天女散花！\n"NOR;
+		message_vision(msg, me, target, damage, HBWHT+HIM"气血伤害"NOR);	//2018.10.2阿飞改，优化化学伤害显示的写法
+//		if (userp(me) && me->query("env/no_combat_msg")<4) tell_object(me, HIW"该绝招对敌人气血的外伤为"+ damage +"，内伤为"+ damage/2 +"。\n" NOR);
+	}
+	else
+	{
+		me->add("neili", -500);
+		msg = HIW"$N全神贯注，毫不大意，$N眼见无机可趁，只得将身形显露出来。\n"NOR;
+		message_vision(msg, target, me);
+	}
+	
+		
+if( (int)me->query_skill("babulongnv-jian", 1) > 2000 )	
+{	
+	extra = (int)me->query_skill("babulongnv-jian",1)/10;
+	msg = HIW "$N手中的"+weapon->query("name")+HIW"如同陀螺一般围住自己转动不息，解着一股螺旋之力，迅捷无比的射向$n。\n"NOR;
+	message_vision(msg, me, target);
+	me->add_temp("apply/attack", extra);
+	me->add_temp("apply/dodge", extra);
+	me->add_temp("apply/damage", extra);
+	
+	msg =YEL"$N落回地面，趁着$n慌乱之时，连接攻击。\n"NOR;
+	message_vision(msg, me, target);
+	COMBAT_D->do_attack(me,target, me->query_temp("weapon"),TYPE_QUICK);
+	COMBAT_D->do_attack(me,target, me->query_temp("weapon"),TYPE_QUICK);
+	
+	msg = HIR "$N剑出连环，似真似幻,招招不离$n的要害之处。\n"NOR;
+	message_vision(msg, me, target);
+	COMBAT_D->do_attack(me,target, me->query_temp("weapon"),TYPE_QUICK);
+	COMBAT_D->do_attack(me,target, me->query_temp("weapon"),TYPE_QUICK);
+	
+	msg = HIC "$N反身回刺,竟然将$n的招数齐齐逼回自身。\n"NOR;
+	message_vision(msg, me, target);
+	COMBAT_D->do_attack(target,target, target->query_temp("weapon"),TYPE_QUICK);
+	COMBAT_D->do_attack(target,target, target->query_temp("weapon"),TYPE_QUICK);
+
+	msg = HIB"$N再乘胜追击，左一剑，右一剑，最后收剑蓄势待发。\n"NOR;	
+	message_vision(msg, me, target);
+	COMBAT_D->do_attack(me,target, me->query_temp("weapon"),TYPE_QUICK);
+	COMBAT_D->do_attack(me,target, me->query_temp("weapon"),TYPE_QUICK);
+	
+	me->add("neili", -2000);
+	me->add_temp("apply/attack", -extra);
+	me->add_temp("apply/dodge", -extra);
+	me->add_temp("apply/damage", -extra);
+}
+	
+	
+if( (int)me->query_skill("babulongnv-jian", 1) > 3000 )	
+{	
+	msg = HIG "\n$N手中的"+weapon->query("name")+HIG"连画半圆，光幕将$N全身护住竟然变为一个巨大的光球，身剑合一，射向$n。\n"NOR;
+	msg += HIC "$N召唤出八部天龙：天众、龙众、夜叉、乾闼婆、阿修罗、迦楼罗、紧那罗、摩睺罗迦！！！。\n" NOR;
+	msg += HIR "让死亡奔放吧，碾碎一切活着的生物！！！。\n" NOR;
+	message_vision(msg, me, target);
+	if (random(ap) > dp/3)
+	{
+		//if (!target->is_busy()) target->start_busy(2);
+		if (me->query("jm/wuyue")) damage = me->query_skill("babulongnv-jian",1)*me->query("per",1)*3/2 + me->query_skill("huashan-jianfa",1)*me->query("con",1)*3/2 + me->query_skill("songshan-jian",1)*me->query("con",1)*3/2 + me->query_skill("hengshan-jian",1)*me->query("int",1)*3/2 + me->query_skill("luoyan-jian",1)*me->query("dex",1)*3/2 + me->query_skill("taishan-jianfa",1)*me->query("str",1)*3/2 + me->query_skill("sword",1) + me->query_skill("force",1);
+		else damage = me->query_skill("babulongnv-jian",1)*me->query("per",1) + me->query_skill("huashan-jianfa",1)*me->query("con",1) + me->query_skill("songshan-jian",1)*me->query("con",1) + me->query_skill("hengshan-jian",1)*me->query("int",1) + me->query_skill("luoyan-jian",1)*me->query("dex",1) + me->query_skill("taishan-jianfa",1)*me->query("str",1) + me->query_skill("sword",1) + me->query_skill("force",1);
+		damage = damage/3 + random(damage/3) + target->query("qi")*4/100;
+		damage = damage*(100-target->query_meridian())/100;
+		target->receive_damage("qi", damage,me);
+		target->receive_wound("qi", damage/2,me);
+		me->add("neili",-2000);
+		me->add("jingli", -2000);
+		target->set("jiali", 0);
+		target->set("jiajing", 0);
+		if (me->query_skill_mapped("force") == "zixia-shengong") target->apply_condition("no_enforce", 10);
+		if (me->query_skill_mapped("force") == "hanbing-zhenqi") target->apply_condition("no_exert", 10);
+		if (random(4)==1) 
+		{
+			target->map_skill("force");	//下特殊内功
+			message_vision(RED"$n被八部天龙剑阵困住，无法运转内功。\n"NOR,me, target);
+		}
+//		if (userp(me) && me->query("env/no_combat_msg")<4) tell_object(me, HIW"该绝招对敌人气血的外伤为"+ damage +"，内伤为"+ damage/2 +"。\n" NOR);		
+		msg = HIR "$n呆立当场，未待闪躲，被$N的巨大光球穿透而过！！。\n" NOR;
+		message_vision(msg, me, target, damage, HBWHT+HIM"气血伤害"NOR);	//2018.10.2阿飞改，优化化学伤害显示的写法
+	}
+	else
+	{
+		me->add("neili", -200);
+		me->add("jingli", -200);
+		//if (!target->is_busy()) target->start_busy(5);
+		msg = HIW"$N连忙一个跟头翻出圈外，却也被吓的浑身是汗！\n" NOR;
+		message_vision(msg, target, me);
+	}	
+}	
+	me->start_busy(1);	
+	return 1;
+}
+
+void del_cooldown(object me)	//CD写法1
+{ 
+	if ( !objectp(me) ) return;
+	if ( me->query_temp("cooldown") )	
+	{
+		me->delete_temp("cooldown");
+		tell_object(me, HIM"你呼出一口气，缓缓的将内力收回丹田。\n"NOR);
+	}	
+}
+

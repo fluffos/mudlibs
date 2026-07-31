@@ -1,0 +1,13 @@
+// dust.c
+
+inherit COMBINED_ITEM;
+
+void create()
+{
+	set_name("一刻香",({"faint poison","faint","poison"}));
+	set("unit", "包");
+	set("base_unit", "份");
+	set("base_weight", 1);
+	set_amount(1);
+	setup();
+}

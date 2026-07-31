@@ -1,0 +1,117 @@
+// alias.c
+// 修改：中山大学  张三丰（Micro）----Micro_Liang@Hotmail.Com           1997.6
+
+#include <ansi.h>
+
+#define MAX_REPEAT 30                           // 最多同一个指令可以重覆的数量
+#define MAX_ALIASES 40                          // 可设定的替代指令数量
+#define HISTORY_BUFFER_SIZE 10                  // 系统记忆指令的数量
+
+mapping alias;
+
+nosave string *history, last_input;
+nosave int last_cmd, repeat_cnt = 0;
+
+// 处里输入指令。如果使用者已输入超过MAX_REPEAT所定义的数量的相同指令, 
+// 系统会强迫使用者昏迷（原先是：使使用者离开）接下来系统会判定使用者是
+// 否要重覆使用前面用过的指令，再来会核对使用者自己所设定的替代指令表，
+// 若有找到符合的则将输入的替代指令扩张为完整的指，传回值为处理过後的输
+// 入指令。若以上条件都不符合则呼叫 ALIAS_D的 process_global_alias() 函
+// 数并将结果做为此函数的传回值。
+string process_input(string str)
+{
+        string *args, cmd, argstr;
+        int i, j;
+/*  先删除来试一试关不关速度的问题。
+//  add by Fan    把指令执行时间调到最大
+        reset_eval_cost();
+*/
+        // Micro: 玩家短时间内（这里是一秒）输入太多的命令时，不会接受....
+        if(!this_object()->query_temp("input_times") )
+                this_object()->set_temp("input_start",time());
+        this_object()->add_temp("input_times",1);
+        if(this_object()->query_temp("input_times") >= 15
+        &&      (time()-(int)this_object()->query_temp("input_start")) <= 1 ) {
+                tell_object( this_object(), HIR "你输入的命令太多了！\n" NOR);
+                // this_object()->delete_temp("input_times");
+                // this_object()->delete_temp("input_start");
+                return "";
+        }
+        else if(this_object()->query_temp("input_times") >= 20) {
+                this_object()->delete_temp("input_times");
+                this_object()->delete_temp("input_start");
+        }
+
+        // Micro: 玩家重复太多的命令时，不把玩家赶出游戏，而是把玩家弄昏....
+//        if ( !living( this_object() ) && !wizardp(this_object()) ) return "";   
+//      change by Fan
+            if (this_object()->query_temp("unconcious") && !wizardp(this_object()) ) return "";   
+            
+        if( str == last_input && str != "" ) {
+                repeat_cnt++;
+                if( repeat_cnt > MAX_REPEAT) {
+                        message_vision(HIR "\n突然天空中乌云密布，一道白色的闪电象利剑般劈向$N。\n" NOR, this_object());
+                        message_vision(HIR "\n半空中隐约传来几声奸笑，天空又恢复了刚才的景象。\n\n" NOR, this_object());
+                        this_object()->unconcious();
+                        repeat_cnt = 0;
+                        return "";
+                }
+        } else {
+                repeat_cnt = 0;
+                last_input = str;
+        }
+
+        if( str[0]=='!' ) {
+                if( pointerp(history) && sizeof(history) ) {
+                        if( sscanf(str, "!%d", i) )
+                                str = (string)history[(HISTORY_BUFFER_SIZE + last_cmd - i) % HISTORY_BUFFER_SIZE];
+                        else
+                                str = history[last_cmd];
+                } else
+                        return "";
+        } else {
+                if( !pointerp(history) ) history = allocate(HISTORY_BUFFER_SIZE);
+                last_cmd = (last_cmd + 1) % HISTORY_BUFFER_SIZE;
+                history[last_cmd] = str;
+        }
+
+        if( mapp(alias) ) {
+
+                if( !undefinedp(alias[str]) )
+                        return replace_string( alias[str], "$*", "" );
+
+                if( sscanf(str, "%s %s", cmd, argstr)==2 && !undefinedp(alias[cmd]) ) {
+                        cmd = replace_string( alias[cmd], "$*", argstr );
+                        args = explode(argstr, " ");
+                        if( (j = sizeof(args)) )
+                                for(i=0; i<j; i++)
+                                        cmd = replace_string( cmd, "$" + (i+1), args[i] );
+                        return cmd;
+                }
+        }
+
+        return (string)ALIAS_D->process_global_alias(str);
+}
+
+// 将新的替代指令加入替代指令列表. 若没有传入第二个参数，则取消所传入之
+// 替代指令的设定，并确定使用者没有超过替代指令数量的上限。
+int set_alias(string verb, string replace)
+{
+        if( !replace ) {
+                if( mapp(alias) ) map_delete(alias, verb);
+                return 1;
+        } else {
+                if( !mapp(alias) ) alias = ([ verb:replace ]);
+                else if( sizeof(alias) > MAX_ALIASES )
+                        return notify_fail("您设定的 alias 太多了，请先删掉一些不常用的。\n");
+                else alias[verb] = replace;
+                return 1;
+        }
+}
+
+// 传回物件所设定的替代指令
+mapping query_all_alias()
+{
+        return alias;
+}
+

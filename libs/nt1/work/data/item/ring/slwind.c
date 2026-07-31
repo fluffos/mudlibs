@@ -1,0 +1,11 @@
+// SN:DZ\]493h9E;Fk6``
+// wedding-ring.c
+
+#include "/clone/misc/wedding-ring.h"
+
+void setup()
+{
+        set("long", "这是飞雪和云飞的结婚戒指，是两人的定情之物。
+");
+        ::setup();
+}

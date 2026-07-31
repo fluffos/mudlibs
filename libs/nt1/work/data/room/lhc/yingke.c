@@ -1,0 +1,38 @@
+// SN:3L`1Rn@N1`DL6PmW
+// File(/data/room/lhc/yingke.c) of lhc's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        set("short", "大钱库迎客厅");
+	set ("long", @LONG
+这里是大钱库的主人灵狐宠迎接八方来客的地方。大凡客人来拜
+见灵狐宠，少不得在这里寒暄叙话，了尽仰慕之情。东面通往一个茶
+室，是主人陪同客人品尝天下名茶之处。 
+LONG );
+
+	set("exits", ([
+		"north"  : __DIR__"yishiting",
+                "south"  : __DIR__"zoudao",
+                "east"   : __DIR__"chashi",
+	]));
+
+        create_door("east", "木门", "west", DOOR_CLOSED);
+
+        set("objects", ([
+                "/d/room/roomnpc/yahuan" : 2,
+        ]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("room_owner", "灵狐宠");
+        set("room_name", "大钱库");
+        set("room_id", "bankchina");
+        set("room_owner_id", "lhc");
+        set("room_position", "青砖路");
+}

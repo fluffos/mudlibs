@@ -1,0 +1,18 @@
+// SN:5BjKk8BRUE81NK8@
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;31m火红狐[2;37;0m", ({"huohong hu"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "$HIR$火红的狐狸
+它是乖乖火的坐骑。
+");
+        set_temp("owner_id", "ggh");
+        set_temp("owner_name", "乖乖火");
+        ::setup();
+}
+

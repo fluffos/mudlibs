@@ -1,0 +1,34 @@
+#include <ansi.h>
+inherit ITEM;
+void create()
+{
+    set_name(BLU"飞狐外传"NOR, ({ "fhwz" }) );
+    set_weight(1);
+    if( clonep() )
+            set_default_object(__FILE__);
+    else {
+	         
+           set("unit", "本");
+            set("material", "paper");
+                       set("long", "神书之一,若是能找另一本雪山飞狐就能拼成(ping)。\n");
+          }
+
+    setup();
+}
+void init()
+{
+    add_action("do_ping","ping");
+}
+int do_ping()
+{
+	object me,newbook;
+	me = this_player();
+	newbook =new(__DIR__"2book");
+ if (!present("xsfh", me))
+	tell_object(me,"书好象没齐.\n");
+ else{      message_vision("$N把从怀中翻出的雪山飞狐，和手中的飞狐外传合并成了一本。\n", me);
+	newbook->move(me);
+	destruct(present("xsfh",me));
+	destruct(this_object());}
+return 1;
+}

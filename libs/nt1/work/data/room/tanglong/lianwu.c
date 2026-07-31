@@ -1,0 +1,32 @@
+// SN:YU6bIn@0bh6H?0_n
+// File(/data/room/tanglong/lianwu.c) of tanglong's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "练武场");
+	set ("long", @LONG
+此处便是苍龙之原的练武场，人在江湖，武功万万不可荒废。 
+LONG );
+
+	set("exits", ([
+                "west" : __DIR__"houyuan",
+	]));
+
+        set("objects", ([
+                "/clone/npc/mu-ren" : 4,
+        ]));
+
+        set("outdoors", "playertown");
+        set("no_sleep_room", 1);
+
+        setup();
+    
+        set("room_owner", "唐龙");
+        set("room_name", "苍龙之原");
+        set("room_id", "dragonsoul");
+        set("room_owner_id", "tanglong");
+        set("room_position", "碎石小道");
+}

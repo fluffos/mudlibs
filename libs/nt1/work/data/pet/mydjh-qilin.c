@@ -1,0 +1,18 @@
+// SN:=VnP5_]NEEZeHWE?
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;32m水麒麟兽[2;37;0m", ({"qilin shou"}));        
+        set("gender", "女性");                
+        set("unit", "头");
+        set("long", "万兽之王，纵横捭阖，驰骋天下，万夫莫当
+它是风随云的坐骑。
+");
+        set_temp("owner_id", "mydjh");
+        set_temp("owner_name", "风随云");
+        ::setup();
+}
+

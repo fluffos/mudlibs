@@ -1,0 +1,72 @@
+#include <ansi.h>
+inherit SKILL;
+
+mapping *quest = ({
+        ([      "quest":               "王五",
+                "quest_type":           "杀",
+                "time":                 600,
+                "score" :               6
+        ]),
+        ([      "quest":                "密汁甜藕",
+                "quest_type":           "寻",
+                "time":                 200,
+                "score" :               3
+        ]),
+        ([      "quest":                "阿紫",
+                "quest_type":           "杀",
+                "time":                 400,
+                "score" :               5
+        ]), 
+        ([      "quest":                "守寺僧兵",
+                "quest_type":           "杀",
+                "time":                 500,
+                "score" :               8
+        ]),
+        ([      "quest":                "僧棍",
+                "quest_type":           "寻",
+                "time":                 500,
+                "score" :               8
+        ]),
+        ([      "quest":                "八卦亭",
+                "quest_type":           "扫",
+                "time":                 200,
+                "score" :               6
+        ]),
+        ([      "quest":                "雷祖殿",
+                "quest_type":           "扫",
+                "time":                 200,
+                "score" :               3
+        ]), 
+        ([      "quest":                "哑仆",
+                "quest_type":           "杀",
+                "time":                 420,
+                "score" :               6
+        ]),
+        ([      "quest":                "铁甲",
+                "quest_type":           "寻",
+                "time":                 200,
+                "score" :               6
+        ]),       
+        ([      "quest":                "钢杖",
+                "quest_type":           "寻",
+                "time":                 400,
+                "score" :               7
+        ]),  
+        ([      "quest":                "红烧狗肉",
+                "quest_type":           "寻",
+                "time":                 200,
+                "score" :               4
+        ]),
+        ([      "quest":                "肥肥",
+                "quest_type":           "杀",
+                "time":                 650,
+                "score" :               9
+        ]),
+});
+
+
+mapping query_quest()
+{
+        return quest[random(sizeof(quest))];
+}
+

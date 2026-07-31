@@ -1,0 +1,35 @@
+// SN:T52Q`^NTOI`6]g;X
+// ITEM Made by player(唐斩:tangzhan) /data/item/t/tangzhan-hualuo.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Wed Sep 22 20:10:35 2004
+#include <ansi.h>
+#include <armor.h>
+
+inherit HANDS;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;31m今年花落颜色改[2;37;0m", ({ "hualuo" }));
+	set_weight(2700);
+	set("item_make", 1);
+	set("unit", "双");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一双铁掌。
+[1;31m血红色的一双掌套，隐隐泛出一些诡异的红色流光，虽不夺目，却让人心神迷失。[2;37;0m
+铁掌缘上刻着一行小字：唐斩(tangzhan)
+");
+	set("value", 2100000);
+	set("point", 451);
+	set("material", "magic stone");
+	set("wear_msg", "[1;31m$N冷冷一笑，戴上一双$n[1;31m，整个人变了似的，双瞳闪烁出一种迷离的红光。\n$N额头上的法令纹也更趋深刻，斜斜的飞入鬓边，一股茫茫的杀意笼罩在四周。[2;37;0m\n");
+	set("remove_msg", "[1;31m$N嘿然一声长笑，双臂一振，脱落了手上的那双邪的血红的手套，放入囊中。\n周围的杀气大减，而$N脸上隐隐逼出霸道杀气也缓缓散去。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/unarmed_damage", apply_damage());
+	set("armor_prop/armor", 10);
+	set("armor_prop/strike", 10);
+	set("armor_prop/hand", 10);
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

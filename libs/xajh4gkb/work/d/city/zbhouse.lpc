@@ -1,0 +1,259 @@
+// by guoguo
+inherit ROOM;
+
+#define SAVER "/clone/misc/zbhouse"
+#define MAX_ZB 100
+
+void create()
+{
+    set("short","装备仓库");
+    set("long","这里是免费存放装备的仓库，仓库的一面墙上贴着一张告示("HIW"gaoshi"NOR")\n");
+    set("no_fight",1);
+    set("no_steal",1);
+    set("no_magic",1);
+    set("no_sleep_room", "1");
+    set("exits", ([
+        "north" : __DIR__"openmarket",
+      ]));
+
+    set("item_desc", ([
+                "gaoshi": @TEXT
+                查看自己的库存装备：list
+
+                存货：cun
+                        cun <装备id>
+
+                取货：qu
+                        qu <装备序号>
+
+
+TEXT
+                ]) );
+    setup();
+}
+
+void init()
+{
+    add_action("do_list","list");
+    add_action("do_cun","cun");
+    add_action("do_qu","qu");
+}
+
+int do_list(string arg)
+{
+    object me = this_player();
+    string myid = me->query("id");
+    string filename,user,msg,idx;
+    object saver;
+    mapping all_zb,tmp,tmp1;
+    string *tmp2;
+    int i;
+    if(arg && sizeof(arg)>0 && wizhood(me)=="(boss)")
+    {
+	filename = "/data/zbhouse/"+arg[0..0]+"/"+arg+__SAVE_EXTENSION__;
+	user=arg;
+    }
+    else
+    {
+	filename = "/data/zbhouse/"+myid[0..0]+"/"+myid+__SAVE_EXTENSION__;
+	user="你";
+    }
+
+    if(file_size(filename) == -1)
+    {
+        printf(user+"没在仓库里存放任何东西。\n");
+        return 1;
+    }
+
+    saver = new(SAVER);
+    if(!saver || !objectp(saver))
+    {
+	tell_object(me,"仓库创建出现异常，请报告巫师。\n");
+	return 1;
+    }
+    if(saver->do_load(filename)==0)
+    {
+        tell_object(me,"装备列表加载失败，请报告巫师。\n");
+        destruct(saver);
+        return 1;
+    }
+    all_zb = saver->get_all_zb();
+    if(!mapp(all_zb) || sizeof(all_zb)==0)
+    {
+        printf(user+"没在仓库里存放任何东西。\n");
+	destruct(saver);
+        return 1;
+    }
+    destruct(saver);
+    msg = sprintf(HIY"%s的库存装备：\n"NOR,user);
+    for(i=0;i<MAX_ZB;i++)
+    {
+	idx = sprintf("%3d",i);
+	if(undefinedp(all_zb[idx]))
+	    continue;
+	tmp = all_zb[idx];
+	if(!mapp(tmp))
+	    continue;
+	if(undefinedp(tmp["dbase"]) || undefinedp(tmp["my_id"]) || undefinedp(tmp["base_name"]))
+	    continue;
+	tmp1 = tmp["dbase"];
+	if(!mapp(tmp1))
+	    continue;
+	tmp2=tmp["my_id"];
+	if(sizeof(tmp2)==0)
+	    continue;
+	msg += sprintf("%s    %s(%s)\n",idx,tmp1["name"],tmp2[0]);
+    }
+    me->start_more(msg);
+    return 1;
+}
+
+int do_cun(string arg)
+{
+    object me = this_player();
+    string myid = me->query("id");
+    string filename,bn;
+//	string idx;	//2017.3.7阿飞记录  服务器测试有问题，该值没有定义
+    object saver,zb;
+    mapping all_zb;
+//    int i;	//2017.3.7阿飞记录  服务器测试有问题，该值没有定义
+
+    if(!arg || sizeof(arg)<1)
+    {
+	tell_object(me,"你要存什么？\n");
+	return 1;
+    }
+    zb = present(arg,me);
+    if(!zb || !objectp(zb))
+    {
+	tell_object(me,"你身上没有这个东西。\n");
+	return 1;
+    }
+    if(zb->query("equipped"))
+    {
+	tell_object(me,"你必须先解除装备。\n");
+	return 1;
+    }
+    bn = base_name(zb);
+    if(strsrch(bn,"/clone/map/weapon/")!=0 && strsrch(bn,"/clone/map/armor/")!=0)
+    {
+	tell_object(me,zb->query("name")+"不能往装备仓库里存。\n");
+	return 1;
+    }
+    filename = "/data/zbhouse/"+myid[0..0]+"/"+myid+__SAVE_EXTENSION__;
+    saver = new(SAVER);
+    if(!saver || !objectp(saver))
+    {
+	tell_object(me,"仓库创建出现异常，请报告巫师。\n");
+	return 1;
+    }
+    if(file_size("/data/zbhouse") != -2) mkdir("/data/zbhouse");
+    if(file_size("/data/zbhouse/"+myid[0..0]) != -2)
+        mkdir("/data/zbhouse/"+myid[0..0]);    
+    if(file_size(filename)>0)
+    {
+        if(saver->do_load(filename)==0)
+        {
+            tell_object(me,"装备列表加载失败，请报告巫师。\n");
+            destruct(saver);
+            return 1;
+        }
+    }
+    if(sizeof(all_zb)>=100)
+    {
+	tell_object(me,"仓库已满。\n");
+	destruct(saver);
+	return 1;
+    }
+    if(saver->add_zb(zb))
+    {
+        if(saver->do_save(filename))
+        {
+            message_vision("$N往仓库里存入一"+zb->query("unit")+zb->query("name")+"\n",me);
+            destruct(zb);
+        }
+        else
+            tell_object(me,"装备存入失败。\n");
+    }
+    else
+	tell_object(me,"装备存入失败。\n");
+    destruct(saver);
+    return 1;
+}
+
+int do_qu(string arg)
+{
+    object me = this_player();
+    string myid = me->query("id");
+    string filename;
+//	string idx,bn;	//2017.3.7阿飞记录  服务器测试有问题，该值没有定义
+    object saver,zb,tmp;
+//    mapping all_zb;	//2017.3.7阿飞记录  服务器测试有问题，该值没有定义
+//    int i;	//2017.3.7阿飞记录  服务器测试有问题，该值没有定义
+	int index;
+
+    filename = "/data/zbhouse/"+myid[0..0]+"/"+myid+__SAVE_EXTENSION__;
+    if(file_size(filename) == -1)
+    {
+        write("你没在仓库里存放任何东西。\n");
+        return 1;
+    }
+    if(!arg || sizeof(arg)<1)
+    {
+	tell_object(me,"你要取什么？\n");
+	return 1;
+    }
+    index=atoi(arg);
+    if(index<0||index>=MAX_ZB)
+    {
+	printf("装备序号只能是0~%d。\n",MAX_ZB-1);
+	return 1;
+    }
+    if((time()-me->query_temp("zb_house_qu_time"))<10)
+    {
+        tell_object(me,"装备提取需要间隔一小会。\n");
+        return 1;
+    }
+    saver = new(SAVER);
+    if(!saver || !objectp(saver))
+    {
+	tell_object(me,"仓库创建出现异常，请报告巫师。\n");
+	return 1;
+    }
+    if(saver->do_load(filename)==0)
+    {
+        tell_object(me,"装备列表加载失败，请报告巫师。\n");
+        destruct(saver);
+        return 1;
+    }
+    zb = saver->qu_zb(index);
+    if(!zb || !objectp(zb))
+	write("装备序号错误。\n");
+    else
+    {
+        if(saver->do_save(filename))
+        {
+            tmp = new(SAVER);
+            //再次检查有没有保存成功
+            if(saver->do_load(filename) && objectp(saver->qu_zb(index)))
+            {
+                tell_object(me,"装备提取失败。\n");
+                destruct(zb);
+            }
+            else
+            {
+                message_vision("$N从仓库里取出一"+zb->query("unit")+zb->query("name")+"。\n",me);
+                zb->delete("equipped");
+                zb->move(me);
+            }
+        }
+        else
+        {
+            tell_object(me,"装备提取失败。\n");
+            destruct(zb);
+        }
+    }
+    me->set_temp("zb_house_qu_time",time());
+    destruct(saver);
+    return 1;
+}

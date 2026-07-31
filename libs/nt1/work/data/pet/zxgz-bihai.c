@@ -1,0 +1,18 @@
+// SN:NdLSMUaD]85CQ^36
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;32m碧海晶净兽[2;37;0m", ({"bihai shou"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "$HIG$以前是牛魔王的坐骑,由于牛魔王为了追求紫霞就送给了她.
+它是紫霞的坐骑。
+");
+        set_temp("owner_id", "zxgz");
+        set_temp("owner_name", "紫霞");
+        ::setup();
+}
+

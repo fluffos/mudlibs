@@ -1,0 +1,49 @@
+// yuzhen.c 玉真散
+
+inherit ITEM;
+
+void setup()
+{}
+
+void init()
+{
+        add_action("do_eat", "eat");
+}
+
+void create()
+{
+        set_name("无极丸", ({"Wuji wan", "wuji", "wan"}));
+        if (clonep())
+                set_default_object(__FILE__);
+        else {
+                set("unit", "颗");
+                set("long", "这是一颗无极丸，可以提高你能吸取的精力上限。\n");
+                set("tianya_money", 5);//增设VIP购买标致
+        }
+        setup();
+}
+
+int do_eat(string arg)
+{
+        if (!id(arg))
+                return notify_fail("你要吃什么？\n");
+        if (this_player()->query_temp("wujiwan"))
+                return notify_fail("你已经吃了一粒，不能再多吃了！\n");
+        else {
+                this_player()->set_temp("wujiwan", 1);
+                message_vision("$N吃下一颗无极丸，体内丹元似乎有些浮动。\n", this_player());
+                
+                this_player()->set_temp("wujiwan_time", (int)time() + 60*60*3);
+                remove_call_out("remove_effect");
+            		call_out("remove_effect", 60*60*3, this_player());
+                destruct(this_object());
+                return 1;
+        }
+}
+
+void remove_effect(object target)
+{
+   if ( !target ) return;
+   target->delete_temp("wujiwan");
+   tell_object(target, "你体内的丹元恢复了正常。\n");
+}

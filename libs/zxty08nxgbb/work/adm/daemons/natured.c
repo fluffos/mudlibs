@@ -1,0 +1,473 @@
+// natured.c
+#include <ansi.h>
+#define TIME_TICK (time()*60)
+#define TIME_TICK1 (time()*60)
+// TIME_TICE1 also use in move.c look.c
+nosave int current_day_phase, current_month;
+void auto_save(object *user, int size, int i);
+mapping *day_phase;
+
+//可能出现陨铁的地方 add by Amis@XO2
+string *box_object=({
+"/d/wudang/hutou",
+"/d/taishan/zhangren",//后面可以自己任意添加
+"/d/quanzhou/nanmen",
+"/d/nanyang/ruzhou",
+"/d/huashan/yunu",
+"/d/songshan/junjigate",
+"/d/taohua/qianyuan",
+"/d/tongchi/damen",
+"/d/wudujiao/damen",
+"/d/xiaoyao/qingcaop",
+
+});
+
+nosave string ppl;
+
+string *month_time = ({
+	"春天悄悄地走来了，",
+	"春风轻轻地拂过你的脸庞，",
+	"天气逐渐变暖了，",
+	"已经是初夏时节了，",
+	"知了的叫声让你感觉到了盛夏的气息，",
+	"天气变得非常闷热，",
+	"虽然是秋天了，天气还是有些热，",
+	"中秋佳节快到了，",
+	"一阵秋风吹来，卷起了地上的落叶，",
+	"秋去冬来，",
+	"寒风凛冽，",
+	"快到年关了，",
+});
+
+string *month_desc = ({
+	HIW"隆冬的"NOR,
+	HIW"寒冬的"NOR,
+	HIG"初春的"NOR,
+	HIG"早春二月的"NOR,
+	HIG"阳春三月的"NOR,
+	HIC"初夏的"NOR,
+	HIC"盛夏的"NOR,
+	HIR"仲夏的"NOR,
+	HIY"初秋的"NOR,
+	HIY"秋高气爽的"NOR,
+	YEL"深秋的"NOR,
+	WHT"初冬的"NOR,
+});
+
+mapping *read_table(string file);
+void init_day_phase();
+
+void create()
+{
+	string get_month, get_day;
+	mixed *local;
+	local = localtime(TIME_TICK1);
+	get_day = CHINESE_D->chinese_number(local[1]);
+	get_month = CHINESE_D->chinese_number(local[4]);
+	switch(get_month)
+	{
+		//spring weather
+		case "三":
+		case "四":
+		case "五":
+		     switch(random(2))
+		     {
+			case 0:
+			   day_phase = read_table("/adm/etc/nature/spring_rain");
+			   break;
+			case 1:
+			   day_phase = read_table("/adm/etc/nature/spring_sun");
+			   break;
+			case 2:
+			   day_phase = read_table("/adm/etc/nature/spring_wind");
+			   break;
+		     }
+		     break;
+		//summer weather
+		case "六":
+		case "七":
+		case "八":
+		     switch(random(2))
+		     {
+			case 0:
+			   day_phase = read_table("/adm/etc/nature/summer_rain");
+			   break;
+			case 1:
+			   day_phase = read_table("/adm/etc/nature/summer_sun");
+			   break;
+			case 2:
+			   day_phase = read_table("/adm/etc/nature/summer_wind");
+			   break;
+		     }
+		     break;
+		//autumn weather
+		case "九":
+		case "十":
+		case "十一":
+		     switch(random(2))
+		     {
+			case 0:
+			   day_phase = read_table("/adm/etc/nature/autumn_rain");
+			   break;
+			case 1:
+			   day_phase = read_table("/adm/etc/nature/autumn_sun");
+			   break;
+			case 2:
+			   day_phase = read_table("/adm/etc/nature/autumn_wind");
+			   break;
+		     }
+		     break;
+		//winter weather
+                  case "零":
+		case "一":
+		case "二":
+		     switch(random(2))
+		     {
+			case 0:
+			   day_phase = read_table("/adm/etc/nature/winter_rain");
+			   break;
+			case 1:
+			   day_phase = read_table("/adm/etc/nature/winter_sun");
+			   break;
+			case 2:
+			   day_phase = read_table("/adm/etc/nature/winter_wind");
+			   break;
+		     }
+		     break;
+		default:
+		     day_phase = read_table("/adm/etc/nature/day_phase");
+	}
+	switch(get_day)
+	{
+		case "一月一日":
+		     day_phase = read_table("/adm/etc/nature/spring");
+		     break;
+//		case "五月五日":
+//		case "七月七日":
+//		case "八月十五日":
+//		case "九月九日":
+//		case "十二月八日":
+	}
+//	day_phase = read_table("/adm/etc/nature/day_phase");
+	init_day_phase();
+}
+
+void init_day_phase()
+{
+	mixed *local;
+	int i, t;
+
+
+	local = localtime(TIME_TICK1);
+	t = local[2] * 60 + local[1];      
+
+
+	for( i=0; i < sizeof(day_phase); i++)
+		if( t >= day_phase[i]["length"] )
+			t -= (int)day_phase[i]["length"];
+		else
+			break;
+
+	current_day_phase = (i==0? sizeof(day_phase)-1: i - 1);
+	current_month = local[4];
+
+
+	remove_call_out("init_day_phase");
+	call_out("init_day_phase", 3600);
+
+
+	remove_call_out("update_day_phase");	
+
+
+
+	call_out("update_day_phase",
+	(int)day_phase[(current_day_phase+1) % sizeof(day_phase)]["length"] - t);
+}
+
+void update_day_phase()
+{
+	int rand;
+	object room;
+	string newroom,chn_date;
+	
+	remove_call_out("update_day_phase");
+
+	current_day_phase = (++current_day_phase) % sizeof(day_phase);
+	if( !undefinedp(day_phase[current_day_phase]["event_fun"]) )
+		call_other(this_object(), day_phase[current_day_phase]["event_fun"]);
+message("vision",day_phase[current_day_phase]["time_msg"] + "\n", users());
+	
+	//随机地点出现流星雨 add by Amis@XO2
+	rand=random(sizeof(box_object));
+	newroom=box_object[rand];
+	room=load_object(newroom);
+        if (room && random(5)==1 )//random的数量可以控制时间的长短 默认可以设置为24
+	{
+		room->set("定做/liuxing",1);
+		if (random(2)==1)
+		message("channel:chat",HIM"【传言】某人：听说"+room->query("short")+HIM"附近刚刚下了场流星雨！\n"NOR,users());
+		else
+		message("channel:chat",HIM"【传言】某人：听说有流星在"+room->query("short")+HIM"附近坠落！\n"NOR,users());
+		
+		message("vision",HIY"天空中似乎有流星划过……\n"NOR, room);
+		call_out("del", 1200, room);
+	}
+	
+	call_out("update_day_phase", day_phase[current_day_phase]["length"]);
+
+}
+
+void del(object room)
+{
+	message("vision","这里似乎已经看不到什么流星坠落过的痕迹了。\n", room);
+	room->delete("定做/liuxing");
+}
+
+/* string room_event_fun()
+{
+    return day_phase[current_day_phase]["event_fun"];
+}
+*/
+void event_midnight()
+{       
+	object *user=users();
+	string get_month, get_day;
+	mixed *local;
+	local = localtime(TIME_TICK1);
+	get_day = CHINESE_D->chinese_number(local[1]);
+	get_month = CHINESE_D->chinese_number(local[4]);
+	
+	switch(get_month)
+	{
+		//spring weather
+		case "三":
+		case "四":
+		case "五":
+		     switch(random(2))
+		     {
+			case 0:
+			   day_phase = read_table("/adm/etc/nature/spring_rain");
+			   break;
+			case 1:
+			   day_phase = read_table("/adm/etc/nature/spring_sun");
+			   break;
+			case 2:
+			   day_phase = read_table("/adm/etc/nature/spring_wind");
+			   break;
+		     }
+		     break;
+		//summer weather
+		case "六":
+		case "七":
+		case "八":
+		     switch(random(2))
+		     {
+			case 0:
+			   day_phase = read_table("/adm/etc/nature/summer_rain");
+			   break;
+			case 1:
+			   day_phase = read_table("/adm/etc/nature/summer_sun");
+			   break;
+			case 2:
+			   day_phase = read_table("/adm/etc/nature/summer_wind");
+			   break;
+		     }
+		     break;
+		//autumn weather
+		case "九":
+		case "十":
+		case "十一":
+		     switch(random(2))
+		     {
+			case 0:
+			   day_phase = read_table("/adm/etc/nature/autumn_rain");
+			   break;
+			case 1:
+			   day_phase = read_table("/adm/etc/nature/autumn_sun");
+			   break;
+			case 2:
+			   day_phase = read_table("/adm/etc/nature/autumn_wind");
+			   break;
+		     }
+		     break;
+		//winter weather
+                 case "零":
+		case "一":
+		case "二":
+		     switch(random(2))
+		     {
+			case 0:
+			   day_phase = read_table("/adm/etc/nature/winter_rain");
+			   break;
+			case 1:
+			   day_phase = read_table("/adm/etc/nature/winter_sun");
+			   break;
+			case 2:
+			   day_phase = read_table("/adm/etc/nature/winter_wind");
+			   break;
+		     }
+		     break;
+		default:
+		     day_phase = read_table("/adm/etc/nature/day_phase");
+	}
+	switch(get_day)
+	{
+		case "一月一日":
+		     day_phase = read_table("/adm/etc/nature/spring");
+		     break;
+
+}
+      
+}
+
+void event_sunrise()
+{
+
+}
+void event_noon()
+{
+	object *ob;
+	int i, con, con1, con2, con3;
+	string get_month,ill,msg;
+	mixed *local;
+	local = localtime(TIME_TICK1);
+	get_month = CHINESE_D->chinese_number(local[4]);
+	switch(get_month)
+	{
+		case "三":
+		case "四":
+		case "五":
+		     ill = "ill_kesou";
+		     msg = HIG + "忽然喉头一阵痕痒，你感觉似乎要咳嗽了。\n" + NOR;
+		     break;
+		case "六":
+		case "七":
+		case "八":
+		     ill = "ill_zhongshu";
+		     msg = HIG+"突然你胸臆之间一阵翻腾，你中暑了。\n" + NOR;
+		     break;
+		case "九":
+		case "十":
+		case "十一":
+		     ill = "ill_shanghan";
+		     msg = HIG+"陡的你打了个冷战，头昏沉沉的，你得伤寒病了。\n"+NOR;
+		     break;
+		case "十二":
+		case "一":
+		case "二":
+		     ill = "ill_dongshang";
+		     msg = HIG+"你肢体末端一阵僵直，看来你被冻伤了。\n"+NOR;
+		     break;
+	}
+	if(random(2))
+	{
+		ill = "ill_fashao";msg = HIG+"你偶感风寒，竟而发起烧来。\n"+NOR;
+	}
+	ob = users();
+	for(i=0; i<sizeof(ob); i++)
+	{
+		if( !environment(ob[i]) ) continue;
+		if( !environment(ob[i])->query("outdoors") ) continue;
+		if( ob[i]->query("age")==14 ) continue;
+		con1 = ob[i]->query("qi");
+		con2 = ob[i]->query("max_qi");
+		(int)con = con1/con2*50;//形成第一个生病判断条件
+		con3 = ob[i]->query("neili");
+		con2 = ob[i]->query("max_neili");
+		if( con2 == 0) con2 = 1;
+		(int)con1 = con3/con2*50;//形成第二个生病判断条件
+		if(random(con)+random(50)+random(con1)<25)
+		{
+			ob[i]->apply_condition(ill, 10);
+			tell_object(ob[i], msg);
+		}
+	}
+}
+string outdoor_room_description()
+{
+	return "    " + sprintf(
+		day_phase[current_day_phase]["desc_msg"],
+		month_desc[current_month]) + "。\n";
+}
+
+string game_time()
+{
+	return CHINESE_D->chinese_date(TIME_TICK1);
+}
+
+mapping *read_table(string file)
+{
+	string *line, *field, *format;
+	mapping *data;
+	int i, rn, fn;
+
+	line = explode(read_file(file), "\n");
+	data = ({});
+	for(i=0; i<sizeof(line); i++) {
+		if( line[i]=="" || line[i][0]=='#' ) continue;
+		if( !pointerp(field) ) {
+			field = explode( line[i], ":" );
+			continue;
+		}
+		if( !pointerp(format) ) {
+			format = explode( line[i], ":" );
+			continue;
+		}
+		break;
+	}
+
+	for( rn = 0, fn = 0; i<sizeof(line); i++) {
+		if( line[i]=="" || line[i][0]=='#' ) continue;
+		if( !fn ) data += ({ allocate_mapping(sizeof(field)) });
+		sscanf( line[i], format[fn], data[rn][field[fn]] );
+		fn = (++fn) % sizeof(field);
+		if( !fn ) ++rn;
+	}
+	return data;
+}
+
+int auto_shutdown(int flag)
+{
+    reclaim_objects();
+    if (172800-uptime()<=0 || flag){
+         message("vision", RED "当机 \n，您的档案已经自动存储了！\n" NOR, users());
+            users()->disable_player("数据备份......");
+             call_out("backup",1);
+    }
+}
+int backup()
+{
+    reset_eval_cost();
+    foreach (object userob in children(USER_OB) ){
+       if (!userob || !environment(userob)) continue;
+           userob->save();
+    }
+        shutdown(0);
+return 1;
+
+}
+/*
+void auto_save(object *user, int size, int i)
+{
+    int j;
+    
+    for(j=i;j<i+5;j++) {
+	if(j>=size) return;
+	if(!user[j]) continue;
+	if(user[j]->save())
+            message("vision", HIB""NOR,user[j]);
+    }
+    
+    call_out("auto_save", 10, user, size, i+5);
+   }
+*/
+mapping *query_day_phase() { return day_phase; }
+/*
+void haojie()
+{
+        message("chat",HIR"【江湖传闻】"MAG"江湖。。。一个充满神秘和危险的世界，太久的平静似乎预示着暴风雨来临的前夕，\n人在江湖，身不由己，总是要去面对一次一次的挑战和危机，谁又能知道明天是否依然是如此的安\n宁呢？\n\n"NOR,users());
+        message("chat",HIR"【江湖传闻】"MAG"江湖上最近出现一个神秘组织，妄想消灭各门派，一统江湖。\n"NOR,users());
+        F_DISASTER->disaster(0);
+}
+*/
+

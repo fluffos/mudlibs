@@ -1,0 +1,18 @@
+// SN:jQZ>ZGnKefDFOAc_
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;36m白狐[2;37;0m", ({"bai hu"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "白色的小狐狸
+它是风之耳语的坐骑。
+");
+        set_temp("owner_id", "muder");
+        set_temp("owner_name", "风之耳语");
+        ::setup();
+}
+

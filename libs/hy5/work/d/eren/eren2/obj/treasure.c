@@ -1,0 +1,18 @@
+#include <ansi.h>
+inherit ITEM; 
+void create()
+{
+    int i; 
+    string *names = ({
+        WHT"珍珠"NOR,RED"翡翠"NOR,MAG"玛瑙"NOR
+    });
+    i = random(3);
+    set_name( names[i], ({ "treasure stone" }));
+    set("unit", "个");
+    set_weight(200);
+    set("value",2000);
+    set("lore",1);
+    set("long", "奇珍异宝，价值连城，真令人眼红啊。\n");
+                                            
+   
+}      

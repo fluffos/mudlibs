@@ -1,0 +1,135 @@
+// riyue-lun.c 日月轮法
+//
+inherit SKILL;
+string type() { return "zhongji"; }
+mapping *action = ({
+([      "action" : "$N使一招「破竹势竹」，抡起手中的$w向$n的$l砸去  ",
+        "skill_name" : GRN "破竹势" NOR,
+        "force" : 120,
+        "lvl" : 0,
+        "damage_type" : "挫伤",
+]),
+([      "action" : "$N使一招「隐山谷势」，双肩一沉，舞动手中$w向$n的$l横扫  ",
+        "skill_name" : YEL "隐山谷势" NOR,
+        "force" : 160,
+        "lvl" : 22,
+        "damage_type" : "挫伤",
+]),
+([      "action" : "$N使一招「隐微势」，就地一滚，手中$w自下而上撩向$n的$l  ",
+        "skill_name" : MAG "隐微势" NOR,
+        "force" : 200,
+        "lvl" : 45,
+        "damage_type" : "挫伤",
+]),
+});
+
+mapping *action2 = ({
+([      "action" : "$N使一招「"+BLK+"擒纵势"+NOR+"」，身形起伏之际$w扫向$n的$l  ",
+        "skill_name" : BLK "擒纵势" NOR,
+        "force" : 520,
+        "dodge" : 200,
+        "parry" : 240,
+        "damage" : 215,
+        "lvl" : 120,
+        "damage_type" : "挫伤",
+]),
+([      "action" : "$N使一招「"+HIM+"圆满势"+NOR+"」，$w如离弦之箭般直捣$n的$l  ",
+        "skill_name" : HIM "圆满势" NOR,
+        "force" : 550,
+        "dodge" : 230,
+        "parry" : 340,
+        "damage" : 275,
+        "lvl" : 180,
+        "damage_type" : "挫伤",
+]),
+});
+
+mapping *action3 = ({
+([      "action" : HIB"$N跃入半空，使一招「"+HIC+"月重辉势"+HIB+"」，高举$w"NOR HIB"敲向$n的$l  "NOR,
+        "skill_name" : "月重辉势",
+     "force" : this_player()->query_skill("riyue-lun",1),
+     "dodge" : this_player()->query_skill("dodge",1)/2,
+     "damage" : this_player()->query("zjb_dj/dj")*180,
+     "parry" : this_player()->query_skill("parry",1),
+        "damage_type" : "挫伤",
+]),
+([      "action" : YEL"$N使一招「"+HIW+"捉月势"+NOR+YEL+"」，斜举手中$w"NOR HIW"击向$n的$l  "NOR,
+        "skill_name" : HIW "捉月势" NOR,
+     "force" : this_player()->query_skill("riyue-lun",1),
+     "dodge" : this_player()->query_skill("dodge",1)/2,
+     "damage" : this_player()->query("zjb_dj/dj")*180,
+     "parry" : this_player()->query_skill("parry",1),
+        "damage_type" : "挫伤",
+]),
+([      "action" : RED"$N提一口真气，使出「"+HIG+"显吉祥"+RED+"」，$w"NOR RED"扫向$n的头部  "NOR,
+        "skill_name" : RED "显吉祥" NOR,
+     "force" : this_player()->query_skill("riyue-lun",1),
+     "dodge" : this_player()->query_skill("dodge",1)/2,
+     "damage" : this_player()->query("zjb_dj/dj")*180,
+     "parry" : this_player()->query_skill("parry",1),
+        "damage_type" : "挫伤",
+]),
+});
+
+int valid_enable(string usage) { return usage == "hammer" || usage == "parry"; }
+int practice_level(){   return 160;  }
+int valid_learn(object me)
+{
+    if ((int)me->query("max_neili") < 100)
+        return notify_fail("你的内力不够。\n");
+    if ((int)me->query_skill("longxiang", 1) < 100)
+        return notify_fail("你的龙象般若功火候太浅。\n");
+    if (me->query_skill("hammer", 1) <=me->query_skill("riyue-lun", 1))
+        return notify_fail("你的基础不够，无法领会更高深的技巧。\n");
+        return 1;
+}
+mapping query_action(object me, object weapon)
+{
+        int i, level;
+          mapping a_action;
+        level   = (int) me->query_skill("riyue-lun",1);
+          me = this_player();
+        if (me->query_skill("riyue-lun",1)<401)  
+    return action[random(sizeof(action))];
+   
+        if (me->query_skill("riyue-lun",1)>400
+        && me->query_skill("riyue-lun",1)<1001)
+    return action2[random(sizeof(action2))];
+ 
+        if (me->query_skill("riyue-lun",1)>1000
+        && me->query("zjb_dj/dj")>=5)
+  return action3[random(sizeof(action3))];
+
+    if (me->query_skill("riyue-lun",1)>1000
+        && me->query("zjb_dj/dj")<5)
+ return action2[random(sizeof(action2))];
+}
+
+mixed hit_ob(object me, object victim, int damage_bonus)
+{
+      if( damage_bonus < 110 ) return 0;
+
+ // 第二等级的伤气
+        if ( me->query_skill("riyue-lun",1)>400
+         && me->query_skill("bahuang-gong",1)>300
+         && me->query_skill("riyue-lun",1)<1001
+&& (me->query("neili")*3) > victim->query("max_neili") ) {
+             victim->receive_damage("qi", (damage_bonus - 100) / 8 , me);
+return HIW "$N的"HIY"日月轮法"HIW"催动着$N手中的兵器,摧毁了"HIY"$n"HIW"的真元！！！！\n" NOR;
+}
+
+ //  第三等级的伤气
+        if( me->query_skill("riyue-lun",1)>1000
+       && me->query("zjb_dj/dj")>=5
+    && me->query_skill("bahuang-gong",1)>500
+&& (me->query("neili")*3) > victim->query("max_neili") ) {
+                victim->receive_damage("qi", (damage_bonus - 100) / 3 , me);
+return HIR "$N的"BLINK HIY"日月轮法"NOR HIR"催动着$N手中的兵器,摧毁了"BLINK HIY"$n"NOR HIR"的真元！！！！\n" NOR;
+  }      
+}
+
+string perform_action_file(string action)
+{
+    return __DIR__"riyue-lun/" + action;
+}
+

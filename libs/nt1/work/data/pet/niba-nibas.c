@@ -1,0 +1,18 @@
+// SN:3Ia2V6^9K?O>W8`S
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[37m神雕[2;37;0m", ({"nibas diao"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "雕就是雕，这都不知道啊
+它是泥巴的坐骑。
+");
+        set_temp("owner_id", "niba");
+        set_temp("owner_name", "泥巴");
+        ::setup();
+}
+

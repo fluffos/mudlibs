@@ -1,0 +1,18 @@
+// SN:D3RCTGek]iTf2XCC
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;33m恶狼狼[2;37;0m", ({"xslang lang"}));        
+        set("gender", "男性");                
+        set("unit", "条");
+        set("long", "恶狼
+它是欧阳血魔的坐骑。
+");
+        set_temp("owner_id", "xsxs");
+        set_temp("owner_name", "欧阳血魔");
+        ::setup();
+}
+

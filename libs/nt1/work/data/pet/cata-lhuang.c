@@ -1,0 +1,18 @@
+// SN:8YhLJ]?`L:6mkXa?
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("老黄牛[2;37;0m", ({"lhuang niu"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "   
+它是慕容意的坐骑。
+");
+        set_temp("owner_id", "cata");
+        set_temp("owner_name", "慕容意");
+        ::setup();
+}
+

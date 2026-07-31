@@ -1,0 +1,3 @@
+// songjing.c
+
+inherit SKILL;

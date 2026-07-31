@@ -1,0 +1,18 @@
+// SN:I:Q\UWADX9b\d4S[
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[37m天下逐鹿[2;37;0m", ({"tianxiazhu lu"}));        
+        set("gender", "女性");                
+        set("unit", "头");
+        set("long", "咳
+它是情觞的坐骑。
+");
+        set_temp("owner_id", "qingshang");
+        set_temp("owner_name", "情觞");
+        ::setup();
+}
+

@@ -1,0 +1,464 @@
+//original from 侠客行-海洋2
+//optimized by keinxin@sj2 for sj2
+//heart of keeping items
+//Optimized for new weapon and armor and treasure system by Keinxin@SJ2
+//Added new code for creat item by order
+//May.29,2003 Keinxin@SJ2
+#include <ansi.h>
+inherit NPC;
+int ask_me();
+
+#define MAX_pawn1 3
+inherit F_VENDOR;
+void create()
+{
+	set_name("欧冶子", ({ "ouye zi" }) );
+	set("gender", "男性" );
+	set("age", 89);
+	set("title", "玄天派掌门");
+	set("long",
+		"玄天派的掌门，精炼于制造各种上古的神兵利器。
+他年纪八十有余。\n");
+	set("combat_exp", 5000000);
+	set("attitude", "friendly");
+	set("per",30);
+        set("str",38);
+        set("int",35);
+        set("con",38);
+	set("dex",39);
+	set("no_arrest",1);
+	set("max_qi", 7000);
+        set("max_jing", 5500);
+        set("neili", 13600);
+        set("eff_jingli", 3000);
+        set("max_neili", 12500);
+        set("jiali", 100);
+        set_skill("sword",280);
+        set_skill("dodge",280);
+        set_skill("force", 200);
+        set_skill("blade",280);
+        set_skill("piaoyi-shenfa", 280);   
+        set_skill("tiyunzong", 280);
+        set_skill("shenghuo-lingfa", 280);
+        set_skill("jiuyang-shengong", 220);
+        set_skill("lieyan-dao", 200);
+        set_skill("liehuo-jian", 200);
+        set_skill("taiji-jian", 280);
+        set_skill("taiji-quan", 280);
+        set_skill("parry", 280);
+        set_skill("cuff", 280);
+        set_skill("qiankun-danuoyi",260);
+        set_skill("qishang-quan",280);
+        set_skill("literate", 150);
+        set_skill("medicine", 170);
+        set_skill("shenghuo-shengong",200);
+
+        map_skill("force", "jiuyang-shengong");
+        map_skill("cuff","qishang-quan");
+        map_skill("blade","shenghuo-lingfa");
+        map_skill("sword","taiji-jian");
+        map_skill("dodge", "tiyunzong");
+        map_skill("parry", "qiankun-danuoyi");
+        prepare_skill("cuff","qishang-quan");      
+        set("inquiry", ([
+                "开凿" : (: ask_me :),                
+        ]));	
+	
+	setup();
+
+       carry_object("/u/keinxin/dao-cloth")->wear();
+}
+void init()
+{
+	add_action("do_value", "value");
+	add_action("do_pawn1", "pawn");
+	add_action("do_redeem", "redeem");
+	add_action("do_show", "show");
+}
+
+int ask_me()
+{
+        command("heihei");
+        tell_object(this_player(), GRN "欧冶子在你耳边悄悄说："
+                    "你把要开凿凹槽的物品拿出来给我看看(show)！\n" NOR);
+        return 1;
+}
+
+string value_string(int value)
+{
+	if( value < 1 ) value = 1;
+	else if( value < 100 )
+		return chinese_number(value) + "文钱";
+	else
+		return chinese_number(value/100) + "两"
+			+ (value%100? "又" + chinese_number(value%100) + "文钱": "");
+}
+
+void pay_player(object who, int amount)
+
+{
+	object ob;
+	if( amount < 1 ) amount = 1;
+	if( amount/100000 ) {
+		ob = new("/clone/money/thousand-cash");
+		ob->set_amount(amount/100000);
+		ob->move(who);
+		amount %= 100000;
+	}	
+	if( amount/10000 ) {
+		ob = new(GOLD_OB);
+		ob->set_amount(amount/10000);
+		ob->move(who);
+		amount %= 10000;
+	}
+        if( amount/100 ) {
+                ob = new(SILVER_OB);
+                ob->set_amount(amount/100);
+                ob->move(who);
+                amount %= 100;
+        }
+	if( amount ) {
+		ob = new(COIN_OB);
+		ob->set_amount(amount);
+		ob->move(who);
+	}
+}
+
+int do_value(string arg)
+{
+	object ob;
+	int value;
+
+	if( !arg || !(ob = present(arg, this_player())) )
+		return notify_fail("你要拿什么估价？\n");
+		
+	if (ob->query("ke_w/special_ke")<1 && ob->query("ke_w/special_ke2")<1)
+                return notify_fail("这样东西欧冶子不感兴趣。\n");		
+
+	value = ob->query("value");
+	if( !value )
+        return notify_fail("这样东西并不值很多钱。\n");
+
+	if( !value || value < 30) printf("%s一文不值。\n", ob->query("name"));
+	else 
+		printf("%s价值%s。\n如果你要放在我这里(pawn)，可以拿到%s。\n",
+			ob->query("name"), value_string(value),
+			value_string(value * 75 / 100));
+
+	return 1;
+}
+
+int do_pawn1(string arg)
+{
+	object ob;
+	string term, *terms;
+	string data;
+	int value, pawn1_count, i;
+	int rvalue;
+	mapping pawn1;
+	object me;
+	me = this_player();
+	pawn1 = me->query("pawn1");
+	if( !arg || !(ob = present(arg, this_player())) )
+	{
+	write("你目前在欧冶子处保管的物品有：\n");
+	if( !mapp(pawn1) ||   !sizeof(pawn1) )
+		write("\t没有任何保管的物品。\n");
+	else {
+                        terms = keys(pawn1);
+                        for(i=0; i<sizeof(terms); i++)
+                                printf("%-3s：  %-15s  赎银：%s\n", terms[i], pawn1[terms[i]],
+			value_string(((int)me->query("vpawn1/"+terms[i]))));
+              }
+	return 1;
+	}
+	if( ob->query("money_id") )	return notify_fail("你要当「钱」？\n");
+        if( ob->query("equipped") || ob->query("no_drop") )     return notify_fail("你先解除装备再说！\n");
+        if( ob->query("no_pawn1") )     return notify_fail("这个东西当不了！\n");
+
+	if (ob->query("ke_w/special_ke")<1 && ob->query("ke_w/special_ke2")<1)
+                return notify_fail("这样东西欧冶子不感兴趣。\n");			                
+
+	value = ob->query("value");
+	if( !value )
+        return notify_fail("这样东西并不值很多钱。\n");
+
+	if( !value || value < 30)
+        return notify_fail("这样东西并不值很多钱。\n");
+
+	if( !(value/4) ) return notify_fail("这样东西并不值很多钱。\n");
+        if( mapp(pawn1) && sizeof(pawn1))
+                {
+                        terms = keys(pawn1);
+                        if(sizeof(terms) > MAX_pawn1)
+                        return notify_fail("你已典当太多物品了。\n");
+			for(i=0; i<sizeof(terms); i++)	
+			{
+			pawn1_count = i;
+                        if(!((int) me->query("vpawn1/" + sprintf("%d", i))))
+                         break;
+                        else pawn1_count = i+1;
+			}
+                }
+	else pawn1_count = 0;
+	term = ob->query("name");
+	data = base_name(ob)+ ".lpc";
+	me->set("pawn1/"+ sprintf("%d",pawn1_count),  term);
+	me->set("vpawn1/"+sprintf("%d",pawn1_count), ob->query("value"));
+	me->set("fpawn1/"+sprintf("%d",pawn1_count), data);
+	me->set("kew/long/"+ sprintf("%d",pawn1_count), ob->query("long"));
+	me->set("kew/id/"+ sprintf("%d",pawn1_count), ob->query("id"));
+	me->set("kew/wield_msg/"+ sprintf("%d",pawn1_count), ob->query("wield_msg"));
+	me->set("kew/unwield_msg/"+ sprintf("%d",pawn1_count), ob->query("unwield_msg"));
+	me->set("kew/ke_w/"+ sprintf("%d",pawn1_count), ob->query("ke_w"));
+	me->set("kew/level/"+ sprintf("%d",pawn1_count), ob->query("level"));
+	me->set("kew/weapon_prop/"+ sprintf("%d",pawn1_count), ob->query("weapon_prop"));
+	me->set("kew/armor_prop/"+ sprintf("%d",pawn1_count), ob->query("armor_prop"));
+	me->save();
+	message_vision("$N把身上的" + ob->query("name") + "拿出来典当了"
+		+ value_string(value * 75 / 100) + "。\n", this_player());
+
+	pay_player(this_player(), value * 75 / 100 );
+	destruct(ob);
+
+	return 1;
+}
+
+int do_sell(string arg)
+{
+	object ob;
+	int value;
+
+	if( !arg || !(ob = present(arg, this_player())) )
+		return notify_fail("你要卖断什麽物品？\n");
+
+	if( ob->query("money_id") )	return notify_fail("你要卖「钱」？\n");
+	value = ob->query("value");
+	if( !value ) return notify_fail("这样东西不值钱。\n");
+if( ob->query("no_pawn1") )     return notify_fail("这个东西当不了！\n");
+
+	message_vision("$N把身上的" + ob->query("name") + "卖掉。\n",
+		this_player());
+
+	pay_player(this_player(), value  * 80 / 100);
+	destruct(ob);
+
+	return 1;
+}
+void pay_him(object who, int amount)
+
+{
+	object ob;
+        object cash, tencash, gold, silver, coin;
+        tencash = present("tenthousand-cash_money", who);
+        cash = present("thousand-cash_money", who);
+        gold = present("gold_money",who);
+        silver = present("silver_money",who);
+        coin = present("coin_money",who);
+	if(tencash) destruct(tencash);
+        if(cash) destruct(cash);
+        if(gold) destruct(gold);
+        if(silver) destruct(silver);
+        if(coin) destruct(coin);
+
+
+	if( amount < 1 ) amount = 1;
+	if( amount/100000 ) {
+		ob = new("/clone/money/thousand-cash");
+		ob->set_amount(amount/100000);
+		ob->move(who);
+		amount %= 100000;
+	}	
+	if( amount/10000 ) {
+		ob = new(GOLD_OB);
+		ob->set_amount(amount/10000);
+		ob->move(who);
+		amount %= 10000;
+	}
+        if( amount/100 ) {
+                ob = new(SILVER_OB);
+                ob->set_amount(amount/100);
+                ob->move(who);
+                amount %= 100;
+        }
+	if( amount ) {
+		ob = new(COIN_OB);
+		ob->set_amount(amount);
+		ob->move(who);
+	}
+}
+
+int affordable(object me, int amount)
+{
+        int total;
+        object cash, tencash, gold, silver, coin;
+
+        tencash = present("tenthousand-cash_money", me);
+        cash = present("thousand-cash_money", me);
+        gold = present("gold_money",me);
+        silver = present("silver_money",me);
+        coin = present("coin_money",me);
+
+        total = 0;
+        if( tencash) total += tencash->value();
+        if( cash) total += cash->value();
+        if( gold ) total += gold->value();
+        if( silver ) total += silver->value();
+        if( coin ) total += coin->value();
+
+        if( total < amount ) return 0;
+
+        return total;
+}
+int do_redeem(string arg)
+{
+        int num;
+        int amount;
+        string ob_file;
+        object ob;
+        object me;
+        int afford;
+        if( !arg || sscanf(arg, "%d", num)!=1 )
+                return notify_fail("指令格式：redeem <物品标号>\n");
+        me = this_player();
+        amount = (int) me->query("vpawn1/" + sprintf("%d", num));
+        if( !amount )
+                return notify_fail("有这个物品标号吗？\n");
+        if( afford = affordable(me, amount) ) {
+                pay_him(me, afford-amount);
+                ob_file = me->query("fpawn1/"+sprintf("%d",num));
+                ob = new(ob_file);
+                ob->set("name",me->query("pawn1/"+num));
+                ob->set("value",me->query("vpawn1/"+num));
+                ob->set("long",me->query("kew/long/"+num));
+                ob->set("id",me->query("kew/id/"+num));
+                ob->set("wield_msg",me->query("kew/wield_msg/"+num));
+                ob->set("unwield_msg",me->query("kew/unwield_msg/"+num));
+                ob->set("ke_w",me->query("kew/ke_w/"+num));
+                ob->set("level",me->query("kew/level/"+num));
+                ob->set("weapon_prop",me->query("kew/weapon_prop/"+num));
+                ob->set("armor_prop",me->query("kew/armor_prop/"+num));
+            
+                ob->move(me);
+                me->delete("pawn1/"+sprintf("%d",num));
+                me->delete("vpawn1/"+sprintf("%d",num));
+                me->delete("fpawn1/"+sprintf("%d",num));
+                me->delete("kew/long/"+sprintf("%d",num));
+                me->delete("kew/id/"+sprintf("%d",num));
+                me->delete("kew/wield_msg/"+sprintf("%d",num));
+                me->delete("kew/unwield_msg/"+sprintf("%d",num));
+                me->delete("kew/ke_w/"+sprintf("%d",num));
+                me->delete("kew/level/"+sprintf("%d",num));
+                me->delete("kew/weapon_prop/"+sprintf("%d",num));
+                me->delete("kew/armor_prop/"+sprintf("%d",num));
+		me->save();
+                message_vision("$N从欧冶子那里赎回了$n。\n", me, ob);
+                return 1;
+        } else
+                return notify_fail("你的钱不够。\n");
+
+}
+
+int do_show(string arg)
+{
+        object money;
+        object ob;
+        object me;
+	string type;
+
+        if (! arg)
+                return notify_fail("你要亮出什么东西？\n");
+
+        me = this_player();
+        if (! objectp(ob = present(arg, me)))
+                return notify_fail("你身上没有这种东西。\n");
+
+        if (ob->query("equipped"))
+                return notify_fail("你先解除" + ob->name() + "的装备再说！\n");
+
+        message_vision("$n拿出一" + ob->query("unit") + ob->name() +
+                       "对$N说：“拜托拜托...”\n",
+                       this_object(), me);
+
+        if (ob->query("money_id"))
+        {
+                command("say 你亮出钱干什么？那就给我好了。");
+                return 1;
+        }
+        
+
+        if( ob->is_corpse() ){ 
+		me->start_busy(5);
+		message_vision("$N说道，我把你变成这样东西吧！说着用手对你一指\n", this_object());
+		me->unconcious();
+		return 1;
+	}
+        
+        if ( ob->query("imbued")>0) {
+                command("consider");
+                command("say 这...这是韦兰铁匠铸造的兵器吧，我不稀罕。");
+                return 1;
+        }
+        
+        if(ob->query("weapon_prop/damage")<10 && ob->query("armor_prop/armor")<10){
+                        command("shake");
+                command("say 这个不能开凿凹槽！");
+                return 1;
+        }
+        
+        if ( ob->query("ke_w/socket")>2) {
+                command("consider");
+                command("say 这...这..."+ ob->name() +"上面已经有"+chinese_number(ob->query("ke_w/socket"))+"个凹槽了。");
+                return 1;
+        }
+
+        if (! me->query_temp("paid/欧冶子", 1))
+        {
+                command("consider");
+                command("say 这...要开光必须耗费大量心力……"
+                        "你总要意思意思吧。至少一千两黄金。");
+                return 1;
+        }
+
+        ob->add("ke_w/socket",1);
+        if(ob->query("weapon_prop/damage")>0)
+        ob->set("ke_w/special_ke",1);
+        if(ob->query("armor_prop/armor")>0)
+        ob->set("ke_w/special_ke2",1);
+        message("vision", HIM + name() + "拿出一把凿子对着" + ob->name() + HIM "敲打起来。\n\n"
+                                HIY"只见" + ob->name() + HIY "蹦出无数火星\n\n"
+                                HIC"慢慢的" + ob->name() + HIC "出现了一个凹槽的轮廓\n\n"NOR, environment());
+        command("say 行了，行了！现在"+ ob->name() +"已经有"+chinese_number(ob->query("ke_w/socket"))+"个凹槽了。");
+        me->delete_temp("paid/欧冶子");
+       
+        return 1;
+}
+
+int accept_object(object who, object ob)
+{
+        if (! ob->query("money_id"))
+        {
+                command("say 这玩艺我可没啥兴趣！");
+                return 0;
+        }
+
+        if (ob->value() < 10000000)
+        {
+                command("shake " + who->query("id"));
+                command("say 这么点怎么够？");
+                return 0;
+        }
+
+        command("say 唉！看你也算有点心意，我就替你开凿一次吧！");
+        who->set_temp("paid/欧冶子", 1);
+//      destruct(ob);
+        return 1;
+}
+
+void fight_ob(object ob)
+{
+        ::fight_ob(ob);
+        message_vision(HIW"$N冷笑一声，道：“这年头，什么人都有。”说完伸手一指$n。\n"NOR"",
+                       this_object(), ob);
+        ob->unconcious();
+}

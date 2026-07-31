@@ -1,0 +1,21 @@
+//Cracked by Roath
+//fear 2002 1 31
+// /d/lingshedao/obj/cooked-fish.c
+#include <ansi.h>
+inherit ITEM;
+inherit F_FOOD;
+
+void create()
+{
+        set_name(YEL"麒麟石斑"NOR, ({"qilin shiban", "shiban"}));
+        set_weight(1500);
+        if (clonep())
+                set_default_object(__FILE__);
+        else {
+                set("long", "此菜外形美观，汤汁浓厚，鱼肉味道鲜美。\n");
+                set("unit", "碟");
+                set("value", 300);
+                set("food_remaining", 5);
+                set("food_supply", 76);
+        }
+}

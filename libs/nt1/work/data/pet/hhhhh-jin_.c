@@ -1,0 +1,18 @@
+// SN:CWZWjZN@]5oMg=>C
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;33m金雕[2;37;0m", ({"jin_ diao"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "一只大鸟
+它是二锅头的坐骑。
+");
+        set_temp("owner_id", "hhhhh");
+        set_temp("owner_name", "二锅头");
+        ::setup();
+}
+

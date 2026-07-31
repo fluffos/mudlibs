@@ -1,0 +1,16 @@
+// by jjyy
+
+inherit ROOM;
+
+void create()
+{
+	set("short", "樱花一街");
+	set("long", "这是一条宽阔的青石街道。");
+	set("outdoors", "hell");
+	set("exits", ([
+		"east" : __DIR__"wulinyi8",
+		"west" : __DIR__"wulinyi10",
+	]));
+	//set("price_build", 1000);
+	setup();
+}

@@ -1,0 +1,3 @@
+// xinfa.c
+
+inherit SKILL;

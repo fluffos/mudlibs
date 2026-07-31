@@ -1,0 +1,19 @@
+// magic
+
+inherit SKILL;
+
+void create() { seteuid(getuid()); }
+
+string type() { return "knowledge"; }
+
+int practice_skill(object me)
+{       
+        return notify_fail("符咒使用只能靠领悟(lingwu)来提高。\n");
+}
+int valid_learn(object me)
+{
+        return notify_fail("符咒使用只能靠领悟(lingwu)来提高。\n");
+}
+
+
+

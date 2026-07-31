@@ -1,0 +1,219 @@
+// troop.c
+
+#include <ansi.h>
+#include <dbase.h>
+
+mapping troops;
+mapping trained;
+mapping troop_map;
+
+mapping query_troops() { return troops; }
+mapping query_trained() { return trained; }
+
+void set_troop(string troop, int val)
+{
+	if( !find_object(TROOP_D(troop))
+	&&	file_size(TROOP_D(troop)+".lpc") < 0 )
+		error("F_TROOP: No such troop (" + troop + ")\n");
+
+	if( !mapp(troops) ) troops = ([ troop: val ]);
+	else troops[troop] = val;
+}
+
+int delete_troop(string troop)
+{
+	if( mapp(troops) ) {
+		map_delete(troops, troop);
+		if( mapp(trained) ) {
+			map_delete(trained, troop);
+			return undefinedp(trained[troop]);
+		}
+		return undefinedp(troops[troop]);
+	}
+	return 0;
+}
+
+// This function 'map' a troop <troop> to another troop <mapped_to>.
+// If 2nd argument not given, cancel the mapped troop <troop>.
+varargs void map_troop(string troop, string mapped_to)
+{
+	if( !mapped_to && mapp(troop_map) ) {
+		map_delete(troop_map, troop);
+		return;
+	}
+
+	if( !find_object(TROOP_D(troop))
+	&&	file_size(TROOP_D(troop)+".lpc") < 0 )
+		error("F_TROOP: No such troop (" + troop + ")\n");
+
+	if( !mapp(troops) || undefinedp(troops[mapped_to]) )
+		return;
+		
+	if( !mapp(troop_map) ) troop_map = ([ troop: mapped_to ]);
+	else troop_map[troop] = mapped_to;
+}
+
+string query_troop_mapped(string troop)
+{
+	if( mapp(troop_map) && !undefinedp(troop_map[troop]) )
+		return troop_map[troop];
+	return 0;
+}
+varargs int query_troop(string troop, int raw)
+{
+	if( !raw ) {
+		int s , level;
+		s = query_temp("apply/" + troop);
+		if( mapp(troops) ) {
+			s += troops[troop] / 2;
+			if( mapp(troop_map) )
+			{
+		 if( troop_map[troop])
+		 level = (int) (TROOP_D(troop_map[troop])->effective_level())  ;
+		 else
+		 level = 0;
+				s += troops[troop_map[troop]] * level / 10 ;
+			}
+		}
+		return s;
+	}
+	if( mapp(troops) && !undefinedp(troops[troop]) ) return troops[troop];
+	return 0;
+}
+
+mapping query_troop_map()
+{
+	return troop_map;
+}
+
+int troop_death_penalty()
+{
+	string *sk;
+	int i,j;
+	if( !mapp(troops) ) return 0;
+	i = 0;
+	sk = keys(troops);
+        for(j = 0; j<sizeof(sk); j++) 
+	if( troops[sk[j]] > troops[sk[i]]) i=j;
+	if( !mapp(trained) )
+		{
+			troops[sk[i]]--;
+			if( troops[sk[i]]<0 ) map_delete(troops, sk[i]);
+		}
+	else
+		{
+			if( (int)trained[sk[i]] > (troops[sk[i]]+1) * (troops[sk[i]]+1) / 2 )
+				map_delete(trained, sk[i]);
+			else {
+				troops[sk[i]]--;
+				if( troops[sk[i]]<0 ) map_delete(troops, sk[i]);
+			}
+		}
+	troop_map = 0;
+	return 1;
+}
+varargs int query_troop_eff_lvl(string troop)
+{
+        int level;
+if(mapp(troops)){
+level = (int) (TROOP_D(troop)->effective_level())  ;
+// for baisc troops where effecitive_level() undefined
+if( level == 0) level = 5;
+return troops[troop] * level /10;
+}
+return 0;
+}
+
+varargs void improve_troop(string troop, int amount, int weak_mode)
+{
+	int spi;
+	if( !find_object(TROOP_D(troop))
+	&&	file_size(TROOP_D(troop)+".lpc") < 0 )
+		error("F_TROOP: No such troop (" + troop + ")\n");
+
+	if( !weak_mode || !userp(this_object()) ) {
+		if( !mapp(troops) ) troops = ([]);
+//		if( undefinedp(troops[troop]) ) troops[troop] = 0;
+	}
+
+	// Give learning penalty to those learning too much troops.
+	spi = this_object()->query_spi();
+	if( sizeof(trained) > spi )
+		amount -= sizeof(trained) - spi;
+
+	if( amount <= 0 ) amount = 1;
+
+	if( !mapp(trained) ) trained = ([ troop : amount ]);
+	else (int)trained[troop] += amount;
+
+	if( (!weak_mode || !userp(this_object()))
+	&&	trained[troop] > (troops[troop] + 1) * (troops[troop] + 1) ) {
+		troops[troop]= troops[troop]+1;
+
+		trained[troop] = 0;
+		tell_object(this_object(), HIC "你的「" + to_chinese(troop) + "」法力增加了！\n" NOR);
+		TROOP_D(troop)->troop_improved(this_object());
+	}
+}
+
+varargs void research_troop(string troop, int amount)
+{
+        if( !find_object(TROOP_D(troop))
+	&&	file_size(TROOP_D(troop)+".lpc") < 0 )
+		error("F_TROOP: No such troop (" + troop + ")\n");
+
+	if( !userp(this_object()) ) 
+	{
+                if( !mapp(troops) ) troops = ([]);
+		if( undefinedp(troops[troop]) ) troops[troop] = 0;
+	}
+
+	// Give learning penalty to those learning too much troops.
+//	spi = this_object()->query_spi();
+//	if( sizeof(trained) > spi )
+//		amount -= sizeof(trained) - spi;
+
+//	if( amount <= 0 ) amount = 1;
+
+	if( !mapp(trained) ) trained = ([ troop : amount ]);
+	else (int)trained[troop] += amount;
+        
+	if( (!userp(this_object()))
+	&&	trained[troop] > (troops[troop] + 1) * (troops[troop] + 1) ) {
+		troops[troop]= troops[troop]+1;
+
+		trained[troop] = 0;
+		tell_object(this_object(), HIC "你的「" + to_chinese(troop) + "」法力增加了！\n" NOR);
+		TROOP_D(troop)->troop_improved(this_object());
+	}
+}
+
+varargs void decrease_troop(string troop, int amount, int weak_mode)
+{
+        int spi;
+        if( !find_object(TROOP_D(troop))
+        &&      file_size(TROOP_D(troop)+".lpc") < 0 )
+                error("F_TROOP: No such troop (" + troop + ")\n");
+
+        if( !weak_mode || !userp(this_object()) ) {
+                if( !mapp(troops) ) troops = ([]);
+        }
+	if( weak_mode )
+	{
+		if( mapp(trained) ) {
+		
+			if (((int)trained[troop] - amount ) > 0 )
+			 (int)trained[troop] -= amount;
+				else trained[troop] = 0;
+			}
+	}
+	else
+	{
+                troops[troop]= troops[troop]-1;
+                trained[troop] = 0;
+		if( troops[troop] <= 0 ) troops[troop] = 0;
+                tell_object(this_object(), HIC "你的「" + to_chinese(troop) + "」法力降低了！\n" NOR);
+                TROOP_D(troop)->troop_decreased(this_object());
+	}
+}
+

@@ -1,0 +1,18 @@
+// SN:B\caf1_Ccde`aJD[
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("中文名羊[2;37;0m", ({"ppb yang"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "宠物羊
+它是胡工二的坐骑。
+");
+        set_temp("owner_id", "ppmob");
+        set_temp("owner_name", "胡工二");
+        ::setup();
+}
+

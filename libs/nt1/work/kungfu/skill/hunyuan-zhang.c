@@ -1,0 +1,98 @@
+// Updated by sinb
+// hunyuan-zhang.c 混元掌
+
+#include <ansi.h>
+inherit SKILL;
+
+mapping *action_msg = ({
+        "$N双掌内拱，续而向外疾推，一式「白云出岫」攻向$n的胸口",
+        "$N左掌虚抬，侧身转向，右掌斜穿而出，使出「白虹贯日」疾切$n的咽喉",
+        "$N使一式「云断秦岭」，转身抬肘，顶向$n的下腭",
+        "$N右掌抓向$n的$l，左拳凝劲后发，一式「青松翠翠」，企图混淆$n的攻势",
+        "$N使出「天绅倒悬」，左腿后撑弹身而上，右拳护腰左拳自上而下猛然捶向$n$l",
+        "$N纵身跃起，一式「无边落木」，双掌幻出无数掌影，推向$n的周身各处",
+        "$N左腿微曲右腿弓步，左拳护腰右掌下按，一招「高山流水」，按向$n的$l",
+        "$N使一式「金玉满堂」，左掌护腰右掌直拍而出，劲气弥漫地挥向$n的$l",
+        "$N两掌上下护胸，一式「风伴流云」，骤然身如流云化掌为剑，劈向$n$l",
+        "$N一式「湮雨缥渺」，以身化剑，劲剧无伦地冲近$n，左掌护额，右掌直击$n的$l",
+});
+
+int valid_enable(string usage) { return usage == "strike" ||  usage == "parry"; }
+
+int valid_combine(string combo) { return combo == "poyu-quan"; }
+
+
+int valid_learn(object me)
+{
+        if (me->query_temp("weapon") || me->query_temp("secondary_weapon"))
+                return notify_fail("练混元掌必须空手。\n");
+        if ((int)me->query_skill("zixia-shengong", 1) < 20)
+                return notify_fail("你的紫霞神功火候不够，无法学混元掌。\n");
+        if ((int)me->query("max_neili") < 100)
+                return notify_fail("你的内力太弱，无法练混元掌。\n");
+        return 1;
+}
+
+mapping query_action(object me, object weapon)
+{
+        return ([
+                "action": action_msg[random(sizeof(action_msg))], 
+                "force": 320 + random(60), 
+                "attack": 70 + random(10), 
+                "dodge" : 70 + random(10), 
+                "parry" : 70 + random(10), 
+                "damage_type" : random(2)?"瘀伤":"内伤", 
+        ]); 
+}
+
+int practice_skill(object me)
+{
+        if ((int)me->query("qi") < 80)
+                return notify_fail("你的体力太低了。\n");
+        if ((int)me->query("neili") < 80)
+                return notify_fail("你的内力不够练混元掌。\n");
+        me->receive_damage("qi", 70);
+        me->add("neili", -70);
+        return 1;
+}
+
+mixed hit_ob(object me, object victim, int damage_bonus)
+{
+        int lvl;
+        int flvl;
+
+        lvl  = me->query_skill("hunyuan-zhang", 1);
+        flvl = me->query("jiali");
+        if (lvl < 80 || flvl < 10 || ! damage_bonus)
+                return;
+
+        if (flvl * 2 + random(lvl) > victim->query_skill("force") &&
+            victim->affect_by("hyz_damage",
+                              ([ "level" : flvl + random(flvl),
+                                 "id"    : me->query("id"),
+                                 "duration" : lvl / 100 + random(lvl / 10) ])))
+        {
+                return HIR "$n" HIR "只觉得一股火热的内力袭入内腑，混身燥热无比！\n" NOR;
+        }
+}
+
+string perform_action_file(string action)
+{
+        return __DIR__"hunyuan-zhang/" + action;
+}
+
+void skill_improved(object me)
+{
+        int i =3 +random(8);
+        if (me->query_skill("hunyuan-zhang", 1) > 200
+        &&  me->query("hunyuan/gift") + 200 < me->query_skill("hunyuan-zhang", 1))
+        {
+                if (! me->query("hunyuan/gift"))
+                        me->set("hunyuan/gift", me->query_skill("hunyuan-zhang", 1) - 200);
+                else 
+                        me->add("hunyuan/gift", 1);
+                me->add("max_neili", i); 
+                tell_object(me, HIW "\n随着混元掌的提高，你感觉自己内力增加了" + chinese_number(i) + "点。\n" NOR);
+        }
+}
+

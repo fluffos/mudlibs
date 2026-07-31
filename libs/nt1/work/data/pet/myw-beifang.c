@@ -1,0 +1,18 @@
+// SN:S9KN[I_b6b=]I>3h
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m北方的狼[2;37;0m", ({"beifang lang"}));        
+        set("gender", "男性");                
+        set("unit", "条");
+        set("long", "孤单的走在旷野中
+它是我来也的坐骑。
+");
+        set_temp("owner_id", "myw");
+        set_temp("owner_name", "我来也");
+        ::setup();
+}
+

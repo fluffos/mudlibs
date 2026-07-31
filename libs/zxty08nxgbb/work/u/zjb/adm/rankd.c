@@ -1,0 +1,640 @@
+// rankd.c
+// 1996-02-15 dts ranking related to "shen"
+// 2003-07-02 Updated by zjb@TY 
+#pragma save_binary
+
+string query_rank(object ob)
+{
+        mapping fam;
+        int dj;
+
+        dj   = ob->query("zjb_dj/dj");
+        fam  = ob->query("family/family_name");
+
+        if(ob->query("ty_rank"))
+                return NOR"【"HIW+ob->query("ty_rank")+NOR"】"; 
+
+        if(wizardp(ob)&&ob->query("env/own_rank"))
+             return NOR"【"HIW+ob->query("ty_rank")+NOR"】"; 
+
+        if( ob->is_ghost() ) 
+                return NOR "【"HIB"孤魂野鬼"NOR"】";
+
+                switch(wizhood(ob)) {
+                case "(boss)":                 
+                         return NOR "【"HIY"天涯明星"NOR"】" ;
+                case "(admin)":                 
+                        return NOR "【"HIR"天界总管"NOR"】" ;
+                case "(arch)":                  
+                        return NOR "【"HIY"八部天神"NOR"】" ;               
+                case "(wizard)":                
+                        return NOR "【"HIC"护法尊者"NOR"】" ;
+                case "(apprentice)":            
+                        return NOR "【"HIG"天宫侍卫"NOR"】" ;  
+                case "(immortal)":              
+                        return NOR "【"HIB"逍遥散仙"NOR"】" ;
+                default: break;
+                }
+
+        if (dj > 150)
+        {
+                if (ob->query("gender") == "无性")
+                        return CYN "【 九千岁 】" NOR;
+
+                switch (fam)
+                {
+                case "少林派":
+                        return HIW "【 圣  僧 】" NOR;
+                case "武当派":
+                        return HIW "【 天  尊 】" NOR;
+                case "峨嵋派":
+                        return HIW "【 圣  尼 】" NOR;
+                case "逍遥派":
+                        return HIW "【 逸  仙 】" NOR;
+                case "灵鹫宫":
+                        return HIW "【天山姥姥】" NOR;
+                case "星宿派":
+                        return HIW "【星宿老怪】" NOR;
+                case "古墓派":
+                        return HIW "【 神  侠 】" NOR;
+                case "全真教":
+                        return HIW "【 中神通 】" NOR;
+                case "昆仑派":
+                        return HIW "【 三  圣 】" NOR;
+                case "桃花岛":
+                        return HIW "【 东  邪 】" NOR;
+                case "雪山寺":
+                        return HIW "【不动明王】" NOR;
+                case "丐帮":
+                        return HIW "【 北  丐 】" NOR;
+                case "天地会":
+                        return HIW "【 英  雄 】" NOR;
+                case "神龙教":
+                        return HIW "【神龙教主】" NOR;
+                case "五毒教":
+                        return HIW "【毒手残心】" NOR;
+                case "明教":
+                        return HIW "【光明圣使】" NOR;
+                case "梅庄":
+                        return HIW "【 庄  主 】" NOR;
+                case "天龙寺":
+                        return HIW "【 圣  僧 】" NOR;
+                case "华山派":
+                        return HIW "【 剑  圣 】" NOR;
+                case "日月神教":
+                        return HIW "【日月圣尊】" NOR;
+                case "慕容世家":
+                        return HIW "【 大燕皇 】" NOR;
+                case "大理段家":
+                        return HIW "【 南  帝 】" NOR;
+                default:
+                        return HIW "【金榜高手】" NOR;
+                }
+        } else
+        if (dj > 100)
+        {
+                if (ob->query("gender") == "无性")
+                        return HIY "【大内高手】" NOR;
+
+                switch (fam)
+                {
+                case "少林派":
+                        return HIY "【 神  僧 】" NOR;
+                case "武当派":
+                        return HIY "【 真  人 】" NOR;
+                case "峨嵋派":
+                        return HIY "【 神  尼 】" NOR;
+                case "逍遥派":
+                        return HIY "【 护  法 】" NOR;
+                case "灵鹫宫":
+                        return HIY "【灵鹫左使】" NOR;
+                case "星宿派":
+                        return HIY "【 毒圣手 】" NOR;
+                case "古墓派":
+                        return HIY "【 隐  侠 】" NOR;
+                case "全真教":
+                        return HIY "【 真  人 】" NOR;
+                case "昆仑派":
+                        return HIY "【 武  狂 】" NOR;
+                case "桃花岛":
+                        return HIY "【 半  邪 】" NOR;
+                case "雪山寺":
+                        return HIY "【 法  王 】" NOR;
+                case "丐帮":
+                        return HIY "【 神  丐 】" NOR;
+                case "天地会":
+                        return HIY "【 英  豪 】" NOR;
+                case "神龙教":
+                        return HIY "【神龙无敌】" NOR;
+                case "五毒教":
+                        return HIY "【 毒  王 】" NOR;
+                case "明教":
+                        return HIY "【 法  王 】" NOR;
+                case "梅庄":
+                        return HIY "【 乐  神 】" NOR;
+                case "天龙寺":
+                        return HIY "【 神  僧 】" NOR;
+                case "华山派":
+                        return HIY "【 剑  豪 】" NOR;
+                case "日月神教":
+                        return HIY "【圣教长老】" NOR;
+                case "慕容世家":
+                        return HIY "【 皇  尊 】" NOR;
+                default:
+                        return HIY "【红榜高手】" NOR;
+                }
+        } else
+        if (dj > 70)
+        {
+                if (ob->query("gender") == "无性")
+                        return HIR "【东厂万户】" NOR;
+
+                switch (fam)
+                {
+                case "少林派":
+                        return HIR "【 长  老 】" NOR;
+                case "武当派":
+                        return HIR "【 天  师 】" NOR;
+                case "峨嵋派":
+                        return HIR "【 德  尼 】" NOR;
+                case "逍遥派":
+                        return HIR "【 逸  士 】" NOR;
+                case "灵鹫宫":
+                        return HIR "【灵鹫右使】" NOR;
+                case "星宿派":
+                        return HIR "【星宿毒师】" NOR;
+                case "古墓派":
+                        return HIR "【 游  侠 】" NOR;
+                case "全真教":
+                        return HIR "【 天  师 】" NOR;
+                case "昆仑派":
+                        return HIR "【 棋  王 】" NOR;
+                case "桃花岛":
+                        return HIR "【 药  王 】" NOR;
+                case "雪山寺":
+                        return HIR "【 国  师 】" NOR;
+                case "丐帮":
+                        return HIR "【 铁  丐 】" NOR;
+                case "天地会":
+                        return HIR "【 豪  杰 】" NOR;
+                case "神龙教":
+                        return HIR "【 白龙使 】" NOR;
+                case "五毒教":
+                        return HIR "【 毒  仆 】" NOR;
+                case "明教":
+                        return HIR "【 散  人 】" NOR;
+                case "梅庄":
+                        return HIR "【 画  圣 】" NOR;
+                case "华山派":
+                        return HIR "【 剑  侠 】" NOR;
+                case "日月神教":
+                        return HIR "【 护  法 】" NOR;
+                case "慕容世家":
+                        return HIR "【 家  臣 】" NOR;
+                default:
+                        return HIR "【黑榜高手】" NOR;
+                }
+        } else
+        if (dj > 40)
+        {
+                if (ob->query("gender") == "无性")
+                        return HIG "【东厂千户】" NOR;
+
+                switch (fam)
+                {
+                case "少林派":
+                        return HIG "【 罗  汉 】" NOR;
+                case "武当派":
+                        return HIG "【 道  长 】" NOR;
+                case "峨嵋派":
+                        return HIG "【 贤  尼 】" NOR;
+                case "逍遥派":
+                        return HIG "【 隐  士 】" NOR;
+                case "灵鹫宫":
+                        return HIG "【 洞  主 】" NOR;
+                case "星宿派":
+                        return HIG "【星宿护卫】" NOR;
+                case "古墓派":
+                        return HIG "【 少  侠 】" NOR;
+                case "全真教":
+                        return HIG "【 道  长 】" NOR;
+                case "昆仑派":
+                        return HIG "【 琴  痴 】" NOR;
+                case "桃花岛":
+                        return HIG "【 卜算子 】" NOR;
+                case "雪山寺":
+                        return HIG "【僧兵头领】" NOR;
+                case "丐帮":
+                        return HIG "【 侠  丐 】" NOR;
+                case "天地会":
+                        return HIG "【 大  侠 】" NOR;
+                case "神龙教":
+                        return HIG "【 青龙使 】" NOR;
+                case "五毒教":
+                        return HIG "【 教  徒 】" NOR;
+                case "明教":
+                        return HIG "【 旗  主 】" NOR;
+                case "梅庄":
+                        return HIG "【 总  管 】" NOR;
+                case "华山派":
+                        return HIG "【 剑  客 】" NOR;
+                case "日月神教":
+                        return HIG "【 护  教 】" NOR;
+                default:
+                        return HIG "【武林高手】" NOR;
+                }
+        } else
+        if (dj > 20)
+        {
+                if (ob->query("gender") == "无性")
+                        return HIC "【东厂百户】" NOR;
+
+                switch (fam)
+                {
+                case "少林派":
+                        return HIC "【 尊  者 】" NOR;
+                case "武当派":
+                        return HIC "【 道  士 】" NOR;
+                case "峨嵋派":
+                        return HIC "【 师  太 】" NOR;
+                case "逍遥派":
+                        return HIC "【 方  士 】" NOR;
+                case "灵鹫宫":
+                        return HIC "【 仕  女 】" NOR;
+                case "星宿派":
+                        return HIC "【 小毒虫 】" NOR;
+                case "古墓派":
+                        return HIC "【江湖豪杰】" NOR;
+                case "全真教":
+                        return HIC "【 道  士 】" NOR;
+                case "昆仑派":
+                        return HIC "【江湖豪杰】" NOR;
+                case "桃花岛":
+                        return HIC "【 秀  才 】" NOR;
+                case "雪山寺":
+                        return HIC "【 僧  兵 】" NOR;
+                case "丐帮":
+                        return HIC "【 义  丐 】" NOR;
+                case "铁掌帮":
+                        return HIC "【 教  头 】" NOR;
+                case "天地会":
+                        return HIC "【 侠  客 】" NOR;
+                case "红花会":
+                        return HIC "【 侠  客 】" NOR;
+                case "神龙教":
+                        return HIC "【 赤龙使 】" NOR;
+                case "五毒教":
+                        return HIC "【 教  众 】" NOR;
+                case "明教":
+                        return HIC "【 门  主 】" NOR;
+                case "梅庄":
+                        return HIC "【 护  院 】" NOR;
+                case "崆峒派":
+                        return HIC "【 道  士 】" NOR;
+                case "华山派":
+                        return HIC "【 剑  士 】" NOR;
+                case "日月神教":
+                        return HIC "【 堂  主 】" NOR;
+                default:
+                        return HIC "【武林异士】" NOR;
+                }
+        } else
+        if (dj > 10)
+        {
+                if (ob->query("gender") == "无性")
+                        return YEL "【东厂十户】" NOR;
+
+                switch (fam)
+                {
+                case "少林派":
+                        return YEL "【 禅  师 】" NOR;
+                case "武当派":
+                        return YEL "【 小道士 】" NOR;
+                case "峨嵋派":
+                        return YEL "【 尼  姑 】" NOR;
+                case "逍遥派":
+                        return YEL "【 郎  中 】" NOR;
+                case "灵鹫宫":
+                        return YEL "【 侍  女 】" NOR;
+                case "星宿派":
+                        return YEL "【 弟  子 】" NOR;
+                case "古墓派":
+                        return YEL "【武林中人】" NOR;
+                case "全真教":
+                        return YEL "【 小道士 】" NOR;
+                case "昆仑派":
+                        return YEL "【武林中人】" NOR;
+                case "桃花岛":
+                        return YEL "【 书  生 】" NOR;
+                case "雪山寺":
+                        return YEL "【 喇  嘛 】" NOR;
+                case "丐帮":
+                        return YEL "【 乞  丐 】" NOR;
+                case "天地会":
+                        return YEL "【 侠  士 】" NOR;
+                case "神龙教":
+                        return YEL "【 随龙使 】" NOR;
+                case "五毒教":
+                        return YEL "【初入江湖】" NOR;
+                case "明教":
+                        return YEL "【 教  徒 】" NOR;
+                case "梅庄":
+                        return YEL "【 随  从 】" NOR;
+                case "华山派":
+                        return YEL "【 剑  侍 】" NOR;
+                case "日月神教":
+                        return YEL "【 教  徒 】" NOR;
+                default:
+                        return YEL "【武林人士】" NOR;
+                }
+        } else
+        {
+                if (ob->query("gender") == "无性")
+                        return GRN "【 公  公 】" NOR;
+
+                switch (fam)
+                {
+                case "少林派":
+                        return GRN "【 比  丘 】" NOR;
+                case "武当派":
+                        return GRN "【 道  童 】" NOR;
+                case "峨嵋派":
+                        return GRN "【 小尼姑 】" NOR;
+                case "逍遥派":
+                        return GRN "【 学  童 】" NOR;
+                case "灵鹫宫":
+                        return GRN "【 使  女 】" NOR;
+                case "星宿派":
+                        return GRN "【 仆  人 】" NOR;
+                case "古墓派":
+                        return GRN "【初入江湖】" NOR;
+                case "全真教":
+                        return GRN "【 道  童 】" NOR;
+                case "昆仑派":
+                        return GRN "【 弟  子 】" NOR;
+                case "桃花岛":
+                        return GRN "【 学  童 】" NOR;
+                case "雪山寺":
+                        return GRN "【 沙  弥 】" NOR;
+                case "丐帮":
+                        return GRN "【 小叫花 】" NOR;
+                case "天地会":
+                        return GRN "【 义  士 】" NOR;
+                case "神龙教":
+                        return GRN "【 弟  子 】" NOR;
+                case "五毒教":
+                        return GRN "【 仆  人 】" NOR;
+                case "明教":
+                        return GRN "【 教  众 】" NOR;
+                case "梅庄":
+                        return GRN "【 仆  人 】" NOR;
+                case "华山派":
+                        return GRN "【 剑  童 】" NOR;
+                case "日月神教":
+                        return GRN "【 教  众 】" NOR;
+                default:
+                        return GRN "【初入武林】" NOR;
+                }
+        }
+}
+
+string query_respect(object ob)
+{
+        int age;
+        string str;
+
+        if( stringp(str = ob->query("rank_info/respect")) )
+                return str;
+
+        age = ob->query("age");
+        switch(ob->query("gender")) {
+                case "女性":
+                        switch(ob->query("class")) {
+                        case "bonze":
+                                if( age < 18 ) return "小师太";
+                                else return "师太";
+                                break;
+                        case "taoist":
+                                if( age < 18 ) return "小仙姑";
+                                else return "仙姑";
+                                break;
+                        default:
+                                if( age < 18 ) return "小姑娘";
+                                else if( age < 50 ) return "姑娘";
+                                else return "婆婆";
+                                break;
+                        }
+                case "男性":
+                default:
+                        switch(ob->query("class")) {
+                        case "bonze":
+                                if( age < 18 ) return "小师父";
+                                else return "大师";
+                                break;
+                        case "taoist":
+                                if( age < 18 ) return "道兄";
+                                else return "道长";
+                                break;
+                        case "fighter":
+                        case "swordsman":
+                                if( age < 18 ) return "小老弟";
+                                else if( age < 50 ) return "壮士";
+                                else return "老前辈";
+                                break;
+                        default:
+                                if( age < 20 ) return "小兄弟";
+                                else if( age < 50 ) return "壮士";
+                                else return "老爷子";
+                                break;
+                        }
+        }
+}
+
+string query_rude(object ob)
+{
+        int age;
+        string str;
+
+        if( stringp(str = ob->query("rank_info/rude")) )
+                return str;
+
+        age = ob->query("age");
+        switch(ob->query("gender")) {
+                case "女性":
+                        switch(ob->query("class")) {
+                        case "bonze":
+                                return "贼尼";
+                                break;
+                        case "taoist":
+                                return "妖女";
+                                break;
+                        default:
+                                if( age < 30 ) return "小贱人";
+                                else return "死老太婆";
+                                break;
+                        }
+                case "男性":
+                default:
+                        switch(ob->query("class")) {
+                        case "bonze":
+                                if( age < 50 ) return "死秃驴";
+                                else return "老秃驴";
+                                break;
+                        case "taoist":
+                                return "死牛鼻子";
+                                break;
+                        default:
+                                if( age < 20 ) return "小王八蛋";
+                                if( age < 50 ) return "臭贼";
+                                else return "老匹夫";
+                                break;
+                        }
+        }
+}
+
+string query_self(object ob)
+{
+        int age;
+        string str;
+
+        if( stringp(str = ob->query("rank_info/self")) )
+                return str;
+
+        age = ob->query("age");
+        switch(ob->query("gender")) {
+                case "女性":
+                        switch(ob->query("class")) {
+                        case "bonze":
+                                if( age < 50 ) return "贫尼";
+                                else return "老尼";
+                                break;
+                        default:
+                                if( age < 30 ) return "小女子";
+                                else return "妾身";
+                                break;
+                        }
+                case "男性":
+                default:
+                        switch(ob->query("class")) {
+                        case "bonze":
+                                if( age < 50 ) return "贫僧";
+                                else return "老纳";
+                                break;
+                        case "taoist":
+                                return "贫道";
+                                break;
+                        default:
+                                if( age < 50 ) return "在下";
+                                else return "老头子";
+                                break;
+                        }
+        }
+}
+
+string query_self_rude(object ob)
+{
+        int age;
+        string str;
+
+        if( stringp(str = ob->query("rank_info/self_rude")) )
+                return str;
+
+        age = ob->query("age");
+        switch(ob->query("gender")) {
+                case "女性":
+                        switch(ob->query("class")) {
+                        case "bonze":
+                                if( age < 50 ) return "贫尼";
+                                else return "老尼";
+                                break;
+                        default:
+                                if( age < 30 ) return "本姑娘";
+                                else return "老娘";
+                                break;
+                        }
+                case "男性":
+                default:
+                        switch(ob->query("class")) {
+                        case "bonze":
+                                if( age < 50 ) return "大和尚我";
+                                else return "老和尚我";
+                                break;
+                        case "taoist":
+                                return "本山人";
+                                break;
+                        default:
+                                if( age < 50 ) return "大爷我";
+                                else return "老子";
+                                break;
+                        }
+        }
+}
+
+string query_close(object ob, int age, string rgender)
+{
+        int a1, a2;
+        string gender;
+        if (objectp(ob) )       {
+                if( !age )
+                        a1 = this_player()->query("age");
+                else
+                        a1 = ob->query("age");
+                if( !age)
+                        a2 = ob->query("age");
+                else    a2 = age;
+        }
+        
+        if( !rgender )
+                gender = ob->query("gender");                                           
+        else    gender = rgender;
+
+        switch ( gender ) {
+        case "女性" :
+                if (a1 > a2)
+                        return "妹妹";
+                else
+                        return "姐姐";
+                break;
+        default :
+                if (a1 > a2)
+                        return "弟弟";
+                else
+                        return "哥哥";
+        }
+}
+
+string query_self_close(object ob, int age)
+{
+        int a1, a2;
+        string gender;
+        if( objectp(ob) ) {
+                if( !age )
+                        a1 = this_player()->query("age");
+                else
+                        a1 = ob->query("age");
+                if( !age)
+                        a2 = ob->query("age");
+                else    a2 = age;
+        }
+
+        if( age )
+                gender = ob->query("gender");
+        else
+                gender = this_player()->query("gender");
+
+        switch (gender) {
+
+        case "女性" :
+                if (a1 > a2)
+                        return "姐姐我";
+                else
+                        return "小妹我";
+                break;
+        default :
+                if (a1 > a2)
+                        return "愚兄我";
+                else
+                        return "小弟我";
+        }
+}
+

@@ -1,0 +1,18 @@
+// SN:OmaO;=GD\>Pd^l?9
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("独孤[1;33m鹤[2;37;0m", ({"looks he"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "鹤啸九天 震翅欲飞
+它是澄无的坐骑。
+");
+        set_temp("owner_id", "acmn");
+        set_temp("owner_name", "澄无");
+        ::setup();
+}
+

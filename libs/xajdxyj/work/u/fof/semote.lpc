@@ -1,0 +1,174 @@
+// 神话世界·西游记·版本４．５０
+/* <SecCrypt CPL V3R05> */
+
+// semote.c
+
+// modified by ytan Dec 18 1996
+// modified by edd Dec 6 1998
+// FoF copy from XKX100 (11/03/1999) and changed 99-11-21 12:37
+
+#include "/doc/help.h"
+
+inherit F_CLEAN_UP;
+
+int all_emote(object me);
+int chkemote(object me,string arg);
+int femote(object me,string arg);
+int help(object me);
+int show(object me,string str,string arg,int count);
+int flag = 1;
+nosave object target;
+nosave int tg;
+
+int main(object me, string arg)
+{
+    if( !arg ) return all_emote(me);
+    return chkemote(me, arg);
+}
+
+int all_emote(object me)
+{
+    string *e;
+    int i;
+    string str1,str;
+
+    str="";
+    e = sort_array(EMOTE_D->query_all_emote(), 1);
+
+    write(MUD_NAME + "的EMOTE动词共有以下" + chinese_number(sizeof(e)) + "条：\n");
+    for(i=0; i<sizeof(e); i++) {
+        str1=sprintf("%-15s%s", e[i], (i%5==4)?"\n": "");
+        str+=str1;
+    }
+    str += "\n〖详细用法请见 help semote 〗\n";
+    me->start_more(str);
+    write("\n");
+    return 1;
+}
+
+int chkemote(object me, string arg)
+{
+    mapping emote;
+    string str, *e, str1;
+    int i, count = 0;
+
+    tg = 0;
+    if( sscanf(arg, "%s %s", str, str1) == 2 ) {
+        arg = str;
+        target = present(str1, environment(me));
+        if( !target || !objectp(target) ) target = find_player(str1);
+        if( target && objectp(target) && target->is_character() && me->visible(target) )
+            tg = 1;
+    }
+
+    emote = EMOTE_D->query_emote(arg);
+    e = sort_array(EMOTE_D->query_all_emote(), 1);
+    str = "";
+
+    if ( !arg ) {
+        for( i = 0; i < sizeof(e); i ++ ) {
+            str1 = sprintf("%s%s\n%s\n","EMOTE名称：", e[i], EMOTE_D->query_emote(e[i])["others_target"] );
+            str += str1;
+        }
+    } else {
+        for( i = 0; i < sizeof(e); i ++ ) {
+            if( arg == e[i] ) {
+                str = sprintf("%s%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n",
+                "EMOTE名称：", e[i],
+                emote["myself"], emote["others"], emote["myself_self"],
+                emote["others_self"], emote["myself_target"], emote["target"],
+                emote["others_target"] );
+                count ++;
+                break;
+            }
+            if( arg == e[i][0..sizeof(arg)-1] ) {
+                str1 = sprintf("%s%s\n%s%s\n","EMOTE名称：", e[i], "内容：",
+                    tg ? ( target == me ? EMOTE_D->query_emote(e[i])["myself_self"] : EMOTE_D->query_emote(e[i])["myself_target"]) : EMOTE_D->query_emote(e[i])["myself"] );
+                str += str1;
+                count ++;
+            }
+        }
+    }
+    if( str == "" ) return femote(me,arg);
+    else {
+        flag = 1;
+        return show(me,str,arg,count);
+    }
+}
+
+int femote(object me,string arg)
+{
+    mapping emote;
+    string *e, *loop;
+    string str="", msg;
+    int i,count,k;
+    count = 0;
+
+    loop = ({ "others_target", "others_self", "others" });
+
+    e = sort_array( EMOTE_D->query_all_emote(), 1);
+
+    for(i=0; i<sizeof(e); i++) {
+        emote = EMOTE_D->query_emote(e[i]);
+            for( int j=0; j<sizeof(loop); j++ ) {
+                msg = emote[ loop[j] ];
+                    if( msg && strsrch(msg, arg) != -1 ) {
+                        str += sprintf("EMOTE名：%s\n动作：%s\n", e[i], msg);
+                        k ++;
+                    }
+            }
+        if( k ) count ++;
+        k = 0;
+    }
+
+    if(  str == "" )
+        return notify_fail(MUD_NAME" 中无符合查询条件的 EMOTE。\n");
+    else {
+        flag = 0;
+        return show(me,str,arg,count);
+    }
+}
+
+int show(object me, string str, string arg, int count)
+{
+    str =
+    "\n查询结果"
+    + ( tg ? (target == me ? "(对自己使用)：" : "(对别人使用)：") : "(不带目标)：" )
+    + "\n---------------------------------------------------------------\n"
+    + str;
+    str = replace_string(str, "$n", tg ? target->query("name") : "(对方)");
+    str = replace_string(str, "$N", me->name(1));
+    str = replace_string(str, "$P", "你");
+    str = replace_string(str, "$p", "你");
+    str = replace_string(str, "$S", RANK_D->query_self(me));
+    str = replace_string(str, "$s", RANK_D->query_self_rude(me));
+    str = replace_string(str, "$R", tg ? RANK_D->query_respect(target) : "(对方的尊称)");
+    str = replace_string(str, "$r", tg ? RANK_D->query_rude(target) : "(对方的辱称)");
+    str = replace_string(str, "$C", tg ? RANK_D->query_respect(me) : "(自己的呢称)");
+    str = replace_string(str, "$c", tg ? RANK_D->query_rude(me) : "(对方的呢称)");
+
+    str += "---------------------------------------------------------------\n";
+    flag ?
+    str += sprintf("在%s中，以“%s”开头的 EMOTE 共有 %d 个。\n",
+                                    MUD_NAME, arg, count ):
+    str += sprintf("在%s中，包含“%s”的 EMOTE 共有 %d 个。\n",
+                                    MUD_NAME, arg, count );
+    me->start_more(str);
+    return 1;
+}
+
+int help(object me)
+{
+    write(@HELP
+指令格式：semote [(任意的中英文)] [目标]
+
+这个指令不加参数的时候可以列出目前所能使用的 EMOTE。加上参数后，
+可以搜索以第一个参数为开头的、以第二个参数为目标的 EMOTE，或者包
+含有参数的 EMOTE。
+
+FoF (11/20/1999)
+
+HELP
+    );
+    return 1;
+}

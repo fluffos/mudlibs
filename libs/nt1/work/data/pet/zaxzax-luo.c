@@ -1,0 +1,18 @@
+// SN:ML9GI5j>F>QFV?Z3
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m骆驼[2;37;0m", ({"luo tuo"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "骆驼
+它是张傲的坐骑。
+");
+        set_temp("owner_id", "zaxzax");
+        set_temp("owner_name", "张傲");
+        ::setup();
+}
+

@@ -1,0 +1,18 @@
+// SN:h2REa82Ggo]jUG7L
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;33m千里[1;32m追风[1;31m赤兔马[2;37;0m", ({"qianli ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "骢珑虎□，绝尘紫鳞，千里绝群，此等良马，唯我赤兔。
+它是关羽的坐骑。
+");
+        set_temp("owner_id", "imissmud");
+        set_temp("owner_name", "关羽");
+        ::setup();
+}
+

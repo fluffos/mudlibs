@@ -1,0 +1,236 @@
+//by mudgod@xssx
+//from kittt's board
+#include <ansi.h>;
+#include <localtime.h>
+inherit BULLETIN_BOARD;
+string chinese_time(int i);
+
+void create()
+{
+        set_name(HIY"《梦》新闻版"NOR, ({ "newsboard"}) );
+        set("location", "/d/wizard/news_room");
+        set("board_id", "news_b");
+        set("long", "这是一个供广播新闻的留言板。\n" );
+        setup();
+        set("capacity", 500);
+}
+void init()
+{
+        object me=this_player();
+        if (wizardp(me) &&  wiz_level(me) > wiz_level("(apprentice)") )
+        {
+                add_action("do_post", "post");
+                add_action("do_read", "read");
+                add_action("do_discard", "discard");
+        }       
+}
+int check_news(object me)
+{
+        int num,i,last_time_read;
+        mapping *notes, last_read_time;
+        string myid,msg="";
+        
+        notes = query("notes");
+        last_read_time = me->query("board_last_read");
+        myid = query("board_id");
+        
+        if( !pointerp(notes) || !sizeof(notes) ) return 1;
+
+        if(userp(me))
+        {
+                i=sizeof(notes)-me->query("LastReadNews");
+                
+                if(i < 6 && i > 0)
+                {
+                        msg = "\n\n    ━━━━━━━━━━━━ "HIW"《梦》最新消息"NOR" ━━━━━━━━━    \n";
+                        
+                        if( !mapp(last_read_time) || undefinedp(last_read_time[myid]) )
+                                num = 1;
+                                
+                        else
+                                for(num = 1; num<=sizeof(notes); num++)
+                                        if( notes[num-1]["time"] > last_read_time[myid] ) break;
+                                        
+                        if (mapp(last_read_time)) last_time_read = last_read_time[myid];
+                        for(i=sizeof(notes)-1 ; i>num-2 ; i--)
+                        {
+                                msg += sprintf("<%3d>"NOR,i+1);
+                                msg += sprintf("     %-=36s %18s (%s)\n",
+                                        notes[i]["title"], notes[i]["author"],
+                                        CHINESE_D->chinese_time(5, ctime(notes[i]["time"])));
+                        }
+                        
+                        msg += "    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━    \n\n";
+                        
+                        me->start_more(msg);
+                }
+                
+                i=sizeof(notes)-me->query("LastReadNews");
+                
+                write(BBLU HIW"\n自从您上次使用 (news) 命令以来，到现在"+((i==0)? "没有任何":"共有"+HIM+chinese_number(i)+HIW"条")+"新闻发布。\n\n"NOR);
+                if(i>10) write("你可以 Help news 来查看《梦》新闻系统的使用方法。\n");
+        }
+}
+
+int main(object me, string arg)
+{
+         int num,i,last_time_read,num1;
+        mapping *notes, last_read_time;
+        string myid,msg;
+
+        last_read_time = me->query("board_last_read");
+        myid = query("board_id");
+        notes = query("notes");
+        i=sizeof(notes)-me->query("LastReadNews");
+        if( !pointerp(notes) || !sizeof(notes) )
+                return notify_fail("《梦》目前没有任何新闻。\n");
+             if(i<=0)
+                    {
+           me->set("LastReadNews",0);
+                 i=sizeof(notes);
+                            }
+                
+        if( !arg ) 
+        {
+                if(i>10) write("你可以 Help news 来查看《梦》新闻系统的使用方法。\n"); 
+                        return notify_fail(
+                                "《"+HIY"梦"+NOR"》目前共有"+HIW+chinese_number(sizeof(notes))+NOR"条新闻"+((i==0)? "。":"，您有"+HIY+chinese_number(i)+NOR"条新闻尚未阅读。")+"\n"); }
+                                
+                if( arg=="all")
+                {
+                        msg = "\n\n ━━━━━━━━━━━━━━━━ "HIY"《梦》"HIG"新闻一览"NOR"  ━━━━━━━━━━━━━━━    \n";
+                        notes = query("notes");
+                        
+                        if (mapp(last_read_time)) last_time_read = last_read_time[myid];
+                        for(i=sizeof(notes)-1 ; i>-1 ; i--)
+                        {
+                                msg += sprintf("%s №%3d" NOR,
+                                notes[i]["time"] > last_time_read ? HIY: "", i+1);
+                                msg += sprintf("     %-=36s %18s (%s)\n",
+                                        notes[i]["title"], notes[i]["author"],
+                                        ctime(notes[i]["time"])[0..15]);
+                        }
+                        msg += "\n";
+                        me->start_more(msg);
+                        return 1;
+                        
+                }
+                else
+                if ( arg=="new" )
+                {
+                        if( !mapp(last_read_time) || undefinedp(last_read_time[myid]) )
+                                num = 1;
+                        else
+                                for(num = 1; num<=sizeof(notes); num++)
+                                        if( notes[num-1]["time"] > last_read_time[myid] ) break;
+                                        
+                } else if( !sscanf(arg, "%d", num) )
+                
+        return notify_fail("你到底要看第几条新闻呀？\n");
+        
+        if( num < 1 || num > sizeof(notes) )
+                return notify_fail("看清楚点，好像没有这条新闻耶。\n");
+                
+        num--;
+	if( !pointerp(notes[num]["num"]) || notes[num]["num"]==0 )
+	num1=0;	
+        num1=notes[num]["num"];
+        num1++;
+ 	notes[num]["num"] = num1;
+	set("notes", notes);
+	save();
+        me->start_more( sprintf("\n\n%s\n"HIW" 新闻主题："HIG"%s\n"HIW" 新闻巫师："HIG"%s\n"HIW" 新闻时间："HIG"%-30s"HIW" 阅读次数："HIG"%-30d\n"NOR
+        "-------------------------------------------------------------------------------\n",
+                HIG"《梦》第"HIR+chinese_number(num + 1)+HIG"条新闻"NOR, 
+                notes[num]["title"], notes[num]["author"],
+        chinese_time(notes[num]["time"]),num1)
+                + notes[num]["msg"]+
+        "-------------------------------------------------------------------------------\n\n", );
+
+        if( !mapp(last_read_time) )
+                me->set("board_last_read", ([ myid: notes[num]["time"] ]) );
+        else 
+                if( undefinedp(last_read_time[myid]) || notes[num]["time"] > last_read_time[myid] )
+                        last_read_time[myid] = notes[num]["time"];
+
+        if(me->query("LastReadNews") < num + 1)
+                me->set("LastReadNews",num+1);
+
+        return 1;
+}
+int do_post(string arg)
+{
+        mapping note;
+
+        if(!arg) return notify_fail("新闻需要一个标题。\n");
+        if(strlen(arg)>=36) notify_fail("新闻标题不能超过17个汉字。\n");
+
+        note = allocate_mapping(4);
+        note["title"] = arg;
+        note["author"] = this_player()->query("name")+"("+this_player()->query("id")+")";
+        note["id"] = this_player()->query("id"); 
+        this_player()->edit( (: done_post, this_player(), note :) );
+        return 1;
+}
+
+void done_post(object me, mapping note, string text)
+{
+        mapping *notes;
+
+        note["time"] = time();
+        note["msg"] = text;
+        notes = query("notes");
+        if( !pointerp(notes) || !sizeof(notes) )
+                notes = ({ note });
+        else
+                notes += ({ note });
+
+        if( sizeof(notes) > query("capacity"))
+                notes = notes[query("capacity")/2 .. query("capacity")];
+
+        set("notes", notes);
+        save();
+        restore();
+         message("channel:chat",HIW"【系统公告】《梦》有了最新新闻，请用 news 命令查看。\n"NOR,users());
+
+        tell_object(me, "新闻发表完毕。\n");
+
+        return;
+}
+string chinese_time(int i)
+{
+	int t, y, mo, d, h, m, s;
+	mixed *ltime;
+	string time,time1,time2;
+	ltime = localtime(i);
+	s = ltime[LT_SEC];
+	m = ltime[LT_MIN];
+	h = ltime[LT_HOUR];
+	d = ltime[LT_MDAY];
+	mo = ltime[LT_MON]+1;
+	y = ltime[LT_YEAR];
+	time2="";
+         if(d>=10)   
+	time = (d) + "/";
+	 else
+	time = "0"+(d) + "/";
+	if(mo>=10)	 
+	time = time+(mo)+"/";
+	else
+	time = time +"0"+(mo)+"/";
+	while (y) {
+		time2 =(y%10)+time2;
+		y /= 10;
+	}
+        time =time+time2;
+        if(h>=10)
+	time1 =  (h) + ":";
+	else
+	time1 = "0" + (h) + ":";
+	if(m>=10)	
+	time1 += (m) + ":";
+	else
+	time1 += "0"+(m) + ":";	
+	time1 = time1 + (s);
+	return ""+time+"  " + time1 + "";
+}

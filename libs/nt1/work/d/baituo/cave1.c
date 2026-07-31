@@ -1,0 +1,22 @@
+//cave1.c
+inherit ROOM;
+
+void create()
+{
+  set("short","岩洞内");
+  set("long", @LONG
+这里是岩洞内部，洞顶上悬挂着洁白的钟乳石。
+LONG );
+  set("exits",([
+      "south" : __DIR__"cave",
+     ]));
+  set("no_clean_up", 0);
+// set("objects",([
+//      ]));
+ setup();
+ replace_program(ROOM);
+}
+
+
+
+

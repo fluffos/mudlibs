@@ -1,0 +1,180 @@
+inherit F_CLEAN_UP;
+
+string *special_props = ({
+        "short", "long" });
+
+int save_kingdom();
+int save_room(string file);
+
+int main(object me,string arg)
+{
+        int num;
+        string file_me,arg_new,kingdom_file,new_file;
+        object env;
+
+        seteuid(getuid(me));
+
+        env = environment(me);
+        file_me = file_name(env) + ".lpc";
+
+        if( me->is_busy() )
+                return notify_fail("你的动作还没有完成\n");
+        
+        if( !arg )
+                return notify_fail("指令格式：mkroom <方向>\n");
+
+        if( env->query("kingdom_id")!=me->query("kingdom") ) 
+                return notify_fail("这已经不是我帮的领地了\n");
+
+        if( arg!="north" && arg!="south" && arg!="east" && arg!="west" && arg!="down" && arg!="up" )
+                return notify_fail("没有这个方向。\n");
+
+        if(env->query("exits/"+arg))
+                return notify_fail("这个方向已经有连接了。\n");
+       if( find_object(me->query("cwd")+"kingdom")->query("room_max") < (me->query("cwd")+"kingdom")->query("room"))
+       return notify_fail("贵帮已经达到房间上限了请消除不要的房间再建．\n");
+        if( find_object(me->query("cwd")+"kingdom")->query("wares") < 100)
+                return notify_fail("本帮里没有足够的木材．\n");
+          kingdom_file = me->query("cwd") + "kingdom";
+//        new(kingdom_file);
+        num = find_object(kingdom_file)->query("room_num");
+        num+=1;
+        find_object(me->query("cwd")+"kingdom")->add("wares",-100);
+                new_file = me->query("cwd")+(string)num+".lpc";
+
+        if( !write_file(new_file, @ROOM_CODE
+
+#include <ansi.h>
+inherit ROOM;
+
+void create()
+{
+        set("short", "空房间");
+        set("long", " 你可以用(set_long)来写描述  (set_short) 来写名称，用(add_desc)设定\n景点，用(set_gate)来设定大门(add_npc)来为这房屋加入npc!!。\n");
+        setup();
+        replace_program(ROOM);
+}
+ROOM_CODE
+        ) ) return notify_fail("你没有建造房间的权利, 请通知巫师。\n");
+
+        message_vision("$N卷起袖子开始建造房间，你觉得这个世界又变大了一点。\n", this_player());
+
+        switch(arg)
+        {
+                case "north":
+                        arg_new="south";
+                        break;
+                case "south":
+                        arg_new="north";
+                        break;
+                case "east":
+                        arg_new="west";
+                        break;
+                case "west":
+                        arg_new="east";
+                        break;
+                case "up":
+                        arg_new="down";
+                        break;
+                case "down":
+                        arg_new="up";
+                        break;
+        }
+
+        new(me->query("cwd")+(string)num);
+        find_object(kingdom_file)->add("room_num",1);
+        find_object(kingdom_file)->add("room",1);
+        find_object(me->query("cwd")+(string)num)->add("exits",([ arg_new:file_name(env)]));
+        find_object(me->query("cwd")+(string)num)->set("kingdom_id",me->query("kingdom"));
+        env->add("exits",([ arg:me->query("cwd")+(string)num]));
+        save_kingdom();
+        save_room(me->query("cwd")+(string)num);
+        save_room(file_name(env));
+        return 1;
+}
+
+int save_kingdom()
+{
+        object env,me;
+        string str, *name, file;
+        mapping prop;
+        int i;
+
+        me = this_player();
+        file = me->query("cwd") + "kingdom.lpc";
+//      new(me->query("cwd")+"kingdom");
+        env = find_object(me->query("cwd")+"kingdom");
+
+        str = "// Room: " + me->query("title") + @ROOM_CODE
+
+#include <ansi.h>
+inherit ROOM;
+
+void create()
+{
+ROOM_CODE
+        ;
+        str += sprintf("\tset(\"short\", %O);\n", env->query("short") );
+        str += sprintf("\tset(\"long\", @LONG\n%sLONG\n\t);\n", env->query("long") );
+        prop = env->query_entire_dbase();
+        name = keys(prop);
+        for(i=0; i<sizeof(name); i++) {
+                if( member_array(name[i], special_props)!=-1 ) continue;
+                str += sprintf("\tset(\"%s\", %O);\n", name[i], prop[name[i]] );
+        }
+        str += "\n\tsetup();\n\treplace_program(ROOM);\n}\n";
+
+        rm(file);
+        write_file(file, str);
+                return 1;
+        return 0;
+
+}
+
+int save_room(string file)
+{
+        object env,me;
+        string str, *name;
+        mapping prop;
+        int i;
+
+        me = this_player();
+//      new(file);
+        env = find_object(file);
+
+        str = "// Room: " + me->query("title") + @ROOM_CODE
+
+#include <ansi.h>
+inherit ROOM;
+
+void create()
+{
+ROOM_CODE
+        ;
+        str += sprintf("\tset(\"short\", %O);\n", env->query("short") );
+        str += sprintf("\tset(\"long\", @LONG\n%sLONG\n\t);\n", env->query("long") );
+        prop = env->query_entire_dbase();
+        name = keys(prop);
+        for(i=0; i<sizeof(name); i++) {
+                if( member_array(name[i], special_props)!=-1 ) continue;
+                str += sprintf("\tset(\"%s\", %O);\n", name[i], prop[name[i]] );
+        }
+        str += "\n\tsetup();\n\treplace_program(ROOM);\n}\n";
+
+        rm(file + ".lpc");
+        write_file(file + ".lpc", str);
+                return 1;
+        return 0;
+
+}
+
+int help(object me)
+{
+  write(@HELP
+指令格式 : mkroom <房间档名>
+
+帮主或长老利用此指令可建造一间房间。
+HELP
+    );
+    return 1;
+}

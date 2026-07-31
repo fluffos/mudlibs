@@ -1,0 +1,45 @@
+#include <ansi.h>
+#include <skill.h>
+#include <weapon.h>
+#include <combat.h>
+inherit F_SSERVER;
+ 
+int perform(object me, object target)
+{
+    object weapon, ob;
+    string msg;
+    int i;
+
+    if( !me->is_fighting() )
+        return notify_fail("蛇岛奇功的「神龙再现」只能在战斗时使用。\n");
+   if (me->query_temp("perform")>time()) return notify_fail("你上一招未使完！\n");
+    if (!objectp(weapon = me->query_temp("weapon"))
+    || (string)weapon->query("skill_type") != "sword")
+    if (!objectp(weapon = me->query_temp("secondary_weapon"))
+    || (string)weapon->query("skill_type") != "sword")
+        return notify_fail("你使用的武器不对。\n");
+    else me->set_temp("secondly_weapon",1);
+    if( (int)me->query("neili") < 1000 )
+        return notify_fail("你的真气不够！\n");
+    if( (int)me->query_skill("sword") < 300 ||
+        me->query_skill_mapped("sword") != "shedao-qigong")
+     return notify_fail("你的「蛇岛奇功」还不到家，无法使用「神龙再现」！\n");
+
+         msg = HIY "\n$N" HIY "怪笑两声，欺身近来，步法极其怪异，手中的" +
+                      weapon->name() + HIY "忽然击出，一连数招急攻而去" HIY "！\n" NOR;
+    message_vision(msg, me);
+    me->clean_up_enemy();
+    ob = me->select_opponent();
+    me->add("neili", -1000);
+    me->set_temp("perform",time()+3);
+    me->set_temp("perform_duan",1);
+   for(i = 0; i < 3; i++)
+        if (me->is_fighting(ob) && ob->is_fighting(me) && ob->query("eff_qi")>0){
+              me->set_temp("action_msg",HIY"剑锋回旋\n"NOR);
+                if (!weapon->query("equipped")) break;
+              COMBAT_D->do_attack(me, ob,weapon, 0);
+            }else break;
+    me->delete_temp("perform_duan");
+    me->delete_temp("secondly_weapon");
+    return 1;
+}

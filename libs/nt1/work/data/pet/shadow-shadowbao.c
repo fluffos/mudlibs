@@ -1,0 +1,18 @@
+// SN:`ea;8bPoO25O;gBl
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("魔风豹豹[2;37;0m", ({"shadowbao bao"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "魔风豹
+它是影子无敌的坐骑。
+");
+        set_temp("owner_id", "shadow");
+        set_temp("owner_name", "影子无敌");
+        ::setup();
+}
+

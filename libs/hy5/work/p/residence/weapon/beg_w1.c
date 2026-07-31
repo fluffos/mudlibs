@@ -1,0 +1,120 @@
+// gangjian.c
+
+#include <ansi.h>
+#include <weapon.h>
+
+//inherit M_WEAPON;
+//inherit F_GEMS;
+inherit SWORD;
+
+string *du=({
+"ice_poison",
+"ill_dongshang",
+"ill_fashao",
+"ill_kesou",
+"ill_shanghan",
+"ill_zhongshu",
+"xx_poison",
+"cold_poison",
+"flower_poison",
+"rose_poison",
+"x2_poison",
+"sanpoison",
+"scorpion_poison",
+"anqi_poison",
+"nx_poison",
+"chilian_poison",
+"yufeng_poison",
+"insect_poison",
+"xscold_poison",
+});
+
+void create()
+{
+	set_name("[1;31m轩辕剑[2;37;0m", ({ "joeywus sword", "sword" }));
+	set_weight(14463);
+	if (clonep())
+		set_default_object(__FILE__);
+	else {
+		set("unit", "把");
+		set("long", @LONG
+[1;34m在西方查理曼统治的时代，最简朴的剑也能值三头母牛的价钱。而查理大帝自己的那把传奇式
+的神兵“乔依乌斯”据说是半人半神的“韦兰铁匠”所造，乃当世界神兵！
+[2;37;0m这是一把由无比坚硬的[37m玄铁[2;37;0m制成，重二十八斤九两二钱的[1;34m乔依乌斯之剑[2;37;0m。
+综合评价[1;36m无双无对[2;37;0m 看起来无比锋利，具有[1;33m举世无匹[2;37;0m的威力！
+上面刻了几个古符号：
+[1;33m金[2;37;0m:[1;31m无双[2;37;0m [36m木[2;37;0m:[35m标准[2;37;0m [32m水[2;37;0m:[1;35m绝世[2;37;0m [1;34m电[2;37;0m:[1;33m天圣[2;37;0m 
+上面还刻了一些符字：
+锋利:[1;33m灭世[2;37;0m 巧制:[1;36m完美[2;37;0m 
+体灵:[31m精致[2;37;0m 白石:[1;36m完美[2;37;0m 长生:[33m很高[2;37;0m 不老:[31m精致[2;37;0m 威力:[32m粗糙[2;37;0m 
+以及一排古篆字【 [1;32m看看[2;37;0m 】。和一些【 [1;32m掌法[2;37;0m 】的技巧。
+
+LONG
+);
+	set("no_get",1);
+	set("no_drop",1);
+	set("no_put",1);
+	set("no_beg",1);
+	set("no_steal",1);
+	set("ownmake",1);
+		set("makeritem",1);
+		set("owner", "beg");
+		set("ownername", "看看");
+		set("value", 25000);
+		set("weapon_prop/intelligence",0);
+		set("weapon_prop/strength",32);
+		set("weapon_prop/karey",40);
+		set("weapon_prop/percao",0);
+		set("weapon_prop/dexerity",40);
+		set("weapon_prop/constitution",40);
+    set("weapon_prop/dodge", 71);
+    set("weapon_prop/parry", 0);
+    set("weapon_prop/attack", 0);
+    set("weapon_prop/armor", 71);
+    set("weapon_prop/defense", 63);
+    
+    set("weapon_prop/neili", 0);
+    set("weapon_prop/qi", 40);
+    set("weapon_prop/jing", 68);
+    set("weapon_prop/jingli", 68);
+    set("weapon_prop/damage", 33);
+
+    set("wtypeA",12);
+    set("wtypeB",5);
+    set("wtypeC",11);
+    set("wtypeD",3);
+    set("wtypeE",0);
+    set("wtypeF",0);
+    set("wtypeG",0);
+    set("wtypeH",10);
+    set("wtypeI",8);
+    set("wtypeJ",0);
+    set("wtypeK",4);
+    set("wtypeL",3);
+    
+
+                set("skill", ([
+                        "name": "strike",
+                        "exp_required": 80000,
+                        "difficulty": 85,
+                        "min_skill":  1,
+                        "max_skill": 300,              
+                ]) );		
+		set("base_unit", "发");
+		
+
+		set("hxweapon", 1);
+		set("material", "default");
+    set("sharpness", 16);
+
+		set("wield_msg", "$N将$n握在手中。\n");
+		set("unwield_msg", "$N将手中的$n放下。\n");
+	}
+	
+	init_sword(967);
+	setup();
+}
+
+int query_autoload() { return 1; }
+
+#include "/obj/weaponzy.h";

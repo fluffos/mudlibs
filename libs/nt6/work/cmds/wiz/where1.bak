@@ -1,0 +1,174 @@
+// Code of ShenZhou
+// where.c
+// 06-14-95
+// naihe 修正此指令。 05-5-18 15:27
+// naihe 05-8-18 21:24 再次修正，能够基本确切描述物件所在的情况。
+
+#include <ansi.h>
+inherit F_CLEAN_UP;
+#include "/d/REGIONS.h"
+
+// 获得一个物件所在地点的信息
+string get_env_msg( object ob )
+{
+     object env, env_living, env_real;
+     string t, msg;
+     int i;
+
+        if (! SECURITY_D->valid_grant(me, "(wizard)"))
+                return 0;
+                
+     if( !objectp(ob) )
+           return "check target \"ob\" loss.";
+     env = environment(ob); // 该物件当前所在
+     if( !env )
+           return "虚空(no environment)";
+     msg = get_area_name( env ) + "的",
+     env_real = env; // 该物件真正所在
+     if( living( env_real ) )
+           env_living = env_real;
+     while ( environment(env_real) ) // 如果外层还有 env, 则再取外层
+     {
+           env_real = environment(env_real);
+           if( living( env_real ) )
+                 env_living = env_real;
+     }
+     // 取得 ob 所在最外面 env 的信息先。
+     msg += sprintf( "%s(%s)",
+                 (t=env_real->query("short")) ? t : (t=env_real->query("name")) ? t : "_noname_",
+                 (t=env_real->query("id")) ? t : base_name(env_real),
+     );
+     // 如果最外边的 env 和它直接所在的 env 不同，那么就是在某个 room 或某个物件、人物里
+     if( env != env_real )
+     {
+           // 首先，看看它的外层 env 里有没有一个是 living 的。这个 living 是最外层的 living
+           if( env_living )
+                 msg += sprintf( " 的 %s(%s) 身上",
+                       (t=env_living->query("short")) ? t : (t=env_living->query("name")) ? t : "_noname_",
+                       (t=env_living->query("id")) ? t : base_name(env_living),
+                 );
+           // 好，再看看它真正所在 env 是不是这个 living 。
+           // 如果不是，则说明它是在这个 living 里的某个(或更深层)物件里(或晕掉的人物等等)
+           if( env != env_living )
+           {
+                 if( env_living )
+                       msg += "带着";
+                 msg += sprintf("的 %s(%s) 里面",
+                       (t=env->query("short")) ? t : (t=env->query("name")) ? t : "_noname_",
+                       (t=env->query("id")) ? t : base_name(env),
+                 );
+           }
+     }
+     return msg + "。";
+}
+
+// 由 me 调用查找 ob 的位置
+string where_is( object ob, object me )
+{
+     if( !me || !ob || !me->visible(ob) )
+           return "";
+     return sprintf( "%s%-20s %s\n",
+                 !userp(ob) ? "*" : "",
+                 ob->name(1) + "("+ob->query("id")+")：",
+                 get_env_msg(ob),
+     );
+}
+
+int sort_ob( object ob, string bn )
+{
+     if( !ob || base_name(ob) != bn )
+           return 0;
+     return 1;
+}
+
+int tell_err( object me, string msg )
+{
+     if( me && msg )
+           tell_object( me, msg );
+     return 1;
+}
+
+int main(object me, string str)
+{
+     object ob, where, *ob_list;
+     int i;
+     string bn, msg;
+
+     if (!str)
+     {
+           ob_list = users();
+           msg = HIC"所有玩家共 "+sizeof(ob_list)+" 位，他们现在所在的方位如下：\n"NOR;
+           foreach( ob in ob_list )
+           {
+                 msg += where_is( ob, me );
+           }
+           me->start_more( msg );
+           return 1;
+     }
+
+     if( sscanf( str, "-bn %s", bn ) == 1 )
+     {
+           bn = resolve_path(me->query("cwd"), bn );
+           if( bn[<2..<1] == ".c" )
+                 bn = bn[0..<3];
+           ob_list = filter_array( objects(), "sort_ob", this_object(), bn );
+           if( !ob_list || sizeof(ob_list) < 1 )
+                 return tell_err(me, "现在无法找到此文件名的任何物件："+bn + "\n");
+           msg = HIM"共发现 "+sizeof(ob_list)+" 个物件，文件名：" + bn + "\n"NOR;
+           for(i=sizeof(ob_list)-1;i>=0;i-- )
+           {
+                 msg+= where_is( ob_list, me );
+           }
+           return tell_err(me, msg );
+     }
+
+     if( sscanf( str, "-ob %s", bn ) == 1 )
+     {
+           if( environment(me) )
+                 ob = present( bn, environment(me) );
+           if( !ob )
+                 ob = present( bn, me );
+           if( !ob )
+                 return tell_err(me, "你身上没有这个id的物件，附近也没有："+bn+"\n");
+           ob_list = children( base_name(ob) );
+           if( !ob_list || sizeof(ob_list) < 1 )
+                 return tell_err(me, "现在无法找到此物件的任何复制件："+bn + "\n");
+           msg = HIG"共发现 "+sizeof(ob_list)+" 个 id 为 "+bn+" 的物件，文件名：" + base_name(ob)+ "\n"NOR;
+           for(i=sizeof(ob_list)-1;i>=0;i-- )
+           {
+                 msg+= where_is( ob_list, me );
+           }
+           return tell_err(me, msg );
+     }
+     // 否则查找 player 。
+     ob = find_player(str);
+     if( !ob || !me->visible(ob))
+           return tell_err(me, "现在找不到这个玩家。\n");
+     for(i=sizeof(ob_list)-1;i>=0;i--)
+     {
+           msg += where_is( ob_list, me );
+     }
+     tell_object( me, where_is( ob, me ) );
+     return 1;
+}
+
+int help(object me)
+{
+     write(@HELP
+指令格式: where <玩家的 ID>
+
+这个指令是用来得知玩家目前所在的位置。
+若省略 "ID"，则会列出所有玩家的所在位置。
+
+你也可以查找一个NPC或者一个OBJ的所有复制件所在的位置；
+但是你必须身在此 NPC 或 OBJ 的同一环境中，又或者把它们带在身上。
+加上参数： -ob 来执行此功能，例如： where -ob liu mang
+
+此外，你可以加上参数 -bn 来进行对所有物件的过滤查找，
+例如： where -bn /d/city/npc/liumang
+那么将会把所有与这个名字相同的物件都找出来。
+
+HELP
+     );
+     return 1;
+}

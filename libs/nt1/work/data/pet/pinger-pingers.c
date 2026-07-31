@@ -1,0 +1,18 @@
+// SN:Xa9DfSU]o`U37fPl
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[35m梅花鹿[2;37;0m", ({"pingers lu"}));        
+        set("gender", "女性");                
+        set("unit", "头");
+        set("long", "萍儿的梅花鹿
+它是萍儿的坐骑。
+");
+        set_temp("owner_id", "pinger");
+        set_temp("owner_name", "萍儿");
+        ::setup();
+}
+

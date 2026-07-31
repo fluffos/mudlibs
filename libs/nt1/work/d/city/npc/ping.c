@@ -1,0 +1,281 @@
+// ping.c 平一指
+
+#include <ansi.h>
+#include <medical.h>
+
+inherit BUNCH_NPC;
+inherit F_DEALER;
+
+int ask_wu();
+string ask_job();
+int do_peiyao(string arg);
+int working(object me);
+int halt_working(object me);
+
+void create()
+{
+        set_name("平一指", ({ "ping yizhi", "ping", "yizhi" }));
+        set("title", "药铺老板");
+        set("gender", "男性");
+        set("long", "他就是医术高超的「杀人神医」平一指。可是他性格古怪，不是什么人都医的。\n");
+        set("age", 65);
+
+        set("int", 38);
+        
+        set("qi", 1000);
+        set("max_qi", 1000);
+        set("jing", 1000);
+        set("max_jing", 1000);
+        set("shen_type", 1);
+
+        set("combat_exp", 500000);
+        set("attitude", "heroism");
+
+        set_skill("unarmed", 80);
+        set_skill("dodge", 80);
+        set_skill("parry", 60);
+        set_temp("apply/attack", 70);
+        set_temp("apply/defense", 70);
+        set_temp("apply/damage", 50);
+        set("inquiry", ([
+                "配药"   : (: ask_job :),
+                "工作"   : (: ask_job :),
+                "job"    : (: ask_job :),
+        ]));
+
+        set("vendor_goods", ({
+                HERB("chenpi"),         // 陈皮
+                HERB("chuanwu"),        // 川乌
+                HERB("dangui"),         // 当归
+                HERB("gsliu"),          // 干石榴
+                HERB("heshouwu"),       // 何首乌
+                HERB("honghua"),        // 红花
+                HERB("juhua"),          // 菊花
+                HERB("lingzhi"),        // 灵芝
+                HERB("lurong"),         // 鹿茸
+                HERB("niuhuang"),       // 牛黄
+                HERB("renshen"),        // 人参
+                HERB("shengdi"),        // 生地
+                HERB("tianqi"),         // 田七
+                HERB("xiefen"),         // 蝎粉
+                HERB("xuelian"),        // 雪莲
+                HERB("yjhua"),          // 洋金花
+                HERB("zzfen"),          // 珍珠粉
+                HERB("zihua"),          // 紫花
+                HERB("xuejie"),         // 血竭
+                HERB("lanhua"),         // 兰花
+                HERB("shancha"),        // 山茶花
+                HERB("xiongdan"),       // 熊胆
+                HERB("moyao"),          // 没药
+                HERB("hugu"),           // 虎骨
+                HERB("fuzi"),           // 附子
+                HERB("niuxi"),          // 牛膝
+                HERB("chaihu"),         // 柴胡
+                HERB("ruxiang"),        // 乳香
+                HERB("dahuang"),        // 大黄
+                HERB("taoxian"),        // 桃仙
+                HERB("lingxian"),       // 灵仙
+                HERB("guiwei"),         // 归尾
+                HERB("shanjia"),        // 山甲
+                HERB("hafen"),          // 蛤粉
+                HERB("qianjinzi"),      // 千金子
+                HERB("tugou"),          // 土狗
+                HERB("wulingzhi"),      // 五灵脂
+                HERB("sumu"),           // 苏木
+                HERB("shenglg"),        // 生龙骨
+                HERB("fangfeng"),       // 防风
+                HERB("duhuo"),          // 独活
+                HERB("yuanzhi"),        // 远志
+                
+                "/clone/misc/yanbo",    // 研钵
+                "/clone/misc/jinchuang",
+                "/clone/misc/yangjing",
+                "/clone/misc/dust",
+                "/clone/misc/fashao",
+                "/clone/misc/shanghan",
+                "/clone/misc/xiaoshu",
+                "/clone/misc/dongshang",
+                "/clone/misc/zhike",
+                "/d/shenlong/obj/xionghuang",
+                "/clone/book/medical_book",
+
+        }));
+
+        setup();
+        add_money("gold", 1);
+        carry_object("/clone/misc/cloth")->wear();
+}
+
+void init()
+{
+        add_action("do_peiyao", "peiyao");
+        add_action("do_list", "list");
+        add_action("do_buy", "buy");
+}
+
+string ask_job()
+{
+        object me;
+
+        me = this_player();
+        if (me->query_temp("job/peiyao"))
+                return "让你干的活你干完了么？";
+
+        if (me->query("combat_exp") > 500000)
+                return "让你干这活，也太屈就你了吧。";
+
+        if (me->query("combat_exp") < 15000)
+                return "就这点经验，连一万五都没有，我看你来药臼都端不起来！";
+
+        if (me->query("qi") < 5)
+                return "你还是先歇歇吧，万一累出人命来我可负担不起。";
+
+        me->set_temp("job/peiyao", 1);
+        return "好，你就帮我配药(peiyao)吧！喏，就这几味。";
+}
+
+int do_peiyao(string arg)
+{
+        object me;
+
+        me = this_player();
+        if (me->is_busy())
+                return notify_fail("你正忙着呢，别着急。\n");
+
+        if (! me->query_temp("job/peiyao"))
+        {
+                message_vision("$N刚想抓几味药配制，就听见$n怒喝道："
+                               "给我放下，别乱动。\n",
+                               me, this_object());
+                return 1;
+        }
+
+        me->set_temp("job/step", 1);
+        me->start_busy(bind((: call_other, __FILE__, "working" :), me),
+                       bind((: call_other, __FILE__, "halt_working" :), me));   
+        tell_object(me, "你开始工作。\n");
+        return 1;
+}
+
+int working(object me)
+{
+        object ob;
+        string msg;
+        int finish;
+        int b;
+
+        if (! me->query_temp("job/step"))
+                me->set_temp("job/step", 1);
+
+        if (! living(me))
+        {
+                me->delete_temp("job/peiyao");
+                me->delete_temp("job/step");
+                return 0;
+        }
+
+        finish = 0;
+        me->receive_damage("qi", 1);
+        switch (me->query_temp("job/step"))
+        {
+        case 1:
+                msg = "$N东挑西拣，选好了一些药材。";
+                break;
+        case 2:
+                msg = "$N把药材放进药臼，使劲捣了起来。";
+                break;
+        case 3:
+                msg = "药材渐渐化作粉屑，混在一起。";
+                break;
+        case 4:
+                msg = "粉屑在$N的捣弄下越来越细，逐渐变成了粉末。";
+                break;
+        default:
+                msg = "$N把药材包好，递给$n。";
+                finish = 1;
+                break;
+        }
+        msg += "\n";
+
+        if (finish)
+        {
+                msg += "$n看了$N配的药，点头道：不错，不错！"
+                       "这是给你的报酬！\n";
+                me->delete_temp("job/peiyao");
+                me->delete_temp("job/step");
+
+                b = 500 + random(20);
+                me->add("combat_exp", b);
+                me->add("potential", b/2);
+                if (me->query("potential") > me->query_potential_limit())
+                        me->set("potential", me->query_potential_limit());
+
+                ob = new("/clone/money/coin");
+                ob->set_amount(10);
+                ob->move(me, 1);
+        }
+
+        msg = replace_string(msg, "$N", "你");
+        msg = replace_string(msg, "$n", name());
+        tell_object(me, msg);
+
+        if (finish)
+        {
+                if (b > 0)
+                {
+                        tell_object(me, HIC "\n你获得了" +
+                                    chinese_number(b) +
+                                "点经验和"+ chinese_number(b/2)+"点潜能。\n\n" NOR);
+                }
+
+                if (random(1000) == 1)
+                {
+                        msg = "$n对$N嘿嘿一笑，道：干得不赖，有点"
+                              "意思，这个丹玉磨就算是我送给你的礼物吧。\n";
+                        message_vision(msg, me, this_object());
+                        ob = new("/clone/misc/dymo");
+                        ob->move(me, 1);
+                        tell_object(me, HIM "\n你获得了一个" + ob->name() +
+                                        HIM "！\n" NOR);
+                }
+
+                return 0;
+        }
+
+        me->add_temp("job/step", 1);
+        return 1;
+}
+
+int halt_working(object me)
+{
+        message_vision("$N把手中的活一甩，嚷嚷道：不干了，不干了！\n",
+                       me);
+        me->delete_temp("job/peiyao");
+        me->delete_temp("job/step");
+        return 1;
+}
+
+int accept_object(object who, object ob)
+{
+        object obj ;
+        int r;
+
+        if (r = ::accept_object(who, ob))
+                return r;
+
+        if (!(int)who->query_temp("何首乌"))
+        {
+        message_vision("平一指对$N说：医一人，杀一人，老夫不收钱！\n", who);
+                return 0 ;
+        }
+        if (ob->query("money_id") && ob->value() >= 50000)
+        {
+                destruct(ob);
+                message_vision("平一指收下了$N的钱，给了$N一株何首乌！\n" , who);
+                this_player()->delete_temp("何首乌" );
+                obj=new(__DIR__"obj/shouwu");
+                obj->move(this_player());
+        }
+        return 1;
+}
+

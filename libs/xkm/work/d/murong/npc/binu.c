@@ -1,0 +1,36 @@
+// /u/chen/murong/npc/binu.c 婢女
+//by chen
+
+inherit NPC;
+void create()
+{
+        set_name("婢女", ({ "bi nu", "bu" }));
+        set("gender", "女性");
+        set("age", 24);
+		set("str", 18);
+        set("int", 20);
+        set("con", 20);
+        set("per", 25);
+        set("dex", 20);
+        set("combat_exp", 10000);
+        set("shen_type", 0);
+        set("attitude", "peaceful");
+		set("max_qi",600);
+        set("max_jing",600);
+        set("neili",450);
+        set("max_neili",450);
+		set("jiali",0);
+		set("score", 5500);
+
+        set_skill("cuff", 35);
+		set_skill("parry",35);
+        set_skill("dodge", 35);
+		set_skill("force",35);
+
+
+        setup();
+        carry_object("/d/murong/obj/skirt")->wear();
+        carry_object("/d/murong/obj/shoe")->wear();
+        carry_object("/d/murong/obj/red_silk")->wear();
+		add_money("silver", 10);
+}

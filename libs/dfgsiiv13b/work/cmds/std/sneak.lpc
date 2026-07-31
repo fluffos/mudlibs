@@ -1,0 +1,165 @@
+/*  sneak.c - the alternate move command as 'go' that moves secretly.
+
+    Copyright (C) 1994-2000 Annihilator <annihilator@muds.net>
+
+    This program is a part of ES2 mudlib. Permission is granted to use,
+    modify, copy or distribute this program provided this copyright notice
+    remains intact and subject to the restriction that this program MAY
+    NOT be used in any way for monetary gain.
+
+    Details of terms and conditions is available in the Copyright.ES2 file.
+    If you don't receive this file along with this program, write to the
+    primary author of ES2 mudlib: Annihilator <annihilator@muds.net>
+*/
+
+
+// This command is another command for movement. Those NPCs who intercept
+// players by add_action(..., "go") won't intercept this command.
+
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+
+int do_sneak(object me, object dest, string dir, string exit_dir, int type);
+int halt_sneak(object me, object who, string how);
+
+mapping default_dirs = ([
+    "north":		"",
+    "south":		"玭",
+    "east":		"狥",
+    "west":		"﹁",
+    "northup":		"娩",
+    "southup":		"玭娩",
+    "eastup":		"狥娩",
+    "westup":		"﹁娩",
+    "northdown":	"娩",
+    "southdown":	"玭娩",
+    "eastdown":		"狥娩",
+    "westdown":		"﹁娩",
+    "northeast":	"狥",
+    "northwest":	"﹁",
+    "southeast":	"狥玭",
+    "southwest":	"﹁玭",
+    "up":		"",
+    "down":		"",
+    "out":		"",
+]);
+
+void create() { seteuid(getuid()); }
+
+int main(object me, string arg)
+{
+    mixed dest;
+    string mout, min, dir;
+    object env, obj, *observer, obsr;
+    int skill, obsp, type;
+
+    if( !arg ) return notify_fail("璶┕よ簿笆\n");
+
+    if( me->is_busy() )
+        return notify_fail("璶簿笆叫ノ halt 沧ゎタ暗ㄆ\n");
+
+    env = environment(me);
+    if( !env ) return notify_fail("柑ぃ叫т︗畍矪瞶\n");
+
+    if( me->is_fighting() )
+	return notify_fail("临驹矮\n");
+
+    if( !(dest = env->query("exits/" + arg)) )
+	return notify_fail("硂よ⊿Τ隔\n");
+
+    // Load destination room and check its existence.
+    if( stringp(dest) ) obj = load_object(dest);
+    else obj = dest;
+    if( !objectp(obj) )
+	return notify_fail("硂よΤ拜肈叫硄畍矪瞶\n");
+
+    skill = me->query_skill("sneak");
+
+    observer = all_inventory(obj);
+    obsp = 0;
+    // The sneak formula:
+    //   postive factors: sneak skill, player's gin
+    //   negative factors: gin of characters in both room, and their
+    //                     sneak/force skill.
+    foreach(obsr in observer) {
+        if( !living(obsr) || obsr==me ) continue;
+        obsp += random(obsr->query_stat("gin") / 3);
+        obsp += obsr->query_skill("force");
+    }
+
+    skill = skill * 3 + me->query_stat("gin") / 10 + me->query_skill("move");
+
+//    printf("肩︽мォ %d芠诡 %d\n", skill, obsp);
+
+    // Test random match. If fail, move with go.
+    if( random(skill*3 + me->query_stat("gin")) < random(obsp) )
+        type = 0;
+    else type = 1;
+    
+    if( !env->valid_leave(me, arg) ) return 0;
+
+    if( !undefinedp(default_dirs[arg]) )    dir = default_dirs[arg];
+    else                                    dir = arg;
+
+    write("秨﹍芢\も芢\ì┕" + dir + "簿笆\n");
+
+    me->set_temp("sneak_countdown", 3);
+    me->start_busy( (: do_sneak, me, obj, dir, arg, type :), (: halt_sneak :) );
+
+    return 1;
+}
+
+int do_sneak(object me, object obj, string dir, string exit_dir, int type)
+{
+    int rating;
+    object old_env;
+
+    if( !me || !obj ) return 0;
+    if( me->query_temp("sneak_countdown") > 0 ) {
+	me->add_temp("sneak_countdown", -1);
+	tell_object(me, CYN "み羖羖 ...\n" NOR);
+	me->improve_skill("sneak", 1);
+	return 1;
+    }
+
+    me->delete_temp("sneak_countdown");
+    old_env = environment(me);
+    me->interrupt(me, "ready");
+    switch(type) {
+    case 0:
+        me->force_me("go " + exit_dir);
+        break;
+    case 1:
+	/* 肩︽留旅祘 */
+	rating = 1 + random( me->query_skill("sneak") * 2 );
+        tell_object(me, "癬ㄓ临⊿Τ祇谋︽笆\n");
+	me->set_temp("pending/hidden", rating);
+        me->improve_skill("sneak", me->query_attr("int") );
+        if( !me->move(obj) ) me->set_temp("pending/hidden", 0);
+        break;
+    }
+
+    return 0;
+}
+
+int halt_sneak(object me, object who, string how)
+{
+    if( who==me && how=="ready" ) return 1;
+    tell_object(me, "氨ゎ肩︽\n");
+    return 1;
+}
+
+int help(object me)
+{
+    write(@HELP
+Α : sneak <よ>
+ 
+琵┕﹚よ肩︽肩︽惠璶ㄇмォ讽ㄏノ肩︽よΑ簿笆︑
+ぃ穦笵Τ⊿Τ祇瞷埃獶祇瞷碍碍τ祇笆ю阑
+ 
+HELP
+    );
+    return 1;
+}
+

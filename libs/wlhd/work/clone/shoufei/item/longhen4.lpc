@@ -1,0 +1,117 @@
+//edit by rock
+//2008.10.22
+
+#include <ansi.h>
+inherit ITEM;
+
+#define EQUIP_D "/adm/obj/equip"
+#define MAKE_INDEX 50    //成功率 百分之
+#define ADD_INDEX 150     //合成成功后增加点数
+
+// 函数：所属类别
+int query_xy() { return 1 ; }
+
+// 函数：天罡等级
+int query_longhen() { return 4 ; }
+
+void create()
+{
+	set_name("龙恨攻击石", ({ "longhen cp","cp" }) );
+	set("long",
+		"神奇的属性提升宝石，世间罕有，镶嵌于装备上可为人物增加随机10至150攻击力追加。\n可以使用(synthesis <物品ID>)强化装备或武器。\n"
+	);
+	set("unit", "个");
+}
+
+void init()
+{
+	add_action("do_hecheng", "synthesis");
+}
+
+int do_hecheng(string arg)
+{
+	object me,item,ob,user_item;
+	int damage,rand,mosaic;
+	string equip_id;
+	
+	me = this_player();
+	ob = this_object();
+
+	if(!arg || !stringp(arg))
+	{
+		tell_object(me,"你要强化哪件装备？\n");
+		return 1;
+	}
+	if(!item = present(arg,me))
+	{
+		tell_object(me,"你没有没有这件物品。\n");
+		return 1;
+	}
+	if(!item->query_xy())
+	{
+		tell_object(me,"无法强化它。\n");
+		return 1;
+	}
+	if(!item->query("weapon_prop/damage"))
+	{
+		tell_object(me,"只可强化武器。\n");
+		return 1;
+	}
+	if(user_item = me->query_temp("weapon"))
+	{
+		if(user_item->query("id") == item->query("id"))
+		{
+			tell_object(me,sprintf("请把%s放下，方可对其强化。\n",item->query("name")));
+			return 1;
+		}
+	}
+
+	rand = random(100);
+	//增加力量
+	damage = item->query("cp");
+	if(rand < MAKE_INDEX)
+	{
+		damage += (10+random(ADD_INDEX));
+		item->set("cp",damage);
+
+		if(ob->reset_item(item,me))
+		{
+			tell_object(me,"恭喜你，强化成功。\n");
+			destruct(item);
+			destruct(ob);
+			return 1;
+		}
+	}
+	//强化失败
+	else
+	{
+		tell_object(me,"对不起，强化失败。\n");
+		destruct(ob);
+		return 1;
+	}
+	return 0;
+}
+
+int reset_item(object item,object me)
+{
+	string file,porp,*temp_porp;
+	int size;
+	object new_item;
+
+	if(!item || !me || !userp(me)) return 0;
+
+	porp = EQUIP_D->query_save_prop_string(item);
+	temp_porp = explode(porp,",");
+	size = sizeof(temp_porp);
+	if(temp_porp)
+	{
+		sscanf(temp_porp[size-1],"file:%s",file);
+		new_item = new(file);
+		if(new_item)
+		{
+			EQUIP_D->set_prop_baseon_string(new_item,porp);
+			new_item->move(me);
+		}
+	}
+	return 1;
+}

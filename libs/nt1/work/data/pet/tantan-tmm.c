@@ -1,0 +1,18 @@
+// SN:\]ZeT;Lha3SdiWig
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("谭谭鹤鹤[2;37;0m", ({"tmm he"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "谭谭鹤
+它是谭谭的坐骑。
+");
+        set_temp("owner_id", "tantan");
+        set_temp("owner_name", "谭谭");
+        ::setup();
+}
+

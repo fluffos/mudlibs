@@ -1,0 +1,470 @@
+// 战国 <* 版本 1.00 *>
+// master.c 主控文件
+// last change by roro
+// 99-12-7 5:59
+
+#include <ansi.h>
+#include <mudlib.h>
+
+object connect()
+{
+        object login_ob;
+        mixed err;
+   
+        err = catch(login_ob = new(LOGIN_OB));
+
+        if (err) {
+                write("现在有人正在修改使用者连线部份的程式，请待会再来。\n");
+                write(err);
+                destruct(this_object());
+        }
+        return login_ob;
+}
+
+mixed compile_object(string file)
+{
+        object daemon;
+
+        if( daemon = load_object(VIRTUAL_D) )
+                return daemon->compile_object(file);
+        else
+                return 0;
+}
+
+
+nosave void crash(string error, object command_giver, object current_object)
+{
+        string w_time;
+        w_time=CTIME_D->chinese_time(5);
+        efun::shout(HIR+"突然间,天空隐隐传来一阵巨响.\n"+NOR);
+        efun::shout(HIR+"当机了,自己保重吧！\n"+NOR);
+        write_file("adm/single/reboot.must", CHINESE_MUD_NAME + HIC+"上次当机是在: " + w_time +
+                ", 原因: " + error + "\n");
+        write_file("/adm/single/reboot.must", CHINESE_MUD_NAME + HIC+"上次当机是在：" + w_time +
+                "，原因：" + error + "\n", 1);
+        if (command_giver)
+                log_file("nosave/reboot.must",
+                        sprintf( "this_player: %O\n", command_giver));
+                write_file("/log/nosave/LASTCRASH",
+                        sprintf( "this_player: %O %s\n",
+                        command_giver, geteuid(command_giver)));
+        if (current_object)
+                log_file("nosave/CRASHES",
+                        sprintf( "this_object: %O\n", current_object));
+                write_file("/log/nosave/LASTCRASH",
+                        sprintf( "this_object: %O\n", current_object));
+}
+
+nosave string *update_file(string file)
+{
+        string *list;
+        string str;
+        int i;
+
+        str = read_file(file);
+        if (!str)
+                return ({});
+        list = explode(str, "\n");
+        for (i = 0; i < sizeof(list); i++) {
+                if (list[i][0] == '#') {
+                        list[i] = 0;
+                }
+        }
+        return list;
+}
+
+// Function name:       epilog
+// Return:              List of files to preload
+string *epilog(int load_empty)
+{
+        string *items;
+
+        items = update_file(CONFIG_DIR + "preload");
+        return items;
+}
+
+// preload an object
+void preload(string file)
+{
+        int t1;
+        string err;
+
+        if (file_size(file + ".lpc") == -1)
+                return;
+
+        t1 = time();
+        write(HIY+"正在加载 : " +HIW+ file+NOR );
+        err = catch( load_object(file) );
+//      err = catch(call_other(file, "??"));
+        if (err)
+                write(HIY+" ->加载 " +HIW+ file +HIY "失败,错误原因: "+HIW+ err + "\n"+NOR);
+        else
+                write(HIY+".... 加载成功.\n"+NOR);
+                
+}
+
+// save_ed_setup and restore_ed_setup are called by the ed to maintain
+// individual options settings. These functions are located in the master
+// object so that the local admins can decide what strategy they want to use.
+int save_ed_setup(object who, int code)
+{
+        string file;
+  
+    if (!intp(code))
+        return 0;
+    file = user_path(getuid(who)) + ".edrc";
+    rm(file);
+    return write_file(file, code + "");
+}
+
+// Retrieve the ed setup. No meaning to defend this file read from
+// unauthorized access.
+int retrieve_ed_setup(object who)
+{
+   string file;
+   int code;
+  
+    file = user_path(getuid(who)) + ".edrc";
+    if (file_size(file) <= 0) {
+        return 0;
+    }
+    sscanf(read_file(file), "%d", code);
+    return code;
+}
+
+// When an object is destructed, this function is called with every
+// item in that room.  We get the chance to save users from being destructed.
+void destruct_env_of(object ob)
+{
+        if (!interactive(ob))
+                return;
+        tell_object(ob, "你所存在的空间被毁灭了。\n");
+        ob->move(VOID_OB);
+}
+
+// make_path_absolute: This is called by the driver to resolve path names in ed.
+string make_path_absolute(string file)
+{
+        file = resolve_path((string)this_player()->query("cwd"), file);
+        return file;
+}
+
+// called if a user connection is broken while in the editor; allows
+// the mudlib to save the changes in an alternate file without modifying
+// the original
+string get_save_file_name(string fname)
+{
+    return fname + ".断线";
+}
+
+string get_root_uid()
+{
+   return ROOT_UID;
+}
+
+string get_bb_uid()
+{
+   return BACKBONE_UID;
+}
+
+string creator_file(string str)
+{
+        return (string)call_other(SIMUL_EFUN_OB, "creator_file", str);
+}
+
+string domain_file(string str)
+{
+        return (string)call_other(SIMUL_EFUN_OB, "domain_file", str);
+}
+
+string author_file(string str)
+{
+        return (string)call_other(SIMUL_EFUN_OB, "author_file", str);
+}
+
+// simulate the old behavior of the driver
+string standard_trace(mapping error, int caught)
+{
+    int i, s;
+    string res;
+
+    /* keep track of number of errors per object...if you're into that */
+    res = (caught) ? HIW+"错误讯息被拦截: "+NOR : "";
+    res = sprintf(HIW+"\n执行时段错误: "+NOR+"%s"+HIW+"\n程式: "+NOR+"%s%s:%i\n"+HIW+"\n物件: " + NOR +"%O\n",
+        error["error"],
+        error["file"],
+        error["file"]==error["program"] ? "" : "(" + error["program"] + ")",
+        error["line"],
+        error["object"]);
+
+       res += HIW+" 函数呼叫回溯:\n"+NOR;
+        res += HIG+"---------------------------------------------------\n"+NOR;
+    for (i=0, s = sizeof(error["trace"]); i < s; i++) {
+                res = sprintf("%s%-25s %s%s:%i\n",
+                        res,
+                        error["trace"][i]["function"] + "()",
+                        error["trace"][i]["file"],
+                error["trace"][i]["file"]==error["trace"][i]["program"] ?
+                        "" : "(" + error["trace"][i]["program"] + ")",
+                        error["trace"][i]["line"],
+                        // error["trace"][i]["object"]
+                );
+        }
+        res += HIG+"---------------------------------------------------\n"+NOR;
+        res += "\n";
+        CHANNEL_D->do_channel(this_object(), "err", res);
+        return res;
+}
+
+// error_handler - 主宰物件处理错误的函式.
+// 此函式让 mudlib 代替驱动程式处理错误情形.
+string error_handler( mapping error, int caught )
+{
+        string report;
+
+        report = standard_trace(error, caught);
+
+        if (this_player(1)) {
+                this_player(1)->set_temp("error", error);
+                if( !caught ) tell_object(this_player(1), report);
+        }
+
+        // whatever we return goes to the debug.log
+        if( caught ) return "";
+        else return report;
+}
+
+/* log_error - 聪明地纪录错误.
+
+        无论编译程式 (compilation)  时发生任何错误, 驱动程式
+        都会以发生错误的档案名称为 file 参数、错误讯息为
+        message 参数, 呼叫主宰物件 (master object)  中的
+        log_error() 函式. 呼叫此函式时, log_error() 可以做
+        任何您认为应该做的资料纪录. 通常 log_error()  根据发
+        生错误的档案名称, 决定该纪录要写入哪个错误讯息档案中.
+*/
+void log_error(string file, string message)
+{
+        string name, home;
+   
+        if( find_object(SIMUL_EFUN_OB) )
+                name = file_owner(file);
+
+        if (name) home = user_path(name);
+        else home = LOG_DIR;
+
+        if(this_player(1)) efun::write(HIW+"\n编译时段错误：" + HIG +message );
+        
+        efun::write_file(home + "error.log", sprintf("[%s]%s", ctime(time())[4..18], message));
+        CHANNEL_D->do_channel(this_object(), "err", message);
+}
+
+/* valid_shadow - 控制哪些物件可以作为投影 (shadow).
+
+        当一个物件尝试作为 ob 的投影时 (使用 shadow() 超越函
+        式 (efun) ) , 会呼叫主宰物件中的 valid_shadow() 函式.
+        物件 ob 为此函式的参数, ob  是 previous_object()  尝
+        试投影的物件. 如果不准投影 ob, valid_shadow() 应传回
+        0 , 导致 shadow() 的呼叫失败并传回 0. 如果
+        valid_shadow()  传回 1, 则投影成功.
+*/
+int valid_shadow( object ob ) { return 0; }
+
+/* valid_override - 控制使用 efun:: 的情形.
+
+        在主宰物件 (master.c) 中加上 valid_override() 可以控制
+        efun::  这种前置语法 (prefix) 的使用情形. 当驱动程式尝
+        试编译前面加上 efun:: 的函式时, 会呼叫主宰物件的
+        valid_override(). 如果 valid_override() 传回 0, 则编译
+        失败. 如此一来, valid_override()  可以让一些重要的超越
+        函式不能用 efun:: 这种前置语法来修改这些超越函式的作用
+         (要修改原始超越函式时, 可以用同名的模拟超越函式
+        (simul_efun)  来修改. 并使用 valid_override() 禁止这些
+        模拟超越函式被其他函式越权修改 (overriden) ).
+*/
+int valid_override( string file, string name )
+{
+        // simul_efun can override any simul_efun by Annihilator
+        if (file == SIMUL_EFUN_OB || file==MASTER_OB)
+                return 1;
+
+        if( file[0..15] == "/adm/simul_efun/" ) return 1;
+        // Must use the move() defined in F_MOVE.
+        if(((name == "move_object") || (name == "destruct")) && (file != F_MOVE)) {
+                log_error("override", sprintf("%s attempts to override %s(), denied.\n", file, name));
+                return 0;
+        }
+
+        //  may also wish to protect shutdown, snoop, and exec.
+if( (name == "exec") && (file != LOGIN_D)) { 
+log_error("override", sprintf("%s attempts to override %s(), denied.\n", file, name));
+return 0;
+}
+        return 1;
+}
+
+/* valid_seteuid - 保障使用 seteuid 的系统安全.
+
+        在 seteuid( euid ) 函式里面, 驱动程式呼叫主宰物件
+        (master object)  中的 valid_seteuid( ob, euid )
+        函式. 如果 valid_seteuid() 传回 0, 则 seteuid(3)
+        失败. 如果 valid_seteuid() 传回 1, 则 seteuid(3)
+        成功.
+*/
+int valid_seteuid( object ob, string str )
+{
+        return (int)SECURITY_D->valid_seteuid( ob, str );
+}
+
+// valid_socket - 保护 socket 超越函式 (efunctions).
+/*      每一个 socket 超越函式执行之前, 都会先呼叫
+        valid_socket(). 如果 valid_socket() 传回 0, 则
+        此 socket 超越函式失败. 反之, 传回 1  则成功
+        */
+int valid_socket( object eff_user, string fun, mixed *info )
+{
+        return 1;
+}
+
+/* valid_asm - 控制 LPC->C 编译的物件是否能使用 asm { }
+
+        编译驱动程式时如果开启 LPC_TO_C 选项, 则 LPC  程式码中
+        一旦出现 asm { }  结构就会呼叫 valid_asm()  函式. 如果
+        此函式传回 0, 就中断编译过程并产生错误.
+*/
+int valid_asm( string file )
+{
+        return 1;
+}
+
+// valid_compile_to_c - 控制一个物件在执行时段 (runtime)
+// 中, 是否可以由 LPC->C 的方式编译 (compile)
+int valid_compile_to_c( string file )
+{
+        return 1;
+}
+
+/* valid_hide - 允许或禁止一个物件具有匿踪 (hide) 和看到
+                     匿踪物件的能力.
+        在主宰物件中 (master.c) 加上 valid_hide() 可以让物件
+        具有自我匿踪和看到其他匿踪物件的能力. 当一个物件使用
+        set_hide()  函式以进入匿踪状态时, 此物件就当成
+        valid_hide()  的唯一参数呼叫此函式. valid_hide()
+        允许此物件匿踪时应传回 1, 反之则传回 0. 当一个物件想
+        看到匿踪状态的物件时, 也以同样的方式呼叫此函式.
+*/
+
+int valid_hide( object who )
+{
+        return 1;
+}
+
+/* valid_object - 控制是否载入某个物件.
+
+        载入一个物件之後, 驱动程式会以新创造的此物件为参数, 
+        呼叫主宰物件 (master object)  的 valid_object().
+        如果 valid_object() 存在, 并传回 0, 则会摧毁此物件
+        并使载入物件的超越函式 (efun) 产生错误输出. 如果此
+        函式不存在或是传回 1, 则载入物件的过程就跟平常一样.
+        在模拟超越函式 (simul_efun) 中使用 nomask 和
+        inherit() 超越函式, 再与 valid_object() 并用的话, 
+        可以安全限制 destruct() 函式.
+*/
+int valid_object( object ob )
+{
+        return (!clonep(ob)) || inherits(F_MOVE, ob);
+}
+
+/* valid_link - 控制使用 link(3) 函式的情形
+
+        在 link( from, to ) 超越函式 (efun) 中, 会呼叫主宰物件
+        (master object) 里面的 valid_link( from, to ) 函式.
+        如果 valid_link() 传回 0, 则 link() 的动作失败. 如果
+        传回 1, 还需要以同样的参数呼叫 rename() 成功, 此次的
+        link()  才算完成.
+*/
+int valid_link( string original, string reference )
+{
+        return 0;
+}
+
+/* valid_save_binary - 控制一个物件是否可以储存它的程式码.
+
+        
+        驱动程式编译时, 如果定义了 ALWAYS_SAVE_BINARIES; 或是
+        一个物件中定义了 #pragma save_binary,  就会以档案名称
+        作为参数呼叫 valid_save_binary().  如果此函式传回 1, 
+        则准许储存. 反之就不准储存.
+*/
+int valid_save_binary( string filename )
+{
+        return 1;
+}
+
+/* valid_write - 检查一个人是否有权限写入一个档案.
+
+        每次当一个使用者尝试写入档案时, 驱动程式会呼叫主宰物
+        件的 valid_write()  以检查此人的写入权限. 此函式的参
+        数 file 为档案名称, user  为尝试写入此档的人名, func
+        为造成呼叫 valid_write()  的函式名称. 如果
+        valid_write() 传回非零值, 则准许写入.
+*/
+int valid_write( string file, mixed user, string func )
+{
+        object ob;
+
+        if( !catch(ob = load_object(SECURITY_D))
+        &&      objectp(ob) )
+                return (int)SECURITY_D->valid_write(file, user, func);
+
+        return 0;
+}
+
+/* valid_read - 检查一个人是否有权限读取一个档案.
+
+        每次当一个使用者尝试读取档案时, 驱动程式会呼叫主宰物
+        件的 valid_read() 以检查此人的读取权限. 此函式的参数
+        file  为档案名称, user  为尝试读取此档的人名, func
+        为造成呼叫 valid_read() 的函式名称. 如果 valid_read()
+        传回非零值, 则准许读取.
+*/
+int valid_read( string file, mixed user, string func )
+{
+        return 1;
+}
+
+// object_name - 驱动程式呼叫此函式以知晓一个物件的名称.
+string object_name(object ob)
+{
+        if( ob ) return ob->name();
+}
+
+mixed query(string arg)
+{
+        if (arg == "channel_id") return "系统核心";
+        return 0;
+}
+
+void create()
+{
+        write(HIR+"master: loaded successfully.\n"+NOR);
+}
+
+/* valid_bind - 控制 bind() 函式的用途.
+
+        当一个物件想使用 bind() 函式把某个物件的函式指标指向
+        其他物件时, 会呼叫此函式检查. 如果 valid_bind() 传回
+        1 就允许 bind() 的动作, 传回 0  则产生错误.
+*/
+int valid_bind(object binder, object old_owner, object new_owner)
+{
+        if( geteuid(binder)==ROOT_UID ) return 1;
+        if( old_owner && geteuid(old_owner)==ROOT_UID ) return 1;
+        if( binder==new_owner ) return 1;
+        if( !userp(new_owner) && clonep(new_owner) ) return 1;
+
+        log_file("bind", sprintf("%O attempts to bind %O's function to %O\n",
+                binder, old_owner, new_owner) );
+        return 0;
+}
+

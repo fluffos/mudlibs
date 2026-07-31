@@ -1,0 +1,18 @@
+// SN:iVCIU6m6_jSE=_EZ
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("小飞马[2;37;0m", ({"xiaoxiao ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "好马一只
+它是风三中的坐骑。
+");
+        set_temp("owner_id", "dajiany");
+        set_temp("owner_name", "风三中");
+        ::setup();
+}
+

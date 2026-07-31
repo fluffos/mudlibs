@@ -1,0 +1,32 @@
+// SN:LCQjiQi]8J_QHG@A
+// ITEM Made by player(月天使:moonangel) /data/item/m/moonangel-last.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Sun Apr 18 05:32:41 2004
+#include <ansi.h>
+#include <weapon.h>
+
+inherit SWORD;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[2;37;0m[31m最后一终章[2;37;0m", ({ "last" }));
+	set_weight(9000);
+	set("item_make", 1);
+	set("unit", "柄");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一柄剑。
+[1;31m这把魔剑因为神深沉的憎恨而缓缓地发出暗黑的光辉．．．[2;37;0m
+剑柄上刻着一行小字：月天使(moonangel)
+");
+	set("value", 2100000);
+	set("point", 348);
+	set("material", "magic stone");
+	set("wield_msg", "[1;31m$N喃喃语道：所有再伟大的乐章也会有落幕的钟声、现在该是让我敲响的时刻了。\n\n　暗红之圣剑随著落幕钟声的吞噬、昏红的光辉隐隐地消逝在$N的手中．．．．[2;37;0m\n");
+	set("unwield_msg", "　　[1;31m$N将魔剑τ最后一终章缓缓地从深沉的憎恶中拔出、\n\n　　　　　　顿时血红的光辉闪耀于这世界，\n\n$N喃喃语道：让这世界再一次地奏乐起那昏红的乐章吧．．．[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	init_sword(apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

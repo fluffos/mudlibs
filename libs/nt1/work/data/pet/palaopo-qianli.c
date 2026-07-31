@@ -1,0 +1,18 @@
+// SN:H[fJ=?@Zim9VA1fm
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m千里驹[2;37;0m", ({"qianli ju"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "日行千里，夜行八百－千里驹
+它是怕老婆的坐骑。
+");
+        set_temp("owner_id", "palaopo");
+        set_temp("owner_name", "怕老婆");
+        ::setup();
+}
+

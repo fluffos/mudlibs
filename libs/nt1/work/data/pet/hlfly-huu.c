@@ -1,0 +1,18 @@
+// SN:VUJmeNHmoaWhTc9k
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[31m飞乱狐[2;37;0m", ({"huu hu"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "胡乱飞的座骑，就叫飞乱狐啦！！
+它是胡乱飞的坐骑。
+");
+        set_temp("owner_id", "hlfly");
+        set_temp("owner_name", "胡乱飞");
+        ::setup();
+}
+

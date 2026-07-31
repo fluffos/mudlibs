@@ -1,0 +1,18 @@
+// SN:N0HDhMCBdgdnd<8i
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;36m啸天象[2;37;0m", ({"longing xiang"}));        
+        set("gender", "女性");                
+        set("unit", "头");
+        set("long", "只吃丹药不吃草
+它是药王的坐骑。
+");
+        set_temp("owner_id", "longer");
+        set_temp("owner_name", "药王");
+        ::setup();
+}
+

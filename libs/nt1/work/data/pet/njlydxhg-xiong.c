@@ -1,0 +1,18 @@
+// SN:SKc6dN\Bo74BDo;B
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m熊[1;37m熊[2;37;0m", ({"xiong xiong"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "它是明教教主亲传第子星星的座骑,一看到它你情不自禁的要拥抱它
+它是星星的坐骑。
+");
+        set_temp("owner_id", "njlydxhg");
+        set_temp("owner_name", "星星");
+        ::setup();
+}
+

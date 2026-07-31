@@ -1,0 +1,22 @@
+//muqiao.c
+// this is made by hotjc
+
+#include <room.h>
+inherit ROOM;
+void create()
+{
+           set("short","木桥");
+         set ("long",@long
+这是通往湖中小亭的木桥，从这望去湖面碧波荡漾，景色宜人。木桥的
+扶手上雕刻着一尊尊小木头狮子，让人爱不释手。木桥往西面走能够看到一
+座湖中小亭。
+long);
+           set("outdoors","murong");
+         set("exits",([
+               "east" : __DIR__"huayuan1",
+                 "west" : __DIR__"road",
+]));
+         setup();
+         replace_program(ROOM);
+}
+

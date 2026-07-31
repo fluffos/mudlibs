@@ -1,0 +1,18 @@
+// SN:5V=1;eeGoaa>km`C
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("最后一只老虎[2;37;0m", ({"newerzs hu"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "没什么好描述的
+它是最后一个的坐骑。
+");
+        set_temp("owner_id", "newerz");
+        set_temp("owner_name", "最后一个");
+        ::setup();
+}
+

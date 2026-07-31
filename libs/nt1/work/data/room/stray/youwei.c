@@ -1,0 +1,56 @@
+// SN:8GFCB0WT]DFc^P8I
+// File(/data/room/stray/youwei.c) of stray's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        object ob;
+
+        set("short", "米米米米右卫舍");
+	set ("long", @LONG
+这里是右卫舍，是看护米米米米大门的家丁放哨的地方。 
+LONG );
+
+	set("exits", ([
+                "east"   : __DIR__"qianting",
+	]));
+
+        set("objects", ([
+                "/d/room/roomnpc/shouwei" : 2,
+        ]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        ob = present("shou wei", this_object());
+        ob->set("coagents", ({
+                ([ "startroom" : __DIR__"youwei",
+                   "id"        : "shou wei 1" ]),
+                ([ "startroom" : __DIR__"youwei",
+                   "id"        : "shou wei 2" ]),
+                ([ "startroom" : __DIR__"zuowei",
+                   "id"        : "shou wei 2" ]),
+                ([ "startroom" : __DIR__"zuowei",
+                   "id"        : "shou wei 1" ]),
+        }));
+
+        ob = present("shou wei 2", this_object());
+        ob->set("coagents", ({
+                ([ "startroom" : __DIR__"youwei",
+                   "id"        : "shou wei 1" ]),
+                ([ "startroom" : __DIR__"youwei",
+                   "id"        : "shou wei 2" ]),
+                ([ "startroom" : __DIR__"zuowei",
+                   "id"        : "shou wei 2" ]),
+                ([ "startroom" : __DIR__"zuowei",
+                   "id"        : "shou wei 1" ]),
+        }));
+
+        set("room_owner", "我是米");
+        set("room_name", "米米米米");
+        set("room_id", "rice");
+        set("room_owner_id", "stray");
+        set("room_position", "青砖路");
+}

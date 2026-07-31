@@ -1,0 +1,18 @@
+// SN:Elnj=IZfYgf^8@MC
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[36m飞狐狐[2;37;0m", ({"fei hu"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "我的宠物 别碰
+它是炎影的坐骑。
+");
+        set_temp("owner_id", "sinewind");
+        set_temp("owner_name", "炎影");
+        ::setup();
+}
+

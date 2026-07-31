@@ -1,0 +1,18 @@
+// SN:1VUb6eI<39Lj=CG?
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[31m雄狮狮[2;37;0m", ({"xiong shi"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "$RED$雄狮
+它是石破天的坐骑。
+");
+        set_temp("owner_id", "spt");
+        set_temp("owner_name", "石破天");
+        ::setup();
+}
+

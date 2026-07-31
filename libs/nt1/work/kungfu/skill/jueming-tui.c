@@ -1,0 +1,72 @@
+// Copyright (C) 2003, by Lonely. All rights reserved.
+// This software can not be used, copied, or modified 
+// in any form without the written permission from authors.
+
+inherit SKILL;
+
+string *action_msg = ({
+        "$N左脚猛地飞起，一式「盘古开天」，脚尖踢向$n的$l",
+        "$N左脚顿地，右脚一式「流星赶月」，猛踹$n的$l",
+        "$N两臂舒张，右脚横踢，既猛且准，一式「横扫千军」踢向$n",
+        "$N突然跃起，双足连环圈转，一式「百步穿杨」，攻向$n的全身",
+        "$N双脚交叉踢起，一式「川流不息」，脚脚不离$n的面门左右",
+        "$N一个侧身，右脚自上而下「独踹华山」，照$n的面门直劈下来",
+        "$N使一式「夸父追日」，双足忽前忽后，迅猛无及踹向$n的胸口",
+        "$N开声吐气，大喝一声，一式「惊天动地」，双脚猛地踢向$n的$l",
+});
+
+int valid_enable(string usage)
+{
+        return usage == "unarmed" ||  usage == "parry";
+} 
+
+int valid_combine(string combo) { return combo=="xiaoyaoyou"; }
+
+int valid_learn(object me)
+{
+        if (me->query_temp("weapon") || me->query_temp("secondary_weapon"))
+                return notify_fail("学习绝命腿必须空手。\n");
+
+        if ((int)me->query_skill("force") < 80)
+                return notify_fail("你的内功火候不够，无法学绝命腿。\n");
+
+        if ((int)me->query("max_neili") < 500)
+                return notify_fail("你的内力太弱，无法练绝命腿。\n");
+
+        if ((int)me->query_skill("unarmed", 1) < (int)me->query_skill("jueming-tui", 1))
+                return notify_fail("你的基本拳脚火候不够，无法领会更高深的绝命腿法。\n");
+
+        return 1;
+}
+
+mapping query_action(object me, object weapon)
+{
+        return ([
+                "action": action_msg[random(sizeof(action_msg))],
+                "force" : 210 + random(60),
+                "attack": 60 - random(10),
+                "dodge" : 60 - random(10),
+                "parry" : 60 - random(10),
+                "damage_type" : random(2)?"瘀伤":"内伤",
+        ]);
+}
+
+int practice_skill(object me)
+{
+        if ((int)me->query("qi") < 60)
+                return notify_fail("你的体力太低了。\n");
+
+        if ((int)me->query("neili") < 60)
+                return notify_fail("你的内力不够练绝命腿。\n");
+
+        me->receive_damage("qi", 50);
+        me->add("neili", -51);
+
+        return 1;
+}
+
+string perform_action_file(string action)
+{
+        return __DIR__"jueming-tui/" + action;
+}
+

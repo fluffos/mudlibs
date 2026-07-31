@@ -1,0 +1,253 @@
+// 神话世界·西游记·版本４．５０
+/* <SecCrypt CPL V3R05> */
+ 
+// fingerd.c
+
+#include <net/dns.h>
+
+mapping level = ([
+	"(admin)" : "园长",
+	"(arch)" : "副园长",
+	"(wizard)" : "专职园丁",
+	"(apprentice)" : "园丁学徒",
+	"(immortal)" : "仙人",
+	"(elder)" : "荣誉玩家",
+	"(player)" : "普通玩家",
+]);
+
+string age_string(int time);
+string sort_by_id(object *list);
+string sort_by_ip(object *list);
+
+void create() { seteuid( getuid() ); }
+
+string finger_all()
+{
+   object *ob;
+   int i;
+
+   ob = users();
+
+   if( !wizardp(this_player()) ) // player finger
+      return "■ " + MUD_NAME + "\n" + 
+      "——————————————————\n" +
+      "姓名          帐号          发呆\n" +
+      "——————————————————\n" +
+      sort_by_id(ob) + 
+      "——————————————————\n";
+   else // wizard finger
+      return "■ " + MUD_NAME + "\n" + 
+      "—————————————————————————————————————\n" +
+      "姓名          帐号          年龄          发呆   连线\n" +
+      "—————————————————————————————————————\n" +
+      sort_by_ip(ob) +
+      "—————————————————————————————————————\n";
+}
+   
+string finger_user(string name)
+{
+   object ob, body;
+   string msg, mud;
+   int public_flag;
+
+   if( sscanf(name, "%s@%s", name, mud) == 2 ) {
+      GFINGER_Q->send_gfinger_q(mud, name, this_player(1));
+      return "网路指令传送过程可能需要一些时间，请稍候。\n";
+   }
+
+   ob = new(LOGIN_OB);
+   ob->set("id", name);
+   if( !ob->restore() ) {
+      destruct(ob);
+      return "没有这个玩家。\n";
+   }   
+   
+   if( !this_player() || !wizardp(this_player()) )  // player finger
+   // !this_player() is used for inter-mud finger.
+   // in that case, this_player() is not defined, so treat as player.
+   // mon 8/27/97
+   {
+      if( objectp(body = find_player(name)) && geteuid(body) == name )
+         public_flag = body->query("env/public") ? 1 : 0;
+      else {
+         body = LOGIN_D->make_body(ob);
+         if( !body->restore() ) {
+            destruct(body);
+            return "没有这个玩家。\n";
+         }
+         public_flag = body->query("env/public") ? 1 : 0;
+         destruct(body);
+      }
+     
+      msg =  sprintf("\n英文代号：\t%s\n姓    名：\t%s\n权限等级：\t%s\n"
+         "电子邮件地址：\t%s\n上次连线：\t%s\n\n",
+         ob->query("id"),
+         ob->query("name"),
+         level[SECURITY_D->get_status(name)],
+         public_flag?ob->query("email") : "不告诉你",
+         ctime(ob->query("last_on")));
+
+      // !body->query("env/invisibility") added by snowcat
+      if( objectp(body = find_player(name)) && geteuid(body) == name &&
+         interactive(body) && !(body->query("env/invisibility") &&
+         wizardp(body)) ) {
+         // can only query_idle on an interactive player.
+            int idle = query_idle(body);
+            msg += sprintf("\n%s目前正在连线", body->name(1));
+            if( idle > 59 ) 
+               msg += sprintf("，已发呆 %d 秒钟。\n", idle);
+            else
+               msg += "中。\n";
+      }
+   } else { // wizard finger
+      msg = sprintf("\n英文代号：\t%s\n姓    名：\t%s\n权限等级：\t%s\n"
+         "电子邮件地址：\t%s\n上次连线地址：\t%s( %s )\n%s\n",
+         ob->query("id"),
+         ob->query("name"),
+         SECURITY_D->get_status(name),
+         ob->query("email"),
+         ob->query("last_from"),
+         ctime(ob->query("last_on")),
+         intp(ob->query("mud_age")) ? "合计在线时间：\t" + age_string(ob->query("mud_age")) : "");
+
+      // !body->query("env/invisibility") added by snowcat, removed by mon
+      if( objectp(body = find_player(name)) && interactive(body) &&
+         geteuid(body) == name ) {
+         msg += sprintf("\n%s目前正在从 %s 连线，已发呆 %d 秒钟。\n", 
+            body->name(1), query_ip_name(body), query_idle(body));
+      }
+   }   
+   
+   destruct(ob);
+   return msg;
+}
+
+//this function is not used.  remote finger still use finger_user.
+//mon 3/7/98
+varargs string remote_finger_user(string name, int chinese_flag)
+{
+   object ob, body;
+   string msg;
+
+   ob = new(LOGIN_OB);
+   ob->set("id", name);
+   if( !ob->restore() ) {
+      destruct(ob);
+      return chinese_flag ? "没有这个玩家。\n" : "No such user.\n";
+   }
+
+   if( chinese_flag ) msg = sprintf("\n英文代号：\t%s\n姓    名：\t%s\n"
+      "权限等级：\t%s\n电子邮件地址：\t%s\n上次连线地址：\t%s( %s )\n\n",
+      ob->query("id"),
+      ob->query("name"),
+      SECURITY_D->get_status(name),
+      ob->query("email"),
+      ob->query("last_from"),
+      ctime(ob->query("last_on")));
+   else msg = sprintf("\nName\t: %s\nStatus\t: %s\nEmail\t: %s\n"
+      "LastOn\t: %s( %s )\n\n",
+      capitalize(ob->query("id")),
+      SECURITY_D->get_status(name),
+      ob->query("email"),
+      ob->query("last_from"),
+      ctime(ob->query("last_on")));
+
+   if( body = find_player(name) ) {
+      if( !this_player() || this_player()->visible(body) )
+         msg += chinese_flag ? ("\n" + ob->query("name") + "目前正在线上。\n"):
+            ("\n" + capitalize(name) + " is currently connected.\n");
+   }
+
+   destruct(ob);
+   return msg;
+}
+
+object acquire_login_ob(string id)
+{
+   object ob;
+
+   if( ob = find_player(id) ) {
+      // Check if the player is linkdead
+      if( ob->query_temp("link_ob") )
+         return ob->query_temp("link_ob");
+   }
+
+   ob = new(LOGIN_OB);
+   ob->set("id", id);
+   if( ob->restore() ) return ob;
+   else {
+      destruct(ob);
+      return 0;
+   }
+}
+
+string age_string(int time)
+{
+   int month, day, hour, min, sec;
+
+   sec = time % 60;
+   time /= 60;
+   min = time % 60;
+   time /= 60;
+   hour = time % 24;
+   time /= 24;
+   day = time % 30;
+   month = time / 30;
+   return (month ? month + "m" : "") + (day ? day + "d" : "") +
+      (hour ? hour + "h" : "") + min + "m";
+}
+
+string sort_by_id(object *list) // 按名字排列
+{
+   int i;
+   mapping id = ([ ]);
+   string *key, str = "";
+   
+   for( i = sizeof(list) - 1; i >= 0; i -- ) {
+      // if( this_player() && !this_player()->visible(list[i]) ) continue;
+      if( !stringp(list[i]->query("id")) ) continue;
+      if( list[i]->query("env/invisibility") && wizardp(list[i]) ) continue;
+      id += ([ list[i]->query("id") :
+         sprintf("%-14s%-12s%6s\n", list[i]->query("name"),
+         list[i]->query("id"), query_idle(list[i]) + "s") ]);
+   }
+   
+   key = keys(id);
+   key = sort_array(key, -1);
+   
+   for( i = sizeof(key) - 1; i >= 0; i -- )
+      str += id[key[i]];
+   
+   return str;
+}
+
+string sort_by_ip(object *list) // 按 IP 地址排列
+{
+   int i;
+   mapping ip = ([ ]);
+   string *key, str = "";
+   
+   for( i = sizeof(list) - 1; i >= 0; i -- ) {
+      // if( this_player() && !this_player()->visible(list[i]) ) continue;
+      if( !stringp(query_ip_number(list[i])) ) continue;
+      if( undefinedp(ip[query_ip_number(list[i])]) )
+         ip += ([ query_ip_number(list[i]) :
+            sprintf("%-14s%-14s%-14s%-7s%s\n", list[i]->query("name"),
+            list[i]->query("id"), age_string((int)list[i]->query("mud_age")),
+            query_idle(list[i]) + "s", query_ip_name(list[i])) ]);
+      else
+         ip[query_ip_number(list[i])] +=
+            sprintf("%-14s%-14s%-14s%-7s%s\n", list[i]->query("name"),
+            list[i]->query("id"), age_string((int)list[i]->query("mud_age")),
+            query_idle(list[i]) + "s", query_ip_name(list[i]));
+   }
+   
+   key = keys(ip);
+   key = sort_array(key, -1);
+   
+   for( i = sizeof(key) - 1; i >= 0; i -- )
+      str += ip[key[i]];
+   
+   return str;
+}
+

@@ -1,0 +1,32 @@
+// SN:mF3iffP38ee>eV3^
+// File(/data/room/mecca/lianwu.c) of mecca's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "练武场");
+	set ("long", @LONG
+此处便是贝勒爷王府的练武场，人在江湖，武功万万不可荒废。
+LONG );
+
+	set("exits", ([
+                "west" : __DIR__"houyuan",
+	]));
+
+        set("objects", ([
+                "/clone/npc/mu-ren" : 4,
+        ]));
+
+        set("outdoors", "yangzhou");
+        set("no_sleep_room", 1);
+
+        setup();
+    
+        set("room_owner", "杨铁心");
+        set("room_name", "贝勒爷王府");
+        set("room_id", "palace");
+        set("room_owner_id", "mecca");
+        set("room_position", "草地");
+}

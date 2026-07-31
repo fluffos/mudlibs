@@ -1,0 +1,31 @@
+// SN:Iehbl99?L[nR?:UG
+// File(/data/room/yunxue/dayuan.c) of yunxue's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        set("short", "天空之城大院");
+	set ("long", @LONG
+这是一个宽阔的院落，种着各种树木，阳光照下来透过树荫投下
+层层影子。一条大路通向里面，踩得非常平滑的，看来是经常有人来
+往。 
+LONG );
+
+	set("exits", ([
+		"north"  : __DIR__"qianting",
+                "out"    : "/d/city/jiaowai2",
+	]));
+
+        set("outdoors", "yangzhou");
+        set("no_sleep_room", 1);
+        set("valid_startroom", 1);
+        setup();
+
+        set("room_owner", "云虚");
+        set("room_name", "天空之城");
+        set("room_id", "skycity");
+        set("room_owner_id", "yunxue");
+        set("room_position", "树林");
+}

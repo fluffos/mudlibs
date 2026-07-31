@@ -1,0 +1,18 @@
+// SN:`e;_]9ZKO<n<BAC?
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("神雕雕[2;37;0m", ({"diao diao"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "高大的鸟
+它是孟知秋的坐骑。
+");
+        set_temp("owner_id", "zyb");
+        set_temp("owner_name", "孟知秋");
+        ::setup();
+}
+

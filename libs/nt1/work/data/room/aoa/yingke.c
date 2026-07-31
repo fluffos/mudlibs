@@ -1,0 +1,38 @@
+// SN:;\mm\HLQF`GK`BnA
+// File(/data/room/aoa/yingke.c) of aoa's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        set("short", "幽宅迎客厅");
+	set ("long", @LONG
+这里是幽宅的主人死囚迎接八方来客的地方。大凡客人来拜见死
+囚，少不得在这里寒暄叙话，了尽仰慕之情。东面通往一个茶室，是
+主人陪同客人品尝天下名茶之处。 
+LONG );
+
+	set("exits", ([
+		"north"  : __DIR__"yishiting",
+                "south"  : __DIR__"zoudao",
+                "east"   : __DIR__"chashi",
+	]));
+
+        create_door("east", "木门", "west", DOOR_CLOSED);
+
+        set("objects", ([
+                "/d/room/roomnpc/yahuan" : 2,
+        ]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("room_owner", "死囚");
+        set("room_name", "幽宅");
+        set("room_id", "you");
+        set("room_owner_id", "aoa");
+        set("room_position", "名人堂");
+}

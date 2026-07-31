@@ -1,0 +1,30 @@
+// ITEM Made by player(南巷故人:a304374772_1) /data/item/a/a304374772_1-sqfmg.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Sat Mar 11 03:42:08 2023
+#include <ansi.h>
+#include <weapon.h>
+
+inherit CLUB;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;36m三千繁梦棍[2;37;0m", ({ "sqfmg" }));
+	set_weight(750);
+	set("item_make", 1);
+	set("unit", "根");
+	set("long", "这是由[1;37m世界[2;37;0m炼制而成的一根棍。
+棍柄上刻着一行小字：南巷故人(a304374772_1)
+");
+	set("value", 200100000);
+	set("point", 22000);
+	set("material", "silk");
+	set("wield_msg", "[1;36m$N[1;36m一声清啸，抖出一根[1;36m$n[1;36m。[2;37;0m\n");
+	set("unwield_msg", "$N随手一抹，收起了$n。\n");
+	if (! check_clone()) return;
+	restore();
+	init_club(apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

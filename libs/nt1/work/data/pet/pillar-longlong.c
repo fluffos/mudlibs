@@ -1,0 +1,18 @@
+// SN:\2iWD<@]E@IVeM7_
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m龙龙兽[2;37;0m", ({"longlong shou"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "龙龙
+它是龙之尊的坐骑。
+");
+        set_temp("owner_id", "pillar");
+        set_temp("owner_name", "龙之尊");
+        ::setup();
+}
+

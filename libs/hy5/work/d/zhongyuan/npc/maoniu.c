@@ -1,0 +1,34 @@
+/* maoniu.c 牦牛
+ * from XO Lib
+ * a npc of desert
+ * created by hydra 19980330
+ * version: @(#) 1.0@(#)
+ * last modified by hydra 19980406
+ */
+
+#include <ansi.h>
+
+inherit NPC;
+
+void create()
+{
+    set_name( "牦牛",({ "mao niu","niu","sheep","yak" }) );
+    set( "long","一只牦牛，体格健壮。\n" );
+    set( "race","野兽" );
+    set( "age",5 );
+
+    set( "str",50 );
+    set( "dex",40 );
+    set( "int",25 );
+    set( "con",30 );
+
+    set( "max_qi",400 );
+    set( "max_jing",400 );
+
+    set( "limbs",({ "头部","身体","前蹄","后蹄","尾巴" }) );
+    set( "verbs",({ "hoof"}) );
+
+    setup();
+}
+
+

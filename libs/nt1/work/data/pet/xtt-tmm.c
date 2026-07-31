@@ -1,0 +1,18 @@
+// SN:M^\3;WN?>`hY;L:4
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("檀眉鹤[2;37;0m", ({"tmm he"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "檀眉
+它是小谭谭的坐骑。
+");
+        set_temp("owner_id", "xtt");
+        set_temp("owner_name", "小谭谭");
+        ::setup();
+}
+

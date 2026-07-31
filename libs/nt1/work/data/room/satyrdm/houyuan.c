@@ -1,0 +1,31 @@
+// SN:>[TVb]hLm9Tcb?KU
+// File(/data/room/satyrdm/houyuan.c) of satyrdm's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "后院");
+	set ("long", @LONG
+这是蚂蚁二号的后院，正中一个假山，傲然而立、非常雄伟。下
+有一水池，环山而走，悠然不息。东面乃是练武之处，西面是厨房。
+LONG );
+
+	set("exits", ([
+                "south" : __DIR__"zhongting",
+                "north" : __DIR__"huayuan",
+                "east"  : __DIR__"lianwu",
+                "west"  : __DIR__"chufang",
+	]));
+
+        set("outdoors", "playertown");
+        set("no_sleep_room", 1);
+        setup();
+
+        set("room_owner", "训练专家");
+        set("room_name", "蚂蚁二号");
+        set("room_id", "antstwo");
+        set("room_owner_id", "satyrdm");
+        set("room_position", "碎石小道");
+}

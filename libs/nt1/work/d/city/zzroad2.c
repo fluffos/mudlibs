@@ -1,0 +1,24 @@
+// Copyright (C) 2003, by Lonely. All rights reserved.
+// This software can not be used, copied, or modified 
+// in any form without the written permission from authors.
+
+inherit ROOM;
+
+void create()
+{
+	set("short", "渡口路");
+	set("long", @LONG
+这里是通往去中州城的渡口，前面就是滚滚长江，向北就是扬州城。
+LONG );
+	set("light_up", 1);
+	set("no_clean_up", 0);
+	set("exits", ([ /* sizeof() == 2 */
+                "northwest" : __DIR__"zzroad1",
+                "south" : "/d/zhongzhou/yangzhoudu",
+                "west"  : __DIR__"xiaofang",                
+        ]));
+	set("outdoors", "/d/city");
+
+	setup();
+	replace_program(ROOM);
+}

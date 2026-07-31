@@ -1,0 +1,18 @@
+// SN:[[9G7hi6bVICeI0b
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m雪山飞狐[2;37;0m", ({"fly hu"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "--------------------------------
+它是紫水晶的坐骑。
+");
+        set_temp("owner_id", "crystal");
+        set_temp("owner_name", "紫水晶");
+        ::setup();
+}
+

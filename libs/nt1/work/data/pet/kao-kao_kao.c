@@ -1,0 +1,18 @@
+// SN::2^^Q`1IIIV37AfN
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[32m老虎[2;37;0m", ({"kao_kao hu"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "sd
+它是辟邪的坐骑。
+");
+        set_temp("owner_id", "kao");
+        set_temp("owner_name", "辟邪");
+        ::setup();
+}
+

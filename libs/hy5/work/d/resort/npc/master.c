@@ -1,0 +1,294 @@
+ inherit NPC;
+inherit F_MASTER;
+int leave(); 
+#include <ansi.h> 
+void create()
+{
+    set_name("铁少", ({ "master tieshao", "master","tieshao" }) );
+    set("gender", "男性" );
+    set("nickname", HIG "多情刀客"NOR);
+    set("reward_npc", 1);
+    set("difficulty", 35);
+    set("age", 25);
+    set("int", 30);
+    set("per", 30);
+    set("cor",55);
+    set("str",100);
+    set("ill_boss",5);
+    set("class","legend");      
+    set("apprentice_available", 50);
+    create_family("铁雪山庄", 1, "庄主");
+    set("rank_nogen",1);
+    set("ranks",({"茶童","小侠","少侠","大侠","奇侠",WHT"狂侠"NOR,WHT"侠圣"NOR,HIW"隐侠"NOR}));
+    set("long",
+        "铁少从十五岁开始就和爱妻雪蕊儿行侠江湖，俩人刀剑合壁，\n"
+        "天下无敌。正当俩人名声顶盛之时，又忽然退出江湖，隐居于此。\n"
+        );
+    set("inquiry", ([
+        "leave" : (: leave :),
+                ]));
+    set("force_factor", 150);
+    set("max_atman", 300);
+    set("atman", 300);
+    set("max_neili", 1500);
+    set("force", 1500);
+    set("max_mana", 300);
+    set("mana", 300);
+    set("fly_target",1);
+    set("combat_exp", 39999999);
+    set("score", 90000);
+      set("qi", 99000);
+    set("max_qi", 99000);
+    set("jing", 98000);
+    set("max_jing", 98000);
+    set("neili", 93500);
+    set("max_neili", 93500);
+    set("jiali", 100);
+
+    set("book_count", 1);
+    set("combat_exp", 9000000);
+    set("score", 0);
+	 
+set("combat_exp", 9999999);
+        set("score", 90000);
+        set_skill("unarmed", 100);
+        set_skill("blade", 350);
+        set_skill("force", 100);
+        set_skill("parry", 100);
+        set_skill("literate", 100);
+	set_skill("dodge", 100);
+
+	set_skill("meihua-shou", 500);
+	set_skill("shortsong-blade", 530);
+	set_skill("qidaoforce", 550);
+	set_skill("fall-steps", 500);
+
+	map_skill("unarmed", "meihua-shou");
+        map_skill("blade", "shortsong-blade");
+        map_skill("force", "qidaoforce");
+        map_skill("parry", "shortsong-blade");
+        map_skill("dodge", "fall-steps");
+        set("chat_chance_combat", 80);
+        set("chat_msg_combat", ({
+                (: perform_action, "dodge.luoyeqiufeng" :),
+                (: perform_action, "blade.duangechangmeng" :),
+        }) );
+
+set("pubmaster",1);
+    setup();
+    carry_object(__DIR__"obj/whitecloth")->wear();
+    carry_object(__DIR__"obj/mblade")->wield();
+}  
+
+int accept_fight(object me)
+{
+    object xiaocui;
+    if( objectp(xiaocui = present("cui", environment(this_object()))) && living(xiaocui))
+    {   
+        command("smile");
+        command("say 还是让小翠来吧。");
+        return 0;
+    }
+    else
+        command("sigh");
+    command("铁少慢慢的从翠竹凳上站起来，放下了手中的紫砂杯。");
+    command("wield wangblade");
+    command("say 请！");
+    call_out("do_unwie", 3);
+    return 1;
+}
+int do_unwie()
+{
+    if( !this_object()->is_fighting())
+    {
+//      command("unwield wangblade");
+        message_vision("$N拿起茶杯浅啖一口，含情脉脉的望了雪蕊儿一眼，又坐在竹凳上。\n", this_object());
+        command("smile");
+        return 1;
+    }
+    else
+        call_out("do_unwie", 3);
+} 
+void init()
+{       
+        object me;
+        add_action("do_killing", "kill");
+        ::init();
+        if( interactive(me = this_player()) && !is_fighting())
+        if( interactive(me = this_player()) ) {
+                remove_call_out("punish_betray");
+                call_out("punish_betray",5 , me);
+        }
+        if (me->query_temp("marks/tie_ask") && !me->query("marks/黄山送信")) {
+                message_vision(HIY"$N问：我叫你办的事怎么样了？\n"NOR,this_object());
+                return;
+                }
+        if (me->query("combat_exp")>3200000 && me->query("class")=="legend" 
+                && !me->query("marks/黄山学艺") && !me->query("marks/黄山送信") 
+                && !me->query_temp("marks/tie_ask")&&userp(me)) {
+                remove_call_out("greeting");
+                add_action("do_accept", "accept");
+                me->set_temp("tie_in_ask",1);
+                call_out("greeting", 1, me);
+    }
+            
+} 
+int greeting(object me)
+{
+    message_vision(HIY"\n$N看了$n一眼说道：“你跟我学艺业已有成，今日有一事嘱托于你。（accept yes/no）\n" NOR, this_object(), me);
+    return 1;
+}  
+int do_accept(string arg)
+{
+        string name;
+        if (!this_player()->query_temp("tie_in_ask"))
+                return notify_fail("什么？\n");
+        if( arg != "yes" &&  arg != "no") 
+                return notify_fail("你要接受什么？\n");
+        if( arg == "yes") {
+                this_player()->set_temp("marks/tie_ask",1);
+                message_vision(CYN "$N说道：数日前小翠路过嵩山，见几个番僧在山下挑衅，还打伤了几个少林门人。\n"NOR,this_object());
+                message_vision(CYN"据说这几个僧人号称[恒河叁佛]，很是嚣张。\n"NOR,this_object());
+                message_vision(CYN"$N说：你且代为师走一趟，把他们赶回西域去。\n"NOR,this_object());
+        }
+        else 
+                command("sigh");
+        this_player()->delete_temp("tie_in_ask");
+        return 1;
+} 
+int accept_object(object who, object ob)
+{
+        object gletter;
+	int i;
+
+	if (!(int)who->query_temp("learn_timeb"))      
+		who->set_temp("learn_timeb", 0);
+
+	if(ob->query("money_id") )
+{	if(who->query_skill("unarmed",1)<30)
+		i=ob->value() / 50;
+	else
+	{
+		if(who->query_skill("unarmed",1)<60)
+			i=ob->value() / 100;
+		else
+		{
+			if(who->query_skill("unarmed",1)<100)
+				i=ob->value() / 100;
+			else
+				i=ob->value() / 100;
+		}
+	}
+	who->add_temp("learn_timeb",i);
+command("say 既然你诚心想学我的武功，我就成全成全你吧。");
+	return 1;
+}	
+        if(!who->query("marks/番僧1") || !who->query("marks/番僧2") ||!who->query("marks/番僧3")) return 0; 
+        if( ob->query("id")!="yellow bead" ) return 0;
+        message_vision(CYN"$N大笑道：好，好，好徒弟！！\n"NOR,this_object());
+        who->set("marks/铁雪疗伤",1);
+        message_vision(CYN"$N说：为师现在把棋道心诀的疗伤术(heal)传给你。\n",this_object());
+        message_vision(CYN"$N说:为师还有一事，黄山拥翠山庄李庄主是为师多年好友，这封信替我带给他。\n"NOR,this_object());
+        message_vision(CYN"雪蕊儿朝你一笑说，代我向李夫人问好。\n"NOR,this_object());
+        who->set("marks/黄山送信",1);
+        gletter = new(__DIR__"obj/gletter");
+        gletter ->move(this_player());
+        return 1;
+} 
+int do_killing(string arg)
+{
+    object player, victim, weapon;
+    string name, id, id_class;
+    if(!arg) return 0;
+    player = this_player();
+    if( objectp(victim = present(arg, environment(this_object()))) && living(victim))
+    {
+        name = victim->name();
+        if( name == "雪蕊儿")
+        {
+            message_vision("$N皱皱眉头。\n", this_object());
+            weapon = present("wangblade", this_object());
+            if(weapon)
+            {
+                message_vision("$N从乌皮刀鞘中抽出一把杀气逼人的垓下刀握在手中。\n", this_object());
+                weapon->wield();
+            }
+            this_object()->kill_ob(player);
+            player->kill_ob(this_object());
+            remove_call_out("do_unwie");
+            call_out("do_unwie", 3);
+            return 0;
+        }
+        if( name == "铁少")
+        {
+            message_vision("$N皱皱眉头。\n", this_object());
+            weapon = present("wangblade", this_object());
+            if(weapon)
+            {
+                message_vision("$N从乌皮刀鞘中抽出一把杀气逼人的垓下刀握在手中。\n", this_object());
+                weapon->wield();
+            }
+            remove_call_out("do_unwie");
+            call_out("do_unwie", 3);
+            return 0;
+        }
+        id_class=victim->query("class");
+        id=victim->query("id");
+        if(id_class == "legend"&& userp(victim)&&player!=victim)
+        {
+            message_vision("$N皱皱眉头。\n", this_object());
+            weapon = present("wangblade", this_object());
+            if(weapon)
+            {
+                message_vision("$N从乌皮刀鞘中抽出一把杀气逼人的垓下刀握在手中。\n", this_object());
+                weapon->wield();
+            }
+            remove_call_out("do_unwie");
+            call_out("do_unwie", 3);
+            message_vision("$N对着$n喝道：" + RANK_D->query_rude(player) 
+                                                + "竟敢杀" + RANK_D->query_self_rude(this_object()) 
+                                                + "的徒弟，去死吧。\n", this_object(), player);
+            this_object()->kill_ob(player);
+            player->kill_ob(this_object());
+            if (!player->is_busy()) player->start_busy(2);
+            return 0;
+        } 
+               
+        return 0;
+    }
+    return 0;           
+}  
+int leave() {
+        if (this_player()->query("class")!="legend") return 0;
+        message_vision(CYN"$N道：人各有志，我不勉强你留下。\n"NOR, this_object(),this_player());
+        message_vision(CYN"$N说：只是聚气心法非弟子不能使用，短歌刀法的精髓你大概也体会不到了。\n"NOR,this_object(),this_player());
+        return 1;
+}     
+void punish_betray(object me)
+{
+        if( ( me->query("tiexue_once")==1) && ( (me->query("class"))!= "legend"))
+          {      
+                tell_object(me, YEL"\n铁少看见你忽然一楞:我派中人，讲求一个信字，你已背我而去，我派武学就不能再用了！”\n"NOR);                  
+                message("vision", YEL"铁少对"+ me->name() +"叹道：“"+ me->name() + "！ 尔等背信弃义,还我武功！\n"NOR, environment(me), me);
+                tell_object(me, HIW"雪蕊儿一缕指风击在你的身上七大穴道！\n"NOR);              
+                message("vision", HIW"雪蕊儿一缕指风击在"+ me->name() +"的身上七大穴道！\n"NOR, environment(me), me);
+              if (me->query_skill("dormancy",1)>100) me->delete_skill("dormancy");
+              if ( me->query("max_neili")<650 )
+              	  me->set("max_neili",0);
+              else
+              me->add("max_neili",-650);
+//              me->add("max_qi",-650);    多余的,而且650的内力不止加650的气血
+                tell_object(me, HIR"你只觉天晕地转,摇摇晃晃地倒了下去----悔不当初呀!\n"NOR);
+                me->set("tiexue_once",2);
+                me->unconcious();
+          }
+}  
+
+
+int recognize_apprentice(object ob)
+{
+	if( ob->query_temp("learn_timeb") <= 0) return 0;
+else         
+ob->add_temp("learn_timeb",-1);
+return 1;
+}

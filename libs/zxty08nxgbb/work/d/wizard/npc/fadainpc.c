@@ -1,0 +1,28 @@
+inherit NPC;
+
+
+void create()
+{
+         set_name(HIC"发呆"NOR, ({"fadai_npc", "fadai"}));
+         set("title", HIG"[天 涯"HIR" ☆"NOR+WHT" 发 呆 最 久"HIR" ☆"HIG" 玩 家]"NOR); 
+       set("long", HIW "天涯资深玩家，支持天涯好多年了，不过这家伙就会发\n呆，你甭想他开口，反正就是“呆”！\n"NOR);
+        set("gender", "男性");
+        set("combat_exp", 10000);
+        set("age", 28);
+        set("attitude", "peaceful");
+        set("shen_type", 1);
+        set("str", 17);
+        set("dex", 20);
+        set("con", 17);
+        set("int", 22);
+        set("per", 30);
+        set("no_die", 1);
+        set_skill("dodge",20);
+        set_skill("unarmed",20);
+
+       
+        setup();
+        carry_object("/d/wizard/npc/obj/colorcloth")->wear();
+        add_money("coin", 40+random(30));
+}
+

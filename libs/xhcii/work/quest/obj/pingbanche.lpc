@@ -1,0 +1,126 @@
+// OBJ: pingbanche.c 平板车
+// derondog@xhcII
+
+#include <ansi.h>
+inherit ITEM;
+
+mapping reverse_dir=([
+        "south":                "南面",
+        "north":                "北面",
+        "west":                 "西面",
+        "east":                 "东面",
+        "southup":              "南边",
+        "northup":              "北边",
+        "westup":               "西边",
+        "eastup":               "东边",
+        "southdown":            "南边",
+        "northdown":            "北边",
+        "westdown":             "西边",
+        "eastdown":             "东边",
+        "southwest":            "西南方向",
+        "southeast":            "东南方向",
+        "northwest":            "西北方向",
+        "northeast":            "东北方向",
+        "down":                 "下面",
+        "up":                   "上面",
+        "enter":                "外面",
+        "out":                  "里面",
+]);
+
+void create()
+{
+       set_name("平板车", ({"pingban che", "che"}));
+        if( clonep() )
+                set_default_object(__FILE__);
+        else {
+                set("long", "这是一个极寻常的手推平板车，上面堆满了货物。");
+                set("unit", "辆");
+                set("no_get", "扛着车子你不累吗？");
+        }
+        set_weight(50000); 
+        set("value", 1000);
+}
+
+void init()
+{
+        add_action("do_tui", "tui");
+}
+
+int do_tui(string arg)
+{
+        string dir, dest, min, mout;
+        object me, ob, env, obj;
+        int exp, pot;
+        mapping exit;
+        me = this_player();
+        env = environment(me);
+
+        ob = present(me->query("id") +"'s che", env);
+        if ( !ob )
+                return 1;
+
+        if( !arg || !sscanf(arg, "che %s", dir) )
+                return notify_fail("推车的命令格式为：" + CYN + "tui che 方向。\n如：tui che east\n" NOR);
+
+        if( me->over_encumbranced() )
+                return notify_fail("你的负荷过重，动弹不得。\n");
+
+        if( !mapp(exit = env->query("exits")) || undefinedp(exit[dir]) ) 
+                return notify_fail("这个方向没有出路。\n");
+
+        if( me->is_busy() )
+                return notify_fail("你上一个动作还没完成，怎么推车啊？\n");
+
+        if ( me->is_fighting() )
+                return notify_fail("你还是把你的对手解决了再推车吧！\n");
+
+        if ( me->query("qi") < 10 )
+                return notify_fail("你实在太累了，休息一下再走吧！\n");
+
+        dest = exit[dir]; 
+        if( !(obj = find_object(dest)) )
+                call_other(dest, "???");
+        if( !(obj = find_object(dest)) )
+                return notify_fail("前面形势不太清楚，你走过去看看？。\n");
+
+        arg = dir;
+        if( !undefinedp(reverse_dir[dir]) )
+                dir = reverse_dir[dir];
+        else
+                dir = arg;
+
+        mout = sprintf(CYN "%s推着%s向%s的%s离开了。\n" NOR, me->name(), ob->name(), dir, obj->query("short"));    
+        message("vision", mout, env, me);
+        tell_object(me, WHT "你擦了擦汗，继续推着车往前走……\n" NOR);
+        ob->move(obj);
+        me->move(obj);
+        min = sprintf(CYN "%s推着%s走了过来。\n", me->name(), ob->name());
+        message("vision", min, obj, me);
+        tell_object(me, WHT "你推着平板车来到了" + obj->query("short") + "。\n" NOR);
+        me->set_temp("pending", 0);
+        all_inventory(env)->follow_me(me, arg);
+        me->start_busy(random(3));
+        me->add("qi", -5-random(5));
+        ob->add("bouns", 1); 
+        me->improve_skill("dodge", me->query_int()*random(me->query_kar()), 0);
+        if ( ob->query("time") < time() ) { 
+                message_vision(CYN "一位零担行的伙计跑了过来，对$N说道：你的速度也太慢了吧！\n" NOR, me);
+                message_vision(CYN "伙计推着$N飞快的向前方跑去……\n" NOR, ob);
+                destruct(ob);
+                }
+
+         if ( base_name(obj)==ob->query("dst") ) {
+                 exp = 2*ob->query("bouns") + 100 + random(100);
+                 pot = exp/2 + random(exp/2);
+                 message_vision(CYN "$N累得满头大汗，终于将货车推到了目的地。\n" NOR, me);
+                 tell_object(me, sprintf(HIW "你被奖励了：\n%s点实战经验，\n%s点潜能。\n" NOR,
+                         chinese_number(exp), chinese_number(pot)));
+                 me->add("combat_exp", exp);
+                 me->add("potential", pot);
+                 me->delete("quest");
+                 destruct(ob);
+                 }
+
+        return 1;
+}
+

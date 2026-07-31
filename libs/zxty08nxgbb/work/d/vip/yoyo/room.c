@@ -1,0 +1,46 @@
+inherit ROOM;
+void create()
+{
+    set("short", "太古虚境");
+    set("long", @LONG
+太古虚境! 
+LONG
+    );
+    set("exits", ([
+          "out" : "/d/taishan/fengchan",
+    ]));
+
+    set("no_new_clean_up", 0);
+    set("no_magic", 1);
+    set("objects",([
+     "/d/vip/yoyo/yoyo" : 1,
+     "/d/shaolin/npc/mu-ren" : 4,
+
+    ]));
+
+   set("no_sleep_room",1);
+
+    setup();
+}
+void init()
+{
+
+      if( !wizardp(this_player()) && this_player()->query("id")!="yoyo" && this_player()->query("id")!="tianya mengzhu" && this_player()->query("id")!="mu ren"   )
+                {
+                 this_player()->move("/d/city/guangchang");
+            message_vision("\n"HIW"$N被赶了出来。NOR\n""\n",this_player());
+                }
+if (this_player()->query("env/combatd") )
+this_player()->delete("env/combatd");
+      if( this_player()->query_condition("killer") )
+                {
+                 this_player()->move("/d/city/guangchang");
+            message_vision("\n"HIW"因为$N杀了人所以被赶出了擂台。NOR\n""\n",this_player());
+                }
+
+}
+
+
+
+
+

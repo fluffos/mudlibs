@@ -1,0 +1,636 @@
+// lottery.c
+// By haiyan
+
+inherit NPC;
+
+#include <ansi.h>
+#include <localtime.h>
+
+#define  PRICE        100            //每注价格一百两白银
+#define  MAX_BONUS    5000000        //单注最高奖金。首期保底
+#define  BUNE         70             //奖金返还率70%
+#define  J_0          60             //特等奖：总奖金的60%
+#define  J_1          25             //一等奖：总奖金的25%
+#define  J_2          10             //二等奖：总奖金的10%
+#define  J_3          5              //三等奖：总奖金的5%
+#define  TAX          1000000        //最低缴税金额
+#define  TAX_RATE     10             //税率10%
+
+int ask_caipiao();
+int ask_dui();
+int golds(int x, int y);
+void check_time();
+void aim_bonus(object me, int math, int bon);
+
+int save()
+{
+        string file;
+        file = "/data/npc/lottery";
+        return save_object(file);
+}
+
+int restore()
+{
+        string file;
+        file = "/data/npc/lottery.o";
+        if (file_size(file) > 0)    return restore_object(file);
+        else   return 0;
+}
+
+void create()
+{
+        set_name("赵老板", ({ "zhao laoban", "zhao", "laoban", "lottery" }));
+        set("title", "博彩店老板");
+        set("gender", "男性");
+        set("shen_type", 1);
+        set("age", 43);
+        set("combat_exp", 100000);
+        set("attitude", "friendly");
+        set("str", 30);
+        set("max_qi", 300);
+        set("max_jing", 300);
+        set("neili", 300);
+        set("max_neili", 300);
+        set("jiali", random(10)+15);
+        set_skill("unarmed", 30);
+        set_skill("parry", 40);
+        set_skill("dodge", 40);
+
+        set("huaxia", 1);
+        set("bonus", MAX_BONUS);
+
+        restore();
+        set("inquiry", ([
+               "彩票"  :   (: ask_caipiao :),
+               "兑奖"  :   (: ask_dui :),
+        ]));
+
+        set("chat_chance", 30);
+        set("chat_msg", ({
+                (: check_time :),
+        }));
+
+        if (clonep(this_object()))   keep_heart_beat();
+
+        setup();
+        carry_object("/d/changan/npc/obj/choupao")->wear();
+}
+
+void init()
+{
+        add_action("do_checkcp", "checkcp");
+        add_action("do_bonus", "bonuscp");
+        add_action("do_checknum", "checknum");
+}
+
+void unconcious()   { return; }
+void die()          { return; }
+
+int do_bonus()
+{
+        object me = this_player();
+        int i, nd = 0;
+        string msg, su, *pr;
+        mapping player_data;
+        mixed *local;
+
+        local = localtime(time());
+        if (local[LT_WDAY] && !wizardp(me))
+              return notify_fail("赵老板说道：奖金总额要星期天才能公布。\n");
+
+        msg = sprintf("赵老板道：本期奖金总额共%s。\n",
+                      MONEY_D->money_str(query("bonus") * 100));
+
+        if (wizardp(me))
+        {
+              player_data = query("caipiao/player");
+              if (! player_data)
+                    su = "目前还没有人投注。";
+              else
+              {
+                    pr = keys(player_data);
+                    for (i = 0; i < sizeof(pr); i++)
+                         nd += sizeof(player_data[pr[i]]);
+
+                    su = sprintf("目前有%d人共投了%d注。", sizeof(pr), nd);
+              }
+              msg += sprintf("盈利总额为%s。\n" + su + "\n",
+                     MONEY_D->money_str(query("profit") * 100));
+              if (query("finish"))
+              msg += "本期开奖号码为" + query("finish/number") + "\n";
+        }
+        tell_object(me, msg);
+        return 1;
+}
+
+int do_checkcp(string arg)
+{
+        object me = this_player();
+        string *num, msg;
+        mapping player_data;
+        int i, p, pages, a, b;
+
+        player_data = query("caipiao/player");
+
+        if (! player_data || member_array(me->query("id"), keys(player_data)) == -1)
+              return notify_fail("本期你还没有投过注。\n");
+
+        num = player_data[me->query("id")];
+
+        if (! arg || ! sscanf(arg, "%d", pages))
+        {
+              if (sizeof(num) > 100)
+              {
+                    if (sizeof(num) % 100)
+                            p = (sizeof(num) / 100) + 1;
+                    else    p = sizeof(num) / 100;
+                    tell_object(me, sprintf("你投的注太多，可以显示%d页。" +
+                                "请使用 checkcp <页码> 来查看。\n", p));
+                    return 1;
+              }  else
+              {
+                    msg = "你共投了" + sprintf("泥潭博彩第%s期有奖福利彩票%d注，" +
+                          "号码是：\n", chinese_number(query("huaxia")), sizeof(num));
+
+                    a = 1;
+                    b = sizeof(num);
+              }
+        }  else
+        {
+              if (sizeof(num) % 100)
+                      p = (sizeof(num) / 100) + 1;
+              else    p = sizeof(num) / 100;
+
+              if (! pages || pages > p)
+                    return notify_fail("页码错误！\n");
+
+              if (sizeof(num) <= 100)
+                    return notify_fail("你只有一页，直接使用checkcp就行了。\n");
+
+              msg = "你共投了" + sprintf("泥潭博彩第%s期有奖福利彩票%d注，" +
+                    "号码是：(第 %d 页)\n", chinese_number(query("huaxia")),
+                    sizeof(num), pages);
+              a = (pages - 1) * 100 + 1;
+              b = (pages - 1) * 100 + 100;
+              if (b > sizeof(num))   b = sizeof(num);
+        }
+
+        for (i = a; i <= b; i++)
+        {
+                msg += num[i-1] + "     ";
+                if (!(i%5))   msg += "\n";
+        }
+        me->start_more(msg);
+        return 1;
+}
+
+int do_checknum()
+{
+        object me = this_player();
+        mapping oldnum;
+        string msg, tmp;
+        int i;
+
+        oldnum = query("oldnum");
+        if (! oldnum)
+        {
+               tell_object(me, "赵老板对你道：还没有开过奖呢。\n");
+               return 1;
+        }
+
+        msg = "泥潭博彩历史开奖号码：\n";
+        for (i = 1; i <= sizeof(keys(oldnum)); i++)
+        {
+               tmp = sprintf("第%d期", i);
+               msg += tmp + "：";
+               msg += oldnum[tmp] + "    ";
+               if (!(i%5))   msg += "\n";
+        }
+        me->start_more(msg);
+        return 1;
+}
+
+int ask_caipiao()
+{
+        object ob;
+        string cont;
+        mixed *local;
+
+        local = localtime(time());
+        if (query("finish") && local[LT_WDAY])
+        {
+              add("huaxia", 1);
+              delete("caipiao");
+              delete("numed");
+              delete("chat_time");
+              delete("finish");
+              delete("duied");
+              delete("bonuses");
+              save();
+        }
+
+        if (local[LT_WDAY])
+        {
+              ob = new("/clone/npc/obj/caipiao");
+              cont = sprintf("泥潭博彩第%s期有奖福利彩票", chinese_number(query("huaxia")));
+              ob->set("caipiao/huaxia", cont);
+              ob->move(this_player());
+              message_vision("赵老板撕下一张彩票递给$N。\n", this_player());
+              tell_object(this_player(), "赵老板对你笑道：每张彩票最多可投十注，" +
+                          "填好后麻烦你交来给我。\n");
+        }  else
+              tell_object(this_player(), "赵老板对你笑道：真是抱歉，今天是兑奖时" +
+                          "间，你明天再来吧。\n");
+        return 1;
+}
+
+int ask_dui()
+{
+        object me = this_player();
+        int i, c0, c1, c2, c3;
+        string *number, *duied, num;
+        mapping player_data;
+
+        if (! query("finish"))
+        {
+              message_vision("赵老板对$N说道：现在不是兑奖时间。\n", me);
+              return 1;
+        }
+
+        player_data = query("caipiao/player");
+        if (! player_data)
+        {
+              message_vision("赵老板对$N说道：你没有投过注呀，如果你投了注" +
+                             "可能就中了，可惜可惜！\n", me);
+              return 1;
+        }
+
+        duied = query("duied");
+        number = player_data[me->query("id")];
+        num = query("finish/number");
+
+        if (! number)
+        {
+              message_vision("赵老板对$N说道：你没有投过注呀，如果你投了注" +
+                             "可能就中了，可惜可惜！\n", me);
+              return 1;
+        }
+
+        if (duied && member_array(me->query("id"), duied) != -1)
+        {
+              message_vision("赵老板盯着$N看了看：你不是兑过奖了吗？" +
+                             "想发不义之财呀！\n", me);
+              return 1;
+        }
+
+        c0 = c1 = c2 = c3 = 0;
+        for (i = 0; i < sizeof(number); i++)
+        {
+              if (number[i] == num)                c0 += 1;
+              else
+              if (number[i][0..3] == num[0..3])    c1 += 1;
+              else
+              if (number[i][0..2] == num[0..2] ||
+                  number[i][1..3] == num[1..3])    c2 += 1;
+              else
+              if (number[i][0..1] == num[0..1] ||
+                  number[i][1..2] == num[1..2] ||
+                  number[i][2..3] == num[2..3])    c3 += 1;
+        }
+
+        if (c0)    aim_bonus(me, c0, 0);
+        if (c1)    aim_bonus(me, c1, 1);
+        if (c2)    aim_bonus(me, c2, 2);
+        if (c3)    aim_bonus(me, c3, 3);
+
+        if (c0 || c1 || c2 || c3)
+        {
+             if (! duied)    duied = ({});
+             duied += ({ me->query("id") });
+             set("duied", duied);
+             save();
+             tell_object(me, "赵老板对你抱拳道：恭喜恭喜，祝你下期再中大奖。\n");
+        }  else
+             tell_object(me, "赵老板对你说道：可惜可惜，这期你没有中奖。" +
+                             "下期一定能中！\n");
+        return 1;
+}
+
+int accept_object(object me, object ob)
+{
+        mixed *local;
+        int zhu;
+        string *tz, qi;
+        mapping player_data;
+
+        if (ob->query("money_id"))
+        {
+              message_vision("赵老板对$N笑道：不用不用，你只需把彩票填好给我，" +
+                             "我会从钱老板那里划帐的。\n", me);
+              return 0;
+        }
+
+        if (! ob->query("lottery"))
+        {
+              message_vision("赵老板对$N笑道：我只做彩票生意，不需要这种东西，" +
+                             "你还是收好吧。\n", me);
+              return 0;
+        }
+
+        local = localtime(time());
+        qi = sprintf("泥潭博彩第%s期有奖福利彩票", chinese_number(query("huaxia")));
+
+        if (! query("caipiao") || query("caipiao/huaxia") != qi)
+        {
+              delete("caipiao");
+              set("caipiao/huaxia", qi);
+              save();
+        }
+
+        if (ob->query("caipiao/huaxia") != qi)
+        {
+              tell_object(me, "赵老板对你笑道：这张彩票已经过期了。\n");
+              destruct(ob);
+              return 1;
+        }
+
+        if (local[LT_WDAY])
+        {
+              // 星期一至星期六，接收玩家填的彩票
+              zhu = sizeof(ob->query("caipiao/numbers"));
+              if (! zhu)
+              {
+                     message_vision("赵老板看了看$N递来的彩票，道：这张彩票" +
+                                    "什么也没填呀，你还是填好再给我吧。\n", me);
+                     return 0;
+              }  else
+              {
+                     if (me->query("balance") < zhu * PRICE * 100)
+                     {
+                              tell_object(me, "赵老板对你说道：你的存款好像不够呀。\n");
+                              return 0;
+                     }
+
+                     tell_object(me, sprintf("赵老板对你笑道：这张彩票你共投了%s注，" +
+                                 "需付%s，已从你的存款中扣除了。\n", chinese_number(zhu),
+                                 MONEY_D->money_str(zhu * PRICE * 100)));
+                     me->add("balance", - zhu * PRICE * 100);
+                     add("bonus", zhu * PRICE * BUNE / 100);
+                     add("profit", zhu * PRICE * (100 - BUNE) / 100);
+
+                     player_data = query("caipiao/player");
+                     if (! player_data)     player_data = ([]);
+
+                     if (member_array(me->query("id"), keys(player_data)) == -1)
+                            tz = ({});
+                     else
+                            tz = player_data[me->query("id")];
+
+                     if (sizeof(tz) < 14990)
+                     {
+                          tz += ob->query("caipiao/numbers");
+
+                          player_data[me->query("id")] = tz;
+                          set("caipiao/player", player_data);
+                          save();
+                     } else
+                          tell_object(me, "赵老板无奈地挠了挠头：你投的注已经太" +
+                                      "多了，小人愚笨，实在记不了那么多。\n");
+                     destruct(ob);
+                     return 1;
+              }
+        }  else
+        {
+              // 星期天是开奖时间
+              tell_object(me, "赵老板对你笑道：今天是摇奖兑奖时间，你这张彩票" +
+                          "已经作废了！明天你再来买号吧。\n");
+              destruct(ob);
+              return 1;
+        }
+}
+
+void check_time()
+{
+        mixed *local;
+        string qi, msg;
+
+        qi = sprintf("泥潭博彩第%s期有奖福利彩票", chinese_number(query("huaxia")));
+        local = localtime(time());
+
+        if (query("busy"))    return;
+
+        if (! local[LT_WDAY] && local[LT_HOUR] >= 12 &&
+              local[LT_HOUR] < 22 && !query("numed"))
+        {
+              set("numed", 1);
+              set("busy", 1);
+              save();
+              call_out("lottery_zero", 1);
+        }
+
+        if (! local[LT_WDAY] && local[LT_HOUR] >= 22 && query("finish"))
+        {
+              add("huaxia", 1);
+              delete("caipiao");
+              delete("numed");
+              delete("chat_time");
+              delete("finish");
+              delete("duied");
+              delete("bonuses");
+              save();
+              return;
+        }
+
+        if (! local[LT_WDAY] && local[LT_HOUR] >= 12 && query("finish"))
+        {
+              if (time() - query("chat_time") > 1200)
+              {
+                      message("vision", HIY "【泥潭博彩】" + this_object()->name() +
+                              "：" + qi + "开奖号码已经产生，中奖号码为：" +
+                              query("finish/number") + "\n" NOR, all_interactive());
+
+                      if (query("finish/zero"))
+                              msg = sprintf("【泥潭博彩】" + this_object()->name() +
+                                    "：本期特等奖中 %d 注；", query("finish/zero"));
+                      else
+                              msg = "【泥潭博彩】" + this_object()->name() +
+                                      "：本期特等奖无人中；";
+
+                      if (query("finish/one"))
+                              msg += sprintf("一等奖中 %d 注；", query("finish/one"));
+                      else
+                              msg += "一等奖无人中；";
+
+                      if (query("finish/two"))
+                              msg += sprintf("二等奖中 %d 注；", query("finish/two"));
+                      else
+                              msg += "二等奖无人中；";
+
+                      if (query("finish/three"))
+                              msg += sprintf("三等奖中 %d 注。\n", query("finish/three"));
+                      else
+                              msg += "三等奖无人中。\n";
+
+                      message("vision", HIY + msg + NOR, all_interactive());
+
+                      set("chat_time", time());
+                      save();
+                      return;
+              }
+        }
+        return;
+}
+
+int lottery_zero()
+{
+        message_vision(HIY"\n赵老板高声宣布：开奖时辰已到，现在开始摇奖。\n\n"NOR,
+                       this_object());
+        call_out("lottery_one", 10);
+        return 1;
+}
+
+int lottery_one()
+{
+        int p;
+
+        p = random(10);
+        message_vision(HIY + sprintf("\n赵老板高声宣布：第一个中奖号码是：%d \n\n" +
+                       NOR, p), this_object());
+        set("finish/number", sprintf("%d", p));
+        save();
+        call_out("lottery_two", 10);
+        return 1;
+}
+
+int lottery_two()
+{
+        int p, i, sp;
+        int c0, c1, c2, c3;
+        string *player_id, num;
+        mapping player_data, oldnum;
+
+        num = query("finish/number");
+        p = random(10);
+
+        if (strlen(num) < 4)
+        {
+              message_vision(HIY + sprintf("\n赵老板高声宣布：第%s个中奖号码是：%d \n\n" +
+                             NOR, chinese_number(strlen(num) + 1), p), this_object());
+              set("finish/number", sprintf(num + "%d", p));
+              save();
+              call_out("lottery_two", 10);
+        }  else
+        {
+              message_vision(HIY + sprintf("\n赵老板高声宣布：特别号码是：%d \n\n" +
+                             NOR, p), this_object());
+              set("finish/number", sprintf(num + "%d", p));
+              oldnum = query("oldnum");
+              if (! oldnum)    oldnum = ([]);
+              oldnum += ([ sprintf("第%d期", query("huaxia")) : query("finish/number") ]);
+              set("oldnum", oldnum);
+              save();
+
+              //计算中奖注数及单注奖金
+              num = query("finish/number");
+              player_data = query("caipiao/player");
+
+              if (! player_data)
+              {
+                    delete("busy");
+                    save();
+                    return 1;
+              }
+
+              player_id = keys(player_data);
+              c0 = c1 = c2 = c3 = 0;
+              for (p = 0; p < sizeof(player_id); p++)
+              {
+                    for (i = 0; i < sizeof(player_data[player_id[p]]); i++)
+                    {
+                         if (player_data[player_id[p]][i] == num)              c0 += 1;
+                         else
+                         if (player_data[player_id[p]][i][0..3] == num[0..3])  c1 += 1;
+                         else
+                         if (player_data[player_id[p]][i][0..2] == num[0..2] ||
+                             player_data[player_id[p]][i][1..3] == num[1..3])  c2 += 1;
+                         else
+                         if (player_data[player_id[p]][i][0..1] == num[0..1] ||
+                             player_data[player_id[p]][i][1..2] == num[1..2] ||
+                             player_data[player_id[p]][i][2..3] == num[2..3])  c3 += 1;
+                    }
+              }
+
+              set("finish/zero", c0);
+              set("finish/one", c1);
+              set("finish/two", c2);
+              set("finish/three", c3);
+
+              sp = golds(c0, 0);
+              set("bonuses/j_0", sp);
+
+              sp = golds(c1, 1);
+              set("bonuses/j_1", sp);
+
+              sp = golds(c2, 2);
+              set("bonuses/j_2", sp);
+
+              sp = golds(c3, 3);
+              set("bonuses/j_3", sp);
+              delete("busy");
+              save();
+        }
+        return 1;
+}
+
+void aim_bonus(object me, int math, int bon)
+{
+        int bonus, pz;
+        string msg;
+
+        switch (bon)
+        {
+              case 0:   pz = query("bonuses/j_0");  break;
+              case 1:   pz = query("bonuses/j_1");  break;
+              case 2:   pz = query("bonuses/j_2");  break;
+              case 3:   pz = query("bonuses/j_3");  break;
+        }
+
+        if (! bon)      msg = "特等奖";
+        else   msg = sprintf("%s等奖", chinese_number(bon));
+
+        bonus = math * pz;
+        me->add("balance", bonus * 100);
+        tell_object(me, sprintf("赵老板对你说道：恭喜恭喜，你中了%d注" + msg +
+                    "！\n你的奖金%s，已经存入你的帐户了。\n",
+                    math, MONEY_D->money_str(bonus * 100)));
+        message("vision", HIY "【泥潭博彩】" + this_object()->name() +
+                "：恭喜" + me->query("name") + "投中本期" + msg + "！\n"NOR,
+                all_interactive());
+        add("bonus", -bonus);
+        save();
+        return;
+}
+
+int golds(int x, int y)
+{
+        int k;
+        if (x)
+        {
+              switch (y)
+              {
+                    case 0:
+                         k = (query("bonus") / 100 * J_0) / x;  break;
+                    case 1:
+                         k = (query("bonus") / 100 * J_1) / x;  break;
+                    case 2:
+                         k = (query("bonus") / 100 * J_2) / x;  break;
+                    case 3:
+                         k = (query("bonus") / 100 * J_3) / x;  break;
+              }
+              if (k > MAX_BONUS)   k = MAX_BONUS;
+              if (k > TAX)         k = k / 100 * (100 - TAX_RATE);
+              return k;
+        }
+        else  return 0;
+}
+

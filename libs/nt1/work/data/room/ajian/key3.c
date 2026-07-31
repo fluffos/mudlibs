@@ -1,0 +1,28 @@
+// SN:P_3ak2MKeU1E`]d?
+// File(/data/room/ajian/key.c) of ajian's key
+// Create by LUBAN written by Doing Lu
+
+#include <ansi.h>
+
+inherit ITEM;
+
+string query_autoload() { return "1"; }
+
+void create()
+{
+        set_name(YEL "啊健家的钥匙" NOR, ({ "key", "3 of ajian" }));
+        set_weight(10);
+        if (clonep())
+                set_default_object(__FILE__);
+        else {
+                set("long", @LONG
+一把用来开启龙盘江南(longjn)的钥匙。
+这是啊健第三次配的钥匙。
+LONG );
+                set("unit", "把");
+                set("no_pawn", 1);
+                set("no_sell", 1);
+                set("item_make", 1);
+                set("value", 1);
+        }
+}

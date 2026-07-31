@@ -1,0 +1,99 @@
+//write by bright
+inherit ITEM;
+void setup()
+{}
+
+void init()
+{
+        add_action("do_du", "du");
+        add_action("do_du", "study");
+}
+
+void create()
+{
+        set_name("易经文学", ({ "yi jing", "jing", "book"}));
+        set_weight(600);
+        if( clonep() )
+                set_default_object(__FILE__);
+        else {
+                set("unit", "本");
+                set("long", "这是一本易经文学篇，可以增加(literate)。\n");
+                set("value", 5000);
+                set("material", "paper");
+
+        }
+}
+
+int do_du(string arg)
+{
+        object me = this_player();
+        object where = environment(me);
+        object ob;
+        mapping skill;
+        int pxlevel; 
+        int neili_lost;
+
+        if (!(arg=="yi jing" || arg == "jing" || arg == "book"))
+        return 0;
+
+        if (where->query("pigging")){
+                write("你还是专心拱猪吧！\n");
+                return 1;
+        }
+        if (me->is_busy()) {
+                write("你现在正忙着呢。\n");
+                return 1;
+        }
+
+        if( me->is_fighting() ) {
+                write("你无法在战斗中专心下来研读新知！\n");
+                return 1;
+        }
+
+/*        if(!arg || !objectp(ob = present(arg, me)) ){
+                write("你要读什么？\n");
+                return 1;
+        }
+*/
+        if (!id(arg)) { 
+                write("你要读什么？\n");
+                return 1;
+        }
+
+        if( !me->query_skill("literate", 1) ){
+                write("你是个文盲，先学点文化(literate)吧。\n");
+                return 1;
+        }
+        if( (int)me->query("potential") <= 0 ){
+                write("你的潜能不足，无法研读新知。\n");
+                return 1;
+        } 
+        if( (int)me->query("jing") < 30 ) {
+                write("你现在过于疲倦，无法专心下来研读新知。\n");
+                return 1;
+        }
+
+        if ( me->query_skill("literate", 1) > 100) neili_lost = 5;
+        else
+        if ( me->query_skill("literate", 1) > 200) neili_lost = 10;
+        else neili_lost = 5;
+
+
+        if( (int)me->query("neili") < neili_lost) {
+                write("你内力不够，无法研读新知。\n");
+                return 1;
+        }
+
+        if( me->query_skill("literate", 1) > 299){
+                write("你研读了一会儿，但是发现上面所说的对你而言都太浅了，没有学到任何东西。\n");
+                return 1;
+        }
+        if(random(10)==1){
+        me->add("potential", -1);
+        }
+        me->receive_damage("jing", 15);
+        me->set("neili",(int)me->query("neili")-neili_lost);
+        me->improve_skill("literate", (int)me->query_skill("literate", 1)/3+1);
+        write("你研读《易经文学》，颇有心得。\n");
+        return 1;
+}

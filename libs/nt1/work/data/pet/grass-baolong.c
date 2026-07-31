@@ -1,0 +1,18 @@
+// SN:h^806SOidD7S;d<D
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;31m暴[1;37m龙[1;32m兽[2;37;0m", ({"baolong shou"}));        
+        set("gender", "女性");                
+        set("unit", "头");
+        set("long", "亚古兽进化型
+它是小草的坐骑。
+");
+        set_temp("owner_id", "grass");
+        set_temp("owner_name", "小草");
+        ::setup();
+}
+

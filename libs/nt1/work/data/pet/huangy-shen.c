@@ -1,0 +1,18 @@
+// SN:5WZU5BWO:_HGSLFa
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;36m神雕[2;37;0m", ({"shen diao"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "look
+它是大少的坐骑。
+");
+        set_temp("owner_id", "huangy");
+        set_temp("owner_name", "大少");
+        ::setup();
+}
+

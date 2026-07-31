@@ -1,0 +1,35 @@
+// SN:mjoXgDblF:HkbAdT
+// File(/data/room/icbc/jusuo.c) of icbc's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "居所");
+	set ("long", @LONG
+这就是工商银行金库主人工商银行休息、读书的地方。楼上就是
+主人的卧室，西面则是书房。 
+LONG );
+
+	set("exits", ([
+		"up"   : __DIR__"woshi",
+                "west" : __DIR__"shufang",
+	]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("KEY_DOOR", ([
+                "exit" : "east",
+                "room" : __DIR__"huayuan",
+        ]));
+    
+        set("room_owner", "工商银行");
+        set("room_name", "工商银行金库");
+        set("room_id", "icbc");
+        set("room_owner_id", "icbc");
+        set("room_position", "碎石小道");
+}

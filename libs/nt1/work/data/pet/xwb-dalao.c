@@ -1,0 +1,18 @@
+// SN:jPBEG>;K6ONo\QgQ
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("大老虎[2;37;0m", ({"dalao hu"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "大老虎
+它是寒夜看雪的坐骑。
+");
+        set_temp("owner_id", "xwb");
+        set_temp("owner_name", "寒夜看雪");
+        ::setup();
+}
+

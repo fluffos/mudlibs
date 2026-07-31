@@ -1,0 +1,72 @@
+// wang.c 妄想连续击
+
+#include <ansi.h>
+#include <skill.h>
+#include <weapon.h>
+#include <combat.h>
+
+inherit F_SSERVER;
+int perform(object me, object target)
+{
+        object weapon;
+        string msg;
+        int i, attack_time;
+
+        if( !target ) target = offensive_target(me);
+
+        if( !target
+        ||      !target->is_character()
+        ||      !me->is_fighting(target) )
+                return notify_fail("妄想连续击只能对战斗中的对手使用。\n");
+
+        if (!objectp(weapon = me->query_temp("weapon"))
+                || (string)weapon->query("skill_type") != "axe")
+                return notify_fail("你使用的武器不对。\n");
+        if ((int)me->query("shen") < 0) 
+                return notify_fail("你的侠义正气太低了，无法集中心志！\n");
+
+
+        if( (int)me->query_skill("wangxiang-fufa", 1) < 100 )
+                return notify_fail("你的妄想斧法不够娴熟，不会使用妄想连续击。\n");
+        if ((int)me->query_skill("wangran-xinfa", 1) < 50)
+                return notify_fail("你的本门心法火候不够，无法使用。\n");
+        if( (int)me->query_skill("shuiyue", 1) < 100 )
+                return notify_fail("你的镜花水月步不够娴熟，不会使用妄想连续击。\n");
+
+        msg = HIR "$N使出妄想连续击，空气中一股杀气铺天盖地的扑向$n。\n";
+
+        if( random(me->query("combat_exp")) > (int)target->query("combat_exp")/30 )
+        {
+                attack_time = random((int)me->query_skill("wangxiang-fufa", 1) / 40);
+                if (me->query("family/family_name") == "痴心妄想门")
+                {
+                if(attack_time < 2)
+                        attack_time = 2;
+                if(attack_time > 5)
+                        attack_time = 5;
+                }
+                else
+                {
+                if(attack_time < 1)
+                        attack_time = 1;
+                if(attack_time > 2)
+                        attack_time = 2;
+                }
+                msg += YEL " 结果$n"YEL"被$N攻得手忙脚乱。\n" NOR;
+                message_vision(msg, me, target);
+                for(i = 0; i < attack_time; i++){
+                COMBAT_D->do_attack(me, target, me->query_temp("weapon"), 0);
+                COMBAT_D->do_attack(me, target, me->query_temp("weapon"), 0);                }
+                me->start_busy(2+random(1));
+                me->add("neili", -100);
+        }
+        else
+        {
+                msg += CYN "可是$n"CYN"冷静的避开了$N的致命一击。\n" NOR;
+                message_vision(msg, me, target);
+                me->start_busy(3);
+        }
+
+
+        return 1;
+}

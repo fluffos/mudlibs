@@ -1,0 +1,18 @@
+// SN:O\N11\8OM[CW_=bX
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;31m飞虎[2;37;0m", ({"feihu hu"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "飞
+它是飞花的坐骑。
+");
+        set_temp("owner_id", "feihua");
+        set_temp("owner_name", "飞花");
+        ::setup();
+}
+

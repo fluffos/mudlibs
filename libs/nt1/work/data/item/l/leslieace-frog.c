@@ -1,0 +1,34 @@
+// SN:T^3gkgOFXj]UI7MP
+// ITEM Made by player(南宫图:leslieace) /data/item/l/leslieace-frog.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Thu Dec  4 16:50:32 2003
+#include <ansi.h>
+#include <armor.h>
+
+inherit HANDS;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;32m青蛙神掌[2;37;0m", ({ "frog" }));
+	set_weight(2700);
+	set("item_make", 1);
+	set("unit", "双");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一双铁掌。
+铁掌缘上刻着一行小字：南宫图(leslieace)
+");
+	set("value", 2100000);
+	set("point", 280);
+	set("material", "magic stone");
+	set("wear_msg", "[1;35m☆[1;36m你觉得$N实在是太酷了[1;35m☆[2;37;0m\n");
+	set("remove_msg", "[1;35m☆[1;36m你觉得$N实在是太帅了[1;35m☆[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/strike", 10);
+	set("armor_prop/armor", 10);
+	set("armor_prop/unarmed_damage", apply_damage());
+	set("armor_prop/hand", 10);
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

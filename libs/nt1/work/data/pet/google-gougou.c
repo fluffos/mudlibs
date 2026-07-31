@@ -1,0 +1,18 @@
+// SN:_`]LHle3b`j>NX@P
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;32m小[1;36m猫[1;37m兽[2;37;0m", ({"gougou shou"}));        
+        set("gender", "女性");                
+        set("unit", "头");
+        set("long", "天生猫狗死对头
+它是狗狗狗的坐骑。
+");
+        set_temp("owner_id", "google");
+        set_temp("owner_name", "狗狗狗");
+        ::setup();
+}
+

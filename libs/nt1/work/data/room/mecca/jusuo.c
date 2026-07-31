@@ -1,0 +1,35 @@
+// SN:d?m:V0E7<9_Wje6B
+// File(/data/room/mecca/jusuo.c) of mecca's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "居所");
+	set ("long", @LONG
+这就是贝勒爷王府主人杨铁心休息、读书的地方。楼上就是主人
+的卧室，西面则是书房。 
+LONG );
+
+	set("exits", ([
+		"up"   : __DIR__"woshi",
+                "west" : __DIR__"shufang",
+	]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("KEY_DOOR", ([
+                "exit" : "east",
+                "room" : __DIR__"huayuan",
+        ]));
+    
+        set("room_owner", "杨铁心");
+        set("room_name", "贝勒爷王府");
+        set("room_id", "palace");
+        set("room_owner_id", "mecca");
+        set("room_position", "草地");
+}

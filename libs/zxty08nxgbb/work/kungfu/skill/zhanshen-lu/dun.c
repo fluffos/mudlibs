@@ -1,0 +1,237 @@
+#include <ansi.h>
+//inherit SSERVER;
+int qigong(object me, object target)
+{
+        object ob,*obj;
+        int i;
+    if (me->is_fighting())
+         return notify_fail("战斗中你没有时间打洞,呵呵！\n");
+    if  (!environment(me)->query("outdoors"))
+         return notify_fail("嘣！嘣！嘣！这里的地板，似乎好硬哟！\n");
+    if (present("biao yin",me)) return notify_fail("你身上带着镖银，无法使用遁术！\n");
+  if (present("bao jing",me)) return notify_fail("你正在做task，无法使用遁术！\n");
+      if (present("xin",me)) return notify_fail("你身上带着信件，无法使用遁术！\n");
+
+     obj=deep_inventory(me);
+     for (i=0;i<sizeof(obj);i++)
+           if (obj[i]->id("illicit salt"))
+         return notify_fail("你身上带着私盐，无法使用遁术！\n");
+
+    ob=first_inventory(me);
+    while(ob){
+        if (ob->is_character() && !ob->is_corpse() )
+            return notify_fail(ob->name()+"不能和你一起钻洞！\n");
+        ob=next_inventory(ob);
+    }
+    if( me->query("jing") < 30 || me->query("jingli") < 75 )
+        return notify_fail("你的精力不够！\n");
+/*
+    if ((int)me->query("neili") > (int)me->query("max_neili") * 2) 
+    me->set("neili", (int)me->query("max_neili")); 
+    if ((int)me->query("jingli") > (int)me->query("max_jingli") * 2) 
+    me->set("jingli", (int)me->query("max_jingli"));
+*/
+
+    if( target )
+        return notify_fail("战神录只能自己使用！\n");
+    write("你要钻到哪一个人身边？");
+    input_to( (: call_other, __FILE__, "select_target", me :));
+    return 1;
+}
+void select_target(object me, string name)
+{
+    object ob,* inv;
+    mapping exits;
+   int i,size;
+    if( !name || name=="" ) {
+        write("中止施法。\n");
+        return;
+    }
+    ob = find_player(name);
+    if( !ob || !me->visible(ob) || wizardp(ob) )
+        ob = find_living(name);
+    if( !ob || !me->visible(ob) || !living(ob) || wizardp(ob) ) {
+    me->start_busy(2);  
+
+        write("你无法感受到这个人的精力 ....\n");
+        return;
+    }
+	inv = children("/quest/task/npc/task_carrier");
+	size = sizeof(inv);
+	for(i=0;i<size;i++)
+	{
+		if(file_name(inv[i]) == file_name(ob))
+		{
+			write("你无法感受到这个人的精力 ....\n");
+			return;
+		}
+	}
+  if(random(me->query("jing"))<30 || random(me->query("jingli"))<20)
+  {
+    me->start_busy(2);  
+write("你无法感觉到对方的存在\n");return;}
+  if (me->query("quest/quest_type")=="杀"
+    && (string)me->query("quest/quest")==ob->short()
+       && me->query("quest/task_time")<time())
+    {
+    me->start_busy(2);  
+
+        write("你无法感受到这个人的精力 ....\n");
+        return;
+     }
+   if(ob->query("id")=="salt seller")
+  {
+    me->start_busy(2);  
+write("你无法感受到这个人的精力 ....\n");return;}
+
+  if(ob->query("id")==me->query("id")+ " xixia")
+ {
+    me->start_busy(2);  
+write("你无法感受到这个人的精力 ....\n");return;}
+
+    if(ob->query("no_dun"))
+{
+me->start_busy(2); 
+write("你无法感受到这个人的精力 ....\n");return;}
+    if( me->is_fighting() ) {
+        write("战斗中你没有时间打洞,呵呵！\n");
+        return;
+    } else if( me->query("jingli") < 75 ) {
+        write("现在你的精神状态不太好，歇会吧！\n");
+        return;
+    }
+    me->add("jingli", -75);
+    me->receive_damage("jing", 30);
+    
+    if( random(ob->query("jingli")) > (int)me->query("jingli") / 2 || time() - me->query_temp("do_flee")<2) {
+        message_vision( YEL "$N飞快地在地上扒了个洞，钻了进去 ....\n" NOR, me);
+    me->start_busy(2);  
+
+        write("咚咚几声，你挖到几块大石头，哇，没门！\n");
+            message( "vision",YEL +me->name()+"一脸气急败坏，灰头灰脸地从洞里又钻了回来。\n" NOR, environment(me),({me}));
+        return;
+    }
+     me->set_temp("do_flee",time());
+    if( !environment(ob) ||
+     environment(ob)->query("no_magic") || environment(ob)->query("no_fight") || random(me->query_skill("zhanshen-lu",1)) < 30 ) {
+        write("你手指都磨破了，才挖出个老鼠洞，MY GOD，怎么钻呀！\n");
+    me->start_busy(2);  
+
+            message( "vision",YEL+me->name()+"使劲把脸往土里蹭了几下，真无聊。\n" NOR, environment(me),({me}));
+        return;
+    }
+     if(environment(ob)->query("owner")){
+    write("那里是神圣的英雄街，你不敢遁过去！\n");
+    me->start_busy(2);  
+
+   message( "vision",YEL+me->name()+"使劲把脸往土里蹭了几下，真无聊。\n" NOR, environment(me),({me}));
+   return;
+ }
+
+    exits=environment(ob)->query("exits");
+    if (!mapp(exits) || !sizeof(exits) )
+    {
+     write("你挖到一堵石墙，不得不退了回来！\n");
+    me->start_busy(2);  
+
+            message( "vision",YEL+me->name()+"一脸气急败坏，灰头灰脸地从洞里又钻了回来。\n" NOR, environment(me),({me}));
+        return;
+    }
+  if ( domain_file(base_name(environment(ob)))=="shaolin" 
+||domain_file(base_name(environment(ob)))=="ygbz" 
+    || domain_file(base_name(environment(ob)))=="death" ){
+    me->start_busy(2);  
+
+     write("那里佛气好重，非道术所能及！\n");
+            message("vision",YEL+me->name()+"一脸气急败坏，灰头灰脸地从洞里又钻了回来。\n" NOR, environment(me),({me}));
+        return;
+    }
+  if ( domain_file(base_name(environment(ob)))=="player" ){
+    me->start_busy(2);  
+     write("那里是人家的家里，你想做贼吗？\n");
+            message( "vision",YEL+me->name()+"一脸气急败坏，灰头灰脸地从洞里又钻了回来。\n" NOR, environment(me),({me}));
+        return;
+    }
+  if ( domain_file(base_name(environment(ob)))=="kefang%d" ){
+    me->start_busy(2);  
+     write("那里是人家的睡觉的地方，你想做贼吗？\n");
+            message( "vision",YEL+me->name()+"一脸气急败坏，灰头灰脸地从洞里又钻了回来。\n" NOR, environment(me),({me}));
+        return;
+    }
+  if ( domain_file(base_name(environment(ob)))=="yihua" ){
+    me->start_busy(2);  
+     write("恭喜你，你挖到了茅坑哩！\n");
+            message( "vision",YEL+me->name()+"从口了吐出几口大粪大叫：好臭呀！好臭呀！\n" NOR, environment(me),({me}));
+        return;
+    }
+    if ( domain_file(base_name(environment(ob)))=="xiakedao" ){
+    me->start_busy(2);  
+     write("恭喜你，你挖到了茅坑哩！\n");
+            message( "vision",YEL+me->name()+"从口了吐出几口大粪大叫：好臭呀！好臭呀！\n" NOR, environment(me),({me}));
+        return;
+    }
+
+   if ( domain_file(base_name(environment(ob)))=="jingcheng" || domain_file(base_name(environment(ob)))=="xixia"){
+    me->start_busy(2);  
+  write("那里是是仇杀的地方，你不敢遁过去！\n");
+  return;
+}
+
+  if ( domain_file(base_name(environment(ob)))=="gaochang" ) {
+    me->start_busy(2);  
+     write("那里太遥远了。\n");
+            message( 
+ "vision",YEL+me->name()+"一脸气急败坏，灰头灰脸地从洞里又钻了回来。\n" NOR, environment(me),({me}));
+        return;
+    }
+if ( domain_file(base_name(environment(ob)))=="tulong" ) {
+    me->start_busy(2);  
+  write("那里是龙窝，你想去死吗?\n");
+          message( 
+  "vision",YEL+me->name()+"一脸气急败坏，灰头灰脸地从洞里又钻了回来。\n" NOR, environment(me),({me}));
+  return;
+ }
+
+  if ( domain_file(base_name(environment(ob)))=="xuantian" ){
+    me->start_busy(2);  
+     write("那里太遥远了。\n");
+            message( 
+ "vision",YEL+me->name()+"一脸气急败坏，灰头灰脸地从洞里又钻了回来。\n" NOR, environment(me),({me}));
+        return;
+    }
+
+
+ if ( domain_file(base_name(environment(ob)))=="heimuya" )  
+{
+    me->start_busy(2);  
+ write("那是一个遥远的地方,可望而不可及。\n");
+            message( 
+ "vision",YEL+me->name()+"一脸气急败坏，灰头灰脸地从洞里又钻了回来。\n" NOR, environment(me),({me}));
+        return;
+    }
+
+    if (!environment(ob) || wizardp(ob)){
+    me->start_busy(2);  
+            message_vision( YEL"$N飞快地在地上扒了个洞，钻了进去 ....\n" NOR, me);
+        write("你在地底钻了半天，发现"+ob->name()+"似乎在天上 ....\n");
+            message( "vision",HIG+me->name()+"一脸气急败坏，灰头灰脸地从洞里又钻了回来。\n" NOR, environment(me),({me}));
+        return;
+    }
+    message_vision( YEL"$N飞快地在地上扒了个洞，钻了进去 ....\n" NOR, me);
+      if ( !me->query("env/no_msg")||me->query_temp("msg")>time() )
+    message( "vision", HIG "\n很快，洞口又封了起来，" + me->name() 
+        + "不见了！\n\n" NOR, environment(me), ({ me }) );
+    if(file_size(file_name(environment(ob))+".c")<=0)
+    {
+        write("但是，很快地你发现那里似乎并不存在，于是又灰头土脸地退了回来。\n");      
+        return;
+    }
+    else me->move(environment(ob));
+      if ( !me->query("env/no_msg")||me->query_temp("msg")>time() )
+    message( "vision", YEL"\n一个黑影突然从地下冒了出来，喷了你满脸的灰！\n\n" NOR,
+        environment(ob), ({ me }) );
+        if (me->query_skill("taoism",1)>me->query_skill("zhanshen-lu",1))
+        me->improve_skill("zhanshen-lu", random(me->query_skill("taoism")),0);
+        else me->improve_skill("zhanshen-lu", random(me->query_skill("taoism")),1);
+}
+

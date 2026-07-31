@@ -1,0 +1,31 @@
+// SN:9^_6\_;1^;ShQ>a]
+// ITEM Made by player(渡甫:acer) /data/item/a/acer-mywhip.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Thu Feb 12 00:54:45 2004
+#include <ansi.h>
+#include <weapon.h>
+
+inherit WHIP;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[2;37;0m[30m黑索[2;37;0m", ({ "mywhip" }));
+	set_weight(1050);
+	set("item_make", 1);
+	set("unit", "根");
+	set("long", "这是由[1;37m冰蚕丝[2;37;0m炼制而成的一根鞭。
+鞭柄上刻着一行小字：渡甫(acer)
+");
+	set("value", 2100000);
+	set("point", 273);
+	set("material", "silk");
+	set("wield_msg", "[1;34m$N冷哼一声，一条$n[1;34m无声无息出现在手中。[2;37;0m\n");
+	set("unwield_msg", "[36m$N将$n[36m一扬，手中已空无一物。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	init_whip(apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

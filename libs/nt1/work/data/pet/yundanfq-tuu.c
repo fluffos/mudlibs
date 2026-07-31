@@ -1,0 +1,18 @@
+// SN:;;h<=BJB7i\TTYCH
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("秃驴[2;37;0m", ({"tuu lv"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "和尚之驴，简称秃驴
+它是渡云的坐骑。
+");
+        set_temp("owner_id", "yundanfq");
+        set_temp("owner_name", "渡云");
+        ::setup();
+}
+

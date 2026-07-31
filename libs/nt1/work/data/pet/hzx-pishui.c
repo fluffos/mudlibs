@@ -1,0 +1,18 @@
+// SN:9kP2;dRD[YM^H@F1
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;32m辟水兽[2;37;0m", ({"pishui shou"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "能辟水而行的神兽。
+它是海之心的坐骑。
+");
+        set_temp("owner_id", "hzx");
+        set_temp("owner_name", "海之心");
+        ::setup();
+}
+

@@ -1,0 +1,32 @@
+// SN:;=Gm41LliYLPOLEg
+// File(/data/room/xtt/lianwu.c) of xtt's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "练武场");
+	set ("long", @LONG
+此处便是谭谭居的练武场，人在江湖，武功万万不可荒废。 
+LONG );
+
+	set("exits", ([
+                "west" : __DIR__"houyuan",
+	]));
+
+        set("objects", ([
+                "/clone/npc/mu-ren" : 4,
+        ]));
+
+        set("outdoors", "yangzhou");
+        set("no_sleep_room", 1);
+
+        setup();
+    
+        set("room_owner", "小谭谭");
+        set("room_name", "谭谭居");
+        set("room_id", "xtt");
+        set("room_owner_id", "xtt");
+        set("room_position", "树林");
+}

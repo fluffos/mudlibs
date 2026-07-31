@@ -1,0 +1,53 @@
+// By zmud@ty
+
+inherit ITEM; 
+int zmud = random(4);
+mapping *jia= ({
+([     "name":     "万年神铁",
+       "id":        "shen tie",
+       "yanse":        HIB,
+
+]),
+([     "name":     "万年寒冰铁",
+       "id":    "xuanbing tie",
+       "yanse":        HIW,
+
+]),
+([     "name":     "天外陨石",
+       "id":    "yun shi",
+       "yanse":        WHT,
+
+]),
+([     "name":     "麒麟玲珑玉",
+       "id":    "linglong yu",
+       "yanse":       HIW,
+]),
+});
+int panduan(int arg) {  if ( arg )   zmud = arg - 1;  }
+void create()
+{
+    string name,id;
+
+    name = jia[zmud]["name"];
+
+    set_name(jia[zmud]["yanse"]+name+NOR,({jia[zmud]["id"]}) );  
+    set_weight(100);
+    if( clonep() )
+    set_default_object(__FILE__);
+    else {
+         set("unit", "个");                        
+        }
+
+   set("ty_jia",1);
+   set("no_get",1);
+   set("no_drop",1);             
+   set("no_put",1);
+   set("no_give",1);
+   set("zhongji_jia",1);
+
+   set("long", "这是一快传说中的金属，可以用来锻造防具!(help fangju)\n");
+   
+   setup();
+  }
+
+

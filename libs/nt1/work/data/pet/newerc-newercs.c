@@ -1,0 +1,18 @@
+// SN:TA\Y[XZKc?YlBMFF
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("小毛驴[2;37;0m", ({"newercs lv"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "我的
+它是小乞丐的坐骑。
+");
+        set_temp("owner_id", "newerc");
+        set_temp("owner_name", "小乞丐");
+        ::setup();
+}
+

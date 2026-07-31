@@ -1,0 +1,116 @@
+
+// 真正的中文格式 ctime()，而不是什么 Sun Apr 27 00:44:44 2003 之类
+// 的 ctime() ........ 永远弄不清英文星期、月份大白痴 奈何 ，献给
+// 所有同此类者 ............
+// by naihe 2003-04-29
+
+// by naihe 05-4-15 1:45 调整了一下 type 参数的顺序
+
+/* 发现服务器时间总有偏差，重新设置一下函数final-2003*/
+#define BUSY_WAIT 60		/*效俭服务器时间得到时间差*/
+int time() 
+{ 
+	return efun::time()+BUSY_WAIT; 
+} 
+
+string ctime_new( int arguments, int type )
+{
+	string msg, *temp;
+	mapping to_cn_month, to_cn_week;
+	int temp_xxx;
+
+	to_cn_month = ([ "Jan":" 1月", "Feb":" 2月", "Mar":" 3月", "Apr":" 4月",
+			 "May":" 5月", "Jun":" 6月", "Jul":" 7月", "Aug":" 8月", 
+			 "Sep":" 9月", "Oct":"10月", "Nov":"11月", "Dec":"12月", ]);
+
+	to_cn_week = ([ "Mon":"星期一", "Tue":"星期二", "Wed":"星期三", "Thu":"星期四",
+			"Fri":"星期五", "Sat":"星期六", "Sun":"星期日", ]);
+
+// 1，无参数
+// 2，指定单一参数，该参数为时间参数	例如： ctime_new(1058076012);
+// 3，双参数，顺序正确			例如： ctime_new(1058076012, 1);
+
+// 上述3个情况是正确的。下面的情况，需要进行纠错：
+
+// 4，指定单一参数，该参数为信息形式的参数	例如：ctime_new(1); ctime_new(2); 等
+//    纠正为： 时间采用当前时间，形式采用指定的形式
+// 5，双参数，顺序不正确		例如： ctime_new(1,1058076012); ctime_new(0,1058076012);
+//    之前我写的 ctime_new.c 就是这个格式的，所以……为当初的考虑不周悲哀中
+//    纠正为：位置互换
+
+
+// 无参数的时候，默认当前时间，返回完整信息字串
+	if( !type && !arguments )
+	{
+		arguments = time();
+		type = 8;
+	}
+// 强力纠错功能 // add by naihe 2003-07-13
+
+// 当时间参数没有，或者它是个很小的数字，那么，意味着参数出现了错误了。
+	if( !arguments || arguments < 3153600 )  // 这个数字是一年的大概秒数……
+	{
+		if( !type || type < 3153600 )  // 这就是  4  的情况。纠正，OK :)
+		{
+			type = arguments;
+			arguments = time();
+		}
+		else		// 否则，只可能是位置互换了。 纠正，OK :)
+		{
+			temp_xxx = type;
+			type = arguments;
+			arguments = temp_xxx;
+		}
+	}
+
+// 这个是强制参数，否则会报BUG……我宁愿它别报BUG。
+	if( !arguments ) arguments = time();
+
+	msg = efun::ctime( arguments );
+	if( !msg ) return 0;
+
+	temp = explode( msg , " ");
+
+// 这个地方原来绝想不到……有的地方的 ctime(time()) return
+// 的东西格式不对，如果是单日例如 1日，2日，会多出一个空格
+// 来。那么， explode 之后，就得到 sizeof() = 6 的 array！
+// 而我的机器上，ctime(time()) 在这种情况，会加为： 01, 02
+// 等。晕吧？
+// 为了安全安全再安全，决定添多一个元素，即连 " " 都删掉！
+
+	temp -= ({ "", " " });
+
+	if( sizeof( temp ) != 5 ) return 0;
+
+	switch( type )
+	{
+// 日期及时刻		"2003年 4月30日 01:50:56"
+                case 1 : return sprintf("%s年%s%s日 %s",
+        temp[4], to_cn_month[ temp[1] ], temp[2], temp[3] );
+
+// 仅日期		"2003年 4月30日"
+
+                case 2 : return sprintf("%s年%s%s日",
+        temp[4], to_cn_month[ temp[1] ], temp[2] );
+
+// 日期及星期		"2003年 4月30日 星期三"
+
+                case 3 : return sprintf("%s年%s%s日 %s",
+        temp[4], to_cn_month[ temp[1] ], temp[2], to_cn_week[ temp[0] ] );
+    }
+
+// 参数有误，或省略了该参数的话，返回完整信息
+//	"2003年 4月30日 星期三 01:50:56"
+
+	return sprintf("%s年%s%s日 %s %s", temp[4], to_cn_month[ temp[1] ],
+			 temp[2], to_cn_week[ temp[0] ], temp[3]);
+}
+
+
+/* ctime_new() 作为扩充好了， 直接改 ctime()   final-2003	*/
+varargs string ctime(int time)
+{
+	if(!time)
+	time=time();
+	return ctime_new(0,time);
+}

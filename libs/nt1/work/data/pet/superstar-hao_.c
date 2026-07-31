@@ -1,0 +1,18 @@
+// SN:SF9G:0IgbAUS2nb]
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("好马[2;37;0m", ({"hao_ ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "一皮好马
+它是唐楠的坐骑。
+");
+        set_temp("owner_id", "superstar");
+        set_temp("owner_name", "唐楠");
+        ::setup();
+}
+

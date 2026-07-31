@@ -1,0 +1,54 @@
+// xiaoyao.c 逍遥掌法 天地逍遥
+
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+
+void remove_effect(object me, int a_amount, int d_amount);
+
+inherit F_SSERVER;
+int perform(object me, object target)
+{
+	object weapon;
+	int skill;
+	string msg;
+
+	if( !target ) target = offensive_target(me);
+
+	if( !target
+	||	!target->is_character()
+	||	!me->is_fighting(target) )
+		return notify_fail("牵制攻击只能对战斗中的对手使用。\n");
+
+	if( (int)me->query_skill("xiaoyao-zhangfa", 1) < 60 )
+		return notify_fail("你的逍遥掌法不够娴熟，不会使用「天地逍遥」。\n");
+
+	
+	if( (int)me->query("neili") < 300  ) 
+		return notify_fail("你的内力不够。\n");
+
+	if( (int)me->query_temp("tdxy") ) 
+		return notify_fail("你已经在运功中了。\n");
+
+	msg = YEL"$N掌法骤然加快，潜用「天地逍遥」，身形也飘忽不定！\n"NOR;
+	message_vision(msg, me, target);
+
+	skill = (int)me->query_skill("xiaoyao-zhangfa",1);
+	me->add_temp("apply/attack", -skill/4);
+	me->add_temp("apply/dodge", skill/3);
+	me->set_temp("tdxy", 1);
+
+	me->start_call_out( (: call_other, __FILE__, "remove_effect", me, skill/4, skill/3 :), skill/3);
+
+	me->add("neili", -100);
+
+	return 1;
+}
+
+void remove_effect(object me, int a_amount, int d_amount)
+{
+	me->add_temp("apply/attack", a_amount);
+	me->add_temp("apply/dodge", -d_amount);
+	me->delete_temp("tdxy");
+	message_vision(HIY "\n$N的掌法渐渐滞待，身形也慢了下来。\n\n" NOR, me);
+}

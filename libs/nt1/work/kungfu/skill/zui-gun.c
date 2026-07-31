@@ -1,0 +1,82 @@
+// Copyright (C) 2003, by Lonely. All rights reserved.
+// This software can not be used, copied, or modified 
+// in any form without the written permission from authors.
+// zui-gun.c -少林醉棍
+
+inherit SHAOLIN_SKILL;
+
+string *action_msg = ({
+        "「蓝采和，提篮劝酒醉朦胧」，$N手中$w半提，缓缓划向$n的$l",
+        "「何仙姑，拦腰敬酒醉仙步」，$N左掌护胸，右臂挟棍猛地扫向$n的腰间",
+        "「曹国舅，千杯不醉倒金盅」，$N倒竖$w，指天打地，向$n的$l劈去",
+        "「韩湘子，铁棍提胸醉拔萧」，$N横提$w，棍端划了个半圈，击向$n的$l",
+        "「汉钟离，跌步翻身醉盘龙」，$N手中棍花团团，疾风般向卷向$n",
+        "「铁拐李，踢倒金山醉玉池」，$N单腿支地，一腿一棍齐齐击向$n的$l",
+        "「张果老，醉酒抛杯倒骑驴」，$N扭身反背，$w从胯底钻出，戳向$n的胸口",
+        "「吕洞宾，酒醉提壶力千钧」，$N腾空而起，如山棍影，疾疾压向$n",
+});
+
+int valid_enable(string usage) { return (usage == "club") || (usage == "parry"); }
+
+int valid_learn(object me)
+{
+        if ((int)me->query("max_neili") < 250)
+                return notify_fail("你的内力不够。\n");
+
+        if ((int)me->query_skill("force") < 50)
+                return notify_fail("你的内功火候太浅。\n");
+
+        if ((int)me->query_skill("club", 1) < (int)me->query_skill("zui-gun", 1))
+                return notify_fail("你的基本棍法水平有限，无法领会更高深的醉棍。\n");
+
+        return 1;
+}
+
+mapping query_action(object me, object weapon)
+{
+        return ([ 
+                "action": action_msg[random(sizeof(action_msg))], 
+                "damage": 120 + random(50), 
+                "attack": 60 + random(10),
+                "dodge" : 60 + random(10),
+                "parry" : 60 + random(10),
+                "damage_type": "挫伤", 
+        ]);
+}
+
+int practice_skill(object me)
+{
+        object weapon;
+
+        if (!objectp(weapon = me->query_temp("weapon"))
+        || (string)weapon->query("skill_type") != "club")
+                return notify_fail("你使用的武器不对。\n");
+        if ((int)me->query("qi") < 70)
+                return notify_fail("你的体力不够练少林醉棍。\n");
+        if ((int)me->query("neili") < 70)
+                return notify_fail("你的内力不够。\n");
+        if ((int)me->query_skill("qianye-shou", 1) < 100)
+                return notify_fail("你的如来千叶手修为还不够。\n");
+
+        me->receive_damage("qi", 60);
+        me->add("neili", -60);
+        return 1;
+}
+
+string perform_action_file(string action)
+{
+        return __DIR__"zui-gun/" + action;
+}
+
+void skill_improved(object me)
+{
+        if( (int)me->query_skill("zui-gun", 1) >= 200
+        &&  (int)me->query_skill("wuchang-zhang", 1) >= 200
+        &&  !me->query("sl_gifts/zg") ) {
+                me->add("dex", 1);
+                me->set("sl_gifts/zg", 1);
+                tell_object(me, "你的醉棍和无常杖学有所成，提高了你的身法。\n");
+        }
+}
+
+

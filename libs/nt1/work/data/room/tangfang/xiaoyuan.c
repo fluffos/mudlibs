@@ -1,0 +1,37 @@
+// SN:;AR@BFdER7O_>7;A
+// File(/data/room/tangfang/xiaoyuan.c) of tangfang's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        set("short", "一间小屋小院");
+	set ("long", @LONG
+[1;32m这里是一间别致的小院。院子里稀稀落落的种有几棵树，树上正开着一
+
+些小花，在风中散发出点点暗香。[2;37;0m
+LONG );
+
+        set("room_key", "1 of tangfang");
+	setup();
+
+	set("exits", ([
+                "out"    : "/d/xiakedao/haibin",
+	]));
+
+        set("outdoors", "xiakedao");
+        set("no_sleep_room", 1);
+        set("valid_startroom", 1);
+
+        set("KEY_DOOR", ([
+                "exit" : "north",
+                "room" : __DIR__"dating",
+        ]));
+    
+        set("room_owner", "唐方");
+        set("room_name", "一间小屋");
+        set("room_id", "tangfang");
+        set("room_owner_id", "tangfang");
+        set("room_position", "南海之滨");
+}

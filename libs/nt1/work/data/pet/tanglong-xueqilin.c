@@ -1,0 +1,18 @@
+// SN:=@HS9Jk1MAKMM9Ch
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;31m血麒麟兽[2;37;0m", ({"xueqilin shou"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "$RED$唐龙的坐骑
+它是唐龙的坐骑。
+");
+        set_temp("owner_id", "tanglong");
+        set_temp("owner_name", "唐龙");
+        ::setup();
+}
+

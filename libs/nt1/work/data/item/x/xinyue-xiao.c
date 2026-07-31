@@ -1,0 +1,32 @@
+// SN:1jUHi:LWM;;\hWGG
+// ITEM Made by player(慕容新月:xinyue) /data/item/x/xinyue-xiao.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Sat Jul 24 23:34:12 2004
+#include <ansi.h>
+#include <weapon.h>
+
+inherit XSWORD;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;34m二十四桥明月夜[2;37;0m", ({ "xiao" }));
+	set_weight(1800);
+	set("item_make", 1);
+	set("unit", "支");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一支箫。
+[1;34m一柄墨兰色的玉箫，兰玉上隐隐有雾气在回旋，居然是比和氏璧更要好的宝玉，此箫传说为弄玉所留。[2;37;0m
+箫柄上刻着一行小字：慕容新月(xinyue)
+");
+	set("value", 2100000);
+	set("point", 786);
+	set("material", "magic stone");
+	set("wield_msg", "[1;34m$N自背后拿出一把玉箫放在嘴边，呜呜咽咽的吹了起来，箫声柔和平稳，象流水一样淌了出去。\n听得此箫声，婴儿睁大着眼睛忘了哭似乎想起前世的种种，武者放下兵器静静地站着，文人泪流满面感怀惆怅，农夫荷锄忘耕。[2;37;0m\n");
+	set("unwield_msg", "[1;34m一曲奏毕，$N取下了玉箫，自玉箫孔中涌出的白色雾气，又不知不觉地回到了箫内，在里面袅袅蒸腾。\n周围的人也仿佛方自南柯梦中苏醒过来，不知此身是真是幻。一时之间四周静寂如死，这么多人，竟闻不到半点声息。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	init_xsword(apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

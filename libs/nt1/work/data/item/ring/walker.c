@@ -1,0 +1,11 @@
+// SN:;N>T8LQl;=:@=fU[
+// wedding-ring.c
+
+#include "/clone/misc/wedding-ring.h"
+
+void setup()
+{
+        set("long", "这是拾荒者和白小玉的结婚戒指，是两人的定情之物。
+");
+        ::setup();
+}

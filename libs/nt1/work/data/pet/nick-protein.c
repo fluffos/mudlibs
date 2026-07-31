@@ -1,0 +1,18 @@
+// SN:=dH_k?Pl@aBcoI=Y
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("蛋白质狮[2;37;0m", ({"protein shi"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "傻头傻脑的
+它是蛋白蛋黄的坐骑。
+");
+        set_temp("owner_id", "nick");
+        set_temp("owner_name", "蛋白蛋黄");
+        ::setup();
+}
+

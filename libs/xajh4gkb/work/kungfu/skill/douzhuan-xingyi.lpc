@@ -1,0 +1,726 @@
+// douzhuan-xingyi 斗转星移
+// 1997-2-14
+#include <ansi.h>
+#include <skill.h>
+#include <weapon.h>
+#include <combat.h>
+#include "/kungfu/skill/eff_msg.h"
+inherit SKILL;
+
+int douzhuan(object me, object victim);
+string *parry_msg = ({
+YEL"蓦地里一股力道飞来，将$N一引一带，$n身子轻轻越起，身行落在一旁"NOR,
+BLU"$n当下一股内力冲向$N，$N击向$n的招数莫名奇妙的溜滑向一旁"NOR,
+HIW"$n双手前探，左臂搭上$N右臂，右臂使出$N的招数将$N此招化去"NOR,
+HIY"$n星移斗转，$N这招莫名其妙的在中途转了方向，直奔自己袭来"NOR,
+YEL"$n作壁上观，双手与对方相交数掌，谈笑间竟使出$N成名技艺，使得$N不知如何是好"NOR,
+BLU"$n凝神运气向$N猛攻快打，使出的招数好似$N的成名绝技，把$N的招数化于无行"NOR,
+HIW"只见$n身如飘风，恰似漫天星移，诡异地一式，双掌动向无定不可捉摸地拍向$N"NOR,
+HIY"$n身行飘忽不定，在星移斗转之间反用$N的招数击向$N，却令人百思不得其解"NOR,
+});
+
+int valid_enable(string usage)
+{
+	return usage == "parry";
+}
+//2019-1-1阿飞新规划，技能代码完善
+//string valid_combine() { return "juehu-shou"; }		//互备技能
+string skill_pinji() {return "上乘";}				//品级区分：上乘、中乘、下乘
+string skill_xingbie() {return "通用";}				//性别区分：男性、女性、无性、通用
+string skill_zhengxie() {return "中立";}			//正邪区分：正道、邪道、中立
+string skill_menpai() {return "姑苏慕容";}				//门派区分：门派，江湖
+string skill_yinyang() {return "中性";}				//阴阳区分：阳、阴、中性
+string skill_zhenying() {return "中立";}			//阵营区分：正派、邪派、中立、通用
+//int damage_damage() {return 60;}	//外伤系数
+//int force_damage() {return 60;}		//内伤系数
+//int qi_heal() {return 50;}		//内功疗气系数
+//int jing_heal() {return 50;}		//内功疗精系数
+int practice_level() {return 100;}	//自练级别
+int practice_add() {return 100;}	//自练效率
+int perform_level() {return 300;}	//PFM最低使用级别
+
+string query_parry_msg(object weapon)
+{
+	return parry_msg[random(sizeof(parry_msg))] + "。\n";
+}
+
+int valid_learn(object me)
+{
+	return notify_fail("斗转星移只能通过领悟来提高。\n");
+}
+
+int practice_skill(object me)
+{
+	return notify_fail("斗转星移只能通过领悟来提高，无法通过练习来提高。\n");
+}
+
+string perform_action_file(string action)
+{
+	return __DIR__"douzhuan-xingyi/" + action;
+}
+	//2017.3.25阿飞封掉ob_hit特效，怀疑与伤害为0的死亡bug有关
+int ob_hit(object ob, object me, int damage)
+{
+    string msg;
+	object *rob;
+    int i,j;
+	int ap,dp,damage1,damage2;
+
+	rob = all_inventory(environment(me));
+	i = random(sizeof(rob));
+	if (damage <10) damage=10;
+    if ( me->query("neili") < 100 || me->query("jingli") < 100 ) return damage;
+	if ( me->query_skill("shenyuan-gong",1) < 300 || me->query_skill("douzhuan-xingyi",1) < 300) return damage;
+//	if ( me->query_skill_mapped("force") != "shenyuan-gong") return damage;
+
+	ap = me->query_skill("douzhuan-xingyi", 1)*(me->query("breakup")+me->query("breakup")*me->query("breakup")+100)/100;
+	dp = ob->query_skill("unarmed", 1)*(ob->query("breakup")+ob->query("breakup")*ob->query("breakup")+100)/100;
+	damage1 = me->query_skill("douzhuan-xingyi", 1);
+	damage2 = me->query_skill("douzhuan-xingyi", 1)*(me->query("breakup")+me->query("breakup")*me->query("breakup")+100)/100;
+
+	if ( (int)me->query("breakup")>=1 && (int)me->query("jm/murong") && me->query_temp("mr_bishen", 1) > (random(2)+2) && random(8)==0)
+	{
+		me->delete_temp("mr_bishen");
+		if( !ob || !ob->is_character() || !me->is_fighting(ob) ) return damage;
+		call_out("bishen", 0, me, ob);
+	}
+	me->add_temp("mr_bishen", 1);
+	
+	if (sizeof(rob)>1)
+	{
+		if ( !rob[i] || rob[i] == me || !rob[i]->is_character() ) return damage;
+		if ( rob[i] != ob && living(rob[i]))
+		{
+			if ( random(ap)>dp/4 && random(8)==1 )
+			{
+				msg = HIC+BBLU+"$N看破了"+ob->query("name")+HIC+BBLU+"的意图，将其招式击一牵一引，"+ob->query("name")+HIC+BBLU+"双手不听使唤，击中了"+rob[i]->query("name")+HIC+BBLU+"。\n"NOR;
+				me->add("neili", -100 );
+				ob->receive_damage("qi", damage1,me);
+				ob->receive_wound("qi", damage1/3,me);
+				j = -(damage/2+random(damage/2));
+				if( !rob[i]->is_fighting(ob) ) rob[i]->fight_ob(ob);
+				if( !ob->is_fighting(rob[i]) ) ob->fight_ob(rob[i]);
+				if (!ob->is_busy()) ob->start_busy(1);
+				message_vision(msg, me, ob,damage1,HBWHT+HIY"气血反伤"NOR);
+				return j;
+			}
+			if(random(ap) > dp/4 && random(8)==2 && (int)me->query("breakup")>1 )
+			{
+				msg = HIC+BBLU+"$N顿悟"+me->query("cognize")+HIC+BBLU"，立时旁拨侧挑，推气引劲，将"+ob->query("name")+HIC+BBLU+"的招式转向"+rob[i]->query("name")+HIC+BBLU+"身上。\n"NOR;
+				me->add("jingli", -100 );
+				ob->receive_damage("jing", damage2,me);
+				ob->receive_wound("jing", damage2/3,me);
+				if( !rob[i]->is_fighting(ob) ) rob[i]->fight_ob(ob);
+				if( !ob->is_fighting(rob[i]) ) ob->fight_ob(rob[i]);
+				if (!ob->is_busy()) ob->start_busy(1);
+				j = -(damage/2+random(damage));
+				message_vision(msg, me, ob,damage2,HBWHT+HIY"精神反伤"NOR);
+				return j;
+			}
+			if(random(ap) > dp/4 && random(8)==3 && (int)me->query("jm/murong") )
+			{
+				msg = HIC+BBLU+"$N使出慕容武功精髓，斗转星移！突然之间"+ob->query("name")+HIC+BBLU+"的招式莫明其妙地击中了"+rob[i]->query("name")+HIC+BBLU+"。\n"NOR;
+				me->add("neili", -100 );
+				ob->receive_damage("qi", damage1,me);
+				ob->receive_wound("qi", damage1/3,me);
+				if( !rob[i]->is_fighting(ob) ) rob[i]->fight_ob(ob);
+				if( !ob->is_fighting(rob[i]) ) ob->fight_ob(rob[i]);
+				if (!ob->is_busy()) ob->start_busy(1);
+				j = -(damage+random(damage));
+				message_vision(msg, me, ob,damage1,HBWHT+HIY"气血反伤"NOR);
+				return j;
+			}
+		}
+		else
+		{
+			if ( random(ap)>dp/4 && random(8)==1 )
+			{
+				msg = HIC+BBLU+"$N看破了"+ob->query("name")+HIC+BBLU+"的意图，将"+ob->query("name")+HIC+BBLU+"的招式击一牵一引，反弹了回去。\n"NOR;
+				me->add("neili", -100 );
+				ob->receive_damage("qi", damage1,me);
+				ob->receive_wound("qi", damage1/3,me);
+				j = -(damage/2+random(damage/2));
+				if (!ob->is_busy()) ob->start_busy(1);
+				message_vision(msg, me, ob,damage1,HBWHT+HIY"气血反伤"NOR);
+				return j;
+			}
+			if(random(ap) > dp/4 && random(8)==2 && (int)me->query("breakup")>1 )
+			{
+				msg = HIC+BBLU+"$N顿悟"+me->query("cognize")+HIC+BBLU"，立时旁拨侧挑，推气引劲，结果"+ob->query("name")+HIC+BBLU+"只感觉一股暗劲袭来。\n"NOR;
+				me->add("jingli", -100 );
+				ob->receive_damage("jing", damage2,me);
+				ob->receive_wound("jing", damage2/3,me);
+				if (!ob->is_busy()) ob->start_busy(1);
+				j = -(damage/2+random(damage));
+				message_vision(msg, me, ob,damage2,HBWHT+HIY"精神反伤"NOR);
+				return j;
+			}
+			if(random(ap) > dp/4 && random(8)==3 && (int)me->query("jm/murong") )
+			{
+				msg = HIC+BBLU+"$N使出慕容武功精髓，斗转星移！突然之间"+ob->query("name")+HIC+BBLU+"的招式击中了自己。\n"NOR;
+				me->add("neili", -100 );
+				ob->receive_damage("qi", damage1,me);
+				ob->receive_wound("qi", damage1/3,me);
+				if (!ob->is_busy()) ob->start_busy(1);
+				j = -(damage+random(damage));
+				message_vision(msg, me, ob,damage1,HBWHT+HIY"气血反伤"NOR);
+				return j;
+			}			
+		}
+	}
+	else
+	{
+		if ( random(ap)>dp/4 && random(8)==1 )
+		{
+			msg = MAG"$n的招势在$N的带引下中途转向，一部分力道卸掉了，一部分反击回来。\n"NOR;
+			me->add("neili", -100 );
+			j = -(damage/2+random(damage/2));
+			ob->receive_damage("qi", damage1,me);
+			ob->receive_wound("qi", damage1/3,me);
+			message_vision(msg, me, ob,damage1,HBWHT+HIY"气血反伤"NOR);
+			return j;
+		}
+		if(random(ap) > dp/4 && random(8)==2 && (int)me->query("breakup")>1 )
+		{
+			msg = HIY"$N顿悟"+me->query("cognize")+HIY"，一挑一拨，突然间$n的招势在中途转向，击中了自己。\n"NOR;
+			ob->receive_damage("jing", damage2,me);
+			ob->receive_wound("jing", damage2/3,me);
+			me->add("jingli", -100 );
+			j = -(damage/2+random(damage));
+			message_vision(msg, me, ob,damage2,HBWHT+HIY"精神反伤"NOR);
+			return j;
+		}
+		if(random(ap) > dp/4 && random(8)==3 && (int)me->query("jm/murong") )
+		{
+			msg = HIC"$N使出慕容武功精髓，斗转星移！$n被自己的成名绝技击中。\n"NOR;
+			ob->receive_damage("qi", damage1,me);
+			ob->receive_wound("qi", damage1/3,me);
+			me->add("neili", -100 );
+			j = -(damage+random(damage));
+			message_vision(msg, me, ob,damage1,HBWHT+HIY"气血反伤"NOR);
+			return j;
+		}
+	}
+
+}
+
+void bishen (object me, object ob)
+{
+	int damage,p,type;
+	object weapon1,weapon2;
+	string msg;
+
+	if( !me || !ob || !living(ob) || !ob->is_character() || !me->is_fighting(ob) ) return ;
+    if ( me->query("neili") < 100 || me->query("jingli") < 100 ) return ;
+	if ( me->query_skill("shenyuan-gong",1) < 300 || me->query_skill("douzhuan-xingyi",1) < 300) return ;
+//	if ( me->query_skill_mapped("force") != "shenyuan-gong") return ;
+	type = 0;
+	damage = (int)me->query_skill("douzhuan-xingyi", 1)*(me->query("breakup")+me->query("breakup")*me->query("breakup")+100)/100;
+	damage = damage*2/3+random(damage/2);
+	weapon1 = me->query_temp("weapon");
+	weapon2 = ob->query_temp("weapon");
+	msg = HIW"\n以彼之道，还施彼身。突然之间，$N使出一招绝技。\n"NOR;
+	switch ( random(25) )
+	{
+		case 1 :
+			if ( objectp(weapon1=me->query_temp("weapon")) ) 
+			{
+				msg += BLU"\n突然$N大喝一声：「雷动九天」，面色唰的变得通红，须发皆飞，真气溶入" + weapon1->name() + BLU"当中，“嗡”的一声，发出"HIW"闪闪光亮"BLU"！\n" NOR;
+				me->add("neili", -100 );
+				me->add("jingli", -100);
+				ob->receive_damage("qi", damage,me);
+				ob->receive_wound("qi", damage/3,me);
+				type = 1;
+			}
+			else
+			{
+				msg += "$N忽然跃起，左脚一勾一弹，霎时之间踢出一招「"HIY"如"NOR"」字诀的穿心腿，直袭$n前胸！\n";
+				me->add("neili", -100 );
+				me->add("jingli", -100);
+				COMBAT_D->do_attack(me,ob, me->query_temp("weapon"));
+				msg += "\n紧接着$N左腿勾回，将腰身一扭，那右腿的一招「"HIY"影"NOR"」字诀便紧随而至，飞向$n！\n";
+				me->add("neili", -100 );
+				me->add("jingli", -100);
+				COMBAT_D->do_attack(me,ob, me->query_temp("weapon"));
+				msg += "\n只见$N右脚劲力未消，便凌空一转，左腿顺势扫出一招「"HIY"随"NOR"」字诀，如影而至！\n";
+				me->add("neili", -100 );
+				me->add("jingli", -100);
+				COMBAT_D->do_attack(me,ob, me->query_temp("weapon"));
+				msg += "\n半空中$N脚未后撤，已经运起「"HIY"形"NOR"」字诀，内劲直透脚尖，在$n胸腹处连点了数十下！\n";
+				me->add("neili", -100 );
+				me->add("jingli", -100);
+				COMBAT_D->do_attack(me,ob, me->query_temp("weapon"));
+				type = 0;
+			}
+			p = (int)ob->query("qi")*100/(int)ob->query("max_qi");
+			msg += "( $n"+eff_status_msg(p)+" )\n";
+			break;
+		case 2 :
+			if ( objectp(weapon1=me->query_temp("weapon")) ) 
+				msg += HIW "\n$N飘身而起，使出峨嵋绝技「灭剑」心法，顿时剑意空灵飘逸，似万千柳絮飞舞，又如和风阵阵拂过。$n惊骇之下，顿时出招散乱，无从招架！\n\n" NOR;
+			else
+				msg += MAG "\n只见$N面显庄严，一式「"HIY"佛光普照"MAG"」，提一口真气，飘身而上，半空中手掌交错，一股内劲狭带着热浪，如风如火，似雷似电，这一招拍出，击向$n，招式平平淡淡，一成不变，但却挡无可挡，避无可避！\n"NOR;
+			me->add("neili", -100 );
+			me->add("jingli", -100);
+			ob->receive_damage("jing", damage,me);
+			ob->receive_wound("jing", damage/3,me);
+			type = 2;
+			p = (int)ob->query("qi")*100/(int)ob->query("max_qi");
+			msg += "( $n"+eff_status_msg(p)+" )\n";
+			break;
+		case 3 :
+			if ( objectp(weapon1=me->query_temp("weapon")) ) 
+				msg += BLU"\n $N长笑一声，剑交左手，蹂身而上，施展「风雷四击」绝技,试图快速击伤$n \n"NOR;
+			else
+				msg += YEL "\n$N凝气于指，一式「阳关三叠」点出，但听得嗤嗤声响，一股纯阳的内力直袭$n胸口！\n" NOR;
+			me->add("neili", -100 );
+			me->add("jingli", -100);
+			ob->receive_damage("jing", damage,me);
+			ob->receive_wound("jing", damage/3,me);
+			type = 2;
+			if (!ob->is_busy()) ob->start_busy(1);
+			p = (int)ob->query("qi")*100/(int)ob->query("max_qi");
+			msg += "( $n"+eff_status_msg(p)+" )\n";
+			break;
+		case 4 :
+			if ( objectp(weapon1=me->query_temp("weapon")) ) 
+			{
+				msg += CYN"\n$N使出太极剑法"RED"「缠」"CYN"字诀，一柄"+weapon1->name()+CYN"在画着一个个圆圈，每一招均是以弧形刺出，弧形收回。神在剑先，绵绵不绝，便如撒出了一张大网，逐步向$n收紧！\n\n"NOR;
+				msg += HIY"结果太极剑意散发出的细丝越积越多，似是积成了一团团丝棉，将$n紧紧裹了起来！\n"NOR;
+				if (!ob->is_busy() ) ob->start_busy(3);
+			}
+			else
+			{
+				msg += CYN"太极之意连绵不断，有如自去行空，一个圆圈未完，第二个圆圈已生，喀喇一响，$n一处骨头被绞断！\n"NOR;
+				ob->receive_damage("qi", damage,me);
+				ob->receive_wound("qi", damage/3,me);
+				type = 1;
+			}
+			me->add("neili", -100 );
+			me->add("jingli", -100);
+			p = (int)ob->query("qi")*100/(int)ob->query("max_qi");
+			msg += "( $n"+eff_status_msg(p)+" )\n";
+			break;
+		case 5 :
+			if ( objectp(weapon1=me->query_temp("weapon")) ) 
+			{
+				if ( me->query("gender") == "男性")
+					msg += HIC"长啸一声，使出平生绝技，连环三击，正是华山剑宗绝学“"HIY"夺命连环三仙剑"HIC"”！\n"NOR;
+				else 
+					msg += HIC"$N突然使出华山绝技，一式“无双无对，宁式一剑”，只见$N挺剑直出，剑式如虹，嗤嗤之声大作，凌厉绝伦，剑力已将$n全身笼罩。\n"NOR;
+				ob->receive_damage("qi", damage,me);
+				ob->receive_wound("qi", damage/3,me);
+				type = 1;
+			}
+			else
+			{
+				msg += MAG"$N使出劈石破玉拳的绝学雷动九天，顿时天空电闪雷鸣！\n"NOR;
+				ob->receive_damage("jing", damage,me);
+				ob->receive_wound("jing", damage/3,me);
+				type = 2;
+			}
+			me->add("neili", -100 );
+			me->add("jingli", -100);
+			p = (int)ob->query("qi")*100/(int)ob->query("max_qi");
+			msg += "( $n"+eff_status_msg(p)+" )\n";
+			break;
+		case 6 :
+			if ( objectp(weapon1=me->query_temp("weapon")) ) 
+			{
+				msg += CYN "$N抽出一只玉箫凑到嘴边，吹得两下，从箫筒里突然射出一道青光，直扑$n。$n躲闪不及，正中前胸！\n";
+				ob->receive_damage("jing", damage,me);
+				ob->receive_wound("jing", damage/3,me);
+				type = 2;
+			}
+			else
+			{
+				msg += GRN "$N一声清啸，拳脚齐施，使出桃花「狂风绝技」迅捷无伦地攻向$n！\n"NOR;
+				ob->receive_damage("qi", damage,me);
+				ob->receive_wound("qi", damage/3,me);
+				type = 1;
+			}
+			me->add("neili", -100 );
+			me->add("jingli", -100);
+			p = (int)ob->query("qi")*100/(int)ob->query("max_qi");
+			msg += "( $n"+eff_status_msg(p)+" )\n";
+			break;			
+		case 7 :
+			if ( objectp(weapon1=me->query_temp("weapon")) ) 
+			{
+				msg += HIG"$N以"+ weapon1->name() + HIG"代棒，使出打狗棒法「缠字」诀，只见一团青影往$n身上罩了过去。结果$n被$N攻了个措手不及。\n";
+				if (!ob->is_busy()) ob->start_busy(3);
+			}
+			else
+			{
+				msg += HIM"\n$N双掌平举前胸，丹田之气凝于膻中，右手缓缓推向$n，看似轻描淡写，"+HIG"但一遇阻力，便加起无数内劲，一道强过一道，呼啸着向$n而去！\n"NOR;
+				ob->receive_damage("qi", damage,me);
+				ob->receive_wound("qi", damage/3,me);
+				type = 1;
+			}
+			me->add("neili", -100 );
+			me->add("jingli", -100);
+			p = (int)ob->query("qi")*100/(int)ob->query("max_qi");
+			msg += "( $n"+eff_status_msg(p)+" )\n";
+			break;
+		case 8 :
+			if ( objectp(weapon1=me->query_temp("weapon")) ) 
+			{
+				msg += HIW"\n$N悄悄使出《圣火令法》绝学"BLU"阴风刀"HIW"，运起一股无形无质的阴寒之气，直插"+ob->name()+"胸口玉堂穴要穴！\n"NOR;
+				ob->receive_damage("qi", damage,me);
+				ob->receive_wound("qi", damage/3,me);
+				type = 1;
+			}
+			else
+			{
+				msg += HIR"\n突然$N眼射精光，朗声念出句似歌非歌、似诗非诗的拳诀：“三焦齐逆兮魂魄飞扬”，接着走上前去，砰的一拳击向$n！\n"NOR;
+				msg += HIW"在刚一触到"+ob->name()+"的身体时，你便暗暗发力，将隐藏在在拳内的七种力道送了过去！\n"NOR;
+				ob->receive_damage("jing", damage,me);
+				ob->receive_wound("jing", damage/3,me);
+				type = 2;
+				if (!ob->is_busy()) ob->start_busy(1);
+			}
+			me->add("neili", -100 );
+			me->add("jingli", -100);
+			p = (int)ob->query("qi")*100/(int)ob->query("max_qi");
+			msg += "( $n"+eff_status_msg(p)+" )\n";
+			break;
+		case 9 :
+			if ( objectp(weapon1=me->query_temp("weapon")) ) 
+				msg += HIY"\n$N乘$n稍稍走神之机，拼尽全力使出洪教主不传之绝技－－「英雄三招」！\n"NOR;
+			else
+				msg += HIR"\n$N忽然猛一吸气，双掌一立，化骨绵掌，向$n轻轻地拍出！$n！\n"NOR;
+			ob->receive_damage("qi", damage,me);
+			ob->receive_wound("qi", damage/3,me);
+			type = 1;
+			me->add("neili", -100 );
+			me->add("jingli", -100);
+			p = (int)ob->query("qi")*100/(int)ob->query("max_qi");
+			msg += "( $n"+eff_status_msg(p)+" )\n";
+			break;
+		case 10 :
+			if ( objectp(weapon1=me->query_temp("weapon")) ) 
+			{
+				msg += HIB"\n$N大吼一声，手持玄铁剑挟巨浪潮涌之势,从轻而响，从响而轻，忽寂然无声，忽轰轰之声，反复七次，席卷而去。\n"NOR;
+				ob->receive_damage("qi", damage,me);
+				ob->receive_wound("qi", damage/3,me);
+				type = 1;
+			}
+			else
+			{
+				msg += HIR"\n$N面呈凄苦之色，心下万念俱灰，没精打采的挥袖卷出，倒拍出一掌！$n！\n"NOR;
+				ob->receive_damage("jing", damage,me);
+				ob->receive_wound("jing", damage/3,me);
+				type = 2;
+			}
+			me->add("neili", -100);
+			me->add("jingli", -100);
+			p = (int)ob->query("qi")*100/(int)ob->query("max_qi");
+			msg += "( $n"+eff_status_msg(p)+" )\n";
+			break;
+		case 11 :
+			if ( objectp(weapon1=me->query_temp("weapon")) ) 
+			{
+				msg += HIB"\n$N一声阴笑，忽若一团红云般欺身而近，手中细针疾指双目！\n"NOR;
+				ob->receive_damage("jing", damage,me);
+				ob->receive_wound("jing", damage/3,me);
+				type = 2;
+			}
+			else
+			{
+				msg += HIR"\n$N面露凝重之色，双手色呈青紫，原本尖锐的掌风竟变得悄无声息！\n"NOR;
+				ob->receive_damage("qi", damage,me);
+				ob->receive_wound("qi", damage/3,me);
+				type = 1;
+			}
+			me->add("neili", -100);
+			me->add("jingli", -100);
+			p = (int)ob->query("qi")*100/(int)ob->query("max_qi");
+			msg += "( $n"+eff_status_msg(p)+" )\n";
+			break;
+		case 12 :
+			if ( objectp(weapon1=me->query_temp("weapon")) ) 
+			{
+				msg += HIC"\n$N凝神息气，手腕疾抖，挽出千万个剑花，铺天盖地飞向$n！\n"NOR;
+				ob->receive_damage("qi", damage,me);
+				ob->receive_wound("qi", damage/3,me);
+				type = 1;
+			}
+			else
+			{
+				msg += HIC"\n$N化水为冰，凝于掌中，双指一弹，手上几道青光急速射向$n\n"NOR;
+				ob->receive_damage("jing", damage,me);
+				ob->receive_wound("jing", damage/3,me);
+				type = 2;
+			}
+			me->add("neili", -100 );
+			me->add("jingli", -100);
+			p = (int)ob->query("qi")*100/(int)ob->query("max_qi");
+			msg += "( $n"+eff_status_msg(p)+" )\n";
+			break;
+		case 13 :
+			if ( objectp(weapon1=me->query_temp("weapon")) ) 
+			{
+				msg += HIY"\n$N一声长笑，只觉世事如意，豪气满胸，哪管什么是非荣辱，反手一刀砍出！！\n"NOR;
+				ob->receive_damage("qi", damage,me);
+				ob->receive_wound("qi", damage/3,me);
+				type = 1;
+			}
+			else
+			{
+				msg += CYN"\n$N化水为冰，凝于掌中，双指一弹，手上几道青光急速射向$n\n"NOR;
+				ob->receive_damage("jing", damage,me);
+				ob->receive_wound("jing", damage/3,me);
+				type = 2;
+			}
+			me->add("neili", -100 );
+			me->add("jingli", -100);
+			p = (int)ob->query("qi")*100/(int)ob->query("max_qi");
+			msg += "( $n"+eff_status_msg(p)+" )\n";
+			break;
+		case 14 :
+			if ( objectp(weapon1=me->query_temp("weapon")) ) 
+			{
+				msg += HIY"\n$N突如起来的从狂风中闪出，对着$n胸前就是一杖！\n"NOR;
+				ob->receive_damage("qi", damage,me);
+				ob->receive_wound("qi", damage/3,me);
+				type = 1;
+			}
+			else
+			{
+				msg += BLU"\n$N身子蹲下，左掌平推而出，使的正是$N生平最得意的「蛤蟆功」绝招，掌风直逼$n而去！\n"NOR;
+				ob->receive_damage("jing", damage,me);
+				ob->receive_wound("jing", damage/3,me);
+				type = 2;
+			}
+			me->add("neili", -100 );
+			me->add("jingli", -100);
+			p = (int)ob->query("qi")*100/(int)ob->query("max_qi");
+			msg += "( $n"+eff_status_msg(p)+" )\n";
+			break;
+		case 15 :
+			if ( objectp(weapon1=me->query_temp("weapon")) ) 
+			{
+				msg += HIY"\n$N伸手搭在法轮上往斜里一拨，法轮在空中划出一道弧线，向$n飞去。\n"NOR;
+				ob->receive_damage("qi", damage,me);
+				ob->receive_wound("qi", damage/3,me);
+				type = 1;
+			}
+			else
+			{
+				msg += RED"\n$N聚气于掌，使出一招「焚心以火」，向$n的胸口击去。\n"NOR;
+				ob->receive_damage("jing", damage,me);
+				ob->receive_wound("jing", damage/3,me);
+				type = 2;
+			}
+			me->add("neili", -100 );
+			me->add("jingli", -100);
+			p = (int)ob->query("qi")*100/(int)ob->query("max_qi");
+			msg += "( $n"+eff_status_msg(p)+" )\n";
+			break;
+		case 16 :
+			if ( objectp(weapon1=me->query_temp("weapon")) ) 
+			{
+				msg += HIR"\n$N轻描淡写，挥尘如意，一瞬间就已使出夺命十三式，手中的武器轻灵流动 ，就像是河水般的向$n刺出,天地间彷佛充满了杀气！\n"NOR;
+				ob->receive_damage("jing", damage,me);
+				ob->receive_wound("jing", damage/3,me);
+				type = 2;
+			}
+			else
+			{
+				msg += RED"\n$N把全身的劲力注入双掌,高高跃起，**凝血神抓**，一抓抓来，势不可挡！\n"NOR;
+				ob->receive_damage("qi", damage,me);
+				ob->receive_wound("qi", damage/3,me);
+				type = 1;
+			}
+			me->add("neili", -100 );
+			me->add("jingli", -100);
+			p = (int)ob->query("qi")*100/(int)ob->query("max_qi");
+			msg += "( $n"+eff_status_msg(p)+" )\n";
+			break;
+		case 17 :
+			if ( objectp(weapon1=me->query_temp("weapon")) ) 
+			{
+				msg += YEL"\n$N使出全真派绝技「一剑化三清」，身法陡然加快,手握剑柄晃成三条白龙！\n"NOR;
+				ob->receive_damage("jing", damage,me);
+				ob->receive_wound("jing", damage/3,me);
+				type = 2;
+			}
+			else
+			{
+				msg += HIR"\n$N怒喝一声，拚尽全力，突然闪电般攻出拳、掌、腿连环三招！\n"NOR;
+				ob->receive_damage("qi", damage,me);
+				ob->receive_wound("qi", damage/3,me);
+				type = 1;
+			}
+			me->add("neili", -100 );
+			me->add("jingli", -100);
+			p = (int)ob->query("qi")*100/(int)ob->query("max_qi");
+			msg += "( $n"+eff_status_msg(p)+" )\n";
+			break;
+		case 18 :
+			if ( objectp(weapon1=me->query_temp("weapon")) ) 
+			{
+				msg += CYN"\n$N突然暴吼一声：“我砸！我砸！我砸砸砸！”，手中巨斧竟然砸向$n手中兵刃！\n"NOR;
+				ob->receive_damage("jing", damage,me);
+				ob->receive_wound("jing", damage/3,me);
+				type = 2;
+				if ( objectp(weapon2=ob->query_temp("weapon")) ) 
+				{
+					weapon2->unequip();
+					weapon2->move(environment(ob));
+				}
+			}
+			else
+			{
+				msg += HIR"\n$N运起［归元吐纳法］，同时使出［铁掌降龙］一阵一阵的掌力，如潮水般的击向$n！\n"NOR;
+				ob->receive_damage("qi", damage,me);
+				ob->receive_wound("qi", damage/3,me);
+				type = 1;
+			}
+			me->add("neili", -100 );
+			me->add("jingli", -100);
+			p = (int)ob->query("qi")*100/(int)ob->query("max_qi");
+			msg += "( $n"+eff_status_msg(p)+" )\n";
+			break;
+		case 19 :
+			if ( objectp(weapon1=me->query_temp("weapon")) ) 
+			{
+				msg += HIC"\n$N手中长剑剑芒跃动，剑光暴长，剑尖颤动似乎分左右刺向$n。\n"NOR;
+				ob->receive_damage("jing", damage,me);
+				ob->receive_wound("jing", damage/3,me);
+				type = 2;
+			}
+			else
+			{
+				msg += HIG"\n$N深吸一口气，大喝一声，连续击出"HIW+ (random(10)+1) +HIG"掌，后招推着前招，掌力叠合在一起扑向$n！\n"NOR;
+				ob->receive_damage("qi", damage,me);
+				ob->receive_wound("qi", damage/3,me);
+				type = 1;
+			}
+			me->add("neili", -100 );
+			me->add("jingli", -100);
+			p = (int)ob->query("qi")*100/(int)ob->query("max_qi");
+			msg += "( $n"+eff_status_msg(p)+" )\n";
+			break;
+		case 20 :
+			if ( objectp(weapon1=me->query_temp("weapon")) ) 
+			{
+				msg += YEL"\n$N"+RED+"阴侧侧长笑数声，天魔刀法接连出招。\n"NOR;
+				ob->receive_damage("qi", damage,me);
+				ob->receive_wound("qi", damage/3,me);
+				type = 1;
+			}
+			else 
+			{
+				msg += RED"\n$N猛地纵起，向$n扑去，手指一弹，细针飞了出去，插向$n右目。\n"NOR;
+				ob->receive_damage("jing", damage,me);
+				ob->receive_wound("jing", damage/3,me);
+				type = 2;
+				if (!ob->is_busy()) ob->start_busy(1);
+			}
+			me->add("neili", -100 );
+			me->add("jingli", -100);
+			p = (int)ob->query("qi")*100/(int)ob->query("max_qi");
+			msg += "( $n"+eff_status_msg(p)+" )\n";
+			break;
+		case 21 :
+			if ( objectp(weapon1=me->query_temp("weapon")) ) 
+			{
+				msg += HIW"\n$N长啸一声,使出「万梅飘零」,手中兵器疾卷,掀起万朵雪花向前铺天盖地的撒去。在白茫茫的一片中,忽然出现万朵梅花形剑花,穿透雪幕,朝四面八方狂射而出。\n"NOR;
+				ob->receive_damage("qi", damage,me);
+				ob->receive_wound("qi", damage/3,me);
+				type = 1;
+				if ( objectp(weapon2=ob->query_temp("weapon")) ) 
+				{
+					weapon2->unequip();
+					weapon2->move(environment(ob));
+				}
+			}
+			else
+			{
+				msg += HIW"\n$N冰雪心法运转一周天，全身只觉一股寒气蒸腾欲出,清啸一声,飞身而上,施展出「"+HIW"烟雪春梅」，双手一搓一放,一股凝人气血的狂飙向$n铺天盖地席卷而去。\n"NOR;
+				ob->receive_damage("jing", damage,me);
+				ob->receive_wound("jing", damage/3,me);
+				type = 2;
+			}
+			me->add("neili", -100 );
+			me->add("jingli", -100);
+			p = (int)ob->query("qi")*100/(int)ob->query("max_qi");
+			msg += "( $n"+eff_status_msg(p)+" )\n";
+			break;
+		case 22 :
+			if ( objectp(weapon1=me->query_temp("weapon")) ) 
+			{
+				msg += HIY"\n$N将发结解开，披头散发，脸色突然变白，手中的"+weapon1->name()+"也跟着剧烈抖动着！突然$N一声狂嚎，如神哭鬼号似的厉啸响自天地，发疯似的将五毒追魂钩狂乱使出！\n"NOR;
+				ob->receive_damage("jing", damage,me);
+				ob->receive_wound("jing", damage/3,me);
+				type = 2;
+			}
+			else
+			{
+				msg += HIR"\n$N一声狞笑飞身纵起，凌空一指向$n的眉心点去。\n"NOR;
+				ob->receive_damage("qi", damage,me);
+				ob->receive_wound("qi", damage/3,me);
+				type = 1;
+			}
+			me->add("neili", -100 );
+			me->add("jingli", -100);
+			if (!ob->is_busy()) ob->start_busy(1);
+			p = (int)ob->query("qi")*100/(int)ob->query("max_qi");
+			msg += "( $n"+eff_status_msg(p)+" )\n";
+			break;
+		case 23 :
+			if ( objectp(weapon1=me->query_temp("weapon")) ) 
+			{
+				msg += HIM"\n$N双目突然泛过怪异绿光,中指在不易察觉间微微一动,一点银星悄无声息打向$n眉心。！\n"NOR;
+				ob->receive_damage("jing", damage,me);
+				ob->receive_wound("jing", damage/3,me);
+				type = 2;
+			}
+			else
+			{
+				msg += HIM"\n$N突然收掌，然后迅速发掌! 掌中尽然有毒砂，这掌风尽然是五颜六色的！！\n"NOR;
+				ob->receive_damage("qi", damage,me);
+				ob->receive_wound("qi", damage/3,me);
+				type = 1;
+			}
+			me->add("neili", -100 );
+			me->add("jingli", -100);
+			p = (int)ob->query("qi")*100/(int)ob->query("max_qi");
+			msg += "( $n"+eff_status_msg(p)+" )\n";
+			break;
+		case 24 :
+			if ( objectp(weapon1=me->query_temp("weapon")) ) 
+			{
+				msg += HIM"\n$N使出飞天御剑流的最高剑决的" + HIR "天翔龙闪" +HIW "，$n只见$N身形一闪，咽喉已被对穿而过！ \n"NOR;
+				ob->receive_damage("jing", damage,me);
+				ob->receive_wound("jing", damage/3,me);
+				type = 2;
+			}
+			else
+			{
+				msg += HIM"\n「三重劲!」$N全身骨骼一阵爆响,拼尽毕生功力使出了喧哗流拳法的终极绝技。\n"NOR;
+				ob->receive_damage("qi", damage,me);
+				ob->receive_wound("qi", damage/3,me);
+				type = 1;
+			}
+			me->add("neili", -100 );
+			me->add("jingli", -100);
+			if (!ob->is_busy()) ob->start_busy(1);
+			p = (int)ob->query("qi")*100/(int)ob->query("max_qi");
+			msg += "( $n"+eff_status_msg(p)+" )\n";
+			break;
+		default :
+			msg += HIW"$N使出$n的成名绝技，刹那间一股排山倒海之力击中$n。\n"NOR;
+			me->add("neili", -100 );
+			me->add("jingli", -100);
+			ob->receive_damage("qi", damage,me);
+			ob->receive_wound("qi", damage/3,me);
+			type = 1;
+			p = (int)ob->query("qi")*100/(int)ob->query("max_qi");
+			msg += "( $n"+eff_status_msg(p)+" )\n";
+	}
+	if (type==1) message_vision(msg, me, ob,damage,HBWHT+HIY"气血反伤"NOR);
+	else if (type==2) message_vision(msg, me, ob,damage,HBWHT+HIY"精神反伤"NOR);
+	else message_vision(msg, me, ob,damage,HBWHT+HIY"气血反伤"NOR);
+}

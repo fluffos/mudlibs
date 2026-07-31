@@ -1,0 +1,222 @@
+// socre.c by edd gds
+// 由jjgod 为模拟华附专门修改
+#include <ansi.h>
+#include <combat.h>
+
+inherit F_CLEAN_UP;
+
+string display_attr(int gift, int value);
+string bar_string = "■■■■■■■■■■■■■■■■■";
+string blank_string = "□□□□□□□□□□□□□□□□□";
+string none_string = "                                  ";
+string display_attr(int gift, int value);
+string tribar_graph(int val, int eff, int max, string color);
+int check_cc(string str);
+
+void create() { seteuid(ROOT_UID); }
+
+int main(object me, string arg)
+{
+         string line,my_str,my_dur,my_con,my_int,skill_type,master,killer;
+         mapping my;
+         object ob, weapon;
+         int i, cc_len, attack_points, dodge_points, parry_points;
+         seteuid(getuid(me));
+
+         if(!arg)
+                 ob = me;
+         else if (wizardp(me)) {
+                 ob = present(arg, environment(me));
+                 if (!ob) ob = find_player(arg);
+                 if (!ob) ob = find_living(arg);
+                 if (!ob) return notify_fail("你要察看谁的状态？\n");
+         } else
+                 return notify_fail("只有巫师能察看别人的状态。\n");
+
+         my = ob->query_entire_dbase();
+         my_str = display_attr(my["str"], ob->query_str());
+         my_con = display_attr(my["con"], ob->query_con());
+         my_int = display_attr(my["int"], ob->query_int());
+         my_dur = display_attr(my["dur"], ob->query_dur());
+
+         if( objectp(weapon = ob->query_temp("weapon")) )
+                 skill_type = weapon->query("skill_type");
+         else
+                 skill_type = "unarmed";
+
+         attack_points = COMBAT_D->skill_power(ob, skill_type, SKILL_USAGE_ATTACK);
+         parry_points = COMBAT_D->skill_power(ob, skill_type, SKILL_USAGE_DEFENSE);
+         dodge_points = COMBAT_D->skill_power(ob, "dodge", SKILL_USAGE_DEFENSE);
+         master = ob->query("family")?(ob->query("family")["master_name"]?my["family"]["master_name"]:"不知道是谁"):"目前还没有" ;
+
+         line = "\n"CYN"≡"YEL"━━━━━"+WHT"【学籍表】"YEL"━━━━━"CYN"≡"NOR"\n";
+         line += sprintf("%s%4s%s\n",
+         YEL"┃"NOR" 头  衔 ：    "+RANK_D->query_rank(ob),         YEL"  ┃",
+         CYN"       膂力：["NOR+my_str+CYN"]     悟性：["NOR+my_int+CYN"] "NOR
+         );
+
+         line += sprintf("%s%-15s"YEL"┃"NOR"%s\n",
+         YEL"┃"NOR"中文姓名：     ",ob->name(),       
+         CYN"       根骨：["NOR+my_con+CYN"]     身法：["NOR+my_dur+CYN"]"NOR
+         );
+
+         if ( !wizardp(me) && (int)ob->query("age") < 15)
+         line += sprintf("%s%-15s"YEL"┃"NOR"%s\n",
+         YEL"┃"NOR"英文名字：     ",ob->query("id"),       
+         CYN"       相貌：[ "NOR+"??"+CYN"]     福缘：[ "NOR+"??"+CYN"]"NOR
+         );
+         else line += sprintf("%s%-15s"YEL"┃"NOR"%s\n",
+         YEL"┃"NOR"英文名字：     ",ob->query("id"),       
+         CYN"       相貌：[ "NOR+ob->query("per")+CYN"]     福缘：[ "NOR+ob->query("kar")+CYN"]"NOR
+         );
+	 if ( wizardp(ob) )
+         line += sprintf("%s%-15s%39s\n",
+         YEL"┃"NOR" 民  族 ：     ","神族",CYN"≡"YEL"━━━━━━━━━━━━━━━━━━━━"CYN"≡"NOR );
+         else if ( ob->query("national") )
+         line += sprintf("%s%-15s%39s\n",
+         YEL"┃"NOR" 类  型 ：     ",ob->query("national"),CYN"≡"YEL"━━━━━━━━━━━━━━━━━━━━"CYN"≡"NOR );
+         else 
+         line += sprintf("%s%-15s%39s\n",
+         YEL"┃"NOR" 类  型 ：     ","不明",CYN"≡"YEL"━━━━━━━━━━━━━━━━━━━━"CYN"≡"NOR );
+
+         if( ob->query("title") )
+         {
+                 line += sprintf("%s%-57s",
+                 YEL"┃"NOR" 称  谓 ：     ",ob->query("title") );
+                 for (i=0,cc_len=check_cc(ob->query("title"));i<cc_len;i++)
+  {
+                         line += sprintf("%s"," ");
+                 }
+                 line += sprintf("%s",YEL"┃"NOR"\n");
+         }
+
+         if( ob->query("nickname") )
+         {
+                 line += sprintf("%s%-57s",
+                 YEL"┃"NOR"你的别称：     ",ob->query("nickname")
+                 );
+
+                 for (i=0,cc_len=check_cc(ob->query("nickname"));i<cc_len;i++) {
+                         line += sprintf("%s"," ");
+                 }
+                 line += sprintf("%s",YEL"┃"NOR"\n");
+         }
+
+         line += sprintf("%s%-16s%s%-28s"YEL"┃"NOR"\n",
+         YEL"┃"NOR" 年  龄 ：     ",chinese_number(ob->query("age"))+"岁","出生年月日 ：",
+         "/cmds/usr/rtime"->chinese_time(5, ctime(ob->query("birthday"))) // 调用rtime指令计算出生年月，模拟华附当然不能用CHINESE_D中的生辰八字。
+         );
+
+         line += sprintf("%s%-16s%12s%-28s"YEL"┃"NOR"\n",
+         YEL"┃"NOR" 性  别 ：     ", ob->query("gender"),
+         "游戏时间：   ",( (int)ob->query("mud_age"))+"秒",);
+
+//       if( wizardp(me) )
+                 line += sprintf("%s"WHT"%-16s"NOR"%s"WHT"%-28s"YEL"┃"NOR"\n",
+                 YEL"┃"NOR"战斗攻击力：   ",
+                 attack_points/100+1+" (+"+ob->query_temp("apply/damage")+")",
+
+                 "战斗防御力： ",
+                 (dodge_points + (weapon? parry_points: (parry_points/10)))/100 + 1+" (+"+ob->query_temp("apply/armor")+")",
+                 );
+
+         line += sprintf("%s%-30s%s%-28s"YEL"┃"NOR"\n",
+                 YEL"┃"NOR"你一共杀生：   ",CYN+(my["MKS"] + my["PKS"])+NOR+" 次",
+               "你的老师是： ",master
+                 );
+         if( ob->query("guild") )
+         {
+         line += sprintf("%s"GRN"%-15s"NOR"%s"CYN"%-28d"YEL"┃"NOR"\n",
+         YEL"┃"NOR"兴趣小组：     ",(int)ob->query("guild/name"),
+         " 专业学分：   ",(int)ob->query("guild/score")
+		);
+         }
+         line += sprintf("%s%-30s%s%-45s"YEL"┃"NOR"\n",
+         YEL"┃"NOR"你一共杀了：   ",CYN+my["PKS"]+NOR+"个玩家","食物： ",
+         tribar_graph(my["food"], ob->max_food_capacity(), ob->max_food_capacity(), YEL)
+         );
+
+         line += sprintf("%s%-30s%s%-29s"YEL"┃"NOR"\n",
+         YEL"┃"NOR"你的存款：     ",RED+ob->query("deposit")/100+"元"+NOR        ,"饮水： ",
+         tribar_graph(my["water"], ob->max_water_capacity(), ob->max_water_capacity(), CYN)
+         );
+
+         line += sprintf("%s"YEL"%-15s"NOR"%s%-20s"YEL"┃"NOR"\n",
+         YEL"┃"NOR" 潜  能 ：     ",(int)ob->query("potential") - (int)ob->query("learned_points")+
+         " ("+(1 + (int)ob->query("learned_points")) * 100 / (1 + (int)ob->query("potential"))+"%)",
+         " 精力   ",tribar_graph(my["gin"], my["eff_gin"], my["max_gin"] , GRN),
+         );
+         line += sprintf("%s"MAG"%-15d"NOR"%s%-28s"YEL"┃"NOR"\n",
+         YEL"┃"NOR" 学  分 ：     ",ob->query("combat_exp")," 气血   ",
+         tribar_graph(my["kee"], my["eff_kee"], my["max_kee"], RED)
+         );
+         line +=CYN"≡"YEL"━━━━━━━━━━━━━━━━━━━━━━模拟华附最终测试版━━━━━"CYN"≡"NOR"\n";
+
+         write(line);
+
+         return 1;
+}
+
+string display_attr(int gift, int value)
+{
+         if( value > gift ) return sprintf( HIY "%3d" NOR, value );
+         else if( value < gift ) return sprintf( CYN "%3d" NOR, value );
+         else return sprintf("%3d", value);
+ }
+
+string tribar_graph(int val,int eff,int max,string color)
+{
+         return color + bar_string[0..(val*17/max)*2-1]
+                 + ((eff > val) ? blank_string[(val*17/max)*2..(eff*17/max)*2-1] : "")
+                 + ((max > eff) ? none_string[(eff*17/max)*2..34] : "")
+                 +NOR;
+}
+
+int check_cc(string str)
+{
+         int i, nn_len;
+
+         for (nn_len=0,i=0;i<strlen(str);i++) {
+                 if (str[i]==27)
+                 {
+                         for (;str[i]!=109;i++)
+                         {
+                                 nn_len++;
+                         }
+                         nn_len++;
+                 }
+         }
+         
+         return nn_len;
+}
+int help(object me)
+{
+	write(@HELP
+指令格式 : score
+           
+
+这个指令可以显示你的基本资料，比如说：
+
+≡━━━━━【学籍表】━━━━━≡
+┃ 头  衔 ：    【 不过初二 】  ┃       膂力：[ 30]     悟性：[ 18] 
+┃中文姓名：     阿飞           ┃       根骨：[ 33]     身法：[ 10]
+┃英文名字：     palmy          ┃       相貌：[ 50]     福缘：[ 50]
+┃ 民  族 ：     神族           ≡━━━━━━━━━━━━━━━━━━━━≡
+┃ 称  谓 ：     法轮邪教第二届学生                                       ┃
+┃你的别称：     欢迎你来到模拟华附！                                     ┃
+┃ 年  龄 ：     十六岁          出生年月日 ：2000年7月5日15点23分        ┃
+┃ 性  别 ：     男性            游戏时间：   1678110秒                   ┃
+┃战斗攻击力：   1744 (+0)       战斗防御力： 8361 (+20)                  ┃
+┃你一共杀生：   170 次          你的老师是： 李洪志                      ┃
+┃兴趣小组：     运动队          专业学分：   200                         ┃
+┃你一共杀了：   14个玩家        食物： ■■■■■■■■■■■■■■■■□┃
+┃你的存款：     14920元         饮水： ■■■■■■■■■■■■■■■■□┃
+┃ 潜  能 ：     6878 (0%)       精力   ■■■■■■■■■■■■■■■■■┃
+┃ 学  分 ：     12818           气血   ■■■■■■■■■■■■■■■■■┃
+≡━━━━━━━━━━━━━━━━━━━━━━模拟华附最终测试版━━━━━≡
+如果你觉得这些信息还不够的话，请使用scmore指令来查看更多的信息。
+另请参见 : hp,scmore
+HELP
+    );
+    return 1;
+}

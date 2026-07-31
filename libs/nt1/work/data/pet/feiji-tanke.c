@@ -1,0 +1,18 @@
+// SN:1<eVQ:^Tae1FCGiU
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m坦克[1;37m象[2;37;0m", ({"tanke xiang"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "$HIW$看锤子你看
+它是明飞的坐骑。
+");
+        set_temp("owner_id", "feiji");
+        set_temp("owner_name", "明飞");
+        ::setup();
+}
+

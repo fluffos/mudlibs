@@ -1,0 +1,18 @@
+// SN:hQ^cC]b`:fXF3bXC
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[33m老虎[2;37;0m", ({"neweres hu"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "老虎就是老虎
+它是看不见我的坐骑。
+");
+        set_temp("owner_id", "newere");
+        set_temp("owner_name", "看不见我");
+        ::setup();
+}
+

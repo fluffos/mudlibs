@@ -1,0 +1,254 @@
+//装备质量提升系统 NPC
+//edit by rock
+//2008年10月29日
+
+#include <ansi.h>
+inherit NPC;
+
+#define EQUIP_UP "/adm/item/equip"
+#define RETURN_OBJ "/u/rock/return_obj/shuijing"
+
+int do_UpEquip();
+void do_UpEquip_2(string arg,object me);
+int do_FenJie();
+void do_FenJie_2(string arg,object me);
+int do_QianKun();
+
+void create()
+{
+	set_name("装备管理员", ({ "quality man", "man" }) );
+        set("title",HIM"装备武器提升"NOR);
+	set("age", 55);
+	set("long", "有了我，您的装备品质将得到完美的提升。\n");
+
+	set("inquiry", ([
+		"提升装备质量"  : (: do_UpEquip :),
+//		"鉴定装备"      : (: do_JianDing :),
+//		"邦定装备"      : (: do_BiangDing :),
+//		"取消邦定"      : (: do_NoBangDing :),
+		"合成乾坤锁"    : (: do_QianKun :),
+		"分解装备"      : (: do_FenJie :),
+	]));
+
+	set("no_kill",1);
+
+	setup();
+}
+
+int query_all_object(object me,int index)
+{
+	object *inv;
+	int i,size,shuliang = 0;
+	
+	inv = all_inventory(me);
+	size = sizeof(inv);
+
+	for(i=0;i<size;i++)
+	{
+		if(inv[i]->query("id") == "rock crystal")
+		{
+			if(index && shuliang < index)
+			{
+				destruct(inv[i]);
+			}
+			shuliang++;
+		}
+	}
+	return shuliang;
+}
+
+//合成乾坤锁
+int do_QianKun()
+{
+	object me,item;
+	me = this_player();
+	
+	if(query_all_object(me,0) < 2)
+	{
+		tell_object(me,"你身上的魔光水晶不足。\n");
+		return 1;
+	}
+
+	if(item = new("/u/rock/get_pet.lpc"))
+	{
+		query_all_object(me,2);
+		tell_object(me,"乾坤锁合成成功。\n");
+		item->move(me);
+		return 1;
+	}
+}
+
+//函数：转入提升装备
+int do_UpEquip()
+{
+	object me;
+	int money;
+
+	me = this_player();
+	money = me->query("points",1);
+
+	if(!money || money < 10)
+	{
+		tell_object(me," 你的方舟币不足。\n");
+		return 1;
+	}
+	
+	tell_object(me,"请输入你要提升质量的物品ID:\n");
+	input_to("do_UpEquip_2",me);
+	return 1;
+}
+
+//函数：提升装备
+void do_UpEquip_2(string arg,object me)
+{
+	object item,user_item;
+	int zhiliang,money,index;
+	
+	if(!me) return;
+	
+	if(!arg || !stringp(arg) || !item = present(arg,me))
+	{
+		tell_object(me,"你身上没有这件物品。\n");
+		return;
+	}
+	
+	if(!item->query_xy())
+	{
+		tell_object(me,"你无法提升这件物品的品质。\n");
+		return;
+	}
+	zhiliang = item->query("zhiliang");
+	if(zhiliang >= 3)
+	{
+		tell_object(me,"这件卓越装备无法提升。\n");
+		return;
+	}
+
+	if(user_item = me->query_temp("armor/cloth"))
+	{
+		if(user_item->query("id") == item->query("id"))
+		{
+			tell_object(me,sprintf("请把%s脱下，方可对其提升。\n",item->query("name")));
+			return;
+		}
+	}
+	if(user_item = me->query_temp("weapon"))
+	{
+		if(user_item->query("id") == item->query("id"))
+		{
+			tell_object(me,sprintf("请把%s放下，方可对其提升。\n",item->query("name")));
+			return;
+		}
+	}
+
+	if(!zhiliang) index = 10;
+	else if(zhiliang == 1) index = 20;
+	else if(zhiliang == 2) index = 30;
+
+	money = me->query("points",1);
+	if(money < index)
+	{
+		tell_object(me,"你的方舟币余额不足。\n");
+		return;
+	}
+
+	me->set("points",money-index);
+
+	switch(zhiliang)
+	{
+		case 1  : EQUIP_UP->init_equip_prop_2(item); break;
+		case 2  : EQUIP_UP->init_equip_prop_3(item); break;
+		default : EQUIP_UP->init_equip_prop_1(item); break;
+	}
+	item->delete("long");
+	item->init();
+	me->add("jym_level/buy_add",index);
+	tell_object(me,sprintf("『%s』品质提升完成。\n",item->query("name")));
+}
+
+int do_FenJie()
+{
+	object me;
+	int money;
+
+	me = this_player();
+
+	tell_object(me,"请输入你要提升质量的物品ID:\n");
+	input_to("do_FenJie_2",me);
+	return 1;
+}
+
+void do_FenJie_2(string arg,object me)
+{
+	object item,user_item,rock;
+	int zhiliang,i,size,index = 0;
+	mapping prop;
+
+	if(!me) return;
+	
+	if(!arg || !stringp(arg) || !item = present(arg,me))
+	{
+		tell_object(me,"你身上没有这件物品。\n");
+		return;
+	}
+	
+	if(!item->query_xy())
+	{
+		tell_object(me,"无法分解这件物品。\n");
+		return;
+	}
+
+	if(user_item = me->query_temp("armor/cloth"))
+	{
+		if(user_item->query("id") == item->query("id"))
+		{
+			tell_object(me,sprintf("请把%s脱下，方可对其分解。\n",item->query("name")));
+			return;
+		}
+	}
+	if(user_item = me->query_temp("weapon"))
+	{
+		if(user_item->query("id") == item->query("id"))
+		{
+			tell_object(me,sprintf("请把%s放下，方可对其分解。\n",item->query("name")));
+			return;
+		}
+	}
+	if(prop = (mapping)item->query("weapon_prop"));
+	else prop = (mapping)item->query("armor_prop");
+	
+	if(prop)
+	{
+		size = sizeof(prop);
+		for(i=0;i<size;i++)
+		{
+			if(stringp(prop))
+				index += item->query(sprintf("weapon_prop/%s",prop[i]))/1000;
+		}
+	}
+
+	index += item->query("weapon_prop/baoji")/10000;
+	index += item->query("jingli")/10000;
+	index += item->query("jing")/10000;
+	index += item->query("dp")/1000;
+	index += item->query("cp")/1000;
+	index += item->query("ap")/1000;
+	index += item->query("mp")/10000;
+	index += item->query("hp")/10000;
+	index += item->query("pp")/1000;
+
+	zhiliang = item->query("zhiliang");
+
+	index += zhiliang;
+
+	for(i=0;i<index;i++)
+	{
+		if(rock = new(RETURN_OBJ))
+		{
+			rock->move(me);
+		}
+	}
+	if(index) tell_object(me,sprintf(HIM"分解成功，分解出了%d个魔光水晶。\n"NOR,index));
+	else tell_object(me,HIR"分解失败。\n"NOR);
+	destruct(item);
+}

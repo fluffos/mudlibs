@@ -1,0 +1,294 @@
+void killer_reward(object killer, object victim)
+{
+    int bls,int_skill,chousha;
+    string vmark,killer_master_id,*die_msg,msg;
+    mapping quest;
+    mapping actions;
+     object money;
+    int exp, pot, score, bonus,factor;
+    int chousha_exp, chousha_pot, chousha_score;
+
+    die_msg = ({"死的时候还面带微笑。","死状极其恐怖。","真是惨不忍睹啊！","哎,真是人生悲剧！","真是可怜！","大家默哀吧！","可悲，可叹啊！",});
+      if (!killer)     return;
+    killer->killed_enemy(victim);
+    killer_master_id=killer->query("family/master_id");
+    if (userp(killer) && (int)victim->query_condition("killer"))
+    {
+/*                      killer->add("combat_exp",(int)victim->query("combat_exp")/10);
+                      killer->add("score",(int)victim->query("score")/10);
+*/
+//这样奖励会有bug，原来的旧火云就弄出来个大bug；
+        killer->add("combat_exp", (int)victim->query("combat_exp")*2/
+                                 (int)killer->query("combat_exp")*500);
+        killer->add("score",(int)victim->query("score")*2/
+                               (int)killer->query("score")*100); 
+//虽然改成这样也不能完全避免bug,但是被玩家用来牟利的机会会小些； 
+
+                            if(victim->query("combat_exp") > 500000){
+                                       money = new("/clone/money/gold");
+                           money->set_amount((random(5)+1) * 100);
+                           money->move(killer);}
+                           CHANNEL_D->do_channel(this_object(), "rumor",
+       sprintf("官府通缉犯%s被%s就地正法，%s获得了应有的奖励!",victim->name(),killer->name(),killer->name()));
+                      killer->clear_condition("killer");
+                      killer->delete_temp("kill_killer");
+                      victim->clear_condition("killer");
+            }
+     else if( userp(victim) ) 
+     {
+        if (wiz_level(killer)>1) return;
+        if ( victim->is_att_killing(killer) ){
+            victim->set_temp("die_for","活腻了去找别人麻烦，结果被杀");
+            die_for(victim);
+            return;
+         }
+
+        if (userp(killer))
+        {
+        killer->add("PKS", 1);
+                victim->add("PKD",1);
+                }
+        victim->add("DIED",1);
+        victim->clear_condition();
+
+        // Give the death penalty to the dying user.
+        victim->add("shen", -(int)victim->query("shen") / 10);
+        victim->delete("vendetta");
+        victim->delete("bellicosity");
+        if( victim->query("thief") )
+            victim->set("thief", (int)victim->query("thief") / 2);
+        if (!userp(killer) && killer->query("id")=="demogorgon"){
+                          int_skill=victim->query_skill("literate",1);
+                        if (int_skill>10)
+                            victim->set_skill("literate",int_skill-10);
+                                else{  if( (int)victim->query("potential") > (int)victim->query("learned_points"))
+                                victim->add("potential",((int)victim->query("learned_points") - (int)victim->query("potential"))/5 );
+        victim->add("combat_exp", -(int)victim->query("combat_exp") / 60);
+        }
+        }else{    victim->skill_death_penalty();
+        victim->add("combat_exp", -(int)victim->query("combat_exp") / 60);
+                    if( (int)victim->query("potential") > (int)victim->query("learned_points"))
+                                victim->add("potential",((int)victim->query("learned_points") - (int)victim->query("potential"))/5 );
+       }
+
+       bls = 10;
+       if(objectp(killer))
+                {
+                        msg="被"+killer->name();
+                        actions = killer->query("actions");
+                        switch(actions["damage_type"]) {
+                        case "擦伤":
+                        case "割伤":
+                                msg+=HIM"用武器砍死了，";
+                                break;
+                        case "刺伤":
+                                msg+=HIM"用利器刺死了，";
+                                break;
+                        case "瘀伤":
+                                msg+=HIM"用掌力击死了，";
+                                break;
+                        case "内伤":
+                                msg+=HIM"用掌力震死了，";
+                                break;
+                        default:
+                                msg+=HIM"杀害了，";
+                        }
+                        msg+=die_msg[random(7)];
+
+     if(victim->query_temp("chousha/fam")
+      && killer->query("family/family_name")==victim->query_temp("chousha/fam"))
+     {
+      msg+=HIR"\n"+victim->query("name")+NOR
+      +HIB"在此次仇杀中绥难，自动退出此次江湖仇杀！\n";
+      victim->delete_temp("chousha");
+     }
+
+                message("channel:rumor",HIM"\n〖江湖传闻〗: 听说"
+                        +victim->name(1)+msg+"\n"NOR,users());
+                }
+
+    if (userp(killer)  
+       && victim->query_temp("chousha/fam")
+       && killer->query_temp("chousha/fam")
+       && killer->query_temp("chousha/fam")==victim->query("family/family_name"))
+       chousha=1;
+       if (userp(killer) && !chousha && killer != victim
+        && (killer->query_temp("invaded_usrs/"+(string)victim->query("id"))
+            || !victim->query_temp("invaded_usrs/"+(string)killer->query("id")))) 
+       {
+       write_file("/log/static/KILL_PLAYER",sprintf("%s(%s) killed by %s(%s) on %s\n",
+       victim->name(1), victim->query("id"),
+       killer->name(1),killer->query("id"),ctime(time()) ));
+       if ((killer->query_temp("pker_starttime")+900*killer->query_temp("pker_time")) < killer->query("mud_age"))
+       {
+                killer->set_temp("pker_starttime",killer->query("mud_age"));
+                killer->delete_temp("pker_time");
+       }
+       killer->add_temp("pker_time",1);
+       CHANNEL_D->do_channel(this_object(), "rumor",
+                                sprintf("官府开始捉拿%s,并奖励将杀人犯就地正法之江湖好汉。", killer->name(0)));
+       killer->apply_condition("killer", 1000);
+       }
+    } else 
+    {
+        killer->add("MKS", 1);
+        bls = 1;
+    }
+
+    if (killer->query_temp("chousha") &&
+        killer->query_temp("chousha/fam")==victim->query("family/family_name")) 
+    {
+     chousha_exp=(int)victim->query("combat_exp")/3000;
+     if( chousha_exp > 10000) chousha_exp=10000;
+     if( chousha_exp < 100) chousha_exp=100;    
+     if(killer->query("combat_exp")>victim->query("combat_exp")*2)
+     chousha_exp=chousha_exp/5;
+     if(killer->query("combat_exp")*5<victim->query("combat_exp"))
+     chousha_exp=chousha_exp+chousha_exp/5;
+     chousha_exp=chousha_exp/2+random(chousha_exp/2);
+     chousha_pot=chousha_exp/5;
+     chousha_score=chousha_exp/40;
+
+message("channel:rumor",HIB"【江湖仇杀】"NOR+HIR+killer->query("name")+NOR
++HIB"杀死了"NOR+HIR+victim->query("name")+NOR+HIB"，获得了"
++CHINESE_D->chinese_number(chousha_exp)
++"点实战经验、"+CHINESE_D->chinese_number(chousha_pot)+"点潜能\n"
++"及"+CHINESE_D->chinese_number(chousha_score)+"点综合评价奖励！\n"NOR,
+users());
+     killer->add("chousha_quest/reward_exp",chousha_exp);
+     killer->add("chousha_quest/reward_potential",chousha_pot);
+     killer->add("chousha_quest/reward_score",chousha_score);
+     killer->add("combat_exp",chousha_exp);
+     killer->add("potential",chousha_pot);
+     killer->add("score",chousha_score);
+     killer->add_temp("chousha/reward_exp",chousha_exp);
+
+     if(killer->query_temp("chousha/reward_exp")>200000)
+     {
+message("channel:rumor",HIB"【江湖仇杀】"NOR+HIR+killer->query("name")+NOR
++HIB"在此次仇杀中已获得超过二十万点经验，自动退出此次江湖仇杀！\n"NOR,users());
+     killer->delete_temp("chousha");
+     }
+    }
+
+    if (killer_master_id==(string)victim->query("id")) {
+                killer->add("GUILT",1);
+                killer->delete("family");
+                killer->set("title","普通百姓");
+                killer->delete("class");
+                killer->add("combat_exp", -(int)killer->query("combat_exp")/50);
+                killer->add("shen", -10000);  
+                CHANNEL_D->do_channel(this_object(), "rumor",
+                sprintf("%s杀死了自己的师傅%s，另某出路去了。", killer->name(0), victim->name(1)));
+        }
+
+    if (!killer->is_ghost())
+    killer->add("shen", -(int)victim->query("shen") / 10);
+       if( stringp(vmark = victim->query("vendetta_mark")) )
+        killer->add("vendetta/" + vmark, 1);
+
+        if( interactive(killer) && (quest = killer->query("mpquest"))
+                && ( (int)killer->query("task_time") >= time())
+                &&(quest["quest"]==victim->query("name")))
+        {
+                tell_object(killer,HIW"恭喜你！你又完成了一项任务！\n"NOR);
+                score = quest["score"] + random(quest["score"]);
+                tell_object(killer,HIW"你对"+killer->query("family/family_name")+
+                        "的忠诚度提高了"+chinese_number(score)+"点。\n"NOR);
+                if(!killer->query("score"))
+                killer->set("score",0);
+                killer->add("score",score);
+                killer->delete("mpquest");
+        }
+
+        if( interactive(killer) && (quest = killer->query("quest"))
+                && ( (int)killer->query("task_time") >= time())
+                &&(quest["quest"]==victim->query("name")))
+            {
+                tell_object(killer,"恭喜你！你又完成了一项任务！\n");
+                exp = quest["exp_bonus"]/2 + random(quest["exp_bonus"]/2);
+                pot = quest["pot_bonus"]/2 + random(quest["pot_bonus"]/2);
+                factor=victim->query("quest_factor");
+                if (factor)
+                {
+                        exp=exp*factor/10;
+                        pot=pot*factor/10;
+                        score=score*factor/10;
+                }
+                bonus = (int) killer->query("combat_exp");
+                bonus += exp;
+                killer->set("combat_exp", bonus);
+                bonus = (int) killer->query("potential");
+                bonus = bonus - (int) killer->query("learned_points");
+                bonus = bonus + pot;
+                if ( bonus > potential_lv((int)killer->query("combat_exp")) )
+                bonus = 0;
+                else bonus=pot;
+                killer->add("potential", bonus );
+                tell_object(killer,HIW"你被奖励了：\n" +
+                chinese_number(exp) + "点实战经验\n"+
+                chinese_number(pot) + "点潜能\n"NOR);
+                killer->delete("quest");
+        }
+}
+
+void compare(object killer,object victim)
+{
+        int score,mp_num;
+        string allstr;
+        string str,pai,pai2,pai3;
+        int i,k;
+             if(!(score=victim->query("score")))
+                score=victim->query("combat_exp")/200+1;
+        if(score<100)return;
+        pai  = killer->query("family/family_name");
+        pai2 = victim->query("family/family_name");
+        str=read_file("/hate/mp_num",1,1);
+        sscanf(str,"%d",mp_num);
+        str = "";
+for(i=0;i<mp_num-1;i++)
+        {
+                allstr = "";
+                pai3 = "";
+                allstr = read_file("/hate/"+pai2,i+1,1);
+                sscanf(allstr,"%s %d",pai3,k);
+                if ( pai3 == pai)
+                {
+                        if(k>-1000)
+                        {
+                                if(score>5000)
+                                score=5000;
+                                k-=score/200+1;
+                        }
+                        allstr = "";
+                        allstr = pai3+" "+k+"\n";
+                }
+                str += allstr;
+        }
+        write_file("/hate/"+pai2, str, 1);
+        tell_object(killer,HIR"由于你残害"+victim->query("name")+
+               "，"+victim->query("family/family_name")+"对你的师门更加仇视了！\n"NOR);
+        return;
+}
+
+void victim_penalty(object victim)
+{
+        victim->clear_condition();
+        victim->add("shen", -(int)victim->query("shen") / 10);
+        victim->add("combat_exp", -(int)victim->query("combat_exp") / 50);
+        victim->delete("vendetta");
+        if ( victim->query("thief") )
+                victim->set("thief", (int)victim->query("thief") / 2);
+        if ( (int)victim->query("potential") > (int)victim->query("learned_points"))
+                victim->add("potential",
+                        ((int)victim->query("learned_points") - (int)victim->query("potential"))/5 );
+        victim->skill_death_penalty();
+}
+int potential_lv(int exp)
+{
+        int grade;
+
+        grade = 100 + exp / 500;
+        return grade;
+}
+

@@ -1,0 +1,91 @@
+// message.c
+#include <ansi.h>
+#include <dbase.h>
+#define MAX_MSG_BUFFER 500
+#define BG_LIST "/adm/etc/badguy_list"
+nosave string *msg_buffer = ({});
+int receive(string str)
+{
+        string *ids, id_list;
+        string myid = this_object()->query("id");
+        int i, t;
+
+    if (!str) return 1;
+        if( stringp(str) ) {
+    if( interactive(this_object()) ) {
+    if( this_object()->query_temp("big5") )
+      str = (string)LANGUAGE_D->toBig5(str);
+    }
+
+//系统监视player，生成player_id.log的文件 by Bug@XCHII
+        if( file_size(BG_LIST)>0 )
+        {
+        id_list = read_file(BG_LIST);
+        ids = explode(id_list,"\n");
+        t = sizeof(ids);
+        for(i=0; i<t; i++)
+            if( ids[i]==myid )
+                log_file("log_player/"+myid+".log",str);
+        }
+//
+
+     return efun::receive(str);
+     }return 0;
+}
+void receive_message(string msgclass, string msg)
+{
+    string subclass, *ch;
+    if( !interactive(this_object()) ) {
+        this_object()->relay_message(msgclass, msg);
+        return;
+    }
+    if( sscanf(msgclass, "%s:%s", subclass, msgclass)==2 ) {
+        switch(subclass) {
+            case "channel":
+                if( !pointerp(ch = query("channels"))
+                ||  member_array(msgclass, ch)==-1 )
+                    return;
+                break;
+            case "outdoor":
+                if( !environment() || !environment()->query("outdoors") )
+                    return;
+                break;
+            default:
+                error("Message: Invalid Subclass " + subclass + ".\n");
+        }
+    }
+    if( query_temp("block_msg/all") || query_temp("block_msg/" + msgclass) )
+        return;
+    if( in_input(this_object()) || in_edit(this_object()) ) {
+        if( sizeof(msg_buffer) < MAX_MSG_BUFFER )
+            msg_buffer += ({ msg });
+    } else
+        receive( msg );
+}
+void write_prompt()
+{
+    if( sizeof(msg_buffer) ) {
+        receive(BOLD "[输入时暂存讯息]\n" NOR);
+        for(int i=0;
+ i<sizeof(msg_buffer);
+ i++)
+            receive(msg_buffer[i]);
+        msg_buffer = ({});
+    }
+    write("> ");
+}
+
+//  temp "snoop-big5" 需要在 snoop.c里面控制
+void receive_snoop(string msg)
+{
+        if ( msg && msg!="" && msg[0]!='%' ){
+            if( this_object()->query_temp("snoop-big5"))
+            if( this_object()->query_temp("big5")){
+                efun::receive(msg);
+                return;
+             }else
+                msg=LANGUAGE_D->Big52GB(msg);
+                receive("%" + msg);
+        }
+}
+

@@ -1,0 +1,38 @@
+// SN:M976IL7d73BDkUL:
+// File(/data/room/zzzmud/yingke.c) of zzzmud's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        set("short", "满天星迎客厅");
+	set ("long", @LONG
+这里是满天星的主人月落无双迎接八方来客的地方。大凡客人来
+拜见月落无双，少不得在这里寒暄叙话，了尽仰慕之情。东面通往一
+个茶室，是主人陪同客人品尝天下名茶之处。 
+LONG );
+
+	set("exits", ([
+		"north"  : __DIR__"yishiting",
+                "south"  : __DIR__"zoudao",
+                "east"   : __DIR__"chashi",
+	]));
+
+        create_door("east", "木门", "west", DOOR_CLOSED);
+
+        set("objects", ([
+                "/d/room/roomnpc/yahuan" : 2,
+        ]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("room_owner", "月落无双");
+        set("room_name", "满天星");
+        set("room_id", "zzzmud");
+        set("room_owner_id", "zzzmud");
+        set("room_position", "碎石小道");
+}

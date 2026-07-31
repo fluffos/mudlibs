@@ -1,0 +1,18 @@
+// SN:8DBZV0mY3FK]N9Ro
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m猪猪的猪[2;37;0m[30m牛[2;37;0m", ({"zhuzhu niu"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "猪猪的猪!!
+它是流风的坐骑。
+");
+        set_temp("owner_id", "liufeng");
+        set_temp("owner_name", "流风");
+        ::setup();
+}
+

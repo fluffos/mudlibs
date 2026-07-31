@@ -1,0 +1,32 @@
+// SN:71ZkcF<eL^nN?H<d
+// ITEM Made by player(天天:yuri) /data/item/y/yuri-sword.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Sun May 30 14:56:58 2004
+#include <ansi.h>
+#include <weapon.h>
+
+inherit SWORD;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("逍遥尖[2;37;0m", ({ "sword" }));
+	set_weight(9000);
+	set("item_make", 1);
+	set("unit", "柄");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一柄剑。
+杀人的[2;37;0m
+剑柄上刻着一行小字：天天(yuri)
+");
+	set("value", 2100000);
+	set("point", 100);
+	set("material", "magic stone");
+	set("wield_msg", "不杀人了[2;37;0m\n");
+	set("unwield_msg", "杀人了[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	init_sword(apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

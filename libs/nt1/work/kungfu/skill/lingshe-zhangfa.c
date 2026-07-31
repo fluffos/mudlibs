@@ -1,0 +1,94 @@
+// Copyright (C) 2003, by Lonely. All rights reserved.
+// This software can not be used, copied, or modified 
+// in any form without the written permission from authors.
+// lingshe-zhangfa.c 灵蛇杖法
+
+#include <ansi.h>
+
+inherit SKILL;
+
+string *action_msg = ({
+        "$N使出一招「灵蛇出洞」，手中$w大开大阖扫向$n的$l",
+        "$N手中$w阵阵风响，一招「摇头摆尾」向$n的$l攻去",
+        "$N举起$w，居高临下使一招「灵蛇下涧」砸向$n的$l",
+        "$N一招「灵蛇挺身」，手中$w猛烈扫向$n的$l",
+        "$N使出一招「蛇游蟒走」，$w左右迂回向$n的$l扫去",
+        "$N手中$w一挥，使出一招「蛇缠左右」，忽左忽右扫向$n的$l",
+        "$N使出一招「巨蟒下山」，高举手中$w，劈头砸向$n的$l",
+        "$N使出一招「灵蛇出洞」，手中$w猛一探，直扫$n的$l",
+});
+
+mapping query_action(object me, object weapon)
+{
+        if (random(me->query_skill("staff")) > 60
+        &&  me->query_skill("force") > 90
+        &&  me->query("neili") > 120 && random(2) == 0) 
+        {
+                return ([
+                        "action": HIB "$N突然双手撑地，双足夹住$w" + HIB "，裹着一阵风声打向$n" NOR,
+                        "dodge" : 100,
+                        "parry" : 100,
+                        "damage": 180,
+                        "attack": 200,
+                        "damage_type": "瘀伤"]);
+        }
+        
+        return ([
+                "action": action_msg[random(sizeof(action_msg))],
+                "dodge" : 70 + random(10),
+                "parry" : 70 + random(10),
+                "damage": 130 + random(40),
+                "attack": 70 + random(10),
+                "damage_type": "瘀伤",
+        ]);
+          
+}
+
+int valid_enable(string usage) { return (usage == "staff") || (usage == "parry"); }
+
+int valid_learn(object me)
+{
+        if ((int)me->query("max_neili") < 70)
+                return notify_fail("你的内力不够。\n");
+        return 1;
+}
+
+int practice_skill(object me)
+{
+        object weapon;
+
+        if (! objectp(weapon = me->query_temp("weapon"))
+        ||  (string)weapon->query("skill_type") != "staff")
+                return notify_fail("你使用的武器不对。\n");
+        if ((int)me->query("qi") < 80)
+                return notify_fail("你的体力不够练灵蛇杖法。\n");
+        if ((int)me->query("neili") < 80)
+                return notify_fail("你的内力不够。\n");
+        me->receive_damage("qi", 70);
+        me->add("neili", -70);
+        return 1;
+}
+
+mixed hit_ob(object me, object victim, int damage_bonus)
+{
+        int lvl;
+        int lvl2;
+
+        lvl  = me->query_skill("lingshe-zhangfa", 1);
+        lvl2 = me->query_skill("poison", 1); 
+        if (random(me->query_skill("lingshe-zhang", 1)) > 100
+        &&  (me->query_temp("weapon"))->query("skill_type") == "staff"
+        &&  victim->affect_by("snake_poison", 
+                                  ([ "level" : lvl2 / 2 + random(lvl2), 
+                                     "id"    : me->query("id"), 
+                                     "duration" : lvl / 50 + random(lvl / 10) ])))
+        {
+                return BLU "$n" BLU "被杖端的蛇头咬了一下，只感觉全身麻木。\n" NOR; 
+        }
+}
+
+string perform_action_file(string action)
+{
+        return __DIR__"lingshe-zhangfa/" + action;
+}
+

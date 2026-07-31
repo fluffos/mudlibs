@@ -1,0 +1,18 @@
+// SN:8fUmZ4=>hUaDZc6^
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("赤兔马[2;37;0m", ({"chitu ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "千里马
+它是透心凉的坐骑。
+");
+        set_temp("owner_id", "reebok");
+        set_temp("owner_name", "透心凉");
+        ::setup();
+}
+

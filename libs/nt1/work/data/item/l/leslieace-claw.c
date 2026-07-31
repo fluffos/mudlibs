@@ -1,0 +1,32 @@
+// SN:`:SMOfB>ne`X\iTg
+// ITEM Made by player(南宫图:leslieace) /data/item/l/leslieace-claw.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Mon Oct 20 08:24:16 2003
+#include <ansi.h>
+#include <weapon.h>
+
+inherit SWORD;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;31m龙[1;33m之[1;31m爪[2;37;0m", ({ "claw" }));
+	set_weight(9000);
+	set("item_make", 1);
+	set("unit", "柄");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一柄剑。
+[1;31m龙[1;33m之[1;31m爪[2;37;0m
+剑柄上刻着一行小字：南宫图(leslieace)
+");
+	set("value", 2100000);
+	set("point", 221);
+	set("material", "magic stone");
+	set("wield_msg", "[1;36m神龙[1;33m之灵[1;36m重天而降，飞跃至往你掌中！[2;37;0m\n");
+	set("unwield_msg", "[1;36m神龙[1;33m之灵[1;36m离你而去了\n[1;35m。[1;36m。[1;34m。[1;32m。[1;31m。\n[1;37m力量慢慢的消失了[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	init_sword(apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

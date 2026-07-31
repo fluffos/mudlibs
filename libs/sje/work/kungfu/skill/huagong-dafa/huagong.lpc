@@ -1,0 +1,176 @@
+// huagong.c 化功
+// by snowman
+// optimized by keinxin@sj2
+
+#include <ansi.h>
+
+inherit F_SSERVER;
+
+void remove_effect(object me);
+
+int exert(object me, object target)
+{        
+        object room,ob;
+        mapping fam;
+        int sp, dp, tp, h, p, my_max, tg_max, tg_p, i, j;
+        
+        if( !target) target = offensive_target(me);
+        if( !target || !me->is_fighting(target) || !living(target))
+                return notify_fail("化功只能在战斗中对对手使用。\n");   
+
+        sp = me->query_skill("force") + me->query("neili");
+        dp = target->query_skill("force") + target->query("neili");
+        tp = (10 * sp) / dp;    
+        
+        if (tp>100) tp =100;
+        
+        h = me->query_skill("huagong-dafa", 1);   
+        p = me->query_skill("poison", 1);   
+        tg_p = target->query_skill("poison", 1);   
+
+        my_max = me->query("max_neili")+1000;
+        tg_max = target->query("max_neili");
+
+        fam = target->query("family");
+       
+        if (me->query_skill_prepared("strike") != "chousui-zhang" ||
+            me->query_skill_mapped("strike") != "chousui-zhang")
+                return notify_fail("你必须先将化功大法功和抽髓掌法相互配合。\n");
+        
+        if( !objectp(target) || target->query("id") == "mu ren" )
+        return notify_fail("用火把来烧比较快。\n");
+        
+        if( !objectp(target) || target->query("id") == "she" )
+        return notify_fail("想吃烤蛇肉？？。\n");
+        
+        if( !objectp(target) || target->query("tasknpc")> 0 )
+        return notify_fail(target->name() +"有神功护体！！\n");        
+        
+        if( objectp(me->query_temp("weapon")) &&
+            (int)me->query_skill("huagong-dafa",1) < 120)
+        return notify_fail("你必须用掌才能施展化功大法！\n");
+    
+        if(!( room = find_object("/d/taishan/fengchan")) )
+           room = load_object("/d/taishan/fengchan");
+        if( objectp(ob = present("zhong shentong", room)) ) 
+        if(target->query("id") == ob->query("winner"))
+           return notify_fail("大胆！竟敢对中神通运用化功大法！\n");
+        
+        if( objectp(target->query_temp("weapon")) && me->query_skill("huagong-dafa",1) < 120)
+                return notify_fail("对方不想跟你对掌, 你没法吸取内力！\n");
+
+        if(fam && fam["family_name"] == "星宿派" && target->query_skill("huagong-dafa", 1) < h/2)
+                return notify_fail("怎麽能对老仙的爱徒使用化功大法？\n");
+        
+        if( !me->is_fighting() || !target->is_fighting())
+        return notify_fail("你必须在战斗中对方运劲抵挡时才能施展化功大法！\n");
+
+        if( (int)me->query_skill("huagong-dafa",1) < 80 )
+                return notify_fail("你的功力不够，不能施展化功大法！\n");
+        if( (int)me->query_skill("chousui-zhang",1) < 80 )
+                return notify_fail("你的抽髓掌功力不够，不能施展化功大法！\n");
+        if( (int)me->query_skill("poison",1) < 70 )
+                return notify_fail("你体内的毒素不够，不能施展化功大法！\n");
+        if(environment(me)->query("no_death"))
+                return notify_fail("此地不能施展化功大法！\n");
+        if( (int)me->query("neili",1) < 300 )
+                return notify_fail("你自己的内力不足，不能施展化功大法！\n");
+
+        if((int)target->query("neili") <= 0)
+                return notify_fail( target->name() +"没有任何内力可化！\n");
+        if((int)target->query_condition("huagong") > 0 )
+                return notify_fail(target->name() +"已经身中化功大法，你不用再费力气了。\n");
+
+        message_vision(BLU"\n突然$N仰天阴阴一声长笑，接着左手手掌虚扬，右手猛地向$n胸口直拍过去！\n\n" NOR, me, target );    
+
+        me->add("neili", -tp);
+        me->add("jingli", -15);        
+
+        me->set_temp("sp", sp);
+        me->set_temp("dp", dp/2);
+
+        if(random(sp) > dp/4 && random(me->query_con()) > target->query("con")/3)
+        {
+           message_vision(HIC"$n大吃一惊，慌乱中伸出右手，想推开$N的手掌，
+结果只听见「啪」的一声，两人双掌掌心已经合在一起！\n"NOR, me, target );       
+           tell_object(me, HIR"你哈哈一声，当下催动内力，要将掌心中蕴积着剧毒透入对方体内！\n");
+           me->start_busy(2);
+           target->start_busy(random(5));
+           me->add_temp("apply/dodge", -20);
+           me->add_temp("apply/parry", -20);
+           me->start_call_out( (: call_other, this_object(), "remove_effect", me:), 4);
+           if(target->query_skill("huagong-dafa", 1) > (h/2)) {             
+              tell_object(target, HIY "你也连忙运起化功大法，与"+me->name()+"一抗，竟然抵抗住了毒素的侵入！\n" NOR);
+              tell_room(environment(me), HIY"可是"+me->name()+"脸色一变，好象并不是很顺利。\n",({ target,me }));     
+              tell_object(me, HIR"你只觉"+target->name()+"内力中包含剧毒，而且和你的内功相同，你这一手化功大法便送不出去了！\n"NOR);
+              return 1;
+              }
+           if(tg_max >= my_max){
+              if(tg_max*2 <= my_max*3){              
+              tell_object(target, HIY "你连忙运功与"+me->name()+"一抗，竟然抵抗住了毒素的侵入！\n" NOR);
+              tell_room(environment(me), HIY"可是"+me->name()+"脸色一变，好象并不是很顺利。\n",({ target,me }));
+              tell_object(me, HIR"你只觉"+target->name()+"内力极强，以内力比拼而论，对方并未处下风。你这一手化功大法便送不出去了！\n"NOR);
+              target->apply_condition("xx_poison", target->query_condition("xx_poison") + p/2);   
+              return 1;
+              }
+              else{
+              tell_object(target, HIY "你连忙运功与"+me->name()+"一抗，竟然把"+me->name()+"的毒素给逼了回去！\n" NOR);
+              tell_room(environment(me), HIY"可是"+me->name()+"脸色一变，好象并不是很顺利。\n",({ target,me }));
+              tell_object(me, HIR"你只觉"+target->name()+"内力极强，远在你自己之上。你这一手化功大法非但送不出去，还被逼了回来！\n"NOR);
+              me->apply_condition("huagong", random(tp) + 1);  
+              me->apply_condition("xx_poison", me->query_condition("xx_poison") + p/10);    
+              return 1;
+              }
+             }
+           if(tg_p >= p){
+              tell_object(target, HIY "你感觉"+me->name()+"传过来的毒素并不厉害，对你造不成什么伤害！\n" NOR);
+              tell_room(environment(me), HIY"可是"+me->name()+"脸色一变，好象并不是很顺利。\n",({ target,me }));
+              tell_object(me, HIR "你只觉"+target->name()+"体内毒素极强，你这一手化功大法对他起不了什么作用！\n"NOR);
+              me->apply_condition("xx_poison", me->query_condition("xx_poison") + p/10);   
+              return 1;
+              }
+                           
+           target->apply_condition("huagong", p/2 + random(tp));  
+           target->apply_condition("xx_poison", target->query_condition("xx_poison") + p/2);                 
+           if(j > i/2){               
+                if (userp(target)) {                          
+                     if(j > i){
+                        me->add("combat_exp", (h + p)/200);      
+                        me->add("potential", p);
+                        me->set_temp("hg_exp", (h + p)/200); 
+                        }                         
+                     else{                                          
+                        me->add("combat_exp", (h + p)/300);      
+                        me->add("potential", p);     
+                        me->set_temp("hg_exp", (h + p)/300); 
+                        } 
+                     if(userp(me)) {
+                        log_file("huagong",sprintf("%s(%s)运用化功大法于： %s，
+      目标：%s(%s)，
+      得到：%i点EXP。\n", me->name(1), getuid(me), ctime(time()), target->name(1), 
+                          geteuid(target), me->query_temp("hg_exp")));
+                          me->delete_temp("hg_exp");
+                          }
+            
+                     target->apply_condition("huagong", target->query_condition("huagong") + p/15 + h/20);  
+                     target->apply_condition("xx_poison", target->query_condition("xx_poison") + p/5);                         
+                     tell_object(target, HIR "\n只听"+me->name()+"哈哈一笑，你感到一股阴气随着"+me->name()+"手掌直传过来！\n" NOR);
+                     tell_object(me, "你觉得你的内力修行得到了提高！\n");
+                     me->add("max_neili", random(2)+1);  
+                     me->improve_skill("poison", h*20);
+                     }
+                else {
+                     me->add("potential", p/300);
+                     me->add("combat_exp", h/100);
+                     }    
+            }
+        }
+
+        else {       
+          message_vision(HIY "可是$p一眼看出了$P的企图，远远纵了开去。\n" NOR, me, target);
+          me->start_busy(2);
+          }
+        return 1;
+}
+
+

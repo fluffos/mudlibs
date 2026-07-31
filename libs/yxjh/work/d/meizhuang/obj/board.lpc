@@ -1,0 +1,13 @@
+inherit BULLETIN_BOARD;
+
+void create()
+{
+        set_name("梅庄弟子留言板", ({ "board" }) );
+         set("location", "/d/meizhuang/damen");
+       set("board_id", "board");
+        set("long", "这是一个供白驼山弟子交流的留言板。\n" );
+        setup();
+        set("capacity", 100);
+        replace_program(BULLETIN_BOARD);
+}
+

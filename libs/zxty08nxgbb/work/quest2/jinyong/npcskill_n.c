@@ -1,0 +1,438 @@
+#include <ansi.h>
+inherit NPC;
+
+
+int set_gumu_guai (int level,object ob)
+{  
+        // set_guai_skills(level,ob,moonskillclass);
+        ob->set("gender","女性");
+
+        ob->set_skill("force", level);
+        ob->set_skill("yunv-xinfa", level);
+        ob->set_skill("sword", level);             
+           ob->set_skill("yunv-jian", level);     
+        ob->set_skill("dodge", level);
+        ob->set_skill("yunv-shenfa", level);   
+        ob->set_skill("parry", level);
+        ob->set_skill("hubo", level);         
+        ob->set_skill("unarmed",level);
+        ob->set_skill("meinv-quan", level);    
+        ob->set_skill("literate",level);
+        ob->set_skill("qufeng",level);      
+        ob->map_skill("force", "yunv-xinfa");
+        ob->map_skill("sword", "yunv-jian");
+
+        ob->map_skill("dodge", "yunv-shenfa");
+        ob->map_skill("parry", "meinv-quan");
+        ob->map_skill("unarmed", "meinv-quan");
+
+        ob->set("chat_msg_combat", ({
+                (: perform_action, "sword.he" :),
+                (: perform_action, "sword.he" :),
+                (: perform_action, "sword.he" :),
+                (: perform_action, "sword.ding" :),
+                (: perform_action, "sword.ding" :),
+                (: perform_action, "sword.ding" :),
+                }) );
+}
+
+
+int set_emei_guai(int level,object ob)
+{  
+        ob->set("gender","女性");
+        ob->set_skill("force", level);
+        ob->set_skill("dodge", level);
+        ob->set_skill("finger",level);
+        ob->set_skill("parry", level);
+        ob->set_skill("sword", level);
+
+        //   ob->set_skill("linji-zhuang",level);
+        ob->set_skill("huifeng-jian",level);
+        ob->set_skill("yanxing-dao", level);
+        ob->set_skill("tiangang-zhi", level);
+        ob->set_skill("zhutian-bu",level);
+        ob->set_skill("taixuan-gong", level);
+//        ob->set_skill("dushi-jiren",level);
+        ob->map_skill("dodge","zhutian-bu");
+        ob-> map_skill("parry", "huifeng-jian");
+        ob->map_skill("sword", "huifeng-jian");
+        ob->map_skill("force","linji-zhuang");
+        ob->map_skill("finger","tiangang-zhi");
+
+        ob->set("chat_msg_combat", ({
+                (: perform_action, "sword.mie" :),
+                (: perform_action, "sword.mie" :),
+                (: perform_action, "finger.lingkong" :),
+                (: perform_action, "finger.lingkong" :),
+                }) );   
+}
+
+int set_quanzhen_guai(int level,object ob)
+{
+        ob->set("gender","男性");
+        ob->set("chat_msg_combat", ({
+                (: exert_function, "recover" :),
+
+                (: perform_action, "sword.ju" :),
+                (: perform_action, "sword.ju" :),
+                (: perform_action, "sword.ju" :),
+                (: perform_action, "sword.ding" :),
+                (: perform_action, "sword.ding" :),
+                (: perform_action, "sword.ding" :),
+                }));
+
+        ob->set_skill("force", level);
+        ob->set_skill("xiantian-qigong", level);    //先天气功
+        ob->set_skill("sword", level);             
+
+
+
+
+
+        ob->set_skill("dodge", level);
+
+        ob->set_skill("jinyan-gong", level);   //金雁功
+        ob->set_skill("parry", level);
+        ob->set_skill("unarmed",level);
+        ob->set_skill("haotian-zhang", level);    //昊天掌
+        ob->set_skill("strike",level);
+           ob->set_skill("taoism",level);
+
+        ob->map_skill("force", "xiantian-qigong");
+        ob->map_skill("dodge", "jinyan-gong");
+        ob->map_skill("parry", "quanzhen-jian");
+        ob->map_skill("unarmed", "haotian-zhang");
+        ob->map_skill("strike", "haotian-zhang");
+}
+
+
+int set_wudang_guai(int level,object ob)
+{
+        ob->set("gender","男性");
+        ob->set_skill("force", level);
+        ob->set_skill("taiji-shengong", level);
+        ob->set_skill("dodge", level);
+        ob->set_skill("tiyunzong", level);
+        ob->set_skill("unarmed", level);
+
+        ob->set_skill("liangyi-jian", level);
+        ob->set_skill("taiji-quan", level);
+        ob->set_skill("sword", level);
+        ob->set_skill("taiji-jian", level);
+        ob->set_skill("taoism", level);
+        ob->set_skill("literate", level);
+
+        ob->map_skill("force", "taiji-shengong");
+        ob->map_skill("dodge", "tiyunzong");
+        ob->map_skill("unarmed", "taiji-quan");
+        ob->map_skill("parry", "taiji-jian");
+        ob->map_skill("sword", "taiji-jian");
+
+
+        ob->set("chat_msg_combat", ({
+                (: perform_action, "sword.lian" :),
+                (: perform_action, "sword.chan" :),
+                (: perform_action, "sword.sui" :),
+                }) );
+}
+
+
+int set_shaolin_guai(int level,object ob)
+
+{
+        ob->set_skill("force", level);
+        ob->set_skill("hunyuan-yiqi", level);
+
+        ob->set_skill("dodge", level);
+        ob->set_skill("shaolin-shenfa", level);
+        ob->set_skill("parry", level);
+        ob->set_skill("cuff", level);
+        ob->set_skill("staff", level);
+        ob->set_skill("blade", level);
+        ob->set_skill("sword", level);
+        ob->set_skill("luohan-quan", level);
+        ob->set_skill("weituo-gun", level);
+        ob->set_skill("xiuluo-dao", level);
+        ob->set_skill("fumo-jian", level);
+        ob->set_skill("buddhism", level);
+        ob->set_skill("literate", level);
+
+        ob->map_skill("force", "hunyuan-yiqi");
+        ob->map_skill("dodge", "shaolin-shenfa");
+        ob->map_skill("parry", "luohan-quan");
+        ob->map_skill("cuff", "luohan-quan");
+        ob->map_skill("staff", "weituo-gun");
+
+ ob->prepare_skill("cuff", "luohan-quan");
+
+        ob->set("chat_msg_combat", ({
+                (: exert_function, "powerup" :),
+                }) );
+}
+
+int set_baituo_guai(int level,object ob)
+{
+        ob->set("gender","男性");
+        ob->set_skill("force", level);
+        ob->set_skill("unarmed", level);
+        ob->set_skill("dodge", level);
+        ob->set_skill("parry", level);
+        ob->set_skill("zhaosheshu",level);
+        ob->set_skill("training",level);
+        ob->set_skill("hand",level);
+        ob->set_skill("staff", level);
+        ob->set_skill("throwing",level);
+        ob->set_skill("hamagong", level);
+        ob->set_skill("shexing-diaoshou", level);
+
+        ob->set_skill("lingshe-zhangfa", level);
+        ob->map_skill("force", "hamagong");
+        ob->map_skill("dodge", "chanchu-bufa");
+        ob->map_skill("unarmed", "shexing-diaoshou");
+        ob->map_skill("hand", "shexing-diaoshou");
+        ob->map_skill("parry", "lingshe-zhangfa");
+        ob->map_skill("staff", "lingshe-zhangfa");
+
+        ob->set("chat_msg_combat", ({
+                (: exert_function, "puji" :),
+                (: exert_function, "reverse" :),
+                (: exert_function, "powerup" :),
+                }) );
+}
+
+int set_gaibang_guai(int level,object ob)
+{
+        ob->set("gender","男性");
+        ob->set_skill("force", level);             // 基本内功
+        ob->set_skill("huntian-qigong", level);    // 混天气功
+        ob->set_skill("unarmed", level);           // 基本拳脚
+        ob->set_skill("xianglong-zhang", level);   // 降龙十八掌
+
+        ob->set_skill("xiaoyaoyou", level);        // 逍遥游
+        ob->set_skill("parry", level);             // 基本招架
+        ob->set_skill("staff", level);             // 基本棍杖
+        ob->set_skill("dagou-bang", level);        // 打狗棒法
+        ob->set_skill("begging", level);           // 叫化绝活
+        ob->set_skill("checking", level);          // 道听途说
+
+        ob->map_skill("force", "huntian-qigong");
+        ob->map_skill("unarmed", "xianglong-zhang");
+        ob->map_skill("dodge", "xiaoyaoyou");
+        ob->map_skill("parry", "xianglong-zhang");
+        ob->map_skill("staff", "dagou-bang");
+
+        ob->set("chat_msg_combat", ({
+                (: perform_action, "unarmed.xianglong" :),
+                (: perform_action, "unarmed.leiting" :),
+                (: exert_function, "powerup" :),
+                (: exert_function, "shengang" :),
+                }) );
+}
+int set_huashan_guai(int level,object ob)
+
+
+{
+        ob->set("gender","男性");
+        ob->set_skill("force", level);
+        ob->set_skill("dodge", level);
+        ob->set_skill("parry", level);
+        ob->set_skill("sword", level);
+        ob->set_skill("cuff", level);
+        ob->set_skill("blade", level);
+        ob->set_skill("zixia-shengong", level);
+        ob->set_skill("huashan-jianfa", level);
+        ob->set_skill("huashan-shenfa", level);
+        ob->set_skill("hunyuan-zhang", level);
+        ob->set_skill("poyu-quan", level);
+        ob->set_skill("fanliangyi-dao", level);
+           ob->set_skill("literate", level);
+
+        ob->set_skill("strike", level);
+        ob->map_skill("dodge", "huashan-shenfa");
+        ob->map_skill("force", "zixia-shengong");
+        ob->map_skill("parry", "huashan-jianfa");
+        ob->map_skill("sword", "huashan-jianfa");
+        ob->map_skill("cuff", "poyu-quan");
+
+        ob->map_skill("blade", "fanliangyi-dao");
+
+        ob->prepare_skill("strike", "hunyuan-zhang");
+        ob->prepare_skill("cuff", "poyu-quan");
+
+        ob->set("chat_msg_combat", ({
+                (: perform_action, "sword.jianzhang" :),
+                (: perform_action, "sword.wushuang" :),
+                (: exert_function, "recover" :),
+                }) );
+}
+
+int set_xingxiu_guai(int level,object ob)
+{
+        ob->set("gender","男性");
+        ob->set_skill("force", level);
+        ob->set_skill("huagong-dafa", level);
+        ob->set_skill("dodge", level);
+        ob->set_skill("zhaixinggong", level);
+        ob->set_skill("unarmed", level);
+        ob->set_skill("xingxiu-duzhang", level);
+        ob->set_skill("staff", level);
+
+        ob->set_skill("tianshan-zhang", level);
+        ob->set_skill("literate", level);
+        ob->map_skill("force", "huagong-dafa");
+        ob->map_skill("dodge", "zhaixinggong");
+        ob->map_skill("unarmed", "xingxiu-duzhang");
+        ob->map_skill("parry", "tianshan-zhang");
+        ob->map_skill("staff", "tianshan-zhang");
+}
+
+int set_mingjiao_guai(int level,object ob)
+{
+        ob->set("gender","男性");
+        ob->set_skill("unarmed", level);
+        ob->set_skill("dodge", level);
+
+        ob->set_skill("parry", level);
+        ob->set_skill("sword",level);
+        ob->set_skill("blade",level);
+        ob->set_skill("literate", level);
+        ob->set_skill("jiuyang-shengong", level);
+        ob->set_skill("qiankun-danuoyi", level);
+        ob->set_skill("shenghuo-ling", level);
+
+        ob->set_skill("taiji-quan",level);
+        ob->set_skill("taiji-jian",level);
+        ob->set_skill("taiji-dao",level);
+
+        ob->map_skill("force", "jiuyang-shengong");
+        ob->map_skill("dodge", "qiankun-danuoyi");
+        ob->map_skill("parry", "qiankun-danuoyi");
+        ob->map_skill("unarmed", "taiji-quan");
+        ob->map_skill("sword","shenghuo-ling");
+        ob->map_skill("blade","taiji-dao");
+
+
+        ob->set("chat_msg_combat", ({
+                (: perform_action, "unarmed.zhen" :),
+                (: perform_action, "sword.bawang" :),
+                (: perform_action, "sword.tougu" :),
+                (: perform_action, "sword.yinfeng" :),
+                (: exert_function, "powerup" :),
+                (: exert_function, "powerup" :),
+                }) );
+}
+
+int set_shenlong_guai(int level,object ob)
+{
+        ob->set("gender","男性");
+        ob->set_skill("force", level);
+        ob->set_skill("hunyuan-yiqi", level);
+        ob->set_skill("shenlong-xinfa", level);
+        ob->set_skill("dodge", level);
+        ob->set_skill("yixingbu",level);
+        ob->set_skill("unarmed", level);
+        ob->set_skill("shenlong-bashi", level);
+        ob->set_skill("parry", level);
+        ob->set_skill("staff",level);
+        ob->set_skill("shedao-qigong", level);
+        ob->set_skill("literate",level);
+
+        ob->map_skill("force", "hunyuan-yiqi");
+        ob->map_skill("dodge", "yixingbu");
+        ob->map_skill("unarmed", "shenlong-bashi");
+        ob->map_skill("parry", "shedao-qigong");
+        ob->map_skill("staff", "shedao-qigong");
+
+        ob->set("chat_msg_combat", ({
+                (: command("say 你活得不耐烦了找死啊？\n") :),
+
+                (: perform_action, "staff.chang" :),
+                (: perform_action, "staff.chang2" :),
+                (: perform_action, "staff.chang3" :),
+                }) );
+}
+
+int set_taohua_guai(int level,object ob)
+{
+        ob->set("gender","男性");
+
+
+        ob->set_skill("force", level);          
+        ob->set_skill("bibo-shengong", level);  
+        ob->set_skill("finger", level);          
+        ob->set_skill("tanzhi-shentong", level);   
+        ob->set_skill("strike", level);         
+        ob->set_skill("dodge", level);            
+        ob->set_skill("anying-fuxiang", level);    
+        ob->set_skill("parry", level);            
+        ob->set_skill("sword", level);            
+        ob->set_skill("yuxiao-jian", level);      
+        ob->set_skill("luoying-shenjian", level);  
+        ob->set_skill("qimen-wuxing",level);     
+
+        ob->map_skill("force"  , "bibo-shengong");
+        ob->map_skill("finger" , "tanzhi-shentong");
+        ob->map_skill("dodge"  , "anying-fuxiang");
+        ob->map_skill("parry"  , "luoying-shenjian");
+        ob->map_skill("sword"  , "yuxiao-jian");
+
+        ob->set("chat_msg_combat", ({
+                (: perform_action, "finger.hui" :),
+                (: perform_action, "sword.tianwai" :),
+                (: exert_function, "powerup" :),
+                (: exert_function, "powerup" :),
+                }) );
+}
+
+int set_xiaoyao_guai(int level,object ob)
+{
+        ob->set("gender","男性");
+        ob->set_skill("force",level);
+        ob->set_skill("dodge", level);
+        ob->set_skill("unarmed",level);
+        ob->set_skill("lingboweibu",level);
+
+
+        ob->map_skill("unarmed", "zhemei-shou");
+        ob->map_skill("dodge", "lingboweibu");
+        ob->map_skill("force", "beiming-shengong");
+
+        ob->set("chat_msg_combat", ({
+                (: perform_action, "unarmed.duo" :),
+                (: exert_function, "shield" :),
+                (: exert_function, "neilisuck" :),
+                (: exert_function, "maxsuck" :),
+                }) );
+}
+
+int set_xueshan_guai(int level,object ob)
+{
+        ob->set("gender","男性");
+        ob->set_skill("force", level);
+        ob->set_skill("xiaowuxiang", level);
+        ob->set_skill("dodge",level);
+        ob->set_skill("shenkong-xing", level);
+        ob->set_skill("unarmed", level);
+
+        ob->set_skill("hammer",level);
+        ob->set_skill("riyue-lun", level );
+
+        ob->map_skill("force", "xiaowuxiang");
+        ob->map_skill("dodge", "shenkong-xing");
+        ob->map_skill("unarmed", "yujiamu-quan");
+        ob->map_skill("parry", "riyue-lun");
+        ob->map_skill("hammer", "riyue-lun");
+
+        ob->set("chat_msg_combat", ({
+                (: exert_function, "shield" :),
+                }) );
+}
+
+
+int set_mz_guai(int level,object ob)
+{
+        ob->set("gender","男性");
+        ob->set_skill("blade",level);
+        ob->set_skill("wuhu-duanmendao",level);
+}
+

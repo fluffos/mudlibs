@@ -1,0 +1,24 @@
+#include <ansi.h>
+
+inherit ROOM;
+
+void create()
+{
+        set("short", RED"作弊室"NOR);
+        set("long", @LONG
+   这里是作弊室，来到这里的玩家都是作弊的。
+LONG
+        );
+        set("no_fight", 1);
+        
+         set("objects", ([
+          "/d/city/obj/zbox" : 1,
+        ]));
+        set("exits", ([
+                "north" : "/d/city/chatroom",
+        ]));
+
+        setup();
+        replace_program(ROOM);
+}
+

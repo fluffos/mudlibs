@@ -1,0 +1,18 @@
+// SN:]ZghRTAO:LK5>`_i
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("乌龙驴[2;37;0m", ({"wulong lv"}));        
+        set("gender", "女性");                
+        set("unit", "头");
+        set("long", "乌龙
+它是这一刻的坐骑。
+");
+        set_temp("owner_id", "moment");
+        set_temp("owner_name", "这一刻");
+        ::setup();
+}
+

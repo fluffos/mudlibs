@@ -1,0 +1,37 @@
+// SN:XXNE;eJZ6if62EDe
+// ITEM Made by player(宇文轩:myselfandi) /data/item/m/myselfandi-xiantian.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Mon Nov 17 08:55:30 2003
+#include <ansi.h>
+#include <armor.h>
+
+inherit HANDS;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;34m重阳[1;37m令[2;37;0m", ({ "xiantian" }));
+	set_weight(2700);
+	set("item_make", 1);
+	set("unit", "双");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一双铁掌。
+这是全真掌教发下的三面重阳令之一
+在教内持此令者如掌教亲至
+教中弟子必须服从[2;37;0m
+铁掌缘上刻着一行小字：宇文轩(myselfandi)
+");
+	set("value", 2100000);
+	set("point", 263);
+	set("material", "magic stone");
+	set("wear_msg", "[33m$N[33m装备[1;34m重阳[1;37m令[2;37;0m[33m。[2;37;0m\n");
+	set("remove_msg", "[33m$N[33m脱下了[1;34m重阳[1;37m令[2;37;0m[33m。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/strike", 10);
+	set("armor_prop/armor", 10);
+	set("armor_prop/hand", 10);
+	set("armor_prop/unarmed_damage", apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

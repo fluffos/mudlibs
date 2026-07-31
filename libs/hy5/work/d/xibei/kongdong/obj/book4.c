@@ -1,0 +1,32 @@
+//
+//nicebook.c
+
+inherit ITEM;
+
+void create()
+{
+    set_name("杨柳漂絮图", ({ "yangliu tu", "shu", "book" }));
+    set_weight(1200);
+        if( clonep() )
+                set_default_object(__FILE__);
+        else {
+        set("unit","本");
+        set("long","这似乎是唐伯虎的名画，又似乎隐藏着什么武学的真谛。\n");
+        set("value", -1);
+        set("material", "paper");
+        set("skill", ([
+                "name"             : "parry",
+                "xiuwei_required"  : 900,
+                "literate_required": 30,
+                "jing_cost"         : 10+random(10),
+                "max_jibie"        : 100,
+                "bonus_jilei"      : 0,
+                "bonus_xiuwei"     : 0,
+                "max_xiuwei"       : 800,
+                "bonus_combat_exp" : 0,
+                "max_combat_exp"   : 0,
+                "bonus_social_exp" : 10,
+                "max_social_exp"   : 100000,
+                ]) );
+        }
+}

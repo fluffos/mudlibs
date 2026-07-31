@@ -1,0 +1,18 @@
+// SN:4GI?OoIg?E<La<=i
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;31m飞虎[2;37;0m", ({"fei hu"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "$HIR$飞飞飞。。。
+它是小子的坐骑。
+");
+        set_temp("owner_id", "xyz");
+        set_temp("owner_name", "小子");
+        ::setup();
+}
+

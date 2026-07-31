@@ -1,0 +1,32 @@
+// SN:TVmffFJO:bP73HAX
+// ITEM Made by player(行香子:michael) /data/item/m/michael-cxnz.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Tue Oct 12 14:16:50 2004
+#include <ansi.h>
+#include <armor.h>
+
+inherit CLOTH;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;32m临江仙[2;37;0m", ({ "cxnz" }));
+	set_weight(1400);
+	set("item_make", 1);
+	set("unit", "件");
+	set("long", "这是由[1;37m冰蚕丝[2;37;0m炼制而成的一件战衣。
+[1;32m临江仙[2;37;0m
+战衣缘上刻着一行小字：行香子(michael)
+");
+	set("value", 2100000);
+	set("point", 224);
+	set("material", "silk");
+	set("wear_msg", "[1;32m庭院深深深几许，云窗雾阁常扃，柳梢梅萼渐分明，春归秣陵树，人老建康城。感月吟风多少事，如今老去无成，谁怜憔悴更雕零，试灯无意思，踏雪没心情。[2;37;0m\n");
+	set("remove_msg", "[1;32m暖日晴风初破冻，柳眼梅腮，已觉春心动。酒意诗情谁与共，泪融残粉花钿重。玉瘦檀轻无限恨，南楼羌管休吹。浓香吹尽有谁知，暖风迟日也，别到杏花肥。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/armor", apply_armor());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

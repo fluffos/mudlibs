@@ -1,0 +1,120 @@
+//	Tbh 具体制作
+//	HBRED	HBGRN	HBYEL	HBBLU	HBMAG	HBCYN	HBWHT
+
+#include <ansi.h>
+
+mapping exert_names = ([
+
+        "yinyun-ziqi/cure":			HBMAG"真气疗伤"NOR,
+        "yinyun-ziqi/lifesave":		HBMAG"鹤嘴劲点龙跃窍"NOR,
+        "yinyun-ziqi/qudu":			HBMAG"真气驱毒"NOR,
+        "yinyun-ziqi/taiji":		HBMAG"太　　极"NOR,
+        "yinyun-ziqi/yinyun":		HBMAG"氤氲内聚"NOR,        
+        
+        "hunyuan-gong/jianmang":		HBMAG"剑　　芒"NOR,
+        "hunyuan-gong/ningshen":		HBMAG"凝　　神"NOR,
+        "hunyuan-gong/lifeforce":		HBMAG"治疗内伤"NOR,
+        "hunyuan-gong/lifeheal":		HBMAG"疗　　伤"NOR,
+        "hunyuan-gong/zixia":		        HBMAG"紫　　霞"NOR,
+
+        "huagong-dafa/duwu":		HBRED"毒　　雾"NOR,
+        "huagong-dafa/huadu":		HBRED"化　　毒"NOR,
+        "huagong-dafa/huagong":		HBRED"化　　功"NOR,
+        "huagong-dafa/huajing":		HBRED"化　　精"NOR,
+        "huagong-dafa/judu":		HBRED"聚　　毒"NOR,
+        "huagong-dafa/liaodu":		HBRED"疗　　毒"NOR,
+        "huagong-dafa/shougong":		HBRED"收　　功"NOR,
+
+        "longxiang-boruo/fanchang":	HBMAG"金刚梵唱"NOR,
+        "longxiang-boruo/guiyuan":		HBMAG"凝魄归元"NOR,
+        "longxiang-boruo/juxue":		HBMAG"聚　　血"NOR,
+        "longxiang-boruo/longxiang":	HBMAG"龙象之力"NOR,
+        "longxiang-boruo/shenyou":		HBMAG"神　　游"NOR,
+        "longxiang-boruo/shield":		HBMAG"真气护体"NOR,
+
+        "jiuyang-shengong/heal":		RED"真气疗伤"NOR,
+        "jiuyang-shengong/chuangong":	RED"传　　功"NOR,
+        "jiuyang-shengong/powerup":	RED"九阳神功加力"NOR,
+        "jiuyang-shengong/tougu":		RED"透 骨 针"NOR,
+        "jiuyang-shengong/yinfeng":	RED"阴 风 刀"NOR,
+
+        "shenghuo-shengong/chuangong":	HBRED"传　　功"NOR,
+        "shenghuo-shengong/tougu":		HBRED"透 骨 针"NOR,
+        "shenghuo-shengong/yinfeng":	HBRED"阴 风 刀"NOR,
+
+
+]);
+
+mapping perform_names = ([
+        "taiji-quan/an":			HBRED"按 字 诀"NOR,
+        "taiji-quan/dongjing":		HBRED"动 静 诀"NOR,
+        "taiji-quan/ji":			HBRED"挤 字 诀"NOR,
+        "taiji-quan/luanhuan":		HBRED"乱 环 诀"NOR,
+        "taiji-quan/yinyang":		HBRED"阴 阳 诀"NOR,
+        "taiji-quan/zhannian":		HBRED"沾 黏 诀"NOR,
+        "taiji-quan/zhen":			HBRED"震 字 诀"NOR,
+        "taiji-quan/gangrou":		HBRED"刚 柔 诀"NOR,
+        "taiji-jian/chan":			HBRED"缠 字 诀"NOR,
+        "taiji-jian/lian":			HBRED"连 字 诀"NOR,
+        "taiji-jian/raozhi":		HBRED"绕指柔剑"NOR,
+        "taiji-jian/sanhuan":		HBRED"三环套月"NOR,
+        "taiji-jian/tongshou":		HBRED"天地同寿"NOR,
+        "zhenshan-mianzhang/bingdi":	YEL+HBRED"花开并蒂"NOR,
+        "juehu-shou/juehu":			HBRED"绝　　户"NOR,
+        "tiyunzong/zong":			YEL+HBRED"梯 云 纵"NOR,
+        "xuanxu-daofa/luanhuan":		GRN+HBRED"乱 环 诀"NOR,
+       
+        "poyu-quan/tianjing":		HBMAG"石破天惊"NOR,
+        "chongling-jian/hebi":		HBYEL"双剑合璧"NOR,
+        "fanliangyi-dao/hebi":		HIC"合　　璧"NOR,
+        "fanliangyi-dao/sanshenfeng":	HIC"华岳三神峰"NOR,
+        "jinshe-jianfa/kuangwu":		HIW+HBYEL"金蛇狂舞"NOR,
+        "jinshe-jianfa/tiao":		HIW+HBYEL"挑 剑 诀"NOR,
+        "jinshe-zhangfa/fugu":		HBRED"附骨缠身"NOR,
+        "huashan-jianfa/fugu":		HIR"附骨之蛆"NOR,
+        "huashan-jianfa/lianhuan":	HIR"夺命三仙剑"NOR,
+        "huashan-jianfa/jianqi":	HIR"剑    气"NOR,
+        "huashan-jianfa/junzi":	        HIR"君子剑法"NOR,
+        "huashan-jianfa/shunv":	        HIR"淑女剑法"NOR,
+        "dugu-jiujian/kuangfeng":	HIG"狂风卷地"NOR,
+        "dugu-jiujian/zongjue":		HIG"总 诀 式"NOR,
+        "dugu-jiujian/poqi":		HIG"破 气 式"NOR,
+
+        "chousui-zhang/biyan":		GRN"碧　　焰"NOR,
+        "chousui-zhang/fushidu":		HIB"腐 尸 毒"NOR,
+        "chousui-zhang/huoqiang":		HIR"火　　墙"NOR,
+        "chousui-zhang/huoqiu":		RED"火　　球"NOR,
+        "chousui-zhang/yinhuo":		HIY"银　　火"NOR,
+        "chousui-zhang/zhaohuo":		HIC"招　　火"NOR,
+        "sanyin-zhua/sanyin":		HBBLU"三阴毒蛭抓"NOR,
+        "tianshan-zhang/feizhi":		HIC"飞掷"NOR,
+        "pixie-jianfa/cimu":			HBBLU"飞针刺目"NOR,
+        "pixie-jianfa/feiying":		HBBLU"葵花飞影术"NOR,
+        "pixie-jianfa/jue":			HBBLU"绝 命 针"NOR,
+        "zhuihun-gou/jumie":		HIB"神形俱灭"NOR,
+        "zhuihun-gou/luanpifeng":		HIB"乱 披 风"NOR,
+
+        "dashou-yin/tianyin":		HIG"阿修罗天印"NOR,
+        "huoyan-dao/fen":			HBRED"　 焚　 "NOR,
+        "huoyan-dao/ran":			HBRED"　 燃　 "NOR,
+        "huoyan-dao/daoqi":			HBRED"火焰刀气"NOR,
+        "xiangfu-lun/dazhuan":		HIY"五轮大转"NOR,
+        "xiangfu-lun/wushuai":		HIY"天人五衰"NOR,
+        "xuedao-jing/jixue":		HIR"祭血神刀"NOR,
+        "xuedao-jing/shendao":		HIR"神刀穿心"NOR,
+
+        "duoming-jinhua/huayu":		HIW"满天花雨"NOR,
+        "hanbing-mianzhang/xixue":		HIC"吸血青蝠"NOR,
+        "lieyan-dao/shenghuo":		HIC"圣火光明"NOR,
+        "qiankun-danuoyi/yi":		BLU"移 字 诀"NOR,
+        "qiankun-danuoyi/xu":		BLU"蓄 字 诀"NOR,
+        "qiankun-danuoyi/yin":		BLU"引 字 诀"NOR,
+        "qiankun-danuoyi/hua":		BLU"化 字 诀"NOR,
+        "qishang-quan/qishang":		HIR"七伤总诀"NOR,
+        "qishang-quan/duanhun":		HIR"断魂夺魄"NOR,
+        "shenghuo-lingfa/duo":		HIM"夺 字 诀"NOR,
+        "shenghuo-lingfa/ji":		HIM"击 字 诀"NOR,
+        "shenghuo-lingfa/xinmo":		HIM"心　　魔"NOR,
+        "shenghuo-lingfa/tisha":		HIM"踢　　沙"NOR,
+
+]);

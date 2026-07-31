@@ -1,0 +1,37 @@
+// SN:HRLWahC;hkEnB:T8
+// File(/data/room/dylydzz/xiaoyuan.c) of dylydzz's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        set("short", "深圳小院");
+	set ("long", @LONG
+位于广东省中南部沿海，东临大亚湾，西近珠江口。南与香港特
+别行政区仅一河之隔。属于亚热带海洋性气候，是一个美丽的滨海城
+市。[2;37;0m
+LONG );
+
+        set("room_key", "1 of dylydzz");
+	setup();
+
+	set("exits", ([
+                "out"    : "/d/room/playtown/road4",
+	]));
+
+        set("outdoors", "playertown");
+        set("no_sleep_room", 1);
+        set("valid_startroom", 1);
+
+        set("KEY_DOOR", ([
+                "exit" : "north",
+                "room" : __DIR__"dulewu",
+        ]));
+    
+        set("room_owner", "唐狐");
+        set("room_name", "深圳");
+        set("room_id", "ydzz");
+        set("room_owner_id", "dylydzz");
+        set("room_position", "碎石小道");
+}

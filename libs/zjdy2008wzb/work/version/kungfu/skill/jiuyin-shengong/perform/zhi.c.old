@@ -1,0 +1,183 @@
+// zhi.c 九阴神指
+
+#include <ansi.h>
+#include <combat.h>
+
+inherit F_SSERVER;
+
+int perform(object me, object target)
+{
+        string msg;
+        object weapon;
+        mapping prepare;
+        string type;
+        int n;
+        int skill, ap, dp, damage;
+        int skill2;
+        string parry_skill;
+        int rate;
+
+        if (! target)
+        {
+                me->clean_up_enemy();
+                target = me->select_opponent();
+        }
+
+        skill = me->query_skill("jiuyin-shengong", 1);
+        skill2 = me->query_skill("martial-cognize", 1);
+
+        if (! me->is_fighting(target))
+                return notify_fail("九阴神指只能对战斗中的对手使用。\n");
+
+        if (skill < 150)
+                return notify_fail("你的九阴神功等级不够，无法施展九阴神指！\n");
+
+        if (me->query("neili") < 150)
+                return notify_fail("你现在真气不够，难以施展九阴神指！\n");
+
+        prepare = me->query_skill_prepare();
+        if (! sizeof(prepare) || ! stringp(type = keys(prepare)[0]))
+                type = "unarmed";
+
+        if (me->query_skill_mapped(type) != "jiuyin-shengong")
+                return notify_fail("你没有将九阴神功激发到" + to_chinese(type) +
+                                   "上，无法以此施展九阴神功！\n");
+
+        if (! living(target))
+                return notify_fail("对方都已经这样了，用不着这么费力吧？\n");
+
+        me->add("neili", -100);
+
+        ap = COMBAT_D->skill_power(me, "jiuyin-shengong", SKILL_USAGE_ATTACK) +
+             COMBAT_D->skill_power(me, "martial-cognize", SKILL_USAGE_DEFENSE);
+        ap /= 10;
+        ap += me->query("str") * 20;
+
+/*      ap1 = COMBAT_D->skill_power(me, "jiuyin-shengong", SKILL_USAGE_ATTACK);
+        ap2 = COMBAT_D->skill_power(me, "martial-cognize", SKILL_USAGE_ATTACK);
+        ap3 = (ap1 + ap2) / 10;
+        ap4 = ap3 + me->query("str") * 20;
+        
+        ap = ap4;
+
+        tell_object(me, HIC "【测试信息】：" NOR + 
+                        HIW "己方九阴神功 AP：" HIC + ap1 +
+                        HIW " 武学修养 AP：" HIC + ap2 + 
+                        HIW " 实际 AP：" HIC + ap3 + 
+                        HIW " 修正 AP：" HIC + ap4 + 
+                        HIW "。\n" NOR); */
+
+        parry_skill = target->query_skill_mapped("parry");
+
+        dp = COMBAT_D->skill_power(target, parry_skill, SKILL_USAGE_DEFENSE) +
+             COMBAT_D->skill_power(target, "martial-cognize", SKILL_USAGE_DEFENSE);
+        dp /= 10;
+        dp += target->query("str") * 20;
+        
+/*      dp1 = COMBAT_D->skill_power(target, parry_skill, SKILL_USAGE_DEFENSE);
+        dp2 = COMBAT_D->skill_power(target, "martial-cognize", SKILL_USAGE_DEFENSE);
+        dp3 = (dp1 + dp2) / 10;
+        dp4 = dp3 + me->query("str") * 20;
+        
+        dp = dp4;
+
+        tell_object(me, HIC "【测试信息】" NOR + 
+                        HIW "：对方基本招架 DP：" HIC + dp1 +
+                        HIW " 武学修养 DP：" HIC + dp2 + 
+                        HIW " 实际 DP：" HIC + dp3 + 
+                        HIW " 修正 DP：" HIC + dp4 + 
+                        HIW "。\n" NOR); */
+
+        msg = HIY "$N" HIY "出手成指，随意点戳，似乎看尽了$n"
+              HIY + "招式中的破绽。\n" NOR;
+
+        if (wizardp(me))
+                tell_object(me, HIC "【测试信息】" NOR + 
+                                HIW "：己方 AP：" HIC + ap +
+                                HIW "，对方 DP：" HIC + dp + HIW "。\n" NOR);
+
+        if (ap / 2 + random(ap * 2) > dp)
+        {
+                n = 5 + random(5);
+                if (target->is_busy() || ap / 2 + random(ap) > dp)
+                {
+                        msg += HIM "$n" HIM "见来指玄幻无比，全然无法抵挡，慌乱之下破绽迭出，$N"
+                               HIM "随手连出" + chinese_number(n) + "指！\n" NOR;
+                        message_combatd(msg, me, target);
+                        me->start_busy(1 + random(n));
+
+                        msg = "";
+                        while (n-- && me->is_fighting(target))
+                        {
+                                if (random(2) && ! target->is_busy())
+                                        target->start_busy(1);
+
+                                rate = skill > 500 ? 2 : (skill > 300 ? 1 : 0);
+                                if (! COMBAT_D->do_attack(me, target, 0, 0) && ! random(5 - rate))
+                                {
+                                        damage = (ap - dp) / 5;
+
+                                        if (damage > dp / 10)
+                                                damage = dp / 15 + random(dp / 20 + ap / 50);
+
+                                        if (damage > skill * 3 / 2)
+                                                damage = skill + random(skill / 2);
+
+                                        switch (random(2))
+                                        {
+                                        case 0:
+                                                msg += COMBAT_D->do_damage(me, target, 
+                                                                           UNARMED_ATTACK, damage, 50,
+                                                                           WHT "眼看这招已经失手，却见"
+                                                                           "$N微微一笑，斜指刺来，竟是"
+                                                                           "全然无法可挡，正中$p的心口！"
+                                                                           "\n" NOR);
+                                                break;
+                                        default:
+                                                msg += COMBAT_D->do_damage(me, target, 
+                                                                           UNARMED_ATTACK, damage, 50,
+                                                                           WHT "$p躲过这招，正待大笑，"
+                                                                           "不料$N双手连扬，九阴神指"
+                                                                           "如狂风骤雨般攻上，正中$p"
+                                                                           "胸口！\n" NOR);
+                                                break;
+                                        }
+                                        message_sort(msg, me, target);
+                                        
+                                        if (wizardp(me))
+                                                tell_object(me, HIC "【测试信息】" NOR + 
+                                                                HIW "：收到普通攻击失败信息，本次伤害：" +
+                                                                HIC + damage + HIW "。\n" NOR);
+                                        msg = "";
+                                }
+                        }
+
+                        weapon = target->query_temp("weapon");
+                        if (weapon && random(ap) / 2 > dp && weapon->query("type") != "pin")
+                        {
+                                msg += HIW "$n" HIW "觉得眼前眼花缭乱，手中的" + weapon->name() +
+                                       HIW "一时竟然拿捏不住，脱手而出！\n" NOR;
+                                weapon->move(environment(me));
+                        } else
+                        {
+                                msg += HIG "$n勉力抵挡，一时间再也无力反击。\n" NOR;
+                                
+                                if (! target->is_busy())
+                                        target->start_busy(1 + random(2));
+                        }
+                } else
+                {
+                        msg += HIC "$n" HIC "不及多想，连忙抵挡，全然无法反击。\n" NOR;
+                        me->start_busy(1);
+                        target->start_busy(4 + random(skill / 30));
+                }
+        } else
+        {
+                msg += HIC "不过$n" HIC "紧守门户，不露半点破绽。\n" NOR;
+                me->start_busy(1 + random(2));
+        }
+
+        message_combatd(msg, me, target);
+        return 1;
+}
+

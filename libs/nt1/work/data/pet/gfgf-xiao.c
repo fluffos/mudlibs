@@ -1,0 +1,18 @@
+// SN:?OQ9mX>9]HIGLN;=
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m小鹿[2;37;0m", ({"xiao lu"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "小鹿
+它是观风的坐骑。
+");
+        set_temp("owner_id", "gfgf");
+        set_temp("owner_name", "观风");
+        ::setup();
+}
+

@@ -1,0 +1,18 @@
+// SN:PD=H8\i@Bm\oS^`b
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[37m铁牛[2;37;0m", ({"tie niu"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "铁牛铁牛铁牛铁牛铁牛铁牛
+它是西索的坐骑。
+");
+        set_temp("owner_id", "hisoka");
+        set_temp("owner_name", "西索");
+        ::setup();
+}
+

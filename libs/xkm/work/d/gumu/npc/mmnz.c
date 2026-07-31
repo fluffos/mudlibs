@@ -1,0 +1,41 @@
+// mmnz.c  
+inherit NPC; 
+inherit F_UNIQUE; 
+inherit F_SAVE; 
+#include <ansi.h> 
+#include "skills.h" 
+#include "mmnz.h"  
+void create() 
+{         
+set_name("蒙面女子", ({ "mengmian nuzi", "mengmian", "nuzi" }) );         
+set("gender", "女性");         set("age", 25 );         
+set("long", "一个风姿秀逸的女子，虽然蒙着面，但掩饰不了其咄咄的杀气。\n");         
+set("combat_exp", 50000);         
+set("shen", -15000);         
+set("attitude", "aggressive");         
+set("age", 25 + random(3));               
+set("str", 20+random(5));         
+set("int",20+random(5));           
+set("con",20+random(5));          
+set("dex",20+random(5));         
+set("per", 30);         
+set("shen_type", -1);         
+set("max_qi",200);         
+set("max_jing",200);         
+set("neili",400);         
+set("max_neili",400);         
+set("score", 5000);                   
+set_skill("force", 80);          
+set_skill("yunu-xinjing",random(20));          
+set_skill("unarmed", 60);          
+set_skill("parry", 60);         
+set_skill("meinu-quan",random(20));          
+set_skill("dodge", 60);         
+set_skill("gumu-shenfa", 50);           
+map_skill("dodge", "gumu-shenfa");         
+map_skill("force", "yunu-xinjing");         
+map_skill("unarmed", "meinu-quan");          
+map_skill("parry", "meinu-quan");          
+setup();         
+carry_object("/d/gumu/obj/qun1")->wear(); 
+} 

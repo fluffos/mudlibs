@@ -1,0 +1,26 @@
+// edit by daniel@jhfy.nh 2002
+#include <room.h>
+inherit ROOM;
+
+void create()
+{
+        set("short", "长廊");
+        set("long", @LONG
+一条笔直的长廊，走廊两边的墙上刻着流传以旧的诗词歌赋，
+还有各种名画，可见此间主人对其的喜爱。长廊很长，向东西北方
+延伸。
+LONG
+        );
+        set("exits", ([ /* sizeof() == 1 */
+  "south" : __DIR__"biwu3",
+   "north" : __DIR__"luojian",
+  "west"  : __DIR__"lang2",
+  "east"  : __DIR__"lang3",
+ ]));
+        set("no_clean_up", 0);
+        set("objects", ([
+   ]));
+        setup();
+        replace_program(ROOM);
+}
+

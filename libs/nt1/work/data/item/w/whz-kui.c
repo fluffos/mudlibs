@@ -1,0 +1,31 @@
+// SN:mfjP:R3ZFPVS:L>j
+// ITEM Made by player(给我新鲜:whz) /data/item/w/whz-kui.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Sat May 22 01:55:03 2004
+#include <ansi.h>
+#include <armor.h>
+
+inherit HEAD;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[2;37;0m[37m战神头盔[2;37;0m", ({ "kui" }));
+	set_weight(4500);
+	set("item_make", 1);
+	set("unit", "顶");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一顶头盔。
+头盔缘上刻着一行小字：给我新鲜(whz)
+");
+	set("value", 2100000);
+	set("point", 110);
+	set("material", "magic stone");
+	set("wear_msg", "[33m$N[33m装备[2;37;0m[37m战神头盔[2;37;0m[33m。[2;37;0m\n");
+	set("remove_msg", "[33m$N[33m脱下了[2;37;0m[37m战神头盔[2;37;0m[33m。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/armor", apply_armor());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

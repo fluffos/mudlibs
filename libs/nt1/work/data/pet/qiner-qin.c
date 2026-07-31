@@ -1,0 +1,18 @@
+// SN:_ZORfR`k]2N;mn]2
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;36m青雕[2;37;0m", ({"qin diao"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "青雕
+它是胡琴儿的坐骑。
+");
+        set_temp("owner_id", "qiner");
+        set_temp("owner_name", "胡琴儿");
+        ::setup();
+}
+

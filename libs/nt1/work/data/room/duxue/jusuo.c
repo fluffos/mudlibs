@@ -1,0 +1,35 @@
+// SN:3:2O2E9d7o?9:<lO
+// File(/data/room/duxue/jusuo.c) of duxue's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "居所");
+	set ("long", @LONG
+这就是血压计主人渡血休息、读书的地方。楼上就是主人的卧室，
+西面则是书房。 
+LONG );
+
+	set("exits", ([
+		"up"   : __DIR__"woshi",
+                "west" : __DIR__"shufang",
+	]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("KEY_DOOR", ([
+                "exit" : "east",
+                "room" : __DIR__"huayuan",
+        ]));
+    
+        set("room_owner", "渡血");
+        set("room_name", "血压计");
+        set("room_id", "zhu");
+        set("room_owner_id", "duxue");
+        set("room_position", "碎石小道");
+}

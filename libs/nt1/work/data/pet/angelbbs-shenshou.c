@@ -1,0 +1,18 @@
+// SN:HW8ICXkfiX26?\<n
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("神兽[2;37;0m", ({"shenshou shou"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "在看我！还在看我！在看我！在看我，就把你吃掉！
+它是香烟啤酒的坐骑。
+");
+        set_temp("owner_id", "angelbbs");
+        set_temp("owner_name", "香烟啤酒");
+        ::setup();
+}
+

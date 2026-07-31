@@ -1,0 +1,35 @@
+// SN:L[iWWWNmEck@DA=7
+// File(/data/room/dond/jusuo.c) of dond's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "居所");
+	set ("long", @LONG
+这就是江湖居主人呆老四休息、读书的地方。楼上就是主人的卧
+室，西面则是书房。 
+LONG );
+
+	set("exits", ([
+		"up"   : __DIR__"woshi",
+                "west" : __DIR__"shufang",
+	]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("KEY_DOOR", ([
+                "exit" : "east",
+                "room" : __DIR__"huayuan",
+        ]));
+    
+        set("room_owner", "呆老四");
+        set("room_name", "江湖居");
+        set("room_id", "jianghu");
+        set("room_owner_id", "dond");
+        set("room_position", "碎石小道");
+}

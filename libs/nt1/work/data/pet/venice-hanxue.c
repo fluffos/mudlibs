@@ -1,0 +1,18 @@
+// SN:D6LGQ0Z6jVBKFFP>
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;31m汗血宝马[2;37;0m", ({"hanxue ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "$HIR$千里神驹，俊美非凡。
+它是慕容闻琳的坐骑。
+");
+        set_temp("owner_id", "venice");
+        set_temp("owner_name", "慕容闻琳");
+        ::setup();
+}
+

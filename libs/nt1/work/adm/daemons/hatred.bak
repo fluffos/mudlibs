@@ -1,0 +1,229 @@
+// Hatred of Family
+// 保存所有门派之间的友好还是仇恨信息
+// 用于门派间互学武功或者自动pk
+// Created by Lonely (06/21/2002)
+
+#include <ansi.h>
+
+#pragma optimize
+#pragma save_binary
+
+inherit F_DBASE;
+inherit F_SAVE;
+
+// 门派对其他的门派的最大仇恨度是1万
+#define MAX_FAMILY_HATRED        10000
+// 门派对其他的门派的最大友好度是1万
+#define MAX_FAMILY_FRIEND       -10000
+
+// 门派之间的初始友好或者仇恨度
+mapping hatred = ([
+        "武当派" : ([ 
+                "少林派"     : -500,
+                "华山派"     : -300,
+                "峨嵋派"     : -300,
+                "全真派"     : -300,
+                "桃花岛"     : 0,
+                "古墓派"     : 0,
+                "逍遥派"     : 0,
+                "灵鹫宫"     : 0,
+                "丐帮"       : 0,
+                "明教"       : 0,
+                "姑苏慕容"   : 0,
+                "大理段氏"   : 0,
+                "白驼山庄"   : 300,
+                "星宿派"     : 300,
+                "雪山派"     : 300,
+                "神龙教"     : 300,
+                ]),
+        "少林派" : ([ 
+                "武当派"     : -500,
+                "华山派"     : -300,
+                "逍遥派"       : 0,
+                "丐帮"       : 0,
+                "星宿派"     : 300,
+                "雪山派"     : 500,
+                ]),
+        "华山派" : ([ 
+                ]),
+        "峨嵋派" : ([ 
+                ]),
+        "全真派" : ([ 
+                ]),
+        "桃花岛" : ([ 
+                ]),
+        "古墓派" : ([ 
+                ]),
+        "逍遥派" : ([ 
+                ]),
+        "灵鹫宫" : ([ 
+                ]),
+        "丐帮" : ([ 
+                ]),
+        "明教" : ([ 
+                ]),
+        "姑苏慕容" : ([ 
+                ]),
+        "大理段氏" : ([ 
+                ]),
+        "白驼山庄" : ([ 
+                ]),
+        "星宿派" : ([ 
+                ]),
+        "雪山派" : ([ 
+                ]),
+        "神龙教" : ([ 
+                ]),
+        ]);
+
+mapping last_hatred;
+
+void create()
+{
+        seteuid(getuid()); 
+        restore();
+        set_heart_beat(1800);
+}
+
+void remove()
+{
+        save();
+}
+
+public void mud_shutdown()
+{
+        save();
+}
+
+// 心跳：维护门派的通常信息
+private void heart_beat()
+{
+        int t, i, j;
+        int last;
+        string *all_fam;
+        string fam;
+
+        t = time();
+        last = query("last_check");
+        if ((t / 86400) != (last / 86400))
+        {
+                // 天数发生了变化：复制门派的仇恨信息
+                all_fam = keys(hatred) - ({ 0 }); 
+/*
+                for (i = 0; i < sizeof(all_fam); i++)
+                {
+                        for (j = 0; j < sizeof(all_fam); j++)
+                        {
+                                hatred[all_fam[i]][all_fam[j]] -= 0;
+                        }
+                }
+*/
+                last_hatred = hatred;
+                hatred = ([ ]);
+
+                foreach (fam in all_fam)
+                        hatred[fam] = last_hatred[fam];
+        }
+        set("last_check", t);
+
+        // 保存门派的最新信息
+        save();
+}
+
+// 查询昨天的门派仇恨信息 
+public mapping query_all_last_hatred() 
+{
+        if (! mapp(last_hatred)) 
+                // 没有昨天的信息，返回今天的 
+                return hatred; 
+
+        // 返回昨天的门派仇恨信息 
+        return last_hatred; 
+}
+
+// 门派之间的仇恨或者友好的变化
+public void add_family_hatred(string src, string dest, int n)
+{
+        int new_hatred;
+        if (! src || ! dest) 
+                return;
+
+        if (undefinedp(hatred[src]) || undefinedp(hatred[dest]))
+                return;
+
+        // 计算门派新的仇视
+        new_hatred = hatred[src][dest] + n;
+        if (new_hatred < MAX_FAMILY_FRIEND) 
+                new_hatred = MAX_FAMILY_FRIEND;
+        if (new_hatred > MAX_FAMILY_HATRED) 
+                new_hatred = MAX_FAMILY_HATRED;
+        hatred[src][dest] = new_hatred;
+}
+
+// 查询 src 门派对 dest 门派的敌对程度
+public int query_hatred(string src, string dest)
+{
+        if (undefinedp(hatred[src]) || undefinedp(hatred[dest])) 
+                return 0;
+
+        return hatred[src][dest];
+}
+
+// killer 杀 victim 发生时敌对程度改变
+public void family_kill(object killer, object victim)
+{
+        string vfam;
+        string kfam;
+        mixed *d;
+
+        // 只有玩家之间的仇杀才计算在内
+        if (! objectp(killer) || ! playerp(killer) ||
+            ! objectp(victim) || ! playerp(victim))
+                return;
+
+        // 巫师之间的比划可不能算数
+        if (wizardp(killer) || wizardp(victim))
+                return;
+
+        kfam = killer->query("family/family_name");
+        vfam = victim->query("family/family_name");
+
+        if (! stringp(kfam) || ! stringp(vfam))
+                return;
+
+        if (undefinedp(hatred[kfam]) || undefinedp(hatred[vfam])) 
+                return;
+
+        if (stringp(kfam) && kfam == vfam)
+        {
+                // 同门残杀？
+                return;
+        }
+
+        // 查看杀手所在的门派是否仇恨死者：如果仇恨，则带动
+        // 仇恨的变化要小点。
+        if (stringp(kfam))
+        {
+                string path;
+                object ob;
+
+                path = "hatred/" + kfam + "/" + victim->query("id");
+                ob = get_object("/adm/daemons/familyd");
+                d = ob->query(path);
+                // 仇恨死者，门派仇恨减半
+                if (arrayp(d) && sizeof(d) >= 2 && intp(d[1]))
+                {
+                        // 调整两个门派的仇恨
+                        add_family_hatred(vfam, kfam, 20);
+                        add_family_hatred(kfam, vfam,-40);
+                }
+                else {
+                        add_family_hatred(vfam, kfam, 40);
+                        add_family_hatred(kfam, vfam,-20);
+                }
+        }
+
+}
+
+public string query_save_file() { return DATA_DIR "hatred"; }
+

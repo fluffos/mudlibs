@@ -1,0 +1,18 @@
+// SN:55lhY\K6LN1IE`Ij
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("神雕[2;37;0m", ({"shen diao"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "会飞的。
+它是互搏明玉的坐骑。
+");
+        set_temp("owner_id", "hbmy");
+        set_temp("owner_name", "互搏明玉");
+        ::setup();
+}
+

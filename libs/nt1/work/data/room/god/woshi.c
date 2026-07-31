@@ -1,0 +1,83 @@
+// SN:8VdRBE1AY>>NOo2V
+// File(/data/room/god/woshi.c) of god's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+#include <ansi.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "ÎÔÊÒ");
+	set ("long", @LONG
+[1;32mÕâÊÇÖ÷ÈËµÄÎÔÊÒ£¬ÊÕÊ°µÃ¾®¾®ÓÐÌõ¡£ÄÏ´°ÏÂÊÇÒ»ÕÅ´ó´²£¬´²±ßÓÐÒ»¸ö¹ñ
+
+×Ó¡£ÍÆ¿ª´°»§¿ÉÒÔ¿´µ½ÏÂÃæµÄ»¨Ô°£¬»¹¿ÉÐáµ½ÕóÕó»¨Ïã£¬·Ç³£ã«Òâ¡£Ô¶´¦ÊÇ
+
+Ò»´óÆ¬ÖñÁÖ¡£[2;37;0m
+LONG );
+
+        set("exits", ([
+                "down" : __DIR__"jusuo",
+        ]));
+
+        set("objects", ([
+                "/adm/npc/obj/xiang" : 1,
+        ]));
+
+        set("sleep_room", 1);
+        set("loving_room", 1);
+        set("no_fight", 1);
+        setup();
+    
+        set("room_owner", "ÉÏµÛ");
+        set("room_name", "ÔÆº£");
+        set("room_id", "god");
+        set("room_owner_id", "god");
+        set("room_position", "ÃûÈËÌÃ");
+}
+
+void init()
+{
+        add_action("do_findbaby", "xunzhao");
+}
+
+int do_findbaby(string arg)
+{
+        object me = this_player(), baby;
+        string file;
+
+        if (! arg || (arg != "baby" && arg != "child") ||
+            ! is_room_owner(me)) 
+                return 0;
+
+        if (! me->query("couple/child"))
+                return notify_fail("ÄãÓÖ»¹Ã»ÓÐº¢×Ó£¬À´ÕâÀï´ÕÊ²Ã´ÈÈÄÖ°¡£¿\n");
+
+        if (objectp(baby = find_living(me->query("couple/child")))
+        &&  environment(baby) && baby->is_baby())
+                return notify_fail("ÄãÃÇµÄº¢×ÓÒÑ¾­ÅÜ³öÈ¥ÍæÁË£¬ºÃºÃËÄ´¦ÕÒÕÒ°É£¡\n");
+
+        if (me->query("gender") == "Å®ÐÔ")
+                file = read_file("/data/baby/" + me->query("id") + ".o");
+        else file = read_file("/data/baby/" + me->query("couple/id") + ".o");
+
+        if (stringp(file))
+        {
+                baby = new("/clone/user/baby");
+
+                baby->load_baby(me);
+                baby->move(environment(me));
+                message_vision("ÄãºöÈ»¿´µ½´²µ×ÏÂ" +
+                        ({"Ì½³öÒ»¿ÅÐ¡ÄÔ¹Ï", "Éì³öÒ»Ë«Ð¡½ÅÑ¾", "Éì³öÒ»Ö§Ð¡ÊÖ"})
+                        [random(3)] + "£®£®£®\n", me);
+
+        } else
+        {
+                tell_object(me, MAG "ÄãÃÇµÄº¢×Ó²»ÐÒØ²ÕÛÁË£¬Çë½Ú°§°É¡£\n" NOR);
+                me->delete("couple/child");
+                me->delete("couple/child_name");
+        }
+        return 1;
+}      

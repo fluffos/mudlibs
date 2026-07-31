@@ -1,0 +1,31 @@
+// SN:jQIW_dPnEGC?N@Qh
+// ITEM Made by player(王小石:wxs) /data/item/w/wxs-wlk.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Mon Aug 23 10:38:13 2004
+#include <ansi.h>
+#include <armor.h>
+
+inherit HEAD;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("头盔[2;37;0m", ({ "wlk" }));
+	set_weight(4500);
+	set("item_make", 1);
+	set("unit", "顶");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一顶头盔。
+头盔缘上刻着一行小字：王小石(wxs)
+");
+	set("value", 2100000);
+	set("point", 514);
+	set("material", "magic stone");
+	set("wear_msg", "[33m$N[33m装备头盔[2;37;0m[33m。[2;37;0m\n");
+	set("remove_msg", "[33m$N[33m脱下了头盔[2;37;0m[33m。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/armor", apply_armor());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

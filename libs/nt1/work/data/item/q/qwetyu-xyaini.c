@@ -1,0 +1,31 @@
+// SN:K@KDU_Ad_2g\^GLS
+// ITEM Made by player(星辰七剑:qwetyu) /data/item/q/qwetyu-xyaini.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Sat Jul 10 20:17:43 2004
+#include <ansi.h>
+#include <weapon.h>
+
+inherit SWORD;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("星辰一怒[2;37;0m", ({ "xyaini" }));
+	set_weight(6750);
+	set("item_make", 1);
+	set("unit", "柄");
+	set("long", "这是由[37m精铁[2;37;0m炼制而成的一柄剑。
+剑柄上刻着一行小字：星辰七剑(qwetyu)
+");
+	set("value", 700000);
+	set("point", 30);
+	set("material", "iron");
+	set("wield_msg", "从天空飞来[2;37;0m\n");
+	set("unwield_msg", "“刷”直入云霄[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	init_sword(apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

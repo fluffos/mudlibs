@@ -1,0 +1,32 @@
+取经总图==@==/doc/help/map-qujing
+江州府／金山寺==@==/doc/help/map-jz
+宝象国／碗子山==@==/doc/help/map-baoxiang
+平顶山／莲花洞==@==/doc/help/map-pingding
+乌鸡国／宝林寺==@==/doc/help/map-wuji
+车迟国／三清观==@==/doc/help/map-chechi
+通天河／陈家庄==@==/doc/help/map-tongtian
+金兜山／金兜洞==@==/doc/help/map-jindou
+女儿国／解阳山==@==/doc/help/map-nuerguo
+毒敌山／琵琶洞==@==/doc/help/map-dudi
+火焰山／翠云山==@==/doc/help/map-firemount
+积雷山／摩云洞==@==/doc/help/map-jilei
+祭赛国 ==@==/doc/help/map-jisaiguo
+碧波潭==@==/doc/help/map-bibotan
+荆棘岭／木仙庵==@==/doc/help/map-jingjiling
+小西天／小雷音寺==@==/doc/help/map-xiaoxitian
+朱紫国==@==/doc/help/map-zhuzi
+麒麟山／獬豸洞==@==/doc/help/map-qilin
+盘丝岭／盘丝洞==@==/doc/help/map-pansi
+比丘国／清华庄==@==/doc/help/map-biqiu
+无底洞／黑松林==@==/doc/help/map-wudidong
+钦法国==@==/doc/help/map-qinfa
+隐雾山／连环洞==@==/doc/help/map-yinwu
+凤仙郡==@==/doc/help/map-fengxian
+玉华县==@==/doc/help/map-yuhua
+ 豹头山／虎口洞==@==/doc/help/map-baotou
+竹节山==@==/doc/help/map-zhujie
+金平府==@==/doc/help/map-jinping
+青龙山／玄英洞==@==/doc/help/map-qinglong
+天竺国==@==/doc/help/map-tianzhu
+毛颖山／三连穴==@==/doc/help/map-maoying
+灵山／雷音寺==@==/doc/help/map-lingshan

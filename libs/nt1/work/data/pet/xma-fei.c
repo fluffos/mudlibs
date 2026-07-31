@@ -1,0 +1,18 @@
+// SN:d4Nh6`Y6@YM00R`X
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("非非驴[2;37;0m", ({"fei lv"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "非非
+它是武当一的坐骑。
+");
+        set_temp("owner_id", "xma");
+        set_temp("owner_name", "武当一");
+        ::setup();
+}
+

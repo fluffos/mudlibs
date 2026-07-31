@@ -1,0 +1,97 @@
+#include <ansi.h>
+inherit SKILL;
+
+mapping *quest = ({
+        ([       "quest":               "霍都",
+                "quest_type":           "杀",
+                "time":                 500,
+                "score" :               10
+        ]),
+        ([      "quest":                "江百胜",
+                "quest_type":           "杀",
+                "time":                 500,
+                "score" :               6
+        ]),
+        ([      "quest":                "康亲王",
+                "quest_type":           "杀",
+                "time":                 520,
+                "score" :               8
+        ]),
+        ([      "quest":                "玉竹杖",
+                "quest_type":           "寻",
+                "time":                 550,
+                "score" :               9
+        ]),       
+        ([      "quest":                "僧棍",
+                "quest_type":           "寻",
+                "time":                 550,
+                "score" :               9
+        ]),  
+        ([      "quest":                "侍卫",
+                "quest_type":           "杀",
+                "time":                 560,
+                "score" :               7
+        ]),
+        ([      "quest":                "游龙剑",
+                "quest_type":           "寻",
+                "time":                 600,
+                "score" :               11
+        ]),
+        ([      "quest":               "两仪剑谱<下卷>",
+                "quest_type":           "寻",
+                "time":                 500,
+                "score" :               12
+        ]),
+        ([       "quest":               "太极十三势",
+                "quest_type":           "寻",
+                "time":                 600,
+                "score" :               15
+        ]),
+        ([       "quest":               "火折",
+                "quest_type":           "寻",
+                "time":                 500,
+                "score" :               8
+        ]),
+        ([       "quest":               "药锄",
+                "quest_type":           "寻",
+                "time":                 500,
+                "score" :               10
+        ]),
+        ([       "quest":               "祖千秋",
+                "quest_type":           "杀",
+                "time":                 600,
+                "score" :               7
+        ]),
+        ([       "quest":               "青衣武士",
+                "quest_type":           "杀",
+                "time":                 500,
+                "score" :               7
+        ]),
+        ([       "quest":               "红衣武士",
+                "quest_type":           "杀",
+                "time":                 500,
+                "score" :               7
+        ]),
+        ([       "quest":               "白衣武士",
+                "quest_type":           "杀",
+                "time":                 500,
+                "score" :               7
+        ]),
+        ([       "quest":               "娘缳玉洞",
+                "quest_type":           "扫",
+                "time":                 200,
+                "score" :               6
+        ]),
+        ([       "quest":               "静音阁",
+                "quest_type":           "扫",
+                "time":                 180,
+                "score" :               5
+        ]),
+
+});
+
+
+mapping query_quest()
+{
+        return quest[random(sizeof(quest))];
+}

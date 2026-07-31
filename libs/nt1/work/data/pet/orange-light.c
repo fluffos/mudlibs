@@ -1,0 +1,18 @@
+// SN:MII8@@AK@c5eCo6<
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m白光虎[2;37;0m", ({"light hu"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "$HIW$魔神斗士的神骑之一！
+它是小次郎的坐骑。
+");
+        set_temp("owner_id", "orange");
+        set_temp("owner_name", "小次郎");
+        ::setup();
+}
+

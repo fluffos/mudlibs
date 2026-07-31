@@ -1,0 +1,18 @@
+// SN::SHfh3dPZWXB64=V
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;32m半人马[2;37;0m", ({"yww ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "上天入地第一骑
+它是段当歌的坐骑。
+");
+        set_temp("owner_id", "cldzt");
+        set_temp("owner_name", "段当歌");
+        ::setup();
+}
+

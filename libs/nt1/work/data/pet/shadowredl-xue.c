@@ -1,0 +1,18 @@
+// SN:VPBd`ib5@F\LF`1F
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;31m血狼[2;37;0m", ({"xue lang"}));        
+        set("gender", "男性");                
+        set("unit", "条");
+        set("long", "redl
+它是血莲使者的坐骑。
+");
+        set_temp("owner_id", "shadowredl");
+        set_temp("owner_name", "血莲使者");
+        ::setup();
+}
+

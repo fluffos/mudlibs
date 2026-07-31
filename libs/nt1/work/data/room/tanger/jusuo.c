@@ -1,0 +1,35 @@
+// SN:\;ej<:bMUVfP9OGa
+// File(/data/room/tanger/jusuo.c) of tanger's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "居所");
+	set ("long", @LONG
+这就是唐二居主人唐二休息、读书的地方。楼上就是主人的卧室，
+西面则是书房。 
+LONG );
+
+	set("exits", ([
+		"up"   : __DIR__"woshi",
+                "west" : __DIR__"shufang",
+	]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("KEY_DOOR", ([
+                "exit" : "east",
+                "room" : __DIR__"huayuan",
+        ]));
+    
+        set("room_owner", "唐二");
+        set("room_name", "唐二居");
+        set("room_id", "tangr");
+        set("room_owner_id", "tanger");
+        set("room_position", "碎石小道");
+}

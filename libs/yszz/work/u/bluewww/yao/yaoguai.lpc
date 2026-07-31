@@ -1,0 +1,221 @@
+inherit __DIR__"yao-gen";
+
+#include <ansi.h>
+
+#define SHILI_D "/adm/daemons/shili"
+
+string *death_msg= ({
+"$n大叫一声“这次是你赢了，下次我们走着瞧。。。”\n$n说完，化做一道青光，直冲云霄去了．．．\n",
+"$N喝道：那里走！\n$n无可奈何，往地下一钻，就消失了。\n",
+"$n惨叫一声，死了。\n",
+});
+
+int strength();
+
+string query_family_type(string fam)
+{
+    if(fam=="东海龙宫"||fam=="方寸山三星洞"||fam=="五庄观"||
+	fam=="月宫"||fam=="南海普陀山")
+	return "xian";
+    return "yao";	
+}
+
+void leave()
+{
+      if(this_object()) { 
+        if(environment())
+          message("vision",HIB + name() + 
+		  "身子一晃，变成一股青烟散去了。\n" NOR,environment());
+        destruct(this_object());
+      }
+      return;
+}
+
+void check_room()
+{
+    object me=this_object();
+    object env=environment(me);
+    
+    if(!living(me)) return;
+    if(env && (env->query("no_fight") ||
+		env->query("no_magic")||
+		env->query("alternative_die"))) {
+	random_move();
+    }
+}
+
+void unconcious()
+{
+  die();
+}
+
+void die()
+{
+    object owner_ob;
+
+    owner_ob = query_temp("last_damage_from");
+
+    if(environment(owner_ob)==environment() && userp(owner_ob)) {
+       message_vision(death_msg[random(sizeof(death_msg))],owner_ob,this_object());
+       owner_ob->add("faith",1);
+       if(SHILI_D->decrease_shili(query("pos"),query("family/family_name"),1))
+          SHILI_D->increase_shili(query("pos"),owner_ob->query("family/family_name"),1);
+   } else {
+	    message_vision("$N死了。\n",this_object());
+   }
+   destruct(this_object());
+}
+
+
+// This is called in heart_beat() to perform attack action.
+int attack()
+{
+	object opponent;
+
+	clean_up_enemy();
+
+	opponent = select_opponent();
+	if( objectp(opponent) ) {
+		if(userp(opponent)
+			&& !living(opponent)
+			&& environment()==environment(opponent)) {
+		    random_move();
+		    return 0;
+		}
+
+		set_temp("last_opponent", opponent);
+		COMBAT_D->fight(this_object(), opponent);
+		return 1;
+	} else
+		return 0;
+}
+
+int accept_fight(object me)
+{
+     if(query("type")==query_family_type(me->query("family/family_name"))){
+     	command("say 你我往日无冤近日无仇，何必争斗！");
+     	return 1;
+     }
+     if(!is_fighting())
+        command("say 我正想找你！");
+     else command("say 好啊，想倚多为胜，这不是欺人太甚吗！");   
+     kill_ob(me);     
+     return 1;
+}
+
+int accept_kill(object me)
+{
+     if(query("type")==query_family_type(me->query("family/family_name"))){
+     	command("say 你我往日无冤近日无仇，何必争斗！");
+     	return 1;
+     }
+     if(!is_fighting())
+        command("say 我正想找你！");
+     else command("say 好啊，想倚多为胜，这不是欺人太甚吗！");   
+     kill_ob(me);     
+     return 1;
+}
+
+int heal_up()
+{
+    object weapon;
+    
+    if(!random(4))
+        check_room();
+        
+    if(!random(10))
+        strength();    
+    
+     if(!random(3)&&!query_temp("weapon")){
+     weapon=new(query("weapon_"));
+     weapon->move(this_object());
+      command("wield all");
+   }    
+    return ::heal_up()+1;
+}
+
+int strength()
+{
+    string* ycolor=({NOR,BLK,RED,YEL,BLU,MAG,CYN,WHT,HIR,HIG,
+      HIY,HIB,HIM,HIC,HIW});   
+    int i;  
+      
+    if(!random(2)&&is_fighting()&&query("kee")*100/query("max_kee")<50){
+         tell_room(environment(),query("name")+"仰天大叫："+RED+"上苍赐我力量！"+NOR+"\n转眼变得精神抖擞起来。\n");
+         i=query("bian_num")+1;
+         set("bian_num",i);
+         if(i==sizeof(ycolor))i=1;
+         set("name",ycolor[i]+query("name")+NOR);
+         set("eff_kee",query("max_kee"));                  	
+         set("eff_sen",query("max_sen"));
+         set("kee",query("max_kee"));
+         set("sen",query("max_sen"));
+         set("force",query("max_force")*(60+i)/50);
+         set("mana",query("max_mana")*(60+i)/50);
+         set("force_factor",query("max_force")*(i+4)/200);
+         set("mana_factor",query("max_mana")*(i+4)/200);          
+    }     
+}
+
+varargs int receive_damage(string type, int damage, object who)
+{
+    int yourexp,myexp;
+    int exp,pot;
+    string skill;
+    object weapon=who->query_temp("weapon");
+    
+    if(who && userp(who)&&damage>0){
+        if(query_family_type(who->query("family/family_name"))!=query("type")){
+	   myexp=query("combat_exp")/10000;
+	   yourexp=who->query("combat_exp")/10000;
+	   exp=query("reward/exp");
+	   pot=query("reward/pot");
+	   if(yourexp<myexp*10){
+	   	exp=exp*myexp/yourexp;
+	   	pot=pot*myexp/yourexp;
+	   	exp=exp*damage/query("max_sen");
+	   	pot=pot*damage/query("max_sen");
+	   	who->add("combat_exp",exp);
+	   	who->add("potential",pot);
+                tell_object(who, "你得到了"+COMBAT_D->chinese_daoxing(exp)
+                   +"道行和"+chinese_number(pot)+ "点潜能！\n");
+	   	
+	   	if(type=="kee"){
+                   if( objectp(weapon) )   {
+                      if( weapon->query("use_apply_skill") )
+                          skill = weapon->query("apply/skill_type");
+                      else
+                          skill = weapon->query("skill_type");
+                   }
+                   else    skill = "unarmed";
+
+                   skill =who->query_skill_mapped(skill);
+                }else if(type=="sen")skill=who->query_skill_mapped("spells");
+                if(skill){
+                  who->improve_skill(skill,damage/2*myexp/yourexp,
+                       yourexp>myexp?1:0);
+                  tell_object(who,"你的["+to_chinese(skill)+"]进步了。\n");     
+                }       
+	   }
+        }   		
+    }
+    
+    return ::receive_damage(type, damage, who);
+}
+
+void init()
+{
+    object who=this_player();
+    int yourexp=who->query("combat_exp");
+    int myexp=query("combat_exp");
+    
+    ::init();
+    if(query("attitude")=="aggr")
+    if(query_family_type(who->query("family/family_name"))!=query("type"))
+         if(myexp>yourexp&&myexp<2*yourexp){
+		message_vision("$N看见$n，大叫一声：哈哈，有收获！\n",
+			this_object(), who);
+		kill_ob(who);
+		who->kill_ob(this_object());
+    }
+}

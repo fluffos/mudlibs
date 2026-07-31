@@ -1,0 +1,38 @@
+// SN:_4f7@ZV=V>[A`16g
+// File(/data/room/xnx/yishiting.c) of xnx's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "议事厅");
+	set ("long", @LONG
+走进一扇对开的大门，进入到了大会堂。这个地方是如此奇怪且
+辉煌。四张长桌子前，头顶上方竟有数以千计的蜡烛在半空中飘浮，
+将整个大会堂照得灯火通明。
+    巨大的丝质长幅从墙上垂下来，每个长幅代表霍格瓦彻的一个班，
+绘有金狮的红色长幅是格林芬顿，有金鹰的蓝幅是卫文卡罗，有黑獾
+的黄幅是海夫巴夫，有银蛇的绿幅是史林德林，教工桌后，是一个最
+大的长幅，上面是霍格瓦彻学校队的标识：狮、鹰、獾和蛇，全都绕
+在一个大大的“霍格瓦彻”周围。[2;37;0m
+LONG );
+
+	set("exits", ([
+                "east"   : __DIR__"yanwu1",
+                "west"   : __DIR__"yanwu2",
+		"north"  : __DIR__"zhongting",
+                "south"  : __DIR__"yingke",
+	]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("room_owner", "绛珠草");
+        set("room_name", "霍格沃茨");
+        set("room_id", "hgwc");
+        set("room_owner_id", "xnx");
+        set("room_position", "碎石小道");
+}

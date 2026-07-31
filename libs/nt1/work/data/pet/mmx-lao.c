@@ -1,0 +1,18 @@
+// SN:GDVMIiefJ\PY\\9M
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("老牛[2;37;0m", ({"lao niu"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "老牛
+它是大喇嘛的坐骑。
+");
+        set_temp("owner_id", "mmx");
+        set_temp("owner_name", "大喇嘛");
+        ::setup();
+}
+

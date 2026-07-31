@@ -1,0 +1,18 @@
+// SN:5UC9ioAJMmXJ20[3
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("红心闪闪小色狼[2;37;0m", ({"lovepet lang"}));        
+        set("gender", "女性");                
+        set("unit", "条");
+        set("long", "传说中天山上唯一的色狼，浑身长满了各种说不出来的色彩。
+它是爱马德的坐骑。
+");
+        set_temp("owner_id", "ilovemud");
+        set_temp("owner_name", "爱马德");
+        ::setup();
+}
+

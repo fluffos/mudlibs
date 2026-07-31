@@ -1,0 +1,286 @@
+// 神话世界·西游记·版本４．５０
+/* <SecCrypt CPL V3R05> */
+ 
+// Room: /d/wiz/register.c
+
+// 本程序参考了 Jackyboy 的注册程序
+// by wester(fsswsq@263.net)
+// FoF modified for Happy
+// 为收不到注册信的玩家重新发送邮件
+
+#include <ansi.h>
+#include <net/dns.h>
+#include <net/telnet.h>
+#include <net/socket.h>
+#include <net/socket_errors.h>
+#include <socket_err.h>
+#include <mudlib.h>
+
+inherit ROOM;
+
+nosave int my_socket0 = 0;
+nosave string smtp_ip = "202.117.1.88 25";
+nosave string smtp_domain = "internet.xjtu.edu.cn";
+nosave string sender = "fof@263.net", rcpt, msg;
+nosave string status = "ready";
+
+private int write_message(string arg);
+private string make_password();
+
+void log_fail(string arg)
+{
+    log_file( "reg_mail", sprintf("%s %s(%s)(resend)-%s\n",
+        ctime(time()), me->query("id"), me->query("name"), arg));
+}
+
+void create()
+{
+    set("id", "mail register");
+    seteuid(getuid());
+    set("short", HIC "注册区II" NOR);
+    set("long", "\n　　在这里给没有收到注册信的玩家重新发信。
+指令格式：register <id> <E-mail 地址>\n");
+
+    set("exits", ([
+        "up" : "/d/wiz/entrance",
+    ]));
+    set("no_fight", 1);
+    set("no_magic",1);
+    set("objects", ([
+    ]) );
+    set("status", "ready");
+    set("connected", 0);
+
+    setup();
+}
+
+void init()
+{
+    if( wiz_level(this_player()) == "(admin)" )
+    	add_action("do_register", "register");
+}
+
+int do_register(string dest)
+{
+    int my_socket, err;
+    string passwd;
+    object link_ob, me = this_player();
+
+    if( query("status") != "ready" )
+        return notify_fail("注册系统忙，请稍候。\n");
+    
+    if( !dest || sscanf(dest, "%s %s", id, dest) != 2 )
+    	return notify_fail("指令格式：register <id> <E-mail 地址>\n");
+    
+    if( !dest || !sscanf(dest, "%*s@%*s.%*s") )
+        return notify_fail("电子邮件地址错误。\n");
+
+    // status = 0;
+    rcpt = dest;
+
+    who = find_player(id);
+    if( who ) {
+    	if( !link_ob = who->query_temp("link_ob") )
+    		return notify_fail("该玩家非正常登录，请检查！\n");
+    } else
+    	tell_object(me, "该玩家不在线。\n");
+    
+    passwd = make_password();
+    set_temp("reg_passwd", passwd);
+    set_temp("email", dest);
+
+    msg = id +
+        "\n    你好！欢迎光临" + INTERMUD_NAME + "！"
+        "\n    你已经成功地在" + INTERMUD_NAME + "注册，请使用下面提供的注册密码登录"
+        "\n完成注册。"
+        "\n    你的注册密码是：" + passwd +
+        "\n    请妥善保存好该密码，因为它将是验证你身份的依据，将来你"
+        "\n要修改登录口令，自杀或恢复档案等都要用到这个密码。"
+        "\n    遇到问题，请与管理员联系："
+        "\n\n    fof@263.net"
+        "\n\n\t" + ctime(time()); 
+    msg = "TO:" + dest + "\n" +
+        "SUBJECT:" + INTERMUD_NAME + "注册信件\n" +
+        "FROM:" + id + "@" + INTERMUD_MUD_NAME + "\n" +
+        "MIME-Version:1.0\n" +
+        "DATE:" + ctime(time()) + "\n" +
+        "X-MAILER:Lpc Smtp client v0.1\n" + "\n" +
+        msg;
+
+    my_socket = socket_create( STREAM, "read_callback", "close_callback" );
+    
+    if( my_socket < 0 ) {
+        log_fail("failed to create socket" );
+        tell_object(me, "注册失败，请再试一试。");
+        return 1;
+    }
+
+    my_socket0 = my_socket;
+    err = socket_connect( my_socket0, smtp_ip , "read_callback", "write_callback" );
+
+    // 如果成功设置连接标记 = 1
+    if( err == EESUCCESS ) {
+        tell_object(me, "成功连接到邮件服务器，正在发送邮件……\n");
+        set("connected", 1);
+    } else {
+        log_fail("cannot connect to SMTP Server");
+        tell_object(me, "无法连接到邮件服务器！注册失败，请再试一试。");
+    }
+
+    if( !my_socket0 ) return notify_fail("无法连接到邮件服务器！\n");
+    
+    return 1;
+}
+
+int close_socket()
+{
+    if( query("connected") ) {
+        if( socket_close(my_socket0) ) {
+            log_fail("close socket\n");
+            delete("connected");
+        } else
+            log_fail("fail to close socket");
+    } else
+        log_fail("socket_close -- not connected");
+    
+    return 1;
+}
+
+void read_callback(int fd, mixed message)
+{
+    string cur_status = query("status");
+    
+    // 配合 call_out
+    if( cur_status != "helo" && message == "250 mailfrom") return;
+    
+    if( message != "250 mailfrom" )
+        tell_object(me, BOLD + "→" + NOR + message);
+
+    switch(cur_status)
+    {
+        case "ready":
+            if( sscanf(message, "220%*s") )
+            {
+                // status ++;
+                write_message("HELO " + smtp_domain);
+                set("status", "helo");
+
+// 当系统或网络忙的时候得用一下延时
+call_out("read_callback", 3, fd, "250 mailfrom");
+/*
+call_out("read_callback", 4, fd, "250 mailfrom");
+call_out("read_callback", 6, fd, "354 mailfrom");
+call_out("read_callback", 8, fd, "451 mailfrom");
+*/
+                return;
+            }
+            break;
+        case "helo":
+            if( sscanf(message, "250%*s") )
+            {
+                // status ++;
+                write_message("MAIL FROM:<mud.xjtu.edu.cn>");
+                set("status", "mailfrom");
+                return ;
+            }
+            break;
+        case "mailfrom":
+            if( rcpt && sscanf(message, "250%*s") )
+            {
+                // status ++;
+                write_message("RCPT TO:<" + rcpt + ">");
+                set("status", "rcptto");
+                return ;
+            }
+            break;
+        case "rcptto":
+            if( sscanf(message, "250%*s") )
+            {
+                // status ++;
+                write_message("DATA");
+                set("status", "data");
+                return;
+            }
+            break;
+        case "data":
+            if( sscanf(message, "354%*s") )
+            {
+                // status ++;
+                write_message(msg + "\n.\n");
+                set("status", "dataend");
+                return;
+            }
+            break;
+        case "dataend":
+            if( sscanf(message, "451%*s") )
+                log_fail("Smtp Server 接收数据出错！请另选服务器。");
+            else
+                tell_object(me, "\n注册信件已经正确发送了。\n\n");
+            set("status", "ready");
+            break;
+        default:
+            log_fail("wrong status");
+    }
+
+    //if( status != 5 || !sscanf(message, "250%*s") )
+    //    log_fail("发送出错");
+    // status = 0;
+    write_message("QUIT\r\t");
+    close_socket();
+    
+    {
+    	set("status", "ready");
+    	delete_temp("email");
+	    delete_temp("reg_passwd");
+        if( who )
+        	object link_ob = who->query_temp("link_ob");
+	    else {
+	    	link_ob = new(LOGIN_OB);
+	    	link_ob->set("id", id);
+	    	link_ob->restore();
+	    }
+	        link_ob->set("reg_mail_send", 1);
+    	    link_ob->set("reg_passwd", crypt(me->query_temp("reg_passwd"), 0));
+        	link_ob->set("email", me->query_temp("email"));
+	        link_ob->save();
+    }
+    
+    return ;
+}
+
+void write_callback(int fd)
+{
+    int res;
+    
+    if( query("connect") ) return;
+    res = socket_write(fd, "");
+    if( res == EESUCCESS || res == EECALLBACK ) {
+        set("connected", 1);
+    }
+}
+
+private int write_message(string arg)
+{
+    if( !arg ) arg = "";
+
+    socket_write(my_socket0, arg + "\n");
+    
+    return 1;
+}
+
+string make_password()
+{
+    int i, j;
+    string passwd = "ASDFGHJK";
+    
+    i = 5 + random(4); // passwd 长度在 5->8 位之间
+    for( j == 0; j < i; j ++ ) {
+        passwd[j] = '1' + random(73);
+    }
+    
+    // 密码的第一个字符不要用 '!' 号
+    if( passwd[0] == '!' ) passwd[0] ++;
+    
+    return passwd;
+}
+

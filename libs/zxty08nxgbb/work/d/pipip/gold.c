@@ -1,0 +1,27 @@
+// thousand.c
+
+#include <ansi.h>
+
+inherit MONEY;
+
+void create()
+{
+        set_name(YEL "大金坨子" NOR, ({"big gold"}));
+        if( clonep() )
+                set_default_object(__FILE__);
+        else {
+                set("money_id", "thousand-gold");
+                set("no_drop",1);
+          set("no_get",1);
+          set("no_put",1);
+                 set("no_put_in",1);
+                set("long", "一块面额值五千两金子的金坨子。\n");
+                set("unit", "块");
+                set("base_value", 50000000);
+                set("base_unit", "块");
+                set("base_weight", 600);
+        }
+        set_amount(1);
+}
+
+

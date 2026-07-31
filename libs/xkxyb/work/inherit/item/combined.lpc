@@ -1,0 +1,111 @@
+// combined_item.c
+
+#include <dbase.h>
+#include <name.h>
+
+inherit F_CLEAN_UP;
+inherit F_DBASE;
+inherit F_MOVE;
+inherit F_NAME;
+
+nosave int amount;
+
+void setup()
+{
+	object ob,pob;
+	ob=this_object();
+	pob=previous_object();
+	if(ob->value()>10000)
+		log_file("money.log",base_name(pob)+"\n");
+}
+
+int query_amount() { return amount; }
+
+void destruct_me() { destruct(this_object()); }
+
+void set_amount(int v)
+{
+	if( v < 0 ) error("combine:set_amount less than 1.\n");
+	if( v==0 ) call_out("destruct_me", 1);
+	else {
+		amount = v;
+		this_object()->set_weight(v * (int)query("base_weight"));
+	}
+}
+
+void add_amount(int v) { set_amount(amount+v); }
+
+string short()
+{
+	return chinese_number(query_amount()) + query("base_unit")
+		+ ::short();
+}
+
+varargs int move(mixed dest, int silent)
+{
+	object env, *inv,*inv1,env1,me,ob;
+	int i, total;
+	string file,str;
+
+	if( ::move(dest, silent) ) {
+		if(1) {
+ 			if(!objectp(env = environment()) )
+				env=this_player(1);
+			if(!objectp(env))
+				log_file("trace/money_move","记录文件出错！\n");
+			file = base_name(this_object());
+			inv = all_inventory(env);
+			total = (int)query_amount();
+			//跟踪用钱记录
+			env1=environment(env);
+			me=env;
+			ob=this_object();//env1不一定存在！
+			if(objectp(env1)&&ob->value()>100000)//只记录10两以上的黄金复制
+			{
+				str="------------\n记录开始:\n";
+				str+="玩家: "+me->query("name")+"("+me->query("id")+")\n";
+				str+="得到"+total+ob->query("base_unit")+ob->query("name");
+				str+="房间:"+base_name(env1)+"\n";
+				if(objectp(ob=previous_object()))
+				inv1=all_inventory(env1);
+				str+="该房间中的物件(包括该玩家):\n";
+				for(i=0;i<sizeof(inv1);i++)
+				if(userp(inv1[i]))
+					str+="\t玩家:"+inv1[i]->query("name")+"("+
+						inv1[i]->query("id")+")\n";
+				else
+					str+="\t房间物件: "+base_name(inv1[i])+"\n";
+				str+="----------------------\n";
+/*暂时不记录这一项，不然硬盘非爆了不可！
+				inv1=all_inventory(me);
+				if(!sizeof(inv1))
+					str+="该玩家身上没有东西\n************************\n";
+				else
+				{
+					str+="玩家身上的物件:\n";
+					for(i=0;i<sizeof(inv1);i++)
+					{
+						if(strsrch(str,base_name(inv1[i]))>0)
+							continue;//不记录重复物品
+						if(strsrch(base_name(inv1[i]),"/clone")>0)
+							continue;
+						str+="\tP OBJ: "+base_name(inv1[i])+"\n";
+					}
+					str+="\n****************************\n";
+				}
+*/
+				str+="记录结束\n\n";
+				log_file("trace/money_move",str);
+			}
+			for(i=0; i<sizeof(inv); i++) {
+				if( inv[i]==this_object() ) continue;
+				if( base_name(inv[i])==file ) {
+					total += (int)inv[i]->query_amount();
+					destruct(inv[i]);
+				}
+			}
+			set_amount(total);
+		}
+		return 1;
+	}
+}

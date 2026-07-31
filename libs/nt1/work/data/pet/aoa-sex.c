@@ -1,0 +1,18 @@
+// SN:5OGV6O\Ujl@7WZH8
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;35m色狼[2;37;0m", ({"sex lang"}));        
+        set("gender", "男性");                
+        set("unit", "条");
+        set("long", "$HIW$色既是空,空既是色.
+它是死囚的坐骑。
+");
+        set_temp("owner_id", "aoa");
+        set_temp("owner_name", "死囚");
+        ::setup();
+}
+

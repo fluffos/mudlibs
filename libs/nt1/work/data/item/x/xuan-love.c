@@ -1,0 +1,33 @@
+// SN:XWV`?_hVAe`5K>_a
+// ITEM Made by player(渡邪:xuan) /data/item/x/xuan-love.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Mon Oct 20 15:46:34 2003
+#include <ansi.h>
+#include <weapon.h>
+
+inherit BLADE;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;33m相思无[1;37m用[2;37;0m", ({ "love" }));
+	set_weight(9000);
+	set("item_make", 1);
+	set("unit", "把");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一把刀。
+[1;35m一把锋利的[1;33m相思无[1;37m用[2;37;0m，
+[1;35m它在[1;37m阳光[1;35m下[1;31m闪闪发光[2;37;0m。[2;37;0m
+刀柄上刻着一行小字：渡邪(xuan)
+");
+	set("value", 2100000);
+	set("point", 310);
+	set("material", "magic stone");
+	set("wield_msg", "[1;37m夜深人静寂寞来袭，\n以我孤独的身体，\n挡不住渴望你的心，\n谈何容易从此分离，\n赤裸裸沸腾的思绪，\n一盏灯亮到天明。\n\n≮‖[1;33m相思无[1;37m用[1;37m‖≯[2;37;0m\n");
+	set("unwield_msg", "[1;37m我一腔真情意，\n总要有个人愿意懂，\n难为我自己却恨不能重逢，\n让你走的无影踪，\n我每个念头都落空。\n\n≮‖[1;33m相思无[1;37m用[1;37m‖≯[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	init_blade(apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

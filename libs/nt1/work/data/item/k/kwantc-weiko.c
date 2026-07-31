@@ -1,0 +1,34 @@
+// SN:9G@Ufe5afKGe]LV<
+// ITEM Made by player(独孤灵月:kwantc) /data/item/k/kwantc-weiko.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Sun Feb 29 13:16:22 2004
+#include <ansi.h>
+#include <armor.h>
+
+inherit HANDS;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("威而钢[2;37;0m", ({ "weiko" }));
+	set_weight(2025);
+	set("item_make", 1);
+	set("unit", "双");
+	set("long", "这是由[37m精铁[2;37;0m炼制而成的一双铁掌。
+铁掌缘上刻着一行小字：独孤灵月(kwantc)
+");
+	set("value", 700000);
+	set("point", 30);
+	set("material", "iron");
+	set("wear_msg", "[33m$N[33m装备威而钢[2;37;0m[33m。[2;37;0m\n");
+	set("remove_msg", "[33m$N[33m脱下了威而钢[2;37;0m[33m。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/strike", 10);
+	set("armor_prop/hand", 10);
+	set("armor_prop/armor", 10);
+	set("armor_prop/unarmed_damage", apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

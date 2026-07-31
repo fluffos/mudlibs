@@ -1,0 +1,68 @@
+#include <ansi.h>
+inherit NPC;
+inherit F_UNIQUE;
+inherit F_SAVE;
+void greeting(object ob);
+string query_save_file()
+{
+        return "/data/npc/jingcha";
+}
+
+void create()
+{       
+        seteuid(getuid());
+        if (!restore()) {
+        set_name("交通警察", ({ "jingcha", "jing", "cha" }));
+        set("long", "他就是维护城市交通安全的天使。\n");
+            set ("title", HIW  "为人民服务" NOR);
+        set("gender", "男性");
+        set("age", 39);
+        set("attitude", "friendly");
+        set("shen_type", -1);
+
+        set("per", 15);
+        set("str", 15);
+        set("int", 14);
+        set("con", 15);
+        set("dex", 16);
+        set("qi", 200);
+        set("max_qi", 200);
+        set("jing", 200);
+        set("max_jing", 100);
+        set("neili", 300);
+        set("max_neili", 300);
+        set("combat_exp", 20000);
+
+        set_skill("unarmed", 90);
+        set_skill("dodge", 90);
+        set_skill("parry", 90);
+        set("startroom","/d/city/guangchang");
+
+        set("chat_chance", 10);
+        set("chat_msg", ({
+                "交通警察说道：请大家遵守交通法规！\n",
+                        "交通警察高声说道：请行人靠边走！\n",
+        }) );
+
+        setup();
+        carry_object("/d/city/obj/cloth1")->wear();
+}       else {
+                set("id", "npc");
+                set_name(query("name"), ({ query("id") }));
+                setup();
+                if( this_object()->query("weapon") ) carry_object(this_object()->query("weapon"))->wield();
+                if( this_object()->query("armor") )  carry_object(this_object()->query("armor"))->wear();        
+        }
+
+}
+
+
+void init()
+{
+        add_action("do_savenpc",  "savenpc");
+        }
+
+void savenpc()
+{
+save();
+}

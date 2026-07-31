@@ -1,0 +1,18 @@
+// SN:;d@IJRVXXhi^5^0>
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;35m姬狐[2;37;0m", ({"jin hu"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "可爱吧
+它是婧姬的坐骑。
+");
+        set_temp("owner_id", "jing");
+        set_temp("owner_name", "婧姬");
+        ::setup();
+}
+

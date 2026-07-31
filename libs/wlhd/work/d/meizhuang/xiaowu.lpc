@@ -1,0 +1,57 @@
+inherit ROOM;
+
+void create()
+{
+        set("short", "小屋");
+        set("long", @LONG
+你进了这间小屋以后，发现这里竟然和你想象的差别很大，这里
+虽然不能说是金碧辉煌，但到处都是玉制的物器，玉床(chuang),玉桌，玉椅，
+玉屏风，玉茶壶，玉杯......数不胜数。墙上挂着一根绿玉萧和一具白玉瑶
+琴。
+LONG
+        );
+        set("outdoors","chengdu");
+        set("exits", ([ /* sizeof() == 1 */
+                "out" : __DIR__"xiaoyuan",
+        ]));
+        set("objects", ([ /* sizeof() == 2 */
+             __DIR__"npc/huangzhong-gong" : 1,
+        ]));
+        set("item_desc", ([
+                "chuang": "一张很平常的玉床，但是......自己猜吧。\n"
+        ]) );
+        set("outdoors", "meizhuang");
+
+        setup();
+}
+void init()
+{
+        add_action("do_zuan", "zuan");
+}
+int do_zuan(string arg)
+{
+        string dir;
+        object me=this_player();
+
+        if( !arg || arg=="" )
+        {
+                write("你要往哪儿钻？\n");return 1;
+        }
+        if( arg=="chuang" )
+        {
+                write(HIY"你蹑手蹑脚的绕到玉床的后面，钻进了下面的一个小洞。\n"NOR);
+                if((int)me->query_skill("dodge",1)>=30)
+                {
+                          write(HIW"你费尽九牛二虎之力，发现自己到了一个很神秘的地道里。\n"NOR);
+                          me->move(__DIR__"didao1");
+                          return 1;
+                }
+                write(RED"你试着钻了一下后面的一个小洞，发现钻不进去。\n"NOR);
+                me->add("jing",-10);
+                me->add("qi",-10);
+
+                return 1;
+        }
+}
+
+

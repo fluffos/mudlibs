@@ -1,0 +1,386 @@
+// damage.c
+// 把 error("F_DAMAGE: 伤害值为负值。\n"); 改成 damage = -damage;。
+// heal = -heal...
+// snowman@SJ 28/10/1999
+
+#include <ansi.h>
+#include <dbase.h>
+#include <login.h>
+#include <move.h>
+
+int ghost = 0;
+
+int is_ghost() { return ghost; }
+
+void set_ghost(int i) { ghost=i; } // add by SPY, 24th Marth, 1997.
+
+varargs int receive_damage(string type, int damage, mixed who)
+{
+        int val;
+
+        if( damage < 0 ) damage = -damage;
+        
+        if( type!="jing" && type!="qi" && type!="jingli" && type!="neili")
+                error("F_DAMAGE: 伤害种类错误( 只能是 jing, qi 其中之一 )。\n");
+
+//added by snowman for some shadow npcs' hit
+        if( objectp(who) ){
+                 if(objectp(who->query("have_master"))) set_temp("last_damage_from", who->query("have_master"));
+                 else set_temp("last_damage_from", who);
+                }
+                
+        val = (int)query(type) - damage;
+
+        if( val < 0 ) val = -1;
+        set(type, val);
+
+        set_heart_beat(1);
+
+        return damage;
+}
+
+varargs int receive_wound(string type, int damage, mixed who)
+{
+        int val;
+
+        if( damage < 0 ) damage = -damage;
+        if( type!="jing" && type!="qi" && type!="neili")
+                error("F_DAMAGE: 伤害种类错误( 只能是 jing, qi 其中之一 )。\n");
+
+//added by snowman for some shadow npcs' hit
+        if( objectp(who) ){
+                 if(objectp(who->query("have_master"))) set_temp("last_damage_from", who->query("have_master"));
+                 else set_temp("last_damage_from", who);
+                }
+                
+        if (type == "neili") val = (int)query("max_" + type) - damage;
+        else val = (int)query("eff_" + type) - damage;
+
+        if( val < 0 ) val = -1;
+        if( val < 0 && type == "neili") val = 0;
+        if (type == "neili") set("max_" + type, val);
+        else set("eff_" + type, val);
+
+        if( (int)query(type) > val ) set(type, val);
+
+        set_heart_beat(1);
+
+        return damage;
+}
+
+int receive_heal(string type, int heal)
+{
+        int val;
+
+        if( heal < 0 ) heal = -heal;
+        if( type!="jing" && type!="qi" && type!="jingli")
+                error("F_DAMAGE: 恢复种类错误( 只能是 jing, qi 其中之一 )。\n");
+
+        val = (int)query(type) + heal;
+
+        if( val > (int)query("eff_" + type) ) set(type, (int)query("eff_" + type));
+        else set( type, val );
+
+        return heal;
+}
+
+int receive_curing(string type, int heal)
+{
+        int max, val;
+
+        if( heal < 0 ) heal = -heal;
+        if( type!="jing" && type!="qi")
+                error("F_DAMAGE: 恢复种类错误( 只能是 jing, qi 其中之一 )。\n");
+
+        val = (int)query("eff_" + type);
+        max = (int)query("max_" + type);
+
+        if( val + heal > max ) {
+                set("eff_" + type, max);
+                return max - val;
+        } else {
+                set( "eff_" + type, val + heal);
+                return heal;
+        }
+}
+
+void unconcious()
+{
+        object defeater,killer;
+        object me;
+        object riding;
+        int i;
+
+        if( !living(this_object()) ) return;
+        if( wizardp(this_object()) && query("env/immortal") ) return;
+	
+        if (userp(this_object())&& environment(this_object())->query("bwdhpk"))
+        {
+                message_vision(HIR "比武之地，只分胜负，不分生死。$N被打败了但却偷得一命。\n" NOR, this_object());
+                message_vision(HIR "$N被抬了下去。\n" NOR, this_object());
+	if( objectp(killer = query_temp("last_damage_from")) )
+{
+	killer->add_temp("bwdhpk",1);
+message("channel:chat", HIC"【屠人战况】"HIR + " "+this_object()->query("name")+"被"+killer->query("name")+"打出了屠人大会！\n"NOR,users() );
+}
+	  this_object()->set("eff_jing", (int)this_object()->query("max_jing"));
+	  this_object()->set("jing", (int)this_object()->query("max_jing"));
+	  this_object()->set("eff_qi", (int)this_object()->query("max_qi"));
+	  this_object()->set("qi", (int)this_object()->query("max_qi"));
+	  this_object()->set("jingli", (int)this_object()->query("max_jingli"));
+	  this_object()->set("neili", (int)this_object()->query("max_neili"));
+	  this_object()->set("food", (int)this_object()->max_food_capacity());
+	  this_object()->set("water", (int)this_object()->max_water_capacity());
+	  this_object()->remove_all_killer();
+          this_object()->move("/d/pk/ready");
+          return;
+}
+
+        if( objectp(defeater = query_temp("last_damage_from")) )
+                COMBAT_D->winner_reward(defeater, this_object());
+
+        this_object()->remove_all_enemy();
+        this_object()->set_temp("faint_by", query_temp("last_damage_from"));
+
+        message("system", HIR "\n你只觉得头昏脑胀，眼前一黑，接着什么也不知道了....\n\n" NOR,this_object());
+        this_object()->disable_player(" <昏迷不醒>");
+
+        if ((i = query("jing")) < 0) i = 0;
+        set("jing", i/2);
+        if ((i = query("qi")) < 0) i = 0;
+        set("qi", i/2);
+        if ((i = query("jingli")) < 0) i = 0;
+        set("jingli", i*3/4);
+        //added by snowman
+	if ((i = query("neili")) < 0) i = 0;
+	else if ((i = query("neili")) > query("max_neili"))
+		set("neili", query("max_neili"));
+        
+        set_temp("block_msg/all", 1);
+        COMBAT_D->announce(this_object(), "unconcious");
+
+        call_out("revive", 30 + random(60 - query("con")));
+}
+
+varargs void revive(int quiet)
+{
+        remove_call_out("revive");
+        
+        // changed environment(environment()) into environment()->is_character(), by snowman
+        while( environment()->is_character() )
+                this_object()->move(environment(environment()));
+        this_object()->enable_player();
+        if (!quiet) {
+                COMBAT_D->announce(this_object(), "revive");
+                delete_temp("block_msg/all");
+                message("system", HIY "\n一股暖流发自丹田流向全身，慢慢地你又恢复了知觉....\n\n" NOR,
+                        this_object());
+                if (query_temp("unconcious") && query_temp("unconcious") != environment()) move(environment(), 1);
+                if (environment()) environment()->relay_revive(this_object());
+        }
+         
+        else delete_temp("block_msg/all");
+        delete_temp("unconcious");
+}
+
+void die()
+{
+        object corpse;
+        mixed killer;
+
+        if( !living(this_object()) ) revive(1);
+        else delete_temp("faint_by");
+
+        if( wizardp(this_object()) && query("env/immortal") ) return;
+        
+        if (userp(this_object())&& environment(this_object())->query("bwdhpk"))
+        {
+                message_vision(HIR "比武之地，只分胜负，不分生死。$N被打败了但却偷得一命。\n" NOR, this_object());
+                message_vision(HIR "$N被抬了下去。\n" NOR, this_object());
+	if( objectp(killer = query_temp("last_damage_from")) )
+{
+	killer->add_temp("bwdhpk",1);
+message("channel:chat", HIC"【屠人战况】"HIR + " "+this_object()->query("name")+"被"+killer->query("name")+"打出了屠人大会！\n"NOR,users() );
+}
+	  this_object()->set("eff_jing", (int)this_object()->query("max_jing"));
+	  this_object()->set("jing", (int)this_object()->query("max_jing"));
+	  this_object()->set("eff_qi", (int)this_object()->query("max_qi"));
+	  this_object()->set("qi", (int)this_object()->query("max_qi"));
+	  this_object()->set("jingli", (int)this_object()->query("max_jingli"));
+	  this_object()->set("neili", (int)this_object()->query("max_neili"));
+	  this_object()->set("food", (int)this_object()->max_food_capacity());
+	  this_object()->set("water", (int)this_object()->max_water_capacity());
+	  this_object()->remove_all_killer();
+          this_object()->move("/d/pk/ready");
+          return;
+}
+        
+         if (userp(this_object())&& this_object()->query("免死金牌"))
+        {
+                message_vision(HIY "就在$N将死之际，突然想起自己身上做过一个武林秘密组织的标记，于是大声呼喊！\n" NOR, this_object());
+                message_vision(HIC "突然之间出现了一个神秘组织的蒙面人将$N救走了。\n" NOR, this_object());
+	
+	  this_object()->set("eff_jing", (int)this_object()->query("max_jing"));
+	  this_object()->set("jing", (int)this_object()->query("max_jing"));
+	  this_object()->set("eff_qi", (int)this_object()->query("max_qi"));
+	  this_object()->set("qi", (int)this_object()->query("max_qi"));
+	  this_object()->set("jingli", (int)this_object()->query("eff_jingli"));
+	  this_object()->set("neili", (int)this_object()->query("max_neili"));
+	  this_object()->set("food", (int)this_object()->max_food_capacity());
+	  this_object()->set("water", (int)this_object()->max_water_capacity());
+	  this_object()->delete("免死金牌");
+          this_object()->move("/d/city/chmiao");
+               message_vision(HIG "神秘组织的蒙面人对$N说：“我救了你这次，你身上免死的标记已经消除了。”\n" NOR, this_object());
+          return;
+}
+        
+          if(userp(this_object())&& this_object()->is_ghost())
+{
+                message_vision(HIC "死人没有办法再死一次。\n" NOR, this_object());
+                message_vision(HIG "$N的魂魄回到了阴间。\n" NOR, this_object());
+		this_object()->set("jing", 10);
+		this_object()->set("eff_jing", 10);
+		this_object()->set("qi", 10);
+		this_object()->set("eff_qi", 10);
+		this_object()->move(DEATH_ROOM);
+}  
+        
+        COMBAT_D->announce(this_object(), "dead");
+        if( !(killer = query_temp("last_damage_from")) )
+                killer = "莫名其妙地";
+                
+        if( objectp(killer) )
+                COMBAT_D->winner_reward(killer, this_object());
+                
+        if (!environment()->query("no_death")) {
+                COMBAT_D->killer_reward(killer, this_object());
+
+                // Clear all the conditions by death.
+                this_object()->clear_condition();
+
+                if( objectp(corpse = CHAR_D->make_corpse(this_object(), killer)) )
+                        corpse->move(environment());
+        }
+        set_temp("last_damage_from", "莫名其妙地");
+
+        this_object()->remove_all_killer();
+        all_inventory(environment())->remove_killer(this_object());
+
+        this_object()->dismiss_team();
+        if( userp(this_object()) ) {
+                if (this_object()->is_busy()) {
+                        this_object()->start_busy(1, 2);
+                        this_object()->interrupt_me();
+                }
+                set("jing", 1); set("eff_jing", 1);
+                set("qi", 1);   set("eff_qi", 1);
+                if (!environment()->query("no_death")) {
+			ghost = 1;
+                        this_object()->save();
+                        this_object()->move(DEATH_ROOM);
+                        DEATH_ROOM->start_death(this_object());
+                }
+        } else destruct(this_object());
+}
+
+int max_food_capacity() { return query_weight() / 100; }
+
+int max_water_capacity() { return query_weight() / 100; }
+
+void reincarnate()
+{
+        ghost = 0;
+        set("eff_jing", query("max_jing"));
+        set("eff_qi", query("max_qi"));
+        set("jingli", query("eff_jingli"));
+        set("jing", query("eff_jing"));
+        set("qi", query("eff_qi"));
+        set("neili", query("max_neili"));
+        set("food", max_food_capacity());
+        set("water", max_water_capacity());
+}
+
+int heal_up()
+{
+        int update_flag, i;
+        object me = this_object();
+        mapping my;
+
+        update_flag = 0;
+
+        my = query_entire_dbase();
+
+        if( my["water"] > 0 ) { my["water"]--; update_flag++; }
+        if( my["food"] > 0 ) { my["food"]--; update_flag++; }
+
+        if( my["water"] < 1 && userp(me) && !wizardp(me)) {
+                message_vision("$N渴得眼冒金星，全身无力。\n", me);                
+                if (!me->is_busy()) me->start_busy(5);
+                return update_flag;
+        }
+        
+        else if(userp(me) && !wizardp(me)) 
+        	switch(my["water"]){
+                	case 50:
+                	case 40:
+                	case 30:
+                	case 20:
+                	case 10: message_vision(HIY"$N舔了舔干裂的嘴唇，看来是很久没有喝水了。\n"NOR, me); break;
+        	}
+        
+        i = my["con"] / 3 + my["max_jingli"] / 10;
+        if (me->is_fighting()) i /= 3;
+        my["jing"] += i;
+        if( my["jing"] >= my["eff_jing"] ) {
+                my["jing"] = my["eff_jing"];
+                if( my["eff_jing"] < my["max_jing"] ) { my["eff_jing"]++; update_flag++; }
+        } else update_flag++;
+
+        i = my["con"] / 3 + my["max_neili"] / 10;
+        if (me->is_fighting()) i /= 3;
+        my["qi"] += i;
+        if( my["qi"] >= my["eff_qi"] ) {
+                my["qi"] = my["eff_qi"];
+                if( my["eff_qi"] < my["max_qi"] ) { my["eff_qi"]++; update_flag++; }
+        } else update_flag++;
+
+        if( my["food"] < 1 && userp(me) && !wizardp(me)) {
+                message_vision("$N饿得头昏眼花，直冒冷汗。\n", me);
+                if (!me->is_busy()) me->start_busy(5);
+                return update_flag;
+        }
+
+        else if(userp(me) && !wizardp(me))
+        	switch(my["food"]){
+                	case 50:
+                	case 40:
+                	case 30:
+                	case 20:
+                	case 10: message_vision(HIY"突然一阵“咕咕”声传来，原来是$N的肚子在叫了。\n"NOR, me); break;
+        	}
+        
+        if( my["jingli"] < my["eff_jingli"] ) {
+                i = my["con"] / 2 + me->query_skill("force", 1) / 3;
+                if (me->is_fighting()) i /= 3;
+                my["jingli"] += i;
+                if( my["jingli"] > my["eff_jingli"] ) my["jingli"] = my["eff_jingli"];
+                update_flag++;
+        }
+
+        if( my["neili"] < my["max_neili"] ) {
+                i = me->query_skill("force", 1) / 2 + my["con"];
+                if (me->is_fighting()) i /= 3;
+                my["neili"] += i;
+                if( my["neili"] > my["max_neili"] ) my["neili"] = my["max_neili"];
+                update_flag++;
+        }
+
+	// added by snowman@SJ 06/02/2000
+	if( my["neili"] > my["max_neili"]*2 ) {
+                if( !me->query_temp("pending") )
+                	my["neili"] = my["max_neili"] * 2;
+                update_flag++;
+        }
+        
+        return update_flag;
+}

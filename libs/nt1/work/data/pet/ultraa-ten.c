@@ -1,0 +1,18 @@
+// SN:WUGA<aPfLM6P_D5E
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;35m十号驴子骡[2;37;0m", ({"ten luo"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "^_^
+它是路人甲的坐骑。
+");
+        set_temp("owner_id", "ultraa");
+        set_temp("owner_name", "路人甲");
+        ::setup();
+}
+

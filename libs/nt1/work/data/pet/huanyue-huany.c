@@ -1,0 +1,18 @@
+// SN:geNY6HkZeOS[ZaJ3
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[32m幻月[1;32m之鹤[2;37;0m", ({"huany he"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "幻月之鹤。
+它是幻月的坐骑。
+");
+        set_temp("owner_id", "huanyue");
+        set_temp("owner_name", "幻月");
+        ::setup();
+}
+

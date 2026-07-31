@@ -1,0 +1,32 @@
+// SN:0RK`;^T\I0aclgg?
+// ITEM Made by player(慕容恪:bushiwo) /data/item/b/bushiwo-kui.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Sun Dec 14 02:10:13 2003
+#include <ansi.h>
+#include <armor.h>
+
+inherit HEAD;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[2;37;0m[33m斗笠[2;37;0m", ({ "kui" }));
+	set_weight(4500);
+	set("item_make", 1);
+	set("unit", "顶");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一顶头盔。
+这顶斗笠看上去念头很长了，为它的主人遮挡了很多年的风雨。[2;37;0m
+头盔缘上刻着一行小字：慕容恪(bushiwo)
+");
+	set("value", 2100000);
+	set("point", 125);
+	set("material", "magic stone");
+	set("wear_msg", "[1;36m$N戴上一顶$n[1;36m。[2;37;0m\n");
+	set("remove_msg", "[1;36m$N随手摘下$n[1;36m，淡然一笑。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/armor", apply_armor());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

@@ -1,0 +1,187 @@
+// bao.c
+// by atu for SJFY 2000/01/10
+#include <ansi.h>
+inherit NPC;
+inherit F_MASTER;
+int ask_me();
+int ask_stop();
+
+void create()
+{
+	set_name("包拯", ({ "bao daren", "bao" }) );
+	set("gender", "男性" );
+	set("long","这就是大名鼎鼎的包清天，铁面无私，断案如神。\n");
+	set("title", HIM"铁面无私"NOR);
+	set("attitude", "friendly");
+	set("age", 54);
+
+	set("max_force", 50000);
+	set("force", 50000);
+	set("combat_exp", 4000000);
+
+	set("inquiry", ([
+		"work": (: ask_me :),
+		"stop": (: ask_stop :),
+	]) );
+
+	set_skill("dodge", 500);
+	set_skill("unarmed",500);
+	set_skill("parry", 500);
+	set_skill("force",500);
+	set_skill("literate", 500);
+
+	set_temp("apply/attack",300);
+	set_temp("apply/damage",30000);
+
+	setup();
+// 37          carry_object(__DIR__"obj/mangpao")->wear();
+	add_money("silver",30);
+}
+void init()
+{       
+        add_action("do_answer", "answer");
+        add_action("do_unmarry", "unmarry");
+}
+int ask_me()
+{
+	object ob,me;
+	me = this_player();
+	if (!(int)me->query("kaifengfu")){
+		command("say 这位"+ RANK_D->query_respect(me)+ "若有意为朝廷效力，不妨到签押房报名！\n");
+		return 1;
+	}
+	command("say 你身为朝廷官员，不能白吃国家俸禄，须得努力工作(work)才是啊。\n
+每次办差归来须如实向本府汇报(finish)。");
+	return 1;
+}
+int ask_stop()
+{
+	object ob,me;
+	me = this_player();
+	if (!(int)me->query("kf_working")){
+		command("say 这位"+ RANK_D->query_respect(me)+ "若不愿意为朝廷效力，本府也不勉强！\n");
+		return 1;
+	}
+	command("say 你真的没有抓到罪犯吗？(answer yes或answer no)");
+	me->set_temp("kf_stop",1);
+	return 1;
+}
+int do_answer(string arg)
+{
+	object ob,me;
+	me = this_player();
+	if (!me->query_temp("kf_stop"))
+		return notify_fail("什么？\n");
+	if (!arg || (arg !="yes"&&arg !="no")){
+		command("say 你吞吞吐吐的在说什么啊！\n");
+		return 1;
+	}
+	if (arg =="no"){                               //113
+		command("say 罪犯既已抓到了你还要放弃什么？\n");
+		return 1;
+	}
+	message_vision (BLU"包拯不由大怒，拍案而起。\n"NOR,me);
+	command("say 大胆！汝身为朝廷官员，食国家俸禄，办差如此不力，休怪本府无情。");
+	command("say 来啊，与我重责二十大板。");
+	message_vision (HIB"四下里顿时拥出几个如狼似虎的衙役将$N按翻在地。\n"NOR,me);
+	me->delete_temp("kf_stop");
+	me->apply_condition("kf_stop",10);
+	return 1;
+}
+int do_unmarry(string arg)
+{
+	object me, obj,ob;
+	me = this_player();
+
+	if (me->is_busy())
+		return notify_fail("包大人眉头一皱说道：“你看看你自己那个忙样！”\n");
+	if( me->is_fighting()){
+		if( !this_object()->is_killing(me) )
+			this_object()->kill_ob(me);
+		return notify_fail("包大人怒火中烧：“大胆逆贼，来来来，本官送你去阴间去离婚！”\n");
+	}
+	if( this_object()->is_fighting() )
+		return notify_fail("包大人说道：“你先退下，等本官处理了这里捣乱的人再说！”\n");
+	if( !living(this_object()) )
+		return notify_fail("你还是先想办法把包大人救醒吧。\n");
+
+	if( !environment()||base_name(environment()) != query("startroom") )
+		return notify_fail("包大人哼了一声说道：“急什么？等本官升堂了再说！”\n");
+
+	if(me->query_temp("unmarry"))
+   		return notify_fail("包大人黑着脸看看你：“本官不是刚刚帮你们办过离婚手续？还来烦我！？”\n");
+
+	if(!me->query("marry") )
+	{
+		if ((string)me->query("gender") == "女性")
+			say("包大人脸一沉喝道：“大胆刁妇，你分明没有丈夫，还敢戏弄本官，来人呀！打她二十大板！”\n");
+		else
+			say("包大人脸一沉喝道：“大胆刁民，你分明没有妻室，还敢戏弄本官，来人呀！打他二十大板！”\n");
+		call_out("zou",1,me);
+		return 1;
+	}
+	if(!arg||arg!=(string)me->query("marry"))
+   		return notify_fail("包大人皱了皱眉头：你要和谁离婚？\n");
+
+	if( file_size("/data/login/" + arg[0..0] + "/" + arg + ".o")<1){
+       message_vision("包大人听了$N的陈述，仔细查看了案卷，点点头道：“既然你的爱人已经不在人世，我就给你\n"
+       "单独办理离婚手续，钱也不必要交了！”然后在案卷上作了记录后，盖上了官印，对师爷招手\n"
+       "道：“送一份给红娘庄！”然后又对$N说：“你走吧，你已经是单身了！”\n",me);
+		CHANNEL_D->do_channel(this_object(), "news",sprintf( "由于%s的配偶已经去世，%s的婚姻关系自然解除！\n",
+		 me->name(1),me->name(1) ) );
+		me->add("divorced", 1);
+		me->set("marry",0);
+		return 1;
+	}else if( !objectp(obj=present(arg, environment(me)))|| !find_player(me->query("marry")) )
+		return notify_fail("包大人懒懒地看了看你道：“你的爱人现在不在场，要两人一起来才能办离婚。”\n");
+
+	if(query_temp("money")!=me->name()	&&query_temp("money")!=obj->name())
+   	return notify_fail("包大人拍了拍桌子：“离婚的手续费100 gold你还没交，没钱就回去凑合着过日子，不要来烦本官！\n");
+
+	if( (object)obj->query_temp("pending/unmarry")!=me )
+	{
+		me->set_temp("pending/unmarry", obj);
+		message_vision(MAG "\n$N看了看$n长叹一口气道：“罢罢罢……我们还是好聚好散吧！?”\n"
+			"包大人眯起眼睛问问$n：“你愿不愿意离婚呢？说出来，本官为你作主！”\n"NOR,me,obj);
+      tell_object(obj,"如果你同意离婚，请你也对"+me->name(1)+ "("+me->query("id")+")下一次 unmarry "
++me->query("id")+"  的指令。\n");
+		write(MAG "现在你正等待着你的伴侣的回答...\n" NOR);
+		return 1;
+	}
+	message_vision(MAG "\n$N对著$n哼了一声说道：“事已至今，既然无缘，咱们就各走各的路吧。”\n\n"NOR, me,obj);
+	me->set_temp("unmarry",1);
+	obj->set_temp("unmarry",1);
+	message_vision(HIY "包大人看了看点点头说道：“$N和$n，既然你们都同意离婚，那本官也就给你们办了！”\n"
+   	"说完，在姻缘簿上重重地划去了两个名字。\n" NOR, obj, me);
+	CHANNEL_D->do_channel(this_object(), "news",
+	sprintf( "从今天起，%s和%s的婚姻关系解除！\n", me->name(), obj->name()));
+
+	me->add("divorced", 1);
+	me->set("marry",0);
+
+	obj->add("divorced", 1);
+	obj->set("marry",0);
+	return 1;
+}
+int zou(object me)
+{
+	message_vision(HIW"一群衙役冲上前来，不由分说，把$N掀翻在地，一阵大板随即跟上……\n"NOR,me);
+	tell_object(me,HIR"你刚发现不对，四肢已经被按牢在地，只觉一板板打得你痛入骨髓……\n"NOR);
+	
+	if((int)me->query("combat_exp")>100000 ){
+		me->receive_damage("kee", 200,this_object());
+		me->receive_wound("kee",  200,this_object());
+	}else
+		me->unconcious();
+  	return 1;
+}
+int accept_object(object me, object ob)
+{
+	if (!ob->query("money_id"))
+     		return notify_fail("包大人冷冷地看了你一眼道：“大胆刁民，敢拿本知府开玩笑？！”\n");
+  	if(ob->value() < 1000000)
+		return notify_fail("包大人皱了皱眉头说道：“钱不够100 GOLD..”\n");
+	message_vision("包大人接过钱点点说：“好吧！我们来办理吧！”\n",me);
+	this_object()->set_temp("money",me->name(1));
+  	return 1;
+}

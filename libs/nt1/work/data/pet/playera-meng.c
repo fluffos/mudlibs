@@ -1,0 +1,18 @@
+// SN:IbA;ej_9_jdW`<2n
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("白虎[2;37;0m", ({"meng hu"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "白虎入世
+它是东郭先生的坐骑。
+");
+        set_temp("owner_id", "playera");
+        set_temp("owner_name", "东郭先生");
+        ::setup();
+}
+

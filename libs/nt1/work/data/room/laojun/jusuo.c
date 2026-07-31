@@ -1,0 +1,35 @@
+// SN:ikETXH\h4IQHP06A
+// File(/data/room/laojun/jusuo.c) of laojun's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "居所");
+	set ("long", @LONG
+这就是炼丹庐主人太上老君休息、读书的地方。楼上就是主人的
+卧室，西面则是书房。 
+LONG );
+
+	set("exits", ([
+		"up"   : __DIR__"woshi",
+                "west" : __DIR__"shufang",
+	]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("KEY_DOOR", ([
+                "exit" : "east",
+                "room" : __DIR__"huayuan",
+        ]));
+    
+        set("room_owner", "太上老君");
+        set("room_name", "炼丹庐");
+        set("room_id", "liandan");
+        set("room_owner_id", "laojun");
+        set("room_position", "碎石小道");
+}

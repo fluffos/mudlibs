@@ -1,0 +1,146 @@
+//fumo.c
+//伏魔剑的外功 金刚伏魔  根据对手正负神来决定出招方式
+//Mr.R编辑于2015.9.10
+
+#include <ansi.h>
+#include <skill.h>
+#include <weapon.h>
+#include <combat.h>
+#include <condition.h>
+
+inherit F_SSERVER;
+
+int perform(object me, object target)
+{
+        int damage;  //伤害变量
+		int skill;   //技能变量
+		int me_shen;  //出招方神
+		int target_shen; //对手神
+		int shen_diff;  //双方神差值
+		int ap,dp;
+        string msg;   //信息
+        object weapon;  //武器
+		
+	if (!target ) target = offensive_target(me);
+	if (!target || !target->is_character() || !me->is_fighting(target) )
+        return notify_fail("「金刚伏魔」只能在战斗中使用。\n");		
+	if (!objectp(weapon = me->query_temp("weapon")) || (string)weapon->query("skill_type") != "sword")	
+        return notify_fail(RED"施展「金刚伏魔」必须拿把剑吧？\n"NOR);
+//	if (target && target->query_temp("apply/shade_vision")) 
+//		return notify_fail("对方隐身了，你看不到"+target->query("name")+"。\n"); 	
+	if ((int)me->query_skill("fumo-jian", 1) < 1000 )						//技能等级要求
+        return notify_fail(WHT"你的伏魔剑法还不到家，无法使用金刚伏魔.\n"NOR);
+	if (me->is_busy()) 
+		return notify_fail("你现在正忙着呢！\n");
+	if((int)me->query_skill("hunyuan-yiqi",1) < 300  && (int)me->query_skill("yijinjing",1) < 300 )
+        return  notify_fail("你佛门内功修为不够，不能使用这一绝技!\n");
+// 	if (me->query_skill_mapped("force") != "yijinjing" && me->query_skill_mapped("force") != "hunyuan-yiqi" ) 
+//		return notify_fail("你未使用佛门内功, 不能使用这一绝技 !\n"); 
+//	if (me->query_skill_mapped("sword") != "fumo-jian")
+//		return notify_fail("你没正确激发该技能 。\n");	
+	if ((int)me->query("shen") < 0)    									
+		return notify_fail("你心存邪念，如何降妖伏魔？\n");	
+	if ((int)me->query("max_neili") < 100000)								
+		return notify_fail("你的内力修为不够。\n");
+	if ((int)me->query("max_jingli") < 100000)								
+		return notify_fail("你的精力修为不够。\n");
+	if( (int)me->query("jingli") < 1000 )
+		return notify_fail("你的精力不够。\n");		
+    if( (int)me->query("neili") < 1000 )
+        return notify_fail("你的真气不够。\n");
+	if (me->query_temp("autolian"))
+		return notify_fail("你正在发动自动连招！\n"); 	
+	if ( me->query_temp("cooldown") )	//CD写法	2017.9.7添加
+		return notify_fail("你处于技能冷却状态中，过会在使用吧。\n");
+		
+      msg = HIC "$N暗运真气，口中默念佛号，运气于臂，使出伏魔剑之“金刚伏魔”，顿时一片圣光笼罩全身！\n\n"NOR;   //技能效果描述
+	  msg += HIC "$N宝相庄严，手中长剑舞出佛号万字纹，剑影向$n笼罩而下！";
+	  msg +=
+	   
+         HIY "                                                         \n"                
+         HIY "                                                         \n"                
+         HIY "             卍卍卍卍卍卍卍卍卍卍              卍卍      \n"                 
+         HIY "             卍卍卍卍卍卍卍卍卍卍 |            卍卍 |    \n"                
+         HIY "               ------------- 卍卍 |            卍卍 |    \n"                 
+         HIY "                             卍卍 |            卍卍 |    \n"                
+         HIY "                             卍卍 |            卍卍 |    \n"                
+         HIY "                             卍卍 |            卍卍 |    \n"                                                   
+         HIY "                             卍卍 |            卍卍 |    \n"                
+         HIY "             卍卍卍卍卍卍卍卍卍卍卍卍卍卍卍卍卍卍卍 |    \n"                  
+         HIY "             卍卍卍卍卍卍卍卍卍卍卍卍卍卍卍卍卍卍卍 |    \n"                 
+         HIY "             卍卍 ---------- 卍卍 |-----------------     \n"                 
+         HIY "             卍卍  |         卍卍 |                      \n"                 
+         HIY "             卍卍  |         卍卍 |                      \n"                 
+         HIY "             卍卍  |         卍卍 |                      \n"                 
+         HIY "             卍卍  |         卍卍 |                      \n"                                    
+         HIY "             卍卍  |         卍卍卍卍卍卍卍卍卍卍卍 |    \n"                                   
+         HIY "             卍卍  |         卍卍卍卍卍卍卍卍卍卍卍 |    \n"                 
+         HIY "               ----            ---------------------     \n"                 
+         HIY "                                                         \n" NOR;              //技能效果描述
+		 
+	message_vision(msg, me, target);
+	me->set_temp("cooldown", 1);	//CD写法	2017.9.7添加
+	call_out("del_cooldown", 3, me);	//CD写法1		 
+		skill = (int)me->query_skill("fumo-jian",1)/10+(int)me->query_skill("buddhism",1)/10;
+		me_shen = me->query("shen");
+		target_shen = target->query("shen");
+		shen_diff = me_shen - target_shen;    //双方神差值
+	ap = me->query("xyzx_sys/level") + me->query_skill("fumo-jian", 1) + me->query_skill("sword") + me->query_skill("force");
+	dp = target->query("xyzx_sys/level") + target->query_skill("dodge") + target->query_skill("parry");
+	ap = ap*((int)me->query("breakup")+(int)me->query("breakup")*(int)me->query("breakup")+100)/100;
+	dp = dp*((int)target->query("breakup")+(int)target->query("breakup")*(int)target->query("breakup")+100)/100;
+        if (random(ap)>dp/3) 
+        {
+			if 	(target_shen>0)	
+				{
+				//对手为正神时，增加临时臂力、身法、伤害，刺出一剑 
+				me->add_temp("apply/strength",skill*3);
+				me->add_temp("apply/dexerity",skill*3);
+				me->add_temp("apply/attack",skill*3);
+				me->add_temp("apply/damage",skill*3);
+				COMBAT_D->do_attack(me, target, weapon, 1);
+				me->add_temp("apply/strength",-skill*3);
+				me->add_temp("apply/dexerity",-skill*3);
+				me->add_temp("apply/attack",-skill*3);
+				me->add_temp("apply/damage",-skill*3);
+				me->add("neili",-300);
+				msg = HIR "$N感受到$n的浩然正气，心中不禁油然而生惺惺相惜之意，精神抖擞，手中长剑挥洒如意，祭出会心一击！\n" NOR;
+				message_vision(msg, me, target);
+				}
+				else
+				{
+				//对手为负神时，伤气血（数值与双方神差值相关）
+                damage = (int)me->query_skill("fumo-jian", 1) + shen_diff/100000;
+				if (damage<10) damage = 10;
+				if (damage>200000) damage = 200000;				
+				damage = damage/2+random(damage/2);
+				damage = damage*(100-target->query_meridian())/100;
+                target->receive_damage("qi", damage,me);
+                target->receive_wound("qi", damage/2,me);
+                me->add("neili", -300);   				
+				msg = HIR "漫天圣光向$n笼罩过来，$n大吃一惊，心魔作祟，不免胆怯！身形一慢，胸口中剑！\n"NOR;
+				message_vision(msg, me, target, damage, HBWHT+HIM"气血伤害"NOR);	//2018.10.2阿飞改，优化化学伤害显示的写法
+//				if (userp(me) && me->query("env/no_combat_msg")<4) tell_object(me, HIW"该绝招对敌人气血的外伤为"+ damage +"，内伤为"+ damage/2 +"。\n" NOR);
+				}
+        } else
+        {
+				msg = HIG"$p瞧不清敌招来路，只得疾退闪避。\n"NOR;
+				message_vision(msg, me, target);
+                me->add("neili", -100);
+        }
+        
+		me->start_busy(1);
+		if(!target->is_fighting(me)) target->fight_ob(me);
+        return 1;
+}
+
+void del_cooldown(object me)	//CD写法1
+{ 
+	if ( !objectp(me) ) return;
+	if ( me->query_temp("cooldown") )	
+	{
+		me->delete_temp("cooldown");
+		tell_object(me, HIM"你呼出一口气，缓缓的将内力收回丹田。\n"NOR);
+	}	
+}
+

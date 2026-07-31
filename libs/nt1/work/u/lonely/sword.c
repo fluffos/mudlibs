@@ -1,0 +1,46 @@
+#define UNIQUE  10000
+#include <weapon.h>
+#include <ansi.h>
+
+inherit SWORD;
+inherit F_UNIQUE;
+inherit F_AUTOLOAD;
+
+int query_autoload() { return 1; }
+
+void create()
+{
+        set_name("天神之剑", ({ "wizard sword", "admin jian", "sword", "jian" }) );
+        set_weight(2000);
+        if( clonep() )
+                set_default_object(__FILE__);
+        else
+        {
+                set("long", "
+
+　　　　　　　　　　　          高处不胜寒的图形剑
+                                              "+HIY+"★"+HBMAG+"☆"+NOR+HIY+"★
+                                               "+HBMAG+"◎"+NOR+MAG+"◣             "+HIW+"╭╮
+"+HIW+" ▁▂▃▄▅▆██████████████████"+HBMAG+"■"+NOR+HBGRN+"╮"+NOR+HIB"█"+HIB+"□"+HIY+"■"+HIB+"□"+HIY+"■"+HIB+"□【=@)"+HIG+"﹏╮
+"+HBWHT+BLK+" ▇▆▄▃▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁"+HBMAG+"■"+NOR+HBGRN+"╯"+NOR+HIB+"█"+HIY+"■"+HIB+"□"+HIY+"■"+HIB+"□"+HIY+"■【=@)"+HIG+"﹌╮
+                                               "+HBMAG+"◎"+NOR+MAG+"◤ "+HIG"            "+HIW+"╰╯"+HIG+"╭╯
+                                              "+HIY+"★"+HBMAG+"☆"+NOR+HIY+"★"+HIG+"                ╰≈≈≈╮
+                                             "+HIY+"★★"+HIG+"                         ╭╯
+                                                                         ¤
+                                                                         ∩
+   "+HIC+"这是一柄 LONELY 的佩剑。\n"NOR);
+                set("wield_msg", "刹那间，一道气壮山河的黑虹，宛似天际间忽起的闪电一般，出现在众人眼前！\n");
+                set("unwield_msg", "但见$N将$n向天一直，数匹布条随风而起，将$n严严实实地裹了起来！\n");
+                set("unit", "柄");
+                set("material", "steel");
+                set("value", UNIQUE);
+                set("sharpness", 10);
+                set("rigidity", 10);
+                set("ductile", 10);
+                set("shape", ({ "long", "sword" }) );
+        }
+        init_sword(20);
+        setup();
+}
+
+

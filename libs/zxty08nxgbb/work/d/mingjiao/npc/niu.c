@@ -1,0 +1,28 @@
+// niu.c
+
+#include <ansi.h>
+inherit NPC;
+
+void create()
+{
+        set_name(HIY"老黄牛"NOR, ({ "huang niu", "niu" }) );
+        set("race", "野兽");
+        set("long", "一头皮包骨头，瘦得没肉的老黄牛！\n");
+        set("attitude", "peaceful");
+        set("str", 30);
+        set("cor", 30);
+        set("limbs", ({ "角", "身体", "前脚", "后脚" }) );
+        set("verbs", ({ "bite", "claw" }) );
+        set("age", 5);
+        set_temp("apply/attack", 5);
+        set_temp("apply/damage", 3);
+        set_temp("apply/armor", 5);
+
+        setup(); 
+        set("chat_chance", 10);
+        set("chat_msg", ({
+                "老黄牛昂头直叫：“哞！哞！哞！哞！哞！”\n",
+        } ) );                 
+}
+
+

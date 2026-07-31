@@ -1,0 +1,18 @@
+// SN:<E:=HR3gDN]XBcE]
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("小奔驰马[2;37;0m", ({"car ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "help nick
+它是黑色风的坐骑。
+");
+        set_temp("owner_id", "scncfyl");
+        set_temp("owner_name", "黑色风");
+        ::setup();
+}
+

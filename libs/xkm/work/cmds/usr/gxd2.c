@@ -1,0 +1,99 @@
+// gxd cmds jhy add 02.9.1
+
+#include <ansi.h>
+inherit F_CLEAN_UP;
+
+//string status_color(int current, int max);
+int main(object me, string arg)
+{
+	object ob;
+	string temp,tempd,tempp;
+	seteuid(getuid(me));
+	if(!arg)	ob = me;
+	else if (wizardp(me)) {
+		ob = present(arg, environment(me));
+		if (!ob) ob = find_player(arg);
+		if (!ob) ob = find_living(arg);
+		if (!ob) return notify_fail("您要察看谁的状态？\n");
+	}
+	else	return notify_fail("只有巫师能察看别人的状态。\n");
+	tempd=(string)(to_int(ob->query("meng/pts")));
+	tempp="您";
+	if( ob != me)
+	{	
+		if( ob->query("gender") == "男性" )	tempp="他";
+		else if(ob->query("gender") == "女性" || ob->query("gender") == "无性" )
+			tempp="她";
+		else tempp="它";
+	}
+	temp=HIY+ob->query("name")+HIY+"目前的侠客梦贡献度是： "HIR + tempd + HIY" 点！\n"NOR;
+	if(ob->query("gxdslz")!=0)
+	{
+		tempd=(string)ob->query("gxdslz");
+		temp += HIC"　　"+tempp+"已经兑换了 " HIR + tempd + HIC " 次舍利子！\n"NOR;
+	}
+	if(ob->query("gxdptz")!=0)
+	{
+		tempd=(string)ob->query("gxdptz");
+		temp += HIC"　　"+tempp+"已经兑换了 " HIR + tempd + HIC " 次菩提子！\n"NOR;
+	}
+	if(ob->query("gxdqq")!=0)
+	{
+		tempd=(string)ob->query("gxdqq");
+		temp += HIC"　　"+tempp+"已经兑换了 " HIR + tempd + HIC " 次 QQ 糖！\n"NOR;
+	}
+	if(ob->query("gxdqq2")!=0)
+	{
+		tempd=(string)ob->query("gxdqq2");
+		temp += HIC"　　"+tempp+"已经兑换了 " HIR + tempd + HIC " 次大 QQ 糖！\n"NOR;
+	}
+	if(ob->query("gxdper")!=0)
+	{
+		tempd=(string)ob->query("gxdper");
+		temp += HIC"　　"+tempp+"已经兑换了 " HIR+ tempd + HIC " 点容貌！\n"NOR;
+	}
+	if(ob->query("gxdkar")!=0)
+	{
+		tempd=(string)ob->query("gxdkar");
+		temp += HIC"　　"+tempp+"已经兑换了 " HIR + tempd + HIC" 点福缘！\n"NOR;
+	}
+	if(ob->query("gxdstr")!=0)
+	{
+		tempd=(string)ob->query("gxdstr");
+		temp += HIC"　　"+tempp+"已经兑换了 " HIR + tempd + HIC " 点臂力！\n"NOR;
+	}
+	if(ob->query("gxdint")!=0)
+	{
+		tempd=(string)ob->query("gxdint");
+		temp += HIC"　　"+tempp+"已经兑换了 " HIR + tempd + HIC " 点智力！\n"NOR;
+	}
+	if(ob->query("gxdcon")!=0)
+	{
+		tempd=(string)ob->query("gxdcon");
+		temp += HIC"　　"+tempp+"已经兑换了 " HIR + tempd + HIC " 点根骨！\n"NOR;
+	}
+	if(ob->query("gxddex")!=0)
+	{
+		tempd=(string)ob->query("gxddex");
+		temp += HIC"　　"+tempp+"已经兑换了 " HIR + tempd + HIC " 点身法！\n"NOR;
+	}
+	if(ob->query("9yin")=="granted")
+		temp += HIC"　　"+tempp+"已经获得了"HIR"学习九阴真经上特殊武功"HIC"的权利！\n"NOR;
+	temp += HIY"感谢您对"HIR"★侠客梦★"HIY"的支持，希望您今后继续努力！\n"NOR;
+ 	printf(temp);
+  	return 1;
+}
+int help(object me)
+{
+	write(@HELP
+指令格式 :
+	gxd
+	gxd <对象名称>	(巫师专用)
+
+这个指令可以显示您(您)或指定对象(含怪物)的侠客贡献度。
+
+see also : score
+HELP);
+	return 1;
+}
+

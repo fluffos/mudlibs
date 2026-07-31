@@ -1,0 +1,32 @@
+// SN:H:A6MRXEeCMVZMV^
+// File(/data/room/shadow/lianwu.c) of shadow's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "练武场");
+	set ("long", @LONG
+此处便是神影之穴的练武场，人在江湖，武功万万不可荒废。 
+LONG );
+
+	set("exits", ([
+                "west" : __DIR__"houyuan",
+	]));
+
+        set("objects", ([
+                "/clone/npc/mu-ren" : 4,
+        ]));
+
+        set("outdoors", "playertown");
+        set("no_sleep_room", 1);
+
+        setup();
+    
+        set("room_owner", "影子无敌");
+        set("room_name", "神影之穴");
+        set("room_id", "lightroom");
+        set("room_owner_id", "shadow");
+        set("room_position", "青砖路");
+}

@@ -1,0 +1,43 @@
+// SN:B\;4@oBJjmdkQ?NK
+// File(/data/room/tangfang/dating.c) of tangfang's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        set("short", "一间小屋大厅");
+	set ("long", @LONG
+[1;36m不大不小的一间厅堂，正中的墙壁上挂着一幅画，画中的兰花栩栩如生
+
+，你仿佛能闻到那淡淡的幽香，只是那朵兰花太寂寞了，你甚至不敢大声呼
+
+吸，唯恐惊扰了她的寂静。大厅的陈设十分简单，一块屏风，几张椅子，椅
+
+子十分新，显见得平时并无太多的人来访。[2;37;0m
+LONG );
+
+	setup();
+
+	set("exits", ([
+                "east"   : __DIR__"woshi",
+		"north"  : __DIR__"houyuan",
+	]));
+
+        create_door("east", "木门", "west", DOOR_CLOSED);
+
+        set("no_sleep_room", 1);
+
+        set("KEY_DOOR", ([
+                "exit" : "south",
+                "room" : __DIR__"xiaoyuan",
+        ]));
+    
+        set("room_owner", "唐方");
+        set("room_name", "一间小屋");
+        set("room_id", "tangfang");
+        set("room_owner_id", "tangfang");
+        set("room_position", "南海之滨");
+}

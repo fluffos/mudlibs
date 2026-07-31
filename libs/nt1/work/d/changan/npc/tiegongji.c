@@ -1,0 +1,42 @@
+//tiegongji.c
+
+inherit BUNCH_NPC;
+inherit F_BANKER;
+
+void create()
+{
+        set_name("铁公鸡", ({"tie gongji", "tie", "gongji"}));
+        set("title", "钱庄老板");
+        set("gender", "男性");
+        set("age", 46);
+        set("kee", 800); 
+        set("max_kee", 800);
+        set("sen", 200);
+        set("max_sen", 200);
+        set("combat_exp", 50000);
+        set("attitude", "friendly");
+        set("env/wimpy", 50);
+        set("chat_chance", 10);
+        set("chat_msg", ({
+        	"铁公鸡嘿嘿嘿地笑了几声：我这把算盘几十年来可从来没算错过。\n",
+        	"铁公鸡骄傲的说道：本银号已经有上百年的历史，在长安城可以说是第一家。\n"
+        }));
+
+        setup();
+        carry_object(__DIR__"obj/choupao")->wear();
+        add_money("silver", 50);
+}
+
+void init()
+{
+       add_action("do_check", "check"); 
+       add_action("do_check", "chazhang"); 
+       add_action("do_tax", "tax"); 
+        add_action("do_convert", "convert");
+        add_action("do_convert", "duihuan");
+        add_action("do_deposit", "deposit");
+        add_action("do_deposit", "cun");
+        add_action("do_withdraw", "withdraw");
+        add_action("do_withdraw", "qu");
+        delete_temp("busy"); 
+}

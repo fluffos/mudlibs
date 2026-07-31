@@ -1,0 +1,18 @@
+// SN:G1i7FT7\QVj8]V>@
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;36m神雕[2;37;0m", ({"shen diao"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "大
+它是杨家哥哥的坐骑。
+");
+        set_temp("owner_id", "guoer");
+        set_temp("owner_name", "杨家哥哥");
+        ::setup();
+}
+

@@ -1,0 +1,18 @@
+// SN:B<E:LAWmUcfclM^c
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m宝马[2;37;0m", ({"bao ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "公司专用车
+它是浪氏金业的坐骑。
+");
+        set_temp("owner_id", "wanb");
+        set_temp("owner_name", "浪氏金业");
+        ::setup();
+}
+

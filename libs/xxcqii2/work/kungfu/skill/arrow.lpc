@@ -1,0 +1,4 @@
+// arrow.c
+
+inherit SKILL;
+

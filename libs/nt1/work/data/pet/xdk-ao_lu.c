@@ -1,0 +1,18 @@
+// SN:9J_4Kl:GPZAona4o
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m色狐狐[2;37;0m", ({"ao_lu hu"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "女的。。漂亮的
+它是武当道士的坐骑。
+");
+        set_temp("owner_id", "xdk");
+        set_temp("owner_name", "武当道士");
+        ::setup();
+}
+

@@ -1,0 +1,39 @@
+#include <ansi.h>
+inherit F_SSERVER;
+int exert(object me, object target)
+{
+    int sp, dp;
+    if ( target == me )
+        target = offensive_target(me);
+    if( !objectp(target) || target->query("id") == "mu ren" )
+        return notify_fail("你要对谁施展寒眼绝技？\n");
+    if (!living(target))
+        return notify_fail("已经不需要为"+target->name()+"浪费精力了！\n");
+   if( (int)me->query_skill("jiuyin-xinjing",1) < 800 )
+        return notify_fail("你的九阴心经功力不够，不能凝神攻击对方！\n");
+    if( (int)me->query("neili",1) < 50 )
+        return notify_fail("你的内力不够，不能使用九阴心经。\n");
+    message_vision(HIW "$N盯着$n的双眼，施展开九阴密技，$n只觉得$N的盯着自己的眼神冰冷异常！\n\n" NOR, me, target );
+    if( living(target))
+        if( !target->is_killing(me) )
+            target->kill_ob(me);
+    sp = me->query_skill("force") + me->query_skill("parry") + me->query_skill("jiuyin-xinjing",1)/2;
+    dp = target->query_skill("force");
+    
+    if (( random(sp) > random(dp) ) )
+    {
+        tell_object(target, HIW " 你忽然觉得脑海中闪过一道寒光，紧接着全身血液就像被冻僵了一般！\n" NOR);
+        tell_object(me, HIB "你看到" + target->name() + "脸色忽然由红转白，紧接着全身抖个不停！\n" NOR);
+        target->receive_wound("jing", 10 + random((int)me->query_skill("jiuyin-xinjing", 1)),me );
+        me->start_busy(2);
+        target->start_busy(random(3));
+        me->add("neili", -50);
+    }
+    else
+    {   
+        message_vision(HIY "$p内力深厚，盯睛回望着$P，反而使得$P心神不宁。\n" NOR, me, target);
+        me->start_busy(4);
+    }
+    return 1;
+}
+

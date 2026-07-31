@@ -1,0 +1,32 @@
+// SN:iVMXk]K<F@IXonZW
+// ITEM Made by player(小草:grass) /data/item/g/grass-moon.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Thu Apr  8 19:19:56 2004
+#include <ansi.h>
+#include <armor.h>
+
+inherit BOOTS;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;35m舫穗之月[2;37;0m", ({ "moon" }));
+	set_weight(3600);
+	set("item_make", 1);
+	set("unit", "双");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一双靴子。
+靴子缘上刻着一行小字：小草(grass)
+");
+	set("value", 2100000);
+	set("point", 240);
+	set("material", "magic stone");
+	set("wear_msg", "[35m☆比初始更攸远的存在[1;36m★比故乡更温柔的归宿[30m☆神圣三角的黑色支点[1;32m★我在此请您聆听我的祈愿[1;31m☆我在此以吾之生灵为献祭[1;37m★一如您遍照冥府的月光[1;33m☆让我所面对的存在[1;35m★笼罩在您的怀抱之中[2;37;0m\n");
+	set("remove_msg", "[35m☆比初始更攸远的存在[1;36m★比故乡更温柔的归宿[30m☆神圣三角的黑色支点[1;32m★我在此请您聆听我的祈愿[1;31m☆我在此以吾之生灵为献祭[1;37m★一如您遍照冥府的月光[1;33m☆让我所面对的存在[1;35m★笼罩在您的怀抱之中[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/armor", apply_armor());
+	set("armor_prop/dodge", apply_armor() / 10 + 1);
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

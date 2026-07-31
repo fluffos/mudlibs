@@ -1,0 +1,18 @@
+// SN:_EeJ3k1R[jVP3dhm
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("飞狼[2;37;0m", ({"fei lang"}));        
+        set("gender", "男性");                
+        set("unit", "条");
+        set("long", "飞.....
+它是李逍遥的坐骑。
+");
+        set_temp("owner_id", "cmlxy");
+        set_temp("owner_name", "李逍遥");
+        ::setup();
+}
+

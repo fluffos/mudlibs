@@ -1,0 +1,18 @@
+// SN:\YT<1OQoD;mDdgbR
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("小猪雕[2;37;0m", ({"fat diao"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "胖胖的
+它是桃叶的坐骑。
+");
+        set_temp("owner_id", "taoye");
+        set_temp("owner_name", "桃叶");
+        ::setup();
+}
+

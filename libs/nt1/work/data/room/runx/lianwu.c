@@ -1,0 +1,32 @@
+// SN:05F0:OQLEl\[8\Ig
+// File(/data/room/runx/lianwu.c) of runx's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "练武场");
+	set ("long", @LONG
+此处便是魔神宫的练武场，人在江湖，武功万万不可荒废。 
+LONG );
+
+	set("exits", ([
+                "west" : __DIR__"houyuan",
+	]));
+
+        set("objects", ([
+                "/clone/npc/mu-ren" : 4,
+        ]));
+
+        set("outdoors", "xiakedao");
+        set("no_sleep_room", 1);
+
+        setup();
+    
+        set("room_owner", "魔神");
+        set("room_name", "魔神宫");
+        set("room_id", "runx");
+        set("room_owner_id", "runx");
+        set("room_position", "平原小路");
+}

@@ -1,0 +1,3 @@
+// leg.c
+
+inherit SKILL;

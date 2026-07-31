@@ -1,0 +1,110 @@
+// /d/dali/npc/can2.c
+
+inherit NPC;
+
+string look_can();
+int change_flag,catched;
+void create()
+{
+	set_name("蚕", ({"can"}) );
+	set_weight(60);
+	set("race", "野兽");
+	set("age", 8);
+	set("long", (: look_can :) );
+	change_flag=0;
+	catched=0;
+	set("str", 40);
+	set("dex", 50);
+	set("limbs", ({ "头部", "身体" }) );
+	set("verbs", ({ "bite", "poke" }) );
+	set("chat_chance", 4);
+	set("chat_msg", ({
+		(: random_move :),
+	}));
+	set_temp("apply/attack", 33);
+	set_temp("apply/armor", 20);
+	setup();
+}
+void init()
+{
+	add_action("do_zhuo","zhuo");
+	add_action("do_drop","drop");
+	call_out("gone",10,this_object());
+}
+string look_can()
+{
+	if(catched==0)
+		return "这是一只很跌伤了的小蚕，正蠕动着。\n"+
+			"那么可怜，可能捉(zhuo)它也没什么用的。\n";
+	return "这是一只很跌伤了的小蚕，正蠕动着。\n";
+}
+
+int do_drop(string arg)
+{
+	object me,obj;
+	me=this_player();
+	obj=this_object();
+	obj->move(environment(me));
+	catched=0;
+	if(member_array(arg,obj->parse_command_id_list())==-1)
+		return notify_fail("你要扔什么？\n");
+	message_vision("$N把身上的"+obj->query("name")+"扔到地上。\n",me);
+	remove_call_out("gone");
+	call_out("gone",10,this_object());
+	return 1;
+}
+void gone(object ob)
+{
+	string out_room;
+	if (catched==1)
+		return;
+	out_room=environment(ob)->query("outdoors");
+	if(!out_room||out_room=="")
+		message_vision("一条"+ob->query("name")+
+			"在地下找了条缝，钻了进去，找不着了。\n",ob);
+	else
+		message_vision("一条"+ob->query("name")+
+			"匆匆爬进草丛中，不见了。\n",ob);
+	destruct(ob);
+}
+int do_zhuo(string arg)
+{
+	if(!arg||arg==""||arg!="can")
+		return notify_fail("你要捉什么东西?\n");
+	if(environment(this_object())->is_character())
+		return 0;
+	message_vision("$N伸手一把把"+this_object()->query("name")+
+		"抓住，差点就把它捏得稀烂。\n",this_player());
+	this_object()->move(this_player());
+	this_object()->unconcious();
+	catched=1;
+}
+//自己做昏迷和苏醒的函数！
+void unconcious()
+{
+	object defeater;
+
+	if( !living(this_object()) ) return;
+	this_object()->remove_all_enemy();
+	set("hunmi",1);
+	this_object()->disable_player("");
+	set_temp("block_msg/all", 1);
+	call_out("revive", random(100 - query("con")) + 30);
+}
+void revive(int quiet)
+{
+	object player;
+	remove_call_out("revive");
+	catched=0; //清除被捉的状态！
+	while( environment()->is_character() )
+	{	
+		player=environment();
+		this_object()->move(environment(environment()));
+	}
+	this_object()->enable_player();
+	message_vision("$N从"+player->query("name")+"身上逃了出来。\n",this_object());
+	set_temp("block_msg/all", 0);
+	set("hunmi",0);
+	call_out("gone",10,this_object());
+}
+

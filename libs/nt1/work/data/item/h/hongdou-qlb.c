@@ -1,0 +1,32 @@
+// SN:Fj=G1UYNJ@_iCc`7
+// ITEM Made by player(红豆:hongdou) /data/item/h/hongdou-qlb.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Thu Jun 19 21:17:58 2003
+#include <ansi.h>
+#include <armor.h>
+
+inherit CLOTH;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;31m麒麟臂[2;37;0m", ({ "qlb" }));
+	set_weight(1400);
+	set("item_make", 1);
+	set("unit", "件");
+	set("long", "这是由[1;37m冰蚕丝[2;37;0m炼制而成的一件战衣。
+[1;33m没什么好看的，红豆的手臂而已。[2;37;0m
+战衣缘上刻着一行小字：红豆(hongdou)
+");
+	set("value", 2100000);
+	set("point", 205);
+	set("material", "silk");
+	set("wear_msg", "[1;36m$N怒气冲天，左臂隐隐现出[1;31m红色，[1;36m似着火一般。[2;37;0m\n");
+	set("remove_msg", "[1;37m$N怒气开始平息，$n[1;37m上的红色也开始褪去。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/armor", apply_armor());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

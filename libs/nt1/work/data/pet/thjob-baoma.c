@@ -1,0 +1,18 @@
+// SN:jFG0MG;WN65iDjZ6
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("宝马马[2;37;0m", ({"baoma ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "这是一匹宝马。
+它是桃花一号的坐骑。
+");
+        set_temp("owner_id", "thjob");
+        set_temp("owner_name", "桃花一号");
+        ::setup();
+}
+

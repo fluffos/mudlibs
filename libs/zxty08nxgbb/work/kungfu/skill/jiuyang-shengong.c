@@ -1,0 +1,94 @@
+// jiuyang-shengong.c
+
+#include <ansi.h>
+inherit FORCE;
+
+mapping *action = ({
+
+        ([      "action":
+"$N使出一招「"CYN"三"HIC"重天地混元"NOR"」，左手聚出一团混元真气击向$n的$l",
+                "force":                300,
+                "damage_type":  "瘀伤"
+
+        ]),
+
+        ([      "action":
+"$N使出一招「"YEL"五"HIC"重天地混元"NOR"」，右手聚出一团混元真气击向$n的$l",
+                "force":                500,
+                "damage_type":  "瘀伤"
+
+        ]),
+
+        ([      "action":
+"$N使出一招「"HIR"七"HIC"重天地混元"NOR"」，双手由掌变拳，聚出一团混元真气击向$n的$l",
+                "force":                700,
+                "damage_type":  "瘀伤"
+        ]),
+
+        ([      "action":
+"$N使出一招「"HIW"风"HIB"雷"HIY"震"HIC"九州"NOR"」，全身腾空而起，化作一团混元真气击向$n的$l",
+                "force":                1000,
+                "damage_type":  "瘀伤"
+        ]),
+
+});
+
+mixed hit_ob(object me, object victim, int damage_bonus)
+{
+    int skill = me->query_skill("jiuyang-shengong",1)/800;
+     if( damage_bonus < 600 ) return 0;
+    if ( skill < 1 ) skill = 1;
+if (!userp(me)) skill = 1;
+    if( random(5*(me->query_skill("jiuyang-shengong",1))) > (damage_bonus )) {
+                        victim->receive_wound("qi", (damage_bonus*skill ));
+                        victim->receive_wound("jing", (damage_bonus*skill ));
+                        victim->add("neili", -(int)me->query("jiali"));
+                        return HIR "$N的九阳神功摧毁了$n的真元！！！！\n" NOR;
+}
+}
+
+int valid_enable(string usage) 
+{ 
+        return  usage=="unarmed" ||
+                usage=="parry"||
+                usage=="force";
+
+}
+
+int valid_learn(object me)
+{
+    if ((int)me->query_skill("jiuyang-shengong",1) >= 0)
+        return notify_fail("九阳神功只能靠楞伽经提高。\n");
+    return 1;
+}
+
+int practice_skill(object me)
+{
+        return notify_fail("九阳神功只能用学的，或是从运用(exert)中增加熟练度。\n");
+}
+
+int effective_level() { return 21; }
+
+mapping query_action(object me, object weapon)
+{
+        return action[random(sizeof(action))];
+}
+
+string *parry_msg = ({
+
+        "$n衣衫澎湃，内力汩汩，$N根本不可近身。\n",
+        "$n长袖一甩，一股大力将$N送出丈外。\n",
+        "$n施展出「九阳无我」，轻描淡写的化解了$N的攻势。\n",
+});
+
+string query_parry_msg(object me,object weapon)
+{
+            return parry_msg[random(sizeof(parry_msg))];
+}
+
+string exert_function_file(string func)
+{
+        return __DIR__"jiuyang-shengong/" + func;
+}
+
+

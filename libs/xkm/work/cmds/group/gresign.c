@@ -1,0 +1,68 @@
+// by tiantian(www.wangcf.com) 2001.4
+// 退出帮派
+
+#include <group.h>
+#include <ansi.h>
+
+#define ADRM "/cmds/adm/adrm"
+
+int main(object me, string arg) 
+{
+    string group_file, str,english,chinese,dir;     //motified for 解散帮派 
+    
+    group_file = GROUP_D->query_home( me ) ;    //add for 解散帮派
+	if( !me->query("group") )
+		return notify_fail( "你并没有加入任何帮派。\n" );
+
+	if( me->query("group/level") == GROUP_MASTER && load_object( group_file )->query("people")>1 )  //motified for 解散帮派
+		return notify_fail("帮主请先让位或解散帮派后再辞职。\n");
+
+        if( me->query("group/level") == GROUP_MASTER && load_object( group_file )->query("people")==1 ) //add for 解散帮派
+        {
+        	english=me->query("group/group");
+        	chinese=to_chinese( english );
+        	dir = resolve_path(GROUP_DIR, english);
+        	ADRM->main(me,"-R "+dir); 
+               
+               me->set( "title", me->query( "group/old_title" ) );
+	       me->delete( "group" );
+	       me->save();
+               message( "channel:chat", HIC"【江湖传闻】："
+    	        + me->query("name") + "即日解散［"HIW 
+    	        + chinese + HIC"］。\n"NOR, users() );
+    	       CHINESE_D->remove_translate(english, chinese);
+        }
+        	
+        else
+        {	
+	group_file = GROUP_D->query_home( me );
+
+	load_object( group_file ) -> add( "people", -1 );
+	str="我宣布即日起辞去帮中职务 !";
+	CHANNEL_D->do_channel(me, "chat", sprintf("%s",str));
+
+	GROUP_D->save_group( me );
+	me->set( "title", me->query( "group/old_title" ) );
+	me->delete( "group" );
+	me->save();
+	}
+	
+	return 1;
+}
+
+int help(object me) 
+{
+   write(@HELP
+----------------------------------------
+指令格式 : gresign
+   
+退出帮派。
+如果这个帮派只剩你一人而且你是头，就解散帮派。
+
+相关命令：gjoin gaccept gbanish
+
+----------------------------------------
+HELP
+   );
+  return 1;
+}

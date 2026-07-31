@@ -1,0 +1,18 @@
+// SN:7RLd3TBWa<C`MbKP
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;32m神勇[1;32m小白[1;36m象[2;37;0m", ({"eyejolin xiang"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "不用多说~反正是最恶的
+它是蔡依林的坐骑。
+");
+        set_temp("owner_id", "square");
+        set_temp("owner_name", "蔡依林");
+        ::setup();
+}
+

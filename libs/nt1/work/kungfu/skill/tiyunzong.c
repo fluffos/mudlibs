@@ -1,0 +1,117 @@
+// tiyunzong.c 梯云纵
+// by Lonely
+
+#include <ansi.h>
+inherit SKILL;
+
+string *dodge_msg = ({
+        "$p吸一口气，猛地里双脚一撑，提身而起。\n",
+        "危急中$p提一口真气，双臂急振，上窜丈余。\n",
+        "$p向后纵出，便如头大鸟一般，稳稳的飞出数丈之外。\n",
+        "$p当即纵身高跃，一转一折，轻轻巧巧的落在一旁。\n",
+        "但$p变招奇速，右足向前踢出，身子已然腾起，轻轻巧巧的跨过了$P。\n",
+        "$p一声清啸，拔身而起，在半空中轻轻一个转折，飘然落在丈许之外。\n",
+        "陡然间$p身形拔起，在空中急速盘旋，连转四个圈子，愈转愈高，又是一个转折，轻轻巧巧的落在数丈之外。\n",
+});
+
+string query_dodge_msg()
+{
+        return dodge_msg[random(sizeof(dodge_msg))];
+}
+
+int valid_enable(string usage)
+{
+        return usage == "dodge" || usage == "move";
+}
+
+int valid_learn(object me)
+{
+        return 1;
+}
+
+int practice_skill(object me)
+{
+        if( (int)me->query("qi") < 70 )
+                return notify_fail("你的体力太差了，无法练习梯云纵。\n");
+        if( (int)me->query("neili") < 70 )
+                return notify_fail("你的内力太差了，无法练习梯云纵。\n");
+        me->receive_damage("qi", 60);
+        me->add("neili", -60);
+        return 1;
+}
+
+/*
+mixed valid_damage(object ob, object me, int damage, object weapon) 
+{
+        mixed result; 
+        int ap, dp, mp; 
+
+        if ((int)me->query_skill("tiyunzong", 1) < 100 || 
+            ! living(me)) 
+                return; 
+
+        mp = ob->query_skill("martial-cognize", 1); 
+        ap = ob->query_skill("force") + mp; 
+        dp = me->query_skill("dodge", 1) / 2 + 
+             me->query_skill("tiyunzong", 1); 
+
+        if (ap / 2 + random(ap) < dp) 
+        {
+                result = ([ "damage": -damage ]); 
+                switch (random(3)) 
+                {
+                case 0:
+                        result += (["msg" : HIC "$n" HIC "一招「白鹤冲天」，身体向上笔直地纵起丈余，" 
+                                            "$N顿然失去目标，劲招失手！\n" NOR]); 
+                        break; 
+                case 1:
+                        result += (["msg" : HIC "$n" HIC "一个「鹞子翻身」，向后纵出数丈之远，" 
+                                            "$N一招失手，攻守之势已露破绽！\n" NOR]); 
+                        if (! ob->is_busy())
+                        ob->start_busy(random(2)); 
+                        break; 
+                default: 
+                        result += (["msg" : HIC "$n" HIC "使出「大鹏展翅」，向一旁飘然纵出，" 
+                                            "已然毫发无损地轻轻着地。\n" NOR]); 
+                        break; 
+                }
+                return result; 
+        } else 
+        if (mp >= 100) 
+        {
+                switch (random(3)) 
+                {
+                case 0: 
+                        result = HIY "$n" HIY "一招「白鹤冲天」，身体向上笔直地纵起丈余，" 
+                                 "可是$N" HIY "早以看破$n的企图。\n" NOR;  
+                        break; 
+                case 1: 
+                        result = HIY "$n" HIY "一个「鹞子翻身」，向后纵出数丈之远，" 
+                                 "$N立刻跟上随手挥招直入，进袭$n！\n" NOR;  
+                        break; 
+                default: 
+                        result = HIY "$n" HIY "使出「大鹏展翅」，向一旁飘然纵出，" 
+                                 "突然发现$N速度更快，也先等候在此！\n" NOR;  
+                        break; 
+                }
+                COMBAT_D->set_bhinfo(result); 
+        }
+}
+*/
+
+int query_effect_dodge(object attacker, object me) 
+{
+        int lvl;
+        lvl = me->query_skill("tiyunzong", 1);
+        if (lvl < 80)  return 0;
+        if (lvl < 200) return 50;
+        if (lvl < 280) return 80;
+        if (lvl < 350) return 100;
+        return 120;
+}
+
+string perform_action_file(string action) 
+{
+        return __DIR__"tiyunzong/" + action; 
+}
+

@@ -1,0 +1,18 @@
+// SN:GdCbnOEQ?=1\6hcA
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m雪狼[2;37;0m", ({"xueyu lang"}));        
+        set("gender", "男性");                
+        set("unit", "条");
+        set("long", "一匹狼
+它是米甲米的坐骑。
+");
+        set_temp("owner_id", "vegae");
+        set_temp("owner_name", "米甲米");
+        ::setup();
+}
+

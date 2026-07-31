@@ -1,0 +1,35 @@
+// SN:d8dfP2c<IM0H[P;N
+// File(/data/room/gangbj/jusuo.c) of gangbj's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "居所");
+	set ("long", @LONG
+这就是三藏的庙主人唐三藏休息、读书的地方。楼上就是主人的
+卧室，西面则是书房。 
+LONG );
+
+	set("exits", ([
+		"up"   : __DIR__"woshi",
+                "west" : __DIR__"shufang",
+	]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("KEY_DOOR", ([
+                "exit" : "east",
+                "room" : __DIR__"huayuan",
+        ]));
+    
+        set("room_owner", "唐三藏");
+        set("room_name", "三藏的庙");
+        set("room_id", "gangbj");
+        set("room_owner_id", "gangbj");
+        set("room_position", "寒水潭");
+}

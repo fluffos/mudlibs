@@ -1,0 +1,317 @@
+ //add by fudan fy wizard_group
+//for we want add a new method for player
+//#pragma optimize
+#include <ansi.h>
+mapping *quests,quests_fin=([]);
+mapping *read_table(string file);
+varargs void init_dynamic_quest(int hard);
+varargs int spread_quest(mapping one_quest, int hard);
+object find_env(object ob);
+varargs int already_spreaded(mixed one_quest, int hard);
+int quest_reward( object me, object quest_item);
+string dyn_quest_list();
+#define MAX_DIS 7
+#define MAX_ALT  2
+#define MAX_DIR  8
+string locate_obj(object me,string str);
+void create()
+{
+        string file;
+        int i;
+        object item;
+        string id;
+        quests = read_table("/quest/dynamic_npc_quest");
+/*      for( i=0; i < sizeof(quests); i++)
+        {
+        if(!objectp(item= find_object(quests[i]["file_name"])))
+        item = load_object(quests[i]["file_name"]);
+                id=item->query("name");
+                quests_fin[id]="no";
+        }
+*/
+//      file = read_file("/quest/dynamic_location");
+//      roomlines = explode(file,"\n"); 
+        //CRON_D->set_last_hard_dis_npc();
+        init_dynamic_quest(1);
+}
+int quest_reward(object me, object quest_item)
+{
+        mapping quest;
+        string id;
+   int hard;
+        int exp,pot,score;
+        if( wizhood(me)=="(dummy)") return 0;
+        if( quest_item->query("killer") != me ) return 0;
+        if( !quest = quest_item->query("dynamic_quest")) return 0;
+//      if(base_name(who) != quest["owner_name"]) return 0;
+        
+        id=quest["file_name"];
+        if(     quests_fin[id]) return 0;
+        quests_fin[id]=1;       
+        if(me->query("combat_exp")>800000){
+        exp=1000+random(100)*random(100)/4;
+        pot=exp/8+random(exp/8)+random(exp/12)+random(exp/12);
+        score=random(50)+1;
+        }
+        else {
+          exp =(600+random(400)*random(100)/40);
+          pot = exp/12+random(exp/12);
+          score = random(15)+1*quest["hard"];}
+         me->add("combat_exp",exp);
+        me->add("potential",pot);
+        me->add("score",score);
+        tell_object(me,HIW"恭喜你，又完成了一个任务。\n你被奖励了：\n" +
+        chinese_number(exp) + "点实战经验\n"+
+        chinese_number(pot) + "点潜能\n" +
+        chinese_number(score)+"点综合评价\n你向风云的终极梦想又前进了一步。\n"NOR);
+        me->add("TASKNPC",1);
+//      if( !undefinedp(quest["fin_func"]))
+//      call_other(this_object(),quest["fin_func"], me, quest_item);
+        return 1;
+} 
+varargs void init_dynamic_quest(int hard)
+{
+        int i;
+        message("system", ""HIY"天机老人"HIW"缓缓地长吟道:"HIR "\n 乱世英雄辈出．．．\n",users());
+        for( i=0; i < sizeof(quests); i++)
+        {
+                spread_quest(quests[i],hard);
+        }
+        message("system", HIG "．．．但看鹿死谁手。\n" NOR,users());  
+}
+varargs int spread_quest(mapping quest, int hard)
+{
+        object obj0,obj1,obj2,obj3;
+        object cur_obj;
+        object next_obj;
+        object tar;
+        object *ob_list;
+        object *inv;
+        object *target=({});
+        int i;
+        string location;
+        string id;
+        if(already_spreaded(quest["file_name"],hard)) return 0; 
+        reset_eval_cost();
+        location = TASK_D->random_room();
+        obj0=find_object(location);
+        if(obj0)
+                obj0->reset();
+        else
+                obj0=load_object(location);
+        cur_obj =obj0;
+        if(cur_obj)
+        {
+      quest["completed"]=0;
+                ob_list = children(quest["file_name"]);
+                if( sizeof(ob_list) )
+                        if( ob_list[0]->is_fighting() )
+                                return 0;
+                        else destruct(ob_list[0]);
+                tar = new(quest["file_name"]);
+                tar->set("ALWAYS_ACTIVE",1);
+                tar->set("dynamic_quest",quest);
+                tar->set("wimpy",50);
+                id = quest["file_name"];
+                quests_fin[ id ]=0;
+                tar->move(cur_obj);
+        }
+        return 1;
+} 
+string dyn_quest_list()
+{
+        string title, nickname,id;
+        string output="";
+        object owner,item;
+    int i;
+    for( i=0; i < sizeof(quests); i++)
+        {
+                reset_eval_cost();
+//      if(!objectp(owner= find_object(quests[i]["owner_name"])))
+//      owner = load_object(quests[i]["owner_name"]);
+//        if(!objectp(item= find_object(quests[i]["file_name"])))
+        item = new(quests[i]["file_name"]);
+                title = item->query("title");
+                nickname=item->query("nickname");
+                if( !title) title=" ";
+                if( !nickname) nickname=" ";
+        if(already_spreaded(quests[i]["file_name"]))
+        {
+                if(random(2))
+                output += sprintf("%s%s%s（%s）\n",title, nickname, item->query("name"),item->query("id"));
+                else
+                output = sprintf("%s%s%s（%s）\n",title, nickname, item->query("name"),item->query("id")) + output;
+        }
+        else
+        {
+        if(random(2))
+        output += sprintf("%s%s%s（%s）〔已完成〕\n",title, nickname, item->query("name"),item->query("id"));
+        else
+        output = sprintf("%s%s%s（%s）〔已完成〕\n",title, nickname, item->query("name"),item->query("id")) + output;
+        }
+        destruct(item);
+        }
+        return output;
+}
+string locate_obj(object me,string strr)
+{
+        string *distance = ({
+"极近", "很近", "比较近", "不远",
+"不近", "比较远", "很远", "极远"
+        });
+        string *altitude =({
+"高处", "地方", "低处"
+        });
+        string *directions=({
+"周围","北方", "南方", "东方","西方",
+"东北方","西北方","东南方","西南方"
+        });
+        object ob, tmpobj,where, *ob_list;
+        object item,room;
+        string output,dis,alt,dir;
+        int i;
+        int x,y,z,x0,y0,z0;
+        int realdis;
+        int tmp;
+        string str="";
+        reset_eval_cost();
+        for( i=0; i < sizeof(quests); i++)
+        {
+        if(!objectp(item= find_object(quests[i]["file_name"])))
+                item = load_object(quests[i]["file_name"]);
+        if(item->query("id") == strr || item->query("name") == strr) str = quests[i]["file_name"];
+        }
+        if(str != "" && already_spreaded( "str") ) {
+                room = environment(me);
+                ob_list = children(str);
+                for(i=0; i<sizeof(ob_list); i++) {
+                ob=find_env(ob_list[i]);
+                if(ob)
+                {
+                        x0= (int)room->query("coor/x");
+                        y0= (int)room->query("coor/y");
+                        z0= (int)room->query("coor/z");
+                        x=(int)ob->query("coor/x")-x0;
+                        y=(int)ob->query("coor/y")-y0;
+                        z=(int)ob->query("coor/z")-z0;
+                        realdis=0;
+                        if(x<0)realdis-=x; else realdis+=x;
+                        if(y<0)realdis-=y; else realdis+=y;
+                        if(z<0)realdis-=z; else realdis+=z;
+                        tmp =(int)  realdis/50;
+                        if(tmp>MAX_DIS) tmp = MAX_DIS;
+                        dis=distance[tmp];
+                        if(z>0) alt=altitude[0];
+                        if(z<0) alt=altitude[2];
+                        if(z==0) alt=altitude[1];
+                        if(x==0&&y==0) dir=directions[0];
+                        if(x==0&&y>0) dir=directions[1];
+                        if(x==0&&y<0) dir=directions[2];
+                        if(x>0&&y==0) dir=directions[3];
+                        if(x<0&&y==0) dir=directions[4];
+                        if(x>0&&y>0) dir=directions[5];
+                        if(x<0&&y>0) dir=directions[6];
+                        if(x>0&&y<0) dir=directions[7];
+                        if(x<0&&y<0) dir=directions[8];
+        output = "『"+ob_list[i]->query("name")+"』似乎在"+dir+dis+"的"+alt+"。\n";
+        return output;
+                }
+                }
+        }
+        else 
+        if(wizardp(me) || me->query("class") == "official")
+        {
+        tmpobj = find_player(strr);
+        if(!tmpobj) tmpobj = find_living(strr);
+        if(!tmpobj) return "";
+        ob = find_env(tmpobj);
+        room = environment(me);
+        if(ob)
+        {
+                        x0= (int)room->query("coor/x");
+                        y0= (int)room->query("coor/y");
+                        z0= (int)room->query("coor/z");
+                        x=(int)ob->query("coor/x")-x0;
+                        y=(int)ob->query("coor/y")-y0;
+                        z=(int)ob->query("coor/z")-z0;
+                        realdis=0;
+                        if(x<0)realdis-=x; else realdis+=x;
+                        if(y<0)realdis-=y; else realdis+=y;
+                        if(z<0)realdis-=z; else realdis+=z;
+                        tmp =(int)  realdis/50;
+                        if(tmp>MAX_DIS) tmp = MAX_DIS;
+                        dis=distance[tmp];
+                        if(z>0) alt=altitude[0];
+                        if(z<0) alt=altitude[2];
+                        if(z==0) alt=altitude[1];
+                        if(x==0&&y==0) dir=directions[0];
+                        if(x==0&&y>0) dir=directions[1];
+                        if(x==0&&y<0) dir=directions[2];
+                        if(x>0&&y==0) dir=directions[3];
+                        if(x<0&&y==0) dir=directions[4];
+                        if(x>0&&y>0) dir=directions[5];
+                        if(x<0&&y>0) dir=directions[6];
+                        if(x>0&&y<0) dir=directions[7];
+                        if(x<0&&y<0) dir=directions[8];
+        output = "『"+tmpobj->query("name")+"』似乎在"+dir+dis+"的"+alt+"。\n";
+        return output;
+        }
+        }
+                return ""; 
+}
+varargs int already_spreaded(mixed filename,int hard)
+{
+        object npc;
+//        int i;
+       if( !stringp(filename)) return 0;
+//        if(!objectp(npc= find_object( filename)))
+//                      npc=load_object( filename);
+//              write (id);
+                if( quests_fin[filename] ) return 0;
+                return 1;
+} 
+object find_env(object ob)
+{
+        while(ob)
+        {
+        if(ob->query("coor") ) return ob;
+        else ob=environment(ob);
+        }
+        return ob;
+}
+mapping *read_table(string file)
+{
+        string *line, *field, *format;
+        mapping *data;
+        int i, rn, fn; 
+        line = explode(read_file(file), "\n");
+        data = ({});
+        for(i=0; i<sizeof(line); i++) {
+                if( line[i]=="" || line[i][0]=='#' ) continue;
+                if( !pointerp(field) ) {
+                        field = explode( line[i], ":" );
+                        continue;
+                }
+                if( !pointerp(format) ) {
+                        format = explode( line[i], ":" );
+                        continue;
+                }
+                break;
+        } 
+        for( rn = 0, fn = 0; i<sizeof(line); i++) {
+                if( line[i]=="" || line[i][0]=='#' ) continue;
+                if( !fn ) data += ({ allocate_mapping(sizeof(field)) });
+                sscanf( line[i], format[fn], data[rn][field[fn]] );
+                fn = (++fn) % sizeof(field);
+                if( !fn ) ++rn;
+        }
+        return data;
+}
+void big_reward(object me, object who, object item)
+{
+        tell_object(me,"你真行！！\n");
+} 
+void execute_accept_object(object me, object who, object item)
+{
+        who->accept_object(me,item);
+}  

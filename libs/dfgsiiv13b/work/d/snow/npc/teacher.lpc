@@ -1,0 +1,174 @@
+// teacher.c
+
+#include <npc.h>
+
+inherit F_VILLAGER;
+
+string *literate_text = ({
+    "ぇ", "┦セ到",
+    "┦", "策环",
+    "璭ぃ毙", "┦綞",
+    "毙ぇ笵", "禥盡",
+    "﹕ダ", "拒綟矪",
+    "ぃ厩", "耞诀猇",
+    "膗縋", "Τ竡よ",
+    "毙き", "喘",
+    "緄ぃ毙", "ぇ筁",
+    "毙ぃ腨", "畍ぇ磌",
+    "", "よぶ",
+    "克畍ね", "策搂祸",
+});
+
+int text_cnt = 0;
+object picked_student;
+
+void teach_literate();
+void pick_student(object ob);
+void cancel_pick(object ob);
+
+void create()
+{
+    set_name("胔", ({ "wang whaiz", "wang", "whaiz" }) );
+    set_race("human");
+    set_level(5);
+    set_stat_maximum("sen", 50);
+
+    set_skill("literate", 60);
+    set("long",
+        "胔琌马縒玡碭ㄊσ刚辅材窱ォびひ筁\n"
+        "痙產秏狝赤盯穠礚ㄆ獽秨丁╬寡毙马弄\n");
+    set("chat_chance", 8);
+    set("chat_msg", ({
+        (: teach_literate :)
+    }));
+    setup();
+}
+
+void init()
+{
+    add_action("do_sit", "sit");
+}
+
+int do_sit(string arg)
+{
+    // add by dragoon
+    if( this_player()->query_skill("literate") > 29 ) 
+	return notify_fail("弄醚膀ぃ岿ぃ惠璶钮竒\n");
+	
+    if( this_player()->query_temp("pending/sit_learning_literate") )
+        return notify_fail("竒Г帝盡み钮量\n");
+    message_vision("$Nт︗Гㄓ秨﹍蛤帝ρ畍搬\n",
+        this_player() );
+    this_player()->set_temp("pending/sit_learning_literate", 1);
+    return 1;
+}
+
+void teach_literate()
+{
+    object *students, ob;
+    string txt;
+
+    if( text_cnt >= sizeof(literate_text) ) {
+        command("say 垛 ... Ω毙び癘ぃ︘и眖繷狡策Ω\n");
+        text_cnt = 0;
+    }
+    txt = literate_text[text_cnt++];
+    command("say 產蛤帝и├" + txt + "\n");
+
+    students = all_inventory(environment());
+    foreach(ob in students)
+    {
+	if( !ob->query_temp("pending/sit_learning_literate")
+	||  !living(ob)
+	||  ob->is_fighting()
+	||  ob->query_skill("literate",1) >= 30 ) continue;
+
+	ob->improve_skill("literate", random(ob->query_attr("int")+1));
+	message_vision("$N蛤帝├笵" + txt + "\n", ob);
+
+	/* 珼匡ネ兵ン */
+	// random, ぃ礛–量碞拜 -Dragoon
+	if( interactive(ob) && random(10) > 7 
+	&&  ob->query_class()=="commoner"
+	&&  ob->query_skill("literate") >= 5
+	&&  member_array(ob->query_race(), ({
+		"human", "woochan", "jiaojao", "rainnar"
+	    })) != -1
+	&&  ob->query_attr("int") > random(20) )
+	    do_chat( (: pick_student, ob :) );
+    }
+}
+
+int accept_fight()
+{
+    do_chat("胔弧笵硂 ...猌\и琌翴ぃ穦硂︗狟ねぃти產毙繷ち絉ち絉\n");
+    return 0;
+}
+
+string rank(string politeness, int raw)
+{
+    if( raw ) return ::rank(politeness, raw);
+    switch(politeness) {
+        case "self": return "ネ";
+        case "respectful": return "ρ畍";
+        default:
+            return ::rank(politeness, raw);
+    }
+}
+
+int accept_info(object ob, string type)
+{
+    return type=="skills";
+}
+
+int acquire_skill(object who, string skill)
+{
+    if( skill=="literate" ) {
+	command("say 稱弄醚盾硂柑Г帝(sit)钮\n");
+	command("smile");
+	command("say 弄ぃ甧ぃ筁厩ぶ晋常琌\n");
+	return 1;
+    }
+    return 0;
+}
+
+void pick_student(object ob)
+{
+    if( ! (ob && present(ob) && interactive(ob)) ) return;
+
+    command("say " + ob->name() + "и硂ㄠ搬Τ琿丁\n");
+    command("say и癸弄会Τ砍届ぱぃ岿\n");
+    command("say 稱ぃ稱㎝ρ畍妓讽ネ\n");
+
+    ob->set_temp("pending/picked_by_whaiz", 1);
+    call_out( (: cancel_pick, ob :), 20);
+}
+
+void cancel_pick(object ob)
+{
+    if( ! ob ) return;
+
+    ob->delete_temp("pending/picked_by_whaiz");
+    if( present(ob) ) {
+	command("pat " + ob->query("id"));
+	command("say 絵Τв");
+    }
+}
+
+void make_new_scholar(object ob)
+{
+    if( !ob || !present(ob) || !interactive(ob)) return;
+
+    ob->set_class("scholar");
+    command("smile");
+    tell_object(ob, "( Θ︗ネ )\n");
+}
+
+void relay_say(object who, string msg)
+{
+    if( ! who->query_temp("pending/picked_by_whaiz") ) return;
+    if( member_array(msg[0..1], ({"稱", "琌", ""})) != -1 ) {
+	do_chat((: make_new_scholar, who :));
+	who->delete_temp("pending/picked_by_whaiz");
+    }
+}

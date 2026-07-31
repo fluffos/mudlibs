@@ -1,0 +1,55 @@
+#include <ansi.h>
+#include <skill.h>
+#include <weapon.h>
+#include <combat.h>
+inherit F_SSERVER;
+ 
+int perform(object me, object target)
+{
+    object weapon, ob;
+    string msg;
+    int i;
+ 
+ ob = me->select_opponent();
+
+    if( !me->is_fighting() )
+        return notify_fail("九头龙闪只能对战斗中的对手使用。\n");
+
+     if (me->query_temp("perform")>time()) return notify_fail("你上一招未使完！\n");
+        weapon = me->query_temp("weapon");
+        if (!weapon) return notify_fail("你没装兵器怎么打！\n");
+        if( (string)weapon->query("skill_type") != "sword" )
+        return notify_fail("你使用的兵器不对！\n");
+      
+        if ( (string) me->query_skill_mapped("sword") != "feitian-yujianliu")
+        return notify_fail("你不是使用的飞天御剑流使用不出来！\n");
+        
+         if( (int)me->query_skill("feitian-yujianliu", 1) < 350 )
+                return notify_fail("你的飞天御剑流不够熟练，使不出九头龍閃。\n");
+
+       if( (int)me->query_skill("shayi-xinfa", 1) < 150 )
+                return notify_fail("你的杀意心法不够熟练，使不出九头龍閃。\n");
+     
+       if (!(me->query("feitian/jiu") & 1))
+              return notify_fail("你虽然听说过“九头龙闪”这一招，可是却未获传授。\n");
+       
+       if(me->query("family/family_name") != "飞天御剑流")
+              return notify_fail("你并非飞天御剑流传人，无法体会到绝招。\n");
+
+msg = HIR  "$N脚下速度突增，同时使出［飞天御剑流］的精髓－－九头龙闪，手中的"+ weapon->name() +"划出一道道长虹，闪电般的刺出无限虚空！！" NOR;
+    message_vision(msg, me);
+    me->clean_up_enemy();
+    me->add("neili", -150);
+    me->set_temp("perform",time()+3);
+    me->set_temp("perform_jiu",1);
+    for(i = 0; i < 3; i++)
+        if (me->is_fighting(ob) && ob->is_fighting(me) && ob->query("eff_qi")>0){
+              me->set_temp("action_msg",HIY"剑光九闪\n"NOR);
+                if (!weapon->query("equipped")) break;
+              COMBAT_D->do_attack(me, ob,weapon, 0);
+            }else break;
+    me->delete_temp("perform_jiu");
+    me->delete_temp("secondly_weapon");
+    return 1;
+}
+

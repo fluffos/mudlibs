@@ -1,0 +1,18 @@
+// SN:S;WBU_@W<HNRJoCP
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("雪山象象[2;37;0m", ({"xsx xiang"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "雪山象
+它是密宗一号的坐骑。
+");
+        set_temp("owner_id", "xsdm");
+        set_temp("owner_name", "密宗一号");
+        ::setup();
+}
+

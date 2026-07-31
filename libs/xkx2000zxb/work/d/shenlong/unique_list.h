@@ -1,0 +1,35 @@
+//Cracked by Kafei
+// /d/shenlong/unique_list.h
+
+mapping unique_list = ([
+        "太极十三势" : "/kungfu/class/wudang/force_book.lpc",
+        "旧竹片" : "/d/shaolin/obj/book-bamboo.lpc",
+        "薄绢" : "/d/shaolin/obj/book-silk.lpc",
+        "紫霞秘笈" : "/d/huashan/obj/zixia_book.lpc",
+        "棒法图解" : "/d/gaibang/obj/stick_book.lpc",
+        "杖法图解" : "/d/huashan/obj/staff_book.lpc",
+        "人参果" : "/d/wudang/obj/renshen_guo.lpc",
+        "蓝玉钵" : "/d/xingxiu/obj/yaobo.lpc",
+        "神木王鼎" : "/d/xingxiu/obj/muding.lpc",
+        "降魔杵" : "/clone/weapon/xiangmo-chu.lpc",
+        "倚天剑" : "/clone/weapon/yitian-jian.lpc",
+        "玉箫" : "/clone/unique/yuxiao.lpc",
+        "伏魔刀" : "/clone/unique/fumo-dao.lpc",
+        "金蛇剑" : "/clone/unique/jinshe-jian.lpc",
+        "鳄嘴剪" : "/clone/unique/eyujian.lpc",
+        "鳄尾鞭" : "/clone/unique/eweibian.lpc",
+        "金刚罩" : "/d/shaolin/obj/jingang-zhao.lpc",
+        "软猬甲" : "/d/taohua/obj/ruanwei-jia.lpc",
+        "玄铁重剑" : "/clone/unique/xuantie-jian.lpc",
+        "金蛇锥" : "/d/huashan/obj/jinshe-zhui.lpc",
+        "玉竹杖" : "/clone/unique/yuzhu-zhang.lpc",
+        "乌蚕衣" : "/d/xueshan/obj/wucan-yi.lpc",
+        "七绝针" : "/clone/weapon/qijue.lpc",
+        "鱼肠剑" : "/clone/unique/yuchang-jian.lpc",
+
+        "龙象般若经" : "/d/qilian/obj/lx-jing.lpc",
+        "神照经" : "/d/city/npc/obj/shenzhao.lpc",
+        "血刀" : "/clone/unique/xuedao.lpc",
+        "鸳刀" : "/clone/unique/yuandao.lpc",
+        "鸯刀" : "/clone/unique/yangdao.lpc",
+]);

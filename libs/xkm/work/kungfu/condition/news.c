@@ -1,0 +1,40 @@
+// news.c
+//风狐(wfoxd) at http://www.cnnetgame.com 2001-1-04
+
+#include <ansi.h>
+
+int update_condition(object me, int duration)
+{
+mapping *notes;
+int i, unread, last_read_time; 
+string err;
+object board;
+err = catch( call_other("/clone/board/jhy_b", "???") );//改为你自己的留言板
+if (err)
+printf( "发生错误：\n%s\n", err );
+
+board = find_object("/clone/board/jhy_b");//改为你自己的留言板
+last_read_time = (int)this_player()->query("board_last_read/jhy_b" );//改为你自己的留言板记录文件
+notes = board->query("notes");
+i=sizeof(notes)-1;
+
+if (duration > 0 && notes[i]["time"] != last_read_time ) { 
+if( !pointerp(notes) || !sizeof(notes) )
+return 1;
+if( this_player() ) { 
+for(unread = 0 ; i>=0; i--, unread ++)
+if( notes[i]["time"] <= last_read_time ) break;
+}
+if( unread ){
+tell_object(me,sprintf("\n※ 希望之光现在有 %d 张新闻，"+RED+"你有 %d"+NOR+" 张未读。读新闻请使用news\n" , sizeof(notes), unread));
+return 1;
+}
+else{
+tell_object(me,sprintf("※ 现在有 %d 张新闻 \n", sizeof(notes)));
+return 1;
+}
+}
+me->apply_condition("news", duration - 1);
+return 1;
+}
+ 

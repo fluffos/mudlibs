@@ -1,0 +1,32 @@
+// SN:VSOm`J\QM8_<Ch0M
+// ITEM Made by player(默默:wuy) /data/item/w/wuy-heye.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Tue Aug 19 21:26:04 2003
+#include <ansi.h>
+#include <armor.h>
+
+inherit CLOTH;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;32m荷叶儿[2;37;0m", ({ "heye" }));
+	set_weight(1400);
+	set("item_make", 1);
+	set("unit", "件");
+	set("long", "这是由[1;37m冰蚕丝[2;37;0m炼制而成的一件战衣。
+[1;32m绿绿的荷叶儿，清清爽爽的散袖紧身纱裙。[2;37;0m
+战衣缘上刻着一行小字：默默(wuy)
+");
+	set("value", 2100000);
+	set("point", 182);
+	set("material", "silk");
+	set("wear_msg", "[1;32m清风摇啊摇，荷叶儿荡啊荡。[2;37;0m\n");
+	set("remove_msg", "[1;32m飘飘摇摇，悠然自得。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/armor", apply_armor());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

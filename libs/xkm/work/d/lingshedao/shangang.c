@@ -1,0 +1,31 @@
+//Cracked by Roath
+
+//wzfeng 2002 1 21
+
+inherit ROOM;
+
+void create()
+{
+        set("short", "山冈");
+        set("long", @LONG
+这里的山势略微平坦，形成群山中的一片山冈，四周长满树木和花草。
+在西面不远处能看见一座民房，似乎有人居住。东边一条山路延伸而来，
+从这里往上走，能到达山冈之颠。
+LONG
+        );
+        set("exits", ([
+                "southup" : __DIR__"shanlu1",
+				 "west" : __DIR__"shuichi",
+				 "east" : __DIR__"forest",
+				 "up" : __DIR__"shandian",
+        ]));
+
+	set("outdoors", "lingshedao");
+    set("objects", ([ /* sizeof() == 1 */
+  "/d/lingshedao/npc/sheep" : 1,
+    ]));
+	set("cost", 1);
+        setup();
+	replace_program(ROOM);
+}
+

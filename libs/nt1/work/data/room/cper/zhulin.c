@@ -1,0 +1,29 @@
+// SN:1ZDU_lFV979efh@X
+// File(/data/room/cper/zhulin.c) of cper's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "竹林");
+	set ("long", @LONG
+这里种着好大一片竹林，非常幽静。风一起就听竹叶沙沙的响，
+有时段笑笑就去听涛阁默听竹浪涛声，参悟武功。 
+LONG );
+
+	set("exits", ([
+                "west" : __DIR__"huayuan",
+                "east" : __DIR__"tingtao",
+	]));
+
+        set("outdoors", "yangzhou");
+        set("sleep_room", 1);
+        setup();
+
+        set("room_owner", "段笑笑");
+        set("room_name", "笑笑居");
+        set("room_id", "xiaoju");
+        set("room_owner_id", "cper");
+        set("room_position", "树林");
+}

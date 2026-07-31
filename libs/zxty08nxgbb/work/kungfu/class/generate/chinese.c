@@ -1,0 +1,29 @@
+// chan_cler 中国挑战者
+
+inherit NPC;
+
+void create()
+{
+        NPC_D->generate_cn_name(this_object());
+        set("long", "一个人。\n");
+        set("gender", "男性");
+        set("age", 20);
+        set("str", 20);
+        set("int", 20);
+        set("con", 20);
+        set("dex", 20);
+
+        // the follow 5 setting has no use      
+        set("max_qi", 100);
+        set("max_jing", 100);
+        set("neili", 100);
+        set("max_neili", 100);
+        set("jiali", 100);
+
+        set("combat_exp", 3000000);
+
+        setup();
+
+}
+
+

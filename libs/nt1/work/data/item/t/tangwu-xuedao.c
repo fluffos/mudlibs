@@ -1,0 +1,32 @@
+// SN:5cc>m<Fcc8R<8CoC
+// ITEM Made by player(唐五藏:tangwu) /data/item/t/tangwu-xuedao.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Thu Dec  4 23:02:45 2003
+#include <ansi.h>
+#include <weapon.h>
+
+inherit BLADE;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[2;37;0m[31m血刀[2;37;0m", ({ "xuedao" }));
+	set_weight(9000);
+	set("item_make", 1);
+	set("unit", "把");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一把刀。
+刀身色作血红，竟透出一股杀意。[2;37;0m
+刀柄上刻着一行小字：唐五藏(tangwu)
+");
+	set("value", 2100000);
+	set("point", 220);
+	set("material", "magic stone");
+	set("wield_msg", "[1;31m$N厉啸一声，喷出漫天[1;31m血雾[1;37m，\n[1;31m血雾[1;36m化作一口$n[1;36m，募然出现在$N手中。[2;37;0m\n");
+	set("unwield_msg", "[1;36m$N手中$n[1;36m一抖，化作漫天[1;31m血雾[1;37m，\n[1;31m$N张口一吸，顿时血雾变得无影无踪。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	init_blade(apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

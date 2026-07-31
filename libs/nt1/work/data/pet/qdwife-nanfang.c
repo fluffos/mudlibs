@@ -1,0 +1,18 @@
+// SN:Y9WaJ`caOnZnWlL9
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("南方来的小狐[2;37;0m", ({"nanfang hu"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "一只南方来的小狐狸。
+它是琴琴的坐骑。
+");
+        set_temp("owner_id", "qdwife");
+        set_temp("owner_name", "琴琴");
+        ::setup();
+}
+

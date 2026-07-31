@@ -1,0 +1,405 @@
+// 注释开始 //
+// 修改作者：胖仔(Pangzai)@WLFY
+// 注释结束 //
+#include <net/dns.h>
+#include <ansi.h>
+#include <mudlib.h>
+int sort_user(object,object);
+
+void create() { seteuid( getuid() ); }
+int query_only_ip(object *ob);
+int online_time(object);
+int online_time_total(object);
+
+string remove_ansi(string str)
+{
+        int i;
+        string *color = ({ BLK, RED, GRN, YEL, BLU, MAG, CYN, WHT,
+                        HIR, HIG, HIY, HIB, HIM, HIC, HIW,
+                        HBRED, HBGRN, HBYEL, HBBLU, HBMAG, HBCYN, HBWHT,
+                        BBLK, BRED, BYEL, BBLU, BMAG, BCYN,
+                        NOR, BOLD });
+                        
+        if( !str || !stringp(str) ) return 0;
+        i = sizeof(color);
+        while( i-- ) {
+                str = replace_string(str, color[i], "");
+        }
+        return str;
+}
+string age_string(int time)
+{
+        int month, day, hour, min, sec;
+
+        sec = time % 60;
+        time /= 60;
+        min = time % 60;
+        time /= 60;
+        hour = time % 24;
+        time /= 24;
+        day = time % 30;
+        month = time / 30;
+        return (month?month + "月":"") + (day?day + "日":"") + 
+        (hour?hour + "时":"") + min + "分";
+}
+
+int online_time(object body)
+{
+        return time() - (int)body->query_temp("login_time");
+}
+
+int online_time_total(object body)
+{
+        return body->query("time_aged")+time()-(int)body->query_temp("login_time");
+}
+
+string finger_all()
+{
+        object *ob, *list, me;
+        string msg,  str;
+        int i,ips;
+
+//      ob = users();
+        ob = ty_users();
+//         list = sort_array(ob, (: sort_user :));
+        list = ty_users();
+        me = this_player();
+        msg = "";
+        if ( !wizardp(this_player()) )  // player finger
+        {
+                for(i=0; i<sizeof(list); i++) {
+                        reset_eval_cost();
+                        if( this_player() && !this_player()->visible(list[i]) ) continue;
+                        msg = sprintf("%s%-14s%-14s%-14s\n",
+                                msg, list[i]->query("name"), list[i]->query("id"),
+                                !interactive(list[i])?"断线中":query_idle(list[i]) + "s");
+                }
+                str = HIG "※ "MUD_NAME + " ※\n" NOR WHT+
+                "——————————————————\n"
+                + "姓名          帐号          发呆\n" +
+                "——————————————————\n"
+                + msg +
+                "——————————————————\n"NOR;
+                me->start_more(str);
+                return"\n";
+        } else          // wizard finger
+        {
+                for(i=0; i<sizeof(list); i++) {
+                        reset_eval_cost();
+                        if( this_player() && !this_player()->visible(list[i]) ) continue;
+                        msg = sprintf("%s%-14s%-14s%-14s%-7s%s\n",
+                                msg, list[i]->query("name"), list[i]->query("id"),
+                                age_string( (int)list[i]->query("mud_age")),
+                                !interactive(list[i])?"断线中":query_idle(list[i]) + "s", query_ip_name(list[i]));
+                }
+                ips=query_only_ip(list);
+                str = HIG "※ "MUD_NAME + " ※\n" NOR WHT+
+                "—————————————————————————————————————\n"
+                + "姓名          帐号          年龄          发呆   连线\n" +
+                "—————————————————————————————————————\n"
+                + msg +
+                "—————————————————————————————————————\n"
+                +HIG"排除由同一IP登录的人后，实际有："+ips+"人\n"NOR;
+                me->start_more(str);
+                return"\n";
+        }
+}
+
+
+string finger_user(string name)
+{
+        object ob, body;
+        string msg, mud,idob,showtime;
+        int public_flag,time, day, hour, min;;
+
+        if( sscanf(name, "%s@%s", name, mud)==2 ) {
+                GFINGER_Q->send_gfinger_q(mud, name, this_player(1));
+                return "网路指令传送过程可能需要一些时间，请稍候。\n";
+        }
+
+        ob = new(LOGIN_OB);
+        ob->set("id", name);
+        if( !ob->restore() ) return "没有这个玩家。\n";
+   if (!stringp(ob->query("name")) )  return "没有这个玩家。\n";
+        if ( !wizardp(this_player()) )  // player finger
+        {
+
+                if( objectp(body = find_player(name)) && geteuid(body)==name )
+                {
+                        public_flag = body->query("env/public")?1:0;
+                } else
+                {
+                        body = LOGIN_D->make_body(ob);
+                        if( !body->restore() ) return "没有这个玩家。\n";
+                        public_flag = body->query("env/public")?1:0;
+                        destruct(body);
+                }
+               if( objectp(body = find_player(name)) && geteuid(body)==name &&
+                       this_player()->visible(body))
+//              if( objectp(body = find_player(name)) && geteuid(body)==name && !wizardp(body)) 
+              {
+                  time = time() - body->query_temp("time");
+                  time /= 60;
+                  min = time%60;
+                  time /= 60;
+                  hour = time%24;
+                  time /= 24;
+                  day = time;
+                  showtime=sprintf("%s%s%s",day?sprintf("%d天",day):"",
+                                  hour?sprintf("%d小时",hour):"",
+                                  min?sprintf("%d分钟",min):"小于一分钟");
+                  msg =  sprintf(NOR WHT"┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━┐\n"
+                        "│"HIG"英文代号："NOR WHT"\t%-42s│\n│"HIG"姓    名："NOR WHT"\t%-42s│\n│"HIG"权限等级："NOR WHT"\t%-42s│\n"
+                        "│"HIG"电子邮件："NOR WHT"\t%-42s│\n│"HIG"上次连线："NOR WHT"\t%-42s│\n"
+                        "│"HIG"连    线："NOR WHT"\t%-42s│\n"
+                        "│"HIG"本次上线时间："NOR WHT"%-42s│\n"
+                        "│"HIG"上线时间总和："NOR WHT"%-42s│\n"
+                        "┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━┘\n%s\n"NOR,
+                        remove_ansi(ob->query("id")),
+                        remove_ansi(ob->query("name")),
+ ob->query("id")=="rock"?remove_ansi("(player)"):remove_ansi(SECURITY_D->get_status(name)),
+// remove_ansi(SECURITY_D->get_status(name)),
+                        remove_ansi(public_flag?ob->query("email"):"不告诉你"),
+                        remove_ansi(ob->query("last_on")),
+                        remove_ansi("目前正在连线中。")+"("+remove_ansi(ob->query("last_on_today"))+")",
+                        remove_ansi(showtime),
+                        CHINESE_D->chinese_period((int)body->query("mud_age")),
+                        stringp(ob->query("profile"))?(ob->query("profile")):""
+                );
+               }
+               else
+
+               {
+                  idob = ob->query("id");
+                  time = time()-(stat(sprintf("%slogin%s%s%s",DATA_DIR,"/"+idob[0..0]+"/",idob,__SAVE_EXTENSION__),-1)[1]);
+                  time /= 60;
+                  min = time%60;
+                  time /= 60;
+                  hour = time%24;
+                  time /= 24;
+                  day = time;
+                  showtime=sprintf("%s%s%s",day?sprintf("%d天",day):"",
+                                  hour?sprintf("%d小时",hour):"",
+                                  min?sprintf("%d分钟",min):"小于一分钟");
+                  msg =  sprintf(NOR WHT"┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━┐\n"
+                        "│"HIG"英文代号："NOR WHT"\t%-42s│\n│"HIG"姓    名："NOR WHT"\t%-42s│\n│"HIG"权限等级："NOR WHT"\t%-42s│\n"
+                        "│"HIG"电子邮件："NOR WHT"\t%-42s│\n│"HIG"上次连线："NOR WHT"\t%-42s│\n"
+                        "│"HIG"本次连线："NOR WHT"\t%-42s│\n"
+                        "│"HIG"本次离线时间："NOR WHT"%-42s│\n"
+                        "┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━┘\n%s\n"NOR,
+                        remove_ansi(ob->query("id")),
+                        remove_ansi(ob->query("name")),
+ob->query("id")=="rock"?remove_ansi("(player)"):remove_ansi(SECURITY_D->get_status(name)),
+//  remove_ansi(SECURITY_D->get_status(name)),
+                        remove_ansi(public_flag?ob->query("email"):"不告诉你"),
+                        remove_ansi(ob->query("last_on")),
+                        remove_ansi("目前还没有连线。"),
+                        remove_ansi(showtime),
+                        stringp(ob->query("profile"))?(ob->query("profile")):""
+                );
+              }
+        } else          // wizard finger
+        {
+               if( objectp(body = find_player(name)) && geteuid(body)==name &&
+                       this_player()->visible(body))
+               {
+                  time = time() - body->query_temp("time");
+                  time /= 60;
+                  min = time%60;
+                  time /= 60;
+                  hour = time%24;
+                  time /= 24;
+                  day = time;
+                  showtime=sprintf("%s%s%s",day?sprintf("%d天",day):"",
+                                  hour?sprintf("%d小时",hour):"",
+                                  min?sprintf("%d分钟",min):"小于一分钟");
+                  msg =  sprintf(NOR WHT"┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━┐\n"
+                        "│"HIG"英文代号："NOR WHT"\t%-42s│\n│"HIG"姓    名："NOR WHT"\t%-42s│\n│"HIG"权限等级："NOR WHT"\t%-42s│\n"
+                        "│"HIG"电子邮件："NOR WHT"\t%-42s│\n│"HIG"上次连线："NOR WHT"\t%-42s│\n"
+                        "│"HIG"本次连线："NOR WHT"\t%-42s│\n"
+                        "│"HIG"本次上线时间："NOR WHT"%-42s│\n"
+                        "│"HIG"上线时间总和："NOR WHT"%-42s│\n"
+                        "┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━┘\n%s\n"NOR,
+                        remove_ansi(ob->query("id")),
+                        remove_ansi(ob->query("name")),
+ ob->query("id")=="rock"?remove_ansi("(player)"):remove_ansi(SECURITY_D->get_status(name)),
+// remove_ansi(SECURITY_D->get_status(name)),
+                        remove_ansi(ob->query("email")),
+                        remove_ansi(ob->query("last_from"))+"("+remove_ansi(ob->query("last_on"))+")",
+                        remove_ansi(wizardp(this_player(1))?query_ip_number(body):"未知")+"("+remove_ansi(ob->query("last_on_today"))+")",
+                        remove_ansi(showtime),
+                        CHINESE_D->chinese_period((int)body->query("mud_age")),
+                        stringp(ob->query("profile"))?(ob->query("profile")):""
+                  );
+               }
+               else
+               {
+                  idob = ob->query("id");
+                  time = time()-(stat(sprintf("%slogin%s%s%s",DATA_DIR,"/"+idob[0..0]+"/",idob,__SAVE_EXTENSION__),-1)[1]);
+                  time /= 60;
+                  min = time%60;
+                  time /= 60;
+                  hour = time%24;
+                  time /= 24;
+                  day = time;
+                  showtime=sprintf("%s%s%s",day?sprintf("%d天",day):"",
+                                  hour?sprintf("%d小时",hour):"",
+                                  min?sprintf("%d分钟",min):"小于一分钟");
+                  msg =  sprintf(NOR WHT"┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━┐\n"
+                        "│"HIG"英文代号："NOR WHT"\t%-42s│\n│"HIG"姓    名："NOR WHT"\t%-42s│\n│"HIG"权限等级："NOR WHT"\t%-42s│\n"
+                        "│"HIG"电子邮件："NOR WHT"\t%-42s│\n│"HIG"上次连线："NOR WHT"\t%-42s│\n"
+                        "│"HIG"本次连线："NOR WHT"\t%-42s│\n"
+                        "│"HIG"本次离线时间："NOR WHT"%-42s│\n"
+                        "┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━┘\n%s\n"NOR,
+                        remove_ansi(ob->query("id")),
+                        remove_ansi(ob->query("name")),
+// ob->query("id")=="rock"?remove_ansi("(player)"):remove_ansi(SECURITY_D->get_status(name)),
+remove_ansi(SECURITY_D->get_status(name)),
+                        remove_ansi(ob->query("email")),
+                        remove_ansi(ob->query("last_from"))+"("+remove_ansi(ob->query("last_on"))+")",
+                        remove_ansi("目前还没有连线。"),
+                        remove_ansi(showtime),
+                        stringp(ob->query("profile"))?(ob->query("profile")):""
+                );
+               }
+        }
+
+        destruct(ob);
+        return msg;
+}
+
+varargs string remote_finger_user(string name, int chinese_flag)
+{
+        object ob, body;
+        string msg;
+
+        ob = new(LOGIN_OB);
+        ob->set("id", name);
+        if( !ob->restore() ) destruct(ob); 
+                return chinese_flag ? "没有这个玩家。\n" : "No such user.\n";
+        if( chinese_flag ) msg =  sprintf(NOR WHT
+                "┏━━━━━━━━━━━━━━━━━━━━━━┐\n"
+                "│"HIG"英文代号："NOR WHT"\t%s\n│"HIG"姓    名："NOR WHT"\t%s\n│"HIG"权限等级："NOR WHT"\t%s\n"
+                "│"HIG"电子邮件地址："NOR WHT"\t不告诉你\n│"HIG"上次连线："NOR WHT"\t%s \n"
+                "┗━━━━━━━━━━━━━━━━━━━━━━┘\n"NOR,
+                ob->query("id"),
+                ob->query("name"),
+                SECURITY_D->get_status(name),
+//              ob->query("email"),
+//              ob->query("last_from"),
+                ob->query("last_on")
+        );
+        else msg =  sprintf(
+                "\nName\t: %s\nStatus\t: %s\nEmail\t: %s\nLastOn\t: %s( %s )\n\n",
+                capitalize(ob->query("id")),
+                SECURITY_D->get_status(name),
+                ob->query("email"),
+                ob->query("last_from"),
+                ob->query("last_on")
+        );
+        if( body = find_player(name) ) {
+                if( !this_player() || this_player()->visible(body) )
+                {
+                        if(chinese_flag)
+                        {
+                                msg+="\n" + ob->query("name") + "目前正从"+
+                                        (wizardp(this_player(1))?query_ip_number(body):"未知");
+                                msg+="\n上线时间总和："+
+                                        CHINESE_D->chinese_period((int)body->query("mud_age"))+"\n";
+
+
+                                msg+="此次上线时间："+CHINESE_D->chinese_period(online_time(body))+"\n";
+                        }
+                        else
+                                msg+="\n" + capitalize(name) + " is currently connected.\n";
+                }
+        }
+        destruct(ob);
+        return msg;
+}
+
+object acquire_login_ob(string id)
+{
+        object ob;
+
+        if( ob = find_player(id) ) {
+                // Check if the player is linkdead
+                if( ob->query_temp("link_ob") )
+                        return ob->query_temp("link_ob");
+        }
+        ob = new(LOGIN_OB);
+        ob->set("id", id);
+        return ob->restore() ? ob : 0;
+}
+
+
+string get_killer()
+{
+        int i;
+        string msg;
+        object *ob = users();
+        
+        msg = "";
+        for (i = 0; i < sizeof(ob); i++)
+                if ((int)ob[i]->query_condition("killer"))
+                        msg = sprintf("%s%-50s 赏金：%s\n",
+                        msg, ob[i]->short(1), MONEY_D->price_str(ob[i]->query("combat_exp") / 5000 * 10000));
+                if (msg == "")
+                        return "本城治安良好。\n";
+        else
+                return "现在本城正在缉拿以下人犯：\n\n" + msg;
+}
+int query_only_ip(object *ob)
+{
+        int i,j,k,count,total;
+
+        total=sizeof(ob);
+        for ( i=0; i<(sizeof(ob)); i++)
+        {
+                reset_eval_cost();
+                count=1;k=sizeof(ob);
+              for (j=0; j<(k);j++)
+{
+                        if (j!=i&&query_ip_name(ob[i])==query_ip_name(ob[j]) )
+                        {
+                                ob=ob-({ob[j]});
+                                count++;
+                                k=sizeof(ob);
+                        }
+}
+                total=total-count+1;
+        }
+        return total;
+}
+
+int ip_name(object ob1, object ob2)
+{
+        string name1, name2;
+        
+        name1 = query_ip_name(ob1);
+        name2 = query_ip_name(ob2);
+
+        if (intp(name1)) name1 = "";
+        if (intp(name2)) name2 = "";
+        if (name1 > name2) return -1;
+        if (name1 < name2) return 1;
+
+        return (int)ob2->query("combat_exp") - (int)ob1->query("combat_exp");
+}
+
+int sort_user(object ob1, object ob2)
+{
+        string name1, name2;
+
+        name1 = query_ip_number(ob1);
+        name2 = query_ip_number(ob2);
+
+        if (intp(name1)) name1 = "";
+        if (intp(name2)) name2 = "";
+        if (name1 > name2) return -1;
+        if (name1 < name2) return 1;
+
+        return (int)ob2->query("combat_exp") - (int)ob1->query("combat_exp");
+}
+
+

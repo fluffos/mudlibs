@@ -1,0 +1,135 @@
+//购买收费物品
+//edit by rock
+//2008.10.31
+//此文件不会被复制
+#include <log.h>
+#define EQUIP_UP "/adm/item/equip"
+
+int do_buy(object me,object npc,string arg)
+{
+	object *inv,item;
+	string *keys;
+	mapping goods;
+	int i,size,money,level;
+
+	if(!arg)
+	{
+		tell_object(me,"您要购买什么？\n");
+		return 1;
+	}
+
+	inv = all_inventory(me);
+	if(inv && sizeof(inv)>=35)
+	{
+		tell_object(me,"你身上已经太多东西了。\n");
+		return 1;
+	}
+
+	if(mapp(goods = npc->query("vendor_goods")))
+	{
+		keys = keys(goods);
+		size = sizeof(keys);
+		for(i=0;i<size;i++)
+		{
+			if(!load_object(keys[i])) continue;
+
+			if(keys[i]->query("id") == arg)
+			{
+                                if(me->query("jym_level/vip")) money = goods[keys[i]];
+                                else money = goods[keys[i]] + 3;
+				if(me->query("points",1) < money)
+				{
+					tell_object(me,"对不起，您身上的方周币余额不足。\n");
+					return 1;
+				}
+
+				if(item = new(keys[i]))
+				{
+					if(level = npc->query_level())
+					{
+						switch(level)
+						{
+							case 2  : item->set("_name",item->query("name")); EQUIP_UP->init_equip_prop_2(item); break;
+							case 3  : item->set("_name",item->query("name")); EQUIP_UP->init_equip_prop_3(item); break;
+							default : EQUIP_UP->init_equip_prop_1(item); break;
+						}
+					}
+
+					item->move(me);
+					me->add("points",-money);
+					message_vision("$N向$n买下"+item->query("name")+"。\n",me,npc);
+					tell_object(me,sprintf("此次交易共花去 %d 枚方舟币，余额为 %d 枚方舟币。\n",money,me->query("points",1)));
+					make_log(me,"money",sprintf("通过 %s 购买了 %s(%s)，花去了 %d枚方舟币，还剩余额 %d 枚方舟币。",npc->query("name"),item->query("name"),item->query("id"),money,me->query("points",1)));
+					me->add("jym_level/buy_add",money);
+					if(me->query("jym_level/buy_add") >= (me->query("jym_level/old_add") + 400))
+					{
+						tell_object(me,HIY"你的金庸梦贡献积分已经达到上限，增加了1级贵宾等级。\n"NOR);
+						me->set("jym_level/old_add",me->query("jym_level/buy_add"));
+						me->add("jym_level/vip_level",1);
+					}
+					me->save();
+					return 1;
+				}
+			}
+		}
+	}
+	tell_object(me,"对不起，没有您要的物品。\n");
+	return 1;
+}
+
+int do_list(object me,object npc)
+{
+        string chars,*longs,name,id,longss,*keys,str,color_name,xingbie,item_level_str;
+        mapping goods;
+        object ob,item;
+        int i,j,amount,long_size,size,money,level,item_level;
+
+        if(mapp(goods = npc->query("vendor_goods")))
+        {
+		tell_object(me,sprintf("这是%s提供给你的物品价目表：\n", npc->query("name")));
+                
+                keys = keys(goods);
+                size = sizeof(keys);
+                for (i = 0; i < size; i++)
+                {
+                	if(!item = load_object(keys[i])) continue;
+
+                	chars = keys[i]->query("long");
+                	name = sprintf("%s",keys[i]->query("name"));
+                	id = sprintf("("HIG"%s"NOR")",keys[i]->query("id"));
+                        if(me->query("jym_level/vip")) money = to_int(goods[keys[i]]);
+                        else money = to_int(goods[keys[i]]) + 3;
+                	if(chars)
+                	{
+                		longs = explode(chars,"\n");
+                		long_size = sizeof(longs[0]);
+                		if(long_size > 87) longss = sprintf("%s...",longs[0][0..87]);
+                		else longss = longs[0]; 
+                		tell_object(me,"─────────────────────────────────────────────────\n");
+                                tell_object(me,sprintf("%s%s%s    "HIY"%d枚方舟币"NOR"\n",name,id,longss,money));
+                	}
+                	else
+                	{
+                		tell_object(me,"─────────────────────────────────────────────────\n");
+
+				level = npc->query_level();
+				item_level = item->query("level");
+				if(item_level) item_level_str = sprintf("等级:%d",item_level);
+				else item_level_str = "无等级限制";
+				xingbie = keys[i]->query("gender");
+				if(!xingbie || xingbie == "男、女") xingbie = "无性别限制";
+                		switch(level)
+				{
+					case 1  : str = YEL"中级"NOR; color_name = sprintf(HIC"%s"NOR,name);        break;
+					case 2  : str = MAG"高级"NOR; color_name = sprintf(HIY"%s"NOR,name);        break;
+					case 3  : str = HIG"卓越"NOR; color_name = sprintf(BLINK+HIM"%s"NOR,name);  break;
+					default : str = HIB"初级"NOR; color_name = name;                            break;
+				}
+                		tell_object(me,sprintf("%s%s[%s]"CYN"%s"NOR"    %s    随机同级装备属性    "HIY"%d枚方舟币"NOR"\n",color_name,id,str,item_level_str,xingbie,money));
+                	}
+		}
+		tell_object(me,"─────────────────────────────────────────────────\n");
+                return 1;
+        }
+	return 0;
+}

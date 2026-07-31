@@ -1,0 +1,35 @@
+// SN:dXJ21e7RVmb3Mj6e
+// File(/data/room/beizi/jusuo.c) of beizi's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "居所");
+	set ("long", @LONG
+这就是杯子居主人胡悟性休息、读书的地方。楼上就是主人的卧
+室，西面则是书房。 
+LONG );
+
+	set("exits", ([
+		"up"   : __DIR__"woshi",
+                "west" : __DIR__"shufang",
+	]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("KEY_DOOR", ([
+                "exit" : "east",
+                "room" : __DIR__"huayuan",
+        ]));
+    
+        set("room_owner", "胡悟性");
+        set("room_name", "杯子居");
+        set("room_id", "beizi");
+        set("room_owner_id", "beizi");
+        set("room_position", "三岔口");
+}

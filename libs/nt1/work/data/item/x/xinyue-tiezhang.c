@@ -1,0 +1,35 @@
+// SN:nJ=g3?odDR>@Zg[L
+// ITEM Made by player(慕容新月:xinyue) /data/item/x/xinyue-tiezhang.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Sat Jul 24 18:11:16 2004
+#include <ansi.h>
+#include <armor.h>
+
+inherit HANDS;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;34m月如无恨月长圆[2;37;0m", ({ "tiezhang" }));
+	set_weight(2700);
+	set("item_make", 1);
+	set("unit", "双");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一双铁掌。
+[1;34m这是一双纤细的掌套，薄如蝉翼，却无惧神兵利刃。掌心织有一个[1;31m恨[1;34m字，上面一轮残月，弥漫出一股清辉。[2;37;0m
+铁掌缘上刻着一行小字：慕容新月(xinyue)
+");
+	set("value", 2100000);
+	set("point", 786);
+	set("material", "magic stone");
+	set("wear_msg", "[1;34m$N自怀中抽出一双如蝉翼般的$n[1;34m，缓缓地戴在手中，玉手便隐没在手套里。\n只见$N高举一只手，五指向天，掌心一个殷红的[1;31m恨[1;34m字散发出凄惨的血光，周遭人儿神为之夺。[2;37;0m\n");
+	set("remove_msg", "[1;34m$N掬起双手捧在胸前，口中吐出“无恨”，但见双手手套中的那轮残月，听得此言，倾泻出一片柔和的清辉。\n四野里被手套上[1;31m恨[1;34m字所笼罩的血光被这片如水的光芒慢慢消融，最后不见了，而手中的$n[1;34m，也随之消失。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/hand", 10);
+	set("armor_prop/armor", 10);
+	set("armor_prop/unarmed_damage", apply_damage());
+	set("armor_prop/strike", 10);
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

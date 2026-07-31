@@ -1,0 +1,18 @@
+// SN:UC`iMU3APkk]US[f
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("龙雕[2;37;0m", ({"longi diao"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "是我的坐标
+它是南宫天龙的坐骑。
+");
+        set_temp("owner_id", "longshen");
+        set_temp("owner_name", "南宫天龙");
+        ::setup();
+}
+

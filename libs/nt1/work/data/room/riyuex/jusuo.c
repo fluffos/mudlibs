@@ -1,0 +1,35 @@
+// SN:nm_3l?g9hnb8F?UV
+// File(/data/room/riyuex/jusuo.c) of riyuex's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "居所");
+	set ("long", @LONG
+这就是日月潭主人蓝魔之泪休息、读书的地方。楼上就是主人的
+卧室，西面则是书房。 
+LONG );
+
+	set("exits", ([
+		"up"   : __DIR__"woshi",
+                "west" : __DIR__"shufang",
+	]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("KEY_DOOR", ([
+                "exit" : "east",
+                "room" : __DIR__"huayuan",
+        ]));
+    
+        set("room_owner", "蓝魔之泪");
+        set("room_name", "日月潭");
+        set("room_id", "riyue");
+        set("room_owner_id", "riyuex");
+        set("room_position", "碎石小道");
+}

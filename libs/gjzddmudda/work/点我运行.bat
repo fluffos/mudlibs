@@ -1,0 +1,2 @@
+mudos start
+exit

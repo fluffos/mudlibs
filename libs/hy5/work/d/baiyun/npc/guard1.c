@@ -1,0 +1,33 @@
+ // XXDER@FY3
+inherit NPC;
+void create()
+{
+        set_name("叶宫" , ({ "swords man","man" }) );
+        set("long", "一个白衣飘飘，英气勃发的白云城剑士。。\n");
+        set("nickname","白云大弟子");
+        set("attitude", "friendly");
+        set("age", 19);
+        set("gender", "男性" );
+        create_family("白云城", 2, "剑士");
+        set("combat_exp", 200000+random(500000));
+        set_skill("dodge", 80+random(50));
+        set_skill("unarmed", 80);
+        set_skill("sword", 65);
+        set_skill("feixian-sword", 50);
+        set_skill("force", 60);
+        set_skill("feixian-steps", 50);
+        set_skill("qingpingforce", 55);
+        map_skill("sword", "feixian-sword");
+        map_skill("dodge", "feixian-steps");
+        set("chat_chance", 50);
+        set("chat_msg", ({
+                (: random_move :),
+        }) );
+        set("chat_chance_combat", 30);
+        set("chat_msg_combat", ({
+                (: perform_action, "dodge.tianwaifeixian" :),
+        }) ); 
+        setup();
+        carry_object("/clone/misc/cloth")->wear();
+        carry_object("/clone/weapon/changjian")->wield();
+}    

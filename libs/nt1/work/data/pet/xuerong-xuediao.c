@@ -1,0 +1,18 @@
+// SN:1LKAZ19L@@B`R^OD
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[37m雪貂[2;37;0m", ({"xuediao diao"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "$WHT$一只雪白色的小狐貂
+它是雪绒的坐骑。
+");
+        set_temp("owner_id", "xuerong");
+        set_temp("owner_name", "雪绒");
+        ::setup();
+}
+

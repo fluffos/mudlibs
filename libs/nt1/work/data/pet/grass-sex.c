@@ -1,0 +1,18 @@
+// SN:^Fk>gfbF\G9H<IL`
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;32m大色狼[2;37;0m", ({"sex lang"}));        
+        set("gender", "男性");                
+        set("unit", "条");
+        set("long", "$HIG$十足的一头大色狼！
+它是小草的坐骑。
+");
+        set_temp("owner_id", "grass");
+        set_temp("owner_name", "小草");
+        ::setup();
+}
+

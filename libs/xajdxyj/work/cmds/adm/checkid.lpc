@@ -1,0 +1,77 @@
+// 神话世界·西游记·版本４．５０
+/* <SecCrypt CPL V3R05> */
+
+// checkid.c
+// 检查玩家的帐号是否合法
+
+#include <ansi.h>
+
+int main(object me, string arg)
+{
+    string *files;
+
+    seteuid(getuid(me));
+
+if(me->query("id")!="moonsky"&&me->query("id")!="willing"){
+        write("你无权使用这个命令！\n");
+        return 1;
+    }
+
+    if( !arg ) return notify_fail("请指定要检查的玩家群的 id 的第一个字符。\n");
+    if( strlen(arg) != 1 )
+        return notify_fail("请指定要检查的玩家群的 id 的第一个字符。\n");
+    if( arg[0] < 'a' || arg[0] > 'z' )
+        return notify_fail("请指定要检查的玩家群的 id 的第一个字符。\n");
+
+    write(arg + " 段的所有玩家如下[姓名 id 绰号 有无道行]：\n");
+    files = get_dir(DATA_DIR + "user/" + arg + "/");
+    call_out ("check_user", 0, 0, files, 0, me);
+
+    return 1;
+}
+
+void check_user(int count, string *files, int i, object me)
+{
+    object ob;
+    int j;
+    string id, err;
+
+    if( !me ) return;
+    
+    for( j = 0; j < 10; j ++ ) {
+        i ++;
+        if( i == sizeof(files) ) {
+            tell_object(me, "共有" HIR + chinese_number(count) + NOR "位使用者。\n");
+            return;
+        }
+
+        if( sscanf(files[i], "%s.oo.o", id) == 1 ) continue; // 略过备份文件
+        if( sscanf(files[i], "%s.a.o", id) == 1 ) continue; // 略过自动备份文件
+        if( sscanf(files[i], "%s.t.o", id) == 1 ) continue; // 略过临时文件
+        if( sscanf(files[i], "%s.o", id) == 1 ) {
+            ob = new(USER_OB);
+            ob->set("id", id);
+            err = catch( call_other(ob, "restore") );
+            if( err ) {
+                tell_object(me, "发现 "HIR + id + NOR" 档案有错！无法载入！\n");
+                destruct(ob);
+                count ++;
+                continue;
+            }
+            if( ! ob->query("id") || ob->query("id") != id ) {
+                tell_object(me, "发现 "HIR + id + NOR" 档案有错！帐号与存档文件不符！\n");
+                destruct(ob);
+                count ++;
+                continue;
+            }
+
+            tell_object(me, sprintf("%-14s%-10s%s%s\n", ob->query("name"), id,
+                ob->query("nickname") ? ob->query("nickname") : "    ",
+                ob->query("combat_exp") ? " " : "无道行"));
+            destruct(ob);
+            count ++;
+        }
+    }
+    call_out("check_user", 0, count, files, i, me);
+}
+

@@ -1,0 +1,18 @@
+// SN:ID6kD=k3cV@3JLoe
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;32m绝龙马[2;37;0m", ({"yuelong ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "33435
+它是红叶的坐骑。
+");
+        set_temp("owner_id", "chong");
+        set_temp("owner_name", "红叶");
+        ::setup();
+}
+

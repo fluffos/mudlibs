@@ -1,0 +1,22 @@
+inherit FORCE;
+int valid_enable(string usage) { return usage=="force"; }
+int valid_learn(object me)
+{
+    mapping skl;
+    string *sname;
+    int i;
+        int lvl = (int)me->query_skill("huashan-force", 1);
+    skl = this_player()->query_skills();
+    sname  = keys(skl);
+    for (i=0;i<sizeof(skl);i++){
+        if (sname[i]!="zixia-shengong") continue;
+            if( SKILL_D(sname[i])->valid_enable("force") )
+            return notify_fail("你不先散了别派内功，怎能学华山内功？！\n");
+    }
+    return 1;
+}
+string exert_function_file(string func)
+{
+    return __DIR__"huashan-force/" + func;
+}
+

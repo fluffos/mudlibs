@@ -1,0 +1,18 @@
+// SN:6X;_T:=TjUHB@:EE
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;31m枣红马[2;37;0m", ({"sanguo ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "三国名将张飞的爱马，有诗云“百万雄狮哮张飞，一骑红光出凡尘”
+它是张飞的坐骑。
+");
+        set_temp("owner_id", "ilifemud");
+        set_temp("owner_name", "张飞");
+        ::setup();
+}
+

@@ -1,0 +1,21 @@
+//by 秦始皇 qsh ednpc tools.
+// xiaolu.c
+
+#include <ansi.h>
+inherit ROOM;
+
+void create()
+{
+	set("short","卢沟桥");
+	set("long","这里是卢沟桥，管理员尚未设定本地详细描述。");
+	set("exits", ([
+		"east" : __DIR__"xiaolu2",
+		"west" : __DIR__"enter",
+	]));
+	set("fuben2", 1);
+	set("objects", ([
+	__DIR__"npc/mitan":random(2),
+	]));
+	setup();
+}
+

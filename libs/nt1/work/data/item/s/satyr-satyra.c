@@ -1,0 +1,33 @@
+// SN:FeM^@?fELLA94G=h
+// ITEM Made by player(蚂蚁:satyr) /data/item/s/satyr-satyra.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Mon Oct 13 08:26:22 2003
+#include <ansi.h>
+#include <armor.h>
+
+inherit BOOTS;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;32m蚂蚁[1;31m神[1;33m靴[2;37;0m", ({ "satyra" }));
+	set_weight(420);
+	set("item_make", 1);
+	set("unit", "双");
+	set("long", "这是由[1;37m冰蚕丝[2;37;0m炼制而成的一双靴子。
+[1;31m看什么看[2;37;0m
+靴子缘上刻着一行小字：蚂蚁(satyr)
+");
+	set("value", 2100000);
+	set("point", 90);
+	set("material", "silk");
+	set("wear_msg", "[1;37m穿上[1;32m$N[1;31m神[1;33m靴[2;37;0m\n");
+	set("remove_msg", "[1;37m脱下[1;32m$N[1;31m神[1;33m靴[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/dodge", apply_armor() / 10 + 1);
+	set("armor_prop/armor", apply_armor());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

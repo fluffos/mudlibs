@@ -1,0 +1,106 @@
+// Daemon: /adm/daemons/recited.c
+// 背单词程序
+// Written by jjgod@FYTX.
+
+inherit F_DBASE;
+inherit F_SAVE;
+
+#include <ansi.h>
+#define WORDS_DIR	"/adm/etc/words/"
+#define WORDS_FILE	"/data/words.o"
+
+/**************************************************************
+ * mapping 的格式：
+ * string 所属等级:([string 单词名 : string 单词类型和解释 ]),
+ **************************************************************/
+mapping lib;
+
+private void load_words();
+private void import_words(string file);
+void create() 
+{
+	seteuid(getuid());
+
+	if (file_size(WORDS_FILE)<=0){
+		lib=([]);
+		load_words();
+		save();
+	}
+	message("channel:sys",sprintf(HIR"【背单词精灵】"HIW"直接从 %s 载入单词库。\n"NOR,
+			WORDS_FILE),filter_array(users(),(: wizardp($1) :)));
+	restore();
+}
+
+string query_save_file()
+{
+	return WORDS_FILE;
+}
+
+private void load_words()
+{
+	string *files;
+	int i;
+
+	if (!arrayp(files=get_dir(WORDS_DIR))) {
+		log_file("recite","Can not find enough word list. ["
+			+ctime(time())+"]\n");
+		return;
+	}
+	else {
+		for (i=0;i<sizeof(files);i++) {
+			message("channel:sys",sprintf(HIR"【背单词精灵】"HIW"正在载入 %s。\n"NOR,
+				WORDS_DIR+files[i]),filter_array(users(),(: wizardp($1) :)));
+			if (file_size(WORDS_DIR+files[i])<=0)
+				continue;
+			import_words(WORDS_DIR+files[i]);
+		}
+		message("channel:sys",sprintf(HIR"【背单词精灵】"HIW"单词载入成功。\n"NOR,),filter_array(users(),(: wizardp($1) :)));
+	}
+}
+
+private void import_words(string file)
+{
+	string book,*info,word,explain;
+	mapping words=([]);
+	int i;
+
+	sscanf(read_file(file,1,2),"$%s$",book);
+	info=explode(read_file(file,2),"\n");
+
+	for (i=0;i<sizeof(info);i++) {
+		// 获得词语和解释
+		if (sscanf(info[i],"%s#%s#%*s",word,explain)<2)
+			continue;
+		words[word]=explain;
+	}
+	lib[book]=words;
+	return;
+}
+
+string get_explain(string book,string word)
+{
+	if (!mapp(lib[book])||!stringp(lib[book][word]))
+		return "查询错误";
+	else {
+		return lib[book][word];
+	}
+}
+
+mapping query_lib()
+{
+	return lib;
+}
+
+mapping get_book(string book)
+{
+	if (mapp(lib[book]))
+		return lib[book];
+}
+
+void rebuild_lib()
+{
+	message("channel:sys",sprintf(HIR"【背单词精灵】"HIW"正在重载单词库……\n"NOR,),filter_array(users(),(: wizardp($1) :)));
+	lib=([]);
+	load_words();
+	save();
+}

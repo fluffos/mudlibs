@@ -1,0 +1,183 @@
+// qwlist10000.c
+
+inherit SKILL;
+#include <ansi.h>;
+mapping *quest = ({
+(["quest":"白色长袍","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"白驼"]),
+(["quest":"海口大碗","quest_type":"寻","time": 300,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"白驼"]),
+(["quest":"草莓","quest_type":"寻","time": 300,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"白驼"]),
+(["quest":"柴刀","quest_type":"寻","time": 300,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"白驼"]),
+(["quest":"大刀","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"白驼"]),
+(["quest":"金蛇胆","quest_type":"寻","time": 400,"exp_bonus":86,"pot_bonus":40,"score" :20,"quest_city":"白驼"]),
+(["quest":"青蛇胆","quest_type":"寻","time": 400,"exp_bonus":86,"pot_bonus":40,"score" :20,"quest_city":"白驼"]),
+(["quest":"青色丝袍","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"白驼"]),
+(["quest":"蛇胆膏","quest_type":"寻","time": 500,"exp_bonus":8,"pot_bonus":3,"score" :20,"quest_city":"白驼"]),
+(["quest":"蛇皮","quest_type":"寻","time": 500,"exp_bonus":8,"pot_bonus":3,"score" :20,"quest_city":"白驼"]),
+(["quest":"蛇肉","quest_type":"寻","time": 500,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"白驼"]),
+(["quest":"绣花鞋","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"白驼"]),
+(["quest":"兔肉","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"白驼"]),
+(["quest":"白色长袍","quest_type":"寻","time": 500,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"白驼"]),
+(["quest":"海口大碗","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"白驼"]),
+(["quest":"蛋糕","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"白驼"]),
+(["quest":"木柴","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"白驼"]),
+(["quest":"豆浆","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"白驼"]),
+(["quest":"蛇胆粉","quest_type":"寻","time": 500,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"白驼"]),
+(["quest":"引路神蛇","quest_type":"寻","time": 500,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"白驼"]),
+(["quest":"蛇杖","quest_type":"寻","time": 400,"pot_bonus":56,"pot_bonus":40,"score" :20,"quest_city":"白驼"]),
+(["quest":"大刀","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"白驼"]),
+	
+(["quest":"草鞋","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"扬州"]),
+(["quest":"绣花小鞋","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"扬州"]),
+(["quest":"金戒指","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"扬州"]),
+(["quest":"狗皮","quest_type":"寻","time": 400,"pot_bonus":56,"pot_bonus":40,"score" :20,"quest_city":"扬州"]),
+(["quest":"金项链","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"扬州"]),
+(["quest":"牢房钥匙","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":20,"score" :20,"quest_city":"扬州"]),
+(["quest":"包子","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"扬州"]),
+(["quest":"药粉","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"扬州"]),
+(["quest":"牛皮酒袋","quest_type":"寻","time": 200,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"扬州"]),
+(["quest":"长剑","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"扬州"]),
+(["quest":"金创药","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"扬州"]),
+(["quest":"火折","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"扬州"]),
+(["quest":"花雕酒袋","quest_type":"寻","time": 300,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"扬州"]),
+(["quest":"粉红绸衫","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"扬州"]),
+(["quest":"碧螺春","quest_type":"寻","time":400,"exp_bonus":240,"pot_bonus":50,"score":5,"quest_city":"扬州"]),
+(["quest":YEL"三字经"NOR,"quest_type":"寻","time":800,"exp_bonus":240,"pot_bonus":50,"score":5,"quest_city":"扬州"]),
+(["quest":YEL"百家姓"NOR,"quest_type":"寻","time":800,"exp_bonus":240,"pot_bonus":50,"score":5,"quest_city":"扬州"]),
+(["quest":YEL"千字文"NOR,"quest_type":"寻","time":800,"exp_bonus":240,"pot_bonus":50,"score":5,"quest_city":"扬州"]),
+(["quest":YEL"论语"NOR,"quest_type":"寻","time":800,"exp_bonus":240,"pot_bonus":50,"score":5,"quest_city":"扬州"]),
+(["quest":"麻布袋","quest_type":"寻","time": 200,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"扬州"]),
+(["quest":"皮背心","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"扬州"]),
+(["quest":"头盔","quest_type":"寻","time": 300,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"扬州"]),
+(["quest":"武者项圈","quest_type":"寻","time": 300,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"扬州"]),
+(["quest":"肚带","quest_type":"寻","time": 300,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"扬州"]),
+(["quest":"牛皮盾","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"扬州"]),
+(["quest":"护腕","quest_type":"寻","time": 400,"exp_bonus":86,"pot_bonus":40,"score" :20,"quest_city":"扬州"]),
+(["quest":"指套","quest_type":"寻","time": 400,"exp_bonus":86,"pot_bonus":40,"score" :20,"quest_city":"扬州"]),
+(["quest":"护腰","quest_type":"寻","time": 200,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"扬州"]),
+(["quest":"草鞋","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"扬州"]),
+(["quest":"皮靴","quest_type":"寻","time": 300,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"扬州"]),
+(["quest":"皮手套","quest_type":"寻","time": 300,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"扬州"]),
+(["quest":"钢刀","quest_type":"寻","time": 400,"exp_bonus":86,"pot_bonus":40,"score" :20,"quest_city":"扬州"]),
+(["quest":"铁棍","quest_type":"寻","time": 400,"exp_bonus":86,"pot_bonus":40,"score" :20,"quest_city":"扬州"]),
+(["quest":"普通匕首","quest_type":"寻","time": 200,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"扬州"]),
+(["quest":"屠刀","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"扬州"]),
+(["quest":"铁锤","quest_type":"寻","time": 300,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"扬州"]),
+(["quest":"长剑","quest_type":"寻","time": 300,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"扬州"]),
+(["quest":"治病理气丸","quest_type":"寻","time": 300,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"扬州"]),
+(["quest":"烤鸡腿","quest_type":"寻","time": 300,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"扬州"]),
+(["quest":"翡翠豆腐","quest_type":"寻","time": 300,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"扬州"]),	
+(["quest":"五香花生","quest_type":"寻","time": 400,"exp_bonus":86,"pot_bonus":40,"score" :20,"quest_city":"扬州"]),
+(["quest":"祁门红茶","quest_type":"寻","time": 400,"exp_bonus":86,"pot_bonus":40,"score" :20,"quest_city":"扬州"]),
+(["quest":"铁观音","quest_type":"寻","time": 200,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"扬州"]),
+(["quest":"武夷岩茶","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"扬州"]),
+(["quest":"信阳毛尖","quest_type":"寻","time": 300,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"扬州"]),
+(["quest":"都匀细毛尖","quest_type":"寻","time": 300,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"扬州"]),
+(["quest":"君山银针","quest_type":"寻","time": 300,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"扬州"]),
+(["quest":"六安瓜片","quest_type":"寻","time": 300,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"扬州"]),
+(["quest":"黄山毛峰","quest_type":"寻","time": 300,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"扬州"]),	
+(["quest":"西湖龙井","quest_type":"寻","time": 300,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"扬州"]),
+
+(["quest":"红烧狗肉","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"丐帮"]),
+(["quest":"竹棒","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"丐帮"]),
+(["quest":"竹棒","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"丐帮"]),
+
+(["quest":"金叶","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"北京"]),
+(["quest":"屠刀","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"北京"]),
+
+(["quest":"绸袍","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"长安"]),
+(["quest":"粗布衣","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"长安"]),
+	
+(["quest":"摆夷短裙","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"大理"]),
+(["quest":"对衿褂子","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"大理"]),
+(["quest":"砍刀","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"大理"]),
+(["quest":"窄裉袄","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"大理"]),
+(["quest":"贝壳项链","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"大理"]),
+(["quest":"蛮刀","quest_type":"寻","time": 700,"exp_bonus":86,"pot_bonus":40,"score" :20,"quest_city":"大理"]),
+(["quest":"毛毯","quest_type":"寻","time": 700,"exp_bonus":86,"pot_bonus":40,"score" :20,"quest_city":"大理"]),
+(["quest":"白纱挑线镶边裙","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"大理"]),
+(["quest":"台夷短裙","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"大理"]),
+(["quest":"筒裙","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"大理"]),
+(["quest":"台夷头巾","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"大理"]),
+(["quest":"乌夷长裙","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"大理"]),
+(["quest":"乌夷大麾","quest_type":"寻","time": 400,"pot_bonus":56,"pot_bonus":26,"score" :20,"quest_city":"大理"]),
+(["quest":"白衣","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"大理"]),
+(["quest":"白绸衫","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"大理"]),
+(["quest":"圆领小袄","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"大理"]),
+(["quest":"纺纱机","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"大理"]),
+
+(["quest":"青色道袍","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"嘉兴"]),
+
+(["quest":"虎皮","quest_type":"寻","time": 400,"exp_bonus":86,"pot_bonus":40,"score" :20,"quest_city":"铁掌"]),
+
+(["quest":"拂尘","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"峨嵋"]),
+(["quest":"皮腰带","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"峨嵋"]),
+
+(["quest":"熊胆干","quest_type":"寻","time": 400,"exp_bonus":86,"pot_bonus":40,"score" :20,"quest_city":"关外"]),
+
+(["quest":"粽子","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"归云庄"]),
+
+(["quest":"长袍","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"燕京"]),
+
+(["quest":"白布长袍","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"明教"]),
+(["quest":"铁背心","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"明教"]),
+(["quest":"长鞭","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"明教"]),
+	
+(["quest":"禅杖","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"少林"]),
+(["quest":"黄布袈裟","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"少林"]),
+(["quest":"齐眉棍","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"少林"]),
+(["quest":"铁手掌","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"少林"]),
+(["quest":"旧竹片","quest_type":"寻","time":600,"exp_bonus":240,"pot_bonus":50,"score":5,"quest_city":"少林"]),
+(["quest":"铁手掌","quest_type":"寻","time":600,"exp_bonus":240,"pot_bonus":50,"score":5,"quest_city":"少林"]),
+
+(["quest":"百花腹蛇膏","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"神龙岛"]),
+(["quest":"无名花","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"神龙岛"]),
+(["quest":"金蛇胆","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"神龙岛"]),
+(["quest":"水蜜桃","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"神龙岛"]),
+(["quest":"腹蛇胆","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"神龙岛"]),
+(["quest":"雄黄","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"神龙岛"]),
+
+(["quest":"白袍","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"古墓"]),
+
+(["quest":"醉仙茶","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"桃花岛"]),
+
+(["quest":"桃花糕","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"桃花岛"]),
+(["quest":"明珠","quest_type":"寻","time": 800,"exp_bonus":8,"pot_bonus":20,"score" :20,"quest_city":"桃花岛"]),
+(["quest":"桃木剑","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"桃花岛"]),
+(["quest":"布阵箱","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"桃花岛"]),
+(["quest":"玉萧","quest_type":"寻","time": 600,"exp_bonus":86,"pot_bonus":40,"score" :20,"quest_city":"桃花岛"]),
+	
+(["quest":"锦盒","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"天龙寺"]),
+(["quest":"香","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"天龙寺"]),
+
+(["quest":"石块","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"福州"]),
+
+(["quest":"蒙汗药","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"星宿海"]),
+
+(["quest":"小蒲团","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"逍遥"]),
+(["quest":"米饭","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"逍遥"]),
+(["quest":"易筋经文学篇","quest_type":"寻","time":600,"exp_bonus":240,"pot_bonus":50,"score":5,"quest_city":"逍遥"]),
+	
+(["quest":"沙虫壳","quest_type":"寻","time": 500,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"星宿海"]),
+(["quest":"哈密瓜","quest_type":"寻","time": 400,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"星宿海"]),
+(["quest":"马奶酒壶","quest_type":"寻","time": 300,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"星宿海"]),
+(["quest":"馕","quest_type":"寻","time": 300,"exp_bonus":80,"pot_bonus":40,"score" :20,"quest_city":"星宿海"]),
+(["quest":"『星宿毒经〖上册〗』","quest_type":"寻","time":600,"exp_bonus":240,"pot_bonus":50,"score":5,"quest_city":"星宿海"]),
+(["quest":"『星宿毒经〖下册〗』","quest_type":"寻","time":800,"exp_bonus":240,"pot_bonus":50,"score":5,"quest_city":"星宿海"]),
+
+(["quest":"道德经「上卷」","quest_type":"寻","time":600,"exp_bonus":240,"pot_bonus":50,"score":5,"quest_city":"武当"]),
+(["quest":"道德经「下卷」","quest_type":"寻","time":600,"exp_bonus":240,"pot_bonus":50,"score":5,"quest_city":"武当"]),
+(["quest":"道德经","quest_type":"寻","time":600,"exp_bonus":240,"pot_bonus":50,"score":5,"quest_city":"武当"]),
+(["quest":"太极十三势","quest_type":"寻","time":800,"exp_bonus":240,"pot_bonus":50,"score":5,"quest_city":"武当"]),
+(["quest":"道德经「第一章」","quest_type":"寻","time":800,"exp_bonus":240,"pot_bonus":50,"score":5,"quest_city":"武当"]),
+(["quest":"道德经「第十三章」","quest_type":"寻","time":800,"exp_bonus":240,"pot_bonus":50,"score":5,"quest_city":"武当"]),
+(["quest":"道德经「第十六章」","quest_type":"寻","time":800,"exp_bonus":240,"pot_bonus":50,"score":5,"quest_city":"武当"]),
+(["quest":"道德经「第十八章」","quest_type":"寻","time":800,"exp_bonus":240,"pot_bonus":50,"score":5,"quest_city":"武当"]),
+(["quest":"道德经「第二章」","quest_type":"寻","time":800,"exp_bonus":240,"pot_bonus":50,"score":5,"quest_city":"武当"]),
+(["quest":"道德经「第八章」","quest_type":"寻","time":800,"exp_bonus":240,"pot_bonus":50,"score":5,"quest_city":"武当"]),
+});
+
+mapping query_quest()
+{
+  return quest[random(sizeof(quest))];
+}
+

@@ -1,0 +1,18 @@
+// SN:THn10:>@CV`=hT;E
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;35m聪明的白雕[2;37;0m", ({"clever diao"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "一只非常聪明的雕，如果你欺负它，它就咬你。
+它是慕容新月的坐骑。
+");
+        set_temp("owner_id", "xinyue");
+        set_temp("owner_name", "慕容新月");
+        ::setup();
+}
+

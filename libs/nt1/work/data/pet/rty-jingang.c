@@ -1,0 +1,18 @@
+// SN:X3REW;lCRG1OHmjW
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;33m金刚伏摩熊[2;37;0m", ({"jingang xiong"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "???
+它是澄扮的坐骑。
+");
+        set_temp("owner_id", "rty");
+        set_temp("owner_name", "澄扮");
+        ::setup();
+}
+

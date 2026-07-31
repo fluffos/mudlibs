@@ -1,0 +1,95 @@
+//Cracked by Roath
+// bingxue-zhenqi.c 冰雪真气
+
+#include <combat.h>
+#include <ansi.h>
+
+inherit FORCE;
+string check() { return "force"; }
+#include "/kungfu/skill/force_list.h"
+
+int valid_enable(string usage) { return usage == "force"; }
+
+int valid_learn(object me)
+// need more limit here
+{
+        int lvl = (int)me->query_skill("bingxue-zhenqi", 1);
+                mapping skl; 
+        string *sname;
+        int i, k=0;
+        int t = 1, j;
+        for (j = 1; j < lvl / 10; j++) t *= 2;
+                skl=this_player()->query_skills();
+        sname=sort_array( keys(skl), (: strcmp :) );
+        if(me->query_skill("this_skill") > 99){
+
+        for(i=0; i<sizeof(skl); i++) {
+                if (SKILL_D(sname[i])->check() == "force")
+                k++;  
+        }
+
+        if ( k >=2 )
+        return notify_fail
+("你体内不同内力互相冲撞，难以领会更高深的武功。\n");
+        }
+
+
+
+        if ( me->query("gender") == "无性" )
+              return notify_fail("冰雪真气练的是天地之间冰寒之气，讲的是至寒至阴，以公公无根无性之身，如何修得！\n");
+
+        if ( me->query("class") == "bonze" )
+                return notify_fail("冰雪真气讲究至寒至阴，有违佛家六根清净之意，"
+                        +RANK_D->query_respect(me)+"欲修此功，已是罪过。\n");
+
+        if ((int)me->query_skill("force", 1) < 10 
+          || (int)me->query_skill("force", 1)/2 < lvl/3 )
+                return notify_fail("你的基本内功火候还不够。\n");
+
+        if (lvl > 10 && (int)me->query("shen") < t * 100
+             && me->query_skill("taoism", 1) < 100) 
+                return notify_fail("你的侠义正气太低了。\n");
+
+        return 1;
+}
+
+int practice_skill(object me)
+{
+        return notify_fail("冰雪真气只能用学(learn)的来增加熟练度。\n");
+}
+
+string exert_function_file(string func)
+{
+        mapping skl;
+        string *sname;
+        int v, k=0;
+
+        skl=this_player()->query_skills();
+        sname=sort_array( keys(skl), (: strcmp :) );
+                if (SKILL_D(sname[v])->check() == "force")
+                k++;
+        }
+
+        if ( k >=2 ) {
+                tell_object(this_player(), "你体内不同内力互相冲撞，难以施展冰雪真气。\n");
+                return 0;
+        }
+
+        return __DIR__"bingxue-zhenqi/" + func;
+}
+
+mapping curing_msg(object me)
+{
+        return ([
+                "apply_short"   : me->name() +"坐在一旁垂帘入定，头顶笼罩"HIW"冰雪之气"NOR"，寒气上升。",
+                "start_self"    : HIW"你潜运内力，在周身穴道流转疗伤，调匀气息。\n"NOR,
+                "start_other"   : HIW"只见"+ me->name() +"闭目坐下，片刻之时，头顶冒出丝丝寒气。\n"NOR,
+                "finish_self"   : HIY"你只觉内息运转顺畅，将真气还合丹田，站起身来。\n"NOR,
+                "finish_other"  : me->name() +"惨白的脸色渐渐恢复平复，缓缓睁开眼，站起身来。\n",
+                "unfinish_self" : "你渐感真气不纯，后劲不继，不得不将在体内搬运的内息收回。\n",
+                "unfinish_other": me->query("eff_qi") < me->query("max_qi")*3/4 ?
+                                  "猛地里"+ me->name() +"口一张，喷出几口鲜血。\n" :
+                                  "猛地里"+ me->name() +"口一张，吐出口紫黑瘀血。\n",
+        ]);
+}
+

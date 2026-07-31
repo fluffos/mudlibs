@@ -1,0 +1,203 @@
+
+#include <ansi.h>
+#include <login.h>
+#include <command.h>
+
+inherit ROOM;
+
+int is_chat_room() { return 1; }
+
+int do_born(string arg);
+
+mapping born = ([
+
+	"扬州人氏" : "/d/city/kedian",
+
+	"欧阳世家" : ([ "born"      : "西域人氏",
+			"surname"   : "欧阳",
+			"startroom" : "/d/city/kedian",
+		     ]),
+	"关外胡家" : ([ "born"      : "关外人氏",
+			"surname"   : "胡",
+			"startroom" : "/d/city/kedian",
+                     ]),
+	"中原苗家" : ([ "born"      : "中原人氏",
+			"surname"   : "苗",
+			"startroom" : "/d/city/kedian",
+		     ]),
+	"段氏皇族" : ([ "born"      : "大理人氏",
+			"surname"   : "段",
+			"startroom" : "/d/city/kedian",
+		     ]),
+	"慕容世家" : ([ "born"      : "江南人氏",
+			"surname"   : "慕容",
+			"startroom" : "/d/city/kedian",
+		     ]),
+	"唐门世家" : ([ "born"      : "四川人氏",
+			"surname"   : "唐",
+			"startroom" : "/d/city/kedian",
+		     ]),
+]);
+
+void create()
+{
+	int i, k;
+	string desc;
+	string *position;
+
+	set("short", HIR "转生殿" NOR);
+	set("long", @LONG
+    旁边有个牌子，你也许应该仔细看看。
+LONG );
+	set("no_fight", 1);
+      set("no_magic", 1);
+	set("item_desc", ([
+
+		"转生" : "投胎乃人生大事，切记不可草率！"ZJBR"请选择你的转生地点：\n"ZJOBACTS,
+            "如何改名" : "给胡庆余100两黄金，然后输入 name 你的名字\n"
+
+	]));
+
+	set("objects", ([
+		//__DIR__"npc/dizangwang" : 1,
+		__DIR__"npc/huqingyu" : 1,
+
+	]));
+
+	set("no_say", "阎罗殿内阴森恐怖，你哪里敢乱说话？\n");
+
+	desc = query("item_desc/转生");
+	position = keys(born);
+
+	for (i = 0, k = 1; i < sizeof(position); i++)
+	{
+		if (! stringp(born[position[i]]))
+			continue;
+		desc += sprintf("%2d. " HIW "%s" NOR ":born %s$zj#", k++, position[i], position[i]);
+	}
+	for (i = 0; i < sizeof(position); i++)
+	{
+		if (! mapp(born[position[i]]))
+			continue;
+		desc += sprintf("%2d. " HIC "%s" NOR ":born %s$zj#", k++, position[i], position[i]);
+	}
+	set("item_desc/转生", desc+"\n");
+
+	setup();
+}
+
+void init()
+{
+
+	add_action("do_born", "born");
+
+}
+
+
+
+
+
+int do_born(string arg)
+{
+	object me;
+	object obj;
+	object item;
+	mixed dest;
+	string new_name;
+	string msg;
+
+	if (! objectp(me = this_player()) ||
+	    ! userp(me))
+		return 1;
+
+
+
+	if (arg && arg[0] < 160)
+		return notify_fail("你必须输入中文地名，比如born 扬州人氏，或者是born 欧阳世家以避免投错胎。\n");
+
+	new_name = 0;
+	if (arg) sscanf(arg, "%s %s", arg, new_name);
+
+	if (! arg || (! stringp(dest = born[arg]) && ! mapp(dest)))
+	{
+		message_vision("牛头恶狠狠的对$N说：你要干什么！投胎去哪里？\n", me);
+		return 1;
+	}
+
+	if (mapp(dest) && stringp(dest["notice"]))
+		return notify_fail(dest["notice"]);
+
+	if (stringp(dest))
+	{
+		if (! objectp(obj = find_object(dest)))
+			obj = load_object(dest);
+		me->set("startroom", dest);
+		me->set("born", arg);
+		me->set("born_family", "没有");
+	} else
+	{
+		if (! objectp(obj = find_object(dest["startroom"])))
+			obj = load_object(dest["startroom"]);
+
+		if (new_name)
+		{
+			if (! sscanf(new_name, dest["surname"] + "%*s"))
+				new_name = dest["surname"] + new_name;
+
+			if (strlen(new_name) > 8)
+				return notify_fail("你的名字太长了。\n");
+
+			if (strlen(new_name) < 4)
+				return notify_fail("你的名字太短了。\n");
+
+			if (! is_chinese(new_name))
+				return notify_fail("请你用中文起名字。\n");
+		}
+
+		if (me->query("surname") != dest["surname"])
+		{
+			// 名字需要变化
+			NAME_D->remove_name(me->name(1), me->query("id"));
+			if (! new_name) new_name = dest["surname"] + me->query("purename");
+			if (stringp(msg = NAME_D->invalid_new_name(new_name)))
+			{
+				write(msg);
+				write("你可以考虑在投入世家的时候重新选择名字：born <世家> <名字>\n");
+				return 1;
+			}
+			me->set("surname", dest["surname"]);
+			me->set("purename", new_name[strlen(dest["surname"])..<1]);
+			me->set_name();
+			NAME_D->map_name(me->name(1), me->query("id"));
+		}
+
+		me->set("startroom", dest["startroom"]);
+		me->set("born", dest["born"]);
+		me->set("born_family", arg);
+
+		if (mapp(dest["family"]))
+		{
+			me->set("family", dest["family"]);
+			me->assign_apprentice(dest["family"]["title"], 0);
+		}
+	}
+	if (! objectp(obj))
+	{
+		message_vision("牛头一呆，搔搔头说：怎么好像有问题...\n", me);
+		return 1;
+	}
+
+	message_vision("牛头飞起一脚，将$N踢了出去。\n", me);
+
+
+	// 选择特殊技能
+	//UPDATE_D->born_player(me);
+
+	me->move(obj);
+
+	me->save();
+//	HELP_CMD->main(me, "rules");
+	message_vision("$N揉揉眼睛，迷惘的望着这个陌生的世界。\n", me);
+
+	return 1;
+}

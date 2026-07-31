@@ -1,0 +1,46 @@
+#include <ansi.h>
+inherit FORCE;
+mixed hit_ob(object me, object victim, int damage_bonus)
+{
+    int skill = me->query_skill("jiuyin-xinjing",1)/800;
+    if( damage_bonus < 600 ) return 0;
+        if ( skill < 1 ) skill = 1;
+   if( random(5*(me->query_skill("jiuyin-xinjing",1))) > (damage_bonus )) {
+                        victim->receive_wound("qi", (damage_bonus*skill ));
+                        victim->receive_wound("jing", (damage_bonus*skill ));
+                        victim->add("neili", -(int)me->query("jiali"));
+                        return HIW "$N眼中神光暴闪，招式中带出一股似有似无的 "BLINK HIB"阴劲"NOR HIW" 震碎了$n的"HIR"心脉"HIW"！！\n" NOR;
+        }
+}
+
+int valid_enable(string usage) 
+{ 
+        return      usage=="force";
+
+}
+
+
+int valid_learn(object me)
+{
+    if ((int)me->query_skill("jiuyin-xinjing",1) >= 0)
+        return notify_fail("九阴心经只能靠钻研(zuanyan)九阴真经提高。\n");
+    return 1;
+}
+
+int practice_skill(object me)
+{
+        return notify_fail("九阴心经只能靠钻研(zuanyan)九阴真经提高。\n");
+}
+
+
+
+int effective_level() { return 21; }
+
+
+
+string exert_function_file(string func)
+{
+        return __DIR__"jiuyin-zhenjing/" + func;
+}
+
+

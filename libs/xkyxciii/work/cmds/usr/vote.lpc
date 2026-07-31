@@ -1,0 +1,162 @@
+// vote.c
+
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+
+int help(object me);
+void vote_player(object me, object ob, object judge, int type);
+
+int main(object me, string arg)
+{
+        object ob, judge, *list;
+        int type, i;
+        string id;
+
+        seteuid(geteuid(me));
+
+        list = users();
+
+        if(me->query("age") < 16)
+                return notify_fail("你还没有成年，没有资格检举玩家。\n");
+
+        if( !arg ) return help( me );
+
+        judge = find_object("/d/wiz/vote_judge");
+        if( !judge ) judge = new("/d/wiz/vote_judge");
+        if( !judge ) return notify_fail("公正人不在，无法进行投票。\n");
+
+        if(judge->query_temp("voter/" + me->query("id")) )
+                return notify_fail("你已经在本轮投票中投了一票了。\n");
+
+        if(sscanf(arg, "%s %d", id, type) != 2) {
+                if(judge->query_temp("voted") && arg != judge->query_temp("voted") )
+                        return notify_fail("一个一个的来，先完成这一轮的检举吧。\n");
+
+                id = arg;
+                for(i = 0; i < sizeof(list); i ++) {
+                        if(list[i]->query("id") != id)  continue;
+                        if(list[i] == me)
+                                return notify_fail("怎么，良心发现，想检举自己了？\n");
+                        ob = list[i];
+                        break;
+                }
+                if( i >= sizeof(list) ) return notify_fail("没有这个玩家。\n");
+                if( wizardp(ob) ) return notify_fail("你不能检举巫师。\n");
+                if( !judge->query_temp("voted") )
+                        return notify_fail("你要检举哪一项？\n");
+
+                vote_player(me, ob, judge, (int)judge->query_temp("vote_type")-1);
+
+                return 1;
+        }
+
+        if(judge->query_temp("voted") && id != judge->query_temp("voted") )
+                return notify_fail("一个一个的来，先完成这一轮的检举吧。\n");
+
+        for(i = 0; i < sizeof(list); i ++) {
+                if(list[i]->query("id") != id) continue;
+                if(list[i] == me)
+                        return notify_fail("怎么，良心发现，想检举自己了？\n");
+                ob = list[i];
+                break;
+        }
+        if( i >= sizeof(list) ) return notify_fail("没有这个玩家。\n");
+        if( wizardp(ob) ) return notify_fail("你不能检举巫师。\n");
+        if( judge->query_temp("vote_type") ) {
+                vote_player(me, ob, judge, (int)judge->query_temp("vote_type")-1);
+                return 1;
+        }
+
+        if(type != 1 && type != 2 && type != 3)
+                return notify_fail("你要检举哪一项？\n");
+
+        vote_player(me, ob, judge, type-1);
+
+        judge->set_temp("vote_type", type);
+        judge->set_temp("voted", id);
+
+        remove_call_out("vote_cancel");
+        call_out("vote_cancel", 80, ob, judge);
+
+        return 1;
+}
+
+void vote_player(object me, object ob, object judge, int type)
+{
+        string msg, *content = ({
+                "的交谈频道关掉，",
+                "送到机器人法院进行审判，",
+                "踢出游戏，"
+        });
+        string *result = ({
+                "的交谈频道被关闭了",
+                "被送到了法院接受审判",
+                "被踢出了游戏",
+        });
+        int *vote_time = ({ 4, 4, 6 });
+
+        msg = me->name() + "投票要求把" + ob->query("name") + content[type];
+
+        judge->add_temp("vote_times", 1);
+        judge->set_temp("voter/" + me->query("id"), 1);
+
+        if(judge->query_temp("vote_times") >= vote_time[type]) {
+                judge->delete_temp("vote_times");
+                judge->delete_temp("vote_type");
+                judge->delete_temp("voter");
+                judge->delete_temp("voted");
+
+                msg += "结果"+ob->query("name")+result[type]+"。\n";
+                message("channel:chat", YEL +"【闲聊】"+ msg + NOR, users());
+
+                if(type == 0) {
+                        ob->set_temp("block_msg/chat", 1);
+                        ob->set_temp("block_msg/rumor", 1);
+                        ob->set_temp("block_msg/es", 1);
+                }
+                if(type == 1) "/d/wiz/courthouse"->test_me(ob);
+
+                if(type == 2) "/cmds/usr/quit"->main(ob, "");
+
+                remove_call_out("vote_cancel");
+
+                return;
+        }
+
+        msg += "现在还差" + chinese_number(vote_time[type] 
+                - judge->query_temp("vote_times")) + "票。\n";
+
+        message("channel:chat", YEL + "【闲聊】" + msg + NOR, users()); 
+}
+
+void vote_cancel(object ob, object judge)
+{
+        judge->delete_temp("vote_times");
+        judge->delete_temp("vote_type");
+        judge->delete_temp("voter");
+        judge->delete_temp("voted");
+
+        message("channel:chat", YEL +"【闲聊】由于响应的人数不够，对" 
+                + ob->query("name") + "的投票取消了。\n" NOR, users());
+}
+
+int help(object me)
+{
+        write(@HELP
+指令格式：vote <玩家id> [<投票内容>]
+
+让你对某个不守规则的玩家进行投票检举，当票数达到一定数量后，检举
+开始生效。
+注意：你必须年满16岁才有权投票。
+
+［投票的内容］
+1.  关闭某人的交谈频道。
+2.  检举某人到机器人法院进行审判。
+3.  把某人踢出游戏。
+HELP
+        );
+        
+        return 1;
+}
+

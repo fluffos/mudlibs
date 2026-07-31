@@ -1,0 +1,29 @@
+// SN:SoQH5:]JFNbhj5>f
+// File(/data/room/lovet/zhulin.c) of lovet's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "竹林");
+	set ("long", @LONG
+这里种着好大一片竹林，非常幽静。风一起就听竹叶沙沙的响，
+有时执着就去听涛阁默听竹浪涛声，参悟武功。 
+LONG );
+
+	set("exits", ([
+                "west" : __DIR__"huayuan",
+                "east" : __DIR__"tingtao",
+	]));
+
+        set("outdoors", "unknow");
+        set("sleep_room", 1);
+        setup();
+
+        set("room_owner", "执着");
+        set("room_name", "飘飘亭");
+        set("room_id", "loveting");
+        set("room_owner_id", "lovet");
+        set("room_position", "名人堂");
+}

@@ -1,0 +1,244 @@
+//kuangfeng.c 狂风快剑
+//liu 2002
+/*
+--xoxo收集--
+
+仰天一声清啸，斜行而前，长剑横削直击，迅捷无比，未到五六招，剑势中已发出隐隐风声。
+他出剑越来越快，风声也是渐响。
+这套“狂风快剑”，是封不平在中条山隐居十五年而创制出来的得意剑法，剑招一剑快似一剑，所激起的风声也越来越强。
+
+他胸怀大志，不但要执掌华山一派，还想成了华山派掌门人之后，更进而为五岳剑派盟主，所凭持的便是这套一百零八式“狂风快剑”。
+这项看家本领本不愿贸然显露，一显之后，便露了底，此后再和一流高手相斗，对方先已有备，便难收出奇制胜之效。
+但此刻势成骑虎，若不将令狐冲打败，当时便即颜面无存，实逼处此，也只好施展了。
+
+这套“狂风快剑”果然威力奇大，剑锋上所发出的一股劲气渐渐扩展，旁观众人只觉寒气逼人，脸上、手上被疾风刮得隐隐生疼，不由自主的后退，围在相斗两人身周的圈子渐渐扩大，竟有四五丈方圆。
+
+--maco收集--
+
+吸一口气，登时连环七剑，一剑快似一剑，如风如雷般攻上。
+封不平脸上一红，一柄长剑更使得犹如疾风骤雨一般。
+封不平长剑连划三个弧形，险些将自己右臂齐肩斩落，实在凶险之极。
+
+--liu 综合--
+$N吸一口气，使出剑宗绝技「狂风快剑」，登时剑走连环，一剑快似一剑攻向$n。
+$N仰天一声清啸，"+weapon->name()+"斜行而前，横削直击，迅捷无比，未到五六招，剑势中已发出隐隐风声。2
+$N脸上一红，"+weapon->name()+"更使得犹如疾风骤雨一般，所激起的风声也
+越来越强。
+$N出剑越来越快，"+weapon->name()+"剑锋之上所发出的一股劲气渐渐扩展，$n只觉寒气逼人，脸上、手上被疾风刮得隐隐生疼，不由自主的后退。
+$N"+weapon->name()+"连划三个弧形，险些将$n右臂齐肩斩落，实在凶险之极。5
+
+一显之后，便露了底，此后再和一流高手相斗，对方先已有备，便难收出奇制胜之效。 
+
+*/
+
+#include <ansi.h>
+
+inherit F_SSERVER;
+
+int remove_effect(object me);
+void checking(object me,object target);
+
+int perform(object me, object target)
+{
+        int skill;
+        string weapon;
+
+        if( !target ) target = offensive_target(me);
+
+        if( !target
+        ||      !target->is_character()
+        ||      !me->is_fighting(target) )
+                return notify_fail("狂风快剑只能对战斗中的对手使用。\n");
+
+        if( me->query_temp("huashan_kuangfeng",1) )
+                return notify_fail("你已在使用狂风快剑！\n");
+
+        if(!me->query("huashan/kuangfeng") )
+                return notify_fail("你还未获传授，无法使用狂风快剑！\n");
+
+/*
+        if( me->query("family")["family_name"] != "华山派")
+                return notify_fail("你不是华山弟子不能用此绝招！\n");
+*/
+
+        if( me->query_skill_mapped("force") != "zixia-gong" )
+                return notify_fail("你所用的并紫霞功，无法施展狂风快剑！\n");
+
+        if( me->query_skill_mapped("parry") != "huashan-jianfa" )
+                return notify_fail("你不全面激发华山剑法，无法施展狂风快剑！\n");
+
+        if( me->query_skill_mapped("dodge") != "huashan-shenfa" )
+                return notify_fail("你所用的并非华山身法，无法施展狂风快剑！\n");
+
+        if( me->query_skill("force") < 180 )
+                return notify_fail("你的紫霞功火候未到，无法施展狂风快剑！\n");
+
+        if( me->query_skill("dodge") < 180 )
+                return notify_fail("你的轻功火候未到，无法施展狂风快剑！\n");
+
+        if( me->query_skill("sword") < 200 )
+                return notify_fail("你的华山剑法修为不足，还不会使用狂风快剑！\n");
+
+        if( me->query_skill("sword") < me->query_skill("force") )
+                return notify_fail("你的气大于剑，无法运用剑宗绝技-狂风快剑！\n");
+
+        skill = ( me->query_skill("huashan-jianfa") + me->query_skill("dodge") ) / 5;
+        weapon = me->query_temp("weapon");
+
+        if( me->query("neili") <= skill*8 )
+                return notify_fail("你的内力不够使用狂风快剑！\n");
+
+        if( me->query("jingli") <= skill*4 )
+                return notify_fail("你的精力不够使用狂风快剑！\n");
+
+        message_vision(HIG"\n$N吸一口气，使出剑宗绝技「狂风快剑」，登时剑走连环，一剑快似一剑，如风如雷般攻向$n。\n" NOR,me,target);
+
+        me->add("neili", -skill*2 );
+        me->add("jingli", -skill );
+        me->add_temp("apply/speed", skill*2);
+        me->add_temp("apply/attack", skill);
+        me->add_temp("apply/dodge", skill*2);
+
+        if( me->query_skill("sword") < 300 )
+        {
+                COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+        }
+        else if( me->query_skill("sword") < 400 )
+        {
+                COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+                COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+        }
+        else if( me->query_skill("sword") < 500 )
+        {
+                COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+                COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+                COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+        }
+        else
+        {
+                COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+                COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+                COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+                COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+        }
+
+        if( target->query_temp("know_kuangfeng") && target->query("combat_exp",1)/1000 > me->query("combat_exp",1)*2/3000 )
+        {
+                tell_object(me,CYN"\n狂风快剑一显之后便露了底，再与一流高手相斗，对方先已有备，便难收出奇制胜之效。\n"NOR);
+                me->start_busy(1+random(1));
+                call_out("remove_effect",3,me);
+                return 1;
+        }
+        me->set_temp("huashan_kuangfeng",2);
+        call_out("checking",1,me,target);
+        return 1;
+}
+
+void checking(object me,object target)
+{
+        int skill = ( me->query_skill("huashan-jianfa") + me->query_skill("dodge") ) / 5;
+        string weapon = me->query_temp("weapon");
+
+        if(me->query_skill_mapped("sword") != "huashan-jianfa"
+        || me->query_skill_mapped("parry") != "huashan-jianfa"
+        || me->is_ghost() || !living(me) || !me->is_fighting()
+        || !objectp(me->query_temp("weapon"))
+        || me->query("neili") <= skill*2 || me->query("jingli") <= skill )
+        {
+                call_out("remove_effect",1,me);
+                return;
+        }
+        if(me->query_temp("huashan_kuangfeng",1)==2)
+        {
+                message_vision(HIW"\n$N仰天一声清啸，"+weapon->name()+HIW+"斜行而前，横削直击，迅捷无比，未到五六招，剑势中已发出隐隐风声。\n" NOR,me,target);
+        }
+        else if(me->query_temp("huashan_kuangfeng",1)==3)
+        {
+                message_vision(HIR"\n$N脸上一红，"+weapon->name()+HIR+"更使得犹如疾风骤雨一般，所激起的风声也越来越强。\n" NOR,me,target);
+                COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+        }
+        else if(me->query_temp("huashan_kuangfeng",1)==4)
+        {
+                message_vision(HIB"\n$N出剑越来越快，"+weapon->name()+HIB+"剑锋之上所发出的一股劲气渐渐扩展，$n只觉寒气逼人，脸上、手上被疾风刮得隐隐生疼，不由自主的后退。\n" NOR,me,target);
+                COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+                COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+        }
+        else
+        {
+                if( random(me->query("combat_exp",1)/1000 + me->query_skill("sword") + me->query_skill("dodge") )/2 > random(target->query("combat_exp",1) + target->query_skill("parry") + target->query_skill("dodge") ) &&                                me->query("combat_exp",1)/1000 + me->query_skill("sword") +                                     me->query_skill("dodge") < (target->query("combat_exp",1) +                              target->query_skill("sword") + target->query_skill("dodge") ) )
+                {
+                        message_vision(HIR"\n猛然间$N手中"+weapon->name()+HIR"连划三个弧形，只听$n「啊」一声惨叫，右臂齐肩已被斩落当场。\n" NOR,me,target);
+
+                        target->die();
+                        call_out("remove_effect",1,me);
+                        return;
+                }
+                else if( random(me->query("combat_exp",1)/1000 + me->query_skill("sword") + me->query_skill("dodge") ) > random(target->query("combat_exp",1)/1000 + target->query_skill("parry") + target->query_skill("dodge") ) )
+                {
+                        message_vision(HIR"\n猛然间$N手中"+weapon->name()+HIR"连划三个弧形，只听$n一声惨叫，胸前已被斩出三道血痕。\n\n" NOR,me,target);
+                        target->add_query("eff_qi",-(target->query("max_qi")/3));
+                        target->add_query("qi",-(target->query("max_qi")/3));
+                        me->start_busy(1+random(1));
+                        COMBAT_D->report_status(target);
+                        call_out("remove_effect",3,me);
+                        return;
+                }
+                else
+                {
+						message_vision(HIR"\n猛然间$N手中"+weapon->name()+HIR"连划三个弧形，险些将$n右臂齐肩斩落，实在凶险之极。\n" NOR,me,target);
+                        me->start_busy(1+random(3));
+                        call_out("remove_effect",3,me);
+                        return;
+                }
+        }
+
+        me->add("neili", -skill*2 );
+        me->add("jingli", -skill );
+        me->add_temp("apply/speed", skill);
+        me->add_temp("apply/attack", skill/2);
+        me->add_temp("apply/dodge", skill);
+
+        if( me->query_skill("sword") < 300 )
+        {
+                COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+                COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+        }
+        else if( me->query_skill("sword") < 400 )
+        {
+                COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+                COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+                COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+        }
+        else if( me->query_skill("sword") < 500 )
+        {
+                COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+                COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+                COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+                COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+        }
+        else
+        {
+                COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+                COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+                COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+                COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+                COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+        }
+        me->add_temp("huashan_kuangfeng",1);
+        target->set_temp("know_kuangfeng",1);
+        call_out("checking", 1, me, target);
+        return;
+}
+
+int remove_effect(object me)
+{
+        me->set_temp("apply/speed", 0);
+        me->set_temp("apply/attack", 0);
+        me->set_temp("apply/dodge", 0);
+
+        me->delete_temp("huashan_kuangfeng");
+
+//      if( me->is_fighting() )
+                message_vision(HIG "\n$N吸了一口气，将内力收回丹田。\n" NOR, me);
+        return 0;
+}

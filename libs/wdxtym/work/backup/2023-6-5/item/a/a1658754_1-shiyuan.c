@@ -1,0 +1,31 @@
+// ITEM Made by player(渡渡:a1658754_1) /data/item/a/a1658754_1-shiyuan.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Mon Mar 13 21:27:28 2023
+#include <ansi.h>
+#include <weapon.h>
+
+inherit SWORD;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("噬怨[2;37;0m", ({ "shiyuan" }));
+	set_weight(750);
+	set("item_make", 1);
+	set("unit", "柄");
+	set("long", "这是由[1;37m深渊[2;37;0m炼制而成的一柄剑。
+吞噬妖魔、人、鬼神死亡之时所产生的怨气[2;37;0m
+剑柄上刻着一行小字：渡渡(a1658754_1)
+");
+	set("value", 50100000);
+	set("point", 5500);
+	set("material", "silk");
+	set("wield_msg", "吞噬吧[2;37;0m\n");
+	set("unwield_msg", "解放[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	init_sword(apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

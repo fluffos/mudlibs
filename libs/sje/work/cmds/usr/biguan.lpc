@@ -1,0 +1,125 @@
+// biguan.c 
+// doing
+// Last Modified by 白玉虎(Flysky) for new bguser.c and JSRH LIB
+
+#include <ansi.h>
+
+inherit F_DBASE;
+
+void create() 
+{
+        seteuid(getuid());
+        set("channel_id", "闭关修练");
+}
+string *valid_place = ({"堂","殿","筑","院","林","洞","山","阁"});
+int main(object me, string arg)
+{
+        object link_ob,bgnpc,weapon;
+        object *inv;
+        int i;
+        string id;
+        
+        seteuid(getuid());
+        if (me->is_busy() || me->is_fighting())
+                return notify_fail("你正忙着呢。\n");
+                
+        if(me->query_condition("killer")) return notify_fail("杀了人就想跑？\n");  
+        
+        if(  explode(base_name(environment(me)), "/")[0] == "d" 
+                && explode(base_name(environment(me)), "/")[1] == "death")
+                return notify_fail("在地府里修练？！\n");
+                
+        if ((int)me->query_skill("force",1) < 160) 
+                return notify_fail("你的内功火候还欠佳，无法闭关修练。\n");
+                
+        if ((int)me->query("max_neili") < 2000) 
+                return notify_fail("你的内功修为太低，无法闭关修练。\n");
+                
+        if ((int)me->query("eff_jingli") < 1500) 
+                return notify_fail("你的精力修为太低，无法闭关修练。\n");
+                
+        if(!arg || (arg!="neili" && arg!="jingli") ) return notify_fail("你要闭关修练什麽？\n");
+        
+        if(environment(me)->query("sleep_room")) 
+                return notify_fail("这是人家休息的地方。\n");
+                
+        if(me->query("qi") < me->query("max_qi")/4*3) 
+                return notify_fail("你的身体状况太差了，强行闭关修练有害无益。\n");
+                
+        if(me->query("jing") < me->query("max_jing")/4*3) 
+                return notify_fail("你的身体状况太差了，强行闭关修练有害无益。\n");
+                
+        if(me->query("neili") < 2000) 
+                return notify_fail("你的内力太弱，无法控制全身真气流动。\n");
+                
+        for (i=0 ; i<sizeof(valid_place);i++)
+        {
+                if(strsrch(environment(me)->query("short"),valid_place[i])>0) 
+                        me->set_temp("bg_place",1);
+        }
+        
+        if(!me->query_temp("bg_place"))  
+                return notify_fail("这里似乎不适合闭关修练。\n");
+                
+        id = me->query("id");
+        me->save();
+        
+        message_vision(HIG"$N盘膝而坐，垂目合什，双掌交汇，内息带动真气周游全身经脉，头顶烟雾盈绕\n"
+                "全然不知周围发生的事情，渐渐进入了闭关修练状态。 \n"NOR,me);
+        write("你开始闭关修练"+to_chinese(arg)+"，去睡觉啦！\n");
+        CHANNEL_D->do_channel(this_object(), "monitor", NOR + me->short() + HIR " 开始闭关修练，并退出游戏！\n");
+        
+        if( !link_ob = me->query_temp("link_ob")) 
+                return notify_fail("数据出问题，快点报告kittt\n");
+                
+        if( link_ob->is_character() )
+                return notify_fail("你不能用possess的个体进行闭关修练。\n");
+                
+        seteuid(id);
+        bgnpc = new("/clone/user/bguser");
+        export_uid(bgnpc);
+        bgnpc->set_name("", ({ id }));
+        if (!bgnpc->restore())
+        {
+                destruct(bgnpc);
+                return notify_fail("你的数据有问题，快点报告kittt。\n");
+        }
+        bgnpc->setup();
+        bgnpc->set_temp("bg_type",arg);
+        bgnpc->move(environment(me));     
+        bgnpc->set("startroom", base_name(environment(me)));
+        bgnpc->set("biguan",1);
+        bgnpc->set("no_quest_npc",1);
+        inv = all_inventory(me);
+        if (sizeof(inv) != 0 ) 
+                for(i=0; i<sizeof(inv); i++)
+          if( !inv[i]->query_autoload() && !inv[i]->query("unique") )
+                                inv[i]->move(bgnpc);
+
+        if(me->query("env") && me->query("env/wimpy"))
+        {
+                bgnpc->set("wimpy",me->query("env/wimpy"));     
+                bgnpc->delete("env/wimpy");
+        }
+        if ( weapon = me->query_temp("weapon") ) weapon->unequip();
+        me->save();
+        
+        "/cmds/usr/quit.lpc"->do_quit(me,link_ob);
+
+        bgnpc->save();
+        return 1;
+}
+
+int help(object me)
+{
+    write(@HELP
+指令格式 : biguan <neili> 闭关修练内力 | <jingli> 闭关修练精力  
+ 
+这个指令可以让你在下网的时候仍然能让你的人修练武功。
+需基本内功180等级，当然，修练也必须找个清幽的地方。
+ 
+HELP
+    );
+    return 1;
+}
+

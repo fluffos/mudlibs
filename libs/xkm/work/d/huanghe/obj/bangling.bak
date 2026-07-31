@@ -1,0 +1,416 @@
+//Cracked by Roath
+// /d/huanghe/obj/bangling.c
+// by aln 2/98
+
+#define BANGZHU   "/d/huanghe/npc/bangzhu"
+
+#include <ansi.h>
+#include <localtime.h>
+
+inherit ITEM;
+
+#include "/d/REGIONS.h"
+#include "/d/huanghe/doc/info_store.h"
+
+void create()
+{
+        set_name("帮令", ({ "bang ling", "ling" }) );
+        set_weight(10);
+        if( clonep() )
+                set_default_object(__FILE__);
+        else {
+                set("unit", "块");
+                set("long", "这是一块帮会中常用的帮令,你可用find和help ling来查看详细资料。\n");
+                set("value", 0);
+                set("material", "wood");
+                set("no_drop", "这样东西不能离开你。\n");
+                set("no_get", "这样东西不能离开那儿。\n");
+        }
+        setup();
+}
+
+void init()
+{
+        add_action("do_collect", "collect");
+        add_action("do_collect", "shoufei");
+        add_action("do_sign", "sign");
+        add_action("do_find", "find");
+        add_action("do_bargain", "bargain");
+        add_action("do_bargain", "taojia");
+        add_action("do_copy","copy");
+        add_action("do_huan","huan");
+        add_action ("do_help", "help");
+}
+
+int do_find(string arg)
+{
+        object *obj, room;
+        string file, region, fam, result,renwu;
+        int i;
+        mapping job;
+	
+	renwu=query("job/type");
+	switch(renwu) {
+        case "寻":
+                result = "huan find"; 
+                break;
+        case "杀":
+                result = " sign corpse"; 
+                break;
+        case "摊费":
+                result = "collect npc";
+                break;
+        case "截镖":
+                result = "huan find";
+                break;
+        case "示威":
+                result = "kill npc";
+                break;
+        case "送礼":
+                result = "给visit npc 放弃giveup";
+                break;
+        case "护驾":
+	        result = "huan find";
+                break;
+        case "买卖":
+                result = "讨价bargain npc 交易jiaoyi no";
+                break;
+        case "伙计":
+                result = "抄书copy book";
+                break;
+       }
+	if(!renwu)
+	result="huan find";
+
+		
+	
+	
+  printf("	┌───────"+HIY"「帮令」"NOR+"───────┐\n" ); 
+  printf("	│ 帮众:    ""%22s    │\n",this_player()->query("name") );   
+  printf("	│ 功劳点:  ""%22d    │\n",(int)this_player()->query("clbscore")); 
+  printf("	│ 帮务:    ""%22s    │\n",((string)query("job/type")+(string)query("job/name"))); 
+  printf("	│ 命令:""%|30s│\n",(string)result );
+  printf("	└─────────"+HIR"「长乐帮」"NOR+"────┘\n" );    
+         
+
+
+ 
+       return 1;    
+}
+
+int do_collect(string arg)
+{
+        object me = this_player();
+        object victim, obj,ob,ob1;
+        int ap, dp, myexp, yourexp, bonus, record;
+        mapping job;
+        string *bangs;
+
+        if( time() < (int)query("collect_time") + random(10) )
+                return notify_fail("你刚向此人要过钱。\n");
+
+        if( (int)me->query("jingli") < 50 || (int)me->query("jing") < 50 )
+                return notify_fail("你太累了，先歇会儿。\n");
+
+        if( (string)query("owner") != me->query("id") )
+                return notify_fail("帮令岂能瞎用？\n");
+
+        if( (string)query("fam") != me->query_temp("bangs/fam") )
+                return notify_fail("你已经不是此帮的人了。\n");
+
+        if( !mapp(job = query("job")) )
+                return notify_fail("你现在没有帮务缠身。\n");
+
+        if( job["type"] != "摊费" )
+                return notify_fail("你当前的帮务不是收摊费。\n");
+
+        if( base_name(environment(me)) != job["place"] )
+                return notify_fail("你还没到" + job["name"] + "收什么摊费？\n");
+
+        if( !arg )
+                return notify_fail("你要向谁收括钱？\n");
+
+        if( !(victim = present(arg, environment(me))) )
+                return notify_fail("这儿没有这个人。\n");
+
+        if( victim->name() != job["boss"] )
+                return notify_fail("你找错人了。\n");
+
+        if( !living(victim) )
+                return notify_fail("你还是等此人醒来后再收括钱吧。\n");
+
+        if( victim->is_busy() || victim->is_fighting() )
+                return notify_fail("此人正忙着。\n");
+
+        message_vision(HIR"\n$N向$n大声吆喝道：我是" + (string)query("fam") + "来收摊费的，识时务的赶快给钱！！！\n"NOR, me, victim);
+        
+        
+        if (present("corpse", environment(me)))
+        { ob1=present("corpse", environment(me));
+        if (ob1->query("my_killer")==me->query("id") && ob1->query("name")=="打手的尸体")
+        {
+        
+        message_vision("$N对$n说道：" + RANK_D->query_respect(me) + "辛苦了，这一点摊费是小的该付的。\n", victim, me);
+        message_vision("$N接着说道：" + RANK_D->query_respect(me) + "请放心，我马上派人将钱送到贵帮！！！\n", victim);
+
+        bonus = 200+((int)me->query("combat_exp") / 10000)+ random(260);;
+        record = bonus + random(bonus);
+        me->add("combat_exp", record);
+        log_file("test/BangJob", sprintf("%s于%s时因收摊费得%s经验点\n", me->query("name"), ctime(time()), chinese_number(record)));
+
+        bonus /= 4;
+        me->add("shen", -bonus);
+        me->add("clbscore",bonus);
+        message_vision(HIY"$N这次工作共得到 "+(int)record +"点经验值 ，"+(int)bonus +" 点功劳点。\n"NOR, me);
+        delete("job");
+        return 1;
+        	}}
+        
+        ob = new("/d/huanghe/npc/dashou");
+        ob->set("title", HIR"拿人钱财"HIY"替人消灾"NOR);
+        ob->move(job["place"]);
+        message("vision",
+                ob->name() +HIY "跳了出来。\n",
+                environment(ob), ({ob}));
+        message_vision(HIR"\n"+ ob->name() + HIM"对$N喝道：" + RANK_D->query_rude(me) + "想收钱问问大爷手里的家伙答不答应！！！\n"NOR, me);    
+        ob->start_busy(3);
+        ob->kill_ob(me);
+ 	me->start_busy(2);
+ 	me->kill_ob(ob);
+        return 1;
+      
+        
+      
+}
+
+int do_sign(string arg)
+{
+        object obj, room;
+        object me = this_player();
+        int bonus, record;
+        mapping job;
+
+        if( query("owner") != me->query("id") )
+                return 0;
+
+        if( (string)query("fam") != (string)me->query_temp("bangs/fam") )
+                return 0;
+
+        if( !arg || arg != "corpse" || !(obj = present(arg, environment(me))) )
+                return 0;
+
+        if( !mapp(job = query("job")) ) {
+                tell_object(me, "你现在没有帮务。\n");
+                return 1;
+        }
+
+        if( obj->query("my_killer") != me->query("id")
+        ||  obj->query("signed")
+        ||  (string)obj->query("victim_name") != job["name"] )
+                return 0;
+
+        if( !( room = find_object("/d/taishan/fengchan")) )
+                room = load_object("/d/taishan/fengchan");
+
+        if( me->query("id") == room->query("winner") ) {
+                tell_object(me, "怕死，不中用的东西！\n");
+                return 1;
+        }
+
+        obj->set("signed", 1);
+        bonus = job["bonus"] * job["max"] / (1000 + me->query("combat_exp"));
+        record = bonus + random(bonus);
+        me->add("combat_exp", record);
+        log_file("test/BangJob", sprintf("%s于%s时杀%s得%s经验点\n", me->query("name"), ctime(time()), job["name"], chinese_number(record)));
+
+        bonus = job["score"];
+        me->add("shen", -bonus);
+        me->add("clbscore",bonus);
+	 
+        message_vision("$N在尸体旁写下“与" + (string)query("fam") + "为敌者杀！”几个大字。\n", me);
+        message_vision(HIY"$N这次工作共得到 "+(int)bonus +" 点功劳点，"+(int)record +" 点经验值。\n"NOR, me);
+        delete("job");
+        return 1;
+}
+
+int do_bargain(string arg)
+{
+        object target, obj, me = this_player();
+        mapping job;
+        int bonus,exp;
+        string week, month, day, time, year;
+     
+        if( (string)query("owner") != me->query("id") )
+                return notify_fail("帮令岂能瞎用？\n");
+
+        if( (string)query("fam") != me->query_temp("bangs/fam") )
+                return notify_fail("你已经不是此帮的人了。\n");
+
+        if( !mapp(job = query("job")) )
+                return notify_fail("你现在没有帮务缠身。\n");
+
+        if( !arg )
+                return notify_fail("你要和谁讨价还价？\n");
+
+        if( !(target = present(arg, environment(me))) )
+                return notify_fail("这儿没有这个人。\n");
+                
+        if( explode(base_name(environment(target)), "/")[1] == "forest" )
+        	return notify_fail("笨蛋，怎么能拿本帮的东西到自己的地盘上卖？\n");
+       
+        if( me->is_fighting() || me->is_busy() )
+                return notify_fail("你正忙着。\n");        
+
+        if( !living(target) )
+                return notify_fail("你还是等此人醒来后再说吧\n");
+
+        if( userp(target) )
+                return notify_fail("玩家不会出好价钱的。\n");
+
+        if( target->is_busy() || target->is_fighting() )
+                return notify_fail(target->name() + "正忙着。\n");
+
+        if( (exp = (int)target->query("combat_exp")) < 10000 ) {
+                message_vision("$N摆了摆手说道：我买不起，你卖给别人吧。\n", target);
+                return 1;
+        }
+	
+	
+        if( !(obj = present(job["good"], me)) )
+                return notify_fail("你把" + job["name"] + "弄丢了。\n");
+
+        if( time() < (int)target->query("trader/time") + 600 ) {
+                message_vision("$N 摆了摆手说道：我刚买了一" + obj->query("unit") + obj->name() + "。\n", target);
+                return 1;
+        }
+ 
+       bonus += 3+((int)me->query("combat_exp") / 10000)+200+random(160);
+
+        message_vision("$N想了想说道：好吧，" + chinese_number(bonus) + "两银子，再贵我不买了。\n", target);
+       	me->set_temp("bangs/bonus",bonus);
+       	me->set_temp("bangs/name",target->query("name"));
+       	me->set_temp("bangs/her",base_name(environment(me)));
+       	
+       	me->start_busy(1);
+  	add_action ("do_jiaoyi", "jiaoyi");
+        return 1;
+}
+
+int do_jiaoyi(string arg)
+{       object target, obj, money, ling,me = this_player();
+	mapping job;
+        int bonus, exp;
+        string ob;
+        
+       if(query("job"))
+       { ob=query("job/good");
+        obj = (present(ob, me));
+        }
+        else
+        return 0;
+              
+        if(me->query_temp("nojob")>1)
+               return 0;       
+        
+	if( !arg )
+                return notify_fail("你要和谁交易？\n");
+       
+	//if(present(environment(me))->query("name")!=me->query_temp("bangs/name"))
+	//	return notify_fail("你乱搞什么，和别人谈价和我交易？\n");
+	
+	if( !(target = present(arg, environment(me))) )
+                return notify_fail("这儿没有这个人。\n");      
+
+        if( !living(target) )
+                return notify_fail("你还是等此人醒来后再说吧\n");
+
+        if( userp(target) )
+                return notify_fail("玩家不会出好价钱的。\n");
+        
+       if(me->query_temp("bangs/her")!=base_name(environment(me)))
+       	{	me->delete_temp("bangs/her");
+        	return notify_fail("你大脑有没有问题，不谈价就交易呀。\n");
+		}
+        if( target->is_busy() || target->is_fighting() )
+                return notify_fail(target->name() + "正忙着。\n");
+         
+        bonus=me->query_temp("bangs/bonus");
+        target->set("trader/time", time());
+        message_vision("$N想了想对$n说道：好吧，就" + chinese_number(bonus) + "两银子，成交了。\n", me,target);
+        message_vision("$N点了点头，将" + obj->query("unit") + obj->name() + "交给$n。\n", me, target);
+        obj->move("/d/shenlong/cangku");
+        message_vision("$N说道：下次贵帮来人时我再付款。\n", target);
+        message_vision("$N说道：没关系，下次还有更好的货。\n", me);
+
+        me->add("combat_exp", bonus);
+        me->add("clbscore",bonus/5);
+        log_file("test/BangJob", sprintf("%s于%s时因卖%s得%s经验点\n", me->query("name"), ctime(time()), obj->name(), chinese_number(bonus)));
+        delete("job");
+        me->set_temp("nojob",1);
+        me->delete_temp("bangs/bonus");
+        me->delete_temp("bangs/her");
+        message_vision(HIY"$N这次工作共得到 "+(int)bonus +"点经验值 ，"+(int)bonus/4 +" 点功劳点。\n"NOR, me);
+   	if(bonus>450)
+   	{
+   	money = new("/clone/money/gold");
+   	message_vision(HIB"$N这次卖的价这么高，藏一百两银子，吃点小酒。\n"NOR, me);
+        money->move(me);}
+   	
+                return 1;
+}
+int do_huan(string arg)
+{
+	int a;
+          int b = 0 - a;
+	object me;
+	me = this_player();
+	if (!arg || !sscanf(arg,"%d",a)) return notify_fail("正确指令格式：huan <用来兑换的功劳点数>\n");
+           if (a < 0 || a == 0 ) return notify_fail("你想干什么啊?。\n");
+	if (a > me->query("clbscore")) return notify_fail("你没有这么多功劳点。\n");
+           if (b < 0) return notify_fail("你没有这么多功劳点。\n");
+	me->add("clbscore", 0 - a);
+	me->add("potential",a);	
+	tell_object(me,HIY"你把"+a+"点功劳点换成了潛能。\n"NOR);
+	if (me->query("potential") > me->query("max_potential"))
+	tell_object(me,HIR"你的潛能太多，当心別丟了！\n"NOR);
+	return 1;
+	
+}
+
+int do_copy(string arg)
+{       object me=this_player();
+	int bonus;
+	if(!arg) return 0;
+
+	if(arg!="book") return 0;
+
+	if(me->query_temp("copy")>0 &&me->query_temp("bangs/fam")=="长乐帮"&&
+	query("job/type")=="伙计")
+	{bonus=180+random(100);
+	me->add("jing",-(20+random(10)));
+	me->add("combat_exp",bonus);
+	me->add("clbscore",bonus/3);
+	me->delete_temp("copy");
+	delete("job"); 
+	//delete_action ("do_jiaoyi", "jiaoyi");
+	message_vision(HIY"$N这次工作共得到 " + (int)bonus/3+ " 点功劳点，" +(int)bonus+" 点经验值。\n"NOR, me);
+	return 1;}
+	
+}
+
+int do_help(string arg)
+{
+	if(!arg)        return 0;
+        if( arg != "ling" && arg !="tieyan ling")
+                return 0;
+	write(WHT"\n长乐帮帮令："NOR"\n");
+	write(
+	"\t帮令，这是长乐的信物,长乐帮弟子必须随身携带，不得遗失。\n"
+        "\t查看帮令的相关信息(find)。                     \n"	
+	"\t有此令你可以把功劳点换(huan)是潜能                       \n"
+	"\t               \n"
+	"\t                        \n"
+	);
+	return 1;
+}
+

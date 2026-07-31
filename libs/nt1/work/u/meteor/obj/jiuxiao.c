@@ -1,0 +1,31 @@
+#include <weapon.h>
+#include <music.h>
+#include <ansi.h>
+
+inherit SWORD;
+inherit MI_QIN;
+
+void create()
+{
+        set_name(HIW "九霄环佩" NOR,({ "jiuxiao huanpei", "jiuxiao", "huanpei", "qin" }) );
+        set_weight(9000);
+        if (clonep())
+                set_default_object(__FILE__);
+        else {
+                set("long", "桐木为体，通体雪白，如天山之雪，广寒之冰，琴侧绕以金环十八枚，名曰“九霄环佩”。\n" NOR);
+                set("unit", "具");
+                set("value", 5000);
+                set("material", "wood");
+                set("wield_msg", HIW "$N" HIW "从背后缓缓取出一具九霄环佩抱在手中。\n" NOR);
+                set("unwield_msg", YEL "$N" YEL "将手中的九霄环佩收了起来，放到背后。\n" NOR);
+                set("stable", 10);
+        }
+        init_sword(200);
+        setup();
+}
+
+void init()
+{
+        add_action("play_qin", "play");
+}
+

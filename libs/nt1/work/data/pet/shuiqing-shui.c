@@ -1,0 +1,18 @@
+// SN:8kXa5dnIeNbW_Je4
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("云鹤[2;37;0m", ({"shui he"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "与白云为伴，凭自由自在
+它是水清妹妹的坐骑。
+");
+        set_temp("owner_id", "shuiqing");
+        set_temp("owner_name", "水清妹妹");
+        ::setup();
+}
+

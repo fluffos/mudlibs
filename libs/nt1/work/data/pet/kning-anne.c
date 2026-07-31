@@ -1,0 +1,18 @@
+// SN:oom7X8JV3h?[:fdh
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("白色鹤[2;37;0m", ({"anne he"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "这是一只高傲的白鹤，似乎正准备展翅高飞。
+它是唐棠的坐骑。
+");
+        set_temp("owner_id", "kning");
+        set_temp("owner_name", "唐棠");
+        ::setup();
+}
+

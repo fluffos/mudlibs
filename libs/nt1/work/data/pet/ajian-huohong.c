@@ -1,0 +1,18 @@
+// SN:f7Pg]0lZ;?aU^j5;
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;33m火红麒麟狮[2;37;0m", ({"huohong shi"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "只见它全身火红色的长毛被一层烈火围着令你不敢仰视
+它是啊健的坐骑。
+");
+        set_temp("owner_id", "ajian");
+        set_temp("owner_name", "啊健");
+        ::setup();
+}
+

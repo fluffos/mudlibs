@@ -1,0 +1,96 @@
+//banish.c
+//edit by xiaoyao
+
+inherit F_CLEAN_UP;
+
+string *special_props = ({
+        "short", "long" });
+
+int save_kingdom();
+
+int main(object me, string arg)
+{
+        object ob;
+        string kingdom_file,str;
+
+        seteuid(getuid(me));
+
+        if( me->is_busy() )
+                return notify_fail("你的动作还没有完成\n");
+
+        if( !arg ) return notify_fail("指令格式：banish <帮众>\n");
+
+        if( !(ob = present(arg, environment(me))) )
+                return notify_fail("你想决定开除谁 ？\n");
+        if( ob==me ) return notify_fail("开除自己？好主意....不过没有用。\n");
+
+        if( !userp(ob) ) return notify_fail(ob->name() + "他不是玩家。\n");
+
+        if( ob->query("kingdom")!=me->query("kingdom") ) return notify_fail("他不是本帮帮众。\n");
+
+                message_vision(
+                        "$N决定开除$n。\n\n",
+                        me, ob);
+
+                write("恭喜你开除了一位帮众！\n");
+                tell_object( ob, "恭喜您成为无帮派之人。\n");
+                ob->delete("title");
+                ob->set("kingdom","无");
+                ob->save();
+       str="我宣布即日开除"+ob->query("name")+"("+ob->query("id")+")!";
+         CHANNEL_D->do_channel(me, "chat", sprintf("%s",str));
+
+                kingdom_file = me->query("cwd")+"kingdom";
+                find_object(kingdom_file)->add("people",-1);
+                save_kingdom();
+                return 1;
+}
+
+int save_kingdom()
+{
+        object env,me;
+        string str, *name, file;
+        mapping prop;
+        int i;
+
+        me = this_player();
+        file = me->query("cwd") + "kingdom.lpc";
+        env = find_object(me->query("cwd")+"kingdom");
+
+        str = "// Room: " + me->query("title") + @ROOM_CODE
+
+#include <ansi.h>
+inherit ROOM;
+
+void create()
+{
+ROOM_CODE
+        ;
+        str += sprintf("\tset(\"short\", %O);\n", env->query("short") );
+        str += sprintf("\tset(\"long\", @LONG\n%sLONG\n\t);\n", env->query("long") );
+        prop = env->query_entire_dbase();
+        name = keys(prop);
+        for(i=0; i<sizeof(name); i++) {
+                if( member_array(name[i], special_props)!=-1 ) continue;
+                str += sprintf("\tset(\"%s\", %O);\n", name[i], prop[name[i]] );
+        }
+        str += "\n\tsetup();\n\treplace_program(ROOM);\n}\n";
+
+        rm(file);
+        write_file(file, str);
+                return 1;
+        return 0;
+
+}
+
+int help(object me)
+{
+        write(@HELP
+指令格式 : banish <帮众>
+ 
+这个指令能让你开除某人帮众
+ 
+HELP
+        );
+        return 1;
+}

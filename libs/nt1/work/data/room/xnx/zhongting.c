@@ -1,0 +1,82 @@
+// SN:8PXO5gibCeY=O`Lb
+// File(/data/room/xnx/zhongting.c) of xnx's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        object ob;
+
+        set("short", "霍格沃茨中庭");
+	set ("long", @LONG
+沿着大理石阶梯向上走去。走廊两旁画像里的人做着各自的事。
+穿越隐蔽在活动镶板和挂墙花毯后的暗道。继续向上走。在走廊尽头
+的墙上挂着一个穿着粉红色丝裙的胖女人的画像。[2;37;0m
+LONG );
+
+	set("exits", ([
+		"north"  : __DIR__"houyuan",
+                "south"  : __DIR__"yishiting",
+                "east"   : __DIR__"zuoxiang",
+                "west"   : __DIR__"youxiang",
+	]));
+
+        set("outdoors", "playertown");
+
+        set("objects", ([
+                "/d/room/roomnpc/shouwei" : 1,
+        ]));
+
+        create_door("east", "木门", "west", DOOR_CLOSED);
+        create_door("west", "木门", "east", DOOR_CLOSED);
+
+        set("no_sleep_room", 1);
+        setup();
+
+        ob = present("shou wei", this_object());
+        ob->set("coagents", ({
+                ([ "startroom" : __DIR__"zuowei",
+                   "id"        : "shou wei 1" ]),
+                ([ "startroom" : __DIR__"zuowei",
+                   "id"        : "shou wei 2" ]),
+                ([ "startroom" : __DIR__"youwei",
+                   "id"        : "shou wei 2" ]),
+                ([ "startroom" : __DIR__"youwei",
+                   "id"        : "shou wei 1" ]),
+        }));
+
+        set("room_owner", "绛珠草");
+        set("room_name", "霍格沃茨");
+        set("room_id", "hgwc");
+        set("room_owner_id", "xnx");
+        set("room_position", "碎石小道");
+}
+
+int valid_leave(object me, string dir)
+{
+        object ob;
+
+        ob = present("shou wei", this_object());
+        if (dir != "north" || ! objectp(ob) || ! living(ob))
+                return ::valid_leave(me, dir);
+
+        if (ob->is_owner(me))
+        {
+                message_vision("$N弯腰对$n道：“请进！”\n", ob, me);
+                return ::valid_leave(me, dir);
+        }
+
+        if (present(query("room_owner_id") + " pass", me))
+        {
+                message_vision("$N对$n道：“即然有主人的手谕，就请进吧。”\n",
+                               ob, me);
+                return ::valid_leave(me, dir);
+        }
+
+        message_vision("$N伸手拦住$n，道：“对不起，没有" +
+                       query("room_owner") + "的手谕，不可擅自闯入！”\n", ob, me);
+        return 0;
+}

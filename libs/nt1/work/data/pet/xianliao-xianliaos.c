@@ -1,0 +1,18 @@
+// SN:;YBheh2@F2RNDP3^
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;31m就是马[2;37;0m", ({"xianliaos ma"}));        
+        set("gender", "女性");                
+        set("unit", "匹");
+        set("long", "没什么好描述的
+它是澄超的坐骑。
+");
+        set_temp("owner_id", "xianliao");
+        set_temp("owner_name", "澄超");
+        ::setup();
+}
+

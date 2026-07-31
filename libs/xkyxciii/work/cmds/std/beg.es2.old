@@ -1,0 +1,103 @@
+// beg.c
+
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+
+int main(object me, string arg)
+{
+        string what, who;
+        object ob, victim;
+        int sp, dp;
+
+	if( me->query_temp("sleeping") ) return notify_fail("你现在正躺着呢。\n");
+
+	 if( me->query("class")!="beggar" )
+                return notify_fail("只有丐帮弟子才能行乞 ！\n");
+        if( me->query_temp("begging") )
+                return notify_fail("你已经在行乞了！\n");
+
+        if( !arg || sscanf(arg, "%s from %s", what, who)!=2 ) return
+                notify_fail("指令格式：beg <物品> from <人物>\n");
+
+	 if(me->query("gin")<10)
+		return notify_fail("你的精神状态太差，没有办法乞讨！\n");
+
+        victim = present(who, environment(me));
+        if( !victim || victim==me) return notify_fail("你想乞讨的对象不在这里。\n");
+
+        if( !wizardp(me) && wizardp(victim) )
+                return notify_fail("玩家不能讨巫师身上的东西。\n");
+	 if(victim->query_temp("sleeping") )
+		  return notify_fail("没见人家在睡觉吗？怎么给你东西啊？\n");
+
+        if( !ob = present(what, victim) ) {
+                object *inv;
+                inv = all_inventory(victim);
+                if( !sizeof(inv) )
+                        return notify_fail( victim->name() + "身上看起来没有什麽值钱的东西可以给你了。\n");
+                ob = inv[random(sizeof(inv))];
+        }
+        sp = (int)me->query_skill("begging") * 100 + (int)me->query("kar") * 2
+                - (int)me->query("beggar") * 20;
+        if( sp < 1 ) sp = 1;
+        if( me->is_fighting() ) {
+                sp /= 2;
+                me->start_busy(3);
+        }
+        dp = (int)victim->query("sen") * 2 + (int)ob->weight()/25;
+        if( victim->is_fighting() ) dp *= 10;
+        if( ob->query("equipped") ) dp *= 10;
+
+        message_vision(CYN"$N一步一步靠近$n，说道：这位" 
+		+ RANK_D->query_respect(victim)+"行行好，给点儿"
+		+ ob->query("name") + CYN"吧...\n\n"NOR, me, victim); 
+
+        me->set_temp("begging", 1);
+ 	me->receive_damage("gin",10);
+        call_out( "compelete_beg", 2, me, victim, ob, sp, dp);
+
+        return 1;
+}
+
+private void compelete_beg(object me, object victim, object ob, int sp, int dp)
+{
+        me->delete_temp("begging");
+
+        if( environment(victim) != environment(me) ) {
+                tell_object(me, "你行乞的目标已经走了。\n");
+                return;
+        }
+
+        if( !living(victim) ) {
+		tell_object(me,victim->name()+"已经没有办法给你任何东西了。\n");
+		return;
+	 }
+	 if(random(sp+dp) > dp ) {
+		message_vision("$n看了$N一眼，摇了摇头，叹了口气，扔给$N"+ob->query("unit")+ob->name()+"。\n",me,victim); 
+                if( !ob->move(me) ) {
+                        tell_object(me, "可是对你而言"+ob->name()+"太重了，不得不放弃。\n");
+                        return;
+                }
+		else {
+	        	  me->improve_skill("begging", random(me->query("int")));
+			  return;
+		}
+        }
+        message_vision("$N大喝一声：滚开！把$n吓得直打哆嗦。\n" , victim, me);
+        me->improve_skill("begging", 1, 1);
+        me->add("beggar", 1);
+	 return;
+}
+
+int help(object me)
+{
+write(@HELP
+指令格式 : beg <某物> from <某人>
+
+这个指令让你有机会讨到他人身上的东西。
+HELP
+    );
+    return 1;
+}
+ 

@@ -1,0 +1,30 @@
+#include <ansi.h>
+#include <room.h>
+
+inherit ROOM;
+
+
+void create()
+{
+        set("short", HIY"天星的小屋"NOR);
+        set("long", @LONG
+一间不是很大的房间，但显得十分悠雅，青绿色的天花板上吊着一盏光线很强的灯，
+小屋的中央有一个小桌，桌上摆着一台电脑(dian nao)，旁边散乱的放着一些没头
+没脑的程序。几位美若天仙的姑娘在一边站着，看起来象是天星的仆人。
+LONG
+        );
+
+        set("exits", ([
+              
+		"down" : "/d/budui/bdguangchang2",
+                "out"  : "/d/wizard/guest_room"
+                ,
+        ]));
+
+     
+        set("item_desc",(["dian nao":"这是一台十分先进的电脑，配有K7的芯片，每秒可以运算一百亿次以上。cool! \n"]));
+        set("objects",([
+                       __DIR__"puren" : 3,
+                       ]));
+        setup();
+}          

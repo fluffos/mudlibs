@@ -1,0 +1,87 @@
+// 神话世界·西游记·版本４．５０
+/* <SecCrypt CPL V3R05> */
+ 
+// sentence.c
+// FoF@Happy 00-5-21
+
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+
+int main(object me, string arg)
+{
+	string id, reason;
+	int prison_time, prison_time2, day;
+	object who;
+	
+	if( ! arg ) return notify_fail("你要宣判谁入狱？\n");
+	
+	if( sscanf(arg, "%s %d day because", id, day, reason) != 3 )
+		return notify_fail("指令格式: sentence <id> <n> day because <reason>\n");
+	
+	if( !reason ) return notify_fail("必须指出宣判的理由！\n");
+	
+	if( ! who = find_player(id) ) {
+		who = new(USER_OB);
+		who->set("id", id);
+		if( ! who->restore() ) {
+			write("玩家 " + id + " 档案读取失败！\n");
+			destruct(who);
+			return 1;
+		}
+	}
+	
+	if( wizardp(who) ) return notify_fail("不能给管理人员判刑！\n");
+	
+	prison_time = who->query("prison_time");
+	prison_time2 = prison_time + 1440 * day;
+	if( prison_time2 <= 0 ) {
+		prison_time2 = 0;
+		who->delete("prison_time");
+		who->set("startroom", "/d/city/kezhan");
+		if( environment(who)->is_prison() ) {
+			tell_object(who, HIW "\n你被获准刑满释放。\n\n" NOR);
+			who->move("/d/city/kezhan");
+		}
+	} else
+		who->set("prison_time", prison_time2);
+	
+	write("玩家 " + who->query("name") + "(" + who->query("id") +
+		") 原有刑期 " + prison_time / 1440 + " 天，现刑期 " +
+		prison_time2 / 1440 + " 天。\n");
+	
+	log_file("prison", sprintf("%s %s sentence %s %d day because\n%s\n",
+		ctime(time()), me->query("id"), who->query("id"), day, reason));
+	
+	if( interactive(who) ) {
+		if( ! who->query("prison_time") ) return 1;
+		tell_object(who, HIR "\n你被宣判入狱" + chinese_number(prison_time2/1440) +
+			"天，理由是：\n" + reason + "\n\n" NOR);
+		who->start_busy(1);
+		
+		if( environment(who)->is_prison() ) return 1;
+		if( !who->move("/d/wiz/prison-1") )
+			if( !who->move("/d/wiz/prison-2") )
+				who->move("/d/wiz/prison-3");
+	} else {
+		who->set("startroom", "/d/wiz/prison-1");
+		who->save();
+		destruct(who);
+	}
+	
+	return 1;
+}
+
+int help (object me)
+{
+    write(@HELP
+指令格式: sentence <id> <n> day because <reason>
+
+宣判某玩家增加入狱 n 天的惩罚，如果要减刑，可以指定 n 为负数。
+宣判时必须说明原因(reason)。
+
+HELP
+    );
+    return 1;
+}
+ 

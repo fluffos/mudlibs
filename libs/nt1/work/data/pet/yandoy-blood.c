@@ -1,0 +1,18 @@
+// SN:b>JEo>C9jP2Jk2kF
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;31m血狼[2;37;0m", ({"blood lang"}));        
+        set("gender", "男性");                
+        set("unit", "条");
+        set("long", "一只红色小狼。
+它是慕容先生的坐骑。
+");
+        set_temp("owner_id", "yandoy");
+        set_temp("owner_name", "慕容先生");
+        ::setup();
+}
+

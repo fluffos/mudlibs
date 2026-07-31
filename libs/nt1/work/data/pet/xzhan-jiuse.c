@@ -1,0 +1,18 @@
+// SN:I>8IehgTFMXA[OCP
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;31m九色鹿[2;37;0m", ({"jiuse lu"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "$HIR$色色色色色色色色色色色色色
+它是血战的坐骑。
+");
+        set_temp("owner_id", "xzhan");
+        set_temp("owner_name", "血战");
+        ::setup();
+}
+

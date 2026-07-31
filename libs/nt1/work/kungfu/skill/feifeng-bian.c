@@ -1,0 +1,70 @@
+// feifeng-bian.c 飞凤鞭
+// by Lonely
+
+#include <ansi.h>
+
+inherit SKILL;
+
+string *action_msg = ({
+        "$N沉肩滑步，手中$w一抖，使出一式「凤凰展翅」，$w迅捷无比地分打$n的左右两侧，$n顿时左右支绌，慌了手脚",
+        "$N将身一纵，跃在半空，一式「彩凤栖梧」，手中$w盘旋而下，鞭势灵动之至，击向$n$l",
+        "$N轻叱一声，一招「鸾凤和鸣」，$N似乎纯系守势，但鞭势如抽丝剥茧，严密之极，将$n全身尽数罩在鞭影之中",
+        "$N深吸一口气，将内力源源不绝地注入$w，蓦地使出一式「游龙戏凤」，$w矫夭飞舞，直如神龙破空一般，直刺$n$l",
+        "$N一声清啸，连连舞动手中$w，正是一招「龙飞凤舞」，但见漫天鞭影铺天盖地地向$n卷来，势道猛烈之极",
+        "$N面露微笑，轻轻跨前一步，举手齐眉，缓缓使出一式「龙凤呈祥」，罩向$n前胸",
+});
+
+int valid_enable(string usage) { return (usage == "whip") || (usage == "parry"); }
+
+int valid_learn(object me)
+{
+        mapping fam;
+        object weapon;
+
+        if ((int)me->query("max_neili") < 100)
+                return notify_fail("你的内力不足，没有办法练飞凤鞭法，多练些内力再来吧。\n");
+
+        if ((int)me->query_skill("kurong-changong", 1) < 20)
+                return notify_fail("你的枯荣禅功火候太浅。\n");
+
+        if ( !objectp(weapon = me->query_temp("weapon"))
+        || ( string)weapon->query("skill_type") != "whip" )
+                return notify_fail("你必须先找一条鞭子才能练鞭法。\n");
+
+        return 1;
+}
+
+mapping query_action(object me, object weapon)
+{
+        return ([
+                "action": action_msg[random(sizeof(action_msg))], 
+                "force": 320 + random(50), 
+                "attack": 50 + random(10), 
+                "dodge" : 50 + random(10), 
+                "parry" : 50 + random(10), 
+                "damage_type" : random(2)?"劈伤":"刺伤", 
+        ]); 
+}
+
+int practice_skill(object me)
+{
+        object weapon;
+
+        if (!objectp(weapon = me->query_temp("weapon"))
+        || (string)weapon->query("skill_type") != "whip")
+                return notify_fail("你使用的武器不对。\n");
+        if ((int)me->query("qi") < 60)
+                return notify_fail("你的体力不够练飞凤鞭。\n");
+        if ((int)me->query("neili") < 60)
+                return notify_fail("你的内力不够。\n");
+        me->receive_damage("qi", 50 );
+        me->add("neili", -50);
+        return 1;
+}
+
+string perform_action_file(string action)
+{
+        return __DIR__"feifeng-bian/" + action;
+}
+
+

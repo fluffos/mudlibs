@@ -1,0 +1,174 @@
+//BBB 09/25/1999 
+//让玩家不会漏过任何重要新闻，也不要长途跋涉去看巫师公告版。
+
+#define NEWS_DIR       "/data/"
+#define NEWS_FILENAME  "news"
+#define NEWS_TITLE  "\n━━━━━━━━━━━━━━━ "HIY"书剑网络游戏新闻列表"NOR" ━━━━━━━━━━━━━━━\n"
+#define NEWS_END  "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+#define NEWS_P HIY"书剑新闻系统："NOR
+
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+inherit F_SAVE;
+
+mapping *notes;
+
+string query_save_file()
+{
+        return NEWS_DIR + NEWS_FILENAME ;
+}
+
+void done_post(object me, mapping note, string text)
+{
+        int i; 
+        note["msg"] = text;
+        i = sizeof(notes);
+        if( !pointerp(notes) || !sizeof(notes) )
+                notes = ({ note });
+        else
+                notes += ({ note });
+        tell_object(me, NEWS_P + HIM "新闻发布完毕。\n"NOR);
+        message("system","\n\n"+NEWS_P+"发布最新新闻，请用 news 查看。\n\n" , users() );
+        save();
+        return;
+}
+
+void list_news(object me, int login)
+{
+        int i,ulogin, j = 0;
+        string str;
+        object link_ob;
+        
+        restore();
+        
+        i = sizeof(notes);
+        if( i < 1 ) write(NEWS_P +"没有任何新闻。\n");
+        
+        else {
+                link_ob = me->query_temp("link_ob");
+                ulogin = link_ob->query("last_on");
+                str = NEWS_TITLE;
+                while (i--){
+                        if( ulogin < notes[i]["time"] ) {
+                        	j++;
+                        	str += sprintf("%3d) %-=40s %18s %s \n",
+                                i+1, notes[i]["title"], notes[i]["poster"]+"("+capitalize(notes[i]["author"])+")", ctime(notes[i]["time"])[0..9] );
+                        }
+                }
+                if ( !j ) write(NEWS_P +"从您上次退出到现在没有任何新闻。\n");
+                else if ( login ) write(NEWS_P+"您目前共有"+ j +"条新闻未读，请用 news 阅读。\n");
+                else me->start_more( str + NEWS_END);
+        }
+}
+
+void list_allnews(object me)
+{
+    	int i;
+    	string str;
+    	
+    	i = sizeof(notes);
+    	if ( i < 1) {
+        	write(NEWS_P +"没有任何新闻。\n");
+        	return;
+    	} 
+    	str = NEWS_TITLE;
+    	while( i-- )
+        	str += sprintf("%3d) %-=40s %18s %s \n",
+                i+1, notes[i]["title"], notes[i]["poster"]+"("+capitalize(notes[i]["author"])+")", ctime(notes[i]["time"])[0..9] );
+               
+        str += NEWS_END;
+    	me->start_more(str);
+}
+
+
+int main(object me, string arg)
+{
+    	mapping note;
+    	string s,arg1 ;
+    	int num;
+    
+        if (!arg) {
+                list_news(me, 0);
+                return 1;
+                }
+        
+        restore();
+        if( sscanf(arg, "%s", s) == 1 ) {
+
+                if ( s == "all" ) {
+                        list_allnews(me);
+                        return 1;
+                        }
+
+                if ( s == "post" && wiz_level(me)<3 ) 
+                        return notify_fail(NEWS_P +"只有巫师才可以发布消息。 \n");
+                if ( s == "delete" && wiz_level(me)<3 ) 
+                        return notify_fail(NEWS_P +"只有巫师才可以删除消息。 \n");              
+                if ( s == "post" && wiz_level(me)>=3 )
+                        return notify_fail("使用方法： news post <主题> \n");           
+                if ( s == "delete" && wiz_level(me)>=3 )
+                        return notify_fail("使用方法： news delete <编号> \n");         
+                }
+                
+                if( sscanf(arg, "post %s", arg1) == 1 ) {
+                        if ( wiz_level(me)<3 ) return notify_fail(NEWS_P +"只有巫师才可以发布消息。 \n");
+                        if ( strlen(arg1)< 8 || strlen(arg1)>40 )
+                                return notify_fail(NEWS_P +"请简明扼要地说明主题，主题字数必须在4-20之间。 \n");                
+                        else
+                        note = allocate_mapping(5);
+                        note["title"] = arg1;
+                        note["author"] = me->query("id"); 
+                        note["poster"] = me->query("name"); 
+                        note["time"] = time();
+                        me->edit( (: done_post, me, note :) );
+                        return 1;
+                }
+
+                if( sscanf(arg, "delete %d", num)== 1 ){
+                        if ( wiz_level(me)<3 ) return notify_fail(NEWS_P +"只有巫师才可以删除消息。 \n");                       
+                        if( !arrayp(notes) || num < 1 || num > sizeof(notes) )
+                                return notify_fail(NEWS_P +"没有这个编号的新闻。\n");
+                        else
+                        num--;
+                        notes = notes[0..num-1] + notes[num+1..<1];
+                        save();
+                        write(NEWS_P +"删除第 " + (num+1) + " 号新闻....Ok。\n");
+                        return 1;
+                }
+
+                if( sscanf(arg, "%d", num)== 1 ){
+                        if( !pointerp(notes) || !sizeof(notes) )
+                                return notify_fail(NEWS_P +"没有任何新闻。\n");
+                        if( num < 1 || num > sizeof(notes) )
+                                return notify_fail(NEWS_P +"没有这个编号的新闻。\n");
+                        num--;
+                        this_player()->start_more( sprintf("%d) %-=36s %18s (%s) (%s)\n"+NEWS_END,
+                        num + 1, notes[num]["title"], notes[num]["poster"],notes[num]["author"],
+                        ctime(notes[num]["time"])[0..15])
+                        + notes[num]["msg"] );
+                        return 1;
+                }
+
+}
+    
+int help(object me)
+{
+write(@HELP
+指令格式 : 
+news                    查看(上次退出->最新发布)期间的新闻列表。
+news all                查看全部新闻列表。
+news <编号>             查看此编号新闻的详细内容。
+news post <主题>        发布新闻，wizard 级别以上巫师专用
+news delete <编号>      删除新闻，wizard 级别以上巫师专用
+
+注意：  1、发布内容主要为：系统公告、程序改动、武林大事。
+        2、未经确实的消息严禁发布，虚假新闻立即删除。
+        3、重大程序变动，如可能涉及玩家，必须用此发布通告，且以此为准。
+        4、玩家登录时，将会自动显示未上线期间的新闻。
+
+HELP
+    );
+    return 1;
+}
+

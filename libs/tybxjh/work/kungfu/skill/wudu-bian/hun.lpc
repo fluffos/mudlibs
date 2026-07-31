@@ -1,0 +1,67 @@
+// mie.c  回风拂柳剑法「灭剑」
+
+#include <ansi.h>
+
+inherit F_SSERVER;
+int perform(object me, object target)
+{
+      int damage, damage2;
+        string msg;
+        object weapon;
+
+ if ( (string)me->query("family/family_name") != "五毒教") 
+       return notify_fail("「"HIR"五毒攻心"NOR"」只有五毒教弟子才能使用。\n");
+
+
+        if (!target ) target = offensive_target(me);
+        if (!objectp(weapon = me->query_temp("weapon"))
+        || (string)weapon->query("skill_type") != "whip")
+        return notify_fail(RED"开什么玩笑，没装备剑就想使「五毒攻心」？\n"NOR);
+      if (!target || !target->is_character() || !me->is_fighting(target) )
+        return notify_fail("「五毒攻心」只能对战斗中的对手使用。\n");
+      if ((int)me->query_skill("wudu-bian", 1) < 800 )
+        return notify_fail(WHT"你的五毒鞭法不够娴熟，还使不出「五毒攻心」。\n"NOR);
+      if ((int)me->query_skill("whip", 1) < 850 )
+        return notify_fail(WHT"你连鞭都拿不来，还妄想使出「五毒攻心」？\n"NOR);
+      if ((int)me->query_skill("force", 1) < 1500 )
+        return notify_fail(RED"你的内功基础不够，耍不出「五毒攻心」。\n"NOR);
+      if ((int)me->query_skill("dodge", 1) < 1500 )
+        return notify_fail(RED"你的身法不够灵活不够，领悟不到「五毒攻心」。\n"NOR);
+      if ((int)me->query("max_neili")<50000)
+        return notify_fail(RED"你的内力修为不足，无法运足「五毒攻心」的内力。\n"NOR);
+      if ((int)me->query("neili")<200)
+        {
+        return notify_fail(HIC"你现在内力不够，没能将「五毒攻心」使完！\n"NOR);
+        }
+
+     msg = HIY "$N深深吸了一口气，使出绝技「五毒攻心」，这一击来势好快，寒光一闪，\n"NOR;
+     msg += HIY"长鞭已近$n的咽喉，$n连忙抽身后跃，想要退出\n"NOR;
+   if (random(me->query_skill("force"))>target->query_skill("force")/2)
+        {
+                me->start_busy(2);
+                target->start_busy(random(3));
+damage = (int)me->query_skill("wudu-bian", 1)*5+(int)me->query_skill("force",1)*2;
+   damage = damage + random(damage);
+if (damage<target->query("max_qi",1)/8 && me->query("max_neili",1) > target->query("max_neili",1)/2) damage = random (target->query("max_qi",1)/6);
+if (damage>target->query("max_qi",1)/3) damage = random (target->query("max_qi",1)/4);
+
+
+damage2 = (int)me->query_skill("wudu-bian", 1)*5+(int)me->query_skill("force",1)*2;
+damage2 = damage2 + random(damage2);
+                target->receive_damage("qi", damage/2);
+                target->receive_wound("qi", damage);
+      msg += HIW"$n根本没法躲避，一声惨叫，软绵绵的瘫了下去。！\n"NOR;
+        me->add("neili", -2000);
+        } else
+        {
+            me->start_busy(random(3));
+        msg += HIY"可是$p轻轻一笑，侧身右转,毫发无伤\n"NOR;
+                me->add("neili", -200);
+        }
+        message_vision(msg, me, target);
+        if(!target->is_fighting(me)) target->fight_ob(me);
+//      if(userp(target)) target->fight_ob(me);
+//      else if( !target->is_killing(me) ) target->kill_ob(me);
+        return 1;
+}
+

@@ -1,0 +1,50 @@
+#include <ansi.h>
+inherit F_SSERVER;
+int perform(object me)
+{
+    string msg;
+    object weapon;
+    int skill, jing_cost;
+//    mapping my_fam  = me->query("family");
+    skill = me->query_skill("taiji-dao",1);
+    if (me->query_int()<50)
+        jing_cost = (int)me->query_int() - 50;
+    else    jing_cost=1;
+    if( me->is_fighting() )
+        return notify_fail("「玄字决」不能在战斗中演练。\n");
+ 
+ if ( (string)me->query("family/family_name") != "武当派") 
+     return notify_fail("只有武当弟子才能使用该PFM。\n");
+
+    if (!objectp(weapon = me->query_temp("weapon"))
+    || (string)weapon->query("skill_type") != "blade")
+        return notify_fail("你必须先去找一把刀。\n");
+    if( !skill || (skill < 60))
+        return notify_fail("你的太级刀法等级不够！\n");
+    if( me->query("neili") < 50 )
+        return notify_fail("你的内力不够！\n");
+    if (me->query_skill("blade",1)<= skill)
+        return notify_fail("你的基本刀法不够，无法通过演练「玄字决」提高太级刀法的技巧！\n");
+    if( me->query("jing") < -jing_cost )
+        return notify_fail("你现在太累了，无法集中精神演练「玄字决」！\n");
+ write(HIW "你使出太级刀法之「玄字决」，将手中" + weapon->name() + HIW "挥舞了几下，太级刀法似乎更深进了一些。\n" + NOR);
+
+    me->add("neili", -50);
+    me->add("jing", jing_cost);
+    if ( skill < 60)
+        me->improve_skill("taiji-dao", 10);
+    else if (skill < 90)
+        me->improve_skill("taiji-dao", 10 + random((int)me->query_int() - 9));
+    else if (skill < 140)
+        me->improve_skill("taiji-dao", 10 + random((int)me->query_int() * 2 - 9));
+    else if (skill < 200)
+        me->improve_skill("taiji-dao", 10 + random((int)me->query_int() * 4 - 9));
+    else
+        me->improve_skill("taiji-dao", 10 + random((int)me->query_int() * 8 - 9));
+//write(HIG"你的「太级刀法」进步了！\n" + NOR);
+
+      if (random(10)>8)    me->start_busy(1);
+    return 1;
+}
+
+

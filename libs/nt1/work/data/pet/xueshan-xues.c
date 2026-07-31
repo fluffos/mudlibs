@@ -1,0 +1,18 @@
+// SN:o8O;55^Y4>CVL@2N
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;33m杀狼狼[2;37;0m", ({"xues lang"}));        
+        set("gender", "男性");                
+        set("unit", "条");
+        set("long", "$HIY$杀狼
+它是刀必杀的坐骑。
+");
+        set_temp("owner_id", "xueshan");
+        set_temp("owner_name", "刀必杀");
+        ::setup();
+}
+

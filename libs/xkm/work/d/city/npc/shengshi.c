@@ -1,0 +1,110 @@
+//Cracked by Roath
+// waiter.c
+
+#include <ansi.h>
+
+inherit NPC;
+
+string ask_me(string, object);
+void do_up(object, object);
+
+void create()
+{
+        set_name("武林圣使", ({ "wulin shengshi", "wulin", "shengshi" }) );
+        set("gender", "男性" );
+        set("age", 102);
+        set("long",
+                "这位武林圣使正悠闲的呆著，还不时比划两下。\n");
+        set("combat_exp", 100);
+        set("attitude", "friendly");
+        set("rank_info/respect", "圣使");
+
+        set("chat_chance", 1);
+        set("chat_msg", ({
+                "武林圣使道：“各位兄台，这里是离线练功的最佳地点。\n",
+
+        }) );
+
+        set("inquiry", ([
+                "武林圣地" : (: ask_me, "shengdi" :),
+                
+        ]));
+
+        setup();
+}
+
+void greeting(object ob)
+{
+        if( !ob || environment(ob) != environment() ) return;
+        switch( random(2) ) {
+                case 0:
+                        say( "圣使笑咪咪地说道：这位" + RANK_D->query_respect(ob)
+                                + "，进来离线练功吗？\n");
+                        break;
+                        }
+}
+
+int accept_object(object who, object ob)
+{
+        if (ob->query("money_id") && ob->value() >= 5000) 
+        {
+                tell_object(who, "圣使接过MONEY，说道：跟我来吧，离线练功保管安全。\n");
+                who->set_temp("rent_paid",1);
+                set_temp("leading", 1);
+                remove_call_out("do_up");
+                call_out("do_up", random(5), this_object(), who);
+                return 1;
+        }
+
+        return 0;
+}
+
+string ask_me(string name, object ob)
+{
+       
+        if ( name == "shengdi" )
+        say(CYN "\n武林圣使笑道：这里就是武林圣地了，论起这武林圣地的好处来啊，可是三天三夜也数不尽 ... \n\n" NOR);
+
+                this_player()->delete_temp("ready_ask");
+
+        return "这些秘密，在下只告诉您一个人，兄台您尽管放心！";
+}
+
+int accept_kill(object obj)
+{
+        command("say 啊！" + obj->name() + "你杀我呀，算你活该！");
+         if (wizardp(obj))
+         { obj->set("immortal",0);
+           obj->die();
+           obj->set("immortal",1);
+         }
+        else
+        {obj->die();}
+}
+
+void do_up(object me, object who)
+{
+        who->set_leader(me);
+        command("go up");                        
+        
+        tell_object(who, "武林圣使笑嘻嘻地说：兄台您算找对地方了，我们这儿是离线练功的最佳地点。
+圣使边说边从腰间摘下一把大钥匙，找出一把来给你开门。\n");
+
+        remove_call_out("do_up");
+        call_out("do_enter", random(5), me, who);
+}
+
+void do_enter(object me, object who)
+{
+        who->set_leader(me);
+        command("go up");
+        
+        tell_object(who, "圣使对你笑笑，说：这里很不错吧!
+兄台在这里慢慢练。\n");
+
+        who->set_leader(0);
+        command("go down");
+        
+        me->set_temp("leading", 0);
+}
+

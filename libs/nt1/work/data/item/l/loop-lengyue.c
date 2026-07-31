@@ -1,0 +1,32 @@
+// SN:VmdmbRJHYQ2<ngP1
+// ITEM Made by player(胡小僧:loop) /data/item/l/loop-lengyue.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Sat Jul 26 00:40:56 2003
+#include <ansi.h>
+#include <weapon.h>
+
+inherit BLADE;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;32m冷月宝刀[2;37;0m", ({ "lengyue" }));
+	set_weight(9000);
+	set("item_make", 1);
+	set("unit", "把");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一把刀。
+这是胡家祖传的宝刀，冷气森森，锐利无比。[2;37;0m
+刀柄上刻着一行小字：胡小僧(loop)
+");
+	set("value", 2100000);
+	set("point", 175);
+	set("material", "magic stone");
+	set("wield_msg", "[1;32m$N抓起刀柄，众人只觉眼前青光一闪，寒气逼人，$N手中已经多了一柄$n，[1;32m刀光如水，流转不定。[2;37;0m\n");
+	set("unwield_msg", "[1;37m$N弹刀清啸，心中感慨，将$n[1;37m插回刀鞘。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	init_blade(apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

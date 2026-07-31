@@ -1,0 +1,194 @@
+// Room: /open/death/gate.c
+#include <ansi.h>
+#include <login.h>
+#include </include/basic_skill.lpc>
+inherit ROOM;
+void end_death(object me);
+void create ()
+{
+  set ("short", "[31m阴曹入口[2;37;0m");
+  set ("long", @LONG
+你已经来到了阴间的入口。虽然距离地府还有一段距离，但是你已经
+感受到阵阵刺骨的阴风。四周一片荒凉，但是却鬼影幢幢，看来这边的夜
+总会蛮热闹的，应该不愁没伴。南边和上面好像是和人世间相通的管道，
+不过好像有一股无形的力量隔开这两个不同的世界，看来要从这两个方向
+回去不是那么简单的事情。
+LONG);
+
+  set("exits", ([ /* sizeof() == 3 */
+//  "up" : "/open/common/room/inn",
+//  "south" : "/open/common/room/inn",
+  "north" : __DIR__"bridge1",
+]));
+  set("no_fight", 1);
+  set("light_up", 1);
+  set("no_transmit", 1);
+
+  setup();
+}
+
+int valid_leave(mixed me, string dir)
+{
+        int i;
+        string room;
+
+        if (dir == "south") {
+                i = (int)me->query_temp("back_road");
+                i = i + 1;
+                if (i >= (random(5) + 5)) {
+                    me->set_temp("back_road", 10);
+                    return notify_fail("你真的那么想回家吗？  好吧！！就如你所愿，不过要付出很大的代价喔！！\n想清楚了之后， 如果还是要回去的话就往上面走吧！！\n");
+                } else {
+                        me->set_temp("back_road",i);
+                        return notify_fail("你还想回家？进了地府就没有路可退了！\n");
+                }
+        }
+        else if (dir == "north") {
+                me->delete_temp("back_road");
+                return 1;
+                }
+        else if (dir == "up" || dir == "上面")
+        {
+            if ( (int) me->query_temp("back_road") >= 10 )
+            {
+                end_death(me);
+		me->delete_temp("back_road");
+                me->reincarnate();
+                if(!stringp(room = me->query("startroom")))
+                    room = STARTROOM;
+                me->move(room);
+                message_vision(
+                "突然天中降下一团祥光，令人无法用肉眼直视。\n过了一会儿，祥光散去，一道人影出现，$N终于从阴间偷跑回来了。\n",me);
+                return notify_fail("恭禧你又重回人世了。\n");
+            } else
+		return notify_fail("想回去！？ 没那么简单！！\n");
+        }
+        else
+        return 1;
+}
+
+void auto_revive(object ob)
+{
+	end_death(ob);
+	ob->reincarnate();
+	ob->move(REVIVEROOM);
+	tell_object(ob, "阎罗王看你不爽啦！！送你回人间！！\n");
+}
+
+void start_death(object ob)
+{
+	if(ob->query("combat_exp"))
+        ob->set_temp("death/combat_exp", 1);
+
+	if( ob->query("death/time") >= random(3)+3 ) {
+	    ob->set("death/time", 0);
+	    return; 
+	}
+
+	ob->add("death/time", 1);
+	ob->set_temp("death/skill", 1);
+	if( ob->query("max_force") || ob->query("max_mana") || ob->query("max_atman") )
+	{
+	if( ob->query("max_force") >= ob->query("max_mana")
+	&& ob->query("max_force") >= ob->query("max_atman") )
+        ob->set_temp("death/force", 1);
+        else if( ob->query("max_mana") >= ob->query("max_force")
+        && ob->query("max_mana") >= ob->query("max_atman") )
+                ob->set_temp("death/mana", 1);
+	else
+                ob->set_temp("death/atman", 1);
+	}
+//	call_out("auto_revive", 300, ob);
+}
+
+void end_death(object me)
+{
+    	int cost;
+	mapping skl, lrn, map;
+	string *sname, *mapped;
+    	int i;
+
+
+    if( me->query_temp("death/combat_exp") )
+    {
+        // cost =(int) ( me->query("combat_exp") *
+// int 和 str 高的人得实战经验比较快... so 扣比较多... 5% - 10%
+//       ( (random(me->query("int")*2 + me->query("str") - 30) + 60) / 12 ) /
+// kar 比较高的人.. 比较有福气... 可以打折... 除以 1 - 2....
+//        ( random(me->query("kar") - 10) / 15 + 1) / 100 );
+	if( !me->query("death/time") ) {
+	    cost = me->query("combat_exp") / 100 * 3;
+            me->add("combat_exp", -cost);
+            tell_object(me, "你的实战经验被扣了"+chinese_number(cost)+"点。\n");
+	    return;
+	}
+
+        cost = me->query("combat_exp") / 100 * 7;
+
+        me->add("combat_exp", -cost);
+	tell_object(me, "你的实战经验被扣了"+chinese_number(cost)+"点。\n");
+    }
+    if( me->query_temp("death/skill") )
+    {
+        skl = me->query_skills();
+        if(sizeof(skl)) {
+            sname  = keys(skl);
+            map = me->query_skill_map();
+            if( mapp(map) ) mapped = values(map);
+            if( !mapped ) mapped = ({});
+            for(i=0; i<sizeof(skl); i++) 
+            if((member_array(sname[i], mapped) != -1 ) || (sname[i] == basic_skill[sname[i]]) )
+	    {
+		if (random(me->query("kar")-10) < 8)
+		{
+		cost = (int) ( skl[sname[i]] * 
+// int 较高者得 skill 比较快... so 扣比较多..  1% - 4%
+		((random(me->query("int")) + 10) / 10 ) /
+// 福缘较高者.. 扣较少.. 除以 1 - 2
+        	(random(me->query("kar") - 10) / 20 + 1) / 100 );
+		skl[sname[i]] -= cost;
+		tell_object(me, "你的"+to_chinese(sname[i])+"技巧被扣了"+chinese_number(cost)+"点。\n");
+		}
+	    }
+        }
+    }
+
+
+    if( me->query_temp("death/force") )
+    {
+        cost = (int) ( me->query("max_force") *
+// con 较高者得 force 比较快... so 扣比较多..  2% - 5%
+        ((random(me->query("con")) + 20) / 10 ) /
+// 福缘较高者.. 扣较少.. 除以 1 - 2
+        (random(me->query("kar") - 10) / 20 + 1) / 100 );
+        if( cost > 10)
+          cost = 10;
+        me->add("max_force", -cost);
+        tell_object(me, "你的内力上限被扣了"+chinese_number(cost)+"点。\n");
+    }
+    if( me->query_temp("death/mana") )
+    {
+        cost = (int) ( me->query("max_mana") *
+// spi 较高者得 mana 比较快... so 扣比较多..  2% - 5%
+        ((random(me->query("spi")) + 20) / 10 ) /
+// 福缘较高者.. 扣较少.. 除以 1 - 2
+        (random(me->query("kar") - 10) / 20 + 1) / 100);
+        if( cost > 10)
+          cost = 10;
+        me->add("max_mana", -cost);
+        tell_object(me, "你的法力上限被扣了"+chinese_number(cost)+"点。\n");
+    }
+    if( me->query_temp("death/atman") )
+    {
+        cost = (int) ( me->query("max_atman") *
+// spi 较高者得 灵力 比较快... so 扣比较多..  2% - 5%
+        ((random(me->query("spi")) + 20) / 10 ) /
+// 福缘较高者.. 扣较少.. 除以 1 - 2
+        (random(me->query("kar") - 10) / 20 + 1) / 100 );
+        if( cost > 10)
+          cost = 10;
+        me->add("max_atman", -cost);
+        tell_object(me, "你的灵力上限被扣了"+chinese_number(cost)+"点。\n");
+    }
+    me->delete_temp("death");
+}

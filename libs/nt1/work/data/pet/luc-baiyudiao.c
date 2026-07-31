@@ -1,0 +1,18 @@
+// SN:S>eJ9RF>P0VI\bWE
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m白玉雕雕[2;37;0m", ({"baiyudiao diao"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "一只在千年雪山上居住的稀有神兽
+它是段人的坐骑。
+");
+        set_temp("owner_id", "luc");
+        set_temp("owner_name", "段人");
+        ::setup();
+}
+

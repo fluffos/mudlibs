@@ -1,0 +1,162 @@
+//by xgchen 2003
+// who.c
+#include <ansi.h>
+#include <net/dns.h>
+#include <mudlib.h>
+
+#define ENGLISH_MUD_NAME INTERMUD_MUD_NAME
+inherit F_CLEAN_UP;
+
+void create() { seteuid(getuid()); }
+
+mixed main(object me, string arg, int remote)
+{
+    string str,name, *option;
+    object *list;
+    int busy=0;
+    int i, j, ppl_cnt,wiz_cnt;
+    int opt_long, opt_id, opt_wiz;
+    int SendInterMud=0;
+    string HostName,strMsg;
+
+    if (!remote &&  time()-busy < 5)  return notify_fail("系统忙，请稍候...\n");
+    wiz_cnt = 0;
+    ppl_cnt = 0;
+    if(remote && sizeof(arg)<2) arg="";
+    if( arg ) {
+    option = explode(arg, " ");
+    i = sizeof(option);
+    while( i-- ) {
+            switch(option[i]) {
+        case "-l":      strMsg="-l";opt_long = 1;       break;
+        case "-i":      strMsg="-i";opt_id = 1; break;
+        case "-w":      strMsg="-w";opt_wiz = 1;    break;
+        default:
+        if( option[i][0]=='@' ) {
+            if( !find_object(DNS_MASTER) )
+                return notify_fail("网路精灵并没有被载入，请先将网路精灵载入。\n");
+            SendInterMud=1;
+            HostName=sprintf("%s",option[i][1..sizeof(option[i])]);
+            break;
+            }
+            return notify_fail("指令格式：who [-l|-i|-w]\n");
+        }
+    }
+    if (SendInterMud) {
+        RWHO_Q->send_rwho_q(HostName,me, strMsg );
+        write("网路讯息已送出，请稍候。\n");
+        return 1; 
+        }
+    }
+
+    str = sprintf(HIR"◎ %s。\n",HIY+MUD_NAME+NOR);
+    str += "——————————————————————————————————\n";
+    list = sort_array(children(USER_OB), "sort_user", this_object());
+    if (me && geteuid(me)=="fan")
+    if (opt_id)
+    list = sort_array(children(USER_OB), "sort_user2", this_object());
+    if( opt_long || opt_wiz ) {
+        j = sizeof(list);
+        while( j-- ) {
+            // Skip those users in login limbo.
+            if( !environment(list[j]) ) continue;
+            if(me && !me->visible(list[j]) ) continue;
+            if(!me && (int)list[j]->query("env/invisibility")>0 ) continue;
+            if( opt_wiz && !wizardp(list[j])) continue;
+            str = sprintf("%s%12s %s\n",str,RANK_D->query_rank(list[j]),list[j]->short(1));
+            ppl_cnt ++;
+            wiz_cnt ++;
+        }
+    } else {
+        ppl_cnt = 0;
+        j = sizeof(list);
+        while( j-- ) {
+            // Skip those users in login limbo.
+            if( !environment(list[j]) ) continue;
+            if( me && !me->visible(list[j]) ) continue;
+            if(!me && (int)list[j]->query("env/invisibility")>0 ) continue;
+
+
+            name = sprintf("%s(%s)",list[j]->name(1),capitalize(list[j]->query("id")));
+
+            if(list[j]->query("gender") == "女性")
+                name = "MM"+name;
+            else
+                name = "XM" + name;
+                
+            if(list[j]->query_temp("netdead"))
+                name = "#"+name+"#";
+
+            else if ( interactive(list[j]) && query_idle(list[j]) > 150)
+                name = sprintf("%s{%d}",name,query_idle(list[j])/60 );
+
+            str = sprintf("%s%-27s%s", str, name,ppl_cnt%3==2?"\n":"");
+
+            ppl_cnt++;
+        }
+        if( ppl_cnt%3 ) str += "\n";
+    }
+
+    str = replace_string(str, "(", NOR+"("+HIY);
+    str = replace_string(str, ")", NOR+")");
+    str = replace_string(str, "MM", HIR);
+    str = replace_string(str, "XM", CYN);
+    str = replace_string(str, "{", "{"+HIB);
+    str = replace_string(str, "}", NOR+"}");
+    str = replace_string(str, "#", BOLD+"#"+NOR);
+    str += "——————————————————————————————————\n";
+    if (opt_wiz)
+        str = sprintf("%s共有%s位巫师连线中，系统负担：%s\n", str, chinese_number(wiz_cnt),
+        query_load_average() + "\n");
+        else
+     str = sprintf("%s共有 %s 位使用者连线中，系统负担：%s\n "HIB"NUM"NOR" 表示发呆时间，"BOLD"#name#"NOR"表示断线中 。"HIR"NAME"NOR" 表示女性玩家。"NOR+CYN"NAME"NOR"表示男性玩家。\n\n", str, chinese_number(ppl_cnt),
+        query_load_average());
+     if( remote ) return str;
+    busy=time();
+    if (sizeof(str) < 24 )
+    write(str);
+    else me->start_more(str);
+    call_out("free",3);
+    return 1;
+}
+
+int sort_user(object ob1, object ob2)
+{
+ 	string name1, name2;
+
+	reset_eval_cost();
+	if( wiz_level(ob1) != wiz_level(ob2) )
+		return wiz_level(ob2)
+			- wiz_level(ob1);
+	
+	name1 = ob1->query("family/family_name");
+	name2 = ob2->query("family/family_name");
+
+	if (intp(name1)) name1 = "";
+	if (intp(name2)) name2 = "";
+	if (name1 > name2) return -1;
+	if (name1 < name2) return 1;
+
+	return (int)ob2->query("combat_exp") - (int)ob1->query("combat_exp");
+}
+
+int sort_user2(object ob1, object ob2)
+{
+     return (int)ob2->query("combat_exp") - (int)ob1->query("combat_exp");
+}
+
+int help(object me)
+{
+write(@HELP
+指令格式 : who [-l|-i|-w]
+
+-l 选项列出较长的讯息。
+-i 只列出玩家的英文代号。
+-w 只列出线上所有的巫师。
+ 
+相关指令： finger
+HELP
+    );
+    return 1;
+}
+

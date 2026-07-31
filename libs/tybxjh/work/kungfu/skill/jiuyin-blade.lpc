@@ -1,0 +1,144 @@
+//jiuyin-blade.九阴追魂刀  by:pipip
+inherit SKILL;
+string type() { return "zhongji"; }
+mapping *action = ({
+([  "action":"$N双手握刀，使一式「无常夺命」，手中$w带出一阵劲风劈向$n的$l",
+    "force" : 120,
+    "lvl" : 0,
+    "skill_name" : BLK "无常夺命" NOR,
+    "damage_type":  "割伤"
+]),
+([  "action":"$N身形随风摆动，看准时机，一招「鬼叫门」使出，$w划出一道金光劈向$n的$l",
+    "force" : 140,
+    "lvl" : 9,
+    "skill_name" : RED "鬼叫门" NOR,
+    "damage_type":  "割伤" ]),
+([  "action":"$N将手中$w一抖，一招「山鬼夜奔」斜斜撩向$n的$l",
+    "force" : 160,
+    "lvl" : 18,
+    "skill_name" : GRN "山鬼夜奔" NOR,
+    "damage_type":  "割伤"
+]),
+});
+
+mapping *action2 = ({
+([  "action":"$N身法徒然加快，一招「"+HIY+"夜叉斩"+NOR+"」已逼到$n的面前",
+        "force" : 520,
+        "dodge" : 200,
+        "parry" : 240,
+        "damage" : 215,
+        "lvl" : 120,
+    "skill_name" : BLU "夜叉斩" NOR,
+    "damage_type":  "刺伤"
+]),
+([  "action":"$N一式「"+MAG+"五鬼勾魂"+NOR+"」，手中$w化成一道电光，斜斜劈向$n的$l",
+        "force" : 580,
+        "dodge" : 240,
+        "parry" : 200,
+        "damage" : 255,
+        "lvl" : 140,
+    "skill_name" : MAG "五鬼勾魂" NOR,
+    "damage_type":  "砍伤"
+]),
+([  "action":"$N手中$w斜指苍天，剑芒吞吐，一式「"+BLU+"九弧震日"+NOR+"」，对准$n的$l斜斜击出",
+        "force" : 560,
+        "dodge" : 230,
+        "parry" : 210,
+        "damage" : 275,
+        "lvl" : 160,
+    "skill_name" : BLU "九弧震日" NOR,
+    "damage_type":  "刺伤"
+]),
+});
+
+mapping *action3 = ({
+([  "action":HIY"$N使出一式「"+WHT+"鬼夜哭"+HIY+"」，狂啸一声，手中利刃有如毒蛇般斜斜挑上$n的脸颊"NOR,
+     "force" : this_player()->query_skill("jiuyin-blade",1),
+     "dodge" : this_player()->query_skill("dodge",1)/2,
+    "damage" : this_player()->query("zjb_dj/dj")*180,
+     "parry" : this_player()->query_skill("parry",1),
+      "lvl" : 1050,
+    "skill_name" : WHT "鬼夜哭" NOR,
+    "damage_type": "割伤"
+]),
+([  "action":HIY"$N眼中透出一股邪气，刀光中一式「"+WHT+"阎罗索命"+HIY+"」从$n意想不到的方位横斩过来"NOR, 
+     "force" : this_player()->query_skill("jiuyin-blade",1),
+     "dodge" : this_player()->query_skill("dodge",1)/2,
+    "damage" : this_player()->query("zjb_dj/dj")*180,
+     "parry" : this_player()->query_skill("parry",1),
+     "lvl" : 1100,
+    "skill_name" : WHT "阎罗索命" NOR,
+    "damage_type": "割伤"
+]),
+([  "action":HIY"$N突然出现在$n面前，就好像是从大地中冒出了一样，$n大惊之下，$N一招「"+WHT+"厉鬼式"+HIY+"」已劈到面前"NOR, 
+     "force" : this_player()->query_skill("jiuyin-blade",1),
+     "dodge" : this_player()->query_skill("dodge",1)/2,
+     "damage" : this_player()->query("zjb_dj/dj")*180,
+     "parry" : this_player()->query_skill("parry",1),
+     "lvl" : 1200,
+    "skill_name" : WHT "厉鬼式" NOR,
+    "damage_type": "割伤"
+])
+});
+int valid_enable(string usage) { return usage == "blade" || usage == "parry"; }
+int practice_level(){   return 60;  }
+mapping query_action(object me, object weapon)
+{
+        int i, level;
+          mapping a_action;
+        level   = (int) me->query_skill("jiuyin-blade",1);
+          me = this_player();
+        if (me->query_skill("jiuyin-blade",1)<401)  
+    return action[random(sizeof(action))];
+   
+        if (me->query_skill("jiuyin-blade",1)>400
+        && me->query_skill("jiuyin-blade",1)<1001)
+    return action2[random(sizeof(action2))];
+ 
+        if (me->query_skill("jiuyin-blade",1)>1000
+        && me->query("zjb_dj/dj")>=5)
+  return action3[random(sizeof(action3))];
+
+    if (me->query_skill("jiuyin-blade",1)>1000
+        && me->query("zjb_dj/dj")<5)
+ return action2[random(sizeof(action2))];
+}
+
+mixed hit_ob(object me, object victim, int damage_bonus)
+{
+      if( damage_bonus < 110 ) return 0;
+
+ // 第二等级的伤气
+        if ( me->query_skill("jiuyin-blade",1)>400
+         && me->query_skill("bahuang-gong",1)>300
+         && me->query_skill("jiuyin-blade",1)<1001
+&& (me->query("neili")*3) > victim->query("max_neili") ) {
+             victim->receive_damage("qi", (damage_bonus - 100) / 8 , me);
+return HIR "$N在瞬间领悟九阴真经精髓，一股"BLINK HIB"九阴真气"NOR HIR"随着刀招扑出，$n立即溅血！！！！\n" NOR;
+}
+
+ //  第三等级的伤气
+        if( me->query_skill("jiuyin-blade",1)>1000
+       && me->query("zjb_dj/dj")>=5
+    && me->query_skill("jiuyin-xinjing",1)>500
+&& (me->query("neili")*3) > victim->query("max_neili") ) {
+                victim->receive_damage("qi", (damage_bonus - 100) / 3 , me);
+return HIR "$N手中刀芒大盛，强大"BLINK HIB"九阴真气"NOR HIR"随着刀气纵横，$n抵挡不住，连连被刀气侵入心脉！！！\n" NOR;
+  }      
+}
+
+
+int practice_skill(object me)
+{
+    return notify_fail("九阴追魂刀发太过深懊，你无从练起。\n");
+}
+int valid_learn(object me)
+{
+    return notify_fail("九阴追魂刀发太过深懊，你无从学起。\n");
+}
+
+string perform_action_file(string action)
+{
+    return __DIR__"jiuyin-blade/" + action;
+}
+

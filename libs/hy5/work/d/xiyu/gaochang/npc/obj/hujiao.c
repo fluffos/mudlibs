@@ -1,0 +1,26 @@
+/* hujiao.c  胡椒
+ * from XO Lib
+ * a obj of gaochang
+ * created by hydra 19980427
+ * version: @(#) 1.0@(#)
+ * last modified by hydra 19980427
+ */
+
+inherit ITEM;
+
+#include <ansi.h>
+
+void create()
+{
+    set_name( BLU"胡椒"NOR,({"hu jiao","hujiao","sugar" }) );
+    set_weight( 100 );
+    if( clonep() )
+        set_default_object( __FILE__ );
+    else 
+    {
+        set( "long","一小串胡椒，调味用品。\n" );
+        set( "unit","包" );
+        set( "value",500 );
+    }
+    setup();
+}

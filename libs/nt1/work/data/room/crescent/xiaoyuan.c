@@ -1,0 +1,36 @@
+// SN:0WL=hVQ[eGAk`aED
+// File(/data/room/crescent/xiaoyuan.c) of crescent's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        set("short", "新月小筑小院");
+	set ("long", @LONG
+这是一个四四方方的院子,院中几棵古木成荫,红墙绿树中,隐约可
+听见清脆的鸟鸣声,院子的北面有一扇小门.[2;37;0m
+LONG );
+
+        set("room_key", "1 of crescent");
+	setup();
+
+	set("exits", ([
+                "out"    : "/d/city/jiaowai3",
+	]));
+
+        set("outdoors", "yangzhou");
+        set("no_sleep_room", 1);
+        set("valid_startroom", 1);
+
+        set("KEY_DOOR", ([
+                "exit" : "north",
+                "room" : __DIR__"dating",
+        ]));
+    
+        set("room_owner", "段枫儿");
+        set("room_name", "新月小筑");
+        set("room_id", "xinyue");
+        set("room_owner_id", "crescent");
+        set("room_position", "树林");
+}

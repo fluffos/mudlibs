@@ -1,0 +1,33 @@
+// SN:mjjX4:Pc^DS`4l>>
+// ITEM Made by player(钟情:cookie) /data/item/c/cookie-fff.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Wed Aug  4 01:18:41 2004
+#include <ansi.h>
+#include <armor.h>
+
+inherit ARMOR;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("一代天骄[2;37;0m", ({ "fff" }));
+	set_weight(7500);
+	set("item_make", 1);
+	set("unit", "张");
+	set("long", "这是由[37m上古寒铁[2;37;0m炼制而成的一张护甲。
+与天试比高[2;37;0m
+护甲缘上刻着一行小字：钟情(cookie)
+");
+	set("value", 1500000);
+	set("point", 116);
+	set("material", "steel");
+	set("wear_msg", "冲天[2;37;0m\n");
+	set("remove_msg", "消散[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/armor", apply_armor());
+	set("armor_prop/parry", apply_armor() / 15 + 1);
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

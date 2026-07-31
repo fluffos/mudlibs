@@ -1,0 +1,42 @@
+// /d/jingzhou/tiesuo.c
+// netkill /98/9/10/
+// 朱雀古铁
+
+#include <ansi.h>
+inherit ROOM;
+
+void create()
+{
+        set("short", HIC "江中铁索" NOR);
+        set("long", @LONG
+你站在一江水之中的一条铁索上，铁索随水起伏不停，你站在这
+里，若没顶尖的轻功，是坚持不了多久的。从这里向江中看去，更觉
+得气势宏大，江水奔流，向江心看去，好象水低有一些古怪的东西。
+LONG
+        );
+    
+  set("exits", ([ /* sizeof() == 3 */
+  "down" : __DIR__"chibi4",
+]));
+
+             
+        setup();
+	//replace_program(ROOM);
+} 
+
+void init()
+{
+	add_action("do_jump","jump");
+}
+
+int do_jump (string arg)
+{	object me=this_player();
+	if (!arg || arg=="") return 0;
+	if (arg=="down")
+	{
+tell_object(me,"你奋不顾身的跳进了江中，一阵江水涌来。。。\n");
+		 me->move(__DIR__"chibi4");
+		return 1;
+	}	
+	else return notify_fail("你要做什么？\n");
+}

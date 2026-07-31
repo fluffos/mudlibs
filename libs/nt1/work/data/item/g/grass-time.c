@@ -1,0 +1,31 @@
+// SN:N0^KFOoPFN6>ShCG
+// ITEM Made by player(小草:grass) /data/item/g/grass-time.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Thu Apr  8 19:11:28 2004
+#include <ansi.h>
+#include <armor.h>
+
+inherit HEAD;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[2;37;0m[37m逆行时舟[2;37;0m", ({ "time" }));
+	set_weight(4500);
+	set("item_make", 1);
+	set("unit", "顶");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一顶头盔。
+头盔缘上刻着一行小字：小草(grass)
+");
+	set("value", 2100000);
+	set("point", 300);
+	set("material", "magic stone");
+	set("wear_msg", "[34m比前生更古老的过去☆[1;33m比来世更遥远的未来★[1;36m恒久不变的古老之梦☆[1;37m遵守时光的约定★[1;32m请将您手中的巨塔☆[1;34m放置在过去与未来的交会之处[2;37;0m\n");
+	set("remove_msg", "[1;37m让愚者在塔中失去方向☆[1;31m迷失在比宇宙诞生还久远的古代★[1;35m比世界灭亡更遥远的未来☆[1;33m直至无尽的永恒[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/armor", apply_armor());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

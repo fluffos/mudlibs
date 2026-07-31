@@ -1,0 +1,211 @@
+#include <ansi.h>
+#include <localtime.h>
+
+inherit NPC;
+int give_quest();
+#define QUEST_XUN "/quest/kaifeng/kaifeng_quest"
+
+void create()
+{
+	int jibie;
+	jibie = 500;
+	set("xyzx_sys/level", jibie);	//2016.5.22阿飞调整NPC属性	
+	set("shen_type", 0);
+    set_name( "公孙策" , ({ "gongsun ce","gongsun" }) );
+    set("gender", "男性" );
+	set("title", HIW "主簿师爷" NOR);
+	set("nickname", HIR "再世诸葛" NOR);
+    set("age", 56);
+    set("long","北宋开封府主簿师爷，包拯的得力助手。\n开封府三口铡刀的设计制造者，懂医术，心思缜密，和蔼善良，见多识广，足智多谋，人称再世诸葛。\n");
+	set("no_die",1);
+	set_skill("unarmed", 500+jibie*2+random(jibie/5));
+	set_skill("force", 500+jibie*2+random(jibie/5));
+	set_skill("sword", 500+jibie*2+random(jibie/5));
+	set_skill("dodge", 500+jibie*2+random(jibie/5));
+	set_skill("parry", 500+jibie*2+random(jibie/5));
+	set_skill("qinnashou", 500+jibie/2+random(jibie/5));
+	set_skill("yijing-force", 500+jibie/2+random(jibie/5));
+	set_skill("wenrou-jian", 500+jibie/2+random(jibie/5));
+	set_skill("shenxing-baibian", 500+jibie/2+random(jibie/5));
+	map_skill("force", "yijing-force");
+	map_skill("unarmed","qinnashou");
+	map_skill("parry", "wenrou-jian");
+	map_skill("sword", "wenrou-jian");
+	map_skill("dodge", "shenxing-baibian");
+
+	set_temp("apply/attack", 200);
+	set_temp("apply/defense", 200);
+	set_temp("apply/armor", 200);
+	set_temp("apply/dodge", 200);
+    set("inquiry", ([
+		"后勤" :(: give_quest :)
+    ]) );
+	setup();
+	set("water",max_water_capacity());
+	set("food",max_food_capacity());
+	carry_object("/clone/weapon/changjian")->wield();
+	carry_object("/clone/cloth/cloth")->wear();
+
+}
+
+string time_period(int timep)
+{
+    int t, d, h, m, s;
+    string time;
+    t = timep;
+
+
+    s = t % 60;
+    t /= 60;
+    m = t % 60;
+    t /= 60;
+    h = t % 24;
+    t /= 24;
+    d = t;
+
+    if(d)
+        time = chinese_number(d) + "天";
+    else
+        time = "";
+
+    if(h)
+        time += chinese_number(h) + "小时";
+    if(m)
+        time += chinese_number(m) + "分";
+    time += chinese_number(s) + "秒";
+
+    return " 在" + time + "内,";
+}
+
+
+int give_quest()
+{
+    object me;
+    string tag;
+    mapping quest=([ ]) ;
+	mixed *local;
+    me = this_player();
+	local = localtime(time());
+	
+    if(quest =  me->query("day_renwu"))
+    {
+        if( (int)me->query("day_renwu/day_kaifeng_time") >  time() )
+        {
+            message_vision(HIY"$N看了$p一眼: "+RANK_D->query_respect(me)+"似乎还有任务在身吧？\n"NOR, this_object(),me);
+            return 1;
+        }
+        else
+        {
+            me->set("day_kaifeng_failed",(int)me->query("day_renwu/day_kaifeng_time") + random(300)+150);
+            me->delete("day_renwu");
+        }
+    }
+    if( time() >= me->query("day_kaifeng_failed") )
+    {
+        me->delete_temp("day_kaifeng_count");
+        me->delete("day_kaifeng_failed");
+    }
+    if(me->query("day_kaifeng_failed") )
+    {
+        message_vision(HIG"$N对$p哼了一声: 上次的任务都完成不了，再问我就杀了你！\n"NOR, this_object(),me);
+        return 1;
+    }
+	if ( local[LT_MDAY] == (int)me->query("day_renwu_timecd"))	//每天
+//	if( (int)me->query("day_renwu_timecd") >  time() )	//间隔24小时
+	{
+		message_vision(HIR"$N看了$p一眼: 户部钱粮不足，故后勤任务每天只能领取一次！\n"NOR, this_object(),me);
+		return 1;
+	}
+	
+	quest = QUEST_XUN->query_quest();
+	if (!mapp(quest))	return 0;
+	quest["time"]=quest["diff"]*(random(300)+600);
+	tag = time_period(quest["time"]);
+	message_vision(HIG"$N对$p说道: 如今契丹虎视端端，仁宗皇帝特令开封府负责后勤，征集粮草！\n"NOR, this_object(),me);
+//	command("whisper 【"chinese_number(quest["diff"])"星任务】："+me->query("id")+tag+ "帮我找『" + quest["quest"] + "』。\n");
+	message_vision(HIR"【"+chinese_number(quest["diff"])+"星任务】："HIC""+me->query("name")+tag+ "帮我找到『" + quest["quest"] + "』。\n\n"NOR, me);
+	me->set("day_renwu", quest);
+	me->set("day_renwu/day_renwu_type","寻");
+	me->set("day_renwu/day_kaifeng_time", (int)time() + (int)quest["time"]);
+	me->add_temp("day_kaifeng_count",1);
+//	me->set("day_renwu_timecd", (int)time()+3600*24);	//间隔24小时
+	me->set("day_renwu_timecd", local[LT_MDAY]);
+	return 1;
+}
+
+int accept_object(object me, object obj)
+{
+    mapping quest,target;
+    object home;
+    int add_exp,add_pot,add_sco,renwu_exp_add;
+
+
+    if( time() < me->query("day_kaifeng_failed") || mapp(quest=me->query("day_renwu")))
+    {
+        if (obj->query("money_id") && obj->value() >= 100000 )
+        {
+			tell_object(me, HIR"公孙策不悦的说道：开封府发布的任务竟敢不想完成，我看你是想进大牢吧！\n"NOR);
+			//2018.8.23阿飞改，每天1次的任务禁止取消
+/*            command("say 好吧！"+me->name()+"，上次的任务就算了！");
+            me->delete("day_kaifeng_failed");
+            me->delete("day_renwu");*/
+            return 1;
+        }
+    }
+    if (!mapp(quest))
+    {
+        command("say 我对"+obj->name()+CYN+"不感兴趣。");
+        return 0;
+    }
+    if ( quest["day_renwu_type"] != "寻" )
+    {
+        say( CYN+this_object()->name()+"摇了摇头："+RANK_D->query_respect(me)+"的任务不是拍我的马屁！\n"NOR);
+        return 0;
+    }
+
+    target = quest["quest"];
+    if ( target!=obj->name() )
+    {
+        command("say 这不是我要的东西。");
+        return 0;
+    }
+    if(!home = find_object(query("startroom")) )
+        home = load_object(query("startroom"));
+    if (environment()!=home)
+    {
+        command("say 我现在正忙着呢！等我回去再说吧！");
+        return 0;
+    }
+	renwu_exp_add = 0;
+	if (me->query_temp("renwu_exp_add")) renwu_exp_add = (int)me->query_temp("renwu_exp_add",1);	//处于任务经验提升状态时	
+    if( quest["day_kaifeng_time"] >  time() )
+    {
+		add_exp = (9+quest["diff"]*2)/3+10000/((int)me->query("xyzx_sys/level",1)+200);
+        command("smile");
+        tell_object(me, sprintf(WHT"你圆满完成了你的任务:\n你的实战等级提高了%s级！", chinese_number(add_exp)) );
+		me->add("xyzx_sys/level", add_exp);
+		add_pot = (quest["diff"]*1000000+random(2000000))*(renwu_exp_add+100)/100;
+        tell_object(me, sprintf(HIY"\n%s点潜能！\n"NOR, chinese_number(add_pot)) );
+        me->add("potential",add_pot);
+		add_sco=(quest["diff"]*500+random(1000))*(renwu_exp_add+100)/100;
+        tell_object(me, sprintf(YEL"江湖阅历增加了%s点！\n"NOR, chinese_number(add_sco)) );
+        me->add("score",add_sco);
+		me->add("jianghu_money",1);
+        me->delete("day_renwu");
+		me->delete("day_kaifeng_failed");
+		me->add("renwu/kaifeng_houqin",1);
+        return 1;
+    }
+    else
+    {
+        me->set("day_kaifeng_failed",(int)me->query("day_renwu/day_kaifeng_time") + (int)me->query("day_renwu/time"));
+        if( time() >= me->query("day_kaifeng_failed") )
+        {
+            me->delete_temp("day_kaifeng_count");
+            me->delete("day_kaifeng_failed");
+        }
+        message_vision(CYN+"$N很生气地对$n说道：这么点儿事都办不好，真没用！\n"+NOR, this_object(), me);
+        me->delete("day_renwu");
+        return	1;
+    }
+}

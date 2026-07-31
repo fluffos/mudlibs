@@ -1,0 +1,39 @@
+//Cracked by Roath
+// Room: /city/beidajie1.c
+// YZC 1995/12/04
+#include <ansi.h>
+
+inherit ROOM;
+
+void create()
+{
+        set("short", BLINK HIC"武林圣地"NOR);
+        set("long", HIY @LONG
+ 这里是武林群雄离线练功的地方，希望各位不要破坏圣地的和平与安宁
+
+              在                             现
+              圣      ┌───────┐     江
+              地      │落花有意随流水│     湖
+              修      │流水无心恋落花│     扬
+              身      └───────┘     名
+              养                             四
+              性                             海 
+  
+LONG NOR
+        );
+        set("outdoors", "city");
+
+        set("exits", ([
+                "east" : __DIR__"proom",
+                
+        ]));
+        set("no_steal", "1");
+       set("nno_kill", "1");
+       set("nno_hit", "1");
+       set("nno_fight", "1");
+            set("cost", 1);
+        setup();
+        replace_program(ROOM);
+}
+
+

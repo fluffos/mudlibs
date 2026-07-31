@@ -1,0 +1,18 @@
+// SN:Bfk8<0bBUR;B`Vd1
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("麒麟圣兽[2;37;0m", ({"missangel shou"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "麒麟圣
+它是至尊宝的坐骑。
+");
+        set_temp("owner_id", "fasc");
+        set_temp("owner_name", "至尊宝");
+        ::setup();
+}
+

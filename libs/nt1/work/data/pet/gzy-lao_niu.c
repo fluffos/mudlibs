@@ -1,0 +1,18 @@
+// SN:GR46hNFN_E>>>SjR
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;32m老色牛狐[2;37;0m", ({"lao_niu hu"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "一见到异性就忘记了主人，
+它是枫王的坐骑。
+");
+        set_temp("owner_id", "gzy");
+        set_temp("owner_name", "枫王");
+        ::setup();
+}
+

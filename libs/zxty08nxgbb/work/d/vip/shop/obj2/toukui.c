@@ -1,0 +1,56 @@
+// toukui.c 头盔
+ 
+#include <armor.h>
+#include <ansi.h>
+#include <mudlib.h>
+ 
+inherit HEAD;
+void owner_is_killed() { destruct(this_object()); } 
+void create()
+{
+         set_name(HIY"狮王头盔"NOR, ({ "shiwang toukui", "toukui" }));
+        set_weight(2000);
+        if( clonep() )
+                set_default_object(__FILE__);
+        else {
+                set("material", "steel");
+                set("unit", "顶");
+                set("long", "这是一顶可增加防御能力200,悟性30的狮王头盔，下线不掉{kaiguang toukui}！。\n"NOR); 
+              set("tianya_money",4);
+		set("no_put",1);
+              set("no_sell",1);
+              set("ty_gift", 1);
+              set("no_get", 1);
+              set("no_give", 1);
+              set("no_drop",1); 
+            set("no_vipcun",1);
+
+                set("armor_prop/armor", 200);
+        set("armor_prop/intelligence", 30);
+        }
+        setup();
+}
+void init()
+{
+        add_action("do_kai", "kaiguang");
+}
+
+int do_kai(string arg)
+{
+        object me;
+
+        if (! id(arg))
+                return notify_fail("你要开光什么？\n");
+
+        me = this_player();
+         
+        if (!me->query("vip"))
+                return notify_fail("你不是VIP！\n");
+        if (me->query("vipshop/toukui")>1)
+                return notify_fail("这件装备你开光过了！\n");
+
+                tell_object(me, HIG "恭喜你！你为你的装备开光好了，现在除了死亡，你的装备下线将不掉落。\n");
+                me->set("vipshop/toukui", 2);
+
+        return 1;
+}

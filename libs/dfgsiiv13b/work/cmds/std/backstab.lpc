@@ -1,0 +1,256 @@
+/*  backstab.c - the backstab command
+
+    Copyright (C) 1994-2000 Annihilator <annihilator@muds.net>
+
+    This program is a part of ES2 mudlib. Permission is granted to use,
+    modify, copy or distribute this program provided this copyright notice
+    remains intact and subject to the restriction that this program MAY
+    NOT be used in any way for monetary gain.
+
+    Details of terms and conditions is available in the Copyright.ES2 file.
+    If you don't receive this file along with this program, write to the
+    primary author of ES2 mudlib: Annihilator <annihilator@muds.net>
+*/
+
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+
+#define DELAY_COUNTDOWN         3
+
+#define INITIAL_COUNTDOWN       DELAY_COUNTDOWN + 1
+#define ENGAGE_COUNTDOWN        DELAY_COUNTDOWN + 2
+#define DOIT_COUNTDOWN          DELAY_COUNTDOWN + 3
+
+int do_backstab(object, object);
+int halt_backstab(object me);
+
+private void create() { seteuid(getuid()); }
+
+int main(object me, string arg)
+{       
+    object victim;
+
+    if( me->query_stat("fatigue")>=me->query_stat_maximum("fatigue") )
+        return notify_fail(me->name() + "菇硂贺敖蔓篘︽ぃ腀種磅︽硂㏑\n");
+
+    if( me->query("life_form") == "ghost" )
+        return notify_fail("碞κ, ет丢確!!\n");
+
+    if( me->is_busy() )
+        return notify_fail("叫ノ halt 氨ゎタ暗ㄆ\n");
+
+    if( me->is_fighting() )
+        return notify_fail("竒驹矮い\n");
+
+    if( !arg
+    ||  arg == "corpse"
+    ||  !(victim = present(arg, environment(me)))
+    ||  victim==me
+    ||  !victim->is_character() )
+        return notify_fail("璶敖脓街\n");
+
+    if( environment(me)->query("no_fight") ) {
+        if( !victim->query("unprotect_mark") ) {
+            tell_object(me, "硂柑ぃ驹矮\n");
+            return 1;
+        }
+    }
+    
+    // add by dragoon
+    if( userp(victim) && !interactive(victim) ) 
+        return notify_fail("硂瞷ぃ絬\n");
+
+    if( victim->query("no_fight") ) return notify_fail("ぃ︽\n");
+
+//    if( !arg ) return notify_fail("璶敖脓街\n");
+
+    if( me->skill_mapped("backstab") )
+    {
+        mapping weapon = me->query_temp("weapon");
+        string skill;
+
+        if( !mapp(weapon) || !sizeof(weapon) ) skill = "unarmed";
+        else {
+            skill = "dagger";
+            if( !objectp(weapon["dagger"]) )
+                return notify_fail("も┪摸猌竟秈︽敖脓\n");
+        }
+        if( ! me->skill_mapped(skill) )
+            return notify_fail("ゲ斗 enable ю阑м\n");
+    }
+    else {
+        write("ゲ斗 enable " + to_chinese("backstab") + "秈︽敖脓\n");
+        return 1;
+    }
+
+    // 琵產ノstakeㄓ絤backstab -Dragoon
+    if( !living(victim) && !victim->query("TARGET_STAKE") ) {
+        write("ぃ惠璶敖脓硂趁ル钡摆\n");
+        return 1;
+    }
+
+    if( victim->query("TARGET_STAKE")
+    && me->query_skill("backstab") > 40 ) {
+        write("安摸癸禜琵策眔彩睱敖脓穞衡мォ\n");
+        return 1;
+    }
+
+    me->set_temp("pending/hidden", 0);
+    write("秨﹍ぃ笆羘︹眖" + victim->name() + "璉篊篊綼 ... \n\n");
+
+    me->set_temp("backstab_countdown", INITIAL_COUNTDOWN);
+    me->start_busy( (: do_backstab, victim :), (: halt_backstab :) );
+
+    return 1;
+}
+
+int do_backstab(object victim, object me)
+{
+    int countdown, ability, defend, bonus;
+
+    if( !me ) return 0;
+
+    /* 浪琩璶敖脓癸禜琌临 */
+    if( !victim || environment(me) != environment(victim) ) {
+        tell_object(me, "\n...  痷堡ê趁ル竒ぃ硂柑\n");
+        return 0;
+    }
+
+    /* 眔敖脓敖脓祘计璸 */
+    countdown = me->query_temp("backstab_countdown");
+    if( ! countdown ) countdown = 4;
+
+    /* 驹矮篈 */
+    if( me->is_fighting() ) {
+        tell_object(me, "\n碿临琌莱泊玡寄\n");
+        return 0;
+    }
+
+    switch(countdown)
+    {
+    case INITIAL_COUNTDOWN:
+        /* 材顶琿代刚 */
+        ability = 3 * (me->query_attr("dex") + me->query_skill("backstab"));
+        defend = victim->query_ability("awarness")
+                 + random(victim->query_stat("gin"));
+
+        if( living(victim) && defend > ability ) {
+            write("砆祇瞷\n");
+            victim->catch_backstab(me);
+            return 0;
+        }
+
+        /* 癸よ临⊿Τ祇瞷秈顶琿 */
+        tell_object(me, CYN "\n癬ㄓ" + victim->name()
+                + "临⊿Τ诡谋羭笆 ... \n\n" NOR);
+        me->set_temp("backstab_countdown", ENGAGE_COUNTDOWN);
+        me->improve_skill("backstab", 1 + random(me->query_attr("int")));
+        return 1;
+
+    case ENGAGE_COUNTDOWN:
+        /* 材顶琿代刚 */
+        ability = 2 * (me->query_attr("dex") + me->query_skill("backstab"));
+        defend = victim->query_ability("awarness")
+                 + random(victim->query_stat("gin"));
+
+        if( living(victim) && defend > ability ) {
+            message_vision(HIY "\n$N祇瞷$n$P璉稱敖琁穞衡\n" NOR,
+                        victim, me);
+            me->kill_ob(victim);
+            me->start_busy(3);
+            write(HIR "\n罺縷砆祇瞷\n\n" NOR "砆"
+                        + victim->name() + "ю惫もぃの\n\n");
+
+            /* 砆敖脓は阑 */
+	    // ア毖端甡㎝㏑い瞯, for thief's low hp -dragoon
+            victim->kill_ob(me);
+            victim->add_temp("apply/attack", 2 * victim->query_level() );
+            victim->add_temp("apply/damage", victim->query_level() );
+            victim->attack(me);
+            victim->add_temp("apply/attack", -2 * victim->query_level() );
+            victim->add_temp("apply/damage", -victim->query_level() );
+
+            /* 敖脓基 */
+            me->gain_score("mortal sin", 1);
+            me->set_temp("backstab_countdown", DELAY_COUNTDOWN);
+            return 1;
+        }
+        write(CYN "\nΘ\ㄓ" + victim->name() + "璉非称笆も ...\n\n" NOR);
+        me->improve_skill("backstab", 1 + random(me->query_attr("int")));
+        me->gain_score("mortal sin", random(10)+1);
+        me->set_temp("backstab_countdown", DOIT_COUNTDOWN);
+        return 50;
+
+    case DOIT_COUNTDOWN:
+        message_vision(HIY "\n$N眖$n璉臘τ耻笵"
+                + victim->rank("rude") + "\n\n" NOR, me, victim);
+        tell_object(victim, "ぃМ砆" + me->name() + "眖敖脓\n");
+        me->kill_ob(victim);
+
+        /* 敖脓Θ */
+        bonus = 10 + me->query_skill("backstab")
+                + 2 * me->query_skill("killerhood");
+
+        me->add_temp("apply/damage", bonus/2);
+        me->add_temp("apply/attack", bonus);
+        me->attack(victim);
+        if( random(victim->query_ability("defense"))
+                < me->query_skill("killerhood") ) {
+            message_vision(HIY "$N敖脓$n眔もǎ$pは莱ぃ筁ㄓ羪臩礼"
+                        "ρ龟ぃ┕玡秈笹˙\n" NOR,
+                        me, victim);
+            /* 炳もセ發ㄢ */
+            me->attack(victim);
+            me->attack(victim);
+        }
+        me->add_temp("apply/damage", - bonus/2);
+        me->add_temp("apply/attack", - bonus);
+
+        victim->kill_ob(me);
+
+        /* 倒ぉ竒喷 */
+        me->improve_skill("backstab", 1 + random(me->query_attr("int")*2) );
+        if( me->query_learn("killerhood") )
+            me->improve_skill("killerhood", 1 + random(me->query_attr("dex")) );
+        me->gain_score("mortal sin", bonus);
+
+        return 0;
+
+    default:
+        /* 璝┑筐い磅︽计璸计 */
+        if( countdown > 0 && countdown <= DELAY_COUNTDOWN ) {
+            me->set_temp("backstab_countdown", --countdown);
+            return countdown;
+        }
+        return 0;
+    }
+}
+
+int halt_backstab(object me)
+{
+    int countdown = me->query_temp("backstab_countdown");
+
+    if( countdown > DELAY_COUNTDOWN ) {
+        write("ゴ敖脓├繷\n");
+        me->supplement_stat("fatigue", 5);
+        return 1;
+    }
+    write("び筐もΓ竲睹稱叉ō琌⊿\n");
+    return 0;
+}
+
+int help()
+{
+    write(@TEXT
+Αbackstab <ヘ夹>
+
+硂琵癸寄秈︽敖脓穞衡敖脓Θ癸寄硑Θ端甡琌
+ア毖穦琵ぃぶ基
+
+敖脓Θ瞯璶蛤敖脓穞衡м硂мΤ闽τ端甡玥м
+籔炳もセ紇臫敖脓も┪ㄏノ单祏
+TEXT
+    );
+        return 1;
+}

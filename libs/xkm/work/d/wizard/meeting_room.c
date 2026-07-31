@@ -1,0 +1,37 @@
+//Cracked by Kafei
+// Room: /d/wizard/meeting_room.c
+
+inherit ROOM;
+
+void create()
+{
+	set("short", "侠客聚义厅");
+	set("long", @LONG
+这是间巨大的圆形会大厅，从地面到天花板都是整块的水磨镜面花冈石。地
+上正中有个四四方方的水池，水池中央匍伏着一只半人高的铜龟。龟背上伏着块
+千斤石碑，上面书写着龙飞凤舞的三个大字：【侠客行】。环绕水池沿著东南西
+北四个方向各摆放着九把虎皮交椅，面对着会议厅的中心水池。四周的墙上镂刻
+着一些古怪的文字。
+LONG );
+
+	set("exits", ([
+         "east" : __DIR__"edit_room",
+  	"down" : __DIR__"wizard_room" ]));
+
+	set("valid_startroom", 1);
+	set("no_fight", "1");
+	set("no_clean_up", 0);
+	set("cost", 0);
+	setup();
+
+	call_other("/clone/board/progress_b", "???");
+//	replace_program(ROOM);
+}
+void init()
+{
+        object me = this_player();
+
+        if (wizhood(me) == "(player)")
+                me->move("/d/death/death.c");
+}
+

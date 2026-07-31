@@ -1,0 +1,102 @@
+// 枪里加锏
+
+#include <ansi.h>
+
+#include <combat.h>
+inherit F_SSERVER;
+
+int perform(object me, object target)
+{       string msg;
+	int skill, skill1, skill2;
+	object weapon1, weapon2;
+        int d=me->query_skill("shenyuan-gong",1)/2;
+        int j=me->query_skill("murong-daofa", 1)/4;
+        int i=me->query_skill("murong-jianfa", 1)/4;
+	if(!target) target = offensive_target(me);
+
+	if( !target
+        ||      !target->is_character()
+        ||      target->is_corpse()
+        ||      target==me)
+                return notify_fail("你要对谁施展这一招「刀剑双绝」？\n");
+
+	if(!me->is_fighting())
+                return notify_fail("「刀剑双绝」只能在战斗中使用！\n");
+            if( (int)me->query_skill("shenyuan-gong", 1) < 120 )
+                return notify_fail("你的内功还未练成，不能使用「刀剑双绝」！\n");   
+	if((int)me->query("max_neili") < 1500)
+		return notify_fail("你的内力不够！\n");
+
+        if((int)me->query("neili") < 500 )
+                return notify_fail("你的内力不足！\n");
+
+	if((int)me->query("jingli") < 450)
+		return notify_fail("你的精神不足，没法子施用外功！\n");
+
+	if((int)me->query_skill("murong-daofa",1) < 120)
+		return notify_fail("你的慕容刀法级别还不够，使用这一招会有困难!\n");
+        if(me->query_skill_mapped("force") != "shenyuan-gong")
+                return notify_fail("你的内功不是神元功，无法使用「刀剑双绝」！\n");   
+       if(me->query_skill_mapped("sword") != "murong-jianfa")
+                return notify_fail("你的剑法不是慕容剑法，无法使用「刀剑双绝」！\n");  
+        if(me->query_skill_mapped("blade") != "murong-daofa")
+                return notify_fail("你的刀法不是慕容刀法，无法使用「刀剑双绝」！\n");  
+	if((int)me->query_skill("murong-jianfa",1) < 120)
+		return notify_fail("你的慕容剑法级别还不够，使用这一招会有困难!\n");
+        
+	weapon1=me->query_temp("weapon");
+	weapon2=present("sword", me);
+	if(!objectp(weapon2)) 
+		return notify_fail("没剑怎么使用「刀剑双绝」?\n");
+
+	message_vision(HIG"\n$N使出慕容绝学使用「刀剑双绝」，运足内力，向$n劈出一刀！\n"NOR, me, target);
+         me->add_temp("apply/dodge", d); 
+        me->add_temp("apply/attack", j); 
+	me->set_temp("BWQ_perform", 1);
+	 COMBAT_D->do_attack(me, target, me->query_temp("weapon"),1);
+      me->add_temp("apply/attack", -j);
+	message_vision(HIC"\n$N右手"+weapon1->query("name")+HIC"连划三个光圈挡住$n的招式，反手抽出"+weapon2->query("name")+HIC"，以左手剑攻敌！ \n"NOR, me, target);
+
+	weapon1->unequip();
+	weapon2->wield();
+
+	me->set_temp("BWQ_perform", 2);
+          me->add_temp("apply/attack", i);
+	 COMBAT_D->do_attack(me, target, me->query_temp("weapon"),1);
+
+	me->set_temp("BWQ_perform", 3);
+	 COMBAT_D->do_attack(me, target, me->query_temp("weapon"),1);
+        me->add_temp("apply/attack", -i);
+	me->delete_temp("BWQ_perform");
+
+	
+	me->add("neili", -350);
+        me->add("jingli", -200);
+	if( !target->is_fighting(me) ) {
+                if( living(target) ) {
+                        if( userp(target) ) target->fight_ob(me);
+                        else target->kill_ob(me);
+                }
+        }
+
+	weapon2->unequip();
+	weapon1->wield();
+if(me->is_fighting(target) && 
+random((int)me->query("combat_exp")) > (int)target->query("combat_exp")/2)
+{
+msg = HIG"紧接着$N"+weapon2->query("name")+HIG"入鞘，双手握刀，自上而下向$n砍去！"NOR;
+ me->add_temp("apply/attack", (i+j)*3/2);
+COMBAT_D->do_attack(me, target, me->query_temp("weapon"), TYPE_QUICK,msg);
+ me->add_temp("apply/attack", -(i+j)*3/2);
+me->add("neili", -100);
+        me->add("jingli", -50);
+}
+else {
+message_vision(HIY"\n$N「刀剑双绝」使用完毕将"+weapon2->query("name")+HIY"收入剑鞘！\n"NOR, me, target);
+} 
+        me->add_temp("apply/dodge", -d); 
+        me->start_busy(2+random(2));
+        me->start_perform(5,"「刀剑双绝」");
+        return 1;
+}
+

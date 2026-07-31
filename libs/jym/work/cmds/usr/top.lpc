@@ -1,0 +1,1022 @@
+
+// 玩家数据排行榜 修改版  top.c
+// by naihe  04-4-28~30
+// last edit by naihe 04-5-2 8:51 修改了一个小地方，使信息排得好看些
+// last edit by naihe 04-5-3 19:53 修改了一个小地方
+// last edit by naihe 04-6-9 0:15 增强了功能和美化了界面。
+//    注：由于兼并了“综合得分榜”以及计算skills的“各类天下第一”，程序结构变得
+//        不完全统一了。上述两种榜面，需要巫师修改文件进行某方面的设置。
+// last edit by naihe 05-4-15 0:49 修正了一个地方。
+// last edit by naihe 05-6-18 1:09 修正可能会丢失记录中玩家 cname 的BUG；增加两个功能。
+
+// ----------------------------------------------------------------------------
+// 如何将本文件嵌入您的站点？
+//
+// 1、本文件请放至：/cmds/usr/top.c 并使用 preload 载入( /adm/etc/preload )
+// 2、没有 ctime_new() 函数的MUD，请加入：
+//    varargs string ctime_new(int t) { if( t<1 ) t = time(); return ctime(t); }
+// 3、没有 setcolor() 函数的MUD，请加入：
+//    string setcolor( string t ) { return color_filter(t); }
+//    如果连 color_filter() 函数都没有，请将上述函数内容直接改为： return t;
+// 4、在 /adm/daemons/logind.c (玩家连线程序) 中，连线成功函数结束之前，
+//    加入： "/cmds/usr/top"->player_login_check( this_player() );
+//    目的是将该玩家资料传到本文件中，将该玩家资料搜集以等待 update。
+//    这样可以避免一些意外的情况，例如某玩家总是碰不上更新的时段，
+//    而导致总是无法上榜；或导致其已上榜资料总是无法更新等。
+//    加入此功能后，玩家一旦上线，即会将其资料录入，以待更新；
+//    当然，如果更新时其仍在线，将会以最新资料为准。
+//    注意：此功能可以舍弃；但加上后会令程序更加完善。
+// 5、如果仍有任何无法解决之问题，请联系奈何：
+//    lovesb@21cn.com  或  lonely@163.com  或 QQ：107507
+//    或至上述网页在线留言本留言。
+//
+// 注：由于许多MUD里都有 top.c 排行榜指令，为了避免冲突，本文件允许自由改名。
+// 改名时，请将 #define MY_FILE_NAME 的值相应更改，否则有些提示信息会让人迷惑。
+// 但如果不改该值，对程序亦无任何影响！
+// ----------------------------------------------------------------------------
+
+#include <ansi.h>
+inherit F_DBASE;
+inherit F_SAVE;
+
+
+// ----------------------[ defines ]-------------------------
+#define		QUERY_SAVE_FILE		DATA_DIR + "cmds_top"	// 这个值若更改，将丢失以前的数据（如果有的话）！
+#define		MUD_CNAME			"【金庸梦】"				// 可随时随意更改
+#define		MY_FILE_NAME		"top"					// 可随意更改，不过请对应本文件名就最好
+#define		WIZ_DATA_CHECK		0						// 设置为0即不检测巫师身份的ID，即巫师不加入排行榜
+														// 设置为1即巫师也加入排行
+#define		UPDATE_TIME			7200					// 每隔多久自动更新一次所有排行榜，建议半小时以上
+														// 如设置为 0 ， 则不更新
+#define		CHECK_TIME_LIMIT	1						// 如果加上这个限制，则至少要5分钟才会进行
+														// 一次自动的排行榜整体更新
+#define		UPDATE_CHANNEL		"sys"					// 自动更新时，系统信息报告频道
+#define		VALID_DO_WIZHOOT	({ "(admin)", })		// 允许操作的巫师级别(即使不对帐号)
+#define		VALID_DO_ID			({ "muder", })			// 允许操作的巫师帐号(即使不够级别)
+								
+#define		PLAYER_NAME_TYPE	2						// 排行榜显示玩家信息时的模式
+								// 默认：简单id模式，一行最高可并排 5 个id
+								// 1：	 简单中英文模式，如：  奈何(naihe)  3个
+								// 2：	 详细模式，如：
+								// 	「亡灵谷」丐帮第二十代传人「http://naihe.126.com」奈何(naihe)
+
+#define		TOP_SKILLS_CMD		"skills"		// 武功排行榜的指令是什么。玩家以例如：top skills
+								// 这样的形式来查询天下第一剑、第一刀之类的排名。
+								// 这个值可以随意更改，更改为什么字串，玩家即以什么
+								// 参数来查询该榜。如果不想开放武功排行榜，定义为 0。
+#define		TOP_ZONGHE_CMD		"zonghe"		// 综合排行榜的指令是什么。玩家以例如：top zonghe
+								// 这样的形式来查询综合榜。综合榜有已定义的计算得分
+								// 公式，玩家依据此公式计算得分进行排名。
+								// 这个值可以随意更改，如果不想开放它，定义为 0。
+								
+		// naihe 05-4-15 0:40 注：以上两功能似乎未实现………………
+// ----------------------------------------------------------
+
+// ------------------------[ vars ]--------------------------
+int LastUpdateTime;			// 最后更新时间，为了避免bug而强行设置
+string *BanAll;				// 其id或ip在此记录内，则不参与任何排行榜排行
+							// 这是为了提供某些特殊需要以及防止未知的BUG
+mapping TopData;			// 所有资料记录于此
+mapping PlayerNameLast;		// 玩家名资料(之前已在榜内的，需要长期保留)
+mapping PlayerNameLogin;	// 玩家名资料(由 login check收集的)
+mapping PlayerNameNow;		// 玩家名资料(现在统计中的)
+// ----------------------------------------------------------
+
+// -----------------------[ per funcs ]----------------------
+// 取得保存文件的位置
+string query_save_file()
+{
+	return QUERY_SAVE_FILE;
+}
+// 为了方便而写
+varargs mixed errs( string msg, int is_void_type )
+{
+	if( !msg )
+		msg = "";
+	write( msg );
+	if( !is_void_type )
+		return 1;
+	return;
+}
+// 确定某人是否能进行一些需要权限的操作函数
+int valid_do( object me )
+{
+	if( !me || !userp(me) || !wizardp(me) ||
+	    ( member_array( wizhood(me), VALID_DO_WIZHOOT ) == -1
+	    && member_array( getuid(me), VALID_DO_ID ) == -1 )
+	)
+		return 0;
+	return 1;
+}
+// 保证安全的一个检测
+void vars_check()
+{
+	if( LastUpdateTime < 100000 )
+		LastUpdateTime = time();
+	if( !TopData || !sizeof( TopData ) )
+		TopData = ([ ]);
+	if( !PlayerNameLast || !sizeof(PlayerNameLast) )
+		PlayerNameLast = ([ ]);
+	PlayerNameLogin = ([ ]);
+	PlayerNameNow = ([ ]);
+	if( !BanAll || !sizeof( BanAll ) )
+		BanAll = ({ });
+}
+// 获取数组中最大数
+int max_number( int *list )
+{
+	if( !list || !sizeof(list) )
+		return 0;
+	return sort_array( list, -1 )[0];
+}
+
+// 根据设置的不同，获得该玩家中文名
+string GetCName( object ob )
+{
+	string id, CName;
+
+	if( !ob || !(id = ob->query("id")) )
+		return 0;
+	switch( PLAYER_NAME_TYPE )
+	{
+		case 1:
+			CName = ob->query("name") + "(" + id + ")";
+			break;
+		case 2:
+			CName = ob->short(1);
+			break;
+		default:
+			CName = id;
+	}
+	return CName;
+}
+
+// 获得所有的玩家中文名，包括： logind 收集的、之前已在排行榜中而记录的、当前在线玩家最新的。
+mapping GetCNameAll()
+{
+	mapping CNameAll = ([]);
+	string id;
+	object ob, *u;
+	
+	// 之前榜中记录的名字，及 logind 收集的名字
+	CNameAll = PlayerNameLast + PlayerNameLogin;
+	// 再加上 / 更新当前在线玩家最新的名字
+	u = users();
+	foreach( ob in u )
+	{
+		if( !(id = ob->query("id")) )
+			continue;
+		CNameAll[ id ] = GetCName( ob );
+	}
+	return CNameAll;
+}
+// ----------------------------------------------------------
+
+// ----------------------[ funcs define]---------------------
+private void auto_checking();
+private void update_all();
+private string update_single(string n);
+
+// 其它的不是非要不可的，懒得预先声明函数了，只要不改变位置
+// 即可。如果您实在看不顺眼，自己抄一份放这吧。
+// ----------------------------------------------------------
+
+void create()
+{
+	restore();
+	seteuid( geteuid() );
+	vars_check();
+	set("name", "排行榜精灵" );
+	set("channel_id", MY_FILE_NAME );
+	save();
+	auto_checking(); // 启动自动程序，周期进行调用更新排行榜的函数
+}
+
+// 建立一个新的排行榜。
+// 需要传入：英文名，中文名，数据类型名(dbase key name)，数据至少量，排位数量
+// 直接生效
+private int do_create_list( string arg )
+{
+	string e_name, c_name, dbase_data_name, doing;
+	int dbase_data_limit;
+	int max_count;
+	object me = this_player();
+
+	doing = "建立一个新的排行榜----";
+	if( !arg || sscanf( arg, "%s %s %s %d %d", e_name, c_name, dbase_data_name, dbase_data_limit, max_count ) != 5 )
+		return errs( doing + "缺少参数或参数错误。\n"
+				"参数格式为：[英文名 中文名 数据名 数据最少量(数字) 该榜排位数量(数字)]\n"
+				"例：[exp 高手榜 combat_exp 1000 3]\n"
+				"  - 建立一个榜面“高手榜(exp)”，以玩家数据“combat_exp”为依据，\n"
+				"    最少要 1000 点才能进入排行，只列出前3名。\n");
+	if( !undefinedp( TopData[ e_name ] ) )
+		return errs( doing + "已有该英文名字的排行榜了！("+e_name+")\n");
+	if( dbase_data_limit < 1 )
+		return errs( doing + "“数据最少量”的值最小为1！("+dbase_data_limit+")\n");
+	if( max_count < 3 || max_count > 100 )
+		return errs( doing + "“排位数量的范围应该在 3 - 100 之间！("+max_count+")\n");
+	// ok. 建立新的排行榜
+	TopData[ e_name ] = ([
+		"c_name" : setcolor(c_name),		// 本榜中文名
+		"create_time" : time(),			// 建立时间
+		"create_by" : sprintf( "%s(%s)", me->query("name"), getuid(me), ),
+							// 建榜者
+		"dbase_data_name" : dbase_data_name,	// 以什么数据为依据进行排行
+		"dbase_data_limit" : dbase_data_limit,	// 该数据至少需要多少才能进入排行榜
+		"max_count" : max_count, 		// 排到第几位
+		"msg"	: "本排行榜未有任何记录！\n",	// 每次更新数据会更新这个信息，玩家查询时无需重新整理数据，
+										// 而是直接丢这个字串过去即可
+		"lastUT": time(),				// 本榜最后更新时间
+		"player_data" : ([ ]),			// 已在排名内的玩家资料
+		"ban_id_ip" : ({ }),			// 本排行榜不排行此内id或ip的数据
+	]);
+	save();
+	return errs( sprintf( "%s建立成功！(%s -- %s)\n请直接输入 <"+MY_FILE_NAME+"> 指令查询现有的排行榜设置信息。\n",
+			doing, e_name, c_name ));
+}
+
+// 删除一个已有的排行榜。
+// 直接生效
+private void do_delete_list(string e_name)
+{
+	string doing;
+	mixed d;
+	object me = this_player();
+
+	doing = "删除一个已有的排行榜----";
+	if( !e_name )
+		return errs( doing +"缺少参数。请输入该排行榜的英文名。\n");
+	if( undefinedp( TopData[ e_name ] ) )
+		return errs( doing +"现在并没有这个排行榜！("+e_name+")\n", 1 );
+	d = TopData[ e_name ];
+	if( !d || !mapp(d) || !sizeof(d) )
+	{
+		map_delete( TopData, e_name );
+		save();
+		return errs( "这个排行榜发生错误，没有任何资料！已删除。("+e_name+")\n", 1 );
+	}
+	write( sprintf( "你确定要删除排行榜 %s(%s) 吗？(y/n)[n]", d[ "c_name" ], e_name, ));
+	input_to( "valid_delete_list", e_name, me );
+}
+
+// 确认删除
+private void valid_delete_list( string inp, string e_name, object me )
+{
+	if( !me )
+		return;
+
+	if( !inp || (inp != "y" && inp != "Y" ) )
+		return errs( "好的，取消删除某排行榜的操作。\n", 1 );
+	// 确认这期间没有发生资料变化
+	if( !e_name || undefinedp( TopData[ e_name ] ))
+		return errs( "在你输入确认的这段时间里，这个排行榜的资料已经被删除了！\n", 1 );
+	map_delete( TopData, e_name );
+	save();
+	return errs( "成功删除了该排行榜。("+e_name+")\n", 1 );
+}
+
+// 更改一个排行榜的英文ID(索引名称)
+// 直接生效
+private int do_change_e_name( string arg )
+{
+	string doing, n1, n2;
+
+	doing = "更改一个已有的排行榜的英文名----";
+	if( !arg || sscanf( arg, "%s %s", n1, n2) != 2 )
+		return errs( doing +"缺少参数或参数错误。\n"
+				"参数格式为：[排行榜英文名 新英文名]\n");
+	if( undefinedp(TopData[ n1 ]) )
+		return errs( doing +"没有这个排行榜！("+n1+")\n");
+	if( !undefinedp( TopData[ n2 ] ))
+		return errs( doing +"已经有这个排行榜了！("+n2+")\n");
+	TopData[ n2 ] = TopData[ n1 ];
+	map_delete( TopData, n1 );
+	save();
+	return errs( "成功！排行榜 "+n1+" 已经改名为 "+n2+" 了，这将直接生效。\n");	
+}
+
+// 更改一个排行榜的中文名
+// 直接生效
+private int do_change_c_name( string arg )
+{
+	mixed m;
+	string doing, n1, n2;
+
+	doing = "更改一个已有的排行榜的中文名----";
+	if( !arg || sscanf( arg, "%s %s", n1, n2 ) != 2 )
+		return errs( doing +"缺少参数或参数错误。\n"
+				"参数格式为：[排行榜英文名 新中文名]\n");
+	if( undefinedp((m=TopData[n1])) || !mapp(m) || !sizeof(m) )
+		return errs( doing +"没有这个排行榜！("+n1+")\n");
+	n2 = setcolor( n2 );
+	m["c_name"] = n2;
+	save();
+	return errs("成功！排行榜 "+n1+" 的中文名改为 "+n2+" 了，这将直接生效。\n");
+}
+
+// 更改一个排行榜的排位数量
+// 将于下一次更新时生效
+private int do_change_count( string arg )
+{
+	string doing, n;
+	int i;
+	mixed m;
+
+	doing = "更改一个已有的排行榜的排位数量----";
+	if( !arg || sscanf( arg, "%s %d", n, i ) != 2 )
+		return errs( doing +"缺少参数或参数错误。\n"
+				"参数格式为：[排行榜英文名 排位数量(数字)]\n");
+	if( undefinedp((m=TopData[n])) || !mapp(m) || !sizeof(m) )
+		return errs( doing +"没有这个排行榜！("+n+")\n");
+	if( i<3 || i>100 )
+		return errs( doing +"排位数量的范围是 3-100 ！\n");
+	m["max_count"] = i;
+	save();
+	return errs("成功！排行榜 "+n+" 的排位数量改为 "+i+" 了，下次更新时生效。\n");
+}
+
+// 更改一个排行榜的入榜限制  naihe 05-6-18 0:44 添加功能
+// 下一次更新生效
+private int do_change_limit( string arg )
+{
+	string doing, n;
+	int i;
+	mixed m;
+
+	doing = "更改一个已有的排行榜的入榜限制----";
+	if( !arg || sscanf( arg, "%s %d", n, i ) != 2 )
+		return errs( doing +"缺少参数或参数错误。\n"
+				"参数格式为：[排行榜英文名 入榜限制(数字)]\n");
+	if( undefinedp((m=TopData[n])) || !mapp(m) || !sizeof(m) )
+		return errs( doing +"没有这个排行榜！("+n+")\n");
+	if( i<1 )
+		return errs( doing +"入榜限制至少为 1 ！\n");
+	m["dbase_data_limit"] = i;
+	save();
+	return errs("成功！排行榜 "+n+" 的入榜限制改为 "+i+" 了，下次更新时生效。\n");
+}
+
+// 删除所有榜面中某 id 的数据。 naihe 添加功能 05-6-18 0:51
+// 下次更新时生效。
+private int do_delusr_data( string arg )
+{
+	string doing, *t;
+	int i;
+	mapping m;
+
+	doing = "删除所有榜面中某ID的记录数据----";
+	if( !arg )
+		return errs( doing +"缺少参数。\n"
+				"参数格式为：[要删除数据的ID]\n");
+	if( !TopData || !mapp(TopData) || !sizeof(TopData) )
+		return errs( doing+"操作取消。\n现在未有任何排行榜的记录。\n");
+	doing += "\n";
+	t = keys( TopData );
+	for( i=sizeof(t)-1; i>=0; i-- )
+	{
+		m = TopData[ t[i] ];
+		if( !m || !mapp(m) || !sizeof(m) || !m[ "player_data"] || !m["player_data"][arg] )
+			continue;
+		map_delete( m["player_data"], arg );
+		doing += sprintf( "%-10s 该榜记录的关于 %s 的数据已删除。\n", t[i], arg );
+	}
+	save();
+	return errs( "成功！所有榜面中 ["+arg+"] 的记录数据都已经删除了，下次统一更新时生效。\n");
+}
+
+// 锁定一个排行榜
+private int do_lock( string arg )
+{
+	object me = this_player();
+	string doing;
+	mixed m;
+	
+	doing = "锁定一个排行榜----";
+	if( !arg )
+		return errs( doing +"缺少参数。请以排行榜的英文ID为参数。\n");
+	if( undefinedp((m=TopData[arg])) || !mapp(m) || !sizeof(m) )
+		return errs( doing +"没有这个排行榜。\n");
+	if( m["lock"] )
+		return errs( doing +"这个排行榜已经被锁定了。\n");
+	m["lock"] = sprintf( "by %s(%s) %s",
+				me->query("name"), getuid(me), ctime_new() );
+	save();
+	return errs("成功！这个排行榜将不再更新。("+arg+")\n");
+}
+
+// 解锁
+private int do_unlock(string arg)
+{
+	string doing = "将已锁定的排行榜解封----";
+	mixed m;
+	
+	if( !arg )
+		return errs( doing +"缺少参数。请以排行榜的英文ID为参数。\n");
+	if( undefinedp((m=TopData[arg])) || !mapp(m) || !sizeof(m) )
+		return errs( doing +"没有这个排行榜。\n");
+	if( !m["lock"] )
+		return errs( doing +"这个排行榜并未被锁定。\n");
+	m["lock"] = 0;
+	save();
+	return errs("成功！这个排行榜已解锁，下次统一更新时恢复。("+arg+")\n");
+}
+
+// 增加一个全部排行榜的限制id或ip
+// 将于下一次更新时生效
+private int do_add_ban_all( string arg )
+{
+	string doing;
+
+	doing = "增加一个被所有排行榜统一禁止的ID或IP----";
+	if( !arg )
+		return errs( doing +"缺少参数。请以任意字符串作为参数。\n");
+	if( member_array( arg, BanAll ) != -1 )
+		return errs( doing +"这个值已经在列表内了。("+arg+")\n");
+	BanAll += ({ arg });
+	save();
+	return errs("成功！["+arg+"] 不再参与任何排行榜的统计，下次统一更新时生效。\n");
+}
+
+// 去除一个全部排行榜的限制id或ip
+// 将于下一次更新时生效
+private int do_del_ban_all( string arg )
+{
+	string doing;
+
+	doing = "剔除一个被所有排行榜统一禁止的ID或IP----";
+	if( !arg )
+		return errs( doing +"缺少参数。请以任意字符串作为参数。\n");
+	if( member_array( arg, BanAll ) == -1 )
+		return errs( doing +"这个值并不在列表内！("+arg+")\n");
+	BanAll -= ({ arg });
+	save();
+	return errs("成功！["+arg+"] 以后可以参与排行榜的统计了，下次统一更新时生效。\n");
+}
+
+// 增加一个单个排行榜的限制id或ip
+// 将于下一次更新时生效
+private int do_add_ban_single( string arg )
+{
+	string doing, n, id, *t;
+
+	doing = "让一个ID或IP不参与某个排行榜的统计----";
+	if( !arg || sscanf( arg, "%s %s", n, id ) != 2 )
+		return errs( doing +"缺少参数或参数错误。\n"
+				"参数格式为：[排行榜英文名 要加入的ID或IP]\n");
+	if( undefinedp( TopData[n] ) || !mapp(TopData[n]) || !sizeof(TopData[n]) )
+		return errs( doing +"没有这个排行榜！("+n+")\n");
+	t = TopData[n]["ban_id_ip"];
+	if( !t )
+		t = ({ });
+	if( member_array( id, t ) != -1 )
+		return errs( doing +"这个值已经在该榜列表内了！("+id+")\n");
+	TopData[n]["ban_id_ip"] += ({ id });
+	save();
+	return errs( "成功！["+id+"] 不再参与 ("+n+") 排行榜的统计，下次统一更新时生效。\n");
+}
+
+// 去除一个单个排行榜的限制id或ip
+// 将于下一次更新时生效
+private int do_del_ban_single( string arg )
+{
+	string doing, n, id, *t;
+
+	doing = "让一个ID或IP恢复参与某个排行榜的统计----";
+	if( !arg || sscanf( arg, "%s %s", n, id ) != 2 )
+		return errs( doing +"缺少参数或参数错误。\n"
+				"参数格式为：[排行榜英文名 要恢复的ID或IP]\n");
+	if( undefinedp( TopData[n] ) || !mapp(TopData[n]) || !sizeof(TopData[n]) )
+		return errs( doing +"没有这个排行榜！("+n+")\n");
+	t = TopData[n]["ban_id_ip"];
+	if( !t )
+		t = ({ });
+	if( member_array( id, t ) == -1 )
+		return errs( doing +"这个值并不在列表内！("+id+")\n");
+	TopData[n]["ban_id_ip"] -= ({ id });
+	save();
+	return errs( "成功！["+id+"] 恢复参与 ("+n+") 排行榜的统计了，下次统一更新时生效。\n");
+}
+
+// 强制更新一个排行榜
+private int do_refresh_single(string n)
+{
+	string s, doing = "强制更新一个排行榜----";
+	object me = this_player();
+	
+	if( !n )
+		return errs( doing +"缺少参数。请以排行榜的英文ID为参数。\n");
+	s = update_single(n);
+	if( strlen(s) > 3 && s[0..3] == "(ok)" )
+	{
+		CHANNEL_D->do_channel( this_player(), UPDATE_CHANNEL, sprintf(
+			HIW"%s"HIW"(%s) 手动更新了排行榜 [%s] 。"NOR, 
+			me->query("name"), getuid(me), n ));
+		me->del_temp( "last_message" ); // 某些MUD限制短时间内不得发布同样的信息
+										// 基于某个变态的理由，我不希望被这个限制。
+	}
+	write( doing + s + "\n" );
+	save();
+	return 1;
+}
+
+///////////////// 下面是玩家操作函数三个 /////////////////
+
+// 查询所有排行榜列表（简单）
+// 本指令可由玩家进行
+private int do_check_all()
+{
+	int size, i;
+	string msg, *key;
+	mixed m;
+
+	if( !(size = sizeof( TopData ) ))
+		msg = sprintf( "\n\n"HIW"%-80s\n\n"NOR,
+			MUD_CNAME"现在没有任何排行榜。  (最后更新："+ctime_new(LastUpdateTime)+")");
+	else
+	{
+		msg = sprintf( "\n\n"HIW"%-80s\n"NOR+HIG"%s\n"NOR,
+			MUD_CNAME"现有排行榜共 "+size+" 个：  (最后更新："+ctime_new(LastUpdateTime)+")",
+			repeat_string("-",80), );
+		key = keys( TopData );
+		for( i=0; i<size; i++ )
+		{
+			m = TopData[key[i]];
+			if( !m || !mapp(m) || !sizeof(m) )
+				continue;
+			msg += sprintf( "    〖%s〗 -  %s\n"NOR+HIG"%s\n"NOR,
+				TopData[key[i]]["c_name"], key[i], repeat_string("-", 80), );
+		}
+	}
+	msg += sprintf( HIW"%-80s\n"NOR,"请输入指令 <"+MY_FILE_NAME+" list> 查看详细设置。");
+	this_player()->start_more( msg );
+	return 1;
+}
+
+// 查询所有排行榜的设置信息（详细）
+// 本指令可由玩家进行
+private int do_check_all2()
+{
+	object me = this_player();
+	string msg, *key, *t, ccc;
+	mixed m;
+	int size, i, k, is_wiz;
+	if( !(size = sizeof( TopData ) ))
+		msg = sprintf( "\n\n"HIW"%-80s\n\n"NOR,
+			MUD_CNAME"现在没有任何排行榜。  (最后更新："+ctime_new(LastUpdateTime)+")");
+	else
+	{
+		if( wizardp(me) )
+			is_wiz = 1;
+		msg = sprintf( "\n\n"HIW"%-80s\n\n"NOR,
+			MUD_CNAME"现有排行榜共 "+size+" 个：  (最后更新："+ctime_new(LastUpdateTime)+")" );
+		key = keys( TopData );
+		for( i=0; i<size; i++ )
+		{
+			m = TopData[key[i]];
+			if( !m || !mapp(m) || !sizeof(m) )
+			{
+				msg += sprintf( HIR"排行榜 (%s) 资料错误！\n\n"NOR, key[i] );
+				continue;
+			}
+			if( i%2 == 1 )
+				ccc = WHT;
+			else
+				ccc = CYN;
+			msg += sprintf( "%s〖 %s - (%s) 〗\n"
+					"    [建榜者] %s  [建榜期] %s\n"
+					"    [使用数据] %s  [至少需要] %s  [排位] %d\n"NOR,
+				m["lock"] ? HIR"(锁定) "NOR+ccc : ccc,
+				m["c_name"]+NOR+ccc, key[i], m["create_by"]+NOR+ccc,
+				ctime_new(m["create_time"]), 
+				is_wiz ? m["dbase_data_name"] : "----",
+				is_wiz ? ""+m["dbase_data_limit"] : "----", m["max_count"], );
+			t = m[ "ban_id_ip" ];
+			if( !t || !sizeof(t) )
+				msg += GRN"["+key[i]+"]榜并未禁止任何id或ip。\n\n"NOR;
+			else
+			{
+				msg += GRN"["+key[i]+"]榜禁止id或ip如下：\n        ";
+				for( k=sizeof(t)-1; k>=0; k-- )
+				{
+					msg += "["+t[k]+"]  ";
+				}
+				msg += NOR"\n\n";
+			}
+		}
+	}
+	if( !(size = sizeof( BanAll ) ))
+		msg += HIG"现在没有任何id或ip被全部排行榜统一禁止。\n\n"NOR;
+	else
+	{
+		msg += HIR"现有以下id或ip被全部排行榜统一禁止：\n        ";
+		for( i=0; i<size; i++ )
+		{
+			msg += "["+BanAll[i]+"]  ";
+		}
+		msg += NOR"\n\n";
+	}
+	
+//	msg += sprintf( BBLU"%-80s\n"NOR," ");
+	me->start_more( msg );
+	return 1;
+}
+
+// 查询某个排行榜的信息
+// 本指令可由玩家进行
+private int do_check_single( string arg )
+{
+	object me = this_player();
+	mixed m;
+	string msg, str;
+	if( !arg )
+		return errs( "你要查看哪个排行榜？请直接输入 <"+MY_FILE_NAME+"> 指令查看现有的排行榜列表。\n");
+	str = "——————————————————————————————————————\n";
+	if( undefinedp( (m=TopData[ arg ])) )
+		return errs( "没有这个排行榜！\n");
+	if( !mapp(m) || !sizeof(m) )
+		return errs( "这个排行榜的资料发生了错误！\n");
+	if( !(msg = m["msg"]) )
+		return errs( "这个排行榜的资料发生了错误！\n");
+	msg = sprintf( "\n\n"+str+"%75s\n"NOR"%s%s -〖%s〗 (前%s名) %s\n\n"NOR,
+			" ",m["lock"] ? HIR"(锁定)"NOR : "",
+			MUD_CNAME, m["c_name"],chinese_number(m["max_count"]),
+			"(最后更新："+ctime_new(m["lastUT"])+")"," ", )
+		+ msg;
+	msg += sprintf( "\n"NOR+str+"%75s\n"NOR, " " );
+	me->start_more( msg );
+	return 1;
+}
+
+////////////////////////////////////////////////////////
+/////////////////// 本程序核心函数 /////////////////////
+////////////////////////////////////////////////////////
+
+// 自动更新检测函数，周期反复地调用更新的函数
+private void auto_checking()
+{
+	remove_call_out("auto_checking");
+	//如果设置为不更新，直接结束。
+	if( UPDATE_TIME < 1 )
+		return;
+	// 否则，开始一轮新的检测(即更新所有排行榜)
+	// 基于某个无伤大雅的理由，这里使用 call_out() 延迟数秒。
+	// 也可以使用 update_all(); 代码句直接开始。
+	call_out( "update_all", 5 );
+	call_out( "auto_checking", UPDATE_TIME ); // 准备下一轮的检测
+}
+
+// 开始更新所有排行榜
+private void update_all()
+{
+	string *key, t;
+
+	remove_call_out( "update_all" );
+	// 基于安全的理由，某些情况下不得启动更新程序
+	// 1, 离上次更新不足5分钟(避免过量消耗系统资源)
+	// 2，无任何排行榜
+	if( CHECK_TIME_LIMIT && time() - LastUpdateTime < 300 || !sizeof(TopData) )
+		return;
+
+	// 允许更新。
+	LastUpdateTime = time();
+	CHANNEL_D->do_channel( this_object(), UPDATE_CHANNEL, HIW"开始更新所有排行榜的信息……"NOR );
+	// 获得在线玩家中文名表
+	PlayerNameNow = GetCNameAll(); // 用 copy 看是否能解决丢失 cname 的问题。
+	// 逐个排行榜更新。// PlayerNameLast 清空，再根据各个榜上榜玩家而记录最新的数据。
+	PlayerNameLast = ([ ]);  // 似乎这样会丢失玩家的 cname，靠  但是注释这一句又会越攒越多，靠
+	key = keys( TopData );
+	foreach( t in key )
+	{
+		CHANNEL_D->do_channel( this_object(), UPDATE_CHANNEL,
+				CYN"更新 ("+t+") ……  "+ update_single(t)+NOR);
+	}
+	CHANNEL_D->do_channel( this_object(), UPDATE_CHANNEL, HIW"更新完毕。"NOR );
+	// 此时，PlayerNameLast 已经记录了最新的名字，并且都是用 copy() 来复制的，这样应该可以解决 cname 丢失的问题。
+	// 清空 logind 记录的名字，清空暂存性质的 PlayerNameNow 记录的名字。
+	PlayerNameLogin = ([ ]);
+	PlayerNameNow = ([ ]);
+	save();
+}
+
+// 过滤已被禁止排行的玩家
+private int filter_users( object ob, string *ls )
+{
+	string id;
+	if( !ob
+	 || !(id=ob->query("id"))
+	 || member_array( id, ls ) != -1
+	 || !(id=query_ip_name(ob))
+	 || member_array( id, ls ) != -1
+	 || (!WIZ_DATA_CHECK && wizardp(ob))
+	 )
+	 	return 0;
+	 return 1;
+}
+
+// 更新单个排行榜
+private string update_single(string n)
+{
+	mixed m, d, temp_d, new_d;
+	object *u, ob;
+	int i, *v, top, k;
+	string *key, msg, t;
+	
+	if( !n || !(m=TopData[n]) || !mapp(m) || !sizeof(m) || !m["dbase_data_name"] )
+		return HIR"无此排行榜或此排行榜资料错误！"NOR;
+	if( m["lock"] )
+		return HIB"该排行榜已被锁定。"NOR;
+
+	// 一个安全判断(实际上不应该出现这样的情形)
+	if( !m["ban_id_ip"] )
+		m["ban_id_ip"] = ({ });
+	
+	// 获得所有有效玩家物件列表。过滤掉不符合大前提的玩家及被单榜禁止的玩家
+	u = filter_array( users(), "filter_users", this_object(), BanAll + m["ban_id_ip"] );
+	// 如果无剩余玩家，改变最后更新时间，结束
+	if( !u || !sizeof(u) )
+	{
+		m["lastUT"] = time();
+		return HIY"未发现符合条件的玩家，更新完毕。"NOR;
+	}
+
+	// 好，开始更新。建立一个映射表记录数据
+	// 先将已有的数据 copy.
+	temp_d = copy( m["player_data"] );
+	if( !temp_d || !mapp(temp_d) || !sizeof(temp_d) )
+		temp_d = ([ ]);
+	// 获得在线玩家的本项数据。
+	foreach( ob in u )
+	{
+		temp_d[ ob->query("id") ] = ob->query( m["dbase_data_name"] );
+	}
+	// 过滤数据，未达到最低要求者去除。
+	// 这个地方应该用 filter_mapping() 之类的搞吧……可惜我不懂这个efun怎么用哈哈哈
+	d = ([ ]);
+	key = keys(temp_d);
+	for(i=sizeof(key)-1; i>=0; i--)
+	{
+		if( temp_d[key[i]] < m["dbase_data_limit"] )
+			continue;
+		d[ key[i] ] = temp_d[key[i]];
+	}
+	// 如果无剩余数据，改变最后更新时间，改变排行榜信息，结束
+	if( !sizeof(d) )
+	{
+		m["lastUT"] = time();
+		m["msg"] = "无任何玩家有足够资格上榜！\n";
+		m["player_data"] = ([ ]);
+		return HIY"未发现符合条件的玩家，更新完毕。"NOR;
+	}
+	// 做个安全判断
+	if( m["max_count"] < 3 )
+		m["max_count"] = 3; // 至少排 3 位吧
+	// 好，开始排名 :)
+	v = values(d);
+	key = keys(d);
+	i = 1;
+	msg = "";
+	new_d = ([ ]);
+	while( sizeof(v) )
+	{
+		// 排够了
+		if( i > m["max_count"] )
+			break;
+		msg += sprintf( "%-12s", "第"+chinese_number(i)+"位：" );
+		// 取得剩下中最大的值
+		top = max_number( v );
+		v -= ({ top });
+		k = 0;
+
+		// 根据不同的方式将玩家名字显示出来
+		// 1, 简单中英文模式如： 奈何(naihe)
+		if( PLAYER_NAME_TYPE == 1 )
+		{
+			foreach( t in key )
+			{
+				if( d[t] == top )
+				{
+					k++;
+					if( k>3 )
+					{
+						msg += "\n            ";
+						k = 1;
+					}
+					msg += sprintf( "%-22s  ", ! PlayerNameNow[t] ? t : PlayerNameNow[t]);
+					new_d[ t ] = top;
+					PlayerNameLast[t] = copy( PlayerNameNow[t] ); // 用 copy 看是否能解决 cname 丢失的问题。
+				}
+			}
+			msg += "\n";
+			i++;
+		}
+		// 2，详细模式如：「亡灵谷」丐帮第二十代传人「http://naihe.126.com」奈何(naihe)
+		else if( PLAYER_NAME_TYPE == 2 )
+		{
+			foreach( t in key )
+			{
+				if( d[t] == top )
+				{
+					k++;
+					if( k!=1 )
+					{
+						msg += "            ";
+					}
+					msg += sprintf( "%s\n", ! PlayerNameNow[t] ? t : PlayerNameNow[t]);
+					new_d[ t ] = top;
+					PlayerNameLast[t] = copy( PlayerNameNow[t] ); // 用 copy 看是否能解决 cname 丢失的问题。
+				}
+			}
+			i++;
+		}
+		else
+		{
+			foreach( t in key )
+			{
+				if( d[t] == top )
+				{
+					k++;
+					if( k > 5 )
+					{
+						msg += "\n            ";
+						k = 1;
+					}
+					msg += sprintf( "%-12s  ","("+t+")" );
+					new_d[ t ] = top;
+				}
+			}
+			msg += "\n";
+			i++;
+		}
+	}
+	m[ "msg" ] = msg;
+	m["lastUT"] = time();
+	m["player_data"] = new_d;
+	return "(ok)"HIG"成功更新！";
+}
+
+
+// 玩家连线进入时，将其资料存入此处，以待更新
+// 这样可以防止玩家在未更新时就已离线，而导致
+// 漏更新的情况。
+// 本函数不作 save(), 以节省资源。
+void player_login_check( object ob )
+{
+	string *key, t, id;
+	mixed m;
+
+	// 过滤意外的情况
+	if( !ob || !userp(ob) || !TopData || !mapp(TopData) || !sizeof(TopData) )
+		return;
+	// 将每一个排行榜需要的资料都记录下来。
+	// 如果已有该玩家的该项资料，将会更新。	
+	key = keys( TopData );
+	foreach( t in key )
+	{
+		m = TopData[t];
+		if( !m || !mapp(m) || !sizeof(m) )
+			continue;
+		if( m["lock"] )
+			continue;
+		if( !filter_users( ob, BanAll + m["ban_id_ip"] ) )
+			continue;
+		m["player_data"][ob->query("id")] = ob->query( m["dbase_data_name"] );
+	}
+	// 记录该玩家的名字
+	if( !id = ob->query("id") )
+		return;
+	PlayerNameLogin[ id ] = GetCName( ob );
+}
+
+////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////
+
+varargs int help()
+{
+	string msg;
+	
+	msg = "
+-------------------------------------------------------
+[排行榜指令帮助]
+
+    本指令可以让你查看本站里所有玩家的某些排名。你可以
+直接输入 "HIY"<"+MY_FILE_NAME+">"NOR"  指令来查看现在有哪些排行榜；而输入
+"HIY"<"+MY_FILE_NAME+" 榜名>"NOR" 指令可以看到具体的排名。\n";
+
+	if( valid_do(this_player()) )
+		msg += "
+巫师指令参数：
+    
+[create / add]    建立一个新的排行榜
+[delete / del]    删除一个已有的排行榜
+[reid]            更改一个已有排行榜的英文名
+[rename]          更改一个已有排行榜的中文名
+[recount]         更改一个已有排行榜的排位数量
+[relimit]         更改一个已有排行榜的入榜限制
+[lock]            暂时锁定一个排行榜(不更新)
+[unlock]          将已锁定的排行榜解封
+[ban1]            将一个ID或IP禁止排上任何一个排行榜
+[unban1]          将一个已被统一禁止排行的ID或IP剔除
+[ban2]            将一个ID或IP禁止排上某个排行榜
+[unban2]          将一个已被某个排行榜禁止排行的ID或IP剔除
+[delusr]          将一个ID的在榜数据全部删除，包括各个版面
+[refresh]         强制更新一个排行榜\n";
+    
+	msg += "
+	                  By 奈何(naihe) 2004-04-28
+-------------------------------------------------------\n";
+
+	return errs( msg );
+}
+
+int main( object me, string arg )
+{
+	string t;
+
+	if( !me || !userp(me) )
+		return 0;
+
+	// 查看所有排行榜列表
+	if( !arg )
+		return do_check_all();
+	// 查看所有排行榜详细设置
+	if( arg == "list" )
+		return do_check_all2();
+	// 查看帮助文件(指令说明)
+	if( arg == "help" )
+		return help();
+	// 查询一个排行榜的排名信息
+	if( !valid_do(me) )
+		return do_check_single(arg);
+	if( arg == "check" || sscanf( arg, "check %s", t ) )
+		return do_check_single(t);
+	if( arg == "ck" || sscanf( arg, "ck %s", t ) )
+		return do_check_single(t);
+	if( arg == "chk" || sscanf( arg, "chk %s", t ) )
+		return do_check_single(t);
+
+		
+	// 以下指令只能由巫师进行
+	if( valid_do(me) )
+	{
+		// 增加一个新的排行榜。
+		if( arg == "create" || sscanf( arg, "create %s", t ) )
+			return do_create_list( t );
+		// 同上，增加一个新的排行榜。
+		if( arg == "add" || sscanf( arg, "add %s", t ) )
+			return do_create_list( t );
+		// 删除一个已有的排行榜。
+		if( arg == "delete" || sscanf( arg, "delete %s", t ) )
+		{
+			do_delete_list( t );
+			return 1;
+		}
+		// 同上，删除一个已有的排行榜。
+		if( arg == "del" || sscanf( arg, "del %s", t ) )
+		{
+			do_delete_list( t );
+			return 1;
+		}
+		// 改英文名
+		if( arg == "reid" || sscanf( arg, "reid %s", t ))
+			return do_change_e_name(t);
+		// 改中文名
+		if( arg == "rename" || sscanf( arg, "rename %s", t ))
+			return do_change_c_name(t);
+		// 改排位数量
+		if( arg == "recount" || sscanf( arg, "recount %s", t ))
+			return do_change_count(t);
+		// 改入榜限制
+		if( arg == "relimit" || sscanf( arg, "relimit %s",t) )
+			return do_change_limit(t);
+		// 锁定一个排行榜
+		if( arg == "lock" || sscanf( arg, "lock %s", t ))
+			return do_lock(t);
+		// 解锁
+		if( arg == "unlock" || sscanf( arg, "unlock %s", t ))
+			return do_unlock(t);
+		// 加全局禁止排行id or ip
+		if( arg == "ban1" || sscanf( arg, "ban1 %s", t ))
+			return do_add_ban_all(t);
+		// 减去全局禁止排行id or ip
+		if( arg == "unban1" || sscanf( arg, "unban1 %s", t ))
+			return do_del_ban_all(t);
+		// 加单榜禁止排行id or ip
+		if( arg == "ban2" || sscanf( arg, "ban2 %s", t ))
+			return do_add_ban_single(t);
+		// 减去单榜禁止排行id or ip
+		if( arg == "unban2" || sscanf( arg, "unban2 %s", t ))
+			return do_del_ban_single(t);
+		// 减去所有榜面某个 id 的记录数据。
+		if( arg == "delusr" || sscanf( arg, "delusr %s", t ))
+			return do_delusr_data(t);
+		// 手动更新一个排行榜的信息(强制更新)
+		// 参数用 refresh 是不想和 update 指令冲突
+		if( arg == "refresh" || sscanf( arg, "refresh %s", t ) )
+		{
+			PlayerNameNow = GetCNameAll();
+			return do_refresh_single(t);
+		}
+	}
+	return do_check_single(arg);
+}

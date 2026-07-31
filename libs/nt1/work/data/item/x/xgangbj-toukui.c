@@ -1,0 +1,31 @@
+// SN:Ib\M>H85IOVU?LUl
+// ITEM Made by player(唐小藏:xgangbj) /data/item/x/xgangbj-toukui.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Mon Feb  2 13:25:15 2004
+#include <ansi.h>
+#include <armor.h>
+
+inherit HEAD;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;36m面具[2;37;0m", ({ "toukui" }));
+	set_weight(4500);
+	set("item_make", 1);
+	set("unit", "顶");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一顶头盔。
+头盔缘上刻着一行小字：唐小藏(xgangbj)
+");
+	set("value", 2100000);
+	set("point", 189);
+	set("material", "magic stone");
+	set("wear_msg", "[33m$N戴上一副$n[33m。[2;37;0m\n");
+	set("remove_msg", "[33m$N把$n[33m取了下来。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/armor", apply_armor());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

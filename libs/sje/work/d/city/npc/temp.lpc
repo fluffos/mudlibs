@@ -1,0 +1,235 @@
+#include <ansi.h>
+inherit NPC;
+inherit F_DEALER;
+//inherit F_CONDITION;
+
+int ask_buy();
+int ask_sell();
+int ask_wei();
+void create()
+{
+	set_name(YEL"马夫"NOR, ({ "ma fu" }));
+	set("long",		
+		"他是一名靠贩马为生的马夫。\n"
+	);
+	set("combat_exp", 50000);
+	set("inquiry", ([
+        "买马" : (: ask_buy :),
+		"buy" : (: ask_buy :),
+        "卖马" : (: ask_sell :),
+		"sell" : (: ask_sell :),
+	]));
+	
+	setup();
+
+}
+
+void init()
+{
+	object ob;
+	
+	::init();
+	if (interactive(ob = this_player()) && !is_fighting()) {
+		remove_call_out("greeting");
+		call_out("greeting", 1, ob);
+	}
+        add_action("do_buy", "buy");
+	   	add_action("do_sell", "sell");
+		add_action("do_wei", "wei");
+}
+
+void greeting(object ob)
+{
+	if (!ob || environment(ob) != environment())
+		return;
+	switch(random(2)) {
+	case 0 :
+		say("马夫笑眯眯地说道：这位" + RANK_D->query_respect(ob) +
+			"，是来挑匹好马吗？。\n");
+		break;
+	case 1 :
+		say("马夫说道：哟！这位" + RANK_D->query_respect(ob) + 
+			"您来了啊！这里有各种良马出售，您想不想挑一匹以代脚力？\n");
+		break;
+	}
+}
+
+int ask_buy()
+{
+	int i,j,have_horse;
+	object *inv;
+	string str;
+	j=1;
+	
+	str = sprintf("马夫笑着对你说道：“客官，我现在这里有以下几种马出售：”\n");
+
+	inv = all_inventory(environment(this_object()));
+	for(i=0; i<sizeof(inv); i++) {
+		if( inv[i]==this_object() ) continue;
+		if( !this_object()->visible(inv[i]) ) continue;
+		if(inv[i]->query_temp("master")==this_object()->query("id"))
+		{
+			
+			str += "第"+j+"匹 " + inv[i]->query("name") +" 价值"+MONEY_D->price_str(inv[i]->query("value"))+ "\n";
+			j++;
+			have_horse=1;
+		}
+	}
+	if(have_horse)
+	{
+		write(str);
+		write("不知客官您想要那匹马？(buy id)\n");
+
+		have_horse=0;
+		this_player()->set_temp("buy_ma",1);
+		return 1;
+	}
+	write("马夫摇了摇头对你说到：“对不起，客官，目前没有可以卖的马。\n");
+	return 1;
+}
+
+
+
+int do_buy(string arg)
+{
+	object *inv,obj;
+	//object *master;
+	mixed master;
+	
+	int i,j;
+	if(!this_player()->query_temp("buy_ma"))
+		return notify_fail("什么？\n");
+	if( !arg )
+		return notify_fail("你要买那一匹马？\n");
+	if(!objectp(obj = present(arg, environment(this_object()))))
+		return notify_fail("马夫说道：“对不起，没有这匹马卖。”\n");
+	if(obj->query_temp("master")!=this_object()->query("id"))
+		return notify_fail("马夫说道：“对不起，没有这匹马卖。。”\n");
+	switch (MONEY_D->player_pay(this_player(), obj->query("value")))
+				{
+					case 0:
+						return notify_fail("穷光蛋，一边呆着去！\n");
+					case 2:
+						return notify_fail("您的零钱不够了，银票又没人找得开。\n");
+						default:
+        				set_temp("busy", 1);
+						write("马夫将马牵到你跟前，把缰绳递到你手里。\n");
+						message_vision("$N从$n那里买下了一匹" + obj->query("name") + "。\n", 
+						this_player(), this_object());
+						master=({obj,});
+						this_player()->add_temp("horse", master);
+						obj->set_temp("master",this_player()->query("id"));
+						obj->set_leader(this_player());
+						obj->set("food",obj->max_food_capacity());
+						obj->set("water",obj->max_water_capacity());	
+obj->set_temp("leader",this_player()->query("id"));
+						this_player()->delete_temp("buy_ma");
+						return 1;
+				}
+
+
+
+
+	return notify_fail("什么？\n");
+
+}
+
+int ask_sell()
+{
+	write("马夫笑着对你说道：“您要卖那匹马？(sell id)”\n");
+	this_player()->set_temp("sell_ma",1);
+	return 1;
+}
+
+int do_sell(string arg)
+{
+	object *inv,obj;
+	int value,i,can_sell;
+	mixed master;
+
+	if(!this_player()->query_temp("sell_ma"))
+		return notify_fail("什么？\n");
+	if( !arg )
+		return notify_fail("你卖那一匹马？\n");
+	if(!objectp(obj = present(arg, environment(this_object()))))
+		return notify_fail("马夫说道：“对不起，没有这匹马。”\n");
+	if(interactive(obj))
+		return notify_fail("马夫对你大声说道：“我这里是卖马，不是贩卖人口！！”\n");
+	if(!obj->query("can_ride"))
+		return notify_fail("马夫怀疑的看着你，说道：“你到底是来捣乱，还是来卖马？”\n");
+	if(obj->query_temp("master")!=this_player()->query("id"))
+		return notify_fail("马夫怀疑的看着你，说道：“那是您的马吗？”\n");
+	if(!this_player()->query_temp("horse"))
+		return notify_fail("你好像不是它的主人。\n");
+	master=this_player()->query_temp("horse");
+	for(i=0;i<sizeof(master);i++)
+		if(master[i]==obj)
+	{
+		master[i]=0;
+		can_sell=1;
+	}
+	if(!can_sell)
+		return notify_fail("你好像不是它的主人。\n");
+	value = obj->query("value");
+	message_vision("$N卖掉了一匹"+ 
+	obj->query("name") + "给$n。\n", this_player(), this_object());
+	MONEY_D->pay_player(this_player(), value * 70 / 100);
+		obj->set_temp("master",this_object()->query("id"));
+	this_player()->delete_temp("sell_ma");
+	obj->delete_temp("leader");
+	obj->set_leader(0);
+	this_player()->delete_temp("ride_horse");
+	obj->delete_temp("rider");
+
+
+
+
+	return 1;
+
+}
+
+int do_wei(string arg)
+{
+	mixed master;
+	object obj;
+	int can_wei,i;
+	if( !arg )
+		return notify_fail("你想喂什么？\n");
+	if(!objectp(obj = present(arg, environment(this_object()))))
+		return notify_fail("马夫说道：“对不起，没有这匹马。”\n");
+	if(interactive(obj))
+		return notify_fail("马夫对你大声说道：“你这是什么意思，消遣我，我肯很忙呢！！”\n");
+	if(!obj->query("can_ride"))
+		return notify_fail("马夫怀疑的看着你，说道：“你到底是来捣乱，还是来喂牲口？”\n");
+	if(obj->query_temp("master")!=this_player()->query("id"))
+		return notify_fail("马夫怀疑的看着你，说道：“那是您的牲口吗？”\n");
+	if(!this_player()->query_temp("horse"))
+		return notify_fail("你好像不是它的主人。\n");
+	master=this_player()->query_temp("horse");
+	for(i=0;i<sizeof(master);i++)
+		if(master[i]==obj)
+	{
+		
+		can_wei=1;
+	}
+	if(!can_wei)
+		return notify_fail("你好像不是它的主人。\n");
+	message_vision("$n满脸欢笑的对$N说到：“虽然现在喂马是免费服务，但您放心，您的牲口在我这里肯定能吃的好好的。”\n",
+							this_player(), this_object());
+   message_vision("$n从$N手上接过缰绳，将"+obj->query("name")+"拉到旁边的马槽里，让"+obj->query("name")+"吃了个饱。”\n",
+							this_player(), this_object());
+	obj->set("food",obj->max_food_capacity());
+	obj->set("water",obj->max_water_capacity());	
+
+
+
+	return 1;
+}
+
+
+
+
+
+
+
+

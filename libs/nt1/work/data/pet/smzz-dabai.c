@@ -1,0 +1,18 @@
+// SN:B35ne@4^_[Da9Q44
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m张无忌的[2;37;0m马[2;37;0m", ({"dabai ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "这就是明教教主的坐骑，全身发亮。只有教主--张无忌才配驾驭它。
+它是张无忌的坐骑。
+");
+        set_temp("owner_id", "smzz");
+        set_temp("owner_name", "张无忌");
+        ::setup();
+}
+

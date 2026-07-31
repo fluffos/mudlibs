@@ -1,0 +1,25 @@
+inherit ROOM;
+void create()
+{
+    set("short", RED "                     浴血残阳"NOR);
+    set("long","                "+HIR+"夕     阳"+NOR+RED+"
+已将整个绝顶染成血红色，你仿佛已嗅到一股血腥之气。"+NOR+"\n ");
+    set("exits", ([ /* sizeof() == 1 */
+]));
+    set("no_magic", 1);
+    set("fight_room", __DIR__"biwu3");
+    setup();
+}
+void relay_message(string msg)
+{
+    object look_fight_room;
+   string *msgs;
+    int i;
+    if (!look_fight_room=find_object(__DIR__"biwu3"))
+    look_fight_room=load_object(__DIR__"biwu3");
+   msgs=explode(msg, "\n");
+    for (i=0;i<sizeof(msgs);i++)
+    if (strlen(msgs[i])>5)
+    message("vision",NOR+BOLD+">>"+NOR+msgs[i]+"\n",look_fight_room);
+}
+

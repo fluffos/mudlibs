@@ -1,0 +1,18 @@
+// SN:]k0?Wmg``jWV^DkV
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m鹤鹤[2;37;0m", ({"xiao_he he"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "等待配偶中
+它是无成无物的坐骑。
+");
+        set_temp("owner_id", "andi");
+        set_temp("owner_name", "无成无物");
+        ::setup();
+}
+

@@ -1,0 +1,18 @@
+// SN:Xgok>Uh5fLMHTD>l
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m闪电貂[2;37;0m", ({"lighting diao"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "疾如闪电
+它是风雷的坐骑。
+");
+        set_temp("owner_id", "hyber");
+        set_temp("owner_name", "风雷");
+        ::setup();
+}
+

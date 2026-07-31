@@ -1,0 +1,18 @@
+// SN:][HT[E;g7Sj7b2^e
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("烂东西驴[2;37;0m", ({"shou lv"}));        
+        set("gender", "女性");                
+        set("unit", "头");
+        set("long", "烂东西
+它是药米的坐骑。
+");
+        set_temp("owner_id", "soulk");
+        set_temp("owner_name", "药米");
+        ::setup();
+}
+

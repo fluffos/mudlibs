@@ -1,0 +1,18 @@
+// SN:QU^DCRUnICeUS>h]
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;31m火貂[2;37;0m", ({"xbb diao"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "我就像那冬天里的一把火
+它是青蛙的坐骑。
+");
+        set_temp("owner_id", "jdg");
+        set_temp("owner_name", "青蛙");
+        ::setup();
+}
+

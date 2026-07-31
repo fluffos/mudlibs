@@ -1,0 +1,18 @@
+// SN:4RMO6J^PXBAn:33K
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("雨过汀芳狐[2;37;0m", ({"yuguotingfang hu"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "雨后清馨的空地
+它是残旅的坐骑。
+");
+        set_temp("owner_id", "canlv");
+        set_temp("owner_name", "残旅");
+        ::setup();
+}
+

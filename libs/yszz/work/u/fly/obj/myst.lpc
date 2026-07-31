@@ -1,0 +1,1013 @@
+//  No Copyright Message (6.17.1997)
+
+#include <mudlib.h>
+#include <ansi.h>
+#include <room.h>
+#include <armor.h>
+#include <command.h>
+#include <net/dns.h>
+
+inherit CLOTH;
+inherit F_SAVE;
+inherit F_AUTOLOAD;
+inherit F_DAMAGE;
+
+mapping dir_alias = ([
+	"n":	"north",
+	"e":	"east",
+	"w":	"west",
+	"s":	"south",
+	"nu":	"northup",
+	"eu":	"eastup",
+	"wu":	"westup",
+	"su":	"southup",
+	"nd":	"northdown",
+	"ed":	"eastdown",
+	"wd":	"westdown",
+	"sd":	"southdown",
+	"ne":	"northeast",
+	"se":	"southeast",
+	"nw":	"northwest",
+	"sw":	"southwest",
+	"u":	"up",
+	"d":	"down"
+]);
+mapping dir_desc = ([
+	"north":		"北面",
+	"south":		"南面",
+	"east":			"东面",
+	"west":			"西面",
+	"northup":		"北边",
+	"southup":		"南边",
+	"eastup":		"东边",
+	"westup":		"西边",
+	"northdown":		"北边",
+	"southdown":		"南边",
+	"eastdown":		"东边",
+	"westdown":		"西边",
+	"northeast":		"东北",
+	"northwest":		"西北",
+	"southeast":		"东南",
+	"southwest":		"西南",
+	"up":			"上面",
+	"down":			"下面",
+	"enter":		"里面",
+	"out":			"外面"
+]);
+
+int msgon = 1;
+
+int start_bipin(object me);
+int whereis(string arg);
+
+void create()
+{
+	seteuid(getuid());
+
+	set("long",@LONG
+这是一件奇怪的物品。
+
+键入<help myst>以获得更多的资讯。
+LONG
+);
+
+set("unit","件");
+	set("no_get", 1);
+	set("no_drop", 1);
+
+	set("material", "cloth");
+	set("armor_prop/armor", 100);
+	set_weight(1);
+	setup();
+}
+
+void init()
+{
+	object me = this_player();
+seteuid(geteuid());
+	if (!present(this_object(), me)) {
+		if (environment(environment(me))) {
+			write("你被一股神秘力量弹开了！\n");
+			me->move(environment(environment(me)), 1);
+		}
+		return;
+	}
+	if (!wizardp(me)) return;
+	set_name (me->name(1) + "的神秘物品", ({ "mystique" }));
+	if (me && present(this_object(), me)) {
+		add_action("help", "help");
+		add_action("remove_wield", "xie");
+		add_action("clone_money", "yao");
+		add_action("steal", "tou");
+		add_action("whereis", "whereis");
+		add_action("pk_mob", "pk");
+		add_action("do_give", "give");
+		add_action("do_wakeup", "wakeup");
+        add_action("do_wiz", "ww");
+        add_action("do_bipin", "bipin");
+        add_action("do_chat", "cc");
+		add_action("force_quit", "fquit");
+		add_action("make_unconcious", "hun");
+		add_action("do_say", "ss");
+		add_action("force_go", ({"forcego", "fgo"}));
+		add_action("do_who", ({"userlist", "ul"}));
+		add_action("do_look", ({"lookhere", "ll"}));
+		add_action("do_fgive", "fgive");
+		add_action("do_tie", "tie");
+		add_action("message_switch", "msg");
+	}
+}
+
+int help(string str)
+{
+
+	if (str != "myst" && str != "mystique") return 0;
+
+	write(@Help
+
+	你可以使用以下的几个命令:
+
+	% localcmd, stat, call, data, score, skills, 等等
+	请用 help wizcmds 取得进一步资料
+
+	yao <number> <type>		<<取出哪种钱币的多少数目>
+	xie <eqs> from <object>		<让某一 object 解除装备>
+	tou <object> from <object>	<从某玩家或object身上拿某样东东>
+	pk <生物1> with <生物2>		<让生物1 与生物2 互 k>
+	forcego <生物> <方向>		<让生物往某方向去>
+	whereis <玩家|生物|文件>	<显示一玩家的所在地或生物、文件的所有clone所在地>
+	forcego <生物> <方向>		<让生物往某方向去>
+	fquit <玩家>              	<强制玩家退出>
+	hun <玩家>			<让玩家昏迷>
+	wakeup <玩家>			<把昏迷不醒的玩家叫醒>
+	ss <string>			<直接用say频道显示string>
+	userlist 或 ul <-i|-l|-w>	<who的功能>
+	lookhere 或 ll			<look本房间>
+	fgive <玩家> <物品>            	<给玩家物品，虚假显示，无实际动作>
+	tie						<让生物互相 follow>
+	msg <on|off>			<打开或关闭pk_mob和force_go的显示,默认on>
+
+Help
+);
+	return 1;
+}
+
+int query_autoload()
+{
+	if (wizardp(this_player())) return 1;
+	else return 0;
+}
+int remove_wield(string str)
+{
+	string ob, player;
+	object obj, npc, me = this_player();
+
+	if (!geteuid()) seteuid(getuid());
+	if (sscanf(str,"%s from %s", ob, player) != 2) return 0;
+
+	if (!(npc = find_player(player)))
+		if (!(npc = find_living(player)))
+			if (!(npc = present(player, environment(me))))
+				return notify_fail ("[MYST]: 没这个人\n");
+  
+	obj = present(ob, npc);
+
+if(!obj) return notify_fail ("那里没有那种东东\n");
+	else {
+		message_vision ("$N让" + npc->name() + "脱下$n。\n", me, obj);
+		obj->move(me);
+		obj->move(npc);
+		return 1;
+	}
+}
+int make_unconcious(string arg)
+{
+	object ob;
+	object me = this_player();
+
+	if (!geteuid()) seteuid(getuid());
+	if (!arg) return notify_fail("[MYST]: 你想让谁趴下？\n");
+	ob = present(lower_case(arg), environment(me));
+	if (!ob) return notify_fail ("[MYST]: 找不到"+ arg + "\n");
+	if (msgon) {
+		message_vision(HIR "\n", me, ob);
+		message_vision(HIR "$N脸色变得惨白。\n" NOR, ob);
+	}
+	ob->unconcious();
+	return 1;
+}
+int message_switch(string arg)
+{
+	if (arg == "on" || arg == "ON") msgon = 1;
+	else if (arg == "off" || arg == "OFF") msgon = 0;
+	else return notify_fail ("[MYST]: msg on|off\n");
+	return 1;
+}
+
+int steal(string str)
+{
+string ob, player;
+	object obj, npc, me = this_player();
+
+	if (!geteuid()) seteuid(getuid());
+	if (sscanf(str,"%s from %s", ob, player) != 2) return 0;
+	if (player == "yuj") return notify_fail("想偷闪电的东西，下辈子吧。\n");
+	if (player == "jpei") return notify_fail("寒雨很穷，你还是给他自己留着吧。\n");
+	npc = find_player(player);
+/*	if (!(npc = find_player(player)))
+		if (!(npc = find_living(player)))
+			if ( !(npc = present(player, environment (me))) )
+				return notify_fail ("没这个"+str+"\n");
+	if (wiz_level(npc) > 4) return notify_fail("想偷大神的东西，下辈子吧。\n");*/
+	if (!(obj=present(ob, npc))) return notify_fail ("[MYST]: 那里没这个东西("+ str + ")\n");
+
+obj->move(me);
+
+	write("你偷了" + npc->name(1) + "的" + obj->short() + "。\n");
+	CHANNEL_D->do_channel(this_object(), "rumor*", "看到有人鬼鬼祟祟地从" + npc->name(1)
+		+ "身上偷走了" + obj->name(1) + "。");
+	return 1;
+}
+
+int where_list(string arg)
+{
+object where, npc, me = this_player();
+	object *ob;
+	string filename;
+	int i;
+
+	if (!geteuid()) seteuid(getuid());
+	if (!arg) return 0;
+//	if (LOGIN_D->find_body(arg)) return whereis(arg);
+	if (arg[0..0] != "/") {
+		if (!(npc = find_living(arg))) return 0;
+		filename = base_name(npc);
+	}
+	else
+		filename = arg;
+	printf("Base file: %s\n", filename);
+	ob = children(filename);
+	for (i = 0; i < sizeof(ob); i++) {
+		if (arg[0..0] == "/" || ob[i]->id(arg)) {
+			where = environment(ob[i]);
+			if (where) {
+				if (!userp(where)) printf("%s\n", base_name(where));
+				else printf("在%s(%s)身上\n", where->query("name"), where->query("id"));
+			}
+		}
+	}
+	return 1;
+}
+int whereis(string arg)
+{
+	object where, target, me = this_player();
+	object *ob;
+	string msg;
+	int i;
+
+	if (!geteuid()) seteuid(getuid());
+	if (arg) {
+		if (target = LOGIN_D->find_body(arg)) {
+			where = environment(target);
+			if (!where) return notify_fail("他在虚无飘藐间。\n");
+			"/cmds/std/look"->look_room(me, where);
+			return 1;
+		}
+		else {
+			if (where_list(arg)) return 1;
+			else return notify_fail("这个物件不存在。\n");
+		}
+	}
+	else {
+		ob = users();
+		msg = "";
+		for (i = 0; i < sizeof(ob); i++) {
+			where = environment(ob[i]);
+			if (!where)
+				msg = sprintf("%s%14s(%-10s) %s\n",
+					msg, ob[i]->name(1), ob[i]->query("id"),
+					"??????????");
+			else
+				msg = sprintf("%s%14s(%-10s) %s\n",
+					msg, ob[i]->name(1), ob[i]->query("id"),
+					file_name(where));
+		}
+	}
+	write (msg);
+	return 1;
+}
+
+/*
+int full(string str)
+{
+	int max;
+	object me;
+
+	if (!geteuid()) seteuid(getuid());
+	if(!str)
+		me = this_player();
+	else
+		me = present(lower_case(str), environment(this_player()));
+
+	if (!me) return notify_fail ("[MYST]: full error: 找不到"+str+"\n");
+	me->reincarnate();
+        max = me->query("max_force");
+	me->set("force",max);
+	max = me->query("max_mana");
+	me->set("mana",max);
+	max = me->query("max_ken");
+	me->set("ken",max);
+    me->set("eff_ken",max);
+    me->set("ken",max);
+	max = me->query("max_sen");
+	me->set("sen",max);
+	max = me->max_food_capacity();
+	me->set("food",max);
+	max = me->max_water_capacity();  
+	me->set("water",max);
+	if (wizardp(me)) me->clear_condition();
+if (me != this_player())
+		if (msgon)
+			message_vision( " ",
+				this_player(), me);
+		else
+			printf(me->name() + "状态恢复完毕！\n");
+	else
+		printf("状态恢复完毕！\n");
+
+	return 1;
+}
+*/
+
+int clone_money(string arg)
+{
+       string kind;
+        int amount;
+        object n_money;
+
+        if( !arg || sscanf(arg, "%d %s", amount, kind)!=2 )
+          return notify_fail("[MYST]: yao <多少钱> <钱币种类>\n");
+
+        n_money = present(kind + "_money", this_player());
+        if( !n_money && file_size("/clone/money/" + kind + ".lpc") < 0 )
+                return notify_fail("你摇了半天却什么也没有出来。\n");
+        if( amount < 1 )
+                return notify_fail("你摇了半天却什么也没有出来。\n");
+
+        if( !n_money ) {
+                n_money = new("/clone/money/" + kind);
+                n_money->move(this_player());
+                n_money->set_amount(amount);
+        } 
+else
+                n_money->add_amount(amount);
+
+	message_vision( sprintf("$N使劲的掏口袋，突然从袋子里掏出%s%s%s。\n",
+                        chinese_number(amount),
+                        n_money->query("base_unit"),
+                        n_money->query("name")),
+			this_player());
+        return 1;
+}
+
+int do_tie(string str)
+{
+        object ob1, ob2, me = this_player();
+        string st1, st2;
+       if (!str || str=="") return notify_fail ("[MYST]: 你想让谁 PK 谁啊？\n");
+        if (sscanf(str, "%s with %s", st1, st2) != 2)
+		return notify_fail ("tie <ob1> with <ob2>\n");
+
+		if (!ob1 = find_living(st1)) ob1 = LOGIN_D->find_body(st1);
+		if (!ob2 = find_living(st2)) ob2 = LOGIN_D->find_body(st2);
+        if (!ob1) return notify_fail("找不到 " + st1 + " 这个生物。\n");
+        if (!ob2) return notify_fail("找不到 " + st2 +" 这个生物。\n");
+		if (ob1 == ob2) return notify_fail("你没问题吧？\n");
+
+		printf("你让" + ob1->name(1) +"和" + ob2->name(1) + "互相跟随。\n");
+		ob1->set_leader(ob2);
+		ob2->set_leader(ob1);
+		return 1;
+}
+
+int pk_mob(string str)
+{
+        object ob1, ob2, me = this_player();
+        string st1, st2;
+
+        if (!str || str=="") return notify_fail ("[MYST]: 你想让谁 PK 谁啊？\n");
+        if (sscanf(str, "%s with %s", st1, st2) != 2)
+		return notify_fail ("pk <ob1> with <ob2>\n");
+
+        if (!ob1 = present(st1, environment(me)) || !ob1->is_living()) return notify_fail("找不到 " + st1 + " 这个生物。\n");
+        if (!ob2 = present(st2, environment(me)) || !ob2->is_living()) return notify_fail("找不到 "+st2+" 这个生物。\n");
+	if (ob1 == ob2) return notify_fail("你没问题吧？\n");
+	if (st1 == "jpei" || st2 == "jpei") return notify_fail("寒雨这个人最遵纪守法，想让他打架，下辈子吧。\n");
+
+	if (msgon) {
+		message_vision(HIR "$N从口袋里掏出一面小红旗，在$n的眼前晃了两晃，$n忽然觉得脑中一片空白。\n", me, ob1);
+		message_vision(HIR "$N诡异地笑了两笑，又用小旗向$n一指。\n", me, ob2);
+		message_vision(HIR "$N满是杀意地瞪了$n一眼，口中“荷荷”有声地冲了上去。\n" NOR, ob1, ob2);
+	}
+	else printf("你让" + ob1->name() +"和" + ob2->name() + "互相PK。\n");
+        ob1->kill_ob(ob2);
+        return 1;
+}
+
+int force_go(string str)
+{
+        object ob, obj, env, me = this_player();
+        string st1, st2, dir, dest;
+	mapping exit;
+
+        if (!str || str=="") return notify_fail ("[MYST]: 你想让谁去哪里啊？\n");
+        if (sscanf(str,"%s %s", st1, st2) != 2)
+		return notify_fail ("fgo <ob> <dir>\n");
+
+        if (!ob = present(st1, environment(me)))
+		return notify_fail("找不到 "+ st1 + " 这个生物.\n");
+
+	if (st1 == "fly") return notify_fail("飞雪这个人只喜欢发呆，不喜欢四处乱蹿。\n");
+
+	
+
+ 	env = environment(me);
+	if (!env) return notify_fail("[MYST]: 哪里也去不了。\n");
+if (!undefinedp(dir_alias[st2])) st2 = dir_alias[st2];
+	
+	if (!mapp(exit = env->query("exits")) || undefinedp(exit[st2]))
+		return notify_fail("[MYST]: 那个方向没有出路。\n");
+
+	dest = exit[st2];
+
+	if (!(obj = find_object(dest)))
+		call_other(dest, "???");
+	if (!(obj = find_object(dest)))
+		return notify_fail("[MYST]: 无法移动。\n");
+
+dir = obj->query("short");
+	if (!undefinedp(dir_desc[st2]))
+		dir = dir_desc[st2] + "的" + dir;
+
+	if (msgon) {
+		message_vision(HIR "$N从口袋里掏出一面小红旗，在$n的眼前晃了两晃，$n忽然觉得脑中一片空白。\n", me, ob);
+		message_vision(HIR "$N诡异地笑了两笑，又用小旗向" + dir + "一指。\n", me);
+		message_vision(HIR "$N不由自主地走了过去。\n" NOR, ob);
+	}
+	else printf("你让" + ob->name() +"向" + dir + "走去。\n");
+	"/cmds/std/go"->main(ob, st2);
+        return 1;
+}
+
+int do_give (string arg)
+{
+	object ob, who, me = this_player();
+	string wiz, obs, whos;
+
+	if (!arg) return 0;
+	wiz = wizhood (me);
+	if (sscanf(arg, "%s to %s", obs, whos) != 2) return 0;
+	if (obs != "myst" && obs != "myst") return 0;
+  
+	write ("my level : " + wiz_level(me) + "\n");
+	if (wiz_level(me) > 2)
+		if ((wiz = SECURITY_D->get_boss(whos)) == "" || (wiz != me->query("id"))) {
+			write ("本神秘物品不能给亲戚以外的人。\n");
+			return 1;
+		}
+ob = present ("myst", me);
+	if (!ob) write ("你没有这样东西。\n");
+	who = find_player(whos);
+	if (!who) write ("没有这个人。\n");
+	if (ob && who) {
+		ob->move (who);
+		message_vision ("$N给$n一件神秘物品。\n", me, who);
+	}
+	return 1;
+}
+int do_wakeup (string str)
+{
+	object who;
+
+	if (!str) return notify_fail ("[MYST]: wakeup error, wakeup <someone>\n");
+
+	if (!(who = present(lower_case(str), environment(this_player()))) )
+		return notify_fail ("[MYST]: wakeup error, 没有" + str + "\n");
+	who->remove_call_out("revive");
+	who->revive();
+	who->reincarnate();
+	return 1;
+}
+int force_quit (string str)
+{
+	object ob, usr;
+
+	if (!geteuid()) seteuid(getuid());
+	if (!str) return notify_fail ("[MYST]: Hey you! 你想让谁 quit 啊\n");
+
+  
+	if (!(ob = find_player(str))) return notify_fail ("[MYST]: 没这个人(" + str + ")\n");
+
+	if (objectp(ob)) destruct( ob );
+	else write ("[MYST]: cannot force quit\n");
+	return 1;
+}
+int do_say(string arg)
+{
+	object me = this_player();
+
+    tell_room(environment(me), HIR + arg + "\n"NOR);
+	return 1;
+}
+
+int do_chat(string arg)
+{
+    object me = this_player();
+message("channel:chat",HIG"【闲聊】"NOR+HIC"绯村剑心"NOR+YEL" (Fly) ："NOR+WHT+arg+NOR+"!\n",users());
+    return 1;
+}
+int do_wiz(string arg)
+{
+    object me = this_player();
+message("channel:wiz",HIM"【巫师】飞雪(Fei Xue)："NOR+HIG+arg+NOR+" !\n",users());
+    return 1;
+}
+
+int do_bipin(string arg)
+{
+        object me,target;
+        int myneili,taneili,mystr,tastr,mydex,tadex,mydodge,tadodge;
+            int myexp,taexp;
+         string force,force1; 
+             mapping msg,msg1;
+            seteuid(getuid());
+    me = this_player();
+    if(!arg) return notify_fail("你想和谁比拼内力？\n");
+
+    if(!objectp(target = present(arg, environment(me))))
+             return notify_fail("这里没有这个人。\n"); 
+//   if( !target->is_fighting() || !target->is_character() || !me->is_fighting() )
+//               return notify_fail("内力比拼只能在战斗中使用。\n");
+
+    if(!living(target))
+                return notify_fail("你似乎不用再和"+target->name()+"比拼内力。\n"); 
+
+    if(target==me) return notify_fail("想和自己比拼内力？\n"); 
+       // 是否判断双放有没有busy?
+ 
+    myneili = me->query("force");
+    taneili = target->query("force");
+    if (me->query_skill("force") < 200 )
+        return notify_fail("你的内功修为不足，无法和对手较量内力。\n");
+   
+       if(myneili < 2500 )
+        return notify_fail("你的真气太弱，无法和对手较量内力。\n");
+ 
+
+   if((int)me->query("max_force") < 2000 )
+        return notify_fail("你现在内力修为太弱，无法和对手较量内力。\n");
+
+    if(me->query_temp("neili/bipin")) 
+        return notify_fail("你正在和人比拼内力。\n");
+    if(target->query_temp("neili/bipin")) 
+        return notify_fail(target->name()+"正在和人比拼内力。\n");  
+   //    if (me->query("jiali") <100)
+   //          return notify_fail(target->name()+"正在和人比拼内力。\n"); 
+       mystr = me->query_str();
+       tastr = target->query_str();
+       mydex = me->query_con();
+       tadex = target->query_con();
+       mydodge = me->query("dodge");
+       tadodge = target->query("dodge");
+       myexp = me->query("combat_exp",1);
+       taexp = target->query("combat_exp",1);
+              me->set_temp("bipin/target", target->query("id"));
+             target->set_temp("bipin/target", me->query("id"));
+        force = me->query_skill_mapped("force");  
+            force1 = target->query_skill_mapped("force");  
+      msg = SKILL_D(force)->bipin_msg(me);
+        msg1 = SKILL_D(force1)->bipin_msg(target);
+           if (!msg || undefinedp(msg["launch_msg"]))
+                write(HIY"你凝聚毕生功力缓缓推出一掌，一股劲风已然压向" + target->name() + "压了过去。\n"NOR);
+                 //      tell_room(environment(me),
+        //  me->name() + "运起毕生功力缓缓推出一掌，一股劲风已然向 " + target->name() + "压去。\n", ({ me })); 
+        else
+                write(msg["launch_msg"]);
+                      tell_room(environment(me),
+                msg["launch_other_msg"], ({ me }));
+
+       if (random(mydex*mydodge*myexp) < tadex*tadodge*taexp*2/3){
+            message_vision(HIW"$n骇然至极，连忙双腿弹起，向后跃出数丈，才勉强躲开$N这凶猛一击。\n"NOR,me, target);
+        me->add("neili",-500);
+        me->start_busy(3);
+        target->start_busy(2);
+        } 
+           if (!msg1 || undefinedp(msg1["accept_my_msg"]) || undefinedp(msg1["accept_other_msg"]))
+                write(HIY"你看无法躲闪，急忙运气真气，以之向抗。\n"NOR);
+                     //    tell_room(environment(me),
+                //      me->name() + "眼看无法躲闪，只能运起内劲硬接了 " + target->name() +"的双掌。\n", ({ me }));
+        else
+
+
+                write(msg1["accept_my_msg"]);
+                        tell_room(environment(me),
+                msg["accept_other_msg"], ({ me })); 
+
+ 
+             
+        me->add("force",-200);
+        target->add("force",-200);
+           me->set_temp("neili/bipin",1);
+           target->set_temp("neili/bipin",1);
+      //  me->set_temp("bipin_lost", (int)me->query("force"));
+       //  target->set_temp("bipin_lost",(int)target->query("force"));
+              me->set_temp("bipin/target", target->query("id"));
+             target->set_temp("bipin/target", me->query("id"));
+        target->start_busy((: start_bipin :));
+        me->start_busy((: start_bipin :));
+              me->set_temp("bipin/period", 1);
+           //   target->set_temp("bipin/period", 1);
+           //   check_pfm(me, tar, ob);
+             return 1;
+}
+int start_bipin(object me)
+{
+        string tar;
+        object target;
+        int myneili_lost,obneili_lost,period, neili, neili2;
+
+        if(!me) return 0;
+        tar = me->query_temp("bipin/target");
+        target = present(tar, environment(me));
+        myneili_lost = target->query_skill("force")/20 + me->query("enforce_factor") + 
+
+              obneili_lost = me->query_skill("force")/20 + me->query("jiali")/2 + target->query("enforce_factor");
+        period = (int)me->query_temp("bipin/period"); 
+        neili = me->query("force");
+        neili2 = target->query("force");
+        me->receive_damage("neili", myneili_lost);
+        me->receive_damage("sen", 3+random(5));        
+        me->improve_skill("force", random(2));
+        //      me->receive_damage("kee",- target->query("jiali")/10);
+              target->receive_damage("force", obneili_lost);
+        target->receive_damage("sen", 3+random(5));        
+        target->improve_skill("force", random(2));
+        //      target->receive_damage("kee",- me->query("jiali")/10);
+        if(me->is_ghost()) return 0;
+            //  message_vision(HIW"$N和$n各出生平苦练的内家真力，全神贯注的比拼内劲。\n"NOR,me, target);
+
+        if(!target || target->is_ghost() || environment(me)!=environment(target)){
+            message_vision(CYN"$N当下内劲一收，的一双衣袖便即垂下，摇摇幌幌地站了起来。\n"NOR, me);
+            return 0;
+            }
+        if(neili < myneili_lost){
+                   message_vision(RED"$N只觉压力越来越重，胸口烦恶，渐渐每喘一口气都感艰难，突然身体一阵摇晃，晕到在一旁。\n"NOR,me);
+           me->unconcious();
+           me->add("max_force",-5); 
+                    me->set_delete("bipin/target",);
+                   target->set_delete("bipin/target",);
+                   me->delete_temp("neili/bipin");
+              target->delete_temp("neili/bipin");
+           message_vision(HIW"$N只觉得心神具衰，深深吸了口气，但脸色惨白如纸。\n"NOR,target);
+                                return 0;
+                    } 
+        if(!living(target) && living(me)){
+                      message_vision(RED"$N只觉压力越来越重，胸口烦恶，渐渐每喘一口气都感艰难，突然身体一阵摇晃，晕到在一旁。\n"NOR,target);
+                      target->unconcious();
+             target->add("max_force",-5);
+                      target->unconcious();
+                      message_vision(HIW"$N深深吸了口气，压住散乱的真气，脸色惨白如纸。\n"NOR,me);
+                     me->delete_temp("bipin/target",);
+                   target->delete_temp("bipin/target",);  
+                      me->delete_temp("neili/bipin");
+              target->delete_temp("neili/bipin");  
+            return 0;
+            }        
+        if(!living(me) && !living(target)){
+                     me->set_delete("bipin/target");
+                  target->set_delete("bipin/target");
+                   me->delete_temp("neili/bipin");
+              target->delete_temp("neili/bipin");
+            message_vision(HIW"此时$N脸上都已无半点血色，看来已经到了油尽灯枯之时！\n"NOR,me);
+            me->set_temp("last_damage_from", "和"+target->name()+"同归于尽");
+            me->die();
+            return 0;
+        }
+
+
+        switch(period) {   
+        case 3: 
+        case 9:
+        case 15:
+        case 21: 
+        case 27:
+        case 33:
+        case 39:
+        case 45:
+        case 51:
+        case 57:
+                            if((neili+neili2) >=1500){ 
+                              message_vision(HIW"不一会，$N和$n头顶都透出一缕缕的白气，渐渐越来越浓，就如蒸笼一般。\n"NOR,me, target);
+                 }
+                 break;
+        case 63:
+        case 69:
+        case 75:
+        case 81:
+        case 87:
+        case 93:   
+            case 99:     
+        case 115:
+        case 145:
+        case 175:
+        case 205:  
+                if(neili > neili2){ 
+                              message_vision(HIR"$N催动内尽，头顶白气越聚越浓，双掌缓缓的向$n推去。\n"NOR,me, target);}
+                              else{
+                             message_vision(HIR"$N催动内尽，头顶白气越聚越浓，双掌缓缓的向$n推去。\n"NOR,target,me);
+                 }
+                 break;
+        case 12:       
+        case 24:
+        case 42:
+        case 60:
+      case 78:  
+        case 96: 
+        case 125:
+        case 155:
+        case 185:
+                 if(neili > neili2){
+                 message_vision(HIR"$N头顶白气凝聚不散，面色越来越严峻，不断鼓动内劲向$n推去。\n"NOR,me, target);}
+                              else{
+                             message_vision(HIR"$N头顶白气凝聚不散，面色越来越严峻，不断鼓动内劲向$n推去。\n"NOR,target,me);
+                 }                 
+                 break; 
+        case 36:
+        case 54:
+        case 72:        
+        case 90:
+        case 105:
+        case 135:
+        case 165:
+        case 195:
+                 if(me->query("jiali") < target->query("jiali")){ 
+                               message_vision(HIR"$N只觉手上一沉，对方力道涌来，忙加劲反击。\n"NOR,me);}
+                              else{
+                             message_vision(HIR"$N只觉手上一沉，对方力道涌来，忙加劲反击。\n"NOR,target);
+
+                 }
+                 
+                 break;
+        } 
+
+        period++;
+             me->set_temp("bipin/period", period);
+       // me->set_temp("bipin/period", period);
+        //      target->set_temp("bipin/period", period);
+ //              me->delete_temp("neili/bipin");
+      //        target->delete_temp("neili/bipin");
+        return 1;        
+}
+int sort_user(object ob1, object ob2)
+{
+string name1, name2;
+
+	if( wiz_level(ob1) != wiz_level(ob2) )
+		return wiz_level(ob2)
+			- wiz_level(ob1);
+	
+	name1 = ob1->query("family/family_name");
+	name2 = ob2->query("family/family_name");
+
+	if (intp(name1)) name1 = "";
+	if (intp(name2)) name2 = "";
+	if (name1 > name2) return -1;
+	if (name1 < name2) return 1;
+
+	return (int)ob2->query("combat_exp") - (int)ob1->query("combat_exp");
+}
+
+mixed do_who(string arg)
+{
+    string str, *option, fname = "",fam;
+	object *list, *ob;
+	int i, ppl_cnt, cnt, count, wcnt = 0;
+    int opt_long, opt_id, opt_wiz, opt_party, opt_party2;
+	object me=this_player();
+
+	if( arg ) {
+		option = explode(arg, " ");
+		i = sizeof(option);
+		while( i-- )
+			switch(option[i]) {
+				case "-l": opt_long = 1; break;
+				case "-i": opt_id = 1; break;
+				case "-w": opt_wiz = 1; break;
+               case "-xueshan":fam="大雪山";opt_party2 = 1;break;
+               case "-moon":fam="月宫";opt_party2 = 1; break;
+               case "-sld":fam="水帘洞";opt_party2 = 1; break;
+               case "-xuanyuan":fam="轩辕古墓";opt_party2 = 1; break;
+               case "-longgong":fam="东海龙宫";opt_party2 = 1;break;
+              case "-fangcun":fam="方寸山三星洞";opt_party2 = 1;break;
+               case "-putuo":fam="南海普陀山";opt_party2 = 1;break;
+               case "-wudidong":fam="陷空山无底洞";opt_party2 = 1;break;              
+                  case "-wuzhuangguan":fam="五庄观";opt_party2 = 1;break;                
+                  case "-hell":fam="阎罗地府";opt_party2 = 1;break;              
+				case "-p": opt_party = 1; break;
+				default:
+					if( wizardp(me)
+					&&	option[i][0]=='@' ) {
+						RWHO_Q->send_rwho_q(option[i][1..sizeof(option[i])],
+							me, opt_long);
+						write("网路讯息已送出，请稍候。\n");
+						return 1;
+					}
+
+					return notify_fail("指令格式：who [-l|-i|-w]\n");
+			}
+	}
+
+if( opt_long && !wizardp(me)) {
+		if( (int)me->query("jing") < 30 )
+			return notify_fail("你的精神太差了，没有办法得知其他玩家的详细资料。\n");
+		me->receive_damage("jing", 30);
+	}
+
+    str = "◎ " + MUD_NAME + "\n";
+	str += "—————————————————————————————————————\n";
+	ob = filter_array(objects(), (: userp :));
+	if (opt_party)
+		ob = filter_array(ob, (: $1->query("family/family_name") ==
+			$2->query("family/family_name") :), me);
+	if (opt_party2){
+      ob = filter_array(ob,(:$1->query("family/family_name")==$2:),fam);
+	}
+	list = sort_array(ob, (: sort_user :));
+	ppl_cnt = 0;
+	cnt = 0;
+	if( opt_long || opt_wiz ) {
+		i = sizeof(list);
+		while( i-- ) {
+			// Skip those users in login limbo.
+			if( !environment(list[i]) ) continue;
+//			if( !me->visible(list[i]) ) continue;
+			if( opt_wiz && !wizardp(list[i]) ) continue;
+			if (interactive(list[i])) ppl_cnt++;
+			else cnt++;
+			str = sprintf("%s%12s%s%s\n",
+				str,
+				RANK_D->query_rank(list[i]),
+				interactive(list[i])?(query_idle(list[i]) > 120?HIM "+" NOR:(me->visible(list[i])?" ":HIC "&" NOR)):HIG "*" NOR,
+				list[i]->short(1)
+			);
+		}
+	} else {
+		i = sizeof(list);
+		count = 0;
+		while( i-- ) {
+			// Skip those users in login limbo.
+			if( !environment(list[i]) ) continue;
+//			if( !me->visible(list[i]) ) continue;
+			if (!wiz_level(list[i]) && fname != list[i]->query("family/family_name")) {
+			    fname = list[i]->query("family/family_name");
+			    if (count % 8) str += "\n";
+                str += sprintf(HIY "%-14s" NOR, (fname?fname:"普通百姓") + "：");
+			    count = 1;
+			}
+			if (!wcnt && wiz_level(list[i])) {
+			    if (count % 8) str += "\n";
+                str += sprintf(HIY "%-14s" NOR, "巫师：");
+			    wcnt = 1;
+			    count = 1;
+			}
+			if (!(count%8)) {
+				count++;
+                str += "              ";
+			}
+                        str = sprintf("%s%s%-9s"NOR"%s",
+				str,
+				interactive(list[i])?(query_idle(list[i]) > 120?HIM "+":(me->visible(list[i])?" ":HIC "&")):HIG "*",
+				opt_id?capitalize(list[i]->query("id")): list[i]->name(1),
+				++count%8 ? "": "\n"
+			);
+			if (interactive(list[i])) ppl_cnt++;
+			else cnt++;
+		}
+		if( count%8 ) str += "\n";
+	}
+	str += "————————————————————————————————————————\n";
+	str = sprintf("%s有 %d 位玩家连线中，%d 位玩家断线中，系统负担：%s\n* 表示断线中  + 表示发呆中", str, ppl_cnt,
+		cnt, query_load_average());
+
+//	if( remote ) return str;
+
+	me->start_more(str);
+	return 1;
+}
+
+int do_look(string arg)
+{
+	int i;
+	object *inv;
+	mapping exits;
+	string str, *dirs;
+	object me = this_player();
+	object env = environment(me);
+
+	if( !env ) {
+		write("你的四周灰蒙蒙地一片，什么也没有。\n");
+		return 1;
+	}
+	str = sprintf( "%s - %s\n    %s%s",
+		env->query("short"),
+		wizardp(me)? file_name(env): "",
+		env->query("long"),
+		env->query("outdoors")? NATURE_D->outdoor_room_description() : "" );
+
+	if( mapp(exits = env->query("exits")) ) {
+		dirs = keys(exits);
+		for(i=0; i<sizeof(dirs); i++)
+			if( (int)env->query_door(dirs[i], "status") & DOOR_CLOSED )
+				dirs[i] = 0;
+		dirs -= ({ 0 });
+		if( sizeof(dirs)==0 )
+			str += "    这里没有任何明显的出路。\n";
+		else if( sizeof(dirs)==1 )
+			str += "    这里唯一的出口是 " + BOLD + dirs[0] + NOR + "。\n";
+		else
+			str += sprintf("    这里明显的出口是 " + BOLD + "%s" + NOR + " 和 " + BOLD + "%s" + NOR + "。\n",
+				implode(dirs[0..sizeof(dirs)-2], "、"), dirs[sizeof(dirs)-1]);
+	}
+//	str += env->door_description();
+
+	inv = all_inventory(env);
+	for(i=0; i<sizeof(inv); i++) {
+	//	if( inv[i]==me ) continue;
+	//	if( !me->visible(inv[i]) ) continue;
+	        if (userp(inv[i]) && inv[i]->query_temp("pending/exercise")) 
+			str += "  " + inv[i]->short() + "  ID:(" + inv[i]->query("id") + ")\n";
+		else
+			str += "  " + inv[i]->short() + "\n";
+	}
+
+	write(str);
+return 1;
+}
+
+int false_give(object me, object obj, object who, int amount)
+{
+	string unit;
+
+	notify_fail("对方不接受这样东西。\n");
+	if( !interactive(who) && !who->accept_object(me, obj) )
+		return 0;
+
+	if( !userp(who) && obj->value() ) {
+		message_vision("$N拿出" + obj->short() + "给$n。\n", me, who);
+		return 1;
+	}
+	if (amount) unit = chinese_number(amount) + obj->query("base_unit");
+	else unit = "一" + obj->query("unit");
+	printf("你假装给%s%s%s。\n", who->name(), unit, obj->name());
+	message("vision", sprintf("%s给你%s%s。\n", me->name(),	unit, obj->name()), who );
+	return 1;
+}
+
+int do_fgive(string arg)
+{
+	string target, item;
+	object obj, who, *inv, obj2, me = this_player();
+	int i, amount;
+
+	if(!arg) return notify_fail("你要给谁什么东西？\n");
+	if( sscanf(arg, "%s to %s", item, target)==2
+	|| sscanf(arg, "%s %s", target, item)==2 );
+	else return notify_fail("你要给谁什么东西？\n");
+
+	if(!objectp(who = present(target, environment(me))) || !living(who))
+		return notify_fail("这里没有这个人。\n");
+
+	if( who == me) return notify_fail("给自己？\n");
+	if(sscanf(item, "%d %s", amount, item)==2) {
+		if( !objectp(obj = present(item, me)) )	
+			return notify_fail("你身上没有这样东西。\n");
+		if( !obj->query_amount() )	
+			return notify_fail( obj->name() + "不能被分开给人。\n");
+		if( amount < 1 )
+			return notify_fail("东西的数量至少是一个。\n");
+		return false_give(me, obj, who, amount);
+	}
+
+	if(item=="all") {
+		inv = all_inventory(me);
+		for(i=0; i<sizeof(inv); i++) {
+			false_give(me, inv[i], who, inv[i]->query_amount());
+		}
+		write("Ok.\n");
+		return 1;
+	}
+
+	if(!objectp(obj = present(item, me)))
+		return notify_fail("你身上没有这样东西。\n");
+	return false_give(me, obj, who, obj->query_amount());
+}

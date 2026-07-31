@@ -1,0 +1,35 @@
+// SN:FcNkC^^o1TUPRSFe
+// ITEM Made by player(慕容一:gege) /data/item/g/gege-gfinger.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Sun Nov 14 23:19:22 2004
+#include <ansi.h>
+#include <armor.h>
+
+inherit HANDS;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;31m慕容一指[2;37;0m", ({ "gfinger" }));
+	set_weight(2100);
+	set("item_make", 1);
+	set("unit", "套");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一套指套。
+[1;31m闪着耀眼红光的金手指[2;37;0m
+指套缘上刻着一行小字：慕容一(gege)
+");
+	set("value", 2100000);
+	set("point", 132);
+	set("material", "magic stone");
+	set("wear_msg", "[1;31m一道耀眼红光从天边闪过[2;37;0m\n");
+	set("remove_msg", "[33m$N[33m脱下了[1;31m慕容一指[2;37;0m[33m。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/finger", 10);
+	set("armor_prop/claw", 10);
+	set("armor_prop/armor", 10);
+	set("armor_prop/unarmed_damage", apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

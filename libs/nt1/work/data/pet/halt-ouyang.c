@@ -1,0 +1,18 @@
+// SN:^f@83?7f:TRTeU\9
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;36m路人乙[2;37;0m[36m的[1;36m小马马[2;37;0m", ({"ouyang ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "哈哈哈
+它是欧阳神的坐骑。
+");
+        set_temp("owner_id", "halt");
+        set_temp("owner_name", "欧阳神");
+        ::setup();
+}
+

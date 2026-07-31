@@ -1,0 +1,18 @@
+// SN:HhA?YNbTmYR5L:;h
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("白马[2;37;0m", ({"bai ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "白
+它是段手的坐骑。
+");
+        set_temp("owner_id", "mwm");
+        set_temp("owner_name", "段手");
+        ::setup();
+}
+

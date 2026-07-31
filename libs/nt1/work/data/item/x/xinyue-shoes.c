@@ -1,0 +1,33 @@
+// SN:V]j2PUD<12R\I>Sg
+// ITEM Made by player(慕容新月:xinyue) /data/item/x/xinyue-shoes.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Sat Jul 24 20:45:27 2004
+#include <ansi.h>
+#include <armor.h>
+
+inherit BOOTS;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;34m此情可待成追忆[2;37;0m", ({ "shoes" }));
+	set_weight(3600);
+	set("item_make", 1);
+	set("unit", "双");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一双靴子。
+[1;34m一双惨蓝惨蓝的靴子，也不知道是什么材料做成的，据说能追上记忆，是否果真如此只有穿过方才知道。[2;37;0m
+靴子缘上刻着一行小字：慕容新月(xinyue)
+");
+	set("value", 2100000);
+	set("point", 314);
+	set("material", "magic stone");
+	set("wear_msg", "[1;34m$N穿上了一双精致的靴子，清秀的脸庞上浮现种种欢喜与悲愁的神情，沉浸在回忆中。\n$N的幻影漂浮在被凝固的时空中急速飞行，以一种不可能的速度追上了遥远的记忆，但却只能做记忆的看客，不能改变什么。[2;37;0m\n");
+	set("remove_msg", "[1;34m$N幻影朝相反的方向飞行，速度也渐渐放缓，最后停留在现今的时空，慢慢地融入$N的真体。\n$N清秀不施脂粉的脸庞变回原本恬淡，她看了看脚下的靴子，想了一想，最终还是脱了下来，放入囊中。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/armor", apply_armor());
+	set("armor_prop/dodge", apply_armor() / 10 + 1);
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

@@ -1,0 +1,68 @@
+// Copyright (C) 2003, by Lonely. All rights reserved.
+// This software can not be used, copied, or modified 
+// in any form without the written permission from authors.
+// jingang-zhi.c - 少林大力金刚指
+       
+inherit SHAOLIN_SKILL;
+        
+string *action_msg = ({
+        "$N身体半蹲，右指中宫直进，一式「降龙伏虎」击向$n的$l",
+        "$N轻轻一纵，居高临下，一式「普渡众生」，点向$n的周身大穴",
+        "$N身形飘忽不定，一式「佛祖献花」，右指击向$n的$l",
+        "$N不动声色，突然一招「斩妖除魔」，左右双指分别指向$n的各大要穴",
+        "$N摒指如刀，一招「五丁开山」，双指呈刀势从意想不到的角度劈向$n",
+        "$N盘膝端坐，一招「佛法无边」，右手拇指弹出一道劲风，击向$n",
+        "$N纵身而上，一招「金刚伏魔」，双手食指端部各射出一道青气击向$n",
+        "$N脸上忽现祥和之气，一招「无色无相」，一指遥遥指向$n，似乎毫无劲力",
+});
+
+int valid_enable(string usage) { return usage == "finger" || usage == "parry"; } 
+     
+int valid_combine(string combo) { return combo == "xumishan-zhang"; } 
+      
+int valid_learn(object me) 
+{ 
+        if (me->query_temp("weapon") || me->query_temp("secondary_weapon")) 
+                return notify_fail("练大力金刚指必须空手。\n"); 
+      
+        if ((int)me->query_skill("force") < 60) 
+                return notify_fail("你的内功火候不够，无法学大力金刚指。\n"); 
+     
+        if ((int)me->query("max_neili") < 300) 
+                return notify_fail("你的内力太弱，无法练大力金刚指。\n"); 
+      
+        if ((int)me->query_skill("finger", 1) < (int)me->query_skill("jingang-zhi", 1))
+                return notify_fail("你的基本指法水平有限，无法领会更高深的大力金刚指。\n"); 
+      
+        return 1; 
+} 
+      
+mapping query_action(object me, object weapon)
+{
+        return ([
+                "action": action_msg[random(sizeof(action_msg))],
+                "force" : 320 + random(60),
+                "attack": 50 + random(10),
+                "dodge" : 50 + random(10),
+                "parry" : 50 + random(10),
+                "damage_type" : "刺伤",
+        ]);        
+}
+      
+int practice_skill(object me) 
+{ 
+        if ((int)me->query("qi") < 60) 
+                return notify_fail("你的体力太低了。\n"); 
+      
+        if ((int)me->query("neili") < 60) 
+                return notify_fail("你的内力不够练大力金刚指。\n"); 
+      
+        me->receive_damage("qi", 50); 
+        me->add("neili", -50); 
+        return 1; 
+} 
+      
+string perform_action_file(string action) 
+{ 
+        return __DIR__"jingang-zhi/" + action; 
+} 

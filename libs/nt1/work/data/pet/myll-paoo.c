@@ -1,0 +1,18 @@
+// SN:2cTYJ=`7\I8VL;Ub
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;36m跑马[2;37;0m", ({"paoo ma"}));        
+        set("gender", "女性");                
+        set("unit", "匹");
+        set("long", "sucks
+它是玉儿的坐骑。
+");
+        set_temp("owner_id", "myll");
+        set_temp("owner_name", "玉儿");
+        ::setup();
+}
+

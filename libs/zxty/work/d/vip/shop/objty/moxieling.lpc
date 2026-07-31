@@ -1,0 +1,85 @@
+#include <ansi.h>
+
+inherit ITEM;
+
+void create()
+{
+        set_name(HIM "莫邪令" NOR, ({ "moxie ling", "ling", "moxie" }) );
+        set_weight(200);
+        if( clonep() )
+                set_default_object(__FILE__);
+        else {
+              set("long", "莫邪令，可将你的自铸武器转换为whip,sword,blade,club,staff的令牌！{zhuanhuan xx}\n");
+              set("no_put",1);
+              set("no_sell",1);
+              set("ty_gift", 1);
+              set("no_get", 1);
+              set("no_give", 1);
+              set("no_drop",1); 
+              set("tianya_money",5);
+              set("unit", "块");      }
+}
+
+void init()
+{
+        add_action("do_eat", "zhuanhuan");
+}
+
+int do_eat(string arg)
+{
+        object me;
+
+
+        me = this_player();
+         
+        if (!me->query("weapon"))
+                return notify_fail("你还没有自铸武器！\n");
+           if ( present(""+me->query("weapon/id")+"", this_player()) )
+   return notify_fail("你的自铸武器不是正在你身上吗？请到gc,d那扔掉自铸武器再使用！\n");
+
+        if ( arg == "sword" ) {
+            me->set("weapon/type","剑");     
+            me->set("weapon/id","my sword");     
+                tell_object(me, HIG "恭喜你！你的自铸武器已重铸为sword。\n"NOR);
+        destruct(this_object());
+        return 1;
+
+}
+        if ( arg == "blade" ) {
+
+            me->set("weapon/type","刀");     
+            me->set("weapon/id","my blade");   
+                tell_object(me, HIG "恭喜你！你的自铸武器已重铸为blade。\n"NOR);
+        destruct(this_object());
+        return 1;
+
+}
+        if ( arg == "club" ) {
+
+            me->set("weapon/type","棍");     
+            me->set("weapon/id","my club");  
+                tell_object(me, HIG "恭喜你！你的自铸武器已重铸为club。\n"NOR);
+        destruct(this_object());
+        return 1;
+
+}
+        if ( arg == "staff" ) {
+
+            me->set("weapon/type","杖");     
+            me->set("weapon/id","my staff");  
+                tell_object(me, HIG "恭喜你！你的自铸武器已重铸为staff。\n"NOR);
+        destruct(this_object());
+        return 1;
+
+}
+        if ( arg == "whip" ) {
+
+            me->set("weapon/type","鞭");     
+            me->set("weapon/id","my whip");  
+                tell_object(me, HIG "恭喜你！你的自铸武器已重铸为whip。\n"NOR);
+        destruct(this_object());
+        return 1;
+
+}
+
+}

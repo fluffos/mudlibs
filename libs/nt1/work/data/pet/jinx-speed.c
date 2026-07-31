@@ -1,0 +1,18 @@
+// SN:cKi53DjCf^5^?@[O
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m仙鹤[2;37;0m", ({"speed he"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "仙鹤神针最佳男主角。
+它是蕴龙心境的坐骑。
+");
+        set_temp("owner_id", "jinx");
+        set_temp("owner_name", "蕴龙心境");
+        ::setup();
+}
+

@@ -1,0 +1,321 @@
+/*  hockshop.c
+
+    Copyright (C) 1994-2000 Annihilator <annihilator@muds.net>
+
+    This program is a part of ES2 mudlib. Permission is granted to use,
+    modify, copy or distribute this program provided this copyright notice
+    remains intact and subject to the restriction that this program MAY
+    NOT be used in any way for monetary gain.
+
+    Details of terms and conditions is available in the Copyright.ES2 file.
+    If you don't receive this file along with this program, write to the
+    primary author of ES2 mudlib: Annihilator <annihilator@muds.net>
+*/
+
+inherit ROOM;
+
+nosave object storage;
+
+void remove()
+{
+    if( storage ) destruct(storage);
+}
+
+void setup()
+{
+    ::setup();
+    seteuid(getuid());
+    if( !storage ) {
+        storage = new(__DIR__"hockshop_storage");
+        storage->set("shop_ob", this_object());
+        set("storage_ob", storage);
+    }
+}
+
+void init()
+{
+    add_action("do_value", "value");
+    add_action("do_pawn", "pawn");
+    add_action("do_sell", "sell");
+    add_action("do_retrieve", "retrieve");
+    add_action("do_list", "list");
+    add_action("do_buy", "buy");
+    add_action("do_store", "store");
+}
+
+string value_string(int value)
+{
+    if( value < 1 ) value = 1;
+    else if( value < 100 )
+        return chinese_number(value) + "ゅ窥";
+    else
+        return chinese_number(value/100) + "ㄢ"
+            + (value%100? "" + chinese_number(value%100) + "ゅ窥": "");
+}
+
+void pay_player(object who, int amount)
+{
+    object ob;
+
+    if( amount < 1 ) amount = 1;
+    if( amount/100 ) {
+        ob = new(SILVER_OB);
+        ob->set_amount(amount/100);
+        if( !ob->move(who) ) ob->move(environment(who));
+        amount %= 100;
+    }
+    if( amount ) {
+        ob = new(COIN_OB);
+        ob->set_amount(amount);
+        if( !ob->move(who) ) ob->move(environment(who));
+    }
+}
+
+int do_value(string arg)
+{
+    object ob;
+    int value;
+
+    if( !arg || !(ob = present(arg, this_player())) )
+        return notify_fail("璶ぐ或珇倒讽綫︳基\n");
+
+    if( ob->query("money_id") )
+        return notify_fail("硂琌窥⊿ǎ筁盾\n");
+
+    value = ob->query("value");
+    if( !value ) printf("%sゅぃ\n", ob->query("name"));
+    if( ob->query("sinister") )
+        printf("%s基%s\n琌硂贺ō钒狥﹁讽綫ぃ腀種Μ\n"
+            "ㄥ讽(pawn)┪芥耞(sell)眔%s\n",
+            ob->query("name"), value_string(value), value_string(value / 100 ));
+    else 
+        printf("%s基%s\n狦璶ㄥ讽(pawn)%sの眎讽布\n狦芥耞(sell)%s\n",
+            ob->query("name"), value_string(value),
+            value_string(value * 60 / 100), value_string(value * 80 / 100));
+
+    return 1;
+}
+
+int do_pawn(string arg)
+{
+    object ob, stamp;
+    int value;
+
+    if( !arg || !(ob = present(arg, this_player())) )
+        return notify_fail("璶ㄥ讽ぐ或珇\n");
+
+    if( ob->query("money_id") )    return notify_fail("璶讽窥\n");
+
+    value = ob->query("value");
+    if( !value ) return notify_fail("硂妓狥﹁ぃ窥\n");
+
+    if (ob->query("no_sell")) return notify_fail("硂妓狥﹁ぃㄥ讽\n");
+
+    message_vision("$Nрō" + ob->query("name") + "ㄓㄥ讽"
+        + value_string(value * 60 / 100) + "传眔眎讽布\n", this_player());
+
+    if( ob->query("sinister") ) {
+        int v;
+        message_vision("讽綫绰癸硂贺ō钒狥﹁ぃヌ腀Μ ...\n", this_player());
+        v = value / 100;
+        if( v > 100 ) v = 100;
+        pay_player(this_player(), v);
+    }
+    else
+        pay_player(this_player(), value * 60 / 100);
+
+    ob->move(storage);
+    stamp = new(__DIR__"obj/pawn_stamp");
+    stamp->set("pawned_item", ob);
+    stamp->set("long", "Μ\n    " + this_player()->name(1)
+        + "ㄥ讽" + ob->name() + "" + ob->query("unit")
+        + "癢瘆年穕ぃ臭\n    奴 (retrieve) 莱" + value_string(value * 120/100)
+        + "俱もユ窥もユ砯\n");
+    stamp->move(this_player());
+
+    return 1;
+}
+
+int sell_item(object ob)
+{
+    int value;
+
+    if( ob->query("money_id") )    return notify_fail("璶芥窥\n");
+    value = ob->query("value");
+    if( !value ) return notify_fail("硂妓狥﹁ぃ窥\n");
+
+    if (ob->query("no_sell")) return notify_fail("硂妓狥﹁ぃ芥\n");
+
+    message_vision("$Nрō" + ob->query("name") + "芥奔\n",
+        this_player());
+
+    if( ob->query("sinister") ) {
+        int v;
+        message_vision("讽綫绰癸硂贺ō钒狥﹁ぃヌ腀Μ ...\n", this_player());
+        v = value / 100;
+        if( v > 100 ) v = 100;
+        pay_player(this_player(), v);
+    }
+    else
+        pay_player(this_player(), value * 80 / 100);
+
+    ob->delete("sinister");
+
+    if( storage ) {
+        int s;
+
+        // Make a simple storage management, when we have more goods in
+        // storage, only keeps higher price goods.
+        s = sizeof(all_inventory(storage));
+        if( value >= (s * 50) ) {
+            ob->add("pawned_time", 1);
+            ob->move(storage);
+        }
+        else destruct(ob);
+    }
+    else destruct(ob);
+
+    return 1;
+}
+
+int do_sell(string arg)
+{
+    object ob;
+
+    if( !arg ) return notify_fail("璶芥耞ぐ或珇\n");
+
+    if( arg=="all" ) {
+        object *inv;
+        
+        inv = all_inventory(this_player());
+        foreach(ob in inv) {
+            if(!ob) continue;
+            if( ob->query("keep_this") ) continue;
+            sell_item(ob);
+        }
+        write("Ok\n");
+        return 1;
+    }
+
+    if( !(ob = present(arg, this_player())) )
+        return notify_fail("璶芥耞ぐ或珇\n");
+
+    return sell_item(ob);
+}
+
+int do_retrieve(string arg)
+{
+    object stamp, ob;
+    int value;
+
+    if( !arg || arg=="" || !(stamp = present(arg, this_player())) )
+        return notify_fail("璶奴眎讽布ㄥ\n");
+
+    if( !stamp->id("pawn stamp") )
+        return notify_fail("硂ぃ琌讽布\n");
+
+    if( !(ob = stamp->query("pawned_item")) ) {
+        write("硂眎讽布ㄥび⊿Τㄓ奴竒砆讽綫芥奔\n");
+        write("繦も盢讽布脊奔サ\n");
+        destruct(stamp);
+        return 1;
+    }
+
+    if( !present(ob, storage) )
+        return notify_fail("硂ぃ琌硂產讽綫秨讽布\n");
+
+    value = (int)ob->query("value") * 120 / 100;
+    if( (int)this_player()->can_afford(value) != 1 )
+        return notify_fail("ō(箂)窥ぃ镑\n");
+
+    message_vision("$N讽布" + value_string(value) + "奴"
+        + ob->name() + "\n", this_player());
+
+    this_player()->pay_money(value);
+    ob->move(this_player());
+    ob->delete("pawned_time");
+    destruct(stamp);
+
+    return 1;
+}
+
+int do_list(string arg)
+{
+    int i;
+    object *inv;
+    string msg;
+
+    if( !storage ) return notify_fail("讽綫柑瞷⊿Τ砯\n");
+    if( wizardp(this_player()) )
+        inv = all_inventory(storage);
+    else
+        inv = filter( all_inventory(storage), (: $1->query("pawned_time") :));
+    if( !sizeof(inv) ) return notify_fail("讽綫柑瞷⊿Τㄑ扳砯\n");
+    if( arg ) inv = filter( inv, (: $1->id($(arg)) :) );
+
+/*
+    msg = "讽綫柑瞷Τ砯扳\n  ";
+    msg += implode( map(inv, (: sprintf("%-50s%s", $1->short(),
+        value_string((int)$1->query("value") * 2)) :)), "\n  ");
+    msg += "\n";
+    this_player()->start_more(msg);
+    return 1;
+*/
+
+    msg = "讽綫柑瞷Τ砯扳\n\n";
+    for ( i = 0; i < sizeof(inv); i++)
+        msg += sprintf("     %-5d  %-50s%s\n",
+        i+1,
+        inv[i]->short(),
+        value_string(inv[i]->query("value") * 2));
+    this_player()->start_more(msg);
+    return 1;
+}
+
+int do_buy(string arg)
+{
+    int i, index;
+    object *inv, ob;
+
+    if( !arg ) return notify_fail("璶禦ぐ或狥﹁\n");
+
+    if( !storage ) return notify_fail("讽綫柑瞷⊿Τ砯\n");
+    inv = filter_array( all_inventory(storage), (: $1->query("pawned_time") :));
+    if( !sizeof(inv) ) return notify_fail("讽綫柑瞷⊿Τ砯\n  ");
+
+// This is a crasher! Dunno why .... Annihilator(11/01/95)
+//    if( !parse_command(arg, inv, "%o", ob) )
+//        return notify_fail("璶禦ぐ或狥﹁\n");
+
+    if( sscanf(arg, "%s %d", arg, index) != 2 ) index = 1;
+    index--;
+    for(i=0; i<sizeof(inv); i++)
+        if( inv[i]->id(arg) && !(index--)) break;
+
+    if( i==sizeof(inv) )
+        return notify_fail("璶禦ぐ或狥﹁\n");
+    ob = inv[i];
+
+    if( (int)this_player()->can_afford((int)ob->query("value") * 2) != 1 )
+        return notify_fail("(箂)窥ぃ镑\n");
+    message_vision("$N鼻窥禦" + ob->query("unit") + ob->name() + "\n",
+        this_player() );
+    this_player()->pay_money((int)ob->query("value") * 2);
+    ob->delete("pawned_time");
+//     fix if pay money....and player can't get....drop in environment
+    if(!ob->move(this_player()))
+        ob->move(environment(this_player()));
+    else
+        ob->move(this_player());
+
+    return 1;
+}
+
+int do_store(string arg)
+{
+    if( !wizardp(this_player()) ) return 0;
+    if( !storage ) return notify_fail("畐ンぃ\n");
+    this_player()->move(storage);
+    write("Ok.\n");
+    return 1;
+}

@@ -1,0 +1,133 @@
+// fentian.c 举火焚天
+// by hunthu
+ 
+#include <ansi.h>
+ 
+inherit F_SSERVER;
+#include "/kungfu/skill/eff_msg.h";
+
+void extra_effect(object me, int damage, int count);
+
+int perform(object me, object target)
+{
+        string msg, dodge_skill;
+        object weapon;
+        int skill, damage, p;
+        weapon = me->query_temp("weapon");  
+        skill = me->query_skill("ranmu-daofa",1);
+        
+        if( !target ) target = offensive_target(me);
+        if( !target
+         || !target->is_character()
+         || ! me->is_fighting(target)
+         || !living(target)
+         || environment(target)!=environment(me) )
+             return notify_fail("「举火焚天」只能对战斗中的对手使用。\n");        
+
+        if (!weapon || weapon->query("skill_type") != "blade"
+         || me->query_skill_mapped("blade") != "ranmu-daofa")
+             return notify_fail("你现在无法使出「举火焚天」之技！\n");
+
+//        if (weapon->query("unique"))
+//             return notify_fail("你手中之刀过于锋利，影响你运功发火！\n");
+
+        if((int)skill < 160 )
+             return notify_fail("你的燃木刀法火候不够，无法「举火焚天」。\n");
+
+        if((int)me->query_skill("blade", 1) < 150 )
+             return notify_fail("你的基本刀法还不够娴熟，使不出「举火焚天」绝技。\n");
+
+        if( (int)me->query_skill("yijin-jing", 1) < 150 )
+             return notify_fail("你的易筋经修为不够，使不出「举火焚天」绝技。\n");
+
+        if ((int)me->query_skill("strike",1)<120)
+             return notify_fail("你的掌法修为太差，无法使出「举火焚天」绝技。\n");
+ 
+        if (me->query_skill_mapped("force") != "yijin-jing")
+             return notify_fail("没有易筋经作为根基，是无法使出「举火焚天」绝技的！\n"); 
+
+        if (me->query_temp("fumo"))
+             return notify_fail("你现在正在使用「金刚伏魔」神功。\n"); 
+
+        if (me->query("max_neili") < 2000)
+             return notify_fail("你的内力修为不够。\n");
+        if (me->query("neili") < 900)
+             return notify_fail("你的内力不够。\n");
+        if (me->query("jingli") < 500)
+             return notify_fail("你的精力不够。\n");
+             
+          me->add("neili", -200);
+          me->add("jingli", -200);        
+        me->start_perform(2,"举火焚天");
+          me->start_busy(1+random(3));
+          
+          msg =HIR"\n$N猛然一声大喝，手中的"+weapon->name()+HIR"如一道流星腾空而起，$N聚气于双掌，在间不容发之际，往空虚劈九九八十一掌。
+一阵筚拨之声，洒下漫天火焰。$N收刀在手向$n一指，刀头指处，一股烈焰熊熊而出！\n"NOR;
+          
+          if( random(me->query("combat_exp",1)) > (target->query("combat_exp",1)/5)
+          &&(me->query_skill("blade",1) + me->query_skill("strike",1))*2 > 
+          random(target->query_skill("dodge",1))){
+                 skill += me->query_skill("blade",1) + me->query_skill("buddhism",1);
+                   damage = skill*(3+random(3));
+                 if(target->query("neili") > me->query("neili")*2)
+                          damage /= 2;
+                 if(me->query("neili") > target->query("neili")*2)   
+                          damage *= 2;
+                            
+                 msg += "结果$n见火焰扑面卷来，不免大惊失色，但躲闪无及，被熊熊大火围在当中！\n";
+target->receive_damage("qi", damage)*(1+random(3));
+   target->receive_wound("qi", damage*2);
+                 p = (int)target->query("qi")*100/(int)target->query("max_qi");
+                 msg += damage_msg(damage, "内伤");
+                 msg += "( $n"+eff_status_msg(p)+" )\n";
+                 message_vision(msg, me, target);
+                 target->start_call_out( (: call_other, this_object(), "extra_effect", target, damage, target->query("death_count") :), 3+(random(10)));
+
+                 }
+           
+          else if(random(me->query("combat_exp",1)) < target->query("combat_exp",1)/5
+                 && target->query("neili") > me->query("neili")){  
+                 msg += HIY"结果$n成竹在胸，长袖拂出，一股疾风扑出，漫天火光顿时凝聚成一个火柱，倒卷向$N！\n"NOR;
+                 message_vision(msg, me, target);
+                 damage = skill;
+                 me->receive_damage("qi", damage);
+                 me->receive_wound("qi", damage/3);
+                 p = (int)me->query("qi")*100/(int)me->query("max_qi");
+                 msg += damage_msg(damage, "内伤") + "( $n"+eff_status_msg(p)+" )\n";
+                 message_vision(msg, target, me);
+                 }
+          
+          else if(random(me->query("combat_exp",1)) > target->query("combat_exp",1)/5){
+                 msg += HIC"$n虽早有防备，但乍见火光耀眼也不禁大吃一惊，急忙跃开规避，也已大是狼狈！\n"NOR;
+  target->start_busy(target->query_busy()+random(7));
+                 message_vision(msg, me, target);
+             target->start_call_out( (: call_other, this_object(), "extra_effect", target, damage, target->query("death_count") :), 3+(random(10)));
+                 }
+          else {
+          	 dodge_skill = target->query_skill_mapped("dodge");
+                 if( !dodge_skill ) dodge_skill = "dodge";
+                 msg += SKILL_D(dodge_skill)->query_dodge_msg(target, 1);
+                 message_vision(msg, me, target);
+                 }
+
+          return 1;
+}
+
+
+void extra_effect(object me, int damage, int count)
+{
+	string msg;
+	int p;
+	
+	if(!me || me->query("death_count") > count) return;
+	
+	if(!living(me))
+	     msg = HIR"\n忽然$N全身烧如火炭，一大股鲜血从$P口中猛地哽出，看来是内伤发作了！\n"NOR;
+	else msg = HIR"\n忽然$N猛得一震，面如金纸，张口“哇”地一声鲜血狂喷而出，看来是内伤发作了！\n"NOR;
+        me->receive_damage("qi", damage);
+        me->receive_wound("qi", damage);
+        p = (int)me->query("qi")*100/(int)me->query("max_qi");
+        msg += "( $N"+eff_status_msg(p)+" )\n\n";
+        message_vision(msg, me);
+}
+

@@ -1,0 +1,37 @@
+// SN:KBl6Q[1HD^YM<9AW
+// File(/data/room/leslieace/xiaoyuan.c) of leslieace's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        set("short", "我的家小院");
+	set ("long", @LONG
+这里是一个四四方方的院子，院墙都是用红砖砌成，不算高，但
+是非常清爽利落。院中几棵古木成荫，隐然有一种世外桃源的感觉。
+院子外面隐约是南海之滨，院子的北面有一扇木门。 
+LONG );
+
+        set("room_key", "1 of leslieace");
+	setup();
+
+	set("exits", ([
+                "out"    : "/d/xiakedao/haibin",
+	]));
+
+        set("outdoors", "xiakedao");
+        set("no_sleep_room", 1);
+        set("valid_startroom", 1);
+
+        set("KEY_DOOR", ([
+                "exit" : "north",
+                "room" : __DIR__"dating",
+        ]));
+    
+        set("room_owner", "南宫图");
+        set("room_name", "我的家");
+        set("room_id", "myhouse");
+        set("room_owner_id", "leslieace");
+        set("room_position", "南海之滨");
+}

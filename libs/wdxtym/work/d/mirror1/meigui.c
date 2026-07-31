@@ -1,0 +1,37 @@
+// 玫瑰宴会厅.c
+
+#include <ansi.h>
+#include <room.h>
+inherit ROOM;
+// amount: 单位是gold
+
+void create()
+{
+        set("short", HIG"玫瑰宴厅"NOR);
+        set("long", @LONG
+进门绕过一道淡黄绸屏风，迎面墙上挂着一副『玫瑰含露』图，鲜嫩欲
+滴，花瓣轻分，似有香气盈室。厅内陈列奢华，正中央一张雕花楠木青漆嵌
+玉大圆桌，四周十二张镶银象牙扶手红木椅，杯碗勺箸，入眼生辉。
+    这里便是醉仙楼的玫瑰厅，桌上平铺着一份菜单(menu)。
+LONG );
+        set("exits", ([ /* sizeof() == 1 */
+            "west" : __DIR__"zxlpath",
+        ]));
+
+        set("item_desc", ([
+                "menu": @TEXT
+承办各式酒席, 欢迎惠顾：
+
+        order marry:    订婚大宴        (3000两黄金)
+
+        order player:   群豪大宴        (5000两黄金)
+
+        order end:      结  束
+
+TEXT
+        ]) );
+
+        setup();
+}
+//是镜像
+int is_mirror() { return 1; }

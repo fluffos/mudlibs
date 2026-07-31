@@ -1,0 +1,39 @@
+// SN:YURaEkjf]Q[=JaUm
+// File(/data/room/wake/dating.c) of wake's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        set("short", "七月居大厅");
+	set ("long", @LONG
+这就是七月居主人七月天迎送客人的地方。正中有些桌椅，侧面
+是两扇屏风。东首是主人七月天的房间，有一扇木门虚掩着。南边是
+大门，出去就是院子。 
+LONG );
+
+	setup();
+
+	set("exits", ([
+                "east"   : __DIR__"woshi",
+		"north"  : __DIR__"houyuan",
+	]));
+
+        create_door("east", "木门", "west", DOOR_CLOSED);
+
+        set("no_sleep_room", 1);
+
+        set("KEY_DOOR", ([
+                "exit" : "south",
+                "room" : __DIR__"xiaoyuan",
+        ]));
+    
+        set("room_owner", "七月天");
+        set("room_name", "七月居");
+        set("room_id", "wake");
+        set("room_owner_id", "wake");
+        set("room_position", "碎石小道");
+}

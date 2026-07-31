@@ -1,0 +1,18 @@
+// SN:Ci2ge3k1UI;3>T<g
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;33m宝马[2;37;0m", ({"guofucheng ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "宝马
+它是郭富城的坐骑。
+");
+        set_temp("owner_id", "edc");
+        set_temp("owner_name", "郭富城");
+        ::setup();
+}
+

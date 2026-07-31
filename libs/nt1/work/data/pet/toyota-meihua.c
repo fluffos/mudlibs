@@ -1,0 +1,19 @@
+// SN:Xe4b^PL4a]kg<amd
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;35m梅[1;31m花[1;36m鹿[2;37;0m", ({"meihua lu"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "一匹梅花鹿，秀闲为曰曰从极北山中捕得。
+它是曰曰的坐骑。
+");
+        set_temp("owner_id", "toyota");
+        set_temp("owner_name", "曰曰");
+        ::setup();
+}
+
+

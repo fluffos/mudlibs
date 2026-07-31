@@ -1,0 +1,126 @@
+// /u/chen/murong/npc/murong-fu.c  慕容复
+// by chen
+
+#include <ansi.h>
+inherit NPC;
+inherit F_MASTER;
+//#include "where.h"
+string ask_bo();
+string ask_book();
+string ask_xingfu();
+string ask_baochou();
+object ob = this_object();
+object me=this_player();
+int auto_perform();
+
+void create()
+{
+        set_name("慕容复",({"murong fu","murong","fu"}));
+        set("title","姑苏慕容公子");
+        set("long", 
+              "他就是天下号称以彼之道，还彼之身的姑苏慕容复。\n"
+              "他脸上带着不可一世的笑容。\n");
+        set("age", 27);
+        set("attitude", "friendly");
+        set("shen_type", 0);
+        set("str", 25);
+        set("int", 30);
+        set("con", 25);
+        set("dex", 25);
+		set("per", 30);
+        
+        set("max_qi", 3500);
+        set("max_jing", 3000);
+        set("neili", 5500);
+        set("max_neili", 5500);
+        set("jiali", 0);
+        set("combat_exp", 2500000);
+
+        set_skill("strike",300);
+        set_skill("finger",300);
+        set_skill("force", 300);
+        set_skill("parry", 300);
+        set_skill("sword", 300);
+        set_skill("blade", 300);
+        set_skill("dodge", 300);
+        set_skill("canhe-zhi", 300);
+        set_skill("murong-jianfa",300);       
+        set_skill("murong-shenfa", 300);   
+        set_skill("murong-daofa", 300);
+        set_skill("xingyi-zhang",300);
+        set_skill("douzhuan-xingyi", 300);
+        set_skill("literate", 250);
+         set_skill("murong-xinfa", 400);
+        
+        map_skill("blade", "murong-daofa");
+        map_skill("finger", "canhe-zhi");
+        map_skill("force", "douzhuan-xingyi");
+        map_skill("dodge", "murong-shenfa");
+        map_skill("strike", "xingyi-zhang");
+        map_skill("parry", "douzhuan-xingyi");
+        map_skill("sword", "murong-jianfa");
+
+        prepare_skill("finger","canhe-zhi");
+        prepare_skill("strike","xingyi-zhang");
+        
+        create_family("姑苏慕容",19,"传人");
+
+        set("inquiry", 
+		([
+			"name" : "我就是以彼之道，还施彼身的姑苏慕容复。\n",
+			"here" : "这里是大名鼎鼎的燕子坞，难道你没有听说过？\n",
+			"rumors" : "家父突染恶疾，我连他老人家最后一面都没见到，此事定有蹊跷！\n",
+			"姑妈" : "我的姑妈住在曼佗罗山庄，那里有闻名天下的郎缳玉洞。\n",
+			"慕容博" : "家父突染恶疾，我连他老人家最后一面都没见到，此事定有蹊跷！\n",
+		]));
+
+ 		set("chat_chance_combat", 50);
+		set("chat_msg_combat", ({
+                (: auto_perform :),
+		}) );
+
+        setup();
+		carry_object("/clone/armor/cloth")->wear();
+}
+
+void init()
+{
+        ::init();
+}
+void attempt_apprentice(object ob)
+{
+	mapping fam; 
+	if (!(fam = this_player()->query("family")) || fam["family_name"] != "姑苏慕容")
+	{ 
+		command("say " + RANK_D->query_respect(ob) + "已是别派高人，在下愧不敢当。");
+		return;     
+	}
+        
+	if (ob->query_skill("parry", 1) < 120) {
+		command("say 我姑苏慕容以彼之道、还施彼身对招架要求甚高，小兄弟似乎不宜学习。");
+		command("say " + RANK_D->query_respect(ob) + "的功力不够，还是请回吧。");
+		return;
+	}
+    
+	if (ob->query_skill("literate", 1) < 120) {
+		command("say 我姑苏慕容以彼之道、还施彼身对悟性要求甚高，小兄弟似乎不宜学习。");
+		command("say " + RANK_D->query_respect(ob) + "的功力不够，还是请回吧。");
+		return;
+	}
+
+	if (ob->query_skill("douzhuan-xingyi", 1) < 80) {
+		command("say 我姑苏慕容以彼之道、还施彼身对内功心法要求甚高，小兄弟似乎不宜学习。");
+		command("say " + RANK_D->query_respect(ob) + "的功力不够，还是请回吧。");
+		return;
+	}
+   
+	command("say 嗯，看你还是个学武的料，我就收下你吧！");
+	command("say 苍天在上，让我姑苏慕容又得一良材，为复兴我大燕多了一份力量。");
+	command("chat 朗声说道：公子我又收一良材，大燕兴复指日可待啦！");
+	command("chat* haha"); 
+	command("recruit " + ob->query("id"));
+	ob->set("title","姑苏慕容 家臣");
+	ob->set("murong/rank", 2);
+}
+
+#include "/kungfu/class/murong/auto_perform.h"

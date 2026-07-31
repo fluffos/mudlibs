@@ -1,0 +1,18 @@
+// SN:?2S@O5b[F?1=?ZWj
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("小羊[2;37;0m", ({"xiao yang"}));        
+        set("gender", "女性");                
+        set("unit", "头");
+        set("long", "一只小羊
+它是林月如的坐骑。
+");
+        set_temp("owner_id", "mvm");
+        set_temp("owner_name", "林月如");
+        ::setup();
+}
+

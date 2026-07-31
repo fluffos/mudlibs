@@ -1,0 +1,18 @@
+// SN:Xk5_eSMT7aX8FY0`
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;31m禽兽[2;37;0m", ({"qin shou"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "这就是世间传闻中的那只$HIR$禽兽$NOR$。
+它是蓝鸟的坐骑。
+");
+        set_temp("owner_id", "bluebird");
+        set_temp("owner_name", "蓝鸟");
+        ::setup();
+}
+

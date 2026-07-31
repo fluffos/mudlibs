@@ -1,0 +1,35 @@
+// SN:R6d8XLV_9HKomnba
+// File(/data/room/gabriel/jusuo.c) of gabriel's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "居所");
+	set ("long", @LONG
+这就是伊甸园主人加百列休息、读书的地方。楼上就是主人的卧
+室，西面则是书房。 
+LONG );
+
+	set("exits", ([
+		"up"   : __DIR__"woshi",
+                "west" : __DIR__"shufang",
+	]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("KEY_DOOR", ([
+                "exit" : "east",
+                "room" : __DIR__"huayuan",
+        ]));
+    
+        set("room_owner", "加百列");
+        set("room_name", "伊甸园");
+        set("room_id", "eden");
+        set("room_owner_id", "gabriel");
+        set("room_position", "青砖路");
+}

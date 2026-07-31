@@ -1,0 +1,18 @@
+// SN:N9ca8iT`PW05_^6M
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m死秃驴[2;37;0m", ({"situ lv"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "一只笨驴啦，看什么看！再看吃了你！
+它是龙七的坐骑。
+");
+        set_temp("owner_id", "kkll");
+        set_temp("owner_name", "龙七");
+        ::setup();
+}
+

@@ -1,0 +1,32 @@
+// SN:5T3mFZoUDemXRMID
+// ITEM Made by player(傲剑啸长空:ajxck) /data/item/a/ajxck-jxqy.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Wed Dec  3 22:33:18 2003
+#include <ansi.h>
+#include <weapon.h>
+
+inherit SWORD;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;37m朝阳[2;37;0m", ({ "jxqy" }));
+	set_weight(9000);
+	set("item_make", 1);
+	set("unit", "柄");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一柄剑。
+[1;35m纵横江湖仗九剑，[1;36m只为傲剑啸长空[2;37;0m
+剑柄上刻着一行小字：傲剑啸长空(ajxck)
+");
+	set("value", 2100000);
+	set("point", 392);
+	set("material", "magic stone");
+	set("wield_msg", "[1;36m当那滴泪水融入[1;37m朝阳之剑[1;36m时，剑的灵性充分体现了出来。[2;37;0m\n");
+	set("unwield_msg", "[1;37m朝阳之剑[1;36m突然破空而去，留下的只有凡人的深思与叹息。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	init_sword(apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

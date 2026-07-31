@@ -1,0 +1,18 @@
+// SN:3VM^YNMHGl\2jme2
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("鼻子牛[2;37;0m", ({"bizi niu"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "两个鼻孔朝天的野牛。真的很牛……
+它是牛鼻子的坐骑。
+");
+        set_temp("owner_id", "nbz");
+        set_temp("owner_name", "牛鼻子");
+        ::setup();
+}
+

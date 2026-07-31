@@ -1,0 +1,644 @@
+#include <ansi.h>
+#include <armor.h>
+#include <dbase.h>
+inherit EQUIP; 
+inherit F_SAVE;
+
+nosave mapping tzs;	
+
+nosave mapping query_mod_list()
+{
+	string arg,name,title,prop;
+	int i,j,k,x,max,v,p;
+	mapping tz,mm;
+	string *mods,n1,*temp,tmp,*tt,*t2,*t3;
+	delete_temp("mod");	
+	mm = ([]);
+	tz = ([]);
+	if( file_size("/doc/mod")<=0 )
+		return 0;
+	arg = read_file("/doc/mod");	
+	if( !arg || !stringp(arg) )
+		return 0;
+	mods = explode(arg,"~");
+	if( !mods || !arrayp(mods) )
+		return 0;
+	for(i=0;i<sizeof(mods);i++)
+	{
+		tmp = mods[i];
+		temp = explode(tmp,"^");
+		if( !temp || !arrayp(temp) )
+			continue;
+		n1 = temp[0];
+		n1 = replace_string(n1,"\n","");
+		n1 = replace_string(n1," ","");
+		if( sscanf(n1,"%s#%s#%d",title,name,max)!=3 )
+			continue;
+		set_temp("mod/"+title+"/name",name);
+		set_temp("mod/"+title+"/max",max);
+		tmp = temp[1];
+		tmp = replace_string(tmp,"\n","");
+		tmp = replace_string(tmp," ","");
+		tt = explode(tmp,"@");
+		for(k=0;k<sizeof(tt);k++)
+		{
+			tmp = tt[k];
+			tmp = replace_string(tmp,"\n","");
+			tmp = replace_string(tmp," ","");
+			t2 = explode(tmp,"&");
+			if( !t2 || !arrayp(t2) )
+				continue;
+			sscanf(t2[0],"%d",v);
+			tmp = t2[1];
+			tmp = replace_string(tmp,"\n","");
+			tmp = replace_string(tmp," ","");
+			t3 = explode(tmp,"$");
+			for(x=0;x<sizeof(t3);x++)
+			{
+				tmp = t3[x];
+				tmp = replace_string(tmp,"\n","");
+				tmp = replace_string(tmp," ","");
+				if( sscanf(tmp,"%s#%d",prop,p)!=2 )
+					continue;
+				set_temp("mod/"+title+"/tz/"+(int)v+"/"+prop,p);				
+			}	
+		}
+	}
+	return query_temp("mod");
+}	
+
+string query_name() { return "特殊防具(+技能)"; }
+
+string query_save_file()
+{
+	if( !query("owner_id") || !stringp(query("owner_id")) )
+        	return 0;
+	return sprintf("/data/armor/%c/%s/%s_%d", query("owner_id")[0],query("owner_id"),query("armor_type"),query("valid_time"));
+}
+
+void leave()
+{
+	remove_call_out("leave");
+	write("\n"+this_object()->name()+HIY"化作一道金光冲天而去。\n\n"NOR);
+	destruct(this_object());
+}
+
+void _leave()
+{
+	call_out("leave",2+random(5));
+}               
+
+void check_owner()
+{
+	object ob = this_object();
+	object env = environment();
+	if( env )
+	{
+    	if( env->is_character() )
+        {
+        	if( !userp(env) )
+            {
+            	if( !env->query("任务") )
+                	_leave();
+			}
+            else    
+            {
+            	if( query("owner_id") && query("owner_id")!=env->query("id") )
+                	_leave();                       
+			}       
+		}
+        else    
+        {
+        	if( query("owner_id") )
+            	_leave();
+		}               
+	}         
+}
+
+int err_msgs(string arg)
+{
+	write(arg);
+	return 0;
+}
+
+int to_save()
+{
+	int t;
+	string type;
+	mixed *ar;
+	object me = environment();
+	if( !me || !query("owner_id") 
+	 || me->query("id")!=query("owner_id") || query("only_npc") )
+		return 0;
+	if( me->is_busy() )
+		return err_msgs("你正忙着。\n");
+	if( !type=query("armor_type") )
+		return 0;		
+	me->start_busy(1); 
+	if( query("equipped") )
+		return err_msgs("你必须先将"+this_object()->query("name")+"卸下。\n");
+	if( (me->query("potential")-me->query("learned_points"))<5000 )   
+		return err_msgs("你的潜能不够,无法保存法宝。\n");
+	t = time();
+	set("valid_time",t);
+	ar = me->query("new_armor");
+	if( !ar || !arrayp(ar) )
+		ar = ({});
+	ar-= ({0});	
+	if( save() )
+	{
+		set("no_give",1);
+        me->add("learned_points",5000);
+        ar+= ({type+"_"+t});
+		me->set("new_armor",ar);
+		me->save();
+		write(name()+"作为你的专属防具保存成功。\n");
+        return 1;
+	}
+	return 0;
+}
+
+int do_dest(string arg)
+{
+	mixed *ar;
+	string type;
+	object me = this_player();
+	if( !arg || !id(arg) )
+        return 0;
+	if( me!=environment() )
+        return 0;  
+	if( !query("owner_id") || !query("valid_time") )
+        return err_msg(name()+"是无主的防具。\n");
+	if( !type=query("armor_type") )
+		return err_msg(name()+"防具类型缺失。\n");
+	if( query("owner_id")
+  	 && me->query("id")!=query("owner_id") )
+        	return err_msg(name()+"是"+query("owner_id")+"的专属防具。\n");
+	if( (me->query("potential")-me->query("learned_points"))<5000 )   
+        	return err_msg("你的潜能不够,无法注销法宝。\n");
+	if( !rm(query_save_file()+".o") )
+        	return err_msg("注销失败。\n");
+	ar = me->query("new_armor");
+	ar-= ({0});
+	ar-= ({type+"_"+query("valid_time")});
+	me->add("learned_points",5000);
+	write("注销成功。\n");
+	me->set("new_armor",ar);
+	me->save();
+	message_vision("$N手中的$n轰的一声炸成了碎片。。。。\n",me,this_object());
+	destruct(this_object());
+	return 1;
+}
+
+void init()
+{
+	check_owner();
+	add_action("do_dest","destruct");
+}
+
+void create()
+{
+	set_name("◆防具",({"fang ju"}));
+	set("mod",1);
+}
+
+string short()
+{
+	int v;
+	string str,temp;
+	v = this_object()->query("sheng_level");
+	switch(v)
+	{
+		case 0 : temp = HIR+BLK"下品"NOR;break;
+		case 1 : temp = CYN"中品"NOR;break;
+		case 2 : temp = WHT"上品"NOR;break;
+		default : temp = HIW" 仙品"NOR;break;
+	}
+	str = query("shorts");
+	if( str && stringp(str) )
+	{
+		str = str+temp;
+		return str;
+	}
+	return ::short();	
+}
+
+varargs string mix_strs(string str1,string str2,int wi)
+{
+	int num,i;
+	string arg,str,*msg1,*msg2,msg;
+	
+	str1 = COLOR_D->clean_color(str1);
+	str1 = replace_string(str1,"\t","       ");
+	str2 = replace_string(str2,"\t","       ");
+	if( str1 == "" )
+		return str2;
+	else
+		msg1 = explode(str1, "\n");
+	if( str2 == "" )
+		return str1;
+	else
+		msg2 = explode(str2, "\n");
+
+	if( sizeof(msg1)>=sizeof(msg2) )
+		num = sizeof(msg1);
+	else
+		num = sizeof(msg2);
+
+	msg = "";	
+	for(i=0;i<num;i++)
+	{
+		arg = "";
+		if( i<sizeof(msg1) )
+			arg+= msg1[i];
+		else
+			arg+= "";
+		if( wi>0 && strlen(arg)<wi )
+			arg+= repeat_string(" ",(wi-strlen(arg)));	
+		if( i<sizeof(msg2) )
+			arg+= msg2[i];
+		msg+= arg+"\n";
+	}	
+	return msg;
+}
+
+string long(int raw)
+{
+	string str1,str2= this_object()->equip_long(raw);
+	str1 = this_object()->TZ_long();
+    if( str1 && stringp(str1) )
+    	str2 = mix_strs(str2,str1,40);
+	return str2;    	
+}	
+
+int is_zhaohuan(){ return 1; }       
+
+//增加特别效果
+varargs void level_up2(object who)
+{
+	object need;    
+	string *temp,tmp;
+	mapping ar;
+	int i;  
+	if( !who || !userp(who) )
+        	return;
+	if( random(20)<=17 && !wizardp(who) && !who->query("env/test") )
+        	return;
+	if( query("armor_level")<5 )
+        	return;
+	ar = query("armor_prop");
+	if( !ar || !mapp(ar) )
+		return 0;
+	temp = keys(ar);
+	if( !temp || !arrayp(temp) )
+		return 0;
+	tmp = temp[random(sizeof(temp))];
+	if( query("armor_prop/"+tmp)>100 )
+        	return;
+	add("armor_prop/"+tmp,1);
+}       
+
+int level_up()
+{
+	object me;      
+	string *tmp;
+	int i,max;
+	mapping my,his = query_entire_dbase();
+	me = environment();
+	if( !me || !userp(me) )
+		return 0;
+	if( query("equipped") )
+		return 0;   
+	if( his["sheng_level"]<=1 )
+		max = 10;
+	else if( his["sheng_level"]==2 )
+		max = 15;
+	else if( his["sheng_level"]==3 )
+		max = 20;
+	else if( his["sheng_level"]==4 )
+		max = 25;
+	else	max = 30;	
+	
+	if( his["level_up_num"]>max )
+	{
+		tell_object(me,HIY+this_object()->query("name")+HIY"品质已经提高到极限，不能再升了。\n"NOR);
+		return 0;
+	}	
+			    
+	if( his["armor_level"]<=0 )
+		his["armor_level"]=0;
+	his["armor_level"]+= 1;
+	his["level_up_num"]+= 1;
+	tmp = keys(his["armor_prop"]);
+	for(i=0;i<sizeof(tmp);i++)
+	{
+    		if( tmp[i]=="armor" )
+        		continue;
+		if( his["armor_prop"][tmp[i]]>=500 )
+        		continue;
+		his["armor_prop"][tmp[i]]+= random(2)+random(2)+random(2)-2;
+        	if( his["armor_level"]<5 )
+        		his["armor_prop"][tmp[i]]+= random(his["armor_level"]/3);
+		else if( his["armor_level"]<10 )
+			his["armor_prop"][tmp[i]]+= random(his["armor_level"]/5);
+		else if( his["armor_level"]<15 )
+			his["armor_prop"][tmp[i]]+= random(his["armor_level"]/6);
+		else if( his["armor_level"]<20 )
+			his["armor_prop"][tmp[i]]+= random(his["armor_level"]/8);
+		else
+			his["armor_prop"][tmp[i]]+= random(his["armor_level"]/15); 		        		
+	}
+	his["armor_prop"]["armor"]+= (1+random(5))*10;
+	if( random(20)==15 )
+    		level_up2(me);
+	this_object()->save();
+	this_object()->setup();
+	return 1;
+}
+
+void recover_func()
+{
+	int v,p;        
+	object who;
+	if( !environment() )
+		return;
+	who = environment();
+	if( !living(who) || !query("equipped") )
+		return;
+	//eff_kee       
+	if( v=query("armor_prop/ad_eff_kee")>0 && who->query("eff_kee")>100 )
+	{
+    	p = who->query("max_kee")/100*v;
+        if( p>0 && who->query("eff_kee")<who->query("max_kee") )
+        	who->receive_curing("kee",p);
+	}
+	//kee
+	if( v=query("armor_prop/ad_kee")>0 && who->query("kee")>100 )
+    {
+    	p = who->query("eff_kee")/100*v;
+        if( p>0 && who->query("kee")<who->query("eff_kee") )
+        	who->receive_heal("kee",p);
+	}
+	//eff_sen
+	if( v=query("armor_prop/ad_eff_sen")>0 && who->query("eff_sen")>100 )
+    {
+    	p = who->query("max_sen")/100*v;
+        if( p>0 && who->query("eff_sen")<who->query("max_sen") )
+        	who->receive_curing("sen",p);
+	}
+	//sen
+	if( v=query("armor_prop/ad_sen")>0 && who->query("sen")>100 )
+    {
+    	p = who->query("eff_sen")/100*v;
+        if( p>0 && who->query("sen")<who->query("eff_sen") )
+        	who->receive_heal("sen",p);
+	}
+    //force
+	if( v=query("armor_prop/ad_force")>0 && who->query("force")>100 )
+    {
+    	p = who->query("max_force")/100*v;
+        if( p>0 && who->query("force")<who->query("max_force")*2 )
+		{
+        	who->add("force",p);
+            if( who->query("force")>who->query("max_force")*2 )
+            	who->set("force",who->query("max_force")*2);
+		}
+	}
+	//mana
+	if( v=query("armor_prop/ad_mana")>0 && who->query("mana")>100 )
+    {
+    	p = who->query("max_mana")/100*v;
+        if( p>0 && who->query("mana")<who->query("max_mana")*2 )
+        {
+	    	who->add("mana",p);
+        	if( who->query("mana")>who->query("max_mana")*2 )
+            	who->set("mana",who->query("max_mana")*2);
+		}
+	}
+}
+
+int restore()
+{
+	if( ::restore() )
+	{
+		set_name(query("name"),query("ids"));
+		return 1;
+	}
+	return 0;
+}
+
+int mod_wear()
+{
+	int i,num,max,lvl;
+	string *tmp,temp,title,str,name,cnum;
+	object *armor,owner,ob=this_object();
+	mapping prop,app,tt;
+
+	if( !(owner = environment())) return 0;
+	if( !owner->is_character() ) return 0;
+	if( !query("equipped") ) return 0;
+	
+	title = ob->query("armor_title");
+	if( !title || !stringp(title) )
+		return 0;
+	tzs = query_mod_list();
+	if( !tzs || !mapp(tzs) )
+		return 0;
+	if( undefinedp(tzs[title]) )
+		return 0;	
+	lvl = ob->query("armor_level");	
+	name = tzs[title]["name"];
+	max = tzs[title]["max"];
+	tt = tzs[title]["tz"];
+	num = 1;
+	if( owner->query_temp("armor") )
+	{
+		armor = values(owner->query_temp("armor"));
+		for(i=0;i<sizeof(armor);i++)
+		{
+			if( armor[i]==ob )
+				continue;
+			if( !armor[i]->query("armor_title")
+		      || armor[i]->query("armor_title")!=title )
+		 		continue;
+		 	num+=1;
+		 	lvl+= armor[i]->query("armor_level");
+		}
+	}	
+	lvl = lvl/(num+1);
+	lvl/= 5;
+	cnum = sprintf("%d",num);
+	if( undefinedp(tt[cnum]) )
+		return 0;
+	
+	if( prop=owner->query_temp("mod/"+name) )
+	{
+		tmp = keys(prop);
+		for(i=0;i<sizeof(tmp);i++)
+			owner->add_temp("apply/"+tmp[i],-prop[tmp[i]]);
+	}
+
+	prop = tt[cnum];
+	tmp = keys(prop);
+	for(i=0;i<sizeof(tmp);i++)
+		prop[tmp[i]]+= lvl;
+	owner->set_temp("mod/"+name,prop);
+	tmp = keys(prop);
+	for(i=0;i<sizeof(tmp);i++)
+	{
+		if( tmp[i]=="max_kee" )
+		{
+			owner->add("max_kee",prop["max_kee"]);
+			if( owner->query("eff_kee")+prop["max_kee"]<=owner->query("max_kee") )
+				owner->add("eff_kee",prop["max_kee"]);
+			if( owner->query("kee")+prop["max_kee"]<=owner->query("eff_kee") )
+				owner->add("kee",prop["max_kee"]);
+		}
+		else if( tmp[i]=="max_sen" )
+		{
+			owner->add("max_sen",prop["max_sen"]);
+			if( owner->query("eff_sen")+prop["max_sen"]<=owner->query("max_sen") )
+				owner->add("eff_sen",prop["max_sen"]);
+			if( owner->query("sen")+prop["max_sen"]<=owner->query("eff_sen") )
+				owner->add("sen",prop["max_sen"]);
+		}	
+		else if( tmp[i]=="max_force" )
+		{
+			owner->add("max_force",prop["max_force"]);
+			if( owner->query("force")+prop["max_force"]<=owner->query("max_force")*2 )
+				owner->add("eff_force",prop["max_force"]);
+		}	
+		else if( tmp[i]=="max_mana" )
+		{
+			owner->add("max_mana",prop["max_mana"]);
+			if( owner->query("mana")+prop["max_mana"]<=owner->query("max_mana")*2 )
+				owner->add("eff_mana",prop["max_mana"]);
+		}			
+		else	owner->add_temp("apply/"+tmp[i],prop[tmp[i]]);
+	}
+	return 1;
+}
+
+int mod_unequip()
+{
+	int i,num,max,lvl;
+	string *tmp,temp,title,str,name,cnum;
+	object *armor,owner,ob=this_object();
+	mapping prop,app,tt;
+
+	if( !(owner = environment())) return 0;
+	if( !owner->is_character() ) return 0;
+	if( query("equipped") ) return 0;
+	
+	title = ob->query("armor_title");
+	if( !title || !stringp(title) )
+		return 0;
+	tzs = query_mod_list();
+	if( !tzs || !mapp(tzs) )
+		return 0;
+	if( undefinedp(tzs[title]) )
+		return 0;	
+		
+	name = tzs[title]["name"];
+	max = tzs[title]["max"];
+	tt = tzs[title]["tz"];
+	if( prop=owner->query_temp("mod/"+name) )
+	{
+		tmp = keys(prop);
+		for(i=0;i<sizeof(tmp);i++)
+		{
+			if( tmp[i]=="max_kee" )
+			{
+				owner->add("max_kee",-prop["max_kee"]);
+				if( owner->query("eff_kee")>owner->query("max_kee") )
+					owner->set("eff_kee",owner->query("max_kee"));
+				if( owner->query("kee")>owner->query("eff_kee") )
+					owner->set("kee",owner->query("eff_kee"));	
+			}
+			else if( tmp[i]=="max_sen" )
+			{
+				owner->add("max_sen",-prop["max_sen"]);
+				if( owner->query("eff_sen")>owner->query("max_sen") )
+					owner->set("eff_sen",owner->query("max_sen"));
+				if( owner->query("sen")>owner->query("eff_sen") )
+					owner->set("sen",owner->query("eff_sen"));	
+			}	
+			else if( tmp[i]=="max_force" )
+			{
+				owner->add("max_force",-prop["max_force"]);
+				if( owner->query("force")>owner->query("max_force")*2 )
+					owner->set("eff_force",owner->query("max_force")*2);
+			}	
+			else if( tmp[i]=="max_mana" )
+			{
+				owner->add("max_mana",-prop["max_mana"]);
+				if( owner->query("mana")>owner->query("max_mana")*2 )
+					owner->set("eff_mana",owner->query("max_mana")*2);
+			}	
+			else	owner->add_temp("apply/"+tmp[i],-prop[tmp[i]]);
+		}	
+	}
+	owner->delete_temp("mod/"+name);
+	lvl = 0;
+	num = 0;
+	if( owner->query_temp("armor") )
+	{
+		armor = values(owner->query_temp("armor"));
+		for(i=0;i<sizeof(armor);i++)
+		{
+			if( armor[i]==ob )
+				continue;
+			if( !armor[i]->query("armor_title")
+		      || armor[i]->query("armor_title")!=title )
+		 		continue;
+		 	lvl+= armor[i]->query("armor_level");
+		 	num=num+1;
+		}
+	}	
+	if( num<2 )		
+		return 0;
+	lvl = lvl/(num+1);
+	lvl/= 5;
+	cnum = sprintf("%d",num);
+	if( undefinedp(tt[cnum]) )
+		return 0;
+	prop = tt[cnum];
+	tmp = keys(prop);
+	for(i=0;i<sizeof(tmp);i++)
+		prop[tmp[i]]+= lvl;
+	owner->set_temp("mod/"+name,prop);
+	tmp = keys(prop);
+	for(i=0;i<sizeof(tmp);i++)
+	{
+		if( tmp[i]=="max_kee" )
+		{
+			owner->add("max_kee",prop["max_kee"]);
+			if( owner->query("eff_kee")+prop["max_kee"]<=owner->query("max_kee") )
+				owner->add("eff_kee",prop["max_kee"]);
+			if( owner->query("kee")+prop["max_kee"]<=owner->query("eff_kee") )
+				owner->add("kee",prop["max_kee"]);
+		}
+		else if( tmp[i]=="max_sen" )
+		{
+			owner->add("max_sen",prop["max_sen"]);
+			if( owner->query("eff_sen")+prop["max_sen"]<=owner->query("max_sen") )
+				owner->add("eff_sen",prop["max_sen"]);
+			if( owner->query("sen")+prop["max_sen"]<=owner->query("eff_sen") )
+				owner->add("sen",prop["max_sen"]);
+		}	
+		else if( tmp[i]=="max_force" )
+		{
+			owner->add("max_force",prop["max_force"]);
+			if( owner->query("force")+prop["max_force"]<=owner->query("max_force")*2 )
+				owner->add("eff_force",prop["max_force"]);
+		}	
+		else if( tmp[i]=="max_mana" )
+		{
+			owner->add("max_mana",prop["max_mana"]);
+			if( owner->query("mana")+prop["max_mana"]<=owner->query("max_mana")*2 )
+				owner->add("eff_mana",prop["max_mana"]);
+		}			
+		else	owner->add_temp("apply/"+tmp[i],prop[tmp[i]]);
+	}	
+	return 1;
+}

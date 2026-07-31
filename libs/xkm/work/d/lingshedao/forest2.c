@@ -1,0 +1,28 @@
+//Cracked by Roath
+//fear 2002 1 30
+#include <ansi.h>
+inherit ROOM;
+
+void create()
+{
+        set("short", "密林");
+        set("long", @LONG
+这里是灵蛇岛高山上的密林，四处是茂密的树丛和参天的古树。幽暗
+的树底下，长了许多怪异的无名植物。密林里经常会有野兽出没。往西面
+斜坡走下去，是密林的出口。
+LONG
+        );
+        set("exits", ([
+                "westdown" : __DIR__"forest",
+        ]));
+
+	set("outdoors", "lingshedao");
+    set("objects", ([ /* sizeof() == 1 */
+  "/d/xingxiu/npc/snake" : 1,
+    ]));
+
+	set("cost", 2);
+        setup();
+	replace_program(ROOM);
+}
+

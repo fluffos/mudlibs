@@ -1,0 +1,32 @@
+// SN:hUL2OPa`<aW5JOG1
+// File(/data/room/xue/lianwu.c) of xue's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "练武场");
+	set ("long", @LONG
+此处便是静静的练武场，人在江湖，武功万万不可荒废。 
+LONG );
+
+	set("exits", ([
+                "west" : __DIR__"houyuan",
+	]));
+
+        set("objects", ([
+                "/clone/npc/mu-ren" : 4,
+        ]));
+
+        set("outdoors", "yangzhou");
+        set("no_sleep_room", 1);
+
+        setup();
+    
+        set("room_owner", "欧阳静");
+        set("room_name", "静静");
+        set("room_id", "xuejingfen");
+        set("room_owner_id", "xue");
+        set("room_position", "树林");
+}

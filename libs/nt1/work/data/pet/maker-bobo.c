@@ -1,0 +1,18 @@
+// SN:V48k@iD6LiR>>J>Z
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;32m不会飞的鹤[2;37;0m", ({"bobo he"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "不会飞
+它是梅乾的坐骑。
+");
+        set_temp("owner_id", "maker");
+        set_temp("owner_name", "梅乾");
+        ::setup();
+}
+

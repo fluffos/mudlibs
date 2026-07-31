@@ -1,0 +1,18 @@
+// SN:1_J[C7`o<_jb0i:T
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m小绵羊[2;37;0m", ({"xiaomian yang"}));        
+        set("gender", "女性");                
+        set("unit", "头");
+        set("long", "老板说道：罗密欧，现在我这里有各种可当作坐骑的宠物！
+它是罗密欧的坐骑。
+");
+        set_temp("owner_id", "romeo");
+        set_temp("owner_name", "罗密欧");
+        ::setup();
+}
+

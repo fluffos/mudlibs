@@ -1,0 +1,18 @@
+// SN:f?X70PK^n=NFV=QC
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;31m梦月貂[2;37;0m", ({"dreamy diao"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "月影的爱貂，是中国稀有的名貂。
+它是月影的坐骑。
+");
+        set_temp("owner_id", "moonshadow");
+        set_temp("owner_name", "月影");
+        ::setup();
+}
+

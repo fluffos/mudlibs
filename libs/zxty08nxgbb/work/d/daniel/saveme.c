@@ -1,0 +1,93 @@
+//wizer.c
+#include <ansi.h>
+#include <login.h>
+
+inherit NPC;
+inherit F_MASTER;
+ 
+void create()
+{
+
+           set_name("大魔道士--雅薇丝", ({ "wizer", "w","wiz" }) );
+           set("age", 20);
+           set("long",@STORY
+一个穿著长袍,带著面纱看不清面貌的神秘女子,传说她已经活了数
+千年的岁月,而且从没有人见过她的真面目,在面纱之下的面孔究竟
+是如何呢??这是许多人所好奇的,是天使??还是魔鬼??
+不知何故,在多年前她来到这个小镇,并就此定居了下来,她的善心是
+全镇的人所共知的,不论你有什堋病痛,只要来找她(saveme),她就会
+帮你医治,要记得多多利用喔!!
+STORY
+              );
+           set("chat_chance", 15);
+       set("title",HIR"清神"NOR);
+           exert_function(10);
+	   set("chat_msg", ({
+	    "大魔道士--雅薇丝闭上眼睛冥思．\n",
+	    "大魔道士--雅薇丝说道:沉睡在时空中的神秘力量....\n",
+            "大魔道士--雅薇丝说道:现在藉著最美丽的创世女神的能力....\n",
+            "大魔道士--雅薇丝说道:给予所有黑暗,愚蠢的一切...,平等地毁灭吧!!...\n",
+	    }));
+
+        set("gender","女性");
+      	set("combat_exp",10000);
+	set("max_neili", 1500);
+        set("force",9999999);
+
+	set_skill("hunyuan-yiqi", 999);
+        set_skill("force",999);
+	map_skill("force", "hunyuan-yiqi");
+
+
+	setup();
+}
+
+void init()
+{
+	add_action("do_save_me", "saveme");
+}
+
+int do_save_me(object ob, string arg,object me)
+{
+        me = this_player();
+        if( !me->query_temp("saveme/paid") )
+        {
+                        message_vision("大魔道士--雅薇丝闭上眼睛，不理$N了。\n", me);
+                      write("老娘这条命也得吃饭啊，不知能否随意给个几十两黄金让我吃点东西。\n");
+         return 1;    
+                }
+                else
+                me->delete_temp("saveme");
+           ob=this_player();     
+	   ob->set("shen",ob->query("max_shen") );
+	   ob->set("food", (int)ob->max_food_capacity() );
+          ob->set("water", (int)ob->max_water_capacity() );
+write(HIY"大魔道士--雅薇丝喃喃自语念道: 藉著水晶女神的力量...让这个受了伤的人回复吧!!\n"NOR);
+write(ob->query("name")+HIW"突然被一道光射中，觉的全身充满活力。\n"NOR);
+	        return 1;    
+	     	
+}
+int accept_object(object me, object ob)
+{
+        
+          if( ob->value() >= 1000000)
+        {
+                 message_vision("大魔道士--雅薇丝满面堆欢地对$N道：多谢"+RANK_D->query_respect(me)+"，在下正需要这个！\n", me);
+            destruct(ob);
+                me->set_temp("saveme/paid", 1);
+                return 1;
+        }
+        else
+        {
+            command("kao "+ me->query("id") );
+            command("say 不敢当．．．您也太客气了。拿回去给您老婆孩子用吧，您也困难。");
+            destruct(ob);
+            return 0;
+        }
+}
+
+
+
+
+
+

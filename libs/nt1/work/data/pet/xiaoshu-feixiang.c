@@ -1,0 +1,18 @@
+// SN:bXIKoH3bS[96C^NE
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("天使鹤[2;37;0m", ({"feixiang he"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "可爱
+它是小树的坐骑。
+");
+        set_temp("owner_id", "xiaoshu");
+        set_temp("owner_name", "小树");
+        ::setup();
+}
+

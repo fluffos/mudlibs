@@ -1,0 +1,33 @@
+// SN:mE<>9EGa0lUG9K9f
+// File(/data/room/xnx/youxiang.c) of xnx's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "右厢房");
+	set ("long", @LONG
+靠墙有一个金光闪闪的舞台，上面点着上千支蜡烛，天花板上是
+深紫色的。[2;37;0m
+LONG );
+
+	set("exits", ([
+                "east" : __DIR__"zhongting",
+	]));
+
+        set("sleep_room", 1);
+        set("no_fight", 1);
+
+        create_door("east", "木门", "west", DOOR_CLOSED);
+
+        setup();
+
+        set("room_owner", "绛珠草");
+        set("room_name", "霍格沃茨");
+        set("room_id", "hgwc");
+        set("room_owner_id", "xnx");
+        set("room_position", "碎石小道");
+}

@@ -1,0 +1,9 @@
+stdnpc.c cp到/cmds/adm/
+area1.c cp到/data/area.c
+die.h cp到/include/die.h
+natured.c cp到/adm/daemons/natured.c
+npcneed.h cp到/data/npc/npcneed.h
+save.c cp到/feature/save.c  
+lingpai.c和area.c cp到/clone/misc/里面
+name.c cp到/feature/name.c
+bhnpc.c cp到/inherit/char/bhnpc.c

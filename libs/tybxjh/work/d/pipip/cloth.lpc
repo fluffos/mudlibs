@@ -1,0 +1,21 @@
+#include <armor.h>
+inherit CLOTH; 
+string *first_name = ({ HIR"大红", HIC"新年", HIG"开心", HIM"长寿", HIY"吉祥", HIB"福禄"});
+string *name_words = ({ HIY"长袍"NOR, HIB"套装"NOR, HIG"大褂"NOR, HIR"袍"NOR, HIM"服"NOR });
+void create()
+{ 
+        string name;
+        name = first_name[random(sizeof(first_name))];
+        name += name_words[random(sizeof(name_words))];
+        set_name(name,({"new cloth"}));
+        set_weight(3000);
+        if( clonep() )
+                set_default_object(__FILE__);
+        else {
+                set("unit", "件");
+                set("material", "cloth");
+                set("armor_prop/armor", 1);
+        }
+        setup();
+}
+

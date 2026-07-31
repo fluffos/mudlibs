@@ -1,0 +1,18 @@
+// SN:M0RgGF<D8>=6VkAE
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[35m紫遛马[2;37;0m", ({"ziliu ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "$MAG$紫遛
+它是大力水手的坐骑。
+");
+        set_temp("owner_id", "daliss");
+        set_temp("owner_name", "大力水手");
+        ::setup();
+}
+

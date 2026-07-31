@@ -1,0 +1,18 @@
+// SN:Um8WO6<e2;dKSjCP
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;32m神[1;32m雕[2;37;0m", ({"shen diao"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "异常凶狠
+它是孤影的坐骑。
+");
+        set_temp("owner_id", "leb");
+        set_temp("owner_name", "孤影");
+        ::setup();
+}
+

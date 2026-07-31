@@ -1,0 +1,18 @@
+//clone/work/cdish.c  
+
+inherit COMBINED_ITEM;
+
+void create()
+{
+                
+        set_name("盘子", ({ "dish" }) );
+        if( clonep() )
+              set_default_object(__FILE__);
+        else{           
+                set("base_unit", "个");
+                set("base_value", 50);
+                set("base_wieght", 80);
+        }  
+        setup();
+        set_amount(1);
+}

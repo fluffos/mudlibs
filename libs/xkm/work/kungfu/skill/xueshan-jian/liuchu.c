@@ -1,0 +1,81 @@
+//Cracked by Roath
+// liuchu.c 雪花六出
+// maco :不开放的perform，code简陋，绝不足以学习！
+
+#include <ansi.h>
+
+inherit F_DBASE;
+inherit F_SSERVER;
+
+int perform(object me, object target)
+{
+        object weapon;
+        int speed, damage, sword;
+
+        weapon = me->query_temp("weapon");
+
+        if( !target && me->is_fighting() ) target = offensive_target(me);
+
+        if( !target
+        ||  !target->is_character()
+        ||  !me->is_fighting(target) )
+                return notify_fail("雪花六出攻击只能对战斗中的对手使用。\n");
+
+        if( !objectp(weapon) || weapon->query("skill_type") != "sword" )
+                return notify_fail("你手中无剑，如何施展「雪花六出」？\n");
+
+        if( me->query_skill("xueshan-jian",1) < 100 )
+                return notify_fail("你的雪山剑法修为未到，施展不了「雪花六出」！\n");
+
+        if( me->query("max_neili") <= 1200 )
+                return notify_fail("你的内力修为不足，无法施展「雪花六出」。\n");
+
+        if( me->query("neili") <= 400 )
+                return notify_fail("你的内力不足，无法施展「雪花六出」。\n");
+
+        if( me->query("jingli") <= 400 )
+                return notify_fail("你的精力不足，无法施展「雪花六出」。\n");
+
+        damage = me->query_skill("xueshan-jian")/6;
+        speed = (me->query_skill("xueshan-jian")+me->query_skill("sword") )/240;
+	me->add("neili", -100);
+	me->add("jingli", -50);
+	
+	me->add_temp("apply/speed", speed);
+        me->add_temp("apply/attack", damage);
+        me->add_temp("apply/damage", damage/2);
+
+         if( me->query_skill("sword") < 180 && me->query_skill("sword") >= 150)
+          {
+    message_vision(CYN "\n$N突然身形加快，将所学剑法施展开来，一道道寒光掠向$n......！\n\n" NOR, me, target);
+         COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+         COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+         COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+          }
+         else if( me->query_skill("sword") < 200 && me->query_skill("sword") >= 180)
+          {
+    message_vision(CYN "\n陡然间$N横剑斜指，将雪山剑法的精妙招数施展开来......！\n\n" NOR, me, target);
+         COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+         COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+         COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+         COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+            }
+         else if( me->query_skill("sword") >= 200) {
+    message_vision(CYN "\n$N剑招疾使，点、斩、劈、削发挥的淋漓尽致，剑招稳而不乱，快而不失大家风范！！\n\n" NOR, me, target);
+         COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+         COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+         COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+         COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+         COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+            }
+         me->add_temp("xuehua", 1);
+        
+	COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+	
+	me->add_temp("apply/speed", -speed);
+        me->add_temp("apply/attack", -damage);
+        me->add_temp("apply/damage", -damage/2);
+	me->delete_temp("xuehua");
+	me->start_busy(1);
+        return 1;
+}

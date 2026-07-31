@@ -1,0 +1,242 @@
+// steal.c
+
+#include <ansi.h>
+#include <login.h>
+
+inherit F_CLEAN_UP;
+
+void create() {seteuid(getuid());}
+
+int main(object me, string arg)
+{
+    string what, who;
+    object ob, victim;
+    int sp, dp, skill, forcesk;
+    string stealer_class, stealer_race;
+
+    stealer_class = me->query_class();
+    stealer_race = me->query_race();
+    forcesk = (me->query_skill("force", 1)/25) + 4;
+
+    if( me->is_busy() ) return notify_fail("瞷⊿Τ\n");
+
+    if( me->query("life_form") == "ghost" )
+	return notify_fail("碞κ, ет丢確!!\n");
+
+    if( environment(me)->query("no_fight") 
+    || environment(me)->query("no_steal") )
+	return notify_fail("硂柑窽ゎ︽叛\n");
+
+    if( me->skill_mapped("stealing")==0 )
+	return notify_fail("ゲ斗ㄏノ (enable) Мもぇм!\n");
+                
+    if( me->query_temp("stealing") )
+	return notify_fail("竒т诀穦も\n");
+
+    if( !arg || sscanf(arg, "%s from %s", what, who)!=2 ) 
+	return notify_fail("Αsteal <珇> from <>\n");
+
+    victim = present(who, environment(me));
+    if( !victim || victim==me || !victim->is_character() )
+	return notify_fail("稱︽叛癸禜ぃ硂柑\n");
+    if( !wizardp(me) && wizardp(victim) )
+	return notify_fail("產ぃ敖畍ō狥﹁\n");
+
+    // add by dragoon
+    if( userp(victim) && !interactive(victim) ) 
+	return notify_fail("硂瞷ぃ絬\n");
+
+    // Don't let NPC steal NPC.
+    if( !userp(me) && !userp(victim) )
+	return 0;
+
+/*
+        if( userp(victim))
+           { if(victim->query("level") < 5)
+                return notify_fail("单び, ぃ璶敖\n"); }
+
+        if( me->query("level") < 5)
+           { if(userp(victim))
+                return notify_fail("单び, 翴ㄓ敖叛\n"); }     
+*/
+    if( !ob = present(what, victim) ) {
+	object *inv;
+        inv = all_inventory(victim);
+        if( !sizeof(inv) )
+            return notify_fail( victim->name() + "ō癬ㄓ⊿Τぐ或窥狥﹁敖\n");
+                ob = inv[random(sizeof(inv))];
+    }
+
+    skill = me->query_skill("stealing");
+    // change while to if -Dragoon
+    if( me->query_stat("gin") < skill/3 )
+        skill /= 2;
+    me->consume_stat("gin", skill/3);
+
+    // reset the power of steal -dragoon
+    // stealм, セō诀庇㎝﹚钡紇臫steal, 讽steal
+    // м笷讽祘, м癸steal紇臫秨﹍蔼妮┦
+    sp = skill*5 + (int)me->query("dex")*10 + (int)me->query("cps")*5;
+
+    // 戮穨矗狜
+    if( me->query("class") == "thief" ) 
+	sp += skill*5 + (int)me->query("dex")*10;
+
+    // 妮┦㎝м耕㏕﹚瞷, ぃ敖мの妮┦絤郴翴
+    // , ㄤsteal畉钵玥パ弘蔼τΤ┮畉钵, 弘计蔼癸steal
+    // Τぃ糷紇臫, 弘禫蔼, Ω计狜
+    sp += 1 + (int)me->qeury_stat("gin")*(int)me->qeury_stat("gin")/600;
+	    
+    if( sp < 1 ) sp = 1;
+    // jo壁结籔ぱネ, 籔force闽, 倒籔膀セ计4, 
+    // force常⊿絤猵, josteal临琌ゑ蔼 (skill+dex)*4
+    // 程蔼计: 150/25+4=10, steal skill200, dex安砞30, 俱砰steal
+    // ゑ贺壁sp蔼2300
+    if( stealer_race == "jiaojao" ) 
+	sp += (skill + (int)me->query("dex")) * forcesk;
+    if( me->is_fighting() && stealer_race != "jiaojao" ) {
+	sp /= 2;
+        me->start_busy(3);
+    }
+    if( me->is_fighting() && stealer_race == "jiaojao" ) {
+        me->start_busy(1);
+    }
+
+    dp = (int)victim->query_stat("sen") * 3 + (int)ob->weight() / 20;
+    dp += (int)victim->qeury_stat("gin")*(int)victim->qeury_stat("gin")/700;
+    
+    if( stealer_race == "jiaojao" ) dp += (int)victim->query_stat("gin");
+    if( victim->is_fighting() ) dp *= 2;
+    if( ob->query("equipped") ) dp *= 3;
+    // max dp for rr += 1500
+    if ( victim->query("race") == "rainnar" ) {
+	if ( present("black viper", victim) ) dp += 100;
+        if ( present("red viper", victim) ) dp += 300;
+        if ( present("green viper", victim) ) dp += 300;
+        if ( present("white viper", victim) ) dp += 400;
+        if ( present("yellow viper", victim) ) dp += 400;
+    }
+
+    write("ぃ笆羘︹篊篊綼" + victim->name() + "单诀穦も ...\n\n");
+
+    me->set_temp("stealing", 1);
+    me->delete_temp("pending/hidden");
+    call_out( "compelete_steal", 3, me, victim, ob, sp, dp);
+
+    return 1;
+}
+
+private void compelete_steal(object me, object victim, object ob, int sp, int dp)
+{
+    if( !me ) return;
+
+    me->delete_temp("stealing");
+
+    if( !victim || environment(victim) != environment(me) ) {
+	tell_object(me, "び堡もヘ夹竒ǐ\n");
+        return;
+    }
+
+    if( victim->detect_steal(me, ob, sp) ) return;
+
+    if( objectp(ob) && (!living(victim) || (random(sp+dp) > dp) )) {
+	if ( ob->query("id") == "black viper"
+        || ob->query("id") == "green viper"
+        || ob->query("id") == "white viper"
+        || ob->query("id") == "red viper"
+        || ob->query("id") == "yellow viper" ) {
+            tell_object(me, "篘兵" + ob->name() +
+            "╡眎帝瑀玶ㄓ纞硈癶碭˙\n");
+            return;
+        }
+        if( ob->query("no_steal") ) {
+            tell_object(me, "硂狥﹁ぃ敖\n");
+            return;
+        }
+        if( !ob->move(me) ) {
+            tell_object(me, "篘" + ob->query("unit") + ob->name()
+                + "琌癸τēびぃ眔ぃ斌\n");
+            return;
+        }
+        tell_object(me, HIW "眔も\n\n" NOR);
+        tell_object(me, "Θ\敖" + ob->query("unit") + ob->name() + "\n");
+        if( living(victim) ) {
+            int gain;
+            me->improve_skill("stealing", me->query_attr("int"));
+            gain = ob->query("value") / (me->query_skill("stealing")+50);
+            if( gain > 100 ) gain = 100;
+            me->gain_score("thievery", gain);
+            if( userp(victim) )
+                me->gain_score("mortal sin", random(me->query_skill("stealing") / 2) + 1 );
+            }
+            if( random(sp) < dp/2 )
+                message("vision", "" + me->name() + "碍碍眖"
+                    + victim->name() + "ō敖ǐ" + ob->query("unit")
+                    + ob->name() + "\n", environment(me), ({ me, victim }) );
+#ifdef SAVE_USER
+    victim->save();
+#endif
+	}
+        else {
+            if( !ob || random(sp) > dp/2 ) {
+                if ( present("black viper", victim)
+                || present("red viper", victim)
+                || present("green viper", victim)
+                || present("white viper", victim)
+                || present("yellow viper", victim) ) {
+                    tell_object(me, "夺羘" + victim->name() + 
+			"ō礛芦兵獺矰跌相相帝\n"
+			"纞眔话候罽も\n");
+                    return; 
+		}
+                else {
+	            tell_object(me, victim->name() + "ぃ竒種锣繷Γ盢も罽\n"
+                         "临⊿Τ砆祇瞷\n");
+                    return; 
+		}
+            }
+            tell_object(me, HIR "罺縷アも\n\n" NOR);
+            if ( present("black viper", victim)
+            || present("red viper", victim)
+            || present("green viper", victim)
+            || present("white viper", victim)
+            || present("yellow viper", victim) ) {
+                message_vision("$Nō矰瞨礛玶$n琵$N佩谋$nもタъ帝$N"
+                + ob->name() + "\n\n"
+                +  "$N耻笵稦ぐ或\n\n", victim, me); 
+	    }
+            else {
+                message_vision("$N繷タ祇瞷$nもタъ帝$Pō" + ob->name() + "\n\n"
+                        + "$N耻笵稦ぐ或\n\n", victim, me);
+            }
+            me->improve_skill("stealing", random(me->query_attr("int")));
+            me->gain_score("thievery", 1);
+            if( userp(victim) ) victim->fight_ob(me);
+        else {
+                victim->accept_kill(me);
+                victim->kill_ob(me);
+        }
+        me->fight_ob(victim);
+        if( me->query_race() != "jiaojao" ) me->start_busy(3);
+        if( me->query_race() == "jiaojao" ) me->start_busy(1);
+    }
+}
+
+int help(object me)
+{
+write(@HELP
+Α : steal <琘> from <琘>
+
+硂琵Τ诀穦敖ō狥﹁Θ, 讽礛碞莉眔
+赣妓珇琌, 皑Τア酷, 羆Τア, 讽ア毖讽礛碞
+眔基, ︓琌ぐ或基......綼︑祇备舘
+
+讽琌祍搁硂戮穨癸ㄤ戮穨穦Τ耕蔼敖祍
+ゑ耕甧Θ︓盢ヘ夹禟ō︾硄硄敖ǐ妓癸
+稱笆ō狥﹁福惮ゑ耕甧诡谋讽祍搁稱璶敖祍搁
+硂碞ゑ街蔼眏
+
+HELP
+    );
+    return 1;
+}

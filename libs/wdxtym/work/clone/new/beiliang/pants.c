@@ -1,0 +1,92 @@
+// news_pants.c
+
+#include <ansi.h>
+#include <armor.h>
+
+inherit PANTS;
+
+string do_wear();
+
+void create()
+{
+	set_name(HIG "北凉战裙" NOR, ({"new pants"}));   //①表示为1阶套装
+	set_weight(3000);
+	if( clonep() )
+		set_default_object(__FILE__);
+	else {
+		set("unit", "件");
+		    set("no_give",1);
+    set("no_sell",1);
+    set("no_drop",1);
+    set("no_get",1);
+    set("no_sell", 1);
+		set("long", "这是一件"+this_object()->query("name")+"，是北凉将士的制式装备之一!。\n");
+		set("material", "boots");    //类型
+	set("armor_prop/armor", 50);  //防御
+	set("armor_prop/warm", 5);   //保暖
+		set("value", 1000);   //价值	 
+		set("wear_msg", (: do_wear :));  //装备时显示的信息
+      //---------------------------------------------------------------
+	      //套装参数
+		set("suit",HIG"新丁套装"NOR);  //套装名称
+		set("suit_lvl",1);	     //套装等级
+		set("suit_count",4);	   //套装部件数量
+	       //套装各部件
+		set("suit_mod/cloth","北凉甲");
+		set("suit_mod/boots","铁靴");
+		set("suit_mod/pants","北凉战裙");
+		set("suit_mod/sword","青铜巨剑");
+		set("suit_mod/blade","北凉刀");
+//		set("suit_mod/hands","链甲手套");
+	       //套装全部附加天赋效果  
+		set("suit_eff/strength",1);      //两件
+		set("suit_eff/intelligence",1);      //三件  
+		set("suit_eff/spirituality",1);      //    一套
+		set("suit_eff/constitution",1);      //三件  
+		//套装全部附加技能效果     
+	       set("suit_eff_skill/dodge",10);   
+	       set("suit_eff_skill/sword",10);
+	       set("suit_eff_skill/blade",10);
+	       set("suit_eff_skill/cuff",10);
+	       set("suit_eff_skill/strike",10);
+	       set("suit_eff_skill/finger",10);
+	       set("suit_eff_skill/claw",10);
+       //------------------------------------------------------
+	}
+	setup();
+}
+
+string do_wear()
+{
+	object me;
+	string msg;
+	int per;
+
+	me = this_player();
+	per = me->query("per");
+	if (me->query("gender") == "女性")
+	{
+		if (per >= 30)
+			msg = HIC "$N" HIC "轻轻将一件$n" HIC "套在腿上，神态曼妙之极。\n";
+		else if (per >= 25)
+			msg = HIG "$N" HIG "把$n" HIG "展开，套在腿上。\n";
+		else if (per >= 20)
+			msg = YEL "$N" YEL "把$n" YEL "套在腿上，缩了缩脖子。\n";
+		else    msg = YEL "$N" YEL "毛手毛脚的把$n" YEL "套在腿上。\n";
+	} else
+	{
+		if (per >= 30)
+			msg = HIC "$N" HIC "随手一挥，将$n" HIC "套在腿上，姿势潇洒之极。\n";
+		else if (per >= 25)
+			msg = HIG "$N" HIG "把$n" HIG "展开，套在腿上。\n";
+		else if (per >= 20)
+			msg = YEL "$N" YEL "把$n" YEL "套在腿上，扯了扯衣角，缩了缩脖子。\n";
+		else    msg = YEL "$N" YEL "毛手毛脚的把$n" YEL "套在腿上，甚是猥琐。\n";
+	}
+	return msg;
+}
+
+int query_autoload()
+{
+	return 1;
+}

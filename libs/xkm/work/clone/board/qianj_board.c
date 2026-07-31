@@ -1,0 +1,16 @@
+//Cracked by Kafei
+// /clone/board/qianj_board.c
+
+inherit BULLETIN_BOARD;
+
+void create()
+{
+        set_name("《奔雷工作笔记》", ({ "board" }) );
+        set("location", "/u/qianj/qinj_workroom");
+        set("board_id", "qianj_board");
+        set("long", "这是一本奔雷的工作笔记。\n" );
+        setup();
+        set("capacity", 200);
+        replace_program(BULLETIN_BOARD);
+}
+

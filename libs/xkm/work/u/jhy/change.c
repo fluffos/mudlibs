@@ -1,0 +1,121 @@
+//by paradise 2/1/2002
+
+
+#include <ansi.h>
+# include <room.h>
+inherit ROOM;
+inherit F_SSERVER;
+
+void create()
+{
+	set("short", HIY"天赋修改室"NOR);
+	set("long",
+" 这是"+HIY"侠客梦"+NOR"先天属性修改的地方，您能到这儿来有两个原因，\n"
+"一是由于wiz的失误，导致你的先天属性和小于105，二是由于您的一些 \n"
+"其它的原因，总而言之，既然来到了这儿，还请您务必支持我们的工作，\n"
+"墙上贴着一张告示（gaoshi）告诉您该怎么做！如果你后天因闭关和其它\n"
+"正常加的天赋，请您在调整后通知wiz帮你补上。\n"
+	);
+	
+	set ("item_desc", ([
+		"gaoshi" : 
+"\n用xiugai 膂力 悟性 根骨 身法 来修改您的先天属性，注意，四项和必须是105。\n\n"
+"比如:xiugai 25 25 30 25。\n\n",
+	])  ) ;
+
+	set("cost", 0);
+	setup();
+}
+
+void init()
+{
+	object me = this_player();
+
+	if ( me->query("huashan/yin-jue") < 2 ) {
+		remove_call_out("close_door");
+		call_out("close_door", 1, me);
+	}
+
+	add_action("do_xiugai", "xiugai");
+	add_action("do_xiugai", "闭关");
+	add_action("do_null",  "exercise");
+	add_action("do_null",  "dazuo");
+	add_action("do_null",  "respirate");
+	add_action("do_null",  "tuna");
+	add_action("do_null",  "practice");
+	add_action("do_null",  "lian");
+	add_action("do_null",  "study");
+	add_action("do_null",  "du");
+	add_action("do_null",  "fight");
+	add_action("do_null",  "kill");
+	add_action("do_null",  "yun");
+	add_action("do_null",  "sleep");
+	add_action("do_null",  "say");
+
+
+
+}
+int do_null(string arg) {
+        object me = this_player();
+        tell_object(me, "还请您先调整天赋吧！这里什么也干不了，grin!\n");
+        return 1;
+}
+
+
+int do_xiugai(string arg)
+{
+	object me = this_player();
+	int bili, wuxing, gengu, shenfa;
+	int sum, num1, num2, num3, num4;
+	object env, link_ob, obj, place;
+
+
+	if ( !arg ) return notify_fail("方法：xiugai * * * *，请您慎重！\n");
+
+	if ( sscanf(arg, "%d %d %d %d", bili, wuxing, gengu, shenfa) != 4  ) 
+		return notify_fail("方法：xiugai * * * *，请您慎重！！\n");
+	
+
+	if ( bili < 20||bili>30 ) return notify_fail("膂力值须大于20小于30！\n");
+	if ( gengu < 20||gengu>30 ) return notify_fail("根骨值须大于20小于30！\n");
+	if ( shenfa < 20||shenfa>30 ) return notify_fail("身法值须大于20小于30！\n");
+	if ( wuxing < 20||wuxing>30 ) return notify_fail("悟性值须大于20小于30！\n");
+	
+	sum =  bili + wuxing + gengu + shenfa;
+
+	if ( sum != 105 ) return notify_fail("各项天赋值的总和须为一百零五点！\n");
+
+	message_vision("$N轻轻念道，“天灵灵地灵灵，属性修改完啦。\n说完冒起一阵黑烟，已经不见了$N的踪影！\n", me);
+	
+		
+		me->set("str", bili);
+		me->set("dex", shenfa);
+		me->set("int", wuxing);
+		me->set("con", gengu);
+		me->set("pur", 10 + random(21));
+                me->add("meng/pts",100);
+                me->add("combat_exp",2000);
+                me->add("potential",1000);
+                me->set("tianfuok",1);
+                me->set("startroom", "/d/city/wumiao");
+		link_ob = me->query_temp("link_ob");
+		obj = LOGIN_D->make_body(link_ob);
+		
+		if (!obj) return 0;
+
+		me->save();
+		exec(link_ob, me);
+		destruct(me);
+
+		obj->restore();
+		LOGIN_D->enter_world(link_ob, obj, 1);
+		obj->move("/d/city/wumiao");
+		if( !wizardp(obj))
+		{
+		write_file("/u/jhy/old/tfxg",sprintf("%s(%s)于%s修改了自己的天赋总和是%d\n",
+		obj->query("name"), obj->query("id") ,ctime(time()),sum  ) );
+		return 1;}
+		
+		
+
+}

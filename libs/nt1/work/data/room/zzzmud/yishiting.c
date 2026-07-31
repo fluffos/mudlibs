@@ -1,0 +1,32 @@
+// SN:^PI\nS`YJhc22fRD
+// File(/data/room/zzzmud/yishiting.c) of zzzmud's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "议事厅");
+	set ("long", @LONG
+这就是满天星主人月落无双和重要人物商量江湖大事之处，正中
+有不少桌椅，侧面是屏风，厅堂中挂着两个条幅，两旁通往演武厅。
+LONG );
+
+	set("exits", ([
+                "east"   : __DIR__"yanwu1",
+                "west"   : __DIR__"yanwu2",
+		"north"  : __DIR__"zhongting",
+                "south"  : __DIR__"yingke",
+	]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("room_owner", "月落无双");
+        set("room_name", "满天星");
+        set("room_id", "zzzmud");
+        set("room_owner_id", "zzzmud");
+        set("room_position", "碎石小道");
+}

@@ -1,0 +1,232 @@
+// 灵蛇拳 lingshe-quan perform
+// by liu 2001.10
+
+/*
+			--liu 收集--
+
+斗然间挥拳打出，郭靖举手挡格，哪知欧阳克的手臂犹似忽然没了骨头，顺势转弯，
+拍得一声，郭靖颈上竟是中了一拳。郭靖一惊，低头窜出，回身发掌，欧阳克斜步让
+开，还了一拳。郭靖不敢再格，侧身闪避，哪知对方手臂忽然间就如变了一根软鞭，
+打出后能在空中任意拐弯，明明见他拳头打向左方，蓦地里转弯向右，蓬的一声，又
+在郭靖肩头击了一拳。郭靖防不胜防，接连吃了三拳，这三下都是十分沉重，登时心
+下慌乱，不知如何应付。
+
+第一拳便是一招“灵蛇拳”，横臂扫去。郭靖伸左臂挡格，欧阳克手臂忽弯，腾的一
+拳，正打在郭靖面颊之上。这拳甚是沉重，郭靖眼前金星乱冒，心想这当儿刻刻都是
+危机，必当疾下杀手，眼见他第二拳跟着打到，仍是举左臂挡架。欧阳克依样葫芦，
+手臂又弯击过来，郭靖头向后仰，右臂猛地向前推出。本来他既向后避让，就不能同
+时施展攻击，但他得了周伯通传授，双手能分别搏击，左架右推，同时施为。欧阳克
+的右臂恰好夹在他双臂之中，被他左臂回收，右臂外推，这般急绞之下，喀的一声，
+臂骨登时折断。
+
+蛇身虽有骨而似无骨，能四面八方，任意所之，因此这路拳法的要旨，在于手臂似乎
+能于无法弯曲处弯曲，敌人只道已将来拳架开，哪知便在离敌最近之处，忽有一拳从
+万难料想的方位打到。要令手臂当真随处软曲，自无此理，但出拳的方位匪夷所思，
+在敌人眼中看来，自己的手臂宛然灵动如蛇。
+
+这时见欧阳锋终于使出，心头暗喜，勾腕伸爪，疾以擒拿手拿他拳头。这一下恰到好
+处，又快又准，正是克制他“灵蛇拳法”的巧妙法门。
+
+			--综合结果--
+
+斗然间$N挥拳打出，$n举"NOR + weapon->name() + "挡格，哪知$N的手臂犹似忽然没了骨头，顺势转弯！
+
+结果只听「拍」的一声，$n limb竟是中了一拳。
+
+$n一惊，低头窜出，回身反击，$N斜步让开，还了一拳。
+
+转眼间$N又一招“灵蛇拳”横臂扫出，虽有骨而似无骨，竟能四面八方，任意所之！
+$n不敢再格，侧身闪避，哪知$N手臂忽然间就如变了一根软鞭，打出后能在空中任意拐弯，明明见$N拳头打向左方，蓦地里转弯向右！
+
+结果只听「蓬」的一声，又在$n limb击了一拳。
+
+$n防不胜防，接连吃了几拳，这几下都是十分沉重，登时心下慌乱，不知如何应付。
+
+$n眼见$N第二拳跟着打到，仍是举左臂挡架。
+$N依样葫芦，手臂又弯击过来，$n头向后仰，右臂猛地向前推出，正是周伯通的左右互搏术！左架右推，同时施为。
+
+$N的右臂恰好夹在双臂之中，被$n左臂回收，右臂外推，这般急绞之下，只听喀的一声。
+
+$n心头暗喜，勾腕伸爪，疾以蛇形刁手拿$N拳头。这一下恰到好处，又快又准，正是克制他“灵蛇拳法”的巧妙法门。
+
+help 指南
+
+特殊攻击：[1m灵蛇拳意[0m
+          功效：出拳威力巨大，方位匪夷所思，在敌人看来，自己手臂宛然灵动如蛇。
+          指令：perform cuff
+          所需：师承欧阳锋，蛤蟆功有效等级１５０，灵蛇拳有效等级１８０
+
+　　　　　“灵蛇拳法”是欧阳锋潜心苦练而成的力作，原拟于二次华山比武时一举压倒
+　　　　　余子，是以在桃花岛上与洪七公检拆千招，这路取意于蛇类身形扭动的拳法，
+　　　　　却始终不曾使过。哪知被欧阳克在宝应与郭靖动手时先行使用，虽然获胜，却
+　　　　　给洪七公觑到了其中关窍，其后欧阳克再与郭靖战时，竟被周伯通所授之左右
+　　　　　互搏术击溃，哎哉！最后自己用时，亦被洪七公以蛇形刁手破解，实在可惜。
+　　　　　故用此拳意，在与学成左右互搏术或全面激发蛇形刁手者交手时，应倍加小心。
+
+*/
+
+#include <ansi.h>
+#include <combat.h>
+
+inherit F_SSERVER;
+inherit F_DBASE;
+
+void lingshe(object me, object target);
+
+int perform(object me, object target)
+{
+	object weapon;
+	string *limb;
+	int skill, damage;
+
+	if( !target ) target = offensive_target(me);
+
+	if( !target
+	||	!target->is_character()
+	||	!me->is_fighting(target) )
+		return notify_fail("你不在战斗中。\n");
+
+	weapon = target->query_temp("weapon");
+	damage = me->query_skill("force")+me->query_skill("strike")+random(me->query("jiali",1)+me->query("jiajin",1))*4;
+
+	limb = target->query("limbs");
+	skill = me->query_skill("lingshe-quan",1);
+
+	if( me->query("family/master_name") != "欧阳锋")
+		return notify_fail("你师承并非欧阳锋，不能使用灵蛇拳意。\n");
+
+	if( me->query_skill("force") < 150 )
+		return notify_fail("你的内功修为不够。\n");
+
+	if( me->query_skill("cuff") < 180 )
+		return notify_fail("你的拳法修为不够。\n");
+
+	if( me->query_skill_mapped("force") != "hamagong")
+		return notify_fail("你现在所用内功并非蛤蟆功！\n");
+
+	if( me->query("neili", 1) < skill*5 )
+		return notify_fail("你的内力不够！\n");
+
+	if( me->query("jingli", 1) < skill*3 )
+		return notify_fail("你的精力不够！\n");
+/*
+	if( me->query("jiali", 1) < skill/2 )
+		return notify_fail("你加力不够，无法发挥威力！\n");
+
+	if( me->query("jiajin", 1) < skill/2 )
+		return notify_fail("你加劲不够，无法发挥威力！\n");
+*/
+	if(weapon) {
+		message_vision( HIB"\n斗然间$N挥拳打出，$n举"NOR + weapon->name() + HIB"挡格，哪知$N的手臂犹似忽然没了骨头，顺势转弯！\n"NOR,me,target);
+	}
+	else {
+		message_vision( HIB"\n斗然间$N挥拳打出，$n伸臂挡格，哪知$N的手臂犹似忽然没了骨头，顺势转弯！\n"NOR,me,target);
+	}
+
+	if( random( me->query("combat_exp", 1) + me->query_skill("cuff") )*3/2 > random( target->query("combat_exp", 1) + target->query_skill("dodge") ) )
+	{
+		if(weapon) {
+			message_vision(HIR"\n结果$n"NOR + weapon->name() + HIR"脱手，只听「拍」的一声，$n"+limb[random(sizeof(limb))]+"竟是中了一拳。\n\n"NOR,me,target);
+
+			weapon->unequip();
+			weapon->move(environment(target));
+			target->reset_action();
+		}
+		else {
+			message_vision(HIR"\n结果只听「拍」的一声，$n"+limb[random(sizeof(limb))]+"竟是中了一拳。\n\n"NOR,me,target);
+		}
+
+		target->receive_damage("qi", damage,  me);
+		target->receive_wound("qi", random(damage/2)+damage/4, me);
+		target->set_temp("lingshe_hit",1);
+		if(wizardp(me)) tell_object(me, "quan damage: "+damage+"\n");
+		COMBAT_D->report_status(target);
+		}
+
+	else {
+		message_vision(HIG"\n$n一惊，低头窜出，回身反击，$N斜步让开，还了一拳。\n"NOR, me, target);
+		COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+	}
+
+	me->add("neili", -skill*3/2);
+	me->add("jingli", -skill/2);
+	me->start_busy(1+random(1));
+	call_out("lingshe", random(2), me, target);
+	return 1;
+
+}
+
+void lingshe(object me, object target)
+{
+	string *limb;
+	int skill,damage;
+
+	if( !target || !me->is_fighting(target) ) return;
+	if( !living(me) || me->is_ghost() ) return;
+	if( !target || environment(me) != environment(target) || !me->is_fighting() ) return;
+	if( me->query_skill_mapped("force") != "hamagong" || me->query_skill_mapped("cuff") != "lingshe-quan") return;
+
+	damage = me->query_skill("force")+me->query_skill("cuff")+random(me->query("jiali",1)+me->query("jiajin",1))*5;
+	limb = target->query("limbs");
+	skill = me->query_skill("lingshe-quan",1);
+
+	if( target->query("double_attack"))
+	{
+		message_vision(
+		HIB"\n$n眼见$N第二拳跟着打到，仍是举左臂挡架。\n"
+		"$N依样葫芦，手臂又弯击过来，$n头向后仰，右臂猛地向前推出，正是周伯通的左右互搏术！左架右推，同时施为。\n"NOR
+		+HIR"\n$N的右臂恰好夹在双臂之中，被$n左臂回收，右臂外推，这般急绞之下，只听喀的一声。\n\n"NOR,me,target);
+
+		me->receive_damage("qi", skill*2, me);
+		me->receive_wound("qi", skill, me);
+        	COMBAT_D->report_status(me);
+		target->delete_temp("lingshe_hit");
+	}
+	else 
+	{
+		message_vision(HIB
+		"\n转眼间$N又一招“灵蛇拳”横臂扫出，正如蛇身虽有骨而似无骨，竟能四面八方，任意所之！"
+		"\n$n不敢再格，侧身闪避，哪知$N手臂忽然间就如变了一根软鞭，打出后能在空中拐弯，明明见$N拳头打向左方，蓦地里转弯向右！\n"NOR, me, target);
+
+		if( target->query_skill_mapped("hand") == "shexing-diaoshou" && target->query_skill_mapped("parry") == "shexing-diaoshou" && target->query_skill("hand") > random(skill) )
+		{
+			message_vision(HIG"\n$n心头暗喜，勾腕伸爪，疾以蛇形刁手拿$N拳头。这一下恰到好处，又快又准，正是克制“灵蛇拳法”的巧妙法门。\n"NOR,me,target);
+			target->delete_temp("lingshe_hit");
+			me->start_busy(2+random(2));
+		}
+
+		else if( random( me->query("combat_exp", 1) + me->query_skill("strike") ) > random( target->query("combat_exp", 1) + target->query_skill("dodge") ) )
+		{
+			if( target->query_skill_mapped("hand") == "shexing-diaoshou" && target->query_skill_mapped("parry") == "shexing-diaoshou" )
+			{
+				message_vision(HIG"\n$n心头暗喜，勾腕伸爪，疾以蛇形刁手拿$N拳头。哪知$n一时大意，被$N迂开就是一拳。\n"NOR,me,target);
+
+			}
+			message_vision(HIR"\n结果只听「蓬」的一声，又在$n"+limb[random(sizeof(limb))]+"击了一拳。\n\n"NOR,me,target);
+
+			target->receive_damage("qi", damage,  me);
+			target->receive_wound("qi", random(damage/2)+damage/4, me);
+			if(wizardp(me)) tell_object(me, "quan damage: "+damage+"\n");
+			COMBAT_D->report_status(target);
+
+			if( target->query_temp("lingshe_hit") ) {
+				message_vision(HIR"\n$n防不胜防，接连吃了两拳，这两下都是十分沉重，登时心下慌乱，不知如何应付。\n"NOR,me,target);
+				target->delete_temp("lingshe_hit");
+				target->start_busy(1+random(1));
+			}
+		}
+
+		else {
+
+		message_vision(HIG"\n$n眉心一紧连忙纵身，躲开了$N的拳势。\n"NOR, me, target);
+
+		}
+	}
+		me->add("neili", -skill*3/2);
+		me->add("jingli", -skill);
+		me->start_busy(1+random(2));
+
+
+	return;
+
+}

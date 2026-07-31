@@ -1,0 +1,31 @@
+// SN:IjI1T2U:kj:j^f_Y
+// ITEM Made by player(水灵:fireice) /data/item/f/fireice-blade.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Thu Aug 12 15:52:46 2004
+#include <ansi.h>
+#include <weapon.h>
+
+inherit BLADE;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;36m冰冻之刃[2;37;0m", ({ "blade" }));
+	set_weight(9000);
+	set("item_make", 1);
+	set("unit", "把");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一把刀。
+刀柄上刻着一行小字：水灵(fireice)
+");
+	set("value", 2100000);
+	set("point", 550);
+	set("material", "magic stone");
+	set("wield_msg", "[1;36m水花溅起，水龙出现，盘旋在刃周围[2;37;0m\n");
+	set("unwield_msg", "[1;36m水花溅起，刀和人合为一体[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	init_blade(apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

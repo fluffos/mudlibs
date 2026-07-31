@@ -1,0 +1,18 @@
+// SN:h^WNi@`P7`=7X]=a
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;31m火麒麟兽[2;37;0m", ({"qilin shou"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "小段的坐骑
+它是慕容覆水的坐骑。
+");
+        set_temp("owner_id", "mrcat");
+        set_temp("owner_name", "慕容覆水");
+        ::setup();
+}
+

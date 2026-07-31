@@ -1,0 +1,29 @@
+// SN:Ab9O7nXk]=>>5dI5
+// File(/data/room/cun/zhulin.c) of cun's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "竹林");
+	set ("long", @LONG
+这里种着好大一片竹林，非常幽静。风一起就听竹叶沙沙的响，
+有时银行啊就去听涛阁默听竹浪涛声，参悟武功。 
+LONG );
+
+	set("exits", ([
+                "west" : __DIR__"huayuan",
+                "east" : __DIR__"tingtao",
+	]));
+
+        set("outdoors", "playertown");
+        set("sleep_room", 1);
+        setup();
+
+        set("room_owner", "银行啊");
+        set("room_name", "贵宾房");
+        set("room_id", "princess");
+        set("room_owner_id", "cun");
+        set("room_position", "碎石小道");
+}

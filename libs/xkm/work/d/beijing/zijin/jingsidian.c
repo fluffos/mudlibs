@@ -1,0 +1,2 @@
+#/clone/user/user.c
+alias (["gob":"goto /d/forest/cldating","goq":"goto /d/quanzhou/zhongxin","kq":"destroy $1","gc":"goto /d/city/guangchang","uh":"update here","mo":"more here","gcb":"goto /d/changbai/nancheng","lml":"localcmds","pr":"promote $1 (immortal)","r":"reply $*","sb":"smash $*","k":"kill $1","gof":"goto /d/foshan/yxlou2","job":"as

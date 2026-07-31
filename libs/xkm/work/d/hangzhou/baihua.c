@@ -1,0 +1,31 @@
+//Cracked by Kafei
+///d/zhongnan/shentong.c 
+// Qianj 11/2001
+
+#include <ansi.h>
+inherit ROOM;
+
+void create()
+{
+                set("short", HIW"百"NOR + HIM"花"NOR + YEL"谷"NOR);
+                  set("long", @LONG
+饶过夕照山来到背后的山谷，眼前突然一片明亮，到处充满了鸟语花香，正是一个世外
+桃源。这里鲜花盛开，各式各样，就像一个花的海洋。花丛间飞舞着白色的蜜蜂，个头比一
+般蜜蜂大了很多。一个老头正兴致勃勃地训着蜜蜂。
+LONG
+                  );
+
+          set("exits", ([
+                    "south" : __DIR__"xizhao1",
+          ]));
+
+          set("objects",([
+                    "/kungfu/class/quanzhen/zhou":1,
+          ]));
+
+                  set("outdoors", "zhongnan" );
+
+                  set("cost", 1);
+                  setup();
+}
+

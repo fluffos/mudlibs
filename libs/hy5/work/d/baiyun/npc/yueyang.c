@@ -1,0 +1,36 @@
+#include <ansi.h>
+inherit NPC; 
+void create()
+{
+        set_name("岳洋", ({ "yue yang", "yue" }) );
+        set("long","他年纪还很轻，黝黑英俊的脸上，带着几分傲气，又带着几分野气，\n眼睛黑得发蓝，薄薄的嘴唇显得很坚强而残忍。\n");
+        set("attitude", "heroism");
+        set("title", "初入江湖");
+        set("str", 18);
+        set("per", 25);
+        set("cor", 20);
+        set("cps", 20); 
+        set("combat_exp", 80000); 
+        set_skill("unarmed", 100);
+
+        set_skill("parry", 70+random(60));
+        set_skill("dodge", 50+random(40));
+        set_skill("move", 100+random(100));
+        set_skill("force",100+random(100));
+
+        set_temp("apply/attack", 10);
+        set_temp("apply/dodge", 70);
+        set_temp("apply/damage", 10);
+        set("chat_chance", 1);
+        set("chat_msg", ({
+        "岳洋眺望着一望无际的大海，握紧了拳头，默默道：一定要闯出个名堂！\n",
+        }) );
+        set("chat_chance_combat", 10);
+        set("chat_msg_combat", ({
+        (: perform_action, "spear.zonghengtianxia" :),
+        }) ); 
+        setup();
+        carry_object("/clone/misc/cloth")->wear();
+        carry_object(__DIR__"obj/egg");
+        carry_object(__DIR__"obj/by_spear")->wield();
+} 

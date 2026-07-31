@@ -1,0 +1,54 @@
+#include <ansi.h>
+#include <room.h> 
+inherit CREATE_CHAT_ROOM; 
+
+int is_chat_room() { return 1; } 
+
+void create()
+{
+        set("short", "随意的工作室");
+        set("long", @LONG
+                            $HIC$闲  来  小  居$NOR$
+
+            
+                                                     $HIW$☆$NOR$
+                                          $WHT$☆$NOR$        
+         $HIY$┌─┐$NOR$       _                         $HIW$☆$NOR$  $WHT$☆$NOR$      $HIY$┌─┐$NOR$
+         $HIY$│$NOR$$HIG$世$NOR$$HIY$│$NOR$     （(_                     $WHT$☆$NOR$             $HIY$│$HIY$$NOR$$HIG$江$NOR$$HIY$│$NOR$
+         $HIY$│$NOR$$HIG$间$NOR$$HIY$│$NOR$    _.;@@)            |_           $HIW$☆$NOR$        $HIY$│$HIY$$NOR$$HIG$湖$NOR$$HIY$│$NOR$
+         $HIY$│$NOR$$HIG$几$NOR$$HIY$│$NOR$                     )|_)                    $HIY$│$NOR$$HIG$已$NOR$$HIY$│
+         $HIY$│$NOR$$HIG$多$NOR$$HIY$│$NOR$                     )|_)                    $HIY$│$NOR$$HIG$经$NOR$$HIY$│$NOR$
+         $HIY$│$NOR$$HIG$无$NOR$$HIY$│$NOR$               ._i____|___-/~_~_~_~          $HIY$│$NOR$$HIG$无$NOR$$HIY$│$NOR$
+         $HIY$│$NOR$$HIG$奈$NOR$$HIY$│$NOR$               \~~~~~~~~~ ~_~_~_~_~_~        $HIY$│$NOR$$HIG$知$NOR$$HIY$│$NOR$
+         $HIY$│$NOR$$HIG$事$NOR$$HIY$│$NOR$            ~ ~_~_~_~_~_~_~ ~ ~              $HIY$│$NOR$$HIG$己$NOR$$HIY$│$NOR$
+         $HIY$└─┘ $NOR$                                            $HIY$└─┘$NOR$
+                            
+                            $HIB$欢迎光临寒舍的各位朋友$NOR$
+LONG );
+
+        set("exits", ([ /* sizeof() == 1 */
+                "north" : "/d/wizard/wizard_room",
+        ]));
+        
+        set("valid_startroom", 1);
+        set("no_fight", "1");
+        set("no_clean_up", 0);
+        setup();
+       "/clone/board/dream_b"->foo();
+
+}
+
+int valid_leave(object me, string dir)
+{
+        if (dir == "north" && ! wizardp(me))
+                return notify_fail("那里只有巫师才能进去。\n");
+                
+        return ::valid_leave(me, dir);
+}
+
+void init()
+{
+        add_all_action(); 
+}
+
+

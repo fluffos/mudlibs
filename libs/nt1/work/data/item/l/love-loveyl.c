@@ -1,0 +1,34 @@
+// SN:dYEElWeZWL8=h3Ln
+// ITEM Made by player(情人:love) /data/item/l/love-loveyl.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Sun Apr 18 23:33:20 2004
+#include <ansi.h>
+#include <armor.h>
+
+inherit HANDS;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[2;37;0m[37m情人的眼泪[2;37;0m", ({ "loveyl" }));
+	set_weight(2250);
+	set("item_make", 1);
+	set("unit", "双");
+	set("long", "这是由[37m上古寒铁[2;37;0m炼制而成的一双铁掌。
+铁掌缘上刻着一行小字：情人(love)
+");
+	set("value", 1500000);
+	set("point", 156);
+	set("material", "steel");
+	set("wear_msg", "[33m$N[33m装备[2;37;0m[37m情人的眼泪[2;37;0m[33m。[2;37;0m\n");
+	set("remove_msg", "[33m$N[33m脱下了[2;37;0m[37m情人的眼泪[2;37;0m[33m。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/armor", 10);
+	set("armor_prop/unarmed_damage", apply_damage());
+	set("armor_prop/hand", 10);
+	set("armor_prop/strike", 10);
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

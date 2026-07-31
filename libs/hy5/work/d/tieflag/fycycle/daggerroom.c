@@ -1,0 +1,24 @@
+#include <room.h>
+inherit ROOM;
+void create()
+{
+        set("short", "野火燎原");
+        set("long", @LONG
+屋内仿佛是一个大火窑。只见一个火圈围着墙壁蔓延，流动的溶岩不停地翻
+滚沸腾，火焰犹如灵蛇般吐着舌头。细看火圈，似乎攀爬的轨迹很有次序，或上
+或下或左或右，连绵不断却有错落有致。火圈交汇处是一面凹凸不平的火墙，在
+烈火中间给凿出八个大字，闪闪生辉。
+LONG
+        );
+        set("exits", ([ /* sizeof() == 4 */
+                "center" : __DIR__"groundroom",
+        ])); 
+        set("objects", ([
+               __DIR__"obj/daggerbook" : 1,
+                        ]));
+        set("indoors", "fycycle");
+        set("coor/x",-160);
+        set("coor/y",50);
+        set("coor/z",0);
+        setup();
+}        

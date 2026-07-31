@@ -1,0 +1,56 @@
+// SN:aJ5aJT:jDGL4c:84
+// File(/data/room/famu/zuowei.c) of famu's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        object ob;
+
+        set("short", "凌云阁左卫舍");
+	set ("long", @LONG
+这里是左卫舍，是看护凌云阁大门的家丁放哨的地方。 
+LONG );
+
+	set("exits", ([
+                "west"   : __DIR__"qianting",
+	]));
+
+        set("objects", ([
+                "/d/room/roomnpc/shouwei" : 2,
+        ]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        ob = present("shou wei", this_object());
+        ob->set("coagents", ({
+                ([ "startroom" : __DIR__"zuowei",
+                   "id"        : "shou wei 1" ]),
+                ([ "startroom" : __DIR__"zuowei",
+                   "id"        : "shou wei 2" ]),
+                ([ "startroom" : __DIR__"youwei",
+                   "id"        : "shou wei 2" ]),
+                ([ "startroom" : __DIR__"youwei",
+                   "id"        : "shou wei 1" ]),
+        }));
+
+        ob = present("shou wei 2", this_object());
+        ob->set("coagents", ({
+                ([ "startroom" : __DIR__"zuowei",
+                   "id"        : "shou wei 1" ]),
+                ([ "startroom" : __DIR__"zuowei",
+                   "id"        : "shou wei 2" ]),
+                ([ "startroom" : __DIR__"youwei",
+                   "id"        : "shou wei 2" ]),
+                ([ "startroom" : __DIR__"youwei",
+                   "id"        : "shou wei 1" ]),
+        }));
+
+        set("room_owner", "陪练");
+        set("room_name", "凌云阁");
+        set("room_id", "famu");
+        set("room_owner_id", "famu");
+        set("room_position", "三岔口");
+}

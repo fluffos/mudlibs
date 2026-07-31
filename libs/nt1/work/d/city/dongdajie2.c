@@ -1,0 +1,30 @@
+// Copyright (C) 2003, by Lonely. All rights reserved.
+// This software can not be used, copied, or modified 
+// in any form without the written permission from authors.
+
+inherit ROOM;
+
+void create()
+{
+	set("short", "东大街");
+	set("long", @LONG
+你走在东大街上，踩着坚实的青石板地面。东边不时传来小贩的吆喝
+声，与西边朗朗的读书声混杂在一起。北边是一家老字号的药铺，南边是
+打铁铺，叮叮当当的声音老远就能听到。
+LONG );
+        set("outdoors", "city");
+	set("no_clean_up", 0);
+	set("exits", ([
+		"east"  : __DIR__"dongdajie3",
+		"south" : __DIR__"datiepu",
+		"west"  : __DIR__"dongdajie1",
+		"north" : __DIR__"yaopu",
+	]));
+        set("objects", ([
+                "/d/gaibang/npc/xiaofeng" : 1,
+	]));
+
+	setup();
+	replace_program(ROOM);
+}
+

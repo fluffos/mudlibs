@@ -1,0 +1,133 @@
+// /d/mr/hssg.c
+// by akuma
+
+#include <ansi.h>
+inherit ROOM;
+inherit F_QUEST;
+#include "/job/mrjob/touxue.h"
+void create()
+{
+	set("short",MAG"还施水阁"NOR);
+	set("long", @long
+这就是举世闻名的姑苏慕容的还施水阁，这里据说有很多武林人事向
+往以久的武功。只见墙上有一个书架子，上面摆满了各种武籍，但是有些
+地方却留有空位，每个空位处都放有一张子条(paper)。
+long);
+	set("exits",([
+		"west":__DIR__"hssg",
+	]));
+	set("item_desc", ([
+		"paper" : "上面写着还施水阁中所尚缺武籍的名称。\n",
+	]));
+	setup();
+}
+
+void init()
+{
+        add_action ("do_kan", ({"kan", "看"}));
+	add_action ("do_put", ({"fang", "放"}));
+	add_action ("do_fangqi", "shibai");
+}
+
+mapping get_touxue()
+{
+	mapping quest = touxue[random(sizeof(touxue))];
+        return quest;
+}
+
+int do_kan(string arg)
+{
+	object me, ob;
+	mapping quest = touxue[random(sizeof(touxue))];
+	me = this_player();
+	if (me->query_condition("mrjob_busy")) return notify_fail ("你刚刚为还施水阁找到一本武籍，还是歇会儿吧。\n");
+	if (me->query_temp("mr_job3")) return notify_fail ("一口吃不了一个胖子，你还是先找到手里那本再说吧。\n");
+	if (me->query("job_done") == "mr_touxue") return notify_fail ("你刚刚为还施水阁找到一本武籍，还是先做做别的任务吧。\n");
+	if (me->is_busy()) return notify_fail("你现在正忙着呢！\n");
+	if (me->is_fighting()) return notify_fail("你正在战斗中，没有闲心看这个！\n");
+	if ( !living(this_player()) || arg != "paper" ) return 0;
+	if ( (me->query("family/master_name")!="慕容复") && (me->query("family/master_name")!="慕容博") ) return 0;
+	if ( me->query("combat_exp") < 500000 )
+		return notify_fail ("你的武功尚未有练成，做这搜集武籍的事情恐怕还有危险。\n");
+        if ( me->query("combat_exp") > 5000000 )
+		return notify_fail ("这等搜集武籍的小事，还是交给你的师弟、师妹去干吧。\n");
+
+        me->delete_temp("mr_quest/job_done");
+	quest = get_touxue();
+	me->set_temp("mr_quest", quest);
+	me->set_temp("mr_job3", 1);
+         me->delete_temp("mr_quest/job_done");
+         me->delete_temp("mr_quest/touxue");
+          me->delete_temp("mr_quest/reward");
+	me->start_busy(1);
+	ob = new ( "/job/mrjob/paper" );
+	ob->move(me);
+	write("还施水阁尚缺少「 " + me->query_temp("mr_quest/name") + "（" + me->query_temp("mr_quest/id") + "）」。\n\n");
+	return 1;
+}
+
+int do_put(string arg)
+{
+	object who, me, ob;
+	mapping quest;
+	who = this_player();
+	me = this_object();
+
+	if(who->is_busy() || who->is_fighting()) return notify_fail("你正忙着呢。\n");
+	if(!arg) return notify_fail("你要放什么东西？\n");
+	if( arg != "paper" ) return notify_fail("你要放什么东西？\n");
+	if(!objectp(ob = present(arg, who))) return notify_fail("你身上没有这样东西。\n");
+	if(!who->query_temp("mr_quest")) return notify_fail("你没有任务呀，来凑什么热闹？\n"); 
+	if(!mapp(quest = who->query_temp("mr_quest")) ) return notify_fail("还施水阁里不缺你这本书。\n"); 
+
+	if( !who->query_temp("mr_quest/job_done") ) {
+		return notify_fail("你的任务还没有完成呢。\n");
+	}
+	who->start_busy(2);
+	tell_object(who, HIY"\n你将书怀中的秘籍拿出，插入书架上的空位中。\n\n"NOR);
+	destruct(ob);
+	call_out("done", 2, who);
+	who->add("mr_job", 1);
+	return 1;
+}
+
+int do_fangqi(string arg)
+{
+	object me, ob;
+	mapping quest;
+	me = this_player();
+	if (me->is_busy()) return notify_fail("你现在正忙着呢！\n");
+	if (me->is_fighting()) return notify_fail("你正在战斗中，没有闲心看这个！\n");
+	if ( !living(this_player()) || arg != "paper" ) return 0;
+	if(!objectp(ob = present(arg, me))) return notify_fail("你身上没有这样东西。\n");
+	tell_object(me, GRN"无奈，你又将纸条放回了原处。\n"NOR);
+	me->delete_temp("mr_quest");
+	me->delete_temp("mr_job3");
+	me->start_busy(1);
+	destruct(ob);
+	me->set("job_done", "mr_touxue");
+	me->apply_condtition("mrjob_busy", 2);
+	return 1;
+}
+
+void done(object me)
+{
+	int exp, pot;
+	mapping quest;
+	if(!me) return;
+	quest = me->query_temp("mr_quest");
+        exp = quest["reward"] * 1400 / (int)me->query_skill("douzhuan-xingyi", 1);
+        exp += (int)me->query("mr_job", 1) / 10;
+	exp += random ( me->query("kar") ) + me->query("kar");
+	pot = exp / 2;
+        if ( (int)me->query("mr_job", 1) > 2500 ) exp = exp * 3 / 2;
+	tell_object(me, GRN"你获得出"+chinese_number(pot)+"点潜能和"+chinese_number(exp)+"点经验的奖励！\n"NOR);
+	write_file( "/log/job/mr_touxue", sprintf("%s %s(%s)第%d次任务，经验：%d，潜能：%d；\n",
+		ctime(time())[4..19], me->name(), me->query("id"), me->query("mr_job"), exp, pot ));
+	me->add("combat_exp", exp);
+	me->add("potential", pot);
+	me->delete_temp("mr_quest");
+	me->delete_temp("mr_job3");
+	me->set("job_done", "mr_touxue");
+	return;
+}

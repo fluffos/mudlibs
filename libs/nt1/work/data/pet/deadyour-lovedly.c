@@ -1,0 +1,18 @@
+// SN:@>01VHHJZo?8i\N_
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("花雕[2;37;0m", ({"lovedly diao"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "一只神雕
+它是西红柿的坐骑。
+");
+        set_temp("owner_id", "deadyour");
+        set_temp("owner_name", "西红柿");
+        ::setup();
+}
+

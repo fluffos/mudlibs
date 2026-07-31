@@ -1,0 +1,18 @@
+// SN:`Ul>F<dl@J4MWUXG
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("青牛[2;37;0m", ({"qing niu"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "一头牛
+它是脉动星的坐骑。
+");
+        set_temp("owner_id", "mdx");
+        set_temp("owner_name", "脉动星");
+        ::setup();
+}
+

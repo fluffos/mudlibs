@@ -1,0 +1,35 @@
+// SN:81gf]0hQ;k6741O5
+// File(/data/room/olbank/xiaoyuan.c) of olbank's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        set("short", "天语雅阁小院");
+	set ("long", @LONG
+这房间虽然小，但很精致，亭台楼阁极有趣味[2;37;0m
+LONG );
+
+        set("room_key", "1 of olbank");
+	setup();
+
+	set("exits", ([
+                "out"    : "/d/xiakedao/haibin",
+	]));
+
+        set("outdoors", "xiakedao");
+        set("no_sleep_room", 1);
+        set("valid_startroom", 1);
+
+        set("KEY_DOOR", ([
+                "exit" : "north",
+                "room" : __DIR__"dulewu",
+        ]));
+    
+        set("room_owner", "段银行");
+        set("room_name", "天语雅阁");
+        set("room_id", "olbank");
+        set("room_owner_id", "olbank");
+        set("room_position", "南海之滨");
+}

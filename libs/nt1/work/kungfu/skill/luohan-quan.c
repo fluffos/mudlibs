@@ -1,0 +1,70 @@
+// Copyright (C) 2003, by Lonely. All rights reserved.
+// This software can not be used, copied, or modified 
+// in any form without the written permission from authors.
+// luohan-quan.c 罗汉拳
+
+inherit SHAOLIN_SKILL;
+
+string *action_msg = ({
+        "$N连续上步，一式「黄莺落架」，左右手分靠，变拳为掌，击向$n的$l",
+        "$N左脚虚踏，全身右转，一招「丹凤朝阳」，右掌猛地插向$n的$l",
+        "$N双手大开大阖，宽打高举，使一招「洛钟东应」，双拳向$n的$l打去",
+        "$N左掌圈花扬起，屈肘当胸，虎口朝上，一招「偏花七星」打向$n的$l",
+        "$N使一招「苦海回头」，上身前探，双手划了个半圈，击向$n的$l",
+        "$N双掌划弧，一记「挟山超海」，掌出如电，一下子切到$n的手上",
+        "$N施出「慑服外道」，双拳拳出如风，同时打向$n头，胸，腹三处要害",
+        "$N左脚内扣，右腿曲坐，一式「三入地狱」，双手齐齐按向$n的胸口",
+});
+
+int valid_enable(string usage) { return usage == "cuff" || usage == "parry"; }
+
+int valid_learn(object me)
+{
+        if (me->query_temp("weapon") || me->query_temp("secondary_weapon"))
+                return notify_fail("练罗汉拳必须空手。\n");
+
+        if ((int)me->query_skill("force") < 20)
+                return notify_fail("你的内功火候不够，无法学罗汉拳。\n");
+
+        if ((int)me->query("max_neili") < 50)
+                return notify_fail("你的内力太弱，无法练罗汉拳。\n");
+
+        if ((int)me->query_skill("cuff", 1) < (int)me->query_skill("luohan-quan", 1))
+                return notify_fail("你的基本拳法水平有限，无法领会更高深的罗汉拳。\n");
+
+        return 1;
+}
+
+mapping query_action(object me, object weapon)
+{
+        return ([
+                "action": action_msg[random(sizeof(action_msg))], 
+                "force": 260 + random(50), 
+                "attack": 40 + random(10), 
+                "dodge" : 40 + random(10), 
+                "parry" : 40 + random(10), 
+                "damage_type" : random(2)?"内伤":"瘀伤", 
+        ]); 
+}
+
+int practice_skill(object me)
+{
+        if ((int)me->query("qi") < 50)
+                return notify_fail("你的体力太低了。\n");
+        if ((int)me->query("neili") < 50)
+                return notify_fail("你的内力不够练罗汉拳。\n");
+        me->receive_damage("qi", 40);
+        me->add("neili", -40);
+        return 1;
+}
+
+void skill_improved(object me)
+{
+        int level = (int)me->query_skill("luohan-quan", 1);
+
+        if( !(level % 10) && level >= (int)me->query_skill("force", 1) ) {
+                me->improve_skill("force", 2 * (level - 5) * (level - 5), 1);
+                tell_object(me, "你在罗汉拳方面的造诣增进了你的基本内功修为。\n");
+        }
+}
+

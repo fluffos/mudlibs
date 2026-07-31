@@ -1,0 +1,11 @@
+// SN:<gS]8nX]68ZS;db=
+// wedding-ring.c
+
+#include "/clone/misc/wedding-ring.h"
+
+void setup()
+{
+        set("long", "这是唐绣和陈小生的结婚戒指，是两人的定情之物。
+");
+        ::setup();
+}

@@ -1,0 +1,653 @@
+// score.c
+// Update by Rcwiz for heros.cn
+
+#include <ansi.h>
+#include <combat.h>
+
+#define LINE HIC "≡" HIY "───────────────────────────────" HIC "≡\n" NOR
+#define MEMBER_D     "/adm/daemons/memberd"
+#define TAOZHUANG_D  "/adm/daemons/taozhuangd"
+
+inherit F_CLEAN_UP;
+
+void create() { seteuid(ROOT_UID); }
+
+/*
+≡───────────────────────────────≡
+职    业：                         职业评价：
+命中等级：                  	   回避等级：
+伤害等级：                  	   防护等级：
+
+≡───────────────────────────────≡
+*/
+
+// 元神等级
+// flag = 0 返回元神等级   flag = 1 返回升级进度百分比，如92%则返回92
+public int yuanshen_level(object me, int flag)
+{
+	int level, point;
+	
+	// 100级前每2000万经验升1级
+	level = me->query("yuanshen/exp") / 20000000;
+	// 101～150级每4000万经验升1级
+	level += me->query("yuanshen/exp2") / 40000000;
+	// 151～180级每6000万经验升1级
+	level += me->query("yuanshen/exp3") / 60000000;
+	// 181～200级每8000万经验升1级
+	level += me->query("yuanshen/exp4") / 80000000;
+
+	if (flag)
+	{
+		if (me->query("yuanshen/exp4"))
+			point = (me->query("yuanshen/exp4") - (level-180) * 80000000 ) / 800000;
+		else if (me->query("yuanshen/exp3"))
+			point = (me->query("yuanshen/exp3") - (level-150) * 60000000 ) / 600000;
+		else if (me->query("yuanshen/exp2"))
+			point = (me->query("yuanshen/exp2") - (level-100) * 40000000 ) / 400000;
+		else
+			point = (me->query("yuanshen/exp") - level * 20000000 ) / 200000;
+						
+		return point;
+	}
+	
+	return level;	
+}
+
+// 返回元神五行属性
+public string WUXING(int iwuxing)
+{
+	string * wuxing_list = ({
+		      HIY "金" NOR,
+		NOR + YEL "木" NOR,
+		      HIC "水" NOR,
+		      HIR "火" NOR,
+		NOR + WHT "土" NOR,
+	});
+	
+	return wuxing_list[iwuxing];
+}
+
+int main(object me, string arg)
+{
+	string line;
+	int job_score, attack, parry_points, dodge_points, damage, damage_bonus, defense;
+	int huibi_points; // 回避综合点数
+	object weapon;
+   	mapping prepare;
+    	string *sk;	
+	string skill_type;
+	mapping action;
+	object tar;
+	int damage1, damage2;
+	int itemp;
+	int attack_up, damage_up, huibi_up, defense_up; // 元神的额外提升
+	string *srv_tmp;
+	mapping srvs;
+	int i, add_yanjiu, add_jiqu;
+	string para1;
+	string *add_keys = ({ "int", "con", "dex", "str", "haoran", "xiagu", "shewo", "moxin", "youran", "haoling",
+		                  "xianyun", "tianxia", "haina", "cint"});
+
+	string *add_keys2 = ({ "int", "con", "dex", "str", "cint" });
+	
+	int tzlv; // 套装等级
+	mapping tz; // 套装属性 
+
+	object mater;
+/*
+	if (! wizardp(me))
+		return notify_fail("系统更新中，请稍后再试！\n");
+*/
+	
+	if (arg)
+	{
+
+        	// 使用轮回点
+		if (sscanf(arg, "lhpoint add %s", para1) == 1)
+		{
+			if (member_array(para1, add_keys) == -1)
+			{								
+				return notify_fail("指令格式：power lhpoint add <int|con|dex|str|cint|特殊技能ID>。\n");	
+			}
+
+			// 增加先天属性
+			if (member_array(para1, add_keys2) != -1)
+			{
+				// 检查轮回点是否足够
+				if (me->query("scborn/cur_lunhui_point") < 4)
+				{
+					return notify_fail("你的轮回点不够。\n");
+				}
+				
+				// 减少1点悟性
+				if (para1 == "cint")
+				{
+					me->add("int", -1);
+				}
+				else
+				{
+					me->add(para1, 1);
+				}
+				me->add("scborn/cur_lunhui_point", -4);
+				me->save();
+
+				write("OK.\n");
+
+				return 1;
+
+			}
+			
+			// 增加转世技能
+			if (! me->query("special_skill/" + para1))
+			{
+				return notify_fail("你不会这样技能。\n");
+			}
+
+				// 检查轮回点是否足够
+				if (me->query("scborn/cur_lunhui_point") < 1)
+				{
+					return notify_fail("你的轮回点不够。\n");
+				}			
+
+				me->add("lhpoint/special/" + para1, 1);
+				me->add("scborn/cur_lunhui_point", -1);
+				me->save();
+
+				write("OK.\n");
+
+				return 1;
+		}
+
+		if (arg == "-p")
+		{
+			line = HIY "各属性对战斗属性影响效果一览\n" NOR;
+			line += LINE;
+			line += HIC +
+				"【实战经验】                       【先天身法】\n" NOR +
+				" 命中等级：★                       命中等级：★★★★★★\n"
+				" 回避等级：★                       回避等级：★★★★★★\n\n" HIC +
+				"【先天臂力】                       【后天身法】\n" NOR +
+				" 伤害等级：★★★★★★             命中等级：★★★★★\n"
+				"                                    回避等级：★★★★★\n\n" HIC +
+				"【后天臂力】                       【武功等级及相关属性】\n" NOR +
+				" 伤害等级：★★★★★               命中等级：★★★★★★\n"
+				"                                    回避等级：★★★★★★\n"
+				"                                    伤害等级：★★★★★★\n"
+				"                                    防护等级：★★★★★★\n\n" HIC +
+				"【运功效果】                       【兵器效果】\n" NOR +
+				" 命中等级：★★★★                 伤害等级：★★★★★★\n"
+				" 回避等级：★★★★\n"
+				" 伤害等级：★★★★\n"
+				" 防护等级：★★★★\n\n" HIC +
+				"【防具效果】                       【加力效果】\n" NOR +
+				" 回避等级：★★★★★★             伤害等级：★★★★\n"
+				" 防护等级：★★★★★★\n\n" HIC +
+				"【其他效果】\n" NOR +
+				" 命中等级：★\n"
+				" 回避等级：★\n"
+				" 伤害等级：★\n"
+				" 防护等级：★\n\n" NOR;
+			line += LINE;
+
+			write(line);
+		
+			return 1;
+		}
+
+       		 // 显示当前购买的有效服务（未过期的服务）
+		if (arg == "-s")
+		{
+			line = HIY "以下是您当前所购买的有效服务\n" NOR;
+			line += LINE;
+			line += sprintf(HIY "%-30s%-30s\n" NOR, "服务", "到期时间");
+			line += LINE;
+			
+			if (mapp(srvs = me->query("service")))
+			{
+				if (sizeof(srvs))
+				{
+					srv_tmp = keys(srvs);
+
+					for (i = 0; i < sizeof(srv_tmp); i ++ )
+					{
+						line += sprintf(HIG "%-30s%-30s\n" NOR, 
+							    "/adm/daemons/yhshopd"->srvname(srv_tmp[i]),
+							    MEMBER_D->bjtime(srvs[srv_tmp[i]], 1) );
+					}
+				}
+				else 
+					line += HIR "\n您目前没有购买任何服务！如欲购买服务请参见帮助文件 help yhshop_srv。\n\n" NOR;
+			}
+			else
+				line += HIR "\n您目前没有购买任何服务！如欲购买服务请参见帮助文件 help yhshop_srv。\n\n" NOR;
+
+			line += LINE;
+
+			write(line);
+
+			return 1;
+
+		}
+
+       		 // 显示轮回点使用情况
+		if (arg == "-l")
+		{
+			line = HIY "以下是您轮回点使用情况：\n" NOR;
+			line += LINE;
+			line += "当前轮回点：" + sprintf("%d", me->query("scborn/cur_lunhui_point")) + "\n";
+			line += "累积轮回点：" + sprintf("%d", me->query("scborn/total_lunhui_point")) + "\n";
+			line += "已用轮回点：" + sprintf("%d", 
+				                     me->query("scborn/total_lunhui_point") - me->query("scborn/cur_lunhui_point")) + "\n";
+
+			line += LINE;
+
+			line += sprintf(HIY "%-30s%-30s\n" NOR, "增加职业技能", "增加等级");
+			line += LINE;
+
+			if (srvs = me->query("lhpoint/special"))
+			{
+				if (sizeof(srvs))
+				{
+					srv_tmp = keys(srvs);
+
+					for (i = 0; i < sizeof(srv_tmp); i ++ )
+					{
+						line += sprintf(HIG "%-30s%-30s\n" NOR, 
+							    filter_color(("/kungfu/special2/" + srv_tmp[i])->name()),
+							    sprintf("%d", srvs[srv_tmp[i]]) );
+					}
+				}
+				else 
+					line += HIR "\n您目前还没有使用轮回点增加职业技能等级。\n\n" NOR;
+			}
+			else
+				line += HIR "\n您目前还没有使用轮回点增加职业技能等级。帮助文件 help scborn。\n\n" NOR;
+			
+			line += LINE;
+
+			write(line);
+
+			return 1;
+		}
+
+		if (! wizardp(me) && arg != me->query("id") && ! me->query("skyeye"))
+			return notify_fail("你只能查看自己的属性。\n");
+
+		tar = find_player(arg);
+
+		if (! objectp(tar))tar = find_living(arg);
+
+		if (! objectp(tar))return notify_fail("目标不存在。\n");
+
+        if (! wizardp(me) && tar->query_temp("apply/invisible") && ! me->query_condition("niuyanlei"))
+				  return notify_fail("目标不存在。\n");
+        
+		me = tar;
+	}
+	
+	// else ! arg
+
+        if (objectp(weapon = me->query_temp("weapon")))
+        {
+                skill_type = weapon->query("skill_type");
+                attack = COMBAT_D->skill_power(me, skill_type, SKILL_USAGE_ATTACK);
+        } else
+        {
+                prepare = me->query_skill_prepare();
+
+                if (! prepare) prepare = ([]);
+                sk = keys(prepare);
+        
+                if (sizeof(sk) == 0)
+                        skill_type = "unarmed";
+                else
+                        skill_type = sk[0];
+
+                attack = COMBAT_D->skill_power(me, skill_type, SKILL_USAGE_ATTACK);
+
+                if (sizeof(prepare) == 2)
+                {
+                        int temp;
+                        temp = COMBAT_D->skill_power(me, sk[1], SKILL_USAGE_ATTACK);
+                        if (attack < temp) attack = temp;
+                }
+        }
+                
+/*
+	// 昆仑无极的威力 + 命中
+	if (weapon && weapon->query("skill_type") == "sword" 
+	    && me->query_skill_mapped(skill_type) == "qiankun-jian"
+   	    && me->query_skill("kunlun-wuji", 1) >= 100)
+	{
+		itemp = me->query_skill("kunlun-wuji", 1) / 100;
+		attack = attack + itemp * 200;
+	}
+	
+	// 逆转乾坤技能提升10%命中
+	if (me->query("special_skill/nizhuan"))
+		attack += attack / 10;
+*/	
+        parry_points = COMBAT_D->skill_power(me, "parry", SKILL_USAGE_DEFENSE);
+        dodge_points = COMBAT_D->skill_power(me, "dodge", SKILL_USAGE_DEFENSE);
+
+	// 伤害等级
+	if (weapon)
+	{
+	      // 将附加冲穴效果      
+	      damage = me->query_temp("apply/damage") + 
+	               me->query_temp("apply/damage") * me->query("jingmai/jingmai_weapon") / 100;
+	}
+	else
+	      damage = me->query_temp("apply/damage") + me->query_temp("apply/unarmed_damage");
+
+	// 兵器正负10%的偏差
+	damage1 = damage / 10;
+	damage2 = damage / 10;
+
+	// 昆仑无极的威力
+	if (weapon && weapon->query("skill_type") == "sword" 
+	    && me->query_skill_mapped(skill_type) == "qiankun-jian"
+   	    && me->query_skill("kunlun-wuji", 1) >= 100)
+	{
+		itemp = me->query_skill("kunlun-wuji", 1) / 100;
+		damage = damage + itemp * 100;
+	}
+
+	action = me->query_action();
+	if (mapp(action) && action["force"])
+	      damage += action["damage"];
+
+	// 等级的作用
+	// 等级对攻击力的影响修正--平招
+	if (me->query_skill(skill_type) > 750)
+	{
+		// 3750级为有效最高等级，即基本2500LV
+		// 此刻等级影响攻击提高4倍
+		if (me->query_skill(skill_type) >= 3750)
+		{
+			damage = damage + 750 + (me->query_skill(skill_type) - 750) * 4;
+		}
+		// 3000LV，即基本2000LV
+		// 此刻等级提高3倍
+		else
+		if (me->query_skill(skill_type) >= 3000)
+		{
+			damage = damage + 750 + (me->query_skill(skill_type) - 750) * 3;
+		}
+		// 2250LV，即基本1500LV
+		// 此刻2.5倍
+		else
+		if (me->query_skill(skill_type) >= 2250)
+		{
+			damage = damage + 750 + (me->query_skill(skill_type) - 750) * 5 / 2;
+		}
+		// 1500LV，即基本1000LV
+		// 此刻2倍
+		else
+		if (me->query_skill(skill_type) >= 1500)
+		{
+			damage = damage + 750 + (me->query_skill(skill_type) - 750) * 2;
+		}
+		// 750LV，即基本500LV
+		// 此刻1.5倍
+		else
+		{
+			damage = damage + 750 + (me->query_skill(skill_type) - 750) * 3 / 2;
+		}			
+	}
+	else
+	{
+		damage = damage + me->query_skill(skill_type);
+	}
+
+	damage += me->query("str") * 50;
+	damage += me->query_str() * 5;
+
+	// breakup的作用
+	if (me->query("breakup"))damage = damage + damage / 10;
+
+	// 隐士特技海纳百川提高伤害
+	// 提高：10% + [（职业等级 - 20) / 2]%
+	if (me->query_temp("special2/haina/joblv") > 20)
+	{
+		 damage = damage + damage / 100 * (10 + (me->query_temp("special2/haina/joblv") - 20) / 2);
+	}
+
+	if (me->query("sky12/floor") >= 2)
+	{
+		 damage = damage + (me->query("sky12/floor") - 1) * 50;
+	}
+	
+	// 发挥披风镶嵌作用
+	damage += COMBAT_D->enchase_surcoat_damage(me);
+
+	if (COMBAT_D->enchased_surcoat_9kong(me))
+	{
+		
+		damage += 300;	
+		attack += 300;			
+	}
+	
+	// 冲穴提高伤害
+	damage = damage + me->query("jingmai/jingmai_damage") * 100;
+	
+	
+	damage_bonus = 0;
+	damage_bonus += me->query("jianu") / 2;
+	damage_bonus += me->query("jiali") * 2 * ITEM_D->neck_add_damage(me, 2) / 100;
+
+	if (mapp(action))
+		if (action["force"])damage_bonus += action["force"] * ITEM_D->neck_add_damage(me, 1) / 100;
+	
+	damage2 += damage_bonus / 2;
+
+	// 防护等级
+	defense = me->query_temp("apply/armor");
+	// 冲穴提高防御
+	defense = defense + me->query("jingmai/jingmai_armor") * 100;
+	
+	// 发挥披风镶嵌的作用
+	if (COMBAT_D->enchase_surcoat_item(me, "流行赶月"))
+		defense += 500;
+	
+	
+	// 同伴系统的影响
+	mater = me->query("me_mater");
+	if (objectp(mater) && mater->query("level") >= 28)
+	{
+		switch(mater->query("types"))
+		{
+			case "防御型":
+				defense = defense + mater->query("level") * 5;
+				break;
+			case "攻击型":
+				dodge_points = dodge_points + mater->query("level") * 10;
+				break;
+			case "灵动型":
+				damage = damage + mater->query("level") * 5;
+				break;				
+			case "智慧型":
+				damage = damage + mater->query("level") * 4;
+				break;				
+		}
+		
+	}
+
+	// 战斗评价
+	job_score = 1 + damage / 100 + attack / 100 + dodge_points / 100 + 
+                    parry_points / 100 + defense / 200;
+
+    // 使用天眼属性的人查看其他人仅显示战斗评价
+    if (! wizardp(this_player()) && sizeof(arg) && arg != this_player()->query("id") && this_player()->query("skyeye"))
+    {
+	    // 目标必须跟自己在同一房间并且自己可见			
+            if (environment(this_player()) != environment(me))
+			return notify_fail("目标不存在。\n");
+
+	    if (wizardp(me))return notify_fail("目标不存在。\n"); 
+							
+	    tell_object(this_player(), HIR + me->name() + "(" + me->query("id") + ")战斗评价： " HIY + 
+			sprintf("%d", job_score) + HIR "\n" NOR);
+	    return 1;
+    }
+
+	line = HIY "\n你的战斗属性如下\t\t\t" HIR "-= 职业等级 " + sprintf("%d", me->query_joblv()) + " LV =-\n" NOR;
+	line += LINE;
+	line += sprintf(NOR + WHT "职    业：%-25s战斗评价：%d\n" NOR, 
+                        stringp(me->query("yhjob/job")) ? me->query("yhjob/job") : "武士",
+                        job_score);
+
+
+	// 回避点数
+	huibi_points = dodge_points + (weapon? parry_points: (parry_points / 10));
+	// 移形换位提升战斗回避率15%
+	if (me->query("special_skill/yixing"))
+		huibi_points = huibi_points + huibi_points * 3 / 20;
+	
+	// 套装
+	tzlv = TAOZHUANG_D->taozhuang_level(me);
+	tz = TAOZHUANG_D->taozhuang_shuxing(tzlv);
+	if (tzlv > 0)
+	{
+		attack += tz["attack"] * 100;
+		huibi_points += tz["huibi"] * 100;
+		damage += tz["damage"] * 100;
+		defense += tz["defense"] * 100;
+	}
+	if (! me->query("yuanshen/status"))
+	{
+		line += sprintf(NOR + WHT "命中等级：%-25d回避等级：%d\n" NOR, 
+                	        attack / 100 + 1, huibi_points / 100 + 1);
+        }
+        else
+        {
+        	attack_up += 1000; // 初始元神有+10命中
+        	if (me->query("yuanshen/QHmingzhong"))
+        		attack_up = attack_up + yuanshen_level(me, 0) * 100 * 2; 	
+        	line += sprintf(NOR + WHT "命中等级：%-46s回避等级：%s\n" NOR, 
+        	        sprintf("%d", attack / 100) + HIG " + " + sprintf("%d", attack_up / 100) + NOR + WHT,
+        	        sprintf("%d", huibi_points / 100 + 1) + HIG " + 10" WHT);
+        }
+
+	if (! me->query("yuanshen/status"))
+	{
+		if (damage + damage2 < 100000)
+			line += sprintf(NOR + WHT "伤害等级：%-3d— %-19d防护等级：%d\n" WHT, 
+                		        (damage - damage1) / 100, (damage + damage2) / 100, defense / 100 + 1);
+		else
+			line += sprintf(NOR + WHT "伤害等级：%-3d— %-18d防护等级：%d\n" WHT, 
+                		        (damage - damage1) / 100, (damage + damage2) / 100, defense / 100 + 1);                		       
+        }
+        else
+        {
+        	damage_up += 1000; // 初始元神有+伤害命中
+        	defense_up += 1000;
+        	if (me->query("yuanshen/QHgongji"))
+        		damage_up = damage_up + yuanshen_level(me, 0) * 100 * 2;    
+        	
+        	if (me->query("yuanshen/QHfangyu"))
+        		defense_up = defense_up + yuanshen_level(me, 0) * 100 * 4;    
+        			  	
+        	line += sprintf(NOR + WHT "伤害等级：%-46s防护等级：%s\n" WHT, 
+        	        sprintf("%-3d— %-19d", (damage - damage1) / 100, (damage + damage2) / 100) + HIG " + " + 
+        	                sprintf("%d", damage_up / 100) + NOR + WHT,
+        	        sprintf("%d", defense / 100 + 1) + HIG " + " + sprintf("%d", defense_up / 100) + WHT);        	
+        }
+
+	line += sprintf(NOR + WHT "福    缘：+%-24d气    运：+%d\n" NOR, 
+                        me->query_temp("apply/fy") + me->query("jingmai/jingmai_fy") + tz["fy"],
+                        me->query_temp("apply/qy") + me->query("jingmai/jingmai_qy") + tz["qy"]);
+        
+        add_yanjiu = 0;
+        add_jiqu = 0;
+
+        if (objectp(me->query_temp("armor/head")) && me->query_temp("armor/head")->item_owner() == me->query("id"))
+        {
+        	add_yanjiu = me->query_temp("apply/add_yanjiu");
+        	add_jiqu = me->query_temp("apply/add_jiqu");
+        }
+	line += sprintf(NOR + WHT "头饰研究效率：+%-20s头饰汲取效率：+%s\n" NOR, 
+                        sprintf("%d",add_yanjiu) + "%",
+                        sprintf("%d", add_jiqu) + "%");
+                                                          		
+	line += LINE;
+
+	if (COMBAT_D->enchased_surcoat_special(me, "猫妖石"))
+	{
+		line = line + HIM "无视对手" + COMBAT_D->enchased_surcoat_special(me, "猫妖石") + 
+		       "%防御给予攻击。\n" NOR;
+	}
+	
+	// 增加元神查看
+	/*
+	line += HIC "≡" HIY "──────────────元神───────────────" HIC "≡\n" NOR;
+
+	if (me->query("yuanshen/wuxing") == 1 ||
+	    me->query("yuanshen/wuxing") == 4)
+	{
+		line += sprintf(NOR + WHT "元神属性：%-47s" NOR + WHT "元神等级：%-s(%s％)\n" NOR, 
+	                       me->query("yuanshen/status") ? WUXING(me->query("yuanshen/wuxing")) : HIM "无" NOR , 
+	                       me->query("yuanshen/status") ? sprintf("%d", yuanshen_level(me, 0)) : "----",
+	                       me->query("yuanshen/status") ? sprintf("%d", yuanshen_level(me, 1)) : "----" );	
+	}
+	else
+	{
+		line += sprintf(NOR + WHT "元神属性：%-40s" NOR + WHT "元神等级：%-s(%s％)\n" NOR, 
+	                       me->query("yuanshen/status") ? WUXING(me->query("yuanshen/wuxing")) : HIM "无" NOR , 
+	                       me->query("yuanshen/status") ? sprintf("%d", yuanshen_level(me, 0)) : "----",
+	                       me->query("yuanshen/status") ? sprintf("%d", yuanshen_level(me, 1)) : "----" );	
+	}
+
+	line += sprintf(NOR + WHT "经验分成：%-24s属性变更：%s\n" NOR, 
+                       "20%" , 
+                       me->query("yuanshen/status") ? 
+                           sprintf("剩余 %d 小时", (me->query("yuanshen/last_change_wuxing") + 15* 3600 * 24 - time()) / 3600) : 
+                           	                   "剩余 0 小时");
+                       
+	line += sprintf(NOR + WHT "强化学习：%-24s强化防御：%s\n" NOR, 
+                       me->query("yuanshen/QHxuexi") ? "√" : "----" , me->query("yuanshen/QHfangyu") ? "√" : "----");	
+                       
+        line += sprintf(NOR + WHT "强化攻击：%-24s强化修养：%s\n" NOR, 
+                       me->query("yuanshen/QHgongji") ? "√" : "----" , me->query("yuanshen/QHxiuyang") ? "√" : "----");                               
+        line += sprintf(NOR + WHT "强化命中：%-24s保留属性：%s\n" NOR, 
+                       me->query("yuanshen/QHmingzhong") ? "√" : "----" , me->query("yuanshen/other") ? "√" : "----");      
+                            
+	line += HIC "\n五行：金克木，木克土，土克水，水克火，火克金\n" NOR;
+	line += LINE;
+	
+	
+	// 增加套装查看
+	
+	line += HIC "≡" HIY "──────────────套装───────────────" HIC "≡\n" NOR;	
+	line += NOR + WHT "套装状态：" + TAOZHUANG_D->taozhuang_name(tzlv) + "\n";
+	line += sprintf(NOR + WHT "伤害等级：+%-24d防护等级：+%d\n" NOR, 
+                        tz["damage"],tz["defense"]);
+ 	line += sprintf(NOR + WHT "回避等级：+%-24d命中等级：+%d\n" NOR, 
+                        tz["huibi"],tz["attack"]);    
+ 	line += sprintf(NOR + WHT "研究效率：+%-24s汲取效率：+%s\n" NOR, 
+                        sprintf("%d", tz["yanjiu"]) + "%",sprintf("%d", tz["jiqu"]) + "%");   
+
+ 	line += sprintf(NOR + WHT "研究次数：+%-24s激发增加：+%d\n" NOR,
+                        sprintf("%d", tz["times"]) + "%", TAOZHUANG_D->jifa_level(tzlv));               
+ 	line += sprintf(NOR + WHT "福    缘：+%-24d气    运：+%d\n" NOR, 
+                        tz["fy"],tz["qy"]);
+ 	line += sprintf(NOR + WHT "后天悟性：+%-24d后天根骨：+%d\n" NOR, 
+                        tz["int"],tz["con"]);       
+ 	line += sprintf(NOR + WHT "后天臂力：+%-24d后天身法：+%d\n" NOR, 
+                        tz["str"],tz["dex"]);
+
+	line += HIC "\n套装特技：见 help taozhuang 文件。\n" NOR;
+
+	//line += TAOZHUANG_D->taozhuang_desc(tzlv) + "\n";
+	line += LINE;
+*/	
+	//line += HIR "各项属性的评价标准请输入指令 power -p 查看。\n" NOR;
+	//line += HIC "有关元神的介绍及使用详见 help yuanshen 。\n" NOR;
+	line += HIY "轮回点使用情况请用 power -l 查看。\n" NOR;
+	line += HIG "当前购买的服务(help yhshop_srv）请输入指令 power -s 查看。\n" NOR;
+
+	
+	write(line);
+
+	return 1;	
+}

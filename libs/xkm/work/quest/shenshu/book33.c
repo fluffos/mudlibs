@@ -1,0 +1,36 @@
+#include <ansi.h>
+inherit ITEM;
+void create()
+{
+    set_name(HIG"闯荡江湖"NOR, ({ "cdjh" }) );
+    set_weight(1);
+    if( clonep() )
+            set_default_object(__FILE__);
+    else {
+	         
+            set("unit", "本");
+            set("material", "paper");
+            set("long", "神书之一,若是能找齐神州无敌，寂寞高手，天下有雪就能(redo)。\n");
+          }
+
+    setup();
+}
+void init()
+{
+    add_action("do_redo","redo");
+}
+int do_redo()
+{
+	object me,newbook;
+	me = this_player();
+	newbook =new(__DIR__"xia");
+ if (!present("szwudi", me)||!present("jmgaoshou",me)||!present("txsnow",me))
+	tell_object(me,"书好象没齐.\n");
+     else{  message_vision("$N把从怀中翻出的神州无敌，寂寞高手，天下有雪，和手中的闯荡江湖合并成了一本。\n", me);
+	newbook->move(me);
+	destruct(present("szwudi",me));
+	destruct(present("jmgaoshou",me));
+	destruct(present("txsnow",me));
+	destruct(this_object());}
+return 1;
+}

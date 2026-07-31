@@ -1,0 +1,18 @@
+// SN:M\jN[T6`]H?1m5gl
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;35m闪电貂貂[2;37;0m", ({"shandian diao"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "这是萧萧的坐骑,看上去武功已达神人之境
+它是萧萧的坐骑。
+");
+        set_temp("owner_id", "yangtonga");
+        set_temp("owner_name", "萧萧");
+        ::setup();
+}
+

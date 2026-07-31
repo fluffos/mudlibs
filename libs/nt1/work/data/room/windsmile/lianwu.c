@@ -1,0 +1,32 @@
+// SN:B5^j^EMoD8L5bJ<K
+// File(/data/room/windsmile/lianwu.c) of windsmile's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "练武场");
+	set ("long", @LONG
+此处便是天羽宫的练武场，人在江湖，武功万万不可荒废。 
+LONG );
+
+	set("exits", ([
+                "west" : __DIR__"houyuan",
+	]));
+
+        set("objects", ([
+                "/clone/npc/mu-ren" : 4,
+        ]));
+
+        set("outdoors", "yangzhou");
+        set("no_sleep_room", 1);
+
+        setup();
+    
+        set("room_owner", "段子羽");
+        set("room_name", "天羽宫");
+        set("room_id", "tianyu");
+        set("room_owner_id", "windsmile");
+        set("room_position", "树林");
+}

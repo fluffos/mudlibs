@@ -1,0 +1,294 @@
+// yue.c 岳小玫
+// lag 2000.5.9
+#include <ansi.h>
+
+inherit NPC;
+#include "/d/REGIONS.h";
+#define JOB_SERVER "/clone/obj/job_server"
+#define JOB_NAME "yue_job"
+string ask_job() ;
+int ask_fail();
+int assign_job(object player);
+string tell_job(object player);
+
+
+void create()
+{
+        set_name("岳小玫", ({ "yue xiaomei", "yue" }));
+		set_color("$YEL$");
+//        set("title", RED"杀尽天下淫贼"NOR);
+        set("gender", "女性");
+        set("age", 20);
+        set("attitude", "friendly");
+        set("shen_type", 1);
+        set("str", 30);
+        set("int", 30);
+        set("con", 30);
+        set("dex", 30);
+        set("per", 55);
+        
+        set("qi", 6000);
+        set("max_qi", 6000);
+        set("jing", 6000);
+        set("max_jing", 6000);
+        set("neili", 6000);
+        set("max_neili", 6000);
+        set("jiali", 50);
+        set("combat_exp", 8000000);
+        set("score", 300000);
+
+        set_skill("force", 300);
+        set_skill("sword", 300);
+        set_skill("parry", 300);
+        set_skill("dodge", 300);
+        set_skill("finger", 300);
+        set_skill("literate", 300);
+        set("inquiry", ([
+                "任务" : (: ask_job() :),
+			    "work" : (: ask_job() :),
+			    "job" : (: ask_job() :),
+                "失败" : (: ask_fail() :),
+			    "fail" : (: ask_fail() :),
+			    "放弃" : (: ask_fail() :),
+          ])),
+
+        set("env/important", 1);    
+
+        setup();
+          carry_object("/d/city/obj/cloth")->wear();
+}
+
+int ask_fail()
+{
+	string *go_list = ({
+                "/d/shaolin/hanshui1",
+                "/d/taishan/yidao3",
+                "/d/hangzhou/hongchun",
+                "/d/emei/emroad5",
+                "/d/xueshan/shanlu2",
+                "/d/dali/dalicheng10",
+                "/d/qilian/dangpu",
+                "/d/qilian/datong-ling",
+                "/d/changbai/ssmiao",
+                "/d/hangzhou/baoshi2",
+        });
+	object *ob_list;
+    object me = this_player();
+	int i;
+
+        
+        if (me->query("yuejob/kill_qiangdao") == 1) {
+                command("sigh "+ me->query("id"));
+                command("say 你这身手也敢来惩奸除恶，都怪岳小玫我当初看错了人,扣你50点潜能。");
+				command("kick "+ me->query("id"));
+	            me->move(go_list[random(sizeof(go_list))]);
+                me->add("potential",-50);
+				me->set("noask/yuejob", time());
+                me->delete("yuejob");
+
+				if (me->query_temp("yue_name"))
+				{
+				ob_list = children(__DIR__"yue_killer");
+				for(i=0; i<sizeof(ob_list); i++) 
+					if(environment(ob_list[i]) && ob_list[i]->query("name") == me->query_temp("yue_name"))
+						{
+							me->delete_temp("yue_name");
+							message("vision", ob_list[i]->name(1)+"急急忙忙地离开了。\n", environment(ob_list[i]), ob_list[i]);
+							destruct(ob_list[i]);
+						 }
+				}
+                return 1;
+                }
+}
+
+void adjust_rate() {
+    object js;
+    int exp_limit, pot_limit, last_job;
+
+    js = new(JOB_SERVER);
+    if (!objectp(js)) {
+	printf("BUG: please report: job_server.c could not be cloned\n");
+	return;
+    }
+
+    exp_limit = js->get_exp_limit_func(JOB_NAME);
+    pot_limit = js->get_pot_limit_func(JOB_NAME);
+    last_job = (int)js->get_job_data_func(JOB_NAME, "last_job");
+    js->set_job_data_func(JOB_NAME, "last_job", time());
+
+    if (time() - last_job > 1200) {  // nobody does job for 20 min
+	// increase 600 exp/hour, so 10 hour nobody do job, it's 6K/h
+	exp_limit += (time()-last_job)*600/3600;   
+	pot_limit += (time()-last_job)*60/3600;   
+	if (exp_limit > 10000) exp_limit = 10000;	    // cap
+	if (pot_limit > 1000) pot_limit = 1000;
+    }
+    exp_limit -= exp_limit/1000;
+    if (exp_limit < 3000) exp_limit = 3000;	// exp/hour
+
+    pot_limit = exp_limit/10;
+
+    js->set_exp_limit_func(JOB_NAME, exp_limit);
+    js->set_pot_limit_func(JOB_NAME, pot_limit);
+    js->save();
+    destruct(js);
+}
+
+string tell_job(object player) {
+    int start_time, used_time, rate, exp_rate, obj_num, kill_num, range;
+    int i, sacrifice;
+    string room_msg, region, room_short;
+    object gold, killer, *obj_list;
+
+    start_time = JOB_SERVER->get_start_time(player, JOB_NAME);
+    kill_num = player->query(JOB_NAME+"/kill_num");
+//    range = player->query(JOB_NAME+"/range");
+    used_time = time()-start_time;
+
+    // case 1: over time
+    if (used_time >= 600) { // 10 min
+	JOB_SERVER->abort_job(player, JOB_NAME);
+  	command("kick "+player->query("id"));
+	player->delete(JOB_NAME);
+  	return "去了这么久才回来, 人家早得手啦。";
+    }
+
+    // case 2: just got assignment
+    if (player->query(JOB_NAME+"/kill_num") == 0) {
+	if (time()-player->query(JOB_NAME+"/last_ask_time") < 10) {
+	    // avoid flooding
+	    return;
+	}
+	if (player->query(JOB_NAME+"/last_ask_time") > 0) { // not first time
+	    command("say 我早就告诉过你了:");
+	}
+	player->set(JOB_NAME+"/last_ask_time", time());
+	room_msg = player->query(JOB_NAME+"/target_room");
+	room_short = player->query(JOB_NAME+"/room_short");
+	if ( strsrch(room_msg, "/d/") != 0        
+        ||  undefinedp(region = region_names[explode(room_msg, "/")[1]]))
+                region = "";
+
+	room_msg = "采花贼在"+ region +"的『" + room_short + "』";
+	
+//	num_msg = CHINESE_D->chinese_number(obj_num);
+//	range_msg = CHINESE_D->chinese_number(range);
+
+//	command("say 听说有"+num_msg+"个家伙想对本帮不利.");
+//	command("say 据说他们已经到了"+region+room_msg+"方圆"+range_msg+"里之内.");
+	command("whisper " + player->query("id") + " 据可靠消息，"+room_msg+"，去替我除却了吧！" NOR);
+	return "有劳"+RANK_D->query_respect(player)+"了。";
+    }
+
+    // case 3: done job, reward:
+    // rate depends on three things:
+    //    range   : larger range, higher rate
+    //    kill_num: percentage of obj_num
+    //    time    :     the shorter the better
+    // if you quickly kill one, then pot rate is high
+    // if you kill all but slower, pot rate drops, but exp rate raise
+
+    rate = 65;   // range 4-10 
+    if (used_time < 60) used_time = 60; // impossible to finish in 1 min
+
+	rate = rate * (60 + 2 * 170) / used_time;  
+
+    rate = rate * (95+random(10)) / 100;    // random factor
+    exp_rate = rate / 4;
+
+    // Finally: we slow down top highhands over 6M
+    if (player->query("combat_exp") > 6000000) {
+        exp_rate = exp_rate * 5000000 / player->query("combat_exp");
+    }
+
+    // adjust exp_limit depending on how frequent job is done
+    adjust_rate();
+    JOB_SERVER->reward(player, JOB_NAME, exp_rate, rate);
+
+    if (rate >= 50) {
+	gold=new("/clone/money/gold");
+	if (objectp(gold)) {
+	    if (rate > 150)  {
+		gold->set_amount(5); 
+	    }else {
+		gold->set_amount(rate/30);
+	    }
+	    gold->move(player);
+	    message_vision("$N交给$n几锭黄金\n", this_object(), player);
+	}
+    }
+    if (random(exp_rate) > 90) {
+	player->add("max_neili", 1);
+	player->add("eff_jingli", 1);
+    }
+
+    command("wa "+player->query("id"));
+    command("thumb "+player->query("id"));
+/*
+    // destruct the killers that hasn't been killed
+    obj_list = player->query(JOB_NAME+"/obj_list");
+    for (i=0; i<obj_num; i++) {
+	killer = obj_list[i];
+	if (objectp(killer)) {
+	    message("vision", killer->name(1)+"急急忙忙地离开了.\n", environment(killer), killer);
+	    destruct(killer);
+	}
+    }
+	*/
+    player->delete(JOB_NAME);
+    return "辛苦了，一点小小意思请笑纳。";
+}
+
+string ask_job() 
+{
+    object player;
+
+    player = this_player();
+    if (player->query("combat_exp") < 10000) return 0;
+    if (player->query("combat_exp") > 11000000) return 0;  
+     //temporiarly disabled job for over 11m players - by xQin
+    // until overflow bug is fixed, currently if the player is over somewhere between 
+   //10.5m to 11m, NPC exp will overflow and approach zero.
+    if (JOB_SERVER->get_start_time(player, JOB_NAME) > 0) {
+	return tell_job(player);
+    }
+    if (assign_job(player)) return tell_job(player);
+
+    return "BUG: assign_job failed";
+}
+
+int assign_job(object player) 
+{
+	mapping quest;
+	object killer;
+	string target_room_path, target_room_short;
+	int playerexp;
+
+	playerexp = player->query("combat_exp");
+
+	quest = (__DIR__"lagjob")->query_quest();
+	target_room_path = quest["place"];
+	target_room_short = quest["short"];
+	player->set(JOB_NAME+"/target_room", target_room_path);
+	player->set(JOB_NAME+"/room_short", target_room_short);
+	if(objectp(killer = new(__DIR__"yue_killer")))
+	{
+	if (playerexp < 1000000)
+		NPC_D->set_npc(killer, 0, playerexp, 60);
+	if (playerexp >= 1000000 && playerexp < 1500000)
+		NPC_D->set_npc(killer, 0, playerexp, 75);
+	if (playerexp >= 1500000)
+		NPC_D->set_npc(killer, 0, playerexp, 85);
+
+	if (killer->query("default_weapon"))
+		killer->carry_object(killer->query("default_weapon"))->wield();
+	killer->set("player_name", player->query("id"));
+	player->set_temp("yue_name",killer->query("name"));
+	killer->move(target_room_path);
+//				ob->move( environment());
+	message("vision",killer->name(1)+"快步走了过来.\n", target_room_path, killer);
+	JOB_SERVER->start_job(player, JOB_NAME);
+	return 1;
+	}
+	else return 0;
+}

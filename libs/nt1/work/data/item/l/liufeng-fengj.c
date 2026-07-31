@@ -1,0 +1,32 @@
+// SN:aBY\LYLI>cY2kS6I
+// ITEM Made by player(流风:liufeng) /data/item/l/liufeng-fengj.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Tue Nov 11 16:59:21 2003
+#include <ansi.h>
+#include <weapon.h>
+
+inherit SWORD;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;36m风之剑[2;37;0m", ({ "fengj" }));
+	set_weight(9000);
+	set("item_make", 1);
+	set("unit", "柄");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一柄剑。
+[1;36m风之神《风》的剑。[2;37;0m
+剑柄上刻着一行小字：流风(liufeng)
+");
+	set("value", 2100000);
+	set("point", 205);
+	set("material", "magic stone");
+	set("wield_msg", "[1;36m一阵风吹过来突然$n[1;36m飞到$N的手掌之中。[2;37;0m\n");
+	set("unwield_msg", "[1;36m一阵风吹过来突然$n[1;36m飞走了。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	init_sword(apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

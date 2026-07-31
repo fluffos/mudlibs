@@ -1,0 +1,62 @@
+// cgbii 
+#include <ansi.h>
+inherit NPC;
+inherit F_MASTER;
+
+string ask_mizi();
+string ask_aobai();
+
+void create()
+{
+	set_name("康熙", ({ "kang xi" }) );
+	set("gender", "男性");
+	set("age", 18);
+        set("title", HIY"大清帝国皇帝 圣祖"NOR);
+	set("long",
+            "他就是大清帝国第四任皇帝，自幼报复远大，是位年轻有为的皇帝。\n"
+			"他举手投足之间都带有皇者的威严，不怒自威，令人不禁慑服。\n");
+	set("combat_exp", 300000);
+        set("shen_type", 0);
+	set("attitude", "peaceful");
+	set("mizi_count", 1);
+	set("aobai_count", 1);
+	set("inquiry", ([
+        "顺治":(:ask_mizi:),
+        "鳌拜":(:ask_aobai:),
+	]) );
+	set_skill("force", 100);
+	set_skill("unarmed", 100);
+	set_skill("sword", 100);
+	set_skill("parry", 100);
+	set_skill("dodge", 100);
+	setup();
+
+}
+
+string ask_mizi()
+{
+object ob,me;
+ob=this_player();
+if (present("yao pai",ob)){return "你是什么人？";}
+if (query("mizi_count") < 1)
+return "关于父王的事情朕已经了解，并派了人去处理，爱卿无须操心。";
+add("mizi_count", -1);
+command("say 爱卿你找着朕父王的下落了？太好了！！\n\n");
+message_vision(HIY"康熙马上写了封密旨交给了$N\n\n\n"NOR,ob);
+me=new(__DIR__"obj/mizhi");
+me->move(ob);
+return "爱卿你可要把这封密旨交到朕父王手中，你暂且退下吧！。\n\n";
+}
+
+string ask_aobai()
+{
+object ob;
+ob=this_player();
+if (!present("yao pai",ob)){return "你是什么人？";}
+if (query("aobai_count") < 1)
+return "关于鳌拜的事情朕已经派了人去处理，爱卿无须操心。";
+add("aobai_count", -1);
+command("say 爱卿你去康亲王处传朕口喻，把鳌拜这老鬼给处决了！！\n\n");
+ob->set_temp("aobai_killer",1);
+return "爱卿你可要把这件事情办妥！。\n";
+}

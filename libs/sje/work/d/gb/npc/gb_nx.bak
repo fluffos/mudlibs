@@ -1,0 +1,228 @@
+// gaibang_npc.c, recruiting gb_dizi and promoting system
+#include <ansi.h>
+
+void kill_ob(object me)
+{     
+        command("hehe");
+        me->remove_killer(this_object());
+}
+
+string ask_job(string arg)
+{
+        object me, ob;
+        mapping quest;
+        int exp,award_exp;
+
+        me = this_player();
+        ob = this_object();
+                                  
+        exp = (int)me->query("combat_exp",1);
+
+        if (!me->query("gb_pass"))
+                return "你没有通过接引弟子的考验，我可不敢用你。\n"; 
+        if (exp > 2000000)
+                return "阁下武艺高强，在下可不敢劳烦您老。\n";
+        if (!mapp(quest= TASK_D->get_quest(me, 0, "杀", "丐帮"))) 
+                return "我现在没有任务给你\n"; 
+        if (me->query_temp("query/id")
+            && me->query_temp("query/family") == "丐帮")
+                return "让你去杀"+me->query_temp("quest/name")+"还不快去？\n";
+        if (interactive(me) && me->query_temp("gb_job_exp")) 
+                return "你的任务还没完成，怎么就跑回来了。"; 
+        if (interactive(me) && (int)me->query_condition("xx_task")) {
+                me->delete("gb_job");
+                tell_object(me,HIW"你从此不再是丐帮帮众了。\n"NOR);
+                return "竟敢偷偷为丁老怪效力，从此你以后和我丐帮再没关系了！\n"; 
+        }
+        if (interactive(me) && (int)me->query_condition("guanfu_task"))
+                return "你已经投靠官府这棵大树，还来我们穷要花子这干什麽？\n";
+        if (interactive(me) && (int)me->query_condition("job_busy"))  
+                return "你正在做其他的任务呢。\n";       
+        if (interactive(me) && (int)me->query_condition("gb_busy"))  
+                return "现在我可没有给你的任务，等会再来吧。\n";
+        if (interactive(me) && (int)me->query_condition("dali_songxi"))
+                return "你已经在震南王府高就，到我们这里寻什么开心？\n";
+                
+        if(exp>=1100000) 
+                award_exp = 350;
+        else if(exp>=850000) 
+                award_exp = 330;
+        else if(exp>=640000) 
+                award_exp = 300;
+        else if(exp>=300000) 
+                award_exp = 270;
+        else if(exp>=100000) 
+                award_exp = 230;
+        else if(exp>=50000) 
+                award_exp = 200;
+        else 
+                award_exp = 170;
+                
+        me->set_temp("quest", quest);
+        me->set_temp("gb_job_exp", award_exp);
+        me->set_temp("assigned_by", ob->query("name"));  
+        me->apply_condition("job_busy", random(20)+30);
+        
+        return "好吧，最近「" + quest["name"] + "」一直和我丐帮作对，你前去设法将此人除掉！\n"
+                + "此人目前出没于" + quest["place"] +"一带，务必在" + 
+                TASK_D->get_time(quest["time"]) + "之前赶回来。\n\n";
+}
+
+int accept_object(object me, object ob)
+{
+        int type;
+
+        if ( !me->query("gb_pass")) 
+              return 0;
+              
+
+        if (me->query_temp("qust") && me->query_temp("query/familty") != "丐帮") {
+                command("say 好啊！不过你得先申请任务。");
+                return 0;
+         }
+        if (interactive(me) && (int)me->query_condition("xx_task")) {
+                command("chat "+ me->name(1)+"偷偷为星宿派效力，现在把他驱逐出丐帮。\n");
+                command("chat "+ me->name(1)+"这等武林败类，人人得而诛之!!!\n");
+                me->delete("gb_pass");
+                me->delete("gb_job");
+                return 1; 
+        }
+        type = TASK_D->is_target(ob, me);
+        switch (type){
+            case 0: command("say 你拿个"+ob->name()+"给我干嘛？");
+                    return 0;
+            case -1:command("say 好啊！不过你得先申请任务。");
+                    return 0;
+            case -2:command("say 嘿嘿。。。，你杀错人了。");
+                    me->apply_condition("gb_busy", 15);
+                    return 0;
+            case -3:command("say 嗯，这么久才办完，你干什么去了？给我滚一边去！");
+                    me->apply_condition("gb_busy", 15);
+                    return 0;
+            case -4:command("say 哦，这是个同名同性的人，算他倒霉吧！");
+                    return 0;
+            default:command("haha");
+                    command("say 好！好！你办事不错，是块好料子。");
+        }
+              
+        me->delete_temp("assigned_by");
+        me->delete_temp("quest");
+        me->clear_condition("job_busy");
+        call_out("destroying", 1, ob);
+        call_out("ok", 1, me);
+        return 1;
+}
+
+void ok(object me)
+{
+        int job_time,exp,pot;
+        if (!me) return;
+        
+        command("thumb " + me->query("id"));
+        command("say 你为丐帮立下了功劳，我们绝不会亏待你的。");
+        
+        job_time=(int)me->query("gb_job")/10;
+        
+        if (job_time > 100) job_time = 100;
+        
+        if (job_time <1) job_time = 0;
+
+        tell_room(environment(),
+                HIY "吴长老在"+ me->name()
+                + "的耳边低声似乎在讲解着什麽，一会儿"+ me->name() +"不住点头，面呈喜色。\n"NOR, ({ me }));
+        write(HIY"吴长老伏身在你耳边悄声指点了你一些武功要领，你听了一会渐有所悟，感到自己武学修为有所提高。\n"NOR);
+        
+        exp = me->query_temp("gb_job_exp") + job_time;
+        exp += random(exp/10);
+        pot = exp/5 + random(exp/5);
+        
+        tell_object(me,HIW"好！任务完成,你被奖励了：\n" + 
+                     chinese_number(exp) + "点实战经验\n" +
+                     chinese_number(pot) + "点潜能\n"NOR);
+
+        me->add("combat_exp", exp);
+        me->add("potential", pot);
+        if(me->query("potential") > me->query("max_pot")) 
+                me->set("potential", me->query("max_pot"));
+        
+        me->clear_condition("job_busy");
+        me->apply_condition("gb_busy", 10+random(5));                
+        me->add("gb_job",1); 
+        me->delete_temp("gb_job_exp");
+        return;
+ 
+}
+
+void gb_apprentice(object ob)
+{
+        string prev_family_name;
+
+        if ((int)ob->query("gb_bags") >= 2  
+            && (prev_family_name = ob->query("family/family_name")) != "丐帮" ) {
+                command("say 丐帮可容不下你这种背信弃义的小人！");
+                return;
+        }
+        
+        command("say 好吧，希望" + RANK_D->query_respect(ob) +
+        "能好好学习本门武功，将来在江湖中闯出一番作为。");
+        
+        command("recruit " + ob->query("id"));
+        
+        if ( prev_family_name != "丐帮")
+                ob->set("gb_bags", 1);
+        ob->set("title",sprintf("丐帮%s袋弟子",
+        chinese_number(ob->query("gb_bags"))) );
+}
+void killing_object(object who)
+{
+        object ob = this_object();
+        ob->kill_ob(who);
+        who->unconcious();
+}
+string ask_fangqi()
+{
+        object me;
+        int exp;
+
+        me = this_player();
+        exp = me->query("combat_exp",1);
+        
+        if(!me->query("gb_pass"))
+                return "你非我丐帮英雄,跑这里瞎嚷嚷什麽?";
+        if(!me->query_temp("quest/id")
+           || me->query_temp("quest/family") != "丐帮")
+                return "你没有领任务,跑这里瞎嚷嚷什麽?";
+                
+        me->clear_condition("job_busy");
+        me->apply_condition("gb_busy",6+random(4));
+        me->delete_temp("assigned_by");
+        me->delete_temp("quest");
+        me->delete_temp("gb_job_exp");
+        if (me->query("gb_job") < 400)
+                me->add("gb_job",-1);
+        
+        return "既然你干不了也没关系,再去刻苦练功吧,以后再来为丐帮出力!";
+}
+
+void destroying(object obj)
+{
+        destruct(obj);
+        return;
+}
+string ask_gonglao(object who)
+{
+        object me;
+        int i;
+             
+        me = this_player();
+
+        i =(int)me->query("gb_job"); 
+
+        if(!me->query("gb_job"))
+                return "你没为我丐帮出过任何力，跑来问什么功劳呢?"; 
+
+        message_vision("$N掏出一本册子翻了翻，指着上面的墨迹对$n说道，这上面共记载着你历次的功劳，
+目前已记功" + chinese_number(i) + "次。\n",who,me);
+
+        return "我丐帮向来赏罚分明，继续努力吧！随手将功劳簿揣入怀中。";
+}

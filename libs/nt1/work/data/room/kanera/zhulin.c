@@ -1,0 +1,29 @@
+// SN:DY4ao6Q?Flj_a:k]
+// File(/data/room/kanera/zhulin.c) of kanera's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "竹林");
+	set ("long", @LONG
+这里种着好大一片竹林，非常幽静。风一起就听竹叶沙沙的响，
+有时米虫就去听涛阁默听竹浪涛声，参悟武功。 
+LONG );
+
+	set("exits", ([
+                "west" : __DIR__"huayuan",
+                "east" : __DIR__"tingtao",
+	]));
+
+        set("outdoors", "playertown");
+        set("sleep_room", 1);
+        setup();
+
+        set("room_owner", "米虫");
+        set("room_name", "米虫的窝");
+        set("room_id", "kanera");
+        set("room_owner_id", "kanera");
+        set("room_position", "碎石小道");
+}

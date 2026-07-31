@@ -1,0 +1,461 @@
+// inn.c
+#include <ansi.h>
+#include <room.h>
+
+inherit ROOM;
+int do_newgui(string arg);
+int do_delgui(string arg);
+int do_putgui(string arg);
+int do_getgui(string arg);
+int do_lookgui(string arg);
+int do_listgui(string arg);
+int do_put(object me, object obj, object dest);
+int do_get(object me, object ob);
+
+void create()
+{
+	set("short", "保险柜");
+	set("long", @LONG
+中原南宫世家，家财万贯，产业不可胜数。此间钱庄黑匾红字，正是南宫产业之
+一。南宫钱庄的保险柜安全可靠，放在保险柜里的东西下线不会掉。（reboot后
+会掉，需要重新申请）。钱庄中央有一红木柜台，上有牌（ｓｉｇｎ）一块。
+[31m
+                	南宫钱庄保险柜
+[37m
+LONG
+	);
+	
+	set("exits", ([
+		"down"    	: "/d/fy/nanbank",
+	]) );
+        set("item_desc", ([
+                "sign": @TEXT
+这里是保险柜服务，命令如下：
+
+newgui     租保险柜。（200gold一个，每人仅能租一个）
+delgui     退保险柜。
+putgui     放东西入保险柜。
+getgui     从保险柜取出东西。
+lookgui	   看保险柜里的东西。
+listgui    列出全部保险柜。
+TEXT
+        ]) );
+
+//        set("objects", ([
+//	"/d/wiz/tmpa/gui" : 1,
+//	]) );
+
+	set("coor/x",10);
+	set("coor/y",-50);
+	set("coor/z",10);
+	setup();
+}
+
+void init()
+{
+        add_action("do_newgui","newgui");
+        add_action("do_delgui","delgui");
+        add_action("do_putgui","putgui");
+        add_action("do_getgui","getgui");
+        add_action("do_lookgui", "lookgui");
+        add_action("do_listgui", "listgui");
+}
+
+varargs private mixed query_gui(string id)
+{
+        object *rooms;
+        rooms = filter_array(children("/d/wiz/tmpa/gui"),
+                             (: clonep($1) && stringp($1->query("owner_id")) :));
+        if (id)
+        {
+                rooms = filter_array(rooms, (: $1->query("owner_id") == $(id) :));
+                if (sizeof(rooms) < 1)
+                        return 0;
+                return rooms;
+        }
+        return rooms;
+}
+
+int do_listgui(string arg)
+{
+        object *rooms;
+        object owner;
+        string *msg;
+	object me;
+        int i;
+	
+	me=this_player();
+        rooms = query_gui(arg);
+        if (! sizeof(rooms)){
+                if(!arg)return notify_fail("目前没有任何人的保险柜。\n");
+		else return notify_fail("目前没有"+arg+"的保险柜。\n");
+		}
+
+        write("目前有以下这些人的保险柜：\n"
+              HIC "≡" HIY "──────────────────────────────" HIC "≡\n" NOR);
+        msg = allocate(sizeof(rooms));
+        for (i = 0; i < sizeof(rooms); i++)
+        {
+                owner = find_player(rooms[i]->query("owner_id"));
+		if(wizardp(me))
+                msg[i] = sprintf("  %-20s    现在放了：%d件东西 %s", 
+                                 rooms[i]->query("owner_id"),
+          sizeof(all_inventory(rooms[i])),
+	  file_name(rooms[i]));
+	      else
+                msg[i] = sprintf("  %-20s    现在放了：%d件东西", 
+                                 rooms[i]->query("owner_id"),
+          sizeof(all_inventory(rooms[i])));
+	      
+        }
+        msg = sort_array(filter_array(msg, (: stringp :)), 1);
+        write(implode(msg, "\n") + "\n"
+              HIC "≡" HIY "──────────────────────────────" HIC "≡\n" NOR);
+        return 1;
+}
+int do_lookgui(string arg)
+{
+        object *rooms;
+        object owner;
+        string *msg;
+	object me;
+        int i;
+        mixed *inv;
+        string prep;
+	object obj;
+	
+	me=this_player();
+        if(!arg)arg=me->query("id");
+	
+        rooms = query_gui(arg);
+        if (! sizeof(rooms)){
+		return notify_fail("目前没有"+arg+"的保险柜。\n");
+		}
+
+	obj=rooms[0];
+        write(obj->long());
+        inv = all_inventory(obj);
+        if(sizeof(inv)) {
+                prep = "里";
+//                inv = map_array(inv, "inventory_look", obj );
+//                message("vision", sprintf("%s面有：\n  %s\n", prep,
+//                        implode(inv, "\n  ") ), me);
+                message("vision", sprintf("%s面有：\n", prep), me);
+		for(i=0;i<sizeof(inv);i++){
+            	    message("vision", sprintf("%s\n",inv[i]->short()), me);
+			}
+        }
+        return 1;
+}
+
+int do_putgui(string arg)
+{
+        int i;
+        object ob,*inv;
+        object me;
+	object *rooms;
+	string target, item;
+	object obj, dest, obj2;
+	int amount;
+
+        me = this_player();
+	if((int)me->query("age")<13)return notify_fail("\n保险柜不是小孩子玩的。\n");
+        if (! arg)
+		return notify_fail("你要放什么入保险柜。\n");
+	if( sscanf(arg, "%s in %s", item, target)!=2 ){
+	    item=arg;
+	    target=me->query("id");
+	}
+	if(!wizardp(me) && me->query("id")!=target)
+		return notify_fail("你不能往"+target+"的保险柜里放东西。\n");
+
+	rooms=query_gui(target);
+        if (! sizeof(rooms)){
+		return notify_fail("目前没有"+target+"的保险柜。\n");
+		}
+	dest=rooms[0];
+        inv = all_inventory(dest);
+	if(sizeof(inv)>=10)return notify_fail("保险柜里最多放10件东西。\n");
+        message_vision("$N打开了" + dest->query("owner_id") + "的保险柜。\n", me);
+
+	if(sscanf(item, "%d %s", amount, item)==2) {
+		if( !objectp(obj = present(item, me)) )
+			return notify_fail("你身上没有这样东西。\n");
+		if( !obj->query_amount() )
+			return notify_fail( obj->name() + "不能被分开。\n");
+		if( amount < 1 )
+			return notify_fail("东西的数量至少是一个。\n");
+		if( amount > obj->query_amount() )
+			return notify_fail("你没有那麽多的" + obj->name() + "。\n");
+		else if( amount == (int)obj->query_amount() )
+			return do_put(me, obj, dest);
+		else {
+                        obj->set_amount( (int)obj->query_amount() - amount );
+			obj2 = new(base_name(obj));
+			obj2->set_amount(amount);
+			return do_put(me, obj2, dest);
+		}
+	}
+/*
+	if(item=="all") {
+		inv = all_inventory(me);
+		for(i=0; i<sizeof(inv); i++)
+			if( inv[i] != dest  && !inv[i]->query("no_drop")) 
+			do_put(me, inv[i], dest);
+		write("Ok.\n");
+		return 1;
+	}
+*/
+	if(!objectp(obj = present(item, me)))
+		return notify_fail("你身上没有这样东西。\n");
+	do_put(me, obj, dest);
+
+        message_vision("$N把保险柜小心翼翼的锁好。\n", me);
+	
+        return 1;
+}
+
+int do_getgui(string arg)
+{
+        int i;
+        object ob,*inv,*rooms;
+        object me;
+        string from, item;
+        object obj, env, obj2;
+        int amount;
+
+
+        if (! arg)
+		return notify_fail("你要从保险柜中取什么东西。\n");
+
+        me = this_player();
+	if((int)me->query("age")<13)return notify_fail("\n保险柜不是小孩子玩的。\n");
+
+        if( sscanf(arg, "%s from %s", arg, from)!=2 ) {
+	    from=me->query("id");
+        }
+	if(!wizardp(me) && me->query("id")!=from)
+		return notify_fail("你不能从"+from+"的保险柜拿东西。\n");
+	rooms=query_gui(from);
+        if (! sizeof(rooms)){
+		return notify_fail("目前没有"+from+"的保险柜。\n");
+		}
+	env=rooms[0];
+	
+        inv = all_inventory(env);
+        message_vision("$N悄悄打开了" + env->query("owner_id") + "的保险柜。\n", me);
+
+        if(sscanf(arg, "%d %s", amount, item)==2) {
+                if( !objectp(obj = present(item, env)) )
+                        return notify_fail("这里没有这样东西。\n");
+                if( !obj->query_amount() )
+                        return notify_fail( obj->name() + "不能被分开拿走。\n");
+                if( amount < 1 )
+                        return notify_fail("东西的个数至少是一个。\n");
+                if( amount > obj->query_amount() )
+                        return notify_fail("这里没有那麽多的" + obj->name() + "。\n");
+                else if( amount == (int)obj->query_amount() ) {
+                        return do_get(me, obj);
+                } else {
+                        i=(int)obj->query_amount();
+                        obj->set_amount(amount);
+                        obj2 = new(base_name(obj));
+                        obj2->set_amount( i- amount);
+                        obj2->move(env);                        // For containers.
+                        return do_get(me, obj);
+                }
+        }
+
+        // Check if we are makeing a quick get.
+        if(arg=="all") {
+                if( me->is_fighting() ) return notify_fail("你还在战斗中！只能一次拿一样。\n");
+                inv = all_inventory(env);
+                if( !sizeof(inv) )
+        {
+                        return notify_fail("那里面没有任何东西。\n");
+        }
+
+                for(i=0; i<sizeof(inv); i++) {
+                        if( inv[i]->is_character() || inv[i]->query("no_get") ) continue;
+                        do_get(me, inv[i]);
+                }
+                write("捡好了。\n");
+                return 1;
+        }
+
+        if( !objectp(obj = present(arg, env)) || living(obj) )
+                return notify_fail("你附近没有这样东西。\n");
+
+        do_get(me, obj);  
+        message_vision("$N锁上了" + env->query("owner_id") + "的保险柜。\n", me);
+        return 1;
+}
+int do_newgui(string arg)
+{
+        object *rooms;
+	int i;
+        object *inv;
+        object me;
+        object room;
+
+        me = this_player();
+	if((int)me->query("age")<13)return notify_fail("\n保险柜不是小孩子玩的。\n");
+        rooms = filter_array(children("/d/wiz/tmpa/gui"),
+                             (: clonep($1) && $1->query("owner_id") == $(me)->query("id") :));
+        if (sizeof(rooms) > 0)
+                return notify_fail("你已经申请了保险柜，在退回之前不能另购。\n");
+
+        if (me->query("deposit") < 2000000)
+                return notify_fail("你银行没有200 GOLD来申请保险柜。\n");
+	me->add("deposit",-2000000);
+        room = new("/d/wiz/tmpa/gui");
+        room->init_room(this_object(), me);
+        write("你申请了一个保险柜。\n");
+	room->set("owner_id",me->query("id"));
+	room->set("long","  "+me->query("name")+"("+me->query("id")+")的保险柜\n");
+        return 1;
+}
+int do_delgui(string arg)
+{
+        object *rooms;
+        int i;
+	object me;
+	me=this_player();
+	if(!arg)arg=me->query("id");
+	if(!wizardp(me)){
+	     if(me->query("id")!=arg)
+		return notify_fail("你只能退掉自己的保险柜。\n");
+	}
+        if (!wizardp(me) || arg!="all")
+        {
+        	rooms = query_gui(arg);
+                if (! sizeof(rooms))
+                        return notify_fail("目前 " + arg + " 并没有申请保险柜。\n");
+                write(rooms[0]->query("owner_id") + "的保险柜被退掉了。\n");
+                destruct(rooms[0]);
+		return 1;
+        }
+
+        rooms = query_gui();
+        if (! sizeof(rooms))
+                return notify_fail("目前没有任何人的保险柜。\n");
+        rooms = filter_array(rooms, (: ! sizeof(filter_array(all_inventory($1), (: userp($1) :))) :));
+        if (! sizeof(rooms))
+                return notify_fail("目前没有空的符合条件的保险柜。\n");
+
+        for (i = 0; i < sizeof(rooms); i++)
+        {
+                write(rooms[i]->query("owner_id") + "的保险柜被退掉了。\n");
+                destruct(rooms[i]);
+        }
+
+        return 1;
+}
+
+int clean_up()
+{
+        object *obs;
+
+        obs = filter_array(all_inventory(), (: userp($1) :));
+        if (! sizeof(obs))
+        {
+                destruct(this_object());
+                return 0;
+        }
+
+        return 1;
+}
+
+void clean_gui()
+{
+        object *rooms;
+
+        remove_call_out("clean_gui");
+        clean_up();
+        rooms = query_gui();
+        if (sizeof(rooms))
+                call_out("clean_gui", 15 * 60);
+}
+
+
+int do_put(object me, object obj, object dest)
+{
+	string prep;
+                if((int) obj->query("no_drop") ||(int) obj->query("no_get"))
+                        return notify_fail("你不可以这么做。\n");
+		if( obj == dest)
+			return notify_fail("你不可以这么做。\n");
+	switch((string)dest->query("prep")) {
+		case "on" :
+			prep = "放在" + dest->name() + "上";
+			break;
+		case "under" :
+			prep = "放在" + dest->name() + "下";
+			break;
+		case "behind" :
+			prep = "放在" + dest->name() + "后面";
+			break;
+		case "insdie" :
+			prep = "放进" + dest->name() + "里面";
+			break;
+		default :
+			prep = "放进" + dest->name() + "里面";
+			break;
+	}
+	if( obj->move(dest) ) {
+		message_vision( sprintf("$N将一%s%s%s。\n",
+			obj->query("unit"), obj->name(), prep),
+			me );
+		return 1;
+	}
+	else return 0;
+}
+
+        
+int do_get(object me, object obj)
+{
+        object old_env, *guard;
+        int equipped;
+       mixed no_get;
+
+        if( !obj ) return 0;
+        old_env = environment(obj);
+
+        if( obj->is_character() ) {
+                if( living(obj) ) return 0;
+        if( !userp(obj) && !obj->is_corpse() )
+              return notify_fail("你只能背负其他玩家的身体。\n");
+                // If we try to save someone from combat, take the risk :P
+        } else {
+               if( no_get = obj->query("no_get") )
+              return notify_fail( stringp(no_get) ? no_get : "这样东西不能拣。\n");
+        }
+
+        if( guard = obj->query_temp("guarded") ) {
+                guard = filter_array(guard, (:
+                        objectp($1) && present($1, environment($2)) && living($1) && ($1!=$2)
+                        :), me);
+                if( sizeof(guard) )
+                        return notify_fail( guard[0]->name() 
+                                + "正守在" + obj->name() + "一旁，防止任何人拿走。\n");
+        }
+
+        if( obj->query("equipped") ) equipped = 1;
+        if( obj->move(me) ) {
+                if( me->is_fighting() ) me->start_busy(1);
+                if( obj->is_character() )
+                        message_vision( "$N将$n扶了起来背在背上。\n", me, obj );
+                else
+                        message_vision( sprintf("$N%s一%s$n。\n", 
+                
+                                old_env==environment(me)? "捡起":
+                                        (old_env->is_character() ?
+                                                "从" + old_env->name() + "身上" + (equipped? "除下" : "搜出"):
+                    (old_env->is_tree() ? "从" + old_env->name() +"上摘下" :
+                                                "从" + old_env->name() + "中拿出") ),
+                                obj->query("unit")), me, obj );
+                return 1;
+        }
+        else return 0;
+}
+

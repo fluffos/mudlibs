@@ -1,0 +1,214 @@
+//Cracked by Roath
+//jingang-chu perform xiangmo
+//突然之间，达尔巴大喝一声，金杵脱手，疾向霍都掷去，这杵重达五十余斤，一掷之下势道凌厉之极。
+
+//霍都吃了一惊，他生平从未见师兄使这般招数，心道：“他久斗不胜，发起蛮来了？”急忙侧身闪避。
+
+//达尔巴抢上前去，手掌在金杵上一撞，金杵转过方向，又向霍都追击过去。
+
+//霍都大骇，才知道十余年中师兄追随师父左右，师父又传了他深湛武功，这飞掷金杵之技正是从师父五轮飞砸的功夫中变化出来，眼见金杵撞来的力道太猛，决不能以铁扇招架，只得滑步斜身躲过，金杵从他头顶横掠而过，相差不逾两寸。
+
+//达尔巴金杵越掷越快，高台四周插着的火把被疾风所激，随着忽明忽暗。
+
+//霍都在杵影中跳荡闪避，往往间不容发。
+
+//台下群雄屏息以观，瞧着这般险恶的情势，无不骇然。
+
+//达尔巴掷到第十八下，猛喝一声，双掌推杵，金杵如飞箭般平射而出。
+
+//霍都再也无法闪避，砰和一声，金杵正撞胸口。
+
+//他身子软软垂下。横卧台下，一动也不动了。
+//Pingguo
+
+#include <ansi.h>
+
+inherit F_DBASE;
+inherit F_SSERVER;
+
+int second_hit(object me, object target);
+int end_att(object me);
+
+
+int perform(object me, object target)
+{
+        object weapon;
+        mapping myfam;
+
+        if( !target ) target = offensive_target(me);
+
+        if( !target
+        ||      !target->is_character()
+        ||      !me->is_fighting(target) )
+                return notify_fail("降魔飞杵只能对战斗中的对手使用。\n");
+	        
+        
+        if( (int)me->query_skill("longxiang-banruo",1) < 200 )
+                return notify_fail("你龙象般若功修为不足！\n");
+
+         if( !me->query("darba/xiangmo") )
+                            return notify_fail("你不会降魔飞杵的绝技！\n");
+
+        if( me->query_skill("jingang-chu",1) < 200 )
+                return notify_fail("你的「金刚降魔杵」修为不够！\n");
+
+        if( me->query_skill("staff",1) < 200 )
+                return notify_fail("你的杖法的基本功不扎实！\n");
+
+             if( me->query("gender") != "男性")
+	                return notify_fail("你不是男子身,无法使用如此刚烈的武功。\n");
+
+       if( me->query_str() < 30 )
+                return notify_fail("你的臂力太差！\n");
+
+       if( me->query("neili") <= 300 )
+                return notify_fail("你的内力不够使用降魔飞杵！\n");
+
+       if( me->query("jingli") <= 200 )
+                return notify_fail("你的精力不够使用降魔飞杵！\n");    
+
+	if( me->query_skill_mapped("force") != "longxiang-banruo")
+		return notify_fail("你所用的内功不对！\n"); 
+                        
+       if(me->query_temp("xiangmo"))
+        	return notify_fail("你正在使用降魔飞杵。\n");
+       
+
+        message_vision(HIY"\n$N大喝一声"+(me->query_temp("weapon")->query("name"))+HIY"脱手，疾向$n掷去，这杵重达五十余斤，一掷之下势道凌厉之极。 \n\n"NOR,me,target);
+        
+        me->set_temp("xiangmo",1);
+        
+        me->add("neili",-me->query_skill("staff")/2);
+        me->add("jingli",-me->query_skill("staff")/3);
+        
+        remove_call_out("second_hit");
+        call_out("second_hit", 3, me, target);        
+ 
+ 	return 1;       
+}
+
+int second_hit(object me, object target){
+
+	int ap, dp, damage;
+	string str;
+
+	me->delete_temp("xiangmo",1);
+	
+	if(me->is_fighting()){
+	//第一下攻击
+		message_vision(HIW"\n$N抢上前去，手掌在"+(me->query_temp("weapon")->query("name"))+HIW"上一撞，"+(me->query_temp("weapon")->query("name"))+HIW"转过方向，又向$n追击过去。\n"NOR, me, target);
+
+              me->add("jiali", me->query_skill("force",1)/5);
+		me->add_temp("apply/attack",me->query_skill("staff",1));
+		me->add_temp("apply/damage",me->query_skill("staff",1));
+		
+		COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+                        
+                        me->add("jiali", -me->query_skill("force",1)/5);
+		me->add_temp("apply/attack",-me->query_skill("staff",1));
+		me->add_temp("apply/damage",-me->query_skill("staff",1));
+
+
+            //第二下攻击
+              message_vision(HIW"\n$n大骇，这飞掷"+(me->query_temp("weapon")->query("name"))+HIW"之技正是从五轮飞砸的功夫中变化出来! \n"NOR,me,target);
+              me->add("jiali", me->query_skill("force",1)/5);
+		me->add_temp("apply/attack",me->query_skill("staff",1));
+		me->add_temp("apply/damage",me->query_skill("staff",1));
+		
+		COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+                        
+                        me->add("jiali", -me->query_skill("force",1)/5);
+		me->add_temp("apply/attack",-me->query_skill("staff",1));
+		me->add_temp("apply/damage",-me->query_skill("staff",1));
+
+              me->start_busy(2);
+
+            //第三下攻击
+              message_vision(HIW"\n眼见"+(me->query_temp("weapon")->query("name"))+HIW"撞来的力道太猛，决不能以一般招架! \n"NOR,me,target);              me->add("jiali", me->query_skill("force",1)/5);
+		me->add_temp("apply/attack",me->query_skill("staff",1));
+		me->add_temp("apply/damage",me->query_skill("staff",1));
+		
+		COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+                        
+                        me->add("jiali", -me->query_skill("force",1)/5);
+		me->add_temp("apply/attack",-me->query_skill("staff",1));
+		me->add_temp("apply/damage",-me->query_skill("staff",1));
+
+		me->start_busy(2);
+	
+		ap=me->query("combat_exp")/100+me->query_skill("staff",1)+me->query("neili");
+		dp=target->query("combat_exp")/100+target->query_skill("staff",1)+target->query("neili");
+		
+		message_vision(HIG"\n$N连掷三招过后，"+(me->query_temp("weapon")->query("name"))+HIG"越掷越快，$n在杵影中跳荡闪避，往往间不容发。 \n"NOR,me,target);
+		message_vision(HIG"\n$N猛喝一声，双掌推杵，"+(me->query_temp("weapon")->query("name"))+HIG"如飞箭般平射而出。 \n"NOR,me,target);
+                
+
+
+		if(random(ap)>dp/2){
+		
+		message_vision(HIR"\n$n再也无法闪避，砰和一声，"+me->query_temp("weapon")->query("name")+HIR"正撞胸口。 \n\n"NOR, me, target);
+			
+		damage=me->query_skill("jingang-chu",1)*(random(6)+3);
+			
+		if (damage<500) damage=500;
+             	if (damage>4000) damage=4000;
+			
+		target->add("qi", -damage);
+       		target->add("eff_qi", -random(damage));				
+		
+			str = COMBAT_D->status_msg((int)target->query("qi") * 100 /(int)target->query("max_qi"));
+			message_vision("($N"+str+")\n", target);
+			
+		} else if(random(ap)>dp/3 && objectp(target->query_temp("weapon")) && me->is_fighting() && random(4)==1){
+			
+			message_vision(RED"\n$n见$N招势凶猛，忙举起手中"+target->query_temp("weapon")->query("name")+RED"招架,刹那间火光飞溅,$n顿时双手麻木!\n"NOR, me, target);
+			
+			target->start_busy(8);
+		
+			 
+ 		        return 1;
+ 			
+		
+		} else if(random(ap)>random(dp)) {
+		
+			message_vision(HIW"\n$n眼见"+me->query_temp("weapon")->query("name")+HIW"撞来的力道太猛，只得滑步斜身躲过。\n"NOR, me, target);		
+		
+			message_vision(HIG"\n$N再次抢上前去，手掌在"+me->query_temp("weapon")->query("name")+HIG"又上一撞。\n"NOR,me,target);
+		
+			me->add_temp("apply/attack",me->query_skill("staff",1));
+			me->add_temp("apply/damage",me->query_skill("staff",1));
+						
+			COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+		
+			me->add_temp("apply/attack",-me->query_skill("staff",1));
+			me->add_temp("apply/damage",-me->query_skill("staff",1));
+
+		
+		} else
+			message_vision(HIW "\n$n眼见"+me->query_temp("weapon")->query("name")+HIW"撞来的力道太猛，只得滑步斜身躲过。\n"NOR,me,target);        			
+		
+		me->start_busy(2+random(2));
+	} else 
+		message_vision(HIY "\n"+me->query_temp("weapon")->query("name")+HIY"又飞回$N手中。\n"NOR, me);
+		
+		remove_call_out("second_hit");
+		remove_call_out("end_att");
+		call_out("end_att", 2, me);
+				
+		return 1;
+}
+
+
+int end_att(object me){
+	
+	if (!me->is_fighting()){
+		me->set_temp("apply/attack",0);
+		me->set_temp("apply/damage",0);
+		
+	}
+
+	return;
+
+}
+
+

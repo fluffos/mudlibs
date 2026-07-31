@@ -1,0 +1,18 @@
+// SN:^o7jboKc`]FC697B
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("雪山飞狐[2;37;0m", ({"xues hu"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "asdl
+它是胡归真的坐骑。
+");
+        set_temp("owner_id", "huhu");
+        set_temp("owner_name", "胡归真");
+        ::setup();
+}
+

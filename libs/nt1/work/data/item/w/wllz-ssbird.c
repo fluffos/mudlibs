@@ -1,0 +1,31 @@
+// SN:g7<aFIkG4[gOh7JU
+// ITEM Made by player(武林列传:wllz) /data/item/w/wllz-ssbird.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Sat Oct  2 23:02:06 2004
+#include <ansi.h>
+#include <weapon.h>
+
+inherit SWORD;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;32m小袅袅[2;37;0m", ({ "ssbird" }));
+	set_weight(9000);
+	set("item_make", 1);
+	set("unit", "柄");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一柄剑。
+剑柄上刻着一行小字：武林列传(wllz)
+");
+	set("value", 2100000);
+	set("point", 800);
+	set("material", "magic stone");
+	set("wield_msg", "[1;35m$N长声呼啸：$n[1;35m，我想你～～～～$n[1;35m笑盈盈地说：在这儿呢，在这儿呢！[2;37;0m\n");
+	set("unwield_msg", "$n[1;36m轻声低语道：我先走一下啦。转身消失无踪。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	init_sword(apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

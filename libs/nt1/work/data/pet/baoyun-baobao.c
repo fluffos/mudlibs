@@ -1,0 +1,18 @@
+// SN:9^=_?METU03I7@ic
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;31m火龙雕[2;37;0m", ({"baobao diao"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "来自西天无天的宠物,因为偷吃了如来的灯油化身为火红神雕.
+它是宝云的坐骑。
+");
+        set_temp("owner_id", "baoyun");
+        set_temp("owner_name", "宝云");
+        ::setup();
+}
+

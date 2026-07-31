@@ -1,0 +1,140 @@
+// feilong.c  狂风快剑「天外狂龙」
+
+#include <ansi.h>
+#include <skill.h>
+#include <weapon.h>
+#include <combat.h>
+
+inherit F_SSERVER;
+int perform(object me, object target)
+{
+        int damage;
+        string msg;
+        object weapon;
+        int busy_time;
+        
+        if (!wizardp(me))
+                return notify_fail("暂时不对玩家开放。\n");
+        
+        if (!target ) 
+                target = offensive_target(me);
+                
+        if (!objectp(weapon = me->query_temp("weapon"))
+            || (string)weapon->query("skill_type") != "sword")
+            
+                return notify_fail("装备剑才能使用「狂风」诀。\n");
+                
+        if (!target || !target->is_character() || !me->is_fighting(target) )    
+                return notify_fail("「狂」只能对战斗中的对手使用。\n");
+                
+        if ((int)me->query_skill("kuangfeng-jian", 1) < 150 )   
+                return notify_fail("你狂风快剑不够娴熟，使不出「狂风」诀。\n");
+                
+        if ((int)me->query("max_neili") < 2000)
+                return notify_fail("你内力修为不足，无法运足内力。\n");
+                
+        if ((int)me->query("neili") < 1500)
+                return notify_fail("你现在内力不足以聚气用于使出「狂风」诀！\n");
+                
+        if (me->query_temp("kuangfeng-jian/pfm_kuang",1))
+                return notify_fail("你刚运用过「狂风」诀，不可能在短时间内再运用了。\n");
+        
+        switch(random(2))
+        {
+        case 0:
+                msg = HIC "\n只见$N" HIC "突然后跃三尺，立直"+weapon->name()+HIC"于胸前，凝神聚气于丹田之内。\n" NOR;
+                break;
+        default:
+                msg = HIC "\n$N左手拈个剑诀按在剑身上，试图凝聚全身劲气贯于"+weapon->name()+HIC"之上\n" NOR;
+                break;
+        }       
+        message_vision(msg, me,target);
+        busy_time = 2 + random(4);
+        me->start_busy(busy_time - 1);
+        me->set_temp("kuangfeng-jian/count",3);
+        me->set_temp("kuangfeng-jian/pfm_kuang",1);
+        call_out("checking", busy_time * 2, me, target);
+        return 1;
+}
+
+void checking(object me, object target)
+{
+        string msg;
+        int i;
+        int n;
+        int busy_time;
+        object weapon;
+        weapon = me->query_temp("weapon");
+        
+        if ((i = me->query_temp("kuangfeng-jian/count")) > 10) {
+                me->start_busy(2 + random(9));
+                call_out("finish", 20 + random(20), me);
+                return;
+        }               
+        if (!me->is_fighting()) {
+                tell_object(me,  "\n你现在没有和人过招，当下收回了「狂风」诀的攻势。\n" NOR);
+                call_out("finish", 20 + random(20), me);
+                me->delete_temp("kuangfeng-jian/count");
+                return;
+        }
+        if (me->is_busy())
+        {
+                tell_object(me,  "\n你的身形一顿，狂风快剑的「狂风」诀攻势就此停了。\n" NOR);
+                call_out("finish", 20 + random(20), me);
+                me->delete_temp("kuangfeng-jian/count");
+                return;
+        }
+        if (me->query_skill_mapped("sword") != "kuangfeng-jian") {
+                tell_object(me, "\n你不再使用狂风快剑，狂风快剑的「狂风」诀攻势就此停了。\n" NOR);
+                call_out("finish", 20 + random(20), me);
+                me->delete_temp("kuangfeng-jian/count");
+                return;
+        }
+                
+        if(i == 3){
+                msg = HIC"\n突然$N一声长啸，手中"+weapon->name()+HIC"隐约焕发出一层紫芒，$N乘机攻出数招。" NOR;         
+                message_vision(msg, me,target);
+        }
+        n = i;
+        if(n > 5)
+                n = 5 + random(i - 5);
+        switch (random(i))
+        {
+                case 0:
+                        msg = HIC"\n$N运剑如风，剑光霍霍中"+weapon->name()+HIC"猛然向$n"
+                              HIC"周身乱刺乱削。\n" NOR;
+                        break;                  
+                case 1:
+                        msg = HIC"\n$N晃动手中"+weapon->name()+HIC"，蓦地刺出，刷刷刷急攻"+chinese_number(n)+
+                              HIC"招，招招尽是指向$n的要害。\n" NOR;
+                        break;
+                case 2:
+                        msg = HIC"\n$N轻吁一声，刷刷刷刷"+chinese_number(n)+HIC"剑，向$n"
+                              HIC"胸，腹，腰，肩四处连刺。\n" NOR;
+                        break;
+                case 3:
+                        msg = HIC"\n$N举剑狂挥，迅速无比地向$n"
+                              HIC"攻出"+chinese_number(n)+HIC"招，顿时四周剑气纵横。\n" NOR;
+                        break;
+                default:
+                        msg = HIC"\n$N神色凝重，"+weapon->name()+HIC"上劈下切左右横扫，挟雷霆万钧之势向$n"
+                              HIC"逼将过去。\n" NOR;
+                        break;
+        }
+        message_vision(msg, me,target);
+        
+        busy_time = 2 + random(i);
+        call_out("checking", busy_time * 2, me, target);    
+        while(i--)
+                COMBAT_D->do_attack(me, target, weapon, TYPE_QUICK);
+                
+        me->start_busy(busy_time - 1);
+        me->add_temp("kuangfeng-jian/count", 1);                
+}
+
+void finish(object me)
+{
+        tell_object(me, "\n经过一段时间的整顿，你现在能再使用「狂风」诀了。\n" NOR);
+        me->delete_temp("kuangfeng-jian/pfm_kuang");
+}
+

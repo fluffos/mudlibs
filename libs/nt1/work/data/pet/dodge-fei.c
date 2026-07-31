@@ -1,0 +1,18 @@
+// SN:VofKSIHAjBL78oLm
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m雪山飞狐[2;37;0m", ({"fei hu"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "雪山飞狐
+它是妲姬的坐骑。
+");
+        set_temp("owner_id", "dodge");
+        set_temp("owner_name", "妲姬");
+        ::setup();
+}
+

@@ -1,0 +1,15 @@
+/clone/npc/meng-zhu.c
+/d/xiakedao/obj/tongpai1.c
+/d/xiakedao/obj/tongpai2.c
+/d/xiakedao/npc/shizhe.c
+/d/xiakedao/shiroom.h
+/d/xiakedao/obj/zhou.c
+/d/xiakedao/obj/jiu.c
+/d/xiakedao/mtroad2.c
+/d/xiakedao/mtroad5.c
+/d/xiakedao/lin3.c
+/d/xiakedao/lin5.c
+/d/xiakedao/npc/zhangsan.c
+/d/xiakedao/npc/lisi.c
+/d/xiakedao/shihole1.c
+/cmds/skill/teach.c

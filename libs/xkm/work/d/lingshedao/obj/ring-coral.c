@@ -1,0 +1,44 @@
+//Cracked by Roath
+#include <ansi.h>
+#include <armor.h>
+inherit FINGER;
+
+string* titles = ({
+        "珊瑚戒指",
+        "珊瑚戒指",
+        "珊瑚戒指",
+        "珊瑚戒指",
+        "珊瑚戒指",
+        "珊瑚戒指",
+        "珊瑚戒指",
+        "珊瑚戒指",
+        "珊瑚戒指",
+        "珊瑚戒指",
+});
+
+void create()
+{
+        int i;
+        i = random(sizeof(titles));
+        if (i<2)
+        set_name(HIW+titles[i]+NOR, ({ "coral ring", "ring"}));
+        else if (i<4)
+        set_name(HIM+titles[i]+NOR, ({ "coral ring", "ring" }));
+        else if (i<6)
+        set_name(HIR+titles[i]+NOR, ({ "coral ring", "ring" }));
+        else if (i<8)
+        set_name(HIB+titles[i]+NOR, ({ "coral ring", "ring" }));
+        else
+        set_name(HIY+titles[i]+NOR, ({ "coral ring", "ring" }));
+        set("weight", 400);
+        if (clonep())
+                set_default_object(__FILE__);
+        else {
+                set("long", "一个珊瑚戒指，材质是在灵蛇岛上一种异常珍贵的珊瑚。\n");
+                set("unit", "个");
+                set("value", 6500);
+                set("material", "jade");
+                set("armor_prop/armor", 4);
+        }
+        setup();
+}       

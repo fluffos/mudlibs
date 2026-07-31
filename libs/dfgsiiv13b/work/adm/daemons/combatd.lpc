@@ -1,0 +1,441 @@
+/*  combatd.c - combat arbitrator daemon
+
+    Copyright (C) 1994-2000 Annihilator <annihilator@muds.net>
+
+    This program is a part of ES2 mudlib. Permission is granted to use,
+    modify, copy or distribute this program provided this copyright notice
+    remains intact and subject to the restriction that this program MAY
+    NOT be used in any way for monetary gain.
+
+    Details of terms and conditions is available in the Copyright.ES2 file.
+    If you don't receive this file along with this program, write to the
+    primary author of ES2 mudlib: Annihilator <annihilator@muds.net>
+*/
+
+// MudOS v21.6 #pragma optimize's jump threading has bug! (line 200)
+//#pragma optimize
+
+#pragma save_binary
+
+#include <ansi.h>
+#include <combat.h>
+
+//#define SHOW_DAMAGE
+//#define SHOW_COMBAT_STAT
+
+inherit F_CLEAN_UP;
+inherit F_DBASE;
+
+string *catch_hunt_msg = ({
+    HIW "$N㎝$nこǎだ泊ミㄨゴ癬ㄓ\n" NOR,
+    HIW "$N癸帝$n耻碿琌\n" NOR,
+    HIW "$N㎝$n窱杠ぃ弧碞ゴ癬ㄓ\n" NOR,
+    HIW "$N泊縣ǎ$n羘侥筁ㄓ\n" NOR,
+    HIW "$N耻笵搁禲\n" NOR,
+    HIW "$N耻笵㏑ㄓ\n" NOR
+});
+
+string *dead_msg = ({
+    "\n$N\n\n",
+    "\n$N碭翧﹀┾輟碭 ... \n\n",
+    "\n$N﹀獃い糒à瑈翧﹀泊琌ぃ\n\n",
+    "\n$N〥碭羘珁翧﹀獽耞\n\n",
+    "\n$N瓀礚泵ゃ穦ㄠ繦\n\n",
+});
+
+void create()
+{
+    seteuid(getuid());
+    set("name", "驹矮弘艶");
+    set("id", "combatd");
+}
+
+string damage_msg(int damage, string type)
+{
+    string str;
+
+    if( !type ) type = "端甡";
+#ifdef SHOW_DAMAGE
+    return "挡狦硑Θ " + damage + " 翴" + type + "\n";
+#else
+    if( damage == -1 ) switch(type) {
+    case "凤端":
+        return "挡狦痽羘ゴタ帝\n";
+    case "澄端":
+        return "挡狦羘笵\n";
+    case "端":
+        return "挡狦糚羘秈\n";
+    default:
+        return "挡狦钡㏑い$n\n";
+    }
+
+    if( damage == 0 ) return "挡狦⊿Τ硑Θ陪端甡\n";
+    if( damage > 100 ) damage = 100;
+
+    switch( type ) {
+    case "辶端":
+    case "澄端":
+        if( damage < 5 ) return "挡狦琌淮淮购瘆$pブψ\n";
+        else if( damage < 10 ) return "挡狦$p$l购笵灿﹀勃\n";
+        else if( damage < 20 ) return "挡狦夺羘购笵端\n";
+        else if( damage < 40 ) return "挡狦夺羘购笵﹀睴睴端\n";
+        else if( damage < 60 ) return "挡狦夺羘购笵瞏端聁眔$N骸羪翧﹀\n";
+        else return "挡狦钮ǎ$n羘篏纙$w$p$l购笵瞏のǎ癌┤端\n";
+        break;
+    case "端":
+        if( damage < 5 ) return "挡狦琌淮淮瘆$pブψ\n";
+        else if( damage < 10 ) return "挡狦$p$l承\n";
+        else if( damage < 20 ) return "挡狦糚羘$n$l砛\\n";
+        else if( damage < 40 ) return "挡狦糚羘秈$n$lㄏ$pぃパ︑癶碭˙\n";
+        else if( damage < 60 ) return "挡狦糚夺羘$w$p$l﹀ψ罸絢﹀竇罧\n";
+        else return "挡狦钮ǎ$n羘篏纙$w$p$l癸τ翧﹀聁眔骸\n";
+        break;
+    case "凤端":
+        if( damage < 2 ) return "挡狦霸羘阑い琌端甡ぃ\n";
+        else if( damage < 5 ) return "挡狦$p$l硑Θ矪凤獵\n";
+        else if( damage < 10 ) return "挡狦阑㏑い$n$l祅竳遏ρ蔼\n";
+        else if( damage < 20 ) return "挡狦阑㏑い$n磂羘陪礛ぃ莲\n";
+        else if( damage < 40 ) return "挡狦痽羘$n癶ㄢ˙\n";
+        else if( damage < 60 ) return "挡狦硂痽羘ゴ眔$n硈癶碭˙畉翴篖\n";
+        return "挡狦阑い$n珃羘翧﹀\n";
+        break;
+    default:
+        if( damage < 2 ) str =  "挡狦琌玧眏硑Θ矪淮稬";
+        else if( damage < 5 ) str = "挡狦硑Θ淮稬";
+        else if( damage < 10 ) str = "挡狦硑Θ矪";
+        else if( damage < 20 ) str = "挡狦硑Θ矪腨";
+        else if( damage < 30 ) str = "挡狦硑Θ会腨";
+        else if( damage < 40 ) str = "挡狦硑Θ讽腨";
+        else if( damage < 60 ) str = "挡狦硑Θだ腨";
+        else if( damage < 80 ) str = "挡狦硑Θ伐ㄤ腨";
+        else str =  "挡狦硑Θ獶盽┤腨";
+        return str + type + "\n";
+    }
+#endif
+}
+
+string eff_status_msg(int ratio)
+{
+    if( ratio==100 ) return HIG "( $N癬ㄓ⊿Τ端 )\n" NOR;
+    if( ratio > 95 ) return HIG "( $N翴淮端ぃ筁眖ぃㄓ )\n" NOR;
+    if( ratio > 90 ) return HIG "( $N癬ㄓ翴淮端 )\n" NOR;
+    if( ratio > 80 ) return HIY "( $N碭矪端ぃ筁ぃ锚ㄆ )\n" NOR;
+    if( ratio > 60 ) return HIY "( $N端ぃ淮癬ㄓ猵ぃび )\n" NOR;
+    if( ratio > 40 ) return HIY "( $N彩笆秨﹍床睹ㄓ┮端帝龟ぃ淮 )\n" NOR;
+    if( ratio > 30 ) return HIY "( $N竒端勃仓仓タ玧や嫉帝ぃ )\n" NOR;
+    if( ratio > 20 ) return HIR "( $N讽端┤穦Τネ㏑繧 )\n" NOR;
+    if( ratio > 10 ) return HIR "( $N端ぇ竒螟や嫉泊碞璶 )\n" NOR;
+    if( ratio > 5  ) return HIR "( $N端筁竒゛゛㏑ス )\n" NOR;
+    return HIR "( $N端筁竒Τい摧离繦常耞 )\n" NOR;
+}
+
+string status_msg(int ratio)
+{
+    if( ratio==100 ) return HIG "( $N癬ㄓ癸硂贺祘ю阑翴ぃ )\n" NOR;
+    if( ratio > 95 ) return HIG "( $NΤㄇ痟疚砛\琌护寄ぇ璸礚猭絋﹚ )\n" NOR;
+    if( ratio > 90 ) return HIG "( $N癬ㄓΤㄇ仓┷秨﹍篊ㄓ )\n" NOR;
+    if( ratio > 80 ) return HIY "( $N笆秨﹍Τ翴ぃび艶琌ご礛Τ兵ぃ )\n" NOR;
+    if( ratio > 60 ) return HIY "( $N齿糔糔癬ㄓ猵ぃび )\n" NOR;
+    if( ratio > 40 ) return HIY "( $Nだ痟疚ㄓ砰讽腨 )\n" NOR;
+    if( ratio > 30 ) return HIY "( $N竒捌繷竲淮家妓タ玧や嫉帝ぃ )\n" NOR;
+    if( ratio > 20 ) return HIR "( $N癬ㄓ竒ぃ眖み )\n" NOR;
+    if( ratio > 10 ) return HIR "( $N穘繷福琻琻弊弊常ぃ铆泊碞璶 )\n" NOR;
+    return HIR "( $N竒炒癵篈繦常篖穡 )\n" NOR;
+}
+
+varargs void report_status(object ob, int effective)
+{
+    if( !ob->query_stat_maximum("kee") ) return;
+    if( effective ) 
+        message_vision( eff_status_msg(
+            (int)ob->query_stat_effective("kee") * 100 / (int)ob->query_stat_maximum("kee") ), ob);
+    else
+        message_vision( status_msg(
+            (int)ob->query_stat("kee") * 100 / (int)ob->query_stat_maximum("kee") ) , ob);
+}
+
+// fight()
+//
+// This function serves as a lowest level routine for combat system and
+// is usually called from a daemon of combat skill such as unarmed, sword
+// etc.
+
+varargs int
+fight(object me, object victim, string skill, mapping action, object weapon)
+{
+    int ability, strength, damage, gin_cost, force_bonus;
+    string msg, force_skill;
+
+    // 璝獶驹跋, 驹矮蛮よ常⊿砆arrest, 氨ゎ驹矮 -Dragoon
+    // 奔userp(me) check, mobぃ非獶驹跋もю阑 -dragoon
+    if( environment(me)->query("no_fight") ) {
+	if( !victim->query("unprotect_mark") 
+	&& !me->query("unprotect_mark") ) return 0;
+    }
+
+    // 璝驹矮耞絬, 氨ゎ蛮よ驹矮 -Dragoon
+    if( ( userp(me) && !interactive(me) ) 
+    || ( userp(victim) && !interactive(victim) ) ) return 0;
+
+    me->set_combat_message(action["action"]);
+    me->set_temp("last_action", action);
+
+    /* 笵
+     */
+    strength = me->query_strength("attack");
+
+    /* ず癸驹矮紇臫:
+     *
+     * 笵糤: м *  * (κだゑ + ┷Α玒计)% * 4
+     *           => м 100,  1000, Θ, 礚┷Α, 穦糤 400Kg 笵
+     * 惠璶: ┮糤笵 / 500;
+     * 弘: 繦诀(1  1 + ┮糤笵 / 30000)
+     */
+    gin_cost = 1;
+    if( force_skill = me->skill_mapped("force") )
+    {
+        int ratio, kee_required, kee;
+
+        if( !(ratio = me->query("force_ratio")) ) ratio = 75;
+
+        force_bonus = me->query_skill("force") * me->query_stat("kee") 
+                * (ratio + action["force"]) / 25;
+        kee_required = force_bonus / 500;
+
+        if( userp(me) && kee_required > 0 ) {
+            kee = me->query_stat("kee");
+            if( kee < kee_required )
+                force_bonus = force_bonus * kee / kee_required;
+        }
+
+        /* 讽ㄏノず伐κだゑ驹矮Τ诀穦 gin_cost = 0 */
+        gin_cost = random(2 + force_bonus/30000);
+    }
+
+    /* ㏑い瞯: ю阑 + ю阑м + ┷Α玒计 */
+    ability = me->query_ability("attack")
+        + me->query_skill(skill)
+        + action["attack"]
+        ;
+
+    /* 璝ю阑癸禜癸ю阑┮ㄏノм剪眡玥倒ぉ㏑い瞯璽莱 */
+    ability -= random( victim->query_skill(skill) );
+
+    /* 璝ю阑癸禜┷ΑΤň縨狦玥倒ぉ㏑い瞯紇臫 */
+    ability -= victim->query_temp("last_action/defense");
+
+    /* ю阑ぶ砛弘 */
+    if( userp(me) ) {
+        if( me->query_stat("gin") > gin_cost ) {
+            me->consume_stat("gin", gin_cost);
+            strength += force_bonus;
+        } else {
+            // 讽ю阑弘ぶ璶―弘, 埃ю阑, 
+            // ご惠Ι弘 -Dragoon
+            me->consume_stat("gin", gin_cost/2 + 1);
+            ability /= 2;
+            strength /= 2;
+        }
+    }
+    else strength += force_bonus;
+
+    if( ability < 1 ) ability = 1;
+
+    /* 璶―ю阑癸禜秈︽ň縨 */
+    me->set_temp("defend_message", 0);
+    if( !victim->is_busy()
+    &&  victim->defend(ability, strength, weapon ? weapon : me) )
+    {
+        string defend_msg;
+
+        /* ň縨Θ盢ň縨癟驹矮癟 */
+        defend_msg = me->query_temp("defend_message");
+        me->add_combat_message( "" );
+        me->add_combat_message( stringp(defend_msg) ? defend_msg
+                : "琌⊿い" );
+        damage = -1;
+    }
+    else
+    {
+        string absorb_msg;
+
+        /* ň縨ア毖倒ぉю阑癸禜Μ笵诀穦 */
+        me->set_temp("absorb_message", 0);
+        strength -= (int)victim->absorb(ability, strength,
+                weapon ? weapon : me);
+        absorb_msg = me->query_temp("absorb_message");
+        me->add_combat_message( "" );
+        me->add_combat_message( stringp(absorb_msg) ? absorb_msg
+                : "琌砆$n秨");
+
+        /* 璝笵ゼЧ砆Μ玥玻ネ端甡 */
+        /* 玻ネ端甡玥跌ю阑よΑ倒ぉぶ计弘剪 -Dragoon */
+        if( strength > 0 ) {
+            if( weapon ) {
+                damage = weapon->inflict_damage(strength, victim);
+                me->gain_score("weapon mastery", random(me->query_attr("int")/3));
+            } else {
+                damage = me->inflict_damage(strength, victim);
+                me->gain_score("unarmed mastery", random(me->query_attr("int")/3));
+            }
+        }
+        else damage = 0;
+    }
+
+    /* 盢端甡祘癟驹矮癟 */
+    if( damage >= 0 ) {
+#ifdef SHOW_DAMAGE
+        me->add_combat_message("" + damage_msg( damage, action["damage_type"] ));
+#else
+        int max, percent;
+
+        max = victim->query_stat_effective("kee");
+        if( max ) percent = damage * 100 / max;
+        else percent = -1;      /* 獶ネ端甡癟 */
+        me->add_combat_message("" + damage_msg( percent, action["damage_type"]));
+#endif
+    }
+    else me->add_combat_message("\n");
+
+#ifdef SHOW_COMBAT_STAT
+    message_vision(sprintf(HIY "%sю阑[мォ %d, 笵 %.2fkg]\n" NOR,
+        me->name(), ability, strength / 1000.0), me);
+#endif
+
+    /* 癳驹矮癟 */
+    msg = me->get_combat_message();
+    if( stringp(msg) )
+    {
+        string *limbs = victim->query("limbs");
+
+        if( !arrayp(limbs) || !sizeof(limbs) ) {
+            msg = replace_string(msg, "$l", "ō");
+        } else {
+            msg = replace_string(msg, "$l", limbs[random(sizeof(limbs))]);
+        }
+        if( weapon ) msg = replace_string(msg, "$w", weapon->name());
+
+        message_vision( msg, me, victim);
+        if( damage > 0 ) report_status(victim);
+    }
+
+    /* 肚獶箂(端甡)ボю阑莉眔竒喷 */
+    if( living(victim) ) {
+        /* 癸も琌ネ */
+        return damage;
+    } else {
+        /* 癸も琌獶ネю阑惠 80 Τ诀穦眔竒喷 */
+        // ability > 80 Τ翴筁腨, 猵force exp玱礚
+        // 菠糴硂砞, はタstake竒郴絤ê
+        // -Dragoon 
+        return random(500) > ability ? damage : 0;
+    }
+}
+
+// auto_fight()
+//
+// This function is to start an automatically fight. Currently this is
+// used in "aggressive", "vendetta", "hatred", "berserk" fight.
+
+void auto_fight(object me, object obj, string type)
+{
+    // Don't let NPC autofight NPC.
+    if( !userp(me) && !userp(obj) ) return;
+
+    // This call_out gives victim a chance to slip trough the fierce guys.
+    call_out( "start_" + type, 0, me, obj);
+}
+
+// add check net connection of player, testing work or not -Dragoon
+void
+start_hatred(object me, object obj)
+{
+    if( !me || !obj ) return;   // Are we still alive(not becoming a corpse)?
+
+    if( !living(me)                             // Are we capable for a fight?
+    ||  (userp(obj) && !interactive(obj))       // Is player net dead?
+    ||  environment(me)!=environment(obj)       // Are we still in the same room?
+    ||  environment(me)->query("no_fight")      // Are we in a peace room?
+    )   return;
+
+    // We found our hatred! Charge!
+    message_vision( catch_hunt_msg[random(sizeof(catch_hunt_msg))], me, obj);
+    me->kill_ob(obj);
+    if( userp(obj) ) obj->fight_ob(me);
+    else obj->kill_ob(me);
+    me->attack(obj);
+}
+
+void
+start_vendetta(object me, object obj)
+{
+    if( !me || !obj ) return;   // Are we still exist( not becoming a corpse )?
+
+    if( me->is_fighting(obj)    // Are we busy fighting?
+    ||  !living(me)             // Are we capable for a fight?
+    ||  (userp(obj) && !interactive(obj))       // Is player net dead?
+    ||  environment(me)!=environment(obj)       // Are we still in the same room?
+    ||  environment(me)->query("no_fight")      // Are we in a peace room?
+    )   return;
+
+    // We found our vendetta opponent! Charge!
+    message_vision( catch_hunt_msg[random(sizeof(catch_hunt_msg))], me, obj);
+    me->kill_ob(obj);
+    if( userp(obj) ) obj->fight_ob(me);
+    else obj->kill_ob(me);
+    me->attack(obj);
+}
+
+void start_aggressive(object me, object obj)
+{
+    int def;
+
+    if( !me || !obj ) return;   // Are we still exist( not becoming a corpse )?
+
+    if( me->is_fighting()       // Are we busy fighting?
+    ||  !living(me)             // Are we capable for a fight?
+    ||  (userp(obj) && !interactive(obj))       // Is player net dead?
+    ||  environment(me)!=environment(obj)       // Are we still in the same room?
+    ||  environment(me)->query("no_fight")      // Are we in a peace room?
+    ||  obj->query("life_form") == "ghost"	// Only kill living -Dragoon
+    ||  me->query_stat("kee") < obj->query_stat("kee")
+    )   return;
+
+    // let cor, cps, and command: agg work -dragoon
+    def = (int)me->query_attr("cps");
+    if( me->query_temp("ashura/aggressive") < 1 )
+	def += (int)me->query_attr("cps");
+    if( random(me->query_attr("cor")) < def ) return;
+
+    /* 琵霉壁笿ㄤ產ゴю墩ゑ︑眏 */
+//  钩砞は??  -dragoon
+//    if( userp(me) && userp(obj) 
+//    && obj->query_ability("intimidate") > me->query_ability("intimidate") )
+//        return;
+
+    // We got a nice victim! Kill him/her/it!!!
+    message_vision( catch_hunt_msg[random(sizeof(catch_hunt_msg))], me, obj);
+    me->kill_ob(obj);
+    if( userp(obj) ) obj->fight_ob(me);
+    else obj->kill_ob(me);
+    me->attack(obj);
+}
+
+// This function is to announce the special events of the combat.
+// This should be moved to another daemon in the future.
+void announce(object ob, string event)
+{
+    switch(event)
+    {
+    case "dead":
+        message_vision( dead_msg[random(sizeof(dead_msg))], ob );
+        break;
+    case "unconcious":
+        message_vision("\n$N竲ぃ铆禴笆ぃ笆\n\n", ob);
+        break;
+    case "revive":
+        message_vision("\n$N篊篊窩秨泊氟睲眶筁ㄓ\n\n", ob);
+        break;
+    }
+}
+

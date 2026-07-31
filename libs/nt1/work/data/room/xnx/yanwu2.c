@@ -1,0 +1,35 @@
+// SN:N45^b[iRgn1`Al`E
+// File(/data/room/xnx/yanwu2.c) of xnx's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        set("short", "霍格沃茨演武厅");
+	set ("long", @LONG
+房间里只有一盏油灯吊在天花板上，没有窗户，还伴随有一股煎
+鱼的味道。几个大木柜靠在墙边，那是用来装违反纪律的人的档案的，
+里面详细地写明了谁干了什么坏事被处罚干什么。一副闪亮的锁链和
+手铐就挂在桌子的墙后面。[2;37;0m
+LONG );
+
+	set("exits", ([
+                "east" : __DIR__"yishiting",
+	]));
+
+        set("objects", ([
+                "/clone/weapon/zhubang" : 1,
+                "/clone/weapon/zhujian" : 1,
+                "/clone/weapon/mudao"   : 1,
+        ]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("room_owner", "绛珠草");
+        set("room_name", "霍格沃茨");
+        set("room_id", "hgwc");
+        set("room_owner_id", "xnx");
+        set("room_position", "碎石小道");
+}

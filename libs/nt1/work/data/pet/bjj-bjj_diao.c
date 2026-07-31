@@ -1,0 +1,18 @@
+// SN:8Nd8Z<47lFSRFf7O
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;33m非常貂[2;37;0m", ({"bjj_diao diao"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "看什么看?非常屌!
+它是白晶晶的坐骑。
+");
+        set_temp("owner_id", "bjj");
+        set_temp("owner_name", "白晶晶");
+        ::setup();
+}
+

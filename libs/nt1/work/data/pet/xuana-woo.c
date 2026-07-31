@@ -1,0 +1,18 @@
+// SN:hMZG[?`YCC8cT^_5
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("蜗牛牛[2;37;0m", ({"woo niu"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "奇慢无比
+它是药痴的坐骑。
+");
+        set_temp("owner_id", "xuana");
+        set_temp("owner_name", "药痴");
+        ::setup();
+}
+

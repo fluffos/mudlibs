@@ -1,0 +1,32 @@
+// SN:MCSSg2=2ncI\:3I2
+// File(/data/room/xdx/lianwu.c) of xdx's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "练武场");
+	set ("long", @LONG
+此处便是紫气山庄的练武场，人在江湖，武功万万不可荒废。 
+LONG );
+
+	set("exits", ([
+                "west" : __DIR__"houyuan",
+	]));
+
+        set("objects", ([
+                "/clone/npc/mu-ren" : 4,
+        ]));
+
+        set("outdoors", "xx");
+        set("no_sleep_room", 1);
+
+        setup();
+    
+        set("room_owner", "净玄");
+        set("room_name", "紫气山庄");
+        set("room_id", "starg");
+        set("room_owner_id", "xdx");
+        set("room_position", "紫气台");
+}

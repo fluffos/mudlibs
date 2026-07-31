@@ -1,0 +1,28 @@
+// SN:a3^<0kEdUD2nMogM
+// File(/data/room/liufeng/key.c) of liufeng's key
+// Create by LUBAN written by Doing Lu
+
+#include <ansi.h>
+
+inherit ITEM;
+
+string query_autoload() { return "1"; }
+
+void create()
+{
+        set_name(YEL "流风家的钥匙" NOR, ({ "key", "4 of liufeng" }));
+        set_weight(10);
+        if (clonep())
+                set_default_object(__FILE__);
+        else {
+                set("long", @LONG
+一把用来开启风之城(wind)的钥匙。
+这是流风第四次配的钥匙。
+LONG );
+                set("unit", "把");
+                set("no_pawn", 1);
+                set("no_sell", 1);
+                set("item_make", 1);
+                set("value", 1);
+        }
+}

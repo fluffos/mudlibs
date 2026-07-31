@@ -1,0 +1,18 @@
+// SN:UbjR7B<3f2G>EKk@
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("飞驼[2;37;0m", ({"fei tuo"}));        
+        set("gender", "女性");                
+        set("unit", "头");
+        set("long", "飞
+它是武当二的坐骑。
+");
+        set_temp("owner_id", "xmb");
+        set_temp("owner_name", "武当二");
+        ::setup();
+}
+

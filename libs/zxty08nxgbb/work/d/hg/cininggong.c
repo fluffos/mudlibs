@@ -1,0 +1,22 @@
+// Room: /u/cass/hg/cininggong.c
+// This is a room made by roommaker. write by Fan. :)
+
+inherit ROOM;
+
+void create()
+{
+	set("short", "慈宁宫");
+	set("long", @LONG
+殿顶筒板瓦覆盖，黄绿色琉璃剪边，殿内无一根柱子，用廊柱和檐柱各
+一周承托殿顶屋梁。檐上装有细致精巧的琉璃鸟兽和花卉，檐下又有一圈佛
+像浮雕，宛如一围华丽的玉带。宫内的暖阁是皇太后居住的地方。
+LONG
+);
+	set("exits", ([ /* sizeof() == 2 */
+  "south" : __DIR__"neishi",
+  "north" : __DIR__"cining-hy",
+]));
+
+	setup();
+	replace_program(ROOM);
+}

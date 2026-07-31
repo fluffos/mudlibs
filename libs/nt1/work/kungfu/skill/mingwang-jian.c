@@ -1,0 +1,83 @@
+// Copyright (C) 2003, by Lonely. All rights reserved.
+// This software can not be used, copied, or modified 
+// in any form without the written permission from authors.
+// mingwang-jian.c 不动明王剑法
+
+inherit SKILL;
+
+string *action_msg = ({
+        "$N持剑静立在$n的身前五尺处，半晌不动不移，$n正想上前，忽的剑风已经指向$n的$l",
+        "$N「起手出剑」，左手捏了个长伸佛手印，右手剑一去千里直刺$n的$l",
+        "$N使出一式「山崩」，脚踏碎步，急速抢上，剑式刚猛，有如山崩地裂般象$n当头劈下",
+        "$N身影晃动，跳起「降魔舞」，口中念六字真言，已绕到$n的身后连刺三剑",
+        "$N跳起「鹤舞」，神色傲然，信步上前，反手平削$n的$l",
+        "$N蹿起「龙腾」，向前跳上，手中剑势骄娆，有如化龙般将$n的全身罩于剑风之下",
+        "$N使出一招「玄冥出世」，闭目转身，乘$n惊愕之际，赫然轮起长剑，当头砍下",
+        "$N舞起「千旋转」，身子象似陀洛般急转，绕在$n身侧两尺处，忽地停住，长剑拦腰平斩",
+        "$N色似通神，一式「花雨漫天」，剑尖颤动，如水银泄地般向$n全身洒下",
+        "$N使出一式「大悲」，$N手中的$w已经迅捷无比的刺向$n的$l。  ",
+        "$N使出一式「出剑」，简单而有效地往$n的$l刺去。",
+        "$N使出一招「不动」，身形一转，反手一挥，手中$w刺向$n的$l。",
+        "$N使出「初醒」，双脚点地，全身转出一团剑光滚向$n。",
+        "$N使出一招「无涯」，全身劲气贯于$w中，一片剑光袭向$n的$l。",
+        "$N剑锋忽转，一式「冲霄」，闪电般刺向$n的$l。",
+        "$N使出一招「归宗」，手中$w狂风骤雨般地向$n的$l连攻数剑。",
+        "$N舞动$w发出逼人剑气刺去，一招「狂雷」，挟著闪闪剑光刺向$n的$l。",
+});
+
+int valid_enable(string usage) { return usage == "sword" || usage == "parry"; }
+
+int valid_learn(object me)
+{
+        if ((int)me->query("max_neili") < 100)
+                return notify_fail("你的内力不够。\n");
+                
+        if ((int)me->query_skill("longxiang-gong", 1) < 80 &&
+            (int)me->query_skill("xuehai-mogong", 1) < 80)
+                return notify_fail("你的内功火候太浅。\n");
+                
+        if (me->query_skill("sword", 1) < me->query_skill("mingwang-jian", 1))
+                return notify_fail("你的基本剑法火候有限，无法领会更高深的不动明王剑法。\n");
+                                
+        return 1;
+}
+
+
+mapping query_action(object me, object weapon)
+{
+        return ([
+                "action": action_msg[random(sizeof(action_msg))],
+                "damage": 120 + random(50),
+                "attack": 70 + random(10),
+                "dodge" : 70 + random(10),
+                "parry" : 70 + random(10),
+                "damage_type" : random(2)?"刺伤":"割伤",
+        ]);
+}
+
+int practice_skill(object me)
+{
+        object weapon;
+
+        if (!objectp(weapon = me->query_temp("weapon"))
+        ||  (string)weapon->query("skill_type") != "sword")
+                return notify_fail("你使用的武器不对。\n");
+                
+        if ((int)me->query("qi") < 80)
+                return notify_fail("你的精力不够练不动明王剑。\n");
+                
+        if ((int)me->query("neili") < 80)
+                return notify_fail("你的内力不够。\n");
+                
+        me->receive_damage("qi", 70);
+        me->add("neili", -70);
+        
+        return 1;
+}
+
+string perform_action_file(string action)
+{
+        return __DIR__"mingwang-jian/" + action;
+}
+
+

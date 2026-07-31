@@ -1,0 +1,155 @@
+中阶 LPC
+Descartes of Borg
+November 1993
+
+			第四章: LPC 前编译器 (pre-compiler)
+
+4.1 回顾
+
+上一章的份量相当重, 所以我现在的步调会放慢一些, 藉由 LPC  前编译器这个
+简单的课题, 让你能消化并使用映射和阵列. 不过在此, 你应该相当了解 driver
+如何与 mudlib 互动, 并能撰写呼叫延迟呼叫和心跳的物件. 附带一提, 你应该
+撰写一些使用映射和阵列的简单物件, 注意这些资料型态如何在物件中使用. 开
+始阅读实际的 mudlib 程式码是个不错的主意, 这样能让你制作你自己的 mud.
+看看你自己是否了解你的 mudlib 房间和怪物程式码其中的每一件事. 对你不懂
+的事, 就询问你 mud  中负责回答创作人程式码问题的人.
+
+前编译器实际上有点误导人, 因为 LPC  码永远不会真正编译过. 虽然这一点随
+着新的 LPC driver 原型而渐渐改变, LPC driver  解译创作人所写的程式码,
+而非编译为二进位格式. 虽然如此, LPC 前编译器的功能仍然表现得比较像是编
+译语言的前编译器, 其指令甚至在 driver 开始看物件码之前就已解译.
+
+4.2 前编译器指令
+
+如果你不知道什么是前编译器, 你不用担心. 对 LPC  而言, 它基本上是在
+driver  开始解译 LPC  码, 以让你执行档案中整段程式码的动作之前的一个程
+序. 因为程式码还未解译, 前编译器程序在档案以物件存在之前、检查任何 LPC
+函式和指令之前执行. 所以前编译器在档案层次上工作, 表示它并不会处理任何
+在继承档案中的程式码.
+
+前编译器在送给它的档案中寻找前编译器指令. 这些档案中的小指令只对前编译
+器有意义, 并不算是 LPC  语言的一部份. 一个前编译器指令是在档案中任何以
+# 号开头的一行. 前编译器指令通常用于制造一个档案看起来的最终程式码. 最
+常见的前编译器指令是:
+
+#define
+#undefine
+#include
+#ifdef
+#ifndef
+#if
+#elseif
+#else
+#endif
+#pragma
+
+mud 里大多数的区域码撰写人并不使用 #define  和 #include 指令. 其他你常
+见的指令即使你从未用过, 你也大概知道它们的意义.
+
+第一对指令是:
+
+#define
+#undefine
+
+#define 指令设定一组字元, 这组字元在程式码中的任何地方都会在前编译器处
+理时段换成它们所定义的东西.
+举例:
+
+#define OB_USER "/std/user"
+
+这个指令让前编译器寻找整个档案中是否有 OB_USER. 任何有 OB_USER  的地方,
+它就换成 "/std/user". 注意, OB_USER 在程式码中并不算是变数. LPC 解译器
+永远不会看到 OB_USER  的标签. 前面已经说过, 前编译器是在程式码解译之前
+的一段过程. 所以你所写的:
+
+#define OB_USER "/std/user"
+
+void create() {
+    if(!file_exists(OB_USER+".c")) write("Merde! No user file!");
+    else write("Good! User file still exists!");
+}
+
+到了 LPC  解译器的手上就变成:
+
+void create() {
+    if(!file_exists("/std/user"+".c")) write("Merde! No user file!");
+    else write("Good! User file still exists!");
+}
+
+只要放个 #define, 它就会将定义的标签换成标签后面的任何东西. 你也可以把
+#define 用于一种特殊的情况, 标签后面不跟着任何值. 这种情形称为二进位定
+义 (binary definition). 举个例子:
+
+#define __NIGHTMARE
+
+出现在 Nightmare Mudlib 的组态档 (config) 中. 这样让前编译器测试一些东
+西, 我们在本章稍后会说明.
+
+其他你常用的前编译器指令是 #include.  正如其名字所暗示的, #include  在
+前编译时将其他档案的内容放入该指令出现的地方. 专为其他档案纳入而制作的
+档案常称为标头档 (header file). 它们有时候含有一些东西被很多档案共用, 
+像是 #define  指令和函式宣告. 标头档传统的档案延伸名是 .h .
+
+include 指令的语法有两种:
+
+#include <filename>
+#include "filename"
+
+如果你用档案的绝对名称, 则你用哪一种语法都无所谓. 档案名称前后使用什么
+符号决定前编译器如何寻找标头档. 用 <> 围住的档案, 前编译器首先寻找系统
+include 目录. 用 "" 围住的档案, 前编译器开始从前编译器正在处理的档案所
+在之目录找起. 不然在放弃之前, 前编译器会寻找系统 include  目录和该档案
+所在的目录. 使用的语法决定了寻找的顺序.
+
+最简单前编译器指令是 #pragma  指令. 我怀疑你大概从未使用过. 基本上, 你
+在 #pragma  指令之后跟着对 driver 有意义的一些关键字. 我唯一见过的关键
+字是 strict_types,  它让 driver 知道你希望这个档案以严格资料型态解译之. 
+我怀疑你会需要使用这种指令, 而且你可能从未看过它. 我在此介绍它, 只是因
+为当你看到它时, 不会让你认为它实际上不具有任何意义.
+
+最后一组前编译器指令是条件前编译器指令 (conditional pre-compiler 
+directives) . 它们让你在一个运算式为真值时, 以一种方式前编译一个档案,
+运算式为伪值时, 以另一种方式前编译该档案. 这是让程式码在不同 mudlib 之
+间具有移植性 (portable) 最方便的方法, 举例来说, 因为在 MudOS mud  的程
+式码中放入 m_delete() 外部函式会导致错误, 所以你大概会照着以下撰写:
+
+#ifdef  MUDOS
+    map_delete(map, key);
+#else
+    map = m_delete(map, key);
+#endif
+
+经过前编译器处理之后, 解译器会看到:
+在 MudOS mud  中:
+
+    map_delete(map, key);   
+
+其他的 mud:
+  
+    map = m_delete(map, key);
+
+解译器永远看不到会产生错误的函式呼叫.
+
+请注意, 我前面用于说明二进位定义的例子. 二进位定义让你对解译器传入一些
+程式码, 基于其他条件下, 你所使用的 driver 或 mudlib 为何.
+
+4.3 总结
+
+前编译器是在你程式之间维持模组性的有用工具. 当你有易受影响而改变的值,
+而此值在你的档案中普遍使用, 你可以在标头档使用 #define  叙述将它们全部
+置换之, 这样一来你以后需要改变这些值时, 只需要更改 #define  指令. 在此
+最好的例子是 money.h  , 它包含这个指令:
+
+#define HARD_CURRENCIES ({ "gold", "platinum", "silver", "electrum", 
+	"copper" })
+
+如果你想加上新的硬货币, 你只需要更改这个指令, 就能更新所有需要硬货币为
+何的档案.
+
+LPC 前编译器也让你撰写不用随 mudlib 和 driver 而改写的可携性程式码. 最
+后, 你应该小心, 前编译器只接受以 carriage return  结束的一行字. 如果你
+要撰写一个多行的前编译器指令, 你必须在未结束的一行末尾加上反斜线 (\).
+
+Copyright (c) George Reese 1993
+
+译者: Spock of the Final Frontier	98.Jul.26.

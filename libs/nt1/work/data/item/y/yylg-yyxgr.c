@@ -1,0 +1,31 @@
+// SN:M_UB[H0E>EDm\g9a
+// ITEM Made by player(阴阳老怪:yylg) /data/item/y/yylg-yyxgr.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Fri Mar 12 17:22:58 2004
+#include <ansi.h>
+#include <weapon.h>
+
+inherit DAGGER;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;34m阴[1;36m阳[1;33m小怪刃[2;37;0m", ({ "yyxgr" }));
+	set_weight(1800);
+	set("item_make", 1);
+	set("unit", "支");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一支短兵。
+短兵柄上刻着一行小字：阴阳老怪(yylg)
+");
+	set("value", 2100000);
+	set("point", 636);
+	set("material", "magic stone");
+	set("wield_msg", "[1;36m$N[1;36m一声清啸，抖出一支[1;36m$n[1;36m。[2;37;0m\n");
+	set("unwield_msg", "$N随手一抹，收起了$n。\n");
+	if (! check_clone()) return;
+	restore();
+	init_dagger(apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

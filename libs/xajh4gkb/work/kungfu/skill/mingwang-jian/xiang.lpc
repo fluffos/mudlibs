@@ -1,0 +1,114 @@
+// Copyright (C) 2003, by Lonely. All rights reserved.
+// This software can not be used, copied, or modified
+// in any form without the written permission from authors.
+
+#include <ansi.h>
+#include <skill.h>
+#include <weapon.h>
+#include <combat.h>
+#define XIANG "「" HIY "明王降魔" NOR "」"
+
+inherit F_SSERVER;
+
+
+int perform(object me, object target)
+{
+	object weapon;
+	string msg;
+	int ap, dp,skill,damage,busy_time;
+
+	if( !target ) target = offensive_target(me);
+	if( !target || !target->is_character() || !me->is_fighting(target) )
+		return notify_fail(XIANG "只能对战斗中的对手使用。\n");
+	if (! objectp(weapon = me->query_temp("weapon")) || (string)weapon->query("skill_type") != "sword")
+		return notify_fail("你使用的武器不对，难以施展" XIANG "。\n");
+	if (target && target->query_temp("apply/shade_vision")) 
+		return notify_fail("对方隐身了，你看不到"+target->query("name")+"。\n"); 		
+    if (me->is_busy())
+        return notify_fail("你现在正忙着！\n");
+	if (target && target->is_busy())
+		return notify_fail(target->name() + "目前正自顾不暇，放胆攻击吧。\n");
+	if ( target && target->query_temp("busy_mianyi") )	//冲穴成功后免疫busy，2017.9.29阿飞添加
+		return notify_fail(target->name() + "奇经八脉浑然一体，真气浩浩荡荡，点穴似乎没什么作用。\n");
+	if ((int)me->query_skill("mingwang-jian", 1) < 300)
+		return notify_fail("你不动明王剑不够娴熟，难以施展" XIANG "。\n");
+	if ((int)me->query_skill("longxiang", 1) < 300 && (int)me->query_skill("xiaowuxiang", 1) < 300)
+		return notify_fail("你对雪山寺内功了解不够，难以施展" XIANG "。\n");
+//	if (me->query_skill_mapped("sword") != "mingwang-jian")
+//		return notify_fail("你没有激发不动明王剑，难以施展" XIANG "。\n");
+//	if ( me->query_skill_mapped("force") != "longxiang" && me->query_skill_mapped("force") != "xiaowuxiang")
+//		return notify_fail("你未使用本门内功！\n");
+	if( (int)me->query("max_neili") < 100000 )
+		return notify_fail("你的内力修为还不够高。\n");
+	if( (int)me->query("jingli") < 1000 )
+		return notify_fail("你的精力不够了。\n");	
+	if (me->query("neili") < 1000)
+		return notify_fail("你现在的真气不足，难以施展" XIANG "。\n");
+	if (target && !living(target))
+		return notify_fail("对方都已经这样了，用不着这么费力吧？\n");
+	if (me->query_temp("autolian"))
+		return notify_fail("你正在发动自动连招！\n"); 	
+	if ( me->query_temp("cooldown") )	//CD写法	2017.9.7添加
+		return notify_fail("你处于技能冷却状态中，过会在使用吧。\n");
+		
+	me->set_temp("cooldown", 1);	//CD写法	2017.9.7添加
+	call_out("del_cooldown", 3, me);	//CD写法1
+	ap = me->query("xyzx_sys/level") + me->query_skill("mingwang-jian", 1) + me->query_skill("sword") + me->query_skill("force");
+	dp = target->query("xyzx_sys/level") + target->query_skill("dodge") + target->query_skill("parry");
+	ap = ap*((int)me->query("breakup")+(int)me->query("breakup")*(int)me->query("breakup")+100)/100;
+	dp = dp*((int)target->query("breakup")+(int)target->query("breakup")*(int)target->query("breakup")+100)/100;
+	skill = (int)me->query_skill("mingwang-jian", 1);	
+	busy_time = (30*skill)/(skill+2000);
+	if( stringp(target->query("inborn")) && (string)target->query("inborn")==YEL"冷静"NOR) busy_time = (30*skill)/(skill+2000)*7/10;
+	msg = HIW "$N" HIW "手中的" + weapon->name() + HIW "轻轻递出，发出一阵轻鸣，$n" + HIW "听了心中不禁有些迷茫。\n" NOR;
+	message_vision(msg, me, target);
+	if (random(ap) > dp/3)
+	{
+		msg = HIR "$n" HIR "心头一震，一时竟然沉迷当中，忘记了继续攻击。\n" NOR;
+		message_vision(msg, me, target);
+		target->start_busy(busy_time + 5);
+		tell_object(target, HIY"你陷入忙乱之中，一时无法动弹。\n"NOR);
+		me->add("neili", -300);
+	}
+	else
+	{
+		msg = HIC "可是$n" HIC "神智只是略微一滞，随即清醒，没有被$P" HIC "所困扰。\n" NOR;
+		message_vision(msg, me, target);
+	}
+
+	msg = HIY "$N" HIY "纵身跃入半空，将全身劲气贯于" + weapon->name() +
+	      HIY "中，剑尖顿时吐出一股剑气直指$n" HIY "而去。\n" NOR;
+	message_vision(msg, me, target);	
+	if (random(ap) > dp/3)
+	{
+		damage = me->query_skill("sword") + me->query_skill("force") + (int)me->query_skill("mingwang-jian", 1)*3;
+		damage = damage/2 + random(damage/2);
+		damage = damage*(100-target->query_meridian())/100;
+		me->add("neili", -300);
+		target->receive_damage("qi",damage,me);
+		target->receive_wound("qi",damage/2,me);
+		msg = HIR "$n" HIR "只见一道黄芒闪过，微作差异，登时只觉全身一麻，剑气已透胸而过！\n" NOR;
+		message_vision(msg, me, target, damage, HBWHT+HIM"气血伤害"NOR);	//2018.10.2阿飞改，优化化学伤害显示的写法
+//		if (userp(me) && me->query("env/no_combat_msg")<4) tell_object(me, HIW"该绝招对敌人气血的外伤为"+ damage +"，内伤为"+ damage/2 +"。\n" NOR);
+	}
+	else
+	{
+		me->add("neili", -100);
+		msg = CYN "可是$n" CYN "一声冷笑，飞身一跃而起，避开"
+		       CYN "$N" CYN "发出的剑气。\n"NOR;
+		message_vision(msg, me, target);
+	}
+	
+	me->start_busy(1);
+	return 1;
+}
+
+void del_cooldown(object me)	//CD写法1
+{ 
+	if ( !objectp(me) ) return;
+	if ( me->query_temp("cooldown") )	
+	{
+		me->delete_temp("cooldown");
+		tell_object(me, HIM"你呼出一口气，缓缓的将内力收回丹田。\n"NOR);
+	}	
+}

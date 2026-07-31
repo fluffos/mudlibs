@@ -1,0 +1,18 @@
+// SN:\<\i:e59li>JdoVQ
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("四不象[2;37;0m", ({"sibu xiang"}));        
+        set("gender", "女性");                
+        set("unit", "头");
+        set("long", "南非进口的
+它是八百的坐骑。
+");
+        set_temp("owner_id", "yeah");
+        set_temp("owner_name", "八百");
+        ::setup();
+}
+

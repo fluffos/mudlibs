@@ -1,0 +1,18 @@
+// SN:XYL2g^Le6=9>XGk]
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;33m烈马[2;37;0m", ({"hot ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "从前很远一位红尘里人 带这他的烈马出家了 记着$HIY$渡白吧
+它是澄白的坐骑。
+");
+        set_temp("owner_id", "arthur");
+        set_temp("owner_name", "澄白");
+        ::setup();
+}
+

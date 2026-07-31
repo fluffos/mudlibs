@@ -1,0 +1,22 @@
+// cracked by vikee 2/09/2002   vikee@263.net
+// gangcha.c
+
+#include <weapon.h>
+
+inherit FORK;
+
+void create()
+{
+        set_name("木叉", ({ "fork", "cha"}) );
+        set_weight(2000);
+        if( clonep() )
+                set_default_object(__FILE__);
+        else {
+                set("unit", "柄");
+                set("value", 100);
+                set("material", "iron");
+        }
+        init_fork(5);
+        setup();
+}
+

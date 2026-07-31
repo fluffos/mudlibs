@@ -1,0 +1,232 @@
+#define bet_DIR       "/log/bet/"
+#define bet_FILENAME  "bet"
+#include <ansi.h>
+inherit F_CLEAN_UP;
+inherit F_SAVE;
+mapping *notes;
+string query_save_file()
+{
+        return bet_DIR + bet_FILENAME ;
+}
+
+void list_dubo(object me)
+{
+    int i;
+    string s;
+    
+    if (sizeof(notes)<1) {
+        write(HIW"没什么可以投票的。\n"NOR);
+        return;
+    } 
+    printf(HIY"                      地狱现有以下的调查信息:\n"NOR
+                "-----------------------------------------------------------------------\n");
+    for( i = 0; i<sizeof(notes); i++){
+        s = HIG+(string)(i+1)+") "+HIW+notes[i]["describ"]+" "+HIY+"( "+notes[i]["ob1"]+ HIR" VS "HIY+notes[i]["ob2"]+" )";
+        switch(notes[i]["status"]){
+          case "0":
+                s = s +" "+HIG+"  现在可以投票";
+                break;
+          case "1":
+                s = s +" "+HIG+"  已经停止投票";
+                break;
+          case "-1":            
+                s = s +" "+HIG+"  正做投票准备";
+                break;
+          default:
+                s = s +" "+"结果是:"+HIG+notes[i]["status"]+"胜 ";
+                break;
+        }       
+        if(wiz_level(me)>0)
+                s = s + HIY+"  标识为："+notes[i]["UID"]+"\n";
+        else
+                s = s + "\n";
+        printf(s);
+    }
+}
+
+int search_UID(string UID)
+{
+    int i;
+    if( !(i = sizeof(notes)) ) return 0;
+    for( ; i > 0; i-- ) 
+        if( notes[i-1]["UID"] == UID ) break;
+    return i;
+}
+
+int main(object me, string arg)
+{
+        mapping note;
+        string s,st,temp,who;
+        string describ,ob1,ob2,status,UID,dir;
+        int i,num;
+        restore();
+        
+        if (!arg)
+           return notify_fail("请用 help mudvote 来看使用方法。\n");
+           
+        if( sscanf(arg, "view %s", st) == 1 ) {
+                if (st=="bet.o"||st=="betlog") {return notify_fail("没有此调查的统计信息。\n");}
+                dir = "/log/bet/"+st;
+                if( file_size(dir) < 0 ) {return notify_fail("没有此调查的统计信息。\n");}
+                else 
+                printf(HIY"%s (%s VS %s) 总计投票人数：%d 人  \n"
+                "其中投票%s的 %d 人 ，投票%s的 %d 人  详细列表如下：\n"HIG
+    "-----------------------------------------------------------------\n"
+HIR"为防止不同意见引起混乱，取消详细列表。\n"NOR,
+                notes[num]["describ"],notes[num]["ob1"],notes[num]["ob2"],
+                notes[num]["ob1_nu"]+notes[num]["ob2_nu"],
+                notes[num]["ob1"],notes[num]["ob1_nu"],
+                notes[num]["ob2"],notes[num]["ob2_nu"]);
+//          me->start_more( read_file(dir));
+                return 1;
+        }
+        
+        if( sscanf(arg, "%s", s) == 1 ) {
+                if(s=="new" && wiz_level(me)<3 )
+                        return notify_fail("只有巫师才能设置调查信息。\n");
+                if(s=="new" && wiz_level(me)>=3 )
+                        return notify_fail("使用方法：mudvote new <唯一标识> <描述> <结果一> <结果二> \n");
+                if(s=="set" && wiz_level(me)<3)
+                        return notify_fail("只有巫师能设置状态。\n");
+                if(s=="set" && wiz_level(me)>=3)
+                        return notify_fail("使用方法：mudvote set <编号> <状态/结果> \n");
+                if ( s == "delete" && wiz_level(me)<3 ) 
+                        return notify_fail("只有巫师才可以删除信息。 \n");
+                if ( s == "delete" && wiz_level(me)>=3 )
+                        return notify_fail("使用方法：mudvote delete <编号> \n");       
+                        
+                if(s =="list"){
+                        list_dubo(me);
+                        return 1;
+                }
+        
+                        
+        }
+        
+        // 设置新的调查内容
+        if( sscanf(arg, "new %s %s %s %s", UID,describ,ob1,ob2,status) == 4 ){ 
+                if(strlen(UID)>8)
+                        return notify_fail("唯一标识请尽量简短。\n");
+                if (search_UID(UID) )
+                        return notify_fail("重复的标识符，换一个。\n");
+                note = allocate_mapping(7);
+                note["describ"] = describ;
+                note["ob1"] = ob1; 
+                note["ob2"] = ob2; 
+                note["status"] = "-1";
+                note["UID"] = UID;
+                note["ob1_nu"] = 0;
+                note["ob2_nu"] = 0;
+                
+                i = sizeof(notes);
+                if( !pointerp(notes) || !sizeof(notes) )
+                        notes = ({ note });
+                else    notes += ({ note });
+                tell_object(me, HIM "已做完准备，再检查一次后 mudvote set <编号> 0 可以开始投票。\n"NOR);
+                save();
+                message("channel:chat", HIC "\n【调查通告】：地狱正在开设新调查，稍后可以投票。\n" NOR, users());
+                return 1;
+        }
+        
+        
+        //设置当前状态：0 or 1 or 结果 
+        if( sscanf(arg, "set %d %s", num,status) == 2){
+                if( !pointerp(notes) || !sizeof(notes) )
+                        return notify_fail("现在没有任何调查。\n");
+                if( num < 1 || num > sizeof(notes) )
+                        return notify_fail("没有这个编号的调查。\n");
+                num--;
+                if(status=="0")
+                        temp = HIC"本次调查："+notes[num]["describ"]+" ( "+notes[num]["ob1"]+" VS "+notes[num]["ob2"]+" ) 现在开始投票，\n"+NOR;
+
+                else if(status=="1")
+                        temp = HIC"本次调查："+notes[num]["describ"]+" ( "+notes[num]["ob1"]+" VS "+notes[num]["ob2"]+" ) 现在停止投票。\n"+NOR;
+
+                else if(status=="-1")
+                        temp = HIC"本次调查："+notes[num]["describ"]+" ( "+notes[num]["ob1"]+" VS "+notes[num]["ob2"]+" ) 正在做开始准备。\n"+NOR;
+
+                else if(status!=notes[num]["ob1"] && status!=notes[num]["ob2"] ){
+                        temp = "没有这一方案啊？检查一下，重来！\n";
+                        return notify_fail(temp);
+                }
+                else{
+                        temp = HIC"本次调查："+notes[num]["describ"]+" ( "+notes[num]["ob1"]+" VS "+notes[num]["ob2"]+" ) ，结果为："+ status + "。\n"+NOR;   
+                }
+                message("channel:chat", HIC "\n【调查通告】："+temp+"\n" NOR, users());
+                notes[num]["status"]=status;
+                save();
+                return 1;
+        }
+        
+        //删除信息 
+        if( sscanf(arg, "delete %d", num)== 1 ){
+                if ( wiz_level(me)<3 ) return notify_fail("只有巫师才可以删除。 \n");                   
+                if( !arrayp(notes) || num < 1 || num > sizeof(notes) )
+                        return notify_fail("没有这个编号的调查信息。\n");
+                else
+                        num--;
+                        dir = notes[num]["UID"];
+                        dir = "/log/bet/"+dir;
+                        notes = notes[0..num-1] + notes[num+1..<1];
+                        save();
+                        if( rm(dir)&&sizeof(dir)>1)
+                        write("删除第 " + (num+1) + " 号调查信息及统计信息....Ok。\n");
+                        else
+                        write("删除第 " + (num+1) + " 号调查信息...Ok。\n" + dir + " 统计文件不存在，无须删除。\n");
+                        return 1;
+        }
+        
+        //调查了!!!
+        if( sscanf(arg, "%d %s", num,who)== 2 ){
+            if(me->query("combat_exp")<100000)  
+                        return notify_fail("你的经验值不够，没有权利投票！\n");
+                if(me->query("bet/aleardy/tongyi")==1)  
+                        return notify_fail("你已经投过票了！\n");
+                if( !arrayp(notes) || num < 1 || num > sizeof(notes) )
+                        return notify_fail("没有这个编号的调查信息。\n");
+                num--;
+                if(notes[num]["status"]=="-1")
+                        return notify_fail("正在做准备工作，请稍候！\n");
+                if(notes[num]["status"]=="1")
+                        return notify_fail("可惜呀，现在已经停止投票了，下次请早吧！\n");
+                if(notes[num]["status"]!="0")
+                        return notify_fail(HIR"结果已经出来了，还投票？!\n"NOR);
+                if(who!=notes[num]["ob1"] && who!= notes[num]["ob2"])
+                        return notify_fail("你要对方面投票呀？\n");
+                tell_object(me,HIM"第 "+(string)(num+1)+" 调查："+notes[num]["describ"]+" 你投票决定 "+who+" 。\n"NOR);
+                me->set("bet/UID",notes[num]["UID"]);
+                me->set("bet/who",who);
+                me->set("bet/aleardy/tongyi",1);
+
+                if (who == notes[num]["ob1"] ) {
+                        notes[num]["ob1_nu"] = notes[num]["ob1_nu"]+1;
+                }
+                
+                else {
+                        notes[num]["ob2_nu"] = notes[num]["ob2_nu"]+1;
+                }
+                
+                save();
+                dir = "/log/bet/"+me->query("bet/UID");
+                write_file( dir, sprintf("%s %-8s %8s       投票决定 %8s \n", ctime(time())[4..19],
+                        me->query("name"), me->query("id"), me->query("bet/who") ));
+                return 1;       
+        }
+        
+        return notify_fail(HIW"参数输入错误，请看"+HIR+" help mudvote"+HIW" 然后重新输入!\n"NOR);       
+}
+
+int help(object me)
+{
+write(@HELP
+指令格式 : 
+mudvote list                                            查看现在有什么调查信息。
+mudvote 1 同意                                          投票同意。
+mudvote 1 不同意                                        投票不同意
+mudvote view 同意                                       查看调查的详细统计资料
+
+HELP
+    );
+    return 1;
+}       
+

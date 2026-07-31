@@ -1,0 +1,35 @@
+// ITEM Made by player(坤承:dyz666534210_1) /data/item/d/dyz666534210_1-qianyuan.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Thu May 25 16:29:43 2023
+#include <ansi.h>
+#include <weapon.h>
+
+inherit SWORD;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;37m乾元[2;37;0m", ({ "qianyuan" }));
+	set_weight(750);
+	set("item_make", 1);
+	set("unit", "柄");
+	set("long", "这是由[1;37m世界[2;37;0m炼制而成的一柄剑。
+[1;33m自遥远的过去一直存在于世的终极神兵
+[1;36m象征着永远生生不息的战斗之心
+[1;31m为生存而战
+[1;36m为前进而战
+[1;33m为真理而战！[2;37;0m
+剑柄上刻着一行小字：坤承(dyz666534210_1)
+");
+	set("value", 200100000);
+	set("point", 22000);
+	set("material", "silk");
+	set("wield_msg", "[1;33m一道流光闪过，[1;37m传奇的神剑降临[2;37;0m\n");
+	set("unwield_msg", "[1;34m黑夜不会永远持续，[1;33m但人类的薪火永存[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	init_sword(apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

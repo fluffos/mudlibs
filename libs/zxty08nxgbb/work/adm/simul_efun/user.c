@@ -1,0 +1,19 @@
+
+
+int playerp(object ob)
+{
+        return ob->is_player();
+}
+mapping zjbdbase(mapping vic)
+{
+mapping zjb = vic;
+return zjb;
+}
+object *ty_users()
+{
+       return filter_array(children(USER_OB), (: userp :));
+}
+object *all_interactive()
+{
+        return efun::users();
+}

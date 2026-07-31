@@ -1,0 +1,35 @@
+// SN:WD<5i=BeSf<[Lf\Y
+// File(/data/room/wuchi/xiaoyuan.c) of wuchi's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        set("short", "武之窝小院");
+	set ("long", @LONG
+这什么小院啊，啥都没有，唉，真是啊，那个什么什么的啊~~`[2;37;0m
+LONG );
+
+        set("room_key", "1 of wuchi");
+	setup();
+
+	set("exits", ([
+                "out"    : "/d/suzhou/road1",
+	]));
+
+        set("outdoors", "suzhou");
+        set("no_sleep_room", 1);
+        set("valid_startroom", 1);
+
+        set("KEY_DOOR", ([
+                "exit" : "north",
+                "room" : __DIR__"dulewu",
+        ]));
+    
+        set("room_owner", "武痴");
+        set("room_name", "武之窝");
+        set("room_id", "wuchi");
+        set("room_owner_id", "wuchi");
+        set("room_position", "青石官道");
+}

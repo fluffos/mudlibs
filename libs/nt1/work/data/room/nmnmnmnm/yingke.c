@@ -1,0 +1,38 @@
+// SN:P=FWk;@eB8K?b@m;
+// File(/data/room/nmnmnmnm/yingke.c) of nmnmnmnm's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        set("short", "盘龙迎客厅");
+	set ("long", @LONG
+这里是盘龙的主人老农迎接八方来客的地方。大凡客人来拜见老
+农，少不得在这里寒暄叙话，了尽仰慕之情。东面通往一个茶室，是
+主人陪同客人品尝天下名茶之处。 
+LONG );
+
+	set("exits", ([
+		"north"  : __DIR__"yishiting",
+                "south"  : __DIR__"zoudao",
+                "east"   : __DIR__"chashi",
+	]));
+
+        create_door("east", "木门", "west", DOOR_CLOSED);
+
+        set("objects", ([
+                "/d/room/roomnpc/yahuan" : 2,
+        ]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("room_owner", "老农");
+        set("room_name", "盘龙");
+        set("room_id", "nmnmnmnm");
+        set("room_owner_id", "nmnmnmnm");
+        set("room_position", "碎石小道");
+}

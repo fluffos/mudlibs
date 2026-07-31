@@ -1,0 +1,28 @@
+// SN:GnX0<?`6W=V:T5DN
+// File(/data/room/tiantian/key.c) of tiantian's key
+// Create by LUBAN written by Doing Lu
+
+#include <ansi.h>
+
+inherit ITEM;
+
+string query_autoload() { return "1"; }
+
+void create()
+{
+        set_name(YEL "猪猪快跑家的钥匙" NOR, ({ "key", "8 of tiantian" }));
+        set_weight(10);
+        if (clonep())
+                set_default_object(__FILE__);
+        else {
+                set("long", @LONG
+一把用来开启猪猪会总坛(tian)的钥匙。
+这是猪猪快跑第八次配的钥匙。
+LONG );
+                set("unit", "把");
+                set("no_pawn", 1);
+                set("no_sell", 1);
+                set("item_make", 1);
+                set("value", 1);
+        }
+}

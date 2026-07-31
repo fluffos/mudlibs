@@ -1,0 +1,18 @@
+// SN:hIR=P[01G6@aS0g]
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("金毛狮[2;37;0m", ({"jinmao shi"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "一头
+它是你好阿优的坐骑。
+");
+        set_temp("owner_id", "duni");
+        set_temp("owner_name", "你好阿优");
+        ::setup();
+}
+

@@ -1,0 +1,104 @@
+#include <combat.h>
+inherit SKILL;
+mapping *action = ({
+([  "action":"$N将$w扣在拇指上用力一弹，一招「"+HIG+"风中劲子"+NOR+"」射向$n的$l",
+    "force" : 180,
+    "lvl" : 0,
+    "skill_name" : HIG "风中劲子" NOR,
+    "damage_type":"刺伤",
+    "post_action":  (: call_other, WEAPON_D, "throw_weapon" :),
+ ]),
+([  "action":"$N一招「"+HIC+"黑子偷心"+NOR+"」$w犹如黑子，突然射向$n的$l",
+    "force" : 180,
+    "lvl" : 40,
+    "skill_name" : HIC "黑子偷心"NOR,
+    "damage_type":"刺伤",
+    "post_action":  (: call_other, WEAPON_D, "throw_weapon" :),
+]),
+([  "action":"$N大喝一声，使出「"+HIW+"白子击天"+NOR+"」手中$w全力而出",
+    "force" : 180,
+    "lvl" : 80,
+    "skill_name" : HIW "白子击天" NOR,
+    "damage_type":"刺伤",
+    "post_action":  (: call_other, WEAPON_D, "throw_weapon" :),
+]),
+([  "action":"$N不顾一切，「"+RED+"双子齐下"+NOR+"」$w雷击一般射向$n的$l",
+    "force" : 180,
+    "lvl" : 120,
+    "skill_name" : RED "双子齐下" NOR,
+    "damage_type":"刺伤",
+    "post_action":  (: call_other, WEAPON_D, "throw_weapon" :),
+]),
+([  "action":"$N移动迅速，身子一动「"+YEL+"黑白交错"+NOR+"」,$w已然射向$n的$l",
+    "force" : 180,
+    "lvl" : 160,
+    "skill_name" : YEL "黑白交错" NOR,
+    "damage_type":"刺伤",
+    "post_action":  (: call_other, WEAPON_D, "throw_weapon" :),
+]),
+});
+int valid_enable(string usage) { return usage == "throwing"; }
+int practice_level(){   return 200;  }
+int valid_learn(object me)
+{
+      if (me->query_skill("throwing",1) <= me->query_skill("fenglei-zifa",1))
+      return notify_fail("你的基础不够，无法领会更高深的技巧！\n");
+    return 1;
+}
+string query_skill_name(int level)
+{
+        int i;
+        for(i = sizeof(action)-1; i >= 0; i--)
+                if(level >= action[i]["lvl"])
+                        return action[i]["skill_name"];
+}
+mapping query_action(object me, object weapon)
+{
+    mapping a_action;
+    int i, level;
+    
+    level   = (int) me->query_skill("fenglei-zifa",1);
+        for(i = sizeof(action); i > 0; i--)
+                if(level > action[i-1]["lvl"]){
+                        a_action = action[NewRandom(i, 20, level/5)];
+                        break;
+                }
+    a_action["dodge"]  = 0-level/3;
+    a_action["damage"] = level+random(level);
+    if ((int)me->query_temp("fenglei-zifa")>0)
+        return (["action": NOR "一"+weapon->query("unit")+"$w"+NOR+"幻化成无数棋子，黑白交错的射向$n"+NOR+"的$l" NOR,
+                 "dodge": -3*random(level),
+                 "damage": level,
+                 "damage_type":"刺伤",
+                 "post_action":  (: call_other, WEAPON_D, "throw_weapon" :),
+                ]);
+    return a_action;
+
+}
+
+int practice_skill(object me)
+{
+    object ob;
+    if( (int)me->query("qi") < 30
+    ||  (int)me->query("neili") < 35 )
+        return notify_fail("你的内力或气不够，没有办法练习风雷子法。\n");
+    if (!objectp(ob = me->query_temp("weapon"))
+    || (string)ob->query("skill_type") != "throwing")
+    if (!objectp(ob = me->query_temp("secondary_weapon"))
+    || (string)ob->query("skill_type") != "throwing")
+        return notify_fail("你装备的武器不对。\n");
+    me->receive_damage("qi", 30);
+    me->add("force", -20);
+    me->add_temp("pratice_throwing",1);
+    if (me->query_temp("pratice_throwing") > me->query_skill("fenglei-zifa",1)/20 ){
+           if( (int)ob->query_amount()==1 ) {
+                   ob->unequip();
+                   tell_object(me, BOLD "\n你的" + ob->query("name") + "用完了！\n\n"+NOR);
+           }
+           ob->add_amount(-1);
+           me->delete_temp("pratice_throwing");
+    }
+    write("你按著所学练了一遍风雷子法。\n");
+    return 1;
+}
+

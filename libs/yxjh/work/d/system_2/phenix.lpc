@@ -1,0 +1,36 @@
+#include <ansi.h>
+#include <combat.h>
+// inherit F_CLEAN_UP;
+inherit F_SSERVER;
+void remove_effect(object me, int amount);
+
+int perform(object me, object target)
+{
+        object ob;
+        int skill,tg_skill,time;
+        string msg;
+
+        if( !target ) target = offensive_target(me);
+
+        if ( (string)me->query("family/family_name") != "玄天派") 
+                return notify_fail("「"HIY"凤舞九天"NOR"」只有玄天派传人才能使用。\n");
+
+        if( !target || !target->is_character() || !me->is_fighting(target) )
+                return notify_fail("「"HIY"凤舞九天"NOR"」只能对战斗中的对手使用。\n");
+
+        if( (int)me->query_skill("lingyunbu", 1) < 800 )
+                return notify_fail("你的凌云步火候不够，不能使出「"HIY"凤舞九天"NOR"」。\n");
+
+        if( (int)me->query("neili", 1) < 500 )
+                return notify_fail("你现在内力太弱，不能使用「"HIY"凤舞九天"NOR"」。\n");
+
+        msg = HIR  "$N心头灵光闪过，暗运易经玄功，纵身跃起，双脚如彩凤腾空一卷，猛地踢出！" NOR;
+    message_vision(msg, me);
+    me->clean_up_enemy();
+    me->add("neili", -150);
+
+        COMBAT_D->do_attack(me,target, 0, TYPE_REGULAR,msg,"瘀伤");
+        me->start_busy(2);
+        return 1;
+}
+

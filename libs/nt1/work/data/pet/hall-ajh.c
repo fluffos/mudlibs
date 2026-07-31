@@ -1,0 +1,18 @@
+// SN:;=UKcU@O2f<A0@gf
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;33m矮脚虎[2;37;0m", ({"ajh hu"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "畜生
+它是好好干的坐骑。
+");
+        set_temp("owner_id", "hall");
+        set_temp("owner_name", "好好干");
+        ::setup();
+}
+

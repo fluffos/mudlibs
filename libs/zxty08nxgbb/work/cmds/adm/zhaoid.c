@@ -1,0 +1,93 @@
+// edit by Zjb@TY 
+
+#define TY "password" // edit by Zjb@TY  要找的Login 变量类别
+
+inherit  F_CLEAN_UP;
+int  strnotlast(string,  string);
+
+int  main(object  me,  string  arg)
+{
+    object  who,  ob;
+    int  i,  j,  count;
+    string  *dir,  *ppls,  name,  address;
+
+    if  (!wizardp(me))
+        return  notify_fail("你没有权力使用这个指令。\n");
+
+    if  (!arg)
+                return  notify_fail("指令格式：zhaoid  <变量名的返回值>\n");
+
+    seteuid(getuid());
+
+    address  =  arg;
+
+    write("开始寻找变量返回值是  "+address+"  的使用者：\n");
+    count  =  0;
+    dir  =  get_dir(DATA_DIR  +  "login/");
+    i  =  0;
+    destruct(who);
+    call_out  ("search_dir",0,count,dir,i,address,me);
+    return  1;
+}
+
+void  search_dir  (int  count,  string  *dir,  int  i,  string  address,  object  me)
+{
+    object  ob;
+    int  j;
+    string  *ppls,  name,  str,  adr,  s1,  s2,  s3,  s4;
+    string  info;
+
+    if  (i  ==  sizeof(dir))  {
+          tell_object(me,"共有"+to_chinese(count)+"位使用者的返回值是一样的。\n");
+    }  else  {
+        ppls  =  get_dir(DATA_DIR  +  "login/"  +  dir[i]  +  "/");
+        for(j=0;  j<sizeof(ppls);  j++)  {
+            reset_eval_cost();
+            if  (sscanf(ppls[j],  "%s.o",  str)==1)  {
+//  What  are  these  for???  Where  was  "name"  assigned?  
+//                if  (name  ==  str)
+//                    continue;
+                ob  =  new(LOGIN_OB);
+                ob->set("id",  str);
+                if  (!  ob->restore())  {
+                    destruct(ob);
+                    continue;
+                }
+                if  (!  ob->query(TY))  {
+                    destruct(ob);
+                    continue;
+                }
+                adr  =  ob->query(TY);
+                if  (strsrch(adr,  address)==-1)  {
+                    destruct(ob);
+                    continue;
+                }
+
+                info  =  sprintf("%-10s%-14s%-11s%-6s%s\n",  
+                                              ob->query("id"),
+                                              ob->query("name"),
+                                              ctime(ob->query("last_on"))[0..10],
+                                              ctime(ob->query("last_on"))[20..24],
+                                              ob->query(TY));
+                tell_object  (me,info);
+
+                destruct(ob);
+                count  ++;
+            }
+        }
+        i++;
+        call_out  ("search_dir",0,count,dir,i,address,me);
+    }
+}
+
+int  help(object  me)
+{
+write(@HELP
+指令格式：  zhaoid  <变量名的返回值>
+
+查找所有与使用者的变量名的返回值相同的使用者。
+HELP
+    );
+        return  1;
+}
+

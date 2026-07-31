@@ -1,0 +1,18 @@
+// SN:ke;Jf3N`F[iBbk[[
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;31m赤[1;36m兔马[2;37;0m", ({"chitu ma"}));        
+        set("gender", "女性");                
+        set("unit", "匹");
+        set("long", "迅疾
+它是天悟的坐骑。
+");
+        set_temp("owner_id", "wintel");
+        set_temp("owner_name", "天悟");
+        ::setup();
+}
+

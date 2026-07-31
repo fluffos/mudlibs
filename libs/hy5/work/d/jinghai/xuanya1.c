@@ -1,0 +1,20 @@
+// Room: /d/jinghai/xuanya1.c
+
+inherit ROOM;
+
+void create()
+{
+	set("short", "悬崖尽头");
+	set("long", @LONG
+这是悬崖尽头。
+
+LONG
+	);
+	set("exits", ([ /* sizeof() == 1 */
+  "east" : __DIR__"xuanya",
+]));
+        set("outdoors","jinghai");
+
+	setup();
+	replace_program(ROOM);
+}

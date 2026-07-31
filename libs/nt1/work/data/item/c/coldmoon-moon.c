@@ -1,0 +1,35 @@
+// SN:T82[_=Y75aidfaUo
+// ITEM Made by player(寒月:coldmoon) /data/item/c/coldmoon-moon.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Wed Sep 15 14:46:32 2004
+#include <ansi.h>
+#include <armor.h>
+
+inherit HANDS;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;37m月[1;35m玲[1;32m珑[2;37;0m", ({ "moon" }));
+	set_weight(2700);
+	set("item_make", 1);
+	set("unit", "双");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一双铁掌。
+[1;34m一双精致的护掌，小巧玲珑，上面隐隐有寒光流动，令人触手生寒。[2;37;0m
+铁掌缘上刻着一行小字：寒月(coldmoon)
+");
+	set("value", 2100000);
+	set("point", 734);
+	set("material", "magic stone");
+	set("wear_msg", "[1;34m只见$N双手一抖，手中的[1;37m月[1;35m玲[1;32m珑[1;34m发出一道道刺眼的寒光，慑人心魄，令你不敢直视。[2;37;0m\n");
+	set("remove_msg", "[1;34m一道寒光隐去，$N将手中的[1;37m月[1;35m玲[1;32m珑[1;34m收好，纳入怀中。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/unarmed_damage", apply_damage());
+	set("armor_prop/armor", 10);
+	set("armor_prop/strike", 10);
+	set("armor_prop/hand", 10);
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

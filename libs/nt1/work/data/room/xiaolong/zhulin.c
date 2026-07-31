@@ -1,0 +1,29 @@
+// SN:[D3C1_o=^`7=Znl`
+// File(/data/room/xiaolong/zhulin.c) of xiaolong's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "竹林");
+	set ("long", @LONG
+这里种着好大一片竹林，非常幽静。风一起就听竹叶沙沙的响，
+有时段小龙就去听涛阁默听竹浪涛声，参悟武功。 
+LONG );
+
+	set("exits", ([
+                "west" : __DIR__"huayuan",
+                "east" : __DIR__"tingtao",
+	]));
+
+        set("outdoors", "unknow");
+        set("sleep_room", 1);
+        setup();
+
+        set("room_owner", "段小龙");
+        set("room_name", "阎罗居");
+        set("room_id", "yanluo");
+        set("room_owner_id", "xiaolong");
+        set("room_position", "名人堂");
+}

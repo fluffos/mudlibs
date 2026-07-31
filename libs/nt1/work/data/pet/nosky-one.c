@@ -1,0 +1,18 @@
+// SN:n4UFSc5CJD1j0Wng
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;35m独[1;33m角[1;32m兽[2;37;0m", ({"one shou"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "$HIM$兽中王者
+它是笑红尘的坐骑。
+");
+        set_temp("owner_id", "nosky");
+        set_temp("owner_name", "笑红尘");
+        ::setup();
+}
+

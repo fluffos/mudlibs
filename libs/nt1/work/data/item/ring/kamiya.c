@@ -1,0 +1,11 @@
+// SN:YAD@1bM]_X>HB@7K
+// wedding-ring.c
+
+#include "/clone/misc/wedding-ring.h"
+
+void setup()
+{
+        set("long", "这是明宇和神谷薰的结婚戒指，是两人的定情之物。
+");
+        ::setup();
+}

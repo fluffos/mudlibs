@@ -1,0 +1,36 @@
+// SN:_XNmDgJCMimGV`^n
+// File(/data/room/rtest/xiaoyuan.c) of rtest's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        set("short", "青龙殿小院");
+	set ("long", @LONG
+这是坐落在皇龙宫左边的小殿堂，它有一道小门，与白虎殿一起
+拱卫着皇龙宫。[2;37;0m
+LONG );
+
+        set("room_key", "1 of rtest");
+	setup();
+
+	set("exits", ([
+                "out"    : "/d/room/playtown/road1",
+	]));
+
+        set("outdoors", "playertown");
+        set("no_sleep_room", 1);
+        set("valid_startroom", 1);
+
+        set("KEY_DOOR", ([
+                "exit" : "north",
+                "room" : __DIR__"dating",
+        ]));
+    
+        set("room_owner", "胡探索");
+        set("room_name", "青龙殿");
+        set("room_id", "qld");
+        set("room_owner_id", "rtest");
+        set("room_position", "碎石小道");
+}

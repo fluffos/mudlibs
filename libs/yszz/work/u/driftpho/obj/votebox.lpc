@@ -1,0 +1,239 @@
+//votebox.c 
+
+#include <ansi.h>
+
+#define RESOULT_FILE   "/u/driftpho/obj/resoult"
+#define WIZLIST    "/adm/etc/wizlist"
+#define  VOTE_TIME 60*60*24
+
+inherit ITEM;
+
+void mail_resoult();
+
+void create()
+{
+   set_name(HIW"投票箱"NOR, ({"vote box"}));
+   set_weight(500);
+   set("no_get",1);
+   set("no_sell",1);
+   set("no_give",1);
+
+   set("min_age",16);
+   if (clonep())
+     set_default_object(__FILE__);
+   else {
+     set("unit", "个");
+     set("value", 100000);
+         set("long","一个投票箱，玩家可以投票表决自己对mud的某件事的立场.
+同意的请(press agree)，不同意的请(press disagree)。topic可以看到
+现在的投票事项！");
+   }
+
+   write_file(RESOULT_FILE,"0\n",1);
+   write_file(RESOULT_FILE,"0\n");
+
+   setup();
+}
+
+void init()
+{
+     add_action("do_press","press");
+     add_action("do_topic","topic");
+     add_action("do_setage","setage");
+     add_action("do_settopic","settopic");
+     add_action("do_start","start");
+}
+
+int do_topic(string arg)
+{
+        if(!query("topic"))
+        {
+                write("目前投票内容还没定！\n");
+                return 1;
+        }
+        write("现在投票表决的内容是:\n"+query("topic")+"\n");
+        return 1;
+}
+
+int do_settopic(string arg)
+{
+        object me = this_player();
+
+        if(!wizardp(me)) return 0;
+        set("topic",arg);
+        write("OK!\n");
+        return 1;
+}
+
+int do_start(string arg)
+{
+        object me = this_player();
+
+        if(!wizardp(me)) return 0;
+
+        if(!query("topic"))
+        {
+                write("请先定个内容！\n");
+                return 1;
+        }
+        remove_call_out("announce");
+        remove_call_out("destroy");
+        call_out("announce",1800);  //半小时提醒一次
+        call_out("destroy",VOTE_TIME);    //大概持续一天时间
+        write("关于\""+query("topic")+"\"开始投票!\n");
+        return 1;
+}
+
+int destroy()
+{
+        object me = this_object();
+        remove_call_out("announce");
+        mail_resoult();
+        destruct(me);
+        return 1;
+}
+
+int announce()
+{
+        string s;
+
+        s = query("topic");
+        message("vote",HIR "【投票箱】"+s+"\n" NOR,users());
+        call_out("announce",10);
+        return 1;
+}
+
+int do_setage(string arg)
+{
+        object me = this_player();
+        int age;
+
+        if(!wizardp(me))
+                return 0;
+
+        sscanf(arg,"%d",age);
+        if(age<14)
+                return notify_fail("最小年龄不能小于14!\n");
+        set("min_age",age);
+        write("OK!\n");
+        return 1;
+}
+
+int have_voted(string name)
+{
+        string all;
+        string* s;
+
+        all = read_file(RESOULT_FILE);
+        s = explode(all,"\n");
+        for(int i=2;i<sizeof(s);i++)
+        {
+                if(s[i]==name)
+                        return 1;
+        }
+        return 0;
+}
+
+int do_press(string arg)
+{
+        object me = this_player();
+        string all;
+        string* s;
+        int a,disa,i;
+
+        if(!arg || 
+        ((arg!="agree") && (arg!="disagree")))
+                return notify_fail("(press agree)投赞成票，(press disagree)投不赞成票！\n");
+
+        if((me->query("age") < query("min_age"))&& !wizardp(me))
+                return notify_fail("你年龄太小不能投票！\n");
+
+        if(have_voted(me->query("id")))
+                return notify_fail("你已经投过一票了！\n");
+
+        all = read_file(RESOULT_FILE);
+        s = explode(all,"\n");
+        sscanf(s[0],"%d",a);
+        sscanf(s[1],"%d",disa);
+        if(arg=="agree")
+        {
+                a++;
+                write("你投了赞成票!\n");
+        }
+        else{
+                disa++;
+                write("你投了反对票!\n");
+        }
+        s[0] = ""+a;
+        s[1] = ""+disa;
+        all = implode(s,"\n");
+        write_file(RESOULT_FILE,all+"\n",1);
+        write_file(RESOULT_FILE,me->query("id")+"\n");
+
+        return 1;
+}
+
+void send_mail(string rcvr, mapping mail, int silent)
+{
+   object ppl, ob, mbx;
+
+   // Acquire the login object of receiver and mark the arrival of newmail.
+
+   ob = FINGER_D->acquire_login_ob(rcvr);
+   if( !ob ) {
+     return;
+   }
+   ob->add("new_mail", 1);
+   ob->save();
+
+   // Get the mailbox or make a new one if not found.
+   ppl = find_player(rcvr);
+   if(ppl && this_player()->visible(ppl)) {
+            mbx = ppl->query_temp("mbox_ob");
+       if(!silent)
+         write("\n您请千里眼通知 " + rcvr + " 收信!\n");
+            tell_object(ppl, "千里眼跟您说：有您的信！快来一下！\n\n");
+        } 
+   if( !mbx ) {
+     mbx = new(MAILBOX_OB);
+     mbx->set_owner(rcvr);
+   }
+
+   // Receive the mail and destruct the objects if receiver is off-line.
+   mbx->receive_mail(mail);
+   if(!ppl) {
+     destruct(mbx);
+     destruct(ob);
+   }
+}
+
+void mail_resoult()
+{
+        mapping mail;
+        string all,wiz,cur_wiz,wiz_lev;
+        string* s,*wizs;
+
+        mail = ([
+     "from":   "投票箱(Vote Box)",
+     "title": "投票结果",
+     "to": "",
+     "time": time(),
+     "status": "N",
+     "text": ""
+   ]);
+
+        wiz = read_file(WIZLIST);
+        wizs = explode(wiz,"\n");
+
+        all = read_file(RESOULT_FILE);
+
+        s = explode(all,"\n");
+        mail["text"] = "投票结果：\n"+s[0]+"赞成,"+s[1]+"不赞成！\n"+
+                "投票内容:\n"+query("topic")+"\n";
+        for(int i=0;i<sizeof(wizs);i++)
+        {
+                sscanf(wizs[i],"%s %s",cur_wiz,wiz_lev);
+                mail["to"] = cur_wiz;
+                send_mail(mail["to"],mail,0);
+        }
+}

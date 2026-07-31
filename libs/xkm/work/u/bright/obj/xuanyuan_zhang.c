@@ -1,0 +1,29 @@
+//write by bright 参照 pro :)
+//星宿底子专用
+
+#include <weapon.h>
+#include <ansi.h>
+inherit F_AUTOLOAD;
+inherit STAFF;
+void create()
+{
+            set_name("轩辕铁杖", ({ "xuanyuan zhang", "zhang" }));
+            set_weight(5000);
+            if (clonep())
+                    set_default_object(__FILE__);
+            else { 
+                    set("unit", "根");
+                    set("long", "这是一根星宿底子专用的重武器,是星宿老仙特意为其弟子设计的。\n");
+                    set("material", "steel");
+                 set("value", 1000);
+               set("no_sell", 1);
+               set("no_drop", 1);
+               set("no_get", 1);
+               set("no_steal", 1);
+                    set("wield_msg", HIG"$N「唰」的一声，将一柄$n擎在手中。\n"NOR);
+                    set("unwield_msg", HIW"$N将手中的$n放下,背在背后。\n"NOR);
+            }
+            init_staff(30);
+            setup();
+     }
+int query_autoload() { return 1; }

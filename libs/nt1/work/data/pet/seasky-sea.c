@@ -1,0 +1,18 @@
+// SN:Kfkn@m1d@6R>iPgo
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;34m海马[2;37;0m", ({"sea ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "不许动！！
+它是碧海蓝天的坐骑。
+");
+        set_temp("owner_id", "seasky");
+        set_temp("owner_name", "碧海蓝天");
+        ::setup();
+}
+

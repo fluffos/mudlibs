@@ -1,0 +1,18 @@
+// SN:f<ZjegUUe=^_iHYo
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;31m剑兽[2;37;0m", ({"king shou"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "他是一名剑客的座骑
+它是剑鬼的坐骑。
+");
+        set_temp("owner_id", "score");
+        set_temp("owner_name", "剑鬼");
+        ::setup();
+}
+

@@ -1,0 +1,4 @@
+string query_dir()
+{
+return __DIR__;
+}

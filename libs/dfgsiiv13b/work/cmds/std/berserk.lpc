@@ -1,0 +1,156 @@
+/*  berserk.c - berserk command
+
+    Copyright (C) 1994-2000 Annihilator <annihilator@muds.net>
+
+    This program is a part of ES2 mudlib. Permission is granted to use,
+    modify, copy or distribute this program provided this copyright notice
+    remains intact and subject to the restriction that this program MAY
+    NOT be used in any way for monetary gain.
+
+    Details of terms and conditions is available in the Copyright.ES2 file.
+    If you don't receive this file along with this program, write to the
+    primary author of ES2 mudlib: Annihilator <annihilator@muds.net>
+*/
+
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+
+void do_berserk(object);
+
+private void create() { seteuid(getuid()); }
+
+int
+main(object me, string arg)
+{
+    object ob;
+    mapping weapon;
+    string skill;
+
+    weapon = me->query_temp("weapon");
+
+    if( me->is_busy() )
+	return notify_fail("叫ノ halt 氨ゎタ暗ㄆ\n");
+
+    /* NPC ぃ浪琩硂ㄇ */
+    if( userp(me) )
+    {
+	if( me->query_stat("fatigue") >= me->query_stat_maximum("fatigue") )
+	    return notify_fail("び仓ヰ穦ㄠ\n");
+
+	if( !me->query_learn("berserk", 1) )
+	    return notify_fail("ぃ穦硂兜м\n");
+
+	if( !me->is_fighting() )
+	    return notify_fail("璶驹矮い琁甶╣阑睹矮ぇ猭\n");
+
+	if( mapp(weapon) && sizeof(weapon) ) {
+	    foreach(skill, ob in weapon)
+		if( skill[0..8] != "twohanded" )
+		    return notify_fail("ゲ斗も蛮搐猌竟ㄏノ硂贺驹砃\n");
+	}
+
+	if( me->query_stat("gin") < me->query_stat_maximum("kee")/10 )
+	    return notify_fail("弘ぃ镑\n");
+
+	me->supplement_stat("fatigue", 3);
+    }
+
+//    message_vision(HIR "\n$N羘驰炳°°°°°\n\n" NOR,
+//	me);
+    do_berserk(me);
+
+    return 1;
+}
+
+void
+do_berserk(object me)
+{
+    object ob, *enemy;
+    int skill, power, cost, max_attack, max_hit, penalty, exp, kee_cost;
+
+    /* berserk 禣眏τ﹚琌弘 */
+    // 籑㎝義醚ノ, 俱砰秸berserk瘆胊, 埃
+    // berserk + powerblow ヘ玡筁忌, ョ箇痙ゼ秨мΤ
+    // 糤眏瓁ю阑丁, : leadership  -dragoon
+    cost = (me->query_attr("str")+me->query_attr("cor")) / 3 +
+	me->query_stat("kee") / 30;
+    if( me->query_stat("gin") < cost ) {
+	tell_object(me, "弘ぃ镑\n");
+	return;
+    }
+    // Ι砞﹚, berserk–Ω龟驹┮ㄏノΩ计
+    // 磷srfr┷ゼ祇猵獽ゴ癸よ
+    kee_cost = me->query_stat_maximum("kee") / 8;
+    if( me->query_stat("kee") < kee_cost ) {
+	tell_object(me, "ぃ镑\n");
+	return;
+    }
+
+    message_vision(HIR "\n$N羘驰炳°°°°°\n\n" NOR,
+        me);
+
+    /* 眏蛤┮Τ闽ю阑Ω计㎝мΤ闽 */
+    skill = me->query_skill("berserk");
+    power = cost * 3500;		/* 程(彩︳) 700Kg */
+    max_attack = skill / 20;		/* ю阑Ω计 4 - 9 */
+    if( max_attack < 4 ) max_attack = 4;
+    max_hit = skill / 45;		/* 程 = 4 */
+    if( max_hit < 1 ) max_hit = 1;
+
+    me->add_temp("apply/attack", skill/4);
+    me->add_temp("apply/strength", power);
+
+    /* 癸┮Τ寄狦临Τ緇ゴ碭近 */
+    enemy = me->query_enemy();
+    while( max_hit-- && max_attack ) {
+	foreach(ob in enemy) {
+	    if( ! ob ) continue;	/* 狦寄竒本铬筁 :P */
+	    // 璝琌寄ぃ┬丁, 铬筁
+	    if( environment(ob) != environment(me) ) continue;
+	    me->attack(ob);
+	    // –もю阑ΩА倒ぉ竒喷, 躬纘產龟驹い厩策 berserk, 
+	    // 竒喷籔ю阑мォΤ闽
+	    exp = 1 + me->query_skill("berserk")/3
+		+ random(me->query_skill("berserk"))/3;
+ 	    // мォぃì, 義醚蔼癸м厩策Τタ腊
+ 	    if( skill < 80 ) exp += random(me->query_attr("cor"));
+	    me->improve_skill("berserk", exp);
+	    if( --max_attack < 1 ) break;
+	}
+    }
+
+    me->add_temp("apply/attack", - skill/4);
+    me->add_temp("apply/strength", - power);
+
+    /* 砰 */
+    if( userp(me) )
+    {
+	me->damage_stat("gin", cost/6);
+//	me->consume_stat("gin", cost);
+	me->consume_stat("kee", kee_cost);
+	
+	// 倒ぉ膀セㄏノ竒喷, 籔┦闽
+	if( me->query_skill("berserk", 1) < 180 )
+	    me->improve_skill("berserk", 1 + random(me->query_attr("int"))*2);
+	me->gain_score("combat", 1 + random(max_hit));
+
+	me->start_busy(2);
+    }
+    else me->start_busy(1);
+}
+
+int help()
+{
+    write(@TEXT
+Αberserk
+
+贺続皑睹驹初┪竤嫁ぇいㄏノ驹砃虑パ既┦斌縨╣
+忌獴ю墩炳癶寄
+
+硂贺ゴ猭伐ㄤ彩忌偿芞τ砰筪琌癸猌美蔼眏寄┕┕甧
+硂贺驹砃睝礚彻猭ē螟ň縨
+TEXT
+    );
+    return 1;
+}

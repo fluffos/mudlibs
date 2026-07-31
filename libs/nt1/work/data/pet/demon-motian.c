@@ -1,0 +1,18 @@
+// SN:j@F;;N3ML[HZ\5GK
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;34m魔狼[2;37;0m", ({"motian lang"}));        
+        set("gender", "男性");                
+        set("unit", "条");
+        set("long", "$HIB$魔天坐骑
+它是魔天的坐骑。
+");
+        set_temp("owner_id", "demon");
+        set_temp("owner_name", "魔天");
+        ::setup();
+}
+

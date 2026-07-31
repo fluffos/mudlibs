@@ -1,0 +1,18 @@
+// SN:JHe2dTGo20UWN5:3
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m雪狼[2;37;0m", ({"baixue lang"}));        
+        set("gender", "男性");                
+        set("unit", "条");
+        set("long", "$HIW$雪
+它是云破月的坐骑。
+");
+        set_temp("owner_id", "live");
+        set_temp("owner_name", "云破月");
+        ::setup();
+}
+

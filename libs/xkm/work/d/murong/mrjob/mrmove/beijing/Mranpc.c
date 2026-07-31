@@ -1,0 +1,30 @@
+/************************
+File:   Mranpc.c
+Create: Play
+Time:   4/25/2002
+************************/
+inherit "/d/murong/mrjob/mrnpc/mr_inherit/ask_npc.c";
+
+void create()
+{
+        seteuid(getuid());
+	set_name("快嘴",({ "kuai zui", "man" }) );
+        set("gender", "男性" );
+        set("title", "北京市井闲民" );
+        set("age", 40);
+        set("long", "一位闲来无事，正于身边的人闲聊的汉子。\n");
+        set("per", 28);
+        set("str", 34);
+        set("dex", 25);
+        set("con", 26);
+        set("int", 25);
+        set("env/wimpy", 40);
+        //设此为必免探访人物出生地出错误，要按地区分别填写
+        set("move_room", "/d/beijing/quanjude.c");
+        //这里必须写上此npc所在的区域代码,详查help map 城市部分
+        set("area", "北京");
+        set("attitude", "friendly");
+
+        setup();
+        carry_object("/clone/armor/cloth")->wear();
+}

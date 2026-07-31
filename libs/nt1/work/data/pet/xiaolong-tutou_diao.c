@@ -1,0 +1,18 @@
+// SN:\JjmL\@=5d7K[:9k
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m秃头[1;35m雕雕[2;37;0m", ({"tutou_diao diao"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "一只没有毛的雕
+它是段小龙的坐骑。
+");
+        set_temp("owner_id", "xiaolong");
+        set_temp("owner_name", "段小龙");
+        ::setup();
+}
+

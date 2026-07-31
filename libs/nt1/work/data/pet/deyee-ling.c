@@ -1,0 +1,18 @@
+// SN:d0aER\<3eRcFabR4
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;32m死[1;34m灵[30m兽[2;37;0m", ({"ling shou"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "由怨气聚集所化而成的妖怪，对一切有生命气息的活物都怀着敌意
+它是痕寒的坐骑。
+");
+        set_temp("owner_id", "deyee");
+        set_temp("owner_name", "痕寒");
+        ::setup();
+}
+

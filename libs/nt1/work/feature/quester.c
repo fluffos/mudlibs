@@ -1,0 +1,43 @@
+// quester.c 接收请求任务
+
+int is_quester() { return 1; } 
+
+/*
+// 接受询问
+mixed accept_ask(object who, string topic)
+{
+        switch (topic)
+        {
+        case "quest" :
+                return DEFEND_D->ask_quest(this_object(),  who);
+        case "finish":
+        case "完成"  :
+        case "复命"  :
+        case "奖励"  :
+                return DEFEND_D->ask_reward(this_object(),  who);
+        default:
+                return QUEST_D->accept_ask(this_object(), who, topic);     
+        }
+}
+*/
+
+// 请求任务
+int ask_quest(object who)
+{
+        return QUEST_D->ask_quest(this_object(), who);
+}
+
+/*
+// 接收物品
+int accept_object(object who, object ob)
+{
+        return QUEST_D->accept_object(this_object(), who, ob);
+}
+*/
+
+// 取消任务
+int cancel_quest(object who)
+{
+        return QUEST_D->cancel_quest(this_object(), who);
+}
+

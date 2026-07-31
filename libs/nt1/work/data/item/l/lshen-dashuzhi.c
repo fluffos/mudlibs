@@ -1,0 +1,32 @@
+// SN:bnLl_deHIS5jEjlb
+// ITEM Made by player(洛神:lshen) /data/item/l/lshen-dashuzhi.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Thu Oct 30 10:30:53 2003
+#include <ansi.h>
+#include <weapon.h>
+
+inherit SWORD;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[2;37;0m[32m大树枝[2;37;0m", ({ "dashuzhi" }));
+	set_weight(9000);
+	set("item_make", 1);
+	set("unit", "柄");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一柄剑。
+一根大大的树枝，但很轻……[2;37;0m
+剑柄上刻着一行小字：洛神(lshen)
+");
+	set("value", 2100000);
+	set("point", 190);
+	set("material", "magic stone");
+	set("wield_msg", "\n$N一伸手，从旁边的树上轻轻摘下一根[32m大树枝[2;37;0m握在手里。\n[2;37;0m\n");
+	set("unwield_msg", "\n$N信手一抖，手中的[32m大树枝[2;37;0m化作粉迹，彻底消失了。\n[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	init_sword(apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

@@ -1,0 +1,32 @@
+// SN:[O;An^8Y76hNFLI8
+// ITEM Made by player(唐三藏:gangbj) /data/item/g/gangbj-kui.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Thu Nov 13 12:58:07 2003
+#include <ansi.h>
+#include <armor.h>
+
+inherit HEAD;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;32m碧玉簪[2;37;0m", ({ "kui" }));
+	set_weight(4500);
+	set("item_make", 1);
+	set("unit", "顶");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一顶头盔。
+看上去这个发簪色呈碧绿，玉色温润。[2;37;0m
+头盔缘上刻着一行小字：唐三藏(gangbj)
+");
+	set("value", 2100000);
+	set("point", 126);
+	set("material", "magic stone");
+	set("wear_msg", "[1;37m$N将$n[1;37m插在发髻上。[2;37;0m\n");
+	set("remove_msg", "[1;37m$N将$n[1;37m自发髻上摘下，小心收入怀中。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/armor", apply_armor());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

@@ -1,0 +1,18 @@
+// SN:3cVoM]T887QSL0\H
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[37m毛毛熊[2;37;0m", ({"maomao xiong"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "它身上有好多毛毛
+它是大少的坐骑。
+");
+        set_temp("owner_id", "huangy");
+        set_temp("owner_name", "大少");
+        ::setup();
+}
+

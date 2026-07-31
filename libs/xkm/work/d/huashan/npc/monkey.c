@@ -1,0 +1,62 @@
+//Cracked by Roath
+inherit NPC;
+
+void create()
+{
+        set_name("小猴子", ({"monkey"}));
+        set("race", "野兽");
+        set("age", 2);
+        set("long", "一只受伤的小猴子，见你望着它，两眼露出哀求的眼神。\n你仔细看了一下伤口，好像是被什么野兽咬伤的！看来需要治疗（zhiliao）。\n");
+        set("attitude", "peaceful");
+        set("limbs", ({ "头部", "身体",  "前肢", "后腿", "尾巴" }) );
+        set("verbs", ({ "bite", "claw" }) );
+        set("combat_exp", 500);
+        set("eff_qi", 40);
+        set("max_qi", 1000);
+        set_temp("apply/attack", 10);
+        set_temp("apply/defense", 8);
+        set_temp("apply/damage", 4);
+        set_temp("apply/armor", 3);
+        set("chat_chance", 10);
+        set("chat_msg", ({
+                "小猴子痛苦的叫了几声。\n",
+                "小猴子望着你，双目露出哀求的眼神。\n",
+                "小猴子挣扎着要爬起来。\n",
+                "小猴子呻吟了几声。\n",
+//                (: random_move :)
+        }) );
+        setup();
+}
+private void go_home()
+{
+        if( !living(this_object()) ) return;
+        message_vision("$N一蹦一跳地离开了。\n", this_object());
+        this_object()->move("/d/huashan/sheshen");
+        message_vision("$N抓着藤条，挣扎着爬了上来。\n", this_object());
+}
+
+void init()
+{
+   add_action("do_zhiliao","zhiliao");
+}
+
+int do_zhiliao()
+{
+   object me=this_player();
+
+
+           message_vision("$N蹲下身子，给小猴子仔细的包扎伤口。\n", me);
+     me->add("neili",-200);
+     me->set_temp("zhiliao",1);
+     me->start_busy(2+(2));
+           message_vision("片刻，小猴子爬起来向$N作揖感谢。\n", me);
+/*
+    me->move("/d/huashan/hscave");
+    this_object()->move("/d/huashan/hscave");
+*/
+
+           message_vision("小猴子拽了拽$N的衣袖，示意$N跟着它走。\n", me);
+      write("小猴子顺着藤条爬了下去。\n");
+    destruct(this_object());
+      return 1;
+}

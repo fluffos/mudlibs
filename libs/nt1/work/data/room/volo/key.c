@@ -1,0 +1,28 @@
+// SN:Xo2CUHiolPT^5gd5
+// File(/data/room/volo/key.c) of volo's key
+// Create by LUBAN written by Doing Lu
+
+#include <ansi.h>
+
+inherit ITEM;
+
+string query_autoload() { return "1"; }
+
+void create()
+{
+        set_name(YEL "一护家的钥匙" NOR, ({ "key", "1 of volo" }));
+        set_weight(10);
+        if (clonep())
+                set_default_object(__FILE__);
+        else {
+                set("long", @LONG
+一把用来开启村长家(volohome)的钥匙。
+这是原配钥匙。
+LONG );
+                set("unit", "把");
+                set("no_pawn", 1);
+                set("no_sell", 1);
+                set("item_make", 1);
+                set("value", 1);
+        }
+}

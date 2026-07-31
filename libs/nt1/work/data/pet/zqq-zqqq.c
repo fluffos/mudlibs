@@ -1,0 +1,18 @@
+// SN:?OheQFP\F@C@;hR\
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("黄叫兽[2;37;0m", ({"zqqq shou"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "风流倜傥
+它是朱七七的坐骑。
+");
+        set_temp("owner_id", "zqq");
+        set_temp("owner_name", "朱七七");
+        ::setup();
+}
+

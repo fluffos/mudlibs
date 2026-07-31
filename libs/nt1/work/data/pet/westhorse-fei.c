@@ -1,0 +1,18 @@
+// SN:2MTB[eDG7Ye\Z\m3
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m色白仙鹤[2;37;0m", ({"fei he"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "一只白色的仙鹤。
+它是西风瘦马的坐骑。
+");
+        set_temp("owner_id", "westhorse");
+        set_temp("owner_name", "西风瘦马");
+        ::setup();
+}
+

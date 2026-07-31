@@ -1,0 +1,32 @@
+// SN:o^dK6Qk\=NLiDHaM
+// File(/data/room/gudaoxifen/lianwu.c) of gudaoxifen's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "练武场");
+	set ("long", @LONG
+此处便是怀旧雅居的练武场，人在江湖，武功万万不可荒废。 
+LONG );
+
+	set("exits", ([
+                "west" : __DIR__"houyuan",
+	]));
+
+        set("objects", ([
+                "/clone/npc/mu-ren" : 4,
+        ]));
+
+        set("outdoors", "playertown");
+        set("no_sleep_room", 1);
+
+        setup();
+    
+        set("room_owner", "古道西风");
+        set("room_name", "怀旧雅居");
+        set("room_id", "benlong");
+        set("room_owner_id", "gudaoxifen");
+        set("room_position", "青砖路");
+}

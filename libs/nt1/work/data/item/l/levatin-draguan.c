@@ -1,0 +1,32 @@
+// SN:j<SejDA?^V<iW2[9
+// ITEM Made by player(慕容伤:levatin) /data/item/l/levatin-draguan.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Tue Jun 15 16:43:39 2004
+#include <ansi.h>
+#include <armor.h>
+
+inherit HEAD;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;37m九幽玄冥冠[2;37;0m", ({ "draguan" }));
+	set_weight(4500);
+	set("item_make", 1);
+	set("unit", "顶");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一顶头盔。
+这是九幽玄玉为材料，以万年血妖之血淬炼而成。[2;37;0m
+头盔缘上刻着一行小字：慕容伤(levatin)
+");
+	set("value", 2100000);
+	set("point", 157);
+	set("material", "magic stone");
+	set("wear_msg", "[1;31m突然间一道红光朝你射了过来，你感到你的生命力在慢慢消失。[2;37;0m\n");
+	set("remove_msg", "[1;31m缠着你的红光消失了，你有一种重获生命的感觉，舒了一口气。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/armor", apply_armor());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

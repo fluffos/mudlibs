@@ -1,0 +1,35 @@
+// SN:J>E4HU`:Ih[mTT:4
+// ITEM Made by player(红莲老祖:redl) /data/item/r/redl-dcst.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Tue Jun 22 23:33:15 2004
+#include <ansi.h>
+#include <armor.h>
+
+inherit HANDS;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;33m干燥的大肠[1;32m手套[2;37;0m", ({ "dcst" }));
+	set_weight(2700);
+	set("item_make", 1);
+	set("unit", "双");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一双铁掌。
+[1;33m从一个不可思议的怪物身上抠出来的暗金装备。[2;37;0m
+铁掌缘上刻着一行小字：红莲老祖(redl)
+");
+	set("value", 2100000);
+	set("point", 617);
+	set("material", "magic stone");
+	set("wear_msg", "[1;31m$N大喝一声，双手快速舞动，往大肠干燥的屁股一探，然后一拉……\n[1;31m只听得一声惊天动地的惨叫，世界从此清净了。\n$N把拽出来的皮交给红脸老猪舔得干干燥燥，并且缝制成了这件举世无双的皮手套。[2;37;0m\n");
+	set("remove_msg", "[1;32m$N把干燥的大肠手套递给红脸老猪，红脸老猪接过来往大肠干燥的身下一塞，并递给他一圈毛线和一根铁棒道：可怜的孩子，一边自个疗伤去吧！[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/unarmed_damage", apply_damage());
+	set("armor_prop/strike", 10);
+	set("armor_prop/armor", 10);
+	set("armor_prop/hand", 10);
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

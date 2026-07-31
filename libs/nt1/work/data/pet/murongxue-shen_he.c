@@ -1,0 +1,18 @@
+// SN:j9iQ7=A<SE;YI;Wj
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("小神鹤鹤[2;37;0m", ({"shen_he he"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "还未成年
+它是慕容飞雪的坐骑。
+");
+        set_temp("owner_id", "murongxue");
+        set_temp("owner_name", "慕容飞雪");
+        ::setup();
+}
+

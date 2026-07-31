@@ -1,0 +1,596 @@
+
+#include <ansi.h>
+#include <net/macros.h>
+
+inherit F_SAVE;
+inherit F_CLEAN_UP;
+
+mixed query_char_mission(string party,string fname);
+int get_char_level_by_exp(int exp);
+
+mapping char_missiondata;
+
+int char_mission_number;
+
+mapping char_indexdata;
+
+/*
+				杀NPC奖励值
+				
+	      exp范围         奖励经验     奖励潜能     奖励神     奖励银子
+             0    - 200           5            1           20	      2	
+             200  - 2k            30           4           60	      5	
+             2k   - 5k            80           5           100	      10	
+             5k   - 20k           150          7           200	      20	
+             20k  - 80k           200          9           400        40 
+             80k  - 300k          500          11          600	      60	
+             300k - 600k          800          13          900	      80	
+             600k - 900k          1200         15          1500       100 		 
+             900k - 1.2m          1500         17          2500	      110			
+             1.2m - 2m            2000         20          3500       120
+	     2m  - 5m		  3000         30	   5000       160
+	
+			任务时间为 6分钟/2+random(6)分钟
+*/
+/*
+static mapping basic_char_bonus_data = ([
+		2000		:	"30#4#60#5",
+		5000		:	"80#5#100#10",
+		20000		:	"150#7#200#20",
+		80000		:	"200#9#400#40",
+		300000		:	"500#11#600#60",
+		600000		:	"800#13#900#80",
+		900000 		:	"1200#15#1500#100",
+		1500000		:	"2000#20#3500#150",
+		5000000		:	"3000#30#5000#200"
+	]); 
+
+*/
+
+//奖励数值提高50%   fuyo@xajh2 99-3-20 4:36
+
+static mapping basic_char_bonus_data = ([	
+								500             :       "20#30#3",
+								1000            :       "25#50#5",
+                2000            :       "45#60#6",
+                2500            :       "45#60#6",
+                3000            :       "50#70#10",
+                3500            :       "60#75#10",
+                4000            :       "70#75#10",
+                5000            :       "80#80#10",
+                6000            :       "90#90#15",
+                10000           :       "100#120#18",
+                20000           :       "120#120#20",
+                25000           :       "120#120#20",
+                30000           :       "150#150#25",
+                40000           :       "180#180#28",
+                50000           :       "200#200#30",
+                80000           :       "300#300#50",
+                100000					:       "500#500#60",
+                150000          :       "600#700#70",
+                180000          :       "600#700#70",
+                200000          :       "650#900#80",
+                300000          :       "700#1000#100",
+                350000          :       "700#1000#100",
+                400000          :       "800#1050#105",
+                450000          :       "800#1050#105",
+								500000          :       "900#1100#110",
+                600000          :       "1000#1200#120",
+                700000          :       "1100#1250#130",
+                800000          :       "1200#1300#150",
+                900000          :       "1300#1350#200",
+                1000000         :       "1400#1400#250",
+                1200000         :       "1500#1500#250",
+                1500000         :       "1600#1600#280",
+                1800000         :       "1800#2000#300",
+                2000000         :       "2000#2500#400",
+                2500000         :       "2200#3000#450",
+                3000000         :       "2500#3500#500",
+                5000000         :       "3000#5000#600",
+                7500000         :       "3500#5500#700",
+                8000000         :       "3600#5600#750",
+                10000000        :       "4000#6000#800",
+]); 
+
+
+void create ()
+{
+	
+	seteuid(getuid()); 
+
+	if( !restore() )
+	{
+		if (  !mapp(char_missiondata) ) 
+		{
+			write("null of mission char data \n");
+			char_missiondata = ([]);
+			char_indexdata = ([]);
+			char_mission_number=0;
+		}
+	}
+	
+}
+
+int save()
+{
+	return ::save();
+}
+
+int remove()
+{
+	save();
+	return 1;
+}
+
+string query_save_file() { return DATA_DIR + "missiondkqw"; }
+
+
+//     next code is for char mission database operation
+//
+//           fuyo@xajh2 98-12-16 14:08
+
+void add_char_data_mission(string party,string fname,int level,mapping char_data,int replace)
+{
+	mapping temp1,dlev;
+	mixed temp2;
+
+	if (!mapp(char_data))
+	{
+		write("char_data type errors!\n");
+		write(RED"Add char data fails!\n"NOR);	
+		return;
+	}
+	
+	if (  !mapp(char_missiondata) ) //初始化char_missiondata
+		{
+			write("null of mission char data \n");
+			char_missiondata = ([]);
+			char_indexdata = ([]);
+			char_mission_number=0;
+		}
+		
+	if ( mapp(char_missiondata[party]) )
+		temp1 = char_missiondata[party];
+	else
+		temp1=([]);
+
+/*	member_array(元素值，数组名，起始下标（可选） ）;
+		函数返回数组中从下标开始第一个元素值为所搜索值的元素下标。若无则返回-1;
+*/
+	if ( member_array(level,keys(basic_char_bonus_data)) ==-1 )
+	{
+		write("Level data value errors!\n");
+		write(RED"Add char data "+fname+" fails!\n"NOR);	
+		return;
+	}
+				
+
+	temp2 = query_char_mission(party,fname);
+
+	if ( temp2==0 )
+	{
+		if(!mapp(dlev=temp1[level]))
+		{
+			dlev=([]);
+		}
+		dlev[fname]=char_data;
+		temp1[level]=dlev;
+		char_missiondata[party]=temp1;
+	}
+	else
+	{
+		if ( temp2["level"] != level && replace!=1 )
+		{
+			write("level not same as existing data!\n");
+			write(RED"Add char data "+fname+"fails!\n"NOR);	
+			return;
+		}
+		temp1[temp2["level"]][fname]=char_data;
+		char_missiondata[party]=temp1;
+	}
+	save();
+	write("Add char: "+fname+" data succeed!\n");	
+	return;	
+}
+	
+	
+
+mixed query_char_mission(string party,string fname)
+{
+	int i;
+	int* basic_level;
+	mapping temp;
+	mapping dparty,dlevel;
+
+	if(!mapp(char_missiondata)) return 0;
+	if(!mapp(dparty=char_missiondata[party])) return 0;
+	
+	basic_level = keys(basic_char_bonus_data);
+	for(i=0;i<sizeof(basic_level);i++)
+	{
+		if(!mapp(dlevel=dparty[basic_level[i]]))
+			continue;
+		if( member_array(fname,keys(dlevel)) != -1 )
+		{
+			temp=([]);
+			temp["level"]=basic_level[i];
+			temp["data"]=dlevel[fname];
+			return temp;
+		}
+	}
+	
+	return 0;
+
+}
+
+// return string format is : filename@@cname(id)@@party@@level
+// this is a interface for out program query char mission
+
+mixed Get_a_char_mission(int exp,string party)
+{
+	int level;
+	string tpat;
+	string* spt;
+	mapping tm,tl,td;
+	
+	if(!mapp(char_missiondata)) return -1;	//表示.o文件里没有数据，因此返回非值
+
+	level = get_char_level_by_exp(exp);		  //根据ASKER的EXP判断获取任务的等级
+	//write("level= "+level);
+
+	if(level==-1)
+		return -1;
+
+	if (party=="all")
+	{
+		spt=keys(char_missiondata); 
+		if( sizeof(spt)<1 ) return -1;
+		spt=sort_array(spt,"sort_party1",this_object());
+		
+		for ( int i=0 ; i <sizeof (spt); i++)
+		{
+			tpat = spt[i];
+			if( !mapp(tm=char_missiondata[tpat]) )  continue;
+			if( mapp(tl=tm[level]) )
+			{
+				td=tl[keys(tl)[random(sizeof(keys(tl)))]];
+				if (mapp(td)) 
+				{
+					//update mission hit data
+					if (intp(td["hit_count"]))
+						td["hit_count"]++;
+					else
+						td["hit_count"]=1;
+					char_missiondata[tpat][level][td["filename"]]=td;
+					save();
+
+					return sprintf("%s@@%s(%s)@@%s@@%d",
+						td["filename"],td["cname"],td["id"],tpat,level);
+				}
+
+			}
+		}
+
+		return -1;
+	}
+	
+	if( !mapp(tm=char_missiondata[party]) )  return -1;
+	if( mapp(tl=tm[level]) )
+	{
+		td=tl[keys(tl)[random(sizeof(keys(tl)))]];
+		if (mapp(td)) 
+		{	
+			if (intp(td["hit_count"]))
+				td["hit_count"]++;
+			else
+				td["hit_count"]=1;
+			char_missiondata[party][level][td["filename"]]=td;
+			save();
+
+			return sprintf("%s@@%s@@%s(%s)@@%s@@%d",
+				td["filename"],td["cname"],td["id"],party,level);
+		}
+	}
+	
+	return -1;
+}
+
+
+int get_char_level_by_exp(int exp) //获得任务等级
+{
+	int* bs;
+	int i;
+	int result=0;
+
+		if (random(3)==1) exp = (int)(exp*(1+random(5))/(1+random(6))); //一定几率让EXP能得到其他级别的任务
+		if (exp < 500) exp = 500;
+		
+	bs = keys(basic_char_bonus_data);
+	bs = sort_array(bs,1);	//把设定的basic_char_bonus_data级别存为一个arrayList
+	for (i=0;i<sizeof(bs);i++) // 对比ASK人的EXP与basic_char_bonus_data比较，看属于哪个等级
+	{
+		if( exp < bs[i] )
+		{
+			result = bs[i];
+			break;
+		}
+			
+	}		
+	if ( result == 0 ) return -1;
+
+	if (random(3)>0) return result;
+	
+        return bs[random(i-1)];
+}
+	
+//  return value:
+//	error: -1 :
+//	success: a mapping include bonus exp,qianneng,shen,money and extra bonus
+//  action:  update database "success_count"
+//       Author:  fuyo@xajh2 98-12-16 14:18
+
+mixed Finish_char_Mission(string filename,string party,int level)
+{
+	mapping bonus=([]);
+	mapping bd;
+	string temp;
+	int exp,qianneng,shen,money;
+	int pk=0;
+	
+
+	if(!mapp(char_missiondata)) return -1;
+	
+	if(!mapp(bd=char_missiondata[party][level][filename])) return -1;
+	
+	//update mission success data
+	if(intp(pk=bd["success_count"]))
+		pk++;
+	else pk=1;
+	char_missiondata[party][level][filename]["success_count"]=pk;
+	save();
+	
+	temp = basic_char_bonus_data[level]; 
+	if (temp == 0) temp = "1500#2000#400";	
+	if ( sscanf(temp,"%d#%d#%d",exp,shen,money)!=3 ) return -1;
+	bonus["exp"]=exp;	
+	//bonus["qianneng"]=qianneng;
+	bonus["shen"]=shen;
+	bonus["money"]=money;
+	bonus["bonus"]=bd["bonus"];
+	return bonus;
+}
+
+mixed query_char_all()
+{
+	mapping result;
+	mapping pmp;
+	string* parties;
+	string pat;
+	int i,k;
+	int tl;
+	
+	if(!mapp(char_missiondata)) return -1;
+
+	result=([]);
+	
+	parties = keys(char_missiondata);
+	
+	for (i=0;i<sizeof(parties);i++)
+	{
+		pat = parties[i];
+		pmp = char_missiondata[pat] ;
+		
+		for (k=0;k<sizeof(keys(pmp));k++)
+		{
+			tl = keys(pmp)[k];
+			//write(sprintf("%d - %O",tl,pmp[tl]));
+			result[sprintf("%s--%d",pat,tl)] = sizeof(keys(pmp[tl]));
+			
+		}
+	}
+	
+	return result;
+}
+
+	
+mixed query_char_all_by_level()
+{	
+	int* bt;
+	mapping result;
+	mapping pmp;
+	string* parties;
+	string pat;
+	int i,k;
+	int tl;
+
+	if(!mapp(char_missiondata)) return -1;
+
+	result=([]);
+	bt = keys(basic_char_bonus_data);
+	for ( i=0 ; i <sizeof(bt) ; i++)
+		result[bt[i]]=0;
+	
+	parties = keys(char_missiondata);
+	
+	for (i=0;i<sizeof(parties);i++)
+	{
+		pat = parties[i];
+		pmp = char_missiondata[pat] ;
+		if (!mapp(pmp)) 
+		{
+			printf("ERROR:\n%s%O",pat,pmp);
+			map_delete(char_missiondata,pat);
+			return -1;
+		}
+		for (k=0;k<sizeof(keys(pmp));k++)
+		{
+			tl = keys(pmp)[k];
+			//write(sprintf("%d - %O",tl,pmp[tl]));
+			result[tl] += sizeof(pmp[tl]);
+			
+		}
+	}
+	
+	return result;
+}
+	
+	
+int delete_char_mission(string party,string fname)
+{
+	int i;
+	int* basic_level;
+	mapping dparty,dlevel;
+
+	if(!mapp(char_missiondata)) return 0;
+	if(!mapp(dparty=char_missiondata[party])) return 0;
+	
+	basic_level = keys(basic_char_bonus_data);
+	for(i=0;i<sizeof(basic_level);i++)
+	{
+		if(!mapp(dlevel=dparty[basic_level[i]]))
+			continue;
+		if( member_array(fname,keys(dlevel)) != -1 )
+		{
+			map_delete(dlevel,fname);
+			return 1;
+		}
+	}
+	
+	return 0;
+
+}
+	
+
+varargs int init_char_hit_count(string strparty)
+{
+	int i,cp,sc;
+	int* basic_level;
+	string party;
+	mapping dparty,dlevel;
+
+	if(!mapp(char_missiondata)) return -1;
+
+	basic_level = keys(basic_char_bonus_data);
+
+	if(strparty)
+	{
+		dparty=char_missiondata[strparty];
+		if(!mapp(dparty)) return -1;
+
+		for(i=0;i<sizeof(basic_level);i++)
+		{
+			if(!mapp(dlevel=dparty[basic_level[i]]))
+				continue;
+			for(sc=0;sc<sizeof(dlevel);sc++)
+			{
+				dlevel[keys(dlevel)[sc]]["success_count"]=0;
+				dlevel[keys(dlevel)[sc]]["hit_count"]=0;
+			}
+		}
+		save();
+		return 1;
+	}
+		
+
+	for(cp=0;cp<sizeof(char_missiondata);cp++)
+	{		
+		party=keys(char_missiondata)[cp];
+		dparty=char_missiondata[party];
+		if(!mapp(dparty)) break;
+
+		for(i=0;i<sizeof(basic_level);i++)
+		{
+			if(!mapp(dlevel=dparty[basic_level[i]]))
+				continue;
+			for(sc=0;sc<sizeof(dlevel);sc++)
+			{
+				dlevel[keys(dlevel)[sc]]["success_count"]=0;
+				dlevel[keys(dlevel)[sc]]["hit_count"]=0;
+			}
+		}
+	}
+	save();	
+	return 1;
+
+}
+
+int update_char_hit_count()
+{	
+	int i,cp,sc,dc;
+	int* basic_level;
+	string party;
+	mapping dparty,dlevel,ddata;
+
+	if(!mapp(char_missiondata)) return -1;
+
+	basic_level = keys(basic_char_bonus_data);
+
+	log_file("mission.log",
+		sprintf("[%s] char mission database hit_count updated!\n",
+				ctime(time())[4..15]));
+
+	for(cp=0;cp<sizeof(char_missiondata);cp++)
+	{		
+		party=keys(char_missiondata)[cp];
+		dparty=char_missiondata[party];
+		if(!mapp(dparty)) break;
+
+		for(i=0;i<sizeof(basic_level);i++)
+		{
+			if(!mapp(dlevel=dparty[basic_level[i]]))
+				continue;
+			for(sc=0;sc<sizeof(dlevel);sc++)
+			{
+				
+				// update bonus by success_count and hit_cout
+				// while hit_count>5 && success_count*100/hit_count > 90
+				//		then if bonus>60 then bonus-=10;
+				// while hit_count>5 && success_count*100/hit_count < 20
+				//		then if bonus<200 then bonus+=10;
+				// while hit_count>5 && success_count=0
+				// then log this mission data to /log/mission.log
+				for(dc=0;dc<sizeof(dlevel);dc++)
+				{
+					ddata=dlevel[keys(dlevel)[dc]];
+					if(!mapp(ddata))
+						continue;
+					ddata["total_hit_count"]=(int)ddata["total_hit_count"]+(int)ddata["hit_count"];	
+					ddata["total_success_count"]=(int)ddata["total_success_count"]+(int)ddata["success_count"];
+					if(ddata["hit_count"]<5)
+						continue;
+					if(ddata["success_count"]*100/ddata["hit_count"]>90)
+					{
+						if(ddata["bonus"]>60) ddata["bonus"]-=10;
+						else ddata["bonus"]=60;
+					}
+					else
+					{
+						if (ddata["success_count"]*100/ddata["hit_count"]<20)
+						{
+							if(ddata["bonus"]<200) ddata["bonus"]+=10;
+							else ddata["bonus"]=200;
+						}
+						if (ddata["success_count"]*100==0)
+							log_file("mission.log",
+								sprintf("[%s] %s hit_count = %d, but no success \n",
+									ctime(time())[4..15],ddata["filename"],
+									ddata["hit_count"]));
+					}
+				}
+			}
+		}
+	}
+
+	init_char_hit_count();
+
+	save();	
+	return 1;
+}
+
+	
+	
+int test()
+{
+	printf("%O",basic_char_bonus_data);
+	return 1;
+}

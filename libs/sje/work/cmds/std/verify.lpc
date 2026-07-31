@@ -1,0 +1,306 @@
+// verify.c
+// Modified by snowman@SJ 16/03/2000
+// Refered by kittt 7/3/2000@WEBSITE http://Mudder2000.yeah.net
+
+/* 闲来无聊，写了个查询武功的命令。个人比较喜欢有框架的图形，各位多包涵。
+   PS: 在没有优化过 ansi 显示的OS里，带颜色的框架会乱序排列，去掉code里的个ansi color就行了。
+   
+	用 verify xxx.yyy 是 call yyy 文件里的 int help(object me)，可以按照其它
+	command 的help()来写。
+   本想再加点其它功能的，但觉得过于花哨了反而不好，就这样吧。
+   附太极拳的help()以做参考：
+
+int help(object me)
+{
+	write(WHT"\n太极拳："NOR"\n");
+	write(@HELP
+	太极拳，为宋末元初武当张三丰真人所创，合道家之说，冲虚自然，主以慢
+	打快，以静制动，後发制人，无为至虚之念的上乘武学。拳出时双手圆转，
+	每一招都含着太极式的阴阳变化，精微奥妙，实是开辟了武学中从所未有的
+	新天地。诀窍为「虚灵顶劲、涵胸拔背、松腰垂臀、沉肩坠肘」十六个字，
+	纯以意行，最忌用力。形神合一，是这路拳法的要旨。
+	太极拳劲首要在似松非松，将展未展，劲断意不断，其接力打力为武林一绝。
+	
+	要求：	氤氲紫气等级 100 以上；
+		内力 500 以上；      
+		有张三丰亲传拳招。
+HELP
+	);
+	return 1;
+}
+
+*/
+
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+
+#include "verify.h";
+
+           // 描述阵列，和skills.c差不多
+string *skill_level_desc = ({
+        BLU "不堪一击" NOR,BLU "毫不足虑" NOR,BLU "不足挂齿" NOR,BLU "初学乍练" NOR,BLU "勉勉强强" NOR,
+        HIB "初窥门径" NOR,HIB "初出茅庐" NOR,HIB "略知一二" NOR,HIB "普普通通" NOR,HIB "平平淡淡" NOR,
+        MAG "平淡无奇" NOR,MAG "粗通皮毛" NOR,MAG "半生不熟" NOR,MAG "马马虎虎" NOR,MAG "略有小成" NOR,
+        HIM "已有小成" NOR,HIM "鹤立鸡群" NOR,HIM "驾轻就熟" NOR,HIM "青出于蓝" NOR,HIM "融会贯通" NOR,
+        CYN "心领神会" NOR,CYN "炉火纯青" NOR,CYN "了然于胸" NOR,CYN "略有大成" NOR,CYN "已有大成" NOR,
+        YEL "豁然贯通" NOR,YEL "出类拔萃" NOR,YEL "无可匹敌" NOR,YEL "技冠群雄" NOR,YEL "神乎其技" NOR,
+        HIY "出神入化" NOR,HIY "非同凡响" NOR,HIY "傲视群雄" NOR,HIY "登峰造极" NOR,HIY "无与伦比" NOR,
+        HIG "所向披靡" NOR,HIG "一代宗师" NOR,HIG "精深奥妙" NOR,HIG "神功盖世" NOR,HIG "举世无双" NOR,
+        HIC "惊世骇俗" NOR,HIC "撼天动地" NOR,HIC "震古铄今" NOR,HIC "超凡入圣" NOR,HIC "威镇寰宇" NOR,
+        HIW "空前绝后" NOR,HIW "天人合一" NOR,HIW "深藏不露" NOR,HIW "深不可测" NOR,HIR "返璞归真" NOR
+});
+           
+string *knowledge_level_desc = ({
+	BLU "新学乍用" NOR,HIB "初窥门径" NOR,HIB "略知一二" NOR,MAG "半生不熟" NOR,
+	CYN "马马虎虎" NOR,YEL "已有小成" NOR,YEL "融会贯通" NOR,HIY "心领神会" NOR,
+	HIY "了然於胸" NOR,HIG "已有大成" NOR,HIG "非同凡响" NOR,HIC "举世无双" NOR,
+	HIC "震古铄今" NOR,HIW "无与伦比" NOR,HIW "超凡入圣" NOR,HIR "空前绝后" NOR,
+});
+
+// 武功种类的mapping
+mapping valid_type = ([
+"unarmed":      "拳脚",
+"claw":         "爪功","cuff":         "拳功",
+"finger":       "指功","strike":       "掌功",
+"hand":         "手功","leg":          "腿功",
+"sword":        "剑法","blade":        "刀法",	
+"dagger":       "匕法","brush":        "笔法",		
+"spear":        "枪法","hook":         "钩法",		
+"stick":        "棒法","staff":        "杖法",		
+"club" :        "棍法","throwing":     "暗器",		
+"whip":         "鞭法","axe":          "斧法",
+"hammer":       "锤法","force":        "内功",	
+"dodge":        "轻功","parry":        "招架",	
+]);
+
+string skill_level(string, int);
+string skill_enables(object sk);
+
+int color_len(string str)
+{
+        int i;
+        int extra;
+
+        extra = 0;
+        for (i = 0; i < strlen(str); i++)
+        {
+                if (str[i] == ESC[0])
+                {
+                        while ((extra++, str[i] < 'A' ||
+                                         str[i] > 'z' ||
+                                         str[i] > 'Z' && str[i] < 'a') && i < strlen(str))
+                                i++;
+                }
+        }
+        return extra;
+}
+
+int sort_skill(string file)  // 判断是否为可行的文件。
+{
+	int i;
+	if ( !sscanf(file, "%*s.lpc") )  return 0;
+	i = strlen(file); 
+	while(i--){
+		if( file[i] == '.' ) continue;
+		if( file[i] < 'a' || file[i] > 'z' ) // 带数字显然就不行了。
+			return 0;
+	}
+
+	return 1;
+}
+
+int main(object me, string arg)
+{
+        mapping lrn;
+        string exert, str, file_name, *file;
+        object sk;
+        int i, j = 0;
+
+        seteuid(getuid());
+
+        if(!arg) return notify_fail("指令格式 : verify [武功名称].[?|特殊技能]\n");
+	
+	sscanf(arg, "%s.%s", arg, str);
+		
+	if(!me->query_skill(arg, 1)) // 自己都不会当然不能查咯。
+		return notify_fail("你要查对什么技能？\n");
+	
+	if(file_size(SKILL_D(arg)+".lpc") < 1)  // 文件不存在
+		return notify_fail("错误！你要查对技能文件已经消失，请通知巫师。\n");
+	
+	if( stringp(str) ){
+		// 格式 verify xxx.? 是查询此skill的帮助。
+		// verify xxx.yyy 是查询 yyy 的帮助。
+		// help还得自己写，麻烦麻烦！！不要也罢。--- by kittt
+		if( str == "?" ){
+			notify_fail("对不起，「"+to_chinese(arg)+"」目前还没有详细的帮助说明。\n");
+			return SKILL_D(arg)->help(me);
+		} // 以下是判断是否存在pfm,exert的说明，也是得自己写。slogan snowman
+		else if( stringp(exert = SKILL_D(arg)->exert_function_file("")) && file_size(exert + str +".lpc") > 0){
+			notify_fail("对不起，"+to_chinese(arg)+"内功方面的「"+str+"」功能没有详细的说明。\n");
+			return (exert + str)->help(me);
+		}
+		else if( stringp(exert = SKILL_D(arg)->perform_action_file("")) && file_size(exert + str +".lpc") > 0){
+			notify_fail("对不起，"+to_chinese(arg)+"外功方面的「"+str+"」功能没有详细的说明。\n");
+			return (exert + str)->help(me);
+		}
+		return notify_fail("对不起，"+to_chinese(arg)+"没有「"+str+"」这项功能。\n");
+	}
+	
+	lrn = me->query_learned();
+        if( !mapp(lrn) ) lrn = ([]);
+        
+	str = sprintf("\n┌"HIW"%-24s"NOR"─────────────────────┐\n", "【"+to_chinese(arg)+"功能表】");
+	// 前面的一些skill状态输出，简单就不用说了吧。
+	str = replace_string(str, "  ", ""GRN"─"NOR"");
+	str += sprintf("│"HIY"等级"NOR"：  %s %3d/%6d\t      "HIY"类别"NOR"：  %-15s%9s  \n",skill_level(SKILL_D(arg)->type(), 
+			me->query_skill(arg, 1)), me->query_skill(arg, 1), 
+			(int)lrn[arg], (SKILL_D(arg)->type()=="martial") ? "武学技巧" : "人文知识", "│");	
+
+	// 如果不是功夫就不用看pfm什么的啦。
+	if(SKILL_D(arg)->type() != "martial"  
+	|| member_array(arg, keys(valid_type))!=-1) 
+		return notify_fail(str+"└─────────────────────────────────┘\n");
+		
+	str += "│\t\t\t\t\t\t\t\t    │\n";
+	sk = load_object(SKILL_D(arg));
+
+	// 输出该skill可以激发的基本技能。
+
+	exert = skill_enables(sk);  //function在后面
+	if(exert != ""){
+		str += exert; // 如果存在就输出。
+		i++;
+	}
+
+	// 输出有效的exert。	
+	if( stringp(exert = SKILL_D(arg)->exert_function_file("")) ){  // skill文件tail不是常有的么
+		file = get_dir(exert); // 用它来找出可用的路径。
+		if( sizeof(file) > 0){   // 在其中将可用的exert列出来。 
+			file  = filter_array(file, (: sort_skill :) );  // sort_skill就是最前面那个function.
+			j = sizeof(file);
+		}
+	}
+	
+	if(j && j > 0){ // 输出结果了。snowman爱画框框啊。
+		if( i )
+			str = str + "├─────────────────────────────────┤\n";
+		str += "│"HIY"内功方面(exert + )"NOR"：\t\t\t\t\t\t    │\n";
+		for(i=0; i < j; i++){
+			if (i >= 0) str += NOR"│\t"NOR;  // 一行一个不要多
+			str += sprintf(YEL"%-15s"NOR,replace_string(file[i], ".lpc", ""));  // 当然输出要把文件名的.c去掉。
+			if ( file_name = exert_names[arg+"/"+replace_string(file[i], ".lpc", "")] )
+			str += sprintf(NOR"%-"+(45+color_len(file_name))+"s│\n"NOR,"「"+file_name+"」");
+			else str += sprintf(NOR"%-45s│\n"NOR," ");
+
+		}
+		j = 0;
+	}
+	// pfm和exert差不了多少。
+	if( stringp(exert = SKILL_D(arg)->perform_action_file(""))){
+		file = get_dir(exert);
+		if( sizeof(file) > 0){
+			file  = filter_array(file, (: sort_skill :) );
+			j = sizeof(file);
+		}
+	}
+	
+	if(j && j > 0){
+		if( i )
+			str = str + "├─────────────────────────────────┤\n";
+		str += "│"HIY"外功方面(perform + )"NOR"：\t\t\t\t\t    │\n";
+		for(i=0; i < j; i++){
+			if (i >= 0) str += NOR"│\t"NOR;  // 一行一个不要多
+			str += sprintf(WHT"%-15s"NOR,replace_string(file[i], ".lpc", ""));  // 当然输出要把文件名的.c去掉。
+			if ( file_name = perform_names[arg+"/"+replace_string(file[i], ".lpc", "")] )
+			str += sprintf(NOR"%-"+(45+color_len(file_name))+"s│\n"NOR,"「"+file_name+"」");
+			else str += sprintf(NOR"%-45s│\n"NOR," ");
+		}
+	}
+	str += "└─────────────────────────────────┘\n";
+        write(str);  // 大工告成。
+        return 1;
+}
+
+string skill_enables(object sk) // 也是前面用到的function用以判断所能激发的基本计能。
+{
+	int i, j;
+	string str, *skills;
+	skills = keys(valid_type); 
+	
+	for(i=0; i < sizeof(skills); i++) { // 分解出有效的基本skill
+		if (sk->valid_enable(skills[i])) continue; 
+		skills[i] = 0;  // 如果是能被激发的基本skill就保留，不行的就改为0。
+	}
+	
+	skills -= ({ 0 }); // 去掉上面code得到的0
+	// 输出。
+	j = sizeof(skills);  
+	if( !j || j < 1)  
+		return "";
+	str = "│"HIY"特殊技能"NOR"：\t\t\t\t\t\t\t    ";
+		
+	for(i=0; i < j; i++) {
+		if (i % 4 == 0) str += ""NOR"│\n│\t"HIC"";  
+		str += sprintf("%-14s ", valid_type[skills[i]]+"("+skills[i]+")"); 
+		if ( i > j-2 ){  
+			switch(i%4){
+				case 0: str +="\t\t\t\t\t            "; break;
+				case 1: str +="\t\t\t            "; break;
+				case 2: str +="\t\t    "; break;
+				default: break;
+			}
+                }
+	}
+	str += ""NOR"│\n";
+	return str;
+}
+
+string skill_level(string type, int level) //输出技能的描述。
+{
+        int grade;
+        
+        switch(type) {
+                case "knowledge":
+                	grade = level / 20;
+                        if( grade >= sizeof(knowledge_level_desc) )
+                                grade = sizeof(knowledge_level_desc)-1;
+                        return knowledge_level_desc[grade];
+                default:
+                	grade = level / 7;
+                        if( grade >= sizeof(skill_level_desc) )
+                                grade = sizeof(skill_level_desc)-1;
+                        return skill_level_desc[grade];
+        }
+}
+
+int help(object me)
+{
+	write("\n指令格式 : verify [武功名称].[绝招名称 | ?]\n");
+	write(@HELP
+这个指令可以让你查询此项技能的功能和数据。
+
+特殊技能表示可以 enable 的技能，如：
+	(轻功、招架、棍法、杖法) 表示：此武功可以用作轻功，招架，棍法，杖法等。
+
+内功方面显示可运用(exert)的内功。
+
+外功方面显示可使用(perform)的外功，绝招等。
+
+如果内功或外功的绝招有帮助介绍，可用 verify skill.pfm 的形式来查看。
+如： 	verify taiji-quan.dongjing  查看动静决
+	verify yinyun-ziqi.yinyun   查看氤氲内聚
+	verify taiji-quan.?	    查看太极拳
+
+
+Snowman@SJ 06/04/1999
+Copyright 1997-2000 ShuJian MUD Wizard Group.
+All rights reserved.
+	
+Visit our Homepage at - www.mymud.com 
+	
+HELP);
+
+    return 1;
+}

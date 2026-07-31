@@ -1,0 +1,18 @@
+// SN:8G\1V\fAghVoEFaG
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m花雕[2;37;0m", ({"hua diao"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "好,
+它是渡知的坐骑。
+");
+        set_temp("owner_id", "leeyio");
+        set_temp("owner_name", "渡知");
+        ::setup();
+}
+

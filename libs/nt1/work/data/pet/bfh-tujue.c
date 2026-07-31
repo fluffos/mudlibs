@@ -1,0 +1,18 @@
+// SN:<3X5lA]kZ]bm<9lT
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;31m突厥[1;35m暴雷兽[2;37;0m", ({"tujue shou"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "暴雷躁动
+它是跋锋寒的坐骑。
+");
+        set_temp("owner_id", "bfh");
+        set_temp("owner_name", "跋锋寒");
+        ::setup();
+}
+

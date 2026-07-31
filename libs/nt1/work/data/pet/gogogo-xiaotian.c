@@ -1,0 +1,18 @@
+// SN:KXX0_h7d7]^4enF3
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[37m啸[1;36m天狮[2;37;0m", ({"xiaotian shi"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "111
+它是笑侠的坐骑。
+");
+        set_temp("owner_id", "gogogo");
+        set_temp("owner_name", "笑侠");
+        ::setup();
+}
+

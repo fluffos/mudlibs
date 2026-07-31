@@ -1,0 +1,18 @@
+// SN:E:=BIad0b?5Ed<RU
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("美眉怪兽[2;37;0m", ({"mmshou shou"}));        
+        set("gender", "女性");                
+        set("unit", "头");
+        set("long", "一只天使般的神兽
+它是宇文成都的坐骑。
+");
+        set_temp("owner_id", "hughes");
+        set_temp("owner_name", "宇文成都");
+        ::setup();
+}
+

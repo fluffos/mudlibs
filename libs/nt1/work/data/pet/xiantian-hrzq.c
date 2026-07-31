@@ -1,0 +1,18 @@
+// SN:hN;aJeM?<;V=JgJI
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m浩然正气雕[2;37;0m", ({"hrzq diao"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "这是重阳宫第七圣兽
+它是先天功的坐骑。
+");
+        set_temp("owner_id", "xiantian");
+        set_temp("owner_name", "先天功");
+        ::setup();
+}
+

@@ -1,0 +1,18 @@
+// SN:nM7NHX4JTm76T;DB
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("我骑的马[2;37;0m", ({"newerjs ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "就是我骑的
+它是武当米的坐骑。
+");
+        set_temp("owner_id", "newerj");
+        set_temp("owner_name", "武当米");
+        ::setup();
+}
+

@@ -1,0 +1,11 @@
+// SN:LjQnWBUW`A1XS_2o
+// wedding-ring.c
+
+#include "/clone/misc/wedding-ring.h"
+
+void setup()
+{
+        set("long", "这是任盈盈和阴阳师的结婚戒指，是两人的定情之物。
+");
+        ::setup();
+}

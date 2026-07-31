@@ -1,0 +1,18 @@
+// SN:<FkR[cC6?c2Od27d
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("白龙马[2;37;0m", ({"baima ma"}));        
+        set("gender", "女性");                
+        set("unit", "匹");
+        set("long", "这是唐僧骑过的白龙马，有些道行！
+它是本拉灯的坐骑。
+");
+        set_temp("owner_id", "ladeng");
+        set_temp("owner_name", "本拉灯");
+        ::setup();
+}
+

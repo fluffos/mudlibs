@@ -1,0 +1,135 @@
+// job.h
+int give_job()
+{
+        object me = this_player();
+       if ( me->query("combat_exp") < 100000 )
+      {
+         command("hmm");
+         message_vision(CYN"$N对$n说道：做镖师这行是刀口上舔血，随时都有性命之忧，"+RANK_D->query_respect(me)+"的本事差了一些，恐不合适做这个，还是请回吧。\n"NOR,this_object(),me);
+         return 1;
+       }
+//        if((int)me->query("combat_exp") >= 500000)
+//        {
+//                write("你无需再向"+name()+"要工作了！\n");
+//                        return 1;
+//        } 
+        if((int) me->is_ghost())
+        {
+                write("鬼魂不可要工作。\n");
+                return 1;
+        }
+        if( me->query("no_array") > time() )
+        {
+            write("上次任务你没有顺利完成，目前还不能给你工作。\n");
+            return 1;
+         }
+         if( me->query("end_array") >  time() )
+         {
+             write(name()+"说道：目前还没有什么工作安排，你先下去休息。\n");
+             return 1;
+          }
+        if((job =  me->query("fjob")))
+        {
+if( ((int) me->query("fjob_time")) >  time()/2 )
+             {
+                write("你目前工作还没有完成怎又来要工作？\n");
+                return 1;
+              }
+        }
+        job = FJOB_D->query_job();
+        me->delete("end_array");
+        me->delete("no_array");
+        me->set("fjob",job);
+        message_vision(CYN"$N说道：好吧，你来得正是时候，我这儿正缺人用。\n"NOR,this_object());
+        message_vision(CYN"$N说道：这是"+job["target_name"]+"所重托的红镖，非同小可。你千万不可大意，\n务必交到"+job["npc_title"]+job["job"]+"手里。\n"NOR,this_object());
+        message_vision(CYN"$N高声叫道：来人呐！。\n"NOR,this_object());
+        call_out("dealy_message",4,me,job);
+        return 1;
+}
+int dealy_message(object me,mapping job)
+{
+        object biaoshi,cart;
+        string short;
+        int timep;
+        timep = 700;
+        timep = random(timep/2)+timep/2;
+        biaoshi = new("/d/city/npc/biaoshi"); 
+        cart = new("/d/city/job/biaoche");
+        time_period(timep, me);
+        sysmsg += "押送镖银到"+job["target_name"];
+        biaoshi->move(environment(me));
+        message_vision("\n$N快步走了过来！\n",biaoshi);
+        message_vision("$N对$n抱拳道：“"+RANK_D->query_respect(me)+"，林总镖头派俺跟您一道保这道镖。\n俺没啥说的，从今以後，有难同担，有福同享，共保咱们福威镖局的金字招牌。”\n",biaoshi,me);
+        me->set("fjob", job);
+        biaoshi->set_leader(me);
+        cart->set("owner",me->query("id"));
+        cart->set("time",(int)time()+(int) timep + 20 ); 
+        cart->move("/d/city/biaoju");
+        message_vision("\n$N说道：镖车就在外面等着你们。你们要小心行事，所谓镖在人在，镖亡人亡，\n务必在限定的时间内完成任务。\n",this_object());
+        short = HIR + "福威镖局镖头"+ NOR + " " + me->query("title")+ " " +me->query("name") +  "(" + capitalize(me->query("id")) + ")";
+        me->set_temp("apply/short", ({ short } ));
+        me->set("fjob_time", (int)time()+(int) timep);
+          message("channel:chat", HBCYN"【镖局传闻】"+me->query("name")+"("+me->query("id")+")"+sysmsg+"\n"NOR,users());
+        return 1;
+}
+
+int time_period(int timep, object me)
+{
+        int t, d, h, m, s;
+        string time;
+        t = timep;
+        s = t % 60;             t /= 60;
+        m = t % 60;             t /= 60;
+        h = t % 24;             t /= 24;
+        d = t;
+
+        if(d) time = chinese_number(d) + "天";
+        else time = "";
+
+        if(h) time += chinese_number(h) + "小时";
+        if(m) time += chinese_number(m) + "分";
+        time += chinese_number(s) + "秒";
+        sysmsg = "在" + time + "内";
+        return 1;
+}
+void init()
+{
+     object me = this_player(),biaoshi;
+     int exp,pot,score;
+       ::init();
+      job = me->query("fjob");
+     if( job  )
+       {
+       if( me->query("end_job") ) {
+       exp = random(100)+job["exp_bonus"]*2;
+       pot = exp/3;
+       score = random(exp)+pot;
+       me->add("combat_exp",exp);
+       me->add("potential",pot);
+       command("nod");
+       message_vision("$N对$n说道：你做的很好，赶紧下去休息去吧。\n",this_object(),me);
+        tell_object(me,"你被奖励了：\n" +
+        chinese_number(exp) + "点实战经验\n"+
+        chinese_number(pot) + "点潜能\n");
+           message("channel:chat", HBMAG"【镖局传闻】"+me->query("name")+"成功把镖运到."+job["target_name"]+"\n"NOR,users());
+        me->delete("fjob");
+        me->delete("fjob_time");
+        me->delete_temp("apply/short");
+        me->delete("end_job");
+       me->set("end_array",time()+random(300)+200);
+        if(biaoshi = present("biao shi", environment(me)) )
+          destruct(biaoshi); 
+     }
+     else if( me->query("fjob_time") < time())
+     {
+     message_vision(CYN"$N脸色一沉，对$n说道：这样重要事情都不能完成，你怎能再做镖师？。\n"NOR,this_object(),me);
+     message_vision(CYN"$N对着$n吼道：速速离开这里，福威镖局不能录用你这样无能之人。\n"NOR,this_object(),me);
+     me->delete("fjob");
+     me->delete("fjob_time");
+     me->delete_temp("apply/short");
+     me->set("no_array",time()+random(400)+300);
+     if(biaoshi = present("biao shi", environment(me)) )
+          destruct(biaoshi);
+       }
+     }
+}

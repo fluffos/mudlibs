@@ -1,0 +1,22 @@
+inherit ROOM;
+
+void create()
+{
+       set("short", "升级室");
+    set("long", @LONG
+这里是星空为天涯写的升级室,各位大侠们可以到此升级(shengji)
+使自己更加厉害!
+LONG
+        );
+        set("exits", ([
+                "north" : "/d/city/wumiao",
+                "up" : "/d/zjb/shuxingroom",
+ ]));
+set("no_fight",1);
+       set("objects", ([
+              "/d/zjb/shengji" : 1,
+    ]));
+        setup();
+        replace_program(ROOM);
+}
+

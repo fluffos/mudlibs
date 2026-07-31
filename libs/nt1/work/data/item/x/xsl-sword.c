@@ -1,0 +1,32 @@
+// SN:fH=S4aec;B>ok>0f
+// ITEM Made by player(陈小生:xsl) /data/item/x/xsl-sword.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Wed Sep 29 01:06:15 2004
+#include <ansi.h>
+#include <weapon.h>
+
+inherit SWORD;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[2;37;0m[36m藏墨剑[2;37;0m", ({ "sword" }));
+	set_weight(9000);
+	set("item_make", 1);
+	set("unit", "柄");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一柄剑。
+这把便是闻名天下的藏墨剑，每当剑身染血时，便会变的通体幽黑。[2;37;0m
+剑柄上刻着一行小字：陈小生(xsl)
+");
+	set("value", 2100000);
+	set("point", 324);
+	set("material", "magic stone");
+	set("wield_msg", "[1;37m只听见噌的一声，[1;33m$N[1;37m手里多了一把[36m蓝墨色的宝剑[1;37m，接着潇洒地舞了个剑花，你只觉一圈圈[36m淡蓝色的剑气[1;37m向你卷了过来！[2;37;0m\n");
+	set("unwield_msg", "[36m淡蓝色的剑气[1;37m突然消失了，就跟它来的时候一样无声无息，无影无踪！[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	init_sword(apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

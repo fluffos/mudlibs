@@ -1,0 +1,31 @@
+// SN:Sg<1OfeH8OV4aEjO
+// ITEM Made by player(纲手:tsunade) /data/item/t/tsunade-setb.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Sun Oct 24 18:14:03 2004
+#include <ansi.h>
+#include <weapon.h>
+
+inherit SWORD;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[2;37;0m[37m五鬼月华刃[2;37;0m", ({ "setb" }));
+	set_weight(6750);
+	set("item_make", 1);
+	set("unit", "柄");
+	set("long", "这是由[2;37;0m[1;31m雷火寒晶[2;37;0m炼制而成的一柄剑。
+剑柄上刻着一行小字：纲手(tsunade)
+");
+	set("value", 1);
+	set("point", 63300);
+	set("material", "stone");
+	set("wield_msg", "[1;36m$N[1;36m一声清啸，抖出一柄[1;36m$n[1;36m。[2;37;0m\n");
+	set("unwield_msg", "$N随手一抹，收起了$n。\n");
+	if (! check_clone()) return;
+	restore();
+	init_sword(apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

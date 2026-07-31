@@ -1,0 +1,2 @@
+// stick.c
+inherit SKILL;

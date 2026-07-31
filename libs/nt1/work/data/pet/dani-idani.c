@@ -1,0 +1,18 @@
+// SN:;6dYJ>oSiRM<HTbb
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m职业[1;33m药[1;37m马马[2;37;0m", ({"idani ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "啊
+它是丹九的坐骑。
+");
+        set_temp("owner_id", "dani");
+        set_temp("owner_name", "丹九");
+        ::setup();
+}
+

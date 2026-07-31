@@ -1,0 +1,18 @@
+// SN:SF4g>P2MM7PN72=U
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("老牛[2;37;0m", ({"lao niu"}));        
+        set("gender", "女性");                
+        set("unit", "头");
+        set("long", "这次别忘了名字
+它是蓝鸟的坐骑。
+");
+        set_temp("owner_id", "bluebird");
+        set_temp("owner_name", "蓝鸟");
+        ::setup();
+}
+

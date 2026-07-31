@@ -1,0 +1,35 @@
+// SN:COMm5`:_:<nF7`eO
+// ITEM Made by player(狐踪魅影:ydzzgb) /data/item/y/ydzzgb-yitian.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Thu Oct 14 02:03:01 2004
+#include <ansi.h>
+#include <armor.h>
+
+inherit HANDS;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[2;37;0m[36m倚天剑[2;37;0m", ({ "yitian" }));
+	set_weight(2700);
+	set("item_make", 1);
+	set("unit", "双");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一双铁掌。
+[1;33m这便与天下至尊的屠龙宝刀并称的倚天剑。[2;37;0m
+铁掌缘上刻着一行小字：狐踪魅影(ydzzgb)
+");
+	set("value", 2100000);
+	set("point", 126);
+	set("material", "magic stone");
+	set("wear_msg", "[1;33m$N缓缓的吐出了一口气，只见衣袖飘飘、气涨如鼓，似要飞扬！\n[2;37;0m\n");
+	set("remove_msg", "[1;37m$N身子一晃，衣袖一波波的不住激荡，劲气逼人！\n[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/unarmed_damage", apply_damage());
+	set("armor_prop/armor", 10);
+	set("armor_prop/strike", 10);
+	set("armor_prop/hand", 10);
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

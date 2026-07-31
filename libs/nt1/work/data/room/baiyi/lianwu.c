@@ -1,0 +1,32 @@
+// SN:SQ\H7Ua]>0X6O\13
+// File(/data/room/baiyi/lianwu.c) of baiyi's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "练武场");
+	set ("long", @LONG
+此处便是藏心阁的练武场，人在江湖，武功万万不可荒废。 
+LONG );
+
+	set("exits", ([
+                "west" : __DIR__"houyuan",
+	]));
+
+        set("objects", ([
+                "/clone/npc/mu-ren" : 4,
+        ]));
+
+        set("outdoors", "unknow");
+        set("no_sleep_room", 1);
+
+        setup();
+    
+        set("room_owner", "白衣人");
+        set("room_name", "藏心阁");
+        set("room_id", "zyq");
+        set("room_owner_id", "baiyi");
+        set("room_position", "名人堂");
+}

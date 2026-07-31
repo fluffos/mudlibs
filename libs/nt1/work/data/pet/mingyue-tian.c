@@ -1,0 +1,18 @@
+// SN:7<Of<;g>VKg:0bQe
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("小马驹[2;37;0m", ({"tian ju"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "一只
+它是天涯狂歌的坐骑。
+");
+        set_temp("owner_id", "mingyue");
+        set_temp("owner_name", "天涯狂歌");
+        ::setup();
+}
+

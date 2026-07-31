@@ -1,0 +1,38 @@
+// SN:K7_h68`HcXci9AiI
+// File(/data/room/sprite/yingke.c) of sprite's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        set("short", "妖精居迎客厅");
+	set ("long", @LONG
+这里是妖精居的主人上官颖儿迎接八方来客的地方。大凡客人来
+拜见上官颖儿，少不得在这里寒暄叙话，了尽仰慕之情。东面通往一
+个茶室，是主人陪同客人品尝天下名茶之处。 
+LONG );
+
+	set("exits", ([
+		"north"  : __DIR__"yishiting",
+                "south"  : __DIR__"zoudao",
+                "east"   : __DIR__"chashi",
+	]));
+
+        create_door("east", "木门", "west", DOOR_CLOSED);
+
+        set("objects", ([
+                "/d/room/roomnpc/yahuan" : 2,
+        ]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("room_owner", "上官颖儿");
+        set("room_name", "妖精居");
+        set("room_id", "demon");
+        set("room_owner_id", "sprite");
+        set("room_position", "南海之滨");
+}

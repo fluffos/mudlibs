@@ -1,0 +1,94 @@
+//Cracked by Kafei
+// jhy's workroom
+
+void close_path();
+#include <ansi.h>
+
+inherit ROOM;
+
+
+void create()
+{
+
+            set("short","海边小屋");
+          set("long",HIG @LONG
+迎面吹来一阵海风，看来是到了神的家了，看你进来，好客主人立即起身相迎，下人递过
+一张椅子，送上刚沏的碧镙春茶，和你聊起了侠客行近期的工作安排。
+
+             ------------------------------------------------------        
+            华山hs，泉州qzh，杨州yz，泰山ts，少林sl，武当gwd，祈连ql
+            丐帮gb，星宿xx，峨嵋em，白驼bt，雪山xs，全真qz，神龙sn  
+            西夏xi，归云gy，大理dl，杭州hz，武庙wm,巫师wr,侠客居xk
+            ------------------------------------------------------
+
+LONG
+	);
+        set("sleep_room", 1);
+	set("no_fight", 1);
+ 
+	set("objects", ([
+ "/u/jhy/obj/cabinet" : 1,
+	]));
+					      
+					      
+	set("exits", ([ "kl" : "/d/kunlun/wall5",
+                "sl" : "/d/shaolin/guangchang1",
+                "sn" : "/d/shenlong/tingkou",
+                "xi" : "/d/xixia/dawu",
+                "hz" : "/d/hangzhou/kedian",
+                "gwd" : "/d/wudang/sanqingdian",
+                "xx" : "/d/xingxiu/xxh2",
+                "gb" : "/d/gaibang/undertre",
+                "gy" : "/d/taihu/qianyuan",
+                "hs" : "/d/huashan/buwei1",
+                "bt" : "/d/xingxiu/btyard",
+                "dl" : "/d/dali/wangfu1",
+                "em" : "/d/emei/hz_guangchang",
+                "xs" : "/d/xueshan/guangchang",
+		 "yz" : "/d/city/kedian",
+                "qzh" : "/d/quanzhou/zhongxin",
+                "hs" : "/d/huashan/buwei1",
+		"qz" : "/d/zhongnan/taijie2",
+                "bt" : "/d/xingxiu/btyard",
+                "dl" : "/d/dali/wangfu1",
+                "em" : "/d/emei/hz_guangchang",
+                "xs" : "/d/xueshan/guangchang",
+                "wr"  : "/d/wizard/meeting_room",
+                "lx" : "/d/lingxiao/dadian", 
+		"lj"  : "/d/lingjiu/dating",
+                "gm"  : "/d/zhongnan/dating",
+		   	                                                            
+	]));
+
+	setup();
+	"/clone/board/jhy_b"->foo();
+	//replace_program(ROOM);
+}
+
+void init()
+{
+	object me = this_player();
+          tell_room( environment(me), HIB"海豚"HIY"叫道：主人，" + me->query("title") + " "
+                + me->query("name") + "(" + me->query("id") + ")" + HIY"来找你了！！！\n"NOR);
+        if( wizardp(me) && getuid(me)!="xkxmud ")
+		message("vision", me->name()+"走了过来。\n", environment(me), ({me}));
+
+	add_action("do_leave", "leave");
+}
+
+int valid_leave(object me, string dir)
+{
+	if (!wizardp(me))
+		return notify_fail("由美子挡在你面前，恭身说道：“非常抱歉，您不能到那儿去。”\n");
+
+	return ::valid_leave(me, dir);
+}
+
+int do_leave()
+{
+	object me = this_player();
+	if(me)
+		me->move("/d/city/wumiao");
+        return 1;
+}
+

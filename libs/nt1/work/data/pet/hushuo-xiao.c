@@ -1,0 +1,18 @@
+// SN:SfR3]FO2KhE]18;d
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("小马[2;37;0m", ({"xiao ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "一匹小马
+它是胡说的坐骑。
+");
+        set_temp("owner_id", "hushuo");
+        set_temp("owner_name", "胡说");
+        ::setup();
+}
+

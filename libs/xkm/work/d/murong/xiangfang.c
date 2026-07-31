@@ -1,0 +1,22 @@
+//xiangfang.c
+// this is made by hotjc
+
+#include <ansi.h>
+#include <room.h>
+inherit ROOM;
+void create()
+{
+         set("short",MAG"厢房"NOR);
+         set ("long",@long
+这是一间厢房, 里面摆设简单, 只有一张床, 一张书桌和一把椅子。
+你可以在这里休息减轻疲劳.
+long);
+         set("no_fight", 1);
+         set("sleep_room", 1);
+         set("exits",([
+             "north" : __DIR__"cl1",
+]));
+         setup();
+         replace_program(ROOM);
+}
+

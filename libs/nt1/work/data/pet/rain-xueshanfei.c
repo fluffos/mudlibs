@@ -1,0 +1,18 @@
+// SN:R]90O9?dJ?DJ=5bO
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[31m雪[1;33m山[36m飞狐[2;37;0m", ({"xueshanfei hu"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "狐狸就是狐狸，会飞的……
+它是小雨点的坐骑。
+");
+        set_temp("owner_id", "rain");
+        set_temp("owner_name", "小雨点");
+        ::setup();
+}
+

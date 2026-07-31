@@ -1,0 +1,48 @@
+// Copyright (C) 2003, by Lonely. All rights reserved.
+// This software can not be used, copied, or modified 
+// in any form without the written permission from authors.
+
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+
+int main(object me, string str)
+{
+        object *users;
+        int j;
+
+        if (! SECURITY_D->valid_grant(me, "(admin)"))
+                return 0;                      
+
+        if (! str)
+                return notify_fail("你要统计什么技能？\n");
+
+        if (file_size("/kungfu/skill/" + str + ".c") == -1)
+                return notify_fail("没有这个技能存在！\n");                
+
+        users = all_interactive();
+
+        j = 0;
+        write(HIW "\n以下为本 MUD 中掌握 " + HIM + CHINESE_D->chinese(str) + HIW + " 的在线玩家。\n" NOR);
+        write(HIY "-------------------------------------------------------------------------\n" NOR);
+
+        foreach (object player in users)
+        {
+                if (player->query_skill(str, 1))
+                {
+                        write(sprintf(HIC "%-21s年龄：%-10d所属门派：%-16s等级：%-10d\n" NOR,
+                                      player->name() + "(" + player->query("id") + ")",
+                                      player->query("age"),
+                                      player->query("family/family_name"),
+                                      player->query_skill(str, 1)));
+                        j ++;
+                }
+         
+        }
+        write(HIW "\n总共 " HIR + j + HIW " 位玩家掌握" + HIM + CHINESE_D->chinese(str) + "\n" NOR);
+        write(HIY "-------------------------------------------------------------------------\n" NOR);
+
+        return 1;
+}
+
+

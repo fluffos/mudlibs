@@ -1,0 +1,33 @@
+// SN:G`[A9NbemE8`]_A^
+// ITEM Made by player(真宫寺樱:sakura) /data/item/s/sakura-jian.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Tue Aug 10 16:00:36 2004
+#include <ansi.h>
+#include <weapon.h>
+
+inherit SWORD;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;31m灵剑荒鹫[2;37;0m", ({ "jian" }));
+	set_weight(9000);
+	set("item_make", 1);
+	set("unit", "柄");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一柄剑。
+[1;35m花组[1;32m成员[1;37m——[1;31m真宫寺樱[1;32m的爱剑
+[2;37;0m
+剑柄上刻着一行小字：真宫寺樱(sakura)
+");
+	set("value", 2100000);
+	set("point", 910);
+	set("material", "magic stone");
+	set("wield_msg", "[1;36m$N[1;36m一声清啸，抖出一柄[1;36m$n[1;36m。[2;37;0m\n");
+	set("unwield_msg", "$N随手一抹，收起了$n。\n");
+	if (! check_clone()) return;
+	restore();
+	init_sword(apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

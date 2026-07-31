@@ -1,0 +1,32 @@
+// SN:gc@>S8W>ValS0aaM
+// File(/data/room/chinapk/yanwu2.c) of chinapk's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        set("short", "肯德鸡演武厅");
+	set ("long", @LONG
+[1;31m演武厅[2;37;0m
+LONG );
+
+	set("exits", ([
+                "east" : __DIR__"yishiting",
+	]));
+
+        set("objects", ([
+                "/clone/weapon/zhubang" : 1,
+                "/clone/weapon/zhujian" : 1,
+                "/clone/weapon/mudao"   : 1,
+        ]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("room_owner", "肯德基");
+        set("room_name", "肯德鸡");
+        set("room_id", "chinapk");
+        set("room_owner_id", "chinapk");
+        set("room_position", "树林");
+}

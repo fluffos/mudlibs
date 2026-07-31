@@ -1,0 +1,67 @@
+// by tiantian(www.wangcf.com) 2001.4
+// 修改帮派简介
+
+#include <ansi.h>
+#include <login.h>
+#include <group.h>
+
+int main(object me,string arg)
+{
+	string group_file;     
+
+	seteuid(getuid(me));
+	
+	if( !me->query("group") )
+		return notify_fail( "你并没有加入任何帮派。\n" );
+
+	if( me->query("group/level") != GROUP_MASTER )
+		return notify_fail( "只有帮主才可以修改帮派简介。\n" );
+
+	group_file = GROUP_D->query_home( me );;
+	
+	if( arg == "-d" ) {
+        rm( GROUP_D->query_cwd( me ) + "story" );
+        load_object( group_file ) -> delete( "story" );
+		write( "你删除了帮派简介。\n");
+	}       
+	else if( arg=="-a" ) {
+        me->edit( (: call_other, __FILE__, "do_change" , me :) );
+        load_object( group_file ) -> set( "story", 1 );
+	}
+	else {
+        return notify_fail("指令格式：gstory <-d/-a>\n");
+	}
+
+	GROUP_D->save_group( me );
+	return 1;
+}
+
+void do_change( object me, string str )
+{
+	str = GROUP_D->replace_color( str );
+	rm( GROUP_D->query_cwd( me ) + "story" );
+	write_file( GROUP_D->query_cwd( me ) + "story", str );
+	write("完成。\n");
+	return ;
+}
+
+int help(object me)
+{
+write(@HELP
+----------------------------------------
+指令格式：gstory <-d/-a>
+
+设定帮派的简介。
+-a 增加简介     
+-d 删除简介
+
+本命令只有帮主可用。
+
+相关命令：group
+
+----------------------------------------
+HELP
+        );
+        return 1;
+}
+

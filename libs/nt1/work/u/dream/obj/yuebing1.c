@@ -1,0 +1,23 @@
+// yuebing.c 
+// By dream@nt
+
+inherit ITEM;
+inherit F_FOOD;
+#include <ansi.h>
+
+
+void create()
+{
+        set_name(HIC "椰果月饼" NOR, ({"yuebing", "bing"}));
+        set_weight(40);
+        if (clonep())
+                set_default_object(__FILE__);
+        else {
+                set("long", "一个香甜可口的椰果月饼，让人看了直流口水。\n");
+                set("unit", "个");
+                set("value", 40);
+                set("food_remaining", 5);
+                set("food_supply", 500);
+        }
+}
+

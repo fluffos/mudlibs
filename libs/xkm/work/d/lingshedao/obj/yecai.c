@@ -1,0 +1,20 @@
+//Cracked by Roath
+#include <ansi.h> 
+inherit ITEM;
+inherit F_FOOD;
+
+void create()
+{
+        set_name(BBLK+GRN "野菜" NOR, ({"vegetable","ye cai", "cai"}));
+        set_weight(200);
+        if (clonep())
+                set_default_object(__FILE__);
+        else {
+                set("long", "一颗不知名野菜，长的很肥沃。\n"  );
+                set("unit", "颗");
+                set("value", 20);
+                set("food_remaining", 5);
+                set("food_supply", 25);
+        }
+}
+

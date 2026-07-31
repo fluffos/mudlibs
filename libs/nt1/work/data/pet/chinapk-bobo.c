@@ -1,0 +1,18 @@
+// SN:_n04>OnR4jL7ARU3
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("闪电貂[2;37;0m", ({"bobo diao"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "一只小笨!
+它是肯德基的坐骑。
+");
+        set_temp("owner_id", "chinapk");
+        set_temp("owner_name", "肯德基");
+        ::setup();
+}
+

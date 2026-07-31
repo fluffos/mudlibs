@@ -1,0 +1,15 @@
+ inherit ITEM;
+#include <ansi.h>
+void create()
+{
+        set_name(HIM"花粉"NOR, ({ "huafen" , "花粉"}) );
+        set_weight(50);
+        if( clonep() )
+                set_default_object(__FILE__);
+        else {
+                set("unit", "盒");
+                set("long", "艳丽胜似桃花的上等花粉\n");
+                set("value", 1000);
+        }
+        
+}     

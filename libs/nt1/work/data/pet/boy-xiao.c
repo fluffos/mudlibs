@@ -1,0 +1,18 @@
+// SN:Jn2JK84ZCYnQJYXK
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("小马[2;37;0m", ({"xiao ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "小
+它是唐来了的坐骑。
+");
+        set_temp("owner_id", "boy");
+        set_temp("owner_name", "唐来了");
+        ::setup();
+}
+

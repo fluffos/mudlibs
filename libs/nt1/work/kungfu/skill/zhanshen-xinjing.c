@@ -1,0 +1,44 @@
+// Copyright (C) 2003, by Lonely. All rights reserved.
+// This software can not be used, copied, or modified 
+// in any form without the written permission from authors.
+
+#include <ansi.h>
+
+inherit FORCE;
+int valid_force(string force) { return 1; } 
+
+// 内力应该比太极神功强些
+int query_neili_improve(object me)  
+{
+        int lvl; 
+        lvl = (int)me->query_skill("zhanshen-xinjing", 1); 
+                return lvl / 10 * lvl / 10 * 25 * 15 / 200;  
+}
+
+int valid_enable(string usage) { return usage == "force"; }
+
+int valid_learn(object me)
+{
+        int lvl = (int)me->query_skill("zhanshen-xinjing", 1);
+
+        if (me->query("gender") == "无性" && lvl > 49)
+                return notify_fail("你无根无性，阴阳不调，难以领会高深的战神心经。\n");
+
+        if (me->query("class") == "bonze")
+                return notify_fail("战神心经讲究阴阳调合，有违佛家六根清净之意，" +
+                                   RANK_D->query_respect(me) + "欲修此功，已是罪过。\n");
+
+        return ::valid_learn(me);
+}
+
+int practice_skill(object me)
+{
+
+        return notify_fail("战神心经只能用学(learn)的来增加熟练度。\n");
+}
+
+string exert_function_file(string func)
+{
+        return __DIR__"zhanshen-xinjing/" + func;
+}
+

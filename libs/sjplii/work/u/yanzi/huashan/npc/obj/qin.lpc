@@ -1,0 +1,125 @@
+// qin.c
+
+inherit ITEM;
+#include <ansi.h>
+
+void create()
+{
+        set_name("古琴", ({ "qin" }) );
+        set("long","一具短琴，琴身陈旧，还刻满了字，琴尾则刻着个篆字“剑”。\n");
+        set("value", 15000);
+        set("unit", "具");
+        set("sword_count", 1);
+        seteuid(getuid());
+}
+void init()
+{
+        add_action("do_play",  ({ "play","tan" }));
+        add_action("do_wield", "wield");
+        add_action("do_study", "study");
+}
+int do_wield(string arg)
+{
+        object me,weapon;
+        me = this_player();
+        if(!arg) return 0;
+        if(environment(this_object()) != me) return 0;
+        if(arg == "sword" || arg == "qin sword" ) {
+                if(query("sword_count") < 1) {
+                        tell_object(me,"琴中已经没有剑了！\n");
+                        return 1;
+                        }
+                weapon = new(__DIR__"sword-qin");               
+                message_vision("$N缓缓地从琴底抽出一柄$n，但见青光闪闪，照映大地。\n",me,weapon);
+                add("sword_count", -1);
+                weapon->move(me);
+                weapon->wield();
+                return 1;
+        }
+        return 0;
+}
+int do_play()
+{
+        object *ob,me,target;
+        int i, skill, heal;
+        me = this_player();
+        skill = me->query_skill("music", 1);
+        if (skill < 50)
+                return notify_fail("你的琴音韵律所学不足！\n");
+                if(((int)me->query("force")- (int)me->query("max_force"))< 200)
+                return notify_fail("你的真气不够。\n");
+        message_vision(HIG "$N手扶古琴，弹起一曲《高山流水》。\n" NOR, me);
+                me->set("force", (int)me->query("max_force"));
+
+                ob = all_inventory(environment(me));
+                for(i=0; i<sizeof(ob); i++) {
+                if( !living(ob[i]) || ob[i]==me ) continue;
+                        heal = skill/3;
+                if( heal > 0 ) {
+                        ob[i]->receive_heal("gin", heal);
+                        ob[i]->receive_heal("sen", heal);
+                        tell_object(ob[i], "你只觉得一曲柔和的音乐传入耳中，整个人的心神都为之一畅。\n");
+                        }
+                }
+        return 1;
+}               
+int do_study(string arg)
+{
+        object me = this_player();
+        object where = environment(me);
+        object ob = this_object();
+        mapping skill;
+        int lvl; 
+
+        if (arg != ob->query("id")) {
+                write("你要读什么？\n");
+                return 1;
+        }
+        if (!id(arg)) { 
+                write("你要读什么？\n");
+                return 1;
+        }
+        if (me->is_busy()) {
+                write("你现在正忙着呢。\n");
+                return 1;
+        }
+        if( me->is_fighting() ) {
+                write("你无法在战斗中专心下来研读新知！\n");
+                return 1;
+        }
+        if( me->query_temp("dazuo") ){
+                write("你无法在练功打坐中专心下来研读新知！\n");
+                return 1;
+        }
+        if( me->query_temp("sleeping") ){
+                write("你正在睡眠中，不能学习技能。\n");
+        }
+        if( !me->query_skill("literate", 1) ){
+                write("你是个文盲，先学点文化(literate)吧。\n");
+                return 1;
+        }
+        message_vision("$N拿出$n，开始细细钻研起来。\n",me,ob);
+        if( (int)me->query("sen") < 15 ) {
+                write("你现在过于疲倦，无法专心下来研读新知。\n");
+                return 1;
+        }
+        lvl = me->query_skill("music", 1);
+        if( (int)me->query("combat_exp") < (int)lvl*lvl*lvl/10 ) {
+                write("你的实战经验不足，再怎么读也没用。\n");
+                return 1;
+        }
+
+        if( me->query_skill("music", 1) > 50){
+                write("你研读了一会儿，但是发现上面所说的对你而言都太浅了，没有学到任何东西。\n");
+                return 1;
+        }
+        me->receive_damage("sen", 15);
+        if( !me->query_skill("music", 1) ) {
+                me->set_skill("music", 0);
+        }
+	if( me->query_skill("music",1) <= 300 )
+        me->improve_skill("music", (int)me->query_skill("literate", 1)/4
+        +random((int)me->query("int")) );
+        write("你研读古琴上的文字，似乎颇有心得。\n");
+        return 1;
+}

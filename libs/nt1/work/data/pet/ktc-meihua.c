@@ -1,0 +1,18 @@
+// SN:mn_Fi;T9:mFU`7YH
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("梅花鹿[2;37;0m", ({"meihua lu"}));        
+        set("gender", "女性");                
+        set("unit", "头");
+        set("long", "这是一个梅花
+它是独孤狂的坐骑。
+");
+        set_temp("owner_id", "ktc");
+        set_temp("owner_name", "独孤狂");
+        ::setup();
+}
+

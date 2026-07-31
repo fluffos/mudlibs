@@ -1,0 +1,18 @@
+// SN:Y=?GCnHE3QTd5V1=
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("禽兽[2;37;0m", ({"hjxbaobao shou"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "无所不能的小禽兽。
+它是我为情狂的坐骑。
+");
+        set_temp("owner_id", "hjx");
+        set_temp("owner_name", "我为情狂");
+        ::setup();
+}
+

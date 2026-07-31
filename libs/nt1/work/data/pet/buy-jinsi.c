@@ -1,0 +1,18 @@
+// SN:22KJCfUb3>f1]N8X
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[31m金丝猴[2;37;0m", ({"jinsi hou"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "快绝种了，保护哦，别砍！
+它是商人的坐骑。
+");
+        set_temp("owner_id", "buy");
+        set_temp("owner_name", "商人");
+        ::setup();
+}
+

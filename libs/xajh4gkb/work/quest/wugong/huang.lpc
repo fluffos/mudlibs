@@ -1,0 +1,210 @@
+// Updated by Zjb@TY
+#include <ansi.h>
+#include <localtime.h>
+inherit NPC;
+
+int give_quest();
+void create()
+{
+	int jibie;
+	jibie = 9000;
+	set("xyzx_sys/level", jibie);	//2016.5.22阿飞调整NPC属性
+    set_name(HIB"黄裳"NOR, ( { "huang shang", "huang"}));
+    set("gender", "男性");
+    set("title", HIC"『武学宗师』"NOR);
+    set("long","他是宋徽宗时期的科举状元，整理道藏典籍时无师自通，修习内功外功，竟成为一位武林宗师。\n");
+	set("age", 75);
+	set("per", 25);
+	set("str", 30);
+	set("int", 40);
+	set("dex", 50);
+	set("con", 50);
+    set("max_neili", 5000000);
+    set("neili", 5000000);
+    set("max_qi", 5000000);
+    set("max_jing", 5000000);
+    set("max_jingli", 2000000);
+    set("jingli", 2000000);
+	set("wuyongjiali", 400);
+    set("combat_exp", 300000000);
+	set_skill("unarmed", 500+jibie*2+random(jibie/5));
+	set_skill("force", 500+jibie*2+random(jibie/5));
+	set_skill("sword", 500+jibie*2+random(jibie/5));
+	set_skill("dodge", 500+jibie*2+random(jibie/5));
+	set_skill("parry", 500+jibie*2+random(jibie/5));
+	set_skill("literate", 500+jibie/2+random(jibie/5));
+	set_skill("taoism", 500+jibie/2+random(jibie/5));
+	set_skill("jiuyin-zhenjing", 500+jibie/2+random(jibie/5));
+	set_skill("jiuyin-baiguzhao", 500+jibie/2+random(jibie/5));
+	set_skill("shenxing-baibian", 500+jibie/2+random(jibie/5));
+	set_skill("wenrou-jian", 500+jibie/2+random(jibie/5));
+	map_skill("force", "jiuyin-zhenjing");
+	map_skill("unarmed","jiuyin-baiguzhao");
+	map_skill("parry", "jiuyin-baiguzhao");
+	map_skill("sword", "wenrou-jian");
+	map_skill("dodge", "shenxing-baibian");
+    set("inquiry", ([
+		"武学" :(: give_quest :)
+    ]) );
+	
+    setup();
+    carry_object("/clone/weapon/changjian")->wield();
+    carry_object("/clone/cloth/cloth")->wear();
+}
+
+string time_period(int timep)
+{
+    int t, d, h, m, s;
+    string time;
+    t = timep;
+
+    s = t % 60;
+    t /= 60;
+    m = t % 60;
+    t /= 60;
+    h = t % 24;
+    t /= 24;
+    d = t;
+
+    if(d)
+        time = chinese_number(d) + "天";
+    else
+        time = "";
+
+    if(h)
+        time += chinese_number(h) + "小时";
+    if(m)
+        time += chinese_number(m) + "分";
+    time += chinese_number(s) + "秒";
+
+    return " 在" + time + "内,";
+}
+
+int give_quest()
+{
+    object me,killer;
+    mapping quest;
+	string tag;
+	mixed *local;
+	int quest_time;
+    me=this_player();
+    quest = (__DIR__"where")->query_quest();
+	local = localtime(time());
+
+    if(me->query_temp("day_wugong_quest") && me->query_temp("day_wugong_quest/have_task"))
+    {
+        write(HIW"你不是要了个任务吗？不想干就滚蛋，我好请别人！\n"NOR);
+        return 1;
+    }
+	if ( local[LT_MDAY] == (int)me->query("day_wugong_timecd"))	//每天
+	{
+		message_vision(HIR"$N看了$p一眼: 武艺考核每天只进行一次，多了伤身！\n"NOR, this_object(),me);
+		return 1;
+	}
+	
+//	if ( !me->query("env/no_msg") ) me->set("env/no_msg",1);
+	me->command("unset no_combat_msg");
+	quest_time = random(2400)+1200;
+	tag = time_period(quest_time);
+    killer=new(__DIR__"quest_killer");
+    killer->move(quest["place"]);
+    killer->set("no_dun",1);
+    killer->set("killer",me->query("id"));
+	killer->set("xyzx_sys/level",me->query("xyzx_sys/level"));
+    me->set_temp("day_wugong_quest/quest_time",time()+quest_time);
+    me->set_temp("day_wugong_quest/have_task",1);
+	me->set_temp("day_wugong_quest/answer_num",3);
+	me->set("day_wugong_timecd", local[LT_MDAY]);
+    message_vision(HIC"难得"+me->query("name")+"有如此侠义心肠，老夫近日获悉在\n『"
+          +quest["short"]+"』一带有一名杀人狂魔为患，你就"
+          +"先去调查一下情况，\n根据我的资料，这个人的名字好象叫"
+          +killer->query("name")+"("+killer->query("id")+")"
+          +"，\n"HIM""+tag+"把他的门派底细弄清楚后立刻回来报告！\n"NOR,me);
+	call_out("wugong_time", quest_time*2, me, killer);
+    return 1;
+}
+
+void init()
+{
+    object ob;
+    ob = this_player();
+
+	if(ob->query_temp("day_wugong_quest/have_task"))
+	{
+		if(ob->query_temp("day_wugong_quest/inquiry"))
+		{
+			write(HIC"黄裳面露微笑，朝你点头道：“你回来啦，"
+              +"可曾查到什么没有？”\n"NOR
+              +CYN"请用 answer <门派> 回答！\n"NOR,ob);
+			add_action("do_answer","answer");
+		}
+	}
+
+}
+
+int do_answer(string arg)
+{
+    object ob;
+	int answer_num;
+	int add_exp,add_pot,add_sco,renwu_exp_add;
+	
+    ob = this_player();
+	answer_num = ob->query_temp("day_wugong_quest/answer_num");
+	renwu_exp_add = 0;
+	
+    if(!arg) return notify_fail("请用 answer <门派> 回答！\n");
+	if(!ob->query_temp("day_wugong_quest/have_task")) return notify_fail("你没有领取任务！\n");
+    if(!ob->query_temp("day_wugong_quest/inquiry"))
+    {
+        write( HIY"黄裳怒道：还不快去，在这里磨蹭什么？\n"NOR,ob);
+        return 1;
+    }
+	if( (int)ob->query_temp("day_wugong_quest/quest_time") < time() )
+	{
+		message_vision(HIY"黄裳怒道: 这点事情你都不能在规定时间内完成，你学的功夫都还给师傅了？\n"NOR, this_object(),ob);
+		ob->delete_temp("day_wugong_quest");
+		return 1;
+	}
+    if(answer_num<1)
+    {
+        write( HIW"黄裳怒道：就你这点武学认知，还谈什么笑傲江湖，回去多练几年吧！\n"NOR,ob);
+        ob->delete_temp("day_wugong_quest");
+        return 1;
+    }	
+    if(arg!=ob->query_temp("day_wugong_quest/family_name2"))
+    {
+        write(HIW"黄裳脸色一沉道：胡说！哪里是什么"+ arg +"，再给你"+HIR+chinese_number(answer_num-1)+HIW+"次机会！\n"NOR,ob);
+        ob->set_temp("day_wugong_quest/answer_num",answer_num-1);
+        return 1;
+    }
+    else
+    {
+        write(HIW"黄裳面露微笑，点头赞许道：不错，不错，正是"+arg+"，和我想的一样！\n"NOR,ob);
+        write(MAG"黄裳顿了顿，接着说道："+RANK_D->query_respect(ob)+"武学认识不凡，武林同道给予你一些奖励以示鼓励。\n", ob);
+
+		if (ob->query_temp("renwu_exp_add")) renwu_exp_add = (int)ob->query_temp("renwu_exp_add",1);	//处于任务经验提升状态时
+		add_exp = (6+random(10))/2+10000/((int)ob->query("xyzx_sys/level",1)+200);
+        tell_object(ob, sprintf(WHT"你圆满完成了你的任务:\n你的实战等级提高了%s级！", chinese_number(add_exp)) );
+		ob->add("xyzx_sys/level", add_exp);
+		add_pot = ((1+random(10))*1000000+random(2000000))*(renwu_exp_add+100)/100;
+        tell_object(ob, sprintf(HIY"\n%s点潜能！\n"NOR, chinese_number(add_pot)) );
+        ob->add("potential",add_pot);
+		add_sco=((1+random(10))*500+random(1000))*(renwu_exp_add+100)/100;
+        tell_object(ob, sprintf(YEL"江湖阅历增加了%s点！\n"NOR, chinese_number(add_sco)) );
+        ob->add("score",add_sco);
+		tell_object(ob, HIM"恭喜你获得江湖币1个！\n"NOR);
+		ob->add("jianghu_money",1);
+        ob->delete_temp("day_wugong_quest");
+		ob->add("renwu/wugong_kaohe",1);
+        return 1;
+    }
+}
+
+void wugong_time(object me, object killer)
+{
+	if ( !objectp(killer) ) return;
+	message_vision(""+killer->query("name")+"("+killer->query("id")+")""狞笑了几声：今天心情好，本大爷就放过你，不陪你玩了。说罢，一个筋斗跳出战圈，不知去向。\n",me,killer);
+	me->delete_temp("day_wugong_quest");	
+	destruct(killer);	
+	return;
+}

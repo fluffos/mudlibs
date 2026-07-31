@@ -1,0 +1,19 @@
+// SN:[ciEJ7C2VQ@bIOUJ
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[37m大灰狼[2;37;0m", ({"dahui lang"}));        
+        set("gender", "男性");                
+        set("unit", "条");
+        set("long", "这是天下万狼之王，代表着黑夜和凶狠。
+它是唐小藏的坐骑。
+");
+        set_temp("owner_id", "xgangbj");
+        set_temp("owner_name", "唐小藏");
+        ::setup();
+}
+
+

@@ -1,0 +1,35 @@
+// SN:<^Peo@N86^m[[4jT
+// ITEM Made by player(洛神:lshen) /data/item/l/lshen-xzhang.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Mon Oct 27 23:55:12 2003
+#include <ansi.h>
+#include <armor.h>
+
+inherit HANDS;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[2;37;0m[33m熊掌[2;37;0m", ({ "xzhang" }));
+	set_weight(2700);
+	set("item_make", 1);
+	set("unit", "双");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一双铁掌。
+用太古凶暴熊做成的掌套，上面五齿异常锋利。[2;37;0m
+铁掌缘上刻着一行小字：洛神(lshen)
+");
+	set("value", 2100000);
+	set("point", 174);
+	set("material", "magic stone");
+	set("wear_msg", "$N把汤里的熊掌捞起来带在手上。\n[2;37;0m\n");
+	set("remove_msg", "$N脱下一双熊掌想熬锅汤补补身子。\n[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/unarmed_damage", apply_damage());
+	set("armor_prop/strike", 10);
+	set("armor_prop/armor", 10);
+	set("armor_prop/hand", 10);
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

@@ -1,0 +1,18 @@
+// SN:A79O<J;_ih2S[?3>
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("吾知咩马[2;37;0m", ({"kcbb ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "吾知咩马
+它是桃花药业的坐骑。
+");
+        set_temp("owner_id", "zzyy");
+        set_temp("owner_name", "桃花药业");
+        ::setup();
+}
+

@@ -1,0 +1,18 @@
+// SN:4EeeFh0j5S_80EC[
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;31m神龙兽[2;37;0m", ({"shenlong shou"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "$HIR$这是一条长达数十丈的神龙，它能腾云驾雾
+它是杨大虾的坐骑。
+");
+        set_temp("owner_id", "yangwei");
+        set_temp("owner_name", "杨大虾");
+        ::setup();
+}
+

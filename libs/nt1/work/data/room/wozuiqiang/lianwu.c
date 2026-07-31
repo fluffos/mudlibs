@@ -1,0 +1,32 @@
+// SN:iaLbWZjb6CcSa^^8
+// File(/data/room/wozuiqiang/lianwu.c) of wozuiqiang's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "练武场");
+	set ("long", @LONG
+此处便是天地花园的练武场，人在江湖，武功万万不可荒废。 
+LONG );
+
+	set("exits", ([
+                "west" : __DIR__"houyuan",
+	]));
+
+        set("objects", ([
+                "/clone/npc/mu-ren" : 4,
+        ]));
+
+        set("outdoors", "playertown");
+        set("no_sleep_room", 1);
+
+        setup();
+    
+        set("room_owner", "血影");
+        set("room_name", "天地花园");
+        set("room_id", "wozuiqiang");
+        set("room_owner_id", "wozuiqiang");
+        set("room_position", "碎石小道");
+}

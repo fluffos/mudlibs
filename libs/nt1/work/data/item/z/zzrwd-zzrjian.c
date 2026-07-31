@@ -1,0 +1,32 @@
+// SN:WU?lYP1AH==P_CEL
+// ITEM Made by player(渡空:zzrwd) /data/item/z/zzrwd-zzrjian.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Wed Jul  7 17:58:50 2004
+#include <ansi.h>
+#include <weapon.h>
+
+inherit SWORD;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;34m扫[1;36m把[2;37;0m", ({ "zzrjian" }));
+	set_weight(9000);
+	set("item_make", 1);
+	set("unit", "柄");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一柄剑。
+[36m无名老僧[1;36m传下来的扫把[2;37;0m
+剑柄上刻着一行小字：渡空(zzrwd)
+");
+	set("value", 2100000);
+	set("point", 221);
+	set("material", "magic stone");
+	set("wield_msg", "[34m高喊一声[1;37m扫把[1;31m达摩[1;34m及忙跑来把扫肥放在你的手上[35m闪闪[1;32m发光[2;37;0m\n");
+	set("unwield_msg", "[1;35m我把[1;36m扫把[1;33m交给了[1;31m达摩[36m叫他好好保管[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	init_sword(apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

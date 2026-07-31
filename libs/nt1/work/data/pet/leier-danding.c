@@ -1,0 +1,18 @@
+// SN:V3EIo^UI6B3E7OHf
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;31m丹顶鹤[2;37;0m", ({"danding he"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "一只十分漂亮的丹顶鹤，额头上一点红星闪亮动人。
+它是泪儿的坐骑。
+");
+        set_temp("owner_id", "leier");
+        set_temp("owner_name", "泪儿");
+        ::setup();
+}
+

@@ -1,0 +1,27 @@
+// Room: /u/cass/hg/taihedian.c
+// This is a room made by roommaker. write by Fan. :)
+
+inherit ROOM;
+
+void create()
+{
+	set("short", "太和殿");
+	set("long", @LONG
+这里就是人们俗称的“金銮殿”，重檐四阿庑殿顶，彩画双龙合玺大点
+金。殿内共有六根蟠龙金漆柱，居中约两米高的平台上设有一张楠木金漆雕
+龙宝座，座上放置髹金龙椅，椅后竖髹金雕龙屏风。宝座左右有对称的宝象、
+角端、仙鹤、香筒等制品。殿顶正中为穹隆圆顶，又称藻井，井内巨龙蟠卧，
+口衔宝珠，叫轩辕镜。镜下正对宝座。地面上铺着金砖，整个宫殿被映照得
+金碧辉煌，华丽无比。
+LONG
+);
+	set("no_new_clean_up", 0);
+	set("exits", ([ /* sizeof() == 2 */
+  "south" : __DIR__"taihemen",
+  "north" : __DIR__"zhonghedian",
+  "west" : __DIR__"taihedian2",
+]));
+
+	setup();
+	replace_program(ROOM);
+}

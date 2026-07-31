@@ -1,0 +1,33 @@
+// SN:9leQ9B_Kg\2i?^jE
+// ITEM Made by player(酷头裤头:kutou) /data/item/k/kutou-myjia.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Tue Nov 18 22:23:25 2003
+#include <ansi.h>
+#include <armor.h>
+
+inherit ARMOR;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;36m乞丐衫[2;37;0m", ({ "myjia" }));
+	set_weight(1050);
+	set("item_make", 1);
+	set("unit", "张");
+	set("long", "这是由[1;37m冰蚕丝[2;37;0m炼制而成的一张护甲。
+[1;37m各位好心的大爷大叔，打发点咯[2;37;0m
+护甲缘上刻着一行小字：酷头裤头(kutou)
+");
+	set("value", 2100000);
+	set("point", 152);
+	set("material", "silk");
+	set("wear_msg", "[33m$N[33m装备[1;36m乞丐衫[2;37;0m[33m。[2;37;0m\n");
+	set("remove_msg", "[33m$N[33m脱下了[1;36m乞丐衫[2;37;0m[33m。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/parry", apply_armor() / 15 + 1);
+	set("armor_prop/armor", apply_armor());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

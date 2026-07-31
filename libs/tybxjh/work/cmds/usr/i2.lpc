@@ -1,0 +1,285 @@
+//inventory.c
+//Write By Leeyao 2000.5.6
+#include <ansi.h>
+inherit F_CLEAN_UP;
+string fill_blank(string type, int num);
+string remove_ansi(string str)
+{
+        int i;
+        string *color = ({ BLK, RED, GRN, YEL, BLU, MAG, CYN, WHT,
+                        HIR, HIG, HIY, HIB, HIM, HIC, HIW,
+                        HBRED, HBGRN, HBYEL, HBBLU, HBMAG, HBCYN, HBWHT,
+                        BBLK, BRED, BYEL, BBLU, BMAG, BCYN,
+                        NOR, BOLD });
+                        
+        if( !str || !stringp(str) ) return 0;
+        i = sizeof(color);
+        while( i-- ) {
+                str = replace_string(str, color[i], "");
+        }
+        return str;
+}
+string tribar_graph(int val, int eff, int max, string bcolor, string fcolor, string dcolor);
+string value_string(int value1,int value)
+{
+    string str;
+    if (value1){
+        str=((int)(value1/10000)?chinese_number(value1/10000)+"亿":"") +chinese_number(value1%10000)+ "万";
+    if( value < 1 ) return str+"两黄金";
+    else    if( value < 100 )
+        return str +"两黄金"+ chinese_number(value) + "文钱";
+    else    if( value < 10000 )
+        return str +"两黄金"+chinese_number(value/100) + "两白银"
+            + (value%100? "又" + chinese_number(value%100) + "文钱": "");
+    else
+        return str + chinese_number(value/10000) + "两黄金"
+            +( (value%10000)/100 ? chinese_number((value%10000)/100) + "两白银" : "")
+            +( (value%10000)%100 ? "又" + chinese_number((value%10000)%100) + "文钱": "");
+    }else   {
+    if( value < 1 ) return "";
+    else    if( value < 100 )
+        return chinese_number(value) + "文钱";
+    else    if( value < 10000 )
+        return chinese_number(value/100) + "两白银"
+            + (value%100? "又" + chinese_number(value%100) + "文钱": "");
+    else
+        return chinese_number(value/10000) + "两黄金"
+            +( (value%10000)/100 ? chinese_number((value%10000)/100) + "两白银" : "")
+            +( (value%10000)%100 ? "又" + chinese_number((value%10000)%100) + "文钱": "");
+    }
+}
+string weight(int w)
+{
+        int j, l, q;
+        string str = "";
+        if (w / 4096) {
+                str = chinese_number(w / 4096) + "斤";
+                w %= 4096;
+        }
+        else
+                str = "";
+        if (w / 256) {
+                str = str + chinese_number(w / 256) + "两";
+                w %= 256;
+        }
+        if (w / 16) {
+                str = str + chinese_number(w / 16) + "钱";
+                w %= 16;
+        }
+        if (w)
+                return str + chinese_number(w) + "分";
+        return str;
+
+}
+
+int main(object me, string arg)
+{
+        int i,n,tgc, gc, tsc, sc, cc, left;
+        string str,str1,str2;
+        object *inv, ob, tg_ob, g_ob, ts_ob, s_ob, c_ob;
+        seteuid(getuid());
+
+
+        if( wizardp(me) && arg || me->query("env/wizhp") && arg ) {
+                ob = find_player(arg);
+                if( !ob ) ob = find_living(arg);
+                if( !ob ) ob = present(arg, environment(me));
+        }
+
+        if( !ob ) ob = me;
+
+        inv = all_inventory(ob);
+        if( !sizeof(inv) ) {
+                write((ob==me)? "目前你身上没有任何东西。\n"
+                        : ob->name() + "身上没有携带任何东西。\n");
+                return 1;
+        }
+        if (tg_ob = present("tengold_money", ob))
+                tgc = tg_ob->query_amount();
+        else
+                tgc = 0;
+        if (g_ob = present("gold_money", ob))
+                gc = g_ob->query_amount();
+        else
+                gc = 0;
+        if (ts_ob = present("tensilver_money", ob))
+                tsc = ts_ob->query_amount();
+        else
+                tsc = 0;
+        if (s_ob = present("silver_money", ob))
+                sc = s_ob->query_amount();
+        else
+                sc = 0;
+        if (c_ob = present("coin_money", ob))
+                cc = c_ob->query_amount();
+        else
+                cc = 0;
+                left = cc + sc * 100 + tsc * 1000 + gc * 10000 + tgc * 100000;
+
+        n =sizeof(inv);
+        str = CYN"\n≡"YEL"────────────────────────────────"CYN"≡\n"NOR;
+        str += sprintf(HIC"　%-8s"BLK"身上带有以下物品　总共："HIC"%4d"BLK"种　　　　　　　　　　　　　\n　共重：　%-40s%3d%%" + 
+                tribar_graph(ob->query_encumbrance(),ob->query_max_encumbrance(),ob->query_max_encumbrance(), HBBLU, HIY ,HIR)+"\n"HIC BLK"　携带的金钱：共%50s"NOR,
+                ob->query("name"),n,weight(ob->query_encumbrance()),(string)((int)ob->query_encumbrance() * 100/ (int)ob->query_max_encumbrance()),
+                value_string(0,left));
+        str += sprintf("\n%s",
+                implode(map_array(inv, "inventory_weapon", this_object()), "\n"));
+        str += sprintf("\n%s",
+                implode(map_array(inv, "inventory_armor", this_object()), "\n"));
+        str += sprintf("\n%s",
+                implode(map_array(inv, "inventory_money", this_object()), "\n"));
+        str += sprintf("\n%s\n",
+                implode(map_array(inv, "inventory_item", this_object()), "\n"));
+        str += CYN"≡"YEL"──"CYN"√"NOR"：可以卖"YEL"─"RED"×"NOR"：不可卖"YEL"─────────────"HIG"天　　涯"YEL"──"CYN"≡\n"NOR;
+        me->start_more(str);
+        return 1;
+}
+string inventory_weapon(object ob)
+{
+        string name;
+        name = ob->query("name");
+        if (ob->query("equipped"))
+                     name=RED+name+NOR;
+                    else
+                        name = ob->query("name");
+        if( mapp(ob->query("weapon_prop")))
+        return sprintf("%-2s%s%s(%-16s)量：%-4d攻：%-4d耐：%-4d%2s"NOR,
+                ob->query("equipped")? RED "☆" NOR:"  ",
+                name,
+                fill_blank(remove_ansi(name), 19) ,
+                ob->query("id"),
+                ob->query_amount()?ob->query_amount():1,
+                ob->query("weapon_prop/damage"),
+                ob->query("weapon_prop/rigidity"),
+                (ob->query("value")||ob->query("base_value"))>=1 ? CYN "√ " NOR:RED"× "NOR,
+        );
+}
+string inventory_armor(object ob)
+{
+        string name;
+        name = ob->query("name");
+        if (ob->query("equipped"))
+                     name=RED+name+NOR;
+                    else
+                        name = ob->query("name");
+        if( !mapp(ob->query("weapon_prop")) && mapp(ob->query("armor_prop")) ){
+        return sprintf("%-2s%s%s(%-16s)防：%-4d耐：%-4d%s"NOR,
+                ob->query("equipped")? RED "☆" NOR:"  ",
+                name,
+                fill_blank(remove_ansi(name), 19) ,
+                ob->query("id"),
+                ob->query("armor_prop/armor"),
+                ob->query("armor_prop/armor"),
+                (ob->query("value")||ob->query("base_value"))>=1 ? CYN "　　　　√ " NOR:RED"　　　　× "NOR,
+        );
+        }
+}
+string inventory_money(object *ob)
+{
+        string name;
+        name = ob->query("name");
+        if( !mapp(ob->query("weapon_prop")) && !mapp(ob->query("armor_prop")) && ob->query("money_id"))
+        return sprintf("%-2s%s%s(%-16s)量：%-4d单：%-4s%s"NOR,
+                ob->query("equipped")? RED "☆" NOR:"  ",
+                name,
+                fill_blank(remove_ansi(name), 19) ,
+                ob->query("id"),
+                ob->query_amount()?ob->query_amount():1,
+                ob->query("base_unit")?ob->query("base_unit"):ob->query("unit"),
+                (ob->query("value")||ob->query("base_value"))>=1 ? CYN "　　　　√ " NOR:RED"　　　　× "NOR,
+        );
+}
+string inventory_item(object ob)
+{
+        string name;
+        name = ob->query("name");
+        if( !mapp(ob->query("weapon_prop")) && !mapp(ob->query("armor_prop")) && !ob->query("money_id"))
+        return sprintf("%-2s%s%s(%-16s)量：%-4d单：%-4s%s"NOR,
+                ob->query("equipped")? RED "☆" NOR:"  ",
+                name,
+                fill_blank(remove_ansi(name), 19) ,
+                ob->query("id"),
+                ob->query_amount()?ob->query_amount():1,
+
+                 ob->query("base_unit")?ob->query("base_unit"):ob->query("unit"),
+                 (ob->query("value")||ob->query("base_value"))>=1 ? CYN "　　　　√ " NOR:RED"　　　　× "NOR,
+          );
+  }
+string tribar_graph(int val, int eff, int max, string bcolor, string fcolor, string dcolor)
+{
+          string ret;
+         int i, n, eff_n, max_n = 10;
+
+        if( max == 0 ) max = 1;
+         n = val * 100 / max / 10;
+         eff_n = eff * 100 / max / 5;
+ 
+         if( n < 0 ) n = 0;
+         if( eff_n < 0 ) eff_n = 0;
+       if( n > max_n ) n = max_n;
+          if( eff_n > max_n ) eff_n = max_n;
+
+         ret = HIC "[" NOR + HIG ;
+          for( i = 0 ; i < max_n; i ++ ) {
+                 if( i > eff_n ) ret += HIG;
+                 if( i < n )  ret += RED"-"NOR;
+                else ret += BLU"-"NOR;
+         }
+          ret += HIG + NOR HIC "]" NOR;
+          return ret;
+  }
+int have_money(object who, int amount)
+ {
+          object tg_ob, g_ob, ts_ob, s_ob, c_ob;
+          int tgc, gc, tsc, sc, cc, left;
+  
+          seteuid(getuid());
+  
+         if (tg_ob = present("tengold_money", who))
+                  tgc = tg_ob->query_amount();
+          else
+                  tgc = 0;
+          if (g_ob = present("gold_money", who))
+                  gc = g_ob->query_amount();
+        else
+                 gc = 0;
+         if (ts_ob = present("tensilver_money", who))
+                  tsc = ts_ob->query_amount();
+          else
+
+                  tsc = 0;
+          if (s_ob = present("silver_money", who))
+                sc = s_ob->query_amount();
+         else
+                 sc = 0;
+         if (c_ob = present("coin_money", who))
+                 cc = c_ob->query_amount();
+         else
+                  cc = 0;
+                 left = cc + sc * 100 + tsc * 1000 + gc * 10000 + tgc * 100000;
+  }
+string fill_blank(string type, int num)
+  {
+          string bak;
+     int i, j;
+  
+         bak="";
+        i=strlen(type);
+         for (j=0; j<num-i; j++ )
+                  bak+=" ";
+         return bak;
+  }
+int help (object me)
+ {
+         write(@HELP
+指令格式: inventory
+  
+可列出你(你)目前身上所携带的所有物品。
+   
+注 : 此指令可以 " i " 代替。
+   
+HELP
+);
+          return 1;
+}
+ 

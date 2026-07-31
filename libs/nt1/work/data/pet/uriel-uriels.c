@@ -1,0 +1,18 @@
+// SN:=fO_ioX:`BLlNod4
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m天使一号兽[2;37;0m", ({"uriels shou"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "乌里叶的翅膀
+它是乌里叶的坐骑。
+");
+        set_temp("owner_id", "uriel");
+        set_temp("owner_name", "乌里叶");
+        ::setup();
+}
+

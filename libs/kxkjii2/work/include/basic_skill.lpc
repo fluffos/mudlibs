@@ -1,0 +1,20 @@
+
+mapping basic_skill = ([
+		"blade"		:	"blade",
+		"sword"		:	"sword",
+		"unarmed"	:	"unarmed",
+		"whip"		:	"whip",
+		"staff"		:	"staff",
+		"stick"		:	"stick",
+     "striback"     :   "striback",
+		"move"		:	"move",
+		"dodge"		:	"dodge",
+		"parry"		:	"parry",
+	"archery"    :    "archery",
+     "magic"    :    "magic",
+		"dagger"	:	"dagger",
+		"throwing"	:	"throwing",
+		"hammer"	:	"hammer",
+		"stabber"	:	"stabber",
+                "lance"         :       "lance",
+				]);

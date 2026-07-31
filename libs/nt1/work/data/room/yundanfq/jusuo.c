@@ -1,0 +1,35 @@
+// SN:?amO^?=kAAF0:9kL
+// File(/data/room/yundanfq/jusuo.c) of yundanfq's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "居所");
+	set ("long", @LONG
+这就是创世神殿主人渡云休息、读书的地方。楼上就是主人的卧
+室，西面则是书房。 
+LONG );
+
+	set("exits", ([
+		"up"   : __DIR__"woshi",
+                "west" : __DIR__"shufang",
+	]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("KEY_DOOR", ([
+                "exit" : "east",
+                "room" : __DIR__"huayuan",
+        ]));
+    
+        set("room_owner", "渡云");
+        set("room_name", "创世神殿");
+        set("room_id", "godhall");
+        set("room_owner_id", "yundanfq");
+        set("room_position", "平原小路");
+}

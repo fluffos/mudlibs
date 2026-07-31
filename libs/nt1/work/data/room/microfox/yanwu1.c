@@ -1,0 +1,33 @@
+// SN:ii?IZM<7?JS2@T7n
+// File(/data/room/microfox/yanwu1.c) of microfox's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        set("short", "清心居演武厅");
+	set ("long", @LONG
+这是清心居的演武厅，有时有些江湖朋友来会，想一试身手，就
+在这里比武较量。 
+LONG );
+
+	set("exits", ([
+                "west" : __DIR__"yishiting",
+	]));
+
+        set("objects", ([
+                "/clone/weapon/zhubang" : 1,
+                "/clone/weapon/zhujian" : 1,
+                "/clone/weapon/mudao"   : 1,
+        ]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("room_owner", "段儿");
+        set("room_name", "清心居");
+        set("room_id", "microfox");
+        set("room_owner_id", "microfox");
+        set("room_position", "碎石小道");
+}

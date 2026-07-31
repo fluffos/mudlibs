@@ -1,0 +1,32 @@
+// SN:nj_;KBKN;gAX9\<L
+// ITEM Made by player(慕容新月:xinyue) /data/item/x/xinyue-yaolian.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Sun Mar 28 23:14:59 2004
+#include <ansi.h>
+#include <armor.h>
+
+inherit WAIST;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;31m琉金[1;32m腰链[2;37;0m", ({ "yaolian" }));
+	set_weight(560);
+	set("item_make", 1);
+	set("unit", "条");
+	set("long", "这是由[1;37m冰蚕丝[2;37;0m炼制而成的一条腰带。
+[1;33m一根金黄色的腰链，环环相扣，中间挂着一个[1;31m心[1;33m形的吊坠。[2;37;0m
+腰带缘上刻着一行小字：慕容新月(xinyue)
+");
+	set("value", 2100000);
+	set("point", 126);
+	set("material", "silk");
+	set("wear_msg", "[1;33m$N随随便便的系上了一根$n[1;33m，更衬出小蛮腰的婀娜多姿。[2;37;0m\n");
+	set("remove_msg", "[1;33m$N随手卸下了围在腰间的腰链，放在自己的怀里。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/armor", apply_armor());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

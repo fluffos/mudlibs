@@ -1,0 +1,23 @@
+// write by Zjb@TY 2003-07-10
+
+#include <armor.h>
+inherit NECK;
+void create()
+{
+        set_name( HIW "°×½ð"HIM"ÏîÁ´" NOR, ({ "baijin xianglian", "xianglian" }));
+        set("weight", 500);
+        if (clonep())
+                set_default_object(__FILE__);
+        else {
+                set("unit", "´®");
+                set("no_give",1);
+                set("no_drop",1);
+                set("no_get",1);
+                set("ty_paimai",1);
+                set("skill/pixie-jian","xianglian");
+                set("armor_prop/constitution", 50);
+                set("material", "gold");
+                set("armor_prop/armor", 1);
+        }
+        setup();
+} 

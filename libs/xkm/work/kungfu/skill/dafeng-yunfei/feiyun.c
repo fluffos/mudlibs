@@ -1,0 +1,63 @@
+//Cracked by Roath
+//feiyun.c 【飞云连环掌】 
+
+#include <ansi.h>
+
+inherit F_DBASE;
+inherit F_SSERVER;
+
+int perform(object me, object target)
+{
+
+	int lvl, amount,i,j;
+
+	if( !target ) target = offensive_target(me);
+
+	if( !target
+	||	!target->is_character()
+	||	!me->is_fighting(target) )
+		return notify_fail("【飞云连环掌】只能对战斗中的对手使用。\n");
+
+	if((lvl=me->query_skill("dafeng-yunfei",1))<100 )
+		return notify_fail("你的大风云飞掌修为不够，无法使用【飞云连环掌】！\n");
+	if( me->query("neili") <= lvl )
+		return notify_fail("你的内力不够，无法使用【飞云连环掌】！\n");
+	if( me->query("jingli") <= lvl )
+		return notify_fail("你的内力不够，无法使用【飞云连环掌】！\n");
+
+
+
+
+	amount=lvl/3;
+	if(amount>100)
+		amount=100+random(amount-100);
+	if(amount<100)
+		amount=amount+random(100-amount);
+
+	if(me->query("family/family_name")!="明教")
+	amount=lvl/5;
+		
+	me->add_temp("apply/damage", amount);
+	me->add_temp("apply/attack", amount);
+	me->add_temp("apply/dodge", amount*3);
+
+	message_vision(HIR "\n突然间$N大喝一声，以惊雷闪电似的手法连发「大风云飞掌」,掌掌凌厉刚猛！\n" NOR, me, target);
+	j=lvl/40;
+	if(j<5) 
+		j=3+random(3);
+	if(j>7)
+		j=7;
+	for(i=0;i<j;i++)
+
+	COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+	
+	me->start_busy(1+random(3));
+	me->add_temp("apply/damage", -amount);
+	me->add_temp("apply/attack", -amount);
+	me->add_temp("apply/dodge", -amount*3);
+	me->add("neili", -amount*3);
+	me->add("jingli", -amount*2);
+
+
+	return 1;
+}

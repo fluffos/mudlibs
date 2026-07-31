@@ -1,0 +1,364 @@
+//edit by landy
+// look.c
+// 2007.6.27
+//只适用于金庸梦 不适合于其他MUD
+
+#include <room.h>
+#include <ansi.h>
+#include <combat.h>
+#define TIME_TICK1 (time()*60-890000000)
+
+inherit F_CLEAN_UP;
+
+int look_room(object me, object env);
+int look_item(object me, object obj);
+int look_living(object me, object obj);
+int look_room_item(object me, string arg);
+string adjust_short(string arg);
+string clean_color(string arg);
+string getper(object me, object obj);
+string tough_level(int power);
+string gettof(object me, object obj);
+string getdam(object me, object obj);
+
+string *tough_level_desc = ({
+BLU "不堪一击" NOR,
+BLU "毫不足虑" NOR,
+BLU "不足挂齿" NOR,
+HIB "初窥门径" NOR,
+HIB "略知一二" NOR,
+HIB "普普通通" NOR,
+CYN "平淡无奇" NOR,
+CYN "马马虎虎" NOR,
+CYN "略有小成" NOR,
+HIC "已有小成" NOR,
+HIC "驾轻就熟" NOR,
+HIC "融会贯通" NOR,
+GRN "心领神会" NOR,
+GRN "炉火纯青" NOR,
+GRN "了然于胸" NOR,
+GRN "略有大成" NOR,
+GRN "已有大成" NOR,
+YEL "豁然贯通" NOR,
+YEL "出类拔萃" NOR,
+YEL "无可匹敌" NOR,
+YEL "技冠群雄" NOR,
+YEL "神乎其技" NOR,
+HIY "出神入化" NOR,
+HIY "傲视群雄" NOR,
+HIY "登峰造极" NOR,
+RED "所向披靡" NOR,
+RED "一代宗师" NOR,
+RED "举世无双" NOR,
+WHT "惊世骇俗" NOR,
+WHT "震古铄今" NOR,
+WHT "超凡入圣" NOR,
+HIM "天人合一" NOR,
+HIM "深不可测" NOR,
+HIR "返璞归真" NOR,
+HIY "笑"+ NOR + HIM + "傲" + NOR + HIY +"江" + NOR +HIM +"湖" + NOR
+});
+string *heavy_level_desc= ({
+        "极轻",
+        "很轻",
+        "不重",
+        "不轻",
+        "很重",
+        "极重"  
+});
+
+void create() { seteuid(getuid()); }
+
+int main(object me, string arg)
+{
+        object obj;
+        int result;
+
+        if( !arg ) result = look_room(me, environment(me));
+        else if( (obj = present(arg, me)) || (obj = present(arg, environment(me)))) {
+                if( obj->is_character() ) result = look_living(me, obj);
+                else result = look_item(me, obj);
+        } else result = look_room_item(me, arg);
+
+        return result;
+}
+
+int look_room(object me, object env)
+{
+        int i;
+        object *inv, room;
+        mapping exits;
+        string str, *dirs;
+
+        if( !env ) {
+                write("你的四周灰蒙蒙地一片，什么也没有。\n");
+                return 1;
+        }
+        str = sprintf( "%s - %s\n    %s%s",
+                env->query("short"),
+                wizardp(me)? file_name(env): "",
+                env->query("long"),
+                env->query("outdoors")? NATURE_D->outdoor_room_description() : "" );
+
+        if( mapp(exits = env->query("exits")) ) {
+                dirs = keys(exits);
+                for(i=0; i<sizeof(dirs); i++)
+                        if( (int)env->query_door(dirs[i], "status") & DOOR_CLOSED )
+                                dirs[i] = 0;
+                dirs -= ({ 0 });
+                if( sizeof(dirs)==0 )
+                        str += "    这里没有任何明显的出路。\n";
+                else if( sizeof(dirs)==1 )
+                        str += "    这里唯一的出口是 " + BOLD + dirs[0] + NOR + "。\n";
+                else
+                        str += sprintf("    这里明显的出口是 " + BOLD + "%s" + NOR + " 和 " + BOLD + "%s" + NOR + "。\n",
+                                implode(dirs[0..sizeof(dirs)-2], "、"), dirs[sizeof(dirs)-1]);
+        }
+//      str += env->door_description();
+
+        inv = all_inventory(env);
+        for(i=0; i<sizeof(inv); i++) {
+                if( inv[i]==me ) continue;
+                if( !me->visible(inv[i]) ) continue;
+                if( objectp(inv[i]->query("rider")) ) continue;
+                else inv[i]->delete("rider");
+
+
+                if( objectp(inv[i]->query("rided")) ) {
+                        str += "  " + inv[i]->short() + "骑在" +
+                        (inv[i]->query("rided"))->name() + "上";
+                if( stringp(inv[i]->query_temp("exit_blocked")))
+                                                                str += "挡着往"+inv[i]->query_temp("exit_blocked")+
+                                                                "去的路";
+                        str += "\n";
+                }
+                else {
+                        if (stringp(inv[i]->query_temp("exit_blocked")))
+                        str += "  " + inv[i]->short() + "挡着往" + inv[i]->query_temp("exit_blocked")
+                                +"去的路\n";
+                        else if( inv[i]->query_temp("riding") ) {
+                                str += "  " + inv[i]->short() + "坐在镖车上\n";
+                        }
+                        else
+                                str += "  " + inv[i]->short() + "\n";
+                        inv[i]->delete("rided");
+                }
+        }
+
+
+        write(str);
+// 小地图描述
+        //if (!this_player()->query("env/no_map") && !this_player()->query("env/brief"))
+        if (!this_player()->query("env/no_map"))
+        {
+                if( mapp(exits =env->query("exits")) )
+                {
+                        dirs=keys(exits);
+                        for(i=0; i<sizeof(dirs); i++)
+                                if( (int)env->query_door(dirs[i], "status") &
+                                        DOOR_CLOSED ) dirs[i] = 0;
+                        dirs -= ({ 0 });
+                        if (sizeof(dirs)!=0)
+                        {
+                                write(SAVEC);
+                                write(SETDISPLAY(7,0)+DELLINE);
+                                write(SETDISPLAY(1,0)+DELLINE);
+                                write(SETDISPLAY(2,0)+DELLINE);
+                                write(SETDISPLAY(3,0)+DELLINE);
+                                write(SETDISPLAY(4,0)+DELLINE);
+                                write(SETDISPLAY(5,0)+DELLINE);
+                                write(SETDISPLAY(6,0)+DELLINE);
+                                write(SETDISPLAY(4,56)+BLINK+HIM+clean_color(env->query("short"))+NOR);
+                                for (i=0;i<sizeof(dirs);i++)
+                                        switch(dirs[i])
+                                        {
+                                                case "north":                                        
+                                                if ( room=load_object(exits["north"]))
+                                                {
+                                                        write(SETDISPLAY(3,60)+HIY"｜"NOR);
+                                                        write(SETDISPLAY(2,56)+clean_color(room->query("short")));
+                                                }
+                                                break;
+
+                                                case "south":
+                                                if ( room=load_object(exits["south"]))
+                                                {
+                                                        write(SETDISPLAY(5,60)+HIY"｜"NOR);
+                                                        write(SETDISPLAY(6,56)+clean_color(room->query("short")));
+                                                }
+                                                break;
+
+                                                case "east":
+                                                if ( room=load_object(exits["east"])){
+                                                        write(SETDISPLAY(4,68)+clean_color(room->query("short")));
+                                                        write(SETDISPLAY(4,66)+HIY"—"NOR);
+                                                }
+                                                break;
+
+                                                case "west":
+                                                if ( room=load_object(exits["west"])){
+                                                        write(SETDISPLAY(4,44)+clean_color(room->query("short")));
+                                                        write(SETDISPLAY(4,54)+HIY"—"NOR);
+                                                }
+                                                break;
+
+                                                case "westup":                case 4 : return arg[0..1]+"      "+arg[2..3];
+        }
+}
+
+
+int look_item(object me, object obj)
+{
+        mixed *inv;
+
+        write(obj->long());
+        inv = all_inventory(obj);
+        if( sizeof(inv) ) {
+                inv = map_array(inv, "inventory_look", this_object() );
+                message("vision", sprintf("里面有：\n  %s\n",
+                        implode(inv, "\n  ") ), me);
+        }
+        return 1;
+}
+
+string gettof(object me, object ob)
+{
+        object weapon;
+        string skill_type,parry_type;
+        int attack_points;
+        if( objectp(weapon = ob->query_temp("weapon")) )
+        {
+                skill_type = weapon->query("skill_type");
+                parry_type = "parry";
+        }
+        else
+                                                if ( room=load_object(exits["westup"]))
+                                                        write(SETDISPLAY(4,44)+clean_color(room->query("short")))
+                                                        write(SETDISPLAY(4,54)+HIY"←"NOR)
+                                                
+                                                break
+                                                case "eastup"
+                                                if ( room=load_object(exits["eastup"]))
+                                                        write(SETDISPLAY(4,68)+clean_color(room->query("short")))
+                                                        write(SETDISPLAY(4,66)+HIY"→"NOR)
+                                                
+                                                break
+                                                case "northup"
+                                                if ( room=load_object(exits["northup"]) )
+                                                        write(SETDISPLAY(3,60)+HIY"↑"NOR)
+                                                        write(SETDISPLAY(2,56)+clean_color(room->query("short")))
+                                                
+                                                break
+                                                case "southup"
+                                                if ( room=load_object(exits["southup"]) 
+                                                
+                                                write(SETDISPLAY(5,60)+HIY"↓"NOR)
+                                                write(SETDISPLAY(6,56)+clean_color(room->query("short")))
+                                                
+                                                break
+                                                case "southdown"
+                                                if ( room=load_object(exits["southdown"]) )
+                                                write(SETDISPLAY(5,60)+HIY"↑"NOR)
+                                                write(SETDISPLAY(6,56)+clean_color(room->query("short")))
+                                                
+                                                break
+                                                case "northdown"
+                                                if ( room=load_object(exits["northdown"]) 
+                                                
+                                                write(SETDISPLAY(3,60)+HIY"↓"NOR)
+                                                write(SETDISPLAY(2,56)+clean_color(room->query("short")))
+                                                
+                                                break
+                                                case "eastdown"
+                                                if ( room=load_object(exits["eastdown"])
+                                                
+                         `帙
+                   write(SETDISPLAY(4,68)+clean_color(room->query("short")))
+                                                write(SETDISPLAY(4,66)+HIY"←"NOR)
+                                                
+                                                break
+                                                case "westdown"
+                                                if ( room=load_object(exits["westdown"]) 
+                                                
+                                                write(SETDISPLAY(4,44)+clean_color(room->query("short")))
+                                                write(SETDISPLAY(4,54)+HIY"→"NOR)
+                                                
+                                                break
+                                                case "northwest"
+                                                if ( room=load_object(exits["northwest"]) 
+                                                
+                                                write(SETDISPLAY(3,54)+HIY"＼"NOR);    
+                                                write(SETDISPLAY(2,44)+clean_color(room->query("short")))
+                                                
+                                                break
+                                                case "southwest"
+                                                if ( room=load_object(exits["southwest"]) 
+                                                
+                                                write(SETDISPLAY(5,54)+HIY"／"NOR)
+                                                write(SETDISPLAY(6,44)+clean_color(room->query("short")))
+                                                
+                                                break
+                                                case "northeast"
+                                                if ( room=load_object(exits["northeast"]) 
+                                                
+                                                write(SETDISPLAY(3,66)+HIY"／"NOR);    
+                                                write(SETDISPLAY(2,68)+clean_color(room->query("short")))
+                                                
+                                                break
+                                                case "southeast"
+                                                if ( room=load_object(exits["southeast"]) 
+                                                
+                                                write(SETDISPLAY(5,66)+HIY"＼"NOR)
+                                                write(SETDISPLAY(6,68)+clean_color(room->query("short")))
+                                                
+                                                break
+                                        
+                                write(SETDISPLAY(1,42)+"┏━━━━━━━━━━━━━━━━━┓")
+                                write(SETDISPLAY(2,42)+"┃")
+                                write(SETDISPLAY(3,42)+"┃")
+                                write(SETDISPLAY(4,42)+"┃")
+                                write(SETDISPLAY(5,42)+"┃")
+                                write(SETDISPLAY(6,42)+"┃")
+                                write(SETDISPLAY(7,42)+"┗━━━━━━━━━━━━━━━━━┛")
+                                write(SETDISPLAY(2,78)+"┃")
+                                write(SETDISPLAY(3,78)+"┃")
+                                write(SETDISPLAY(4,78)+"┃")
+                                write(SETDISPLAY(5,78)+"┃")
+                                write(SETDISPLAY(6,78)+"┃")
+                                write(REST)
+                        
+                
+        }      
+        return 1
+// 清除颜色，匹配小地
+string clean_color(string arg
+        if(!arg) return ""
+        arg = replace_string(arg, BLK, "")
+        arg = replace_string(arg, RED, "")
+        arg = replace_string(arg, GRN, "")
+        arg = replace_string(arg, YEL, "")
+        arg = replace_string(arg, BLU, "")
+        arg = replace_string(arg, MAG, "")
+        arg = replace_string(arg, CYN, "")
+        arg = replace_string(arg, WHT, "")
+        arg = replace_string(arg, HIR, "")
+        arg = replace_string(arg, HIG, "")
+        arg = replace_string(arg, HIY, "")
+        arg = replace_string(arg, HIB, "")
+        arg = replace_string(arg, HIM, "")
+        arg = replace_string(arg, HIC, "")
+        arg = replace_string(arg, HIW, "")
+        arg = replace_string(arg, NOR, "")
+        arg = replace_string(arg, BLINK,"")
+        arg = adjust_short(arg)
+        return arg+NOR
+// 小地图房间短描述统一成五个汉
+string adjust_short(string arg
+        switch (strlen(arg)
+        
+                case 14: return arg
+                case 12: return arg
+                case 10: return arg
+                case 9 : return arg
+                case 8 : return arg[0..3]+"  "+arg[4..7]
+                case 6 : return arg[0..1]+"  "+arg[2..3]+"  "+arg[4..5]

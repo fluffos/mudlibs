@@ -1,0 +1,23 @@
+// edit by daniel@jhfy.nh 2002
+inherit ROOM;
+void create()
+{
+        set("short", "西厢房");
+        set("long", @LONG
+梅庄一向很少接待客人,但厢房确布置得很不错。算得上
+高贵的了，听说这间房子就是当时令狐冲住过的。
+LONG
+        );
+        set("no_fight", "1");
+        set("sleep_room", "1");
+        set("exits", ([ /* sizeof() == 1 */
+  "south" : __DIR__"huayuan",
+]));
+        set("objects", ([ /* sizeof() == 1 */
+                 __DIR__"npc/obj/ouxuepu" : 1,
+        ]));
+
+        setup();
+        replace_program(ROOM);
+}
+

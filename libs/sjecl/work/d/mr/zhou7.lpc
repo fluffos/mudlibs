@@ -1,0 +1,35 @@
+// /u/beyond/mr/xiaozhou7.c
+// this is made by beyond
+// update 1997.6.20
+inherit ROOM;
+void create()
+{
+	set("short", "小舟");
+	set("long", @LONG
+一叶小舟，最多也就能载七、八个人。一名老船夫手持长竹篙，正在船尾
+吃力地撑着船。你放眼望去，湖面上的美丽景色使你浮想连篇。
+LONG
+	);
+	set("outdoors", "慕容");
+
+        set("no_fight",1);
+
+	setup();
+}
+
+void run(object ob)
+{
+	if (!ob) return;
+	if (environment(ob) == this_object()) {
+		tell_object(ob,"\n小舟驶进一片一望无际的荷花荡。一眼望去, 满湖荷叶, 菱叶, 芦苇, 茭白，\n"
+				"都是一模一样, 兼之荷叶, 菱叶在水面漂浮, 随时一阵风来, 便即变化百端，\n"
+				"就算此刻记得清清楚楚, 霎时间局面便全然不同。\n\n");
+		ob->move(__DIR__"zhou8", 1);
+	}
+}
+
+void init()
+{
+	object ob = this_player();
+	call_out("run", 5, ob);
+}

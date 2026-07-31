@@ -1,0 +1,18 @@
+// SN:Pc^=BWWi<6l=^aS<
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("飘摇鹤[2;37;0m", ({"piaoyao he"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "随风飘要
+它是慕容心的坐骑。
+");
+        set_temp("owner_id", "xina");
+        set_temp("owner_name", "慕容心");
+        ::setup();
+}
+

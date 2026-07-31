@@ -1,0 +1,18 @@
+// SN:Wfd<DdU38j_\1U3g
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m白老虎[2;37;0m", ({"bailao hu"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "它很白的
+它是情人的坐骑。
+");
+        set_temp("owner_id", "love");
+        set_temp("owner_name", "情人");
+        ::setup();
+}
+

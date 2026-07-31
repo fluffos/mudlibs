@@ -1,0 +1,93 @@
+// story:huanyin 幻阴指法
+
+#include <ansi.h>
+
+static string char_id;
+static string char_name;
+static string family_name;
+
+int give_gift();
+object select_character();
+
+static mixed *story = ({
+	"羽天邪道：本座今日了断凡尘",
+	"看这天下谁与吾有着未了的凡尘俗缘。",
+	"羽天邪道：阁下何人？",
+	"$N淡淡道：我是$N。",
+	"羽天邪道：原来就是你了，化甲术就交给你了，本座去也",
+	(: give_gift :),
+});
+
+void create()
+{
+	seteuid(getuid());
+
+	if (! objectp(select_character()))
+	{
+		destruct(this_object());
+		return;
+	}
+}
+
+string prompt() { return HIG "【武林传闻】" NOR; }
+
+// 每三天一次
+int interval() { return 72 * 60 * 60; }
+
+
+object select_character()
+{
+	object *obs;
+	object ob;
+
+	obs = filter_array(all_interactive(),
+			   (: ultrap($1) &&
+			      living($1) &&
+			      $1->query_skill("huajia-su", 1) < 1 &&
+			      $1->query("family/family_name") &&
+			      ! wizardp($1) &&
+			      ! $1->query("story/huajia") :));
+	if (! sizeof(obs))
+		return 0;
+
+	ob = obs[random(sizeof(obs))];
+	char_id = ob->query("id");
+	char_name = ob->name(1);
+	family_name = ob->query("family/family_name");
+	return ob;
+}
+
+mixed query_story_message(int step)
+{
+	mixed msg;
+
+	if (step >= sizeof(story))
+		return 0;
+
+	msg = story[step];
+	if (stringp(msg))
+	{
+		msg = replace_string(msg, "$N", char_name);
+		msg = replace_string(msg, "$F", family_name);
+		msg = replace_string(msg, "$ID", char_id);
+	}
+	return msg;
+}
+
+int give_gift()
+{
+	object ob;
+
+	ob = find_player(char_id);
+	if (! ob) return 1;
+
+	if (ob->query_skill("huajia-su", 1) < 10)
+		ob->set_skill("huajia-su", 10);
+
+	ob->set("story/huanyin", 1);
+	tell_object(ob, HIC "你从羽天邪那里学习到了化甲术。"NOR"\n");
+	CHANNEL_D->do_channel(this_object(), "rumor", "听说" + ob->name(1) +
+			      "从羽天邪那里学习到了化甲术。");
+	STORY_D->remove_story("huajia");
+	return 1;
+}

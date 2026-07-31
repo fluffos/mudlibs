@@ -1,0 +1,18 @@
+// SN:eJdY7\Y2nNkF5RCQ
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;33m狂马[2;37;0m", ({"kuang ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "狂狂狂狂狂狂狂狂狂狂狂狂狂
+它是狂风的坐骑。
+");
+        set_temp("owner_id", "kuangf");
+        set_temp("owner_name", "狂风");
+        ::setup();
+}
+

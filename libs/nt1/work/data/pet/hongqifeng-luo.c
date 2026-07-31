@@ -1,0 +1,18 @@
+// SN:J8X]BbT:09:=IiMI
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;33m骆驼[2;37;0m", ({"luo tuo"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "不是我想故意骑你啊
+它是净洪的坐骑。
+");
+        set_temp("owner_id", "hongqifeng");
+        set_temp("owner_name", "净洪");
+        ::setup();
+}
+

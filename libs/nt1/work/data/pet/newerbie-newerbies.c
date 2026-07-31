@@ -1,0 +1,18 @@
+// SN:_N3laa<6d5Ek@R1:
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m就是马[2;37;0m", ({"newerbies ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "没什么好描述的
+它是怎么了的坐骑。
+");
+        set_temp("owner_id", "newerbie");
+        set_temp("owner_name", "怎么了");
+        ::setup();
+}
+

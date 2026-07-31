@@ -1,0 +1,18 @@
+// SN:Ec5]JBf91T8MWYUT
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m的卢马[2;37;0m", ({"dilu ma"}));        
+        set("gender", "女性");                
+        set("unit", "匹");
+        set("long", "$HIW$的卢马
+它是伯约的坐骑。
+");
+        set_temp("owner_id", "boyuezi");
+        set_temp("owner_name", "伯约");
+        ::setup();
+}
+

@@ -1,0 +1,56 @@
+//Cracked by Roath
+//fear 2002 1 30
+#include <ansi.h>
+inherit ROOM;
+
+void create()
+{
+        set("short", CYN"小溪"NOR);
+        set("long", @LONG
+这里有条清澈见底的小溪。溪水清凉，清甜可口。溪边有几颗果树。
+上面有些野果可以充饥，地上还有些野菜。这里也是鸟儿们的天堂，
+野果的香甜，引来了不少鸟儿。在小溪的东方有座瀑布，南面有个树林。
+LONG
+        );
+        set("exits", ([
+                "southdown" : __DIR__"forest",
+                "northwest" : __DIR__"zhulin",
+                "east" : __DIR__"fall",
+        ]));
+
+	set("outdoors", "lingshedao");
+    set("resource/water", 1);
+	set("cost", 1);
+    set("objects", ([ /* sizeof() == 2 */
+  "/d/lingshedao/obj/yecai" : 1,
+  "/d/lingshedao/obj/yeguo" : 1,
+    ]));
+
+        setup();
+//	replace_program(ROOM);
+}
+
+void init()
+{
+        add_action("do_drink", "drink");
+}
+
+int do_drink(string arg)
+{
+        int current_water;
+        int max_water;
+        object me;
+
+        me = this_player();
+        current_water = me->query("water");
+        max_water = me->query("str")*10 + 100;
+        if (current_water<me->max_water_capacity()) {
+            me->set("water", current_water+random(30));
+            message("vision", me->name()+"捧了一把溪水喝了下去。\n"
+            , environment(me), ({me}) );
+            write("你捧了一把溪水喝了下去。溪水清凉，入口极是清甜。\n");
+        }
+        else write("你一口气喝了好多溪水，已经再也喝不下了。\n");
+
+        return 1;
+}

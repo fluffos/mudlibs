@@ -1,0 +1,39 @@
+// SN:3R\1AWE\c5B1HFK5
+// File(/data/room/kutou/dating.c) of kutou's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        set("short", "邪王魔窟大厅");
+	set ("long", @LONG
+这就是邪王魔窟主人酷头裤头迎送客人的地方。正中有些桌椅，
+侧面是两扇屏风。东首是主人酷头裤头的房间，有一扇木门虚掩着。
+南边是大门，出去就是院子。 
+LONG );
+
+	setup();
+
+	set("exits", ([
+                "east"   : __DIR__"woshi",
+		"north"  : __DIR__"houyuan",
+	]));
+
+        create_door("east", "木门", "west", DOOR_CLOSED);
+
+        set("no_sleep_room", 1);
+
+        set("KEY_DOOR", ([
+                "exit" : "south",
+                "room" : __DIR__"xiaoyuan",
+        ]));
+    
+        set("room_owner", "酷头裤头");
+        set("room_name", "邪王魔窟");
+        set("room_id", "kutou");
+        set("room_owner_id", "kutou");
+        set("room_position", "碎石小道");
+}

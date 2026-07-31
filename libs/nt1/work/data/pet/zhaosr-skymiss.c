@@ -1,0 +1,18 @@
+// SN:c@O55MB>mGFTniW:
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;36m天涯思念马[2;37;0m", ({"skymiss ma"}));        
+        set("gender", "女性");                
+        set("unit", "匹");
+        set("long", "一匹即便是在天涯也思念着主人的灵马。
+它是赵师容的坐骑。
+");
+        set_temp("owner_id", "zhaosr");
+        set_temp("owner_name", "赵师容");
+        ::setup();
+}
+

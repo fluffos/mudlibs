@@ -1,0 +1,167 @@
+// xingyi.c 斗转星移perform星移斗转
+
+#include <ansi.h>
+#include <skill.h>
+#include <weapon.h>
+#include <combat.h>
+#include "/kungfu/skill/eff_msg.h";
+inherit F_SSERVER;
+
+
+
+int perform(object me, object target)
+{
+	string msg;	
+	int damage,damage1,ap,dp;
+	object weapon,thing,*inv;
+
+	if( !target ) target = offensive_target(me);
+	if( !target || !target->is_character() || !me->is_fighting(target) )
+		return notify_fail("星移斗转只能对战斗中的对手使用。\n");
+	if (target && target->query_temp("apply/shade_vision")) 
+		return notify_fail("对方隐身了，你看不到"+target->query("name")+"。\n"); 
+	if( (int)me->query_skill("douzhuan-xingyi", 1) < 300 )
+		return notify_fail("你的星移斗转还未练成，不能使用！\n");
+	if( (int)me->query_skill("shenyuan-gong", 1) < 300 )
+		return notify_fail("你的神元功还未练成，不能使用！\n");
+	if( (int)me->query("max_neili") < 10000 )
+		return notify_fail("你现在内力修为不够，不能使用星移斗转！\n");
+	if( (int)me->query("neili") < 1000 )
+		return notify_fail("你现在真气不足，不能使用星移斗转！\n");
+	if( (int)me->query("max_jingli") < 10000 )
+		return notify_fail("你现在精力修为不够，不能使用星移斗转！\n");
+	if( (int)me->query("jingli") < 1000 )
+		return notify_fail("你现在精神状况不好，不能使用星移斗转！\n");	
+	if( (int)me->query_skill("parry", 1) < 500 )
+		return notify_fail("你的基本招架之法不够娴熟，不能使用星移斗转。\n");
+//	if ( me->query_skill_mapped("force") != "shenyuan-gong")
+//		return notify_fail("不使用本门内功，如何使用本门绝学!\n"); 
+	if (me->query_skill_mapped("parry") != "douzhuan-xingyi")
+		return notify_fail("你现在无法使用星移斗转。\n");
+	if (me->query_temp("autolian"))
+		return notify_fail("你正在发动自动连招！\n"); 	
+	if ( me->query_temp("cooldown") )	//CD写法	2017.9.7添加
+		return notify_fail("你处于技能冷却状态中，过会在使用吧。\n");
+		
+	me->set_temp("cooldown", 1);	//CD写法	2017.9.7添加
+	call_out("del_cooldown", 3, me);	//CD写法1	
+	ap = me->query("xyzx_sys/level") + me->query_skill("douzhuan-xingyi", 1) + me->query_skill("parry") + me->query_skill("force");
+	dp = target->query("xyzx_sys/level") + target->query_skill("dodge") + target->query_skill("parry");
+	ap = ap*((int)me->query("breakup")+(int)me->query("breakup")*(int)me->query("breakup")+100)/100;
+	dp = dp*((int)target->query("breakup")+(int)target->query("breakup")*(int)target->query("breakup")+100)/100;
+	damage1 = me->query_skill("douzhuan-xingyi", 1)*2;
+	msg = CYN "$N突然身形一展，使出「探云手」向$n怀中伸去！\n"NOR;
+	message_vision(msg, me, target);
+	if(random(ap)>dp/3)	
+	{		
+		me->add("neili", -200);
+		me->add("jingli",-200);	
+		inv=all_inventory(target);
+		if(!sizeof(inv))	
+		{
+			msg =CYN"$n身上空空如也，$N什么也没「探」到！\n"NOR;
+			message_vision(msg, me, target);
+		}
+		else	
+		{
+			thing=inv[random(sizeof(inv))];
+			if( (thing->query("equipped") && random(me->query("str",1))<20) || (int)thing->query("no_steal"))
+			{
+			msg =CYN"$n双手紧紧抓住"+thing->query("name")+"没让$N得逞！\n"NOR;
+			message_vision(msg, me, target);
+			}
+			else 	
+			{
+			if(thing->query("equipped"))	thing->unequip();
+			thing->move(me);
+			msg =CYN"$N妙手空空，从$n身上得到"+thing->query("unit")+thing->query("name")+"！\n"NOR;
+			message_vision(msg, me, target);
+			}
+		}
+	} else 
+	{
+		damage = damage1/2 + random(damage1/2);
+		damage = damage*(100-me->query_meridian())/100;
+		me->add("neili",-200);
+		me->receive_damage("qi",damage,target);
+		me->receive_wound("qi",damage/3,target);
+		msg = CYN"可是$N看破了$n的企图，反手就是一掌打的$n晕乎乎的。\n"NOR;
+		message_vision(msg, target, me, damage, HBWHT+HIM"气血伤害"NOR);	//2018.10.2阿飞改，优化化学伤害显示的写法
+//		if (userp(me) && me->query("env/no_combat_msg")<4) tell_object(me, HIW"该绝招对自己气血的外伤为"+ damage +"。\n" NOR);
+	}
+
+	msg = HIY "\n忽然天昏地暗，$N使出$n的绝招，袍袖中两股内家真气向$n扑去！\n"NOR;
+	message_vision(msg, me, target);	
+	if(me->query("neili") < random(target->query("neili")))
+	{	
+		me->add("neili", -200);
+		me->add("jingli",-200);
+		damage = damage1/2 + random(damage1/2);
+		damage = damage*(100-target->query_meridian())/100;
+		target->receive_damage("jing", damage,me);
+		target->receive_wound("jing", damage/2,me);
+		damage = damage1/2 + random(damage1/2);
+		damage = damage*(100-me->query_meridian())/100;
+		me->receive_damage("jing", damage,target);
+		me->receive_wound("jing", damage/2,target);
+		msg = HIY"结果$n和$N两人内力一拼，双方都没占到丝毫好处！\n"NOR;
+		message_vision(msg, me, target, damage, HBWHT+HIM"精气伤害"NOR);	//2018.10.2阿飞改，优化化学伤害显示的写法
+//		if (userp(me) && me->query("env/no_combat_msg")<4) tell_object(me, HIW"该绝招对敌人精神的外伤为"+ damage +"，内伤为"+ damage/2 +"。对自己精神的外伤为"+ damage +"，内伤为"+ damage/2 +"。\n" NOR);
+	}
+	if( objectp(weapon = target->query_temp("weapon")) )
+	{
+		if( random(ap) > dp/3 )
+		{			
+			me->add("neili", -200);
+			me->add("jingli",-200);
+			damage = damage1/2 + random(damage1/2);
+			damage = damage*(100-target->query_meridian())/100;
+			target->receive_damage("qi", damage,me);
+			target->receive_wound("qi", damage/2,me);
+			weapon->move(environment(target));					
+			msg = HIR"\n$n只觉得全身受到内力震荡，钻心般巨痛，一口鲜血喷出，手中"+ weapon->query("name") +HIR"坠地而出。\n"NOR;
+			message_vision(msg, me, target, damage, HBWHT+HIM"气血伤害"NOR);	//2018.10.2阿飞改，优化化学伤害显示的写法
+//			if (userp(me) && me->query("env/no_combat_msg")<4) tell_object(me, HIW"该绝招对敌人气血的外伤为"+ damage +"，内伤为"+ damage/2 +"。\n" NOR);
+		}
+		else
+		{
+			me->add("neili", -300);
+			msg = "$n怎么也想不到$N能够使出自己的成名绝技，危及之中双脚跋地而起，艰难的躲过这一招，脸色变的苍白。\n";
+			message_vision(msg, me, target);
+		}
+	}
+	else
+	{
+		if (random(ap) > dp/3)
+		{			
+			damage1 = (int)me->query_skill("shenyuan-gong",1) + (int)me->query_skill("douzhuan-xingyi",1)*3 + (int)me->query_skill("parry",1);
+			damage = damage1/2 + random(damage1/2);
+			damage = damage*(100-target->query_meridian())/100;
+			target->receive_damage("qi", damage,me);
+			target->receive_wound("qi", damage/2,me);
+			me->add("neili", -300);		
+			msg = HIR"\n$n只觉得全身受到内力震荡，钻心般巨痛，一口鲜血喷出。\n"NOR;
+			message_vision(msg, me, target, damage, HBWHT+HIM"气血伤害"NOR);	//2018.10.2阿飞改，优化化学伤害显示的写法
+//			if (userp(me) && me->query("env/no_combat_msg")<4) tell_object(me, HIW"该绝招对敌人气血的外伤为"+ damage +"，内伤为"+ damage/2 +"。\n" NOR);
+
+		}
+		else
+		{		
+			me->add("neili", -100);
+			msg = CYN"\n$n怎么也想不到$N能够使出自己的成名绝技，危及之中双脚跋地而起，艰难的躲过这一招，脸色变的苍白。\n" NOR;
+			message_vision(msg, me, target);
+		}
+	}
+	me->start_busy(1);
+	return 1;
+}
+
+void del_cooldown(object me)	//CD写法1
+{ 
+	if ( !objectp(me) ) return;
+	if ( me->query_temp("cooldown") )	
+	{
+		me->delete_temp("cooldown");
+		tell_object(me, HIM"你呼出一口气，缓缓的将内力收回丹田。\n"NOR);
+	}	
+}

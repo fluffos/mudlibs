@@ -1,0 +1,18 @@
+// SN:GeRSYJbkh?J35060
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("神樱雕[2;37;0m", ({"shenying diao"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "动人可爱又厉害
+它是李乐星的坐骑。
+");
+        set_temp("owner_id", "happystar");
+        set_temp("owner_name", "李乐星");
+        ::setup();
+}
+

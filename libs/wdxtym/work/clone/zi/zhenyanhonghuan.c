@@ -1,0 +1,61 @@
+#include <ansi.h>
+
+inherit COMBINED_ITEM;
+
+string query_autoload() { return query_amount() + ""; }
+
+void autoload(string param)
+{
+	int amt;
+
+	if (sscanf(param, "%d", amt) == 1)
+		set_amount(amt);
+}
+
+void setup()
+{
+	set_amount(1);
+	::setup();
+}
+void create()
+{
+	set_name(HIR"【洪 荒 箴 言】"NOR, ({"zhengdao honghuang book"}));
+	if( clonep() )
+		set_default_object(__FILE__);
+	else {
+		set("value", 100);
+		set("tianji1", 9500000);
+        set("no_sell",1);
+        set("give",1);
+		set("no_put", 1);
+		set("no_drop",1);
+        set("no_get",1);
+		set("unit", "本");
+		set("base_weight", 1);
+		set("base_value", 100);
+		set("long","【洪荒】\n");
+		set("only_do_effect", 1);
+	}
+	setup();
+}
+
+int do_effect(object me)
+{
+      if (me->is_busy())
+                return notify_fail("你正忙着呢。\n");
+
+	if (me->is_fighting())
+		    return notify_fail("正在战斗中，不能使用"+name()+"。\n");
+
+	me->set_skill("zhenwu-unarmed", me->query_skill("zhenwu-unarmed",1) + 180);//真武万荒殒落神拳
+	me->set_skill("yinyang-strike", me->query_skill("yinyang-strike",1) + 180);//九阴九阳混沌无极寂灭掌
+	me->set_skill("huanmo-longtianwu", me->query_skill("huanmo-longtianwu",1) + 280);//幻魔胧天舞
+	me->set_skill("lunhui-finger", me->query_skill("lunhui-finger",1) + 180);//大荒轮回囚天指
+	me->set_skill("wuji-cuff", me->query_skill("wuji-cuff",1) + 180);//混沌无极殒落神拳
+	me->set_skill("zhutian-bu", me->query_skill("zhutian-bu",1) + 180);//诸天化身步
+	me->set_skill("jiutian-xiaoyaobu", me->query_skill("jiutian-xiaoyaobu",1) + 180);//九天逍遥步
+	write(YEL"你感觉到大道一阵轰鸣"NOR"\n");
+	
+	add_amount(-1);
+	return 1;
+}

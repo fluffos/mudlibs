@@ -1,0 +1,15 @@
+// shuang.c 国士无双
+// Created by Lonely
+
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+
+string name() { return HIY "国士无双" NOR; }
+
+int perform(object me, string skill)
+{
+        return notify_fail("这项技能可修炼何种武功，均不考虑武功中关于天性的限制，不需要运用。\n");
+}
+
+

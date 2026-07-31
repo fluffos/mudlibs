@@ -1,0 +1,18 @@
+// SN:EClFGRH?bZ`1kfDV
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m豺狼配虎豹[2;37;0m", ({"chai bao"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "FINISH
+它是李铁梅的坐骑。
+");
+        set_temp("owner_id", "litiemei");
+        set_temp("owner_name", "李铁梅");
+        ::setup();
+}
+

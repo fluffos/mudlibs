@@ -1,0 +1,15 @@
+// ghost.c 六阴鬼脉
+// Created by Lonely
+
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+
+string name() { return HIY "六阴鬼脉" NOR; }
+
+int perform(object me, string skill)
+{
+        return notify_fail("这项技能可修炼各种内功将事半功倍，不需要运用。\n");
+}
+
+

@@ -1,0 +1,18 @@
+// SN:FLZ5oWPM<Ja[L>_:
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m大宛良马[2;37;0m", ({"dawan ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "西域特产
+它是断水流的坐骑。
+");
+        set_temp("owner_id", "duansl");
+        set_temp("owner_name", "断水流");
+        ::setup();
+}
+

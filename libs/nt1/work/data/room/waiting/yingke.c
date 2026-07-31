@@ -1,0 +1,38 @@
+// SN:f=PR8Y;d\LW4@^]o
+// File(/data/room/waiting/yingke.c) of waiting's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        set("short", "等你一万年迎客厅");
+	set ("long", @LONG
+这里是等你一万年的主人妹子等我迎接八方来客的地方。大凡客
+人来拜见妹子等我，少不得在这里寒暄叙话，了尽仰慕之情。东面通
+往一个茶室，是主人陪同客人品尝天下名茶之处。 
+LONG );
+
+	set("exits", ([
+		"north"  : __DIR__"yishiting",
+                "south"  : __DIR__"zoudao",
+                "east"   : __DIR__"chashi",
+	]));
+
+        create_door("east", "木门", "west", DOOR_CLOSED);
+
+        set("objects", ([
+                "/d/room/roomnpc/yahuan" : 2,
+        ]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("room_owner", "妹子等我");
+        set("room_name", "等你一万年");
+        set("room_id", "waiting");
+        set("room_owner_id", "waiting");
+        set("room_position", "碎石小道");
+}

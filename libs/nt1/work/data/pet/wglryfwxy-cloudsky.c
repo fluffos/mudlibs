@@ -1,0 +1,18 @@
+// SN:fCc1:W[k1mPBTjIK
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m雪雕[2;37;0m", ({"cloudsky diao"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "一个全身雪白的神雕.
+它是云涛的坐骑。
+");
+        set_temp("owner_id", "wglryfwxy");
+        set_temp("owner_name", "云涛");
+        ::setup();
+}
+

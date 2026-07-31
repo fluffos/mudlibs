@@ -1,0 +1,699 @@
+/****************************************************************
+ * This file is a part of the TianXia(天下, The World)'s MudLib.*
+ * Please retain the header if you use it.     -- Micro@TianXia *
+ ****************************************************************/
+
+// File     : natured.c
+// Purpose  : 关于天气的 daemon 函数
+// Created  : 1998-08-03
+// By       : Micro@TianXia
+
+// History  : 98-08-03  Micro@TianXia 创建文件
+
+inherit F_DBASE;
+
+#include <ansi.h>
+#include <login.h>
+#include <localtime.h>
+#include <net/daemons.h>
+
+#define TIME_TICK (time()*60)
+
+// 天气自动机（这里采取缓慢变化之自动机，假设没有突变状态）：
+
+// 变化：晴（无云）<->晴（有云）<->阴（多云）<->雨（小雨）<->雨（大雨）
+//       雾（晚秋及冬天之早晨）->晴
+//       霜（冬天之晚上）
+//       雪（冬天）
+//       晚霞（傍晚）->晴
+//
+// 规则：晴阴可有０至６级风，小雨可有０至９级风，大雨可有０至１２级风
+//       雨均可有云雷电，只是大雨会强烈许多
+
+
+#define SUNSHINE        0       // 晴
+#define CLOUDY_SKY      1       // 阴
+#define SPRINKLE        2       // 小雨
+#define DING_ON         3       // 大雨
+#define FOG             4       // 雾
+#define FROST           5       // 霜
+#define SNOW            6       // 雪
+#define GLOW            7       // 霞
+
+#define CLOUDLESS       0       // 无云
+#define NORMAL          1       // 有云
+#define CLOUDY          2       // 多云
+
+nosave int current_day_phase, no_auto_save;     // Micro 19990320 减少系统负担
+mapping *day_phase;
+
+// 变量：记录各地天气当前状态
+mapping mWeather;
+
+string *weather_msg = ({
+        "天空中万里无云",
+        "几朵淡淡的云彩妆点著晴朗的天空",
+        "白云在天空中飘来飘去",
+        "厚厚的云层堆积在天边",
+        "天空中乌云密布",
+});
+
+mapping *read_table(string file);
+void init_day_phase();
+void auto_save();
+void auto_reboot();
+void give_gift();
+void update_weather();
+
+void create() 
+{
+        day_phase = read_table("/adm/etc/nature/day_phase");
+        init_day_phase();
+}
+
+void init_day_phase()
+{
+        mixed *local;
+        int i, t;
+
+        // Get minutes of today.
+        local = localtime(TIME_TICK);
+        t = local[2] * 60 + local[1];           // hour * 60 + minutes
+
+        // Find the day phase for now.
+        for( i=0; i < sizeof(day_phase); i++)
+                if( t >= day_phase[i]["length"] )
+                        t -= (int)day_phase[i]["length"];
+                else
+                        break;
+
+        current_day_phase = (i==0? sizeof(day_phase)-1: i - 1);
+
+        // Since in our time scale, 1 minute == 1 second in RL, so we don't need
+        // any conversion before using this number as call_out dalay, if you 
+        // changed the time scale, be sure to convert it.
+
+        call_out("update_day_phase",
+                (int)day_phase[(current_day_phase+1) % sizeof(day_phase)]["length"] - t);
+}
+
+void update_day_phase()
+{
+//        mixed *t;
+//        object *ob;
+//        string datestr;
+//        int i;
+
+        remove_call_out("update_day_phase");
+
+        current_day_phase = (++current_day_phase) % sizeof(day_phase);
+
+        message("outdoor:vision", day_phase[current_day_phase]["time_msg"] + "\n", users());
+
+//        // 每日六小时的限制
+//        ob = users();
+//        t = localtime( time() );
+//        datestr = sprintf("%d-%d-%d", t[LT_YEAR] ,t[LT_MON] + 1, t[LT_MDAY] );
+//        for(i=0; i<sizeof(ob); i++) {
+//                if( ob[i]->query("day_on") == datestr ) {
+//                        if( ! wizardp(ob[i]) && ob[i]->query("mud_age") - ob[i]->query("day_time") >= 6 * 3600 ) {
+//                                tell_room( environment(ob[i]), MUD_NAME + "突然出现在你面前。\n" 
+//                                        + MUD_NAME + "说道：“" + ob[i]->query("name") + "！每天只能玩六个小时，你走吧！”\n" );
+//                                ob[i]->save();
+//                                ob[i]->unconcious();
+//                        }
+//                }
+//                else {
+//                        ob[i]->set("day_on", datestr);
+//                        ob[i]->set("day_time", (int)ob[i]->query("mud_age") );
+//                }
+//        }
+
+//        // 每天中午及午夜时自动存盘        
+//        if( day_phase[current_day_phase]["event_fun"] == "event_noon" 
+//        ||      day_phase[current_day_phase]["event_fun"] == "event_midnight" ) 
+//                auto_save();
+
+        // Micro: 系统重启
+        auto_reboot();
+
+        // Micro: 突发事件，如果发生，为了减少系统负担，暂停自动存盘
+        give_gift();
+
+        update_weather();
+
+        if( !undefinedp(day_phase[current_day_phase]["event_fun"]) )
+                call_other(this_object(), day_phase[current_day_phase]["event_fun"]);
+
+        call_out("update_day_phase", day_phase[current_day_phase]["length"]);
+}
+
+// This is called everyday noon by update_day_phase, defined in the
+// "event_fun" field in /adm/etc/nature/day_phase
+
+void event_dawn()
+{
+        string *sName;
+        int i, iSize;
+
+        if( !query("mWeather") ) return;
+        if( sizeof(mWeather) <= 0 ) return;
+
+        // 遍历所有地区
+        sName  = sort_array( keys(mWeather), 1 );
+        for( i = 0, iSize = sizeof(sName); i < iSize; i ++ )
+                // 晴天早上有可能有雾
+                if( query("mWeather/" + sName[i] + "/weather" ) == SUNSHINE 
+                &&      random(5) == 0 ) 
+                        set("mWeather/" + sName[i] + "/weather", FOG );
+}
+
+void event_sunrise() 
+{
+        string *sName;
+        int i, iSize;
+
+        if( !query("mWeather") ) return;
+        if( sizeof(mWeather) <= 0 ) return;
+
+        // 遍历所有地区
+        sName  = sort_array( keys(mWeather), 1 );
+        for( i = 0, iSize = sizeof(sName); i < iSize; i ++ )
+                // 晴天早上有可能有雾
+                if( query("mWeather/" + sName[i] + "/weather" ) == SUNSHINE 
+                &&      random(5) == 0 ) 
+                        set("mWeather/" + sName[i] + "/weather", FOG );
+
+        auto_save();                    // Micro: 每天太阳升起时自动存盘        
+}
+
+void event_morning()
+{
+}
+
+void event_noon()
+{
+        object *ob;
+        string *sName;
+        int i, iSize, skill;
+
+        auto_save();                    // Micro: 每天中午时自动存盘        
+        ob = users();
+        for(i=0; i<sizeof(ob); i++) {
+                if( !environment(ob[i]) ) continue;
+                if( !environment(ob[i])->query("outdoors") ) continue;
+                if( !ob[i]->query("mana") ) continue;
+                if( !(skill = ob[i]->query_skill("spells", 1) )) {
+                        tell_object(ob[i], "你觉得一阵晕眩，好像有一股能量从身上被人吸走了。\n");
+                        ob[i]->set("mana", 0);
+                        ob[i]->receive_damage("sen", 0);
+                } else if( skill < 25 ) {
+                        tell_object(ob[i], "随著太阳升到天空的正中央，你觉得你的法力开始消失了。\n");
+                        ob[i]->set("mana", (int)ob[i]->query("mana") * skill / 25 );
+                }
+        }
+}
+
+void event_afternoon()
+{
+}
+
+void event_evening() 
+{
+        string *sName;
+        int i, iSize;
+
+        if( !query("mWeather") ) return;
+        if( sizeof(mWeather) <= 0 ) return;
+
+        // 遍历所有地区
+        sName  = sort_array( keys(mWeather), 1 );
+        for( i = 0, iSize = sizeof(sName); i < iSize; i ++ )
+                // 晴天晚上有可能有晚霞
+                if( query("mWeather/" + sName[i] + "/weather" ) == SUNSHINE 
+                &&      random(5) == 0 ) 
+                        set("mWeather/" + sName[i] + "/weather", GLOW );
+
+        auto_save();                    // Micro: 每天傍晚时自动存盘        
+}
+
+void event_night()
+{
+        string *sName;
+        int i, iSize;
+
+        mixed *local = localtime( (TIME_TICK > 0) ? TIME_TICK : - TIME_TICK );
+
+        if( !query("mWeather") ) return;
+        if( sizeof(mWeather) <= 0 ) return;
+
+        // 遍历所有地区
+        sName  = sort_array( keys(mWeather), 1 );
+        for( i = 0, iSize = sizeof(sName); i < iSize; i ++ )
+                // 冬天晚上有可能有霜
+                if( query("mWeather/" + sName[i] + "/weather" ) == SUNSHINE 
+                &&      random(5) == 0 && local[LT_MON]+1 >= 10 && local[LT_MON]+1 <= 12 ) 
+                        set("mWeather/" + sName[i] + "/weather", FROST );
+}
+
+void event_midnight() 
+{
+        string *sName;
+        int i, iSize;
+
+        mixed *local = localtime( (TIME_TICK > 0) ? TIME_TICK : - TIME_TICK );
+
+        if( !query("mWeather") ) return;
+        if( sizeof(mWeather) <= 0 ) return;
+
+        // 遍历所有地区
+        sName  = sort_array( keys(mWeather), 1 );
+        for( i = 0, iSize = sizeof(sName); i < iSize; i ++ )
+                // 冬天晚上有可能有霜
+                if( query("mWeather/" + sName[i] + "/weather" ) == SUNSHINE 
+                &&      random(5) == 0 && local[LT_MON]+1 >= 10 && local[LT_MON]+1 <= 12 ) 
+                        set("mWeather/" + sName[i] + "/weather", FROST );
+
+        auto_save();                    // Micro: 每天午夜时自动存盘        
+}
+
+string outdoor_room_description( object oEnv )
+{
+        string sEnvName, sRet_Msg;
+        int iEnvWeather;
+
+        // 如果该地没有定义天气，则给出最初的值
+        if( sEnvName = oEnv->query("outdoors") ) {
+                if( !query("mWeather/"  + sEnvName ) ) {
+                        set( "mWeather/"  + sEnvName + "/weather", SUNSHINE );
+                        set( "mWeather/"  + sEnvName + "/cloud", CLOUDLESS );
+                        set( "mWeather/"  + sEnvName + "/wind", 0 );
+                }
+        }
+
+        // 生成白天／晚上的描述
+        sRet_Msg = "    " + day_phase[current_day_phase]["desc_msg"] + "。\n";
+
+        // 生成天气的描述
+        sRet_Msg += "    ";
+        switch( query("mWeather/"  + sEnvName + "/weather") ) {
+                case SUNSHINE  : sRet_Msg += "天气非常晴朗。" ; break;
+                case CLOUDY_SKY: sRet_Msg += "正是阴天时候。" ; break;
+                case SPRINKLE  : sRet_Msg += "天上下着小雨。" ; break;
+                case DING_ON   : sRet_Msg += "天上下着大雨。" ; break;
+                case FOG       : sRet_Msg += "处处弥漫着雾。" ; break;
+                case FROST     : sRet_Msg += "地上到处是霜。" ; break;
+                case SNOW      : sRet_Msg += "天上飘着雪花。" ; break;
+                case GLOW      : sRet_Msg += "晚霞映红了天。" ; break;
+        }
+
+        // 生成云彩的描述
+        switch( query("mWeather/"  + sEnvName + "/cloud" ) ) {
+                case CLOUDLESS: sRet_Msg += "天空万里无云。" ; break;
+                case NORMAL   : sRet_Msg += "空中飘着几朵云彩。" ; break;
+                case CLOUDY   : sRet_Msg += "空中堆积着厚厚的云层。" ; break;
+        }
+
+        // 生成风力的描述
+        switch( query("mWeather/"  + sEnvName + "/wind" ) ) {
+                case 0 : sRet_Msg += "一点风都没有。\n" ; break;
+                case 1 : sRet_Msg += "软软的风吹过。\n" ; break;
+                case 2 : sRet_Msg += "轻轻的风吹过。\n" ; break;
+                case 3 : sRet_Msg += "微微的风吹过。\n" ; break;
+                case 4 : sRet_Msg += "习习和风吹过。\n" ; break;
+                case 5 : sRet_Msg += "劲风呼呼吹过。\n" ; break;
+                case 6 : sRet_Msg += "强风呼呼刮过。\n" ; break;
+                case 7 : sRet_Msg += "疾风呜呜刮过。\n" ; break;
+                case 8 : sRet_Msg += "大风呜呜刮过。\n" ; break;
+                case 9 : sRet_Msg += "烈风呜呜刮过。\n" ; break;
+                case 10: sRet_Msg += "狂风横扫大地。\n" ; break;
+                case 11: sRet_Msg += "暴风狂扫大地。\n" ; break;
+                case 12: sRet_Msg += "飓风狂扫大地。\n" ; break;
+        }
+
+        // 下雨时，雷电显示的处理。
+        if( query("mWeather/"  + sEnvName + "/weather") == SPRINKLE )
+                sRet_Msg += "闪电啦！打雷啦！\n";
+        if( query("mWeather/"  + sEnvName + "/weather") == DING_ON )
+                sRet_Msg += "闪电越来越猛，雷声越来越响了！\n";
+
+        return sRet_Msg;
+}
+
+// 函数：天气自动变化函数
+void update_weather() 
+{
+        mixed *local = localtime( (TIME_TICK > 0) ? TIME_TICK : - TIME_TICK );
+        string *sName;
+        int i, iSize, iWeather, iCloud, iWind;
+
+        if( !query("mWeather") ) return;
+        if( sizeof(mWeather) <= 0 ) return;
+
+        // 遍历所有地区
+        sName  = sort_array( keys(query("mWeather")), (: strcmp :) );
+        for( i = 0, iSize = sizeof(sName); i < iSize; i ++ ) {
+
+                // 天气的变化
+                iWeather = query("mWeather/" + sName[i] + "/weather" );
+                switch( iWeather ) {
+                        case SUNSHINE :         // -> 晴，阴，雾，霜，雪，晚霞
+                                switch( random(6) ) {
+                                        case 0 : iWeather = SUNSHINE; break;
+                                        case 1 : iWeather = CLOUDY_SKY; break;
+                                        case 2 : iWeather = SUNSHINE; break;
+                                        case 3 : iWeather = SUNSHINE; break;
+                                        case 4 : iWeather = SUNSHINE; break;
+                                        case 5 : iWeather = SUNSHINE; break;
+                                }
+
+                                // 冬天可能有雪
+                                if( iWeather == SUNSHINE && random(5) == 0 
+                                &&      local[LT_MON]+1 >= 10 && local[LT_MON]+1 <= 12 ) 
+                                        iWeather = SNOW;
+
+                                break;
+                        case CLOUDY_SKY :       // -> 晴，雨（春夏秋），雪（冬）
+                                switch( random(3) ) {
+                                        case 0 : iWeather = CLOUDY_SKY; break;
+                                        case 1 : iWeather = SUNSHINE; break;
+                                        case 2 : 
+                                                if( local[LT_MON]+1 >= 10 && local[LT_MON]+1 <= 12 )
+                                                        iWeather = SNOW;
+                                                else 
+                                                        iWeather = SPRINKLE;
+                                                break;
+                                }
+                                break;
+                        case SPRINKLE :         // -> 大雨，小雨，阴
+                                switch( random(3) ) {
+                                        case 0 : iWeather = SPRINKLE; break;
+                                        case 1 : iWeather = CLOUDY_SKY; break;
+                                        case 2 : iWeather = DING_ON; break;
+                                }
+                                break;
+                        case DING_ON :          // -> 大雨，小雨，阴
+                                switch( random(3) ) {
+                                        case 0 : iWeather = SPRINKLE; break;
+                                        case 1 : iWeather = CLOUDY_SKY; break;
+                                        case 2 : iWeather = DING_ON; break;
+                                }
+                                break;
+                        case FOG :              // -> 晴
+                                iWeather = SUNSHINE;
+                                break;
+                        case FROST :            // -> 晴，雪
+                                switch( random(2) ) {
+                                        case 0 : iWeather = SUNSHINE; break;
+                                        case 1 : iWeather = SNOW; break;
+                                }
+                                break;
+                        case SNOW :             // -> 晴，雪
+                                switch( random(2) ) {
+                                        case 0 : iWeather = SUNSHINE; break;
+                                        case 1 : iWeather = SNOW; break;
+                                }
+                                break;
+                        case GLOW :             // -> 晴
+                                iWeather = SUNSHINE;
+                                break;
+                        default:
+                                iWeather = SUNSHINE;
+                                break;
+                }
+                set("mWeather/" + sName[i] + "/weather", iWeather );
+
+                // 云彩的变化
+                iCloud = query("mWeather/" + sName[i] + "/cloud" );
+                iCloud = random(3);
+                // 晴天云彩或有或无，只是不多；阴天云彩很多
+                // 小雨时云彩亦不多，大雨时云彩很多
+                if( iWeather == SUNSHINE ) iCloud = random(2);
+                else if( iWeather == CLOUDY_SKY ) iCloud = CLOUDY;
+                else if( iWeather == SPRINKLE ) iCloud = NORMAL;
+                else if( iWeather == DING_ON ) iCloud = CLOUDY;
+                set("mWeather/" + sName[i] + "/cloud", iCloud );
+
+                // 风力的变化
+                iWind = query("mWeather/" + sName[i] + "/wind" );
+                if( iWeather == SPRINKLE ) iWind = random(10);
+                else if( iWeather == DING_ON ) iWind = random(13);
+                else iWind = random(7);
+                set("mWeather/" + sName[i] + "/wind", iWind );
+        }
+}
+
+string game_time()
+{
+        return CHINESE_D->chinese_date(TIME_TICK);
+}
+
+// This function is to read a regular type of data table for day_phase and
+// etc.
+mapping *read_table(string file)
+{
+        string *line, *field, *format;
+        mapping *data;
+        int i, rn, fn;
+
+        line = explode(read_file(file), "\n");
+        data = ({});
+        for(i=0; i<sizeof(line); i++) {
+                if( line[i]=="" || line[i][0]=='#' ) continue;
+                if( !pointerp(field) ) {
+                        field = explode( line[i], ":" );
+                        continue;
+                }
+                if( !pointerp(format) ) {
+                        format = explode( line[i], ":" );
+                        continue;
+                }
+                break;
+        }
+
+        for( rn = 0, fn = 0; i<sizeof(line); i++) {
+                if( line[i]=="" || line[i][0]=='#' ) continue;
+                if( !fn ) data += ({ allocate_mapping(sizeof(field)) });
+                sscanf( line[i], format[fn], data[rn][field[fn]] );
+                fn = (++fn) % sizeof(field);
+                if( !fn ) ++rn;
+        }
+        return data;
+}
+
+mapping *query_day_phase() { return day_phase; }
+
+void auto_save()                                // 自动存盘功能
+{
+        int i;
+        object *ob;
+
+        if(no_auto_save) return;                // Micro 19990320 暂停自动存盘
+
+        ob = users();
+        
+        if(!ob) return ;
+        
+        i = sizeof(ob);
+        while( i-- ) {
+                // 不处理在 login 的人
+                if( !environment(ob[i]) ) continue;
+
+                                                // 先处理杀人和坐牢标志
+                if(ob[i]->query("kill_flag") 
+                &&      (int)(ob[i]->query("mud_age") - ob[i]->query("kill_time")) > 5000 ) {
+                        ob[i]->delete("kill_flag");
+                        ob[i]->delete("kill_time");
+                        if(ob[i]->query("in_prison")) {
+                                tell_object(ob[i],
+                        HIY "你的刑期满了，出去吧，下次可不能再杀人了。\n\n" NOR);
+                                ob[i]->delete("in_prison");
+                                ob[i]->set("startroom", START_ROOM );
+                                ob[i]->move( REVIVE_ROOM );
+                                message("vision",
+                        "你忽然发现前面多了一个人影，不过那人影又好像已经在那里很久了，"
+                        "只是你一直没发觉。\n\n", environment(ob[i]), ob[i]);
+                        }
+                        else 
+                                tell_object(ob[i],
+                        HIY "官府总算放弃对你的追捕，记往，下次可不能再杀人了。\n\n" NOR);
+                }
+                ob[i]->save();                  // 存盘操作
+        }
+        message("system", RED"【存盘精灵】"YEL"您的档案已经自动储存了。\n"NOR, users() );
+}
+
+void auto_reboot()                              // 自动重启
+{
+        mixed *mTime;
+        object *oUser, oLink_ob;
+        int iI, iJ;
+
+/*      // Micro: 99-02-09 这些是原来的定时当机方式，现改为每运行24小时当机一次。
+
+        mTime = localtime( time() );
+
+        iI = ( 115200 + 600                  // (24 + 8) * 3600 秒
+                - (mTime[LT_HOUR] * 3600 + mTime[LT_MIN] * 60 + mTime[LT_SEC]) )
+                % 43200;                // 12 * 3600 秒
+
+        iJ = ( 158400 + 600                  // (24 + 8) * 3600 秒
+                - (mTime[LT_HOUR] * 3600 + mTime[LT_MIN] * 60 + mTime[LT_SEC]) )
+                % 43200;                // 12 * 3600 秒
+
+        if( (iI < 600 || iJ < 600 ) && uptime() > 600 )      // 重新启动：在十分钟之内，且运行超过十分钟
+*/
+        // 取当前游戏运行时间，到一天时，自动当机。
+        iI = 86400 - uptime() % 86400; 
+        
+        if( iI < 600 && uptime() > 600 )      // 重新启动：在十分钟之内，且运行超过十分钟        
+        {
+                message("system", HIY"【" MUD_NAME "】大神（God）："
+                        "系统重新启动啦！\n" NOR, users() );
+
+                oUser = users();
+                for(iI = 0; iI < sizeof(oUser); iI++) {
+                        if( !environment(oUser[iI]) ) continue;
+                        oUser[iI]->save();
+                        oLink_ob = oUser[iI]->query_temp("link_ob");
+                        if( objectp(oLink_ob) ) oLink_ob->save();
+                }
+
+                if( find_object(DNS_MASTER) ) DNS_MASTER->send_shutdown();
+
+                shutdown(0);
+        }
+
+        // if( (iI < 1800 || iJ < 1800 ) && uptime() > 1800 )      // 提前三十分钟警告示
+        if( iI < 1800 && uptime() > 1800 )      // 提前三十分钟警告示
+                message("system", HIY"【" MUD_NAME "】大神（God）：警告，" 
+                        + chinese_time( iI ) + "后系统将会重新启动！\n" NOR, users() );
+}
+
+string *stone = ({
+        "/obj/self/stone-hiy",
+        "/obj/self/stone-hiy",
+        "/obj/self/stone-hiy",
+        "/obj/self/stone-hiw",
+        "/obj/self/stone-him",
+        "/obj/self/stone-hic",
+        "/obj/self/stone-hic",
+        "/obj/self/stone-hic",
+        "/obj/self/stone-hir",
+        "/obj/self/stone-hir",
+});
+
+string *path=({
+        "/d/road/",
+        "/d/wudangshan/",
+        "/d/songshan/",
+        "/d/huashan/",
+        "/d/taishan/",
+        "/d/emeishan/",
+        "/d/zhongnanshan/",
+        "/d/wuliangshan/",
+        "/d/lingjiugong/",
+        "/d/guangmingding/",
+        "/d/heimuya/",
+});
+
+string *name=({
+        "荒郊野外",
+        "侠客城以南",
+        "侠客城以北",
+        "侠客城以北",
+        "侠客城以东",
+        "侠客城以西",
+        "侠客城以西",
+        "侠客城以西",
+        "侠客城西北",
+        "侠客城西北",
+        "侠客城以东",
+});
+
+void give_gift()                                // 突发事件
+{
+        mixed *file;
+        object ob, *all_user;
+        string dir, filename;
+        int l, m, n;
+
+        no_auto_save = 0;
+
+        all_user = users();
+
+        // Micro: 1999-02-21 当少于 5 人时，不开放
+        if(!all_user) return;
+        if(sizeof(all_user) < 5) return;
+
+        if( random( 10 ) == 0 ) {
+no_auto_save = 1;
+
+                ob = new("/obj/npc/rascal");
+                ob->do_move();
+
+                log_file( "STONES", sprintf(HIR "%s : 流氓。\n" NOR, ctime(time()) ) );
+        }
+
+/*      Micro: 这样东西到做得好一些时再放开吧。
+        if( random( 100 ) == 0 ) {
+no_auto_save = 1;
+                ob = new("/obj/npc/man");
+                ob->move("/d/center/roadn1");
+
+                log_file( "STONES", sprintf(HIR "%s : 大魔／大侠。\n" NOR, ctime(time()) ) );
+
+        }
+*/
+
+        if( random( 60 ) == 0 ) {              // Micro: 60 * 3分钟一次，天降大石
+no_auto_save = 1;
+
+                log_file( "STONES", sprintf(HIR "%s : 石头。\n" NOR, ctime(time()) ) );
+
+                m = random( sizeof(path) );
+                dir = path[m];
+
+                file = get_dir(dir, -1);
+/*
+                if( !sizeof(file) ) {
+                        if (file_size(dir) == -2) return;       // notify_fail("目录是空的。\n");
+                        else return;                            // notify_fail("没有这个目录。\n");
+                }
+*/
+                // Micro: 990320 什么都没有则返回
+                if( !sizeof(file) ) return;
+
+                n = random( sizeof(file) );
+                filename = file[n][0];
+
+                l = strlen(filename);
+                if( file[n][1] == -2 ) return;                  // notify_fail("这是一个目录。\n");
+                if( l < 3 ) return;                             // notify_fail("这不是我们要找的文件。\n");
+/*
+                if( sprintf("%c", filename[l-2]) == "." && sprintf("%c", filename[l-1] ) == "c" ) {
+                        ob = new( stone[ random(sizeof(stone)) ] );
+                        ob->move(dir + filename);
+                }
+
+                message("system", HIY"【" MUD_NAME "】占星家（Observer）：天降奇缘，有神光降于"
+                        + name[m] + "！\n" NOR, users() );
+                CHANNEL_D->do_channel( ob, "sys", sprintf(HIR "%s" NOR, dir + filename), 0 );
+
+                log_file( "STONES", sprintf(HIR "%s : %s 落于 %s\n" NOR, ctime(time()), 
+                        ob->query("name"), dir + filename) );
+*/
+                // Micro 19990320
+                if( filename[<2..<1] == ".lpc" ) { // 注意！！相应目录只能放场景！
+                        ob = new( stone[ random(sizeof(stone)) ] );
+                        ob->move(dir + filename);
+                        message("system", HIY"【" MUD_NAME "】占星家（Observer）：天降奇缘，有神光降于"
+                                + name[m] + "！\n" NOR, users() );
+                        CHANNEL_D->do_channel( ob, "sys", sprintf(HIR "%s" NOR, dir + filename), 0 );
+
+                        log_file( "STONES", sprintf(HIR "%s : %s 落于 %s\n" NOR, ctime(time()), 
+                                ob->query("name"), dir + filename) );
+                }
+        }
+}
+

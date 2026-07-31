@@ -1,0 +1,68 @@
+//whl by 2002.9.5
+//xkxmud by 02/10/8
+#include <ansi.h>
+#include <room.h>
+inherit ROOM;
+
+void create()
+{
+        set("short", BLINK HIC"武林圣地"NOR);
+        set("long",HIY "
+这里是武林群雄离线练功的地方，希望各位不要破坏圣地的和平与安宁
+"+HIR"请您丢掉宝物，当心阿大。
+
+             "+BRED+HIG"在                           现"NOR+"
+             "+BRED+HIG"圣     ┌───────┐    江"NOR+"
+             "+BRED+HIG"地     │落花有意随流水│    湖"NOR+"
+             "+BRED+HIG"修     │流水无心恋落花│    扬"NOR+"
+             "+BRED+HIG"身     └───────┘    名"NOR+"
+             "+BRED+HIG"养                           四"NOR+"
+             "+BRED+HIG"性                           海"NOR+" 
+" NOR  
+        );
+
+
+//        set("no_fight", "1");
+        set("no_kill", "1");
+        set("no_steal", "1");
+        
+        set("exits", ([
+                "down" : __DIR__"yuelao",
+                ]));
+
+
+}
+void init()
+{
+        add_action("do_kill",  "kill");
+        add_action("do_kill",  "fight");
+        add_action("do_kill",  "throw");
+        add_action("do_kill",  "steal");
+        add_action("do_kill",  "hit");
+        add_action("do_kill",  "forcekill");
+        add_action("do_kill",  "lea");
+        add_action("do_kill",  "perform");
+        add_action("do_kill",  "drive");
+}
+
+int valid_leave(object me, string dir)
+{
+      object *inv;
+        int i;
+        inv = all_inventory(me);
+           if ( dir == "down") {
+                // can not got to any where if they take players
+                for (i=0; i<sizeof(inv); i++) {
+                        if (inv[i]->is_character())
+                        return notify_fail("你不能带着其他玩家离开这里。\n");
+                         }
+        }
+           me->set_temp("mark/武林圣地", 0);
+        return ::valid_leave(me, dir);
+}            
+int do_kill(string arg)
+{
+        object me = this_player();
+        tell_object(me, HIR"武林圣地禁止你这样做！\n"NOR);
+        return 1;
+}

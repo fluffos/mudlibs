@@ -1,0 +1,35 @@
+// SN:Xk67El:inQWFB2KZ
+// ITEM Made by player(石破烂:shi) /data/item/s/shi-splb.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Thu Sep 30 16:14:23 2004
+#include <ansi.h>
+#include <armor.h>
+
+inherit HANDS;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;35m玉蒲团[1;33m偷情宝鉴[2;37;0m", ({ "splb" }));
+	set_weight(2100);
+	set("item_make", 1);
+	set("unit", "套");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一套指套。
+叶子媚周弘主演，玉蒲团系列的第一部。情节忠实原著。也许因为没看到期待中的叶子媚露点，令人失望。[2;37;0m
+指套缘上刻着一行小字：石破烂(shi)
+");
+	set("value", 2100000);
+	set("point", 334);
+	set("material", "magic stone");
+	set("wear_msg", "片中吴启华饰演的未央生想淫遍天下女人，但又怕自己的妻子被别人污了，于是便专找了一个家风极正、门第森严的大家闺秀叶子楣为妻。[2;37;0m\n");
+	set("remove_msg", "未央生自以为万无一失，就放心大胆地到处和有夫之妇偷情。但到得后来，未央生之妻被卖入青楼，遭千人践踏，这才使得未央生幡然悔悟、遁入空门。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/unarmed_damage", apply_damage());
+	set("armor_prop/finger", 10);
+	set("armor_prop/claw", 10);
+	set("armor_prop/armor", 10);
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

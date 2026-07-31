@@ -1,0 +1,55 @@
+//TASK物品
+
+
+#include <ansi.h>
+
+#define  SET_TASK   "/quest/task/set_task"
+
+inherit ITEM;
+
+
+void create()
+{
+        set_name(HIW "虎裘大衣" NOR, ({ "hqdayi"}));
+        if (clonep())
+                destruct(this_object());
+        else {
+                set("unit", "件");
+                set("owner_id", "hu fei");
+                set("owner", "胡斐");
+
+                set("value",10);
+                                set("nopaimai",1);
+                set("no_sell",1);
+                set("no_put",1);
+        }
+        setup();
+}
+
+void init()
+{
+	add_action("do_give","give");
+}
+
+
+int do_give(string arg)
+
+{
+
+	object me,ob;
+
+	ob = this_object();
+	me = this_player();
+
+    return call_other(SET_TASK, "do_return", ob, me, arg);
+
+}
+
+
+string long()
+{
+        return "这是" + query("owner") + "的" + query("name") +
+               "(" + query("id") + ")。\n";
+
+}
+

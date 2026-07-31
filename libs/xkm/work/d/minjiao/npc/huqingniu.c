@@ -1,0 +1,42 @@
+//Cracked by Kafei
+
+#include "mingjiao_npc.c"
+#include <ansi.h>
+
+void create()
+{
+		mapping S_skills= ([ ]);
+		mapping I_inquiry=([ ]);
+		mixed Skill_name;
+        set_name("胡青牛",({"hu qingniu","hu"}));
+        set("title", "明教弟子");
+        set("nickname", "蝶谷仙医");
+        set("long", "有待添加。\n");
+        set("age", 40);
+        set("attitude", "peaceful");
+        set("shen", 300000);
+        create_family("明教",37,"弟子");
+
+		Skill_name=({"guangming-xinfa","wuxing-bu","bagua-dao",
+			     "riyue-shenzhang","shenghuo-quan"});
+		I_inquiry["name"]="在下就是明教弟子胡青牛，不知阁下有何指教。";
+		Set_Inquiry(I_inquiry,Skill_name);
+		Set_Npcattrib(25,5,2000,300,4000,400,4000,300,3000,1000,800000,50000);
+
+        S_skills["force"]="shenghuo-xuanming";
+        S_skills["dodge"]="wuxing-bu";
+        S_skills["parry"]="bagua-dao";
+        S_skills["blade"]="bagua-dao";
+        S_skills["strike"]="riyue-shenzhang";
+        S_skills["cuff"]="shenghuo-quan";
+        set_skill("guangming-xinfa",100+random(20));
+	set_skill("literate",100+random(20));
+	
+        Set_Npcskills(100,20,S_skills);
+
+        prepare_skill("cuff","shenghuo-quan");
+        prepare_skill("strike","riyue-shenzhang");
+        
+	setup();
+	carry_object(OBJ_PATH"/changpao")->wear();
+}

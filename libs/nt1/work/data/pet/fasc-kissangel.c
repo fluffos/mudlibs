@@ -1,0 +1,18 @@
+// SN:ffO1DdQ=RA4L<emf
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;31m麒麟圣兽[2;37;0m", ({"kissangel shou"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "$HIR$麒麟圣
+它是至尊宝的坐骑。
+");
+        set_temp("owner_id", "fasc");
+        set_temp("owner_name", "至尊宝");
+        ::setup();
+}
+

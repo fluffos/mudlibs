@@ -1,0 +1,150 @@
+时间变化在MUD中的应用
+
+    让NPC更人性化，让房间更贴近现实，相信这是大家都想做的。 让NPC能随不同时间说不同的话，有不同的行动，房间能有早晚不同的变化，
+不是很好的么？下面 我就争对这个给大家讲一讲。 
+  首先我们在/adm/daemons/natured.c中加入这一句：
+string room_event() { return day_phase[current_day_phase]["event_fun"]; } 
+将会加入一个room可以调用的string，来自你的natured day_phase，如果你没 作什么大的改变，会输出一系列的时段string，如
+event_night,event_sunrise。由此你就可以判断 当前是什么时间从而改变NPC的行为了。 先看个简单的例子： 
+
+    在NPC中我们常常看到有自动向出现在附近的玩家问好的NPC。如客店的小二。如果我们稍微改动一下void_greeting() part。
+
+void greeting(object ob) 
+{ 
+           string time,respect;  
+     
+             time = NATURE_D->room_event(); // 调用
+             respect=RANK_D->query_respect(ob); 
+     
+              if( !ob || environment(ob) != environment() ) return; 
+               
+              switch(time) {  // 使用switch 判断当前时间                         
+                      case "event_sunrise": // 早上
+                              message_vision(CYN"$N笑着对$n说道：「这位" + respect 
+                      + "，今儿可真早啊，小店刚刚营业，欢迎光临。」\n"NOR, this_object(),ob);  
+                              break; 
+ 
+                      case "event_noon":   // 中午
+                              message_vision(CYN"$N跑过来对$n说道：「这位" + respect 
+                      + "，用过午饭了吗？快请坐。」\n"NOR, this_object(),ob);  
+                              break; 
+
+                     case "event_evening": // 傍晚
+                              message_vision(CYN"$N笑嘻嘻地对$n说道：「这位" + respect 
+                      + "，天快黑了，还是来小店歇歇吧，今天瞧把您给累的。」\n"NOR, this_object(),ob);  
+                             break; 
+
+                     case "event_midnight": // 午夜
+                             message_vision(CYN"$N披着睡衣走出来，迷迷糊糊地对$n说道：「这位" + respect 
+                     + "，可真不巧啊，小店已经打烊了，您还是天亮再来吧。」\n"NOR, this_object(),ob); 
+                             ob->move("xxxx");        
+                             break; 
+
+                     default : 
+                             break;
+             }  
+
+} 
+
+你看明白了么？time调用了我们在NATURED中设定的新function，下面判断不同的时间，就出现了不同的 信息。午夜的时候，客栈关门，你可以
+将玩家移到门口。这个小二虽然简单，不过还算人性化，比过去见人 就问好那个要好多了吧。 如果你上面那个觉得没问题，我们就看看下面这
+个NPC的CODE： 
+
+// beggar.c
+
+inherit NPC;
+void create() 
+{ 
+      set_name("乞丐", ({ "beggar" }) ); 
+      set("gender", "男性" );
+      set("age", 33);
+      set("combat_exp", 10000);  
+      set("long", "一个中年乞丐，全身穿得破烂不堪，甚是可怜。\n" ); 
+      setup(); 
+               
+      carry_object(__DIR__"obj/cloth")->wear(); 
+      check_time(); 
+}
+
+void check_time() // 判断时间
+{ 
+             string time = NATURE_D->room_event(); 
+      
+             if ( time == "event_midnight" ) // 如果是晚上就。。。
+             { // 变化
+                set_name("王三", ({ "wang san", "thief" }) ); 
+                set("title", "江南大盗"); 
+                set("long","江南大盗王三，在江湖上成名多年，却从极少有人见过他的真面目。\n");  
+                set("combat_exp", 800000);
+                set("chat_chance", 40);  
+                set("chat_msg", ({  
+                         (: random_move :),  
+                }));  
+            } 
+      
+             if ( time == "event_sunrise" )  
+             {  // 早上就复原啦
+                set_name("乞丐", ({ "beggar" }) ); 
+                set("combat_exp", 10000);  
+                set("long", "一个中年乞丐，全身穿得破烂不堪，甚是可怜。\n" ); 
+                delete("title");
+                delete("chat_chance");          
+             } 
+             remove_call_out("check_time"); 
+             call_out("check_time", 20);  
+} 
+
+现在这个干了什么呢？哇！白天是普普通通的乞丐，半夜就变成了武艺高强的大盗，当然在我这个例子里 晚上大盗并没有变多少，不过你可以加
+skill等等，还是那句老话，全看你自己怎么改了。怎么样，现在发现 这个功能好玩了吧，呵呵，这样你的MUD可以增色不少噢。
+    时间在NPC中的应用暂时先讲到这里，现在讲讲它在ROOM当中的运用。 先看看下面这段CODE： 
+
+
+void create() 
+       { 
+              set("short", "城门");
+              ... ... // 这些地方就省略了，你不能省略啊 :P
+
+              setup();
+              timepass();
+}
+
+void timepass()
+{
+     string time; 
+
+     time = NATURE_D->room_event();
+     switch(time) {                  
+            case "event_evening":
+              if(query("exits/north")) {  // 想想为什么要这个判断 :)
+                 tell_room(this_object(), "天黑了，城门关了。\n");            
+                 delete("exits/north"); 
+                  }
+              break;
+            
+            case "event_dawn":
+              if(!query("exits/north")) {
+                 tell_room(this_object(), "天亮了，城门开了。\n");
+                 set("exits", ([
+                           "south" :   __DIR__"xxxx",
+                           "north" :   __DIR__"xxxx",
+                              ]));
+                 }
+                break;               
+            default:  break;            
+        }
+                   remove_call_out("timepass");        
+                   call_out("timepass", 10);
+}
+
+不难看懂，这个城门是随早晚时间开关哟，够贴近现实吧，呵呵。
+已经是半夜了，时间的应用我就暂时讲到这里吧，如果大家还有什么问题，可以EMAIL我。 注意：
+以上的CODE只是作为讲解用途，很多地方是删减过的，所以最好不要就这样用。 
+
+作者： Kittt 
+EMAIL：Jeffwang@mindspring.com 
+
+  
+
+                                                        
+
+                                                  <--回到上页 

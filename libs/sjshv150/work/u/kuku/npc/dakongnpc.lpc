@@ -1,0 +1,176 @@
+// Created by kuku@sjsh  2003.6
+// 给兵器打孔的npc
+
+#include <ansi.h>
+inherit NPC;
+int ask_jiagong();
+
+void create()
+{
+        set_name("老板", ({"lao ban", "boss"}));
+        set("age", 52);
+        set("title","装备加工店");
+        set("gender", "男性");
+        set("int", 35);
+        set("long","专门负责给兵器打孔的手艺人。\n");
+        set("attitude", "friendly");
+        set("combat_exp", 40000);
+        set("daoxing", 100000);
+        set("max_force", 400);
+        set("force", 400);
+        set("force_factor", 5);
+        set_skill("unarmed", 60);
+        set_skill("dodge", 60);
+        set_skill("parry", 60);
+        set_skill("literate", 150);
+        set("inquiry", ([   
+                "打孔" : (: ask_jiagong :),
+        ]) );
+        setup();
+        carry_object("/d/obj/cloth/linen")->wear();
+}
+
+void init()
+{
+        call_out("greeting", 1, this_player());
+        add_action("do_agree","agree");
+        add_action("do_dakong","dakong");
+        ::init();
+}
+
+void greeting(object who) 
+{
+        if( !who || environment(who) != environment() ) return;
+        tell_object(who,"这位"+RANK_D->query_respect(who)+"，你是来给装备打孔(ask boss about 打孔)的吗？\n");  
+}
+
+int ask_jiagong()
+{               
+        object me = this_player();
+        object ob = this_object();
+                
+        if( !me || environment(me) != environment() ) return 0;
+        
+        if( me->is_busy() || me->is_fighting() ){
+                command("say 你先忙完再说吧。\n");
+                return 1;
+        }
+     
+        if( ob->is_busy() || ob->is_fighting() ){
+                command("say 先等等，我正忙着呢。\n");
+                return 1;
+        }
+        
+        if(me->query("max_force")<100 || me->query("max_mana")<100){
+                command("say 你的内功修为不够。\n");
+                return 1;
+        }
+        
+        if(me->query("combat_exp")<500000 ){
+                command("say 你的实战经验太少了。\n");
+                return 1;
+        }
+        
+        if(me->query("daoxing")<1000000 ){
+                command("say 你的道行太低了。\n");
+                return 1;
+        }
+        
+        if(me->query("balance")<10000000 ){
+                command("say 打一个孔需要一千两黄金啊，你还是先攒够钱再来吧。\n");
+                return 1;
+        }
+       
+        command("say 给装备打孔花费很高喔，打一个孔要降你100点内力，100点法力，50万武学，1000年道行和1000两黄金外加一个终极宝石。\n");
+        command("say 你真的要给你的兵器或护具打孔吗？如果确定，请表示同意(agree)。\n");
+        me->add_temp("wait_agree",1);
+        return 1;
+}
+
+int do_agree()
+{       
+        object me=this_player();
+        if(!me->query_temp("wait_agree")){
+                command("say 鬼鬼祟祟的想干什么？\n");
+                return 1;
+        }
+        command("say 请输入dakong xxx(装备id)。\n");
+        me->add_temp("answer_agree",1);
+        return 1;
+}
+
+int do_dakong(string arg)
+{       
+        int i,j,inset_hole;
+        object *ilist,obj;
+        object me = this_player();
+        object ob = this_object();
+                        
+        if(!me->query_temp("answer_agree")){
+                command("say 鬼鬼祟祟的想干什么？\n");
+                command("hammer "+me->query("id") );
+                return 1;
+        }
+               
+        if(!arg){
+                write("你要给什么东西打孔？\n"); 
+                return 1;
+        }
+
+        obj=present (arg,me);
+        inset_hole = obj->query("inset_hole");
+        
+        if(obj->query("inset_hole")<2){
+                tell_object(me,"老板说道：本店不负责劣质装备的加工。\n");
+                return 1;
+        }
+        
+        if(obj->query("level_quest")==50 ){
+                if(obj->query("inset_hole") ==4){
+                        tell_object(me,"老板说道：这件装备已经不能再打孔了。\n");
+                        return 1;
+                }
+        }
+        
+        if(obj->query("imbued") ){
+                if(obj->query("inset_hole") ==5){
+                        tell_object(me,"老板说道：这件装备已经不能再打孔了。\n");
+                        return 1;
+                }
+        }
+        
+/*
+        i = 0;
+        ilist = all_inventory(me); 
+        j = sizeof(ilist); 
+        while (j--){ 
+                if( ilist[j]->query("b_lvl")>=22 )
+                        i++;
+                else
+                continue;
+        }             
+                        
+        if(i < 1)          
+                return notify_fail("给装备打孔身上还需带有一个终极宝石。\n");          
+*/
+        message_vision(CYN"不愧是手艺人，不消片刻功夫，这件精良的装备上就被加工出了一个圆圆的孔。\n"NOR,ob);         
+        me->add("combat_exp",-500000);
+        me->add("daoxing",-1000000);
+        me->add("balance",-10000000);
+        me->add("max_force",-100);
+        me->add("max_mana",-100);       
+        for (j = 0; j<5; j++) {
+                if( ilist[j]->query("b_lvl")>=22 ) 
+                        destruct(ilist[j]);                             
+        }              
+        inset_hole = inset_hole + 1;
+        obj->set("inset_hole",inset_hole);   
+        obj->add("dakong_mark",1);
+        obj->set("long",obj->query("long")+"经过加工后，目前总共有"+obj->query("inset_hole")+"个孔。\n"); 
+        obj->save();
+        command("say 完工啦。\n");     
+        command("sweat");  
+        me->delete_temp("wait_agree");
+        me->delete_temp("answer_agree");               
+        return 1;
+}

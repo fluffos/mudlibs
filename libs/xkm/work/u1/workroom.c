@@ -1,0 +1,43 @@
+//未经授权，请不要修改此room
+//thank
+inherit ROOM;
+#include <ansi.h>;
+void create()
+{
+        set("short", HIW"第九空间"NOR);
+        set("long", WHT"简简单单的房间，这是snow一生工作的地方。
+里面除了一张办公桌和一台电脑之外，值得可看的就是那一张画了。
+上面的内容是："NOR"\n
+             ∴°★．☆° ．★·°∴°★．° ．·。∴
+             ☆ ．·°∴° ☆．．·°∴°．☆°★°∴
+             °∴ 那怕星际无垠 ☆° ．·★°∴°．°°
+             ∴°．°★ ．·°∴°．°∴°．★☆
+             °．☆° ．★·我也要追到你 °．°°．★
+             ．·°∴★°．°∴°．☆° ．·°∴°．°
+             ．·°∴°★．°．∴·°°并永远爱你∴☆
+\n"NOR);
+        set("exits", ([ /* sizeof() == 1 */
+"gc":"/d/city/guangchang",
+"south":"/d/wizard/wizard_room",
+                  ]));
+        set("no_clean_up", 0);
+        set("no_fight", 1);
+        set("valid_startroom", 1);
+        setup();
+     call_other("/clone/board/snow_b", "???");
+//        replace_program(ROOM)
+}
+void init()
+{
+   object me;
+   me = this_player();
+   if ((string)me->query("id")=="snow" ){
+      return;
+   }
+   else
+   {
+   me->delete("env/invisibility");
+   tell_object(this_player(), BBLU+HIY"你到了第九空间隐身功能自动被切断。\n" NOR );
+   message_vision(BLINK+HIR"$N到了第九空间被飘雪㊣切断了隐身功能！\n"NOR,me);
+   }
+}

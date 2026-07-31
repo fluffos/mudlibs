@@ -1,0 +1,32 @@
+// SN:CdQlY4=iMjZNZZ1m
+// ITEM Made by player(炎影:sinewind) /data/item/s/sinewind-wqwy.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Sat Feb 14 16:45:12 2004
+#include <ansi.h>
+#include <weapon.h>
+
+inherit SWORD;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;31m无情[31m无义[2;37;0m", ({ "wqwy" }));
+	set_weight(9000);
+	set("item_make", 1);
+	set("unit", "柄");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一柄剑。
+无情无义[2;37;0m
+剑柄上刻着一行小字：炎影(sinewind)
+");
+	set("value", 2100000);
+	set("point", 190);
+	set("material", "magic stone");
+	set("wield_msg", "[1;31m刹那间只见飞花全身顿时浮现出一层刚猛的劲气，将你全全笼罩。[2;37;0m\n");
+	set("unwield_msg", "[1;37m　你一仰脖，吞下了一颗[1;35m玄黄紫清丹[1;37m，只见你浑身一颤，七窍都冒出白烟来。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	init_sword(apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

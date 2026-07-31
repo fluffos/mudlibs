@@ -1,0 +1,133 @@
+/************************
+File:   Shuihu.c
+Create: Play
+Time:   4/25/2002
+************************/
+#include <ansi.h>;
+inherit ITEM;
+string *water_msg = ({
+"提起水壶浇灌花草。。。",
+"将水壶中的清水浇灌在葱绿的花草上。。。",
+"细心的为花草浇灌清水。。。",
+"把水壶提得高高的，使清水淋在娇嫩的花朵上。。。"
+});
+
+void create()
+{
+        set_name(CYN"水壶"NOR, ({"shui hu", "hu"}));
+        if( clonep() )
+                set_default_object(__FILE__);
+        else {
+                set("unit", "个");
+                set("long", "一个注(zhu)满水后用来浇灌(jiaoguan)花草的水壶。\n");
+                set("value", 0);
+                set("mrjob", 1);
+                set_weight(500);
+        }
+        setup();
+}
+void init()
+{
+        add_action("do_jiaoguan", ({"jiaoguan","water"}));
+        add_action("do_zhu", ({"zhu","zhuman"}));
+}
+
+int do_zhu(string arg)
+{
+	object me;
+	me = this_player();
+	if(!arg||arg==""||arg!=query("id"))
+	return 0;
+	if(!environment(me)->query("resource/water"))
+	      return notify_fail("这里没有浇灌用的水。\n");
+	if(query("fill_water")&&query("fill_water")>=50)
+	      return notify_fail("水壶里已经装满了清水。\n");
+	
+	set("long", "一个注(zhu)满水后用来浇灌(jiaoguan)花草的水壶。\n");
+        add("long", "水壶里装满了清水。\n");
+       	message_vision("$N取出$n注满了清水。\n",
+                 	me,this_object());
+        this_object()->set("fill_water",50);
+	return 1;
+}
+int do_jiaoguan(string arg)
+{
+	mapping job;
+	object me, home;
+	string smg;
+	int i;
+	me = this_player();
+	job = me->query_temp("Mrjob");
+	if(!job) 
+	      return notify_fail("什么？\n");
+	if(!job["content"]||job["content"]!="water")
+	      return notify_fail("什么？\n");
+	if(me->query_temp("Mrjob_over"))
+	      return notify_fail("你已经完成"+job["type"]+"的工作了。\n");
+        if(me->is_fighting())
+	      return notify_fail("你没时间做这件工作。\n");
+	if(!query("fill_water"))
+	      return notify_fail("你的水壶里没有水。\n");
+	if(me->query_temp("Mrjob_water"))
+	      return notify_fail("你正在浇灌花草。\n");
+	if(me->query("jingli")<15)
+	      return notify_fail("你的精神太差，不能从事此项工作。\n");
+	if(!environment(me)->query("water_f"))
+	      return notify_fail("这里没有花草可以浇灌。\n");
+	
+	me->set_temp("Mrjob_water",1);
+       	message_vision("$N提起$n开始浇灌花草。。。\n",
+                 	me,this_object());
+                remove_call_out("go_water");
+        	call_out("go_water",3,me,job);
+        me->start_busy(2);
+        return 1;
+}
+int go_water(object me,mapping job)
+{
+	string msg;
+
+        if(me->query_temp("Mrjob_amu")>10+random(5))
+        {
+        	write("你完成了"+job["type"]+"的工作，可以回去交差了。\n");
+	        me->set_temp("Mrjob_hortation",1+random(me->query_temp("Mrjob_amu"))/2);
+                me->set_temp("Mrjob_over",1);
+                me->delete_temp("Mrjob_water");
+	        me->delete_temp("Mrjob_amu");
+
+                me->stop_busy();
+                return 1;
+        }
+	if(me->query("jingli")<15||me->is_fighting()||
+	   !living(me)||!environment(me)->query("water_f")) 
+	{
+		me->delete_temp("Mrjob_water");
+		write("你中途停止了浇灌花草。\n");
+		return 1;
+	}
+	if(me->query_temp("Mrjob_time")<time())
+	{
+		me->delete_temp("Mrjob_water");
+                me->set_temp("Mrjob_over",1);
+		write("你没有及时完成浇灌花草的工作，可以回去交差了。\n");
+		return 1;
+	}
+	if(!query("fill_water"))
+	{
+		set("long", "一个注(zhu)满水后用来浇灌(jiaoguan)花草的水壶。\n");
+                me->delete_temp("Mrjob_water");
+        	write("水壶里的水用光了。\n");
+                return 1;
+	}
+
+        msg = water_msg[random(sizeof(water_msg))];
+       	message_vision("$N"+msg+"\n",  	me);
+        add("fill_water",-1);
+                me->start_busy(3);
+                me->add_temp("Mrjob_amu",1);
+                me->add("jingli", -me->query_temp("Mrjob_amu"));
+                remove_call_out("go_water");
+        	call_out("go_water",8+random(4),me,job);
+        
+	return 1;
+}

@@ -1,0 +1,18 @@
+// SN:JFfh7RLlk[TEk65l
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[37m仙鹤[2;37;0m", ({"xian he"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "这是我的小仙鹤！
+它是寒夜看雪的坐骑。
+");
+        set_temp("owner_id", "xwb");
+        set_temp("owner_name", "寒夜看雪");
+        ::setup();
+}
+

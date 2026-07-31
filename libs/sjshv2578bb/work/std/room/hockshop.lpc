@@ -1,0 +1,418 @@
+ /******************************************/
+/* MUDLIB：Glory of Days Past 〓光辉岁月〓 */
+/* Updated Admin By Waiwai@2003/04/09     */
+/* Admin Email：wkzstory@21cn.com         */
+/******************************************/
+// Old code from Find.
+// Update by waiwai@2004/01/16
+// 为了考虑到系统负担问题，禁止随意改变可保存数量
+// 因为当票的形式已经成为很少为人所用的东西，所以
+// 给予彻底删除掉，系统多余的利用率极低的设置还是
+// 能减少就减少的好。。。
+// Modified by kuku@2004/02/22
+
+/* 收购价和原值的比例 */
+#define sell_rate 7/10
+
+/* 可以保存的物品种类最大量 */
+#define CAN_SAVE_OBJECT 100
+
+#include <ansi.h>
+#include <mudlib.h>
+
+inherit ROOM;
+inherit F_SAVE;
+
+int do_sellt(object ob,object me);
+
+mapping pawned_objects = ([]);
+
+/* 可以保存的物品个数最大数量 */
+nosave int max_items = 500;
+
+/* 价值小于 10 两银子的物品当铺不收 */
+nosave int min_value = 1000;
+
+#ifdef WIZARD_FLAG
+private int check_pawn_object(object me,object ob)
+{
+string name;
+
+if(!objectp(me) || !objectp(ob))
+return 0;
+
+// 无论是卖到当铺的东西玩家均可以通过正常渠道接触到
+      // 因此只要是 wiz_ob 物品就不允许流入当铺，无论动作人是不是巫师
+if(ob->query_wiz_flag() || ob->query("wiz_cloneF") )
+{
+name = ob->name();
+log_file("player/wiz_ob",sprintf("[%s] %s在%s%s%s %s(%s.c) 被系统没收。\n",
+log_time(), log_id(me), MISC_D->find_place(environment(me)),
+environment(me)->query("short"),
+(ob->query("wiz_cloneF"))?"卖"+ob->query("wiz_cloneF")+"给的":"卖巫师物品",
+name, base_name(ob) ));
+notify_fail(ob->name()+"是来自巫师被系统没收了，请立刻向主管天神做出合理解释！\n");
+destruct(ob);
+return 0;
+}
+else
+return 1;
+}
+#endif
+
+/* 该当铺存放文件路径和名称 */
+string query_save_file()
+{
+string name;
+
+name = base_name(this_object());
+if(name[0..0] == "/")
+name = name[1..];
+name = replace_string(name,"/","_");
+
+return DATA_DIR+"hockshop/"+name;
+}
+
+void setup()
+{
+::setup();
+seteuid(getuid());
+restore();
+}
+
+void init()
+{
+add_action("do_sell", "sell");
+add_action("do_list", "list");
+add_action("do_buy", ({"buy","mai"}));
+}
+
+int do_sellob_filter(object ob)
+{
+mixed ns;
+
+if(!objectp(ob))
+return 0;
+
+if( ob->query("money_id") )
+return notify_fail("这是「钱」，你没见过吗？\n");
+
+if(ob->is_food())
+return notify_fail("食品留着自己吃吧。\n");
+
+if(ob->is_corpse())
+return notify_fail("这是谁的尸首快搬走，我们这还要做生意呢。\n");
+
+if(ob->is_weapon())
+return notify_fail("兵器小店可不敢收，你去铁匠铺问问吧。\n");
+
+if(ob->is_character())
+return notify_fail("小店奉公守法，不敢贩卖人口。\n");
+
+#ifdef WIZARD_FLAG
+if(!check_pawn_object(this_player(),ob))
+return 0;
+#endif
+
+if(ob->query("no_drop") || ob->query("no_stock"))
+return notify_fail("这样东西本店不收。\n");
+
+       if (ob->query("max_liquid") && ob->query("liquid/remaining")<ob->query("max_liquid"))
+               return notify_fail(WHT"拿个喝过的也想来骗钱啊！\n"NOR);
+
+       if (ob->query_max_encumbrance())
+               return notify_fail(WHT"这里不收购容器！\n"NOR);
+
+/*
+       if (ob->query("armor_prop/armor")!=ob->query("armor/max_armor"))
+               return notify_fail(WHT"这个物品已破损不能拿来卖！\n"NOR);
+
+       if (ob->query("weapon_prop/damage")!=ob->query("max_weapon"))
+               return notify_fail(WHT"这个物品已破损不能拿来卖！\n"NOR);
+*/
+
+if( ob->query("no_break") )
+return notify_fail("掌柜的说：神器物品我们这里不敢收购。\n");
+
+if( ob->query("npc_only") || ob->query("deadfly") || ob->query("combine") )
+return notify_fail("掌柜的说：我们这里不收购这样东西。\n");
+
+if( ob->query("material") == "ice" )
+return notify_fail("掌柜的说：冰的东西我们这里没法存放。\n");
+
+if( ob->query("material") == "water" )
+return notify_fail("掌柜的说：水的东西我们这里没法存放。\n");
+
+// 如果是帮会属性物品    
+if(ob->query("area_name"))
+               return notify_fail(CYN"掌柜的惊道：“小的胆子很小，可"
+                     "不敢买"+ob->query("area_name")+"的东西。”\n" NOR); 
+
+       if (ob->query("wiz_only"))
+               return notify_fail(CYN"掌柜的忙摇头道：“小的只有一个脑袋，可"
+                     "不敢买大神的东西。”\n" NOR);
+
+if( ns = ob->query("no_sell")) {
+               if (stringp(ns))
+               return notify_fail(CYN "掌柜的摇摇头，道："+ns+"\n" NOR);
+else
+               return notify_fail(CYN "掌柜的摇摇头，道：“这种东西我"
+                     "不识货，不敢要。”\n" NOR);
+       }
+else
+return 1;
+}
+
+int do_sell(string arg)
+{
+      object ob,*inv,me;
+      int i;
+
+      me=this_player();
+
+if(!arg)
+return notify_fail("你要卖断什么物品？\n");
+
+if(arg!="all")
+{
+if(!(ob = present(arg,me)))
+return notify_fail("你要卖断什么物品？\n");
+
+if(!do_sellob_filter(ob))
+return 0;
+#ifdef WIZARD_FLAG
+if(!check_pawn_object(me,ob))
+return 0;
+#endif
+return do_sellt(ob,me);
+} else {
+inv = all_inventory(me);
+if(!sizeof(inv))
+return notify_fail("你身上没有任何东西。\n");
+for(i=0; i<sizeof(inv); i++)
+{
+if(!do_sellob_filter(ob))
+continue;
+
+#ifdef WIZARD_FLAG
+if(!check_pawn_object(me,ob))
+return 0;
+#endif
+else
+do_sellt(inv[i],me);
+}
+}
+return 1;
+}
+
+int do_sellt(object ob,object me)
+{
+int value, amount;
+string file, msg;
+
+string *sell_msg = ({
+    "破破烂烂，一文不值",
+    "质地低劣，难看之极",
+    "又脏又破，臭气熏天",
+});
+
+if(!objectp(ob) || !objectp(me))
+return 0;
+
+      amount = ob->query_amount(); 
+
+// 为了系统规范和扩展需要，个数性物品，必须严格写有
+// base_value和base_unit，任何巫师都必须认真对待
+      if (amount>0 )
+value = ob->query("base_value");
+else
+value = ob->query("value");
+
+if(!value)
+value = ob->value();
+
+if(!value)
+return notify_fail(sprintf("%s一文不值。\n", ob->query("name")));
+
+if(value < min_value)
+return notify_fail(ob->query("name")+"价值太低，这不收。\n");
+
+// price_ratio和price_num定义在simul_efun的finance里
+// price_ratio用于控制浮动的区域差价
+//value = value*price_ratio(this_object())/100;
+
+// 对于个数性query_mount()物品必须按照实际个数给予计算金钱
+// 但是卖后当铺文件不能累加这个数量，比如500包药，卖时会给
+// 玩家按500包的收购价值计算，但当铺收购后会认定为1包，也就
+// 是list显示是1包的数量，以次数计算数量，而不是实际个数。
+// 这种设定是为了避免达到收购数量限制的问题，比如当铺只收购
+// 500件货物，某人一次性卖了500包药，再有人过来卖当铺就不收
+// 了，这种问题需要避免。虽然按道理应该计算实际的个数在当铺
+// 中，但实际和现实总有特殊性，需要特殊设置的。如果不限制收
+// 购总件数也是不现实的。
+      if( amount )
+value = value * sell_rate * amount;
+else
+value = value * sell_rate;
+
+// 显示必须准确区分个数物品
+      if (amount) {
+
+msg = sprintf("掌柜的唱道：%s%s%d%s，当%s。\n", 
+sell_msg[random(sizeof(sell_msg))], ob->query("name"), 
+amount, ob->query("base_unit"), price_num(value) );
+
+message_vision("$N把身上的"+ amount + ob->query("base_unit") 
++ ob->query("name")+ "拿出卖给了"+query("short")+"。\n",me);
+
+write("\n"+msg);
+
+} else {
+
+msg = sprintf("掌柜的唱道：%s%s一%s，当%s。\n", 
+sell_msg[random(sizeof(sell_msg))],  ob->query("name"), 
+ob->query("unit"), price_num(value) );
+
+message_vision("$N把身上的"+ob->query("name")+"拿出卖给了"+query("short")+"。\n",me);
+
+write("\n"+msg);
+
+}
+
+pay_player(me, value);
+
+// 矿脉类物品卖后直接清除，不保留在物品栏
+if( ob->is_iron_class_res() )
+{
+destruct(ob);
+return 1;
+}
+
+file = base_name(ob);
+
+if(!undefinedp(pawned_objects[file]) )
+{
+if(pawned_objects[file] > max_items)
+return notify_fail(query("short")+"最多收购"+max_items+"件物品，请到别处卖吧。\n");
+else if(pawned_objects[file] < max_items)
+pawned_objects[file]++;
+}
+else if(sizeof(pawned_objects) < CAN_SAVE_OBJECT)
+pawned_objects += ([ file : 1 ]);
+else
+return notify_fail(query("short")+"最多收购"+CAN_SAVE_OBJECT+"个种类的物品，请到别处卖吧。\n");
+
+destruct(ob);
+save();
+
+return 1;
+}
+
+int do_list(string arg)
+{
+string msg,*items;
+int i,n,value, amount;
+float rate;
+
+if(!sizeof(pawned_objects))
+return notify_fail(query("short")+"目前没有任何货物可卖。\n");
+
+//        rate = price_ratio(this_object());
+
+msg = query("short")+"提供销售的所有商品如下，概不赊帐:  \n";
+msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
+msg += "[序号]    [ 商 品 名 称 ]                          [ 卖出现货单价 ]   [ 现 货 量 ]\n";
+msg += "───────────────────────────────────────────\n";
+
+items = keys(pawned_objects);
+
+n = sizeof(items);
+for(i=0;i<n;i++)
+{
+amount = (int)items[i]->query_amount();
+value = items[i]->query("value");
+
+if(!value)
+value = items[i]->value();
+
+//        value = value*rate/100*9/10;
+
+// 显示必须准确区分个数物品
+if( amount >0 ) {
+       msg += sprintf("[%4d] %-"+(34+color_len(items[i]->name()+"("+items[i]->query("id")+")"))+"s %25s → 还剩：%3d%s \n",
+i+1, items[i]->name()+"("+items[i]->query("id")+")",
+price_num(value),
+pawned_objects[items[i]],
+items[i]->query("base_unit") );
+}
+else
+       msg += sprintf("[%4d] %-"+(34+color_len(items[i]->name()+"("+items[i]->query("id")+")"))+"s %25s → 还剩：%3d%s \n",
+i+1, items[i]->name()+"("+items[i]->query("id")+")",
+price_num(value),
+pawned_objects[items[i]],
+items[i]->query("unit") );
+
+}
+
+msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ "HIR+SITE_NAME+"商业行会"NOR" ━━━━━\n";
+msg += "注：请用 "YEL"mai <物品ID>"NOR" 来购买物品。目前"+query("short")+"提供销售 "YEL+(i++)+NOR" 个种类的商品。\n";
+
+this_player()->start_more(msg);
+return 1;
+}
+
+int do_buy(string arg)
+{
+int i,n,value,pay;
+object ob;
+string *items;
+
+if(!sizeof(pawned_objects))
+return notify_fail(query("short")+"里现在没有待出售的货物。\n");
+
+if( !arg )
+return notify_fail("你要买什么东西？\n");
+
+items = keys(pawned_objects);
+n = sizeof(items);
+
+for(i=0;i<n;i++)
+if(items[i]->id(arg))
+break;
+
+if( i >= sizeof(pawned_objects) )
+return notify_fail("你要买什么东西？\n");
+
+value = items[i]->query("value");
+if(!value)
+value = items[i]->value();
+
+//value = value*price_ratio(this_object())/100*9/10;
+
+pay = player_pay(this_player(),value);
+if(!pay || (pay == 2))
+return notify_fail("你身上的钱不够。\n");
+
+ob = new(items[i]);
+//if(pay == 3)
+//ob->set_credit_point_flag();
+
+if( --pawned_objects[items[i]] <= 0)
+map_delete(pawned_objects,items[i]);
+save();
+
+if(!ob->move(this_player())) {
+write("掌柜的说道：你拿不了"+ ob->query("name") +"了，就给你先放这里地上吧。\n");
+ob->move(this_object());
+}
+
+// 显示必须准确区分个数物品
+if( ob->query_amount())
+message_vision("$N掏出钱从"+query("short")+"买下一" + ob->query("base_unit") + ob->name() +
+"，花费："+price_num(value)+"。\n", this_player() );
+else
+message_vision("$N掏出钱从"+query("short")+"买下一" + ob->query("unit") + ob->name() + 
+"，花费："+price_num(value)+"。\n", this_player() );
+
+return 1;
+}

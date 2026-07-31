@@ -1,0 +1,27 @@
+#include "/clone/npc/magic-beast.h"
+void setup()
+{
+	set_name("狮子", ({ "shizi" }));
+		set("gender","男性");
+		set("unit", "只");
+		set("long", "狮子
+它是小刀的宠物。
+");
+	set("owner","zmud");
+	set("owner_name","小刀");
+	last_age_set = 0;
+	set_skill("dodge",554);
+	set_learned("dodge",288000);
+	set_skill("force",6);
+	set_learned("force",0);
+	set_skill("parry",12);
+	set_learned("parry",0);
+	set_skill("taiji-shengong",1000);
+	set_learned("taiji-shengong",0);
+	set_skill("taoism",1000);
+	set_learned("taoism",0);
+	map_skill("force","taiji-shengong");
+
+	::setup();
+}
+

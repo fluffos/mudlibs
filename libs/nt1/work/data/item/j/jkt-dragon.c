@@ -1,0 +1,32 @@
+// SN:m;ld4jb6ILee@>DU
+// ITEM Made by player(渡独:jkt) /data/item/j/jkt-dragon.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Sun May  9 05:18:23 2004
+#include <ansi.h>
+#include <weapon.h>
+
+inherit BLADE;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;36m青龙[1;33m偃月[1;31m刀[2;37;0m", ({ "dragon" }));
+	set_weight(9000);
+	set("item_make", 1);
+	set("unit", "把");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一把刀。
+[1;33m我靠关老爷当年用的冷偃锯都不知道，还活着干吗？[2;37;0m
+刀柄上刻着一行小字：渡独(jkt)
+");
+	set("value", 2100000);
+	set("point", 451);
+	set("material", "magic stone");
+	set("wield_msg", "[1;33m唰的一道金光在你眼前闪过，三山五岳龙声齐鸣，久久不散。[2;37;0m\n");
+	set("unwield_msg", "[1;33m漫天金光顿时消失的无影无踪。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	init_blade(apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

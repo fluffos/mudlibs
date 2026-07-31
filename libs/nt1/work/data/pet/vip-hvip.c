@@ -1,0 +1,18 @@
+// SN:E9VDjXoGNCfYFckI
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("小神[1;33m雕[2;37;0m", ({"hvip diao"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "不大清楚的坐骑.
+它是不大清楚的坐骑。
+");
+        set_temp("owner_id", "vip");
+        set_temp("owner_name", "不大清楚");
+        ::setup();
+}
+

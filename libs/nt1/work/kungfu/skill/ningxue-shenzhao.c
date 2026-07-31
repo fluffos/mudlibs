@@ -1,0 +1,88 @@
+// ningxue-shenzhao.c 凝血神抓
+// by Lonely
+
+#include <ansi.h>
+inherit SKILL;
+
+string *action_msg = ({
+        "$N双掌平平提到胸前，神色沉重的缓缓施出「苍龙探爪」抓向$n的$l",
+        "$N突然身形飞起，双手居高临下一招「飞鹰拨兔」抓向$n的$l",
+        "$N右手一招「黑虎掏心」，迅捷无比地抓向$n的$l",
+        "$N双手施出一招「泰山压顶」，隐隐带着风声抓向$n的$l",
+        "$N左手聚成虎爪状，右手一招「凝血神抓」缓缓抓向$n的$l",
+});
+
+int valid_enable(string usage) { return usage=="claw" ||  usage=="parry"; }
+
+int valid_learn(object me)
+{
+        if (me->query_temp("weapon") || me->query_temp("secondary_weapon"))
+                return notify_fail("练凝血神抓必须空手。\n");
+        if ((int)me->query("max_neili") < 100)
+                return notify_fail("你的内力太弱，无法练凝血神抓。\n");
+        return 1;
+}
+
+mapping query_action(object me, object weapon)
+{
+        return ([
+                "action": action_msg[random(sizeof(action_msg))],
+                "force" : 320 + random(30),
+                "attack": 70 - random(10),
+                "dodge" : 70 - random(10),
+                "parry" : 70 - random(10),
+                "damage_type" : random(2)?"抓伤":"内伤",
+        ]);
+}
+
+int practice_skill(object me)
+{
+        if ((int)me->query("qi") < 40)
+                return notify_fail("你的体力太低了。\n");
+        if ((int)me->query("neili") < 10)
+                return notify_fail("你的内力不够练凝血神抓。\n");
+        me->receive_damage("qi", 30);
+        me->add("neili", -5);
+        return 1;
+}
+
+string perform_action_file(string action)
+{
+        return __DIR__"ningxue-shenzhao/" + action;
+}
+
+mixed hit_ob(object me, object victim, int damage_bonus)
+{
+        int lvl;
+        int flvl;
+
+        lvl  = me->query_skill("ningxue-shenzhao", 1);
+        flvl = me->query("jiali");
+        if (lvl < 80 || flvl < 10 || ! damage_bonus)
+                return;
+
+        if (flvl * 2 + random(lvl) > victim->query_skill("force") &&
+            victim->affect_by("zhua_poison",
+                              ([ "level" : flvl + random(flvl),
+                                 "id"    : me->query("id"),
+                                 "remain": -1,
+                                 "duration" : lvl / 100 + random(lvl / 10) ])))
+        {
+                return HIW "$n" HIW "的身子突然一阵颤抖,牙关咬得咯咯作响，看来是中了$N" HIW "抓上的凝血神抓毒。\n" NOR;
+        }
+}
+
+int query_effect_parry(object attacker, object me) 
+{
+        int lvl;
+        if (objectp(me->query_temp("weapon")))
+                return 0;
+
+        lvl = me->query_skill("ningxue-shenzhao", 1);
+        if (lvl < 80)  return 0;
+        if (lvl < 200) return 50;
+        if (lvl < 280) return 80;
+        if (lvl < 350) return 100;
+        return 120;
+}
+

@@ -1,0 +1,18 @@
+// SN:G<494o_;>Mf:=RCE
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m苏芳的长毛象[2;37;0m", ({"suphande xiang"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "阿哈
+它是猎人的坐骑。
+");
+        set_temp("owner_id", "hunterx");
+        set_temp("owner_name", "猎人");
+        ::setup();
+}
+

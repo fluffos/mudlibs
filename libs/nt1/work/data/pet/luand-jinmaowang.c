@@ -1,0 +1,18 @@
+// SN:^=JL9STNm:dnoZon
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[33m金毛王狮[2;37;0m", ({"jinmaowang shi"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "我没有欺负我的义父
+它是乱挡的坐骑。
+");
+        set_temp("owner_id", "luand");
+        set_temp("owner_name", "乱挡");
+        ::setup();
+}
+

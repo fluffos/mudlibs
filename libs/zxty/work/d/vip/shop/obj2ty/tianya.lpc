@@ -1,0 +1,99 @@
+#include <ansi.h>
+
+
+
+inherit ITEM;
+//int do_jixiang();
+
+
+void create()
+{
+        set_name( HIC"[天涯护符]"NOR, ({ "tianya hufu", "hufu" }) );
+        set_weight(3000);
+        if( clonep() )
+                set_default_object(__FILE__);
+        else {
+                set("unit", "块");
+                set("long", HIC"这是一块天涯护符，虽然本身没什么用，但是能唤醒天涯护具的潜能。"NOR"
+成套装备指令："HIG"huanxing"NOR"
+成套装备："HIC"[天祥防具]"NOR" "HIR"真龙护腕"NOR" "YEL"千里靴"NOR" "HIG"狮王头盔"NOR" "HIY"法藤项圈"NOR" "HIM"风彩羽衣"NOR" "HIC"黄金腰带"NOR" "HIW"逍遥指"NOR"
+成套效果："HIG"精气恢复，内力充沛"NOR"
+保存提示："HIG"请自行保存在VIP柜子里,下线会掉。"NOR"
+使用次数："HIW"一次"NOR"\n");
+                set("no_put",1);
+              set("no_sell",1);
+              set("ty_gift", 1);
+              set("no_get", 1);
+              set("no_give", 1);
+              set("no_drop",1); 
+              set("tianya_money",5);
+                set("unit", "张");      }
+}
+
+  void init()
+{
+  add_action("do_jx","huanxing");
+}
+int do_jx()
+{
+  object wrists,shoes,toukui,necklace,cloth,yaodai,ring;
+
+  object me = this_player();
+  object ob = this_object();
+
+
+        if(!me->is_fighting())
+           return notify_fail("你不在战斗啊！\n");
+        if(me->is_busy())
+           return notify_fail("你正忙着呢!\n");
+        if(!wrists = present("wrists",me))
+           return notify_fail("你还缺少"HIR"真龙护腕"NOR"\n");   
+        if(!shoes = present("qianli shoes",me))
+           return notify_fail("你还缺少"HIW"千里靴"NOR"\n");
+        if(!toukui = present("shiwang toukui",me))
+           return notify_fail("你还缺少"YEL"狮王头盔"NOR"\n");
+        if(!necklace = present("fateng necklace",me))
+           return notify_fail("你还缺少"HIG"法藤项圈"NOR"\n");
+        if(!cloth = present("fengcai cloth",me))
+           return notify_fail("你还缺少"HIM"风彩羽衣"NOR"\n");
+                   if(!yaodai = present("huangjin yaodai",me))
+           return notify_fail("你还缺少"HIC"黄金腰带"NOR"\n");
+                   if(!ring = present("xiaoyao ring",me))
+           return notify_fail("你还缺少"HIM"逍遥指"NOR"\n");
+        if ((wrists->query("equipped")!="worn") || (shoes->query("equipped")!="worn") || (toukui->query("equipped")!="worn") || (necklace->query("equipped")!="worn") || (cloth->query("equipped")!="worn")|| (ring->query("equipped")!="worn")|| (yaodai->query("equipped")!="worn"))   
+           return notify_fail("你必须要穿上一整套[天涯防具]\n");
+        if (me->query_temp("jixiangeff"))
+           return notify_fail("你已经开始呼应[天涯防具]的威力了！\n");
+message_vision(HIG"$N将"HIC"[天祥护符]"NOR""HIG"贴在"HIC"[天涯防具]"HIG"上，五件装备各自呼应起来。$N顿时感到浑身内力充沛！！\n"NOR,me);
+me->add_temp("jixiangeff",1);
+call_out("jixiangeff",3,me);
+  destruct(this_object());
+  return 0;
+}
+void jixiangeff(object me)
+{ 
+message_vision(HIY"$N的一套"HIC"[天祥防具]"HIY"突然放出光芒，$N只感到浑身血脉通畅，精神百倍。\n"NOR,me);
+         me->add("neili",me->query_con()*50);
+         me->add("jingli",me->query_con()*50);
+         me->add("qi",me->query_con()*50);   
+         me->add("jing",me->query_con()*50);         
+         if (me->query("qi")>me->query("max_qi"))
+         {
+                 me->set("qi",me->query("max_qi"));
+         }  
+         if (me->query("jing")>me->query("max_jing"))
+         {
+                 me->set("jing",me->query("max_jing"));
+         }                         
+         if (me->query("neili")>me->query("max_neili"))
+         {
+                 me->set("neili",me->query("max_neili"));
+         }     
+                  if (me->query("jingli")>me->query("eff_jingli"))
+         {
+                 me->set("jingli",me->query("eff_jingli"));
+         }     
+me->delete_temp("jixiangeff");
+
+}
+

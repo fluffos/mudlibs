@@ -1,0 +1,18 @@
+// SN:ChhWCf]7H:a>9EWW
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[37m不死兽[2;37;0m", ({"busi shou"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "不会死
+它是罪不至死的坐骑。
+");
+        set_temp("owner_id", "nonono");
+        set_temp("owner_name", "罪不至死");
+        ::setup();
+}
+

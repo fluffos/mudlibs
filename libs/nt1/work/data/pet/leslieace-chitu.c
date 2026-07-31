@@ -1,0 +1,18 @@
+// SN:kZbjkJXQYh1RTRhB
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[31m赤兔马[2;37;0m", ({"chitu ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "日行千里
+它是南宫图的坐骑。
+");
+        set_temp("owner_id", "leslieace");
+        set_temp("owner_name", "南宫图");
+        ::setup();
+}
+

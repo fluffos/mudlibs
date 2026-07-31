@@ -1,0 +1,18 @@
+// SN:B_8EZfR\o0l[bB<R
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;35m九尾妖狐[2;37;0m", ({"jiuwei hu"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "你是猪。你是猪。你是猪。你是猪。你是猪
+它是卡卡西的坐骑。
+");
+        set_temp("owner_id", "kkx");
+        set_temp("owner_name", "卡卡西");
+        ::setup();
+}
+

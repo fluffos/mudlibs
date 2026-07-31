@@ -1,0 +1,39 @@
+// ITEM Made by player(南巷故人:a304374772_1) /data/item/a/a304374772_1-sqfmd.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Tue Mar  7 17:05:53 2023
+#include <ansi.h>
+#include <weapon.h>
+
+inherit BLADE;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;36m三千繁梦刀[2;37;0m", ({ "sqfmd" }));
+	set_weight(750);
+	set("item_make", 1);
+	set("unit", "把");
+	set("long", "这是由[1;37m世界[2;37;0m炼制而成的一把刀。
+
+[1;36m灵散红尘渺无迹
+[1;36m月迷巴蜀似木人
+[1;36m霜叶舞剑真似假
+[1;36m狐媚情仇有还无
+[1;36m刀剑辉映情难禁
+[1;36m恩怨纠缠叹无份
+[1;36m千里烟波寻踪影
+[1;36m神魔乱舞乱烟尘[2;37;0m
+刀柄上刻着一行小字：南巷故人(a304374772_1)
+");
+	set("value", 200100000);
+	set("point", 22000);
+	set("material", "silk");
+	set("wield_msg", "\n[1;36m十步杀一人\n[1;36m千里不留行[2;37;0m\n");
+	set("unwield_msg", "\n[1;36m蛰龙已惊眠\n[1;36m一啸动千山[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	init_blade(apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

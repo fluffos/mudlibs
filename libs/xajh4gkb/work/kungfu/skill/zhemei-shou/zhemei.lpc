@@ -1,0 +1,200 @@
+
+#include <ansi.h>
+#include <skill.h>
+#include <weapon.h>
+#include <combat.h>
+#include <condition.h>
+
+#define TANMEI "「" HIR "【弹梅.落雪.散花香】" NOR "」"
+
+inherit F_SSERVER;
+
+
+int perform(object me, object target)
+{
+	object weapon2;
+	int damage,extra,i,ap, dp,count;
+	string msg;
+
+	if (!target ) target = offensive_target(me);
+	if (!target || !target->is_character() || !me->is_fighting(target) )
+		return notify_fail(TANMEI "只能对战斗中的对手使用。\n");
+	if (objectp(me->query_temp("weapon")))
+		return notify_fail(TANMEI "只能空手施展。\n");
+	if (target && target->query_temp("apply/shade_vision")) 
+		return notify_fail("对方隐身了，你看不到"+target->query("name")+"。\n"); 		
+	if ((int)me->query_skill("beiming-shengong", 1) < 500 && (int)me->query_skill("bahuang-gong", 1) < 500 && (int)me->query_skill("xiaowuxiang", 1) < 500)
+		return notify_fail("你的逍遥门内功火候不够，难以施展" TANMEI "。\n");
+//	if ( me->query_skill_mapped("force") != "beiming-shengong" && me->query_skill_mapped("force") != "bahuang-gong" && me->query_skill_mapped("force") != "xiaowuxiang")
+//		return notify_fail(HIC"不使用本门内功，如何使用本门绝学!\n"NOR);
+	if (me->query_skill_mapped("unarmed") != "zhemei-shou" && me->query_skill_mapped("unarmed") != "liuyang-zhang")
+		return notify_fail("你没正确激发相应技能 ，难以施展" TANMEI "。\n");
+	if ((int)me->query_skill("force", 1) < 500)
+		return notify_fail("你的基本内功等级不够，难以施展" TANMEI "。\n");
+	if ((int)me->query_skill("zhemei-shou", 1) < 500)
+		return notify_fail("你的逍遥折梅手等级不够，难以施展" TANMEI "。\n");
+	if ((int)me->query_skill("lingboweibu", 1) < 500)
+		return notify_fail("你的凌波微步等级不够，难以施展" TANMEI "。\n");
+    if(me->is_busy())
+        return notify_fail("你现在正忙着！\n");
+	if (me->query("max_jingli") < 100000)
+		return notify_fail("你的精力修为不足，难以施展" TANMEI "。\n");
+	if (me->query("max_neili") < 100000)
+		return notify_fail("你的内力修为不足，难以施展" TANMEI "。\n");
+	if (me->query("neili") < 10000)
+		return notify_fail("你现在真气不足，难以施展" TANMEI "。\n");
+	if (me->query("jingli") < 10000)
+		return notify_fail("你现在精力不足，难以施展" TANMEI "。\n");
+	if (target && !living(target))
+		return notify_fail("对方都已经这样了，用不着这么费力吧？\n");
+	if (me->query_temp("autolian"))
+		return notify_fail("你正在发动自动连招！\n"); 	
+	if ( me->query_temp("cooldown") )	//CD写法	2017.9.7添加
+		return notify_fail("你处于技能冷却状态中，过会在使用吧。\n");
+		
+	msg = HIM "$N" HIM "深深吸进一口气，单手挥出，掌缘顿时霞光万道，漾出七色虹彩向$n" HIM "席卷而至。\n" NOR;
+	message_vision(msg, me, target);
+	me->set_temp("cooldown", 1);	//CD写法	2017.9.7添加
+	call_out("del_cooldown", 3, me);	//CD写法1
+	ap = me->query("xyzx_sys/level") + me->query_skill("zhemei-shou", 1) + me->query_skill("unarmed") + me->query_skill("force");
+	dp = target->query("xyzx_sys/level") + target->query_skill("dodge") + target->query_skill("parry");
+	ap = ap*((int)me->query("breakup")+(int)me->query("breakup")*(int)me->query("breakup")+100)/100;
+	dp = dp*((int)target->query("breakup")+(int)target->query("breakup")*(int)target->query("breakup")+100)/100;
+	damage = dp/3 + random(ap/3);
+	damage = damage*(100-target->query_meridian())/100;
+	extra = me->query_skill("zhemei-shou",1)/10;
+	count = me->query_skill("zhemei-shou",1)/600;
+	if(count > 6 ) count = 6;
+	if(count < 1 ) count = 1;
+	if (objectp(weapon2 = target->query_temp("weapon")))
+	{
+		msg = CYN "$N凝神闭息，打算施展空手入白刃的绝技. \n";
+		message_vision(msg, me,target);	
+		if( random(ap) >dp/3 )
+		{
+			me->add("neili",-300);
+			me->add("jingli",-300);
+
+			weapon2->unequip();
+			weapon2->move(me);
+			target->receive_damage("qi", damage,me);
+			target->receive_wound("qi", damage/2,me);
+			msg = "$N使出空手入白刃的绝招, $n顿时觉得眼前一花，手腕一麻，手中兵刃脱手而出！\n" NOR;
+			message_vision(msg, me, target, damage, HBWHT+HIM"气血伤害"NOR);	//2018.10.2阿飞改，优化化学伤害显示的写法
+//			if (userp(me) && me->query("env/no_combat_msg")<4) tell_object(me, HIW"该绝招对敌人气血的外伤为"+ damage +"，内伤为"+ damage/2 +"。\n" NOR);
+		}
+		else
+		{
+			msg = "可是$n的看破了$N的企图，立刻采取守势，使$N没能夺下兵刃。\n"NOR;
+			message_vision(msg, me, target);
+		}
+	}
+if ((int)me->query_skill("zhemei-shou", 1) > 1000 && (int)me->query_skill("lingboweibu", 1) > 1000)
+{
+	damage = dp/2 + random(ap/3);
+	damage = damage*(100-target->query_meridian())/100;
+	if (random(ap) > dp/3)
+	{
+		if (me->query("max_neili") > target->query("max_neili") * 2)
+		{
+			target->receive_damage("qi", damage,me);
+			target->receive_wound("qi", damage/2,me);
+			me->add("neili", -200);
+			me->add("jingli", -200);			
+			msg = HIM "只听$n" HIM "一声尖啸，$N" HIM "的七色掌"
+			       "劲已尽数注入$p" HIM "体内，顿时将$p" HIM "化"
+			       "为一滩血水。\n" NOR "( $n" RED "受伤过重，已"
+			       "经有如风中残烛，随时都可能断气。" NOR ")\n";
+			message_vision(msg, me, target, damage, HBWHT+HIM"气血伤害"NOR);	//2018.10.2阿飞改，优化化学伤害显示的写法
+//			if (userp(me) && me->query("env/no_combat_msg")<4) tell_object(me, HIW"该绝招对敌人气血的外伤为"+ damage +"，内伤为"+ damage/2 +"。\n" NOR);
+		}
+		else
+		{
+			me->add("neili", -200);
+			me->add("jingli", -200);
+			target->receive_damage("jing", damage,me);
+			target->receive_wound("jing", damage/2,me);
+			msg = HIM "$n" HIM "只是微微一愣，$N" HIM "的七色掌劲已破体而"
+			       "入，$p" HIM "便犹如身置洪炉一般，连呕数口鲜血。\n" NOR;	
+			message_vision(msg, me, target, damage, HBWHT+HIM"精神伤害"NOR);	//2018.10.2阿飞改，优化化学伤害显示的写法
+//			if (userp(me) && me->query("env/no_combat_msg")<4) tell_object(me, HIW"该绝招对敌人气血的外伤为"+ damage/3 +"，内伤为"+ damage/5 +"。\n" NOR);
+		}
+	}
+	else
+	{
+		msg = CYN "$p" CYN "见状大惊失色，完全勘破不透$P"
+		       CYN "招中奥秘，当即飞身跃起丈许，躲闪开来。\n" NOR;
+		message_vision(msg, me, target);
+		me->add("neili", -200);
+	}
+}
+if ((int)me->query_skill("zhemei-shou", 1) > 1500 && (int)me->query_skill("lingboweibu", 1) > 1500)
+{
+	msg = HIY "$N於咆哮声中纵身而起，一个翻腾後双手化掌为爪扑面而至，势要把$n撕开两半！\n" NOR;
+	message_vision(msg, me, target);
+	me->add_temp("apply/attack", extra);
+	me->add_temp("apply/damage", extra);
+	for (i=0; i< count ; i++)
+	{
+		msg = HIR  "$N双手呈鹰爪状，全身腾空，左右掌穿插翻飞，疾向$n抓去！" NOR;
+		COMBAT_D->do_attack(me,target, me->query_temp("weapon"), TYPE_REGULAR,msg);
+		me->add("neili", -150);
+		me->add("jingli", -150);
+	}
+	me->add_temp("apply/attack", -extra);
+	me->add_temp("apply/damage", -extra);
+	msg = HIW "$n面色变得惨白如纸，双手提起，指尖发出莹莹的光芒。 $n忽然化作一丝飘云般闪到$N面前，双爪电击而下抓向$N心口！ \n"NOR;
+	message_vision(msg, me, target);
+}
+if ((int)me->query_skill("zhemei-shou", 1) > 2000 && (int)me->query_skill("lingboweibu", 1) > 2000)
+{
+	damage = dp/2 + random(ap/2);
+	damage = damage*(100-target->query_meridian())/100;
+	if( random(ap) > dp/3 )
+	{
+		target->receive_damage("qi", damage,me);
+		target->receive_wound("qi", damage/2,me);
+        target->apply_condition("no_enforce", 20);
+		me->add("neili",-300);
+		me->add("jingli",-300);
+		msg = HIR "$N双手幻出漫天手影，宛若朵朵梅花，将$n笼罩在一片梅海之中！\n" NOR;
+		message_vision(msg , me, target, damage, HBWHT+HIM"气血伤害"NOR);	//2018.10.2阿飞改，优化化学伤害显示的写法
+//		if (userp(me) && me->query("env/no_combat_msg")<4) tell_object(me, HIW"该绝招对敌人气血的外伤为"+ damage +"，内伤为"+ damage/2 +"。\n" NOR);
+	}
+	else
+	{
+		msg = HIW "$n笑看红尘，不动如山，一指点出，花落满天！\n" NOR;
+		message_vision(msg , me, target);
+	}	
+}
+if ((int)me->query_skill("zhemei-shou", 1) > 3000 && (int)me->query_skill("lingboweibu", 1) > 3000)
+{
+	me->add_temp("apply/damage", extra*2);
+	me->add_temp("apply/attack", extra*2);
+	message_vision(HIW"【弹 梅】"NOR, me, target);	
+	msg = YEL "$N微微一笑，左手向$n轻轻弹出，好像是要弹去梅花上面的露珠！" NOR;
+	COMBAT_D->do_attack(me,target, me->query_temp("weapon"), 1,msg);
+	message_vision(HIW"【落 雪】"NOR, me, target);
+	msg = YEL "$N双手急挥，左右摇摆，幻出漫天梅花，飞雪似的向$n落来！" NOR;
+	COMBAT_D->do_attack(me,target, me->query_temp("weapon"), 2,msg);
+	message_vision(HIW" 【散花香】\n"NOR, me, target);
+	msg = YEL "$n突然闻到一股若有若无的香味，心猿意马之中$N的双手已向$p胸口拍来！" NOR;
+	COMBAT_D->do_attack(me,target, me->query_temp("weapon"), 3,msg);
+	me->add_temp("apply/damage", -extra*2);
+	me->add_temp("apply/attack", -extra*2);
+	me->add("jingli",-1000);
+	me->add("neili",-1000);	
+}	
+	me->start_busy(1);
+	return 1;
+}
+
+void del_cooldown(object me)	//CD写法1
+{ 
+	if ( !objectp(me) ) return;
+	if ( me->query_temp("cooldown") )	
+	{
+		me->delete_temp("cooldown");
+		tell_object(me, HIM"你呼出一口气，缓缓的将内力收回丹田。\n"NOR);
+	}	
+}

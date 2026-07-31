@@ -1,0 +1,18 @@
+// SN:D:BWTmA^^jc>VAMk
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;31m小红马[2;37;0m", ({"red ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "$HIR$火
+它是青莲剑歌的坐骑。
+");
+        set_temp("owner_id", "lotus");
+        set_temp("owner_name", "青莲剑歌");
+        ::setup();
+}
+

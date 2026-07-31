@@ -1,0 +1,11 @@
+// SN:?7\Y9:04hn\0LSJ0
+// wedding-ring.c
+
+#include "/clone/misc/wedding-ring.h"
+
+void setup()
+{
+        set("long", "这是慕容闻琳和欧阳闻浩的结婚戒指，是两人的定情之物。
+");
+        ::setup();
+}

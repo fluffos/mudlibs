@@ -1,0 +1,18 @@
+// SN:0?TI>3D5TY_ooOd=
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("憨豆熊[2;37;0m", ({"enter_ququ xiong"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "finish
+它是柳溱的坐骑。
+");
+        set_temp("owner_id", "along");
+        set_temp("owner_name", "柳溱");
+        ::setup();
+}
+

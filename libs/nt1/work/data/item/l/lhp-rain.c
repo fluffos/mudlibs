@@ -1,0 +1,35 @@
+// SN:@B;]9JAiUa<7P6B;
+// ITEM Made by player(少龙:lhp) /data/item/l/lhp-rain.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Mon Jun  7 13:26:28 2004
+#include <ansi.h>
+#include <armor.h>
+
+inherit HANDS;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;35m梧桐细雨[2;37;0m", ({ "rain" }));
+	set_weight(4500);
+	set("item_make", 1);
+	set("unit", "双");
+	set("long", "这是由[1;37m寰宇天晶[2;37;0m炼制而成的一双铁掌。
+[1;35m梧桐更兼细雨，到黄昏、点点滴滴。这次第，怎么一个愁字了得！[2;37;0m
+铁掌缘上刻着一行小字：少龙(lhp)
+");
+	set("value", 4100000);
+	set("point", 1356);
+	set("material", "tian jing");
+	set("wear_msg", "[1;35m寻寻觅觅，冷冷清清，凄凄惨惨戚戚。乍暖还寒时候，最难将息。[2;37;0m\n");
+	set("remove_msg", "[1;35m三杯两盏淡酒，怎么敌他、晚风急！雁过也，正伤心，却是旧时相识。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/armor", 10);
+	set("armor_prop/unarmed_damage", apply_damage());
+	set("armor_prop/hand", 10);
+	set("armor_prop/strike", 10);
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

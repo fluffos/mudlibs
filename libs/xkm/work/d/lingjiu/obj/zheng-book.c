@@ -1,0 +1,41 @@
+//Cracked by program
+
+inherit ITEM;
+string* names = ({
+        "《阳关三叠》",
+        "《秋塞吟》",
+        "《搔首问天》",
+        "《水仙操》",
+        "《渭城曲》",
+        "《秋风词》",
+});
+ string* longs = ({
+"古筝著录，对演奏技巧、古筝曲目有详尽的介绍。\n",
+"古筝的大撮小撮，各种和音，连弹、刮奏，滑音各种演奏技巧。\n",
+"宫、商、角、徵、羽五音演奏法。\n",
+"身居五徽，左手大拇指按琴上的徽，右手钩五弦等姿势练习法。\n",
+"左右手双弹练习法。\n",
+"一本筝谱，用来练习提高你的音乐技能。\n",
+});
+
+void create()
+{
+   int num = random(6);
+set_name( names[num], ({ "guzheng qupu", "qupu" }));
+        set("long", longs[num]);
+    set_weight(200);
+    if( clonep() )
+            set_default_object(__FILE__);
+    else {
+            set("unit", "本");
+            set("value", 200);
+            set("material", "paper");
+            set("skill", ([
+                    "name": "music",        // name of the skill
+                    "exp_required": 0,      // minimum combat experience required
+                    "jing_cost": 10,        // jing cost every time study this
+                    "difficulty":   21,     // the base int to learn this skill
+                    "max_skill":    60,     // the maximum level you can learn
+            ]) );
+    }
+}

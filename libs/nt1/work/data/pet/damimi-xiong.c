@@ -1,0 +1,18 @@
+// SN:Lm:_c9ihNJ2H64aK
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;33m东方雄狮[2;37;0m", ({"xiong shi"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "cool
+它是段秘密的坐骑。
+");
+        set_temp("owner_id", "damimi");
+        set_temp("owner_name", "段秘密");
+        ::setup();
+}
+

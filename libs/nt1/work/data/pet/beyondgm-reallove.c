@@ -1,0 +1,18 @@
+// SN:Zd028jh=oQK4k]Qo
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;32m真的爱你狼[2;37;0m", ({"reallove lang"}));        
+        set("gender", "男性");                
+        set("unit", "条");
+        set("long", "beyond
+它是惊鸿一瞥的坐骑。
+");
+        set_temp("owner_id", "beyondgm");
+        set_temp("owner_name", "惊鸿一瞥");
+        ::setup();
+}
+

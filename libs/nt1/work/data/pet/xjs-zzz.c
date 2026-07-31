@@ -1,0 +1,18 @@
+// SN:KM@QVboMg?aTJC32
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;31m禽[1;33m兽[2;37;0m", ({"zzz shou"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "个
+它是超级流氓的坐骑。
+");
+        set_temp("owner_id", "xjs");
+        set_temp("owner_name", "超级流氓");
+        ::setup();
+}
+

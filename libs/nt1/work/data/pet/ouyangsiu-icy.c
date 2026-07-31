@@ -1,0 +1,18 @@
+// SN:@FSUA9T8\:GM=RoY
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;36m玄冰虎[2;37;0m", ({"icy hu"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "小家伙
+它是欧阳修的坐骑。
+");
+        set_temp("owner_id", "ouyangsiu");
+        set_temp("owner_name", "欧阳修");
+        ::setup();
+}
+

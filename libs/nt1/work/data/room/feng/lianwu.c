@@ -1,0 +1,32 @@
+// SN:V`8KZW?=AKUiQ=QS
+// File(/data/room/feng/lianwu.c) of feng's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "练武场");
+	set ("long", @LONG
+此处便是听风阁的练武场，人在江湖，武功万万不可荒废。 
+LONG );
+
+	set("exits", ([
+                "west" : __DIR__"houyuan",
+	]));
+
+        set("objects", ([
+                "/clone/npc/mu-ren" : 4,
+        ]));
+
+        set("outdoors", "playertown");
+        set("no_sleep_room", 1);
+
+        setup();
+    
+        set("room_owner", "青衣修罗");
+        set("room_name", "听风阁");
+        set("room_id", "feng");
+        set("room_owner_id", "feng");
+        set("room_position", "三岔口");
+}

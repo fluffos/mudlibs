@@ -1,0 +1,18 @@
+// SN:f<:ZPZ=o3mO]3eeL
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("驴肉火烧驴[2;37;0m", ({"lvroubing lv"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "hehe
+它是超级厨嫂的坐骑。
+");
+        set_temp("owner_id", "string");
+        set_temp("owner_name", "超级厨嫂");
+        ::setup();
+}
+

@@ -1,0 +1,25 @@
+inherit "/inherit/room/city.c";
+
+void create ()
+{
+set ("short", "三城");
+set ("long", @LONG
+
+这是一座古老的城市。
+LONG);
+
+  set("exits", ([
+"east" : "/p/residence/xtuzi986480433", /* sizeof() == 1 */
+  "west" : __DIR__"eastx",
+//  "east" : __DIR__"hanyang3",
+]));
+//  set("no_clean_up", 1);
+
+  setup();
+}
+
+int clean_up()
+{
+      return 0;
+}
+

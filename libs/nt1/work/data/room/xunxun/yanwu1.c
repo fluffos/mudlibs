@@ -1,0 +1,33 @@
+// SN:D5f=0OR]Ve?<[]Ho
+// File(/data/room/xunxun/yanwu1.c) of xunxun's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        set("short", "寻寻演武厅");
+	set ("long", @LONG
+这是寻寻的演武厅，有时有些江湖朋友来会，想一试身手，就在
+这里比武较量。 
+LONG );
+
+	set("exits", ([
+                "west" : __DIR__"yishiting",
+	]));
+
+        set("objects", ([
+                "/clone/weapon/zhubang" : 1,
+                "/clone/weapon/zhujian" : 1,
+                "/clone/weapon/mudao"   : 1,
+        ]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("room_owner", "枪下蛋");
+        set("room_name", "寻寻");
+        set("room_id", "xunxun");
+        set("room_owner_id", "xunxun");
+        set("room_position", "青石官道");
+}

@@ -1,0 +1,18 @@
+// SN:\]1<ZN>GQ7FCSXd3
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("大象[2;37;0m", ({"fans xiang"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "一头大象
+它是弄啊的坐骑。
+");
+        set_temp("owner_id", "zzwwll");
+        set_temp("owner_name", "弄啊");
+        ::setup();
+}
+

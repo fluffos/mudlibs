@@ -1,0 +1,182 @@
+// 神话世界·西游记·版本４．５０
+/* <SecCrypt CPL V3R05> */
+
+////////////////////////////////////////////////////////////////////////
+// /adm/daemons/paimingd.c
+// 1997.5.20 finished
+// by maxim@nju_mud
+// 1999.10.nn goat 改编
+// 00-5-8 FoF 改编
+////////////////////////////////////////////////////////////////////////
+
+#include <login.h>
+#include <ansi.h>
+#define MAX_ITEM 100
+
+inherit F_DBASE;
+inherit F_SAVE;
+
+mapping all_paiming = ([
+    "富翁" : ({ "0 id name title" }),
+    "高手" : ({ "0 id name title" }),
+    "魔头" : ({ "0 id name title" }),
+    "老手" : ({ "0 id name title" }),
+    "悲情人物" : ({ "0 id name title" }),
+    ]);
+
+private string *paiming_status;
+private int how_many_money(object ob);
+private int save_paiming();
+private int do_save();
+
+void create()
+{
+    seteuid(ROOT_UID);
+    set("name", "排名精灵");
+    set("id", "paiming daemon");
+    restore();
+    if( !sizeof(all_paiming) )
+        all_paiming = ([
+            "富翁" : ({ "0 id name title" }),
+            "高手" : ({ "0 id name title" }),
+            "魔头" : ({ "0 id name title" }),
+            "老手" : ({ "0 id name title" }),
+            "悲情人物" : ({ "0 id name title" }),
+        ]);
+}
+
+string query_save_file()
+{
+    return DATA_DIR "paiming";
+}
+
+string * query_paiming(string mode)
+{
+    return all_paiming[mode];
+}
+
+void set_paiming(mixed ob)
+{
+    string uid, player_id, player_name, player_title;
+    string *player_lst, *player_list, player_list2;
+    int i, j, size, code, player_code, paiming, old_paiming;
+    string *paiming_keys, *paiming_value;
+
+    if( userp(ob) ) uid = getuid(ob);
+    else if ( stringp(ob) ) uid = ob;
+    else return;
+    if( wizardp(ob) ) return;
+
+    paiming_keys = keys(all_paiming);
+    
+    for( j = 0; j < sizeof(paiming_keys); j ++ )  {
+        paiming = 0;
+        old_paiming = 0;
+        if( paiming_keys[j] == "富翁" ) code = how_many_money(ob);
+        if( paiming_keys[j] == "高手" ) code = (int)ob->query("combat_exp");
+        if( paiming_keys[j] == "魔头" ) code = (int)ob->query("kill/pkgain");
+        if( paiming_keys[j] == "老手" ) code = (int)ob->query("mud_age");
+        if( paiming_keys[j] == "悲情人物" ) code = (int)ob->query("kill/pklose");
+
+        size = sizeof(all_paiming[paiming_keys[j]]);
+
+        for( i = 0; i < MAX_ITEM; i ++ ) // 检验格式，处理不正确的格式
+        	if( i < size ) {
+        	    if( sscanf(all_paiming[paiming_keys[j]][i], "%d %s %s %s", player_code,player_id,player_name,player_title) != 4)
+        		    all_paiming[paiming_keys[j]][i] = "0 id name title";
+        	} else all_paiming[paiming_keys[j]] += ({ "0 id name title" });
+        
+        for( i = 0; i < MAX_ITEM; i ++ ) { // 找出新旧排名
+            if( sscanf(all_paiming[paiming_keys[j]][i], "%d %s %s %s", player_code,player_id,player_name,player_title) == 4)
+            {
+                if( ob->query("id") == player_id ) old_paiming = i + 1;
+                if( code >= player_code && !paiming ) paiming = i + 1;
+            }
+        }
+
+        // 重新排名
+        if( !old_paiming && !paiming ) continue;
+
+        if( !old_paiming && paiming ) // 原来没有排名而现在有，插入
+        {
+            for( i = MAX_ITEM-1; i >= paiming; i -- )
+                all_paiming[paiming_keys[j]][i] = all_paiming[paiming_keys[j]][i-1];
+            all_paiming[paiming_keys[j]][paiming-1] = (string)code+" "+ob->query("id")+" "+ob->query("name")+" "+ob->query("title");
+        }
+
+        if( old_paiming && !paiming ) // 原来有排名而现在没有，排名移到最后
+        {
+            for( i = old_paiming-1; i < MAX_ITEM-1; i ++ )
+                all_paiming[paiming_keys[j]][i] = all_paiming[paiming_keys[j]][i+1];
+            all_paiming[paiming_keys[j]][MAX_ITEM-1] = (string)code+" "+ob->query("id")+" "+ob->query("name")+" "+ob->query("title");
+        }
+
+        if( old_paiming && paiming ) // 新旧排名的更换
+        {
+            if( old_paiming == paiming ) //新旧排名一样
+                all_paiming[paiming_keys[j]][paiming-1] = (string)code+" "+ob->query("id")+" "+ob->query("name")+" "+ob->query("title");
+
+            if( old_paiming > paiming ) //排名下降
+            {
+                for( i = old_paiming-1; i > paiming-1; i -- )
+                    all_paiming[paiming_keys[j]][i] = all_paiming[paiming_keys[j]][i-1];
+                all_paiming[paiming_keys[j]][paiming-1] = (string)code+" "+ob->query("id")+" "+ob->query("name")+" "+ob->query("title");
+            } else { //排名不变或上升
+                for( i = old_paiming-1; i < paiming-1; i ++ )
+                    all_paiming[paiming_keys[j]][i] = all_paiming[paiming_keys[j]][i+1];
+                all_paiming[paiming_keys[j]][paiming-1] = (string)code+" "+ob->query("id")+" "+ob->query("name")+" "+ob->query("title");
+            }
+        }
+
+        save_paiming();
+
+        if ( paiming > 10 || paiming <= 0 )  continue;
+
+        if( !random(5) )
+            write("\t你名列最近天下十大" + paiming_keys[j] + "排行榜第"HIR +
+            chinese_number(paiming) + NOR"名。\n");
+        //记录更新信息
+        //log_file( "nosave/topten", capitalize(uid)
+         //+ " become "+ paiming_name[j] +"之一("+ code + ") on " + ctime(time()) + "\n" );
+    }
+    return;
+}
+
+private int how_many_money(object ob)
+{
+    int total;
+    int total2;
+    object gold, silver, coin;
+
+    total = 0;
+    total2 = 0;
+
+    gold   = present("gold_money",ob);
+    silver = present("silver_money",ob);
+    coin   = present("coin_money",ob);
+
+    if( gold ) total += gold->value();
+    if( silver ) total += silver->value();
+    if( coin ) total += coin->value();
+
+    total2 = (int)ob->query("balance");
+    if (!total2 || total2 < 0) {
+        ob->set("balance", 0);
+    }
+    total=total+total2;
+    return total;
+}
+
+private int save_paiming()
+{
+    remove_call_out("do_save");
+    call_out("do_save", 30);
+    return 1;
+}
+
+private int do_save()
+{
+    save();
+    return 1;
+}
+

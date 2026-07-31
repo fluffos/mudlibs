@@ -1,0 +1,316 @@
+/*==========================================*\
+ 工程：交易系统 《jiaoyi》      ┏━━━━━┓
+ 编辑：袁文卿                   ┃ \\\\//// ┃
+ 日期：2008年4月18日            ┃ ( -●●- ) ┃
+ -------------------------------┃  \    /  ┃
+ File: /adm/daemons/jiaoyi.c    ┃   \︶/   ┃
+ Edit: by Rock yuan             ┃ROCK YUAN.┃
+ Data: 19.9.2008                ┗━━━━━┛
+\*==========================================*/
+
+#include <ansi.h>
+#include <log.h>
+inherit F_CLEAN_UP;
+
+int exit_jiaoyi(object mee,int quxiao);
+int reply_jiaoyi(object you,string obj_id2);
+int end_jiaoyi(object me);
+
+int main(object me,string cmd)
+{
+	object you,jiaoyi_obj1;
+	string you_id,obj_id1,obj_id2;
+//-----------------------------------------------------------------------
+//命令处理
+//-----------------------------------------------------------------------
+	if(!cmd || cmd == "")
+	{
+		return notify_fail("什么？\n");
+	}
+	else if(cmd == "exit")
+	{
+		if(me->query_temp("jiaoyi/yaoqing") || me->query_temp("jiaoyi/wait"))
+		{
+			exit_jiaoyi(me,1);
+			return 1;
+		}
+		return 0;
+	}
+	else if(cmd == "none")
+	{
+		me->set("no_jiaoyi",1);
+		return notify_fail("设置成功，当前状态：不可交易。\n");
+	}
+	else if(cmd == "open")
+	{
+		me->delete("no_jiaoyi");
+		return notify_fail("设置成功，当前状态：可以交易。\n");
+	}
+	else if(cmd == "ok")
+	{
+		end_jiaoyi(me);
+		return 1;
+	}
+	else if(sscanf(cmd,"%s to %s",obj_id1,you_id) == 2)
+	{
+//-----------------------------------------------------------------------
+//判断对方是否存在
+//----------------------------------------------------------------------
+			if(you_id == me->query("id"))
+			{
+				return notify_fail("不能和自己交易。\n");
+			}
+			you = present(you_id, environment(me));
+			if(!you || !living(you))
+			{
+				return notify_fail("这里没有这位玩家。\n");
+			}
+//-----------------------------------------------------------------------
+//条件判断
+//-----------------------------------------------------------------------
+			if(you->query("no_jiaoyi"))
+			{
+				tell_object(you,sprintf("%s想与你交易，被主动拒绝。\n",me->query("name")));
+				return notify_fail("对方状态：不可交易。\n");
+			}
+			if(me->query_temp("jiaoyi/yaoqing"))
+			{
+				return notify_fail("你在等待对方确认交易，如果要取消本次交易请输入：jiaoyi exit\n");
+			}
+			if(you->query_temp("jiaoyi/zt"))
+			{
+				return notify_fail("对方正在交易。\n");
+			}
+//----------------------------------------------------------------------
+//判断所要交易物品1是否存在
+//----------------------------------------------------------------------
+			jiaoyi_obj1 = present(obj_id1,me);
+			if(!jiaoyi_obj1)
+			{
+				return notify_fail("你身上没这件物品。\n");
+			}
+//----------------------------------------------------------------------
+//玩家计上交易标志
+//----------------------------------------------------------------------
+			me->set_temp("jiaoyi/yaoqing",1);               //邀请交易，等待对方同意。
+			me->set_temp("jiaoyi/id",you_id);               //记录对方ID。
+			me->set_temp("jiaoyi/zt",1);                    //自己交易状态。
+			me->set_temp("jiaoyi/obj_id1",obj_id1);         //自己记上自己要出售物品
+		
+			you->set_temp("jiaoyi/wait",1);                 //等待确认。
+			you->set_temp("jiaoyi/id",me->query("id"));     //对方记录自己ID。
+			you->set_temp("jiaoyi/zt",1);                   //对方交易状态。
+			you->set_temp("jiaoyi/obj_id1",obj_id1);        //对方记上自己要出售物品
+			
+			tell_object(you,sprintf("\n%s向你发送交易申请。\n    交易物品为：%s(%s)。\n%s\n    如果你想同他交易请输入：jiaoyi <物品>\n    如果不想同他交易请输入：jiaoyi <exit>\n"
+						,me->query("name"),jiaoyi_obj1->query("name"),jiaoyi_obj1->query("id"),jiaoyi_obj1->query("long")));
+			tell_object(me,"你向对方申请交易。\n");
+		return 1;
+//----------------------------------------------------------------------
+	}
+	else if(sscanf(cmd,"%s",obj_id2) == 1)
+	{
+		reply_jiaoyi(me,obj_id2);
+		return 1;
+	}
+	return 0;
+}
+
+//结束交易
+varargs int exit_jiaoyi(object me,int quxiao)
+{
+	object you;
+	string you_id;
+
+	you_id = me->query_temp("jiaoyi/id");
+	you = find_player(you_id);
+	if(you)
+	{
+		you->delete_temp("jiaoyi");
+		if(quxiao)
+		{
+			tell_object(you,sprintf("%s取消了本次交易。\n",me->query("name")));
+		}
+		else
+		{
+			tell_object(you,"交易结束。\n");
+		}
+	}
+	me->delete_temp("jiaoyi");
+	if(quxiao)
+	{
+		tell_object(me,"你取消了本次交易。\n");
+	}
+	else
+	{
+		tell_object(me,"交易结束。\n");
+	}
+	return 1;
+}
+
+//回复交易
+int reply_jiaoyi(object you,string obj_id2)
+{
+	object jiaoyi_obj1,jiaoyi_obj2,me;
+	string me_id,obj_id1;
+
+
+	if(!you->query_temp("jiaoyi/wait") || !you->query_temp("jiaoyi/zt"))
+	{
+		tell_object(you,"你没有在交易中。\n");
+		return 0;
+	}
+
+	me_id = you->query_temp("jiaoyi/id");
+	me = present(me_id, environment(you));
+	if(!me || !living(me))
+	{
+		exit_jiaoyi(you,1);
+		tell_object(you,"原因：交易对象失效。\n");
+		return 0;
+	}
+
+	if(!obj_id2)
+	{
+		exit_jiaoyi(you,1);
+		tell_object(you,"原因：交易对象失效。\n");
+		return 0;
+	}
+//----------------------------------------------------------------------
+//判断所要交易物品1和2是否存在
+//----------------------------------------------------------------------
+	jiaoyi_obj2 = present(obj_id2,you);
+	if(!jiaoyi_obj2)
+	{
+		tell_object(you,"你身上没这件物品。\n");
+		return 0;
+	}
+	obj_id1 = you->query_temp("jiaoyi/obj_id1");
+	jiaoyi_obj1 = present(obj_id1,me);
+	if(!jiaoyi_obj1)
+	{
+		exit_jiaoyi(you);
+		tell_object(you,"原因：对方身上没有要交易的物品。\n");
+		return 0;
+	}
+//----------------------------------------------------------------------
+//玩家计上交易标志
+//----------------------------------------------------------------------
+	me->set_temp("jiaoyi/obj_id2",obj_id2);               //自己记录对方要出售物品ID。
+	you->set_temp("jiaoyi/obj_id2",obj_id2);              //对方记录对方要出售物品ID。
+//	me->disable_player(" <交易中>");
+//	you->disable_player(" <交易中>");
+
+	tell_object(me,sprintf("交易系统：\n    %s交易物品为：%s(%s)。\n%s\n    %s交易物品为：%s(%s)。\n%s\n    如果你想同他交易请输入：jiaoyi ok\n    如果你不想同他交易请输入：jiaoyi exit\n"
+							 ,me->query("name")
+							  ,jiaoyi_obj1->query("name")
+							  ,jiaoyi_obj1->query("id")
+							  ,jiaoyi_obj1->query("long")
+							  ,you->query("name")
+							  ,jiaoyi_obj2->query("name")
+							  ,jiaoyi_obj2->query("id")
+							  ,jiaoyi_obj2->query("long")
+							 ));
+	tell_object(you,sprintf("交易系统：\n    %s交易物品为：%s(%s)。\n%s\n    %s交易物品为：%s(%s)。\n%s\n    如果你想同他交易请输入：jiaoyi ok\n    如果你不想同他交易请输入：jiaoyi exit\n"
+							 ,me->query("name")
+							  ,jiaoyi_obj1->query("name")
+							  ,jiaoyi_obj1->query("id")
+							  ,jiaoyi_obj1->query("long")
+							  ,you->query("name")
+							  ,jiaoyi_obj2->query("name")
+							  ,jiaoyi_obj2->query("id")
+							  ,jiaoyi_obj2->query("long")
+							 ));
+//----------------------------------------------------------------------
+}
+
+int end_jiaoyi(object player)
+{
+	object me,you,temp_player,jiaoyi_obj1,jiaoyi_obj2;
+	string temp_player_id,obj_id1,obj_id2;
+
+	temp_player_id = player->query_temp("jiaoyi/id");
+	if(!temp_player_id) return 0;
+
+	temp_player = present(temp_player_id, environment(player));
+	if(!temp_player || !living(temp_player))
+	{
+		exit_jiaoyi(player,1);
+		tell_object(you,"原因：交易对象失效。\n");
+		return 0;
+	}
+
+	if(player->query_temp("jiaoyi/yaoqing"))
+	{
+		me = player;
+		you = temp_player;
+	}
+	else
+	{
+		me = temp_player;
+		you = player;
+	}
+
+	if(player->query_temp("jiaoyi/ok"))
+	{
+		if(temp_player->query_temp("jiaoyi/ok"))
+		{
+			//调换装备
+			obj_id1 = me->query_temp("jiaoyi/obj_id1");
+			obj_id2 = you->query_temp("jiaoyi/obj_id2");
+			if(!obj_id1 || !obj_id2)
+			{
+				tell_object(player,"交易系统出错，请联系Wiz！\n");
+				tell_object(temp_player,"交易系统出错，请联系Wiz！\n");
+				return 0;
+			}
+
+			jiaoyi_obj1 = present(obj_id1,me);
+			if(!jiaoyi_obj1)
+			{
+				exit_jiaoyi(you,1);
+				tell_object(player,sprintf("原因：%s的交易物品变更。\n",me->query("name")));
+				tell_object(temp_player,sprintf("原因：%s的交易物品变更。\n",me->query("name")));
+				return 0;
+			}
+
+			jiaoyi_obj2 = present(obj_id2,you);
+			if(!jiaoyi_obj2)
+			{
+				exit_jiaoyi(me,1);
+				tell_object(player,sprintf("原因：%s的交易物品变更。\n",you->query("name")));
+				tell_object(temp_player,sprintf("原因：%s的交易物品变更。\n",you->query("name")));
+				return 0;
+			}
+
+			if(jiaoyi_obj1->query_xy() || jiaoyi_obj2->query_xy())
+			{
+				make_log(you,"jiaoyi",sprintf("通过交易获得了%s(%s)",jiaoyi_obj1->query("name"),jiaoyi_obj1->query("id")));
+				make_log(me,"jiaoyi",sprintf("通过交易获得了%s(%s)",jiaoyi_obj2->query("name"),jiaoyi_obj2->query("id")));
+			}
+
+			jiaoyi_obj1->move(you);
+			jiaoyi_obj2->move(me);
+
+			jiaoyi_obj1->save();
+			jiaoyi_obj2->save();
+
+			exit_jiaoyi(player,0);
+
+			tell_object(me,"交易成功！\n");
+			tell_object(you,"交易成功！\n");
+			return 1;
+		}
+		else
+		{
+			tell_object(player,"正在等待对方确认。\n");
+			tell_object(temp_player,"对方正在等待你的确认。\n");
+			return 0;
+		}
+	}
+
+	player->set_temp("jiaoyi/ok",1);   //确认交易
+	tell_object(player,"正在等待对方确认。\n");
+	tell_object(temp_player,"对方正在等待你的确认。\n");
+	return 1;
+}

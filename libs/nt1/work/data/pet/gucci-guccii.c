@@ -1,0 +1,18 @@
+// SN:n79>:9=9JPgI8f4T
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("破处兽[2;37;0m", ({"guccii shou"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "123
+它是仙人破处的坐骑。
+");
+        set_temp("owner_id", "gucci");
+        set_temp("owner_name", "仙人破处");
+        ::setup();
+}
+

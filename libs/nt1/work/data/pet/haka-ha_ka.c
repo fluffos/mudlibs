@@ -1,0 +1,18 @@
+// SN:jO2ljJRnaR7oBP@O
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m白鹤[2;37;0m", ({"ha_ka he"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "很白
+它是胡涯的坐骑。
+");
+        set_temp("owner_id", "haka");
+        set_temp("owner_name", "胡涯");
+        ::setup();
+}
+

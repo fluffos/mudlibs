@@ -1,0 +1,34 @@
+// SN:GedT<BGNWRg`W1Qa
+// ITEM Made by player(藏马:donb) /data/item/d/donb-dbzf.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Mon Nov 10 03:04:09 2003
+#include <ansi.h>
+#include <armor.h>
+
+inherit HANDS;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;31m雪域苍狼追杀令[2;37;0m", ({ "dbzf" }));
+	set_weight(2700);
+	set("item_make", 1);
+	set("unit", "双");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一双铁掌。
+铁掌缘上刻着一行小字：藏马(donb)
+");
+	set("value", 2100000);
+	set("point", 404);
+	set("material", "magic stone");
+	set("wear_msg", "得罪了[1;37m雪域[1;31m苍狼[2;37;0m还想活？？？[2;37;0m\n");
+	set("remove_msg", "杀人偿命，天经地义！[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/armor", 10);
+	set("armor_prop/hand", 10);
+	set("armor_prop/unarmed_damage", apply_damage());
+	set("armor_prop/strike", 10);
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

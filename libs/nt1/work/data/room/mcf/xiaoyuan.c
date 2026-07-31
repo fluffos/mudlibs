@@ -1,0 +1,36 @@
+// SN:dH5Rg5LWc5@M\bLP
+// File(/data/room/mcf/xiaoyuan.c) of mcf's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        set("short", "九花之屋小院");
+	set ("long", @LONG
+这里是一个不大的院子，角落里栽了几棵树，地上零零散散有一
+些碎落叶片。院门虚掩，穿过院子就是一个小屋，非常精致。 
+LONG );
+
+        set("room_key", "1 of mcf");
+	setup();
+
+	set("exits", ([
+                "out"    : "/d/room/playtown/road8",
+	]));
+
+        set("outdoors", "playertown");
+        set("no_sleep_room", 1);
+        set("valid_startroom", 1);
+
+        set("KEY_DOOR", ([
+                "exit" : "north",
+                "room" : __DIR__"dulewu",
+        ]));
+    
+        set("room_owner", "梅超风");
+        set("room_name", "九花之屋");
+        set("room_id", "jiuhua");
+        set("room_owner_id", "mcf");
+        set("room_position", "三岔口");
+}

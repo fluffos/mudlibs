@@ -1,0 +1,32 @@
+// SN:n8;U\_Cm5cX:OD4H
+// File(/data/room/baiyi/yishiting.c) of baiyi's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "议事厅");
+	set ("long", @LONG
+这就是藏心阁主人白衣人和重要人物商量江湖大事之处，正中有
+不少桌椅，侧面是屏风，厅堂中挂着两个条幅，两旁通往演武厅。 
+LONG );
+
+	set("exits", ([
+                "east"   : __DIR__"yanwu1",
+                "west"   : __DIR__"yanwu2",
+		"north"  : __DIR__"zhongting",
+                "south"  : __DIR__"yingke",
+	]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("room_owner", "白衣人");
+        set("room_name", "藏心阁");
+        set("room_id", "zyq");
+        set("room_owner_id", "baiyi");
+        set("room_position", "名人堂");
+}

@@ -1,0 +1,31 @@
+// SN:M1S>0kGA7:Z<YAZT
+// File(/data/room/tom/dayuan.c) of tom's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        set("short", "怪兽之家大院");
+	set ("long", @LONG
+这是一个宽阔的院落，种着各种树木，阳光照下来透过树荫投下
+层层影子。一条大路通向里面，踩得非常平滑的，看来是经常有人来
+往。 
+LONG );
+
+	set("exits", ([
+		"north"  : __DIR__"qianting",
+                "out"    : "/d/room/playtown/road3",
+	]));
+
+        set("outdoors", "playertown");
+        set("no_sleep_room", 1);
+        set("valid_startroom", 1);
+        setup();
+
+        set("room_owner", "怪兽蜻蜓");
+        set("room_name", "怪兽之家");
+        set("room_id", "tom");
+        set("room_owner_id", "tom");
+        set("room_position", "碎石小道");
+}

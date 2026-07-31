@@ -1,0 +1,18 @@
+// SN:j@:_l:lBfLY=@N?:
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("小狐[2;37;0m", ({"fish hu"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "小
+它是段老二的坐骑。
+");
+        set_temp("owner_id", "hdx");
+        set_temp("owner_name", "段老二");
+        ::setup();
+}
+

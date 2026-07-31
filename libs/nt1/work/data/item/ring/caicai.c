@@ -1,0 +1,11 @@
+// SN:\AgoJhVYS[@7Ae6J
+// wedding-ring.c
+
+#include "/clone/misc/wedding-ring.h"
+
+void setup()
+{
+        set("long", "这是浪荡子和小菜菜的结婚戒指，是两人的定情之物。
+");
+        ::setup();
+}

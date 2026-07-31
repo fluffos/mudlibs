@@ -1,0 +1,18 @@
+// SN:U4KdOjUJ?ZW7Ukfb
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;31m海[1;34m狸[1;33m兽[2;37;0m", ({"beaver shou"}));        
+        set("gender", "女性");                
+        set("unit", "头");
+        set("long", "这是一只海狸,是和sprite一起从妖精国出来历练的.
+它是上官颖儿的坐骑。
+");
+        set_temp("owner_id", "sprite");
+        set_temp("owner_name", "上官颖儿");
+        ::setup();
+}
+

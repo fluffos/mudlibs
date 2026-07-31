@@ -1,0 +1,117 @@
+//qiuge-bang.c 【秋歌棒法】
+
+inherit SKILL;
+#include <ansi.h>;
+
+mapping *action = ({
+        ([      "name":                 "孤城落日",
+                "action":
+"$N身形稍缓，倒提手中$w，以一个奇异的曲线缓缓的落向$n的$l",
+                "dodge":                5,
+                "parry":   -10,
+                "damage":               55,
+                "damage_type":  "砸伤"
+        ]),
+        ([      "name":                 "绝域苍茫",
+                "action":
+"$N神情戚苦，一招"+HIR"「绝域苍茫」"NOR+"，随手一棒横扫而出，向$n当头砸下\n"
+"悲凉气氛摄人心魄。",
+
+                "dodge":                0,
+                "parry":     0,
+                "damage":               65,
+                "damage_type":  "砸伤"
+        ]),
+        ([      "name":                 "力守金关",
+                "action":
+"$N一个虎吼，舞棒成盾、一盾化百盾。方圆十丈里只看见重重棍影在不断的舞动\n"
+"赫然正是一招"+HIY"「力守金关」"NOR+"",
+                "dodge":                10,
+                "parry":   -20,
+                "damage":               75,
+                "damage_type":  "砸伤"
+        ]),
+        ([      "name":                 "大漠秋歌",
+                "action":
+"$N横棒向天，挥棒！横扫、力劈、虚点，一气呵成！一条条棍影如沙子一样\n"
+"带着炎热的气劲向$n铺天盖地的倾泻了下来，这招就是"+HIY"「大漠秋歌」"NOR+"！！",
+                "dodge":               10,
+                "parry":   -15,
+                "damage":               105,
+                "damage_type":  "挫伤"
+        ]),
+        ([      "name":                 "搅海势",
+                "action":
+"$N使出"+HIB"「搅海势」"NOR+"，踏着碎步，状如撑桨，$w在地面上虚画了一个又一个\n"
+"的圆圈。$n正发愣时就被$w带起的气旋缠了个正着。看来，$n这次不死不行了。",
+                "dodge":                -5,
+                "parry":     -5,
+                "damage":(int)this_player()->query_skill("stick"),
+                "damage_type":  "砸伤"
+        ]),   
+        ([      "name":                 "裂地势",
+                "action":
+"$N大喝一声："+HIW"「裂地势」"NOR+"，手擎$w往地上一插！只听见大地一阵震动，\n"
+"地面从$w一直碎裂到$n那里。$n只看见几道"+HIR"气劲"NOR+"从地里射了出来。\n"
+"躲闪不及，眼看就要被射穿了！",
+                "dodge":                5,
+                "parry":   -10,
+                "damage":(int)this_player()->query_skill("stick") + (int)this_player()->query_skill("force"),
+                "damage_type":  "刺伤"
+        ]),   
+        ([      "name":                 "震天势",
+                "action":
+"$N冲天跃起！手中$w一摇，带着惊雷之声的一棒向$n压了下来。这一棒的名堂可大了，\n"
+"叫做："+HIY"【震天势】"NOR+"。只听见$w在空中发出一串爆雷声，连$n所在的\n"
+"那一块地面也被压的陷了下去。$n真可怜。",
+                "dodge":                0,
+                "parry":   -20,
+                "damage":(int)this_player()->query_skill("stick") + (int)this_player()->query_skill("force") + (int)this_player()->query("str")*10,
+                "damage_type":  "砸伤"
+        ]),
+});
+
+
+int valid_learn(object me)
+{
+        object ob;
+
+        if( (int)me->query("max_neili") < 150 )
+                return notify_fail("你的内力不够，没有办法练秋歌棒法，
+多练些内力再来吧。\n");
+
+        if( !(ob = me->query_temp("weapon"))
+        ||      (string)ob->query("skill_type") != "stick" )
+                return notify_fail("你必须先找一根棒子才能练棒法。\n");
+
+        return 1;
+}
+
+int valid_enable(string usage)
+{
+        return usage=="stick"||usage=="parry";
+}
+
+int practice_skill(object me)
+{
+        if( (int)me->query("qi") < 50
+        ||      (int)me->query("neili") < 5 )
+                return notify_fail("你的内力或气不够，没有办法练习秋歌棒法。\n");
+        me->receive_damage("qi", 30);
+        me->add("neili", -10);
+        write("你按着所学练了一遍秋歌棒法。\n");
+        return 1;
+}
+
+mapping query_action(object me, object weapon)
+{
+        return action[random(sizeof(action))];
+}
+
+string perform_action_file(string func)
+{
+return CLASS_D("wandao") + "/qiuge-bang/" + func;
+}
+
+
+

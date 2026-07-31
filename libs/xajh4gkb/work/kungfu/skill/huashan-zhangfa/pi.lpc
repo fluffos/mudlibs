@@ -1,0 +1,90 @@
+#include <ansi.h>
+#include <skill.h>
+#include <weapon.h>
+#include <combat.h>
+
+inherit F_SSERVER;
+int perform(object me, object target)
+{
+	string msg;
+	object weapon;
+	int skill;
+	int ap,dp,busy_time;
+	
+	if( !target ) target = offensive_target(me);
+	if( !target || !target->is_character() || !me->is_fighting(target) )
+		return notify_fail("力劈华山只能对战斗中的对手使用。\n");
+    if (objectp(weapon = me->query_temp("weapon")))
+        return notify_fail("你必须要空手才能使用。\n");
+	if (target && target->query_temp("apply/shade_vision")) 
+		return notify_fail("对方隐身了，你看不到"+target->query("name")+"。\n"); 	
+	if( target && target->is_busy() )
+		return notify_fail(target->name() + "已经不能动了！\n");
+	if ( target && target->query_temp("busy_mianyi") )	//冲穴成功后免疫busy，2017.9.29阿飞添加
+		return notify_fail(target->name() + "奇经八脉浑然一体，真气浩浩荡荡，点穴似乎没什么作用。\n");	
+	if (me->is_busy()) 
+		return notify_fail("你现在正忙着呢！\n");
+	if( (int)me->query("neili") < 1000 )
+		return notify_fail("你的真气不够！\n");
+	if( (int)me->query("jingli") < 1000 )
+		return notify_fail("你的精力不够。\n");	
+	if( (int)me->query_skill("huashan-jianfa", 1) < 300 )
+		return notify_fail("你的华山剑法不够娴熟，不会使用「力劈华山」。\n");
+	if( (int)me->query_skill("huashan-zhangfa", 1) < 300 )
+		return notify_fail("你的华山掌法不够娴熟，不会使用「力劈华山」。\n");
+	if( (int)me->query_skill("zixia-shengong", 1) < 300 )
+		return notify_fail("你的华山掌法不够娴熟，不会使用「力劈华山」。\n");
+//	if ( me->query_skill_mapped("force")!="zixia-shengong")
+//		return notify_fail("「力劈华山」需要紫霞神功才能使用。\n");
+//	if (me->query_skill_mapped("unarmed") != "huashan-zhangfa")
+//		return notify_fail("你没正确激发该技能 。\n");
+	if (me->query_temp("autolian"))
+		return notify_fail("你正在发动自动连招！\n"); 	
+	if ( me->query_temp("cooldown") )	//CD写法	2017.9.7添加
+		return notify_fail("你处于技能冷却状态中，过会在使用吧。\n");
+		
+	skill = (int)me->query_skill("huashan-zhangfa", 1);
+	msg = HIM "$N运起紫霞神功，手掌紫气大盛，一招「力劈华山」已然重重劈在$n的身上。\n"NOR;
+	message_vision(msg, me, target);
+	me->set_temp("cooldown", 1);	//CD写法	2017.9.7添加
+	call_out("del_cooldown", 3, me);	//CD写法1	
+	ap = me->query("xyzx_sys/level") + me->query_skill("huashan-zhangfa", 1) + me->query_skill("unarmed") + me->query_skill("force");
+	dp = target->query("xyzx_sys/level") + target->query_skill("dodge") + target->query_skill("parry");
+	ap = ap*((int)me->query("breakup")+(int)me->query("breakup")*(int)me->query("breakup")+100)/100;
+	dp = dp*((int)target->query("breakup")+(int)target->query("breakup")*(int)target->query("breakup")+100)/100;
+	busy_time = (30*skill)/(skill+2000);
+	if( stringp(target->query("inborn")) && (string)target->query("inborn")==YEL"冷静"NOR) busy_time = (30*skill)/(skill+2000)*7/10;
+	if( random(ap) > dp/3 )
+	{
+		msg = HIR "$n无法抵挡，被$N千钧力道击中，顿时无法动弹。\n" NOR;
+		message_vision(msg, me, target);
+		target->start_busy( 5+busy_time );
+		tell_object(target, HIY"你陷入忙乱之中，一时无法动弹。\n"NOR);
+		me->add("neili", -500);
+	}
+	else
+	{
+		me->add("neili",-100);
+		msg = HIC "$n使出四两拨千斤技巧，将$N的招式拨到了一边。\n" NOR;
+		message_vision(msg, me, target);
+	}
+	msg = HIY "紧接着$N使出华山派绝技「剑掌五连环」，身法陡然加快！\n" NOR;
+	message_vision(msg, me,target);
+	COMBAT_D->do_attack(me, target, me->query_temp("weapon"), 1);
+	COMBAT_D->do_attack(me, target, me->query_temp("weapon"), 1);
+	COMBAT_D->do_attack(me, target, me->query_temp("weapon"), 1);
+	COMBAT_D->do_attack(me, target, me->query_temp("weapon"), 1);
+	COMBAT_D->do_attack(me, target, me->query_temp("weapon"), 1);	
+	me->add("neili", -300);
+	me->start_busy(1);
+	return 1;
+}
+void del_cooldown(object me)	//CD写法1
+{ 
+	if ( !objectp(me) ) return;
+	if ( me->query_temp("cooldown") )	
+	{
+		me->delete_temp("cooldown");
+		tell_object(me, HIM"你呼出一口气，缓缓的将内力收回丹田。\n"NOR);
+	}	
+}

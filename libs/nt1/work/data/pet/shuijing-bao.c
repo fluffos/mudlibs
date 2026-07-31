@@ -1,0 +1,18 @@
+// SN:a<1bM3Oki>7MYe45
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;31m宝马[2;37;0m", ({"bao ma"}));        
+        set("gender", "女性");                
+        set("unit", "匹");
+        set("long", "^_^
+它是水晶的坐骑。
+");
+        set_temp("owner_id", "shuijing");
+        set_temp("owner_name", "水晶");
+        ::setup();
+}
+

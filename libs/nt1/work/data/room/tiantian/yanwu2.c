@@ -1,0 +1,33 @@
+// SN:gY`LC^MM_gJl=T45
+// File(/data/room/tiantian/yanwu2.c) of tiantian's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        set("short", "猪猪会总坛演武厅");
+	set ("long", @LONG
+这是猪猪会总坛的演武厅，有时有些江湖朋友来会，想一试身手，
+就在这里比武较量。 
+LONG );
+
+	set("exits", ([
+                "east" : __DIR__"yishiting",
+	]));
+
+        set("objects", ([
+                "/clone/weapon/zhubang" : 1,
+                "/clone/weapon/zhujian" : 1,
+                "/clone/weapon/mudao"   : 1,
+        ]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("room_owner", "猪猪快跑");
+        set("room_name", "猪猪会总坛");
+        set("room_id", "tian");
+        set("room_owner_id", "tiantian");
+        set("room_position", "南大街");
+}

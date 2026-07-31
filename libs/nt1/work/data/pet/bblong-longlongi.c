@@ -1,0 +1,18 @@
+// SN:bTOckanL16XifY_0
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("天海龙兽[2;37;0m", ({"longlongi shou"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "这是天海中的异兽
+它是龙飞雪的坐骑。
+");
+        set_temp("owner_id", "bblong");
+        set_temp("owner_name", "龙飞雪");
+        ::setup();
+}
+

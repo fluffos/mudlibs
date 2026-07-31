@@ -1,0 +1,33 @@
+// SN:O<Pdd<KaiVP29@<o
+// File(/data/room/sniper/yanwu1.c) of sniper's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        set("short", "大本营演武厅");
+	set ("long", @LONG
+这是大本营的演武厅，有时有些江湖朋友来会，想一试身手，就
+在这里比武较量。 
+LONG );
+
+	set("exits", ([
+                "west" : __DIR__"yishiting",
+	]));
+
+        set("objects", ([
+                "/clone/weapon/zhubang" : 1,
+                "/clone/weapon/zhujian" : 1,
+                "/clone/weapon/mudao"   : 1,
+        ]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("room_owner", "狙击手");
+        set("room_name", "大本营");
+        set("room_id", "sniper");
+        set("room_owner_id", "sniper");
+        set("room_position", "三岔口");
+}

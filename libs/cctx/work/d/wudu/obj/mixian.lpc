@@ -1,0 +1,20 @@
+// 米线
+
+inherit ITEM;
+inherit F_FOOD;
+
+void create()
+{
+	set_name("米线", ({"mi xian", "xian"}));
+	set_weight(300);
+	if (clonep())
+		set_default_object(__FILE__);
+	else {
+		set("long", "一碗热腾腾的过桥米线\n");
+		set("unit", "碗");
+		set("value", 200);
+		set("food_remaining", 3);
+		set("food_supply", 70);
+	}
+}
+

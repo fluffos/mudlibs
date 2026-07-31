@@ -1,0 +1,18 @@
+// SN:jNF4>FL1QT9^W8fo
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("搜狐[2;37;0m", ({"sou hu"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "三大门户网站之一。
+它是段线的坐骑。
+");
+        set_temp("owner_id", "line");
+        set_temp("owner_name", "段线");
+        ::setup();
+}
+

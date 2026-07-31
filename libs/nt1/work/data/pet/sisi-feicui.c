@@ -1,0 +1,18 @@
+// SN:0NQVYg@DKBd;g=@3
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;32m冷月[1;31m花魂貂[2;37;0m", ({"feicui diao"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "最最可爱的小貂儿。
+它是丝丝的坐骑。
+");
+        set_temp("owner_id", "sisi");
+        set_temp("owner_name", "丝丝");
+        ::setup();
+}
+

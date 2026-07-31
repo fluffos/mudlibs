@@ -1,0 +1,32 @@
+// SN:cjLk[K[HC_PbmEfP
+// ITEM Made by player(陈小生:xsl) /data/item/x/xsl-scarf.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Tue Sep 28 04:57:08 2004
+#include <ansi.h>
+#include <armor.h>
+
+inherit HEAD;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;34m一字逍遥巾[2;37;0m", ({ "scarf" }));
+	set_weight(4500);
+	set("item_make", 1);
+	set("unit", "顶");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一顶头盔。
+书生们常戴的一种头巾。[2;37;0m
+头盔缘上刻着一行小字：陈小生(xsl)
+");
+	set("value", 2100000);
+	set("point", 156);
+	set("material", "magic stone");
+	set("wear_msg", "[1;36m$N将一字逍遥巾仔细戴在了头上，看上去英俊潇洒了不少。[2;37;0m\n");
+	set("remove_msg", "[1;36m$N将头巾取了下来，把头发弄了个江湖人物十分流行的发型。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/armor", apply_armor());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

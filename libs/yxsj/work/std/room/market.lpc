@@ -1,0 +1,140 @@
+// market.c by Daniel Guo
+
+#include <ansi.h>
+
+inherit ROOM;
+
+void init()
+{
+	add_action("do_list", "list");
+  	add_action("do_buy_obj", "buy");
+  	add_action("do_sell", "sell");
+  	add_action("do_value", "value");
+}
+
+private int check_money_enough(int num);
+private void remove_item(int num);
+
+int do_list()
+{
+	int amount, i;
+	amount = environment(this_player())->query_temp("amount");
+	if(!amount)
+		return notify_fail("╆簆セ┍狥﹁场扳Ч叫筁碭ぱㄓ....\n");
+	write("セ┍┮砪扳狥﹁Τ\n");
+	for (i=1; i<=amount; i++)
+	{
+	write(i+":"+environment(this_player())->query_temp("goods_name["+i+"]"));
+	write("\t");
+	write("基"+
+	F_VENDOR->price_string(environment(this_player())->query_temp("goods_value["+i+"]"))+
+	"\n");
+	}
+	return 1;
+}
+
+int do_buy_obj(string arg)
+{
+	int num, amount, temp;
+	if (arg) sscanf(arg, "%d", num);
+	amount = environment(this_player())->query_temp("amount");
+	if(!amount) {
+		write("╆簆セ┍狥﹁场扳Ч叫筁碭ぱㄓ....\n");
+		return 1; }
+	if(!num || num == 0) {
+		write("ボ: buy <珇絪腹>\n");
+		return 1; }
+	if( amount < num ) {
+		write("╆簆セ┍⊿Τ芥硂妓狥﹁\n");
+		return 1; }
+	temp = check_money_enough(num);
+	return 1;
+}
+
+private void remove_item(int num)
+{
+	int i, j;
+	string temp;
+	object me, here;
+	me = this_player();
+	here = environment(this_player());
+	for (i=num; i<=here->query_temp("amount"); i++)
+	{
+		j = i + 1;
+		temp = here->query_temp("goods["+j+"]");
+		here->set_temp("goods["+i+"]", temp);
+		temp = here->query_temp("goods_name["+j+"]");
+		here->set_temp("goods_name["+i+"]", temp);
+		temp = here->query_temp("goods_value["+j+"]");
+		here->set_temp("goods_value["+i+"]", temp);
+	}
+	here->set_temp("amount", (here->query_temp("amount")-1));
+}
+
+private int check_money_enough(int num)
+{
+	object me, ob, here;
+	me = this_player();
+	here = environment(this_player());
+	ob = new(here->query_temp("goods["+num+"]"));
+        
+	if ( !me->can_afford(ob->query("value")) ) {
+        	write("ō⊿Τê或窥\n");
+		return 1; }
+      	me->pay_money(ob->query("value"));
+        ob->move(me);
+	message_vision("$N"+F_VENDOR->price_string(ob->query("value"))+"禦"+ob->query("unit")+ob->short()+"\n", me);
+	remove_item(num);
+	return 1;
+}
+
+int do_value(string arg)
+{
+	object ob;
+	int value;
+
+	if( !arg || !(ob = present(arg, this_player())) )
+		return notify_fail("璶笵ぐ或珇基窥\n");
+
+	if( ob->query("money_id") )
+		return notify_fail("硂琌窥⊿ǎ筁盾\n");
+
+	value = ob->query("value");
+	if( !value ) printf("%sゅぃ\n", ob->query("name"));
+	else 
+		printf("%s基%s\n狦璶芥(sell)%s\n",
+			ob->query("name"),
+			F_VENDOR->price_string(value),
+			F_VENDOR->price_string(value * 80 / 100) );
+	return 1;
+}
+
+int do_sell(string arg)
+{
+	object ob, here;
+	int value;
+
+	here = environment(this_player());
+	if( !arg || !(ob = present(arg, this_player())) )
+		return notify_fail("璶芥ぐ或珇\n");
+
+	if( ob->query("money_id") )
+		return notify_fail("璶芥窥\n");
+	value = ob->query("value");
+	if( !value )
+		return notify_fail("硂妓狥﹁ぃ窥\n");
+
+	write("рō"+ob->short()+"芥奔眔"+
+	F_VENDOR->price_string(value * 80 / 100)+"\n");
+	message_vision(HIC"$N芥奔"+ob->query("unit")+ob->query("name")+"\n"NOR,
+		this_player());
+
+	this_player()->pay_money(-value * 80 / 100);
+	here->set_temp("amount", (here->query_temp("amount")+1));
+	here->set_temp("goods["+here->query_temp("amount")+"]", base_name(ob));
+	here->set_temp("goods_name["+here->query_temp("amount")+"]", ob->query("name")+"("+ob->query("id")+")");
+	here->set_temp("goods_value["+here->query_temp("amount")+"]", ob->query("value"));
+	destruct(ob);
+	return 1;
+}
+

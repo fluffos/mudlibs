@@ -1,0 +1,35 @@
+// SN:jZfA@@7o>fB4QXjf
+// File(/data/room/ems/jusuo.c) of ems's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "居所");
+	set ("long", @LONG
+这就是么牢牢工作室主人么牢牢休息、读书的地方。楼上就是主
+人的卧室，西面则是书房。 
+LONG );
+
+	set("exits", ([
+		"up"   : __DIR__"woshi",
+                "west" : __DIR__"shufang",
+	]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("KEY_DOOR", ([
+                "exit" : "east",
+                "room" : __DIR__"huayuan",
+        ]));
+    
+        set("room_owner", "么牢牢");
+        set("room_name", "么牢牢工作室");
+        set("room_id", "ems");
+        set("room_owner_id", "ems");
+        set("room_position", "名人堂");
+}

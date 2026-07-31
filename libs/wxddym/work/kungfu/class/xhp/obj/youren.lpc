@@ -1,0 +1,24 @@
+#include <ansi.h>
+#include <weapon.h>
+inherit THROWING;
+
+void create()
+{
+        set_name(HIC"游忍箭"NOR, ({ "youren jian", "arrow" }) );
+        if (clonep())
+                set_default_object(__FILE__);
+        else
+        {
+                set("long", "游忍箭连珠箭发，势道凶猛。\n");
+                set("unit", "把");
+                set("base_value", 2100);
+                set("material", "steel");
+		    set("no_sell", 1);
+                set("base_unit", "枚");
+                set("base_weight", 10);
+        }
+        set_amount(10);
+        init_throwing(600);
+        setup();
+}
+

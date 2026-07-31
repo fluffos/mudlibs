@@ -1,0 +1,11 @@
+// SN:Bd:>8^Mh>MIf<B_0
+// wedding-ring.c
+
+#include "/clone/misc/wedding-ring.h"
+
+void setup()
+{
+        set("long", "这是痴心月亮和妖媚之眼的结婚戒指，是两人的定情之物。
+");
+        ::setup();
+}

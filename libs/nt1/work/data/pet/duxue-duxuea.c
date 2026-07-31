@@ -1,0 +1,18 @@
+// SN:;0@Pm3HT@J2;k^fR
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("小白马马[2;37;0m", ({"duxuea ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "小白马
+它是渡血的坐骑。
+");
+        set_temp("owner_id", "duxue");
+        set_temp("owner_name", "渡血");
+        ::setup();
+}
+

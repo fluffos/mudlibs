@@ -1,0 +1,33 @@
+// SN:OWFY@VXN`V4m^I8i
+// ITEM Made by player(明宇:myselfandi) /data/item/m/myselfandi-blood.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Fri Dec  5 18:23:51 2003
+#include <ansi.h>
+#include <weapon.h>
+
+inherit SWORD;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[2;37;0m[31m血[30m妖[2;37;0m", ({ "blood" }));
+	set_weight(9000);
+	set("item_make", 1);
+	set("unit", "柄");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一柄剑。
+[31m十大魔兵排名第九的血妖
+[31m为血魔尊生前专用兵器[2;37;0m
+剑柄上刻着一行小字：明宇(myselfandi)
+");
+	set("value", 2100000);
+	set("point", 259);
+	set("material", "magic stone");
+	set("wield_msg", "[1;36m$N[1;36m一声清啸，抖出一柄[1;36m$n[1;36m。[2;37;0m\n");
+	set("unwield_msg", "$N随手一抹，收起了$n。\n");
+	if (! check_clone()) return;
+	restore();
+	init_sword(apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

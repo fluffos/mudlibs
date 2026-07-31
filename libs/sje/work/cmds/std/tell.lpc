@@ -1,0 +1,76 @@
+// tell.c
+
+#include <ansi.h>
+#include <mudlib.h>
+#include <net/dns.h>
+
+inherit F_CLEAN_UP;
+
+int help(object me);
+
+void create() {seteuid(getuid());}
+
+int main(object me, string arg)
+{
+    string target, msg, mud;
+	object obj;
+
+	if( !arg || sscanf(arg, "%s %s", target, msg)!=2 ) return help(me);
+
+	if( sscanf(target, "%s@%s", target, mud)==2 ) {
+		GTELL->send_gtell(mud, target, me, msg);
+		write("网路讯息已送出，可能要稍候才能得到回应。\n");
+		return 1;
+	}
+
+    obj = LOGIN_D->find_body(target);
+	if(!obj || !me->visible(obj)) return notify_fail("没有这个人。\n");
+	if(obj == me) return notify_fail("告诉自己？\n");
+	if (!interactive(obj)) return notify_fail("这个人断线了。\n");
+	if (!living(obj)) return notify_fail("这个人现在无法听见你的话。\n");
+	if (!wizardp(me) && obj->query_temp("pigging_seat"))
+		return notify_fail("正在拱猪的人听不到悄悄话……。\n");
+    if (!wizardp(me) && (obj->query("env/block") == "BUSY" ||
+		obj->query("env/block") == "busy" || obj->query("env/block") == "ALL" ||
+		obj->query("env/block") == "all"))
+		return notify_fail(obj->name(1)+"很忙，有什么事待会再说吧！\n");
+	if (!wizardp(me) && me->query("id") == obj->query("env/block"))
+        return notify_fail(obj->name(1)+"不想听你瞎掰！\n");
+
+	write(GRN "你告诉" + obj->name(1) + "：" + msg + "\n" NOR);
+	tell_object(obj, sprintf( GRN "%s告诉你：%s\n" NOR,
+		me->name(1)+"("+me->query("id")+")", msg));
+
+	obj->set_temp("reply", me);
+	return 1;
+}
+
+string remote_tell(string cname, string from, string mud, string to, string msg)
+{
+	object ob;
+
+	if( ob = find_player(to) ) {
+		if( cname )
+			tell_object(ob, sprintf(HIG "%s(%s@%s)告诉你：%s\n" NOR,
+				cname, capitalize(from), mud, msg ));
+		else
+			tell_object(ob, sprintf(HIG "%s@%s 告诉你：%s\n" NOR,
+				capitalize(from), mud, msg ));
+		ob->set_temp("reply", from + "@" + mud);
+		return sprintf("你告诉%s(%s@%s)：%s", ob->name(1), capitalize(to), INTERMUD_MUD_NAME, msg);
+	}
+	return "千里传音@" INTERMUD_MUD_NAME "告诉你：没有 "+to+" 这个玩家。";
+}
+
+int help(object me)
+{
+	write(@HELP
+指令格式：tell <某人> <讯息>
+
+你可以用这个指令和其他地方的使用者说话。
+
+其他相关指令：reply
+HELP
+	);
+	return 1;
+}

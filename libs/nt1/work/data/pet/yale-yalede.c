@@ -1,0 +1,18 @@
+// SN:6:gKeQ@jQQlj`MD4
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;35m老[1;36m母牛[2;37;0m", ({"yalede niu"}));        
+        set("gender", "女性");                
+        set("unit", "头");
+        set("long", "穷人只能骑这个!
+它是寒易的坐骑。
+");
+        set_temp("owner_id", "yale");
+        set_temp("owner_name", "寒易");
+        ::setup();
+}
+

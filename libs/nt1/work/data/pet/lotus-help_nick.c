@@ -1,0 +1,18 @@
+// SN:Gb=_nhhc9l6Nj>UY
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("改革马[2;37;0m", ({"help_nick ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "改革
+它是青莲剑歌的坐骑。
+");
+        set_temp("owner_id", "lotus");
+        set_temp("owner_name", "青莲剑歌");
+        ::setup();
+}
+

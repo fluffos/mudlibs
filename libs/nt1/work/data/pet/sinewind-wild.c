@@ -1,0 +1,18 @@
+// SN:G23T[eU5>_M4eWJT
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("野兽[2;37;0m", ({"wild shou"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "这是一只野兽
+它是炎影的坐骑。
+");
+        set_temp("owner_id", "sinewind");
+        set_temp("owner_name", "炎影");
+        ::setup();
+}
+

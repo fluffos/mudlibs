@@ -1,0 +1,18 @@
+// SN:_Ga0Eo9@bdE\kJL1
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;32m跑得快马[2;37;0m", ({"msdqc ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "海
+它是欧阳雅观的坐骑。
+");
+        set_temp("owner_id", "zhao");
+        set_temp("owner_name", "欧阳雅观");
+        ::setup();
+}
+

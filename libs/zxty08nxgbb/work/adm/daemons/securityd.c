@@ -1,0 +1,312 @@
+// 2003-07-05 Updated by Zjb@TY
+
+#include <login.h>
+nosave mapping wiz_status;
+nosave string *wiz_levels = ({
+    "(player)",
+    "(immortal)", 
+     "(genie)", 
+    "(apprentice)",
+    "(wizard)",
+    "(arch)",  
+    "(admin)",
+    "(boss)",
+    "(ceo)",});
+void create()
+{
+    string *wizlist, wiz_name, wiz_level;
+    int i;
+    wizlist = explode(read_file(WIZLIST), "\n");
+    wiz_status = allocate_mapping(sizeof(wizlist));
+    for(i=0; i<sizeof(wizlist); i++) {
+        if( wizlist[i][0]=='#'  || 
+        sscanf(wizlist[i], "%s %s", wiz_name, wiz_level)!=2 )
+        continue;
+        wiz_status[wiz_name] = wiz_level;
+    }
+}
+string *query_wizlist() { return keys(wiz_status); }
+
+// This function returns the status of an uid.
+string get_status(mixed ob)
+{
+    string euid;
+    if( objectp(ob) ) {
+        euid = geteuid(ob);
+        if( !euid ) euid = getuid(ob);
+    }   else if( stringp(ob) ) euid = ob;
+    if ( euid=="landy" ) return "(admin)";
+    if ( euid=="zmud" ) return "(boss)";
+
+    if( !undefinedp(wiz_status[euid]) ) return wiz_status[euid];
+    else if( member_array(euid, wiz_levels)!=-1 ) return euid;
+    else return "(player)";
+}
+int get_wiz_level(object ob)
+{
+    return member_array(get_status(ob), wiz_levels);
+}
+int set_status(mixed ob, string status)
+{
+    string uid,str,*wiz, wizlist;
+    int i;
+    object me;
+
+    if( geteuid(previous_object())!= ROOT_UID ) return 0;
+    if( geteuid(this_player(1)) != "zmud"&& geteuid(this_player(1)) != "landy"|| 
+        previous_object(0)!=find_object("/cmds/bos/promote"))
+    {
+    me=this_player(1);
+    str="时间"+ctime(time())+",人物"+me->query("name")+"("+me->query("id")+"),
+        来自文件"+base_name(previous_object())+"\n";
+       log_file("file/illegal_pomote",str);
+    return 0;
+    }
+    if(stringp(ob))    uid = ob;
+    else if( userp(ob) )   uid = getuid(ob);
+    else return 0;
+    
+    if( status == "(player)" )
+        map_delete(wiz_status, uid);
+    else
+        wiz_status[uid] = status;
+    wiz = keys(wiz_status);
+    for(wizlist = "", i=0; i<sizeof(wiz); i++)
+        wizlist += wiz[i] + " " + wiz_status[wiz[i]] + "\n";
+    rm(WIZLIST);
+    write_file(WIZLIST, wizlist);
+    log_file( "static/promotion", capitalize(uid)
+     + " become a " + status + " on " + ctime(time()) + "\n" );
+    return 1;
+}
+
+string *get_wizlist() { return keys(wiz_status); }
+
+int valid_set(object ob, object user)
+{
+    int level_ob,level_user;
+    string str;     
+
+    if ( author_file(base_name(user)) == ROOT_UID 
+         || author_file(base_name(user)) == "MudLib")
+          return 1;
+        else 
+           if ( get_status( author_file(base_name(user)) ) == "(player)" )
+           {
+               str="文件"+base_name(user)+"与"+ctime(time())+"时间落                    入"+ob->query("name")+"("+ob->query("id")+")手中\n";
+              log_file("file/illegal_set",str);
+              return 0;            // wiz use illegal object to set player
+           }
+
+    if (ob==user)   return 1;
+    
+    level_ob=member_array(get_status(ob), wiz_levels);
+    level_user=member_array(get_status(user), wiz_levels);
+    
+    if ( !level_ob && level_user<3 )  return 0;            // wiz set player
+    return ( level_user >= level_ob );                   // wiz set wiz
+}
+int valid_write(string file, mixed user, string func)
+{
+    string euid;
+    mixed localtime;
+    object me = this_player();
+
+     if ( me )
+     if ( geteuid(me)!="zmud" && geteuid(me)!="landy" ) {
+             switch(file)
+             {
+             case "/adm/daemons/securityd.c":
+                     return 0;
+             case "/adm/obj/master.c":
+                     return 0;
+             case "/adm/obj/simul_efun.c":
+                     return 0;
+             case "/adm/simul_efun/file.c":
+                     return 0;
+             case "/adm/daemons/logind.c":
+                     return 0;
+             case "/adm/etc/wizlist":
+                     return 0;
+             default:
+             break;
+             }
+    }
+    if( !objectp(user) )
+        error("valid_write: Invalid argument type of user.\n");
+
+    /*if( func == "write_file" || func == "write" || func == "cp" || func == "rm")
+    {
+        if( file == "/adm/etc/wizlist" &&
+            base_name(user) != "/adm/daemons/securityd" )
+        return 0; 
+
+        if( creator_file(base_name(user)) != ROOT_UID &&
+            creator_file(base_name(user)) != "MudOS" &&
+           (creator_file(file) == ROOT_UID || creator_file(file) == "MudOS") )
+        return 0;
+
+        if( sscanf(file,"/u/%*s") ) {
+        if( creator_file(base_name(user)) != ROOT_UID &&
+            creator_file(base_name(user)) != "MudOS" &&
+            creator_file(base_name(user)) != creator_file(file) )
+        return 0;
+        }
+    }   */
+
+    if( func=="save_object" ) {
+        if ( file == (string)user->query_save_file() ||
+             file == (string)user->query_save_file()+".o" ||
+             file == (string)user->query_save_file()+".oo" ) 
+             return 1;
+        if( sscanf(base_name(user), "/data/mail/%*s") ||
+            sscanf(base_name(user), "/p/%*s") ||
+            sscanf(base_name(user), "/data/board/%*s") )
+              return 1;
+    }
+    switch(get_status(user))
+    {
+    case "(apprentice)" : 
+            if (sscanf(file,"/doc/%*s") ==1 )   return 1; 
+    case "(wizard)" : 
+            if ( sscanf(file,"/doc/%*s") ==1
+                 || sscanf( file , "/kungfu/%*s" ) == 1
+                 || sscanf( file , "/clone/%*s" ) == 1 
+                 || sscanf( file , "/d/%*s" ) == 1 )   return 1;  
+    case "(arch)" : 
+            if ( sscanf( file , "/kungfu/%*s" ) == 1 
+                 || sscanf( file , "/d/%*s" ) == 1 
+                 || sscanf( file , "/clone/%*s" ) == 1 
+                 || sscanf( file , "/quest/%*s" ) == 1 
+                 || sscanf( file , "/feature/%*s" ) == 1
+                 || sscanf( file , "/include/%*s" ) == 1
+                 || sscanf( file , "/inherit/%*s" ) == 1
+                 || sscanf( file , "/adm/%*s" ) == 1
+                 || sscanf( file , "/doc/%*s" ) == 1 )   return 1; 
+    case "(admin)" : 
+            if ( sscanf( file , "/kungfu/%*s" ) == 1 
+                 || sscanf( file , "/d/%*s" ) == 1
+                 || sscanf( file , "/clone/%*s" ) == 1
+                 || sscanf( file , "/quest/%*s" ) == 1
+                 || sscanf( file , "/quest2/%*s" ) == 1
+                 || sscanf( file , "/feature/%*s" ) == 1
+                 || sscanf( file , "/include/%*s" ) == 1
+                 || sscanf( file , "/inherit/%*s" ) == 1
+                 || sscanf( file , "/adm/%*s" ) == 1
+                 || sscanf( file , "/doc/%*s" ) == 1)   return 1; 
+    case "(player)" : {
+            if ( func == "rm" )
+            {
+                if ( file == (string)user->query_save_file() ||
+                     file == (string)user->query_save_file()+".o" ||
+                     sscanf(file,"/data/baby/%*s") ||
+                     sscanf(file,"/data/guild/%*s")||
+                     sscanf(file,"/data/room/%*s") ||
+                     sscanf(file,"/data/board/%*s")||
+                     sscanf(file,"/data/area/%*s") ||
+                     sscanf(file,"/p/%*s")         ||
+                     sscanf(file,"/data/city/%*s") ||
+                     sscanf(file,"/data/beast/%*s") ||
+                     sscanf(file,"/data/mail/%*s") )
+                     return 1;
+            }
+            if( creator_file(base_name(user)) == ROOT_UID ||
+                creator_file(base_name(user)) == "MudOS" ||
+                creator_file(file) == "Domain" || 
+                sscanf(file,"/data/npc/%*s") ||
+                sscanf(file,"/p/%*s") ||
+                sscanf(file,"/data/area/%*s") )
+                return 1;
+        }
+    case "(boss)" :     return 1;
+    case "(ceo)" :     return 1;           
+    default:
+    break;
+    }
+    euid = geteuid(user);
+    if( sscanf(file, "/u/" + euid + "/%*s") )
+        return 1;   
+           
+    localtime=localtime(time());
+    log_file(sprintf("FILES.%d%d",localtime[5],localtime[4]+1), sprintf("%s %s %s failed.\n", euid, func , file));
+    return 0;
+}
+
+int valid_seteuid( object ob, string uid )
+{
+    if( uid==0 ) return 1;
+    if( uid==getuid(ob) ) return 1;
+    if( getuid(ob)==ROOT_UID ) return 1;
+    if( sscanf(file_name(ob), "/adm/%*s") ) return 1;
+    if( wiz_status[uid] != "(boss)"
+    &&  wiz_status[getuid(ob)] == "(boss)" )
+        return 1;
+    return 0;
+}
+int valid_read(string file, mixed user, string func)
+{
+    string str;
+    object ob = this_player();
+
+     if ( ob )
+     if ( geteuid(ob)!="zmud" && geteuid(ob)!="landy" ) {
+             switch(file)
+             {
+             case "/adm/daemons/securityd.c":
+                     return 0;
+             case "/adm/obj/master.c":
+                     return 0;
+             case "/adm/obj/simul_efun.c":
+                     return 0;
+             case "/adm/simul_efun/file.c":
+                     return 0;
+             case "/adm/daemons/logind.c":
+                     return 0;
+             case "/cmds/app/update.c":
+                     return 0;
+             case "/adm/etc/wizlist":
+                     return 0;
+             default:
+             break;
+             }
+    }
+
+    if( !objectp(user) ) return 1;
+
+    if( sscanf(base_name(user),"/adm/daemons/%*s") ||
+        sscanf(base_name(user),"/adm/etc/%*s") ||
+        sscanf(base_name(user),"/feature/%*s") ||
+        sscanf(base_name(user),"/inherit/%*s") ||
+        sscanf(base_name(user),"/include/%*s") ||
+        sscanf(base_name(user),"/cmds/%*s") )
+    return 1;
+
+    if ( !ob ) return 1;
+    if ( geteuid(ob)!="zmud"&&geteuid(ob)!="landy" ) 
+    {
+      if( sscanf(file,"/log/%*s") || sscanf(file,"/u/zjb/%*s") || sscanf(file,"/u/daniel/%*s") )
+      {
+             str="On "+ctime(time())+", previous_object: "
+                 +base_name(user);
+             if ( objectp(ob) ) {
+             str+=ob->query("name")+"("+ob->query("id")+")";
+             str+=" try to read file: "+file+".\n";
+             log_file("file/bug_read",str);
+             write("警告：你不能操作这些目录下的文件。\n");
+             return 0;
+             }
+       } else return 1;
+     } else
+     return 1;
+}
+int valid_bind(object binder, object old_owner, object new_owner)
+{
+        // ROOT可以绑定任何函数
+        if (geteuid(binder) == ROOT_UID) return 1;
+        // 如果绑定者没有发生变化
+        if (binder == new_owner) return 1;
+        if (! wiz_level(new_owner) && geteuid(new_owner) != ROOT_UID)
+                return 1;
+        // 不同意绑定
+        return 0;
+}

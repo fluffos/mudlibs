@@ -1,0 +1,18 @@
+// SN:iZ[Ro6H^_3F77:ek
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m米象[2;37;0m", ({"rice xiang"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "米米米米米米米米米
+它是我是米的坐骑。
+");
+        set_temp("owner_id", "stray");
+        set_temp("owner_name", "我是米");
+        ::setup();
+}
+

@@ -1,0 +1,198 @@
+#include <ansi.h>
+inherit NPC;
+object curr_user, new_user, curr_env;
+object last_steal;
+int steal_time=0, fresh=1;
+int just_bianed=0, no_player=0, just_steal=0;
+void copy_status(object me, object ob);
+int random_walk();
+void do_steal(object me, object user);
+
+void create()
+{
+   set_name("蒙面强盗", ({ "mask robber" }) );
+   set("long","这是一名蒙面强盗，样子很神秘。\n");
+   set("gender", "男性" );
+   set("age", 30);
+   set("long", "\n");
+   set("attitude", "heroism");
+
+   set("chat_chance_combat", 15);
+   set("chat_msg_combat", ({
+            BOLD "蒙面强盗喝道：呔！此路是我开，此树是我栽，要想从此过，留下镖银来！\n" NOR,
+            CYN "蒙面强盗喝道：快快放下东西，留你一条生路！\n" NOR,
+            CYN "蒙面强盗喝道：老子看你是要钱还是要命！\n"NOR ,
+            BOLD "蒙面强盗喝道：钱也要，命也要！\n"NOR,
+   }) );
+
+   set("str", 20 + random(10));            // 膂力
+   set("per", 20 + random(10));            // 容貌
+   set("int", 20 + random(10));            // 悟性
+   set("con", 20 + random(10));            // 根骨
+   set("dex", 20 + random(10));            // 身法
+   set("kar", 20 + random(10));            // 福缘
+
+   set("combat_exp", 10500);
+
+   set("neili", 700);
+   set("max_neili", 700);
+   set("jiali", 10);
+   set("shen", -10);
+   set("no_suck",1);
+
+   set_temp("apply/attack", 40);
+   set_temp("apply/defense", 40);
+   set_temp("apply/damage", 40);
+   set_temp("apply/armor", 40);
+   set_temp("apply/dodge", 40);
+
+   set_skill("force", 100); 
+   set_skill("unarmed", 100);
+   set_skill("dodge", 100);
+   set_skill("parry", 90);
+
+   setup();
+   carry_object("/clone/misc/cloth")->wear();
+   carry_object("/d/city/npc/obj/gangdao")->wield();
+   add_money("gold", 1);
+
+}
+void init()
+{
+        object me, ob, obj;
+        int n;
+        me=this_object();
+        ob=this_player();
+        ::init();
+        if (obj=present("biao yin", ob)) {
+                if (obj->query("identifier")==query("target"))
+                        if (!me->is_killing(ob)) {
+                                set_leader(ob);
+                                if(query("speaker"))
+                                        command("say "+ob->name()+"，把镖银留下，放你走路！！！");
+                                me->kill_ob(ob);
+                                ob->fight_ob(me);
+                                set("victim", ob->query("id"));
+                                copy_status(me,ob);
+                        }
+        }
+        remove_call_out("check_out");
+        call_out("check_out", 1);
+}
+void check_out()
+{
+        int i, present;
+        object me, *ob, obj;
+
+        me=this_object();
+        ob=all_inventory(environment());
+        for(i=0; i<sizeof(ob); i++) {
+                if(obj=present("biao yin", ob[i])) {
+                        if(obj->query("identifier")==query("target")) {
+                                if(!me->is_killing(ob[i]->query("id"))) {
+                                        set_leader(ob[i]);
+                                        if(query("speaker"))
+                                                command("say "+ob[i]->name()+"，把镖银留下，放你走路！！\n");
+                                        me->kill_ob(ob[i]);
+                                        ob[i]->fight_ob(me);
+                                        set("victim", ob[i]->query("id"));
+                                }
+                                present = 1;
+                                break;
+                        }
+                }
+                present = 0;
+        }
+
+        if(present) {
+                remove_call_out("check_out");
+                call_out("check_out", 1);
+        }
+        else {
+                for(i=0; i<sizeof(ob); i++)
+                        if(me->is_killing(ob[i]->query("id")))
+                                remove_killer(ob[i]);
+                remove_call_out("leave");
+                call_out("leave", 1);
+        }
+}
+void leave()
+{
+        object ob;
+
+        if (!environment()) return;
+
+        if(query("speaker"))
+                if(objectp(ob=present(query("victim"), environment()))) {
+                        message("vision", "\n", environment(), this_object());
+                        message("vision", HIY + name() + "哼了一声。\n" NOR, environment(), this_object());
+                        message("vision", HIY + name() + "说道：“"+ob->name()+"，算你识相！大爷们今天就放你一条生路！”\n" NOR, environment(), this_object());
+                }
+                else {
+                        message("vision", "\n", environment(), this_object());
+                        message("vision", HIB + name() + "喊道：“风紧，扯乎！”\n" NOR, environment(), this_object());
+                        message("vision", HIB + name() + "一哄而散。\n" NOR, environment(), this_object());
+                }
+        destruct(this_object());
+}
+void copy_status(object me, object ob)
+{
+        mapping hp_status, skill_status, map_status;
+        string *sname, *mname;
+        int i,j;
+        if(skill_status = me->query_skills()) {
+           sname  = keys(skill_status);
+      j=sizeof(skill_status);
+           for(i=0; i<j; i++) {
+        me->delete_skill(sname[i]);
+           }
+        }
+   if (skill_status = ob->query_skills() ) {
+      sname  = keys(skill_status);
+      for(i=0; i<sizeof(skill_status); i++) {
+     me->set_skill(sname[i], skill_status[sname[i]]);
+      }
+        }
+   if(map_status = me->query_skill_map()) {
+     mname  = keys(map_status);
+     j=sizeof(map_status);
+     for(i=0; i<j; i++) {
+       me->map_skill(mname[i]);
+          }
+        }
+        //add new skill mappings.
+   if (map_status = ob->query_skill_map()) {
+     mname  = keys(map_status);
+     for(i=0; i<sizeof(map_status); i++) {
+     me->map_skill(mname[i], map_status[mname[i]]);
+     }
+        }
+   hp_status = ob->query_entire_dbase();
+
+   me->set("str", hp_status["str"]);
+   me->set("per", hp_status["per"]);
+   me->set("int", hp_status["int"]);
+   me->set("con", hp_status["con"]);
+   me->set("dex", hp_status["dex"]);
+   me->set("kar", hp_status["kar"]);
+ 
+   if(fresh==1) {
+     fresh=0;
+     me->set("eff_qi",    hp_status["eff_qi"]);
+     me->set("qi",        hp_status["qi"]);
+     me->set("eff_jing",  hp_status["eff_jing"]);
+     me->set("jing",      hp_status["jing"]);
+
+     me->set("eff_dx", me->query("combat_exp"));
+     if(COMBAT_D->check_family(ob->query("family/family_name"))>0)
+     me->set("eff_dx", -me->query("eff_dx"));
+     }
+   me->set("max_qi",    hp_status["max_qi"]);
+   me->set("max_jing",  hp_status["max_jing"]);
+   me->set("max_neili", hp_status["max_neili"]);
+   me->set("neili",     hp_status["neili"]);
+   me->set("jiali",     hp_status["jiali"]);
+   me->set("combat_exp",hp_status["combat_exp"]+hp_status["combat_exp"]/50);
+   return ;
+}
+

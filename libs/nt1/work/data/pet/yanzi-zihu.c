@@ -1,0 +1,18 @@
+// SN:iG7hM`28:8ef1DSK
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;35m紫[1;32m貂貂[2;37;0m", ({"zihu diao"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "$HIG$一身$HIM$紫红色$HIY$的毛,$HIR$出现在$HIG$众人面前.
+它是孙燕姿的坐骑。
+");
+        set_temp("owner_id", "yanzi");
+        set_temp("owner_name", "孙燕姿");
+        ::setup();
+}
+

@@ -1,0 +1,144 @@
+#include <ansi.h>
+inherit NPC;
+int clean_trash();
+int dest_trash();
+int do_sell(string arg);
+void create()
+{
+        int i,amun;
+        string *order = ({"张", "王", "李", "赵", "孙", "徐", "郑", "周", "吴",
+"蒋", "沈", "杨", "苗", "尹", "金", "魏", "陶" });
+	string *orderr = ({"冬瓜", "西瓜", "南瓜", "傻瓜"});
+        set_name( order[random(17)] + orderr[random(4)], ({ "scavenger", "chang" }) );
+	set("title", "收破烂的");
+	set("gender", "女性" );
+	set("age", random(20)+20);
+	set("env/wimpy",90);
+	set("vendetta_mark", "authority");
+	set("str", 10);
+	set("long",
+"她以清理华附的垃圾为生．但她和守门的保安之间
+好像有某种不可告人的关系，虽然人很讨厌，但你
+最好不要招惹她。杀了她会导致所有保安的追杀。\n");
+        set("chat_chance", 80);
+        set("chat_msg", ({
+                (: clean_trash :),
+		(: dest_trash :)
+        }) );
+
+	set("attitude", "friendly");
+	set("combat_exp", 1000);
+	setup();
+}
+
+void init()
+{
+// clean up all trash
+	object room;
+	int i;
+	object *inv;
+	dest_trash();
+	room = environment(this_object());
+	if(room)
+	{
+	inv = all_inventory(room);
+        for(i=0; i<sizeof(inv); i++) {
+
+	if( userp( inv[i]) ) 
+	{
+	if ( !random(5))
+	set_leader(inv[i]);
+	continue;
+	}
+	if( inv[i]->query("no_shown")) continue;
+	if( inv[i]->query("no_get")) continue;
+	if( inv[i]->is_character()) continue;
+	if( inv[i]->is_corpse()) continue;
+	command("get "+ inv[i]->query("id"));
+	}
+	}
+        add_action("do_sell", "sell");
+}
+int randommove()
+{
+        mapping exits;
+        string *dirs;
+	string thisdir;
+        if( !mapp(exits = environment()->query("exits")) ) 
+	{
+	destruct(this_object());
+	return 0;
+	}
+        dirs = keys(exits);
+	thisdir = dirs[random(sizeof(dirs))];
+	this_object()->set("last_dir",thisdir);
+        command("go " + thisdir);
+}
+
+
+int clean_trash()
+{
+	mapping exits;
+	string *dirs;
+	string last_dir;
+	if( last_dir = this_object()->query("last_dir"))
+	{
+        if( !mapp(exits = environment()->query("exits")) ) 
+	{
+	destruct(this_object());
+	return 0;
+	}
+        dirs = keys(exits);
+	if( member_array(last_dir, dirs) != -1)
+	{
+	if( random(2) )
+		command("go "+ last_dir);
+	else
+		randommove();
+	}		
+	else
+		randommove();
+		
+
+	}
+	else
+		randommove();
+}
+int dest_trash()
+{
+	object *inv;
+	int i,j;
+	inv = all_inventory(this_object());
+	j = sizeof(inv);
+       for(i=0; i<j; i++) 
+	destruct(inv[i]);
+}
+int do_sell(string arg)
+{
+	object ob, myenv;
+	object silver;
+	object *inv;
+	int value;
+	if (!arg || !(ob = present(arg, this_player())))
+		return notify_fail("你要卖什么？\n");
+	if (!ob->is_character())
+		return notify_fail("你只能卖活人。\n");
+	if( this_player()->query("id") == ob->query("id"))
+		return notify_fail("自己卖自己？实在是发财有道了。\n");
+	value=TOP_D->get_score(ob);
+	command("rumor "+ob->query("name")+"被"+this_player()->query("name")+"拐卖给了卖破烂的，不多不少，正好" +
+		CHINESE_D->chinese_number(value) + "块钱哪。");
+	message_vision("$N把" + ob->query("name") + "卖给了卖破烂的。\n", this_player());
+	silver=new("/obj/money/silver");
+	silver->set_amount(value);
+	silver->move(this_player());
+	myenv = environment (this_player());
+	tell_room(myenv,"收破烂的开心的大笑：老娘要发财了。\n");
+	ob->move("/d/huafu/shoujia");
+	ob->set("startroom","/d/huafu/shoujia");
+	ob->set("title","收破烂的宝贝");
+	ob->apply_condition("prostitute", 5);
+	ob->set_temp("selled");
+	ob->set("class", "prostitute");
+	return 1;
+}

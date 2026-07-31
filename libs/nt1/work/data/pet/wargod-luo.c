@@ -1,0 +1,18 @@
+// SN:4b4e?:Y=]HV6JnMm
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m骆驼[2;37;0m", ({"luo tuo"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "一匹骆驼
+它是战神的坐骑。
+");
+        set_temp("owner_id", "wargod");
+        set_temp("owner_name", "战神");
+        ::setup();
+}
+

@@ -1,0 +1,18 @@
+// SN:=]8R=j8=F1eIhooQ
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m千年鹤[2;37;0m", ({"qiannian he"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "雪白的千年鹤
+它是乖乖芙的坐骑。
+");
+        set_temp("owner_id", "ggf");
+        set_temp("owner_name", "乖乖芙");
+        ::setup();
+}
+

@@ -1,0 +1,475 @@
+// damage.c
+// 增加一项在特定的房间pk不会死....by chan design
+#include <ansi.h>
+#include <dbase.h>
+#include <login.h>
+#include <move.h>
+#include <pkla.h>
+int ghost = 0;
+int is_ghost() { return ghost; }
+varargs int receive_damage(string type, int damage, object who)
+{
+  int val;
+  if( damage < 0 ) error("F_DAMAGE: 伤害值为负值。\n");
+  if( type!="gin" && type!="kee" && type!="sen" )
+    error("F_DAMAGE: 伤害种类错误( 只能是 gin, kee, sen 其中之一 )。\n");
+  if( objectp(who) ) set_temp("last_damage_from", who);
+  if( query_temp("mana_shield") && type == "kee" )
+  {
+     if( query("atman")>50)
+     {
+         type = "atman";
+     }else{
+         delete_temp("mana_shield");
+     }
+  }
+  val = (int)query(type) - damage;
+   if( val >= 0 ) { set(type, val); }
+   else if( type == "atman") { set(type,0); delete_temp("mana_shield"); }
+   else set(type,-1);
+  set_heart_beat(1);
+  return damage;
+}
+varargs int receive_wound(string type, int damage, object who)
+{
+  int val;
+  if( damage < 0 ) error("F_DAMAGE: 伤害值为负值。\n");
+  if( type!="gin" && type!="kee" && type!="sen" )
+    error("F_DAMAGE: 伤害种类错误( 只能是 gin, kee, sen 其中之一 )。\n");
+  if( objectp(who) ) set_temp("last_damage_from", who);
+  val = (int)query("eff_" + type) - damage;
+  if( val >= 0 ) set("eff_" + type, val);
+  else {
+    set( "eff_" + type, -1 );
+    val = -1;
+  }
+  if( (int)query(type) > val ) set(type, val);
+  set_heart_beat(1);
+  return damage;
+}
+int receive_heal(string type, int heal)
+{
+  int val;
+  if( heal < 0 ) error("F_DAMAGE: 恢复值为负值。\n");
+  if( type!="gin" && type!="kee" && type!="sen" )
+    error("F_DAMAGE: 恢复种类错误( 只能是 gin, kee, sen 其中之一 )。\n");
+  val = (int)query(type) + heal;
+  if( val > (int)query("eff_" + type) ) set(type, (int)query("eff_" + type));
+  else set( type, val );
+  return heal;
+}
+int receive_curing(string type, int heal)
+{
+  int max, val;
+  if( heal < 0 ) error("F_DAMAGE: 恢复值为负值。\n");
+  if( type!="gin" && type!="kee" && type!="sen" )
+    error("F_DAMAGE: 恢复种类错误( 只能是 gin, kee, sen 其中之一 )。\n");
+  val = (int)query("eff_" + type);
+  max = (int)query("max_" + type);
+  if( val + heal > max ) {
+    set("eff_" + type, max);
+    return max - val;
+  } else {
+    set( "eff_" + type, val + heal);
+    return heal;
+  }
+}
+void unconcious()
+{
+  object defeater, officer;
+  if( !living(this_object()) ) return;
+  if( wizardp(this_object()) && query("env/immortal") ) return;
+  if( this_object()->query_temp("pk_fight") ) {
+      if( !(officer = find_living("pkla officer")) )
+          return;
+      officer->pk_lose(this_object());
+      return;
+  } 
+  if( objectp(defeater = query_temp("last_damage_from")) )
+    COMBAT_D->winner_reward(defeater, this_object());
+  this_object()->remove_all_enemy();
+  message("system", HIR "\n你的眼前一黑，接着什么也不知道了....\n\n" NOR,
+    this_object());
+  this_object()->disable_player(" <昏迷不醒>");
+  set("gin", 0);
+  set("kee", 0);
+  set("sen", 0);
+  set_temp("block_msg/all", 1);
+  set_temp("unconcious", 1);
+  COMBAT_D->announce(this_object(), "unconcious");
+  call_out("revive", random(100 - 2*query("con")) + 30);
+}
+varargs void revive(int quiet)
+{
+  remove_call_out("revive");
+  set_temp("unconcious", 0);
+  while( environment()->is_character() )
+    this_object()->move(environment(environment()));
+  this_object()->enable_player();
+  if( !quiet ) {
+    COMBAT_D->announce(this_object(), "revive");
+    set_temp("block_msg/all", 0);
+    message("system", HIY "\n慢慢地你终于又有了知觉....\n\n" NOR,
+      this_object());
+  } else
+    set_temp("block_msg/all", 0);
+}
+void die()
+{
+  object corpse, killer, me=this_object(),where;
+  mapping  my;
+   string   *my_key,head;
+  object *living_here, ob, officer;
+  string *killer_name;
+  int gin, kee, sen, force, mana, atman;
+  //int i,j;
+  float sum_of_killers_exp;
+  int get_exp, get_pot;
+  if( !living(me) ) revive(1);
+  if (environment() && environment()->query("undead")) return;
+  if( wizardp(me) && query("env/immortal") ) return;
+  where = environment(me);
+  if(where->query("pkroom",1))
+  {
+  //若被追缉的人在格斗场的话一样会死.....
+  if(userp(me)&&(!me->query("ckill")))
+   {
+   if(userp(killer= me->query_temp("last_damage_from")))
+   CHANNEL_D->do_channel(killer,"dead",
+   sprintf("哈!!哈!!笨蛋%s死在我手里了!!!",me->name(1)));
+ me->remove_all_killer();
+all_inventory(environment())->remove_killer(me);
+// 掉钱....借用一下 living_here 变数....
+/*不掉钱...by chan 还有要做pkgame时要掉钱哦.....
+    living_here= all_inventory( me);
+    for( i= 0; i< sizeof( living_here); i++)
+    {
+       if( living_here[ i]->query("id") == "gold")
+          living_here[ i]->move( environment( me));
+       if( living_here[ i]->query("id") == "thousand-cash")
+          living_here[ i]->move( environment( me));
+       if( living_here[ i]->query("id") == "coin"
+        || living_here[ i]->query("id") == "silver")
+          living_here[ i]->move( environment( me));
+     }
+*/
+     me->dismiss_team();
+//   killer->add("PKS", 1); 不算pk....
+     killer->add("pkgame",1);  //可以用pklist看战绩....by chan
+//   me->clear_condition();  不解除状态
+     me->remove_all_enemy();
+     gin = me->query("max_gin");
+     kee = me->query("max_kee");
+     sen = me->query("max_sen");
+     force = me->query("max_force");
+     mana = me->query("max_mana");
+     atman = me->query("max_atman");
+     me->set("eff_gin", gin);
+     me->set("gin", gin);
+     me->set("eff_kee", kee);
+     me->set("kee", kee);
+     me->set("eff_sen", sen);
+     me->set("sen", sen);
+     me->set("force", force);
+     me->set("mana", mana);
+     me->set("atman", atman);
+     me->set("water", 0);
+     me->set("food", 0);
+     me->move("/open/common/room/inn.c");
+     return;
+   }
+}
+  // 清除药性
+  me->set("status",0);
+  // Clear all the conditions by death.
+  me->clear_condition();
+  //  在 pkla 中死掉的
+ if( this_object()->query_temp("pk_fight") ) {
+     if( !(officer = find_living("pkla officer")) )
+         return;
+     officer->pk_lose(this_object());
+     return;
+  }
+//这是小渡在1998.8.24加入的有关杀手的追杀对象
+//chan重新修正by 1998.9.17
+//wataru 1998.10.25 再次修正
+//                  避免有替身的玩家不会死掉，且title仍在
+//                  所以把检查title的改到替身之前，且把死亡的部分加上去
+//              问题是接下来这一两行，因为不能放在检查title的block里面
+//      因为他是检查杀人者，并且设定物件的内容
+//      o样会形成，有set_temp杀人者
+//      不知道对于有替身者有何影响？因为，原本有替身者，并不会被侦察这一项
+ if( objectp(killer = query_temp("last_damage_from")) || killer = me) 
+       set_temp("my_killer", killer->query("id"));
+ if (me->query("title") == HIR"杀手全力追杀的人头"NOR)
+ {
+       COMBAT_D->announce(me, "dead");
+       COMBAT_D->killer_reward(killer, me);
+       if( objectp(corpse = CHAR_D->make_corpse(me, killer)) )
+       corpse->move(environment());
+        new("/open/killer/obj/kill_yar_head.c")->move(corpse);
+        me->delete("title");
+        me->remove_all_killer();
+        all_inventory(environment())->remove_killer(me);
+        me->dismiss_team();
+        if( userp(me) ) 
+        {
+            ob = me->query_temp("link_ob");
+            my = me->query_entire_temp_dbase();
+            my_key = keys(my);
+            foreach(object x in my_key)
+            {  me->delete_temp(x); }
+            me->set_temp("link_ob", ob);
+            me->setup();
+            set("gin", 1);  set("eff_gin", 1);
+            set("kee", 1);  set("eff_kee", 1);
+            set("sen", 1);  set("eff_sen", 1);
+            ghost = 1;
+            me->move(DEATHROOM);
+            me->delete("ckill"); //取消ckill所设的....by chan
+            me->delete("ckill_id"); //取消ckill所设的....by chan
+            DEATHROOM->start_death(me);
+            me->save();
+       } 
+       else 
+          destruct(me);
+       return ;
+  }
+  // 替身
+        if( me->query("standby") > 0 ) {
+            me->add("standby", -1);
+            me->clear_condition();
+            me->remove_all_enemy();
+            gin = me->query("max_gin");
+            kee = me->query("max_kee");
+            sen = me->query("max_sen");
+            force = me->query("max_force");
+            mana = me->query("max_mana");
+            atman = me->query("max_atman");
+            me->set("eff_gin", gin);
+            me->set("gin", gin);
+            me->set("eff_kee", kee);
+            me->set("kee", kee);
+            me->set("eff_sen", sen);
+            me->set("sen", sen);
+            me->set("force", force);
+            me->set("mana", mana);
+            me->set("atman", atman);
+            me->set("water", 0);
+            me->set("food", 0);
+            me->delete("ckill"); //取消ckill所设的....by chan
+            me->delete("ckill_id"); //取消ckill所设的....by chan
+            me->move(me->query("startroom"));
+            tell_object(me, "你用掉一个替身了, 你的替身正在地府观光呢。\n");
+            return;
+        }
+  // 清除药性
+  me->set("status",0);
+  // Clear all the conditions by death.
+  me->set("force",10);
+  me->clear_condition();
+  me->clear_condition("burn");
+  me->clear_condition("cold");
+  me->clear_condition("hart");
+  me->clear_condition("god_out");
+  me->clear_condition("u-stial");
+  me->clear_condition("blade");
+  me->clear_condition("star-stial");
+  //清掉..burn hart cold及god_out防止死了又死 by Chan 7/7
+  //清除来不及解除的魔域波幻迷掌...被折磨致死大概很难过吧
+  //By Roger
+  if(me->query_condition("mogi"))
+  me->clear_condition("mogi");
+//只有这种方法能解除波幻迷掌
+  COMBAT_D->announce(me, "dead");
+        if( objectp(killer = query_temp("last_damage_from")) || killer = me) 
+                set_temp("my_killer", killer->query("id"));
+        COMBAT_D->killer_reward(killer, me);
+  if( objectp(corpse = CHAR_D->make_corpse(me, killer)) )
+    corpse->move(environment());
+//  sum_of_killers_exp=0;
+  killer_name=me->query_killer();
+  living_here=all_inventory(environment());
+  if(member_array(killer,living_here) == -1)
+        living_here += ({killer});
+/*
+  foreach(object x in living_here)
+    foreach(object y in killer_name)
+      if(y==x->query("id"))
+        sum_of_killers_exp=x->query("combat_exp")+sum_of_killers_exp;
+*/
+  foreach(object x in living_here)
+    foreach(object y in killer_name)
+      if(y==x->query("id"))
+      {
+//exp及pot系统重新改写..by chan
+      switch(x->query("combat_exp"))
+ {
+  case 0..1000:
+       get_exp=10;
+       get_pot=5;
+  break;
+  case 1001..5000:
+       get_exp=30;
+       get_pot=10;
+  break;
+  case 5001..10000:
+       get_exp=50;
+       get_pot=15;
+  break;
+  case 10001..50000:
+       get_exp=100;
+       get_pot=30;
+  break;
+  case 50001..100000:
+       get_exp=200;
+       get_pot=40;
+  break;
+  case 100001..500000:
+       get_exp=300;
+       get_pot=50;
+  break;
+  case 500001..1000000:
+       get_exp=400;
+       get_pot=60;
+  break;
+  case 1000001..1500000:
+       get_exp=500;
+       get_pot=65;
+  break;
+  case 1500001..2000000:
+       get_exp=600;
+       get_pot=70;
+  break;
+  case 2000001..2500000:
+       get_exp=700;
+       get_pot=80;
+  break;
+  case 2500001..3000000:
+       get_exp=850;
+       get_pot=90;
+  break;
+  default:
+       get_exp=1000;
+       get_pot=100;
+  break;
+ }
+/*
+        if(me->query("combat_exp")<5000)
+           get_exp=10;
+        else
+          get_exp=100*x->query("combat_exp")/(sum_of_killers_exp+1);
+        get_pot=get_exp*0.4;
+        get_exp=get_exp*2.4;
+          if(me->query("combat_exp")<x->query("combat_exp")*8/10) {
+          get_pot=0;
+          get_exp=0; }
+          if(me->query("combat_exp")>x->query("combat_exp")*3) {
+          get_pot=0;
+          get_exp=0; }
+        if(!x->query("no_exp")) { //身上有no_exp的mob拿不到exp及pot by chan
+*/
+          if(me->query("combat_exp")<x->query("combat_exp")*8/10) {
+          get_pot=0;
+          get_exp=0; }
+          if(me->query("combat_exp")>x->query("combat_exp")*3) {
+          get_pot=0;
+          get_exp=0; }
+          x->add("potential",get_pot);
+          x->add("combat_exp",(int)get_exp);
+        tell_object(x,"你得到 "+sprintf("%O",(int)get_exp)+" 的实战经验。\n");
+        tell_object(x,"你得到 "+sprintf("%O",(int)get_pot)+" 的潜能。\n");
+//     }
+     }
+  me->remove_all_killer();
+  all_inventory(environment())->remove_killer(me);
+  me->dismiss_team();
+  if( userp(me) ) {
+    ob = me->query_temp("link_ob");
+    my = me->query_entire_temp_dbase();
+    my_key = keys(my);
+    foreach(object x in my_key)
+    {  me->delete_temp(x); }
+    me->set_temp("link_ob", ob);
+    me->setup();
+    set("gin", 1);  set("eff_gin", 1);
+    set("kee", 1);  set("eff_kee", 1);
+    set("sen", 1);  set("eff_sen", 1);
+    ghost = 1;
+    me->move(DEATHROOM);
+    DEATHROOM->start_death(me);
+    me->save();
+  } else 
+    destruct(me);
+}
+void reincarnate()
+{
+  ghost = 0;
+  set("eff_gin", query("max_gin"));
+  set("eff_kee", query("max_kee"));
+  set("eff_sen", query("max_sen"));
+
+}
+int max_food_capacity() { return query_weight() / 200; }
+int max_water_capacity() { return query_weight() / 200; }
+
+int heal_up()
+{
+  int update_flag;
+  mapping my;
+
+//  if( this_object()->is_fighting() ) return -1;
+
+  update_flag = 0;
+
+  my = query_entire_dbase();
+
+  if( my["water"] > 0 ) my["water"] -= 1;
+  else if( userp(this_object()) ) return update_flag;
+
+  if( my["food"] > 0 ) my["food"] -= 1;
+  else if( userp(this_object()) ) return update_flag;
+  
+  my["gin"] += my["con"] + my["atman"] / 8;
+  if( my["gin"] >= my["eff_gin"] ) {
+    my["gin"] = my["eff_gin"];
+    if( my["eff_gin"] < my["max_gin"] ) { my["eff_gin"] ++; update_flag++; }
+  } else update_flag++;
+
+  my["kee"] += my["con"] + my["force"] / 40 ;
+  if( my["kee"] >= my["eff_kee"] ) {
+    my["kee"] = my["eff_kee"];
+    if( my["eff_kee"] < my["max_kee"] )  { my["eff_kee"] ++; update_flag++; }
+  } else update_flag++;
+
+  my["sen"] += my["con"] + my["mana"] / 8;
+  if( my["sen"] >= my["eff_sen"] ) {
+    my["sen"] = my["eff_sen"];
+    if( my["eff_sen"] < my["max_sen"] )  { my["eff_sen"] ++; update_flag++; }
+  } else update_flag++;
+
+  if( my["max_atman"] && my["atman"] < my["max_atman"] ) {
+    my["atman"] += (int)this_object()->query_skill("magic", 1) / 2;
+    if( my["atman"] > my["max_atman"] ) my["atman"] = my["max_atman"];
+    update_flag++;
+  }
+
+  if( my["max_force"] && my["force"] < my["max_force"] ) {
+    my["force"] += (int)this_object()->query_skill("force", 1) / 2;
+    if( my["force"] > my["max_force"] ) my["force"] = my["max_force"];
+    update_flag++;
+  }
+
+  if( my["max_mana"] && my["mana"] < my["max_mana"] ) {
+    my["mana"] += (int)this_object()->query_skill("spells", 1) / 2;
+    if( my["mana"] > my["max_mana"] ) my["mana"] = my["max_mana"];
+    update_flag++;
+  }
+
+  if( my["max_officer_power"] && my["officer_power"] < my["max_officer_power"] ) {
+    my["officer_power"] += this_object()->query_skill("be-officer",1) / 2;
+    if( my["officer_power"] > my["max_officer_power"] ) my["officer_power"] = my["max_officer_power"];
+    update_flag++;
+  }
+  return update_flag;
+}

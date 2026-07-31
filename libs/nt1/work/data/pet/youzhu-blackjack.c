@@ -1,0 +1,18 @@
+// SN:Y1=SLfj@?`\Y4d9J
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;36m傲啸长空雕[2;37;0m", ({"blackjack diao"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "看什么看！再看，就把你喝掉！！！
+它是浦饭幽助的坐骑。
+");
+        set_temp("owner_id", "youzhu");
+        set_temp("owner_name", "浦饭幽助");
+        ::setup();
+}
+

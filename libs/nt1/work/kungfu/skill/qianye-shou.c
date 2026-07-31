@@ -1,0 +1,93 @@
+// Copyright (C) 2003, by Lonely. All rights reserved.
+// This software can not be used, copied, or modified 
+// in any form without the written permission from authors.
+// qianye-shou.c -如来千叶手
+
+#include <ansi.h>
+inherit SHAOLIN_SKILL;
+
+string *action_msg = ({
+        "$N一式「南海礼佛」，右手虚晃，左手扬起，突然拍向$n的背后二穴",
+        "$N侧身一晃，一式「金玉瓦砾」，左手拿向$n的肩头，右拳打向$n的胸口",
+        "$N一式「人命呼吸」，右手环拢成爪，一出手就向扣$n的咽喉要害",
+        "$N左手虚招，右掌直立，一式「镜里观影」，错步飘出，疾拍$n的面门",
+        "$N使一式「水中捉月」，左拳上格，右手探底突出，抓向$n的裆部",
+        "$N双拳挥舞，一式「浮云去来」，两手环扣，拢成圈状，猛击$n的下颌",
+        "$N一式「水泡出没」，十指伸缩，虚虚实实地袭向$n的全身要穴",
+        "$N双手抱拳，一式「梦里明明」，掌影翻飞，同时向$n施出九九八十一招",
+        "$N一式「觉后空空」，拳招若隐若现，若有若无，缓缓地拍向$n的丹田",
+});
+
+int valid_enable(string usage) { return usage == "hand" || usage == "parry"; }
+
+int valid_combine(string combo) { return combo == "longzhua-gong"; }
+
+int valid_learn(object me)
+{
+        if (me->query_temp("weapon") || me->query_temp("secondary_weapon"))
+                return notify_fail("练如来千叶手必须空手。\n");
+
+        if ((int)me->query_skill("force") < 40)
+                return notify_fail("你的内功火候不够，无法学如来千叶手。\n");
+
+        if ((int)me->query("max_neili") < 200)
+                return notify_fail("你的内力太弱，无法练如来千叶手。\n");
+
+        if ((int)me->query_skill("hand", 1) < (int)me->query_skill("qianye-shou", 1))
+                return notify_fail("你的基本手法水平有限，无法领会更高深的如来千叶手。\n");
+
+        return 1;
+}
+
+mapping query_action(object me, object weapon)
+{
+        return ([
+                "action": action_msg[random(sizeof(action_msg))], 
+                "force": 320 + random(120), 
+                "attack": 50 + random(10), 
+                "dodge" : 50 + random(10), 
+                "parry" : 50 + random(10), 
+                "damage_type" : random(2)?"内伤":"瘀伤", 
+        ]); 
+}
+
+int practice_skill(object me)
+{
+        if ((int)me->query("qi") < 60)
+                return notify_fail("你的体力太低了。\n");
+        if ((int)me->query("neili") <60)
+                return notify_fail("你的内力不够练如来千叶手。\n");
+        if ((int)me->query_skill("sanhua-zhang", 1) < 90)
+                return notify_fail("你的散花掌修为还不够。\n");
+
+        me->receive_damage("qi", 50);
+        me->add("neili", -50);
+        return 1;
+}
+
+string perform_action_file(string action)
+{
+        return __DIR__"qianye-shou/" + action;
+}
+
+mixed hit_ob(object me, object target, int damage)
+{
+        string msg;
+        mixed result;
+        int j;
+        
+        j = me->query_skill("qianye-shou", 1);
+   
+        if ((random(10) > 5) && ! target->is_busy() && j > 150 &&
+            me->query_skill("buddhism", 1) >180 &&
+            me->query("neili") > 1000 && me->query("max_neili") > 2500)
+        {
+                result = ([ "damage" : damage / 2 ]);
+                msg = CYN"$N轻飘飘拍出一掌，掌到中途，忽然微微摇晃，登时一掌变两掌，两掌变四掌，四掌变八掌。\n"NOR;
+                msg += "结果$n只须迟得顷刻，$N便八掌变十六掌，进而幻化为三十二掌。\n";
+                msg +="$n躲闪不及被漫天掌影裹在核心。\n";
+                result += ([ "msg" : msg ]);
+                
+                return result;
+        }
+}

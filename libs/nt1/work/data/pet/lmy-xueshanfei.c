@@ -1,0 +1,18 @@
+// SN:U9R@40i<Z_]8Y=2;
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m雪山飞狐[2;37;0m", ({"xueshanfei hu"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "这是一只寒冰山特有的狐狸
+它是冷明月的坐骑。
+");
+        set_temp("owner_id", "lmy");
+        set_temp("owner_name", "冷明月");
+        ::setup();
+}
+

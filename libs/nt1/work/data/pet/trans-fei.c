@@ -1,0 +1,18 @@
+// SN:Q\XSnj`iQFURONDa
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;36m飞熊[2;37;0m", ({"fei xiong"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "$HIW$莫非坐骑道号飞熊 
+它是莫非的坐骑。
+");
+        set_temp("owner_id", "trans");
+        set_temp("owner_name", "莫非");
+        ::setup();
+}
+

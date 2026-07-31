@@ -1,0 +1,136 @@
+//qishang-quan/zongjue.c
+// by liu 7/13/01
+// Modified by Xuanyuan 12/7/2001
+
+#include <ansi.h>
+#include <combat.h>
+inherit F_DBASE;
+inherit F_SSERVER;
+
+void remove_effect(object target);
+string *songs = ({"五行之气调阴阳","损心伤肺摧肝肠","藏离精失意恍惚","三焦齐逆兮魂魄飞扬"});
+
+int perform(object me, object target)
+{
+	int damage, ap, dp, pp;
+	string msg, song, *limb, type, result, str;
+	song = songs[random(sizeof(songs))];
+   
+	if( !target ) target = offensive_target(me);
+
+	if( !target || !target->is_character() || !me->is_fighting(target) )
+		return notify_fail("总诀只能对战斗中的对手使用。\n");
+
+	if (me->query_temp("weapon") || me->query_temp("secondary_weapon"))
+		return notify_fail("总决只能空手使用。\n");
+
+	if( me->query_skill("qishang-quan", 1) < 180 )
+		return notify_fail("你的七伤拳火候不够，无法使用总决！\n");
+
+	if( me->query_skill("force",1) < 150 )
+		return notify_fail("你的内功修为不够，无法使用总决！\n");
+
+	if( me->query("max_neili") <= 1000 )
+		return notify_fail("你的内力修为不足，劲力不能运发，无法使用总决！\n");
+
+	if( (int)me->query("neili") < 1000  ) 
+		return notify_fail("你的内力不够。\n");
+
+	if( (int)me->query("jingli") < 500  )
+		return notify_fail("你的精力不够。\n");
+
+	damage = (me->query("jiali") + me->query("jiajin")) * (int)me->query_skill("force")/60 + (int)me->query_skill("force", 1) + me->query_temp("apply/damage");
+	if(damage > me->query_skill("force")*10 ) damage = me->query_skill("force")*10;
+	if(damage < me->query_skill("force")*3 ) damage = me->query_skill("force")*3;
+
+	if(wizardp(me)) tell_object(me, "zongjue damage: "+damage+"\n");
+
+	ap = COMBAT_D->skill_power(me, "cuff", SKILL_USAGE_ATTACK);
+	if( ap < 1 ) ap = 1;
+
+	dp = COMBAT_D->skill_power(target, "dodge", SKILL_USAGE_DEFENSE);
+	if( dp < 1 ) dp = 1;
+	
+	pp = COMBAT_D->skill_power(target, "parry", SKILL_USAGE_DEFENSE);
+	if( pp < 1 ) pp = 1;
+
+	if(!target->query_temp("qishang_damage")){
+	message_vision(HIR"\n突然$N眼射精光，朗声念出句似歌非歌、似诗非诗的拳诀：“"+song+"”，接着跨上一步，砰的一拳击向$n！\n"NOR,me, target);
+	if( living(target) && random(ap + dp) < dp ) {
+		me->start_busy(2);
+		me->add("neili",-100 -me->query("jiajin"));
+		me->add("jingli",-80 -me->query("jiali"));     
+		me->receive_damage("qi",random(100),"七伤拳内劲反噬死了");
+		message_vision("只见$p轻轻一转身，已经绕到了$P身后。而$N却因劲力打空不受控制，头脑眩晕！\n",me, target);
+		return 1;
+	}
+	else if( living(target) && random(ap + pp) < pp ) {
+		me->start_busy(2);
+		me->add("neili",-100 -me->query("jiajin"));
+		me->add("jingli",-80 -me->query("jiali"));       
+		me->receive_damage("qi",random(100),"七伤拳内劲反噬死了");
+		message_vision("只见$p轻轻一转身，已经绕到了$P身后。而$N却因劲力打空不受控制，头脑眩晕！\n",me, target);
+		return 1;
+	}
+	else{       
+		if(((int)me->query("neili",1) + me->query("con")*50) < (int)target->query("neili",1))  
+			tell_object(me, HIR"你只觉"+target->name()+"体内内力极强，你暗藏在拳内的各种力道根本送不出去！\n"NOR);
+			else{
+				tell_object(me, HIR"在刚一触到"+target->name()+"的身体时，你便暗暗发力，将隐藏在在拳内的七种力道送了过去！\n"NOR);
+				tell_object(target, HIR"你一晃眼，只见"+me->name()+"的拳已经打在你的身上，跟着几股说不出的暗劲顺势传了过来！\n"NOR);
+				target->set_temp("qishang_damage", 1);
+				target->add_temp("apply/strength", -random((int)target->query("str", 1)/2));    
+				target->add_temp("apply/dexerity", -random((int)target->query("dex", 1)/2));  
+				target->add_temp("apply/intelligence", -random((int)target->query("int", 1)/2));    
+				target->add_temp("apply/constitution", -random((int)target->query("con", 1)/2));  
+				if( random(me->query_skill("qishang-quan", 1)) > 80 ) {
+					target->apply_condition("qs_damage",
+					random(me->query_skill("qishang-quan", 1)/3) + target->query_condition("qs_damage"));
+				}
+				if ( target->query_temp("jinzhongzhao") ) {
+					target->apply_condition("qs_damage", target->query_condition("qs_damage")/3);
+				}
+				target->start_call_out( (: call_other, __FILE__, "remove_effect", target :), me->query_skill("force")/2); 
+				}
+		target->receive_damage("qi", damage, me);         
+		me->add("neili",-100 -me->query("jiajin"));
+		me->add("jingli",-80 -me->query("jiali"));       
+		me->receive_damage("qi",random(100),"七伤拳内劲反噬死了");
+
+		limb = target->query("limbs");
+		type = "内伤";
+		result = COMBAT_D->damage_msg(damage, type);
+		result = replace_string( result, "$l", limb[random(sizeof(limb))]);
+		result = replace_string( result, "$p", target->name() );
+		message_vision(result, me, target);
+
+		str = COMBAT_D->status_msg((int)target->query("qi") * 100 /(int)target->query("max_qi"));
+		message_vision("( $N"+str+" )\n", target);
+        } 
+		return 1;
+	}
+
+	me->set_temp("apply/attack", me->query_temp("apply/attack",1)+ random(100));
+	me->set_temp("zongjue",1);
+	COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+	me->delete_temp("zongjue");
+	me->set_temp("apply/attack", 0);
+
+	me->add("neili",-100);
+	me->add("jingli",-80);
+	me->receive_damage("qi",random(100),"七伤拳内劲反噬死了");
+
+	me->start_busy(1+random(2));
+	return 1;
+}
+
+void remove_effect(object target)
+{
+      if(!target) return;
+      target->delete_temp("apply/strength");    
+      target->delete_temp("apply/dexerity");  
+      target->delete_temp("apply/intelligence");    
+      target->delete_temp("apply/constitution");  
+      target->delete_temp("qishang_damage");
+      tell_object(target, HIW"终于，体内那几股暗劲在遍布你的全身后开始慢慢散去了。\n"NOR);
+}

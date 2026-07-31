@@ -1,0 +1,13 @@
+inherit BULLETIN_BOARD;
+
+void create()
+{
+        set_name(HIG"星空家的留言板"NOR,({"board"}));
+        set("location","/u/zjb/workroom");
+        set("board_id", "zjb_b");
+        set("long", "如果有事找星空，可以在这里留言。\n");
+        setup();
+        set("capacity", 100);
+        replace_program(BULLETIN_BOARD);
+}
+

@@ -1,0 +1,32 @@
+// SN:`XH?;bg5FF>14GBn
+// File(/data/room/remiel/lianwu.c) of remiel's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "练武场");
+	set ("long", @LONG
+此处便是天使禁猎区的练武场，人在江湖，武功万万不可荒废。
+LONG );
+
+	set("exits", ([
+                "west" : __DIR__"houyuan",
+	]));
+
+        set("objects", ([
+                "/clone/npc/mu-ren" : 4,
+        ]));
+
+        set("outdoors", "playertown");
+        set("no_sleep_room", 1);
+
+        setup();
+    
+        set("room_owner", "雷米尔");
+        set("room_name", "天使禁猎区");
+        set("room_id", "angelcage");
+        set("room_owner_id", "remiel");
+        set("room_position", "青砖路");
+}

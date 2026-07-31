@@ -1,0 +1,11 @@
+// SN:790N[V]L=4F\1Ee:
+// wedding-ring.c
+
+#include "/clone/misc/wedding-ring.h"
+
+void setup()
+{
+        set("long", "这是雨柔和千王之王的结婚戒指，是两人的定情之物。
+");
+        ::setup();
+}

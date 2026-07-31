@@ -1,0 +1,18 @@
+// SN:97gS8MaX3b_ZH5Q4
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;32m晴天无机大山羊[2;37;0m", ({"ren yang"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "一只吸取天地灵气的羊，有几千年道行。
+它是猪猪快跑的坐骑。
+");
+        set_temp("owner_id", "tiantian");
+        set_temp("owner_name", "猪猪快跑");
+        ::setup();
+}
+

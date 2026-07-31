@@ -1,0 +1,107 @@
+// juan.c 风卷残云
+#include <ansi.h>
+#include <skill.h>
+#include <weapon.h>
+#include <combat.h>
+#include <condition.h>
+inherit F_SSERVER;
+
+int perform(object me, object target)
+{
+	string msg;
+	object weapon, weapon2;
+	int damage,ap,dp;
+
+	if (!target ) target = offensive_target(me);
+	if (!target || !target->is_character() || !me->is_fighting(target) )
+		return notify_fail("风卷残云只能对战斗中的对手使用。\n");
+	if (target && target->query_temp("apply/shade_vision")) 
+		return notify_fail("对方隐身了，你看不到"+target->query("name")+"。\n"); 	
+	if (me->is_busy()) 
+		return notify_fail("你现在正忙着呢！\n");
+	if (!objectp(weapon = me->query_temp("weapon")) || (string)weapon->query("skill_type") != "whip")
+		return notify_fail("你使用的武器不对。\n");
+	if( (int)me->query_skill("chixin-bianfa",1) < 300)
+		return notify_fail("你的痴心鞭法等级不够, 不能使用风卷残云！\n");
+	if ((int)me->query_skill("wangran-xinfa", 1) < 300)
+		return notify_fail("你的本门心法火候不够，无法使用。\n");
+//	if ( me->query_skill_mapped("force") != "wangran-xinfa")
+//		return notify_fail("你必须激发妄然心法才能使用「风卷残云」！\n"); 	
+//	if ( me->query_skill_mapped("whip") != "chixin-bianfa")
+//		return notify_fail("你必须激发该技能！\n"); 	
+	if( me->query("max_jingli") < 10000 )
+		return notify_fail("你的精力修为不够，无法使用风卷残云！\n");	
+	if( me->query("jingli") < 1000 )
+		return notify_fail("你的精力不够，无法使用风卷残云！\n");
+    if( (int)me->query("neili") < 1000 )
+        return notify_fail("你的真气不够。\n");
+	if (me->query_temp("autolian"))
+		return notify_fail("你正在发动自动连招！\n"); 	
+	if ( me->query_temp("cooldown") )	//CD写法	2017.9.7添加
+		return notify_fail("你处于技能冷却状态中，过会在使用吧。\n");
+		
+	msg = HIW "$N默念口诀，打算施展风卷残云绝技. \n"NOR;
+	message_vision(msg, me, target);
+	me->set_temp("cooldown", 1);	//CD写法	2017.9.7添加
+	call_out("del_cooldown", 3, me);	//CD写法1	
+/*	if (me->query("family/family_name") == "痴心妄想门")	//非本门派弟子使用本门技能，则技能效果削一半
+	{
+		ap = me->query("xyzx_sys/level") + me->query_skill("chixin-bianfa", 1) + me->query_skill("whip") + me->query_skill("force");
+	}
+	else
+	{
+		ap = me->query("xyzx_sys/level") + (me->query_skill("chixin-bianfa", 1) + me->query_skill("whip") + me->query_skill("force"))/2;
+	}*/
+	ap = me->query("xyzx_sys/level") + me->query_skill("chixin-bianfa", 1) + me->query_skill("whip") + me->query_skill("force");
+	dp = target->query("xyzx_sys/level") + target->query_skill("dodge") + target->query_skill("parry");
+	ap = ap*((int)me->query("breakup")+(int)me->query("breakup")*(int)me->query("breakup")+100)/100;
+	dp = dp*((int)target->query("breakup")+(int)target->query("breakup")*(int)target->query("breakup")+100)/100;
+	if( random(ap) > dp/3 )
+	{
+		if(userp(me)) me->add("jingli",-500);
+		if (objectp(weapon2 = target->query_temp("weapon")))		
+		{
+		msg = WHT"$N挥舞手中" + weapon->name() + WHT"卷向$n, "WHT"$n顿时觉得眼前一花，手腕一麻，" + weapon2->name() + WHT"脱手而出！\n" NOR;
+		message_vision(msg, me, target);
+		weapon2->unequip();
+//		weapon2->move(environment(target));
+		weapon2->move(me);	
+//		target->apply_condition("no_equip", 10);
+		}
+		msg = WHT"紧接着$N手中"+ NOR+weapon->name()+ WHT"挥舞一圈又绕了回来，乘$n惊讶间急刺$n胸口！\n" NOR;		
+		COMBAT_D->do_attack(me, target, me->query_temp("weapon"), 1);
+		message_vision(msg, me, target);		
+		msg = WHT"紧接着$N手中"+ NOR+weapon->name()+ WHT"挥舞一圈又绕了回来，乘$n惊讶间急刺$n檀中大穴！\n" NOR;		
+		COMBAT_D->do_attack(me, target, me->query_temp("weapon"), 1);						
+		message_vision(msg, me, target);		
+		msg = WHT"紧接着$N手中"+ NOR+weapon->name()+ WHT"挥舞一圈又绕了回来，乘$n惊讶间缠上$n脖颈！\n" NOR;		
+		COMBAT_D->do_attack(me, target, me->query_temp("weapon"), 1);	
+		message_vision(msg, me, target);		
+		damage = me->query_skill("chixin-bianfa",1) + me->query_skill("whip",1);
+		damage = damage/2 + random(damage/2);
+		damage = damage*(100-target->query_meridian())/100;
+		target->receive_damage("qi", damage,me);
+		target->receive_wound("qi", damage/2,me);
+		msg = MAG "结果$n"MAG"被$N抽了好几鞭子！\n" NOR;
+		message_vision(msg, me, target, damage, HBWHT+HIM"气血伤害"NOR);	//2018.10.2阿飞改，优化化学伤害显示的写法
+//		if (userp(me) && me->query("env/no_combat_msg")<4) tell_object(me, HIW"该绝招对敌人气血的外伤为"+ damage +"，内伤为"+ damage/2 +"。\n" NOR);
+	}
+	else
+	{
+		msg = RED"可是$n"RED"的看破了$N的企图，立刻采取守势，使$N的招式落空了。\n"NOR;
+		message_vision(msg, me, target);		
+	}
+	me->start_busy(1);
+
+	return 1;
+}
+
+void del_cooldown(object me)	//CD写法1
+{ 
+	if ( !objectp(me) ) return;
+	if ( me->query_temp("cooldown") )	
+	{
+		me->delete_temp("cooldown");
+		tell_object(me, HIM"你呼出一口气，缓缓的将内力收回丹田。\n"NOR);
+	}	
+}

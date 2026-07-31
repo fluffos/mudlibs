@@ -1,0 +1,3 @@
+// poison.c
+
+inherit SKILL;

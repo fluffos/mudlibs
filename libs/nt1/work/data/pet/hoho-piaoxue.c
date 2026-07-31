@@ -1,0 +1,18 @@
+// SN:lO`]ED9:=CZKLZ_B
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m白鹤[2;37;0m", ({"piaoxue he"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "$HIW$白
+它是唐弄影的坐骑。
+");
+        set_temp("owner_id", "hoho");
+        set_temp("owner_name", "唐弄影");
+        ::setup();
+}
+

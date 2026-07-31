@@ -1,0 +1,160 @@
+// pi.c 开天辟地
+
+#include <ansi.h>
+#include <skill.h>
+#include <weapon.h>
+#include <combat.h>
+
+inherit F_SSERVER;
+
+int perform(object me, object target)
+{
+	object weapon,weapon2;
+	int damage,damage1,i;
+	string msg;
+	int ap, dp;
+
+/*	if (! target)
+	{
+		me->clean_up_enemy();
+		target = me->select_opponent();
+	}
+	if (! target || ! me->is_fighting(target))
+		return notify_fail("你只能对战斗中的对手使用。\n");	*/	//这种写法适合内功的攻击招式
+	if( !target ) target = offensive_target(me);
+	if( !target || !target->is_character() || !me->is_fighting(target) )		
+		return notify_fail("「开天辟地」只能对战斗中的对手使用。\n");
+	if (target && target->query_temp("apply/shade_vision")) 
+		return notify_fail("对方隐身了，你看不到"+target->query("name")+"。\n"); 
+	if (! objectp(weapon = me->query_temp("weapon")) || (string)weapon->query("skill_type") != "blade")
+		return notify_fail("运用「开天劈地」手中必须有刀！\n");
+	if (me->is_busy()) 
+		return notify_fail("你现在正忙着呢！\n");
+	if ((int)me->query_skill("hujia-dao", 1) < 500)
+		return notify_fail("你的胡家刀法不够娴熟，不会使用「开天辟地」。\n");
+//	if (me->query_skill_mapped("force")!="lengyue-shengong") 
+//		return notify_fail("你没有使用冷月神功吧！。\n");
+	if ((int)me->query_skill("force",1) < 1000)
+		return notify_fail("你的内功修为不够高。\n");
+	if ((int)me->query_skill("lengyue-shengong",1) < 500)
+		return notify_fail("你的冷月神功修为不够高。\n");
+	if( (int)me->query("neili") < 1000 )
+		return notify_fail("你现在内力太弱，不能使用「开天劈地」。\n");
+	if( (int)me->query("jingli") < 1000 )
+		return notify_fail("你的精力不够。\n");	
+	if( (int)me->query("max_neili") < 100000 )
+		return notify_fail("你现在内力修为太弱，不能使用「开天劈地」。\n");
+//	if (me->query_skill_mapped("blade") != "hujia-dao")
+//		return notify_fail("你没正确激发该技能 。\n");	
+	if (me->query_temp("autolian"))
+		return notify_fail("你正在发动自动连招！\n"); 	
+	if ( me->query_temp("cooldown") )	//CD写法	2017.9.7添加
+		return notify_fail("你处于技能冷却状态中，过会在使用吧。\n");
+		
+	msg = HIC "$N" HIC "一声长笑，双手紧握" + weapon->name() + HIC "刀柄，长吸一口气，全力向$n" HIC "迅猛劈去！\n\n"NOR;
+	message_vision(msg, me, target);
+	me->set_temp("cooldown", 1);	//CD写法	2017.9.7添加
+	call_out("del_cooldown", 3, me);	//CD写法1
+	if (target->query_temp("snow/freeze") )
+	{
+		msg = HIW + weapon->name() + HIW "寒气逼人，刀身撕裂空气，片片雪花飘落，刀未至气先及，$n" HIW "眉毛都蒙上了薄薄白霜！\n\n"NOR;
+		message_vision(msg, me, target);
+		target->add("neili", -5000);
+	}
+
+	ap = me->query("xyzx_sys/level") + me->query_skill("hujia-dao", 1) + me->query_skill("blade") + me->query_skill("force");
+	dp = target->query("xyzx_sys/level") + target->query_skill("dodge") + target->query_skill("parry");
+	ap = ap*((int)me->query("breakup")+(int)me->query("breakup")*(int)me->query("breakup")+100)/100;
+	dp = dp*((int)target->query("breakup")+(int)target->query("breakup")*(int)target->query("breakup")+100)/100;
+
+	if (random(ap) > dp/3)
+	{
+		damage1 = me->query_skill("force",1) + me->query_skill("dodge",1) + me->query_skill("hujia-dao",1)*3 + me->query_skill("lengyue-shengong",1);
+		me->add("neili", -500);
+		me->add("jingli", -500);
+		if (!objectp(weapon2 = target->query_temp("weapon")))
+		{
+			damage = damage1/2 + random(damage1/2);
+			damage = damage*(100-target->query_meridian())/100;
+			target->receive_damage("qi",damage,me);
+			target->receive_wound("qi",damage/2,me);
+			msg = HIR "只见$n" HIR "一声惨叫，胸口给劈开一个巨大的口子，鲜血汹涌喷出！\n"NOR;
+			message_vision(msg, me, target, damage, HBWHT+HIM"气血伤害"NOR);	//2018.10.2阿飞改，优化化学伤害显示的写法
+//			if (userp(me) && me->query("env/no_combat_msg")<4) tell_object(me, HIW"该绝招对敌人气血的外伤为"+ damage +"，内伤为"+ damage/2 +"。\n" NOR);
+
+			if (random(3)==0 && target->query_temp("snow/freeze"))
+			{
+				damage = damage1/4 + random(damage1/4);
+				damage = damage*(100-target->query_meridian())/100;
+				target->receive_damage("qi",damage,me);
+				target->receive_wound("qi",damage/2,me);
+				msg = HIR "\n$n" HIR "身形摇晃间，感觉到" + weapon->name() + HIR +"上一阵刺骨的寒气侵入体内，复又喷出一口鲜血！\n" NOR;
+				message_vision(msg, me, target, damage, HBWHT+HIM"气血伤害"NOR);	//2018.10.2阿飞改，优化化学伤害显示的写法
+//				if (userp(me) && me->query("env/no_combat_msg")<4) tell_object(me, HIW"该绝招对敌人追加气血的外伤为"+ damage/2 +"，内伤为"+ damage/4 +"。\n" NOR);
+			}
+		}
+		else
+		{
+			msg = HIR "$n" HIR "见状不妙，连忙举起" + weapon2->name() + HIR +
+			       "抵挡，在$N这霸气无边的一招下，" + weapon2->name() + HIR +
+			       "给震成碎片！\n" NOR;
+			message_vision(msg, me, target);
+			for (i = 0; i < 2 + random(3); i++)
+			{
+				damage = damage1/6 + random(damage1/6);
+				damage = damage*(100-target->query_meridian())/100;
+				target->receive_damage("qi",damage,me);
+				target->receive_wound("qi",damage/2,me);				
+				msg = HIB "碎片四散飞溅，射中了$n的身体！\n" NOR;
+				message_vision(msg, me, target, damage, HBWHT+HIM"气血伤害"NOR);	//2018.10.2阿飞改，优化化学伤害显示的写法
+//				if (userp(me) && me->query("env/no_combat_msg")<4) tell_object(me, HIW"该绝招对敌人气血的外伤为"+ damage/3 +"，内伤为"+ damage/5 +"。\n" NOR);
+			}
+
+			weapon2->unequip();
+			weapon2->move(environment(target));
+			weapon2->set("name","断掉的" + weapon2->query("name"));
+			weapon2->set("item_old_value", weapon2->query("value"));
+			weapon2->set("value", 0);
+			weapon2->set("backold_weapon_prop", weapon2->query("weapon_prop"));
+			weapon2->set("weapon_prop", 0);
+//			target->reset_action();
+			damage = damage1/2 + random(damage1/2);
+			damage = damage*(100-target->query_meridian())/100;
+			target->receive_damage("qi",damage,me);
+			target->receive_wound("qi",damage/2 ,me);
+			msg = HIR + weapon->name() + HIR "余势未尽，又劈入了$n" + HIR + "的胸口，$n遭此重创，鲜血狂喷而出！\n" NOR;
+			message_vision(msg, me, target, damage, HBWHT+HIM"气血伤害"NOR);	//2018.10.2阿飞改，优化化学伤害显示的写法
+			if (userp(me) && me->query("env/no_combat_msg")<4) tell_object(me, HIW"该绝招对敌人气血的外伤为"+ damage +"，内伤为"+ damage/2 +"。\n" NOR);
+			if (target->query_temp("snow/freeze") && random(3)==0)
+			{
+				damage = damage1/2 + random(damage1/2);
+				damage = damage*(100-target->query_meridian())/100;
+				target->receive_damage("qi",damage,me);
+				target->receive_wound("qi",damage/2,me);
+				msg = HIR "\n$n" HIR "身形摇晃间，感觉到" + weapon->name() + HIR + "上一阵刺骨的寒气侵入体内，复又喷出一口鲜血！\n" NOR;
+				message_vision(msg, me, target, damage, HBWHT+HIM"气血伤害"NOR);	//2018.10.2阿飞改，优化化学伤害显示的写法
+//				if (userp(me) && me->query("env/no_combat_msg")<4) tell_object(me, HIW"该绝招对敌人气血的外伤为"+ damage +"，内伤为"+ damage/2 +"。\n" NOR);
+			}
+		}
+	}
+	else
+	{
+		msg = HIY "$n" HIY "见势不妙，抽身急退，险险避过$N"
+		       HIY "的这记开天辟地，尘土飞扬中，地上裂开了一道大口子！\n"NOR;
+		 message_vision(msg, me, target);
+		me->add("neili", -100);
+	}
+	
+	me->start_busy(1);
+	return 1;
+}
+
+void del_cooldown(object me)	//CD写法1
+{ 
+	if ( !objectp(me) ) return;
+	if ( me->query_temp("cooldown") )	
+	{
+		me->delete_temp("cooldown");
+		tell_object(me, HIM"你呼出一口气，缓缓的将内力收回丹田。\n"NOR);
+	}	
+}

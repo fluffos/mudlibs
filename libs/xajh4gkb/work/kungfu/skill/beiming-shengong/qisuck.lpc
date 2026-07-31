@@ -1,0 +1,87 @@
+// qisuck.c
+#include <ansi.h>
+#include <skill.h>
+#include <weapon.h>
+#include <combat.h>
+inherit F_SSERVER;
+int exert(object me, object target)
+{
+    int ap, dp;
+	int damage,damage1;
+	
+	if ( target == me ) target = offensive_target(me);
+    if( !objectp(target) || target->query("id") == "mu ren" )
+        return notify_fail("你要吸取谁的气血？\n");
+    if(me->is_busy())
+        return notify_fail("你现在正忙着！\n");
+    if( objectp(me->query_temp("weapon")) )
+        return notify_fail("你必须空手才能施用北冥神功吸人气血！\n");
+//	if (target && target->query_temp("apply/shade_vision")) 
+//		return notify_fail("对方隐身了，你看不到"+target->query("name")+"。\n"); 
+    if( (int)me->query_skill("beiming-shengong",1) < 300 )
+        return notify_fail("你的北冥神功功力不够，不能吸取对方的气血。\n");
+	if ( me->query_skill_mapped("force") != "beiming-shengong")
+		return notify_fail(HIC"不使用本门内功，如何使用本门绝学!\n"NOR);
+    if( (int)me->query("neili",1) < 1000 )
+        return notify_fail("你的内力不够，不能使用北冥神功。\n");
+	if( (int)me->query("jingli") < 1000 )
+		return notify_fail("你的精力不够。\n");	
+	if( (int)target->query("qi") < 1000 || !living(target) )
+        return notify_fail( target->name() + "已经奄奄一息，你已经无法从他体内吸取气血了！\n");
+	if( me->query("qi",1) > me->query("max_qi",1)*2 )
+        return notify_fail("你只觉气血翻腾，似乎已无法吸取更多的气血。\n");
+	if (me->query_temp("autolian"))
+		return notify_fail("你正在发动自动连招！\n"); 	
+	if ( me->query_temp("cooldown") )	//CD写法	2017.9.7添加
+		return notify_fail("你处于技能冷却状态中，过会在使用吧。\n");
+//	if ( !me->query("xy_huiyuan") && target->query("id") == "nai niu" && domain_file(base_name(environment(me))) == "party" )
+//		return notify_fail(HIY"帮会中奶牛只提供给注册会员使用，你无法吸取。\n"NOR);
+		
+    message_vision( HIR "$N身法陡然加快，右掌直出，猛地对准$n的膻中大穴按了上去！\n\n" NOR,me, target );
+	me->add("neili", -100);
+	me->add("jingli", -100);	
+	me->set_temp("cooldown", 1);	//CD写法	2017.9.7添加
+	call_out("del_cooldown", 5, me);	//CD写法1		
+	if ( living(target) )
+	{
+		me->kill_ob(target);
+		if( !target->is_killing(me) ) target->kill_ob(me);
+	}
+	ap = me->query("xyzx_sys/level") + me->query_skill("beiming-shengong", 1) + me->query_skill("lingboweibu",1) + me->query_skill("force");
+	dp = target->query("xyzx_sys/level") + target->query_skill("force");
+	ap = ap*((int)me->query("breakup")+(int)me->query("breakup")*(int)me->query("breakup")+100)/100;
+	dp = dp*((int)target->query("breakup")+(int)target->query("breakup")*(int)target->query("breakup")+100)/100;
+	damage1 = (int)me->query_skill("beiming-shengong", 1) + target->query("jiali");
+	damage = damage1/2 + random(damage1/2);
+    if ( random(ap) > dp/3  )
+    {
+        tell_object(target, HIR "你顿觉全身气血如水银般循孔飞泄而出，四肢无力，再也使不出劲来！\n" NOR);
+        target->receive_damage("qi", damage,me);
+		target->receive_wound("qi", damage/2,me);		
+        me->add("qi", damage );
+        me->add("eff_qi", damage/2 );	
+        if ( target->query("neili") >damage ) target->add("neili", -damage );
+        me->add("neili", damage);
+        if ( me->query("eff_qi") > me->query("max_qi") ) me->set("eff_qi", me->query("max_qi"));
+		if ( me->query("qi") > me->query("eff_qi") ) me->set("qi", me->query("eff_qi"));		
+        if ( me->query("eff_qi") > me->query("max_qi") ) me->set("eff_qi", me->query("max_qi"));
+		if ( me->query("qi") > me->query("eff_qi") ) me->set("qi", me->query("eff_qi"));
+//		if (userp(me) && me->query("env/no_combat_msg")<4) tell_object(me, HIW"该绝招对敌人气血的外伤为"+ damage +"，气血的内伤为"+ damage/2 +"。\n" NOR);	
+        tell_object(me, HIG "你觉得" + target->name() + "的气血("+damage+")自手掌源源不绝地流了进来。\n" NOR);
+    }
+    else
+    {   
+        message_vision(HIY "可是$p看破了$P的企图，机灵地闪了开去。\n" NOR, me, target);
+    }
+    me->start_busy(1);	
+    return 1;
+}
+void del_cooldown(object me)	//CD写法1
+{ 
+	if ( !objectp(me) ) return;
+	if ( me->query_temp("cooldown") )	
+	{
+		me->delete_temp("cooldown");
+		tell_object(me, HIM"你呼出一口气，缓缓的将内力收回丹田。\n"NOR);
+	}	
+}

@@ -1,0 +1,18 @@
+// SN:SP_H8:Zlil5[XmMO
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;31m炽火狐[2;37;0m", ({"firen hu"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "小家伙
+它是炽天使的坐骑。
+");
+        set_temp("owner_id", "fireangel");
+        set_temp("owner_name", "炽天使");
+        ::setup();
+}
+

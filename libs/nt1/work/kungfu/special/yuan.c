@@ -1,0 +1,38 @@
+// yuan.c
+
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+
+string name() { return HIC "破元大法" NOR; }
+
+int perform(object me, string skill)
+{
+
+        if (me->query("jing") < 80)
+                return notify_fail("你的精气不够，现在还不能施展破元大法。\n");
+
+        if (time()-(int)me->query("yuan_time") < 86400)
+                return notify_fail("破元大法每天只能使用一次。\n");
+
+        if (me->query("qi") >= me->query("eff_qi"))
+                return notify_fail("你的体力很好，没有必要使用破元大法。\n");
+
+        message_vision(HIC "$N" HIC "双手平举，暗运破元大法"
+                       "真气突破自身七经八脉，感到全身舒畅无比。\n" NOR, me);
+        tell_object(me, HIG "你感觉到恢复到最佳状态了。\n" NOR);
+
+        me->receive_damage("jing", 60 + random(20));
+        me->set("qi", (int)me->query("max_qi"));
+        me->set("jing", (int)me->query("max_jing"));
+        me->set("neili", (int)me->query("max_neili")*2 );
+        me->set("jingli", (int)me->query("max_jingli"));
+        me->set("eff_qi", (int)me->query("max_qi"));
+        me->set("eff_jing", (int)me->query("max_jing"));
+        me->set("eff_neili", (int)me->query("max_neili"));
+        me->set("eff_jingli", (int)me->query("max_jingli"));
+        me->set("yuan_time", time());
+        // me->start_busy(1);
+        return 1;
+}
+

@@ -1,0 +1,35 @@
+// SN:I>A>4fe3;hcH3h7<
+// File(/data/room/terra/jusuo.c) of terra's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "居所");
+	set ("long", @LONG
+这就是天堂乌鸦的家主人天堂乌鸦休息、读书的地方。楼上就是
+主人的卧室，西面则是书房。 
+LONG );
+
+	set("exits", ([
+		"up"   : __DIR__"woshi",
+                "west" : __DIR__"shufang",
+	]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("KEY_DOOR", ([
+                "exit" : "east",
+                "room" : __DIR__"huayuan",
+        ]));
+    
+        set("room_owner", "天堂乌鸦");
+        set("room_name", "天堂乌鸦的家");
+        set("room_id", "terras");
+        set("room_owner_id", "terra");
+        set("room_position", "山路");
+}

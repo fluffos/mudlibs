@@ -1,0 +1,18 @@
+// SN:T<>DBh?VJ5I]`MVI
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("美女美兽[2;37;0m", ({"dhdhw shou"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "美女美
+它是出云子的坐骑。
+");
+        set_temp("owner_id", "chuyun");
+        set_temp("owner_name", "出云子");
+        ::setup();
+}
+

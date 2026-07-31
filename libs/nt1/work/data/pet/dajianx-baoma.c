@@ -1,0 +1,18 @@
+// SN:9_>^QGmHhQC^OBHi
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;33m小宝马马[2;37;0m", ({"baoma ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "好马一只
+它是唐双龙的坐骑。
+");
+        set_temp("owner_id", "dajianx");
+        set_temp("owner_name", "唐双龙");
+        ::setup();
+}
+

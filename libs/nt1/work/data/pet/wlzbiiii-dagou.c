@@ -1,0 +1,18 @@
+// SN:P;8]lbmlh>m9aQ\]
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;33m大狗[1;32m熊[2;37;0m", ({"dagou xiong"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "一只熊
+它是武林争帝的坐骑。
+");
+        set_temp("owner_id", "wlzbiiii");
+        set_temp("owner_name", "武林争帝");
+        ::setup();
+}
+

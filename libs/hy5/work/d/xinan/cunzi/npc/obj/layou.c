@@ -1,0 +1,31 @@
+//writen by lnwm
+//layou.c
+
+#include <ansi.h>
+inherit ITEM;
+inherit F_FOOD;
+
+void create()
+{
+        set_name("辣椒油", ({"lajiao you"}));
+        set_weight(300);
+        set("long", "鲜红的辣椒油，看起来香香的。");
+        set("unit", "瓶");
+        set("value", 1);
+        set("fruit_remaining", 5); 
+        set("food_supply", 0);//可以是-1吗？ 
+        set("eat_msg", "$N拿起$n，就往嘴里倒,一定有毛病\n");
+        set("end_msg", "$N居然吃光了瓶里的辣椒油，真可怕.\n"); 
+        set("over_msg", "辣椒油你也要吃饱??\n");
+        set("core", "空瓶");    
+        set("core_id", ({"ping"}) );
+        set("core_unit", "只");    
+        set("core_long", "空瓶。\n"); 
+ 
+        setup();
+}
+void init()
+{
+    add_action("do_eat","drink");
+}
+

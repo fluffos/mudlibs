@@ -1,0 +1,22 @@
+// Room: /u/cass/hg/quqiao.c
+// This is a room made by roommaker. write by Fan. :)
+
+inherit ROOM;
+
+void create()
+{
+	set("short", "曲桥");
+	set("long", @LONG
+桥身是用青石砌成，桥上置白玉栏杆，桥顶盖泛青的琉璃瓦，桥似长亭，
+可避风雨。石桥的拱脚特薄，孔与孔之间衔接适宜，显得十分雅秀。清波反
+照，桥孔圆如皓月，半浮水上，半沉水下，天光云影，浮动水中，蔚为壮观。
+LONG
+);
+	set("exits", ([ /* sizeof() == 2 */
+  "south" : __DIR__"longtan",
+  "north" : __DIR__"yanyuhu",
+]));
+
+	setup();
+	replace_program(ROOM);
+}

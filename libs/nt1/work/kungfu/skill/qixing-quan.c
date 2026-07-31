@@ -1,0 +1,70 @@
+// Copyright (C) 2003, by Lonely. All rights reserved.
+// This software can not be used, copied, or modified 
+// in any form without the written permission from authors.
+
+inherit SKILL;
+
+string *action_msg = ({
+        "$N一招「星光灿烂」，双拳闪动, 攻向$n的$l",
+        "$N一招「摇光易位」，一拳横扫，气势如虹，击向$n的$l",
+        "$N身影向飘动，脸浮微笑，一招「星过长空」，右拳快速拍向$n的$l",
+        "$N一招「群星闪烁」，双拳数分数合，$n只觉到处是$N的拳影",
+        "$N施展开「千变万化」绕着$n一转，飞身游走，拳出如风，不住的击向$n。",
+        "只见$N突然猛跨两步，已到$n面前，右拳陡出，迅如崩雷，一招「流星雨」击向$n的前胸",
+        "$N一招「北斗生采」，拳影交错，上中下一齐攻向$n。",
+});
+
+int valid_enable(string usage) { return usage=="cuff" || usage=="parry"; }
+
+int valid_combine(string combo) { return combo == "canhe-zhi"; }
+
+int valid_learn(object me)
+{
+        if (me->query_temp("weapon") || me->query_temp("secondary_weapon"))
+                return notify_fail("练七星拳法必须空手。\n");
+
+        if ((int)me->query_skill("force") < 30)
+                return notify_fail("你的内功火候不够，无法练七星拳法。\n");
+
+        if ((int)me->query("max_neili") < 120)
+                return notify_fail("你的内力太弱，无法练七星拳法。\n");
+
+        if ((int)me->query_skill("cuff", 1) < 20)
+                return notify_fail("你的基本拳法火候太浅。\n");
+
+        if ((int)me->query_skill("cuff", 1) < (int)me->query_skill("qixing-quan", 1))
+                return notify_fail("你的基本拳法水平有限，无法领会更高深的七星拳法。\n");
+
+        return 1;
+}
+
+mapping query_action(object me, object weapon)
+{
+        return ([
+                "action": action_msg[random(sizeof(action_msg))], 
+                "force": 210 + random(50), 
+                "attack": 40 + random(10), 
+                "dodge" : 40 + random(10), 
+                "parry" : 40 + random(10), 
+                "damage_type" : random(2)?"内伤":"瘀伤", 
+        ]); 
+}
+
+int practice_skill(object me)
+{
+        if ((int)me->query("qi") < 50)
+                return notify_fail("你的体力太低了。\n");
+
+        if ((int)me->query("neili") < 50)
+                return notify_fail("你的内力不够练七星拳法。\n");
+
+        me->receive_damage("qi", 40);
+        me->add("neili", -40);
+        return 1;
+}
+
+string perform_action_file(string action)
+{
+        return __DIR__"qixing-quan/" + action;
+}
+

@@ -1,0 +1,31 @@
+// SN:[D7PZ43?ONhcCHXj
+// ITEM Made by player(白云:sau) /data/item/s/sau-myblade.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Mon Mar 15 08:29:41 2004
+#include <ansi.h>
+#include <weapon.h>
+
+inherit BLADE;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;34m屠龙刀[2;37;0m", ({ "myblade" }));
+	set_weight(9000);
+	set("item_make", 1);
+	set("unit", "把");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一把刀。
+刀柄上刻着一行小字：白云(sau)
+");
+	set("value", 2100000);
+	set("point", 463);
+	set("material", "magic stone");
+	set("wield_msg", "[1;34m$N一扬手，一柄黑沉沉的$n[1;34m赫然出现在手中。[2;37;0m\n");
+	set("unwield_msg", "[33m$N反手将$n[33m收回鞘中。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	init_blade(apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

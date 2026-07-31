@@ -1,0 +1,18 @@
+// SN:5VJP?UP6]R2bOj;2
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("黑驴驴[2;37;0m", ({"heilv lv"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "没有
+它是慕容降龙的坐骑。
+");
+        set_temp("owner_id", "qiao");
+        set_temp("owner_name", "慕容降龙");
+        ::setup();
+}
+

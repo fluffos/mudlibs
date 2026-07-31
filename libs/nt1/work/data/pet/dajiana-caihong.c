@@ -1,0 +1,18 @@
+// SN:J?3AAdkVb_d^3RVM
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;31m彩虹狮[2;37;0m", ({"caihong shi"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "好狮一只
+它是何济公的坐骑。
+");
+        set_temp("owner_id", "dajiana");
+        set_temp("owner_name", "何济公");
+        ::setup();
+}
+

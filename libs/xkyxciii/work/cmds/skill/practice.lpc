@@ -1,0 +1,128 @@
+// practice.c
+// 修改：中山大学  张三丰（Micro）----Micro_Liang@Hotmail.Com           1997.6
+
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+
+int help(object me);
+
+/* skill -- XXX
+        if ((int)me->query("kee") < PRACTICE_KEE)
+                return notify_fail( sprintf( "凭你你现在的体力还不够练习“%s”。\n", name ) );
+        me->receive_damage("kee", PRACTICE_KEE);
+   query_practice_kee();
+*/
+
+void create() { seteuid(getuid()); }
+
+int main(object me, string arg)
+{
+        object env;
+        string skillname;
+        int skill, skill_basic, pr_factor, pr_bonus, gain, n, times;
+
+        if (!arg || arg=="")   return help(me);
+        if( me->query_temp("sleeping") ) return notify_fail("你现在正躺着呢。\n");
+
+        env = environment(me);
+        if( env->query("restrict_action") ) 
+                return notify_fail("这里不能做这件事情。\n");
+
+        if( me->is_fighting() ) return notify_fail("你已经在战斗中了，学一点实战经验吧。\n");
+
+        if(sscanf(arg, "%d %s",times, arg) == 2 ) { 
+                if(times < 1) return notify_fail("最少要练一次。\n");
+        }
+        else times = 1;
+
+        if(times > 100) return notify_fail("你练那么多次干什么？\n");
+
+        if( !arg ) return (__DIR__"enable")->main(me, arg);
+
+        if( !stringp(skillname = me->query_skill_mapped(arg)) )
+                return notify_fail("你只能练习用 enable 指定的特殊技能。\n");
+
+        skill_basic = me->query_skill(arg, 1);
+        skill = me->query_skill(skillname, 1);
+
+        if( skill < 1 )
+                return notify_fail("你好像还没「学会」这项技能吧？最好先去请教别人。\n");
+        if( skill_basic < 1 )
+                return notify_fail("你对这方面的技能还是一窍不通，最好从先从基本学起。\n");
+
+        notify_fail("你现在不能练习这项技能。\n");
+        if( !SKILL_D(skillname)->valid_learn(me) ) return 0;
+
+        notify_fail("你试著练习" + to_chinese(skillname) + "，但是并没有任何进步。\n");
+        if( SKILL_D(skillname)->practice_skill(me) ) {
+/*
+
+//              if(! (pr_factor = SKILL_D(skillname)->practice_factor()) ) pr_factor = 100;
+// change by chance
+                if(! (pr_factor = (SKILL_D(skillname)->learn_factor()+10)))) pr_factor=110;
+                gain = skill_basic * pr_factor / 1000 ;
+                if(!(pr_bonus = SKILL_D(skillname)->practice_bonus()) ) gain += pr_bonus;
+// 加高难度
+                if( gain < 1 ) gain = 1;
+*/
+
+if( me->query("kee") < 30*times ) return notify_fail("你现在没有足够的力气。\n");
+
+                // Micro: 当特殊武功没到100时，Practice可以进步，但是不能升级。
+/*
+                n = 20 - (int)(skill / 10);
+                me->improve_skill(skillname, 
+                        gain * times, 
+                        skill_basic > skill && skill >= 100
+                        && me->query("combat_exp") >= skill * skill * skill / ( (n <= 0) ? 1 : ( n >= 10 ) ? 10 : n ) 
+                        * ( (int)SKILL_D(skillname)->enable_factor() >= 100 ? (int)SKILL_D(skillname)->enable_factor() : 100 )
+                        / 100 ? 0: 1);
+*/
+                // 加高难度
+// change by chance
+/*                if( ! SKILL_D(skillname)->learn_factor(skill))
+                    gain=110*times/100
+                else
+                    gain = (SKILL_D(skillname)->learn_factor(skill)+10) * times / 100;
+*/
+                if( ! SKILL_D(skillname)->learn_factor(skill))
+                    gain=skill_basic*skill_basic*90*times/20000;   //90=100-10
+                else
+                    gain =skill_basic*skill_basic*(SKILL_D(skillname)->learn_factor(skill)-10) * times / 20000;
+                if(skill<100 && gain>5) gain=5;
+                if( gain < 1 ) gain = 1;
+// 100 级以下也能通过 practice 升级，但是最多只能得到 5 点。
+                me->improve_skill(skillname, 
+                        gain, // gain * times, 
+                        skill_basic > skill  // && skill>=100
+                        && (int)me->query("combat_exp") >= (skill * skill * skill)  * (int)SKILL_D(skillname)->enable_factor() / 150
+                         ? 0 : 1);
+
+
+                // me->improve_skill(skillname, gain, skill_basic > skill ? 0: 1);
+                write( HIY "你的" + to_chinese(skillname) + "进步了！\n" NOR);
+
+if( times >= 1  ) me->receive_damage("kee", 30 * times - 30 );
+
+                return 1;
+        }
+        else return 0;
+}
+
+int help(object me)
+{
+        write(@TEXT
+指令格式：practice <技能种类>
+
+练习某个种类的技能，这个技能必须是经过 enable 的专业技能。
+
+如果你对这方面的基本技能够高，可以经过练习直接升级，而且升级的上
+限只跟你基本技能的等级有关，换句话说，勤加练习是使你的所学「青出
+於蓝胜於蓝」的唯一途径，当然，在这之前你必须从实际运用中获得足够
+的经验以提升你的基本技能。
+TEXT
+        );
+
+        return 1;
+}

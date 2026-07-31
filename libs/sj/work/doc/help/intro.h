@@ -1,0 +1,12 @@
+newbie==@==/doc/help/newbie
+rules==@==/doc/help/rules
+setting==@==/doc/help/settings
+wiz_rules==@==/doc/help/wiz_rules
+wizsettings==@==/doc/help/wizsettings
+cmds==@==/doc/help/cmds
+gengxin==@==/doc/help/gexing
+force==@==/doc/help/force
+故事背景==@==/doc/help/jianjie
+制造机器人==@==/doc/help/jiqiren
+主要的门派任务==@==/doc/help/job
+搏饼==@==/doc/help/bobin

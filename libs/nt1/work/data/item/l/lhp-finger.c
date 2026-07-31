@@ -1,0 +1,35 @@
+// SN:QJcOdOB9ECj>497^
+// ITEM Made by player(少龙:lhp) /data/item/l/lhp-finger.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Wed Jun  9 15:07:48 2004
+#include <ansi.h>
+#include <armor.h>
+
+inherit HANDS;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;34m灵犀一指[2;37;0m", ({ "finger" }));
+	set_weight(2100);
+	set("item_make", 1);
+	set("unit", "套");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一套指套。
+[1;34m身无彩凤双飞翼，心有灵犀一点通[2;37;0m
+指套缘上刻着一行小字：少龙(lhp)
+");
+	set("value", 2100000);
+	set("point", 682);
+	set("material", "magic stone");
+	set("wear_msg", "[1;37m老夫聊发少年狂，左牵黄，右擎苍。锦帽貂裘，千骑卷平冈。欲报倾城随太守，亲射虎，看孙郎。[2;37;0m\n");
+	set("remove_msg", "[1;37m酒酣胸胆尚开张，鬓微霜，又何妨！持节云中，何日遣冯唐？会挽雕弓如满月，西北望，射天狼。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/claw", 10);
+	set("armor_prop/armor", 10);
+	set("armor_prop/finger", 10);
+	set("armor_prop/unarmed_damage", apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

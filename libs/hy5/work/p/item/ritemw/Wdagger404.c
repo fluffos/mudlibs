@@ -1,0 +1,116 @@
+// gangjian.c
+
+#include <ansi.h>
+#include <weapon.h>
+
+//inherit M_WEAPON;
+//inherit F_GEMS;
+inherit DAGGER;
+
+string *du=({
+"ice_poison",
+"ill_dongshang",
+"ill_fashao",
+"ill_kesou",
+"ill_shanghan",
+"ill_zhongshu",
+"xx_poison",
+"cold_poison",
+"flower_poison",
+"rose_poison",
+"x2_poison",
+"sanpoison",
+"scorpion_poison",
+"anqi_poison",
+"nx_poison",
+"chilian_poison",
+"yufeng_poison",
+"insect_poison",
+"xscold_poison",
+});
+
+void create()
+{
+	set_name("[1;31m神通之匕首[2;37;0m", ({ "shentong dagger", "dagger" }));
+	set_weight(5057);
+	if (clonep())
+		set_default_object(__FILE__);
+	else {
+		set("unit", "把");
+		set("long", @LONG
+[1;31m天兵神通，走势要平善，气要随行，两眼顾尖，气沉两足稳，
+身法需自然，身行如飞燕，身落如停风，收如花絮，刺如钢钉！
+[2;37;0m这是一把由无比坚硬的[31m流花石[2;37;0m制成，重十斤一两一钱的[1;31m神通之匕首[2;37;0m。
+综合评价[1;36m无双无对[2;37;0m 看起来无比锋利，具有[1;34m倚天屠龙[2;37;0m的威力！
+上面刻了几个古符号：
+[31m火[2;37;0m:[1;31m无双[2;37;0m [37m天[2;37;0m:[1;31m无双[2;37;0m 
+上面还刻了一些符字：
+锋利:[1;31m毁天[2;37;0m 体灵:[32m粗糙[2;37;0m 白石:[32m粗糙[2;37;0m 紫石:[35m标准[2;37;0m 长生:[32m粗糙[2;37;0m 
+
+LONG
+);
+    set("no_get",1);
+	  set("no_put",1);
+	  set("no_pawn",1);
+	  set("no_drop",1);
+	  set("no_beg",1);
+	  set("no_steal",1);
+	  set("systemmake",1);
+		set("value", 25000);
+		set("weapon_prop/intelligence",0);
+		set("weapon_prop/strength",0);
+		set("weapon_prop/karey",0);
+		set("weapon_prop/percao",0);
+		set("weapon_prop/dexerity",0);
+		set("weapon_prop/constitution",0);
+    set("weapon_prop/dodge", 32);
+    set("weapon_prop/parry", 59);
+    set("weapon_prop/attack", 0);
+    set("weapon_prop/armor", 0);
+    set("weapon_prop/defense", 39);
+    
+    set("weapon_prop/neili", 0);
+    set("weapon_prop/qi", 31);
+    set("weapon_prop/jing", 0);
+    set("weapon_prop/jingli", 0);
+    set("weapon_prop/damage", 0);
+
+    set("wtypeA",0);
+    set("wtypeB",0);
+    set("wtypeC",0);
+    set("wtypeD",12);
+    set("wtypeE",0);
+    set("wtypeF",0);
+    set("wtypeG",0);
+    set("wtypeH",0);
+    set("wtypeI",12);
+    set("wtypeJ",0);
+    set("wtypeK",0);
+    set("wtypeL",0);
+    
+
+                set("skill", ([
+                        "name": "sword",
+                        "exp_required": 80000,
+                        "difficulty": 85,
+                        "min_skill":  1,
+                        "max_skill": 300,              
+                ]) );		
+		set("base_unit", "发");
+		
+
+		set("hxweapon", 1);
+		set("material", "default");
+    set("sharpness", 15);
+
+		set("wield_msg", "$N将$n握在手中。\n");
+		set("unwield_msg", "$N将手中的$n放下。\n");
+	}
+	
+	init_dagger(750);
+	setup();
+}
+
+
+
+#include "/obj/ritem/weaponzy.h";

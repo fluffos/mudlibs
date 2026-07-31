@@ -1,0 +1,94 @@
+#include <ansi.h>
+#include <combat.h>
+inherit ITEM;
+void create()
+{
+        set_name( HIY "孔雀翎" NOR, ({ "bird box","box" }) );
+        set_weight(80);
+        if( clonep() )
+                set_default_object(__FILE__);
+        else {
+                set("unit", "个");
+                set("long", @LONG
+一个金光闪闪的圆筒，圆筒的外表很光滑，看来
+甚至很平凡，只不过纯金铸造的。
+圆筒上刻着几行比蚊子大一点的字： 
+按下第一道钮
+机簧就已发动
+按下第二道钮
+世上没人能救
+圆筒上有一句新刻上的警句： 
+暗器也是种武器
+武器的真正意义并不是杀人
+而是止杀
+
+LONG);
+                set("material", "gold");
+        }
+        
+} 
+void init()
+{
+        add_action("do_shoot","shoot");
+} 
+int do_shoot(string arg)
+{
+        object ob;
+        object me;
+   string where;
+        int dp;
+        int damage;
+        if (!arg) return notify_fail("你要打谁？\n");
+        if (query("used")) return notify_fail(this_object()->name()+"已经用完了。\n");
+        me=this_player();
+        if( ( me->query("combat_exp") < 300000 )||( me->query("combat_exp") > 1000000 ))
+                return notify_fail("以你的经验，不应该使用" + this_object()->name()+"作为杀人的凶器。\n");
+        if( environment(me)->query("no_fight") || environment(me)->query("no_magic") || environment(me)->query("no_spells"))
+                return notify_fail("在这不可偷袭！\n");
+        ob=present(arg,environment(me));
+        if (!objectp(ob) || !living(ob)) 
+                return notify_fail(this_object()->name()+"只能对活的生物使用。\n");
+
+	if( !me->is_fighting())
+		return notify_fail("你不在打架，用这个做什么?\n");
+        
+        
+        if (! ob || ! me->is_fighting(ob))
+                return notify_fail("只能对战斗中的对手使用。\n");
+        
+        message_vision(BLU"$N忽然举起手上一样圆筒状的东西。。。\n"NOR,me);
+        if (ob!=me)
+                message_vision(HIY"$N对着$n举起了手中的孔雀翎，从匣子中闪电般射出一片金光。。。。。\n",me,ob);
+        else {
+                message("vision",HIY""+me->name()+HIW"对着自己举起了手中的孔雀翎，从匣子中闪电般射出一片银光。。。。。\n"NOR,environment(me),me);
+                tell_object(me,HIY"你对着自己举起了手中的孔雀翎，从匣子中闪电般射出一片金光。。。。。\n"NOR);
+        }
+            
+        where=file_name(environment(ob));
+        if (!userp(ob) && where[0..6]=="/d/cave") {
+                message_vision(YEL"$N大笑道:这点雕虫小技也到我青龙会地盘上来卖弄,大爷见得多了！\n"NOR,ob);
+                message_vision(YEL"$N听风辨形，居然在间不容发之际躲过了这漫天针雨！\n\n"NOR,ob);
+        } else {                
+                if (ob->query_skill("perception")/10>random(22)) {
+                        if (me!=ob) message_vision("$N听风辨形，居然在间不容发之际躲过了这漫天针雨！\n\n",ob);
+                        else {
+                                message("vision",me->name()+"听风辨形，居然在间不容发之际躲过了这漫天针雨！\n\n",environment(me),me);
+                                tell_object(me,"你听风辨形，居然在间不容发之际躲过了这漫天针雨！\n\n");
+                        }       
+                }else {
+                        message_vision(RED"金光打在$N身上，一闪就消失了。\n\n"NOR,ob);
+                        dp=ob->query_skill("dodge",1)*3;
+                        damage=5000-dp;
+                        damage/=100;
+                        if (damage<0) damage=0;
+                        ob->receive_wound("qi",damage);    
+                           ob->receive_wound("jing",damage);    
+                        ob->receive_wound("jing",damage);    
+                }       
+        }       
+        COMBAT_D->report_status(ob);                                         
+        //if (ob!=me)     ob->kill_ob(me); 
+        set("used",1);
+        if (me->query_busy()<2) me->start_busy(2);
+        return 1;
+}     

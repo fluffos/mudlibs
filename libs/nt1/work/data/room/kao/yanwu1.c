@@ -1,0 +1,33 @@
+// SN:F44_RUHGlPM<bB;b
+// File(/data/room/kao/yanwu1.c) of kao's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        set("short", "辟邪的金库演武厅");
+	set ("long", @LONG
+这是辟邪的金库的演武厅，有时有些江湖朋友来会，想一试身手，
+就在这里比武较量。 
+LONG );
+
+	set("exits", ([
+                "west" : __DIR__"yishiting",
+	]));
+
+        set("objects", ([
+                "/clone/weapon/zhubang" : 1,
+                "/clone/weapon/zhujian" : 1,
+                "/clone/weapon/mudao"   : 1,
+        ]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("room_owner", "辟邪");
+        set("room_name", "辟邪的金库");
+        set("room_id", "kao");
+        set("room_owner_id", "kao");
+        set("room_position", "碎石小道");
+}

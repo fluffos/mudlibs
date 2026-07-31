@@ -1,0 +1,16 @@
+#include <ansi.h>
+inherit ITEM;
+void create()
+{
+        set_name( HIW "石狮"NOR, ({ "shi shi" }) );
+        set_weight(50000000);
+        if( clonep() )
+                set_default_object(__FILE__);
+        else {
+                set("unit", "座");
+                set("value", 2000);
+                set("material", "stone");
+        }
+        setup();
+}
+

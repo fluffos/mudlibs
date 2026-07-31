@@ -1,0 +1,18 @@
+// SN:C8:KKCEDk[W01U;L
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;36m药驴[2;37;0m", ({"lvv lv"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "sucks
+它是侠客岛的坐骑。
+");
+        set_temp("owner_id", "xkd");
+        set_temp("owner_name", "侠客岛");
+        ::setup();
+}
+

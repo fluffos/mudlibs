@@ -1,0 +1,18 @@
+// SN:_kY>X1W^I:V^]@SG
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;31m血狼狼[2;37;0m", ({"xuewhy lang"}));        
+        set("gender", "男性");                
+        set("unit", "条");
+        set("long", "神狼
+它是胡刀的坐骑。
+");
+        set_temp("owner_id", "why");
+        set_temp("owner_name", "胡刀");
+        ::setup();
+}
+

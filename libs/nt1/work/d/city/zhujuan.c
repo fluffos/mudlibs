@@ -1,0 +1,30 @@
+// Copyright (C) 2003, by Lonely. All rights reserved.
+// This software can not be used, copied, or modified 
+// in any form without the written permission from authors.
+
+#include <ansi.h>
+
+inherit ROOM;
+
+void create()
+{
+    set("short", "猪圈");
+        set("long",
+"这里是一个臭烘烘的猪圈，栏上挂着一个牌子(paizi)。\n"
+);
+        set("outdoors", "city");
+
+        set("exits", ([
+                "up" : __DIR__"kedian",
+        ]));
+        set("objects", ([
+        ]));
+        set("item_desc", ([ 
+                "paizi" : HIW "大家一起发呆，把泥潭变成猪的世界。\n" NOR, 
+        ]));
+
+        setup();
+        replace_program(ROOM);
+}
+
+

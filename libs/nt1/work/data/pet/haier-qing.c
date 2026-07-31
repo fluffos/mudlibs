@@ -1,0 +1,18 @@
+// SN:66Ak>RoXQCBi:N2h
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("禽兽[2;37;0m", ({"qing shou"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "一头禽兽
+它是师妃暄的坐骑。
+");
+        set_temp("owner_id", "haier");
+        set_temp("owner_name", "师妃暄");
+        ::setup();
+}
+

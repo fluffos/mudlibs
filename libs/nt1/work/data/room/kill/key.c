@@ -1,0 +1,28 @@
+// SN:P=6Sbj`;F7Z5C1Dj
+// File(/data/room/kill/key.c) of kill's key
+// Create by LUBAN written by Doing Lu
+
+#include <ansi.h>
+
+inherit ITEM;
+
+string query_autoload() { return "1"; }
+
+void create()
+{
+        set_name(YEL "欧阳杀家的钥匙" NOR, ({ "key", "1 of kill" }));
+        set_weight(10);
+        if (clonep())
+                set_default_object(__FILE__);
+        else {
+                set("long", @LONG
+一把用来开启一个仓库(tokill)的钥匙。
+这是原配钥匙。
+LONG );
+                set("unit", "把");
+                set("no_pawn", 1);
+                set("no_sell", 1);
+                set("item_make", 1);
+                set("value", 1);
+        }
+}

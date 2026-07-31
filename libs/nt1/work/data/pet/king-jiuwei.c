@@ -1,0 +1,18 @@
+// SN:6YC@CMd1D=cFRc?H
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m九尾飞狐[2;37;0m", ({"jiuwei hu"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "你居然看我的坐骑,想找死啊!
+它是愁中仇的坐骑。
+");
+        set_temp("owner_id", "king");
+        set_temp("owner_name", "愁中仇");
+        ::setup();
+}
+

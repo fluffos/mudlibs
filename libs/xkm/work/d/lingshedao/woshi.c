@@ -1,0 +1,161 @@
+//Cracked by Roath
+//wzfeng 2002 1 21
+#include <ansi.h>
+inherit ROOM;
+void create()
+{
+        set("short", HIM"卧室"NOR);
+        set("long", @LONG
+这是一间女子卧室，布置非常精致，四面墙上贴着画纸，两张小床摆
+在墙角，靠近窗户放了一张梳妆台，香木所制，台上有一面铜镜(mirror)。
+一阵清香扑鼻，滋味陶醉。
+LONG
+        );
+        set("exits", ([
+               "east" : __DIR__"room1",
+        ]));
+        set("item_desc",([
+                "mirror" : "一面白铜磨成的镜子，可照(zhao)出你的仪容。\n"
+        ]));
+		//set("outdoors", "lingshedao");
+        set("sleep_room", 1);
+        set("no_fight", 1);
+		set("cost", 1);
+		setup();
+//		replace_program(ROOM);
+}
+
+int valid_leave(object me, string dir)
+{
+      object *inv;
+        int i;
+        inv = all_inventory(me);
+           if ( dir == "east" || dir = "northwest") {
+                // can not got to any where if they take players
+                for (i=0; i<sizeof(inv); i++) {
+                        if (userp(inv[i]))
+                        return notify_fail("你不能带着其他玩家离开这里。\n");
+                         }
+        }
+           me->set_temp("mark/卧室", 0);
+        return ::valid_leave(me, dir);
+}            
+
+void init()
+{
+           add_action("do_zhao","zhao");
+           add_action("do_push", "push");
+}
+
+int do_zhao(string arg)
+{
+        object me = this_player();
+        object ob = this_object();
+        int qper = me->query_per();
+        string qname = me->query("name");
+
+        if ( !arg || arg ==     "")
+            return notify_fail("你要照什么？\n");
+
+        if ( arg ==     "mirror" ){
+
+
+        message_vision("$N对着铜镜仔细端详着。\n\n", me);
+        if (this_player()->query("gender") == "女性") {
+        if (qper<15) 
+        {
+        write("镜中之人貌似无盐，你吓得惊叫起来！！\n\n");
+//        destruct(ob);   
+        return 1;
+}
+        if (qper<20)
+        {
+write("你看了看镜子，觉得多少也还算是中人之姿了，嫣然一笑，却也风态款款！\n\n");
+        return 1;
+}
+ 
+if (qper<25)
+        {
+write("镜中之人虽是荆钗布裙，但然清秀之色溢然而现，却有一番风韵！\n\n");
+        return 1;
+}          
+if (qper<35)
+        {
+write("你向镜中望去，端的是闭月羞花之容，沉鱼落雁之色！芙蓉妖艳，明媚回春！！\n\n");
+        return 1;
+}
+
+if (qper>34)        
+{
+write("镜中之人满面脂粉，看不清本来面目！\n\n");
+        return 1;
+}
+
+}
+
+        else
+{
+if (qper<15)
+        {
+write("镜中人面带菜色，一副病慵慵的模样！\n\n");
+        return 1;
+}       
+        
+if (qper<21)
+        {
+write("你对着铜镜打量了半晌，自觉到也还五官端正！\n\n");
+        return 1;
+}        
+
+if (qper<28)
+        {
+write("镜中公子气宇轩昂，端的是人中龙凤！\n\n");
+        return 1;
+}
+        
+if (qper<34)
+        {
+write("你只见自己润润如玉，谦然君子耳！\n\n");
+        return 1;
+}
+        
+if (qper>33)
+        {
+write("镜中之人颇为纤柔，婉若妇人一般！\n\n");
+        return 1;
+}
+
+}
+
+}
+
+}
+
+int do_push(string arg)
+{
+	object me;
+	mapping fam;
+
+	me = this_player();
+
+	if( !arg || arg=="" ) return 0;
+
+	if( arg=="mirror" )
+	{
+                message("vision", "梳妆台后面的一堵墙缓缓移了开来，原来是道密门。\n", this_player());
+                set("exits/west", __DIR__"mishi");
+
+                remove_call_out("close");
+                call_out("close", 3, this_object());
+                return 1;
+	}
+}	
+
+void close()
+{
+        object room = load_object("d/gaibang/undertre");
+
+        message("vision", "密门悄悄的关上了。\n", this_object() );
+        delete("exits/west");
+        tell_room(room, "密门悄悄的关上了。\n");
+}

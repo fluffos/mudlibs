@@ -1,0 +1,35 @@
+// SN:gBb9PcK[G2koHVG3
+// ITEM Made by player(海殇君:ack) /data/item/a/ack-zelo.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Sun Sep 12 22:54:59 2004
+#include <ansi.h>
+#include <armor.h>
+
+inherit HANDS;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;33m绕指柔[2;37;0m", ({ "zelo" }));
+	set_weight(2100);
+	set("item_make", 1);
+	set("unit", "套");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一套指套。
+[1;31m传说中由千年寒冰制成的寒冰手套[2;37;0m
+指套缘上刻着一行小字：海殇君(ack)
+");
+	set("value", 2100000);
+	set("point", 136);
+	set("material", "magic stone");
+	set("wear_msg", "[1;35m装备起绕指柔手中泛出一阵强烈光芒[2;37;0m\n");
+	set("remove_msg", "[1;32m手中的光芒渐渐驱于平淡[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/claw", 10);
+	set("armor_prop/armor", 10);
+	set("armor_prop/finger", 10);
+	set("armor_prop/unarmed_damage", apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

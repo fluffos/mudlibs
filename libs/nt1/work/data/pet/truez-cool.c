@@ -1,0 +1,18 @@
+// SN:MQcVR5f7OjHDT[^n
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("酷驴[2;37;0m", ({"cool lv"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "超酷现代派
+它是酷房的坐骑。
+");
+        set_temp("owner_id", "truez");
+        set_temp("owner_name", "酷房");
+        ::setup();
+}
+

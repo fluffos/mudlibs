@@ -1,0 +1,72 @@
+// qingyan-zhang 
+// liu 2002
+
+/*  段正淳不答，站起身来，忽地左掌向后斜劈，飕的一声轻响，身后一枝红烛随
+掌风而灭，跟着右掌向后斜劈，又是一枝红烛陡然熄灭，如此连出五掌，劈熄了五
+枝红烛，眼光始终向前，出掌却如行云流水，潇洒之极。*/
+
+#include <ansi.h>
+
+inherit F_SSERVER;
+
+int perform(object me, object target)
+{
+	object weapon;
+	int skill, i ,level;
+
+	if( !target ) target = offensive_target(me);
+	if( !target || !target->is_character() || !me->is_fighting(target) )
+		return notify_fail("此绝技只能在战斗中使用。\n");
+
+	if( me->query_skill_mapped("force") != "kurong-changong")
+		return notify_fail("你现在运使的内功不对。\n");
+
+	if( me->query_skill("force") < 180 )
+		return notify_fail("你的内功修为不够。\n");
+
+	if( me->query_skill("strike") < 200 )
+		return notify_fail("你的掌法修为不够。\n");
+
+	skill = me->query_skill("qingyan-zhang",1);
+	level = me->query_skill("strike") / 60;
+
+	if ( level > 5 ) level = 5;
+
+	if( me->query("neili") <= skill*2 )
+		return notify_fail("你的内力不够！\n");
+
+	if( me->query("jingli") <= skill )
+		return notify_fail("你的精力不够！\n");
+
+	message_vision(WHT"\n$N忽地左掌斜劈，飕的一声轻响，一股劲风向$n呼去，跟着右掌斜劈，又是一股劲风，如此连出"+ chinese_number(level) +"掌，如行云流水，潇洒之极。\n"NOR,me,target);
+
+	if ( skill < 60 ) skill = 60;
+	if ( skill > 200 ) skill = 200;
+
+	me->add_temp("apply/speed", skill);
+	me->add_temp("apply/damage", skill/2);
+	me->add_temp("apply/attack", skill);
+
+	if( me->query_skill_prepared("cuff") == "jinyu-quan" ) {
+		me->set_temp("restore", 1);
+		me->prepare_skill("cuff");
+	}
+
+	for( i=0; i < level; i++ )
+	{
+		COMBAT_D->do_attack(me, target, weapon);
+		me->add("neili",-skill/3);
+		me->add("jingli",-skill/6);
+	}
+
+	if( me->query_temp("restore") ) {
+		me->prepare_skill("cuff", "jinyu-quan");
+		me->delete_temp("restore");
+	}
+
+	me->add_temp("apply/speed", -skill);
+	me->add_temp("apply/damage", -skill/2);
+	me->add_temp("apply/attack", -skill);
+	me->start_busy(1+random(2));
+	return 1;
+}

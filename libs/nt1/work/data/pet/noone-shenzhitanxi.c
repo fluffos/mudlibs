@@ -1,0 +1,18 @@
+// SN:GVZfFfG>3RF?aYZW
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("神之叹息雕[2;37;0m", ({"shenzhitanxi diao"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "noone的影子
+它是决不拜师的坐骑。
+");
+        set_temp("owner_id", "noone");
+        set_temp("owner_name", "决不拜师");
+        ::setup();
+}
+

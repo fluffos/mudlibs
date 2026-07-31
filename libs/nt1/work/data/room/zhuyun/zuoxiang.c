@@ -1,0 +1,33 @@
+// SN:^n<eIA6WGdDZ:l??
+// File(/data/room/zhuyun/zuoxiang.c) of zhuyun's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "左厢房");
+	set ("long", @LONG
+这是猪猪的窝的左厢房，是客人居住的地方。虽然不算奢华，却
+也布置得非常舒适。一张床整齐干净，没有多少折纹，而窗帘厚大结
+实，使屋内光线恰到好处。 
+LONG );
+
+	set("exits", ([
+                "west" : __DIR__"zhongting",
+	]));
+
+        set("sleep_room", 1);
+        set("no_fight", 1);
+        set("outdoors", "hangzhou");
+
+        create_door("west", "木门", "east", DOOR_CLOSED);
+
+        set("room_owner", "猪猪");
+        set("room_name", "猪猪的窝");
+        set("room_id", "piggy");
+        set("room_owner_id", "zhuyun");
+        set("room_position", "山路");
+}

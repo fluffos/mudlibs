@@ -1,0 +1,30 @@
+#include <ansi.h>
+inherit NPC;
+void create()
+{
+        set_name(BLU "豺狼" NOR, ({ "chai lang", "lang","wolf" }) );
+        set("race", "野兽");
+        set("age", 8);
+        set("long", "一只饿极了的豺狼，两眼绿幽幽的盯着你......\n");
+        if(random(2) == 1)
+           {  set("attitude","aggressive");}
+        set("str", 30);
+        set("cor", 30);
+
+        set("limbs", ({ "头部", "身体", "前脚", "後脚", "尾巴" }) );
+        set("verbs", ({ "bite", "claw" }) );
+
+        set("combat_exp", 3000);
+
+        set("chat_chance", 6);
+        set("chat_msg", ({
+                (: this_object(), "random_move" :),
+             "豺狼用一对绿幽幽的眼睛盯着你......",
+        }) );
+        
+        set("chat_msg_combat", ({
+                RED "豺狼突然昂头嚎叫，似乎在召唤同类......\n" NOR,
+        }) );
+        setup();
+}
+

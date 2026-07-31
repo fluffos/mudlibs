@@ -1,0 +1,122 @@
+// 神话世界·西游记·版本４．５０
+/* <SecCrypt CPL V3R05> */
+
+////////////////////////////////////////////////////////////////////////
+// /adm/daemons/ip_usaged.c
+// by FoF@Happy
+// 2000.5.14
+// IP 管理器
+// 记录每个 IP 的使用情况
+// 此程序不宜公开
+////////////////////////////////////////////////////////////////////////
+
+#include <login.h>
+#include <ansi.h>
+
+inherit F_SAVE;
+
+string file_name = "file_name";
+int last_save;
+mapping ip = ([ ]);
+
+string query_save_file();
+int save();
+private int do_save();
+
+void create()
+{
+    string err;
+    
+    seteuid(ROOT_UID);
+    restore();
+}
+
+// 存档文件名的格式：4 位数的年份加上三个字符的月份简称，例如：2000May
+string query_save_file()
+{
+    string ret, now = ctime(time());
+    
+    ret = DATA_DIR "ip_usage/" + now[20..23] + now[4..6] + now[8..8];
+    if( ret[<1..<1] == "3" ) ret[<1..<1] = "2";
+    if( ret[<1..<1] == " " ) ret[<1..<1] = "0";
+    return ret;
+}
+
+// 传回 IP 的使用情况
+// 按月份查询功能待加
+mapping query_ip_usage(string ip_number)
+{
+    int a, b, c, d;
+    
+    if( sscanf(ip_number, "%d.%d.%d.%d", a, b, c, d) != 4 )
+        return ([ "0" : "IP 地址错误！" ]);
+    
+    if( undefinedp(ip[ip_number]) )
+        return ([ "0" : "无此地址的使用者！" ]);
+    
+    return ip[ip_number];
+}
+
+int log_ip(string id, string ip_number, string mode)
+{
+    int a, b, c, d;
+    
+    if( !stringp(ip_number) ) return 0;
+    
+    if( sscanf(ip_number, "%d.%d.%d.%d", a, b, c, d) != 4 ) return 0;
+    
+    if( mode != "login" && mode != "create" && mode != "logout" && mode != "replace" )
+        return 0;
+    
+    if( !id ) return 0;
+    
+    if( query_save_file() != file_name ) { // 不同的月份存为不同的文件
+        save();
+        file_name = query_save_file();
+        ip = ([ ]);
+    }
+    
+    if( undefinedp(ip[ip_number]) ) {
+        ip += ([ ip_number : ([ time() : id + " " + mode ]) ]);
+        ip[ip_number] += ([ mode : time() ]);
+    } else {
+/*
+        // 登录、退出登录的时间间隔在 1 分钟内的视同连续游戏
+        if( mode == "login" ) {
+            if( !undefinedp(ip[ip_number]["logout"]) ) {
+                if( time() - ip[ip_number]["logout"] < 60 )
+                    return 0;
+            } else
+                ip[ip_number] += ([ "login" : time() ]);
+        } else if( mode == "replace" ) {
+            if( !undefinedp(ip[ip_number]["replace"]) ) {
+                if( time() - ip[ip_number]["replace"] < 60 )
+                    return 0;
+            }
+        }
+*/
+        ip[ip_number] += ([ mode : time() ]);
+        ip[ip_number] += ([ time() : id + " " + mode ]);
+
+    }
+
+    return save();
+}
+
+int save() // 避免频繁地写文件，使用 call_out
+{
+    if( time() - last_save > 30 ) {
+        remove_call_out("do_save");
+        last_save = time();
+        return do_save();
+    }
+    remove_call_out("do_save");
+    call_out("do_save", 30);
+    return 1;
+}
+
+private int do_save()
+{
+    return ::save();
+}
+

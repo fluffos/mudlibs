@@ -1,0 +1,943 @@
+// dugu.c 独孤求败
+
+#include <ansi.h>
+
+inherit NPC;
+
+inherit F_NOCLONE;
+
+
+#define QUESTGOODS_D(x) ("/quest/questdg/quest/questgoods" + x)
+#define QUESTDG_D(x)    ("/quest/questdg/quest/questdg" + x)
+#define DGMSG_D         ("/quest/questdg/dugu-msg")
+#define FUBEN_D         ("/adm/daemons/fubend")
+#define ANTI_ROBOT      "/kungfu/class/ultra/robot"
+#define GIFT_D      "/adm/daemons/giftd"
+#define X_QuestD      "/adm/daemons/questd"
+mixed ask_opinion();
+int give_quest();
+int give_up();
+void npc_dest(object npc);
+void destory(object ob);
+string time_period(int timep);
+mixed ask_maze();
+
+string *dg_msg = ({
+        "独孤求败笑呵呵的说：“",
+        "独孤求败慢慢踱着方步道：“",
+        "独孤求败低头想了想，说道：“",
+        "独孤求败满脸期待的说道：“",
+        "独孤求败微笑着道：“",
+});
+
+string *qin_msg1 = ({
+        "动物是人们的朋友，就算name严重影响了生态环境，关起来也就可以了，",
+        "我听说name过多的繁殖，影响了当地的生态，不过还是不应该随便杀动物，",
+        "难道name也会给人类带来麻烦？真是稀奇，我倒是想看看它，",
+        "我这里的花园养着很多的动物，就是没有name，",
+        "在空闲的时候，看看动物的生活能够放松情绪，name其实挺可爱的，",
+        "南海神尼是一个很喜欢动物的人，尤其是name，用来送给她做礼物最好不过，",
+        "江湖上打打杀杀的，少不了让name也遭受无辜连累，我有心保护它，",
+});
+
+string *qin_msg2 = ({
+        "你去把它带到这里来吧。”",
+        "去找到它，把它带来。”",
+        "你能把它带我这里来么？”",
+        "你就辛苦一趟去帮我把它找来吧。”",
+        "把它弄来给我。”",
+});
+
+// 该头文件必须在这里嵌入
+//#include <ultra.h>
+
+void create()
+{
+        set_name("独孤求败", ({ "dugu qiubai", "dugu" }) );
+        set("title", HIC "大宗师" NOR);
+        set("gender", "男性");
+        set("age", 48);
+        set("long",
+"这是一个普普通通的老者，一袭粗布衣裳，\n"
+"颏下一缕白须，神情详和。目光转动之间，\n"
+"隐隐流露出一丝王者之气。\n");
+        set("attitude", "peaceful");
+        set("no_get", 1);
+        set("str", 38);
+        set("int", 39);
+        set("con", 32);
+        set("dex", 33);
+
+        set("max_qi", 20000);
+        set("max_jing", 20000);
+        set("neili", 30000);
+        set("max_neili", 30000);
+        set("jiali", 100);
+
+        set("combat_exp", 50000000);
+
+        set("inquiry", ([
+                "任务"     : (: give_quest :),
+                "迷宫"     : (: ask_maze :),
+        ]));
+
+        set_skill("unarmed", 500);
+        set_skill("sword", 500);
+        set_skill("blade", 500);
+        set_skill("staff", 500);
+        set_skill("hammer", 500);
+        set_skill("club", 500);
+        set_skill("whip", 500);
+        set_skill("dagger", 500);
+        set_skill("throwing", 500);
+        set_skill("parry", 500);
+        set_skill("dodge", 500);
+        set_skill("force", 500);
+        set_skill("never-defeated", 500);
+        set_skill("martial-cognize", 500);
+
+        map_skill("sword", "never-defeated");
+        map_skill("blade", "never-defeated");
+        map_skill("staff", "never-defeated");
+        map_skill("hammer", "never-defeated");
+        map_skill("club", "never-defeated");
+        map_skill("whip", "never-defeated");
+        map_skill("dagger", "never-defeated");
+        map_skill("parry", "never-defeated");
+        map_skill("dodge", "never-defeated");
+        map_skill("force", "never-defeated");
+
+        set("opinion/ultra",  1);
+        set("opinion/master", 1);
+
+        set("chat_chance_combat", 120);
+
+
+        set("rank_info/self", "在下");
+
+        setup();
+        carry_object("/clone/cloth/cloth")->wear();
+        carry_object("/clone/weapon/zhujian")->wield();
+
+        set("startroom", "/d/wizard/wizard_room");
+        check_clone();
+}
+
+void init()
+{
+        object me;
+
+        if (! interactive(me = this_player()))
+                return;
+
+        if (ultrap(me))
+        {
+                message_vision(CYN "$N" CYN "微微一笑，对$n"
+                               CYN "点了点头。\n" NOR,
+                               this_object(), me);
+        }
+
+        add_action("give_quest", "quest");
+        add_action("give_up", "giveup");
+}
+
+mixed ask_maze()
+{
+        object me;
+        object ob;
+        mapping quest;
+        mapping maze;
+
+        me = this_player();
+        ob = this_object();
+        quest = me->query("quest_dg");
+
+        if (!quest)
+                return "你并没有接我的任务，找我问迷宫的事情干什么？";
+
+        if ( undefinedp(quest["maze"]) )
+                return "你接的任务跟迷宫无关啊，凑什么热闹呢？";
+
+        /* 取消老的迷宫
+        maze = MAZE_D->query_maze(quest["maze"]);
+        if ( !mapp(maze) || undefinedp(maze["entry"]) )
+        */
+        if( !(find_object("/f/ultra/"+me->query("id")+"/maze/exit")) )
+                return "你的任务看来是无法完成啦，那个迷宫据说已经消失了。";
+
+        message_vision("$N对$n点头道：“既然你已经准备好要去那里，那就祝你一切顺利！”\n", ob, me);
+        FUBEN_D->enter_fuben(me, "ultra");
+
+        return 1;
+}
+
+void check_weapon()
+{
+        if (objectp(query_temp("weapon")))
+                return;
+
+        message_vision(CYN "$N" CYN "长叹一口气道：我$N"
+                       CYN "多年来兵器还从未离过手，罢！罢"
+                       "了！我去也！\n" NOR, this_object());
+        destruct(this_object());
+}
+
+
+int calc_level(object me, string skill)
+{
+        int lvl;
+        string sp;
+        mapping action;
+
+        lvl = me->query_skill(skill, 1) / 2;
+        sp = me->query_skill_mapped(skill);
+        if (! sp) return lvl;
+
+        lvl += me->query_skill(sp, 1);
+        action = SKILL_D(sp)->query_action(me, me->query_temp("weapon"));
+        if (mapp(action))
+                lvl += (action["force"] + action["parry"] + action["dodge"] - 250) / 10;
+        return lvl;
+}
+
+void do_congration(object me)
+{
+        command("chat 这位" + RANK_D->query_respect(me) +
+                "可要善自珍重，须知强中更有强中手。");
+}
+
+int accept_hit(object me)
+{
+        if (me->query_temp("want_hit/dugu") >= 2)
+        {
+                command("heng");
+                command("say 事不过三，你要找死那就去死吧！");
+                kill_ob(me);
+                return 1;
+        }
+
+        command("shake");
+        command("say 这位" + RANK_D->query_respect(me) + "，"
+                "练武之人切忌贸然挑衅。");
+        me->add_temp("want_hit/dugu", 1);
+        return 0;
+}
+
+
+int accept_kill(object me)
+{
+        if (me->query("combat_exp") < 500000000)
+        {
+                message_vision(CYN "$N" CYN "大怒道：“无名小辈捣"
+                               "什么乱？给我滚！”说罢一掌把$n" CYN
+                               "劈倒在地。\n" NOR, this_object(), me);
+                me->unconcious();
+                return -1;
+        }
+        command("sigh");
+        command("say 很好！近年还真没有遇到什么敢和我较量的高手！");
+        return 1;
+}
+
+
+int give_quest()
+{
+        mapping questtemp, questgoods, questdg;
+        mapping skills, robot_quest;
+        string msg, dest, error, dgmsg, place;
+        object ob, npc, thing;
+        int time, bonus, level, i, lev, lev1;
+        mixed exp;
+        int all_lvl, lvl;
+        object maze_target;
+        object maze_object;
+
+        ob = this_player();
+        exp = ob->query("combat_exp");
+
+        if ((ob->query("character") != "光明磊落") &&
+            (ob->query("character") != "国士无双") &&
+            (ob->query("character") != "狡黠多变"))
+        {
+                write("独孤求败看了你一眼，道：“你本性杀气太重，跟我等相处日久必然格格不入，你还是另找他人去吧！”\n");
+                return 1;
+        }
+        /*
+        if (ob->query("shen") < 0)
+        {
+                write("独孤求败对你冷冷道：“道不同，不相为谋，你还是请便罢！”\n");
+                return 1;
+        }
+        */
+        if (exp < 500000)
+        {
+                write("独孤求败看了看你，轻抚白须，道：“江湖险恶，你还是先练好基本功吧。”\n");
+                return 1;
+        }
+
+        if (mapp(ob->query("quest_dg")))
+        {
+                write("独孤求败拍了拍你的肩膀，呵呵笑道：“不要急，先将手头的做完再说。”\n");
+                return 1;
+        }
+
+        if (mapp(ob->query("quest_hs")))
+        {
+                write("独孤求败拍了拍你的肩膀，呵呵笑道：“黄裳那老家伙给你任务了？先去把它完成吧！”\n");
+                return 1;
+        }
+
+
+        if (! wizardp(ob) && (time()-ob->query("questdg_giveup_time")) < 30)
+        {
+                write("不要急，慢一点嘛。\n");
+                return 1;
+        }
+
+        if (ob->query("questdg_times") < 3
+        ||  (ob->query("questdg_times") > 5 && random(20) == 5))
+        {
+                X_QuestD->query_quest(ob, this_object());
+                return 1;
+        }
+
+        if (random(4) + 1)
+        {
+                // 以下给任务
+                if(exp <= 600000)        level = 0;
+                else if(exp <= 900000)   level = 1;
+                else if(exp <= 1200000)  level = 2;
+                else if(exp <= 1800000)  level = 3;
+                else if(exp <= 2500000)  level = 4-random(3);
+                else if(exp <= 3200000)  level = 5-random(3);
+                else if(exp <= 4000000)  level =6-random(3);
+                else
+                {
+                        if(random(15)==0||(exp>10000000&&random(10)==0))
+                                level = 8;
+                        else level = 7 - random(3);
+                }
+                if (level != 8)
+                {
+                        if (exp > 4000000)
+                        {
+                                all_lvl = 0;
+                                lvl = random(28) + 1;
+                                for (i = 1;i < 8;i ++)
+                                {
+                                        all_lvl += i;
+                                        if (lvl > all_lvl - i && lvl <= all_lvl)
+                                        {
+                                                lvl = i;
+                                                break;
+                                        }
+                                }
+                        } else lvl = level;
+                        while(1)
+                        {
+                                questtemp = QUESTDG_D(lvl)->query_questdg(ob);
+                                if (questtemp["type"] == "杀" || questtemp["type"] == "擒")
+                                {
+                                    if (! get_object(questtemp["object"])->is_master())
+                                        break;
+                                } else
+                                        break;
+                        }
+                }
+                if (level == 8)
+                {
+                        npc = new(CLASS_D("generate") + "/player_npc.c");
+                        FUBEN_D->clear_fuben("ultra", ob->query("id"));
+                        maze_object = get_object("/f/ultra/"+ob->query("id")+"/maze");
+                        maze_object->set_maze_boss(npc);
+                        //maze_target = MAZE_D->create_maze(npc);
+                        maze_target = get_object("/f/ultra/"+ob->query("id")+"/maze/exit");
+                        npc->move(maze_target);
+                        /*
+                        NPC_D->place_npc(npc, count_lt(ob->query("combat_exp"), 500000)  ? ({ "大理一带", "终南山", "关外", "西域" }) :
+                                              count_lt(ob->query("combat_exp"), 800000) ? ({ "大理一带", "终南山", "西域" }) : ({"大理一带", "西域"}));
+                        */
+                        npc->set_from_me(ob, 1);
+                        npc->add_temp("apply/attack", npc->query_skill("force") / 3);
+                        npc->add_temp("apply/dodge", npc->query_skill("force") / 3);
+                        npc->add_temp("apply/parry", npc->query_skill("force") / 3);
+                        npc->add_temp("apply/damage", 200 + random(100));
+                        npc->add_temp("apply/unarmed_damage", 200 + random(100));
+                        npc->add_temp("apply/armor", 200 + random(300));
+                        npc->set_temp("quester", ob->query("id"));
+                        npc->set("auto_perform",1);
+                        /*
+                        NPC_D->random_move(npc);
+                        NPC_D->random_move(npc);
+                        NPC_D->random_move(npc);
+
+                        place = npc->query("place");
+                        */
+                        npc->set("shen", - 20000);
+                        /*
+                        msg = "独孤求败面色凝重道：“" + npc->name(1) +
+                              "居然又重现江湖，你速去除了这一害，\n此人可能会在" + place +
+                              "附近，慢了就找不到了。”\n",
+                        */
+                        msg = "独孤求败面色凝重道：“"+npc->name(1)+
+                              "居然又重现江湖，你速去除了这一害，\n此人喜欢躲在迷宫(maze)中，慢了就找不到了。”\n",
+
+                        questtemp = ([
+                                //"maze" : maze_target->query("maze/mazename"),
+                                "maze" : maze_object,
+                                "name" : npc->name(1),
+                                "id"   : npc->query("id"),
+                                "bonus": (200+random(51)),
+                                "type" : "杀",
+                                "level" : level,
+                                //"chinese_w" : place,
+                                //"where" : npc->query("startroom"),
+                                "where": maze_target,
+                                "dgmsg" : msg,
+		                "object" : base_name(npc),
+                        ]);
+                        tell_object(ob, questtemp["dgmsg"] + "\n");
+                        ob->set("quest_dg", questtemp);
+
+                        return 1;
+                }
+                else
+                {
+                        switch(questtemp["type"])
+                        {
+                        case "杀":
+                                if (questtemp["object"]->query("race") != "人类")
+                                {
+                                        questtemp["type"] = "擒";
+                                        msg = dg_msg[random(sizeof(dg_msg))] + replace_string(qin_msg1[random(sizeof(qin_msg1))],"name",questtemp["name"]) + qin_msg2[random(sizeof(qin_msg2))];
+                                        break;
+                                }
+                                if(undefinedp(msg = questtemp["msg1"])||msg==""||random(2))
+                                {
+                                        if(questtemp["race"])
+                                                msg=DGMSG_D->query_dgmsg("宰",questtemp["name"]);
+                                        else
+                                                msg=DGMSG_D->query_dgmsg("杀",questtemp["name"]);
+                                }
+                                break;
+                        case "寻":
+                                if(undefinedp(msg = questtemp["msg"])||msg==""||random(2))
+                                        msg=DGMSG_D->query_dgmsg("寻",questtemp["name"]);
+                                break;
+                        case "擒":
+                                if (questtemp["object"]->query("race") != "人类")
+                                {
+                                        msg = dg_msg[random(sizeof(dg_msg))] + replace_string(qin_msg1[random(sizeof(qin_msg1))],"name",questtemp["name"]) + qin_msg2[random(sizeof(qin_msg2))];
+                                        break;
+                                }
+                                if(undefinedp(msg = questtemp["msg2"])||msg==""||random(2))
+                                {
+                                        if(questtemp["race"])
+                                                msg=DGMSG_D->query_dgmsg("捉",questtemp["name"]);
+                                        else
+                                                msg=DGMSG_D->query_dgmsg("擒",questtemp["name"]);
+                                }
+                                break;
+                        case "送":
+                                npc = new(CLASS_D("generate") + "/dg_receiver.c");
+                                FUBEN_D->clear_fuben("ultra", ob->query("id"));
+                                maze_object = get_object("/f/ultra/"+ob->query("id")+"/maze");
+                                maze_object->set_maze_boss(npc);
+                                maze_target = get_object("/f/ultra/"+ob->query("id")+"/maze/exit");
+                                //maze_target = MAZE_D->create_maze(npc);
+                                npc->move(maze_target);
+                                /*
+                                NPC_D->place_npc(npc, count_lt(ob->query("combat_exp"), 500000)  ? ({ "大理一带", "终南山", "关外", "西域" }) :
+                                              count_lt(ob->query("combat_exp"), 800000) ? ({ "大理一带", "终南山", "西域" }) : ({"大理一带", "西域"}));
+                                */
+                                NPC_D->set_from_me(npc, ob, 100);
+                                npc->set_temp("quester", ob->query("id"));
+                                /*
+                                NPC_D->random_move(npc);
+                                NPC_D->random_move(npc);
+                                NPC_D->random_move(npc);
+                                */
+                                //place = npc->query("place");
+                                thing = new(questtemp["object"]);
+                                if (! objectp(thing))
+                                        log_file("static/Non_things", sprintf("无法找到物品 %s\n", questtemp["object"]));
+                                thing->set("send_to",npc->query("id"));
+                                thing->set("send_from",query("id"));
+                                thing->set("send_from_name",query("name"));
+                                msg = dg_msg[random(5)]+"麻烦你帮我将"+thing->name(1)+"送至"+npc->name(1)+"处，"
+                                                "他现在正在迷宫中，误了时间他可能就离开了。";
+                                /*
+                                msg = dg_msg[random(5)]+"麻烦你帮我将"+thing->name(1)+"送至"+npc->name(1)+"处，"
+                                                "他现在正在"+place+"，误了时间他可能就离开了。";
+                                */
+                                if (!thing->move(ob))
+                                {
+                                        thing->move(environment(this_object()));
+                                        message_vision("独孤求败将$N轻轻放在地上。\n",thing);
+                                } else message_vision("独孤求败将$N交给$n。\n",thing,ob);
+                                break;
+                        }
+                        questdg=([
+                                "name":questtemp["name"],
+                                "type":questtemp["type"],
+                                "bonus":questtemp["bonus"],
+			        "object":questtemp["object"],
+                                "dgmsg":msg,
+                        ]);
+                }
+        }
+        if (questdg["type"] == "杀" && (random(6) == 2 || wizardp(ob)))
+        {
+                robot_quest = ANTI_ROBOT->get_question();
+                msg = "独孤求败郑重说道：“我刚将我们组织的口令更改了一下，你去通知一下" + questdg["name"] + NOR"，新口令是：\n";
+                msg += robot_quest["question"];
+                msg += "你只需要将口令用"HIR"普通的数字形式"NOR"传送过去就行了，传送的指令是：whisper。\n";
+                questdg["type"]   = "传";
+                questdg["dgmsg"]  = msg;
+                questdg["answer"] = robot_quest["answer"];
+        }
+
+        tell_object(ob, questdg["dgmsg"]+"\n");
+        questdg["level"]=level;
+        if (questdg["type"] == "送")
+        {
+                questdg["obj"] = thing;
+                questdg["send_to"] = thing->query("send_to");
+                if (maze_object)
+                        questdg["maze"] = maze_object;
+        }
+        ob->set("quest_dg",questdg);
+        return 1;
+}
+
+
+int accept_object(object who, object ob)
+{
+        int exp, pot,level,bonus,time,times;
+        int i,quest_count,mar,score,weiwang,all_quest_dg;
+        int total_count;
+        mapping questdg;
+        string dest,msg;
+        object gold,obj;
+        mixed special = 0;
+        mixed money = 0;
+        mapping my;
+
+        if (base_name(ob) == "/clone/book/dugubook")
+        {
+                if (who->query_skill("dugu-jiujian", 1) < 340)
+                {
+                        command("shake");
+                        command("say 可惜，可惜！你独孤九剑还不够熟练，还无法领悟独孤九剑的精妙之处！");
+                        destruct(ob);
+                        return 1;
+                }
+
+                if (who->query("can_learn/dugu-jiujian/nothing"))
+                {
+                        command("nod");
+                        command("say 你已经领悟了独孤九剑之精髓，下去好好练习吧！");
+                        destruct(ob);
+                        return 1;
+                }
+
+                // 开始传授独孤九剑之无招
+                command("nod");
+                command("say 不错，不错！既然如此，我就将独孤九剑之精髓传授于你。");
+                command("say 独孤九剑最精妙之处已经不是招式，而是一种" HIY "境界" NOR + CYN "！");
+                command("say 独孤九剑讲究后发制人，不拘泥于任何招式，随心而发，随心而收，达到一\n"
+                        "种" HIY "无招胜有招" NOR + CYN "的境界！");
+                command("say 明白了？");
+
+                who->set("dugu-jiujian/nothing", 1);
+
+                if (who->can_improve_skill("sword"))
+                        who->improve_skill("sword", 1500000);
+                if (who->can_improve_skill("sword"))
+                        who->improve_skill("sword", 1500000);
+                if (who->can_improve_skill("sword"))
+                        who->improve_skill("sword", 1500000);
+                if (who->can_improve_skill("dugu-jiujian"))
+                        who->improve_skill("dugu-jiujian", 1500000);
+                if (who->can_improve_skill("dugu-jiujian"))
+                        who->improve_skill("dugu-jiujian", 1500000);
+                if (who->can_improve_skill("dugu-jiujian"))
+                        who->improve_skill("dugu-jiujian", 1500000);
+                who->improve_skill("martial-cognize", 1500000);
+                who->improve_skill("martial-cognize", 1500000);
+                who->improve_skill("martial-cognize", 1500000);
+
+                tell_object(who, HIG "你学会了独孤九剑之「无招」。\n" NOR);
+
+                destruct(ob);
+                return 1;
+        }
+
+        if(!(questdg =  who->query("quest_dg")))
+        {
+                tell_object(who,"独孤求败看了看你，似乎不知道你是什么意思。\n");
+                return notify_fail("独孤求败淡淡一笑，道：“我可不缺什么东西。”\n");
+        }
+
+        if(ob->query("money_id"))
+        {
+                if (ob->value() < 1000000)
+                {
+                        tell_object(who,"独孤求败对你语重心长的说：你拿这么点钱来干什么呢？我又不是缺钱花。\n");
+                        return notify_fail("独孤求败摇摇头：如果给个100两黄金，或许我就消除了你的任务。\n");
+                }
+                who->delete("quest_dg");
+                tell_object(who,"独孤求败盯着" + ob->name(1) + "注视良久，叹气道：那你这个任务不做就算了吧。\n");
+                destruct(ob);
+                return 1;
+        }
+
+        if(questdg["type"] != "寻" && questdg["type"] != "擒" && questdg["type"] != "送")
+        {
+                tell_object(who,"独孤求败看了看你，似乎不知道你是什么意思。\n");
+                return notify_fail("独孤求败淡淡一笑，道：“我可不缺什么东西。”\n");
+        }
+
+        if( ob->name(1) != questdg["name"] || userp(ob))
+        {
+                tell_object(who,"独孤求败叹了口气，道：这并不是我想要的。\n");
+                return notify_fail("独孤求败看着你，道：“你是不是再去找找看啊？”\n");
+        }
+
+        if(questdg["type"]=="送")
+        {
+                if (!ob->is_receipt() || ob->query("reply_to") != this_object()->query("id") )
+                {
+                        write("独孤求败接过来一看，惊讶的说：“我不是叫你帮我送东西了么，你是不是记错了？”\n");
+                        return 0;
+                }
+                if ( ob->query("reply_by") != questdg["send_to"] )
+                {
+                        write("独孤求败接过来一看，生气的说：“这张回执是谁给你的？别想来糊弄我！”\n");
+                        return 0;
+                }
+                if ( ob->query("receive_from") != who->query("id") )
+                {
+                        write("独孤求败接过来一看，生气的说：“这张回执是你自己得到的么？别想来糊弄我！”\n");
+                        return 0;
+                }
+        }
+
+        if (userp(ob) || ob->query("user") ||
+            ob->is_item_make() ||
+            ob->query_save_file())
+        {
+                write("独孤求败大怒道：“好你个小子，竟然想蒙骗本宗师！来人！把他给我抓起来！”\n");
+                who->get_into_prison(this_object(), 0, 30);
+                log_file( "static/QUEST_DIJIAO", sprintf("%s(%s)(独孤任务)制造%s(%s)(%s)作弊\n", who->query("name"),
+                who->query("id"),ob->name(),ob->query("id"),ctime(time()) ) );
+                return 1;
+        }
+
+        // message_vision("$N将$n交给独孤求败。\n",who,ob); 与give信息重复
+        tell_object(who,"独孤求败点头微笑，其意颇为嘉许，道：“不错！不错！”\n");
+        who->delete("quest_dg");
+        if (ob->is_character() && ob->query("startroom"))
+        {
+                my = ob->query_entire_dbase();
+                my["jing"]   = my["eff_jing"]   = my["max_jing"];
+                my["jingli"] = my["eff_jingli"] = my["max_jingli"];
+                my["qi"]     = my["eff_qi"]     = my["max_qi"];
+                my["neili"]  = my["max_neili"];
+                if(! living(ob))
+                        ob->revive();
+                ob->clear_condition();
+                ob->remove_all_killer();
+                if (! ob->return_home(ob->query("startroom")) )
+                        ob->move(ob->query("startroom"));
+        } else destruct(ob);
+
+        level = questdg["level"]+1;
+        if((i=who->query("questdg_times")) < 8)
+                i = 15-i;
+        else i = 1;
+
+        exp = level*400 + questdg["bonus"]*12;
+        exp += who->query("questdg_times")*2;
+        exp /= i;
+
+        if (questdg["type"] == "擒")
+        exp += exp/5;
+        pot = exp/(2+random(2));
+        score = random(exp/20);
+        weiwang = random(exp/15);
+
+        if (who->query("questdg_times") + 1 > 200)
+	       mar = exp/3 + random(who->query("questdg_times"));
+        else mar = 100 + random(100);
+
+        if (mar > 3000) mar = 3000;
+
+        if(wizardp(who)||!random(10))
+        {
+                i=(exp/60+1);
+                if(i>30) i=30;
+                gold=new("/clone/money/gold");
+                gold->set_amount(i);
+                tell_object(who,"接着说道：“整日行走江湖，手头有点紧吧？！喏，拿点黄金做盘缠吧！”\n"
+                        HIW"\n你被奖励了 "+i+" 两黄金。\n");
+                if(!gold->move(who))
+                {
+                        message_vision("但是$N身上东西太重，黄金一下子掉到了地上。\n",who);
+                        gold->move(environment());
+                }
+                GIFT_D->bonus(who, ([ "exp" : exp, "pot" : pot, "mar" : mar,
+                                      "weiwang" : weiwang, "score" : score, "percent" : 50 ]), 1);
+        }
+        else
+                GIFT_D->bonus(who, ([ "exp" : exp, "pot" : pot, "mar" : mar, "percent" : 80,
+                                      "weiwang" : weiwang, "score" : score ]), 1);
+
+        // who->add("questdg_times",1);
+        who->add("total_hatred",-5);
+        if (who->query("total_hatred") < 0) who->set("total_hatred",0);
+
+
+        quest_count = who->query("questdg_times") + 1;
+        total_count = quest_count % 500;
+        if (total_count == 50)
+        {
+                msg = "$N呵呵笑了两声道：“你还可以，连着"+chinese_number(quest_count)+
+                      "次任务都完成的漂漂亮亮，继续努力！”\n";
+	        special = 1;
+        } else
+        if (total_count == 100)
+        {
+                msg = "$N笑的合不拢嘴，看了你一眼道：“有志气！"+chinese_number(quest_count)+
+                      "次任务干得干净利索！”\n";
+                special = "/clone/gift/puti-zi";
+        } else
+        if (total_count == 150)
+        {
+                msg = "$N叹道：“真是长江后浪推前浪，想不到你接连"+chinese_number(quest_count)+
+                      "次任务都无一疏漏，不易，不易！”\n";
+                money = 1;
+        } else
+        if (total_count == 200)
+        {
+                msg = "$N叹道：“真是长江后浪推前浪，想不到你接连"+chinese_number(quest_count)+
+                      "次任务都无一疏漏，不易，不易！”\n";
+                money = 1;
+        } else
+        if (total_count == 250)
+        {
+                msg = "$N叹道：“真是长江后浪推前浪，想不到你接连"+chinese_number(quest_count)+
+                      "次任务都无一疏漏，不易，不易！”\n";
+                money = 1;
+        } else
+
+        if (total_count == 300)
+        {
+                msg = "$N叹道：“真是长江后浪推前浪，想不到你接连"+chinese_number(quest_count)+
+                      "次任务都无一疏漏，不易，不易！”\n";
+	        special = "/clone/gift/tianxiang";
+        } else
+        if (total_count == 350)
+        {
+                msg = "$N吓了一跳：“看来你真的很适合学武，竟接连"+chinese_number(quest_count)+
+                      "次任务都无一疏漏，不易，不易！”\n";
+	        special = "/clone/gift/tianxiang";
+        } else
+        if (total_count == 400)
+        {
+                msg = "$N叹道：“真是一个武学天才啊，想不到你接连"+chinese_number(quest_count)+
+                      "次任务都无一疏漏，不易，不易！”\n";
+                special = "/clone/gift/jiuzhuan";
+        } else
+        if (total_count == 450)
+        {
+                msg = "$N大声叫起来：“天才！真是天才，真有人连续"+chinese_number(quest_count)+
+                      "次任务都无一疏漏，不易，不易！”\n";
+                special = "/clone/gift/jiuzhuan";
+        } else
+        if (total_count == 0)
+        {
+                msg = "$N深深叹了口气，道：“没想到你连着"+chinese_number(quest_count)+
+                      "次任务无一失手，看来以后就是你们这些人挑大梁啦！”\n";
+                special = "/clone/gift/xuanhuang";
+#ifdef DB_SAVE
+                if (MEMBER_D->is_valid_member(who->query("id")))
+		{
+
+                        if (who->query("special_skill/sophistry"))
+                        {
+                                if (quest_count >= 4000)
+					quest_count = 0;
+			} else {
+                                if (quest_count >= 2000)
+                                        quest_count = 0;
+			}
+                } else {
+#endif
+                	if (quest_count >= 1000)
+                                quest_count = 0;
+#ifdef DB_SAVE
+		}
+#endif
+        } else
+        if ((total_count % 10) == 0)
+        {
+                msg = "$N呵呵笑着：“你表现很不错啊，居然连着" +
+                      chinese_number(quest_count) +
+                      "次都没有失手，别忙着练，慢慢来。”\n";
+        }
+
+        who->set("questdg_times", quest_count);
+
+        if (special)
+        {
+                // message_vision(msg, this_object(), who);
+                QUEST_D->special_bonus(this_object(), who, special);
+        }
+        if (money)
+        {
+                // message_vision(msg, this_object(), who);
+                QUEST_D->money_bonus(this_object(), who, money);
+        }
+
+        // 记录完成任务的次数（不要求连续），如果满1000次则奖励玛瑙残片
+        all_quest_dg = (int)who->query("all_quest_dg");
+        if (!all_quest_dg) all_quest_dg = 0;
+        all_quest_dg += 1;
+        if (all_quest_dg == 1000)
+        {
+                obj = new("/clone/enchase/redgem.c");
+                tell_object(who,this_object()->name() + "又对你点了点头：你已经从我这里接了一千个任务，我这里正好\n" +
+                        "有个" + obj->query("name") + "，就奖给你了！\n");
+                if (!obj->move(who))
+                        obj->move(environment());
+                who->set("all_quest_dg",0);
+                FAMILY_D->add_family_fame(who, 20 + random(5));
+                LEAGUE_D->add_league_fame(who, 20 + random(5));
+         //       BUNCH_D->add_bunch_fame(who, 20 + random(5));
+        } else who->set("all_quest_dg",all_quest_dg);
+        return -1;
+}
+
+int give_up()
+{
+        object ob,obj,room;
+        mapping questdg;
+
+        ob = this_player();
+
+        if(mapp(questdg =  ob->query("quest_dg")))
+        {
+                write("你满脸羞惭，请求独孤求败取消自己的任务。\n");
+                /*
+                if (questdg["type"] == "传")
+                {
+                        message_vision("$N惊讶地对$n笑笑：『传口令，这个是很简单的任务啊！不要着急，回头再好好想想，努力把它完成！\n",this_object(),ob);
+                        return 1;
+                }
+                */
+                write("独孤求败和颜悦色地拍拍你的脑袋，道：“没关系，要继续努力啊！”\n");
+                if(questdg["type"] == "送")
+                {
+                        if(ob->query("questdg_times") > 0)
+                                ob->add("questdg_times",-1);
+                }
+                else if(questdg["type"] == "杀"&&questdg["level"] == 8)    //by llm
+                {
+                        ob->set("questdg_times",0);
+                }
+                else
+                        ob->set("questdg_times",0);
+
+                if ( stringp(questdg["maze"]) )
+                {
+                        //MAZE_D->remove_maze(questdg["maze"]);
+                        FUBEN_D->clear_fuben("ultra", ob->query("id"));
+                }
+
+        }
+                /*
+                if(questdg["type"] == "送")
+                {
+                        if(objectp(obj = questdg["obj"]))
+                        {
+                                if(obj->is_character())
+                                        message_vision("$N一跃而起，跑得无影无踪了。\n",obj);
+                                obj->move(environment(ob));
+                                destruct(obj);
+                                if(ob->query("questdg_times") > 0)
+                                        ob->add("questdg_times",-1);
+                        }
+                }
+                else
+                if(questdg["type"] == "杀"&&questdg["level"] == 8)    //by llm
+                {
+                        if(!(room = find_object(questdg["where"])) )
+                                room = load_object(questdg["where"]);
+
+                        if(objectp(obj = present(questdg["id"],room))
+                                &&obj->is_character()
+                                &&!userp(obj))
+                        {
+                                message_vision("$N哼了一声，转身走开了。\n",obj);
+                                obj->move("/d/wizard/wizard_room");
+                                destruct(obj);
+                        }
+                        ob->set("questdg_times",0);
+                }
+                else
+                        ob->set("questdg_times",0);
+        }
+        */
+        else
+                write("独孤求败和颜悦色地看着你，道：“没关系，你现在根本就没有任务啊！”\n");
+        ob->delete("quest_dg");
+        ob->set("questdg_giveup_time",time());
+        return 1;
+}
+
+string time_period(int timep)
+{
+        int t, d, h, m, s;
+        string time;
+        t = timep;
+        s = t % 60;             t /= 60;
+        m = t % 60;             t /= 60;
+        h = t % 24;             t /= 24;
+        d = t;
+
+        if(d) time = chinese_number(d) + "天";
+        else time = "";
+
+        if(h) time += chinese_number(h) + "小时";
+        if(m) time += chinese_number(m) + "分";
+        time += chinese_number(s) + "秒";
+        return time;
+}
+
+void destory(object ob)
+{
+        if(!ob)
+                return;
+        if(ob->is_character())
+                message_vision("$N一跃而起，跑得无影无踪了。\n",ob);
+        ob->move("/d/wizard/wizard_room");
+        destruct(ob);
+        return ;
+}
+
+void npc_dest(object npc)
+{
+        if(!npc) return;
+        if(npc->is_fighting()&&npc->query_temp("wait_times")<4)
+        {
+                npc->add_temp("wait_times",1);   //4次机会
+                call_out("npc_dest",60,npc);     //再等一分钟
+                return;
+        }
+        if(npc->is_character())
+                message_vision("$N重重地哼了一声：“看来都是胆小鬼”，转身一晃，已不见了身影。\n",npc);
+        npc->move("/d/wizard/wizard_room");
+        destruct(npc);
+        return ;
+}

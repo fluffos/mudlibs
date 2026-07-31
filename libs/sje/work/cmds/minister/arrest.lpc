@@ -1,0 +1,152 @@
+//arrest.c
+//by xiaoyao
+
+inherit F_CLEAN_UP;
+#include <ansi.h>
+#include <save.h>
+int main(object me, string arg)
+{
+        string kingdom_file, *arrman, *arrcount, msg;
+        object ob;
+        int i,kingdom_gold;
+        seteuid(getuid(me));
+        if( !me->query("kingdom") )
+                return notify_fail("你不能使用这个指令。\n");
+        if( me->is_busy() )
+                return notify_fail("你的动作还没有完成。\n");
+        if( me->is_fight() )
+                return notify_fail("你现在在战斗中。\n");
+
+        kingdom_file = "/open/" + me->query("kingdom") + "/kingdom";
+        arrman = find_object(kingdom_file)->query("arrest");
+kingdom_gold=find_object(kingdom_file)->query("gold");
+
+        if( !arg ) {
+msg = "贵帮派目前正通缉：\n";
+msg += "------------------------------------------\n";
+if( sizeof(arrman) ) {
+for(i=0;i<sizeof(arrman);i++) {
+if( file_size(DATA_DIR + "login/" + arrman[i][0..0] + "/" + arrman[i] + __SAVE_EXTENSION__) < 0 ) {
+find_object(kingdom_file)->set("arrest", arrman - ({ arrman[i] }) );
+return notify_fail("没有 " + arrman[i] + " 这位使用者。\n");
+}
+msg += capitalize(arrman[i]) + "\n";
+}
+msg += "共 " + sizeof(arrman) + " 位通缉者。\n";
+} else msg += "贵帮派目前没有通缉任何人。\n";
+                msg += "==========================================\n";
+                me->start_more(msg);
+                return 1;
+        }
+        if( sscanf(arg, "on %s", arg) == 1 ) {
+                ob = LOGIN_D->find_body(arg);
+                 if( !ob ) return notify_fail("没有这个人。\n");
+                if( !userp(ob) ) return notify_fail("他不是玩家。\n");
+
+                arrcount = ob->query("arrest");
+
+                if( ob == me )
+                        return notify_fail("你想通缉自己，不如请天神惩罚还比较快。\n");
+                if( wizhood(ob) == "(king)" && ob->query("kingdom") == me->query("kingdom") ) 
+                        return notify_fail("通缉帮主?!你想篡位吗?\n");
+                if( sizeof(arrcount) && sizeof(arrman) ) {
+                        if( member_array( find_object(kingdom_file), arrcount) != -1 )
+                                return notify_fail("贵帮派已经通缉此人了。\n");
+                        if( member_array( ob->query("id"), arrman) != -1 )
+                                return notify_fail("贵帮派已经通缉此人了。\n");
+                }
+                if( sizeof(arrman) >=3 )
+                        return notify_fail("贵帮派已达通缉人数上限。\n"); 
+                if( !pointerp(arrman) )
+                        find_object(kingdom_file)->set("arrest", ({ arg }) );
+                else if( member_array(arg, arrman) == -1 )
+                        find_object(kingdom_file)->set("arrest", arrman + ({ arg }) );
+                if( !pointerp(arrcount) )
+                        ob->set("arrest", ({ me->query("kingdom") }) );
+                else if( member_array(me->query("kingdom"), arrcount) == -1 )
+                        ob->set("arrest", arrcount + ({ me->query("kingdom") }) );
+                ob->add("arr",1);
+                ob->save();
+                save_kingdom();
+
+                write(
+    HIY + find_object(kingdom_file)->query("kingdom_name") + "的" + me->short() + "发布了" 
+    + ob->short() + "的通缉令···\n"NOR);
+                shout(
+    HIY + find_object(kingdom_file)->query("kingdom_name") + "的" + me->short() + "发布了" 
+    + ob->short() + "的通缉令···\n"NOR);
+                write("你发布了" + ob->short() + "的通缉令\n");
+                tell_object( ob, me->short() +"发布了通缉你的命令。\n");
+        return 1;
+        }
+        if( sscanf(arg, "cancel %s", arg) == 1 ) {
+                ob = LOGIN_D->find_body(arg);
+                if( !userp(ob) ) return notify_fail("他不是玩家。\n");
+                arrcount = ob->query("arrest");
+
+                if( wizhood(me)!="(king)" )
+                        return notify_fail("只有帮主才有解除通缉的权力\n");
+                if( sizeof(arrcount) && sizeof(arrman) ) {
+                        if( !ob->query("arrest") ) return                            notify_fail("贵帮派并没有通缉此人。\n");
+                        if( member_array( me->query("kingdom"), arrcount) == -1 )
+                                return notify_fail("贵帮派并没有通缉此人。\n");
+                        if( member_array( ob->query("id"), arrman) == -1 )
+                                return notify_fail("贵帮派并没有通缉此人。\n");
+                }
+                if( pointerp(arrman) ) {
+                        if( member_array(arg, arrman) != -1 )
+                                find_object(kingdom_file)->set("arrest", arrman - ({ arg }) );
+                        else return notify_fail("档案删除通缉者失败。\n");
+                } else return notify_fail("帮派没有通缉者。\n");
+                if( pointerp(arrcount) ) {
+                        if( member_array(me->query("kingdom"), arrcount) != -1 )
+                                ob->set("arrest", arrcount - ({ me->query("kingdom") }) );
+                        else return notify_fail("玩家删除通缉帮派失败。\n");
+        
+                } else return notify_fail("玩家没有被通缉。\n");
+                ob->save();
+                save_kingdom();
+
+                write(
+     HIY"我 -- " + find_object(kingdom_file)->query("kingdom_name") + HIC + "帮主" + me->short() +
+     "为" + ob->short() + "发布特赦令···\n"NOR);
+                shout(
+     HIY"我 -- " + find_object(kingdom_file)->query("kingdom_name") + HIC + "帮主" + me->short() + 
+     "为" + ob->short() + "发布特赦令···\n"NOR);
+                write("你解除了" + ob->short() + "的通缉令\n");
+                tell_object( ob, me->short() + "解除了你的通缉令。\n");
+                ob->add("arr",-1);
+                ob->save();
+                return 1;
+        } return notify_fail("指令格式：arrest [on|cancel] <玩家>\n");
+        return 1;
+}
+int help(object me)
+{
+        write(@HELP
+----------------------------------------
+指令格式：arrest [on|cancel] <玩家>
+----------------------------------------
+说明：
+　　这个指令可以通缉一个帮派的敌人。被帮
+派列入通缉犯的人，会被全帮派的帮众追杀，
+所以只要他进入了通缉的地盘，就几乎是寸步
+难行，直到他被杀为止。如果哪个帮众杀死通
+缉犯那他就可以得到一笔奖金，奖金由通缉帮
+派的拨给。由于只要发出通缉令，就必须动用
+全部力量追杀逃犯，一个帮派同时只能通缉三
+个敌人。通缉时一定要对方在线上，而取消通
+缉则随时可以。
+
+被通缉是一件很可怕的事，不仅只是人人想要
+你的项上人头，更糟的是，同时被三个以上的
+帮派通缉的玩家更会被强制剥夺发言的权力，
+而会长时间地处于禁止说话状态。
+
+只有两个情况能终止通缉 : 一个是由通缉方的
+帮主下特赦令。另一个就是被通缉者死亡。
+----------------------------------------
+HELP
+        );
+        return 1;
+}

@@ -1,0 +1,18 @@
+// SN:\UiWTWGDj35XG<k[
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m雪玉雕[2;37;0m", ({"xueyu diao"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "白蕊儿的心爱坐骑。
+它是白蕊儿的坐骑。
+");
+        set_temp("owner_id", "bairr");
+        set_temp("owner_name", "白蕊儿");
+        ::setup();
+}
+

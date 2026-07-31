@@ -1,0 +1,29 @@
+// SN:0[Wk4DD]ihCnIdC2
+// File(/data/room/nonono/zhulin.c) of nonono's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "竹林");
+	set ("long", @LONG
+这里种着好大一片竹林，非常幽静。风一起就听竹叶沙沙的响，
+有时罪不至死就去听涛阁默听竹浪涛声，参悟武功。 
+LONG );
+
+	set("exits", ([
+                "west" : __DIR__"huayuan",
+                "east" : __DIR__"tingtao",
+	]));
+
+        set("outdoors", "playertown");
+        set("sleep_room", 1);
+        setup();
+
+        set("room_owner", "罪不至死");
+        set("room_name", "天之亭");
+        set("room_id", "nonono");
+        set("room_owner_id", "nonono");
+        set("room_position", "碎石小道");
+}

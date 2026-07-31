@@ -1,0 +1,242 @@
+// score.c
+//by douzige
+#include <ansi.h>
+#include <combat.h>
+#include <dbase.h>
+inherit F_CLEAN_UP;
+string display_attr(int gift, int value);
+string date_string(int date);
+string tribar_graph(int val, int eff, int max, string color);
+string gettof(object obj);
+string tough_level(int power, int hide_level);
+string wrong_color(string color,int len);
+int get_score(object ob);
+void create() { seteuid(ROOT_UID); }
+string *stand_color=({BLK,RED,BLU,YEL,GRN,MAG,WHT,CYN,HIR,HIG,GRN,HIC,HIM,HIY,HIB,HBRED,HBBLU,HBYEL,HBGRN,HBCYN,HBMAG,HBWHT,BBLK,BRED,BYEL,BBLU,BMAG,BCYN,BGRN,NOR,BLINK,"[2;37;0m",""});
+int main(object me, string arg)
+{
+        object ob;
+        mapping my,prepare;
+        string line , skill_type,a,b,c,color,*option;
+        object weapon;
+        int attack_points, dodge_points, parry_points, hide_level,opt_more;
+        seteuid(getuid(me));
+        if(!arg)
+                ob = me;
+        else {
+                option = explode(arg, " ");
+                ob = present(option[0], environment(me));
+                if(option[0] == "-more") {
+                        ob = me;
+                        opt_more = 1;
+                }
+                if(sizeof(option) > 1) 
+                        if(option[1] == "-more")
+                                opt_more = 1;
+                if( me->query_temp("score")) return notify_fail("你刚查询过人物资料，等会再查吧。\n");
+        }
+        if (wizardp(me)) {
+                if (!ob) ob = find_player(option[0]);
+                if (!ob) ob = find_living(option[0]);
+                if (!ob) return notify_fail("你要察看谁的状态？\n");
+        } else if (ob != me)
+                return notify_fail("只有巫师能察看别人的状态。\n");
+                
+        my = ob->query_entire_dbase();
+        
+        if( objectp(weapon = ob->query_temp("weapon")) )
+        {
+                skill_type = weapon->query("skill_type");
+        }
+        else
+        {
+                prepare = ob->query_skill_prepare();
+                if (!sizeof(prepare)) skill_type = "unarmed";
+                else skill_type = keys(prepare)[0];
+        }
+        attack_points = COMBAT_D->skill_power(ob, skill_type, SKILL_USAGE_ATTACK);
+        parry_points = COMBAT_D->skill_power(ob, "parry", SKILL_USAGE_DEFENSE);
+        dodge_points = COMBAT_D->skill_power(ob, "dodge", SKILL_USAGE_DEFENSE);
+      //bye douzige add
+        if( intp(hide_level = ob->query("hide_level")) && hide_level > 0)
+               a=tough_level(attack_points, hide_level);
+        else a=tough_level(attack_points, 0);
+        if( intp(hide_level = ob->query("hide_level")) && hide_level > 0)
+               b=tough_level(dodge_points, hide_level);
+        else b=tough_level(dodge_points, 0);
+        if( intp(hide_level = ob->query("hide_level")) && hide_level > 0)
+               c=tough_level(parry_points, hide_level);
+        else c=tough_level(parry_points, 0);
+       
+        line = sprintf(ESC+"[200D"+GRN"┏━━━━━━━"HIG"〖"HIY"书剑贰个人资料"HIG"〗"GRN"━━┳━━━━━━━━━━━━━━━━━━┓\n");
+        ob->update_age();
+        color = wrong_color(RANK_D->query_rank(ob),24);
+        line += sprintf(GRN"┃"NOR"头    衔：%s%s",RANK_D->query_rank(ob),color);
+        line += sprintf(GRN"┃"NOR"体  重：「%-28s"GRN"┃"NOR"\n",chinese_number(ob->max_food_capacity()/5)+"斤」");
+        color = wrong_color(ob->query("title")?ob->query("title"):"无",24);
+        line += sprintf(GRN"┃"NOR"称    谓：%s%s",ob->query("title")?ob->query("title"):"无",color);
+        color = wrong_color(display_attr(my["str"], ob->query_str()),6);
+        line += sprintf(GRN"┃"NOR"膂  力：「%s」%s",display_attr(my["str"], ob->query_str()),color);
+        color = wrong_color(display_attr(my["int"], ob->query_int()),8);
+        line += sprintf("悟  性：「%s」%s"GRN"┃"NOR"\n",display_attr(my["int"], ob->query_int()),color);
+        color = wrong_color((ob->query("color")?ob->query("color"):"")+ob->name(1)+NOR"("+ob->query("id")+")",24);
+        line += sprintf(GRN"┃"NOR"姓    名：%s%s",(ob->query("color")?ob->query("color"):"")+ob->name(1)+NOR"("+ob->query("id")+")",color);
+        color = wrong_color(display_attr(my["con"], ob->query_con()),6);
+        line += sprintf(GRN"┃"NOR"根  骨：「%s」%s",display_attr(my["con"], ob->query_con()),color);
+        color = wrong_color(display_attr(my["dex"], ob->query_dex()),8);
+        line += sprintf("身  法：「%s」%s"GRN"┃"NOR"\n",display_attr(my["dex"], ob->query_dex()),color);
+        color = wrong_color(ob->query("nickname")?ob->query("nickname"):"无",24);
+        line += sprintf(GRN"┃"NOR"绰    号：%s%s",ob->query("nickname")?ob->query("nickname"):"无",color);
+        line += sprintf(GRN"┗━━━━━━━━━━━━━━━━━━━┫\n"NOR);
+        color = wrong_color(chinese_number(ob->query("age"))+"岁"+(ob->query("month")?"零" +chinese_number(ob->query("month")) + "个月":""),26);
+        line += sprintf(GRN"┃"NOR"年    龄：%s%s",chinese_number(ob->query("age"))+"岁"+(ob->query("month")?"零" +chinese_number(ob->query("month")) + "个月":""),color);
+        line += sprintf("生  辰：%-30s"GRN"┃"NOR"\n",CHINESE_D->chinese_date(((int)ob->query("birthday") - 14*365*24*60) * 60));
+        line += sprintf(GRN"┃"NOR"性    别：%-26s",ob->query("gender"));
+        color = wrong_color(a,9);
+        line += sprintf("攻："GRN "%s" NOR"%s",a,color);
+        color = wrong_color(b,9);
+        line += sprintf("躲："GRN "%s" NOR"%s",b,color);
+        color = wrong_color(c,8);
+        line += sprintf("架："GRN "%s" NOR"%s"GRN"┃\n"NOR,c,color);
+        color = wrong_color(mapp(my["marry"])?((my["marry"]["name"]?my["marry"]["name"]+"("+my["marry"]["id"]+")":"")):"未婚",26);
+        line += sprintf(GRN"┃"NOR"%s：%s%s",mapp(my["marry"])?(my["gender"]=="女性"?"丈    夫":"娇    妻"):"婚姻状况",mapp(my["marry"])?((my["marry"]["name"]?my["marry"]["name"]+"("+my["marry"]["id"]+")":"")):"未婚",color);
+        line += sprintf("%s：%s%-30d"GRN"┃\n"NOR, ob->query("shen") < 0?"戾  气":"正  气",(ob->query("shen") < 0? HIR:HIC),(ob->query("shen") < 0?-1:1) * ob->query("shen"));
+        color = wrong_color(HIY+BBLU+chinese_number(my["MKS"]+my["PKS"])+"位"NOR,26);
+        line += sprintf(GRN"┃"NOR"杀    人：%s%s",HIY+BBLU+chinese_number(my["MKS"]+my["PKS"])+"位"NOR,color);
+        color = wrong_color(HIY+BBLU+chinese_number(my["PKS"])+"位"NOR,30);
+        line += sprintf("玩  家：%s%s"GRN"┃\n"NOR,HIY+BBLU+chinese_number(my["PKS"])+"位"NOR,color);
+        color = wrong_color(HIM+chinese_number(my["death_count"])+"次"NOR,26);
+        line += sprintf(GRN"┃"NOR"死亡次数：%s%s",HIM+chinese_number(my["death_count"])+"次"NOR,color);
+        color = wrong_color(HIM+chinese_number(my["death_times"])+"次"NOR,10);
+        line += sprintf("有  效：%s%s",HIM+chinese_number(my["death_times"])+"次"NOR,color);
+        line += sprintf("综合评价："HIY"%-10d"GRN"┃\n"NOR NOR,get_score(ob));
+        color = wrong_color((ob->query("balance")/10000)<1?"很少":HIY+BRED+chinese_number((int)(ob->query("balance")/10000))+"两黄金"NOR,26);
+        line += sprintf(GRN"┃"NOR"钱庄存款：%s%s",(ob->query("balance")/10000)<1?"很少":HIY+BRED+chinese_number((int)(ob->query("balance")/10000))+"两黄金"NOR,color);
+        color = wrong_color(mapp(my["family"])?GRN"【"+my["family"]["family_name"]+"】 【"+(my["family"]["master_name"]?my["family"]["master_name"]+"】"NOR:""):"普通百姓",30);
+        line += sprintf("师  承：%s%s"GRN"┃"NOR"\n",mapp(my["family"])?GRN"【"+my["family"]["family_name"]+"】 【"+(my["family"]["master_name"]?my["family"]["master_name"]+"】"NOR:""):"普通百姓",color);
+        color = wrong_color((ob->query("last_kill_by")? ob->query("last_kill_by"):"无"),64);
+        line += sprintf(GRN"┃"NOR"上次遇害：%s%s"GRN"┃\n"NOR, 	(ob->query("last_death")?ob->query("last_death"):"还未遇害")
+			+(ob->query("last_killer")?"「"+ob->query("last_killer")+"」":"")
+			);
+        if (ob->query("combat_exp")>100000){
+        line += sprintf(GRN"┣━━━━ 成长 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫\n");
+        line += sprintf("│"NOR"成长速度：%10d/分钟    %18d/小时%-22s"GRN"│\n", ob->query("combat_exp")/(ob->query("mud_age")/60),ob->query("combat_exp")/(ob->query("mud_age")/3600), " ");
+        line += sprintf("│"NOR"登陆距今：%10d 小时    总共在线：%8d 小时%-22s"GRN"│\n",(time()-ob->query("birthday"))/3600,ob->query("mud_age")/3600," ");        
+        }
+        if (!wizardp(me)) {
+                line += sprintf(GRN"┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛\n");     
+                write(line);
+                return 1;
+        }
+        line += sprintf(GRN"┣━━━ 隐藏属性 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫\n");
+        color = wrong_color(display_attr(my["per"], ob->query_per()),15);
+        line += sprintf("│"NOR"福缘：%-15s容貌：%s%s纯朴：%-26s"GRN"┃\n",display_attr(my["kar"], ob->query_kar()),display_attr(my["per"], ob->query_per()),color,display_attr(my["pur"], my["pur"]));   
+        line += sprintf("│"NOR"攻击："WHT"%-15s"NOR"躲闪："WHT"%-15d"NOR"防御："WHT"%-26s"GRN"│\n",attack_points/100 + "(+" + ob->query_temp("apply/damage") + ")",dodge_points/100,parry_points/100+"(+"+ob->query_temp("apply/armor")+")");
+//        if ( opt_more) {
+                line += sprintf(GRN"┣━━━ 任务次数 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫\n");
+                line += sprintf("│"NOR"大理送信: %-12d丐帮任务：%-12d雪山任务：%-20d"GRN"│\n",ob->query("dali_job"),ob->query("gb_job"),ob->query("xs_job"));
+                line += sprintf("│"NOR"官府任务: %-12d华山任务：%-12d嵩山任务：%-20d"GRN"│\n",ob->query("gf_job"),ob->query("hs_job"),ob->query("songshan_points"));
+                line += sprintf("│"NOR"武当任务: %-12d少林任务：%-12d抢劫任务：%-20d"GRN"│\n",ob->query("wd_job"),ob->query("sl_job"),ob->query("xx_job2"));
+                line += sprintf("│"NOR"赵敏任务: %-12d逍遥任务：%-12d护镖任务：%-20d"GRN"│\n",ob->query("zm_job"),ob->query("xy_job"),ob->query("hb_job"));                
+//                line += sprintf(GRN"┣━━━━ 成长 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫\n");
+//                line += sprintf("│"NOR"成长速度：%10d/分钟    %18d/小时%-22s"GRN"│\n", ob->query("combat_exp")/(ob->query("mud_age")/60),ob->query("combat_exp")/(ob->query("mud_age")/3600), " ");
+//                line += sprintf("│"NOR"登陆距今：%10d 小时    总共在线：%8d 小时%-22s"GRN"│\n",(time()-ob->query("birthday"))/3600,ob->query("mud_age")/3600," ");
+//        }
+                line += sprintf(GRN"┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛\n");     
+// end
+              write(line);
+              return 1;
+}
+string display_attr(int gift, int value)
+{
+        if( value > gift ) 
+                return sprintf( HIY "%d"+NOR"/%d", value,gift );
+        else if( value < gift ) return sprintf( CYN "%d"+NOR"/%d" , value,gift );
+        else return sprintf("%d"+"/%d", value,gift);
+}
+string tough_level(int power, int hide_level)
+{
+//        int lvl, rawlvl;
+string *tough_level_desc = ({
+BLU "不堪一击" NOR,BLU "毫不足虑" NOR,BLU "不足挂齿" NOR,BLU "初学乍练" NOR,BLU "勉勉强强" NOR,
+HIB "初窥门径" NOR,HIB "初出茅庐" NOR,HIB "略知一二" NOR,HIB "普普通通" NOR,HIB "平平淡淡" NOR,
+MAG "平淡无奇" NOR,MAG "粗通皮毛" NOR,MAG "半生不熟" NOR,MAG "马马虎虎" NOR,MAG "略有小成" NOR,
+HIM "已有小成" NOR,HIM "鹤立鸡群" NOR,HIM "驾轻就熟" NOR,HIM "青出于蓝" NOR,HIM "融会贯通" NOR,
+CYN "心领神会" NOR,CYN "炉火纯青" NOR,CYN "了然于胸" NOR,CYN "略有大成" NOR,CYN "已有大成" NOR,
+YEL "豁然贯通" NOR,YEL "出类拔萃" NOR,YEL "无可匹敌" NOR,YEL "技冠群雄" NOR,YEL "神乎其技" NOR,
+HIY "出神入化" NOR,HIY "非同凡响" NOR,HIY "傲视群雄" NOR,HIY "登峰造极" NOR,HIY "无与伦比" NOR,
+HIG "所向披靡" NOR,HIG "一代宗师" NOR,HIG "精深奥妙" NOR,HIG "神功盖世" NOR,HIG "举世无双" NOR,
+HIC "惊世骇俗" NOR,HIC "撼天动地" NOR,HIC "震古铄今" NOR,HIC "超凡入圣" NOR,HIC "威镇寰宇" NOR,
+GRN "空前绝后" NOR,GRN "天人合一" NOR,GRN "深藏不露" NOR,GRN "深不可测" NOR,HIR "返璞归真" NOR
+
+});
+        int lvl;
+        int rawlvl;
+        int grade = 1;
+        if(power<0) power=0;
+        rawlvl = (int) pow( (float) 1.0 * power, 0.2);        
+        lvl = to_int(rawlvl/grade);        
+        if(hide_level)
+            lvl = hide_level;
+        if( lvl >= sizeof(tough_level_desc) )
+            lvl = sizeof(tough_level_desc)-1;
+        return tough_level_desc[lvl];
+}
+int get_score(object ob)
+{
+        int tlvl,i,score;
+        string *ski;
+        mapping skills;
+
+      reset_eval_cost();
+        skills = ob->query_skills();
+        if (!sizeof(skills)) return 1; 
+        ski  = keys(skills);
+        for(i = 0; i<sizeof(ski); i++) {
+                        tlvl += skills[ski[i]];
+                        }  // count total skill levels
+        score = tlvl/4;
+        score += ob->query("max_neili") / 2;
+        score += ob->query("max_jingli") / 2;
+        score += (ob->query_str() + ob->query_int() + ob->query_dex() + ob->query_con()-80) * 10;
+        score += (int)ob->query("combat_exp") / 250;
+        score = score/10;
+
+        return score;
+}
+
+string wrong_color(string color,int len)
+{
+         int i,n;
+         for(n=0;n<sizeof(stand_color);n++) {
+           color = replace_string(color,stand_color[n],"");
+         }
+         if( len < strlen(color)) return "";
+         else {i = len-strlen(color);
+         color = "";
+         while( i ) {
+          if(i > 20) {color += "                    ";i -= 20;}
+          else if( i > 10) {color += "          ";i -= 10;}
+          else if(i>5) { color += "     ";i -= 5;}
+          else {color += " ";i -= 1;}
+         }
+         return color;
+        }
+}
+void del_score(object me)
+{
+       if(me)
+          me->delete_temp("score");
+}
+int help(object me)
+{
+        write(@HELP
+指令格式 : score
+           score <对象名称>                   (巫师专用)
+这个指令可以显示你(你)或指定对象(含怪物)的基本资料。
+基本资料的设定请参阅 'help setup'。
+see also : hp
+HELP
+    );
+    return 1;
+}

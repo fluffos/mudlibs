@@ -1,0 +1,18 @@
+// SN:JIln[oY9K0KFD5WS
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("探险驹[2;37;0m", ({"tanxian ju"}));        
+        set("gender", "女性");                
+        set("unit", "匹");
+        set("long", "探险登山的绝好助手
+它是胡探索的坐骑。
+");
+        set_temp("owner_id", "rtest");
+        set_temp("owner_name", "胡探索");
+        ::setup();
+}
+

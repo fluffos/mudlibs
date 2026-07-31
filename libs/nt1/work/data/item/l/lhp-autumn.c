@@ -1,0 +1,33 @@
+// SN:QXm<>5mK@GX>g74O
+// ITEM Made by player(少龙:lhp) /data/item/l/lhp-autumn.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Wed Jun  9 18:13:33 2004
+#include <ansi.h>
+#include <armor.h>
+
+inherit ARMOR;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;33m秋天童话[2;37;0m", ({ "autumn" }));
+	set_weight(1050);
+	set("item_make", 1);
+	set("unit", "张");
+	set("long", "这是由[1;37m冰蚕丝[2;37;0m炼制而成的一张护甲。
+[1;33m秋，当澄黄的落叶飘下时，突然冒出的悲凉；爱，迷漫的全是深情；有人说，秋天是初恋；也有人说，秋天是别离……[2;37;0m
+护甲缘上刻着一行小字：少龙(lhp)
+");
+	set("value", 2100000);
+	set("point", 545);
+	set("material", "silk");
+	set("wear_msg", "[1;33m秋，除了金黄的落叶，你还想起了什么？童年，还是童年里面的童话[2;37;0m\n");
+	set("remove_msg", "[33m$N[33m脱下了[1;33m秋天童话[2;37;0m[33m。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/parry", apply_armor() / 15 + 1);
+	set("armor_prop/armor", apply_armor());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

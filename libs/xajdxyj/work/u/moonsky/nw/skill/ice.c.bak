@@ -1,0 +1,81 @@
+// by txin
+
+#include <ansi.h>
+
+inherit SSERVER;
+
+int cast(object me, object target)
+
+{
+        string msg;
+        int damage, ap, dp;
+
+        if( !target ) target = offensive_target(me);
+
+        if( !target
+        ||   !target->is_character()
+        ||   target->is_corpse()
+        ||   target==me)
+                return notify_fail("你要攻击谁 ？\n");
+	if((int)me->query("max_force") < 1000 )
+	return notify_fail("你的法力不够！\n");
+        if((int)me->query("mana") < 400 )
+                return notify_fail("你的法力不足！\n");
+
+        if((int)me->query("sen") < 50 )
+                return notify_fail("你现在神智不清！\n");
+
+        me->add("mana", -(int)me->query("mana_factor"));
+        me->receive_damage("sen", 50);
+
+        msg=HIC"$N大吼道：风来！雪来！冰来！突然狂风大作，一座冰山向$n压来!\n"NOR;
+
+        ap = me->query_skill("spells");
+        ap = ( ap * ap * ap / (4 * 400) ) * (int)me->query("sen");
+        ap += (int)me->query("combat_exp");
+        dp = target->query("combat_exp");
+        if( random(ap + dp) > dp ) 
+{
+                damage = (int)me->query("max_mana") / 10 + random((int)me->query("eff_sen") / 5);
+                damage -= (int)target->query("max_mana") / 10 + random((int)me->query("eff_sen") / 5);
+                damage +=(int)me->query("mana_factor")-random((int)target->query("mana_factor"));
+                //here we can see if 2 players are at same status, the attacker has higher chance.
+                if( damage > 0 ) 
+                {
+                        //finally damage also depends on enabled spells level.
+                        damage +=random((damage*(int)me->query_skill("spells"))/100);
+                        msg += HIC "结果$n被冰山没头没脑地埋了起来，生死未卜！\n" NOR;
+                        target->receive_damage("kee", damage, me);
+                        target->receive_wound("kee", damage/4, me);
+                        me->improve_skill("dengxian-dafa", 1, 1);
+                 }
+
+                else {
+                        //here, cast failed and the target's mana_factor will be added to the previous 
+                        msg += HIC "结果冰山失了准头，把$N埋得个严严实实！\n" NOR;
+                        damage -= (int)target->query("mana_factor");
+                        damage -= random((-damage*(int)target->query_skill("spells"))/100);
+                        me->receive_damage("kee", -damage, target);
+                        me->receive_wound("kee", -damage/4, target);
+                        me->improve_skill("dengxian-dafa", 1, 1);
+               }
+     }
+        else
+                msg += "但是被$n躲开了。\n";
+
+        message_vision(msg, me, target);
+        if( damage > 0 ) COMBAT_D->report_status(target);
+        else if( damage < 0 ) COMBAT_D->report_status(me);
+
+        if( !target->is_fighting(me) ) 
+        {
+                if( living(target) ) 
+                {
+                        if( userp(target) ) target->fight_ob(me);
+                        else target->kill_ob(me);
+                }
+                me->kill_ob(target);
+        }
+        me->start_busy(1+random(2));
+        return 1+random(5);
+ }

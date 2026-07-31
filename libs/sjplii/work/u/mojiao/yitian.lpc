@@ -1,0 +1,430 @@
+//yitian.c written by john darks
+#include <ansi.h>
+inherit ROOM;
+mapping menpai_map=([
+        "emei":"峨嵋派",
+        "qingcheng":"青城派",
+        "taohua":"桃花派",
+        "xueshan":"雪山派",
+        "gaibang":"丐帮",
+        "lama":"塔尔寺",
+        "quanzhen":"全真教",
+        "guanfu":"朝廷",
+]);
+void create()
+{
+        set("short","倚天殿");
+        set("long",@LONG
+这就是魔教的大殿——倚天殿，正面为高大的九臂魔君彩塑像，周围
+摆放着举行祭典时用的祭器和乐器，殿壁东北南三面为大型壁画，展示玄
+天真人飞天而去时的浩大场面。整个大殿高大开阔，可谓高不可及，深不
+可探。历年的魔教评定大会都是在这个大殿举行，你可以在会上向教主提
+出自己的建议(suggest)。等级高的教众还可以在这里召开(declare)自己
+的会议。
+LONG
+);
+        set("exits",([
+                "north":__DIR__"feiyun.lpc",
+                "southeast":__DIR__"zoulang2.lpc",
+        ]));
+        set("objects", ([
+                __DIR__"npc/sangwutian" :1,
+        ]) );
+        set("no_fight",1);
+        set("no_magic",1);
+        set("no_sleep",1);
+        set("meeting",0);
+        set("yitian",1);
+        set("subip",({}));
+        set("item_desc", ([
+                "九臂魔君": "九臂魔君高六尺，型貌活灵活现，宛如真人一般。\n",
+        ]) );
+        setup();
+}
+
+void init()
+{       
+        if (this_object()->query("meeting"))
+                this_player()->set("mojiao/enter_time",0);
+        add_action("do_look",({"l","look"}));
+        add_action("do_drop","drop");
+        add_action("do_vote","vote");
+        add_action("do_suggest","suggest");     
+        add_action("do_declare","declare");
+}
+
+void reset()
+{
+        object *players;
+        int i;
+        object room = this_object();
+        if (room->query("meeting"))
+                room->end_meeting();
+        ::reset();
+        room->set("meeting",0);
+        set("subip",({}));
+        players = users();
+        i = sizeof(players);
+        while (i--) {
+                if (players[i]->query("marks/帮派")=="魔教")
+                        players[i]->delete("mojiao/hasvote");
+        }
+}
+
+int do_drop()
+{
+        write("请不要随地乱扔东西。\n");
+        return 1;
+}
+
+int do_suggest(string arg)
+{
+        string who,what,all,*allip;
+        object victim,master;
+        int i,addvote;
+        object me = this_player();
+        object ob = this_object();
+        if (!ob->query("meeting")){
+                write("非大会时间，不可以提建议。\n");
+                return 1;
+        }
+        master = present("master jiuyin",ob);
+        if (!master){
+                write("教主并不在这里。\n");
+                return 1;
+        }
+        if(!arg) {
+                if (!master->query("start_vote"))
+                        write("指令格式：suggest <misusage/demotion/promotion/rebel> on <who>\n");
+                else write( (string)master->query("allsuggest")+"\n");
+                return 1;
+        }
+        if (master->query("start_vote")){
+                write( (string)master->query("allsuggest")+"\n");
+                return 1;
+        }
+        if(sscanf(arg,"%s on %s",what,who)!= 2){
+                write("指令格式：suggest <misusage/demotion/promotion/rebel> on <who>\n");
+                return 1;
+        }
+        if((string)me->query("marks/帮派")!="魔教" ){
+                write("你不是魔教中人，没有提建议的资格！\n");
+                return 1;
+        }
+        if(what != "promotion" && what != "demotion" 
+              && what != "misusage" && what != "rebel"){
+                write("目前只可提出对帮众关于 滥用职权(misusage),提携(promotion),
+降职(demotion),反叛(rebel)的建议！\n"); 
+                write("指令格式：suggest <misusage/demotion/promotion/rebel> on <who>\n");
+                return 1;
+        }
+        victim = find_player(who);
+        if (!victim){
+                write("现在找不到此人！\n");
+                return 1;
+        }else if ( (string)victim->query("marks/帮派")!="魔教"){
+                write("这个人不是魔教中人。\n");
+                return 1;
+        }
+        allip = ob->query("subip");
+        for (i=0 ; i<sizeof(allip); i++)
+                if (allip[i] == me->query("id")){
+                        addvote = 1;
+                        break;
+                }else addvote = 0;
+        if (!addvote) allip += ({ me->query("id")});
+        else {
+                write("你已经提过建议了。\n");
+                return 1;
+        }
+        all = "suggest/"+what+"/"+who;
+        master->add(all,(int)me->query("mojiao/忠心"));
+        if (stringp(master->query(all)))
+                i= atoi(master->query(all));
+        else i = master->query(all);
+        if (i < 250000 )
+                write("你提出了自己的的建议，但响应还不够。\n");
+        else  write("你提出了自己的的建议，将由教主决定是否通过。\n");
+        ob->set("subip",allip);
+        return 1;
+}
+
+void start_vote()
+{
+        object victim;
+        mapping suggest;
+        string *who,msg;
+        int i,j,exp,pot,score;
+        object master = present("master jiuyin",this_object());
+        if (!master){
+                tell_object(this_object(),"教主并不在这里，投票略过。\n");
+                return;
+        }
+        suggest = master->query("suggest/promotion");
+        msg = "\n";
+        if (mapp(suggest)){
+                who = keys(suggest);
+                for (i=0 ;i < sizeof(who); i++){
+                        if ((int)suggest[who[i]] < 250000)      continue;
+                        if (!userp(victim = find_player(who[i])))       continue;
+                        if (victim->query("mojiao/goods") > 4 && (int)suggest[who[i]] > 750000 ){
+                                msg +="对"+victim->name()+"提升的决议通过了。\n";
+                                exp = 3000 + random(2000);
+                                victim->add("combat_exp",exp);
+                                pot = 1500 + random(500);
+                                victim->add("potential",pot);
+                                score = 1000+random(1000);
+                                victim->add("mojiao/忠心",score);
+                                tell_object(victim,HIW"你被奖励了：\n" +
+                                chinese_number(exp) + "点实战经验\n"+
+                                chinese_number(pot) + "点潜能\n" +
+                                chinese_number(score)+"点忠心度\n"NOR);
+                                victim->add("mojiao/goods",-4);
+                        }
+                }
+        }
+        suggest = master->query("suggest/demotion");
+        if (mapp(suggest)){
+                who = keys(suggest);
+                for (i=0 ;i < sizeof(who); i++){
+                        if ((int)suggest[who[i]] < 250000)      continue;
+                        if (!userp(victim = find_player(who[i])))       continue;
+                        if (victim->query("mojiao/bads") > 9 && (int)suggest[who[i]] > 500000 ){
+                                msg += "对"+victim->name()+"降职的决议通过了。\n";
+                                exp = 3000 + random(2000);
+                                victim->add("combat_exp",-exp);
+                                score = 1000+random(1000);
+                                victim->add("mojiao/忠心",-score);
+                                tell_object(victim,HIW"你被降职了：\n" +
+                                "扣掉了"+chinese_number(exp) + "点实战经验\n"+
+                                "扣掉了"+chinese_number(score)+"点忠心度\n"NOR);
+                                victim->add("mojiao/bads",-6);
+                        }
+                }
+        }
+        suggest = master->query("suggest/misusage");
+        if (mapp(suggest)){
+                who = keys(suggest);
+                for (i=0 ;i < sizeof(who); i++){
+                        if ((int)suggest[who[i]] < 250000)      continue;
+                        if (!userp(victim = find_player(who[i])))       continue;
+                        if (victim->query("mojiao/bads") > 4 ){
+                                msg += "对"+victim->name()+"滥用职权的决议通过了。\n";
+                                exp = 2000 + random(1000);
+                                victim->add("combat_exp",-exp);
+                                score = 700+random(500);
+                                victim->add("mojiao/忠心",-score);
+                                tell_object(victim,HIW"你因滥用职权被处罚了：\n" +
+                                "扣掉了"+chinese_number(exp) + "点实战经验\n"+
+                                "扣掉了"+chinese_number(score)+"点忠心度\n"NOR);
+                                victim->query("mojiao/bads",-3);
+                        }
+                }
+        }
+        suggest = master->query("suggest/rebel");
+        if (mapp(suggest)){
+                who = keys(suggest);
+                for (i=0 ;i < sizeof(who); i++){
+                        if ((int)suggest[who[i]] < 250000)      continue;
+                        if (!userp(victim = find_player(who[i])))       continue;
+                        if (victim->query("mojiao/bads") > 19 && (int)suggest[who[i]] > 1000000 ){
+                                msg += "对"+victim->name()+"反叛的决议通过了。\n";
+                                tell_object(victim,HIR"由于认为你反叛的决议通过，你被逐出魔教了！"NOR);
+                                victim->set("mojiao/忠心",- 1000);
+                                victim->set("mojiao/弃子",1);
+                                victim->delete("marks/帮派");
+                                victim->delete("marks/魔教");
+                        }
+                }
+        }
+        master->set("start_vote",1);
+        if (msg== "\n"){
+                msg += "\n目前没有任何建议。\n";
+        }
+        msg = HIR"⊙本次评定大会决议表"NOR + msg;
+        master->set("allsuggest",msg);
+        message("vision",msg+"\n",this_object());
+        message_vision("\n$N道；现在对魔教的扩张政策投票(vote)。\n",master);
+        master->delete("suggest");
+}
+
+
+int do_vote(string arg)
+{
+        string yesno,what;
+        object victim,master;
+        int i,votesum;
+        object me = this_player();
+        object ob = this_object();
+        if (!ob->query("meeting")){
+                write("非大会时间，不可以在此投票。\n");
+                return 1;
+        }
+        master = present("master jiuyin",ob);
+        if (!master){
+                write("教主并不在这里。\n");
+                return 1;
+        }
+        if(!arg) {
+                write("指令格式：vote <yes/no> on <shaolin/wudang/xiaoyao/huashan>\n");
+                return 1;
+        }
+        if (!master->query("start_vote")){
+                write("现在还不可以投票。\n");
+                return 1;
+        }
+        if(sscanf(arg,"%s on %s",yesno,what)!= 2){
+                write("指令格式：vote <yes/no> on <shaolin/wudang/xiaoyao/huashan>\n");
+                return 1;
+        }
+        if((string)me->query("marks/帮派")!="魔教" ){
+                write("你不是魔教中人，不可以投票！\n");
+                return 1;
+        }
+        if(yesno != "yes" && yesno != "no" ){
+                write(" <yes>表示同意攻打，<no>表示反对攻打。\n");
+                write("指令格式：vote <yes/no> on <shaolin/wudang/xiaoyao/huashan>\n");
+                return 1;
+        }
+        if(what != "shaolin" && what != "wudang" 
+              && what != "xiaoyao" && what != "huashan"){
+                write("你还没有能力提出攻打少林(shaolin)，武当(wudang)，
+华山(huashan)，逍遥(xiaoyao)以外的门派。\n");   
+                write("指令格式：vote <yes/no> on <shaolin/wudang/xiaoyao/huashan>\n");
+                return 1;
+        }
+        if (me->query("mojiao/hasvote/"+what)){
+                write("你已经投过一票了。\n");
+                return 1;
+        }
+        if (yesno =="yes"){
+                master->add("vote/"+what,(int)me->query("mojiao/忠心"));
+                master->add(what,({me}));
+        }
+        else if (yesno =="no")
+                master->add("vote/"+what,-(int)me->query("mojiao/忠心"));
+        write("你投了一票。\n");
+        me->set("mojiao/hasvote/"+what,1);
+        return 1;
+}
+void end_meeting()
+{
+        object master,ob,*players,head;
+        int max,i;
+        string menpai,msg,mpname;
+        msg = "\n";
+        ob = this_object();
+        master = present("master jiuyin",this_object());
+        if (!master){
+                tell_object(this_object(),"教主并不在这里，会议结束。\n");
+                return;
+        }
+        message_vision(CYN"$N道：现在宣布投票结果。\n"NOR,master);
+max = 10000;
+        if (max < (int)master->query("vote/shaolin")){
+                max = master->query("vote/shaolin");
+                menpai = "shaolin";
+                mpname = "少林寺";
+        }
+        if (max < (int)master->query("vote/wudang")){
+                max = master->query("vote/wudang");
+                menpai = "wudang";
+                mpname = "武当派";
+        }
+        if (max < (int)master->query("vote/xiaoyao")){
+                max = master->query("vote/xiaoyao");
+                menpai = "xiaoyao";
+                mpname = "逍遥派";
+        }
+        if (max < (int)master->query("vote/huashan")){
+                max = master->query("vote/huashan");
+                menpai = "huashan";
+                mpname = "华山派";
+        }
+if (max > 10000){
+                players = master->query(menpai);
+                for (i =0; i<sizeof(players); i++){
+                        if (max < players[i]->query("combat_exp")){
+                                max = players[i]->query("combat_exp");
+                                head = players[i];
+                        }
+                        msg += players[i]->query("name") + "   ";
+                        players[i]->set("possessed",master);
+                        players[i]->set("mojiao/menpai",mpname);
+                        players[i]->set("mojiao/time",time());
+                        call_out("delete_poss",1000,players[i]);
+                        if (i%5==4)     msg+="\n";
+                }
+        }
+        if (msg!="\n"){
+                msg = NOR"这次攻击行动为攻打"+mpname+NOR"，由"+ msg+"\n组成。\n";
+                msg += HIY+ head->query("name")+HIY"负责统帅！\n"NOR;
+                head->set("mojiao/head",1);
+        }else   msg = "\n由于响应的人不多，这次攻击行动被取消了。\n\n";
+        message("vision",HIR"\n***发布这次的大会结果：***\n"NOR+msg ,ob);
+        message_vision(CYN"$N道：散会。\n"NOR,master);
+        ob->set("meeting",0);
+        ob->set("subip",({}));
+        master->set("start_vote",0);
+        master->set("shaolin",({}));
+        master->set("wudang",({}));
+        master->set("xiaoyao",({}));
+        master->set("huashan",({}));
+        return;
+}
+
+int do_declare(string arg)
+{
+        object ob;
+        ob = this_object();
+        if (ob->query("meeting")){
+                write("评定大会时间，不可以自己召开会议。\n");
+                return 1;
+        }
+        write("你还没有足够的能力召开大会。\n");
+        return 1;
+}
+
+int do_look(string arg)
+{
+        string msg,menshow;
+        object *inv;
+        int i;
+        object me = this_player();
+        object room = environment(me);
+        msg = room->query("short")+" - ";
+        msg +=wizardp(me)?file_name(room):"";
+        msg +="\n    " + room->query("long");
+        msg +="    这里明显的出口是 " + BOLD + "north" + NOR + " 和 " + BOLD + "southeast" + NOR + "。\n";
+        
+        menshow = "
+─────────────────────────
+  　　　　　　　　┍────┒　　　　　　　　　　
+　　　　　　　　　│九阴夫人│　　桑无天　　　　　
+　　　　　　　　　┖────┙      　　　　　　　
+     李跛       孙残         赵矮      田驼     　
+    姬如玉     龙步青       轩辕山    久沉阳
+\n";
+        inv = all_inventory(room);
+        for(i=0; i<sizeof(inv); i++) {
+                if( inv[i]==me ) continue;
+                if( !userp(inv[i])) continue;
+                if( inv[i]->query("no_shown")) continue;
+                if( !me->visible(inv[i]) ) continue;
+                menshow += " " + inv[i]->query("name")+"("+inv[i]->query("id")+") ";
+                if (i%3==2)     menshow += "\n";
+        }
+        msg += menshow+"\n";
+        if (!arg && room->query("meeting")){
+                write(msg);     
+                return 1;
+        }else return 0;
+}
+
+void delete_poss(object me)
+{
+        if (!me) return ;
+        me->delete("possessed");
+        me->delete("mojiao/menpai");
+        me->delete("mojiao/time");
+}

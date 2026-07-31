@@ -1,0 +1,11 @@
+// SN:`^mN7[FB]V3Q10>;
+// wedding-ring.c
+
+#include "/clone/misc/wedding-ring.h"
+
+void setup()
+{
+        set("long", "这是艾薇儿和段承旭的结婚戒指，是两人的定情之物。
+");
+        ::setup();
+}

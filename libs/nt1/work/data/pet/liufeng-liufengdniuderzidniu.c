@@ -1,0 +1,18 @@
+// SN:VIHno3=X0V9M0HZO
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;36m流风[1;31m的[1;36m牛[2;37;0m", ({"liufengdniuderzidniu niu"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "千王之王的老婆的儿子的哥哥的妈妈的朋友的朋友的妹妹的朋友朋友
+它是流风的坐骑。
+");
+        set_temp("owner_id", "liufeng");
+        set_temp("owner_name", "流风");
+        ::setup();
+}
+

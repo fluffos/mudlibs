@@ -1,0 +1,32 @@
+// SN:?Ql?1H=I;F=4\on`
+// File(/data/room/donb/yishiting.c) of donb's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "议事厅");
+	set ("long", @LONG
+这就是幽游白书主人虚藏和重要人物商量江湖大事之处，正中有
+不少桌椅，侧面是屏风，厅堂中挂着两个条幅，两旁通往演武厅。 
+LONG );
+
+	set("exits", ([
+                "east"   : __DIR__"yanwu1",
+                "west"   : __DIR__"yanwu2",
+		"north"  : __DIR__"zhongting",
+                "south"  : __DIR__"yingke",
+	]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("room_owner", "虚藏");
+        set("room_name", "幽游白书");
+        set("room_id", "donb");
+        set("room_owner_id", "donb");
+        set("room_position", "碎石小道");
+}

@@ -1,0 +1,28 @@
+// SN:F=L1n@Z3k4N3`m5^
+// File(/data/room/skydevil/key.c) of skydevil's key
+// Create by LUBAN written by Doing Lu
+
+#include <ansi.h>
+
+inherit ITEM;
+
+string query_autoload() { return "1"; }
+
+void create()
+{
+        set_name(YEL "风魔家的钥匙" NOR, ({ "key", "5 of skydevil" }));
+        set_weight(10);
+        if (clonep())
+                set_default_object(__FILE__);
+        else {
+                set("long", @LONG
+一把用来开启小库咖啡屋(coffeeshop)的钥匙。
+这是风魔第五次配的钥匙。
+LONG );
+                set("unit", "把");
+                set("no_pawn", 1);
+                set("no_sell", 1);
+                set("item_make", 1);
+                set("value", 1);
+        }
+}

@@ -1,0 +1,310 @@
+// sandie  阳关三叠
+// By Xuanyuan 14/3/2002  白色情人节耶，写完了就和女朋友出去！
+
+/*
+    武三通大怒，怒道：“小子狂妄，适才我掌底留情，未下杀手，你便敢轻视于
+我么？”右手食指蓦地伸出，使的竟然便是“一阳指”。他数十年苦练，功力深厚。
+杨过只见他食指幌动，来势虽缓，自己上半身正面大穴却已全在他一指笼罩之下，
+竟不知他要点的是那一处穴道，正困不知他点向何处，九处大穴皆大指之虞，当即
+伸出中指往他食指上一弹，使的正是黄药师所授“弹指神通”功夫。
+
+    “弹指神通”与“一阳指”齐名数十年，原是各擅胜场，但杨过功力既浅，所
+学为时极暂，学后又未尽心钻研苦练，那及得上武三通数十年的专心一致？两指相
+触，杨过只觉右臂一震，全身发热，腾腾腾退出五六步，才勉强拿住椿子，不致摔
+倒。
+
+    武三通“咦”的一声，道：“小子果然在桃花岛住过。”一来碍着黄药师的面
+子，二来见他小小年纪，居然挡住了自己生平绝技，心起爱才之意，喝道：“第二
+指又来了，挡不住便不用挡，莫要震坏内脏，我不伤你性命便是。”说着抢上数步，
+又是一指点出，这次却是指向杨过小腹。
+
+    这一指所盖罩的要穴更广，肚腹间冲脉十二大穴，自幽门、通谷，下至中注、
+四满，直抵横骨、会阴，尽处于这一指威力之下。杨过见来势甚疾，如再以“弹指
+神通”功夫抵挡，只怕不但手指断折，还得如他所云内脏也得震伤，当下急使一招
+“琴心暗通”，嗤的一声轻响，君子剑出鞘，护在肚腹之前二寸。武三通手指将及
+剑刃，急忙缩回，跟着第三指又出。这一指迅如闪电，直指杨过眉心，料想他决计
+不及抽剑回护。杨过见来指奇速，绝难化解，危急中使出“九阴真经”中的功夫，
+飕的一声，倏地矮身从武三通胯下钻了过去。这一招虽然迅捷，毕竟姿式狼狈，抑
+且大失身分，好在他是小辈，在长辈胯下钻下也没甚么。
+*/
+
+#include <ansi.h>
+inherit F_SSERVER;
+ 
+int perform(object me, object target)
+{       
+        int damage, ap, dp, time, jiali, jiajin;
+		string *limb, type, result, str;
+
+		if( !target ) target = offensive_target(me);
+ 
+		if( !target || !target->is_character()
+           || !me->is_fighting(target) || !living(target) )
+                return notify_fail("「阳关三叠」只能在战斗中使用。\n");
+        
+        if( objectp( me->query_temp("weapon")) )
+                return notify_fail("只有空手才能施展「阳关三叠」。\n");
+
+//		if (target->is_busy())
+//				return notify_fail(target->name() + "目前正自顾不暇，使用此招有违江湖道义。\n");
+
+        if( (int)me->query_skill("liumai-shenjian", 1) < 240 ||
+            (int)me->query_skill("finger", 1) < 200 ||
+            (int)me->query_str() < 30)
+                return notify_fail("你有的功夫还不够娴熟，不会使用「阳关三叠」。\n");
+
+        if( (int)me->query_skill("kurong-changong", 1) < 200 )
+                return notify_fail("以你现在的内功修为还使不出「阳关三叠」。\n");        
+         
+		if (me->query_skill_mapped("force") != "kurong-changong" )
+                return notify_fail("你所使用的内功不对。\n");
+
+        if (me->query_skill_mapped("finger") != "liumai-shenjian" || 
+			me->query_skill_prepared("finger") != "liumai-shenjian" )
+                return notify_fail("你现在无法使用「阳关三叠」进行攻击。");  
+      
+		if (me->query_skill_mapped("parry") != "liumai-shenjian")
+                return notify_fail("你所使用的招架不对。\n");
+
+        if( (int)me->query("max_neili") < 3000 )
+                return notify_fail("你的内力修为太弱，不能使用「阳关三叠」！\n");
+        
+        if( (int)me->query("neili") < (int)me->query_skill("liumai-shenjian", 1)/2 + me->query_skill("force",1)*2/3 + jiali*3 )
+                return notify_fail("你的真气不够！\n");
+
+        jiali = me->query("jiali",1);
+		jiajin= me->query("jiajin",1);
+
+		ap = (me->query_skill("finger")*2
+			+ me->query("int")*40
+			+ me->query("combat_exp")/3000);
+
+		dp = (target->query_skill("dodge")
+			+ target->query_skill("parry")
+			+ me->query("int")*30
+			+ target->query("combat_exp")/3000);
+
+        if( (int)me->query_skill("liumai-shenjian", 1) < 200 )
+			time = 1;
+        if( (int)me->query_skill("liumai-shenjian", 1) < 240 )
+			time = 2;
+		else time = 3;
+
+		damage = (me->query("jiali") + me->query("jiajin")) * (int)me->query_skill("force")/50 + 
+					(random((int)me->query_skill("liumai-shenjian", 1)) + (int)me->query_skill("force", 1))*time + 
+					me->query_temp("apply/damage");
+
+		if(damage > me->query_skill("finger")*(8+time) ) damage = me->query_skill("finger")*(8+time);
+		if(damage < me->query_skill("finger")*time ) damage = me->query_skill("finger")*time;
+
+		//一阳指对蛤蟆功的克制
+        if( target->query_skill_mapped("force")=="hamagong" || 
+			target->query_skill_mapped("strike") == "hamagong"){
+			message_vision(YEL "\n$N右手食指蓦地伸出，食指幌动，来势虽缓，但$n上半身正面大穴却已全在$N一指笼罩之下！\n\n" NOR, me, target);
+
+		if ( ap + random(ap) > dp + dp / 3 ){
+                me->start_busy(2+random(3));
+				damage = damage + random(damage) + random(damage/2);
+				if(damage > me->query_skill("finger")*(10+time) ) damage = me->query_skill("finger")*(10+time);
+				if(damage < me->query_skill("finger")*time ) damage = me->query_skill("finger")*time;
+                target->receive_damage("qi", damage);
+                target->receive_wound("qi", damage/3);               
+				me->add("neili", -(int)me->query_skill("liumai-shenjian", 1) - jiali );
+				me->add("jingli", -(int)me->query_skill("kurong-changong", 1)/3 - jiajin );
+				message_vision(HIR "\n$n一见之下，大为失色，发现这似乎正是自己的克星！\n\n" NOR, me, target);
+				if( wizardp(me) ) tell_object(me,"damage "+damage+" \n");
+				limb = target->query("limbs");
+				type = "内伤";
+				result = COMBAT_D->damage_msg(damage, type);
+				result = replace_string( result, "$l", limb[random(sizeof(limb))]);
+				result = replace_string( result, "$p", target->name() );
+				message_vision(result, me, target);
+				COMBAT_D->report_status(target);
+                } 
+		else {       
+                me->start_busy(2);
+				me->add("neili", -(int)me->query_skill("liumai-shenjian", 1)/3);
+				me->add("jingli", -(int)me->query_skill("kurong-changong", 1)/4);              
+				message_vision(HIY "$n见这反手点穴似乎正是蛤蟆功的克星，识得厉害，危及之中一个铁板桥，上身向后一倒，艰难的躲过这一招。\n\n" NOR, me, target);
+ //               if(me->query_skill("liumai-shenjian", 1) > 199)
+				call_out("perform2", 2, me, target);    
+				}
+		}
+		else{
+		message_vision(YEL"\n$N右手食指蓦地伸出，食指幌动，来势虽缓，但$n上半身正面大穴却已全在$N一指笼罩之下！\n\n" NOR, me, target);
+		if ( ap + random(ap) > dp + dp / 2 ){
+				if (target->query_skill_mapped("finger")=="tanzhi-shentong" && 
+					target->query_skill_mapped("parry") == "tanzhi-shentong")
+				{
+				message_vision(HIG"$n当即伸出中指往$N食指上一弹，使的正是黄药师所授“弹指神通”功夫。\n\n" NOR, me, target);
+					if (random((int)me->query_skill("liumai-shenjian", 1)) > random((int)target->query_skill("tanzhi-shentong", 1)))
+					{
+					message_vision(HIM"但$n功力既浅，所学为时极暂，两指相触，$n只觉右臂一震，全身发热，腾腾腾退出五六步，才勉强拿住椿子，不致摔倒。\n\n" NOR, me, target);
+					me->start_busy(4);
+					target->start_busy(4);
+					if(damage > me->query_skill("finger")*(8+time) ) damage = me->query_skill("finger")*(8+time);
+					if(damage < me->query_skill("finger")*time ) damage = me->query_skill("finger")*time;
+					target->receive_damage("qi", random(damage));
+					target->receive_wound("qi", random(damage/3));               
+					me->add("neili", -(int)me->query_skill("liumai-shenjian", 1)/3 - jiali );
+					me->add("jingli", -(int)me->query_skill("kurong-changong", 1)/4 - jiajin );
+					if( wizardp(me) ) tell_object(me,"damage "+damage+" \n");
+					COMBAT_D->report_status(target);
+//					if(me->query_skill("liumai-shenjian", 1) > 199)
+					call_out("perform2", 4, me, target);    
+					return 1;
+					}
+				message_vision(HIG"“弹指神通”与“一阳指”齐名数十年，各擅胜场，$n这一弹，一股细细的劲力激射出去与$N的一阳指斗了个旗鼓相当。\n\n" NOR, me, target);
+				me->start_busy(2);
+                target->start_busy(2);            
+				me->add("neili", -(int)me->query_skill("liumai-shenjian", 1)/3 - jiali );
+				me->add("jingli", -(int)me->query_skill("kurong-changong", 1)/4 - jiajin );
+                if(me->query_skill("liumai-shenjian", 1) > 199)
+                call_out("perform2", 2, me, target);    
+				return 1;
+				}
+                me->start_busy(2 + random(3));
+				damage = damage + random(damage/2);
+				if(damage > me->query_skill("finger")*(8+time) ) damage = me->query_skill("finger")*(8+time);
+				if(damage < me->query_skill("finger")*time ) damage = me->query_skill("finger")*time;
+                target->receive_damage("qi", damage);
+                target->receive_wound("qi", damage/3);    
+				limb = target->query("limbs");
+				type = "内伤";
+				result = COMBAT_D->damage_msg(damage, type);
+				result = replace_string( result, "$l", limb[random(sizeof(limb))]);
+				result = replace_string( result, "$p", target->name() );
+				message_vision(result, me, target);
+				me->add("neili", -(int)me->query_skill("liumai-shenjian", 1) - jiali );
+				me->add("jingli", -(int)me->query_skill("kurong-changong", 1)/3 - jiajin );
+				if( wizardp(me) ) tell_object(me,"damage "+damage+" \n");
+				COMBAT_D->report_status(target);
+              } 
+         else {       
+                me->start_busy(2);
+				me->add("neili", -(int)me->query_skill("liumai-shenjian", 1)/3);
+				me->add("jingli", -(int)me->query_skill("kurong-changong", 1)/4);                
+				message_vision(HIY"可是$n一个巧云翻身，远远的躲了开去。\n" NOR, me, target);
+//                if(me->query_skill("liumai-shenjian", 1) > 199)
+                call_out("perform2", 2, me, target);    
+				}
+         }         
+        return 1;
+}
+
+int perform2(object me, object target)
+{
+        int ap, dp, jiali, jiajin;
+
+        jiali = me->query("jiali",1);
+		jiajin= me->query("jiajin",1);
+
+		ap = (me->query_skill("finger")*2
+			+ me->query("int")*40
+			+ me->query("combat_exp")/3000);
+
+		dp = (target->query_skill("dodge")
+			+ target->query_skill("parry")
+			+ me->query("int")*30
+			+ target->query("combat_exp")/3000);
+
+		if( !target || !me->is_fighting(target) ) return;
+		if( !living(target) ) return;
+		if( !living(me) || me->is_ghost() ) return;
+		if( !target || environment(me) != environment(target) || !me->is_fighting() ) return;
+
+        if( (int)me->query("neili", 1) < me->query_skill("force",1)/2 + jiali )
+                return notify_fail("你待要再出第二指，却发现自己的内力不够了！\n");     
+       
+		message_vision(YEL"\n$N抢上数步又是一指点出，这一指所盖罩的要穴更广，$n肚腹间冲脉十二大穴，自幽
+门、通谷，下至中注、四满，直抵横骨、会阴，尽处于这一指威力之下。\n\n" NOR, me, target);
+		if ( ap + random(ap) > dp + dp / 2 ){      
+				if(	target->query_skill_mapped("parry") == "yunu-jianfa" && 
+				target->query_skill_mapped("force") == "yunu-xinjing" && 
+				target->query_temp("suxin") && 
+				target->query("neili") > 200 && 
+				target->query_temp("weapon") &&
+				target->query_skill("yunu-jianfa", 1) > 120){
+				message_vision(HIW"“$n当下急使一招“琴心暗通”，嗤的一声轻响，横剑护在肚腹之前二寸。$N见手指将及剑刃，急忙缩回。\n\n" NOR, me, target);
+				me->start_busy(4);
+                target->start_busy(2);            
+				me->add("neili", -(int)me->query_skill("liumai-shenjian", 1)/3);
+				me->add("jingli", -(int)me->query_skill("kurong-changong", 1)/4);
+  //              if((int)me->query_skill("liumai-shenjian", 1) > 239) 
+                call_out("perform3", 4, me, target);    
+				return 1;
+				}
+                message_vision(HIR "结果一指点中，$n只觉得全身气脉通道阻塞，真气立受干挠！\n" NOR, me, target);
+                target->start_busy(me->query_skill("force",1)/40+random(3));
+                me->add("neili", - me->query_skill("force",1)/2 - jiali);
+				me->add("jingli", -(int)me->query_skill("kurong-changong", 1)/2 - jiajin );
+				COMBAT_D->report_status(target);
+                } 
+        else {
+                me->start_busy(2);
+				me->add("neili", -(int)me->query_skill("liumai-shenjian", 1)/2);
+				me->add("jingli", -(int)me->query_skill("kurong-changong", 1)/3);     
+				target->add("neili", -50);
+				message_vision(HIY"不料$n眼疾身快，身形一飘，躲开了$N的攻击。\n" NOR, me, target);
+//                if((int)me->query_skill("liumai-shenjian", 1) > 239) 
+                call_out("perform3", 2, me, target);   
+           }
+        return 1;
+}
+
+int perform3(object me, object target)
+{
+        int ap, dp, jiali, jiajin, skill;;
+
+        jiali = me->query("jiali",1);
+		jiajin= me->query("jiajin",1);
+        skill = (int)me->query_skill("liumai-shenjian", 1);                
+        skill = skill/10;
+
+		ap = (me->query_skill("finger")*2
+			+ me->query("int")*40
+			+ me->query("combat_exp")/3000);
+
+		dp = (target->query_skill("dodge")
+			+ target->query_skill("parry")
+			+ me->query("int")*30
+			+ target->query("combat_exp")/3000);
+
+		if( !target || !me->is_fighting(target) ) return;
+		if( !living(target) ) return;
+		if( !living(me) || me->is_ghost() ) return;
+		if( !target || environment(me) != environment(target) || !me->is_fighting() ) return;
+
+        if( (int)me->query("neili", 1) < me->query_skill("force",1) + jiali )
+                return notify_fail("你待要再出第三指，却发现自己的内力不够了！\n");      
+
+		message_vision(YEL"\n$N两指不中，跟着第三指又点出，这一指迅如闪电，以纯阳内力直指$n眉心！\n\n" NOR, me, target);
+
+		if ( ap + random(ap) > dp + dp / 2 ){               
+                message_vision(HIR "$n只觉体内奇经八脉中内息为之一怠，全身气力竟然提不起来了！\n" NOR, me, target);
+                target->add_temp("apply/attack", -100);
+                target->add_temp("apply/dodge", -100);
+                target->add_temp("apply/parry", -100);  
+                me->add("neili", - me->query_skill("force",1) - jiali);
+				me->add("jingli", -(int)me->query_skill("kurong-changong", 1)/2 - jiajin );
+                target->add("neili", - me->query_skill("force",1));       
+				COMBAT_D->report_status(target);
+                call_out("back", 3 + skill/5, target);
+                } 
+        else {
+                me->start_busy(target->query_skill("force",1)/60);
+				me->add("neili", -(int)me->query_skill("liumai-shenjian", 1));
+				me->add("jingli", -(int)me->query_skill("kurong-changong", 1)/2);     
+                target->start_busy(2);
+				message_vision(HIY "$n危急中飕的一声，倏地矮身从$N胯下钻了过去。这一招虽然迅捷，毕竟姿式狼狈，抑且大失身分。\n" NOR, me, target);
+             }
+        return 1;
+}
+
+void back(object target)
+{
+    if (!target) return;
+        target->add_temp("apply/attack", 100);
+        target->add_temp("apply/dodge", 100);
+        target->add_temp("apply/parry", 100);
+}

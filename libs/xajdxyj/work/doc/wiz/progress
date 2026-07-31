@@ -1,0 +1,318 @@
+
+西游记巫师学园工作进程汇报：
+
+    好多任务都没完成，巫师们要加油啊！！
+
+[1;33m—————————————————————————————————[2;37;0m
+*** 关于被杀死后技能损失的改进
+提出：fof
+简要说明：原来对死亡的惩罚太严重（各项技能减1级），对玩家打击太大，并且受到惩罚
+    的概率很高，rancom(100) > (int)victim->query("kar") 这个条件是很容易满足的，
+    且与捐钱加的福缘无关。
+编程实现：fof
+完成度：80%
+做法：
+修改/feature/skill.c中的skill_death_penalty()函数和skill_death_recover()函数
+int skill_death_penalty()
+{
+  string *sk;
+  int i,ii,n;
+
+  if( wizardp(this_object()) || !mapp(skills) ) return 0;
+
+  sk = keys(skills);
+
+  n = random(10 - this_object()->query_kar() / 5); //随机减少若干项技能，跟福缘有关
+  for(i = 0; i < n; i ++) {                        //n 是减少的技能的总级数
+    ii = random(sizeof(sk));                       //有可能一项技能被连续减掉几级
+    skills[sk[ii]] --;
+    if(skills[sk[ii]] < 0) delete_skill(sk[ii]);
+        this_object()->add("death_skill_loss/" + sk[ii], 1);//把损失的技能记录起来
+  }
+  skill_map = 0;
+  return 1;
+}
+
+int skill_death_recover()
+{
+  string *sk;
+  object obj;
+  int i, amount;
+
+  if( !mapp(skills) ) return 0;
+  sk = keys(skills);
+  obj = this_object();
+
+  for(i = 0; i < sizeof(sk); i ++) {                //所有损失的技能同时恢复
+    amount = obj->query("death_skill_loss/"+sk[i]);
+    if （ amount > 10 )  amount = 10;               //每项技能最多恢复10级
+    skills[sk[i]] += amount;
+  }
+  obj->delete("death_skill_loss");
+  return 1;
+}
+
+修改/adm/daemons/combatd.c中的victim_penalty(object victim)函数
+……
+   if( random(50) > (int)victim->query_kar() ) {
+     victim->set("death/skill_loss",1);
+     victim->skill_death_penalty();
+   }
+……
+[1;33m—————————————————————————————————[2;37;0m
+*** 对人参果的改进
+提出：fof
+简要说明：我认为人参果应该是方便玩家练功的好东西，而不是一个灾难，我极力反对用
+    暴力抢夺。这样的好东西应该属于有缘人。
+编程实现：fof
+完成度：90%
+做法：
+1。修改/d/qujing/wuzhuang/anshi.c中的init()函数和do_mo(string arg)函数
+void init()
+{
+   add_action("do_mo", "mo");
+   if( query("started") != 1 )
+   {
+     set("started", 1);
+//     call_out("generate_key", 54000);          //原设定黄铜钥匙是15小时后出现
+     call_out("generate_key", 18000 + random(18000));//黄铜钥匙在随机5-10小时后
+   }                               //出现，防止有人到了一定时间就蹲在暗室摸钥匙
+}
+int do_mo(string arg)
+{
+   object me, key;
+   me = this_player();
+   if( query("available") == 1 )
+   {
+     set("available", 0);
+     key = new(__DIR__"obj/huangtong-key");
+     key -> move(this_object());
+     message_vision("只听当！地一声，一把黄铜钥匙掉在地上。\n", me);
+     remove_call_out("generate_key");
+//     call_out("generate_key", 54000);//15 hours
+     call_out("generate_key", 18000 + random(18000));//5-10 hours
+     return 1;
+   }
+   else return notify_fail("你什么也没摸着。\n");
+}
+2。修改/d/qujing/wuzhuang/renshenguo-yuan.c中的zydx_appear()函数
+void zydx_appear()
+{
+   object me, zhenyuan;
+   string room, room_short;
+   me = this_player();
+   if( me->query_temp("used_huangtong_key") == 1 )
+   {
+     me->delete_temp("used_huangtong_key");
+     switch(random(10)) {                 //召开人参果大会的地点是随机的
+    case 0:
+    case 1:
+    case 2:
+       { room = __DIR__"wangxian";
+         room_short = "望仙台";
+         break;
+       }
+    case 3:
+    case 4:
+    case 5:
+       { room = __DIR__"xunzhen";
+         room_short = "寻真台";
+         break;
+       }
+    case 6:
+    case 7:
+       { room = __DIR__"renshenguo-yuan";
+         room_short = "人参果园";
+         break;
+       }
+    case 8:
+    case 9:
+       { room = __DIR__"mudanting";
+         room_short = "牡丹亭";
+         break;
+       }
+                       }
+     message_vision("\n只听几声哈哈大笑，镇元大仙走了出来。\n", me);
+     message_vision("镇元大仙说道：居然被你发现了。那我们就开个人参果大会吧！\n\n\n", me);
+     if( !objectp(zhenyuan=present("zhenyuan daxian", environment(me))) )
+     {//if zhenyuan already here, we do not need creat another one.
+        zhenyuan = new(__DIR__"npc/zhenyuan");
+        zhenyuan->move(room);
+        if(room_short != "人参果园")
+        {
+            message_vision("只见眼前一晃．．．\n\n", me);   
+            me->move(room);
+        }
+     }
+     zhenyuan->start_renshen(room,room_short);
+   }
+}
+3。修改/d/qujing/wuzhuang/npc/zhenyuan.c中的start_renshen()函数、ready1()函数、
+asked_guo()函数以及inviting()函数
+void start_renshen(string room, string name)
+{
+   object me;
+   me = this_object();
+   room_short = name;
+   set_temp("invite","public");
+   announce (me, "五庄观人参果品尝大会即将在" + room_short + 
+         "举行！诸位仙贤\n如愿观礼，请到" + room_short + "使accept zhenyuan daxian便可！\n");
+   remove_call_out ("inviting");
+   call_out ("inviting",1,me);
+   call_out("ready1", 180);
+   set_temp("ready", 1);
+}
+void ready1()
+{
+   object me;
+   me = this_object();
+   announce (me, "五庄观人参果品尝大会马上在" + room_short + 
+         "举行！诸位仙贤\n如愿观礼，请到" + room_short + "使accept zhenyuan daxian便可！\n");
+   set_temp("ready1", 1);
+}
+
+string asked_guo()
+{
+   int i, j, n, max, gived;
+   object guo, me, who, *list;
+   me = this_object();
+
+   //if no renshenguo party at all...
+   if( query_temp("ready") != 1 ) return ("人参果可是个好东西。\n");
+
+   //if not in the right place, no guo...
+   //need the right name, also right outdoors(so ppls can not use fake room).
+   if( environment(me)->query("short") != room_short || environment(me)->query("outdoors") != "wuzhuang" )
+	  return ("请速到" + room_short + "参加人参果大会。\n");
+
+	//if has not waited for 3 minutes...
+   if( query_temp("ready1") != 1 ) return ("不要急，再等等。\n");
+
+   //if finished...
+   if( query_temp("finished") == 1 ) return ("人参果已分发完了。\n");
+
+	//check who are invited first and give them renshen guo...
+	list = all_inventory( environment(this_object()) );
+	j = sizeof(list);
+	n = 1;
+	gived = 0;
+	max = 0;
+	while(gived < 5)                  //最多给5个人参果，可以适当修改
+	{
+		for (i =0; i < j; i ++)       //根据接受邀请的人的名单确定发果的顺序
+   		{
+			if ( n == 1 )             //找出接受邀请的人数最大值以减少循环次数
+   			{
+	   			if ( me->query_temp("accepted/" + list[i]->query("id") ) > max )
+   					max = me->query_temp("accepted/" + list[i]->query("id") );
+   			}
+			if ( n == me->query_temp("accepted/" + list[i]->query("id")) )
+			{			
+				guo = new("/d/obj/drug/renshen-guo");
+				guo->move(list[i]);
+				message_vision("$N给$n一枚人参果。\n", me, list[i]);
+				announce (me, "恭喜恭喜！" + list[i]->query("name") + "获得人参果一枚。\n");
+				gived ++;
+				if ( gived == 5 )  break;    //跳出for循环，gived=5，也必跳出
+			}                                //while 循环而结束分果
+		}
+		n ++;
+		if ( n > max )   break;       //减少循环次数
+	}
+	if ( gived == 0 ) return ("谁要人参果？\n");
+
+    set_temp("finished", 1);
+    me->delete_temp("accepted");      //把接受邀请的人的名单删掉
+    call_out("finishing", 10);
+
+    return ("好！人参果分发完毕，诸位仙贤尽情享用吧。\n");
+}
+void inviting (object me)
+{
+   int i, j;
+   object *list;
+
+   if (! me->query_temp("invite"))
+   return;
+
+   if(acpt_n < 30)           //最多接受30人
+   {
+   	 remove_call_out ("inviting");
+     call_out ("inviting", 3, me);
+   }
+
+   list = all_inventory( environment(this_object()) );//找出这个房间里所有的物件
+
+   j = sizeof(list);
+   for (i =0; i < j; i ++)       //挨个判断是否把玩家纳入分果人名单
+   {
+     string here, there;
+
+     reset_eval_cost();
+    
+     if (environment(list[i]) != environment(this_object()) )
+        continue;  //地方不对的，不管
+    
+     if (list[i]->query_temp("accepted") && !list[i]->query_temp("accept"))
+     	continue;  //没有使accept zhenyuan daxian 的和已经被纳入名单的，不管
+
+     if (list[i]->is_fighting())
+        continue;  //正在打架的，不管
+    
+     if (list[i]->is_busy())
+        continue;  //忙着的，不管
+    
+     if (list[i]->query_temp("no_move"))
+        continue;  //动不了的，不管
+    
+     if (!living(list[i]))
+        continue;  //死了的，不管
+    
+     if ((string)list[i]->query_temp("accept")!=me->query("id"))
+        continue;  //不是接受zhenyuan daxian 邀请的，不管
+
+     if (list[i]->query_kar() < 20 && random(6) < 2)  //福缘太低就得多等一会儿
+     	continue;
+
+     list[i]->set_temp("accept",0);
+     list[i]->set_temp("accepted",1);
+     me ->set_temp("accepted/" + list[i]->query("id"), acpt_n);//把玩家的id及
+     acpt_n ++;                    //接受邀请的序号纪录起来，以便后来分果时用
+	}
+}
+< Over >
+另注：在严格限制多重登录的情况下，即使拿到钥匙的玩家事先通知其同伙，也算他们
+有缘，该得。        FoF (09/18/99)
+[1;33m—————————————————————————————————[2;37;0m
+*** 门派的力量均衡
+提出：zys
+简要说明：前期五庄观的八仙拿人很牛，要求也不高，但后期就很弱了；月宫
+    的蚀月心法太厉害了，用来偷袭别人……方寸的千均棒法也很厉害；雪山
+    派看来看去都很弱……
+完成度：20%
+[1;33m—————————————————————————————————[2;37;0m
+*** 五庄观没有掌门人
+提出：zys
+简要说明：掌门人该叫什么好呢？掌门仙兄(仙姑)？掌门大弟子(大师姐)？
+    亟待讨论。
+完成度：20%
+[1;33m—————————————————————————————————[2;37;0m
+*** 解谜系统的改进
+提出：fof
+简要说明：现在可以用机器人解谜……都不知道怎么说好。解密系统可是花了不少
+    巫师的不少心血的，用机器人解密太不尊重巫师们的劳动了。
+完成度：20%
+[1;33m—————————————————————————————————[2;37;0m
+*** 区域开发：仙灵岛（水月宫派）
+提出：fof
+完成度：0%
+[1;33m—————————————————————————————————[2;37;0m
+*** 给办喜事的新人作些喜糖
+提出：fof
+完成度：95%
+做法：
+编制/obj/food/sweet.c，玩家可以在喜福会一楼购买。
+[1;33m—————————————————————————————————[2;37;0m
+
+……
+

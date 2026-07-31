@@ -1,0 +1,18 @@
+// SN:A1jHK^Mgik8c4Oe;
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("唐马马[2;37;0m", ({"ankma ma"}));        
+        set("gender", "女性");                
+        set("unit", "匹");
+        set("long", "无聊
+它是张柏芝的坐骑。
+");
+        set_temp("owner_id", "zhangbozhi");
+        set_temp("owner_name", "张柏芝");
+        ::setup();
+}
+

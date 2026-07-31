@@ -1,0 +1,13 @@
+#include <ansi.h>
+inherit BULLETIN_BOARD;
+void create()
+{
+	set_name(HIW"×ªÕ¾¼ÇÂ¼"NOR, ({ "board" }) );
+	set("location", "/d/city/guangchang");
+	set("poster_level", "(immortal)");
+	set("board_id", "zz_b");
+	set("long", "×ªÕ¾¼ÇÂ¼ÁôÑÔ°å¡£\n" );
+	setup();
+	set("capacity", 100);
+	replace_program(BULLETIN_BOARD);
+}

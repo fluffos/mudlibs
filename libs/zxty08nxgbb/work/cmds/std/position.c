@@ -1,0 +1,19 @@
+#define POS "/adm/daemons/poistiond.c"
+#include <ansi.h>
+inherit F_CLEAN_UP;
+
+int main(object me)
+{
+
+	if ( me->query("jing") < 20 )
+                        return notify_fail("你的精太少了！\n");
+
+	me->add("jing",-15);
+	
+        if (!POS->do_list(me)) 
+        write("请稍后再查看官职。\n");
+	
+	write(YEL"你目前的朝廷贡献度是 "+me->query("mark/achievement")+"。\n"NOR);
+	return 1;
+	
+}

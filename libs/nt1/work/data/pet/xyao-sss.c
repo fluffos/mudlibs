@@ -1,0 +1,18 @@
+// SN:bYC=VA59S7H]Qilh
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;32m驭兽[2;37;0m", ({"sss shou"}));        
+        set("gender", "女性");                
+        set("unit", "头");
+        set("long", "sucks
+它是小遥的坐骑。
+");
+        set_temp("owner_id", "xyao");
+        set_temp("owner_name", "小遥");
+        ::setup();
+}
+

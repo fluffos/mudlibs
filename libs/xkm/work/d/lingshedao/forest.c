@@ -1,0 +1,30 @@
+//Cracked by Roath
+//fear 2002 1 30
+#include <ansi.h>
+inherit ROOM;
+
+void create()
+{
+        set("short", "树林");
+        set("long", @LONG
+这是一片茂密的树林，微弱的阳光从树缝中探出。草地上长了许多
+菇类植物及奇形怪状地杂草。北边隐隐约约传来流水声，西边是座山岗。
+LONG
+        );
+        set("exits", ([
+                "northup" : __DIR__"river1",
+                "west" : __DIR__"shangang",
+                "eastup" : __DIR__"forest2",
+        ]));
+
+	set("outdoors", "lingshedao");
+    set("objects", ([ /* sizeof() == 2 */
+  "/d/wudang/npc/yetu" : 1,
+  "/d/lingshedao/obj/mushroom" : 1,
+    ]));
+
+	set("cost", 2);
+        setup();
+	replace_program(ROOM);
+}
+

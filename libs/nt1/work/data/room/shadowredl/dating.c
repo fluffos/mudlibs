@@ -1,0 +1,39 @@
+// SN:A00]4gmGB4@cfO<F
+// File(/data/room/shadowredl/dating.c) of shadowredl's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        set("short", "雪峰大厅");
+	set ("long", @LONG
+这就是雪峰主人血莲使者迎送客人的地方。正中有些桌椅，侧面
+是两扇屏风。东首是主人血莲使者的房间，有一扇木门虚掩着。南边
+是大门，出去就是院子。 
+LONG );
+
+	setup();
+
+	set("exits", ([
+                "east"   : __DIR__"woshi",
+		"north"  : __DIR__"houyuan",
+	]));
+
+        create_door("east", "木门", "west", DOOR_CLOSED);
+
+        set("no_sleep_room", 1);
+
+        set("KEY_DOOR", ([
+                "exit" : "south",
+                "room" : __DIR__"xiaoyuan",
+        ]));
+    
+        set("room_owner", "血莲使者");
+        set("room_name", "雪峰");
+        set("room_id", "xuefeng");
+        set("room_owner_id", "shadowredl");
+        set("room_position", "名人堂");
+}

@@ -1,0 +1,18 @@
+// SN:0B_4Le<:c]fmlhLL
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;35m火凤凰鹤[2;37;0m", ({"hfn he"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "一团火渐渐升起半空，化成一只红色的凤凰。
+它是飘飘的坐骑。
+");
+        set_temp("owner_id", "ppx");
+        set_temp("owner_name", "飘飘");
+        ::setup();
+}
+

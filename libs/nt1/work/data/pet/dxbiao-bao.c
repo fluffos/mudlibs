@@ -1,0 +1,18 @@
+// SN:gmd[b4F7KQhbkGXo
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;35m宝马[2;37;0m", ({"bao ma"}));        
+        set("gender", "女性");                
+        set("unit", "匹");
+        set("long", "请描述坐骑
+它是邓侃琼的坐骑。
+");
+        set_temp("owner_id", "dxbiao");
+        set_temp("owner_name", "邓侃琼");
+        ::setup();
+}
+

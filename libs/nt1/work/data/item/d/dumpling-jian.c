@@ -1,0 +1,32 @@
+// SN:X>2lC]6=7G0PSnEl
+// ITEM Made by player(烈风:dumpling) /data/item/d/dumpling-jian.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Mon Jun 28 23:38:00 2004
+#include <ansi.h>
+#include <weapon.h>
+
+inherit SWORD;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("长剑[2;37;0m", ({ "jian" }));
+	set_weight(9000);
+	set("item_make", 1);
+	set("unit", "柄");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一柄剑。
+一把长剑[2;37;0m
+剑柄上刻着一行小字：烈风(dumpling)
+");
+	set("value", 2100000);
+	set("point", 164);
+	set("material", "magic stone");
+	set("wield_msg", "哈哈[2;37;0m\n");
+	set("unwield_msg", "哈哈[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	init_sword(apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

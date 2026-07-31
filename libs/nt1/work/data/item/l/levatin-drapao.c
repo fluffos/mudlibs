@@ -1,0 +1,33 @@
+// SN:CUAQNBbo2DD>fBE]
+// ITEM Made by player(慕容伤:levatin) /data/item/l/levatin-drapao.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Fri Jun 11 19:01:13 2004
+#include <ansi.h>
+#include <armor.h>
+
+inherit ARMOR;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[2;37;0m[31m九幽皇袍[2;37;0m", ({ "drapao" }));
+	set_weight(9000);
+	set("item_make", 1);
+	set("unit", "张");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一张护甲。
+邪皇的龙袍，有聚集天地邪气的能力。[2;37;0m
+护甲缘上刻着一行小字：慕容伤(levatin)
+");
+	set("value", 2100000);
+	set("point", 245);
+	set("material", "magic stone");
+	set("wear_msg", "[1;34m刹那间天地间的怨气向这里聚齐起来。[2;37;0m\n");
+	set("remove_msg", "[1;34m邪气已经被[31m九幽皇袍[1;34m的主人收为己用了，他的修为又进了一步。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/parry", apply_armor() / 15 + 1);
+	set("armor_prop/armor", apply_armor());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

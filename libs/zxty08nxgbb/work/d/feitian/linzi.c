@@ -1,0 +1,26 @@
+// Room: linzi.c
+// Date: diabio
+
+#include <ansi.h>
+
+inherit ROOM;
+
+void create()
+{
+	set("short", "森林中部");
+	set("long", @LONG
+森林中央生了一堆篝火，几个地藏菩萨围在四周。一个面色阴冷的
+和尚正做在火边打坐念经。
+LONG
+	);
+
+	set("exits", ([
+		"southeast" : __DIR__"senlin",
+	]));
+
+	set("objects",([
+		__DIR__"npc/luo": 1,
+	]));
+	setup();
+}
+

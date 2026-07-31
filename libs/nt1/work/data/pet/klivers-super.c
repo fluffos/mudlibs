@@ -1,0 +1,18 @@
+// SN:AS;7A1UNoIX;6b:n
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("万里驹[2;37;0m", ({"super ju"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "一匹强健的万里神驹
+它是逍遥一剑的坐骑。
+");
+        set_temp("owner_id", "klivers");
+        set_temp("owner_name", "逍遥一剑");
+        ::setup();
+}
+

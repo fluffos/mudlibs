@@ -1,0 +1,18 @@
+// SN:I3]bKDRlo4HJ?DW4
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("丹顶鹤[2;37;0m", ({"danding he"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "没用的东西
+它是边城浪子的坐骑。
+");
+        set_temp("owner_id", "xuejian");
+        set_temp("owner_name", "边城浪子");
+        ::setup();
+}
+

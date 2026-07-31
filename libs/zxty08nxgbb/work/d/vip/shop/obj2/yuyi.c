@@ -1,0 +1,59 @@
+#include <armor.h>
+#include <ansi.h>
+#include <mudlib.h>
+
+inherit CLOTH;
+void owner_is_killed() { destruct(this_object()); }
+void create()
+{
+        set_name(HIM"风彩羽衣"NOR, ({ "fengcai cloth" }) ); 
+
+        set_weight(600);
+
+        if( clonep() )
+                set_default_object(__FILE__);
+        else {
+                set("long", HIY"这是一件风彩羽衣，据说充满灵气。下线不会消失{kaiguang fengcai cloth}。防御+2000\n"NOR);
+                set("unit", "件");
+              set("tianya_money",4);
+		set("no_put",1);
+              set("no_sell",1);
+              set("ty_gift", 1);
+              set("no_get", 1);
+              set("no_give", 1);
+            set("no_vipcun",1);
+              set("no_drop",1); 
+                set("material", "feature");
+                set("armor_prop/personality", 30);
+                set("armor_prop/armor", 2000);
+//               set("armor_prop/armor_vs_force", 10);
+                set("armor_prop/attack", -2); 
+        }
+        setup();
+}
+void init()
+{
+        add_action("do_kai", "kaiguang");
+}
+
+int do_kai(string arg)
+{
+        object me;
+
+
+        if (! id(arg))
+                return notify_fail("你要开光什么？\n");
+
+
+        me = this_player();
+         
+        if (!me->query("vip"))
+                return notify_fail("你不是VIP！\n");
+        if (me->query("vipshop/yuyi")>1)
+                return notify_fail("这件装备你开光过了！\n");
+
+                tell_object(me, HIG "恭喜你！你为你的装备开光好了，现在除了死亡，你的装备下线将不掉落。\n");
+                me->set("vipshop/yuyi", 2);
+
+        return 1;
+}

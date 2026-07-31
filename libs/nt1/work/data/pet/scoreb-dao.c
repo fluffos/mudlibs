@@ -1,0 +1,18 @@
+// SN:DcIPd8_i22N9V4Yo
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m龙兽[2;37;0m", ({"dao shou"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "他是剑家的宠物
+它是剑魂的坐骑。
+");
+        set_temp("owner_id", "scoreb");
+        set_temp("owner_name", "剑魂");
+        ::setup();
+}
+

@@ -1,0 +1,18 @@
+// SN:<7ifbAmV\8]=o8NX
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[30m黑马[2;37;0m", ({"linghus ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "没什么好描述的
+它是令狐冲的坐骑。
+");
+        set_temp("owner_id", "linghu");
+        set_temp("owner_name", "令狐冲");
+        ::setup();
+}
+

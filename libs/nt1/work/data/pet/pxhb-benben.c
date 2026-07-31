@@ -1,0 +1,18 @@
+// SN:E@oSbab_8kB0;K@M
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m笨笨象[2;37;0m", ({"benben xiang"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "傲问天的坐骑
+它是傲问天的坐骑。
+");
+        set_temp("owner_id", "pxhb");
+        set_temp("owner_name", "傲问天");
+        ::setup();
+}
+

@@ -1,0 +1,18 @@
+// SN:<e;=jG5LTC`IO>XD
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("凶兽[2;37;0m", ({"xiong shou"}));        
+        set("gender", "女性");                
+        set("unit", "头");
+        set("long", "我的小兽
+它是渡会的坐骑。
+");
+        set_temp("owner_id", "yourdead");
+        set_temp("owner_name", "渡会");
+        ::setup();
+}
+

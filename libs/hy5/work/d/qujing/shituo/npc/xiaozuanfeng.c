@@ -1,0 +1,58 @@
+//xiaozuanfeng.c
+
+int ask_name(); 
+
+inherit NPC;
+#include "/d/migong/romnpc2.c"
+// inherit NPC;
+void create()
+{
+        object yaopai;
+
+	set_name("小钻风", ({"xiao zuanfeng", "xiao yao", "xiaoyao", "yao"}));
+	set("gender", "男性" );
+	set("age", 16);
+        set("title", "巡山小妖");
+	set("long", "一个小妖，手里拿着铜锣正边走边吆喝。\n");
+	set("class", "yaomo");
+	set("combat_exp", 5000);
+	set("attitude", "peaceful");
+	set_skill("unarmed", 20);
+	set_skill("dodge", 20);
+	set_skill("parry", 10);
+
+	set("per", 11);
+	set("max_kee", 150);
+
+
+
+
+	setup();
+	   initlvl((300+random(300)),random(63));
+	carry_object("/d/obj/armor/shoupi")->wear();
+
+     
+
+       set("inquiry", ([
+
+                   "大大王"     : "我家大大王神通广大，本事高强，曾一口吞了十万天兵。",
+                "二大王"     : "我家二大王身高三丈，卧蚕眉，丹凤眼，"
+                          +"美人声，扁担牙，鼻似蛟龙。若与人争斗，"
+                          +"只消一鼻子卷去，就是铁臂铜身，也就魂亡魄丧。",
+                "三大王"     : "我家三大王非凡间之物，名号云程万里鹏，又叫大鹏名王，"
+                          +"行动时，疾风掠海，振北图南。",
+         ]) );
+
+        set("chat_msg", ({
+            "小钻风敲着铜锣吆喝道：巡山的，放哨的注意了！这几天唐僧就要从这过，大家都留点神！\n",
+            "小钻风喊道：唐僧的大徒弟孙悟空尖嘴猴腮，象个雷公！\n",
+            "小钻风喊道：唐僧的二徒弟猪八戒肥头大耳，象个猪骡！\n",
+            "小钻风喊道：唐僧的三徒弟沙和尚满脸秽气，象个鲶鱼精！\n",
+  (: random_move :),
+        }) );
+        set("chat_chance", 25);
+}
+
+
+
+

@@ -1,0 +1,83 @@
+//Cracked by Kafei
+/// kungfu/skill/shenghuo-xuanming 圣火玄冥功
+// wsky
+
+#include <combat.h>
+#include <ansi.h>
+
+inherit FORCE;
+string check() { return "force"; }
+#include "/kungfu/skill/force_list.h"
+
+int valid_enable(string usage) { return usage == "force"; }
+
+int valid_learn(object me)
+{
+	mapping skill;
+	string *skname;
+	int i, n = 0;
+
+	skill = this_player()->query_skills();
+	skname = sort_array(keys(skill), (: strcmp :) );
+
+	if ((int)me->query_skill("force", 1) < 10 )
+		return notify_fail("你的基本内功火候不足，不能学圣火玄冥功。\n");
+
+	if(me->query_skill("shenghuo-xuangong", 1) > 99)
+	{
+		for(i=0; i<sizeof(skill); i++) 
+		{
+			if (SKILL_D(skname[i])->check() == "force")
+        	        n++;  
+		}
+		if ( n >=2 && !me->query_skill("qiankun-danuoyi", 1) ) 	// if learned qkny,
+									// can have 2+ forces.
+			return notify_fail("你体内不同内力互相冲撞，难以领会更高深的圣火玄冥功。\n");
+	}
+
+	return 1;
+}
+
+int practice_skill(object me)
+{
+        if ( me->query_skill("shenghuo-xuanming", 1) < 200 )
+                return notify_fail("你的圣火玄冥功修为不够，不能自行修炼。\n");
+        if ( me->query_temp("weapon") )
+                return notify_fail("练习圣火玄冥功必须空手，静坐诚心方可。\n");
+        if ( (int)me->query("qi") < 70 )
+                return notify_fail("你的体力不够练习圣火玄冥功。\n");
+        if ( (int)me->query("jingli") < 70 )
+                return notify_fail("你的精力不够练习圣火玄冥功。\n");
+        if ( (int)me->query("neili") < 70 )
+                return notify_fail("你的内力不够练习圣火玄冥功。\n");
+
+        me->add("neili", -60);
+        me->receive_damage("jingli", 60, "精力透支过度死了");
+                  me->receive_damage("qi", 60, "体力透支过度死了");
+                  return 1;
+}
+
+string exert_function_file(string func)
+{
+	object me = this_player();
+	mapping skill;
+	string *skname;
+	int i, n = 0;
+
+	skill = me->query_skills();
+	skname = sort_array(keys(skill), (: strcmp :) );
+
+	for(i=0; i<sizeof(skill); i++) 
+	{
+		if (SKILL_D(skname[i])->check() == "force")
+       	        n++;  
+	}
+
+	if ( n >=2 && !me->query_skill("qiankun-danuoyi", 1) )	// if learned qkny, can exert
+	{							// even when have 2+ forces
+		tell_object(me, "你体内不同内力互相冲撞，难以使用圣火玄冥功。\n");
+		return 0;
+	}
+        return __DIR__"shenghuo-xuanming/" + func;
+}
+

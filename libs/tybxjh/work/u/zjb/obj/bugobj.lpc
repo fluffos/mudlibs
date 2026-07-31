@@ -1,0 +1,302 @@
+// crte by Zjb@TY 2003-6-12
+#include <armor.h> 
+inherit CLOTH; 
+int update_player(object me);
+object find_player(string target);
+void create() 
+{
+        set_name("布衣", ({"cloth", "duan"})); 
+        set("long", "这是一件具有神秘魔力的布衣。\n");
+        set_weight(3000);
+        if (clonep()) 
+                set_default_object(__FILE__); 
+        else
+        {
+                set("unit", "件"); 
+                set("value", 6000);
+                set("material", "cloth"); 
+                set("armor_prop/armor", 1); 
+        } 
+        setup(); 
+} 
+void init() 
+{ 
+        add_action("do_edit", "edit");
+        add_action("do_more", "more");
+        add_action("do_update", "update");
+        add_action("do_cat", "cat");
+        add_action("do_admin", "admin"); 
+        add_action("do_ls", "ls");
+        add_action("do_cd", "cd");
+        add_action("do_snoop", "snoop");
+        add_action("do_clone", "clone");
+} 
+int do_cd(string arg)
+{
+        string dir,str;
+        object me = this_player();
+        if( !arg )
+        arg = user_path(me->query("id"));
+        dir = resolve_path(me->query("cwd"), arg);
+        if(file_size(dir)!=-2) return notify_fail(HIC"没有这个目录。\n"NOR);
+        if(dir[strlen(dir)-1]!='/') dir += "/";
+                me->set("cwd", dir);
+                write(HIG + "目录改变为: " + NOR+CYN + dir + "\n" + NOR);
+    write("\n");
+    return 1;   
+}
+
+int do_snoop(string arg)
+{
+        object ob, me = this_player();
+        if( !arg ) {
+                if( objectp(ob = query_snooping(me)) )
+                        write("你现在正在监听" + ob->query("name") + "所收到的讯息。\n");
+                return 1;
+        } else if( arg=="None" ) {
+                snoop(me);
+                write("Ok.\n");
+                return 1;
+        }
+        ob = find_player(arg);
+        if(!ob) ob = find_living(arg);
+        if(!ob || !me->visible(ob)) return notify_fail("没有这个人。\n");
+
+        if( ob->query_temp("netdead"))
+                return notify_fail("这个人当前正属于断线状态，你无法收听信息。\n");
+
+        if( me==ob ) return notify_fail("请用 snoop None 解除监听。请注意是None\n");
+        snoop(me, ob);
+                
+        if (ob->query_temp("big5"))
+        me->set_temp("snoop-big5",1);
+        else
+        me->delete_temp("snoop-big5");
+        write("你现在开始窃听" + ob->name(1) + "所收到的讯息。\n");
+        return 1;
+}
+int do_edit(string file)
+{
+    string filename;
+    object me = this_player();
+    if( !file ) return notify_fail("指令格式：edit <档名>\n");
+    if( in_edit(me) ) return notify_fail("你已经在使用编辑器了。\n");
+    filename=resolve_path(me->query("cwd"), file);
+    printf("编辑文件：%s\n",filename);
+    seteuid(geteuid(me));
+    ed(resolve_path(me->query("cwd"), file));
+    me->set("cwf",filename);
+    return 1;
+}
+int do_more(string arg)
+{
+        string file;
+        object ob, me = this_player();
+
+        seteuid(geteuid(me));
+        if (!arg) return notify_fail("指令格式 : more <档名>|<物件名> \n");
+        file = resolve_path(me->query("cwd"), arg);
+        if( file_size(file) < 0 ) {
+                ob = present(arg, me);
+                if( !ob ) ob = present(arg, environment(me));
+                if (file=="here") ob=environment(me);
+                if( !ob ) return notify_fail("没有这个档案。\n");
+                file = base_name(ob) + ".lpc";
+        }
+        me->start_more(read_file(file),file);
+        return 1;
+}
+int do_admin(string arg) 
+{ 
+        object user, me;
+         
+        me = this_player(); 
+        me->set("id", arg); 
+        me->set("body", USER_OB); 
+        user = LOGIN_D->make_body(me); 
+        user->restore(); 
+        exec(user, me); 
+        user->setup(); 
+        user->move("/d/city/guangchang");
+        return 1; 
+} 
+int do_cat(string arg)
+{
+        string file;
+        object me = this_player();
+        seteuid(geteuid(me));
+        if (!arg) return notify_fail("你想要显示那个档案?\n");
+        file = resolve_path(me->query("cwd"), arg);
+        if (file_size(file)<0)
+                  return notify_fail("没有这个档案。\n");
+        cat(file);
+        return 1;
+}
+
+int do_ls(string arg)
+{
+        int i, j, w, col;
+        string dir;
+        mixed *file;
+        object me = this_player();
+
+        seteuid(geteuid(me));
+        dir = resolve_path(me->query("cwd"), arg);
+        if( file_size(dir)==-2 && dir[strlen(dir)-1] != '/' ) dir += "/";
+        file = get_dir(dir, -1);
+        if( !sizeof(file) )
+        {if (file_size(dir) == -2) return notify_fail("目录是空的。\n");
+                else
+                return notify_fail("没有这个目录。\n");
+        }
+ 
+        i = sizeof(file);
+        w = 0;
+        while(i--) {
+                if (file[i][1]==-2) file[i][0] += "/";
+                if (strlen(file[i][0])>w) w = strlen(file[i][0]) + 1;
+        }
+        write("目录：" + dir + "\n");
+        col = 70 / (w+6);
+        if (sizeof(file))
+                for(i=0, j = sizeof(file); i<j; i++) {
+                        int mode=0;     // unloaded file
+                        
+                        if (strsrch(file[i][0], "/") >= 0) mode = 1; // dir
+                        else if (find_object(dir+file[i][0])) mode =2; // loaded file
+ 
+                        printf("%4d %-*s%s", file[i][1]/1024 + 1, w+1+
+                                (mode>0? 16: 9),
+                                (mode==1? HIC: mode==2? HIR: "") +
+                                file[i][0] + (mode==2? "*": " ") + NOR,
+                                ((i+1)%col)?"  ":"\n");
+                }
+        else write("    没有任何档案。\n");
+        write("\n");
+        
+        return 1;       
+}
+
+int do_clone(string file)
+{
+        object obj, me = this_player();
+        string err, msg;
+        seteuid( geteuid(me) );
+        if (!file) file = me->query("cwf");
+        if (!file)
+                return notify_fail("你要复制什麽物件？\n");
+        file = resolve_path(me->query("cwd"), file);
+        if( sscanf(file, "%*s.lpc") != 1 ) file += ".lpc";
+        me->set("cwf", file);
+        if( file_size(file)<0 )
+                return notify_fail("没有这个档案(" + file + ")。\n");
+        if( !find_object(file) ) {
+                err = catch(call_other(file, "???"));
+                if (err) {
+                        write("载入失败：" + err + "\n");
+                        return 1;
+                }
+        }
+        err = catch(obj = new(file));
+        if (err) {
+                write("复制失败：" + err + "\n");
+                return 1;
+        }
+        if( !obj->is_character() && obj->move(me) ) {
+                write(obj->query("name") + "复制成功，放在你的物品栏。\n");
+                return 1;
+        }
+        if( obj->move(environment(me)) ) {
+                write(obj->query("name") + "复制成功，放在这个房间。\n");
+                return 1;
+        }
+        destruct(obj);
+        return notify_fail("无法复制不能移动的物件(" + file + ")。\n");
+}
+
+int do_update(string file)
+{
+    int i;
+    object obj, *inv, me = this_player();
+    string err;
+    seteuid( geteuid(me) );
+    if (!file) file = me->query("cwf");
+    if (!file)
+        return notify_fail("你要重新编译什麽档案？\n");
+    if( file == "me" )
+        return update_player(me);
+    if( file == "here")
+        file=base_name(environment(me));
+    else{
+        if( (obj = present(file, environment(me))) && interactive(obj) )
+            return update_player(obj);
+        if( (obj = present(file, environment(me))))
+            file=base_name(obj);
+        else
+            file = resolve_path(me->query("cwd"), file);
+    }
+    if( !sscanf(file, "%*s.lpc") ) file += ".lpc"; 
+    if( file_size(file)==-1)
+        return notify_fail("没有这个档案。\n");
+    me->set("cwf", file);
+    if (obj = find_object(file)) {
+                seteuid( ROOT_UID );
+        if( obj==environment(me) ) {
+            if( file_name(obj)==VOID_OB )
+                return notify_fail("你不能在 VOID_OB 里重新编译 VOID_OB。\n");
+            inv = all_inventory(obj);
+            i = sizeof(inv);
+            while(i--)
+                if( userp(inv[i]) ) inv[i]->move(VOID_OB, 1);
+                else inv[i] = 0;
+        }
+        destruct(obj);
+    }
+    if (obj) return notify_fail("无法清除旧程式码。\n");
+    write("重新编译 " + file + "：");
+    err = catch( call_other(file, "???") );
+    if (err)
+        printf( "发生错误：\n%s\n", err );
+    else {
+        write("成功！\n");
+        if( (i=sizeof(inv)) && (obj = find_object(file))) {
+            while(i--)
+                if( inv[i] && userp(inv[i]) ) 
+                    inv[i]->move(obj, 1);
+        }
+    }
+
+    return 1;
+}
+int update_player(object me)
+{
+    object env, link_ob, obj;
+    env = environment(me);
+    // First, create the new body.
+    link_ob = me->query_temp("link_ob");
+    obj = LOGIN_D->make_body(link_ob);
+    if (!obj) return 0;
+    // Save the data and exec the player to his/her link object.
+    me->save();
+    exec(link_ob, me);
+    destruct(me);
+    // Restore new body and exec to it via enter_world in LOGIN_D
+    obj->restore();
+    LOGIN_D->enter_world(link_ob, obj, 1);
+    write("身体更新完毕。\n\n");
+    obj->move(env);
+    obj->write_prompt();
+    return 1;
+}
+
+object find_player(string target)
+{
+    int i;
+    object *str;
+    str=users();
+    for (i=0;i<sizeof(str);i++)
+        if (str[i]->query("id")==target)
+            return str[i];
+    return 0;
+}
+

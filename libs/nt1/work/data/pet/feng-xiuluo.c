@@ -1,0 +1,18 @@
+// SN:7SZ97iU`cm`[_lQk
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;33m修罗狮[2;37;0m", ({"xiuluo shi"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "$HIB$青衣修罗的坐骑,威猛霸气,吼声震天,凛凛不可侵犯
+它是青衣修罗的坐骑。
+");
+        set_temp("owner_id", "feng");
+        set_temp("owner_name", "青衣修罗");
+        ::setup();
+}
+

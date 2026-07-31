@@ -1,0 +1,32 @@
+// SN:34`VW`46Fmm\fWLC
+// File(/data/room/joey/yishiting.c) of joey's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "议事厅");
+	set ("long", @LONG
+这就是不想回家主人容祖儿和重要人物商量江湖大事之处，正中
+有不少桌椅，侧面是屏风，厅堂中挂着两个条幅，两旁通往演武厅。
+LONG );
+
+	set("exits", ([
+                "east"   : __DIR__"yanwu1",
+                "west"   : __DIR__"yanwu2",
+		"north"  : __DIR__"zhongting",
+                "south"  : __DIR__"yingke",
+	]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("room_owner", "容祖儿");
+        set("room_name", "不想回家");
+        set("room_id", "bxhj");
+        set("room_owner_id", "joey");
+        set("room_position", "三岔口");
+}

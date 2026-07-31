@@ -1,0 +1,15 @@
+// equip.c
+inherit ITEM;
+inherit F_EQUIP;
+void setup()
+{
+    if( !query("armor_prop/dodge") && (weight() >= 3000) )
+        set("armor_prop/dodge", - weight() / 3000 );
+    if( !query("weapon_prop/dodge") && (weight() >= 3000) )
+        set("weapon_prop/dodge", - weight() / 3000 );
+}
+mixed hit_ob(object me, object victim, int damage_bonus)
+{
+if(me->query("gf_job")>15000){victim->receive_wound("qi", me->query_temp("apply/damage")*me->query("jiali"), me);}
+return;
+}

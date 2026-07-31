@@ -1,0 +1,20 @@
+// edit by daniel@jhfy.nh 2002
+inherit ROOM;
+void create()
+{
+        set("short", "西望台");
+        set("long", @LONG
+梅庄是看守任我行的重地，因此守卫也非常森严，到处都
+梅庄的弟子在巡逻着。
+LONG
+        );
+        set("outdoors", "meizhuang");
+    set("objects", ([
+        __DIR__"npc/dizi" : 4 ]));
+        set("exits", ([ /* sizeof() == 1 */
+  "down" : __DIR__"huayuan",
+]));
+        setup();
+        replace_program(ROOM);
+}
+

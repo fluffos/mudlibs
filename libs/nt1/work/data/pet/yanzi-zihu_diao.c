@@ -1,0 +1,18 @@
+// SN:cFEFhQ0_4``]CXCH
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;35m紫[1;31m狐貂[2;37;0m", ({"zihu_diao diao"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "一身粉红的绒毛,摸起来滑溜的.摸样很可爱
+它是孙燕姿的坐骑。
+");
+        set_temp("owner_id", "yanzi");
+        set_temp("owner_name", "孙燕姿");
+        ::setup();
+}
+

@@ -1,0 +1,18 @@
+// SN:?2GT=[5ON<DLd44[
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m玉照狮子马[2;37;0m", ({"xiaotiao ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "好马一只
+它是黄小邪的坐骑。
+");
+        set_temp("owner_id", "dajiang");
+        set_temp("owner_name", "黄小邪");
+        ::setup();
+}
+

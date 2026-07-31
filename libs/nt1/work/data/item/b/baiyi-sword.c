@@ -1,0 +1,32 @@
+// SN:hcABk6^7=jD;7L9C
+// ITEM Made by player(白衣人:baiyi) /data/item/b/baiyi-sword.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Wed May 26 06:50:10 2004
+#include <ansi.h>
+#include <weapon.h>
+
+inherit SWORD;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;37m琉璃剑[2;37;0m", ({ "sword" }));
+	set_weight(9000);
+	set("item_make", 1);
+	set("unit", "柄");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一柄剑。
+[1;36m这就是传说中，无影无形的[1;37m琉璃剑[2;37;0m[2;37;0m
+剑柄上刻着一行小字：白衣人(baiyi)
+");
+	set("value", 2100000);
+	set("point", 361);
+	set("material", "magic stone");
+	set("wield_msg", "[1;37m$N伸手一抖，你只觉寒气逼人，周围气温下降。[2;37;0m\n");
+	set("unwield_msg", "[1;37m$N随手一挥，周围又恢复原样。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	init_sword(apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

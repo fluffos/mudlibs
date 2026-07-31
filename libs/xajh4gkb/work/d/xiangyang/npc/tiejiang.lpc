@@ -1,0 +1,178 @@
+// smith.c
+
+inherit NPC;
+inherit F_DEALER;
+
+string ask_me(); //定义ask_me
+int do_gu(string arg); 
+int do_dapi(string arg); 
+int do_cuihuo(string arg); 
+void reward(object me); 
+
+void create()
+{
+	int jibie;
+	jibie = 100;
+	set("xyzx_sys/level", jibie*8/10+random(jibie*4/10));	//2016.5.22阿飞调整NPC属性
+	set_name("铁匠", ({ "tie jiang", "smith" }));//以下为人物设置
+	set("title", "铁匠铺老板");
+	set("shen_type", 1);
+	set("gender", "男性" );
+	set("age", 33);
+	set("long", "铁匠正用铁钳夹住一块红热的铁块放进炉中。\n");
+	set("combat_exp", 800000);
+	set("attitude", "friendly");
+	set("vendor_goods",({//注释了，提高兼容性
+	    "/clone/weapon/gangdao",
+	    "/clone/weapon/changjian",
+	    "/clone/weapon/qimeigun",
+	    "/clone/weapon/changbian",
+	    "/clone/weapon/gangzhang",
+		"/clone/weapon/tieqiao",
+	    "/clone/armor/tiejia",
+	    "/clone/box/tuzhu",
+	}));
+	set("inquiry", ([ 
+		"工作" : (: ask_me :), 
+	]));
+
+	setup();
+	carry_object("/clone/cloth/cloth")->wear();//也是为了兼容性
+}
+
+void init()//定义动作
+{
+	add_action("do_list", "list");
+	add_action("do_buy", "buy");
+	add_action("do_gu", "gu"); 
+	add_action("do_dapi", "dapi"); 
+	add_action("do_cuihuo", "cuihuo"); 
+}
+
+string ask_me() 
+{ 
+	object me = this_player(); 
+
+	if (me->is_busy()) 
+		return "你现在正忙，等会再说。\n"; 	
+	if (me->query("xyzx_sys/level") >= 100000) //检查EXP是否大于500
+		return "让您老干这个未免屈尊了吧？"; 
+	if (me->query("qi") < 50) //检查气
+		return "你还是歇会儿吧！要是出了人命我可承担不起。"; 
+	if (me->query_temp("smith/gu")) //检查标记
+		return "让你鼓风箱，你怎么还磨蹭(gu)？"; 
+	if (me->query_temp("smith/dapi")) 
+		return "叫你打的坯你打了没有(dapi)？"; 
+	if (me->query_temp("smith/cuihuo")) 
+		return "叫你淬火你怎么不动(cuihuo)？"; 
+	
+	switch(random(3))//随机分配三个工作
+	{ 
+		case 0: 
+			me->set_temp("smith/gu", 1); 
+			return "锻造兵甲需要完成多项工作。好！你帮我鼓一会儿风箱(gu)。"; 
+
+		case 1: 
+			me->set_temp("smith/dapi", 1); 
+			return "锻造兵甲需要完成多项工作。这样吧，你帮我打一下坯吧(dapi)！"; 
+
+		case 2:
+			me->set_temp("smith/cuihuo", 1); 
+			return "锻造兵甲需要完成多项工作。去帮我把这些刚出炉的淬一下火(cuihuo)。"; 
+	} 
+} 
+
+int do_gu(string arg) 
+{ 
+	object me = this_player(); 
+
+	if (me->is_busy()) 
+		return notify_fail("你现在正忙。\n"); 
+	if (! me->query_temp("smith/gu")) 
+	{ 
+		message_vision("$n刚偷偷的拉起鼓风机，鼓了几阵风。就听见$N对$n大喝道：滚开，乱搞什么。\n", this_object(), me); 
+		return 1; 
+	} 
+
+	message_vision("$n拉起鼓风机拼命鼓了起来，$N看了点了点头。\n", this_object(), me); 
+	me->set_temp("smith/gu_over", 1); 
+	reward(me); 
+	return 1; 
+} 
+
+int do_dapi(string arg) 
+{ 
+	object me = this_player(); 
+
+	if (me->is_busy()) 
+		return notify_fail("你现在正忙。\n"); 
+	if (! me->query_temp("smith/dapi")) 
+	{ 
+		message_vision("$n拿起几块生铁，在手里掂了掂。就听见$N对$n大喝道：放下，乱搞什么。\n", this_object(), me); 
+		return 1; 
+	} 
+
+	message_vision("$n拿着锤子对刚出炉的火热的生铁用力敲打着，$N“嗯”了一声，看上去有些满意。\n", this_object(), me); 
+	me->set_temp("smith/dapi_over", 1); 
+	reward(me); 
+	return 1; 
+} 
+
+int do_cuihuo(string arg) 
+{ 
+	object me = this_player(); 
+
+	if (me->is_busy()) 
+		return notify_fail("你现在正忙。\n"); 
+	if (! me->query_temp("smith/cuihuo")) 
+	{ 
+		message_vision("$n刚抄起一个打造好的坯子，就听见$N对$n大喝道：放下，别给我搞坏了。\n", this_object(),me);
+		return 1; 
+	} 
+
+	message_vision("$N用铁钳抄起一块火红的坯子，伸进了水池，“哧”的一声轻烟四冒。\n", me); 
+	me->set_temp("smith/cuihuo_over", 1); 
+	reward(me); 
+	return 1; 
+} 
+
+void reward(object me) //工作结束，分配奖赏，移除标记
+{ 
+	object coin; 
+	int exp,pot,sco,renwu_exp_add;
+	me->delete_temp("smith/gu"); 
+	me->delete_temp("smith/dapi"); 
+	me->delete_temp("smith/cuihuo"); 
+	renwu_exp_add = 0;
+	if (me->query_temp("renwu_exp_add")) renwu_exp_add = (int)me->query_temp("renwu_exp_add",1);	//处于任务经验提升状态时
+	coin = new("/clone/money/silver"); 
+	coin->set_amount(20 + random(50)); 
+	exp = (30000+random(30000))*(renwu_exp_add+100)/100;
+	pot = (10000+random(10000))*(renwu_exp_add+100)/100;
+	sco = (1+random(2))*(renwu_exp_add+100)/100;
+	if (me->query_temp("smith/gu_over") && me->query_temp("smith/dapi_over") && me->query_temp("smith/cuihuo_over")) 
+	{
+		me->add("combat_exp", exp); 
+		me->add("potential", pot); 
+		me->add("score", sco);
+		tell_object(me,"你成功的锻造了一件兵器，得到了"+exp+"点经验和"+pot+"点潜能。\n");
+		coin->move(this_player()); 
+		message_vision("$N对$n道：这是给你的工钱。\n", this_object(), me);		
+		me->delete_temp("smith/gu_over"); 
+		me->delete_temp("smith/dapi_over"); 
+		me->delete_temp("smith/cuihuo_over");
+		me->add("renwu/xiangyang_duanzao",1);
+//2018.5.28阿飞添加  端午节活动--铁匠任务10次
+		if ((int)me->query("jieri_gift/duanwu")==1) me->add_temp("duanwu/duanzao",1);
+		if ((int)me->query_temp("duanwu/duanzao")>=10 )
+		{
+			me->set_temp("duanwu/duanzao",10);
+			tell_object(me, HIW"你在端午节期间，辛勤劳动兢兢业业，勤勉可嘉！\n"NOR);
+		}		
+	} else
+	{
+		tell_object(me,"锻造武器是件很繁杂的工作，你还需要完成其他步骤。\n");
+	}
+	me->receive_damage("qi", 30); 
+	me->start_busy(5);
+} 

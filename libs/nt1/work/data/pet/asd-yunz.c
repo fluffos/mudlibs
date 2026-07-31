@@ -1,0 +1,18 @@
+// SN:U9cN^d=N<JHOebPe
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("云中鹤[2;37;0m", ({"yunz he"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "仙人坐骑
+它是逗你玩的坐骑。
+");
+        set_temp("owner_id", "asd");
+        set_temp("owner_name", "逗你玩");
+        ::setup();
+}
+

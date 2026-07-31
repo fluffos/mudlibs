@@ -1,0 +1,18 @@
+// SN:RfLQ436`8lAm@hDY
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("雷豹豹[2;37;0m", ({"leibao bao"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "雷豹
+它是大侠的坐骑。
+");
+        set_temp("owner_id", "flyernet");
+        set_temp("owner_name", "大侠");
+        ::setup();
+}
+

@@ -1,0 +1,36 @@
+// SN:g8W=KYNCUjgg8=kD
+// ITEM Made by player(战歌:orc) /data/item/o/orc-ties.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Mon May  3 21:33:24 2004
+#include <ansi.h>
+#include <armor.h>
+
+inherit HANDS;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;34m玄铁手[2;37;0m", ({ "ties" }));
+	set_weight(2700);
+	set("item_make", 1);
+	set("unit", "双");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一双铁掌。
+[1;34m[1;34m玄铁手[2;37;0m
+[1;34m它在阳光下闪闪发光[2;37;0m
+铁掌缘上刻着一行小字：战歌(orc)
+");
+	set("value", 2100000);
+	set("point", 368);
+	set("material", "magic stone");
+	set("wear_msg", "[1;36m$N伸手一抖，随空而出。[2;37;0m\n");
+	set("remove_msg", "[1;37m$N双手一搓，$n[1;37m化为一阵细沙[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/unarmed_damage", apply_damage());
+	set("armor_prop/hand", 10);
+	set("armor_prop/armor", 10);
+	set("armor_prop/strike", 10);
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

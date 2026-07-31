@@ -1,0 +1,309 @@
+//指间MUD服务器转义协议   如有问题请联系qq359117510
+
+//1、加密有关：通过加密可以阻止非手机专用端登陆，服务器管理员可以根据需要合理调用
+//#define ZJKEY ksTR1VPgP3gWw
+
+//2、客户端检测，下边为服务器验证客户端方案
+void jiance(string arg,object ob,string str);
+//logind.c中logon()中添加下列接口
+{
+	write("\n");
+	str = crypt(ZJKEY,0);
+	write("ver1.0,"+str+"\n");
+	input_to("jiance",ob,str);
+}
+//客户端验证接口，需要接手机端的必须调用，需要手机端和zmud共存的可以在检测接口中做判断，下边函数仅供参考。管理可以自行定义
+//上边检测会发送一个ZJKEY的随机加密串给用户，用户接收到之后利用得到的加密串 str 连接指间mud网页网关获取新的加密串回复给游戏服务器
+//服务器发送验证加密串 str 后等待用户回复，用户回复必须=crypt(ZJKEY,str[2..3])...此回复由用户调用指间MUD网关生成
+void jiance(string arg,object ob,string str)
+{
+	if(!arg)
+	{
+		input_to("jiance",ob,str);
+		return;
+	}
+	else if (arg==crypt(ZJKEY,str[2..3]))//如果接收到客户端回应是手机端
+	{
+		//版本验证成功:必须发送"版本验证成功\n"字串，客户端会对此字串做出回应，否则客户端会无响应
+		write("版本验证成功\n");
+
+		//客户端收到"版本验证成功\n"字串会自动发送指间网关的 "账号║密码║密文" 格式字串到游戏服务器，
+		//密文验证方式为 crypt(ZJKEY,"账号")+crypt(ZJKEY,"密码"))=="密文"
+
+		//游戏服务器可自行处理，如果要让客户用网关默认账号自动注册，可以仿照下面 get_user()函数适当修改
+		//如果服务器不想让用户用网关账号自动注册，可以对网关账号数据不做处理，直接 write(SYSY"0007\n")
+		//客户端会对 SYSY"0007\n" 字串做出回应跳转到主界面，此时主界面可以进行命令输入交互
+		//验证完毕之后可以给予连接物件赋予是否手机登陆的变量，以便之后调用
+		ob->set_temp("mob_login",1);
+		input_to("get_user", ob);
+		return;
+	}
+	else //如果需要屏蔽zmud，可以参考下边几行写法做出处理。如果要互通zmud下边可以转到zmud欢迎入口
+	{
+		write("客户端非法\n");
+			log_file( "logins", sprintf("%s:%s\n",arg,str) );
+		destruct(ob);
+		return;
+	}
+}
+
+private void get_user(string arg, object ob);
+private void get_char(string arg, object ob);
+
+//验证手机端账号密码函数
+private void get_user(string arg, object ob)
+{
+	//arg,账号║密码║密文║email。
+	object old_link,user;
+	string *myinfo;
+
+	if( !arg||arg=="") {
+		input_to("get_user", ob);
+		return;
+	}
+
+	myinfo = explode(arg,"║");
+
+	if( sizeof(myinfo)!=4 ) {//数据串格式不对
+		write(ZJTMPSAY"数据验证错误。。。\n");
+		input_to("get_user", ob);
+		return;
+	}
+
+	if( !check_legal_id(myinfo[0])) {
+		//ID合法性检查，请自行相关修改，指间网关账号要求为字母打头的字母数字结合
+		input_to("get_user", ob);
+		return;
+	}
+
+	if( (crypt(ZJKEY,myinfo[0])+crypt(ZJKEY,myinfo[1]))!=myinfo[2] ) {
+		write(ZJTMPSAY"账号数据校验错误，请重试。。。\n");
+		input_to("get_user", ob);
+		return;
+	}
+
+	myinfo[0] = lower_case(myinfo[0]);
+
+	if( (string)ob->set("id", myinfo[0]) != myinfo[0]) {
+		write(ZJTMPSAY"未知错误，请重试。。。\n");
+		input_to("get_user", ob);
+		return;
+	}
+	ob->set("email",myinfo[3]);
+	if( file_size(ob->query_save_file() + __SAVE_EXTENSION__) >= 0 ) 
+	{//如果账号存在，读取账号登陆数据
+		if( !ob->restore() ) 
+		{
+			write(ZJTMPSAY"人物存档出现问题。。。\n");
+			input_to("get_user", ob);
+			return;
+		}
+		//此处可以加入账号如果账号已存在，2次密码验证
+	}
+	else 
+		ob->set("body", USER_OB);//不存在，为新建账号做准备
+
+	//不论账号是否是新建账号。根据网关账号更新游戏账号密码，担心安全问题请在上边加入2次验证
+	if( (string)ob->set("password",crypt(myinfo[1],"zj")) != crypt(myinfo[1],"zj")) {
+		write(ZJTMPSAY"未知错误，请重试。。。\n");
+		input_to("get_user", ob);
+		return;
+	}
+
+	write("\n");
+
+	user = find_body(ob->query("id"));
+	if (user) { //如果角色正在游戏中
+		old_link = user->query_temp("link_ob");
+		if( old_link ) {
+			if(interactive(user))
+			{
+				tell_object(user, RED"你的账号在别处登录，你被迫下线了！\n");
+				exec(old_link, user);
+			}
+			destruct(old_link);
+		}
+		//0007，登陆成功
+		write(SYSY"0007\n");
+		write(ZJTMPSAY"登录成功，正在加载世界。。。\n");
+		reconnect(ob, user);
+		return;
+	}
+
+	if( objectp(user = make_body(ob)) ) {
+		user->set_temp("link_ob",ob);
+
+		//如果角色数据存在，读取角色数据并正式进入游戏世界
+		if( file_size(user->query_save_file() + __SAVE_EXTENSION__) >= 0 ){
+			if( user->restore() ) {
+				//////0007，登陆成功
+				write(SYSY"0007\n");
+				write(ZJTMPSAY"登录成功，正在加载世界。。。\n");
+				enter_world(ob, user);
+				return;
+			} else {
+				write(ZJTMPSAY"人物存档出现问题。。。\n");
+				input_to("get_user", ob);
+				return;
+			}
+		}
+	}
+	destruct(user);
+	//角色数据不存在，软如新建角色处理，客户端在登陆界面中收到 SYSY"0008\n" 字串会打开建立角色界面，如果客户端已经打开命令交互，次项无效
+	write(SYSY"0008\n");
+	//角色界面包含 "性别║头像║昵称" 数据，确定建立会向服务器发送 "性别║头像║昵称"格式字串，可做如下处理 get_char()
+	//如果
+	input_to("get_char", ob);
+}
+
+private void get_char(string arg, object ob)
+{
+	//arg,性别║头像║昵称。
+	object user;
+	string *myinfo;
+
+	if( !arg||arg=="") {
+		input_to("get_char", ob);
+		return;
+	}
+
+	myinfo = explode(arg,"║");
+	if(sizeof(myinfo)!=3){ //数据串格式错误
+		write(ZJTMPSAY"错误，请检查重试。\n");
+		input_to("get_char", ob);
+		return;
+	}
+
+	if( !check_legal_name(myinfo[2]) ){//昵称检查，服务器可根据情况自行设定检查
+		//0009，昵称不符合要求
+		input_to("get_char", ob);
+		return;
+	}
+
+	ob->set("name", myinfo[2]);
+	if( !objectp(user = make_body(ob)) )
+		return;
+
+//初始化角色，请根据MUD设定自行调整
+	user->set("kar", 20 );
+	user->set("str", 20 );
+	user->set("cps", 20 );
+	user->set("int", 25 );
+	user->set("cor", 20 );
+	user->set("con", 20 );
+	user->set("spi", 25 );
+	user->set("per", 20 );
+	user->set("gender", myinfo[0]);
+	user->set("img", myinfo[1]);
+
+	user->set("no_gift",1);
+	CHAR_D->setup_char(user); //setup user weight. mon 11/7/97
+	user->set("title", "普通百姓");
+	user->set("birthday", time() );
+	user->set("potential",99);
+	user->set("food", user->max_food_capacity());
+	user->set("water", user->max_water_capacity());
+	user->set("channels", ({ "chat","rumor","xyj","sldh","es" }) );
+	log_file( "USAGE", sprintf("%s was created from %s (%s)\n", user->query("id"),
+		query_ip_number(ob), ctime(time()) ) );
+
+	ob->set("last_from",query_ip_number(ob));
+	ob->set("last_on",time());
+//0007，登陆成功。。客户端收到此消息会打开主界面窗口。主窗口可进行命令交互
+	write(SYSY"0007\n");
+	call_out("enter_world",1,ob, user);
+}
+
+
+
+#define ESA		"" 
+
+//下列定义如果跟现有定义冲突玩家可自行更改定义名称
+// '\n'换行符容易造成客户端信息刷新延迟，因此定义下面几个分隔符，提高客户端信息刷新效率
+#define ZJSEP		"$zj#"		//字串分隔符，比如向客户端发送场景中的多个npc信息，npc信息之间可用此分隔符连接
+#define ZJSP2		"$z2#"		//菜单字串分隔符，一次向客户端发送多个菜单项，每项之间用此连接，菜单名字和关联命令之间用 '|' 连接
+#define ZJBR		"$br#"		//长描述换行符
+
+//定义此标志后文字的热点命令，点击此标志后直到 NOR 之前的文字 会触发 w 字串内包含的命令，
+// w 字串格式："cmds:xxx"客户端会执行xxx命令，"http://xxxx","tel:xxx","mailto:xxx"会对应打开网页，电话，邮件程序
+//ZJOBLONG"这是一个巨大的石头(stone)，你可以试着"+ZJURL("cmds:move stone")+ZJSIZE(20)+"推动(move)"NOR"它。\n"
+#define ZJURL(w)	ESA + "[u:" + w + "]"
+#define ZJSIZE(n)	ESA + "[s:" + n + "]"	//设定标志之后直到NOR之前字符的文字大小为 (屏幕宽度/n) 
+
+#define SYSY		ESA + "000"
+
+//弹出对话应答框，a为对话框标题，b为输入内容点击确定后执行的命令，如b="anwser",则确定后发送"answer 输入内容"
+//b字串内可使用$txt#通配串，如 b="answer $txt# for kill" 则确定后发送 "answer 输入内容 for kill"
+#define INPUTTXT(a,b)	ESA + "001" + a + ZJSEP + b
+
+//场景名称标志，必须在行首，之后跟随的直到 '\n' 之前的内容将在客户端场景标题标签上显示，支持彩色显示
+//ZJTITLE+ob->query("short")+"\n"....客户端收到ZJTITLE标志设置标题的同时会清空出口和左侧场景物件栏
+#define ZJTITLE		ESA + "002"	
+
+//场景出口标志，必须在行首，之后跟随的直到 '\n' 之前的内容将在客户端场景出口框中按方向分割处理并添加显示
+//ZJEXIT "出口名字1:dir1" ZJSEP "出口2:dir2" ZJSEP "出口3:dir3"。。。。+"\n"  出口名字支持彩色显示
+#define ZJEXIT		ESA + "003"
+#define ZJEXITRM	ESA + "903"//客户端收到此消息。会将对应出口按钮隐藏。
+#define ZJEXITCL	ESA + "913"//客户端收到此消息。会将所有出口按钮清除。
+
+//场景描述标志，必须在行首，之后跟随的直到 '\n' 之前的内容将在客户端场景描述框中显示。
+//ZJOBLONG+ob->query("long")+"\n"....基于对齐问题重定义了描述框控件，暂不支持文字点击定义和多彩显示，除场景描述之外的文本均支持文字点击协议
+#define ZJLONG		ESA + "004"	
+
+//场景左侧栏物件标志，必须在行首，之后跟随的直到 '\n' 之前的内容将在客户端场景左侧物件列表框中添加显示
+//ZJOBIN+"name1:cmds1"ZJSEP"name2:cmds2"......."\n"
+#define ZJOBIN		ESA + "005"
+#define ZJOBOUT		ESA + "905"//客户端收到此消息。会将删除左侧栏对应物件。
+
+//推送自定义按钮定义，必须在行首，之后跟随的直到 '\n' 之前的内容将在客户端自定义按钮区处理，类似出口处理
+//ZJBTSET+"b1:查看状态:score"ZJSEP"b2:查看技能:skills"..."\n"
+//可以任意推送任何一个按钮不必每次全部推送，总共17个自定义按钮，分别b1-b17表示。(bxx:名称:命令)
+#define ZJBTSET		ESA + "006"
+
+//强制客户端发送某命令，必须在行首，之后跟随的直到 '\n' 之前的内容将被客户端作为命令发送
+//ZJFCMDS"quit\n" 客户端收到此消息自动发送quit命令
+#define ZJFORCECMD(c)	ESA + "014" + c + "\n"
+
+//弹出描述标志，必须在行首，之后跟随的直到 '\n' 之前的内容将在客户端弹出框中显示，支持ZJBR换行
+//此标志打头的文字信息会弹出显示，设计中可以配合文字点击协议灵活运用
+//ZJOBLONG"这是一个巨大的石头(stone)，你可以试着"+ZJURL("cmds:move stone")+"推动(move)"NOR"它。\n"
+#define ZJOBLONG		ESA + "007"
+
+//弹出窗口中的附加列表框，必须在行首，之后跟随的直到 '\n' 之前的内容将在客户端弹出框中的列表区中处理，作为可触摸命令按钮显示
+//次接口与文字点击接口功能类似，但是必须与ZJOBLONG结合，可以根据需要灵活调用此接口或者文字点击接口。
+#define ZJOBACTS		ESA + "008"	//按钮列表1，窄按钮，可根据需要灵活使用标志1或2
+#define ZJOBACTS2		ESA + "009"	//按钮列表2，自适应宽度按钮
+
+//顶部常用状态更新标志，必须在行首，之后跟随的直到 '\n' 之前的内容将在客户端状态显示框中处理显示
+//ZJHPTXT"名字:XXX:#颜色串║经验:XXX:#颜色串║气血:xxx/xxx/xxx:#颜色串║内力:xxx/xxx:颜色串。。。。"
+//各状态中间用“║”分开，每个子状态串中间为数据部分可以用"/"分开，单数据、2数据、3数据均可，客户端会自行解析
+//如果是单数据，客户端属性条会直接把数值显示出来，2、3数据，会自动解析状态条百分比
+sp  = ZJHPTXT + my["name"];
+sp += "║" + sprintf("EXP:%d",my["combat_exp"]);
+sp += "║" + sprintf("气.%d:%d/%d/%d:%s",my["qi"],my["qi"],my["eff_qi"],my["max_qi"],"#BBFF0000");
+sp += "║" + sprintf("内力.%d:%d/%d:%s",my["neili"],my["neili"],my["max_neili"],"#BB0000FF");
+sp += "\n";
+tell_object(me, sp);
+#define ZJHPTXT		ESA + "012"
+
+//必须在行首，之后跟随的直到 '\n' 之前的内容将在客户端地图框中显示，地图框支持ZJBR换行
+#define ZJMAPTXT		ESA + "011"
+
+//配合start_more()使用，start_more()输出的内容将在客户端大文本阅读框中分页显示，支持ZJBR换行
+#define ZJMORETXT		ESA + "013"
+
+//既显既隐提示标志，必须在行首，之后跟随的直到 '\n' 之前的内容将在客户端临时消息框中渐显渐隐显示
+#define ZJTMPSAY		ESA + "015"
+
+//客户端弹出菜单标志，之后跟随的直到 '\n' 之前的内容将在客户端处理并弹出菜单
+//ZJPOPMENU"菜单一|cmds1" ZJSP2 "菜单二|cmds2"...."\n"
+//r列数，w列宽(屏宽/w)，h行高(屏宽/h)，s字号(屏宽/s)，
+#define ZJPOPMENU		ESA + "020"
+#define ZJMENUF(r,w,h,s)	"$"+r+","+w+","+h+","+s+"#"
+
+//频道分屏协议
+//ZJCHANNEL打头的行会在聊天频道框显示，此协议最好在/feature/message.c中的receive_message函数中添加
+#define ZJCHANNEL	ESA + "100"
+
+//客户端收到此消息会强行关闭客户端
+#define SYSEXIT		ESA + "999"

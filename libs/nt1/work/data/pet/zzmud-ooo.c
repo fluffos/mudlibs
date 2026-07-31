@@ -1,0 +1,18 @@
+// SN:kUeYc5f?b:cVE6hA
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m木马[2;37;0m", ({"ooo ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "$HIG$一只可爱的小木马
+它是不明的坐骑。
+");
+        set_temp("owner_id", "zzmud");
+        set_temp("owner_name", "不明");
+        ::setup();
+}
+

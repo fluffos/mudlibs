@@ -1,0 +1,18 @@
+// SN:JmbZ5MfZnDNO8ZOh
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m白虎虎[2;37;0m", ({"kokc hu"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "hp
+它是净叶的坐骑。
+");
+        set_temp("owner_id", "kobebb");
+        set_temp("owner_name", "净叶");
+        ::setup();
+}
+

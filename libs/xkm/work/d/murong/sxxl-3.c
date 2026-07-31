@@ -1,0 +1,22 @@
+// /u/chen/murong/xiaojing-1.c
+// by chen
+
+#include <ansi.h>
+#include <room.h>
+inherit ROOM;
+void create()
+{
+         set("short","琴韵小径");
+         set("long",@long
+一条曲曲折折用鹅卵石铺成的小径, 路两旁绿柳成阴, 一处处山石花木
+点缀在其中。你走在石地上，啪嗒啪嗒的发出清脆的响声，往东面面去
+是听雨居。
+long);
+         set("ourdoors","murong");
+         set("exits",([
+             "east" : __DIR__"xiaojing-2",
+             "west" : __DIR__"xiaozhu",
+]));
+	setup();
+	replace_program(ROOM);
+}

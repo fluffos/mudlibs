@@ -1,0 +1,64 @@
+// Copyright (C) 2003, by Lonely. All rights reserved.
+// This software can not be used, copied, or modified 
+// in any form without the written permission from authors.
+// meinv-quan.c 美女拳
+
+inherit SKILL;
+
+string *action_msg = ({
+        "$N使一招「红玉击鼓」 ，双臂交互快击",
+        "$N突然变为「红拂夜奔」，出其不意的叩关直入，令$n大吃一惊",
+        "$N招式一变成「绿珠坠楼」，扑地攻敌下盘，委实难测",
+        "$N双掌连拍数下，接著连绵不断拍出，原来是「文姬归汉」，共胡笳十八拍",
+        "$N使出「红线盗盒」，以空手入白刃之技向$n手中兵刃夺去",
+        "$N一式「木兰弯弓」，左手如抱满月，右手疾挥而过，令$n目瞪口呆",
+        "$N忽然昂首如吟明月，双掌从不可思议的角度攻了过来，原来是一招「班姬赋诗」",
+        "$N使招「蛮腰纤纤」，腰肢轻摆避开，紧跟着挥掌攻击$n的前胸",
+        "$N五指在自己头发上一梳，跟著软软的挥了出去，脸上微微一笑，却是一招「丽华梳装」。",
+        "$N见$n呆住，伸指戳出，却是一招「萍姬针神」。",
+        "$N突然间蹙起眉头，宛如「西子捧心」，双掌自自己胸口攻出",
+        "$N脚下翩若惊鸦、矫若游龙，犹如在水上漂行一般，却是一招「洛神微步」",
+        "$N使招「曹令割鼻」，挥手在自己脸上斜削一掌，左掌削过，右掌又削，连绵不断",
+});
+
+int valid_enable(string usage) { return  usage=="unarmed" || usage=="parry"; }
+
+int valid_combine(string combo) { return combo=="tianluo-diwang"; }
+int valid_learn(object me)
+{
+        if (me->query_temp("weapon") || me->query_temp("secondary_weapon"))
+                return notify_fail("练美女拳必须空手。\n");
+        if ((int)me->query_skill("yunv-xinfa", 1) < 10)
+                return notify_fail("你的玉女心法火候不够，无法学美女拳。\n");
+        if ((int)me->query("max_neili") < 30)
+                return notify_fail("你的内力太弱，无法学习美女拳。\n");
+        return 1;
+}
+
+mapping query_action(object me, object weapon)
+{
+        return ([
+                "action": action_msg[random(sizeof(action_msg))], 
+                "force": 320 + random(30), 
+                "attack": 50 + random(10), 
+                "dodge" : 50 + random(10), 
+                "parry" : 50 + random(10), 
+                "damage_type" : random(2)?"瘀伤":"内伤", 
+        ]); 
+}
+
+int practice_skill(object me)
+{
+        if ((int)me->query("qi") < 60)
+                return notify_fail("你的体力太差了，不能练习美女拳。\n");
+        if ((int)me->query("neili") < 60)
+                return notify_fail("你的内力不够练美女拳。\n");
+        me->receive_damage("qi", 50);
+        me->add("neili", -50);
+        return 1;
+}
+
+string perform_action_file(string action)
+{
+        return __DIR__"meinv-quan/" + action;
+}

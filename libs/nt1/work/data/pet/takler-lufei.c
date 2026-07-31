@@ -1,0 +1,18 @@
+// SN:ICnYGeY7:jcg6:b9
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;32m伟大的航路虎[2;37;0m", ({"lufei hu"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "看什么看，你傻啊。他可是海贼王的坐骑.
+它是路飞的坐骑。
+");
+        set_temp("owner_id", "takler");
+        set_temp("owner_name", "路飞");
+        ::setup();
+}
+

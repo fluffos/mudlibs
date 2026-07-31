@@ -1,0 +1,18 @@
+// SN:>Mc74Xd]CfBAU\3J
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[37m神雕[2;37;0m", ({"shutdowns diao"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "也别打我
+它是关机的坐骑。
+");
+        set_temp("owner_id", "shutdown");
+        set_temp("owner_name", "关机");
+        ::setup();
+}
+

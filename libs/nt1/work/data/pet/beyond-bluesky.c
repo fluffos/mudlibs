@@ -1,0 +1,18 @@
+// SN:`eEOVOdXE]J>[6lY
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;36m海阔天空雕[2;37;0m", ({"bluesky diao"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "$HIC$服役于光辉岁月
+它是光辉岁月的坐骑。
+");
+        set_temp("owner_id", "beyond");
+        set_temp("owner_name", "光辉岁月");
+        ::setup();
+}
+

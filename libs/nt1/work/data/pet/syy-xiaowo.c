@@ -1,0 +1,18 @@
+// SN:fT;<^l5TbghcCT71
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m蜗牛[2;37;0m", ({"xiaowo niu"}));        
+        set("gender", "女性");                
+        set("unit", "头");
+        set("long", "一只慢腾腾的小蜗牛。
+它是段小丫的坐骑。
+");
+        set_temp("owner_id", "syy");
+        set_temp("owner_name", "段小丫");
+        ::setup();
+}
+

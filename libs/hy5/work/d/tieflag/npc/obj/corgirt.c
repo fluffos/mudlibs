@@ -1,0 +1,19 @@
+ // icy_girth.c
+#include <ansi.h>
+#include <armor.h> 
+inherit WAIST; 
+void create()
+{
+        set_name(  "²Ê´ø" , ({ "color girth", "girth" }) );
+        set_weight(60);
+        if( clonep() )
+                set_default_object(__FILE__);
+        else {
+        set("unit", "Ìõ");
+        set("value", 700);
+        set("material", "cloth");
+        set("armor_prop/armor", 1);
+        set("female_only", 1);
+        }
+
+}     

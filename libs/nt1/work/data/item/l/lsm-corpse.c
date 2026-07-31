@@ -1,0 +1,32 @@
+// SN:=:fV7l[6hV]^b3e2
+// ITEM Made by player(雷斯魔:lsm) /data/item/l/lsm-corpse.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Thu May 13 15:43:10 2004
+#include <ansi.h>
+#include <weapon.h>
+
+inherit SWORD;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[2;37;0m尸体骸骨[2;37;0m", ({ "corpse" }));
+	set_weight(9000);
+	set("item_make", 1);
+	set("unit", "柄");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一柄剑。
+[1;34m呵呵呵呵．．．[2;37;0m
+剑柄上刻着一行小字：雷斯魔(lsm)
+");
+	set("value", 2100000);
+	set("point", 468);
+	set("material", "magic stone");
+	set("wield_msg", "[1;34m呵呵呵呵．．．[2;37;0m\n");
+	set("unwield_msg", "[1;34m呵呵呵呵．．．[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	init_sword(apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

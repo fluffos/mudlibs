@@ -1,0 +1,18 @@
+// SN:K_]0MSZZTj?UPLY;
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;31m英熊[2;37;0m", ({"dos xiong"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "这不是英雄的坐骑....英熊嘛！！
+它是英雄的坐骑。
+");
+        set_temp("owner_id", "hero");
+        set_temp("owner_name", "英雄");
+        ::setup();
+}
+

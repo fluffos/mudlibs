@@ -1,0 +1,32 @@
+// SN:88m8Q;Vh3DZBfj8l
+// ITEM Made by player(月落无双:zzzmud) /data/item/z/zzzmud-zzz.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Tue Sep 14 20:06:53 2004
+#include <ansi.h>
+#include <weapon.h>
+
+inherit SWORD;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;31m血[1;37m影[1;33m神[30m杀[2;37;0m", ({ "zzz" }));
+	set_weight(9000);
+	set("item_make", 1);
+	set("unit", "柄");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一柄剑。
+剑身竟隐隐闪着[30m黑色的[1;37m光晕。只见剑缘上也是透着一层[30m黑色的[1;37m光华。上书：[1;37m民族英雄——[1;31m小平赠[2;37;0m
+剑柄上刻着一行小字：月落无双(zzzmud)
+");
+	set("value", 2100000);
+	set("point", 220);
+	set("material", "magic stone");
+	set("wield_msg", "[37m如雾的$n闪过如电般的光芒，随着内力激增，[1;37m黑光[1;33m越来越盛，竟将$N的手团团包住。[37m仿佛是[1;31m燃烧着的[30m黑色花焰，竟是不停地翻腾不已。$n[34m划着不可捉摸的轨迹跃入$N的手中[2;37;0m\n");
+	set("unwield_msg", "$n[1;34m竟如闪电一般，直刺得心神俱冽。[1;37m炫目的光华过后，$n[1;34m隐入$N袖中不见[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	init_sword(apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

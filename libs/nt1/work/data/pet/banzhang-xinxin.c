@@ -1,0 +1,18 @@
+// SN:6eX]mXSATGE3>HFi
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;34m星星猴[2;37;0m", ({"xinxin hou"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "长的很象黑猩猩的小猴子.
+它是班长的坐骑。
+");
+        set_temp("owner_id", "banzhang");
+        set_temp("owner_name", "班长");
+        ::setup();
+}
+

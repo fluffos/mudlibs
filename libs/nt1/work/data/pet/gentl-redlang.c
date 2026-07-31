@@ -1,0 +1,18 @@
+// SN:BFC>=fdQE7SlJ_fo
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("色朗狼[2;37;0m", ({"redlang lang"}));        
+        set("gender", "男性");                
+        set("unit", "条");
+        set("long", "fdsa发
+它是小赌的坐骑。
+");
+        set_temp("owner_id", "gentl");
+        set_temp("owner_name", "小赌");
+        ::setup();
+}
+

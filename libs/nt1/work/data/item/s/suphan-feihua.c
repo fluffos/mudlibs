@@ -1,0 +1,32 @@
+// SN:@M2nXOYWRkd3ibaE
+// ITEM Made by player(苏芳:suphan) /data/item/s/suphan-feihua.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Thu May  6 19:04:22 2004
+#include <ansi.h>
+#include <weapon.h>
+
+inherit XSWORD;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;31m飞花[2;37;0m", ({ "feihua" }));
+	set_weight(1350);
+	set("item_make", 1);
+	set("unit", "支");
+	set("long", "这是由[37m精铁[2;37;0m炼制而成的一支箫。
+[1;31m飞花的化身[2;37;0m
+箫柄上刻着一行小字：苏芳(suphan)
+");
+	set("value", 700000);
+	set("point", 67);
+	set("material", "iron");
+	set("wield_msg", "$N一口把$n喝了下肚子[2;37;0m\n");
+	set("unwield_msg", "$N将$n吐了出来[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	init_xsword(apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

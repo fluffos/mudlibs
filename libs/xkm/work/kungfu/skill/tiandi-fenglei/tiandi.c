@@ -1,0 +1,139 @@
+#include <ansi.h>
+#include <combat.h>
+inherit F_DBASE;
+inherit F_SSERVER;
+int perform(object me, object target)
+{
+        object weapon, ob;
+        string msg, string1;
+        int speed, damage;
+
+        damage = (int)me->query_skill("liangyi-jian",1) + (int)me->query_skill("sword",1);
+        damage = damage/8;
+        speed = me->query_skill("sword")/100;
+
+        if( !target ) target = offensive_target(me);
+        if( me->query_skill("shenghuo-xuanming", 1) < 100 )
+                return notify_fail("你的圣火玄冥功火候未到，无法施展天地诀！\n");
+
+        if( me->query_skill_mapped("force") != "shenghuo-xuanming" )
+                return notify_fail("你所用的并圣火玄冥功，无法施展天地诀！\n");
+
+        if( me->query_skill_mapped("sword") != "tiandi-fenglei" )
+                return notify_fail("你所用的并天地风雷剑，无法施展天地诀！\n");
+
+        if( (me->query_skill("tiandi-fenglei")) < 120 )
+                return notify_fail("你天地风雷剑修为不足，还不能使用天地诀！\n");
+
+        if( !target || !target->is_character() || !me->is_fighting(target) )
+             return notify_fail("「天地诀」只能对战斗中的对手使用。\n");
+        if( me->query_temp("tiandi-jue"))
+             return notify_fail("你剑势未尽，不能再施展「天地诀」！\n");
+
+        if (!objectp(weapon = me->query_temp("weapon"))
+        || (string)weapon->query("skill_type") != "sword")
+             return notify_fail("你使用的武器不对。\n");
+
+        if( (int)me->query("neili") < 800 )
+             return notify_fail("你的内力不够！\n");
+        msg = HIC "\n$N手中"+weapon->query("name")+HIR"剑走轻盈，剑招亦怪异之极，如同行云流水一般！\n\n" NOR;
+        message_vision(msg, me,target);
+        me->start_busy(1);
+        ob = me->select_opponent();
+        me->delete_temp("tiandi");
+        me->set_temp("tiandi",4);
+        me->add("neili", -50);
+        me->set_temp("tiandi-jue");
+        call_out("checking", 1, me, target);
+        return 1;
+}
+void checking(object me, object target, int speed, int damage)
+{
+
+        object weapon;
+        weapon = me->query_temp("weapon");
+
+        if (!objectp(weapon = me->query_temp("weapon"))
+        || (string)weapon->query("skill_type") != "sword") {
+                tell_object(me, HIW"\n你手中无剑，当下停止了天地诀的架势。\n" NOR);
+                me->delete_temp("tiandi");
+                return;
+        }
+        else if ( weapon->query("weapon_prop") == 0 ) {
+                tell_object(me, HIW"\n你的"+weapon->name()+"已毁，无法持续天地诀的攻势！\n\n" NOR);
+                call_out("tiandi_end", 5, me);
+                me->delete_temp("tiandi");
+                return;
+        }
+        else if ( (int)me->query("neili") < 400  ) {
+                message_vision(HIR"$N的内劲後继无力，不得不停止天地诀的攻势！\n" NOR, me,target);
+                call_out("tiandi_end", 5, me);
+                me->delete_temp("tiandi");
+                return;
+        }
+        else if ( me->query_skill_mapped("sword") != "tiandi-fenglei" ) {
+                tell_object(me, HIR "\n你转而施展其他剑法，无法再以天地风雷剑天地诀攻敌！\n\n" NOR);
+                call_out("tiandi_end", 5, me);
+                me->delete_temp("tiandi");
+                return;
+        }
+        else if ( me->is_busy() ) {
+                tell_object(me, HIR "\n你现在动作不够灵活，无法继续维持天地诀攻势！\n\n" NOR);
+                call_out("tiandi_end", 5, me);
+                me->delete_temp("tiandi");
+                return;
+        }
+        else if (!me->is_fighting()) {
+                tell_object(me,  HIW"\n你现在没有和人过招，当下收回了天地诀的攻势。\n" NOR);
+                call_out("tiandi_end", 5, me);
+                me->delete_temp("tiandi");
+                return;
+        }
+        if( environment(target) != environment(me) ) {
+                tell_object(me, HIW"你见对方已经不在这里，当下停止了迅雷剑的攻势。\n"NOR);
+                call_out("tiandi_end", 5, me);
+                me->delete_temp("tiandi");
+                return;
+        }
+        else{
+        me->add_temp("apply/speed", speed);
+        me->add_temp("apply/damage", damage);
+        me->add_temp("apply/attack", damage);
+
+        if ( me->query_temp("tiandi") ==4 )message_vision(HIY"\n$N纵身近前，"+weapon->name()+HIY"陡然弯弯弹出，剑尖直刺$n，出招之快真乃为任何剑法所不及！\n" NOR, me,target);
+        if ( me->query_temp("tiandi") ==3 )message_vision(HIW"\n$N伸指在"+weapon->name()+HIW"上一弹，剑声嗡嗡，有若龙吟，"+weapon->name()+HIW"颤处，剑锋来势神妙无方！\n" NOR, me,target);
+        if ( me->query_temp("tiandi") ==2 )message_vision(HIG"\n$N陡然间大喝一声，"+weapon->name()+HIG"上寒光闪动，喝道：「"+target->name()+HIG"，可小心了！」\n" NOR, me,target);
+        if ( me->query_temp("tiandi") ==1 )message_vision(HIR"\n见$N随手挥剑，"+weapon->name()+HIR"颤处，前后左右，瞬息之间已攻出了四四一十六招！\n" NOR, me,target);
+        me->add("neili", -100);
+        me->start_busy(1);
+        COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+        COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+        COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+        COMBAT_D->do_attack(me, target, me->query_temp("weapon"));
+
+        me->add_temp("apply/speed", -speed);
+        me->add_temp("apply/attack", -damage);  
+        me->add_temp("apply/attack", -damage);
+
+        if ( me->query_temp("tiandi") ==1 ) {
+        message_vision(HIY "\n$N顺势圈转手中"+weapon->name()+HIY"，天地风雷剑「天地诀」已然尽数使出！\n" NOR, me, weapon);
+        me->delete_temp("tiandi");
+        call_out("tiandi_end", 10, me);
+        me->start_busy(4);
+        }
+        else {
+           me->set_temp("tiandi_attack");
+        me->set_temp("tiandi", me->query_temp("tiandi")-1);
+        call_out("checking", 1, me, target);
+           }  
+        }
+}  
+void tiandi_end(object me)
+{
+        object weapon;
+        weapon = me->query_temp("weapon");
+        tell_object(me,HIW"你深深的吸了口气，将内力收回丹田。\n" NOR,);
+        me->delete_temp("tiandi");
+        me->delete_temp("tiandi_jue");
+
+}

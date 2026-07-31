@@ -1,0 +1,22 @@
+// Copyright (C) 2003, by Lonely. All rights reserved.
+// This software can not be used, copied, or modified 
+// in any form without the written permission from authors.
+
+inherit  ROOM;
+
+void  create  ()
+{
+	set("short",  "大官道");
+	set("long",  @LONG
+这是一条宽阔笔直的官道，足可容下十马并驰。往东通向函谷关，往
+西则直达长安城。
+LONG);
+	set("exits",  ([  /*  sizeof()  ==  2  */
+		"west" :  __DIR__"dong-chengmen",
+		"east" :  __DIR__"road3",
+                "north" :  __DIR__"chongwudian",
+	]));
+	set("outdoors", "changan");
+	setup();
+	replace_program(ROOM);
+}

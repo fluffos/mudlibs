@@ -1,0 +1,18 @@
+// SN:8UGU^B9ab0?Kf5ZY
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m白龙马[2;37;0m", ({"bailong ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "白兵卫
+它是虚白的坐骑。
+");
+        set_temp("owner_id", "baibingwei");
+        set_temp("owner_name", "虚白");
+        ::setup();
+}
+

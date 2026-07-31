@@ -1,0 +1,38 @@
+// SN:o>PnRGS1TDcFGBbB
+// File(/data/room/qjwjwx/yingke.c) of qjwjwx's room
+// Create by LUBAN written by Doing Lu
+
+#include <room.h>
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        set("short", "不是哈批迎客厅");
+	set ("long", @LONG
+这里是不是哈批的主人流光飞逝迎接八方来客的地方。大凡客人
+来拜见流光飞逝，少不得在这里寒暄叙话，了尽仰慕之情。东面通往
+一个茶室，是主人陪同客人品尝天下名茶之处。 
+LONG );
+
+	set("exits", ([
+		"north"  : __DIR__"yishiting",
+                "south"  : __DIR__"zoudao",
+                "east"   : __DIR__"chashi",
+	]));
+
+        create_door("east", "木门", "west", DOOR_CLOSED);
+
+        set("objects", ([
+                "/d/room/roomnpc/yahuan" : 2,
+        ]));
+
+        set("no_sleep_room", 1);
+        setup();
+
+        set("room_owner", "流光飞逝");
+        set("room_name", "不是哈批");
+        set("room_id", "qjwjwx");
+        set("room_owner_id", "qjwjwx");
+        set("room_position", "碎石小道");
+}

@@ -1,0 +1,32 @@
+// SN:J<j0QY0[Me>KSflQ
+// ITEM Made by player(慕容伤:levatin) /data/item/l/levatin-drashan.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Mon Jun 21 01:26:34 2004
+#include <ansi.h>
+#include <armor.h>
+
+inherit CLOTH;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[2;37;0m[37m九幽玄月衫[2;37;0m", ({ "drashan" }));
+	set_weight(1400);
+	set("item_make", 1);
+	set("unit", "件");
+	set("long", "这是由[1;37m冰蚕丝[2;37;0m炼制而成的一件战衣。
+一件白白的贴身小衫，传说它可以抵挡天下所有伤害。[2;37;0m
+战衣缘上刻着一行小字：慕容伤(levatin)
+");
+	set("value", 2100000);
+	set("point", 324);
+	set("material", "silk");
+	set("wear_msg", "[1;37m一道圣洁的光芒照住了玄月衫的主人，他的神圣力量加强了。[2;37;0m\n");
+	set("remove_msg", "[1;37m圣洁的光芒消失了，神圣力量也消失了。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/armor", apply_armor());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

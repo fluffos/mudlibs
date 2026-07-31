@@ -1,0 +1,25 @@
+// Copyright (C) 2003, by Lonely. All rights reserved.
+// This software can not be used, copied, or modified 
+// in any form without the written permission from authors.
+
+inherit ROOM;
+
+void create ()
+{
+        set ("short", "卧室");
+        set("long", @LONG
+这里是萧家的卧室，摆设很是华丽。几个丫鬟忙个不停，似乎出了什
+么大事。
+LONG );
+        set("exits", 
+        ([ //sizeof() == 1
+        	"north" : __DIR__"xiaojiadt",
+        ]));
+        set("objects", 
+        ([ //sizeof() == 1
+        	__DIR__"npc/yahuan" : 1,
+        ]));
+
+        setup();
+        replace_program(ROOM);
+}

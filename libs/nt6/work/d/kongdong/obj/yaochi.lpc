@@ -1,0 +1,13 @@
+inherit ITEM;
+
+
+void create()
+{
+	set_name("铜钥匙", ({"yao shi","shi"}));
+        set("long","一把黄澄澄的铜钥匙。\n");
+        set_weight(20);
+        set("unit", "把");
+        set("value", 200);
+	set("lock","lock001");
+        setup();
+}

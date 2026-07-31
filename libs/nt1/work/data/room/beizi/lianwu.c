@@ -1,0 +1,32 @@
+// SN:nh:7XG75=JBEKKcF
+// File(/data/room/beizi/lianwu.c) of beizi's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "练武场");
+	set ("long", @LONG
+此处便是杯子居的练武场，人在江湖，武功万万不可荒废。 
+LONG );
+
+	set("exits", ([
+                "west" : __DIR__"houyuan",
+	]));
+
+        set("objects", ([
+                "/clone/npc/mu-ren" : 4,
+        ]));
+
+        set("outdoors", "playertown");
+        set("no_sleep_room", 1);
+
+        setup();
+    
+        set("room_owner", "胡悟性");
+        set("room_name", "杯子居");
+        set("room_id", "beizi");
+        set("room_owner_id", "beizi");
+        set("room_position", "三岔口");
+}

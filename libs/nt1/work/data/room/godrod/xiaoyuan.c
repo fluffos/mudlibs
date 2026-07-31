@@ -1,0 +1,37 @@
+// SN:Va>e6d2^:=^8TWZk
+// File(/data/room/godrod/xiaoyuan.c) of godrod's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+        set("short", "土地公庙小院");
+	set ("long", @LONG
+若大的空地围著一些用老竹所编成的篱笆，几棵老榕树交错成荫，
+一张藤制躺椅被置放在老树底下。外头可见隐约的山路，北面有著一
+扇半闭的木门。[2;37;0m
+LONG );
+
+        set("room_key", "1 of godrod");
+	setup();
+
+	set("exits", ([
+                "out"    : "/d/hangzhou/shanlu4",
+	]));
+
+        set("outdoors", "hangzhou");
+        set("no_sleep_room", 1);
+        set("valid_startroom", 1);
+
+        set("KEY_DOOR", ([
+                "exit" : "north",
+                "room" : __DIR__"dating",
+        ]));
+    
+        set("room_owner", "断武");
+        set("room_name", "土地公庙");
+        set("room_id", "tudigong");
+        set("room_owner_id", "godrod");
+        set("room_position", "山路");
+}

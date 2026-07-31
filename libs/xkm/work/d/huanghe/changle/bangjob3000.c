@@ -1,0 +1,124 @@
+//Cracked by Roath
+// /d/huanghe/changle/bangjob3000.c
+// by aln 2 / 98
+
+// inherit SKILL;
+
+inherit F_CLEAN_UP;
+
+mapping *bangjobs = ({
+        ([      "name"  :  "进香客",
+                "file"  :  "/d/emei/npc/xiang-ke",
+                "area"  :  "峨眉山",
+                "type"  :  "杀",
+                "bonus" :  128,
+                "score" : 32,
+        ]),
+
+        ([      "name"  :  "皮货商",
+                "file"  :  "/d/changbai/npc/phshang",
+                "area"  :  "长白山集市",
+                "type"  :  "杀",
+                "bonus" :  110,
+                "score" :  32,
+        ]),
+
+        ([      "name"  :  "胖商人",
+                "file"  :  "/d/foshan/npc/pang",
+                "area"  :  "佛山镇",
+                "type"  :  "杀",
+                "bonus" :  165,
+                "score" :  31,
+        ]),
+
+        ([      "name"  :  "瘦商人",
+                "file"  :  "/d/foshan/npc/shou",
+                "area"  :  "佛山镇",
+                "type"  :  "杀",
+                "bonus" :  155,
+                "score" :  61,
+        ]),
+
+        ([      "name"  :  "小贩",
+                "file"  :  "/d/quanzhou/npc/mao-fan",
+                "area"  :  "泉州中心广场",
+                "type"  :  "杀",
+                "bonus" :  236,
+                "score" :  42,
+        ]),
+
+        ([      "name"  :  "野菊花",
+                "file"  :  "/d/city/obj/juhua",
+                "type"  :  "寻",
+                "bonus" :  123,
+                "score" :  41,
+        ]),
+
+        ([      "name"  :  "狗皮",
+                "file"  :  "/d/city/obj/goupi",
+                "type"  :  "寻",
+                "bonus" :  133,
+                "score" :  51,
+        ]),
+
+        ([      "type"  :  "摊费",
+        ]),
+
+        ([      "type"  :  "买卖",
+        ]),
+
+        ([      "type"  :  "买卖",
+        ]),
+
+        ([      "type"  :  "买卖",
+        ]),
+
+        ([      "type"  :  "买卖",
+        ]),
+
+        ([      "type"  :  "买卖",
+        ]),
+
+        ([      "type"  :  "买卖",
+        ]),
+
+        ([      "type"  :  "买卖",
+        ]),
+
+        ([      "type"  :  "买卖",
+        ]),
+
+        ([      "type"  :  "伙计",
+        ]),
+
+        ([      "type"  :  "伙计",
+        ]),
+
+        ([      "type"  :  "伙计",
+        ]),
+
+        ([      "type"  :  "伙计",
+        ]),
+
+        ([      "type"  :  "伙计",
+        ]),
+
+        ([      "type"  :  "伙计",
+        ]),
+
+        ([      "type"  :  "伙计",
+        ]),
+
+        ([      "type"  :  "伙计",
+        ]),
+});
+
+void create() { seteuid(getuid()); }
+
+mapping query_job()
+{
+        return bangjobs[random(sizeof(bangjobs))];
+}
+
+
+

@@ -1,0 +1,18 @@
+// SN:\5PG7BGQ]93gd@U\
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("老马马[2;37;0m", ({"lao ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "老马
+它是欧阳家的的坐骑。
+");
+        set_temp("owner_id", "superboy");
+        set_temp("owner_name", "欧阳家的");
+        ::setup();
+}
+

@@ -1,0 +1,52 @@
+// by tiantian(www.wangcf.com) 2001.4
+// 设置当前房间的名称
+
+#include <ansi.h>
+#include <group.h>
+
+int main( object me, string arg )
+{
+	object env;
+	env = environment(me);
+
+	if( !env )
+		return 0;
+
+	if( !me->query("group") )
+		return notify_fail( "你并没有加入任何帮派。\n" );
+
+	if( me->query("group/level") < GROUP_VICE_MASTER )
+		return notify_fail( "只有副帮主才能修改房间名称。\n" );
+
+	if( env->query("group") != me->query("group/group") ) 
+		return notify_fail("这里不是我派的领地。\n");
+
+	if( env->query("no_change") ) 
+		return notify_fail("这里不能修改。\n");
+
+	arg = GROUP_D->replace_color( arg );
+	
+	env -> set( "short", arg );
+	
+	GROUP_D->save_room( me, file_name( env ) + ".c" );
+
+	write("修改房间名称成功。\n");
+
+	return 1;
+}
+
+int help(object me)
+{
+	write(@HELP
+----------------------------------------
+指令格式 : gsetshort <房间名称>
+
+修改房间的名称。
+
+相关指令 : gsetlong
+
+----------------------------------------
+HELP
+    );
+    return 1;
+}

@@ -1,0 +1,18 @@
+// SN:>jn@V[^<ocEHQ3PG
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[36m黑熊熊[2;37;0m", ({"dagouxiong xiong"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "$HIR$看起来黑熊想杀死你
+它是段延的坐骑。
+");
+        set_temp("owner_id", "rong");
+        set_temp("owner_name", "段延");
+        ::setup();
+}
+

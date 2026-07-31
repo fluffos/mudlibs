@@ -1,0 +1,32 @@
+// SN:_M36h6J4D]F[cbXJ
+// ITEM Made by player(莫非:trans) /data/item/t/trans-trans.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Sun Sep 12 00:23:25 2004
+#include <ansi.h>
+#include <weapon.h>
+
+inherit SWORD;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;36m柔云轻似梦[2;37;0m", ({ "trans" }));
+	set_weight(9000);
+	set("item_make", 1);
+	set("unit", "柄");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一柄剑。
+[1;37m全长约一百五十公分，刀身隐隐泛着银光。[2;37;0m
+剑柄上刻着一行小字：莫非(trans)
+");
+	set("value", 2100000);
+	set("point", 163);
+	set("material", "magic stone");
+	set("wield_msg", "[35m从它与空气有所接触开始，屑般的水滴飞溅如雾，拖着如若晚霞般的霓虹云烟，飘飘然欲仙好像就快要飞起来的地步。[2;37;0m\n");
+	set("unwield_msg", "[1;35m消失在空中[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	init_sword(apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

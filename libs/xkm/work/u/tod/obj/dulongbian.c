@@ -1,0 +1,42 @@
+// dulongbian.c 毒龙鞭;
+#include <ansi.h>
+#include <weapon.h>
+
+inherit WHIP;
+
+void create()
+{
+        set_name(HIW"毒龙鞭"NOR, ({"dulong bian","bian","whip"}));
+        set_weight(600);
+
+        if (clonep())
+                set_default_object(__FILE__);
+        else {
+                set("unit", "条");
+                set("long", HIW"一条极长的银色软鞭，眼见是四丈有奇，鞭头装着十多只明晃晃的尖利倒钩。\n"NOR);
+                set("value", 2000);
+                set("material", "leather");
+                set("rigidity", 6);
+                set("sharpness", 2);
+                set("宝物", 1);
+                set("no_pawn", 1);
+                set("wield_msg", HIW"$N左手在腰里一拉一抖，突然飞出烂银也似的一条长蛇来。\n"NOR);
+                set("unwield_msg", HIW"$N将手中$n"+HIW"缠回腰间。\n"NOR);
+        }
+        init_whip(120);
+        setup();
+}
+
+#include "/u/tod/eff_msg.h";
+
+mixed hit_ob(object me, object victim, int damage_bonus)
+{
+        if(!( me->query_temp("weapon")->id("dulong bian"))) 
+                return 0;
+        if( random(damage_bonus/2) > victim->query_dex())
+        {
+                victim->receive_wound("qi", (damage_bonus - 100) / 10 );
+                message_vision(HIR "你听到「刺啦」一声轻响，原来是$N被毒龙鞭上的倒刺割破了皮肉！\n"NOR, victim);
+                return 1;
+        }
+}

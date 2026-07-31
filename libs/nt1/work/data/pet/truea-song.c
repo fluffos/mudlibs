@@ -1,0 +1,18 @@
+// SN:O6?lQWKE?K`I06\Z
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;36m松鹤[2;37;0m", ({"song he"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "武当 宋前 之坐骑
+它是宋前的坐骑。
+");
+        set_temp("owner_id", "truea");
+        set_temp("owner_name", "宋前");
+        ::setup();
+}
+

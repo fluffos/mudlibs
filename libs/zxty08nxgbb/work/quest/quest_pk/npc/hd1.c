@@ -1,0 +1,51 @@
+inherit NPC;
+inherit F_UNIQUE;
+void create()
+{
+    set_name("海盗", ({ "hai dao"}));
+    set("long",
+        "一个相貌狰狞的海盗，他正准备把你干掉。\n"
+    );
+    set("gender", "男性");
+    set("attitude", "aggressive");
+    set("age", 30);
+    set("shen_type", -1);
+    set("str", 50);
+    set("int", 50);
+    set("con", 50);
+    set("dex", 50);
+    set("max_qi", 200000);
+    set("max_jing", 95000);
+    set("neili", 150000);
+    set("max_neili", 1500);
+    set("jiali", 1000);
+    set("combat_exp", 1700000);
+    set("zjb_dj/dj", 3);
+    set_skill("force", 1000);
+    set_skill("taixuan-gong", 1000);
+    set_skill("dodge", 1300);
+    set_skill("piaomiao-shenfa", 1300);
+    set_skill("unarmed", 1000);
+    set_skill("parry", 1000);
+    set_skill("jiuyin-baiguzhao", 1000);
+    map_skill("force", "taixuan-gong");
+    map_skill("dodge", "piaomiao-shenfa");
+    map_skill("unarmed", "jiuyin-baiguzhao");
+    map_skill("parry", "jiuyin-baiguzhao");
+        setup();
+        carry_object("/quest/quest_pk/obj/cloth")->wear();
+}
+void die()
+{
+        object ob, me, corpse;
+        
+        ob = this_object();
+        me = query_temp("last_damage_from");
+        
+   message_vision(WHT"$N大叫一声！喷出几口黑血，死了。\n"NOR,ob,me);
+       me->add("combat_exp",2000);
+  me->add("potential",1000);
+       destruct(ob);
+        return;
+}
+

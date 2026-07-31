@@ -1,0 +1,18 @@
+// SN:CYf]obJY>a937iUe
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m瑞脑[1;35m消[33m金兽[2;37;0m", ({"guai shou"}));        
+        set("gender", "女性");                
+        set("unit", "头");
+        set("long", "薄雾浓云愁永昼，瑞脑消金兽。
+它是月明的坐骑。
+");
+        set_temp("owner_id", "roisl");
+        set_temp("owner_name", "月明");
+        ::setup();
+}
+

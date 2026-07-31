@@ -1,0 +1,24 @@
+// Room: /d/xiangyang/caodi1.c
+// Date: Jan. 8 1999 by Winder
+
+inherit ROOM;
+#include <ansi.h>;
+
+void create()
+{
+	set("short", "草地");
+	set("long", @LONG
+这是荆州城外的草地。
+LONG );
+        set("outdoors", "xiangyang");
+
+	set("exits", ([
+                "west"  : __DIR__"jzdongmen",
+	]));
+	set("objects", ([
+                "/d/jingzhou/npc/obj/juhua" : 1,
+	]));
+	setup();
+	replace_program(ROOM);
+}
+

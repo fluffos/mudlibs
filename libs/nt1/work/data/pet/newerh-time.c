@@ -1,0 +1,18 @@
+// SN:F3@;YXJGF6KJB`lP
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[33m老虎[2;37;0m", ({"time hu"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "还是老虎啊
+它是越取越难的坐骑。
+");
+        set_temp("owner_id", "newerh");
+        set_temp("owner_name", "越取越难");
+        ::setup();
+}
+

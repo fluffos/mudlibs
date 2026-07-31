@@ -1,0 +1,18 @@
+// SN:ZUXn\bjSo5Umk8n_
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("杰尼马[2;37;0m", ({"kylinkylin ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "没力气的小马
+它是段微风的坐骑。
+");
+        set_temp("owner_id", "bent");
+        set_temp("owner_name", "段微风");
+        ::setup();
+}
+

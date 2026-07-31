@@ -1,0 +1,18 @@
+// SN:g;8=0bOL0Ybd>Q:6
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[30m黑象[2;37;0m", ({"xian xiang"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "黑黑
+它是小黑的坐骑。
+");
+        set_temp("owner_id", "hei");
+        set_temp("owner_name", "小黑");
+        ::setup();
+}
+

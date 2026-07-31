@@ -1,0 +1,18 @@
+// SN:mcI4S124:e=lCl4X
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;31m野狐[2;37;0m", ({"yei hu"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "野狐狸
+它是血中送瘫的坐骑。
+");
+        set_temp("owner_id", "dmxs");
+        set_temp("owner_name", "血中送瘫");
+        ::setup();
+}
+

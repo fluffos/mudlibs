@@ -1,0 +1,185 @@
+/******************
+Cname:  魁星射斗
+Ename:  shedou
+Create: Play
+Time:   3/10/2002
+********************/
+#include <ansi.h>
+inherit F_SSERVER;
+string *points=
+({
+  "内关穴","外关穴","中府穴","云门穴","尺泽穴","风府穴",
+  "太渊穴","商阳穴","合谷穴","曲池穴","五里穴","迎香穴",
+  "极泉穴","少海穴","通里穴","神门穴","少府穴","曲泽穴",
+  "劳宫穴","阳池穴","天井穴","少泽穴","肩贞穴","中注穴",
+  "巨阙穴","阳关穴","大椎穴","环跳穴","悬钟穴","风市穴",
+  "气舍穴","阳白穴","委中穴","商邱穴","灵道穴","少冲穴"
+});
+int perform(object me, object target)
+{
+        string msg,line,race;
+        mapping map, M_apply, T_apply, M_dbase, T_dbase;
+        int i,j,size;
+        int myw_skill, myf_skill;
+        int M_exp, M_dam, M_dod, M_int;
+        int T_exp, T_par, T_dod, T_int;
+        object weapon;
+        line = "魁星射斗";
+        
+        if ( me->query_temp("kuixing-shedou") ) 
+                return notify_fail("你刚发动过"+line+"，正在调理气息。\n");
+/*
+          if (me->query("family/family_name") != "姑苏慕容") 
+                return notify_fail("什么?\n");
+*/
+        if( !target ) target = offensive_target(me);
+        if( !target
+        ||      !target->is_character()
+        ||      !me->is_fighting(target) )
+                return notify_fail(line+"只能对战斗中的对手使用。\n");
+        
+                race = target->query("race");
+        
+        if( !race )
+                return notify_fail("对手数据错误，请告之管理人员。\n");
+
+        if( race !="人类" )
+                points = target->query("limbs");
+
+        if( ( myw_skill = (int)me->query_skill("canhe-zhi",1)) < 200)
+                return notify_fail(line+"需要高深的指法才能发动。\n");
+
+        if( ( myf_skill = me->query_skill("douzhuan-xingyi",1)) < 200)
+                return notify_fail("发动"+line+"需要高深的斗转星移心法。\n");
+
+        if( me->query_int() < 37)
+                return notify_fail("以你目前的悟性很难参悟出"+line+"。\n");
+            
+        if( me->query_skill("murong-shenfa",1 ) < 180)
+                return notify_fail("你的慕容身法不够纯熟，无法发动"+line+"。\n");
+
+                map = me->query_skill_map();
+        if( undefinedp(map["finger"]) || map["finger"] != "canhe-zhi" )
+                return notify_fail(line+"需要使用参合指法方能发动。\n");
+
+        if( undefinedp(map["force"]) || map["force"] != "douzhuan-xingyi" )
+                return notify_fail(line+"需要使用斗转星移心法方能发动。\n");
+
+            M_dbase = me->query_entire_dbase();
+            T_dbase = target->query_entire_dbase();
+        if( M_dbase["max_neili"] < 1000 || M_dbase["neili"] < 1000 )
+                return notify_fail("你的内力不足，无法发动"+line+"攻击对手。\n");
+  
+        if( M_dbase["jing"] < 150 || M_dbase["jingli"] < 150 )
+                return notify_fail("你目前的精神无法使用"+line+"。\n");
+
+        weapon = target->query_temp("weapon");
+
+        call_out("wait_end_shedou",(60-me->query_con())<5?5:60-me->query_con(),me);
+        me->set_temp("kuixing-shedou",1);
+
+        if(me->query("env/kuixing-shedou") || !objectp(weapon))
+        {
+                msg = HIC"$N猛然揉身攻向内圈，左手中、食二指连弹，缕缕"
+                          "指风尖啸着射向$n的全身大穴。。。\n"NOR;
+                message_vision(msg,me,target);
+        
+        M_apply = me->query_temp("apply");
+        T_apply = target->query_temp("apply");
+
+        M_dod = me->query_skill("dodge");
+        M_dam = me->query_skill("finger");
+        T_par = target->query_skill("parry");
+        T_dod = target->query_skill("dodge");
+		M_int = (int)me->query("int",1);
+		T_int = (int)target->query("int",1);
+
+        me->start_busy(1);
+        me->add("neili",-200 );
+
+        M_exp = me->query_dex() + M_dod/10 + M_dam/10 + M_int + M_apply["jiali"];
+        T_exp = target->query_dex() + T_dod/10 + T_par/10 + T_int + T_apply["jiali"];
+        
+        if( random(M_exp) > T_exp/2 )
+          {
+                size=(int)((myf_skill+myw_skill)/50);           
+                
+             if( M_dbase["combat_exp"] < T_dbase["combat_exp"] * 2/3 )
+                 size = size - T_dbase["combat_exp"]*2/3/M_dbase["combat_exp"];
+
+             if( size >= 1 )
+               {
+                    msg = CYN"但见$N闪转腾挪身形变化不定，双掌护体，以应来招！\n" NOR;
+                    message_vision(msg, target);
+                        if(size > 12) size = 12;
+                 for(i=0;i<size;i++)
+                    {
+                        if(M_dbase["neili"]<M_dbase["jiali"]/2 || random(target->query_kar())>size)
+                            msg = CYN"一道指风被$N不停变化的身形闪了开去。\n"NOR;
+                         else
+                         {
+                            msg = "一道指风破空发出“咝咝”尖啸，点中了$N的"HIW+
+                            points[random(sizeof(points))]+NOR"。\n";
+                          if(M_dbase["neili"]>M_dbase["jiali"]/2)
+                            me->add("neili",-M_dbase["jiali"]/2);
+                            me->add("jingli", -8 );
+                            j++;
+                            target->receive_damage("qi",10 + random(M_dbase["jiali"]*3),me);
+                            target->receive_wound("qi",5 + random(M_dbase["jiali"]/2),me);
+                         }
+                         message_vision(msg,target);
+                    }
+                    target->start_busy(j);
+                    if(random(j*5)+3>target->query_kar())
+                    target->apply_condition("kuixing-shedou", j);
+                    msg = WHT"结果$N被指风攻得险象环生，身形迟缓下来！\n" NOR;
+                    message_vision(msg, target);
+                    COMBAT_D->report_status(target);
+                      return 1;
+                } else 
+                msg = HIY "\n只听$N一声轻哼，双掌连挥，将$n的攻击一一化解。\n" NOR;
+                message_vision(msg, target,me);
+                return 1;
+			}
+			msg=HIY "\n只见$N身形飘逸，轻描淡写地化解了$n的攻击。\n"NOR;
+			message_vision(msg, target,me);
+			return 1;
+       }else
+        {
+                msg = HIB"但见$N身形陡然加快，滑步抢入中宫，指间射出一道劲风，攻向$n的"
+                    + points[random(sizeof(points))]+"。。。\n\n"NOR;
+                message_vision(msg, me, target);
+                me->start_busy(1);
+           if( M_exp + me->query_int() > (T_exp + target->query_int()) *3/4)
+            {
+               if( T_dbase["combat_exp"]>M_dbase["combat_exp"]*4/3
+                   || random(target->query_kar())>6 )
+ //                  || M_dbase["neili"]<M_dbase["jiali"]*2 )
+                        msg = HIY"$N身形一顿，旋身侧飘一丈，闪过了$n的攻击。\n"NOR;
+                else
+                    {
+                        weapon->unequip();
+                        weapon->move(environment(target));
+                        msg = HIR"$N身形稍慢，穴道被$n点个正着，手中"+
+                              weapon->name()+HIR"哐啷一声，掉在当地。\n"NOR;
+                        target->start_busy(2);
+                     }
+                        me->add("neili",-M_dbase["jiali"]*2);
+                        me->add("jingli",-M_dbase["jiali"]/5);
+                        message_vision(msg, target, me);
+                        return 1;
+            }
+                msg = HIY"$N将身轻纵，闪开了$n的攻击。\n"NOR;
+                message_vision(msg, target, me);
+                return 1;
+        }
+      return 1;
+}
+
+int wait_end_shedou(object me)
+{
+        remove_call_out("wait_end_shedou");
+        me->delete_temp("kuixing-shedou");
+        return 1;
+}
+

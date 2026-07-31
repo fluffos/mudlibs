@@ -1,0 +1,18 @@
+// SN:JB>[lUJfL=F=3AH>
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;31m炽天狼[2;37;0m", ({"chitian lang"}));        
+        set("gender", "女性");                
+        set("unit", "条");
+        set("long", "天狼星守护神
+它是天降神兵的坐骑。
+");
+        set_temp("owner_id", "blacksmith");
+        set_temp("owner_name", "天降神兵");
+        ::setup();
+}
+

@@ -1,0 +1,18 @@
+// SN:WWJFbJo53[4Sd]od
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;32m冰舞雕[2;37;0m", ({"icedance diao"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "寒玉儿的伙伴
+它是寒玉儿的坐骑。
+");
+        set_temp("owner_id", "icegirl");
+        set_temp("owner_name", "寒玉儿");
+        ::setup();
+}
+

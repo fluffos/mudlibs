@@ -1,0 +1,3 @@
+// cable.c
+
+inherit SKILL;

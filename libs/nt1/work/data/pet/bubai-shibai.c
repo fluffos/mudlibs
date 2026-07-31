@@ -1,0 +1,18 @@
+// SN:@B^ojFBBV]dC`mH3
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;31m无影豹[2;37;0m", ({"shibai bao"}));        
+        set("gender", "女性");                
+        set("unit", "只");
+        set("long", "$HIR$无影$HIM$无踪
+它是西方不败的坐骑。
+");
+        set_temp("owner_id", "bubai");
+        set_temp("owner_name", "西方不败");
+        ::setup();
+}
+

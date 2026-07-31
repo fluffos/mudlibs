@@ -1,0 +1,86 @@
+// maphere.c
+// Last modified by jjgod@FYTX.
+
+#include <ansi.h>
+#include "/doc/help.h"
+
+inherit F_CLEAN_UP;
+
+string dir_env(object me);
+int main(object me)
+{
+	int i;
+	string file,map,name, *search;
+
+	seteuid(getuid());
+    
+	file = dir_env(me);
+
+	name = environment(me)->query("short");
+	if( file_size("/doc/help/" + file)>0 ) 
+	{
+		if(stringp(file = read_file("/doc/help/" + file)))
+		{
+			map="────────────────────────────────\n";
+			map+=HBBLU+HIW"        【地图指引】                                            \n"NOR;
+			map+="────────────────────────────────\n";
+			
+			map+= replace_string(file, name,BLINK HIY+name+NOR);
+
+			map+="\n────────────────────────────────\n";
+			map+=sprintf(HBRED HIW"%62s  \n"NOR,sprintf("您现在所处的位置是：%s的%s。",
+			environment(me)->query("outdoors")?environment(me)->query("outdoors"):"本地",
+			//clean_color(environment(me)->query("short"))));
+			(environment(me)->query("short"))));
+			map+="────────────────────────────────\n";
+
+			me->start_more(map);
+			return 1;
+		}
+	}
+	return notify_fail("暂时还没有开放这里的地图查询。\n");
+}
+
+string dir_env(object me)
+{
+	string domain;
+
+	if (! environment(me))
+		return "NULL";
+
+	if (! sscanf(base_name(environment(me)), "/d/%s/", domain))
+		return "NULL";
+
+	else {
+		switch (domain)
+		{
+			case "city":return "map_yangzhou";
+			case "dali":return "map_dali";
+			case "mr" :return "map_murong";
+			case "tiezhang":return "map_tiezhang";
+			case "xingxiu":return "map_xingxiu";
+			case "jiaxing":return "map_jiaxing";
+			case "hz":return "map_hangzhou";
+			case "kunlun":return "map_kunlun";
+			case "suzhou":return "map_suzhou";
+			case "mingjiao":return "map_mingjiao";
+			case "wuguan":return "map_wuguan";
+			case "taishan":return "map_taishan";
+			case "tianlong":return "map_tianlong";
+			case "emei":return "map_emei";
+			case "xiangyang":return "map_xiangyang";
+			case "fuzhou":return "map_fuzhou";
+			default:return "NULL";
+		}
+	}
+}
+
+int help(object me)
+{
+	write(@HELP
+指令格式：maphere
+这个指令提供你在室外查询所在地的地图。闪亮处表示你所处之地。
+HELP
+	);
+	return 1;
+}

@@ -1,0 +1,18 @@
+// SN:mT18L;60ALIE=Df6
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;36m汉血宝马[2;37;0m", ({"hanxuebao ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "这是一匹难得的西域贡品－－汉血宝马
+它是刘志钢的坐骑。
+");
+        set_temp("owner_id", "liuzhigang");
+        set_temp("owner_name", "刘志钢");
+        ::setup();
+}
+

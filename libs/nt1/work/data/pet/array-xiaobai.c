@@ -1,0 +1,18 @@
+// SN:QVcSlHWN4NT[TkPI
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;37m萧柏熊[2;37;0m", ({"xiaobai xiong"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "萧萧一条歌
+它是空艾的坐骑。
+");
+        set_temp("owner_id", "array");
+        set_temp("owner_name", "空艾");
+        ::setup();
+}
+

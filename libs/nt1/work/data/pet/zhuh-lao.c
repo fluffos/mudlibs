@@ -1,0 +1,18 @@
+// SN:lcHUkP7JnDFjH=X<
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("老马[2;37;0m", ({"lao ma"}));        
+        set("gender", "男性");                
+        set("unit", "匹");
+        set("long", "一群老马
+它是碎月天蓬的坐骑。
+");
+        set_temp("owner_id", "zhuh");
+        set_temp("owner_name", "碎月天蓬");
+        ::setup();
+}
+

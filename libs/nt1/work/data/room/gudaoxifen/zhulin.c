@@ -1,0 +1,29 @@
+// SN:`T0`Vh2K5TgN47^A
+// File(/data/room/gudaoxifen/zhulin.c) of gudaoxifen's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "竹林");
+	set ("long", @LONG
+这里种着好大一片竹林，非常幽静。风一起就听竹叶沙沙的响，
+有时古道西风就去听涛阁默听竹浪涛声，参悟武功。 
+LONG );
+
+	set("exits", ([
+                "west" : __DIR__"huayuan",
+                "east" : __DIR__"tingtao",
+	]));
+
+        set("outdoors", "playertown");
+        set("sleep_room", 1);
+        setup();
+
+        set("room_owner", "古道西风");
+        set("room_name", "怀旧雅居");
+        set("room_id", "benlong");
+        set("room_owner_id", "gudaoxifen");
+        set("room_position", "青砖路");
+}

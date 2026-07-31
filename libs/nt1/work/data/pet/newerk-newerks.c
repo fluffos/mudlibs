@@ -1,0 +1,18 @@
+// SN:2mnWd?@AJ>=HAfBf
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[33m老虎[2;37;0m", ({"newerks hu"}));        
+        set("gender", "男性");                
+        set("unit", "只");
+        set("long", "就是老虎啊
+它是药药药药的坐骑。
+");
+        set_temp("owner_id", "newerk");
+        set_temp("owner_name", "药药药药");
+        ::setup();
+}
+

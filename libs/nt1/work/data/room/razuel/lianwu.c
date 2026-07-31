@@ -1,0 +1,32 @@
+// SN:mk5X4JN<?YS\R03h
+// File(/data/room/razuel/lianwu.c) of razuel's room
+// Create by LUBAN written by Doing Lu
+
+     inherit PRIVATE_ROOM;
+
+void create()
+{
+	set("short", "练武场");
+	set ("long", @LONG
+此处便是天使地狱的练武场，人在江湖，武功万万不可荒废。 
+LONG );
+
+	set("exits", ([
+                "west" : __DIR__"houyuan",
+	]));
+
+        set("objects", ([
+                "/clone/npc/mu-ren" : 4,
+        ]));
+
+        set("outdoors", "playertown");
+        set("no_sleep_room", 1);
+
+        setup();
+    
+        set("room_owner", "澄瑞");
+        set("room_name", "天使地狱");
+        set("room_id", "losangels");
+        set("room_owner_id", "razuel");
+        set("room_position", "青砖路");
+}

@@ -1,0 +1,32 @@
+// SN:TF_SDFE0lBWo>3JK
+// ITEM Made by player(南宫无仁:playerf) /data/item/p/playerf-evila.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Fri Oct  8 15:57:59 2004
+#include <ansi.h>
+#include <armor.h>
+
+inherit HEAD;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[2;37;0m[34m恶魔之角[2;37;0m", ({ "evila" }));
+	set_weight(4500);
+	set("item_make", 1);
+	set("unit", "顶");
+	set("long", "这是由[1;35m神铁[2;37;0m炼制而成的一顶头盔。
+[30m这是使用九幽恶魔的[34m双角[30m炼制，经过恶魔之血浸泡的带有诅咒的[34m恶魔之角。[2;37;0m
+头盔缘上刻着一行小字：南宫无仁(playerf)
+");
+	set("value", 2100000);
+	set("point", 112);
+	set("material", "magic stone");
+	set("wear_msg", "$N[1;31m从九幽深潭中抓出一件[34m恶魔之角。[2;37;0m\n");
+	set("remove_msg", "$N[1;31m将[34m恶魔之角[1;31m浸入九幽深潭之中。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/armor", apply_armor());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

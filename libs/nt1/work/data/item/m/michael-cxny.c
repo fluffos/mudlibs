@@ -1,0 +1,32 @@
+// SN:?UT2hh@7Tj:kRa0d
+// ITEM Made by player(行香子:michael) /data/item/m/michael-cxny.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Tue Oct 12 14:06:15 2004
+#include <ansi.h>
+#include <armor.h>
+
+inherit WAIST;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;32m菩萨蛮[2;37;0m", ({ "cxny" }));
+	set_weight(560);
+	set("item_make", 1);
+	set("unit", "条");
+	set("long", "这是由[1;37m冰蚕丝[2;37;0m炼制而成的一条腰带。
+[1;32m菩萨蛮[2;37;0m
+腰带缘上刻着一行小字：行香子(michael)
+");
+	set("value", 2100000);
+	set("point", 89);
+	set("material", "silk");
+	set("wear_msg", "[1;32m归鸿声断残云碧，背窗雪落炉烟直。烛底凤钗明，钗头人胜轻。角声催晓漏，曙色回牛斗。春意看花难，西风留旧寒。[2;37;0m\n");
+	set("remove_msg", "[1;32m风柔日薄春犹早，夹衫乍著心情好。睡起觉微寒，梅花鬓上残。故乡何处是？忘了除非醉。沈水卧时烧，香消酒未消。[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	set("armor_prop/armor", apply_armor());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

@@ -1,0 +1,18 @@
+// SN:LlIQXA1Y]oV@bY4@
+// pet.c
+
+#include "/clone/npc/pet.h"
+
+void setup()
+{
+        set_name("[1;32m泥事驴[2;37;0m", ({"nishi lv"}));        
+        set("gender", "男性");                
+        set("unit", "头");
+        set("long", "泥事已透绿
+它是刚子的坐骑。
+");
+        set_temp("owner_id", "wgpj");
+        set_temp("owner_name", "刚子");
+        ::setup();
+}
+

@@ -1,0 +1,223 @@
+// child.c
+
+#include <npc.h>
+
+inherit F_VILLAGER;
+
+void timeto_eat();
+
+void create()
+{
+	set_name("腳", ({ "arbao", "__ID_ARBAO__" }) );
+	set_attr("spi", 18);
+	set_attr("int", 19);
+	set_attr("dex", 19);
+	set_attr("con", 17);
+	set_race("human");
+	set_class("thief");
+	set_level(10);
+
+	set_skill("stealing", 40);
+	set_skill("dodge", 35);
+	set_skill("lightswift", 45);
+	set_skill("dagger", 40);
+	set_skill("sword", 30);
+	
+	map_skill("dodge", "lightswift");
+
+	set("age", 16);
+	set("gender", "female");
+	set("long",
+		"硂きせ烦﹉甉碞琌腳ō瘤礛帝彩ガ\n"
+		"︾狝玱ì琌璅蛮↙↙泊氟癌窵窵锣\n"
+		"帝临ぃ╪帝ㄏぃ窽谋眔Τㄇ祇祣\n");
+
+	// set arbao to consume food -dragoon
+	set("schedule", ([
+	    700: (: timeto_eat :),
+	    1200: (: timeto_eat :),
+	    1900: (: timeto_eat :),
+	]));
+
+	setup();
+	carry_money("coin", 30);
+	carry_object(__DIR__"obj/blue_cloth")->wear();
+	carry_object("/obj/area/obj/dagger")->wield();
+}
+
+int hungry = 1;
+
+void timeto_eat()
+{
+	this_object()->consume_stat("food", 
+	    this_object()->query_stat("food")+1);
+	return;
+}
+
+void init()
+{
+	::init();
+	if( is_fighting() || is_chatting() ) return;
+	
+	if( this_player()->query_temp("try/fon")==10 ){
+		do_chat("腳秨み穘穘も, 拜笵: ǎ琱盾 ? ぃ?\n");
+		//this_player()->set_temp("try/fon",13);
+	}
+
+	// if trying fon, wont join thief
+	if( this_player()->query_temp("try/fon") )
+		return;
+
+	if( hungry )
+		do_chat((: command, "say 侈 ... и▄緅Τ⊿Τ" :));
+	else if( this_player()->query_class() == "thief" ) {
+		do_chat(({
+			"腳辨帝┛礛弧笵玿ぃ琌Ω倒и狥﹁ê︗ ...\n",
+			"腳稬弧笵硂柑笿痷ォ\n"
+		}));
+	}
+	else
+		do_chat((: command, "say 糔 ... 琵盋盋笵и硂柑 ..." :));
+}
+
+private void give_comb(object player)
+{
+	object comb;
+
+	if( !player || environment(player)!=environment() ) {
+		command("say 玿 ... ㎡");
+		return;
+	}
+	comb = new(__DIR__"obj/comb");
+	comb->move(this_object());
+	command("give comb to " + player->query("id"));
+}
+
+private void exchange(string food_name, object player)
+{
+	set_stat_current("food", 0);
+	command("eat " + food_name);
+	if( !player || environment(player) != environment() ) return;
+
+	command("say 癸 ... ぃ赣フ狥﹁硂癳倒");
+}
+
+private void do_follow(object me,object ob)
+{
+	if( !ob->move(me) )	ob->move(environment(me));
+	message_vision("腳рン珇患倒$N.\n",me);
+	command("follow "+me->query("id"));
+	me->set_temp("try/fon",43);
+}
+
+int accept_object(object me, object ob)
+{
+	if(me->query_temp("try/fon")!=40){
+		if( !hungry || !inherits(F_FOOD, ob) ) {
+			do_chat((: command, "say 倒и硂稦估" :));
+			return 0;
+		}
+
+		hungry = 0;
+		command("smile");
+		command("say 摆 .. び痷谅谅 ...");
+		do_chat(({ (: exchange, ob->query("id"), me :), (: give_comb, me :) }));
+		return 1;
+	}
+	if(ob->id("__ID_CHALLIE__")){
+		do_chat(({
+			"腳灿瘆ガ.\n",
+			"腳弧笵: 硂....躲..и碞笵蛤琱產礚闽..躲...份份..\n",
+			"腳端み癬ㄓ.\n",
+			"腳皚, 癸弧笵: 谅谅, и硂碞ǎイイ.\n",
+			(: do_follow,me,ob :),
+		}));
+		hungry=0;		// stop talking about another quest by init
+		return 1;
+	}
+}
+
+void relay_say(object ob,string msg)
+{
+	int tmp = ob->query_temp("try/fon");
+
+	// communicate with gammer
+	if( !userp(ob) ){
+		if( ob->id("__ID_GAMMER__") ){
+			if( strsrch(msg,"ぃ穦т碝こ")>= 0 ) {
+				do_chat(
+(:command("say 痷! êび!"):));
+				return;
+			}
+			if( strsrch(msg,"尺舧琱睧")>= 0 ) {
+				do_chat(({
+"腳羪.\n",
+(:command("say 琌."):),
+				}));
+				return;
+			}
+			if( strsrch(msg,"腊份份厨こ")>= 0 ) {
+				all_inventory(environment())->set_fon_temp(this_player());
+				call_out((:do_chat(
+"腳弧笵: イイみ薄ぃ, и璶抄抄, 叫腊Γи禗琱硂, 
+谅.\n"):),4);
+				call_out((:do_chat(
+"腳弧Ч, ΓΓ發帝組泊ρび盋瞒.\n"):),5);
+				call_out((:destruct(this_object()):),8);
+			}
+		}
+		return;
+	}
+	// communicate with user
+	switch(tmp){
+		case 0:
+		case 1:
+			if( (strsrch(msg, "琱さい穦ㄓ") >= 0) ) {
+				do_chat(({
+"腳羪弧笵 .. 弧琌琱睧琱盾\n",
+"腳弧笵硂罺硂ㄓ盋盋﹚璶炳 ... 或快㎡\n",
+"腳弧笵: 硂︗"+ob->rank("respectful")+"腊Γ?\n",
+				}));
+				ob->set_temp("try/fon",3);
+			}
+			break;
+		case 3:
+			if( strsrch(msg,"")>=0 || strsrch(msg,"")>=0 ){
+				do_chat(({
+"腳笵: 狦笿琱杠, 叫禗既临琌ㄓ撤獸马, ぃ礛, 璶琌
+㎝盋盋癬侥,и穦螟.临Τ.....\n",
+"腳帝羪, 馁羘笵: ...叫禗腳稱....\n",
+				}));
+				ob->set_temp("try/fon",5);
+			}
+			break;
+		case 10:
+			if( strsrch(msg,"ǎ")>=0 || strsrch(msg,"")>=0 ) {
+				do_chat(
+"腳羪獂癬皚皚穡, 充充搬帝琱, τ拜笵: 隔Τ或拜肈盾?\n"
+				);
+				ob->set_temp("try/fon",13);
+			}
+			break;
+		case 13:
+			if( strsrch(msg,"碍")>=0 ) {
+				do_chat(({
+"腳笵: 翅, 琱蛤矗硂ンㄆ翅, イイ程癚菇, 或常量ぃ钮, 產常ぃ璶
+瞶.\n",
+"腳笵: и份份化ぅ, 打ね嘿ぅ份, ō淮\ <縋钠> 荡˙打, イ
+イ瘤礛碍, 琌稰薄, 產常笵㎡.\n",
+"腳礛泊氟癬ㄓ, 笵: 琌玡份份ぃ砆街穞衡, ぱǜ瓣...\n",
+"腳钡帝笵: 產ぃ笵, 躲..  琱ゑ耕, ﹚癘眔и份份化ぅㄆ.\n",
+				}));
+				ob->set_temp("try/fon",15);
+			}
+			break;
+		default:	break;
+	}
+}
+
+void set_fon_temp(object me)
+{
+	if( me->query_temp("try/fon")!=48 )	return;
+	me->set_temp("try/fon",50);
+}
