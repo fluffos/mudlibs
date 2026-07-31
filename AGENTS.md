@@ -2906,6 +2906,45 @@ fixing anything: `datangshuanglong`'s menu is unreachable behind an
 bug, out of scope, don't "fix" the typo as part of this pass unless
 asked.
 
+### 8.8 `get_id()` routes ANY wiz-level id through a password check that assumes a save file already exists
+
+A registration flow's `get_id()` sometimes has an early, wizard-specific
+branch — `if (wiz_level(arg)) { input_to("get_passwdd", 1, ob); }` —
+that fires purely based on the id's CURRENT wizard status, with no
+check for whether a save file exists yet, and critically NO `return`
+(execution falls through to the rest of the function, which later
+does its own, correct `file_size(...) >= 0` check and registers a
+DIFFERENT `input_to` for the normal new-character flow). The intent is
+reasonable (route wizards through a richer login handler with
+suicide-list/netdead-reconnect logic that a plain new-player flow
+doesn't need) — but it breaks exactly the scenario this project's own
+§1.5 admin-seeding convention creates: a `fluffos` id freshly granted
+`(admin)` status that has never actually registered a character. The
+next player input gets silently captured by the wizard-only password
+handler, which reads `ob->query("password")` — unset, since
+`ob->restore()` was never called for a brand-new id — so ANY password
+attempt fails immediately with a generic "密码错误" (wrong password)
+and the connection is destructed, with no other error trace. This
+looks exactly like a send-sequence misalignment (per §8.2) but isn't
+one — re-sending with a "corrected" sequence won't help, since the
+bug is that a DIFFERENT, wrong `input_to` callback is intercepting the
+very next input regardless of what it contains. Detection: if a lib's
+registration flow works fine for an ordinary id but a freshly
+wiz-flagged id fails at the very next prompt after id entry with an
+unexplained password-style rejection, grep `get_id()` for an
+`input_to(` call gated only on `wiz_level(...)`, with no accompanying
+`file_size()`/save-existence check on the same condition. Fix: add the
+missing existence check (matching whatever check the same function
+does later for the ordinary new/existing-character split) and the
+missing `return`, e.g. `if (wiz_level(arg) && file_size(save_file) >=
+0) { input_to("get_passwdd", 1, ob); return; }`. This is a genuine
+pre-existing bug in the archived source (would bite any real
+deployment that grants wizard status to a not-yet-registered id), not
+something the admin-seeding process introduces. (`xkm`, sibling of
+`jym` — `jym` itself doesn't have this early branch at all, so don't
+assume it's present just because two libs share the rest of their
+`logind.lpc`/`securityd.lpc` composition.)
+
 ---
 
 ## 9. LPC formatter (`~/src/fluffos/tools/lpc-syntax/`) — required checks
