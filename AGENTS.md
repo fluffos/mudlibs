@@ -401,6 +401,24 @@ succeeds) rather than trusting a `(admin)` banner as proof of working
 admin access — the two are enforced by genuinely different code paths
 in libs with this shape.
 
+**Bug class: the hardcoded bootstrap admin id is already occupied by a
+pre-existing archived player.** Some `securd.lpc`/`securityd.lpc`
+lineages hardcode a single bootstrap admin id directly in
+`restore_list()`/`create()` (e.g. `set("wiz_status/hxsd",
+"(admin)");`, with a comment acknowledging the intent: "leave a door
+open, but make sure the admin claims this id first"). If the archived
+save data already has a real player registered under that exact id
+(from the original site's actual history), the id's password is
+unknown and `fluffos` can't claim it — attempting to register it hits
+`密码错误！` instead of the normal new-character flow. Don't try to
+guess the password or delete the pre-existing player's save data. Add
+a parallel `set("wiz_status/fluffos", "(admin)");` line right next to
+the original (with a one-line comment explaining why), register
+`fluffos` normally, and verify the usual way. Document the deviation
+in the lib's README so a future re-seed knows both ids are meaningful.
+(`hy2002`, sibling of `hy2000`'s `wuyou` bootstrap id — that one WAS
+still unclaimed.)
+
 **Bug class: `wiz_status` (or equivalent) declared `nosave`.** A few
 lineages declare the wizard-status mapping `private nosave mapping
 wiz_status = ([]);` — it is NEVER written to a save file, always starts
