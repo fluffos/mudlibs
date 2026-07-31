@@ -175,9 +175,9 @@ classes it's found.
 | 018-2 | `xianlvqingyuanzheda` | 仙侣情缘·浙大版 | `仙侣情缘浙大版.rar` | 40033 | WASM limited |
 | 019 | `xo` | 笑傲江湖（迷你版） | `xo.zip` | 40023 | WASM limited |
 | 019-1 | `xo_final` | 笑傲江湖（最终版） | `xo最终版1.2.rar` | 40024 | WASM playable |
-| 019-2 | `qhxajh` | 清华笑傲江湖 | `清华笑傲江湖）.tgz` | 40195 | native-boot verified, WASM pending |
 | 019-2 | `xiaoaojianghu2` | 笑傲江湖 II | `笑傲江湖II.rar` | 40068 | WASM playable |
 | 019-3 | `xiaoaojianghu_xo` | 笑傲江湖 XO | `笑傲江湖XO .rar` | 40069 | WASM limited |
+| 019-4 | `qhxajh` | 清华笑傲江湖 | `清华笑傲江湖）.tgz` | 40195 | native-boot verified, WASM pending |
 | 020 | `zzfy` | 郑州风云3 | `zzfy (full).rar` | 40025 | WASM playable |
 | 020-1 | `fengyun3xiuding` | 风云III修订版 | `风云III修订版  (1).rar` | — | pending |
 | 020-2 | `fengyun3dianzang` | 风云III典藏版 | `风云III典藏版 (1).rar` | — | pending |
