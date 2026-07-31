@@ -2,147 +2,123 @@
 #include <net/daemons.h>
 #include <net/config.h>
 #include <net/macros.h>
- 
+
 inherit F_CLEAN_UP;
 inherit F_SAVE;
- 
+
 #define WHO     find_player( "inspiral" )
 #define TELL( x ) if( WHO ) tell_object( WHO, x + "\n" )
- 
+
 mapping mail_outgoing;
 mapping mail_incoming;
- 
-void create()
-{
-	seteuid( getuid() );
-	mail_outgoing = ([ ]);
-	mail_incoming = ([ ]);
+
+void create() {
+  seteuid(getuid());
+  mail_outgoing = ([]);
+  mail_incoming = ([]);
 }
-string query_save_file()
-{
-	return DATA_DIR + "netmail";
+string query_save_file() {
+  return DATA_DIR + "netmail";
 }
-varargs void check_for_mail( string mudname, int flag )
-{
-	mapping outmsg, info;
-	string package;
-	int index, size;
-	
-	outmsg = ([ ]);
-	mudname = htonn( mudname );
-	
-	switch( flag )
-	{
-		case 3:
-		if( !mail_outgoing[mudname] )
-		{
-			mail_outgoing[mudname] = ([ ]);
-		}
-		if( !sizeof( outmsg ) )
-		{
-			map_delete( mail_outgoing, mudname );
-			break;
-		}
-		break;
-		case 2:
-		case 1:
-		if( !sizeof( outmsg ) )
-		{
-			map_delete( mail_outgoing, mudname );
-			break;
-		}
-		mail_outgoing[mudname] = ([ "time" : time(), "index" : 0 ]);
-		break;
-		case 0:
-		mail_outgoing[mudname]["time"] = time();
-		mail_outgoing[mudname]["index"] += MAIL_PACKET_SIZE;
-		break;
-	}
-	if( !sizeof( outmsg ) || !mail_outgoing[mudname] )
-	return;
-	
-	info = ( mapping ) DNS_MASTER -> query_mud_info( mudname );
-	if( !info || !info["NAME"] || !info["PORTUDP"] )
-	return;
-	TELL( "MAILQ: Sending to " + mudname );
-	outmsg["MSG"] = replace_string( outmsg["MSG"], "|", " \b|" );
-	outmsg["MSG"] = replace_string( outmsg["MSG"], "@", " \b@" );
-	TELL( "message size: " + strlen( outmsg["MSG"] ) );
-	package = 
-	"@@@" + DNS_MAIL_Q +
-	"||NAME:" + Mud_name() +
-	"||PORTUDP:" + udp_port();
-	
-	if( !mail_outgoing[mudname]["index"] )
-	{
-		package +=
-		"||WIZTO:" + outmsg["WIZTO"] +
-		"||WIZFROM:" + outmsg["WIZFROM"] +
-		"||DATE:" + time() +
-		"||SUBJECT:" + outmsg["SUBJECT"];
-		
-		if( outmsg["CC"] )
-		package += "||CC:" + outmsg["CC"];
-	}
-	index = mail_outgoing[mudname]["index"];
-	size = strlen( outmsg["MSG"] );
-	
-	if( size <= MAIL_PACKET_SIZE ||
-	( (index-1) + MAIL_PACKET_SIZE ) >= size )
-	{
-		TELL( "Sending ENDMSG:1." );
-		package += "||ENDMSG:1";
-	}
-	TELL( "MAILQ: Sending: " + (index) + ".." + ((index-1)+MAIL_PACKET_SIZE) );
-	package += "||MSG:" + outmsg["MSG"][(index)..( (index-1) + MAIL_PACKET_SIZE )];
-	package += "@@@\n";
-	DNS_MASTER -> send_udp( info["HOSTADDRESS"],
-	info["PORTUDP"],
-	package );
-	return;
+varargs void check_for_mail(string mudname, int flag) {
+  mapping outmsg, info;
+  string package;
+  int index, size;
+
+  outmsg = ([]);
+  mudname = htonn(mudname);
+
+  switch (flag) {
+    case 3:
+      if (!mail_outgoing[mudname]) {
+        mail_outgoing[mudname] = ([]);
+      }
+      if (!sizeof(outmsg)) {
+        map_delete(mail_outgoing, mudname);
+        break;
+      }
+      break;
+    case 2:
+    case 1:
+      if (!sizeof(outmsg)) {
+        map_delete(mail_outgoing, mudname);
+        break;
+      }
+      mail_outgoing[mudname] = ([ "time": time(), "index": 0 ]);
+      break;
+    case 0:
+      mail_outgoing[mudname]["time"] = time();
+      mail_outgoing[mudname]["index"] += MAIL_PACKET_SIZE;
+      break;
+  }
+  if (!sizeof(outmsg) || !mail_outgoing[mudname])
+    return;
+
+  info = (mapping)DNS_MASTER->query_mud_info(mudname);
+  if (!info || !info["NAME"] || !info["PORTUDP"])
+    return;
+  TELL("MAILQ: Sending to " + mudname);
+  outmsg["MSG"] = replace_string(outmsg["MSG"], "|", " \b|");
+  outmsg["MSG"] = replace_string(outmsg["MSG"], "@", " \b@");
+  TELL("message size: " + strlen(outmsg["MSG"]));
+  package = "@@@" + DNS_MAIL_Q + "||NAME:" + Mud_name() + "||PORTUDP:" + udp_port();
+
+  if (!mail_outgoing[mudname]["index"]) {
+    package += "||WIZTO:" + outmsg["WIZTO"] + "||WIZFROM:" + outmsg["WIZFROM"] + "||DATE:" + time() + "||SUBJECT:" + outmsg["SUBJECT"];
+
+    if (outmsg["CC"])
+      package += "||CC:" + outmsg["CC"];
+  }
+  index = mail_outgoing[mudname]["index"];
+  size = strlen(outmsg["MSG"]);
+
+  if (size <= MAIL_PACKET_SIZE ||
+    ((index - 1) + MAIL_PACKET_SIZE) >= size) {
+    TELL("Sending ENDMSG:1.");
+    package += "||ENDMSG:1";
+  }
+  TELL("MAILQ: Sending: " + (index) + ".." + ((index - 1) + MAIL_PACKET_SIZE));
+  package += "||MSG:" + outmsg["MSG"][(index)..((index - 1) + MAIL_PACKET_SIZE)];
+  package += "@@@\n";
+  DNS_MASTER->send_udp(info["HOSTADDRESS"],
+    info["PORTUDP"],
+    package);
+  return;
 }
-void incoming_request( mapping info )
-{
-	string field;
-	if( !info["NAME"] || !info["PORTUDP"] )
-	return;
-	
-	if( !DNS_MASTER -> query_mud_info( info["NAME"] ) )
-	PING_Q -> send_ping_q( info["HOSTADDRESS"], info["PORTUDP"] );
-	if( info["WIZTO"] )
-	{
-		mail_incoming[ info["NAME"] ] = info;
-	}
-	else
-	{
-		if( !mail_incoming[ info["NAME"] ] )
-		info[ "RESEND" ] = 1;
-		
-		else mail_incoming[info["NAME"]]["MSG"] += info["MSG"];
-	}
-	DNS_MASTER -> send_udp( info["HOSTADDRESS"], info["PORTUDP"],
-	"@@@" + DNS_MAIL_A + "||NAME:" + Mud_name() +
-	"||PORTUDP:" + udp_port() +
-	( info["ENDMSG"] ? "||ENDMSG:1" : "" ) +
-	( info["RESEND"] ? "||RESEND:1" : "" ) +
-	"@@@\n" );
-	TELL( "MAILQ: Sending mail_a " +
-	( info["ENDMSG"] ? ", ENDMSG:1 " : "" ) +
-	( info["RESEND"] ? ", RESEND:1" : "" ) +
-	".");
-	
-	if( info["ENDMSG"] )
-	{
-		TELL( "MAILQ:  Sending to netmail." );
-		catch( NETMAIL_D -> incoming_mail( mail_incoming[ info["NAME"] ] ));
-		map_delete( mail_incoming, info["NAME"] );
-	}
+void incoming_request(mapping info) {
+  string field;
+  if (!info["NAME"] || !info["PORTUDP"])
+    return;
+
+  if (!DNS_MASTER->query_mud_info(info["NAME"]))
+    PING_Q->send_ping_q(info["HOSTADDRESS"], info["PORTUDP"]);
+  if (info["WIZTO"]) {
+    mail_incoming[info["NAME"]] = info;
+  } else {
+    if (!mail_incoming[info["NAME"]])
+      info["RESEND"] = 1;
+
+    else mail_incoming[info["NAME"]]["MSG"] += info["MSG"];
+  }
+  DNS_MASTER->send_udp(info["HOSTADDRESS"], info["PORTUDP"],
+    "@@@" + DNS_MAIL_A + "||NAME:" + Mud_name() +
+    "||PORTUDP:" + udp_port() +
+    (info["ENDMSG"] ? "||ENDMSG:1" : "") +
+    (info["RESEND"] ? "||RESEND:1" : "") +
+    "@@@\n");
+  TELL("MAILQ: Sending mail_a " +
+    (info["ENDMSG"] ? ", ENDMSG:1 " : "") +
+    (info["RESEND"] ? ", RESEND:1" : "") +
+    ".");
+
+  if (info["ENDMSG"]) {
+    TELL("MAILQ:  Sending to netmail.");
+    catch(NETMAIL_D->incoming_mail(mail_incoming[info["NAME"]]));
+    map_delete(mail_incoming, info["NAME"]);
+  }
 }
-void get_status()
-{
-}
-void clear_queues()
-{
-	mail_outgoing = ([ ]);
-	mail_incoming = ([ ]);
+void get_status() {}
+void clear_queues() {
+  mail_outgoing = ([]);
+  mail_incoming = ([]);
 }
