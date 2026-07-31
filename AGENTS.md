@@ -2774,6 +2774,42 @@ Do not chase this by adding narrow per-file `trusted_read` exemptions
 argument; only the func-based fix covers all of them at once).
 (`shujian3`.)
 
+### 7.60 `master.lpc`'s `log_error()` calls `CHANNEL_D->do_channel(...)`, triggering the same load-mid-compile crash as §7.1 — but from a completely ordinary compile WARNING, not an error
+
+Same underlying driver rule as §7.1 (`load_object()`/an implicit compile
+via `->` forbidden while another compile is already in progress), but
+reached through a different, much more commonly-hit door:
+`master.lpc`'s `log_error(file, message)` — called for EVERY compile
+warning, not just real errors, including totally harmless ones like
+`Unknown #pragma, ignored` — ends with
+`CHANNEL_D->do_channel(this_object(), "err", message)`. If `CHANNEL_D`
+hasn't been preloaded yet (true for whichever files sit before it in
+`adm/etc/preload`, `securityd.lpc` often being the very first), that
+call-other silently triggers a fresh compile of `channeld.lpc` from
+inside the CALLER's still-in-progress compile — caught, but re-thrown
+as `*Object cannot be loaded during compilation.` and re-logged through
+`log_error()` again, which calls `CHANNEL_D->do_channel()` again,
+producing a wall of repeated trace dumps (tens of thousands of lines
+in one case) for what was originally just a benign pragma warning on
+the first couple of preloaded files. Bounded to the boot window before
+`CHANNEL_D` loads — once it's up, subsequent `log_error()` calls are
+ordinary method calls on an already-compiled object and work fine — but
+during that window it drowns real output and wastes enormous transcript
+space. Fix: guard the broadcast the same way §7.1 guards its own
+recursive load, checking `find_object()` first instead of assuming the
+object is there:
+
+```lpc
+// BEFORE:  CHANNEL_D->do_channel(this_object(), "err", message);
+// AFTER:
+if( find_object(CHANNEL_D) )
+    CHANNEL_D->do_channel(this_object(), "err", message);
+```
+
+The `write_file()` call just above still captures the message to the
+log file regardless, so no information is lost by skipping the
+broadcast during the boot window. (`fyzfqyy`.)
+
 ---
 
 ## 8. Login and registration flow bugs
