@@ -70,10 +70,10 @@
 #define CORPSE_OB	"/clone/misc/corpse"
 #define GOLD_OB		"/clone/money/gold"
 #define LOGIN_OB	"/clone/user/login"
-#define MASTER_OB	"/adm/single/master"
+#define MASTER_OB	"/adm/obj/master"
 #define MAILBOX_OB	"/clone/misc/mailbox"
 #define SILVER_OB	"/clone/money/silver"
-#define SIMUL_EFUN_OB	"/adm/single/simul_efun"
+#define SIMUL_EFUN_OB	"/adm/obj/simul_efun"
 #define USER_OB		"/clone/user/user"
 #define VOID_OB		"/clone/misc/void"
 
