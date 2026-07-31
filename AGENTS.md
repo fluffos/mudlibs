@@ -2495,9 +2495,9 @@ every OTHER call site in the same lib correctly passes
 (string vs object)`, blocking the whole `clone/user/user` compile (and
 therefore character creation, since `make_body()` needs it). Fix:
 `is_killing(ob)` → `is_killing(ob->query("id"))`, matching the other
-call sites in the same file. Seen independently in three unrelated
-lineages (`nt1`, `wxddym`, `zjmudhell`), so check for it on sight in any
-new lib rather than waiting to hit the compile error.
+call sites in the same file. Seen independently in four unrelated
+lineages (`nt1`, `wxddym`, `zjmudhell`, `hell`), so check for it on
+sight in any new lib rather than waiting to hit the compile error.
 
 ### 7.51 NTOS-specific driver extensions with no FluffOS equivalent: `query_heartbeat_interval()`/`set_heartbeat_interval()`
 
@@ -2809,6 +2809,77 @@ if( find_object(CHANNEL_D) )
 The `write_file()` call just above still captures the message to the
 log file regardless, so no information is lost by skipping the
 broadcast during the boot window. (`fyzfqyy`.)
+
+### 7.61 The §7.12 wrapper bug can live in `message()` itself, not just in `tell_room()`
+
+§7.12 documents the classic `tell_room()` shape (`exclude` arg defaults
+to raw int 0), but on some libs the actual simul_efun `message()`
+wrapper is the one missing the guard:
+
+```lpc
+// BEFORE:
+void message(mixed arg, string message, mixed target, mixed exclude) {
+    efun::message(arg, message, target, exclude);
+}
+// AFTER:
+void message(mixed arg, string message, mixed target, mixed exclude) {
+    efun::message(arg, message, target, exclude || ({}));
+}
+```
+
+Fixing only `tell_room()`'s own body is insufficient here: `message()`
+is called directly, with just 3 args (leaving `exclude` an
+uninitialized int 0), from many other unrelated places —
+`channeld.lpc`'s `do_channel()` (`message("channel:" + ..., msg, obs)`)
+and `questd.lpc`'s `collect_all_quest_information()` broadcast were both
+observed crashing independently of `tell_room()` on the same lib. When
+`Bad argument 4 to EFUN message()` recurs from more than one call site
+after the `tell_room()` fix is already in place, fix the root
+`message()` wrapper instead of chasing each caller individually.
+(`hell`.)
+
+### 7.62 `check_legal_id`'s `while (i--)` loop silently accepts an empty string
+
+A common English-id validator shape:
+
+```lpc
+int check_legal_id(string id) {
+    int i;
+    i = strlen(id);
+    while (i--) {
+        if ((id[i] < 'a' || id[i] > 'z') && id[i] != '_') return 0;
+    }
+    return 1;
+}
+```
+
+For `id == ""`, `strlen(id)` is 0, so `while (i--)` never runs its body
+at all (the loop condition is checked before any decrement takes
+effect) and the function falls straight through to `return 1` —
+accepting an empty name as legal. This is easy to hit by accident (an
+automated test client sending a blank line as its very first input, or
+a real user just pressing Enter at the very first prompt) and the
+consequences cascade: the empty id gets `set("id", "")`, and any
+downstream code indexing `id[0]` for save-path sharding (e.g.
+`sprintf(DATA_DIR "login/%c/%s", my_id[0], my_id)`) reads index 0 of an
+empty string — which returns integer 0 rather than throwing an
+out-of-bounds error on this driver — and `sprintf("%c", 0)` then fails
+with `*(s)printf(): Incorrect argument to type %c, must be valid UTF8
+char. (arg: 0)`, disconnecting the user with a confusing low-level
+error nowhere near the actual bug. Fix: reject empty input explicitly
+before the loop:
+
+```lpc
+if (! i) {
+    write("对不起，没有这个玩家。\n");
+    return 0;
+}
+```
+
+Any `while (len--)` (or `for`) loop meant to validate every character
+of a string has this same empty-string blind spot — check for it
+whenever a validator's rejection message can be bypassed by sending
+nothing at all. (`hell`.)
 
 ---
 
