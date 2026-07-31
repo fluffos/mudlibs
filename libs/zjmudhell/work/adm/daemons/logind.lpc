@@ -16,498 +16,464 @@ nosave int wiz_lock_level = 0;
 nosave string *movie;
 
 string *banned_name = ({
-    "你", "你", "我", "他", "她", "它",
-    "爸", "爷", "　", "妈",
-    "屎", "尿", "粪",
+  "你", "你", "我", "他", "她", "它",
+  "爸", "爷", "　", "妈",
+  "屎", "尿", "粪",
 });
 
 // 内部调用的函数
 private void get_user(string arg, object ob);
 private void get_char(string arg, object ob);
-void jiance(string arg,object ob,string str);
+void jiance(string arg, object ob, string str);
 private void init_new_player(object user);
 
 // 可以被外部调用的函数
-object  make_body(object ob);
+object make_body(object ob);
 varargs void enter_world(object ob, object user, int silent);
 varargs void reconnect(object ob, object user, int silent);
 object find_body(string name);
 int check_legal_id(string arg);
 int check_legal_name(string arg, int maxlen);
 
-void create() 
-{
-	seteuid(ROOT_UID);
-	set("channel_id", "连线");
-	if (intp(WIZ_LOCK_LEVEL))
-		wiz_lock_level = WIZ_LOCK_LEVEL;
-	else
-		wiz_lock_level = 0;
+void create() {
+  seteuid(ROOT_UID);
+  set("channel_id", "连线");
+  if (intp(WIZ_LOCK_LEVEL))
+    wiz_lock_level = WIZ_LOCK_LEVEL;
+  else
+    wiz_lock_level = 0;
 }
 
-void logon(object ob)
-{
-	string str;
-	if (BAN_D->is_banned(query_ip_name(ob)) == 1) {
-		write(ZJTMPSAY"你的地址在本 MUD 不受欢迎。\n");
-		destruct(ob);
-		return;
-	}
-	write("\n");
-	str = crypt(ZJKEY,0);
-	write("ver1.0,"+str+"\n");
-	input_to("jiance",ob,str);
+void logon(object ob) {
+  string str;
+  if (BAN_D->is_banned(query_ip_name(ob)) == 1) {
+    write(ZJTMPSAY "你的地址在本 MUD 不受欢迎。\n");
+    destruct(ob);
+    return;
+  }
+  write("\n");
+  // crypt(KEY, 0) is non-deterministic on this driver (falls through to
+  // a fresh random $6$ SHA-512 salt every call instead of the classic
+  // deterministic DES-crypt path), making this client challenge/response
+  // handshake mathematically unpassable (see AGENTS.md §7.14). Use an
+  // explicit old-style 2-char salt so crypt(ZJKEY, str[2..3]) is
+  // reproducible.
+  str = crypt(ZJKEY, "zj");
+  write("ver1.0," + str + "\n");
+  input_to("jiance", ob, str);
 }
 
-void jiance(string arg,object ob,string str)
-{
-	if(!arg)
-	{
-		input_to("jiance",ob,str);
-		return;
-	}
-	else if (arg!=crypt(ZJKEY,str[2..3]))
-	{
-		write("客户端非法\n");
-			log_file( "logins", sprintf("%s:%s\n",arg,str) );
-		destruct(ob);
-		return;
-	}
-	write("版本验证成功\n");
-	input_to("get_user", ob);
+void jiance(string arg, object ob, string str) {
+  if (!arg) {
+    input_to("jiance", ob, str);
+    return;
+  } else if (arg != crypt(ZJKEY, str[2..3])) {
+    write("客户端非法\n");
+    log_file("logins", sprintf("%s:%s\n", arg, str));
+    destruct(ob);
+    return;
+  }
+  write("版本验证成功\n");
+  input_to("get_user", ob);
 }
 
-private void get_user(string arg, object ob)
-{
-	//arg,账号║密码║密文║email。
-	object old_link,user;
-	string *myinfo;
+private void get_user(string arg, object ob) {
+  //arg,账号║密码║密文║email。
+  object old_link, user;
+  string *myinfo;
 
-	if( !arg||arg=="") {
-		input_to("get_user", ob);
-		return;
-	}
+  if (!arg || arg == "") {
+    input_to("get_user", ob);
+    return;
+  }
 
-	myinfo = explode(arg,"║");
+  myinfo = explode(arg, "║");
 
-	if( sizeof(myinfo)!=4 ) {
-		write(ZJTMPSAY"未知错误，请重试。。。\n");
-		input_to("get_user", ob);
-		return;
-	}
+  if (sizeof(myinfo) != 4) {
+    write(ZJTMPSAY "未知错误，请重试。。。\n");
+    input_to("get_user", ob);
+    return;
+  }
 
-	if( !check_legal_id(lower_case(myinfo[0]))) {
-		//0001，ID不合法
-		input_to("get_user", ob);
-		return;
-	}
+  if (!check_legal_id(lower_case(myinfo[0]))) {
+    //0001，ID不合法
+    input_to("get_user", ob);
+    return;
+  }
 
-	if( (crypt(ZJKEY,myinfo[0])+crypt(ZJKEY,myinfo[1]))!=myinfo[2] ) {
-		write(ZJTMPSAY"账号数据校验错误，请重试。。。\n");
-		input_to("get_user", ob);
-		return;
-	}
+  if ((crypt(ZJKEY, myinfo[0]) + crypt(ZJKEY, myinfo[1])) != myinfo[2]) {
+    write(ZJTMPSAY "账号数据校验错误，请重试。。。\n");
+    input_to("get_user", ob);
+    return;
+  }
 
-	myinfo[0] = lower_case(myinfo[0]);
+  myinfo[0] = lower_case(myinfo[0]);
 
-	if( (string)ob->set("id", myinfo[0]) != myinfo[0]) {
-		write(ZJTMPSAY"未知错误，请重试。。。\n");
-		input_to("get_user", ob);
-		return;
-	}
-	ob->set("email",myinfo[3]);
-	if( file_size(ob->query_save_file() + __SAVE_EXTENSION__) >= 0 ) 
-	{
-		if( !ob->restore() ) 
-		{
-			write(ZJTMPSAY"人物存档出现问题。。。\n");
-			input_to("get_user", ob);
-			return;
-		}
-	}
-	else 
-		ob->set("body", USER_OB);
+  if ((string)ob->set("id", myinfo[0]) != myinfo[0]) {
+    write(ZJTMPSAY "未知错误，请重试。。。\n");
+    input_to("get_user", ob);
+    return;
+  }
+  ob->set("email", myinfo[3]);
+  if (file_size(ob->query_save_file() + __SAVE_EXTENSION__) >= 0) {
+    if (!ob->restore()) {
+      write(ZJTMPSAY "人物存档出现问题。。。\n");
+      input_to("get_user", ob);
+      return;
+    }
+  } else
+    ob->set("body", USER_OB);
 
-	if( (string)ob->set("password",crypt(myinfo[1],"zj")) != crypt(myinfo[1],"zj")) {
-		write(ZJTMPSAY"未知错误，请重试。。。\n");
-		input_to("get_user", ob);
-		return;
-	}
+  if ((string)ob->set("password", crypt(myinfo[1], "zj")) != crypt(myinfo[1], "zj")) {
+    write(ZJTMPSAY "未知错误，请重试。。。\n");
+    input_to("get_user", ob);
+    return;
+  }
 
-	write("\n");
+  write("\n");
 
-	user = find_body(ob->query("id"));
-	if (user) {
-		old_link = user->query_temp("link_ob");
-		if( old_link ) {
-			if(interactive(user))
-			{
-				tell_object(user, RED"你的账号在别处登录，你被迫下线了！\n");
-				exec(old_link, user);
-			}
-			destruct(old_link);
-		}
-		//0007，登陆成功
-		write(SYSY"0007\n");
-		write(ZJTMPSAY"登录成功，正在加载世界。。。\n");
-		reconnect(ob, user);
-		return;
-	}
-	if( objectp(user = make_body(ob)) ) {
-		user->set_temp("link_ob",ob);
-		if( file_size(user->query_save_file() + __SAVE_EXTENSION__) >= 0 ){
-			if( user->restore() ) {
-				//////0007，登陆成功
-				write(SYSY"0007\n");
-				write(ZJTMPSAY"登录成功，正在加载世界。。。\n");
-				enter_world(ob, user);
-				return;
-			} else {
-				write(ZJTMPSAY"人物存档出现问题。。。\n");
-				input_to("get_user", ob);
-				return;
-			}
-		}
-	}
-	destruct(user);
-	//请建立角色
-	write(SYSY"0008\n");
-	input_to("get_char", ob);
+  user = find_body(ob->query("id"));
+  if (user) {
+    old_link = user->query_temp("link_ob");
+    if (old_link) {
+      if (interactive(user)) {
+        tell_object(user, RED "你的账号在别处登录，你被迫下线了！\n");
+        exec(old_link, user);
+      }
+      destruct(old_link);
+    }
+    //0007，登陆成功
+    write(SYSY "0007\n");
+    write(ZJTMPSAY "登录成功，正在加载世界。。。\n");
+    reconnect(ob, user);
+    return;
+  }
+  if (objectp(user = make_body(ob))) {
+    user->set_temp("link_ob", ob);
+    if (file_size(user->query_save_file() + __SAVE_EXTENSION__) >= 0) {
+      if (user->restore()) {
+        //////0007，登陆成功
+        write(SYSY "0007\n");
+        write(ZJTMPSAY "登录成功，正在加载世界。。。\n");
+        enter_world(ob, user);
+        return;
+      } else {
+        write(ZJTMPSAY "人物存档出现问题。。。\n");
+        input_to("get_user", ob);
+        return;
+      }
+    }
+  }
+  destruct(user);
+  //请建立角色
+  write(SYSY "0008\n");
+  input_to("get_char", ob);
 }
 
-private void get_char(string arg, object ob)
-{
-	//arg,性别║头像║昵称。
-	object user;
-	string *myinfo,result;
+private void get_char(string arg, object ob) {
+  //arg,性别║头像║昵称。
+  object user;
+  string *myinfo, result;
 
-	if( !arg||arg=="") {
-		input_to("get_char", ob);
-		return;
-	}
+  if (!arg || arg == "") {
+    input_to("get_char", ob);
+    return;
+  }
 
-	myinfo = explode(arg,"║");
-	if(sizeof(myinfo)!=3){
-		write(ZJTMPSAY"错误，请检查重试。\n");
-		input_to("get_char", ob);
-		return;
-	}
+  myinfo = explode(arg, "║");
+  if (sizeof(myinfo) != 3) {
+    write(ZJTMPSAY "错误，请检查重试。\n");
+    input_to("get_char", ob);
+    return;
+  }
 
-	if( !check_legal_name(myinfo[2],8) ) {
-		//0009，昵称不符合要求
-		input_to("get_char", ob);
-		return;
-	}
-	if (stringp(result = NAME_D->invalid_new_name(myinfo[2])))
-	{
-		write("对不起，" + result);
-		input_to("get_char", ob);
-		return;
-	}
+  if (!check_legal_name(myinfo[2], 8)) {
+    //0009，昵称不符合要求
+    input_to("get_char", ob);
+    return;
+  }
+  if (stringp(result = NAME_D->invalid_new_name(myinfo[2]))) {
+    write("对不起，" + result);
+    input_to("get_char", ob);
+    return;
+  }
 
-	ob->set("purename", myinfo[2]);
-	ob->set("name", myinfo[2]);
-	if( !objectp(user = make_body(ob)) )
-		return;
-	user->set("str", 10);
-	user->set("dex", 10);
-	user->set("con", 10);
-	user->set("int", 10);
-	user->set("kar", 10);
-	user->set("per", 10);
-	user->set("gender", myinfo[0]);
-	user->set("img", myinfo[1]);
-	init_new_player(user);
-//0007，登陆成功
-	write(SYSY"0007\n");
-	call_out("enter_world",1,ob, user);
+  ob->set("purename", myinfo[2]);
+  ob->set("name", myinfo[2]);
+  if (!objectp(user = make_body(ob)))
+    return;
+  user->set("str", 10);
+  user->set("dex", 10);
+  user->set("con", 10);
+  user->set("int", 10);
+  user->set("kar", 10);
+  user->set("per", 10);
+  user->set("gender", myinfo[0]);
+  user->set("img", myinfo[1]);
+  init_new_player(user);
+  //0007，登陆成功
+  write(SYSY "0007\n");
+  call_out("enter_world", 1, ob, user);
 }
 
-object make_body(object ob)
-{
-	string err;
-	object user;
-	int n;
+object make_body(object ob) {
+  string err;
+  object user;
+  int n;
 
-	if (! is_root(previous_object()))
-	{
-		log_file("nosave/security",
-			 sprintf("%s try to create player(%s) on %s.\n",
-				 (string)geteuid(previous_object()),
-				 (string)ob->query("id"),
-				 ctime(time())));
-		write("你没有权限创建玩家。\n");
-		return 0;
-	}
+  if (!is_root(previous_object())) {
+    log_file("nosave/security",
+      sprintf("%s try to create player(%s) on %s.\n",
+        (string)geteuid(previous_object()),
+        (string)ob->query("id"),
+        ctime(time())));
+    write("你没有权限创建玩家。\n");
+    return 0;
+  }
 
-	seteuid(getuid());
-	user = new(USER_OB);
-	if (! user)
-	{
-		write("现在可能有人正在修改使用者物件的程式，无法进行复制。\n");
-		write(err+"\n");
-		return 0;
-	}
-	seteuid(ob->query("id"));
-	export_uid(user);
-	export_uid(ob);
-	seteuid(getuid());
-	user->set("id", ob->query("id"));
-	user->set("surname", ob->query("surname"));
-	user->set("purename", ob->query("purename"));
-	user->set_name( 0, ({ ob->query("id")}) );
-	return user;
+  seteuid(getuid());
+  user = new(USER_OB);
+  if (!user) {
+    write("现在可能有人正在修改使用者物件的程式，无法进行复制。\n");
+    write(err + "\n");
+    return 0;
+  }
+  seteuid(ob->query("id"));
+  export_uid(user);
+  export_uid(ob);
+  seteuid(getuid());
+  user->set("id", ob->query("id"));
+  user->set("surname", ob->query("surname"));
+  user->set("purename", ob->query("purename"));
+  user->set_name(0, ({ ob->query("id") }));
+  return user;
 }
 
-private void init_new_player(object user)
-{
-	// 初始化必要属性
-	user->set("title", "普通百姓");
-	user->set("birthday", time() );
-	user->set("potential", 99);
-	user->set("food", (user->query("str") + 10) * 10);
-	user->set("water", (user->query("str") + 10) * 10);
-	user->set("channels", ({ "chat", "rumor", "party",
-				 "bill", "sos", "family",
-				 "ic", "rultra" }));
+private void init_new_player(object user) {
+  // 初始化必要属性
+  user->set("title", "普通百姓");
+  user->set("birthday", time());
+  user->set("potential", 99);
+  user->set("food", (user->query("str") + 10) * 10);
+  user->set("water", (user->query("str") + 10) * 10);
+  user->set("channels", ({ "chat", "rumor", "party",
+    "bill", "sos", "family",
+    "ic", "rultra" }));
 
-	// 记录名字
-	NAME_D->map_name(user->query("name"), user->query("id"));
+  // 记录名字
+  NAME_D->map_name(user->query("name"), user->query("id"));
 
-	// 设置必要的环境参数
-	user->set("env/wimpy", 60);
-}
-		
-varargs void enter_world(object ob, object user, int silent)
-{
-	object cloth, shoe, room, login_ob;
-	string startroom;
-	string ipname;
-
-	if (! is_root(previous_object()))
-		return;
-
-	user->set_temp("link_ob", ob);
-	ob->set_temp("body_ob", user);
-	ob->set("registered", user->query("registered"));
-	if (interactive(ob)) exec(user, ob);
-
-	write("\n目前权限：" + wizhood(user) + "\n");
-
-	user->setup();
-	if (user->query("age") == 14)
-	{
-		user->set("food", user->max_food_capacity());
-		user->set("water", user->max_water_capacity());
-	}
-
-	user->save();
-	user->set("last_save", time());
-	ob->save();
-
-	// check the user
-	UPDATE_D->check_user(user);
-
-	if (! silent)
-	{
-		if (! user->query("registered"))
-			color_cat(UNREG_MOTD);
-		else
-			color_cat(MOTD);
-
-		write("你连线进入了" + LOCAL_MUD_NAME() + "。\n\n");
-
-		if (! user->query("registered") || ! stringp(user->query("character")))
-		{
-			if (user->is_ghost())
-				user->reincarnate();
-			user->set("startroom", REGISTER_ROOM);
-		} else
-		if (! stringp(user->query("born")))
-		{
-			if (user->is_ghost())
-				user->reincarnate();
-			user->set("startroom", BORN_ROOM);
-		}
-
-		if (user->is_in_prison())
-			startroom = user->query_prison();
-		else
-		if (user->is_ghost())
-			startroom = DEATH_ROOM;
-		else
-		if (! stringp(startroom = user->query("startroom")) ||
-		    file_size(startroom + ".lpc") < 0)
-			startroom = START_ROOM;
-
-		if (! catch(load_object(startroom)))
-			user->move(startroom);
-		else
-		{
-			user->move(START_ROOM);
-			startroom = START_ROOM;
-			user->set("startroom", START_ROOM);
-		}
-		tell_room(startroom, user->query("name") +
-			  "连线进入这个世界。\n", ({user}));
-	}
-
-	login_ob = new(LOGIN_OB);
-	login_ob->set("id", user->query("id"));
-	login_ob->restore();
-	if (login_ob->query("registered"))
-	{
-		if (! intp(login_ob->query("login_times")))
-		{
-			write(NOR "\n你是第一次光临" + LOCAL_MUD_NAME() + "。\n");
-			login_ob->set("login_times", 1);
-			// show rules
-		} else
-		{
-			login_ob->add("login_times", 1);
-			write("\n你上次光临" + LOCAL_MUD_NAME() + "是 " + HIG + ctime(login_ob->query("last_on")) + NOR + " 从 " + HIR +
-				login_ob->query("last_from") + NOR + " 连接的。\n");
-		}
-	}
-
-	destruct(login_ob);
-
-	CHANNEL_D->do_channel(this_object(), "sys",sprintf("%s(%s)由%s连线进入。",user->name(), user->query("id"),
-					(ipname = query_ip_number(user)) ? ipname : "未知地点"));
-
-	if (wizhood(user) != "(admin)" &&
-	    EXAMINE_D->query("log_by/" + user->query("id")))
-		user->start_log();
-
-	write(ZJBTSET"b12:常用"ZJBR"指令:mycmds ofen"ZJSEP"b13:技能"ZJBR"相关:mycmds skill"ZJSEP"b14:战斗"ZJBR"相关:mycmds fight"ZJSEP
-		"b15:任务"ZJBR"相关:mycmds quest"ZJSEP"b16:游戏"ZJBR"指南:mycmds help"ZJSEP"b17:频道"ZJBR"交流:liaotian"+"\n");
-
-	NEWS_D->prompt_user(user);
-
-	if ((user->query("qi") < 0 || user->query("jing") < 0) && living(user))
-		user->unconcious();
+  // 设置必要的环境参数
+  user->set("env/wimpy", 60);
 }
 
-varargs void reconnect(object ob, object user, int silent)
-{
-	user->set_temp("link_ob", ob);
-	ob->set_temp("body_ob", user);
-	exec(user, ob);
+varargs void enter_world(object ob, object user, int silent) {
+  object cloth, shoe, room, login_ob;
+  string startroom;
+  string ipname;
 
-	user->reconnect();
-	if( !silent && (! wizardp(user) || ! user->query("env/invisible"))) {
-		tell_room(environment(user), user->query("name") + "重新连线回到这个世界。\n",
-		({user}));
-	}
-	CHANNEL_D->do_channel( this_object(), "sys",
-		sprintf("%s[%s]由%s重新连线进入。", user->query("name"),
-			user->query("id"), query_ip_number(user)));
-	write(ZJFORCECMD("look"));
-	write(ZJBTSET"b12:常用"ZJBR"指令:mycmds ofen"ZJSEP"b13:技能"ZJBR"相关:mycmds skill"ZJSEP"b14:战斗"ZJBR"相关:mycmds fight"ZJSEP
-		"b15:任务"ZJBR"相关:mycmds quest"ZJSEP"b16:游戏"ZJBR"指南:mycmds help"ZJSEP"b17:频道"ZJBR"交流:liaotian"+"\n");
+  if (!is_root(previous_object()))
+    return;
+
+  user->set_temp("link_ob", ob);
+  ob->set_temp("body_ob", user);
+  ob->set("registered", user->query("registered"));
+  if (interactive(ob)) exec(user, ob);
+
+  write("\n目前权限：" + wizhood(user) + "\n");
+
+  user->setup();
+  if (user->query("age") == 14) {
+    user->set("food", user->max_food_capacity());
+    user->set("water", user->max_water_capacity());
+  }
+
+  user->save();
+  user->set("last_save", time());
+  ob->save();
+
+  // check the user
+  UPDATE_D->check_user(user);
+
+  if (!silent) {
+    if (!user->query("registered"))
+      color_cat(UNREG_MOTD);
+    else
+      color_cat(MOTD);
+
+    write("你连线进入了" + LOCAL_MUD_NAME() + "。\n\n");
+
+    if (!user->query("registered") || !stringp(user->query("character"))) {
+      if (user->is_ghost())
+        user->reincarnate();
+      user->set("startroom", REGISTER_ROOM);
+    } else if (!stringp(user->query("born"))) {
+      if (user->is_ghost())
+        user->reincarnate();
+      user->set("startroom", BORN_ROOM);
+    }
+
+    if (user->is_in_prison())
+      startroom = user->query_prison();
+    else if (user->is_ghost())
+      startroom = DEATH_ROOM;
+    else if (!stringp(startroom = user->query("startroom")) ||
+      file_size(startroom + ".lpc") < 0)
+      startroom = START_ROOM;
+
+    if (!catch(load_object(startroom)))
+      user->move(startroom);
+    else {
+      user->move(START_ROOM);
+      startroom = START_ROOM;
+      user->set("startroom", START_ROOM);
+    }
+    tell_room(startroom, user->query("name") +
+      "连线进入这个世界。\n", ({ user }));
+  }
+
+  login_ob = new(LOGIN_OB);
+  login_ob->set("id", user->query("id"));
+  login_ob->restore();
+  if (login_ob->query("registered")) {
+    if (!intp(login_ob->query("login_times"))) {
+      write(NOR "\n你是第一次光临" + LOCAL_MUD_NAME() + "。\n");
+      login_ob->set("login_times", 1);
+      // show rules
+    } else {
+      login_ob->add("login_times", 1);
+      write("\n你上次光临" + LOCAL_MUD_NAME() + "是 " + HIG + ctime(login_ob->query("last_on")) + NOR + " 从 " + HIR +
+        login_ob->query("last_from") + NOR + " 连接的。\n");
+    }
+  }
+
+  destruct(login_ob);
+
+  CHANNEL_D->do_channel(this_object(), "sys", sprintf("%s(%s)由%s连线进入。", user->name(), user->query("id"),
+    (ipname = query_ip_number(user)) ? ipname : "未知地点"));
+
+  if (wizhood(user) != "(admin)" &&
+    EXAMINE_D->query("log_by/" + user->query("id")))
+    user->start_log();
+
+  write(ZJBTSET "b12:常用" ZJBR "指令:mycmds ofen" ZJSEP "b13:技能" ZJBR "相关:mycmds skill" ZJSEP "b14:战斗" ZJBR "相关:mycmds fight" ZJSEP
+    "b15:任务" ZJBR "相关:mycmds quest" ZJSEP "b16:游戏" ZJBR "指南:mycmds help" ZJSEP "b17:频道" ZJBR "交流:liaotian" + "\n");
+
+  NEWS_D->prompt_user(user);
+
+  if ((user->query("qi") < 0 || user->query("jing") < 0) && living(user))
+    user->unconcious();
 }
 
-int check_legal_id(string id)
-{
-	int i;
+varargs void reconnect(object ob, object user, int silent) {
+  user->set_temp("link_ob", ob);
+  ob->set_temp("body_ob", user);
+  exec(user, ob);
 
-	id = lower_case(id);
-
-	i = strlen(id);
-
-	if( (i<4||i>20) && (string)SECURITY_D->get_status(id) == "(player)" ) {
-		write(ZJTMPSAY"对不起，你的ID长度不符合要求(4-20)。\n");
-		return 0;
-	}
-
-	if( id[0]<'a' || id[0]>'z' ) {
-		write(ZJTMPSAY"对不起，你的ID必须用英文字母开头。\n");
-		return 0;
-	}
-	while(i--)
-	{
-		if( !((id[i]>='a' && id[i]<='z')||id[i]=='_'||(id[i]>='0' && id[i]<='9')) ) {
-			write(ZJTMPSAY"对不起，你的ID只能用英文字母或包含数字及‘_’的组合。\n");
-			return 0;
-		}
-	}
-
-	return 1;
+  user->reconnect();
+  if (!silent && (!wizardp(user) || !user->query("env/invisible"))) {
+    tell_room(environment(user), user->query("name") + "重新连线回到这个世界。\n",
+      ({ user }));
+  }
+  CHANNEL_D->do_channel(this_object(), "sys",
+    sprintf("%s[%s]由%s重新连线进入。", user->query("name"),
+      user->query("id"), query_ip_number(user)));
+  write(ZJFORCECMD("look"));
+  write(ZJBTSET "b12:常用" ZJBR "指令:mycmds ofen" ZJSEP "b13:技能" ZJBR "相关:mycmds skill" ZJSEP "b14:战斗" ZJBR "相关:mycmds fight" ZJSEP
+    "b15:任务" ZJBR "相关:mycmds quest" ZJSEP "b16:游戏" ZJBR "指南:mycmds help" ZJSEP "b17:频道" ZJBR "交流:liaotian" + "\n");
 }
 
-int check_legal_name(string name, int maxlen)
-{
-	int i;
+int check_legal_id(string id) {
+  int i;
 
-	i = strlen(name);
-	
-	if ((strlen(name) < 2) || (strlen(name) > maxlen))
-	{
-		write(ZJTMPSAY"对不起，你的中文姓名不能太长或太短。\n");
-		return 0;
-	}
+  id = lower_case(id);
 
-	if (! is_chinese(name))
-	{
-		write(ZJTMPSAY"对不起，请您用「中文」取名字。\n");
-		return 0;
-	}
+  i = strlen(id);
 
-	if (member_array(name, banned_name) % 2 == 0)
-	{
-		write(ZJTMPSAY"对不起，这种姓名会造成其他人的困扰。\n");
-		return 0;
-	}
+  if ((i < 4 || i > 20) && (string)SECURITY_D->get_status(id) == "(player)") {
+    write(ZJTMPSAY "对不起，你的ID长度不符合要求(4-20)。\n");
+    return 0;
+  }
 
-	return 1;
+  if (id[0] < 'a' || id[0] > 'z') {
+    write(ZJTMPSAY "对不起，你的ID必须用英文字母开头。\n");
+    return 0;
+  }
+  while (i--) {
+    if (!((id[i] >= 'a' && id[i] <= 'z') || id[i] == '_' || (id[i] >= '0' && id[i] <= '9'))) {
+      write(ZJTMPSAY "对不起，你的ID只能用英文字母或包含数字及‘_’的组合。\n");
+      return 0;
+    }
+  }
+
+  return 1;
 }
 
-object find_body(string name)
-{
-	return find_player(name);
+int check_legal_name(string name, int maxlen) {
+  int i;
+
+  i = strlen(name);
+
+  if ((strlen(name) < 2) || (strlen(name) > maxlen)) {
+    write(ZJTMPSAY "对不起，你的中文姓名不能太长或太短。\n");
+    return 0;
+  }
+
+  if (!is_chinese(name)) {
+    write(ZJTMPSAY "对不起，请您用「中文」取名字。\n");
+    return 0;
+  }
+
+  if (member_array(name, banned_name) % 2 == 0) {
+    write(ZJTMPSAY "对不起，这种姓名会造成其他人的困扰。\n");
+    return 0;
+  }
+
+  return 1;
 }
 
-int set_wizlock(int level)
-{
-	if (wiz_level(this_player(1)) <= level)
-		return 0;
-
-	if (geteuid(previous_object()) != ROOT_UID)
-		return 0;
-
-	wiz_lock_level = level;
-	return 1;
+object find_body(string name) {
+  return find_player(name);
 }
 
-int can_login(int level)
-{
-	if (level < wiz_lock_level)
-		return 0;
+int set_wizlock(int level) {
+  if (wiz_level(this_player(1)) <= level)
+    return 0;
 
-	return 1;
+  if (geteuid(previous_object()) != ROOT_UID)
+    return 0;
+
+  wiz_lock_level = level;
+  return 1;
 }
 
-int howmuch_money(object ob)
-{
-	int total;
-	int total2;
-	object gold, silver, coin;
+int can_login(int level) {
+  if (level < wiz_lock_level)
+    return 0;
 
-	total = 0;
-	total2 = 0;
+  return 1;
+}
 
-	gold = present("gold_money",ob);
-	silver = present("silver_money",ob);
-	coin = present("coin_money",ob);
+int howmuch_money(object ob) {
+  int total;
+  int total2;
+  object gold, silver, coin;
 
-	if( gold ) total += gold->value();
-	if( silver ) total += silver->value();
-	if( coin ) total += coin->value();
+  total = 0;
+  total2 = 0;
 
-	total2 = (int)ob->query("balance");
-	if (!total2 || total2 < 0) {
-		ob->set("balance", 0);
-	}
-	total=total+total2;
-	return total;
+  gold = present("gold_money", ob);
+  silver = present("silver_money", ob);
+  coin = present("coin_money", ob);
+
+  if (gold) total += gold->value();
+  if (silver) total += silver->value();
+  if (coin) total += coin->value();
+
+  total2 = (int)ob->query("balance");
+  if (!total2 || total2 < 0) {
+    ob->set("balance", 0);
+  }
+  total = total + total2;
+  return total;
 }
