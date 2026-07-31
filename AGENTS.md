@@ -38,7 +38,15 @@ Conventions used throughout:
   as new archives arrive (past 40100 as of this writing).
 - Update this file whenever you learn something that saves time on the
   *next* lib. Keep entries in the catalog style: symptom → root cause →
-  fix (with code) → how to detect → which lineages it affects.
+  fix (with code) → how to detect → which lineages it affects. Do this
+  proactively, as part of finishing the lib — don't wait to be asked,
+  and don't batch it up for "later".
+- **Run the §9 LPC formatter on every lib whose `.lpc`/`.h` files you
+  edited, before considering the lib done** — not just when reminded.
+  It's a required step of the workflow, same tier as boot-testing, not
+  an optional polish pass. Then check all three §9 blind spots and
+  re-boot/re-test after formatting, since the formatter itself can
+  introduce a regression.
 
 ---
 
