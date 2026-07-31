@@ -1,0 +1,147 @@
+//wasroom.c
+// 2016.5.24 luoyun
+
+inherit F_DBASE;
+
+#define fb_time 1800;  //半小时1800 
+
+string master;
+object *room;
+int times;
+int num = 2;
+
+void out_time(object me,object ob);
+
+void create()
+{
+	set("channel_id", "万安寺副本");
+	master = 0;
+	room = ({});
+	times = 0;
+}
+
+int des_fb()
+{
+	int i,j;
+	int size = sizeof(room);
+	int size2;
+	int lvl2;
+	object *all_inv,m_master;
+
+	for(i=0;i<size;i++) //删除副本房间
+	{
+		if(!room[i]) continue;
+		all_inv = all_inventory(room[i]);
+		size2 = sizeof(all_inv);
+		for(j=0;j<size2;j++) //删房间内的生物及物品
+		{
+			if(userp(all_inv[j])) 
+			{
+				all_inv[j]->move("/d/nanyang/kedian1");
+				tell_object(all_inv[j], "副本销毁，你被传回客店。\n");
+			}
+			else
+				destruct(all_inv[j]);
+		}
+		destruct(room[i]);
+	}
+	
+	destruct(this_object());
+	return 1;
+}
+
+//初始化
+int init(object me)
+{
+	int i,j,k,k1,k2;
+	string *room_a=({}), *tmp=({});
+	object systeam = this_object();
+	master = me->query("id"); //记录主人id
+	times = time()+fb_time;//副本时间
+	
+	//创建房间入口
+	room = ({ new(sprintf("/d/jingcheng/wanan-si/wanan-siyuan")), });
+	tmp = ({file_name(room[0]),});
+	//房间集,目前共13层
+	for(i=1;i<14;i++) {
+		room += ({ new(sprintf("/d/jingcheng/wanan-si/baota-%d",i)), });
+		room[i]->set("fb_room", 1);
+		tmp += ({file_name(room[i]),});
+		room[i]->setup_shouwei(num);
+	}
+	
+	j = sizeof(tmp);
+	
+	room[0]->set("exits",(["up" : sprintf("/%s", tmp[1])]));
+	room[1]->set("exits",(["up" : sprintf("/%s", tmp[2]),"down" : sprintf("/%s", tmp[0]),]));
+		
+	//设置出入口
+	for(k=2;k<j;k++) {
+		if (k < 13){
+			room[k]->set("exits",([
+				"up" : sprintf("/%s", tmp[k+1]),
+				"down" : sprintf("/%s", tmp[k-1]),
+			]));
+		}	
+	}
+	room[13]->set("exits",(["down" : sprintf("/%s", tmp[12])]));
+	//进入副本
+	me->move(room[0]);
+	CHANNEL_D->do_channel(systeam, "sys", sprintf("%s(%s)进入万安寺副本。\n",me->query("name"),me->query("id")));
+
+	//心跳循环
+	out_time(me,this_object());
+	return 1;
+}
+
+//心跳循环
+void out_time(object me,object ob)
+{
+	int i,j;
+	int size,size2,is_ok;
+	object *all_inv;
+	
+	if(!ob || !clonep(ob))
+	{
+		return;
+	}
+
+	//检查副本时间，半小时后清理
+	if(times < time())
+	{
+		des_fb();
+		return;
+	}
+	
+	//检查玩家是否在副本中
+	is_ok = 0;
+	size = sizeof(room);
+	for(i=0;i<size;i++)
+	{
+		if(!room[i]) continue;
+		all_inv = all_inventory(room[i]);
+		size2 = sizeof(all_inv);
+		for(j=0;j<size2;j++)
+		{
+			if(userp(all_inv[j]))
+			{
+				is_ok = 1;
+				break;
+			}
+		}
+	}
+	
+	if(!is_ok)
+	{
+		des_fb();
+		return;
+	}
+
+	call_out("out_time",5, me, ob); //心跳5秒
+}
+
+void query_data(string id)
+{
+	if(find_player("luoyun"))
+	tell_object(find_player("luoyun"),sprintf("master = %O\nroom = %O\ntimes = %O\n",master,room,times));
+}

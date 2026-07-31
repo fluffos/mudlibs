@@ -1,0 +1,126 @@
+// /d/city/npc/dadao.c
+#include <ansi.h>
+inherit NPC;
+
+void create()
+{
+	set_name("大盗", ({"da dao", "dadao", "dao"}));
+	set("long", "他是一个横行江北的大盗，经常打家劫舍。\n");
+
+	set("gender", "男性");
+	set("attitude", "heroism");
+
+	set("age", 50);
+	set("shen_type", -1);
+	set("shen", -50000);
+	set("str", 28);
+	set("int", 23);
+	set("con", 23);
+	set("dex", 28);
+	set("max_qi", 1500);
+	set("max_jing", 1000);
+	set("neili", 1600);
+	set("max_neili", 1600);
+	set("jiaji", 60);
+	set("combat_exp", 200000);
+
+	set_skill("force", 90);
+	set_skill("dodge", 80);
+	set_skill("unarmed", 90);
+	set_skill("parry", 80);
+
+	set("die_give", ([
+		"/clone/weapon/blade/blade" : 10,
+	]));
+
+	setup();
+	carry_object(ARMOR_D("cloth"))->wear();
+	carry_object(ARMOR_D("shoes"))->wear();
+	add_money("gold", 1);
+}
+
+void set_lvl(int lvl)
+{
+	object me = this_object();
+	mapping smap = me->query_skills();
+	int i;
+	string *skills;
+
+	skills = keys(smap);
+	for(i=0;i<sizeof(skills);i++)
+	{
+		me->set_skill(skills[i],lvl);
+	}
+	me->set("combat_exp",lvl*lvl*lvl/10+10000);
+	me->set("max_qi",lvl*10000);
+	me->set("jiali",lvl);
+	me->set("max_qi",lvl*3000);
+	me->set("max_neili",lvl*500);
+}
+
+varargs int receive_damage(string type, int damage, mixed who)
+{
+	object me = this_object();
+
+	if(objectp(who))
+		me->add("boss/"+who->query("id"),damage);
+
+	if(me->query("qi")*2 < me->query("max_qi")&&me->query_temp(""))
+	{
+		message_vision("$N惨叫一声，吐出一口鲜血，好像从身上掉下来了一些什么东西。。。\n", me);
+	}
+
+	return ::receive_damage(type,damage,who);
+}
+
+int chat()
+{
+	string *msg;
+	int chance, rnd;
+
+	if( !chance = query(is_fighting()? "chat_chance_combat": "chat_chance") )
+		return 0;
+
+	if( arrayp(msg = query(is_fighting()? "chat_msg_combat": "chat_msg")) && !is_busy())
+	{
+		if (!sizeof(msg)) return 0;                                                    
+		if( random(100) < chance )
+		{
+			rnd = random(sizeof(msg));
+			if( stringp(msg[rnd]) )
+				say(msg[rnd]);
+			else if( functionp(msg[rnd]) )
+				return evaluate(msg[rnd]);
+		}
+		return 1;
+	}
+}
+
+void die()
+{
+	int i;
+	string *items,*killer;
+	object ob;
+	mapping boss,give;
+
+	killer = keys(boss=query("boss"));
+	for(i=0;i<sizeof(killer);i++)
+	{
+		if(objectp(ob=find_player(killer[i])))
+			message_vision("$N累计对boss造成"+ boss[killer[i]] +"点伤害。\n", ob);
+	}
+	if(give = query("die_give"))
+	{
+		items = keys(give);
+		for(i=0;i<sizeof(items);i++)
+		{
+			if(random(give[items[i]])==0)
+			{
+				ob = new(items[i]);
+				ob->move(environment(this_object()));
+			}
+		}
+	}
+	
+	return ::die();
+}

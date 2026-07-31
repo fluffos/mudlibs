@@ -1,0 +1,242 @@
+// suicide.c
+
+#include <ansi.h>
+#include <command.h>
+#include <mudlib.h>
+#include <database.h>
+
+int main(object me, string arg)
+{
+	object weapon;
+	object zhong;
+	int needdest = 0;
+
+	if( me->is_busy() || me->is_fighting() )
+	{
+		return notify_fail("你上一个动作还没完成。\n");
+	}
+
+	if( me->query("combat_exp") < 100 )
+	{
+		return notify_fail("你刚步入江湖就想自杀？\n");
+	}
+
+	if( me->query("combat_exp") > 500000 )
+	{
+		return notify_fail("山穷水尽疑无路，柳暗花明又一村。这位" + RANK_D->query_respect(me) +"不要意气用事，还是先冷静一下再说吧！\n");
+	}
+	if( me->query("marry"))
+	{
+		return notify_fail("你还有伴侣在江湖里，怎么舍得自杀？\n");
+	}
+
+	if( me->query("p_master"))
+	{
+		return notify_fail("你还有师傅在江湖里，怎么舍得自杀？\n");
+	}
+	if( me->query("p_dizi"))
+	{
+		return notify_fail("你还有弟子在江湖里，怎么舍得自杀？\n");
+	}
+
+	if (!me->query_temp("link_ob"))
+	{
+		return notify_fail("你不是正常连线进入的，不能自杀。\n");
+	}
+
+	weapon = me->query_temp("weapon");		
+	if(!arg)
+	{
+		zhong = find_object(NPC_D("zhong-shentong"));
+		if(!zhong)
+		{
+			zhong = load_object(NPC_D("zhong-shentong"));
+			needdest = 1;
+		}
+				
+		if( zhong->query("winner") == me->query("id") )
+		{
+			if(needdest) destruct(zhong);
+			return notify_fail("你身为武林盟主岂可轻言就死？\n");
+		}
+
+		if(needdest) destruct(zhong);
+														
+		write(ZJOBLONG"您选择永远死掉的自杀方式，这个人物的资料将永远删除，你确定要自杀么？\n"
+			ZJOBACTS2+ZJMENUF(3,3,8,30)+"确定:suicide -f"ZJSEP"取消:shake\n");
+		return 1;
+	}
+	else if( arg == "-yes") 
+	{
+		if(weapon)
+		{
+			message_vision(HIR"$N昂首仰望天穹深处，心意刚决，力发掌缘，挥起手中利刃，向自己咽喉处发力抹去……"NOR"\n",me);
+			tell_object(me,"万点珠红刹那间喷溅汹涌，……再也不可回首那红尘往事……\n");
+			me->set_temp("last_damage_from","于"+environment(me)->query("short")+"自刎而死。");
+		}
+		else
+		{
+			message_vision(HIR"$N惨然一笑，盘膝而坐，五心向天，慢慢将丹田中气逆转，直攻向自己的奇经八脉……"NOR"\n",me);
+			tell_object(me,"你的面色由红润至惨白，由惨白终至蜡黄，再无半点生机……\n");
+			me->set_temp("last_damage_from","于"+environment(me)->query("short")+"自断经脉而死。");
+		}
+		CHANNEL_D->do_channel(this_object(), "rumor", me->short(1) + "决定要自杀了。");
+		me->delete_temp("faint_by");
+//		me->die();
+		me->set_temp("suicide_countdown", 21);
+		me->start_busy( (: call_other, this_object(), "slow_suicide" :), (: call_other, this_object(), "halt_suicide" :) );
+	}
+	else
+		write(ZJOBLONG"您选择永远死掉的自杀方式，这个人物的资料将永远删除，你确定要自杀么？\n"
+			ZJOBACTS2+ZJMENUF(3,3,8,30)+"确定:suicide -yes"ZJSEP"取消:shake\n");
+
+	return 1;
+}
+
+private int slow_suicide(object me)
+{
+	object link_ob = me->query_temp("link_ob");
+	int stage = me->add_temp("suicide_countdown", -1);
+
+	if (!link_ob)
+	{
+		return 0;
+	}
+
+	if (stage > 1)
+	{
+		if( stage%5 == 0 )//%5除以5的余数=0就是能被5整除的数字或者每隔5秒提示一下
+		{
+			tell_object(me, HIR "你还有" + chinese_number(stage+stage) 
+				+ "秒的生存时间，想停止可以 halt。"NOR"\n");
+		}
+
+		return 1;
+	}
+
+	log_file("nosave/SUICIDE",	sprintf("%s 自杀\n", geteuid(me)), me);
+
+	seteuid(getuid());
+
+	write(HIY"放松一下心情，好好休息吧！"NOR"\n");
+
+	if (me->query("g_title") && me->query("g_level") == 1)
+	{
+		write_file("/log/group", sprintf("%s %s 解散，%s ( %s ) 自杀。\n", 
+			ctime(time())[4..19], me->query("g_title"), 
+			me->query("name"), me->query("id")));
+	}
+
+	rm(link_ob->query_save_file() + ".o");
+	rm(me->query_save_file() + ".o");
+
+	if(!wiz_level(me))
+	{
+		foreach (object inv in all_inventory(me))
+		{
+			if (inv->query("money_id"))
+			{
+				destruct(inv);
+			}
+			else if ( !inv->query_autoload() )
+			{
+				DROP_CMD->do_drop(me, inv);
+			}
+
+			me->delete("balance");
+		}
+	}
+/*
+	if (wiz_level(me))
+	{
+		link_ob->save();
+		me->save();
+
+		cp(link_ob->query_save_file() + SAVE_EXTENSION, 
+			link_ob->query_save_file() + ".ooo");
+		rename(me->query_save_file() + SAVE_EXTENSION, 
+			me->query_save_file() + ".ooo");
+	}
+	else if (me->query("combat_exp") < 20000)
+	{
+		dbquery("delete from Users "
+			"where U_Username='" + geteuid(me) + "'");
+		// 删除论坛帐号
+		BBS_D->add_Bbs_Up_Map(WEB_DB_NAME, "DELETE FROM members 
+		WHERE username = '"+
+		geteuid(me) +"@"+lower_case(INTERMUD_MUD_NAME)+"'");
+
+		rm(link_ob->query_save_file() + SAVE_EXTENSION);
+		rm(me->query_save_file() + SAVE_EXTENSION);
+	}
+	else
+	{
+		link_ob->set("last_on", time() + 86400);
+		link_ob->save();
+
+		if (!environment(me)->query("no_save"))
+		{
+			me->set("startroom", base_name(environment(me)));
+		}
+
+		if (me->query("registered") == 3)
+		{
+			me->add("combat_exp", -me->query("combat_exp")/20);
+		}
+		else
+		{
+			me->add("combat_exp", -me->query("combat_exp")/10);
+		}
+
+		me->save();
+
+		rm(link_ob->query_save_file() + ".ooo");
+		rm(me->query_save_file() + ".ooo");
+	}
+*/
+	tell_room(environment(me), me->name() +	"自杀了，以后你再也看不到这个人了。\n", ({me}));
+
+	if (!wiz_level(me))
+	{
+		CHANNEL_D->do_channel(this_object(),"rumor", me->short(1) + "自杀了，以后你再也见不到这个人了。");
+	}
+
+	destruct(link_ob);
+	destruct(me);
+	return 0;
+}
+
+int halt_suicide(object me)
+{
+	tell_object(me, "你放弃了自杀的念头。\n");
+
+	if (!wiz_level(me))
+	{
+		CHANNEL_D->do_channel(this_object(), "rumor", me->name(1) + "决定继续勇敢地活下去。");
+
+		me->start_busy(10);
+	}
+
+	write("你陷入了长时间的沉思之中。\n");
+	return 1;
+}
+
+
+int help (object me)
+{
+	write(@HELP
+指令格式: suicide [-f]
+
+如果因为某种原因你不想活了，你可以选择自杀。
+自杀二十四小时以后才能重新登录。
+
+普通用户减去10%的经验，VIP用户减去5%的经验。
+
+经验小于 20K 的玩家档案直接删除。
+
+如果不加 -f 这个参数则表示自杀一次。
+
+HELP);
+
+	return 1;
+}

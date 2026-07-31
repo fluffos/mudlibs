@@ -335,6 +335,7 @@ classes it's found.
 | 154 | `xbtxiii` | 雄霸天下III | `雄霸天下III.rar` | 40201 | native-boot verified, WASM pending |
 | 155 | `xkxlb` | 侠客行（老版/金庸群侠传） | `侠客行老版(金庸群侠传）.rar` | 40202 | native-boot verified, WASM pending |
 | 156 | `xyj42` | 西游记 4.2 | `西游记4.2.gz` | 40203 | native-boot verified, WASM pending |
+| 157 | `shujian3` | 书剑3 | `最新独立安卓客户端和书剑源码一键架站.zip` | 40200 | native-boot verified, WASM pending |
 | 901 | `dw_fluffos_v1` | Discworld MUD lib (v1) | `dw_fluffos_v1.tar.gz` | — | deprioritized |
 | 901-1 | `dw_fluffos_v2` | Discworld MUD lib (v2) | `dw_fluffos_v2.zip` | — | deprioritized |
 | 901-2 | `dw_fluffos_v3` | Discworld MUD lib (v3) | `dw_fluffos_v3.zip` | — | deprioritized |

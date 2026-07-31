@@ -1,0 +1,232 @@
+// Room: /d/shaolin/dmyuan2.c
+// Date: YZC 96/01/19
+// LinuX@SJ 04/03/01
+
+#include <job_mul.h>
+#include <ansi.h>
+
+inherit ROOM;
+
+void init()
+{
+	add_action("lingwu","lingwu");
+}
+
+void create()
+{
+	set("short", "达摩院后殿");
+	set("long", @LONG
+这是一座古朴的殿堂。西首的墙上挂满了各类武功图谱，不少白须白眉
+的老僧们正端坐在图谱画轴之前，似乎在苦苦思索。南北山墙是高及屋顶的
+大书架，走近细看，它们是各门各派的武功秘笈，屋正中摆着几张矮几诃和
+几个蒲团，几位老僧正在入定中。
+LONG
+);
+
+	set("no_fight", 1);
+	set("exits", ([
+		"south" : __DIR__"dmyuan",
+	]));
+	set("item_desc", ([
+		"【图谱】" : "各种武功图谱，这是少林历代高僧的呕心沥血完善所制。\n"
+		ZJOBACTS2"参悟:lingwu\n",
+	]));
+
+	setup();
+}
+
+string *valid_type = ({
+"force",	"parry",	"dodge",	"unarmed",	"claw",
+"cuff",		"finger",	"strike",	"hand",		"leg",
+"sword",	"blade",	"dagger",	"brush",	"spear",
+"hook",		"stick",	"staff",	"club",		"throwing",
+"whip",		"axe",		"hammer",
+});
+
+int lingwu(string arg)
+{
+	string special,str;
+	int cnt,bb,ss,i,j;
+	object me=this_player();
+	mapping skills = me->query_skills();
+	
+	if (!me->query("luohan_winner")) {
+		write("你的十八罗汉大阵还没过，不能在此领悟。\n");
+		return 1;
+	}
+	if (!arg)
+	{
+		str = ZJOBLONG"你要领悟什么：\n"+ZJOBACTS2+ZJMENUF(2,2,9,30);
+		for(i=0;i<sizeof(valid_type);i++)
+		{
+			str += to_chinese(valid_type[i])+":lingwu "+valid_type[i]+ZJSEP;
+		}
+		write(str+"\n");
+		return 1;
+	}
+	if (!me->query_skill(arg,1))
+	{
+		write("你不会这种技能。\n");
+		return 1;
+	}
+	if (me->is_busy() || me->is_fighting())
+	{
+		write("你正忙着呢。\n");
+		return 1;
+	}
+	if (arg == "force" && me->query_skill("force",1)<200) {
+		write("以你现在的基本内功修为，尚无法领悟基本内功。\n");
+		return 1;
+	}
+	if (me->query("potential") < 1) {
+		write("你从实战中得到的潜能已经用完了。\n");
+		return 1;
+	}
+	if (!(special=me->query_skill_mapped(arg))) {
+		write("你只能从特殊技能中领悟。\n");
+		return 1;
+	}
+
+	bb = me->query_skill(arg, 1);
+	i = me->query("int");
+	if( i < 5 ) i = 5;
+	i = bb/i*10;
+	if ((me->query("jing")<i) || ((me->query("jing")*100/me->query("max_jing"))< 50)) {
+		me->receive_damage("jing",bb/2);
+		write("你的精神不足，你没办法集中精神。\n");
+		return 1;
+	}
+	ss=me->query_skill(special,1);
+	if (bb>ss) {
+		write("你的"+to_chinese(special)+"造诣不够，无法领悟更深一层的"+to_chinese(arg)+"。\n");
+		return 1;
+	}
+
+	message_vision("$N开始对照自己的" + to_chinese(special) + "，潜心领悟" + to_chinese(arg) + "有关的武学问题。\n", me);
+	
+	cnt = me->query("potential");
+	if(cnt<1) cnt = 1;
+	me->set_temp("pending/lingwu", cnt);
+	me->set_temp("lingwu_cost", i);
+	me->set_temp("lingwu_type", arg);
+	tell_object(me,ZJEXIT"northwest:"RED"停止领悟"NOR":halt\n");
+	me->start_busy((: call_other, __FILE__, "start_lingwu" :),
+			(: call_other, __FILE__, "halt_lingwu" :));
+	return 1;
+}
+
+int start_lingwu(object me)
+{
+	int cnt, cost, temp, zstemp;
+	string skill;
+	
+	if( !me ) return 0;
+	if( !living(me) ) return 0;
+	
+	cost = me->query_temp("lingwu_cost");
+	if( cost < 20 ) cost = 20;
+	cnt = me->query_temp("pending/lingwu");
+	skill = me->query_temp("lingwu_type");
+	temp = me->query_skill("literate",1) + me->query_int() * 10;
+
+	//天赋“神童在世”影响效果   by lsxk@hsbbs 2008/3/14
+	if((int)me->query("relife/study/stzs",1) > 0)
+		zstemp = temp + temp * (int)me->query("relife/study/stzs",1) * 2 / 100;
+
+	if(me->query("jing")<cost || me->query("jing") * 100 / me->query("max_jing") < 50)
+	{
+		if (SKILL_D("force/regenerate")->exert(me, me))
+		{
+			if( (int)me->query("jing") < me->query("eff_jing"))
+			{
+				if(!random(3))
+					tell_object(me,"精力不足，等待恢复中。。。\n");
+				return 1;
+			}
+		}
+	}
+	me->receive_damage("jing", cost, "心血枯竭");
+	
+	if( !living(me) || !stringp(skill) ) return 0;
+	
+	if (me->query("registered") ==3 && me->query_temp("ggs/started") && me->query("ggs/started")){
+	    if((int)me->query("relife/study/stzs",1) > 0){
+		tell_object(me,HIG"你只觉得自己天赋惊人，领悟能力远比别人高出很多！"NOR"\n");
+		me->improve_skill(skill, zstemp);
+	    }
+	    else
+		me->improve_skill(skill, temp);
+	}
+	else{
+	    if((int)me->query("relife/study/stzs",1) > 0){
+		tell_object(me,HIG"你只觉得自己天赋惊人，领悟能力远比别人高出很多！"NOR"\n");
+		me->improve_skill(skill, zstemp/2);
+	    }
+	    else
+		me->improve_skill(skill, temp/2);
+	}
+	me->add("potential", -1);
+	if( me->query("potential") < 1 || cnt < 1 || me->query("jing") <= cost ){
+		write("你已经领悟到一段落了。\n");
+		message_vision("$N领悟完毕，站起身来。\n", me);
+		me->delete_temp("pending/lingwu");	     
+		me->delete_temp("lingwu_cost");
+		me->start_busy(1);
+		return 0;
+	}
+	
+	cnt--;
+	me->set_temp("pending/lingwu", cnt);
+	
+	switch(random(7)){
+		case 6:
+		case 3:
+			me->add("potential", -1);
+			if( me->query("potential") > 1 )
+				me->add("potential", -1);
+			if( !random(3) )
+				write("你瞑思苦想，对"+to_chinese(skill)+"的体会又深了一层。\n");
+			me->improve_skill(skill, me->query_skill("literate",1) + me->query_int() * 10 );
+			break;
+		case 5:
+		case 2:
+			me->add("potential", -1);
+			if( !random(3) )
+				write("你用手比划着，对"+to_chinese(skill)+"的理解又加深了一点。\n");
+			me->improve_skill(skill, me->query_skill("literate",1)/2 + me->query("int")*5 );
+			break;
+		case 4:
+		case 1:
+			if( !random(3) )
+				write("你绞尽脑汁，依然无法想通有关"+to_chinese(skill)+"的问题。\n");
+			me->improve_skill(skill, me->query_int() * 4);
+			break;
+		case 0:
+			if( !random(3) )
+				write("你想了半天，却根本无法理出个头绪来。\n");
+			me->improve_skill(skill, random(50));
+			break;
+	}
+	if (me->query("registered") ==3 && me->query_temp("ggs/started") && me->query("ggs/started") ){
+		if (!random(5) ) write("你参照自己在"HIG"鬼谷算术"NOR"上的修为，运神通数，觉得自己领悟起来事半功倍。\n");
+		if (!random(10)) tell_room(environment(me), me->name() + "正在参照"HIG"鬼谷算术"NOR"上的修为，运神通数，领悟有关" + to_chinese(skill) + "的问题。\n", ({ me }));
+	}
+	return 1;
+}
+
+int halt_lingwu(object me)
+{
+	if( !me ) return 1;
+	
+	if( environment(me) && me->query_temp("pending/lingwu") ) { 
+		tell_object(me,ZJEXITRM"northwest\n");
+		if( living(me) )
+			message_vision("$N眉头紧锁，看来是领悟不得要领，拍拍衣袖站了起来。\n", me);
+		me->receive_damage("jing", me->query("jing")/2, "心血枯竭");
+		me->delete_temp("pending/lingwu");	     
+		me->delete_temp("lingwu_cost");
+		me->start_busy(2+random(2));
+		return 1;
+	}
+	else return 0;
+}

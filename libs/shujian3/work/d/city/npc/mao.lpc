@@ -1,0 +1,179 @@
+// mao.c
+// Creator : Numa@Sj 00-5-28 12:02
+
+#include <ansi.h>
+inherit NPC;
+
+string do_give_book();
+string do_lingwu_dmd();
+int ask_5h();
+
+
+void create()
+{
+        set_name("茅十八", ({ "mao shiba", "mao" }));
+        set("gender", "男性");
+        set("age", 32);
+        set("long", "一个虬髯大汉，头上包了白布。\n");
+        set("attitude", "peaceful");
+        set("shen_type", 0);
+        set("str", 30);
+        set("int", 20);
+        set("con", 30);
+        set("dex", 26);
+        set("startroom", "/d/city/dongxiangfang");
+
+        set("max_qi", 1000);
+        set("max_jing", 1000);
+        set("neili", 1000);
+        set("max_neili", 1000);
+        set("combat_exp", 200000);
+        set("inquiry", ([
+                "name" : "我姓茅，茅草的茅，不是毛虫之虫，排行第十八。茅十八便是我了。",
+                "rumors" : "咱们都是大汉百姓，花花江山却给鞑子占了，总有一日，要把鞑子杀得干干净净！",
+                "五虎断门刀" : (: ask_5h :),
+                "秘籍" : (: do_give_book :),
+                "猛虎下山" : (: do_lingwu_dmd :),
+        ]));
+
+        set_skill("force", 100);
+        set_skill("huntian-qigong",100);
+        set_skill("dodge", 120);
+        set_skill("xiaoyaoyou",120);
+        set_skill("blade",120);
+        set_skill("wuhu-duanmendao",120);
+        set_skill("parry", 100);
+        set_skill("taizu-quan", 100);
+        set_skill("cuff",100);
+        map_skill("force", "huntian-qigong");
+        map_skill("dodge", "xiaoyaoyou");
+        map_skill("parry", "wuhu-duanmendao");
+        map_skill("blade", "wuhu-duanmendao");
+        map_skill("cuff", "taizu-quan");
+        prepare_skill("cuff", "taizu-quan");
+        setup();
+
+        carry_object(__DIR__"obj/cloth")->wear();
+        carry_object(__DIR__"obj/blade")->wield();
+}
+
+
+int ask_5h()
+{
+	object me=this_player();
+	object ob1;
+	int i, time;
+
+	i = me->query("combat_exp") - 10000;
+	i /= 10000;
+
+	time = time() - me->query("quest/5h/time");
+/*
+	if( me->query("class") =="bonze" 
+            || me->query("class") == "huanxi" 
+            || me->query("gender") == "无性" 
+            || me->query("age") > 20 
+            || me->query("shen")<0 ){
+		command("say "+RANK_D->query_respect(me)+"的身份年龄还是侠义没有达到要求，我没兴趣教你。");
+		return 1;
+	}
+*/
+
+	if (me->query("mao18/pass")) {
+		command("? " + me->query("id"));
+		command("say 我不是教过你了吗？");
+		return 1;
+	}
+	if (me->query("mao18/fail") >=3 && me->query("registered") < 3){
+		command("sigh"+ me->query("id"));
+		command("say 你已经错失太多机会，别再来问我了！");
+		return 1;
+	}
+	if ( me->query("quest/5h/time") && time < 86400 ) {
+		command("shake");
+		command("say 这位"+RANK_D->query_respect(me)+"，你不是刚刚来问过，怎么这么快又来了？");
+		return 1;
+	}
+
+	if ( me->query("mao18/fail") >= i ){
+		command("shake");
+		command("say 你武功进展太慢，我没法教你。");
+		return 1;
+	}
+
+	if ( me->query("combat_exp") < 10000) {
+		command("shake "+ me->query("id"));
+		command("say 你的武艺实在太糟糕了，我可没兴趣教你。");
+		return 1;
+	}
+	if ( me->query_skill("literate", 1) < 40 
+           || me->query_skill("force") < 40) {
+		command("shake "+ me->query("id"));
+		command("say 你的读书识字基础太差，恐怕学不会这门功夫。");
+		return 1;
+	}
+
+	if (me->query("kar") < 10){
+		command("hoho "+ me->query("id"));
+		command("say 你福泽不够深厚，"+RANK_D->query_respect(me)+"请回吧！");
+		me->set("quest/5h/time", time());
+		log_file("quest/wuhu",sprintf("%8s%-18s从茅十八处学得五虎断门刀，失败，福：%d。\n",
+			me->name(1), "("+capitalize(me->query("id"))+")", me->query("kar") ), me);
+		me->set("mao18/fail", 1);
+		return 1;
+	}
+
+
+	command("nod " + me->query("id"));
+	message_vision("茅十八对$N说道：“我这里有一本我派刀法的秘籍，你拿去自行好好钻研。只要你能\n"+
+			"勤学苦练，将来未始不能练成一身好武艺。”\n", me);
+	ob1 = new("/d/city/obj/whdmd-book");
+	ob1->move(me);
+	ob1->set_temp("mao18/book",me->query("id"));
+      me->set("mao18/pass",1);
+	log_file("quest/wuhu",sprintf("%8s%-18s从茅十八处学得五虎断门刀，福：%d。\n",
+		me->name(1), "("+capitalize(me->query("id"))+")", me->query("kar") ), me);
+	return 1;
+
+
+}
+
+
+string do_give_book()
+{
+        object me = this_player();
+        object book;
+
+        if (!me->query("mao18/pass"))
+                return "秘籍？什么秘籍？不知道。";
+        if (present("wuhuduanmendao miji",me))
+                return "耶？你身上不是有一本吗？";
+
+        book = unew("/d/city/obj/whdmd-book");
+        if (!book)
+                return "你来晚了，秘籍已经被人拿走了。";
+
+        book->move(me);
+        book->set_temp("mao18/book",me->query("id"));
+        message_vision("茅十八递给$N一本秘籍。\n", me, );
+        return "这本秘籍你拿去好好研读，将我们这门功夫好好发扬光大。";
+}
+
+string do_lingwu_dmd()
+{
+        object me = this_player();
+        int i;
+
+        if (!me->query("mao18/pass"))
+                return "五虎断门刀可是我的绝学，你想干什么？";
+        if (me->query("mao18/pass2"))
+                return "我的全部所学都已经教给你了呀！";
+        i = me->query_skill("wuhu-duanmendao",1);
+        if (i != 150)
+                return "我不去好好研读秘籍，跑到这里来干什么？";
+        me->set("mao18/pass2",1);
+        tell_object(me, CYN"茅十八对你说道：我们这门五虎断门刀绝学乃是一无名老者所创，其招式辛辣，堪称一代奇功。\n我现在就把这手「猛虎下山」传授与你。"NOR"\n");
+        tell_object(me, HIY"你听了茅十八的话，心中豁然开朗，五虎断门刀的造诣更深了一层！"NOR"\n");
+        tell_room(environment(me), "茅十八在"+me->name()+"耳边嘀嘀咕咕的说了些话。\n", ({me}));
+        return "你回去加紧修炼吧！";
+}

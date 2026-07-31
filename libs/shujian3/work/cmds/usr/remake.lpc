@@ -1,0 +1,207 @@
+// unset.c
+
+inherit F_CLEAN_UP;
+
+int help();
+
+string get_enchase(object obj)
+{
+	mapping oldee;
+	string *types,bstype,sn,str="";
+	int i;
+
+	types = ({
+		"伤害","盔甲","轻功","气血","身法","臂力","悟性","根骨",
+	});
+
+	str += "开孔数量："+obj->query("drill_num")+"孔。"ZJBR;
+	str += "一一一一一一一一一一一一一一一一一一一一一一"ZJBR;
+
+	if(!mapp(oldee=obj->query("old_ee")))
+	{
+		str += "没有镶嵌任何宝石。\n";
+		return str;
+	}
+
+	for(i=1;i<(obj->query("drill_num")+1);i++)
+	{
+		sn = sprintf("%d",i);
+		if(!mapp(oldee[sn]))
+		{
+			str += " Ｏ 孔"+sn+"：无镶嵌";
+			if(i<obj->query("drill_num")) str += ZJBR;
+			continue;
+		}
+		if(obj->query("skill_type")&&oldee[sn]["rlv"]==1)
+			bstype = types[0];
+		else if(obj->query("armor_type")&&oldee[sn]["rlv"]==1)
+			bstype = types[1];
+		else
+			bstype = types[oldee[sn]["rlv"]];
+		str += " Ｏ 孔"+sn+"："+oldee[sn]["name"]+"　"+bstype+"+"+oldee[sn]["num"];
+		if(i<obj->query("drill_num")) str += ZJBR;
+	}
+	return str;
+}
+
+int main(object me, string arg)
+{
+	object *inv,obj,dianjin,baoshi;
+	int i,k,n;
+	mapping oldee;
+	string *types,bstype,*sn,sss,item,str="";
+
+	if (!arg)
+	{
+		return notify_fail("你想要做什么？\n");
+	}
+
+	if (sscanf(arg, "%s for insert with %s", item,sss)==2)
+	{
+		if(!objectp(obj=present(item,me)))
+			return notify_fail("你要给什么装备镶嵌？\n");
+		if(!obj->query("owner") || obj->query("owner")!=getuid(me))
+			return notify_fail("只能给私有装备镶嵌！\n");
+		if(!objectp(baoshi=present(sss,me)))
+			return notify_fail("你要用什么宝石镶嵌？\n");
+		if(!obj->query("skill_type")&&!obj->query("armor_type")||obj->query_amount())
+			return notify_fail("你要给什么装备镶嵌？\n");
+		if(obj->query("equipped"))
+			return notify_fail("你还是先把装备取下来吧，不然给自己弄伤可不好！\n");
+		if(!sss->do_enchase(file_name(obj)))
+			return notify_fail("镶嵌失败了！！\n");
+	}
+	else if (sscanf(arg, "%s for combine", item)==1)
+	{
+		if(!objectp(obj=present(item,me)))
+			return notify_fail("你合成什么物品？\n");
+		if(!obj->do_combine())
+			return notify_fail("合成失败！\n"); 
+	}
+	else if (sscanf(arg, "%s for drill", item)==1)
+	{
+		if(!objectp(dianjin = present("dianjin arrow",me)))
+			return notify_fail("你身上没有点金之箭了，不能进行开孔操作！\n");
+		if(!objectp(obj=present(item,me)))
+			return notify_fail("你要给什么装备开孔？\n");
+		if(!obj->query("owner") || obj->query("owner")!=getuid(me))
+			return notify_fail("只能给私有装备开孔！\n");
+		if(!obj->query("skill_type")&&!obj->query("armor_type")||obj->query_amount())
+			return notify_fail("你要给什么装备开孔？\n");
+		if(obj->query("equipped"))
+			return notify_fail("你还是先把装备取下来再开孔吧，不然给自己弄伤可不好！\n");
+		if(obj->query("drill_num")>=6)
+			return notify_fail("开了6个空了还要开啊？别给装备搞成破烂儿了！\n");
+		if(!dianjin->do_use())
+			return notify_fail("开孔失败！\n"); 
+		obj->add("drill_num",1);
+	}
+	else if (sscanf(arg, "%s for remove %s", item,sss)==2)
+	{
+		if(!objectp(obj=present(item,me)))
+			return notify_fail("你取出什么装备上的宝石？\n");
+		if(!obj->query("owner") || obj->query("owner")!=getuid(me))
+			return notify_fail("这是人家私有的装备，别乱动！\n");
+		if(!mapp(oldee=obj->query("old_ee/"+sss)))
+			return notify_fail("你要拆什么？\n");
+		if(obj->query("equipped"))
+			return notify_fail("你还是先把装备取下来吧，不然给自己弄伤可不好！\n");
+		types = ({"damage","armor","dodge","qi","dexerity","strength","intelligence","constitution"});
+		if(obj->query("skill_type"))
+		{
+			if(oldee["rlv"]==1)
+				obj->add("weapon_prop/"+types[0],-oldee["num"]);
+			else
+				obj->add("weapon_prop/"+types[oldee["rlv"]],-oldee["num"]);
+		}
+		else if(obj->query("armor_type"))
+		{
+			if(oldee["rlv"]==1)
+				obj->add("armor_prop/"+types[1],-oldee["num"]);
+			else
+				obj->add("armor_prop/"+types[oldee["rlv"]],-oldee["num"]);
+		}
+		obj->delete("old_ee/"+sss);
+		baoshi = new("/quest/obj/baoshi");
+		baoshi->changename(oldee["lv"],oldee["rlv"]);
+		baoshi->move(me,1);
+		write(baoshi->query("name")+"摘除成功。。。\n");
+		log_file("baoshi/remake", sprintf(me->query("id")+"给%s摘除%s成功。\n",obj->query("name"),baoshi->query("name")));
+	}
+	else if (sscanf(arg, "%s for remove", item)==1)
+	{
+		if(!objectp(obj=present(item,me)))
+			return notify_fail("你取出什么装备上的宝石？\n");
+		if(!obj->query("owner") || obj->query("owner")!=getuid(me))
+			return notify_fail("这是人家的私有装备，别乱动！\n");
+		if(!mapp(oldee=obj->query("old_ee"))||sizeof(sn=keys(oldee))<1)
+			return notify_fail("你这装备上没有镶嵌宝石！\n");
+		if(obj->query("equipped"))
+			return notify_fail("你还是先把装备取下来吧，不然给自己弄伤可不好！\n");
+		types = ({"伤害","盔甲","轻功","气血","身法","臂力","悟性","根骨"});
+		str += ZJOBLONG"你想取下哪颗宝石？\n"ZJOBACTS2+ZJMENUF(2,2,9,30);
+		for(n=0;n<sizeof(sn);n++)
+		{
+			if(obj->query("skill_type")&&oldee[sn[n]]["rlv"]==1)
+				bstype = types[0];
+			else if(obj->query("armor_type")&&oldee[sn[n]]["rlv"]==1)
+				bstype = types[1];
+			else
+				bstype = types[oldee[sn[n]]["rlv"]];
+
+			str += oldee[sn[n]]["name"]+ZJBR+bstype+"+"+oldee[sn[n]]["num"]+":remake "+item+" for remove "+sn[n]+ZJSEP;
+		}
+		write(str+"\n");
+	}
+	else if (sscanf(arg, "%s for insert", item)==1)
+	{
+		if(!objectp(obj=present(item,me)))
+			return notify_fail("你要给什么装备镶嵌？\n");
+		if(!obj->query("owner") || obj->query("owner")!=getuid(me))
+			return notify_fail("只能给私有装备操作！\n");
+
+		if(!obj->query("skill_type")&&!obj->query("armor_type")||obj->query_amount())
+			return notify_fail("你要给什么装备镶嵌？\n");
+		if(obj->query("equipped"))
+			return notify_fail("你还是先把装备取下来吧，不然给自己弄伤可不好！\n");
+
+		str += ZJOBLONG+"请选择宝石进行镶嵌：";
+		str += ZJBR"一一一一一一一一一一一一一一一一一一一一一一\n"ZJOBACTS2+ZJMENUF(3,3,9,30);
+		inv = all_inventory(me);
+		for(i=0;i<sizeof(inv);i++)
+		{
+			if(inv[i]->is_baoshi())
+			{
+				str += inv[i]->query("name")+":remake "+item+" for insert with "+file_name(inv[i])+ZJSEP;
+				k = 1;
+			}
+		}
+		if(!k)
+			str = ZJOBLONG"你身上没有宝石，无法进行镶嵌！";
+		write(str+"\n");
+	}
+	else
+	{
+		if(!objectp(obj=present(arg,me)))
+			return notify_fail("你要重铸什么装备？\n");
+
+		if(!obj->query("owner") || obj->query("owner")!=getuid(me))
+			return notify_fail("只能给私有装备操作！\n");
+
+		if((obj->query("skill_type")||obj->query("armor_type"))&&!obj->query_amount())
+		{
+			str += ZJOBLONG+obj->short();
+			str += ZJBR"一一一一一一一一一一一一一一一一一一一一一一"ZJBR;
+			str += "开孔镶嵌状态："ZJBR+get_enchase(obj);
+			str += "\n"ZJOBACTS2+ZJMENUF(4,4,9,30)+"开孔:remake "+arg+" for drill"ZJSEP"镶嵌:remake "+arg+" for insert"ZJSEP"拆宝石:remake "+arg+" for remove\n";
+			write(str);
+		}
+		else
+			return notify_fail("你想要做什么？\n");
+	}
+	if(obj->query("armor_mp"))
+		obj->save_armor(me);
+	else if(obj->query("weapon_mp"))
+		obj->save_weapon(me);
+	return 1;
+}

@@ -1,0 +1,199 @@
+#include <ansi.h>
+#include <job_mul.h>
+inherit NPC;
+string ask_job();
+string ask_finish();
+void create()
+{
+        set_name("苦头陀",({"ku toutuo", "ku"}));
+        set("long", "一个长发披肩的头陀，身材魁伟，满面横七竖八的都是刀疤，本来相貌已全不可辨。\n");
+        set("age", 56);
+        set("attitude", "peaceful");
+        set("shen", -10000);
+        set("str", 26);
+        set("per", 28);
+        set("int", 29);
+        set("con", 27);
+        set("dex", 30);
+        set("max_qi", 3500);
+        set("max_jing", 2200);
+        set("eff_jingli", 2500);
+        set("jiali", 80);
+        set("combat_exp", 1500000);
+        set("unique", 1);
+
+        set_skill("sword",170);
+        set_skill("dodge",170);
+        set_skill("force", 170);
+        set_skill("blade",170);
+        set_skill("literate",150);
+        set_skill("hand",170);
+        set_skill("strike",170);
+        set_skill("hanbing-mianzhang",170);
+        set_skill("yingzhua-shou",170);
+        set_skill("piaoyi-shenfa", 170);
+        set_skill("shenghuo-shengong", 170);
+        set_skill("lieyan-dao",170);
+        set_skill("liehuo-jian",170);
+        set_skill("parry", 170);
+
+        map_skill("force", "shenghuo-shengong");
+        map_skill("dodge", "piaoyi-shenfa");
+        map_skill("sword", "liehuo-jian");
+        map_skill("parry", "liehuo-jian");
+        map_skill("blade", "lieyan-dao");
+        map_skill("hand", "yingzhua-shou");
+        map_skill("strike", "hanbing-mianzhang");
+        prepare_skill("strike", "hanbing-mianzhang");
+        prepare_skill("hand","yingzhua-shou");
+
+        set("inquiry", ([
+                 "营救" : (: ask_job :),
+                // "脱险" : (: ask_finish :),
+        ]));
+        setup();
+        carry_object(BINGQI_D("blade"))->wield();
+        carry_object("/d/mingjiao/obj/white-cloth")->wear();
+}
+
+int check_ip(object *team)
+{
+        int i, j;
+        for (i = 0;i < sizeof(team);i ++)
+                for (j = i + 1;j < sizeof(team);j ++)
+                        if (team[i] && query_ip_number(team[i]) == query_ip_number(team[j]))
+                                return 0;
+        return 1;
+}
+
+string ask_job()
+{
+        object me = this_player(), *team = me->query_team();
+        object fb_room = 0;
+        int i, max, min, total = 0;
+        string room;
+        object ob_list = filter_array(children(USER_OB), (: clonep($1) && !wizardp($1) :));
+        int times;
+        mixed *local,*last;
+
+        if (me->query_condition("killer"))
+                return ("这里不欢迎杀人狂魔，请回吧！"NOR"\n");
+        if (me->query_temp("day_jobs/was_job/was_job_ok"))
+                return "你的奖励都不要了？\n";
+                
+        last = localtime(me->query("day_jobs/was_job/times"));
+        times = me->query("day_jobs/was_job/mun");
+
+        if(last[7]!=localtime(time())[7])
+                me->set("day_jobs/was_job/mun",0);
+        else if(last[7]==localtime(time())[7]&&times>=2)
+        {
+                return (me->query("name")+"今日已经任务已经完成两次了，明天再来吧。"NOR"\n");
+        }
+        if (sizeof(team)>0) {
+                if (sizeof(team) < 2)
+                        return "救人之事十分危险，仅凭一人之力恐怕不能胜任。\n";
+                if (sizeof(team) > 5)
+                        return "万安寺内防守极其严密，人数太多更容易暴露。\n";
+                if (team[0] != me) 
+                        return "只有队伍的首领才可以带队救人。\n";
+                if (!check_ip(team))
+                        return "你的队伍有问题，无法给你任务。\n";
+                        
+                max = min = me->query("combat_exp");
+                for (i = 0;i < sizeof(team);i ++)
+                {
+                        if (!team[i])
+                                return "你的队伍出现了问题，请解散并重新组建。";
+                        if (!present(team[i]))
+                                return "怎么好象人不全啊？" + team[i]->query("name") + "怎么没来？\n";
+                      //  if (team[i]->query("combat_exp") < 1000000)
+                           //     return "救人之事十分危险，" + team[i]->query("name") + "恐怕不能胜任。\n";
+                        if (team[i]->query_condition("was_job"))
+                                return "你队伍中的" + team[i]->query("name") + "已经十分辛苦，换其他人吧。\n";
+                        if (team[i]->query_condition("killer"))
+                                return ("这里不欢迎杀人狂魔，"+team[i]->query("name")+"请回吧！"NOR"\n");
+                        if (team[i]->query_temp("day_jobs/was_job/was_job_ok"))
+                                return team[i]->query("name")+"的奖励都不要了？\n";
+                        if (me == team[i])
+                                continue;
+                        last = localtime(team[i]->query("day_jobs/was_job/times"));
+                        times = team[i]->query("day_jobs/was_job/mun");
+
+                        if(last[7]!=localtime(time())[7]) 
+                                team[i]->set("day_jobs/was_job/mun",0);
+                        
+                        else if(last[7]==localtime(time())[7]&&times>=2)
+                        {
+                                return (team[i]->query("name")+"今日已经任务已经完成两次了，明天再来吧。"NOR"\n");
+                        }
+                        if (!interactive(team[i]))
+                                return "你还是将" + team[i]->query("name") + "换成其他人吧。\n";
+                        
+                        total += team[i]->query("combat_exp");
+                        if (team[i]->query("combat_exp") > max)
+                                max = team[i]->query("combat_exp"); 
+                        if (team[i]->query("combat_exp") < min)
+                                min = team[i]->query("combat_exp");
+                }
+               // if ((total < 1000000)) 
+                   //     return "救人之事十分危险，恐怕你们不能胜任。\n";
+                if (min / (max / 100) < 80)
+                        return "救人之事十分危险，你们的差距太大了。\n";
+                
+                command("say 寺内十分危险，务必小心！");
+                
+                fb_room = new("/adm/daemons/wasroom.lpc");
+                fb_room->init(me);
+                
+                for (i = 0;i < sizeof(team);i ++)
+                {
+                        team[i]->delete_temp("day_jobs/was_job");
+                        team[i]->set_temp("day_jobs/was_job/asked", 1);
+                        team[i]->set_temp("day_jobs/was_job/num", sizeof(team));
+                        team[i]->apply_condition("job_busy", 20);
+                        team[i]->apply_condition("was_job", 200);
+                        team[i]->set("day_jobs/was_job/times",time());
+                        team[i]->add("day_jobs/was_job/mun", 1);
+                        team[i]->set("job_name", "万安寺营救");
+                        team[i]->add("job_time/万安寺副本",1); 
+                        
+                        if (team[i] != me)
+                                team[i]->move(file_name(environment(me)));
+                        
+                        team[i]->set("day_jobs/was_job/times",time());
+                        team[i]->add("day_jobs/was_job/mun", 1);
+                        log_file("fuben/was", sprintf("%s %s(%s)%d次万安寺营救任务当前经验%d，潜能%d。\n",
+                                ctime(time())[4..19],team[i]->name(1),team[i]->query("id"),(int)team[i]->query("job_time/万安寺副本")+1,team[i]->query("combat_exp"),team[i]->query("potential")));
+                        tell_object(team[i], HIR"你来到宝塔前，发现宝塔已经起火，救人迫在眉睫！"NOR"\n");
+                }
+                CHANNEL_D->do_channel( this_object(), "rumor",sprintf("%s带领一只队伍进入了万安寺，希望营救顺利！", me->name(1)));
+        } else {
+                min = me->query("combat_exp");
+               // if ((min < 1000000))
+                 //       return "救人之事十分危险，恐怕你不能胜任。\n";
+               // if (me->query("day_jobs/was_job/time") > time())
+                       // return "你还是好好休息休息，一会再进去吧。\n";
+                command("say 寺内十分危险，务必小心！");
+
+                if (me) {
+                        me->delete_temp("day_jobs/was_job");
+                        me->set_temp("day_jobs/was_job/asked", 1);
+                        me->set_temp("day_jobs/was_job/num", 1);
+                        me->apply_condition("job_busy", 20);
+                        me->apply_condition("was_job", 200);
+                        me->set("job_name", "万安寺营救");
+                        me->add("job_time/万安寺副本",1);
+                        fb_room = new("/adm/daemons/wasroom.lpc");
+                        fb_room->init(me);
+                        me->set("day_jobs/was_job/times",time());
+                        me->add("day_jobs/was_job/mun", 1);
+                        log_file("fuben/was", sprintf("%s %s(%s)%d次万安寺营救任务当前经验%d，潜能%d。\n",
+                                ctime(time())[4..19],me->name(1),me->query("id"),(int)me->query("job_time/万安寺副本")+1,me->query("combat_exp"),me->query("potential")));
+                        tell_object(me, HIR"你来到宝塔前，发现宝塔已经起火，救人迫在眉睫！"NOR"\n");
+                }
+                CHANNEL_D->do_channel( this_object(), "rumor",sprintf("%s独自闯入万安寺，希望营救顺利！", me->name(1)));
+        } 
+        
+        return "希望此行一切顺利。\n";
+}

@@ -1,0 +1,155 @@
+// yanshang2.c 盐商头子
+//Yanqi 08/11/2k
+//提升到160k可以做@yeju
+
+#include <ansi.h>
+inherit NPC;
+int ask_job();
+int ask_job2();
+
+void create()
+{
+        set_name("盐商", ({ "yanshang touzi", "touzi", "yanshang" }));
+        set("gender", "男性");
+        set("age", 32+random(20));
+        set("long", "他是这里盐商的头子，表面上中规中矩，但是背地里干着贩运私盐的勾当。\n");
+        set("combat_exp", 3000);        
+        set("shen_type", 1);
+        set("attitude", "peaceful");
+        
+        set_skill("unarmed", 30);
+        set_skill("dodge", 20);
+        set_temp("apply/attack", 25);
+        set_temp("apply/defense", 25);
+        set("inquiry", ([
+                "任务": (: ask_job :),
+                "海滩": (: ask_job2 :)
+        ]));
+        set("chat_chance", 3);
+        set("chat_msg", ({
+                "盐商不停地嘟囔道：朝廷如此没落，叫我等百姓如何生存？\n",
+        }) );
+        carry_object("/clone/misc/cloth")->wear();
+        add_money("silver", 10);
+        setup();        
+}
+
+void init()
+{
+        object me;
+        ::init();
+        if( interactive(me = this_player()) && !is_fighting())
+        {
+                remove_call_out("greeting");
+                call_out("greeting", 1, me);
+        }
+}
+
+int ask_job()
+{
+        object me;
+        int exp1;
+        
+        me=this_player();
+
+        exp1=me->query("combat_exp");
+    
+        if( exp1 < 10000 || exp1 > 400000 )
+        {
+                command("say 让您老干这个未免屈尊了吧？");
+                return 1;
+        }
+/*        
+        if (me->query_condition("job_busy")) 
+        {
+                command("say 你正忙着做别的任务呢？过一会再来向我要任务吧，你也可以输入cond命令查看自己的任务状态。");
+                return 1;
+        }
+*/                
+        me->delete_temp("newbiejob2");       
+        me->apply_condition("job_busy",5 + random(5));
+        me->set_temp("newbiejob2/start",1);
+        
+        command("whisper "+me->query("id")+" 你速去泰山脚下的海滩那里等候我的船来。");
+
+        return 1;
+}
+
+void greeting(object ob)
+{
+       if( !ob || environment(ob) != environment() ) return;
+       if(ob->query_temp("newbiejob2/start")
+        && ob->query_temp("newbiejob2/over")
+        && ob->query_temp("newbiejob2/middle"))
+       { 
+           command("nod " +ob->query("id"));
+           command("whisper "+ob->query("id")+" 你辛苦了，可以跟我覆命（give yanshang yan）了! ");
+write(ZJURL("cmds:give yanshang yan")+ZJSIZE(20)+"覆命"NOR"\n");
+           return;
+       }
+}
+
+
+int ask_job2()
+{
+        object me;
+        
+        me=this_player();
+
+        if (!(me->query_temp("newbiejob2/start")))
+                return notify_fail("你又没有在我这里接任务，我送你去海滩干什么？\n");
+                    
+        command("whisper "+me->query("id")+" 我这就送你过去，你可要小心！");
+	me->move("/d/taishan/haitan");
+        return 1;
+}
+
+
+int accept_object(object me, object yan)
+{
+        int pot,exp;
+        
+        if (!(me->query_temp("newbiejob2/start")))
+                return notify_fail("你没有在我这里要任务呀？\n");
+                
+        if (!(me->query_temp("newbiejob2/middle")))
+                return notify_fail("你怎么还没有去海滩？\n");
+
+        if ( yan->query("id") != "yan ba") 
+                return notify_fail("你给我这个干吗啊？");
+
+        if (me->query_temp("newbiejob2/over"))
+        {       
+                pot =100 + random(me->query_skill("force",1));
+        if (me->query_condition("db_exp")) {
+                pot=pot*2;
+                tell_object(me,HIG"由于你是双倍经验状态，奖励翻倍。"NOR"\n");
+                }
+                exp = pot*2+random(me->query("age",1));
+                me->add("job_time/盐枭",1);
+                me->add("potential",pot);
+                me->add("combat_exp",exp);
+                if(me->query("potential") > me->query("max_pot")*50)
+                        me->set("potential", me->query("max_pot")*50);
+                me->delete_temp("newbiejob2");
+                call_out("destroying", 1, yan);
+                tell_object(me,HIW"你被奖励了："+chinese_number(exp)+"点经验和"+chinese_number(pot)+"点潜能。"NOR"\n");
+                return 1;
+        }
+        else
+        {
+                message_vision("来人呀！快把"+me->query("name")+"给我痛打一顿！也不打听打听大爷我的名号。\n",me);
+                message_vision("只见两个身穿黑衣的大汉走了过来，一顿拳脚打的$N昏了过去！"NOR"\n",me);
+                me->delete_temp("newbiejob2");
+                me->apply_condition("job_busy", 2);
+                call_out("destroying", 1, yan);
+                me->unconcious();
+                return 1;
+        }
+}
+
+void destroying(object yan)
+{
+        if(!yan) return;
+        destruct(yan);
+}
