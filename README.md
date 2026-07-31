@@ -169,7 +169,7 @@ classes it's found.
 | 013 | `xiakexing2017` | 侠客行 (MUD侠客行2017完整版) | `MUD侠客行2017完整版.zip` | 40017 | WASM playable |
 | 014 | `nitan170911` | 仙剑奇侠传 (nitan170911) | `nitan170911.7z` | 40018 | WASM limited |
 | 014-1 | `hhsj` | 洪荒世界 | `洪荒世界.rar` | 40106 | native-boot verified, WASM pending |
-| 014-2 | `xfbhh` | 洪荒世界（修复版） | `修复版洪荒.rar` | 40190 | native-boot verified, WASM pending |
+| 014-2 | `xfbhh` | 洪荒世界（修复版） | `修复版洪荒.rar` | 40190 | WASM playable |
 | 015 | `nitan6` | 笑傲江湖 (nitan6) | `nitan6.zip` | 40019 | WASM limited |
 | 016 | `rzrmud` | 大唐西游 YWX人造人 (rzrmud) | `rzrmud.20130220.tar.gz` | 40020 | WASM playable |
 | 017 | `xkx2001` | 侠客行 Ⅰ (The Quest of Oriental Chivalry) | `xkx2001测试用老lib.zip` | 40021 | WASM playable |
