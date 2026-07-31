@@ -4,11 +4,8 @@
 #include "tomud.h"
 //#pragma save_binary
 #ifndef __SENSIBLE_MODIFIERS__
-#define nosave nosave
-#define protected nosave
 #else
 #define private protected
-#define nosave nosave
 #endif
 // Important directories
 #define BACKUP_DIR      "/backup/"
