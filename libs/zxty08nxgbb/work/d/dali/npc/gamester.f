@@ -5,10 +5,10 @@ void pay_him(object who, int amount);
 void clear_stat();
 void create()
 {
-        set_name( "À×¾ÅÖ¸", ({ "lei jiuzhi","lei" }) );
-        set("long", "ÕâÊÇÕâÀïµÄÖ°Òµ¶ÄÊÖ£¬÷»×ÓÉÏµÄ¹¦·ò³öÉñÈë»¯¡£\n");
+        set_name( "é›·ä¹æŒ‡", ({ "lei jiuzhi","lei" }) );
+        set("long", "è¿™æ˜¯è¿™é‡Œçš„èŒä¸šèµŒæ‰‹ï¼Œéª°å­ä¸Šçš„åŠŸå¤«å‡ºç¥å…¥åŒ–ã€‚\n");
         set("attitude", "friendly");
-        set("title", HIW "´óÇ§ÊÖ" NOR);
+        set("title", HIW "å¤§åƒæ‰‹" NOR);
         set("jiali", 30);
         set("max_jing", 3000);
         set("max_qi", 3000);
@@ -18,7 +18,7 @@ void create()
         set("meili", 3000);
         set("age", 33);
         set_temp("apply/damage",600);
-        set("gender", "ÄĞĞÔ" );
+        set("gender", "ç”·æ€§" );
         set("str", 35);
         set("con", 30);
         set("cps", 25);
@@ -59,16 +59,16 @@ void greeting(object ob)
         if( !ob || environment(ob) != environment() ) return;
         switch( random(10) ) {
                 case 0:
-                        say( "À×¾ÅÖ¸Ğ¦ßäßäµØËµµÀ£ºÕâÎ»" + RANK_D->query_respect(ob)
-                                + "£¬¹ıÀ´¶ÄÁ½ÊÖ£¬¿ª¿ªĞÄ°É¡£\n");
+                        say( "é›·ä¹æŒ‡ç¬‘å’ªå’ªåœ°è¯´é“ï¼šè¿™ä½" + RANK_D->query_respect(ob)
+                                + "ï¼Œè¿‡æ¥èµŒä¸¤æ‰‹ï¼Œå¼€å¼€å¿ƒå§ã€‚\n");
                         break;
                 case 1:
-                        say( "À×¾ÅÖ¸»ÎÁË»ÎÊÖÖĞµÄ÷»×Ó£¬½ĞµÀ£ºÕâÎ»" + RANK_D->query_respect(ob)
-                                + "£¬Ğ¡¶Ä¿ÉÒÔÑø¼Òºı¿Ú£¬´ó¶Ä¿ÉÒÔ¶¨¹ú°²°î¡£À´°É£¡\n");
+                        say( "é›·ä¹æŒ‡æ™ƒäº†æ™ƒæ‰‹ä¸­çš„éª°å­ï¼Œå«é“ï¼šè¿™ä½" + RANK_D->query_respect(ob)
+                                + "ï¼Œå°èµŒå¯ä»¥å…»å®¶ç³Šå£ï¼Œå¤§èµŒå¯ä»¥å®šå›½å®‰é‚¦ã€‚æ¥å§ï¼\n");
                         break;
                 case 2:
-                        say( "À×¾ÅÖ¸ËµµÀ£ºÕâÎ»" + RANK_D->query_respect(ob)
-                                + "£¬½øÀ´£¡½øÀ´£¡ ÊäÁËËãÎÒµÄ£¡\n");
+                        say( "é›·ä¹æŒ‡è¯´é“ï¼šè¿™ä½" + RANK_D->query_respect(ob)
+                                + "ï¼Œè¿›æ¥ï¼è¿›æ¥ï¼ è¾“äº†ç®—æˆ‘çš„ï¼\n");
                         break;
         }
         return;
@@ -76,46 +76,46 @@ void greeting(object ob)
  
 string *dice = ({
 HIW"
-         ©³©¥©¥©¥©·
-         ©§      ©§
-         ©§  "+HIR+"¡Ñ"+HIW+"  ©§
-         ©§      ©§
-         ©»©¥©¥©¥©¿
+         â”â”â”â”â”“
+         â”ƒ      â”ƒ
+         â”ƒ  "+HIR+"âŠ™"+HIW+"  â”ƒ
+         â”ƒ      â”ƒ
+         â”—â”â”â”â”›
 "NOR,
 HIW"
-         ©³©¥©¥©¥©·
-         ©§"+HIY+"¡Ñ"+HIW+"    ©§
-         ©§      ©§
-         ©§    "+HIY+"¡Ñ"+HIW+"©§
-         ©»©¥©¥©¥©¿
+         â”â”â”â”â”“
+         â”ƒ"+HIY+"âŠ™"+HIW+"    â”ƒ
+         â”ƒ      â”ƒ
+         â”ƒ    "+HIY+"âŠ™"+HIW+"â”ƒ
+         â”—â”â”â”â”›
 "NOR,
 HIW"
-         ©³©¥©¥©¥©·
-         ©§"+HIY+"¡Ñ"+HIW+"    ©§
-         ©§  "+HIY+"¡Ñ"+HIW+"  ©§
-         ©§    "+HIY+"¡Ñ"+HIW+"©§
-         ©»©¥©¥©¥©¿
+         â”â”â”â”â”“
+         â”ƒ"+HIY+"âŠ™"+HIW+"    â”ƒ
+         â”ƒ  "+HIY+"âŠ™"+HIW+"  â”ƒ
+         â”ƒ    "+HIY+"âŠ™"+HIW+"â”ƒ
+         â”—â”â”â”â”›
 "NOR,
 HIW"
-         ©³©¥©¥©¥©·
-         ©§"+HIR+"¡Ñ"+HIW+"  "+HIR+"¡Ñ"+HIW+"©§
-         ©§      ©§
-         ©§"+HIR+"¡Ñ"+HIW+"  "+HIR+"¡Ñ"+HIW+"©§
-         ©»©¥©¥©¥©¿
+         â”â”â”â”â”“
+         â”ƒ"+HIR+"âŠ™"+HIW+"  "+HIR+"âŠ™"+HIW+"â”ƒ
+         â”ƒ      â”ƒ
+         â”ƒ"+HIR+"âŠ™"+HIW+"  "+HIR+"âŠ™"+HIW+"â”ƒ
+         â”—â”â”â”â”›
 "NOR,
 HIW"
-         ©³©¥©¥©¥©·
-         ©§"+HIY+"¡Ñ"+HIW+"  "+HIY+"¡Ñ"+HIW+"©§
-         ©§  "+HIY+"¡Ñ"+HIW+"  ©§
-         ©§"+HIY+"¡Ñ"+HIW+"  "+HIY+"¡Ñ"+HIW+"©§
-         ©»©¥©¥©¥©¿
+         â”â”â”â”â”“
+         â”ƒ"+HIY+"âŠ™"+HIW+"  "+HIY+"âŠ™"+HIW+"â”ƒ
+         â”ƒ  "+HIY+"âŠ™"+HIW+"  â”ƒ
+         â”ƒ"+HIY+"âŠ™"+HIW+"  "+HIY+"âŠ™"+HIW+"â”ƒ
+         â”—â”â”â”â”›
 "NOR,
 HIW"
-         ©³©¥©¥©¥©·
-         ©§"+HIY+"¡Ñ"+HIW+"  "+HIY+"¡Ñ"+HIW+"©§
-         ©§"+HIY+"¡Ñ"+HIW+"  "+HIY+"¡Ñ"+HIW+"©§
-         ©§"+HIY+"¡Ñ"+HIW+"  "+HIY+"¡Ñ"+HIW+"©§
-         ©»©¥©¥©¥©¿
+         â”â”â”â”â”“
+         â”ƒ"+HIY+"âŠ™"+HIW+"  "+HIY+"âŠ™"+HIW+"â”ƒ
+         â”ƒ"+HIY+"âŠ™"+HIW+"  "+HIY+"âŠ™"+HIW+"â”ƒ
+         â”ƒ"+HIY+"âŠ™"+HIW+"  "+HIY+"âŠ™"+HIW+"â”ƒ
+         â”—â”â”â”â”›
 "NOR});
 
 
@@ -127,23 +127,23 @@ int do_bet(string arg)
         object me, money_ob;
         string message,money;
         if(!arg || !sscanf(arg, "%d %d %s",bet_type,amount,money))
-                return notify_fail("bet <ÖÖÀà> <ÊıÁ¿> <»õ±ÒÃû³Æ>\n");
+                return notify_fail("bet <ç§ç±»> <æ•°é‡> <è´§å¸åç§°>\n");
         if(bet_type>18 || bet_type < 0)
-                return notify_fail("ÖÖÀàÖ»¿É´ÓÁãµ½Ê®°Ë\n");
+                return notify_fail("ç§ç±»åªå¯ä»é›¶åˆ°åå…«\n");
         me = this_player();
         if(me->is_busy())
-                return notify_fail("ÄãÉÏ¸ö¶¯×÷»¹Ã»Íê³É¡£\n");
+                return notify_fail("ä½ ä¸Šä¸ªåŠ¨ä½œè¿˜æ²¡å®Œæˆã€‚\n");
                 money_ob = present(money + "_money", me);
-        if(!money_ob) return notify_fail("ÄãÉíÉÏÃ»ÓĞÕâÖÖÇ®¡£\n");
-                if (amount<0)   return notify_fail("ÄãÖÁÉÙÒªÏÂÒ»¸ö×Ó¡£\n");
+        if(!money_ob) return notify_fail("ä½ èº«ä¸Šæ²¡æœ‰è¿™ç§é’±ã€‚\n");
+                if (amount<0)   return notify_fail("ä½ è‡³å°‘è¦ä¸‹ä¸€ä¸ªå­ã€‚\n");
         if((int) money_ob->query_amount() < amount)
-                return notify_fail("ÄãÉíÉÏÃ»ÓĞÄÇ÷á¶à"+money_ob->query("name")+"¡£\n"); 
+                return notify_fail("ä½ èº«ä¸Šæ²¡æœ‰é‚£éº½å¤š"+money_ob->query("name")+"ã€‚\n"); 
         if((int) this_object()->query("too_late") )
-                return notify_fail("ÕâÆÌÀ´²»¼°ÁË£¬µÈÏÂÊÖ°É£®\n");
+                return notify_fail("è¿™é“ºæ¥ä¸åŠäº†ï¼Œç­‰ä¸‹æ‰‹å§ï¼\n");
                 bet_amt=amount * money_ob->query("base_value");
                 if (me->query_temp("gamble/amount")+bet_amt<0
                 || me->query_temp("gamble/amount")+bet_amt>1000000000)
-                        return notify_fail("Ñ¹ÕâÃ´¶àÇ®£¬Ğ¡µÄÅÂÅâ²»Æğ¡£\n");
+                        return notify_fail("å‹è¿™ä¹ˆå¤šé’±ï¼Œå°çš„æ€•èµ”ä¸èµ·ã€‚\n");
                 money=money_ob->query("base_unit")+money_ob->query("name");
                 i=money_ob->value()-bet_amt;
                 destruct(money_ob);
@@ -151,19 +151,19 @@ int do_bet(string arg)
                         pay_him(me,i);
                 else
                 if (i<0)
-                        say(BOLD "²ÆÉñ´Ó×À×Óµ×ÏÂÉìÁËÖ»ÊÖ³öÀ´£º"+me->name(1)+"£¬ÄãÉíÉÏµÄÇ®Ì«¶àÁË£¬»¹ÊÇÎÒ°ïÄã±£¹Ü°É¡£\n" NOR);
+                        say(BOLD "è´¢ç¥ä»æ¡Œå­åº•ä¸‹ä¼¸äº†åªæ‰‹å‡ºæ¥ï¼š"+me->name(1)+"ï¼Œä½ èº«ä¸Šçš„é’±å¤ªå¤šäº†ï¼Œè¿˜æ˜¯æˆ‘å¸®ä½ ä¿ç®¡å§ã€‚\n" NOR);
         if((int) me->query_temp("gamble/amount")) { 
                 if(bet_type != (int) me->query_temp("gamble/type"))
-                        return notify_fail("Äã²»¿ÉÔÚÒ»ÆÌÖĞÏÂ²»Í¬µÄ×¢£®\n");
+                        return notify_fail("ä½ ä¸å¯åœ¨ä¸€é“ºä¸­ä¸‹ä¸åŒçš„æ³¨ï¼\n");
                 if(bet_type == 0)
-                        message = sprintf(RED"Ğ¡"NOR);
+                        message = sprintf(RED"å°"NOR);
                 if(bet_type == 1)
-                        message = sprintf(RED"´ó"NOR);
+                        message = sprintf(RED"å¤§"NOR);
                 if(bet_type == 2)
-                        message = sprintf(RED"Î§÷»"NOR);
+                        message = sprintf(RED"å›´éª°"NOR);
                 if(bet_type >=3)
                         message = sprintf(RED"%s"NOR,chinese_number(bet_type));
-                    message_vision(sprintf("$NÓÖ´ÓÉíÉÏÄÃ³ö%s%s£¬¼ÓÑ¹ÔÚ%sÉÏ£®\n",
+                    message_vision(sprintf("$Nåˆä»èº«ä¸Šæ‹¿å‡º%s%sï¼ŒåŠ å‹åœ¨%sä¸Šï¼\n",
                                 chinese_number(amount), money,message), me);
                 bet_amt += (int) me->query_temp("gamble/amount");
             me->set_temp("gamble/amount",bet_amt);
@@ -171,14 +171,14 @@ int do_bet(string arg)
         else
         {
                 if(bet_type == 0)       
-                        message = sprintf(RED"Ğ¡"NOR);
+                        message = sprintf(RED"å°"NOR);
                 if(bet_type == 1)
-                        message = sprintf(RED"´ó"NOR);
+                        message = sprintf(RED"å¤§"NOR);
                 if(bet_type == 2)
-                        message = sprintf(RED"Î§÷»"NOR);
+                        message = sprintf(RED"å›´éª°"NOR);
                 if(bet_type >=3)
                         message = sprintf(RED"%s"NOR,chinese_number(bet_type));
-                message_vision(sprintf("$N´ÓÉíÉÏÄÃ³ö%s%s£¬Ñ¹ÔÚ%sÉÏ£®\n",
+                message_vision(sprintf("$Nä»èº«ä¸Šæ‹¿å‡º%s%sï¼Œå‹åœ¨%sä¸Šï¼\n",
                                         chinese_number(amount),money, message), me);
                 me->set_temp("gamble/type",bet_type);
                 me->set_temp("gamble/amount",bet_amt);
@@ -195,11 +195,11 @@ void advertise()
 {
         if (is_fighting()) return;
         switch( random(3) ) {
-                case 0: message_vision("$NÏòÄãĞ¦µÀ£º¿ìÏÂ×¢£¡Õâ×¢ÄãÒ»¶¨»áÓ®£¡\n",this_object());
+                case 0: message_vision("$Nå‘ä½ ç¬‘é“ï¼šå¿«ä¸‹æ³¨ï¼è¿™æ³¨ä½ ä¸€å®šä¼šèµ¢ï¼\n",this_object());
                         break;
-                case 1: message_vision("$NËµµÀ£ºÔÙ²»ÏÂ×¢¾ÍÀ´²»¼°ÁË£¡\n",this_object());
+                case 1: message_vision("$Nè¯´é“ï¼šå†ä¸ä¸‹æ³¨å°±æ¥ä¸åŠäº†ï¼\n",this_object());
                         break;
-                case 2: message_vision("$NÂúÃæºì¹â£¬ËÊÓÁ×Å´ó¼Ò£º¼Ó£¡ÔÙ¼Ó´óÄãµÄ¶Ä×¢£¡Ò»¶¨Ó®£¡\n",this_object());
+                case 2: message_vision("$Næ»¡é¢çº¢å…‰ï¼Œè€¸æ¿ç€å¤§å®¶ï¼šåŠ ï¼å†åŠ å¤§ä½ çš„èµŒæ³¨ï¼ä¸€å®šèµ¢ï¼\n",this_object());
                         break;
         }
         if( find_call_out("rolldice") >=10)
@@ -211,8 +211,8 @@ void rolldice()
 {
         if (is_fighting()) return;
         this_object()->set("too_late",1);
-        message_vision("$N´óÉù½ĞµÀ£ºÏÂ¶¨×¢£¡Ëµ°Õ£¬½«ÊÖÖĞµÄÈıÁ£÷»×ÓÈöÏòÍëÀï£®\n",this_object());
-        message_vision("\n£®£®£®ÈıÁ£÷»×ÓÔÚÍëÀï±ÄÌø×Å£¬·¢³öÔÃ¶úµÄÉùÒô£®£®£®\n",this_object());
+        message_vision("$Nå¤§å£°å«é“ï¼šä¸‹å®šæ³¨ï¼è¯´ç½¢ï¼Œå°†æ‰‹ä¸­çš„ä¸‰ç²’éª°å­æ’’å‘ç¢—é‡Œï¼\n",this_object());
+        message_vision("\nï¼ï¼ï¼ä¸‰ç²’éª°å­åœ¨ç¢—é‡Œè¹¦è·³ç€ï¼Œå‘å‡ºæ‚¦è€³çš„å£°éŸ³ï¼ï¼ï¼\n",this_object());
         call_out("first_dice",3);
         return;
 }
@@ -223,13 +223,13 @@ void first_dice()
         this_object()->set("first_dice",(random(1000)%18)/3);
         switch( random(3) ) {
                 case 0:
-        message_vision("\nÒ»Á£÷»×Óµ¯ÁË¼¸ÏÂ£¬Í£ÔÚ£º\n\n",this_object());
+        message_vision("\nä¸€ç²’éª°å­å¼¹äº†å‡ ä¸‹ï¼Œåœåœ¨ï¼š\n\n",this_object());
                         break;
                 case 1:
-        message_vision("\nÒ»Á£÷»×Ó£¢¶£¶£¶££¢µÄÌø¶¯ÁË¼¸ÏÂ£¬»º»ºµÄÍ£ÁËÏÂÀ´£º\n\n",this_object());
+        message_vision("\nä¸€ç²’éª°å­ï¼‚å®å®å®ï¼‚çš„è·³åŠ¨äº†å‡ ä¸‹ï¼Œç¼“ç¼“çš„åœäº†ä¸‹æ¥ï¼š\n\n",this_object());
                         break;
                 case 2:
-        message_vision("\nÈıÁ£÷»×ÓÏà»¥Ò»×²£¬Ò»¿ÅÖ±ÂäÍëµ×£º\n\n",this_object());
+        message_vision("\nä¸‰ç²’éª°å­ç›¸äº’ä¸€æ’ï¼Œä¸€é¢—ç›´è½ç¢—åº•ï¼š\n\n",this_object());
                         break;
         }
         first = (int) this_object()->query("first_dice");
@@ -246,11 +246,11 @@ void second_dice()
         if (this_object()->query("first_dice")+1 ==this_object()->query("second_dice") )
                 this_object()->set("second_dice",(random(1000)%18)/3);
         switch( random(3) ) {
-                case 0: message_vision("\nÓÖÒ»Á£÷»×Ó»º»ºµÄÍ£ÁËÏÂÀ´£º\n\n",this_object());
+                case 0: message_vision("\nåˆä¸€ç²’éª°å­ç¼“ç¼“çš„åœäº†ä¸‹æ¥ï¼š\n\n",this_object());
                         break;
-                case 1: message_vision("\nµÚ¶şÁ£÷»×ÓÔÚÍë±ßĞı×ª²»Í££®£®ºöµØ·­ÁË¸öÉí£º\n\n",this_object());
+                case 1: message_vision("\nç¬¬äºŒç²’éª°å­åœ¨ç¢—è¾¹æ—‹è½¬ä¸åœï¼ï¼å¿½åœ°ç¿»äº†ä¸ªèº«ï¼š\n\n",this_object());
                         break;
-                case 2: message_vision("\n¶şÁ£÷»×ÓÏà»¥Ò»×²£¬ÆäÖĞÒ»¿ÅÌøÁËÒ»Ìø£º\n\n",this_object());
+                case 2: message_vision("\näºŒç²’éª°å­ç›¸äº’ä¸€æ’ï¼Œå…¶ä¸­ä¸€é¢—è·³äº†ä¸€è·³ï¼š\n\n",this_object());
                         break;
         }
         second= (int) this_object()->query("second_dice");
@@ -269,13 +269,13 @@ void third_dice()
                 this_object()->set("third_dice",(random(1000)%18)/3);
         switch( random(3) ) {
                 case 0:
-       message_vision("\n×îºóÒ»Á£÷»×ÓÔÚÍëÀï»¬ÁËÁ½ÏÂ£¬ÖÕÓÚÍ£ÔÚ£º\n\n",this_object());
+       message_vision("\næœ€åä¸€ç²’éª°å­åœ¨ç¢—é‡Œæ»‘äº†ä¸¤ä¸‹ï¼Œç»ˆäºåœåœ¨ï¼š\n\n",this_object());
                         break;
                 case 1:
-        message_vision("\n»¹ÓĞ×îºóÒ»Á£÷»×ÓàÖåŞåŞµÄ×ª¸ö²»Í££®£®ÖÕÓÚ£º\n\n",this_object());
+        message_vision("\nè¿˜æœ‰æœ€åä¸€ç²’éª°å­å˜€é›é›çš„è½¬ä¸ªä¸åœï¼ï¼ç»ˆäºï¼š\n\n",this_object());
                         break;
                 case 2:
-        message_vision("\n×îºóÒ»Á£÷»×ÓÒ²ÖÕÓÚÍ£ÎÈÁË£º\n\n",this_object());
+        message_vision("\næœ€åä¸€ç²’éª°å­ä¹Ÿç»ˆäºåœç¨³äº†ï¼š\n\n",this_object());
                         break;
         }
         third= (int) this_object()->query("third_dice");
@@ -292,13 +292,13 @@ void end_the_round()
         second= (int) this_object()->query("second_dice");
         third = (int) this_object()->query("third_dice");
 // announce results:
-        message_vision(sprintf("\n$N¸ßÉù½ĞµÀ£º%s£¬%s£¬%s£¬",
+        message_vision(sprintf("\n$Né«˜å£°å«é“ï¼š%sï¼Œ%sï¼Œ%sï¼Œ",
                 chinese_number(first),chinese_number(second),chinese_number(third)),
                 this_object());
 // see who is the winner!
         if (!first || !second || !third){
                 tot = first+second+third;
-                message_vision(sprintf("%s....µã£¬°¡?£¡÷»×ÓË¤ÀÃÁË£¬²»ºÃÒâË¼£¬´óĞ¡Í¨³Ô!\n",chinese_number(tot)),this_object());
+                message_vision(sprintf("%s....ç‚¹ï¼Œå•Š?ï¼éª°å­æ‘”çƒ‚äº†ï¼Œä¸å¥½æ„æ€ï¼Œå¤§å°é€šåƒ!\n",chinese_number(tot)),this_object());
                 inv = deep_inventory(environment(this_object()));
                 for(i=0; i<sizeof(inv); i++) {
                         if( inv[i] && userp(inv[i]) && (int) inv[i]->query_temp("gamble/amount") )
@@ -309,14 +309,14 @@ void end_the_round()
         }else
         if( second == first && third == first)
         {
-        message_vision("´óĞ¡Í¨³Ô£¡£¡\n",this_object());
+        message_vision("å¤§å°é€šåƒï¼ï¼\n",this_object());
         inv = deep_inventory(environment(this_object()));
         for(i=0; i<sizeof(inv); i++) {
                 if( inv[i] && userp(inv[i]) && (int) inv[i]->query_temp("gamble/amount") )
                 {
                         if((int) inv[i]->query_temp("gamble/type") == 2)
                         {
-                                message_vision("Ó®¼Ò£­$N£¬Ò»ÅâÈıÊ®Áù£¡£¡\n",inv[i]);
+                                message_vision("èµ¢å®¶ï¼$Nï¼Œä¸€èµ”ä¸‰åå…­ï¼ï¼\n",inv[i]);
                                 reward = (int) inv[i]->query_temp("gamble/amount");
                                 for (j=0; j<=36;j++)
                                         pay_him( inv[i],reward);
@@ -326,18 +326,18 @@ void end_the_round()
         }
         }else{
                 tot = first+second+third;
-                message_vision(sprintf("%sµã£¬",chinese_number(tot)),this_object());
+                message_vision(sprintf("%sç‚¹ï¼Œ",chinese_number(tot)),this_object());
                 if( tot>10 )
-                        message_vision("Åâ´ó³ÔĞ¡£¡\n",this_object());
+                        message_vision("èµ”å¤§åƒå°ï¼\n",this_object());
                 else
-                        message_vision("ÅâĞ¡³Ô´ó£¡\n",this_object());
+                        message_vision("èµ”å°åƒå¤§ï¼\n",this_object());
         inv = deep_inventory(environment(this_object()));
         for(i=0; i<sizeof(inv); i++) {
         if( inv[i] && userp(inv[i]) && (int) inv[i]->query_temp("gamble/amount") )
         {
                 if((int) inv[i]->query_temp("gamble/type") == tot)
                 {
-                message_vision("Ó®¼Ò£­$N£¬Ò»ÅâËÄ£¡\n",inv[i]);
+                message_vision("èµ¢å®¶ï¼$Nï¼Œä¸€èµ”å››ï¼\n",inv[i]);
                                 reward = (int) inv[i]->query_temp("gamble/amount");
                                 for (j=0; j<=4;j++)
                       pay_him( inv[i],reward);
@@ -347,7 +347,7 @@ void end_the_round()
                 if(((int) inv[i]->query_temp("gamble/type") == 0 && tot <=10 ) ||
                         ((int) inv[i]->query_temp("gamble/type") == 1 && tot > 10 ))
                 {
-                message_vision("Ó®¼Ò£­$N£¬Ò»ÅâÒ»£¡\n",inv[i]);
+                message_vision("èµ¢å®¶ï¼$Nï¼Œä¸€èµ”ä¸€ï¼\n",inv[i]);
                                 reward = (int) inv[i]->query_temp("gamble/amount");
                                 for (j=0; j<=1;j++)
                       pay_him( inv[i],reward);
@@ -374,7 +374,7 @@ void pay_him(object who, int amount)
 {
         object ob;
         if( amount < 0 ){
-            say(BOLD "²ÆÉñ´Ó×À×Óµ×ÏÂÉìÁËÖ»ÊÖ³öÀ´£º"+who->name(1)+"£¬ÄãÉíÉÏµÄÇ®Ì«¶àÁË£¬»¹ÊÇÎÒ°ïÄã±£¹Ü°É¡£\n" NOR);
+            say(BOLD "è´¢ç¥ä»æ¡Œå­åº•ä¸‹ä¼¸äº†åªæ‰‹å‡ºæ¥ï¼š"+who->name(1)+"ï¼Œä½ èº«ä¸Šçš„é’±å¤ªå¤šäº†ï¼Œè¿˜æ˜¯æˆ‘å¸®ä½ ä¿ç®¡å§ã€‚\n" NOR);
             return;
         }
                 if (environment(who)!=environment(this_object()))     return;
@@ -419,23 +419,23 @@ int accept_object(object who, object ob)
         string message;
         
                 if( ob->value() >= 100) {
-                        say("À×¾ÅÖ¸ºÇºÇµÄĞ¦µÀ£ºĞ»ÉÍ...\n");
-        message_vision("$NÔÚ$n¶ú±ßàÖ¹¾ÁË¼¸¾ä£®£®\n",this_object(),who);
+                        say("é›·ä¹æŒ‡å‘µå‘µçš„ç¬‘é“ï¼šè°¢èµ...\n");
+        message_vision("$Nåœ¨$nè€³è¾¹å˜€å’•äº†å‡ å¥ï¼ï¼\n",this_object(),who);
         bet_type = random(1000)%19;
         if(bet_type == 0)
-                message = sprintf(RED"Ğ¡"NOR);
+                message = sprintf(RED"å°"NOR);
         if(bet_type == 1)
-                message = sprintf(RED"´ó"NOR);
+                message = sprintf(RED"å¤§"NOR);
         if(bet_type == 2)
-                message = sprintf(RED"Î§÷»"NOR);
+                message = sprintf(RED"å›´éª°"NOR);
         if(bet_type >=3)
                 message = sprintf(RED"%s"NOR,chinese_number(bet_type));
-        tell_object(who,"À×¾ÅÖ¸ÇÄÇÄ¸æËßÄã£ºÏÂÊÖ¶ùÑ¹"+message+"£¬Ò»¶¨Ó®£¡\n");
-        message_vision("$N»áĞÄµÄÎ¢Ğ¦ÆğÀ´£®£®\n",who);
+        tell_object(who,"é›·ä¹æŒ‡æ‚„æ‚„å‘Šè¯‰ä½ ï¼šä¸‹æ‰‹å„¿å‹"+message+"ï¼Œä¸€å®šèµ¢ï¼\n");
+        message_vision("$Nä¼šå¿ƒçš„å¾®ç¬‘èµ·æ¥ï¼ï¼\n",who);
         
                         return 1;
                 } else {
-                    say("À×¾ÅÖ¸ËµµÀ£ºÕâµãÇ®Äã»¹ÊÇ×Ô¼ºÓÃ°É£¡\n");
+                    say("é›·ä¹æŒ‡è¯´é“ï¼šè¿™ç‚¹é’±ä½ è¿˜æ˜¯è‡ªå·±ç”¨å§ï¼\n");
                         return 0;
                 }
         return 0;

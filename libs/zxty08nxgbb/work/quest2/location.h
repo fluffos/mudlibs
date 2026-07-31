@@ -1,6 +1,6 @@
 mapping allloca=([
 /*
-    "ÑïÖİ³Ç":({"/d/city/","beidajie1","beidajie2","beimen","beiyin1",
+    "æ‰¬å·åŸ":({"/d/city/","beidajie1","beidajie2","beimen","beiyin1",
                "guangchang","houyuan","jiaowai8","kedian","kedian2",
                "kedian3","jiaowai3","lichunyuan","lichunyuan2","meigui",
                "mishi","ml1","ml2","ml3","ml4","ml5","ml6","ml7",
@@ -13,17 +13,17 @@ mapping allloca=([
              }),
 */
 /*
-  "ÈªÖŞ" :({"/d/quanzhou/","beimen","haigang","houyuan","jiaxing",
+  "æ³‰æ´²" :({"/d/quanzhou/","beimen","haigang","houyuan","jiaxing",
               "jxnanmen","laozhai","liang","midao","mishi","nanhu","nanhu1","nanmen",
               "qzroad1","qzroad2","qzroad3","qzroad4","qzroad5","tieqiang","well",
               "xijie","yanyu","zahuopu","zhongxin",
              }),
 */
-   "´óÀí³Ç" : ({"/d/dali/","tusifu","guangchang",
+   "å¤§ç†åŸ" : ({"/d/dali/","tusifu","guangchang",
              "sheguta","tusimentang","xidajie1","xidajie2","xidajie3","dongdajie1",
              "tusiyishi","paifang",
              "tusihouting",}),
-    "±±¾©³Ç":({"/d/city2/","alley1","alley2","alley3","andao1","andao10",
+    "åŒ—äº¬åŸ":({"/d/city2/","alley1","alley2","alley3","andao1","andao10",
                "andao2","andao3","andao4","andao5","andao6","andao7","andao8",
                "andao9","anding","aobai1","aobai10","aobai11","aobai12","aobai2",
                "aobai3","aobai4","aobai5","aobai6","aobai7","aobai8","aobai9",
@@ -44,7 +44,7 @@ mapping allloca=([
                "zhuang2","zhuang3","zhuang4","zhuang5","zhuang6","zhuang7","zhuang8","zhuang9",
                "zhulin1","zhulin2","zhulin3","zhulin4","zhulin5",
                 }),
-"°×ÍÕÉ½":({"/d/baituo/","bridge","cao1","cao2","caomeide","caoping","cave","cave1","cedong",
+"ç™½é©¼å±±":({"/d/baituo/","bridge","cao1","cao2","caomeide","caoping","cave","cave1","cedong",
                "chaifang","changlang","chufang","damen","datiepu","dating","dongjie",
                "dongkou","dongnei","fang","fende","gebi","guangchang","houmen","houyuan",
                "huayuan","jiudian","liangong","menlang","midao","mumen","neishi","nongshe",
@@ -52,7 +52,7 @@ mapping allloca=([
                "shulin1","storeroom","tuyuan","wuqiku","xiaolu1","xiaolu2","xiaolu3",
                "xiaolu4","xijie","ximen","yaofang","yuanzi","zhailuo","zhulin","zhuyuan",
                 }),
-"Áéõí¹¬":({"/d/lingjiu/","biguan","caifeng","changl1","changl10","changl11",
+"çµè¹´å®«":({"/d/lingjiu/","biguan","caifeng","changl1","changl10","changl11",
                "changl12","changl13","changl14","changl15","changl2","changl3",
                "changl4","changl5","changl6","changl7","changl8","changl9","chufang",
                "daban","dadao1","dadao2","damen","dating","huayuan","jian","liangong",
@@ -61,7 +61,7 @@ mapping allloca=([
              }),
 
 
-"»ªÉ½" :({"/d/huashan/","baichi","bingqifang","buwei1","buwei2","buwei3",
+"åå±±" :({"/d/huashan/","baichi","bingqifang","buwei1","buwei2","buwei3",
                 "canglong","changlang","chaopath1","chaopath2","chaoyang","chengxiang","chufang","doctorroom",
                 "garden","houyuan","huixinshi","husun","jiashan","jinsuo","lianpath1",                         "lianpath2","luoyan","path1","pingdi","pingxinshi",
                 "qingke","qunxiangyuan","sgyhole","sgyhole1","shaluo",
@@ -71,14 +71,14 @@ mapping allloca=([
                 "yuntai","yunupath1","yunu","yunuci","yunupath1",
                 "yunupath2","yuquan","zhandao","zhenyue","ziqitai",
                  }),
-"åĞÒ£ÅÉÁÚ½ü":({"/d/xiaoyao/","bingqif.c","damen.c","fangjian1.c","fangjian2.c","gudi","hubian",
-               "liangong","midao1","midao2","midao3","mubanlu","muwu1","muwu2","muwu3.c","pubu",
+"é€é¥æ´¾é‚»è¿‘":({"/d/xiaoyao/","bingqif.lpc","damen.lpc","fangjian1.lpc","fangjian2.lpc","gudi","hubian",
+               "liangong","midao1","midao2","midao3","mubanlu","muwu1","muwu2","muwu3.lpc","pubu",
                "qingcaop","shantang","shidong","shiji1","shiji2","shiji3","shishi1","shishi2",
-               "shishi3.c","shishi4.c","shishi5.c","shulin1.c","shulin2.c","shulin3.c","tongmen","xiaodao1",
+               "shishi3.lpc","shishi4.lpc","shishi5.lpc","shulin1.lpc","shulin2.lpc","shulin3.lpc","tongmen","xiaodao1",
                "xiaodao2","xiaodao3","xiaodao4","xiaodao5","xiuxis","yandong","yanfeng",}),
 
 
-"Îå¶¾½Ì" :({"/d/wudujiao/","baidu1","baidu2","beiyuan","bianzhai1","bianzhai2",
+"äº”æ¯’æ•™" :({"/d/wudujiao/","baidu1","baidu2","beiyuan","bianzhai1","bianzhai2",
                 "bianzhai3","cun1","cun2","cun3","cun4","cun5","cun6","cun7",
                 "cun8","cun9","huating1","huating2","huating3","milin1","milin2",
                 "milin3","milin4","milin5","milin6","milin7","milin8","minju1","minju2",
@@ -87,12 +87,12 @@ mapping allloca=([
                 "wdsl6","wdsl7","wdsl8",
              }),
               
-     "»ªÉ½´å":({"/d/village/","alley1","alley2","bighouse1","bighouse2","eexit","ehouse1","ehouse2",
+     "åå±±æ‘":({"/d/village/","alley1","alley2","bighouse1","bighouse2","eexit","ehouse1","ehouse2",
                  "eroad1","eroad2","eroad3","hsroad1","hsroad2","hsroad3","nwhouse","nwroad1",
-                 "nwroad2","sexit.c","shack","shop","shouse","smithy1","smithy2","square","sroad1",
+                 "nwroad2","sexit.lpc","shack","shop","shouse","smithy1","smithy2","square","sroad1",
            "sroad2","sroad3","sroad4","temple1","temple2","wexit",}),
         
-    "±±¾©³ÇÍâ":({"/d/city2/","road10","road9","road8","road7","road6","road5",
+    "åŒ—äº¬åŸå¤–":({"/d/city2/","road10","road9","road8","road7","road6","road5",
                "road4","road3","road2","road1","zhuang1","zhuang2","zhuang3","zhuang4",
                "haigang",}),
      ]);

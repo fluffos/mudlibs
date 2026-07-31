@@ -1,7 +1,7 @@
 // kang.h for kangqw job Amis@xajh2 2005-6-9 
 
 #include <ansi.h>
-#define POS "/adm/daemons/poistiond.c"
+#define POS "/adm/daemons/poistiond.lpc"
 string ask_fenglu();
 string ask_shengqian();
 string ask_shengqian()

@@ -6,7 +6,7 @@ int block_say(object me)
                 time=time();
                 if(me->query("channel/say_block") &&
                   (time-me->query("channel/say_block"))<0 ) {
-                   write("你的舌头正疼得厉害。\n");
+                   write("浣犵殑鑸屽ご姝ｇ柤寰楀帀瀹炽�俓n");
                    return 0;
                 }
               
@@ -18,7 +18,7 @@ int block_say(object me)
                   me->set("channel/last_say",time);
                   if (time==last_say) {
                     me->set("channel/say_block",time+180);
-                    write("你一次讲话太多太快，不小心咬到了舌头，暂时没法说话了！\n");
+                    write("浣犱竴娆¤璇濆お澶氬お蹇紝涓嶅皬蹇冨挰鍒颁簡鑸屽ご锛屾殏鏃舵病娉曡璇濅簡锛乗n");
                     return 0;
                   }
                 }

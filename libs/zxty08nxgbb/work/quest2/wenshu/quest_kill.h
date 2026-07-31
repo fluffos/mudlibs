@@ -1,6 +1,6 @@
 mapping area=([
 /*
- "ÑïÖİ³Ç" : ({"/d/city/","beidajie1","beidajie2","beimen","bingyin",
+ "æ‰¬å·åŸ" : ({"/d/city/","beidajie1","beidajie2","beimen","bingyin",
             "bingyindamen","caizhu","guangchang","houyuan","kedian",
             "kedian2","kedian3","lichunyuan","lichunyuan2","meigui",
 "ml1","ml2","ml3","ml4","ml5","ml6","ml7","mudan",
@@ -10,7 +10,7 @@ mapping area=([
             "zahuopu","zhengting","zuixianlou","zuixianlou2"
             }),
 */
- "±±¾©³Ç" : ({"/d/city2/","alley1","alley2","alley3","anding","aobai1",
+ "åŒ—äº¬åŸ" : ({"/d/city2/","alley1","alley2","alley3","anding","aobai1",
             "aobai10","aobai11","aobai12","aobai2","aobai3","aobai4",
             "aobai5","aobai6","aobai7","bingqiku",
             "bingyin1","bingyin2","bridge","bridge2","bridge3","ceting",
@@ -26,7 +26,7 @@ mapping area=([
             "ximen","ximenwai","xisi","xisi2","yihongyu","yongding",
             "zahuopu","zhengmen"
             }),
- "°×ÍÕÉ½" : ({"/d/baituo/","bridge","cao1","cao2","caomeide","caoping",
+ "ç™½é©¼å±±" : ({"/d/baituo/","bridge","cao1","cao2","caomeide","caoping",
             "cave","cave1","cedong","chaifang","changlang","chufang",
             "damen","datiepu","dating","dongjie","dongkou","dongnei",
             "fang","fende","gebi","guangchang","houmen","houyuan",
@@ -37,7 +37,7 @@ mapping area=([
             "xijie","ximen","yaofang","yuanzi","zhailuo","zhulin",
             "zhuyuan",
             }),
-  "ÁéğÕ¹¬" : ({"/d/lingjiu/","changl1","changl10","changl11",
+  "çµé¹«å®«" : ({"/d/lingjiu/","changl1","changl10","changl11",
             "changl12","changl13","changl14","changl15","changl2",
             "changl3","changl4","changl5","changl6","changl7","changl8",
             "changl9","chufang","daban","dadao1","dadao2","damen",
@@ -45,7 +45,7 @@ mapping area=([
             "shanjiao","shufang","wuqiku","xianchou","xiaodao1",
             "xiaodao2",   
              }),
- "ÈªÖİ³Ç" : ({"/d/quanzhou/","beimen","haigang","houyuan",
+ "æ³‰å·åŸ" : ({"/d/quanzhou/","beimen","haigang","houyuan",
             "jiaxing","jxnanmen","laozhai","liang","midao","mishi",
             "nanhu","nanhu1","nanmen","qzroad1","qzroad2","qzroad3",
             "qzroad4","qzroad5","tieqiang","well","xijie","yanyu",
@@ -53,7 +53,7 @@ mapping area=([
             }),
          ]);
 
-string *city=({"±±¾©³Ç","°×ÍÕÉ½","ÁéğÕ¹¬","ÈªÖİ³Ç"});
+string *city=({"åŒ—äº¬åŸ","ç™½é©¼å±±","çµé¹«å®«","æ³‰å·åŸ"});
 
 int place_room(object me,object ob)
 {

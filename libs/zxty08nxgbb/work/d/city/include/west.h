@@ -12,7 +12,7 @@
     }
 if((objectp(present("guan bing", environment(me))) || objectp(present("wu jiang", environment(me)))) && (nature=="event_dawn"||nature=="event_night"||nature=="event_midnight"))
 {
-return notify_fail("守城官军双手一拦说道：城门已经关了，要进城等明天吧。\n");
+return notify_fail("瀹堝煄瀹樺啗鍙屾墜涓�鎷﹁閬擄細鍩庨棬宸茬粡鍏充簡锛岃杩涘煄绛夋槑澶╁惂銆俓n");
 }
 }
  return ::valid_leave(me, dir);

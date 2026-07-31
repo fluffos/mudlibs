@@ -639,7 +639,7 @@ int receive_whistle(object me)
                 	//读取file
                 	//beast_id = me->query_temp("beast/beast_id");
                 	//write("beast_id="+beast_id+" \n");
-                	file = BEAST_DIR + me->query("id") + "-" + "beast.c";
+                	file = BEAST_DIR + me->query("id") + "-" + "beast.lpc";
                 	mapskill = "";
                 
                 	buf = "#include \"/clone/npc/magic-beast.h\"\n";

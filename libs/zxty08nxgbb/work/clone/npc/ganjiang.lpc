@@ -1,0 +1,1187 @@
+// by tony  2004/05/03
+
+inherit NPC;
+#include <ansi.h>
+
+#define	ILLEGAL_STR	"."
+#define ITEM_DIR 	"/clone/item/data/"
+#define	NOCOLOR		1
+#define COLORABLE	0
+
+private int	ask_me();
+private int	start_work(object me, object ob);
+private int	prepare_make(object me, object ob);
+private string  create_file(object item_temp);
+private void    tell_rules(object me);
+private void    waiting(object me, object ob, object moye);
+private string	converts(string arg, int max_len, int nocolor);
+private int     legal_chinese(string str);
+
+string chinese_desc(string arg);
+string filter_color(string arg);
+varargs string log_id(object ob, int raw);
+string log_time();
+string up_case(string arg);
+int is_legal_id(string id);
+void auto_post(string title,string body);
+
+string *banned_name = ({
+"你", "笑傲","我", "他", "她", "它", "它的","你的内力","　","尸体","人头","陈近南的人头","钥匙","操","操你妈",
+"青狼主","青子","一切小心","东方青云","牛头","巡阳剑","阿飞","观月","洪七公","一条","可惜","你觉","操你",
+"爸","妈","爷","奶","老豆","老窦","中国","毛泽东","胡锦涛","温家堡","飞龙子","你的","张三丰","一条黑影","穴",
+"金庸","笑傲江湖","某","的","","一","巫师","天神","武林至尊","武将","官兵","九难","任我行","某人","日","阴",
+"性","鸡","鸭","一个","你得","你得手","你得手了","东方不败","张无忌","扬过","小龙女","风清扬","碧水剑","小穴",
+});
+
+string *banned_english_name = ({
+	"fuck","jian","shit","bitch","asshole","mother","father","master","wujiang","bing","corpse","gold","tea","baozi",
+  "xajh","wiz","admin","chat","root","tmd","tnnd","west","east","none","cao","silver","fuyo","tang","xiangcha","kuihua",
+  "north","south","enter","down","southwest","southeast","northwest","northeast","diu","cash","yaoshi","jitui","baodian",
+	"northup","northdown","southup","southdown","westup","westdown","eastup","eastdown","feng","key","kaoya","hamigua",
+  "npc","tiejia","armor","blade","sword","zongzi","kao","head","jiang","wield","wear","unwield","jiudai","hulu","amis",
+  "jiuyang","zhenjing","book","shu","miji","all",
+});
+void create()
+{
+        seteuid(getuid());
+	set_name("干将", ({ "gan jiang", "ganjiang", "gan" }));
+	set("long", "他就是古往今来鼎鼎有名的铸剑大师干将。\n他身材结实，深褐色的皮肤，专注的双眼炯炯有神。\n" );
+	set("nickname", HIR "大剑师" NOR);
+	set("title","普通百姓");
+	set("gender", "男性");
+	set("attitude", "friendly");
+	set("age", 35);
+	set("shen_type", 0);
+	set("str", 1000);
+	set("inquiry", ([
+		"make" : (: ask_me :),
+		"定做" : (: ask_me :),
+		"材料" : "炼剑就得有原料，一分钱，一分货，好原料就能出好东西。\n",
+		//"定金" : "定金少得很，才五两黄金，要交定金请交给莫邪。\n",
+		"价格" : "一分钱一分货，好武器必须得有好材料才行......",
+		"重做" : "重新定做请recustomize你以前定做过的武器。",
+		"重新再做" : "重新定做请recustomize你以前定做过的武器。",
+    "销毁" : "不想要这件定做了就退回(discard)来吧...",
+    "退回" : "不想要这件定做了就退回(discard)来吧...",
+	]));
+        setup();
+	carry_object("/clone/misc/cloth")->wear();
+}
+
+void init()
+{
+	add_action("do_name", "name");
+	add_action("do_desc", "desc");
+	add_action("do_wieldmsg", "wieldmsg");
+	add_action("do_unwield", "unwieldmsg");
+	add_action("do_finish", "finish");
+	add_action("do_help", "bangzhu");
+	add_action("do_recustomize", "recustomize");
+  add_action("do_discard", "discard");
+}
+
+private int ask_me()
+{
+	message_vision("干将对$N说道：这些事请问莫邪，我只管锻造之事。\n", this_player());
+	return 1;
+}
+
+int accept_object(object me, object ob)
+{
+	
+	if (me->name(1) == "莫邪" && me->query("id") == "mo ye") {
+		start_work(ob->query("item/owner"), ob);
+                return 1;
+	}
+	
+	if (ob->query("rate")) {
+		message_vision("干将对$N说：你别给我这东西，把这个先交"
+                               "给莫邪，在她那里付了钱再说。\n", me);
+		return 0;
+	}
+	
+	if (ob->query("item_make")) {
+               	if (ob->query("owner") != me->query("id")) {
+                       	command("heng");
+                       	command("say 这是你的东西吗？看来非盗即抢，我没收了！");
+                       	destruct(ob);
+                       	return 1;
+               	}
+                message_vision("$N疑惑的望着$n道：“你是嫌它"
+                	"不好么？不想要那就退掉(discard)吧！”\n",
+                        this_object(), me);
+                return 0;
+  }
+  
+  if (!me->query_temp("ganjiang/recustomize")) {
+  	message_vision("干将冷冷的对$N说道：你给我这些东西干什"
+                       "么？我炼剑，不用这些东西。\n", me);
+		return 0;
+	}
+	
+	if (ob->query("money_id")) {
+		if (ob->value() < me->query_temp("ganjiang/recustom-money") * 10000) {
+      command("say 阁下是现钱带的不够么？");
+     	return 0;
+    }
+      
+  command("nod");
+  message_vision("$N转身走进内屋，很快就拿着一些图纸和源材料出来了。\n\n" NOR, this_object());
+  message_vision(HIC "\n$N说道：好，我这就开炉重炼！\n\n" NOR, this_object());
+	message_vision(HIM "$N鼓风添火，将材料丢入炼炉，待其烧红后便依着图纸的模样和注释慢慢锤炼……\n\n" NOR , this_object());
+	remove_call_out("recustomizeok");
+	call_out("recustomizeok", 5, me);
+	return 1;
+	}
+}
+
+int recustomizeok(object me)
+{
+		object obj;
+		string path;
+		path = me->query_temp("ganjiang/recustomize");
+    obj = new(path);
+   
+   	if (!obj)
+   	return notify_fail("对不起，数据出错，请联系巫师！\n");
+   
+		message_vision(HIW "过得片刻，$N锤打完毕，猛地将其抛入水池，只听丝丝作响，从水池腾起一股雾气，"
+                       "弥漫四周。\n\n" NOR, this_object());
+    message_vision(HIC "$N缓缓的从水池抽出了重新炼制的"NOR + obj->query("name") +
+		      HIC"仔细看了看，点了点头。\n\n" NOR,this_object());                   
+    me->delete_temp("ganjiang");
+    
+    if ( environment(me) != environment(this_object())) {
+			message_vision("$N皱眉道：这人怎么转眼就走了，算了算了，不要也罢！\n", this_object());
+			destruct(obj);
+			return 1;
+		}
+  
+   message_vision("$N将重新打造的"+obj->query("name")+"交给了"+me->query("name")+"。\n", this_object()); 
+   obj->move(me); 
+   command("say 请千万保管妥善，若再有遗失，老夫可就无能为力了。");
+   
+   if (!me->query("dingzuo/recustomize"))
+   me->set("dingzuo/recustomize",1);
+   else me->set("dingzuo/recustomize",me->query("dingzuo/recustomize")+1);
+   
+   log_file("nosave/dingzuo", sprintf("%s %s 重新打造了 %s(%s) from %s\n",
+				 					log_time(), log_id(me),filter_color(obj->name(1)), obj->query("id"),
+                  query_ip_name(me)));
+	 return 1;
+}
+
+private int start_work(object me, object ob)
+{
+	remove_call_out("prepare_make");
+	call_out("prepare_make", 1, me, ob);
+        set_temp("item/making", ob);
+        set_temp("item/player", me);
+        me->set_temp("item/status", "waiting");
+	return 1;
+}
+
+private int prepare_make(object me, object ob)
+{
+	message_vision(HIC "\n$N说道：好，开炉锻炼！\n\n" NOR, this_object());
+	message_vision(HIM "$N接过莫邪手中的" + ob->name() +
+		       HIM "，随手把它抛入炉内，霎时间，那" + ob->name() +
+		       HIM "已被火炉中的熊熊" HIR "烈焰" HIM "吞没。\n" +
+		       "$N凝视着炉火，喃喃说道：天地之精华为其血脉，日"
+                       "月之光辉是其灵气……\n\n" NOR , this_object());
+	remove_call_out("work_step_1");
+	call_out("work_step_1", 5, me, ob);
+	return 1;
+}
+
+private int work_step_1(object me, object ob)
+{
+	message_vision(HIG "炉火渐渐的转成了绿色，火苗不断跳跃，你觉得屋"
+                       "内十分燥热，可是干将莫邪却若无其事，看来早就习以为常。\n\n" NOR, this_object());
+
+		if (objectp(me) && environment(me) == environment() && ob->query("rate")>2) {
+				me->set_temp("item/can_help", 1);
+				message_vision(CYN "$N对$n说道："+ob->query("name")+CYN"十分难得，若要与你心神合一，还需"
+                               "注入你自己的精气血脉。\n如果你已准备妥当，就快"
+                               "助我"+HIG"bangzhu"+CYN" 一臂之力。\n\n"NOR, this_object(), me);
+        remove_call_out("destory");
+				call_out("destory", 60, me, ob);                       
+       	return 1;
+		}
+	remove_call_out("work_step_2");
+	call_out("work_step_2", 6, me, ob);
+	return 1;
+}
+
+private int work_step_2(object me, object ob)
+{
+	remove_call_out("destory");
+	message_vision(RED "炉火渐渐的淡了下来，呈现出一片暗红色……\n\n" NOR, this_object());
+	remove_call_out("work_step_3");
+	if (objectp(me))
+                me->delete_temp("item/can_help");
+	call_out("work_step_3", 3, me, ob);
+	return 1;
+}
+
+private int work_step_3(object me, object ob)
+{
+	message_vision(HIY "$N左手持蛟龙剪，一扬手已经取出了" + ob->name() +
+		       HIY "，右手持金刚锤聚精会神地用力锤打。\n渐渐的，" + ob->name() +
+		       HIY "在干将手下的成了" + ob->query("item/ctype") +
+		       HIY "的形状。\n\n" NOR, this_object());
+	remove_call_out("work_step_4");
+	call_out("work_step_4", 5, me, ob);
+	return 1;
+}
+
+private int work_step_4(object me, object ob)
+{
+	message_vision(HIC "$N锤打完毕，大喝一声，将" + ob->query("item/ctype") +
+		       HIC "抛入水池，只听丝丝作响，从水池腾起一股雾气，"
+                       "弥漫四周。\n\n" NOR, this_object());
+	remove_call_out("work_step_5");
+	call_out("work_step_5", 3, me, ob);
+	return 1;
+}
+
+private int work_step_5(object me, object ob)
+{
+	message_vision(HIW "$N缓缓的从水池抽出了炼好的" + ob->query("item/ctype") +
+		       HIW "仔细看了看，满意地说，很好，很好，终于大功告成了！\n\n" NOR,
+                       this_object());
+	remove_call_out("work_step_6");
+	call_out("work_step_6", 2, me, ob);
+}
+
+private int work_step_6(object me, object ob)
+{
+	object moye;
+	int improve;
+
+	if (! objectp(moye = present("mo ye"))) {
+		message_vision(HIW "干将看了看四周，说道：咦，莫邪呢？"
+                               "算了算了，不做了，去吧！\n"
+			       "干将把炼好的道具抛进火炉，就此化为飞灰。\n\n" NOR,
+                               this_object());
+		if (objectp(me))
+                        me->delete_temp("item");
+		if (objectp(ob) && present(ob, this_object()))
+                        destruct(ob);
+		delete_temp("item");
+		return 1;
+	}
+        if (! objectp(me))
+                me = find_player(ob->query("item/owner_id"));
+	if (! objectp(me) || environment(me) != environment()) {
+		message_vision(HIW "$N叹了口气，说道：客人为何这就去"
+                               "了！？罢了罢了，不做了，去吧！\n"
+			       "$N把炼好的道具抛进火炉，就此化为飞灰。\n\n" NOR,
+                               this_object());
+		if (objectp(me))
+                        me->delete_temp("item");
+		if (objectp(ob) && present(ob, this_object()))
+                        destruct(ob);
+		delete_temp("item");
+		moye->delete_temp("item");
+		return 1;
+	}
+  moye->set_temp("item/status", "waiting");
+	me->set_temp("item/status", "inputing");
+	message_vision("$N对$n说道：一" + ob->query("item/unit") + "好" +
+                       ob->query("item/ctype") + NOR "不能没有名字，你给它起个名字吧！\n",
+                       this_object(), me);
+        tell_rules(me);
+	ob->set("item/long", "");
+	ob->set("item/wield_msg", "");
+	ob->set("item/wear_msg", "");
+	ob->set("item/unwield_msg", "");
+	ob->set("item/remove_msg", "");
+	ob->set("item/owner_name", me->query("name"));
+	ob->set("item/owner_id", me->query("id"));
+  set_temp("item/waited", 4);
+	remove_call_out("waiting");
+	call_out("waiting", 240, me, ob, moye);
+	return 1;
+}
+
+int do_help(string arg)
+{
+	object me, ob, moye;
+	int i;
+
+	me = this_player();
+	ob = query_temp("item/making");
+	
+	if (arg) 
+		return 0;
+	if (me->query_temp("item/status") != "waiting")
+ 		return 0;
+	if (! me->query_temp("item/can_help"))
+		return 0;
+		
+	if (! objectp(moye = present("mo ye"))) {
+		message_vision(HIW "干将看了看四周，说道：咦，莫邪呢？"
+                               "算了算了，不做了，去吧！\n"
+			       "干将把炼好的道具抛进火炉，就此化为飞灰。\n\n" NOR,
+                               this_object());
+		if (objectp(me))
+                        me->delete_temp("item");
+		if (objectp(ob) && present(ob, this_object()))
+                        destruct(ob);
+		delete_temp("item");
+		return 1;
+	}
+	
+	if (me->query("neili") < 1000 || me->query("jing") < 150 || me->query("qi") < 200) {
+		message_vision("$N双臂一振，伸手搭上风炉边，正待以内"
+                               "力哺育炉火，却突然感觉眼前一黑，却是自身体力不支……\n", me);
+		tell_object(me, RED "\n你感到精神疲惫，内力迅速枯竭，看来你目前的体力根本不足以锻造此物！\n" NOR);
+		me->set("neili", 0);
+		me->set("jing", 0);
+		
+		message_vision(HIB"\n只见炉内火焰起伏不定，很快便即熄灭，上好的材料也就此化为了一堆废渣。\n\n" NOR,this_object());
+		if (objectp(me))
+                        me->delete_temp("item");
+		if (objectp(ob) && present(ob, this_object()))
+                        destruct(ob);
+		delete_temp("item");
+		moye->delete_temp("item");
+		command("disapp");
+		command("say 可惜可惜……");
+		return 1;
+	}
+	
+	message_vision(HIR"$N长啸一声，双手搭上炉边，以内力催动燃烧，刹那间炉火大盛，"
+                       "接着一道"HIW"白光"HIR"直冲霄汉。\n\n" NOR, me);        
+        i = 1 + random(me->query_skill("force") / 100);
+        ob->add("item/point", i);
+	me->delete_temp("item/can_help");
+	//me->add("max_neili", -(i*100));
+	tell_object(me, "你感到内力狂涌而出，宛如进行了一场剧斗，看来锻造武器果然大耗真元！\n" NOR);
+	me->set("neili",0);
+	me->add("qi",-100);
+	me->add("jing",-80);
+	remove_call_out("work_step_2");
+	call_out("work_step_2", 5, me, ob);
+	return 1;
+}
+
+void destory(object me,object ob)
+{
+	object moye;
+	if (! objectp(moye = present("mo ye"))) {
+		message_vision(HIW "干将看了看四周，说道：咦，莫邪呢？"
+                               "算了算了，不做了，去吧！\n"
+			       "干将把炼好的道具抛进火炉，就此化为飞灰。\n\n" NOR,
+                               this_object());
+		if (objectp(me))
+                        me->delete_temp("item");
+		if (objectp(ob) && present(ob, this_object()))
+                        destruct(ob);
+		delete_temp("item");
+		return;
+	}
+	message_vision(CYN"\n干将皱眉道：既然迟迟无法相助，我也无法继续了。说着把炉门一关，任由材料化作飞灰。\n\n" NOR,this_object());
+		
+		if (objectp(me))
+                        me->delete_temp("item");
+		if (objectp(ob) && present(ob, this_object()))
+                        destruct(ob);
+		delete_temp("item");
+		moye->delete_temp("item");
+	
+}
+
+void tell_rules(object me)
+{
+	tell_object(me, CYN @RULES
+干将在你耳边悄声说道：
+名字需要你来定，其它信息系统有缺省的描述，当然也可以由你自己为它自定描述。
+当然了，最好不用让别人误会的词语字句噢。具体的方法如下。
+    命名: name 中文名字 英文代号。   (必须有)
+    描述: desc 武器的描述文字。      (可  选)
+    装备: wieldmsg   装备时的描述。  (可  选)
+    收起: unwieldmsg 收起时的描述。  (可  选)
+描述时分行请用\n，除了英文代号以外所有的文字都可以用颜色，使用颜色的方法可以参照nick 。
+如果你觉得可以了，就请告诉我(finish)。
+
+RULES NOR);
+}
+
+void waiting(object me, object ob, object moye)
+{
+        if (! objectp(me) || environment(me) != environment(this_object()))
+                me = find_player(ob->query("item/owner_id"));
+	if (! objectp(me) || environment(me) != environment(this_object())) {
+		message_vision("$N叹了口气说道：怎么这走了，算了算"
+                               "了，去吧！\n", this_object());
+		if (objectp(moye))
+    moye->delete_temp("item");
+		delete_temp("item");
+		destruct(ob);
+		return;
+	}
+	if (add_temp("item/waited", -1) <= 0) {
+		if (objectp(moye))
+                        moye->delete_temp("item");
+		log_file("nosave/dingzuo", sprintf("%s %s do timeout when make item of %s from %s\n",
+				 log_time(), log_id(me),
+				 (ob ? filter_color(ob->name(1)) : "???"),
+				 query_ip_name(me)));
+				 
+		if (objectp(ob) && present(ob, this_object()))
+                        destruct(ob);
+		me->delete_temp("item");
+		delete_temp("item");
+                if (in_input(me)) return;
+                if (environment(me) == environment()) {
+			message_vision("$N皱了皱眉头说道：这人怎么这么"
+                                       "磨蹭，算了，不要就不要吧！\n",
+                                       this_object());
+			return;
+		}
+		message_vision("$N皱了皱眉头对$n说道：你这人怎么这么"
+                               "磨蹭，不要就算了，恕不退款！\n",
+                               this_object(), me);
+		return;
+	}
+	if (environment(me) != environment()) {
+		message_vision("$N疑惑地说道：人怎么跑掉了？算了，再等"
+                               "他一会吧。\n", this_object());
+	} else
+        	if (! in_input(me)) {
+			message_vision(HIR "$N" HIR "催$n" HIR
+                               "道：麻烦你快点，别磨蹭，否则我可就不做了。\n" NOR,
+                               this_object(), me);
+		}
+  remove_call_out("waiting");
+	call_out("waiting", 180, me, ob, moye);
+}
+
+int do_name(string arg)
+{
+	object me;
+        object ob;
+        string pname;
+	string sname, sid;
+
+	me = this_player();
+	if (me->query_temp("item/status") != "inputing")
+                return 0;
+	if (! arg || sscanf(arg, "%s %s", sname, sid) != 2) {
+		write("格式不对！应该是：命名 中文名字 英文名字\n例如：命名 长剑 sword\n");
+		return 1;
+	}
+	if ((sname = converts(sname, 14, COLORABLE)) == ILLEGAL_STR)
+                return 1;
+	if ((sid = converts(sid, 8, NOCOLOR)) == ILLEGAL_STR)
+                return 1;
+        if (! sname || ! sid) {
+                message_vision("$N摇摇头，对$n道：不行不行，你好好个定个名字！\n",
+                               this_object(), me);
+                return 1;
+        }
+        if (file_size(ITEM_DIR + me->query("id")[0..0] + "/" + me->query("id") + "-" + sid + ".lpc") != -1) {
+                message_vision("$N摇摇头，对$n道：不好，你已不能再用(" + sid +
+                               ")这个英文代号了，换一个吧！\n",
+                               this_object(), me);
+                return 1;
+        }
+        if (! is_chinese(filter_color(sname))) {
+                command("kick " + me->query("id"));
+                command("say 不会写中文字怎么的？");
+                return 1;
+        }
+        if (! is_legal_id(sid)) {
+                command("say 英文代号必须全部用小写英文才可以！");
+                return 1;
+				}
+        if (strlen(filter_color(sname)) < 4) {
+                command("say 我说你这名字起得也太短了吧，至少两个汉字！");
+                return 1;
+        }
+        if (strlen(filter_color(sname)) > 16) {
+                command("say 我说你这名字起得也太长了吧，麻不麻烦啊！");
+                return 1;
+        }
+        if (strlen(sid) < 3) {
+                command("say 我说你这代号起得也太短了吧，至少三个字符！");
+                return 1;
+        }
+        if (member_array(sname, banned_name)!=-1 ) {
+                command("say 对不起，请不要用这样中文的名字。\n");
+                return 1;
+        }        
+        if (member_array(sid, banned_english_name)!=-1 ) {
+                command("say 对不起，请不要用这样英文的名字。\n");
+                return 1;
+        }
+        
+        if (sname[0] == 27 && sname[4] == 'm')
+                sname = NOR + sname;
+  sname = "◇"+sname;              
+	ob = query_temp("item/making");
+	ob->set("item/name", sname);
+	ob->set("item/id", sid);
+	write("名字：" CYN + sname + "    代号：" CYN + sid + NOR "\n");
+	return 1;
+}
+
+int do_desc(string arg)
+{
+	object ob, me;
+        string chk;
+
+	me = this_player();
+	if (me->query_temp("item/status") != "inputing")
+                return 0;
+	ob = query_temp("item/making");
+        if (! ob->query("item/name")) {
+                message_vision("$N瞪了$n一眼道：你还是先给它取好名字再考虑描述吧！\n",
+                               this_object(), me);
+                return 1;
+        }
+	if (! arg) {
+		write("参照格式：应该是 desc 描述的文字。\n例如：一把"
+                      "锋利的$n\\n它在阳光下闪闪发光 -- 其中\\n表示换行，$n代表定做名称。\n");
+		return 1;
+	}
+	if ((arg = converts(arg, 200, COLORABLE)) == ILLEGAL_STR)
+                return 1;
+        arg = replace_string(arg, "$N", me->name(1));
+        chk = filter_color(arg);
+        if (strlen(chk) >= 2 && chk[0..1] == "你" || strsrch(chk, "\\n你") != -1)
+                return notify_fail("对不起，描述禁止以“你”字开头！\n");
+
+        chk = replace_string(chk, " ", "");
+        chk = replace_string(chk, "\\n", "");
+        chk = replace_string(chk, "$n", "");
+        if (! legal_chinese(chk))
+                return notify_fail("对不起，描述必须使用汉字和系统规定可以使用的代表符号。\n");
+  arg = "◆"+arg; 		//防止作弊，前面加特殊符号              
+	arg = replace_string(arg, "$n", ob->query("item/name"));
+	arg = replace_string(arg, "\\n", "\n");	
+	arg = chinese_desc(arg);
+	ob->set("item/long", arg);
+	write(CYN "当你观察它的时候将会出现下列描述：\n" NOR + arg + "\n");
+	return 1;
+}
+
+int do_wieldmsg(string arg)
+{
+	object ob;
+	object me;
+        string chk;
+
+	me = this_player();
+	if (me->query_temp("item/status") != "inputing")
+                return 0;
+	ob = query_temp("item/making");
+        if (! ob->query("item/name")) {
+                message_vision("$N瞪了$n一眼道：你还是先给它取好名字再考虑描述吧！\n",
+                               this_object(), me);
+                return 1;
+        }
+	if (! arg) {
+		write("参照格式：应该是 wieldmsg 描述的文字。\n例如："
+                      "$N伸手一抖，抽出一把锋利长剑。 -- 其中$N表示你自"
+                       "己，$n代表道具。\n");
+		return 1;
+	}
+	if ((arg = converts(arg, 200, COLORABLE)) == ILLEGAL_STR)
+                return 1;
+        chk = filter_color(arg);
+        if (strlen(chk) >= 2 && chk[0..1] == "你" || strsrch(chk, "\\n你") != -1)
+                return notify_fail("对不起，描述不能以“你”字打头。\n");
+        chk = replace_string(chk, " ", "");
+        chk = replace_string(chk, "\\n", "");
+        chk = replace_string(chk, "$N", "");
+        chk = replace_string(chk, "$n", "");
+        if (! legal_chinese(chk))
+                return notify_fail("对不起，描述必须使用汉字和系统规定可以使用的代表符号。\n");
+  arg = "◆"+arg; 		//防止作弊，前面加特殊符号 
+	arg = chinese_desc(arg);
+	arg = replace_string(arg, me->name(1), "$N");
+        ob->set("item/wear_msg", arg);
+        ob->set("item/wield_msg", arg);
+	arg = replace_string(arg, "\\n", "\n");
+	arg = replace_string(arg, "$N", me->name(1));
+	arg = replace_string(arg, "$n", ob->query("item/name"));
+	write(CYN "当你装备它的时候将会出现下列描述：\n" NOR + arg + "\n");
+	return 1;
+}
+
+int do_unwield(string arg)
+{
+	object ob;
+	object me;
+        string chk;
+
+	me = this_player();
+	if (me->query_temp("item/status") != "inputing")
+                return 0;
+	ob = query_temp("item/making");
+        if (! ob->query("item/name")) {
+                message_vision("$N瞪了$n一眼道：你还是先给它取好名字再考虑描述吧！\n",
+                               this_object(), me);
+                return 1;
+        }
+	if (! arg) {
+		write("格式不对！应该是：unwield 描述的文字。\n例如："
+                       "$N随手一挥，$n已入鞘内。 -- 其中$N表示你自己，$n代表道具。\n");
+		return 1;
+	}
+	if ((arg = converts(arg, 200, COLORABLE)) == ILLEGAL_STR)
+                return 1;
+        chk = filter_color(arg);
+        if (strlen(chk) >= 2 && chk[0..1] == "你" || strsrch(chk, "\\n你") != -1)
+                return notify_fail("对不起，描述不能以“你”字打头。\n");
+        chk = replace_string(chk, " ", "");
+        chk = replace_string(chk, "\\n", "");
+        chk = replace_string(chk, "$N", "");
+        chk = replace_string(chk, "$n", "");
+        if (! legal_chinese(chk))
+                return notify_fail("对不起，描述必须使用汉字和系统规定可以使用的代表符号。\n");
+  arg = "◆"+arg; 		//防止作弊，前面加特殊符号               
+	arg = chinese_desc(arg);
+	arg = replace_string(arg, me->name(1), "$N");
+        ob->set("item/unwield_msg", arg);
+        ob->set("item/remove_msg", arg);
+	arg = replace_string(arg, "\\n", "\n");
+	arg = replace_string(arg, "$N", me->query("name"));
+	arg = replace_string(arg, "$n", ob->query("item/name"));
+	write(CYN "当你收回它的时候将会出现下列描述：\n" NOR + arg + "\n");
+	return 1;
+}
+
+private int legal_chinese(string str)
+{
+	int i;
+
+	if (strlen(str) < 2)
+		return 0;
+	for (i = 0; i < strlen(str); i++) {
+		if (str[i] < 161 || str[i] == 255)
+			return 0;
+		if ((! (i % 2)) && str[i] >= 248)
+			return 0;
+	}
+	return 1;
+}
+
+private string converts(string arg, int max_len, int no_color)
+{
+        int i;
+
+	arg = replace_string(arg, " ", ""); 
+	arg = replace_string(arg, "\"", "'");
+        for (i = 0; i < strlen(arg) - 1; i++) {
+                if (arg[i] == '\\' && arg[i + 1] != 'n') {
+                        write("字符'\\'后面只能跟随n字符表示回车！\n");
+        		return ILLEGAL_STR;
+                }
+        }
+        arg = replace_string(arg, ",", "，");
+        arg = replace_string(arg, ":", "：");
+        arg = replace_string(arg, "?", "？");
+	if (no_color) {
+		arg = replace_string(arg, "$BLK$", "");
+		arg = replace_string(arg, "$RED$", "");
+		arg = replace_string(arg, "$GRN$", "");
+		arg = replace_string(arg, "$YEL$", "");
+		arg = replace_string(arg, "$BLU$", "");
+		arg = replace_string(arg, "$MAG$", "");
+		arg = replace_string(arg, "$CYN$", "");
+		arg = replace_string(arg, "$WHT$", "");
+		arg = replace_string(arg, "$HIR$", "");
+		arg = replace_string(arg, "$HIG$", "");
+		arg = replace_string(arg, "$HIY$", "");
+		arg = replace_string(arg, "$HIB$", "");
+		arg = replace_string(arg, "$HIM$", "");
+		arg = replace_string(arg, "$HIC$", "");
+		arg = replace_string(arg, "$HIW$", "");
+		arg = replace_string(arg, "$NOR$", "");
+	} else {
+		arg = replace_string(arg, "$BLK$", BLK);
+		arg = replace_string(arg, "$RED$", RED);
+		arg = replace_string(arg, "$GRN$", GRN);
+		arg = replace_string(arg, "$YEL$", YEL);
+		arg = replace_string(arg, "$BLU$", BLU);
+		arg = replace_string(arg, "$MAG$", MAG);
+		arg = replace_string(arg, "$CYN$", CYN);
+		arg = replace_string(arg, "$WHT$", WHT);
+		arg = replace_string(arg, "$HIR$", HIR);
+		arg = replace_string(arg, "$HIG$", HIG);
+		arg = replace_string(arg, "$HIY$", HIY);
+		arg = replace_string(arg, "$HIB$", HIB);
+		arg = replace_string(arg, "$HIM$", HIM);
+		arg = replace_string(arg, "$HIC$", HIC);
+		arg = replace_string(arg, "$HIW$", HIW);
+		arg = replace_string(arg, "$NOR$", NOR);
+                if (strlen(arg) < strlen(NOR) || arg[strlen(arg) - strlen(NOR)..<1] != NOR)
+		        arg += NOR;
+	}
+	if (strlen(arg) > max_len + 30 || strlen(filter_color(arg)) > max_len) {
+		write("对不起，这个字符串太长了，请不要输入超过" + chinese_number(max_len) +
+		      "个字符长的字符串。\n");
+		return ILLEGAL_STR;
+	}
+	return arg;
+}
+
+int do_finish()
+{
+	object me, ob, moye;
+	string msg;
+
+	me = this_player();
+	if (me->query_temp("item/status") != "inputing")
+                return 0;
+	if (! objectp(ob = query_temp("item/making"))) {
+		write("系统故障：数据不一致，你无法完成炼制道具！\n");
+		me->delete_temp("item");
+		delete_temp("item");
+		if (objectp(moye = present("mo ye")))
+			moye->delete_temp("item");
+		return 0;
+	}	
+	if (! ob->query("item/name")) {
+		message_vision("$N瞪了$n一眼，说道：你怎么能不给它起个"
+                               "名字？你要是不想要了就算了！\n",
+                               this_object(), me);
+		return 1;
+	}
+	if (! ob->query("item/id")) {
+		message_vision("$N瞪了$n一眼，说道：你怎么能不给它起个"
+                               "代号？你要是不想要了就算了！\n",
+                               this_object(), me);
+		return 1;
+	}
+	msg = sprintf("干将对$N说：你的道具描述如下，请看看有没有错。\n");
+	message_vision(msg, me);
+	msg = sprintf("道具名字：%s   道具英文代号：%s\n\n",
+		      ob->query("item/name"), ob->query("item/id"));
+	if (ob->query("item/long") != "")
+		msg += sprintf(CYN "外观描述如下：" NOR "\n%s\n\n", ob->query("item/long"));
+	else
+		msg += "采用缺省的外观描述。\n";
+	if (ob->query("item/wield_msg") != "")
+		msg += sprintf(CYN "装备时描述如下：" NOR "\n%s\n\n", replace_string(ob->query("item/wield_msg"), "\\n", "\n"));
+	else
+		msg += "装备时采用缺省的描述。\n";
+	if (ob->query("item/unwield_msg") != "")
+		msg += sprintf(CYN "收回时描述如下：" NOR "\n%s\n\n", replace_string(ob->query("item/unwield_msg"), "\\n", "\n"));
+	else
+		msg += "收回时采用缺省的描述。\n";
+		msg += CYN "如果没有问题，就可以继续进行了(y/n):" NOR;
+	msg = replace_string(msg, "$N", me->query("name"));
+	msg = replace_string(msg, "$n", ob->query("item/name"));
+	tell_object(me, msg);
+	input_to("confirm_make", ob);
+	return 1;
+}
+
+void confirm_make(string arg, object ob)
+{
+	object me, moye;
+	string item_filename;
+
+	me = this_player();
+        if (! objectp(query_temp("item/making"))) {
+                command("kick " + me->query("id"));
+                command("say 你太磨蹭了，这生意我不做了，恕不退货！");
+                return;
+        }
+	if (arg != "y" && arg != "Y") {
+                message_vision(CYN "\n$N" CYN "点了点头道：那你还是再看看吧。\n" NOR, this_object());
+                return;
+        }
+	message_vision("$N对$n说道：好，马上就好！\n", this_object(), me);
+	if (item_filename = create_file(ob)) {
+		destruct(ob);
+                catch(call_other(item_filename, "???"));
+		ob = find_object(item_filename);
+                if (! ob) {
+                        message_vision("$N一呆，对$n道：抱歉抱歉！出了一些问题，请询问一下巫师！\n",
+                                       this_object(), me);
+                } else {
+		        			if (ob->move(me))
+		        			message_vision("$N把" + ob->query("name") + "交给了$n。\n", this_object(), me);
+		        			else {
+		        				ob->move(environment(me));	
+		        				message_vision("$N想把" + ob->query("name") + "交给$n，但$n手一脱，结果掉在地上。\n", this_object(), me);
+		        				}
+		        				
+		     CHANNEL_D->do_channel(this_object(), "rumor",
+                        me->name() + "定做了一" +
+                        ob->query("unit") +
+                        ob->query("name") + "。\n");
+                        
+         //设置定做数量限制                  
+         if (!me->query("dingzuo/count")) me->set("dingzuo/count",1);
+   			 else me->add("dingzuo/count",1);
+   	                				
+         log_file("nosave/dingzuo", sprintf("%s %s created  %s(%s) from %s\n",
+				 					log_time(), log_id(me),filter_color(ob->name(1)), ob->query("id"),
+                  query_ip_name(me)));
+         if (ob->query("wield_msg")) {       
+         		auto_post(
+                sprintf("定做公告：%s定做了 %s(%s) from %s ",
+                log_id(me),filter_color(ob->name(1)), ob->query("id"),
+                  query_ip_name(me)),
+	
+                sprintf("武器look 描述：\n%s\n"
+                        "武器wield描述：\n%s\n武器unwield描述：\n%s\n",
+                        ob->query("long"),ob->query("wield_msg"),ob->query("unwield_msg")
+										));
+					}					
+					else {     
+         	auto_post(
+                sprintf("定做公告：%s定做了 %s(%s) from %s ",
+                log_id(me),filter_color(ob->name(1)), ob->query("id"),
+                  query_ip_name(me)),
+	
+                sprintf("装备look 描述：\n%s\n"
+                        "装备wear描述：\n%s\n装备remove描述：\n%s\n",
+                        ob->query("long"),ob->query("wear_msg"),ob->query("remove_msg")
+										));	
+					}				
+     }         	
+	}
+	if (objectp(moye = present("mo ye", environment())))
+		moye->delete_temp("item");
+	me->delete_temp("item");
+	delete_temp("item");
+	remove_call_out("waiting");
+}
+
+private string create_file(object item_temp)
+{
+	string	buf, filename, desc, ih, id ,desc2;
+	int	i;
+        mapping info;
+
+        id = item_temp->query("item/owner_id");
+	filename = ITEM_DIR + id[0..0] + "/" + id + 
+		   "-" + item_temp->query("item/id") + ".lpc";
+	if (file_size(filename) != -1) {
+		write("无法生成档案，请通知巫师处理！\n");
+		return 0;
+	}
+        assure_file(filename);
+        buf =  sprintf("// Information : %s(%s) at %s\n",
+                item_temp->query("item/owner_name"),
+                item_temp->query("item/owner_id"),
+                ctime(time()));
+        info = item_temp->query("item");
+        ih = up_case(info["stype"]);
+	if (info["type"] == "weapon") {
+		//根据材料等级来描述武器气质
+		if (item_temp->query("rate")==1) 
+		desc2 = "它看起来普普通通，十分寻常";
+		if (item_temp->query("rate")==2) 
+		desc2 = WHT"它看起来寒光闪烁，相当锋利"NOR;
+		if (item_temp->query("rate")==3) 
+		desc2 = HIY"它看起来令人不安，散发出强烈的凶杀之气"NOR;
+		if (item_temp->query("rate")==4) 
+		desc2 = HIR"它看起来气冲霄汉，凛然不可侵犯的王霸之气老远就能让人感觉到，端的是绝世神兵"NOR;
+		if (item_temp->query("rate")==5)  { //jiali 0的特殊材料
+			desc2 = HIG"它看起来弹性十足，坚韧无比"NOR;
+			info["point"] = 0;
+		}
+		
+		desc = "这是由" + item_temp->query("name") + "炼制而成的一" +
+		       info["unit"] + info["ctype"] +"，"+desc2+"。\n";
+                desc += info["long"];
+                if (desc[strlen(desc) - 1] != '\n')
+                        desc += "\n";
+		desc += info["ctype"] + "柄上刻着一行小字：" +
+		        info["owner_name"] + "(" + info["owner_id"] + ")\n";
+		if (info["wield_msg"] == "") {
+			info["wield_msg"] = HIC "$N" HIC "一声清啸，抖出一" +
+					    info["unit"] + HIC "$n" HIC "。" NOR;
+		}
+		if (info["unwield_msg"] == "") {
+			info["unwield_msg"] = "$N随手一抹，收起了$n。";
+		}
+		buf += "#include <ansi.h>\n";
+		buf += "#include <weapon.h>\n\n";
+		buf += "inherit " + ih + ";\n";
+		buf += "inherit F_AUTOLOAD;\n";
+                buf += "int amount;\n\n";
+                buf += "void create()\n{\n";
+		buf += sprintf("\tset_name(\"%s\", ({ \"%s\" }));\n", 
+				info["name"], info["id"]);
+		buf += sprintf("\tset_weight(%d);\n", item_temp->query_weight());
+        	buf += sprintf("\tif (clonep())\n");
+        	buf += sprintf("\t\t\tset_default_object(__FILE__);\n\telse {\n");
+		buf += sprintf("\t\tset(\"unit\", \"%s\");\n", info["unit"]);
+		buf += sprintf("\t\tset(\"long\", \"%s\");\n", desc);
+		buf += sprintf("\t\tset(\"value\", %d);\n", info["value"]);
+		buf += sprintf("\t\tset(\"rigidity\", %d);\n", item_temp->query("rigidity"));
+		buf += sprintf("\t\tset(\"material\", \"%s\");\n", item_temp->query("material_attrib"));
+		buf += sprintf("\t\tset(\"wield_msg\", \"%s\\n\");\n", info["wield_msg"]);
+		buf += sprintf("\t\tset(\"unwield_msg\", \"%s\\n\");\n", info["unwield_msg"]);
+		if ( item_temp->query("item/ctype")=="令") 
+		buf += sprintf("\t\tset(\"ling\", %d);\n", 1);
+		//设置附带效果
+	  if (item_temp->query("rate")==3)
+	  	buf += sprintf("\t\tset(\"weapon_prop/damage\", %d);\n", 30+random(30));	
+    if (item_temp->query("rate")==4) {
+	  	buf += sprintf("\t\tset(\"weapon_prop/damage\", %d);\n", 100+random(50));	
+	  	buf += sprintf("\t\tset(\"weapon_prop/attack\", %d);\n", 100+random(50));
+	  	buf += sprintf("\t\tset(\"weapon_prop/dodge\", %d);\n", 50+random(50));
+		}
+    buf += sprintf("\t\tset(\"no_drop\",\"你不能丢掉这样东西。\\n\");\n");
+    buf += sprintf("\t\tset(\"no_get\",\"你捡不起这东西。\\n\");\n");
+		buf += sprintf("\t\tinit_%s(%d);\n", info["stype"], info["point"]);
+	} else {
+		//根据材料等级来描述武器气质
+		if (item_temp->query("rate")==1) 
+		desc2 = "它看起来普普通通，十分寻常"NOR;
+		if (item_temp->query("rate")==2) 
+		desc2 = CYN"它看起来棱角分明，相当坚固"NOR;
+		if (item_temp->query("rate")==3) 
+		desc2 = HIW"它看起来气冲斗牛，似乎有股强大的真气环绕周围"NOR;
+		if (item_temp->query("rate")==4) 
+		desc2 = HIC"它看起来巧夺天工，神锋内敛，似乎天地间没有任何力量能将其撼动"NOR;
+		
+		desc = "这是由" + item_temp->query("name") + "炼制而成的一" +
+		       info["unit"] + info["ctype"] + "，"+desc2+"。\n";
+                desc += info["long"];
+                if (desc[strlen(desc) - 1] != '\n')
+                        desc += "\n";
+		desc += info["ctype"] + "边缘刻着一行小字：" +
+		        info["owner_name"] + "(" + info["owner_id"] + ")\n";
+		if (info["wear_msg"] == "") {
+			info["wear_msg"] = YEL "$N" YEL "装备" +
+					   info["name"] + YEL "。" NOR;
+		}
+		if (info["remove_msg"] == "") {
+			info["remove_msg"] = YEL "$N" YEL "脱下了" +
+					     info["name"] + YEL "。" NOR;
+		}
+		buf += "#include <ansi.h>\n";
+		buf += "#include <armor.h>\n\n";
+		buf += "inherit " + ih + ";\n";
+                buf += "int amount;\n\n";
+                buf += "void create()\n{\n";
+		buf += sprintf("\tset_name(\"%s\", ({ \"%s\" }));\n", 
+				info["name"], info["id"]);
+		buf += sprintf("\tset_weight(%d);\n", item_temp->query_weight() * item_temp->query("item/wscale") / 100);
+        	buf += sprintf("\tif (clonep())\n");
+        	buf += sprintf("\t\tset_default_object(__FILE__);\n\telse {\n");
+		buf += sprintf("\t\tset(\"unit\", \"%s\");\n", info["unit"]);
+		buf += sprintf("\t\tset(\"long\", \"%s\");\n", desc);
+		buf += sprintf("\t\tset(\"value\", %d);\n", info["value"]);
+		buf += sprintf("\t\tset(\"material\", \"%s\");\n", item_temp->query("material_attrib"));
+		buf += sprintf("\t\tset(\"wear_msg\", \"%s\\n\");\n", info["wear_msg"]);
+		buf += sprintf("\t\tset(\"remove_msg\", \"%s\\n\");\n", info["remove_msg"]);
+        	buf += sprintf("\t\tset(\"no_drop\",\"你不能丢掉这东西。\\n\");\n");
+        	buf += sprintf("\t\tset(\"no_get\",\"你捡不起这东西。\\n\");\n");
+	        buf += sprintf("\t\tset(\"armor_prop/armor\", %d);\n", info["point"]);
+	  //设置附带效果
+	  if (item_temp->query("rate")==3){	
+	  	buf += sprintf("\t\tset(\"armor_prop/dodge\", %d);\n", 30+random(50));
+	  	buf += sprintf("\t\tset(\"armor_prop/defense\", %d);\n", 50+random(30));
+	  }
+    if (item_temp->query("rate")==4) {
+	  	buf += sprintf("\t\tset(\"armor_prop/defense\", %d);\n", 150+random(50));	
+	  	if(random(2==1))
+	  	buf += sprintf("\t\tset(\"armor_prop/dodge\", %d);\n", 150+random(50));
+	  	else
+	  	buf += sprintf("\t\tset(\"armor_prop/parry\", %d);\n", 150+random(50));
+		}
+	}
+        buf += "\t}\n";
+        buf += "\tset(\"item_make\", 1);\n";
+        buf += sprintf("\tset(\"owner\",\"%s\");\n", id);
+        buf +=  "\tsetup();\n}\n\n"+
+                "int query_amount() { return amount; }\n" +
+                "string query_autoload() { return query_amount() + \"\"; }\n";
+	rm(filename);
+	if (write_file(filename, buf) == 1)
+		return filename;
+	write("写入档案(" + filename + ")时出错，请通知巫师处理。\n");
+	return 0;
+}
+
+int do_discard(string arg)
+{
+        object money, ob, me;
+        int n;
+
+        if (! arg || arg=="" )
+                return notify_fail("你要退回什么东西？\n");
+        me = this_player();
+        if (! objectp(ob = present(arg, me)))
+                return notify_fail("你身上没有这种东西。\n");
+        message_vision("$n拿出一" + ob->query("unit") + ob->name() +
+                       "对$N说：“这个东西我想退掉了...”\n",
+                       this_object(), me);
+        if (! ob->query("item_make")) {
+                command("heng");
+                command("say 这不是我这里出来的东西，我可不能负责。");
+                return 1;
+        }
+        if (ob->query("owner") != me->query("id")) {
+                command("kick " + me->query("id"));
+                command("say 你拿了别人的东西还敢来我这里？以为我是傻子？");
+                return 1;
+        }
+        command("say 好吧！");
+        message_vision("$N接过$n递过来的" + ob->name() + "，随手"
+                       "扔进了火炉，呆呆的望了半晌，似乎有些惋惜。\n",
+                       this_object(), me);
+        command("say 你既然不满意我的东西，我也不能收你的钱，"
+                "这些算是我退回给你的！");
+        n = (ob->query("value") /2 ) / 10000;
+        if (! n) {
+                money = new("/clone/money/silver");
+                money->set_amount(1);
+        } else {
+                money = new("/clone/money/gold");
+                money->set_amount(n);
+        }
+        message_vision("$N拿出一些" + money->name() + "交给"
+                       "$n。\n", this_object(), me);
+        log_file("nosave/dingzuo", sprintf("%s %s discard  %s(%s) from %s\n",
+				log_time(), log_id(me),
+                                filter_color(ob->name(1)), ob->query("id"),
+       				query_ip_name(me)));
+        rm(base_name(ob) + ".lpc");
+        money->move(me,1);
+        destruct(ob);
+        return 1;
+}
+
+string chinese_desc(string arg)
+{
+        arg = replace_string(arg, ",", "，");
+        arg = replace_string(arg, "!", "！");
+        return arg;
+}
+
+string filter_color(string arg)
+{
+	arg = replace_string(arg, BLK, "");
+	arg = replace_string(arg, RED, "");
+	arg = replace_string(arg, GRN, "");
+	arg = replace_string(arg, YEL, "");
+	arg = replace_string(arg, BLU, "");
+	arg = replace_string(arg, MAG, "");
+	arg = replace_string(arg, CYN, "");
+	arg = replace_string(arg, WHT, "");
+	arg = replace_string(arg, HIR, "");
+	arg = replace_string(arg, HIG, "");
+	arg = replace_string(arg, HIY, "");
+	arg = replace_string(arg, HIB, "");
+	arg = replace_string(arg, HIM, "");
+	arg = replace_string(arg, HIC, "");
+	arg = replace_string(arg, HIW, "");
+	arg = replace_string(arg, NOR, "");
+        arg = replace_string(arg, BOLD, "");
+        arg = replace_string(arg, BLINK, "");
+        return arg;
+}
+
+varargs string log_id(object ob, int raw)
+{
+        string msg;
+        if (raw)
+        	return sprintf("%-8s", geteuid(ob));
+        msg = sprintf("%s(%s)", ob->name(1), geteuid(ob));
+        msg = sprintf("%-16s", msg);
+        return msg;
+}
+
+string log_time()
+{
+        string msg = ctime(time());
+
+        msg = msg[4..6] + "/" + msg[8..9] + "/" +
+              msg[20..23] + " " + msg[11..18];
+        return msg;
+}
+
+string up_case(string arg)
+{
+        int i;
+        for (i = 0; i < strlen(arg); i++)
+                if (arg[i] >= 'a' && arg[i] <= 'z')
+                        arg[i] = arg[i] - 32;
+        return arg;
+}
+
+int is_legal_id(string id)
+{
+        int i;
+
+        if (! id)
+        	return 0;
+        for (i = 0; i < strlen(id); i++)
+		if (id[i] < 'a' || id[i] > 'z')
+                        return 0;
+        return 1;
+}
+
+int do_recustomize(string arg) //重新再CLONE一次
+{
+		object me,ob;
+		int val;
+		string path;
+
+		me = this_player();
+		
+		if (me->query("dingzuo/recustomize")>=3)
+		{
+			command("shake");	
+			command("say 很抱歉，我无法再为你重新打造物品了。");
+    	return 1;
+    }
+    
+		if (! arg || arg=="") {
+		command("say 你到底要重新定做什么东西？");
+		return 1;
+		}
+		
+		if (!is_legal_id(arg)) {
+       write("请把你定做的英文代号以小写输入！\n");
+       return 1;
+		}
+		
+		if (present(arg, me)){
+			command("hmm");	
+			command("say 这不在你身上好好的吗！");
+    	return 1;
+    }
+    path = ITEM_DIR + me->query("id")[0..0] + "/" + me->query("id") + "-" + arg + ".lpc";
+    //command("say path= "+path);
+    //if (file_size(ITEM_DIR + me->query("id")[0..0] + "/" + me->query("id") + "-" + arg + ".lpc") != -1) {
+    if (objectp(ob=load_object(path))) {
+    	//ob = new(path);
+    	val = (int)( ob->query("value") / 20000 );
+    	me->set_temp("ganjiang/recustomize",path);
+    	me->set_temp("ganjiang/recustom-money",val);
+    	command("say 好吧，上次跟你做这个的时候材料还剩了些，样式图纸也都在，正好可以再补做一次");
+    	command("say 既然是老主顾，我就只收你一半价钱好了，重新定做这样道具大概需要" + chinese_number(val) + "两黄金，请给我吧。");
+    	return 1;
+    }
+    command("say 你有定做过这东西吗？");
+    return 1;
+}        
+
+void auto_post(string title,string body) {
+        mapping note;
+        object POSTER;
+        if( objectp(POSTER=load_object("/clone/board/lpc")) )
+        {
+                note=([]);
+                note["title"] = title;
+                note["author"] = sprintf("%s(%s)",this_player()->query("name"),this_player()->query("id"));
+                note["time"] = time();
+                POSTER->done_post(this_player(),note,body);
+        }
+        return;
+}

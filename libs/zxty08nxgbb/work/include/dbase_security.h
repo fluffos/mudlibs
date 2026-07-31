@@ -1,6 +1,6 @@
 // dbase_security.h
 
-#include <origin.h>
+#include "origin.h"
 
 nomask mixed set(string prop, mixed data)
 {

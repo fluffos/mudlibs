@@ -47,31 +47,31 @@ int do_invite(string arg)
         me = this_player();
 
         if (!is_owner(me))
-                return notify_fail("ÀÏÆÍÆæ¹ÖµÄÎÊ£ºÄãÊÇË­£¿Æ¾Ê²Ã´¶ÔÎÒÖ¸ÊÖ»­½ÅµÄ£¿\n");
+                return notify_fail("è€ä»†å¥‡æ€ªçš„é—®ï¼šä½ æ˜¯è°ï¼Ÿå‡­ä»€ä¹ˆå¯¹æˆ‘æŒ‡æ‰‹ç”»è„šçš„ï¼Ÿ\n");
 
         if (! arg || ! objectp(ob = present(arg, environment())))
-                return notify_fail("ÄãÒªÑûÇëË­£¿\n");
+                return notify_fail("ä½ è¦é‚€è¯·è°ï¼Ÿ\n");
 
         if (! ob->is_character())
-                return notify_fail("ÄãÏòÑûÇëËü£¬¿ÉÊÇËü²»»á×ßÂ·°¡£¡\n");
+                return notify_fail("ä½ å‘é‚€è¯·å®ƒï¼Œå¯æ˜¯å®ƒä¸ä¼šèµ°è·¯å•Šï¼\n");
 
         if (! ob->query("can_speak"))
-                return notify_fail("ÓĞÒâË¼£¬²»¹ıÄã×îºÃ»¹ÊÇÑûÇëÒ»¸ö¡°ÈË¡±¡£\n");
+                return notify_fail("æœ‰æ„æ€ï¼Œä¸è¿‡ä½ æœ€å¥½è¿˜æ˜¯é‚€è¯·ä¸€ä¸ªâ€œäººâ€ã€‚\n");
 
         if (ob == me)
-                return notify_fail("ÄãÒªÑûÇëÄã×Ô¼º£¿Ïë·¨²»´í£¬¿ÉÏ§Ã»ÓĞÓÃ¡£\n");
+                return notify_fail("ä½ è¦é‚€è¯·ä½ è‡ªå·±ï¼Ÿæƒ³æ³•ä¸é”™ï¼Œå¯æƒœæ²¡æœ‰ç”¨ã€‚\n");
 
         if (is_owner(ob))
-                return notify_fail("ÕâÈËÒ²ËãÊÇÕâ¶ùµÄÖ÷ÈË£¬ÓĞÊ²Ã´ºÃÑûÇëµÄ£¿\n");
+                return notify_fail("è¿™äººä¹Ÿç®—æ˜¯è¿™å„¿çš„ä¸»äººï¼Œæœ‰ä»€ä¹ˆå¥½é‚€è¯·çš„ï¼Ÿ\n");
 
         if (! userp(ob))
-                return notify_fail("ÕâÈËÄã»¹ÊÇ±ğÑûÇëÁË¡£\n");
+                return notify_fail("è¿™äººä½ è¿˜æ˜¯åˆ«é‚€è¯·äº†ã€‚\n");
 
         me = this_player();
-        message_vision("$NÖ¸×Å" + ob->name() + "¶Ô$nµÀ£º¡°ÕâÊÇÎÒÇëÀ´µÄ"
-                       "¿ÍÈË£¬Äã¿É²»Òªµ¡ÂıÁË£¡¡±\n$nÁ¬Ã¦µãÍ·¹şÑüµÀ£º¡°"
-                       "ÖªµÀÁË£¡ÖªµÀÁË£¡ÕâÎ»" + RANK_D->query_respect(ob) +
-                       "£¬Ğ¡µÄÄÄÓĞ²»ÖÜ¾¡¹ÜÌá£¡¡±\n", me, this_object());
+        message_vision("$NæŒ‡ç€" + ob->name() + "å¯¹$né“ï¼šâ€œè¿™æ˜¯æˆ‘è¯·æ¥çš„"
+                       "å®¢äººï¼Œä½ å¯ä¸è¦æ€ æ…¢äº†ï¼â€\n$nè¿å¿™ç‚¹å¤´å“ˆè…°é“ï¼šâ€œ"
+                       "çŸ¥é“äº†ï¼çŸ¥é“äº†ï¼è¿™ä½" + RANK_D->query_respect(ob) +
+                       "ï¼Œå°çš„å“ªæœ‰ä¸å‘¨å°½ç®¡æï¼â€\n", me, this_object());
         ob->set_temp("permit_enter/" + me->query("id"), 1);
         return 1;
 }
@@ -83,23 +83,23 @@ int do_show(string arg)
         string msg;
 
         if (! arg)
-                return notify_fail("ÄãÒªÁÁ³öÊ²Ã´¶«Î÷£¿\n");
+                return notify_fail("ä½ è¦äº®å‡ºä»€ä¹ˆä¸œè¥¿ï¼Ÿ\n");
 
         me = this_player();
         if (! objectp(ob = present(arg, me)))
-                return notify_fail("ÄãÉíÉÏÃ»ÓĞÕâÖÖ¶«Î÷¡£\n");
+                return notify_fail("ä½ èº«ä¸Šæ²¡æœ‰è¿™ç§ä¸œè¥¿ã€‚\n");
  
-        msg = "$NÁÁ³öÒ»" + ob->query("unit") + ob->name() + "\n";
+        msg = "$Näº®å‡ºä¸€" + ob->query("unit") + ob->name() + "\n";
         if (! ob->id(environment()->query("room_owner_id") + " pass"))
-                msg += "²»¹ı$nÀí¶¼Ã»ÓĞÀí$n¡£\n";
+                msg += "ä¸è¿‡$nç†éƒ½æ²¡æœ‰ç†$nã€‚\n";
         else
                 if (is_owner_permit(me))
-                        msg += "$nÂúÁ³¶ÑĞ¦£¬¶Ô$NµÀ£º¡°Ê§¾´£¡Ê§¾´£¡¡±\n";
+                        msg += "$næ»¡è„¸å †ç¬‘ï¼Œå¯¹$Né“ï¼šâ€œå¤±æ•¬ï¼å¤±æ•¬ï¼â€\n";
                 else
                 {
-                        msg += "$nÒ»¿´£¬ÂúÁ³¶ÑĞ¦£¬¶Ô$NµÀ£º¡°Ô­À´ÊÇ" +
+                        msg += "$nä¸€çœ‹ï¼Œæ»¡è„¸å †ç¬‘ï¼Œå¯¹$Né“ï¼šâ€œåŸæ¥æ˜¯" +
                                environment()->query("room_owner") +
-                               "µÄÅóÓÑ£¬Ê§¾´£¡Ê§¾´£¡¡±\n";
+                               "çš„æœ‹å‹ï¼Œå¤±æ•¬ï¼å¤±æ•¬ï¼â€\n";
                         me->set_temp("permit_enter/" +
                                      environment()->query("room_ownerid"), 1);
                 }
@@ -114,18 +114,18 @@ int list_vip()
         string msg,*vip;
 
         if (!is_owner(this_player()))
-                return notify_fail("ÀÏÆÍÆæ¹ÖµÄÎÊ£ºÄãÊÇË­£¿Æ¾Ê²Ã´¶ÔÎÒÖ¸ÊÖ»­½ÅµÄ£¿\n");
+                return notify_fail("è€ä»†å¥‡æ€ªçš„é—®ï¼šä½ æ˜¯è°ï¼Ÿå‡­ä»€ä¹ˆå¯¹æˆ‘æŒ‡æ‰‹ç”»è„šçš„ï¼Ÿ\n");
 
         ob = this_object();
 
         vip = ob->query("vip");
         if (!vip || sizeof(vip) < 1)
         {
-                msg = "Äú²¢Ã»ÓĞ¶¨ÒåÈÎºÎµÄ¹ó±ö¡£\n";
-                msg += "Äú¿ÉÒÔÍ¨¹ıvip <id>À´Ìí¼Ó¹ó±ö£¬Í¨¹ıvip <id> -cÀ´Çå³ı¹ó±ö¡£\n";
+                msg = "æ‚¨å¹¶æ²¡æœ‰å®šä¹‰ä»»ä½•çš„è´µå®¾ã€‚\n";
+                msg += "æ‚¨å¯ä»¥é€šè¿‡vip <id>æ¥æ·»åŠ è´µå®¾ï¼Œé€šè¿‡vip <id> -cæ¥æ¸…é™¤è´µå®¾ã€‚\n";
                 return notify_fail(msg);
         }
-        msg = HIY "ÄúËù¶¨ÒåµÄ¹ó±öÓĞÈçÏÂÍæ¼Ò£º\n" NOR;
+        msg = HIY "æ‚¨æ‰€å®šä¹‰çš„è´µå®¾æœ‰å¦‚ä¸‹ç©å®¶ï¼š\n" NOR;
         msg += "------------------------------\n";
         for (i = 0;i < sizeof(vip);i++)
         {
@@ -133,8 +133,8 @@ int list_vip()
         }
         msg += "------------------------------\n";
 
-        msg += HIY "×Ü¹²" + sizeof(vip) + "¸ö¹ó±ö¡£\n" NOR;
-        msg += HIY "Äú¿ÉÒÔÍ¨¹ıvip <id>À´Ìí¼Ó¹ó±ö£¬Í¨¹ıvip <id> -cÀ´Çå³ı¹ó±ö¡£\n" NOR;
+        msg += HIY "æ€»å…±" + sizeof(vip) + "ä¸ªè´µå®¾ã€‚\n" NOR;
+        msg += HIY "æ‚¨å¯ä»¥é€šè¿‡vip <id>æ¥æ·»åŠ è´µå®¾ï¼Œé€šè¿‡vip <id> -cæ¥æ¸…é™¤è´µå®¾ã€‚\n" NOR;
         write(msg);
         return 1;
 }
@@ -149,10 +149,10 @@ int do_vip(string arg)
         me = this_player();
 
         if (!is_owner(me))
-                return notify_fail("ÀÏÆÍÆæ¹ÖµÄÎÊ£ºÄãÊÇË­£¿Æ¾Ê²Ã´¶ÔÎÒÖ¸ÊÖ»­½ÅµÄ£¿\n");
+                return notify_fail("è€ä»†å¥‡æ€ªçš„é—®ï¼šä½ æ˜¯è°ï¼Ÿå‡­ä»€ä¹ˆå¯¹æˆ‘æŒ‡æ‰‹ç”»è„šçš„ï¼Ÿ\n");
 
         if (!arg)
-                return notify_fail("Äú¿ÉÒÔÍ¨¹ıvip <id>À´Ìí¼Ó¹ó±ö£¬Í¨¹ıvip <id> -cÀ´Çå³ı¹ó±ö¡£\n");
+                return notify_fail("æ‚¨å¯ä»¥é€šè¿‡vip <id>æ¥æ·»åŠ è´µå®¾ï¼Œé€šè¿‡vip <id> -cæ¥æ¸…é™¤è´µå®¾ã€‚\n");
 
         vip = ob->query("vip");
         if (!vip) vip = ({});
@@ -160,27 +160,27 @@ int do_vip(string arg)
         if (sscanf(arg,"%s -c",arg) == 1)
         {
                 if (member_array(arg,vip) == -1)
-                        return notify_fail(ob->name(1) + "Åâ×ÅĞ¦Á³Ëµ£º" + arg + "±¾À´¾Í²»ÊÇÄúµÄ¹ó±ö°¡£¡\n");
+                        return notify_fail(ob->name(1) + "èµ”ç€ç¬‘è„¸è¯´ï¼š" + arg + "æœ¬æ¥å°±ä¸æ˜¯æ‚¨çš„è´µå®¾å•Šï¼\n");
                 vip -= ({arg});
                 ob->set("vip",vip);
                 ob->save();
-                write(ob->name(1) + "µãÍ·¹şÑü¶ÔÄãËµ£ºÊÕµ½£¡ÊÕµ½£¡£¡ÒÔºó" + arg + "²»ÊÇÄúµÄ¹ó±öÁË¡£\n");
+                write(ob->name(1) + "ç‚¹å¤´å“ˆè…°å¯¹ä½ è¯´ï¼šæ”¶åˆ°ï¼æ”¶åˆ°ï¼ï¼ä»¥å" + arg + "ä¸æ˜¯æ‚¨çš„è´µå®¾äº†ã€‚\n");
                 return 1;
         }
 
         if (sizeof(vip) >= ob->query("max_vip"))
-                return notify_fail(ob->name(1) + "¿à×ÅÁ³Ëµ£ºÄú¶¨µÄ¹ó±öÌ«¶àÁË£¬ÀÏÅ«ÎÒÊµÔÚÊÇ¼Ç²»×¡°¡£¡\n");
+                return notify_fail(ob->name(1) + "è‹¦ç€è„¸è¯´ï¼šæ‚¨å®šçš„è´µå®¾å¤ªå¤šäº†ï¼Œè€å¥´æˆ‘å®åœ¨æ˜¯è®°ä¸ä½å•Šï¼\n");
 
         if (arg == me->query("id"))
-                return notify_fail(ob->name(1) + "Ò»¸ö¶ßàÂ£¬Õ½Õ½¾¤¾¤µÄËµ£ºÄúÊÇÖ÷ÈË°¡£¬ÀÏÅ«²»¸Òµ±ÄúÊÇ¿ÍÈË£¡\n");
+                return notify_fail(ob->name(1) + "ä¸€ä¸ªå“†å—¦ï¼Œæˆ˜æˆ˜å…¢å…¢çš„è¯´ï¼šæ‚¨æ˜¯ä¸»äººå•Šï¼Œè€å¥´ä¸æ•¢å½“æ‚¨æ˜¯å®¢äººï¼\n");
 
         if (member_array(arg,vip) != -1)
-                return notify_fail(ob->name(1) + "Åâ×ÅĞ¦Á³Ëµ£º" + arg + "±¾À´¾ÍÒÑ¾­ÊÇÄúµÄ¹ó±öÀ²£¡\n");
+                return notify_fail(ob->name(1) + "èµ”ç€ç¬‘è„¸è¯´ï¼š" + arg + "æœ¬æ¥å°±å·²ç»æ˜¯æ‚¨çš„è´µå®¾å•¦ï¼\n");
 
         vip += ({ arg });
         ob->set("vip",vip);
         ob->save();
-        write(ob->name(1) + "ÂúÁ³¶ÑĞ¦£¬µãÍ·¹şÑüµ½£º" + arg + "¼ÈÈ»ÊÇÄú¹ó±ö£¬ÒÔºóÒ»¶¨·ÅĞĞ£¡\n");
+        write(ob->name(1) + "æ»¡è„¸å †ç¬‘ï¼Œç‚¹å¤´å“ˆè…°åˆ°ï¼š" + arg + "æ—¢ç„¶æ˜¯æ‚¨è´µå®¾ï¼Œä»¥åä¸€å®šæ”¾è¡Œï¼\n");
         return 1;
 }
 
@@ -192,18 +192,18 @@ int add_force()
         me = this_player();
 
         if (!is_owner(me))
-                return notify_fail("ÀÏÆÍÆæ¹ÖµÄÎÊ£ºÄãÊÇË­£¿Æ¾Ê²Ã´¶ÔÎÒÖ¸ÊÖ»­½ÅµÄ£¿\n");
+                return notify_fail("è€ä»†å¥‡æ€ªçš„é—®ï¼šä½ æ˜¯è°ï¼Ÿå‡­ä»€ä¹ˆå¯¹æˆ‘æŒ‡æ‰‹ç”»è„šçš„ï¼Ÿ\n");
 
         if (ob->query("max_jing") >= 50000 || ob->query("max_qi") >= 50000
             || ob->query("max_neili") >= 50000)
-                return notify_fail("ÀÏÆÍµÄ¾«¡¢Æø¡¢ÄÚÁ¦ÒÑ¾­²»ÄÜÔÙÉıÁË¡£\n");
+                return notify_fail("è€ä»†çš„ç²¾ã€æ°”ã€å†…åŠ›å·²ç»ä¸èƒ½å†å‡äº†ã€‚\n");
 
 #ifdef LONELY_IMPROVED 
         if (count_lt(me->query("balance"), 100000000))
 #else
         if (me->query("balance") < 100000000)
 #endif
-                return notify_fail("ÄãµÄ´æ¿î²»×ã¡£\n");
+                return notify_fail("ä½ çš„å­˜æ¬¾ä¸è¶³ã€‚\n");
 
         me->add("balance", - 10000 * GOLDS);
         ob->add("max_qi", 2000);
@@ -216,9 +216,9 @@ int add_force()
         ob->add("neili", 2000);
 
         ob->save();
-        message_vision("Ö»¼û$NÁ³ÉÏºì¹âºöÒşºöÏÖ£¬" +
-                "Ë²¼äÓÖ»Ö¸´Æ½¾²¡£\n", ob);
-        tell_object(me, "ÀÏÆÍµÄ¾«¡¢Æø¡¢ÄÚÁ¦Éı¼¶³É¹¦£¡\n");
+        message_vision("åªè§$Nè„¸ä¸Šçº¢å…‰å¿½éšå¿½ç°ï¼Œ" +
+                "ç¬é—´åˆæ¢å¤å¹³é™ã€‚\n", ob);
+        tell_object(me, "è€ä»†çš„ç²¾ã€æ°”ã€å†…åŠ›å‡çº§æˆåŠŸï¼\n");
         return 1;
 }
 
@@ -231,7 +231,7 @@ int add_skill()
         me = this_player();
 
         if (!is_owner(me))
-                return notify_fail("ÀÏÆÍÆæ¹ÖµÄÎÊ£ºÄãÊÇË­£¿Æ¾Ê²Ã´¶ÔÎÒÖ¸ÊÖ»­½ÅµÄ£¿\n");
+                return notify_fail("è€ä»†å¥‡æ€ªçš„é—®ï¼šä½ æ˜¯è°ï¼Ÿå‡­ä»€ä¹ˆå¯¹æˆ‘æŒ‡æ‰‹ç”»è„šçš„ï¼Ÿ\n");
 
         oldlvl = ob->query_skill("force", 1);
 
@@ -240,7 +240,7 @@ int add_skill()
 #else
         if (me->query("balance") < oldlvl * 200000)
 #endif
-                return notify_fail("ÄãµÄ´æ¿î²»×ã¡£\n");
+                return notify_fail("ä½ çš„å­˜æ¬¾ä¸è¶³ã€‚\n");
 
         me->add("balance", - oldlvl * 20 * GOLDS);
         ob->set_skill("force", oldlvl + 100);
@@ -255,9 +255,9 @@ int add_skill()
         ob->set_skill("cuixin-zhang", oldlvl + 100);
 
         ob->save();
-        message_vision("ºöÈ»¼äÌıµ½$NÈ«ÉíµÄ¹Ç÷À¡°»©À²À²¡±Ò»Õó±©Ïì£¬" +
-                "Ë²¼äÓÖ»Ö¸´Æ½¾²¡£\n", ob);
-        tell_object(me, "ÀÏÆÍµÄÎä¹¦Éı¼¶³É¹¦£¡\n");
+        message_vision("å¿½ç„¶é—´å¬åˆ°$Nå…¨èº«çš„éª¨éª¼â€œå“—å•¦å•¦â€ä¸€é˜µæš´å“ï¼Œ" +
+                "ç¬é—´åˆæ¢å¤å¹³é™ã€‚\n", ob);
+        tell_object(me, "è€ä»†çš„æ­¦åŠŸå‡çº§æˆåŠŸï¼\n");
         return 1;
 }
 
@@ -269,21 +269,21 @@ int buy_vip()
         me = this_player();
 
         if (!is_owner(me))
-                return notify_fail("ÀÏÆÍÆæ¹ÖµÄÎÊ£ºÄãÊÇË­£¿Æ¾Ê²Ã´¶ÔÎÒÖ¸ÊÖ»­½ÅµÄ£¿\n");
+                return notify_fail("è€ä»†å¥‡æ€ªçš„é—®ï¼šä½ æ˜¯è°ï¼Ÿå‡­ä»€ä¹ˆå¯¹æˆ‘æŒ‡æ‰‹ç”»è„šçš„ï¼Ÿ\n");
 
 #ifdef LONELY_IMPROVED 
         if (count_lt(me->query("balance"), 2000 * GOLDS))
 #else
         if (me->query("balance") < 2000 * GOLDS)
 #endif
-                return notify_fail("ÄãµÄ´æ¿î²»×ã¡£\n");
+                return notify_fail("ä½ çš„å­˜æ¬¾ä¸è¶³ã€‚\n");
 
         me->add("balance", - 2000 * GOLDS);
         ob->add("max_vip", 1);
 
         ob->save();
-        tell_object(me, "³É¹¦Ôö¼ÓÒ»¸öVIPÃû¶î£¡\n");
-        tell_object(me, sprintf("ÏÖ¹²ÓĞ %d ¸öVIPÃû¶î¡£\n", ob->query("max_vip")));
+        tell_object(me, "æˆåŠŸå¢åŠ ä¸€ä¸ªVIPåé¢ï¼\n");
+        tell_object(me, sprintf("ç°å…±æœ‰ %d ä¸ªVIPåé¢ã€‚\n", ob->query("max_vip")));
         return 1;
 }
 
@@ -295,23 +295,23 @@ int add_hujiu()
         me = this_player();
 
         if (!is_owner(me))
-                return notify_fail("ÀÏÆÍÆæ¹ÖµÄÎÊ£ºÄãÊÇË­£¿Æ¾Ê²Ã´¶ÔÎÒÖ¸ÊÖ»­½ÅµÄ£¿\n");
+                return notify_fail("è€ä»†å¥‡æ€ªçš„é—®ï¼šä½ æ˜¯è°ï¼Ÿå‡­ä»€ä¹ˆå¯¹æˆ‘æŒ‡æ‰‹ç”»è„šçš„ï¼Ÿ\n");
 
         if (ob->query("can_hujiu"))
-                return notify_fail("Ö÷ÈËÒÑ¾­·Ô¸À¹ıÁË£¬ÀÏÅ«²»¸ÒÍü¼Ç¡£\n");
+                return notify_fail("ä¸»äººå·²ç»å©å’è¿‡äº†ï¼Œè€å¥´ä¸æ•¢å¿˜è®°ã€‚\n");
 
 #ifdef LONELY_IMPROVED 
         if (count_lt(me->query("balance"), 3000 * GOLDS))
 #else
         if (me->query("balance") < 30000 * GOLDS)
 #endif
-                return notify_fail("ÄãµÄ´æ¿î²»×ã¡£\n");
+                return notify_fail("ä½ çš„å­˜æ¬¾ä¸è¶³ã€‚\n");
 
         me->add("balance", - 30000 * GOLDS);
         ob->set("can_hujiu", 1);
 
         ob->save();
-        tell_object(me, "Ö÷ÈË·ÅĞÄ£¬ÀÏÅ«¼Ç×¡ÁË£¡\n");
+        tell_object(me, "ä¸»äººæ”¾å¿ƒï¼Œè€å¥´è®°ä½äº†ï¼\n");
         return 1;
 }
 

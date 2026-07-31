@@ -314,6 +314,7 @@ classes it's found.
 | 136 | `zjdy2008wzb` | 终极地狱2008完整版 | `终极地狱2008完整版.rar` | 40110 | native-boot verified, WASM pending |
 | 137 | `zjdywzb` | 终极地狱完整版 | `终极地狱完整版.rar` | 40109 | native-boot verified, WASM pending |
 | 138 | `zxty` | 再现天涯 | `再现天涯.rar` | 40166 | native-boot verified, WASM pending |
+| 138-1 | `zxty08nxgbb` | 再现天涯（08年修改版本） | `再现天涯08年修改版本.rar` | 40193 | native-boot verified, WASM pending |
 | 139 | `zzfy3` | 郑州风云3 | `郑州风云3.rar` | 40120 | native-boot verified, WASM pending |
 | 140 | `hellxg` | hell（修改版） | `hell - 修改.7z` | 40181 | noboot |
 | 141 | `wxddym` | 武学大道 | `武学大道源码.7z` | 40189 | native-boot verified, WASM pending |

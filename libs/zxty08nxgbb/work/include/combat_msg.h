@@ -1,7 +1,7 @@
 #ifndef _COMBAT_MSG_H_
 #define _COMBAT_MSG_H_
 
-static string *guard_msg = ({
+nosave string *guard_msg = ({
 	CYN "$N注视着$n的行动，企图寻找机会出手。\n" NOR,
 	CYN "$N正盯着$n的一举一动，随时准备发动攻势。\n" NOR,
 	CYN "$N缓缓地移动着，想要找出$n的破绽。\n" NOR,
@@ -10,7 +10,7 @@ static string *guard_msg = ({
 	CYN "$N慢慢地移动着，伺机出手。\n" NOR,
 });
 
-static string *catch_hunt_human_msg = ({
+nosave string *catch_hunt_human_msg = ({
 	HIW "$N和$n仇人相见分外眼红，立刻打了起来！\n" NOR,
 	HIW "$N对着$n大喝：「可恶，又是你！」\n" NOR,
 	HIW "$N和$n一碰面，二话不说就打了起来！\n" NOR,
@@ -20,19 +20,19 @@ static string *catch_hunt_human_msg = ({
 	HIW "$N喝道：「$n，看招！」\n" NOR,
 });
 
-static string *catch_hunt_beast_msg = ({
+nosave string *catch_hunt_beast_msg = ({
 	HIW "$N怒吼一声，扑了过来攻击$n！\n" NOR,
 	HIW "$N对着$n大吼，想杀死$n！\n" NOR,
 	HIW "$N发出连串低吼，突然暴起攻击$n！\n" NOR,
 });
 
-static string *catch_hunt_bird_msg = ({
+nosave string *catch_hunt_bird_msg = ({
 	HIW "$N对着$n一声怒鸣，飞冲了过来！\n" NOR,
 	HIW "$N怒鸣几声，突然暴起攻击$n！\n" NOR,
 	HIW "$N一声锐鸣，猛然向$n发起攻击！\n" NOR,
 });
 
-static string *winner_msg = ({
+nosave string *winner_msg = ({
 	CYN "\n$N哈哈大笑，说道：承让了！\n\n" NOR,
 	CYN "\n$N双手一拱，笑着说道：承让！\n\n" NOR,
         CYN "\n$n向后一纵，说道：阁下武艺果然高明，这场算是在下输了！\n\n" NOR,
@@ -42,7 +42,7 @@ static string *winner_msg = ({
 	CYN "\n$n向后一纵，躬身做揖说道：阁下武艺不凡，果然高明！\n\n" NOR,
 });
 
-static string *winner_animal_msg = ({
+nosave string *winner_animal_msg = ({
 	CYN "\n$N退在一旁，警戒地向$n盯视！\n\n" NOR,
 	CYN "\n$N退守开来，但仍然毫不放松地盯着$n！\n\n" NOR,
 	CYN "\n$N退了几步，但随时可能再冲过来！\n\n" NOR

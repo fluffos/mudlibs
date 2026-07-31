@@ -1,0 +1,187 @@
+inherit F_CLEAN_UP;
+
+#define debug(x) tell_object(me,"debug: "+x+"\n");
+//self defined functions
+varargs string set_data(string arg, object me);
+
+string set_skill_data();
+//init str.    
+nosave private object pl; //player ob
+nosave private string str = "";
+
+int main(object me, string arg)
+{
+    string fsrc, fdest, str;
+    int i;
+
+    if(!arg || sscanf(arg, "%s %s", fsrc, fdest) != 2)
+        return notify_fail("Syntax: pl2npc <user_data.ext> <npc_file.ext>\n");
+
+    pl = new(USER_OB);
+    seteuid(fsrc);
+    export_uid(pl);
+    pl->set("id",fsrc);
+
+    if( !pl->restore() ){
+        destruct(pl);
+        debug("pl ["+fsrc+"] not exists.\n");
+        return 1;
+    }
+    pl->setup();
+    //seteuid(getuid(this_player()));
+    //debug(sprintf("%O",pl->query_entire_dbase()));
+    //seteuid(geteuid(this_player()));
+
+    if( file_size(fdest) != -1){
+        debug("["+fdest+"] exists.\n");
+    }
+
+    str = "// "+ fdest +"\n//created by pl2npc.c\n\n";
+    str += "inherit NPC;\n\nvoid create()\n{\n";
+    str += sprintf("    set_name(\"%s\", ({ \"npc %s\" }) );\n",
+      pl->query("name"),
+      pl->query("id") );
+
+    str += set_data("long");
+    str += set_data("gender");
+    str += set_data("age");
+    str += set_data("mud_age");
+    str += set_data("age_modify");
+    str += set_data("birthday");
+    str += set_data("combat_exp");
+    str += set_data("potential");
+    str += "\n";
+    str += set_data("qi");
+    str += set_data("eff_qi");
+    str += set_data("max_qi");
+    str += "\n";
+    str += set_data("food");
+    str += set_data("water");
+    str += "\n";
+    str += set_data("nickname");
+    str += set_data("title");
+    str += "\n";
+    str += set_data("jing");
+    str += set_data("eff_jing");
+    str += set_data("max_jing");
+    str += "\n";
+    str += set_data("env");
+    str += "\n";
+    str += set_data("str");
+    str += set_data("int");
+    str += set_data("con");
+    str += set_data("dex");
+    str += set_data("kar");
+    str += set_data("per");
+    str += set_data("neili");
+    str += "\n";
+    str += set_data("shen");
+    str += set_data("shen_record");
+    str += set_data("weiwang");
+    str += set_data("meili");
+    str += set_data("score");
+    str += "\n";
+    str += set_data("family");
+    str += set_data("betrayer");
+    str += set_data("degree");
+    str += set_data("weapon");
+    str += set_data("party");
+    str += set_data("friends");
+    str += set_data("couple");
+    str += "\n";
+    str += set_data("MKS");
+    str += set_data("DIED");
+    str += set_data("PKS");
+    str += set_data("PKD");
+    str += set_data("K_record");
+
+    str += set_skill_data();
+
+    str += "\n";
+    str += "    setup();\n";
+    str += "    if (query(\"gender\") == \"男性\")\n";
+    str += "        carry_object(\"/clone/cloth/male\"+(1+random(8))+\"-cloth\")->wear();\n";
+    str += "    else\n";
+    str += "        carry_object(\"/clone/cloth/female\"+(1+random(8))+\"-cloth\")->wear();\n";
+    str += "}\n";
+    destruct(pl);
+    //debug(str);
+    if( !str ){
+        debug("str = 0!");
+        return 1;
+    }
+    //seteuid(ROOT_UID);
+    seteuid(getuid(me));
+    if( !write_file(fdest, str, 1) ){
+        debug("cannot write file: "+fdest+"\n");
+    }
+    else{
+        debug("convert OK!");
+    }
+    str = "";
+    return 1;
+}
+
+varargs string set_data(string arg, object cmdr)
+{
+    object me = this_player();
+    mixed tmp = pl->query(arg);
+    mixed data;
+    string s = "    set(\"" + arg + "\", ";
+
+    if( tmp ){
+        if( intp(tmp) )
+            tmp = sprintf("%d",tmp);
+        else
+        if( stringp(tmp) )
+            tmp = "\""+tmp+"\"";
+        else
+        if( mapp(tmp) )
+            tmp  = sprintf("%O",tmp);
+    }
+    else{
+        debug("property ["+arg+"] is null.\n");
+        tmp = 0;
+        return ""; // tmp = 0 时没有必要给数据.
+    }
+    debug("tmp = "+tmp+"\n");
+
+    s += tmp + ");\n";
+    return s;
+}
+
+string set_skill_data()
+{
+    mapping skills;
+    mixed *sk;
+    string tmp = "";
+    int i;
+
+    skills = pl->query_skills();
+    if( skills ){
+        tmp += "\n//set skills\n";
+        sk = keys(skills);
+        for(i = 0;i < sizeof(sk); i++){
+            tmp += "    set_skill(\""+ sk[i] +"\", "+ sprintf("%d",skills[sk[i]]) +" );\n";
+        }
+    }
+    skills = pl->query_skill_map();
+    if( skills ){
+        tmp += "\n//map_skill\n";
+        sk = keys(skills);
+        for(i = 0;i < sizeof(sk); i++){
+            tmp += "    map_skill(\""+ sk[i] +"\", \""+ skills[sk[i]] +"\");\n";
+        }
+    }
+    return tmp;
+}
+
+int help()
+{
+    write(@TEXT
+用法: pl2npc <路径+NPC文件名>
+作用: 将现有的player数据转换成最接近的npc, 以便生成名人堂等用处.
+TEXT);
+    return 1;
+}
+
