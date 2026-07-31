@@ -2398,6 +2398,20 @@ comparison in `valid_write()` — faster than guessing when the mismatch
 isn't obvious from reading the two functions in isolation.
 (`njhhdxdes2hx`'s `securityd.lpc`.)
 
+### 7.50 `accept_kill()` passes an object where `is_killing()` expects a string id
+
+A recurring copy-paste bug in `clone/user/user.lpc`'s `accept_kill(object
+ob)`: `if (is_killing(ob)) return 1;` — but `is_killing()` (typically in
+`feature/attack.lpc`) takes a string id (`is_killing(string id)`), and
+every OTHER call site in the same lib correctly passes
+`ob->query("id")`. Compiles with `Bad type for argument 1 of is_killing
+(string vs object)`, blocking the whole `clone/user/user` compile (and
+therefore character creation, since `make_body()` needs it). Fix:
+`is_killing(ob)` → `is_killing(ob->query("id"))`, matching the other
+call sites in the same file. Seen independently in two unrelated
+lineages (`nt1`, `wxddym`), so check for it on sight in any new lib
+rather than waiting to hit the compile error.
+
 ---
 
 ## 8. Login and registration flow bugs

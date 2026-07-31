@@ -322,7 +322,7 @@ classes it's found.
 | 138-1 | `zxty08nxgbb` | 再现天涯（08年修改版本） | `再现天涯08年修改版本.rar` | 40193 | native-boot verified, WASM pending |
 | 139 | `zzfy3` | 郑州风云3 | `郑州风云3.rar` | 40120 | native-boot verified, WASM pending |
 | 140 | `hellxg` | hell（修改版） | `hell - 修改.7z` | 40181 | noboot |
-| 141 | `wxddym` | 武学大道 | `武学大道源码.7z` | 40189 | native-boot verified, WASM pending |
+| 141 | `wxddym` | 武学大道 | `武学大道源码.7z` | 40189 | WASM playable |
 | 142 | `nt6` | 泥潭6 | `泥潭6.zip` | 40186 | native-boot verified, WASM pending |
 | 142-1 | `nt6nitan6win` | 泥潭6 (win_nodb版) | `泥潭6nitan6-win_nodb.rar` | 40187 | native-boot verified, WASM pending |
 | 143 | `yszz` | 妖神之争 | `妖神之争.rar` | 40192 | WASM playable |
