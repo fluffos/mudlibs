@@ -27,7 +27,7 @@ void do_cold(object me, int scale, int con)
 		con = con / 2 + random(con);
 	}
 	damage = 35 - (con + me->query_temp("apply/warm") + query_temp("warm"));
-	if (me->query("born") == "πÿÕ‚»À œ") damage -= 25;
+	if (me->query("born") == "ÂÖ≥Â§ñ‰∫∫Ê∞è") damage -= 25;
 	if (damage < 0) damage = 0;
 	if (hour <= 6 || hour >= 18) damage += damage / 2;
 	if (hour <= 4 || hour >= 22) damage += damage / 2;
@@ -35,26 +35,26 @@ void do_cold(object me, int scale, int con)
 	damage *= scale;
 	if (damage) me->receive_damage("qi", damage);
 	if (damage > 80)
-		msg = HIB "“ªπ…¥Ãπ«µƒ∫Æ∑Á¥µπ˝£¨ƒ„÷ªæıµ√ªÎ…Ì"
-		      "µƒ—™“∫∂ºøÏ±ª∂≥◊°¡À£°"NOR"\n";
+		msg = HIB "‰∏ÄËÇ°Âà∫È™®ÁöÑÂØíÈ£éÂêπËøáÔºå‰Ω†Âè™ËßâÂæóÊµëË∫´"
+		      "ÁöÑË°ÄÊ∂≤ÈÉΩÂø´Ë¢´ÂÜª‰Ωè‰∫ÜÔºÅ"NOR"\n";
 	else if (damage > 60)
-		msg = HIB "“ªπ…¥Ãπ«µƒ∫Æ∑Á¥µπ˝£¨ƒ„÷ªæıµ√ªÎ…Ì"
-		      "∑«≥£Ω©”≤£°"NOR"\n";
+		msg = HIB "‰∏ÄËÇ°Âà∫È™®ÁöÑÂØíÈ£éÂêπËøáÔºå‰Ω†Âè™ËßâÂæóÊµëË∫´"
+		      "ÈùûÂ∏∏ÂÉµÁ°¨ÔºÅ"NOR"\n";
 	else if (damage > 40)
-		msg = HIB "“ªπ…¥Ãπ«µƒ∫Æ∑Á¥µπ˝£¨ƒ„÷ªæıµ√¿‰∆¯"
-		      "Õ∏π˝“¬…¿◊Í¡ÀΩ¯¿¥£¨ªÎ…Ì√ª”–∞Îµ„»»∆¯£°"NOR"\n";
+		msg = HIB "‰∏ÄËÇ°Âà∫È™®ÁöÑÂØíÈ£éÂêπËøáÔºå‰Ω†Âè™ËßâÂæóÂÜ∑Ê∞î"
+		      "ÈÄèËøáË°£Ë°´Èíª‰∫ÜËøõÊù•ÔºåÊµëË∫´Ê≤°ÊúâÂçäÁÇπÁÉ≠Ê∞îÔºÅ"NOR"\n";
 	else if (damage > 20)
-		msg = HIB "“ªπ…¥Ãπ«µƒ∫Æ∑Á¥µπ˝£¨ƒ„÷ªæıµ√»À∂º"
-		      "“™¬Èƒæ¡À£°"NOR"\n";
+		msg = HIB "‰∏ÄËÇ°Âà∫È™®ÁöÑÂØíÈ£éÂêπËøáÔºå‰Ω†Âè™ËßâÂæó‰∫∫ÈÉΩ"
+		      "Ë¶ÅÈ∫ªÊú®‰∫ÜÔºÅ"NOR"\n";
 	else if (damage > 10)
-		msg = HIB "“ªπ…¥Ãπ«µƒ∫Æ∑Á¥µπ˝£¨ƒ„÷ªæıµ√ÃÏ∆¯"
-		      "∑«≥£µƒ¿‰£°"NOR"\n";
+		msg = HIB "‰∏ÄËÇ°Âà∫È™®ÁöÑÂØíÈ£éÂêπËøáÔºå‰Ω†Âè™ËßâÂæóÂ§©Ê∞î"
+		      "ÈùûÂ∏∏ÁöÑÂÜ∑ÔºÅ"NOR"\n";
 	else if (damage > 0)
-		msg = HIB "“ªπ…¥Ãπ«µƒ∫Æ∑Á¥µπ˝£¨ƒ„∏–æıµΩ”–µ„"
-		      "¿‰£°"NOR"\n";
+		msg = HIB "‰∏ÄËÇ°Âà∫È™®ÁöÑÂØíÈ£éÂêπËøáÔºå‰Ω†ÊÑüËßâÂà∞ÊúâÁÇπ"
+		      "ÂÜ∑ÔºÅ"NOR"\n";
 	else
-		msg = HIC "“ªπ…¥Ãπ«µƒ∫Æ∑Á¥µπ˝£¨ø… «ƒ„…Ì…œªπ"
-		      " «Õ¶≈Ø∫Õµƒ°£"NOR"\n";
+		msg = HIC "‰∏ÄËÇ°Âà∫È™®ÁöÑÂØíÈ£éÂêπËøáÔºåÂèØÊòØ‰Ω†Ë∫´‰∏äËøò"
+		      "ÊòØÊå∫ÊöñÂíåÁöÑ„ÄÇ"NOR"\n";
 
 	if (me->query("qi") < 50 && damage > 10)
 		me->apply_condition("ill_dongshang",

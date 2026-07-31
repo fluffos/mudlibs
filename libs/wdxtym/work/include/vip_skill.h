@@ -35,7 +35,7 @@ string *sk_list2 = ({
 		"shenzhaojing",
 		"jiuyang-shengong",
 });
-//¼ì²éVIP¶ÔÓ¦µÈ¼¶£¬´ïµ½Ìõ¼ş¿ÉÓµÓĞ
+//æ£€æŸ¥VIPå¯¹åº”ç­‰çº§ï¼Œè¾¾åˆ°æ¡ä»¶å¯æ‹¥æœ‰
 int check_vip_skill(string skills, object me)
 {
 	int vip_lvl;
@@ -44,10 +44,10 @@ int check_vip_skill(string skills, object me)
 		if (SKILL_D(skills)->valid_learn(me))
 			return 1;
 		vip_lvl = me->query("zjvip/level");
-		//VIP3¼¶ºó¿ÉÒÔÎŞÌõ¼şÓµÓĞµÄ¼¼ÄÜ
+		//VIP3çº§åå¯ä»¥æ— æ¡ä»¶æ‹¥æœ‰çš„æŠ€èƒ½
 		if (vip_lvl >= 3 && member_array(skills, sk_list) != -1)
 			return 1;
-		//VIP4¼¶ºó¿ÉÒÔÎŞÌõ¼şÓµÓĞµÄ¼¼ÄÜ
+		//VIP4çº§åå¯ä»¥æ— æ¡ä»¶æ‹¥æœ‰çš„æŠ€èƒ½
 		if (vip_lvl >= 4 && member_array(skills, sk_list2) != -1)
 			return 1;
 	}

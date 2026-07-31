@@ -23,39 +23,39 @@ int do_accept(string arg)
 	if (arg != "quest") return 0;
 
 	if (sizeof(filter_array(children(__DIR__"obj/cart"), (: clonep :))) > 4) {
-		command("say ÄãÀ´ÍíÁËÒÑ¾­ÓĞÈË½ÓÏÂÕâÖ§ïÚÁË¡£");
+		command("say ä½ æ¥æ™šäº†å·²ç»æœ‰äººæ¥ä¸‹è¿™æ”¯é•–äº†ã€‚");
 		return 1;
 	}
 
 	team = me->query_team();
 	if (sizeof(team) < 2 ){
-		command("say »¤ïÚÂ·Í¾Î£ÏÕ£¬ÄãÕâÃ´ÉÙµÄÈË£¬ÎÒ¿É²»·ÅĞÄ¡£");
+		command("say æŠ¤é•–è·¯é€”å±é™©ï¼Œä½ è¿™ä¹ˆå°‘çš„äººï¼Œæˆ‘å¯ä¸æ”¾å¿ƒã€‚");
 		return 1;
 	}
 	else if(sizeof(team) > 4){
-		command("say »¤ïÚÂ·Í¾Î£ÏÕ£¬µ¥¿¿ÈË¶àÊÇÃ»ÓÃµÄ¡£");
+		command("say æŠ¤é•–è·¯é€”å±é™©ï¼Œå•é äººå¤šæ˜¯æ²¡ç”¨çš„ã€‚");
 		return 1;
 	}
 	if ( team[0] != me) {
-		command("say Ö»ÓĞ¶ÓÎéÊ×Áì²ÅÄÜÌá³ö½ÓïÚ¡£");
+		command("say åªæœ‰é˜Ÿä¼é¦–é¢†æ‰èƒ½æå‡ºæ¥é•–ã€‚");
 		return 1;
 	}
 	for (i=0;i<sizeof(team);i++){
 		if (!team[i]){
-			command("say ÄãµÄ¶ÓÎé³öÏÖÁËÎÊÌâ£¬Çë½âÉ¢²¢ÖØĞÂ×é½¨¡£");
+			command("say ä½ çš„é˜Ÿä¼å‡ºç°äº†é—®é¢˜ï¼Œè¯·è§£æ•£å¹¶é‡æ–°ç»„å»ºã€‚");
 			return 1;
 		}
 		if (team[i]->query_temp("protecting")) {
-			command("say àÅ£¿ÄãµÄ¶ÓÎéÀïÔõÃ´ÓĞÈç´ËÌ°À·Ö®ÈË£¿");
+			command("say å—¯ï¼Ÿä½ çš„é˜Ÿä¼é‡Œæ€ä¹ˆæœ‰å¦‚æ­¤è´ªå©ªä¹‹äººï¼Ÿ");
 			return 1;
 		}
-		if( team[i]->query_temp("quest/busy")) //added by tangfeng Óëquest³åÍ»
+		if( team[i]->query_temp("quest/busy")) //added by tangfeng ä¸questå†²çª
 		{
-			command("say ÄãÃÇÓĞÈËÔÚ½âÃÜÖ®ÖĞ£¬ÄãÃÇ»¹ÊÇÏÈ´¦ÀíºÃÄãÆäËûÊÂÇéÔÙËµ°É¡£");
+			command("say ä½ ä»¬æœ‰äººåœ¨è§£å¯†ä¹‹ä¸­ï¼Œä½ ä»¬è¿˜æ˜¯å…ˆå¤„ç†å¥½ä½ å…¶ä»–äº‹æƒ…å†è¯´å§ã€‚");
 			return 1;
 		}
 		if (!present(team[i],environment(this_object()))){
-			command("say ß×£¿ÔõÃ´ºÃÏóÈË²»È«°¡£¿"+team[i]->query("name")+"ÔõÃ´Ã»À´£¿");
+			command("say å’¦ï¼Ÿæ€ä¹ˆå¥½è±¡äººä¸å…¨å•Šï¼Ÿ"+team[i]->query("name")+"æ€ä¹ˆæ²¡æ¥ï¼Ÿ");
 			return 1;
 		}
 		if(team[i]->query("day_jobs/hubiao/last_time"))
@@ -67,13 +67,13 @@ int do_accept(string arg)
 				team[i]->set("day_jobs/hubiao/times",0);
 			else if(last[7]==localtime(time())[7]&&times>=5)
 			{
-				command("say "+team[i]->query("name")+"½ñÈÕµÄ»¤ïÚ´ÎÊıÒÑ¾­ÓÃÍê£¬»»¸öÈË°É¡£");
+				command("say "+team[i]->query("name")+"ä»Šæ—¥çš„æŠ¤é•–æ¬¡æ•°å·²ç»ç”¨å®Œï¼Œæ¢ä¸ªäººå§ã€‚");
 				return 1;
 			}
 		}
 		if (me == team[i]) continue;
 		if (!interactive(team[i])) {
-			command("say "+team[i]->query("name")+"ÏÖÔÚ²»ÔÚÏß£¬»»³ÉÆäËûÈË°É¡£");
+			command("say "+team[i]->query("name")+"ç°åœ¨ä¸åœ¨çº¿ï¼Œæ¢æˆå…¶ä»–äººå§ã€‚");
 			return 1;
 		}
 	}
@@ -82,20 +82,20 @@ int do_accept(string arg)
 	for (i=0;i<sizeof(team);i++){
 
 		if (!ultrap(team[i])) {
-			command("say »¤ïÚÂ·Í¾Î£ÏÕ£¬ÎÒ¿´ÕâÎ»"+RANK_D->query_respect(me)+"»¹ĞèÅ¬Á¦£¬ÔçÈÕ³ÉÎªÎäÑ§´ó×ÚÊ¦£¡");
+			command("say æŠ¤é•–è·¯é€”å±é™©ï¼Œæˆ‘çœ‹è¿™ä½"+RANK_D->query_respect(me)+"è¿˜éœ€åŠªåŠ›ï¼Œæ—©æ—¥æˆä¸ºæ­¦å­¦å¤§å®—å¸ˆï¼");
 			return 1;
 		}
 
 		if (team[i]->query("combat_exp") < 500000) {
-			command("say »¤ïÚÂ·Í¾Î£ÏÕ£¬ÎÒ¿´ÕâÎ»"+RANK_D->query_respect(me)+"ĞèÒªÒ»¸öºÃ´îµµ£¡");
+			command("say æŠ¤é•–è·¯é€”å±é™©ï¼Œæˆ‘çœ‹è¿™ä½"+RANK_D->query_respect(me)+"éœ€è¦ä¸€ä¸ªå¥½æ­æ¡£ï¼");
 			return 1;
 		}
 		if (team[i]->query("balance") < 1000000 && !wizardp(team[i])) {
-			command("say »¤ïÚÊÇÎ£ÏÕµÄÊÂ£¬ÎÒ¿´"+team[i]->query("name")+RANK_D->query_respect(team[i])+"Ã»ÓĞÅâ³¥ÄÜÁ¦¡£");
+			command("say æŠ¤é•–æ˜¯å±é™©çš„äº‹ï¼Œæˆ‘çœ‹"+team[i]->query("name")+RANK_D->query_respect(team[i])+"æ²¡æœ‰èµ”å¿èƒ½åŠ›ã€‚");
 			return 1;
 		}
 		if (team[i]->query_condition("job_busy") && !wizardp(team[i])){
-			command("say Ò»Ö±»¤ïÚºÜĞÁ¿àµÄ£¬ÎÒ¿´ÕâÎ»"+team[i]->query("name")+RANK_D->query_respect(team[i])+"»¹ÊÇÈ¥ĞªÏ¢Æ¬¿Ì°É£¡");
+			command("say ä¸€ç›´æŠ¤é•–å¾ˆè¾›è‹¦çš„ï¼Œæˆ‘çœ‹è¿™ä½"+team[i]->query("name")+RANK_D->query_respect(team[i])+"è¿˜æ˜¯å»æ­‡æ¯ç‰‡åˆ»å§ï¼");
 			return 1;
 		}
 		totalexp = totalexp + team[i]->query("combat_exp");
@@ -107,24 +107,24 @@ int do_accept(string arg)
 			minexp=team[i]->query("combat_exp");
 	}
 	if( totalexp < 1000000 ){
-		command("say »¤ïÚÂ·Í¾Î£ÏÕ£¬ÎÒ¿´ÖîÎ»ËÆºõÎŞ´ËÄÜÁ¦£¿£¿£¿");
+		command("say æŠ¤é•–è·¯é€”å±é™©ï¼Œæˆ‘çœ‹è¯¸ä½ä¼¼ä¹æ— æ­¤èƒ½åŠ›ï¼Ÿï¼Ÿï¼Ÿ");
 		return 1;
 	}
 
 	if( totalexp < 20000000 && (maxexp-minexp) > 5000000 ){
-		command("say »¤ïÚÂ·Í¾Î£ÏÕ£¬ĞèÒª¶ÓÎéĞ­Í¬×÷Õ½£¬ÎÒ¿´ÖîÎ»µÄÊµÁ¦²î¾àĞüÊâ£¬»¹ÊÇÖØĞÂ×é¶Ó°É¡£");
+		command("say æŠ¤é•–è·¯é€”å±é™©ï¼Œéœ€è¦é˜Ÿä¼ååŒä½œæˆ˜ï¼Œæˆ‘çœ‹è¯¸ä½çš„å®åŠ›å·®è·æ‚¬æ®Šï¼Œè¿˜æ˜¯é‡æ–°ç»„é˜Ÿå§ã€‚");
 		return 1;
 	}
 
 
 	teams=sizeof(team);
 
-// Ñ¡Ôñ»¤ïÚÄ¿µÄ
+// é€‰æ‹©æŠ¤é•–ç›®çš„
 
 	if(!objectp(place = find_object(target_list[random(sizeof(target_list))])))
 		place = load_object(target_list[random(sizeof(target_list))]);
 	if (!place) {
-		command("say ÔİÊ±Ã»ÓĞïÚĞèÒªÀÍ¼İ"+RANK_D->query_respect(team[0])+"³öÂí¡£");
+		command("say æš‚æ—¶æ²¡æœ‰é•–éœ€è¦åŠ³é©¾"+RANK_D->query_respect(team[0])+"å‡ºé©¬ã€‚");
 		return 1;
 	}
 
@@ -142,10 +142,10 @@ int do_accept(string arg)
 		endname =  MAP_D->query_map_short(place->query("indoors"))+place->query("short");
 	else endname =  place->query("short");
 
-	command("say Çë»¤ËÍÕâÒ»±ÊïÚÒøµ½"+endname+CYN"µÄ"+target->name()+"ÊÖÖĞ¡£");
+	command("say è¯·æŠ¤é€è¿™ä¸€ç¬”é•–é“¶åˆ°"+endname+CYN"çš„"+target->name()+"æ‰‹ä¸­ã€‚");
 
 	log_file("job/hubiao",
-		sprintf("%8s%-10s´ÓÁÖÕğÄÏÕâÀïµÃµ½»¤ïÚÈÎÎñ£¬¹²%1sÈË×ö£¬ĞèÒªËÍ´ï"HIR"%s"NOR"¡£\n",
+		sprintf("%8s%-10sä»æ—éœ‡å—è¿™é‡Œå¾—åˆ°æŠ¤é•–ä»»åŠ¡ï¼Œå…±%1säººåšï¼Œéœ€è¦é€è¾¾"HIR"%s"NOR"ã€‚\n",
 			me->name(1),
 			"("+capitalize(me->query("id"))+")",
 			chinese_number(sizeof(team)),
@@ -153,9 +153,9 @@ int do_accept(string arg)
 		), me
 	);
 
-	message_vision("$N½«»¤ïÚÑº½ğ"+chinese_number(sizeof(team)*50)+"Á½»Æ½ğ½»¸øÁËïÚ¾Ö¡£\n", me);
+	message_vision("$Nå°†æŠ¤é•–æŠ¼é‡‘"+chinese_number(sizeof(team)*50)+"ä¸¤é»„é‡‘äº¤ç»™äº†é•–å±€ã€‚\n", me);
 
-	say("Ò»¶ÓïÚ³µ´ÓÄÚÔºÊ»³ö¡£\n");
+	say("ä¸€é˜Ÿé•–è½¦ä»å†…é™¢é©¶å‡ºã€‚\n");
 
 	cart=new(__DIR__"obj/cart");
 	cart->set_temp("teams", teams);
@@ -169,7 +169,7 @@ int do_accept(string arg)
 	if(teams > 0)
 		cart->set_temp("team1",team[0]);
 
-	cart->set("long", cart->query("long")+"ÕâÖ§ïÚÊÇÓÉ¸£ÍşïÚ¾ÖïÚÊ¦"+me->query("name")+"¸ºÔğËÍµ½"+HIR+endname+HIY+target->name()+NOR"ÊÖÉÏµÄ¡£\n");
+	cart->set("long", cart->query("long")+"è¿™æ”¯é•–æ˜¯ç”±ç¦å¨é•–å±€é•–å¸ˆ"+me->query("name")+"è´Ÿè´£é€åˆ°"+HIR+endname+HIY+target->name()+NOR"æ‰‹ä¸Šçš„ã€‚\n");
 	cart->set("teamhead", me->query("name"));
 	cart->set("arrive", endname);
 	cart->set("target", target);
@@ -181,7 +181,7 @@ int do_accept(string arg)
 		team[i]->apply_condition("job_busy", 45);
 		team[i]->add("balance", -500000);
 		team[i]->set_temp("death", team[i]->query("death_count"));
-		//GIFT_D->check_count(team[i],this_object(),"»¤ïÚ");
+		//GIFT_D->check_count(team[i],this_object(),"æŠ¤é•–");
 	}
 
 	cart->move(environment());
@@ -202,7 +202,7 @@ int do_accept(string arg)
 	NPC_D->init_npc_skill(biaotou,NPC_D->check_level(biaotou));
 	ob=new("/clone/money/silver");
 	ob->set_amount(1000+random(100));
-	ob->set("name","ïÚÒø");
+	ob->set("name","é•–é“¶");
 	ob->move(cart);
 /*
 	ob=new(__DIR__"biaoshi");
@@ -213,7 +213,7 @@ int do_accept(string arg)
 	ob->move(environment());
 	ob->set_temp("protecting", cart);
 */
-	me->set_temp("hubiao/where", base_name(environment(target))); //ÉèÖÃÄ¿±ê
+	me->set_temp("hubiao/where", base_name(environment(target))); //è®¾ç½®ç›®æ ‡
 	me->set_temp("hubiao/biao_time", uptime());
 	me->set_temp("hubiao/target", target);
 	return 1;
@@ -226,11 +226,11 @@ int test_dart()
 	if (ob->query_condition("job_busy")
 	 || ob->query_temp("protecting")
 	 || random(100) > 80) {
-		command("say ÏÖÔÚÃ»ÓĞïÚĞèÒªÀÍ¼İ"+RANK_D->query_respect(ob)+"³öÂí¡£");
+		command("say ç°åœ¨æ²¡æœ‰é•–éœ€è¦åŠ³é©¾"+RANK_D->query_respect(ob)+"å‡ºé©¬ã€‚");
 		return 1;
 	}
 
-	command("say ÎÒÃÇ¸£ÍşïÚ¾ÖÊÜÈËËùÍĞ£¬ÓĞ±ÊïÚÒøĞèÒªËÍµ½Ëû´¦¡£");
+	command("say æˆ‘ä»¬ç¦å¨é•–å±€å—äººæ‰€æ‰˜ï¼Œæœ‰ç¬”é•–é“¶éœ€è¦é€åˆ°ä»–å¤„ã€‚");
 	do_accept("quest");
 	return 1;
 }

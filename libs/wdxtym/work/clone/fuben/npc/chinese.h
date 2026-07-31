@@ -1,4 +1,4 @@
-// chan_cler ÖĞ¹úÌôÕ½Õß
+// chan_cler ä¸­å›½æŒ‘æˆ˜è€…
 // internal functions
 private void from_wudang();
 private void from_shaolin();
@@ -18,19 +18,19 @@ private void from_quanzhen();
 public void setup_family(string family);
 
 mapping init_family = ([
-	"ÉÙÁÖËÂ"   : (: from_shaolin :),
-	"Îäµ±ÅÉ"   : (: from_wudang :),
-	"Ø¤°ï"     : (: from_gaibang :),
-	"È«Õæ½Ì"   : (: from_quanzhen :),
-	"»ªÉ½ÅÉ"   : (: from_huashan :),
-	"Ñ©É½ËÂ"   : (: from_xueshan :),
-	"ÌÒ»¨µº"   : (: from_taohua :),
-	"ÉñÁú½Ì"   : (: from_shenlong :),
-	"¹ÅÄ¹ÅÉ"   : (: from_gumu :),
-	"ĞÇËŞÅÉ"   : (: from_xingxiu :),
-	"åĞÒ£ÅÉ"   : (: from_xiaoyao :),
-	"Ñªµ¶ÃÅ"   : (: from_xuedao :),
-	"Å·ÑôÊÀ¼Ò" : (: from_ouyang :),
+	"å°‘æ—å¯º"   : (: from_shaolin :),
+	"æ­¦å½“æ´¾"   : (: from_wudang :),
+	"ä¸å¸®"     : (: from_gaibang :),
+	"å…¨çœŸæ•™"   : (: from_quanzhen :),
+	"åå±±æ´¾"   : (: from_huashan :),
+	"é›ªå±±å¯º"   : (: from_xueshan :),
+	"æ¡ƒèŠ±å²›"   : (: from_taohua :),
+	"ç¥é¾™æ•™"   : (: from_shenlong :),
+	"å¤å¢“æ´¾"   : (: from_gumu :),
+	"æ˜Ÿå®¿æ´¾"   : (: from_xingxiu :),
+	"é€é¥æ´¾"   : (: from_xiaoyao :),
+	"è¡€åˆ€é—¨"   : (: from_xuedao :),
+	"æ¬§é˜³ä¸–å®¶" : (: from_ouyang :),
 ]);
 
 void init_skill(int lvl)

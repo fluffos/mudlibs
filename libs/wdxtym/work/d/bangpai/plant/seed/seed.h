@@ -2,20 +2,20 @@ inherit COMBINED_ITEM;
 
 /*
 mapping seed_info = ([
-	"name" : "ÖÖ×Ó",		//ÖÖ×ÓÃû×Ö
-	"long" : "ÃèÊö¡£\n",	//ÖÖ×ÓÃèÊö
-	"id" : "seed",			//ÖÖ×ÓID
-	"value" : 1,			//ÖÖ×Ó¼ÛÖµ
-	"mature_name" : "²Ë", //³ÉÊìÃû³Æ
-	"mature" : 0,			//³ÉÊì¶ÔÏóÂ·¾¶
-	"time_need" : 0,		//³ÉÊìÊ±¼ä
+	"name" : "ç§å­",		//ç§å­åå­—
+	"long" : "æè¿°ã€‚\n",	//ç§å­æè¿°
+	"id" : "seed",			//ç§å­ID
+	"value" : 1,			//ç§å­ä»·å€¼
+	"mature_name" : "èœ", //æˆç†Ÿåç§°
+	"mature" : 0,			//æˆç†Ÿå¯¹è±¡è·¯å¾„
+	"time_need" : 0,		//æˆç†Ÿæ—¶é—´
 ]);*/
 
 void create_seed(mapping seed_info)
 {
 	set_name(seed_info["name"], ({seed_info["id"] + " seed"}));
-	set("long", "ÕâÊÇÒ»Á£" + seed_info["name"] + "¡£\n");
-	set("base_unit", "Á£");
+	set("long", "è¿™æ˜¯ä¸€ç²’" + seed_info["name"] + "ã€‚\n");
+	set("base_unit", "ç²’");
 	set("base_value", seed_info["value"]);
 	set("base_weight", 1);
 	set("seed_info", ([

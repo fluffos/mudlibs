@@ -3,8 +3,8 @@ inherit COMBINED_ITEM;
 void create_veg(mapping veg_info)
 {
 	set_name(veg_info["name"], ({veg_info["id"]}));
-	set("long", "ÕâÊÇÒ»¿Ã" + veg_info["name"] + "¡£\n");
-	set("base_unit", "¿Ã");
+	set("long", "è¿™æ˜¯ä¸€æ£µ" + veg_info["name"] + "ã€‚\n");
+	set("base_unit", "æ£µ");
 	set("base_value", 1);
 	set("base_weight", 1);
 	set("no_sell", 1);

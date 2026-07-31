@@ -1,17 +1,17 @@
-//ºê¶¨Òå
-#define NPC_AMOUNT 7	//NPC×ÜÊı
+//å®å®šä¹‰
+#define NPC_AMOUNT 7	//NPCæ€»æ•°
 
-//º¯ÊıÉùÃ÷
+//å‡½æ•°å£°æ˜
 
-int distribute_skill(object ob, int skill_level, mapping npc_family_skill);	//ÉèÖÃNPCÃÅÅÉÒÔ¼°Îä¹¦µÈ¼¶
-int get_average_skill(object fb_mem);	//»ñÈ¡È«¶Ó×î¸ßÎä¹¦µÈ¼¶Æ½¾ùÊı
-int get_average_attri(object fb_mem, string arg);	//»ñÈ¡È«¶ÓÊôĞÔÆ½¾ùÊı
-int create_npc(object who, object fb_mem);	//´´½¨NPCÒÔ¼°½«NPCÒÆ¶¯µ½µØÍ¼ÖĞ
+int distribute_skill(object ob, int skill_level, mapping npc_family_skill);	//è®¾ç½®NPCé—¨æ´¾ä»¥åŠæ­¦åŠŸç­‰çº§
+int get_average_skill(object fb_mem);	//è·å–å…¨é˜Ÿæœ€é«˜æ­¦åŠŸç­‰çº§å¹³å‡æ•°
+int get_average_attri(object fb_mem, string arg);	//è·å–å…¨é˜Ÿå±æ€§å¹³å‡æ•°
+int create_npc(object who, object fb_mem);	//åˆ›å»ºNPCä»¥åŠå°†NPCç§»åŠ¨åˆ°åœ°å›¾ä¸­
 
 
-//È«¾Ö±äÁ¿
+//å…¨å±€å˜é‡
 mapping *skill_map = ({
-([//åĞÒ£
+([//é€é¥
 	"beiming-shengong" : "force",
 	"lingbo-weibu" : "dodge",
 	"zhemei-shou" : "hand",
@@ -21,7 +21,7 @@ mapping *skill_map = ({
 	"xiaoyao-qixue" : "medical",
 	"literate" : 0,
 ]),
-([//ÉÙÁÖ
+([//å°‘æ—
 	"cibei-dao" : "blade",
 	"longzhua-gong" : "claw",
 	"wuchang-zhang" : "club",
@@ -39,7 +39,7 @@ mapping *skill_map = ({
 	"buddhism" : 0,
 	"literate" : 0,
 ]),
-([//»ªÉ½
+([//åå±±
 	"kuangfeng-jian" : "sword",
 	"kuangfeng-jian" : "parry",
 	"huashan-xinfa" : "force",
@@ -48,7 +48,7 @@ mapping *skill_map = ({
 	"huashan-shenfa" : "dodge",
 	"literate" : 0,
 ]),
-([//ÌÒ»¨
+([//æ¡ƒèŠ±
 	"bibo-shengong" : "force",
 	"tanzhi-shentong" : "finger",
 	"lanhua-shou" : "hand",
@@ -67,7 +67,7 @@ mapping *skill_map = ({
 	"mathematics" : 0,
 	"literate" : 0,
 ]),
-([//È«Õæ
+([//å…¨çœŸ
 	"xiantian-gong" : "force",
 	"quanzhen-jian" : "sword",
 	"jinyan-gong" : "dodge",
@@ -78,7 +78,7 @@ mapping *skill_map = ({
 	"taoism" : 0,
 	"literate" : 0,
 ]),
-([//¹ÅÄ¹
+([//å¤å¢“
 	"surge-force" : "force",
 	"xuantie-jian" : "sword",
 	"yunv-shenfa" : "dodge",
@@ -88,7 +88,7 @@ mapping *skill_map = ({
 	"throwing" : 0,
 	"literate" : 0,
 ]),
-([//Ä½Èİ
+([//æ…•å®¹
 	"zihui-xinfa" : "force",
 	"douzhuan-xingyi" : "parry",
 	"beidou-xianzong" : "dodge",
@@ -99,7 +99,7 @@ mapping *skill_map = ({
 	"unarmed" : 0,
 	"literate" : 0,
 ]),
-([//ÁéğÕ
+([//çµé¹«
 	"bahuang-gong" : "force",
 	"liuyang-zhang" : "strike",
 	"yueying-wubu" : "dodge",
@@ -108,7 +108,7 @@ mapping *skill_map = ({
 	"tianyu-qijian" : "sword",
 	"literate" : 0,
 ]),
-([//ĞÇËŞ
+([//æ˜Ÿå®¿
 	"huagong-dafa" : "force",
 	"zhaixinggong" : "dodge",
 	"chousui-zhang" : "strike",
@@ -120,7 +120,7 @@ mapping *skill_map = ({
 	"throwing" : 0,
 	"literate" : 0,
 ]),/*
-([//Ã÷½Ì
+([//æ˜æ•™
 	"jiuyang-shengong" : "force",
 	"qingfu-shenfa" : "dodge",
 	"jiuyang-shengong" : "unarmed",
@@ -133,7 +133,7 @@ mapping *skill_map = ({
 	"throwing" : 0,
 	"literate" : 0,
 ]),
-([//ÈÕÔÂ
+([//æ—¥æœˆ
     "riyue-xinfa" : "force",
     "tianmo-jian" : "sword",
     "tianmo-dao" : "blade",
@@ -143,7 +143,7 @@ mapping *skill_map = ({
     "piaomiao-shenfa" : "dodge",
     "literate" : 0,
 ]),*/
-([//Ñªµ¶
+([//è¡€åˆ€
 	"xuehai-mogong" : "force",
 	"shenkong-xing" : "dodge",
 	"dashou-yin" : "hand",
@@ -154,7 +154,7 @@ mapping *skill_map = ({
 	"lamaism" : 0,
 	"literate" : 0,
 ]),
-([//ÉñÁú
+([//ç¥é¾™
 	"shenlong-xinfa" : "force",
 	"yixingbu" : "dodge",
 	"shenlong-bashi" : "hand",
@@ -164,7 +164,7 @@ mapping *skill_map = ({
 	"shedao-qigong" : "unarmed",
 	"literate" : 0,
 ]),
-([//ºú¼Ò
+([//èƒ¡å®¶
 	"lengyue-shengong" : "force",
 	"hujia-daofa" : "blade",
 	"sixiang-bufa" : "dodge",
@@ -174,7 +174,7 @@ mapping *skill_map = ({
 	"hujia-quan" : "cuff",
 	"literate" : 0,
 ]),
-([//Å·Ñô
+([//æ¬§é˜³
 	"hamagong" : "force",
 	"chanchu-bufa" : "dodge",
 	"lingshe-quan" : "cuff",
@@ -186,7 +186,7 @@ mapping *skill_map = ({
 	"unarmed" : 0,
 	"literate" : 0,
 ]),
-([//Ñ©É½
+([//é›ªå±±
 	"longxiang" : "force",
 	"shenkong-xing" : "dodge",
 	"yujiamu-quan" : "cuff",
@@ -198,7 +198,7 @@ mapping *skill_map = ({
 	"lamaism" : 0,
 	"literate" : 0,
 ]),
-([//Îäµ±
+([//æ­¦å½“
 	"taiji-shengong" : "force",
 	"tiyunzong" : "dodge",
 	"taiji-quan" : "unarmed",
@@ -210,7 +210,7 @@ mapping *skill_map = ({
 	"taoism" : 0,
 	"literate" : 0,
 ]),
-([//¶ëÃ¼
+([//å³¨çœ‰
 	"linji-zhuang" : "force",
 	"tiangang-zhi" : "finger",
 	"zhutian-bu" : "dodge",

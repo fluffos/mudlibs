@@ -1,5 +1,5 @@
 
-//¿ÉËÑË÷µ½µÄÎïÆ·ÁĞ±í
+//å¯æœç´¢åˆ°çš„ç‰©å“åˆ—è¡¨
 string *random_ob = ({
     "/clone/money/gold",
     "/clone/money/coin",
@@ -17,10 +17,10 @@ void init()
 	add_action("do_sousuo", "sousuo");
 /*
 	set("action_list", ([
-		"ËÑË÷":"sousuo",
+		"æœç´¢":"sousuo",
 	]));
 */
-	//Ê¶±ğÒş²Ø·¿¼ä
+	//è¯†åˆ«éšè—æˆ¿é—´
 	if ( this_object()->query("anniu_hide")) 
 		add_action("do_anniu", "anniu");
 	if ( this_object()->query("jiguan")) 
@@ -31,7 +31,7 @@ int do_sousuo(object me)
 {
 	object ob;
 	object oba, obb, obc, obd;
-	string id = random_ob[random(sizeof(random_ob))];//Ëæ»úÎïÆ·
+	string id = random_ob[random(sizeof(random_ob))];//éšæœºç‰©å“
 	me = this_player();
 	
 	oba = present("tu fei", environment(me));
@@ -42,38 +42,38 @@ int do_sousuo(object me)
 	if (oba) {
 		oba->kill_ob(me);
 		me->kill_ob(oba);
-		return notify_fail(oba->name()+"¶ÔÄã´óºğµÀ£º»îµÃ²»ÄÍ·³ÁË£¿¸ÒÔÚ´óÒ¯ÃæÇ°Íµ¶«Î÷£¡\n");
+		return notify_fail(oba->name()+"å¯¹ä½ å¤§å¼é“ï¼šæ´»å¾—ä¸è€çƒ¦äº†ï¼Ÿæ•¢åœ¨å¤§çˆ·é¢å‰å·ä¸œè¥¿ï¼\n");
 	}
 	if (obb) {
 		obb->kill_ob(me);
 		me->kill_ob(obb);
-		return notify_fail(obb->name()+"¶ÔÄã´óºğµÀ£ºÏëÔÚÎÒÕâÀïÍµ¶«Î÷£¿ÎÒ¿´ÄãÊÇÕÒËÀ£¡\n");
+		return notify_fail(obb->name()+"å¯¹ä½ å¤§å¼é“ï¼šæƒ³åœ¨æˆ‘è¿™é‡Œå·ä¸œè¥¿ï¼Ÿæˆ‘çœ‹ä½ æ˜¯æ‰¾æ­»ï¼\n");
 	}
 	
 	if (obc) {
 		obc->kill_ob(me);
 		me->kill_ob(obc);
-		return notify_fail(obc->name()+"¶ÔÄã¡°ºÙºÙ£¡¡±Ò»Ğ¦£¬Äã¿´µÃÃ«¹Çã¤È»£¡\n");
+		return notify_fail(obc->name()+"å¯¹ä½ â€œå˜¿å˜¿ï¼â€ä¸€ç¬‘ï¼Œä½ çœ‹å¾—æ¯›éª¨æ‚šç„¶ï¼\n");
 	}
 	if (obd) {
 		obd->kill_ob(me);
 		me->kill_ob(obd);
-		return notify_fail(obd->name()+"¶ÔÄã¡°ºÙºÙ£¡¡±Ò»Ğ¦£¬Äã¿´µÃÃ«¹Çã¤È»£¡\n");
+		return notify_fail(obd->name()+"å¯¹ä½ â€œå˜¿å˜¿ï¼â€ä¸€ç¬‘ï¼Œä½ çœ‹å¾—æ¯›éª¨æ‚šç„¶ï¼\n");
 	}
 	/*
 	if (me->query_temp("sousuo_buy", 1) > time()) 
-		return notify_fail(sprintf("ÄãÕıÃ¦×ÅËÑË÷£¬±ğ×Å¼±£¡\n"));
+		return notify_fail(sprintf("ä½ æ­£å¿™ç€æœç´¢ï¼Œåˆ«ç€æ€¥ï¼\n"));
 	*/
 	if (query_temp("sousuo")) 
-		return notify_fail(sprintf("ÕâÀïÒÑ¾­±»Äã·­µÃµ×³¯ÌìÁË£¬»»¸öµØ·½°É£¡\n"));
+		return notify_fail(sprintf("è¿™é‡Œå·²ç»è¢«ä½ ç¿»å¾—åº•æœå¤©äº†ï¼Œæ¢ä¸ªåœ°æ–¹å§ï¼\n"));
 	
-	//¸£ÔµÔ½¸ß¼¸ÂÊÔ½´ó
+	//ç¦ç¼˜è¶Šé«˜å‡ ç‡è¶Šå¤§
 	if (random(200) < me->query("kar")) {
 		ob = new(id);
 		ob->move(me);
-		tell_object(me, sprintf("¹§Ï²Äã¾ÓÈ»ÕÒµ½ÁË%s£¡\n", ob->name()));
+		tell_object(me, sprintf("æ­å–œä½ å±…ç„¶æ‰¾åˆ°äº†%sï¼\n", ob->name()));
 	} else
-		tell_object(me, sprintf("ÄãÏñ×öÔôËÆµÄÕâÀï³ò³ò£¬ÄÇÀï·­·­£¬½á¹ûÊ²Ã´Ò²Ã»ÕÒµ½¡£\n"));
+		tell_object(me, sprintf("ä½ åƒåšè´¼ä¼¼çš„è¿™é‡Œç…ç…ï¼Œé‚£é‡Œç¿»ç¿»ï¼Œç»“æœä»€ä¹ˆä¹Ÿæ²¡æ‰¾åˆ°ã€‚\n"));
 	
 	//me->set_temp("sousuo_buy", time() + random(3) + 2);
 	add_temp("sousuo", 1);

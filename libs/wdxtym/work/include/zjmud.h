@@ -1,4 +1,4 @@
-//终极地狱转义协议
+//缁堟瀬鍦扮嫳杞箟鍗忚
 
 #define ZJKEY           "123456789abcd" 
 #define ZJPAYPORT		3001

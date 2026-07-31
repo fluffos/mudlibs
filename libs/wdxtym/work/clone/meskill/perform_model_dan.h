@@ -2,7 +2,7 @@
 #include <ansi.h>
 #include <combat.h>
 
-#define PFM "°∏" HIW "<æ¯’–√˚>" NOR "°π"
+#define PFM "„Äå" HIW "<ÁªùÊãõÂêç>" NOR "„Äç"
 
 inherit F_SSERVER;
 #include <balance.h>
@@ -20,7 +20,7 @@ int perform(object me, object target)
 	int attack;
 
 	if (! me->query("can_perform/" + "SKILL" + "/" + "E_NAME"))
-		return notify_fail("ƒ„ªπ√ª”– ‹µΩ∏ﬂ ÷÷∏µ„£¨ªπ≤ªª·‘À”√" PFM "°£\n");
+		return notify_fail("‰Ω†ËøòÊ≤°ÊúâÂèóÂà∞È´òÊâãÊåáÁÇπÔºåËøò‰∏ç‰ºöËøêÁî®" PFM "„ÄÇ\n");
 
 	if (! target)
 	{
@@ -29,37 +29,37 @@ int perform(object me, object target)
 	}
 
 	if (! target || ! me->is_fighting(target))
-		return notify_fail(PFM "÷ªƒ‹∂‘’Ω∂∑÷–µƒ∂‘ ÷ π”√°£\n");
+		return notify_fail(PFM "Âè™ËÉΩÂØπÊàòÊñó‰∏≠ÁöÑÂØπÊâã‰ΩøÁî®„ÄÇ\n");
 
 	if (member_array("BASE_SKILL", weapon_sk) != -1)
 	{
 		attack = WEAPON_ATTACK;
 		if (! objectp(weapon = me->query_temp("weapon"))
 		   || (string)weapon->query("skill_type") != "BASE_SKILL")
-			return notify_fail("ƒ„À˘ π”√µƒŒ‰∆˜≤ª∂‘£¨ƒ—“‘ ©’π" PFM "°£\n");
+			return notify_fail("‰Ω†ÊâÄ‰ΩøÁî®ÁöÑÊ≠¶Âô®‰∏çÂØπÔºåÈöæ‰ª•ÊñΩÂ±ï" PFM "„ÄÇ\n");
 	} else
 	{
 		attack = UNARMED_ATTACK;
 		if (me->query_temp("weapon") || me->query_temp("secondary_weapon"))
-			return notify_fail(PFM "÷ªƒ‹ø’ ÷ π”√°£\n");	     
+			return notify_fail(PFM "Âè™ËÉΩÁ©∫Êâã‰ΩøÁî®„ÄÇ\n");	     
 	}
 	
 	if ((int)me->query_skill("SKILL", 1) < 400)
-		return notify_fail("ƒ„" + to_chinese("SKILL") + "≤ªπªÊµ Ï£¨ƒ—“‘ ©’π" PFM "°£\n");
+		return notify_fail("‰Ω†" + to_chinese("SKILL") + "‰∏çÂ§üÂ®¥ÁÜüÔºåÈöæ‰ª•ÊñΩÂ±ï" PFM "„ÄÇ\n");
 
 	if (member_array("BASE_SKILL", weapon_sk) == -1)
 	{
 		if (me->query_skill_prepared("BASE_SKILL") != "SKILL")
-			return notify_fail("ƒ„√ª”–◊º±∏" + to_chinese("SKILL") + "£¨ƒ—“‘ ©’π" PFM "°£\n");
+			return notify_fail("‰Ω†Ê≤°ÊúâÂáÜÂ§á" + to_chinese("SKILL") + "ÔºåÈöæ‰ª•ÊñΩÂ±ï" PFM "„ÄÇ\n");
 	}
 	
 	if (me->query("neili") < 300)
-		return notify_fail("ƒ„œ÷‘⁄µƒ’Ê∆¯≤ªπª£¨ƒ—“‘ ©’π" PFM "°£\n");
+		return notify_fail("‰Ω†Áé∞Âú®ÁöÑÁúüÊ∞î‰∏çÂ§üÔºåÈöæ‰ª•ÊñΩÂ±ï" PFM "„ÄÇ\n");
 
 	if (! living(target))
-		return notify_fail("∂‘∑Ω∂º“—æ≠’‚—˘¡À£¨”√≤ª◊≈’‚√¥∑—¡¶∞…£ø\n");
+		return notify_fail("ÂØπÊñπÈÉΩÂ∑≤ÁªèËøôÊ†∑‰∫ÜÔºåÁî®‰∏çÁùÄËøô‰πàË¥πÂäõÂêßÔºü\n");
 
-	msg = HIW "<PFM∑¢’–√Ë ˆ>" + "\n" + NOR;
+	msg = HIW "<PFMÂèëÊãõÊèèËø∞>" + "\n" + NOR;
 
 	ap = me->query_skill("BASE_SKILL");
 	dp = target->query_skill("parry");
@@ -67,14 +67,14 @@ int perform(object me, object target)
 	if (ap * 2 / 3 + random(ap * 2) > dp)
 	{
 		damage = da_power(me, "BASE_SKILL") * 3;
-		msg += COMBAT_D->do_damage(me, target, attack, damage, 100, HIM "<PFM¥Ú÷–√Ë ˆ>" + ""NOR"\n");
+		msg += COMBAT_D->do_damage(me, target, attack, damage, 100, HIM "<PFMÊâì‰∏≠ÊèèËø∞>" + ""NOR"\n");
 		me->add("neili", -200);
 		me->start_busy(1);
 		if (! target->is_busy())
 			target->start_busy(2);
 	} else
 	{
-		msg += NOR + CYN "<PFM ßŒÛ√Ë ˆ>" + ""NOR"\n";
+		msg += NOR + CYN "<PFMÂ§±ËØØÊèèËø∞>" + ""NOR"\n";
 		me->add("neili", -100);
 		me->start_busy(2);
 	}

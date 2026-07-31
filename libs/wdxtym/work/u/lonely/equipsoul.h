@@ -5,13 +5,13 @@ inherit EQUIP_SOUL;
 
 void create()
 {
-        set_name(HIM "RP_NAMEÖ®»ê" NOR, ({"RP_ID soulRP_STATUS", "RP_ID", "soulRP_STATUS"}));
+        set_name(HIM "RP_NAMEä¹‹é­‚" NOR, ({"RP_ID soulRP_STATUS", "RP_ID", "soulRP_STATUS"}));
         set_weight(100);
         if (clonep())
                 set_default_object(__FILE__);
         else {
-                set("long", HIM "ÕâÊÇÒ»¸öRP_NAMEÖ®»ê¡£\n" NOR);
-                set("unit", "¸ö");
+                set("long", HIM "è¿™æ˜¯ä¸€ä¸ªRP_NAMEä¹‹é­‚ã€‚\n" NOR);
+                set("unit", "ä¸ª");
                 set("value", 200000);
                 set("no_sell", 1);
         }

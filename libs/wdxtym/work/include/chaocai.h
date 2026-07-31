@@ -1,6 +1,6 @@
 // chuniang.c
 
-#include <ansi.h>
+#include "ansi.h"
 
 void auto_cook(object me)
 {
@@ -15,7 +15,7 @@ void auto_cook(object me)
 		{
 			if( (int)me->query("jing") < me->query("eff_jing"))
 			{
-				tell_object(me,"¾«Á¦²»×ã£¬µÈ´ı»Ö¸´ÖĞ¡£¡£¡£\n");
+				tell_object(me,"ç²¾åŠ›ä¸è¶³ï¼Œç­‰å¾…æ¢å¤ä¸­ã€‚ã€‚ã€‚\n");
 				call_out("auto_cook",1,me);
 			}
 			else
@@ -25,14 +25,14 @@ void auto_cook(object me)
 		}
 		else
 		{
-			tell_object(me,"¾«Á¦²»×ã£¬µÈ´ı»Ö¸´ÖĞ¡£¡£¡£\n");
+			tell_object(me,"ç²¾åŠ›ä¸è¶³ï¼Œç­‰å¾…æ¢å¤ä¸­ã€‚ã€‚ã€‚\n");
 			call_out("auto_cook",1,me);
 		}
 	}
 	else
 	{
-		tell_object(me,"ÍĞ¹ÜÖĞ£¬¼ÌĞø¹¤×÷¡£¡£¡£¡£¡£¡£\n");
-		tell_object(me,ZJFORCECMD("ask "+this_object()->query("id")+" about ¹¤×÷"));
+		tell_object(me,"æ‰˜ç®¡ä¸­ï¼Œç»§ç»­å·¥ä½œã€‚ã€‚ã€‚ã€‚ã€‚ã€‚\n");
+		tell_object(me,ZJFORCECMD("ask "+this_object()->query("id")+" about å·¥ä½œ"));
 	}
 }
 
@@ -44,22 +44,22 @@ string ask_job()
 	me = this_player();
 
 	if (me->query("combat_exp") < 1000)
-		return "ßÏ£¬ÄãÕâµã±¾ÊÂ°¡£¬¶ËµÃ¶¯ÅÌ×ÓÃ´£¿";
+		return "å‘¦ï¼Œä½ è¿™ç‚¹æœ¬äº‹å•Šï¼Œç«¯å¾—åŠ¨ç›˜å­ä¹ˆï¼Ÿ";
 
 	if (me->query("jing") < 50) 
-		return "Äã»¹ÊÇĞİÏ¢»á¶ù°É£¬Ğ¡ĞÄ°ÑÉí×ÓÀÛ¿åÁË£¡";
+		return "ä½ è¿˜æ˜¯ä¼‘æ¯ä¼šå„¿å§ï¼Œå°å¿ƒæŠŠèº«å­ç´¯å®äº†ï¼";
 	
 	if (!query("max_exp"))
-		return "ÎÒÎŞ·¨Ìá¹©·şÎñ£¬¿ÉÄÜ¹ÜÀíÃ»¸øÎÒÖ¸ÅÉÈÎÎñ£¬ÇëÁªÏµ¹ÜÀí£¡";
-	//³´²ËĞŞÎªÉÏÏŞ
+		return "æˆ‘æ— æ³•æä¾›æœåŠ¡ï¼Œå¯èƒ½ç®¡ç†æ²¡ç»™æˆ‘æŒ‡æ´¾ä»»åŠ¡ï¼Œè¯·è”ç³»ç®¡ç†ï¼";
+	//ç‚’èœä¿®ä¸ºä¸Šé™
 	if (me->query("combat_exp") > query("max_exp"))
-		return "ÕâÎ»Å®ÏÀ£¬ÄãÕâ²»ÊÇÕÛÉ±Ğ¡µÄÂğ£¡Äã»¹ÊÇÈ¥Ç°ÃæÓÃ²Í°É£¡·¹²ËÂíÉÏ¾ÍºÃ£¡";
+		return "è¿™ä½å¥³ä¾ ï¼Œä½ è¿™ä¸æ˜¯æŠ˜æ€å°çš„å—ï¼ä½ è¿˜æ˜¯å»å‰é¢ç”¨é¤å§ï¼é¥­èœé©¬ä¸Šå°±å¥½ï¼";
 
 	if (me->query_skill("cooking") < 60)
-		return "ÄãµÄ³´²ËÊÖÒÕÄÇÃ´²î£¬ÄÇÀïÄÜ°ïÎÒ£¿";
+		return "ä½ çš„ç‚’èœæ‰‹è‰ºé‚£ä¹ˆå·®ï¼Œé‚£é‡Œèƒ½å¸®æˆ‘ï¼Ÿ";
 
 	if (me->query_skill_mapped("cooking") != "chuancai-jiyi")
-		return "ÎÒËµÄãÖª²»ÖªµÀÀ´µÄ¿ÍÈË¿É¶¼ÊÇ³Ô´¨²ËµÄ£¬ÁÁ³öÄã´¨²ËµÄ»î¶ùÔÙËµ£¡";
+		return "æˆ‘è¯´ä½ çŸ¥ä¸çŸ¥é“æ¥çš„å®¢äººå¯éƒ½æ˜¯åƒå·èœçš„ï¼Œäº®å‡ºä½ å·èœçš„æ´»å„¿å†è¯´ï¼";
 
 	if (! interactive(me))
 		return "...";
@@ -70,26 +70,26 @@ string ask_job()
 			      $1->query_temp("job/cook") &&
 			      query_ip_number($1) == query_ip_number($(me)) :));*/
 	//if (sizeof(obs) > 0)
-	//	return "Õâ¶ùÓĞ" + obs[0]->name() + "ÄØ£¬Äã»¹ÊÇ±ğ·ÑĞÄÁË¡£";
+	//	return "è¿™å„¿æœ‰" + obs[0]->name() + "å‘¢ï¼Œä½ è¿˜æ˜¯åˆ«è´¹å¿ƒäº†ã€‚";
 
 	me->set_temp("job/cook", 1);
 	tell_object(me,ZJFORCECMD("cook"));
-	tell_object(me,ZJEXIT"northwest:"RED"ÖĞ¶Ï¹¤×÷"NOR":halt\n");
-	return "ºÃ°É£¬Äã¾Í°ïÎÒ"ZJURL("cmds:cook")ZJSIZE(15)"³´²Ë"NOR"(cook)°É£¡²ËÔÚÕâ¶ù£¬ÔîÌ¨ÔÚÄÇ±ß¡£";
+	tell_object(me,ZJEXIT"northwest:"RED"ä¸­æ–­å·¥ä½œ"NOR":halt\n");
+	return "å¥½å§ï¼Œä½ å°±å¸®æˆ‘"ZJURL("cmds:cook")ZJSIZE(15)"ç‚’èœ"NOR"(cook)å§ï¼èœåœ¨è¿™å„¿ï¼Œç¶å°åœ¨é‚£è¾¹ã€‚";
 }
 
 int recognize_apprentice(object ob, string skill)
 {
-	if ((int)ob->query_temp("mark/³øÄï") < 1)
+	if ((int)ob->query_temp("mark/å¨å¨˜") < 1)
 		return 0;
 
 	if (skill != "cooking" && skill != "chuancai-jiyi")
 	{
-		command("say Äã´ò×¡...ÎÒ¿ÉÖ»»á×ö²ËÉÕ·¹¡£");
+		command("say ä½ æ‰“ä½...æˆ‘å¯åªä¼šåšèœçƒ§é¥­ã€‚");
 		return -1;
 	}
 
-	ob->add_temp("mark/³øÄï", -1);
+	ob->add_temp("mark/å¨å¨˜", -1);
 	return 1;
 }
 
@@ -97,19 +97,19 @@ int accept_object(object who, object ob)
 {
 	object me = this_player();
 
-	if ((int)who->query_temp("mark/³øÄï") < 1)
-		who->set_temp("mark/³øÄï", 0);
+	if ((int)who->query_temp("mark/å¨å¨˜") < 1)
+		who->set_temp("mark/å¨å¨˜", 0);
 
 	if (ob->query("money_id") && ob->value() >= 2000)
 	{
-		message_vision("³øÄïÍ¬ÒâÖ¸µã$NÒ»Ğ©¹ØÓÚ³´²ËµÄ³£Ê¶ºÍ¼¼ÇÉ¡£\n", who);
-		who->add_temp("mark/³øÄï", ob->value() / 50);
+		message_vision("å¨å¨˜åŒæ„æŒ‡ç‚¹$Nä¸€äº›å…³äºç‚’èœçš„å¸¸è¯†å’ŒæŠ€å·§ã€‚\n", who);
+		who->add_temp("mark/å¨å¨˜", ob->value() / 50);
 		destruct(ob);
 		return 1;
 	}
 
-	command("say ËäËµ³´²Ë¶Ô´³µ´½­ºşÃ»Ê²Ã´ÓÃ£¬ÎÒÒ²²»ÄÜ°×°×½ÌÄã"
-		"°¡£¡ÄÃÀ´£¬ĞÁ¿à·ÑÎÆÒø¶şÊ®Á½£¬Í¯ÛÅÎŞÆÛ£¡");
+	command("say è™½è¯´ç‚’èœå¯¹é—¯è¡æ±Ÿæ¹–æ²¡ä»€ä¹ˆç”¨ï¼Œæˆ‘ä¹Ÿä¸èƒ½ç™½ç™½æ•™ä½ "
+		"å•Šï¼æ‹¿æ¥ï¼Œè¾›è‹¦è´¹çº¹é“¶äºŒåä¸¤ï¼Œç«¥åŸæ— æ¬ºï¼");
 	return 0;
 }
 
@@ -119,11 +119,11 @@ int do_cook(string arg)
 
 	me = this_player();
 	if (me->is_busy())
-		return notify_fail("ÄãÕıÃ¦×ÅÄØ£¬±ğ×Å¼±¡£\n");
+		return notify_fail("ä½ æ­£å¿™ç€å‘¢ï¼Œåˆ«ç€æ€¥ã€‚\n");
 
 	if (! me->query_temp("job/cook"))
 	{
-		tell_object(me, "³øÄïºÈµÀ£ºÄãÒª¸ÉÊ²Ã´£¿²»ÒªÀ´µ·ÂÒ£¬ÎÒÃ¦×ÅÄØ£¡\n");
+		tell_object(me, "å¨å¨˜å–é“ï¼šä½ è¦å¹²ä»€ä¹ˆï¼Ÿä¸è¦æ¥æ£ä¹±ï¼Œæˆ‘å¿™ç€å‘¢ï¼\n");
 		return 1;
 	}
 
@@ -131,7 +131,7 @@ int do_cook(string arg)
 	me->set_temp("pending/auto_cook", 1);
 	me->start_busy(bind((: call_other, __FILE__, "cooking" :), me),
 		       bind((: call_other, __FILE__, "halt_cooking" :), me));
-	tell_object(me, "ÄãÄÃÆğÊß²Ë£¬×ßµ½Ò»±ß×øÏÂ£¬¿ªÊ¼¼ğ²Ë¡£\n");
+	tell_object(me, "ä½ æ‹¿èµ·è”¬èœï¼Œèµ°åˆ°ä¸€è¾¹åä¸‹ï¼Œå¼€å§‹æ‹£èœã€‚\n");
 	return 1;
 }
 
@@ -157,26 +157,26 @@ int cooking(object me)
 	switch (me->query_temp("job/step"))
 	{
 	case 1:
-		msg = "$N¿´¿´²Ë²î²»¶à¹»ÁË£¬Õ¾ÆğÉíÀ´×ßµ½Ë®Åè±ß¿ªÊ¼Ï´²Ë¡£";
+		msg = "$Nçœ‹çœ‹èœå·®ä¸å¤šå¤Ÿäº†ï¼Œç«™èµ·èº«æ¥èµ°åˆ°æ°´ç›†è¾¹å¼€å§‹æ´—èœã€‚";
 		break;
 	case 2:
-		msg = "»©----£¬$N½«Ë®ÅèÖĞµÄÎÛË®µ¹µô£¬²ËÒ²Ï´¸É¾»ÁË¡£";
+		msg = "å“—----ï¼Œ$Nå°†æ°´ç›†ä¸­çš„æ±¡æ°´å€’æ‰ï¼Œèœä¹Ÿæ´—å¹²å‡€äº†ã€‚";
 		break;
 	case 3:
-		msg = "$N×ßµ½ÔîÌ¨Ç°¿ªÊ¼ÇĞ²Ë£¬àê----àê-----¡£";
+		msg = "$Nèµ°åˆ°ç¶å°å‰å¼€å§‹åˆ‡èœï¼Œåš“----åš“-----ã€‚";
 		break;
 	case 4:
 	case 6:
-		msg = "$N½«ÓÍµ½Èë¹øÖĞ£¬¼ÌĞøÇĞ²Ë¡£";
+		msg = "$Nå°†æ²¹åˆ°å…¥é”…ä¸­ï¼Œç»§ç»­åˆ‡èœã€‚";
 		break;
 	case 5:
-		msg = "ÓÍÈÈÁË£¬Ã°³öÕóÕóÇåÑÌ£¬$N½«ÇĞºÃµÄ²Ëµ½Èë¹øÖĞ£¡×Ì------";
+		msg = "æ²¹çƒ­äº†ï¼Œå†’å‡ºé˜µé˜µæ¸…çƒŸï¼Œ$Nå°†åˆ‡å¥½çš„èœåˆ°å…¥é”…ä¸­ï¼æ»‹------";
 		break;
 	case 7:
-		msg = "$N²»¶Ï·­¶¯¹øÖĞµÄ²Ë£¬ÂıÂıµÄ£¬Ò»ÕóÏãÎ¶É¢·¢³öÀ´¡£";
+		msg = "$Nä¸æ–­ç¿»åŠ¨é”…ä¸­çš„èœï¼Œæ…¢æ…¢çš„ï¼Œä¸€é˜µé¦™å‘³æ•£å‘å‡ºæ¥ã€‚";
 		break;
 	default:
-		msg = "$NÔÚ¹øÖĞ¼ÓÈëµ÷ÁÏ£¬ÓÖ·­¶¯ÁË¼¸ÏÂ£¬½«³´ºÃµÄ²Ë²ùµ½ÅÌÖĞ£¬ÄÃ¸ø$n¡£";
+		msg = "$Nåœ¨é”…ä¸­åŠ å…¥è°ƒæ–™ï¼Œåˆç¿»åŠ¨äº†å‡ ä¸‹ï¼Œå°†ç‚’å¥½çš„èœé“²åˆ°ç›˜ä¸­ï¼Œæ‹¿ç»™$nã€‚";
 		finish = 1;
 		break;
 	}
@@ -185,24 +185,24 @@ int cooking(object me)
 	if (finish)
 	{
 		object ob;
-		msg += "$n¿´ÁË$N³´µÄ²Ë£¬ÓÖ¼ĞÁËÁ½Æ¬³¢ÁË³¢£¬ÂúÒâµÄµãµãÍ·"
-		       "ÕâÊÇ¸øÄãµÄ±¨³ê£¡Äã¿ÉÒÔÔÚÎÒÕâÀïÑ§µã³´²Ë¼¼Êõ¡£\n";
+		msg += "$nçœ‹äº†$Nç‚’çš„èœï¼Œåˆå¤¹äº†ä¸¤ç‰‡å°äº†å°ï¼Œæ»¡æ„çš„ç‚¹ç‚¹å¤´"
+		       "è¿™æ˜¯ç»™ä½ çš„æŠ¥é…¬ï¼ä½ å¯ä»¥åœ¨æˆ‘è¿™é‡Œå­¦ç‚¹ç‚’èœæŠ€æœ¯ã€‚\n";
 		me->delete_temp("job/cook");
 		me->delete_temp("job/step");
 		gain_money = 2+random(6);
-		me->add_temp("mark/³øÄï", random(30));
+		me->add_temp("mark/å¨å¨˜", random(30));
 		me->improve_skill("cooking", 10 + random(10));
 
-		// ½±ÀøµÄĞŞÎªÎª10¼Ó20µÄËæ»úÊı£¨½Ï¶à£©£¬ moneyÎª100¼Ó³´²Ë¼¼
-		// ÊõµÄµÈ¼¶È¡Ëæ»úÊı£¨½Ï¶à£©£¬Ç±ÄÜÎª²»³¬¹ı3µã£¬Ö÷Òª»¹ÊÇÒÔ¼Ó
-		// silverÎªÖ÷¡£
+		// å¥–åŠ±çš„ä¿®ä¸ºä¸º10åŠ 20çš„éšæœºæ•°ï¼ˆè¾ƒå¤šï¼‰ï¼Œ moneyä¸º100åŠ ç‚’èœæŠ€
+		// æœ¯çš„ç­‰çº§å–éšæœºæ•°ï¼ˆè¾ƒå¤šï¼‰ï¼Œæ½œèƒ½ä¸ºä¸è¶…è¿‡3ç‚¹ï¼Œä¸»è¦è¿˜æ˜¯ä»¥åŠ 
+		// silverä¸ºä¸»ã€‚
 		ob = new("/clone/money/coin");
 		ob->set_amount(gain_money);
 		ob->move(me, 1);
 		call_out("auto_cook",2,me);
 	}
 
-	msg = replace_string(msg, "$N", "Äã");
+	msg = replace_string(msg, "$N", "ä½ ");
 	msg = replace_string(msg, "$n", name());
 	tell_object(me, msg);
 
@@ -210,22 +210,22 @@ int cooking(object me)
 	{
 		if (me->query("combat_exp") >= 50000)
 		{
-			write(MAG "ÄãÒşÒşÔ¼Ô¼µÄ·¢ÏÖ³´²Ë¾ÓÈ»ºÍÎä¹¦ÓĞÒ»Ğ©ÏàÍ¨Ö®´¦£¬ÕæÊÇÆæÃî¡£"NOR"\n");
+			write(MAG "ä½ éšéšçº¦çº¦çš„å‘ç°ç‚’èœå±…ç„¶å’Œæ­¦åŠŸæœ‰ä¸€äº›ç›¸é€šä¹‹å¤„ï¼ŒçœŸæ˜¯å¥‡å¦™ã€‚"NOR"\n");
 			gain_exp = 200;
 			gain_pot = 200;
 			
 			local = localtime(time());
 			if (to_int(local[4])+1 == 5 && (local[3] >= 25) || to_int(local[4])+1 == 6 &&  local[3] <= 8 ) {
-				gain_exp *= 2;//¿ª·ş¹Ò»ú½±Àø·­±¶¡£Ò»ÖÜ?»¹ÊÇ£¿
-				gain_pot *= 2;//¿ª·ş¹Ò»ú½±Àø·­±¶¡£Ò»ÖÜ?»¹ÊÇ£¿
+				gain_exp *= 2;//å¼€æœæŒ‚æœºå¥–åŠ±ç¿»å€ã€‚ä¸€å‘¨?è¿˜æ˜¯ï¼Ÿ
+				gain_pot *= 2;//å¼€æœæŒ‚æœºå¥–åŠ±ç¿»å€ã€‚ä¸€å‘¨?è¿˜æ˜¯ï¼Ÿ
 			}
 			me->add("combat_exp", gain_exp);
 			me->improve_potential(gain_pot);
-			msg = HIC "Äã»ñµÃÁË"+(gain_money)+"¸öÍ­°å¡¢" + (gain_exp) + "µãĞŞÎª";
+			msg = HIC "ä½ è·å¾—äº†"+(gain_money)+"ä¸ªé“œæ¿ã€" + (gain_exp) + "ç‚¹ä¿®ä¸º";
 			if (gain_pot)
-				msg += "ºÍ" + (gain_pot) + "µãÇ±ÄÜ¡£"NOR"\n";
+				msg += "å’Œ" + (gain_pot) + "ç‚¹æ½œèƒ½ã€‚"NOR"\n";
 			else
-				msg += "¡£"NOR"\n";
+				msg += "ã€‚"NOR"\n";
 			tell_object(me,  msg);
 		}
 		return 0;
@@ -237,7 +237,7 @@ int cooking(object me)
 
 int halt_cooking(object me)
 {
-	message_vision("$NÈàÈàÑü²¿£¬ÓÖÅ¤ÁËÅ¤£¬Ì¾µ½£ºÕâÒ²Ì«ÄÑÁË£¬ÎÒ»¹ÊÇÈ¥´³µ´½­ºş°É£¡\n", me);
+	message_vision("$Næ‰æ‰è…°éƒ¨ï¼Œåˆæ‰­äº†æ‰­ï¼Œå¹åˆ°ï¼šè¿™ä¹Ÿå¤ªéš¾äº†ï¼Œæˆ‘è¿˜æ˜¯å»é—¯è¡æ±Ÿæ¹–å§ï¼\n", me);
 	me->delete_temp("job/cook");
 	me->delete_temp("pending/auto_cook");
 	me->delete_temp("job/step");

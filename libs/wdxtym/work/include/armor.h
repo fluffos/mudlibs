@@ -2,19 +2,19 @@
 #define __ARMOR__
 
 // Standard inheritable armor objects.
-#define HEAD		"/inherit/armor/head"       //Í·
-#define NECK		"/inherit/armor/neck"       //²±×Ó
-#define CLOTH		"/inherit/armor/cloth"      //ÒÂ·ş
-#define ARMOR		"/inherit/armor/armor"      //×°¼×
-#define SURCOAT		"/inherit/armor/surcoat"     //ÍâÌ×
-#define WAIST		"/inherit/armor/waist"      //Ñü²¿
-#define WRISTS		"/inherit/armor/wrists"     //ÊÖÍó
-#define SHIELD		"/inherit/armor/shield"     //¶ÜÅÆ
-#define HANDS		"/inherit/armor/hands"     //ÊÖÕÆ
-#define FINGER		"/inherit/armor/finger"     //ÊÖÖ¸
-#define BOOTS		"/inherit/armor/boots"    //Ğ¬
-#define PANTS		"/inherit/armor/pants"   //¿ã×Ó
-#define LEG		"/inherit/armor/leg"   //ÍÈ
+#define HEAD		"/inherit/armor/head"       //å¤´
+#define NECK		"/inherit/armor/neck"       //è„–å­
+#define CLOTH		"/inherit/armor/cloth"      //è¡£æœ
+#define ARMOR		"/inherit/armor/armor"      //è£…ç”²
+#define SURCOAT		"/inherit/armor/surcoat"     //å¤–å¥—
+#define WAIST		"/inherit/armor/waist"      //è…°éƒ¨
+#define WRISTS		"/inherit/armor/wrists"     //æ‰‹è…•
+#define SHIELD		"/inherit/armor/shield"     //ç›¾ç‰Œ
+#define HANDS		"/inherit/armor/hands"     //æ‰‹æŒ
+#define FINGER		"/inherit/armor/finger"     //æ‰‹æŒ‡
+#define BOOTS		"/inherit/armor/boots"    //é‹
+#define PANTS		"/inherit/armor/pants"   //è£¤å­
+#define LEG		"/inherit/armor/leg"   //è…¿
 
 // Standard armor types
 #define TYPE_HEAD	"head"

@@ -1,74 +1,74 @@
-//ÎïÆ·
+//ç‰©å“
 mapping weapon_file =
 ([
-    "sword" : "/clone/weapon/gangjian",   //¸Ö½£
-    "blade" : "/clone/weapon/gangdao",    //¸Öµ¶
-    "staff" : "/clone/weapon/gangzhang",  //¸ÖÕÈ
-    "qiang" : "/clone/weapon/changqiang", //³¤Ç¹
-    "axe"   : "/clone/weapon/tiefu",      //Ìú¸«
-    "fork"  : "/clone/weapon/gangcha",    //¸Ö²æ
-    "whip"  : "/clone/weapon/changbian",  //³¤±Ş
-    "dadao" : "/clone/weapon/dadao",      //´óµ¶
+    "sword" : "/clone/weapon/gangjian",   //é’¢å‰‘
+    "blade" : "/clone/weapon/gangdao",    //é’¢åˆ€
+    "staff" : "/clone/weapon/gangzhang",  //é’¢æ–
+    "qiang" : "/clone/weapon/changqiang", //é•¿æª
+    "axe"   : "/clone/weapon/tiefu",      //é“æ–§
+    "fork"  : "/clone/weapon/gangcha",    //é’¢å‰
+    "whip"  : "/clone/weapon/changbian",  //é•¿é­
+    "dadao" : "/clone/weapon/dadao",      //å¤§åˆ€
 ]);
 
-//É«²Ê
+//è‰²å½©
 string *all_color =
 ({
     "$WHT$", "$YEL$", "$MAG$", "$CYN$", "$BLU$", "$GRN$", "$RED$",
     "$HIW$", "$HIY$", "$HIM$", "$HIC$", "$HIB$", "$HIG$", "$HIR$",
 });
 
-//ÖĞ×º
+//ä¸­ç¼€
 mapping name_a =
 ([
-    "´í½î" : "cuojin",
-    "»¯¹Ç" : "huagu",
-    "ËéĞÄ" : "suixin",
-    "Ëğ¾«" : "sunjing",
-    "ÎüÑª" : "xixue",
-    "ÓÄäé" : "youming",
-    "À×Ãù" : "leiming",
-    "ÄùÅÍ" : "niepan",
-    "×ÏÑô" : "ziyang",
-    "³àÒõ" : "chiyin",
-    "ÁÑÌì" : "lietian",
-    "Éã»ê" : "shehun",
-    "Ä¦ÂŞ" : "moluo",
-    "»ğÑô" : "huoyang",
-    "çÍÌì" : "bintian",
-    "¾ûÌì" : "juntian",
-    "ÁúÑ×" : "longyan",
-    "³àÏ¼" : "chixia",
-    "Çàºç" : "qinghong",
-    "µÛãÚ" : "dique",
-    "¹ÅÔÂ" : "guyue",
-    "·üÄ§" : "fumo",
-    "Àë»ğ" : "lihuo",
-    "ĞŞÂŞ" : "xiuluo",
-    "ĞÇÔÂ" : "xinyue",
-    "×·»ê" : "zhuihun",
-    "»ìÌì" : "huntian",
-    "»ìÔª" : "hunyuan",
-    "×·»ê" : "zhuihun",
-    "¶áÃü" : "duoming",
+    "é”™ç­‹" : "cuojin",
+    "åŒ–éª¨" : "huagu",
+    "ç¢å¿ƒ" : "suixin",
+    "æŸç²¾" : "sunjing",
+    "å¸è¡€" : "xixue",
+    "å¹½æºŸ" : "youming",
+    "é›·é¸£" : "leiming",
+    "æ¶…ç£" : "niepan",
+    "ç´«é˜³" : "ziyang",
+    "èµ¤é˜´" : "chiyin",
+    "è£‚å¤©" : "lietian",
+    "æ‘„é­‚" : "shehun",
+    "æ‘©ç½—" : "moluo",
+    "ç«é˜³" : "huoyang",
+    "ç¼¤å¤©" : "bintian",
+    "é’§å¤©" : "juntian",
+    "é¾™ç‚" : "longyan",
+    "èµ¤éœ" : "chixia",
+    "é’è™¹" : "qinghong",
+    "å¸é˜™" : "dique",
+    "å¤æœˆ" : "guyue",
+    "ä¼é­”" : "fumo",
+    "ç¦»ç«" : "lihuo",
+    "ä¿®ç½—" : "xiuluo",
+    "æ˜Ÿæœˆ" : "xinyue",
+    "è¿½é­‚" : "zhuihun",
+    "æ··å¤©" : "huntian",
+    "æ··å…ƒ" : "hunyuan",
+    "è¿½é­‚" : "zhuihun",
+    "å¤ºå‘½" : "duoming",
 ]);
 
-//Ç°×º
+//å‰ç¼€
 mapping name_b =
 ([
-    "±ùĞÄ" : "bingxin",
-    "º®ÔÂ" : "hanyue",
-    "ĞşÌì" : "xuantian",
-    "Ñ©²õ" : "xuechan",
-    "ÇàÁ§" : "qingli",
-    "×ÏÑæ" : "ziyan",
-    "Ì«Ğş" : "taixuan",
-    "ÁÒÑæ" : "lieyan",
-    "¹áÈÕ" : "guanri",
-    "ÆÆÔÂ" : "poyue",
-    "ÇàÁú" : "qinglong",
-    "°×»¢" : "baihu",
-    "ÖìÈ¸" : "zhuque",
-    "ĞşÎä" : "xuanwu",
+    "å†°å¿ƒ" : "bingxin",
+    "å¯’æœˆ" : "hanyue",
+    "ç„å¤©" : "xuantian",
+    "é›ªè‰" : "xuechan",
+    "é’ç’ƒ" : "qingli",
+    "ç´«ç„°" : "ziyan",
+    "å¤ªç„" : "taixuan",
+    "çƒˆç„°" : "lieyan",
+    "è´¯æ—¥" : "guanri",
+    "ç ´æœˆ" : "poyue",
+    "é’é¾™" : "qinglong",
+    "ç™½è™" : "baihu",
+    "æœ±é›€" : "zhuque",
+    "ç„æ­¦" : "xuanwu",
 ]);
 

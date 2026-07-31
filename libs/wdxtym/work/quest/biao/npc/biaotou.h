@@ -21,7 +21,7 @@ void die()
         object ob, me, corpse;
         
         ob = this_object();
-message_vision("$N��ž����һ�����ڵ��ϣ���������˿��Ѫ��ʹ��������˼��¾����ˡ�\n", ob);
+message_vision("$N「啪」地一声倒在地上，嘴角溢出几丝鲜血，痛苦的挣扎了几下就死了。\n", ob);
         destruct(ob);
         return;
 }

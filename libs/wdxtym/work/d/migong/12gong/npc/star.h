@@ -18,8 +18,8 @@ void powerup()
 {
         object me = this_object();
         random(3)?
-        me->command("chat ÑÅµäÄÈ£¬´ÍÓèÎÒÁ¦Á¿°É£¡\n"):
-        me->command("chat Ð¡ÓîÖæ£¡±¬·¢°É£¡\n");
+        me->command("chat é›…å…¸å¨œï¼Œèµäºˆæˆ‘åŠ›é‡å§ï¼\n"):
+        me->command("chat å°å®‡å®™ï¼çˆ†å‘å§ï¼\n");
     if(!me->is_busy() && random(10)>2 )
 {
         me->set("qi",query("max_qi"));

@@ -1,4 +1,4 @@
-// ÃÅÅÉÎä¹¦ÁÐ±í (by xbd)
+// é—¨æ´¾æ­¦åŠŸåˆ—è¡¨ (by xbd)
 
 mapping *ps = ({
 	([	"party": "wudang",
@@ -143,7 +143,7 @@ mapping *ps = ({
 	([	"party": "mingjiao",
 		"status": ([
 			"party": "mingjiao",
-			"family/family_name": "Ã÷½Ì",
+			"family/family_name": "æ˜Žæ•™",
 			"no_accept": 1,
 			"no_fight": 1,
 			"ticks": ([ ]),
@@ -375,7 +375,7 @@ mapping *ps = ({
 	([	"party": "wdjiao",
 		"status": ([
 			"party": "wdjiao",
-			"family/family_name": "Îå¶¾½Ì",
+			"family/family_name": "äº”æ¯’æ•™",
 			"no_accept": 1,
 			"no_fight": 1,
 			"ticks": ([ ]),

@@ -26,7 +26,7 @@ int do_copy(object me,int maxpot)
 }
 int do_back(object me)
 {                       
-  tell_room(environment(me), me->query("name")+"´Ò´ÒÃ¦Ã¦µÄÀë¿ªÁË¡£\n", ({me}));	
+  tell_room(environment(me), me->query("name")+"åŒ†åŒ†å¿™å¿™çš„ç¦»å¼€äº†ã€‚\n", ({me}));	
   destruct(me); 
   return 1;
 }
@@ -38,10 +38,10 @@ void die()
 	else delete_temp("faint_by");
 	COMBAT_D->announce(this_object(), "dead");
 	if( !(killer = query_temp("last_damage_from")) )
-	killer = "ÄªÃûÆäÃîµØ";
+	killer = "èŽ«åå…¶å¦™åœ°";
 	if( objectp(corpse = CHAR_D->make_corpse(this_object(), killer)) )
 	corpse->move(environment());
-	set_temp("last_damage_from", "ÄªÃûÆäÃîµØ");
+	set_temp("last_damage_from", "èŽ«åå…¶å¦™åœ°");
     corpse->set_temp("must_killby",this_object()->query_temp("must_killby"));
 	this_object()->remove_all_killer();
 	all_inventory(environment())->remove_killer(this_object());
@@ -63,6 +63,6 @@ void init()
 }
 
 void begin_kill(object ob,object player)
-{message_vision(HIY"\n$N¶ñºÝºÝµÄ¶Ô$nºÈµÀ£º³ôÔô£¬´óÒ¯ÎÒ×îºÞ¶à¹ÜÏÐÊÂµÄÈË£¬½ñÌìËãÄãµ¹Ã¹ÁË£¡£¡\n"NOR ,ob,player);
+{message_vision(HIY"\n$Næ¶ç‹ ç‹ çš„å¯¹$nå–é“ï¼šè‡­è´¼ï¼Œå¤§çˆ·æˆ‘æœ€æ¨å¤šç®¡é—²äº‹çš„äººï¼Œä»Šå¤©ç®—ä½ å€’éœ‰äº†ï¼ï¼\n"NOR ,ob,player);
  ob->kill_ob(player);
 }

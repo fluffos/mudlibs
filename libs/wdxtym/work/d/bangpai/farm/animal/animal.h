@@ -3,9 +3,9 @@ inherit NPC;
 void create_animal(mapping animal_info)
 {
     set_name(animal_info["name"], ({ animal_info["id"] }));
-    set("long", "ÕâÊÇÒ»Ö»" + animal_info["name"] + "¡£\n");
+    set("long", "è¿™æ˜¯ä¸€åª" + animal_info["name"] + "ã€‚\n");
     set("combat_exp", 10000);
-    set("race", "Ò°ÊŞ");
+    set("race", "é‡å…½");
     set("need_time", animal_info["time"]);
     set("is_animal", 1);
     set("meat", animal_info["meat"]);

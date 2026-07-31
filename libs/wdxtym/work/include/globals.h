@@ -4,11 +4,11 @@
 #include "tomud.h"
 //#pragma save_binary
 #ifndef __SENSIBLE_MODIFIERS__
-#define nosave static
-#define protected static
+#define nosave nosave
+#define protected nosave
 #else
 #define private protected
-#define static nosave
+#define nosave nosave
 #endif
 // Important directories
 #define BACKUP_DIR      "/backup/"
@@ -144,7 +144,7 @@
 #define SNAKE	   "/inherit/char/snake"
 #define COMBINED_ITEM_BANG   "/inherit/item/combined_bang"
 
-#define F_GEMS			"/feature/gems.c"
+#define F_GEMS			"/feature/gems.lpc"
 #define S_ARMOR		"/inherit/gems/armor"
 #define S_BOOTS		"/inherit/gems/boots"
 #define S_HEAD		"/inherit/gems/head"
@@ -154,10 +154,10 @@
 #define S_WAIST		"/inherit/gems/waist"
 #define S_WRISTS	"/inherit/gems/wrists"
 #define S_PANTS		"/inherit/gems/pants"
-#define S_HAND		"/inherit/gems/hand.c"
-#define S_WEAPON		"/inherit/gems/weapon.c"
-#define S_ROBE			"/inherit/gems/robe.c"
-#define S_RING			"/inherit/gems/ring.c"
+#define S_HAND		"/inherit/gems/hand.lpc"
+#define S_WEAPON		"/inherit/gems/weapon.lpc"
+#define S_ROBE			"/inherit/gems/robe.lpc"
+#define S_RING			"/inherit/gems/ring.lpc"
 #define S_FABAO		"/inherit/gems/fabao"
 #define S_CHIBANG		"/inherit/gems/chibang"
 #define S_SHOUHUAN		"/inherit/gems/shouhuan"
@@ -166,50 +166,50 @@
 #define BACKBONE_UID    "Backbone"
 
 // Features
-#define F_ACTION	"/feature/action.c"
-#define F_ALIAS	 "/feature/alias.c"
-#define F_APPRENTICE    "/feature/apprentice.c"
-#define F_ATTACK	"/feature/attack.c"
-#define F_ATTRIBUTE     "/feature/attribute.c"
-#define F_AUTOLOAD      "/feature/autoload.c"
-#define F_BANKER	"/feature/banker.c"
-#define F_CLEAN_UP      "/feature/clean_up.c"
-#define F_COAGENT       "/feature/coagent.c"
-#define F_COMMAND       "/feature/command.c"
-#define F_CONDITION     "/feature/condition.c"
-#define F_CUTABLE       "/feature/cutable.c"
-#define F_DAMAGE	"/feature/damage.c"
-#define F_DBASE	 "/feature/dbase.c"
-#define F_DEALER	"/feature/dealer.c"
-#define F_EDIT	  "/feature/edit.c"
-#define F_EQUIP	 "/feature/equip.c"
-#define F_FINANCE       "/feature/finance.c"
-#define F_FOOD	  "/feature/food.c"
-#define F_GUARDER       "/feature/guarder.c"
-#define F_ITEMMAKE      "/feature/itemmake.c"
-#define F_LIQUID	"/feature/liquid.c"
-#define F_MASTER	"/feature/master.c"
-#define F_MESSAGE       "/feature/message.c"
-#define F_MORE	  "/feature/more.c"
-#define F_MOVE	  "/feature/move.c"
-#define F_NAME	  "/feature/name.c"
-#define F_NOCLONE       "/feature/noclone.c"
-#define F_OBSAVE	"/feature/obsave.c"
-#define F_PUNISHER      "/feature/punisher.c"
-#define F_QUESTER       "/feature/quester.c"
-#define F_SAVE	  "/feature/save.c"
-#define F_SHADOW	"/feature/shadow.c"
-#define	F_SILENTDEST	"/feature/silentdest.c"
-#define F_SKILL	 "/feature/skill.c"
-#define F_SSERVER       "/feature/sserver.c"
-#define F_TEAM	  "/feature/team.c"
-#define F_TRANSPORT     "/feature/transport.c"
-#define F_TREEMAP       "/feature/treemap.c"
-#define F_VENDOR	"/feature/dealer.c"
-#define F_UNIQUE	"/feature/unique.c"
-#define F_LEVEL	"/feature/level.c"
-#define F_SUIT		"/feature/suit.c"	   //Ì××°
-#define F_LEVELL	"/feature/levell.c"
+#define F_ACTION	"/feature/action.lpc"
+#define F_ALIAS	 "/feature/alias.lpc"
+#define F_APPRENTICE    "/feature/apprentice.lpc"
+#define F_ATTACK	"/feature/attack.lpc"
+#define F_ATTRIBUTE     "/feature/attribute.lpc"
+#define F_AUTOLOAD      "/feature/autoload.lpc"
+#define F_BANKER	"/feature/banker.lpc"
+#define F_CLEAN_UP      "/feature/clean_up.lpc"
+#define F_COAGENT       "/feature/coagent.lpc"
+#define F_COMMAND       "/feature/command.lpc"
+#define F_CONDITION     "/feature/condition.lpc"
+#define F_CUTABLE       "/feature/cutable.lpc"
+#define F_DAMAGE	"/feature/damage.lpc"
+#define F_DBASE	 "/feature/dbase.lpc"
+#define F_DEALER	"/feature/dealer.lpc"
+#define F_EDIT	  "/feature/edit.lpc"
+#define F_EQUIP	 "/feature/equip.lpc"
+#define F_FINANCE       "/feature/finance.lpc"
+#define F_FOOD	  "/feature/food.lpc"
+#define F_GUARDER       "/feature/guarder.lpc"
+#define F_ITEMMAKE      "/feature/itemmake.lpc"
+#define F_LIQUID	"/feature/liquid.lpc"
+#define F_MASTER	"/feature/master.lpc"
+#define F_MESSAGE       "/feature/message.lpc"
+#define F_MORE	  "/feature/more.lpc"
+#define F_MOVE	  "/feature/move.lpc"
+#define F_NAME	  "/feature/name.lpc"
+#define F_NOCLONE       "/feature/noclone.lpc"
+#define F_OBSAVE	"/feature/obsave.lpc"
+#define F_PUNISHER      "/feature/punisher.lpc"
+#define F_QUESTER       "/feature/quester.lpc"
+#define F_SAVE	  "/feature/save.lpc"
+#define F_SHADOW	"/feature/shadow.lpc"
+#define	F_SILENTDEST	"/feature/silentdest.lpc"
+#define F_SKILL	 "/feature/skill.lpc"
+#define F_SSERVER       "/feature/sserver.lpc"
+#define F_TEAM	  "/feature/team.lpc"
+#define F_TRANSPORT     "/feature/transport.lpc"
+#define F_TREEMAP       "/feature/treemap.lpc"
+#define F_VENDOR	"/feature/dealer.lpc"
+#define F_UNIQUE	"/feature/unique.lpc"
+#define F_LEVEL	"/feature/level.lpc"
+#define F_SUIT		"/feature/suit.lpc"	   //å¥—è£…
+#define F_LEVELL	"/feature/levell.lpc"
 
 //
 #define SKILL_MODEL_UNARMED    "/clone/meskill/skill_model_unarmed.h"
@@ -217,7 +217,7 @@
 #define SKILL_MODEL_DEFAULT    "/clone/meskill/skill_model_default.h"
 
 // music instructment
-#define F_XIAO	  "/inherit/misc/_xiao.c"
+#define F_XIAO	  "/inherit/misc/_xiao.lpc"
 
 // Others
 

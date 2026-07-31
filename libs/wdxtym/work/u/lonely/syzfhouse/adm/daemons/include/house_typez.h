@@ -1,16 +1,16 @@
-//·¿ÎİÀàĞÍÏ¸Ä¿±í
+//æˆ¿å±‹ç±»å‹ç»†ç›®è¡¨
 
 mapping *house_type = ({
 ([
-    "name"  : "ÁáççÎİ",         //Ãû³Æ
-    "code"  : "linglong",       //´úÂë
-    "type"  : "user",           //ÀàĞÍ
-    "entry" : "xiaoyuan",       //Èë¿Ú
-    "rooms" : 1,                //¼äÊı
-    "value" : 2500,             //Ôì¼Û
+    "name"  : "ç²ç‘å±‹",         //åç§°
+    "code"  : "linglong",       //ä»£ç 
+    "type"  : "user",           //ç±»å‹
+    "entry" : "xiaoyuan",       //å…¥å£
+    "rooms" : 1,                //é—´æ•°
+    "value" : 2500,             //é€ ä»·
 ]),
 ([
-    "name"  : "ËæÒâ¸ó",
+    "name"  : "éšæ„é˜",
     "code"  : "suiyi",
     "type"  : "user",
     "entry" : "xiaoyuan",
@@ -18,7 +18,7 @@ mapping *house_type = ({
     "value" : 5000,
 ]),
 ([
-    "name"  : "åĞÒ£¾Ó",
+    "name"  : "é€é¥å±…",
     "code"  : "xiaoyao",
     "type"  : "user",
     "entry" : "xiaoyuan",
@@ -26,7 +26,7 @@ mapping *house_type = ({
     "value" : 7500,
 ]),
 ([
-    "name"  : "½õĞåÕ¬",
+    "name"  : "é”¦ç»£å®…",
     "code"  : "jinxiu",
     "type"  : "user",
     "entry" : "xiaoyuan",
@@ -34,7 +34,7 @@ mapping *house_type = ({
     "value" : 12000,
 ]),
 ([
-    "name"  : "¼¯ÏÍ»á¹İ",
+    "name"  : "é›†è´¤ä¼šé¦†",
     "code"  : "jixian",
     "type"  : "bang",
     "entry" : "xiaoyuan",
@@ -42,7 +42,7 @@ mapping *house_type = ({
     "value" : 15000,
 ]),
 ([
-    "name"  : "¾ÛÓ¢É½×¯",
+    "name"  : "èšè‹±å±±åº„",
     "code"  : "juying",
     "type"  : "bang",
     "entry" : "xiaoyuan",
@@ -50,7 +50,7 @@ mapping *house_type = ({
     "value" : 30000,
 ]),
 ([
-    "name"  : "¹ãÁêÒİ¾³",
+    "name"  : "å¹¿é™µé€¸å¢ƒ",
     "code"  : "yijing",
     "type"  : "xian",
     "entry" : "xiaoyuan",

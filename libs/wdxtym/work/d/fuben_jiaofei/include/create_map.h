@@ -1,10 +1,10 @@
-//º¯ÊıÉùÃ÷
-int create_room(object fb_mem);	//¸´ÖÆµØÍ¼·¿¼ä
-int link_room(object fb_mem);	//Á¬½Ó³ö¿Ú
+//å‡½æ•°å£°æ˜
+int create_room(object fb_mem);	//å¤åˆ¶åœ°å›¾æˆ¿é—´
+int link_room(object fb_mem);	//è¿æ¥å‡ºå£
 
-//È«¾Ö±äÁ¿
-string *city_dir = ({	//³ÇÊĞÄ¿Â¼  ±ØĞëÌîÈë¾ø¶ÔÂ·¾¶²¢ÒÔ¡°/¡±½áÎ²
-	"/d/dali/",	//´óÀí
-	"/d/xiangyang/",	//ÏåÑô
+//å…¨å±€å˜é‡
+string *city_dir = ({	//åŸå¸‚ç›®å½•  å¿…é¡»å¡«å…¥ç»å¯¹è·¯å¾„å¹¶ä»¥â€œ/â€ç»“å°¾
+	"/d/dali/",	//å¤§ç†
+	"/d/xiangyang/",	//è¥„é˜³
 });
 

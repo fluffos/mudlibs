@@ -11,7 +11,7 @@ void leave()
 {
         object ob = this_object();
         if (!ob->is_fighting()) {
-                message_vision(HIC "ци╧е╠ЬЁ╥акЁЖх╔ё╛╡╩╪Шак║ё\n" NOR,this_object());
+                message_vision(HIC "Х▓≥Е▐╓Е┘╣Ф▓╓Д╨├Е┤╨Е▌╩О╪▄Д╦█Х╖│Д╨├Ц─┌\n" NOR,this_object());
                 destruct(this_object());
                 }
         else call_out("leave",15);
@@ -25,12 +25,12 @@ int do_kill(string arg)
         if(!arg || present(arg,environment(me))!=me) return 0;
         if (me->query("ygjg")==who)
                   {
-                  message_vision(CYN"$N╪ссмё║$N╪ссмё║\n"NOR,who);
+                  message_vision(CYN"$NЕ┼═Ф╡╧О╪│$NЕ┼═Ф╡╧О╪│\n"NOR,who);
                   return 1;
                   }
             else if (me->query("ygjg"))
              {
-                  tell_object(who,CYN"дЦ╩╧йг╦Вк╬фДж╟ё╛в╗пд╤т╦╤дЦ╣д"HIR"ци╧е╠Ь"CYN"╟и║ё\n"NOR);
+                  tell_object(who,CYN"Д╫═Х©≤Ф≤╞Е░└Е▐╦Е┘╤Х│▄О╪▄Д╦⌠Е©┐Е╞╧Д╩≤Д╫═Г └"HIR"Х▓≥Е▐╓Е┘╣"CYN"Е░╖Ц─┌\n"NOR);
                   return 1;
                   }
                    return 0;

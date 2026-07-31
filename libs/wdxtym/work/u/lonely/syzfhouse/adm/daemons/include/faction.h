@@ -1,59 +1,59 @@
-//¶ÔÓ¦ÎäÆ÷Êı¾İ±í
+//å¯¹åº”æ­¦å™¨æ•°æ®è¡¨
 mapping weapon_file =
 ([
-    "sword" : "/clone/weapon/gangjian",   //¸Ö½£
-    "blade" : "/clone/weapon/gangdao",    //¸Öµ¶
-    "dadao" : "/clone/weapon/dadao",      //´óµ¶
-    "staff" : "/clone/weapon/gangzhang",  //¸ÖÕÈ
-    "qiang" : "/clone/weapon/changqiang", //³¤Ç¹
-    "axe"   : "/clone/weapon/tiefu",      //Ìú¸«
-    "fork"  : "/clone/weapon/gangcha",    //¸Ö²æ
-    "whip"  : "/clone/weapon/changbian",  //³¤±Ş
-    "wodao" : "/clone/weapon/wodao",      //ÙÁµ¶
-    "xiyang-jian" : "/clone/weapon/xiyang-jian",    //Î÷Ñó½£
+    "sword" : "/clone/weapon/gangjian",   //é’¢å‰‘
+    "blade" : "/clone/weapon/gangdao",    //é’¢åˆ€
+    "dadao" : "/clone/weapon/dadao",      //å¤§åˆ€
+    "staff" : "/clone/weapon/gangzhang",  //é’¢æ–
+    "qiang" : "/clone/weapon/changqiang", //é•¿æª
+    "axe"   : "/clone/weapon/tiefu",      //é“æ–§
+    "fork"  : "/clone/weapon/gangcha",    //é’¢å‰
+    "whip"  : "/clone/weapon/changbian",  //é•¿é­
+    "wodao" : "/clone/weapon/wodao",      //å€­åˆ€
+    "xiyang-jian" : "/clone/weapon/xiyang-jian",    //è¥¿æ´‹å‰‘
 ]);
 
-//¼¼ÄÜÃû³Æ¶ÔÕÕ±í
+//æŠ€èƒ½åç§°å¯¹ç…§è¡¨
 mapping weapon_type =
 ([
-    "axe"     : "¸«·¨",
-    "blade"   : "µ¶·¨",
-    "claw"    : "×¦·¨",
-    "dadao"   : "µ¶·¨",
-    "fork"    : "²æ·¨",
-    "finger"  : "Ö¸·¨",
-    "qiang"   : "Ç¹·¨",
-    "staff"   : "ÕÈ·¨",
-    "sword"   : "½£·¨",
-    "unarmed" : "È­·¨",
-    "whip"    : "±Ş·¨",
+    "axe"     : "æ–§æ³•",
+    "blade"   : "åˆ€æ³•",
+    "claw"    : "çˆªæ³•",
+    "dadao"   : "åˆ€æ³•",
+    "fork"    : "å‰æ³•",
+    "finger"  : "æŒ‡æ³•",
+    "qiang"   : "æªæ³•",
+    "staff"   : "æ–æ³•",
+    "sword"   : "å‰‘æ³•",
+    "unarmed" : "æ‹³æ³•",
+    "whip"    : "é­æ³•",
 ]);
 
-//¼¼ÄÜÇé¿öÊı¾İ±í
+//æŠ€èƒ½æƒ…å†µæ•°æ®è¡¨
 mapping *all_skill = ({
 ([
-    "faction" : "°×ÍÕ",             //ËùÊôÃÅÅÉ
-    "name"    : "ÁéÉßÕÈ·¨",         //¼¼ÄÜÃû³Æ
-    "code"    : "baituo_1",         //¼¼ÄÜ´úºÅ
-    "weapon"  : "staff",            //ÎäÆ÷ÀàĞÍ
-    "gender"  : "all",              //ĞÔ±ğÏŞÖÆ
-    "horse"   : 0,                  //ÂíÊõĞèÇó
-    "m_skill" : ([                  //¼¼ÄÜÓ³Éä
+    "faction" : "ç™½é©¼",             //æ‰€å±é—¨æ´¾
+    "name"    : "çµè›‡æ–æ³•",         //æŠ€èƒ½åç§°
+    "code"    : "baituo_1",         //æŠ€èƒ½ä»£å·
+    "weapon"  : "staff",            //æ­¦å™¨ç±»å‹
+    "gender"  : "all",              //æ€§åˆ«é™åˆ¶
+    "horse"   : 0,                  //é©¬æœ¯éœ€æ±‚
+    "m_skill" : ([                  //æŠ€èƒ½æ˜ å°„
                     "unarmed" : "shexing-diaoshou",
                     "dodge"   : "chanchu-bufa",
                     "parry"   : "lingshe-zhangfa",
                     "staff"   : "lingshe-zhangfa",
                     "force"   : "hamagong",
                 ]),
-    "p_skill" : ([]),               //Ô¤±¸¼¼ÄÜ
-    "special" : ([                  //ÌØÊâ±ê¼Ç
+    "p_skill" : ([]),               //é¢„å¤‡æŠ€èƒ½
+    "special" : ([                  //ç‰¹æ®Šæ ‡è®°
                     "weapon/she" :  30,
                     "weapon/id"  : "gang zhang",
                 ]),
 ]),
 ([
-    "faction" : "¶ëáÒ",
-    "name"    : "»Ø·ç·÷Áø½£",
+    "faction" : "å³¨åµ‹",
+    "name"    : "å›é£æ‹‚æŸ³å‰‘",
     "code"    : "emei_1",
     "weapon"  : "sword",
     "gender"  : "female",
@@ -71,8 +71,8 @@ mapping *all_skill = ({
                 ]),
 ]),
 ([
-    "faction" : "¶ëáÒ",
-    "name"    : "¾ÅÒõ´İĞÄ×¦",
+    "faction" : "å³¨åµ‹",
+    "name"    : "ä¹é˜´æ‘§å¿ƒçˆª",
     "code"    : "emei_2",
     "weapon"  : "claw",
     "gender"  : "female",
@@ -87,8 +87,8 @@ mapping *all_skill = ({
                 ]),
 ]),
 ([
-    "faction" : "Ø¤°ï",
-    "name"    : "½µÁúÊ®°ËÕÆ",
+    "faction" : "ä¸å¸®",
+    "name"    : "é™é¾™åå…«æŒ",
     "code"    : "gaibang_1",
     "weapon"  : "unarmed",
     "gender"  : "all",
@@ -100,8 +100,8 @@ mapping *all_skill = ({
                 ]),
 ]),
 ([
-    "faction" : "Ø¤°ï",
-    "name"    : "´ò¹·°ô·¨",
+    "faction" : "ä¸å¸®",
+    "name"    : "æ‰“ç‹—æ£’æ³•",
     "code"    : "gaibang_2",
     "weapon"  : "staff",
     "gender"  : "all",
@@ -114,8 +114,8 @@ mapping *all_skill = ({
                 ]),
 ]),
 ([
-    "faction" : "»ªÉ½",
-    "name"    : "»ªÉ½½£·¨",
+    "faction" : "åå±±",
+    "name"    : "åå±±å‰‘æ³•",
     "code"    : "huashan_1",
     "weapon"  : "sword",
     "gender"  : "all",
@@ -131,8 +131,8 @@ mapping *all_skill = ({
                 ]),
 ]),
 ([
-    "faction" : "»ªÉ½",
-    "name"    : "Á½ÒÇµ¶·¨",
+    "faction" : "åå±±",
+    "name"    : "ä¸¤ä»ªåˆ€æ³•",
     "code"    : "huashan_2",
     "weapon"  : "blade",
     "gender"  : "all",
@@ -145,8 +145,8 @@ mapping *all_skill = ({
                 ]),
 ]),
 ([
-    "faction" : "À¥ÂØ",
-    "name"    : "Á½ÒÇ½£·¨",
+    "faction" : "æ˜†ä»‘",
+    "name"    : "ä¸¤ä»ªå‰‘æ³•",
     "code"    : "kunlun_1",
     "weapon"  : "sword",
     "gender"  : "all",
@@ -159,8 +159,8 @@ mapping *all_skill = ({
                 ]),
 ]),
 ([
-    "faction" : "ÁéğÕ",
-    "name"    : "ÌìÓğÆæ½£",
+    "faction" : "çµé¹«",
+    "name"    : "å¤©ç¾½å¥‡å‰‘",
     "code"    : "lingjiu_1",
     "weapon"  : "sword",
     "gender"  : "female",
@@ -176,8 +176,8 @@ mapping *all_skill = ({
                 ]),
 ]),
 ([
-    "faction" : "Çà³Ç",
-    "name"    : "ËÉ·ç½£·¨",
+    "faction" : "é’åŸ",
+    "name"    : "æ¾é£å‰‘æ³•",
     "code"    : "qingcheng_1",
     "weapon"  : "sword",
     "gender"  : "male",
@@ -190,8 +190,8 @@ mapping *all_skill = ({
                 ]),
 ]),
 ([
-    "faction" : "È«Õæ",
-    "name"    : "È«Õæ½£·¨",
+    "faction" : "å…¨çœŸ",
+    "name"    : "å…¨çœŸå‰‘æ³•",
     "code"    : "quanzhen_1",
     "weapon"  : "sword",
     "gender"  : "all",
@@ -204,8 +204,8 @@ mapping *all_skill = ({
                 ]),
 ]),
 ([
-    "faction" : "ÉÙÁÖ",
-    "name"    : "´ïÄ¦½£·¨",
+    "faction" : "å°‘æ—",
+    "name"    : "è¾¾æ‘©å‰‘æ³•",
     "code"    : "shaolin_1",
     "weapon"  : "sword",
     "gender"  : "male",
@@ -221,8 +221,8 @@ mapping *all_skill = ({
                 ]),
 ]),
 ([
-    "faction" : "ÉÙÁÖ",
-    "name"    : "Äé»¨Ö¸·¨",
+    "faction" : "å°‘æ—",
+    "name"    : "æ‹ˆèŠ±æŒ‡æ³•",
     "code"    : "shaolin_2",
     "weapon"  : "finger",
     "gender"  : "male",
@@ -238,8 +238,8 @@ mapping *all_skill = ({
     "special" : ([]),
 ]),
 ([
-    "faction" : "ÉÙÁÖ",
-    "name"    : "ÈÕÔÂ±Ş·¨",
+    "faction" : "å°‘æ—",
+    "name"    : "æ—¥æœˆé­æ³•",
     "code"    : "shaolin_3",
     "weapon"  : "whip",
     "gender"  : "male",
@@ -255,8 +255,8 @@ mapping *all_skill = ({
                 ]),
 ]),
 ([
-    "faction" : "ÉñÁú",
-    "name"    : "ÉßµºÆæ½£",
+    "faction" : "ç¥é¾™",
+    "name"    : "è›‡å²›å¥‡å‰‘",
     "code"    : "shenlong_1",
     "weapon"  : "sword",
     "gender"  : "all",
@@ -269,8 +269,8 @@ mapping *all_skill = ({
                 ]),
 ]),
 ([
-    "faction" : "ÉñÁú",
-    "name"    : "ÉñÁú°ËÊ½",
+    "faction" : "ç¥é¾™",
+    "name"    : "ç¥é¾™å…«å¼",
     "code"    : "shenlong_2",
     "weapon"  : "unarmed",
     "gender"  : "all",
@@ -282,8 +282,8 @@ mapping *all_skill = ({
                 ]),
 ]),
 ([
-    "faction" : "ÌÒ»¨",
-    "name"    : "ÂäÓ¢Éñ½£",
+    "faction" : "æ¡ƒèŠ±",
+    "name"    : "è½è‹±ç¥å‰‘",
     "code"    : "taohua_1",
     "weapon"  : "sword",
     "gender"  : "all",
@@ -296,8 +296,8 @@ mapping *all_skill = ({
                 ]),
 ]),
 ([
-    "faction" : "ÌÒ»¨",
-    "name"    : "¾ÅÒõ°×¹Ç×¦",
+    "faction" : "æ¡ƒèŠ±",
+    "name"    : "ä¹é˜´ç™½éª¨çˆª",
     "code"    : "taohua_2",
     "weapon"  : "claw",
     "gender"  : "all",
@@ -312,8 +312,8 @@ mapping *all_skill = ({
                 ]),
 ]),
 ([
-    "faction" : "Îäµ±",
-    "name"    : "Ì«¼«½£·¨",
+    "faction" : "æ­¦å½“",
+    "name"    : "å¤ªæå‰‘æ³•",
     "code"    : "wudang_1",
     "weapon"  : "sword",
     "gender"  : "all",
@@ -326,8 +326,8 @@ mapping *all_skill = ({
                 ]),
 ]),
 ([
-    "faction" : "Îä¹Ù",
-    "name"    : "Ñî¼ÒÇ¹·¨",
+    "faction" : "æ­¦å®˜",
+    "name"    : "æ¨å®¶æªæ³•",
     "code"    : "wuguan_1",
     "weapon"  : "qiang",
     "gender"  : "all",
@@ -341,8 +341,8 @@ mapping *all_skill = ({
                 ]),
 ]),
 ([
-    "faction" : "Îä¹Ù",
-    "name"    : "´ºÇï´óµ¶",
+    "faction" : "æ­¦å®˜",
+    "name"    : "æ˜¥ç§‹å¤§åˆ€",
     "code"    : "wuguan_2",
     "weapon"  : "dadao",
     "gender"  : "all",
@@ -356,8 +356,8 @@ mapping *all_skill = ({
                 ]),
 ]),
 ([
-    "faction" : "Îä¹Ù",
-    "name"    : "ÍĞÌì²æ·¨",
+    "faction" : "æ­¦å®˜",
+    "name"    : "æ‰˜å¤©å‰æ³•",
     "code"    : "wuguan_3",
     "weapon"  : "fork",
     "gender"  : "all",
@@ -371,8 +371,8 @@ mapping *all_skill = ({
                 ]),
 ]),
 ([
-    "faction" : "Îä¹Ù",
-    "name"    : "·çÄ§¸«·¨",
+    "faction" : "æ­¦å®˜",
+    "name"    : "é£é­”æ–§æ³•",
     "code"    : "wuguan_4",
     "weapon"  : "axe",
     "gender"  : "all",
@@ -386,8 +386,8 @@ mapping *all_skill = ({
                 ]),
 ]),
 ([
-    "faction" : "ÔÆÁú",
-    "name"    : "ÔÆÁú½£·¨",
+    "faction" : "äº‘é¾™",
+    "name"    : "äº‘é¾™å‰‘æ³•",
     "code"    : "yunlong_1",
     "weapon"  : "sword",
     "gender"  : "all",
@@ -405,8 +405,8 @@ mapping *all_skill = ({
                 ]),
 ]),
 ([
-    "faction" : "ÔÆÁú",
-    "name"    : "ÔÆÁú±Ş·¨",
+    "faction" : "äº‘é¾™",
+    "name"    : "äº‘é¾™é­æ³•",
     "code"    : "yunlong_2",
     "weapon"  : "whip",
     "gender"  : "all",
@@ -424,8 +424,8 @@ mapping *all_skill = ({
                 ]),
 ]),
 ([
-    "faction" : "ÔÆÁú",
-    "name"    : "Îå»¢¶ÏÃÅµ¶",
+    "faction" : "äº‘é¾™",
+    "name"    : "äº”è™æ–­é—¨åˆ€",
     "code"    : "yunlong_3",
     "weapon"  : "blade",
     "gender"  : "all",
@@ -443,8 +443,8 @@ mapping *all_skill = ({
                 ]),
 ]),
 ([
-    "faction" : "ÔÆÁú",
-    "name"    : "ÄıÑªÉñ×¥",
+    "faction" : "äº‘é¾™",
+    "name"    : "å‡è¡€ç¥æŠ“",
     "code"    : "yunlong_4",
     "weapon"  : "claw",
     "gender"  : "all",
@@ -461,12 +461,12 @@ mapping *all_skill = ({
                 ]),
 ]),
 ([
-    "faction" : "ÙÁ¿Ü",
-    "name"    : "¶«å­ÈÌÊõ",
+    "faction" : "å€­å¯‡",
+    "name"    : "ä¸œç€›å¿æœ¯",
     "code"    : "wokou",
     "weapon"  : "wodao",
     "gender"  : "male",
-    "nation"  : "ÈÕ±¾",
+    "nation"  : "æ—¥æœ¬",
     "no_list" : 1,
     "m_skill" : ([
                     "blade"   : "wo-dao",
@@ -477,12 +477,12 @@ mapping *all_skill = ({
                 ]),
 ]),
 ([
-    "faction" : "Î÷Ñó",
-    "name"    : "Î÷Ñó²«»÷",
+    "faction" : "è¥¿æ´‹",
+    "name"    : "è¥¿æ´‹æå‡»",
     "code"    : "xiyang",
     "weapon"  : "xiyang-jian",
     "gender"  : "male",
-    "nation"  : "Å·ÖŞ",
+    "nation"  : "æ¬§æ´²",
     "no_list" : 1,
     "m_skill" : ([
                     "sword"   : "xiyang-jian",
@@ -493,8 +493,8 @@ mapping *all_skill = ({
                 ]),
 ]),
 ([
-    "faction" : "Ñ²²¶",
-    "name"    : "ºôÂ¬ºÈïôÊÖ",
+    "faction" : "å·¡æ•",
+    "name"    : "å‘¼å¢å–é›‰æ‰‹",
     "code"    : "butou",
     "weapon"  : "unarmed",
     "gender"  : "male",

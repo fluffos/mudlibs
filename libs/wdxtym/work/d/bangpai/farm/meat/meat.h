@@ -3,8 +3,8 @@ inherit COMBINED_ITEM;
 void create_meat(mapping meat_info)
 {
     set_name(meat_info["name"], ({ meat_info["id"] }));
-    set("base_unit", "¿é");
-    set("long", "ÕâÊÇ" + meat_info["name"] + "¡£\n");
+    set("base_unit", "å—");
+    set("long", "è¿™æ˜¯" + meat_info["name"] + "ã€‚\n");
     set("base_weight", 1);
     set("base_value", 1);
     

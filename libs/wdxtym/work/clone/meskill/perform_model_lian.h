@@ -2,7 +2,7 @@
 #include <ansi.h>
 #include <combat.h>
 
-#define PFM "¡¸" HIW "<¾øÕÐÃû>" NOR "¡¹"
+#define PFM "ã€Œ" HIW "<ç»æ‹›å>" NOR "ã€"
 
 inherit F_SSERVER;
 
@@ -19,7 +19,7 @@ int perform(object me, object target)
 	int i, attack_time;
 
 	if (! me->query("can_perform/" + "SKILL" + "/" + "E_NAME"))
-		return notify_fail("Äã»¹Ã»ÓÐÊÜµ½¸ßÊÖÖ¸µã£¬»¹²»»áÔËÓÃ" PFM "¡£\n");
+		return notify_fail("ä½ è¿˜æ²¡æœ‰å—åˆ°é«˜æ‰‹æŒ‡ç‚¹ï¼Œè¿˜ä¸ä¼šè¿ç”¨" PFM "ã€‚\n");
 
 	if (! target)
 	{
@@ -28,35 +28,35 @@ int perform(object me, object target)
 	}
 
 	if (! target || ! me->is_fighting(target))
-		return notify_fail(PFM "Ö»ÄÜ¶ÔÕ½¶·ÖÐµÄ¶ÔÊÖÊ¹ÓÃ¡£\n");
+		return notify_fail(PFM "åªèƒ½å¯¹æˆ˜æ–—ä¸­çš„å¯¹æ‰‹ä½¿ç”¨ã€‚\n");
 
 	if (member_array("BASE_SKILL", weapon_sk) != -1)
 	{
 		if (! objectp(weapon = me->query_temp("weapon"))
 		   || (string)weapon->query("skill_type") != "BASE_SKILL")
-			return notify_fail("ÄãËùÊ¹ÓÃµÄÎäÆ÷²»¶Ô£¬ÄÑÒÔÊ©Õ¹" PFM "¡£\n");
+			return notify_fail("ä½ æ‰€ä½¿ç”¨çš„æ­¦å™¨ä¸å¯¹ï¼Œéš¾ä»¥æ–½å±•" PFM "ã€‚\n");
 	} else
 	{
 		if (me->query_temp("weapon") || me->query_temp("secondary_weapon"))
-			return notify_fail(PFM "Ö»ÄÜ¿ÕÊÖÊ¹ÓÃ¡£\n");	     
+			return notify_fail(PFM "åªèƒ½ç©ºæ‰‹ä½¿ç”¨ã€‚\n");	     
 	}
 	
 	if ((int)me->query_skill("SKILL", 1) < 400)
-		return notify_fail("Äã" + to_chinese("SKILL") + "²»¹»æµÊì£¬ÄÑÒÔÊ©Õ¹" PFM "¡£\n");
+		return notify_fail("ä½ " + to_chinese("SKILL") + "ä¸å¤Ÿå¨´ç†Ÿï¼Œéš¾ä»¥æ–½å±•" PFM "ã€‚\n");
 
 	if (member_array("BASE_SKILL", weapon_sk) == -1)
 	{
 		if (me->query_skill_prepared("BASE_SKILL") != "SKILL")
-			return notify_fail("ÄãÃ»ÓÐ×¼±¸" + to_chinese("SKILL") + "£¬ÄÑÒÔÊ©Õ¹" PFM "¡£\n");
+			return notify_fail("ä½ æ²¡æœ‰å‡†å¤‡" + to_chinese("SKILL") + "ï¼Œéš¾ä»¥æ–½å±•" PFM "ã€‚\n");
 	}
 	
 	if (me->query("neili") < 300)
-		return notify_fail("ÄãÏÖÔÚµÄÕæÆø²»¹»£¬ÄÑÒÔÊ©Õ¹" PFM "¡£\n");
+		return notify_fail("ä½ çŽ°åœ¨çš„çœŸæ°”ä¸å¤Ÿï¼Œéš¾ä»¥æ–½å±•" PFM "ã€‚\n");
 
 	if (! living(target))
-		return notify_fail("¶Ô·½¶¼ÒÑ¾­ÕâÑùÁË£¬ÓÃ²»×ÅÕâÃ´·ÑÁ¦°É£¿\n");
+		return notify_fail("å¯¹æ–¹éƒ½å·²ç»è¿™æ ·äº†ï¼Œç”¨ä¸ç€è¿™ä¹ˆè´¹åŠ›å§ï¼Ÿ\n");
 
-	msg = HIW "<PFM·¢ÕÐÃèÊö>" + "\n" + NOR;
+	msg = HIW "<PFMå‘æ‹›æè¿°>" + "\n" + NOR;
 
 	ap = me->query_skill("BASE_SKILL");
 	dp = target->query_skill("parry");
@@ -64,13 +64,13 @@ int perform(object me, object target)
 
 	if (ap * 2 / 3 + random(ap * 2) > dp)
 	{
-		msg += HIM "<PFM´òÖÐÃèÊö>" + ""NOR"\n";
+		msg += HIM "<PFMæ‰“ä¸­æè¿°>" + ""NOR"\n";
 		count = ap / 10;
 		me->add_temp("apply/attack", count);
 		me->add_temp("apply/damage", count);
 	} else
 	{
-		msg += NOR + CYN "<PFMÊ§ÎóÃèÊö>" + ""NOR"\n";
+		msg += NOR + CYN "<PFMå¤±è¯¯æè¿°>" + ""NOR"\n";
 		count = 0;
 	}
 

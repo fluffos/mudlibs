@@ -10,32 +10,32 @@ int exp,pot;
         myfam=(mapping)me->query("family");
         
 
-        if (  !myfam || myfam["family_name"]!="Ø¤°ï"  )
+        if (  !myfam || myfam["family_name"]!="ä¸å¸®"  )
         {
-                command("say ÄãÓë±¾ÅÉºÁÎÞ¹ØÏµ£¬ÕâÖÖÊÂ²»ÄÜÈÃÄã×ö¡£");
+                command("say ä½ ä¸Žæœ¬æ´¾æ¯«æ— å…³ç³»ï¼Œè¿™ç§äº‹ä¸èƒ½è®©ä½ åšã€‚");
                 return 1;
         }
         
 
         if ( (int)me->query("combat_exp")<80000 )
         {
-                command("say ÄãµÄ¹¦·ò²»ÐÐ£¬»¹Òª¶àÑ§µã¹¦·ò£¡");
+                command("say ä½ çš„åŠŸå¤«ä¸è¡Œï¼Œè¿˜è¦å¤šå­¦ç‚¹åŠŸå¤«ï¼");
                 return 1;
         }
       if( (int)me->query_skill("huntian-qigong",1) < 50)
             {
-                message_vision("$N¶Ô×Å$n´óºÈÒ»Éù£ºÄãµÄ±¾ÃÅÄÚ¹¦²»¹»£¡\n", this_object(), me);
+                message_vision("$Nå¯¹ç€$nå¤§å–ä¸€å£°ï¼šä½ çš„æœ¬é—¨å†…åŠŸä¸å¤Ÿï¼\n", this_object(), me);
                 return 1;
             }
    if ((int)me->query_condition("guojob2_busy"))
             {
-                      message_vision("Â³³¤ÀÏ¶Ô×Å$NÒ¡ÁËÒ¡Í·Ëµ£ºÄãµÈ»áÔÙÀ´!\n", me);
+                      message_vision("é²é•¿è€å¯¹ç€$Næ‘‡äº†æ‘‡å¤´è¯´ï¼šä½ ç­‰ä¼šå†æ¥!\n", me);
                       return 1;
             }
         if ( me->query_temp("xhjob_failed") )
         {
                 command("poor "+me->query("id"));
-                command("say Äã»¹ÊÇÏÈÁ·Á·¹¦·ò°É£¬ÃâµÃÓÖ°Ñ¹¤×÷¸ãßÆÁË¡£");
+                command("say ä½ è¿˜æ˜¯å…ˆç»ƒç»ƒåŠŸå¤«å§ï¼Œå…å¾—åˆæŠŠå·¥ä½œæžå’‚äº†ã€‚");
                         me->delete_temp("xhjob_start");
                         me->delete_temp("xhjob_failed");
                 return 1;
@@ -44,7 +44,7 @@ int exp,pot;
         if ( me->query_temp("xhjob_start") && !(me->query_temp("xhjob_ok")) )
         {
                 command("hmm");
-                command("say ÄãÒÑ¾­ÓÐ¹¤×÷ÁË¡£»¹²»¿ìÈ¥×ö£¿");
+                command("say ä½ å·²ç»æœ‰å·¥ä½œäº†ã€‚è¿˜ä¸å¿«åŽ»åšï¼Ÿ");
                 return 1;
         }
         
@@ -52,7 +52,7 @@ int exp,pot;
         {
               if (random(10)==0)
               this_object()->set("book_count", 1);
-                command("say ºÃºÃ£¬¸ÉµÄºÃ£¬ÄãÏÂÈ¥ÐªÐª°É¡£");
+                command("say å¥½å¥½ï¼Œå¹²çš„å¥½ï¼Œä½ ä¸‹åŽ»æ­‡æ­‡å§ã€‚");
                if (me->query("combat_exp")<800000)
                {
                me->add("combat_exp", random(100) + 80);
@@ -63,7 +63,7 @@ exp=380+random(400);
 pot=280+random(300);
                 me->add("combat_exp",exp);
                 me->add("potential",pot);
-   tell_object(me, "Äã±»½±ÀøÁË"+chinese_number(exp)+"µãÐÞÎªÖµ£¡\n"+chinese_number(pot)+"µãÇ±ÄÜ\n");
+   tell_object(me, "ä½ è¢«å¥–åŠ±äº†"+chinese_number(exp)+"ç‚¹ä¿®ä¸ºå€¼ï¼\n"+chinese_number(pot)+"ç‚¹æ½œèƒ½\n");
                 me->delete_temp("xhjob_start");
                 me->add("kill",20);
                 me->delete_temp("xhjob_ok");
@@ -72,13 +72,13 @@ pot=280+random(300);
 
         if (me->query_condition("xh_busy"))
         {
-                command("say ÄãÏÈÐÝÏ¢Ò»»á£¬µÈ»áÔÙÀ´£¡");
+                command("say ä½ å…ˆä¼‘æ¯ä¸€ä¼šï¼Œç­‰ä¼šå†æ¥ï¼");
                 return 1;
         }
         
-        command("say ÄãÀ´µÄÕýºÃ£¬ÌýËµ»¤ÎÀÔÚ¹Ø¿¨´¦¶¥²»¹ýÀ´ÁË£¬ÄãÈ¥°ï°ïËû¡£");
-        command("say ×¢Òâ£¬±ðÈÃÃÉ¹Å±ø´òÀ´ÁË¡£");
-        command("say ÏÞÄãÔÚÒ»·ÖÖÓÖ®ÄÚ¸Ïµ½ÄÇÀïÈ¥¡£");
+        command("say ä½ æ¥çš„æ­£å¥½ï¼Œå¬è¯´æŠ¤å«åœ¨å…³å¡å¤„é¡¶ä¸è¿‡æ¥äº†ï¼Œä½ åŽ»å¸®å¸®ä»–ã€‚");
+        command("say æ³¨æ„ï¼Œåˆ«è®©è’™å¤å…µæ‰“æ¥äº†ã€‚");
+        command("say é™ä½ åœ¨ä¸€åˆ†é’Ÿä¹‹å†…èµ¶åˆ°é‚£é‡ŒåŽ»ã€‚");
         
         me->set_temp("xhjob_ok",0);
         me->set_temp("xhjob_start",1);
@@ -98,13 +98,13 @@ void do_goto(object me)
         if (file_name(where)==me->query_temp("where"))
         {
                 if (!(me->query_temp("shouwei")))  {
-                tell_object(me,HIC"ÄãÓ¦¸Ã¿ªÊ¼ÊØÎÀ(shouwei)ÁË¡£\n"NOR);
+                tell_object(me,HIC"ä½ åº”è¯¥å¼€å§‹å®ˆå«(shouwei)äº†ã€‚\n"NOR);
                 }
                 return;
         }
         else
         {
-                tell_object(me,"\nÄãÏÔÈ»Ã»ÄÜÔÚÒ»·ÖÖÓÖ®ÄÚ¸Ïµ½Ä¿µÄµØ£¬ÈÎÎñÊ§°Ü¡£\n");
+                tell_object(me,"\nä½ æ˜¾ç„¶æ²¡èƒ½åœ¨ä¸€åˆ†é’Ÿä¹‹å†…èµ¶åˆ°ç›®çš„åœ°ï¼Œä»»åŠ¡å¤±è´¥ã€‚\n");
                 me->set_temp("xhjob_failed",1);
                 me->apply_condition("zzz_busy",6);
         }

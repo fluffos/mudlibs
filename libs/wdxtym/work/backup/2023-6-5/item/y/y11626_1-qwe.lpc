@@ -1,0 +1,30 @@
+// ITEM Made by player(焚寂:y11626_1) /data/item/y/y11626_1-qwe.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Mon May 22 18:08:53 2023
+#include <ansi.h>
+#include <weapon.h>
+
+inherit SWORD;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("孤影[2;37;0m", ({ "qwe" }));
+	set_weight(750);
+	set("item_make", 1);
+	set("unit", "柄");
+	set("long", "这是由[1;37m世界[2;37;0m炼制而成的一柄剑。
+剑柄上刻着一行小字：焚寂(y11626_1)
+");
+	set("value", 200100000);
+	set("point", 22000);
+	set("material", "silk");
+	set("wield_msg", "一剑霜寒十四州[2;37;0m\n");
+	set("unwield_msg", "十步杀一人[2;37;0m\n");
+	if (! check_clone()) return;
+	restore();
+	init_sword(apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }

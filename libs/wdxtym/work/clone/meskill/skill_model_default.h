@@ -1,7 +1,7 @@
 int valid_learn(object me)
 {
 	if( (int)me->query("max_neili") < 50 )
-		return notify_fail("你的内力太弱，无法练"+SKILL_CH_NAME+"。\n");
+		return notify_fail("浣犵殑鍐呭姏澶急锛屾棤娉曠粌"+SKILL_CH_NAME+"銆俓n");
 	return 1;
 }
 
@@ -47,9 +47,9 @@ int query_effect_parry(object attacker, object me)
 int practice_skill(object me)
 {
 	if( (int)me->query("qi") < 25 )
-		return notify_fail("你的体力不够了，休息一下再练吧。\n");
+		return notify_fail("浣犵殑浣撳姏涓嶅浜嗭紝浼戞伅涓�涓嬪啀缁冨惂銆俓n");
 	if( (int)me->query("neili") < 3 )
-		return notify_fail("你的内力不够了，休息一下再练吧。\n");
+		return notify_fail("浣犵殑鍐呭姏涓嶅浜嗭紝浼戞伅涓�涓嬪啀缁冨惂銆俓n");
 	me->receive_damage("qi", 25);
 	me->add("neili", -3);
 	return 1;

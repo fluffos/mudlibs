@@ -326,6 +326,7 @@ classes it's found.
 | 146-1 | `hy5` | 海洋5 | `海洋5.7z` | 40183 | native-boot verified, WASM pending |
 | 147 | `jym` | 金庸梦 | `金庸梦.rar` | 40184 | native-boot verified, WASM pending |
 | 148 | `nt1` | 泥潭1 | `泥潭1.gz` | 40185 | native-boot verified, WASM pending |
+| 149 | `wdxtym` | 武动仙途 | `武动仙途源码.rar` | 40188 | native-boot verified, WASM pending |
 | 901 | `dw_fluffos_v1` | Discworld MUD lib (v1) | `dw_fluffos_v1.tar.gz` | — | deprioritized |
 | 901-1 | `dw_fluffos_v2` | Discworld MUD lib (v2) | `dw_fluffos_v2.zip` | — | deprioritized |
 | 901-2 | `dw_fluffos_v3` | Discworld MUD lib (v3) | `dw_fluffos_v3.zip` | — | deprioritized |

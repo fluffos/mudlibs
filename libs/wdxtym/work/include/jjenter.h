@@ -6,8 +6,8 @@ string *jjrooms = ({
 			__DIR__"south",
 		});
 
-static object *total = ({ });
-static object *jjnpc = ({ });
+nosave object *total = ({ });
+nosave object *jjnpc = ({ });
 
 private void init_player(object me);
 private void message_competition(string msg);
@@ -26,7 +26,7 @@ int valid_leave(object me, string dir)
 {
 	if(me->query_temp(FAMILY+"-jjsign"))
 	{
-		tell_object(me,HIR"ÄãÀë¿ªÁË¾º¼¼³¡£¬±¨Ãû×Ô¶¯È¡Ïû¡£ÔÙ½øÈëĞèÒªÖØĞÂ±¨Ãû£¡£¡£¡£¡£¡£¡£¡£¡£¡£¡"NOR"\n");
+		tell_object(me,HIR"ä½ ç¦»å¼€äº†ç«æŠ€åœºï¼ŒæŠ¥åè‡ªåŠ¨å–æ¶ˆã€‚å†è¿›å…¥éœ€è¦é‡æ–°æŠ¥åï¼ï¼ï¼ï¼ï¼ï¼ï¼ï¼ï¼ï¼"NOR"\n");
 		me->delete_temp(FAMILY+"-jjsign");
 	}
 	return ::valid_leave(me, dir);
@@ -38,16 +38,16 @@ int jjsign()
 	object me = this_player();
 
 	if(localtime(now)[6]!=MENPAI_DAY||localtime(now)[2]!=MENPAI_HOUR||localtime(now)[1]>MENPAI_PRE)
-		return notify_fail(ZJOBLONG"±¨ÃûÊ±¼ä£ºÃ¿ÖÜ"+chinese_number(MENPAI_DAY)+MENPAI_HOUR+":00-"+MENPAI_HOUR+":10¡£\n");
+		return notify_fail(ZJOBLONG"æŠ¥åæ—¶é—´ï¼šæ¯å‘¨"+chinese_number(MENPAI_DAY)+MENPAI_HOUR+":00-"+MENPAI_HOUR+":10ã€‚\n");
 
 	if(!me->query("family/family_name")||me->query("family/family_name")!=FAMILY)
-		return notify_fail("Äã²»ÊÇ"+FAMILY+"ÖĞÈË£¬»¹ÊÇ»Ø×Ô¼ºµÄÃÅÅÉ±¨Ãû°É£¡\n");
+		return notify_fail("ä½ ä¸æ˜¯"+FAMILY+"ä¸­äººï¼Œè¿˜æ˜¯å›è‡ªå·±çš„é—¨æ´¾æŠ¥åå§ï¼\n");
 
 	if (me->query("combat_exp",1)<200000)
-		return notify_fail("ÄãÄê¼ÍÉĞĞ¡£¬»¹ÊÇ°Ñ¹¦·òÁ·ºÃÔÙÀ´°É¡£\n");
+		return notify_fail("ä½ å¹´çºªå°šå°ï¼Œè¿˜æ˜¯æŠŠåŠŸå¤«ç»ƒå¥½å†æ¥å§ã€‚\n");
 
 	me->set_temp(FAMILY+"-jjsign",1);
-	tell_object(me,"±¨Ãû³É¹¦£¬ÇëÔÚ´ËÉÔºó£¬"+MENPAI_HOUR+"µã10·Ö×Ô¶¯½øÈë¾º¼¼³¡ÖĞ¡£\n");
+	tell_object(me,"æŠ¥åæˆåŠŸï¼Œè¯·åœ¨æ­¤ç¨åï¼Œ"+MENPAI_HOUR+"ç‚¹10åˆ†è‡ªåŠ¨è¿›å…¥ç«æŠ€åœºä¸­ã€‚\n");
 	set_heart_beat(1);
 	return 1;
 }
@@ -91,12 +91,12 @@ private void auto_check()
 
 	if (sizeof(total) < 1)
 	{
-		msg = "ÌıËµ"+FAMILY+"ÃÅÅÉ¾º¼¼²ÎÈüÕßËÀµÄËÀ£¬ÌÓµÄÌÓ£¬ÏÖÔÚÒ»¸öÈË¶¼Ã»ÓĞÀ²£¡";
+		msg = "å¬è¯´"+FAMILY+"é—¨æ´¾ç«æŠ€å‚èµ›è€…æ­»çš„æ­»ï¼Œé€ƒçš„é€ƒï¼Œç°åœ¨ä¸€ä¸ªäººéƒ½æ²¡æœ‰å•¦ï¼";
 	} else
 	if (sizeof(total)==1&&sizeof(jjnpc)==0)
 	{
 		// change the daemon's state
-		msg = "ÌıËµ"+FAMILY+"ÃÅÅÉ¾º¼¼´óÈüÔ²Âú½áÊø£¬" + total[0]->name(1) + "»ñµÃ"+FAMILY+"Ê×Ï¯µÜ×Ó³ÆºÅ£¡";
+		msg = "å¬è¯´"+FAMILY+"é—¨æ´¾ç«æŠ€å¤§èµ›åœ†æ»¡ç»“æŸï¼Œ" + total[0]->name(1) + "è·å¾—"+FAMILY+"é¦–å¸­å¼Ÿå­ç§°å·ï¼";
 		FAMILY_D->set_family_leader(FAMILY,total[0]->query("id"));
 		give_bouns(total[0]);
 	} else
@@ -110,7 +110,7 @@ private void auto_check()
 
 private void init_player(object me)
 {
-	tell_object(me, HIY "ÄãÑÛÇ°ºöÈ»Ò»»¨..."NOR"\n");
+	tell_object(me, HIY "ä½ çœ¼å‰å¿½ç„¶ä¸€èŠ±..."NOR"\n");
 	me->set_override("unconcious", (: call_other, __FILE__, "check_out" :));
 	me->set_override("die", (: call_other, __FILE__, "check_out" :));
 	me->set_override("quit", (: call_other, __FILE__, "check_quit" :));
@@ -147,11 +147,11 @@ private void kickout_players()
 		my["qi"] = 1;
 		my["jing"] = 1;
 
-		tell_object(ob, HIC "±¾´Î¾º¼¼½áÊø£¬Äã±»ËÍ³ö±ÈÈü³¡µØ£¡¡±"NOR"\n");
+		tell_object(ob, HIC "æœ¬æ¬¡ç«æŠ€ç»“æŸï¼Œä½ è¢«é€å‡ºæ¯”èµ›åœºåœ°ï¼â€"NOR"\n");
 
 		restore_status(ob);
 		ob->move(this_object());
-		message("vision", "Ö»¼û" + ob->name() + "ã¬ã¬µÄ×ßÁË³öÀ´¡£\n",	environment(ob), ({ ob }));
+		message("vision", "åªè§" + ob->name() + "æ‚»æ‚»çš„èµ°äº†å‡ºæ¥ã€‚\n",	environment(ob), ({ ob }));
 		if (! living(ob))
 			ob->revive();
 	}
@@ -191,13 +191,13 @@ private void give_bouns(object me)
 	object ob;
 
 	restore_status(me);
-	tell_object(me, "Õâ´ÎÕæÊÇË¬´ôÁË...\n");
+	tell_object(me, "è¿™æ¬¡çœŸæ˜¯çˆ½å‘†äº†...\n");
 	me->move(this_object());
-	message("vision", me->name() + "ÂıÂıµÄ×ßÁË¹ıÀ´£¬Ò»Á³¼éĞ¦¡£\n",environment(me), ({ me }));
+	message("vision", me->name() + "æ…¢æ…¢çš„èµ°äº†è¿‡æ¥ï¼Œä¸€è„¸å¥¸ç¬‘ã€‚\n",environment(me), ({ me }));
 
 	// bouns
 
-	tell_object(me, HIY"¹§Ï²Äã»ñµÃÁË±¾ÃÅÊ×Ï¯µÜ×Ó³ÆºÅ£¬Äã¿ÉÒÔÃ¿Ììµ½Ê¦ÃÅÄÇÀïÁìÈ¡Ò»´Î½±Àø"NOR"¡£\n");
+	tell_object(me, HIY"æ­å–œä½ è·å¾—äº†æœ¬é—¨é¦–å¸­å¼Ÿå­ç§°å·ï¼Œä½ å¯ä»¥æ¯å¤©åˆ°å¸ˆé—¨é‚£é‡Œé¢†å–ä¸€æ¬¡å¥–åŠ±"NOR"ã€‚\n");
 }
 
 private void restore_status(object me)
@@ -244,7 +244,7 @@ void heart_beat()
 	if(!query("pre_start")&&localtime(now)[1]==MENPAI_PRE)
 	{
 		set("pre_start",1);
-		tell_room(this_object(),"1·ÖÖÓºó½«½øÈë¾º¼¼³¡£¬Çë×öºÃ×¼±¸¡£¡£¡£\n");
+		tell_room(this_object(),"1åˆ†é’Ÿåå°†è¿›å…¥ç«æŠ€åœºï¼Œè¯·åšå¥½å‡†å¤‡ã€‚ã€‚ã€‚\n");
 	}
 	else if(!query("start")&&localtime(now)[1]==(MENPAI_PRE+1))
 	{
@@ -252,7 +252,7 @@ void heart_beat()
 		inv = filter_array(all_inventory(this_object()), (: playerp($1)&&$1->query_temp(FAMILY+"-jjsign") :));
 		if(sizeof(inv)<MENPAI_USER_MIN)
 		{
-			tell_room(this_object(),"±¨ÃûÈËÊı²»×ã"+MENPAI_USER_MIN+"ÈË£¬±¾´Î»î¶¯Î´ÄÜ³É¹¦½øĞĞ¡£¡£¡£\n");
+			tell_room(this_object(),"æŠ¥åäººæ•°ä¸è¶³"+MENPAI_USER_MIN+"äººï¼Œæœ¬æ¬¡æ´»åŠ¨æœªèƒ½æˆåŠŸè¿›è¡Œã€‚ã€‚ã€‚\n");
 			delete("pre_start");
 			delete("start");
 			set_heart_beat(0);
@@ -263,7 +263,7 @@ void heart_beat()
 		{
 			init_player(inv[i]);
 			inv[i]->move(jjrooms[random(sizeof(jjrooms))]);
-			tell_object(inv[i], HIY "Äã¶¨ÉñÒ»¿´£¬²Å·¢ÏÖ×Ô¼ºµ½ÁË" + environment(inv[i])->short() + NOR "¡£\n");
+			tell_object(inv[i], HIY "ä½ å®šç¥ä¸€çœ‹ï¼Œæ‰å‘ç°è‡ªå·±åˆ°äº†" + environment(inv[i])->short() + NOR "ã€‚\n");
 		}
 		foreach (file in jjrooms)
 		{
@@ -280,7 +280,7 @@ void heart_beat()
 	}
 	else if(localtime(now)[1]>(MENPAI_PRE+MENPAI_TIME))
 	{
-		message_competition("ÌıËµ"+FAMILY+"ÃÅÅÉ¾º¼¼´óÈüÖÚµÜ×ÓÊÆ¾ùÁ¦µĞ£¬Î´ÄÜÑ¡Ê×Ï¯µÜ×Ó£¡");
+		message_competition("å¬è¯´"+FAMILY+"é—¨æ´¾ç«æŠ€å¤§èµ›ä¼—å¼Ÿå­åŠ¿å‡åŠ›æ•Œï¼Œæœªèƒ½é€‰é¦–å¸­å¼Ÿå­ï¼");
 		delete("pre_start");
 		delete("start");
 		kickout_players();
@@ -291,15 +291,15 @@ void heart_beat()
 
 int check_quit(object me)
 {
-	message_competition("ÌıËµ" + me->name(1) + "ÁÙÕóÍÑÌÓ£¬´Ó"+FAMILY+"ÃÅÅÉ¾º¼¼³¡Áï×ßÁË¡£");
+	message_competition("å¬è¯´" + me->name(1) + "ä¸´é˜µè„±é€ƒï¼Œä»"+FAMILY+"é—¨æ´¾ç«æŠ€åœºæºœèµ°äº†ã€‚");
 	restore_status(me);
 	if (arrayp(total))
 		total -= ({ me });
 
-	tell_object(me, "ÄãÌÓ³öÁË¾º¼¼³¡¡£\n");
+	tell_object(me, "ä½ é€ƒå‡ºäº†ç«æŠ€åœºã€‚\n");
 
 	me->move(this_object());
-	message("vision", "Ö»¼û" + me->name() + "»ÅÀï»ÅÕÅµÄÅÜÁË³öÀ´¡£\n",environment(me), ({ me }));
+	message("vision", "åªè§" + me->name() + "æ…Œé‡Œæ…Œå¼ çš„è·‘äº†å‡ºæ¥ã€‚\n",environment(me), ({ me }));
 	return 1;
 }
 
@@ -325,19 +325,19 @@ int check_out(object me)
 	my["qi"] = 1;
 	my["jing"] = 1;
 
-	tell_object(me, HIR "\nÄã¾õµÃÑÛÇ°Ò»ÕóÄ£ºı...ÕâÏÂÍêÁË£¡"NOR"\n");
+	tell_object(me, HIR "\nä½ è§‰å¾—çœ¼å‰ä¸€é˜µæ¨¡ç³Š...è¿™ä¸‹å®Œäº†ï¼"NOR"\n");
 	if (ob = me->query_last_damage_from())
 	{
-		msg = "ÌıËµ" + me->name(1) + "ÔÚ"+FAMILY+"ÃÅÅÉ¾º¼¼ÖĞ²ÒÔâ" + ob->name(1) + "µÄ¶¾ÊÖ£¬±»ÎŞÇéÌÔÌ­¡£";
+		msg = "å¬è¯´" + me->name(1) + "åœ¨"+FAMILY+"é—¨æ´¾ç«æŠ€ä¸­æƒ¨é­" + ob->name(1) + "çš„æ¯’æ‰‹ï¼Œè¢«æ— æƒ…æ·˜æ±°ã€‚";
 	} else
-		msg = "ÌıËµ" + me->name(1) + "ÔÚ"+FAMILY+"ÃÅÅÉ¾º¼¼ÖĞÔËÆø²»¼Ñ£¬±¾ÁìÓĞÏŞ¡¢ÒÑ¾­²ÒÔâÌÔÌ­¡£";
+		msg = "å¬è¯´" + me->name(1) + "åœ¨"+FAMILY+"é—¨æ´¾ç«æŠ€ä¸­è¿æ°”ä¸ä½³ï¼Œæœ¬é¢†æœ‰é™ã€å·²ç»æƒ¨é­æ·˜æ±°ã€‚";
 	message_competition(msg);
 
 	restore_status(me);
 	total -= ({ me });
 	me->move(this_object());
-	message("vision", "Ò»¸öºÚÓ°Ù¿µÄ´ÜÁË³öÀ´£¬Ëæ¼´¾ÍÊÇ¡°Å¾¡±µÄÒ»Éù£¬¾Í¼û" + me->name() +"Ë¤µ¹ÁËµØÉÏ£¬Ò»¸±°ëËÀ²»»îµÄÑù×Ó¡£\n", environment(me), ({ me }));
-	tell_object(me, "°ë»è°ëÃÔÖĞ£¬Äã¾õµÃ±»ÈËÁàÁËÆğÀ´£¬ÓÖÖØÖØµÄË¤µ¹ÁËµØÉÏ¡£\n");
+	message("vision", "ä¸€ä¸ªé»‘å½±å€çš„çªœäº†å‡ºæ¥ï¼Œéšå³å°±æ˜¯â€œå•ªâ€çš„ä¸€å£°ï¼Œå°±è§" + me->name() +"æ‘”å€’äº†åœ°ä¸Šï¼Œä¸€å‰¯åŠæ­»ä¸æ´»çš„æ ·å­ã€‚\n", environment(me), ({ me }));
+	tell_object(me, "åŠæ˜åŠè¿·ä¸­ï¼Œä½ è§‰å¾—è¢«äººæ‹äº†èµ·æ¥ï¼Œåˆé‡é‡çš„æ‘”å€’äº†åœ°ä¸Šã€‚\n");
 	if (! living(me))
 		me->revive();
 	return 1;

@@ -1,4 +1,4 @@
-// ÇóÈý´Î·½¸ù
+// æ±‚ä¸‰æ¬¡æ–¹æ ¹
 int sqrt3(int x)
 {
         float y = 1.0 / 3.0;
@@ -68,9 +68,9 @@ void check_me(object me)
 
                         if( query_temp("warequest/party", obb) != "meng" )
                         {
-                                message_vision(HIC "$N´óÉùÏÂÁîµÀ£ºÆï±ø×¼±¸£¡Ò»ÅÅÅÅÆï±øÁÐ³öÕûÆë"
-                                        + "µÄ·½Õó£¬\nÑô¹âÏÂµÄÃÉ¹Å¾üµ¶ÉÁÉÁ·¢¹â¡ª¡ªÍ»»÷£¡£¡"
-                                        + "$NÒ»ÉùÁîÏÂ£¬\nÍòÂíÆëÃù£¬ÃÉ¹ÅÆï±ø¿ªÊ¼ÁË¿ÉÅÂµÄ³å·æ£¡£¡\n" NOR,
+                                message_vision(HIC "$Nå¤§å£°ä¸‹ä»¤é“ï¼šéª‘å…µå‡†å¤‡ï¼ä¸€æŽ’æŽ’éª‘å…µåˆ—å‡ºæ•´é½"
+                                        + "çš„æ–¹é˜µï¼Œ\né˜³å…‰ä¸‹çš„è’™å¤å†›åˆ€é—ªé—ªå‘å…‰â€”â€”çªå‡»ï¼ï¼"
+                                        + "$Nä¸€å£°ä»¤ä¸‹ï¼Œ\nä¸‡é©¬é½é¸£ï¼Œè’™å¤éª‘å…µå¼€å§‹äº†å¯æ€•çš„å†²é”‹ï¼ï¼\n" NOR,
                                         me);
 
                                 set_temp("warequest/attack", 1, me);
@@ -78,9 +78,9 @@ void check_me(object me)
 
                                 remove_call_out("attack_over");
                                 call_out("attack_over", 10, me);
-                                dir = "south"; // ÕâÀïµÄÕâ¸öÊýÖµË¿ºÁ×÷ÓÃ¶¼Ã»ÓÐ£¬ËùÒÔËæ±ã¸³ÖµÁË
-                                               // Ææ¹ÖµÄÊÇºóÃæµÄ attack_begin() ¼ÓÁË varargs £¬
-                                               // ÕâÀïÈ¡Ïû dir £¬È´±¨´í£¬»³ÒÉÊÇÓÃ include Ô­Òò¡£
+                                dir = "south"; // è¿™é‡Œçš„è¿™ä¸ªæ•°å€¼ä¸æ¯«ä½œç”¨éƒ½æ²¡æœ‰ï¼Œæ‰€ä»¥éšä¾¿èµ‹å€¼äº†
+                                               // å¥‡æ€ªçš„æ˜¯åŽé¢çš„ attack_begin() åŠ äº† varargs ï¼Œ
+                                               // è¿™é‡Œå–æ¶ˆ dir ï¼Œå´æŠ¥é”™ï¼Œæ€€ç–‘æ˜¯ç”¨ include åŽŸå› ã€‚
                                 attack_begin(me, obb, env, env, dir);
                                 break;
                         }
@@ -114,8 +114,8 @@ void check_me(object me)
                                         if (! obb->is_character() || ! living(obb)) continue;
                                         if( query_temp("warequest/party", obb) != "meng" )
                                         {
-                                                message_vision(HIC "$N´óÉùÏÂÁîµÀ£º¹­¼ýÊÖ×¼±¸£¡Ò»ÅÅÅÅÀû¼ýÔÚÑô"
-                                                        + "¹âÏÂÉÁÉÁ·¢¹â¡ª¡ªÉä»÷£¡£¡\n$NÒ»ÉùÁîÏÂ£¬ÍòåóÆë·¢£¡\n" NOR, me);
+                                                message_vision(HIC "$Nå¤§å£°ä¸‹ä»¤é“ï¼šå¼“ç®­æ‰‹å‡†å¤‡ï¼ä¸€æŽ’æŽ’åˆ©ç®­åœ¨é˜³"
+                                                        + "å…‰ä¸‹é—ªé—ªå‘å…‰â€”â€”å°„å‡»ï¼ï¼\n$Nä¸€å£°ä»¤ä¸‹ï¼Œä¸‡å¼©é½å‘ï¼\n" NOR, me);
                                                 set_temp("warequest/attack", 1, me);
                                                 set_temp("warequest/attacking", 1, me);
 
@@ -178,8 +178,8 @@ varargs void attack_begin(object me, object target, object room, object env, str
                 else
                 if (room == env && objectp(target))
                 {
-                        message_vision(HIC "$NÖ¸»ÓµÄÃÉ¹ÅÌúÆï£¬ÍòÂí±¼ÌÚ£¬"
-                                       + "Èç¿ñ·çÖèÓê°ã³¯$n·¢ÆðÁË³å»÷£¡£¡\n" NOR,
+                        message_vision(HIC "$NæŒ‡æŒ¥çš„è’™å¤é“éª‘ï¼Œä¸‡é©¬å¥”è…¾ï¼Œ"
+                                       + "å¦‚ç‹‚é£Žéª¤é›¨èˆ¬æœ$nå‘èµ·äº†å†²å‡»ï¼ï¼\n" NOR,
                                        me, target);
                         // COMBAT_D->do_attack(me, target, me->query_temp("weapon"), 0);
 
@@ -199,8 +199,8 @@ void attack_over(object me)
         if (! objectp(me)) return;
         if (objectp(me))
         {
-                message_vision(HIB"$NÊÖÖÐ¾üµ¶Ò»»Ó£¬ÃÉ¹ÅÆï±ø¹¥ÊÆÒ»»º£¬ÖØÐÂ"
-                                + "¿ªÊ¼ÁÐÕó£¬×¼±¸·¢ÆðÐÂÒ»ÂÖµÄ³å»÷£¡£¡\n"NOR,
+                message_vision(HIB"$Næ‰‹ä¸­å†›åˆ€ä¸€æŒ¥ï¼Œè’™å¤éª‘å…µæ”»åŠ¿ä¸€ç¼“ï¼Œé‡æ–°"
+                                + "å¼€å§‹åˆ—é˜µï¼Œå‡†å¤‡å‘èµ·æ–°ä¸€è½®çš„å†²å‡»ï¼ï¼\n"NOR,
                                 me);
                 delete_temp("warequest/attack", me);
         }
@@ -234,33 +234,33 @@ int do_kill(string arg)
 
         if (this_object()->id(arg))
         {
-                write("ÓÐÃ»ÓÐ¸ã´í£¬ÄÇÊÇÃÉ¹Å±øÒ®£¬»¹²»¿ìÅÜ£¿£¡\n");
+                write("æœ‰æ²¡æœ‰æžé”™ï¼Œé‚£æ˜¯è’™å¤å…µè€¶ï¼Œè¿˜ä¸å¿«è·‘ï¼Ÿï¼\n");
                 return 1;
         }
         else
         if (sscanf(arg, "%s from %s",what, who) == 2 && this_object()->id(who))
         {
-                write("ÓÐÃ»ÓÐ¸ã´í£¬ÄÇÊÇÃÉ¹Å±øÒ®£¬»¹²»¿ìÅÜ£¿£¡\n");
+                write("æœ‰æ²¡æœ‰æžé”™ï¼Œé‚£æ˜¯è’™å¤å…µè€¶ï¼Œè¿˜ä¸å¿«è·‘ï¼Ÿï¼\n");
                 return 1;
         } else
         if (sscanf(arg, "%s at %s", what, who) == 2 && this_object()->id(who))
         {
-                write("ÓÐÃ»ÓÐ¸ã´í£¬ÄÇÊÇÃÉ¹Å±øÒ®£¬»¹²»¿ìÅÜ£¿£¡\n");
+                write("æœ‰æ²¡æœ‰æžé”™ï¼Œé‚£æ˜¯è’™å¤å…µè€¶ï¼Œè¿˜ä¸å¿«è·‘ï¼Ÿï¼\n");
                 return 1;
         } else
         if (sscanf(arg, "%s on %s", what, who) == 2 && this_object()->id(who))
         {
-                write("ÓÐÃ»ÓÐ¸ã´í£¬ÄÇÊÇÃÉ¹Å±øÒ®£¬»¹²»¿ìÅÜ£¿£¡\n");
+                write("æœ‰æ²¡æœ‰æžé”™ï¼Œé‚£æ˜¯è’™å¤å…µè€¶ï¼Œè¿˜ä¸å¿«è·‘ï¼Ÿï¼\n");
                 return 1;
         } else
         if (sscanf(arg, "%s %s", what, who) == 2 && this_object()->id(who))
         {
-                write("ÓÐÃ»ÓÐ¸ã´í£¬ÄÇÊÇÃÉ¹Å±øÒ®£¬»¹²»¿ìÅÜ£¿£¡\n");
+                write("æœ‰æ²¡æœ‰æžé”™ï¼Œé‚£æ˜¯è’™å¤å…µè€¶ï¼Œè¿˜ä¸å¿«è·‘ï¼Ÿï¼\n");
                 return 1;
         } else
         if (arg == "roar" || arg == "hou")
         {
-                write("ÓÐÃ»ÓÐ¸ã´í£¬ÄÇÊÇÃÉ¹Å±øÒ®£¬»¹²»¿ìÅÜ£¿£¡\n");
+                write("æœ‰æ²¡æœ‰æžé”™ï¼Œé‚£æ˜¯è’™å¤å…µè€¶ï¼Œè¿˜ä¸å¿«è·‘ï¼Ÿï¼\n");
                 return 1;
         }
 

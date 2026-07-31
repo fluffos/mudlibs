@@ -6,13 +6,13 @@ void remove_buff(object who);
 void create_food(mapping food_info)
 {
 	set_name(food_info["name"], ({food_info["id"]}));
-	set("long", food_info["name"] + "¡£\n");
+	set("long", food_info["name"] + "ã€‚\n");
 	set("base_unit", food_info["unit"]);
 	set("base_value", 1);
 	set("base_weight", 1);
 	set("need", food_info["need"]);
 	set("action_list", ([
-		"³Ô" : "eat " + file_name(this_object()),
+		"åƒ" : "eat " + file_name(this_object()),
 		]));
 	set("time", food_info["time"]);
 	
@@ -45,12 +45,12 @@ int do_eat(string arg)
 		return 0;
 	if (who->query_temp("eat_food"))
 	{
-		write("Äã³ÔµÄÊ³ÎïbuffÊ±¼äÃ»¹ı£¬ÎŞ·¨ÔÙ³ÔĞÂµÄÊ³Îï¡£\n");
+		write("ä½ åƒçš„é£Ÿç‰©buffæ—¶é—´æ²¡è¿‡ï¼Œæ— æ³•å†åƒæ–°çš„é£Ÿç‰©ã€‚\n");
 		return 1;
 	}
 	if (query("no_buff"))
 	{
-        write("Äã³ÔÏÂÁË" + query("name") + "¡£\n");
+        write("ä½ åƒä¸‹äº†" + query("name") + "ã€‚\n");
         add_amount(-1);
         return 1;
 	}
@@ -60,7 +60,7 @@ int do_eat(string arg)
 		who->food_call_out((: call_other, __FILE__, "remove_buff", who :), this_object()->query("time"));
 	}
 	
-	//write("Äã³ÔÏÂÁËÒ»ÅÌ" + query("name") + "¡£\n");
+	//write("ä½ åƒä¸‹äº†ä¸€ç›˜" + query("name") + "ã€‚\n");
 	add_amount(-1);
 	return 1;
 }

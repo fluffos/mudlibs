@@ -1,16 +1,16 @@
 //roombao.h
 
-//ÒÔÏÂÎª²Ø±¦Ëæ»úµØÍ¼
+//ä»¥ä¸‹ä¸ºè—å®éšæœºåœ°å›¾
 mapping room_place = ([
-	"ºâÉ½"     : "/d/hengshan/",
-	"¶ëáÒ"	    : "/d/emei/",
-	"ºÚÄ¾ÑÂ"  : "/d/heimuya/",
-	"Ì©É½"     : "/d/taishan/",
-	"Ñ©É½"     : "/d/xueshan/",
+	"è¡¡å±±"     : "/d/hengshan/",
+	"å³¨åµ‹"	    : "/d/emei/",
+	"é»‘æœ¨å´–"  : "/d/heimuya/",
+	"æ³°å±±"     : "/d/taishan/",
+	"é›ªå±±"     : "/d/xueshan/",
 ]);
 mapping fuben_list = ([
-	"heifeng"	:	"ºÚ·çÕ¯",
-	"canglong" :    "ÎÔÁú±¤",
+	"heifeng"	:	"é»‘é£Žå¯¨",
+	"canglong" :    "å§é¾™å ¡",
 ]);
  
 object load_room_place(string file_dir)
@@ -41,7 +41,7 @@ void do_copy()
 	string *strtemp, locastr, exit;
 	int temp, i1, i;
 		
-	//È·¶¨Î»ÖÃ 
+	//ç¡®å®šä½ç½® 
 	if (!query("where")) {
 		strtemp = keys(room_place);
 		i1 = sizeof(strtemp);
@@ -64,8 +64,8 @@ void do_copy()
 			do_copy();
 		else {
 			set("where", base_name(room));
-			set("long", "Ò»ÕÅ±ê×¢×Å"+fuben_list[query("fuben_type")]+"ÃÜÊÒµÄ²Ø±¦Í¼£¬"+
-									"¿´ÉÏÈ¥ºÃÏñ¾ÍÔÚ"+strtemp[temp]+"µÄ"+(room->query("short"))+"¸½½ü¡£\n");
+			set("long", "ä¸€å¼ æ ‡æ³¨ç€"+fuben_list[query("fuben_type")]+"å¯†å®¤çš„è—å®å›¾ï¼Œ"+
+									"çœ‹ä¸ŠåŽ»å¥½åƒå°±åœ¨"+strtemp[temp]+"çš„"+(room->query("short"))+"é™„è¿‘ã€‚\n");
 		}
 	}
 }

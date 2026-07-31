@@ -6,7 +6,7 @@ int valid_leave(object me, string dir)
 {
 	if(random(2))
 	{
-		tell_object(me,"´ÒÃ¦ÖĞ£¬ÄãÒ»²»Ğ¡ĞÄµøÁËÒ»õÓ£¡\n");
+		tell_object(me,"åŒ†å¿™ä¸­ï¼Œä½ ä¸€ä¸å°å¿ƒè·Œäº†ä¸€è·¤ï¼\n");
 		me->start_busy(2);
 		return 1;
 	}

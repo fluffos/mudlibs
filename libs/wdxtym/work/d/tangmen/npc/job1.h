@@ -16,18 +16,18 @@ int do_look(string arg)
                        "6","7","8","9","10"});
       
       if ( !ob->query_temp("askok") 
-           && ob->query("family/family_name") != "ÌÆÃÅÊÀ¼Ò"
+           && ob->query("family/family_name") != "å”é—¨ä¸–å®¶"
            && ob->query_temp("minchen") != query("short") )
-          return notify_fail("Äã¾Í²»Òª´ÕÈÈÄÖÁË£¡\n");;
+          return notify_fail("ä½ å°±ä¸è¦å‡‘çƒ­é—¹äº†ï¼\n");;
       
       if ( !arg || arg != "wenzi")
-          return notify_fail("ÄãÕÒÊ²Ã´°¡£¡\n");
+          return notify_fail("ä½ æ‰¾ä»€ä¹ˆå•Šï¼\n");
           
       if ( ob->query_temp("askok"))
       {
             ob->set_temp("lianyl",1);
             ob->delete_temp("askok");
-            tell_object(ob,"Äã¿ÉÒª¼ÓÓÍ°¡£¡\n");
+            tell_object(ob,"ä½ å¯è¦åŠ æ²¹å•Šï¼\n");
                  
             a = number[random(10)];                 
             b = number[random(10)];
@@ -75,15 +75,15 @@ void get_jiguo(string arg,object me,int total)
       {
           
               where=environment(me);
-              ob = new("/d/tangmen/npc/wenzi.c");
+              ob = new("/d/tangmen/npc/wenzi.lpc");
               ob->set("d3name",me->query("id") );
               ob->apply_condition("tmjob2",3);
               me->apply_condition("tmjob",5);
               ob->move(where);
-              tell_object(me,HIC"Ò»Ö»ÎÃ×Ó£¬ÃÍÈ»ÔÚÄãµÄÑÛÇ°ÂÓ¹ı£¬¶¨¾¦Ò»¿´......\n"NOR);
+              tell_object(me,HIC"ä¸€åªèšŠå­ï¼ŒçŒ›ç„¶åœ¨ä½ çš„çœ¼å‰æ è¿‡ï¼Œå®šç›ä¸€çœ‹......\n"NOR);
               return;
       }  
-      write(HIG"ºÃ¿ÉÁ¯°¡£¡\n"NOR);
+      write(HIG"å¥½å¯æ€œå•Šï¼\n"NOR);
                me->set_temp("tmjob_failed",1);
        me->apply_condition("tmjob",2);
        me->delete_temp("started");

@@ -1,5 +1,5 @@
 
-//#include <fb_copy.h>
+//#include "fb_copy.h"
 #include "/d/fuben/npc/fb_copy.h"
 
 void set_basic()
@@ -27,7 +27,7 @@ void set_martial()
         string weapon = "null";
         switch(random(13))
         {
-                case 0:  // Îäµ±
+                case 0:  // æ­¦å½“
                      set_skill("force", 1);
                      set_skill("taiji-shengong", 1);
                      set_skill("parry", 1);
@@ -61,7 +61,7 @@ void set_martial()
                      }) );
                         weapon = "changjian";
                         break;
-                case 1: //ÉÙÁÖ
+                case 1: //å°‘æž—
                      set_skill("force", 1);
                      set_skill("hunyuan-yiqi", 1);
                      set_skill("parry", 1);
@@ -93,7 +93,7 @@ void set_martial()
                      }) );
                         weapon = "changjian";
                         break;
-                case 2:  //»ªÉ½
+                case 2:  //åŽå±±
                      set_skill("force", 1);
                      set_skill("zixia-shengong", 1);
                      set_skill("parry", 1);
@@ -127,7 +127,7 @@ void set_martial()
                      }) );
                         weapon = "changjian";
                         break;
-                case 3: //ÉñÁú
+                case 3: //ç¥žé¾™
                      set_skill("force", 1);
                      set_skill("shenlong-xinfa", 1);
                      set_skill("dodge", 1);
@@ -161,7 +161,7 @@ void set_martial()
                      }));
 
                         break;
-                case 4:  //Ø¤°ï
+                case 4:  //ä¸å¸®
                      set_skill("force", 1);
                      set_skill("huntian-qigong", 1);
                      set_skill("parry", 1);
@@ -189,7 +189,7 @@ void set_martial()
                      }) );
                         weapon = "gangzhang";
                         break;
-                case 5:  //ÌÒ»¨
+                case 5:  //æ¡ƒèŠ±
                      set_skill("force", 1);
                      set_skill("bibo-shengong", 1);
                      set_skill("parry", 1);
@@ -223,7 +223,7 @@ void set_martial()
                      }) );
                         weapon = "changjian";
                         break;
-                case 6: //¹ÅÄ¹
+                case 6: //å¤å¢“
                      set_skill("force", 1);
                      set_skill("yunv-xinfa", 1);
                      set_skill("parry", 1);
@@ -264,7 +264,7 @@ void set_martial()
 
                         weapon = "changjian";
                         break;
-                case 7: //Ñ©É½ËÂ
+                case 7: //é›ªå±±å¯º
                      set_skill("force", 1);
                      set_skill("longxiang", 1);
                      set_skill("mizong-neigong", 1);
@@ -303,7 +303,7 @@ void set_martial()
                      }));
                      weapon = "yinlun";
                         break;
-                case 8: // ÐÇËÞ
+                case 8: // æ˜Ÿå®¿
                      set_skill("force", 1);
                      set_skill("huagong-dafa", 1);
                      set_skill("guixi-gong", 1);
@@ -348,7 +348,7 @@ void set_martial()
 
                         weapon = "gangzhang";
                         break;
-                case 9: //Å·ÑôÊÀ¼Ò
+                case 9: //æ¬§é˜³ä¸–å®¶
                      set_skill("force", 1);
                      set_skill("hamagong", 1);
                      set_skill("parry", 1);
@@ -382,7 +382,7 @@ void set_martial()
                      }) );
                         weapon = "gangzhang";
                         break;
-                case 10: //È«Õæ
+                case 10: //å…¨çœŸ
                      set_skill("force", 1);
                      set_skill("quanzhen-xinfa", 1);
                      set_skill("parry", 1);
@@ -416,7 +416,7 @@ void set_martial()
                      }));
                         weapon = "changjian";
                         break;
-                case 11: //åÐÒ£
+                case 11: //é€é¥
                      set_skill("force", 1);
                      set_skill("xiaoyao-xinfa", 1);
                      set_skill("beiming-shengong", 1);
@@ -453,7 +453,7 @@ void set_martial()
                      }));
                      weapon = "gangdao";
                         break;
-                case 12: //Ñªµ¶
+                case 12: //è¡€åˆ€
                      set_skill("lamaism", 1);
                      set_skill("force", 1);
                      set_skill("parry", 1);
@@ -493,7 +493,7 @@ void set_martial()
                      weapon = "gangdao";
                         break;
                 default: // others      BUG!!!
-                        set("long","Îä¹¦ÉèÖÃ´íÎó£¬BUG£¡£¡£¡");
+                        set("long","æ­¦åŠŸè®¾ç½®é”™è¯¯ï¼ŒBUGï¼ï¼ï¼");
         }
         set("weapon", weapon);
         if (weapon != "null")
@@ -512,7 +512,7 @@ void check_fight()
         weapon = ob->query("weapon");
         if (stringp(weapon) && weapon != "null" && !ob->query_temp("weapon"))
         {
-                message_vision("$NÓÖÄÃ³öÒ»°Ñ±øÆ÷ÎÕÔÚÊÖÖÐ¡£\n", ob);
+                message_vision("$Nåˆæ‹¿å‡ºä¸€æŠŠå…µå™¨æ¡åœ¨æ‰‹ä¸­ã€‚\n", ob);
                 if (weapon == "yinlun")
                         carry_object("/d/xueshan/obj/yinlun")->wield();
                 else

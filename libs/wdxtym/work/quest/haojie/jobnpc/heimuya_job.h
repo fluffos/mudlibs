@@ -31,7 +31,7 @@ me->start_busy(1);
 if (random(3)==0)
                                 say(HIR+me->query("name")+
 
-                                "�ٺ���Ц�˼�����������֮����������"+me->query("hated")+"���˴Ӵ��ڽ�������ʧ��\n�ҿ�"+ob->query("name")+"���ǹԹԵ����־��ܰ�!\n\n"NOR);
+                                "嘿嘿冷笑了几声：奉掌门之命，让你们"+me->query("hated")+"的人从此在江湖上消失。\n我看"+ob->query("name")+"还是乖乖的束手就擒吧!\n\n"NOR);
 }
 else if (!ob->query_temp("no_kill")
 && !userp(ob)
@@ -49,7 +49,7 @@ me->start_busy(1);
 if (random(3)==0)
                                 say(HIR+me->query("name")+
 
-                                "�ٺ���Ц�˼�����������֮����������"+me->query("hated")+"���˴Ӵ��ڽ�������ʧ��\n�ҿ�"+ob->query("name")+"���ǹԹԵ����־��ܰ�!\n\n"NOR);
+                                "嘿嘿冷笑了几声：奉掌门之命，让你们"+me->query("hated")+"的人从此在江湖上消失。\n我看"+ob->query("name")+"还是乖乖的束手就擒吧!\n\n"NOR);
 }
                         }else{
 
@@ -81,7 +81,7 @@ void greeting(object ob,object me)
 
                 case 0:
 
-                        say(me->query("name")+"��ݺݵ�˵����ɱ����һ�����Ҳ��Ҫ��!!\n");
+                        say(me->query("name")+"恶狠狠的说到：杀啊，一个活口也不要留!!\n");
 
                         break;
 
@@ -101,7 +101,7 @@ void dest_me(object me)
 
                 say(HIR+me->query("name")+
 
-                                "��Ȼ�����߽е�������ȷŹ����ǣ��´��پ����ߵ͡�\n˵��һ��ת������ʧ����Ӱ���١�\n"NOR);
+                                "忽然纵声高叫道：这次先放过你们，下次再决个高低。\n说罢一个转身，消失的无影无踪。\n"NOR);
 
                 destruct(me);
 

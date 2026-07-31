@@ -1,0 +1,31 @@
+// ITEM Made by player(洛竹:wswzly_1) /data/item/w/wswzly_1-yehua.c
+// Written by GAN JIANG(Doing Lu 1998/11/2)	Sat Apr  8 20:46:16 2023
+#include <ansi.h>
+#include <weapon.h>
+
+inherit SWORD;
+inherit F_ITEMMAKE;
+
+void create()
+{
+	set_name("[1;32m万叶[1;35m飞花[2;37;0m", ({ "yehua" }));
+	set_weight(1);
+	set("item_make", 1);
+	set("unit", "柄");
+	set("long", "这是由[1;31m真龙[2;37;0m炼制而成的一柄剑。
+[1;35m此剑一出，周遭顿时浮现出一座辽阔的竹林，里面飞舞着竹叶和落花，煞是好看[2;37;0m
+剑柄上刻着一行小字：洛竹(wswzly_1)
+");
+	set("value", 300100000);
+	set("point", 33000);
+	set("material", "silk");
+	set("wield_msg", "[1;35m$N随手一招，万叶飞花领域顿时浮现[2;37;0m\n");
+	set("unwield_msg", "$N随手一抹，收起了$n。\n");
+	if (! check_clone()) return;
+	restore();
+	init_sword(apply_damage());
+
+	setup();
+}
+
+string long() { return query("long") + item_long(); }
