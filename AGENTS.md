@@ -2459,6 +2459,125 @@ driver, see §6.3) — fix those too since the function still needs to
 compile even though it'll never usefully run. (`nt6`/`nt6nitan6win`'s
 `mudlistd.lpc`.)
 
+### 7.53 A daemon's own defensive `seteuid(getuid())` silently resets a euid that `create()` deliberately set
+
+If a daemon's real uid never resolves (e.g. `master.lpc`'s
+`creator_file()`/`domain_file()`/`author_file()` return `""` — see
+§7.43 — for whatever authorship path this file's directory implies),
+`getuid(this_object())` permanently returns `""` for that object. A
+`create()` that explicitly does `seteuid(ROOT_UID)` to work around this
+looks like it fixes everything (welcome banner, first few reads all
+work) — but if any OTHER function in the same file later does the
+"defensive" `seteuid(getuid())` idiom (common in old code as a
+no-op-looking reset to "my own normal uid"), that call resets euid back
+to the broken `""`, silently breaking every `read_file()`/`write_file()`
+call from that point onward in the same request — with no error at the
+`seteuid()` call site itself (it succeeds; it just sets euid to
+garbage). Symptom: an early operation works (e.g. a `write()`d welcome
+banner), then something several calls later throws
+`*Bad argument 1 to sscanf`/`explode()` on a `read_file()` result that
+used to work fine natively — because the euid got clobbered in between
+by an unrelated helper function's own uid "hygiene" line. Detection:
+grep the WHOLE file for `seteuid(` once you've found one euid-related
+bug in it — don't stop at the first occurrence. Fix: replace every
+`seteuid(getuid())` in the file with the same `seteuid(ROOT_UID)` (or
+whatever the file's real intended identity is) rather than trusting
+`getuid()` to return anything useful. (`hy`'s `adm/daemons/logind.lpc`
+— `howmany_user()` and `make_body()` both had this, in addition to the
+already-fixed `create()`.)
+
+### 7.54 A `sscanf(read_file(counter_file), ...)` crash on a truly fresh checkout — not just a WASM-sandbox artifact
+
+Code that tracks a running counter in a small text file (visitor
+count, gift-card count, etc.) via `read_file()` + `sscanf()` assumes
+the file already exists. If it doesn't, `read_file()` returns the
+integer `0` (not an empty string), and `sscanf(0, "%s %d", ...)` throws
+`*Bad argument 1 to sscanf, Expected: string Got: 0`, aborting whatever
+mid-registration flow called it. This is easy to dismiss as a
+WASM-test-harness artifact (the harness's `copyDir()` deliberately
+skips copying `log/` file CONTENTS into the WASM sandbox, per its own
+comment — see `scripts/wasm_client.js`), but it is NOT harness-specific
+here: `libs/*/work/**/log` is `.gitignore`d project-wide, so a genuinely
+fresh `git clone` of this repo also lacks the file, and a real first
+boot ever would hit the identical crash. Detection: any
+`sscanf(read_file(X), ...)` where `X` lives under `log/` (or any other
+gitignored/runtime-only directory) is suspect — check whether the
+directory is gitignored before assuming "well it existed when the
+archive was captured, so it's fine." Fix: guard with
+`if (!content) return 0;` (or an equivalent sane default) before the
+`sscanf`. (`hy`'s `howmany_visitor()`/`howmany_card()`, reading
+`/log/mud/MUDVISITOR`/`GIFTCARD`.)
+
+### 7.55 A security/status daemon crashes on a REENTRANT call to itself, mid-`create()`, before its own later-declared variables initialize
+
+Top-level variable initializers in a `.lpc` file run in DECLARATION
+ORDER as the object loads — not all-at-once before `create()`. If
+`create()` calls something that reenters the SAME object (e.g.
+`restore()` triggers `master.lpc`'s `valid_read()`, which forwards to
+`SECURITY_D->valid_read()` — and `SECURITY_D` is this very object,
+still mid-load), any function invoked during that reentrant call sees
+only the variables declared BEFORE the one currently being
+initialized — variables declared later in the file are still their
+zero-value default (`0`), not their intended literal. Symptom:
+`*Bad argument 2 to member_array(), Expected: string or array Got: 0`
+(or similar) from a function like `get_status()` that reads a
+STRING-ARRAY variable (e.g. `wiz_levels`) declared textually AFTER a
+MAPPING variable (e.g. `wiz_status`) that's declared first and so is
+already valid by the time of the reentrant call — the mapping lookup
+succeeds, the fallback array lookup crashes. This crash is intermittent
+in practice: it only manifests when something happens to trigger the
+reentrant call at exactly this point in this object's own load
+sequence (boot preload ordering, or which save-file edits change byte
+offsets/read timing), so a lib can appear to boot clean and register
+players fine in one test run and crash in another that exercises the
+same status-check code path slightly earlier. Fix: guard the
+type-sensitive call, e.g. `arrayp(wiz_levels) && member_array(...)`,
+so a not-yet-initialized variable degrades to "not found" instead of
+crashing. (`hy`'s `adm/daemons/securd.lpc` `get_status()`.)
+
+### 7.56 Two files both plausibly named "the security daemon" — always confirm which one the `SECURITY_D` (or similar) macro actually resolves to before editing
+
+A lib can ship BOTH `adm/daemons/securityd.lpc` and
+`adm/daemons/securd.lpc` (or similarly near-named pairs elsewhere) —
+one a genuine dead-code leftover from an earlier refactor, unreferenced
+by anything, the other the file every macro/call site actually points
+at. Editing the unreferenced one is harmless but wastes a debugging
+session's worth of "why doesn't my fix change the observed behavior"
+confusion. Detection: before editing a daemon whose name you inferred
+from convention (rather than grepping its actual macro), grep the
+`#define X_D "..."` line in `include/globals.h` (or wherever the
+project keeps its path macros) and confirm the path matches the file
+you're about to edit — do this BEFORE spending time reading/patching
+it, not after the fix mysteriously doesn't take effect. (`hy` ships
+both `securityd.lpc` — dead code, never referenced — and `securd.lpc`
+— the real one `SECURITY_D` resolves to.)
+
+### 7.57 Editing an LPC save file (`.o`) with a text-mode file open corrupts it if the lineage encodes structural characters as raw control bytes
+
+Some lineages encode mapping-key path separators as a literal control
+character rather than escaping `/` textually — e.g. `implode(path, "\r")`
+or `implode(path, "\n")` to flatten a path into a single save-file
+mapping key, relying on the raw byte surviving the save/restore
+round-trip. If you edit such a `.o` file with a scripting language's
+default TEXT-mode file I/O (e.g. Python's `open(path, 'r')` /
+`open(path, 'w')` without `'b'`), universal-newline translation on read
+converts every `\r` (and `\r\n`) in the file to `\n`, and the write-back
+re-serializes only `\n` — silently converting every embedded CR control
+byte to LF throughout the ENTIRE file, not just near your intended
+edit. Symptom on next boot: `*restore_object(): Illegal mapping format
+while restoring dbase` (or similar), often followed by cascading
+crashes in anything that reads the now-malformed mapping (e.g. §7.55's
+`member_array` crash, if the corruption also disturbs load timing).
+Detection: `git diff` on the edited `.o` file shows what LOOKS like
+dozens of new line breaks inside what was one long line — that's real,
+not a terminal-wrapping illusion; confirm with a raw byte count
+(`data.count(b'\r')` before vs. after) rather than trusting a visual
+diff. Fix: revert to the original blob and redo the edit with
+`open(path, 'rb')`/`open(path, 'wb')` (or equivalent raw-bytes I/O),
+verifying the CR/LF counts are unchanged except for your intended
+insertion. (`hy`'s `adm/daemons/securd.o`, seeding the `fluffos` admin
+account into its saved `wiz_status` mapping.)
+
 ---
 
 ## 8. Login and registration flow bugs
