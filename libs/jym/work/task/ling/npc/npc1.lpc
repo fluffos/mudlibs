@@ -11,187 +11,180 @@ inherit NPC;
 
 #include "/task/ling/doc/info_bang.h"
 
-void create()
-{
-        set_name("草上飞", ({ "shenmi ren", "smr" }));
-        set("gender", "男性");
-        set("age", 30);
-        set("long",
-"你想看清楚神秘人的面容，可是发现神秘人戴着面具。\n");
-        set("attitude", "friendly");
-        set("shen_type", -1);
+void create() {
+  set_name("草上飞", ({ "shenmi ren", "smr" }));
+  set("gender", "男性");
+  set("age", 30);
+  set("long",
+    "你想看清楚神秘人的面容，可是发现神秘人戴着面具。\n");
+  set("attitude", "friendly");
+  set("shen_type", -1);
 
-        set("str", 30);
-        set("int", 30);
-        set("con", 30);
-        set("dex", 30);
+  set("str", 30);
+  set("int", 30);
+  set("con", 30);
+  set("dex", 30);
 
-        set("combat_exp", 60000);
+  set("combat_exp", 60000);
 
-        set("max_qi", 300);
-        set("max_jing", 200);
-        set("max_jingli", 60);
-        set("max_neili", 200);
-        set("neili", 200);
+  set("max_qi", 300);
+  set("max_jing", 200);
+  set("max_jingli", 60);
+  set("max_neili", 200);
+  set("neili", 200);
 
-        set_skill("dodge", 80);
-        set_skill("force", 80);
-        set_skill("parry", 80);
-        set_skill("cuff", 80);
+  set_skill("dodge", 80);
+  set_skill("force", 80);
+  set_skill("parry", 80);
+  set_skill("cuff", 80);
 
-        set_skill("ding-force", 80);
-        map_skill("force", "ding-force");
+  set_skill("ding-force", 80);
+  map_skill("force", "ding-force");
 
-        set_skill("wuxingbu", 80);
-        map_skill("dodge", "wuxingbu");
+  set_skill("wuxingbu", 80);
+  map_skill("dodge", "wuxingbu");
 
-        set("no_get", "神秘人物太重了");
+  set("no_get", "神秘人物太重了");
 
-        setup();
+  setup();
 
-        call_out("come_attacker", 10);
-        remove_call_out("self_destruct");
-        call_out("self_destruct", 480);
+  call_out("come_attacker", 10);
+  remove_call_out("self_destruct");
+  call_out("self_destruct", 480);
 }
 
-void init()
-{
-        ::init();
-		add_action("do_order","order");
-        add_action("do_ask", "ask");
+void init() {
+  ::init();
+  add_action("do_order", "order");
+  add_action("do_ask", "ask");
 }
 
 void self_destruct() {
-    object me = this_object();
-	if (!environment(me) || !living(me)) return;
-	say(name() + "自言自语道：此地不可久留，三十六计走为上！\n");
-	say(name() + "急急忙忙地离开了。\n");
+  object me = this_object();
+  if (!environment(me) || !living(me)) return;
+  say(name() + "自言自语道：此地不可久留，三十六计走为上！\n");
+  say(name() + "急急忙忙地离开了。\n");
+  destruct(me);
+}
+
+int do_ask(string arg) {
+  object ob, me = this_object();
+  string dest, topic;
+
+  if (!arg || sscanf(arg, "%s about %s", dest, topic) != 2) {
+    write("你要问谁什么事？\n");
+    return 1;
+  }
+
+  if (!objectp(ob = present(dest, environment(me)))) {
+    write("这里没有这个人。\n");
+    return 1;
+  }
+
+  if (ob != me)
+    return notify_fail("");
+
+  if (!living(me))
+    return 1;
+
+  say(name() + "只是摇了摇头，并没有说一句话。\n");
+  return 1;
+}
+
+void come_attacker() {
+  object me = this_object(), helper, *myenemy, room, ob, obj;
+  string *bangs;
+  int temp, bonus, record;
+
+  if (!(room = environment())) {
     destruct(me);
+    return;
+  }
+
+  if (!(helper = query("helper"))) {
+    say(name() + "自言自语道：此地不可久留，三十六计走为上！\n");
+    say(name() + "急急忙忙地离开了。\n");
+    destruct(me);
+    return;
+  }
+
+  if (room != environment(helper)) {
+    say(name() + "自言自语道：此地不可久留，三十六计走为上！\n");
+    say(name() + "急急忙忙地离开了。\n");
+    destruct(me);
+    return;
+  }
+
+  if (!is_fighting() && living(me)
+    && explode(base_name(room), "/")[1] == (string)query("dest")) {
+    command("thumb " + helper->query("id"));
+    if (obj = present("mi ling", helper)) {
+      helper->delete("husong");
+      obj->delete("job");
+      destruct(obj);
+    }
+    say(name() + "双手一抱拳道：就此别过！\n");
+    say(name() + "扬长而去。\n");
+    destruct(me);
+    return;
+  }
+
+  remove_call_out("come_attacker");
+  call_out("come_attacker", 5 + random(5));
+
+  if (room->query("no_fight")) return;
+
+  if (temp = sizeof(myenemy = query_enemy())) {
+    for (int i = 0; i < temp; i++)
+      if (myenemy[i]->query("victim") == me)
+        return;
+  }
+
+  if (random(3) > 0) {
+    ob = new(KILLER);
+    ob->set("victim", me);
+
+    ob->move(room);
+    message("vision", ob->name() + "走了过来。\n", room, ({ ob }));
+    ob->set_leader(me);
+    message_vision("$N对$n喝道：看你还往哪里跑？！\n", ob, me);
+    ob->kill_ob(me);
+    command("!!!");
+    me->kill_ob(ob);
+  }
 }
 
-int do_ask(string arg)
-{
-        object ob, me = this_object();
-        string dest, topic;
+int do_order(string arg) {
+  object me = this_player();
+  string act, sth, dest, dest_add;
+  int busy_time;
 
-        if( !arg || sscanf(arg, "%s about %s", dest, topic) != 2 ) {
-                write("你要问谁什么事？\n");
-                return 1;
-        }
+  if (query("helper")->query("id") != me->query("id"))
+    return notify_fail("什么什么？\n");
 
-        if( !objectp(ob = present(dest, environment(me))) ) {
-                write("这里没有这个人。\n");
-                return 1;
-        }
+  if (!arg || sscanf(arg, "%s %s", act, sth) != 2)
+    return notify_fail("指令格式：order <动作词> <具体动作描述>\n");
 
-        if( ob != me )
-                return notify_fail("");
+  if (query("qi") < 50)
+    return notify_fail(name() + "目前没有力气执行该项动作！\n");
 
-        if( !living(me) )
-                return 1;
+  if (act != "go" && act != "ask chuanfu about 出海" && act != "get" && act != "give" && act != "drink" && act != "wear" && act != "remove" && act != "zou" && act != "wield" && act != "unwield" && act != "enter" && act != "eat")
+    return notify_fail("什么啊？\n");
 
-        say(name() + "只是摇了摇头，并没有说一句话。\n");
-        return 1;
-}
+  if (objectp(me))
+    if (me->is_busy() || me->is_fighting())
+      return notify_fail("你现在很忙着，等忙完再说吧。\n");
 
-void come_attacker()
-{
-        object me = this_object(), helper, *myenemy, room, ob, obj;
-        string *bangs;
-        int temp, bonus, record;
-
-        if( !(room = environment()) ) {
-                destruct(me);
-                return;
-        }
-
-        if( !(helper = query("helper")) ) {
-                say(name() + "自言自语道：此地不可久留，三十六计走为上！\n");
-                say(name() + "急急忙忙地离开了。\n");
-                destruct(me);
-                return;
-        }
-
-        if( room != environment(helper) ) {
-                say(name() + "自言自语道：此地不可久留，三十六计走为上！\n");
-                say(name() + "急急忙忙地离开了。\n");
-                destruct(me);
-                return;
-        }
-
-        if( !is_fighting() &&  living(me)
-        &&  explode(base_name(room), "/")[1] == (string)query("dest") ) {
-                command("thumb " + helper->query("id"));
-                if( obj = present("mi ling", helper) ) {
-                        helper->delete("husong");
-						obj->delete("job");
-						destruct(obj);
-                }
-                say(name() + "双手一抱拳道：就此别过！\n");
-                say(name() + "扬长而去。\n");
-                destruct(me);
-                return;
-        }
-
-        remove_call_out("come_attacker");
-        call_out("come_attacker", 5 + random(5));
-
-        if( room->query("no_fight") ) return;
-
-        if( temp = sizeof(myenemy = query_enemy()) ) {
-                for(int i = 0; i < temp; i++)
-                        if( myenemy[i]->query("victim") == me )
-                                return;
-        }
-
-		if (random(3)>0)
-		{
-			ob = new(KILLER);
-			ob->set("victim", me);
-
-			ob->move(room);
-			message("vision", ob->name() + "走了过来。\n", room, ({ob}));
-			ob->set_leader(me);
-			message_vision("$N对$n喝道：看你还往哪里跑？！\n", ob, me);
-			ob->kill_ob(me);
-			command("!!!");
-			me->kill_ob(ob);
-		}
-}
-        
-int do_order(string arg)
-{
-	object me = this_player();
-	string act, sth, dest, dest_add;
-	int busy_time;
-
-	if ( query("helper")->query("id") != me->query("id") )
-		return notify_fail("什么什么？\n");
-
-	if (!arg || sscanf(arg, "%s %s",act,sth) != 2)
-		return notify_fail("指令格式：order <动作词> <具体动作描述>\n");
-
-	if (query("qi") < 50)
-		return notify_fail(name() +"目前没有力气执行该项动作！\n");
-
-	if ( act!="go" && act!="ask chuanfu about 出海" && act!="get" && act!="give" && act!="drink" && act!="wear" && act!="remove" && act!="zou" && act!="wield" && act!="unwield" && act!="enter" && act!="eat" )
-		return notify_fail("什么啊？\n");
-
-	if( objectp(me) )
-        if ( me->is_busy() || me->is_fighting())
-		    return notify_fail("你现在很忙着，等忙完再说吧。\n");
-
-	if (act == "go")
-	{
-		if (this_object()->is_busy() )
-			return notify_fail("你的动作还没有完成，不能移动。\n");
-		dest = sprintf( "exits/%s",sth);
-		if (! dest_add = environment()->query(dest))
-			return notify_fail("这个方向没有出路。\n");
-	}
-	command(arg);
-	busy_time = random(3);
-	busy_time += 2;
-	this_object()->start_busy(busy_time);
-	return 1;
+  if (act == "go") {
+    if (this_object()->is_busy())
+      return notify_fail("你的动作还没有完成，不能移动。\n");
+    dest = sprintf("exits/%s", sth);
+    if (!dest_add = environment()->query(dest))
+      return notify_fail("这个方向没有出路。\n");
+  }
+  command(arg);
+  busy_time = random(3);
+  busy_time += 2;
+  this_object()->start_busy(busy_time);
+  return 1;
 }
