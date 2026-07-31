@@ -33,9 +33,8 @@ inherit F_TEAM;
 // Use a tick with longer period than heart beat to save cpu's work
 nosave int tick;
 
-void create()
-{
-        seteuid(0); // so LOGIN_D can export uid to us
+void create() {
+  seteuid(0);  // so LOGIN_D can export uid to us
 }
 
 // Use this function to identify if an object is a character.
@@ -43,154 +42,146 @@ int is_character() { return 1; }
 
 // setup: used to configure attributes that aren't known by this_object()
 // at create() time such as living_name (and so can't be done in create()).
-void setup()
-{
-        seteuid(getuid(this_object()));
+void setup() {
+  seteuid(getuid(this_object()));
 
-        set_heart_beat(1);
-        tick = 5 + random(10);
-    enable_player();
+  set_heart_beat(1);
+  tick = 5 + random(10);
+  enable_player();
 
-        CHAR_D->setup_char( this_object() );
+  CHAR_D->setup_char(this_object());
 }
 
-void heart_beat()
-{
-        int wimpy_ratio, cnd_flag;
-        int period;
-        int t;
-        mapping my;
-        object me,ob,room;
-        
-        if (!objectp(room=environment()))       return;
-        me=this_object();
-        my = query_entire_dbase();
-        if (userp(me) && living(me) && mapp(my["env"]))
-        {
-                if ( (my["env"]["prompt"] == "time") &&
-                    is_waiting_command() )           
-                        write_prompt();                
-        }
-        // If we are dying because of mortal wounds?
-        if( my["eff_qi"] < 0 || my["eff_jing"] < 0) {
-                remove_all_enemy();
-                           die();
-                return;
-        }
-        // By rock&jym
-        if( my["qi"] < 0 || my["jing"] < 0||my["jingli"]<0) {
-//         remove_all_enemy();
-                if( !living(me) ) die();
-                else unconcious();
-                return;
-        }
+void heart_beat() {
+  int wimpy_ratio, cnd_flag;
+  int period;
+  int t;
+  mapping my;
+  object me, ob, room;
+
+  if (!objectp(room = environment())) return;
+  me = this_object();
+  my = query_entire_dbase();
+  if (userp(me) && living(me) && mapp(my["env"])) {
+    if ((my["env"]["prompt"] == "time") &&
+      is_waiting_command())
+      write_prompt();
+  }
+  // If we are dying because of mortal wounds?
+  if (my["eff_qi"] < 0 || my["eff_jing"] < 0) {
+    remove_all_enemy();
+    die();
+    return;
+  }
+  // By rock&jym
+  if (my["qi"] < 0 || my["jing"] < 0 || my["jingli"] < 0) {
+    //         remove_all_enemy();
+    if (!living(me)) die();
+    else unconcious();
+    return;
+  }
 
 
-        // Do attack if we are fighting.
-        if( is_busy() ) {
-                continue_action();
-                // We don't want heart beat be halt eventually, so return here.
-                return;
-        } else {
-                // Is it time to flee?
-                if( is_fighting()
-                &&      intp(wimpy_ratio = (int)query("env/wimpy"))
-                &&      wimpy_ratio > 0
-                &&      (       my["qi"] / (my["max_qi"]/100) <= wimpy_ratio
-                        ||      my["jing"] * 100 / my["max_jing"] <= wimpy_ratio) )
-                        GO_CMD->do_flee(me);
-                // Do attack or clean up enemy if we have fleed.
-                attack();
-        }
+  // Do attack if we are fighting.
+  if (is_busy()) {
+    continue_action();
+    // We don't want heart beat be halt eventually, so return here.
+    return;
+  } else {
+    // Is it time to flee?
+    if (is_fighting()
+      && intp(wimpy_ratio = (int)query("env/wimpy"))
+      && wimpy_ratio > 0
+      && (my["qi"] / (my["max_qi"] / 100) <= wimpy_ratio
+        || my["jing"] * 100 / my["max_jing"] <= wimpy_ratio))
+      GO_CMD->do_flee(me);
+    // Do attack or clean up enemy if we have fleed.
+    attack();
+  }
 
-        if( !userp(me) ) {
-                me->chat();
-                // chat() may do anything -- include destruct(this_object())
-                if( !me ) return;       
-        }
+  if (!userp(me)) {
+    me->chat();
+    // chat() may do anything -- include destruct(this_object())
+    if (!me) return;
+  }
 
- t=time();
-        if( tick--  ) return;
-        else tick = 5 + random(10);
-        if (!room->query("freeze") || me->query("no_get"))
-                cnd_flag = update_condition();
-        if (living(me) || me->query("doing") )
-        {
-                   period = t - ((int) my["last_save"]);
-                if (period < 0 || period > 15 * 60)
-                {
-                        string msg;
+  t = time();
+  if (tick--) return;
+  else tick = 5 + random(10);
+  if (!room->query("freeze") || me->query("no_get"))
+    cnd_flag = update_condition();
+  if (living(me) || me->query("doing")) {
+    period = t - ((int)my["last_save"]);
+    if (period < 0 || period > 15 * 60) {
+      string msg;
 
-                        msg = HIR "【号令天下】" NOR + WHT "您的"
-                              "资料已成功载入史册。\n" NOR;
+      msg = HIR "【号令天下】" NOR + WHT "您的"
+        "资料已成功载入史册。\n" NOR;
 
-                        if (! me->save())
+      if (!me->save())
 
-                        msg = HIR "【数据保护】由于数据异常，您的档"
+        msg = HIR "【数据保护】由于数据异常，您的档"
 
-                              "案本次存盘失败。\n" NOR;
+          "案本次存盘失败。\n" NOR;
 
-                         set("last_save", t);
+      set("last_save", t);
 
-                        tell_object(me, msg);
+      tell_object(me, msg);
 
-            }
-}
-        // If we are compeletely in peace, turn off heart beat.
-        // heal_up() must be called prior to other two to make sure it is called
-        // because the && operator is lazy :P
-        if( ((cnd_flag & CND_NO_HEAL_UP) || !heal_up())
-        &&      !is_fighting() 
-        &&      !interactive(me)) {
-                ob = first_inventory(room);
-                while(ob && !interactive(ob))
-                ob = next_inventory(ob);
-                if( !ob ) set_heart_beat(0);
-        }
+    }
+  }
+  // If we are compeletely in peace, turn off heart beat.
+  // heal_up() must be called prior to other two to make sure it is called
+  // because the && operator is lazy :P
+  if (((cnd_flag & CND_NO_HEAL_UP) || !heal_up())
+    && !is_fighting()
+    && !interactive(me)) {
+    ob = first_inventory(room);
+    while (ob && !interactive(ob))
+      ob = next_inventory(ob);
+    if (!ob) set_heart_beat(0);
+  }
 
-        if( !userp(me) ) return;
+  if (!userp(me)) return;
 
-        // Make us a bit older. Only player's update_age is defined.
-        // Note: update_age() is no need to be called every heart_beat, it
-        //       remember how much time has passed since last call.
-        me->update_age();
-    if ( ! interactive(me) ) return;
-        if(query_idle(me) > IDLE_TIMEOUT)// && !wizardp(me))
-                me->user_dump(DUMP_IDLE);
+  // Make us a bit older. Only player's update_age is defined.
+  // Note: update_age() is no need to be called every heart_beat, it
+  //       remember how much time has passed since last call.
+  me->update_age();
+  if (!interactive(me)) return;
+  if (query_idle(me) > IDLE_TIMEOUT)  // && !wizardp(me))
+    me->user_dump(DUMP_IDLE);
 }
 
-int visible(object ob)
-{
-        int lvl, invis;
+int visible(object ob) {
+  int lvl, invis;
 
-      if (ob==this_object()) return 1;
-        lvl = wiz_level(this_object());
+  if (ob == this_object()) return 1;
+  lvl = wiz_level(this_object());
 
-        if( ob->is_ghost() ) {
-                if( is_ghost() ) return 1;
-                if (!userp(this_object()))      return 1;
-                if( query_temp("apply/astral_vision") ) return 1;
-                if (lvl>2) return 1;
-                else return 0;
-        }
-        if ( lvl <= wiz_level(ob) ){
-                if (!query_temp("apply/shade_vision") && ob->query_temp("apply/shade_vision") && ob->is_fighting()){
-                        if (!userp(this_object()))      return 1;
-                        else return 0;
-                }
-                if (wizardp(ob))
-                invis = (int)ob->query("env/invisibility");
-                else
-                invis = 0;
-                if( (int)invis > lvl )      return 0;
-        }       else return 1;
+  if (ob->is_ghost()) {
+    if (is_ghost()) return 1;
+    if (!userp(this_object())) return 1;
+    if (query_temp("apply/astral_vision")) return 1;
+    if (lvl > 2) return 1;
+    else return 0;
+  }
+  if (lvl <= wiz_level(ob)) {
+    if (!query_temp("apply/shade_vision") && ob->query_temp("apply/shade_vision") && ob->is_fighting()) {
+      if (!userp(this_object())) return 1;
+      else return 0;
+    }
+    if (wizardp(ob))
+      invis = (int)ob->query("env/invisibility");
+    else
+      invis = 0;
+    if ((int)invis > lvl) return 0;
+  } else return 1;
 
-        return 1;
+  return 1;
 }
 
-int command( string str )
-{
-    reset_eval_cost();
-    return efun::command(str);
-}      
-
+int command(string str) {
+  reset_eval_cost();
+  return efun::command(str);
+}
